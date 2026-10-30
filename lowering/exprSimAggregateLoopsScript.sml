@@ -20,8 +20,8 @@ Ancestors
   exprSimAggregateSource exprSimAggregateEncoding exprSimAggregateLayout exprLoweringProps
   localPtrsProps compileEnv valueEncoding valueEncodingProofs
   valueEncodingProps exprLowering vyperInterpreter vyperState
-  exprSimHyps exprSim fragExec exprSimAggregateChildren
-  vyperImmutableMetadataFrame
+  exprSimHyps exprSim fragExec exprSimAggregateChildren exprSimOps
+  vyperImmutableMetadataFrame vyperEvalExprPreservesScopesDom
 
 Theorem aggregate_alloca_slice_excludes_local:
   stmt_state_rel func ce cx es r /\ fn_inst_ids_distinct func /\
@@ -134,7 +134,8 @@ Theorem aggregate_make_tuple_sim:
         aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
-        mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
+        mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+      locals_kept ce es s0 r)
     (\exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -278,7 +279,8 @@ Resume aggregate_make_tuple_sim[after_add]:
         p+n <= lo \/ lo+sz <= p) /\
       p <= a /\ a+k <= p+n /\
       (a+k <= b+off \/ b+off+type_memory_size h' <= a) ==>
-      mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory)` >>
+      mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
+    locals_kept ce es1 r q` >>
   qexists_tac `ss` >>
   reverse conj_tac
   >- (conj_tac >- metis_tac[ci_mono_def, cs_extends_trans] >>
@@ -341,7 +343,8 @@ Resume aggregate_make_tuple_sim[tuple_join]:
   >- suspend "vars_join"
   >- suspend "allocas_join"
   >- suspend "slice_join"
-  >> suspend "exterior_join"
+  >- suspend "exterior_join"
+  >> suspend "locals_join"
 QED
 
 Resume aggregate_make_tuple_sim[head_encoding]:
@@ -421,10 +424,10 @@ Resume aggregate_make_tuple_sim[exterior_join]:
       p + n <= lo \/ lo + sz <= p` by
     (rpt strip_tac >>
      `local_region ce es1.scopes r name lo sz` by
-       (irule local_region_vars_backward >>
+       (irule local_region_frame >>
         conj_tac
         >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
-        qexistsl_tac [`t'`, `sn`, `es1.scopes`] >> asm_rewrite_tac[]) >>
+        qexistsl_tac [`sn`, `es1.scopes`, `t'`] >> asm_rewrite_tac[]) >>
      qpat_x_assum `!name lo sz. local_region ce es1.scopes r name lo sz ==> p + n <= lo \/ _`
        (qspecl_then [`name`, `lo`, `sz`] mp_tac) >> asm_rewrite_tac[]) >>
   `mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory` by
@@ -464,6 +467,16 @@ Resume aggregate_make_tuple_sim[exterior_join]:
      asm_rewrite_tac[] >> qexists_tac `aid` >> asm_rewrite_tac[] >>
      fs[ci_mono_def] >> decide_tac) >>
   asm_rewrite_tac[]
+QED
+
+Resume aggregate_make_tuple_sim[locals_join]:
+  `locals_kept ce es1 r s` by
+    (irule locals_kept_trans >> qexistsl_tac [`es1`, `sn`, `t'`] >>
+     asm_rewrite_tac[]) >>
+  `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
+    (drule eval_expr_preserves_scopes_dom >> simp[]) >>
+  irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `r`] >>
+  gvs[vv_post_def]
 QED
 
 Finalise aggregate_make_tuple_sim
@@ -513,7 +526,8 @@ Theorem aggregate_struct_fields_sim:
         aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
-        mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
+        mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+      locals_kept ce es s0 r)
     (\exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -586,7 +600,8 @@ Theorem aggregate_make_array_elems_sim:
         aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
-        mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
+        mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+      locals_kept ce es s0 r)
     (\exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -656,7 +671,8 @@ Theorem aggregate_make_array_start_sim:
         aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
-        mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
+        mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+      locals_kept ce es s0 r)
     (\exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -727,7 +743,8 @@ Theorem aggregate_make_array_sim:
         aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
-        mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
+        mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+      locals_kept ce es s0 r)
     (\exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -843,7 +860,8 @@ Resume aggregate_make_array_sim[header_frames]:
   >- (rpt strip_tac >> first_x_assum irule >>
       simp[Abbr `s1`, venomStateTheory.mstore_def]) >>
   conj_tac >- suspend "header_interior" >>
-  suspend "header_exterior"
+  conj_tac >- suspend "header_exterior" >>
+  suspend "header_locals"
 QED
 
 Resume aggregate_make_array_sim[header_interior]:
@@ -862,6 +880,20 @@ Resume aggregate_make_array_sim[header_exterior]:
         local_region_def, venomStateTheory.lookup_var_def] >>
      metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
   simp[] >> simp[Abbr `s1`] >> irule mstore_mem_bytes_at_disjoint >> decide_tac
+QED
+
+Resume aggregate_make_array_sim[header_locals]:
+  `locals_kept ce es s0 s1` by
+    (irule locals_kept_regions >> rpt strip_tac >>
+     simp[Abbr `s1`] >> irule mstore_mem_bytes_at_disjoint >>
+     `not_local_ptr ce es.scopes x` by simp[] >>
+     `alloca_inv s0 /\ local_ptrs_rel func ce es.scopes s0` by
+       fs[stmt_state_rel_def, state_rel_def] >>
+     drule_all local_ptrs_rel_alloca_disjoint >>
+     simp[regions_disjoint_def] >> decide_tac) >>
+  irule locals_kept_trans >> qexistsl_tac [`es`, `sa`, `s1`] >>
+  simp[] >> rpt strip_tac >>
+  gvs[Abbr `s1`, venomStateTheory.mstore_def, venomStateTheory.lookup_var_def]
 QED
 
 Finalise aggregate_make_array_sim

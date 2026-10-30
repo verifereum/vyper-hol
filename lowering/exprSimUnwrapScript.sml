@@ -199,7 +199,9 @@ Proof
   >~ [`expr_val_at`] >- simp[expr_val_at_def]
   >~ [`lookup_var x s`]
   >- (fs[vv_post_def] >> metis_tac[not_fresh_at_mono])
-  >~ [`FLOOKUP s.vs_allocas`] >- fs[vv_post_def] >>
+  >~ [`FLOOKUP s.vs_allocas`] >- fs[vv_post_def]
+  >~ [`locals_kept`]
+  >- (fs[vv_post_def] >> metis_tac[locals_kept_mem_tail]) >>
   fs[vv_post_def] >> metis_tac[]
 QED
 

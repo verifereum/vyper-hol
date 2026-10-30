@@ -229,14 +229,17 @@ Theorem base_vv_at_struct[local]:
     val_wf stv v /\
     ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
                  sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
-                 b <= w2n w /\ w2n w + val_footprint stv v <= b + sz) \/
+                 b <= w2n w /\ w2n w + val_footprint stv v <= b + sz /\
+                 (!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
+                              b + sz <= lb \/ lb + lsz <= b)) \/
      (?n b sz. local_region cenv es.scopes s n b sz /\
-               b <= w2n w /\ w2n w + val_footprint stv v <= b + sz) \/
+               b <= w2n w /\ w2n w + val_footprint stv v <= b + sz /\
+               (dynarray_local cenv n ==> b + 32 <= w2n w)) \/
      val_footprint stv v = 0)
 Proof
   rpt gen_tac >> Cases_on `vv` >>
   simp[vv_at_def, vv_loc_def, vv_location_def, vv_operand_def,
-       expr_val_at_def, is_word_type_def] >>
+       expr_val_at_def, is_word_type_def, dynarray_type_def] >>
   rpt strip_tac >> gvs[] >>
   TRY (first_x_assum drule_all >> strip_tac >> gvs[]) >> metis_tac[]
 QED
@@ -292,10 +295,14 @@ Proof
      qexistsl [`type_memory_size ftv`, `type_memory_size_fields fs`] >>
      simp[] >> res_tac >> DECIDE_TAC) >>
   simp[] >>
-  TRY (disj1_tac >> goal_assum (drule_at Any) >> simp[] >> NO_TAC) >>
-  TRY (disj2_tac >> disj1_tac >> goal_assum (drule_at Any) >> simp[] >>
-       NO_TAC) >>
-  disj2_tac >> disj2_tac >> DECIDE_TAC
+  all_tac
+  >~ [`FLOOKUP q.vs_allocas aid = SOME (b,sz)`]
+  >- (disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
+      first_assum ACCEPT_TAC)
+  >~ [`local_region cenv es1.scopes q n b sz`]
+  >- (disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[] >>
+      rpt strip_tac >> res_tac >> decide_tac) >>
+  disj2_tac >> disj2_tac >> decide_tac
 QED
 
 (* The field's value_vv after the ADD, from the base's. *)

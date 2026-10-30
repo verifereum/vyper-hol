@@ -112,7 +112,7 @@ Proof
                 `\r. F`] >>
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
        vyperASTTheory.expr_type_def, is_word_type_def,
-       typed_val_to_w256_word_value, word_value_def] >>
+       typed_val_to_w256_word_value, word_value_def, locals_kept_mem] >>
   drule emit_op_frag >> disch_then irule >>
   simp[is_terminator_def] >> rpt strip_tac >>
   simp[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def] >>
