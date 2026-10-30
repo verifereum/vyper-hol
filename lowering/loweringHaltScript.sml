@@ -868,6 +868,43 @@ Proof
             arithmeticTheory.LESS_EQ_ADD]
 QED
 
+Theorem emit_inst_fn_member:
+  !sa sb func opc args outs.
+    emit_inst opc args outs sa = ((),sb) /\ fn_has_code sa sb func ==>
+    MEM (mk_inst sa.cs_next_id opc args outs) (fn_insts func)
+Proof
+  rpt strip_tac >> drule emit_inst_extends >> strip_tac >>
+  `?bb. lookup_block sb.cs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX sb.cs_current_insts bb.bb_instructions` by
+    gvs[fn_has_code_def] >>
+  `MEM (mk_inst sa.cs_next_id opc args outs) bb.bb_instructions` by
+    gvs[IS_PREFIX_APPEND] >>
+  metis_tac[lookup_block_fn_insts]
+QED
+
+Theorem compile_alloc_buffer_emission:
+  !sz sa buf sm.
+    compile_alloc_buffer sz sa = (buf,sm) ==>
+    ?sx p. sx = sa with cs_next_var := sa.cs_next_var + 1 /\
+      buf.buf_operand = Var p /\
+      ~not_fresh_at sa p /\ not_fresh_at sm p /\
+      sm.cs_next_var = sa.cs_next_var + 1 /\
+      emit_inst ALLOCA [Lit (n2w sz)] [p] sx = ((),sm) /\
+      cs_extends sa sx /\ cs_extends sx sm
+Proof
+  rpt strip_tac >> drule compile_alloc_buffer_parts >> strip_tac >>
+  qabbrev_tac `sx = sa with cs_next_var := sa.cs_next_var + 1` >>
+  `emit_inst ALLOCA [Lit (n2w sz)]
+    [STRING #"%" (toString sa.cs_next_var)] sx = ((),sm)` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[compile_alloc_buffer_def, emit_op_def, emit_inst_def, fresh_var_def,
+       fresh_id_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, Abbr `sx`] >> strip_tac >> gvs[]) >>
+  `cs_extends sx sm` by metis_tac[cs_appends_def, cs_appends_emit_helpers] >>
+  qexistsl [`sx`, `STRING #"%" (toString sa.cs_next_var)`] >>
+  simp[Abbr `sx`, cs_extends_def, emitted_blocks_def]
+QED
+
 Theorem compile_alloc_buffer_frag:
   !ctx n st buf st' P Q R.
     compile_alloc_buffer n st = (buf,st') /\

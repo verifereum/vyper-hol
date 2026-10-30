@@ -44,21 +44,23 @@
  * the loop in stmtSimForLoop), and with other ends in stmtSimForRange;
  * Return of a word or of a tuple of words from an internal function in
  * stmtSimReturn; AnnAssign of a local held in one word (a word_value, an
- * address, a bytesN) in stmtSimDecl, and of a memory-backed local whose
- * value is lowered at the declared type in stmtSimDeclMem; Raise and Assert
+ * address, a bytesN) in stmtSimDecl, of a memory-backed local whose value
+ * is lowered at the declared type, or is a bytestring of another bound, in
+ * stmtSimDeclMem, and of a local initialised with the empty value in
+ * stmtSimDeclEmpty; Raise and Assert
  * with a string literal reason in stmtSimReason, with another reason held on
  * the stack or in memory in stmtSimReasonExpr, and with a reason read from
  * storage or transient storage in stmtSimReasonStorage; AugAssign to a
  * local held in one word in stmtSimAugAssign; Assign to a local held in one
  * word in stmtSimAssign, to a memory-backed local in stmtSimAssignMem, to
- * a tuple of locals each held in one word in stmtSimAssignTuple, and to a
- * storage or transient variable held in one word in stmtSimAssignStorage.
- * Not covered yet: Assign to an aggregate storage or transient variable,
- * Assign and AugAssign to other targets (#550), Append and For
- * over an array (#559), Log (#570), the other memory-backed declarations
- * (empty values, bytestring literals of another length, initialisations that
- * widen the value), reasons held in code (immutables) or calldata, and
- * memory-backed returns.
+ * a tuple of locals each held in one word in stmtSimAssignTuple or with
+ * memory-backed elements in stmtSimAssignTupleMem, and to a storage or
+ * transient variable held in one word in stmtSimAssignStorage.  Not covered
+ * yet: Assign to an aggregate storage or transient variable, Assign and
+ * AugAssign to other targets (#550), Append and For over an array (#559),
+ * Log (#570), memory-backed declarations whose initialisation changes the
+ * value's layout (compile_store_memory_typed), reasons held in code
+ * (immutables) or calldata, and memory-backed returns.
  *)
 
 Theory stmtSim
