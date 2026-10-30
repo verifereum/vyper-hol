@@ -37,8 +37,9 @@
  *
  * Unprovable as the definitions stand, to be fixed in the lowering or in
  * state_rel before their PRs:
- *   - compile_len_code_sim, len of an immutable: immutables_rel relates the
- *     immutable's first word to its whole value, not to its length.
+ *   - compile_len_code_sim, len of an immutable: in the constructor
+ *     immutables_rel relates the immutable's first word to its whole
+ *     value, not to its length.
  *   - compile_blockhash_sim: the source raises a RuntimeError where
  *     BLOCKHASH returns 0 (#671), and call_ctx_rel does not relate the block
  *     hashes.
@@ -77,9 +78,11 @@ Ancestors
 (* ===== Lengths and calldata ===== *)
 
 (* len of an operand in code, an immutable: the lowering loads the
-   immutable's first word (ILOAD or DLOAD), but immutables_rel relates that
-   word to typed_val_to_w256 of the whole value, not to its length, so this
-   does not hold as the definitions stand. *)
+   immutable's first word (ILOAD or DLOAD).  At runtime immutables_rel lays
+   the value out in the data section, so DLOAD reads the length word; in
+   the constructor it relates the ILOAD word to typed_val_to_w256 of the
+   whole value, not to its length, so this does not hold as the
+   definitions stand. *)
 Theorem compile_len_code_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) /\
