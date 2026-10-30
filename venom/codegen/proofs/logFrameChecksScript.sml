@@ -4,7 +4,7 @@ Ancestors
   codegen stackPlanGenCompute stackPlanTypes planExec symbolResolve
   codegenRel asmSem venomExecSemantics venomInst venomState
   frameOutcome callTrace vfmExecution vfmExecutionProp vfmContext vfmState vfmOperation vfmConstants
-  list finite_map words
+  list finite_map words vfmBuffer
 Libs wordsLib finite_mapLib
 
 val () = computeLib.upd_compset add_finite_map_compset;
@@ -87,18 +87,20 @@ Proof
 QED
 val () = computeLib.add_funs [log_probe_code, log_probe_parsed];
 
+(* Keep probe states byte-list based; convert at the VFM memory boundary. *)
 Definition log_probe_at_def:
   log_probe_at used pc stk mem lgs =
     log_probe_es with contexts :=
       [((FST (HD log_probe_es.contexts)) with
-         <| gasUsed := used; pc := pc; stack := stk; memory := mem; logs := lgs |>,
+         <| gasUsed := used; pc := pc; stack := stk;
+            memory := buffer_of_list mem; logs := lgs |>,
         SND (HD log_probe_es.contexts))]
 End
 Theorem log_probe_initial:
   log_probe_at 0 0 [] [] [] = log_probe_es
 Proof
   simp[log_probe_at_def, log_probe_es_def, make_asm_call_state_def,
-       vfmContextTheory.initial_context_def]
+       vfmContextTheory.initial_context_def, buffer_of_list_def]
 QED
 Theorem log_probe_jumpdest:
   step (log_probe_at 0 0 [] [] []) =
@@ -266,7 +268,10 @@ Theorem log_probe_at_projections[simp]:
   (FST (HD (log_probe_at used pc stk mem lgs).contexts)).pc = pc /\
   (FST (HD (log_probe_at used pc stk mem lgs).contexts)).logs = lgs /\
   (FST (HD (log_probe_at used pc stk mem lgs).contexts)).stack = stk /\
-  (FST (HD (log_probe_at used pc stk mem lgs).contexts)).memory = mem /\
+  (FST (HD (log_probe_at used pc stk mem lgs).contexts)).memory =
+    buffer_of_list mem /\
+  buffer_to_list (FST (HD (log_probe_at used pc stk mem lgs).contexts)).memory =
+    mem /\
   (FST (HD (log_probe_at used pc stk mem lgs).contexts)).returnData = [] /\
   (log_probe_at used pc stk mem lgs).txParams = log_probe_es.txParams /\
   (log_probe_at used pc stk mem lgs).rollback = log_probe_es.rollback
@@ -289,7 +294,7 @@ Theorem log_probe_fresh:
   (?d. log_probe_es.msdomain = Collect d) /\
   LENGTH log_probe_es.contexts = 1 /\
   (FST (HD log_probe_es.contexts)).logs = [] /\
-  (FST (HD log_probe_es.contexts)).memory = [] /\
+  buffer_to_list (FST (HD log_probe_es.contexts)).memory = [] /\
   ~(FST (HD log_probe_es.contexts)).msgParams.static
 Proof
   simp[log_probe_es_def, log_probe_asm_def, make_asm_call_state_def,

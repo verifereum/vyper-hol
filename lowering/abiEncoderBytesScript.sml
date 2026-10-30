@@ -5,7 +5,17 @@ Ancestors
   abiEncoderWrites abiBuiltinPrefix abiDecoderDynamicLoopSetup abiDecoderReentry
   abiDecoderGuards emitHelperProps exprLoweringProps emitHelper compileEnv venomExecSemantics
   venomInst abiEncoderBytesPrefix abiEncoderMemory venomMemProps abiEncoderRounding byte
-  rich_list valueEncodingProps
+  rich_list valueEncodingProps abiBytestringProps abiBytestringExec abiBytestringCode pred_set
+
+(* Enclosing-loop liveness discharges the raw execution name-avoidance contract. *)
+Theorem abi_encoder_live_names:
+  abi_decoder_operand_live next op ==>
+  EVERY (\name. op <> Var name) (compiler_var_names next num_names)
+Proof
+  Cases_on `op` >>
+  simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+    compiler_var_names_def, EVERY_GENLIST] >> metis_tac[LESS_EQ_ADD]
+QED
 
 (* ===== Active ===== *)
 
@@ -261,45 +271,38 @@ Proof
   mp_tac (Q.INST [`bs` |-> `bs:byte list`] abi_encoder_bytes_encoding) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   mp_tac (Q.INST [`cnt` |-> `LENGTH (bs:byte list)`] abi_encoder_ceil32_bounds) >> strip_tac >>
-  drule abi_encode_bytes_trace >> strip_tac >> drule abi_encode_bytes_suffix_shape >> strip_tac >>
-  drule abi_encode_bytes_copy_shape >> strip_tac >> drule abi_encode_bytes_prefix_shape >> strip_tac >>
-  `copied.cs_next_var <= limit_st.cs_next_var /\ st.cs_next_var <= copied.cs_next_var /\
-   LENGTH bs+31 < dimword (:256) /\ db+contractABI$ceil32 (LENGTH bs) < dimword (:256) /\
+  drule abi_encode_bytes_shape >> strip_tac >>
+  `st.cs_next_var+8 <= limit_st.cs_next_var /\ LENGTH bs+31 < dimword (:256) /\
+   db < dimword (:256) /\ db+contractABI$ceil32 (LENGTH bs) < dimword (:256) /\
    32+LENGTH bs < dimword (:256)` by decide_tac >>
   `mload sb s = n2w (LENGTH bs)` by fs[mem_word_at_eq_mload] >>
-  mp_tac (Q.INST [`cnt` |-> `LENGTH (bs:byte list)`] abi_encode_bytes_body_sequence) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts st copied) s = OK prepared` >>
-  mp_tac (Q.INST [`len` |-> `FST (ops:operand # operand)`, `cnt` |-> `LENGTH (bs:byte list)`,
-    `st` |-> `copied`, `st'` |-> `final`, `s` |-> `prepared:venom_state`]
-    abi_encode_bytes_suffix_sequence) >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  rename1 `abi_builtin_prefix copied final limit_st prepared actual` >>
-  qpat_assum `abi_builtin_prefix _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_builtin_prefix_def]) >>
-  qpat_assum `abi_decoder_address_frame _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
-  drule_all abi_decode_sequence_chain >> strip_tac >>
-  `sb+(32+LENGTH bs) <= db \/ db+(32+contractABI$ceil32 (LENGTH bs)) <= sb` by decide_tac >>
-  `mem_bytes_at db (LENGTH (enc at (contractABI$BytesV bs)))
-    (mcopy db sb (32+LENGTH bs) (mstore (db+contractABI$ceil32 (LENGTH bs)) 0w s)).vs_memory =
-    enc at (contractABI$BytesV bs)` by
-    (mp_tac (Q.INST [`maxlen` |-> `maxlen`, `cap` |-> `cap`] abi_encoder_bytes_input_memory) >>
-     asm_simp_tac bool_ss []) >>
-  `abi_decode_frame db (32+contractABI$ceil32 (LENGTH bs)) s
-    (mcopy db sb (32+LENGTH bs) (mstore (db+contractABI$ceil32 (LENGTH bs)) 0w s))` by
-    (irule abi_encoder_bytes_write_frame >> asm_simp_tac bool_ss []) >>
-  `abi_decode_frame db (32+contractABI$ceil32 (LENGTH bs)) s actual` by
-    (mp_tac (Q.INST [`t` |-> `mcopy db sb (32+LENGTH (bs:byte list))
-        (mstore (db+contractABI$ceil32 (LENGTH (bs:byte list))) 0w s)`,
-      `u` |-> `actual:venom_state`, `sz` |-> `32+contractABI$ceil32 (LENGTH (bs:byte list))`]
-      abi_encoder_frame_memory) >> asm_simp_tac bool_ss []) >>
-  `!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
-    eval_operand op actual = SOME w` by
-    (rpt strip_tac >> `abi_decoder_operand_live copied.cs_next_var op` by
-      (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> asm_simp_tac bool_ss []) >>
-     `eval_operand op prepared = SOME w` by (first_x_assum irule >> asm_simp_tac bool_ss []) >>
-     first_x_assum irule >> asm_simp_tac bool_ss []) >>
-  (qexists_tac `actual` >> asm_simp_tac (srw_ss()) [abi_encoder_bytes_padded_length] >>
-   qpat_x_assum `mem_bytes_at db (LENGTH (enc at _)) _ = _` mp_tac >>
-   asm_simp_tac (srw_ss()) [abi_encoder_bytes_padded_length])
+  `EVERY (\name. src <> Var name /\ dst <> Var name) (compiler_var_names st.cs_next_var 8)` by
+    (simp_tac bool_ss [EVERY_CONJ] >> conj_tac >> irule abi_encoder_live_names >> simp[]) >>
+  drule_all compile_abi_bytestring_execution >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st final) s = OK actual` >>
+  `fresh_vars_wrt limit_st actual` by
+    (mp_tac (Q.SPECL [`limit_st`, `st.cs_next_var`, `8`, `s`, `actual`]
+      fresh_vars_wrt_operand_frame) >> simp[]) >>
+  `bytestring_round_word (n2w (LENGTH bs)) = n2w (contractABI$ceil32 (LENGTH bs))` by
+    (simp_tac bool_ss [bytestring_round_word_def] >>
+     irule abi_encoder_round_ceil32 >> asm_rewrite_tac[]) >>
+  `bytestring_copy_state (n2w db) (n2w sb) s =
+    mcopy db sb (32+LENGTH bs) (mstore (db+contractABI$ceil32 (LENGTH bs)) 0w s)` by
+    (asm_simp_tac (srw_ss()) [bytestring_copy_state_def, LET_THM, word_add_n2w, w2n_n2w]) >>
+  qpat_x_assum `actual with vs_vars := s.vs_vars = _` (fn th =>
+    ASSUM_LIST (fn asl => strip_assume_tac (SIMP_RULE (srw_ss())
+      (abi_encoder_write_observations::asl)
+      (AP_TERM ``\t:venom_state. (t.vs_memory,t.vs_call_ctx,t.vs_data_section,
+        t.vs_allocas,t.vs_alloca_next,t.vs_halted)`` th)))) >>
+  qexists_tac `actual` >>
+  asm_simp_tac (srw_ss()) [abi_encoder_bytes_padded_length, w2n_n2w, word_add_n2w] >> rpt conj_tac
+  >- (mp_tac (Q.INST [`maxlen` |-> `maxlen`, `cap` |-> `cap`] abi_encoder_bytes_input_memory) >>
+      impl_tac >- (asm_simp_tac bool_ss [] >> decide_tac) >>
+      asm_simp_tac (srw_ss()) [abi_encoder_bytes_padded_length])
+  >- (irule abi_encoder_frame_memory >> asm_simp_tac bool_ss [] >>
+      qexists_tac `mcopy db sb (32+LENGTH bs) (mstore (db+contractABI$ceil32 (LENGTH bs)) 0w s)` >>
+      asm_simp_tac (srw_ss()) [abi_encoder_bytes_write_frame]) >>
+  rpt strip_tac >>
+  `eval_operand op actual = eval_operand op s` by
+    (first_x_assum irule >> irule abi_encoder_live_names >> simp[]) >> simp[]
 QED

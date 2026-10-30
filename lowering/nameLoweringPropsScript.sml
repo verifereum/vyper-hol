@@ -1,11 +1,9 @@
-(* TOP-LEVEL: compile_name_correct covers typed word and aggregate names.
-   The compiler's MemLoc and allocation-backed PtrVar bindings supply memory
-   representations. Name loads preserve payload memory and earlier operands. *)
+(* TOP-LEVEL: allocation-backed name loads preserve typed values,
+   payload memory and earlier operands. Helpers frame source invariants. *)
 Theory nameLoweringProps
 Ancestors
   exprLoweringProps exprLowering context compileEnv valueLoadProps
-  valueEncodingProps eventTopicProps eventTopicExecProps localPtrsProps
-  vyperTypeEnv vyperTypeInvariants vyperTypeSystem vyperTyping
+  valueEncodingProps eventTopicExecProps localPtrsProps
   venomState venomExecSemantics
 
 Theorem unwrap_memory_value_eq:
@@ -59,34 +57,6 @@ Proof
   simp[eval_operand_def] >> strip_tac >> goal_assum drule >> simp[]
 QED
 
-Theorem lower_value_name_memloc_correct:
-  !tenv cenv scopes ty ann id entry offset region_size ss cs op cs'.
-    vars_rel cenv scopes ss /\ lookup_scopes id scopes = SOME entry /\
-    evaluate_type tenv ann = SOME entry.type /\
-    value_has_type entry.type entry.value /\
-    FLOOKUP cenv.ce_vars id = SOME (MemLoc offset region_size) /\
-    offset < dimword(:256) /\ fresh_vars_wrt cs ss /\
-    lower_value compile_expr cenv ty (Name ann id) cs = (op,cs') ==>
-    ?out. run_inst_seq (emitted_insts cs cs') ss = OK out /\
-      lowered_value_rel ann entry.type entry.value op out /\ same_blocks cs cs' /\
-      fresh_vars_wrt cs' out /\
-      (!old w. eval_operand old ss = SOME w ==> eval_operand old out = SOME w) /\
-      out with vs_vars := ss.vs_vars = ss
-Proof
-  rpt gen_tac >> strip_tac >>
-  `memory_value_rel entry.type entry.value offset ss.vs_memory` by
-    (drule_all vars_rel_memloc_value >> simp[]) >>
-  `unwrap_value cenv (LocatedValue ann (mk_ptr (Lit (n2w offset)) LocMemory)) cs =
-      (op,cs')` by
-    (mp_tac (Q.SPECL [`cenv`, `id`, `offset`, `region_size`, `ty`, `ann`, `cs`]
-       lower_value_name_memloc) >> simp[] >> strip_tac >>
-     gvs[unwrap_memory_value_eq]) >>
-  qspecl_then [`tenv`, `cenv`, `ann`, `entry.type`, `entry.value`,
-    `Lit (n2w offset)`, `cs`, `op`, `cs'`, `ss`, `n2w offset`]
-    mp_tac unwrap_memory_value_correct >>
-  simp[eval_operand_def]
-QED
-
 Theorem lower_value_name_ptrvar_correct:
   !tenv func cenv scopes ty ann id entry p region_size ss cs op cs'.
     local_ptrs_rel func cenv scopes ss /\ lookup_scopes id scopes = SOME entry /\
@@ -111,35 +81,6 @@ Proof
   qspecl_then [`tenv`, `cenv`, `ann`, `entry.type`, `entry.value`,
     `Var p`, `cs`, `op`, `cs'`, `ss`, `addr`]
     mp_tac unwrap_memory_value_correct >> simp[]
-QED
-
-Theorem compile_name_correct:
-  !env cenv cx func ty ann id es ss cs op cs'.
-    well_typed_expr env (Name ann id) /\ env_consistent env cx es /\
-    state_well_typed es /\ fresh_vars_wrt cs ss /\
-    lower_value compile_expr cenv ty (Name ann id) cs = (op,cs') /\
-    ((?offset region_size. FLOOKUP cenv.ce_vars id = SOME (MemLoc offset region_size) /\
-        offset < dimword(:256) /\ vars_rel cenv es.scopes ss) \/
-     (?p region_size. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) region_size) /\
-        local_ptrs_rel func cenv es.scopes ss)) ==>
-    ?v tv out.
-      eval_expr cx (Name ann id) es = (INL (Value v),es) /\
-      evaluate_type env.type_defs ann = SOME tv /\
-      run_inst_seq (emitted_insts cs cs') ss = OK out /\
-      lowered_value_rel ann tv v op out /\ same_blocks cs cs' /\
-      fresh_vars_wrt cs' out /\
-      (!old w. eval_operand old ss = SOME w ==> eval_operand old out = SOME w) /\
-      out with vs_vars := ss.vs_vars = ss
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all well_typed_Name_lookup >> strip_tac >> gvs[] >>
-  rename1 `lookup_scopes id es.scopes = SOME entry` >>
-  `eval_expr cx (Name ann id) es = (INL (Value entry.value),es)` by
-    (irule eval_name_lookup_scopes >> simp[]) >>
-  FIRST [drule_all lower_value_name_memloc_correct,
-         drule_all lower_value_name_ptrvar_correct] >>
-  strip_tac >> rename1 `run_inst_seq (emitted_insts cs cs') ss = OK final` >>
-  qexistsl_tac [`entry.value`, `final`] >> simp[]
 QED
 
 Theorem state_rel_simple_vs_vars:
@@ -181,94 +122,6 @@ Proof
         (qspecl_then [`Var p`, `addr`] mp_tac) >>
       gvs[eval_operand_def]) >>
   rpt gen_tac >> strip_tac >> gvs[]
-QED
-
-Theorem lowered_value_rel_assignment_frame:
-  !ty tv v op ss out.
-    lowered_value_rel ty tv v op ss /\ out with vs_vars := ss.vs_vars = ss /\
-    (!old w. eval_operand old ss = SOME w ==> eval_operand old out = SOME w) ==>
-    lowered_value_rel ty tv v op out
-Proof
-  rpt gen_tac >> strip_tac >>
-  `out.vs_memory = ss.vs_memory` by
-    (irule assignment_frame_memory >> simp[]) >>
-  fs[lowered_value_rel_def] >>
-  rename1 `eval_operand op ss = SOME value_word` >>
-  qexists_tac `value_word` >> simp[]
-QED
-
-(* A checked name load is compositional in the existing source/memory
-   invariant, including locals held through pointer variables. *)
-Theorem compile_name_preserves_state:
-  !env cenv cx func ty ann id es ss cs op cs'.
-    well_typed_expr env (Name ann id) /\ env_consistent env cx es /\
-    state_well_typed es /\ fresh_vars_wrt cs ss /\
-    state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
-    lower_value compile_expr cenv ty (Name ann id) cs = (op,cs') /\
-    ((?offset region_size. FLOOKUP cenv.ce_vars id = SOME (MemLoc offset region_size) /\
-        offset < dimword(:256)) \/
-     (?p region_size. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) region_size))) ==>
-    ?v tv out.
-      eval_expr cx (Name ann id) es = (INL (Value v),es) /\
-      evaluate_type env.type_defs ann = SOME tv /\
-      run_inst_seq (emitted_insts cs cs') ss = OK out /\
-      lowered_value_rel ann tv v op out /\ same_blocks cs cs' /\
-      fresh_vars_wrt cs' out /\ state_rel_simple cenv cx es out /\
-      local_ptrs_rel func cenv es.scopes out /\
-      (!old w. eval_operand old ss = SOME w ==> eval_operand old out = SOME w) /\
-      out with vs_vars := ss.vs_vars = ss
-Proof
-  rpt gen_tac >> disch_then (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
-  `vars_rel cenv es.scopes ss` by fs[state_rel_simple_def] >>
-  qsuff_tac `well_typed_expr env (Name ann id) /\ env_consistent env cx es /\
-    state_well_typed es /\ fresh_vars_wrt cs ss /\
-    lower_value compile_expr cenv ty (Name ann id) cs = (op,cs') /\
-    ((?offset region_size. FLOOKUP cenv.ce_vars id = SOME (MemLoc offset region_size) /\
-        offset < dimword(:256) /\ vars_rel cenv es.scopes ss) \/
-     (?p region_size. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) region_size) /\
-        local_ptrs_rel func cenv es.scopes ss))`
-  >- (disch_then (mp_tac o MATCH_MP (Q.SPECL [`env`, `cenv`, `cx`, `func`, `ty`,
-        `ann`, `id`, `es`, `ss`, `cs`, `op`, `cs'`] compile_name_correct)) >>
-      strip_tac >> rename1 `run_inst_seq (emitted_insts cs cs') ss = OK final` >>
-      rename1 `lowered_value_rel ann value_ty value op final` >>
-      qexistsl_tac [`value`, `value_ty`, `final`] >> simp[] >> conj_tac >>
-      FIRST [irule state_rel_simple_assignment_frame >> qexists_tac `ss` >> simp[],
-             irule local_ptrs_rel_assignment_frame >> qexists_tac `ss` >> simp[]]) >>
-  simp[] >> metis_tac[]
-QED
-
-(* Source name evaluation through the actual word-topic compiler. In
-   particular, a bytes20 load remains left-aligned and an address does not. *)
-Theorem compile_name_word_topic_correct:
-  !env cenv cx func ty ann id es ss cs op cs'.
-    well_typed_expr env (Name ann id) /\ env_consistent env cx es /\
-    state_well_typed es /\ fresh_vars_wrt cs ss /\ is_word_type ann /\
-    state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
-    lower_value compile_expr cenv ty (Name ann id) cs = (op,cs') /\
-    ((?offset region_size. FLOOKUP cenv.ce_vars id = SOME (MemLoc offset region_size) /\
-        offset < dimword(:256)) \/
-     (?p region_size. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) region_size))) ==>
-    ?v tv out.
-      eval_expr cx (Name ann id) es = (INL (Value v),es) /\
-      evaluate_type env.type_defs ann = SOME tv /\
-      run_inst_seq (emitted_insts cs cs') ss = OK out /\
-      compile_encode_log_topic op (is_bytestring_type ann) cs' = (op,cs') /\
-      eval_operand op out = encode_event_topic ann v /\
-      same_blocks cs cs' /\ fresh_vars_wrt cs' out /\
-      state_rel_simple cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
-      (!old w. eval_operand old ss = SOME w ==> eval_operand old out = SOME w) /\
-      out with vs_vars := ss.vs_vars = ss
-Proof
-  rpt gen_tac >> disch_then (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
-  mp_tac (Q.SPECL [`env`, `cenv`, `cx`, `func`, `ty`, `ann`, `id`,
-    `es`, `ss`, `cs`, `op`, `cs'`] compile_name_preserves_state) >>
-  impl_tac >- simp[] >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts cs cs') ss = OK final` >>
-  rename1 `lowered_value_rel ann value_ty value op final` >>
-  `eval_operand op final = SOME (typed_val_to_w256 value_ty value)`
-    by (fs[lowered_value_rel_def] >> gvs[]) >>
-  drule_all compile_word_topic_correct >> strip_tac >>
-  qexistsl_tac [`value`, `value_ty`, `final`] >> simp[]
 QED
 
 val () = List.app (fn (name,th) =>

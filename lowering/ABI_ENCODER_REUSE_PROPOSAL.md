@@ -51,6 +51,32 @@ single admissibility induction. The six existing exports in
 [abiScratchEncoderRecursive](abiScratchEncoderRecursiveScript.sml) are projection
 wrappers with unchanged statements and attributes.
 
+## Native Log proof reuse
+
+The native Log interface retains its explicit `fragment_path`, actual-ALLOCA
+budget and allocation trace. These are not consequences of the continuation
+simulation interface alone; conversely the shared interface does not assume
+registered source/output ownership or global allocation validity. Neither
+endpoint is replaced by a weaker theorem or given new premises.
+
+The overlapping execution is now shared at two boundaries:
+
+- [abiEncoderLeafRaw](abiEncoderLeafRawScript.sml) owns word/copy instruction
+  execution, re-exported by `abiEncoderPathProps` and consumed by the enclosing
+  freshness wrappers. The bytes wrapper consumes `compile_abi_bytestring_execution`
+  rather than independently executing the same prefix/copy/suffix instructions.
+- [abiEncoderMembersGenerate](abiEncoderMembersGenerateScript.sml) owns actual
+  member compiler cuts, code-span transport and generative suffix recursion.
+  `abi_encoder_member_spine_generate` and both native static/mixed traversals
+  instantiate it with their existing child runners and invariants. Its callbacks
+  produce runtime states; it does not assume an execution of the whole list.
+
+The descriptor admissibility and raw-memory inductions, array resource proofs,
+frames and child-step interpretations remain separate where their contracts
+are different. In particular, an empty shared array need not satisfy the native
+raw relation's unconditional static-width equation. Deleting either recursive
+closure would therefore discard coverage, not merely remove duplication.
+
 ## Source and return adapters
 
 The dependency order is:

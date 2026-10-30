@@ -448,8 +448,7 @@ Theorem elem_count_snoc[local]:
     LIST_ELEM_COUNT x (SNOC y xs) =
     LIST_ELEM_COUNT x xs + LIST_ELEM_COUNT x [y]
 Proof
-  gen_tac >> gen_tac >> Induct >> simp[LIST_ELEM_COUNT_THM] >>
-  rpt gen_tac >> Cases_on `h = x` >> gvs[LIST_ELEM_COUNT_THM]
+  ACCEPT_TAC operandInventoryTheory.elem_count_snoc
 QED
 
 Theorem residual_budget_wf_push[local]:
@@ -2193,16 +2192,7 @@ Theorem alloc_spill_slot_max_agree_reorder[local]:
     spill_alloc_layout_wf al spilled ==>
     MAX al.sa_next_offset (off + 32) = al'.sa_next_offset
 Proof
-  rpt strip_tac >>
-  fs[alloc_spill_slot_def, spill_alloc_layout_wf_def] >>
-  Cases_on `al.sa_free_slots` >> gvs[]
-  >- simp[MAX_DEF] >>
-  simp[MAX_DEF] >>
-  `LAST (h::t) + 32 <= al.sa_next_offset` suffices_by decide_tac >>
-  qpat_x_assum `!off'. off' = h \/ MEM off' t ==> _`
-    (qspec_then `LAST (h::t)` mp_tac) >>
-  `MEM (LAST (h::t)) (h::t)` suffices_by (strip_tac >> fs[MEM]) >>
-  simp[MEM_LAST]
+  ACCEPT_TAC doSwapSimTheory.alloc_spill_slot_max_agree
 QED
 
 (* do_spill_at: apply_prefix_ops aligns with do_spill_at on stack+spilled *)
@@ -2370,7 +2360,7 @@ QED
 
 (* One prefix operation is extensional in all fields observed by
    venom_asm_rel. *)
-Theorem apply_prefix_op_ext_relevant[local]:
+Theorem apply_prefix_op_ext_relevant:
   !op lo ps1 ps2.
     ps1.ps_stack = ps2.ps_stack /\
     ps1.ps_spilled = ps2.ps_spilled /\
@@ -2392,7 +2382,7 @@ QED
 
 (* Prefix interpretation is extensional in all fields observed by
    venom_asm_rel. *)
-Theorem apply_prefix_ops_ext_relevant[local]:
+Theorem apply_prefix_ops_ext_relevant:
   !ops lo ps1 ps2.
     ps1.ps_stack = ps2.ps_stack /\
     ps1.ps_spilled = ps2.ps_spilled /\
@@ -2604,7 +2594,7 @@ QED
 
 (* Threaded spill well-formedness depends only on the fields changed by prefix
    interpretation, not on allocator free-list bookkeeping. *)
-Theorem prefix_spill_wf_ext_relevant[local]:
+Theorem prefix_spill_wf_ext_relevant:
   !ops lo ps1 ps2.
     ps1.ps_stack = ps2.ps_stack /\
     ps1.ps_spilled = ps2.ps_spilled /\
@@ -4021,8 +4011,7 @@ Theorem prefix_spill_wf_append_reorder[local]:
     prefix_spill_wf initial_fmp lo l2
       (apply_prefix_ops initial_fmp lo l1 ps)
 Proof
-  Induct >> simp[prefix_spill_wf_def, apply_prefix_ops_def] >>
-  metis_tac[]
+  ACCEPT_TAC doSwapSimTheory.prefix_spill_wf_append
 QED
 
 
@@ -5123,9 +5112,7 @@ Theorem stack_peek_eq_reverse_el[local]:
   !d stk. d < LENGTH stk ==>
     stack_peek d stk = EL d (REVERSE stk)
 Proof
-  rpt strip_tac >> simp[stack_peek_def, EL_REVERSE] >>
-  `PRE (LENGTH stk - d) = LENGTH stk - 1 - d` by decide_tac >>
-  simp[]
+  metis_tac[stack_peek_eq_EL_REVERSE_inventory]
 QED
 
 Theorem reorder_alias_exchange_top_n_distinct[local]:

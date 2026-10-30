@@ -159,6 +159,27 @@ the index does not replace those contracts.
 - [abi_scratch_members_child_post_def](abiScratchMembersInterpretScript.sml#L14)
 - [abi_scratch_members_entry_def](abiScratchMembersInterpretScript.sml#L47)
 
+## Shared native Log execution boundaries
+
+These preserve the existing native and shared endpoint statements; see
+[the reuse description](ABI_ENCODER_REUSE_PROPOSAL.md#native-log-proof-reuse).
+
+### abiEncoderLeafRaw
+
+- [compile_abi_encode_static_code](abiEncoderLeafRawScript.sml)
+- [compile_abi_encode_static_execution](abiEncoderLeafRawScript.sml)
+- [compile_abi_copy_execution](abiEncoderLeafRawScript.sml)
+
+These existing path-API exports remain available from `abiEncoderPathProps`.
+
+### abiEncoderMembersGenerate
+
+- [abi_encoder_members_generate](abiEncoderMembersGenerateScript.sml)
+
+### abiEncoderBytes
+
+- [abi_encoder_live_names](abiEncoderBytesScript.sml)
+
 ## Theorem statements
 
 These are new helper contracts and compatibility corollaries. Existing APIs

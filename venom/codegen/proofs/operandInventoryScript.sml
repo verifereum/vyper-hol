@@ -2,11 +2,12 @@
    TOP-LEVEL: emit_one_input_inventory_mono, emit_one_input_inventory_inc. *)
 Theory operandInventory
 Ancestors
-  doSwapSim planWf stackPlanGen stackPlanOps stackPlanTypes stackModel
+  doDupModel doSwapSim planWf stackPlanGen stackPlanOps stackPlanTypes stackModel
   list rich_list finite_map arithmetic
 Libs pairLib
 
-Theorem elem_count_snoc[local]:
+(* Shared count interface for input preparation and reorder budgets. *)
+Theorem elem_count_snoc:
   !x y (xs : 'a list).
     LIST_ELEM_COUNT x (SNOC y xs) =
     LIST_ELEM_COUNT x xs + LIST_ELEM_COUNT x [y]
@@ -19,8 +20,7 @@ Theorem do_dup_spilled_unchanged:
   !(ps : plan_state) dist.
     (SND (do_dup dist ps)).ps_spilled = ps.ps_spilled
 Proof
-  gen_tac >> gen_tac >> Cases_on `dist <= 15` >>
-  simp[do_dup_def, LET_THM] >> rpt (pairarg_tac >> gvs[])
+  metis_tac[do_dup_spilled]
 QED
 
 Theorem do_dup_inventory_count:
@@ -33,7 +33,7 @@ Theorem do_dup_inventory_count:
       (if x = stack_peek dist ps.ps_stack then 1 else 0)
 Proof
   rpt strip_tac >> drule_then assume_tac do_dup_stack_exact >>
-  simp[do_dup_spilled_unchanged, LIST_ELEM_COUNT_THM, LIST_ELEM_COUNT_THM] >>
+  simp[do_dup_spilled_unchanged, LIST_ELEM_COUNT_THM] >>
   Cases_on `x = stack_peek dist ps.ps_stack` >>
   simp[LIST_ELEM_COUNT_DEF]
 QED

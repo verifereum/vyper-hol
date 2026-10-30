@@ -196,9 +196,20 @@ are preserved in the scope-cleanup archive. The #560 validation dependencies
 remain outside this fix.
 
 The fixed-array widening parity fixture requires the corrected deep-DUP restore
-order. The stack-planner definition change and its affected input/reorder/block
-simulation proofs are retained for that concrete fixture and the LOG instruction
-path. They do not close the pre-existing S7 admission.
+order, which current main already contains. The remaining schedule factoring is
+behavior-preserving. The unique input/reorder/block and LOG simulation proofs
+are retained: they have no equivalent fallback. Duplicated allocator and prefix
+proofs derive from their stronger shared lemmas instead. These proofs do not
+close the pre-existing S7 admission.
+
+After integrating #551, native Log and shared encoder proofs reuse the same raw
+leaf execution and generative member recursion; see
+`lowering/ABI_ENCODER_REUSE_PROPOSAL.md`. The native static and mixed traversals
+and the shared member spine retain their existing statements. Their distinct
+resource, frame and execution-path guarantees are not discarded to force an
+endpoint alias. Unconsumed deployment, optimizer and representation probes and
+unused expression/name/store extensions were removed; concrete codegen
+regressions and unique correctness lemmas remain.
 
 ## Focused validation
 
@@ -239,6 +250,32 @@ identical; the two builtin-interface inputs differed only in Python installation
 path strings. Frozen fixtures and their Python 3.11 provenance were not
 regenerated, and exact reproduction of that legacy dependency environment is not
 claimed.
+
+## Post-merge consolidation validation
+
+After integrating #551, the following build passed with no CHEAT warnings.
+The full dependency rebuild finished in 3702.686 seconds; the final cached
+recheck, including the explicit codegen and trimmed-helper targets below,
+finished in 2.417 seconds. The 10-second tactic contract accommodates the
+existing dependency cache; no proof-step or goal-fragment checks were skipped.
+
+```sh
+holbuild -j4 --maxheap=8192 build --tactic-timeout 10 \
+  abiEncoderPathPropsTheory abiNativeEncodingTheory abiEncoderReuseAuditTheory \
+  eventEndpointAuditTheory evalCompilerEventParityTheory \
+  eventBytecodeEvalChecksTheory vyperEventWhitelistTheory \
+  supportedProgramPropsTheory deepDupChecksTheory logFrameChecksTheory \
+  doSwapSimTheory operandInventoryTheory reorderSimTheory genBlockSimTheory \
+  allocationSpillChecksTheory nameLoweringPropsTheory nameValueCodeTheory \
+  localValueStorePropsTheory loweringShapePropsTheory
+```
+
+The merge had left the shape proof using the pre-snapshot Log evaluator and
+pre-declared-layout data-store APIs; their proofs now compose the actual
+compiler actions without changing their statements. The retained concrete LOG
+trace regression converts its byte-list memory to the current EVM buffer type
+at the state-construction boundary. The member-phase global frame derives from
+the existing stronger leaf frame rather than unfolding instruction semantics.
 
 ## Whitelist validation baseline
 

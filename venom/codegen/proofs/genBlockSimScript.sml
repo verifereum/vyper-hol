@@ -2293,8 +2293,7 @@ Theorem bump_prefix_spill_wf_append[local]:
     prefix_spill_wf initial_fmp lo l2
       (apply_prefix_ops initial_fmp lo l1 ps)
 Proof
-  Induct >> simp[prefix_spill_wf_def, apply_prefix_ops_def] >>
-  metis_tac[]
+  ACCEPT_TAC doSwapSimTheory.prefix_spill_wf_append
 QED
 
 
@@ -4156,11 +4155,7 @@ Theorem bump_apply_prefix_op_ext_relevant[local]:
        via1.ps_alloc.sa_spill_base = via2.ps_alloc.sa_spill_base /\
        via1.ps_alloc.sa_next_offset = via2.ps_alloc.sa_next_offset
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `op` >>
-  simp[apply_prefix_op_def, apply_simple_op_def, LET_THM,
-       stack_push_def, stack_pop_def, stack_swap_def,
-       stack_peek_def, stack_poke_def, spill_lookup_def, MAX_DEF] >>
-  TRY (Cases_on `o'` >> simp[apply_simple_op_def, stack_push_def])
+  ACCEPT_TAC reorderSimTheory.apply_prefix_op_ext_relevant
 QED
 
 Theorem bump_apply_prefix_ops_ext_relevant[local]:
@@ -4176,15 +4171,7 @@ Theorem bump_apply_prefix_ops_ext_relevant[local]:
        via1.ps_alloc.sa_spill_base = via2.ps_alloc.sa_spill_base /\
        via1.ps_alloc.sa_next_offset = via2.ps_alloc.sa_next_offset
 Proof
-  Induct >> simp[apply_prefix_ops_def, LET_THM] >>
-  rpt gen_tac >> strip_tac >>
-  first_x_assum (qspecl_then [`lo`,
-    `apply_prefix_op initial_fmp lo h ps1`,
-    `apply_prefix_op initial_fmp lo h ps2`] mp_tac) >>
-  (impl_tac >-
-    (qspecl_then [`h`, `lo`, `ps1`, `ps2`] mp_tac
-       bump_apply_prefix_op_ext_relevant >> simp[LET_THM])) >>
-  simp[LET_THM]
+  ACCEPT_TAC reorderSimTheory.apply_prefix_ops_ext_relevant
 QED
 
 Theorem bump_prefix_spill_wf_ext_relevant[local]:
@@ -4196,21 +4183,7 @@ Theorem bump_prefix_spill_wf_ext_relevant[local]:
     prefix_spill_wf initial_fmp lo ops ps1 ==>
     prefix_spill_wf initial_fmp lo ops ps2
 Proof
-  Induct >> simp[prefix_spill_wf_def] >>
-  rpt gen_tac >> strip_tac >>
-  conj_tac
-  >- (Cases_on `h` >>
-      gvs[spill_op_wf_def, apply_prefix_op_def, apply_simple_op_def,
-          stack_push_def, stack_pop_def, stack_swap_def, stack_peek_def,
-          stack_poke_def, spill_lookup_def] >>
-      TRY (first_assum ACCEPT_TAC) >> TRY (metis_tac[])) >>
-  first_x_assum (qspecl_then
-    [`lo`, `apply_prefix_op initial_fmp lo h ps1`,
-     `apply_prefix_op initial_fmp lo h ps2`] mp_tac) >>
-  (impl_tac >-
-    (qspecl_then [`h`, `lo`, `ps1`, `ps2`] mp_tac
-       bump_apply_prefix_op_ext_relevant >> simp[LET_THM])) >>
-  simp[]
+  ACCEPT_TAC reorderSimTheory.prefix_spill_wf_ext_relevant
 QED
 
 Theorem bump_emit_one_input_next_offset[local]:
@@ -4264,8 +4237,7 @@ Theorem bump_do_dup_spilled_unchanged[local]:
   !(ps : plan_state) dist.
     (SND (do_dup dist ps)).ps_spilled = ps.ps_spilled
 Proof
-  gen_tac >> gen_tac >> Cases_on `dist <= 15` >>
-  simp[do_dup_def, LET_THM] >> rpt (pairarg_tac >> gvs[])
+  metis_tac[do_dup_spilled]
 QED
 
 Theorem bump_emit_one_input_spilled_shape[local]:

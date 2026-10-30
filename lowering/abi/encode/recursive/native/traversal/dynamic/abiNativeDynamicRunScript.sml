@@ -1,10 +1,10 @@
-(* TOP-LEVEL: execute every field of a mixed aggregate from its recursive
-   semantic assertions. The actual compiler continuation bounds each
-   child inside the enclosing profile, including the parent's final code. *)
+(* TOP-LEVEL: native mixed traversal instantiates the shared generative member
+   recursion. Its whole-step callback preserves the dynamic cursor and state;
+   the common engine owns compiler cuts, code spans and list recursion. *)
 Theory abiNativeDynamicRun
 Ancestors
   abiNativeDynamicStep abiNativeDynamicState abiNativeCursor abiNativeTraversal abiNativeEncodingDefs
-  abiFieldsStructure abiFieldsCons abiComplexStructure abiComplexCode abiFieldLayoutDefs
+  abiEncoderMembersGenerate abiComplexStructure
   compileEnv fragExec venomState list pair arithmetic
 
 Theorem abi_native_dynamic_traversal:
@@ -31,20 +31,47 @@ Theorem abi_native_dynamic_traversal:
         (head_offset + SUM (MAP (\(_,abi_sz,_,_). abi_sz) entries)) after out /\
       out.vs_current_bb = after.cs_current_bb /\ out.vs_inst_idx = LENGTH after.cs_current_insts /\ ~out.vs_halted
 Proof
-  Induct_on `entries`
-  >- (rpt gen_tac >> strip_tac >> gvs[abi_complex_fields_nil] >> qexists_tac `ss` >> simp[]) >>
-  simp_tac bool_ss [FORALL_PROD] >>
-  MAP_EVERY qx_gen_tac [`info`, `abi_sz`, `mem_sz`, `is_dyn`] >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `compile_abi_encode_complex_elems _ _ (_::_) _ _ _ _ = _`
-    (mp_tac o PURE_REWRITE_RULE [compile_abi_fields_cons_cuts]) >>
-  disch_then (qx_choose_then `child_ret` (qx_choose_then `mid` strip_assume_tac)) >>
-  drule_all abi_fields_step_contains >> strip_tac >>
-  `cs_extends mid after` by (drule_all compile_abi_fields_extends >> simp[]) >>
-  `cs_extends mid root_after` by
-    (irule cs_extends_trans >> qexists_tac `after` >> simp[]) >>
-  drule_all abi_native_dynamic_step >> disch_then (qx_choose_then `child_out` strip_assume_tac) >>
-  first_x_assum drule_all >> disch_then (qx_choose_then `out` strip_assume_tac) >>
-  qexists_tac `out` >> simp_tac bool_ss [MAP, SUM, pairTheory.UNCURRY_DEF, ADD_ASSOC] >> asm_rewrite_tac []
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `end_so = source_offset + SUM (MAP (\(_,_,mz,_). mz) entries)` >>
+  qabbrev_tac `end_ho = head_offset + SUM (MAP (\(_,az,_,_). az) entries)` >>
+  Q.ISPECL_THEN [
+    `\pending (current,so,ho) (result:operand,en) (x:unit) state.
+      cs_extends en root_after /\
+      abi_native_traversal ctx func root_cs root_after dst_addr
+        (abi_field_bytes (abi_field_head_size full) full) initial current state /\
+      abi_native_cursor func root_cs root_after counter_inst dyn_addr current state /\
+      abi_native_dynamic_state full dst src dyn_ptr dst_addr dyn_addr root_addr source_capacity reference
+        pending so ho current state /\
+      so + SUM (MAP (\(_,_,mz,_). mz) pending) = end_so /\
+      ho + SUM (MAP (\(_,az,_,_). az) pending) = end_ho /\
+      state.vs_current_bb = current.cs_current_bb /\
+      state.vs_inst_idx = LENGTH current.cs_current_insts /\ ~state.vs_halted`,
+    `\(pending:(abi_enc_info # num # num # bool) list)
+        (current:compile_state,so:num,ho:num) (result:operand,en:compile_state)
+        (state:venom_state) out.
+      abi_native_traversal ctx func root_cs root_after dst_addr
+        (abi_field_bytes (abi_field_head_size full) full) initial en out /\
+      abi_native_cursor func root_cs root_after counter_inst dyn_addr en out`,
+    `\(result:operand,en) out.
+      abi_native_dynamic_state full dst src dyn_ptr dst_addr dyn_addr root_addr source_capacity reference
+        [] end_so end_ho en out /\
+      out.vs_current_bb = en.cs_current_bb /\
+      out.vs_inst_idx = LENGTH en.cs_current_insts /\ ~out.vs_halted`] mp_tac
+    (Q.GENL [`Inv`, `Run`, `Post`]
+      (Q.INST [`dp` |-> `dyn_ptr`] abi_encoder_members_generate)) >>
+  simp_tac bool_ss [] >> impl_tac
+  >- (conj_tac
+      >- (rpt gen_tac >> strip_tac >> gvs[] >>
+          `cs_extends ce root_after` by
+            (irule cs_extends_trans >> qexists_tac `en` >> simp[]) >>
+          drule_all abi_native_dynamic_step >>
+          disch_then (qx_choose_then `child_out` strip_assume_tac) >>
+          qexists_tac `child_out` >> gvs[ADD_COMM]) >>
+      rpt gen_tac >> strip_tac >> gvs[abi_complex_fields_nil]) >>
+  disch_then (qspecl_then [`entries`, `cs`, `source_offset`, `head_offset`, `ret`,
+    `after`, `()`, `ss`] mp_tac) >>
+  impl_tac >- gvs[Abbr`end_so`, Abbr`end_ho`] >>
+  disch_then (qx_choose_then `out` strip_assume_tac) >> qexists_tac `out` >> gvs[]
 QED
 
 val () = List.app (fn (name,th) =>

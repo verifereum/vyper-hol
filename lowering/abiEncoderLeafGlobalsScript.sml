@@ -1,9 +1,10 @@
 (* Pure leaf opcode certificate; field preservation only, not execution correctness. *)
 Theory abiEncoderLeafGlobals
 Ancestors
-  abiEncoderLeafCode abiEncoderBytesCode abiEncoderReentryLeaves abiEncoder
+  abiEncoderLeaves abiEncoder
   emitHelper emitHelperProps exprLoweringProps compileEnv venomState venomExecSemantics venomInst
   valueEncoding list rich_list pred_set words arithmetic
+  abiEncoderLeafRaw abiBytestringCode
 
 Theorem abi_encoder_leaf_step_globals:
   inst.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND} /\
@@ -36,33 +37,22 @@ Theorem abi_encoder_word_global_code:
   compile_abi_encode_to_buf dst src AbiPrimWord st = (out,st') ==>
   EVERY (\i. i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND}) (emitted_insts st st')
 Proof
-  simp[Once compile_abi_encode_child_def, compile_abi_encode_static_def,
-    comp_bind_def, comp_ignore_bind_def, comp_return_def,
-    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  simp[emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>
-  simp[DROP_LENGTH_APPEND, mk_inst_def]
+  simp_tac bool_ss [Once compile_abi_encode_child_def] >> strip_tac >>
+  drule compile_abi_encode_static_code >> simp[mk_inst_def]
 QED
 
 Theorem abi_encoder_copy_global_code:
   compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,st') ==>
   EVERY (\i. i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND}) (emitted_insts st st')
 Proof
-  simp[Once compile_abi_encode_child_def, compile_abi_encode_static_def,
-    comp_bind_def, comp_ignore_bind_def, comp_return_def,
-    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  simp[emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>
-  simp[DROP_LENGTH_APPEND, mk_inst_def]
+  strip_tac >> drule abi_encode_copy_code >> strip_tac >>
+  drule emitted_insts_emit_void >> simp[mk_inst_def]
 QED
 
 Theorem abi_encoder_bytes_global_code:
   compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,st') ==>
   EVERY (\i. i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND}) (emitted_insts st st')
 Proof
-  simp[Once compile_abi_encode_child_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  simp[emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>
-  simp[DROP_LENGTH_APPEND, mk_inst_def]
+  strip_tac >> drule compile_abi_bytestring_code >>
+  simp[bytestring_encoder_insts_def, mk_inst_def]
 QED

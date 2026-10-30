@@ -11,7 +11,6 @@
  *   compile_expr_correct     — main expression lowering correctness
  *   compile_literal_vv_correct  — word literal case
  *   compile_name_correct     — allocation-backed word variable lookup
- *   compile_name_correct_word — fixed-offset word variable lookup
  *   compile_binop_correct    — binary operation case
  *   compile_expr_grows, compile_binop_grows — compile_expr, lower_value
  *                              and compile_binop only append (cs_extends)
@@ -860,52 +859,6 @@ Proof
   `mload (w2n w) ss = mem_word_at (w2n w) ss.vs_memory` by
     simp[mload_def, mem_word_at_def] >>
   simp[] >> irule memory_value_rel_base_word >> simp[]
-QED
-
-(* MemLoc bindings are described by vars_rel, not the function-indexed
-   state_rel's allocation-backed local_ptrs_rel. Keep the word-load API for
-   callers with an explicit MemLoc representation. *)
-Theorem compile_name_correct_word:
-  ∀ cenv cx ty ann id es ss st op st' v es' offset size entry.
-    vars_rel cenv es.scopes ss ∧
-    eval_expr cx (Name ann id) es = (INL (Value v), es') ∧
-    lower_value compile_expr cenv ty (Name ann id) st = (op, st') ∧
-    FLOOKUP cenv.ce_vars id = SOME (MemLoc offset size) ∧
-    offset < dimword (:256) ∧
-    lookup_scopes id es.scopes = SOME entry ∧
-    entry.value = v ∧
-    value_has_type entry.type v ∧
-    (∃ bt. entry.type = BaseTV bt ∧ is_word_type (BaseT bt)) ∧
-    is_word_type ann
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand op ss' = SOME (typed_val_to_w256 entry.type v) ∧
-      es' = es ∧
-      same_blocks st st'
-Proof
-  rpt gen_tac >> strip_tac >>
-  `eval_expr cx (Name ann id) es = (INL (Value entry.value),es)` by
-    (irule eval_name_lookup_scopes >> simp[]) >>
-  `es' = es` by gvs[] >>
-  `memory_value_rel entry.type entry.value offset ss.vs_memory` by
-    (drule_all vars_rel_memloc_value >> simp[]) >>
-  `mem_word_at offset ss.vs_memory = typed_val_to_w256 entry.type v` by
-    (gvs[] >> irule memory_value_rel_base_word >> simp[]) >>
-  `emit_op MLOAD [Lit (n2w offset)] st = (op,st')` by
-    (drule lower_value_name_memloc >> simp[] >> strip_tac >> gvs[]) >>
-  `same_blocks st st'` by (drule emit_op_extends >> simp[]) >>
-  drule emitted_insts_emit_op_local >> strip_tac >> gvs[] >>
-  `step_inst_base (mk_inst st.cs_next_id MLOAD [Lit (n2w offset)]
-      [STRING #"%" (toString st.cs_next_var)]) ss =
-    OK (update_var (STRING #"%" (toString st.cs_next_var)) (mload offset ss) ss)` by
-    (mp_tac (Q.SPECL [`Lit (n2w offset)`,
-       `STRING #"%" (toString st.cs_next_var)`, `st.cs_next_id`, `ss`, `n2w offset`]
-       step_MLOAD_local) >> simp[eval_operand_def]) >>
-  qexists_tac `update_var (STRING #"%" (toString st.cs_next_var))
-    (mload offset ss) ss` >>
-  simp[run_inst_seq_def, step_MLOAD_local, eval_operand_def,
-    eval_operand_update_var_local, GSYM mem_word_at_eq_mload_proof]
 QED
 
 (* --- BinOp (safe arithmetic) --- *)
@@ -4277,7 +4230,6 @@ val () = List.app (fn (name,th) =>
   end)
   [("compile_expr_ci_mono", compile_expr_ci_mono),
    ("compile_name_correct", compile_name_correct),
-   ("compile_name_correct_word", compile_name_correct_word),
    ("ci_mono_lower_value_compile_expr", ci_mono_lower_value_compile_expr),
    ("compile_expr_extends_insts", compile_expr_extends_insts)];
 

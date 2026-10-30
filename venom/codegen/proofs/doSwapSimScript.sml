@@ -227,81 +227,6 @@ Proof
       first_x_assum (qspecl_then [`ix`, `il`] mp_tac) >> fs[])
 QED
 
-(* spill_alloc_wf preserved after one allocation + FUPDATE *)
-Theorem spill_alloc_wf_after_spill:
-  !al spilled off al' op.
-    spill_alloc_wf al spilled /\
-    alloc_spill_slot al = (off, al') /\
-    al'.sa_next_offset < dimword(:256) ==>
-    spill_alloc_wf al' (spilled |+ (op, off))
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all alloc_spill_slot_wf >> strip_tac >>
-  fs[spill_alloc_wf_def] >>
-  fs[alloc_spill_slot_def] >>
-  Cases_on `al.sa_free_slots` >> gvs[]
-  (* Empty free_slots: off = next_offset, al' bumps by 32 *)
-  >- (fs[FLOOKUP_UPDATE] >> rpt conj_tac >> rpt gen_tac >>
-      every_case_tac >> rpt strip_tac >> gvs[] >>
-      res_tac >> decide_tac)
-  (* Non-empty free_slots: off = LAST, al' uses FRONT *)
-  >> rename1 `h::t'` >>
-  simp[FLOOKUP_UPDATE] >> rpt conj_tac >> rpt gen_tac >>
-  every_case_tac >> rpt strip_tac >> gvs[MEM_FRONT, ALL_DISTINCT_FRONT] >>
-  TRY (res_tac >> decide_tac) >>
-  TRY decide_tac >>
-  (* remaining: FRONT membership → full list membership *)
-  TRY (imp_res_tac MEM_FRONT >> gvs[] >> res_tac >> decide_tac) >>
-  (* EL FRONT pairwise *)
-  TRY (fs[EL_FRONT, LENGTH_FRONT] >>
-       qpat_x_assum `!i j. i < SUC _ /\ _ ==> _`
-         (qspecl_then [`i`, `j`] mp_tac) >>
-       simp[]) >>
-  (* spilled vs FRONT: need MEM_FRONT then use spilled-vs-free hyp *)
-  imp_res_tac MEM_FRONT >> fs[] >>
-  qpat_x_assum `!op off1 off2. FLOOKUP _ _ = SOME _ /\ _ ==> _`
-    (qspecl_then [`op'`, `off1`, `off2`] mp_tac) >>
-  simp[]
-QED
-
-
-(* One allocator step plus the matching map update preserves durable layout.
-   Concrete access validity (off < dimword) remains a call-site obligation. *)
-Theorem spill_alloc_layout_wf_after_spill:
-  !al spilled off al' op.
-    spill_alloc_layout_wf al spilled /\
-    al.sa_next_offset < dimword(:256) /\
-    alloc_spill_slot al = (off, al') ==>
-    spill_alloc_layout_wf al' (spilled |+ (op, off))
-Proof
-  rpt gen_tac >> strip_tac >>
-  `spill_alloc_wf al spilled` by
-    simp[spill_alloc_wf_iff_layout_ready] >>
-  drule_all alloc_spill_slot_wf >> strip_tac >>
-  fs[spill_alloc_layout_wf_def, alloc_spill_slot_def] >>
-  Cases_on `al.sa_free_slots` >> gvs[]
-  >- (fs[FLOOKUP_UPDATE, spill_alloc_layout_wf_def] >>
-      rpt conj_tac >> rpt gen_tac >>
-      every_case_tac >> rpt strip_tac >> gvs[] >>
-      res_tac >> decide_tac)
-  >> rename1 `h::t'` >>
-  simp[FLOOKUP_UPDATE, spill_alloc_layout_wf_def] >>
-  rpt conj_tac >> rpt gen_tac >>
-  every_case_tac >> rpt strip_tac >> gvs[MEM_FRONT, ALL_DISTINCT_FRONT] >>
-  TRY (res_tac >> decide_tac) >>
-  TRY decide_tac >>
-  TRY (imp_res_tac MEM_FRONT >> gvs[] >> res_tac >> decide_tac) >>
-  TRY (fs[EL_FRONT, LENGTH_FRONT] >>
-       qpat_x_assum `!i j. i < SUC _ /\ _ ==> _`
-         (qspecl_then [`i`, `j`] mp_tac) >>
-       simp[]) >>
-  imp_res_tac MEM_FRONT >> fs[] >>
-  qpat_x_assum `!op off1 off2. FLOOKUP _ _ = SOME _ /\ _ ==> _`
-    (qspecl_then [`op'`, `off1`, `off2`] mp_tac) >>
-  simp[]
-QED
-
-
 (* Allocation preserves durable layout even at allocator saturation. *)
 Theorem spill_alloc_layout_wf_after_alloc:
   !al spilled off al' op.
@@ -365,6 +290,29 @@ Proof
 QED
 
 
+(* Compatibility interfaces derive from the saturation-safe layout theorem;
+   readiness is needed only when the conclusion explicitly asks for it. *)
+Theorem spill_alloc_wf_after_spill:
+  !al spilled off al' op.
+    spill_alloc_wf al spilled /\
+    alloc_spill_slot al = (off, al') /\
+    al'.sa_next_offset < dimword(:256) ==>
+    spill_alloc_wf al' (spilled |+ (op, off))
+Proof
+  simp[spill_alloc_wf_iff_layout_ready] >>
+  metis_tac[spill_alloc_layout_wf_after_alloc]
+QED
+
+Theorem spill_alloc_layout_wf_after_spill:
+  !al spilled off al' op.
+    spill_alloc_layout_wf al spilled /\
+    al.sa_next_offset < dimword(:256) /\
+    alloc_spill_slot al = (off, al') ==>
+    spill_alloc_layout_wf al' (spilled |+ (op, off))
+Proof
+  metis_tac[spill_alloc_layout_wf_after_alloc]
+QED
+
 Theorem separated_slots_snoc[local]:
   !slots off.
     (!i j. i < LENGTH slots /\ j < LENGTH slots /\ i <> j ==>
@@ -390,46 +338,6 @@ Proof
   >> `i < LENGTH slots /\ j < LENGTH slots` by decide_tac >>
      simp[listTheory.EL_SNOC] >> metis_tac[]
 QED
-(* Returning an active slot to the reusable list preserves canonical allocator
-   consistency, provided its map entry is removed in the same transition. *)
-Theorem spill_alloc_wf_after_free:
-  !al spilled op off.
-    spill_alloc_wf al spilled /\
-    FLOOKUP spilled op = SOME off ==>
-    spill_alloc_wf (free_spill_slot off al) (spilled \\ op)
-Proof
-  rpt gen_tac >> strip_tac >>
-  fs[spill_alloc_wf_def] >>
-  simp[spill_alloc_wf_def, free_spill_slot_def, ALL_DISTINCT_SNOC,
-       finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
-  rpt conj_tac
-  >- metis_tac[]
-  >- metis_tac[]
-  >- metis_tac[]
-  >- (strip_tac >>
-      qpat_x_assum `!op' off1 off2. _`
-        (qspecl_then [`op`, `off`, `off`] mp_tac) >>
-      simp[] >> decide_tac)
-  >- (rpt gen_tac >> strip_tac >>
-      Cases_on `i = LENGTH al.sa_free_slots` >>
-      Cases_on `j = LENGTH al.sa_free_slots`
-      >- gvs[]
-      >- (`j < LENGTH al.sa_free_slots` by decide_tac >>
-          simp[listTheory.EL_SNOC, listTheory.EL_LENGTH_SNOC] >>
-          qpat_x_assum `!op' off1 off2. _`
-            (qspecl_then [`op`, `off`, `EL j al.sa_free_slots`] mp_tac) >>
-          simp[MEM_EL] >> metis_tac[])
-      >- (`i < LENGTH al.sa_free_slots` by decide_tac >>
-          simp[listTheory.EL_SNOC, listTheory.EL_LENGTH_SNOC] >>
-          qpat_x_assum `!op' off1 off2. _`
-            (qspecl_then [`op`, `off`, `EL i al.sa_free_slots`] mp_tac) >>
-          simp[MEM_EL] >> metis_tac[])
-      >> `i < LENGTH al.sa_free_slots /\ j < LENGTH al.sa_free_slots`
-           by decide_tac >>
-         simp[listTheory.EL_SNOC] >> metis_tac[])
-  >> rpt gen_tac >> strip_tac >> gvs[] >> metis_tac[]
-QED
-
 (* Returning an active slot preserves durable layout safety even when the
    allocator is saturated and no further fresh allocation is ready. *)
 Theorem spill_alloc_layout_wf_after_free:
@@ -468,6 +376,18 @@ Proof
            by decide_tac >>
          simp[listTheory.EL_SNOC] >> metis_tac[])
   >> rpt gen_tac >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+(* Freeing does not change the frontier, so the ready interface follows from
+   durable layout preservation without repeating the slot-separation proof. *)
+Theorem spill_alloc_wf_after_free:
+  !al spilled op off.
+    spill_alloc_wf al spilled /\
+    FLOOKUP spilled op = SOME off ==>
+    spill_alloc_wf (free_spill_slot off al) (spilled \\ op)
+Proof
+  simp[spill_alloc_wf_iff_layout_ready, free_spill_slot_preserves] >>
+  metis_tac[spill_alloc_layout_wf_after_free]
 QED
 
 (* =========================================================================
