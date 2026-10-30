@@ -14,7 +14,7 @@ Definition vyper_base_to_abi_type_def[simp]:
   vyper_base_to_abi_type (UintT n) = Uint n ∧
   vyper_base_to_abi_type (IntT n) = Int n ∧
   vyper_base_to_abi_type BoolT = Bool ∧
-  vyper_base_to_abi_type DecimalT = Int 168 ∧
+  vyper_base_to_abi_type DecimalT = Int decimal_bits ∧
   vyper_base_to_abi_type (StringT _) = String ∧
   vyper_base_to_abi_type (BytesT (Dynamic _)) = Bytes NONE ∧
   vyper_base_to_abi_type (BytesT (Fixed n)) = Bytes (SOME n) ∧
@@ -749,15 +749,6 @@ Definition evaluate_abi_encode_bytes_def:
 End
 
 val () = cv_auto_trans evaluate_abi_encode_bytes_def;
-
-Definition evaluate_abi_encode_def:
-  evaluate_abi_encode tenv typ v =
-    case evaluate_abi_encode_bytes tenv typ v of
-      INL bs => INL (BytesV bs)
-    | INR err => INR err
-End
-
-val () = cv_auto_trans evaluate_abi_encode_def;
 
 (* ===== External Call Calldata Building ===== *)
 

@@ -16,6 +16,9 @@
  *   compile_annassign_word_stmt_frag  — the same for a word_value
  *   compile_annassign_typed_stmt_frag — the same for a value of the
  *                                       declared type: address and bytesN
+ *   annassign_word_store_run          — the MSTORE into a new local's
+ *                                       buffer, for a word laying out a
+ *                                       value that fits the buffer
  *)
 
 Theory stmtSimDecl
@@ -240,7 +243,7 @@ Proof
   qexistsl_tac [`s1`, `w`] >> simp[] >> metis_tac[]
 QED
 
-Theorem annassign_word_store_run[local]:
+Theorem annassign_word_store_run:
   !ctx func cenv cx es s id p sz w inst v tyv sc rest a op st st' wd.
     emit_void MSTORE [Var p; op] st = ((), st') /\
     fn_has_code st st' func /\ ~s.vs_halted /\
@@ -254,7 +257,7 @@ Theorem annassign_word_store_run[local]:
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
-    32 <= sz /\ type_memory_size tyv = 32 /\
+    32 <= sz /\ type_memory_size tyv <= sz /\
     val_in_memory tyv v (w2n w) (mstore (w2n w) wd s).vs_memory /\
     val_wf tyv v ==>
     ?t. stmt_state_rel func cenv cx
@@ -354,6 +357,7 @@ Proof
   `val_in_memory tyv v (w2n w)
      (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory /\
    val_wf tyv v /\ type_memory_size tyv = 32` by fs[store_lays_out_def] >>
+  `type_memory_size tyv <= sz` by simp[] >>
   drule_all annassign_word_store_run >>
   disch_then (qspecl_then [`ctx`, `a`] mp_tac) >> strip_tac >>
   qexists_tac `t` >> simp[] >> metis_tac[]
