@@ -38,6 +38,72 @@ Proof
   simp[]
 QED
 
+Theorem internal_call_no_type_error:
+  well_typed_expr env (Call ty (IntCall (src,fn)) args drv) /\
+  env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr (Call ty (IntCall (src,fn)) args drv)) ==>
+  no_type_error_eval (eval_expr cx (Call ty (IntCall (src,fn)) args drv) st)
+Proof
+  strip_tac >>
+  Cases_on `eval_expr cx (Call ty (IntCall (src,fn)) args drv) st` >>
+  simp[no_type_error_eval_def, no_type_error_result_def] >>
+  drule_all typed_expr_evaluation_sound >>
+  simp[no_type_error_result_def]
+QED
+
+Theorem internal_call_success_value[local]:
+  eval_expr cx (Call ty (IntCall (src,fn)) args drv) st = (INL pv,st') ==>
+  ?v. pv = Value v
+Proof
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+       raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem internal_call_type_preservation:
+  well_typed_expr env (Call ty (IntCall (src,fn)) args drv) /\
+  env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr (Call ty (IntCall (src,fn)) args drv)) /\
+  eval_expr cx (Call ty (IntCall (src,fn)) args drv) st = (INL tvl, st') ==>
+  state_well_typed st' /\ expr_runtime_typed env (Call ty (IntCall (src,fn)) args drv) tvl
+Proof
+  strip_tac >>
+  drule_all typed_expr_evaluation_sound >> strip_tac >> gvs[] >>
+  drule internal_call_success_value >> strip_tac >>
+  gvs[eval_result_typed_def, expr_runtime_typed_def,
+      value_result_typed_def]
+QED
+
+Theorem external_call_no_type_error:
+  well_typed_expr env (Call ty (ExtCall stat skip_check fsig opts) args drv) /\
+  env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr (Call ty (ExtCall stat skip_check fsig opts) args drv)) ==>
+  no_type_error_eval (eval_expr cx (Call ty (ExtCall stat skip_check fsig opts) args drv) st)
+Proof
+  strip_tac >>
+  Cases_on `eval_expr cx (Call ty (ExtCall stat skip_check fsig opts) args drv) st` >>
+  simp[no_type_error_eval_def, no_type_error_result_def] >>
+  drule_all typed_expr_evaluation_sound >>
+  simp[no_type_error_result_def]
+QED
+
+Theorem special_call_no_type_error:
+  well_typed_expr env (Call ty target args drv) /\
+  target <> IntCall (src,fn) /\ (!stat skip_check fsig opts. target <> ExtCall stat skip_check fsig opts) /\
+  env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr (Call ty target args drv)) ==>
+  no_type_error_eval (eval_expr cx (Call ty target args drv) st)
+Proof
+  strip_tac >>
+  Cases_on `eval_expr cx (Call ty target args drv) st` >>
+  simp[no_type_error_eval_def, no_type_error_result_def] >>
+  drule_all typed_expr_evaluation_sound >>
+  simp[no_type_error_result_def]
+QED
+
 (* ===== Main no-TypeError theorem for already-typed statement lists ===== *)
 
 Theorem typed_stmts_no_type_error:

@@ -795,9 +795,6 @@ QED
    Main theorems
    ------------------------------------------------------------------------ *)
 
-
-
-
 Theorem eval_stmts_preserves_scopes_dom:
   ∀cx st st' ss res.
     eval_stmts cx ss st = (res, st') ⇒
@@ -1131,7 +1128,6 @@ Proof
   >> simp[] (* remaining expression/list/resolver/tuple clauses are vacuous *)
 QED
 
-
 Theorem eval_stmts_new_in_head_not_in_tail:
   !cx ss st res st' id.
     eval_stmts cx ss st = (res, st') /\
@@ -1420,7 +1416,6 @@ Proof
   imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
   gvs[] >> metis_tac[write_place_preserves_tv]
 QED
-
 
 Theorem pop_place_preserves_tv:
   pop_place cx p st = (res,st') ==> preserves_tv cx st st'
@@ -1949,7 +1944,8 @@ Proof
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
     pop_assum mp_tac >>
-    simp_tac std_ss [evaluate_def, bind_apply, ignore_bind_apply] >>
+    simp_tac std_ss [evaluate_def, bind_apply, ignore_bind_apply,
+                     lock_if_nr_def, unlock_if_nr_def, is_view_mut_def] >>
     (* check recursion *)
     BasicProvers.TOP_CASE_TAC >>
     imp_res_tac type_check_state >>
@@ -2210,7 +2206,6 @@ Proof
   simp[]
 QED
 
-
 (* Standalone lemma: preserves_tv through the IntCall finally+safe_cast chain.
    Abstracts away variable names so we can prove it with hol_state_at. *)
 Theorem intcall_ptv_chain[local]:
@@ -2362,7 +2357,7 @@ QED
 
 Finalise eval_preserves_tv_with_results
 
-Theorem eval_preserves_tv_extended:
+Theorem eval_preserves_tv:
   (∀cx s st res st'. eval_stmt cx s st = (res, st') ⇒
      preserves_tv cx st st') ∧
   (∀cx ss st res st'. eval_stmts cx ss st = (res, st') ⇒
@@ -2387,21 +2382,6 @@ Theorem eval_expr_results_preserves_tv:
   eval_expr_results cx es st = (res,st') ==> preserves_tv cx st st'
 Proof
   metis_tac[eval_preserves_tv_with_results]
-QED
-
-Theorem eval_preserves_tv:
-  (!cx s st res st'. eval_stmt cx s st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx ss st res st'. eval_stmts cx ss st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx it st res st'. eval_iterator cx it st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx ty nm body vs st res st'. eval_for cx ty nm body vs st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx e st res st'. eval_expr cx e st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx es st res st'. eval_exprs cx es st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx t st res st'. eval_base_place cx t st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx t st res st'. eval_target_place cx t st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> preserves_tv cx st st')
-Proof
-  ACCEPT_TAC eval_preserves_tv_extended
 QED
 
 Theorem eval_stmt_preserves_tv:

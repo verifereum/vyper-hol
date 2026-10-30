@@ -86,4 +86,14 @@ Proof
   simp[]
 QED
 
+Theorem function_body_type_sound:
+  functions_well_typed cx /\ context_well_typed cx /\ accounts_well_typed st.accounts /\
+  state_well_typed st /\ env_consistent env cx st /\
+  call_evaluation_safe cx (int_calls_stmts body_stmts) /\
+  type_stmts env ret_ty body_stmts = SOME env_after ==>
+  no_type_error_eval (eval_stmts cx body_stmts st)
+Proof
+  metis_tac[eval_stmts_no_type_error]
+QED
+
 (* ===== Top-level theorem shape ===== *)

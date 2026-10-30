@@ -791,6 +791,17 @@ Proof
        well_formed_type_def]
 QED
 
+Theorem check_contract_functions_well_typed_initial_stk[local]:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP sources addr = SOME mods /\
+  tx.target = addr ==>
+  functions_well_typed ((initial_evaluation_context sources layouts tx src) with stk := stk)
+Proof
+  rw[functions_well_typed_stk_irrelevant] >>
+  irule check_contract_functions_well_typed_initial >>
+  simp[]
+QED
+
 Theorem checked_contract_static_maps_transfer_inputs_initial[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
@@ -950,6 +961,86 @@ Proof
        vyperTypeStmtResultTheory.return_exception_typed_def,
        vyperTypeExprSoundnessTheory.value_runtime_typed_def,
        get_tenv_def, initial_evaluation_context_def]
+QED
+
+Theorem checked_explicit_external_entry_establishes_type_soundness_preconditions[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
+  MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts /\
+  context_well_typed
+    ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)]) /\
+  machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+    ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)])
+    am.immutables /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  args_values_typed (type_env_all_modules mods) args vals ==>
+  ?env_body env_after st.
+    st = (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) /\
+    functions_well_typed
+      ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)]) /\
+    accounts_well_typed st.accounts /\
+    state_well_typed st /\
+    env_consistent env_body
+      ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)]) st /\
+    type_stmts env_body ret body = SOME env_after
+Proof
+  strip_tac >> gvs[] >>
+  `External <> Deploy` by simp[] >>
+  drule_all checked_explicit_external_body_typing_package >>
+  strip_tac >>
+  `scope_well_typed scope` by
+    metis_tac[bind_arguments_scope_well_typed_from_success] >>
+  qexistsl [`env_body`, `env_after`] >>
+  rw[initial_state_accounts_well_typed_simple,
+     initial_state_single_scope_well_typed_simple] >-
+    (irule check_contract_functions_well_typed_initial_stk >> simp[]) >>
+  rw[env_consistent_def]
+  >- (irule env_context_consistent_same_static_maps >>
+      qexists `artifact_env art mods env_body.current_src` >>
+      rpt (conj_tac >- simp[artifact_env_def, get_tenv_def, initial_evaluation_context_def]) >>
+      irule check_contract_env_context_consistent_initial_with_current_src >>
+      simp[])
+  >- (`env_scopes_consistent env_body
+         ((initial_evaluation_context am.sources am.layouts tx env_body.current_src) with stk := [(env_body.current_src,fn)])
+         ((initial_state am []) with scopes := [scope])` suffices_by
+        simp[initial_state_def] >>
+      irule bind_arguments_env_scopes_consistent >>
+      qexistsl [`args`, `type_env_all_modules mods`, `vals`] >>
+      gvs[get_tenv_def, initial_evaluation_context_def] >> metis_tac[])
+  >- (irule (SRULE [] immutables_ready_env_immutables_consistent) >>
+      qexists `artifact_env art mods src` >>
+      gvs[artifact_env_def])
+QED
+
+Theorem check_contract_explicit_external_entry_no_type_error:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
+  MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts /\
+  context_well_typed
+    ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)]) /\
+  machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+    ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)])
+    am.immutables /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  args_values_typed (type_env_all_modules mods) args vals /\
+  call_evaluation_safe
+    ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)])
+    (int_calls_stmts body) ==>
+  no_type_error_eval
+    (eval_stmts
+      ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)])
+      body
+      (initial_state am [scope] with <|outcomes := orc; requests := rqs|>))
+Proof
+  metis_tac[
+    checked_explicit_external_entry_establishes_type_soundness_preconditions,
+    eval_stmts_no_type_error]
 QED
 
 Theorem checked_explicit_external_post_prefix_body_no_type_error_selected:

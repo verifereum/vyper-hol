@@ -6,6 +6,8 @@ Ancestors
 Libs
   intLib wordsLib
 
+(* Some results in this theory have downstream consumers outside this repository. *)
+
 (****************************************************************************)
 (*                         Main theorems                                    *)
 (****************************************************************************)

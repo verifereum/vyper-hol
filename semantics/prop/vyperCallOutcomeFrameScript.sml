@@ -139,8 +139,6 @@ Proof
   metis_tac[]
 QED
 
-(* The actual TASK028 continuation equations isolate the pre-take code check. *)
-
 Theorem Send_outcome_transport:
   (!s. R s s) /\
   (!s t u. R s t /\ R t u ==> R s u) /\
