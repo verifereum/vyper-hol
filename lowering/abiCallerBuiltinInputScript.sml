@@ -222,16 +222,56 @@ Proof
   fs[abi_embedded_static_size_def]
 QED
 
+Theorem abi_caller_decode_minimum_fixed_relaxed[local]:
+  abi_caller_abi_shape sf env ty /\
+  vyper_decode_valid_enc (vyper_to_abi_type env (ArrayT ty (Fixed n))) bs ==>
+  abi_static_size sf (ArrayT ty (Fixed n)) <= LENGTH bs
+Proof
+  strip_tac >> drule abi_caller_embedded_head >> strip_tac >>
+  qpat_x_assum `vyper_decode_valid_enc _ _` mp_tac >>
+  simp_tac bool_ss [Once vyper_to_abi_type_def, Once vyper_decode_valid_enc_def, LET_THM] >>
+  strip_tac >> drule abi_valid_array_heads >> strip_tac >>
+  asm_simp_tac bool_ss [Once abi_static_size_def, GSYM abi_embedded_static_size_def]
+QED
+
+Theorem abi_caller_decode_minimum_tuple_relaxed[local]:
+  EVERY (abi_caller_abi_shape sf env) tys /\
+  vyper_decode_valid_enc (vyper_to_abi_type env (TupleT tys)) bs ==>
+  abi_static_size sf (TupleT tys) <= LENGTH bs
+Proof
+  strip_tac >> drule abi_caller_members_head >> strip_tac >>
+  `vyper_decode_valid_enc (Tuple (vyper_to_abi_types env tys)) bs` by
+    fs[Once vyper_to_abi_type_def] >>
+  drule abi_valid_tuple_view >> strip_tac >>
+  asm_simp_tac bool_ss [Once abi_static_size_def]
+QED
+
+Theorem abi_caller_decode_minimum_struct_relaxed[local]:
+  FLOOKUP env nsid = SOME (StructArgs args) /\
+  FLOOKUP sf (nsid_to_string nsid) = SOME fields /\
+  MAP (\(name,ty,sz). (name,ty)) fields = args /\
+  EVERY (abi_caller_abi_shape (sf \\ nsid_to_string nsid) (env \\ nsid))
+    (MAP SND args) /\
+  vyper_decode_valid_enc (vyper_to_abi_type env (StructT nsid)) bs ==>
+  abi_static_size sf (StructT nsid) <= LENGTH bs
+Proof
+  strip_tac >> drule_all abi_caller_struct_map_field_types >> strip_tac >>
+  drule abi_caller_members_head >> strip_tac >>
+  `vyper_decode_valid_enc (Tuple (vyper_to_abi_types (env \\ nsid) (MAP SND args))) bs` by
+    (qpat_assum `vyper_decode_valid_enc (vyper_to_abi_type env (StructT nsid)) bs`
+       (mp_tac o ONCE_REWRITE_RULE [vyper_to_abi_type_def]) >>
+     asm_simp_tac (srw_ss()) [Excl "vyper_decode_valid_enc_def", Excl "dec_def"]) >>
+  drule abi_valid_tuple_view >> strip_tac >>
+  asm_simp_tac (srw_ss()) [Once abi_static_size_def, LET_THM]
+QED
+
 Theorem abi_caller_decode_minimum_fixed:
   abi_caller_abi_shape sf env ty /\
   valid_enc (vyper_to_abi_type env (ArrayT ty (Fixed n))) bs ==>
   abi_static_size sf (ArrayT ty (Fixed n)) <= LENGTH bs
 Proof
-  strip_tac >> drule abi_caller_embedded_head >> strip_tac >>
-  qpat_x_assum `valid_enc _ _` mp_tac >>
-  simp_tac bool_ss [Once vyper_to_abi_type_def, Once valid_enc_def, LET_THM] >>
-  strip_tac >> drule abi_valid_array_heads >> strip_tac >>
-  asm_simp_tac bool_ss [Once abi_static_size_def, GSYM abi_embedded_static_size_def]
+  strip_tac >> drule valid_enc_vyper_decode_valid_enc >> strip_tac >>
+  drule_all abi_caller_decode_minimum_fixed_relaxed >> simp[]
 QED
 
 Theorem abi_caller_decode_minimum_tuple:
@@ -239,11 +279,8 @@ Theorem abi_caller_decode_minimum_tuple:
   valid_enc (vyper_to_abi_type env (TupleT tys)) bs ==>
   abi_static_size sf (TupleT tys) <= LENGTH bs
 Proof
-  strip_tac >> drule abi_caller_members_head >> strip_tac >>
-  `valid_enc (Tuple (vyper_to_abi_types env tys)) bs` by
-    fs[Once vyper_to_abi_type_def] >>
-  drule abi_valid_tuple_view >> strip_tac >>
-  asm_simp_tac bool_ss [Once abi_static_size_def]
+  strip_tac >> drule valid_enc_vyper_decode_valid_enc >> strip_tac >>
+  drule_all abi_caller_decode_minimum_tuple_relaxed >> simp[]
 QED
 
 Theorem abi_caller_decode_minimum_struct:
@@ -255,14 +292,8 @@ Theorem abi_caller_decode_minimum_struct:
   valid_enc (vyper_to_abi_type env (StructT nsid)) bs ==>
   abi_static_size sf (StructT nsid) <= LENGTH bs
 Proof
-  strip_tac >> drule_all abi_caller_struct_map_field_types >> strip_tac >>
-  drule abi_caller_members_head >> strip_tac >>
-  `valid_enc (Tuple (vyper_to_abi_types (env \\ nsid) (MAP SND args))) bs` by
-    (qpat_assum `valid_enc (vyper_to_abi_type env (StructT nsid)) bs`
-       (mp_tac o ONCE_REWRITE_RULE [vyper_to_abi_type_def]) >>
-     asm_simp_tac (srw_ss()) [Excl "valid_enc_def", Excl "dec_def"]) >>
-  drule abi_valid_tuple_view >> strip_tac >>
-  asm_simp_tac (srw_ss()) [Once abi_static_size_def, LET_THM]
+  strip_tac >> drule valid_enc_vyper_decode_valid_enc >> strip_tac >>
+  drule_all abi_caller_decode_minimum_struct_relaxed >> simp[]
 QED
 
 Theorem abi_caller_decode_minimum_array_eval:
@@ -326,15 +357,38 @@ Theorem abi_caller_decode_minimum:
   vyper_valid_enc env ty bs ==>
   abi_static_size sf ty <= LENGTH bs
 Proof
-  strip_tac >> drule vyper_valid_enc_valid_enc >> strip_tac >>
-  drule vyper_valid_enc_length_lower >> strip_tac >>
-  Cases_on `ty` >>
-  FIRST [drule_all abi_caller_decode_minimum_array_eval >> simp[],
-    drule_all abi_caller_decode_minimum_tuple_eval >> simp[],
-    drule_all abi_caller_decode_minimum_struct_eval >> simp[],
-    drule_all abi_caller_decode_minimum_base >>
-      disch_then (qspec_then `sf` ACCEPT_TAC),
-    fs[abi_static_size_def]]
+  simp_tac bool_ss [vyper_valid_enc_window] >> strip_tac >>
+  Cases_on `ty`
+  >- (drule_all abi_caller_decode_minimum_base >>
+      disch_then (qspec_then `sf` ACCEPT_TAC))
+  >- (qpat_x_assum `evaluate_type _ _ = _` mp_tac >>
+      simp_tac bool_ss [Once evaluate_type_def, LET_THM] >> strip_tac >>
+      gvs[AllCaseEqs(), Excl "vyper_decode_valid_enc_def", Excl "dec_def",
+          Excl "vyper_to_abi_type_def"] >>
+      drule_all (cj 2 abi_caller_abi_shape_induction) >> strip_tac >>
+      drule_all abi_caller_decode_minimum_tuple_relaxed >> simp[])
+  >- (rename1 `ArrayT elem bound` >> Cases_on `bound`
+      >- (qpat_x_assum `evaluate_type _ _ = _` mp_tac >>
+          simp_tac bool_ss [Once evaluate_type_def, LET_THM] >> strip_tac >>
+          gvs[AllCaseEqs(), Excl "vyper_decode_valid_enc_def", Excl "dec_def",
+              Excl "vyper_to_abi_type_def"] >>
+          drule_all (cj 1 abi_caller_abi_shape_induction) >> strip_tac >>
+          drule_all abi_caller_decode_minimum_fixed_relaxed >> simp[]) >>
+      simp[abi_static_size_def])
+  >- (qpat_x_assum `evaluate_type _ _ = _` mp_tac >>
+      simp_tac bool_ss [Once evaluate_type_def, LET_THM] >> strip_tac >>
+      gvs[AllCaseEqs(), Excl "vyper_decode_valid_enc_def", Excl "dec_def",
+          Excl "vyper_to_abi_type_def"] >>
+      rename1 `FLOOKUP env nsid = SOME (StructArgs args)` >>
+      drule_all abi_caller_struct_map_namespace >> strip_tac >>
+      `abi_caller_struct_map (sf \\ nsid_to_string nsid) (env \\ nsid)` by
+        (Cases_on `nsid` >> gvs[nsid_to_string_def] >>
+         irule abi_caller_struct_map_delete >> simp[]) >>
+      drule_all (cj 2 abi_caller_abi_shape_induction) >> strip_tac >>
+      drule_all abi_caller_struct_map_lookup >> strip_tac >>
+      drule_all abi_caller_decode_minimum_struct_relaxed >> simp[])
+  >- gvs[abi_static_size_def, vyper_to_abi_type_def, static_length_def]
+  >> simp[abi_static_size_def]
 QED
 
 Theorem abi_caller_source_decode_minimum:
