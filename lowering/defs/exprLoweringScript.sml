@@ -2230,11 +2230,7 @@ Definition compile_subscript_def:
                                  ArrayT _ (Fixed n) => n | _ => 0) in
            let ws = word_scale loc in
            let elem_size = elem_size_in_location cenv loc elem_ty in
-           let load_opc = (case loc of
-                             LocStorage => SLOAD
-                           | LocTransient => TLOAD
-                           | LocCalldata => CALLDATALOAD
-                           | _ => MLOAD) in
+           let load_opc = load_opc_for loc in
            let is_signed_idx = is_signed_type (expr_type idx_e) in
            do idx_op <- lower_value cfn cenv ty idx_e;
               elem_ptr <-
