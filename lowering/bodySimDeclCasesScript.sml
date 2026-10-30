@@ -176,6 +176,9 @@ Proof
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          int_calls_stmt_def] >>
      qexists_tac `[]` >> simp[]) >>
+  `!x. c.ce_var_type (module_var_key (NONE, x)) =
+        cenv.ce_var_type (module_var_key (NONE, x))` by
+    metis_tac[declare_local_module_var_type, declared_name_not_module_key] >>
   metis_tac[body_expr_ok_def, body_inv_same_frame]
 QED
 
@@ -484,7 +487,11 @@ Proof
         (irule o REWRITE_RULE [body_stmts_ok_def]) >>
       simp[] >> rpt conj_tac
       >- metis_tac[stmt_exprs_ok_same_frame]
-      >- metis_tac[body_inv_same_frame]
+      >- (`!x. c.ce_var_type (module_var_key (NONE, x)) =
+                cenv.ce_var_type (module_var_key (NONE, x))` by
+            metis_tac[declare_local_module_var_type,
+                      declared_name_not_module_key] >>
+          metis_tac[body_inv_same_frame])
       >- (qexistsl_tac [`extend_local env id typ F`, `env_b`] >> simp[] >>
           metis_tac[expr_sim_inv_for_scope, ce_locals_declared_declare_local]) >>
       metis_tac[frame_ret_ok_same_frame]) >>

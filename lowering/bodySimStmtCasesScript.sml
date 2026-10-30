@@ -23,12 +23,14 @@
  *                        environment and compile environment it gives
  *   ce_locals_declared_declare_local, ce_locals_declared_stmt — the same
  *                        for ce_locals_declared
- *   compile_expr_open, eval_stmts_popped_keys_indexed — GAP, the facts
- *                        the statement and list cases still take on trust
+ *   compile_expr_open, eval_stmts_popped_keys_indexed,
+ *   declared_name_not_module_key — GAP, the facts the statement and list
+ *                        cases still take on trust
  *
  * Helper:
  *   stmts_env_cs_mono, stmt_env_declare, declare_stmt_local_other,
- *   type_stmt_other     — stmt_env and type_stmt of a statement
+ *   type_stmt_other, declare_local_module_var_type,
+ *   stmt_env_module_var_type — stmt_env and type_stmt of a statement
  *   same_frame_trans, body_inv_same_frame, frame_ret_ok_same_frame,
  *   stmt_exprs_ok_same_frame, stmts_exprs_ok_EVERY — the frame facts
  *                        at a later compile env of the same body
@@ -47,6 +49,8 @@ Ancestors
   vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimMain
   vyperTypeValues vyperTyping vyperTypeDefaults stmtSimAssignTuple
   vyperTypeEnvPreservation bodySimExprCases
+  stmtSimAssignStorage supportedDecls vyperTypeContractStaticMaps
+  vyperTypeContract compileVyper supportedTypes
 Libs
   monadsyntax
 
@@ -118,11 +122,60 @@ QED
 
 Theorem body_inv_same_frame:
   !tops ctx cenv c cx.
-    body_inv tops ctx cenv cx /\ same_frame cenv c ==> body_inv tops ctx c cx
+    body_inv tops ctx cenv cx /\ same_frame cenv c /\
+    (!id. c.ce_var_type (module_var_key (NONE, id)) =
+          cenv.ce_var_type (module_var_key (NONE, id))) ==>
+    body_inv tops ctx c cx
 Proof
   rpt strip_tac >>
   fs[body_inv_def, same_frame_def, compile_env_component_equality] >>
   metis_tac[]
+QED
+
+(* A declaration keeps cenv's type at a module key ("self." ++ name)
+   unless it declares that very key. *)
+Theorem declare_local_module_var_type:
+  !cenv id ty st c st1 x.
+    declare_local cenv id ty st = (c, st1) /\
+    id <> module_var_key (NONE, x) ==>
+    c.ce_var_type (module_var_key (NONE, x)) =
+    cenv.ce_var_type (module_var_key (NONE, x))
+Proof
+  rpt gen_tac >> simp[declare_local_def] >>
+  Cases_on `cenv.ce_alloca_locals` >>
+  simp[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  gvs[comp_return_def, combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem stmt_env_module_var_type:
+  !cenv lctx ret_ty s sa c sb id.
+    stmt_env cenv lctx ret_ty s sa = (c, sb) /\
+    (!t e. s <> AnnAssign (module_var_key (NONE, id)) t e) ==>
+    c.ce_var_type (module_var_key (NONE, id)) =
+    cenv.ce_var_type (module_var_key (NONE, id))
+Proof
+  rpt strip_tac >> drule stmt_env_declare >> strip_tac >>
+  reverse (Cases_on `?x t e. s = AnnAssign x t e`)
+  >- (drule_all declare_stmt_local_other >> simp[]) >>
+  gvs[declare_stmt_local_def] >>
+  drule declare_local_module_var_type >> simp[]
+QED
+
+(* GAP (#637 declarations): the typing declares no module key.  Declared
+   names are dot-free (supported_function_bindings), which the body
+   predicates do not carry yet, as for bodySimDeclCases's
+   declared_name_unbound; module variables in compile-env fields of their
+   own would make this unnecessary.  False for a local spelled as a module
+   key. *)
+Theorem declared_name_not_module_key:
+  !env ret_ty s env' id x.
+    type_stmt env ret_ty s = SOME env' /\
+    ((?typ e. s = AnnAssign id typ e) \/
+     (?typ it n body. s = For id typ it n body)) ==>
+    id <> module_var_key (NONE, x)
+Proof
+  cheat
 QED
 
 Theorem frame_ret_ok_same_frame:
@@ -451,8 +504,9 @@ End
    ImmutableLoc compiles to another form (LocCode, compile_expr's
    TopLevelName case).  A supported program declares no immutables
    (supported_immutables_constants_rejected), so build_compile_env binds
-   none, but body_inv does not fix cenv's module variables: closing this
-   needs a body_inv clause saying cenv binds no ImmutableLoc. *)
+   none, but body_inv fixes only cenv's hashmaps and types at module keys,
+   not its bindings: closing this needs a body_inv clause saying cenv
+   binds no ImmutableLoc. *)
 Theorem body_raise_reason_other:
   !ctx func cx lctx RetQ cenv tops bindings env ret_ty e es res es'.
     body_inv tops ctx cenv cx /\
@@ -712,6 +766,161 @@ Proof
   metis_tac[store_lays_out_typed]
 QED
 
+(* A storage declaration found by name is a variable declaration of tops
+   under that name. *)
+Theorem find_var_decl_storage_mem[local]:
+  !ts id tr typ id_str.
+    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) ==>
+    id_str = id /\ ?vis mut init. MEM (VariableDecl vis mut id typ init) ts
+Proof
+  Induct >> simp[find_var_decl_by_name_def] >> Cases >>
+  rw[find_var_decl_by_name_def] >> metis_tac[]
+QED
+
+Theorem find_var_decl_storage_some[local]:
+  !ts vis mut id ty init.
+    MEM (VariableDecl vis mut id ty init) ts /\
+    (mut = Storage \/ mut = Transient) ==>
+    find_var_decl_by_name id ts <> NONE
+Proof
+  Induct >> simp[] >> Cases >> rw[find_var_decl_by_name_def] >> metis_tac[]
+QED
+
+Theorem supported_variable_decl_mem[local]:
+  !tops src id vis mut ty slot.
+    supported_variable_decl tops (src, id) = SOME (vis, mut, ty, slot) ==>
+    src = NONE /\ MEM (VariableDecl vis mut id ty slot) tops
+Proof
+  Induct >> simp[supported_variable_decl_def] >> Cases >>
+  rw[supported_variable_decl_def] >> metis_tac[]
+QED
+
+Theorem module_var_key_none_11[local]:
+  !a b. module_var_key (NONE, a) = module_var_key (NONE, b) <=> a = b
+Proof
+  simp[module_var_key_def, nsid_to_string_def]
+QED
+
+Theorem build_hashmap_info_absent[local]:
+  !tops id.
+    ~MEM (NONE, id)
+       (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) ==>
+    build_hashmap_info tops (module_var_key (NONE, id)) = NONE
+Proof
+  Induct >> simp[build_hashmap_info_def] >> Cases >>
+  simp[build_hashmap_info_def, toplevel_vtype_keys_toplevel_def,
+       module_var_key_none_11]
+QED
+
+(* With distinct names, cenv's maps at a module variable's key are its
+   declaration's. *)
+Theorem build_maps_variable[local]:
+  !tops vis mut id ty init.
+    ALL_DISTINCT
+      (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
+    MEM (VariableDecl vis mut id ty init) tops ==>
+    build_hashmap_info tops (module_var_key (NONE, id)) = NONE /\
+    build_var_type_map tops (module_var_key (NONE, id)) = SOME ty
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >> Cases_on `h` >>
+  gvs[build_hashmap_info_def, build_var_type_map_def,
+      toplevel_vtype_keys_toplevel_def, ALL_DISTINCT_APPEND,
+      module_var_key_none_11] >>
+  metis_tac[build_hashmap_info_absent, module_toplevel_vtype_key_MEM_Variable]
+QED
+
+Theorem env_assignable_find_NONE[local]:
+  !env cx st src id ty.
+    env_consistent env cx st /\
+    FLOOKUP env.bare_global_assignable (src, id) = SOME ty ==>
+    ?ts. get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = NONE
+Proof
+  rw[env_consistent_def, env_context_consistent_def] >>
+  first_x_assum drule >> strip_tac >> simp[]
+QED
+
+(* A supported scalar target is a word variable of tops in storage or
+   transient storage. *)
+Theorem supported_scalar_target_decl[local]:
+  !tops src id.
+    supported_scalar_target tops (src, id) ==>
+    src = NONE /\ find_var_decl_by_name id tops <> NONE /\
+    ?vis mut ty slot. MEM (VariableDecl vis mut id ty slot) tops /\
+                      is_word_type ty
+Proof
+  rpt gen_tac >> simp[supported_scalar_target_def] >>
+  Cases_on `supported_variable_decl tops (src, id)` >> simp[] >>
+  rename1 `SOME x` >> PairCases_on `x` >>
+  Cases_on `x0` >> Cases_on `x1` >> Cases_on `x3` >> simp[] >> strip_tac >>
+  drule supported_variable_decl_mem >> strip_tac >>
+  `find_var_decl_by_name id tops <> NONE` by
+    metis_tac[find_var_decl_storage_some] >>
+  gvs[supported_full_word_type_def] >> first_assum (irule_at Any) >>
+  simp[is_word_type_def]
+QED
+
+(* An assignment to a word storage or transient variable:
+   stmtSimAssignStorage's compile_assign_storage_typed_stmt_frag.  The
+   typing finds the variable's declaration and layout slot, and body_inv's
+   module clauses give cenv's view of it. *)
+Theorem body_assign_toplevel_word[local]:
+  !cx src id e tops ctx func cenv env env' ret_ty lctx RetQ es res es'.
+    body_expr_ok cx e /\ body_inv tops ctx cenv cx /\
+    supported_scalar_target tops (src, id) /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget (src, id))) e) =
+      SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget (src, id))) e) /\
+    call_evaluation_safe cx
+      (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget (src, id))) e)) /\
+    eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src, id))) e) es =
+      (res, es') ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty
+         (Assign (BaseTarget (TopLevelNameTarget (src, id))) e)) es res es'
+Proof
+  rpt strip_tac >>
+  drule supported_scalar_target_decl >> strip_tac >> gvs[] >>
+  `get_module_code cx NONE = SOME tops /\
+   ALL_DISTINCT
+     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
+   cenv.ce_hashmap_info = build_hashmap_info tops /\
+   cenv.ce_var_type (module_var_key (NONE, id)) =
+     build_var_type_map tops (module_var_key (NONE, id))` by
+    fs[body_inv_def] >>
+  drule_all build_maps_variable >> strip_tac >>
+  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  Cases_on `type_place_target env (TopLevelNameTarget (NONE, id))` >>
+  gvs[type_stmt_def, atarget_accepts_def] >>
+  rename1 `type_place_target _ _ = SOME vt` >> Cases_on `vt` >> gvs[] >>
+  gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
+  >- (drule_all env_assignable_find_NONE >> strip_tac >> gvs[]) >>
+  drule_all vyperTypeEnvTheory.env_consistent_toplevel_storage_static >>
+  strip_tac >> drule find_var_decl_storage_mem >> strip_tac >> gvs[] >>
+  `t = ty` by metis_tac[build_maps_variable, optionTheory.SOME_11] >>
+  gvs[] >> rename1 `FLOOKUP env.toplevel_vtypes _ = SOME (Type ty)` >>
+  `expr_type e = ty` by metis_tac[type_widens_to_word] >>
+  `expr_body_pre cenv cx env e es` by
+    (irule stmt_expr_body_pre >>
+     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         supported_assignment_exists_def, int_calls_stmt_def,
+         int_calls_atarget_def, int_calls_expr_def] >>
+     qexists_tac `[]` >> simp[]) >>
+  `expr_sim ctx func cenv cx ty e es` by metis_tac[body_expr_ok_def] >>
+  irule compile_assign_storage_typed_stmt_frag >> simp[] >>
+  qpat_x_assum `IS_SOME (lookup_var_slot_from_layout _ _ _ _)`
+    (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
+  qpat_x_assum `IS_SOME (evaluate_type _ _)`
+    (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
+  rename1 `lookup_var_slot_from_layout _ _ _ _ = SOME slot'` >>
+  rename1 `evaluate_type _ ty = SOME tvt` >>
+  qexistsl_tac [`slot'`, `tvt`] >> simp[] >> rpt strip_tac >>
+  drule_all expr_body_pre_eval >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  gvs[value_runtime_typed_def]
+QED
+
 (* RESIDUAL (#637 assignments): the other base targets.
    - A local in memory: stmtSimAssignMem's
      compile_assign_local_memory_stmt_frag asks of the local's type
@@ -724,12 +933,8 @@ QED
      typing lets e widen (type_widens_to), and an empty value assigned to a
      type with a length word (has_length_word, is_empty_value_expr) has no
      lemma.
-   - A storage variable: stmtSimAssignStorage's
-     compile_assign_storage_typed_stmt_frag asks
-     cenv.ce_hashmap_info (module_var_key (src, id)) = NONE and
-     cenv.ce_var_type (module_var_key (src, id)) = SOME vtyp, which body_inv
-     does not give: it fixes none of cenv's module variables, though
-     build_compile_env sets both.
+   - A storage or transient variable that is not a word
+     (supported_target_info's copies): no statement lemma.
    - Subscript and attribute targets: no statement lemma (the simulation
      of compile_get_target_ptr on eval_target_place). *)
 Theorem body_assign_other:
@@ -745,7 +950,8 @@ Theorem body_assign_other:
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
     eval_stmt cx (Assign (BaseTarget t) e) es = (res, es') /\
     ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
-              is_word_type ty) ==>
+              is_word_type ty) /\
+    ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e)) es res es'
 Proof
@@ -762,6 +968,10 @@ Proof
   Cases_on `?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
                     is_word_type ty`
   >- (gvs[] >> irule body_assign_local_word >> metis_tac[]) >>
+  Cases_on `?nsid. t = TopLevelNameTarget nsid /\
+                   supported_scalar_target tops nsid`
+  >- (gvs[] >> rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
+      irule body_assign_toplevel_word >> metis_tac[]) >>
   irule body_assign_other >> metis_tac[]
 QED
 
@@ -1104,7 +1314,9 @@ Proof
     (irule expr_sim_inv_stmt >> fs[body_inv_def] >>
      metis_tac[call_evaluation_safe_append_left]) >>
   `ce_locals_declared c env1` by metis_tac[ce_locals_declared_stmt] >>
-  `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
+  `body_inv tops ctx c cx` by
+    metis_tac[body_inv_same_frame, stmt_env_module_var_type,
+              declared_name_not_module_key] >>
   `frame_ret_ok ctx func cx RetQ c ret_ty` by
     metis_tac[frame_ret_ok_same_frame] >>
   qpat_x_assum `!s'' t. _ ==> body_stmts_ok _ _` drule >>
