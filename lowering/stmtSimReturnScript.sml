@@ -434,6 +434,42 @@ Definition tuple_words_def:
     tuple_words cenv w ts (off + type_memory_bytes cenv t) mem
 End
 
+Theorem tuple_elem_load_head_run:
+  !bop off sa pv sm v sb s w load.
+    emit_op ADD [bop; Lit off] sa = (pv, sm) /\
+    compile_load_memory pv load sm = (v, sb) /\
+    eval_operand bop s = SOME w ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\
+    sb.cs_next_var = sa.cs_next_var + 1 + (if load then 1 else 0) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sb) /\
+    (?x. v = Var x /\ not_fresh_at sb x) /\
+    ?t vs. run_inst_seq (emitted_insts sa sb) s = OK t /\
+           t = s with vs_vars := vs /\
+           (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+           eval_operand v t = SOME
+             (if load then mem_word_at (w2n (w + off)) s.vs_memory else w + off)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `load` >>
+  gvs[contextTheory.compile_load_memory_def, emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
+      fresh_var_def, emit_def, comp_return_def] >>
+  simp[emitted_insts_def, same_blocks_def, DROP_APPEND1,
+       venomInstTheory.mk_inst_def, is_terminator_def,
+       not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  simp[run_inst_seq_def] >>
+  simp[Once step_inst_base_def] >>
+  simp[exec_pure2_def, exec_read1_def,
+       eval_operand_def, bind_outputs_def, lookup_var_update_var] >>
+  simp[Once step_inst_base_def, exec_read1_def, eval_operand_def,
+       bind_outputs_def, lookup_var_update_var] >>
+  simp[update_var_def, mload_def, mem_word_at_def, lookup_var_def,
+       FLOOKUP_UPDATE] >>
+  qmatch_goalsub_abbrev_tac `s with vs_vars := VV` >> qexists `VV` >>
+  simp[Abbr `VV`, FLOOKUP_UPDATE] >> rw[] >>
+  metis_tac[arithmeticTheory.LESS_EQ_REFL, DECIDE ``a <= a + 1n``]
+QED
+
 Theorem tuple_elem_head_run[local]:
   !bop off sa pv sm v sb s w.
     emit_op ADD [bop; Lit off] sa = (pv, sm) /\
@@ -449,19 +485,68 @@ Theorem tuple_elem_head_run[local]:
            (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
            eval_operand v t = SOME (mem_word_at (w2n (w + off)) s.vs_memory)
 Proof
+  rpt strip_tac >>
+  mp_tac (Q.SPEC `T` (Q.GEN `load` (SPEC_ALL tuple_elem_load_head_run))) >>
+  simp[contextTheory.compile_load_memory_def] >> disch_then drule_all >> simp[]
+QED
+
+Theorem eval_operand_old_vars:
+  !sa s t op.
+    t.vs_labels = s.vs_labels /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!x. op = Var x ==> not_fresh_at sa x) ==>
+    eval_operand op t = eval_operand op s
+Proof
+  rpt strip_tac >> Cases_on `op` >> simp[eval_operand_def]
+QED
+
+Theorem tuple_load_cons_compose:
+  !sa sh sf x rest s vs1 vs2 a ws.
+    sh.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sh /\
+    sf.cs_current_insts = sh.cs_current_insts ++ emitted_insts sh sf /\
+    same_blocks sa sh /\ same_blocks sh sf /\
+    sa.cs_next_var <= sh.cs_next_var /\ sh.cs_next_var <= sf.cs_next_var /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sh) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sh sf) /\
+    not_fresh_at sh x /\
+    (!x. MEM (Var x) rest ==> not_fresh_at sf x) /\
+    run_inst_seq (emitted_insts sa sh) s = OK (s with vs_vars := vs1) /\
+    (!x. not_fresh_at sa x ==>
+         lookup_var x (s with vs_vars := vs1) = lookup_var x s) /\
+    eval_operand (Var x) (s with vs_vars := vs1) = SOME a /\
+    run_inst_seq (emitted_insts sh sf) (s with vs_vars := vs1) =
+      OK (s with vs_vars := vs2) /\
+    (!x. not_fresh_at sh x ==>
+         lookup_var x (s with vs_vars := vs2) =
+         lookup_var x (s with vs_vars := vs1)) /\
+    eval_operands rest (s with vs_vars := vs2) = SOME ws ==>
+    sf.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sf /\
+    same_blocks sa sf /\ sa.cs_next_var <= sf.cs_next_var /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sf) /\
+    (!y. MEM (Var y) (Var x::rest) ==> not_fresh_at sf y) /\
+    ?t vs. run_inst_seq (emitted_insts sa sf) s = OK t /\
+           t = s with vs_vars := vs /\
+           (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+           eval_operands (Var x::rest) t = SOME (a::ws)
+Proof
   rpt gen_tac >> strip_tac >>
-  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
-      fresh_var_def, emit_def, comp_return_def] >>
-  simp[emitted_insts_def, same_blocks_def, DROP_APPEND1,
-       venomInstTheory.mk_inst_def, is_terminator_def,
-       not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
-  simp[run_inst_seq_def, step_inst_base_def, exec_pure2_def, exec_read1_def,
-       eval_operand_def, bind_outputs_def, lookup_var_update_var] >>
-  simp[update_var_def, mload_def, mem_word_at_def, lookup_var_def,
-       FLOOKUP_UPDATE] >>
-  qmatch_goalsub_abbrev_tac `s with vs_vars := VV` >> qexists `VV` >>
-  simp[Abbr `VV`, FLOOKUP_UPDATE] >> rw[] >>
-  metis_tac[arithmeticTheory.LESS_EQ_REFL, DECIDE ``a <= a + 1n``]
+  `emitted_insts sa sf = emitted_insts sa sh ++ emitted_insts sh sf` by
+    metis_tac[emitted_insts_append] >>
+  `same_blocks sa sf` by fs[same_blocks_def] >>
+  `sa.cs_next_var <= sf.cs_next_var` by decide_tac >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sh x` by
+    metis_tac[not_fresh_at_mono] >>
+  `!x. not_fresh_at sh x ==> not_fresh_at sf x` by
+    metis_tac[not_fresh_at_mono] >>
+  `run_inst_seq (emitted_insts sa sf) s = OK (s with vs_vars := vs2)` by
+    (simp[] >>
+     qpat_assum `run_inst_seq (emitted_insts sa sh) _ = OK _`
+       (mp_tac o MATCH_MP run_inst_seq_append) >> simp[]) >>
+  gvs[eval_operand_def] >> simp[eval_operands_def, eval_operand_def] >>
+  conj_tac >- metis_tac[] >> qexists `vs2` >> simp[] >> metis_tac[]
 QED
 
 (* compile_load_tuple_elements runs from any state where its bop is
@@ -503,33 +588,15 @@ Proof
      >- metis_tac[not_fresh_at_mono, arithmeticTheory.LESS_EQ_ADD] >>
      Cases_on `bop` >> gvs[eval_operand_def]) >>
   first_x_assum drule_all >> strip_tac >> gvs[] >>
-  rename1 `run_inst_seq (emitted_insts sh sf) _ = OK (_ with vs_vars := vs2)` >>
-  `emitted_insts sa sf = emitted_insts sa sh ++ emitted_insts sh sf` by
-    metis_tac[emitted_insts_append] >>
-  `same_blocks sa sf` by fs[same_blocks_def] >>
-  `not_fresh_at sf x` by (irule not_fresh_at_mono >> qexists `sh` >> simp[]) >>
-  `run_inst_seq (emitted_insts sa sf) s = OK (s with vs_vars := vs2)` by
-    (simp[] >>
-     qpat_assum `run_inst_seq (emitted_insts sa sh) _ = OK _`
-       (mp_tac o MATCH_MP run_inst_seq_append) >> simp[]) >>
-  `!y. not_fresh_at sa y ==>
-       lookup_var y (s with vs_vars := vs2) = lookup_var y s` by
-    (rpt strip_tac >>
-     `not_fresh_at sh y` by
-       (irule not_fresh_at_mono >> qexists `sa` >> simp[]) >>
-     metis_tac[]) >>
-  `lookup_var x (s with vs_vars := vs2) =
-     SOME (mem_word_at (w2n (w + n2w off)) s.vs_memory)` by
-    (gvs[eval_operand_def] >> metis_tac[]) >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> gvs[] >>
-      irule not_fresh_at_mono >> qexists `sh` >> simp[]) >>
-  qexists `vs2` >>
-  simp[eval_operands_def, tuple_words_def, eval_operand_def]
+  `sa.cs_next_var <= sh.cs_next_var` by simp[] >>
+  `sh.cs_next_var <= sf.cs_next_var` by simp[] >>
+  `sf.cs_current_insts = sh.cs_current_insts ++ emitted_insts sh sf` by simp[] >>
+  drule_all tuple_load_cons_compose >> strip_tac >>
+  gvs[tuple_words_def] >> metis_tac[]
 QED
 
 (* A word type takes one word, at the value level and in the lowering. *)
-Theorem word_type_sizes[local]:
+Theorem word_type_sizes:
   !tenv t tv cenv.
     is_word_type t /\ evaluate_type tenv t = SOME tv ==>
     type_memory_size tv = 32 /\ type_memory_bytes cenv t = 32
@@ -618,6 +685,37 @@ Proof
   `FRONT (h::t) = vals` by
     (qpat_x_assum `_ = h::t` (SUBST1_TAC o SYM) >> simp[FRONT_APPEND]) >>
   simp[step_inst_base_def, venomInstTheory.mk_inst_def]
+QED
+
+Theorem compile_tuple_load_all_words:
+  !tys cenv src off.
+    EVERY is_word_type tys ==>
+    compile_tuple_load_all cenv src tys off =
+    compile_load_tuple_elements cenv src tys off
+Proof
+  Induct >>
+  simp[compile_tuple_load_all_def, compile_load_tuple_elements_def,
+       contextTheory.compile_load_memory_def]
+QED
+
+Theorem compile_tuple_load_all_grows:
+  !tys cenv base off sa elems sb.
+    compile_tuple_load_all cenv base tys off sa = (elems, sb) ==>
+    cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var
+Proof
+  Induct >- simp[compile_tuple_load_all_def, comp_return_def, cs_extends_refl] >>
+  rpt gen_tac >>
+  simp[compile_tuple_load_all_def, comp_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> simp[]) >> simp[comp_return_def] >> strip_tac >> gvs[] >>
+  rename1 `compile_load_memory pv (is_word_type ht) sm = (v, sh)` >>
+  `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var` by
+    metis_tac[ci_mono_emit_op, ci_mono_def, pairTheory.SND] >>
+  `cs_extends sm sh /\ sm.cs_next_var <= sh.cs_next_var` by
+    (Cases_on `is_word_type ht` >>
+     gvs[contextTheory.compile_load_memory_def, comp_return_def] >>
+     metis_tac[ci_mono_emit_op, ci_mono_def, pairTheory.SND, cs_extends_refl]) >>
+  first_x_assum drule >> strip_tac >>
+  metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem compile_load_tuple_elements_extends:
