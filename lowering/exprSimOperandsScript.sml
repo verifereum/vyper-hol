@@ -15,9 +15,9 @@
  * expr_val_rel_footprint_agree).
  *
  * A first operand that points into a live local's region (expr_val_at's
- * other case) is not covered: the second operand can write that local
- * (x.pop()), and stmt_state_rel at its end says what the local holds then,
- * not what it held before.
+ * other case) is not covered here.  The second fragment's expr_post keeps
+ * that region's bytes (locals_kept) but a DynArray local's length word,
+ * which x.pop() writes and expr_val_at lets only a DynArray value cover.
  *
  * TOP-LEVEL:
  *   expr_val_in_alloca      — a memory value sits in one of the
@@ -198,7 +198,8 @@ Proof
   qpat_x_assum `!n lb lsz. local_region _ es1.scopes t _ _ _ ==> _` irule >>
   qexists_tac `n` >>
   irule local_region_frame >>
-  conj_tac >- (qexistsl_tac [`cx`, `func`] >> first_assum ACCEPT_TAC) >>
+  conj_tac >- (qexists_tac `func` >>
+    gvs[stmt_state_rel_def, state_rel_def]) >>
   qexistsl_tac [`s1`, `es'.scopes`, `u`] >> simp[]
 QED
 

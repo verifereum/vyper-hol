@@ -134,6 +134,11 @@ Proof
      `LENGTH (MAP FST fields) = LENGTH tvs` by
        (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
      simp[struct_layout_size_zip]) >>
+  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
+    (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
+  `!nm lb len. local_region cenv es'.scopes s nm lb len ==>
+     b + type_memory_size_list tvs <= lb \/ lb + len <= b` by
+    (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
   irule buffer_loop_memory_vv_post >>
   simp[expr_type_def, is_word_type_def, contextTheory.mk_ptr_def, contextTheory.base_ptr_def,
     eval_operand_def, val_in_memory_def] >>
@@ -202,6 +207,11 @@ Resume compile_make_array_sim[tuple]:
        vyperStateTheory.return_def] >> metis_tac[]) >>
   `val_footprint (TupleTV tvs) (ArrayV (TupleV vs)) <= type_memory_size_list tvs` by
     (drule val_footprint_le >> simp[type_memory_size_def]) >>
+  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
+    (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
+  `!nm lb len. local_region cenv es'.scopes s nm lb len ==>
+     b + type_memory_size_list tvs <= lb \/ lb + len <= b` by
+    (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
   irule (buffer_loop_memory_vv_post |> Q.INST
     [`e` |-> `Builtin (TupleT (MAP expr_type args)) (MakeArray NONE bnd) args`]
     |> SIMP_RULE (srw_ss()) [expr_type_def]) >>
@@ -269,6 +279,11 @@ Resume compile_make_array_sim[array]:
     (drule val_footprint_le >>
      `type_memory_bytes cenv (ArrayT x bnd) = type_memory_size (ArrayTV tv bnd)` by
        metis_tac[expr_sim_inv_memory_size] >> simp[]) >>
+  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
+    (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
+  `!nm lb len. local_region cenv es'.scopes s nm lb len ==>
+     b + type_memory_bytes cenv (ArrayT x bnd) <= lb \/ lb + len <= b` by
+    (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
   irule (buffer_loop_memory_vv_post |> Q.INST
     [`e` |-> `Builtin (ArrayT x bnd) (MakeArray (SOME x) bnd) args`]
     |> SIMP_RULE (srw_ss()) [expr_type_def]) >>
@@ -277,6 +292,7 @@ Resume compile_make_array_sim[array]:
   qexistsl [`b`,`sm`,`type_memory_bytes cenv (ArrayT x bnd)`,`t`] >>
   simp[wordsTheory.dimword_def] >>
   conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
   conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
   `LENGTH vs = LENGTH args` by (drule eval_exprs_length >> simp[]) >>
   Cases_on `bnd`
@@ -415,11 +431,22 @@ Proof
   simp[contextTheory.mk_ptr_def, valueEncodingProofsTheory.val_wf_default_value_proof] >>
   conj_tac
   >- (rpt strip_tac >>
+      qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _ \/ _` drule >>
+      strip_tac >> first_x_assum irule >> decide_tac) >>
+  conj_tac
+  >- (rpt strip_tac >>
       qpat_x_assum `!aid b len. _ ==> regions_disjoint _ _ b len` drule >>
       simp[compileEnvTheory.regions_disjoint_def] >> strip_tac >>
       first_x_assum irule >> decide_tac) >>
   drule_all expr_sim_inv_memory_size >> strip_tac >>
-  simp[val_footprint_le, valueEncodingProofsTheory.val_wf_default_value_proof]
+  simp[val_footprint_le, valueEncodingProofsTheory.val_wf_default_value_proof] >>
+  rpt strip_tac >>
+  `local_region cenv es.scopes s n lb lsz` by
+    (irule exprSimOpsTheory.local_region_frame >> conj_tac
+     >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
+     qexistsl [`sa`, `es.scopes`, `t`] >> simp[]) >>
+  qpat_x_assum `!name b len. local_region _ _ s _ _ _ ==> _` drule >>
+  simp[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem compile_empty_sim:

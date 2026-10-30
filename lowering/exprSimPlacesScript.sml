@@ -111,7 +111,12 @@ QED
      immutables_rel keeps it;
    - a nested target (x.a.pop(), x[i].pop()): the lowering falls back to a
      uint256 array in memory at the base's operand when the target is not a
-     name (exprSimPlaces's header). *)
+     name (exprSimPlaces's header).
+   Each of these also breaks expr_post's frame on the live locals
+   (locals_kept): the lowering MSTOREs at the base's first word, which for
+   x.a.pop() is a live local's, and for a module variable or an immutable is
+   the fixed memory address slot or offset, where an allocation holding a
+   local can sit (allocation starts at 0). *)
 Theorem compile_pop_other_sim:
   !cenv ann tgt.
     (!id. tgt <> NameTarget id) /\ expr_sim_below cenv (expr_size (Pop ann tgt)) ==>
