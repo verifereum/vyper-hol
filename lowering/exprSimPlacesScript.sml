@@ -3,17 +3,15 @@
  *
  * The case lemmas of compile_expr_sim (exprSimMain) for subscripts,
  * attributes and pop.  Proved: pop on a local (exprSimPop's
- * compile_pop_name_sim) and attributes of a base not in code
- * (exprSimAttribute's compile_attribute_loc_sim).  Cheated, for the later
- * #636 PRs: subscripts, pop on any other target (compile_pop_other_sim),
- * and attributes of a base in code (compile_attribute_code_sim).
+ * compile_pop_name_sim) and attributes (exprSimAttribute's
+ * compile_attribute_vv_sim).  Cheated, for the later #636 PRs: subscripts
+ * and pop on any other target (compile_pop_other_sim).
  *
  * TOP-LEVEL:
  *   compile_subscript_sim — static and dynamic arrays with the bounds-check
  *                           abort, hashmaps, tuples (#558), Places row 1
  *   compile_attribute_sim — struct fields (#558), row 2: by
- *                           compile_attribute_loc_sim, but for
- *                           compile_attribute_code_sim
+ *                           compile_attribute_vv_sim
  *   compile_pop_sim       — pop on a dynamic array, with the empty-array
  *                           abort, row 3: compile_pop_name_sim for a local,
  *                           compile_pop_other_sim for the rest
@@ -44,35 +42,17 @@ Proof
   cheat
 QED
 
-(* An attribute of a base in code: an immutable, or a field of one.
-   Cheated, and false as stated: the lowering hands out the base's code
-   pointer plus the field's offset, while immutable_holds asks a code
-   pointer to be an immutable's own data offset (ImmutableLoc), as for
-   exprSimLeaves's compile_toplevel_immutable_sim. *)
-Theorem compile_attribute_code_sim:
-  !cenv ann obj fld.
-    expr_sim_below cenv (expr_size (Attribute ann obj fld)) /\
-    (?ty st. vv_location (FST (compile_expr cenv ty obj st)) =
-             SOME LocCode) ==>
-    expr_vv_ok cenv (Attribute ann obj fld)
-Proof
-  cheat
-QED
-
 Theorem compile_attribute_sim:
   !cenv ann obj fld.
     expr_sim_below cenv (expr_size (Attribute ann obj fld)) ==>
     expr_vv_ok cenv (Attribute ann obj fld)
 Proof
   rpt strip_tac >>
-  Cases_on `!ty st. vv_location (FST (compile_expr cenv ty obj st)) <>
-                    SOME LocCode`
-  >- (`expr_vv_ok cenv obj` by
-        (fs[expr_sim_below_def, expr_ok_def] >> first_x_assum irule >>
-         simp[expr_size_def]) >>
-      rw[expr_vv_ok_def] >>
-      drule_all compile_attribute_loc_sim >> simp[] >> metis_tac[]) >>
-  irule compile_attribute_code_sim >> gvs[] >> metis_tac[]
+  `expr_vv_ok cenv obj` by
+    (fs[expr_sim_below_def, expr_ok_def] >> first_x_assum irule >>
+     simp[expr_size_def]) >>
+  rw[expr_vv_ok_def] >>
+  drule_all compile_attribute_vv_sim >> simp[] >> metis_tac[]
 QED
 
 (* pop on a target other than a local.  Cheated:
