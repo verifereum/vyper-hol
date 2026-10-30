@@ -204,38 +204,6 @@ Proof
   qexistsl_tac [`"local"`, `0`, `32`] >> simp[]
 QED
 
-(* Tracking a fixed reservation does not establish ALLOCA provenance. *)
-Theorem immutable_alloca_sep_tracked_alias_probe[local]:
-  !func bb inst ce cx es s c v t f i.
-    (c,v,t,f,i) =
-      (ce with <| ce_is_ctor := T; ce_module := NONE;
-          ce_vars := FEMPTY |+ (module_var_key (NONE,"imm"), ImmutableLoc 0) |>,
-       es with <| scopes := [];
-          immutables := [(cx.txn.target,
-            [(NONE,FEMPTY |+ ("imm",(BaseTV BoolT,BoolV T)))])] |>,
-       s with <| vs_allocas := FEMPTY |+ (0,(0,32)); vs_alloca_next := 32;
-                 vs_vars := FEMPTY |+ ("x",0w) |>,
-       func with fn_blocks := [bb with bb_instructions :=
-         [inst with <| inst_id := 0; inst_opcode := ASSIGN;
-                       inst_outputs := ["x"] |>]],
-       inst with <| inst_id := 0; inst_opcode := ASSIGN;
-                    inst_outputs := ["x"] |>) ==>
-      MEM i (fn_insts f) /\ i.inst_opcode <> ALLOCA /\
-      i.inst_outputs = ["x"] /\
-      FLOOKUP t.vs_allocas i.inst_id = SOME (0,32) /\
-      lookup_var "x" t = SOME 0w /\
-      immutable_alloca_sep f c cx v t /\
-      ~regions_disjoint 0 32 0 32
-Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  simp[fn_insts_def, fn_insts_blocks_def, lookup_var_def,
-       immutable_alloca_sep_def, local_region_def, lookup_scopes_def,
-       get_source_immutables_def, module_var_key_def, nsid_to_string_def,
-       type_memory_size_def, compileEnvTheory.regions_disjoint_def,
-       finite_mapTheory.FLOOKUP_UPDATE] >>
-  rpt strip_tac >> gvs[]
-QED
-
 Theorem immutable_alloca_sep_fields:
   !func cenv cx vs vs' ss ss'.
     immutable_alloca_sep func cenv cx vs ss /\
