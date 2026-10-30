@@ -30,9 +30,8 @@
  *   compile_flag_member_case_sim — a flag member: the literal 2 ** id, by
  *                              expr_sim_inv's flag members clause
  *
- * Helpers: expr_sim_of_vv_sim_memory, val_in_memory_word_type,
- *   eval_expr_toplevel_storage, toplevel_storage_ce_vars,
- *   compile_toplevel_no_module_sim
+ * Helpers: expr_sim_of_vv_sim_memory, eval_expr_toplevel_storage,
+ *   toplevel_storage_ce_vars, compile_toplevel_no_module_sim
  *
  * Unprovable as the definitions stand, to be fixed in the lowering, in
  * state_rel or in the judgment before their PRs:
@@ -134,26 +133,6 @@ val () =
   end;
 
 (* ===== Locals ===== *)
-
-(* A value of a word type in memory: its word is the typed encoding. *)
-Theorem val_in_memory_word_type:
-  !tenv t tvt v off mem.
-    is_word_type t /\ evaluate_type tenv t = SOME tvt /\
-    value_has_type tvt v /\ val_in_memory tvt v off mem ==>
-    mem_word_at off mem = typed_val_to_w256 tvt v
-Proof
-  rpt strip_tac >>
-  `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
-   t = BaseT BoolT \/ t = BaseT AddressT \/ t = BaseT DecimalT \/
-   (?m. t = BaseT (BytesT (Fixed m)) /\ m <= 32) \/ (?n. t = FlagT n)` by
-    (Cases_on `t` >> fs[is_word_type_def] >>
-     rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_word_type_def] >>
-     rename1 `BytesT bd` >> Cases_on `bd` >> fs[is_word_type_def]) >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-  Cases_on `v` >>
-  gvs[vyperTypingTheory.value_has_type_def, val_in_memory_def,
-      typed_val_to_w256_def]
-QED
 
 (* A local held through its pointer variable p, as expr_sim_inv's locals
    clause has every local: its value_vv is p as a memory pointer, no code,
@@ -514,8 +493,9 @@ QED
 (* An immutable or a constant (no storage declaration of the name; both
    are read from the immutables).  Cheated, and false as stated: nothing in
    expr_sim_inv puts them in ce_vars (the lowering has no ImmutableLoc for
-   immutables yet, #563) nor bounds their offsets (immutable_holds), so the
-   lowering may emit INVALID where the source reads a value. *)
+   immutables yet, #563), so the lowering may emit INVALID where the source
+   reads a value.  Where it does, immutable_holds also needs the
+   immutable's bytes to end below 2 ** 256 and the value typed. *)
 Theorem compile_toplevel_immutable_sim:
   !ctx func cenv cx env ty ann src id es ts.
     expr_sim_pre cenv cx env (TopLevelName ann (src, id)) es /\
