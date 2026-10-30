@@ -2295,6 +2295,14 @@ Proof
   simp[int_calls_expr_def]
 QED
 
+Theorem well_typed_named_exprs_MAP_SND_storage:
+  !env kes. well_typed_named_exprs env kes ==>
+            well_typed_exprs env (MAP SND kes)
+Proof
+  gen_tac >> Induct >> simp[well_typed_expr_def] >>
+  Cases >> simp[well_typed_expr_def]
+QED
+
 Resume eval_scc_storage_preservation_results_mutual[Expr_StructLit]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_evaluation_safe cx
@@ -2308,7 +2316,7 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_StructLit]:
   qpat_x_assum `well_typed_expr _ (StructLit _ _ _)` mp_tac >>
   simp_tac(srw_ss())[Once well_typed_expr_def] >> strip_tac >>
   `well_typed_exprs env (MAP SND kes)` by
-    (irule well_typed_named_exprs_MAP_SND_stmt >> simp[]) >>
+    (irule well_typed_named_exprs_MAP_SND_storage >> simp[]) >>
   qpat_x_assum `eval_expr _ (StructLit _ _ _) _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def] >>
   Cases_on `eval_exprs cx (MAP SND kes) st` >>
@@ -2960,6 +2968,45 @@ Proof
     simp[vyperStorageBackendTheory.get_storage_def]) >>
   metis_tac[runtime_storage_consistent_intro,
             runtime_storage_consistent_layout]
+QED
+
+Theorem extcall_return_tail_preserves_contract_storage:
+  runtime_storage_consistent env cx st /\
+  functions_well_typed cx /\
+  protected_storage_calls_preserve cx /\
+  oracle_storage_ok cx st /\
+  well_typed_opt env drv /\
+  (returnData = [] /\ IS_SOME drv ==>
+    call_evaluation_safe cx (int_calls_expr (THE drv))) /\
+  (returnData = [] /\ IS_SOME drv ==>
+    !env0 st0 res0 st0'.
+      runtime_storage_consistent env0 cx st0 /\
+      functions_well_typed cx /\
+      call_evaluation_safe cx (int_calls_expr (THE drv)) /\
+      protected_storage_calls_preserve cx /\
+      oracle_storage_ok cx st0 /\
+      eval_expr cx (THE drv) st0 = (res0,st0') ==>
+      (well_typed_expr env0 (THE drv) ==>
+       contract_storage_well_formed cx st0') /\
+      (!vt. type_place_expr env0 (THE drv) = SOME vt ==>
+       contract_storage_well_formed cx st0')) /\
+  (if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+   else do
+     ret_val <- lift_sum_runtime
+       (evaluate_abi_decode_return (get_tenv cx) ret_type returnData);
+     return (Value ret_val)
+   od) st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  Cases_on `returnData = [] /\ IS_SOME drv` >> gvs[]
+  >- (Cases_on `drv` >> gvs[Once well_typed_expr_def] >>
+      first_x_assum drule_all >> strip_tac >> metis_tac[]) >>
+  qpat_x_assum `(do _ od) st = (res,st')` mp_tac >>
+  simp[lift_sum_runtime_def, bind_def, return_def, raise_def] >>
+  Cases_on `evaluate_abi_decode_return (get_tenv cx) ret_type returnData` >>
+  gvs[return_def, raise_def] >>
+  metis_tac[runtime_storage_consistent_storage]
 QED
 
 

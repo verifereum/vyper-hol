@@ -335,6 +335,17 @@ Proof
   rpt strip_tac >> Cases_on `addr = cx.txn.target` >> simp[]
 QED
 
+Theorem write_storage_preserves_state_well_typed:
+  state_well_typed st /\ accounts_well_typed st.accounts /\ value_has_type tv v /\
+  write_storage_slot cx is_transient slot tv v st = (INL res, st') ==>
+  state_well_typed st' /\ accounts_well_typed st'.accounts
+Proof
+  rpt strip_tac >>
+  Cases_on `encode_value tv v` >> gvs[write_storage_slot_eq]
+  >- (irule set_storage_preserves_state_well_typed >> simp[]) >>
+  irule set_storage_preserves_accounts_well_typed >> simp[]
+QED
+
 Theorem write_storage_slot_preserves_state_well_typed_any:
   !cx is_transient slot tv v st res st'.
   write_storage_slot cx is_transient slot tv v st = (res, st') /\
@@ -435,6 +446,18 @@ Definition LIST_REL3_def:
   LIST_REL3 R _ _ _ = F
 End
 
+Theorem read_storage_slot_well_typed_value:
+  read_storage_slot cx is_transient slot tv st = (INL v, st') /\
+  well_formed_type_value tv ==>
+  value_has_type tv v
+Proof
+  simp[read_storage_slot_def, bind_def, AllCaseEqs(),
+       get_storage_backend_def, return_def, lift_option_def,
+       option_CASE_rator, raise_def] >>
+  rpt strip_tac >> gvs[] >>
+  drule_all (cj 1 decode_value_well_typed) >> simp[]
+QED
+
 
 
 
@@ -483,6 +506,33 @@ Proof
   drule safe_cast_well_typed >> simp[]
 QED
 
+Theorem assign_subscripts_append_leaf_no_type_error:
+  value_has_type (ArrayTV elem_tv (Dynamic n)) leaf /\
+  value_has_type elem_tv nv ==>
+  assign_subscripts (ArrayTV elem_tv (Dynamic n)) leaf [] (AppendOp nv) <>
+    INR (TypeError msg)
+Proof
+  simp[Once assign_subscripts_def] >>
+  metis_tac[append_element_no_type_error]
+QED
+
+Theorem pop_element_no_type_error:
+  value_has_type (ArrayTV elem_tv (Dynamic n)) arr_v ==>
+  pop_element arr_v <> INR (TypeError msg)
+Proof
+  Cases_on `arr_v` >> simp[value_has_type_def, pop_element_def] >>
+  Cases_on `a` >> simp[value_has_type_def, pop_element_def]
+QED
+
+Theorem assign_subscripts_pop_leaf_no_type_error:
+  value_has_type (ArrayTV elem_tv (Dynamic n)) leaf ==>
+  assign_subscripts (ArrayTV elem_tv (Dynamic n)) leaf [] PopOp <>
+    INR (TypeError msg)
+Proof
+  simp[Once assign_subscripts_def] >>
+  metis_tac[pop_element_no_type_error]
+QED
+
 Theorem int_typed_value_is_IntV:
   is_int_type ty /\ evaluate_type tenv ty = SOME tv /\ value_has_type tv v ==>
   ?i. v = IntV i
@@ -524,6 +574,91 @@ Proof
   Cases_on `0 <= i` >> gvs[array_index_def, array_set_index_def, LET_THM] >>
   Cases_on `av` >> gvs[value_has_type_def, array_set_index_def, array_index_def] >>
   Cases_on `bd` >> gvs[value_has_type_def, array_set_index_def, array_index_def, AllCaseEqs()]
+QED
+
+Theorem assign_operation_runtime_typed_leaf_no_type_error:
+  !env leaf_ty op leaf_tv leaf msg.
+    assign_operation_runtime_typed env leaf_ty op /\
+    evaluate_type env.type_defs leaf_ty = SOME leaf_tv /\
+    value_has_type leaf_tv leaf ==>
+    assign_subscripts leaf_tv leaf [] op <> INR (TypeError msg)
+Proof
+  rpt strip_tac >>
+  Cases_on `op` >- (
+    gvs[assign_operation_runtime_typed_def, value_runtime_typed_def, Once assign_subscripts_def]) >- (
+    rename1 `AppendOp v` >>
+    gvs[assign_operation_runtime_typed_def, evaluate_type_def] >>
+    drule_all assign_subscripts_append_leaf_no_type_error >> simp[]) >>
+  gvs[assign_operation_runtime_typed_def, evaluate_type_def] >>
+  drule_all assign_subscripts_pop_leaf_no_type_error >> simp[]
+QED
+
+Theorem assign_subscripts_no_type_error_from_leaf:
+  !tv a subs op.
+    value_has_type tv a /\
+    well_formed_type_value tv /\
+    leaf_type tv subs <> NoneTV /\
+    (!leaf msg.
+       value_has_type (leaf_type tv subs) leaf ==>
+       assign_subscripts (leaf_type tv subs) leaf [] op <>
+         INR (TypeError msg)) ==>
+    !msg. assign_subscripts tv a subs op <> INR (TypeError msg)
+Proof
+  Induct_on `subs` >- (
+    simp[leaf_type_def] >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
+    first_x_assum irule >> simp[]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `h` >> gvs[leaf_type_def] >- (
+    Cases_on `v` >> gvs[Once assign_subscripts_def, leaf_type_def] >>
+    Cases_on `a` >> gvs[Once assign_subscripts_def] >>
+    Cases_on `tv` >> gvs[value_has_type_def, well_formed_type_value_def, leaf_type_def] >>
+    Cases_on `array_index (ArrayTV t b) a' i` >> gvs[] >>
+    `value_has_type t x` by (
+      irule array_index_has_type >> simp[] >>
+      goal_assum drule >> simp[]) >>
+    qpat_x_assum `!tv a op. _` (qspecl_then [`t`,`x`,`op`] mp_tac) >>
+    impl_tac >- (
+      simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
+    strip_tac >>
+    Cases_on `assign_subscripts t x subs op` >> gvs[] >> rpt strip_tac >>
+    `array_set_index (ArrayTV t b) a' i x' <> INR (TypeError msg)` by (
+      irule array_set_index_no_type_error >> simp[] >>
+      goal_assum drule >> simp[]) >>
+    gvs[]) >>
+  Cases_on `a` >> gvs[Once assign_subscripts_def] >>
+  Cases_on `tv` >> gvs[value_has_type_def, well_formed_type_value_def, leaf_type_def] >>
+  reverse (Cases_on `ALOOKUP l s`) >> gvs[] >- (
+    rename1 `ALOOKUP l s = SOME fv` >>
+    `?(field_ty:type_value). ALOOKUP l' s = SOME field_ty /\ value_has_type field_ty fv` by
+      (drule_all struct_field_has_type >> simp[]) >>
+    gvs[] >>
+    `well_formed_type_value field_ty` by
+      (gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS, FORALL_PROD] >>
+       drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+       first_x_assum irule >> metis_tac[]) >>
+    first_x_assum (qspecl_then [`field_ty`,`fv`,`op`] mp_tac) >>
+    impl_tac >- (
+      simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
+    strip_tac >>
+    Cases_on `assign_subscripts field_ty fv subs op` >> gvs[]) >>
+  drule_all struct_has_type_alookup_none >> strip_tac >> gvs[]
+QED
+
+Theorem assign_subscripts_no_type_error_runtime_typed:
+  !tv a subs op env leaf_ty msg.
+    value_has_type tv a /\
+    well_formed_type_value tv /\
+    leaf_type tv subs <> NoneTV /\
+    assign_operation_runtime_typed env leaf_ty op /\
+    evaluate_type env.type_defs leaf_ty = SOME (leaf_type tv subs) ==>
+    assign_subscripts tv a subs op <> INR (TypeError msg)
+Proof
+  rpt strip_tac >>
+  qspecl_then [`tv`,`a`,`subs`,`op`] mp_tac assign_subscripts_no_type_error_from_leaf >>
+  impl_tac >- (
+    simp[] >> rpt strip_tac >>
+    drule_all assign_operation_runtime_typed_leaf_no_type_error >> simp[]) >>
+  strip_tac >> first_x_assum (qspec_then `msg` mp_tac) >> simp[]
 QED
 
 
