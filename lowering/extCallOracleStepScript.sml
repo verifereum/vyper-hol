@@ -107,7 +107,8 @@ Proof
   rpt strip_tac >>
   gvs[state_rel_def, adopt_call_outcome_equation, adopt_outcome_def,
       adopt_outcome_deletions_def, logs_rel_eq] >>
-  Cases_on `outcome.co_success /\ ~rq.cr_static` >>
+  Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
+  Cases_on `rq.cr_kind = MessageCall` >>
   gvs[storage_rel_def, transient_rel_def, accounts_rel_def,
       immutables_rel_def, call_ctx_rel_def, contract_storage_def,
       contract_transient_def]
