@@ -92,19 +92,22 @@ Termination
   | (INL (t,_,_)) => (abi_type_size t, 0))’
 End
 
-val pre = cv_trans_pre_rec
-  "vyper_abi_dec_pre vyper_abi_dec_array_pre vyper_abi_dec_tuple_pre"
-  vyper_abi_dec_def (
+(* Termination of the four cv translations below. *)
+val cv_termination_tac =
   WF_REL_TAC ‘inv_image ($< LEX $<)
   (λx. case x of
-    (INR (INR (ts,_,_,_,_))) => (cv_size ts, 0)
-  | (INR (INL (n,_,t,_,_,_,_))) => (cv_size t, cv$c2n n)
-  | (INL (t,_,_)) => (cv_size t, 0))’
+    (INR (INR (ts,_))) => (cv_size ts, 0)
+  | (INR (INL (n,_,t,_))) => (cv_size t, cv$c2n n)
+  | (INL (t,_)) => (cv_size t, 0))’
   \\ rpt conj_tac
   \\ Cases_on`cv_v` \\ rw[] \\ gs[cv_lt_Num_0]
   \\ qmatch_goalsub_rename_tac`cv_snd p`
-  \\ Cases_on`p` \\ gs[]
-);
+  \\ Cases_on`p` \\ gs[];
+
+val pre = cv_trans_pre_rec
+  "vyper_abi_dec_pre vyper_abi_dec_array_pre vyper_abi_dec_tuple_pre"
+  vyper_abi_dec_def
+  cv_termination_tac;
 
 (* Unfold preconditions only in the goal. Keep recursive schemas and semantic
    definitions out of cleanup; only constructor/logical rules and IHs are needed. *)
@@ -209,17 +212,8 @@ End
 
 val pre = cv_trans_pre_rec
   "vyper_abi_valid_enc_pre vyper_abi_valid_enc_array_pre vyper_abi_valid_enc_tuple_pre"
-  (PURE_REWRITE_RULE [every_zero_intro] vyper_abi_valid_enc_def) (
-  WF_REL_TAC ‘inv_image ($< LEX $<)
-  (λx. case x of
-    (INR (INR (ts,_,_,_))) => (cv_size ts, 0)
-  | (INR (INL (n,_,t,_,_,_))) => (cv_size t, cv$c2n n)
-  | (INL (t,_,_)) => (cv_size t, 0))’
-  \\ rpt conj_tac
-  \\ Cases_on`cv_v` \\ rw[] \\ gs[cv_lt_Num_0]
-  \\ qmatch_goalsub_rename_tac`cv_snd p`
-  \\ Cases_on`p` \\ gs[]
-);
+  (PURE_REWRITE_RULE [every_zero_intro] vyper_abi_valid_enc_def)
+  cv_termination_tac;
 
 Theorem vyper_abi_valid_enc_pre[cv_pre]:
   (∀v bs off. vyper_abi_valid_enc_pre v bs off) ∧
@@ -407,17 +401,8 @@ End
 
 val pre = cv_trans_pre_rec
   "vyper_abi_dec_fast_pre vyper_abi_dec_array_fast_pre vyper_abi_dec_tuple_fast_pre"
-  vyper_abi_dec_fast_def (
-  WF_REL_TAC ‘inv_image ($< LEX $<)
-  (λx. case x of
-    (INR (INR (ts,_,_,_,_))) => (cv_size ts, 0)
-  | (INR (INL (n,_,t,_,_,_,_))) => (cv_size t, cv$c2n n)
-  | (INL (t,_,_)) => (cv_size t, 0))’
-  \\ rpt conj_tac
-  \\ Cases_on`cv_v` \\ rw[] \\ gs[cv_lt_Num_0]
-  \\ qmatch_goalsub_rename_tac`cv_snd p`
-  \\ Cases_on`p` \\ gs[]
-);
+  vyper_abi_dec_fast_def
+  cv_termination_tac;
 
 Theorem vyper_abi_dec_fast_pre[cv_pre]:
   (∀v bs off. vyper_abi_dec_fast_pre v bs off) ∧
@@ -497,17 +482,8 @@ End
 
 val pre = cv_trans_pre_rec
   "vyper_abi_valid_enc_fast_pre vyper_abi_valid_enc_array_fast_pre vyper_abi_valid_enc_tuple_fast_pre"
-  vyper_abi_valid_enc_fast_def (
-  WF_REL_TAC ‘inv_image ($< LEX $<)
-  (λx. case x of
-    (INR (INR (ts,_,_,_))) => (cv_size ts, 0)
-  | (INR (INL (n,_,t,_,_,_))) => (cv_size t, cv$c2n n)
-  | (INL (t,_,_)) => (cv_size t, 0))’
-  \\ rpt conj_tac
-  \\ Cases_on`cv_v` \\ rw[] \\ gs[cv_lt_Num_0]
-  \\ qmatch_goalsub_rename_tac`cv_snd p`
-  \\ Cases_on`p` \\ gs[]
-);
+  vyper_abi_valid_enc_fast_def
+  cv_termination_tac;
 
 Theorem vyper_abi_valid_enc_fast_pre[cv_pre]:
   (∀v bs off. vyper_abi_valid_enc_fast_pre v bs off) ∧

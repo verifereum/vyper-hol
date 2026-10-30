@@ -687,7 +687,7 @@ Theorem int_call_no_control[local]:
     (INR exc,st') ⇒ no_control_exc exc
 Proof
   rpt strip_tac >> pop_assum mp_tac
-  >> PURE_REWRITE_TAC[Once evaluate_def] >> strip_tac
+  >> PURE_REWRITE_TAC[Once evaluate_def, lock_if_nr_def, unlock_if_nr_def, is_view_mut_def] >> strip_tac
   >> step_tac >- close_type_check
   >> step_tac >- close_lift_option_type
   >> step_tac >- close_lift_option_type
