@@ -29,6 +29,8 @@
  *   val_footprint, val_footprint_le, val_in_memory_footprint_agree,
  *   expr_val_rel_footprint_agree — the bytes a memory value occupies, which
  *                            expr_val_at bounds, and the same at them
+ *   val_in_memory_word_type — a word type's value in memory: its word is
+ *                            the typed encoding
  *   dynarray_type, dynarray_local, locals_kept — the frame on the live
  *                            locals' memory in expr_post: every byte of a
  *                            live local's region is kept, but a DynArray
@@ -473,23 +475,35 @@ Definition storage_holds_def:
             read_result cx tv es = (INL v, es)
 End
 
-(* w is the data offset of an immutable of the module being lowered, and
-   tv is its value at es, stored at the type t evaluates to; immutables_rel
-   says where the Venom state keeps it.  The offset fits a word, so the
-   load reads at the offset itself.  No invariant gives that bound yet:
-   immutables_rel at runtime says only byte_offset + 32 <= the data
-   section's length, so a producer of a code pointer needs a compile-env
-   clause bounding ImmutableLoc offsets. *)
+(* tvt v sits at offset k inside the layout of itv iv: wherever memory holds
+   iv, it holds v k bytes further on, inside iv's bytes.  A struct's field
+   sits so in the struct, and any value at offset 0 in itself. *)
+Definition sub_layout_def:
+  sub_layout itv iv k tvt v <=>
+    k + type_memory_size tvt <= type_memory_size itv /\
+    !b mem. val_in_memory itv iv b mem ==> val_in_memory tvt v (b + k) mem
+End
+
+(* w points k bytes into the data of an immutable of the module being
+   lowered, and tv is the value of type t that sits there (sub_layout)
+   inside the immutable's value at es; immutables_rel says where the Venom
+   state keeps that value.  The immutable's bytes end below 2 ** 256, so a
+   load reads at off + k itself.  No invariant gives that bound yet:
+   immutables_rel at runtime bounds the offset only by the data section's
+   length, so a producer of a code pointer needs a compile-env clause
+   bounding ImmutableLoc offsets. *)
 Definition immutable_holds_def:
   immutable_holds cenv cx t tv (w:bytes32) (es:evaluation_state) <=>
-    ?name off itv v.
+    ?name off itv iv k tvt v.
       FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
-        SOME (ImmutableLoc off) /\ w = n2w off /\ off < dimword (:256) /\
-      evaluate_type (get_tenv cx) t = SOME itv /\
+        SOME (ImmutableLoc off) /\ w = n2w (off + k) /\
+      off + type_memory_size itv < dimword (:256) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
                  NONE => FEMPTY
                | SOME imms => get_source_immutables cenv.ce_module imms)
-              name = SOME (itv, v) /\
+              name = SOME (itv, iv) /\
+      evaluate_type (get_tenv cx) t = SOME tvt /\
+      sub_layout itv iv k tvt v /\ value_has_type tvt v /\
       read_result cx tv es = (INL v, es)
 End
 
@@ -744,6 +758,26 @@ Theorem typed_val_to_w256_word_value:
 Proof
   rw[word_value_def] >> Cases_on `tv` >> simp[typed_val_to_w256_def] >>
   rename1 `BaseTV bt` >> Cases_on `bt` >> simp[typed_val_to_w256_def]
+QED
+
+(* A value of a word type in memory: its word is the typed encoding. *)
+Theorem val_in_memory_word_type:
+  !tenv t tvt v off mem.
+    is_word_type t /\ evaluate_type tenv t = SOME tvt /\
+    value_has_type tvt v /\ val_in_memory tvt v off mem ==>
+    mem_word_at off mem = typed_val_to_w256 tvt v
+Proof
+  rpt strip_tac >>
+  `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
+   t = BaseT BoolT \/ t = BaseT AddressT \/ t = BaseT DecimalT \/
+   (?m. t = BaseT (BytesT (Fixed m)) /\ m <= 32) \/ (?n. t = FlagT n)` by
+    (Cases_on `t` >> fs[is_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_word_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >> fs[is_word_type_def]) >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `v` >>
+  gvs[vyperTypingTheory.value_has_type_def, val_in_memory_def,
+      typed_val_to_w256_def]
 QED
 
 (* A word local held through its pointer (loweringSlice's

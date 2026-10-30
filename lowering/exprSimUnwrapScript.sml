@@ -226,11 +226,11 @@ Proof
      venomExecSemanticsTheory.exec_read1_def]
 QED
 
-(* At runtime an immutable's word is in the data section at its offset, as
-   immutables_rel says. *)
+(* At runtime a word at an immutable's code pointer is in the data
+   section, where immutables_rel lays the immutable out. *)
 Theorem immutable_holds_dload:
   !func cenv cx es s t v w.
-    stmt_state_rel func cenv cx es s /\ ~cenv.ce_is_ctor /\
+    stmt_state_rel func cenv cx es s /\ ~cenv.ce_is_ctor /\ is_word_type t /\
     immutable_holds cenv cx t (Value v) w es ==>
     ?tvt. evaluate_type (get_tenv cx) t = SOME tvt /\
           word_of_bytes T (0w:bytes32)
@@ -240,7 +240,11 @@ Proof
   rw[immutable_holds_def, exprLoweringPropsTheory.stmt_state_rel_def,
      state_rel_def, immutables_rel_def, read_result_def, return_def] >>
   gvs[] >> first_x_assum drule_all >> strip_tac >>
-  simp[rich_listTheory.TAKE_APPEND1]
+  gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
+  `off + k < dimword (:256)` by DECIDE_TAC >>
+  `mem_word_at (off + k) s.vs_data_section = typed_val_to_w256 tvt v` by
+    (irule val_in_memory_word_type >> metis_tac[]) >>
+  gvs[valueEncodingTheory.mem_word_at_def]
 QED
 
 (* A word immutable at runtime: a DLOAD. *)
@@ -348,12 +352,10 @@ QED
 (* An aggregate in storage, transient storage or code: a copy into a buffer
    of the expression's own, allocated at instruction id sm.cs_next_id.
    Cheated.  From storage and transient storage it is the copy loop's
-   proof.  From code it is not provable as things stand.  At runtime,
-   immutables_rel relates only an immutable's 32-byte word, where Python
-   copies the value's whole memory layout (copy_to_memory of
-   memory_bytes_required bytes); the fix is for immutables_rel to say the
-   data section holds the value as val_in_memory lays it out at its offset.
-   In the constructor the lowering differs from Python:
+   proof.  From code at runtime it is the copy's too: immutables_rel lays
+   the immutable out in the data section as val_in_memory does, and
+   immutable_holds places the value inside that layout.  In the constructor
+   the lowering differs from Python:
    compile_code_to_memory copies with DLOAD from the data section, where
    Python's load_word reads the immutables' buffer with ILOAD, so it needs
    a lowering fix as well. *)
