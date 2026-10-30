@@ -18,7 +18,6 @@
  *
  * TOP-LEVEL:
  *   body_inv            — the frame's cenv and ctx are the program's
- *   expr_body_pre       — expr_sim_pre less int_calls_expr e = []
  *   stmt_exprs_ok       — the byte_widths and alloc_limits premises of
  *                         expr_sim_pre for each expression of a statement
  *   same_frame, frame_ret_ok — the frame's RetQ accepts its returns
@@ -55,22 +54,6 @@ Definition body_inv_def:
     cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
     ~cenv.ce_is_ctor /\ cenv.ce_alloca_locals
 End
-
-(* expr_sim_pre without int_calls_expr e = []. *)
-Definition expr_body_pre_def:
-  expr_body_pre cenv cx env e es <=>
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-    byte_widths_expr e /\ alloc_limits_expr cenv e /\
-    call_evaluation_safe cx (int_calls_expr e)
-End
-
-Theorem expr_sim_pre_body:
-  !cenv cx env e es.
-    expr_sim_pre cenv cx env e es <=>
-    expr_body_pre cenv cx env e es /\ int_calls_expr e = []
-Proof
-  rw[expr_sim_pre_def, expr_body_pre_def] >> metis_tac[]
-QED
 
 (* expr_sim_pre's byte_widths_expr and alloc_limits_expr for every
    expression of a statement, targets' keys included. *)

@@ -7,14 +7,15 @@
  * operator and writes x, as evaluating the expression x op e annotated with
  * x's type and then writing x would, and the lowering is x op e's lowering
  * at x's type (an MLOAD of the pointer, e, compile_binop) and then an
- * MSTORE at the pointer.  So the expression side is compile_bop_word_sim's
+ * MSTORE at the pointer.  So the expression side is compile_bop_word_case's
  * (exprSimOperators), the checked operators' aborts (overflow, division by
  * zero) among its exits, and ** and the narrow or negative shifts rest on
  * exprSimBinopFrag's cheats (#572).  The store is stmtSimAssignStore's.
  *
  * TOP-LEVEL:
- *   compile_augassign_local_stmt_frag — x op= e on a word local, for every
- *                                       outcome
+ *   compile_augassign_local_case      — x op= e on a word local, for every
+ *                                       outcome, given e's expr_sim_case
+ *   compile_augassign_local_stmt_frag — the same, given e's expr_sim_ok
  *   eval_augassign_local_bop          — x op= e evaluates as x op e, then
  *                                       writes x
  *   augassign_local_code_bop          — its code is x op e's, then MSTORE
@@ -261,6 +262,45 @@ Proof
       vyperASTTheory.expr_type_def]
 QED
 
+(* expr_sim_pre_augassign under expr_body_pre: e may make internal calls. *)
+Theorem expr_body_pre_augassign:
+  !cenv cx env ty id bop e es.
+    expr_body_pre cenv cx env e es /\ FLOOKUP env.var_types id = SOME ty /\
+    well_typed_binop ty bop ty (expr_type e) ==>
+    expr_body_pre cenv cx env (Builtin ty (Bop bop) [Name ty id; e]) es
+Proof
+  rpt strip_tac >>
+  drule expr_body_pre_var_types_well_formed >>
+  disch_then drule >> strip_tac >>
+  drule well_formed_type_bits >> strip_tac >>
+  gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
+      byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
+      vyperASTTheory.expr_type_def]
+QED
+
+Theorem name_sim_case[local]:
+  !nocalls ctx func cenv cx ann id.
+    expr_sim_case nocalls ctx func cenv cx (Name ann id)
+Proof
+  rw[expr_sim_case_def] >> irule expr_sim_ok_apply >>
+  simp[compile_name_sim, expr_sim_pre_body, int_calls_expr_def] >>
+  metis_tac[]
+QED
+
+(* x op e simulates where e does, with or without internal calls. *)
+Theorem augassign_bop_case:
+  !nocalls ctx func cenv cx ty id bop e.
+    expr_sim_case nocalls ctx func cenv cx e /\
+    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
+    expr_sim_case nocalls ctx func cenv cx
+      (Builtin ty (Bop bop) [Name ty id; e])
+Proof
+  rpt strip_tac >>
+  drule_all well_typed_binop_augassign_word >> strip_tac >>
+  irule compile_bop_word_case >>
+  simp[name_sim_case, vyperASTTheory.expr_type_def]
+QED
+
 Theorem augassign_bop_sim:
   !ctx func cenv cx env ty id bop e es.
     expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
@@ -296,20 +336,22 @@ Proof
   qpat_x_assum `!id ty entry. _ /\ _ ==> _` drule_all >> simp[]
 QED
 
-(* x op= e on a word local x, for every outcome: x op e's errors exit,
+(* x op= e on a word local x, for every outcome, given e's expr_sim_case
+   (so e may make internal calls unless nocalls): x op e's errors exit,
    the checked operators' aborts among them, and on a value the MSTORE
    writes it to x's region. *)
 (* Why it holds.  The source reads x, evaluates e and runs the operator,
    which is how x op e evaluates (eval_augassign_local_bop), and the code
    is x op e's lowering then the MSTORE (augassign_local_code_bop); x op e
-   meets expr_sim_pre where e does, so its expr_sim is compile_bop_word_sim's.
+   meets expr_body_pre where e does, so its expr_sim is compile_bop_word_case's.
    The scopes at the write hold x at the type ty evaluates to
    (expr_sim_inv at the state after e), so the result's typed word is the
    word the store lays out at x's type (store_lays_out_word_value). *)
-Theorem compile_augassign_local_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty0 env ty id bop e es res es'.
+Theorem compile_augassign_local_case:
+  !nocalls ctx func cx lctx RetQ cenv ty0 env ty id bop e es res es'.
     eval_stmt cx (AugAssign ty (NameTarget id) bop e) es = (res, es') /\
-    expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
+    expr_sim_case nocalls ctx func cenv cx e /\
+    expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
     FLOOKUP env.var_types id = SOME ty /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
@@ -317,7 +359,7 @@ Theorem compile_augassign_local_stmt_frag:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
-  `expr_sim_inv cenv cx env es` by fs[expr_sim_pre_def] >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   drule_all expr_sim_inv_local >> strip_tac >>
   `word_value_type ty /\ word_value_type (expr_type e)` by
     metis_tac[well_typed_binop_augassign_word] >>
@@ -326,16 +368,19 @@ Proof
   rename1 `emit_void MSTORE [Var p; res_op] s3 = _` >>
   drule_all eval_augassign_local_bop >>
   disch_then (qx_choosel_then [`r`, `es1`] strip_assume_tac) >>
-  `expr_sim_pre cenv cx env (Builtin ty (Bop bop) [Name ty id; e]) es` by
-    (irule expr_sim_pre_augassign >> simp[]) >>
+  `expr_body_pre cenv cx env (Builtin ty (Bop bop) [Name ty id; e]) es` by
+    (irule expr_body_pre_augassign >> simp[]) >>
+  `expr_sim_case nocalls ctx func cenv cx
+     (Builtin ty (Bop bop) [Name ty id; e])` by
+    (irule augassign_bop_case >> simp[]) >>
   `expr_sim ctx func cenv cx ty (Builtin ty (Bop bop) [Name ty id; e]) es` by
-    (irule augassign_bop_sim >> metis_tac[]) >>
+    (irule expr_sim_case_apply >> simp[int_calls_expr_def] >> metis_tac[]) >>
   qspecl_then [`cenv`, `cx`, `env`, `Builtin ty (Bop bop) [Name ty id; e]`,
-               `es`, `r`, `es1`] mp_tac expr_sim_pre_word_result >>
+               `es`, `r`, `es1`] mp_tac expr_body_pre_word_result >>
   impl_tac >- simp[vyperASTTheory.expr_type_def] >> strip_tac >>
   qspecl_then [`cenv`, `cx`, `env`, `Builtin ty (Bop bop) [Name ty id; e]`,
                `es`, `ty`, `sa`, `res_op`, `s3`] mp_tac
-    expr_sim_pre_lower_value_word_shape >>
+    expr_body_pre_lower_value_word_shape >>
   impl_tac >- simp[vyperASTTheory.expr_type_def] >> strip_tac >>
   `cs_extends s3 sb` by
     metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
@@ -393,6 +438,22 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+(* compile_augassign_local_case for an operand with no internal call. *)
+Theorem compile_augassign_local_stmt_frag:
+  !ctx func cx lctx RetQ cenv ty0 env ty id bop e es res es'.
+    eval_stmt cx (AugAssign ty (NameTarget id) bop e) es = (res, es') /\
+    expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
+    FLOOKUP env.var_types id = SOME ty /\
+    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e)) es res es'
+Proof
+  rpt strip_tac >> irule compile_augassign_local_case >>
+  fs[expr_sim_pre_body, expr_sim_ok_case] >>
+  conj_tac >- (qexists_tac `env` >> simp[]) >>
+  qexists_tac `T` >> simp[]
+QED
+
 (* Integrity gate: the source and code sides and the store carry no
    admission; the statement itself inherits exprSimBinopFrag's (#572). *)
 val () = List.app (fn th =>
@@ -402,4 +463,4 @@ val () = List.app (fn th =>
      then print "AUGASSIGN_AUDIT OK\n"
      else raise Fail "augmented assignment inherited admission"
   end) [eval_augassign_local_bop, augassign_local_code_bop,
-        expr_sim_pre_augassign, expr_sim_inv_local, assign_local_store_run];
+        expr_sim_pre_augassign, expr_body_pre_augassign, expr_sim_inv_local, assign_local_store_run];
