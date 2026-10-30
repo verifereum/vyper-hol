@@ -37,8 +37,9 @@ Proof
   rename1 `type_stmt env ret (Log (src,name) exprs) = SOME env'` >>
   drule_all_then (qspec_then `type_env tops` strip_assume_tac) checked_log_event_info >>
   rename1 `FLOOKUP env.event_fields (src,name) = SOME fields` >>
-  `art = build_contract_type_artifact dep [(NONE,tops)]` by
-    fs[check_contract_def, AllCaseEqs()] >>
+  `art.cta_event_fields =
+   (build_contract_type_artifact dep [(NONE,tops)]).cta_event_fields` by
+    gvs[check_contract_def, AllCaseEqs()] >>
   `MEM (EventDecl name fields) tops` by
     (`FLOOKUP (build_contract_type_artifact dep [(NONE,tops)]).cta_event_fields
       (src,name) = SOME fields` by gvs[] >>

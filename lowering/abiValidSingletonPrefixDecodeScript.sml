@@ -2,7 +2,7 @@
    child's canonical prefix with the established recursive decoder. *)
 Theory abiValidSingletonPrefixDecode
 Ancestors
-  abiValidSingletonPrefix abiValidSingletonCode abiDecoderCoherentCorrect abiDecoderArrayBody
+  abiValidSingletonPrefix abiValidSingletonReentry abiDecoderCoherentCorrect abiDecoderArraySetupCode
   abiDecoderCoherence abiDecoderDynamic abiDecoderValidRecursive abiDecoderValidContract
   abiDecoderValidWrapping valueEncodingProps vyperTyping abiBoundaryChecks abiDecoderEffect
   abiDecoderTypedContract abiDecoderContract abiDecoderReentry abiDecoderAllocation

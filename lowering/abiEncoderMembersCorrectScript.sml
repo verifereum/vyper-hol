@@ -2,8 +2,8 @@
 Theory abiEncoderMembersCorrect
 Ancestors
   abiEncoderSourceMembersInterpret abiEncoderSourceMembersIndex abiEncoderMemberSpine
-  abiEncoderMembersStep abiEncoderMembersContract abiEncoderMembersDefs abiEncoderMembersPrepare
-  abiEncoderMemberCode abiEncoderChildCompose abiEncoderInput abiDecoderMemberPhases
+  abiEncoderMembersStep abiEncoderMembersContract abiEncoderMembersDefs abiEncoderMemberSourcePhase
+  abiEncoderMemberCode abiEncoderChildCompose abiEncoderInput abiDecoderMemberCons
   abiDecoderDynamicLoopSetup abiDecoderEffect abiDecoderLoop abiDecoderContract fragExec
   compileEnv valueEncoding contractABI venomState list arithmetic
 
@@ -19,7 +19,7 @@ Proof
   Cases_on `tys` >> Cases_on `avs` >> gvs[abi_encoder_tuple_type_def]
 QED
 
-Theorem abi_encoder_members_correct_from_spine[local]:
+Theorem abi_encoder_members_correct_all:
   !infos. abi_encoder_members_correct infos
 Proof
   gen_tac >> simp_tac bool_ss [abi_encoder_members_correct_def] >> rpt gen_tac >>
@@ -37,11 +37,5 @@ Theorem abi_encoder_members_correct_cons:
   abi_encoder_members_correct infos ==>
   abi_encoder_members_correct ((ei,abi_sz,mem_sz,dyn)::infos)
 Proof
-  strip_tac >> MATCH_ACCEPT_TAC abi_encoder_members_correct_from_spine
-QED
-
-Theorem abi_encoder_members_correct_all:
-  !infos. abi_encoder_members_correct infos
-Proof
-  MATCH_ACCEPT_TAC abi_encoder_members_correct_from_spine
+  strip_tac >> MATCH_ACCEPT_TAC abi_encoder_members_correct_all
 QED

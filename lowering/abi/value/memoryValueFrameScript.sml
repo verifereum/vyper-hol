@@ -5,6 +5,7 @@ Theory memoryValueFrame
 Ancestors
   memoryValueDefs valueEncoding valueEncodingProps valueEncodingProofs
   memoryReadProps venomState venomExecSemantics vyperValue list alist arithmetic pair
+  typeValueInduction
 
 Theorem default_base_val_wf:
   !bt. val_wf (BaseTV bt) (default_value (BaseTV bt))
@@ -26,7 +27,7 @@ Theorem default_value_val_wf:
   (!p:string # type_value. val_wf (SND p) (default_value (SND p))) /\
   (!tvs. tuple_val_wf (MAP default_value tvs) tvs)
 Proof
-  ho_match_mp_tac (TypeBase.induction_of ``:type_value``) >>
+  ho_match_mp_tac type_value_mutual_induction >>
   simp[default_base_val_wf, default_array_val_wf,
     default_value_def, default_value_struct_MAP, default_value_tuple_MAP,
     val_wf_def, type_memory_size_def] >> rpt gen_tac >> strip_tac >>
@@ -304,7 +305,7 @@ Theorem memory_value_frames:
   (!p:string # type_value. memory_value_frame (SND p)) /\
   (!tvs. memory_tuple_frame tvs)
 Proof
-  ho_match_mp_tac (TypeBase.induction_of ``:type_value``) >>
+  ho_match_mp_tac type_value_mutual_induction >>
   simp[memory_value_frame_base, memory_value_frame_flag, memory_value_frame_none,
     memory_value_frame_array, memory_value_frame_struct, memory_value_frame_tuple,
     memory_fields_frame_nil, memory_fields_frame_cons,

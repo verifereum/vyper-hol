@@ -3,7 +3,7 @@ Theory abiDecoderCorrectStruct
 Ancestors
   abiDecoderCorrect abiDecoderStruct abiDecoderComplexExecute abiDecoderMemberInfos
   abiDecoderEffect abiDecoderCoherence abiDecoderReentry abiDecoderTypedContract
-  abiDecoderContract abiStaticListProps fragExec compileEnv valueEncoding valueEncodingProps
+  abiDecoderContract abiStaticDynarrayLayout fragExec compileEnv valueEncoding valueEncodingProps
   vyperABI vyperTyping venomState words list
 
 Theorem abi_decoder_correct_struct:

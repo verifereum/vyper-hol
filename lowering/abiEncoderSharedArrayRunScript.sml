@@ -2,9 +2,9 @@
 Theory abiEncoderSharedArrayRun
 Ancestors
   abiEncoderSharedArrayLoop abiEncoderSharedArrayEntry abiEncoderSharedArrayIndex
-  abiEncoderSharedArrayComplete abiScratchEffect abiEncoderRegisteredEffect abiScratchEncoderContract
+  abiEncoderSharedArrayEntry abiScratchEffect abiEncoderRegisteredEffect abiScratchEncoderContract
   abiEncoderSharedContract abiEncoderExtendSim abiEncoderArrayLoopCode
-  abiEncoderArrayCursor abiEncoderMembersDefs abiDecoderContract abiDecoderReentry
+  abiEncoderArrayHeaderMemory abiEncoderMembersDefs abiDecoderContract abiDecoderReentry
   compileEnv valueEncoding contractABI venomState words list arithmetic
 
 Theorem abi_encoder_shared_array_prepared_run:

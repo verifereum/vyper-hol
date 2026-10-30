@@ -2,7 +2,7 @@
 Theory abiScratchDecoderIndex
 Ancestors
   abiScratchOwnedPrefix abiScratchPrefix abiScratchEncoderContract abiScratchDecoderContract
-  abiEncoderArrayInitCode abiEncoderComplexPrefix abiEncoderMembersDefs abiDecoderIndexInit
+  abiEncoderArrayParent abiEncoderComplexPrefix abiEncoderMembersDefs abiDecoderIndexInit
   abiDecoderAllocation abiDecoderFootprint abiDecoderReentry abiDecoderLoop abiDecoderFrame
   compileEnv valueEncoding contractABI venomState words list arithmetic
 

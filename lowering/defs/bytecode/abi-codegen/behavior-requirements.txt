@@ -1,3 +1,0 @@
-# EVM runner used by abi_codegen_behavior.py (separate from compiler oracle deps).
-py-evm==0.12.1b1
-eth-abi==6.0.0

@@ -2,7 +2,7 @@
    TOP-LEVEL: abi_decoder_member_after_head, abi_decoder_member_tail_execute. *)
 Theory abiDecoderMemberTail
 Ancestors
-  abiDecoderMembersCorrect abiDecoderMemberInfos abiDecoderMemberInputs abiDecoderMemberFrames
+  abiDecoderMembersCorrect abiDecoderMemberInfos abiDecoderMemberBody abiDecoderMemberFrames
   abiDecoderMembers abiDecoderCoherence abiDecoderTypedContract abiDecoderEffect
   abiDecoderReentry abiDecoderContract abiDecodeRanges compileEnv valueEncoding
   vyperABI vyperValue vyperTyping venomState words list arithmetic

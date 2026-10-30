@@ -2,8 +2,8 @@
    Empty dynamic fixed-array members use their inline head without a payload read. *)
 Theory abiDecoderValidRecursive
 Ancestors
-  abiDecoderOffsetHead abiDecoderReadableTypes abiDecoderValidContract abiDecoderValidLeaves abiDecoderValidArray
-  abiDecoderValidFixed abiDecoderValidTuple abiDecoderValidStruct abiDecoderCoherence
+  abiDecoderOffsetHead abiDecoderReadableTypes abiDecoderValidContract abiDecoderValidFixed abiDecoderValidArray
+  abiDecoderValidFixed abiDecoderValidFixed abiDecoderValidFixed abiDecoderCoherence
   abiDecoderTypedContract abiDecoderEffect abiDecoderContract abiDecoderReentry abiDecoderLoop
   abiEncoder fragExec compileEnv valueEncoding vyperABI vyperValue contractABI
   venomState venomExecSemantics words list

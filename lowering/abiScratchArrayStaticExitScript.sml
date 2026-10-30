@@ -3,8 +3,8 @@
    and composes its address-only effect from the loop origin. *)
 Theory abiScratchArrayStaticExit
 Ancestors
-  abiScratchArrayLoopInvariant abiScratchArrayLoopExit abiScratchArrayCount abiScratchAddress
-  abiScratchEffect abiScratchEncoderContract abiEncoderArrayExit abiEncoderArrayLayout
+  abiScratchArrayLoopInvariant abiScratchArrayLoopRun abiScratchArrayEntry abiScratchAddress
+  abiScratchEffect abiScratchEncoderContract abiEncoderArrayExit abiEncoderArrayBodyCode
   abiEncoderMembersDefs abiDecoderDynamicLoopSetup abiDecoderLoop abiDecoderReentry
   abiDecoderContract compileEnv valueEncoding contractABI venomState words list arithmetic
 

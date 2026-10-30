@@ -2,7 +2,7 @@
    scratch path. Both fresh allocation and reuse yield the same output row. *)
 Theory abiScratchBuiltinOwnership
 Ancestors
-  abiBuiltinEncodeOwnership abiBuiltinEncodeSetup abiScratchEncoderContract abiDecoderAllocation
+  abiBuiltinEncodeCorrect abiBuiltinEncodeSetup abiScratchEncoderContract abiDecoderAllocation
   compileEnv venomState finite_map pred_set arithmetic
 
 Theorem abi_scratch_effect_allocation_row:

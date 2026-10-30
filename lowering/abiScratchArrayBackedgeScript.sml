@@ -1,9 +1,9 @@
 Theory abiScratchArrayBackedge
 Ancestors
-  abiScratchEncoderContract abiScratchEffect abiEncoderArrayBackedge abiDecoderAllocation
+  abiScratchEncoderContract abiScratchEffect abiEncoderArrayRound abiDecoderAllocation
   abiDecoderArrayBackedge abiDecoderFootprint abiDecoderLoop abiDecoderReentry compileEnv
   venomState venomInst words finite_map list arithmetic abiScratchInput abiScratchCursor
-  abiScratchFootprint abiEncoderArrayCursor abiEncoderArrayFrame abiEncoderArrayPrefix
+  abiScratchFootprint abiEncoderArrayHeaderMemory abiEncoderArrayFrame abiEncoderArrayPrefix
   abiEncoderMembersDefs abiEncoderInput abiDecoderFrame valueEncodingProps valueEncoding
   contractABI
 

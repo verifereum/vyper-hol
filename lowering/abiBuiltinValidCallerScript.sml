@@ -2,7 +2,7 @@
    Physical input ownership and numeric resources remain explicit. *)
 Theory abiBuiltinValidCaller
 Ancestors
-  abiBuiltinValidDispatch abiCallerCoherence abiDecoderReadableTypes abiBuiltinSource
+  abiBuiltinValidDispatch abiCallerBuiltinInput abiDecoderReadableTypes abiBuiltinSource
   abiBuiltinDecodeEffect abiDecoderCoherence abiDecoderContract abiDecoderLoop abiDecoderReentry
   exprLowering builtinAbi fragExec compileVyper compileEnv context valueEncoding vyperTypeSystem
   vyperValue vyperABI vyperContext venomState words list

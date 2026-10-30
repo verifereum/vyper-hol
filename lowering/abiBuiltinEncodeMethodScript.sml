@@ -1,13 +1,13 @@
 Theory abiBuiltinEncodeMethod
 Ancestors
-  abiBuiltinEncodeCode abiBuiltinEncodeFinish abiBuiltinPrefix abiEncoderWrites
+  abiBuiltinEncodeCode abiBuiltinEncodeCorrect abiBuiltinPrefix abiEncoderWrites
   abiDecoderReentry abiDecoderDynamicLoopSetup abiDecoderGuards abiDecoderFrameCompose
   abiDecoderContract compileEnv emitHelper emitHelperProps exprLoweringProps venomInst
   venomState venomExecSemantics words list rich_list arithmetic abiEncoderMemory
   abiEncoderSequence abiDecoderTypedContract abiDecoderLoop fragExec instIdxIndep
   valueEncodingProps byte abiBuiltinEncodeAllocate abiBuiltinEncodeSetup abiBuiltinAllocation
   finite_map valueEncoding abiBuiltinEncodeInput abiBuiltinEncodeEffect
-  abiBuiltinEncodeOwnership abiBuiltinEncodeBody abiBuiltinEncodeContext abiEncoderCorrect
+  abiBuiltinEncodeCorrect abiBuiltinEncodeCorrect abiBuiltinEncodeContext abiEncoderCorrect
   abiEncoderInput abiDecoderEffect abiDecoderAllocation builtinAbi exprLowering
 
 (* ===== Builtin Encode Method ===== *)

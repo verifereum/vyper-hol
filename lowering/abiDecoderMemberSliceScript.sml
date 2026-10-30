@@ -3,7 +3,7 @@
    Helpers: offset calculation and static-member window. *)
 Theory abiDecoderMemberSlice
 Ancestors
-  abiDecoderCanonicalPtr abiCanonicalWindows abiCanonicalLoad abiDecodeRanges
+  abiDecoderCanonicalPtr abiCanonicalWindows abiCanonicalHeadSize abiDecodeRanges
   abiDecoderContract contractABI venomState words list rich_list arithmetic
 
 Definition abi_tuple_child_offset_def:

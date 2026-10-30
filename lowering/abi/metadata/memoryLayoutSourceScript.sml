@@ -6,6 +6,8 @@ Theory memoryLayoutSource
 Ancestors
   memoryLayoutRel memoryLayoutDefs memoryValueDefs valueEncoding valueLoadProps
   vyperTypeValues vyperValue vyperAST list pair arithmetic
+Libs
+  legacyInduction
 
 Theorem memory_layout_key_array:
   !ty array_bound.
@@ -173,7 +175,7 @@ QED
 Theorem all_layout_key_transports:
   (!ty. layout_key_transport ty) /\ (!tys. EVERY layout_key_transport tys)
 Proof
-  ho_match_mp_tac (TypeBase.induction_of ``:type``) >>
+  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops type_induction) >>
   simp[layout_key_transport_base, layout_key_transport_array, layout_key_transport_tuple,
     layout_key_transport_atomic]
 QED

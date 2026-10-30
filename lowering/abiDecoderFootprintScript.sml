@@ -131,16 +131,6 @@ Proof
   metis_tac[abi_decode_footprint_frame_mload, abi_decode_footprint_frame_slice]
 QED
 
-Theorem abi_decoder_child_frame_count:
-  abi_decode_footprint_frame fp s t /\
-  abi_footprint_disjoint count_slot 32 fp /\
-  abi_footprint_disjoint index_slot 32 fp ==>
-  mload count_slot t = mload count_slot s /\
-  mload index_slot t = mload index_slot s
-Proof
-  metis_tac[abi_decode_child_preserves_loop_slots]
-QED
-
 Theorem abi_decoder_parent_index_preserves_source_count:
   count_slot + 32 <= index_slot \/ index_slot + 32 <= count_slot ==>
   mload count_slot (mstore index_slot w s) = mload count_slot s

@@ -1,11 +1,11 @@
 Theory abiBuiltinWrapped
 Ancestors
-  abiValidWrapped abiValidSingletonPrefix abiBuiltinPrefixReady abiBuiltinSource
-  abiBuiltinDecodeSetup abiBuiltinSetupExecute abiBuiltinAllocation abiDecoderCoherence
+  abiValidWrapped abiValidSingletonPrefix abiBuiltinPrefixSource abiBuiltinSource
+  abiBuiltinDecodeSetup abiBuiltinSetupReach abiBuiltinAllocation abiDecoderCoherence
   abiDecoderTypedContract abiDecoderContract abiDecoderReentry abiDecoderAllocation
   abiDecoderArrayInitExec compileEnv valueEncoding vyperABI contractABI venomState words list
-  arithmetic abiValidSingletonPrefixDecode abiBuiltinDecodeCode abiBuiltinSetupReach
-  abiBuiltinDecodeEffect abiDecoderDynamic abiDecoderEffect abiDecoderLoop abiCanonicalLoad
+  arithmetic abiValidSingletonPrefixDecode abiBuiltinDecodeCorrect abiBuiltinSetupReach
+  abiBuiltinDecodeEffect abiDecoderDynamic abiDecoderEffect abiDecoderLoop abiCanonicalHeadSize
   abiEncoder builtinAbi fragExec valueEncodingProps venomExecSemantics
 
 (* ===== Array Ready ===== *)

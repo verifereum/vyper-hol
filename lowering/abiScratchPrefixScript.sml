@@ -2,8 +2,8 @@ Theory abiScratchPrefix
 Ancestors
   abiScratchEncoderContract abiScratchFootprint abiEncoderComplexPrefix abiEncoderChildFrames
   abiDecoderFootprint abiDecoderFrame abiDecoderReentry compileEnv venomState finite_map words
-  arithmetic abiEncoderArrayFrame abiEncoderArrayBounds abiEncoderArrayPrefix
-  abiEncoderArrayLayout abiEncoderTuple abiEncoderMemory abiCanonicalWindows abiDecoderContract
+  arithmetic abiEncoderArrayFrame abiEncoderArrayBodyCode abiEncoderArrayPrefix
+  abiEncoderArrayBodyCode abiEncoderTuple abiEncoderMemory abiCanonicalWindows abiDecoderContract
   valueEncodingProps valueEncoding contractABI list rich_list
 
 (* ===== Effect ===== *)

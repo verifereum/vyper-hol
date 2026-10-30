@@ -5,7 +5,7 @@ Ancestors
   abiDecoderArrayHeader abiDecoderReentry abiDecoderContract abiDecoderGuards
   abiEncoder emitHelperProps exprLoweringProps compileEnv emitHelper
   valueEncoding valueEncodingProps contractABI venomState venomExecSemantics
-  venomInst words list arithmetic ssaOperandFrame abiBytestringCode abiDecoderReentryAllocation
+  venomInst words list arithmetic ssaOperandFrame abiBytestringCode abiDecoderReentryAddress
 
 Theorem abi_encode_word_trace:
   compile_abi_encode_to_buf dst src AbiPrimWord st = (out,st') ==>

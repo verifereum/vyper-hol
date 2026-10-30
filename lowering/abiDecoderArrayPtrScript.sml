@@ -1,7 +1,7 @@
 (* The sentinel dynamic-array child pointer and its canonical source window. *)
 Theory abiDecoderArrayPtr
 Ancestors
-  abiDecoderBytesBound abiDecoderGuards abiDecoderContract abiCanonicalArrayLoad
+  abiDecoderBytesBound abiDecoderGuards abiDecoderContract abiCanonicalHeadSize
   abiEncoder emitHelperProps exprLoweringProps compileEnv emitHelper
   valueEncoding contractABI venomExecSemantics venomState words arithmetic list
 

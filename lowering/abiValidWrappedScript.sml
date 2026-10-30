@@ -6,7 +6,7 @@ Ancestors
   abiValidSingletonBytes abiValidSingletonSetup abiDecoderValidBytes abiDecoderBytes
   abiDecoderSingletonSetup abiDecoderReservation abiEncoder emitHelperProps abiDecoderWrapped
   abiDecoderWrappedBytesFragment abiDecoderBytesTyped abiDecoderTypedCompose abiDecoderGuards
-  abiDecoderReentrySequence exprLoweringProps emitHelper venomExecSemantics venomInst rich_list
+  abiDecoderReentryPointer exprLoweringProps emitHelper venomExecSemantics venomInst rich_list
 
 Theorem abi_valid_wrapped_static_array_strict[local]:
   ~is_dynamic at /\ vyper_decode_valid_enc (Array NONE at) bs ==>

@@ -2,7 +2,7 @@
    TOP-LEVEL: prefix capacity and preservation across disjoint scratch writes. *)
 Theory abiEncoderArrayFrame
 Ancestors
-  abiEncoderArrayPrefix abiEncoderArrayLayout abiEncoderInput abiCanonicalArrays abiDecodeRanges
+  abiEncoderArrayPrefix abiEncoderArrayBodyCode abiEncoderInput abiCanonicalHeadSize abiDecodeRanges
   abiDecoderFrame abiDecoderContract valueEncoding contractABI venomState list arithmetic
 
 Theorem abi_footprint_disjoint_subwindow:

@@ -39,8 +39,8 @@ Proof
   `well_typed_exprs env [e]` by simp[well_typed_expr_def] >>
   `call_evaluation_safe cx (int_calls_exprs [e])` by simp[int_calls_expr_def] >>
   fs[runtime_consistent_def] >>
-  qspecl_then [`cx`, `[e]`, `env`, `es`, `INL [v]`, `es'`]
-    mp_tac (cj 9 eval_all_type_sound_mutual) >>
+  qspecl_then [`cx`, `[e]`] (mp_tac o CONJUNCT1) (cj 6 eval_scc_type_sound_mutual) >>
+  disch_then (qspecl_then [`env`, `es`, `INL [v]`, `es'`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> strip_tac >>
   simp_tac bool_ss [runtime_consistent_def] >>
   rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC,

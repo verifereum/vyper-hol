@@ -3,6 +3,7 @@
    scalar, array, tuple and struct cases by type-value induction. *)
 Theory memoryValueAbiStatic
 Ancestors
+  typeValueInduction
   memoryValueAbiWord memoryValueAbiArray memoryValueAbiTuple memoryValueDefs
   sourceAbiArray valueEncoding compileEnv vyperABI vyperValue vyperTyping
   vyperTypeValues vyperTypeABI vyperTypeDefaults contractABI
@@ -186,7 +187,7 @@ Theorem memory_value_abi_types:
   (!p:string # type_value. memory_value_abi_type (SND p)) /\
   (!tvs. memory_tuple_abi_types tvs)
 Proof
-  ho_match_mp_tac (TypeBase.induction_of ``:type_value``) >>
+  ho_match_mp_tac type_value_mutual_induction >>
   simp[memory_value_abi_type_base, memory_value_abi_type_flag, memory_value_abi_type_none,
     memory_value_abi_type_array, memory_value_abi_type_tuple, memory_value_abi_type_struct,
     memory_tuple_abi_types_nil, memory_tuple_abi_types_cons] >>

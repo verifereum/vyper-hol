@@ -3,7 +3,7 @@ Theory abiDecoderPrimitiveArrayFacts
 Ancestors
   abiDecoderArrayInvariant abiDecoderArrayAdvance abiDecoderPrimitiveLoopContext
   abiDecoderCoherence abiDecoderTypedContract abiDecoderWordTyped abiDecoderContract
-  abiCanonicalArrays abiCanonicalArrayLoad abiDecoderBulk compileEnv exprLowering valueEncoding
+  abiCanonicalHeadSize abiCanonicalHeadSize abiDecoderBulk compileEnv exprLowering valueEncoding
   vyperABI vyperTyping vyperValue contractABI byte words list arithmetic
 
 Theorem abi_decoder_static_word_array_length:

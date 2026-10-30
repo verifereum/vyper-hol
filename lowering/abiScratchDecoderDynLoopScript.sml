@@ -1,7 +1,7 @@
 (* Typed finite execution follows the actual recursive dynamic-loop compiler. *)
 Theory abiScratchDecoderDynLoop
 Ancestors
-  abiScratchDecoderContract abiScratchEncoderContract abiScratchArrayLoopEntry
+  abiScratchDecoderContract abiScratchEncoderContract abiScratchArrayLoopRun
   abiDecoderRecursiveLoopLayout abiDecoderRecursiveLoopContext abiScratchDecoderLoopContext abiScratchDecoderLoopFinite
   abiScratchDecoderLoopInvariant abiDecoderLoopEmit abiDecoderArraySetupCode
   abiDecoderValidContract abiDecoderEffect abiDecoderExecution abiDecoderLoop

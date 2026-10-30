@@ -12,16 +12,14 @@ Theorem check_contract_struct_fields_assignable:
     MEM (StructDecl name fields) tops ==>
     EVERY (assignable_type (type_env_all_modules mods) o SND) fields
 Proof
-  rpt strip_tac >> gvs[check_contract_def] >>
-  `check_module in_deploy layouts addr mods
-    (build_contract_type_artifact in_deploy mods) (src,tops)` by fs[EVERY_MEM] >>
-  `check_toplevel_decl layouts addr mods
-    (build_contract_type_artifact in_deploy mods) src (StructDecl name fields)` by
-    (qpat_x_assum `check_module _ _ _ _ _ _` mp_tac >>
-     simp_tac bool_ss [check_module_def, EVERY_MEM] >> strip_tac >>
-     first_x_assum irule >> simp[]) >>
-  gvs[check_toplevel_decl_def, o_DEF] >>
-  qpat_x_assum `EVERY _ fields` mp_tac >> simp[EVERY_MEM, FORALL_PROD]
+  rpt strip_tac >>
+  qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+  simp[check_contract_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x mods ==> check_module _ _ _ _ _ _ x` drule >>
+  simp[check_module_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x tops ==> check_toplevel_decl _ _ _ x` drule >>
+  simp[check_toplevel_decl_def, EVERY_MEM, FORALL_PROD, o_DEF] >>
+  strip_tac >> asm_rewrite_tac []
 QED
 
 Theorem checked_main_struct_fields_assignable:

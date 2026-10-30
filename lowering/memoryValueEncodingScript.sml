@@ -5,7 +5,7 @@
 Theory memoryValueEncoding
 Ancestors
   memoryValueDefs valueEncoding vyperTyping vyperValue list alist
-  arithmetic pair sorting
+  arithmetic pair sorting typeValueInduction
 
 (* ===== Canonical list interfaces ===== *)
 
@@ -64,7 +64,7 @@ Theorem default_memory_encoding:
     memory_tuple_rel tvs (MAP default_value tvs) offset mem ==>
     tuple_in_memory (MAP default_value tvs) tvs offset mem)
 Proof
-  ho_match_mp_tac (TypeBase.induction_of ``:type_value``) >>
+  ho_match_mp_tac type_value_mutual_induction >>
   simp[default_value_def, default_value_struct_MAP, default_value_tuple_MAP,
        memory_value_rel_def, val_in_memory_def, default_array_memory_encoding] >>
   rpt conj_tac >> rpt gen_tac >> strip_tac >>
@@ -191,7 +191,7 @@ Theorem memory_encoding_bridges:
   (!p:string # type_value. memory_encoding_bridge (SND p)) /\
   (!tvs. memory_tuple_encoding_bridge tvs)
 Proof
-  ho_match_mp_tac (TypeBase.induction_of ``:type_value``) >>
+  ho_match_mp_tac type_value_mutual_induction >>
   simp[memory_encoding_bridge_array, memory_encoding_bridge_struct,
        memory_encoding_bridge_tuple, memory_fields_encoding_bridge_cons,
        memory_tuple_encoding_bridge_cons] >>

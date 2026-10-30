@@ -1,7 +1,7 @@
 (* Actual scratch-index allocation and zero initialization, including site reuse. *)
 Theory abiDecoderIndexInit
 Ancestors
-  abiDecoderReentryAllocation abiDecoderAllocation abiDecoderReentry
+  abiDecoderReentryAddress abiDecoderAllocation abiDecoderReentry
   abiDecoderArrayHeader abiDecoderGuards abiDecoderContract abiDecoderFrame
   emitHelperProps exprLoweringProps compileEnv emitHelper context
   venomExecSemantics venomMemProps venomState venomInst finite_map words list rich_list arithmetic

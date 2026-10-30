@@ -3,7 +3,7 @@
    metadata; none assumes successful execution of an emitted fragment. *)
 Theory abiBuiltinCanonicalPre
 Ancestors
-  abiBuiltinAllocation abiBuiltinDecodeSetup abiBuiltinSetupExecute abiDecoderCoherence
+  abiBuiltinAllocation abiBuiltinDecodeSetup abiBuiltinSetupReach abiDecoderCoherence
   abiDecoderTypedContract abiDecoderReentry abiDecoderReservation abiDecoderAllocation
   abiDecoderArrayInitExec abiDecoderFrame abiDecoderContract compileEnv valueEncoding vyperABI
   contractABI venomState finite_map words list arithmetic

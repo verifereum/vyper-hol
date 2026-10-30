@@ -2,7 +2,7 @@
    types alone, including the one-instruction zero-sized copy case. *)
 Theory abiTupleEncodeCounters
 Ancestors
-  abiTupleEncodeCode abiTupleEncodeStage abiTupleProps compileEnv context exprLowering
+  abiTupleEncodePrepare abiTupleEncodePrepare abiTupleProps compileEnv context exprLowering
   emitHelper emitHelperProps exprLoweringProps words list arithmetic
 
 Definition abi_tuple_encode_inst_count_def:

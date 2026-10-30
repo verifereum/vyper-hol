@@ -1,7 +1,7 @@
 (* Persistent complete source data and the processed output prefix for encoder loops. *)
 Theory abiEncoderArrayMemory
 Ancestors
-  abiEncoderArrayFrame abiEncoderArrayPrefix abiEncoderArrayLayout abiEncoderBufferFrame
+  abiEncoderArrayFrame abiEncoderArrayPrefix abiEncoderArrayBodyCode abiEncoderBufferFrame
   abiEncoderChildInputs abiEncoderInput abiDecoderEffect abiDecoderDynamicLoopSetup
   abiDecoderReentry abiDecoderFrame abiDecoderContract compileEnv valueEncoding contractABI
   venomState words arithmetic list

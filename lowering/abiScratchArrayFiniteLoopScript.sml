@@ -4,7 +4,7 @@
 Theory abiScratchArrayFiniteLoop
 Ancestors
   abiScratchArrayLoopHeader abiScratchArrayLoopInvariant abiScratchArrayDynamicRound
-  abiScratchEffect abiScratchEncoderContract abiEncoderArrayLoopCode abiEncoderArrayLoopHeader
+  abiScratchEffect abiScratchEncoderContract abiEncoderArrayLoopCode abiEncoderArrayLoopDynamicStep
   abiEncoderMembersDefs abiDecoderLoop abiDecoderReentry abiDecoderContract compileEnv
   valueEncoding contractABI venomState venomInst words list arithmetic
 

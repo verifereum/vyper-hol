@@ -3,7 +3,7 @@
 Theory abiDecoderNestedArrayLoop
 Ancestors
   abiDecoderCorrectPrimitiveArray abiDecoderRecursiveLoopFinite abiDecoderCorrect
-  abiDecoderArrayBody compileEnv vyperAST vyperValue
+  abiDecoderArraySetupCode compileEnv vyperAST vyperValue
 
 val nested_child_instance = Q.INST
   [`ty` |-> `inner_ty:vyperAST$type`, `tv` |-> `inner_tv:vyperValue$type_value`,

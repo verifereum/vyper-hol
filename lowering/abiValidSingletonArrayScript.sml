@@ -1,7 +1,7 @@
 (* Dynamic singleton validity exposes the actual head offset and child window. *)
 Theory abiValidSingletonArray
 Ancestors
-  abiCanonicalLoad abiCanonicalArrayLoad abiDecoderContract vyperABI contractABI
+  abiCanonicalHeadSize abiCanonicalHeadSize abiDecoderContract vyperABI contractABI
   venomState words list rich_list arithmetic
 
 Theorem abi_dynamic_singleton_value:

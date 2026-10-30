@@ -66,7 +66,8 @@ Proof
   FIRST
    [drule_all checked_pop_type_well_formed >> simp[],
     drule_all checked_call_type_well_formed >> simp[],
-    drule_all TopLevelName_well_formed_type >> simp[],
+    qmatch_asmsub_rename_tac `TopLevelName _ nsid` >>
+      Cases_on `nsid` >> fs[Once well_typed_expr_def],
     qpat_x_assum `well_typed_expr env _` mp_tac >>
       simp_tac bool_ss [Once well_typed_expr_def] >> strip_tac >>
       FIRST [first_assum MATCH_ACCEPT_TAC,

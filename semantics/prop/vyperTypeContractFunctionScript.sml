@@ -13,7 +13,7 @@ Ancestors
   vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeValues vyperTypeBindArguments
   vyperTypeStmtSoundness vyperTypeInitialState vyperPureExpr vyperEvalPreservesScopes vyperEvalExprPreservesScopesDom
   vyperEvalPreservesImmutablesDom vyperScopePreservation vyperStatePreservation
-  vyperTypeContractStaticMaps vyperTypeContractContext
+  vyperTypeContractStaticMaps vyperTypeContractContext vyperTypeEventLookup
 Libs
   wordsLib
 
@@ -444,6 +444,9 @@ Theorem function_entry_env_static_maps_transfer_deploy[local]:
     (function_entry_env deploy_art mods entry_src args) env
 Proof
   strip_tac >>
+  `deploy_art.cta_event_fields = runtime_art.cta_event_fields` by
+    (gvs[check_contract_def] >>
+     metis_tac[build_contract_type_artifact_nonsig_mode_irrelevant]) >>
   qpat_assum `check_contract T _ _ _ = _`
     (strip_assume_tac o MATCH_MP check_contract_artifact_fields) >>
   qpat_assum `check_contract F _ _ _ = _`

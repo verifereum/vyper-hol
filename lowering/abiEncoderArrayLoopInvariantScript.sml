@@ -1,7 +1,7 @@
 (* Pure observations and accumulated owned effects for finite encoder iteration. *)
 Theory abiEncoderArrayLoopInvariant
 Ancestors
-  abiEncoderArrayMemory abiEncoderArrayCursor abiEncoderMembersDefs abiEncoderDynamic
+  abiEncoderArrayMemory abiEncoderArrayHeaderMemory abiEncoderMembersDefs abiEncoderDynamic
   abiDecoderEffect abiDecoderContract abiDecoderReentry compileEnv valueEncoding contractABI
   venomState words list arithmetic
 

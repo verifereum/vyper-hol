@@ -1,7 +1,7 @@
 (* Canonical child slices for either ABI array representation and any child type. *)
 Theory abiDecoderArraySlice
 Ancestors
-  abiCanonicalArrayLoad abiDecodeRanges abiDecoderContract
+  abiCanonicalHeadSize abiDecodeRanges abiDecoderContract
   contractABI venomState words list rich_list arithmetic
 Libs
   Omega

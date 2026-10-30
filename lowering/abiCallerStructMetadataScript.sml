@@ -3,7 +3,7 @@
    descent invariants supplied by checked construction at the root. *)
 Theory abiCallerStructMetadata
 Ancestors
-  abiCallerStructFields abiCallerStructMap abiCallerMemorySize abiCallerTypeEnv
+  abiCallerStructSize abiCallerStructMap abiCallerTupleLayout abiCallerTypeEnv
   compileVyper compileEnv valueEncoding vyperTypeABI vyperValue vyperContext
   finite_map list pair
 

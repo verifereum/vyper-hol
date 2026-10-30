@@ -1,8 +1,8 @@
 (* Execute actual dynamic-array address setup and establish the child API. *)
 Theory abiDecoderValidArrayEntry
 Ancestors
-  abiDecoderValidContract abiDecoderValidArrayChild abiDecoderValidArraySetupInputs
-  abiDecoderValidArrayValues abiDecoderArraySetupInputs abiDecoderDynamicLoopSetup
+  abiDecoderValidContract abiDecoderValidArraySetupInputs abiDecoderValidArraySetupInputs
+  abiDecoderValidArraySetupInputs abiDecoderArraySetupInputs abiDecoderDynamicLoopSetup
   abiDecoderArrayEntry abiDecoderDynamic abiDecoderCoherence abiDecoderTypedContract
   abiDecoderReentry abiDecoderContract abiDecoderLoop abiValidMember abiValidMembers abiEncoder
   fragExec instIdxIndep compileEnv valueEncoding vyperABI vyperValue contractABI venomState

@@ -15,8 +15,6 @@
  *   compile_builtin_len_correct    — compiled len outputs stored length via ptr_load
  *   compile_raw_call_correct       — compiled raw_call: OK or revert [CHEATED]
  *   compile_raw_create_correct     — compiled raw_create: OK or revert [CHEATED]
- *   lower_abi_encode_correct       — complete CFG execution with exact ABI bytes
- *   lower_abi_decode_correct       — complete CFG execution for canonical typed input
  *
  * Source: builtins/*.py
  * Lowering: builtin*Script.sml
@@ -27,7 +25,7 @@ Ancestors
   exprLoweringProps exprLowering emitHelperProps emitHelper
   builtinHashing builtinMath builtinSimple builtinBytes
   builtinStrings builtinSystem builtinMisc builtinCreate
-  builtinAbi builtinAbiProps context
+  builtinAbi abiBuiltinEncodeRun abiBuiltinDecodeCorrect context
   compileEnv venomExecSemantics venomState venomInst venomMemProps
   valueEncoding abiEncoder
   logroot
@@ -2305,16 +2303,3 @@ Finalise compile_extract32_correct;
 (* ===== Type Conversion ===== *)
 (* compile_type_convert_correct moved to builtinTypeConvertPropsScript.sml
    for build time reasons (49 case arms × step_inst_base_def = slow). *)
-
-(* ===== ABI Builtins ===== *)
-
-(* The former admitted statements assumed only operand evaluation and SSA
-   freshness and ran emitted_insts as one flat list. They are false when an
-   action emits completed blocks: abiBuiltinFlatChecks proves counterexamples
-   to both statements. The checked interfaces below execute the actual CFG,
-   expose complete source and allocator preconditions, and return typed memory,
-   precise write frames and the exact final program point. Decode success here
-   is explicitly restricted to canonical typed inputs. *)
-Theorem lower_abi_encode_correct = builtinAbiPropsTheory.lower_abi_encode_correct
-
-Theorem lower_abi_decode_correct = builtinAbiPropsTheory.lower_abi_decode_correct

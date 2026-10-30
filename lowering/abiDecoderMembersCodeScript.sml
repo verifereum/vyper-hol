@@ -1,7 +1,7 @@
 (* Recover code and endpoint conditions for each nonempty member-list phase. *)
 Theory abiDecoderMembersCode
 Ancestors
-  abiDecoderMemberPhases abiDecoderMemberCode abiDecoderMemberInfos abiDecoderContract
+  abiDecoderMemberCons abiDecoderMemberCode abiDecoderMemberInfos abiDecoderContract
   abiDecoderMemberSetup abiDecoderDynamic abiDecoderLoop fragExec abiEncoder compileEnv
   venomState venomInst list arithmetic
 

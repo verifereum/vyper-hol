@@ -1,7 +1,7 @@
 (* A generated primitive body advances the invariant at any valid cursor. *)
 Theory abiDecoderArrayIteration
 Ancestors
-  abiDecoderArrayInvariant abiDecoderArrayAdvance abiDecoderPrimitiveLoopBody
+  abiDecoderArrayInvariant abiDecoderArrayAdvance abiDecoderPrimitiveLoopFragment
   abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiDecoderReentry
   abiDecoderLoopSetup exprLoweringProps emitHelperProps compileEnv valueEncoding
   abiDecoderPrimitiveLoopFragment fragExec instIdxIndep

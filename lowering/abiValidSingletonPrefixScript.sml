@@ -1,11 +1,11 @@
 Theory abiValidSingletonPrefix
 Ancestors
   abiValidSingletonArray abiValidSingletonSetup abiDecoderPrefixPre abiDecoderCoherence
-  abiDecoderTypedContract abiDecoderContract abiDecoderReentry abiCanonicalArrayLoad
-  abiCanonicalLoad abiDecoderArrayInitReentry compileEnv valueEncoding vyperABI contractABI
-  venomState words list arithmetic abiDecoderArrayChildSource abiDecoderArraySetupInputs
-  abiDecoderDynamicLoopSetup abiValidSingletonReentry abiValidSingletonCode
-  abiDecoderSingletonSetup abiDecoderArrayBody abiDecoderAllocation abiDecoderArrayInitExec
+  abiDecoderTypedContract abiDecoderContract abiDecoderReentry abiCanonicalHeadSize
+  abiCanonicalHeadSize abiDecoderArrayInitReentry compileEnv valueEncoding vyperABI contractABI
+  venomState words list arithmetic abiDecoderArraySetupInputs abiDecoderArraySetupInputs
+  abiDecoderDynamicLoopSetup abiValidSingletonReentry abiValidSingletonReentry
+  abiDecoderSingletonSetup abiDecoderArraySetupCode abiDecoderAllocation abiDecoderArrayInitExec
   abiDecoderLoop abiEncoder fragExec venomExecSemantics pair
 
 (* ===== Input ===== *)

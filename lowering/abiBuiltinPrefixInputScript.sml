@@ -2,7 +2,7 @@
 Theory abiBuiltinPrefixInput
 Ancestors
   abiBuiltinSource abiBuiltinCanonicalPre abiBuiltinDecodeSetup abiDecoderCoherence
-  abiDecoderTypedContract abiDecoderContract abiCanonicalLoad valueEncoding valueEncodingProps
+  abiDecoderTypedContract abiDecoderContract abiCanonicalHeadSize valueEncoding valueEncodingProps
   vyperABI contractABI compileEnv venomState words list
 
 Definition abi_builtin_prefix_pre_def:

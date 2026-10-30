@@ -1,15 +1,42 @@
+Theory abiScratchEncoderCaller
+Ancestors
+  abiEncoderSharedRecursive abiEncoderSharedContract abiEncoderAdmissible abiEncoder
+  exprLowering compileEnv list pair abiScratchEncoderRun abiScratchEncoderContract
+  abiScratchEffect abiCallerAllocation abiEncoderInput abiEncoderArrayFrame abiDecoderAllocation
+  abiDecoderFootprint abiDecoderFrame abiDecoderReentry abiDecoderContract abiDecoderLoop
+  valueEncoding contractABI venomState venomMemDefs finite_map pred_set words arithmetic
+
+(* Structural closure of the precise encoder for actual translated descriptors.
+   TOP-LEVEL: abi_scratch_encoder_translation removes all child execution
+   hypotheses; complete source memory and physical resources remain explicit. *)
+Theorem abi_scratch_encoder_admissible_mutual:
+  (!ei. abi_encoder_admissible ei ==> abi_scratch_encoder ei) /\
+  (!infos. abi_encoder_members_admissible infos ==> EVERY (\(ei,_,_,_). abi_scratch_encoder ei) infos)
+Proof
+  conj_tac
+  >- (metis_tac[abi_encoder_shared_admissible, abi_encoder_shared_scratch]) >>
+  rpt strip_tac >>
+  drule (cj 2 abi_encoder_shared_admissible_mutual) >>
+  simp_tac (srw_ss()) [EVERY_MEM, FORALL_PROD] >>
+  metis_tac[abi_encoder_shared_scratch]
+QED
+
+Theorem abi_scratch_encoder_admissible:
+  abi_encoder_admissible ei ==> abi_scratch_encoder ei
+Proof
+  simp[cj 1 abi_scratch_encoder_admissible_mutual]
+QED
+
+Theorem abi_scratch_encoder_translation:
+  abi_scratch_encoder (type_to_abi_enc_info sf ce ty)
+Proof
+  irule abi_scratch_encoder_admissible >> simp[abi_encoder_translation_admissible]
+QED
+
 (* Run translated encoders from ordinary live-buffer allocation facts.
    TOP-LEVEL: abi_scratch_encoder_caller derives the precise input and scratch
    budget from alloca_inv, distinct owned buffers and numeric allocation credit.
    Complete source memory and generated-site ownership remain caller inputs. *)
-Theory abiScratchEncoderCaller
-Ancestors
-  abiScratchEncoderRecursive abiScratchEncoderRun abiScratchEncoderContract abiScratchEffect
-  abiCallerAllocation abiEncoderInput abiEncoderArrayFrame abiDecoderAllocation
-  abiDecoderFootprint abiDecoderFrame abiDecoderReentry abiDecoderContract abiDecoderLoop
-  compileEnv exprLowering valueEncoding contractABI venomState venomMemDefs finite_map pred_set
-  words list arithmetic
-
 Theorem abi_scratch_allocation_input:
   alloca_inv s /\ abi_decoder_budget first last b cap s /\
   FLOOKUP s.vs_allocas source_id = SOME (sb,source_cap) /\

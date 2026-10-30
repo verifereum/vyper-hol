@@ -3,8 +3,8 @@
    and all live cursors on both the body and exit edges. *)
 Theory abiScratchArrayHeader
 Ancestors
-  abiScratchAddress abiScratchFootprint abiEncoderArrayHeader abiEncoderArrayHeaderFrame
-  abiEncoderArrayCursor abiEncoderArrayLayout abiEncoderMembersDefs abiEncoderInput
+  abiScratchAddress abiScratchFootprint abiEncoderArrayHeader abiEncoderArrayHeaderMemory
+  abiEncoderArrayHeaderMemory abiEncoderArrayBodyCode abiEncoderMembersDefs abiEncoderInput
   abiEncoderArrayPrefix abiDecoderDynamicLoopSetup abiDecoderLoopRegisters abiDecoderArrayBackedge
   abiDecoderAllocation abiDecoderFootprint abiDecoderFrame abiDecoderReentry
   abiDecoderLoop abiDecoderContract compileEnv valueEncoding contractABI

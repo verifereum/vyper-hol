@@ -8,14 +8,14 @@ Ancestors
 Libs pairLib
 
 Definition eval_argument_def:
-  eval_argument cx e = do tv <- eval_expr cx e; materialise cx tv od
+  eval_argument cx e = do tv <- eval_expr cx e; read_result cx tv od
 End
 
 Theorem eval_argument_value:
   !cx e es v es'. eval_expr cx e es = (INL (Value v),es') ==>
     eval_argument cx e es = (INL v,es')
 Proof
-  simp[eval_argument_def, bind_def, materialise_def, return_def]
+  simp[eval_argument_def, bind_def, read_result_def, return_def]
 QED
 
 Theorem eval_exprs_cons_argument:

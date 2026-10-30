@@ -4,10 +4,10 @@ Ancestors
   abiDecoderContract abiDecoderGuards emitHelperProps exprLoweringProps compileEnv emitHelper
   valueEncoding venomExecSemantics venomState words abiDecoderArrayHeader abiDecoderFrameCompose
   arithmetic abiDecoderDynarrayPrefix abiDecoderGuard abiEncoder venomMemProps
-  abiStaticDynarrayLayout abiCanonicalArrays abiStaticAggregateProps abiStaticLayoutProps
-  abiStaticPrimitiveProps vyperABI vyperTyping contractABI byte list rich_list
+  abiStaticDynarrayLayout abiCanonicalHeadSize abiStaticAggregateProps abiStaticLayoutProps
+  abiStaticAggregateProps vyperABI vyperTyping contractABI byte list rich_list
   abiDecoderCoherence abiDecoderLayout exprLowering vyperValue abiDecodeRanges
-  abiDecoderTypedContract abiCanonicalArrayLoad abiDecoderFrame abiDecoderBytesTyped fragExec
+  abiDecoderTypedContract abiCanonicalHeadSize abiDecoderFrame abiDecoderBytesTyped fragExec
   venomInst
 
 (* ===== Payload ===== *)

@@ -7,6 +7,8 @@ Ancestors
   compileVyper compileEnv valueEncoding valueLoadProps memoryValueAbiTuple
   vyperContext vyperValue vyperAST vyperTypeABI vyperTypeValues vyperTypeExprSoundness
   vyperTypeContract vfmConstants finite_map list pair combin arithmetic
+Libs
+  legacyInduction
 
 Theorem type_memory_size_list_sum:
   !tvs. type_memory_size_list tvs = SUM (MAP type_memory_size tvs)
@@ -124,7 +126,7 @@ QED
 Theorem all_type_memory_layouts:
   (!ty. type_memory_layout ty) /\ (!tys. EVERY type_memory_layout tys)
 Proof
-  ho_match_mp_tac (TypeBase.induction_of ``:type``) >>
+  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops type_induction) >>
   simp[type_memory_layout_base, type_memory_layout_struct, type_memory_layout_flag,
     type_memory_layout_none, type_memory_layout_array, type_memory_layout_tuple]
 QED

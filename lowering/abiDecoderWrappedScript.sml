@@ -2,7 +2,7 @@ Theory abiDecoderWrapped
 Ancestors
   abiDecoderSingletonSetup abiDecoderComplexHead abiDecoderGuard abiDecoderBytes abiEncoder
   exprLowering compileEnv emitHelper words venomMemProps abiDecoderTypedCompose
-  abiDecoderTypedContract abiDecoderReservation abiDecoderBytesTyped abiCanonicalLoad
+  abiDecoderTypedContract abiDecoderReservation abiDecoderBytesTyped abiCanonicalHeadSize
   abiDecodeRanges abiDecoderContract emitHelperProps valueEncoding vyperABI contractABI byte
   venomExecSemantics venomState arithmetic list
 

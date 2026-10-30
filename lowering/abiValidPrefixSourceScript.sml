@@ -21,6 +21,16 @@ Proof
      asm_simp_tac (srw_ss()) [LENGTH_TAKE_EQ, TAKE_TAKE_MIN]]
 QED
 
+Theorem abi_valid_prefix_validation[local]:
+  (~is_dynamic at \/ ?elem. at = Array NONE elem /\ ~is_dynamic elem) /\
+  vyper_decode_valid_enc at bs ==> valid_enc at bs
+Proof
+  rpt strip_tac
+  >- (irule vyper_decode_valid_enc_static >> asm_rewrite_tac []) >>
+  gvs[Once vyper_decode_valid_enc_def, Once valid_enc_def, LET_THM] >>
+  irule (cj 2 vyper_decode_valid_enc_static_mutual) >> asm_rewrite_tac []
+QED
+
 Theorem abi_valid_prefix_source:
   evaluate_abi_decode env ty bs = INL v /\
   (~is_dynamic (vyper_to_abi_type env ty) \/
@@ -33,7 +43,8 @@ Proof
   drule evaluate_abi_decode_vyper_valid_enc >> strip_tac >>
   qpat_assum `vyper_valid_enc _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [vyper_valid_enc_window]) >>
-  irule abi_valid_prefix_types >> asm_simp_tac bool_ss []
+  irule abi_valid_prefix_types >> asm_simp_tac bool_ss [] >>
+  irule abi_valid_prefix_validation >> asm_rewrite_tac []
 QED
 
 Theorem abi_builtin_prefix_pre_valid_source:

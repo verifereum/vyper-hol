@@ -3,7 +3,7 @@
    original physical scratch footprint across repeated allocation-site reuse. *)
 Theory abiScratchArrayLoopInvariant
 Ancestors
-  abiScratchEncoderContract abiScratchEffect abiEncoderArrayPrefix abiEncoderArrayLayout
+  abiScratchEncoderContract abiScratchEffect abiEncoderArrayPrefix abiEncoderArrayBodyCode
   abiEncoderMembersDefs abiEncoderInput abiDecoderAllocation abiDecoderReentry compileEnv
   valueEncoding contractABI venomState words list arithmetic
 

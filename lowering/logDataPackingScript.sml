@@ -6,6 +6,7 @@
    Helpers expose allocation, typed RAM and the public preservation frame. *)
 Theory logDataPacking
 Ancestors
+  typeValueInduction
   logAbiEncoder abiLogPackingState abiBufferAllocationPath abiBufferAllocationCode abiLogReady
   abiLogPackingReady typedCopyStateFrame abiFieldOperands abiStaticLoopCode
   abiAllocatedState abiAllocatorState abiAllocatedWindows abiAllocationFrame
@@ -355,7 +356,7 @@ Theorem log_memory_slot_sizes:
   (!p:string # type_value. type_memory_size (SND p) = 32 * type_slot_size (SND p)) /\
   (!tvs. type_memory_size_list tvs = 32 * type_slot_size_list tvs)
 Proof
-  ho_match_mp_tac (TypeBase.induction_of ``:type_value``) >>
+  ho_match_mp_tac type_value_mutual_induction >>
   simp[log_array_memory_slots, log_base_memory_slots, type_memory_size_def, type_slot_size_def,
     LEFT_ADD_DISTRIB, MULT_ASSOC] >>
   rpt gen_tac >> strip_tac >> rename1 `type_memory_size (SND entry)` >>

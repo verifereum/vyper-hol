@@ -2,7 +2,7 @@
 Theory abiDecoderBytesTyped
 Ancestors
   venomMemProps
-  abiDecoderBytes abiDecoderTypedContract abiCanonicalBytes abiCanonicalLoad
+  abiDecoderBytes abiDecoderTypedContract abiCanonicalBytes abiCanonicalHeadSize
   abiDecoderContract abiDecoderFrame valueEncoding valueEncodingProps compileEnv
   vyperABI vyperTyping vyperValue contractABI vfmConstants words arithmetic
   abiEncoder emitHelper exprLoweringProps fragExec venomInst venomState rich_list

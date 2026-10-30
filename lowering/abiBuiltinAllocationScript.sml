@@ -1,6 +1,6 @@
 Theory abiBuiltinAllocation
 Ancestors
-  abiDecoderReentryAllocation abiDecoderReentry abiDecoderContract context compileEnv emitHelper
+  abiDecoderReentryAddress abiDecoderReentry abiDecoderContract context compileEnv emitHelper
   emitHelperProps exprLoweringProps venomExecSemantics venomState venomInst finite_map words
   arithmetic list abiBuiltinPrefix abiDecoderDynamicLoopSetup abiDecoderAllocation
   abiDecoderArrayInitExec abiDecoderFrame

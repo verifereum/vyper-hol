@@ -1,7 +1,7 @@
 Theory abiValidStatic
 Ancestors
   contractABI venomMemProofs vfmTypes byte words integer_word list rich_list arithmetic
-  abiCanonicalArrays vyperABI
+  abiCanonicalHeadSize vyperABI
 
 (* ===== Scalar ===== *)
 

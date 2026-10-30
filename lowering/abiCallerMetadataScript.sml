@@ -3,7 +3,7 @@
    the actual builder; callers need not assume this metadata predicate. *)
 Theory abiCallerMetadata
 Ancestors
-  abiCallerHeader abiCallerLeaves abiCallerStructMetadata abiCallerStructMap
+  abiCallerTupleLayout abiCallerTupleLayout abiCallerStructMetadata abiCallerStructMap
   compileVyper compileEnv vyperContext vyperValue
   finite_map list
 

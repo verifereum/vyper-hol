@@ -1,7 +1,7 @@
 (* Observations of the existing seven-instruction address execution. *)
 Theory abiEncoderSharedArrayAddress
 Ancestors
-  abiEncoderArrayAddress abiEncoderMemberPhaseRaw abiEncoderSharedArrayHeader abiEncoderSequence
+  abiEncoderArrayBodyCode abiEncoderMemberPhaseRaw abiEncoderSharedArrayEntry abiEncoderSequence
   abiEncoderRegisteredEffect abiEncoderExtendSim abiScratchAddress
   abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderContract valueEncoding
   abiEncoderArrayCode emitHelper exprLoweringProps compileEnv emitHelperProps

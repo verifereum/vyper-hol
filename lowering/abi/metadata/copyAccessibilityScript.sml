@@ -4,6 +4,8 @@ Theory copyAccessibility
 Ancestors
   typedCopyDomain compileEnv vyperTypeSystem vyperValue vyperAST
   finite_map relation list pair combin
+Libs
+  legacyInduction
 
 Definition copy_source_agrees_def:
   copy_source_agrees sf tenv <=>
@@ -112,6 +114,6 @@ Proof
   gen_tac >> DISCH_TAC >>
   `(!ty. WFP (type_copy_child sf) ty) /\
    (!tys. EVERY (WFP (type_copy_child sf)) tys)` suffices_by simp[WF_EQ_WFP] >>
-  ho_match_mp_tac (TypeBase.induction_of ``:type``) >>
+  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops type_induction) >>
   simp[copy_wfp_leaves, copy_wfp_array, copy_wfp_tuple, copy_wfp_struct]
 QED

@@ -1,7 +1,7 @@
 (* Repeated header execution overwrites only its four generated temporaries. *)
 Theory abiDecoderLoopRegisters
 Ancestors
-  abiDecoderArrayInvariant abiDecoderArrayBackedge abiDecoderReentryAllocation abiDecoderReentry
+  abiDecoderArrayInvariant abiDecoderArrayBackedge abiDecoderReentryAddress abiDecoderReentry
   abiDecoderExecution abiDecoderContract emitHelperProps exprLoweringProps
   compileEnv venomState finite_map words arithmetic
 

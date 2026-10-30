@@ -1,7 +1,7 @@
 (* Closed shared array constructor, derived from the shared execution spine. *)
 Theory abiEncoderSharedArray
 Ancestors
-  abiEncoderSharedArrayOuter abiEncoderSharedArrayInput abiEncoderSharedContract
+  abiEncoderSharedArrayOuter abiEncoderSharedArrayInitFrame abiEncoderSharedContract
   abiEncoderOpenInput abiEncoderInput abiDecoderReentry abiDecoderContract
   compileEnv valueEncoding contractABI venomState words list
 

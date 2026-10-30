@@ -1,7 +1,7 @@
 (* Additive static-copy representatives; no source cardinality restriction. *)
 Theory abiEncoderStaticRepresentative
 Ancestors
-  abiEncoderOpenInput valueEncodingProps abiCallerStaticMemory contractABI valueEncoding words list arithmetic
+  abiEncoderOpenInput valueEncodingProps abiCallerTupleLayout contractABI valueEncoding words list arithmetic
 
 Theorem abi_encoder_zero_copy_representative:
   abi_encoder_open_input (AbiCopy 0) (Tuple []) (ListV []) sb 0 mem /\

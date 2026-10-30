@@ -146,17 +146,6 @@ Proof
   Cases_on `x0` >- gvs[] >> Cases_on `x1` >- gvs[] >> simp[]
 QED
 
-Theorem abi_scratch_members_layout_bound[local]:
-  abi_encoder_spine_cons_layout func limit_st hi args entry position terminal child /\
-  hi <= last ==>
-  abi_encoder_spine_cons_layout func limit_st last args entry position terminal child
-Proof
-  PairCases_on `args` >> PairCases_on `entry` >> PairCases_on `position` >>
-  PairCases_on `terminal` >> PairCases_on `child` >>
-  simp_tac bool_ss [abi_encoder_spine_cons_layout_def, abi_encoder_spine_code_def] >>
-  rpt strip_tac >> asm_rewrite_tac [] >> decide_tac
-QED
-
 Theorem abi_scratch_members_entry_prepare:
   hi <= last /\
   abi_scratch_members_index (ctx,func) (origin,initial)
@@ -172,7 +161,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_scratch_members_index_cons_shape >> strip_tac >>
   qpat_x_assum `x = _` SUBST_ALL_TAC >>
-  drule_all abi_scratch_members_layout_bound >> strip_tac >>
+  drule_all abi_encoder_spine_cons_layout_bound >> strip_tac >>
   drule_all abi_scratch_members_index_prepare >> strip_tac >>
   qpat_assum `abi_encoder_spine_cons_layout _ _ hi _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o

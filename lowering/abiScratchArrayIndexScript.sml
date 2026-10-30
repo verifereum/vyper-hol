@@ -3,7 +3,7 @@
    output prefix and parent cursor while initializing a distinct index cursor. *)
 Theory abiScratchArrayIndex
 Ancestors
-  abiScratchOwnedPrefix abiScratchPrefixReach abiScratchFootprint abiEncoderArrayInitCode
+  abiScratchOwnedPrefix abiScratchPrefixReach abiScratchFootprint abiEncoderArrayParent
   abiEncoderComplexPrefix abiEncoderArrayFrame abiEncoderArrayPrefix abiEncoderMembersDefs
   abiEncoderInput abiEncoderInputFrame abiDecoderAllocation abiDecoderFootprint abiDecoderFrame
   abiDecoderReentry abiDecoderLoop compileEnv valueEncoding contractABI venomState finite_map

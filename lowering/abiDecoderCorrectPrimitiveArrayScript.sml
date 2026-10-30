@@ -3,7 +3,7 @@ Theory abiDecoderCorrectPrimitiveArray
 Ancestors
   abiDecoderCorrect abiDecoderEffect abiDecoderPrimitiveArrayReentry abiDecoderCoherence
   abiDecoderTypedContract abiDecoderArrayAdvance abiDecoderWordTyped abiDecoderAllocation
-  abiDecoderContract abiDecodeRanges abiDecoderArrayBody abiDecoderRecursiveArray exprLowering
+  abiDecoderContract abiDecodeRanges abiDecoderArraySetupCode abiDecoderRecursiveArray exprLowering
   compileEnv valueEncoding vyperABI vyperValue vyperTyping contractABI venomState words list
 
 Theorem abi_decoder_dynarray_metadata_shape:

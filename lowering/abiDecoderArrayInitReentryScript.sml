@@ -4,7 +4,7 @@ Ancestors
   abiDecoderArrayInitExec abiDecoderArrayLoopInit abiDecoderIndexInit abiDecoderArrayInit
   abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderArrayHeader abiDecoderGuard
   abiDecoderGuards abiDecoderContract abiDecoderAllocation abiDecoderReentry
-  abiDecoderReentryPrefix abiDecoderReentrySequence abiDecoderVarSequence abiDecoderVarExtend
+  abiDecoderReentryPointer abiDecoderReentryPointer abiDecoderVarSequence abiDecoderVarExtend
   abiDecoderFrame exprLoweringProps emitHelperProps emitHelper compileEnv context fragExec
   venomState venomInst finite_map words list rich_list arithmetic
 

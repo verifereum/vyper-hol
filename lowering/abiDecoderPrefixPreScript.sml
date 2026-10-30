@@ -2,7 +2,7 @@
    arbitrary child address. The source need not be a standalone Bytes object. *)
 Theory abiDecoderPrefixPre
 Ancestors
-  abiCanonicalArrayLoad abiDecoderCoherence abiDecoderTypedContract abiDecoderReentry
+  abiCanonicalHeadSize abiDecoderCoherence abiDecoderTypedContract abiDecoderReentry
   abiDecoderContract vyperABI contractABI valueEncoding compileEnv venomState words list arithmetic
 
 Theorem abi_decode_source_prefix_window:

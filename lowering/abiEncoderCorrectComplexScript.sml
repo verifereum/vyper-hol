@@ -1,7 +1,7 @@
 (* Every complex descriptor is correct once its recursive child descriptors are correct. *)
 Theory abiEncoderCorrectComplex
 Ancestors
-  abiEncoderComplexStatic abiEncoderComplexDynamic abiEncoderCorrect abiEncoder list
+  abiEncoderComplexDynamic abiEncoderComplexDynamic abiEncoderCorrect abiEncoder list
 
 Theorem abi_encoder_correct_complex:
   EVERY (\(ei,_,_,_). abi_encoder_correct ei) infos ==>

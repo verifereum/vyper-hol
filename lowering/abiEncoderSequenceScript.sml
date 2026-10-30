@@ -1,6 +1,6 @@
 Theory abiEncoderSequence
 Ancestors
-  abiEncoderCorrect abiDecoderCorrectWord abiDecoderEffect abiDecoderAllocation abiDecoderLoop
+  abiEncoderCorrect abiDecoderCorrectLeaves abiDecoderEffect abiDecoderAllocation abiDecoderLoop
   abiDecoderReentry abiDecoderContract fragExec emitHelperProps compileEnv valueEncoding
   venomState venomExecSemantics instIdxIndep list rich_list words abiBuiltinPrefix
   abiDecoderDynamicLoopSetup abiDecoderReentryAddress exprLoweringProps venomInst

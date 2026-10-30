@@ -1,7 +1,7 @@
 (* Source-window representatives with a type uniform across array elements. *)
 Theory abiEncoderSourceWindow
 Ancestors
-  abiEncoderStaticRepresentative abiEncoderOpenInput abiCallerStaticMemory
+  abiEncoderStaticRepresentative abiEncoderOpenInput abiCallerTupleLayout
   valueEncodingProps valueEncoding valueEncodingTyping vyperTyping vyperTypeValues
   vyperABI vyperMisc vyperValue contractABI words list arithmetic
 

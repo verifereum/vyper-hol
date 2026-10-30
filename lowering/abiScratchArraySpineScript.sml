@@ -1,7 +1,7 @@
 (* Physical interpretation of the common array execution spine. *)
 Theory abiScratchArraySpine
 Ancestors
-  abiEncoderArraySpine abiScratchMemberAdapter abiEncoderMemberPhaseRaw
+  abiEncoderArraySourceSpine abiScratchMemberAdapter abiEncoderMemberPhaseRaw
   abiEncoderMemberSpine abiEncoderArrayTail abiScratchAddress abiScratchChild
   abiScratchEncoderContract abiScratchEffect abiScratchFootprint
   abiDecoderDynamicLoopSetup abiDecoderAllocation abiDecoderFrame abiDecoderReentry

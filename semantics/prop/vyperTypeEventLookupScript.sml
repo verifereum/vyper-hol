@@ -114,6 +114,12 @@ Proof
   simp[artifact_env_def]
 QED
 
+Theorem live_artifact_event_fields[simp]:
+  (live_artifact layouts addr mods live art).cta_event_fields = art.cta_event_fields
+Proof
+  simp[live_artifact_def]
+QED
+
 Theorem checked_single_module_log_source:
   check_contract dep layouts addr [(NONE,tops)] = SOME art /\
   env.event_fields = art.cta_event_fields /\

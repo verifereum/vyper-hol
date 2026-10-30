@@ -2,7 +2,7 @@
    the checked reverse-layout theorem on the canonical encoding itself. *)
 Theory abiEncoderWordSource
 Ancestors
-  abiTupleProps abiStaticPrimitiveProps abiEncoderMemory abiBuiltinEncodeWord valueEncoding
+  abiTupleProps abiStaticAggregateProps abiEncoderMemory abiBuiltinEncodeWord valueEncoding
   valueEncodingProps vyperABI vyperTyping contractABI compileEnv venomState venomExecSemantics
   words byte list rich_list arithmetic
 

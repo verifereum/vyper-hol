@@ -1,7 +1,7 @@
 (* Pure code and data premises for the recursive dynamic-array loop. *)
 Theory abiDecoderRecursiveLoopContext
 Ancestors
-  abiDecoderRecursiveArrayIteration abiDecoderArrayBody abiDecoderRecursiveLoopInvariant
+  abiDecoderRecursiveArrayIteration abiDecoderArraySetupCode abiDecoderRecursiveLoopInvariant
   abiDecoderArrayInvariant abiDecoderCoherence abiDecoderTypedContract abiDecoderEffect
   abiDecoderProtectedScratch abiDecoderAllocation abiDecoderFrame abiDecoderContract
   abiDecoderCorrect abiDecoderLoop abiDecoderExecution abiDecoderReentry abiDecoderCode

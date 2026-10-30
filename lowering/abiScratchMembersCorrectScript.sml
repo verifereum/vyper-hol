@@ -3,9 +3,9 @@
    Helpers isolate nonempty source structure and physical effect composition. *)
 Theory abiScratchMembersCorrect
 Ancestors
-  abiScratchMembers abiScratchMembersAdvance abiScratchEncoderContract abiScratchAfterAddress
+  abiScratchMembers abiScratchMembersEntry abiScratchEncoderContract abiScratchAfterAddress
   abiScratchMembersInterpret abiScratchMembersIndex abiEncoderMemberSpine
-  abiScratchEffect abiEncoderMemberCode abiEncoderInput abiDecoderMemberPhases
+  abiScratchEffect abiEncoderMemberCode abiEncoderInput abiDecoderMemberCons
   abiDecoderDynamicLoopSetup abiDecoderLoop abiDecoderReentry abiDecoderContract fragExec
   compileEnv valueEncoding contractABI venomState list arithmetic
 
@@ -46,7 +46,7 @@ Proof
   irule abi_decode_sim_trans >> qexists_tac `encoded` >> simp[]
 QED
 
-Theorem abi_scratch_members_correct_instance[local]:
+Theorem abi_scratch_members_correct_all:
   !infos. abi_scratch_members_correct infos
 Proof
   gen_tac >> simp_tac bool_ss [abi_scratch_members_correct_def] >> rpt gen_tac >>
@@ -64,11 +64,5 @@ Theorem abi_scratch_members_correct_cons:
   abi_scratch_members_correct infos ==>
   abi_scratch_members_correct ((ei,abi_sz,mem_sz,dyn)::infos)
 Proof
-  strip_tac >> MATCH_ACCEPT_TAC abi_scratch_members_correct_instance
-QED
-
-Theorem abi_scratch_members_correct_all:
-  !infos. abi_scratch_members_correct infos
-Proof
-  MATCH_ACCEPT_TAC abi_scratch_members_correct_instance
+  strip_tac >> MATCH_ACCEPT_TAC abi_scratch_members_correct_all
 QED

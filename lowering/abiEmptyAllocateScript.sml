@@ -1,8 +1,8 @@
 Theory abiEmptyAllocate
 Ancestors
-  abiEmptyCode abiBuiltinAllocation abiDecoderReentry abiTupleEncodeSlot exprLoweringProps
+  abiEmptySequence abiBuiltinAllocation abiDecoderReentry abiTupleEncodeSlot exprLoweringProps
   emitHelperProps compileEnv builtinSimple emitHelper venomState venomInst words list arithmetic
-  abiEmptyEffect abiDecoderContract finite_map abiEmptySequence abiBuiltinEncodeFinish
+  abiEmptyEffect abiDecoderContract finite_map abiEmptySequence abiBuiltinEncodeCorrect
   abiEncoderMemory abiDecoderGuards venomExecSemantics
 
 (* ===== Code ===== *)

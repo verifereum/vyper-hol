@@ -1,7 +1,7 @@
 (* Recover entry and completed-block code from actual compiler extensions. *)
 Theory abiDecoderLoopCode
 Ancestors
-  abiDecoderArraySetupCode abiDecoderArraySetupInputs abiDecoderArrayBody abiDecoderAppend abiDecoderLoopEmit
+  abiDecoderArraySetupCode abiDecoderArraySetupInputs abiDecoderArraySetupCode abiDecoderAppend abiDecoderLoopEmit
   abiDecoderPhi abiDecoderExecution abiDecoderLoopSetup abiDecoderContract
   fragExec compileEnv emitHelperProps emitHelper venomInst venomExecSemantics
   words list rich_list arithmetic

@@ -2,7 +2,7 @@
 Theory abiDecoderFixedBytes
 Ancestors
   venomMemProps
-  abiDecoderClamp abiDecoderContract abiCanonicalLoad valueEncodingProofs
+  abiDecoderClamp abiDecoderContract abiCanonicalHeadSize valueEncodingProofs
   exprLowering valueEncoding venomState contractABI byte words list rich_list arithmetic
 
 Theorem abi_decoder_set_byte_low_bit:

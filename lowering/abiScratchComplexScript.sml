@@ -1,12 +1,12 @@
 Theory abiScratchComplex
 Ancestors
   abiScratchMembers abiScratchOwnedPrefix abiScratchPrefix abiScratchEncoderContract
-  abiEncoderComplexPrefix abiEncoderComplexLayout abiEncoderMembersDefs abiEncoderInput
+  abiEncoderComplexPrefix abiEncoderComplexDynamic abiEncoderMembersDefs abiEncoderInput
   abiDecoderAllocation abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv
   valueEncoding contractABI venomState words list arithmetic abiScratchAddress
   abiEncoderLoadReach abiDecoderDynamicLoopSetup abiDecoderProtectedScratch abiDecoderIndexInit
-  emitHelperProps pred_set abiScratchMembersCorrect abiScratchEffect abiEncoderComplexContext
-  abiEncoderComplexStatic abiEncoderComplexCode abiEncoderMemberCode abiEncoderMembersInput
+  emitHelperProps pred_set abiScratchMembersCorrect abiScratchEffect abiEncoderComplexDynamic
+  abiEncoderComplexDynamic abiEncoderComplexCode abiEncoderMemberCode abiEncoderMembersInput
 
 (* ===== Prepare ===== *)
 

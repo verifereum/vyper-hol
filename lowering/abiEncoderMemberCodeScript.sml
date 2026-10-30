@@ -2,7 +2,7 @@
 Theory abiEncoderMemberCode
 Ancestors
   abiEncoderPhi abiEncoderAppend abiEncoderCounters abiEncoderAddressReach abiEncoder
-  abiDecoderMemberSyntax abiDecoderLoopCode abiDecoderContract fragExec compileEnv emitHelper
+  abiDecoderMemberCons abiDecoderLoopCode abiDecoderContract fragExec compileEnv emitHelper
   emitHelperProps venomState venomExecSemantics venomInst list rich_list arithmetic pair
 
 Theorem abi_encoder_members_bounds:

@@ -3,7 +3,7 @@ Theory abiDecoderNumericWord
 Ancestors
   venomMemProps
   abiDecoderClamp abiDecoderCoherence abiDecoderTypedContract abiDecoderContract
-  abiCanonicalLoad abiDecoderWordTyped exprLowering compileEnv vyperABI
+  abiCanonicalHeadSize abiDecoderWordTyped exprLowering compileEnv vyperABI
   contractABI valueEncoding venomState words arithmetic byte finite_map
 
 Theorem abi_decoder_n2w_unsigned_bound:

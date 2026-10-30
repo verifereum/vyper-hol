@@ -68,7 +68,8 @@ Theorem checked_log_encoding_success:
   ?ev. encode_source_event (type_env_all_modules mods) sources target (src,name) vs = SOME ev
 Proof
   rpt strip_tac >> gvs[type_log_inversion] >>
-  `art = build_contract_type_artifact dep mods /\ contract_namespaces_ok dep mods` by
+  `art.cta_event_fields = (build_contract_type_artifact dep mods).cta_event_fields /\
+   contract_namespaces_ok dep mods` by
     gvs[check_contract_def, AllCaseEqs()] >>
   gvs[] >>
   drule_all checked_artifact_source_event_metadata >>

@@ -4,7 +4,7 @@
 Theory abiScratchLeafEffect
 Ancestors
   abiScratchEncoderContract abiScratchFootprint abiDecoderFootprint abiEncoderSequence
-  abiDecoderCorrectWord abiDecoderLoop abiDecoderReentry
+  abiDecoderCorrectLeaves abiDecoderLoop abiDecoderReentry
   abiDecoderAllocation abiDecoderArrayInitExec abiDecoderPrimitiveLoopFrames
   abiDecoderFrame abiDecoderContract compileEnv venomState finite_map pred_set arithmetic
 

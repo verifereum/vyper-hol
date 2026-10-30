@@ -1,7 +1,7 @@
 (* Whole-loop code containment supplies each real compiler phase's containing code. *)
 Theory abiEncoderArrayLoopContext
 Ancestors
-  abiEncoderArrayTrace abiEncoderArrayPhaseAppend abiEncoderArrayPhases abiEncoderArrayCode
+  abiEncoderArrayContext abiEncoderArrayPhaseAppend abiEncoderArrayPhases abiEncoderArrayCode
   abiDecoderIndexInit abiDecoderLoopEmit abiEncoder fragExec compileEnv list
 
 Theorem abi_encoder_five_phase_code:

@@ -1,7 +1,7 @@
 (* Canonical tuple offsets connected to the emitted member-pointer sequence. *)
 Theory abiDecoderCanonicalPtr
 Ancestors
-  abiDecoderMemberPtr abiCanonicalLoad abiCanonicalWindows abiCanonicalArrayLoad
+  abiDecoderMemberBound abiCanonicalHeadSize abiCanonicalWindows abiCanonicalHeadSize
   abiDecodeRanges abiDecoderContract contractABI valueEncoding
   venomExecSemantics venomState words arithmetic list
 

@@ -2,7 +2,7 @@
 Theory abiDecoderRecursiveLoopInvariant
 Ancestors
   abiDecoderEffect abiDecoderArrayInvariant abiDecoderArrayScratch
-  abiDecoderPrimitiveLoopHeader abiDecoderArrayBackedge abiDecoderLoopRegisters
+  abiDecoderPrimitiveLoopFinite abiDecoderArrayBackedge abiDecoderLoopRegisters
   abiDecoderExecution abiDecoderLoop abiDecoderReentry abiDecoderContract
   abiDecoderAllocation abiDecoderFrame abiDecoderDynamicLoopSetup
   compileEnv valueEncoding venomState words list arithmetic finite_map

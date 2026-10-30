@@ -1,8 +1,8 @@
 (* Actual array-address instructions, for both static and dynamic child layouts. *)
 Theory abiScratchDecoderArraySetup
 Ancestors
-  abiScratchDecoderContract abiScratchDecoderRanges abiScratchDecoderAddress
-  abiDecoderValidArraySetupInputs abiDecoderValidArrayValues abiDecoderArraySetupInputs
+  abiScratchDecoderContract abiScratchDecoderRanges abiScratchDecoderTuple
+  abiDecoderValidArraySetupInputs abiDecoderValidArraySetupInputs abiDecoderArraySetupInputs
   abiDecoderStaticLoopSetup abiDecoderDynamicLoopSetup abiDecoderDynamic abiDecoderOffset
   abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiDecoderReentry
   abiDecoderLoop abiDecodeRanges abiValidMember abiValidMembers abiEncoder fragExec instIdxIndep

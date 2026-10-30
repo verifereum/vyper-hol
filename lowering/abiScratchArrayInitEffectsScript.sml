@@ -5,7 +5,7 @@
 Theory abiScratchArrayInitEffects
 Ancestors
   abiScratchPrefix abiScratchOwnedPrefix abiScratchArrayTail abiScratchInput
-  abiScratchEncoderContract abiEncoderArrayInitCode abiEncoderArrayTailInit
+  abiScratchEncoderContract abiEncoderArrayParent abiEncoderArrayTailInit
   abiEncoderComplexPrefix abiEncoderMembersDefs abiEncoderInput abiEncoderArrayFrame
   abiEncoderArrayPrefix abiDecoderAllocation abiDecoderFootprint abiDecoderFrame
   abiDecoderReentry abiDecoderLoop compileEnv valueEncoding contractABI venomState words list

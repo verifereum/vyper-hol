@@ -39,8 +39,9 @@ Proof
   rename1 `type_stmt env ret (Log (src,name) exprs) = SOME env'` >>
   drule_all_then (qspec_then `type_env tops` strip_assume_tac) checked_log_event_info >>
   rename1 `FLOOKUP env.event_fields (src,name) = SOME fields` >>
-  `art = build_contract_type_artifact dep [(NONE,tops)]` by
-    fs[check_contract_def, AllCaseEqs()] >>
+  `art.cta_event_fields =
+   (build_contract_type_artifact dep [(NONE,tops)]).cta_event_fields` by
+    gvs[check_contract_def, AllCaseEqs()] >>
   `MEM (EventDecl name fields) tops` by
     (`FLOOKUP (build_contract_type_artifact dep [(NONE,tops)]).cta_event_fields
       (src,name) = SOME fields` by gvs[] >>
@@ -74,8 +75,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   `well_typed_exprs env exprs` by fs[type_log_inversion] >>
   fs[runtime_consistent_def] >>
-  qspecl_then [`cx`, `exprs`, `env`, `es`, `INL values`, `es'`]
-    mp_tac (cj 9 eval_all_type_sound_mutual) >>
+  qspecl_then [`cx`, `exprs`] (mp_tac o CONJUNCT1) (cj 6 eval_scc_type_sound_mutual) >>
+  disch_then (qspecl_then [`env`, `es`, `INL values`, `es'`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
   simp_tac (srw_ss()) [exprs_runtime_typed_def, value_runtime_typed_def] >> strip_tac >>
   rename1 `LIST_REL (\e tv. evaluate_type env.type_defs (expr_type e) = SOME tv) exprs field_tvs` >>

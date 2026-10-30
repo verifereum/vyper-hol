@@ -7,11 +7,11 @@
  * copies the bytes with CALLDATACOPY and stores the length n in the
  * buffer's first word.  The source raises where n = 0 or start + n
  * overflows (evaluate_calldata_slice), and where start + n is past the
- * calldata (evaluate_slice).  expr_sim_pre's alloc_limits_expr keeps the
+ * calldata (evaluate_slice).  expr_body_pre's alloc_limits_expr keeps the
  * buffer below 2 ** 64 bytes, as Python's allocator does.
  *
  * TOP-LEVEL:
- *   compile_calldata_slice_call_sim — expr_vv_ok of CalldataSlice n
+ *   compile_calldata_slice_call_case — expr_vv_case of CalldataSlice n
  *
  * Also exported: bytes_buffer_write_encoding, bytes_buffer_write_state_rel,
  *   bytes_buffer_write_frame (a bytes value written into a fresh buffer);
@@ -835,7 +835,7 @@ QED
 
 Theorem slice_calldata_uint_compose[local]:
   expr_type e = BaseT (UintT 256) /\
-  expr_sim_pre cenv cx env e es /\
+  expr_body_pre cenv cx env e es /\
   expr_sim ctx func cenv cx (expr_type e) e es /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL (IntV (&a)),es') /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
@@ -858,7 +858,7 @@ Proof
         (simp[FUN_EQ_THM] >> metis_tac[]) >>
       simp[] >> irule frag_exec_false_pre) >>
   `is_word_type (expr_type e)` by simp[is_word_type_def] >>
-  drule_all expr_sim_pre_lower_value_word_shape >> strip_tac >>
+  drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
   drule slice_calldata_shape >> strip_tac >>
   `cs_extends sm sc` by
     (simp[cs_extends_def] >> qexists_tac `[]` >>
@@ -897,25 +897,19 @@ Proof
   metis_tac[expr_post_frame]
 QED
 
-Theorem compile_calldata_slice_call_sim:
-  !cenv ann n args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (Builtin ann (CalldataSlice n) args)
+Theorem compile_calldata_slice_call_case:
+  !nocalls ctx func cenv cx ann n args.
+    exprs_case nocalls ctx func cenv cx args ==>
+    expr_vv_case nocalls ctx func cenv cx (Builtin ann (CalldataSlice n) args)
 Proof
-  rpt gen_tac >> strip_tac >> rewrite_tac[expr_vv_ok_def] >>
+  rpt gen_tac >> strip_tac >> rewrite_tac[expr_vv_case_def] >>
   rpt gen_tac >> strip_tac >>
   `well_typed_expr env (Builtin ann (CalldataSlice n) args)` by
-    gvs[expr_sim_pre_def] >>
+    gvs[expr_body_pre_def] >>
   drule calldata_slice_typing >> strip_tac >> gvs[] >>
-  `expr_ok cenv e` by
-    (qpat_x_assum `expr_sim_below _ _` mp_tac >>
-     simp[expr_sim_below_def] >> disch_then irule >> simp[]) >>
-  `expr_sim_pre cenv cx env e es` by
-    (drule expr_sim_pre_builtin_arg >>
-     disch_then (qspecl_then [`e`,`es`] mp_tac) >>
-     simp[] >> impl_tac >- gvs[expr_sim_pre_def] >> simp[]) >>
-  `expr_sim ctx func cenv cx (expr_type e) e es` by
-    metis_tac[expr_ok_def, expr_sim_ok_def] >>
+  `expr_body_pre cenv cx env e es /\
+   expr_sim ctx func cenv cx (expr_type e) e es` by
+    metis_tac[unop_operand_sim] >>
   rewrite_tac[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
   simp[compile_calldata_slice_parts] >>
@@ -936,7 +930,7 @@ Proof
   >- (gvs[] >> drule eval_exprs_cons_cases >> strip_tac
       >- (gvs[] >>
           `expr_res_ok (INR exc)` by
-            (irule expr_sim_pre_res_ok >> simp[] >>
+            (irule expr_body_pre_res_ok >> simp[] >>
              goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
           drule_all expr_sim_apply >>
           disch_then (qspec_then `s0` mp_tac) >> simp[] >> strip_tac >>
@@ -948,7 +942,7 @@ Proof
   >- gvs[] >>
   gvs[eval_exprs_nil] >>
   `word_value_type (expr_type e)` by simp[word_value_type_def] >>
-  drule_all expr_sim_pre_word_result >> simp[] >> strip_tac >>
+  drule_all expr_body_pre_word_result >> simp[] >> strip_tac >>
   gvs[vyperValueTheory.evaluate_type_def, value_has_type_def] >>
   `?a. v = IntV (&a) /\ a < 2 ** 256` by
     (Cases_on `v` >> gvs[value_has_type_inv, word_value_def] >>
@@ -957,8 +951,8 @@ Proof
   irule slice_calldata_uint_compose >>
   goal_assum (drule_at Any) >>
   simp[type_memory_bytes_def] >>
-  conj_tac >- fs[expr_sim_pre_def, expr_sim_inv_def] >>
-  conj_tac >- fs[expr_sim_pre_def, alloc_limits_expr_def] >>
+  conj_tac >- fs[expr_body_pre_def, expr_sim_inv_def] >>
+  conj_tac >- fs[expr_body_pre_def, alloc_limits_expr_def] >>
   conj_tac >- fs[type_memory_bytes_def, vfmConstantsTheory.word_size_def] >>
   qexists_tac `env` >> simp[]
 QED
