@@ -23,7 +23,7 @@ Theory stmtSimDeclMem
 Ancestors
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclStore
-  stmtSimDecl valueCopy intCallResult exprOperandVar freshWrites
+  stmtSimDecl valueCopy valueCopyBytes intCallResult exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   context compileEnv valueEncoding valueTypingMemoryProps
   vyperInterpreter vyperState vyperValue vyperTyping vyperExprNoControl
@@ -76,55 +76,7 @@ Proof
           compile_bytestring_copy_len_def]
 QED
 
-(* A bytestring destination copies the source's runtime length whatever the
-   source's bound: the store is the one at the destination type. *)
-Theorem compile_store_memory_bytestring_src:
-  !cenv src dst dty sty.
-    is_bytestring_type dty ==>
-    compile_store_memory cenv src dst dty sty =
-    compile_store_memory cenv src dst dty dty
-Proof
-  simp[compile_store_memory_def]
-QED
-
-Theorem is_bytestring_word_type:
-  !t. is_bytestring_type t ==> ~is_word_type t
-Proof
-  Cases >> simp[is_bytestring_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_bytestring_type_def] >>
-  TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
-  simp[is_bytestring_type_def, is_word_type_def]
-QED
-
-Theorem bytestring_type_value:
-  !tenv t tv.
-    is_bytestring_type t /\ evaluate_type tenv t = SOME tv ==>
-    (?n. tv = BaseTV (BytesT (Dynamic n))) \/ (?n. tv = BaseTV (StringT n))
-Proof
-  rpt gen_tac >> Cases_on `t` >> simp[is_bytestring_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_bytestring_type_def] >>
-  TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
-  rw[is_bytestring_type_def, evaluate_type_def]
-QED
-
-(* The two bytestring types, of any bounds, lay out a value of either the
-   same way: a length word, then the bytes. *)
-Theorem bytestring_val_in_memory_transfer:
-  !tenv t1 t2 tv1 tv2 v off mem.
-    is_bytestring_type t1 /\ is_bytestring_type t2 /\
-    evaluate_type tenv t1 = SOME tv1 /\ evaluate_type tenv t2 = SOME tv2 /\
-    value_has_type tv2 v /\ val_in_memory tv1 v off mem ==>
-    val_in_memory tv2 v off mem
-Proof
-  rpt strip_tac >>
-  qspecl_then [`tenv`, `t1`, `tv1`] mp_tac bytestring_type_value >>
-  qspecl_then [`tenv`, `t2`, `tv2`] mp_tac bytestring_type_value >>
-  simp[] >> rpt strip_tac >>
-  Cases_on `v` >> gvs[value_has_type_def, val_in_memory_def]
-QED
-
-(* So do their footprints: a value of both a bytestring type and another
-   fits the other's size. *)
+(* A value of both a bytestring type and another fits the other's size. *)
 Theorem bytestring_val_footprint_le[local]:
   !tenv t1 t2 tv1 tv2 v.
     is_bytestring_type t1 /\ is_bytestring_type t2 /\
@@ -134,10 +86,7 @@ Theorem bytestring_val_footprint_le[local]:
 Proof
   rpt strip_tac >>
   `val_footprint tv1 v = val_footprint tv2 v` by
-    (qspecl_then [`tenv`, `t1`, `tv1`] mp_tac bytestring_type_value >>
-     qspecl_then [`tenv`, `t2`, `tv2`] mp_tac bytestring_type_value >>
-     simp[] >> rpt strip_tac >>
-     Cases_on `v` >> gvs[value_has_type_def, val_footprint_def]) >>
+    metis_tac[bytestring_val_footprint_eq] >>
   simp[] >> irule val_footprint_le >> simp[value_has_type_memory_wf]
 QED
 
@@ -400,7 +349,7 @@ Proof
   simp[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def]
 QED
 
-Theorem alloc_copy_memory_framed_run:
+Theorem alloc_copy_memory_owned_run:
   !ctx func cenv cx es sa sm sb s0 p src sz sw tv v.
     emit_inst ALLOCA [Lit (n2w sz)] [p] sa = ((), sm) /\
     emit_void MCOPY [Var p; src; Lit (n2w sz)] sm = ((), sb) /\
@@ -414,6 +363,7 @@ Theorem alloc_copy_memory_framed_run:
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?s2 w. lookup_var p s2 = SOME w /\
+      FLOOKUP s2.vs_allocas sa.cs_next_id = SOME (w2n w, sz) /\
       stmt_state_rel func cenv cx es s2 /\
       val_in_memory tv v (w2n w) s2.vs_memory /\
       (!x. x <> p ==> lookup_var x s2 = lookup_var x s0) /\
@@ -439,6 +389,35 @@ Proof
   disch_then (qspecl_then [`func`, `s1`] mp_tac) >> simp[] >>
   disch_then (qx_choose_then `s2` strip_assume_tac) >>
   qexistsl_tac [`s2`, `w`] >> simp[]
+QED
+
+Theorem alloc_copy_memory_framed_run:
+  !ctx func cenv cx es sa sm sb s0 p src sz sw tv v.
+    emit_inst ALLOCA [Lit (n2w sz)] [p] sa = ((), sm) /\
+    emit_void MCOPY [Var p; src; Lit (n2w sz)] sm = ((), sb) /\
+    stmt_state_rel func cenv cx es s0 /\ fn_inst_ids_distinct func /\
+    MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
+    not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\
+    src <> Var p /\ eval_operand src s0 = SOME sw /\
+    val_in_memory tv v (w2n sw) s0.vs_memory /\ val_wf tv v /\
+    val_footprint tv v <= sz /\
+    fn_has_code sa sm func /\ fn_has_code sm sb func /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?s2 w. lookup_var p s2 = SOME w /\
+      stmt_state_rel func cenv cx es s2 /\
+      val_in_memory tv v (w2n w) s2.vs_memory /\
+      (!x. x <> p ==> lookup_var x s2 = lookup_var x s0) /\
+      (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
+                   FLOOKUP s2.vs_allocas aid = SOME entry) /\
+      ~s2.vs_halted /\ s2.vs_current_bb = sb.cs_current_bb /\
+      s2.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      !fuel r. run_from fuel ctx func s2 = r /\ (!e. r <> Error e) ==>
+               ?fuel'. run_from fuel' ctx func s0 = r
+Proof
+  rpt strip_tac >> drule_all alloc_copy_memory_owned_run >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexistsl [`s2`, `w`] >> simp[] >> metis_tac[]
 QED
 
 Theorem stmt_state_rel_declare_store_frame[local]:
@@ -589,35 +568,32 @@ Proof
   simp[compile_assign_value_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  drule loweringHaltTheory.compile_alloc_buffer_parts >> strip_tac >>
-  `cs_appends (compile_store_memory cenv (Var (STRING #"%" (toString sa.cs_next_var)))
-      dst dty dty)` by
-    (qspecl_then [`cenv`, `dst`, `Var (STRING #"%" (toString sa.cs_next_var))`,
-                   `NONE`] mp_tac compile_assign_memory_appends >>
-     simp[compile_assign_value_def]) >>
+  drule loweringHaltTheory.compile_alloc_buffer_emission >>
+  disch_then (qx_choosel_then [`sx`, `tmp`] strip_assume_tac) >>
+  `cs_appends (compile_store_memory cenv (Var tmp) dst dty dty)` by
+    (qspecl_then [`cenv`, `dst`, `Var tmp`, `NONE`]
+       mp_tac compile_assign_memory_appends >> simp[compile_assign_value_def]) >>
   rename1 `compile_copy_memory _ _ _ sm = ((),sn)` >>
-  qabbrev_tac `sx = sa with cs_next_var := sa.cs_next_var + 1` >>
-  `emit_inst ALLOCA [Lit (n2w (type_memory_bytes cenv sty))]
-      [STRING #"%" (toString sa.cs_next_var)] sx = ((),sm)` by
-    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
-     simp[compile_alloc_buffer_def, emit_op_def, emit_inst_def, fresh_var_def,
-          fresh_id_def, emit_def, comp_bind_def, comp_ignore_bind_def,
-          comp_return_def, Abbr `sx`] >> strip_tac >> gvs[]) >>
-  `emit_void MCOPY [Var (STRING #"%" (toString sa.cs_next_var)); src;
-      Lit (n2w (type_memory_bytes cenv sty))] sm = ((),sn)` by
+  `emit_void MCOPY [Var tmp; src; Lit (n2w (type_memory_bytes cenv sty))]
+      sm = ((),sn)` by
     (Cases_on `type_memory_bytes cenv sty` >> gvs[compile_copy_memory_def]) >>
-  `cs_extends sx sm /\ cs_extends sm sn /\ cs_extends sn sb` by
+  `cs_extends sm sn /\ cs_extends sn sb` by
     metis_tac[cs_appends_def, cs_appends_emit_helpers] >>
-  `cs_extends sa sx` by
-    simp[Abbr `sx`, cs_extends_def, emitted_blocks_def] >>
   `sm.cs_next_var = sn.cs_next_var` by
     (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
      simp[emit_void_def, emit_def, fresh_id_def, comp_bind_def, comp_return_def] >>
      strip_tac >> gvs[]) >>
-  qexistsl_tac [`sm`, `sn`, `STRING #"%" (toString sa.cs_next_var)`] >>
-  simp[Abbr `sx`] >> conj_tac >-
-    (irule not_fresh_at_mono >> qexists_tac `sm` >> simp[]) >>
-  metis_tac[fn_has_code_split, cs_extends_trans]
+  `cs_extends sa sn` by metis_tac[cs_extends_trans] >>
+  drule_all fn_has_code_split >> strip_tac >>
+  `cs_extends sx sn` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sx func /\ fn_has_code sx sn func` by
+    (irule fn_has_code_split >> simp[]) >>
+  `fn_has_code sx sm func /\ fn_has_code sm sn func` by
+    (irule fn_has_code_split >> simp[]) >>
+  qexistsl_tac [`sm`, `sn`, `tmp`] >>
+  qpat_x_assum `sx = _` SUBST_ALL_TAC >> simp[] >>
+  conj_tac >- (irule not_fresh_at_mono >> qexists_tac `sm` >> simp[]) >>
+  metis_tac[]
 QED
 
 Theorem annassign_staged_memory_parts:
@@ -682,14 +658,7 @@ Proof
       disch_then (qx_choosel_then [`sx`, `sm`, `sn`, `tmp`] strip_assume_tac) >>
       `MEM (mk_inst sx.cs_next_id ALLOCA
           [Lit (n2w (type_memory_bytes cenv sty))] [tmp]) (fn_insts func)` by
-        (drule emit_inst_extends >> strip_tac >>
-         `?bb. lookup_block sm.cs_current_bb func.fn_blocks = SOME bb /\
-                isPREFIX sm.cs_current_insts bb.bb_instructions` by
-           metis_tac[fn_has_code_start] >>
-         `MEM (mk_inst sx.cs_next_id ALLOCA
-           [Lit (n2w (type_memory_bytes cenv sty))] [tmp]) bb.bb_instructions` by
-           gvs[rich_listTheory.IS_PREFIX_APPEND] >>
-         metis_tac[lookup_block_fn_insts]) >>
+        (irule loweringHaltTheory.emit_inst_fn_member >> qexists `sm` >> simp[]) >>
       `not_local_ptr cenv es.scopes tmp` by
         (gvs[local_ptrs_reserved_def, not_local_ptr_def] >> metis_tac[]) >>
       `src <> Var tmp /\ p <> tmp` by metis_tac[] >>

@@ -31,7 +31,7 @@ Ancestors
   exprLowering stmtLowering exprLoweringProps
   compileEnv valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperLookup
-  venomState
+  venomExecSemantics venomExecProofs venomInst venomState emitHelperProps
 
 Theorem compile_get_target_ptr_local:
   !cenv id op sz st.
@@ -240,6 +240,71 @@ QED
 (* The MSTORE of the typed word of v at a live local's pointer, run: it
    reaches its end related at the scopes write_place leaves, with every
    variable and allocation kept. *)
+Theorem assign_local_store_run_framed:
+  !ctx func cenv cx es s id p sz pre env entry rest v etv op st st'.
+    emit_void MSTORE [Var p; op] st = ((), st') /\
+    fn_has_code st st' func /\ ~s.vs_halted /\
+    s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\
+    eval_operand op s = SOME (typed_val_to_w256 etv v) /\
+    stmt_state_rel func cenv cx es s /\
+    find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    store_lays_out etv entry.type v ==>
+    ?dw t. lookup_var p s = SOME dw /\
+        stmt_state_rel func cenv cx
+          (es with scopes :=
+             pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
+             rest) t /\
+        ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
+        t.vs_inst_idx = LENGTH st'.cs_current_insts /\
+        (!x. lookup_var x t = lookup_var x s) /\
+        (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+                 FLOOKUP t.vs_allocas aid = SOME b) /\
+        (!a len. a + len <= w2n dw \/ w2n dw + 32 <= a ==>
+           mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
+        !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
+                 ?fuel'. run_from fuel' ctx func s = r
+Proof
+  rpt strip_tac >>
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  `?w. lookup_var p s = SOME w` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+     metis_tac[]) >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel func cenv cx es1` >>
+  `stmt_state_rel func cenv cx es1
+     (mstore (w2n w) (typed_val_to_w256 etv v) s)` by
+    (simp[Abbr `es1`] >> irule stmt_state_rel_write_local_store >>
+     metis_tac[]) >>
+  `frag_exec ctx st st' (\t. t = s)
+     (\t. stmt_state_rel func cenv cx es1 t /\
+          (!x. lookup_var x t = lookup_var x s) /\
+          (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+                   FLOOKUP t.vs_allocas aid = SOME b) /\
+          (!a len. a + len <= w2n w \/ w2n w + 32 <= a ==>
+             mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory))
+     (\r. F)` by
+    (drule emitted_insts_emit_void >> strip_tac >>
+     drule emit_void_extends >> strip_tac >>
+     `step_inst_base (mk_inst st.cs_next_id MSTORE [Var p; op] []) s =
+        OK (mstore (w2n w) (typed_val_to_w256 etv v) s)` by
+       (irule step_MSTORE >> simp[eval_operand_def]) >>
+     `!a len. a + len <= w2n w \/ w2n w + 32 <= a ==>
+        mem_bytes_at a len (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory =
+        mem_bytes_at a len s.vs_memory` by
+       (rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >> simp[]) >>
+     irule frag_exec_run_inst_seq >>
+     fs[same_blocks_def, IS_PREFIX_APPEND3] >>
+     simp[run_inst_seq_def, stmt_state_rel_inst_idx] >>
+     gvs[mstore_def, LET_THM, lookup_var_def, is_terminator_def] >>
+     first_assum ACCEPT_TAC) >>
+  drule frag_exec_no_exit_run >> disch_then drule >>
+  disch_then (qspec_then `s` mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `t` strip_assume_tac) >>
+  qexists `t` >> simp[] >> first_assum ACCEPT_TAC
+QED
+
 Theorem assign_local_store_run:
   !ctx func cenv cx es s id p sz pre env entry rest v etv op st st'.
     emit_void MSTORE [Var p; op] st = ((), st') /\
@@ -263,25 +328,8 @@ Theorem assign_local_store_run:
         !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
                  ?fuel'. run_from fuel' ctx func s = r
 Proof
-  rpt strip_tac >>
-  `lookup_scopes id es.scopes = SOME entry` by
-    metis_tac[find_containing_scope_lookup] >>
-  `?w. lookup_var p s = SOME w` by
-    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
-     metis_tac[]) >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel func cenv cx es1` >>
-  `stmt_state_rel func cenv cx es1
-     (mstore (w2n w) (typed_val_to_w256 etv v) s)` by
-    (simp[Abbr `es1`] >> irule stmt_state_rel_write_local_store >>
-     metis_tac[]) >>
-  `frag_exec ctx st st' (\t. t = s)
-     (\t. stmt_state_rel func cenv cx es1 t /\
-          (!x. lookup_var x t = lookup_var x s) /\
-          (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
-                   FLOOKUP t.vs_allocas aid = SOME b)) (\r. F)` by
-    (irule (SRULE [] (Q.INST [`keep` |-> `\x. T`]
-       (SPEC_ALL annassign_mstore_framed_frag))) >>
-     simp[] >> metis_tac[]) >>
-  drule frag_exec_no_exit_run >> disch_then drule >>
-  disch_then (qspec_then `s` mp_tac) >> simp[] >> metis_tac[]
+  rpt strip_tac >> drule_all assign_local_store_run_framed >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists `t` >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >> qexists `fuel` >> simp[]
 QED

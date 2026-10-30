@@ -20,7 +20,7 @@ Ancestors
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclStore
   stmtSimDecl stmtSimDeclMem stmtSimAssignStore stmtSimAssign
-  valueCopy exprOperandVar freshWrites
+  valueCopy valueCopySource valueCopyBytes exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperLookup vyperExprNoControl
@@ -113,6 +113,88 @@ QED
 (* compile_store_memory at ty of a value of the local's type, held in
    memory at src, into a live local: it reaches its end related at the
    scopes write_place leaves. *)
+Theorem local_memory_store_run_framed:
+  !ctx func cenv cx es s id p sz pre env entry rest v src ty sa sb sw tyv sty stv.
+    compile_store_memory cenv src (Var p) ty sty sa = ((), sb) /\
+    (!x. src = Var x ==> not_fresh_at sa x) /\
+    eval_operand src s = SOME sw /\
+    ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tyv /\
+    entry.type = tyv /\ value_has_type tyv v /\ val_wf tyv v /\
+    val_in_memory stv v (w2n sw) s.vs_memory /\
+    evaluate_type (get_tenv cx) sty = SOME stv /\ value_has_type stv v /\
+    (ty = sty \/ is_bytestring_type ty /\ is_bytestring_type sty) /\
+    type_memory_bytes cenv ty = type_memory_size tyv /\
+    type_memory_size tyv + 64 < dimword (:256) /\
+    stmt_state_rel func cenv cx es s /\
+    find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?dw t. lookup_var p s = SOME dw /\
+        stmt_state_rel func cenv cx
+          (es with scopes :=
+             pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
+             rest) t /\
+        ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+        (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+                 FLOOKUP t.vs_allocas aid = SOME b) /\
+        (!a len. a + len <= w2n dw \/
+           w2n dw + MIN (type_memory_size stv) (type_memory_size tyv) <= a ==>
+           mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
+        !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
+                 ?fuel'. run_from fuel' ctx func s = r
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  `?w. lookup_var p s = SOME w` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+     metis_tac[]) >>
+  `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+  `eval_operand (Var p) s = SOME w` by simp[eval_operand_def] >>
+  `~is_word_type sty` by metis_tac[is_bytestring_word_type] >>
+  `if is_word_type sty then sw = typed_val_to_w256 stv v
+   else val_in_memory stv v (w2n sw) s.vs_memory` by simp[] >>
+  `!x. Var p = Var x ==> not_fresh_at sa x` by simp[] >>
+  drule_all compile_store_memory_run_source_bound >> strip_tac >>
+  `!a len. a + len <= w2n w \/ w2n w + type_memory_size tyv <= a ==>
+     mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory` by
+    (rpt strip_tac >> first_x_assum irule >> simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+  qpat_x_assum `ty = sty \/ _` kall_tac >>
+  `!q. ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s` by
+    (rpt strip_tac >> first_x_assum irule >>
+     fs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
+  qpat_x_assum `entry.type = tyv` (SUBST_ALL_TAC o SYM) >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel func cenv cx es1` >>
+  `stmt_state_rel func cenv cx es1 t` by
+    (qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `t`, `id`, `p`, `sz`, `w`,
+                  `pre`, `env`, `entry`, `rest`, `v`]
+       mp_tac stmt_state_rel_write_local >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     simp[Abbr `es1`]) >>
+  `t.vs_allocas = s.vs_allocas` by
+    (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `frag_exec ctx sa sb (\u. u = s)
+     (\u. stmt_state_rel func cenv cx es1 u /\
+          (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+          u.vs_allocas = s.vs_allocas /\
+          (!a len. a + len <= w2n w \/
+             w2n w + MIN (type_memory_size stv) (type_memory_size entry.type) <= a ==>
+             mem_bytes_at a len u.vs_memory = mem_bytes_at a len s.vs_memory))
+     (\r. F)` by
+    (irule frag_exec_run_inst_seq >>
+     fs[same_blocks_def, lookup_var_def] >> simp[stmt_state_rel_inst_idx] >>
+     first_assum ACCEPT_TAC) >>
+  drule frag_exec_no_exit_run >>
+  disch_then (qspecl_then [`func`, `s`] mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `u` strip_assume_tac) >>
+  qexists_tac `u` >> simp[] >> first_assum ACCEPT_TAC
+QED
+
 Theorem local_memory_store_run:
   !ctx func cenv cx es s id p sz pre env entry rest v src ty sa sb sw tyv.
     compile_store_memory cenv src (Var p) ty ty sa = ((), sb) /\
@@ -141,50 +223,13 @@ Theorem local_memory_store_run:
         !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
                  ?fuel'. run_from fuel' ctx func s = r
 Proof
-  rpt gen_tac >> strip_tac >>
-  `lookup_scopes id es.scopes = SOME entry` by
-    metis_tac[find_containing_scope_lookup] >>
-  `?w. lookup_var p s = SOME w` by
-    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
-     metis_tac[]) >>
-  `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
-  `eval_operand (Var p) s = SOME w` by simp[eval_operand_def] >>
-  drule compile_store_memory_run_size_bound_with_capacity >>
-  disch_then (qspecl_then [`s`, `get_tenv cx`, `tyv`, `v`, `sw`, `w`] mp_tac) >>
-  impl_tac >- simp[] >> strip_tac >>
-  `!q. ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s` by
-    (rpt strip_tac >> first_x_assum irule >>
-     fs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
-  qpat_x_assum `entry.type = tyv` (SUBST_ALL_TAC o SYM) >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel func cenv cx es1` >>
-  `type_memory_size entry.type <= sz` by
-    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >> metis_tac[]) >>
-  `local_region cenv es.scopes s id (w2n w) sz` by simp[local_region_def] >>
-  `t.vs_data_section = s.vs_data_section` by
-    (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
-     simp_tac (srw_ss()) [venom_state_component_equality]) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
-    (irule local_copy_immutables >>
-     goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
-     qexistsl_tac [`func`, `type_memory_size entry.type`] >> simp[] >>
-     rpt strip_tac >> qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ _ = _` irule >>
-     decide_tac) >>
-  `stmt_state_rel func cenv cx es1 t` by
-    (drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
-  `t.vs_allocas = s.vs_allocas` by
-    (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
-     simp[venom_state_component_equality]) >>
-  `frag_exec ctx sa sb (\u. u = s)
-     (\u. stmt_state_rel func cenv cx es1 u /\
-          (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
-          u.vs_allocas = s.vs_allocas) (\r. F)` by
-    (irule frag_exec_run_inst_seq >>
-     fs[same_blocks_def, lookup_var_def] >> simp[stmt_state_rel_inst_idx] >>
-     first_assum ACCEPT_TAC) >>
-  drule frag_exec_no_exit_run >>
-  disch_then (qspecl_then [`func`, `s`] mp_tac) >> simp[] >>
-  disch_then (qx_choose_then `u` strip_assume_tac) >>
-  qexists_tac `u` >> simp[]
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all (local_memory_store_run_framed |> SPEC_ALL
+    |> Q.INST [`sty` |-> `ty`, `stv` |-> `tyv`]
+    |> GEN_ALL |> PURE_REWRITE_RULE [REFL_CLAUSE, OR_CLAUSES, AND_CLAUSES]) >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `t` >> simp[] >> rpt strip_tac >> first_x_assum irule >>
+  simp[] >> qexists_tac `fuel` >> simp[]
 QED
 
 (* compile_assign_value at the local's memory type: staged through a fresh
