@@ -138,16 +138,21 @@ Proof
   `s1.vs_call_ctx = s.vs_call_ctx` by
     (Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]) >>
   drule accounts_rel_storage_transient >> strip_tac >>
-  irule stmt_state_rel_allocas_frame >>
-  `s1.vs_allocas = s.vs_allocas /\ s1.vs_alloca_next = s.vs_alloca_next` by
-    (Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]) >>
-  reverse conj_tac >- (qexistsl [`es`, `s`] >> simp[]) >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
-  Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`] >>
-  simp[stmt_state_rel_def, state_rel_def, sstore_def, tstore_def, LET_THM,
-       set_storage_def, local_ptrs_rel_storage_fields, immutables_rel_def,
-       logs_rel_def] >>
-  gvs[sstore_def, tstore_def, LET_THM]
+  `state_rel func cenv cx es1 s1` by
+    (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`] >>
+     fs[stmt_state_rel_def, state_rel_def, sstore_def, tstore_def, LET_THM,
+        set_storage_def, local_ptrs_rel_storage_fields, immutables_rel_def,
+        logs_rel_def] >> gvs[] >> metis_tac[]) >>
+  `immutable_alloca_sep func cenv cx es1 s1` by
+    (`immutable_alloca_sep func cenv cx es s` by fs[stmt_state_rel_def] >>
+     irule immutable_alloca_sep_fields >> qexistsl [`s`, `es`] >>
+     simp[] >> Cases_on `tr` >>
+     simp[Abbr `s1`, Abbr `es1`, sstore_def, tstore_def, LET_THM,
+          set_storage_def, local_region_def, lookup_var_def] >>
+     metis_tac[]) >>
+  irule stmt_state_rel_allocas_frame >> simp[] >>
+  qexistsl [`es`, `s`] >> simp[] >>
+  Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]
 QED
 
 (* ===== The lowering ===== *)
