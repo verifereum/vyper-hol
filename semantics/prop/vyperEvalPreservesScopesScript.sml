@@ -1561,14 +1561,16 @@ QED
    when g preserves both scopes and immutables *)
 Theorem finally_pop_function_then_facts[local]:
   !f g prev st res st'.
-    finally f (do pop_function prev; g od) st = (res, st') /\
+    finally_unless_halt (finally f (pop_function prev)) g st = (res, st') /\
     (!st0 res0 st0'. g st0 = (res0, st0') ==>
        st0'.scopes = st0.scopes /\ st0'.immutables = st0.immutables) ==>
     st'.scopes = prev /\ st'.immutables = (SND (f st)).immutables
 Proof
-  rpt strip_tac >> gvs[finally_def] >>
-  Cases_on `f st` >> Cases_on `q` >>
-  gvs[ignore_bind_apply, bind_def, ignore_bind_def,
+  rpt strip_tac >>
+  Cases_on `f st` >> rename1 `f st = (outcome, body_post)` >>
+  Cases_on `outcome` >>
+  TRY (rename1 `INR ex` >> Cases_on `ex`) >>
+  gvs[finally_unless_halt_def, finally_def, ignore_bind_apply, bind_def, ignore_bind_def,
       pop_function_def, set_scopes_def, return_def, raise_def] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[return_def, raise_def] >>
   res_tac >> fs[]
@@ -2032,7 +2034,7 @@ Proof
     gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
          return_def, raise_def] >>
     imp_res_tac type_check_state >>
-    imp_res_tac check_state >> gvs[] >>
+    imp_res_tac check_state >> imp_res_tac lift_option_type_state >> gvs[] >>
     first_x_assum drule >> rw[] >>
     gvs[preserves_tv_def]) >>
   (* SelfDestructTarget *)
@@ -2044,8 +2046,8 @@ Proof
     imp_res_tac type_check_state >>
     imp_res_tac lift_option_type_state >>
     imp_res_tac get_accounts_state >>
-    imp_res_tac transfer_value_scopes >>
-    imp_res_tac transfer_value_immutables >> gvs[] >>
+    gvs[update_accounts_def, update_pending_deletions_def,
+        bind_def, ignore_bind_def, return_def, raise_def, COND_RATOR, AllCaseEqs()] >>
     first_x_assum drule >> rw[] >>
     gvs[preserves_tv_def]) >>
   (* CreateTarget *)
@@ -2218,9 +2220,9 @@ Theorem intcall_ptv_chain[local]:
   (!st0 (res0:unit + exception) st0'. cleanup st0 = (res0, st0') ==>
      st0'.scopes = st0.scopes /\ st0'.immutables = st0.immutables) /\
   (case
-     finally
-       (try (do eval_stmts cxf body; return NoneV od) handle_function)
-       (do pop_function r_mid.scopes; cleanup od)
+     finally_unless_halt
+       (finally (try (do eval_stmts cxf body; return NoneV od) handle_function)
+         (pop_function r_mid.scopes)) cleanup
        (r_lock with scopes := [env])
    of
      (INL rv, s'') =>
@@ -2232,16 +2234,16 @@ Theorem intcall_ptv_chain[local]:
 Proof
   strip_tac >>
   (* Name the finally result *)
-  `?fres fst. finally
-     (try (do eval_stmts cxf body; return NoneV od) handle_function)
-     (do pop_function r_mid.scopes; cleanup od)
+  `?fres fst. finally_unless_halt
+     (finally (try (do eval_stmts cxf body; return NoneV od) handle_function)
+       (pop_function r_mid.scopes)) cleanup
      (r_lock with scopes := [env]) = (fres, fst)` by
     metis_tac[pairTheory.PAIR] >>
   (* Get facts from finally_pop_function_then_facts *)
   `fst.scopes = r_mid.scopes /\
    fst.immutables = (SND (try (do eval_stmts cxf body; return NoneV od)
      handle_function (r_lock with scopes := [env]))).immutables` by (
-    qpat_x_assum `finally _ _ _ = _`
+    qpat_x_assum `finally_unless_halt _ _ _ = _`
       (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
         finally_pop_function_then_facts)) >>
     impl_tac >- simp[] >>
@@ -2347,10 +2349,6 @@ Resume eval_preserves_tv_with_results[IntCall_ptv]:
     strip_tac >>
     imp_res_tac release_nonreentrant_lock_scopes >>
     imp_res_tac release_nonreentrant_lock_immutables >> simp[]
-  ) >>
-  conj_tac >- (
-    qpat_x_assum `(case _ of (INL rv,s'') => _ | (INR e,s'') => _) = (res,st')` mp_tac >>
-    simp[finally_def, ignore_bind_def, bind_def, return_def, raise_def]
   ) >>
   irule preserves_tv_trans >> qexists_tac `r'` >> simp[]
 QED

@@ -38,6 +38,7 @@ Definition context_venom_asm_rel_def:
     as.as_logs = vs.vs_logs /\
     as.as_outcomes = vs.vs_outcomes /\
     as.as_requests = vs.vs_requests /\
+    as.as_pending_deletions = vs.vs_pending_deletions /\
     as.as_call_ctx = vs.vs_call_ctx /\
     as.as_tx_ctx = vs.vs_tx_ctx /\
     as.as_block_ctx = vs.vs_block_ctx /\

@@ -4,6 +4,8 @@
 Theory exprCallbackContracts
 Ancestors
   exprLowering exprCallBounds compileEnv context vyperAST list
+Libs
+  proofAuditLib
 
 Definition expr_callbacks_agree_def:
   expr_callbacks_agree f g cenv es =
@@ -143,7 +145,8 @@ QED
 
 Definition call_callback_children_def:
   call_callback_children args default_ret =
-    args ++ (case default_ret of NONE => [] | SOME e => [e])
+    args ++ FLAT (MAP raw_log_topic_exprs args) ++
+    (case default_ret of NONE => [] | SOME e => [e])
 End
 
 Theorem compile_intcall_callback_contract:
@@ -213,8 +216,13 @@ Theorem compile_extcall_callback_contract:
     (ExtCall static_call skip_check (fn_name,arg_types,return_type) opts)
     args default_ret st
 Proof
+  strip_tac >>
+  `expr_callbacks_agree f g cenv
+     (args ++ (case default_ret of NONE => [] | SOME e => [e]))` by
+    fs[call_callback_children_def] >>
+  qpat_x_assum `expr_callbacks_agree _ _ _ (call_callback_children _ _)` kall_tac >>
   Cases_on `args` >- simp[compile_call_def] >>
-  rename1 `addr_e::rest` >> strip_tac >>
+  rename1 `addr_e::rest` >>
   `expr_callbacks_agree f g cenv [addr_e] ∧ expr_callbacks_agree f g cenv rest` by
     (Cases_on `default_ret` >> fs[call_callback_children_def]) >>
   drule_then (qspec_then `LENGTH arg_types` strip_assume_tac)
@@ -225,6 +233,59 @@ Proof
     (assume_tac o MATCH_MP compile_ext_call_kwargs_callback_contract) >>
   fs[] >> rpt strip_tac >>
   simp[compile_call_def, lower_value_def, comp_bind_def]
+QED
+
+Theorem raw_log_topic_exprs_member_bound:
+  MEM child (raw_log_topic_exprs e) ==> expr_size child < expr_size e
+Proof
+  Cases_on `e` >> simp[raw_log_topic_exprs_def] >>
+  rename1 `Builtin ann bi es` >> Cases_on `bi` >>
+  simp[raw_log_topic_exprs_def, expr_size_def] >>
+  strip_tac >> drule expr_list_member_bound >> simp[]
+QED
+
+Theorem raw_log_topic_exprs_list_member_bound:
+  MEM e args /\ MEM child (raw_log_topic_exprs e) ==>
+  expr_size child < list_size expr_size args
+Proof
+  strip_tac >> drule raw_log_topic_exprs_member_bound >>
+  qpat_x_assum `MEM e args` (mp_tac o MATCH_MP expr_list_member_bound) >> simp[]
+QED
+
+Theorem expr_callbacks_agree_flat_topics:
+  expr_callbacks_agree f g cenv (FLAT (MAP raw_log_topic_exprs args)) /\
+  MEM e args ==> expr_callbacks_agree f g cenv (raw_log_topic_exprs e)
+Proof
+  simp[expr_callbacks_agree_def, MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem compile_raw_log_callback_contract:
+  expr_callbacks_agree f g cenv args /\
+  expr_callbacks_agree f g cenv (FLAT (MAP raw_log_topic_exprs args)) ==>
+  compile_call f cenv ret_ty ty RawLog args default_ret st =
+  compile_call g cenv ret_ty ty RawLog args default_ret st
+Proof
+  Cases_on `args` >- simp[compile_call_def] >>
+  rename1 `topics_e::rest` >> Cases_on `rest` >- simp[compile_call_def] >>
+  rename1 `topics_e::data_e::tail` >> Cases_on `tail` >>
+  simp[compile_call_def] >> strip_tac >> fs[] >>
+  `expr_callbacks_agree f g cenv (raw_log_topic_exprs topics_e)` by
+    metis_tac[expr_callbacks_agree_flat_topics, MEM] >>
+  qpat_x_assum `expr_callbacks_agree _ _ _ (raw_log_topic_exprs topics_e)`
+    (mp_tac o MATCH_MP compile_multi_exprs_callback_contract) >> strip_tac >>
+  simp[lower_value_def, comp_bind_def]
+QED
+
+Theorem compile_single_arg_callback_contract:
+  expr_callbacks_agree f g cenv args ∧
+  (target = RawRevert ∨ target = SelfDestructTarget) ⇒
+  compile_call f cenv ret_ty ty target args default_ret st =
+  compile_call g cenv ret_ty ty target args default_ret st
+Proof
+  strip_tac >>
+  (Cases_on `args` >- gvs[compile_call_def] >>
+   rename1 `arg_e::rest` >> Cases_on `rest` >>
+   gvs[compile_call_def, lower_value_def])
 QED
 
 Theorem compile_call_callback_contract:
@@ -239,6 +300,10 @@ Proof
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
          irule compile_raw_call_calldata_callback_contract >>
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
+         irule compile_raw_log_callback_contract >>
+           fs[call_callback_children_def],
+         irule compile_single_arg_callback_contract >>
+           fs[call_callback_children_def] >> NO_TAC,
          rename1 `compile_call f _ _ _ (ExtCall _ _ signature _)` >>
            PairCases_on `signature` >>
            irule compile_extcall_callback_contract >> simp[],
@@ -251,8 +316,10 @@ Theorem call_callback_child_bound:
   expr_size child < expr_size (Call ann target args default_ret)
 Proof
   Cases_on `default_ret` >> simp[call_callback_children_def] >>
-  rpt strip_tac >> gvs[] >>
-  FIRST [drule expr_list_member_bound >> simp[expr_size_def], simp[expr_size_def]]
+  rpt strip_tac >> gvs[MEM_FLAT, MEM_MAP] >>
+  FIRST [drule_all raw_log_topic_exprs_list_member_bound >> simp[expr_size_def] >> NO_TAC,
+         drule expr_list_member_bound >> simp[expr_size_def],
+         simp[expr_size_def]]
 QED
 
 Theorem struct_callback_child_bound:
@@ -460,28 +527,5 @@ Proof
   drule_all extcode_child_bound >> simp[]
 QED
 
-(* ===== Kernel audit for changed place callbacks ===== *)
-
-val () = List.app (fn (name,theorem) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag theorem)
-  in
-    if null (Thm.hyp theorem) andalso null axioms andalso
-       List.all (fn label => label = "DISK_THM") oracles then
-      print ("PLACE_CALLBACK_KERNEL_CLOSED " ^ name ^ " hyp=0\n")
-    else raise Fail ("admitted place callback: " ^ name)
-  end)
-  [("compile_subscript_callback_contract",compile_subscript_callback_contract),
-   ("compile_attribute_callback_contract",compile_attribute_callback_contract)];
-
-(* Issue #560 callback interfaces must remain kernel-closed. *)
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles then ()
-     else raise Fail "admitted memory-construction callback contract"
-  end)
-  [compile_make_tuple_callback_contract,
-   compile_make_array_elems_callback_contract,
-   compile_make_array_callback_contract,
-   compile_struct_lit_callback_contract,
-   compile_make_array_list_child_calls];
+(* Check all callback contracts in the same theory session. *)
+val () = proofAuditLib.check_theory "exprCallbackContracts";

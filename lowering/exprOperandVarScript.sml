@@ -660,6 +660,14 @@ Proof
   metis_tac[compiler_counter_emit, pairTheory.SND, arithmeticTheory.LESS_EQ_TRANS]
 QED
 
+(* These effect-only calls return a literal, including malformed arities. *)
+val compiler_literal_call_result_tac =
+  simp[compile_call_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[contextTheory.vv_operand_def];
+
 Theorem compiler_call_var:
   compile_call cfn cenv rt ty target args default_ret sa = (vv,sb) ==>
   !x. vv_operand vv = Var x ==> not_fresh_at sb x
@@ -679,7 +687,21 @@ Proof
   >~ [`compile_call _ _ _ _ (RawCallCalldataTarget _) _ _ _`] >-
     suspend "rawcalldata"
   >~ [`compile_call _ _ _ _ (Send _) _ _ _`] >-
-    suspend "send" >>
+    suspend "send"
+  >~ [`compile_call _ _ _ _ RawLog _ _ _`] >-
+    (namedCases_on `args` ["", "topics_e rest"] >-
+       compiler_literal_call_result_tac >>
+     namedCases_on `rest` ["", "data_e tail"] >-
+       compiler_literal_call_result_tac >>
+     Cases_on `tail` >> compiler_literal_call_result_tac)
+  >~ [`compile_call _ _ _ _ RawRevert _ _ _`] >-
+    (namedCases_on `args` ["", "data_e rest"] >-
+       compiler_literal_call_result_tac >>
+     Cases_on `rest` >> compiler_literal_call_result_tac)
+  >~ [`compile_call _ _ _ _ SelfDestructTarget _ _ _`] >-
+    (namedCases_on `args` ["", "to_e rest"] >-
+       compiler_literal_call_result_tac >>
+     Cases_on `rest` >> compiler_literal_call_result_tac) >>
   simp[compile_call_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   gvs[contextTheory.vv_operand_def]
@@ -1487,6 +1509,58 @@ Proof
   simp[compile_call_def]
 QED
 
+(* RawLog evaluates topics before data; bytes32 allocates between them. *)
+Theorem compiler_raw_log_reserved_cong:
+  (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
+  (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
+  local_ptrs_reserved ce sa ==>
+  compile_call f ce rt ty RawLog args dr sa =
+  compile_call g ce rt ty RawLog args dr sa
+Proof
+  strip_tac >> Cases_on `args` >- simp[compile_call_def] >>
+  rename1 `topics_e::rest` >> Cases_on `rest` >- simp[compile_call_def] >>
+  rename1 `topics_e::data_e::tail` >> Cases_on `tail`
+  >- (`compile_multi_exprs f ce (raw_log_topic_exprs topics_e) sa =
+       compile_multi_exprs g ce (raw_log_topic_exprs topics_e) sa` by
+        (irule compiler_multi_exprs_reserved_cong >> simp[]) >>
+      Cases_on `compile_multi_exprs f ce (raw_log_topic_exprs topics_e) sa` >>
+      rename1 `compile_multi_exprs f _ _ sa = (topics,sb)` >>
+      `local_ptrs_reserved ce sb` by
+        (irule compiler_ci_mono_reserved >> qexists `sa` >>
+         metis_tac[ci_mono_compile_multi_exprs, pairTheory.SND]) >>
+      qpat_x_assum `(topics,sb) = _` (assume_tac o SYM) >>
+      Cases_on `expr_type data_e = BaseT (BytesT (Fixed 32))`
+      >- (Cases_on `compile_alloc_buffer 32 sb` >>
+          rename1 `compile_alloc_buffer 32 sb = (buf,sc)` >>
+          `local_ptrs_reserved ce sc` by
+            (irule compiler_ci_mono_reserved >> qexists `sb` >>
+             metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND]) >>
+          `lower_value f ce (BaseT (BytesT (Fixed 32))) data_e sc =
+           lower_value g ce (BaseT (BytesT (Fixed 32))) data_e sc` by
+            (irule compiler_lower_value_reserved_cong >> simp[]) >>
+          simp[compile_call_def, LET_THM]) >>
+      `lower_value f ce (expr_type data_e) data_e sb =
+       lower_value g ce (expr_type data_e) data_e sb` by
+        (irule compiler_lower_value_reserved_cong >> simp[]) >>
+      simp[compile_call_def, LET_THM]) >>
+  simp[compile_call_def]
+QED
+
+(* The single callback is entered in the original reserved state. *)
+Theorem compiler_single_arg_call_reserved_cong:
+  (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
+  local_ptrs_reserved ce sa /\
+  (target = RawRevert \/ target = SelfDestructTarget) ==>
+  compile_call f ce rt ty target args dr sa =
+  compile_call g ce rt ty target args dr sa
+Proof
+  rw[] >>
+  `!ty e. lower_value f ce ty e sa = lower_value g ce ty e sa` by
+    (rpt gen_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
+  (namedCases_on `args` ["", "arg_e rest"] >- simp[compile_call_def] >>
+   Cases_on `rest` >> simp[compile_call_def, LET_THM])
+QED
+
 Theorem compiler_call_reserved_cong:
   (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
   (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
@@ -1498,6 +1572,8 @@ Proof
   FIRST [irule compiler_intcall_reserved_cong >> simp[],
          irule compiler_send_reserved_cong >> simp[],
          irule compiler_raw_call_calldata_reserved_cong >> simp[],
+         irule compiler_raw_log_reserved_cong >> simp[],
+         irule compiler_single_arg_call_reserved_cong >> simp[] >> NO_TAC,
          rename1 `ExtCall _ _ signature _` >> PairCases_on `signature` >>
            irule compiler_extcall_reserved_cong >> simp[],
          simp[compile_call_def]]
@@ -1909,7 +1985,7 @@ Resume compiler_compile_var[expr]:
   Cases_on `e`
   >~ [`IfExp _ _ _ _`] >-
     (strip_tac >> qpat_x_assum `compile_expr_body _ _ _ _ _ _ _ = _`
-       (mp_then Any mp_tac compiler_ifexp_var) >> simp[]) 
+       (mp_then Any mp_tac compiler_ifexp_var) >> simp[])
   >~ [`Builtin _ _ _`] >- suspend "expr_builtin"
   >~ [`TypeBuiltin _ _ _ _`] >-
     (simp[compile_expr_body_def, LET_THM] >> metis_tac[])

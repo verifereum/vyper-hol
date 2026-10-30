@@ -1,12 +1,10 @@
 (*
  * Properties of accounts_rel (#665): the state_rel component that relates
- * every address's accounts and transient storage, with no source pending
- * deletions.
+ * every address's raw accounts and transient storage.
  *
  * TOP-LEVEL:
- *   state_rel_accounts      — state_rel gives the accounts and transient
- *                             storage the success case of the external
- *                             result relation compares
+ *   state_rel_accounts      — state_rel gives equal raw accounts and transient
+ *                             storage before outer deletion finalization
  *   accounts_rel_set_storage, accounts_rel_set_transient — a write of the
  *                             running contract's storage or transient
  *                             storage on both sides keeps accounts_rel
@@ -23,8 +21,7 @@
  *   accounts_rel_storage_transient — storage_rel and transient_rel are
  *                             accounts_rel's case for the running contract
  *   accounts_rel_frame, accounts_rel_updates — accounts_rel reads only
- *                             the accounts, transient storage and pending
- *                             deletions
+ *                             the accounts and transient storage
  *)
 
 Theory accountsRelProps
@@ -37,7 +34,7 @@ Ancestors
 Theorem state_rel_accounts:
   !func cenv cx es s.
     state_rel func cenv cx es s ==>
-    s.vs_accounts = process_deletions es.pending_deletions es.accounts /\
+    s.vs_accounts = es.accounts /\
     s.vs_transient = es.tStorage
 Proof
   rw[state_rel_def, accounts_rel_def, process_deletions_def]
@@ -55,9 +52,7 @@ QED
 
 (* ===== Frames ===== *)
 
-(* accounts_rel reads only the accounts, transient storage and pending
-   deletions of the source and the accounts and transient storage of
-   Venom. *)
+(* accounts_rel reads only the accounts and transient storage of both sides. *)
 Theorem accounts_rel_frame:
   !es es' s s'.
     es'.accounts = es.accounts /\ es'.tStorage = es.tStorage /\
@@ -150,16 +145,18 @@ Proof
   pop_assum SUBST1_TAC >> fs[accounts_rel_def]
 QED
 
-(* Venom adopts an outcome with adopt_outcome on its accounts, transient
-   storage and logs (consume_call_outcome), as the source does. *)
+(* Both sides adopt accounts, transient storage, logs and pending deletions
+   with adopt_outcome. Pending lists may grow before outer finalization. *)
 Theorem accounts_rel_adopt_call_outcome:
   !rq outcome es es' s s' logs.
     accounts_rel es s /\ adopt_call_outcome rq outcome es = (INL (), es') /\
     s'.vs_accounts =
-      FST (adopt_outcome rq outcome (s.vs_accounts, s.vs_transient, logs)) /\
+      FST (adopt_outcome rq outcome
+             (s.vs_accounts, s.vs_transient, logs, s.vs_pending_deletions)) /\
     s'.vs_transient =
       FST (SND (adopt_outcome rq outcome
-                  (s.vs_accounts, s.vs_transient, logs))) ==>
+                  (s.vs_accounts, s.vs_transient, logs,
+                   s.vs_pending_deletions))) ==>
     accounts_rel es' s'
 Proof
   rw[adopt_call_outcome_equation] >>

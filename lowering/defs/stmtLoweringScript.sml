@@ -1146,6 +1146,16 @@ Definition compile_stmt_def:
                        return norm_ptr
                     od
                   else return val_op);
+               (* Raw returns copy into a fresh typed temporary before RETURN. *)
+               ret_op <-
+                 (if cenv.ce_raw_return then
+                    let raw_src_ty = (if needs_normalize then ty else src_ty) in
+                    do raw_buf <- compile_alloc_buffer (type_memory_bytes cenv ty);
+                       compile_store_memory_typed cenv raw_buf.buf_operand ty
+                         ret_op raw_src_ty;
+                       return raw_buf.buf_operand
+                    od
+                  else return ret_op);
                compile_external_return (SOME ret_op) is_prim cenv.ce_raw_return
                  cenv.ce_ret_enc_info cenv.ce_max_return_size
                  is_nonreentrant nkey use_transient is_view

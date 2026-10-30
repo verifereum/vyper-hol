@@ -1399,7 +1399,8 @@ End
 (* Merge callee's side effects back into caller after INVOKE.
    Internal function calls share the same contract, so mutable state
    (memory, transient storage, accounts, returndata, logs, immutables,
-   remaining outcomes and recorded requests) propagates from callee to caller.
+   remaining outcomes, recorded requests and pending deletions) propagates
+   from callee to caller.
    The allocation frame is the caller's: vs_allocas and vs_alloca_next stay
    as they were at the call, so the callee's allocations are reclaimed and the
    next call reuses their regions.  Memory returns go through a buffer the
@@ -1415,6 +1416,7 @@ Definition merge_callee_state_def:
       vs_logs       := callee.vs_logs;
       vs_outcomes   := callee.vs_outcomes;
       vs_requests   := callee.vs_requests;
+      vs_pending_deletions := callee.vs_pending_deletions;
       vs_immutables := callee.vs_immutables
     |>
 End

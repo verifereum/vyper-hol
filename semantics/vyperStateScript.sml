@@ -60,6 +60,7 @@ Datatype:
   | BreakException
   | ContinueException
   | ReturnException value
+  | HaltException
 End
 
 (* Machinery for managing variables (local, top-level, mutable, immutable), and
@@ -243,6 +244,16 @@ Definition finally_def:
   finally f g s : α evaluation_result =
   case f s of (INL x, s) => ignore_bind g (return x) s
      | (INR e, s) => ignore_bind g (raise e) s
+End
+
+(* Scope restoration belongs inside this action; a successful EVM halt skips
+   only the outer nonreentrant unlock. Other results retain normal cleanup. *)
+Definition finally_unless_halt_def:
+  finally_unless_halt f g s : α evaluation_result =
+  case f s of
+  | (INR HaltException, st) => (INR HaltException, st)
+  | (INL value, st) => ignore_bind g (return value) st
+  | (INR error, st) => ignore_bind g (raise error) st
 End
 
 Definition lift_option_def:

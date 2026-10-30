@@ -205,7 +205,8 @@ Ancestors
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
-  vyperExprNoControl loweringSlice exprSimUnwrap exprSafeOperand
+  vyperExprNoControl vyperSourceSupplyDefs vyperEvalSupply
+  loweringSlice exprSimUnwrap exprSafeOperand
   vyperEvalOutcomeSuffix vyperRuntimeAccounts vyperLookup
   vyperPlaceResultTyping
 Libs
@@ -413,7 +414,7 @@ End
 
 Definition expr_sim_pre_def:
   expr_sim_pre cenv cx env e es <=>
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\ well_typed_expr env e /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e)
 End
@@ -422,7 +423,7 @@ End
    (bodySim), where an operand may call an internal function. *)
 Definition expr_body_pre_def:
   expr_body_pre cenv cx env e es <=>
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\ well_typed_expr env e /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     call_evaluation_safe cx (int_calls_expr e)
 End
@@ -598,11 +599,15 @@ QED
 Theorem expr_body_pre_eval_result:
   !cenv cx env e es res es'.
     expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\ no_type_error_result res /\
     !tv. res = INL tv ==>
          eval_result_typed (env,cx,es') tv (Type (expr_type e))
 Proof
   rpt gen_tac >> simp[expr_body_pre_def, expr_sim_inv_def] >> strip_tac >>
+  `source_supply es'` by
+    (qspecl_then [`cx`, `e`, `es`] mp_tac
+       (REWRITE_RULE [source_supply_action_def] (cj 5 eval_source_supply_mutual)) >>
+     simp[]) >>
   drule_all eval_expr_popped_keys_indexed >> strip_tac >>
   qspecl_then [`cx`, `e`] (mp_tac o CONJUNCT1)
     (cj 5 eval_scc_type_sound_mutual) >>
@@ -622,7 +627,7 @@ QED
 Theorem expr_sim_pre_eval_result:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\ no_type_error_result res /\
     !tv. res = INL tv ==>
          eval_result_typed (env,cx,es') tv (Type (expr_type e))
 Proof
@@ -632,7 +637,7 @@ QED
 Theorem expr_body_pre_eval:
   !cenv cx env e es res es'.
     expr_body_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\ no_type_error_result res /\
     !v. res = INL v ==> expr_result_typed env e (Value v)
 Proof
   rpt strip_tac >>
@@ -652,7 +657,7 @@ QED
 Theorem expr_sim_pre_eval:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\ no_type_error_result res /\
     !v. res = INL v ==> expr_result_typed env e (Value v)
 Proof
   metis_tac[expr_body_pre_eval, expr_sim_pre_body_pre]
@@ -725,7 +730,7 @@ Theorem expr_body_pre_word_result:
   !cenv cx env e es res es'.
     expr_body_pre cenv cx env e es /\ word_value_type (expr_type e) /\
     (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ expr_res_ok res /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\ expr_res_ok res /\
     !tv. res = INL tv ==>
          ?tyv. word_value tv /\
                  evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
@@ -745,7 +750,7 @@ Theorem expr_sim_pre_word_result:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ word_value_type (expr_type e) /\
     (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ expr_res_ok res /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\ expr_res_ok res /\
     !tv. res = INL tv ==>
          ?tyv. word_value tv /\
                  evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
@@ -784,7 +789,7 @@ QED
 Theorem expr_sim_pre_builtin_arg:
   !cenv cx env ann bi args e es es'.
     expr_sim_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
-    expr_sim_inv cenv cx env es' ==>
+    expr_sim_inv cenv cx env es' /\ source_supply es' ==>
     expr_sim_pre cenv cx env e es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,

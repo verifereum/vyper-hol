@@ -344,6 +344,7 @@ Proof
    s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_tx_ctx = s.vs_tx_ctx /\
    s'.vs_block_ctx = s.vs_block_ctx /\ s'.vs_logs = s.vs_logs /\
    s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests /\
+   s'.vs_pending_deletions = s.vs_pending_deletions /\
    s'.vs_immutables = s.vs_immutables /\
    s'.vs_data_section = s.vs_data_section` by
     simp[Abbr `s'`, mstore_def, LET_THM] >>

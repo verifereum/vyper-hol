@@ -43,7 +43,9 @@ Theorem stmt_state_rel_declare_memory:
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
     t.vs_block_ctx = s.vs_block_ctx /\ t.vs_logs = s.vs_logs /\
     t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
-    t.vs_immutables = s.vs_immutables /\ t.vs_data_section = s.vs_data_section /\
+    t.vs_immutables = s.vs_immutables /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\
+    t.vs_data_section = s.vs_data_section /\
     (!q. q = p \/ ~not_local_ptr cenv es.scopes q ==>
          lookup_var q t = lookup_var q s) /\
     (!n b sz'. n <> id /\ local_region cenv es.scopes s n b sz' ==>

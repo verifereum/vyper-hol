@@ -210,7 +210,7 @@ Theorem expr_body_pre_bop:
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     well_typed_binop ann bop (expr_type e1) (expr_type e2) /\
     expr_body_pre cenv cx env e1 es /\
-    !es'. expr_sim_inv cenv cx env es' ==> expr_body_pre cenv cx env e2 es'
+    !es'. expr_sim_inv cenv cx env es' /\ source_supply es' ==> expr_body_pre cenv cx env e2 es'
 Proof
   rpt gen_tac >>
   simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
@@ -225,7 +225,7 @@ Theorem expr_sim_pre_bop:
     expr_sim_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     well_typed_binop ann bop (expr_type e1) (expr_type e2) /\
     expr_sim_pre cenv cx env e1 es /\
-    !es'. expr_sim_inv cenv cx env es' ==> expr_sim_pre cenv cx env e2 es'
+    !es'. expr_sim_inv cenv cx env es' /\ source_supply es' ==> expr_sim_pre cenv cx env e2 es'
 Proof
   rpt strip_tac
   >- gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def]
@@ -268,7 +268,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule expr_body_pre_bop >> strip_tac >>
   drule int_calls_bop_operands >> strip_tac >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
+  `expr_sim_inv cenv cx env es /\ source_supply es` by gvs[expr_body_pre_def] >>
   `expr_body_pre cenv cx env e2 es` by (first_assum irule >> simp[]) >>
   `is_word_type (expr_type e1) /\ ~is_ArrayT (expr_type e1) /\
    ~is_bytestring_type (expr_type e1) /\
@@ -333,13 +333,13 @@ Theorem expr_body_pre_word_type_result:
   !cenv cx env e es res es'.
     expr_body_pre cenv cx env e es /\ is_word_type (expr_type e) /\
     (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\
     !v. res = INL v ==>
         ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
               value_has_type tyv v
 Proof
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- (drule_all expr_body_pre_eval >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  drule_all expr_body_pre_eval >> strip_tac >> asm_rewrite_tac[] >>
   rw[] >> drule_all expr_body_pre_word_value >> simp[]
 QED
 
@@ -347,7 +347,7 @@ Theorem expr_sim_pre_word_type_result:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ is_word_type (expr_type e) /\
     (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\
     !v. res = INL v ==>
         ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
               value_has_type tyv v
@@ -374,7 +374,7 @@ Proof
   simp[Once expr_sim_case_def] >> rpt gen_tac >> strip_tac >>
   drule expr_body_pre_bop >> strip_tac >>
   drule int_calls_bop_operands >> strip_tac >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
+  `expr_sim_inv cenv cx env es /\ source_supply es` by gvs[expr_body_pre_def] >>
   `expr_body_pre cenv cx env e2 es` by (first_assum irule >> simp[]) >>
   `expr_type e2 = expr_type e1 /\ ann = BaseT BoolT` by
     (qpat_x_assum `bop = _ \/ _` strip_assume_tac >>
@@ -690,7 +690,7 @@ Theorem expr_body_pre_ifexp:
     expr_body_pre cenv cx env (IfExp t c a b) es ==>
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
     expr_body_pre cenv cx env c es /\
-    !es'. expr_sim_inv cenv cx env es' ==>
+    !es'. expr_sim_inv cenv cx env es' /\ source_supply es' ==>
           expr_body_pre cenv cx env a es' /\ expr_body_pre cenv cx env b es'
 Proof
   rpt gen_tac >>
@@ -706,7 +706,7 @@ Theorem expr_sim_pre_ifexp:
     expr_sim_pre cenv cx env (IfExp t c a b) es ==>
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
     expr_sim_pre cenv cx env c es /\
-    !es'. expr_sim_inv cenv cx env es' ==>
+    !es'. expr_sim_inv cenv cx env es' /\ source_supply es' ==>
           expr_sim_pre cenv cx env a es' /\ expr_sim_pre cenv cx env b es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
@@ -789,7 +789,7 @@ Proof
           drule expr_body_pre_lower_value_word_shape >> disch_then drule >>
           simp[is_word_type_def])
       >- (rpt gen_tac >> strip_tac >>
-          (`expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+          (`expr_sim_inv cenv cx env es /\ source_supply es` by fs[expr_body_pre_def] >>
            `expr_body_pre cenv cx env e es /\ is_word_type (expr_type e)` by
              gvs[] >>
            drule expr_body_pre_lower_value_word_shape >> disch_then drule >>

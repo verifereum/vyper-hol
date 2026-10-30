@@ -37,9 +37,20 @@ Ancestors
   vyperTypeCallGraph vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
   vyperTypeExternalCallMachine vyperTypeInvariants vyperTypeBindArguments
   vyperTypeStmtSoundness vyperTypeStmtResult vyperTypeEvalSoundness
-  vyperExprNoControl
+  vyperExprNoControl vyperSourceSupplyDefs vyperSourceSupplyFields vyperEvalSupply
+Libs
+  vyperSourceSupplyLib
 
 val _ = Parse.hide "body";
+
+val deploy_gvs = gvs;
+val deploy_fs = fs;
+val deploy_drule_all = drule_all;
+fun gvs ths = vyperSourceSupplyLib.forward >> deploy_gvs ths >>
+  vyperSourceSupplyLib.forward;
+fun fs ths = vyperSourceSupplyLib.forward >> deploy_fs ths >>
+  vyperSourceSupplyLib.forward;
+fun drule_all th = vyperSourceSupplyLib.forward >> deploy_drule_all th;
 
 (* ===== Setup steps ===== *)
 
@@ -103,12 +114,35 @@ QED
 
 (* TOP-LEVEL: load_contract is the constructor body run once setup has
    succeeded. *)
+Theorem release_action_success[local]:
+  !nr is_view target slot st.
+  ?post.
+    (if nr /\ ~is_view then
+       case slot of
+         NONE => return ()
+       | SOME lock => release_nonreentrant_lock target lock
+     else return ()) st = (INL (),post)
+Proof
+  rpt gen_tac >>
+  Cases_on `(if nr /\ ~is_view then
+    case slot of NONE => return ()
+    | SOME lock => release_nonreentrant_lock target lock
+    else return ()) st` >>
+  rename1 `_ = (answer,post)` >>
+  `answer = INL ()` by
+    (irule release_action_result >>
+     qexistsl [`<|txn := (empty_call_txn with target := target);
+                  nonreentrant_slot := slot|>`, `is_view`, `nr`, `st`, `post`] >>
+     simp[]) >>
+  qexists_tac `post` >> simp[]
+QED
+
 Theorem load_contract_constructor_body:
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,[],ret,body) /\
-  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
           NONE with in_deploy := T) /\
   LENGTH tx.args = LENGTH args /\
   bind_arguments (type_env_all_modules mods) args tx.args = SOME scope /\
@@ -119,15 +153,42 @@ Theorem load_contract_constructor_body:
   load_contract orc am tx mods exps =
     case call_external_body orc am_c cx nr mut (type_env_all_modules mods)
            scope body ret of
-      (INR e, _, _) => INR e
+      (INR HaltException, am', rqs) =>
+        INL (finalize_pending_deletions am', rqs)
+     | (INR e, _, _) => INR e
     | (INL _, am', rqs) =>
         INL (finalize_pending_deletions
                (am' with sources updated_by CONS (tx.target,mods)), rqs)
 Proof
   strip_tac >>
+  qabbrev_tac `body_run = (do
+    (if nr then
+       case cx.nonreentrant_slot of
+         NONE => raise (Error (TypeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                        (mut = View \/ mut = Pure)
+     else return ());
+    send_call_value mut cx;
+    eval_stmts cx body
+  od) (initial_state am_c [scope] with <|outcomes := orc; requests := []|>)` >>
+  Cases_on `body_run` >> rename1 `Abbrev ((body_res,body_st) = _)` >>
+  qpat_x_assum `Abbrev ((body_res,body_st) = _)`
+    (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  Cases_on `body_res` >>
   gvs[load_contract_def, call_external_function_def, call_external_body_def,
-      evaluate_defaults_def, initial_evaluation_context_def] >>
-  BasicProvers.EVERY_CASE_TAC >> gvs[]
+      evaluate_defaults_def, initial_evaluation_context_def, triple_identity]
+  >- (qspecl_then [`nr`, `mut = View \/ mut = Pure`, `tx.target`,
+         `lookup_nonreentrant_slot am.layouts tx.target`, `body_st`]
+        strip_assume_tac release_action_success >> gvs[]) >>
+  rename1 `_ = (INR body_exc,body_st)` >>
+  Cases_on `body_exc` >> gvs[triple_identity] >>
+  qspecl_then [`nr`, `mut = View \/ mut = Pure`, `tx.target`,
+    `lookup_nonreentrant_slot am.layouts tx.target`, `body_st`]
+    strip_assume_tac release_action_success >> gvs[] >>
+  rename1 `_ = (INR (ReturnException returned),body_st)` >>
+  Cases_on `evaluate_type (type_env_all_modules mods) ret` >> gvs[] >>
+  rename1 `evaluate_type _ _ = SOME value_type` >>
+  Cases_on `safe_cast value_type returned` >> gvs[]
 QED
 
 (* ===== Constructor static boundary ===== *)
@@ -204,7 +265,7 @@ Theorem checked_constructor_constants_exist:
   check_contract T am.layouts tx.target mods = SOME deploy_art /\
   check_contract F am.layouts tx.target mods = SOME runtime_art /\
   machine_well_typed am /\
-  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
           NONE with in_deploy := T) /\
   context_well_typed cx /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms ==>
@@ -229,7 +290,7 @@ QED
 Theorem checked_constructor_initial_immutables_consistent:
   check_contract T am.layouts tx.target mods = SOME deploy_art /\
   check_contract F am.layouts tx.target mods = SOME runtime_art /\
-  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
           NONE with in_deploy := T) /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   evaluate_all_constants cx
@@ -242,17 +303,18 @@ Proof
   strip_tac >>
   irule checked_deployment_constants_establish_initial_env_immutables_consistent >>
   qexistsl [`am with exports updated_by CONS (tx.target,exps)`,`imms`,
-    `am.layouts`,`runtime_art`,`(tx.target,mods)::am.sources`,`tx.target`,`tx`] >>
+    `am.layouts`,`runtime_art`,`(tx.target,mods)::am.sources`,`tx.target`,
+    `tx with created_in_tx := T`] >>
   simp[]
 QED
 
 Theorem checked_constructor_prefix_typing:
   check_contract T am.layouts tx.target mods = SOME deploy_art /\
   check_contract F am.layouts tx.target mods = SOME runtime_art /\
-  machine_well_typed am /\ ALOOKUP mods NONE = SOME ts /\
+  machine_well_typed am /\ machine_supply am orc /\ ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
-  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
           NONE with in_deploy := T) /\ context_well_typed cx /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   evaluate_all_constants cx
@@ -273,7 +335,7 @@ Theorem checked_constructor_prefix_typing:
     type_stmts env_body ret body = SOME env_after /\
     env_consistent env_body cx body_st /\
     env_body.type_defs = type_env_all_modules mods /\
-    state_well_typed body_st /\ accounts_well_typed body_st.accounts /\
+    state_well_typed body_st /\ accounts_well_typed body_st.accounts /\ source_supply body_st /\
     context_well_typed cx /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmts body)
 Proof
@@ -281,6 +343,9 @@ Proof
   `machine_well_typed am_c` by
     (drule_all checked_constructor_constants_exist >>
      disch_then (qspec_then `exps` mp_tac) >> strip_tac >> gvs[]) >>
+  `machine_supply am_c orc` by
+    (drule evaluate_all_constants_preserves_accounts >>
+     gvs[machine_supply_def]) >>
   `scope_well_typed scope` by
     metis_tac[bind_arguments_scope_well_typed_from_success] >>
   drule_all call_lock_send_success_components >> strip_tac >>
@@ -298,23 +363,25 @@ Proof
      context_well_typed cx /\ functions_well_typed cx /\ state_well_typed body_st` by
     (irule checked_constructor_body_setup >> simp[] >>
      qexistsl [`args`,`deploy_art`,`dflts`,`am.layouts`,`mods`,`mut`,`nr`,
-       `runtime_art`,`(tx.target,mods)::am.sources`,`ts`,`tx`,`vals`] >>
+        `runtime_art`,`(tx.target,mods)::am.sources`,`ts`,
+        `tx with created_in_tx := T`,`vals`] >>
      gvs[]) >>
   qexistsl [`env_body`,`env_after`] >> simp[] >> conj_tac
   >- gvs[env_consistent_def, env_context_consistent_def,
          get_tenv_def, initial_evaluation_context_def] >>
   irule checked_constructor_call_evaluation_safe >>
   qexistsl [`args`,`deploy_art`,`dflts`,`am.layouts`,`mods`,`mut`,`nr`,
-    `ret`,`(tx.target,mods)::am.sources`,`ts`,`tx`] >> simp[]
+    `ret`,`(tx.target,mods)::am.sources`,`ts`,
+    `tx with created_in_tx := T`] >> simp[]
 QED
 
 Theorem checked_constructor_prefix_no_type_error:
   check_contract T am.layouts tx.target mods = SOME deploy_art /\
   check_contract F am.layouts tx.target mods = SOME runtime_art /\
-  machine_well_typed am /\ ALOOKUP mods NONE = SOME ts /\
+  machine_well_typed am /\ machine_supply am orc /\ ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
-  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
           NONE with in_deploy := T) /\ context_well_typed cx /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   evaluate_all_constants cx
@@ -336,7 +403,9 @@ Theorem checked_constructor_prefix_no_type_error:
 Proof
   strip_tac >>
   `nr ==> cx.nonreentrant_slot <> NONE` by
-    (strip_tac >> drule_all checked_constructor_nonreentrant_slot >> simp[]) >>
+    (strip_tac >>
+     drule_all (checked_constructor_nonreentrant_slot |> SPEC_ALL |>
+       Q.INST [`tx` |-> `tx with created_in_tx := T`] |> SRULE []) >> simp[]) >>
   qmatch_goalsub_abbrev_tac `ignore_bind lock_action
      (ignore_bind (send_call_value mut cx) (eval_stmts cx body))` >>
   `no_type_error_eval
@@ -363,10 +432,10 @@ QED
 Theorem checked_constructor_prefix_return_typed:
   check_contract T am.layouts tx.target mods = SOME deploy_art /\
   check_contract F am.layouts tx.target mods = SOME runtime_art /\
-  machine_well_typed am /\ ALOOKUP mods NONE = SOME ts /\
+  machine_well_typed am /\ machine_supply am orc /\ ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
-  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
           NONE with in_deploy := T) /\ context_well_typed cx /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   evaluate_all_constants cx
@@ -432,12 +501,6 @@ Proof
   `stmts_no_control_escape body` by
     (drule_all checked_constructor_no_control_escape >> simp[]) >>
   drule_all call_lock_send_eval_no_loop_control_c53 >> simp[]
-QED
-
-Theorem triple_identity[local]:
-  !p. (\(res,am_out,rqs). (res,am_out,rqs)) p = p
-Proof
-  Cases >> Cases_on `r` >> simp[]
 QED
 
 Theorem call_external_body_no_type_error_from_prefix:
@@ -515,10 +578,10 @@ QED
 Theorem checked_constructor_body_no_static_error:
   check_contract T am.layouts tx.target mods = SOME deploy_art /\
   check_contract F am.layouts tx.target mods = SOME runtime_art /\
-  machine_well_typed am /\ ALOOKUP mods NONE = SOME ts /\
+  machine_well_typed am /\ machine_supply am orc /\ ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
-  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
           NONE with in_deploy := T) /\ context_well_typed cx /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   evaluate_all_constants cx
@@ -565,11 +628,11 @@ QED
 Theorem checked_load_contract_no_static_error:
   check_contract T am.layouts tx.target mods = SOME deploy_art /\
   check_contract F am.layouts tx.target mods = SOME runtime_art /\
-  machine_well_typed am /\
+  machine_well_typed am /\ machine_supply am orc /\
   ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
-  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
           NONE with in_deploy := T) /\
   call_tx_well_typed tx /\
   LENGTH tx.args = LENGTH args /\
@@ -585,7 +648,9 @@ Theorem checked_load_contract_no_static_error:
     load_contract orc am tx mods exps =
       (case call_external_body orc am_c cx nr mut (type_env_all_modules mods)
               scope body ret of
-         (INR e, _, _) => INR e
+         (INR HaltException, am', rqs) =>
+        INL (finalize_pending_deletions am', rqs)
+     | (INR e, _, _) => INR e
        | (INL _, am', rqs) =>
            INL (finalize_pending_deletions
                   (am' with sources updated_by CONS (tx.target,mods)), rqs)) /\
@@ -606,8 +671,7 @@ Proof
   drule check_contract_initial_immutables >> strip_tac >>
   drule_all checked_constructor_constants_exist >>
   disch_then (qspec_then `exps` strip_assume_tac) >>
-  drule_all checked_constructor_body_no_static_error >>
-  disch_then (qspec_then `orc` strip_assume_tac) >>
+  drule_all checked_constructor_body_no_static_error >> strip_tac >>
   drule_all load_contract_constructor_body >>
   disch_then (qspec_then `orc` assume_tac) >>
   qexistsl [`imms`,`am_c`,`scope`] >> simp[]

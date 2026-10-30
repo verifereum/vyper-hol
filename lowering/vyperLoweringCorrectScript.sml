@@ -139,7 +139,8 @@ Definition initial_venom_state_rel_def:
     tx_env_ok tx /\ venom_env_rel tx vs /\
     vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
     vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0 /\
-    vs.vs_returndata = [] /\ vs.vs_requests = []
+    vs.vs_returndata = [] /\ vs.vs_requests = [] /\
+    vs.vs_pending_deletions = am.pending_deletions
 End
 
 (* The calldata Venom reads is the transaction's, which the source typing
@@ -171,7 +172,13 @@ Definition external_call_result_rel_def:
     case (res, vres) of
       (INL v, Halt ss) =>
         return_bytes tops ret v ss.vs_returndata /\
-        ss.vs_accounts = am'.accounts /\ ss.vs_transient = am'.tStorage /\
+        process_deletions ss.vs_pending_deletions ss.vs_accounts = am'.accounts /\ ss.vs_transient = am'.tStorage /\
+        logs_correspond (compiled_event_info tops) (type_env tops)
+          tx.target am'.logs ss.vs_logs /\
+        ss.vs_requests = rqs
+    | (INR HaltException, Halt ss) =>
+        ss.vs_returndata = [] /\
+        process_deletions ss.vs_pending_deletions ss.vs_accounts = am'.accounts /\ ss.vs_transient = am'.tStorage /\
         logs_correspond (compiled_event_info tops) (type_env tops)
           tx.target am'.logs ss.vs_logs /\
         ss.vs_requests = rqs
@@ -784,7 +791,9 @@ QED
 
 (* The same, for the plan and buffer size update_cenv_ret_abi builds from a
    compile env with the program's struct map (as build_compile_env's is), for
-   a return type with no NoneT in it (retAbiPlanProps). *)
+   a return type with no NoneT in it (retAbiPlanProps).  Accounts remain raw
+   at the return; external_call_result_rel processes pending deletions only
+   at the success boundary, as in external_return_abi_result_rel. *)
 Theorem external_return_abi_cenv_result_rel:
   !ctx op nr nkey ut iv st x st' func cenv cenv0 cx es ret tv v0 v
      tops tx srcs exps layouts Q.

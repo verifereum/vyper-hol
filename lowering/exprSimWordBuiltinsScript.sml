@@ -608,7 +608,7 @@ Proof
   qspec_then `d` strip_assume_tac denomination_multiplier_bounds >>
   simp[builtin_result_def, evaluate_builtin_def, evaluate_as_wei_value_uint] >>
   Cases_on `w2n a * denomination_multiplier d < dimword (:256)` >>
-  gvs[dimword_def] 
+  gvs[dimword_def]
   >- (irule word_builtin_frag_success >>
       simp[straight_fresh_as_wei_value_int, word_value_def] >>
       rpt strip_tac >>
@@ -706,19 +706,23 @@ QED
 
 (* ===== Typed composition and the case lemmas ===== *)
 
-(* Adapter from the public induction predicate to list composition. *)
+(* Adapter from the public induction predicate to list composition.
+   Thread source_supply with expr_sim_inv so each later operand meets
+   expr_sim_pre after evaluating the preceding operands. *)
 Theorem typed_word_args_ready:
   !ctx func cenv cx env ann bt args arg_ty es.
     expr_sim_pre cenv cx env (Builtin ann bt args) es /\
     EVERY (\e. word_value_type (expr_type e) /\ expr_sim_ok cenv e) args ==>
-    wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args /\
+    wb_args_ready ctx func cenv cx arg_ty
+      (\s. expr_sim_inv cenv cx env s /\ source_supply s) args /\
     wb_args_shape cenv arg_ty args
 Proof
   rpt strip_tac
-  >- (simp[wb_args_ready_def] >> rpt strip_tac >>
+  >- (simp[wb_args_ready_def] >> rpt gen_tac >> strip_tac >>
+      rename1 `source_supply arg_state` >>
       `word_value_type (expr_type e) /\ expr_sim_ok cenv e` by
         (gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
-      `expr_sim_pre cenv cx env e es'` by
+      `expr_sim_pre cenv cx env e arg_state` by
         (drule_all expr_sim_pre_builtin_arg >> simp[]) >>
       simp[] >> rpt conj_tac
       >- metis_tac[expr_sim_ok_def]
@@ -739,9 +743,10 @@ QED
 
 Theorem word_args_values_typed:
   !args vs cenv cx env es es'.
-    (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+    (!e s. MEM e args /\ expr_sim_inv cenv cx env s /\ source_supply s ==>
        expr_sim_pre cenv cx env e s /\ word_value_type (expr_type e)) /\
-    expr_sim_inv cenv cx env es /\ eval_exprs cx args es = (INL vs,es') ==>
+    expr_sim_inv cenv cx env es /\ source_supply es /\
+    eval_exprs cx args es = (INL vs,es') ==>
     LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                          value_has_type tv v) args vs
 Proof
@@ -791,7 +796,8 @@ Proof
   rpt gen_tac >> strip_tac >> drule_all typed_word_args_ready >>
   disch_then (qspecl_then [`ctx`, `func`, `arg_ty`] strip_assume_tac) >>
   irule compile_word_builtin_sim >> simp[] >>
-  qexistsl_tac [`expr_sim_inv cenv cx env`, `arg_ty`, `code`] >> simp[] >>
+  qexistsl_tac [`\s. expr_sim_inv cenv cx env s /\ source_supply s`,
+               `arg_ty`, `code`] >> simp[] >>
   conj_tac >- gvs[expr_sim_pre_def] >> conj_tac
   >- (rpt strip_tac >> first_x_assum (qspec_then `xs` mp_tac) >>
       simp[straight_fresh_def] >> disch_then drule >> strip_tac >>

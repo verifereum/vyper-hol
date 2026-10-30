@@ -812,7 +812,8 @@ Definition enc_frame_def:
            FLOOKUP s.vs_allocas i = SOME r) /\
     enc_scratch (frag_ids st st') lo top s /\
     s.vs_accounts = s0.vs_accounts /\ s.vs_transient = s0.vs_transient /\
-    s.vs_logs = s0.vs_logs /\ s.vs_requests = s0.vs_requests
+    s.vs_logs = s0.vs_logs /\ s.vs_requests = s0.vs_requests /\
+    s.vs_pending_deletions = s0.vs_pending_deletions
 End
 
 (* The encoder's inputs at s0: its operands are bound before st, the

@@ -57,6 +57,8 @@ Theorem call_external_selected_entry:
     case call_external_function orc am cx nr mut ts mods args dflts tx.args
            body ret of
       (INL value, am', rqs) => (INL value, finalize_pending_deletions am', rqs)
+    | (INR HaltException, am', rqs) =>
+        (INR HaltException, finalize_pending_deletions am', rqs)
     | failure => failure
 Proof
   rw[selected_entry_def] >>

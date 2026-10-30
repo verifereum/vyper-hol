@@ -5,6 +5,8 @@
  * ADD, an unwrap and a store per child.  By induction on the children,
  * each loop evaluates them in order, fills its slice of the buffer, and
  * keeps the bytes outside it, the older allocations and the locals.
+ * The source invariant and source_supply are threaded between children,
+ * so each later child satisfies expr_sim_pre.
  *
  * TOP-LEVEL:
  *   aggregate_make_tuple_sim — compile_make_tuple
@@ -43,8 +45,8 @@ Theorem aggregate_make_tuple_sim:
   compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb) /\
   eval_exprs cx args es = (res,es') /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
-  expr_sim_inv ce cx env es /\
-  (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
+  expr_sim_inv ce cx env es /\ source_supply es /\
+  (!e st. MEM e args /\ expr_sim_inv ce cx env st /\ source_supply st ==>
     expr_sim_pre ce cx env e st) /\ EVERY (expr_ok ce) args /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
@@ -55,7 +57,7 @@ Theorem aggregate_make_tuple_sim:
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) ==>
   out = Var x /\
   frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func ce cx es s)
-    (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\
+    (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\ source_supply es' /\
       stmt_state_rel func ce cx es' r /\
       tuple_in_memory vs tvs (b+off) r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -166,7 +168,7 @@ Resume aggregate_make_tuple_sim[child_success]:
 QED
 
 Resume aggregate_make_tuple_sim[after_add]:
-  `expr_sim_inv ce cx env es1` by
+  `expr_sim_inv ce cx env es1 /\ source_supply es1` by
     (drule_all expr_sim_pre_eval_result >> simp[]) >>
   `type_memory_bytes ce (expr_type h) = type_memory_size h'` by
     metis_tac[exprSimAggregateLayoutTheory.expr_sim_inv_memory_size] >>
@@ -403,8 +405,8 @@ Theorem aggregate_struct_fields_sim:
   compile_struct_lit compile_expr ce ty fields (Var x) off sa = (out,sb) /\
   eval_exprs cx (MAP SND fields) es = (res,es') /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type (MAP SND fields)) = SOME tvs /\
-  expr_sim_inv ce cx env es /\
-  (!e st. MEM e (MAP SND fields) /\ expr_sim_inv ce cx env st ==>
+  expr_sim_inv ce cx env es /\ source_supply es /\
+  (!e st. MEM e (MAP SND fields) /\ expr_sim_inv ce cx env st /\ source_supply st ==>
     expr_sim_pre ce cx env e st) /\ EVERY (expr_ok ce) (MAP SND fields) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
@@ -415,7 +417,7 @@ Theorem aggregate_struct_fields_sim:
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) ==>
   out = Var x /\
   frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func ce cx es s)
-    (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\
+    (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\ source_supply es' /\
       stmt_state_rel func ce cx es' r /\
       fields_in_memory (ZIP (MAP FST fields,vs))
         (ZIP (MAP FST fields,tvs)) (b+off) r.vs_memory /\
@@ -469,8 +471,8 @@ Theorem aggregate_make_array_elems_sim:
   off = (if header then 32 else 0) + idx * type_memory_size tv /\
   compile_make_array_elems compile_expr ce args elem_ty
     (type_memory_bytes ce elem_ty) header (Var x) idx sa = (out,sb) /\
-  eval_exprs cx args es = (res,es') /\ expr_sim_inv ce cx env es /\
-  (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
+  eval_exprs cx args es = (res,es') /\ expr_sim_inv ce cx env es /\ source_supply es /\
+  (!e st. MEM e args /\ expr_sim_inv ce cx env st /\ source_supply st ==>
     expr_sim_pre ce cx env e st) /\ EVERY (expr_ok ce) args /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
@@ -481,7 +483,7 @@ Theorem aggregate_make_array_elems_sim:
   off + LENGTH args * type_memory_size tv <= asz /\ b + asz < dimword (:256) ==>
   out = Var x /\
   frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func ce cx es s)
-    (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\
+    (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\ source_supply es' /\
       stmt_state_rel func ce cx es' r /\
       elems_in_memory vs (b+off) tv r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -527,8 +529,8 @@ Theorem aggregate_make_array_start_sim:
   stride = type_memory_size tv /\
   type_memory_bytes ce elem_ty = type_memory_size tv /\
   compile_make_array_elems compile_expr ce args elem_ty stride header (Var x) 0 sa = (out,sb) /\
-  eval_exprs cx args es = (res,es') /\ expr_sim_inv ce cx env es /\
-  (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
+  eval_exprs cx args es = (res,es') /\ expr_sim_inv ce cx env es /\ source_supply es /\
+  (!e st. MEM e args /\ expr_sim_inv ce cx env st /\ source_supply st ==>
     expr_sim_pre ce cx env e st) /\ EVERY (expr_ok ce) args /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
@@ -540,7 +542,7 @@ Theorem aggregate_make_array_start_sim:
   b + asz < dimword (:256) ==>
   out = Var x /\
   frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func ce cx es s)
-    (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\
+    (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\ source_supply es' /\
       stmt_state_rel func ce cx es' r /\
       elems_in_memory vs (b+(if header then 32 else 0)) tv r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -590,8 +592,8 @@ Theorem aggregate_make_array_sim:
   stride = type_memory_size tv /\
   type_memory_bytes ce elem_ty = type_memory_size tv /\
   compile_make_array compile_expr ce args elem_ty stride header (Var x) sa = (out,sb) /\
-  eval_exprs cx args es = (res,es') /\ expr_sim_inv ce cx env es /\
-  (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
+  eval_exprs cx args es = (res,es') /\ expr_sim_inv ce cx env es /\ source_supply es /\
+  (!e st. MEM e args /\ expr_sim_inv ce cx env st /\ source_supply st ==>
     expr_sim_pre ce cx env e st) /\ EVERY (expr_ok ce) args /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
@@ -603,7 +605,7 @@ Theorem aggregate_make_array_sim:
   b + asz < dimword (:256) ==>
   out = Var x /\
   frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func ce cx es s)
-    (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\
+    (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\ source_supply es' /\
       stmt_state_rel func ce cx es' r /\
       elems_in_memory vs (b+(if header then 32 else 0)) tv r.vs_memory /\
       (header ==> mem_word_at b r.vs_memory = n2w (LENGTH args)) /\

@@ -132,8 +132,9 @@ Proof
   simp[] >> metis_tac[vv_post_def]
 QED
 
-(* The reason's fragment, then the encoder and its REVERT: an exit, the
-   reason's own as expr_exit allows, or the REVERT. *)
+(* The reason's fragment, then the encoder and its REVERT: preserve the
+   reason's own expr_exit (including HaltException).  Only a value reaches
+   the encoder, so only that outcome needs to admit its REVERT. *)
 Theorem reason_expr_revert_frag:
   !ctx func cenv cx r es res1 es1 sa vv sm rty msz sb s0 R.
     compile_expr cenv (expr_type r) r sa = (vv, sm) /\
@@ -144,7 +145,8 @@ Theorem reason_expr_revert_frag:
     expr_res_ok res1 /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    (!rr. expr_exit res1 rr ==> R rr) /\ (!t. R (Abort Revert_abort t)) ==>
+    (!rr. expr_exit res1 rr ==> R rr) /\
+    (!tv t. res1 = INL tv ==> R (Abort Revert_abort t)) ==>
     frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
       (\s. F) R
 Proof
@@ -153,8 +155,8 @@ Proof
   `reason_operand (reason_ds op) op` by
     (Cases_on `op` >> gvs[reason_ds_def, reason_operand_def]) >>
   qspecl_then [`ctx`, `cenv`, `vv`, `op`, `rty`, `msz`, `sm`, `sb`,
-               `reason_ds op`, `R`] mp_tac compile_revert_reason_frag >>
-  impl_tac >- simp[] >> strip_tac >>
+               `reason_ds op`, `\rr. T`] mp_tac compile_revert_reason_frag >>
+  impl_tac >- simp[] >> disch_then (assume_tac o cj 2) >>
   `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
   Cases_on `eval_expr cx r es` >> rename1 `_ = (raw, est)` >>
   `est = es1` by
@@ -176,6 +178,21 @@ Proof
     (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
   disch_then (qspecl_then [`sa`, `sm`, `vv`, `raw`, `es1`, `s0`] mp_tac) >>
   simp[] >> strip_tac >>
+  `!tv s. raw = INL tv /\
+          vv_post func cenv cx r es sa sm s0 es1 tv vv s ==>
+          ?v. res1 = INL v` by
+    (rpt strip_tac >> gvs[vv_post_def] >>
+     Cases_on `vv` >> gvs[reason_vv_def, vv_holds_def] >>
+     qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+     simp[bind_def] >> metis_tac[]) >>
+  reverse (Cases_on `?tv. res1 = INL tv`)
+  >- (irule frag_exec_exit_prefix >> qexists_tac `sm` >> simp[] >>
+      irule frag_exec_conseq >>
+      qpat_x_assum `frag_exec ctx sa sm _ _ _` (irule_at Any) >>
+      simp[] >> metis_tac[]) >>
+  qspecl_then [`ctx`, `cenv`, `vv`, `op`, `rty`, `msz`, `sm`, `sb`,
+               `reason_ds op`, `R`] mp_tac compile_revert_reason_frag >>
+  impl_tac >- metis_tac[] >> strip_tac >>
   irule frag_exec_seq >> qexistsl [`reason_known (reason_ds op)`, `sm`] >>
   simp[] >>
   irule frag_exec_conseq >>
@@ -227,14 +244,8 @@ Proof
   gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]
 QED
 
-Theorem expr_res_ok_revert[local]:
-  !ex t. expr_res_ok (INR ex : value + exception) ==>
-         expr_exit (INR ex : unit + exception) (Abort Revert_abort t)
-Proof
-  rw[expr_res_ok_def] >> simp[expr_exit_def]
-QED
-
-(* The exits of a raise with a reason, as the reason's outcome gives them. *)
+(* An exception propagates its own exit unchanged; only a returned string
+   becomes an assertion and admits the encoder's REVERT. *)
 Theorem raise_reason_exits:
   !r1 res RetQ es'.
     expr_res_ok r1 /\
@@ -242,11 +253,10 @@ Theorem raise_reason_exits:
             res = INR (AssertException str)) \/
      (?ex. r1 = INR ex /\ res = INR ex)) ==>
     (!rr. expr_exit r1 rr ==> stmt_exit RetQ es' res rr) /\
-    (!t. stmt_exit RetQ es' res (Abort Revert_abort t))
+    (!tv t. r1 = INL tv ==> stmt_exit RetQ es' res (Abort Revert_abort t))
 Proof
   rpt gen_tac >> strip_tac >> gvs[stmt_exit_def, expr_exit_def] >>
-  `expr_res_ok (INR ex : value + exception)` by simp[] >>
-  simp[expr_res_ok_revert] >> rpt strip_tac >> disj1_tac >>
+  rpt strip_tac >> disj1_tac >>
   ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``]
                       expr_exit_INR_type] >>
   first_assum ACCEPT_TAC

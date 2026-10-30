@@ -628,20 +628,16 @@ fun fixture_name_of_dep dep =
     [] => ""
   | parts => List.last parts
 
-(* Pass 1: collect fixtures from JSON items into a lookup dictionary.
-   Keep the raw JSON for source eligibility checks as well as the decoded traces. *)
+(* Keep selection entirely in raw JSON. In particular, a definitions shard must
+   not decode (and cache HOL byte/AST definitions for) the other shards. *)
 fun collect_fixture ((name, json), acc) =
   if decode (field "item_type" string) json = "fixture"
-  then let
-    val traces = decode fixture_decoder json
-  in
-    (name, json, traces) :: acc
-  end
+  then (name, json) :: acc
   else acc
 
-(* Pass 2: decode test items, resolving the directly listed (already flattened)
-   deps by prepending fixture traces in their declared order. *)
-fun trydecode_with_fixtures decode_test_traces fixtures
+(* Resolve directly listed (already flattened) dependencies and apply the
+   original source/name filters without decoding traces. *)
+fun select_with_fixtures fixtures
       ((name,json),(selected,failures,name_skips,source_skips,non_tests)) =
   if decode (field "item_type" string) json <> "test"
   then (selected,failures,name_skips,source_skips,non_tests + 1)
@@ -651,22 +647,16 @@ fun trydecode_with_fixtures decode_test_traces fixtures
     val dep_names = decode (field "deps" (array string)) json
     fun resolve dn =
       case List.find
-        (fn (fixture_name, _, _) => fixture_name = fixture_name_of_dep dn)
+        (fn (fixture_name, _) => fixture_name = fixture_name_of_dep dn)
         fixtures of
         NONE => raise Fail ("unresolved fixture dependency: " ^ dn)
       | SOME fixture => fixture
     val resolved = List.map resolve dep_names
-    val fixture_jsons =
-      List.map (fn (_, fixture_json, _) => fixture_json) resolved
+    val fixture_jsons = List.map #2 resolved
     val source_reason = unsupported_source_reason_for (fixture_jsons @ [json])
-    fun select () = let
-      val test_traces = decode_test_traces json
-      val fixture_traces =
-        List.concat (List.map (fn (_, _, traces) => traces) resolved)
-    in
-      ((name, fixture_traces @ test_traces) :: selected,
+    fun select () =
+      ((name, (resolved, json)) :: selected,
        failures,name_skips,source_skips,non_tests)
-    end
   in
     if List.exists (equal name) allowed_test_names then select ()
     else case source_reason of
@@ -683,12 +673,11 @@ fun trydecode_with_fixtures decode_test_traces fixtures
               ::failures,
             name_skips,source_skips,non_tests)
 
-fun read_test_json decode_test_traces json_path = let
+fun select_test_json json_path = let
   val test_jsons = decodeFile rawObject json_path
   val fixtures = List.foldl collect_fixture [] test_jsons
   val (selected,failures,name_skips,source_skips,non_tests) =
-    List.foldl (trydecode_with_fixtures decode_test_traces fixtures)
-      ([],[],[],[],0) test_jsons
+    List.foldl (select_with_fixtures fixtures) ([],[],[],[],0) test_jsons
 in
   {selected = selected,
    failures = failures,
@@ -721,24 +710,42 @@ fun cleanup_generated_scripts files = let
      String.isPrefix "vyperTest_" name) andalso
     String.isSuffix "Script.sml" name
   val gen_dir = generated_dir
-  fun loop d =
+  fun stock_definition entry text =
+    case String.fields (fn c => c = #"\n") text of
+      [theory, ancestors, libs, deps, call, ""] =>
+        theory = "Theory " ^
+          String.substring (entry, 0, String.size entry - String.size "Script.sml") ^
+          "[no_sig_docs]" andalso
+        ancestors = "Ancestors jsonToVyper" andalso libs = "Libs vyperTestLib" andalso
+        String.isPrefix "val () = holbuild_extra_deps [" deps andalso
+        String.isSuffix "];" deps andalso
+        (String.isPrefix "val () = make_definitions_for_file (" call orelse
+         String.isPrefix "val () = make_definitions_for_file_range (" call)
+    | _ => false
+  fun loop d acc =
     case OS.FileSys.readDir d of
-      NONE => ()
+      NONE => acc
     | SOME entry =>
-        if entry = "." orelse entry = ".." then loop d
+        if entry = "." orelse entry = ".." then loop d acc
         else let
           val path = OS.Path.concat(gen_dir, entry)
+          val obsolete = is_gen entry andalso not (is_keep entry)
+          val () = if obsolete andalso String.isPrefix "vyperTestDefs_" entry
+            then let
+              val input = TextIO.openIn path
+              val text = TextIO.inputAll input before TextIO.closeIn input
+            in
+              if stock_definition entry text then ()
+              else raise Fail ("obsolete custom test definitions require manual resharding: " ^ entry)
+            end else ()
         in
-          if is_gen entry andalso not (is_keep entry) then
-            (OS.FileSys.remove path handle _ => ())
-          else ();
-          loop d
+          loop d (if obsolete then path :: acc else acc)
         end
   val d = OS.FileSys.openDir gen_dir
-  val () = loop d
+  val obsolete = loop d [] handle e => (OS.FileSys.closeDir d; raise e)
   val () = OS.FileSys.closeDir d
 in
-  ()
+  List.app OS.FileSys.remove obsolete
 end
 
 fun holbuild_extra_deps (_ : string list) = ()
@@ -1161,30 +1168,42 @@ in
   else raise Fail ("invalid export provenance: " ^ json_path)
 end
 
-fun decode_test_traces json = #2 (decode test_with_deps_decoder json)
-
-(* Eligibility and dependency checks traverse every item; the callback decides
-   which admitted tests to HOL-decode. Fixtures are still decoded in pass 1.
-   Recorded errors must fail before slicing, never disappear with placeholders. *)
-fun read_definition_tests decode_test_traces select_tests json_path = let
+(* Select raw tests and dependencies before decoding any HOL traces. Every
+   chunk validates the complete selection, but only decodes its own tests and
+   their fixtures; unowned fixtures must not populate byteStringCache. *)
+fun read_definition_tests select_tests json_path = let
   val () = check_export_provenance json_path
-  val report = read_test_json decode_test_traces json_path
-  val decode_fails = #failures report
-  val () =
-    case decode_fails of
-        [] => ()
-      | (name, err)::_ =>
-          raise Fail (
-            String.concat ["decode failure in ", json_path, ": ", name,
-                           " - ", exnMessage err, " (",
-                           Int.toString (List.length decode_fails),
-                           " tests failed to decode)"])
-  val tests = select_tests (#selected report)
+  val selected = select_test_json json_path
+  val () = case #failures selected of
+      [] => ()
+    | (name, err)::_ => raise Fail (String.concat
+        ["selection failure in ", json_path, ": ", name, " - ", exnMessage err])
+  val tests_json = select_tests (#selected selected)
+  val fixture_cache = ref ([] : (string * term list) list)
+  fun decode_fixture (name, json) =
+    case List.find (fn (n, _) => n = name) (!fixture_cache) of
+      SOME (_, traces) => traces
+    | NONE => let
+        val traces = decode fixture_decoder json
+      in fixture_cache := (name, traces) :: !fixture_cache; traces end
+  fun decode_test ((name, (fixtures, json)), (tests, failures)) =
+    let
+      val (_, traces) = decode test_with_deps_decoder json
+      val fixture_traces = List.concat (List.map decode_fixture fixtures)
+    in ((name, fixture_traces @ traces)::tests, failures) end
+    handle e => (tests, (name, e)::failures)
+  val (reversed_tests, decode_fails) = List.foldl decode_test ([], []) tests_json
+  val tests = List.rev reversed_tests
+  val () = case decode_fails of
+      [] => ()
+    | (name, err)::_ => raise Fail (String.concat
+        ["decode failure in ", json_path, ": ", name, " - ", exnMessage err,
+         " (", Int.toString (List.length decode_fails), " tests failed to decode)"])
   val () = print_file_coverage json_path
     {selected = tests, failures = decode_fails,
-     name_skips = #name_skips report, source_skips = #source_skips report,
-     total_items = #total_items report, fixtures = #fixtures report,
-     non_tests = #non_tests report}
+     name_skips = #name_skips selected, source_skips = #source_skips selected,
+     total_items = #total_items selected, fixtures = #fixtures selected,
+     non_tests = #non_tests selected}
 in
   tests
 end
@@ -1213,7 +1232,7 @@ end
 
 fun make_definitions_for_file (id, json_path) =
   define_file_tests
-    (id, json_path, 0, read_definition_tests decode_test_traces I json_path)
+    (id, json_path, 0, read_definition_tests I json_path)
 
 fun make_definitions_for_file_range (id, json_path, start, count) = let
   val total = #selected (read_coverage_json json_path)
@@ -1221,24 +1240,11 @@ fun make_definitions_for_file_range (id, json_path, start, count) = let
     if start >= 0 andalso count >= 0 andalso start <= total andalso
        count <= total - start then ()
     else raise Fail ("test range out of bounds in " ^ json_path)
-  val remaining = ref total
-  (* foldl conses selected tests, reversing traversal order: the first eligible
-     item has global index total - 1, the last has index 0.
-     Filter BEFORE decoding: byteStringCache creates persistent HOL definitions
-     even for discarded traces, defeating chunk memory bounds. Each owner chunk
-     validates its own traces; unowned test traces are not HOL-decoded here. *)
-  fun decode_owned json = let
-    val index = !remaining - 1
-    val () = remaining := index
-  in
-    if start <= index andalso index < start + count
-    then decode_test_traces json else []
-  end
   fun select_tests tests =
-    if List.length tests = total andalso !remaining = 0
+    if List.length tests = total
     then List.take (List.drop (tests, start), count)
     else raise Fail ("selected-count mismatch in " ^ json_path)
-  val tests = read_definition_tests decode_owned select_tests json_path
+  val tests = read_definition_tests select_tests json_path
 in
   define_file_tests (id, json_path, start, tests)
 end
@@ -1293,17 +1299,9 @@ fun raw_payload_weight (JSON.OBJECT fields) =
   | raw_payload_weight _ = 0
 
 fun read_test_weights json_path = let
-  val items = decodeFile rawObject json_path
-  (* Raw fixtures, NOT collect_fixture: its trace decoder creates HOL terms.
-     Reuse the executable reader's exact eligibility/dependency logic and its
-     foldl/cons order. Each selected entry contains fixture JSONs then test JSON. *)
-  val fixtures = List.foldl (fn ((name,json),acc) =>
-    if decode (field "item_type" string) json = "fixture"
-    then (name,json,[json]) :: acc else acc) [] items
-  val (selected,failures,_,_,_) =
-    List.foldl (trydecode_with_fixtures (fn json => [json]) fixtures)
-      ([],[],[],[],0) items
-  val () = case failures of
+  val report = select_test_json json_path
+  val selected = #selected report
+  val () = case #failures report of
       [] => ()
     | (name,err)::_ => raise Fail (String.concat
         ["raw selection failure in ", json_path, ": ", name, " - ", exnMessage err])
@@ -1311,9 +1309,9 @@ fun read_test_weights json_path = let
     if List.length selected = #selected (read_coverage_json json_path) then ()
     else raise Fail ("selected-count mismatch in " ^ json_path)
 in
-  List.map (fn (_,jsons) =>
-    List.foldl (fn (json,total) => total + raw_payload_weight json) 0 jsons)
-    selected
+  List.map (fn (_, (fixtures, json)) =>
+    List.foldl (fn ((_,fixture),total) => total + raw_payload_weight fixture)
+      (raw_payload_weight json) fixtures) selected
 end
 
 fun generated_test_plan () =
@@ -1342,12 +1340,10 @@ in
     (List.map (fn line => if is_call line then call else line) lines)
 end
 
-fun generate_defn_scripts () = let
-  val () = check_generate_dirs ()
-  val plan = generated_test_plan ()
+fun definition_scripts plan = let
   val gen_dir = generated_dir
-  val () = cleanup_test_plan plan
-  val () = List.app (fn (chunk : test_chunk, suite_id, jsonp, chunked) => let
+in
+  List.map (fn (chunk : test_chunk, suite_id, jsonp, chunked) => let
     val id = #id chunk
     val thyname = String.concat["vyperTestDefs_", id]
     val fname = OS.Path.concat(gen_dir, String.concat[thyname, "Script.sml"])
@@ -1375,22 +1371,14 @@ fun generate_defn_scripts () = let
           then rewrite_definition_call call old
           else old (* Small custom scripts remain byte-for-byte unchanged. *)
   in
-    if existing = SOME contents then () else let
-      val out = TextIO.openOut(fname)
-      val () = TextIO.output(out, contents)
-      val () = TextIO.closeOut out
-    in () end
+    (fname, contents)
   end) plan
-in
-  ()
 end
 
-fun generate_test_scripts () = let
-  val () = check_generate_dirs ()
-  val plan = generated_test_plan ()
+fun execution_scripts plan = let
   val gen_dir = generated_dir
-  val () = cleanup_test_plan plan
-  val () = List.app (fn (chunk : test_chunk, _, _, _) => let
+in
+  List.map (fn (chunk : test_chunk, _, _, _) => let
     val id = #id chunk
     val thyname = String.concat["vyperTest_", id]
     val defsname = String.concat["vyperTestDefs_", id]
@@ -1399,17 +1387,35 @@ fun generate_test_scripts () = let
       "Theory ", thyname, "[no_sig_docs]\nAncestors ", defsname,
       "\nLibs vyperTestRunnerLib\nval () = ",
       "run_tests_on_traces $ all_traces \"", defsname, "\";\n"]
-    val out = TextIO.openOut(fname)
-    val () = TextIO.output(out, contents)
-    val () = TextIO.closeOut out
-  in () end) plan
-in
-  ()
+  in (fname, contents) end) plan
 end
 
-fun generate_tests () = (
-  generate_defn_scripts ();
-  generate_test_scripts ()
-)
+fun generation_plan () = let
+  val () = check_generate_dirs ()
+  val plan = generated_test_plan ()
+  (* Validate custom definitions before cleanup or any write, including when
+     only execution scripts are requested. A rejected plan leaves all files. *)
+  val definitions = definition_scripts plan
+  val tests = execution_scripts plan
+  val () = cleanup_test_plan plan
+in
+  {definitions = definitions, tests = tests}
+end
+
+fun write_scripts scripts = List.app (fn (path, contents) => let
+  val out = TextIO.openOut path
+in
+  (TextIO.output (out, contents) before TextIO.closeOut out)
+  handle e => (TextIO.closeOut out; raise e)
+end) scripts
+
+fun generate_defn_scripts () = write_scripts (#definitions (generation_plan ()))
+fun generate_test_scripts () = write_scripts (#tests (generation_plan ()))
+fun generate_tests () = let
+  val plan = generation_plan ()
+in
+  write_scripts (#definitions plan);
+  write_scripts (#tests plan)
+end
 
 end

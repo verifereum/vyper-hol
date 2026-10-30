@@ -256,7 +256,7 @@ Theorem raw_call_calldata_original_input_test:
   ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0) /\
   cx.txn.calldata = [1w; 2w; 3w; 4w; 10w; 11w; 99w] /\
   run_raw_call cx flags to cx.txn.calldata amount st.accounts st.tStorage =
-      SOME (success, retdata, accounts', transient', logs') ==>
+      SOME (success, retdata, accounts', transient', logs', deletions) ==>
   eval_raw_call cx flags to cx.txn.calldata amount st =
     (if flags.rcf_revert_on_failure then
        if success then INL (Value (if flags.rcf_max_outsize = 0 then NoneV
@@ -265,14 +265,17 @@ Theorem raw_call_calldata_original_input_test:
      else INL (Value (if flags.rcf_max_outsize = 0 then BoolV success
        else ArrayV (TupleV [BoolV success;
          BytesV (TAKE flags.rcf_max_outsize retdata)]))),
-     st with <|accounts := accounts'; tStorage := transient'; logs := st.logs ++ logs'|>)
+     st with <|accounts := accounts'; tStorage := transient'; logs := st.logs ++ logs';
+               pending_deletions := deletions ++ st.pending_deletions|>)
 Proof
   rpt strip_tac >>
   Cases_on `flags.rcf_revert_on_failure` >> Cases_on `success` >>
   Cases_on `flags.rcf_max_outsize = 0` >>
   gvs[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def, check_def,
        assert_def, get_accounts_def, get_transient_storage_def, lift_option_def,
-       update_accounts_def, update_transient_def, append_logs_def, return_def, raise_def]
+       update_accounts_def, update_transient_def, append_logs_def,
+       update_pending_deletions_def, return_def, raise_def,
+       evaluation_state_component_equality]
 QED
 
 Theorem raw_call_calldata_recursive_cps_agreement_test:

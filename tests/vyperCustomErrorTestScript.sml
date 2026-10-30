@@ -124,7 +124,8 @@ Definition custom_error_outcome_def:
       co_returnData := REPLICATE 31 0w ++ [n2w n];
       co_accounts := empty_accounts;
       co_tStorage := empty_transient_storage;
-      co_logs := []|>
+      co_logs := [];
+      co_toDelete := []|>
 End
 
 Definition custom_error_context_def:

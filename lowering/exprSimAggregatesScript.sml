@@ -76,8 +76,9 @@ Proof
   drule compile_struct_literal_inv >> strip_tac >> gvs[] >>
   drule struct_literal_lookup_types >> strip_tac >>
   drule struct_literal_evaluated_layout >> strip_tac >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_sim_pre_def] >>
-  `!e st. MEM e (MAP SND fields) /\ expr_sim_inv cenv cx env st ==>
+  `expr_sim_inv cenv cx env es /\ source_supply es` by gvs[expr_sim_pre_def] >>
+  `!e st. MEM e (MAP SND fields) /\ expr_sim_inv cenv cx env st /\
+    source_supply st ==>
     expr_sim_pre cenv cx env e st` by metis_tac[expr_sim_pre_struct_field] >>
   `EVERY (expr_ok cenv) (MAP SND fields)` by
     (irule expr_sim_below_struct_fields >> simp[expr_size_def] >>
@@ -160,8 +161,8 @@ Resume compile_make_array_sim[tuple]:
   rw[expr_vv_ok_def, expr_vv_sim_def] >>
   drule compile_tuple_literal_inv >> strip_tac >> gvs[] >>
   drule make_tuple_evaluated_layout >> strip_tac >> gvs[] >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_sim_pre_def] >>
-  `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
+  `expr_sim_inv cenv cx env es /\ source_supply es` by gvs[expr_sim_pre_def] >>
+  `!e st. MEM e args /\ expr_sim_inv cenv cx env st /\ source_supply st ==>
     expr_sim_pre cenv cx env e st` by metis_tac[expr_sim_pre_builtin_arg] >>
   `EVERY (expr_ok cenv) args` by metis_tac[expr_sim_below_args] >>
   `compatible_bound bnd (LENGTH args)` by
@@ -226,8 +227,8 @@ Resume compile_make_array_sim[array]:
   rw[expr_vv_ok_def, expr_vv_sim_def] >>
   drule compile_array_literal_inv >> strip_tac >> gvs[] >>
   drule make_array_evaluated_layout >> strip_tac >> gvs[] >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_sim_pre_def] >>
-  `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
+  `expr_sim_inv cenv cx env es /\ source_supply es` by gvs[expr_sim_pre_def] >>
+  `!e st. MEM e args /\ expr_sim_inv cenv cx env st /\ source_supply st ==>
     expr_sim_pre cenv cx env e st` by metis_tac[expr_sim_pre_builtin_arg] >>
   `EVERY (expr_ok cenv) args` by metis_tac[expr_sim_below_args] >>
   `compatible_bound bnd (LENGTH args)` by

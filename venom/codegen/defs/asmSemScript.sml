@@ -41,6 +41,7 @@ Datatype:
     as_prev_hashes : bytes32 list;
     as_outcomes : call_outcome list;
     as_requests : call_request list;
+    as_pending_deletions : address list;
     as_gas_readings : bytes32 list
   |>
 End
@@ -594,8 +595,8 @@ End
 Definition asm_consume_call_outcome_def:
   asm_consume_call_outcome rq ro rs stk s =
     let (outcome, rest) = take_outcome rq s.as_outcomes;
-        (accounts, ts, logs) = adopt_outcome rq outcome
-          (s.as_accounts, s.as_transient, s.as_logs);
+        (accounts, ts, logs, pending) = adopt_outcome rq outcome
+          (s.as_accounts, s.as_transient, s.as_logs, s.as_pending_deletions);
         bytes = TAKE rs outcome.co_returnData;
         output : bytes32 = if outcome.co_success then 1w else 0w
     in AsmOK (asm_next (s with <|
@@ -605,6 +606,7 @@ Definition asm_consume_call_outcome_def:
          as_accounts := accounts;
          as_transient := ts;
          as_logs := logs;
+          as_pending_deletions := pending;
          as_returndata := outcome.co_returnData;
          as_memory := TAKE ro s.as_memory ++ bytes ++
                       DROP (ro + LENGTH bytes) s.as_memory |>))

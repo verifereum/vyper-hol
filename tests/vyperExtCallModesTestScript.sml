@@ -4,6 +4,7 @@ Ancestors
   vyperExtCallConsumptionTest vyperCallOutcome extCallOracle
   vyperInterpreter vyperState vyperContext vyperABI vyperAST vyperValue
   vyperValueOperation list finite_map words vfmTypes pair
+  vfmContext[ignore_grammar]
   vfmState[ignore_grammar]
 Libs wordsLib cv_transLib
 
@@ -220,6 +221,94 @@ Proof
   simp (send_value_expr_def :: extcall_gas_expr_def :: gas_kwarg_def ::
         log_state_def :: DIRECT_CALL_SIMP) >>
   CONV_TAC cv_eval
+QED
+
+(* Issue 567 merge regression: no injected outcomes. The real EVM recipient
+   CREATEs a child whose constructor is PUSH0; SELFDESTRUCT. EIP-6780 leaves
+   the pre-existing recipient alive, but queues the newly-created child.
+   PUSH2 0x5fff; PUSH0; MSTORE; PUSH1 2; PUSH1 30; PUSH0; CREATE; STOP. *)
+Definition deleting_call_state_def:
+  deleting_call_state = empty_state with
+    <|accounts := update_account 0x99w
+        (empty_account_state with
+          <|nonce := 1;
+            code := [0x61w;0x5fw;0xffw;0x5fw;0x52w;0x60w;2w;
+                     0x60w;30w;0x5fw;0xf0w;0w]|>)
+        (update_account 0w (empty_account_state with balance := 10)
+          empty_accounts);
+      pending_deletions := [0x88w;0x77w]|>
+End
+val () = cv_auto_trans deleting_call_state_def;
+
+Definition deleting_call_child_def:
+  deleting_call_child = vfmContext$address_for_create 0x99w 1
+End
+val () = cv_auto_trans deleting_call_child_def;
+
+(* Observe all six run_ext_call components without comparing account maps.
+   Nonce one proves deletion is deferred, not processed at the call boundary. *)
+Definition deleting_call_result_def:
+  deleting_call_result = OPTION_MAP
+    (\(success, data, accounts, transient, logs, deletions).
+      (success, data,
+       (lookup_account 0w accounts).balance,
+       (lookup_account 0x99w accounts).balance,
+       (lookup_account 0x99w accounts).nonce,
+       (lookup_account deleting_call_child accounts).nonce,
+       transient, logs, deletions))
+    (run_ext_call 0w 0x99w [] (SOME 1) 50000
+      deleting_call_state.accounts deleting_call_state.tStorage
+      (vyper_to_tx_params empty_call_txn))
+End
+val () = cv_auto_trans deleting_call_result_def;
+
+Theorem direct_run_ext_call_returns_deletion_six_tuple:
+  deleting_call_result =
+    SOME (T, [], 9, 1, 2, 1, empty_transient_storage, [],
+          [deleting_call_child])
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition deleting_call_observe_def:
+  deleting_call_observe expected (result, st : evaluation_state) <=>
+    result = expected /\
+    st.pending_deletions = [deleting_call_child;0x88w;0x77w] /\
+    (lookup_account 0w st.accounts).balance = 9 /\
+    (lookup_account 0x99w st.accounts).balance = 1 /\
+    (lookup_account 0x99w st.accounts).nonce = 2 /\
+    (lookup_account 0x99w st.accounts).code =
+      (lookup_account 0x99w deleting_call_state.accounts).code /\
+    (lookup_account deleting_call_child st.accounts).nonce = 1 /\
+    st.tStorage = deleting_call_state.tStorage /\
+    st.logs = [] /\ st.requests = [] /\ IS_NONE st.outcomes
+End
+val () = cv_auto_trans deleting_call_observe_def;
+
+Theorem direct_send_explicit_gas_preserves_pending_deletions:
+  deleting_call_observe (INL (Value NoneV))
+    (eval_expr empty_evaluation_context (send_gas_expr (SOME 50000))
+      deleting_call_state)
+Proof
+  simp (send_gas_expr_def :: gas_kwarg_def :: DIRECT_CALL_SIMP) >>
+  CONV_TAC cv_eval
+QED
+
+(* The keyword values are in source order, not EKValue/EKGas/EKDefault order.
+   Empty returndata selects the default after the successful deleting call;
+   skip_contract_check=F also checks that the recipient's code survives. *)
+Theorem direct_extcall_kwargs_preserve_pending_deletions:
+  deleting_call_observe (INL (Value (IntV 7)))
+    (eval_expr empty_evaluation_context
+      (Call (BaseT (UintT 256))
+        (ExtCall F F ("f",[],BaseT (UintT 256)) [EKDefault;EKGas;EKValue])
+        [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [0x99w]));
+         Literal (BaseT (UintT 256)) (IntL 7);
+         Literal (BaseT (UintT 256)) (IntL 50000);
+         Literal (BaseT (UintT 256)) (IntL 1)] NONE)
+      deleting_call_state)
+Proof
+  simp DIRECT_CALL_SIMP >> CONV_TAC cv_eval
 QED
 
 (* Positional arguments retain their locations through later positional and

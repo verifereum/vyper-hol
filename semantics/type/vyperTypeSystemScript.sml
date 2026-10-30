@@ -872,11 +872,17 @@ End
 (* Conservative syntactic control-flow predicate for callable bodies.  If this
  * holds for a statement/list, the evaluator should not be able to fall through
  * normally; the semantic boundary lemma is proved in vyperTypeStmtSoundness. *)
+Definition expr_no_fallthrough_def:
+  expr_no_fallthrough (Call _ RawRevert _ _) = T /\
+  expr_no_fallthrough (Call _ SelfDestructTarget _ _) = T /\
+  expr_no_fallthrough _ = F
+End
+
 Definition stmt_no_fallthrough_def:
   stmt_no_fallthrough Pass = F /\
   stmt_no_fallthrough Continue = T /\
   stmt_no_fallthrough Break = T /\
-  stmt_no_fallthrough (Expr e) = F /\
+  stmt_no_fallthrough (Expr e) = expr_no_fallthrough e /\
   stmt_no_fallthrough (For id ty it n body) = F /\
   stmt_no_fallthrough (If e ss1 ss2) =
     (stmts_no_fallthrough ss1 /\ stmts_no_fallthrough ss2) /\
