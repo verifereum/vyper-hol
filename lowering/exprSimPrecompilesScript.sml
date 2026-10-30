@@ -134,7 +134,9 @@ Theorem computed_static_exec_wb_frame:
      (!name lb lsz. local_region cenv es.scopes s name lb lsz ==>
          b + sz <= lb \/ lb + lsz <= b) ==>
      b + sz <= w2n ro \/ w2n ro + LENGTH (TAKE (w2n rs)
-       (FST (take_outcome rq s.vs_outcomes)).co_returnData) <= b) ==>
+       (FST (take_outcome rq s.vs_outcomes)).co_returnData) <= b) /\
+  (!name lb lsz. local_region cenv es.scopes s name lb lsz ==>
+     regions_disjoint (w2n ro) (w2n rs) lb lsz) ==>
   ?t. exec_ext_call inst s gas addr 0w ai an ro rs T = OK t /\
       wb_frame cenv es sa s t
 Proof
@@ -144,8 +146,15 @@ Proof
   simp[wb_frame_def, update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   conj_tac
   >- (rpt strip_tac >> IF_CASES_TAC >> gvs[write_memory_with_expansion_def]) >>
-  rpt strip_tac >> irule mem_bytes_at_write_disjoint >>
-  first_x_assum (drule_all_then mp_tac) >> decide_tac
+  conj_tac
+  >- (rpt strip_tac >> irule mem_bytes_at_write_disjoint >>
+      first_x_assum (drule_all_then mp_tac) >> decide_tac) >>
+  (* the locals: the returned bytes land outside their regions *)
+  rw[locals_kept_def] >> irule mem_bytes_at_write_disjoint >>
+  first_x_assum (drule_then mp_tac) >>
+  qmatch_goalsub_abbrev_tac `LENGTH bs` >>
+  `LENGTH bs <= w2n rs` by simp[Abbr `bs`, listTheory.LENGTH_TAKE_EQ] >>
+  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem ecrecover_typing[local]:
@@ -445,15 +454,22 @@ QED
 Theorem scratch_mstore_frame:
   (!aid b sz. aid < sa.cs_next_id /\
      FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-     a + 32 <= b \/ b + sz <= a) ==>
+     a + 32 <= b \/ b + sz <= a) /\
+  (!name b sz. local_region cenv es.scopes s name b sz ==>
+     regions_disjoint a 32 b sz) ==>
   wb_frame cenv es sa s (mstore a w s)
 Proof
   strip_tac >> rewrite_tac[wb_frame_def] >>
   conj_tac >- simp[mstore_def] >>
   conj_tac >- simp[mstore_def] >>
-  rpt strip_tac >>
+  conj_tac
+  >- (rpt strip_tac >>
+      irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+      first_x_assum drule >> simp[]) >>
+  (* the locals: the word lands outside their regions *)
+  irule locals_kept_regions >> rpt strip_tac >>
   irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
-  first_x_assum drule >> simp[]
+  first_x_assum drule >> simp[compileEnvTheory.regions_disjoint_def]
 QED
 
 (* Appending a word by MSTORE does not disturb the serialized prefix. *)
@@ -630,8 +646,12 @@ Proof
       conj_tac >- (rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
       rpt strip_tac >> first_x_assum irule >>
       gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `locals_kept cenv es s t` by
+    (irule locals_kept_regions >> rpt strip_tac >>
+     first_x_assum irule >> metis_tac[]) >>
   conj_tac
-  >- (simp[wb_frame_def, IgnAsm `t.vs_memory = _`] >> conj_tac
+  >- (qpat_x_assum `locals_kept _ _ _ _` (fn th =>
+        simp[th, wb_frame_def, IgnAsm `t.vs_memory = _`]) >> conj_tac
       >- (rpt strip_tac >>
           `not_fresh_at sa x` by
             (gvs[not_fresh_at_def] >>
@@ -824,7 +844,7 @@ Proof
   drule_all ecrecover_input_stores_sim >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sb) s1 = OK s2` >>
   `wb_frame cenv es sf s s1` by
-    (simp[wb_frame_def] >> metis_tac[]) >>
+    (simp[wb_frame_def] >> metis_tac[locals_kept_mem]) >>
   `wb_frame cenv es sf s s2` by
     (irule wb_frame_trans >> simp[] >>
      conj_tac >- (qexistsl_tac [`cx`,`func`] >> simp[]) >>
@@ -857,7 +877,7 @@ Proof
      qexistsl_tac [`w2n wo`,`32`] >> simp[] >>
      gvs[compileEnvTheory.regions_disjoint_def]) >>
   `wb_frame cenv es sb s2 s3` by
-    (simp[wb_frame_def] >> metis_tac[]) >>
+    (simp[wb_frame_def] >> metis_tac[locals_kept_mem]) >>
   `wb_frame cenv es sf s s3` by
     (irule wb_frame_trans >> simp[] >>
      conj_tac >- (qexistsl_tac [`cx`,`func`] >> simp[]) >>
@@ -872,7 +892,7 @@ Proof
      first_x_assum irule >>
      qexistsl_tac [`sb.cs_next_id`,`aid`] >> simp[] >> decide_tac) >>
   `wb_frame cenv es sf s3 (mstore (w2n wo) 0w s3)` by
-    (irule scratch_mstore_frame >> first_assum ACCEPT_TAC) >>
+    (irule scratch_mstore_frame >> conj_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame cenv es sf s (mstore (w2n wo) 0w s3)` by
     (irule wb_frame_trans >> simp[] >>
      conj_tac >- (qexistsl_tac [`cx`,`func`] >> simp[]) >>
@@ -1111,10 +1131,13 @@ Theorem wb_frame_readonly_input:
      lookup_var x t = SOME w) /\
   t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
   (!name b sz. local_region cenv es.scopes t name b sz ==>
-     local_region cenv es.scopes s name b sz) ==>
+     local_region cenv es.scopes s name b sz) /\
+  (!name b sz. local_region cenv es.scopes s name b sz ==>
+     local_region cenv es.scopes t name b sz) ==>
   wb_frame cenv es sa s u
 Proof
-  simp[wb_frame_def] >> rpt strip_tac >> metis_tac[]
+  simp[wb_frame_def, locals_kept_def] >> rpt strip_tac >> gvs[] >>
+  metis_tac[]
 QED
 
 Theorem ecrecover_suffix_preserves[local]:
@@ -1166,7 +1189,8 @@ Proof
   `!name b sz. local_region cenv es.scopes sg name b sz ==>
      local_region cenv es.scopes s name b sz` by
     (rpt strip_tac >> irule local_region_frame >>
-     conj_tac >- (goal_assum (drule_at Any)) >>
+     conj_tac >- (qexists_tac `func` >>
+       gvs[stmt_state_rel_def, state_rel_def]) >>
      qexistsl_tac [`sm`, `es.scopes`, `sg`] >> simp[]) >>
   `!name b sz. local_region cenv es.scopes sg name b sz ==>
       regions_disjoint (w2n wo) 32 b sz` by metis_tac[] >>
@@ -1191,12 +1215,15 @@ Proof
         (1w:bytes32) 0w wi (128w:bytes32) wo (32w:bytes32) T = OK u /\
        wb_frame cenv es sf sg u` by
     (irule computed_static_exec_wb_frame >>
-     simp[Abbr `ci`, computed_precompile_def, venom_call_request_def,
+     qpat_assum `!name b sz. local_region cenv es.scopes sg name b sz ==>
+                   regions_disjoint _ _ _ _` (fn th =>
+     simp[th, Abbr `ci`, computed_precompile_def, venom_call_request_def,
           wordsTheory.dimword_def, wordsTheory.w2w_n2w,
-          fcpLib.INDEX_CONV ``dimindex(:160)``] >>
-     reverse conj_tac >- (simp[not_fresh_at_def] >> decide_tac) >>
+          fcpLib.INDEX_CONV ``dimindex(:160)``]) >>
+     conj_tac >- (first_assum ACCEPT_TAC) >>
      conj_tac >-
-       (rpt strip_tac >>
+       (conj_tac >-
+        (rpt strip_tac >>
         `regions_disjoint (w2n wo) 32 b sz` by
           (qpat_x_assum `!aid b sz. aid < _ /\ _ ==> _`
              (qspecl_then [`aid`, `b`, `sz`] mp_tac) >>
@@ -1207,6 +1234,7 @@ Proof
      simp[venom_call_request_def, Abbr `sg`, update_var_def, read_memory_def,
           wordsTheory.w2w_n2w, wordsTheory.dimword_def,
           fcpLib.INDEX_CONV ``dimindex(:160)``]) >>
+     simp[not_fresh_at_def] >> decide_tac) >>
   `wb_frame cenv es sf sg sc` by gvs[] >>
   qpat_x_assum `run_inst_seq _ sc = OK t` mp_tac >>
   simp[Once run_inst_seq_def, step_inst_base_def,
@@ -1220,8 +1248,15 @@ Proof
   `wb_frame cenv es sf s sc` by
     (irule wb_frame_readonly_input >> qexists_tac `sg` >>
      simp[Abbr `sg`, update_var_def] >>
+     conj_tac
+     >- (simp[lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+         rpt strip_tac >> IF_CASES_TAC >>
+         gvs[not_fresh_at_def]) >>
+     rpt strip_tac >> irule exprSimOpsTheory.local_region_frame_fwd >>
+     qexistsl [`s`, `sm`, `es.scopes`] >> simp[update_var_def] >>
      simp[lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-     rpt strip_tac >> IF_CASES_TAC >> gvs[not_fresh_at_def] >> decide_tac) >>
+     rpt strip_tac >> IF_CASES_TAC >>
+     gvs[not_fresh_at_def]) >>
   irule wb_frame_readonly_tail >>
   qexistsl_tac [`sm`, `sc`] >>
   simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>

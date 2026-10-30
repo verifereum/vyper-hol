@@ -171,6 +171,8 @@ Proof
      gvs[env_consistent_def, env_context_consistent_def]) >>
   `?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
     gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
+  `cenv.ce_var_type id = SOME ann` by
+    gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
   drule_then (qspecl_then [`cx`, `ann`] assume_tac) eval_name_word >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
@@ -192,8 +194,9 @@ Proof
        vyperASTTheory.expr_type_def, eval_operand_def] >>
   rpt conj_tac
   >- metis_tac[val_in_memory_word_type]
-  >- (disj1_tac >>
-      qexistsl_tac [`id`, `w2n w`, `sz`] >> simp[local_region_def] >>
+  >- (disj2_tac >> disj1_tac >>
+      qexistsl_tac [`id`, `w2n w`, `sz`] >>
+      asm_simp_tac (srw_ss()) [local_region_def, dynarray_local_def] >>
       drule val_footprint_le >> decide_tac) >>
   rpt strip_tac >> gvs[]
 QED

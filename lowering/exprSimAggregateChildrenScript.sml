@@ -10,12 +10,13 @@
  * TOP-LEVEL:
  *   buffer_alloc_frag — the buffer's ALLOCA, disjoint from older
  *     allocations and locals
+ *   aggregate_buffer_clearance — carry buffer clearance through aggregate children
  *   buffer_loop_memory_vv_post — a filled buffer is the parent's vv_post
  *   aggregate_child_unwrap_var, aggregate_child_add_then,
  *   aggregate_unwrap_store_slice_sim — the per-child step
  *   vv_post_old_buffer — an older allocation outside the locals keeps its
  *     bytes
- *   local_region_vars_backward, vv_post_local_region_backward — local
+ *   vv_post_local_region_backward — local
  *     regions after a child were there before it
  *
  * Helpers: the *_materialise lemmas, vv_*_vars_frame, vv_post_rebase,
@@ -103,39 +104,6 @@ Proof
   qexists_tac `aid` >> asm_rewrite_tac[]
 QED
 
-Theorem local_region_vars_forward:
-  local_ptrs_reserved cenv sa /\
-  (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
-    lookup_var x t = SOME w) /\
-  local_region cenv scopes s n b sz ==>
-  local_region cenv scopes t n b sz
-Proof
-  rw[local_region_def] >>
-  `not_fresh_at sa p` by
-    (gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
-  metis_tac[]
-QED
-
-Theorem local_region_vars_backward:
-  MAP FDOM scopes0 = MAP FDOM scopes1 /\
-  local_ptrs_reserved ce sa /\ local_ptrs_rel func ce scopes0 s0 /\
-  (!p w. not_fresh_at sa p /\ lookup_var p s0 = SOME w ==>
-    lookup_var p s1 = SOME w) /\
-  local_region ce scopes1 s1 name b sz ==>
-  local_region ce scopes0 s0 name b sz
-Proof
-  rw[local_region_def] >>
-  `?entry0. lookup_scopes name scopes0 = SOME entry0` by
-    (Cases_on `lookup_scopes name scopes0` >> simp[] >>
-     drule_all lookup_scopes_none_map_fdom >> simp[]) >>
-  `?w0. lookup_var p s0 = SOME w0` by
-    (gvs[local_ptrs_rel_def] >> metis_tac[]) >>
-  `not_fresh_at sa p` by
-    (gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
-  `lookup_var p s1 = SOME w0` by metis_tac[] >>
-  gvs[] >> metis_tac[]
-QED
-
 Theorem vv_post_local_region_backward:
   eval_expr cx e es = (res,es1) /\
   stmt_state_rel func ce cx es s0 /\ local_ptrs_reserved ce sa /\
@@ -143,11 +111,11 @@ Theorem vv_post_local_region_backward:
   local_region ce es1.scopes s1 name b sz ==>
   local_region ce es.scopes s0 name b sz
 Proof
-  rpt strip_tac >> irule local_region_vars_backward >>
+  rpt strip_tac >> irule local_region_frame >>
   conj_tac
   >- (qexists_tac `func` >>
       gvs[stmt_state_rel_def, state_rel_def]) >>
-  qexistsl_tac [`s1`, `sa`, `es1.scopes`] >>
+  qexistsl_tac [`sa`, `es1.scopes`, `s1`] >>
   gvs[vv_post_def] >>
   metis_tac[eval_expr_preserves_scopes_dom]
 QED
@@ -168,12 +136,22 @@ Theorem vv_at_vars_frame:
   eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
   (!n b sz. local_region cenv es.scopes s n b sz ==>
     local_region cenv es.scopes t n b sz) /\
+  (!n b sz. local_region cenv es.scopes t n b sz ==>
+    local_region cenv es.scopes s n b sz) /\
   sm.cs_next_id <= sn.cs_next_id ==>
   vv_at cenv cx ty sa sn es tv vv t
 Proof
   Cases_on `vv` >>
   simp[vv_at_def, vv_operand_def, expr_val_at_def] >>
-  rpt strip_tac >> gvs[] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]
+  rpt strip_tac >> gvs[]
+  >>~- ([`FLOOKUP s.vs_allocas aid = SOME (b,sz)`],
+        disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
+        rpt strip_tac >>
+        `local_region cenv es.scopes s n lb lsz` by metis_tac[] >>
+        qpat_x_assum `!n lb lsz. local_region _ _ s _ _ _ ==> b + sz <= lb \/ _` drule >> simp[])
+  >>~- ([`local_region cenv es.scopes s n b sz`],
+        disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[])
+  >> metis_tac[]
 QED
 
 Theorem vv_post_vars_frame:
@@ -196,8 +174,14 @@ Proof
     (drule_all vv_holds_vars_frame >> simp[]) >>
   `vv_at cenv cx (expr_type e) sa sn es' tv vv t` by
     (irule vv_at_vars_frame >> qexistsl_tac [`s`, `sm`] >>
-     simp[] >> rpt strip_tac >> irule local_region_vars_forward >>
-     qexistsl_tac [`s`, `sa`] >> asm_rewrite_tac[]) >>
+     simp[] >> conj_tac
+     >- (rpt strip_tac >> irule local_region_frame_fwd >>
+         qexistsl_tac [`s`, `sa`, `es'.scopes`] >> asm_rewrite_tac[]) >>
+     rpt strip_tac >> irule local_region_frame >> conj_tac
+     >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
+     qexistsl_tac [`sa`, `es'.scopes`, `t`] >> asm_rewrite_tac[]) >>
+  `locals_kept cenv es s0 t` by
+    (irule locals_kept_mem_tail >> qexists_tac `s` >> asm_rewrite_tac[]) >>
   pure_rewrite_tac[vv_post_def] >> asm_rewrite_tac[] >>
   rpt strip_tac >> metis_tac[]
 QED
@@ -373,7 +357,8 @@ Theorem aggregate_store_rebased_slice_run:
         off + sz <= b \/ b + len <= off) /\
       off <= a /\ a + k <= off + sz /\
       (a + k <= w2n w \/ w2n w + type_memory_size tv <= a) ==>
-      mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory)
+      mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
+    locals_kept ce es' r q
 Proof
   strip_tac >>
   `lookup_var x s = SOME w` by
@@ -383,7 +368,8 @@ Proof
     (rpt strip_tac >>
      `local_region ce es'.scopes r n b k` by
        (irule local_region_frame >> conj_tac
-        >- metis_tac[] >>
+        >- (qexists_tac `func` >>
+            gvs[expr_post_def, stmt_state_rel_def, state_rel_def]) >>
         qexistsl_tac [`sm`, `es'.scopes`, `s`] >>
         gvs[expr_post_def, not_fresh_at_def]) >> metis_tac[]) >>
   `!z. op = Var z \/ Var x = Var z ==> not_fresh_at su z` by
@@ -397,6 +383,10 @@ Proof
     (irule buffer_store_state_frame >>
      qexistsl_tac [`w2n w`, `type_memory_size tv`, `s`, `su`] >>
      simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `locals_kept ce es' r q` by
+    (irule locals_kept_regions_tail >> qexists_tac `s` >>
+     reverse conj_tac >- gvs[expr_post_def] >>
+     rpt strip_tac >> metis_tac[]) >>
   qexists_tac `q` >> simp[] >>
   `q.vs_allocas = s.vs_allocas` by
     (qpat_assum `q with <|vs_memory := _; vs_vars := _|> = s`
@@ -461,7 +451,8 @@ Theorem aggregate_store_rebased_slice_sim:
           off + sz <= b \/ b + len <= off) /\
         off <= a /\ a + k <= off + sz /\
         (a + k <= w2n w \/ w2n w + type_memory_size tv <= a) ==>
-        mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory)) R
+        mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
+      locals_kept ce es' r q) R
 Proof
   strip_tac >> drule buffer_store_memory_shape >> strip_tac >>
   irule hash_run_frag >> simp[] >>
@@ -540,7 +531,8 @@ Theorem aggregate_unwrap_store_slice_sim:
           off + sz <= b \/ b + len <= off) /\
         off <= a /\ a + k <= off + sz /\
         (a + k <= w2n w \/ w2n w + type_memory_size tv <= a) ==>
-        mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) ==>
+        mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
+      locals_kept ce es' r q ==>
       Q q) ==>
   frag_exec ctx sm sb (\s. s = r) Q R
 Proof
@@ -631,8 +623,11 @@ Proof
   `!name p n. local_region ce es.scopes t name p n <=>
     local_region ce es.scopes s0 name p n` by
     (rpt gen_tac >> eq_tac
-     >- metis_tac[local_region_frame] >>
-     metis_tac[local_region_vars_forward]) >>
+     >- (strip_tac >> irule local_region_frame >> conj_tac
+         >- (qexists_tac `func` >>
+             gvs[stmt_state_rel_def, state_rel_def]) >>
+         qexistsl [`sa`, `es.scopes`, `t`] >> simp[]) >>
+     metis_tac[local_region_frame_fwd]) >>
   disj1_tac >> goal_assum (drule_at Any) >>
   simp[stmt_state_rel_inst_idx, buffer_local_region_inst_idx] >>
   gvs[eval_operand_def, lookup_var_def] >> metis_tac[]
@@ -640,6 +635,30 @@ QED
 
 (* Compose the allocation-entry and aggregate-loop frames once for all
    fresh-buffer constructors. *)
+Theorem aggregate_buffer_clearance:
+  stmt_state_rel func ce cx es t /\
+  local_ptrs_reserved ce sm /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  (!z w. not_fresh_at sm z /\ lookup_var z t = SOME w ==>
+         lookup_var z r = SOME w) /\
+  (!name lb len. local_region ce es.scopes t name lb len <=>
+                  local_region ce es.scopes s0 name lb len) /\
+  (!name lb len. local_region ce es.scopes s0 name lb len ==>
+                  regions_disjoint b sz lb len)
+  ==>
+  !name lb len. local_region ce es'.scopes r name lb len ==>
+                 b + sz <= lb \/ lb + len <= b
+Proof
+  rpt strip_tac >>
+  `local_region ce es.scopes t name lb len` by
+    (irule local_region_frame >> conj_tac
+     >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
+     qexistsl [`sm`, `es'.scopes`, `r`] >> simp[]) >>
+  `local_region ce es.scopes s0 name lb len` by metis_tac[] >>
+  qpat_x_assum `!name lb len. local_region _ _ s0 _ _ _ ==> _` drule >>
+  simp[regions_disjoint_def]
+QED
+
 Theorem buffer_loop_memory_vv_post:
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
@@ -649,6 +668,8 @@ Theorem buffer_loop_memory_vv_post:
   eval_operand p.ptr_operand r = SOME (n2w b) /\
   ci_mono sa sm /\ ci_mono sm sb /\ sa.cs_next_id < sm.cs_next_id /\
   b + sz < dimword (:256) /\
+  (!name lb len. local_region ce es'.scopes r name lb len ==>
+    b + sz <= lb \/ lb + len <= b) /\
   FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,sz) /\
   (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s0) /\
   (!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==>
@@ -666,7 +687,7 @@ Theorem buffer_loop_memory_vv_post:
     (!name lo k. local_region ce es.scopes t name lo k ==>
       a+n <= lo \/ lo+k <= a) ==>
     mem_bytes_at a n r.vs_memory = mem_bytes_at a n t.vs_memory) /\
-  t.vs_memory = s0.vs_memory ==>
+  t.vs_memory = s0.vs_memory /\ locals_kept ce es t r ==>
   vv_post func ce cx e es sa sb s0 es' (Value v)
     (LocatedValue (expr_type e) p) r
 Proof
@@ -691,6 +712,8 @@ Proof
         (qspecl_then [`aid`,`off`,`len`] mp_tac) >>
       simp[regions_disjoint_def] >> decide_tac) >>
   conj_tac >- (gvs[ci_mono_def] >> decide_tac) >>
+  conj_tac
+  >- (gvs[locals_kept_def] >> metis_tac[]) >>
   qexists `sz` >>
   simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> metis_tac[]
 QED
