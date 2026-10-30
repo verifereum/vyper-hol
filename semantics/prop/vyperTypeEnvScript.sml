@@ -57,13 +57,6 @@ Proof
   >> simp[]
 QED
 
-Theorem var_assignable_sound:
-  env_consistent env cx st /\ FLOOKUP env.var_assignable id = SOME T ==>
-  ?entry. lookup_scopes id st.scopes = SOME entry /\ entry.assignable
-Proof
-  rw[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def]
-QED
-
 Theorem type_place_target_NameTarget:
   type_place_target env (NameTarget id) = SOME vt <=>
   ?ty. vt = Type ty /\
@@ -111,43 +104,6 @@ Proof
 QED
 
 
-Theorem env_consistent_bare_global_assignable_ready:
-  !env cx st id ty.
-    env_consistent env cx st /\
-    FLOOKUP env.bare_global_assignable (env.current_src,id) = SOME ty ==>
-      env.current_src = current_module cx /\
-      FLOOKUP env.bare_globals (env.current_src,id) = SOME ty /\
-      ty <> NoneT /\
-      (?ts. get_module_code cx (current_module cx) = SOME ts /\
-            is_immutable_decl id ts /\
-            find_var_decl_by_name id ts = NONE) /\
-      IS_SOME (FLOOKUP (get_source_immutables (current_module cx)
-        (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id)
-Proof
-  rpt strip_tac >>
-  gvs[env_consistent_def, env_context_consistent_def, env_immutables_consistent_def] >>
-  qpat_x_assum `!src id ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==> ?ts. _`
-    (drule_then strip_assume_tac) >>
-  qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> IS_SOME _`
-    drule >>
-  strip_tac >> gvs[]
-QED
-Theorem type_place_target_TopLevelNameTarget_ASSIGNABLE:
-  FLOOKUP env.bare_global_assignable (src_id_opt,id) = SOME ty ==>
-  type_place_target env (TopLevelNameTarget (src_id_opt, id)) = SOME (Type ty)
-Proof
-  simp[well_typed_expr_def]
-QED
-
-Theorem type_place_target_TopLevelNameTarget_NOT_BARE:
-  FLOOKUP env.bare_global_assignable (src_id_opt,id) = NONE /\
-  FLOOKUP env.bare_globals (src_id_opt,id) = NONE ==>
-  type_place_target env (TopLevelNameTarget (src_id_opt, id)) =
-  FLOOKUP env.toplevel_vtypes (src_id_opt,id)
-Proof
-  simp[well_typed_expr_def]
-QED
-
 Theorem type_place_target_TopLevelNameTarget:
   type_place_target env (TopLevelNameTarget (src_id_opt, id)) = SOME vt <=>
   (?ty. vt = Type ty /\
@@ -190,13 +146,6 @@ Theorem NameTarget_sound:
 Proof
   rw[well_typed_expr_def, env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def]
   >> gvs[well_typed_expr_def, AllCaseEqs(), LET_THM]
-QED
-
-Theorem lookup_scopes_head_fupdate_other:
-  n1 <> n2 ==>
-  lookup_scopes n2 ((h |+ (n1, entry))::rest) = lookup_scopes n2 (h::rest)
-Proof
-  rw[lookup_scopes_def, FLOOKUP_UPDATE]
 QED
 
 Theorem extend_local_env_consistent_after_new_variable:
@@ -252,89 +201,7 @@ Proof
   >> simp[]
 QED
 
-Theorem current_immutables_well_typed:
-  state_well_typed st ==>
-  imms_well_typed (case ALOOKUP st.immutables addr of SOME m => m | NONE => [])
-Proof
-  rw[AllCaseEqs()]
-  >> CASE_TAC >> rw[] >> TRY(rw[imms_well_typed_def] >> NO_TAC)
-  >> drule_all state_well_typed_immutables_ALOOKUP
-  >> simp[]
-QED
-
-Theorem top_level_bare_global_lookup_sound:
-  well_typed_expr env (TopLevelName ty (src,id)) /\
-  FLOOKUP env.bare_globals (src,id) = SOME ty /\
-  env_consistent env cx st /\ state_well_typed st ==>
-  ?tv v. FLOOKUP (get_source_immutables src
-            (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => []))
-            id = SOME (tv,v) /\
-         evaluate_type env.type_defs ty = SOME tv /\ value_has_type tv v
-Proof
-  simp[well_typed_expr_def, env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def] >>
-  strip_tac >> gvs[] >>
-  qmatch_goalsub_abbrev_tac`fl = SOME _` >>
-  `IS_SOME fl` by (
-    simp[Abbr`fl`] >> first_x_assum irule >> rw[] )
-  >> pop_assum mp_tac >> simp_tac (srw_ss())[IS_SOME_EXISTS]
-  >> strip_tac >> simp[]
-  >> rename1 `fl = SOME tvv`
-  >> PairCases_on `tvv`
-  >> gvs[]
-  >> first_x_assum drule_all
-  >> strip_tac
-  >> simp[]
-  >> drule current_immutables_well_typed
-  >> disch_then (qspec_then `cx.txn.target` assume_tac)
-  >> drule_all imms_well_typed_get_source_immutables
-  >> simp[]
-QED
-
 (* ===== Top-level values ===== *)
-
-Theorem toplevel_vtype_Type_immutable_sound:
-  env_consistent env cx st /\ state_well_typed st /\
-  FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
-  get_module_code cx src = SOME ts /\
-  find_var_decl_by_name id ts = NONE /\
-  FLOOKUP (get_source_immutables src
-    (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
-  evaluate_type env.type_defs ty = SOME tv /\ value_has_type tv v
-Proof
-  rw[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def]
-  >> first_x_assum drule_all
-  >> strip_tac
-  >> drule current_immutables_well_typed
-  >> disch_then (qspec_then `cx.txn.target` assume_tac)
-  >> drule_all imms_well_typed_get_source_immutables
-  >> simp[]
-  >> strip_tac
-  >> qpat_x_assum `find_var_decl_by_name id ts = NONE ⇒ _` mp_tac
-  >> simp[]
-  >> disch_then (qspecl_then [`id`, `tv`, `v`] mp_tac)
-  >> simp[]
-QED
-
-Theorem TopLevelName_well_formed_type:
-  well_typed_expr env (TopLevelName ty nsid) ==> well_formed_type env.type_defs ty
-Proof
-  Cases_on `nsid` >> rw[well_typed_expr_def]
-QED
-
-Theorem TopLevelName_annotation_sound:
-  type_place_expr env (TopLevelName ann nsid) = SOME vt ==>
-  vtype_annotation_ok vt ann
-Proof
-  Cases_on `nsid` >> rw[well_typed_expr_def, AllCaseEqs()]
-QED
-
-Theorem TopLevelName_expr_source:
-  well_typed_expr env (TopLevelName ty nsid) ==>
-  FLOOKUP env.toplevel_vtypes nsid = SOME (Type ty) \/
-  FLOOKUP env.bare_globals nsid = SOME ty
-Proof
-  Cases_on `nsid` >> rw[well_typed_expr_def]
-QED
 
 Theorem flag_member_sound:
   well_typed_expr env (FlagMember ty nsid mid) /\ env_consistent env cx st ==>

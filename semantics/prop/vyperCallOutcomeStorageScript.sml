@@ -1,5 +1,3 @@
-(* Storage/suffix boundary for TASK032/033. Runtime accounts guards bound only
- * balances and code: adopted payload storage comes solely from PLAN T6.2. *)
 Theory vyperCallOutcomeStorage
 Ancestors
   list pair option sum vyperState vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches
@@ -17,13 +15,6 @@ Proof
   drule_all outcome_suffix_EVERY >> simp[]
 QED
 
-(* Original TASK031 proof: unconditional equality is refuted by
-   activated_ExtCall_consumes_counterexample. Retained for provenance.
-Proof
-  rpt conj_tac >> rpt strip_tac >> imp_res_tac eval_outcomes_preserved_mutual >>
-  metis_tac[oracle_storage_ok_outcomes]
-QED
-*)
 Theorem eval_oracle_storage_preserved_mutual:
   (!cx s st res st'. oracle_storage_ok cx st /\ eval_stmt cx s st = (res,st') ==> oracle_storage_ok cx st') /\
   (!cx ss st res st'. oracle_storage_ok cx st /\ eval_stmts cx ss st = (res,st') ==> oracle_storage_ok cx st') /\

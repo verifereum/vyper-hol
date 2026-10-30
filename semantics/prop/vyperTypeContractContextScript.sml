@@ -383,26 +383,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem FOLDL_extend_local_args_lookup[local]:
-  !args (base : typing_env) env.
-  ALL_DISTINCT (MAP FST args) /\
-  env = FOLDL (\env (id,ty). extend_local env (id) ty T) base args /\
-  base.var_types = FEMPTY /\ base.var_assignable = FEMPTY ==>
-  (!id typ. MEM (id,typ) args ==>
-     FLOOKUP env.var_types (id) = SOME typ /\
-     FLOOKUP env.var_assignable (id) = SOME T) /\
-  (!n ty. FLOOKUP env.var_types n = SOME ty ==>
-     ?id. MEM (id,ty) args /\ n = id) /\
-  (!n b. FLOOKUP env.var_assignable n = SOME b ==>
-     ?id typ. MEM (id,typ) args /\ n = id /\ b = T)
-Proof
-  rw[] >-
-    (drule_all FOLDL_extend_local_args_formal_lookup >> simp[])
-  >- (drule_all FOLDL_extend_local_args_formal_lookup >> simp[])
-  >- (drule_all FOLDL_extend_local_args_var_types_range >> rw[] >> gvs[])
-  >- (drule_all FOLDL_extend_local_args_var_assignable_range >> rw[] >> gvs[])
-QED
-
 Theorem FOLDL_extend_local_args_static:
   !args (base : typing_env).
     (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).current_src = base.current_src /\

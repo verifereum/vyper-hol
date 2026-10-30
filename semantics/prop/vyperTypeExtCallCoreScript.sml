@@ -35,8 +35,6 @@ Proof
   gvs[value_has_type_inv, value_has_type_def]
 QED
 
-(* Decoder-only boundary shared by concrete and oracle tails. Invalid bytes
-   are RuntimeError, never source TypeError or control transfer. *)
 Theorem extcall_decode_return_sound:
   runtime_consistent env cx st /\
   evaluate_type env.type_defs ret_type = SOME ret_tv /\

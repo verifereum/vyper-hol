@@ -23,18 +23,6 @@ Libs
 
 (* ===== Statement/list corollaries of eval_scc_type_sound_mutual ===== *)
 
-Theorem eval_stmt_no_type_error:
-  type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-  call_evaluation_safe cx (int_calls_stmt s) ==>
-  no_type_error_eval (eval_stmt cx s st)
-Proof
-  strip_tac >>
-  Cases_on `eval_stmt cx s st` >>
-  simp[no_type_error_eval_def] >>
-  drule_all (cj 1 eval_scc_type_sound_mutual) >> rw[]
-QED
-
 Theorem eval_stmt_type_preservation_success:
   type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
   context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
@@ -45,66 +33,6 @@ Proof
   strip_tac >>
   drule_all (cj 1 eval_scc_type_sound_mutual) >>
   simp[]
-QED
-
-Theorem eval_stmt_type_preservation_exception:
-  type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-  call_evaluation_safe cx (int_calls_stmt s) /\
-  eval_stmt cx s st = (INR exn, st') ==>
-  state_well_typed st' /\ stmt_error_ok env ret_ty (INR exn) /\ accounts_well_typed st'.accounts
-Proof
-  rpt strip_tac >>
-  drule_all (cj 1 eval_scc_type_sound_mutual) >>
-  simp[stmt_error_ok_def] >>
-  simp[no_type_error_result_def]
-QED
-
-Theorem eval_stmt_type_preservation_exception_state:
-  type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-  call_evaluation_safe cx (int_calls_stmt s) /\
-  eval_stmt cx s st = (INR exn, st') ==>
-  state_well_typed st'
-Proof
-  metis_tac[eval_stmt_type_preservation_exception]
-QED
-
-Theorem eval_stmt_type_preservation_exception_ok:
-  type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-  call_evaluation_safe cx (int_calls_stmt s) /\
-  eval_stmt cx s st = (INR exn, st') ==>
-  stmt_error_ok env ret_ty (INR exn)
-Proof
-  metis_tac[eval_stmt_type_preservation_exception]
-QED
-
-Theorem stmt_error_ok_type_defs_eq:
-  env1.type_defs = env2.type_defs ==>
-  (stmt_error_ok env1 ret_ty r <=> stmt_error_ok env2 ret_ty r)
-Proof
-  Cases_on `r` >> simp[stmt_error_ok_def, return_exception_typed_def] >>
-  Cases_on `y` >> simp[value_runtime_typed_def]
-QED
-
-Theorem type_stmt_preserves_stmt_error_ok:
-  type_stmt env ret_ty s = SOME env1 /\ stmt_error_ok env1 ret_ty r ==>
-  stmt_error_ok env ret_ty r
-Proof
-  strip_tac >>
-  drule type_stmt_env_preserved_static >> strip_tac >>
-  fs[stmt_error_ok_def, return_exception_typed_def, value_runtime_typed_def]
-QED
-
-Theorem eval_stmt_type_preservation_exception_state_pair:
-  type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-  call_evaluation_safe cx (int_calls_stmt s) /\
-  eval_stmt cx s st = (INR exn, st') ==>
-  state_well_typed st' /\ stmt_error_ok env ret_ty (INR exn)
-Proof
-  metis_tac[eval_stmt_type_preservation_exception]
 QED
 
 Theorem eval_stmts_no_type_error:
@@ -158,8 +86,6 @@ Proof
   simp[]
 QED
 
-(* ===== Top-level theorem shape ===== *)
-
 Theorem function_body_type_sound:
   functions_well_typed cx /\ context_well_typed cx /\ accounts_well_typed st.accounts /\
   state_well_typed st /\ env_consistent env cx st /\
@@ -169,3 +95,5 @@ Theorem function_body_type_sound:
 Proof
   metis_tac[eval_stmts_no_type_error]
 QED
+
+(* ===== Top-level theorem shape ===== *)

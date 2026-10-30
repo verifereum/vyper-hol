@@ -305,20 +305,6 @@ Proof
   create_frame_tac
 QED
 
-(* Storage is NOT preserved across creation in general: the constructor runs
-   arbitrary EVM code that may write any account's storage, including the
-   created account's own.  There is therefore no frame rule to prove here,
-   and the old eval_create_preserves_storage theorem has been removed as
-   false.
-
-   Downstream storage preservation must handle creation the same way it
-   handles external calls: by postulating the analogous property at the EVM
-   boundary.  Cf. protected_storage_calls_preserve_def in
-   vyperTypeStoragePreservationScript.sml, which is postulated for
-   run_ext_call.  The matching postulate for run_create_evm belongs beside
-   it; create_tail_preserves_scopes above is the shape lemma that hook
-   consumes. *)
-
 (* KEY LEMMA for the type-soundness consumer.
 
    Once the three operand-shape decodes and the initcode construction have

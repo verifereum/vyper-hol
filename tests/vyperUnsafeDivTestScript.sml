@@ -3,10 +3,37 @@
 Theory vyperUnsafeDivTest
 Ancestors
   arithmetic integer words vyperAST vyperValue vyperValueOperation
-  vyperContext vyperTyping vyperTypeContract evalCompilerSubsetScalars
+  vyperContext vyperTyping vyperTypeContract
 Libs
   cv_transLib vyperCheckContractLib
 
+Definition scalar_arith_unsafe_uint_program_def:
+  scalar_arith_unsafe_uint_program =
+    [FunctionDecl External Pure F F "unsafe_add_u8"
+       [("a", BaseT (UintT 8)); ("b", BaseT (UintT 8))] ([] : expr list) (BaseT (UintT 8))
+       [Return (SOME (Builtin (BaseT (UintT 8)) (Bop UnsafeAdd)
+         [Name (BaseT (UintT 8)) "a"; Name (BaseT (UintT 8)) "b"]))];
+     FunctionDecl External Pure F F "unsafe_sub_u8"
+       [("a", BaseT (UintT 8)); ("b", BaseT (UintT 8))] ([] : expr list) (BaseT (UintT 8))
+       [Return (SOME (Builtin (BaseT (UintT 8)) (Bop UnsafeSub)
+         [Name (BaseT (UintT 8)) "a"; Name (BaseT (UintT 8)) "b"]))];
+     FunctionDecl External Pure F F "unsafe_mul_u8"
+       [("a", BaseT (UintT 8)); ("b", BaseT (UintT 8))] ([] : expr list) (BaseT (UintT 8))
+       [Return (SOME (Builtin (BaseT (UintT 8)) (Bop UnsafeMul)
+         [Name (BaseT (UintT 8)) "a"; Name (BaseT (UintT 8)) "b"]))];
+     FunctionDecl External Pure F F "unsafe_div_u8"
+       [("a", BaseT (UintT 8)); ("b", BaseT (UintT 8))] ([] : expr list) (BaseT (UintT 8))
+       [Return (SOME (Builtin (BaseT (UintT 8)) (Bop UnsafeDiv)
+         [Name (BaseT (UintT 8)) "a"; Name (BaseT (UintT 8)) "b"]))]]
+End
+
+Definition scalar_arith_unsafe_int_program_def:
+  scalar_arith_unsafe_int_program =
+    [FunctionDecl External Pure F F "unsafe_div_i256"
+       [("a", BaseT (IntT 256)); ("b", BaseT (IntT 256))] ([] : expr list) (BaseT (IntT 256))
+       [Return (SOME (Builtin (BaseT (IntT 256)) (Bop UnsafeDiv)
+         [Name (BaseT (IntT 256)) "a"; Name (BaseT (IntT 256)) "b"]))]]
+End
 (* Kernel counterexample to the former claim that success of UnsafeDiv
    implies a nonzero divisor. The operand and result types are uint8. *)
 Theorem unsafe_div_success_nonzero_counterexample:
@@ -166,8 +193,7 @@ Theorem unsafe_div_fixtures_runtime_checked:
   IS_SOME (check_contract F [] (0w : address)
     [(NONE, scalar_arith_unsafe_int_program)])
 Proof
-  simp[scalar_arith_unsafe_uint_program_def, scalar_arith_unsafe_int_program_def,
-       scalar_binary_bop_fn_def] >> conj_tac >>
+  simp[scalar_arith_unsafe_uint_program_def, scalar_arith_unsafe_int_program_def] >> conj_tac >>
   CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
 QED
 
@@ -177,7 +203,6 @@ Theorem unsafe_div_fixtures_deployment_checked:
   IS_SOME (check_contract T [] (0w : address)
     [(NONE, scalar_arith_unsafe_int_program)])
 Proof
-  simp[scalar_arith_unsafe_uint_program_def, scalar_arith_unsafe_int_program_def,
-       scalar_binary_bop_fn_def] >> conj_tac >>
+  simp[scalar_arith_unsafe_uint_program_def, scalar_arith_unsafe_int_program_def] >> conj_tac >>
   CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
 QED
