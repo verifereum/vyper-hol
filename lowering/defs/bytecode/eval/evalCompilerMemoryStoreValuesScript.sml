@@ -1,7 +1,7 @@
 (* Independent checked-frontend bytecode witnesses for memory stores. *)
 Theory evalCompilerMemoryStoreValues
-Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute alist byte integer_word option
-Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
+Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute alist byte integer_word option sourceModuleDefs sourceModuleEnv sourceConstBuiltinCompute
+Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib sourceModuleLoaderLib sourceOrdinaryClaimsLib sourceOrdinaryProgramLib cv_transLib
 
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps ["../memory-stores"]
@@ -10,6 +10,47 @@ val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
   [fmap_to_alist_FEMPTY, i2w_pos])
 val fixture_root = "../memory-stores/oracle"
+
+(* This fixture needs explicit source normalization, not the legacy raw
+   runtime MethodId. Pair genuine pre-erasure syntax with the UNCHANGED oracle
+   annotations. Only layouts and runtime contexts are inherited, never bodies. *)
+fun source_program source_path annotated_path = let
+  val original = sourceModuleLoaderLib.load_file source_path
+  val capture = JSONDecode.decodeFile JSONDecode.raw source_path
+  val original_json = JSONDecode.decode
+    (JSONDecode.field "annotated_ast" JSONDecode.raw) capture
+  val annotated = JSONDecode.decodeFile JSONDecode.raw annotated_path
+  val paired = sourceOrdinaryClaimsLib.pair_program original original_json annotated
+  val trust = ``<| smt_ids := [(["main"],NONE)]; smt_nominals := [];
+    smt_type_defs := FEMPTY; smt_slots := [] |>``
+  val storage = JSONDecode.decodeFile jsonASTLib.storage_layout annotated_path
+  val layout = rhs (concl (EVAL
+    ``jsonToVyper$extract_storage_layout [] ^storage``))
+  val layouts = ``[(0w:address,^layout)]``
+  val contexts = sourceOrdinaryProgramLib.inherited_contexts paired trust
+  (* Kernel-checked evaluation of arbitrary original strings, not a selector
+     table or an interpretation of folded_value. *)
+  val () = computeLib.upd_compset (computeLib.add_conv
+    (``sourceConstBuiltin$source_const_keccak``,1,cv_transLib.cv_eval))
+  val checked = vyperCheckContractFrontendLib.check_contract_result
+    {fuel=``80:num``,address=``0w:address``,paired=paired,
+     inherited={trust=trust,layouts=layouts,contexts=contexts}}
+  (* The ordinary API checks deployment. Keep the independent runtime check
+     on the exact same normalized modules, as for every legacy witness. *)
+  val _ = vyperCheckContractLib.check_contract
+    {in_deploy=false,address= #address checked,
+     modules= #modules checked,layouts= #layouts checked}
+in
+  case #1 (listSyntax.dest_list (#modules checked)) of
+    [entry] => #2 (pairSyntax.dest_pair entry)
+  | _ => raise Fail "expected one checked source module"
+end
+
+val method_id_lit_tops = source_program
+  "../memory-stores/source/method_id_lit.json"
+  "../memory-stores/oracle/method_id_lit.json"
+val method_id_lit_term = memoryStoreWitnessLib.compile_term method_id_lit_tops
+val method_id_lit = {term=method_id_lit_term,evaluation=EVAL method_id_lit_term}
 
 val a01_str_local_reassign = memoryStoreWitnessLib.evaluate fixture_root "a01_str_local_reassign"
 Theorem a01_str_local_reassign_matches_python_oracle:
@@ -107,7 +148,6 @@ Proof
   CONV_TAC (LAND_CONV (K (#evaluation enc_in_assign))) >> EVAL_TAC
 QED
 
-val method_id_lit = memoryStoreWitnessLib.evaluate fixture_root "method_id_lit"
 Theorem method_id_lit_matches_python_oracle:
   ^(#term method_id_lit) =
     SOME ^(memoryStoreWitnessLib.oracle fixture_root "method_id_lit")

@@ -147,7 +147,9 @@ Theorem source_type_resolve_ok:
     source_type_resolve_list tenv names env annotations = ST_Ok rs ==>
     EVERY (source_type_resolution_ok tenv env) rs)
 Proof
-  ho_match_mp_tac source_const_annotation_induction >>
+  ho_match_mp_tac (source_type_resolve_ind
+    |> Q.SPECL [`\tenv names env a. P a`, `\tenv names env xs. Q xs`]
+    |> SIMP_RULE (srw_ss()) []) >>
   rw[source_type_resolve_def, source_type_require_constructor_def,
      source_type_bind_success] >>
   gvs[AllCaseEqs(), source_type_bind_success]

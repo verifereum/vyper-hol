@@ -247,11 +247,10 @@ Proof
     gvs[source_const_names_def, EVERY_FLAT, EVERY_MAP] >> metis_tac[]]
 QED
 
-(* Specialize the generated mutual induction to the usual EVERY interface. *)
+(* Normalize nested datatype induction to the usual EVERY interface. *)
 val source_resolve_induction = source_const_expr_induction
-  |> Q.SPECL [`P`, `EVERY (\kw. P (SND kw))`, `\kw. P (SND kw)`, `EVERY P`]
-  |> SIMP_RULE (srw_ss()) [FORALL_PROD]
-  |> UNDISCH |> CONJUNCT1 |> DISCH_ALL |> GEN_ALL;
+  |> SIMP_RULE (srw_ss())
+       [pairTheory.setSND_def, PULL_EXISTS, GSYM EVERY_MEM];
 
 Theorem source_resolve_expr_names:
   !expr scopes table pos resolved.
