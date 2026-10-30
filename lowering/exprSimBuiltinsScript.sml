@@ -4,8 +4,8 @@
  * The case lemmas of compile_expr_sim (exprSimMain) for the builtins that
  * are neither operators nor aggregates.  Row 3's word builtins but ceil
  * (in exprSimWordBuiltins), rows 2 and 7 on exprSimHash's machinery, row 5
- * (here) and row 6's account reads but .code (in exprSimAccounts) are
- * proved; the rest are cheated, for the later #636 PRs.  Each #636
+ * (here), row 6's account reads but .code (in exprSimAccounts) and row 8
+ * (in exprSimPrecompiles and exprSimECArith) are proved; the rest are cheated, for the later #636 PRs.  Each #636
  * Builtins row is:
  *   1 len, len(msg.data), msg.data slices: compile_len_sim (by
  *     exprSimLen's compile_len_loc_sim, and compile_len_code_sim for an
@@ -33,7 +33,8 @@
  *     selector, a word literal), the rest in compile_method_id_other_sim
  *   8 ecrecover, ecadd, ecmul: compile_ecrecover_sim (by
  *     exprSimPrecompiles' compile_ecrecover_call_sim), compile_ecadd_sim,
- *     compile_ecmul_sim
+ *     compile_ecmul_sim (by exprSimECArith's compile_ecadd_call_sim,
+ *     compile_ecmul_call_sim)
  *
  * Unprovable as the definitions stand, to be fixed in the lowering or in
  * state_rel before their PRs:
@@ -71,7 +72,7 @@ Ancestors
   valueEncoding fragExec vyperInterpreter vyperState vyperContext
   vyperValueOperation venomState exprSimAccounts exprSimUnop
   exprSimOperators exprBopLowering builtinMisc venomExecSemantics venomInst
-  exprSimCalldata exprSimCalldataSlice exprSimLen exprSimPrecompiles
+  exprSimCalldata exprSimCalldataSlice exprSimLen exprSimPrecompiles exprSimECArith
   vyperValue exprLoweringProps vyperTyping
 
 (* ===== Lengths and calldata ===== *)
@@ -554,7 +555,7 @@ Theorem compile_ecadd_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann ECAdd args)
 Proof
-  cheat
+  simp[compile_ecadd_call_sim]
 QED
 
 Theorem compile_ecmul_sim:
@@ -562,6 +563,6 @@ Theorem compile_ecmul_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann ECMul args)
 Proof
-  cheat
+  simp[compile_ecmul_call_sim]
 QED
 
