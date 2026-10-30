@@ -275,19 +275,6 @@ QED
 
 (* ===== Main frame lemma ===== *)
 
-Theorem preserves_tv_immutables_type_preserved:
-  !cx st st' src id tv v.
-    preserves_tv cx st st' /\
-    FLOOKUP (get_source_immutables src
-        (case ALOOKUP st.immutables cx.txn.target of
-           SOME m => m | NONE => [])) id = SOME (tv,v) ==>
-    ?v'. FLOOKUP (get_source_immutables src
-        (case ALOOKUP st'.immutables cx.txn.target of
-           SOME m => m | NONE => [])) id = SOME (tv,v')
-Proof
-  rw[preserves_tv_def]
-QED
-
 (* ===== Assignability preservation for expression evaluation ===== *)
 
 Definition preserves_assignable_lookup_def:
