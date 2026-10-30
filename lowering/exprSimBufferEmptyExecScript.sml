@@ -277,7 +277,9 @@ Theorem compile_builtin_empty_complex_run:
         FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
         regions_disjoint (w2n w) sz b len) /\
       (!a len. a+len <= w2n w \/ w2n w+sz <= a ==>
-        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
+        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
+      (!name b len. local_region cenv es.scopes s name b len ==>
+        w2n w+sz <= b \/ b+len <= w2n w)
 Proof
   rpt gen_tac >> strip_tac >> drule empty_compile_decompose >> strip_tac >>
   drule empty_tail_shape >> strip_tac >>
@@ -321,7 +323,14 @@ Resume compile_builtin_empty_complex_run[package]:
   >- (rpt strip_tac >>
       `not_fresh_at sm x` by metis_tac[not_fresh_at_mono] >> simp[]) >>
   conj_tac >- (rpt strip_tac >> metis_tac[]) >>
-  first_assum ACCEPT_TAC
+  conj_tac >- first_assum ACCEPT_TAC >>
+  (* the locals' regions, by their pointers, which the buffer's code keeps *)
+  map_every qx_gen_tac [`nm`, `lb`, `llen`] >> strip_tac >>
+  `local_region cenv es.scopes t nm lb llen` by
+    (irule exprSimOpsTheory.local_region_frame_fwd >>
+     qexistsl [`s`, `sa`, `es.scopes`] >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `!name b len. local_region _ _ t name b len ==> _ \/ _` drule >>
+  simp[arithmeticTheory.ADD_COMM]
 QED
 
 Finalise compile_builtin_empty_complex_run

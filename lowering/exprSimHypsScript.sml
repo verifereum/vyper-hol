@@ -35,6 +35,9 @@
  *   compile_expr_type_builtin_dispatch — compile_expr of a type builtin is
  *                       its dispatcher's
  *   word_value_type   — the types whose values are word_values
+ *   popped_keys_indexed — every key of a local's popped history ends in
+ *                       an array index
+ *   eval_expr_popped_keys_indexed — evaluation keeps popped_keys_indexed
  *   expr_sim_pre_eval — type soundness: evaluation keeps expr_sim_inv and
  *                       raises no type error
  *   expr_sim_pre_res_ok, expr_sim_pre_word_result — the results of an
@@ -140,6 +143,15 @@
  *     INVOKE, whose simulation is #638's call step; until that is stated
  *     this theorem excludes them, and #638 replaces this conjunct with its
  *     hypothesis on the callees.
+ *   - The popped keys clause (popped_keys_indexed): every key of a local's
+ *     popped history ends in an array index.  Reading a field of a popped
+ *     element reads the history, and a snapshot recorded at the field
+ *     itself would be read instead of the field of the element's snapshot,
+ *     which memory at the field's pointer holds.  This is a fact about the
+ *     source semantics, not the compiler: pop records the element it
+ *     removes at path ++ [ValueSubscript (IntV i)] (record_pop), a new
+ *     local starts with no history, and evaluation changes the scopes only
+ *     by pops (eval_expr_popped_keys_indexed).
  *
  *   - The struct fields clauses: the compile environment's struct field
  *     map agrees with the type environment's struct declarations, field
@@ -180,7 +192,8 @@ Ancestors
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
   vyperExprNoControl loweringSlice exprSimUnwrap exprSafeOperand
-  vyperEvalOutcomeSuffix vyperRuntimeAccounts
+  vyperEvalOutcomeSuffix vyperRuntimeAccounts vyperLookup
+  vyperPlaceResultTyping
 Libs
   pairLib
 
@@ -195,6 +208,16 @@ Definition outcomes_accounts_typed_def:
     !os. oos = SOME os ==>
          EVERY (\oc. oc.co_success ==>
                      accounts_runtime_well_typed oc.co_accounts) os
+End
+
+(* Every key of a local's popped history ends in an array index: pop records
+   the element it removes at path ++ [ValueSubscript (IntV i)] (record_pop),
+   and replace_popped keeps the keys. *)
+Definition popped_keys_indexed_def:
+  popped_keys_indexed (scs : scope list) <=>
+    EVERY (\sc. !id entry. FLOOKUP sc id = SOME entry ==>
+                 EVERY (\k. ?p i. k = p ++ [ValueSubscript i])
+                       (MAP FST entry.popped)) scs
 End
 
 Definition expr_sim_inv_def:
@@ -218,7 +241,8 @@ Definition expr_sim_inv_def:
        ALL_DISTINCT (MAP FST fields) /\
        EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
                                      sz = type_memory_size tv) fields) /\
-    outcomes_accounts_typed es.outcomes
+    outcomes_accounts_typed es.outcomes /\
+    popped_keys_indexed es.scopes
 End
 
 (* The types whose values are word_values (loweringSlice): integers,
@@ -457,6 +481,60 @@ QED
 
 (* ===== Type soundness ===== *)
 
+Theorem replace_popped_keys[local]:
+  !h tv path r h'.
+    replace_popped tv path r h = SOME h' ==> MAP FST h' = MAP FST h
+Proof
+  Induct >> simp[replace_popped_def] >> Cases >> rpt gen_tac >>
+  simp[replace_popped_def] >> rw[AllCaseEqs()] >> gvs[] >> res_tac
+QED
+
+Theorem entry_pop_step_keys_indexed[local]:
+  !entry path entry'.
+    entry_pop_step entry path entry' /\
+    EVERY (\k. ?p i. k = p ++ [ValueSubscript i]) (MAP FST entry.popped) ==>
+    EVERY (\k. ?p i. k = p ++ [ValueSubscript i]) (MAP FST entry'.popped)
+Proof
+  rw[entry_pop_step_def] >> simp[record_pop_def] >>
+  BasicProvers.every_case_tac >> imp_res_tac replace_popped_keys >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem scope_pop_step_keys_indexed[local]:
+  !sc ev sc'.
+    scope_pop_step sc ev sc' /\ popped_keys_indexed sc ==>
+    popped_keys_indexed sc'
+Proof
+  rpt gen_tac >> PairCases_on `ev` >> rw[scope_pop_step_def] >>
+  drule find_containing_scope_structure >> strip_tac >>
+  gvs[popped_keys_indexed_def, FLOOKUP_UPDATE] >> rw[] >> gvs[]
+  >- (irule entry_pop_step_keys_indexed >> metis_tac[]) >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Theorem scope_pop_trace_keys_indexed[local]:
+  !events sc sc'.
+    scope_pop_trace sc events sc' /\ popped_keys_indexed sc ==>
+    popped_keys_indexed sc'
+Proof
+  Induct >> simp[scope_pop_trace_def] >>
+  metis_tac[scope_pop_step_keys_indexed]
+QED
+
+(* Evaluating an expression changes the scopes only by pops
+   (eval_mutual_scope_pop_effect), so it keeps popped_keys_indexed. *)
+Theorem eval_expr_popped_keys_indexed:
+  !cx e es res es'.
+    eval_expr cx e es = (res, es') /\ popped_keys_indexed es.scopes ==>
+    popped_keys_indexed es'.scopes
+Proof
+  rpt strip_tac >>
+  `scope_pop_effect (eval_expr cx e)` by
+    simp[cj 5 eval_mutual_scope_pop_effect] >>
+  gvs[scope_pop_effect_def] >> first_x_assum drule >> strip_tac >>
+  drule_all scope_pop_trace_keys_indexed >> simp[]
+QED
+
 Theorem expr_sim_pre_eval_result:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
@@ -465,6 +543,7 @@ Theorem expr_sim_pre_eval_result:
          eval_result_typed (env,cx,es') tv (Type (expr_type e))
 Proof
   rpt gen_tac >> simp[expr_sim_pre_def, expr_sim_inv_def] >> strip_tac >>
+  drule_all eval_expr_popped_keys_indexed >> strip_tac >>
   qspecl_then [`cx`, `e`] (mp_tac o CONJUNCT1)
     (cj 5 eval_scc_type_sound_mutual) >>
   disch_then (qspecl_then [`env`, `es`, `res`, `es'`] mp_tac) >>
