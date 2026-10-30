@@ -40,17 +40,7 @@ val () = cv_auto_trans system_expr_run_def;
 Definition system_stmts_run_def:
   system_stmts_run cx ss st = fromk (cont (eval_stmts_cps cx ss st DoneK))
 End
-val system_stmts_run_pre_def = cv_auto_trans_pre
-  "system_stmts_run_pre" system_stmts_run_def;
-
-Theorem system_stmts_run_pre[cv_pre]:
-  !cx ss st. system_stmts_run_pre cx ss st
-Proof
-  rw[system_stmts_run_pre_def, cont_pre_IS_SOME_cont] >>
-  qspecl_then [`cx`, `ss`, `st`, `DoneK`] mp_tac (cj 2 eval_cps_eq) >>
-  rw[] >> CASE_TAC >> CASE_TAC >> rw[cont_def] >>
-  rw[Once OWHILE_THM]
-QED
+val () = cv_auto_trans system_stmts_run_def;
 
 Definition system_destroy_observation_def:
   system_destroy_observation created target own_balance target_balance pending =

@@ -6954,7 +6954,8 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_IntCall]:
   drule intcall_call_evaluation_safe_target_not_mem >> strip_tac >>
   qpat_x_assum `well_typed_expr env (Call _ (IntCall _) _ _)` mp_tac >>
   rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
-  RULE_ASSUM_TAC (SIMP_RULE (pure_ss ++ boolSimps.UNWIND_ss) []) >>
+  RULE_ASSUM_TAC (SIMP_RULE (pure_ss ++ boolSimps.UNWIND_ss)
+    [lock_if_nr_def, unlock_if_nr_def, is_view_mut_def]) >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   rewrite_tac[Once evaluate_def] >>
   simp_tac(srw_ss())[bind_apply, ignore_bind_apply, LET_THM] >>

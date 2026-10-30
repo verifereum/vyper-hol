@@ -12,7 +12,8 @@
  *   store_lays_out               — the stored word lays out the value
  *   store_lays_out_word_value, store_lays_out_typed — its two sources
  *   stmt_state_rel_declare_store — a store into a new local's region binds
- *                                  it, for a word laying out the value
+ *                                  it, for a word laying out a value that
+ *                                  fits the region
  *   typed_word_store             — a typed value of a word type is laid out
  *                                  by its typed word, and well formed
  *   stmt_state_rel_declare_memory — copying a value into a new local's
@@ -99,7 +100,9 @@ Proof
 QED
 
 (* Storing a word that lays out v into a new local's region, whose ALLOCA
-   ran, binds the local to v in the innermost scope. *)
+   ran, binds the local to v in the innermost scope.  v may occupy more than
+   the stored word (the zero length word of an empty bytestring or dynamic
+   array), as long as it fits the region. *)
 Theorem stmt_state_rel_declare_store:
   !func cenv cx es s id p sz w inst v tyv sc rest a x.
     stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -109,7 +112,7 @@ Theorem stmt_state_rel_declare_store:
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
-    32 <= sz /\ type_memory_size tyv = 32 /\
+    32 <= sz /\ type_memory_size tyv <= sz /\
     val_in_memory tyv v (w2n w) (mstore (w2n w) x s).vs_memory /\
     val_wf tyv v ==>
     stmt_state_rel func cenv cx

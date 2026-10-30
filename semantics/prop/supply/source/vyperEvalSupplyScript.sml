@@ -303,6 +303,8 @@ Resume eval_source_supply_mutual[eval_expr_Call_Send]:
 QED
 
 Resume eval_source_supply_mutual[eval_expr_Call_IntCall]:
+  RULE_ASSUM_TAC (REWRITE_RULE
+    [is_view_mut_def, lock_if_nr_def, unlock_if_nr_def]) >>
   simp[Once evaluate_def] >> rpt SUPPLY_STEP >>
   SUPPLY_FINISH_TAC
 QED

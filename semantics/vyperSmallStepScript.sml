@@ -7,19 +7,14 @@ Libs
   cv_transLib wordsLib
 
 (*
-  plan for cps version:
-  - define the same functions as in evaluate_def, but with an additional
-    continuation argument. make the state argument explicit.
-  - whenever there's a recursive call, make it a tail call and store anything
-    required for the remainder on top of the given continuation
-  - whenever there's a return (or raise), call an "apply" function (these are
-    additional compared to evaluate_def) that applies the continuation to the
-    result (there will be a kind of apply function for each kind of result)
-  - applying a continuation to a result that it doesn't expect is an error: find
-    the results it could expect by looking at where it was created
+  CPS version of evaluate_def: the same functions with an additional
+  continuation argument and an explicit state argument.
+  - every recursive call is a tail call; what the remainder needs is stored on
+    top of the given continuation
+  - every return (or raise) calls an "apply" function, one for each kind of
+    result, that applies the continuation to the result
+  - applying a continuation to a result it doesn't expect is an error
 *)
-
-
 
 Datatype:
   eval_continuation
@@ -388,12 +383,7 @@ Definition apply_def:
   apply cx st (IntCallK2 prev rtv nr is_view k) =
     liftk (cx with stk updated_by TL) (ApplyTv o Value)
       (do pop_function prev;
-          (* Release reentrancy lock if nonreentrant and not view *)
-          (if nr ∧ ¬is_view then
-             case cx.nonreentrant_slot of
-             | NONE => return ()
-             | SOME slot => release_nonreentrant_lock cx.txn.target slot
-           else return ());
+          unlock_if_nr cx nr is_view;
           crv <- lift_option_type (safe_cast rtv NoneV) "IntCall cast ret";
           return crv od st) k ∧
   apply cx st DoneK = AK cx Apply st DoneK ∧
@@ -476,13 +466,8 @@ Definition apply_exc_def:
     liftk (cx with stk updated_by TL) (ApplyTv o Value)
       (do rv <- finally_unless_halt
             (finally (handle_function ex) (pop_function prev))
-            (do (* A halt restores scopes but leaves the lock set. *)
-                if nr ∧ ¬is_view then
-                  case cx.nonreentrant_slot of
-                  | NONE => return ()
-                  | SOME slot => release_nonreentrant_lock cx.txn.target slot
-                else return ()
-             od);
+            (* A halt restores scopes but leaves the lock set. *)
+            (unlock_if_nr cx nr is_view);
           crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
 	  return crv od st)
       k ∧
@@ -726,13 +711,9 @@ Definition apply_vals_def:
       vs <- read_results (cx with stk updated_by TL) results;
       env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
       rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
-      is_view <<- (mut = View ∨ mut = Pure);
+      is_view <<- is_view_mut mut;
       (* Acquire lock BEFORE push_function so scopes are unmodified on failure *)
-      (if nr then
-         case cx.nonreentrant_slot of
-         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
-       else return ());
+      lock_if_nr cx nr is_view;
       cxf <- push_function src_fn env (cx with stk updated_by TL);
       return (prev, cxf, body, rtv, is_view) od st
      of (INR ex, st) => apply_exc (cx with stk updated_by TL) ex st k

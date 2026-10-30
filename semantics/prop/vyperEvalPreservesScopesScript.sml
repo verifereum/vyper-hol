@@ -1946,7 +1946,8 @@ Proof
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
     pop_assum mp_tac >>
-    simp_tac std_ss [evaluate_def, bind_apply, ignore_bind_apply] >>
+    simp_tac std_ss [evaluate_def, bind_apply, ignore_bind_apply,
+                     lock_if_nr_def, unlock_if_nr_def, is_view_mut_def] >>
     (* check recursion *)
     BasicProvers.TOP_CASE_TAC >>
     imp_res_tac type_check_state >>
