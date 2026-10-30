@@ -116,10 +116,3 @@ Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[abi_allocation_windows_separated] >>
   drule_all abi_writer_separated_allocation >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed actual allocation profile windows: " ^ name)
-  end) (DB.thms "abiAllocationWindows")

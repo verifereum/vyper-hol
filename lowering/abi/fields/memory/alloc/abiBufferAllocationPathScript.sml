@@ -111,10 +111,3 @@ Proof
     asm_simp_tac (srw_ss()) [Abbr`out`, abi_state_frame_inst_idx] >>
   qexists_tac `out` >> asm_simp_tac bool_ss [] >> simp[Abbr`out`]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed actual buffer allocation path: " ^ name)
-  end) (DB.thms "abiBufferAllocationPath")

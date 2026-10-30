@@ -10,7 +10,9 @@ Theorem abi_encoder_leaf_step_globals:
   inst.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND} /\
   step_inst_base inst s = OK t ==>
   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-  t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+  t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests /\
+  t.vs_tx_ctx = s.vs_tx_ctx /\ t.vs_block_ctx = s.vs_block_ctx /\
+  t.vs_immutables = s.vs_immutables /\ t.vs_outcomes = s.vs_outcomes
 Proof
   simp_tac (srw_ss()) [IN_INSERT, NOT_IN_EMPTY] >> strip_tac >>
   gvs[Once step_inst_base_def] >>
@@ -23,7 +25,9 @@ Theorem abi_encoder_leaf_sequence_globals:
   EVERY (\i. i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND}) insts /\
   run_inst_seq insts s = OK t ==>
   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-  t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+  t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests /\
+  t.vs_tx_ctx = s.vs_tx_ctx /\ t.vs_block_ctx = s.vs_block_ctx /\
+  t.vs_immutables = s.vs_immutables /\ t.vs_outcomes = s.vs_outcomes
 Proof
   Induct_on `insts` >- simp[run_inst_seq_def] >>
   rpt gen_tac >> rename1 `EVERY _ (inst::rest)` >> simp_tac (srw_ss()) [Once run_inst_seq_def] >>

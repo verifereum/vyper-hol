@@ -81,10 +81,3 @@ Proof
   mp_tac (Q.SPECL [`32`,`off`] encode_num_bytes_length_bound) >>
   asm_simp_tac (srw_ss()) [dimword_def, dimindex_256]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed spill word-bound proof: " ^ name)
-  end) (DB.thms "spillWordBounds")

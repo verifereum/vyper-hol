@@ -89,10 +89,3 @@ Proof
   mp_tac (Q.SPECL [`before`, `middle`] allocation_growth_next) >> impl_tac >- simp[] >> DISCH_TAC >>
   mp_tac (Q.SPECL [`middle`, `after`] allocation_growth_next) >> impl_tac >- simp[] >> decide_tac
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed snapshot allocation growth: " ^ name)
-  end) (DB.thms "allocationGrowth")

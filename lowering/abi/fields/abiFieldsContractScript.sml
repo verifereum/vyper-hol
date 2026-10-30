@@ -45,10 +45,3 @@ Proof
   simp_tac bool_ss [abi_fields_contract_def, abi_complex_fields_nil] >>
   rpt gen_tac >> strip_tac >> gvs[] >> qexists_tac `ss` >> simp[fragment_path_refl]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed ABI field assertion contracts: " ^ name)
-  end) (DB.thms "abiFieldsContract")

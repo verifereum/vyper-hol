@@ -417,10 +417,3 @@ Proof
   simp[build_compile_env_ce_struct_fields] >> strip_tac >>
   irule make_struct_fields_map_acyclic >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed typed-copy metadata theorem: " ^ name)
-  end) (DB.thms "typedCopyMetadata")

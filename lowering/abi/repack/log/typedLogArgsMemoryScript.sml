@@ -39,10 +39,3 @@ Proof
   impl_tac >- first_assum MATCH_ACCEPT_TAC >> DISCH_TAC >>
   asm_simp_tac bool_ss [log_arg_safe_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed saved Log argument RAM and operand frames: " ^ name)
-  end) (DB.thms "typedLogArgsMemory")

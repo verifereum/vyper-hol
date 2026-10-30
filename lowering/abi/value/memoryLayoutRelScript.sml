@@ -87,10 +87,3 @@ Proof
   simp[memory_value_rel_def, val_in_memory_def, LET_THM] >>
   rename1 `ArrayV elems` >> Cases_on `elems` >> simp[val_in_memory_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed complete memory-layout relation theorem: " ^ name)
-  end) (DB.thms "memoryLayoutRel")

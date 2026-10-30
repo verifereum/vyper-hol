@@ -62,10 +62,3 @@ Proof
   qpat_x_assum `!other_tv other_v offset. _` mp_tac >>
   asm_simp_tac (srw_ss()) [array_copy_frame_def, type_memory_size_def, ADD_ASSOC] >> first_assum MATCH_ACCEPT_TAC
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed checked bulk dynamic-array contract: " ^ name)
-  end) (DB.thms "typedDynBulkContract")

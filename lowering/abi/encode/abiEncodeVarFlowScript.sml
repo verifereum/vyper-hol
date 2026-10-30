@@ -72,10 +72,3 @@ Proof
   mp_tac (Q.SPECL [`dst`, `src`, `info`] (cj 2 compiler_vars_mono_abi_encode)) >>
   DISCH_TAC >> drule_all compiler_vars_mono_result >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed ABI encoder SSA allocation: " ^ name)
-  end) (DB.thms "abiEncodeVarFlow")

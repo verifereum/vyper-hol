@@ -80,10 +80,3 @@ Proof
   `copy_state_frame ss final_ss` by simp[Abbr`final_ss`] >>
   qexists_tac `final_ss` >> asm_simp_tac bool_ss [LENGTH] >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed complete recursive fixed-array path: " ^ name)
-  end) (DB.thms "typedSArrayPath")

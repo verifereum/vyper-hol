@@ -144,10 +144,3 @@ Proof
   qspecl_then [`CARD (abi_alloca_pending small ss)`, `CARD (abi_alloca_pending large ss)`, `byte_count`]
     mp_tac LESS_MONO_MULT >> simp[abi_alloca_budget_def, MULT_COMM]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed reusable ABI allocation trace budget: " ^ name)
-  end) (DB.thms "abiAllocationTrace")

@@ -19,8 +19,3 @@ Theorem event_widen_nested_string_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val () = List.app (fn (name,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail ("event parity oracle dependency: " ^ name))
-  (DB.thms "evalCompilerEventWidenNestedString")

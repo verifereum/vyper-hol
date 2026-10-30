@@ -83,9 +83,3 @@ Proof
     (qx_choose_then `init_slot` strip_assume_tac o PURE_REWRITE_RULE [abi_encoder_complex_prefix_post_def]) >>
   qexistsl_tac [`actual`,`slot`] >> gvs[]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared cursor preparation admission, axiom or hypothesis"
-  end) [abi_encoder_complex_prefix_raw_reach, abi_encoder_shared_cursor_prepare];

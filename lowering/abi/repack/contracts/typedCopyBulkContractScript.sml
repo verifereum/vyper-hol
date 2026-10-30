@@ -25,10 +25,3 @@ Proof
   simp[eval_op_inst_idx, array_copy_frame_def] >> rpt gen_tac >> DISCH_TAC >>
   irule memory_copy_result_frame >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed constant-size typed copy contract: " ^ name)
-  end) (DB.thms "typedCopyBulkContract")

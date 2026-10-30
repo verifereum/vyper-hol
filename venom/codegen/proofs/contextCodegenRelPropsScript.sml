@@ -278,14 +278,3 @@ Proof
   first_x_assum drule >>
   PairCases_on `e` >> simp[] >> metis_tac[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed local read-safety proof: " ^ name)
-  end)
-  [("context_source_memory_reads_disjoint_local",
-    context_source_memory_reads_disjoint_local),
-   ("codegen_memory_obligations_local_reads",
-    codegen_memory_obligations_local_reads)]

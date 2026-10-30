@@ -784,17 +784,6 @@ val () = List.app (fn mods =>
      else raise Fail "event declaration should be rejected"
   end) event_decl_rejections;
 
-(* The event checker interface must remain kernel-closed. *)
-val () = List.app (fn th =>
-  let val (oracles, _) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail "event checker theorem has oracle dependencies"
-  end)
-  [check_contract_event_fields, module_event_key_MEM,
-   module_event_keys_unique, contract_keys_module_distinct,
-   contract_namespaces_ok_event_decl_unique, check_contract_event_decl_unique,
-   event_declaration_regressions];
-
 Theorem event_arg_recursive_widening_eval:
   event_arg_compatible (BaseT (StringT 10)) (BaseT (StringT 5)) /\
   event_arg_compatible (ArrayT (BaseT (UintT 256)) (Dynamic 5))

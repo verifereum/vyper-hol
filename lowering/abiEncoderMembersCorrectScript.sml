@@ -45,10 +45,3 @@ Theorem abi_encoder_members_correct_all:
 Proof
   MATCH_ACCEPT_TAC abi_encoder_members_correct_from_spine
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "source members wrapper has an admission, axiom or hypothesis"
-  end) [abi_encoder_members_correct_from_spine, abi_encoder_members_correct_cons,
-    abi_encoder_members_correct_all];

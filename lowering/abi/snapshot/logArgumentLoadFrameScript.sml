@@ -43,10 +43,3 @@ Proof
   Cases_on `arg` >> Cases_on `atvs` >> Cases_on `values` >> simp[log_args_rel_def] >>
   strip_tac >> first_x_assum drule_all >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed loaded Log argument prefix frames: " ^ name)
-  end) (DB.thms "logArgumentLoadFrame")

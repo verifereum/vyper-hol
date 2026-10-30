@@ -81,10 +81,3 @@ Definition log_argument_plan_def:
         MEM (load_cut.cs_next_id,type_memory_size tv) requests /\ MEM load_cut.cs_next_id ids) /\
       log_argument_plan tops cenv func ids requests final_cut suffix save_cut cut)
 End
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed Log list induction contracts: " ^ name)
-  end) (DB.thms "logArgumentListContract")

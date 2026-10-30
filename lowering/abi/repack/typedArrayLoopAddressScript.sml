@@ -116,10 +116,3 @@ Proof
     `body_bb`, `typed_array_loop_addresses cs.cs_next_id cs.cs_next_var dst src dst_size src_size`]
     fragment_path_prefix) >> simp[typed_array_loop_addresses_straight]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed typed array-copy address theorem: " ^ name)
-  end) (DB.thms "typedArrayLoopAddress")

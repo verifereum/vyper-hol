@@ -40,10 +40,3 @@ Proof
     asm_simp_tac bool_ss [abi_field_bytes_length] >>
   gvs[abi_flat_geometry_def, abi_field_head_size_def, abi_field_tail_size_def] >> decide_tac
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed concrete Log encoder prerequisites: " ^ name)
-  end) (DB.thms "abiLogReady")

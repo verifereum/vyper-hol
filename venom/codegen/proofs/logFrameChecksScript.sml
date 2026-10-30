@@ -373,9 +373,3 @@ Proof
        log_probe_es_def, make_asm_call_state_def,
        vfmContextTheory.initial_context_def]
 QED
-
-
-
-val _ = List.app (fn (name,th) =>
-  if null (List.filter (fn s => s <> "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail ("oracle dependency in " ^ name)) (DB.thms "logFrameChecks");

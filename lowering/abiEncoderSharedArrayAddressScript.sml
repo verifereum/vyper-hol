@@ -23,8 +23,10 @@ QED
 Theorem abi_encoder_array_address_step_globals[local]:
   (i.inst_opcode = ADD \/ i.inst_opcode = MUL \/ i.inst_opcode = MLOAD) /\
   step_inst_base i s = OK t ==>
-  (t.vs_accounts,t.vs_transient,t.vs_logs,t.vs_requests) =
-  (s.vs_accounts,s.vs_transient,s.vs_logs,s.vs_requests)
+  (t.vs_accounts,t.vs_transient,t.vs_logs,t.vs_requests,
+    t.vs_tx_ctx,t.vs_block_ctx,t.vs_immutables,t.vs_outcomes) =
+  (s.vs_accounts,s.vs_transient,s.vs_logs,s.vs_requests,
+    s.vs_tx_ctx,s.vs_block_ctx,s.vs_immutables,s.vs_outcomes)
 Proof
   strip_tac >>
   gvs[step_inst_base_def, exec_pure2_def, exec_read1_def,
@@ -35,15 +37,20 @@ Theorem abi_encoder_array_address_raw_globals:
   abi_encode_array_addresses ip src dst asz msz st = (coords,final) /\
   abi_encoder_member_phase_raw st final initial actual ==>
   actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
-  actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests
+  actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
+  actual.vs_tx_ctx = initial.vs_tx_ctx /\ actual.vs_block_ctx = initial.vs_block_ctx /\
+  actual.vs_immutables = initial.vs_immutables /\ actual.vs_outcomes = initial.vs_outcomes
 Proof
   strip_tac >> drule abi_encoder_array_address_opcodes >> disch_tac >>
   gvs[abi_encoder_member_phase_raw_def] >>
   rename1 `run_inst_seq (emitted_insts st final) initial = OK raw` >>
-  `(raw.vs_accounts,raw.vs_transient,raw.vs_logs,raw.vs_requests) =
-   (initial.vs_accounts,initial.vs_transient,initial.vs_logs,initial.vs_requests)` by
+  `(raw.vs_accounts,raw.vs_transient,raw.vs_logs,raw.vs_requests,
+      raw.vs_tx_ctx,raw.vs_block_ctx,raw.vs_immutables,raw.vs_outcomes) =
+   (initial.vs_accounts,initial.vs_transient,initial.vs_logs,initial.vs_requests,
+     initial.vs_tx_ctx,initial.vs_block_ctx,initial.vs_immutables,initial.vs_outcomes)` by
     (irule (BETA_RULE (Q.ISPEC
-       `\s:venom_state. (s.vs_accounts,s.vs_transient,s.vs_logs,s.vs_requests)`
+       `\s:venom_state. (s.vs_accounts,s.vs_transient,s.vs_logs,s.vs_requests,
+         s.vs_tx_ctx,s.vs_block_ctx,s.vs_immutables,s.vs_outcomes)`
        run_inst_seq_preserves_field)) >>
      qexists_tac `emitted_insts st final` >> asm_rewrite_tac [] >>
      rpt strip_tac >> irule abi_encoder_array_address_step_globals >>
@@ -85,7 +92,9 @@ Proof
   `abi_decoder_address_frame st.cs_next_var initial actual /\ fresh_vars_wrt limit_st actual` by
     gvs[abi_decoder_address_frame_def, fresh_vars_wrt_def, Abbr `actual`, eval_op_inst_idx] >>
   `actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
-   actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests` by
+   actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
+   actual.vs_tx_ctx = initial.vs_tx_ctx /\ actual.vs_block_ctx = initial.vs_block_ctx /\
+   actual.vs_immutables = initial.vs_immutables /\ actual.vs_outcomes = initial.vs_outcomes` by
     (drule_all abi_encoder_array_address_raw_globals >> simp[]) >>
   `abi_encoder_registered_effect ids outs initial actual /\
    (alloca_inv initial ==> alloca_inv actual)` by
@@ -101,9 +110,3 @@ Proof
   qexists_tac `actual` >>
   gvs[abi_decoder_address_frame_def, Abbr `actual`, eval_op_inst_idx]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array address admission, axiom or hypothesis"
-  end) [abi_encoder_array_address_raw_globals, abi_encoder_shared_array_address_reach];

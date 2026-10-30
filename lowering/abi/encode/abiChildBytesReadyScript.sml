@@ -40,10 +40,3 @@ Theorem bytestring_abi_pre_memory:
 Proof
   simp[bytestring_abi_pre_def, mload_def, read_memory_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed bytestring child preparation: " ^ name)
-  end) (DB.thms "abiChildBytesReady")

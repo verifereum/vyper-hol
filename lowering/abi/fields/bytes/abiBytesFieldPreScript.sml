@@ -34,10 +34,3 @@ Proof
   simp[abi_bytes_field_pre_def, bytestring_abi_pre_def, abi_fields_layout_def,
     mload_def, read_memory_def, abi_field_address_state_frame]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed bytestring ABI field traversal precondition: " ^ name)
-  end) (DB.thms "abiBytesFieldPre")

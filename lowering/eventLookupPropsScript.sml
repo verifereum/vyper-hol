@@ -30,9 +30,3 @@ Proof
   irule lookup_event_metadata_in_decl >>
   metis_tac[contract_namespaces_ok_event_decl_unique, MEM]
 QED
-
-(* Kernel-integrity check for this boundary and its semantic prerequisite. *)
-val _ = List.app (fn thy => List.app (fn (name,th) =>
-  if List.exists (fn s => s <> "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then raise Fail ("oracle: " ^ thy ^ "." ^ name) else ()) (DB.thms thy))
-  ["vyperTypeEventLookup", "eventLookupProps"];

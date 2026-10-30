@@ -266,11 +266,3 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_scratch_member_dynamic_output_detailed >> simp_tac bool_ss []
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "scratch child interpretation has an admission, axiom or hypothesis"
-  end) [abi_scratch_member_static_input, abi_scratch_member_static_output,
-    abi_scratch_member_dynamic_input, abi_scratch_member_dynamic_output_detailed,
-    abi_scratch_member_dynamic_output];

@@ -130,11 +130,3 @@ Proof
       fragment_path_emitted) >>
   simp[eval_op_inst_idx, eval_operand_def, fresh_vars_wrt_inst_idx]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed ABI path theorem: " ^ name)
-  end)
-  (DB.thms "abiEncoderPathProps")

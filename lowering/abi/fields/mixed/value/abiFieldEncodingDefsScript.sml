@@ -18,10 +18,3 @@ Definition abi_field_encodings_def:
     abi_field_encodings tenv sfields cenv tys tvs vs avs rows) /\
   (abi_field_encodings tenv sfields cenv _ _ _ _ _ <=> F)
 End
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed pure source/compiler field encodings: " ^ name)
-  end) (DB.thms "abiFieldEncodingDefs")

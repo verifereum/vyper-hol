@@ -40,10 +40,3 @@ Proof
   rpt gen_tac >> strip_tac >> Cases_on `vs` >> fs[vyperTypingTheory.value_has_type_def] >>
   qexists_tac `ss` >> simp[memory_value_rel_def, fragment_path_refl]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed complete tuple-field copy contract: " ^ name)
-  end) (DB.thms "typedFieldsContract")

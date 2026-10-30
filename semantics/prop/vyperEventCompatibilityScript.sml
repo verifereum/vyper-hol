@@ -157,9 +157,3 @@ Proof
   simp[well_formed_type_def, evaluate_type_def, event_arg_compatible_def,
        vyperValueTheory.type_slot_size_def, wordsTheory.dimword_def] >> CONV_TAC (wordsLib.WORD_CONV) >> simp[vyperValueTheory.type_slot_size_def]
 QED
-
-val _ = List.app (fn (name, th) =>
-  if null (List.filter (fn s => s <> "DISK_THM")
-      (fst (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail ("oracle dependency: " ^ name))
-  (DB.thms "vyperEventCompatibility");

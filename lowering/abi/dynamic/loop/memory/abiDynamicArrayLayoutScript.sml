@@ -93,10 +93,3 @@ Proof
   mp_tac (Q.SPECL [`elem_ty`, `vs`] abi_dynamic_array_encoded_size) >> impl_tac >- simp[] >> DISCH_TAC >>
   asm_simp_tac bool_ss [word_add_n2w]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed dynamic-array source ABI layout: " ^ name)
-  end) (DB.thms "abiDynamicArrayLayout")

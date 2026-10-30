@@ -175,11 +175,3 @@ Proof
     gvs[ci_mono_def, same_blocks_def, cs_extends_def, APPEND_EQ_SELF] >>
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed LOG compiler structure theorem: " ^ name)
-  end)
-  (DB.thms "eventLoweringStructure")

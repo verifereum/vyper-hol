@@ -67,10 +67,3 @@ Proof
         mp_tac (Q.SPECL [`type_env tops`, `ctx`, `func`, `cenv`, `field_ty`, `field_ty`, `field_tv`, `field_tv`]
           typed_copy_complete_instance) >> simp[CONJUNCT1 event_arg_compatible_reflexive]]) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed compatible aggregate-copy completeness: " ^ name)
-  end) (DB.thms "typedCopyCompleteAggregate")

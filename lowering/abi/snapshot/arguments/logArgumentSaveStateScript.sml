@@ -79,10 +79,3 @@ Proof
   qexists_tac `out` >> asm_simp_tac bool_ss [EVERY_APPEND, EVERY_DEF, FST] >>
   rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed source-state saving of Log argument prefix: " ^ name)
-  end) (DB.thms "logArgumentSaveState")

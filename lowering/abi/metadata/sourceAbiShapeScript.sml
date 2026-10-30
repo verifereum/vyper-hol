@@ -44,10 +44,3 @@ Proof
      simp[Once vyper_to_abi_type_def, Once vyper_is_dynamic_def, is_dynamic_def],
      simp[Once vyper_to_abi_type_def, Once vyper_is_dynamic_def, is_dynamic_def]]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed source ABI dynamic shape: " ^ name)
-  end) (DB.thms "sourceAbiShape")

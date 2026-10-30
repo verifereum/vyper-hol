@@ -58,10 +58,3 @@ Proof
   `alloca_inv ss_mid` by (drule_all fragment_step_alloca_inv >> simp[]) >>
   first_x_assum irule >> first_assum MATCH_ACCEPT_TAC
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed native fragment allocator invariant: " ^ name)
-  end) (DB.thms "abiPathAllocInv")

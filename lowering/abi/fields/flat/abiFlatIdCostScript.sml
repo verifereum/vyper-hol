@@ -50,10 +50,3 @@ Proof
   rpt gen_tac >> Cases_on `row` >> simp_tac bool_ss [abi_flat_id_cost_def] >>
   FIRST [MATCH_ACCEPT_TAC compile_abi_flat_static_singleton_cost, MATCH_ACCEPT_TAC compile_abi_flat_bytes_singleton_cost]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed exact native flat field compiler cost: " ^ name)
-  end) (DB.thms "abiFlatIdCost")

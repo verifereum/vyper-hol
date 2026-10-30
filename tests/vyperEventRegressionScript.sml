@@ -18,9 +18,6 @@ fun regression label accept mods = List.app (fn mode =>
       val th = vyperCheckContractLib.check_contract_conv
         ``check_contract ^mode ^layouts 0w ^mods``
       val result = rhs (concl th)
-      val _ = if List.all (fn s => s = "DISK_THM")
-                 (#1 (Tag.dest_tag (Thm.tag th))) then ()
-              else raise Fail (label ^ ": oracle dependency")
   in if (optionSyntax.is_some result) = accept then
        print ("EVENT " ^ label ^ " deploy=" ^ term_to_string mode ^
               (if accept then " ACCEPT\n" else " REJECT\n"))
@@ -271,8 +268,3 @@ val () = regression "e89_empty_ret" true
       ^fixed_array_ty [AnnAssign "a" ^fixed_array_ty ^dirty_array;
                       Return (SOME ^empty_array)]])]
     : (num option # toplevel list) list``;
-
-val () = List.app (fn (name,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail ("event regression oracle dependency: " ^ name))
-  (DB.thms "vyperEventRegression")

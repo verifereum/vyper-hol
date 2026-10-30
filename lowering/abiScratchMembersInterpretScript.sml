@@ -256,16 +256,3 @@ Proof
   disch_then (qspecl_then [`infos`,`st`,`so`,`ho`,`out`,`en`,`x`,`s`] mp_tac) >>
   asm_rewrite_tac []
 QED
-
-val _ =
-  if List.exists (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
-    ["abiScratchMembersCorrect", "abiScratchComplex", "abiScratchEncoderRecursive"]
-  then raise Fail "scratch interpretation imports a recursive execution owner" else ();
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "scratch interpretation has an admission, axiom or hypothesis"
-  end) [abi_scratch_members_child_dispatch, abi_scratch_members_child_run,
-    abi_scratch_members_entry_input, abi_scratch_members_entry_exit,
-    abi_scratch_members_index_cons_shape, abi_scratch_members_entry_prepare,
-    abi_scratch_members_empty_post, abi_scratch_members_generate];

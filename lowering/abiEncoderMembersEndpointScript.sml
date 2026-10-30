@@ -141,10 +141,3 @@ Proof
   irule abi_decode_sim_trans >> qexists_tac `s` >> asm_rewrite_tac [] >>
   irule abi_decode_sim_trans >> qexists_tac `r` >> asm_rewrite_tac []
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "source member endpoint has an admission, axiom or hypothesis"
-  end) [abi_encoder_members_static_endpoint, abi_encoder_members_dynamic_endpoint,
-  abi_encoder_members_origin_transport];

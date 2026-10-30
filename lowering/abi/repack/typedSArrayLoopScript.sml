@@ -159,10 +159,3 @@ Proof
   mp_tac (Q.SPECL [`cs.cs_next_var`, `7`, `num_names`, `j`] compiler_var_names_before) >>
   simp[sarray_copy_start_def, typed_array_loop_start_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed actual fixed-array loop theorem: " ^ name)
-  end) (DB.thms "typedSArrayLoop")

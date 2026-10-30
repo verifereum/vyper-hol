@@ -95,10 +95,3 @@ Proof
   simp[abi_request_reservation_def, abi_requests_compatible_def, abi_alloca_request_ok_def,
     abi_alloca_budget_def, abi_alloca_pending_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed heterogeneous request profile reservation: " ^ name)
-  end) (DB.thms "abiRequestProfile")

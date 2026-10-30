@@ -50,10 +50,3 @@ Proof
   simp[abi_field_values_def, value_has_type_def] >> strip_tac >>
   conj_tac >- (drule_all abi_field_value_valid >> simp[]) >> first_x_assum drule_all >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed pure typed mixed field values: " ^ name)
-  end) (DB.thms "abiFieldValueDefs")

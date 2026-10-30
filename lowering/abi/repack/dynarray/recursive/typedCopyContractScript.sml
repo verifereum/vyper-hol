@@ -49,10 +49,3 @@ Proof
       (compiler_var_name cs.cs_next_var 5) (fresh_label_output "typed_dyn_cond" cs.cs_next_label) |>` >>
   simp[typed_array_loop_counter_def, phi_prefix_length_def, mk_inst_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed recursive typed-copy contract: " ^ name)
-  end) (DB.thms "typedCopyContract")

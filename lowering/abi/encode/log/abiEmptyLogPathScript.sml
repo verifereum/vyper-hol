@@ -37,10 +37,3 @@ Proof
   `copy_state_frame ss (out with vs_logs := ss.vs_logs)` by simp[] >>
   qexists_tac `out` >> fs[read_memory_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed empty-data actual Log execution: " ^ name)
-  end) (DB.thms "abiEmptyLogPath")

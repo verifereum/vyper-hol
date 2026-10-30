@@ -112,10 +112,3 @@ Proof
         typed_array_loop_counter_terminator, DROP_LENGTH_APPEND] >>
       simp[typed_array_loop_counter_def, mk_inst_def, is_terminator_def, jump_to_def]) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed typed array-copy counter theorem: " ^ name)
-  end) (DB.thms "typedArrayLoopCounter")

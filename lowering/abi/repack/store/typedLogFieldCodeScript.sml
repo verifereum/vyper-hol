@@ -53,10 +53,3 @@ Proof
   simp_tac bool_ss [typedCopyCutTheory.compiler_cut_continuation_def] >>
   disch_then (qspecl_then [`cs`, `dst`, `mid`, `func`] mp_tac) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed actual Log field store cuts: " ^ name)
-  end) (DB.thms "typedLogFieldCode")

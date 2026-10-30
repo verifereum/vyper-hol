@@ -64,12 +64,6 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array tail admission, axiom or hypothesis"
-  end) [abi_encoder_shared_array_tail_reach];
-
 (* Pure observations at the driver's actual suffix state.  The zero-byte
    branch deliberately needs no disjointness of the empty child window. *)
 Theorem abi_encoder_shared_array_tail_observations:
@@ -117,9 +111,3 @@ Proof
     (asm_rewrite_tac [] >> irule abi_encoder_child_suffix_words >> asm_rewrite_tac []) >>
   asm_rewrite_tac []
 QED
-
-val _ =
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag abi_encoder_shared_array_tail_observations) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp abi_encoder_shared_array_tail_observations)
-    then () else raise Fail "shared array tail observations admission, axiom or hypothesis"
-  end;

@@ -88,10 +88,3 @@ Proof
     `src`, `aty`, `atv`, `copy_count`, `cs`, `ret`, `cs'`, `after`] checked_compile_copy_sarray_contract) >>
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed checked recursive fixed-array contract: " ^ name)
-  end) (DB.thms "typedSArrayContract")

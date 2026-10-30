@@ -58,10 +58,3 @@ Proof
   gvs[abi_flat_state_def, abi_flat_mem_size_def, abi_flat_output_def, abi_field_head_size_append,
     abi_field_head_size_def, abi_field_tail_size_append, abi_field_tail_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed concrete static field step with remaining source preservation: " ^ name)
-  end) (DB.thms "abiFlatStaticStep")

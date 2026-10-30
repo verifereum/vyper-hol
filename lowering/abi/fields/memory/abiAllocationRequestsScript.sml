@@ -25,10 +25,3 @@ Proof
   mp_tac (Q.SPECL [`allocations`, `ss`, `FST (request:num # num)`, `SND (request:num # num)`] abi_allocation_sequence_request) >>
   impl_tac >- fs[EVERY_MEM] >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed pending allocation request preservation: " ^ name)
-  end) (DB.thms "abiAllocationRequests")

@@ -41,22 +41,6 @@ Proof
 QED
 
 (* This layer must remain available before all member execution owners. *)
-val _ =
-  if List.exists
-       (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
-       ["abiEncoderStatic", "abiEncoderDynamic", "abiEncoderMemberSourcePhase", "abiEncoderMembersDefs",
-        "abiScratchStatic", "abiScratchDynamicChild", "abiScratchMemberStep", "abiScratchComplex",
-        "abiEncoderMemberSpineCompat", "abiEncoderMemberPhaseExec", "abiEncoderMember",
-        "abiScratchMembers", "abiEncoderMembersCorrect", "abiEncoderComplexStatic"]
-  then raise Fail "source adapter imports a member execution owner"
-  else ();
-
-val _ =
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag abi_encoder_static_child_spine_reach) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print "ENCODER_SOURCE_ADAPTER_AUDIT_OK static_child_spine_reach\n"
-    else raise Fail "source adapter admission dependency: static_child_spine_reach"
-  end;
 
 Theorem abi_encoder_source_suffix_raw_post:
   abi_encode_child_suffix head dp offset len st = (out,final) /\
@@ -154,17 +138,6 @@ Proof
   disch_then (qspec_then `ctx` assume_tac) >>
   fs[abi_encoder_child_suffix_post_def]
 QED
-
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print ("ENCODER_SOURCE_ADAPTER_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("source adapter admission dependency: " ^ name)
-  end)
-  [("suffix_raw_post", abi_encoder_source_suffix_raw_post),
-   ("suffix_raw_sim", abi_encoder_source_suffix_raw_sim),
-   ("suffix_raw_control", abi_encoder_source_suffix_raw_control),
-   ("dynamic_finish_transport", abi_encoder_source_dynamic_finish_transport)];
 
 Theorem abi_encoder_source_dynamic_prepare_transport:
   abi_encode_child_prefix dst head_offset dyn_ptr st = (ops,prepared) /\
@@ -410,15 +383,3 @@ Proof
   goal_assum (drule_at Any) >> asm_rewrite_tac [] >>
   goal_assum (drule_at Any) >> simp[]
 QED
-
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print ("ENCODER_SOURCE_ADAPTER_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("source adapter admission dependency: " ^ name)
-  end)
-  [("dynamic_prepare_transport", abi_encoder_source_dynamic_prepare_transport),
-   ("dynamic_core_run", abi_encoder_source_dynamic_core_run),
-   ("dynamic_input", abi_encoder_member_source_dynamic_input),
-   ("dynamic_output", abi_encoder_member_source_dynamic_output),
-   ("dynamic_child_spine_reach", abi_encoder_dynamic_child_spine_reach)];

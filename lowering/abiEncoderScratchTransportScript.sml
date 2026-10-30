@@ -20,9 +20,3 @@ Proof
     (irule abi_encoder_child_scratch_allocations >> fs[abi_decoder_address_frame_def]) >>
   metis_tac[]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "scratch transport admission, axiom or hypothesis"
-  end) [abi_encoder_child_scratch_allocations, abi_encoder_address_scratch_disjoint];

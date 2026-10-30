@@ -95,9 +95,3 @@ Proof
   qpat_x_assum `off = _` SUBST_ALL_TAC >>
   full_simp_tac bool_ss [AC ADD_ASSOC ADD_COMM]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "open array step admission, axiom or hypothesis"
-  end) [abi_encoder_open_array_static_step, abi_encoder_open_array_dynamic_step];

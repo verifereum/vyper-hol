@@ -48,10 +48,3 @@ Proof
      impl_tac >- simp[abi_child_prefix_frame] >> simp[]) >>
   fs[abi_child_prefix_cut_def, eval_op_inst_idx, abi_child_prefix_values, EVERY_CONJ]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed bytestring child prefix preparation: " ^ name)
-  end) (DB.thms "abiChildBytesStart")

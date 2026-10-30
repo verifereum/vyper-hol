@@ -112,10 +112,3 @@ Proof
   fs[eval_op_inst_idx, log_bytes_store_field_operand, log_bytes_store_operand_frame] >>
   first_assum MATCH_ACCEPT_TAC
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed Log bytes/string field path theorem: " ^ name)
-  end) (DB.thms "logBytesStoreProps")

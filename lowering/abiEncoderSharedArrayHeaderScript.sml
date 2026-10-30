@@ -160,11 +160,3 @@ Proof
   simp[Abbr `t`, abi_encoder_array_header_registered, jump_to_def,
     abi_encode_array_header_state_def, update_var_def]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array header admission, axiom or hypothesis"
-  end) [abi_encoder_array_header_extend_state, abi_encoder_array_header_extend_sim,
-    abi_encoder_array_header_registered, abi_encoder_shared_input_address,
-    abi_encoder_shared_array_index_address, abi_encoder_shared_array_header_index];

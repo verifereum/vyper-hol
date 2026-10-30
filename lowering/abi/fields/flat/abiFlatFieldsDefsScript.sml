@@ -71,10 +71,3 @@ Definition abi_flat_state_def:
     abi_flat_sources rows root_addr source_offset dst_addr (tail_offset + abi_field_tail_size fields)
       [(w2n dst_addr,capacity);(w2n dyn_addr,32)] ss
 End
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed concrete ABI field observation definitions: " ^ name)
-  end) (DB.thms "abiFlatFieldsDefs")

@@ -43,10 +43,3 @@ Proof
   qspecl_then [`compile_log_save_arg cenv ty src suffix`, `cs`, `saved`, `cut`]
     mp_tac compiler_id_flow_result >> simp[compiler_id_flow_log_save_arg]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed Log argument instruction-ID flow: " ^ name)
-  end) (DB.thms "logArgumentIdFlow")

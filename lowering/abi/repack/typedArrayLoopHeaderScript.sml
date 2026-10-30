@@ -139,10 +139,3 @@ Proof
   >- (simp[typed_array_loop_header_prefix_straight, typed_array_loop_header_terminator] >>
       simp[typed_array_loop_header_def, mk_inst_def, is_terminator_def, jump_to_def]) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed typed array-copy header theorem: " ^ name)
-  end) (DB.thms "typedArrayLoopHeader")

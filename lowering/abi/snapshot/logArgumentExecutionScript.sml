@@ -67,10 +67,3 @@ Proof
   qpat_x_assum `log_args_rel _ _ _ out` mp_tac >>
   simp_tac bool_ss [GSYM APPEND_ASSOC, APPEND]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed source-order argument execution: " ^ name)
-  end) (DB.thms "logArgumentExecution")

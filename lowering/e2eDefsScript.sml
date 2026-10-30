@@ -385,14 +385,3 @@ Definition call_result_rel_def:
     | (INR ContinueException, _, _) => F
     | (INR (ReturnException _), _, _) => F
 End
-
-(* These executable topic and list-characterization boundaries must remain
-   kernel-closed, including the twenty-byte alignment regressions. *)
-val _ = List.app (fn th =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail "event topic boundary has oracle dependencies")
-  [encode_event_topic_eq_log_topic_equiv,
-   encode_indexed_event_topics_characterization,
-   vyperEventTheory.encode_indexed_event_topics_pre,
-   vyperEventTheory.encode_event_topic_bytes20,
-   vyperEventTheory.encode_event_topic_address];

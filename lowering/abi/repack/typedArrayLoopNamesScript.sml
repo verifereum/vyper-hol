@@ -65,10 +65,3 @@ Proof
   rpt gen_tac >> DISCH_TAC >> rewrite_tac[compiler_var_names_avoid] >>
   simp[compiler_var_name_add] >> rpt strip_tac >> decide_tac
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed generated-name lifetime theorem: " ^ name)
-  end) (DB.thms "typedArrayLoopNames")

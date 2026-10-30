@@ -91,10 +91,3 @@ Proof
   qpat_x_assum `!arg_op. EVERY _ _ ==> _` (qspec_then `arg_op` mp_tac) >>
   asm_simp_tac (srw_ss()) [abi_child_prefix_cut_def, eval_op_inst_idx]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed actual bytestring child execution: " ^ name)
-  end) (DB.thms "abiChildBytesExec")

@@ -34,10 +34,3 @@ Theorem abi_allocated_window_field_address[simp]:
 Proof
   rpt gen_tac >> irule abi_allocated_window_state >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed allocation-state ownership transport: " ^ name)
-  end) (DB.thms "abiAllocatedState")

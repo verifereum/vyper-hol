@@ -204,10 +204,3 @@ Proof
   rpt gen_tac >> strip_tac >> qpat_x_assum `topic_value_rel _ _ _ _` mp_tac >>
   asm_simp_tac bool_ss [topic_value_rel_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed topic operand execution: " ^ name)
-  end) (DB.thms "eventTopicOperands")

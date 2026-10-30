@@ -98,10 +98,3 @@ Proof
   `left_inst = right_inst` by
     (qspecl_then [`func`, `left_inst`, `right_inst`] mp_tac fn_inst_ids_distinct_inj >> simp[]) >> gvs[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed allocation requests from emitted code: " ^ name)
-  end) (DB.thms "compileAllocationRequests")

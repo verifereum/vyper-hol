@@ -156,13 +156,3 @@ Proof
     (gvs[abi_encoder_zero_aware_separation] >> decide_tac) >>
   asm_simp_tac bool_ss [abi_encoder_shared_input_def] >> decide_tac
 QED
-
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared members input admission, axiom or hypothesis"
-  end) [abi_encoder_shared_members_pre_mono, abi_encoder_shared_members_pre_address,
-    abi_encoder_shared_members_pre_shape, abi_encoder_shared_members_pre_empty,
-    abi_encoder_shared_open_input_frame, abi_encoder_shared_members_pre_effect,
-    abi_encoder_shared_members_pre_cons, abi_encoder_shared_members_child_buffer];

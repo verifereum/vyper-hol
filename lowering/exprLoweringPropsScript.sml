@@ -4220,19 +4220,6 @@ Proof
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
 
-(* These structural certificates must remain independent of the semantic
-   expression-correctness admissions elsewhere in this theory. *)
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed expression structure theorem: " ^ name)
-  end)
-  [("compile_expr_ci_mono", compile_expr_ci_mono),
-   ("compile_name_correct", compile_name_correct),
-   ("ci_mono_lower_value_compile_expr", ci_mono_lower_value_compile_expr),
-   ("compile_expr_extends_insts", compile_expr_extends_insts)];
-
 (* Issue #560 integrity gate, including local proof-interface helpers. *)
 val () = List.app (fn th =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)

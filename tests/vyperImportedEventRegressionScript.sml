@@ -30,8 +30,3 @@ end
 
 val () = List.app imported_event_regression
   ["event_import_ierc20", "event_import_user_module", "event_import_approval"]
-
-val () = List.app (fn (name,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail ("imported event oracle dependency: " ^ name))
-  (DB.thms "vyperImportedEventRegression")

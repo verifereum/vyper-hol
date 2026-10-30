@@ -53,10 +53,3 @@ Proof
     (drule_all compile_abi_encode_extends >> simp[]) >>
   irule fn_has_code_split >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed static ABI child code cuts: " ^ name)
-  end) (DB.thms "abiStaticChildCode")

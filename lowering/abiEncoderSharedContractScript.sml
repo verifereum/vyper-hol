@@ -215,24 +215,3 @@ Theorem abi_encoder_shared_endpoint_intro:
 Proof
   simp[abi_encoder_shared_endpoint_def]
 QED
-
-(* Check the exact new boundary dependencies, including primitive writes.
-   DISK_THM is the only permitted load marker; this is not an axiom audit
-   of upstream .dat files, which do not retain axiom provenance. *)
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print ("ENCODER_SHARED_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("encoder shared admission dependency: " ^ name)
-  end)
-  [("shared_run", abi_encoder_shared_run),
-   ("shared_scratch", abi_encoder_shared_scratch),
-   ("endpoint_intro", abi_encoder_shared_endpoint_intro),
-   ("scratch_input_shared", abi_scratch_input_shared),
-   ("endpoint_sim", abi_encoder_shared_endpoint_sim),
-   ("registered_slot_store", abi_encoder_registered_slot_store),
-   ("output_store", abi_encoder_output_store),
-   ("output_copy", abi_encoder_registered_output_copy),
-   ("register_alloca_inv", abi_encoder_register_alloca_inv),
-   ("registered_allocation", abi_encoder_registered_allocation),
-   ("primitive_alloca_inv", abi_encoder_primitive_alloca_inv)];

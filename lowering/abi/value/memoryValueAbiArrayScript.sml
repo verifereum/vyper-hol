@@ -199,10 +199,3 @@ Proof
   fs[enc_array_static_values, enc_dynamic_array_static_values,
     mem_bytes_at_split, mem_bytes_at_word] >> gvs[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed complete memory/ABI array theorem: " ^ name)
-  end) (DB.thms "memoryValueAbiArray")

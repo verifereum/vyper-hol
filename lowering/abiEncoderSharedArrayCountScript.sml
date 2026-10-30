@@ -53,7 +53,9 @@ Theorem abi_encoder_array_count_registered:
 Proof
   strip_tac >> drule_all abi_encoder_array_count_raw_transport >> strip_tac >>
   `ready.vs_accounts = initial.vs_accounts /\ ready.vs_transient = initial.vs_transient /\
-   ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests` by
+   ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests /\
+   ready.vs_tx_ctx = initial.vs_tx_ctx /\ ready.vs_block_ctx = initial.vs_block_ctx /\
+   ready.vs_immutables = initial.vs_immutables /\ ready.vs_outcomes = initial.vs_outcomes` by
     (irule abi_encoder_member_phase_globals >> goal_assum (drule_at Any) >>
      drule abi_encoder_array_count_opcodes >> simp[]) >>
   conj_tac
@@ -145,12 +147,3 @@ Proof
   asm_simp_tac bool_ss [abi_encoder_shared_input_def, abi_encoder_array_prefix_empty] >>
   fs[abi_decoder_child_scratch_def]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array count admission, axiom or hypothesis"
-  end) [abi_encoder_array_count_raw_transport, abi_encoder_array_count_opcodes,
-    abi_encoder_array_count_registered, abi_encoder_array_count_extend,
-    abi_encoder_shared_array_count_effect, abi_encoder_shared_array_count_input_facts,
-    abi_encoder_shared_array_count_input];

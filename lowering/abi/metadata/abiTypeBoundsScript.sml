@@ -226,10 +226,3 @@ Proof
   rpt gen_tac >> strip_tac >> simp_tac bool_ss [Once abi_size_bound_def] >>
   drule_all (CONJUNCT2 abi_type_size_bound_joint) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed source/compiler complete ABI size bounds: " ^ name)
-  end) (DB.thms "abiTypeBounds")

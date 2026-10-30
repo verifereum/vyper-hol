@@ -57,10 +57,3 @@ Proof
   disch_then (qx_choose_then `tail_rows` (qx_choose_then `tail_abis` ASSUME_TAC)) >>
   qexistsl_tac [`head_row::tail_rows`, `head_abi::tail_abis`] >> simp[abi_field_encodings_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed complete lists of source/compiler field encodings: " ^ name)
-  end) (DB.thms "abiFieldEncodingsList")

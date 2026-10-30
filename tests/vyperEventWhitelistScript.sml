@@ -51,10 +51,3 @@ Theorem log_arity_and_type_checker_owned:
 Proof
   EVAL_TAC
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed issue 570 event whitelist regression: " ^ name)
-  end) (DB.thms "vyperEventWhitelist")

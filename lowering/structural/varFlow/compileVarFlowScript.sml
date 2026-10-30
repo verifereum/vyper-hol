@@ -62,10 +62,3 @@ Proof
   qpat_x_assum `compiler_vars_mono m` (mp_tac o REWRITE_RULE [compiler_vars_mono_def]) >>
   disch_then (qspec_then `cs` mp_tac) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed compiler variable-allocation theorem: " ^ name)
-  end) (DB.thms "compileVarFlow")

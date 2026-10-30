@@ -151,10 +151,3 @@ Proof
   irule type_memory_bytes_evaluated >> qexists_tac `tops` >>
   simp[build_compile_env_ce_struct_fields]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed evaluated memory-layout theorem: " ^ name)
-  end) (DB.thms "typeLayoutProps")

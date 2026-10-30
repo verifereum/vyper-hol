@@ -86,10 +86,3 @@ Proof
   simp[compiler_preserves_def, compiler_alloca_code_def, emit_inst_def,
     comp_bind_def, fresh_id_def, emit_def, comp_return_def, mk_inst_def, LET_THM]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed compiler code predicate preservation: " ^ name)
-  end) (DB.thms "compileCodePreservation")

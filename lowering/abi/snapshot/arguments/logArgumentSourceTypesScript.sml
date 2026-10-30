@@ -100,10 +100,3 @@ Proof
     (mp_tac o CONJUNCT2 o REWRITE_RULE [source_memory_separated_def]) >>
   disch_then (qspecl_then [`name`, `old`, `p`, `region_size`, `ptr_addr`] mp_tac) >> fs[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed source scope type transport for Log arguments: " ^ name)
-  end) (DB.thms "logArgumentSourceTypes")

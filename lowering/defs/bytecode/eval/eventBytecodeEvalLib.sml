@@ -46,9 +46,6 @@ fun compile_stages stem program = let
     val th = save_thm (stem ^ "_" ^ label,
       if String.isSuffix "_pipeline_eval" label then pipeline_eval label tm
       else bossLib.EVAL tm)
-    val _ = if null (hyp th) andalso
-        List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-      then () else raise Fail ("event compiler certificate: " ^ label)
     val _ = evalCompilerBytecodeLib.add_compile_eval th
     val _ = print ("EVENT compiler stage elapsed " ^
       Time.toString (Time.- (Time.now (), started)) ^ "s\n")

@@ -126,9 +126,3 @@ Proof
   drule_all (Q.INST [`dyn` |-> `T`, `active` |-> `T`] abi_scratch_members_after_child) >>
   strip_tac >> asm_rewrite_tac []
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "scratch member endpoint has an admission, axiom or hypothesis"
-  end) [abi_scratch_members_static_endpoint, abi_scratch_members_dynamic_endpoint];

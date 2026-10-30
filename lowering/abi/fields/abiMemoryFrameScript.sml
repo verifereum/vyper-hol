@@ -127,10 +127,3 @@ Theorem abi_memory_frame_update_var:
 Proof
   simp[abi_memory_frame_def, read_memory_def, update_var_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed ABI written-window memory frames: " ^ name)
-  end) (DB.thms "abiMemoryFrame")

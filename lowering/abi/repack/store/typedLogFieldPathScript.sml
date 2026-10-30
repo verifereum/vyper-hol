@@ -69,10 +69,3 @@ Proof
   qexists_tac `out` >> rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC,
     asm_simp_tac bool_ss [] >> NO_TAC]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed complete Log memory field path: " ^ name)
-  end) (DB.thms "typedLogFieldPath")

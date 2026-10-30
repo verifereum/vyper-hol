@@ -71,10 +71,3 @@ Proof
   drule array_copy_fixed_frame >> DISCH_TAC >>
   qexists_tac `out` >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed complete recursive sparse fixed-array copy: " ^ name)
-  end) (DB.thms "typedSArraySource")

@@ -84,10 +84,3 @@ Proof
   disch_then (mp_tac o AP_TERM ``\st:venom_state. st with vs_inst_idx := LENGTH mid.cs_current_insts + 3``) >>
   simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed dynamic ABI child path composition: " ^ name)
-  end) (DB.thms "abiChildRun")

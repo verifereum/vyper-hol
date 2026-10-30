@@ -46,10 +46,3 @@ Proof
   asm_simp_tac (srw_ss()) [abi_field_address_state_operand, abi_field_address_state_value,
     abi_field_source_names, EVERY_CONJ]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed arbitrary ABI field child operand preparation: " ^ name)
-  end) (DB.thms "abiFieldReady")

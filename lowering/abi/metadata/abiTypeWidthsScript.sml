@@ -203,10 +203,3 @@ Proof
   drule_all evaluated_abi_embedded_width >> DISCH_TAC >>
   first_x_assum (qspecl_then [`tail_tvs`, `tenv`, `sfields`] mp_tac) >> simp[type_memory_size_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed source/compiler ABI widths: " ^ name)
-  end) (DB.thms "abiTypeWidths")

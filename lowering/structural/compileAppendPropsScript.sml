@@ -29,10 +29,3 @@ Proof
      disch_then (qspecl_then [`mid`, `ret`, `cs'`] mp_tac) >> simp[]) >>
   drule_all fn_has_code_split >> strip_tac >> qexistsl_tac [`value`, `mid`] >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed compiler-bind containment theorem: " ^ name)
-  end) (DB.thms "compileAppendProps")

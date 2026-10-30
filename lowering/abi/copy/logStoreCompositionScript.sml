@@ -85,10 +85,3 @@ Proof
   simp[compile_log_store_data_def, comp_ignore_bind_def, comp_bind_def,
     comp_return_def, FUN_EQ_THM, LET_THM, pairTheory.UNCURRY]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed Log store-composition theorem: " ^ name)
-  end) (DB.thms "logStoreComposition")

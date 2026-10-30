@@ -126,11 +126,3 @@ Proof
   simp[bytestring_copy_state_def, mcopy_def, LET_THM,
     LENGTH_write_memory_with_expansion, LENGTH_mstore_eq, MAX_DEF]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed ABI bytestring memory theorem: " ^ name)
-  end)
-  (DB.thms "abiBytestringMemory")

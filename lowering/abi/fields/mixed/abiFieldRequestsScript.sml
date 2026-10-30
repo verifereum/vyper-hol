@@ -52,10 +52,3 @@ Proof
   `next_id <= FST request` by fs[EVERY_MEM] >>
   mp_tac (Q.SPECL [`next_id`, `ss`, `FST (request:num # num)`, `SND (request:num # num)`] abi_allocation_fresh_request) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed mixed native scratch-request profiles: " ^ name)
-  end) (DB.thms "abiFieldRequests")

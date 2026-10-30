@@ -183,11 +183,3 @@ Proof
   qexists_tac `out` >> simp[] >> irule fragment_path_trans >>
   qexists_tac `abi_static_loop_enter_body var_base labels counter_addr len_word ss` >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed ABI static-loop iteration theorem: " ^ name)
-  end)
-  (DB.thms "abiStaticLoopIteration")

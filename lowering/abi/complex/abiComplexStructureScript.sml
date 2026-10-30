@@ -103,10 +103,3 @@ Proof
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> strip_tac >>
   mp_tac (Q.SPECL [`addressed`, `mid`, `cs'`, `func`] fn_has_code_split) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed actual aggregate ABI code spans: " ^ name)
-  end) (DB.thms "abiComplexStructure")

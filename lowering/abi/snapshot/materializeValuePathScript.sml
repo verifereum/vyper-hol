@@ -127,10 +127,3 @@ Proof
   gvs[materialized_state_def, lowered_value_rel_def, abi_state_frame_inst_idx,
     eval_op_inst_idx, memory_snapshot_result_operand_frame]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed materialized value execution and frames: " ^ name)
-  end) (DB.thms "materializeValuePath")

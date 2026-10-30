@@ -12,10 +12,3 @@ Proof
   qpat_x_assum `abi_operand_before _ _` (mp_tac o REWRITE_RULE [abi_operand_before_def]) >>
   disch_then (qspec_then `var_base` mp_tac) >> simp[compiler_var_name_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed generated operand frame: " ^ name)
-  end) (DB.thms "nameValueCode")

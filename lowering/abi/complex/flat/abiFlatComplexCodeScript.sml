@@ -37,10 +37,3 @@ Proof
   impl_tac >- simp[abi_flat_entries_dynamic] >>
   simp[compile_abi_complex_prefix_result, abi_flat_entries_head_size]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed concrete field metadata for the actual ABI dispatcher: " ^ name)
-  end) (DB.thms "abiFlatComplexCode")

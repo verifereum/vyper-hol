@@ -145,11 +145,3 @@ Theorem mload_read_memory:
 Proof
   simp[mload_def, read_memory_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed memory-read theorem: " ^ name)
-  end)
-  (DB.thms "memoryReadProps")

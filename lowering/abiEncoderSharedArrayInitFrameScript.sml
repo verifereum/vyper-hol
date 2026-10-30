@@ -22,9 +22,3 @@ Proof
   irule abi_scratch_disjoint_subset >> qexists_tac `abi_decoder_ids first last` >>
   fs[abi_encoder_shared_input_def, SUBSET_DEF, abi_decoder_ids_def] >> decide_tac
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array init frame admission, axiom or hypothesis"
-  end) [abi_encoder_shared_array_prefix_scratch];

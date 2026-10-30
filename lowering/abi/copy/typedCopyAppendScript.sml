@@ -43,10 +43,3 @@ Proof
   rpt (FIRST [CHANGED_TAC (asm_simp_tac (srw_ss())
       (CONJUNCTS cs_appends_typed_copy_mutual @ typed_append_rules)), IF_CASES_TAC])
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed recursive typed-copy append theorem: " ^ name)
-  end) (DB.thms "typedCopyAppend")

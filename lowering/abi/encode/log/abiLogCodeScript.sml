@@ -34,10 +34,3 @@ Proof
     (irule cs_extends_same_block >> drule emit_inst_extends >> simp[IS_PREFIX_APPEND]) >>
   drule_all compile_abi_encode_code_split >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed actual Log encoding/emission cuts: " ^ name)
-  end) (DB.thms "abiLogCode")

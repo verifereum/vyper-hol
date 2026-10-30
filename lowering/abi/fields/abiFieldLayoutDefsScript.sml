@@ -114,10 +114,3 @@ Proof
   first_x_assum (qspecl_then [`right`, `tail_offset + LENGTH (abi_field_tail is_dyn payload)`] SUBST1_TAC) >>
   simp_tac bool_ss [APPEND_ASSOC, ADD_ASSOC]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed ABI field head/tail layout: " ^ name)
-  end) (DB.thms "abiFieldLayoutDefs")

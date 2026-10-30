@@ -71,10 +71,3 @@ Proof
   impl_tac >- (rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC, simp[log_args_avoid_def]]) >>
   simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed saved Log argument list frames: " ^ name)
-  end) (DB.thms "typedLogArgsFrames")

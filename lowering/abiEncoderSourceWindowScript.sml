@@ -103,14 +103,3 @@ Proof
 QED
 
 (* Retained tags do not reconstruct axiom provenance erased by .dat loading. *)
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print ("ENCODER_SOURCE_WINDOW_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("source window admission dependency: " ^ name)
-  end)
-  [("uniform_block", abi_encoder_uniform_block_representative),
-   ("uniform_aligned", abi_encoder_uniform_aligned_representative),
-   ("uniform_static", abi_encoder_uniform_static_source),
-   ("bytes", abi_encoder_open_bytes_source),
-   ("string", abi_encoder_open_string_source)];

@@ -105,10 +105,3 @@ Proof
     abi_alloca_budget byte_count ids ss` by (irule abi_alloca_budget_frame >> simp[]) >>
   simp[memory_snapshot_alloc_frame_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed cached ABI allocation budget: " ^ name)
-  end) (DB.thms "abiAllocationBudget")

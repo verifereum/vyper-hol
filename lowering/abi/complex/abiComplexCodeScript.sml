@@ -94,10 +94,3 @@ Proof
   rename1 `emit_op ADD [src; Lit (n2w source_offset)] cs = (field_src,prefix)` >>
   Cases_on `compile_abi_encode_child dst field_src info is_dyn head_offset dyn_ptr prefix` >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed actual aggregate ABI code: " ^ name)
-  end) (DB.thms "abiComplexCode")

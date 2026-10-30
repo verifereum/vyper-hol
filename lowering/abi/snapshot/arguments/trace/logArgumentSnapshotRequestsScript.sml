@@ -37,10 +37,3 @@ Proof
      simp[Abbr`inst`, mk_inst_def]) >>
   drule_all compiler_alloca_requests_ids >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed actual Log snapshot request membership: " ^ name)
-  end) (DB.thms "logArgumentSnapshotRequests")

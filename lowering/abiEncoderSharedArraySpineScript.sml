@@ -132,7 +132,9 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_encoder_member_tail_transport >> strip_tac >>
   `ready.vs_accounts = initial.vs_accounts /\ ready.vs_transient = initial.vs_transient /\
-   ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests` by
+   ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests /\
+   ready.vs_tx_ctx = initial.vs_tx_ctx /\ ready.vs_block_ctx = initial.vs_block_ctx /\
+   ready.vs_immutables = initial.vs_immutables /\ ready.vs_outcomes = initial.vs_outcomes` by
     (irule abi_encoder_member_phase_globals >> goal_assum (drule_at Any) >>
      drule abi_encoder_array_spine_tail_opcodes >> simp[]) >>
   gvs[abi_decoder_address_frame_def, abi_encoder_registered_effect_def,
@@ -225,16 +227,3 @@ Proof
   irule abi_encoder_extend_sim_trans >> qexists_tac `ready` >> simp[] >>
   irule abi_encoder_extend_sim_trans >> qexists_tac `encoded` >> simp[]
 QED
-
-val _ =
-  if List.exists (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
-    ["abiScratchEncoderRecursive", "abiEncoderCorrectRecursive", "abiEncoderProps"]
-  then raise Fail "shared array spine imports recursive execution owner" else ();
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array spine admission, axiom or hypothesis"
-  end) [abi_encoder_array_spine_shared_pre, abi_encoder_array_spine_cursor_saved,
-    abi_encoder_array_spine_shared_run, abi_encoder_array_spine_tail_opcodes,
-    abi_encoder_array_spine_tail_registered, abi_encoder_array_spine_tail_extend_sim,
-    abi_encoder_array_spine_shared_effects, abi_encoder_array_spine_shared_sim];

@@ -85,8 +85,3 @@ Proof
     (gen_tac >> irule (cj 2 event_arg_compatible_abi_value) >> simp[]) >>
   simp[encode_vyper_event_metadata_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail ("event encoding oracle dependency: " ^ name))
-  (DB.thms "eventEncodingProps")

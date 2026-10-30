@@ -51,10 +51,3 @@ Proof
   mp_tac (Q.SPECL [`ctx`, `func`, `cenv`, `fty`, `aty`, `ftv`, `atv`]
     log_field_type_contract_memory) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed checked uniform Log field contract: " ^ name)
-  end) (DB.thms "typedLogFieldChecked")

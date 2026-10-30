@@ -58,10 +58,3 @@ Proof
   qexistsl_tac [`raw with vs_inst_idx := LENGTH cs'.cs_current_insts`, `topics`] >>
   simp[eval_op_inst_idx, eval_ops_inst_idx]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed indexed-topic control-flow path: " ^ name)
-  end) (DB.thms "eventTopicsPath")

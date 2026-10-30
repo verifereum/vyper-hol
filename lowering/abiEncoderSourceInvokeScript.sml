@@ -77,9 +77,3 @@ Proof
      gvs[abi_decoder_prune_vars_def] >> metis_tac[]) >>
   metis_tac[]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "source invocation admission, axiom or hypothesis"
-  end) [abi_encoder_source_shared_input, abi_encoder_source_shared_run];

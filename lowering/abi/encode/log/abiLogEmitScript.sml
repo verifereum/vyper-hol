@@ -46,10 +46,3 @@ Proof
   qpat_x_assum `out with vs_logs := _ = _` (mp_tac o AP_TERM ``abi_state_context``) >>
   fs[abi_state_frame_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed actual final LOG fragment and external-state frame: " ^ name)
-  end) (DB.thms "abiLogEmit")

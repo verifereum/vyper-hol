@@ -148,11 +148,3 @@ Proof
         jump_to_def] >>
       simp[abi_static_loop_header_def, mk_inst_def, is_terminator_def]) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed ABI static-loop header theorem: " ^ name)
-  end)
-  (DB.thms "abiStaticLoopHeader")

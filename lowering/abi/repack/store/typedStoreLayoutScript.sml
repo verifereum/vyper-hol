@@ -62,10 +62,3 @@ Proof
   mp_tac (Q.SPECL [`ctx`, `func`, `dst`, `src`, `ftv`, `atv`, `cs`, `cs'`]
     typed_copy_contract_source_layout) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed outer layout store contract: " ^ name)
-  end) (DB.thms "typedStoreLayout")

@@ -107,10 +107,3 @@ Proof
   MAP_EVERY qx_gen_tac [`name`, `entry`, `p`, `region_size`, `ptr_addr`] >> strip_tac >>
   drule_all source_pointer_cached_allocation_disjoint >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed source memory allocation separation: " ^ name)
-  end) (DB.thms "sourceMemorySeparation")

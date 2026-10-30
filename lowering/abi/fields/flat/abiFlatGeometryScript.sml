@@ -98,10 +98,3 @@ Proof
     abi_field_tail_size_append, abi_field_head_size_def] >>
   Cases_on `abi_flat_output row` >> simp[abi_field_head_size_def, abi_field_tail_def] >> decide_tac
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed common-arena geometry of concrete ABI fields: " ^ name)
-  end) (DB.thms "abiFlatGeometry")

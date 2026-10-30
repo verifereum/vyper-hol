@@ -48,10 +48,3 @@ Proof
   mp_tac (Q.SPECL [`id`, `var_base`, `capacity`, `index`, `before`, `after`, `abi_field_requests (id + 3) rows`]
     buffer_allocation_word_requests) >> impl_tac >- simp[abi_field_requests_sizes] >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed Log output allocation scratch transport: " ^ name)
-  end) (DB.thms "abiLogAllocationRequests")

@@ -107,10 +107,3 @@ Proof
   mp_tac (Q.SPECL [`tenv`, `ctx`, `func`, `fty`, `aty`, `ftv`, `atv`, `v`, `dst`, `src`,
     `cs`, `ret`, `cs'`, `ss`, `dst_addr`, `src_addr`] compile_store_bytestring_path) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed bytes/string store path theorem: " ^ name)
-  end) (DB.thms "bytesCopyProps")

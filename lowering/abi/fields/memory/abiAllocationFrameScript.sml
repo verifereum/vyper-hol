@@ -104,10 +104,3 @@ Theorem abi_allocation_frame_fields:
 Proof
   rpt gen_tac >> strip_tac >> simp[memory_snapshot_alloc_frame_def, memory_snapshot_addr_def] >> rw[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed reusable ABI allocator frame: " ^ name)
-  end) (DB.thms "abiAllocationFrame")

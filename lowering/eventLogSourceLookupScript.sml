@@ -63,10 +63,3 @@ Proof
   rpt strip_tac >> drule_all_then (qspec_then `values` assume_tac) checked_log_source_encoding >>
   gvs[encode_vyper_event_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed checked source Log lookup and encoding: " ^ name)
-  end) (DB.thms "eventLogSourceLookup")

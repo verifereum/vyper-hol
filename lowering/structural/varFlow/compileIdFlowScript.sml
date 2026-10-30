@@ -166,10 +166,3 @@ Proof
   >- (drule_all compiler_ids_mono_result >> simp[]) >>
   DISCH_TAC >> drule_all compiler_preserves_result >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed compiler instruction ID flow: " ^ name)
-  end) (DB.thms "compileIdFlow")

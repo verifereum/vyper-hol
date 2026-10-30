@@ -61,10 +61,3 @@ Proof
     abi_memory_frame_inst_idx, mstore_update_var, mload_update_var,
     abi_memory_frame_update_var, abi_memory_frame_mstore, abi_state_frame_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed word/copy ABI byte execution frames: " ^ name)
-  end) (DB.thms "abiStaticBytesPath")

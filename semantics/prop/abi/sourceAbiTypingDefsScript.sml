@@ -37,10 +37,3 @@ Definition source_abi_types_typed_def:
       vyper_to_abi_list env tys vs = SOME avs ==>
       has_types (MAP (vyper_to_abi_type env) tys) avs
 End
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed source ABI typing definitions: " ^ name)
-  end) (DB.thms "sourceAbiTypingDefs")

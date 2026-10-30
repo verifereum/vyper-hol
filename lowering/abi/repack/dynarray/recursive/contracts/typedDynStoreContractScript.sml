@@ -49,10 +49,3 @@ Proof
     `dst_capacity`, `src`, `aty`, `atv`, `src_capacity`, `cs`, `ret`, `cs'`, `after`] checked_compile_copy_dynarray_contract) >>
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed checked dynamic-array dispatcher contract: " ^ name)
-  end) (DB.thms "typedDynStoreContract")

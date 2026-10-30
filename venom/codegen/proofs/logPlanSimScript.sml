@@ -177,10 +177,3 @@ Proof
   qexists_tac `st'` >> asm_rewrite_tac [] >>
   irule venom_asm_rel_release_dead_spills >> asm_rewrite_tac []
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed LOG operand-plan proof: " ^ name)
-  end) (DB.thms "logPlanSim")

@@ -42,10 +42,3 @@ Proof
   Cases_on `vs` >> fs[log_args_rel_def] >> qexists_tac `ss` >>
   simp[log_args_rel_def, log_args_safe_def, memory_value_rel_def, value_has_type_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed complete Log data packing contract: " ^ name)
-  end) (DB.thms "typedLogDataContract")

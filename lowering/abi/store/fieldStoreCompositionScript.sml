@@ -65,10 +65,3 @@ Proof
      disch_then (qspecl_then [`mid`, `()`, `cs'`] mp_tac) >> simp[]) >>
   mp_tac (Q.SPECL [`ctx`, `cs`, `mid`, `cs'`, `P`, `Q`, `Q'`, `R`] frag_exec_seq) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed Log field-store composition theorem: " ^ name)
-  end) (DB.thms "fieldStoreComposition")

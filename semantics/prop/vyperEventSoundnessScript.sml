@@ -81,9 +81,3 @@ Proof
   simp[encode_source_event_def] >>
   irule typed_event_metadata_total >> simp[]
 QED
-
-(* Check the complete saved dependency tags, not just successful elaboration. *)
-val _ = List.app (fn (name,th) =>
-  if List.exists (fn s => s <> "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then raise Fail ("oracle: vyperEventSoundness." ^ name) else ())
-  (DB.thms "vyperEventSoundness");

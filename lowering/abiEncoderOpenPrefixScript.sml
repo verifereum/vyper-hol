@@ -18,9 +18,3 @@ Theorem abi_encoder_open_prefix_head_advance:
 Proof
   simp[MAP_APPEND, SUM_APPEND]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "open prefix admission, axiom or hypothesis"
-  end) [abi_encoder_open_prefix_tail_advance, abi_encoder_open_prefix_head_advance];

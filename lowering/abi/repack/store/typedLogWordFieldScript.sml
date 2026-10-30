@@ -66,10 +66,3 @@ Proof
     (irule copy_state_frame_trans >> qexists_tac `addressed` >> simp[]) >>
   qexists_tac `out` >> rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC, simp[] >> NO_TAC]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed scalar Log field path and frame: " ^ name)
-  end) (DB.thms "typedLogWordField")

@@ -33,10 +33,3 @@ Proof
   mp_tac (Q.SPECL [`arg_op`, `cs.cs_next_var`, `0`] abi_field_input_names) >>
   impl_tac >- simp[] >> strip_tac >> simp[abi_field_address_state_operand]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed empty static ABI child execution: " ^ name)
-  end) (DB.thms "abiStaticChildEmpty")

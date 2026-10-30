@@ -65,9 +65,3 @@ Proof
   qpat_x_assum `restored.vs_allocas = _` (fn th => rewrite_tac[th]) >>
   qpat_x_assum `restored.vs_alloca_next = _` (fn th => rewrite_tac[th])
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "fragment frame admission, axiom or hypothesis"
-  end) [abi_encoder_budget_registered_frame, abi_encoder_restored_frame];

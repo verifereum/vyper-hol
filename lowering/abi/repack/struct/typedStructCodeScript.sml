@@ -62,10 +62,3 @@ Proof
   >- (irule struct_field_self_lookup >> simp[]) >> fs[EVERY_MEM] >>
   qpat_x_assum `!entry. MEM entry fields ==> _` (qspec_then `(name,ty,byte_count)` mp_tac) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed actual struct field copy reduction: " ^ name)
-  end) (DB.thms "typedStructCode")

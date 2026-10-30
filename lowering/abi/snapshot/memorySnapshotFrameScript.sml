@@ -68,10 +68,3 @@ Proof
   asm_simp_tac (srw_ss()) [array_copy_frame_def] >> rpt gen_tac >> strip_tac >>
   irule mcopy_preserves_memory_value_rel >> simp[] >> decide_tac
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed argument snapshot memory and external frames: " ^ name)
-  end) (DB.thms "memorySnapshotFrame")

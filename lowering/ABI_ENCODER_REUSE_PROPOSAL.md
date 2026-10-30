@@ -51,31 +51,25 @@ single admissibility induction. The six existing exports in
 [abiScratchEncoderRecursive](abiScratchEncoderRecursiveScript.sml) are projection
 wrappers with unchanged statements and attributes.
 
-## Native Log proof reuse
+## Log consumer
 
-The native Log interface retains its explicit `fragment_path`, actual-ALLOCA
-budget and allocation trace. These are not consequences of the continuation
-simulation interface alone; conversely the shared interface does not assume
-registered source/output ownership or global allocation validity. Neither
-endpoint is replaced by a weaker theorem or given new premises.
+[logAbiEncoder](logAbiEncoderScript.sml) composes
+`compile_abi_encode_to_buf_frag_effect` with the actual LOG instruction.
+[logDataPacking](logDataPackingScript.sml) supplies its input from checked
+argument packing. [memoryValueEncoding](memoryValueEncodingScript.sml) bridges
+the typed packing relation to the canonical `val_in_memory` relation.
+[checkedLogDataExecution](checkedLogDataExecutionScript.sml) composes argument evaluation, topics,
+buffer allocation, packing and encoding, preserving source-state and local
+pointer relations and the source event.
 
-The overlapping execution is now shared at two boundaries:
-
-- [abiEncoderLeafRaw](abiEncoderLeafRawScript.sml) owns word/copy instruction
-  execution, re-exported by `abiEncoderPathProps` and consumed by the enclosing
-  freshness wrappers. The bytes wrapper consumes `compile_abi_bytestring_execution`
-  rather than independently executing the same prefix/copy/suffix instructions.
-- [abiEncoderMembersGenerate](abiEncoderMembersGenerateScript.sml) owns actual
-  member compiler cuts, code-span transport and generative suffix recursion.
-  `abi_encoder_member_spine_generate` and both native static/mixed traversals
-  instantiate it with their existing child runners and invariants. Its callbacks
-  produce runtime states; it does not assume an execution of the whole list.
-
-The descriptor admissibility and raw-memory inductions, array resource proofs,
-frames and child-step interpretations remain separate where their contracts
-are different. In particular, an empty shared array need not satisfy the native
-raw relation's unconditional static-width equation. Deleting either recursive
-closure would therefore discard coverage, not merely remove duplication.
+The former native recursive encoder, raw encoding relations and associated
+array/resource/trace machinery are removed. This deliberately retires their
+internal APIs: Log now uses #551's `enc_scratch`/`enc_frame` resource contract
+and non-error continuation simulation, not the stronger per-instruction path
+and exact-allocation certificate. Cached scratch is permitted above live
+source/output regions; no encoder execution is assumed in its resource
+premises. The shared registered effect exposes the source context fields
+needed by both return and Log consumers.
 
 ## Source and return adapters
 

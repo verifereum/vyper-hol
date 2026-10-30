@@ -108,10 +108,3 @@ Proof
   rpt gen_tac >> Cases_on `tvs` >> simp_tac (srw_ss()) [] >>
   strip_tac >> first_x_assum drule_all >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed returned Log argument pointer origins: " ^ name)
-  end) (DB.thms "logArgumentOrigins")

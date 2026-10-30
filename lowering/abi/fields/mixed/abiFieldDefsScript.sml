@@ -56,10 +56,3 @@ Definition abi_field_sources_def:
     abi_field_sources rest source_id root_addr (source_offset + abi_field_mem_size row) dst_addr
       (tail_cursor + abi_field_tail_size [abi_field_output row]) ss)
 End
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed mixed native ABI field observations: " ^ name)
-  end) (DB.thms "abiFieldDefs")

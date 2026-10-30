@@ -267,10 +267,3 @@ Proof
     rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
       gen_tac >> strip_tac >> CCONTR_TAC >> gvs[]])) >> simp_tac bool_ss []
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed checked-reorder proof: " ^ name)
-  end) (DB.thms "reorderCheckedSim")

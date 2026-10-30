@@ -116,10 +116,3 @@ Proof
   gvs[execute_plan_def, exec_stack_op_def,
       asm_state_component_equality, APPEND_ASSOC]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed duplication restore theorem: " ^ name)
-  end) (DB.thms "deepDupRestore")

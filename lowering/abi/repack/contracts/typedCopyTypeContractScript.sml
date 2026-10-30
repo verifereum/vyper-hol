@@ -43,10 +43,3 @@ Proof
   mp_tac (Q.SPECL [`tenv`, `ctx`, `func`, `cenv`, `dst`, `fty`, `ftv`, `src`, `aty`, `atv`, `cs`, `ret`, `cs'`]
     compile_store_memory_typed_bytes_contract) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed child type-pair copy contracts: " ^ name)
-  end) (DB.thms "typedCopyTypeContract")

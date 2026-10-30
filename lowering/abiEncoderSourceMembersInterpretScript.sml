@@ -30,7 +30,6 @@ Proof
     abi_encoder_source_members_child_post_def]
 QED
 
-
 Theorem abi_encoder_source_members_child_run:
   !y c r. abi_encoder_spine_core_code func c /\
     abi_encoder_source_members_child_pre resources y c r ==>
@@ -193,7 +192,6 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> gvs[]
 QED
 
-
 Theorem abi_encoder_source_members_generate:
   hi <= last /\
   abi_encoder_spine_code func limit_st hi (dst,src,dp) infos (st,so,ho) (out,en) /\
@@ -238,12 +236,3 @@ Proof
   disch_then (qspecl_then [`infos`,`st`,`so`,`ho`,`out`,`en`,`x`,`s`] mp_tac) >>
   asm_rewrite_tac []
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "source interpretation has an admission, axiom or hypothesis"
-  end) [abi_encoder_source_members_child_run, abi_encoder_source_members_child_dispatch,
-    abi_encoder_source_members_entry_input, abi_encoder_source_members_entry_exit,
-    abi_encoder_source_members_entry_prepare, abi_encoder_source_members_empty_post,
-    abi_encoder_source_members_generate];

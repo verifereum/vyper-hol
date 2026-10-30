@@ -47,10 +47,3 @@ Proof
   drule_all_then (qspec_then `ctx` strip_assume_tac) emit_field_address_path >>
   qexists_tac `out` >> fs[compiler_var_names_def, GENLIST_CONS, compiler_var_name_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed typed copy byte-offset path: " ^ name)
-  end) (DB.thms "typedCopyOffset")

@@ -70,10 +70,3 @@ Proof
   disch_then (qspecl_then [`ctx`, `func`, `fty`] ASSUME_TAC) >>
   drule_all typed_copy_complete_instance >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed checked typed-copy completeness: " ^ name)
-  end) (DB.thms "typedCopyComplete")

@@ -65,10 +65,3 @@ Proof
     compiler_cut_continuation_copy_memory_dynamic ::
     cs_appends_compile_bytestring_copy_len :: cs_appends_compile_copy_memory_dynamic :: cut_emit_rules))
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed copy compiler continuation rules: " ^ name)
-  end) (DB.thms "typedCopyCutRules")

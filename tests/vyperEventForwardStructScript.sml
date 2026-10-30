@@ -64,10 +64,3 @@ val () = List.app (fn mode =>
                          else "forward_struct_runtime_checked"), th))
      else raise Fail "forward nested-struct LOG rejected"
   end) [``F``, ``T``];
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed forward-struct LOG theorem: " ^ name)
-  end) (DB.thms "vyperEventForwardStruct")

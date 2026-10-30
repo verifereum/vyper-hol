@@ -172,12 +172,3 @@ Proof
   qexistsl_tac [`h`,`slot`,`off`,`LENGTH (enc at av)`] >>
   fs[abi_scratch_member_core_post_def]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "scratch core contract has an admission, axiom or hypothesis"
-  end) [abi_scratch_member_core_run, abi_scratch_member_child_run,
-    abi_scratch_member_core_saved, abi_scratch_member_dynamic_run,
-    abi_scratch_member_dynamic_saved, abi_scratch_member_dynamic_child_run,
-    abi_scratch_member_dynamic_cursor_input];

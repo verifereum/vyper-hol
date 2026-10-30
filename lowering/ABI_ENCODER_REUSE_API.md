@@ -159,10 +159,12 @@ the index does not replace those contracts.
 - [abi_scratch_members_child_post_def](abiScratchMembersInterpretScript.sml#L14)
 - [abi_scratch_members_entry_def](abiScratchMembersInterpretScript.sml#L47)
 
-## Shared native Log execution boundaries
+## Shared execution and Log boundaries
 
-These preserve the existing native and shared endpoint statements; see
-[the reuse description](ABI_ENCODER_REUSE_PROPOSAL.md#native-log-proof-reuse).
+The native recursive Log framework is retired in favor of the shared source
+encoder; see [the consumer description](ABI_ENCODER_REUSE_PROPOSAL.md#log-consumer).
+The shared source/return API is unchanged; its effect projection additionally
+exposes source-context preservation.
 
 ### abiEncoderLeafRaw
 
@@ -179,6 +181,14 @@ These existing path-API exports remain available from `abiEncoderPathProps`.
 ### abiEncoderBytes
 
 - [abi_encoder_live_names](abiEncoderBytesScript.sml)
+
+### Log consumers
+
+- [compile_abi_encode_to_buf_frag_effect](abiEncoderFragmentScript.sml)
+- [compile_log_abi_emit_frag](logAbiEncoderScript.sml)
+- [memory_value_rel_val_in_memory](memoryValueEncodingScript.sml)
+- [checked_log_data_frag](logDataPackingScript.sml)
+- [checked_compile_log_data_execution](checkedLogDataExecutionScript.sml)
 
 ## Theorem statements
 

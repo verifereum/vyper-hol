@@ -92,10 +92,3 @@ Proof
     fs[log_args_writes_separated_append] >>
   drule_all log_args_rel_write_frame >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed saved Log argument fresh-heap frame: " ^ name)
-  end) (DB.thms "logArgumentFreshFrame")

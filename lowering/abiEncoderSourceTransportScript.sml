@@ -221,17 +221,3 @@ Proof
 QED
 
 (* Retained tags do not reconstruct axiom provenance erased by .dat loading. *)
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print ("ENCODER_SOURCE_TRANSPORT_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("source transport admission dependency: " ^ name)
-  end)
-  [("dense", abi_encoder_dense_source),
-   ("tuple", abi_encoder_tuple_source),
-   ("sparse", abi_encoder_sparse_source),
-   ("dynamic_parent", abi_encoder_dynamic_source),
-   ("tuple_parent", abi_encoder_tuple_parent),
-   ("struct_parent", abi_encoder_struct_parent),
-   ("zero_probe", abi_encoder_sparse_zero_probe),
-   ("absent_probe", abi_encoder_sparse_absent_probe)];

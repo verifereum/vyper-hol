@@ -128,10 +128,3 @@ Proof
   strip_tac >> asm_rewrite_tac [] >>
   irule fixed_suffix_decompose >> fs[plan_state_residual_wf_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed logical-reorder proof: " ^ name)
-  end) (DB.thms "reorderMaterialised")

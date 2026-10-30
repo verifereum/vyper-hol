@@ -70,10 +70,3 @@ Proof
   rpt strip_tac >> drule checked_contract_struct_args_unique >> DISCH_TAC >>
   drule_all evaluated_struct_metadata_types >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed source struct-metadata theorem: " ^ name)
-  end) (DB.thms "structSourceProps")

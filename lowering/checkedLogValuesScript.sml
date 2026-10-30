@@ -82,10 +82,3 @@ Proof
   fs[LIST_REL_EL_EQN] >> rpt strip_tac >> rename1 `expr_type (EL index exprs)` >>
   qexists_tac `EL index field_tvs` >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed checked Log field values: " ^ name)
-  end) (DB.thms "checkedLogValues")

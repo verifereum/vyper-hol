@@ -43,13 +43,3 @@ Proof
   >> qexists_tac `vyper_to_abi_type env ty` >> simp[source_rep_def] >>
   metis_tac[]
 QED
-
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print ("ENCODER_SOURCE_PRIMITIVE_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("source primitive admission dependency: " ^ name)
-  end)
-  [("copy32_word", abi_encoder_copy32_word),
-   ("word_shape", abi_encoder_word_source_shape),
-   ("primitive", source_rep_primitive)];

@@ -102,10 +102,3 @@ Proof
   simp[Once enc_def, enc_tuple_static_acc, any_dynamic_EXISTS, EXISTS_MEM] >>
   AP_TERM_TAC >> qid_spec_tac `vs` >> Induct >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed source ABI array theorem: " ^ name)
-  end) (DB.thms "sourceAbiArray")

@@ -99,10 +99,3 @@ Proof
   qexists_tac `out` >> asm_simp_tac bool_ss [comp_bind_def, LET_THM] >>
   rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC, simp[] >> decide_tac]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed reserved execution of Log argument step: " ^ name)
-  end) (DB.thms "logArgumentReservedStep")

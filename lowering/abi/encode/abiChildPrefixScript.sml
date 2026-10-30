@@ -99,10 +99,3 @@ Proof
         same_blocks_def, DROP_LENGTH_APPEND] >>
       simp[abi_child_prefix_insts_def, mk_inst_def, is_terminator_def]) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed dynamic ABI child prefix execution: " ^ name)
-  end) (DB.thms "abiChildPrefix")

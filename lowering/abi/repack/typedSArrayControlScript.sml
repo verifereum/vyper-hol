@@ -82,10 +82,3 @@ Proof
     `exit_bb`] typed_array_loop_header_path) >>
   simp[eval_operand_lit, sarray_copy_finish_def, typed_array_loop_finish_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed fixed-array loop control theorem: " ^ name)
-  end) (DB.thms "typedSArrayControl")

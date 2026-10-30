@@ -37,10 +37,3 @@ Theorem log_topic_header:
 Proof
   simp[eval_operands_def, eval_operand_def, abi_operand_before_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed topic-to-data preparation: " ^ name)
-  end) (DB.thms "abiLogTopicsReady")

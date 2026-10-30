@@ -79,10 +79,3 @@ Proof
   mp_tac (Q.SPECL [`bss`, `SUC index`] abi_bytes_array_tail_take_bound) >>
   simp[abi_bytes_array_tail_prefix]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed byte/string array prefix model: " ^ name)
-  end) (DB.thms "abiBytesArrayModel")

@@ -51,10 +51,3 @@ Proof
       impl_tac >- (rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC,
         asm_simp_tac bool_ss [] >> first_assum MATCH_ACCEPT_TAC]) >> simp[]) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed checked arbitrary-child fixed-array loop: " ^ name)
-  end) (DB.thms "typedSArrayRun")

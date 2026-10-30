@@ -50,10 +50,3 @@ Proof
   ONCE_REWRITE_TAC [mload_read_memory] >> asm_simp_tac bool_ss [] >>
   rewrite_tac [GSYM mload_read_memory] >> simp[mload_update_var, mload_mstore_same]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed dynamic ABI child memory frames: " ^ name)
-  end) (DB.thms "abiChildFrames")

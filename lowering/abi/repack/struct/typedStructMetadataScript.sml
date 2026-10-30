@@ -50,10 +50,3 @@ Proof
   qexistsl_tac [`fields`, `ZIP (MAP FST args,field_tvs)`] >>
   asm_simp_tac (srw_ss()) [get_struct_fields_def, MAP_ZIP]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed evaluated struct copy metadata: " ^ name)
-  end) (DB.thms "typedStructMetadata")

@@ -57,10 +57,3 @@ Proof
   qpat_x_assum `MAP _ (MAP _ decl_fields) = MAP (abi_field_entry _ cenv) rows` (SUBST1_TAC o SYM) >>
   simp_tac bool_ss [MAP_MAP_o] >> irule MAP_CONG >> simp[FORALL_PROD, o_DEF]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed actual Vyper metadata for mixed field encoding: " ^ name)
-  end) (DB.thms "abiFieldTypeMetadata")

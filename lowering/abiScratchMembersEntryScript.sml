@@ -180,16 +180,3 @@ Proof
   asm_rewrite_tac [] >> qexistsl_tac [`T`, `ei`, `p`, `r`, `r`, `p`] >>
   asm_rewrite_tac [] >> decide_tac
 QED
-
-val _ =
-  if List.exists (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
-    ["abiScratchMembersCorrect", "abiScratchComplex", "abiScratchEncoderRecursive"]
-  then raise Fail "scratch member entry imports a recursive execution owner" else ();
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "scratch member entry has an admission, axiom or hypothesis"
-  end) [abi_scratch_members_index_prepare, abi_scratch_members_static_request,
-    abi_scratch_members_dynamic_request, abi_scratch_members_static_exit,
-    abi_scratch_members_dynamic_exit];

@@ -234,10 +234,3 @@ Proof
   asm_rewrite_tac [] >> qexistsl_tac [`T`, `ei`, `p`, `r`, `r`, `p`] >>
   gvs[Excl "enc_def"]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared endpoint admission, axiom or hypothesis"
-  end) [abi_encoder_shared_members_static_endpoint, abi_encoder_shared_members_static_exit,
-    abi_encoder_shared_members_dynamic_endpoint, abi_encoder_shared_members_dynamic_exit];

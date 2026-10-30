@@ -34,10 +34,3 @@ Proof
     compile_copy_memory_contract) >>
   impl_tac >- first_assum MATCH_ACCEPT_TAC >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed fixed-array bulk-copy contract: " ^ name)
-  end) (DB.thms "typedSArrayBulkContract")

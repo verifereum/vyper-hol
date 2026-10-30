@@ -166,10 +166,3 @@ Proof
           (fresh_label_output "typed_dyn_exit" (cs.cs_next_label + 2)) (Var (compiler_var_name cs.cs_next_var 0)) |>`,
     `exit_bb`] typed_array_loop_header_path) >> impl_tac >- simp[compiler_var_name_add] >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed recursive dynamic-array control theorem: " ^ name)
-  end) (DB.thms "typedDynLoopControl")

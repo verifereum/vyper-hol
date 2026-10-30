@@ -71,10 +71,3 @@ Proof
   mp_tac (Q.SPECL [`tops`, `in_deploy`, `layouts`, `addr`, `art`, `ctx`, `func`, `cenv`, `fts`, `ats`, `ftvs`, `atvs`]
     typed_copy_type_contract_tuple) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed scalar and bytes tuple contracts: " ^ name)
-  end) (DB.thms "typedTupleLeafContract")

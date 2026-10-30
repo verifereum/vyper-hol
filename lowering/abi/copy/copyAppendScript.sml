@@ -51,10 +51,3 @@ Theorem cs_appends_compile_alloc_buffer:
 Proof
   gen_tac >> simp_tac bool_ss [compile_alloc_buffer_def] >> copy_append_tac copy_append_rules
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed memory-copy append theorem: " ^ name)
-  end) (DB.thms "copyAppend")

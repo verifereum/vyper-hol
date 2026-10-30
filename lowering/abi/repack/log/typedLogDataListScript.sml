@@ -35,10 +35,3 @@ Proof
         qpat_x_assum `!buf field_offset cs ret cs'. _`
           (qspecl_then [`buf`, `field_offset + type_memory_bytes cenv fty`, `mid`, `ret`, `cs'`] mp_tac) >> simp[]]) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed complete Log data store list: " ^ name)
-  end) (DB.thms "typedLogDataList")

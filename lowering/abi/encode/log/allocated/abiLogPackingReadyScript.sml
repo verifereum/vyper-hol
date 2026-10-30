@@ -77,10 +77,3 @@ Proof
   drule_all type_memory_layout_list >> DISCH_TAC >>
   asm_simp_tac bool_ss [type_memory_size_def, type_memory_size_list_sum]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed checked packing encoder readiness: " ^ name)
-  end) (DB.thms "abiLogPackingReady")

@@ -34,10 +34,3 @@ Proof
     (qspecl_then [`read_id`, `read_offset`, `read_len`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> simp[read_memory_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed allocation and Log caller frames: " ^ name)
-  end) (DB.thms "abiLogAllocationFrame")

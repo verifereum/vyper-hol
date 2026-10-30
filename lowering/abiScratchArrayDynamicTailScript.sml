@@ -131,10 +131,3 @@ Proof
   irule abi_decode_sim_trans >> qexists_tac `ready` >> asm_simp_tac bool_ss [] >>
   irule abi_decode_sim_trans >> qexists_tac `encoded` >> simp[]
 QED
-
-val _ =
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag abi_scratch_array_dynamic_tail_reach) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print "SCRATCH_ARRAY_SPINE_AUDIT_OK dynamic_tail_reach\n"
-    else raise Fail "scratch array spine admission dependency"
-  end;

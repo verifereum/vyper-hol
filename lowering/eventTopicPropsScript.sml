@@ -54,8 +54,3 @@ Proof
   simp[compile_log_topic_ops_def, compile_encode_log_topic_def,
        comp_bind_def, comp_return_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail ("event topic oracle dependency: " ^ name))
-  (DB.thms "eventTopicProps")

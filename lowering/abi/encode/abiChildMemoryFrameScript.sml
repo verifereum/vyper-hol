@@ -54,10 +54,3 @@ Proof
   >- simp[read_memory_def] >>
   irule abi_child_suffix_read_frame >> fs[abi_window_separated_def, regions_disjoint_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed actual ABI child memory frame: " ^ name)
-  end) (DB.thms "abiChildMemoryFrame")

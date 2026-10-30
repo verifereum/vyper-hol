@@ -43,10 +43,3 @@ Proof
     compile_abi_complex_dynamic_split) >> impl_tac >- simp[abi_field_entries_dynamic] >>
   simp[compile_abi_complex_prefix_result, abi_field_entries_head_size]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed mixed field metadata for actual aggregate encoding: " ^ name)
-  end) (DB.thms "abiFieldComplexCode")

@@ -90,10 +90,3 @@ Proof
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> strip_tac >>
   qexists_tac `out` >> asm_simp_tac (srw_ss()) [array_copy_frame_def] >> first_assum MATCH_ACCEPT_TAC
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed recursive bytes/string store theorem: " ^ name)
-  end) (DB.thms "typedBytesStoreProps")

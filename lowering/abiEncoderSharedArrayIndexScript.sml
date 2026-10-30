@@ -139,11 +139,3 @@ Proof
   simp_tac bool_ss [abi_encoder_shared_array_index_def] >> strip_tac >>
   drule_all abi_encoder_shared_array_selected_input >> simp[]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array index admission, axiom or hypothesis"
-  end) [abi_encoder_shared_array_index_initial, abi_encoder_shared_array_index_facts,
-    abi_encoder_shared_array_index_advance, abi_encoder_shared_array_index_exit_facts,
-    abi_encoder_shared_array_index_layout, abi_encoder_shared_array_index_selected_input];

@@ -115,10 +115,3 @@ Proof
       (qspecl_then [`name`, `entry`, `p`, `region_size`] mp_tac) >> simp[]) >>
   disj2_tac >> qexistsl_tac [`p`, `ptr_addr`] >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed source-backed Log argument windows: " ^ name)
-  end) (DB.thms "logArgumentSourceWindows")

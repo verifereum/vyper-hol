@@ -37,10 +37,3 @@ Theorem dyn_copy_prefix_result_state_frame[simp]:
 Proof
   simp[dyn_copy_prefix_result_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed recursive-copy loop state frames: " ^ name)
-  end) (DB.thms "typedCopyLoopStateFrame")

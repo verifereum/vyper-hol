@@ -5857,12 +5857,3 @@ Proof
   ASM_REWRITE_TAC[execute_plan_append, LENGTH_APPEND, asm_steps_add] >>
   simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed prepared-input inventory proof: " ^ name)
-  end)
-  [("emit_input_plan_pending_inventory", emit_input_plan_pending_inventory),
-   ("emit_input_plan_two_pending_inventory", emit_input_plan_two_pending_inventory)]

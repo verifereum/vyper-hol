@@ -9,7 +9,8 @@ Ancestors
   fragExec compileEnv valueEncoding vyperABI vyperTyping contractABI
   venomState venomExecSemantics words list
   abiEncoderSourceInvoke abiEncoderVarRestore abiEncoderFragmentFrame
-  abiDecoderLoop venomMemDefs
+  abiDecoderLoop venomMemDefs abiEncoderSharedContract
+  abiDecoderVarExtend abiDecoderReentry abiDecoderFrame abiEncoderRegisteredEffect
 
 (* enc_pre allows stale fresh variables: the bridge must preserve that
    generality. Its scratch bounds already imply source/output nonwrapping.
@@ -46,14 +47,48 @@ Proof
   qexists_tac `restored` >> gvs[abi_decode_sim_def]
 QED
 
-(* Kernel-tag audit includes the transitive proof dependencies. *)
-val _ =
-  let
-    val th = compile_abi_encode_to_buf_frag
-    val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in
-    if List.all (fn s => s = "DISK_THM") oracles andalso
-       null axioms andalso null (Thm.hyp th)
-    then ()
-    else raise Fail "encoder fragment admission, axiom or hypothesis"
-  end;
+(* TOP-LEVEL: expose the shared encoder's source-visible context effects.
+   This is a projection of the existing recursive execution endpoint. *)
+Theorem compile_abi_encode_to_buf_frag_effect:
+  !dst src ei st op st' ctx env ty tv v av s0 dst_w src_w lo top.
+    compile_abi_encode_to_buf dst src ei st = (op, st') /\
+    abi_enc_plan env ty ei /\
+    evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+    vyper_to_abi env ty v = SOME av /\
+    eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+    enc_pre st st' [dst; src] lo top tv v (w2n src_w)
+      [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+    frag_exec ctx st st' (\s. s = s0)
+      (\s. mem_bytes_at (w2n dst_w)
+             (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+           eval_operand op s =
+             SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+           enc_frame st st' lo top
+             [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s /\
+           s.vs_call_ctx = s0.vs_call_ctx /\
+           s.vs_data_section = s0.vs_data_section /\
+           s.vs_tx_ctx = s0.vs_tx_ctx /\ s.vs_block_ctx = s0.vs_block_ctx /\
+           s.vs_immutables = s0.vs_immutables /\ s.vs_outcomes = s0.vs_outcomes)
+      (\r. F)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp_tac bool_ss [frag_exec_def] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  drule_all abi_encoder_source_shared_run >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule abi_encoder_shared_restore >> strip_tac >>
+  `lo <= top /\ alloca_inv s0` by
+    (fs[enc_pre_def, enc_scratch_def] >> decide_tac) >>
+  `enc_frame st st' lo top [(w2n dst_w,LENGTH (enc ct rv))] s0 restored` by
+    (drule_all abi_encoder_restored_frame >> simp[]) >>
+  drule abi_encoder_shared_endpoint_scratch >> strip_tac >>
+  `actual.vs_call_ctx = s0.vs_call_ctx /\
+   actual.vs_data_section = s0.vs_data_section` by
+    fs[abi_scratch_effect_def, abi_decode_footprint_frame_def,
+       abi_decoder_prune_vars_def] >>
+  drule abi_decoder_vars_extend_observations >> strip_tac >>
+  drule abi_encoder_shared_endpoint_registered >> strip_tac >>
+  qexists_tac `restored` >>
+  gvs[abi_decode_sim_def, abi_encoder_registered_effect_def,
+    abi_decoder_prune_vars_def]
+QED

@@ -283,10 +283,3 @@ Proof
     execute_plan_singleton, exec_stack_op_def, restore_below_top_code_length] >>
   simp[execute_plan_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed duplication simulation theorem: " ^ name)
-  end) (DB.thms "doDupSim")

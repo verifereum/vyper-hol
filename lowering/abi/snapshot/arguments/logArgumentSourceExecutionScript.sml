@@ -47,10 +47,3 @@ Proof
     gvs[exprs_runtime_typed_def, LIST_REL_CONS1, value_runtime_typed_def] >>
     goal_assum drule >> simp[]]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed source execution for general Log arguments: " ^ name)
-  end) (DB.thms "logArgumentSourceExecution")

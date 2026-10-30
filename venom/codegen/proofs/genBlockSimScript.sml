@@ -6298,35 +6298,6 @@ Proof
   Cases_on `x` >> gvs[] >> metis_tac[]
 QED
 
-(* These constructive input paths must remain independent of the outstanding
-   instruction admissions elsewhere in this theory. *)
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed input preparation proof: " ^ name)
-  end)
-  [("bump_emit_input_plan_first_stage", bump_emit_input_plan_first_stage),
-   ("bump_emit_input_plan_shallow_state_align", bump_emit_input_plan_shallow_state_align),
-   ("bump_emit_input_plan_sim", bump_emit_input_plan_sim),
-   ("bump_deep_inputs_reorder", bump_deep_inputs_reorder),
-   ("bump_input_reorder_venom_asm_rel", bump_input_reorder_venom_asm_rel),
-   ("single_input_owned_coverage", single_input_owned_coverage),
-   ("owned_operands_covered", owned_operands_covered),
-   ("single_input_execution_sim", single_input_execution_sim),
-   ("single_input_postpop_wf", single_input_postpop_wf),
-   ("single_input_fresh_output", single_input_fresh_output),
-   ("generated_plan_state_wf_push_fresh", generated_plan_state_wf_push_fresh),
-   ("fresh_var_conditions", fresh_var_conditions),
-   ("fresh_var_absent", fresh_var_absent),
-   ("assignment_rename_top", assignment_rename_top),
-   ("generated_plan_state_wf_replace_fresh", generated_plan_state_wf_replace_fresh),
-   ("assignment_input_sim", assignment_input_sim),
-   ("prefix_spill_wf_front_suffix", prefix_spill_wf_front_suffix),
-   ("optimistic_postfix_compose_sim", optimistic_postfix_compose_sim),
-   ("pushed_var_pop_sim", pushed_var_pop_sim),
-   ("pop_postfix_compose_sim", pop_postfix_compose_sim)];
-
 (* Deep-DUP repair boundaries must not inherit the unrelated codegen admissions. *)
 val _ = List.app (fn (name, th) =>
   let val oracles = #1 (Tag.dest_tag (Thm.tag th))

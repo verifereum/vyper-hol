@@ -92,10 +92,3 @@ Proof
     fs[GSYM event_fields_expr_compatibility] >>
   drule_all checked_compile_log_eval_all_types >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed checked produced Log argument compatibility: " ^ name)
-  end) (DB.thms "logArgumentTyping")

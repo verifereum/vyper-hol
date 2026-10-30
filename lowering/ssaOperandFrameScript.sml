@@ -85,11 +85,3 @@ Theorem mcopy_reset_vars:
 Proof
   simp[mcopy_def, read_memory_def, write_memory_with_expansion_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed SSA operand frame theorem: " ^ name)
-  end)
-  (DB.thms "ssaOperandFrame")

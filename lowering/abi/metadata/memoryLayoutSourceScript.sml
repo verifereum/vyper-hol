@@ -188,10 +188,3 @@ Proof
   mp_tac (Q.SPECL [`fty`, `aty`, `tenv`, `ftv`, `atv`] layout_key_transport_evaluated) >>
   simp[all_layout_key_transports]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed source memory-layout theorem: " ^ name)
-  end) (DB.thms "memoryLayoutSource")

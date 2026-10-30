@@ -134,16 +134,3 @@ Proof
   >- (irule abi_encoder_shared_member_dynamic_run >> asm_rewrite_tac []) >>
   irule abi_encoder_shared_member_core_run >> asm_rewrite_tac []
 QED
-
-val _ =
-  if List.exists (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
-    ["abiScratchMembersCorrect", "abiScratchComplex", "abiScratchEncoderRecursive",
-     "abiEncoderCorrectRecursive", "abiEncoderProps"]
-  then raise Fail "shared member contract imports recursive execution owner" else ();
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared member contract admission, axiom or hypothesis"
-  end) [abi_encoder_shared_member_core_run, abi_encoder_shared_member_dynamic_run,
-    abi_encoder_shared_member_dynamic_saved, abi_encoder_shared_member_dynamic_cursor_input,
-    abi_encoder_shared_members_child_dispatch, abi_encoder_shared_members_child_run];

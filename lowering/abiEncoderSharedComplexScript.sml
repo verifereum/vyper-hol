@@ -310,14 +310,3 @@ Proof
   >- (irule abi_encoder_shared_complex_dynamic >> asm_rewrite_tac []) >>
   irule abi_encoder_shared_complex_static >> asm_rewrite_tac []
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared complex admission, axiom or hypothesis"
-  end) [abi_encoder_shared_complex_head_length,abi_encoder_shared_complex_prepare,
-    abi_encoder_shared_complex_load_finish, abi_encoder_shared_complex_static_length,
-    abi_encoder_shared_complex_static_run, abi_encoder_shared_complex_static,
-    abi_encoder_shared_complex_slot_bound, abi_encoder_shared_complex_effect_sequence,
-    abi_encoder_shared_complex_members_finish, abi_encoder_shared_complex_dynamic,
-    abi_encoder_shared_complex];

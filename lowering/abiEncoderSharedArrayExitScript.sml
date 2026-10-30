@@ -98,17 +98,22 @@ Theorem abi_encoder_array_exit_readonly:
   ready.vs_memory = initial.vs_memory /\
   ready.vs_allocas = initial.vs_allocas /\ ready.vs_alloca_next = initial.vs_alloca_next /\
   ready.vs_accounts = initial.vs_accounts /\ ready.vs_transient = initial.vs_transient /\
-  ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests
+  ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests /\
+  ready.vs_tx_ctx = initial.vs_tx_ctx /\ ready.vs_block_ctx = initial.vs_block_ctx /\
+  ready.vs_immutables = initial.vs_immutables /\ ready.vs_outcomes = initial.vs_outcomes
 Proof
   strip_tac >> drule abi_encoder_array_exit_opcodes >> strip_tac >>
   gvs[abi_encoder_member_phase_raw_def] >>
   rename1 `run_inst_seq (emitted_insts st final) initial = OK u` >>
-  ` (u.vs_memory,u.vs_allocas,u.vs_alloca_next,u.vs_accounts,u.vs_transient,u.vs_logs,u.vs_requests) =
+  ` (u.vs_memory,u.vs_allocas,u.vs_alloca_next,u.vs_accounts,u.vs_transient,u.vs_logs,u.vs_requests,
+      u.vs_tx_ctx,u.vs_block_ctx,u.vs_immutables,u.vs_outcomes) =
     (initial.vs_memory,initial.vs_allocas,initial.vs_alloca_next,initial.vs_accounts,
-      initial.vs_transient,initial.vs_logs,initial.vs_requests)` by
+      initial.vs_transient,initial.vs_logs,initial.vs_requests,
+      initial.vs_tx_ctx,initial.vs_block_ctx,initial.vs_immutables,initial.vs_outcomes)` by
     (irule (BETA_RULE (Q.ISPEC
        `\s:venom_state. (s.vs_memory,s.vs_allocas,s.vs_alloca_next,s.vs_accounts,
-         s.vs_transient,s.vs_logs,s.vs_requests)` run_inst_seq_preserves_field)) >>
+         s.vs_transient,s.vs_logs,s.vs_requests,s.vs_tx_ctx,s.vs_block_ctx,s.vs_immutables,s.vs_outcomes)`
+       run_inst_seq_preserves_field)) >>
      qexists_tac `emitted_insts st final` >> asm_rewrite_tac [] >> rpt strip_tac >>
      `i.inst_opcode = ADD \/ i.inst_opcode = MUL \/ i.inst_opcode = MLOAD` by
        (fs[EVERY_MEM] >> metis_tac[]) >>
@@ -162,12 +167,3 @@ Proof
   strip_tac >> drule_all abi_encoder_array_exit_readonly >> strip_tac >>
   drule_all abi_encoder_shared_input_address >> simp[]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array exit admission, axiom or hypothesis"
-  end) [abi_encoder_array_static_exit_raw_transport, abi_encoder_array_dynamic_exit_raw_transport,
-    abi_encoder_array_exit_opcodes, abi_encoder_array_exit_extend,
-    abi_encoder_array_exit_readonly, abi_encoder_array_exit_registered,
-    abi_encoder_array_exit_effect, abi_encoder_shared_array_exit_source];

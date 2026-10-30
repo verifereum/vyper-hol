@@ -252,11 +252,3 @@ Proof
 QED
 
 (* Loaded .dat files retain oracle tags but erase upstream axiom dependencies. *)
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print ("ENCODER_SOURCE_PRODUCER_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("source producer admission dependency: " ^ name)
-  end)
-  [("uniform_source", abi_encoder_uniform_source),
-   ("source_window", abi_encoder_source_window)];

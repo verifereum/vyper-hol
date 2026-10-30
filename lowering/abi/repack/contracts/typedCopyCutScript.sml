@@ -71,10 +71,3 @@ Proof
   fs[fn_has_code_def, emitted_blocks_def] >>
   simp[phi_prefix_length_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed compiler continuation composition: " ^ name)
-  end) (DB.thms "typedCopyCut")

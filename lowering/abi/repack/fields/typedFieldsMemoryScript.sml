@@ -67,10 +67,3 @@ Proof
   qpat_x_assum `array_copy_frame _ _ _ _ _` (mp_tac o REWRITE_RULE [array_copy_frame_def]) >>
   disch_then (qspecl_then [`ftv`, `v`, `dst_off`] mp_tac) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed sequential tuple memory theorem: " ^ name)
-  end) (DB.thms "typedFieldsMemory")

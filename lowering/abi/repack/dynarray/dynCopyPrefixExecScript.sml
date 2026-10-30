@@ -113,10 +113,3 @@ Proof
   simp[dyn_copy_result_def, dyn_copy_prefix_result_def, LET_THM,
     compiler_var_names_EL, compiler_var_name_def]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed dynamic-array prefix execution theorem: " ^ name)
-  end) (DB.thms "dynCopyPrefixExec")

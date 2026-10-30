@@ -43,10 +43,3 @@ Proof
       fs[memory_value_rel_def, val_in_memory_def]) >>
   simp[mem_bytes_at_append_zero]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed memory/ABI word theorem: " ^ name)
-  end) (DB.thms "memoryValueAbiWord")

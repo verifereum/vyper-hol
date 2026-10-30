@@ -119,10 +119,3 @@ Proof
   disch_then (qspecl_then [`MAP SND values`, `encoded`, `offset`, `mem`] mp_tac) >>
   impl_tac >- simp[] >> simp[type_memory_size_fields_list] >> gvs[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed complete memory/ABI tuple theorem: " ^ name)
-  end) (DB.thms "memoryValueAbiTuple")

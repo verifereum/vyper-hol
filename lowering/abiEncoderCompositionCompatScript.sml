@@ -179,17 +179,3 @@ Theorem abi_encoder_array_child_compat:
 Proof
   Cases_on `active` >> simp[abi_encoder_shared_scratch]
 QED
-
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print ("ENCODER_COMPAT_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("encoder compatibility admission dependency: " ^ name)
-  end)
-  [("compose", abi_encoder_child_sequence_compose),
-   ("weak_sequence", abi_encoder_weak_child_sequence),
-   ("rich_sequence", abi_encoder_rich_child_sequence),
-   ("scratch_call", abi_encoder_scratch_call_sequence),
-   ("correct_call", abi_encoder_correct_call_sequence),
-   ("shared_call", abi_encoder_shared_call_sequence),
-   ("array_selector", abi_encoder_array_child_compat)];

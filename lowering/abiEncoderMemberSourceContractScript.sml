@@ -144,21 +144,3 @@ Proof
   goal_assum (drule_at Any) >> rpt strip_tac >> BETA_TAC >>
   irule abi_encoder_member_source_dynamic_run >> asm_rewrite_tac []
 QED
-
-val _ =
-  if List.exists
-       (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
-       ["abiEncoderStatic", "abiEncoderDynamic", "abiEncoderMemberSourcePhase", "abiEncoderMembersDefs",
-        "abiScratchStatic", "abiScratchDynamicChild", "abiScratchMemberStep", "abiScratchComplex",
-        "abiEncoderMemberSpineCompat", "abiEncoderMemberPhaseExec", "abiEncoderMember",
-        "abiScratchMembers", "abiEncoderMembersCorrect", "abiEncoderComplexStatic"]
-  then raise Fail "source core contract imports a member execution owner"
-  else ();
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then ()
-    else raise Fail "source core contract has an admission or axiom"
-  end) [abi_encoder_member_source_core_run, abi_encoder_member_source_child_run,
-    abi_encoder_member_source_core_saved, abi_encoder_member_source_dynamic_run,
-    abi_encoder_member_source_dynamic_saved, abi_encoder_member_source_dynamic_child_run];

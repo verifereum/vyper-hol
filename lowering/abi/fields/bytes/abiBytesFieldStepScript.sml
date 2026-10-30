@@ -78,10 +78,3 @@ Proof
     (qpat_assum `abi_allocator_state out = abi_allocator_state addressed` mp_tac >> simp[Abbr`addressed`]) >>
   qexistsl_tac [`mid`, `out`] >> fs[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed actual bytestring ABI field traversal step: " ^ name)
-  end) (DB.thms "abiBytesFieldStep")

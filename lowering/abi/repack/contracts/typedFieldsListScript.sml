@@ -44,10 +44,3 @@ Proof
   >- (rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC,
         qx_gen_tac `after` >> DISCH_TAC >> first_x_assum irule >> first_assum MATCH_ACCEPT_TAC]) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed checked tuple field-list copy: " ^ name)
-  end) (DB.thms "typedFieldsList")

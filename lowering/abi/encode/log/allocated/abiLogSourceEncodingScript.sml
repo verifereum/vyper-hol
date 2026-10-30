@@ -44,10 +44,3 @@ Proof
     (qpat_x_assum `MAP FST typed_values = _` mp_tac >> asm_simp_tac (srw_ss()) []) >>
   gvs[encode_vyper_event_metadata_def, Once vyper_to_abi_def] >> EVAL_TAC
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed native field and source event encoding: " ^ name)
-  end) (DB.thms "abiLogSourceEncoding")

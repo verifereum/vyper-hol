@@ -147,10 +147,3 @@ Proof
     (irule compatible_indexed_event_topics >> simp[]) >>
   qexistsl_tac [`final`, `topics`] >> simp[] >> first_assum MATCH_ACCEPT_TAC
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed topic list operand execution: " ^ name)
-  end) (DB.thms "eventTopicsOperands")

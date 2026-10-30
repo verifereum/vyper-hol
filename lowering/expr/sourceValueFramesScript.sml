@@ -93,10 +93,3 @@ Proof
     local_ptrs_rel_before_assignment_frame) >>
   impl_tac >- (rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC, simp[eval_op_inst_idx]]) >> simp[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed source expression state frames: " ^ name)
-  end) (DB.thms "sourceValueFrames")

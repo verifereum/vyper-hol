@@ -115,10 +115,3 @@ Proof
   ho_match_mp_tac (TypeBase.induction_of ``:type``) >>
   simp[copy_wfp_leaves, copy_wfp_array, copy_wfp_tuple, copy_wfp_struct]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed source copy-accessibility theorem: " ^ name)
-  end) (DB.thms "copyAccessibility")

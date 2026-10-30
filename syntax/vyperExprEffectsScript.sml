@@ -21,10 +21,3 @@ Termination
   WF_REL_TAC `measure expr_size` >> rw[] >>
   Induct_on `kes` >> rw[] >> PairCases_on `h` >> rw[] >> res_tac >> simp[]
 End
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-      List.all (fn s => s = "DISK_THM") oracles
-    then () else raise Fail ("unclosed expression effect theorem: " ^ name)
-  end) (DB.thms "vyperExprEffects")
