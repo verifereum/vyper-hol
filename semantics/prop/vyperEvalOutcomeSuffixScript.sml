@@ -559,6 +559,9 @@ QED
 val OUTCOMES_SUFFIX_TAC = rpt (outcomes_suffix_step
   (outcomes_suffix_ext_call :: outcomes_suffix_send :: outcomes_suffix_base_facts));
 
+(* The IntCall case's lock steps, unfolded in the goal and the hypotheses. *)
+val lock_helper_defs = [lock_if_nr_def, unlock_if_nr_def, is_view_mut_def];
+
 (* Backward IH application leaves only witnessed successful-prefix guards. *)
 val OUTCOMES_GUARD_TAC =
   first_x_assum irule >>
@@ -566,7 +569,8 @@ val OUTCOMES_GUARD_TAC =
   simp[ignore_bind_def];
 
 val OUTCOMES_CONSTRUCTOR_TAC =
-  rpt strip_tac >> simp_tac bool_ss [Once evaluate_def] >>
+  rpt strip_tac >> simp_tac bool_ss (Once evaluate_def :: lock_helper_defs) >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE lock_helper_defs) >>
   OUTCOMES_SUFFIX_TAC >> OUTCOMES_GUARD_TAC;
 
 Theorem eval_outcomes_suffix_with_results:
@@ -723,14 +727,16 @@ Resume eval_outcomes_suffix_with_results[c45]:
   OUTCOMES_CONSTRUCTOR_TAC
 QED
 Resume eval_outcomes_suffix_with_results[c46]:
-  rpt strip_tac >> simp_tac bool_ss [Once evaluate_def] >>
+  rpt strip_tac >> simp_tac bool_ss (Once evaluate_def :: lock_helper_defs) >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE lock_helper_defs) >>
   OUTCOMES_SUFFIX_TAC >> gvs[] >> OUTCOMES_GUARD_TAC
 QED
 Resume eval_outcomes_suffix_with_results[c47]:
   OUTCOMES_CONSTRUCTOR_TAC
 QED
 Resume eval_outcomes_suffix_with_results[c48]:
-  rpt strip_tac >> simp_tac bool_ss [Once evaluate_def] >>
+  rpt strip_tac >> simp_tac bool_ss (Once evaluate_def :: lock_helper_defs) >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE lock_helper_defs) >>
   OUTCOMES_SUFFIX_TAC >> gvs[] >> OUTCOMES_GUARD_TAC
 QED
 Resume eval_outcomes_suffix_with_results[c49]:

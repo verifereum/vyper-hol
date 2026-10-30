@@ -11,6 +11,13 @@ Ancestors
 Libs
   cv_transLib wordsLib
 
+(* Storage layout: maps (source_id, variable_name) to base slot numbers.
+   source_id is NONE for main module, SOME n for imported module n.
+   This is a simplified representation - the full json_storage_layout
+   from jsonAST includes additional info like n_slots and type_str,
+   but for storage access we only need the base slot. *)
+Type storage_layout = “:((num option # string) # num) list”
+
 (* ===== Basic Slot Encoding/Decoding ===== *)
 
 Definition bool_to_slot_def:
@@ -102,7 +109,7 @@ Definition decode_base_from_slot_def:
   decode_base_from_slot slot (BaseTV (IntT n)) =
     IntV (truncate_signed n slot) /\
   decode_base_from_slot slot (BaseTV DecimalT) =
-    DecimalV (truncate_signed 168 slot) /\
+    DecimalV (truncate_signed decimal_bits slot) /\
   decode_base_from_slot slot (BaseTV BoolT) = BoolV (slot_to_bool slot) /\
   decode_base_from_slot slot (BaseTV AddressT) =
     BytesV (DROP 12 (word_to_bytes_be slot)) /\
@@ -123,6 +130,12 @@ Definition encode_dyn_bytes_slots_def:
     else NONE
 End
 val () = cv_auto_trans encode_dyn_bytes_slots_def;
+
+(* Helper to read a slot at a given offset from storage *)
+Definition read_slot_def:
+  read_slot storage offset = lookup_storage (n2w offset : bytes32) storage
+End
+val () = cv_auto_trans read_slot_def;
 
 (* First-order helper: read n consecutive slots starting at offset *)
 Definition read_slots_def:
@@ -152,12 +165,6 @@ Definition apply_writes_def:
     apply_writes base_slot writes (update_storage slot val storage)
 End
 val () = cv_trans apply_writes_def;
-
-(* Helper to read a slot at a given offset from storage *)
-Definition read_slot_def:
-  read_slot storage offset = lookup_storage (n2w offset : bytes32) storage
-End
-val () = cv_auto_trans read_slot_def;
 
 (* ===== Termination helper lemmas for encode_value ===== *)
 
@@ -490,12 +497,3 @@ Definition encode_hashmap_key_def:
    encode_hashmap_key _ _ = (0w:bytes32)
 End
 val () = cv_auto_trans encode_hashmap_key_def;
-
-(* ===== Top-Level Variable Access ===== *)
-
-(* Storage layout: maps (source_id, variable_name) to base slot numbers.
-   source_id is NONE for main module, SOME n for imported module n.
-   This is a simplified representation - the full json_storage_layout
-   from jsonAST includes additional info like n_slots and type_str,
-   but for storage access we only need the base slot. *)
-Type storage_layout = “:((num option # string) # num) list”
