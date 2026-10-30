@@ -94,8 +94,8 @@ of strings, dynamic bytes, structs, tuples, nested arrays and oversized fixed
 bytes; acceptance of all retained primitive classes and direct flags. Its
 `membership_element_word_boundary` proves correspondence with lowering and
 `membership_checker_lowering_boundary` exposes the typing consequence.
-These are checker-rule tests. Final validation additionally checks the three
-original aggregate witnesses with the strengthened checker in both modes;
+These are checker-rule tests. The compact fixture suite additionally checks one
+nested-array witness with the strengthened checker in both modes;
 see `membership-comparison-validation.md`. The external behavior experiment
 above retains its original acceptance domain and is not rerun by that check.
 

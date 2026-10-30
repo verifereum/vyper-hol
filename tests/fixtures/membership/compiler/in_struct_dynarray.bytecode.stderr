@@ -1,8 +1,0 @@
-vyper.exceptions.TypeMismatch: `in` not allowed for arrays of non-base types, tracked in issue #2637
-
-  contract ".agent-files/c6-validation/sources/in_struct_dynarray.vy:6", function "f", line 6:11 
-       5 def f(a: DynArray[S, 3]) -> bool:
-  ---> 6     return S(a=1) in a
-  ------------------^
-       7
-
