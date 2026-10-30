@@ -14,6 +14,8 @@
  *   struct_field_offset_slots_eq — a field of a laid out struct
  *   read_storage_slot_field      — a field of a struct read from storage
  *   popped_at_field, select_attr_read — the source's selection
+ *   popped_keys_indexed_not_at_field — popped_at_field never holds where
+ *                                  expr_sim_inv does
  *
  * Helpers: type_memory_size_slots, slot_count_of_memory_size,
  *   fields_layout_zip, read_slots_n2w, decode_value_n2w, decode_struct_field,
@@ -339,6 +341,22 @@ Definition popped_at_field_def:
                     MEM (path ++ [AttrSubscript id], v') entry.popped) /\
   popped_at_field _ _ _ = F
 End
+
+(* Under popped_keys_indexed (an expr_sim_inv clause) no popped key is a
+   field: every key ends in an array index. *)
+Theorem popped_keys_indexed_not_at_field:
+  !tv id es. popped_keys_indexed es.scopes ==> ~popped_at_field tv id es
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `tv` >> simp[popped_at_field_def] >>
+  rename1 `PlaceR pl` >> Cases_on `pl` >> simp[popped_at_field_def] >>
+  rpt strip_tac >>
+  drule vyperLookupTheory.lookup_scopes_find_containing_scope >> strip_tac >>
+  drule vyperLookupTheory.find_containing_scope_structure >> strip_tac >>
+  gvs[popped_keys_indexed_def] >>
+  qpat_x_assum `!id entry. FLOOKUP env id = _ ==> _` drule >>
+  simp[EXISTS_MEM, MEM_MAP, PULL_EXISTS] >> goal_assum drule >>
+  simp[GSYM SNOC_APPEND, SNOC_11]
+QED
 
 (* select_attr_read for an immutable's place. *)
 Theorem select_attr_read_immutable[local]:
