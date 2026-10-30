@@ -19,7 +19,7 @@ Definition integration_program_def:
     [FunctionDecl External Nonpayable F F "calls" [] [] NoneT integration_body;
      FunctionDecl Deploy Payable F F "__init__" [] [] NoneT integration_body;
      FunctionDecl External Nonpayable F F "defaults" [("x",NoneT)]
-       [send_call 20w 0] NoneT [Expr (send_call 10w 7)]]
+       [send_call 0x99w 0] NoneT [Expr (send_call 10w 7)]]
 End
 val () = cv_auto_trans integration_program_def;
 
@@ -137,7 +137,7 @@ Definition integration_defaults_constants_observe_def:
     let (r,am,rqs) = call_external (SOME [send_outcome T [] 17])
       integration_machine (integration_tx "defaults") in
     let mods = [(NONE,
-      [VariableDecl Private (Constant (send_call 20w 0)) "c" NoneT NONE;
+      [VariableDecl Private (Constant (send_call 0x99w 0)) "c" NoneT NONE;
        FunctionDecl Deploy Payable F F "__init__" [] [] NoneT [Expr (send_call 10w 7)]])] in
     let loaded = load_contract (SOME [send_outcome T [] 17])
       integration_machine (integration_tx "__init__") mods [] in

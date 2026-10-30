@@ -260,6 +260,34 @@ Definition raw_call_flags_of_kwargs_def:
        rcf_revert_on_failure := kwarg_bool "revert_on_failure" kwargs T |>
 End
 
+(* Runtime operands remain in code-generation order.  Only supplied runtime
+   keywords contribute indices, visited in their JSON/source order. *)
+Definition create_keyword_order_def:
+  create_keyword_order kind has_salt nargs (kwargs : (identifier # expr) list) =
+    FLAT (MAP (\(key,e).
+      if key = "value" then [1n]
+      else if key = "salt" /\ has_salt then
+        [if kind = RawCreate then nargs + 1 else 2]
+      else if key = "code_offset" then
+        (case kind of CreateFromBlueprint _ =>
+           [if has_salt then 3 else 2] | _ => [])
+      else []) kwargs)
+End
+
+Theorem create_keyword_order_examples:
+  create_keyword_order CreateMinimalProxy T 1
+    [("salt",s); ("revert_on_failure",r); ("value",v)] = [2;1] /\
+  create_keyword_order CreateCopyOf F 1 [] = [] /\
+  create_keyword_order (CreateFromBlueprint F) T 3
+    [("code_offset",off); ("salt",s); ("value",v)] = [3;2;1] /\
+  create_keyword_order (CreateFromBlueprint T) F 2
+    [("raw_args",r); ("code_offset",off)] = [2] /\
+  create_keyword_order RawCreate T 3
+    [("salt",s); ("value",v)] = [4;1]
+Proof
+  simp[create_keyword_order_def]
+QED
+
 Definition make_builtin_call_def:
   make_builtin_call ty name args kwargs ret_ty =
     if name = "len" then Builtin ty Len args
@@ -317,14 +345,16 @@ Definition make_builtin_call_def:
       let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
       let salt_opt = ALOOKUP kwargs "salt" in
       let salt_es = case salt_opt of NONE => [] | SOME salt_e => [salt_e] in
-      Call ty (CreateTarget CreateMinimalProxy (IS_SOME salt_opt) rof)
+      Call ty (CreateTarget CreateMinimalProxy (IS_SOME salt_opt) rof
+        (create_keyword_order CreateMinimalProxy (IS_SOME salt_opt) (LENGTH args) kwargs))
         (TAKE 1 args ++ [value_e] ++ salt_es) NONE
     else if name = "create_copy_of" then
       let rof = kwarg_bool "revert_on_failure" kwargs T in
       let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
       let salt_opt = ALOOKUP kwargs "salt" in
       let salt_es = case salt_opt of NONE => [] | SOME salt_e => [salt_e] in
-      Call ty (CreateTarget CreateCopyOf (IS_SOME salt_opt) rof)
+      Call ty (CreateTarget CreateCopyOf (IS_SOME salt_opt) rof
+        (create_keyword_order CreateCopyOf (IS_SOME salt_opt) (LENGTH args) kwargs))
         (TAKE 1 args ++ [value_e] ++ salt_es) NONE
     else if name = "create_from_blueprint" then
       let rof = kwarg_bool "revert_on_failure" kwargs T in
@@ -334,14 +364,17 @@ Definition make_builtin_call_def:
       let salt_es = case salt_opt of NONE => [] | SOME salt_e => [salt_e] in
       let code_offset_e = kwarg_expr "code_offset" kwargs
         (Literal (BaseT (UintT 256)) (IntL 3)) in
-      Call ty (CreateTarget (CreateFromBlueprint raw_args_flag) (IS_SOME salt_opt) rof)
+      Call ty (CreateTarget (CreateFromBlueprint raw_args_flag) (IS_SOME salt_opt) rof
+        (create_keyword_order (CreateFromBlueprint raw_args_flag)
+          (IS_SOME salt_opt) (LENGTH args) kwargs))
         (TAKE 1 args ++ [value_e] ++ salt_es ++ [code_offset_e] ++ DROP 1 args) NONE
     else if name = "raw_create" then
       let rof = kwarg_bool "revert_on_failure" kwargs T in
       let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
       let salt_opt = ALOOKUP kwargs "salt" in
       let salt_es = case salt_opt of NONE => [] | SOME salt_e => [salt_e] in
-      Call ty (CreateTarget RawCreate (IS_SOME salt_opt) rof)
+      Call ty (CreateTarget RawCreate (IS_SOME salt_opt) rof
+        (create_keyword_order RawCreate (IS_SOME salt_opt) (LENGTH args) kwargs))
         (TAKE 1 args ++ [value_e] ++ DROP 1 args ++ salt_es) NONE
     else if name = "abs" then Builtin ty Abs args
     else if name = "as_wei_value" then

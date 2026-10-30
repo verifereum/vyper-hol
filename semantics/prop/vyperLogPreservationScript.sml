@@ -2194,7 +2194,7 @@ Proof
           rpt (qpat_x_assum `!x. _` kall_tac) >>
           metis_tac[log_extends_trans]) >~
        [`_ ==> !st res st'.
-           eval_expr _ (Call _ (CreateTarget _ _ _) _ _) st = (res,st') ==>
+           eval_expr _ (Call _ (CreateTarget _ _ _ _) _ _) st = (res,st') ==>
            log_extends st st'`] >-
          suspend "CreateTarget" >>
      all_tac >>~- ([`_ ==> !st res st'.
@@ -2522,3 +2522,54 @@ val () = List.app (fn (name,th) =>
   in if List.all (fn s => s = "DISK_THM") oracles then ()
      else raise Fail ("Log preservation oracle debt: " ^ name)
   end) (DB.thms "vyperLogPreservation");
+
+Theorem log_extends_outcome_rules[local]:
+  (!s. log_extends s s) /\
+  (!s t u. log_extends s t /\ log_extends t u ==> log_extends s u) /\
+  (!s os rqs. log_extends s (s with <|outcomes := os; requests := rqs|>)) /\
+  (!s accounts transient logs pending. log_extends s
+     (s with <|accounts := accounts; tStorage := transient;
+               logs := s.logs ++ logs; pending_deletions := pending|>))
+Proof
+  rpt conj_tac
+  >- simp[log_extends_refl]
+  >- metis_tac[log_extends_trans]
+  >- simp[log_extends_def, rich_listTheory.IS_PREFIX_REFL] >>
+  simp[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Theorem log_extends_final_frame:
+  log_extends st mid /\ isPREFIX mid.logs st'.logs ==>
+  log_extends st st'
+Proof
+  simp[log_extends_def] >> metis_tac[rich_listTheory.IS_PREFIX_TRANS]
+QED
+
+Theorem Send_outcome_log_extends:
+  (do
+    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    check outcome.co_success "send failed";
+    adopt_call_outcome rq outcome;
+    return (Value NoneV)
+  od) st = (res,st') ==> log_extends st st'
+Proof
+  strip_tac >> strip_assume_tac log_extends_outcome_rules >>
+  drule_all (Send_outcome_transport |> Q.INST [`R` |-> `log_extends`]) >> simp[]
+QED
+
+Theorem ExtCall_outcome_log_extends:
+  (!bs s res t. k bs s = (res,t) ==> log_extends s t) /\
+  (do
+    accounts <- get_accounts;
+    (if ret_type = NoneT then
+       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
+     else return ());
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success "ExtCall reverted";
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st = (res,st') ==> log_extends st st'
+Proof
+  rpt strip_tac >> strip_assume_tac log_extends_outcome_rules >>
+  drule_all (ExtCall_outcome_transport |> Q.INST [`R` |-> `log_extends`]) >> simp[]
+QED

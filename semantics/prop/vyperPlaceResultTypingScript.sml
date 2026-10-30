@@ -1519,7 +1519,8 @@ Proof
   >- (irule scope_pop_effect_frame >> irule state_rel_frame_locals_take >> simp[]) >>
   irule scope_pop_effect_identity >>
   simp[vyperCallOutcomeTheory.adopt_call_outcome_equation, return_def] >>
-  gen_tac >> IF_CASES_TAC >> simp[]
+  gen_tac >> IF_CASES_TAC >>
+  Cases_on `co.co_success` >> Cases_on `rq.cr_kind = MessageCall` >> simp[]
 QED
 
 Theorem scope_pop_effect_call_helpers[simp]:
@@ -1633,7 +1634,7 @@ Proof
   rpt gen_tac >> rpt strip_tac >~
   [`scope_pop_effect (eval_expr _ (Call _ (ExtCall _ _ _ _) _ _))`] >-
     suspend "ExtCall" >~
-  [`scope_pop_effect (eval_expr _ (Call _ (CreateTarget kind has_salt rof) _ _))`] >-
+  [`scope_pop_effect (eval_expr _ (Call _ (CreateTarget kind has_salt rof kw_order) _ _))`] >-
     suspend "Create" >~
   [`scope_pop_effect (eval_expr _ (Call _ (IntCall _) _ _))`] >-
     suspend "IntCall" >>

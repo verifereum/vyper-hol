@@ -89,7 +89,7 @@ Proof
   strip_tac >> drule computed_precompile_no_observation >>
   disch_then (qspecl_then [`s.vs_requests`, `s.vs_outcomes`] strip_assume_tac) >>
   `rq.cr_static` by simp[venom_call_request_def] >>
-  simp[consume_call_outcome_eq, adopt_outcome_def,
+  simp[consume_call_outcome_eq, adopt_outcome_def, adopt_outcome_deletions_def,
        write_memory_with_expansion_def, venom_state_component_equality]
 QED
 

@@ -167,11 +167,6 @@ End
    Per-opcode emission logic.
    ========================================================================= *)
 
-Definition bump_round_word_def:
-  bump_round_word (sz:bytes32) =
-    word_lsl (word_lsr (sz + 31w) 5) 5
-End
-
 Definition bump_emit_ops_def:
   bump_emit_ops =
     [SODup 2; SOEmit "ADD"]
@@ -303,7 +298,10 @@ Definition generate_regular_inst_plan_def:
       (input_ops ++ join_ops ++ reorder_ops ++ emit_ops, ps8)
     else
       let (pop_ops, ps8) =
-        if ¬ is_halting then
+        (* A halting block may retain a dead single output.  Multi-output
+           instructions such as BUMP still discard dead outputs so later
+           operand reordering sees the same stack as pinned Vyper. *)
+        if ¬ is_halting ∨ LENGTH outputs > 1 then
           let dead = FILTER (λout. ¬ MEM out next_liveness) outputs in
           popmany_plan (MAP Var dead) ps7
         else ([] : stack_op list, ps7) in

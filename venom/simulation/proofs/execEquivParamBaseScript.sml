@@ -584,24 +584,19 @@ Theorem vsr_exec_create:
       (exec_create inst s1 value offset sz salt_opt)
       (exec_create inst s2 value offset sz salt_opt)
 Proof
-  rw[LET_THM, exec_create_def] >>
-  imp_res_tac vsr_R_ok_fields >> gvs[] >>
-  simp[read_memory_def, make_venom_call_state_def,
-       make_venom_delegatecall_state_def, make_venom_create_state_def,
-       make_sub_tx_def, make_rollback_def, venom_to_tx_params_def,
-       LET_THM] >>
-  simp[extract_venom_result_def] >>
-  qmatch_goalsub_abbrev_tac `run evm` >>
-  Cases_on `run evm` >> gvs[lift_result_def, Abbr`evm`] >>
-  PairCases_on `x` >> gvs[lift_result_def] >>
-  Cases_on `x1.contexts` >> gvs[lift_result_def] >>
-  Cases_on `t` >> gvs[lift_result_def] >>
-  PairCases_on `h` >> gvs[] >>
-  Cases_on `x0` >> gvs[lift_result_def] >>
-  TRY (Cases_on `y` >> gvs[lift_result_def]) >>
-  Cases_on `inst.inst_outputs` >> gvs[lift_result_def] >>
-  Cases_on `t` >> gvs[lift_result_def] >>
-  ext_call_result_tac ()
+  rpt strip_tac >>
+  drule_all vsr_R_ok_frame >> strip_tac >>
+  `venom_create_request s1 value offset sz salt_opt =
+   venom_create_request s2 value offset sz salt_opt` by
+    fs[vsr_frame_def, venom_create_request_def, read_memory_def,
+       venom_state_component_equality] >>
+  fs[vsr_frame_def, venom_state_component_equality] >>
+  Cases_on `inst.inst_outputs` >> simp[exec_create_def, lift_result_def] >>
+  rename1 `inst.inst_outputs = out::rest_outputs` >>
+  Cases_on `rest_outputs` >> simp[exec_create_def, lift_result_def] >>
+  Cases_on `(FST (take_outcome
+    (venom_create_request s2 value offset sz salt_opt) s2.vs_outcomes)).co_success` >>
+  simp[] >> ext_call_result_tac ()
 QED
 
 Theorem vsr_exec_alloca:

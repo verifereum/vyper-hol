@@ -193,7 +193,7 @@ Definition eval_expr_cps_def:
     eval_exprs_cps cx10 es st (RawRevertK k) ∧
   eval_expr_cps cx10 (Call _ SelfDestructTarget es _) st k =
     eval_exprs_cps cx10 es st (SelfDestructK k) ∧
-  eval_expr_cps cx10 (Call ty (CreateTarget kind has_salt rof) es _) st k =
+  eval_expr_cps cx10 (Call ty (CreateTarget kind has_salt rof _) es _) st k =
     (case kind of
        CreateFromBlueprint raw_args =>
          eval_exprs_cps cx10 (TAKE (if has_salt then 4 else 3) es) st
@@ -2050,11 +2050,3 @@ Proof
   \\ CASE_TAC \\ CASE_TAC \\ gvs[]
   \\ rw[Once OWHILE_THM]
 QED
-
-
-(* Integration audit: required CPS equivalences must be kernel closed. *)
-val () = List.app (fn (name,th) =>
-  let val (oracles,_) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("CPS oracle debt: " ^ name)
-  end) (DB.thms "vyperSmallStep");

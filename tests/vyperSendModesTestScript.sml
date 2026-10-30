@@ -18,6 +18,30 @@ val send_monad_simps = [vyperStateTheory.bind_def,
   (byteTheory.word_of_bytes_word_to_bytes |> INST_TYPE [alpha |-> ``:160``]
     |> SRULE [dividesTheory.compute_divides])];
 
+(* Independent NONE-mode tail: run the recipient with send's default zero
+   forwarded gas, reject a failed call, then adopt its accounts/storage/logs.
+   In particular this is not the old transfer_value-only approximation. *)
+Definition send_concrete_backend_def:
+  send_concrete_backend target amount = do
+    accounts <- get_accounts;
+    tStorage <- get_transient_storage;
+    result <- lift_option
+      (run_ext_call empty_evaluation_context.txn.target target [] (SOME amount)
+                    0 accounts tStorage
+                    (vyper_to_tx_params empty_evaluation_context.txn))
+      "send run failed";
+    success <<- FST result; result1 <<- SND result;
+    result2 <<- SND result1;
+    accounts' <<- FST result2; result3 <<- SND result2;
+    tStorage' <<- FST result3; emitted_logs <<- SND result3;
+    check success "send failed";
+    update_accounts (K accounts');
+    update_transient (K tStorage');
+    append_logs emitted_logs;
+    return (Value NoneV)
+  od
+End
+
 Theorem send_address_literal:
   (word_of_bytes_be (REPLICATE 19 0w ++ [9w]) : address) = 9w
 Proof
@@ -26,10 +50,21 @@ QED
 
 Theorem send_bigstep_after_arguments:
   eval_expr empty_evaluation_context (send_call 9w 7) st =
-    eval_send empty_evaluation_context F [AddressV 9w; IntV 7] st
+    (case st.outcomes of
+     | NONE => send_concrete_backend 9w 7
+     | SOME _ => do
+         (rq,co) <- take_call_outcome 9w [] (SOME 7);
+         check co.co_success "send failed";
+         adopt_call_outcome rq co;
+         return (Value NoneV)
+       od) st
 Proof
-  `AddressV 9w = BytesV (REPLICATE 19 0w ++ [9w])` by (CONV_TAC cv_eval) >>
-  simp (send_monad_simps @ [send_call_def, evaluate_def, evaluate_literal_def])
+  Cases_on `st.outcomes` >>
+  simp (send_monad_simps @ [send_call_def, evaluate_def,
+       evaluate_literal_def, dest_AddressV_def,
+       dest_NumV_def, vyperStateTheory.read_result_def, send_address_literal,
+       eval_send_def, ext_call_kwarg_def, forwarded_gas_def,
+       send_concrete_backend_def])
 QED
 
 Theorem send_zero_address_literal:
@@ -41,20 +76,21 @@ QED
 
 Theorem send_zero_bigstep_after_arguments:
   eval_expr empty_evaluation_context (send_call 0w 0) st =
-    eval_send empty_evaluation_context F [AddressV 0w; IntV 0] st
+    (case st.outcomes of
+     | NONE => send_concrete_backend 0w 0
+     | SOME _ => do
+         (rq,co) <- take_call_outcome 0w [] (SOME 0);
+         check co.co_success "send failed";
+         adopt_call_outcome rq co;
+         return (Value NoneV)
+       od) st
 Proof
-  `AddressV 0w = BytesV (REPLICATE 19 0w ++ [0w])` by (CONV_TAC cv_eval) >>
-  simp (send_monad_simps @ [send_call_def, evaluate_def, evaluate_literal_def])
-QED
-
-(* NONE-mode send executes recipient code, even for a zero-value self-send. *)
-Theorem send_none_executes_invalid_recipient:
-  FST (eval_send empty_evaluation_context F [AddressV 0w; IntV 0]
-    (empty_state with accounts := update_account 0w
-      (empty_account_state with code := [254w]) empty_accounts)) =
-  INR (Error (RuntimeError "send failed"))
-Proof
-  CONV_TAC cv_eval
+  Cases_on `st.outcomes` >>
+  simp (send_monad_simps @ [send_call_def, evaluate_def,
+       evaluate_literal_def, dest_AddressV_def, dest_NumV_def,
+       vyperStateTheory.read_result_def, send_zero_address_literal,
+       eval_send_def, ext_call_kwarg_def, forwarded_gas_def,
+       send_concrete_backend_def])
 QED
 
 (* Closed actual counterexample to the old inert-mode Send conjunct, saved
@@ -99,6 +135,7 @@ Theorem send_bigstep_success_whole_state:
       <|accounts := (send_outcome T [99w] 17).co_accounts;
         tStorage := (send_outcome T [99w] 17).co_tStorage;
         logs := send_state.logs ++ (send_outcome T [99w] 17).co_logs;
+        pending_deletions := (send_outcome T [99w] 17).co_toDelete;
         outcomes := SOME [cpscv_tail];
         requests := send_state.requests ++
           [call_outcome_request 9w [] (SOME 7) send_state]|>)
@@ -108,8 +145,17 @@ Proof
        computed_precompile_addresses, send_outcome_def, cpscv_outcome_def,
        send_state_def, cpscv_state_def, empty_state_def, UNCURRY,
        (send_success_payload_account_guard |> SRULE [send_outcome_def, cpscv_outcome_def]),
-       adopt_call_outcome_def, adopt_outcome_def,
+       adopt_call_outcome_def, adopt_outcome_def, adopt_outcome_deletions_def,
        vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
        vyperStateTheory.append_logs_def,
        empty_account_state_def])
+QED
+
+Theorem send_none_executes_invalid_recipient:
+  FST (eval_send empty_evaluation_context F [AddressV 0w; IntV 0]
+    (empty_state with accounts := update_account 0w
+      (empty_account_state with code := [254w]) empty_accounts)) =
+  INR (Error (RuntimeError "send failed"))
+Proof
+  CONV_TAC cv_eval
 QED

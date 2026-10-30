@@ -711,6 +711,28 @@ fun test_files () =
   |> Lib.sort lexless
   |> List.map (fn path => (json_path_to_id path, path))
 
+fun generated_script_names ids =
+  List.map (fn id => String.concat ["vyperTestDefs_", id, "Script.sml"]) ids @
+  List.map (fn id => String.concat ["vyperTest_", id, "Script.sml"]) ids
+
+fun is_generated_script name =
+  (String.isPrefix "vyperTestDefs_" name orelse
+   String.isPrefix "vyperTest_" name) andalso
+  String.isSuffix "Script.sml" name
+
+(* Directory basenames must contain both scripts for every planned chunk. *)
+fun check_generated_script_inventory ids entries = let
+  val expected = Lib.sort lexless (generated_script_names ids)
+  val actual = Lib.sort lexless (List.filter is_generated_script entries)
+  fun absent xs ys = List.filter (fn x => not (List.exists (equal x) ys)) xs
+in
+  if expected = actual then ()
+  else raise Fail (String.concat [
+    "generated script inventory mismatch (regenerate test scripts)",
+    "\nmissing: ", String.concatWith ", " (absent expected actual),
+    "\nunexpected: ", String.concatWith ", " (absent actual expected)])
+end
+
 fun cleanup_generated_scripts files = let
   val keep =
     List.map (fn (id, _) => String.concat ["vyperTestDefs_", id, "Script.sml"]) files @
@@ -1327,6 +1349,22 @@ fun generated_test_plan () =
 fun cleanup_test_plan plan =
   cleanup_generated_scripts
     (List.map (fn (chunk : test_chunk, _, path, _) => (#id chunk, path)) plan)
+
+(* Recompute the expected inventory from raw exports, independently of scripts. *)
+fun check_generated_scripts () = let
+  val () = check_generate_dirs ()
+  val ids = List.map (fn (chunk : test_chunk, _, _, _) => #id chunk)
+    (generated_test_plan ())
+  val dir = OS.FileSys.openDir generated_dir
+  fun entries acc =
+    case OS.FileSys.readDir dir of
+      NONE => acc
+    | SOME entry => entries (entry :: acc)
+  val actual = (entries [] before OS.FileSys.closeDir dir)
+    handle e => (OS.FileSys.closeDir dir; raise e)
+in
+  check_generated_script_inventory ids actual
+end
 
 (* Replace only the generated call, retaining custom proofs/annotations. A
    nonstandard large-suite wrapper needs manual attention, not deletion. *)

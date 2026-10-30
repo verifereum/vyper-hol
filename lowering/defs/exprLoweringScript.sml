@@ -2380,6 +2380,145 @@ End
    succeeds), but the formal proof needs: well_typed ⇒ safe_cast is identity.
    Also: default argument expansion not performed — frontend must inline defaults
    into the Call AST node before codegen (Python does this). *)
+(* ===== Interleaved creation operands ===== *)
+
+Definition compile_create_salt_def:
+  compile_create_salt cfn cenv NONE = return NONE ∧
+  compile_create_salt cfn cenv (SOME e) =
+    do salt <- lower_value cfn cenv (expr_type e) e;
+       return (SOME salt)
+    od
+End
+
+(* Evaluate located values before allocating the temporary tuple, then unwrap
+   them while storing it, exactly as for external-call arguments. *)
+Definition compile_create_ctor_tuple_def:
+  compile_create_ctor_tuple cfn cenv args =
+    let tys = MAP expr_type args in
+    do vals <- compile_multi_vvs cfn cenv args;
+       tmp <- compile_alloc_buffer (type_memory_bytes cenv (TupleT tys));
+       compile_extcall_store_values cenv (ZIP (vals,tys)) tmp.buf_operand 0;
+       return tmp.buf_operand
+    od
+End
+
+Definition compile_create_blueprint_args_def:
+  compile_create_blueprint_args cfn cenv raw_args args =
+    if raw_args then
+      (case args of
+         [e] =>
+           do ptr <- lower_value cfn cenv (expr_type e) e;
+              len <- emit_op MLOAD [ptr];
+              data <- emit_op ADD [ptr; Lit 32w];
+              return (data,len)
+           od
+       | _ => do emit_inst INVALID [] []; return (Lit 0w,Lit 0w) od)
+    else if args = [] then return (Lit 0w,Lit 0w)
+    else
+      let tuple_ty = TupleT (MAP expr_type args) in
+      let enc = type_to_abi_enc_info cenv.ce_struct_fields cenv tuple_ty in
+      do buf <- compile_alloc_buffer (abi_size_bound cenv.ce_struct_fields tuple_ty);
+         src <- compile_create_ctor_tuple cfn cenv args;
+         len <- compile_abi_encode_to_buf buf.buf_operand src enc;
+         return (buf.buf_operand,len)
+      od
+End
+
+(* Freeze bytecode before value/constructor/salt evaluation can overwrite it. *)
+Definition compile_create_snapshot_def:
+  compile_create_snapshot cenv vv bytecode_ty =
+    let mem_size = type_memory_bytes cenv bytecode_ty in
+    do tmp <- compile_alloc_buffer mem_size;
+       (case vv_location vv of
+          SOME LocStorage =>
+            do compile_slot_to_memory (vv_operand vv) tmp.buf_operand
+                 ((mem_size + 31) DIV 32) LocStorage;
+               return () od
+        | SOME LocTransient =>
+            do compile_slot_to_memory (vv_operand vv) tmp.buf_operand
+                 ((mem_size + 31) DIV 32) LocTransient;
+               return () od
+        | _ =>
+            do len <- emit_op MLOAD [vv_operand vv];
+               size <- emit_op ADD [len; Lit 32w];
+               compile_copy_memory_dynamic tmp.buf_operand (vv_operand vv) size
+            od);
+       return tmp.buf_operand
+    od
+End
+
+Definition compile_raw_create_def:
+  compile_raw_create cfn cenv bytecode_e value_e ctor_args salt_e rof =
+    (* RawCreate._inputs promotes its bytecode use to Bytes[49152]. Names in
+       our AST retain declaration types, so use the builtin bound for buffer
+       capacity and slot copying, while evaluating the original expression. *)
+    let maxlen = 49152 in
+    let bytecode_ty = BaseT (BytesT (Dynamic maxlen)) in
+    let tuple_ty = TupleT (MAP expr_type ctor_args) in
+    let enc = type_to_abi_enc_info cenv.ce_struct_fields cenv tuple_ty in
+    let abi_size = abi_size_bound cenv.ce_struct_fields tuple_ty in
+    do vv <- cfn cenv (expr_type bytecode_e) bytecode_e;
+       bytecode <- compile_create_snapshot cenv vv bytecode_ty;
+       value <- lower_value cfn cenv (expr_type value_e) value_e;
+       len <- emit_op MLOAD [bytecode];
+       data <- emit_op ADD [bytecode; Lit 32w];
+       (ptr,total) <-
+         (if ctor_args = [] then return (data,len)
+          else do buf <- compile_alloc_buffer (maxlen + abi_size);
+                  compile_copy_memory_dynamic buf.buf_operand data len;
+                  src <- compile_create_ctor_tuple cfn cenv ctor_args;
+                  dst <- emit_op ADD [buf.buf_operand; len];
+                  args_len <- compile_abi_encode_to_buf dst src enc;
+                  total <- emit_op ADD [len; args_len];
+                  return (buf.buf_operand,total)
+               od);
+       salt <- compile_create_salt cfn cenv salt_e;
+       compile_create_dispatch ptr total value salt rof
+    od
+End
+
+Definition compile_create_call_def:
+  compile_create_call cfn cenv ck has_salt rof args =
+    case args of
+      target_e::value_e::rest =>
+        (if LENGTH rest < (if has_salt then 1 else 0) +
+             (case ck of CreateFromBlueprint _ => 1 | _ => 0) then
+           do emit_inst INVALID [] []; return (Lit 0w) od
+         else case ck of
+           RawCreate =>
+             compile_raw_create cfn cenv target_e value_e
+               (if has_salt then FRONT rest else rest)
+               (if has_salt then SOME (LAST rest) else NONE) rof
+         | _ =>
+           do target <- lower_value cfn cenv (expr_type target_e) target_e;
+              value <- lower_value cfn cenv (expr_type value_e) value_e;
+              case ck of
+                CreateMinimalProxy =>
+                  do buf <- compile_create_proxy_buf target;
+                     salt <- compile_create_salt cfn cenv
+                       (if has_salt then SOME (HD rest) else NONE);
+                     compile_create_dispatch buf (Lit 54w) value salt rof
+                  od
+              | CreateCopyOf =>
+                  do salt <- compile_create_salt cfn cenv
+                       (if has_salt then SOME (HD rest) else NONE);
+                     compile_create_copy target value salt rof
+                  od
+              | CreateFromBlueprint raw_args =>
+                  let suffix = if has_salt then TL rest else rest in
+                  do salt <- compile_create_salt cfn cenv
+                       (if has_salt then SOME (HD rest) else NONE);
+                     offset <- lower_value cfn cenv (expr_type (HD suffix)) (HD suffix);
+                     size <- compile_create_blueprint_check target offset;
+                     (ptr,len) <- compile_create_blueprint_args cfn cenv raw_args (TL suffix);
+                     compile_create_blueprint_append target value salt offset
+                       size ptr len rof
+                  od
+              | RawCreate => return (Lit 0w)
+           od)
+    | _ => do emit_inst INVALID [] []; return (Lit 0w) od
+End
+
 Definition compile_call_def:
   compile_call cfn cenv ret_ty ty (IntCall func_id) args default_ret st =
     (let name = nsid_to_string func_id in
@@ -2516,9 +2655,8 @@ Definition compile_call_def:
   compile_call cfn cenv ret_ty ty SelfDestructTarget args default_ret st =
     (let (_, st') = emit_inst INVALID [] [] st in
      (StackValue ret_ty (Lit 0w), st')) ∧
-  compile_call cfn cenv ret_ty ty (CreateTarget ck has_salt rof) args default_ret st =
-    (let (_, st') = emit_inst INVALID [] [] st in
-     (StackValue ret_ty (Lit 0w), st'))
+  compile_call cfn cenv ret_ty ty (CreateTarget ck has_salt rof _) args default_ret st =
+    as_stack_val ret_ty (compile_create_call cfn cenv ck has_salt rof args st)
 End
 
 (* ===== Builtin Dispatch Helpers ===== *)

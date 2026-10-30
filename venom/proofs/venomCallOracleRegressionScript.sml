@@ -24,7 +24,7 @@ End
 
 Definition call_probe_outcome_def:
   call_probe_outcome =
-    <| co_success := T;
+    <| co_created := 0w; co_toDelete := []; co_success := T;
        co_returnData := [9w];
        co_accounts := ((8w:address) =+
          (empty_account_state with balance := 23)) empty_accounts;
@@ -221,6 +221,7 @@ Proof
   simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,
        take_outcome_def, record_request_def, computed_precompile_def,
        precompile_result_empty_ec, failed_outcome_def, adopt_outcome_def,
+       adopt_outcome_deletions_def,
        write_memory_with_expansion_def, call_probe_state_def,
        init_venom_state_def, empty_call_context_def, w2w_n2w]
 QED
@@ -257,4 +258,18 @@ Theorem consume_nonzero_precompile_ordinary:
      t.vs_memory = [1w; 9w; 3w; 4w]
 Proof
   simp probe_defs >> EVAL_TAC
+QED
+
+(* A computed CALL cannot discard deletions scheduled by an earlier call. *)
+Theorem computed_call_preserves_pending_deletions:
+  (SND (consume_call_outcome
+    (venom_call_request (call_probe_state with vs_toDelete := [8w])
+      2w 0w 0w 0w F) 0 0
+    (call_probe_state with vs_toDelete := [8w]))).vs_toDelete = [8w]
+Proof
+  simp[consume_call_outcome_eq, venom_call_request_def,
+       adopt_outcome_deletions_def, computed_precompile_def,
+       take_outcome_def, failed_outcome_def,
+       call_probe_state_def, init_venom_state_def, empty_call_context_def,
+       read_memory_def, w2w_n2w]
 QED

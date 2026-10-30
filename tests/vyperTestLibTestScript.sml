@@ -81,6 +81,35 @@ val _ = List.app (fn weights =>
   else raise Fail "negative selected test weight accepted")
   [[~1], [0, ~1, 0], List.tabulate (100, fn _ => 0) @ [~1]];
 
+(* The directory check uses the weighted plan, not the files it checks. *)
+val inventory_ids = List.map #id
+  (test_chunks ("sample", List.tabulate (739, fn _ => 0)));
+val inventory_scripts = List.concat (List.map (fn id =>
+  ["vyperTestDefs_" ^ id ^ "Script.sml", "vyperTest_" ^ id ^ "Script.sml"])
+  inventory_ids);
+val final_replay = "vyperTest_sample_part7Script.sml";
+val final_defs = "vyperTestDefs_sample_part7Script.sml";
+val _ = check_generated_script_inventory inventory_ids
+  (".holbuild" :: "unrelatedScript.sml" :: List.rev inventory_scripts);
+fun rejects_inventory entries =
+  ((check_generated_script_inventory inventory_ids entries; false)
+   handle Fail _ => true);
+fun check_inventory label entries =
+  if rejects_inventory entries then ()
+  else raise Fail ("generated inventory: " ^ label);
+val _ = check_inventory "missing final replay accepted"
+  (List.filter (fn name => name <> final_replay) inventory_scripts);
+val _ = check_inventory "missing final Defs accepted"
+  (List.filter (fn name => name <> final_defs) inventory_scripts);
+val _ = check_inventory "omitted final chunk pair accepted"
+  (List.filter (fn name => name <> final_replay andalso name <> final_defs)
+    inventory_scripts);
+val _ = check_inventory "stale replay accepted"
+  ("vyperTest_sample_batch_007Script.sml" :: inventory_scripts);
+val _ = check_inventory "stale Defs accepted"
+  ("vyperTestDefs_sample_batch_007Script.sml" :: inventory_scripts);
+val _ = check_generated_script_inventory [] ["unrelatedScript.sml"];
+
 (* Unowned traces must not populate byteStringCache: those definitions would
    survive slicing and make each chunk reload the entire suite's CV data. *)
 val () = holbuild_extra_deps

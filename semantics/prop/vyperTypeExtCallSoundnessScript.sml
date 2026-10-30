@@ -898,12 +898,29 @@ Proof
   gvs[]
 QED
 
+Theorem create_oracle_result_accounts_well_typed:
+  accounts_well_typed st.accounts /\
+  create_oracle_result salt value code rof st = (res,st') ==>
+  accounts_well_typed st'.accounts
+Proof
+  Cases_on `salt` >> Cases_on `st.outcomes` >>
+  gvs[create_oracle_result_def, vyperCallOutcomeTheory.take_create_outcome_def] >>
+  rpt strip_tac >> gvs[] >> pairarg_tac >>
+  rw[vyperCallOutcomeTheory.adopt_call_outcome_equation,
+     vyperCallOutcomeTheory.create_outcome_request_def] >>
+  gvs[AllCaseEqs(), evaluation_state_accfupds,
+      accounts_runtime_well_typed_accounts_well_typed] >>
+  gvs[vyperCallOutcomeTheory.adopt_call_outcome_equation,
+      vyperCallOutcomeTheory.create_outcome_request_def]
+QED
+
 Theorem eval_create_accounts_well_typed:
   accounts_well_typed st.accounts /\
   eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (res, st') ==>
   accounts_well_typed st'.accounts
 Proof
   strip_tac >>
+  Cases_on `st.outcomes` >- (
   Cases_on `dest_create_args kind has_salt vs` >-
     gvs[eval_create_def, bind_def, lift_option_type_def, return_def, raise_def] >>
   rename1 `dest_create_args kind has_salt vs = SOME ops` >>
@@ -975,7 +992,12 @@ Proof
           `accounts_well_typed x1` by
             (drule_all run_create_evm_accounts_well_typed >> simp[]) >>
           simp[evaluation_state_accounts_tStorage_acc,
-               evaluation_state_accfupds])])]
+               evaluation_state_accfupds])])]) >>
+  gvs[eval_create_def, bind_def, ignore_bind_def, lift_option_type_def,
+      get_accounts_def, check_def, assert_def, return_def, raise_def,
+      AllCaseEqs()] >>
+  gvs[option_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
+  drule_all create_oracle_result_accounts_well_typed >> simp[]
 QED
 
 Theorem create_tail_result_sound_simp:
@@ -989,7 +1011,7 @@ Theorem create_tail_result_sound_simp:
     (!msg. res <> INR (Error (TypeError msg))) /\
     (case res of
      | INL tv => expr_result_typed env
-         (Call (BaseT AddressT) (CreateTarget kind has_salt rof) es NONE) tv
+         (Call (BaseT AddressT) (CreateTarget kind has_salt rof kw_order) es NONE) tv
      | INR _ => T)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1017,7 +1039,7 @@ Proof
   (* the returned value is either the created address or a zero address *)
   `case res of
      | INL tv => expr_result_typed env
-         (Call (BaseT AddressT) (CreateTarget kind has_salt rof) es NONE) tv
+         (Call (BaseT AddressT) (CreateTarget kind has_salt rof kw_order) es NONE) tv
      | INR _ => T` by (
     gvs[runtime_consistent_def] >>
     qpat_x_assum `eval_create _ _ _ _ _ _ _ _ = _` mp_tac >>
@@ -1032,6 +1054,10 @@ Proof
              value_result_typed_def, value_has_type_def,
              is_HashMapRef_def]) >>
     rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+    TRY (qpat_x_assum `create_oracle_result _ _ _ _ _ = _` mp_tac >>
+         Cases_on `res` >> simp[] >> strip_tac >>
+         drule create_oracle_result_address >> strip_tac >>
+         gvs[value_result_typed_def, value_has_type_def, is_HashMapRef_def] >> NO_TAC) >>
     first_x_assum mp_tac >>
     strip_tac >>
     gvs[get_transient_storage_def, get_pending_deletions_def,

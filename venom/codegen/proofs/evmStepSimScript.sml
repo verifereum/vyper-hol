@@ -326,6 +326,7 @@ Theorem asm_evm_step_setup:
       ctxt.logs = as.as_logs /\
       es.rollback.accounts = as.as_accounts /\
       es.rollback.tStorage = as.as_transient /\
+      es.rollback.toDelete = as.as_toDelete /\
       (!a. ctxt.msgParams.outputTo <> Code a)
 Proof
   rpt strip_tac >>
@@ -730,7 +731,8 @@ Triviality asm_evm_rel_next_sstore:
     ctxt1.returnData = as.as_returndata /\
     ctxt1.logs = as.as_logs /\
     rbstate.accounts = asm_accounts /\
-    rbstate.tStorage = as.as_transient ==>
+    rbstate.tStorage = as.as_transient /\
+    rbstate.toDelete = as.as_toDelete ==>
     asm_evm_rel prog
       (asm_next (as with <|as_stack := stk; as_accounts := asm_accounts|>))
       (es with <|contexts := [(ctxt1, rb)]; rollback := rbstate|>)
@@ -755,7 +757,8 @@ Triviality asm_evm_rel_next_sstore_domain:
     ctxt1.returnData = as.as_returndata /\
     ctxt1.logs = as.as_logs /\
     rbstate.accounts = asm_accounts /\
-    rbstate.tStorage = as.as_transient ==>
+    rbstate.tStorage = as.as_transient /\
+    rbstate.toDelete = as.as_toDelete ==>
     asm_evm_rel prog
       (asm_next (as with <|as_stack := stk; as_accounts := asm_accounts|>))
       (es with <|contexts := [(ctxt1, rb)]; rollback := rbstate; msdomain := md|>)

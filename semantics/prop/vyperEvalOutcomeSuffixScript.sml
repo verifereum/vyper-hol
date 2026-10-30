@@ -294,15 +294,6 @@ Proof
   simp[outcomes_frame_def, check_create_blueprint_state]
 QED
 
-Theorem outcomes_frame_create[simp]:
-  outcomes_frame (eval_create cx kind has_salt rof arg_tys vs blueprint_size)
-Proof
-  simp_tac bool_ss [eval_create_def, create_soft_failure_def, LET_THM] >>
-  (* Split the exposed run_create_evm option and result tuple incrementally;
-     the head conversion reduces pair cases without generated variable names. *)
-  rpt (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
-              ASSIGN_OUTCOMES_FRAME_STEP])
-QED
 
 Theorem outcomes_frame_raw_call[simp]:
   outcomes_frame (eval_raw_call cx flags target_addr calldata amount)
@@ -511,13 +502,30 @@ val outcomes_suffix_frame_simps =
     (List.concat (List.map (CONJUNCTS o SPEC_ALL)
       [outcomes_frame_reads, outcomes_frame_read_results,
        outcomes_frame_primitives, outcomes_frame_handlers,
-       outcomes_frame_return, outcomes_frame_raise, outcomes_frame_create,
+       outcomes_frame_return, outcomes_frame_raise,
        outcomes_frame_check_create_blueprint,
        outcomes_frame_resolve_array,
        outcomes_frame_adopt, outcomes_frame_raw_call,
        outcomes_frame_places, outcomes_frame_write_place,
        outcomes_frame_get_place, outcomes_frame_append_place,
        outcomes_frame_pop_place]));
+
+Theorem outcomes_suffix_create_oracle:
+  outcomes_suffix (create_oracle_result salt value code rof)
+Proof
+  simp[outcomes_suffix_def] >> gen_tac >>
+  Cases_on `salt` >> Cases_on `st.outcomes` >>
+  simp[create_oracle_result_def, take_create_outcome_def] >>
+  pairarg_tac >>
+  rw[adopt_call_outcome_equation, create_outcome_request_def] >>
+  gvs[AllCaseEqs(), extCallOracleTheory.take_outcome_def,
+      extCallOracleTheory.computed_precompile_def, create_outcome_request_def,
+      outcome_suffix_def, evaluation_state_accfupds] >>
+  Cases_on `rof` >> gvs[AllCaseEqs(), evaluation_state_accfupds] >>
+  TRY (qexists_tac `[]` >> simp[] >> NO_TAC) >>
+  Cases_on `outcome.co_success` >>
+  qexists_tac `[outcome]` >> simp[]
+QED
 
 val outcomes_suffix_fact_index =
   List.map (fn th => (outcomes_fact_key (concl (SPEC_ALL th)),th))
@@ -539,7 +547,7 @@ fun outcomes_suffix_step facts =
   end;
 
 val outcomes_suffix_base_facts =
-  outcomes_suffix_read :: outcomes_suffix_take :: outcomes_suffix_frame_simps;
+  outcomes_suffix_create_oracle :: outcomes_suffix_read :: outcomes_suffix_take :: outcomes_suffix_frame_simps;
 
 Theorem outcomes_suffix_ext_call:
   outcomes_suffix (eval_ext_call cx static skip_check sig opts vs)
@@ -559,6 +567,15 @@ QED
 val OUTCOMES_SUFFIX_TAC = rpt (outcomes_suffix_step
   (outcomes_suffix_ext_call :: outcomes_suffix_send :: outcomes_suffix_base_facts));
 
+Theorem outcomes_suffix_create:
+  outcomes_suffix (eval_create cx kind has_salt rof arg_tys vs blueprint_size)
+Proof
+  simp_tac bool_ss [eval_create_def, create_soft_failure_def, LET_THM] >>
+  OUTCOMES_SUFFIX_TAC >> simp[outcomes_suffix_def]
+QED
+
+val OUTCOMES_SUFFIX_TAC = rpt (outcomes_suffix_step
+  (outcomes_suffix_create :: outcomes_suffix_ext_call :: outcomes_suffix_send :: outcomes_suffix_base_facts));
 (* The IntCall case's lock steps, unfolded in the goal and the hypotheses. *)
 val lock_helper_defs = [lock_if_nr_def, unlock_if_nr_def, is_view_mut_def];
 

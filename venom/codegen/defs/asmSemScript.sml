@@ -41,6 +41,7 @@ Datatype:
     as_prev_hashes : bytes32 list;
     as_outcomes : call_outcome list;
     as_requests : call_request list;
+    as_toDelete : address list;
     as_gas_readings : bytes32 list
   |>
 End
@@ -577,7 +578,9 @@ End
  * Forwarded gas is popped/evaluated by dispatch and deliberately ignored. *)
 Definition asm_call_request_def:
   asm_call_request s (addr:bytes32) (value:bytes32) ao asz is_static =
-    <| cr_target := w2w addr;
+    <| cr_kind := MessageCall; cr_gas := NONE;
+       cr_data_len := LENGTH (TAKE asz (DROP ao (asm_expand_memory (ao + asz) s.as_memory)));
+       cr_target := w2w addr;
        cr_value := w2n value;
        cr_data := TAKE asz (DROP ao (asm_expand_memory (ao + asz) s.as_memory));
        cr_static := (is_static \/ s.as_call_ctx.cc_static);
@@ -605,6 +608,8 @@ Definition asm_consume_call_outcome_def:
          as_accounts := accounts;
          as_transient := ts;
          as_logs := logs;
+         as_toDelete := if computed_precompile rq then s.as_toDelete
+                        else adopt_outcome_deletions rq outcome s.as_toDelete;
          as_returndata := outcome.co_returnData;
          as_memory := TAKE ro s.as_memory ++ bytes ++
                       DROP (ro + LENGTH bytes) s.as_memory |>))

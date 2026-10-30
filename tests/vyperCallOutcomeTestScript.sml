@@ -18,7 +18,7 @@ val () = cv_auto_trans outcome_test_state_def;
 
 Definition outcome_test_outcome_def:
   outcome_test_outcome success balance =
-    <|co_success := success; co_returnData := [42w];
+    <|co_created := 0w; co_toDelete := []; co_success := success; co_returnData := [42w];
       co_accounts := update_account 11w (empty_account_state with balance := balance) empty_accounts;
       co_tStorage := update_transient_storage 11w
         (update_storage 1w 8w empty_storage) empty_transient_storage;
@@ -119,9 +119,18 @@ Theorem outcome_success_actual_client:
   rq.cr_accounts = st.accounts /\ rq.cr_tStorage = st.tStorage /\
   st2 = st with <|accounts := st2.accounts; tStorage := st2.tStorage;
                  logs := st2.logs; outcomes := st2.outcomes;
-                 requests := st2.requests|>
+                 requests := st2.requests; pending_deletions := st2.pending_deletions|>
 Proof
   rpt strip_tac
   >- (drule_all take_adopt_call_outcome_typed >> simp[]) >>
   drule_all checked_call_outcome_success_frame >> simp[]
 QED
+
+(* Kernel-tag audit of the shared protocol and its source adoption boundary. *)
+val () = List.app (fn thy =>
+  List.app (fn (name,th) =>
+    if List.all (fn tag => tag = "DISK_THM") (fst (Tag.dest_tag (Thm.tag th)))
+    then () else raise Fail ("oracle dependency: " ^ thy ^ "." ^ name))
+    (DB.thms thy))
+  ["extCallOracle", "vyperCallOutcome", "vyperCallOutcomeBranches",
+   "vyperCallOutcomeFrame", "vyperCallOutcomeTest"];

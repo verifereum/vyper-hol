@@ -234,6 +234,7 @@ Datatype:
      - raw_create: [bytecode; value] ++ ctor_args ++ [salt]?
      The first bool records salt presence; the second is revert_on_failure. *)
   | CreateTarget create_kind bool (* has_salt *) bool (* revert_on_failure *)
+      (num list) (* supplied keyword operand indices, in source order *)
 End
 
 Datatype:

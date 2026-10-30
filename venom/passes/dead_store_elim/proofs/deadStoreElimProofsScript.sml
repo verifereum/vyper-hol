@@ -330,7 +330,8 @@ QED
 (* A dead store confined to one space is not an oracle call. *)
 Theorem effects_in_space_not_oracle_call:
   effects_in_space space inst ==>
-  inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL
+  inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+  inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2
 Proof
   Cases_on `space` >>
   simp[Once effects_in_space_def, Once is_memory_def_opcode_def, space_effect_def] >>

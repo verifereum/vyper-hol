@@ -14,12 +14,11 @@
  *   5 the creates: compile_create_sim
  *
  * Unprovable as the definitions stand:
- *   - compile_raw_call_sim, compile_raw_log_sim, compile_selfdestruct_sim
- *     and compile_create_sim: compile_call lowers RawCallTarget, RawLog,
- *     SelfDestructTarget and CreateTarget to INVALID (builtinCreate's
- *     compile_create_* are not called yet), where the source can succeed.
- *   - compile_raw_call_calldata_sim, and the create lowerings once they are
- *     wired in: they allocate with DALLOCA, at vs_fmp, which
+ *   - compile_raw_call_sim, compile_raw_log_sim and compile_selfdestruct_sim:
+ *     compile_call lowers RawCallTarget, RawLog and SelfDestructTarget to
+ *     INVALID, where the source can succeed.
+ *   - compile_raw_call_calldata_sim and the create lowerings:
+ *     they allocate with DALLOCA, at vs_fmp, which
  *     stmt_state_rel does not relate to the ALLOCA allocations, so
  *     expr_post's memory frame does not follow (#668, #636 Infrastructure
  *     row 2).
@@ -93,9 +92,9 @@ Proof
 QED
 
 Theorem compile_create_sim:
-  !cenv ann kind has_salt rof args dflt.
-    expr_sim_below cenv (expr_size (Call ann (CreateTarget kind has_salt rof) args dflt)) ==>
-    expr_vv_ok cenv (Call ann (CreateTarget kind has_salt rof) args dflt)
+  !cenv ann kind has_salt rof order args dflt.
+    expr_sim_below cenv (expr_size (Call ann (CreateTarget kind has_salt rof order) args dflt)) ==>
+    expr_vv_ok cenv (Call ann (CreateTarget kind has_salt rof order) args dflt)
 Proof
   cheat
 QED

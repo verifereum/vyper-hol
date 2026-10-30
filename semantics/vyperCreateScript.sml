@@ -7,6 +7,9 @@
  *   minimal_proxy_initcode — EIP-1167 initcode (54 bytes)
  *   create_address         — CREATE/CREATE2 address selection
  *   eval_create            — shared interpreter/CPS creation semantics
+ *
+ * Shared eval_create frame/outcome lemmas live in vyperCreateFrame.
+ * Oracle-boundary lemmas remain here beside create_oracle_result.
  *)
 
 Theory vyperCreate
@@ -15,6 +18,7 @@ Ancestors
   contractABI sptree vfmTypes vfmConstants vfmState vfmContext
   vfmExecution[ignore_grammar] vyperAST vyperABI vyperMisc vyperValue
   vyperContext vyperState vyperEvmBoundary vyperRuntimeAccounts
+  extCallOracle[ignore_grammar] vyperCallOutcome[ignore_grammar]
 Libs
   cv_transLib wordsLib monadsyntax
 
@@ -512,6 +516,63 @@ val () = cv_auto_trans run_create_evm_def;
    Source/size ASSERTs always revert, independently of revert_on_failure.
    CREATE failure returns zero when rof = F; constructor REVERT data bubbles
    as RevertData when rof holds. *)
+val () = List.app (fn field => temp_overload_on ("create_" ^ field,
+  prim_mk_const {Thy="extCallOracle", Name="recordtype.call_outcome.seldef.co_" ^ field}))
+  ["success", "created", "returnData"];
+Definition create_oracle_result_def:
+  create_oracle_result salt value initcode rof st =
+    case vyperCallOutcome$take_create_outcome
+      (case salt of NONE => extCallOracle$CreateCall | SOME s => extCallOracle$Create2Call s)
+      value initcode st of
+    | (INR ex, st') => (INR ex, st')
+    | (INL (rq,outcome), st') =>
+        let st'' = SND (vyperCallOutcome$adopt_call_outcome rq outcome st') in
+        if (create_success outcome) then (INL (Value (AddressV (create_created outcome))), st'')
+        else if rof then (INR (Error (RevertData (create_returnData outcome))), st'')
+        else (INL (Value (AddressV 0w)), st'')
+End
+val () = create_oracle_result_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_trans;
+
+Theorem create_oracle_result_frame:
+  create_oracle_result salt value code rof st = (res,st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables /\
+  isPREFIX st.logs st'.logs
+Proof
+  Cases_on `salt` >> Cases_on `st.outcomes` >>
+  simp[create_oracle_result_def, take_create_outcome_def] >>
+  pairarg_tac >>
+  rw[adopt_call_outcome_equation, create_outcome_request_def, evaluation_state_accfupds] >>
+  gvs[AllCaseEqs(), evaluation_state_accfupds, rich_listTheory.IS_PREFIX_REFL,
+      rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Theorem create_oracle_result_exception:
+  create_oracle_result salt value code rof st = (INR ex,st') ==>
+  ?err. ex = Error err /\ (!msg. err <> TypeError msg)
+Proof
+  Cases_on `salt` >> Cases_on `st.outcomes` >>
+  simp[create_oracle_result_def, take_create_outcome_def] >>
+  pairarg_tac >> rw[] >>
+  gvs[AllCaseEqs(), vyperValueOperationTheory.error_distinct]
+QED
+
+Theorem create_oracle_result_no_type_error:
+  create_oracle_result salt value code rof st = (res,st') ==>
+  !msg. res <> INR (Error (TypeError msg))
+Proof
+  strip_tac >> rpt strip_tac >> gvs[] >>
+  drule create_oracle_result_exception >> simp[] >> metis_tac[]
+QED
+
+Theorem create_oracle_result_address:
+  create_oracle_result salt value code rof st = (INL tv,st') ==>
+  ?addr. tv = Value (AddressV addr)
+Proof
+  Cases_on `salt` >> Cases_on `st.outcomes` >>
+  simp[create_oracle_result_def, take_create_outcome_def] >>
+  pairarg_tac >> rw[] >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
 Definition eval_create_def:
   eval_create cx kind has_salt rof arg_tys vs blueprint_size = do
     ops <- lift_option_type (dest_create_args kind has_salt vs)
@@ -525,6 +586,10 @@ Definition eval_create_def:
     (* copy-of/blueprint ASSERTs are emitted before CREATE and always revert. *)
     check code_info.cc_source_ok "create source has no deployable code";
     check code_info.cc_size_ok "create initcode too large";
+    oracle_mode <- (\st. (INL (IS_SOME st.outcomes), st));
+    if oracle_mode then
+      create_oracle_result ops.co_salt ops.co_value code_info.cc_initcode rof
+    else do
     self_acct <<- lookup_account cx.txn.target accounts;
     new_addr <<- create_address cx.txn.target self_acct.nonce ops.co_salt
       code_info.cc_initcode;
@@ -567,6 +632,7 @@ Definition eval_create_def:
                       else return (Value (AddressV 0w))
           od
       od
+    od
     od
   od
 End

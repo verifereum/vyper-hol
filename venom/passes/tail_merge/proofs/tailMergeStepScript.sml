@@ -696,7 +696,7 @@ val ee_UNIV_exec_delegatecall = prove(``
     | _ => F``,
   prove_exec_wrapper exec_delegatecall_def);
 
-val ee_UNIV_exec_create = prove(``
+Theorem ee_UNIV_exec_create:
   !inst1 inst2 s1 s2 value offset sz salt_opt.
     execution_equiv UNIV s1 s2 /\
     LENGTH inst1.inst_outputs = LENGTH inst2.inst_outputs ==>
@@ -705,8 +705,15 @@ val ee_UNIV_exec_create = prove(``
       (OK s1', OK s2') => execution_equiv UNIV s1' s2'
     | (Error _, Error _) => T
     | (Abort a1 s1', Abort a2 s2') => a1 = a2 /\ execution_equiv UNIV s1' s2'
-    | _ => F``,
-  prove_exec_wrapper exec_create_def);
+    | _ => F
+Proof
+  rpt strip_tac >> fs[execution_equiv_def] >>
+  Cases_on `inst1.inst_outputs` >> Cases_on `inst2.inst_outputs` >>
+  gvs[exec_create_def] >>
+  Cases_on `t` >> Cases_on `t'` >> gvs[] >>
+  simp[venom_create_request_def, consume_create_outcome_eq,
+       read_memory_def, execution_equiv_def, update_var_def]
+QED
 
 (* Flat-form extraction lemmas: exec result equations in hypotheses.
    Derived from case-form wrappers via qspecl_then + gvs.
@@ -1211,7 +1218,7 @@ val exec_delegatecall_output = prove(``
         lookup_var (EL k inst2.inst_outputs) s2'``,
   prove_exec_output_wrapper exec_delegatecall_def);
 
-val exec_create_output = prove(``
+Theorem exec_create_output:
   !inst1 inst2 s1 s2 value offset sz salt_opt s1' s2'.
     execution_equiv UNIV s1 s2 /\
     LENGTH inst1.inst_outputs = LENGTH inst2.inst_outputs /\
@@ -1219,8 +1226,15 @@ val exec_create_output = prove(``
     exec_create inst2 s2 value offset sz salt_opt = OK s2' ==>
     !k. k < LENGTH inst1.inst_outputs ==>
         lookup_var (EL k inst1.inst_outputs) s1' =
-        lookup_var (EL k inst2.inst_outputs) s2'``,
-  prove_exec_output_wrapper exec_create_def);
+        lookup_var (EL k inst2.inst_outputs) s2'
+Proof
+  rpt strip_tac >> fs[execution_equiv_def] >>
+  gvs[exec_create_def, venom_create_request_def, consume_create_outcome_eq,
+      read_memory_def, AllCaseEqs(), lookup_var_def, update_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE] >>
+  qmatch_goalsub_abbrev_tac `outcome.co_success` >>
+  Cases_on `outcome.co_success` >> simp[]
+QED
 
 (* --- Per-category output-match provers --- *)
 

@@ -2084,6 +2084,10 @@ QED
 
 (* ===== Create Builtins ===== *)
 
+(* Historical admitted contract, refuted by rawCreateContractProbeTheory.
+   Retained for review; production creation uses the callback-driven pipeline.
+   The replacement must use CFG execution and cover all live operands.
+
 (* NOTE: compile_raw_create_correct was ILL-TYPED as originally stated.
    compile_raw_create takes 5 args (bytecode_op, value_op, salt_opt,
    revert_on_failure, ctor_args_info) but the original had 6 positional args
@@ -2105,6 +2109,8 @@ Theorem compile_raw_create_correct:
 Proof
   cheat
 QED
+
+*)
 
 (* ===== Bytes Builtins ===== *)
 

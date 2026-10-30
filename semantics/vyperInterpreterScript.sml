@@ -1639,7 +1639,7 @@ Definition evaluate_def:
   (* Blueprint validation interrupts the runtime operand layout before ctor
      arguments, retaining the modular copy size even if those arguments deploy
      code at a previously empty target. *)
-  eval_expr cx (Call ty (CreateTarget kind has_salt rof) es _) =
+  eval_expr cx (Call ty (CreateTarget kind has_salt rof _) es _) =
     (case kind of
      | CreateFromBlueprint raw_args => do
          prefix <- eval_exprs cx (TAKE (if has_salt then 4 else 3) es);

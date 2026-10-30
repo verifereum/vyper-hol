@@ -343,32 +343,21 @@ Triviality exec_create_renamed:
           ssa_sim ((HD inst1.inst_outputs =+ HD inst2.inst_outputs) sigma)
                   s1' s2'
 Proof
-  rw[exec_create_def, LET_THM] >>
-  imp_res_tac ssa_sim_fields >> gvs[read_memory_def] >>
-  `make_venom_create_state s1
-     (case salt_opt of
-        NONE => address_for_create s2.vs_call_ctx.cc_address
-          (lookup_account s2.vs_call_ctx.cc_address s2.vs_accounts).nonce
-      | SOME salt => address_for_create2 s2.vs_call_ctx.cc_address salt
-          (TAKE (w2n sz) (DROP (w2n offset) s2.vs_memory ++ REPLICATE (w2n sz) 0w)))
-     (s2.vs_call_ctx.cc_gas - s2.vs_call_ctx.cc_gas DIV 64)
-     (w2n value) (TAKE (w2n sz) (DROP (w2n offset) s2.vs_memory ++ REPLICATE (w2n sz) 0w)) =
-   make_venom_create_state s2
-     (case salt_opt of
-        NONE => address_for_create s2.vs_call_ctx.cc_address
-          (lookup_account s2.vs_call_ctx.cc_address s2.vs_accounts).nonce
-      | SOME salt => address_for_create2 s2.vs_call_ctx.cc_address salt
-          (TAKE (w2n sz) (DROP (w2n offset) s2.vs_memory ++ REPLICATE (w2n sz) 0w)))
-     (s2.vs_call_ctx.cc_gas - s2.vs_call_ctx.cc_gas DIV 64)
-     (w2n value) (TAKE (w2n sz) (DROP (w2n offset) s2.vs_memory ++ REPLICATE (w2n sz) 0w))` by (
-    Cases_on `salt_opt` >> simp[] >>
-    metis_tac[make_venom_create_state_ssa_sim]) >>
-  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
-  BasicProvers.every_case_tac >> gvs[] >>
-  drule_all extract_venom_result_ssa_sim >> strip_tac >> gvs[] >>
-  irule ssa_sim_update_var >> gvs[] >>
-  gvs[extract_venom_result_def, AllCaseEqs(), LET_THM, lookup_var_def] >>
-  BasicProvers.every_case_tac >> gvs[]
+  rpt strip_tac >>
+  `venom_create_request s1 value offset sz salt_opt =
+   venom_create_request s2 value offset sz salt_opt` by
+    fs[ssa_sim_def, venom_create_request_def, read_memory_def] >>
+  `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests` by
+    fs[ssa_sim_def] >>
+  gvs[exec_create_def, AllCaseEqs()] >>
+  qexists_tac `update_var (HD inst2.inst_outputs)
+    (FST (consume_create_outcome
+      (venom_create_request s2 value offset sz salt_opt) s2))
+    (SND (consume_create_outcome
+      (venom_create_request s2 value offset sz salt_opt) s2))` >>
+  Cases_on `inst2.inst_outputs` >> gvs[] >>
+  irule ssa_sim_update_var >>
+  gvs[ssa_sim_def, consume_create_outcome_eq, lookup_var_def]
 QED
 
 (* Under ssa_sim, vs_alloca_next is equal *)

@@ -2450,3 +2450,37 @@ val () = List.app (fn (name,th) =>
        List.all (fn s => s = "DISK_THM") oracles then ()
     else raise Fail ("vyperEvalPreservesScopes." ^ name ^ ": admitted dependency")
   end) (DB.thms "vyperEvalPreservesScopes");
+
+Theorem preserves_tv_final_frame:
+  preserves_tv cx st mid /\
+  st'.scopes = mid.scopes /\ st'.immutables = mid.immutables ==>
+  preserves_tv cx st st'
+Proof
+  metis_tac[preserves_tv_trans, preserves_tv_eq]
+QED
+
+Theorem ExtCall_outcome_preserves_tv:
+  (!bs s res t. k bs s = (res,t) ==> preserves_tv cx s t) /\
+  (do
+    accounts <- get_accounts;
+    (if ret_type = NoneT then
+       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
+     else return ());
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success "ExtCall reverted";
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st = (res,st') ==> preserves_tv cx st st'
+Proof
+  rpt strip_tac >>
+  `!s t u. preserves_tv cx s t /\ preserves_tv cx t u ==>
+            preserves_tv cx s u` by metis_tac[preserves_tv_trans] >>
+  `!s os rqs. preserves_tv cx s
+      (s with <|outcomes := os; requests := rqs|>)` by simp[preserves_tv_def] >>
+  `!s accounts transient logs pending. preserves_tv cx s
+      (s with <|accounts := accounts; tStorage := transient;
+                logs := s.logs ++ logs; pending_deletions := pending|>)` by simp[preserves_tv_def] >>
+  `!s. preserves_tv cx s s` by simp[] >>
+  drule_all (ExtCall_outcome_transport |> Q.INST
+    [`R` |-> `preserves_tv cx`]) >> simp[]
+QED

@@ -502,28 +502,14 @@ Definition exec_delegatecall_def:
     | NONE => Error "delegatecall: non-terminating or invalid state"
 End
 
-(* Execute CREATE/CREATE2 via verifereum EVM semantics.
-   CREATE: salt_opt = NONE, address from sender + nonce
-   CREATE2: salt_opt = SOME salt, address from sender + salt + code hash
-*)
+(* CREATE/CREATE2 share the observed outcome oracle with CALL. *)
 Definition exec_create_def:
   exec_create inst s value offset sz salt_opt =
-    let init_code = read_memory (w2n offset) (w2n sz) s in
-    let sender = s.vs_call_ctx.cc_address in
-    let sender_acct = lookup_account sender s.vs_accounts in
-    let new_address =
-      (case salt_opt of
-         NONE => address_for_create sender sender_acct.nonce
-       | SOME salt => address_for_create2 sender salt init_code) in
-    let gas = s.vs_call_ctx.cc_gas - s.vs_call_ctx.cc_gas DIV 64 in
-    let evm_s = make_venom_create_state s new_address gas (w2n value)
-                  init_code in
-    case extract_venom_result s (w2w new_address) 0 0 (run evm_s) of
-    | SOME (output, s') =>
-        (case inst.inst_outputs of
-           [out] => OK (update_var out output s')
-         | _ => Error "create requires single output")
-    | NONE => Error "create: non-terminating or invalid state"
+    let rq = venom_create_request s value offset sz salt_opt;
+        (output, s') = consume_create_outcome rq s
+    in case inst.inst_outputs of
+         [out] => OK (update_var out output s')
+       | _ => Error "create requires single output"
 End
 
 (* Bump-allocate: record region in vs_allocas without touching vs_memory.
@@ -1245,7 +1231,7 @@ val preserves_idx_result = prove (
 val preserves_idx_projection_rewrites = let
   val defs = [exec_pure1_def, exec_pure2_def, exec_pure3_def,
     exec_read0_def, exec_read1_def, exec_ext_call_def,
-    consume_call_outcome_eq, exec_delegatecall_def, exec_create_def,
+    consume_call_outcome_eq, consume_create_outcome_eq, exec_delegatecall_def, exec_create_def,
     extract_venom_result_def, exec_write2_def, exec_alloca_def,
     step_inst_base_def]
   fun case_type tm = let val (_, arg, _) = TypeBase.dest_case tm
@@ -1302,7 +1288,7 @@ Proof
 QED
 
 val call_preserves_idx_ss = preserves_idx_ss ++ rewrites
-  [exec_ext_call_def, consume_call_outcome_eq, exec_delegatecall_def,
+  [exec_ext_call_def, consume_call_outcome_eq, consume_create_outcome_eq, exec_delegatecall_def,
    exec_create_def, extract_venom_result_def];
 
 (* Call helpers preserve the instruction index despite their state changes. *)
@@ -1415,6 +1401,7 @@ Definition merge_callee_state_def:
       vs_logs       := callee.vs_logs;
       vs_outcomes   := callee.vs_outcomes;
       vs_requests   := callee.vs_requests;
+      vs_toDelete   := callee.vs_toDelete;
       vs_immutables := callee.vs_immutables
     |>
 End

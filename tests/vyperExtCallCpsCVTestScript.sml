@@ -17,13 +17,13 @@ End
 val () = cv_auto_trans cpscv_run_def;
 
 Definition cpscv_call_def:
-  cpscv_call static target ret dflt =
-    Call ret (ExtCall static F ("f",[],ret)
+  cpscv_call static target ret dflt = Call ret
+    (ExtCall static F ("f",[],ret)
       ((if static then [] else [EKValue]) ++
        if IS_SOME dflt then [EKDefault] else []))
-      ([Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [target]))] ++
-       (if static then [] else [Literal (BaseT (UintT 256)) (IntL 7)]) ++
-       case dflt of NONE => [] | SOME e => [e]) NONE
+    ([Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [target]))] ++
+     (if static then [] else [Literal (BaseT (UintT 256)) (IntL 7)]) ++
+     (case dflt of NONE => [] | SOME e => [e])) NONE
 End
 val () = cv_auto_trans cpscv_call_def;
 
@@ -40,7 +40,7 @@ val () = cv_auto_trans cpscv_state_def;
 
 Definition cpscv_outcome_def:
   cpscv_outcome success data balance =
-    <|co_success := success; co_returnData := data;
+    <|co_created := 0w; co_toDelete := []; co_success := success; co_returnData := data;
       co_accounts := update_account 11w (empty_account_state with balance := balance) empty_accounts;
       co_tStorage := vfmExecution$update_transient_storage 11w
         (update_storage 1w 8w empty_storage) empty_transient_storage;
@@ -110,14 +110,15 @@ Definition cpscv_tail_snapshot_def:
 End
 val () = cv_auto_trans cpscv_tail_snapshot_def;
 
+(* Reverts propagate the callee's bytes, rather than a generic runtime error. *)
 Theorem cpscv_failed_head_consumed:
   cpscv_observe T 9w (BaseT (UintT 256)) NONE
-    (SOME [cpscv_outcome F [] 17; cpscv_tail])
-    (INR (Error (RevertData [])))
+    (SOME [cpscv_outcome F [13w;37w] 17; cpscv_tail])
+    (INR (Error (RevertData [13w;37w])))
     3 4w cpscv_initial_logs (cpscv_requests T) cpscv_tail_snapshot /\
   cpscv_observe F 9w (BaseT (UintT 256)) NONE
-    (SOME [cpscv_outcome F [] 17; cpscv_tail])
-    (INR (Error (RevertData [])))
+    (SOME [cpscv_outcome F [13w;37w] 17; cpscv_tail])
+    (INR (Error (RevertData [13w;37w])))
     3 4w cpscv_initial_logs (cpscv_requests F) cpscv_tail_snapshot
 Proof
   CONV_TAC cv_eval
@@ -178,6 +179,96 @@ Proof
   CONV_TAC cv_eval
 QED
 
+(* Empty target code now rejects the default path after taking/adopting.
+   In particular, the nonstatic failure still exposes the adopted fields. *)
+Theorem cpscv_empty_return_default_checks_code:
+  cpscv_observe T 9w (BaseT (UintT 256))
+    (SOME (Literal (BaseT (UintT 256)) (IntL 77)))
+    (SOME [cpscv_outcome T [] 17; cpscv_tail])
+    (INR (Error (RuntimeError "ExtCall target has no code")))
+    3 4w cpscv_initial_logs (cpscv_requests T) cpscv_tail_snapshot /\
+  cpscv_observe F 9w (BaseT (UintT 256))
+    (SOME (Literal (BaseT (UintT 256)) (IntL 77)))
+    (SOME [cpscv_outcome T [] 17; cpscv_tail])
+    (INR (Error (RuntimeError "ExtCall target has no code")))
+    17 8w cpscv_adopted_logs (cpscv_requests F) cpscv_tail_snapshot
+Proof
+  CONV_TAC cv_eval
+QED
+
+(* The whole queue is retained when eager operand evaluation fails. *)
+Definition cpscv_head_snapshot_def:
+  cpscv_head_snapshot success data balance = SOME
+    [(success,data,balance,8w:256 word,[<|logger := 11w; topics := [1w]; data := [8w]|>]);
+     (T,[99w:word8],23,8w,[<|logger := 11w; topics := [1w]; data := [8w]|>])]
+End
+val () = cv_auto_trans cpscv_head_snapshot_def;
+
+(* Even a default that would not be selected must evaluate before the call. *)
+Theorem cpscv_nonempty_return_evaluates_default_before_call:
+  cpscv_observe T 9w (BaseT (UintT 256)) (SOME (Name (BaseT (UintT 256)) "missing"))
+    (SOME [cpscv_outcome T (REPLICATE 31 0w ++ [42w]) 17; cpscv_tail])
+    (INR (Error (TypeError "Name not in scope")))
+    3 4w cpscv_initial_logs cpscv_initial_requests
+      (cpscv_head_snapshot T (REPLICATE 31 0w ++ [42w]) 17) /\
+  cpscv_observe F 9w (BaseT (UintT 256)) (SOME (Name (BaseT (UintT 256)) "missing"))
+    (SOME [cpscv_outcome T (REPLICATE 31 0w ++ [42w]) 17; cpscv_tail])
+    (INR (Error (TypeError "Name not in scope")))
+    3 4w cpscv_initial_logs cpscv_initial_requests
+      (cpscv_head_snapshot T (REPLICATE 31 0w ++ [42w]) 17)
+Proof
+  CONV_TAC cv_eval
+QED
+
+(* A focused unchecked default fixture keeps successful default selection
+   covered despite the intentionally empty code at target 9. *)
+Definition cpscv_skip_default_observe_def:
+  cpscv_skip_default_observe static dflt data expected balance slot logs =
+    let r = cpscv_run
+      (Call (BaseT (UintT 256))
+        (ExtCall static T ("f",[],BaseT (UintT 256))
+          ((if static then [] else [EKValue]) ++ [EKDefault]))
+        ([Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [9w]))] ++
+         (if static then [] else [Literal (BaseT (UintT 256)) (IntL 7)]) ++ [dflt]) NONE)
+      (cpscv_state with outcomes := SOME [cpscv_outcome T data 17; cpscv_tail]) in
+    FST r = expected /\ cpscv_snapshot balance slot logs
+      (cpscv_requests static) cpscv_tail_snapshot (SND r)
+End
+val () = cv_auto_trans cpscv_skip_default_observe_def;
+
+Theorem cpscv_empty_return_uses_eager_default_with_skip_check:
+  cpscv_skip_default_observe T (Literal (BaseT (UintT 256)) (IntL 77)) []
+    (INL (Value (IntV 77))) 3 4w cpscv_initial_logs /\
+  cpscv_skip_default_observe F (Literal (BaseT (UintT 256)) (IntL 77)) []
+    (INL (Value (IntV 77))) 17 8w cpscv_adopted_logs
+Proof
+  CONV_TAC cv_eval
+QED
+
+(* A valid eager default is ignored when ABI return data is present. *)
+Theorem cpscv_nonempty_return_ignores_default_value:
+  cpscv_skip_default_observe T (Literal (BaseT (UintT 256)) (IntL 77))
+    (REPLICATE 31 0w ++ [42w]) (INL (Value (IntV 42))) 3 4w cpscv_initial_logs /\
+  cpscv_skip_default_observe F (Literal (BaseT (UintT 256)) (IntL 77))
+    (REPLICATE 31 0w ++ [42w]) (INL (Value (IntV 42))) 17 8w cpscv_adopted_logs
+Proof
+  CONV_TAC cv_eval
+QED
+
+(* The default value is captured before adoption in both call modes. *)
+Theorem cpscv_skip_default_observes_incoming_state:
+  cpscv_skip_default_observe T
+    (Builtin (BaseT (UintT 256)) (Acc Balance)
+      [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [11w]))]) []
+    (INL (Value (IntV 3))) 3 4w cpscv_initial_logs /\
+  cpscv_skip_default_observe F
+    (Builtin (BaseT (UintT 256)) (Acc Balance)
+      [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [11w]))]) []
+    (INL (Value (IntV 3))) 17 8w cpscv_adopted_logs
+Proof
+  CONV_TAC cv_eval
+QED
+
 (* Defaults need deployed target code unless the call explicitly skips that check. *)
 Definition cpscv_default_state_def:
   cpscv_default_state = cpscv_state with accounts := update_account 9w
@@ -210,19 +301,7 @@ Proof
   CONV_TAC cv_eval
 QED
 
-Theorem cpscv_nonempty_return_evaluates_default:
-  cpscv_observe T 9w (BaseT (UintT 256)) (SOME (Name (BaseT (UintT 256)) "missing"))
-    (SOME [cpscv_outcome T (REPLICATE 31 0w ++ [42w]) 17; cpscv_tail])
-    (INR (Error (TypeError "Name not in scope")))
-    3 4w cpscv_initial_logs cpscv_initial_requests
-    (SOME [(T, REPLICATE 31 0w ++ [42w], 17, 8w,
-              [<|logger := 11w; topics := [1w]; data := [8w]|>]);
-           (T, [99w], 23, 8w, [<|logger := 11w; topics := [1w]; data := [8w]|>])])
-Proof
-  CONV_TAC cv_eval
-QED
 
-(* The value is captured before the call, while the resulting state is adopted. *)
 Theorem cpscv_default_reads_before_state_adoption:
   cpscv_default_observe T []
     (Builtin (BaseT (UintT 256)) (Acc Balance)
@@ -236,13 +315,28 @@ Proof
   CONV_TAC cv_eval
 QED
 
-Theorem cpscv_default_failure_precedes_failed_call:
+Theorem cpscv_failed_empty_head_consumed:
+  cpscv_observe T 9w (BaseT (UintT 256)) NONE
+    (SOME [cpscv_outcome F [] 17; cpscv_tail])
+    (INR (Error (RevertData [])))
+    3 4w cpscv_initial_logs (cpscv_requests T) cpscv_tail_snapshot /\
+  cpscv_observe F 9w (BaseT (UintT 256)) NONE
+    (SOME [cpscv_outcome F [] 17; cpscv_tail])
+    (INR (Error (RevertData [])))
+    3 4w cpscv_initial_logs (cpscv_requests F) cpscv_tail_snapshot
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem cpscv_failing_default_prevents_failed_call:
   cpscv_observe T 9w (BaseT (UintT 256)) (SOME (Name (BaseT (UintT 256)) "missing"))
     (SOME [cpscv_outcome F [] 17; cpscv_tail])
     (INR (Error (TypeError "Name not in scope")))
-    3 4w cpscv_initial_logs cpscv_initial_requests
-    (SOME [(F, [], 17, 8w, [<|logger := 11w; topics := [1w]; data := [8w]|>]);
-           (T, [99w], 23, 8w, [<|logger := 11w; topics := [1w]; data := [8w]|>])])
+    3 4w cpscv_initial_logs cpscv_initial_requests (cpscv_head_snapshot F [] 17) /\
+  cpscv_observe F 9w (BaseT (UintT 256)) (SOME (Name (BaseT (UintT 256)) "missing"))
+    (SOME [cpscv_outcome F [] 17; cpscv_tail])
+    (INR (Error (TypeError "Name not in scope")))
+    3 4w cpscv_initial_logs cpscv_initial_requests (cpscv_head_snapshot F [] 17)
 Proof
   CONV_TAC cv_eval
 QED

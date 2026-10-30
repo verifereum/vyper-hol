@@ -29,10 +29,12 @@ env:
 
 jobs:
   toolchain:
-    # Without a project snapshot to carry the HOL toolchain, this job builds it
-    # once for build, compiler and test-deps, instead of once per job. With the
-    # remote login, holbuild restores the published HOL toolchain instead of
-    # building a new one.
+    # holbuild hashes the HOL toolchain's bytes into every action key, and two
+    # HOL builds differ, so build-rollup finds the witness groups' actions only
+    # if build and compiler share one toolchain. Without a project snapshot to
+    # carry it, this job builds it once for build, compiler and test-deps. With
+    # the remote login, holbuild restores the published HOL toolchain instead of
+    # building a new one, so keys stay those of earlier runs.
     if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 60
@@ -281,7 +283,12 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps
+          # Bound total HOL memory on the hosted runner, including fixture builds.
+          jobs=$(nproc)
+          if [ "$jobs" -gt 2 ]; then jobs=2; fi
+          memory_mib=$(( $(getconf _PHYS_PAGES) * $(getconf PAGE_SIZE) / 1024 / 1024 ))
+          if [ "$memory_mib" -lt 12288 ]; then jobs=1; fi
+          holbuild --max-heap 4096 --verbose -j"$jobs" build --skip-checkpoints --skip-proof-steps
 
       - name: Save holbuild project snapshot
         uses: actions/cache/save@v6
@@ -443,10 +450,11 @@ jobs:
           snapshot-key: ${{ needs.test-deps.outputs.holbuild-cache-key }}
 
       - name: Restore Vyper test exports
-        uses: ./.github/actions/restore-run-cache
+        uses: actions/cache/restore@v6
         with:
           path: tests/vyper-test-exports
           key: ${{ needs.export-vyper-tests.outputs.export-cache-key }}
+          fail-on-cache-miss: true
 
       - name: Configure remote cache
         uses: ./.github/actions/setup-remote-cache
@@ -455,15 +463,19 @@ jobs:
 
       - name: Generate test theories from pinned exports
         run: |
-          holbuild build --skip-checkpoints --skip-proof-steps vyperTestLib
+          holbuild --max-heap 4096 build --skip-checkpoints --skip-proof-steps vyperTestLibTestTheory
           generator=$(mktemp --suffix=.sml)
           trap 'rm -f "$generator"' EXIT
           printf '%s\n' 'vyperTestLib.generate_tests ();' > "$generator"
-          (cd tests && holbuild run --noconfig vyperTestLib "$generator")
+          (cd tests && holbuild --max-heap 4096 run --noconfig vyperTestLib "$generator")
+
+      - name: Check generated Vyper script inventory
+        run: |
+          holbuild --max-heap 4096 run --noconfig tests/checkGeneratedScripts.sml
 
       - name: Build Vyper test coverage baseline
         if: matrix.group == 0
-        run: holbuild build --skip-checkpoints --skip-proof-steps vyperTestCoverageReportTheory
+        run: holbuild --max-heap 4096 build --skip-checkpoints --skip-proof-steps vyperTestCoverageReportTheory
 
       - name: Report Vyper test coverage baseline
         if: matrix.group == 0
@@ -477,7 +489,12 @@ jobs:
           # build time; rerun `tools/vyper_test_groups.py plan` when tests change.
           targets=$(python3 tools/vyper_test_groups.py targets --group ${{ matrix.group }} --groups ${{ strategy.job-total }})
           echo "Building: $targets"
-          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $targets
+          # Leave RAM for the runner and dependency loading, not just ML heaps.
+          jobs=$(nproc)
+          if [ "$jobs" -gt 2 ]; then jobs=2; fi
+          memory_mib=$(( $(getconf _PHYS_PAGES) * $(getconf PAGE_SIZE) / 1024 / 1024 ))
+          if [ "$memory_mib" -lt 12288 ]; then jobs=1; fi
+          holbuild --max-heap 4096 --verbose -j"$jobs" build --skip-checkpoints --skip-proof-steps $targets
 
       - name: Verify no successful-build checkpoints remain
         run: |

@@ -1055,3 +1055,16 @@ val () = List.app (fn (name,th) =>
   in if List.all (fn s => s = "DISK_THM") oracles then ()
      else raise Fail ("No-control oracle debt: " ^ name)
   end) (DB.thms "vyperExprNoControl");
+
+Theorem Send_outcome_runtime_error:
+  (do
+    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    check outcome.co_success "send failed";
+    adopt_call_outcome rq outcome;
+    return (Value NoneV)
+  od) st = (INR exc,st') ==>
+  ?msg. exc = Error (RuntimeError msg)
+Proof
+  simp[checked_call_outcome_cases, return_def] >> rpt strip_tac
+  >- (drule take_call_outcome_error >> rw[] >> simp[]) >> simp[]
+QED

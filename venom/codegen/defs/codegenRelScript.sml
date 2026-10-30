@@ -328,6 +328,7 @@ Definition venom_asm_rel_def:
     as.as_logs = vs.vs_logs ∧
     as.as_outcomes = vs.vs_outcomes ∧
     as.as_requests = vs.vs_requests ∧
+    as.as_toDelete = vs.vs_toDelete ∧
     (* Shared environment *)
     as.as_call_ctx = vs.vs_call_ctx ∧
     as.as_tx_ctx = vs.vs_tx_ctx ∧
@@ -346,7 +347,8 @@ Definition venom_asm_terminal_rel_def:
     as.as_transient = vs.vs_transient ∧
     as.as_returndata = vs.vs_returndata ∧
     as.as_logs = vs.vs_logs ∧
-    as.as_requests = vs.vs_requests
+    as.as_requests = vs.vs_requests ∧
+    as.as_toDelete = vs.vs_toDelete
 End
 
 (* venom_asm_rel implies venom_asm_terminal_rel (for proof use) *)
@@ -405,6 +407,7 @@ Definition asm_evm_rel_def:
          (* Live accounts and transient storage (NOT per-frame checkpoint) *)
          es.rollback.accounts = as.as_accounts ∧
          es.rollback.tStorage = as.as_transient ∧
+         es.rollback.toDelete = as.as_toDelete ∧
          (* Call context *)
          as.as_call_ctx.cc_caller = ctxt.msgParams.caller ∧
          as.as_call_ctx.cc_address = ctxt.msgParams.callee ∧

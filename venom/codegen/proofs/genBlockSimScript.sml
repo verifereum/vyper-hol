@@ -5159,14 +5159,7 @@ Resume gen_inst_bump_ok_sim[bump]:
        (update_var h'³' (x + x')
          (update_var h'' x vs)) as8 /\
      as8.as_pc = as''.as_pc + LENGTH (execute_plan initial_fmp pop_ops)` by
-    (Cases_on `is_halting`
-     >- (qpat_x_assum `(if ~T then _ else _) = (pop_ops,ps8)` mp_tac >>
-         simp[] >> strip_tac >> gvs[] >>
-         qexistsl [`0`, `as''`] >>
-         conj_tac >- simp[asm_steps_def] >>
-         conj_tac >- first_assum ACCEPT_TAC >>
-         simp[execute_plan_def])
-     >> qspecl_then
+    (qspecl_then
           [`~MEM h'' next_liveness`, `~MEM h'³' next_liveness`,
            `Var h''`, `Var h'³'`, `stack_pop 2 ps4.ps_stack`,
            `ps4 with ps_stack :=
@@ -5180,18 +5173,14 @@ Resume gen_inst_bump_ok_sim[bump]:
           ((conj_tac >- simp[stack_push_def]) >>
            (conj_tac >- simp[]) >>
            (conj_tac >-
-             (qpat_x_assum `(if ~F then _ else _) = (pop_ops,ps8)` mp_tac >>
+             (qpat_x_assum `popmany_plan _ _ = (pop_ops,ps8)` mp_tac >>
               Cases_on `MEM h'' next_liveness` >>
               Cases_on `MEM h'³' next_liveness` >> simp[])) >>
            (conj_tac >- first_assum ACCEPT_TAC) >>
            first_assum ACCEPT_TAC)) >>
         simp[]) >>
   `generated_plan_state_wf base' ps8` by
-    (Cases_on `is_halting`
-     >- (qpat_x_assum `(if ~T then _ else _) = (pop_ops,ps8)` mp_tac >>
-         simp[] >> strip_tac >> gvs[] >>
-         first_assum ACCEPT_TAC)
-     >> qspecl_then
+    (qspecl_then
           [`base'`, `~MEM h'' next_liveness`, `~MEM h'³' next_liveness`,
            `Var h''`, `Var h'³'`, `stack_pop 2 ps4.ps_stack`,
            `ps4 with ps_stack :=
@@ -5202,7 +5191,7 @@ Resume gen_inst_bump_ok_sim[bump]:
           ((conj_tac >- first_assum ACCEPT_TAC) >>
            (conj_tac >- simp[stack_push_def]) >>
            (conj_tac >- simp[]) >>
-           (qpat_x_assum `(if ~F then _ else _) = (pop_ops,ps8)` mp_tac >>
+           (qpat_x_assum `popmany_plan _ _ = (pop_ops,ps8)` mp_tac >>
             Cases_on `MEM h'' next_liveness` >>
             Cases_on `MEM h'³' next_liveness` >> simp[]))) >>
         simp[]) >>
@@ -5332,6 +5321,7 @@ Theorem istore_emit_relation_agreement:
               as_prev_hashes := vs.vs_prev_hashes;
               as_outcomes := vs.vs_outcomes;
               as_requests := vs.vs_requests;
+              as_toDelete := vs.vs_toDelete;
               as_gas_readings := [] |> in
   let st' = st with <| as_stack := [];
                        as_memory := word_to_bytes (1w:bytes32) T;
@@ -5616,6 +5606,7 @@ Theorem istore_spill_overlap_mismatch:
                as_prev_hashes := vs0.vs_prev_hashes;
                as_outcomes := vs0.vs_outcomes;
                as_requests := vs0.vs_requests;
+               as_toDelete := vs0.vs_toDelete;
                as_gas_readings := [] |> in
   let vs1 = istore 0 (1w:bytes32) vs0 in
   let as1 = as0 with <| as_stack := [];

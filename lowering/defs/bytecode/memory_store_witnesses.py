@@ -153,9 +153,12 @@ def probe(repo: Path, corpus: Path, fixtures: Path, output: Path,
         '  handle exn => memoryStoreWitnessLib.report\n'
         '   ("WITNESS " ^ name ^ " ERROR=" ^ General.exnMessage exn));\n'
         f'val _ = List.app bounded {json.dumps(selected)};\n')
-    with (output / "probe.log").open("w") as log:
-        completed = subprocess.run(["holbuild", "run", script.name], cwd=repo,
-                                   stdout=log, stderr=subprocess.STDOUT)
+    try:
+        with (output / "probe.log").open("w") as log:
+            completed = subprocess.run(["holbuild", "run", script.name], cwd=repo,
+                                       stdout=log, stderr=subprocess.STDOUT)
+    finally:
+        script.unlink(missing_ok=True)
     if completed.returncode:
         raise RuntimeError(f"HOL probe failed: {output / 'probe.log'}")
     statuses: dict[str, list[str]] = {}

@@ -54,7 +54,8 @@ Theorem activated_call_vs_nop:
          execution_frame s = execution_frame s /\
          t.vs_outcomes <> s.vs_outcomes /\ t.vs_requests <> s.vs_requests
 Proof
-  simp dispatch_defs >> EVAL_TAC
+  mp_tac activated_call_not_preservation >>
+  simp[mk_inst_def, step_inst_base_def]
 QED
 
 Theorem activated_ordinary_success_short_write:
@@ -130,23 +131,28 @@ Definition probe_computed_def:
 End
 
 Theorem probe_computed_dispatch[local]:
-  step_inst_base (probe_computed target sz) s =
-    OK (update_var "result"
-      (FST (consume_call_outcome
-        (venom_call_request s target 0w 0w sz s.vs_call_ctx.cc_static) 1 0 s))
-      (SND (consume_call_outcome
-        (venom_call_request s target 0w 0w sz s.vs_call_ctx.cc_static) 1 0 s)))
+  ~s.vs_call_ctx.cc_static /\
+  consume_call_outcome (venom_call_request s target 0w 0w sz F) 1 0 s = (v,t) ==>
+  step_inst_base (probe_computed target sz) s = OK (update_var "result" v t)
 Proof
-  simp[probe_computed_def, mk_inst_def, step_inst_base_def,
-       eval_operand_def, exec_ext_call_def, Excl "consume_call_outcome_eq"] >>
-  pairarg_tac >> simp[]
+  strip_tac >>
+  simp[Excl "consume_call_outcome_eq", probe_computed_def, mk_inst_def,
+       step_inst_base_def, eval_operand_def, exec_ext_call_def]
+QED
+
+Theorem call_probe_nonstatic[local,simp]:
+  call_probe_state.vs_call_ctx.cc_static = F
+Proof
+  simp[call_probe_state_def, init_venom_state_def, empty_call_context_def]
 QED
 
 val computed_defs =
   [probe_computed_def, call_probe_state_def, init_venom_state_def,
    empty_call_context_def, step_inst_base_def, mk_inst_def, eval_operand_def,
-   exec_ext_call_def, venom_call_request_def, read_memory_def, take_outcome_def,
+   exec_ext_call_def, consume_call_outcome_def,
+   venom_call_request_def, read_memory_def, take_outcome_def,
    record_request_def, computed_precompile_def, adopt_outcome_def,
+   adopt_outcome_deletions_def,
    failed_outcome_def, write_memory_with_expansion_def,
    lookup_var_def, update_var_def, w2w_n2w,
    precompile_result_empty_ecrecover, precompile_result_empty_ec,
@@ -182,27 +188,10 @@ Theorem activated_computed_empty_ec:
      step_inst_base (probe_computed 7w 0w) s =
        OK (update_var "result" 1w (s with vs_returndata := REPLICATE 64 0w))
 Proof
-  `call_probe_state.vs_call_ctx.cc_static = F` by
-    simp[call_probe_state_def, init_venom_state_def, empty_call_context_def] >>
-  simp[probe_computed_dispatch, Excl "consume_call_outcome_eq",
-       SIMP_RULE bool_ss [LET_THM] consume_computed_empty_ec]
-QED
-
-Theorem consume_invalid_ec_zero_output[local]:
-  s = call_probe_state with <|
-        vs_memory := REPLICATE 63 0w ++ [1w];
-        vs_outcomes := [call_probe_outcome]; vs_requests := [call_probe_request] |> ==>
-  consume_call_outcome (venom_call_request s 6w 0w 0w 64w F) 1 0 s =
-       (0w, s with vs_returndata := []) /\
-     consume_call_outcome (venom_call_request s 7w 0w 0w 64w F) 1 0 s =
-       (0w, s with vs_returndata := [])
-Proof
-  disch_then SUBST1_TAC >>
-  mp_tac (SIMP_RULE bool_ss [LET_THM] consume_computed_invalid_ec) >>
-  pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >> conj_tac >>
-  irule consume_call_outcome_empty_output_size >>
-  simp[Excl "consume_call_outcome_eq"] >>
-  qexists_tac `3` >> simp[Excl "consume_call_outcome_eq"]
+  mp_tac consume_computed_empty_ec >>
+  pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>
+  conj_tac >> irule probe_computed_dispatch >>
+  simp[Excl "consume_call_outcome_eq"]
 QED
 
 Theorem activated_computed_invalid_ec:
@@ -214,10 +203,12 @@ Theorem activated_computed_invalid_ec:
      step_inst_base (probe_computed 7w 64w) s =
        OK (update_var "result" 0w (s with vs_returndata := []))
 Proof
-  `call_probe_state.vs_call_ctx.cc_static = F` by
-    simp[call_probe_state_def, init_venom_state_def, empty_call_context_def] >>
-  simp[probe_computed_dispatch, Excl "consume_call_outcome_eq",
-       consume_invalid_ec_zero_output]
+  mp_tac consume_computed_invalid_ec >>
+  pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>
+  conj_tac >> irule probe_computed_dispatch >>
+  simp[Excl "consume_call_outcome_eq"] >>
+  irule consume_call_outcome_empty_output_size >> simp[Excl "consume_call_outcome_eq"] >>
+  qexists_tac `3` >> simp[Excl "consume_call_outcome_eq", venom_state_fupdcanon]
 QED
 
 Theorem activated_nonzero_precompile_ordinary:
@@ -279,7 +270,6 @@ Theorem activated_unequal_targets:
              t1.vs_outcomes = t2.vs_outcomes /\
              t1.vs_requests <> t2.vs_requests
 Proof
-  simp[probe_call_dispatch, Excl "consume_call_outcome_eq"] >>
-  simp[update_var_def, Excl "consume_call_outcome_eq"] >>
-  simp dispatch_defs >> EVAL_TAC
+  simp[Excl "consume_call_outcome_eq", probe_call_dispatch] >>
+  simp[consume_call_outcome_eq] >> simp dispatch_defs >> EVAL_TAC
 QED

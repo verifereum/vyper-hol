@@ -59,6 +59,7 @@ Theorem venom_frame_rel_single_constructor_witnesses:
       vs' = vs with <| vs_returndata := out; vs_logs := lgs;
                       vs_accounts := es.rollback.accounts;
                       vs_transient := es.rollback.tStorage;
+                      vs_toDelete := es.rollback.toDelete;
                       vs_requests := MAP FST (call_trace start) |>
   in
     venom_frame_rel start (INR NONE) post (Halt vs') /\
@@ -141,6 +142,7 @@ Theorem venom_frame_rel_nested_constructor_witnesses:
         memory := buffer_write mr.offset (TAKE mr.size out) parent.memory |>;
       vs' = vs with <| vs_returndata := out; vs_logs := lgs;
         vs_accounts := es.rollback.accounts; vs_transient := es.rollback.tStorage;
+        vs_toDelete := es.rollback.toDelete;
         vs_requests := MAP FST (call_trace start) |>
   in
     venom_frame_rel start (INL ()) (es with contexts := [(ok, prb)]) (Halt vs') /\

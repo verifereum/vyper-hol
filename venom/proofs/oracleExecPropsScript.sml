@@ -1,4 +1,4 @@
-(* Only non-CALL/non-STATICCALL primitives preserve the oracle lists.
+(* Only non-CALL/non-STATICCALL/non-CREATE/non-CREATE2 primitives preserve the oracle lists.
  * Activated-call counterexamples live in venomCallActivationRegression.
  * INVOKE transport remains the calleeTransport boundary. *)
 Theory oracleExecProps
@@ -25,8 +25,10 @@ val step_inst_base_opcode_tac =
 
 Theorem step_inst_base_oracle:
   inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+  inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2 /\
   step_inst_base inst s = OK s' ==>
-  s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests
+  s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests /\
+  s'.vs_toDelete = s.vs_toDelete
 Proof
   strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[] >>
@@ -42,13 +44,15 @@ Proof
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
   fs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
      istore_def, write_memory_with_expansion_def, mcopy_def,
-     revert_state_def, eval_operands_def]
+     revert_state_def, jump_to_def, eval_operands_def]
 QED
 
 Theorem step_inst_noninvoke_oracle:
   inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> CALL /\
-  inst.inst_opcode <> STATICCALL /\ step_inst fuel ctx inst s = OK s' ==>
-  s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests
+  inst.inst_opcode <> STATICCALL /\ inst.inst_opcode <> CREATE /\
+  inst.inst_opcode <> CREATE2 /\ step_inst fuel ctx inst s = OK s' ==>
+  s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests /\
+  s'.vs_toDelete = s.vs_toDelete
 Proof
   simp[Once step_inst_def] >> strip_tac >> gvs[] >>
   drule step_inst_base_oracle >> simp[]

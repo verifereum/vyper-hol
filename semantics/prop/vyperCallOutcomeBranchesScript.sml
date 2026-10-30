@@ -55,8 +55,8 @@ Proof
   rename1 `take_call_outcome target calldata value_opt st = (res,st1)` >>
   drule checked_call_outcome_continue >> disch_then (qspecl_then [`msg`,`k`] mp_tac) >>
   Cases_on `res` >- (rename1 `INL ro` >> Cases_on `ro` >>
-    simp[adopt_call_outcome_equation] >> rw[] >> gvs[EQ_SYM_EQ]) >>
-  simp[EQ_SYM_EQ]
+    simp[adopt_call_outcome_equation] >> rw[] >> metis_tac[]) >>
+  simp[] >> metis_tac[]
 QED
 
 (* The only newly generated exceptions are runtime errors. Any other error
@@ -82,6 +82,41 @@ Proof
 QED
 
 (* ===== ExtCall and Send exact branch rules ===== *)
+
+(* Code is checked before taking, precisely when ret_type = NoneT. Neither
+   balance nor default-return-value evaluation is duplicated here. k gets
+   outcome.co_returnData at the adopted state, including empty return data. *)
+Theorem ExtCall_outcome_continue:
+  take_call_outcome target calldata value_opt st = (res,st1) ==>
+  (do
+    accounts <- get_accounts;
+    (if ret_type = NoneT then
+       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
+     else return ());
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success "ExtCall reverted";
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st =
+  if ret_type = NoneT /\ NULL (lookup_account target st.accounts).code then
+    (INR (Error (RuntimeError "ExtCall target has no code")),st)
+  else
+    case res of
+      INR exc => (INR exc,st1)
+    | INL (rq,outcome) =>
+        if outcome.co_success then
+          k outcome.co_returnData (SND (adopt_call_outcome rq outcome st1))
+        else (INR (Error (RuntimeError "ExtCall reverted")),st1)
+Proof
+  strip_tac >>
+  simp[bind_def, ignore_bind_def, get_accounts_def, return_def, check_def, assert_def] >>
+  rw[] >> gvs[assert_def, bind_def, ignore_bind_def, return_def] >>
+  Cases_on `res` >> simp[] >>
+  rename1 `take_call_outcome target calldata value_opt st = (INL ro,st1)` >>
+  Cases_on `ro` >>
+  simp[adopt_call_outcome_equation, bind_def, ignore_bind_def, assert_def] >>
+  rw[] >> gvs[]
+QED
 
 Theorem Send_outcome_continue:
   take_call_outcome target [] (SOME amount) st = (res,st1) ==>
@@ -113,9 +148,10 @@ Theorem checked_call_outcome_success_frame:
   rq.cr_accounts = st.accounts /\ rq.cr_tStorage = st.tStorage /\
   st2 = st with <|accounts := st2.accounts; tStorage := st2.tStorage;
                  logs := st2.logs; outcomes := st2.outcomes;
-                 requests := st2.requests|>
+                 requests := st2.requests; pending_deletions := st2.pending_deletions|>
 Proof
   rpt strip_tac >> drule take_call_outcome_success >> strip_tac >>
+  Cases_on `outcome.co_success` >>
   gvs[call_outcome_request_def, adopt_call_outcome_equation] >>
   IF_CASES_TAC >> simp[evaluation_state_component_equality]
 QED

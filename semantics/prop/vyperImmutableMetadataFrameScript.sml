@@ -421,7 +421,7 @@ Proof
     end) >> asm_simp_tac bool_ss [] >>
   simp_tac bool_ss [Once evaluate_def, lock_if_nr_def, unlock_if_nr_def, is_view_mut_def] >>
   RULE_ASSUM_TAC (REWRITE_RULE [GSYM state_rel_frame_result]) >>
-  TRY (rename1 `CreateTarget kind has_salt rof` >>
+  TRY (rename1 `CreateTarget kind has_salt rof kw_order` >>
        Cases_on `kind` >> Cases_on `has_salt` >>
        simp_tac bool_ss [COND_CLAUSES] >>
        RULE_ASSUM_TAC (SIMP_RULE bool_ss

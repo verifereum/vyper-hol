@@ -139,7 +139,8 @@ Definition initial_venom_state_rel_def:
     tx_env_ok tx /\ venom_env_rel tx vs /\
     vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
     vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0 /\
-    vs.vs_returndata = [] /\ vs.vs_requests = []
+    vs.vs_returndata = [] /\ vs.vs_requests = [] /\
+    vs.vs_toDelete = am.pending_deletions
 End
 
 (* The calldata Venom reads is the transaction's, which the source typing
@@ -171,7 +172,8 @@ Definition external_call_result_rel_def:
     case (res, vres) of
       (INL v, Halt ss) =>
         return_bytes tops ret v ss.vs_returndata /\
-        ss.vs_accounts = am'.accounts /\ ss.vs_transient = am'.tStorage /\
+        process_deletions ss.vs_toDelete ss.vs_accounts = am'.accounts /\
+        ss.vs_transient = am'.tStorage /\
         logs_correspond (compiled_event_info tops) (type_env tops)
           tx.target am'.logs ss.vs_logs /\
         ss.vs_requests = rqs
