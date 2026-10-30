@@ -18,6 +18,8 @@
  *
  * TOP-LEVEL:
  *   body_inv            — the frame's cenv and ctx are the program's
+ *   ce_locals_declared  — every local the compile env binds is one of the
+ *                         type environment's
  *   stmt_exprs_ok       — the byte_widths and alloc_limits premises of
  *                         expr_sim_pre for each expression of a statement
  *   same_frame, frame_ret_ok — the frame's RetQ accepts its returns
@@ -62,6 +64,19 @@ Definition body_inv_def:
     cenv.ce_hashmap_info = build_hashmap_info tops /\
     (!id. cenv.ce_var_type (module_var_key (NONE, id)) =
           build_var_type_map tops (module_var_key (NONE, id)))
+End
+
+(* The compile env binds no local the typing does not know: every name
+   ce_vars binds, but a module variable's key, is a local of the type
+   environment.  build_compile_env binds the parameters and the module
+   variables' keys, and each declaration binds its name as the typing
+   adds it.  A name the typing declares (it is not in env.var_types) is
+   then unbound unless it is a module variable's key. *)
+Definition ce_locals_declared_def:
+  ce_locals_declared cenv env <=>
+    !n l. FLOOKUP cenv.ce_vars n = SOME l /\
+          (!nsid. n <> module_var_key nsid) ==>
+          n IN FDOM env.var_types
 End
 
 (* expr_sim_pre's byte_widths_expr and alloc_limits_expr for every
@@ -141,7 +156,7 @@ Definition body_stmt_ok_def:
   body_stmt_ok cx s <=>
     !tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
       body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
-      expr_sim_inv cenv cx env es /\
+      expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
       type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\
       call_evaluation_safe cx (int_calls_stmt s) /\
       frame_ret_ok ctx func cx RetQ cenv ret_ty /\
@@ -154,7 +169,7 @@ Definition body_stmts_ok_def:
   body_stmts_ok cx ss <=>
     !tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
       body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
-      expr_sim_inv cenv cx env es /\
+      expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
       type_stmts env ret_ty ss = SOME env' /\
       EVERY (stmt_exprs_ok cenv) ss /\
       call_evaluation_safe cx (int_calls_stmts ss) /\

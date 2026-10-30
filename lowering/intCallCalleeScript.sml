@@ -1637,7 +1637,7 @@ Proof
   simp[is_terminator_def] >> rpt strip_tac >> gvs[is_terminator_def]
 QED
 
-Theorem internal_param_decls_projection[local]:
+Theorem internal_param_decls_projection:
   !params idx st caps next st'.
     compile_internal_param_decls params idx st = ((caps,next),st') ==>
     MAP (\c. (FST c,FST (SND c))) caps = params /\
