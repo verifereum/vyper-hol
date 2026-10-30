@@ -43,7 +43,7 @@ Ancestors
   stmtSimAugAssign vyperTypeEvalSoundness vyperTypeInvariants
   vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimMain
   vyperTypeValues vyperTyping vyperTypeDefaults stmtSimAssignTuple
-  vyperTypeEnvPreservation
+  vyperTypeEnvPreservation bodySimExprCases
 Libs
   monadsyntax
 
@@ -412,12 +412,12 @@ Definition reason_covered_def:
 End
 
 (* RESIDUAL (#637 raise/assert with a reason): a reason whose compiled
-   value reason_covered does not cover.  Expected unreachable: only an
-   immutable compiles to another form (LocCode, compile_expr's TopLevelName
-   case), and a supported program declares none
-   (supported_immutables_constants_rejected); a supported TopLevelName
-   names a storage or transient variable, which storage_vars_rel places in
-   storage.  Proving it needs that argument, not a new reason lemma. *)
+   value reason_covered does not cover.  Only a TopLevelName bound to an
+   ImmutableLoc compiles to another form (LocCode, compile_expr's
+   TopLevelName case).  A supported program declares no immutables
+   (supported_immutables_constants_rejected), so build_compile_env binds
+   none, but body_inv does not fix cenv's module variables: closing this
+   needs a body_inv clause saying cenv binds no ImmutableLoc. *)
 Theorem body_raise_reason_other:
   !ctx func cx lctx RetQ cenv tops bindings env ret_ty e es res es'.
     body_inv tops ctx cenv cx /\
@@ -702,17 +702,21 @@ QED
 (* RESIDUAL (#637 assignments): the other base targets.
    - A local in memory: stmtSimAssignMem's
      compile_assign_local_memory_stmt_frag asks of the local's type
-     type_memory_bytes cenv vtyp = type_memory_size tyv,
-     0 < type_memory_size tyv and type_memory_size tyv + 64 < dimword (:256),
-     which nothing in body_stmt_ok gives, and expr_type e = vtyp and
-     lowered_value_type cenv e = vtyp, where the typing lets e widen
-     (type_widens_to); an empty value assigned to a type with a length
-     word (has_length_word, is_empty_value_expr) has no lemma.
+     type_memory_size tyv + 64 < dimword (:256), which nothing in
+     body_stmt_ok gives (Python bounds every allocation by 2 ** 64,
+     codegen_venom's Context.allocate_buffer, which expr_sim_inv does not
+     model for locals), as well as type_memory_bytes cenv vtyp =
+     type_memory_size tyv and 0 < type_memory_size tyv.  It also asks
+     expr_type e = vtyp and lowered_value_type cenv e = vtyp, where the
+     typing lets e widen (type_widens_to), and an empty value assigned to a
+     type with a length word (has_length_word, is_empty_value_expr) has no
+     lemma.
    - A storage variable: stmtSimAssignStorage's
      compile_assign_storage_typed_stmt_frag asks
      cenv.ce_hashmap_info (module_var_key (src, id)) = NONE and
      cenv.ce_var_type (module_var_key (src, id)) = SOME vtyp, which body_inv
-     does not give (it fixes no module variable metadata of cenv).
+     does not give: it fixes none of cenv's module variables, though
+     build_compile_env sets both.
    - Subscript and attribute targets: no statement lemma (the simulation
      of compile_get_target_ptr on eval_target_place). *)
 Theorem body_assign_other:
@@ -848,10 +852,11 @@ QED
 (* RESIDUAL (#637 tuple assignments): the other tuple targets.
    - Locals in memory: stmtSimAssignTupleMem's
      compile_assign_tuple_locals_memory_stmt_frag asks cenv.ce_target
-     CapMcopy, type_memory_size (TupleTV tvs) < dimword (:256) and, for each
+     CapMcopy, which body_inv does not fix,
+     type_memory_size (TupleTV tvs) < dimword (:256) and, for each
      memory local, 0 < type_memory_size vtv and
      type_memory_size vtv + 64 < dimword (:256), which nothing in
-     body_stmt_ok gives.
+     body_stmt_ok gives (as for Assign).
    - Storage, subscript and attribute elements: no statement lemma for
      compile_tuple_store_all.
    An empty tuple target is supported but has no lemma either.  A nested
@@ -895,18 +900,22 @@ QED
 
 (* ===== Augmented assignments ===== *)
 
-(* x op= e on a local, e with no internal call: stmtSimAugAssign's
-   compile_augassign_local_stmt_frag. *)
+(* x op= e on a local: stmtSimAugAssign's compile_augassign_local_case,
+   the operand's internal calls allowed. *)
 Theorem body_augassign_local[local]:
-  !cx ty id bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
-   res es'.
+  !cx ty id bop e tops ctx func cenv env env' ret_ty lctx RetQ es res es'.
+    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
+       eval_target_place cx (NameTarget id) s'' = (INL p,t') /\
+       read_place cx p s'3' = (INL cur,t'') /\
+       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_ok cx e) /\
+    body_inv tops ctx cenv cx /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (AugAssign ty (NameTarget id) bop e) = SOME env' /\
     stmt_exprs_ok cenv (AugAssign ty (NameTarget id) bop e) /\
     call_evaluation_safe cx
       (int_calls_stmt (AugAssign ty (NameTarget id) bop e)) /\
-    eval_stmt cx (AugAssign ty (NameTarget id) bop e) es = (res, es') /\
-    int_calls_expr e = [] ==>
+    eval_stmt cx (AugAssign ty (NameTarget id) bop e) es = (res, es') ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign ty (NameTarget id) bop e))
       es res es'
@@ -918,18 +927,25 @@ Proof
          supported_expr_exists_def, int_calls_stmt_def,
          int_calls_expr_def] >>
      qexists_tac `[]` >> simp[]) >>
-  irule compile_augassign_local_stmt_frag >>
-  gvs[type_stmt_def, well_typed_target_def, well_typed_expr_def,
-      AllCaseEqs(), expr_sim_pre_body] >>
-  metis_tac[compile_expr_sim_mutual, expr_ok_def]
+  `FLOOKUP env.var_types id = SOME ty /\
+   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn` by
+    (gvs[type_stmt_def, well_typed_target_def, well_typed_expr_def,
+         AllCaseEqs()] >>
+     Cases_on `FLOOKUP env.var_types id` >>
+     Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
+     rename1 `FLOOKUP env.var_assignable id = SOME asg` >>
+     Cases_on `asg` >> gvs[]) >>
+  drule_all expr_sim_inv_local >> strip_tac >>
+  `body_expr_ok cx e` by
+    (first_x_assum irule >> metis_tac[eval_target_place_local]) >>
+  `expr_sim_case F ctx func cenv cx e` by metis_tac[body_expr_ok_case] >>
+  irule compile_augassign_local_case >> simp[] >>
+  conj_tac >- (qexists_tac `env` >> simp[]) >>
+  qexists_tac `F` >> simp[]
 QED
 
-(* RESIDUAL (#637 augmented assignment): the other targets, and a local
-   whose operand makes an internal call.  compile_augassign_local_stmt_frag
-   asks expr_sim_ok and expr_sim_pre of the operand (its x op e goes
-   through compile_bop_word_sim under expr_sim_pre), which an operand with
-   an internal call does not meet; storage, subscript and attribute
-   targets have no statement lemma. *)
+(* RESIDUAL (#637 augmented assignment): the targets other than a local.
+   Storage, subscript and attribute targets have no statement lemma. *)
 Theorem body_augassign_other:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
@@ -946,7 +962,7 @@ Theorem body_augassign_other:
     call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
     eval_stmt cx (AugAssign ty t bop e) es = (res, es') /\
-    ~((?id. t = NameTarget id) /\ int_calls_expr e = []) ==>
+    ~(?id. t = NameTarget id) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
 Proof
@@ -963,7 +979,7 @@ Theorem body_augassign_case:
     body_stmt_ok cx (AugAssign ty t bop e)
 Proof
   rw[body_stmt_ok_def] >>
-  Cases_on `(?id. t = NameTarget id) /\ int_calls_expr e = []`
+  Cases_on `?id. t = NameTarget id`
   >- (gvs[] >> irule body_augassign_local >> metis_tac[]) >>
   irule body_augassign_other >> metis_tac[]
 QED
