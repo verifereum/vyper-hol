@@ -634,6 +634,7 @@ Theorem compile_expr_stmt_frag_ok:
     eval_stmt cx (Expr e) es = (res, es') /\
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
     (!sa vv sb tv es1.
+       storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
        eval_expr cx e es = (INL tv, es1) /\
        compile_expr cenv (expr_type e) e sa = (vv, sb) /\
        ~block_is_terminated sa ==> ~block_is_terminated sb) ==>
@@ -642,6 +643,8 @@ Theorem compile_expr_stmt_frag_ok:
 Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
   strip_tac >>
+  `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
+    fs[stmt_state_rel_def, state_rel_def] >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
   simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>

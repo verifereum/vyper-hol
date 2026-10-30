@@ -22,6 +22,14 @@
  *                        environment and compile environment it gives
  *   compile_expr_open, eval_stmts_popped_keys_indexed — GAP, the facts
  *                        the statement and list cases still take on trust
+ *
+ * Helper:
+ *   stmts_env_cs_mono, stmt_env_declare, declare_stmt_local_other,
+ *   type_stmt_other     — stmt_env and type_stmt of a statement
+ *   same_frame_trans, body_inv_same_frame, frame_ret_ok_same_frame,
+ *   stmt_exprs_ok_same_frame, stmts_exprs_ok_EVERY — the frame facts
+ *                        at a later compile env of the same body
+ *   expr_sim_inv_push_scope — expr_sim_inv in a new scope
  *)
 
 Theory bodySimStmtCases
@@ -195,45 +203,6 @@ Proof
   cheat
 QED
 
-Theorem expr_sim_inv_eval[local]:
-  !cenv cx env e es res es'.
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-    call_evaluation_safe cx (int_calls_expr e) /\
-    eval_expr cx e es = (res, es') ==>
-    expr_sim_inv cenv cx env es'
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `expr_sim_inv _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
-  drule_all eval_expr_popped_keys_indexed >> strip_tac >>
-  qspecl_then [`cx`, `e`] (mp_tac o CONJUNCT1)
-    (cj 5 eval_scc_type_sound_mutual) >>
-  disch_then (qspecl_then [`env`, `es`, `res`, `es'`] mp_tac) >>
-  impl_tac >- ASM_REWRITE_TAC [] >> strip_tac >>
-  qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
-  impl_tac >- ASM_REWRITE_TAC [] >> strip_tac >>
-  `outcomes_accounts_typed es'.outcomes` by
-    (rw[outcomes_accounts_typed_def] >>
-     drule (cj 5 eval_outcome_suffix_mutual) >> strip_tac >>
-     drule_then irule outcome_suffix_EVERY >>
-     gvs[outcomes_accounts_typed_def]) >>
-  ASM_REWRITE_TAC [expr_sim_inv_def]
-QED
-
-Theorem expr_sim_inv_eval_read:
-  !cenv cx env e es res es'.
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-    call_evaluation_safe cx (int_calls_expr e) /\
-    (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es'
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `_ es = (res, es')` mp_tac >>
-  simp[NoAsms, bind_def, AllCaseEqs()] >> strip_tac >>
-  imp_res_tac read_result_state >> gvs[] >>
-  drule_all expr_sim_inv_eval >> simp[]
-QED
-
 Theorem expr_sim_inv_push_scope:
   !cenv cx env es.
     expr_sim_inv cenv cx env es ==>
@@ -314,14 +283,16 @@ QED
 
 (* GAP (#637 expression statements): compile_expr leaves its block open
    for a supported expression of the frame that evaluates.  Not every
-   expression does: the lowering's fallbacks for cases it does not
-   support end their block in INVALID, and raw_revert ends it in REVERT.
-   No lemma yet; it is an induction over compile_expr, as
-   compile_expr_ci_mono is. *)
+   expression does: the lowering's fallbacks end their block in INVALID,
+   and raw_revert ends it in REVERT.  Which fallback a module variable
+   takes depends on cenv.ce_vars, so the storage and transient bindings
+   that state_rel gives are premises.  No lemma yet; it is an induction
+   over compile_expr, as compile_expr_ci_mono is. *)
 Theorem compile_expr_open:
   !tops ctx cenv cx env e es tv es1 sa vv sb.
     body_inv tops ctx cenv cx /\ supported_expr tops e /\
     expr_body_pre cenv cx env e es /\
+    storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     eval_expr cx e es = (INL tv, es1) /\
     compile_expr cenv (expr_type e) e sa = (vv, sb) /\
     ~block_is_terminated sa ==>
@@ -1035,9 +1006,7 @@ Proof
        simp[push_scope_def, return_def] >>
      metis_tac[]) >>
   `expr_sim_inv cenv cx env es1` by
-    (irule expr_sim_inv_eval_read >>
-     qexistsl_tac [`e`, `es`, `INL (BoolV b)`] >> simp[] >>
-     metis_tac[call_evaluation_safe_append_left]) >>
+    (drule_all expr_body_pre_eval >> simp[]) >>
   drule expr_sim_inv_push_scope >> strip_tac >>
   rpt (qpat_x_assum `body_stmts_ok _ _`
          (strip_assume_tac o REWRITE_RULE [body_stmts_ok_def])) >>

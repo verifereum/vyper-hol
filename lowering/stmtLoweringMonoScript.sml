@@ -7,7 +7,16 @@
  *
  * TOP-LEVEL:
  *   compile_stmt_ci_mono — compile_stmt and compile_stmts
- *   compile_stmt_cs_mono — the same as cs_mono, which stmt_frag_cons asks
+ *   compile_stmt_cs_mono — the same as cs_mono, which stmt_frag_cons_env
+ *                          and compile_if_stmt_frag ask
+ *
+ * Helper:
+ *   ci_mono_compile_expr_sa, ci_mono_context_helpers,
+ *   ci_mono_compile_dynarray_append, ci_mono_comp_get,
+ *   ci_mono_compile_get_target_ptr, ci_mono_stmt_helpers,
+ *   ci_mono_list_helpers, ci_mono_return_helpers — the helpers
+ *                          compile_stmt calls
+ *   ci_mono_cs_mono      — ci_mono from every start gives cs_mono
  *)
 
 Theory stmtLoweringMono
@@ -132,7 +141,7 @@ Proof
       [ci_mono_chain_tac ci_mono_stmt_rws, ci_mono_chain_tac ci_mono_stmt_rws,
        ci_mono_chain_tac ci_mono_stmt_rws, ci_mono_chain_tac ci_mono_stmt_rws,
        ci_mono_chain_tac ci_mono_stmt_rws])
-  >- (Cases_on `l` >> TRY (Cases_on `x`) >>
+  >- (Cases_on `l` >> TRY (rename1 `SOME loc` >> Cases_on `loc`) >>
       simp[compile_store_at_loc_def, ci_mono_emit_void])
   >- (Cases_on `e` >> simp[compile_reason_message_def, ci_mono_compile_expr_sa] >>
       rename1 `Literal ty lit` >> Cases_on `ty` >> Cases_on `lit` >>

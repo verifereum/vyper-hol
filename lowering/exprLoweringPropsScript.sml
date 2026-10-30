@@ -15,8 +15,14 @@
  *   compile_expr_grows, compile_binop_grows — compile_expr, lower_value
  *                              and compile_binop only append (cs_extends)
  *                              and grow the counters
+ *   compile_expr_ci_mono     — the same as ci_mono
  *
  * Helper:
+ *   ci_mono_refl, ci_mono_bind, ci_mono_ignore_bind, ci_mono_comp_return,
+ *   ci_mono_compile_* (copy_memory, word_copy_loop, store_bytestring,
+ *   keccak256_key, mapping_subscript, array_subscript, bytelike_literal),
+ *   ci_mono_typed_memory_family — ci_mono of the monad and of the helpers
+ *                              compile_expr calls, for stmtLoweringMono
  *   state_rel_jump_to, state_rel_push_scope, state_rel_pop_scope,
  *   state_rel_frame, stmt_state_rel_jump_to, stmt_state_rel_inst_idx,
  *   stmt_state_rel_push_scope, stmt_state_rel_pop_scope,
@@ -1118,7 +1124,7 @@ Proof
   simp[ci_mono_def, cs_extends_refl]
 QED
 
-Theorem ci_mono_trans:
+Theorem ci_mono_trans[local]:
   ci_mono a b ∧ ci_mono b c ⇒ ci_mono a c
 Proof
   simp[ci_mono_def] >> rpt strip_tac >> gvs[] >>
@@ -3396,7 +3402,7 @@ Proof
 QED
 
 (* Paired sequencing interface for the body definitions' explicit lets. *)
-Theorem ci_mono_uncurry:
+Theorem ci_mono_uncurry[local]:
   (∀s. ci_mono s (SND (m s))) ∧
   (∀a s. ci_mono s (SND (k a s))) ⇒
   ci_mono st (SND (UNCURRY k (m st)))
