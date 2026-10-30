@@ -419,7 +419,7 @@ Proof
       irule (INST_TYPE [alpha |-> type_of result] metadata_frame_at) >>
       exists_tac (rator (lhs (concl th))) >> exists_tac result
     end) >> asm_simp_tac bool_ss [] >>
-  simp_tac bool_ss [Once evaluate_def] >>
+  simp_tac bool_ss [Once evaluate_def, lock_if_nr_def, unlock_if_nr_def, is_view_mut_def] >>
   RULE_ASSUM_TAC (REWRITE_RULE [GSYM state_rel_frame_result]) >>
   TRY (rename1 `CreateTarget kind has_salt rof kw_order` >>
        Cases_on `kind` >> Cases_on `has_salt` >>

@@ -144,6 +144,8 @@ val checker_defs =
    vyperValueTheory.compatible_bound_def,
    vyperValueTheory.within_int_bound_def,
    vyperValueTheory.decimal_scale_def,
+   vyperValueTheory.decimal_bits_def,
+   vyperValueTheory.string_to_bytes_def,
    vyperValueTheory.decimal_bound_def,
    expr_type_def,
    well_typed_literal_def,

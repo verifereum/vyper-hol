@@ -231,11 +231,6 @@ Definition blueprint_size_ok_def:
   blueprint_size_ok n = (0i < w2i (n2w n : bytes32))
 End
 
-Definition blueprint_code_ok_def:
-  blueprint_code_ok code_offset code =
-    blueprint_size_ok (blueprint_copy_size code_offset code)
-End
-
 Definition blueprint_prefix_size_def:
   blueprint_prefix_size has_salt vs accounts =
     case dest_create_args (CreateFromBlueprint F) has_salt vs of
@@ -284,7 +279,6 @@ val () = cv_auto_trans blueprint_copy_size_def;
 val () = cv_auto_trans blueprint_initcode_def;
 val () = cv_auto_trans raw_create_initcode_def;
 val () = cv_auto_trans blueprint_size_ok_def;
-val () = cv_auto_trans blueprint_code_ok_def;
 val () = cv_auto_trans blueprint_prefix_size_def;
 val () = check_create_blueprint_def
   |> SRULE [FUN_EQ_THM, bind_def, get_accounts_def, return_def,
