@@ -1,7 +1,8 @@
 (* Public source entry integration after ExtCall/Send activation.
    Reuse the permanent actual-CPS fixtures; do not replay generated suites here.
    Failure requests survive machine rollback; deployment failure intentionally
-   exposes only its exception. Defaults/constants execute concrete NONE. *)
+   exposes only its exception. Defaults share the call oracle; constants
+   execute concrete NONE. *)
 Theory vyperOracleIntegrationTest
 Ancestors
   vyperOracleEntryTest vyperSendCpsCVTest vyperExtCallCpsCVTest
@@ -134,7 +135,8 @@ QED
 
 Definition integration_defaults_constants_observe_def:
   integration_defaults_constants_observe =
-    let (r,am,rqs) = call_external (SOME [send_outcome T [] 17])
+    let (r,am,rqs) = call_external
+      (SOME [send_outcome T [] 17; send_outcome T [] 23])
       integration_machine (integration_tx "defaults") in
     let mods = [(NONE,
       [VariableDecl Private (Constant (send_call 20w 0)) "c" NoneT NONE;
@@ -142,15 +144,17 @@ Definition integration_defaults_constants_observe_def:
     let loaded = load_contract (SOME [send_outcome T [] 17])
       integration_machine (integration_tx "__init__") mods [] in
     r = INL NoneV /\
-    integration_request_fields rqs = [(10w,7,[],F,3,2w,4w)] /\
-    integration_machine_snapshot 17 9w 8w cpscv_adopted_logs am /\
+    integration_request_fields rqs =
+      [(20w,0,[],F,3,2w,4w); (10w,7,[],F,17,9w,8w)] /\
+    integration_machine_snapshot 23 9w 8w
+      (cpscv_adopted_logs ++ [<|logger := 11w; topics := [1w]; data := [8w]|>]) am /\
     (case loaded of INR _ => F | INL (am,rqs) =>
       integration_request_fields rqs = [(10w,7,[],F,3,2w,4w)] /\
       integration_machine_snapshot 17 9w 8w cpscv_adopted_logs am)
 End
 val () = cv_auto_trans integration_defaults_constants_observe_def;
 
-Theorem defaults_constants_do_not_consume_body_oracle:
+Theorem defaults_share_body_oracle_constants_do_not:
   integration_defaults_constants_observe
 Proof
   CONV_TAC cv_eval
