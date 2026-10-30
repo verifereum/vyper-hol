@@ -16,7 +16,7 @@ Ancestors
   exprSimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
   stmtSimDeclMem exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
-  stmtSimAssign stmtSimAssignMem stmtSimAssignTuple
+  stmtSimAssign stmtSimAssignMem stmtSimAssignTuple stmtSimAssignStorage
   valueEncodingProofs
   localPtrsProps
   externalEntryProps constructorGuardProps

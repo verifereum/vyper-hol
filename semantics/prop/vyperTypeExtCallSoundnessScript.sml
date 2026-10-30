@@ -119,6 +119,12 @@ Proof
   EVAL_TAC
 QED
 
+Theorem accounts_runtime_well_typed_accounts_well_typed:
+  !acc. accounts_runtime_well_typed acc <=> accounts_well_typed acc
+Proof
+  ACCEPT_TAC vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed
+QED
+
 Theorem ext_call_success_accounts_ok_imp_extract_premise:
   !outcome.
     ext_call_success_accounts_ok outcome ==>
@@ -301,6 +307,15 @@ Proof
   simp[]
 QED
 
+Theorem evaluate_abi_decode_return_well_typed:
+  !tenv ret_type bs v tv.
+    evaluate_abi_decode_return tenv ret_type bs = INL v /\
+    evaluate_type tenv ret_type = SOME tv ==>
+    value_has_type tv v
+Proof
+  ACCEPT_TAC vyperTypeExtCallCoreTheory.evaluate_abi_decode_return_well_typed
+QED
+
 Theorem update_accounts_transient_runtime_consistent:
   runtime_consistent env cx st /\ accounts_well_typed accounts' ==>
   runtime_consistent env cx (st with <| accounts := accounts'; tStorage := tStorage' |>)
@@ -308,6 +323,22 @@ Proof
   rw[runtime_consistent_def, state_well_typed_def, env_consistent_def] >>
   gvs[env_scopes_consistent_def, env_immutables_consistent_def] >>
   metis_tac[]
+QED
+
+Theorem extcall_decode_return_sound:
+  runtime_consistent env cx st /\
+  evaluate_type env.type_defs ret_type = SOME ret_tv /\
+  (do
+    v <- lift_sum_runtime (evaluate_abi_decode_return env.type_defs ret_type bs);
+    return (Value v)
+  od) st = (res,st') ==>
+  state_well_typed st' /\ env_consistent env cx st' /\
+  accounts_well_typed st'.accounts /\ no_type_error_result res /\
+  case res of
+  | INL tv => expr_result_typed env (Call ret_type (ExtCall stat skc fsig opts) es drv) tv
+  | INR _ => T
+Proof
+  ACCEPT_TAC vyperTypeExtCallCoreTheory.extcall_decode_return_sound
 QED
 
 
@@ -1054,6 +1085,87 @@ Theorem raw_revert_tail_sound:
 Proof
   rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
      raise_def, return_def] >>
+  gvs[runtime_consistent_def]
+QED
+
+Theorem raw_log_tail_sound:
+  !env cx es vs st bd bd'.
+    runtime_consistent env cx st /\
+    exprs_runtime_typed env es vs /\
+    LENGTH es = 2 /\
+    EL 0 (MAP expr_type es) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
+    EL 1 (MAP expr_type es) = BaseT (BytesT bd') /\
+    bound_at_most bd 4 ==>
+    runtime_consistent env cx
+      (SND ((do
+               type_check (LENGTH vs = 2) "raw_log args";
+               topics <- lift_option_type (dest_ArrayV (EL 0 vs)) "raw_log topics";
+               data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_log data";
+               topic_vals <<- (case topics of
+                  TupleV vs => vs | DynArrayV vs => vs | _ => []);
+               type_check (LENGTH topic_vals <= 4) "raw_log too many topics";
+               push_log (encode_raw_event_values cx.txn.target topic_vals data);
+               return (Value NoneV)
+             od) st)) /\
+    (!s. FST ((do
+                 type_check (LENGTH vs = 2) "raw_log args";
+                 topics <- lift_option_type (dest_ArrayV (EL 0 vs)) "raw_log topics";
+                 data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_log data";
+                 topic_vals <<- (case topics of
+                    TupleV vs => vs | DynArrayV vs => vs | _ => []);
+                 type_check (LENGTH topic_vals <= 4) "raw_log too many topics";
+                 push_log (encode_raw_event_values cx.txn.target topic_vals data);
+                 return (Value NoneV)
+               od) st) <> INR (Error (TypeError s)))
+Proof
+  rpt strip_tac >>
+  drule_all raw_log_args_runtime_typed_dest >> strip_tac >> gvs[] >>
+  Cases_on `topics` >>
+  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+     raise_def, return_def, lift_option_type_def, push_log_def] >>
+  TRY (irule runtime_consistent_logs_append >> simp[]) >>
+  qpat_x_assum `FST _ = INR (Error (TypeError s))` mp_tac >>
+  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+     raise_def, return_def, lift_option_type_def, push_log_def]
+QED
+
+Theorem raw_log_tail_result_sound:
+  !env cx es vs st res st' bd bd'.
+    runtime_consistent env cx st /\
+    exprs_runtime_typed env es vs /\
+    LENGTH es = 2 /\
+    EL 0 (MAP expr_type es) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
+    EL 1 (MAP expr_type es) = BaseT (BytesT bd') /\
+    bound_at_most bd 4 /\
+    ((do
+        type_check (LENGTH vs = 2) "raw_log args";
+        topics <- lift_option_type (dest_ArrayV (EL 0 vs)) "raw_log topics";
+        data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_log data";
+        topic_vals <<- (case topics of
+           TupleV vs => vs | DynArrayV vs => vs | _ => []);
+        type_check (LENGTH topic_vals <= 4) "raw_log too many topics";
+        push_log (encode_raw_event_values cx.txn.target topic_vals data);
+        return (Value NoneV)
+      od) st = (res, st')) ==>
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!msg. res <> INR (Error (TypeError msg))) /\
+    (case res of
+     | INL tv => expr_result_typed env (Call NoneT RawLog es NONE) tv
+     | INR _ => T)
+Proof
+  rpt strip_tac >>
+  qspecl_then [`env`, `cx`, `es`, `vs`, `st`, `bd`, `bd'`]
+    mp_tac raw_log_tail_sound >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `(do _ od) _ = _` mp_tac >>
+  drule_all raw_log_args_runtime_typed_dest >> strip_tac >> gvs[] >>
+  Cases_on `topics` >>
+  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+     raise_def, return_def, lift_option_type_def, push_log_def,
+     no_type_error_result_def,
+     expr_result_typed_def, expr_runtime_typed_def,
+     expr_type_def, value_result_typed_def, value_has_type_def,
+     evaluate_type_def, is_HashMapRef_def] >>
   gvs[runtime_consistent_def]
 QED
 

@@ -228,7 +228,7 @@ Proof
   strip_tac >> gvs[] >>
   `word_of_bytes_be (REPLICATE 20 0w) = (0w : address)` by (CONV_TAC cv_eval) >>
   simp[oracle_state_smoke_def, evaluate_def, bind_def, ignore_bind_def,
-       read_result_def, return_def, eval_ext_call_def, raise_def] >>
+       read_result_def, read_results_def, return_def, eval_ext_call_def, raise_def] >>
   simp[type_check_def, vyperValueOperationTheory.evaluate_literal_def, eval_send_def,
        bind_def, ignore_bind_def, return_def, lift_option_type_def,
        dest_AddressV_def, dest_NumV_def, ext_call_kwarg_def,

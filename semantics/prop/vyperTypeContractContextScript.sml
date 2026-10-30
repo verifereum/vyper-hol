@@ -62,6 +62,51 @@ Proof
       simp[get_module_code_def, get_tenv_def, initial_evaluation_context_def])
 QED
 
+Theorem fn_sigs_consistent_stk[local]:
+  !sigs cx stk.
+    fn_sigs_consistent sigs (cx with stk := stk) <=> fn_sigs_consistent sigs cx
+Proof
+  simp[fn_sigs_consistent_def, get_module_code_stk]
+QED
+
+Theorem fn_sigs_declared_complete_stk[local]:
+  !sigs cx stk.
+    fn_sigs_declared_complete sigs (cx with stk := stk) <=>
+    fn_sigs_declared_complete sigs cx
+Proof
+  simp[fn_sigs_declared_complete_def, get_module_code_stk]
+QED
+
+Theorem toplevel_vtypes_complete_stk[local]:
+  !m cx stk.
+    toplevel_vtypes_complete m (cx with stk := stk) <=>
+    toplevel_vtypes_complete m cx
+Proof
+  simp[toplevel_vtypes_complete_def, get_module_code_stk]
+QED
+
+Theorem bare_globals_complete_stk[local]:
+  !m cx stk.
+    bare_globals_complete m (cx with stk := stk) <=> bare_globals_complete m cx
+Proof
+  simp[bare_globals_complete_def, get_module_code_stk]
+QED
+
+Theorem bare_global_assignable_complete_stk[local]:
+  !m cx stk.
+    bare_global_assignable_complete m (cx with stk := stk) <=>
+    bare_global_assignable_complete m cx
+Proof
+  simp[bare_global_assignable_complete_def, get_module_code_stk]
+QED
+
+Theorem flag_members_complete_stk[local]:
+  !m cx stk.
+    flag_members_complete m (cx with stk := stk) <=> flag_members_complete m cx
+Proof
+  simp[flag_members_complete_def, get_module_code_stk]
+QED
+
 Theorem check_contract_env_context_consistent_initial_src:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
@@ -106,6 +151,60 @@ Proof
       simp[] >> strip_tac >>
       first_x_assum (qspecl_then [`tx`,`sources`,`src'`,`fid`,`ls`] mp_tac) >>
       simp[get_tenv_def, initial_evaluation_context_def, get_module_code_def])
+QED
+
+Theorem check_contract_env_context_consistent_initial_with_current_src:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP sources addr = SOME mods /\
+  tx.target = addr ==>
+  env_context_consistent (artifact_env art mods src)
+    ((initial_evaluation_context sources layouts tx src) with stk := [(src, fn)])
+Proof
+  rw[env_context_consistent_def, artifact_env_def]
+  >- simp[get_tenv_stk, get_tenv_def, initial_evaluation_context_def]
+  >- simp[current_module_def]
+  >- (simp[fn_sigs_consistent_stk] >>
+      irule check_contract_fn_sigs_consistent_initial >> simp[])
+  >- (simp[] >> irule check_contract_fn_sigs_live_initial >> metis_tac[])
+  >- (simp[fn_sigs_declared_complete_stk] >>
+      irule check_contract_fn_sigs_declared_complete_initial >> simp[])
+  >- (simp[toplevel_vtypes_complete_stk] >>
+      irule check_contract_toplevel_vtypes_complete_initial >> simp[])
+  >- (simp[bare_globals_complete_stk] >>
+      irule check_contract_bare_globals_complete_initial >> simp[])
+  >- (simp[bare_global_assignable_complete_stk] >>
+      irule check_contract_bare_global_assignable_complete_initial >> simp[])
+  >- (simp[flag_members_complete_stk] >>
+      irule check_contract_flag_members_complete_initial >> simp[])
+  >- (dxrule check_contract_bare_globals_consistent_initial >>
+      simp[] >> strip_tac >>
+      first_x_assum (qspecl_then [`tx`,`sources`,`src'`,`id`,`ty`] mp_tac) >>
+      simp[get_module_code_stk, get_module_code_def, initial_evaluation_context_def])
+  >- (dxrule check_contract_bare_global_assignable_consistent_initial >>
+      simp[] >> strip_tac >>
+      first_x_assum (qspecl_then [`tx`,`sources`,`src'`,`id`,`ty`] mp_tac) >>
+      simp[get_module_code_stk, get_module_code_def, initial_evaluation_context_def])
+  >- (dxrule check_contract_toplevel_vtypes_consistent_initial >>
+      simp[] >> disch_then (qspecl_then [`tx`,`sources`] mp_tac) >>
+      simp[get_module_code_stk, get_module_code_def, initial_evaluation_context_def,
+           lookup_var_slot_from_layout_stk, lookup_var_slot_from_layout_def,
+           get_tenv_stk, get_tenv_def] >> strip_tac >> metis_tac[])
+  >- (dxrule check_contract_toplevel_vtypes_consistent_initial >>
+      simp[] >> disch_then (qspecl_then [`tx`,`sources`] mp_tac) >>
+      simp[get_tenv_stk, get_tenv_def, initial_evaluation_context_def,
+           get_module_code_stk, get_module_code_def,
+           lookup_var_slot_from_layout_stk, lookup_var_slot_from_layout_def] >>
+      strip_tac >> metis_tac[])
+  >- (dxrule check_contract_toplevel_vtypes_consistent_initial >>
+      simp[] >> disch_then (qspecl_then [`tx`,`sources`] mp_tac) >>
+      simp[get_module_code_stk, get_module_code_def, initial_evaluation_context_def,
+           lookup_var_slot_from_layout_stk, lookup_var_slot_from_layout_def] >>
+      strip_tac >> metis_tac[])
+  >- (dxrule check_contract_flag_members_consistent_initial >>
+      simp[] >> strip_tac >>
+      first_x_assum (qspecl_then [`tx`,`sources`,`src'`,`fid`,`ls`] mp_tac) >>
+      simp[get_tenv_stk, get_tenv_def, initial_evaluation_context_def,
+           get_module_code_stk, get_module_code_def])
 QED
 
 (* ===== Static-map transfer helpers ===== *)
@@ -397,6 +496,13 @@ Proof
   gvs[toplevel_vtypes_complete_def, lookup_var_slot_from_layout_initial] >>
   gvs[get_module_code_def, initial_evaluation_context_def] >>
   metis_tac[var_allocated_slot_VariableDecl, var_allocated_slot_HashMapDecl]
+QED
+
+Theorem check_contract_namespaces_ok:
+  check_contract in_deploy layouts addr mods = SOME art ==>
+  contract_namespaces_ok in_deploy mods
+Proof
+  metis_tac[check_contract_artifact_fields]
 QED
 
 Theorem module_allocated_VariableDecl_slots:

@@ -417,6 +417,17 @@ Proof
   metis_tac[call_evaluation_safe_append_right]
 QED
 
+Theorem call_evaluation_safe_singleton:
+  irreflexive (TC (call_edge_rel edges)) /\
+  functions_follow_call_graph edges cx /\
+  calls_follow_call_graph edges owner calls ==>
+  call_evaluation_safe (cx with stk := [owner]) calls
+Proof
+  rw[call_evaluation_safe_def] >>
+  qexists_tac `edges` >>
+  simp[call_stack_follows_def, functions_follow_call_graph_stk]
+QED
+
 Theorem checked_contract_call_evaluation_safe_singleton:
   check_contract cx.in_deploy layouts cx.txn.target mods = SOME art /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
