@@ -47,19 +47,6 @@ Proof
   Cases_on `rest` >> gvs[]
 QED
 
-Theorem sha256_computed_request:
-  rq.cr_target = 2w /\ rq.cr_value = 0 ==>
-  computed_precompile rq /\
-  take_outcome rq os =
-    (failed_outcome rq with
-       <| co_success := T;
-          co_returnData := word_to_bytes (SHA_256_bytes rq.cr_data) T |>, os) /\
-  record_request rq rqs = rqs
-Proof
-  strip_tac >>
-  simp[computed_precompile_def, take_outcome_def, record_request_def]
-QED
-
 (* Covers partial words, including the empty byte sequence. *)
 Theorem typed_bytes_prefix:
   LENGTH bs <= 32 ==>
@@ -479,20 +466,6 @@ Proof
   gvs[mem_bytes_at_def, TAKE_APPEND, arithmeticTheory.MIN_DEF]
 QED
 
-Theorem sha256_consume_outcome:
-  rq.cr_target = 2w /\ rq.cr_value = 0 /\ rq.cr_static ==>
-  consume_call_outcome rq ro 32 s =
-    (1w, (write_memory_with_expansion ro
-       (word_to_bytes (SHA_256_bytes rq.cr_data) T) s) with
-       vs_returndata := word_to_bytes (SHA_256_bytes rq.cr_data) T)
-Proof
-  strip_tac >> drule_all sha256_computed_request >> strip_tac >>
-  simp[venomCallOracleDefsTheory.consume_call_outcome_eq,
-       failed_outcome_def, TAKE_LENGTH_TOO_LONG, LENGTH_word_to_bytes,
-       write_memory_with_expansion_def, LET_THM,
-       venom_state_component_equality]
-QED
-
 Theorem sha256_exec_ext_call:
   read_memory (w2n args_off) (w2n args_size) s = bs ==>
   exec_ext_call (mk_inst iid STATICCALL ops [out]) s gas 2w 0w
@@ -512,11 +485,13 @@ Proof
    (1w, (write_memory_with_expansion (w2n ret_off)
          (word_to_bytes (SHA_256_bytes bs) T) s) with
          vs_returndata := word_to_bytes (SHA_256_bytes bs) T)` by
-    (qspecl_then [`venom_call_request s 2w 0w args_off args_size T`,
-                    `w2n ret_off`, `s`] mp_tac
-       (Q.GENL [`rq`, `ro`, `s`] sha256_consume_outcome) >>
-     simp[venomCallOracleDefsTheory.venom_call_request_def,
-          w2w_n2w, Excl "consume_call_outcome_eq"] ) >>
+    simp[venomCallOracleDefsTheory.consume_call_outcome_eq,
+         venomCallOracleDefsTheory.venom_call_request_def,
+         computed_precompile_def, take_outcome_def, record_request_def,
+         adopt_outcome_def, adopt_outcome_deletions_def,
+         failed_outcome_def, TAKE_LENGTH_TOO_LONG, LENGTH_word_to_bytes,
+         write_memory_with_expansion_def, LET_THM,
+         venom_state_component_equality, w2w_n2w] >>
   simp[exec_ext_call_def, mk_inst_def, Excl "consume_call_outcome_eq",
        dimword_def, fcpTheory.index_bit0, fcpTheory.finite_bit0,
        fcpTheory.index_one, fcpTheory.finite_one]
