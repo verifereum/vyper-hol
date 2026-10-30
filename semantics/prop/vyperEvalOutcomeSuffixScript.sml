@@ -11,6 +11,7 @@ Definition outcomes_frame_def:
   outcomes_frame f <=> !st. (SND (f st)).outcomes = st.outcomes
 End
 
+(* This result has downstream consumers outside this repository. *)
 Theorem outcomes_frame_result:
   outcomes_frame f /\ f st = (res,st') ==> st'.outcomes = st.outcomes
 Proof

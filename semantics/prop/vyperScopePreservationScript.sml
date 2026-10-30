@@ -258,29 +258,11 @@ Proof
   gvs[pred_setTheory.ABSORPTION_RWT]
 QED
 
-
-
-
-
 Theorem resolve_array_element_scopes:
   !cx b base tv subs st res st'.
     resolve_array_element cx b base tv subs st = (res, st') ==> st'.scopes = st.scopes
 Proof
-  (* Original recursive attempt, retained for reference; the state boundary
-     avoids repeating induction and speculative recursive-hypothesis search:
-  ho_match_mp_tac resolve_array_element_ind >> rw[] >>
-  qpat_x_assum `_ = (res, st')` mp_tac >>
-  simp[Once resolve_array_element_def, bind_def, return_def, raise_def] >>
-  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def, check_def, type_check_def, assert_def, AllCaseEqs()]) >>
-  rpt strip_tac >> gvs[] >>
-  rpt (TRY (first_x_assum drule >>
-            gvs[check_def, type_check_def, assert_def, return_def, raise_def, bind_def,
-                ignore_bind_def, AllCaseEqs()] >>
-            TRY (imp_res_tac get_storage_backend_scopes >> gvs[]) >> NO_TAC) >>
-       gvs[check_def, type_check_def, assert_def, return_def, raise_def, bind_def,
-           ignore_bind_def, AllCaseEqs()] >>
-       TRY (imp_res_tac get_storage_backend_scopes >> gvs[]))
-  *)
+
   metis_tac[resolve_array_element_state]
 QED
 
