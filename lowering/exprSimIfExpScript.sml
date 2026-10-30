@@ -176,7 +176,15 @@ Proof
       simp[expr_val_at_def, eval_operand_def] >> rpt strip_tac >>
       first_x_assum drule_all >> strip_tac
       >- (disj1_tac >> qexists_tac `aid` >> first_assum (irule_at Any) >>
-          simp[] >> fs[] >> decide_tac)
+          simp[] >> fs[] >> rpt strip_tac >>
+          `local_region cenv es'.scopes u n lb lsz` by
+            (irule local_region_frame >> conj_tac
+             >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
+             qexistsl_tac [`sa`, `es'.scopes`, `ss`] >> simp[] >>
+             rpt strip_tac >>
+             `x <> rv` by metis_tac[] >>
+             qpat_x_assum `!x. x <> rv ==> _` drule >> simp[]) >>
+          qpat_x_assum `!n lb lsz. local_region _ _ u _ _ _ ==> _` drule >> simp[])
       >> TRY (disj2_tac >> disj2_tac >> first_assum ACCEPT_TAC >> NO_TAC) >>
       disj2_tac >> disj1_tac >> qexists_tac `n` >>
   `local_region cenv es'.scopes ss n b sz` by
@@ -190,6 +198,17 @@ Proof
       `z <> rv` by metis_tac[] >>
       `lookup_var z tt = SOME w'` by metis_tac[] >>
       metis_tac[]) >>
+  (* the locals' memory: kept by c, then by e *)
+  `locals_kept cenv es s0 ss` by
+    (irule locals_kept_mem_tail >> qexists_tac `u` >>
+     conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+     irule locals_kept_trans >>
+     qexistsl_tac [`es1`, `sa`, `jump_to lbl tt`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
+     >~ [`lookup_var _ (jump_to _ _)`] >- metis_tac[] >>
+     irule locals_kept_mem_tail >> qexists_tac `tt` >>
+     simp[jump_to_def] >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `locals_kept cenv es s0 ss` (fn th => rewrite_tac[th]) >>
   rpt strip_tac >>
   qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _`
     (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
@@ -202,7 +221,8 @@ Proof
       qpat_x_assum `!n b sz'. local_region _ es.scopes s0 _ _ _ ==> _` irule >>
       qexists_tac `n` >>
       irule local_region_frame >>
-      conj_tac >- (qexistsl_tac [`cx`, `func`] >> first_assum ACCEPT_TAC) >>
+      conj_tac >- (qexists_tac `func` >>
+        gvs[stmt_state_rel_def, state_rel_def]) >>
       qexistsl_tac [`sa`, `es1.scopes`, `tt`] >> asm_rewrite_tac[] >>
       fs[local_region_def] >> metis_tac[])
   >- decide_tac >>

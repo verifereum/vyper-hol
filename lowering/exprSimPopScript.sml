@@ -18,6 +18,7 @@
  *   compile_pop_name_sim — expr_vv_sim of x.pop() on a local
  *
  * Helpers:
+ *   pop_locals_kept — popping preserves the other live locals' regions
  *   elems_val_wf_EL, elems_val_wf_FRONT, elems_in_memory_FRONT,
  *     elems_in_memory_mstore_before — the array's layout
  *   lookup_scopes_set_other, eval_target_place_name, eval_pop_name,
@@ -596,11 +597,38 @@ Proof
   simp[LAST_EL, arithmeticTheory.PRE_SUB1]
 QED
 
+(* The store of the new length leaves the live locals' memory as
+   locals_kept allows: the popped local is a dynamic array, whose length word
+   is exempt, and the other locals' regions are disjoint from its region. *)
+Theorem pop_locals_kept[local]:
+  !func cenv es s0 u id entry p sz w et n v.
+    local_ptrs_rel func cenv es.scopes s0 /\
+    lookup_scopes id es.scopes = SOME entry /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    lookup_var p s0 = SOME w /\ 32 <= sz /\
+    cenv.ce_var_type id = SOME (ArrayT et (Dynamic n)) /\
+    u.vs_memory = (mstore (w2n w) v s0).vs_memory ==>
+    locals_kept cenv es s0 u
+Proof
+  rw[locals_kept_def] >> rename1 `local_region _ _ _ nm b' sz'` >>
+  `local_region cenv es.scopes s0 id (w2n w) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  qpat_x_assum `u.vs_memory = _` SUBST1_TAC >>
+  irule mstore_mem_bytes_at_disjoint >>
+  Cases_on `nm = id`
+  >- (`b' = w2n w` by gvs[local_region_def] >>
+      gvs[dynarray_local_def, dynarray_type_def]) >>
+  `regions_disjoint (w2n w) sz b' sz'` by
+    (fs[local_ptrs_rel_def] >> metis_tac[]) >>
+  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+QED
+
 Theorem pop_vv_post:
   !func cenv cx ann id es sa sb s0 u k pre envs entry rest p sz w etv n vs x6.
     stmt_state_rel func cenv cx es s0 /\
     local_ptrs_rel func cenv es.scopes s0 /\
     find_containing_scope id es.scopes = SOME (pre, envs, entry, rest) /\
+    cenv.ce_var_type id = SOME (ArrayT ann (Dynamic n)) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s0 = SOME w /\ local_backed func p s0 (w2n w) sz /\
     w2n w + sz <= s0.vs_alloca_next /\
@@ -678,7 +706,13 @@ Proof
          val_footprint etv (LAST vs) <= w2n w + sz` by
         (irule pop_elem_fits >> metis_tac[val_footprint_le]) >>
       simp[] >> disj2_tac >> disj1_tac >>
-      qexistsl_tac [`id`, `w2n w`, `sz`] >> fs[]) >>
+      qexistsl_tac [`id`, `w2n w`, `sz`] >> fs[])
+  >~ [`locals_kept`]
+  >- (irule pop_locals_kept >>
+      conj_tac
+      >- (qexistsl [`entry`, `ann`, `id`, `n`, `p`, `sz`,
+                   `n2w (LENGTH vs) - 1w`, `w`] >> simp[]) >>
+      qexists `func` >> simp[]) >>
   (* the variables and allocations clauses simplified away; the memory
      frame is left *)
   `32 <= sz` by (qpat_x_assum `32 + _ <= sz` mp_tac >> simp[]) >>
