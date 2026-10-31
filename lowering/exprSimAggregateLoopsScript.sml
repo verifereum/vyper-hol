@@ -329,7 +329,8 @@ Resume aggregate_make_tuple_sim[after_store]:
   disch_then (qspec_then `inst` mp_tac) >>
   disch_then (qspecl_then [`b`, `asz`, `t'`, `ctx`, `nocalls`] mp_tac) >>
   (impl_tac >- (simp[] >> fs[ci_mono_def, type_memory_size_def] >>
-    rpt strip_tac >>
+    rpt strip_tac
+    >~ [`int_calls_expr _ = []`] >- metis_tac[] >>
     qpat_x_assum `ce.ce_is_ctor ==> _` mp_tac >>
     asm_rewrite_tac[] >>
     disch_then (qspecl_then [`name`, `itv`, `iv`, `io`] mp_tac) >>
