@@ -184,6 +184,14 @@ Proof
     drule_all resolve_array_element_state] >> simp[]
 QED
 
+Theorem metadata_frame_next_gas_reading[local]:
+  state_rel_frame immutable_metadata_frame next_gas_reading
+Proof
+  simp[state_rel_frame_result] >> rpt strip_tac >>
+  irule immutable_metadata_frame_eq >>
+  drule next_gas_reading_state >> rw[] >> simp[]
+QED
+
 Theorem metadata_frame_primitives[local]:
   state_rel_frame immutable_metadata_frame get_scopes /\
   state_rel_frame immutable_metadata_frame (set_scopes scs) /\
@@ -286,6 +294,7 @@ val metadata_frame_net =
   let
     val rules = [metadata_frame_bind, metadata_frame_try, metadata_frame_finally]
     val leaves = metadata_frame_reads :: metadata_frame_primitives ::
+      metadata_frame_next_gas_reading ::
       metadata_frame_storage :: metadata_frame_mutations :: metadata_frame_write ::
       metadata_frame_handlers :: METADATA_LOCALS :: [METADATA_TAKE]
     val structural = List.foldl (fn (th,net) => Net.insert
@@ -380,7 +389,7 @@ Proof
 QED
 
 Theorem metadata_frame_raw_call[local]:
-  state_rel_frame immutable_metadata_frame (eval_raw_call cx flags target data amount)
+  state_rel_frame immutable_metadata_frame (eval_raw_call cx flags target data amount gas)
 Proof
   simp_tac bool_ss [eval_raw_call_def, LET_THM] >> METADATA_FRAME_TAC
 QED

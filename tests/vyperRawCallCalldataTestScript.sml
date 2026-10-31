@@ -39,17 +39,17 @@ val zero_e = ``Literal (BaseT (UintT 256)) (IntL 0)``;
 val expected_calls = [
   ``Call NoneT (RawCallCalldataTarget
     <|rcf_max_outsize := 0; rcf_is_delegate := F; rcf_is_static := F;
-      rcf_revert_on_failure := T|>)
+      rcf_revert_on_failure := T; rcf_kws := [EKValue]|>)
     [^target_e; Name (BaseT (UintT 256)) "amount"] NONE``,
   ``Call (BaseT (BytesT (Dynamic 4))) (RawCallCalldataTarget
     <|rcf_max_outsize := 4; rcf_is_delegate := F; rcf_is_static := T;
-      rcf_revert_on_failure := T|>) [^target_e; ^zero_e] NONE``,
+      rcf_revert_on_failure := T; rcf_kws := []|>) [^target_e] NONE``,
   ``Call (BaseT BoolT) (RawCallCalldataTarget
     <|rcf_max_outsize := 0; rcf_is_delegate := F; rcf_is_static := F;
-      rcf_revert_on_failure := F|>) [^target_e; ^zero_e] NONE``,
+      rcf_revert_on_failure := F; rcf_kws := []|>) [^target_e] NONE``,
   ``Call (TupleT [BaseT BoolT; BaseT (BytesT (Dynamic 4))]) (RawCallCalldataTarget
     <|rcf_max_outsize := 4; rcf_is_delegate := F; rcf_is_static := F;
-      rcf_revert_on_failure := F|>) [^target_e; ^zero_e] NONE``];
+      rcf_revert_on_failure := F; rcf_kws := []|>) [^target_e] NONE``];
 val () = app (fn expected =>
   if not (null (find_terms (aconv expected) (#modules fixture))) then ()
   else raise Fail "pinned raw_call calldata operands/flags were not preserved") expected_calls;
@@ -156,7 +156,7 @@ fun check_raw_call args flags =
          NoneT [Expr (Call NoneT (RawCallCalldataTarget ^flags) ^args NONE)]])]
          : (num option # toplevel list) list``});
 val flags = ``<|rcf_max_outsize := 0; rcf_is_delegate := F; rcf_is_static := F;
-  rcf_revert_on_failure := T|>``;
+  rcf_revert_on_failure := T; rcf_kws := [EKValue]|>``;
 val addr_e = rhs (concl (EVAL ``Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w))``));
 val () = if optionSyntax.is_some (rhs (concl (check_raw_call ``[^addr_e; ^zero_e]`` flags)))
   then () else raise Fail "valid calldata raw_call rejected";
@@ -167,9 +167,10 @@ val () = app (fn args =>
    ``[^zero_e; ^zero_e]``, ``[^addr_e; Literal (BaseT BoolT) (BoolL T)]``];
 val () = app (fn valid_flags =>
   if optionSyntax.is_some (rhs (concl (check_raw_call
-    ``[^addr_e; ^zero_e]`` valid_flags))) then ()
+    ``[^addr_e]`` valid_flags))) then ()
   else raise Fail "valid delegate/static calldata raw_call rejected")
-  [``^flags with rcf_is_delegate := T``, ``^flags with rcf_is_static := T``];
+  [``^flags with <|rcf_is_delegate := T; rcf_kws := []|>``,
+   ``^flags with <|rcf_is_static := T; rcf_kws := []|>``];
 val one_e = ``Literal (BaseT (UintT 256)) (IntL 1)``;
 val () = app (fn (amount, invalid_flags) =>
   if optionSyntax.is_none (rhs (concl (check_raw_call
@@ -181,36 +182,41 @@ val () = app (fn (amount, invalid_flags) =>
 
 (* Arbitrary side effects: target runs first, value sees its resulting state;
    execution receives the original transaction input without stripping a selector
-   or trailing bytes and begins in the post-value state. *)
+   or trailing bytes and begins in the post-value state. With no gas= the call
+   forwards the default gas. *)
 Theorem raw_call_calldata_operand_order_test:
+  flags.rcf_kws = [EKValue] /\
   eval_expr cx target st = (INL (Value target_v), target_st) /\
   eval_expr cx value_e target_st = (INL (Value amount_v), value_st) /\
   dest_AddressV target_v = SOME to /\ dest_NumV amount_v = SOME amount ==>
   eval_expr cx (Call ty (RawCallCalldataTarget flags) [target; value_e] drv) st =
-    eval_raw_call cx flags to cx.txn.calldata amount value_st
+    eval_raw_call cx flags to cx.txn.calldata amount default_evm_gas_limit value_st
 Proof
   rpt strip_tac >>
   simp[Once evaluate_def, bind_def] >>
   simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   simp[Once evaluate_def, return_def, bind_def, ignore_bind_def,
-       type_check_def, assert_def, lift_option_type_def]
+       type_check_def, assert_def, lift_option_type_def, raw_call_value_def,
+       ext_call_kwarg_def, forwarded_gas_def]
 QED
 
 Theorem raw_call_bytes_operand_order_test:
+  flags.rcf_kws = [EKValue] /\
   eval_expr cx target st = (INL (Value target_v), target_st) /\
   eval_expr cx data_e target_st = (INL (Value (BytesV data)), data_st) /\
   eval_expr cx value_e data_st = (INL (Value amount_v), value_st) /\
   dest_AddressV target_v = SOME to /\ dest_NumV amount_v = SOME amount ==>
   eval_expr cx (Call ty (RawCallTarget flags) [target; data_e; value_e] drv) st =
-    eval_raw_call cx flags to data amount value_st
+    eval_raw_call cx flags to data amount default_evm_gas_limit value_st
 Proof
   rpt strip_tac >> simp[Once evaluate_def, bind_def] >>
   simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   simp[Once evaluate_def, return_def, bind_def, ignore_bind_def,
-       type_check_def, assert_def, lift_option_type_def, dest_BytesV_def]
+       type_check_def, assert_def, lift_option_type_def, dest_BytesV_def,
+       raw_call_value_def, ext_call_kwarg_def, forwarded_gas_def]
 QED
 
 Theorem raw_call_calldata_target_exception_test:
@@ -223,6 +229,7 @@ Proof
 QED
 
 Theorem raw_call_calldata_bad_target_state_test:
+  flags.rcf_kws = [EKValue] /\
   eval_exprs cx es st = (INL [BoolV b; amount_v], operand_st) ==>
   eval_expr cx (Call ty (RawCallCalldataTarget flags) es drv) st =
     (INR (Error (TypeError "raw_call target")), operand_st)
@@ -232,17 +239,20 @@ Proof
 QED
 
 Theorem raw_call_calldata_bad_value_state_test:
+  flags.rcf_kws = [EKValue] /\
   eval_exprs cx es st = (INL [target_v; BoolV b], operand_st) /\
   dest_AddressV target_v = SOME to ==>
   eval_expr cx (Call ty (RawCallCalldataTarget flags) es drv) st =
     (INR (Error (TypeError "raw_call value")), operand_st)
 Proof
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, lift_option_type_def, return_def, raise_def, dest_NumV_def]
+       assert_def, lift_option_type_def, return_def, raise_def, dest_NumV_def,
+       raw_call_value_def, ext_call_kwarg_def]
 QED
 
 Theorem raw_call_calldata_malformed_arity_state_test:
-  eval_exprs cx es st = (INL vs, operand_st) /\ LENGTH vs <> 2 ==>
+  eval_exprs cx es st = (INL vs, operand_st) /\
+  LENGTH vs <> 1 + LENGTH flags.rcf_kws ==>
   eval_expr cx (Call ty (RawCallCalldataTarget flags) es drv) st =
     (INR (Error (TypeError "raw_call calldata args")), operand_st)
 Proof
@@ -255,9 +265,9 @@ Theorem raw_call_calldata_original_input_test:
   ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
   ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0) /\
   cx.txn.calldata = [1w; 2w; 3w; 4w; 10w; 11w; 99w] /\
-  run_raw_call cx flags to cx.txn.calldata amount st.accounts st.tStorage =
+  run_raw_call cx flags to cx.txn.calldata amount gas st.accounts st.tStorage =
       SOME (success, retdata, accounts', transient', logs') ==>
-  eval_raw_call cx flags to cx.txn.calldata amount st =
+  eval_raw_call cx flags to cx.txn.calldata amount gas st =
     (if flags.rcf_revert_on_failure then
        if success then INL (Value (if flags.rcf_max_outsize = 0 then NoneV
          else BytesV (TAKE flags.rcf_max_outsize retdata)))

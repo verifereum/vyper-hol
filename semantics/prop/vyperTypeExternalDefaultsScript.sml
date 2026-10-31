@@ -254,13 +254,14 @@ Proof
 QED
 
 Theorem call_external_function_success_phases:
-  call_external_function orc am cx nr mut ts mods args dflts vals body ret =
+  call_external_function orc gobs am cx nr mut ts mods args dflts vals body ret =
     (INL v,am_out,rqs) ==>
   ?am_c s1 dflt_vs s2 env res st_body st_unlocked.
     (if cx.in_deploy then evaluate_all_constants cx am cx.txn.target mods
      else SOME am) = SOME am_c /\
     send_call_value mut cx
-      (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := []|>) =
+      (initial_state am_c [FEMPTY] with
+         <|outcomes := orc; requests := []; gas_obs := gobs|>) =
       (INL (),s1) /\
     eval_external_defaults cx (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) s1 =
       (INL dflt_vs,s2) /\

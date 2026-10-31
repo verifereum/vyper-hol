@@ -81,24 +81,24 @@ Theorem call_external_function_read_only:
       (DROP (LENGTH dflts + LENGTH vals - LENGTH args) dflts)) /\
   state_rel_frame machine_frame (eval_stmts cx body) /\
   (mut = View \/ mut = Pure) /\
-  call_external_function orc am cx nr mut ts mods args dflts vals body ret =
+  call_external_function orc gobs am cx nr mut ts mods args dflts vals body ret =
     (INL v, am', rqs) ==>
   am' = am
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[call_external_function_def] >>
   IF_CASES_TAC >- simp[] >>
   `LENGTH dflts - (LENGTH args - LENGTH vals) =
    LENGTH dflts + LENGTH vals - LENGTH args` by decide_tac >>
   simp[] >>
-  qmatch_goalsub_abbrev_tac `action (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>)` >>
+  qmatch_goalsub_abbrev_tac `action (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
   `state_rel_frame machine_frame action` by
     (simp[Abbr `action`] >> irule machine_frame_external_action >> simp[]) >>
   qpat_x_assum `state_rel_frame machine_frame action`
-    (qspec_then `initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>` mp_tac o
+    (qspec_then `initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>` mp_tac o
      REWRITE_RULE [state_rel_frame_def]) >>
-  Cases_on `action (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>)` >>
+  Cases_on `action (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
   simp[] >> strip_tac >> rename1 `machine_frame _ st` >>
   `abstract_machine_from_state am.sources am.exports am.layouts st = am` by
     (irule machine_frame_reconstruct >>
@@ -114,7 +114,7 @@ Theorem selected_entry_external_function_frame:
   check_contract F am.layouts tx.target mods = SOME art /\
   selected_entry am tx mods (mut,nr,args,dflts,ret,body) /\
   (mut = View \/ mut = Pure) /\
-  call_external_function orc am
+  call_external_function orc gobs am
     (initial_evaluation_context am.sources am.layouts tx
       (find_function_module am tx.target tx.function_name))
     nr mut ts mods args dflts vals body ret = (INL v, am', rqs) ==>
@@ -143,7 +143,7 @@ Proof
       (find_function_module am tx.target tx.function_name)) body)` by
     (irule machine_frame_eval_stmts >> qexists `mods` >> simp[]) >>
   irule call_external_function_read_only >>
-  qpat_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ = _`
+  qpat_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _`
     (fn th => irule_at Any th) >>
   simp[initial_evaluation_context_def]
 QED

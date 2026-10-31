@@ -174,6 +174,8 @@ Datatype:
   ; rcf_is_delegate: bool
   ; rcf_is_static: bool
   ; rcf_revert_on_failure: bool
+  (* kinds of the value=/gas= operands, in source order *)
+  ; rcf_kws: ext_call_opts
   |>
 End
 
@@ -183,7 +185,8 @@ End
 Theorem raw_call_flags_size_accessors[compute]:
   !r. raw_call_flags_size r =
         1 + (r.rcf_max_outsize + (bool_size r.rcf_is_delegate +
-             (bool_size r.rcf_is_static + bool_size r.rcf_revert_on_failure)))
+             (bool_size r.rcf_is_static + (bool_size r.rcf_revert_on_failure +
+              list_size ext_call_kw_size r.rcf_kws))))
 Proof
   Cases >>
   REWRITE_TAC [DB.fetch "-" "raw_call_flags_size_def",
@@ -213,11 +216,12 @@ Datatype:
   (* Send has_gas: operands [to; value] ++ (if has_gas then [gas] else []) *)
   | Send bool
   (* raw_call(to, data, max_outsize=0, gas=gas, value=0, ...)
-     args = [to_addr; data_bytes; value]
-     Keyword args (compile-time constants) are in raw_call_flags *)
+     args = [to_addr; data_bytes] ++ keyword args, where the keyword args are
+     the value= and gas= expressions in source order and rcf_kws lists their
+     kinds.  The other keyword args are compile-time constants in the flags. *)
   | RawCallTarget raw_call_flags
   (* raw_call(to, msg.data, ...): original transaction input, never a bounded
-     ordinary expression. Runtime operands are [to_addr; value]. *)
+     ordinary expression. Runtime operands are to_addr :: keyword args. *)
   | RawCallCalldataTarget raw_call_flags
   (* raw_log(topics, data)
      args = [data_bytes; topic1; ...; topicN] where N ≤ 4 *)

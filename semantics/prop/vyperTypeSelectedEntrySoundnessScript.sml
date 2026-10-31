@@ -69,11 +69,11 @@ Theorem call_external_function_body:
   LENGTH vals <= LENGTH args /\
   LENGTH args - LENGTH vals <= LENGTH dflts /\
   send_call_value mut cx
-    (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>) = (INL (),st1) /\
+    (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>) = (INL (),st1) /\
   eval_external_defaults cx
     (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) st1 = (INL dvs,st2) /\
   bind_arguments (type_env_all_modules mods) args (vals ++ dvs) = SOME env ==>
-  call_external_function orc am cx nr mut (ts : toplevel list) mods args dflts vals body ret =
+  call_external_function orc gobs am cx nr mut (ts : toplevel list) mods args dflts vals body ret =
     call_external_body am cx nr mut (type_env_all_modules mods) st2 env body ret
 Proof
   strip_tac >>
@@ -91,11 +91,11 @@ Theorem call_external_selected_entry_body:
   LENGTH tx.args <= LENGTH args /\
   LENGTH args - LENGTH tx.args <= LENGTH dflts /\
   send_call_value mut cx
-    (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>) = (INL (),st1) /\
+    (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>) = (INL (),st1) /\
   eval_external_defaults cx
     (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) st1 = (INL dvs,st2) /\
   bind_arguments (type_env_all_modules mods) args (tx.args ++ dvs) = SOME scope ==>
-  call_external orc am tx =
+  call_external orc gobs am tx =
     case call_external_body am cx nr mut (type_env_all_modules mods) st2 scope body ret of
       (INL value, am', rqs) => (INL value, finalize_pending_deletions am', rqs)
     | failure => failure
@@ -117,11 +117,11 @@ Theorem checked_selected_entry_no_static_error:
   LENGTH tx.args <= LENGTH args /\
   LENGTH args - LENGTH tx.args <= LENGTH dflts /\
   provided_args_typed (type_env_all_modules mods) args tx.args ==>
-  no_type_error_result (FST (call_external orc am tx)) /\
-  (!exc. FST (call_external orc am tx) = INR exc ==>
+  no_type_error_result (FST (call_external orc gobs am tx)) /\
+  (!exc. FST (call_external orc gobs am tx) = INR exc ==>
      exc <> BreakException /\ exc <> ContinueException)
 Proof
-  strip_tac >> Cases_on `call_external orc am tx` >>
+  strip_tac >> Cases_on `call_external orc gobs am tx` >>
   PairCases_on `r` >> simp[] >>
   conj_tac >- (drule_all checked_call_external_no_type_error >> simp[]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>

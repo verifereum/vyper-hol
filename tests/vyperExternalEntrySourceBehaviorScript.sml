@@ -27,12 +27,12 @@ Definition entry_source_observe_def:
       <| accounts := entry_behavior_accounts code; layouts := layouts |> in
     let deploy_tx = empty_call_txn with
       <| sender := 42w; target := 43w; function_name := "__init__" |> in
-    case load_contract NONE am deploy_tx modules [] of
+    case load_contract NONE [] am deploy_tx modules [] of
       INR e => NONE
     | INL (deployed,_) =>
         let tx = deploy_tx with
           <| function_name := "f"; args := vals; value := amount |> in
-        let (result,called,_) = call_external_transaction NONE deployed tx in
+        let (result,called,_) = call_external_transaction NONE [] deployed tx in
         case result of
           INR e => NONE
         | INL v => SOME (v,

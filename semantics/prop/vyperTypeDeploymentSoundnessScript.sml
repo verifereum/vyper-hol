@@ -44,9 +44,9 @@ val _ = Parse.hide "body";
 (* Constructors have no defaults.  Transfer first, then hand the actual
    transferred state to the shared scope/lock/body continuation. *)
 Definition call_constructor_body_def:
-  call_constructor_body orc am cx nr mut tenv scope body ret =
+  call_constructor_body orc gobs am cx nr mut tenv scope body ret =
     case send_call_value mut cx
-      (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>) of
+      (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>) of
       (INR exc, st) => (INR exc, am, st.requests)
     | (INL (), st) => call_external_body am cx nr mut tenv st scope body ret
 End
@@ -56,11 +56,11 @@ Theorem constructor_call_observed[local]:
   evaluate_all_constants cx am0 cx.txn.target mods = SOME am_c /\
   LENGTH vals = LENGTH args /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope ==>
-  (case call_external_function orc am0 cx nr mut (ts:toplevel list)
+  (case call_external_function orc gobs am0 cx nr mut (ts:toplevel list)
           mods args [] vals body ret of
      (INR e,_,_) => INR e
    | (INL v,am',rqs) => INL (v,am',rqs)) =
-  (case call_constructor_body orc am_c cx nr mut (type_env_all_modules mods)
+  (case call_constructor_body orc gobs am_c cx nr mut (type_env_all_modules mods)
           scope body ret of
      (INR e,_,_) => INR e
    | (INL v,am',rqs) => INL (v,am',rqs))
@@ -68,7 +68,7 @@ Proof
   strip_tac >>
   simp[call_external_function_def, call_constructor_body_def] >>
   Cases_on `send_call_value mut cx
-    (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := []|>)` >>
+    (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
   Cases_on `q` >>
   simp[call_external_body_def, bind_def, ignore_bind_def, set_scopes_def, return_def] >>
   TRY (rename1 `send_call_value _ _ _ = (INR exc,_)` >>
@@ -159,8 +159,8 @@ Theorem load_contract_constructor_body:
     (am with <|immutables updated_by CONS (tx.target,imms);
                exports updated_by CONS (tx.target,exps)|>)
     tx.target mods = SOME am_c ==>
-  load_contract orc am tx mods exps =
-    case call_constructor_body orc am_c cx nr mut (type_env_all_modules mods)
+  load_contract orc gobs am tx mods exps =
+    case call_constructor_body orc gobs am_c cx nr mut (type_env_all_modules mods)
            scope body ret of
       (INR e, _, _) => INR e
     | (INL _, am', rqs) =>
@@ -176,7 +176,7 @@ Proof
      cx.txn.target mods = SOME am_c` by
     (qpat_x_assum `evaluate_all_constants _ _ tx.target _ = _` mp_tac >> simp[]) >>
   drule_all constructor_call_observed >>
-  disch_then (qspecl_then [`ts`,`ret`,`orc`,`nr`,`mut`,`body`] mp_tac) >>
+  disch_then (qspecl_then [`ts`,`ret`,`orc`,`nr`,`mut`,`gobs`,`body`] mp_tac) >>
   simp[load_contract_def] >>
   qpat_x_assum `cx = _` (fn th => rewrite_tac[GSYM th]) >>
   rpt (CASE_TAC >> gvs[])
@@ -289,7 +289,7 @@ Theorem checked_constructor_initial_immutables_consistent:
                exports updated_by CONS (tx.target,exps)|>)
     tx.target mods = SOME am_c ==>
   env_immutables_consistent (artifact_env deploy_art mods NONE) cx
-    (initial_state am_c [scope] with <|outcomes := orc; requests := rqs|>)
+    (initial_state am_c [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)
 Proof
   strip_tac >>
   irule checked_deployment_constants_establish_initial_env_immutables_consistent >>
@@ -313,7 +313,7 @@ Theorem checked_constructor_prefix_typing:
     tx.target mods = SOME am_c /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   send_call_value mut cx
-    (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := rqs|>) =
+    (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) =
       (INL (),send_st) /\
   (if nr then
      case cx.nonreentrant_slot of
@@ -336,8 +336,8 @@ Proof
      disch_then (qspec_then `exps` mp_tac) >> strip_tac >> gvs[]) >>
   `scope_well_typed scope` by
     metis_tac[bind_arguments_scope_well_typed_from_success] >>
-  `state_well_typed (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := rqs|>) /\
-   accounts_well_typed (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := rqs|>).accounts` by
+  `state_well_typed (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) /\
+   accounts_well_typed (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>).accounts` by
     gvs[machine_well_typed_def, state_well_typed_def, initial_state_def, scope_well_typed_def] >>
   `state_well_typed send_st /\ accounts_well_typed send_st.accounts /\
    send_st.immutables = am_c.immutables` by
@@ -347,9 +347,9 @@ Proof
     (drule call_lock_action_frame_c53 >> gvs[state_well_typed_def]) >>
   `env_immutables_consistent (artifact_env deploy_art mods NONE) cx body_st` by
     (drule_all checked_constructor_initial_immutables_consistent >>
-     disch_then (qspecl_then [`scope`,`rqs`,`orc`] assume_tac) >>
+     disch_then (qspecl_then [`scope`,`rqs`,`orc`,`gobs`] assume_tac) >>
      irule (iffLR env_immutables_consistent_immutables_cong) >>
-     qexists `initial_state am_c [scope] with <|outcomes := orc; requests := rqs|>` >>
+     qexists `initial_state am_c [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>` >>
      simp[initial_state_def]) >>
   `ALL_DISTINCT (MAP FST args)` by
     (drule_all checked_constructor_args_distinct >> simp[]) >>
@@ -394,7 +394,7 @@ Theorem checked_constructor_prefix_no_type_error:
                            (mut = View \/ mut = Pure)
         else return ());
        eval_stmts cx body
-     od (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := []|>))
+     od (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>))
 Proof
   strip_tac >>
   `nr ==> cx.nonreentrant_slot <> NONE` by
@@ -404,7 +404,7 @@ Proof
   qpat_x_assum `cx = _` (assume_tac o GSYM) >>
   simp[no_type_error_eval_def, ignore_bind_def, bind_def, set_scopes_def, return_def] >>
   Cases_on `send_call_value mut cx
-    (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := []|>)` >>
+    (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
   rename1 `_ = (send_res,send_st)` >> Cases_on `send_res`
   >- (Cases_on `lock_action (send_st with scopes := [scope])` >>
       rename1 `_ = (lock_res,body_st)` >> Cases_on `lock_res`
@@ -417,7 +417,7 @@ Proof
         (qunabbrev_tac `lock_action` >> irule call_lock_action_no_type_error_c53 >> simp[]) >>
       gvs[no_type_error_eval_def]) >>
   `no_type_error_eval (send_call_value mut cx
-    (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := []|>))` by
+    (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>))` by
     simp[send_call_value_no_type_error_c53] >>
   gvs[no_type_error_eval_def]
 QED
@@ -446,7 +446,7 @@ Theorem checked_constructor_prefix_return_typed:
                          (mut = View \/ mut = Pure)
       else return ());
      eval_stmts cx body
-   od (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := []|>)) =
+   od (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)) =
      (INR (ReturnException v),st') ==>
   ?tv. evaluate_type (type_env_all_modules mods) ret = SOME tv /\ value_has_type tv v
 Proof
@@ -512,12 +512,12 @@ Theorem call_constructor_body_no_type_error_from_prefix:
                       (mut = View \/ mut = Pure)
      else return ());
     eval_stmts cx body
-  od (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>)) /\
+  od (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)) /\
   no_type_error_eval prefix /\
   (!v st. prefix = (INR (ReturnException v),st) ==>
     ?tv. evaluate_type tenv ret = SOME tv /\ value_has_type tv v) ==>
   no_type_error_result
-    (FST (call_constructor_body orc am cx nr mut tenv scope body ret))
+    (FST (call_constructor_body orc gobs am cx nr mut tenv scope body ret))
 Proof
   strip_tac >>
   qabbrev_tac `unlock_action = if nr /\ mut <> View /\ mut <> Pure then
@@ -527,7 +527,7 @@ Proof
   `!st. no_type_error_eval (unlock_action st)` by
     (qunabbrev_tac `unlock_action` >> simp[unlock_action_no_type_error_c53]) >>
   Cases_on `send_call_value mut cx
-    (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>)` >>
+    (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
   Cases_on `q`
   >- (fs[ignore_bind_def, bind_def, set_scopes_def, return_def] >>
       simp[call_constructor_body_def, call_external_body_def, triple_identity,
@@ -558,10 +558,10 @@ Theorem call_constructor_body_no_loop_control_from_prefix:
                       (mut = View \/ mut = Pure)
      else return ());
     eval_stmts cx body
-  od (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>)) /\
+  od (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)) /\
   (!exc st. prefix = (INR exc,st) ==>
      exc <> BreakException /\ exc <> ContinueException) ==>
-  !exc. FST (call_constructor_body orc am cx nr mut tenv scope body ret) = INR exc ==>
+  !exc. FST (call_constructor_body orc gobs am cx nr mut tenv scope body ret) = INR exc ==>
     exc <> BreakException /\ exc <> ContinueException
 Proof
   strip_tac >>
@@ -572,7 +572,7 @@ Proof
   `!st exc st'. unlock_action st = (INR exc,st') ==> no_control_exc exc` by
     (qunabbrev_tac `unlock_action` >> metis_tac[unlock_action_no_control_c53]) >>
   Cases_on `send_call_value mut cx
-    (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>)` >>
+    (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
   Cases_on `q`
   >- (fs[ignore_bind_def, bind_def, set_scopes_def, return_def] >>
       simp[call_constructor_body_def, call_external_body_def, triple_identity,
@@ -607,9 +607,9 @@ Theorem checked_constructor_body_no_static_error:
     tx.target mods = SOME am_c /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope ==>
   no_type_error_result
-    (FST (call_constructor_body orc am_c cx nr mut (type_env_all_modules mods)
+    (FST (call_constructor_body orc gobs am_c cx nr mut (type_env_all_modules mods)
             scope body ret)) /\
-  (!exc. FST (call_constructor_body orc am_c cx nr mut (type_env_all_modules mods)
+  (!exc. FST (call_constructor_body orc gobs am_c cx nr mut (type_env_all_modules mods)
                scope body ret) = INR exc ==>
     exc <> BreakException /\ exc <> ContinueException)
 Proof
@@ -662,18 +662,18 @@ Theorem checked_load_contract_no_static_error:
       tx.target mods = SOME am_c /\
     bind_arguments (type_env_all_modules mods) args tx.args = SOME scope /\
     args_values_typed (type_env_all_modules mods) args tx.args /\
-    load_contract orc am tx mods exps =
-      (case call_constructor_body orc am_c cx nr mut (type_env_all_modules mods)
+    load_contract orc gobs am tx mods exps =
+      (case call_constructor_body orc gobs am_c cx nr mut (type_env_all_modules mods)
               scope body ret of
          (INR e, _, _) => INR e
        | (INL _, am', rqs) =>
            INL (finalize_pending_deletions
                   (am' with sources updated_by CONS (tx.target,mods)), rqs)) /\
     no_type_error_result
-      (FST (call_constructor_body orc am_c cx nr mut (type_env_all_modules mods)
+      (FST (call_constructor_body orc gobs am_c cx nr mut (type_env_all_modules mods)
               scope body ret)) /\
     !exc.
-      FST (call_constructor_body orc am_c cx nr mut (type_env_all_modules mods)
+      FST (call_constructor_body orc gobs am_c cx nr mut (type_env_all_modules mods)
              scope body ret) = INR exc ==>
       exc <> BreakException /\ exc <> ContinueException
 Proof
@@ -687,9 +687,9 @@ Proof
   drule_all checked_constructor_constants_exist >>
   disch_then (qspec_then `exps` strip_assume_tac) >>
   drule_all checked_constructor_body_no_static_error >>
-  disch_then (qspec_then `orc` strip_assume_tac) >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
   drule_all load_contract_constructor_body >>
-  disch_then (qspec_then `orc` assume_tac) >>
+  disch_then (assume_tac o SPEC_ALL) >>
   qexistsl [`imms`,`am_c`,`scope`] >> simp[]
 QED
 
