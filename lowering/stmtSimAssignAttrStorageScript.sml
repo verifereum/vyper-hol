@@ -27,7 +27,7 @@ Ancestors
   stmtSim stmtSimDecl stmtSimDeclMem stmtSimAssign stmtSimAssignMem
   stmtSimAssignStorage stmtSimAssignAttr
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding
+  compileEnv valueEncoding accountsRelProps
   vyperInterpreter vyperState vyperStorage vyperValue vyperTyping
   vyperTypeEnv vyperTypeInvariants vyperTypeExprSoundness vyperTypeExprResult
   vyperExprNoControl
@@ -164,7 +164,14 @@ Theorem assign_attr_storage_source:
                    (n2w slot + n2w (struct_field_offset_slots
                       (get_struct_fields cenv.ce_struct_fields
                          (nsid_to_string sid)) fld))
-                   ftv v es1 = (res, es'))
+                   ftv v es1 = (res, es') /\
+                 !u st.
+                   storage_dead cx tr
+                     (update_storage
+                        (n2w slot + n2w (struct_field_offset_slots
+                           (get_struct_fields cenv.ce_struct_fields
+                              (nsid_to_string sid)) fld)) u st) =
+                   storage_dead cx tr st)
 Proof
   rpt gen_tac >> strip_tac >>
   `!m. res <> INR (Error (TypeError m))` by
@@ -184,6 +191,12 @@ Proof
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   gvs[expr_result_typed_def, expr_runtime_typed_def,
       value_result_typed_def] >>
+  rpt conj_tac
+  >~ [`storage_dead`]
+  >- (rpt gen_tac >> irule storage_dead_update_struct_word_field >>
+      qexistsl_tac [`fld`, `fs`, `ftv`, `src`, `id`] >>
+      simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
+      metis_tac[exprSimUnwrapTheory.word_type_slot_size]) >>
   irule encode_value_word_typed >> metis_tac[]
 QED
 
@@ -300,7 +313,10 @@ Theorem assign_attr_storage_frag:
          ?ftv. evaluate_type (get_tenv cx) (expr_type e) = SOME ftv /\
                encode_value ftv v = SOME [(0, typed_val_to_w256 ftv v)] /\
                write_storage_slot cx tr (n2w slot + n2w off) ftv v es1 =
-                 (res, es')) ==>
+                 (res, es') /\
+               !u st.
+                 storage_dead cx tr (update_storage (n2w slot + n2w off) u st) =
+                 storage_dead cx tr st) ==>
     frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
       (\t. res = INL () /\ stmt_state_rel func cenv cx es' t /\
            (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>

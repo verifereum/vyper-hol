@@ -15,17 +15,20 @@
  *   expr_sim_inv      — the facts about the source state and the context
  *                       that every subexpression keeps: type soundness's
  *                       invariants, the locals of the type environment
- *                       held through pointer variables, and the flag
+ *                       held through pointer variables, the flag
  *                       member ids, flag member counts and struct fields
- *                       of the compile environment
+ *                       of the compile environment, and the storage
+ *                       invariants
  *   expr_sim_pre      — expr_sim_inv, the expression well typed, its
  *                       integer types of whole bytes, its buffers below
- *                       the allocation limit, and no internal call in it
+ *                       the allocation limit, and no internal call,
+ *                       raw_call or create in it
  *   byte_widths_expr  — every node's type has a width of whole bytes
  *   alloc_limits_expr, literal_alloc_ok — every static buffer the lowering
  *                       allocates for a node is below 2 ** 64 bytes
  *   expr_body_pre     — expr_sim_pre less int_calls_expr e = []: the
- *                       body simulation's (bodySim)
+ *                       body simulation's (bodySim); its calls are to
+ *                       the main module of a supported program
  *   expr_sim_ok       — expr_sim wherever expr_sim_pre holds
  *   expr_vv_ok        — expr_vv_sim wherever expr_sim_pre holds
  *   expr_ok           — both: the induction predicate
@@ -163,6 +166,21 @@
  *     INVOKE, whose simulation is #638's call step; until that is stated
  *     this theorem excludes them, and #638 replaces this conjunct with its
  *     hypothesis on the callees.
+ *   - The storage clauses: the outcomes are SOME (state_rel), every
+ *     declared storage and transient region decodes
+ *     (contract_storage_well_formed), the layout is safe, and every
+ *     successful outcome still to consume keeps the regions decoding
+ *     (oracle_storage_ok).  e2eDefs's source_storage_ok and
+ *     call_outcomes_ok ask these of the entry state and the outcomes.
+ *     Without them a storage read's slot need not decode: the source
+ *     raises where the lowering reads the slot.  expr_sim_pre_eval
+ *     carries them on by exprStoragePreservation, which needs no
+ *     postulate about the code external calls run.
+ *   - ~expr_has_evm_run e: no raw_call or create.  The source runs these
+ *     on the EVM even with the outcome oracle, and a delegate raw_call can
+ *     write anything into the contract's storage, so nothing keeps the
+ *     storage clauses across them without a postulate on that code.
+ *     The supported subset excludes both (supported_expr_no_evm_run).
  *   - The popped keys clause (popped_keys_indexed): every key of a local's
  *     popped history ends in an array index.  Reading a field of a popped
  *     element reads the history, and a snapshot recorded at the field
@@ -212,8 +230,11 @@ Ancestors
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
   vyperExprNoControl loweringSlice exprSimUnwrap exprSafeOperand
-  vyperEvalOutcomeSuffix vyperRuntimeAccounts vyperLookup
-  vyperPlaceResultTyping
+  vyperEvalOutcomeSuffix vyperRuntimeAccounts
+  vyperStorageLayoutSafety vyperTypeStoragePreservation
+  vyperTypeEvalStoragePreservation vyperCallOutcomeStorage
+  supportedExprTraverse exprStoragePreservation
+  vyperLookup vyperPlaceResultTyping supportedProgram bodyStoragePreservation
 Libs
   pairLib
 
@@ -240,6 +261,14 @@ Definition popped_keys_indexed_def:
                        (MAP FST entry.popped)) scs
 End
 
+(* The source takes external calls from the outcome oracle (state_rel's
+   outcomes are SOME).  The storage conjuncts: every declared storage and
+   transient region decodes (contract_storage_well_formed), the layout
+   keeps the regions in
+   range and apart (storage_layout_safe), and every successful outcome
+   still to consume leaves the regions decoding (oracle_storage_ok), as
+   e2eDefs's source_storage_ok and call_outcomes_ok ask of the entry state
+   and the outcomes. *)
 Definition expr_sim_inv_def:
   expr_sim_inv cenv cx env (es:evaluation_state) <=>
     env_consistent env cx es /\ state_well_typed es /\
@@ -262,6 +291,9 @@ Definition expr_sim_inv_def:
        EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
                                      sz = type_memory_size tv) fields) /\
     outcomes_accounts_typed es.outcomes /\
+    IS_SOME es.outcomes /\
+    contract_storage_well_formed cx es /\ storage_layout_safe cx /\
+    oracle_storage_ok cx es /\
     popped_keys_indexed es.scopes
 End
 
@@ -421,16 +453,24 @@ Definition expr_sim_pre_def:
   expr_sim_pre cenv cx env e es <=>
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
-    int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e)
+    int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e) /\
+    ~expr_has_evm_run e
 End
 
 (* expr_sim_pre without int_calls_expr e = []: the body simulation's
-   (bodySim), where an operand may call an internal function. *)
+   (bodySim), where an operand may call an internal function.  Its calls
+   are to the main module of a supported program, as supported_expr's
+   are, so the callees' bodies keep storage well formed
+   (bodyStoragePreservation). *)
 Definition expr_body_pre_def:
   expr_body_pre cenv cx env e es <=>
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
-    call_evaluation_safe cx (int_calls_expr e)
+    call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
+    EVERY (\c. FST c = NONE /\
+               ?tops. supported_program tops /\
+                      get_module_code cx NONE = SOME tops)
+          (int_calls_expr e)
 End
 
 Theorem expr_sim_pre_body:
@@ -438,7 +478,7 @@ Theorem expr_sim_pre_body:
     expr_sim_pre cenv cx env e es <=>
     expr_body_pre cenv cx env e es /\ int_calls_expr e = []
 Proof
-  rw[expr_sim_pre_def, expr_body_pre_def] >> metis_tac[]
+  rw[expr_sim_pre_def, expr_body_pre_def, EQ_IMP_THM] >> gvs[]
 QED
 
 Theorem expr_sim_pre_body_pre:
@@ -560,6 +600,44 @@ QED
 
 (* ===== Type soundness ===== *)
 
+(* The storage conjuncts of expr_sim_inv after evaluating e: with no
+   internal call by exprStoragePreservation, with one by
+   bodyStoragePreservation.  The outcomes still to consume are a suffix of
+   the earlier ones (vyperEvalOutcomeSuffix), so oracle_storage_ok
+   carries over. *)
+Theorem expr_body_pre_storage_preserved:
+  !cenv cx env e es res es'.
+    expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
+    contract_storage_well_formed cx es' /\ oracle_storage_ok cx es'
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (Cases_on `int_calls_expr e = []`
+      >- (irule eval_expr_oracle_preserves_contract_storage_well_formed >>
+          gvs[expr_body_pre_def, expr_sim_inv_def,
+              runtime_storage_consistent_def, runtime_consistent_def] >>
+          metis_tac[]) >>
+      `?tops. supported_program tops /\ get_module_code cx NONE = SOME tops`
+        by (Cases_on `int_calls_expr e` >> gvs[expr_body_pre_def] >>
+            metis_tac[]) >>
+      irule eval_expr_body_oracle_storage >>
+      gvs[expr_body_pre_def, expr_sim_inv_def, listTheory.EVERY_CONJ,
+          runtime_storage_consistent_def, runtime_consistent_def] >>
+      metis_tac[]) >>
+  irule oracle_storage_ok_suffix >> qexists_tac `es` >>
+  gvs[expr_body_pre_def, expr_sim_inv_def] >>
+  drule_then irule (cj 5 eval_outcome_suffix_mutual)
+QED
+
+(* The outcomes stay SOME: evaluation only drops some from the front. *)
+Theorem eval_expr_outcomes_some:
+  !cx e es res es'.
+    IS_SOME es.outcomes /\ eval_expr cx e es = (res, es') ==>
+    IS_SOME es'.outcomes
+Proof
+  rpt strip_tac >> drule (cj 5 eval_outcome_suffix_mutual) >>
+  rw[outcome_suffix_def] >> gvs[]
+QED
+
 Theorem replace_popped_keys[local]:
   !h tv path r h'.
     replace_popped tv path r h = SOME h' ==> MAP FST h' = MAP FST h
@@ -621,7 +699,13 @@ Theorem expr_body_pre_eval_result:
     !tv. res = INL tv ==>
          eval_result_typed (env,cx,es') tv (Type (expr_type e))
 Proof
-  rpt gen_tac >> simp[expr_body_pre_def, expr_sim_inv_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule_all expr_body_pre_storage_preserved >> strip_tac >>
+  `IS_SOME es'.outcomes` by
+    (irule eval_expr_outcomes_some >>
+     gvs[expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+  qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+  simp[expr_body_pre_def, expr_sim_inv_def] >> strip_tac >>
   drule_all eval_expr_popped_keys_indexed >> strip_tac >>
   qspecl_then [`cx`, `e`] (mp_tac o CONJUNCT1)
     (cj 5 eval_scc_type_sound_mutual) >>
@@ -807,9 +891,10 @@ Theorem expr_sim_pre_builtin_arg:
     expr_sim_pre cenv cx env e es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
-     byte_widths_expr_def, alloc_limits_expr_def] >>
+     byte_widths_expr_def, alloc_limits_expr_def, expr_has_evm_run_thm] >>
   drule_all well_typed_exprs_mem >> drule_all byte_widths_exprs_mem >>
-  drule_all alloc_limits_exprs_mem >> gvs[]
+  drule_all alloc_limits_exprs_mem >>
+  gvs[expr_has_evm_run_thm, EVERY_MEM, EXISTS_MEM] >> metis_tac[]
 QED
 
 Theorem well_typed_exprs_member:
@@ -834,6 +919,13 @@ Proof
   Induct >> rw[int_calls_expr_def] >> gvs[]
 QED
 
+Theorem int_calls_exprs_every_mem:
+  !args e P. EVERY P (int_calls_exprs args) /\ MEM e args ==>
+             EVERY P (int_calls_expr e)
+Proof
+  Induct >> rw[int_calls_expr_def] >> gvs[]
+QED
+
 Theorem expr_body_pre_builtin_arg:
   !cenv cx env ann bi args e es es'.
     expr_body_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
@@ -842,6 +934,8 @@ Theorem expr_body_pre_builtin_arg:
 Proof
   rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
      byte_widths_expr_def, alloc_limits_expr_def] >>
+  imp_res_tac int_calls_exprs_every_mem >>
+  gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
   metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
             alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
 QED

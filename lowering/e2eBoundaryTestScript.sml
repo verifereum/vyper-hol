@@ -286,13 +286,15 @@ QED
 
 (* ===== Result cases: success REQUESTS, not remaining OUTCOMES ===== *)
 Theorem success_requires_requests_and_effects:
-  call_external (SOME (MAP SND (call_trace es))) am tx = (INL v,am',rqs) ==>
+  call_external (SOME (MAP SND (call_trace es))) am tx = (INL v,am',rqs) /\
+  cx = initial_evaluation_context am'.sources am'.layouts tx NONE ==>
   (call_result_rel tops ret am tx es r es' <=>
     ?out lgs. frame_outcome es r es' NONE out lgs /\
       return_bytes tops ret v out /\
-      es'.rollback.accounts = am'.accounts /\ es'.rollback.tStorage = am'.tStorage /\
+      accounts_agree cx am'.accounts es'.rollback.accounts /\
+      transient_agree cx am'.tStorage es'.rollback.tStorage /\
       logs_correspond (compiled_event_info tops) (type_env tops) tx.target am'.logs lgs /\
-      rqs = MAP FST (call_trace es))
+      LIST_REL (request_agree cx) rqs (MAP FST (call_trace es)))
 Proof
   simp[call_result_rel_def]
 QED
