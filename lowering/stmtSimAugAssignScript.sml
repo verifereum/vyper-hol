@@ -259,6 +259,7 @@ Proof
   drule well_formed_type_bits >> strip_tac >>
   gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
       vyperASTTheory.expr_type_def]
 QED
 
@@ -275,6 +276,7 @@ Proof
   drule well_formed_type_bits >> strip_tac >>
   gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
       vyperASTTheory.expr_type_def]
 QED
 

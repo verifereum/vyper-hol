@@ -17,12 +17,14 @@
  *                        compile_expr_sim
  *   body_expr_ok_case, body_expr_ok_of_case — body_expr_ok is the shared
  *                        judgments at nocalls = F in every frame
+ *   body_exprs_ok_case — body_exprs_ok is exprs_case at nocalls = F
  *   body_*_case        — one case of the induction each
  *)
 
 Theory bodySimExprCases
 Ancestors
-  list bodySim exprSim exprSimHyps exprSimOperators exprSimMain vyperAST
+  list bodySim exprSim exprSimHyps exprSimOperators exprSimAttribute
+  exprSimPlaces exprSimAggregates exprSimSend exprSimMain vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph
 
 (* With no internal call in it, an expression simulates by
@@ -83,13 +85,15 @@ Proof
   metis_tac[body_expr_ok_case]
 QED
 
-(* GAP (#636 operands with internal calls): struct literals, as body_builtin_residual_case. *)
+(* exprSimAggregates' compile_struct_lit_case. *)
 Theorem body_structlit_case:
   !cx v7 src_id_opt id kes.
     (!ks. ks = MAP FST kes ==> body_exprs_ok cx (MAP SND kes)) ==>
     body_expr_ok cx (StructLit v7 (src_id_opt,id) kes)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >>
+  strip_tac >> irule compile_struct_lit_case >>
+  metis_tac[body_exprs_ok_case]
 QED
 
 (* GAP (#636 operands with internal calls): subscripts, as body_builtin_residual_case. *)
@@ -102,11 +106,12 @@ Proof
   rpt strip_tac >> irule body_expr_ok_intro >> cheat
 QED
 
-(* GAP (#636 operands with internal calls): attributes, as body_builtin_residual_case. *)
+(* exprSimAttribute's compile_attribute_case. *)
 Theorem body_attribute_case:
   !cx v9 e id. body_expr_ok cx e ==> body_expr_ok cx (Attribute v9 e id)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >>
+  strip_tac >> irule compile_attribute_case >> metis_tac[body_expr_ok_case]
 QED
 
 (* A binary operator: exprSimOperators' compile_bop_case, whose
@@ -137,19 +142,36 @@ Proof
   gvs[]
 QED
 
-(* GAP (#636 operands with internal calls): array literals, ecadd and
-   ecmul.  Their case lemmas (exprSimAggregates' compile_make_array_sim,
-   exprSimBuiltins' compile_ecadd_sim and compile_ecmul_sim) are still
-   stated over expr_sim_below, every smaller expression's simulation, so
-   they serve compile_expr_sim only.  Restated over exprSimHyps' shared
-   judgments, they close this as body_builtin_rest_case closes the rest.
+(* Array literals: exprSimAggregates' compile_make_array_case, from the
+   elements' body_exprs_ok; a count the bound does not admit fails to type
+   check. *)
+Theorem body_make_array_case:
+  !cx ty t n es.
+    (builtin_args_length_ok (MakeArray t n) (LENGTH es) ==>
+     body_exprs_ok cx es) ==>
+    body_expr_ok cx (Builtin ty (MakeArray t n) es)
+Proof
+  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `builtin_args_length_ok (MakeArray t n) (LENGTH es)`)
+  >- (rw[expr_sim_case_def, expr_vv_case_def] >>
+      gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
+      drule well_typed_builtin_app_length >> simp[]) >>
+  irule compile_make_array_case >> metis_tac[body_exprs_ok_case]
+QED
+
+(* GAP (#636 operands with internal calls): ecadd and ecmul.  Their case
+   lemmas (exprSimBuiltins' compile_ecadd_sim and compile_ecmul_sim) are
+   still stated over expr_sim_below, every smaller expression's
+   simulation, so they serve compile_expr_sim only.  Restated over
+   exprSimHyps' shared judgments, they close this as body_builtin_rest_case
+   closes the rest.
    The other cases marked GAP (#636) stand as this one does, but some case
    lemmas take more than the judgments of the operands the induction
    hypotheses give (a subscript's place chain, a pop's target, the calls),
    so restating alone will not close those. *)
 Theorem body_builtin_residual_case:
   !cx ty bt es.
-    ((?t n. bt = MakeArray t n) \/ bt = ECAdd \/ bt = ECMul) /\
+    (bt = ECAdd \/ bt = ECMul) /\
     (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_ok cx es) ==>
     body_expr_ok cx (Builtin ty bt es)
 Proof
@@ -158,7 +180,8 @@ QED
 
 (* The builtins other than the binary operators: exprSimMain's
    compile_builtin_case, from the operands' body_expr_ok (a len's one
-   operand's), but for body_builtin_residual_case's. *)
+   operand's), but for body_make_array_case's and
+   body_builtin_residual_case's. *)
 Theorem body_builtin_rest_case:
   !cx ty bt es.
     (!bop. bt <> Bop bop) /\
@@ -172,8 +195,10 @@ Theorem body_builtin_rest_case:
        body_expr_ok cx (HD es)) ==>
     body_expr_ok cx (Builtin ty bt es)
 Proof
-  rpt strip_tac >>
-  Cases_on `(?t n. bt = MakeArray t n) \/ bt = ECAdd \/ bt = ECMul`
+  rpt strip_tac >> Cases_on `?t n. bt = MakeArray t n`
+  >- (gvs[] >> irule body_make_array_case >> strip_tac >>
+      first_x_assum irule >> gvs[type_check_def, assert_def]) >>
+  Cases_on `bt = ECAdd \/ bt = ECMul`
   >- (irule body_builtin_residual_case >> simp[] >> strip_tac >>
       first_x_assum irule >> gvs[type_check_def, assert_def]) >>
   irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
@@ -234,11 +259,32 @@ Proof
   irule compile_bop_args_case >> gvs[]
 QED
 
-(* GAP (#636 operands with internal calls): pop, as body_builtin_residual_case. *)
+(* GAP (#636 operands with internal calls): pop on a nested target whose
+   subscript key makes an internal call.  Blocked on the lowering of a
+   nested pop (exprSimPlaces' compile_pop_nested_sim) and on a target/place
+   judgment: the induction hypotheses give only body_base_target_ok of the
+   target. *)
+Theorem body_pop_nested_case:
+  !cx v10 bt.
+    (!id. bt <> NameTarget id) /\ (!nid. bt <> TopLevelNameTarget nid) /\
+    body_base_target_ok cx bt ==>
+    body_expr_ok cx (Pop v10 bt)
+Proof
+  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+QED
+
+(* pop on a local: exprSimPlaces' compile_pop_name_case; on a module
+   variable or immutable, which makes no internal call, compile_expr_sim;
+   the rest by body_pop_nested_case. *)
 Theorem body_pop_case:
   !cx v10 bt. body_base_target_ok cx bt ==> body_expr_ok cx (Pop v10 bt)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  rpt strip_tac >> Cases_on `?id. bt = NameTarget id`
+  >- (gvs[] >> irule body_expr_ok_of_case >> simp[compile_pop_name_case]) >>
+  Cases_on `?nid. bt = TopLevelNameTarget nid`
+  >- (gvs[] >> irule body_expr_ok_intro >>
+      simp[vyperTypeCallGraphTheory.int_calls_expr_def]) >>
+  irule body_pop_nested_case >> gvs[]
 QED
 
 (* The type builtins: exprSimMain's compile_type_builtin_case. *)
@@ -261,7 +307,8 @@ Proof
   irule compile_type_builtin_case >> metis_tac[body_exprs_ok_case]
 QED
 
-(* GAP (#636 operands with internal calls): send, as body_builtin_residual_case. *)
+(* exprSimSend's compile_send_case; the operands' body_exprs_ok holds when
+   their count type checks, which well_typed_expr gives. *)
 Theorem body_send_case:
   !cx v12 has_gas es v13.
     (!s'' x t.
@@ -270,7 +317,15 @@ Theorem body_send_case:
        body_exprs_ok cx es) ==>
     body_expr_ok cx (Call v12 (Send has_gas) es v13)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  `expr_vv_case F ctx func cenv cx (Call v12 (Send has_gas) es v13)`
+    suffices_by simp[expr_sim_case_of_vv] >>
+  rw[expr_vv_case_def] >> drule send_pre_types >> strip_tac >>
+  `body_exprs_ok cx es` by
+    (first_x_assum irule >> simp[type_check_def, assert_def]) >>
+  `expr_vv_case F ctx func cenv cx (Call v12 (Send has_gas) es v13)` by
+    metis_tac[compile_send_case, body_exprs_ok_case] >>
+  fs[expr_vv_case_def] >> metis_tac[]
 QED
 
 (* GAP (#636 operands with internal calls): external calls, as body_builtin_residual_case. *)

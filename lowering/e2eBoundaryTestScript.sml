@@ -56,8 +56,10 @@ Theorem boundary_live_and_fresh:
     ~ctxt.msgParams.static /\ ctxt.jumpDest = NONE /\
     ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
     buffer_to_list ctxt.memory = [] /\ ctxt.returnData = [] /\
-    ctxt.msgParams.code = code /\
-    ctxt.msgParams.parsed = parse_code 0 FEMPTY code /\ LENGTH code <= 24576
+    installed_code_rel tops code (account_immutables am tx.target)
+      ctxt.msgParams.code /\
+    ctxt.msgParams.parsed = parse_code 0 FEMPTY ctxt.msgParams.code /\
+    LENGTH ctxt.msgParams.code <= 24576
 Proof
   simp[call_state_rel_def] >> metis_tac[]
 QED
@@ -286,13 +288,15 @@ QED
 
 (* ===== Result cases: success REQUESTS, not remaining OUTCOMES ===== *)
 Theorem success_requires_requests_and_effects:
-  call_external (SOME (MAP SND (call_trace es))) am tx = (INL v,am',rqs) ==>
+  call_external (SOME (MAP SND (call_trace es))) am tx = (INL v,am',rqs) /\
+  cx = initial_evaluation_context am'.sources am'.layouts tx NONE ==>
   (call_result_rel tops ret am tx es r es' <=>
     ?out lgs. frame_outcome es r es' NONE out lgs /\
       return_bytes tops ret v out /\
-      es'.rollback.accounts = am'.accounts /\ es'.rollback.tStorage = am'.tStorage /\
+      accounts_agree cx am'.accounts es'.rollback.accounts /\
+      transient_agree cx am'.tStorage es'.rollback.tStorage /\
       logs_correspond (compiled_event_info tops) (type_env tops) tx.target am'.logs lgs /\
-      rqs = MAP FST (call_trace es))
+      LIST_REL (request_agree cx) rqs (MAP FST (call_trace es)))
 Proof
   simp[call_result_rel_def]
 QED

@@ -8,7 +8,7 @@ Ancestors
 Theorem canonical_bytes_encoding:
   enc (Bytes NONE) (contractABI$BytesV bs) =
     word_to_bytes (n2w (LENGTH bs) : 256 word) T ++
-    bs ++ REPLICATE (ceil32 (LENGTH bs) - LENGTH bs) 0w
+    bs ++ REPLICATE (contractABI$ceil32 (LENGTH bs) - LENGTH bs) 0w
 Proof
   simp[Once enc_def, enc_number_def]
 QED
@@ -20,7 +20,7 @@ Theorem canonical_bytes_source_head:
 Proof
   pure_rewrite_tac[canonical_bytes_encoding, GSYM APPEND_ASSOC] >> strip_tac >>
   qspecl_then [`sb`, `[]`, `word_to_bytes (n2w (LENGTH bs) : 256 word) T`,
-    `bs ++ REPLICATE (ceil32 (LENGTH bs) - LENGTH bs) 0w`, `mem`]
+    `bs ++ REPLICATE (contractABI$ceil32 (LENGTH bs) - LENGTH bs) 0w`, `mem`]
     mp_tac abi_decoder_source_subwindow >> gvs[]
 QED
 
@@ -31,7 +31,7 @@ Theorem canonical_bytes_source_payload:
 Proof
   pure_rewrite_tac[canonical_bytes_encoding, GSYM APPEND_ASSOC] >> strip_tac >>
   qspecl_then [`sb`, `word_to_bytes (n2w (LENGTH bs) : 256 word) T`, `bs`,
-    `REPLICATE (ceil32 (LENGTH bs) - LENGTH bs) 0w`, `mem`]
+    `REPLICATE (contractABI$ceil32 (LENGTH bs) - LENGTH bs) 0w`, `mem`]
     mp_tac abi_decoder_source_subwindow >> gvs[]
 QED
 

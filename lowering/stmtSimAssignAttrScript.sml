@@ -280,6 +280,14 @@ Proof
      t.vs_memory` by
     (gvs[val_in_memory_struct, Abbr `t`, Abbr `a`] >>
      irule fields_in_memory_mstore_field >> simp[] >> metis_tac[]) >>
+  `local_region cenv es.scopes s id (w2n w) sz` by simp[local_region_def] >>
+  `type_memory_size entry.type <= sz` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+     first_x_assum drule_all >> simp[]) >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
+    (simp[Abbr `t`, Abbr `a`] >> irule local_mstore_immutables_at >>
+     conj_tac >- metis_tac[] >>
+     qexistsl_tac [`id`, `sz`] >> gvs[type_memory_size_def]) >>
   drule_all stmt_state_rel_write_local >> simp[Abbr `t`, Abbr `a`]
 QED
 

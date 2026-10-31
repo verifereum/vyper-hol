@@ -61,7 +61,7 @@ End
 
 Definition place_type_def:
   place_type cenv (TopLevelName ty nsid) =
-    (case cenv.ce_hashmap_info (module_var_key nsid) of
+    (case cenv.ce_hashmap_info nsid of
        SOME (tr, kt, vt) => MapPT kt vt
      | NONE => ValPT ty) ∧
   place_type cenv (Subscript ty base_e idx) =
@@ -78,7 +78,7 @@ Proof
 QED
 
 Theorem place_type_module_map:
-  cenv.ce_hashmap_info (module_var_key nsid) = SOME (tr, kt, vt) ⇒
+  cenv.ce_hashmap_info nsid = SOME (tr, kt, vt) ⇒
   place_type cenv (TopLevelName ty nsid) = MapPT kt vt
 Proof
   simp[place_type_def]
@@ -99,7 +99,7 @@ Proof
 QED
 
 Theorem place_type_nested_map:
-  cenv.ce_hashmap_info (module_var_key nsid) =
+  cenv.ce_hashmap_info nsid =
     SOME (tr, kt, HashMapT kt' (Type vt)) ⇒
   place_type cenv
     (Subscript vt (Subscript NoneT (TopLevelName NoneT nsid) k1) k2) =
@@ -109,7 +109,7 @@ Proof
 QED
 
 Theorem place_type_map_array:
-  cenv.ce_hashmap_info (module_var_key nsid) =
+  cenv.ce_hashmap_info nsid =
     SOME (tr, kt, Type (ArrayT et bound)) ⇒
   place_type cenv (Subscript NoneT (TopLevelName NoneT nsid) k) =
     ValPT (ArrayT et bound)
@@ -118,7 +118,7 @@ Proof
 QED
 
 Theorem place_type_map_struct:
-  cenv.ce_hashmap_info (module_var_key nsid) =
+  cenv.ce_hashmap_info nsid =
     SOME (tr, kt, Type (StructT sid)) ⇒
   place_type cenv (Subscript NoneT (TopLevelName NoneT nsid) k) =
     ValPT (StructT sid)
@@ -148,7 +148,7 @@ Proof
 QED
 
 Theorem place_type_module_value:
-  cenv.ce_hashmap_info (module_var_key nsid) = NONE ==>
+  cenv.ce_hashmap_info nsid = NONE ==>
   place_type cenv (TopLevelName ty nsid) = ValPT ty
 Proof
   simp[place_type_def]
@@ -193,7 +193,7 @@ End
 
 (* ===== Array Location Inference ===== *)
 (* Infer array data location from expression AST + compile_env.
-   TopLevelName → look up the module_var_key in ce_vars → StorageLoc/TransientLoc/ImmutableLoc.
+   TopLevelName → look up the nsid in ce_module_vars → StorageLoc/TransientLoc/ImmutableLoc.
    Name var → look up the plain name in ce_vars.
    Otherwise → LocMemory (default).
    Mirrors Python: array_vv.location or node.iter._expr_info.location
@@ -207,7 +207,7 @@ Definition infer_array_location_def:
      | SOME (ImmutableLoc _) => LocCode
      | _ => LocMemory) ∧
   infer_array_location cenv (TopLevelName _ nsid) =
-    (case FLOOKUP cenv.ce_vars (module_var_key nsid) of
+    (case FLOOKUP cenv.ce_module_vars nsid of
        SOME (StorageLoc _) => LocStorage
      | SOME (TransientLoc _) => LocTransient
      | SOME (ImmutableLoc _) => LocCode
@@ -223,7 +223,7 @@ Definition infer_array_is_dynamic_def:
        SOME (ArrayT _ (Dynamic _)) => T
      | _ => F) ∧
   infer_array_is_dynamic cenv (TopLevelName _ nsid) =
-    (case cenv.ce_var_type (module_var_key nsid) of
+    (case cenv.ce_module_var_type nsid of
        SOME (ArrayT _ (Dynamic _)) => T
      | _ => F) ∧
   infer_array_is_dynamic cenv _ = T  (* default: assume dynamic for safety *)
@@ -719,7 +719,7 @@ End
    Mirrors Python: expr.py _lower_array_membership *)
 Definition compile_array_membership_loop_def:
   compile_array_membership_loop needle arr_op len_op
-      elem_size offset_base load_opc is_in =
+      elem_size offset_base loader is_in =
     do (* Pre-allocate result variable *)
        result_var <- fresh_var;
        (* Create blocks *)
@@ -744,7 +744,7 @@ Definition compile_array_membership_loop_def:
        (* Body: load elem, compare.
           Uses elem_size (not word_scale) for element stride.
           Uses offset_base for DynArray length-word skip.
-          Uses load_opc for location-aware load (MLOAD/SLOAD/TLOAD).
+          Uses loader for location-aware loads, including constructor immutables.
           Mirrors Python: expr.py _lower_array_membership body block *)
        new_block body_lbl;
        idx_offset <- emit_op MUL [Var idx_var; Lit (n2w elem_size)];
@@ -752,7 +752,7 @@ Definition compile_array_membership_loop_def:
                           emit_op ADD [Lit (n2w offset_base); idx_offset]
                         else return idx_offset);
        elem_addr <- emit_op ADD [arr_op; total_offset];
-       elem_val <- emit_op load_opc [elem_addr];
+       elem_val <- loader elem_addr;
        match_op <- emit_op EQ [elem_val; needle];
        emit_inst JNZ [match_op; Label found_lbl; Label incr_lbl] [];
        (* Found: result = 1, jump to exit *)
@@ -784,11 +784,10 @@ Definition compile_var_array_membership_def:
     let elem_ty = (case rhs_ty of ArrayT t _ => t
                    | _ => BaseT (UintT 256)) in
     let elem_sz = elem_size_in_location cenv loc elem_ty in
-    let load_opc = (case loc of
-        LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD) in
+    let loader = compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc in
     let offset_base = if is_dyn then ws else 0 in
     do len_op <- (if is_dyn then
-                    emit_op load_opc [arr_op]
+                    loader arr_op
                   else
                     (case rhs_ty of
                        ArrayT _ (Fixed n) => return (Lit (n2w n))
@@ -804,7 +803,7 @@ Definition compile_var_array_membership_def:
           | _ => return ()
         else return ());
        compile_array_membership_loop needle arr_op len_op
-         elem_sz offset_base load_opc is_in
+         elem_sz offset_base loader is_in
     od
 End
 
@@ -949,7 +948,7 @@ Definition unwrap_value_def:
   unwrap_value cenv (StackValue ty op) = return op ∧
   unwrap_value cenv (LocatedValue ty p) =
     if is_word_type ty then
-      compile_ptr_load cenv.ce_is_ctor p.ptr_location p.ptr_operand
+      compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca p.ptr_location p.ptr_operand
     else
       (case p.ptr_location of
          LocMemory => return p.ptr_operand
@@ -957,7 +956,7 @@ Definition unwrap_value_def:
            let mem_bytes = type_memory_bytes cenv ty in
            let word_count = (mem_bytes + 31) DIV 32 in
            compile_ensure_in_memory p.ptr_operand p.ptr_location
-             mem_bytes word_count cenv.ce_is_ctor)
+             mem_bytes word_count cenv.ce_is_ctor cenv.ce_imm_alloca)
 End
 
 Definition compile_multi_vvs_def:
@@ -1341,9 +1340,9 @@ End
 Definition compile_array_subscript_def:
   compile_array_subscript base_op idx_op is_dynamic static_count
                                word_scale elem_size is_signed_idx
-                               (load_opc : opcode) =
-    do (* Get length: load from base using location-appropriate opcode *)
-       len_op <- (if is_dynamic then emit_op load_opc [base_op]
+                               loader =
+    do (* Get length through the location-aware word loader. *)
+       len_op <- (if is_dynamic then loader base_op
                   else return (Lit (n2w static_count)));
        (* Bounds check: assert not (idx < 0) and not (idx >= length).
           For signed index types, check SLT(idx, 0) for negative indices.
@@ -1535,8 +1534,7 @@ Definition compile_target_base_def:
      | SOME (PtrVar ptr_op _) => ptr_op
      | _ => Lit 0w) ∧
   compile_target_base cenv (TopLevelNameTarget nsid) =
-    (let name = module_var_key nsid in
-     case FLOOKUP cenv.ce_vars name of
+    (case FLOOKUP cenv.ce_module_vars nsid of
        SOME (StorageLoc slot) => Lit slot
      | SOME (TransientLoc slot) => Lit slot
      | SOME (ImmutableLoc offset) => Lit (n2w offset)
@@ -2243,16 +2241,12 @@ Definition compile_subscript_def:
                                  ArrayT _ (Fixed n) => n | _ => 0) in
            let ws = word_scale loc in
            let elem_size = elem_size_in_location cenv loc elem_ty in
-           let load_opc = (case loc of
-                             LocStorage => SLOAD
-                           | LocTransient => TLOAD
-                           | LocCalldata => CALLDATALOAD
-                           | _ => MLOAD) in
+           let loader = compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc in
            let is_signed_idx = is_signed_type (expr_type idx_e) in
            do idx_op <- lower_value cfn cenv ty idx_e;
               elem_ptr <-
                 compile_array_subscript base_op idx_op is_dynamic static_count
-                                         ws elem_size is_signed_idx load_opc;
+                                         ws elem_size is_signed_idx loader;
               return (LocatedValue ret_ty (mk_ptr elem_ptr loc))
            od
     od
@@ -2725,8 +2719,7 @@ Definition compile_expr_body_def:
         let flag_id = cenv.ce_flag_member_id flag_name mem_name in
         (StackValue ret_ty (Lit (n2w (2 ** flag_id))), st))
    | TopLevelName _ nsid =>
-       (let name = module_var_key nsid in
-        case FLOOKUP cenv.ce_vars name of
+       (case FLOOKUP cenv.ce_module_vars nsid of
           SOME (StorageLoc slot) =>
             (LocatedValue ret_ty (mk_ptr (Lit slot) LocStorage), st)
         | SOME (TransientLoc slot) =>
@@ -2740,13 +2733,14 @@ Definition compile_expr_body_def:
    | Pop _ target =>
        (* Returns LocatedValue with element location. unwrap_value handles loading. *)
        (let target_op = compile_target_base cenv target in
-        let (loc, arr_name) = (case target of
-            NameTarget id => (infer_array_location cenv (Name ARB id), id)
+        let (loc, fty_opt) = (case target of
+            NameTarget id =>
+              (infer_array_location cenv (Name ARB id), cenv.ce_var_type id)
           | TopLevelNameTarget nsid =>
-              (infer_array_location cenv (TopLevelName ARB nsid), module_var_key nsid)
-          | _ => (LocMemory, "")) in
+              (infer_array_location cenv (TopLevelName ARB nsid),
+               cenv.ce_module_var_type nsid)
+          | _ => (LocMemory, cenv.ce_var_type "")) in
         let ws = word_scale loc in
-        let fty_opt = cenv.ce_var_type arr_name in
         let elem_ty = (case fty_opt of
             SOME (ArrayT t _) => t
           | _ => BaseT (IntT 256)) in
@@ -2864,12 +2858,13 @@ Definition compile_builtin_dispatch_body_def:
             (compile_slice_calldata start_op (Lit (n2w n))
                (type_memory_bytes cenv ret_ty) st1))
      | Len =>
-         (* Len needs the raw ptr to read length word *)
-         (let (vv, st1) = compile_expr cenv ty (HD args) st in
-          let v = vv_operand vv in
-          let loc = (case vv_location vv of
-                       SOME l => l | NONE => LocMemory) in
-          as_stack_val ret_ty (compile_builtin_len cenv.ce_is_ctor v loc st1))
+         (let e1 = HD args in
+          (* Len needs the raw ptr to read length word *)
+            let (vv, st1) = compile_expr cenv ty e1 st in
+            let v = vv_operand vv in
+            let loc = (case vv_location vv of
+                         SOME l => l | NONE => LocMemory) in
+            as_stack_val ret_ty (compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca v loc st1))
      | BlockHash =>
          (let e1 = HD args in
           let (v, st1) = lower_value compile_expr cenv ty e1 st in

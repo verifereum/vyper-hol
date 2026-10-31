@@ -107,6 +107,9 @@ Definition well_typed_lowering_def:
     well_formed_cenv cenv ∧
     (∀var ty. cenv.ce_var_type var = SOME ty ⇒
                ∃tenv tv. evaluate_type tenv ty = SOME tv ∧
+                         well_formed_type_value tv) ∧
+    (∀nsid ty. cenv.ce_module_var_type nsid = SOME ty ⇒
+               ∃tenv tv. evaluate_type tenv ty = SOME tv ∧
                          well_formed_type_value tv)
 End
 

@@ -22,7 +22,8 @@
 Theory exprSimLen
 Ancestors
   list fragExec exprSim exprSimHyps exprSimWordBuiltins exprBopLowering exprLowering
-  exprLoweringProps builtinSimple emitHelper compileEnv valueEncoding
+  exprLoweringProps builtinSimple emitHelper compileEnv accountsRelProps
+  valueEncoding
   venomExecSemantics venomInst venomState vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeSystem vyperTypeBuiltins vyperValue vyperTyping vyperStorage
   builtinProps vyperTypeInvariants context freshWrites loweringSlice emitHelperProps
@@ -55,7 +56,7 @@ Theorem compile_expr_len[local]:
     compile_expr cenv ty (Builtin ann Len [e]) st =
     (let (vv, st1) = compile_expr cenv ty e st in
        as_stack_val ann
-         (compile_builtin_len cenv.ce_is_ctor (vv_operand vv)
+         (compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand vv)
            (case vv_location vv of SOME l => l | NONE => LocMemory) st1))
 Proof
   rpt gen_tac >>
@@ -271,9 +272,15 @@ Theorem storage_holds_header:
     result_array_length cx tv es = (INL n, es) ==>
     lookup_storage w
       (if tr then lookup_transient_storage cx.txn.target es.tStorage
-       else (lookup_account cx.txn.target es.accounts).storage) = n2w n
+       else (lookup_account cx.txn.target es.accounts).storage) = n2w n /\
+    storage_read_live cx tr (get_storage cx es tr) w tvt /\
+    0 < type_slot_size tvt
 Proof
   rpt gen_tac >> simp[storage_holds_def] >> strip_tac >> gvs[] >>
+  `0 < type_slot_size tvt` by
+    (drule sized_type_cases >> strip_tac >>
+     gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
+         vyperValueTheory.type_slot_size_def]) >>
   `value_has_type tvt v` by metis_tac[] >>
   `evaluate_type env.type_defs t = SOME tvt` by simp[] >>
   drule_all sized_read_result_length >> strip_tac >>
@@ -340,10 +347,15 @@ Proof
       `value_has_type tvt v` by metis_tac[] >>
       drule_all read_result_memory_header >>
       simp[ptr_load_val_def, mem_word_at_def]) >>
-  drule_all storage_holds_header >>
+  drule_all storage_holds_header >> strip_tac >>
+  `s.vs_call_ctx.cc_address = cx.txn.target` by
+    gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   gvs[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
-      ptr_load_val_def, sload_def, tload_def,
-      vfmExecutionTheory.lookup_transient_storage_def]
+      ptr_load_val_def, sload_def, tload_def, contract_storage_def,
+      contract_transient_def, vyperStorageBackendTheory.get_storage_def,
+      vfmExecutionTheory.lookup_transient_storage_def,
+      vfmStateTheory.lookup_account_def] >>
+  drule_all storage_agree_read_head >> simp[]
 QED
 
 Theorem vv_holds_sized_length_success:
@@ -393,8 +405,8 @@ Proof
 QED
 
 Theorem len_load_frag[local]:
-  !ctx func cenv cx es is_ctor pop loc sm op sb s0 w R.
-    compile_builtin_len is_ctor pop loc sm = (op, sb) /\
+  !ctx func cenv cx es is_ctor imm pop loc sm op sb s0 w R.
+    compile_builtin_len is_ctor imm pop loc sm = (op, sb) /\
     (loc = LocCode ==> ~is_ctor) /\ loc <> LocCalldata /\
     local_ptrs_reserved cenv sm /\
     eval_operand pop s0 = SOME w ==>
@@ -408,7 +420,8 @@ Theorem len_load_frag[local]:
            s.vs_memory = s0.vs_memory) R
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `loc` >>
-  gvs[compile_builtin_len_def, compile_ptr_load_def, ptr_load_val_def] >>
+  gvs[compile_builtin_len_def, compile_ptr_load_def,
+      compile_imm_load_word_runtime, ptr_load_val_def] >>
   irule emit_op_frag >> (reverse conj_tac >- simp[])
   >~ [`emit_op MLOAD [pop] sm = _`]
   >- (qexistsl [`[pop]`, `MLOAD`] >> simp[is_terminator_def] >>
@@ -425,7 +438,7 @@ QED
 
 Theorem compile_len_vv_frag[local]:
   !env ctx func cenv cx e es sa sm sb s0 es' tv vv op tvt R.
-    compile_builtin_len cenv.ce_is_ctor (vv_operand vv)
+    compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand vv)
       (case vv_location vv of SOME l => l | NONE => LocMemory) sm = (op,sb) /\
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     is_sized_type (expr_type e) /\
@@ -461,12 +474,13 @@ Proof
 QED
 
 Theorem len_load_extends[local]:
-  !ctor pop loc sa op sb.
-    compile_builtin_len ctor pop loc sa = (op,sb) /\
+  !ctor imm pop loc sa op sb.
+    compile_builtin_len ctor imm pop loc sa = (op,sb) /\
     (loc = LocCode ==> ~ctor) ==> cs_extends sa sb
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `loc` >>
-  gvs[compile_builtin_len_def, compile_ptr_load_def] >>
+  gvs[compile_builtin_len_def, compile_ptr_load_def,
+      compile_imm_load_word_runtime] >>
   drule emitted_insts_emit_op >> drule emit_op_extends >> rpt strip_tac >>
   irule cs_extends_same_block >> gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND3]
 QED
@@ -488,7 +502,7 @@ Proof
   simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
   gvs[compile_expr_len] >> pairarg_tac >> gvs[] >>
   rename1 `compile_expr cenv ty e sa = (evv, sm)` >>
-  Cases_on `compile_builtin_len cenv.ce_is_ctor (vv_operand evv)
+  Cases_on `compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand evv)
     (case vv_location evv of SOME l => l | NONE => LocMemory) sm` >>
   gvs[as_stack_val_def] >>
   `(case vv_location evv of SOME l => l | NONE => LocMemory) = LocCode ==>
