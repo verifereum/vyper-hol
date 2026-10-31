@@ -491,7 +491,7 @@ End
 Definition immutable_holds_def:
   immutable_holds cenv cx t tv (w:bytes32) (es:evaluation_state) <=>
     ?name off itv iv k tvt v.
-      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module, name) =
         SOME (ImmutableLoc off) /\ w = n2w (off + k) /\
       off + type_memory_size itv < dimword (:256) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of

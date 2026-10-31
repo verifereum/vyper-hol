@@ -25,10 +25,10 @@
  *   compile_toplevel_name_sim — storage, transient, immutable and constant
  *                              reads: a storage or transient variable by
  *                              compile_toplevel_storage_vv_sim, a pointer
- *                              to its slot, whose ce_vars entry comes from
- *                              storage_vars_rel and transient_vars_rel;
- *                              its slot decodes by expr_sim_inv's storage
- *                              clauses
+ *                              to its slot, whose ce_module_vars entry
+ *                              comes from storage_vars_rel and
+ *                              transient_vars_rel; its slot decodes by
+ *                              expr_sim_inv's storage clauses
  *                              (compile_toplevel_storage_undecodable_sim)
  *   compile_flag_member_case_sim — a flag member: the literal 2 ** id, by
  *                              expr_sim_inv's flag members clause
@@ -41,7 +41,8 @@
  * state_rel or in the judgment before their PRs:
  *   compile_toplevel_immutable_sim — immutables and constants (row 3),
  *                              which lookup_global reads from the
- *                              immutables: nothing puts them in ce_vars,
+ *                              immutables: nothing puts them in
+ *                              ce_module_vars,
  *                              so the lowering may emit INVALID where the
  *                              source reads a value (#563 for immutables).
  *   compile_prevhash_sim     — block.prevhash (row 5): the source raises a
@@ -428,7 +429,7 @@ Theorem toplevel_storage_ce_vars:
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot ==>
-    FLOOKUP cenv.ce_vars (module_var_key (src, id)) =
+    FLOOKUP cenv.ce_module_vars (src, id) =
       SOME (if tr then TransientLoc (n2w slot) else StorageLoc (n2w slot))
 Proof
   rpt strip_tac >> Cases_on `tr` >>
@@ -549,7 +550,7 @@ QED
 
 (* An immutable or a constant (no storage declaration of the name; both
    are read from the immutables).  Cheated, and false as stated: nothing in
-   expr_sim_inv puts them in ce_vars (the lowering has no ImmutableLoc for
+   expr_sim_inv puts them in ce_module_vars (the lowering has no ImmutableLoc for
    immutables yet, #563), so the lowering may emit INVALID where the source
    reads a value.  Where it does, immutable_holds also needs the
    immutable's bytes to end below 2 ** 256 and the value typed. *)

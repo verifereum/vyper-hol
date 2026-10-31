@@ -61,7 +61,7 @@ or placeholder. A header theorem is not a program/body acceptance theorem.
   collect only the corresponding top-level names.
 - **`supported_function_bindings tops args locals loops`**: ALL_DISTINCT
   on `MAP FST args ++ locals ++ loops`. Locals may shadow module variables
-  (`compile_env` keys those as `"self." ++ name`) and may use the names
+  (`compile_env` keeps those in `ce_module_vars`) and may use the names
   `__return_buf__`/`__return_pc__` (dedicated `ce_return_*` fields). TASK_021 must supply
   **all** AnnAssign and For names across all branches/nesting, as lists rather
   than deduplicated sets. This rejects duplicates within and across each class.

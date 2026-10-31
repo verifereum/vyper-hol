@@ -7,7 +7,7 @@ Ancestors
 Definition immutable_section_layout_def:
   immutable_section_layout cenv tops <=>
     !name off.
-      FLOOKUP cenv.ce_vars (module_var_key (NONE,name)) =
+      FLOOKUP cenv.ce_module_vars (NONE,name) =
         SOME (ImmutableLoc off) ==>
       ?pre post vis ty slot.
         tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
@@ -114,7 +114,7 @@ QED
 
 Theorem immutable_relation_from_slices:
   (!name tv v off.
-    FLOOKUP cenv.ce_vars (module_var_key (src,name)) = SOME (ImmutableLoc off) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP vs.immutables addr of NONE => FEMPTY
       | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     immutable_value_admissible tv v /\
@@ -156,7 +156,7 @@ QED
 
 Theorem immutable_relation_preserve_canonical_slices:
   (!name tv v off.
-    FLOOKUP cenv.ce_vars (module_var_key (src,name)) = SOME (ImmutableLoc off) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP vs.immutables addr of NONE => FEMPTY
       | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     immutable_value_admissible tv v /\
@@ -194,7 +194,7 @@ QED
 
 Theorem immutable_relation_lookup:
   immutables_rel cenv addr src ctor vs ss /\
-  FLOOKUP cenv.ce_vars (module_var_key (src,name)) = SOME (ImmutableLoc off) /\
+  FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
   ALOOKUP vs.immutables addr = SOME imms /\
   FLOOKUP (get_source_immutables src imms) name = SOME (tv,v) ==>
   immutable_value_admissible tv v /\

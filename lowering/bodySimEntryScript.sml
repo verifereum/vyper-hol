@@ -1,19 +1,17 @@
 (*
  * The body simulation of S1: ce_locals_declared at a body's entry (#637)
  *
- * build_compile_env binds the parameters and the module variables' keys,
- * and the prologues rebind parameters only, so every other name a body's
- * compile env binds at its entry is a module variable's key.  With a type
- * environment that has the parameters, ce_locals_declared (bodySim) holds
- * there.
+ * build_compile_env binds the parameters, and the prologues rebind
+ * parameters only, so a body's compile env binds only parameters at its
+ * entry.  With a type environment that has the parameters,
+ * ce_locals_declared (bodySim) holds there.
  *
  * TOP-LEVEL:
  *   ce_locals_declared_params    — ce_locals_declared from the bound names
  *   external_entry_declared, constructor_entry_declared,
  *   fallback_entry_declared, internal_entry_declared
  *                                — each entry's compile env binds the
- *                                  parameters and module variables' keys
- *                                  only
+ *                                  parameters only
  *)
 
 Theory bodySimEntry
@@ -23,55 +21,28 @@ Ancestors
 Libs
   monadsyntax
 
-(* A compile env that binds only parameters and module variables' keys,
-   with a type environment that has the parameters. *)
+(* A compile env that binds only parameters, with a type environment that
+   has the parameters. *)
 Theorem ce_locals_declared_params:
   !cenv env fargs.
     (!n l. FLOOKUP cenv.ce_vars n = SOME l ==>
-           MEM n (MAP FST fargs) \/ ?nsid. n = module_var_key nsid) /\
+           MEM n (MAP FST fargs)) /\
     (!n. MEM n (MAP FST fargs) ==> n IN FDOM env.var_types) ==>
     ce_locals_declared cenv env
 Proof
   rw[ce_locals_declared_def] >> metis_tac[]
 QED
 
-Theorem add_module_var_locations_keys[local]:
-  !tops vars n loc.
-    FLOOKUP (add_module_var_locations tops vars) n = SOME loc ==>
-    FLOOKUP vars n = SOME loc \/ ?nsid. n = module_var_key nsid
-Proof
-  Induct >> simp[add_module_var_locations_def] >>
-  qx_gen_tac `top` >> rpt gen_tac >> simp[Once add_module_var_locations_def] >>
-  strip_tac >> first_x_assum drule >>
-  Cases_on `top` >> simp[] >> rpt (CASE_TAC >> simp[]) >>
-  rw[FLOOKUP_UPDATE] >> metis_tac[]
-QED
-
-Theorem add_immutable_locations_keys[local]:
-  !sft tops off vars n loc.
-    FLOOKUP (add_immutable_locations sft tops off vars) n = SOME loc ==>
-    FLOOKUP vars n = SOME loc \/ ?nsid. n = module_var_key nsid
-Proof
-  gen_tac >> Induct >> simp[add_immutable_locations_def] >>
-  rpt gen_tac >> Cases_on `h` >>
-  simp[add_immutable_locations_def] >> rpt (CASE_TAC >> simp[]) >>
-  strip_tac >> first_x_assum drule >>
-  rw[FLOOKUP_UPDATE] >> metis_tac[]
-QED
-
 Theorem build_compile_env_bound[local]:
   !tops vis mut fname args ret body use_trans n l.
     FLOOKUP (build_compile_env tops vis mut fname args ret body
                use_trans).ce_vars n = SOME l ==>
-    MEM n (MAP FST args) \/ ?nsid. n = module_var_key nsid
+    MEM n (MAP FST args)
 Proof
   rpt gen_tac >> simp[build_compile_env_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   Cases_on `MEM n (MAP FST args)` >> simp[] >>
-  drule_all allocate_args_FLOOKUP_other >> strip_tac >> gvs[] >>
-  drule add_immutable_locations_keys >> strip_tac
-  >- (drule add_module_var_locations_keys >> simp[]) >>
-  metis_tac[]
+  drule_all allocate_args_FLOOKUP_other >> strip_tac >> gvs[]
 QED
 
 fun register_args_bound_tac def =
@@ -108,7 +79,7 @@ Theorem external_entry_declared:
       (lbl, cenv0, pos_args, rest) /\
     compile_register_positional_args cenv0 pos_args 4 st = (cenv, st') /\
     FLOOKUP cenv.ce_vars n = SOME l ==>
-    MEM n (MAP FST fargs) \/ ?nsid. n = module_var_key nsid
+    MEM n (MAP FST fargs)
 Proof
   rpt gen_tac >> strip_tac >>
   `cenv0.ce_vars = (build_compile_env tops External mut fname fargs ret fbody
@@ -127,7 +98,7 @@ Theorem constructor_entry_declared:
       (cenv0, pos_args, rest) /\
     compile_register_constructor_args cenv0 pos_args 0 dsz st = (cenv, st') /\
     FLOOKUP cenv.ce_vars n = SOME l ==>
-    MEM n (MAP FST fargs) \/ ?nsid. n = module_var_key nsid
+    MEM n (MAP FST fargs)
 Proof
   rpt gen_tac >> strip_tac >>
   `cenv0.ce_vars = (build_compile_env tops Deploy mut fname fargs ret fbody
@@ -144,7 +115,7 @@ Theorem fallback_entry_declared:
       (SOME (mut, nr, rr, fname, fargs, dflts, ret, fbody)) =
       SOME (cenv, rest) /\
     FLOOKUP cenv.ce_vars n = SOME l ==>
-    MEM n (MAP FST fargs) \/ ?nsid. n = module_var_key nsid
+    MEM n (MAP FST fargs)
 Proof
   rpt gen_tac >> simp[package_fallback_fn_def] >> strip_tac >>
   gvs[] >> drule build_compile_env_bound >> simp[]
@@ -177,7 +148,7 @@ Theorem internal_entry_declared:
     compile_internal_prologue cenv params has_rb ret_type st0 =
       ((cenv2, return_pc), st1) /\
     FLOOKUP cenv2.ce_vars n = SOME l ==>
-    MEM n (MAP FST fargs) \/ ?nsid. n = module_var_key nsid
+    MEM n (MAP FST fargs)
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[package_internal_fn_def, update_cenv_nonreentrant_def] >>

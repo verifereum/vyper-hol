@@ -26,14 +26,12 @@
  *                        environment and compile environment it gives
  *   ce_locals_declared_declare_local, ce_locals_declared_stmt — the same
  *                        for ce_locals_declared
- *   compile_expr_open, eval_stmts_popped_keys_indexed,
- *   declared_name_not_module_key — GAP, the facts the statement and list
- *                        cases still take on trust
+ *   compile_expr_open, eval_stmts_popped_keys_indexed — GAP, the facts
+ *                        the statement and list cases still take on trust
  *
  * Helper:
  *   stmts_env_cs_mono, stmt_env_declare, declare_stmt_local_other,
- *   type_stmt_other, declare_local_module_var_type,
- *   stmt_env_module_var_type — stmt_env and type_stmt of a statement
+ *   type_stmt_other    — stmt_env and type_stmt of a statement
  *   same_frame_trans, body_inv_same_frame, frame_ret_ok_same_frame,
  *   stmt_exprs_ok_same_frame, stmts_exprs_ok_EVERY — the frame facts
  *                        at a later compile env of the same body
@@ -231,60 +229,12 @@ QED
 
 Theorem body_inv_same_frame:
   !tops ctx cenv c cx.
-    body_inv tops ctx cenv cx /\ same_frame cenv c /\
-    (!id. c.ce_var_type (module_var_key (NONE, id)) =
-          cenv.ce_var_type (module_var_key (NONE, id))) ==>
+    body_inv tops ctx cenv cx /\ same_frame cenv c ==>
     body_inv tops ctx c cx
 Proof
   rpt strip_tac >>
   fs[body_inv_def, same_frame_def, compile_env_component_equality] >>
   metis_tac[]
-QED
-
-(* A declaration keeps cenv's type at a module key ("self." ++ name)
-   unless it declares that very key. *)
-Theorem declare_local_module_var_type:
-  !cenv id ty st c st1 x.
-    declare_local cenv id ty st = (c, st1) /\
-    id <> module_var_key (NONE, x) ==>
-    c.ce_var_type (module_var_key (NONE, x)) =
-    cenv.ce_var_type (module_var_key (NONE, x))
-Proof
-  rpt gen_tac >> simp[declare_local_def] >>
-  Cases_on `cenv.ce_alloca_locals` >>
-  simp[comp_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  gvs[comp_return_def, combinTheory.APPLY_UPDATE_THM]
-QED
-
-Theorem stmt_env_module_var_type:
-  !cenv lctx ret_ty s sa c sb id.
-    stmt_env cenv lctx ret_ty s sa = (c, sb) /\
-    (!t e. s <> AnnAssign (module_var_key (NONE, id)) t e) ==>
-    c.ce_var_type (module_var_key (NONE, id)) =
-    cenv.ce_var_type (module_var_key (NONE, id))
-Proof
-  rpt strip_tac >> drule stmt_env_declare >> strip_tac >>
-  reverse (Cases_on `?x t e. s = AnnAssign x t e`)
-  >- (drule_all declare_stmt_local_other >> simp[]) >>
-  gvs[declare_stmt_local_def] >>
-  drule declare_local_module_var_type >> simp[]
-QED
-
-(* GAP (#637 declarations): the typing declares no module key.  Declared
-   names are dot-free (supported_function_bindings), which the body
-   predicates do not carry yet, as for bodySimDeclCases's
-   declared_name_unbound; module variables in compile-env fields of their
-   own would make this unnecessary.  False for a local spelled as a module
-   key. *)
-Theorem declared_name_not_module_key:
-  !env ret_ty s env' id x.
-    type_stmt env ret_ty s = SOME env' /\
-    ((?typ e. s = AnnAssign id typ e) \/
-     (?typ it n body. s = For id typ it n body)) ==>
-    id <> module_var_key (NONE, x)
-Proof
-  cheat
 QED
 
 Theorem frame_ret_ok_same_frame:
@@ -543,8 +493,8 @@ QED
    for a supported expression of the frame that evaluates.  Not every
    expression does: the lowering's fallbacks end their block in INVALID,
    and raw_revert ends it in REVERT.  Which fallback a module variable
-   takes depends on cenv.ce_vars, so the storage and transient bindings
-   that state_rel gives are premises.  No lemma yet; it is an induction
+   takes depends on cenv.ce_module_vars, so the storage and transient
+   bindings that state_rel gives are premises.  No lemma yet; it is an induction
    over compile_expr, as compile_expr_ci_mono is. *)
 Theorem compile_expr_open:
   !tops ctx cenv cx env e es tv es1 sa vv sb.
@@ -656,9 +606,9 @@ End
    ImmutableLoc compiles to another form (LocCode, compile_expr's
    TopLevelName case).  A supported program declares no immutables
    (supported_immutables_constants_rejected), so build_compile_env binds
-   none, but body_inv fixes only cenv's hashmaps and types at module keys,
-   not its bindings: closing this needs a body_inv clause saying cenv
-   binds no ImmutableLoc. *)
+   none, but body_inv fixes only the hashmaps and types of cenv's module
+   variables, not their bindings: closing this needs a body_inv clause
+   saying cenv binds no ImmutableLoc. *)
 Theorem body_raise_reason_other:
   !ctx func cx lctx RetQ cenv tops bindings env ret_ty e es res es'.
     body_inv tops ctx cenv cx /\
@@ -949,21 +899,14 @@ Proof
   rw[supported_variable_decl_def] >> metis_tac[]
 QED
 
-Theorem module_var_key_none_11[local]:
-  !a b. module_var_key (NONE, a) = module_var_key (NONE, b) <=> a = b
-Proof
-  simp[module_var_key_def, nsid_to_string_def]
-QED
-
 Theorem build_hashmap_info_absent[local]:
   !tops id.
     ~MEM (NONE, id)
        (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) ==>
-    build_hashmap_info tops (module_var_key (NONE, id)) = NONE
+    build_hashmap_info tops (NONE, id) = NONE
 Proof
   Induct >> simp[build_hashmap_info_def] >> Cases >>
-  simp[build_hashmap_info_def, toplevel_vtype_keys_toplevel_def,
-       module_var_key_none_11]
+  simp[build_hashmap_info_def, toplevel_vtype_keys_toplevel_def]
 QED
 
 (* With distinct names, cenv's maps at a module variable's key are its
@@ -973,13 +916,12 @@ Theorem build_maps_variable[local]:
     ALL_DISTINCT
       (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
     MEM (VariableDecl vis mut id ty init) tops ==>
-    build_hashmap_info tops (module_var_key (NONE, id)) = NONE /\
-    build_var_type_map tops (module_var_key (NONE, id)) = SOME ty
+    build_hashmap_info tops (NONE, id) = NONE /\
+    build_var_type_map tops (NONE, id) = SOME ty
 Proof
   Induct >> simp[] >> rpt gen_tac >> strip_tac >> Cases_on `h` >>
   gvs[build_hashmap_info_def, build_var_type_map_def,
-      toplevel_vtype_keys_toplevel_def, ALL_DISTINCT_APPEND,
-      module_var_key_none_11] >>
+      toplevel_vtype_keys_toplevel_def, ALL_DISTINCT_APPEND] >>
   metis_tac[build_hashmap_info_absent, module_toplevel_vtype_key_MEM_Variable]
 QED
 
@@ -1039,8 +981,8 @@ Proof
    ALL_DISTINCT
      (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
    cenv.ce_hashmap_info = build_hashmap_info tops /\
-   cenv.ce_var_type (module_var_key (NONE, id)) =
-     build_var_type_map tops (module_var_key (NONE, id))` by
+   cenv.ce_module_var_type (NONE, id) =
+     build_var_type_map tops (NONE, id)` by
     fs[body_inv_def] >>
   drule_all build_maps_variable >> strip_tac >>
   `env_consistent env cx es` by fs[expr_sim_inv_def] >>
@@ -1490,8 +1432,7 @@ Proof
      metis_tac[call_evaluation_safe_append_left]) >>
   `ce_locals_declared c env1` by metis_tac[ce_locals_declared_stmt] >>
   `body_inv tops ctx c cx` by
-    metis_tac[body_inv_same_frame, stmt_env_module_var_type,
-              declared_name_not_module_key] >>
+    metis_tac[body_inv_same_frame] >>
   `frame_ret_ok ctx func cx RetQ c ret_ty` by
     metis_tac[frame_ret_ok_same_frame] >>
   qpat_x_assum `!s'' t. _ ==> body_stmts_ok _ _` drule >>

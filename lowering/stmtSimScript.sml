@@ -267,21 +267,15 @@ Proof
   simp[immutable_prefix_bound_def]
 QED
 
-(* Adding a local pointer can remove, but cannot introduce, an immutable
-   binding.  Thus a prefix bound transports to the declaration environment. *)
+(* Locals live outside the module table, so a prefix bound transports to
+   the declaration environment. *)
 Theorem immutable_prefix_bound_local_entry:
-  !cenv bc id p sz addr src es cap.
+  !cenv bc addr src es cap.
     immutable_prefix_bound cenv addr src es cap /\
-    FLOOKUP bc.ce_vars id = SOME (PtrVar p sz) /\
-    (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) ==>
+    bc.ce_module_vars = cenv.ce_module_vars ==>
     immutable_prefix_bound bc addr src es cap
 Proof
-  rpt gen_tac >> simp[immutable_prefix_bound_def] >> rpt strip_tac >>
-  qpat_x_assum `!name tv v off. _`
-    (qspecl_then [`name`, `tv`, `v`, `off`] mp_tac) >>
-  impl_tac
-  >- (simp[] >> Cases_on `module_var_key (src,name) = id` >> gvs[]) >>
-  simp[]
+  rw[immutable_prefix_bound_def] >> metis_tac[]
 QED
 
 Theorem exec_alloca_prefix_base:
@@ -481,19 +475,16 @@ Proof
   rpt strip_tac >>
   drule_all stmt_state_rel_pop_scope >> strip_tac >>
   irule stmt_state_rel_cenv_cong >>
-  qexists_tac `cenv'` >> fs[cenv_top_ext_def] >> rpt conj_tac
+  qexists_tac `cenv'` >> fs[cenv_top_ext_def] >>
+  `cenv'.ce_module_vars = cenv.ce_module_vars` by
+    (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
+  rpt conj_tac
   >- (rpt strip_tac >> CCONTR_TAC >>
       qpat_x_assum `!n. FLOOKUP cenv'.ce_vars n <> _ ==> _`
         (qspec_then `n` mp_tac) >>
       simp[] >> rpt strip_tac >> gvs[])
-  >- (rpt strip_tac >> spose_not_then assume_tac >>
-      qpat_x_assum `!n. FLOOKUP cenv'.ce_vars n <> _ ==> _`
-        (qspec_then `n` mp_tac) >>
-      simp[] >> metis_tac[])
-  >- (rpt strip_tac >> spose_not_then assume_tac >>
-      qpat_x_assum `!n. FLOOKUP cenv'.ce_vars n <> _ ==> _`
-        (qspec_then `n` mp_tac) >>
-      simp[] >> metis_tac[]) >>
+  >- simp[]
+  >- simp[] >>
   fs[compileEnvTheory.compile_env_component_equality]
 QED
 

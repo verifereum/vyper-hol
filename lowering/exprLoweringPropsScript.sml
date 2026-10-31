@@ -243,7 +243,7 @@ Definition immutable_alloca_sep_def:
   immutable_alloca_sep func cenv cx (vs:evaluation_state) (ss:venom_state) <=>
     cenv.ce_is_ctor ==>
     !name tv v off.
-      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
         SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
         | SOME imms => get_source_immutables cenv.ce_module imms) name =
@@ -263,8 +263,8 @@ Theorem immutable_alloca_sep_borrowed_probe[local]:
   !func ce cx es s entry c v t u.
     (c,v,t,u) =
       (ce with <| ce_is_ctor := T; ce_module := NONE;
-          ce_vars := FEMPTY |+ (module_var_key (NONE,"imm"), ImmutableLoc 0)
-                           |+ ("local", PtrVar (Var "p") 32) |>,
+          ce_module_vars := FEMPTY |+ ((NONE,"imm"), ImmutableLoc 0);
+          ce_vars := FEMPTY |+ ("local", PtrVar (Var "p") 32) |>,
        es with <| scopes := [FEMPTY |+ ("local",entry)];
           immutables := [(cx.txn.target,
             [(NONE,FEMPTY |+ ("imm",(BaseTV BoolT,BoolV T)))])] |>,
@@ -281,7 +281,7 @@ Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   simp[local_region_def, lookup_scopes_def, lookup_var_def,
        immutable_alloca_sep_def, get_source_immutables_def,
-       finite_mapTheory.FLOOKUP_UPDATE, module_var_key_def, nsid_to_string_def,
+       finite_mapTheory.FLOOKUP_UPDATE, nsid_to_string_def,
        type_memory_size_def, compileEnvTheory.regions_disjoint_def, wordsTheory.dimword_def,
        venomMemPropsTheory.dimindex_256] >>
   conj_tac
@@ -306,8 +306,8 @@ QED
 Theorem immutable_alloca_sep_cenv_cong:
   !func cenv cenv' cx vs ss.
     immutable_alloca_sep func cenv' cx vs ss /\
-    (!n off. FLOOKUP cenv.ce_vars n = SOME (ImmutableLoc off) ==>
-       FLOOKUP cenv'.ce_vars n = SOME (ImmutableLoc off)) /\
+    (!n off. FLOOKUP cenv.ce_module_vars n = SOME (ImmutableLoc off) ==>
+       FLOOKUP cenv'.ce_module_vars n = SOME (ImmutableLoc off)) /\
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor /\
     (!id b sz. local_region cenv vs.scopes ss id b sz ==>
        ?id0. local_region cenv' vs.scopes ss id0 b sz) ==>
@@ -761,38 +761,38 @@ Theorem state_rel_cenv_cong:
     state_rel func cenv' cx vs ss /\
     (!n e. lookup_scopes n vs.scopes = SOME e ==>
            FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) /\
-    (!n l. FLOOKUP cenv.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
-           FLOOKUP cenv'.ce_vars n = SOME l) /\
-    (!n l. FLOOKUP cenv'.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
-           FLOOKUP cenv.ce_vars n = SOME l) /\
+    (!n l. FLOOKUP cenv.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv'.ce_module_vars n = SOME l) /\
+    (!n l. FLOOKUP cenv'.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv.ce_module_vars n = SOME l) /\
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
     state_rel func cenv cx vs ss
 Proof
   rw[state_rel_def]
   >- metis_tac[local_ptrs_rel_cenv_cong]
   >- (simp[storage_vars_rel_def] >> conj_tac >> rpt strip_tac
-      >- (`FLOOKUP cenv'.ce_vars (module_var_key (cenv.ce_module,name)) =
+      >- (`FLOOKUP cenv'.ce_module_vars (cenv.ce_module,name) =
            SOME (StorageLoc slot)` by
-            (qpat_x_assum `!n l. FLOOKUP cenv.ce_vars n = SOME l /\ _ ==> _`
+            (qpat_x_assum `!n l. FLOOKUP cenv.ce_module_vars n = SOME l /\ _ ==> _`
                irule >> simp[]) >>
           qpat_x_assum `storage_vars_rel cenv' cx` mp_tac >>
           simp[storage_vars_rel_def] >> metis_tac[]) >>
-      qpat_x_assum `!n l. FLOOKUP cenv'.ce_vars n = SOME l /\ _ ==> _` irule >>
+      qpat_x_assum `!n l. FLOOKUP cenv'.ce_module_vars n = SOME l /\ _ ==> _` irule >>
       simp[] >> qpat_x_assum `storage_vars_rel cenv' cx` mp_tac >>
       simp[storage_vars_rel_def] >> metis_tac[])
   >- (simp[transient_vars_rel_def] >> conj_tac >> rpt strip_tac
-      >- (`FLOOKUP cenv'.ce_vars (module_var_key (cenv.ce_module,name)) =
+      >- (`FLOOKUP cenv'.ce_module_vars (cenv.ce_module,name) =
            SOME (TransientLoc slot)` by
-            (qpat_x_assum `!n l. FLOOKUP cenv.ce_vars n = SOME l /\ _ ==> _`
+            (qpat_x_assum `!n l. FLOOKUP cenv.ce_module_vars n = SOME l /\ _ ==> _`
                irule >> simp[]) >>
           qpat_x_assum `transient_vars_rel cenv' cx` mp_tac >>
           simp[transient_vars_rel_def] >> metis_tac[]) >>
-      qpat_x_assum `!n l. FLOOKUP cenv'.ce_vars n = SOME l /\ _ ==> _` irule >>
+      qpat_x_assum `!n l. FLOOKUP cenv'.ce_module_vars n = SOME l /\ _ ==> _` irule >>
       simp[] >> qpat_x_assum `transient_vars_rel cenv' cx` mp_tac >>
       simp[transient_vars_rel_def] >> metis_tac[])
   >- (fs[immutables_rel_def, LET_THM] >> Cases_on `cenv.ce_is_ctor` >>
       gvs[] >> rpt strip_tac >>
-      `FLOOKUP cenv'.ce_vars (module_var_key (cenv.ce_module,name)) =
+      `FLOOKUP cenv'.ce_module_vars (cenv.ce_module,name) =
        SOME (ImmutableLoc byte_offset)` by (first_x_assum irule >> simp[]) >>
       metis_tac[]) >>
   fs[logs_rel_def, listTheory.LIST_REL_EL_EQN, log_entry_equiv_def]
@@ -805,10 +805,10 @@ Theorem stmt_state_rel_cenv_cong:
     stmt_state_rel func cenv' cx es ss /\
     (!n e. lookup_scopes n es.scopes = SOME e ==>
            FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) /\
-    (!n l. FLOOKUP cenv.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
-           FLOOKUP cenv'.ce_vars n = SOME l) /\
-    (!n l. FLOOKUP cenv'.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
-           FLOOKUP cenv.ce_vars n = SOME l) /\
+    (!n l. FLOOKUP cenv.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv'.ce_module_vars n = SOME l) /\
+    (!n l. FLOOKUP cenv'.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv.ce_module_vars n = SOME l) /\
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
     stmt_state_rel func cenv cx es ss
 Proof
@@ -3748,7 +3748,7 @@ Theorem ci_mono_compile_expr_toplevelname[local]:
     (TopLevelName ann nsid) st))
 Proof
   simp[compile_expr_body_def, LET_THM] >>
-  Cases_on `FLOOKUP cenv.ce_vars (module_var_key nsid)`
+  Cases_on `FLOOKUP cenv.ce_module_vars nsid`
   >- (simp[] >> irule ci_mono_uncurry >> simp[ci_mono_emit_inst, ci_mono_refl])
   >> rename1 `SOME loc` >> Cases_on `loc` >>
   simp[ci_mono_refl] >>
