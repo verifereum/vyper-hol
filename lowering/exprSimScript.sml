@@ -26,6 +26,17 @@
  *   val_footprint, val_footprint_le, val_in_memory_footprint_agree,
  *   expr_val_rel_footprint_agree — the bytes a memory value occupies, which
  *                            expr_val_at bounds, and the same at them
+ *   val_in_memory_word_type — a word type's value in memory: its word is
+ *                            the typed encoding
+ *   dynarray_type, dynarray_local, locals_kept — the frame on the live
+ *                            locals' memory in expr_post: every byte of a
+ *                            live local's region is kept, but a DynArray
+ *                            local's length word
+ *   locals_kept_mem, locals_kept_mem_tail, locals_kept_regions,
+ *   locals_kept_regions_tail — locals_kept from equal memory or from the
+ *                            whole regions kept, and along such code
+ *   locals_kept_refl, locals_kept_inst_idx — reflexivity and instruction-index
+ *                            normalization of the local frame
  *
  * Helpers: expr_exit_INL, typed_val_to_w256_word_value, eval_expr_env,
  *   lower_value_env
@@ -41,9 +52,10 @@
  * allocation's id is below the second's start counter and it holds no
  * local (alloca_inv, local_backed), so the second's expr_post keeps its
  * bytes, and val_in_memory with them (expr_val_rel_footprint_agree:
- * expr_val_at bounds the value's val_footprint bytes).  A first
- * operand that points into a local stays related through stmt_state_rel,
- * as long as the source leaves that local alone in between.  expr_frag,
+ * expr_val_at bounds the value's val_footprint bytes).  expr_post also
+ * keeps the bytes of the live locals at its start (locals_kept), but the
+ * length word of a DynArray local, which x.pop() writes; expr_val_at puts
+ * no other value on such a length word.  expr_frag,
  * which relates values by val_to_w256, follows for a word type whose typed
  * encoding is val_to_w256 (expr_sim_expr_frag).
  *
@@ -74,6 +86,7 @@ Ancestors
   vyperInterpreter vyperState vyperValueOperation vyperContext
   valueEncoding valueEncodingProofs vyperTypeSystem
   venomExecSemantics venomInst venomState
+  vyperLookupStorage vyperStorageBackend
 
 (* ===== The judgment ===== *)
 
@@ -145,17 +158,106 @@ Definition val_footprint_def:
     | _ => type_memory_size tv
 End
 
+(* A dynamic array type: its memory layout starts with the length word. *)
+Definition dynarray_type_def:
+  dynarray_type t <=> ?et n. t = ArrayT et (Dynamic n)
+End
+
+(* The local n is a dynamic array, by the compile environment's type of it,
+   which expr_sim_inv makes the local's type. *)
+Definition dynarray_local_def:
+  dynarray_local cenv n <=> ?t. cenv.ce_var_type n = SOME t /\ dynarray_type t
+End
+
+(* Code run from s0 to s leaves the live locals' memory alone, but for the
+   length word of a dynamic array local: the bytes of every live local's
+   region at es, from its second word on for a dynamic array, are kept.
+   The only memory of a local an expression writes is the length word of
+   the array x.pop() pops (exprSimPop).  A pop on a nested place
+   (x.f.pop(), x[i].pop()) would write a length word inside the region,
+   which this frame does not exempt; its lowering is wrong as it stands
+   (exprSimPlaces's compile_pop_other_sim), and lowering it right means
+   exempting the length words of nested dynamic arrays here too. *)
+Definition locals_kept_def:
+  locals_kept cenv es s0 s <=>
+    !n b sz off len.
+      local_region cenv es.scopes s0 n b sz /\ b <= off /\
+      off + len <= b + sz /\ (dynarray_local cenv n ==> b + 32 <= off) ==>
+      mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory
+End
+
+Theorem locals_kept_mem_tail:
+  !cenv es s0 t u.
+    locals_kept cenv es s0 t /\ u.vs_memory = t.vs_memory ==>
+    locals_kept cenv es s0 u
+Proof
+  rw[locals_kept_def]
+QED
+
+Theorem locals_kept_refl[simp]:
+  !cenv es s. locals_kept cenv es s s
+Proof
+  simp[locals_kept_def]
+QED
+
+Theorem locals_kept_mem:
+  !cenv es s0 s. s.vs_memory = s0.vs_memory ==> locals_kept cenv es s0 s
+Proof
+  metis_tac[locals_kept_mem_tail, locals_kept_refl]
+QED
+
+Theorem locals_kept_inst_idx[simp]:
+  !cenv es s0 s k.
+    locals_kept cenv es s0 (s with vs_inst_idx := k) <=>
+    locals_kept cenv es s0 s
+Proof
+  simp[locals_kept_def]
+QED
+
+(* Locals kept up to s, then whole regions kept from s to t. *)
+Theorem locals_kept_regions_tail:
+  !cenv es s0 s t.
+    locals_kept cenv es s0 s /\
+    (!n b sz. local_region cenv es.scopes s0 n b sz ==>
+       mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) ==>
+    locals_kept cenv es s0 t
+Proof
+  rw[locals_kept_def] >>
+  qpat_x_assum `!n b sz. local_region _ _ _ n b sz ==> _` drule >>
+  strip_tac >>
+  drule (cj 1 valueEncodingProofsTheory.mem_bytes_at_agree_window) >>
+  disch_then (qspecl_then [`off`, `len`] mp_tac) >>
+  impl_tac >- decide_tac >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+
+(* Code that keeps every live local's whole region keeps the locals. *)
+Theorem locals_kept_regions:
+  !cenv es s0 s.
+    (!n b sz. local_region cenv es.scopes s0 n b sz ==>
+       mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory) ==>
+    locals_kept cenv es s0 s
+Proof
+  metis_tac[locals_kept_regions_tail, locals_kept_refl]
+QED
+
 (* Where the value v of an expression of type t, lowered from compile state
    sa to sb, sits in s when t is not a word type: well formed for its type
    (val_wf), and its val_footprint bytes lie inside
    - an allocation of one of the expression's own ALLOCAs (instruction id
-     in [sa.cs_next_id, sb.cs_next_id)), or
-   - the region of a live local at es,
+     in [sa.cs_next_id, sb.cs_next_id)), clear of every live local's
+     region, or
+   - the region of a live local at es, past its length word where the
+     local is a dynamic array and t is not (an element, or the popped one,
+     of the array; the array itself starts at the length word),
    or it occupies no bytes (a NoneV, the result of send, has
    val_footprint 0 and sits nowhere: the lowering hands out Lit 0w).
    An operator's proof needs this to keep a first operand's value through
    the second operand's fragment: an allocation of the first is below the
-   second's start counter, and expr_post keeps such allocations' bytes. *)
+   second's start counter and clear of the live locals, and expr_post
+   keeps such allocations' bytes;
+   a local's region it keeps but for a dynamic array's length word
+   (locals_kept). *)
 Definition expr_val_at_def:
   expr_val_at cenv cx t sa sb es v op s <=>
     !tv. evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t ==>
@@ -163,9 +265,13 @@ Definition expr_val_at_def:
       ?w. eval_operand op s = SOME w /\
           ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b, sz) /\
                        sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
-                       b <= w2n w /\ w2n w + val_footprint tv v <= b + sz) \/
+                       b <= w2n w /\ w2n w + val_footprint tv v <= b + sz /\
+                       (!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
+                                   b + sz <= lb \/ lb + lsz <= b)) \/
            (?n b sz. local_region cenv es.scopes s n b sz /\
-                     b <= w2n w /\ w2n w + val_footprint tv v <= b + sz) \/
+                     b <= w2n w /\ w2n w + val_footprint tv v <= b + sz /\
+                     (dynarray_local cenv n /\ ~dynarray_type t ==>
+                      b + 32 <= w2n w)) \/
            val_footprint tv v = 0)
 End
 
@@ -300,7 +406,10 @@ QED
    - those holding a live local: e can write a local (x.pop()), and
      stmt_state_rel at es' says what the locals hold.
    The rest are the buffers of the expressions lowered before e, so a
-   value an earlier operand left in memory survives e's fragment. *)
+   value an earlier operand left in memory survives e's fragment.  And the
+   live locals' regions kept but for a dynamic array's length word
+   (locals_kept), so a value an earlier operand left in a local survives
+   too, where it does not cover that word (expr_val_at). *)
 Definition expr_post_def:
   expr_post func cenv cx e es sa sb s0 es' v op s <=>
     stmt_state_rel func cenv cx es' s /\
@@ -314,7 +423,8 @@ Definition expr_post_def:
        FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
-       mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory)
+       mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
+    locals_kept cenv es s0 s
 End
 
 (* The fragment of e lowered as a value of type ty, run from a state
@@ -347,31 +457,49 @@ End
    from it and unwrap_value's code (exprSimHyps). *)
 
 (* The slot w holds the value obtained by reading the captured source
-   result at es.  storage_rel and transient_rel relate the Venom slot. *)
+   result at es, the slots it occupies are in range (slots_in_range):
+   a word's slot holds its value's encoding, so a load of the slot gives
+   the value's word, and the read sees no other value's dead bytes, so
+   storage_rel and transient_rel relate the Venom slots it reads. *)
 Definition storage_holds_def:
   storage_holds cx is_transient t tv (w:bytes32) es <=>
     ?tvt v. evaluate_type (get_tenv cx) t = SOME tvt /\
             read_storage_slot cx is_transient w tvt es = (INL v, es) /\
-            read_result cx tv es = (INL v, es)
+            read_result cx tv es = (INL v, es) /\
+            slots_in_range (get_storage cx es is_transient) (w2n w) tvt /\
+            storage_read_live cx is_transient (get_storage cx es is_transient)
+              w tvt
 End
 
-(* w is the data offset of an immutable of the module being lowered, and
-   tv is its value at es, stored at the type t evaluates to; immutables_rel
-   says where the Venom state keeps it.  The offset fits a word, so the
-   load reads at the offset itself.  No invariant gives that bound yet:
-   immutables_rel at runtime says only byte_offset + 32 <= the data
-   section's length, so a producer of a code pointer needs a compile-env
-   clause bounding ImmutableLoc offsets. *)
+(* tvt v sits at offset k inside the layout of itv iv: wherever memory holds
+   iv, it holds v k bytes further on, inside iv's bytes.  A struct's field
+   sits so in the struct, and any value at offset 0 in itself. *)
+Definition sub_layout_def:
+  sub_layout itv iv k tvt v <=>
+    k + type_memory_size tvt <= type_memory_size itv /\
+    !b mem. val_in_memory itv iv b mem ==> val_in_memory tvt v (b + k) mem
+End
+
+(* w points k bytes into the data of an immutable of the module being
+   lowered, and tv is the value of type t that sits there (sub_layout)
+   inside the immutable's value at es; immutables_rel says where the Venom
+   state keeps that value.  The immutable's bytes end below 2 ** 256, so a
+   load reads at off + k itself.  No invariant gives that bound yet:
+   immutables_rel at runtime bounds the offset only by the data section's
+   length, so a producer of a code pointer needs a compile-env clause
+   bounding ImmutableLoc offsets. *)
 Definition immutable_holds_def:
   immutable_holds cenv cx t tv (w:bytes32) (es:evaluation_state) <=>
-    ?name off itv v.
+    ?name off itv iv k tvt v.
       FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
-        SOME (ImmutableLoc off) /\ w = n2w off /\ off < dimword (:256) /\
-      evaluate_type (get_tenv cx) t = SOME itv /\
+        SOME (ImmutableLoc off) /\ w = n2w (off + k) /\
+      off + type_memory_size itv < dimword (:256) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
                  NONE => FEMPTY
                | SOME imms => get_source_immutables cenv.ce_module imms)
-              name = SOME (itv, v) /\
+              name = SOME (itv, iv) /\
+      evaluate_type (get_tenv cx) t = SOME tvt /\
+      sub_layout itv iv k tvt v /\ value_has_type tvt v /\
       read_result cx tv es = (INL v, es)
 End
 
@@ -414,9 +542,13 @@ Definition vv_at_def:
        ?w. eval_operand p.ptr_operand s = SOME w /\
            ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b, sz) /\
                         sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
-                        b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz) \/
+                        b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
+                        (!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
+                                    b + sz <= lb \/ lb + lsz <= b)) \/
             (?n b sz. local_region cenv es.scopes s n b sz /\
-                      b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz) \/
+                      b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
+                      (dynarray_local cenv n /\ ~dynarray_type t ==>
+                       b + 32 <= w2n w)) \/
             val_footprint tvt v = 0))
 End
 
@@ -434,7 +566,8 @@ Definition vv_post_def:
        FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
-       mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory)
+       mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
+    locals_kept cenv es s0 s
 End
 
 (* Raw expression results include values and captured places.  Mapping
@@ -579,7 +712,13 @@ Proof
     (irule alloca_inv_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `alloca_room func (s with vs_vars := V)` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
-  fs[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
+  `immutable_alloca_sep func cenv cx es (s with vs_vars := V)` by
+    (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
+     fs[stmt_state_rel_def] >>
+     rpt strip_tac >> qexists_tac `id` >>
+     fs[local_region_def] >> metis_tac[]) >>
+  fs[stmt_state_rel_def, state_rel_def,
+     storage_rel_def, transient_rel_def,
      immutables_rel_def, logs_rel_def, contract_storage_def,
      contract_transient_def] >>
   metis_tac[]
@@ -622,6 +761,26 @@ Proof
   rename1 `BaseTV bt` >> Cases_on `bt` >> simp[typed_val_to_w256_def]
 QED
 
+(* A value of a word type in memory: its word is the typed encoding. *)
+Theorem val_in_memory_word_type:
+  !tenv t tvt v off mem.
+    is_word_type t /\ evaluate_type tenv t = SOME tvt /\
+    value_has_type tvt v /\ val_in_memory tvt v off mem ==>
+    mem_word_at off mem = typed_val_to_w256 tvt v
+Proof
+  rpt strip_tac >>
+  `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
+   t = BaseT BoolT \/ t = BaseT AddressT \/ t = BaseT DecimalT \/
+   (?m. t = BaseT (BytesT (Fixed m)) /\ m <= 32) \/ (?n. t = FlagT n)` by
+    (Cases_on `t` >> fs[is_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_word_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >> fs[is_word_type_def]) >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `v` >>
+  gvs[vyperTypingTheory.value_has_type_def, val_in_memory_def,
+      typed_val_to_w256_def]
+QED
+
 (* A word local held through its pointer (loweringSlice's
    compile_name_word_frag). *)
 Theorem compile_name_word_sim:
@@ -645,7 +804,7 @@ Proof
   strip_tac >> first_x_assum (irule_at Any) >> rpt strip_tac >>
   gvs[expr_post_def, expr_val_rel_def, expr_val_at_def,
       vyperASTTheory.expr_type_def,
-      typed_val_to_w256_word_value]
+      typed_val_to_w256_word_value, locals_kept_mem]
 QED
 
 val literal_word_tac =
@@ -736,7 +895,7 @@ Proof
                      s.vs_memory = s0.vs_memory`,
                 `\r. F`] >>
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
-       vyperASTTheory.expr_type_def] >>
+       vyperASTTheory.expr_type_def, locals_kept_mem] >>
   Cases_on `item` >>
   gvs[compile_env_var_def, evaluate_builtin_def] >>
   drule emit_op_frag >> disch_then irule >>

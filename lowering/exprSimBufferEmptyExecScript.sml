@@ -59,7 +59,8 @@ Theorem buffer_zero_words_run_frame[local]:
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
       (!a len. a+len <= w2n w \/ w2n w+32*n <= a ==>
-        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
+        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   Induct_on `n`
   >- (simp[compile_zero_words_def, comp_return_def] >> rpt strip_tac >>
@@ -121,6 +122,9 @@ Resume buffer_zero_words_run_frame[frames]:
   simp[] >> conj_tac
   >- (simp[Abbr `ta`, update_var_def, mstore_def,
            write_memory_with_expansion_def]) >>
+  reverse conj_tac
+  >- (simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
+           Abbr `ta`, update_var_def] >> decide_tac) >>
   rpt gen_tac >> strip_tac >>
   `mem_bytes_at a len (mstore (32*n+w2n w) 0w ta).vs_memory =
    mem_bytes_at a len ta.vs_memory` by
@@ -139,7 +143,12 @@ Theorem compile_zero_words_run:
     stmt_state_rel func cenv cx es s /\ local_ptrs_reserved cenv sa /\
     32*n <= sz /\ w2n w+sz < dimword (:256) /\
     (!name b len. local_region cenv es.scopes s name b len ==>
-       w2n w+sz <= b \/ b+len <= w2n w) ==>
+       w2n w+sz <= b \/ b+len <= w2n w) /\
+    (cenv.ce_is_ctor ==> !name tv v off.
+      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) = SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+      regions_disjoint off (type_memory_size tv) (w2n w) (32*n)) ==>
     ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
       stmt_state_rel func cenv cx es t /\ eval_operand pop t = SOME w /\
       mem_bytes_at (w2n w) (32*n) t.vs_memory = REPLICATE (32*n) 0w /\
@@ -153,14 +162,18 @@ Proof
   qexists_tac `t` >> simp[] >> reverse conj_tac
   >- (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   irule literal_state_memory_frame >> qexists_tac `s` >> simp[] >>
-  reverse conj_tac
+  rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `w2n w+sz <= b \/ b+sz' <= w2n w` by metis_tac[] >>
+      first_x_assum irule >> decide_tac)
   >- (rpt gen_tac >> strip_tac >>
       `not_fresh_at sa p` by
         (gvs[local_ptrs_reserved_def] >> metis_tac[]) >> simp[]) >>
-  rpt gen_tac >> strip_tac >>
-  `w2n w+sz <= b \/ b+sz' <= w2n w` by metis_tac[] >>
-  `b+sz' <= w2n w \/ w2n w+32*n <= b` by decide_tac >>
-  simp[]
+  rpt strip_tac >>
+  qpat_x_assum `cenv.ce_is_ctor ==> _` mp_tac >> asm_rewrite_tac[] >>
+  disch_then (qspecl_then [`name`, `tv`, `v`, `off`] mp_tac) >>
+  asm_rewrite_tac[] >> simp_tac std_ss [regions_disjoint_def] >>
+  strip_tac >> first_x_assum irule >> decide_tac
 QED
 
 Theorem empty_word_count[local]:
@@ -183,7 +196,12 @@ Theorem empty_tail_run[local]:
     w2n w+sz < dimword (:256) /\
     (if header then 32 <= sz else sz MOD 32 = 0) /\
     (!name b len. local_region cenv es.scopes s name b len ==>
-      w2n w+sz <= b \/ b+len <= w2n w) ==>
+      w2n w+sz <= b \/ b+len <= w2n w) /\
+    (cenv.ce_is_ctor ==> !name tv v off.
+      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) = SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+      regions_disjoint off (type_memory_size tv) (w2n w) (if header then 32 else sz)) ==>
     ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
       stmt_state_rel func cenv cx es t /\ eval_operand pop t = SOME w /\
       mem_bytes_at (w2n w) (if header then 32 else sz) t.vs_memory =
@@ -209,14 +227,21 @@ Resume empty_tail_run[header]:
      disch_then (qspecl_then [`s`,`w`,`0w`] mp_tac) >> simp[eval_operand_def]) >>
   qexists_tac `mstore (w2n w) 0w s` >> simp[] >>
   conj_tac
-  >- (irule literal_mstore_state_rel >> simp[] >>
-      qexistsl_tac [`w2n w`,`sz`] >> simp[] >> metis_tac[]) >>
+  >- (irule literal_state_memory_frame >> qexists_tac `s` >> simp[] >>
+      rpt conj_tac
+      >- (rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >>
+          first_x_assum drule >> decide_tac)
+      >- simp[immutableMemoryFrameTheory.immutable_mstore_capacity]
+      >- simp[mstore_def, write_memory_with_expansion_def] >>
+      rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >>
+      qpat_x_assum `cenv.ce_is_ctor ==> _` mp_tac >> asm_rewrite_tac[] >>
+      disch_then (qspecl_then [`name`, `tv`, `v`, `off`] mp_tac) >>
+      asm_rewrite_tac[] >> simp[regions_disjoint_def] >> decide_tac) >>
   `mem_bytes_at (w2n w) 0 s.vs_memory = REPLICATE 0 0w` by
     simp[valueEncodingTheory.mem_bytes_at_def] >>
   drule mem_bytes_at_zero_extend >> simp[] >> strip_tac >>
   conj_tac >- (Cases_on `pop` >> gvs[eval_operand_def, mstore_def]) >>
-  simp[] >> conj_tac
-  >- simp[mstore_def, write_memory_with_expansion_def] >>
+  simp[] >>
   rpt gen_tac >> strip_tac >> irule mstore_mem_bytes_at_disjoint >> decide_tac
 QED
 
@@ -241,31 +266,31 @@ Proof
 QED
 
 Theorem empty_compile_decompose[local]:
-  !sz header sa sb pop.
-    compile_builtin_empty_complex sz header sa = (pop,sb) ==>
-    ?buf sm. compile_alloc_buffer sz sa = (buf,sm) /\
+  !sz header sa sb buf.
+    compile_builtin_empty_complex sz header sa = (buf,sb) ==>
+    ?sm. compile_alloc_buffer sz sa = (buf,sm) /\
       (if header then emit_void MSTORE [buf.buf_operand; Lit 0w]
-       else compile_zero_words buf.buf_operand ((sz+31) DIV 32)) sm = ((),sb) /\
-      pop = buf.buf_operand
+       else compile_zero_words buf.buf_operand ((sz+31) DIV 32)) sm = ((),sb)
 Proof
   rpt gen_tac >>
   simp[compile_builtin_empty_complex_def, comp_bind_def, comp_return_def] >>
-  pairarg_tac >> rename1 `compile_alloc_buffer sz sa = (buf,sm)` >>
+  pairarg_tac >> rename1 `compile_alloc_buffer sz sa = (ba,sm)` >>
   simp[] >> Cases_on `header` >> simp[comp_bind_def, comp_ignore_bind_def,
                                      comp_return_def] >>
   pairarg_tac >> rename1 `_ = (u,st)` >> Cases_on `u` >> simp[] >>
-  strip_tac >> gvs[] >> qexistsl_tac [`buf`,`sm`] >> simp[]
+  strip_tac >> gvs[] >> qexists_tac `sm` >> simp[]
 QED
 
 Theorem compile_builtin_empty_complex_run:
-  !sz header sa sb pop func cenv cx es s.
-    compile_builtin_empty_complex sz header sa = (pop,sb) /\
+  !sz header sa sb buf func cenv cx es s.
+    compile_builtin_empty_complex sz header sa = (buf,sb) /\
     fn_has_code sa sb func /\ stmt_state_rel func cenv cx es s /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     sz < dimword (:256) /\
     (if header then 32 <= sz else sz MOD 32 = 0) ==>
     ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      stmt_state_rel func cenv cx es t /\ eval_operand pop t = SOME w /\
+      stmt_state_rel func cenv cx es t /\
+      eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
       w2n w+sz < dimword (:256) /\ sa.cs_next_id < sb.cs_next_id /\
       (if header then mem_word_at (w2n w) t.vs_memory = 0w
@@ -277,7 +302,9 @@ Theorem compile_builtin_empty_complex_run:
         FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
         regions_disjoint (w2n w) sz b len) /\
       (!a len. a+len <= w2n w \/ w2n w+sz <= a ==>
-        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
+        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
+      (!name b len. local_region cenv es.scopes s name b len ==>
+        w2n w+sz <= b \/ b+len <= w2n w)
 Proof
   rpt gen_tac >> strip_tac >> drule empty_compile_decompose >> strip_tac >>
   drule empty_tail_shape >> strip_tac >>
@@ -300,9 +327,18 @@ Proof
     (gvs[regions_disjoint_def] >> metis_tac[]) >>
   drule empty_tail_run >>
   disch_then (qspecl_then [`t`,`w`,`func`,`cenv`,`cx`,`es`] mp_tac) >>
-  simp[] >> (impl_tac >- (rpt strip_tac >>
-    qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _ \/ _` drule >>
-    decide_tac)) >> strip_tac >>
+  simp[] >> (impl_tac >- (conj_tac
+    >- (rpt strip_tac >>
+        qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _ \/ _` drule >>
+        decide_tac) >>
+    rpt strip_tac >>
+    `regions_disjoint off (type_memory_size tv) (w2n w) sz` by
+      (qpat_x_assum `stmt_state_rel _ _ _ _ t` mp_tac >>
+       simp[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
+       first_x_assum drule_all >> strip_tac >>
+       qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> regions_disjoint _ _ b sz` irule >>
+       goal_assum (drule_at Any) >> simp[mk_inst_def]) >>
+    Cases_on `header` >> gvs[regions_disjoint_def] >> decide_tac)) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sm sb) t = OK q` >>
   `run_inst_seq (emitted_insts sa sb) s = OK q` by
     (drule_all run_inst_seq_chain >> simp[]) >>
@@ -321,7 +357,14 @@ Resume compile_builtin_empty_complex_run[package]:
   >- (rpt strip_tac >>
       `not_fresh_at sm x` by metis_tac[not_fresh_at_mono] >> simp[]) >>
   conj_tac >- (rpt strip_tac >> metis_tac[]) >>
-  first_assum ACCEPT_TAC
+  conj_tac >- first_assum ACCEPT_TAC >>
+  (* the locals' regions, by their pointers, which the buffer's code keeps *)
+  map_every qx_gen_tac [`nm`, `lb`, `llen`] >> strip_tac >>
+  `local_region cenv es.scopes t nm lb llen` by
+    (irule exprSimOpsTheory.local_region_frame_fwd >>
+     qexistsl [`s`, `sa`, `es.scopes`] >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `!name b len. local_region _ _ t name b len ==> _ \/ _` drule >>
+  simp[arithmeticTheory.ADD_COMM]
 QED
 
 Finalise compile_builtin_empty_complex_run
@@ -350,8 +393,8 @@ Proof
 QED
 
 Theorem compile_builtin_empty_complex_shape:
-  !sz header sa sb pop.
-    compile_builtin_empty_complex sz header sa = (pop,sb) ==>
+  !sz header sa sb buf.
+    compile_builtin_empty_complex sz header sa = (buf,sb) ==>
     sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
     isPREFIX sa.cs_current_insts sb.cs_current_insts /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
@@ -380,8 +423,8 @@ Proof
 QED
 
 Theorem compile_builtin_empty_complex_frag:
-  !sz header sa sb pop ctx P Q R.
-    compile_builtin_empty_complex sz header sa = (pop,sb) /\
+  !sz header sa sb buf ctx P Q R.
+    compile_builtin_empty_complex sz header sa = (buf,sb) /\
     (!s. P s ==> ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
       Q (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
     frag_exec ctx sa sb P Q R

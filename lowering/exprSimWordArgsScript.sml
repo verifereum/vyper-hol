@@ -24,6 +24,7 @@
  * Helper:
  *   eval_exprs_cons_cases, wb_args_cons_cases — the source's left-to-right
  *                            evaluation of the operands
+ *   forced_eval_expr_preserves_scopes_dom — forced evaluation keeps scope domains
  *   lower_word_args_sim    — the operands' fragments, run in sequence
  *   wb_frame, wb_args_post, wb_args_exit — what holds after them
  *   expr_post_word_builtin — expr_post of the whole from the last
@@ -226,7 +227,8 @@ Definition wb_frame_def:
        FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
-       mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory)
+       mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
+    locals_kept cenv es s0 s
 End
 
 Theorem wb_frame_refl:
@@ -288,8 +290,10 @@ Theorem wb_frame_readonly_tail:
     u.vs_memory = t.vs_memory ==>
     wb_frame cenv es sa s0 u
 Proof
-  simp[wb_frame_def] >> rpt strip_tac >>
-  metis_tac[not_fresh_at_mono]
+  rpt strip_tac >>
+  `locals_kept cenv es s0 t` by fs[wb_frame_def] >>
+  `locals_kept cenv es s0 u` by metis_tac[locals_kept_mem_tail] >>
+  fs[wb_frame_def] >> rpt strip_tac >> metis_tac[not_fresh_at_mono]
 QED
 
 Theorem wb_frame_trans:
@@ -303,6 +307,9 @@ Proof
   rpt gen_tac >> simp[wb_frame_def] >> strip_tac >>
   conj_tac
   >- (rpt strip_tac >> metis_tac[not_fresh_at_mono]) >>
+  reverse conj_tac
+  >- (irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `t`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   rpt strip_tac >>
   qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _`
     (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
@@ -314,7 +321,8 @@ Proof
   >- (rpt strip_tac >>
       qpat_x_assum `!n b sz'. local_region _ es.scopes s0 _ _ _ ==> _` irule >>
       qexists_tac `n` >> irule local_region_frame >>
-      conj_tac >- (qexistsl_tac [`cx`, `func`] >> first_assum ACCEPT_TAC) >>
+      conj_tac >- (qexists_tac `func` >>
+        gvs[stmt_state_rel_def, state_rel_def]) >>
       qexistsl_tac [`sa`, `es1.scopes`, `t`] >> simp[]) 
   >- (irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
       qexists_tac `sa.cs_next_id` >> simp[]) >>
@@ -322,15 +330,21 @@ Proof
 QED
 
 (* ===== Invariant-indexed source argument evaluation ===== *)
+(* Each operand's facts at every state of the invariant; a later operand's
+   only if the ones before it can evaluate, as evaluate_ind gives them. *)
 Definition wb_args_ready_def:
-  wb_args_ready ctx func cenv cx arg_ty I args <=>
-    !e es. MEM e args /\ I es ==>
-      expr_sim ctx func cenv cx (arg_ty e) e es /\
-      is_word_type (expr_type e) /\
-      IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
-      (!res es'. (do r <- eval_expr cx e; read_result cx r od) es = (res, es') ==> expr_res_ok res) /\
-      (!v es'. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
-        word_value v /\ I es')
+  wb_args_ready ctx func cenv cx arg_ty Inv [] = T /\
+  wb_args_ready ctx func cenv cx arg_ty Inv (e::args) =
+    ((!es. Inv es ==>
+       expr_sim ctx func cenv cx (arg_ty e) e es /\
+       is_word_type (expr_type e) /\
+       IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
+       (!res es'. (do r <- eval_expr cx e; read_result cx r od) es = (res, es') ==> expr_res_ok res) /\
+       (!v es'. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
+         word_value v /\ Inv es')) /\
+     ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
+                        read_result cx tv s1 = (INL v, t1)) ==>
+      wb_args_ready ctx func cenv cx arg_ty Inv args))
 End
 
 Theorem wb_args_ready_head:
@@ -347,11 +361,13 @@ Proof
 QED
 
 Theorem wb_args_ready_tail:
-  !ctx func cenv cx arg_ty I e args.
-    wb_args_ready ctx func cenv cx arg_ty I (e::args) ==>
+  !ctx func cenv cx arg_ty I e args es v es1.
+    wb_args_ready ctx func cenv cx arg_ty I (e::args) /\
+    (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es1) ==>
     wb_args_ready ctx func cenv cx arg_ty I args
 Proof
-  simp[wb_args_ready_def] >> metis_tac[]
+  simp[wb_args_ready_def] >> rpt strip_tac >> first_x_assum irule >>
+  drule eval_expr_read_INL >> metis_tac[]
 QED
 
 Theorem eval_exprs_nil:
@@ -478,7 +494,7 @@ Proof
   irule frag_exec_pre_exit >> goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem forced_eval_expr_preserves_scopes_dom[local]:
+Theorem forced_eval_expr_preserves_scopes_dom:
   !cx e es res es'.
     (do r <- eval_expr cx e; read_result cx r od) es = (res, es') ==>
     MAP FDOM es.scopes = MAP FDOM es'.scopes

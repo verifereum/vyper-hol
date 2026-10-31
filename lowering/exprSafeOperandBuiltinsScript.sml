@@ -27,7 +27,7 @@ Proof
 QED
 
 Theorem compile_builtin_len_safe_operand:
-  compile_builtin_len ctor ptr_op loc sa = (r,sb) ==> safe_operand sb r
+  compile_builtin_len ctor imm ptr_op loc sa = (r,sb) ==> safe_operand sb r
 Proof
   simp[compile_builtin_len_def] >> metis_tac[compile_ptr_load_safe_operand]
 QED
@@ -266,8 +266,20 @@ Proof
   simp[ci_mono_def]
 QED
 
+Theorem compile_ptr_load_next_var:
+  compile_ptr_load ctor imm loc p sa = (v,sb) ==>
+  sa.cs_next_var <= sb.cs_next_var
+Proof
+  Cases_on `ctor` >> Cases_on `imm` >> Cases_on `loc` >>
+  simp[compile_ptr_load_def, compile_imm_load_word_def, emit_op_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[]
+QED
+
 Theorem compile_array_membership_loop_safe_operand:
-  compile_array_membership_loop needle arr len sz off opc bound isin sa = (r,sb) ==>
+  (!p s v t. loader p s = (v,t) ==> s.cs_next_var <= t.cs_next_var) /\
+  compile_array_membership_loop needle arr len sz off loader bound isin sa = (r,sb) ==>
   safe_operand sb r
 Proof
   Cases_on `bound` >> Cases_on `isin` >> Cases_on `off > 0` >>
@@ -278,6 +290,7 @@ Proof
   ntac 8 (pairarg_tac >> gvs[]) >>
   ntac 8 (pairarg_tac >> gvs[]) >>
   rpt (pairarg_tac >> gvs[]) >>
+  qpat_x_assum `!p s v t. _` drule_all >> strip_tac >>
   imp_res_tac emit_op_safe_operand >>
   imp_res_tac fresh_var_safe_operand >>
   imp_res_tac fresh_var_counter_mono >>
@@ -296,7 +309,7 @@ Proof
   simp[compile_var_array_membership_def, LET_THM,
        comp_bind_def, comp_ignore_bind_def] >>
   strip_tac >> rpt (pairarg_tac >> gvs[]) >>
-  metis_tac[compile_array_membership_loop_safe_operand]
+  metis_tac[compile_array_membership_loop_safe_operand, compile_ptr_load_next_var]
 QED
 
 (* Keep the membership safety interface closed under the HOL kernel. *)

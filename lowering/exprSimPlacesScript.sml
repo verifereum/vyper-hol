@@ -2,19 +2,18 @@
  * Expression simulation: places (#636, Places)
  *
  * The case lemmas of compile_expr_sim (exprSimMain) for subscripts,
- * attributes and pop.  Proved: pop on a local (exprSimPop's
- * compile_pop_name_sim) and attributes of a base not in code
- * (exprSimAttribute's compile_attribute_loc_sim).  Cheated, for the later
- * #636 PRs: subscripts, pop on any other target (compile_pop_other_sim),
- * and the two attribute cases below.
+ * attributes and pop.  Proved: pop on a local (compile_pop_name_case, by
+ * exprSimPop's compile_pop_name_sim, for the body simulation too) and
+ * attributes (exprSimAttribute's compile_attribute_vv_sim).  Cheated, for
+ * the later #636 PRs: subscripts and pop on any other target, by kind
+ * (compile_pop_storage_sim, compile_pop_immutable_sim,
+ * compile_pop_nested_sim).
  *
  * TOP-LEVEL:
  *   compile_subscript_sim — static and dynamic arrays with the bounds-check
  *                           abort, hashmaps, tuples (#558), Places row 1
  *   compile_attribute_sim — struct fields (#558), row 2: by
- *                           compile_attribute_loc_sim, but for
- *                           compile_attribute_code_sim and
- *                           compile_attribute_popped_clash_sim
+ *                           compile_attribute_vv_sim
  *   compile_pop_sim       — pop on a dynamic array, with the empty-array
  *                           abort, row 3: compile_pop_name_sim for a local,
  *                           compile_pop_other_sim for the rest
@@ -36,44 +35,17 @@
 Theory exprSimPlaces
 Ancestors
   list exprSim exprSimHyps exprSimPop exprSimAttribute vyperAST
+  vyperTypeCallGraph
 
+(* Cheated.  For a storage or transient subscript, storage_holds also asks
+   that the element's or hashmap leaf's slots are in range (slots_in_range);
+   the proof gets that from static_/dyn_slots_in_range and the hashmap
+   regions of contract_storage_well_formed, as toplevel_storage_slots_in_range
+   and storage_field_slots_in_range do for names and struct fields. *)
 Theorem compile_subscript_sim:
   !cenv ann base idx.
     expr_sim_below cenv (expr_size (Subscript ann base idx)) ==>
     expr_vv_ok cenv (Subscript ann base idx)
-Proof
-  cheat
-QED
-
-(* An attribute of a base in code: an immutable, or a field of one.
-   Cheated, and false as stated: the lowering hands out the base's code
-   pointer plus the field's offset, while immutable_holds asks a code
-   pointer to be an immutable's own data offset (ImmutableLoc), as for
-   exprSimLeaves's compile_toplevel_immutable_sim. *)
-Theorem compile_attribute_code_sim:
-  !cenv ann obj fld.
-    expr_sim_below cenv (expr_size (Attribute ann obj fld)) /\
-    (?ty st. vv_location (FST (compile_expr cenv ty obj st)) =
-             SOME LocCode) ==>
-    expr_vv_ok cenv (Attribute ann obj fld)
-Proof
-  cheat
-QED
-
-(* The base evaluates to a local's place that memory no longer holds (a
-   popped element), whose popped history holds a snapshot exactly at the
-   field (exprSimAttribute's attr_popped_clash).  Cheated, and false as
-   stated: read_popped reads the newest matching snapshot, so where that
-   snapshot is newer than the one the base reads, it reads that snapshot's
-   value while memory at the field's pointer holds the base's field.
-   record_pop only records snapshots at array elements, so the case never
-   arises, but expr_sim_inv has no clause saying so. *)
-Theorem compile_attribute_popped_clash_sim:
-  !ctx func cenv cx env ty ann obj fld es.
-    expr_vv_ok cenv obj /\
-    expr_sim_pre cenv cx env (Attribute ann obj fld) es /\
-    attr_popped_clash cx obj fld es ==>
-    expr_vv_sim ctx func cenv cx ty (Attribute ann obj fld) es
 Proof
   cheat
 QED
@@ -84,40 +56,94 @@ Theorem compile_attribute_sim:
     expr_vv_ok cenv (Attribute ann obj fld)
 Proof
   rpt strip_tac >>
-  Cases_on `!ty st. vv_location (FST (compile_expr cenv ty obj st)) <>
-                    SOME LocCode`
-  >- (`expr_vv_ok cenv obj` by
-        (fs[expr_sim_below_def, expr_ok_def] >> first_x_assum irule >>
-         simp[expr_size_def]) >>
-      rw[expr_vv_ok_def] >>
-      Cases_on `attr_popped_clash cx obj fld es`
-      >- (irule compile_attribute_popped_clash_sim >> metis_tac[]) >>
-      drule_all compile_attribute_loc_sim >> simp[] >> metis_tac[]) >>
-  irule compile_attribute_code_sim >> gvs[] >> metis_tac[]
+  `expr_vv_ok cenv obj` by
+    (fs[expr_sim_below_def, expr_ok_def] >> first_x_assum irule >>
+     simp[expr_size_def]) >>
+  rw[expr_vv_ok_def] >>
+  drule_all compile_attribute_vv_sim >> simp[] >> metis_tac[]
 QED
 
-(* pop on a target other than a local.  Cheated:
-   - a module variable (TopLevelNameTarget) in storage or transient
-     storage: the source reads the popped element from its slots
-     (read_storage_slot), which raises a RuntimeError where the slots do not
-     decode, while the lowering never reads it and hands out the slot, so
-     this is false as stated until a storage invariant keeps slots
-     decodable (as for exprSimLeaves's
-     compile_toplevel_storage_undecodable_sim).  Where they decode, the
-     proof also needs expr_sim_inv to give ce_var_type of the module
-     variable's key, from which the lowering reads the element type;
-   - an immutable in the constructor: the lowering pops at LocCode with
-     MLOAD and MSTORE at the immutable's data offset, which is not where
-     immutables_rel keeps it;
-   - a nested target (x.a.pop(), x[i].pop()): the lowering falls back to a
-     uint256 array in memory at the base's operand when the target is not a
-     name (exprSimPlaces's header). *)
+(* pop on a local: exprSimPop's compile_pop_name_sim.  Its target has no
+   operand that can call, so expr_body_pre is expr_sim_pre here. *)
+Theorem compile_pop_name_case:
+  !nocalls ctx func cenv cx ann id.
+    expr_sim_case nocalls ctx func cenv cx (Pop ann (NameTarget id)) /\
+    expr_vv_case nocalls ctx func cenv cx (Pop ann (NameTarget id))
+Proof
+  rpt gen_tac >>
+  `expr_vv_case nocalls ctx func cenv cx (Pop ann (NameTarget id))` by
+    (rw[expr_vv_case_def] >> irule compile_pop_name_sim >>
+     gvs[expr_sim_pre_body, int_calls_expr_def] >> metis_tac[]) >>
+  simp[expr_sim_case_of_vv]
+QED
+
+(* pop on a module variable in storage or transient storage.  Cheated:
+   the source reads the popped element from its slots (read_storage_slot),
+   which raises a RuntimeError where the slots do not decode, while the
+   lowering never reads it and hands out the slot; expr_sim_inv's storage
+   clauses keep the slots decoding (as in exprSimLeaves's
+   compile_toplevel_storage_undecodable_sim), but the proof also needs
+   expr_sim_inv to give ce_var_type of the module variable's key, from
+   which the lowering reads the element type.
+   It also breaks expr_post's frame on the live locals (locals_kept): the
+   lowering MSTOREs at the slot's fixed memory address, where an allocation
+   holding a local can sit (allocation starts at 0). *)
+Theorem compile_pop_storage_sim:
+  !cenv ann src id ctx func cx env ty es ts d.
+    expr_sim_below cenv (expr_size (Pop ann (TopLevelNameTarget (src,id)))) /\
+    get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = SOME d /\
+    expr_sim_pre cenv cx env (Pop ann (TopLevelNameTarget (src,id))) es ==>
+    expr_vv_sim ctx func cenv cx ty (Pop ann (TopLevelNameTarget (src,id))) es
+Proof
+  cheat
+QED
+
+(* pop on an immutable, in the constructor.  Cheated: the lowering pops at
+   LocCode with MLOAD and MSTORE at the immutable's data offset, which is
+   not where immutables_rel keeps it, and that offset can hold a live
+   local's allocation (locals_kept). *)
+Theorem compile_pop_immutable_sim:
+  !cenv ann src id ctx func cx env ty es.
+    expr_sim_below cenv (expr_size (Pop ann (TopLevelNameTarget (src,id)))) /\
+    (!ts. get_module_code cx src = SOME ts ==>
+          find_var_decl_by_name id ts = NONE) /\
+    expr_sim_pre cenv cx env (Pop ann (TopLevelNameTarget (src,id))) es ==>
+    expr_vv_sim ctx func cenv cx ty (Pop ann (TopLevelNameTarget (src,id))) es
+Proof
+  cheat
+QED
+
+(* pop on a nested target (x.a.pop(), x[i].pop()).  Cheated: the lowering
+   falls back to a uint256 array in memory at the base's operand when the
+   target is not a name (this file's header), and MSTOREs at the base's
+   first word, which for x.a.pop() is a live local's (locals_kept). *)
+Theorem compile_pop_nested_sim:
+  !cenv ann tgt.
+    (!id. tgt <> NameTarget id) /\ (!nid. tgt <> TopLevelNameTarget nid) /\
+    expr_sim_below cenv (expr_size (Pop ann tgt)) ==>
+    expr_vv_ok cenv (Pop ann tgt)
+Proof
+  cheat
+QED
+
+(* pop on a target other than a local: compile_pop_storage_sim,
+   compile_pop_immutable_sim and compile_pop_nested_sim, by kind. *)
 Theorem compile_pop_other_sim:
   !cenv ann tgt.
     (!id. tgt <> NameTarget id) /\ expr_sim_below cenv (expr_size (Pop ann tgt)) ==>
     expr_vv_ok cenv (Pop ann tgt)
 Proof
-  cheat
+  rpt strip_tac >> Cases_on `?src id. tgt = TopLevelNameTarget (src,id)`
+  >- (qpat_x_assum `?src id. _` strip_assume_tac >>
+      rpt BasicProvers.VAR_EQ_TAC >> simp[expr_vv_ok_def] >> rpt strip_tac >>
+      Cases_on `?ts d. get_module_code cx src = SOME ts /\
+                       find_var_decl_by_name id ts = SOME d`
+      >- (irule compile_pop_storage_sim >> metis_tac[]) >>
+      irule compile_pop_immutable_sim >> rpt conj_tac
+      >- (rpt strip_tac >> Cases_on `find_var_decl_by_name id ts` >>
+          metis_tac[]) >>
+      metis_tac[]) >>
+  irule compile_pop_nested_sim >> rw[] >> Cases_on `nid` >> gvs[]
 QED
 
 Theorem compile_pop_sim:

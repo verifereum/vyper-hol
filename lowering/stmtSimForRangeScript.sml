@@ -801,7 +801,7 @@ Proof
   rw[] >> intLib.ARITH_TAC
 QED
 
-Theorem range_value_has_type[local]:
+Theorem range_value_has_type:
   !tyv n1 n2.
     value_has_type tyv (IntV n1) /\ value_has_type tyv (IntV n2) /\
     n1 <= n2 ==>
@@ -1284,24 +1284,19 @@ Resume compile_for_range_checked_frag[run_loop]:
                `incr_lbl`, `s2.cs_next_id + 12`, `s2.cs_next_id + 13`,
                `s2.cs_next_id + 14`, `bbb`, `sj.cs_next_id`, `sj.cs_next_id + 1`,
                `sj.cs_next_id + 2`, `sb0`, `sb1`, `sj`, `sa`, `0`, `es2`, `cc`,
-               `wp`, `res`, `es'`] mp_tac for_loop >>
+               `wp`, `res`, `es'`] mp_tac for_loop_alloca >>
   impl_tac
-  >- (REWRITE_TAC [for_code_def] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      TRY (simp[block_is_terminated_def, venomInstTheory.mk_inst_def,
-                is_terminator_def] >> NO_TAC) >>
-      TRY (fs[] >> NO_TAC) >>
-      TRY (simp[not_fresh_at_def] >> NO_TAC) >>
-      rw[not_fresh_at_def] >>
-      TRY (first_x_assum (qspec_then `sj.cs_next_var` mp_tac)) >> simp[]) >>
+  >- (simp[for_code_def] >> conj_tac
+      >- simp[block_is_terminated_def, venomInstTheory.mk_inst_def,
+              is_terminator_def, not_fresh_at_def] >>
+      conj_tac
+      >- (rw[not_fresh_at_def] >>
+          first_x_assum (qspec_then `sb1.cs_next_var` mp_tac) >> simp[]) >>
+      first_assum ACCEPT_TAC) >>
   strip_tac
   >- (rename1 `s9.vs_current_bb = exit_lbl` >> disj1_tac >>
       qexists_tac `s9` >> qexists_tac `cenv` >>
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-      >- simp[stmt_lands_def]
-      >- simp[block_is_terminated_def]
-      >- simp[cenv_top_ext_refl]
-      >- metis_tac[]
-      >- metis_tac[] >>
+      simp[stmt_lands_def, block_is_terminated_def, cenv_top_ext_refl] >>
       rpt strip_tac >> metis_tac[]) >>
   disj2_tac >> rename1 `exit_result r9` >>
   drule exit_result_not_error >> strip_tac >> metis_tac[]
