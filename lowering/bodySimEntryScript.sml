@@ -47,6 +47,18 @@ Proof
   rw[FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
+Theorem add_immutable_locations_keys[local]:
+  !sft tops off vars n loc.
+    FLOOKUP (add_immutable_locations sft tops off vars) n = SOME loc ==>
+    FLOOKUP vars n = SOME loc \/ ?nsid. n = module_var_key nsid
+Proof
+  gen_tac >> Induct >> simp[add_immutable_locations_def] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[add_immutable_locations_def] >> rpt (CASE_TAC >> simp[]) >>
+  strip_tac >> first_x_assum drule >>
+  rw[FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
 Theorem build_compile_env_bound[local]:
   !tops vis mut fname args ret body use_trans n l.
     FLOOKUP (build_compile_env tops vis mut fname args ret body
@@ -57,7 +69,9 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   Cases_on `MEM n (MAP FST args)` >> simp[] >>
   drule_all allocate_args_FLOOKUP_other >> strip_tac >> gvs[] >>
-  drule add_module_var_locations_keys >> simp[]
+  drule add_immutable_locations_keys >> strip_tac
+  >- (drule add_module_var_locations_keys >> simp[]) >>
+  metis_tac[]
 QED
 
 fun register_args_bound_tac def =

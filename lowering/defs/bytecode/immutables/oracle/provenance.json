@@ -1,0 +1,48 @@
+{
+  "producer": "pinned Python Vyper",
+  "vyper_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "vyper_version": "0.5.0a4+commit.cd74ce4f",
+  "python_version": "3.14.4",
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.3.1",
+    "packaging": "26.3",
+    "pycryptodome": "3.24.1",
+    "wheel": "0.48.0"
+  },
+  "settings": {
+    "experimental_codegen": true,
+    "optimization_level": "NONE",
+    "evm_version": "prague",
+    "bytecode_metadata": false
+  },
+  "sources": {
+    "i01_immut_uint.vy": "4120c03538b2a8eebb82fb83e01d827bedfbc4bd10386c7f17a10f66db575cb3",
+    "i06_multiple_immutables.vy": "d4bfa4c397abb4b09cc583bc8e082bb15c755a3687935f00bd05bb904cf7187f",
+    "i08_immut_read_in_ctor.vy": "f511302a1016de5dc1f1b65ab7fe94408330d931b4a68ecad40193ed676f33a1",
+    "p23_imm_uint256.vy": "e2f6f0b2f1f63754a8b0726cf43556e6c11c26eee5ced0113d2bc60cb1f96954",
+    "p24_imm_uint8.vy": "a72c33155893cd0dd0eadb1d73b665e0f0d3ba567a9da3cf57b4d3b0c053834c",
+    "p25_imm_address.vy": "3bf94f39aab46584ed9783ec30f11b7a6573268136b9f2fba761462ea3475ce9",
+    "p29b_imm_multi_nostr.vy": "ed6107214cc0a5ea96c4c65c86dcd8484685eac699aeb7d6888ac4f220ae237a",
+    "p59_imm_with_runtime_internal.vy": "f69f536bb19509ee54e4144b6806bdcf9c27ac234998cdbd0197d28f462478c0"
+  },
+  "outputs": {
+    "i01_immut_uint.hex": "0b1fe2ee2ba652d13537dbf7a786d68dfde6508254f7274c936405f3822b7e81",
+    "i01_immut_uint.json": "d9a034de75c98a2e94ea4a8f0eac3e39712691de71d8984b7aa97134c2543e47",
+    "i06_multiple_immutables.hex": "bf726ce3dfd3cc5ecde09dd74014f71bc54d1f0766c187b77d6a0ab7bd96bed1",
+    "i06_multiple_immutables.json": "9a67252d2c87ca8cbd0920450cf72303aa1694c2b0e032aa2202d3fc3abf3754",
+    "i08_immut_read_in_ctor.hex": "da2e52093638e15529a6098d8e28e932ca50f9e51ac7ebec4ac61a7eb5f0f1f6",
+    "i08_immut_read_in_ctor.json": "f6b817a6671d00f3889d2e4f6a9952634bbe7899a14e3192569e48d66cfe372b",
+    "p23_imm_uint256.hex": "3d18e627bcadf16ac5f59fe3d9686605f9baa1f2e7999ea390def2c5e1cefe2e",
+    "p23_imm_uint256.json": "412bf7386dac2eb1ee5a85ae8d7d24d1637037a45d559c32299fdddbef6c8349",
+    "p24_imm_uint8.hex": "d2c6b0e576654a7c17370a8cdb870723c13cb46ecca8d366dff047c3a37dc40d",
+    "p24_imm_uint8.json": "ff1430e7cd7aae7407de72b6e01c154f8beb92de84ba04ca8a7831d8f42ef410",
+    "p25_imm_address.hex": "89edc716d8250d9fc82dcb7ee872e40dc014fa653a9b3c074ce40cbe7878788a",
+    "p25_imm_address.json": "a7b6482b2d9c2d237b687aa48e8257433ebc53e0b6ec00143e03473f96dd722c",
+    "p29b_imm_multi_nostr.hex": "4b9fdfad6c2e8ae4644e107ef3eb67248588fa90697adc6cdfb3f1048bdef4ea",
+    "p29b_imm_multi_nostr.json": "7c8a4a9ca55d6d9a0cf196d22a340147672ac93b679242b2db830f9a6ffdc837",
+    "p59_imm_with_runtime_internal.hex": "9b5eada8630f76cf967e786a3f592d9d9c9017ba9774cd04e1f7ca271fb88868",
+    "p59_imm_with_runtime_internal.json": "c81e582c1cd97638543f46598d609f6d7f05848b3d25c6b4f4207ba489f37bd7"
+  }
+}

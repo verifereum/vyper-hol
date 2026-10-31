@@ -85,9 +85,10 @@ QED
 Theorem entry_venom_state_initial_venom_state_rel:
   !tops prog am tx es cp.
   call_state_rel tops (assemble prog) am tx es ==>
-  initial_venom_state_rel am tx (entry_venom_state prog cp es)
+  initial_venom_state_rel tops am tx (entry_venom_state prog cp es)
 Proof
   rpt strip_tac >> drule entry_venom_state_source_environment >> strip_tac >>
+  drule entry_venom_state_installed_section >> strip_tac >>
   gvs[call_state_rel_def, tx_block_fields_rel_def,
       initial_venom_state_rel_def, entry_venom_state_frame_fields,
       entry_venom_state_fresh]
@@ -109,6 +110,7 @@ Theorem entry_venom_state_initial_ctx_rel:
   initial_ctx_rel cp prog u.cu_context (entry_venom_state prog cp es) es
 Proof
   rpt strip_tac >> rename1 `entry_venom_state prog cplan es` >>
+  drule entry_venom_state_installed_section >> strip_tac >>
   `initial_state_rel cplan prog 0 (HD u.cu_context.ctx_functions)
      (entry_venom_state prog cplan es) es` by
     (drule entry_venom_state_first_frame >> disch_then irule >>

@@ -8,16 +8,24 @@
  * stack-passed argument, the PARAM itself for a memory-passed one), and
  * the temporary return-value ALLOCA Python allocates.  Run from the state
  * setup_callee gives the INVOKE's callee, it establishes the statement
- * relation for the scope push_function builds from the arguments, where
- * the prologue leaves off: before the immutables reservation of a
- * constructor callee, the nonreentrant lock and the body.
+ * relation for the scope push_function builds from the arguments, before
+ * the nonreentrant lock and the body.  The runtime prologue excludes a
+ * nonempty constructor reservation: that reservation belongs between the
+ * physical entry pseudos and materialization, not after the prologue.
+ * compile_internal_function_entry factors this general constructor case.
  *
  * TOP-LEVEL:
  *   compile_internal_prologue   — the prologue as one compile action
- *   compile_internal_function_prologue — compile_internal_function is the
- *                                 prologue, then the rest of it
+ *   compile_internal_function_prologue — no-reservation specialization of
+ *                                 compile_internal_function
+ *   compile_internal_entry_prefix — PARAMs and RETPC_PARAM only
+ *   compile_internal_function_entry — general entry with fixed reservation
+ *   compile_internal_function_entry_factorization — constructor-safe split
+ *                                 of compile_internal_function
  *   internal_args_rel           — the arguments an INVOKE passes, for
  *                                 the scope the callee's body starts in
+ *   internal_immutable_regions  — constructor immutable footprints to frame
+ *                                 below the inherited allocation frontier
  *   internal_stack_size         — the bytes the stack-passed arguments'
  *                                 ALLOCAs take
  *   compile_internal_prologue_entry — from setup_callee, the prologue
@@ -49,17 +57,16 @@
 Theory intCallCallee
 Ancestors
   list rich_list finite_map
-  fragExec localPtrsProps exprLoweringProps loweringHalt
-  moduleLowering stmtLowering exprLowering emitHelper context compileEnv
+  fragExec localPtrsProps exprLoweringProps
+  compileVyper moduleLowering stmtLowering exprLowering emitHelper context compileEnv
   valueEncoding valueEncodingProps venomMemDefs
   venomExecSemantics venomInst venomState venomMemProps vyperState
 
 (* ===== The prologue ===== *)
 
-(* compile_internal_function up to the code that is not the prologue's: the
-   immutables reservation of a constructor callee, the nonreentrant lock and
-   the body.  It returns the compile env the body is compiled in and the
-   return-PC operand. *)
+(* The no-reservation prologue, before the nonreentrant lock and body.
+   It returns the materialized compile env (before ce_alloca_locals is set
+   and ce_imm_alloca is reset to NONE) and the return-PC operand. *)
 Definition compile_internal_prologue_def:
   compile_internal_prologue cenv params has_return_buf ret_type =
     do return_buf_var <-
@@ -94,27 +101,113 @@ Definition compile_internal_prologue_def:
     od
 End
 
+(* The physical entry pseudos must precede a constructor's fixed region.
+   This prefix is shared by the general factorization below and the runtime
+   prologue; it deliberately does not materialize any user parameter. *)
+Definition compile_internal_entry_prefix_def:
+  compile_internal_entry_prefix cenv params has_return_buf =
+    do rb <- (if has_return_buf then
+                do p <- emit_op PARAM [Lit 0w]; return (SOME p) od
+              else return NONE);
+       pr <- compile_internal_param_decls params (if has_return_buf then 1 else 0);
+       rpc <- emit_op RETPC_PARAM [Lit (n2w (SND pr))];
+       return (cenv with
+         <| ce_return_buf :=
+              (case (rb, cenv.ce_return_buf) of
+                 (SOME p, SOME (MemLoc _ sz)) => SOME (PtrVar p sz)
+               | _ => cenv.ce_return_buf);
+            ce_return_pc := SOME (PtrVar rpc 0) |>, FST pr, rpc)
+    od
+End
+
+(* General entry, including constructor reservation BEFORE materialization.
+   The existing compile_internal_prologue is its no-reservation specialization;
+   its runtime proofs below need not reason about fixed-region execution. *)
+Definition compile_internal_function_entry_def:
+  compile_internal_function_entry cenv params has_return_buf
+                                  is_ctor_context immutables_len ret_type =
+    do prefix <- compile_internal_entry_prefix cenv params has_return_buf;
+       imm_opt <-
+         (if is_ctor_context /\ immutables_len > 0 then
+            do ar <- compile_fixed_region_with_id immutables_len;
+               return (SOME (SND ar).buf_operand)
+            od
+          else return NONE);
+       cenv2 <- materialize_internal_params (FST prefix) (FST (SND prefix));
+       (case ret_type of
+          SOME ty => if cenv.ce_returns_count > 0 then
+                       do compile_alloc_buffer (type_memory_bytes cenv ty);
+                          return () od
+                     else return ()
+        | NONE => return ());
+       return (cenv2, SND (SND prefix), imm_opt)
+    od
+End
+
+Theorem compile_internal_function_entry_factorization:
+  !cenv params has_return_buf is_nonreentrant nkey use_transient is_view
+   is_ctor_context immutables_len body ret_type.
+  compile_internal_function cenv params has_return_buf is_nonreentrant
+    nkey use_transient is_view is_ctor_context immutables_len body ret_type =
+  do entry <- compile_internal_function_entry cenv params has_return_buf
+                is_ctor_context immutables_len ret_type;
+     (if is_nonreentrant then
+        compile_nonreentrant_lock nkey use_transient is_view
+      else return ());
+     compile_stmts
+       ((FST entry) with
+         <| ce_imm_alloca := SND (SND entry); ce_alloca_locals := T |>) NoLoop
+       (case ret_type of SOME t => t | NONE => BaseT BoolT) body;
+     cs <- comp_get;
+     (if block_is_terminated cs then return ()
+      else do (if is_nonreentrant then
+                 compile_nonreentrant_unlock nkey use_transient is_view
+               else return ());
+              (case ret_type of
+                 NONE => emit_inst RET [FST (SND entry)] []
+               | SOME _ => emit_inst INVALID [] []) od);
+     return ()
+  od
+Proof
+  simp[FUN_EQ_THM, compile_internal_function_def,
+       compile_internal_function_entry_def, compile_internal_entry_prefix_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt gen_tac >> rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem compile_internal_function_entry_no_reservation:
+  ~(is_ctor_context /\ immutables_len > 0) ==>
+  compile_internal_function_entry cenv params has_return_buf
+    is_ctor_context immutables_len ret_type =
+  do pr <- compile_internal_prologue cenv params has_return_buf ret_type;
+     return (FST pr, SND pr, NONE)
+  od
+Proof
+  strip_tac >>
+  simp[FUN_EQ_THM, compile_internal_function_entry_def,
+       compile_internal_entry_prefix_def, compile_internal_prologue_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt gen_tac >> rpt (pairarg_tac >> gvs[])
+QED
+
+(* Runtime/no-reservation factorization only. A constructor with a nonempty
+   immutable region uses compile_internal_function_entry_factorization instead.
+   Even without reservation the current compiler resets ce_imm_alloca to NONE
+   and returns unit, not an allocation identifier. *)
 Theorem compile_internal_function_prologue:
   !cenv params has_return_buf is_nonreentrant nkey use_transient is_view
    is_ctor_context immutables_len body ret_type st cenv2 return_pc st1.
+    ~(is_ctor_context /\ immutables_len > 0) /\
     compile_internal_prologue cenv params has_return_buf ret_type st =
       ((cenv2, return_pc), st1) ==>
     compile_internal_function cenv params has_return_buf is_nonreentrant
       nkey use_transient is_view is_ctor_context immutables_len body
       ret_type st =
-    (do forced_alloc_id <-
-          (if is_ctor_context /\ immutables_len > 0 then
-             let touch_offset = if immutables_len > 32
-                                then immutables_len - 32 else 0 in
-             do alloc_result <- compile_alloc_buffer_with_id immutables_len;
-                emit_op MLOAD [Lit (n2w touch_offset)];
-                return (SOME (FST alloc_result))
-             od
-           else return NONE);
-        (if is_nonreentrant then
+    (do (if is_nonreentrant then
            compile_nonreentrant_lock nkey use_transient is_view
          else return ());
-        compile_stmts (cenv2 with ce_alloca_locals := T) NoLoop
+        compile_stmts
+          (cenv2 with <| ce_imm_alloca := NONE; ce_alloca_locals := T |>) NoLoop
           (case ret_type of SOME t => t | NONE => BaseT BoolT) body;
         cs <- comp_get;
         (if block_is_terminated cs then return ()
@@ -126,10 +219,10 @@ Theorem compile_internal_function_prologue:
                  NONE => emit_inst RET [return_pc] []
                | SOME _ => emit_inst INVALID [] [])
            od);
-        return forced_alloc_id
+        return ()
      od) st1
 Proof
-  rpt gen_tac >>
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
   simp[compile_internal_prologue_def, compile_internal_function_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[]
@@ -310,6 +403,7 @@ Proof
                comp_ignore_bind_def, comp_return_def, fresh_id_def,
                fresh_var_def, emit_def] >>
           strip_tac >> first_x_assum drule >> strip_tac >> gvs[] >>
+          simp[mk_inst_def] >>
           conj_tac >- (qexists_tac `vars` >> simp[]) >>
           rpt strip_tac >> gvs[FLOOKUP_UPDATE]) >>
       strip_tac >> first_x_assum drule >> strip_tac >> gvs[] >>
@@ -565,10 +659,12 @@ Proof
   rpt conj_tac
   >- (fs[mk_inst_def] >> simp[run_inst_seq_def])
   >- (irule local_ptrs_rel_bind_ptr >> simp[lookup_scopes_def] >>
+      qexists_tac `n2w nxt` >> simp[] >>
       rpt conj_tac
       >- (rpt strip_tac >>
           qpat_x_assum `!name b sz. local_region _ _ sa _ _ _ ==> _` irule >>
           fs[local_region_def, lookup_var_def] >> metis_tac[])
+      >- fs[lookup_var_def]
       >- (qpat_x_assum `!b m. mem_word_at b m = a ==> _` irule >>
           simp[mstore_mem_word_at_same]) >>
       simp[local_backed_def] >> disj1_tac >>
@@ -705,11 +801,18 @@ Definition mat_inv_def:
               f0 <= b \/ mr n = SOME (b, sz))
 End
 
+(* Materialization may extend memory, but may not shrink it or change any
+   byte window below its entry frontier. This is stronger than preserving
+   vs_immutables, whose bookkeeping is not constructor staging memory. *)
 Definition mat_frame_def:
   mat_frame st s t <=>
     (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
     t = s with <| vs_vars := t.vs_vars; vs_memory := t.vs_memory;
-                  vs_allocas := t.vs_allocas; vs_alloca_next := t.vs_alloca_next |>
+                  vs_allocas := t.vs_allocas; vs_alloca_next := t.vs_alloca_next |> /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+    (!b n. b + n <= s.vs_alloca_next ==>
+       mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory)
 End
 
 Theorem mat_frame_refl[local]:
@@ -725,7 +828,7 @@ Theorem mat_frame_trans[local]:
     mat_frame st s u
 Proof
   rpt gen_tac >> simp[mat_frame_def] >> strip_tac >>
-  gvs[venom_state_component_equality]
+  gvs[venom_state_component_equality] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem mat_pending_bind[local]:
@@ -803,10 +906,16 @@ Theorem mat_stack_frame[local]:
     mat_frame st s t /\ fresh_vars_wrt mid t
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >> conj_tac
-  >- (simp[mat_frame_def, mstore_def, update_var_def,
-           venom_state_component_equality] >>
-      rpt strip_tac >> simp[lookup_var_def, FLOOKUP_UPDATE] >>
-      fs[not_fresh_at_def]) >>
+  >- (rewrite_tac[mat_frame_def] >> rpt conj_tac
+      >- (rpt strip_tac >>
+          simp[mstore_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+          fs[not_fresh_at_def])
+      >- simp[mstore_def, update_var_def, venom_state_component_equality]
+      >- simp[mstore_def, update_var_def]
+      >- simp[LENGTH_mstore_eq, update_var_def] >>
+      rpt strip_tac >>
+      irule EQ_TRANS >> irule_at (Pos hd) mstore_mem_bytes_at_disjoint >>
+      simp[update_var_def]) >>
   gvs[fresh_vars_wrt_def, mstore_def, update_var_def] >>
   rpt strip_tac >> simp[] >>
   `n <> st.cs_next_var` by decide_tac >>
@@ -1087,6 +1196,11 @@ Theorem internal_args_regions[local]:
   !cenv params env base args frontier mem.
     internal_args_rel cenv params env base args frontier mem ==>
     ?mr.
+      (!n b sz. mr n = SOME (b,sz) <=>
+        ?i off. i < LENGTH params /\ ~SND (EL i params) /\
+          FST (EL i params) = n /\
+          FLOOKUP cenv.ce_vars n = SOME (MemLoc off sz) /\
+          b = w2n (EL (base + i) args)) /\
       (!i off sz. i < LENGTH params /\ ~SND (EL i params) /\
          FLOOKUP cenv.ce_vars (FST (EL i params)) = SOME (MemLoc off sz) ==>
          mr (FST (EL i params)) = SOME (w2n (EL (base + i) args), sz)) /\
@@ -1116,6 +1230,8 @@ Proof
          strip_tac >> `i = i'` by metis_tac[] >> gvs[]) >>
      qexists_tac `NONE` >> simp[] >> metis_tac[]) >>
   qexists_tac `mr` >> conj_tac
+  >- (first_assum ACCEPT_TAC) >>
+  conj_tac
   >- (rpt strip_tac >> simp[] >> metis_tac[]) >>
   rpt strip_tac >>
   gvs[] >> fs[internal_args_rel_def] >>
@@ -1135,7 +1251,13 @@ Theorem internal_args_materialization_pre[local]:
           lookup_var p s = SOME (EL (idx + i) args)) /\
     s.vs_memory = mem /\ s.vs_alloca_next = frontier /\
     s.vs_allocas = FEMPTY /\ fresh_vars_wrt st s ==>
-    ?mr. mat_pending cenv env st s frontier mr caps /\
+    ?mr.
+         (!n b sz. mr n = SOME (b,sz) <=>
+           ?i off. i < LENGTH params /\ ~SND (EL i params) /\
+             FST (EL i params) = n /\
+             FLOOKUP cenv.ce_vars n = SOME (MemLoc off sz) /\
+             b = w2n (EL (idx + i) args)) /\
+         mat_pending cenv env st s frontier mr caps /\
          mat_inv func cenv env st s frontier mr /\
          (!n1 n2 b1 sz1 b2 sz2.
            n1 <> n2 /\ mr n1 = SOME (b1,sz1) /\ mr n2 = SOME (b2,sz2) ==>
@@ -1146,6 +1268,9 @@ Proof
   drule internal_args_initial_locals >>
   disch_then (qspecl_then [`func`, `s`] strip_assume_tac) >>
   qexists_tac `mr` >> conj_tac
+  >- (first_assum ACCEPT_TAC) >>
+  qpat_x_assum `!n b sz. mr n = SOME (b,sz) <=> _` kall_tac >>
+  conj_tac
   >- (simp[mat_pending_def, EVERY_EL] >> rpt strip_tac >>
       qpat_x_assum `!i. i < LENGTH params ==> _` drule >>
       strip_tac >>
@@ -1303,6 +1428,11 @@ Theorem internal_capture_materialization_entry[local]:
       caller.vs_alloca_next caller.vs_memory /\
     cenv1.ce_vars = cenv.ce_vars ==>
     ?t mr x.
+      (!n b sz. mr n = SOME (b,sz) <=>
+        ?i off. i < LENGTH params /\ ~SND (EL i params) /\
+          FST (EL i params) = n /\
+          FLOOKUP cenv.ce_vars n = SOME (MemLoc off sz) /\
+          b = w2n (EL ((if has_rb then 1 else 0) + i) args)) /\
       run_inst_seq (emitted_insts st0 stc) s0 = OK t /\
       t = s0 with vs_vars := t.vs_vars /\
       mat_frame st0 s0 t /\
@@ -1348,14 +1478,19 @@ Proof
   `sc.vs_memory = caller.vs_memory /\
    sc.vs_alloca_next = caller.vs_alloca_next /\ sc.vs_allocas = FEMPTY` by
     (qpat_x_assum `sc = s0 with vs_vars := _` SUBST1_TAC >> simp[]) >>
-  `?mr. mat_pending cenv1 env stc sc caller.vs_alloca_next mr caps /\
+  `?mr.
+        (!n b sz. mr n = SOME (b,sz) <=>
+          ?i off. i < LENGTH params /\ ~SND (EL i params) /\
+            FST (EL i params) = n /\
+            FLOOKUP cenv1.ce_vars n = SOME (MemLoc off sz) /\
+            b = w2n (EL ((if has_rb then 1 else 0) + i) args)) /\
+        mat_pending cenv1 env stc sc caller.vs_alloca_next mr caps /\
         mat_inv func cenv1 env stc sc caller.vs_alloca_next mr /\
         (!n1 n2 b1 sz1 b2 sz2.
           n1 <> n2 /\ mr n1 = SOME (b1,sz1) /\ mr n2 = SOME (b2,sz2) ==>
           regions_disjoint b1 sz1 b2 sz2)` by
     (irule internal_args_materialization_pre >> simp[] >>
-     qexistsl_tac [`args`, `if has_rb then 1 else 0`, `params`] >>
-     simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+     metis_tac[arithmeticTheory.ADD_COMM]) >>
   `st0.cs_next_var <= stb.cs_next_var` by
     (qpat_x_assum `(if has_rb then _ else _) st0 = _` mp_tac >>
      Cases_on `has_rb` >>
@@ -1368,6 +1503,8 @@ Proof
      qpat_x_assum `sc = s0 with vs_vars := _` SUBST1_TAC >>
      simp[venom_state_component_equality]) >>
   qexistsl_tac [`sc`, `mr`, `x`] >>
+  conj_tac >- fs[] >>
+  qpat_x_assum `!n b sz. mr n = SOME (b,sz) <=> _` kall_tac >>
   conj_tac
   >- (drule_all run_inst_seq_chain >> simp[]) >>
   `sb.vs_return_pc_token = s0.vs_return_pc_token` by
@@ -1402,7 +1539,12 @@ Theorem scratch_alloca_run[local]:
          FLOOKUP t.vs_allocas inst.inst_id = SOME (base, sz) ==> sz = w2n w) /\
       fresh_vars_wrt (st with cs_next_var := st.cs_next_var + 1) t /\
       (!aid. aid IN FDOM t.vs_allocas ==> aid < st.cs_next_id + 1) /\
-      mat_frame st s t /\ t.vs_memory = s.vs_memory
+      mat_frame st s t /\ t.vs_memory = s.vs_memory /\
+      s.vs_alloca_next <= t.vs_alloca_next /\
+      (!aid b sz. FLOOKUP t.vs_allocas aid = SOME (b,sz) ==>
+        FLOOKUP s.vs_allocas aid = SOME (b,sz) \/ b = s.vs_alloca_next) /\
+      (!name b sz. local_region cenv scopes t name b sz ==>
+        local_region cenv scopes s name b sz)
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `x = STRING #"%" (toString st.cs_next_var)` >>
@@ -1444,8 +1586,31 @@ Proof
   >- (simp[mat_frame_def, Abbr `t`, update_var_def,
            venom_state_component_equality] >>
       rpt strip_tac >> simp[lookup_var_def, FLOOKUP_UPDATE] >>
-      fs[not_fresh_at_def, Abbr `x`]) >>
-  simp[Abbr `t`, update_var_def]
+      fs[not_fresh_at_def, Abbr `x`])
+  >- simp[Abbr `t`, update_var_def]
+  >- simp[Abbr `t`, update_var_def]
+  >- (simp[Abbr `t`, update_var_def, FLOOKUP_UPDATE] >>
+      rpt strip_tac >> gvs[AllCaseEqs()]) >>
+  fs[local_region_def, not_local_ptr_def, Abbr `t`, update_var_def,
+     lookup_var_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+(* Keep this elementary emission fact local: importing loweringHalt merely
+   for its compile_alloc_buffer_insts pulls in the end-to-end contract stack. *)
+Theorem internal_alloc_buffer_insts[local]:
+  !n st buf st'.
+    compile_alloc_buffer n st = (buf, st') ==>
+    buf.buf_operand = Var (STRING #"%" (toString st.cs_next_var)) /\
+    buf.buf_size = n /\
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    st'.cs_current_insts = st.cs_current_insts ++
+      [mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+         [STRING #"%" (toString st.cs_next_var)]]
+Proof
+  simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+       emit_def] >> rpt strip_tac >> gvs[]
 QED
 
 Theorem scratch_buffer_run[local]:
@@ -1470,12 +1635,17 @@ Theorem scratch_buffer_run[local]:
       fresh_vars_wrt st' t /\
       (!aid. aid IN FDOM t.vs_allocas ==> aid < st'.cs_next_id) /\
       mat_frame st s t /\ t.vs_memory = s.vs_memory /\
+      s.vs_alloca_next <= t.vs_alloca_next /\
+      (!aid b sz. FLOOKUP t.vs_allocas aid = SOME (b,sz) ==>
+        FLOOKUP s.vs_allocas aid = SOME (b,sz) \/ b = s.vs_alloca_next) /\
+      (!name b sz. local_region cenv scopes t name b sz ==>
+        local_region cenv scopes s name b sz) /\
       st.cs_next_var <= st'.cs_next_var /\
       st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
       isPREFIX st.cs_current_insts st'.cs_current_insts
 Proof
   rpt gen_tac >> strip_tac >>
-  drule compile_alloc_buffer_insts >> strip_tac >>
+  drule internal_alloc_buffer_insts >> strip_tac >>
   `st'.cs_next_var = st.cs_next_var + 1 /\
    st'.cs_next_id = st.cs_next_id + 1` by
     (gvs[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
@@ -1520,6 +1690,11 @@ Theorem internal_scratch_run[local]:
       fresh_vars_wrt st' t /\
       (!aid. aid IN FDOM t.vs_allocas ==> aid < st'.cs_next_id) /\
       mat_frame st s t /\ t.vs_memory = s.vs_memory /\
+      s.vs_alloca_next <= t.vs_alloca_next /\
+      (!aid b sz. FLOOKUP t.vs_allocas aid = SOME (b,sz) ==>
+        FLOOKUP s.vs_allocas aid = SOME (b,sz) \/ b = s.vs_alloca_next) /\
+      (!name b sz. local_region cenv scopes t name b sz ==>
+        local_region cenv scopes s name b sz) /\
       st.cs_next_var <= st'.cs_next_var /\
       st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
       isPREFIX st.cs_current_insts st'.cs_current_insts
@@ -1581,9 +1756,52 @@ Proof
   drule materialize_internal_params_shape >> strip_tac >> simp[]
 QED
 
+(* Only initialized constructor immutables need a memory frame. Runtime
+   immutables live in the unchanged data section. Each observed typed region
+   must lie below the inherited allocation frontier; vs_immutables alone is
+   not their representation. val_wf permits transporting its memory encoding. *)
+Definition internal_immutable_regions_def:
+  internal_immutable_regions cenv cx (vs:evaluation_state) frontier <=>
+    cenv.ce_is_ctor ==>
+    !name tv v off.
+      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
+        SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of
+                 NONE => FEMPTY
+               | SOME imms => get_source_immutables cenv.ce_module imms) name =
+        SOME (tv,v) ==>
+      val_wf tv v /\ off + type_memory_size tv <= frontier
+End
+
+Theorem internal_immutables_frame[local]:
+  !cenv cx vs caller s.
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs caller /\
+    internal_immutable_regions cenv cx vs caller.vs_alloca_next /\
+    s.vs_data_section = caller.vs_data_section /\
+    LENGTH caller.vs_memory <= LENGTH s.vs_memory /\
+    (!b n. b + n <= caller.vs_alloca_next ==>
+       mem_bytes_at b n s.vs_memory = mem_bytes_at b n caller.vs_memory) ==>
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs s
+Proof
+  rpt gen_tac >> reverse (Cases_on `cenv.ce_is_ctor`)
+  >- (simp[immutables_rel_def] >> strip_tac >> gvs[]) >>
+  simp[internal_immutable_regions_def, immutables_rel_def] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  rename1 `FLOOKUP cenv.ce_vars _ = SOME (ImmutableLoc off)` >>
+  qpat_x_assum `!name tv v byte_offset. _ /\ _ ==> _ /\ _ /\ _ /\ _`
+    drule_all >> strip_tac >>
+  qpat_x_assum `!name tv v off. _ /\ _ ==> val_wf _ _ /\ _`
+    drule_all >> strip_tac >>
+  `mem_bytes_at off (type_memory_size tv) s.vs_memory =
+   mem_bytes_at off (type_memory_size tv) caller.vs_memory` by simp[] >>
+  simp[] >> irule val_in_memory_mem_agree >> simp[] >>
+  qexistsl_tac [`type_memory_size tv`, `caller.vs_memory`] >> simp[]
+QED
+
 Theorem internal_body_state_rel[local]:
   !f func cenv cx vs caller cenv1 cenv2 rb rpc caps st st' env s0 s args st0.
     state_rel f cenv cx (vs with scopes := []) caller /\
+    internal_immutable_regions cenv cx vs caller.vs_alloca_next /\
     cenv1 = cenv with <| ce_return_buf := rb; ce_return_pc := rpc |> /\
     materialize_internal_params cenv1 caps st = (cenv2, st') /\
     EVERY (\c. ?off sz. FLOOKUP cenv1.ce_vars (FST c) = SOME (MemLoc off sz)) caps /\
@@ -1612,7 +1830,12 @@ Proof
   >- fs[transient_rel_def, contract_transient_def]
   >- (fs[transient_vars_rel_def] >> metis_tac[])
   >- fs[accounts_rel_def]
-  >- (fs[immutables_rel_def] >> metis_tac[])
+  >- (`immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs s` by
+        (irule internal_immutables_frame >> simp[] >>
+         qexists_tac `caller` >> simp[] >>
+         fs[mat_frame_def, setup_callee_def, AllCaseEqs(), immutables_rel_def] >>
+         gvs[] >> first_assum ACCEPT_TAC) >>
+      fs[immutables_rel_def] >> metis_tac[])
   >- fs[logs_rel_def, log_entry_equiv_def, LIST_REL_EL_EQN] >>
   simp[]
 QED
@@ -1634,7 +1857,7 @@ Proof
   Cases_on `has_rb` >> Cases_on `ret_type` >> Cases_on `cenv.ce_returns_count > 0` >>
   gvs[emit_op_def, comp_bind_def, comp_return_def, comp_ignore_bind_def,
       fresh_id_def, fresh_var_def, emit_def, compile_alloc_buffer_def] >>
-  simp[is_terminator_def, EVERY_GENLIST] >>
+  simp[is_terminator_def, EVERY_GENLIST, mk_inst_def] >>
   gvs[EVERY_MEM] >> rpt strip_tac >>
   qpat_x_assum `!i. MEM i new ==> _` (qspec_then `i` mp_tac) >>
   simp[is_terminator_def] >> rpt strip_tac >> gvs[is_terminator_def]
@@ -1699,7 +1922,7 @@ Proof
   Cases_on `cenv.ce_returns_count > 0` >>
   simp[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  drule compile_alloc_buffer_insts >> strip_tac >> simp[] >>
+  drule internal_alloc_buffer_insts >> strip_tac >> simp[] >>
   gvs[compile_alloc_buffer_def, emit_op_def, comp_bind_def, comp_return_def,
       comp_ignore_bind_def, fresh_id_def, fresh_var_def, emit_def]
 QED
@@ -1853,12 +2076,25 @@ Theorem internal_prologue_run:
     fn_has_code st0 st1 func /\ fn_inst_ids_distinct func /\
     setup_callee func args caller = SOME s0 /\
     state_rel f cenv cx (vs with scopes := []) caller /\
+    internal_immutable_regions cenv cx vs caller.vs_alloca_next /\
     internal_args_rel cenv params env (if has_rb then 1 else 0) args
       caller.vs_alloca_next caller.vs_memory /\
+    (cenv.ce_is_ctor ==> !i po psz name tv iv io.
+      i < LENGTH params /\ ~SND (EL i params) /\
+      FLOOKUP cenv.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
+      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+        SOME (ImmutableLoc io) /\
+      FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables cenv.ce_module imms) name =
+        SOME (tv,iv) ==>
+      regions_disjoint io (type_memory_size tv)
+        (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
     caller.vs_alloca_next + internal_stack_size cenv params
       < dimword (:256) ==>
     ?t.
       run_inst_seq (emitted_insts st0 st1) s0 = OK t /\
+      immutable_alloca_sep func (cenv2 with ce_alloca_locals := T) cx
+        (vs with scopes := [env]) t /\
       state_rel func (cenv2 with ce_alloca_locals := T) cx
         (vs with scopes := [env]) t /\ alloca_inv t /\
       (!inst n base sz.
@@ -1913,6 +2149,7 @@ Proof
      simp[] >> fs[not_fresh_at_def]) >>
   qexists_tac `t'` >>
   conj_tac >- suspend "sequence" >>
+  conj_tac >- suspend "separation" >>
   conj_tac >- suspend "relation" >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -1956,6 +2193,7 @@ Resume internal_prologue_run[relation]:
      rpt strip_tac >> gvs[] >>
      first_x_assum drule >> strip_tac >> metis_tac[]) >>
   qpat_x_assum `state_rel _ _ _ _ _` mp_tac >>
+  qpat_x_assum `internal_immutable_regions _ _ _ _` mp_tac >>
   qpat_x_assum `setup_callee _ _ _ = _` mp_tac >>
   qpat_x_assum `materialize_internal_params ce caps sc = _` mp_tac >>
   qpat_x_assum `EVERY _ caps` mp_tac >>
@@ -1989,14 +2227,73 @@ Resume internal_prologue_run[returns]:
   conj_tac >- fs[mat_frame_def] >>
   drule materialize_internal_params_shape >> strip_tac >> simp[]
 QED
+Resume internal_prologue_run[separation]:
+  drule materialize_internal_params_shape >> strip_tac >>
+  drule materialize_nonptr_binding >> disch_then assume_tac >>
+  `cenv2.ce_module = cenv.ce_module /\
+   cenv2.ce_is_ctor = cenv.ce_is_ctor /\
+   (!name off. FLOOKUP cenv2.ce_vars name = SOME (ImmutableLoc off) ==>
+      FLOOKUP cenv.ce_vars name = SOME (ImmutableLoc off))` by
+    (asm "cenv_stage" mp_tac >> simp[] >> strip_tac >>
+     rpt strip_tac >>
+     qpat_x_assum `!name loc. _`
+       (qspecl_then [`name`, `ImmutableLoc off`] mp_tac) >> simp[]) >>
+  `caller.vs_alloca_next <= t'.vs_alloca_next` by
+    (qpat_x_assum `caller.vs_alloca_next <= u.vs_alloca_next` mp_tac >>
+     qpat_x_assum `u.vs_alloca_next <= t'.vs_alloca_next` mp_tac >>
+     decide_tac) >>
+  `!aid b sz. FLOOKUP t'.vs_allocas aid = SOME (b,sz) ==>
+      caller.vs_alloca_next <= b` by
+    (rpt strip_tac >>
+     qpat_x_assum `!aid b sz. FLOOKUP t'.vs_allocas aid = _ ==> _` drule >>
+     strip_tac >- (qpat_x_assum `!aid b sz. FLOOKUP u.vs_allocas aid = _ ==> _` drule >> simp[]) >>
+     simp[]) >>
+  `!n b sz. local_region cenv2 [env] t' n b sz ==>
+      caller.vs_alloca_next <= b \/ mr n = SOME (b,sz)` by
+    (rpt strip_tac >>
+     qpat_x_assum `!name b sz. local_region cenv2 [env] t' _ _ _ ==> _` drule >>
+     strip_tac >>
+     qpat_x_assum `!n b sz. local_region cenv2 [env] u _ _ _ ==> _` drule >> simp[]) >>
+  qpat_x_assum `internal_immutable_regions _ _ _ _` mp_tac >>
+  qpat_x_assum `cenv.ce_is_ctor ==> !i po psz name tv iv io. _` mp_tac >>
+  qpat_x_assum `!n b sz. mr n = SOME (b,sz) <=> _` mp_tac >>
+  qpat_x_assum `!n b sz. local_region cenv2 [env] t' _ _ _ ==> _` mp_tac >>
+  qpat_x_assum `!aid b sz. FLOOKUP t'.vs_allocas aid = _ ==> _` mp_tac >>
+  qpat_x_assum `caller.vs_alloca_next <= t'.vs_alloca_next` mp_tac >>
+  qpat_x_assum `!name off. FLOOKUP cenv2.ce_vars name = _ ==> _` mp_tac >>
+  qpat_x_assum `cenv2.ce_is_ctor = cenv.ce_is_ctor` mp_tac >>
+  qpat_x_assum `cenv2.ce_module = cenv.ce_module` mp_tac >>
+  qpat_x_assum `ce.ce_vars = cenv.ce_vars` mp_tac >>
+  rpt (pop_assum kall_tac) >> rpt strip_tac >>
+  simp[immutable_alloca_sep_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+     SOME (ImmutableLoc off)` by
+    (qpat_x_assum `!name off. _` drule >> simp[]) >>
+  `off + type_memory_size tv <= caller.vs_alloca_next` by
+    (fs[internal_immutable_regions_def] >>
+     qpat_x_assum `!name tv v off. _ ==> _` drule_all >> simp[]) >>
+  conj_tac >- decide_tac >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!aid b sz. _` drule >>
+      simp[compileEnvTheory.regions_disjoint_def]) >>
+  rpt strip_tac >>
+  `local_region cenv2 [env] t' id b sz` by fs[local_region_def] >>
+  qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> _` drule >>
+  strip_tac >- simp[compileEnvTheory.regions_disjoint_def] >>
+  qpat_x_assum `!n b sz. mr n = _ <=> _` (drule o iffLR) >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `!i po psz name tv iv io. _` irule >>
+  simp[] >> qexistsl_tac [`v`, `name`] >> simp[]
+QED
 Finalise internal_prologue_run[local]
+
 
 (* Running the prologue of an internal function func, compiled in cenv from
    st0, at the head of func's entry block, to st1, from the state
    setup_callee builds for an INVOKE of func with arguments args from the
-   state caller, reaches the point where the prologue leaves off (before the
-   immutables reservation of a constructor callee, the nonreentrant lock
-   and the body) in a state
+   state caller, reaches the point where the no-reservation prologue leaves
+   off (before the nonreentrant lock and the body) in a state
    s1 related at the scope env the source binds the parameters in:
    - each parameter is a local held through a pointer variable: a
      stack-passed one in a region of its own ALLOCA, holding its value, a
@@ -2007,7 +2304,10 @@ Finalise internal_prologue_run[local]
      entry state.
    The global part of the relation (storage, transient, immutables, logs,
    contexts) is that of the caller's state in cenv, which the hypothesis
-   on caller states with no scope.  alloca_room of the callee's entry
+   on caller states with no scope. internal_immutable_regions explicitly
+   frames initialized constructor-memory regions below the caller's frontier
+   (vacuous for runtime); materialization preserves their bytes and capacity.
+   alloca_room of the callee's entry
    state is a hypothesis: the caller's frontier carries over, so only the
    call site can establish it. *)
 Theorem compile_internal_prologue_entry:
@@ -2020,8 +2320,19 @@ Theorem compile_internal_prologue_entry:
     st0.cs_current_bb = (HD func.fn_blocks).bb_label /\
     setup_callee func args caller = SOME s0 /\
     state_rel f cenv cx (vs with scopes := []) caller /\
+    internal_immutable_regions cenv cx vs caller.vs_alloca_next /\
     internal_args_rel cenv params env (if has_rb then 1 else 0) args
       caller.vs_alloca_next caller.vs_memory /\
+    (cenv.ce_is_ctor ==> !i po psz name tv iv io.
+      i < LENGTH params /\ ~SND (EL i params) /\
+      FLOOKUP cenv.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
+      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+        SOME (ImmutableLoc io) /\
+      FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables cenv.ce_module imms) name =
+        SOME (tv,iv) ==>
+      regions_disjoint io (type_memory_size tv)
+        (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
     caller.vs_alloca_next + internal_stack_size cenv params
       < dimword (:256) /\
     alloca_room func s0 ==>
@@ -2114,8 +2425,8 @@ Proof
   rpt strip_tac >> first_x_assum drule >> simp[]
 QED
 
-(* The prologue's code is one open block of straight-line code, and it
-   leaves the compile env the body is compiled in with each parameter held
+(* The prologue's code is one open block of straight-line code, and its
+   materialized compile env (before ce_imm_alloca is reset) has each parameter held
    through a pointer variable of its own that the body's code does not
    assign, when cenv holds the parameters, all at MemLoc slots, and no
    other local.  build_compile_env gives every internal function such a
@@ -2190,12 +2501,13 @@ Proof
       compileVyperTheory.update_cenv_nonreentrant_def] >>
   drule compile_internal_prologue_code >>
   disch_then irule >>
-  qspecl_then [`tops`, `if is_ctor then Deploy else Internal`, `mut`, `fname`,
-               `fargs`, `ret`, `body'`, `use_tr`]
-    strip_assume_tac compileVyperTheory.build_compile_env_vars >>
   simp[MAP_ZIP, LENGTH_ZIP_MIN, EL_ZIP, EL_MAP,
        LENGTH_compute_pass_via_stack] >>
-  rpt strip_tac >> first_x_assum irule >>
+  conj_tac
+  >- (rpt strip_tac >> drule (cj 2 compileVyperTheory.build_compile_env_vars) >> simp[]) >>
+  conj_tac
+  >- simp[cj 3 compileVyperTheory.build_compile_env_vars] >>
+  rpt strip_tac >> irule (cj 1 compileVyperTheory.build_compile_env_vars) >>
   simp[MEM_MAP] >> metis_tac[MEM_EL]
 QED
 

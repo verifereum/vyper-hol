@@ -56,8 +56,10 @@ Theorem boundary_live_and_fresh:
     ~ctxt.msgParams.static /\ ctxt.jumpDest = NONE /\
     ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
     buffer_to_list ctxt.memory = [] /\ ctxt.returnData = [] /\
-    ctxt.msgParams.code = code /\
-    ctxt.msgParams.parsed = parse_code 0 FEMPTY code /\ LENGTH code <= 24576
+    installed_code_rel tops code (account_immutables am tx.target)
+      ctxt.msgParams.code /\
+    ctxt.msgParams.parsed = parse_code 0 FEMPTY ctxt.msgParams.code /\
+    LENGTH ctxt.msgParams.code <= 24576
 Proof
   simp[call_state_rel_def] >> metis_tac[]
 QED
