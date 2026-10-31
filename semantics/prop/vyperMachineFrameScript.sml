@@ -113,6 +113,13 @@ Proof
   rpt strip_tac >> Cases_on `st.scopes` >> simp[return_def, raise_def]
 QED
 
+Theorem machine_frame_next_gas_reading:
+  state_rel_frame machine_frame next_gas_reading
+Proof
+  simp[state_rel_frame_def, next_gas_reading_def] >> rpt strip_tac >>
+  CASE_TAC >> simp[raise_def, return_def, machine_frame_def]
+QED
+
 Theorem machine_frame_view_lock:
   state_rel_frame machine_frame (acquire_nonreentrant_lock addr slot T)
 Proof

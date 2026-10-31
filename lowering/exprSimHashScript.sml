@@ -1942,6 +1942,7 @@ Theorem eval_expr_unary_builtin_cases:
              INL v => INL (Value v) | INR exc => INR exc)
 Proof
   strip_tac >>
+  `bt <> Env MsgGas` by (strip_tac >> gvs[builtin_args_length_ok_def]) >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def] >>

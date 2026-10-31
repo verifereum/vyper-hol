@@ -694,6 +694,7 @@ Proof
       gvs[well_formed_type_def, IS_SOME_EXISTS] >>
     `evaluate_builtin cx (initial_state am sc).accounts ty bt (MAP expr_type es) vs = INL v` by
       metis_tac[evaluate_builtin_constant_context] >>
+    `bt <> Env MsgGas` by (strip_tac >> gvs[evaluate_builtin_def, AllCaseEqs()]) >>
     `value_has_type tv v` by
       (drule_at (Pat `evaluate_builtin cx _ _ _ _ _ = _`)
          constant_builtin_success_typed >>
@@ -1006,6 +1007,7 @@ Resume constant_eval_expr_fold_agreement[builtin]:
        !v. read_result cx pv (initial_state am sc) = (INL v,initial_state am sc) ==>
          constant_value mods (constant_machine_immutables am cx.txn.target) e = SOME v` by
       (fs[EVERY_MEM] >> metis_tac[constant_exprs_MEM_typed]) >>
+    `bt <> Env MsgGas` by (strip_tac >> gvs[constant_builtin_def]) >>
     qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
     simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
          lift_sum_def, get_accounts_def, return_def] >> strip_tac >>

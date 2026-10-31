@@ -865,9 +865,9 @@ val () = cv_auto_trans forwarded_gas_def;
 (* DELEGATECALL loads code from target_addr but retains the current message's
    address, caller and value. In particular there is no entry value transfer. *)
 Definition make_delegate_call_state_def:
-  make_delegate_call_state cx target_addr calldata accounts tStorage =
+  make_delegate_call_state cx target_addr calldata gas accounts tStorage =
     let tx = make_evm_tx cx.txn.sender cx.txn.target cx.txn.value calldata
-                         default_evm_gas_limit in
+                         gas in
     let accesses =
       <| addresses := fINSERT cx.txn.target (fINSERT target_addr fEMPTY);
          storageKeys := fEMPTY |> in
@@ -887,8 +887,8 @@ End
 val () = cv_auto_trans make_delegate_call_state_def;
 
 Definition run_delegate_call_def:
-  run_delegate_call cx target_addr calldata accounts tStorage =
-    let s0 = make_delegate_call_state cx target_addr calldata accounts tStorage in
+  run_delegate_call cx target_addr calldata gas accounts tStorage =
+    let s0 = make_delegate_call_state cx target_addr calldata gas accounts tStorage in
     let outcome =
       if fIN target_addr precompile_addresses then
         SOME (vfmExecution$dispatch_precompiles target_addr s0)
@@ -904,12 +904,12 @@ End
 val () = cv_auto_trans run_delegate_call_def;
 
 Definition run_raw_call_def:
-  run_raw_call cx flags target_addr calldata amount accounts tStorage =
+  run_raw_call cx flags target_addr calldata amount gas accounts tStorage =
     if flags.rcf_is_delegate then
-      run_delegate_call cx target_addr calldata accounts tStorage
+      run_delegate_call cx target_addr calldata gas accounts tStorage
     else run_ext_call cx.txn.target target_addr calldata
       (if flags.rcf_is_static then NONE else SOME amount)
-      default_evm_gas_limit accounts tStorage (vyper_to_tx_params cx.txn)
+      gas accounts tStorage (vyper_to_tx_params cx.txn)
 End
 
 val () = cv_auto_trans run_raw_call_def;
@@ -936,7 +936,7 @@ val () = cv_auto_trans ext_call_precheck_ok_def;
 (* Shared execution after raw_call operands have been evaluated and decoded.
    Both input forms retain the same static/revert/output and state effects. *)
 Definition eval_raw_call_def:
-  eval_raw_call cx flags target_addr calldata amount = do
+  eval_raw_call cx flags target_addr calldata amount gas = do
     type_check
       (¬(flags.rcf_is_delegate ∧ flags.rcf_is_static) ∧
        ((flags.rcf_is_delegate ∨ flags.rcf_is_static) ⇒ amount = 0))
@@ -944,7 +944,7 @@ Definition eval_raw_call_def:
     accounts <- get_accounts;
     tStorage <- get_transient_storage;
     result <- lift_option
-      (run_raw_call cx flags target_addr calldata amount accounts tStorage)
+      (run_raw_call cx flags target_addr calldata amount gas accounts tStorage)
       "raw_call run failed";
     success <<- FST result; result1 <<- SND result;
     returnData <<- FST result1; result2 <<- SND result1;
@@ -972,7 +972,7 @@ val () = eval_raw_call_def
   |> cv_auto_trans;
 
 Theorem eval_raw_call_preserves_non_accounts:
-  eval_raw_call cx flags target_addr calldata amount st = (res, st') ==>
+  eval_raw_call cx flags target_addr calldata amount gas st = (res, st') ==>
   st'.scopes = st.scopes /\ st'.immutables = st.immutables
 Proof
   Cases_on `¬(flags.rcf_is_delegate ∧ flags.rcf_is_static) ∧
@@ -980,10 +980,10 @@ Proof
   fs[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
      assert_def, return_def, raise_def, get_accounts_def,
      get_transient_storage_def] >>
-  Cases_on `run_raw_call cx flags target_addr calldata amount
+  Cases_on `run_raw_call cx flags target_addr calldata amount gas
     st.accounts st.tStorage` >>
   simp[lift_option_def, bind_def, return_def, raise_def] >>
-  rename1 `run_raw_call _ _ _ _ _ _ _ = SOME call_result` >>
+  rename1 `run_raw_call _ _ _ _ _ _ _ _ = SOME call_result` >>
   PairCases_on `call_result` >>
   Cases_on `flags.rcf_revert_on_failure` >> Cases_on `call_result0` >>
   Cases_on `flags.rcf_max_outsize = 0` >>
@@ -1003,6 +1003,17 @@ Definition ext_call_kwarg_def:
 End
 
 val () = cv_auto_trans ext_call_kwarg_def;
+
+(* A raw_call's value= (default 0) from the keyword operands, whose kinds kws
+   lists in source order. *)
+Definition raw_call_value_def:
+  raw_call_value kws kw_vals =
+    case ext_call_kwarg EKValue kws kw_vals of
+    | NONE => SOME 0
+    | SOME v => dest_NumV v
+End
+
+val () = cv_auto_trans raw_call_value_def;
 
 (* Each keyword argument at most once; staticcall sends no value. *)
 Definition ext_call_opts_ok_def:
@@ -1264,6 +1275,17 @@ val () = release_nonreentrant_lock_def
             vyperStateTheory.return_def]
   |> cv_auto_trans;
 
+(* msg.gas: the next reading of the frame's gas observations, in execution
+   order.  Readings are never rolled back; running out is a runtime error. *)
+Definition next_gas_reading_def:
+  next_gas_reading st =
+    case st.gas_obs of
+    | [] => raise (Error (RuntimeError "msg.gas: no gas reading")) st
+    | w::ws => return (IntV (&w2n (w:bytes32))) (st with gas_obs := ws)
+End
+
+val () = cv_auto_trans next_gas_reading_def;
+
 Definition is_view_mut_def[simp]:
   is_view_mut mut ⇔ mut = View ∨ mut = Pure
 End
@@ -1515,7 +1537,8 @@ Definition evaluate_def:
       tv <- eval_expr cx (HD es);
       len <- result_array_length cx tv;
       return $ IntV (&len)
-    od else do
+    od else if bt = Env MsgGas then next_gas_reading
+    else do
       vs <- eval_exprs cx es;
       acc <- get_accounts;
       lift_sum $ evaluate_builtin cx acc ty bt (MAP expr_type es) vs
@@ -1585,22 +1608,29 @@ Definition evaluate_def:
     return $ Value crv
   od ∧
   (* ===== Chain interaction builtins ===== *)
-  (* raw_call(to, data, max_outsize=0, value=0, is_delegate_call=F, is_static_call=F, revert_on_failure=T)
-     args = [to_addr; data_bytes; value] *)
+  (* raw_call(to, data, max_outsize=0, gas=gas, value=0, is_delegate_call=F,
+              is_static_call=F, revert_on_failure=T)
+     args = [to_addr; data_bytes] ++ value=/gas= operands in source order *)
   eval_expr cx (Call ty (RawCallTarget flags) es _) = do
     vs <- eval_exprs cx es;
-    type_check (LENGTH vs = 3) "raw_call args";
+    type_check (LENGTH vs = 2 + LENGTH flags.rcf_kws) "raw_call args";
     target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
     calldata <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_call data";
-    amount <- lift_option_type (dest_NumV (EL 2 vs)) "raw_call value";
+    amount <- lift_option_type (raw_call_value flags.rcf_kws (DROP 2 vs))
+                "raw_call value";
     eval_raw_call cx flags target_addr calldata amount
+      (forwarded_gas default_evm_gas_limit
+         (ext_call_kwarg EKGas flags.rcf_kws (DROP 2 vs)))
   od ∧
   eval_expr cx (Call ty (RawCallCalldataTarget flags) es _) = do
     vs <- eval_exprs cx es;
-    type_check (LENGTH vs = 2) "raw_call calldata args";
+    type_check (LENGTH vs = 1 + LENGTH flags.rcf_kws) "raw_call calldata args";
     target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
-    amount <- lift_option_type (dest_NumV (EL 1 vs)) "raw_call value";
+    amount <- lift_option_type (raw_call_value flags.rcf_kws (DROP 1 vs))
+                "raw_call value";
     eval_raw_call cx flags target_addr cx.txn.calldata amount
+      (forwarded_gas default_evm_gas_limit
+         (ext_call_kwarg EKGas flags.rcf_kws (DROP 1 vs)))
   od ∧
   (* raw_log(topics_list, data)
      args = [topics_array; data_bytes] *)
@@ -1906,6 +1936,7 @@ Definition initial_state_def:
    ; pending_deletions := am.pending_deletions
    ; outcomes := NONE
    ; requests := []
+   ; gas_obs := []
    |>
 End
 
@@ -2034,19 +2065,22 @@ val () = send_call_value_def
             LET_RATOR, COND_RATOR]
   |> cv_auto_trans;
 
+(* Each default runs in a fresh state; only the gas readings it consumes
+   carry over to the next default and then to the call. *)
 Definition evaluate_defaults_def:
-  evaluate_defaults cx am [] = SOME [] ∧
-  evaluate_defaults cx am (e::es) =
-    (case FST $ (do res <- eval_expr cx e; read_result cx res od) (initial_state am [FEMPTY]) of
-     | INL v =>
-         (case evaluate_defaults cx am es of
-          | SOME vs => SOME (v :: vs)
+  evaluate_defaults cx am gobs [] = SOME ([], gobs) ∧
+  evaluate_defaults cx am gobs (e::es) =
+    (case (do res <- eval_expr cx e; read_result cx res od)
+            (initial_state am [FEMPTY] with gas_obs := gobs) of
+     | (INL v, st) =>
+         (case evaluate_defaults cx am st.gas_obs es of
+          | SOME (vs, gobs') => SOME (v :: vs, gobs')
           | NONE => NONE)
      | _ => NONE)
 End
 
 Definition call_external_function_def:
-  call_external_function orc am cx nr mut ts all_mods args dflts vals body ret =
+  call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret =
   let all_tenv = type_env_all_modules all_mods in
   let n_provided = LENGTH vals in
   let n_expected = LENGTH args in
@@ -2055,9 +2089,9 @@ Definition call_external_function_def:
     (INR $ Error (RuntimeError "call args length"), am, [])
   else
   let needed_dflts = DROP (LENGTH dflts - n_missing) dflts in
-  case evaluate_defaults cx am needed_dflts of
+  case evaluate_defaults cx am gobs needed_dflts of
   | NONE => (INR $ Error (RuntimeError "call evaluate_defaults"), am, [])
-  | SOME dflt_vs =>
+  | SOME (dflt_vs, gobs') =>
   case bind_arguments all_tenv args (vals ++ dflt_vs)
   of NONE => (INR $ Error (RuntimeError "call bind_arguments"), am, [])
    | SOME env =>
@@ -2065,7 +2099,8 @@ Definition call_external_function_def:
          else SOME am)
    of NONE => (INR $ Error (RuntimeError "call constants_env"), am, [])
     | SOME am_c =>
-   let st = initial_state am_c [env] with <| outcomes := orc; requests := [] |> in
+   let st = initial_state am_c [env] with
+              <| outcomes := orc; requests := []; gas_obs := gobs' |> in
    let srcs = am_c.sources in
    let exps = am_c.exports in
    let layouts = am_c.layouts in
@@ -2163,7 +2198,7 @@ Proof
 QED
 
 Definition call_external_def:
-  call_external orc am tx =
+  call_external orc gobs am tx =
   (* Determine which module to use for type environment *)
   let src_id_opt = find_function_module am tx.target tx.function_name in
   let cx = initial_evaluation_context am.sources am.layouts tx src_id_opt in
@@ -2179,7 +2214,7 @@ Definition call_external_def:
   case lookup_exported_function cx am tx.function_name
   of NONE => (INR $ Error (RuntimeError "call lookup_function"), am, [])
    | SOME (mut, nr, args, dflts, ret, body) =>
-       case call_external_function orc am cx nr mut ts all_mods args dflts tx.args body ret of
+       case call_external_function orc gobs am cx nr mut ts all_mods args dflts tx.args body ret of
          (INL value, am', rqs) => (INL value, finalize_pending_deletions am', rqs)
        | failure => failure
 End
@@ -2206,7 +2241,8 @@ Definition clear_machine_logs_def:
 End
 
 Definition call_external_transaction_def:
-  call_external_transaction orc am tx = call_external orc (clear_machine_logs am) tx
+  call_external_transaction orc gobs am tx =
+    call_external orc gobs (clear_machine_logs am) tx
 End
 
 (* Vyper-level deployment abstraction.  The target address is supplied by the
@@ -2221,7 +2257,7 @@ End
    same path, including constant evaluation and deployment value transfer.  The
    NONE case below is defensive and unreachable for finite declaration lists. *)
 Definition load_contract_def:
-  load_contract orc am tx mods exps =
+  load_contract orc gobs am tx mods exps =
   let addr = tx.target in
   let ts = case ALOOKUP mods NONE of SOME ts => ts | NONE => [] in
   let tenv = type_env_all_modules mods in
@@ -2235,7 +2271,7 @@ Definition load_contract_def:
      | SOME (mut, nr, args, dflts, ret, body) =>
        let cx = (initial_evaluation_context ((addr,mods)::am.sources) am.layouts tx NONE)
                 with in_deploy := T in
-       case call_external_function orc am cx nr mut ts mods args dflts tx.args body ret
+       case call_external_function orc gobs am cx nr mut ts mods args dflts tx.args body ret
          of (INR e, _, _) => INR e
           | (_, am', rqs) => INL (finalize_pending_deletions
                                     (am' with sources updated_by CONS (addr, mods)), rqs)

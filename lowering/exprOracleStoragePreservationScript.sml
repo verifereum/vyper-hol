@@ -342,13 +342,24 @@ Resume eval_expr_oracle_storage_mutual[Expr_Builtin]:
         Cases_on `q` >> gvs[return_def, raise_def] >>
         rpt strip_tac >> gvs[]) >>
     rpt strip_tac >> gvs[]) >>
+  Cases_on `bt = Env MsgGas`
+  >- (rpt strip_tac >>
+      gvs[ignore_bind_def, assert_def, bind_def, return_def] >>
+      Cases_on `next_gas_reading st` >>
+      imp_res_tac next_gas_reading_state >>
+      Cases_on `q` >> gvs[return_def, raise_def] >>
+      irule contract_storage_well_formed_storage_frame >>
+      qexists_tac `st` >>
+      gvs[runtime_storage_consistent_def] >>
+      Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
   qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
+  qpat_assum `bt <> Env MsgGas` (fn th => rewrite_tac[th]) >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
     type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
   Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-  qpat_x_assum `!s'' t. _ /\ bt <> Len ==> _`
+  qpat_x_assum `!s'' t. _ /\ bt <> Len /\ bt <> Env MsgGas ==> _`
     (qspecl_then [`st`, `st`] mp_tac) >>
   (impl_tac >- (simp[type_check_def, assert_def] >> metis_tac[])) >>
   strip_tac >> first_x_assum drule_all >> strip_tac >>
