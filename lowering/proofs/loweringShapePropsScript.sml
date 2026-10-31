@@ -12854,7 +12854,8 @@ QED
 
 Theorem package_external_group_shape_ok:
   !tops target trans nkeys src.
-    supported_program tops /\ MEM src (FST (classify_functions tops)) ==>
+    supported_program tops /\ immutable_free_program tops /\
+    MEM src (FST (classify_functions tops)) ==>
     external_group_shape_ok (package_external_group tops target trans nkeys src)
 Proof
   rpt gen_tac >> strip_tac >>
