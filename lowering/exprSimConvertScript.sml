@@ -633,10 +633,12 @@ Theorem expr_body_pre_convert:
          expr_body_pre cenv cx env e1 es
 Proof
   rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
+     supportedExprTraverseTheory.expr_has_evm_run_thm,
      byte_widths_expr_def, alloc_limits_expr_def, type_builtin_result_ok_def,
      well_typed_type_builtin_args_def] >>
   Cases_on `args` >> gvs[] >> rename1 `h::tl` >> Cases_on `tl` >>
-  gvs[well_typed_expr_def, int_calls_expr_def, byte_widths_expr_def,
+  gvs[well_typed_expr_def, int_calls_expr_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm, byte_widths_expr_def,
       alloc_limits_expr_def] >>
   metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
             listTheory.APPEND_ASSOC]

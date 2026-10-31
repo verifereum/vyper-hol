@@ -27,6 +27,7 @@
 
 Theory bodySimDeclCases
 Ancestors
+  vyperTypeStoragePreservation
   list finite_map bodySim bodySimStmtCases exprSim exprSimHyps
   exprLoweringProps stmtSim stmtSimDecl stmtSimReturn stmtSimAssign
   stmtSimFor stmtSimForParts stmtSimForRange stmtLowering stmtLoweringMono
@@ -122,7 +123,7 @@ Theorem body_annassign_word[local]:
        lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
        (INL tyv,t) ==>
        body_expr_ok cx e) /\
-    body_inv tops ctx cenv cx /\
+    body_inv tops ctx cenv cx /\ supported_expr tops e /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
@@ -139,6 +140,9 @@ Proof
    id NOTIN FDOM env.var_types` by
     (gvs[type_stmt_def, AllCaseEqs()] >> metis_tac[type_widens_to_word]) >>
   `cenv.ce_alloca_locals` by fs[body_inv_def] >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
@@ -230,7 +234,9 @@ Theorem body_annassign_case:
        body_expr_ok cx e) ==>
     body_stmt_ok cx (AnnAssign id typ e)
 Proof
-  rw[body_stmt_ok_def] >> Cases_on `is_word_type typ`
+  rw[body_stmt_ok_def] >>
+  `supported_expr tops e` by gvs[supported_stmt_def] >>
+  Cases_on `is_word_type typ`
   >- (irule body_annassign_word >> metis_tac[]) >>
   irule body_annassign_other >> metis_tac[]
 QED
@@ -313,7 +319,8 @@ Proof
                ce_dynarray_capacity := _ |> = cenv`
     (strip_assume_tac o
      SIMP_RULE (srw_ss()) [compile_env_component_equality]) >>
-  ASM_REWRITE_TAC [expr_sim_inv_def] >> simp[]
+  ASM_REWRITE_TAC [expr_sim_inv_def] >> simp[] >>
+  irule storage_conjs_scopes >> simp[]
 QED
 
 (* After an iteration that goes on (a normal end or a continue), with the
@@ -321,7 +328,8 @@ QED
    compile and type environments: the type soundness of the body, and
    vyperTypeEvalSoundness's for_body_env_consistent_after_pop. *)
 Theorem expr_sim_inv_for_pop:
-  !cenv cx env es id fty tyv v ret_ty body env_b r2 es2 sc rest.
+  !cenv cx env es id fty tyv v ret_ty body env_b r2 es2 sc rest tops
+   bindings.
     expr_sim_inv cenv cx env es /\ id NOTIN FDOM env.var_types /\
     evaluate_type (get_tenv cx) fty = SOME tyv /\ value_has_type tyv v /\
     type_stmts (extend_local env id fty F) ret_ty body = SOME env_b /\
@@ -331,7 +339,9 @@ Theorem expr_sim_inv_for_pop:
          (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
                            popped := []|>)) :: es.scopes) = (r2, es2) /\
     (r2 = INL () \/ r2 = INR ContinueException) /\
-    es2.scopes = sc :: rest ==>
+    es2.scopes = sc :: rest /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    supported_stmts tops bindings body ==>
     expr_sim_inv cenv cx env (es2 with scopes := rest)
 Proof
   rpt gen_tac >> disch_then (fn th => MAP_EVERY assume_tac (CONJUNCTS th)) >>
@@ -370,6 +380,27 @@ Proof
     (drule (cj 2 eval_stmts_popped_keys_indexed) >> disch_then irule >>
      simp[for_pushed_popped_keys]) >>
   `popped_keys_indexed rest` by gvs[popped_keys_indexed_def] >>
+  `contract_storage_well_formed cx
+     (es with scopes updated_by
+        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
+                               popped := []|>))) /\
+   oracle_storage_ok cx
+     (es with scopes updated_by
+        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
+                               popped := []|>)))` by
+    (irule storage_conjs_scopes >> simp[]) >>
+  `runtime_storage_consistent (extend_local env id fty F) cx
+     (es with scopes updated_by
+        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
+                               popped := []|>))) /\
+   IS_SOME (es with scopes updated_by
+              CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
+                                     popped := []|>))).outcomes` by
+    simp[runtime_storage_consistent_def, runtime_consistent_def] >>
+  drule_all (cj 2 eval_stmts_storage_conjs) >> strip_tac >>
+  `contract_storage_well_formed cx (es2 with scopes := rest) /\
+   oracle_storage_ok cx (es2 with scopes := rest)` by
+    (irule storage_conjs_scopes >> simp[]) >>
   qpat_x_assum `es2.scopes = _` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   RULE_ASSUM_TAC (REWRITE_RULE [TL]) >>
   ASM_REWRITE_TAC [expr_sim_inv_def] >> simp[]
@@ -499,9 +530,9 @@ Proof
   `value_has_type tyv (IntV (n1 + &j))` by
     (irule range_value_has_type >> simp[] >> qexists_tac `n2` >> simp[]) >>
   (irule expr_sim_inv_for_pop >> conj_tac >- metis_tac[] >>
-   qexistsl_tac [`stmts`, `env_b`, `ei`, `typ`, `id`, `r2`, `ret_ty`, `tyv`,
-                 `IntV (n1 + &j)`] >>
-   simp[])
+   qexistsl_tac [`bindings`, `stmts`, `env_b`, `ei`, `typ`, `id`, `r2`,
+                 `ret_ty`, `tops`, `tyv`, `IntV (n1 + &j)`] >>
+   simp[] >> fs[body_inv_def])
 QED
 
 (* RESIDUAL (#637 for): a loop over a range whose ends are not both
