@@ -115,7 +115,7 @@ Theorem consume_call_outcome_static_or_failed:
 Proof
   simp[consume_call_outcome_def] >>
   Cases_on `take_outcome rq s.vs_outcomes` >> simp[] >>
-  rw[adopt_outcome_def] >> simp[]
+  rw[adopt_outcome_def, adopt_outcome_deletions_def] >> simp[]
 QED
 
 (* Binding the output leaves every residual field intact, by the existing

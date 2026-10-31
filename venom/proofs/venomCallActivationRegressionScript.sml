@@ -21,7 +21,8 @@ val dispatch_defs =
    call_probe_outcome_def, init_venom_state_def, empty_call_context_def,
    venom_call_request_def, read_memory_def, consume_call_outcome_def,
    take_outcome_def, computed_precompile_addresses, record_request_def,
-   failed_outcome_def, adopt_outcome_def, write_memory_with_expansion_def,
+   failed_outcome_def, adopt_outcome_def, adopt_outcome_deletions_def,
+   write_memory_with_expansion_def,
    update_var_def, lookup_var_def, mk_inst_def, step_inst_base_def,
    exec_ext_call_def, eval_operand_def, w2w_n2w];
 
@@ -150,6 +151,7 @@ val computed_defs =
    exec_ext_call_def, venom_call_request_def, read_memory_def,
    consume_call_outcome_def, take_outcome_def,
    record_request_def, computed_precompile_def, adopt_outcome_def,
+   adopt_outcome_deletions_def,
    failed_outcome_def, write_memory_with_expansion_def,
    lookup_var_def, update_var_def, w2w_n2w,
    precompile_result_empty_ecrecover, precompile_result_empty_ec,

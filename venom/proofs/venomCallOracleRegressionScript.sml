@@ -40,7 +40,8 @@ val probe_defs =
    init_venom_state_def, empty_call_context_def, venom_call_request_def,
    read_memory_def, consume_call_outcome_def, take_outcome_def,
    computed_precompile_addresses, record_request_def, failed_outcome_def,
-   adopt_outcome_def, write_memory_with_expansion_def,
+   adopt_outcome_def, adopt_outcome_deletions_def,
+   write_memory_with_expansion_def,
    update_var_def, lookup_var_def, mk_inst_def, step_inst_base_def,
    w2w_n2w];
 
@@ -187,7 +188,8 @@ Proof
   simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,
        take_outcome_def, record_request_def, computed_precompile_def,
        precompile_result_empty_ecrecover, failed_outcome_def,
-       adopt_outcome_def, write_memory_with_expansion_def,
+       adopt_outcome_def, adopt_outcome_deletions_def,
+       write_memory_with_expansion_def,
        call_probe_state_def, init_venom_state_def, empty_call_context_def,
        w2w_n2w]
 QED
@@ -204,7 +206,8 @@ Theorem consume_computed_sha256:
 Proof
   simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,
        take_outcome_def, record_request_def, computed_precompile_def,
-       failed_outcome_def, adopt_outcome_def, write_memory_with_expansion_def,
+       failed_outcome_def, adopt_outcome_def, adopt_outcome_deletions_def,
+       write_memory_with_expansion_def,
        call_probe_state_def, init_venom_state_def, empty_call_context_def,
        byteTheory.LENGTH_word_to_bytes, w2w_n2w]
 QED
@@ -222,6 +225,7 @@ Proof
   simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,
        take_outcome_def, record_request_def, computed_precompile_def,
        precompile_result_empty_ec, failed_outcome_def, adopt_outcome_def,
+       adopt_outcome_deletions_def,
        write_memory_with_expansion_def, call_probe_state_def,
        init_venom_state_def, empty_call_context_def, w2w_n2w]
 QED
@@ -239,6 +243,7 @@ Proof
   simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,
        take_outcome_def, record_request_def, computed_precompile_def,
        precompile_result_invalid_ec, failed_outcome_def, adopt_outcome_def,
+       adopt_outcome_deletions_def,
        write_memory_with_expansion_def, call_probe_state_def,
        init_venom_state_def, empty_call_context_def, w2w_n2w,
        TAKE_APPEND1, TAKE_APPEND2] >> EVAL_TAC

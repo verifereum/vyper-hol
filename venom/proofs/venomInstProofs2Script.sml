@@ -30,7 +30,8 @@ Theorem exec_ext_call_static_preserves:
     s'.vs_call_ctx = s.vs_call_ctx
 Proof
   rw[exec_ext_call_def, AllCaseEqs(), update_var_def,
-     venom_call_request_def, adopt_outcome_def] >> simp[]
+     venom_call_request_def, adopt_outcome_def,
+     adopt_outcome_deletions_def] >> simp[]
 QED
 
 (* Original concrete-call proof, retained for the legacy helper argument:
