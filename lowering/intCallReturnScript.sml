@@ -28,6 +28,7 @@ Theory intCallReturn
 Ancestors
   list rich_list finite_map
   intCallStep intCallFrame stmtSimReturn exprLoweringProps localPtrsProps compileEnv
+  accountsRelProps
   vyperCall vyperTyping vyperInterpreter vyperState
   venomExecSemantics venomExecProofs venomInstProofs opcodeClass venomInst
   venomState
@@ -196,8 +197,9 @@ QED
    Hypotheses beyond the call itself:
    - the outputs are distinct and none is a live local's pointer (the
      fresh outputs of compile_call's emit_multi_op);
-   - the callee's relation is at the caller's transaction (cx' may be cx
-     with the callee pushed on stk) and its compile env places immutables
+   - the callee's relation is at the caller's transaction, sources and
+     layouts (cx' may be cx with the callee pushed on stk), which fix the
+     dead bytes storage_rel allows, and its compile env places immutables
      as the caller's does;
    - FRAME: the callee changed no byte below the caller's frontier
      outside the exempt regions excl, which miss the caller's live
@@ -216,7 +218,7 @@ Theorem invoke_intret_state_rel:
     EVERY (not_local_ptr cenv es.scopes) inst.inst_outputs /\
     stmt_state_rel func cenv cx es s /\
     intret_q callee cenv' cx' tv v (es2 with scopes := []) (IntRet ret cs') /\
-    cx'.txn = cx.txn /\
+    cx'.txn = cx.txn /\ cx'.sources = cx.sources /\ cx'.layouts = cx.layouts /\
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor /\
     (!n off. FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, n)) =
                SOME (ImmutableLoc off) ==>
@@ -238,6 +240,11 @@ Theorem invoke_intret_state_rel:
          s'.vs_halted = s.vs_halted
 Proof
   rpt strip_tac >>
+  `storage_dead cx' = storage_dead cx /\ accounts_agree cx' = accounts_agree cx /\
+   transient_agree cx' = transient_agree cx /\
+   request_agree cx' = request_agree cx` by
+    (qspecl_then [`cx`, `cx'`] mp_tac storage_dead_cx_cong >>
+     qspecl_then [`cx`, `cx'`] mp_tac agree_cx_cong >> simp[]) >>
   `local_ptrs_rel func cenv es.scopes s` by gvs[stmt_state_rel_def, state_rel_def] >>
   drule_all step_inst_invoke_live_regions >> strip_tac >>
   qexists_tac `s'` >> simp[] >>

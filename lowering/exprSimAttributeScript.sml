@@ -37,6 +37,7 @@ Ancestors
   fragExec exprSim exprSimHyps exprSimUnwrap exprSimLen exprSimLeaves
   exprSimBuffer exprSimAggregateChildren exprSimAttributeFields
   exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv context
+  accountsRelProps
   valueEncoding vyperAST vyperInterpreter vyperState vyperStorage vyperValue
   vyperTyping vyperTypeSystem vyperTypeExprSoundness vyperTypeInvariants
   vyperPlaceResultTyping
@@ -220,6 +221,10 @@ Theorem base_vv_holds_struct[local]:
         (vv_loc vv = LocTransient ==>
            read_storage_slot cx T w stv es = (INL v, es) /\
            slots_in_range (get_storage cx es T) (w2n w) stv) /\
+        (vv_loc vv = LocStorage ==>
+           storage_read_live cx F (get_storage cx es F) w stv) /\
+        (vv_loc vv = LocTransient ==>
+           storage_read_live cx T (get_storage cx es T) w stv) /\
         (vv_loc vv = LocCode ==>
            immutable_holds cenv cx (StructT sid) tv w es) /\
         vv_loc vv <> LocCalldata
@@ -418,6 +423,7 @@ Proof
       >- (irule immutable_holds_field >> simp[] >> metis_tac[]) >>
       drule struct_field_slot_exists >> strip_tac >>
       drule_all read_storage_slot_field >> strip_tac >> gvs[] >>
+      drule_all storage_read_live_field >> strip_tac >>
       drule_all struct_field_offset_slots_eq >> strip_tac >>
       imp_res_tac vyperLookupStorageTheory.storage_field_slots_in_range >>
       gvs[storage_holds_def])
