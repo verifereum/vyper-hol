@@ -5113,6 +5113,11 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
   Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (args_res,args_st)` >>
   qpat_x_assum `!s'' x t. _ /\ bt = Len ==> _` kall_tac >>
+  qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ ~(_ \/ _) /\ bt <> Env MsgGas ==> _`
+    mp_tac >>
+  qpat_assum `bt <> Env MsgGas`
+    (fn th => pure_rewrite_tac [th, NOT_CLAUSES, AND_CLAUSES]) >>
+  strip_tac >>
   drule guarded_cases >> disch_then drule >>
   (impl_tac >- simp[]) >> strip_tac >>
   qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env es vs | INR _ => T`
@@ -8199,6 +8204,11 @@ Resume eval_scc_type_sound_results_mutual[TraceBuiltinBody]:
            AllCaseEqs()] >>
       strip_tac >> imp_res_tac next_gas_reading_state >>
       irule typed_scope_transition_scopes >> gvs[assert_def, return_def]) >>
+  qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ ~(_ \/ _) /\ bt <> Env MsgGas ==> _`
+    mp_tac >>
+  qpat_assum `bt <> Env MsgGas`
+    (fn th => pure_rewrite_tac [th, NOT_CLAUSES, AND_CLAUSES]) >>
+  strip_tac >>
   drule guarded_cases >> disch_then drule >>
   (impl_tac >- simp[]) >> strip_tac >>
   rpt (qpat_x_assum `!s'' x t. type_check _ _ _ = _ /\ _ ==> _` kall_tac) >>
