@@ -160,12 +160,12 @@ Proof
   fs[stmt_state_rel_def] >> metis_tac[]
 QED
 
-(* One MSTORE of a word that lays v out at the local's base. *)
-Theorem local_mstore_immutables[local]:
+(* One MSTORE of a word inside a local's region. *)
+Theorem local_mstore_immutables_at:
   stmt_state_rel func cenv cx es s /\
-  local_region cenv es.scopes s id b sz /\ 32 <= sz ==>
+  local_region cenv es.scopes s id b sz /\ k + 32 <= sz ==>
   immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
-    (mstore b wd s)
+    (mstore (b + k) wd s)
 Proof
   strip_tac >> irule immutables_rel_mem_agree >> qexists_tac `s` >>
   conj_tac
@@ -181,6 +181,19 @@ Proof
      disch_then drule_all >> strip_tac >> metis_tac[]) >>
   irule mstore_mem_bytes_at_disjoint >>
   gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+QED
+
+(* One MSTORE of a word that lays v out at the local's base. *)
+Theorem local_mstore_immutables[local]:
+  stmt_state_rel func cenv cx es s /\
+  local_region cenv es.scopes s id b sz /\ 32 <= sz ==>
+  immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+    (mstore b wd s)
+Proof
+  strip_tac >>
+  qspecl_then [`b`, `0`] mp_tac
+    (Q.GENL [`b`, `k`] local_mstore_immutables_at) >>
+  simp[] >> disch_then irule >> metis_tac[]
 QED
 
 Theorem stmt_state_rel_write_local_word:

@@ -1461,8 +1461,8 @@ Proof
 QED
 
 (* ci_mono for compile_ptr_load (used by unwrap_value) *)
-Theorem ci_mono_compile_ptr_load[local]:
-  ∀ is_ctor loc op sa. ci_mono sa (SND (compile_ptr_load is_ctor imm loc op sa))
+Theorem ci_mono_compile_ptr_load:
+  ∀ is_ctor imm loc op sa. ci_mono sa (SND (compile_ptr_load is_ctor imm loc op sa))
 Proof
   rpt gen_tac >> Cases_on `loc` >> Cases_on `imm` >> Cases_on `is_ctor` >>
   simp[contextTheory.compile_ptr_load_def, contextTheory.compile_imm_load_word_def] >>
@@ -1533,7 +1533,7 @@ Proof
   Cases_on `op` >> simp[ci_mono_comp_return, ci_mono_emit_op]
 QED
 
-Theorem ci_mono_compile_imm_copy_to_memory[local]:
+Theorem ci_mono_compile_imm_copy_to_memory:
   !n is_ctor imm src dst off sa.
     ci_mono sa (SND (compile_imm_copy_to_memory is_ctor imm src dst n off sa))
 Proof
@@ -1546,7 +1546,14 @@ Proof
   rpt gen_tac >> irule ci_mono_ignore_bind >> simp[ci_mono_emit_void]
 QED
 
-Theorem ci_mono_compile_imm_store_words[local]:
+Theorem ci_mono_compile_imm_store_word:
+  !imm off v sa. ci_mono sa (SND (compile_imm_store_word imm off v sa))
+Proof
+  Cases >> simp[contextTheory.compile_imm_store_word_def, ci_mono_emit_void] >>
+  rpt gen_tac >> irule ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_imm_store_words:
   !n imm src dst off sa.
     ci_mono sa (SND (compile_imm_store_words imm src dst n off sa))
 Proof
