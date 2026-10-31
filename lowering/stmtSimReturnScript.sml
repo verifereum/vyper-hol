@@ -23,7 +23,7 @@ Theory stmtSimReturn
 Ancestors
   list rich_list pair finite_map fragExec exprSim exprSimLeaves stmtSim
   freshWrites vyperTypeABI
-  transientLockProps nonreentrantEquiv context localPtrsProps
+  transientLockProps nonreentrantEquiv accountsRelProps context localPtrsProps
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding venomMemDefs
   vyperContext vfmExecution vfmState
@@ -303,25 +303,27 @@ Proof
   Cases_on `nr` >> Cases_on `iv` >>
   gvs[return_unlock_state_def, result_rel_def, vyperStateTheory.return_def,
       release_nonreentrant_lock_execution] >>
-  irule state_rel_transient_update >> simp[]
+  irule state_rel_transient_update >> simp[] >>
+  metis_tac[storage_dead_update_zero]
 QED
 
 (* Evidence that the old unchanged-source contract is genuinely false for
    a held transient guard, rather than merely difficult for metis. *)
+
 Theorem return_unlock_changes_source_relation:
   !func cenv cx es s key.
+    nonreentrant_slot_separated cx /\ cx.nonreentrant_slot = SOME key /\
     cenv.ce_nonreentrant = (T,key,T,F) /\
     state_rel func cenv cx es s /\ tload (n2w key) s <> 0w ==>
     ~state_rel func cenv cx es (return_unlock_state cenv s)
 Proof
   rpt gen_tac >> strip_tac >>
+  `storage_read_live cx T (es.tStorage cx.txn.target) (n2w key)
+     (BaseTV (UintT 256))` by
+    (irule nonreentrant_slot_read_live >> simp[]) >>
+  drule_all state_rel_transient_lookup >> strip_tac >>
   simp[return_unlock_state_def] >> strip_tac >>
-  qpat_assum `state_rel _ _ _ _ s`
-    (mp_tac o GEN_ALL o MATCH_MP state_rel_transient_lookup) >>
-  disch_then (qspec_then `n2w key` assume_tac) >>
-  qpat_x_assum `state_rel _ _ _ _ (tstore _ _ _)`
-    (mp_tac o GEN_ALL o MATCH_MP state_rel_transient_lookup) >>
-  disch_then (qspec_then `n2w key` mp_tac) >> simp[]
+  drule_all state_rel_transient_lookup >> simp[]
 QED
 
 (* A word returns as the one word of its typed encoding. *)

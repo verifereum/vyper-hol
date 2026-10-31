@@ -18,7 +18,9 @@ Proof
   metis_tac[check_contract_function_header, listTheory.MEM]
 QED
 
+
 Theorem nonreentrant_entry_lock_source_correct:
+  nonreentrant_slot_separated cx /\
   layouts_agree tops am tx /\
   MEM (FunctionDecl vis mut T rr name args dflts ret stmts) tops /\
   function_header_ok vis mut T rr name args dflts ret /\
@@ -41,7 +43,9 @@ Proof
   irule compile_nonreentrant_lock_source_correct >> gvs[]
 QED
 
+
 Theorem nonreentrant_entry_lock_source_revert:
+  nonreentrant_slot_separated cx /\
   layouts_agree tops am tx /\
   MEM (FunctionDecl vis mut T rr name args dflts ret stmts) tops /\
   function_header_ok vis mut T rr name args dflts ret /\
@@ -90,7 +94,9 @@ QED
 
 (* The checked entry boundary also keeps already-decoded arguments and local
    buffers, so the simulation can continue into the guarded body. *)
+
 Theorem checked_nonreentrant_entry_lock:
+  nonreentrant_slot_separated cx /\
   source_typing_ok tops am tx /\ layouts_agree tops am tx /\
   MEM (FunctionDecl vis mut T rr name args dflts ret stmts) tops /\
   cx.nonreentrant_slot = lookup_nonreentrant_slot am.layouts tx.target /\
