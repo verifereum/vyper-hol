@@ -4982,7 +4982,9 @@ val shape_subscript_tuple_tac =
   simp[value_shape_ok_def, vv_location_def, mk_ptr_def];
 
 val shape_subscript_array_tac =
-
+  Cases_on `vv_location base_vv = SOME LocCode`
+  >- (Cases_on `base_vv` >>
+      gvs[vv_location_def, shape_step_def, value_shape_ok_def]) >>
   match_mp_tac shape_step_bind >>
   qexists_tac `\v st. (cenv_shape_ok st cenv /\ value_shape_ok st base_vv) /\ plain_operand st v` >> conj_tac
   >- (shape_under_tac lower_value_callback_shape `\st. cenv_shape_ok st cenv /\ value_shape_ok st base_vv` >> simp[]) >>
@@ -4990,8 +4992,8 @@ val shape_subscript_array_tac =
   match_mp_tac shape_step_bind >> qexists_tac `\v st. value_shape_ok st base_vv /\ plain_operand st v` >> conj_tac
   >- (shape_under_tac compile_array_subscript_shape_framed `\st. value_shape_ok st base_vv` >>
       simp[] >> conj_tac
-      >- (Cases_on `vv_location base_vv` >> simp[] >>
-          rename1 `SOME loc` >> Cases_on `loc` >> simp[]) >>
+      >- (Cases_on `vv_location base_vv` >> simp[load_opc_for_def] >>
+          rename1 `SOME loc` >> Cases_on `loc` >> gvs[load_opc_for_def]) >>
       Cases_on `base_vv` >> simp[value_shape_ok_def, vv_operand_def]) >>
   gen_tac >> simp[] >> irule shape_step_return >> Cases_on `base_vv` >>
   simp[value_shape_ok_def, vv_location_def, mk_ptr_def];
