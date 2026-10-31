@@ -1149,6 +1149,25 @@ Proof
   metis_tac[local_ptrs_reserved_next_var, ci_mono_def]
 QED
 
+Theorem compiler_hash_ci_mono[local]:
+  !p sa. ci_mono sa (SND (compile_bytestring_hash p sa))
+Proof
+  rpt gen_tac >> simp[compile_bytestring_hash_def, comp_bind_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  mp_tac ci_mono_emit_op >>
+  simp[ci_mono_def] >>
+  metis_tac[cs_extends_trans, pairTheory.SND, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem compiler_hash_reserved[local]:
+  local_ptrs_reserved ce sa /\
+  compile_bytestring_hash p sa = (h,sb) ==>
+  local_ptrs_reserved ce sb
+Proof
+  rpt strip_tac >> irule compiler_ci_mono_reserved >>
+  qexists `sa` >> metis_tac[compiler_hash_ci_mono, pairTheory.SND]
+QED
+
 Theorem compiler_guarded_callback_ci_mono:
   (!ce ty e s. ci_mono s (SND (f ce ty e s))) ==>
   !ce ty e s.
@@ -1630,7 +1649,19 @@ Resume compiler_builtin_reserved_cong[bop]:
       Cases_on `HD (TL args)` >> simp[] >>
       rename1 `Builtin _ b _` >> Cases_on `b` >> simp[] >>
       AP_TERM_TAC >> irule compiler_multi_exprs_reserved_cong >> simp[]) >>
-  IF_CASES_TAC >> simp[] >> rpt compiler_reserved_pair_tac
+  IF_CASES_TAC >> simp[]
+  >- (Cases_on `bytestring_literal_hash (HD args)` >> simp[]
+      >- (Cases_on `lower_value g ce (expr_type (HD args)) (HD args) sa` >>
+          rename1 `lower_value g ce _ _ sa = (p,sb)` >>
+          `local_ptrs_reserved ce sb` by metis_tac[] >>
+          simp[] >> Cases_on `compile_bytestring_hash p sb` >>
+          rename1 `compile_bytestring_hash p sb = (h,sc)` >>
+          `local_ptrs_reserved ce sc` by
+            (irule compiler_hash_reserved >> metis_tac[]) >>
+          simp[] >>
+          Cases_on `bytestring_literal_hash (HD (TL args))` >> simp[]) >>
+      Cases_on `bytestring_literal_hash (HD (TL args))` >> simp[]) >>
+  rpt compiler_reserved_pair_tac
 QED
 
 Resume compiler_builtin_reserved_cong[concat]:

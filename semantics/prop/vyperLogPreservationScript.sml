@@ -542,9 +542,12 @@ Proof
        (first_x_assum (qspec_then `st` mp_tac) >>
         simp[vyperStateTheory.check_def, vyperStateTheory.type_check_def,
              vyperStateTheory.assert_def, vyperStateTheory.return_def])
-  >> gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def,
+  >> Cases_on `bt = Bop In \/ bt = Bop NotIn`
+  >> gvs[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+         vyperStateTheory.assert_def, vyperStateTheory.return_def,
          vyperStateTheory.raise_def, vyperStateTheory.get_accounts_def,
          AllCaseEqs()]
+  >> imp_res_tac lift_option_type_state >> gvs[]
   >> BasicProvers.FULL_CASE_TAC
   >> gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
   >> first_x_assum drule >> simp[]
@@ -2196,7 +2199,11 @@ Proof
        [`_ ==> !st res st'.
            eval_expr _ (Call _ (CreateTarget _ _ _) _ _) st = (res,st') ==>
            log_extends st st'`] >-
-         suspend "CreateTarget" >>
+         suspend "CreateTarget" >~
+       [`_ ==> !st res st'.
+           eval_expr _ (Builtin _ _ _) st = (res,st') ==>
+           log_extends st st'`] >-
+         suspend "Builtin" >>
      all_tac >>~- ([`_ ==> !st res st'.
        eval_stmt _ (Assign _ _) st = (res,st') ==> log_extends st st'`],
        PLACE_LOG_CASE_TAC) >>~-
@@ -2230,6 +2237,14 @@ Resume eval_mutual_log_extends[CreateTarget]:
   res_tac >>
   imp_res_tac eval_create_logs_extend >>
   metis_tac[log_extends_refl, log_extends_trans, log_extends_def]
+QED
+
+Resume eval_mutual_log_extends[Builtin]:
+  rpt gen_tac >> strip_tac >>
+  mp_tac case_expr_builtin_logs >>
+  (impl_tac >-
+    (Cases_on `bt = Bop In \/ bt = Bop NotIn` >> gvs[] >> metis_tac[])) >>
+  simp[]
 QED
 
 Finalise eval_mutual_log_extends

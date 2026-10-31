@@ -495,6 +495,13 @@ Resume evaluate_read_only[builtin_len]:
 QED
 
 Resume evaluate_read_only[builtin_other]:
+  Cases_on `bt = Bop In \/ bt = Bop NotIn` >> simp[]
+  >- (irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
+      >- (rpt strip_tac >> simp[ignore_bind_def] >>
+          match_mp_tac machine_frame_bind >> simp[machine_frame_primitives] >>
+          match_mp_tac machine_frame_bind >>
+          simp[machine_frame_primitives]) >>
+      gvs[SF ETA_ss] >> metis_tac[]) >>
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
   >- (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
       simp[machine_frame_def, machine_frame_reads, machine_frame_primitives]) >>

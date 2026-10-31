@@ -1,0 +1,532 @@
+{
+  "producer": "independent pinned Python Vyper",
+  "compiler_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "python_version": "3.11.11",
+  "compiler_version": "0.5.0a4+cd74ce4f",
+  "compiler_module": "/tmp/issue-548-vyper-oracle/venv/lib/python3.11/site-packages/vyper",
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.1.9",
+    "packaging": "26.3",
+    "pycryptodome": "3.23.0",
+    "wheel": "0.48.0"
+  },
+  "settings": {
+    "experimental_codegen": true,
+    "optimization": "NONE",
+    "venom_pipeline": "O1",
+    "final_assembly_optimization": false,
+    "evm_version": "prague",
+    "bytecode_metadata": false
+  },
+  "task_sha256": "266d67550a36b02a224054397891627a85ba0904635afe9f2f77bf2724b32fed",
+  "witnesses": {
+    "eq_bytes_storage_both": {
+      "source_sha256": "4575640e0f29269926bfb738ead092d45157220cbd065484417628bd2f60561e",
+      "ast": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "-f",
+          "annotated_ast,layout",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/eq_bytes_storage_both.vy"
+        ],
+        "exit_code": 0
+      },
+      "bytecode": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "--experimental-codegen",
+          "--evm-version",
+          "prague",
+          "-O",
+          "none",
+          "--disable-bytecode-metadata",
+          "-f",
+          "bytecode,bytecode_runtime",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/eq_bytes_storage_both.vy"
+        ],
+        "exit_code": 0
+      },
+      "outputs": {
+        "deploy": {
+          "bytes": 196,
+          "sha256": "5260ebc4fd1b8c60a21a5d0eab4869a87b65a497c0b7919425370f08cfd595e3"
+        },
+        "runtime": {
+          "bytes": 177,
+          "sha256": "111ce0c5896ec06370c457f713a5efb2bc3211f79a25612a33351bbb56f4f859"
+        }
+      }
+    },
+    "eq_string_lit_same": {
+      "source_sha256": "6ad63b17f9214781312108069f9b6e930700f75dce9833d649d02e7234fa5fc2",
+      "ast": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "-f",
+          "annotated_ast,layout",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/eq_string_lit_same.vy"
+        ],
+        "exit_code": 0
+      },
+      "bytecode": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "--experimental-codegen",
+          "--evm-version",
+          "prague",
+          "-O",
+          "none",
+          "--disable-bytecode-metadata",
+          "-f",
+          "bytecode,bytecode_runtime",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/eq_string_lit_same.vy"
+        ],
+        "exit_code": 0
+      },
+      "outputs": {
+        "deploy": {
+          "bytes": 166,
+          "sha256": "928157d6fac0d3b7f7c54fbbf9b67e82b5b8d8da86bfad296b8992a2d3559085"
+        },
+        "runtime": {
+          "bytes": 147,
+          "sha256": "8e10276245c0f68f3f12b686e0d7806efda8edbd9c98e6f14e04298b50467737"
+        }
+      }
+    },
+    "in_empty_list": {
+      "source_sha256": "c70e7f793cb875c9380ec040ccf823ed31a3612bfbf29ae51b6a500c2cd052cf",
+      "ast": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "-f",
+          "annotated_ast,layout",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/in_empty_list.vy"
+        ],
+        "exit_code": 0
+      },
+      "bytecode": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "--experimental-codegen",
+          "--evm-version",
+          "prague",
+          "-O",
+          "none",
+          "--disable-bytecode-metadata",
+          "-f",
+          "bytecode,bytecode_runtime",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/in_empty_list.vy"
+        ],
+        "exit_code": 0
+      },
+      "outputs": {
+        "deploy": {
+          "bytes": 189,
+          "sha256": "c35af5cb71003359b7fd87c3cbdbc9606162fc814ff0aea4a64fe2dbdebbbe3e"
+        },
+        "runtime": {
+          "bytes": 170,
+          "sha256": "88cbd59f28e570ba025473d2ecd0d787f88f8094e8339c36ddd7a292d3fe7db8"
+        }
+      }
+    },
+    "in_flag": {
+      "source_sha256": "164dd6e91347003ca3aaa10c69d8aca4f58ee57061c52ef9041f8dcbdbb26dfc",
+      "ast": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "-f",
+          "annotated_ast,layout",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/in_flag.vy"
+        ],
+        "exit_code": 0
+      },
+      "bytecode": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "--experimental-codegen",
+          "--evm-version",
+          "prague",
+          "-O",
+          "none",
+          "--disable-bytecode-metadata",
+          "-f",
+          "bytecode,bytecode_runtime",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/in_flag.vy"
+        ],
+        "exit_code": 0
+      },
+      "outputs": {
+        "deploy": {
+          "bytes": 147,
+          "sha256": "aca3c85345a67cf54ffd687978a72e509d9d26c1aa8f447fb8d1c811c0cbb0c4"
+        },
+        "runtime": {
+          "bytes": 128,
+          "sha256": "ee6677ec6c741b0339a7eeb0ac28a0c961f50de371d991e855bbe6a8c8fa3b83"
+        }
+      }
+    },
+    "in_lit_list": {
+      "source_sha256": "f82881c53d51e00ef6b6f0f82c3c5a1f43be953a327968411c8fb23eea94e941",
+      "ast": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "-f",
+          "annotated_ast,layout",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/in_lit_list.vy"
+        ],
+        "exit_code": 0
+      },
+      "bytecode": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "--experimental-codegen",
+          "--evm-version",
+          "prague",
+          "-O",
+          "none",
+          "--disable-bytecode-metadata",
+          "-f",
+          "bytecode,bytecode_runtime",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/in_lit_list.vy"
+        ],
+        "exit_code": 0
+      },
+      "outputs": {
+        "deploy": {
+          "bytes": 122,
+          "sha256": "06fed38a8218b412197ed6c62eab4a8525edcd849967397d1df44f6d69576866"
+        },
+        "runtime": {
+          "bytes": 103,
+          "sha256": "b8f97c74a05751b927ce61d77aa216cbe7dc3c5aa6edf4d829e8614899b6d4da"
+        }
+      }
+    },
+    "in_mem_dynarray": {
+      "source_sha256": "eef2f26b94a096241266d260514b1c24317f71d0e81bfb2f0dc6baa5824adfad",
+      "ast": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "-f",
+          "annotated_ast,layout",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/in_mem_dynarray.vy"
+        ],
+        "exit_code": 0
+      },
+      "bytecode": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "--experimental-codegen",
+          "--evm-version",
+          "prague",
+          "-O",
+          "none",
+          "--disable-bytecode-metadata",
+          "-f",
+          "bytecode,bytecode_runtime",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/in_mem_dynarray.vy"
+        ],
+        "exit_code": 0
+      },
+      "outputs": {
+        "deploy": {
+          "bytes": 229,
+          "sha256": "b7161854195d7406662c03316fecd00f2e95728ae20ed27cb1a5b90766608218"
+        },
+        "runtime": {
+          "bytes": 210,
+          "sha256": "dee2d5fedbd4f5558a4990b3a9ff36a01654b4e27d90d5f7fb80883f4bb176d1"
+        }
+      }
+    },
+    "in_nested_array": {
+      "source_sha256": "da7ea1f5a09bdcadd565382c6a468b6ad3cc7b1b0c75397d694d1150d6943349",
+      "ast": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "-f",
+          "annotated_ast,layout",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/in_nested_array.vy"
+        ],
+        "exit_code": 0
+      },
+      "bytecode": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "--experimental-codegen",
+          "--evm-version",
+          "prague",
+          "-O",
+          "none",
+          "--disable-bytecode-metadata",
+          "-f",
+          "bytecode,bytecode_runtime",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/in_nested_array.vy"
+        ],
+        "exit_code": 1
+      }
+    },
+    "in_storage_dynarray": {
+      "source_sha256": "064de6743c51cd4bb5140051f274e230306c7b8996795d2428acdc99057384d7",
+      "ast": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "-f",
+          "annotated_ast,layout",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/in_storage_dynarray.vy"
+        ],
+        "exit_code": 0
+      },
+      "bytecode": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "--experimental-codegen",
+          "--evm-version",
+          "prague",
+          "-O",
+          "none",
+          "--disable-bytecode-metadata",
+          "-f",
+          "bytecode,bytecode_runtime",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/in_storage_dynarray.vy"
+        ],
+        "exit_code": 0
+      },
+      "outputs": {
+        "deploy": {
+          "bytes": 184,
+          "sha256": "e3d4b0cf98a6e49dfb3b36a22ec18962905429f7f3e12e60b6421e404b0903d6"
+        },
+        "runtime": {
+          "bytes": 165,
+          "sha256": "e202ce651eebf98d57082e397b7f53a97438f95bf8a973e2ffbb70336032e640"
+        }
+      }
+    },
+    "ne_bytes_var": {
+      "source_sha256": "21b49bc49695998e517b2cff5f4ebddd7791ded2f32bc23ee88b8c6a2f3c4c78",
+      "ast": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "-f",
+          "annotated_ast,layout",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/ne_bytes_var.vy"
+        ],
+        "exit_code": 0
+      },
+      "bytecode": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "--experimental-codegen",
+          "--evm-version",
+          "prague",
+          "-O",
+          "none",
+          "--disable-bytecode-metadata",
+          "-f",
+          "bytecode,bytecode_runtime",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/ne_bytes_var.vy"
+        ],
+        "exit_code": 0
+      },
+      "outputs": {
+        "deploy": {
+          "bytes": 172,
+          "sha256": "b6b3bab99d2188b31bd9b690f9ddd760a0d7f3cbf73665483e7004f4868fe11c"
+        },
+        "runtime": {
+          "bytes": 153,
+          "sha256": "51f70ac7a90b3140c1a7a1fd09b6d9e7892d9571fdd5df6155be2db919a6b18e"
+        }
+      }
+    },
+    "notin_flag": {
+      "source_sha256": "1401b2f94f5937ff24fadadb34c220350e315ecc349bf52a97d45124c5a98992",
+      "ast": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "-f",
+          "annotated_ast,layout",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/notin_flag.vy"
+        ],
+        "exit_code": 0
+      },
+      "bytecode": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "--experimental-codegen",
+          "--evm-version",
+          "prague",
+          "-O",
+          "none",
+          "--disable-bytecode-metadata",
+          "-f",
+          "bytecode,bytecode_runtime",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/notin_flag.vy"
+        ],
+        "exit_code": 0
+      },
+      "outputs": {
+        "deploy": {
+          "bytes": 125,
+          "sha256": "05283ba6b9ce23f3b6f59eb281fdf7bbd03b89a404384af559008d89e754ea46"
+        },
+        "runtime": {
+          "bytes": 106,
+          "sha256": "2a4b5a08058063cae3c411bcd23e00d1d3cc00f408dc37d3923ffcfb910b85a1"
+        }
+      }
+    },
+    "notin_lit_list3": {
+      "source_sha256": "e3857bd1facd1e6dbd06b015ef9494907cba3dd34663a6e5a0e5957eed941c7d",
+      "ast": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "-f",
+          "annotated_ast,layout",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/notin_lit_list3.vy"
+        ],
+        "exit_code": 0
+      },
+      "bytecode": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "--experimental-codegen",
+          "--evm-version",
+          "prague",
+          "-O",
+          "none",
+          "--disable-bytecode-metadata",
+          "-f",
+          "bytecode,bytecode_runtime",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/notin_lit_list3.vy"
+        ],
+        "exit_code": 0
+      },
+      "outputs": {
+        "deploy": {
+          "bytes": 159,
+          "sha256": "12d3706a0159ce3426b3eaf424a0bd3da2fb0400ebc462fd6bda4cfb81c8cc9b"
+        },
+        "runtime": {
+          "bytes": 140,
+          "sha256": "dcbfb973f50b72fa1bc1ad8c1559c7d41e0dd2bd860a2d437333a51dc43979d4"
+        }
+      }
+    },
+    "notin_mem_sarray": {
+      "source_sha256": "c103699015a0fd33a83da42c7cbb3a00b2005380783580d26ed281d5c5480a39",
+      "ast": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "-f",
+          "annotated_ast,layout",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/notin_mem_sarray.vy"
+        ],
+        "exit_code": 0
+      },
+      "bytecode": {
+        "command": [
+          "/tmp/issue-548-vyper-oracle/venv/bin/python",
+          "-I",
+          "-m",
+          "vyper",
+          "--experimental-codegen",
+          "--evm-version",
+          "prague",
+          "-O",
+          "none",
+          "--disable-bytecode-metadata",
+          "-f",
+          "bytecode,bytecode_runtime",
+          "/home/lukasz/work/vyper-hol/worktrees/issue-569/.agent-files/c6-validation/sources/notin_mem_sarray.vy"
+        ],
+        "exit_code": 0
+      },
+      "outputs": {
+        "deploy": {
+          "bytes": 273,
+          "sha256": "c07cf94fcebf5f62e8b6d012752011b50afff28c8f76e7abe11058d624d6a5ad"
+        },
+        "runtime": {
+          "bytes": 254,
+          "sha256": "d98ab27ca0ccb63bf4aa89a9b3941ff9df070894e60296607bc212da580ef747"
+        }
+      }
+    }
+  }
+}

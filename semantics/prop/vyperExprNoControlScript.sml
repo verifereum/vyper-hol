@@ -850,11 +850,13 @@ QED
 
 Resume canonical_eval_no_control_with_results[Builtin]:
   rpt gen_tac >> strip_tac >> Cases_on `bt = Len` >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
     get_accounts_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  metis_tac[type_check_no_control, result_array_length_no_control,
+  imp_res_tac result_array_length_no_control >>
+  metis_tac[type_check_no_control, lift_option_type_no_control,
     lift_sum_no_control]
 QED
 

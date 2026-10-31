@@ -15,6 +15,14 @@ Definition closed_integer_def:
   closed_integer _ = F
 End
 
+Theorem closed_integer_type_context_independent[local]:
+  !e. closed_integer e ==> !tenv tenv'.
+    evaluate_type tenv (expr_type e) = evaluate_type tenv' (expr_type e)
+Proof
+  ho_match_mp_tac closed_integer_ind >>
+  simp[closed_integer_def, expr_type_def, evaluate_type_def]
+QED
+
 Theorem closed_integer_value:
   !e. closed_integer e ==>
     !cx st. eval_pure_expr cx st e = NONE \/
@@ -47,6 +55,7 @@ Proof
   imp_res_tac closed_integer_expr_type >>
   simp[eval_pure_expr_def, builtin_args_length_ok_def] >>
   fs[] >>
+  imp_res_tac closed_integer_type_context_independent >>
   qpat_x_assum `!a b c d. _` (qspecl_then [`cx'`, `st'`, `cx`, `st`] assume_tac) >>
   qpat_x_assum `!a b c d. _` (qspecl_then [`cx'`, `st'`, `cx`, `st`] assume_tac) >>
   qpat_x_assum `closed_integer _` (mp_tac o MATCH_MP closed_integer_value) >>
@@ -55,7 +64,10 @@ Proof
   disch_then strip_assume_tac >>
   disch_then (qspecl_then [`cx`, `st`] mp_tac) >>
   simp[] >> rpt strip_tac >>
-  simp[read_result_def, return_def, evaluate_builtin_def, evaluate_type_def]
+  simp[read_result_def, return_def, evaluate_builtin_def, evaluate_type_def] >>
+  qpat_x_assum `!a b. evaluate_type b (expr_type e') = _`
+    (qspecl_then [`get_tenv cx'`, `get_tenv cx`] (fn th => once_rewrite_tac[th])) >>
+  simp[]
 QED
 
 (* Failure includes unsupported syntax and runtime arithmetic errors. *)
