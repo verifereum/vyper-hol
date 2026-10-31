@@ -26,21 +26,19 @@
  *                              reads: a storage or transient variable by
  *                              compile_toplevel_storage_vv_sim, a pointer
  *                              to its slot, whose ce_vars entry comes from
- *                              storage_vars_rel and transient_vars_rel
+ *                              storage_vars_rel and transient_vars_rel;
+ *                              its slot decodes by expr_sim_inv's storage
+ *                              clauses
+ *                              (compile_toplevel_storage_undecodable_sim)
  *   compile_flag_member_case_sim — a flag member: the literal 2 ** id, by
  *                              expr_sim_inv's flag members clause
  *
  * Helpers: expr_sim_of_vv_sim_memory, eval_expr_toplevel_storage,
- *   toplevel_storage_ce_vars, compile_toplevel_no_module_sim
+ *   toplevel_storage_ce_vars, toplevel_storage_read_decodes,
+ *   compile_toplevel_no_module_sim
  *
  * Unprovable as the definitions stand, to be fixed in the lowering, in
  * state_rel or in the judgment before their PRs:
- *   compile_toplevel_storage_undecodable_sim — a storage or transient
- *                              variable whose slot does not decode (row 3):
- *                              the source raises a RuntimeError where the
- *                              lowering emits no code.  It needs a storage
- *                              invariant keeping the variables' slots
- *                              decodable.
  *   compile_toplevel_immutable_sim — immutables and constants (row 3),
  *                              which lookup_global reads from the
  *                              immutables: nothing puts them in ce_vars,
@@ -64,6 +62,7 @@ Ancestors
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeEnv vyperTyping vyperTypeGlobalLookupSoundness
   vyperValueOperation valueEncoding fragExec venomState exprSimLiteralBuffer
+  vyperStorageLayoutSafety vyperLookupStorage vyperTypeValues
 
 val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
                   basicSizeTheory.option_size_def];
@@ -470,13 +469,36 @@ Proof
        vyperASTTheory.expr_type_def]
 QED
 
-(* A storage or transient variable whose slot does not decode at es (a
-   dynamic array, bytestring or string, or an aggregate holding one, whose
-   length word is above its bound).  Cheated, and false as stated: the
-   source raises a RuntimeError when read_result reads the StoragePlace,
-   where the lowering emits no code and hands out the slot.
-   Nothing in stmt_state_rel keeps a variable's slots decodable; the fix is
-   a storage invariant, as for exprSimUnwrap's unwrap_storage_word_sim. *)
+(* A storage or transient variable's slot decodes wherever the declared
+   regions do (contract_storage_well_formed,
+   decode_value_from_slots_in_range). *)
+Theorem toplevel_storage_read_decodes:
+  !cx es src id ts tr typ id_str slot tvt.
+    contract_storage_well_formed cx es /\
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+    evaluate_type (get_tenv cx) typ = SOME tvt ==>
+    ?v. read_storage_slot cx tr (n2w slot) tvt es = (INL v, es)
+Proof
+  rpt strip_tac >>
+  `declared_storage_region cx src id [] = SOME (tr, n2w slot, tvt)` by
+    simp[declared_storage_region_def] >>
+  `?storage. get_storage_backend cx tr es = (INL storage, es)` by
+    (Cases_on `tr` >>
+     simp[get_storage_backend_def, bind_def, return_def,
+          get_transient_storage_def, get_accounts_def]) >>
+  drule_all contract_storage_well_formed_region >> strip_tac >>
+  drule evaluate_type_well_formed_type_value >> strip_tac >>
+  drule_all decode_value_from_slots_in_range >> strip_tac >>
+  gvs[read_storage_slot_def, bind_def, lift_option_def, return_def,
+      wordsTheory.w2n_n2w]
+QED
+
+(* A storage or transient variable whose slot does not decode at es: the
+   source raises a TypeError when the layout has no slot for it or its
+   type does not evaluate, and otherwise the slot decodes
+   (toplevel_storage_read_decodes, by expr_sim_inv's storage clauses). *)
 Theorem compile_toplevel_storage_undecodable_sim:
   !ctx func cenv cx env ty ann src id es ts tr typ id_str.
     expr_sim_pre cenv cx env (TopLevelName ann (src, id)) es /\
@@ -487,7 +509,17 @@ Theorem compile_toplevel_storage_undecodable_sim:
                    read_storage_slot cx tr (n2w slot) tvt es = (INL v, es)) ==>
     expr_vv_sim ctx func cenv cx ty (TopLevelName ann (src, id)) es
 Proof
-  cheat
+  rpt strip_tac >> simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
+  `F` suffices_by simp[] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >> lookup_global_tac >>
+  Cases_on `lookup_var_slot_from_layout cx tr src id_str` >>
+  simp[raise_def, return_def]
+  >- (strip_tac >> gvs[expr_vv_res_ok_def]) >>
+  Cases_on `evaluate_type (get_tenv cx) typ` >> simp[raise_def, return_def]
+  >- (strip_tac >> gvs[expr_vv_res_ok_def]) >>
+  `contract_storage_well_formed cx es` by
+    gvs[expr_sim_pre_def, expr_sim_inv_def] >>
+  drule_all toplevel_storage_read_decodes >> metis_tac[]
 QED
 
 (* An immutable or a constant (no storage declaration of the name; both

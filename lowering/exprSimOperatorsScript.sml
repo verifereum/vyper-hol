@@ -215,7 +215,11 @@ Theorem expr_body_pre_bop:
 Proof
   rpt gen_tac >>
   simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
-       int_calls_expr_def, byte_widths_expr_def, alloc_limits_expr_def] >>
+       int_calls_expr_def, byte_widths_expr_def, alloc_limits_expr_def,
+       supportedExprTraverseTheory.expr_has_evm_run_def,
+       supportedExprTraverseTheory.supported_expr_exists_def,
+       supportedExprTraverseTheory.expr_evm_run_root_def,
+       listTheory.EVERY_APPEND] >>
   strip_tac >>
   metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
             vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right]
@@ -705,7 +709,11 @@ Theorem expr_body_pre_ifexp:
 Proof
   rpt gen_tac >>
   simp[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
-       byte_widths_expr_def, alloc_limits_expr_def] >>
+       byte_widths_expr_def, alloc_limits_expr_def,
+       supportedExprTraverseTheory.expr_has_evm_run_def,
+       supportedExprTraverseTheory.supported_expr_exists_def,
+       supportedExprTraverseTheory.expr_evm_run_root_def,
+       listTheory.EVERY_APPEND] >>
   strip_tac >>
   metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
             vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right]
@@ -720,6 +728,7 @@ Theorem expr_sim_pre_ifexp:
           expr_sim_pre cenv cx env a es' /\ expr_sim_pre cenv cx env b es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
+     supportedExprTraverseTheory.expr_has_evm_run_thm,
      byte_widths_expr_def, alloc_limits_expr_def] >> gvs[]
 QED
 

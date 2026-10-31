@@ -258,9 +258,13 @@ Theorem expr_sim_pre_send_arg:
     expr_sim_pre cenv cx env e es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
+     supportedExprTraverseTheory.expr_has_evm_run_thm,
      byte_widths_expr_def, alloc_limits_expr_def] >>
   drule_all well_typed_exprs_mem >> drule_all byte_widths_exprs_mem >>
-  drule_all alloc_limits_exprs_mem >> gvs[]
+  drule_all alloc_limits_exprs_mem >>
+  gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EVERY_MEM,
+      listTheory.EXISTS_MEM] >>
+  metis_tac[]
 QED
 
 Theorem send_pre_types:
