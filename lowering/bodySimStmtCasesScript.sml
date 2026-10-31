@@ -758,24 +758,30 @@ Proof
   conj_tac >- metis_tac[] >> qexists_tac `env` >> simp[]
 QED
 
-(* GAP (#637 log): no statement lemma for Log yet.  body_inv ties
-   ce_event_info to the program's events, and supported_log the
-   arguments' types to the event's fields. *)
-Theorem body_log_case:
-  !cx id es. body_exprs_ok cx es ==> body_stmt_ok cx (Log id es)
+(* RESIDUAL (#637 append): an append to a storage or transient DynArray,
+   the only target supported_append_target admits.  It waits on the
+   storage statement of #713, which relates the array's slots. *)
+Theorem body_append_storage_other:
+  !cx nid e.
+    (!s'' p t'. eval_target_place cx (TopLevelNameTarget nid) s'' = (INL p,t') ==>
+                body_expr_ok cx e) ==>
+    body_stmt_ok cx (Append (TopLevelNameTarget nid) e)
 Proof
   cheat
 QED
 
-(* GAP (#637 append): no statement lemma for Append yet; the target's
-   pointer comes from compile_get_target_ptr. *)
+(* supported_append_target admits no local, subscript or attribute target
+   (#549, #559), so the storage root is the only form. *)
 Theorem body_append_case:
   !cx t e.
     (!s'' p t'. eval_target_place cx t s'' = (INL p,t') ==> body_expr_ok cx e) /\
     body_base_target_ok cx t ==>
     body_stmt_ok cx (Append t e)
 Proof
-  cheat
+  rpt strip_tac >> Cases_on `?nid. t = TopLevelNameTarget nid`
+  >- (gvs[] >> irule body_append_storage_other >> first_assum ACCEPT_TAC) >>
+  Cases_on `t` >> gvs[] >>
+  rw[body_stmt_ok_def, supported_stmt_def, supported_append_target_def]
 QED
 
 (* ===== Assignments ===== *)
