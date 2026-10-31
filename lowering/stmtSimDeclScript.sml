@@ -44,10 +44,14 @@ Theorem stmt_state_rel_declare_local_entry:
 Proof
   rpt strip_tac >> drule_all declare_local_ptr >> strip_tac >>
   irule stmt_state_rel_cenv_cong >> qexists `cenv` >> simp[] >>
+  `c.ce_module_vars = cenv.ce_module_vars` by
+    (qpat_x_assum `c with <| ce_vars := _; ce_var_type := _;
+                            ce_dynarray_capacity := _ |> = cenv`
+       (SUBST1_TAC o SYM) >> simp[]) >>
   rpt conj_tac
   >- (rpt strip_tac >> Cases_on `n = id` >> gvs[])
-  >- (rpt strip_tac >> Cases_on `n = id` >> gvs[] >> metis_tac[])
-  >- (rpt strip_tac >> Cases_on `n = id` >> gvs[] >> metis_tac[]) >>
+  >- simp[]
+  >- simp[] >>
   qpat_x_assum `c with <| ce_vars := _; ce_var_type := _;
                          ce_dynarray_capacity := _ |> = cenv` mp_tac >>
   simp[compileEnvTheory.compile_env_component_equality]

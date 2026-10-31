@@ -100,13 +100,24 @@ Termination
   WF_REL_TAC `measure (λ(cenv,ops,buf,off). LENGTH ops)`
 End
 
-(* Key of the target's root variable in the name-keyed compile_env tables:
-   the plain name for a local/argument, module_var_key for a module variable. *)
-Definition target_to_string_def:
-  target_to_string (NameTarget id) = id ∧
-  target_to_string (TopLevelNameTarget nsid) = module_var_key nsid ∧
-  target_to_string (SubscriptTarget bt _) = target_to_string bt ∧
-  target_to_string (AttributeTarget bt _) = target_to_string bt
+(* Declared type and DynArray capacity of the target's root variable: a
+   local's from the local tables, a module variable's from its own. *)
+Definition target_root_type_def:
+  target_root_type cenv (NameTarget id) = cenv.ce_var_type id ∧
+  target_root_type cenv (TopLevelNameTarget nsid) =
+    cenv.ce_module_var_type nsid ∧
+  target_root_type cenv (SubscriptTarget bt _) = target_root_type cenv bt ∧
+  target_root_type cenv (AttributeTarget bt _) = target_root_type cenv bt
+End
+
+Definition target_root_capacity_def:
+  target_root_capacity cenv (NameTarget id) = cenv.ce_dynarray_capacity id ∧
+  target_root_capacity cenv (TopLevelNameTarget nsid) =
+    cenv.ce_module_dynarray_capacity nsid ∧
+  target_root_capacity cenv (SubscriptTarget bt _) =
+    target_root_capacity cenv bt ∧
+  target_root_capacity cenv (AttributeTarget bt _) =
+    target_root_capacity cenv bt
 End
 
 (* Convert assignment target to expression for location inference *)
@@ -380,15 +391,15 @@ Definition compile_get_target_ptr_def:
          return (Lit (n2w offset), SOME LocCode, OPTION_MAP ValPT (cenv.ce_var_type id))
      | _ => return (Lit 0w, NONE, NONE)) ∧
   compile_get_target_ptr cenv (TopLevelNameTarget nsid) =
-    (let name = module_var_key nsid in
-     let pt = (case cenv.ce_hashmap_info name of
+    (let pt = (case cenv.ce_hashmap_info nsid of
                   SOME (_, kt, vt) => SOME (MapPT kt vt)
-                | NONE => OPTION_MAP ValPT (cenv.ce_var_type name)) in
-     case FLOOKUP cenv.ce_vars name of
+                | NONE => OPTION_MAP ValPT (cenv.ce_module_var_type nsid)) in
+     case FLOOKUP cenv.ce_module_vars nsid of
        SOME (StorageLoc slot) => return (Lit slot, SOME LocStorage, pt)
      | SOME (TransientLoc slot) => return (Lit slot, SOME LocTransient, pt)
      | SOME (ImmutableLoc offset) =>
-         return (Lit (n2w offset), SOME LocCode, OPTION_MAP ValPT (cenv.ce_var_type name))
+         return (Lit (n2w offset), SOME LocCode,
+                 OPTION_MAP ValPT (cenv.ce_module_var_type nsid))
      | _ => return (Lit 0w, NONE, NONE)) ∧
   compile_get_target_ptr cenv (SubscriptTarget bt idx_e) =
     do result <- compile_get_target_ptr cenv bt;
@@ -1155,13 +1166,12 @@ Definition compile_stmt_def:
      Mirrors Python: expr.py _lower_dynarray_append *)
   compile_stmt cenv lctx ty (Append target val_e) =
     (let target_op = compile_target_base cenv target in
-     let target_name = target_to_string target in
      (* Use array element type, not threading ty.
         Python: elem_typ = darray_typ.value_type *)
-     let elem_ty = (case cenv.ce_var_type target_name of
+     let elem_ty = (case target_root_type cenv target of
                       SOME (ArrayT t _) => t | _ => ty) in
      let is_prim = is_word_type elem_ty in
-     let capacity = cenv.ce_dynarray_capacity target_name in
+     let capacity = target_root_capacity cenv target in
      let loc = infer_array_location cenv (target_to_expr target) in
      let ws = word_scale loc in
      let elem_size = elem_size_in_location cenv loc elem_ty in

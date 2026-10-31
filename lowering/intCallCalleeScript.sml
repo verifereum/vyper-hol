@@ -1764,7 +1764,7 @@ Definition internal_immutable_regions_def:
   internal_immutable_regions cenv cx (vs:evaluation_state) frontier <=>
     cenv.ce_is_ctor ==>
     !name tv v off.
-      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module, name) =
         SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of
                  NONE => FEMPTY
@@ -1787,7 +1787,7 @@ Proof
   >- (simp[immutables_rel_def] >> strip_tac >> gvs[]) >>
   simp[internal_immutable_regions_def, immutables_rel_def] >>
   strip_tac >> rpt gen_tac >> strip_tac >>
-  rename1 `FLOOKUP cenv.ce_vars _ = SOME (ImmutableLoc off)` >>
+  rename1 `FLOOKUP cenv.ce_module_vars _ = SOME (ImmutableLoc off)` >>
   qpat_x_assum `!name tv v byte_offset. _ /\ _ ==> _ /\ _ /\ _ /\ _`
     drule_all >> strip_tac >>
   qpat_x_assum `!name tv v off. _ /\ _ ==> val_wf _ _ /\ _`
@@ -2082,7 +2082,7 @@ Theorem internal_prologue_run:
     (cenv.ce_is_ctor ==> !i po psz name tv iv io.
       i < LENGTH params /\ ~SND (EL i params) /\
       FLOOKUP cenv.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
-      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
         SOME (ImmutableLoc io) /\
       FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
         | SOME imms => get_source_immutables cenv.ce_module imms) name =
@@ -2232,12 +2232,9 @@ Resume internal_prologue_run[separation]:
   drule materialize_nonptr_binding >> disch_then assume_tac >>
   `cenv2.ce_module = cenv.ce_module /\
    cenv2.ce_is_ctor = cenv.ce_is_ctor /\
-   (!name off. FLOOKUP cenv2.ce_vars name = SOME (ImmutableLoc off) ==>
-      FLOOKUP cenv.ce_vars name = SOME (ImmutableLoc off))` by
-    (asm "cenv_stage" mp_tac >> simp[] >> strip_tac >>
-     rpt strip_tac >>
-     qpat_x_assum `!name loc. _`
-       (qspecl_then [`name`, `ImmutableLoc off`] mp_tac) >> simp[]) >>
+   (!name off. FLOOKUP cenv2.ce_module_vars name = SOME (ImmutableLoc off) ==>
+      FLOOKUP cenv.ce_module_vars name = SOME (ImmutableLoc off))` by
+    (asm "cenv_stage" mp_tac >> simp[]) >>
   `caller.vs_alloca_next <= t'.vs_alloca_next` by
     (qpat_x_assum `caller.vs_alloca_next <= u.vs_alloca_next` mp_tac >>
      qpat_x_assum `u.vs_alloca_next <= t'.vs_alloca_next` mp_tac >>
@@ -2260,13 +2257,13 @@ Resume internal_prologue_run[separation]:
   qpat_x_assum `!n b sz. local_region cenv2 [env] t' _ _ _ ==> _` mp_tac >>
   qpat_x_assum `!aid b sz. FLOOKUP t'.vs_allocas aid = _ ==> _` mp_tac >>
   qpat_x_assum `caller.vs_alloca_next <= t'.vs_alloca_next` mp_tac >>
-  qpat_x_assum `!name off. FLOOKUP cenv2.ce_vars name = _ ==> _` mp_tac >>
+  qpat_x_assum `!name off. FLOOKUP cenv2.ce_module_vars name = _ ==> _` mp_tac >>
   qpat_x_assum `cenv2.ce_is_ctor = cenv.ce_is_ctor` mp_tac >>
   qpat_x_assum `cenv2.ce_module = cenv.ce_module` mp_tac >>
   qpat_x_assum `ce.ce_vars = cenv.ce_vars` mp_tac >>
   rpt (pop_assum kall_tac) >> rpt strip_tac >>
   simp[immutable_alloca_sep_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
-  `FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+  `FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
      SOME (ImmutableLoc off)` by
     (qpat_x_assum `!name off. _` drule >> simp[]) >>
   `off + type_memory_size tv <= caller.vs_alloca_next` by
@@ -2326,7 +2323,7 @@ Theorem compile_internal_prologue_entry:
     (cenv.ce_is_ctor ==> !i po psz name tv iv io.
       i < LENGTH params /\ ~SND (EL i params) /\
       FLOOKUP cenv.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
-      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
         SOME (ImmutableLoc io) /\
       FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
         | SOME imms => get_source_immutables cenv.ce_module imms) name =

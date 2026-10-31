@@ -86,6 +86,7 @@ End
 Definition cenv_shape_ok_def:
   cenv_shape_ok st cenv <=>
     (!n loc. FLOOKUP cenv.ce_vars n = SOME loc ==> loc_shape_ok st loc) /\
+    (!n loc. FLOOKUP cenv.ce_module_vars n = SOME loc ==> loc_shape_ok st loc) /\
     (!loc. cenv.ce_return_buf = SOME loc ==> loc_shape_ok st loc) /\
     case cenv.ce_return_pc of
       NONE => T
@@ -106,6 +107,7 @@ End
 Definition cenv_static_ok_def:
   cenv_static_ok cenv <=>
     (!n loc. FLOOKUP cenv.ce_vars n = SOME loc ==> static_loc loc) /\
+    (!n loc. FLOOKUP cenv.ce_module_vars n = SOME loc ==> static_loc loc) /\
     (!loc. cenv.ce_return_buf = SOME loc ==> ?off sz. loc = MemLoc off sz) /\
     (!loc. cenv.ce_return_pc = SOME loc ==> ?off sz. loc = MemLoc off sz)
 End
@@ -182,6 +184,7 @@ Proof
   rw[shape_stable_def, cenv_shape_ok_def]
   >- metis_tac[loc_shape_ok_mono]
   >- metis_tac[loc_shape_ok_mono]
+  >- metis_tac[loc_shape_ok_mono]
   >> BasicProvers.every_case_tac >> gvs[] >>
   metis_tac[plain_operand_mono, retpc_operand_mono]
 QED
@@ -197,6 +200,7 @@ Theorem cenv_static_ok_shape_ok:
   !cenv st. cenv_static_ok cenv ==> cenv_shape_ok st cenv
 Proof
   rw[cenv_static_ok_def, cenv_shape_ok_def]
+  >- (res_tac >> Cases_on `loc` >> gvs[static_loc_def, loc_shape_ok_def])
   >- (res_tac >> Cases_on `loc` >> gvs[static_loc_def, loc_shape_ok_def])
   >- (res_tac >> gvs[loc_shape_ok_def])
   >> Cases_on `cenv.ce_return_pc` >> simp[] >> res_tac >> gvs[]
@@ -866,6 +870,13 @@ QED
 Theorem cenv_shape_ok_lookup[local]:
   !st cenv n loc. cenv_shape_ok st cenv /\
     FLOOKUP cenv.ce_vars n = SOME loc ==> loc_shape_ok st loc
+Proof
+  rw[cenv_shape_ok_def] >> metis_tac[]
+QED
+
+Theorem cenv_shape_ok_module_lookup[local]:
+  !st cenv n loc. cenv_shape_ok st cenv /\
+    FLOOKUP cenv.ce_module_vars n = SOME loc ==> loc_shape_ok st loc
 Proof
   rw[cenv_shape_ok_def] >> metis_tac[]
 QED
@@ -2891,7 +2902,8 @@ Proof
   simp[compile_target_base_def] >> rpt strip_tac >>
   BasicProvers.TOP_CASE_TAC >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
   rename1 `FLOOKUP _ _ = SOME vloc` >>
-  `loc_shape_ok st vloc` by metis_tac[cenv_shape_ok_lookup] >>
+  `loc_shape_ok st vloc` by
+    metis_tac[cenv_shape_ok_lookup, cenv_shape_ok_module_lookup] >>
   Cases_on `vloc` >> gvs[loc_shape_ok_def, plain_operand_def,
     stackPlanTypesTheory.is_label_operand_def]
 QED
@@ -4759,21 +4771,10 @@ Resume compile_struct_lit_shape[store]:
 QED
 Finalise compile_struct_lit_shape[local]
 
-Theorem cenv_lookup_shape[local]:
-  cenv_shape_ok st cenv /\ FLOOKUP cenv.ce_vars name = SOME loc ==>
-  loc_shape_ok st loc
-Proof
-  simp[cenv_shape_ok_def] >> metis_tac[]
-QED
-
 Theorem infer_array_location_shape[local]:
   cenv_shape_ok st cenv ==> infer_array_location cenv e <> LocCode
 Proof
-  Cases_on `e` >> simp[infer_array_location_def] >> strip_tac >>
-  qmatch_goalsub_abbrev_tac `FLOOKUP cenv.ce_vars var_name` >>
-  Cases_on `FLOOKUP cenv.ce_vars var_name` >> simp[] >>
-  rename1 `FLOOKUP cenv.ce_vars var_name = SOME loc` >>
-  drule_all cenv_lookup_shape >> Cases_on `loc` >> simp[loc_shape_ok_def]
+  metis_tac[infer_array_location_not_code]
 QED
 
 Theorem compile_tuple_subscript_shape[local]:
@@ -7696,8 +7697,8 @@ QED
 Resume compile_expr_body_shape[top_name]:
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_expr_body_def, expr_type_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  qmatch_goalsub_abbrev_tac `FLOOKUP cenv.ce_vars key` >>
-  Cases_on `FLOOKUP cenv.ce_vars key` >> simp[]
+  qmatch_goalsub_abbrev_tac `FLOOKUP cenv.ce_module_vars key` >>
+  Cases_on `FLOOKUP cenv.ce_module_vars key` >> simp[]
   >- (irule shape_step_uncurry >> qexists_tac `\u st. T` >> reverse conj_tac
       >- (shape_under_tac shape_step_emit_inst_guarded_framed `\st. T` >>
           simp[shape_stable_def] >> shape_opcode_tac) >>
@@ -7710,7 +7711,7 @@ Resume compile_expr_body_shape[top_name]:
   simp[shape_step_def, shape_extends_refl, value_shape_ok_def, mk_ptr_def,
        plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
   rpt strip_tac >> CCONTR_TAC >> gvs[] >>
-  drule_all cenv_lookup_shape >> simp[loc_shape_ok_def]
+  drule_all cenv_shape_ok_module_lookup >> simp[loc_shape_ok_def]
 QED
 
 Resume compile_expr_body_shape[call]:
@@ -7914,7 +7915,7 @@ Resume compile_get_target_ptr_shape[toplevel]:
   >- (irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
   rename1 `FLOOKUP _ _ = SOME vloc` >> Cases_on `vloc` >> simp[] >>
   irule shape_step_return >> BETA_TAC >> rpt strip_tac >>
-  drule_all cenv_shape_ok_lookup >>
+  drule_all cenv_shape_ok_module_lookup >>
   gvs[loc_shape_ok_def, plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
 QED
 Resume compile_get_target_ptr_shape[subscript]:
@@ -11394,12 +11395,11 @@ Theorem internal_cenv_install_shape[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   `cenv_shape_ok st cenv` by metis_tac[cenv_static_ok_shape_ok] >>
-  Cases_on `rb` >> gvs[cenv_shape_ok_def] >>
-  Cases_on `cenv.ce_return_buf` >> gvs[]
-  >- (first_assum MATCH_ACCEPT_TAC) >>
-  rename1 `cenv.ce_return_buf = SOME loc` >>
-  `?off sz. loc = MemLoc off sz` by metis_tac[cenv_static_ok_def] >>
-  gvs[cenv_shape_ok_def, loc_shape_ok_def] >> first_assum MATCH_ACCEPT_TAC
+  `!loc. cenv.ce_return_buf = SOME loc ==> ?off sz. loc = MemLoc off sz`
+    by metis_tac[cenv_static_ok_def] >>
+  fs[cenv_shape_ok_def] >>
+  Cases_on `rb` >> Cases_on `cenv.ce_return_buf` >>
+  rw[loc_shape_ok_def] >> res_tac >> gvs[loc_shape_ok_def]
 QED
 
 Theorem internal_fallthrough_shape[local]:
@@ -12139,13 +12139,15 @@ Proof
   `!n loc. FLOOKUP (add_module_var_locations tops FEMPTY) n = SOME loc ==>
      static_loc loc` by
     (match_mp_tac add_module_var_locations_static >> simp[]) >>
+  `!n loc. FLOOKUP (FEMPTY : (string, var_location) fmap) n = SOME loc ==>
+     static_loc loc` by simp[] >>
   drule allocate_args_static >>
   disch_then (qspecl_then
     [`get_struct_fields (make_struct_fields_map tops)`, `args`, `0`] mp_tac) >>
   gvs[] >> strip_tac >>
   Cases_on `vis = External` >>
   gvs[allocate_internal_special_vars_def, AllCaseEqs(), cenv_static_ok_def] >>
-  metis_tac[pairTheory.FST]
+  rpt strip_tac >> res_tac >> gvs[]
 QED
 
 Theorem classify_functions_external_source:

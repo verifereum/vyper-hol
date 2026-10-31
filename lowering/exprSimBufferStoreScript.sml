@@ -502,7 +502,7 @@ Theorem buffer_store_state_frame:
       b+sz <= dst \/ dst+n <= b) /\
     LENGTH s.vs_memory <= LENGTH q.vs_memory /\
     (cenv.ce_is_ctor ==> !name tv v off.
-      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
         SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
         | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
