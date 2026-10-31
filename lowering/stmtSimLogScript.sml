@@ -48,8 +48,9 @@ Definition log_args_ready_def:
 End
 
 (* log E(args) where the compile env and the source give E the same
-   metadata (its hash, field types and indexed flags), each argument has
-   its field's type, a word type or a bytestring, and the data buffer and
+   metadata (its hash, field types and indexed flags), at most three fields
+   are indexed (LOG's topic count is a literal), each argument has its
+   field's type, a word type or a bytestring, and the data buffer and
    the ABI encoding of the non-indexed fields fit below 2 ** 256 (the
    lowering hands their sizes to ALLOCA as words).
 
@@ -78,7 +79,7 @@ Theorem compile_log_stmt_frag:
     lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id =
       SOME (h, tys, flags) /\
     MAP expr_type args = tys /\ LENGTH flags = LENGTH tys /\
-    EVERY supported_scalar_type tys /\
+    LENGTH (FILTER I flags) <= 3 /\ EVERY supported_scalar_type tys /\
     SUM (MAP (type_memory_bytes cenv) (log_non_indexed_types flags tys)) <
       dimword (:256) /\
     abi_size_bound cenv.ce_struct_fields

@@ -21,7 +21,7 @@ Theory bodySimLog
 Ancestors
   list bodySim bodySimStmtCases stmtSimLog stmtSim exprSim exprSimHyps
   compileEnv compileVyper supportedStmts supportedDecls supportedTypes
-  supportedExprs supportedStmtTraverse vyperEvent vyperInterpreter
+  supportedExprs supportedExprTraverse supportedStmtTraverse vyperEvent vyperInterpreter
   vyperState vyperTypeSystem supportedProgram supportedNames vyperContext
   vyperABI vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallGraph
   vyperTypeCallStackSoundness
@@ -40,11 +40,8 @@ Proof
   rpt gen_tac >> PairCases_on `id` >>
   simp[supported_event_fields_def] >>
   Cases_on `id0` >> simp[] >> strip_tac >>
-  Cases_on `h` >> gvs[lookup_event_metadata_in_def]
-  >~ [`EventDecl`]
-  >- (rename1 `EventDecl s l` >> Cases_on `s = id1` >> gvs[] >>
-      first_x_assum drule >> rw[] >> simp[]) >>
-  first_x_assum drule >> rw[] >> simp[]
+  Cases_on `h` >> fs[lookup_event_metadata_in_def, AllCaseEqs()] >>
+  rw[] >> res_tac >> fs[]
 QED
 
 Theorem event_decl_names_mem[local]:
@@ -83,16 +80,20 @@ Theorem body_log_metadata:
           SOME (h, MAP (SND o FST) fields, MAP SND fields) /\
         lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id =
           SOME (h, MAP (SND o FST) fields, MAP SND fields) /\
+        LENGTH (FILTER I (MAP SND fields)) <= 3 /\
         EVERY supported_scalar_type (MAP (SND o FST) fields)
 Proof
   rpt gen_tac >> strip_tac >>
   drule supported_event_fields_some >> strip_tac >> gvs[] >>
-  `EVERY supported_scalar_type (MAP (SND o FST) fields)` by
+  `EVERY supported_scalar_type (MAP (SND o FST) fields) /\
+   LENGTH (FILTER I (MAP SND fields)) <= 3` by
     (gvs[body_inv_def, supported_program_def,
          supported_declaration_headers_def, EVERY_MEM] >>
-     first_x_assum drule >>
-     simp[supported_declaration_header_def, EVERY_MEM, MEM_MAP] >>
-     metis_tac[]) >>
+     qpat_x_assum `!e. MEM e tops ==> supported_declaration_header _ _`
+       drule >>
+     simp[supported_declaration_header_def, EVERY_MAP, combinTheory.o_DEF,
+          MEM_MAP, PULL_EXISTS] >>
+     strip_tac >> gvs[EVERY_MEM]) >>
   `event_decl_unique name tops` by
     gvs[body_inv_def, supported_program_def,
         supported_declaration_names_def, event_names_unique] >>
@@ -152,11 +153,11 @@ Proof
   reverse conj_tac >- (strip_tac >> first_x_assum irule >> metis_tac[]) >>
   gen_tac >> strip_tac >>
   `expr_body_pre cenv cx env h es` by
-    (irule log_arg_body_pre >> metis_tac[]) >>
+    (irule log_arg_body_pre >> simp[DE_MORGAN_THM] >> metis_tac[]) >>
   conj_tac >- metis_tac[body_expr_ok_def] >>
   rpt gen_tac >> strip_tac >>
   drule_all expr_body_pre_eval >> strip_tac >>
-  gvs[value_runtime_typed_def] >>
+  gvs[vyperTypeExprResultTheory.expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def] >>
   `env.type_defs = get_tenv cx` suffices_by metis_tac[] >>
   gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def]
 QED
@@ -206,7 +207,10 @@ Proof
                          (MAP (SND o FST) fields))) < dimword (:256)`
   >- (drule_all body_log_metadata >> strip_tac >>
       irule compile_log_stmt_frag >> simp[] >>
-      qexists_tac `\es. expr_sim_inv cenv cx env es` >> simp[] >>
+      conj_tac
+      >- (qpat_x_assum `MAP expr_type _ = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+          simp[]) >>
+      qexists_tac `\s. expr_sim_inv cenv cx env s` >> simp[] >>
       irule body_log_args_ready >>
       gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
           int_calls_stmt_def, AllCaseEqs()] >>
