@@ -623,7 +623,7 @@ Proof
   rpt strip_tac >>
   `local_ptrs_rel func cenv es.scopes (update_var name w ss)` by
     (irule local_ptrs_rel_update_var >> fs[state_rel_def]) >>
-  fs[state_rel_def, update_var_def, storage_rel_def,
+  gvs[state_rel_def, update_var_def, storage_rel_def,
      transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
      contract_storage_def, contract_transient_def] >> metis_tac[]
 
@@ -679,9 +679,9 @@ Theorem state_rel_frame:
 Proof
   rpt strip_tac >>
   qpat_x_assum `es' = _` SUBST1_TAC >>
-  fs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
+  gvs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
      immutables_rel_def, logs_rel_def, call_ctx_rel_def, contract_storage_def,
-     contract_transient_def] >> first_assum ACCEPT_TAC
+     contract_transient_def]
 
 QED
 
