@@ -396,9 +396,9 @@ QED
 
 (* What expr_sim_pre and stmt_state_rel give of the local popped from. *)
 Theorem pop_name_facts:
-  !cenv cx env ann id es func s0.
+  !cenv cx env ann id es func s0 ctx.
     expr_sim_pre cenv cx env (Pop ann (NameTarget id)) es /\
-    stmt_state_rel func cenv cx es s0 ==>
+    stmt_state_rel ctx func cenv cx es s0 ==>
     ?n p sz entry etv vs w.
       FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
       cenv.ce_var_type id = SOME (ArrayT ann (Dynamic n)) /\
@@ -536,15 +536,15 @@ QED
 (* stmt_state_rel after the pop: the source changed only the scopes, Venom
    only variables and memory. *)
 Theorem pop_stmt_state_rel:
-  !func cenv cx es es' s0 u.
-    stmt_state_rel func cenv cx es s0 /\
+  !func cenv cx es es' s0 u ctx.
+    stmt_state_rel ctx func cenv cx es s0 /\
     local_ptrs_rel func cenv es'.scopes u /\
     es' = es with scopes := es'.scopes /\
     u = s0 with <| vs_vars := u.vs_vars; vs_memory := u.vs_memory |> /\
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es u /\
     (!id b sz. local_region cenv es'.scopes u id b sz ==>
        ?id0. local_region cenv es.scopes s0 id0 b sz) ==>
-    stmt_state_rel func cenv cx es' u
+    stmt_state_rel ctx func cenv cx es' u
 Proof
   rpt strip_tac >>
   `u.vs_accounts = s0.vs_accounts /\ u.vs_transient = s0.vs_transient /\
@@ -557,7 +557,7 @@ Proof
     (qpat_x_assum `u = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
   `state_rel func cenv cx es s0` by fs[stmt_state_rel_def] >>
   irule stmt_state_rel_allocas_frame >>
-  qpat_assum `stmt_state_rel _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `stmt_state_rel ctx _ _ _ _ _` (irule_at Any) >>
   conj_tac
   >- (irule immutable_alloca_sep_fields >>
       qexistsl_tac [`s0`, `es`] >>
@@ -572,13 +572,13 @@ Proof
 QED
 
 Theorem pop_stmt_state_rel_scopes:
-  !func cenv cx es sc s0 u.
-    stmt_state_rel func cenv cx es s0 /\ local_ptrs_rel func cenv sc u /\
+  !func cenv cx es sc s0 u ctx.
+    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_rel func cenv sc u /\
     u = s0 with <| vs_vars := u.vs_vars; vs_memory := u.vs_memory |> /\
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es u /\
     (!id b sz. local_region cenv sc u id b sz ==>
        ?id0. local_region cenv es.scopes s0 id0 b sz) ==>
-    stmt_state_rel func cenv cx (es with scopes := sc) u
+    stmt_state_rel ctx func cenv cx (es with scopes := sc) u
 Proof
   rpt strip_tac >> irule pop_stmt_state_rel >> simp[] >>
   qexistsl_tac [`es`, `s0`] >> fs[] >> first_assum ACCEPT_TAC
@@ -626,7 +626,7 @@ Proof
 QED
 
 Theorem pop_local_mstore_immutables[local]:
-  stmt_state_rel func cenv cx es s0 /\
+  stmt_state_rel ctx func cenv cx es s0 /\
   local_region cenv es.scopes s0 id b sz /\ 32 <= sz /\
   u.vs_memory = (mstore b w s0).vs_memory /\
   u.vs_data_section = s0.vs_data_section ==>
@@ -640,7 +640,7 @@ Proof
   reverse conj_tac >- gvs[stmt_state_rel_def, state_rel_def] >>
   rpt strip_tac >>
   `regions_disjoint off (type_memory_size tv) b sz` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >>
      strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then drule_all >> strip_tac >> metis_tac[]) >>
@@ -675,8 +675,8 @@ Proof
 QED
 
 Theorem pop_vv_post:
-  !func cenv cx ann id es sa sb s0 u k pre envs entry rest p sz w etv n vs x6.
-    stmt_state_rel func cenv cx es s0 /\
+  !func cenv cx ann id es sa sb s0 u k pre envs entry rest p sz w etv n vs x6 ctx.
+    stmt_state_rel ctx func cenv cx es s0 /\
     local_ptrs_rel func cenv es.scopes s0 /\
     find_containing_scope id es.scopes = SOME (pre, envs, entry, rest) /\
     cenv.ce_var_type id = SOME (ArrayT ann (Dynamic n)) /\
@@ -696,7 +696,7 @@ Theorem pop_vv_post:
       SOME (w + 32w + (n2w (LENGTH vs) - 1w) * n2w (type_memory_size etv)) /\
     EVERY (value_has_type etv) vs /\
     evaluate_type (get_tenv cx) ann = SOME etv ==>
-    vv_post func cenv cx (Pop ann (NameTarget id)) es sa sb s0
+    vv_post ctx func cenv cx (Pop ann (NameTarget id)) es sa sb s0
       (es with scopes :=
          pre ++ envs |+ (id, pop_name_entry entry vs)
            :: rest)
@@ -734,7 +734,7 @@ Proof
   rpt conj_tac
   >- (irule pop_stmt_state_rel_scopes >> conj_tac
       >- first_assum ACCEPT_TAC >>
-      reverse conj_tac
+      conj_tac
       >- (`local_region cenv es.scopes s0 id (w2n w) sz` by
             (simp[local_region_def] >> metis_tac[]) >>
           `32 <= sz` by decide_tac >>
@@ -797,8 +797,8 @@ Theorem compile_pop_name_sim:
     expr_vv_sim ctx func cenv cx ty (Pop ann (NameTarget id)) es
 Proof
   rw[expr_vv_sim_def] >>
-  reverse (Cases_on `stmt_state_rel func cenv cx es s0`)
-  >- (`(\s. s = s0 /\ stmt_state_rel func cenv cx es s) = (\s. F)` by
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
+  >- (`(\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s) = (\s. F)` by
         (simp[FUN_EQ_THM] >> metis_tac[]) >>
       simp[] >> irule frag_exec_false_pre) >>
   drule_all pop_name_facts >> strip_tac >>

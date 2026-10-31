@@ -123,10 +123,10 @@ Definition convert_frag_def:
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
       frag_exec ctx sa sb
-        (\s. s = s0 /\ stmt_state_rel func cenv cx es0 s /\
+        (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s /\
              eval_operand x s = SOME (val_to_w256 v1))
         (\s. ?v. convert_result cx src t v1 = INL v /\ word_value v /\
-                 stmt_state_rel func cenv cx es0 s /\
+                 stmt_state_rel ctx func cenv cx es0 s /\
                  eval_operand op s = SOME (val_to_w256 v) /\
                  (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                         lookup_var z s = SOME w) /\
@@ -137,9 +137,9 @@ Definition convert_frag_def:
 End
 
 Theorem expr_post_convert:
-  !func cenv cx ann t e1 es es' sa s1 sb s0 t0 ss x op v1 v.
-    expr_post func cenv cx e1 es sa s1 s0 es' v1 x t0 /\
-    stmt_state_rel func cenv cx es' ss /\
+  !func cenv cx ann t e1 es es' sa s1 sb s0 t0 ss x op v1 v ctx.
+    expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0 /\
+    stmt_state_rel ctx func cenv cx es' ss /\
     eval_operand op ss = SOME (val_to_w256 v) /\ word_value v /\
     (!z w. not_fresh_at s1 z /\ lookup_var z t0 = SOME w ==>
            lookup_var z ss = SOME w) /\
@@ -147,7 +147,7 @@ Theorem expr_post_convert:
              FLOOKUP ss.vs_allocas aid = SOME b) /\
     ss.vs_memory = t0.vs_memory /\
     is_word_type ann /\ sa.cs_next_var <= s1.cs_next_var ==>
-    expr_post func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0 es'
+    expr_post ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0 es'
       v op ss
 Proof
   rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
@@ -188,7 +188,7 @@ Theorem compile_convert_frag_sim:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[expr_sim_def] >> rpt gen_tac >> strip_tac >>
-  reverse (Cases_on `stmt_state_rel func cenv cx es s0`)
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
   >- (`frag_exec ctx sa sb (\s. F) (\s. F) (\r. F)` by
         simp[frag_exec_false_pre] >>
       pop_assum (fn th => irule (MATCH_MP frag_exec_weaken th)) >>
@@ -211,7 +211,7 @@ Proof
                     mp_tac) >>
       (impl_tac >- gvs[]) >>
       disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
-      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
+      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
                                `\s. F`, `expr_exit res`] mp_tac) >>
       (impl_tac >- gvs[]) >> strip_tac >>
       irule frag_exec_exit_prefix >> qexists_tac `s1` >> simp[]) >>
@@ -223,13 +223,13 @@ Proof
                 mp_tac) >>
   (impl_tac >- simp[expr_res_ok_def]) >>
   disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
-  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
+  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
                            `expr_exit res`] mp_tac) >>
   (impl_tac >- simp[]) >>
   disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
   asm_rewrite_tac[] >> rpt strip_tac >> fs[] >>
-  rename1 `expr_post func cenv cx e1 es sa s1 s0 es' v1 x t0` >>
-  `stmt_state_rel func cenv cx es' t0 /\
+  rename1 `expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0` >>
+  `stmt_state_rel ctx func cenv cx es' t0 /\
    eval_operand x t0 = SOME (val_to_w256 v1)` by
     (fs[expr_post_def] >> irule expr_val_rel_word >> asm_rewrite_tac[] >>
      first_assum (irule_at Any) >> asm_rewrite_tac[]) >>

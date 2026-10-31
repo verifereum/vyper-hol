@@ -27,8 +27,8 @@ Libs
   monadsyntax intLib
 
 Theorem stmt_state_rel_declare_word_alloca[local]:
-  !func cenv cx es s id p sz w inst v tyv sc rest a.
-    stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
+  !func cenv cx es s id p sz w inst v tyv sc rest a ctx.
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
@@ -36,7 +36,7 @@ Theorem stmt_state_rel_declare_word_alloca[local]:
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     32 <= sz /\ word_value v /\ type_memory_size tyv = 32 ==>
-    stmt_state_rel func cenv cx
+    stmt_state_rel ctx func cenv cx
       (es with scopes :=
          (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest)
       (mstore (w2n w) (val_to_w256 v) s)
@@ -80,7 +80,7 @@ Theorem for_body_entry_alloca[local]:
     lookup_block body_lbl func.fn_blocks = SOME bbb /\
     get_instruction bbb 0 = SOME (mk_inst j3 MSTORE [Var p; Var cv] []) /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
-    stmt_state_rel func cenv cx esk cc /\
+    stmt_state_rel ctx func cenv cx esk cc /\
     lookup_var cv cc = SOME (i2w (n1 + &k)) /\
     lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
     FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
@@ -97,7 +97,7 @@ Theorem for_body_entry_alloca[local]:
     32 <= sz /\ type_memory_size tyv = 32 ==>
     ?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
          ~s2.vs_halted /\
-         stmt_state_rel func bc cx
+         stmt_state_rel ctx func bc cx
            (esk with scopes :=
               (FEMPTY |+ (id, <| assignable := F; type := tyv;
                                  value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes)
@@ -134,14 +134,14 @@ Proof
            (irule step_MSTORE >> simp[eval_operand_def]) >>
          fs[venomInstTheory.mk_inst_def]) >>
      simp[Abbr `s2`]) >>
-  `stmt_state_rel func cenv cx (esk with scopes := FEMPTY :: esk.scopes) s1` by
+  `stmt_state_rel ctx func cenv cx (esk with scopes := FEMPTY :: esk.scopes) s1` by
     (simp[Abbr `s1`, stmt_state_rel_jump_to, stmt_state_rel_push_scope] >>
      irule stmt_state_rel_update_var >> simp[]) >>
-  `stmt_state_rel func bc cx (esk with scopes := FEMPTY :: esk.scopes) s1` by
+  `stmt_state_rel ctx func bc cx (esk with scopes := FEMPTY :: esk.scopes) s1` by
     (irule stmt_state_rel_cenv_cong >> qexists_tac `cenv` >> simp[] >>
      rpt strip_tac >> Cases_on `n = id` >> gvs[lookup_scopes_def] >>
      res_tac >> gvs[]) >>
-  `stmt_state_rel func bc cx
+  `stmt_state_rel ctx func bc cx
      (esk with scopes :=
        (FEMPTY |+ (id, <| assignable := F; type := tyv;
                           value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes)
@@ -173,7 +173,7 @@ Theorem for_body_entry:
     lookup_block body_lbl func.fn_blocks = SOME bbb /\
     get_instruction bbb 0 = SOME (mk_inst j3 MSTORE [Var p; Var cv] []) /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
-    stmt_state_rel func cenv cx esk cc /\
+    stmt_state_rel ctx func cenv cx esk cc /\
     lookup_var cv cc = SOME (i2w (n1 + &k)) /\
     lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
     FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
@@ -192,7 +192,7 @@ Theorem for_body_entry:
        immutable_prefix_bound cenv cx.txn.target cenv.ce_module esk cap) ==>
     ?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
          ~s2.vs_halted /\
-         stmt_state_rel func bc cx
+         stmt_state_rel ctx func bc cx
            (esk with scopes :=
               (FEMPTY |+ (id, <| assignable := F; type := tyv;
                                  value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes)
@@ -220,7 +220,7 @@ QED
 
 (* The rest of an iteration from the increment block, at DD. *)
 val for_incr_tac =
-  qpat_x_assum `stmt_state_rel func cenv cx (es2 with scopes := rest) DD`
+  qpat_x_assum `stmt_state_rel ctx func cenv cx (es2 with scopes := rest) DD`
     assume_tac >>
   qspecl_then [`ctx`, `func`, `DD`, `cv`, `nv`, `i2w (n1 + &k)`, `incr_lbl`,
                `cond_lbl`, `i1`, `i2`, `i3`] mp_tac for_incr_block >>
@@ -323,7 +323,7 @@ Theorem for_iteration_alloca[local]:
     (* the iteration *)
     n1 <= n2 /\ k < Num (n2 - n1) /\ Num (n2 - n1) < dimword (:256) /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
-    stmt_state_rel func cenv cx esk cc /\
+    stmt_state_rel ctx func cenv cx esk cc /\
     lookup_scopes id esk.scopes = NONE /\
     lookup_var cv cc = SOME (i2w (n1 + &k)) /\
     lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
@@ -345,7 +345,7 @@ Theorem for_iteration_alloca[local]:
     ((r2 = INL () \/ r2 = INR ContinueException) /\
      ?cc'. cc'.vs_current_bb = cond_lbl /\ cc'.vs_inst_idx = 0 /\
            ~cc'.vs_halted /\
-           stmt_state_rel func cenv cx (es2 with scopes := rest) cc' /\
+           stmt_state_rel ctx func cenv cx (es2 with scopes := rest) cc' /\
            lookup_var cv cc' = SOME (i2w (n1 + &(k + 1))) /\
            lookup_var ev cc' = SOME (i2w n2) /\ lookup_var p cc' = SOME w /\
            (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
@@ -356,7 +356,7 @@ Theorem for_iteration_alloca[local]:
                      ?fuel'. run_from fuel' ctx func cc = rr) \/
     (r2 = INR BreakException /\
      ?s. s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-         stmt_state_rel func cenv cx (es2 with scopes := rest) s /\
+         stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s /\
          (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
                 lookup_var x s = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
@@ -370,7 +370,7 @@ Proof
   `bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor` by
     (qpat_assum `_ = cenv` (fn th => ONCE_REWRITE_TAC [SYM th]) >> simp[]) >>
   `not_local_ptr cenv esk.scopes dv` by metis_tac[] >>
-  drule_all for_body_entry_alloca >> disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all for_body_entry_alloca >> strip_tac >>
   `ret_pc_ok bc sb0 s2` by
     (qspecl_then [`cenv`, `bc`, `st`, `sb0`, `cc`, `s2`] mp_tac
        ret_pc_ok_frame >>
@@ -395,7 +395,7 @@ Proof
   strip_tac
   >- (
     (* the body reaches its end, the increment block or the exit block *)
-    rename1 `stmt_state_rel func c3 cx es2 s3` >>
+    rename1 `stmt_state_rel ctx func c3 cx es2 s3` >>
     qabbrev_tac `esA = esk with scopes :=
            (FEMPTY |+ (id, <| assignable := F; type := tyv;
                               value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes` >>
@@ -408,8 +408,8 @@ Proof
        qpat_x_assum `eval_stmts _ _ _ = _`
          (strip_assume_tac o MATCH_MP eval_stmts_preserves_scopes_dom) >>
        gvs[preserves_scopes_dom_def, Abbr `esA`]) >>
-    `stmt_state_rel func cenv cx (es2 with scopes := rest) s3` by
-      (qspecl_then [`func`, `cenv`, `c3`, `cx`, `es2`, `s3`, `sc`, `rest`]
+    `stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s3` by
+      (qspecl_then [`func`, `cenv`, `c3`, `cx`, `es2`, `s3`, `sc`, `rest`, `ctx`]
          mp_tac stmt_state_rel_pop_top_ext >> simp[]) >>
     `!x v. not_fresh_at sb0 x /\ x <> dv /\ lookup_var x cc = SOME v ==>
            lookup_var x s3 = SOME v` by
@@ -447,7 +447,7 @@ Proof
       `DD.vs_current_bb = incr_lbl /\ DD.vs_inst_idx = 0 /\ ~DD.vs_halted /\
        (!x. lookup_var x DD = lookup_var x s3) /\
        DD.vs_allocas = s3.vs_allocas /\
-       stmt_state_rel func cenv cx (es2 with scopes := rest) DD` by
+       stmt_state_rel ctx func cenv cx (es2 with scopes := rest) DD` by
         simp[Abbr `DD`, jump_to_def, lookup_var_def, stmt_state_rel_jump_to] >>
       for_incr_tac)
     >- (
@@ -475,7 +475,7 @@ Theorem for_iteration:
     (!x. not_fresh_at st x ==> x <> dv /\ x <> cv /\ x <> nv) /\
     n1 <= n2 /\ k < Num (n2 - n1) /\ Num (n2 - n1) < dimword (:256) /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
-    stmt_state_rel func cenv cx esk cc /\
+    stmt_state_rel ctx func cenv cx esk cc /\
     lookup_scopes id esk.scopes = NONE /\
     lookup_var cv cc = SOME (i2w (n1 + &k)) /\
     lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
@@ -500,7 +500,7 @@ Theorem for_iteration:
     ((r2 = INL () \/ r2 = INR ContinueException) /\
      ?cc'. cc'.vs_current_bb = cond_lbl /\ cc'.vs_inst_idx = 0 /\
            ~cc'.vs_halted /\
-           stmt_state_rel func cenv cx (es2 with scopes := rest) cc' /\
+           stmt_state_rel ctx func cenv cx (es2 with scopes := rest) cc' /\
            lookup_var cv cc' = SOME (i2w (n1 + &(k + 1))) /\
            lookup_var ev cc' = SOME (i2w n2) /\ lookup_var p cc' = SOME w /\
            (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
@@ -511,7 +511,7 @@ Theorem for_iteration:
                      ?fuel'. run_from fuel' ctx func cc = rr) \/
     (r2 = INR BreakException /\
      ?s. s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-         stmt_state_rel func cenv cx (es2 with scopes := rest) s /\
+         stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s /\
          (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
                 lookup_var x s = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
@@ -568,13 +568,13 @@ Theorem for_loop_alloca:
       (res, es') /\
     stmt_res_ok lctx res /\ P esk /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
-    stmt_state_rel func cenv cx esk cc /\
+    stmt_state_rel ctx func cenv cx esk cc /\
     lookup_scopes id esk.scopes = NONE /\
     lookup_var cv cc = SOME (i2w (n1 + &k)) /\
     lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
     FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) ==>
     (?s. res = INL () /\ s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\
-         ~s.vs_halted /\ stmt_state_rel func cenv cx es' s /\
+         ~s.vs_halted /\ stmt_state_rel ctx func cenv cx es' s /\
          (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
                 lookup_var x s = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
@@ -678,7 +678,7 @@ Proof
     (first_x_assum irule >> simp[]) >>
   asm_x "loop_ih" drule_all >>
   (strip_tac
-    >- (rename1 `stmt_state_rel func cenv cx es' s9` >> disj1_tac >>
+    >- (rename1 `stmt_state_rel ctx func cenv cx es' s9` >> disj1_tac >>
         qexists_tac `s9` >> simp[] >> rpt strip_tac >>
         qpat_x_assum `!fuel rr. run_from fuel ctx func s9 = rr /\ _ ==> _`
           (qspec_then `fuel` mp_tac) >> simp[] >> strip_tac >>
@@ -729,14 +729,14 @@ Theorem for_loop:
       (res, es') /\
     stmt_res_ok lctx res /\ P esk /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
-    stmt_state_rel func cenv cx esk cc /\
+    stmt_state_rel ctx func cenv cx esk cc /\
     lookup_scopes id esk.scopes = NONE /\
     lookup_var cv cc = SOME (i2w (n1 + &k)) /\
     lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
     FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
     cap <= w2n w ==>
     (?s. res = INL () /\ s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\
-         ~s.vs_halted /\ stmt_state_rel func cenv cx es' s /\
+         ~s.vs_halted /\ stmt_state_rel ctx func cenv cx es' s /\
          (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
                 lookup_var x s = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>

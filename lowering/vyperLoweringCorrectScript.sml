@@ -940,7 +940,7 @@ Theorem vyper_to_venom_correct:
   !tenv selectors ext_fns int_fns fb_fn dispatch
     bucket_count fn_meta_bytes dense_buckets entry_info entry_label
     vs am tx sel fn_lbl htz cenv
-    args dflts ret body mut nr.
+    args dflts ret body mut nr ctx.
   let (ctx, _) = run_lowering_pair_compat selectors ext_fns int_fns fb_fn
                    dispatch bucket_count fn_meta_bytes
                    dense_buckets entry_info entry_label in

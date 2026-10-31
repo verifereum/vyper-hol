@@ -83,11 +83,11 @@ Definition binop_frag_words_def:
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
       frag_exec ctx sa sb
-        (\s. s = s0 /\ stmt_state_rel func cenv cx es0 s /\
+        (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s /\
              eval_operand x s = SOME w1 /\ eval_operand y s = SOME w2)
         (\s. ?v. bop_result cx ann bop tys v1 v2 es0 = INL v /\
                  word_value v /\
-                 stmt_state_rel func cenv cx es0 s /\
+                 stmt_state_rel ctx func cenv cx es0 s /\
                  eval_operand op s = SOME (val_to_w256 v) /\
                  (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                         lookup_var z s = SOME w) /\
@@ -328,10 +328,10 @@ QED
 
 (* The end of an operator's fragment from the ends of its operands'. *)
 Theorem expr_post_bop:
-  !func cenv cx ann bop e1 e2 es es1 es' sa s1 s2 sb s0 t u ss x y op v1 v2 v.
-    expr_post func cenv cx e1 es sa s1 s0 es1 v1 x t /\
-    expr_post func cenv cx e2 es1 s1 s2 t es' v2 y u /\
-    stmt_state_rel func cenv cx es' ss /\
+  !func cenv cx ann bop e1 e2 es es1 es' sa s1 s2 sb s0 t u ss x y op v1 v2 v ctx.
+    expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
+    expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
+    stmt_state_rel ctx func cenv cx es' ss /\
     eval_operand op ss = SOME (val_to_w256 v) /\ word_value v /\
     (!z w. not_fresh_at s2 z /\ lookup_var z u = SOME w ==>
            lookup_var z ss = SOME w) /\
@@ -339,11 +339,11 @@ Theorem expr_post_bop:
              FLOOKUP ss.vs_allocas aid = SOME b) /\
     ss.vs_memory = u.vs_memory /\
     is_word_type ann /\ local_ptrs_reserved cenv sa /\
-    stmt_state_rel func cenv cx es s0 /\
+    stmt_state_rel ctx func cenv cx es s0 /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
     sa.cs_next_id <= s1.cs_next_id ==>
-    expr_post func cenv cx (Builtin ann (Bop bop) [e1; e2]) es sa sb s0 es'
+    expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1; e2]) es sa sb s0 es'
       v op ss
 Proof
   rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
@@ -426,7 +426,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[expr_sim_def] >> rpt gen_tac >> strip_tac >>
   (* only a start state related at es is of interest *)
-  reverse (Cases_on `stmt_state_rel func cenv cx es s0`)
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
   >- (`frag_exec ctx sa sb (\s. F) (\s. F) (\r. F)` by
         simp[frag_exec_false_pre] >>
       pop_assum (fn th => irule (MATCH_MP frag_exec_weaken th)) >>
@@ -451,7 +451,7 @@ Proof
                     mp_tac) >>
       (impl_tac >- gvs[]) >>
       disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
-      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
+      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
                                `\s. F`, `expr_exit res`] mp_tac) >>
       (impl_tac >- gvs[]) >> strip_tac >>
       irule frag_exec_exit_prefix >> qexists_tac `s1` >> simp[])
@@ -464,7 +464,7 @@ Proof
                                `s0`] mp_tac) >>
       (impl_tac >- simp[expr_res_ok_def]) >>
       disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
-      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
+      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
                                `expr_exit res`] mp_tac) >>
       (impl_tac >- simp[]) >>
       disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
@@ -494,13 +494,13 @@ Proof
                 mp_tac) >>
   (impl_tac >- simp[expr_res_ok_def]) >>
   disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
-  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
+  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
                            `expr_exit res`] mp_tac) >>
   (impl_tac >- simp[]) >>
   disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
   asm_rewrite_tac[] >> rpt strip_tac >> fs[] >>
-  rename1 `expr_post func cenv cx e1 es sa s1 s0 es1 v1 x t` >>
-  `stmt_state_rel func cenv cx es1 t /\
+  rename1 `expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t` >>
+  `stmt_state_rel ctx func cenv cx es1 t /\
    eval_operand x t = SOME (typed_val_to_w256 tv1 v1)` by
     (fs[expr_post_def] >> irule expr_val_rel_typed >> metis_tac[]) >>
   (* the right operand, from t *)
@@ -516,8 +516,8 @@ Proof
   (impl_tac >- simp[]) >>
   disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
   asm_rewrite_tac[] >> rpt strip_tac >> fs[] >>
-  rename1 `expr_post func cenv cx e2 es1 s1 s2 t es' v2 y u` >>
-  `stmt_state_rel func cenv cx es' u /\
+  rename1 `expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u` >>
+  `stmt_state_rel ctx func cenv cx es' u /\
    eval_operand y u = SOME (typed_val_to_w256 tv2 v2) /\
    eval_operand x u = SOME (typed_val_to_w256 tv1 v1)` by
     (fs[expr_post_def] >> conj_tac

@@ -67,10 +67,10 @@ Definition unop_frag_def:
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
       frag_exec ctx sa sb
-        (\s. s = s0 /\ stmt_state_rel func cenv cx es0 s /\
+        (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s /\
              eval_operand x s = SOME w1)
         (\s. ?v. res = INL v /\
-                 stmt_state_rel func cenv cx es0 s /\
+                 stmt_state_rel ctx func cenv cx es0 s /\
                  expr_val_rel cx t v op s /\
                  (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                         lookup_var z s = SOME w) /\
@@ -110,9 +110,9 @@ QED
 (* ===== The composition ===== *)
 
 Theorem expr_post_unop:
-  !func cenv cx ann bi e1 es es' sa s1 sb s0 t0 ss x op v1 v.
-    expr_post func cenv cx e1 es sa s1 s0 es' v1 x t0 /\
-    stmt_state_rel func cenv cx es' ss /\
+  !func cenv cx ann bi e1 es es' sa s1 sb s0 t0 ss x op v1 v ctx.
+    expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0 /\
+    stmt_state_rel ctx func cenv cx es' ss /\
     expr_val_rel cx ann v op ss /\
     (!z w. not_fresh_at s1 z /\ lookup_var z t0 = SOME w ==>
            lookup_var z ss = SOME w) /\
@@ -120,7 +120,7 @@ Theorem expr_post_unop:
              FLOOKUP ss.vs_allocas aid = SOME b) /\
     ss.vs_memory = t0.vs_memory /\
     is_word_type ann /\ sa.cs_next_var <= s1.cs_next_var ==>
-    expr_post func cenv cx (Builtin ann bi [e1]) es sa sb s0 es' v op ss
+    expr_post ctx func cenv cx (Builtin ann bi [e1]) es sa sb s0 es' v op ss
 Proof
   rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
   `locals_kept cenv es s0 ss` by
@@ -162,7 +162,7 @@ Theorem compile_unop_sim:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[expr_sim_def] >> rpt gen_tac >> strip_tac >>
-  reverse (Cases_on `stmt_state_rel func cenv cx es s0`)
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
   >- (`frag_exec ctx sa sb (\s. F) (\s. F) (\r. F)` by
         simp[frag_exec_false_pre] >>
       pop_assum (fn th => irule (MATCH_MP frag_exec_weaken th)) >>
@@ -187,7 +187,7 @@ Proof
                     mp_tac) >>
       (impl_tac >- gvs[]) >>
       disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
-      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
+      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
                                `\s. F`, `expr_exit res`] mp_tac) >>
       (impl_tac >- gvs[]) >> strip_tac >>
       irule frag_exec_exit_prefix >> qexists_tac `s1` >> simp[])
@@ -200,13 +200,13 @@ Proof
                 mp_tac) >>
   (impl_tac >- simp[expr_res_ok_def]) >>
   disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
-  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
+  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
                            `expr_exit res`] mp_tac) >>
   (impl_tac >- simp[]) >>
   disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
   asm_rewrite_tac[] >> rpt strip_tac >> fs[] >>
-  rename1 `expr_post func cenv cx e1 es sa s1 s0 es' v1 x t0` >>
-  `stmt_state_rel func cenv cx es' t0 /\
+  rename1 `expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0` >>
+  `stmt_state_rel ctx func cenv cx es' t0 /\
    eval_operand x t0 = SOME (typed_val_to_w256 tv1 v1)` by
     gvs[expr_post_def, expr_val_rel_def] >>
   qpat_x_assum `unop_frag _ _ _ _ _ _ _ _ _`

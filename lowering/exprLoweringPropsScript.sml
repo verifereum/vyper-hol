@@ -7,7 +7,15 @@
  *   stmt_state_rel           — state_rel with the Venom-side allocation
  *                              facts a fragment keeps, and alloca_room
  *   alloca_room, pending_alloca_size — the frontier plus the sizes of the
- *                              ALLOCAs not yet run stays below 2 ** 256
+ *                              ALLOCAs not yet run, of func and of a frame
+ *                              of each function it can call, stays below
+ *                              2 ** 256
+ *   alloca_lit_size, unit_alloca_frame — an ALLOCA's literal size, and
+ *                              their sum over the unit (one frame)
+ *   pending_alloca_size_le_frame — a function's pending ALLOCAs fit in a
+ *                              frame
+ *   alloca_room_callee       — a callee, entered at the caller's frontier,
+ *                              has room
  *   compile_expr_correct     — main expression lowering correctness
  *   compile_literal_vv_correct  — word literal case
  *   compile_name_correct     — variable lookup case
@@ -49,7 +57,7 @@ Ancestors
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
   valueEncoding valueEncodingProofs localPtrsProps venomMemDefs
-  vyperAST vyperTyping
+  vyperAST vyperTyping fcgDefs
 Libs
   pairLib BasicProvers monadsyntax
 
@@ -209,28 +217,52 @@ Definition well_annotated_def:
   well_annotated _ = T
 End
 
+(* The size an ALLOCA asks for: its literal operand.  An ALLOCA with any
+   other operand stops with an error and allocates nothing. *)
+Definition alloca_lit_size_def:
+  alloca_lit_size (inst:instruction) =
+    case inst.inst_operands of [Lit n] => w2n n | _ => 0
+End
+
 (* The sizes func's frame can still allocate: those of its ALLOCAs whose ids
-   have no allocation yet.  Every ALLOCA the lowering emits has a literal
-   size; any other counts as the whole address space. *)
+   have no allocation yet. *)
 Definition pending_alloca_size_def:
   pending_alloca_size (func:ir_function) (ss:venom_state) =
-    SUM (MAP (\inst. case inst.inst_operands of
-                       [Lit n] => w2n n
-                     | _ => dimword (:256))
+    SUM (MAP alloca_lit_size
              (FILTER (\inst. inst.inst_opcode = ALLOCA /\
                              inst.inst_id NOTIN FDOM ss.vs_allocas)
                 (fn_insts func)))
 End
 
-(* Room in func's frame: the frontier plus every allocation func can still
-   make stays below 2 ** 256, so no ALLOCA of func hands out a wrapped
-   pointer.  A fresh ALLOCA of func moves its size from the pending sizes to
-   the frontier; a step that leaves the allocations alone keeps it, and so
-   does an INVOKE, which gives the caller its frontier back
-   (merge_callee_state). *)
+(* The sizes of all ALLOCAs of the unit: at least what any one frame of it
+   can allocate. *)
+Definition unit_alloca_frame_def:
+  unit_alloca_frame ctx =
+    SUM (MAP alloca_lit_size (FILTER (\inst. inst.inst_opcode = ALLOCA)
+                                (FLAT (MAP fn_insts ctx.ctx_functions))))
+End
+
+(* Room in func's frame and in the frames of the functions it can call:
+   the frontier, func's allocations still to come, and one frame of the
+   unit's size for each function func can reach in ctx stay below 2 ** 256.
+   func is ctx's function of its name and is on no call cycle, so a callee
+   reaches fewer functions than its caller, and a callee, which starts at
+   the caller's frontier (setup_callee), has room too (alloca_room_callee).
+   So no ALLOCA of func hands out a wrapped pointer.  A fresh ALLOCA of func
+   moves its size from the pending sizes to the frontier; a step that
+   leaves the allocations alone keeps the room, and so does an INVOKE,
+   which gives the caller its frontier back (merge_callee_state).
+   allocaFrontierBound's alloca_frontier_inv is the same charge, against
+   the unit's budget. *)
 Definition alloca_room_def:
-  alloca_room func (ss:venom_state) <=>
-    ss.vs_alloca_next + pending_alloca_size func ss < dimword (:256)
+  alloca_room ctx func (ss:venom_state) <=>
+    lookup_function func.fn_name ctx.ctx_functions = SOME func /\
+    FINITE {g | TC (fn_directly_calls ctx) func.fn_name g} /\
+    (!g. TC (fn_directly_calls ctx) func.fn_name g ==>
+         ~TC (fn_directly_calls ctx) g g) /\
+    ss.vs_alloca_next + pending_alloca_size func ss +
+    CARD {g | TC (fn_directly_calls ctx) func.fn_name g} *
+      unit_alloca_frame ctx < dimword (:256)
 End
 
 (* Initialized constructor immutable capacity regions lie below the bump
@@ -342,12 +374,13 @@ QED
      A re-executed ALLOCA (a loop body, a branch) returns the recorded base
      without checking its size, so with alloca_inv this is what makes its
      region miss every other live local;
-   - alloca_room: func's allocations still to come fit below 2 ** 256, so
-     the frontier stays below 2 ** 256 and a declaration's ALLOCA hands out
-     its base unwrapped, after other declarations and inside bodies. *)
+   - alloca_room: func's allocations still to come, and a frame for each
+     function it can call, fit below 2 ** 256, so the frontier stays below
+     2 ** 256 and a declaration's ALLOCA hands out its base unwrapped,
+     after other declarations, inside bodies and in callees. *)
 Definition stmt_state_rel_def:
-  stmt_state_rel func cenv cx vs ss ⇔
-    state_rel func cenv cx vs ss ∧ alloca_inv ss ∧ alloca_room func ss ∧
+  stmt_state_rel ctx func cenv cx vs ss ⇔
+    state_rel func cenv cx vs ss ∧ alloca_inv ss ∧ alloca_room ctx func ss ∧
     immutable_alloca_sep func cenv cx vs ss ∧
     ∀inst n base sz.
       MEM inst (fn_insts func) ∧ inst.inst_opcode = ALLOCA ∧
@@ -357,10 +390,10 @@ Definition stmt_state_rel_def:
 End
 
 Theorem alloca_room_fields:
-  !func ss ss'.
-    alloca_room func ss /\
+  !func ss ss' ctx.
+    alloca_room ctx func ss /\
     ss'.vs_allocas = ss.vs_allocas /\ ss'.vs_alloca_next = ss.vs_alloca_next ==>
-    alloca_room func ss'
+    alloca_room ctx func ss'
 Proof
   rw[alloca_room_def, pending_alloca_size_def] >> gvs[]
 QED
@@ -368,11 +401,11 @@ QED
 (* state_rel re-established by a step that keeps the allocations gives
    stmt_state_rel back. *)
 Theorem stmt_state_rel_allocas_frame:
-  !func cenv cx es s es' s'.
-    stmt_state_rel func cenv cx es s /\ state_rel func cenv cx es' s' /\
+  !func cenv cx es s es' s' ctx.
+    stmt_state_rel ctx func cenv cx es s /\ state_rel func cenv cx es' s' /\
     immutable_alloca_sep func cenv cx es' s' /\
     s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next ==>
-    stmt_state_rel func cenv cx es' s'
+    stmt_state_rel ctx func cenv cx es' s'
 Proof
   rw[stmt_state_rel_def]
   >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[])
@@ -381,7 +414,7 @@ Proof
 QED
 
 Theorem alloca_room_next_lt:
-  !func ss. alloca_room func ss ==> ss.vs_alloca_next < dimword (:256)
+  !func ss ctx. alloca_room ctx func ss ==> ss.vs_alloca_next < dimword (:256)
 Proof
   rw[alloca_room_def] >> decide_tac
 QED
@@ -405,26 +438,75 @@ QED
 
 (* A fresh ALLOCA of func fits below 2 ** 256 and keeps the room. *)
 Theorem alloca_room_fresh:
-  !func ss inst n.
-    alloca_room func ss /\ MEM inst (fn_insts func) /\
+  !func ss inst n ctx.
+    alloca_room ctx func ss /\ MEM inst (fn_insts func) /\
     inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit n] /\
     inst.inst_id NOTIN FDOM ss.vs_allocas ==>
     ss.vs_alloca_next + w2n n < dimword (:256) /\
-    alloca_room func
+    alloca_room ctx func
       (ss with <| vs_allocas :=
                     ss.vs_allocas |+ (inst.inst_id, (ss.vs_alloca_next, w2n n));
                   vs_alloca_next := ss.vs_alloca_next + w2n n |>)
 Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then
-    [`\i:instruction. case i.inst_operands of
-                        [Lit n] => w2n n | _ => dimword (:256)`,
+    [`alloca_lit_size`,
      `\i. i.inst_opcode = ALLOCA /\ i.inst_id NOTIN FDOM ss.vs_allocas`,
      `\i. i.inst_opcode = ALLOCA /\
           i.inst_id NOTIN (inst.inst_id INSERT FDOM ss.vs_allocas)`,
      `inst`, `fn_insts func`] mp_tac SUM_MAP_FILTER_drop >>
-  impl_tac >- simp[] >>
+  impl_tac >- simp[] >> strip_tac >>
+  `alloca_lit_size inst = w2n n` by simp[alloca_lit_size_def] >>
   fs[alloca_room_def, pending_alloca_size_def]
+QED
+
+
+(* A frame of a function of ctx allocates at most the unit's ALLOCA sizes. *)
+Theorem pending_alloca_size_le_frame:
+  !ctx func ss.
+    MEM func ctx.ctx_functions ==>
+    pending_alloca_size func ss <= unit_alloca_frame ctx
+Proof
+  rw[pending_alloca_size_def, unit_alloca_frame_def] >>
+  irule arithmeticTheory.LESS_EQ_TRANS >>
+  qexists_tac `SUM (MAP alloca_lit_size
+                 (FILTER (\inst. inst.inst_opcode = ALLOCA) (fn_insts func)))` >>
+  conj_tac >- (irule SUM_MAP_FILTER_mono >> simp[]) >>
+  pop_assum mp_tac >> qspec_tac (`ctx.ctx_functions`, `fns`) >>
+  Induct >> rw[listTheory.FILTER_APPEND_DISTRIB, listTheory.SUM_APPEND] >> res_tac >> decide_tac
+QED
+
+(* A function ctx calls from func, entered at func's frontier, has room:
+   it reaches fewer functions than func, which is charged a frame for it. *)
+Theorem alloca_room_callee:
+  !ctx caller callee s t.
+    alloca_room ctx caller s /\
+    fn_directly_calls ctx caller.fn_name callee.fn_name /\
+    lookup_function callee.fn_name ctx.ctx_functions = SOME callee /\
+    t.vs_alloca_next = s.vs_alloca_next ==>
+    alloca_room ctx callee t
+Proof
+  rpt gen_tac >> rewrite_tac[alloca_room_def] >> strip_tac >>
+  `TC (fn_directly_calls ctx) caller.fn_name callee.fn_name`
+    by metis_tac[relationTheory.TC_RULES] >>
+  `{g | TC (fn_directly_calls ctx) callee.fn_name g} SUBSET
+   {g | TC (fn_directly_calls ctx) caller.fn_name g}`
+    by (rw[pred_setTheory.SUBSET_DEF] >> metis_tac[relationTheory.TC_RULES]) >>
+  `FINITE {g | TC (fn_directly_calls ctx) callee.fn_name g}`
+    by metis_tac[pred_setTheory.SUBSET_FINITE] >>
+  `CARD {g | TC (fn_directly_calls ctx) callee.fn_name g} <
+   CARD {g | TC (fn_directly_calls ctx) caller.fn_name g}`
+    by (irule pred_setTheory.CARD_PSUBSET >> simp[pred_setTheory.PSUBSET_MEMBER] >>
+        qexists_tac `callee.fn_name` >> simp[]) >>
+  rpt conj_tac >- fs[] >- fs[] >- metis_tac[relationTheory.TC_RULES] >>
+  qmatch_goalsub_abbrev_tac `CARD below * frame` >>
+  qmatch_asmsub_abbrev_tac `CARD below < CARD above` >>
+  `pending_alloca_size callee t <= frame`
+    by (simp[Abbr `frame`] >> irule pending_alloca_size_le_frame >>
+        metis_tac[venomInstTheory.lookup_function_MEM]) >>
+  `frame * SUC (CARD below) <= frame * CARD above`
+    by simp[arithmeticTheory.LE_MULT_LCANCEL] >>
+  full_simp_tac bool_ss [arithmeticTheory.MULT_CLAUSES] >> decide_tac
 QED
 
 (* The expression lemmas relate states with stmt_state_rel func, where func
@@ -435,8 +517,8 @@ QED
    misses every live local, and a Name reads a pointer local, not a MemLoc
    variable, which state_rel does not relate. *)
 Theorem compile_expr_correct:
-  ∀ func cenv cx ty e es ss st op st' v es'.
-    stmt_state_rel func cenv cx es ss ∧
+  ∀ func cenv cx ty e es ss st op st' v es' ctx.
+    stmt_state_rel ctx func cenv cx es ss ∧
     supported_expr e ∧
     well_annotated e ∧
     (do result <- eval_expr cx e; read_result cx result od) es =
@@ -448,7 +530,7 @@ Theorem compile_expr_correct:
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       eval_operand op ss' = SOME (val_to_w256 v) ∧
-      stmt_state_rel func cenv cx es' ss' ∧
+      stmt_state_rel ctx func cenv cx es' ss' ∧
       same_blocks st st' ∧
       st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
       ¬ss'.vs_halted ∧
@@ -686,9 +768,9 @@ Proof
 QED
 
 Theorem stmt_state_rel_jump_to:
-  !func cenv cx es s lbl.
-    stmt_state_rel func cenv cx es (jump_to lbl s) <=>
-    stmt_state_rel func cenv cx es s
+  !func cenv cx es s lbl ctx.
+    stmt_state_rel ctx func cenv cx es (jump_to lbl s) <=>
+    stmt_state_rel ctx func cenv cx es s
 Proof
   simp[stmt_state_rel_def, state_rel_jump_to, jump_to_def, alloca_inv_def,
        allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
@@ -697,9 +779,9 @@ Proof
 QED
 
 Theorem stmt_state_rel_inst_idx:
-  !func cenv cx es s n.
-    stmt_state_rel func cenv cx es (s with vs_inst_idx := n) <=>
-    stmt_state_rel func cenv cx es s
+  !func cenv cx es s n ctx.
+    stmt_state_rel ctx func cenv cx es (s with vs_inst_idx := n) <=>
+    stmt_state_rel ctx func cenv cx es s
 Proof
   simp[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def,
        local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
@@ -710,9 +792,9 @@ Proof
 QED
 
 Theorem stmt_state_rel_push_scope:
-  !func cenv cx es s.
-    stmt_state_rel func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
-    stmt_state_rel func cenv cx es s
+  !func cenv cx es s ctx.
+    stmt_state_rel ctx func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
+    stmt_state_rel ctx func cenv cx es s
 Proof
   simp[stmt_state_rel_def, state_rel_push_scope, immutable_alloca_sep_def,
        local_region_def, lookup_scopes_def]
@@ -731,10 +813,10 @@ Proof
 QED
 
 Theorem stmt_state_rel_pop_scope:
-  !func cenv cx es s sc rest.
-    stmt_state_rel func cenv cx es s /\ es.scopes = sc :: rest /\
+  !func cenv cx es s sc rest ctx.
+    stmt_state_rel ctx func cenv cx es s /\ es.scopes = sc :: rest /\
     (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
-    stmt_state_rel func cenv cx (es with scopes := rest) s
+    stmt_state_rel ctx func cenv cx (es with scopes := rest) s
 Proof
   rw[stmt_state_rel_def]
   >- (irule state_rel_pop_scope >> metis_tac[])
@@ -801,8 +883,8 @@ QED
 (* stmt_state_rel reads the compile environment through the locals in
    scope and its other bindings. *)
 Theorem stmt_state_rel_cenv_cong:
-  !func cenv cenv' cx es ss.
-    stmt_state_rel func cenv' cx es ss /\
+  !func cenv cenv' cx es ss ctx.
+    stmt_state_rel ctx func cenv' cx es ss /\
     (!n e. lookup_scopes n es.scopes = SOME e ==>
            FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) /\
     (!n l. FLOOKUP cenv.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
@@ -810,7 +892,7 @@ Theorem stmt_state_rel_cenv_cong:
     (!n l. FLOOKUP cenv'.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
            FLOOKUP cenv.ce_vars n = SOME l) /\
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
-    stmt_state_rel func cenv cx es ss
+    stmt_state_rel ctx func cenv cx es ss
 Proof
   rw[stmt_state_rel_def] >- (irule state_rel_cenv_cong >> metis_tac[])
   >- (irule immutable_alloca_sep_cenv_cong >> qexists_tac `cenv'` >>
@@ -821,9 +903,9 @@ QED
 
 (* Assigning a variable that is no live local's pointer. *)
 Theorem stmt_state_rel_update_var:
-  !func cenv cx es s x w.
-    stmt_state_rel func cenv cx es s /\ not_local_ptr cenv es.scopes x ==>
-    stmt_state_rel func cenv cx es (update_var x w s)
+  !func cenv cx es s x w ctx.
+    stmt_state_rel ctx func cenv cx es s /\ not_local_ptr cenv es.scopes x ==>
+    stmt_state_rel ctx func cenv cx es (update_var x w s)
 Proof
   rpt strip_tac >> fs[stmt_state_rel_def] >> rpt conj_tac
   >- (irule state_rel_update_var_local >> simp[])
@@ -1012,8 +1094,8 @@ QED
    fresh_vars_wrt is now dropped (see stmt_state_rel): local_ptrs_reserved
    keeps the temporaries off the locals' pointers. *)
 Theorem compile_binop_correct:
-  ∀ func cenv cx ty ann bop e1 e2 es ss st op st' v es'.
-    stmt_state_rel func cenv cx es ss ∧
+  ∀ func cenv cx ty ann bop e1 e2 es ss st op st' v es' ctx.
+    stmt_state_rel ctx func cenv cx es ss ∧
     (∀u. type_to_int_bound ann = SOME u ⇒
          type_to_int_bound (expr_type e1) = SOME u) ∧
     (do result <- eval_expr cx (Builtin ann (Bop bop) [e1; e2]);
@@ -1026,7 +1108,7 @@ Theorem compile_binop_correct:
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       eval_operand op ss' = SOME (val_to_w256 v) ∧
-      stmt_state_rel func cenv cx es' ss'
+      stmt_state_rel ctx func cenv cx es' ss'
 Proof
   cheat
 QED
@@ -1090,8 +1172,8 @@ QED
    Fix: named annotation, added type_to_int_bound constraint, and
    restricted ann to signed IntT. *)
 Theorem compile_neg_correct:
-  ∀ func cenv cx ty ann e es ss st op st' v es' n.
-    stmt_state_rel func cenv cx es ss ∧
+  ∀ func cenv cx ty ann e es ss st op st' v es' n ctx.
+    stmt_state_rel ctx func cenv cx es ss ∧
     (do result <- eval_expr cx (Builtin ann Neg [e]); read_result cx result od) es =
       (INL v, es') ∧
     ann = BaseT (IntT n) ∧
@@ -1103,7 +1185,7 @@ Theorem compile_neg_correct:
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       eval_operand op ss' = SOME (val_to_w256 v) ∧
-      stmt_state_rel func cenv cx es' ss'
+      stmt_state_rel ctx func cenv cx es' ss'
 Proof
   cheat
 QED
@@ -3880,16 +3962,21 @@ Theorem ci_mono_builtin_hash[local]:
   ∀bi. (bi = Keccak256 ∨ bi = Sha256) ⇒
   ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st))
 Proof
-  strip_tac >> gen_tac >> Cases_on `bi` >> simp[] >>
+  strip_tac >> gen_tac >> Cases_on `bi` >> simp[]
+  >- (simp[compile_builtin_dispatch_body_def, LET_THM] >>
+      rpt IF_CASES_TAC >> rpt TOP_CASE_TAC >>
+      rpt (irule ci_mono_uncurry >> reverse conj_tac
+           >- simp[ci_mono_lower_value_cfn]
+           >> rpt gen_tac >> BETA_TAC) >>
+      simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_bytes,
+           ci_mono_compile_keccak256_bytesm, ci_mono_compile_keccak256_word]) >>
   simp[compile_builtin_dispatch_body_def, LET_THM] >>
   rpt IF_CASES_TAC >> rpt TOP_CASE_TAC >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_lower_value_cfn]
        >> rpt gen_tac >> BETA_TAC) >>
-  simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_bytes,
-       ci_mono_compile_keccak256_bytesm, ci_mono_compile_keccak256_word,
-       ci_mono_compile_sha256_bytes, ci_mono_compile_sha256_bytesm,
-       ci_mono_compile_sha256_word]
+  simp[ci_mono_as_stack_val, ci_mono_compile_sha256_bytes,
+       ci_mono_compile_sha256_bytesm, ci_mono_compile_sha256_word]
 QED
 
 Theorem ci_mono_builtin_membership[local]:

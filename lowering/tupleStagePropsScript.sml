@@ -139,13 +139,13 @@ Theorem tuple_stage_copy_run:
     eval_operand op s = SOME sw /\
     val_in_memory tv v (w2n sw) s.vs_memory /\ val_wf tv v /\
     val_footprint tv v <= sz /\ sz < dimword (:256) /\
-    stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t w. eval_operand staged t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
       val_in_memory tv v (w2n w) t.vs_memory /\
-      stmt_state_rel func cenv cx es t /\
+      stmt_state_rel ctx func cenv cx es t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -165,7 +165,7 @@ Proof
   `s.vs_current_bb = sx.cs_current_bb /\
    s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
   drule_all alloc_copy_memory_owned_run >>
-  disch_then (qspec_then `ctx` (qx_choosel_then [`t`, `w`] strip_assume_tac)) >>
+  disch_then ((qx_choosel_then [`t`, `w`] strip_assume_tac)) >>
   qexistsl [`t`, `w`] >> simp[eval_operand_def] >>
   conj_tac >- (qpat_x_assum `sx = _` SUBST_ALL_TAC >> gvs[]) >>
   conj_tac
@@ -191,13 +191,13 @@ Theorem optional_tuple_stage_run:
     (flag ==> type_memory_size_list tvs < dimword (:256)) /\
     fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
     (!x. op = Var x ==> not_fresh_at sa x) /\
-    stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     tuple_val_wf vs tvs /\ values_have_types tvs vs /\
     ?t w. eval_operand staged t = SOME w /\
       tuple_in_memory vs tvs (w2n w) t.vs_memory /\
-      stmt_state_rel func cenv cx es t /\
+      stmt_state_rel ctx func cenv cx es t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -223,7 +223,7 @@ Proof
          type_memory_size_list tvs` by
         simp[val_in_memory_def, val_wf_def, val_footprint_def, type_memory_size_def] >>
       drule_all tuple_stage_copy_run >>
-      disch_then (qspec_then `ctx` (qx_choosel_then [`t`, `w`] strip_assume_tac)) >>
+      disch_then ((qx_choosel_then [`t`, `w`] strip_assume_tac)) >>
       qexistsl [`t`, `w`] >> simp[] >>
       conj_tac >- gvs[val_in_memory_def] >>
       conj_tac >- (qexistsl [`w2n w`, `type_memory_size_list tvs`] >>

@@ -287,7 +287,7 @@ QED
 
 (* The invariant of typed_args_ready holds after all the operands. *)
 Theorem typed_args_ready_inv:
-  !args es vs es'.
+  !args es vs es' ctx.
     typed_args_ready ctx func cenv cx arg_ty Inv args /\ Inv es /\
     eval_exprs cx args es = (INL vs, es') ==>
     Inv es'
@@ -303,9 +303,9 @@ QED
 (* ===== The CALL and the ASSERT ===== *)
 
 Theorem expr_post_none_intro:
-  expr_type e = NoneT /\ stmt_state_rel func cenv cx es' s /\
+  expr_type e = NoneT /\ stmt_state_rel ctx func cenv cx es' s /\
   wb_frame cenv es sa s0 s ==>
-  expr_post func cenv cx e es sa sb s0 es' NoneV (Lit 0w) s
+  expr_post ctx func cenv cx e es sa sb s0 es' NoneV (Lit 0w) s
 Proof
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def, wb_frame_def,
        eval_operand_def, vyperValueTheory.evaluate_type_def,
@@ -341,7 +341,7 @@ Theorem send_tail_frag:
     sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (u, sb) /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  stmt_state_rel func cenv cx es1 t /\ wb_frame cenv es sa s0 t /\
+  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es sa s0 t /\
   outcomes_accounts_typed es1.outcomes /\
   accounts_runtime_well_typed es1.accounts /\
   IS_SOME (eval_operand gas_op t) /\
@@ -353,7 +353,7 @@ Theorem send_tail_frag:
   expr_type e = NoneT ==>
   frag_exec ctx sm sb (\s. s = t)
     (\s. ?v. res = INL v /\
-             expr_post func cenv cx e es sa sb s0 es' v (Lit 0w) s)
+             expr_post ctx func cenv cx e es sa sb s0 es' v (Lit 0w) s)
     (expr_exit res)
 Proof
   strip_tac >> drule_all send_tail_shape >> strip_tac >>
@@ -386,7 +386,7 @@ Proof
   TRY (gvs[run_inst_seq_def, send_assert_fail, expr_exit_def] >> NO_TAC) >>
   gvs[run_inst_seq_def, send_assert_ok] >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
-  conj_tac
+  reverse conj_tac
   >- (irule stmt_state_rel_update_var >> conj_tac
       >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[]) >>
       `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by
@@ -434,8 +434,8 @@ Proof
   `wb_args_shape cenv expr_type args` by metis_tac[typed_stack_args_shape] >>
   qpat_x_assum `!arg_ty. _` (qspec_then `expr_type` assume_tac) >>
   rewrite_tac[expr_sim_def] >> rpt gen_tac >> strip_tac >>
-  reverse (Cases_on `stmt_state_rel func cenv cx es s0`)
-  >- (`(\s. s = s0 /\ stmt_state_rel func cenv cx es s) = (\s. F)` by
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
+  >- (`(\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s) = (\s. F)` by
         (simp[FUN_EQ_THM] >> metis_tac[]) >>
       simp[] >> irule frag_exec_false_pre) >>
   drule lower_value_send >> strip_tac >> gvs[] >>

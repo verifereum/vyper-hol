@@ -134,17 +134,17 @@ QED
 
 Theorem expr_post_ifexp:
   !func cenv cx t c a b e es es1 es' sa s1 sc sd sb s0 tt u cop aop
-             rv v1 v lbl w k xl.
-    expr_post func cenv cx c es sa s1 s0 es1 v1 cop tt /\
-    expr_post func cenv cx e es1 sc sd (jump_to lbl tt) es' v aop u /\
+             rv v1 v lbl w k xl ctx.
+    expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
+    expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) es' v aop u /\
     expr_type e = t /\ eval_operand aop u = SOME w /\
     (!x. not_fresh_at sa x ==> x <> rv) /\
-    local_ptrs_reserved cenv sa /\ stmt_state_rel func cenv cx es s0 /\
+    local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
     sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
     sd.cs_next_id <= sb.cs_next_id ==>
-    expr_post func cenv cx (IfExp t c a b) es sa sb s0 es' v (Var rv)
+    expr_post ctx func cenv cx (IfExp t c a b) es sa sb s0 es' v (Var rv)
       (jump_to xl (update_var rv w u with vs_inst_idx := k))
 Proof
   rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
@@ -160,7 +160,7 @@ Proof
     simp[jump_to_def, lookup_var_def] >>
   `!x. not_fresh_at sa x ==> not_fresh_at sc x` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
-  `stmt_state_rel func cenv cx es' ss` by
+  `stmt_state_rel ctx func cenv cx es' ss` by
     (simp[Abbr `ss`, stmt_state_rel_jump_to, stmt_state_rel_inst_idx,
           update_var_def] >>
      irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
@@ -252,9 +252,9 @@ QED
 (* expr_post of an operand held by a variable, as vv_post of the value_vv
    compile_expr makes of the variable. *)
 Theorem vv_post_of_expr_post:
-  !func cenv cx e es sa sb s0 es' v rv s.
-    expr_post func cenv cx e es sa sb s0 es' v (Var rv) s ==>
-    vv_post func cenv cx e es sa sb s0 es' (Value v)
+  !func cenv cx e es sa sb s0 es' v rv s ctx.
+    expr_post ctx func cenv cx e es sa sb s0 es' v (Var rv) s ==>
+    vv_post ctx func cenv cx e es sa sb s0 es' (Value v)
       (if is_word_type (expr_type e) then StackValue (expr_type e) (Var rv)
        else LocatedValue (expr_type e) (mk_ptr (Var rv) LocMemory)) s
 Proof
@@ -275,11 +275,11 @@ Theorem ifexp_arm_frag:
     emit_inst ASSIGN [eop] [rv] bm = ((), bn) /\
     (do result <- eval_expr cx e; read_result cx result od) es1 = (res, es') /\ expr_res_ok res /\
     fn_has_code bs bm func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv bs /\ stmt_state_rel func cenv cx es1 tt /\
+    local_ptrs_reserved cenv bs /\ stmt_state_rel ctx func cenv cx es1 tt /\
     cs_extends bs bm ==>
     frag_exec ctx bs bn (\s. s = jump_to lbl tt)
       (\s. ?v u w. res = INL v /\
-             expr_post func cenv cx e es1 bs bm (jump_to lbl tt) es' v eop u /\
+             expr_post ctx func cenv cx e es1 bs bm (jump_to lbl tt) es' v eop u /\
              eval_operand eop u = SOME w /\
              s = (update_var rv w u) with
                    vs_inst_idx := LENGTH bn.cs_current_insts)
@@ -299,9 +299,9 @@ Proof
   asm_rewrite_tac[] >> rpt strip_tac >> fs[] >>
   irule frag_exec_assign >> first_assum (irule_at Any) >>
   rpt strip_tac >> gvs[] >>
-  rename1 `expr_post func cenv cx e es1 bs bm _ es' v eop uu` >>
+  rename1 `expr_post ctx func cenv cx e es1 bs bm _ es' v eop uu` >>
   `?w. eval_operand eop uu = SOME w` by
-    (qpat_x_assum `expr_post func cenv cx e _ _ _ _ _ _ _ uu` mp_tac >>
+    (qpat_x_assum `expr_post ctx func cenv cx e _ _ _ _ _ _ _ uu` mp_tac >>
      simp[expr_post_def, expr_val_rel_def] >> strip_tac >>
      qexists_tac `w` >> simp[]) >>
   qexists_tac `w` >> conj_tac >- first_assum ACCEPT_TAC >>
@@ -316,12 +316,12 @@ Theorem ifexp_jnz_arm:
    bs bm bn bo bx bp tl el xl bl lbl rv cond_op eop tt.
     frag_exec ctx bs bn (\s. s = jump_to bl tt)
       (\s. ?v u w. res = INL v /\
-             expr_post func cenv cx e es1 bs bm (jump_to bl tt) es' v eop u /\
+             expr_post ctx func cenv cx e es1 bs bm (jump_to bl tt) es' v eop u /\
              eval_operand eop u = SOME w /\
              s = (update_var rv w u) with
                    vs_inst_idx := LENGTH bn.cs_current_insts)
       (expr_exit res) /\
-    expr_post func cenv cx c es sa s1 s0 es1 (BoolV bv) cond_op tt /\
+    expr_post ctx func cenv cx c es sa s1 s0 es1 (BoolV bv) cond_op tt /\
     eval_operand cond_op tt = SOME (val_to_w256 (BoolV bv)) /\
     emit_inst JNZ [cond_op; Label tl; Label el] [] s5 = ((), s6) /\
     new_block tl s6 = (x6, s7) /\
@@ -339,11 +339,11 @@ Theorem ifexp_jnz_arm:
     sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= bs.cs_next_id /\
     bm.cs_next_id <= sb.cs_next_id /\
     expr_type e = t /\ (!x. not_fresh_at sa x ==> x <> rv) /\
-    local_ptrs_reserved cenv sa /\ stmt_state_rel func cenv cx es s0 /\
+    local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes ==>
     frag_exec ctx s1 sb (\s. s = tt)
       (\s. ?v. res = INL v /\
-                vv_post func cenv cx (IfExp t c a b) es sa sb s0 es' (Value v)
+                vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 es' (Value v)
                   (if is_word_type t then StackValue t (Var rv)
                    else LocatedValue t (mk_ptr (Var rv) LocMemory)) s)
       (expr_exit res)
@@ -377,7 +377,7 @@ Proof
   qspecl_then [`ctx`, `fn`, `tt`, `tt`, `jbb`, `jnz`, `bs`, `bn`, `bo`,
      `bp`, `xl`, `lbl`, `bx`, `\s. s = jump_to bl tt`,
      `\s. ?v u w. res = INL v /\
-            expr_post func cenv cx e es1 bs bm (jump_to bl tt) es' v eop u /\
+            expr_post ctx func cenv cx e es1 bs bm (jump_to bl tt) es' v eop u /\
             eval_operand eop u = SOME w /\
             s = (update_var rv w u) with
                   vs_inst_idx := LENGTH bn.cs_current_insts`,
@@ -391,7 +391,7 @@ Proof
       qexists_tac `jump_to xl ss` >> rpt conj_tac
       >- (qexists_tac `v` >> simp[] >>
           qspecl_then [`func`, `cenv`, `cx`, `IfExp t c a b`, `es`, `sa`, `sb`,
-                       `s0`, `es'`, `v`, `rv`, `jump_to xl ss`] mp_tac
+                       `s0`, `es'`, `v`, `rv`, `jump_to xl ss`, `ctx`] mp_tac
             vv_post_of_expr_post >>
           simp[vyperASTTheory.expr_type_def] >> disch_then irule >>
           qpat_x_assum `ss = _` SUBST_ALL_TAC >> irule expr_post_ifexp >>
@@ -441,10 +441,10 @@ Theorem ifexp_branch_sim:
     bm.cs_next_id <= sb.cs_next_id /\
     (!x. not_fresh_at sa x ==> x <> rv) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ stmt_state_rel func cenv cx es s0 ==>
-    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+    local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 ==>
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
       (\s. ?v. res = INL v /\
-                vv_post func cenv cx (IfExp t c a b) es sa sb s0 es' (Value v)
+                vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 es' (Value v)
                   (if is_word_type t then StackValue t (Var rv)
                    else LocatedValue t (mk_ptr (Var rv) LocMemory)) s)
       (expr_exit res)
@@ -480,13 +480,13 @@ Proof
                            `es1`, `s0`] mp_tac) >>
   (impl_tac >- simp[expr_res_ok_def]) >>
   disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
-  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
+  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
                            `expr_exit res`] mp_tac) >>
   (impl_tac >- simp[]) >>
   disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
   asm_rewrite_tac[] >> rpt strip_tac >> fs[] >>
-  rename1 `expr_post func cenv cx c es sa s1 s0 es1 (BoolV bv) cond_op tt` >>
-  `stmt_state_rel func cenv cx es1 tt /\
+  rename1 `expr_post ctx func cenv cx c es sa s1 s0 es1 (BoolV bv) cond_op tt` >>
+  `stmt_state_rel ctx func cenv cx es1 tt /\
    eval_operand cond_op tt = SOME (val_to_w256 (BoolV bv))` by
     (fs[expr_post_def] >>
      qspecl_then [`cx`, `BaseT BoolT`, `BoolV bv`, `cond_op`, `tt`] mp_tac
@@ -607,11 +607,11 @@ Theorem readable_eval_frag_transport[local]:
          expr_res_ok res ==>
          frag_exec ctx sa sb P
            (\s. ?v. res = INL v /\
-                vv_post func cenv cx e es sa sb s0 es' (Value v) vv s)
+                vv_post ctx func cenv cx e es sa sb s0 es' (Value v) vv s)
            (expr_exit res)) ==>
   frag_exec ctx sa sb P
     (\s. ?tv. raw = INL tv /\
-         vv_post func cenv cx e es sa sb s0 es' tv vv s)
+         vv_post ctx func cenv cx e es sa sb s0 es' tv vv s)
     (expr_exit raw)
 Proof
   strip_tac >> fs[expr_read_res_ok_def] >> gvs[]
@@ -648,13 +648,13 @@ Theorem compile_ifexp_forced_frag[local]:
       (do result <- eval_expr cx (IfExp t c a b); read_result cx result od) es = (res, es') /\ expr_res_ok res /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
         (\s. ?v. res = INL v /\
-                  vv_post func cenv cx (IfExp t c a b) es sa sb s0 es' (Value v) vv s)
+                  vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 es' (Value v) vv s)
         (expr_exit res)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  reverse (Cases_on `stmt_state_rel func cenv cx es s0`)
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
   >- (`frag_exec ctx sa sb (\s. F) (\s. F) (\r. F)` by
         simp[frag_exec_false_pre] >>
       pop_assum (fn th => irule (MATCH_MP frag_exec_weaken th)) >>
@@ -669,7 +669,7 @@ Proof
                     mp_tac) >>
       (impl_tac >- gvs[]) >>
       disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
-      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
+      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
                                `\s. F`, `expr_exit res`] mp_tac) >>
       (impl_tac >- gvs[]) >> strip_tac >>
       irule frag_exec_exit_prefix >> qexists_tac `s1` >> simp[])
@@ -711,9 +711,9 @@ Theorem compile_ifexp_vv_sim:
       eval_expr cx (IfExp t c a b) es = (res, es') /\ expr_read_res_ok cx es' res /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
         (\s. ?tv. res = INL tv /\
-                  vv_post func cenv cx (IfExp t c a b) es sa sb s0 es' tv vv s)
+                  vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 es' tv vv s)
         (expr_exit res)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
