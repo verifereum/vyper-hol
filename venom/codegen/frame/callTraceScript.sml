@@ -63,7 +63,8 @@ Definition outcome_of_def:
           co_accounts := s.rollback.accounts;
           co_tStorage := s.rollback.tStorage;
           co_logs := DROP n c.logs;
-          co_toDelete := TAKE (LENGTH s.rollback.toDelete - m) s.rollback.toDelete |>
+          co_toDelete :=
+            TAKE (LENGTH s.rollback.toDelete - m) s.rollback.toDelete |>
 End
 
 (* ===== Exact observer table (PLAN section 5.2) ===== *)
