@@ -719,7 +719,7 @@ End
    Mirrors Python: expr.py _lower_array_membership *)
 Definition compile_array_membership_loop_def:
   compile_array_membership_loop needle arr_op len_op
-      elem_size offset_base load_opc is_in =
+      elem_size offset_base loader is_in =
     do (* Pre-allocate result variable *)
        result_var <- fresh_var;
        (* Create blocks *)
@@ -744,7 +744,7 @@ Definition compile_array_membership_loop_def:
        (* Body: load elem, compare.
           Uses elem_size (not word_scale) for element stride.
           Uses offset_base for DynArray length-word skip.
-          Uses load_opc for location-aware load (MLOAD/SLOAD/TLOAD).
+          Uses loader for location-aware loads, including constructor immutables.
           Mirrors Python: expr.py _lower_array_membership body block *)
        new_block body_lbl;
        idx_offset <- emit_op MUL [Var idx_var; Lit (n2w elem_size)];
@@ -752,7 +752,7 @@ Definition compile_array_membership_loop_def:
                           emit_op ADD [Lit (n2w offset_base); idx_offset]
                         else return idx_offset);
        elem_addr <- emit_op ADD [arr_op; total_offset];
-       elem_val <- emit_op load_opc [elem_addr];
+       elem_val <- loader elem_addr;
        match_op <- emit_op EQ [elem_val; needle];
        emit_inst JNZ [match_op; Label found_lbl; Label incr_lbl] [];
        (* Found: result = 1, jump to exit *)
@@ -784,11 +784,10 @@ Definition compile_var_array_membership_def:
     let elem_ty = (case rhs_ty of ArrayT t _ => t
                    | _ => BaseT (UintT 256)) in
     let elem_sz = elem_size_in_location cenv loc elem_ty in
-    let load_opc = (case loc of
-        LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD) in
+    let loader = compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc in
     let offset_base = if is_dyn then ws else 0 in
     do len_op <- (if is_dyn then
-                    emit_op load_opc [arr_op]
+                    loader arr_op
                   else
                     (case rhs_ty of
                        ArrayT _ (Fixed n) => return (Lit (n2w n))
@@ -804,7 +803,7 @@ Definition compile_var_array_membership_def:
           | _ => return ()
         else return ());
        compile_array_membership_loop needle arr_op len_op
-         elem_sz offset_base load_opc is_in
+         elem_sz offset_base loader is_in
     od
 End
 
@@ -949,7 +948,7 @@ Definition unwrap_value_def:
   unwrap_value cenv (StackValue ty op) = return op ∧
   unwrap_value cenv (LocatedValue ty p) =
     if is_word_type ty then
-      compile_ptr_load cenv.ce_is_ctor p.ptr_location p.ptr_operand
+      compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca p.ptr_location p.ptr_operand
     else
       (case p.ptr_location of
          LocMemory => return p.ptr_operand
@@ -957,7 +956,7 @@ Definition unwrap_value_def:
            let mem_bytes = type_memory_bytes cenv ty in
            let word_count = (mem_bytes + 31) DIV 32 in
            compile_ensure_in_memory p.ptr_operand p.ptr_location
-             mem_bytes word_count cenv.ce_is_ctor)
+             mem_bytes word_count cenv.ce_is_ctor cenv.ce_imm_alloca)
 End
 
 Definition compile_multi_vvs_def:
@@ -1259,7 +1258,8 @@ Definition type_to_abi_dec_info_def:
                     type_memory_bytes cenv fty))
                 fields)) ∧
   type_to_abi_dec_info sfields cenv (FlagT nsid) =
-    DecPrimWord (IntClamp (cenv.ce_flag_n_members (nsid_to_string nsid)) F) ∧
+    (let n = cenv.ce_flag_n_members (nsid_to_string nsid) in
+     DecPrimWord (if n = 256 then NoClamp else IntClamp n F)) ∧
   type_to_abi_dec_info sfields cenv ty = DecPrimWord (type_to_abi_clamp ty)
 Termination
   WF_REL_TAC `inv_image ($< LEX $<) (λ(sfields, cenv, ty).
@@ -1340,9 +1340,9 @@ End
 Definition compile_array_subscript_def:
   compile_array_subscript base_op idx_op is_dynamic static_count
                                word_scale elem_size is_signed_idx
-                               (load_opc : opcode) =
-    do (* Get length: load from base using location-appropriate opcode *)
-       len_op <- (if is_dynamic then emit_op load_opc [base_op]
+                               loader =
+    do (* Get length through the location-aware word loader. *)
+       len_op <- (if is_dynamic then loader base_op
                   else return (Lit (n2w static_count)));
        (* Bounds check: assert not (idx < 0) and not (idx >= length).
           For signed index types, check SLT(idx, 0) for negative indices.
@@ -2169,6 +2169,18 @@ Termination
   WF_REL_TAC `measure (LENGTH o (FST o SND o SND))`
 End
 
+(* Stage evaluated arguments in the contiguous ABI tuple memory layout.
+   Keep ADD even at offset zero, matching Vyper's tuple construction. *)
+Definition compile_store_abi_tuple_def:
+  compile_store_abi_tuple cenv buf off [] = return () ∧
+  compile_store_abi_tuple cenv buf off ((v,ty)::rest) =
+    do dst <- emit_op ADD [buf; Lit (n2w off)];
+       (if is_word_type ty then emit_void MSTORE [dst; v]
+        else compile_copy_memory dst v (type_memory_bytes cenv ty));
+       compile_store_abi_tuple cenv buf (off + type_memory_bytes cenv ty) rest
+    od
+End
+
 (* Helper: the list callback only compiles members of its input list. *)
 Theorem compile_multi_exprs_callback_cong:
   ∀es. (∀e. MEM e es ⇒ f cenv (expr_type e) e = g cenv (expr_type e) e) ⇒
@@ -2230,16 +2242,12 @@ Definition compile_subscript_def:
                                  ArrayT _ (Fixed n) => n | _ => 0) in
            let ws = word_scale loc in
            let elem_size = elem_size_in_location cenv loc elem_ty in
-           let load_opc = (case loc of
-                             LocStorage => SLOAD
-                           | LocTransient => TLOAD
-                           | LocCalldata => CALLDATALOAD
-                           | _ => MLOAD) in
+           let loader = compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc in
            let is_signed_idx = is_signed_type (expr_type idx_e) in
            do idx_op <- lower_value cfn cenv ty idx_e;
               elem_ptr <-
                 compile_array_subscript base_op idx_op is_dynamic static_count
-                                         ws elem_size is_signed_idx load_opc;
+                                         ws elem_size is_signed_idx loader;
               return (LocatedValue ret_ty (mk_ptr elem_ptr loc))
            od
     od
@@ -2442,11 +2450,9 @@ Definition compile_call_def:
        let args_mem_size = SUM (MAP (type_memory_bytes cenv) call_arg_types) in
        let args_abi_size = abi_size_bound cenv.ce_struct_fields (TupleT call_arg_types) in
        let args_enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT call_arg_types) in
-       let wrapped_return = (case return_type of
-                               TupleT ts =>
-                                 if LENGTH ts > 1 then return_type
-                                 else TupleT [return_type]
-                             | _ => TupleT [return_type]) in
+       let wrapped_return =
+         (if needs_external_call_wrap return_type then TupleT [return_type]
+          else return_type) in
        let return_abi_size = abi_size_bound cenv.ce_struct_fields wrapped_return in
        let min_return_size = abi_static_size cenv.ce_struct_fields wrapped_return in
        let ret_mem_bytes = type_memory_bytes cenv return_type in
@@ -2853,12 +2859,13 @@ Definition compile_builtin_dispatch_body_def:
             (compile_slice_calldata start_op (Lit (n2w n))
                (type_memory_bytes cenv ret_ty) st1))
      | Len =>
-         (* Len needs the raw ptr to read length word *)
-         (let (vv, st1) = compile_expr cenv ty (HD args) st in
-          let v = vv_operand vv in
-          let loc = (case vv_location vv of
-                       SOME l => l | NONE => LocMemory) in
-          as_stack_val ret_ty (compile_builtin_len cenv.ce_is_ctor v loc st1))
+         (let e1 = HD args in
+          (* Len needs the raw ptr to read length word *)
+            let (vv, st1) = compile_expr cenv ty e1 st in
+            let v = vv_operand vv in
+            let loc = (case vv_location vv of
+                         SOME l => l | NONE => LocMemory) in
+            as_stack_val ret_ty (compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca v loc st1))
      | BlockHash =>
          (let e1 = HD args in
           let (v, st1) = lower_value compile_expr cenv ty e1 st in
@@ -3035,13 +3042,13 @@ Definition compile_type_builtin_dispatch_body_def:
           | _ => as_stack_val vv_ty (compile_type_convert v
                    (mk_convert_op src_ty ret_ty) st1))
      | Empty =>
-         if is_word_type ret_ty then (StackValue vv_ty (Lit 0w), st)
-         else
-           (let is_bs = (is_bytestring_type ret_ty ∨
-                         (case ret_ty of ArrayT _ (Dynamic _) => T | _ => F)) in
-            let (buf, st1) = compile_builtin_empty_complex
-                               (type_memory_bytes cenv ret_ty) is_bs st in
-            (LocatedValue ret_ty (mk_ptr buf LocMemory), st1))
+         (if is_word_type ret_ty then (StackValue vv_ty (Lit 0w), st)
+          else
+            let zero_length_only = (is_bytestring_type ret_ty ∨
+                  (case ret_ty of ArrayT _ (Dynamic _) => T | _ => F)) in
+            let (buf,st') = compile_builtin_empty_complex
+                  (type_memory_bytes cenv ret_ty) zero_length_only st in
+            (LocatedValue vv_ty (base_ptr buf), st'))
      | MaxValue =>
          (let (_, hi) = type_bounds ret_ty in (StackValue vv_ty (Lit hi), st))
      | MinValue =>
@@ -3056,12 +3063,13 @@ Definition compile_type_builtin_dispatch_body_def:
           let clamp = mk_extract32_clamp ret_ty in
           as_stack_val vv_ty (compile_clamp_extract32 raw clamp st3))
      | AbiEncode ensure method_id =>
-         (let e1 = HD args in
+         (let method_id_word = OPTION_MAP bytes_method_id_word method_id in
+          if LENGTH args = 1 ∧ ¬ensure then
+          let e1 = HD args in
           let src_ty = expr_type e1 in
-          let enc_ty = if ensure then TupleT [src_ty] else src_ty in
+          let enc_ty = src_ty in
           let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
           let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in
-          let method_id_word = OPTION_MAP bytes_method_id_word method_id in
           if is_word_type src_ty then
             (* Prim word: stage to temp memory for encoder *)
             let (v, st1) = lower_value compile_expr cenv src_ty e1 st in
@@ -3074,15 +3082,29 @@ Definition compile_type_builtin_dispatch_body_def:
             let (src_vv, st1) = compile_expr cenv src_ty e1 st in
             let (src_op, st2) = unwrap_value cenv src_vv st1 in
             as_ptr_val vv_ty LocMemory
-              (lower_abi_encode ensure method_id_word src_op enc_info maxlen st2))
-     | AbiDecode _ =>
+              (lower_abi_encode ensure method_id_word src_op enc_info maxlen st2)
+          else
+          let arg_tys = MAP expr_type args in
+          let enc_ty = TupleT arg_tys in
+          let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
+          let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in
+          let (vs, st1) = compile_multi_exprs compile_expr cenv args st in
+          let (tup_alloc, st2) =
+                compile_alloc_buffer (type_memory_bytes cenv enc_ty) st1 in
+          let tup = tup_alloc.buf_operand in
+          let (_, st3) = compile_store_abi_tuple cenv tup 0 (ZIP (vs, arg_tys)) st2 in
+          as_ptr_val vv_ty LocMemory
+            (lower_abi_encode ensure method_id_word tup enc_info maxlen st3))
+     | AbiDecode unwrap =>
          (let e1 = HD args in
           let (data_vv, st1) = compile_expr cenv (expr_type e1) e1 st in
           let (data_op, st2) = unwrap_value cenv data_vv st1 in
-          let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv ret_ty in
-          let abi_min = abi_static_size cenv.ce_struct_fields ret_ty in
-          let abi_max = abi_size_bound cenv.ce_struct_fields ret_ty in
-          let out_size = type_memory_bytes cenv ret_ty in
+          let wty = if unwrap /\ needs_external_call_wrap ret_ty then
+                      TupleT [ret_ty] else ret_ty in
+          let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv wty in
+          let abi_min = abi_static_size cenv.ce_struct_fields wty in
+          let abi_max = abi_size_bound cenv.ce_struct_fields wty in
+          let out_size = type_memory_bytes cenv wty in
           as_ptr_val vv_ty LocMemory (lower_abi_decode data_op dec_info abi_min abi_max out_size st2)))
 End
 
@@ -3154,7 +3176,7 @@ Theorem compile_empty_memory_dispatch:
       (type_memory_bytes cenv ret_ty)
       (is_bytestring_type ret_ty \/
        (case ret_ty of ArrayT _ (Dynamic _) => T | _ => F)) st in
-    (LocatedValue ret_ty (mk_ptr buf LocMemory), st1)
+    (LocatedValue vv_ty (base_ptr buf), st1)
 Proof
   simp[compile_type_builtin_dispatch_body_def]
 QED

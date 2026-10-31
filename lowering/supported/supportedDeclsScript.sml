@@ -39,6 +39,8 @@ Definition supported_declaration_header_def:
         supported_storage_type tops ty
     | VariableDecl Private Transient name ty (SOME slot) =>
         supported_storage_type tops ty
+    | VariableDecl Private Immutable name ty NONE =>
+        supported_value_type tops ty
     | HashMapDecl Private transient name kt vt (SOME slot) =>
         supported_hashmap_key_type kt /\ supported_hashmap_value tops vt
     | StructDecl name fields =>
@@ -77,6 +79,15 @@ Definition supported_hashmap_decl_def:
         if s = name then SOME (vis, transient, kt, vt, slot)
         else supported_hashmap_decl rest (module_id, name)
     | _ => supported_hashmap_decl rest (module_id, name)
+End
+
+(* Private immutable values have a byte layout, rather than a storage slot. *)
+Definition supported_immutable_type_def:
+  supported_immutable_type tops id =
+    case supported_variable_decl tops id of
+      SOME (Private, Immutable, ty, NONE) =>
+        if supported_value_type tops ty then SOME ty else NONE
+    | _ => NONE
 End
 
 Definition supported_function_decl_def:
@@ -148,6 +159,14 @@ Proof
   Cases_on `vis` >> Cases_on `slot` >> simp[supported_declaration_header_def]
 QED
 
+Theorem supported_immutable_header_contract:
+  supported_declaration_header tops
+    (VariableDecl Private Immutable name ty NONE) <=>
+  supported_value_type tops ty
+Proof
+  simp[supported_declaration_header_def]
+QED
+
 Theorem supported_public_variables_rejected:
   ~supported_declaration_header tops (VariableDecl Public mut name ty slot)
 Proof
@@ -156,15 +175,15 @@ Proof
 QED
 
 Theorem supported_missing_slots_rejected:
-  ~supported_declaration_header tops (VariableDecl vis mut name ty NONE) /\
+  ~supported_declaration_header tops (VariableDecl vis Storage name ty NONE) /\
+  ~supported_declaration_header tops (VariableDecl vis Transient name ty NONE) /\
   ~supported_declaration_header tops (HashMapDecl vis transient name kt vt NONE)
 Proof
-  Cases_on `vis` >> Cases_on `mut` >> Cases_on `transient` >>
+  Cases_on `vis` >> Cases_on `transient` >>
   Cases_on `vt` >> simp[supported_declaration_header_def]
 QED
 
-Theorem supported_immutables_constants_rejected:
-  ~supported_declaration_header tops (VariableDecl vis Immutable name ty slot) /\
+Theorem supported_constants_rejected:
   ~supported_declaration_header tops (VariableDecl vis (Constant e) name ty slot)
 Proof
   Cases_on `vis` >> Cases_on `slot` >>

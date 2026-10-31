@@ -86,6 +86,7 @@ Ancestors
   vyperInterpreter vyperState vyperValueOperation vyperContext
   valueEncoding valueEncodingProofs vyperTypeSystem
   venomExecSemantics venomInst venomState
+  vyperLookupStorage vyperStorageBackend
 
 (* ===== The judgment ===== *)
 
@@ -456,12 +457,18 @@ End
    from it and unwrap_value's code (exprSimHyps). *)
 
 (* The slot w holds the value obtained by reading the captured source
-   result at es.  storage_rel and transient_rel relate the Venom slot. *)
+   result at es, the slots it occupies are in range (slots_in_range):
+   a word's slot holds its value's encoding, so a load of the slot gives
+   the value's word, and the read sees no other value's dead bytes, so
+   storage_rel and transient_rel relate the Venom slots it reads. *)
 Definition storage_holds_def:
   storage_holds cx is_transient t tv (w:bytes32) es <=>
     ?tvt v. evaluate_type (get_tenv cx) t = SOME tvt /\
             read_storage_slot cx is_transient w tvt es = (INL v, es) /\
-            read_result cx tv es = (INL v, es)
+            read_result cx tv es = (INL v, es) /\
+            slots_in_range (get_storage cx es is_transient) (w2n w) tvt /\
+            storage_read_live cx is_transient (get_storage cx es is_transient)
+              w tvt
 End
 
 (* tvt v sits at offset k inside the layout of itv iv: wherever memory holds
@@ -705,7 +712,13 @@ Proof
     (irule alloca_inv_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `alloca_room func (s with vs_vars := V)` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
-  fs[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
+  `immutable_alloca_sep func cenv cx es (s with vs_vars := V)` by
+    (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
+     fs[stmt_state_rel_def] >>
+     rpt strip_tac >> qexists_tac `id` >>
+     fs[local_region_def] >> metis_tac[]) >>
+  fs[stmt_state_rel_def, state_rel_def,
+     storage_rel_def, transient_rel_def,
      immutables_rel_def, logs_rel_def, contract_storage_def,
      contract_transient_def] >>
   metis_tac[]

@@ -13,7 +13,8 @@
  * source's AddressV 0w.
  *
  * TOP-LEVEL:
- *   compile_ecrecover_call_sim — expr_vv_ok of ECRecover
+ *   compile_ecrecover_call_case — expr_vv_case of ECRecover from its
+ *                            operands' exprs_case
  *
  * Exported for the other precompiles:
  *   - computed STATICCALLs: computed_static_consume_eq, computed_static_exec,
@@ -24,8 +25,10 @@
  *     word_value): typed_args_ready, typed_args_post, typed_args_ready_head,
  *     typed_args_ready_tail, typed_args_cons_cases, typed_args_post_cons,
  *     lower_typed_args_nil_sim, lower_typed_args_sim,
- *     typed_stack_args_ready, stack_args_values_typed,
- *     typed_builtin_stack_args_values, expr_sim_pre_stack_result,
+ *     typed_args_ready_of_case, typed_stack_args_ready,
+ *     stack_args_values_typed, stack_args_values_typed_body,
+ *     typed_builtin_stack_args_values, expr_body_pre_stack_result,
+ *     expr_sim_pre_stack_result,
  *     expr_post_typed_stack_operand, expr_post_typed_stack_intro
  *   - scratch buffers: scratch_mstore_frame, mem_bytes_at_store_append
  *   - big-endian words: num_of_bytes_l2n, num_of_be_bytes_word32
@@ -50,7 +53,9 @@ Libs
 Theorem write_memory_stmt_state_rel:
   stmt_state_rel func cenv cx es s /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
-     b + sz <= dst \/ dst + LENGTH data <= b) ==>
+     b + sz <= dst \/ dst + LENGTH data <= b) /\
+  immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+    (write_memory_with_expansion dst data s) ==>
   stmt_state_rel func cenv cx es (write_memory_with_expansion dst data s)
 Proof
   strip_tac >>
@@ -75,7 +80,8 @@ Proof
   conj_tac
   >- (irule alloca_room_fields >> qexists_tac `s` >>
       simp[write_memory_with_expansion_def]) >>
-  simp[write_memory_with_expansion_def] >> metis_tac[]
+  gvs[write_memory_with_expansion_def, immutable_alloca_sep_def,
+      local_region_def, lookup_var_def] >> metis_tac[]
 QED
 
 Theorem computed_static_consume_eq:
@@ -115,7 +121,10 @@ Theorem computed_static_exec_state_rel:
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      b + sz <= w2n ro \/
      w2n ro + LENGTH (TAKE (w2n rs)
-       (FST (take_outcome rq s.vs_outcomes)).co_returnData) <= b) ==>
+       (FST (take_outcome rq s.vs_outcomes)).co_returnData) <= b) /\
+  immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+    (write_memory_with_expansion (w2n ro)
+      (TAKE (w2n rs) (FST (take_outcome rq s.vs_outcomes)).co_returnData) s) ==>
   ?t. exec_ext_call inst s gas addr 0w ai an ro rs T = OK t /\
       stmt_state_rel func cenv cx es t
 Proof
@@ -190,16 +199,22 @@ Proof
 QED
 
 (* The word-only argument predicates cannot encode bytes32.  Keep the
-   same compiler and frame, but use the type-directed stack encoding. *)
+   same compiler and frame, but use the type-directed stack encoding.  As
+   wb_args_ready, a later operand's facts only if the ones before it can
+   evaluate. *)
 Definition typed_args_ready_def:
-  typed_args_ready ctx func cenv cx arg_ty Inv args <=>
-    !e es. MEM e args /\ Inv es ==>
-      expr_sim ctx func cenv cx (arg_ty e) e es /\
-      is_word_type (expr_type e) /\
-      IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
-      (!res es'. (do r <- eval_expr cx e; read_result cx r od) es = (res, es') ==> expr_res_ok res) /\
-      (!v es'. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
-        Inv es')
+  typed_args_ready ctx func cenv cx arg_ty Inv [] = T /\
+  typed_args_ready ctx func cenv cx arg_ty Inv (e::args) =
+    ((!es. Inv es ==>
+       expr_sim ctx func cenv cx (arg_ty e) e es /\
+       is_word_type (expr_type e) /\
+       IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
+       (!res es'. (do r <- eval_expr cx e; read_result cx r od) es = (res, es') ==> expr_res_ok res) /\
+       (!v es'. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
+         Inv es')) /\
+     ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
+                        read_result cx tv s1 = (INL v, t1)) ==>
+      typed_args_ready ctx func cenv cx arg_ty Inv args))
 End
 
 Definition typed_args_post_def:
@@ -226,10 +241,12 @@ Proof
 QED
 
 Theorem typed_args_ready_tail:
-  typed_args_ready ctx func cenv cx arg_ty Inv (e::args) ==>
+  typed_args_ready ctx func cenv cx arg_ty Inv (e::args) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es1) ==>
   typed_args_ready ctx func cenv cx arg_ty Inv args
 Proof
-  simp[typed_args_ready_def] >> metis_tac[]
+  simp[typed_args_ready_def] >> rpt strip_tac >> first_x_assum irule >>
+  drule eval_expr_read_INL >> metis_tac[]
 QED
 
 Theorem typed_args_cons_cases:
@@ -525,6 +542,28 @@ Proof
   simp[emitted_insts_def, rich_listTheory.DROP_APPEND1, same_blocks_def]
 QED
 
+Theorem ecrecover_lookup_generated_update[local]:
+  not_fresh_at sa x /\ sa.cs_next_var <= k ==>
+  lookup_var x (update_var (STRING #"%" (toString k)) z t) = lookup_var x t
+Proof
+  simp[not_fresh_at_def, emitHelperPropsTheory.lookup_var_update_var] >>
+  metis_tac[]
+QED
+
+Theorem ecrecover_operand_generated_update[local]:
+  (!x. q = Var x ==> not_fresh_at sa x) /\ sa.cs_next_var <= k ==>
+  eval_operand q (update_var (STRING #"%" (toString k)) z t) = eval_operand q t
+Proof
+  Cases_on `q` >> simp[eval_operand_def] >>
+  metis_tac[ecrecover_lookup_generated_update]
+QED
+
+Theorem ecrecover_operand_mstore[local]:
+  eval_operand q (mstore a z t) = eval_operand q t
+Proof
+  Cases_on `q` >> simp[eval_operand_def, mstore_def, lookup_var_def]
+QED
+
 Theorem ecrecover_input_stores_run[local]:
   (do emit_void MSTORE [base_op; h];
       p1 <- emit_op ADD [base_op; Lit 32w];
@@ -550,14 +589,8 @@ Proof
   `!q k z t. MEM q [base_op;h;v;r;sig] /\ sa.cs_next_var <= k ==>
      eval_operand q (update_var (STRING #"%" (toString k)) z t) =
      eval_operand q t` by
-    (rpt gen_tac >> strip_tac >> Cases_on `q` >>
-     simp[eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >>
-     IF_CASES_TAC >> gvs[] >>
-     qpat_x_assum `!x. _ ==> not_fresh_at sa x`
-       (qspec_then `STRING #"%" (toString k)` mp_tac) >>
-     simp[not_fresh_at_def]) >>
-  `!q a z t. eval_operand q (mstore a z t) = eval_operand q t` by
-    (Cases >> simp[eval_operand_def, mstore_def, lookup_var_def]) >>
+    (rpt strip_tac >> irule ecrecover_operand_generated_update >>
+     simp[] >> metis_tac[]) >>
   qpat_x_assum `_ sa = ((),sb)` mp_tac >>
   simp[emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
@@ -567,7 +600,7 @@ Proof
        exec_write2_def] >>
   simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def,
        exec_pure2_def, bind_outputs_def, eval_operand_def,
-       emitHelperPropsTheory.eval_operand_mstore] >>
+       ecrecover_operand_mstore] >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_write2_def,
        eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
@@ -585,7 +618,6 @@ Proof
     (rpt conj_tac >> irule abiDecodeStaticPropsTheory.w2n_add_n2w_lt >>
      decide_tac) >>
   qpat_x_assum `!q k z t. _` kall_tac >>
-  qpat_x_assum `!q a z t. _` kall_tac >>
   simp[GSYM dftCommutationTheory.update_var_mstore_commute] >>
   `!a z t m vs. (mstore a z t) with <|vs_memory := m; vs_vars := vs|> =
      t with <|vs_memory := m; vs_vars := vs|>` by simp[mstore_def] >>
@@ -614,7 +646,14 @@ Theorem ecrecover_input_stores_sim[local]:
      regions_disjoint (w2n p) 128 b sz) /\
   (!aid b sz. aid < sc.cs_next_id /\
      FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-     regions_disjoint (w2n p) 128 b sz) ==>
+     regions_disjoint (w2n p) 128 b sz) /\
+  (cenv.ce_is_ctor ==> !name tv iv off.
+     FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+       SOME (ImmutableLoc off) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       SOME (tv,iv) ==>
+     regions_disjoint (w2n p) 128 off (type_memory_size tv)) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     t.vs_memory =
       (mstore (w2n p+96) ws (mstore (w2n p+64) wr
@@ -644,8 +683,16 @@ Proof
   >- (irule literal_state_memory_frame >> qexists_tac `s` >>
       simp[IgnAsm `t.vs_memory = _`] >>
       conj_tac >- (rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
-      rpt strip_tac >> first_x_assum irule >>
-      gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+      conj_tac
+      >- (rpt strip_tac >>
+          qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
+          gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+      conj_tac
+      >- simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
+              arithmeticTheory.MAX_DEF] >>
+      rpt strip_tac >>
+      qpat_x_assum `!b len. regions_disjoint _ _ b len ==> _` irule >>
+      metis_tac[]) >>
   `locals_kept cenv es s t` by
     (irule locals_kept_regions >> rpt strip_tac >>
      first_x_assum irule >> metis_tac[]) >>
@@ -772,6 +819,28 @@ Proof
   first_x_assum irule >> decide_tac
 QED
 
+Theorem precompile_alloca_immutable_disjoint[local]:
+  stmt_state_rel func cenv cx es s /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+  (cenv.ce_is_ctor ==> !name tv iv off.
+     FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+       SOME (ImmutableLoc off) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       SOME (tv,iv) ==>
+     regions_disjoint b sz off (type_memory_size tv))
+Proof
+  strip_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >>
+  strip_tac >> rpt strip_tac >>
+  qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
+  disch_then drule_all >> strip_tac >>
+  qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >>
+  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+QED
+
 Theorem ecrecover_buffers_run[local]:
   (do ib <- context$compile_alloc_buffer 128;
       emit_void MSTORE [ib.buf_operand; h];
@@ -804,6 +873,13 @@ Theorem ecrecover_buffers_run[local]:
     (!aid b sz. aid < sf.cs_next_id /\
       FLOOKUP t.vs_allocas aid = SOME (b,sz) ==>
       regions_disjoint (w2n po) 32 b sz) /\
+    (cenv.ce_is_ctor ==> !name tv iv off.
+       FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+         SOME (ImmutableLoc off) /\
+       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+         | SOME imms => get_source_immutables cenv.ce_module imms) name =
+         SOME (tv,iv) ==>
+       regions_disjoint (w2n po) 32 off (type_memory_size tv)) /\
     (!x. not_fresh_at sf x ==> lookup_var x t = lookup_var x s) /\
     (?x. ip = Var x /\ not_fresh_at sm x) /\
     (?x. op = Var x /\ not_fresh_at sm x)
@@ -841,6 +917,20 @@ Proof
   `!x. MEM (Var x) [ib.buf_operand;h;v;r;sig] ==> not_fresh_at sa x` by
     (simp[] >> rpt strip_tac >> gvs[] >>
      gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  `(cenv.ce_is_ctor ==> !name tv iv off.
+     FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+       SOME (ImmutableLoc off) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       SOME (tv,iv) ==>
+     regions_disjoint (w2n wi) 128 off (type_memory_size tv))` by
+    (rpt strip_tac >> irule precompile_alloca_immutable_disjoint >>
+     goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >>
+     qexists_tac `mk_inst sf.cs_next_id ALLOCA [Lit 128w]
+       [STRING #"%" (toString sf.cs_next_var)]` >> simp[mk_inst_def]) >>
   drule_all ecrecover_input_stores_sim >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sb) s1 = OK s2` >>
   `wb_frame cenv es sf s s1` by
@@ -874,7 +964,9 @@ Proof
   drule_all literal_emit_mstore_run >> strip_tac >>
   `stmt_state_rel func cenv cx es (mstore (w2n wo) 0w s3)` by
     (irule literal_mstore_state_rel >> simp[] >>
-     qexistsl_tac [`w2n wo`,`32`] >> simp[] >>
+     qexistsl_tac [`w2n wo`,
+       `mk_inst sb.cs_next_id ALLOCA [Lit 32w]
+         [STRING #"%" (toString sb.cs_next_var)]`, `32`] >> simp[mk_inst_def] >>
      gvs[compileEnvTheory.regions_disjoint_def]) >>
   `wb_frame cenv es sb s2 s3` by
     (simp[wb_frame_def] >> metis_tac[locals_kept_mem]) >>
@@ -929,6 +1021,14 @@ Proof
   conj_tac
   >- (simp[mstore_def, compileEnvTheory.regions_disjoint_def] >>
       first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (rpt strip_tac >> irule precompile_alloca_immutable_disjoint >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >>
+      qexists_tac `mk_inst sb.cs_next_id ALLOCA [Lit 32w]
+        [STRING #"%" (toString sb.cs_next_var)]` >> simp[mk_inst_def, mstore_def]) >>
   qx_gen_tac `y` >> strip_tac >>
   `not_fresh_at sa y /\ not_fresh_at sb y` by
     (gvs[not_fresh_at_def] >>
@@ -1140,6 +1240,30 @@ Proof
   metis_tac[]
 QED
 
+Theorem precompile_write_immutables[local]:
+  stmt_state_rel func cenv cx es s /\ LENGTH data <= cap /\
+  (cenv.ce_is_ctor ==> !name tv iv off.
+     FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+       SOME (ImmutableLoc off) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       SOME (tv,iv) ==>
+     regions_disjoint dst cap off (type_memory_size tv)) ==>
+  immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+    (write_memory_with_expansion dst data s)
+Proof
+  strip_tac >> irule immutables_rel_mem_agree >> qexists_tac `s` >>
+  conj_tac
+  >- simp[immutableMemoryFrameTheory.immutable_write_memory_capacity,
+          arithmeticTheory.MAX_DEF] >>
+  conj_tac >- simp[write_memory_with_expansion_def] >>
+  reverse conj_tac >- gvs[stmt_state_rel_def, state_rel_def] >>
+  rpt strip_tac >> irule hash_write_memory_disjoint >>
+  qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
+  disch_then drule_all >>
+  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+QED
+
 Theorem ecrecover_suffix_preserves[local]:
   (do gas <- emit_op GAS [];
       success <- emit_op STATICCALL
@@ -1157,7 +1281,14 @@ Theorem ecrecover_suffix_preserves[local]:
   (!name b sz. local_region cenv es.scopes s name b sz ==>
     regions_disjoint (w2n wo) 32 b sz) /\
   (!aid b sz. aid < sf.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-    regions_disjoint (w2n wo) 32 b sz) ==>
+    regions_disjoint (w2n wo) 32 b sz) /\
+  (cenv.ce_is_ctor ==> !name tv iv off.
+     FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+       SOME (ImmutableLoc off) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       SOME (tv,iv) ==>
+     regions_disjoint (w2n wo) 32 off (type_memory_size tv)) ==>
   stmt_state_rel func cenv cx es t /\ wb_frame cenv es sf s t
 Proof
   strip_tac >> drule ecrecover_suffix_shape >> strip_tac >>
@@ -1206,10 +1337,17 @@ Proof
         `regions_disjoint (w2n wo) 32 b sz` by metis_tac[] >>
         gvs[compileEnvTheory.regions_disjoint_def, listTheory.LENGTH_TAKE_EQ] >>
         decide_tac) >>
-     qpat_x_assum `precompile_result _ _ = _` mp_tac >>
-     simp[venom_call_request_def, Abbr `sg`, update_var_def, read_memory_def,
-          wordsTheory.w2w_n2w, wordsTheory.dimword_def,
-          fcpLib.INDEX_CONV ``dimindex(:160)``]) >>
+     conj_tac
+     >- (qpat_x_assum `precompile_result _ _ = _` mp_tac >>
+         simp[venom_call_request_def, Abbr `sg`, update_var_def, read_memory_def,
+              wordsTheory.w2w_n2w, wordsTheory.dimword_def,
+              fcpLib.INDEX_CONV ``dimindex(:160)``]) >>
+     irule precompile_write_immutables >>
+     reverse conj_tac >- (qexists_tac `func` >> simp[]) >>
+     qexists_tac `32` >>
+     conj_tac
+     >- (simp[listTheory.LENGTH_TAKE_EQ] >> decide_tac) >>
+     first_assum ACCEPT_TAC) >>
   `stmt_state_rel func cenv cx es sc` by gvs[] >>
   `?u. exec_ext_call ci sg (n2w s.vs_call_ctx.cc_gas:bytes32)
         (1w:bytes32) 0w wi (128w:bytes32) wo (32w:bytes32) T = OK u /\
@@ -1338,6 +1476,21 @@ Proof
   qexistsl_tac [`es`, `sf`, `t`] >> simp[]
 QED
 
+Theorem expr_body_pre_stack_result:
+  expr_body_pre cenv cx env e es /\ is_word_type (expr_type e) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (res,es') ==>
+  expr_sim_inv cenv cx env es' /\ expr_res_ok res /\
+  !v. res = INL v ==> ?tv.
+    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v
+Proof
+  strip_tac >> drule_all expr_body_pre_word_type_result >> strip_tac >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- (drule_then irule expr_body_pre_res_ok >> simp[] >>
+      rpt strip_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[]
+QED
+
 Theorem expr_sim_pre_stack_result:
   expr_sim_pre cenv cx env e es /\ is_word_type (expr_type e) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (res,es') ==>
@@ -1345,12 +1498,61 @@ Theorem expr_sim_pre_stack_result:
   !v. res = INL v ==> ?tv.
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v
 Proof
-  strip_tac >> drule_all expr_sim_pre_word_type_result >> strip_tac >>
+  metis_tac[expr_body_pre_stack_result, expr_sim_pre_body_pre]
+QED
+
+Theorem typed_args_ready_of_ok[local]:
+  !args ctx func cenv cx env arg_ty.
+    (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+           expr_sim_pre cenv cx env e s) /\
+    EVERY (\e. is_word_type (expr_type e) /\ expr_sim_ok cenv e) args ==>
+    typed_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args
+Proof
+  Induct >> simp[typed_args_ready_def] >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `expr_sim_pre cenv cx env h es` by metis_tac[] >>
   rpt conj_tac
-  >- first_assum ACCEPT_TAC
-  >- (drule_then irule expr_sim_pre_res_ok >> simp[] >>
-      rpt strip_tac >> gvs[]) >>
-  rpt strip_tac >> gvs[]
+  >~ [`expr_sim _ _ _ _ _ _ _`] >- metis_tac[expr_sim_ok_def]
+  >~ [`IS_SOME _`] >- metis_tac[well_typed_expr_type_evaluates]
+  >~ [`expr_res_ok _`]
+  >- (rpt strip_tac >> drule_all expr_sim_pre_stack_result >> simp[]) >>
+  rpt strip_tac >> drule_all expr_sim_pre_stack_result >> simp[]
+QED
+
+(* typed_args_ready from the operands' shared case judgments. *)
+Theorem typed_args_ready_of_case:
+  !args nocalls ctx func cenv cx env arg_ty.
+    (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+       expr_body_pre cenv cx env e s /\ (nocalls ==> int_calls_expr e = []) /\
+       is_word_type (expr_type e)) /\
+    exprs_case nocalls ctx func cenv cx args ==>
+    typed_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args
+Proof
+  Induct >> simp[typed_args_ready_def, exprs_case_def] >> rpt gen_tac >>
+  strip_tac >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `expr_body_pre cenv cx env h es /\ (nocalls ==> int_calls_expr h = []) /\
+       is_word_type (expr_type h)` by metis_tac[] >>
+      rpt conj_tac
+      >- metis_tac[expr_sim_case_def]
+      >- first_assum ACCEPT_TAC
+      >- metis_tac[expr_body_pre_type_evaluates]
+      >- (rpt strip_tac >> drule_all expr_body_pre_stack_result >> simp[]) >>
+      rpt strip_tac >> drule_all expr_body_pre_stack_result >> simp[]) >>
+  strip_tac >> first_x_assum irule >> metis_tac[]
+QED
+
+Theorem typed_stack_args_shape:
+  !args cenv cx env arg_ty es.
+    (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+           expr_body_pre cenv cx env e s /\ is_word_type (expr_type e)) /\
+    expr_sim_inv cenv cx env es ==>
+    wb_args_shape cenv arg_ty args
+Proof
+  rpt strip_tac >> simp[wb_args_shape_def] >> rpt gen_tac >> strip_tac >>
+  `expr_body_pre cenv cx env e es /\ is_word_type (expr_type e)` by
+    metis_tac[] >>
+  drule expr_body_pre_lower_value_word_shape >> disch_then drule >> simp[]
 QED
 
 (* typed_args_ready and wb_args_shape of word operands that each meet
@@ -1363,24 +1565,29 @@ Theorem typed_stack_args_ready:
   typed_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args /\
   wb_args_shape cenv arg_ty args
 Proof
-  strip_tac >> conj_tac
-  >- (pure_rewrite_tac[typed_args_ready_def] >> rpt gen_tac >>
-      disch_then strip_assume_tac >>
-      rename1 `expr_sim_inv cenv cx env es_arg` >>
-      `is_word_type (expr_type e) /\ expr_sim_ok cenv e` by
-        (gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
-      `expr_sim_pre cenv cx env e es_arg` by metis_tac[] >>
-      simp[] >> rpt conj_tac
-      >- metis_tac[expr_sim_ok_def]
-      >- metis_tac[well_typed_expr_type_evaluates]
-      >- (rpt strip_tac >> drule_all expr_sim_pre_stack_result >> simp[]) >>
-      rpt strip_tac >> drule_all expr_sim_pre_stack_result >>
-      simp[] >> metis_tac[]) >>
-  simp[wb_args_shape_def] >> rpt gen_tac >> strip_tac >>
-  `is_word_type (expr_type e)` by
-    (gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
-  `expr_sim_pre cenv cx env e es` by metis_tac[] >>
-  drule expr_sim_pre_lower_value_word_shape >> disch_then drule >> simp[]
+  strip_tac >> conj_tac >- metis_tac[typed_args_ready_of_ok] >>
+  irule typed_stack_args_shape >> qexistsl_tac [`cx`, `env`, `es`] >> simp[] >>
+  rpt strip_tac >- metis_tac[expr_sim_pre_body_pre] >>
+  gvs[EVERY_MEM] >> first_x_assum drule >> simp[]
+QED
+
+Theorem stack_args_values_typed_body:
+  !args vs cenv cx env es es'.
+    (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+       expr_body_pre cenv cx env e s /\ is_word_type (expr_type e)) /\
+    expr_sim_inv cenv cx env es /\ eval_exprs cx args es = (INL vs,es') ==>
+    LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+                         value_has_type tv v) args vs
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[eval_exprs_nil] >>
+  drule eval_exprs_cons_cases >> strip_tac >> gvs[] >>
+  `expr_body_pre cenv cx env h es /\ is_word_type (expr_type h)` by
+    (first_x_assum irule >> simp[]) >>
+  drule_all expr_body_pre_stack_result >> strip_tac >> gvs[] >>
+  Cases_on `rr` >> gvs[] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[listTheory.MEM]
 QED
 
 Theorem stack_args_values_typed:
@@ -1391,15 +1598,7 @@ Theorem stack_args_values_typed:
     LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                          value_has_type tv v) args vs
 Proof
-  Induct >> rpt gen_tac >> strip_tac
-  >- gvs[eval_exprs_nil] >>
-  drule eval_exprs_cons_cases >> strip_tac >> gvs[] >>
-  `expr_sim_pre cenv cx env h es /\ is_word_type (expr_type h)` by
-    (first_x_assum irule >> simp[]) >>
-  drule_all expr_sim_pre_stack_result >> strip_tac >> gvs[] >>
-  Cases_on `rr` >> gvs[] >>
-  first_x_assum irule >> goal_assum (drule_at Any) >>
-  simp[] >> metis_tac[listTheory.MEM]
+  metis_tac[stack_args_values_typed_body, expr_sim_pre_body_pre]
 QED
 
 Theorem typed_builtin_stack_args_values:
@@ -1482,11 +1681,11 @@ Proof
 QED
 
 Theorem ecrecover_pre_types[local]:
-  expr_sim_pre cenv cx env (Builtin ann ECRecover args) es ==>
+  expr_body_pre cenv cx env (Builtin ann ECRecover args) es ==>
   ann = BaseT AddressT /\ LENGTH args = 4 /\
   EVERY (\e. is_word_type (expr_type e)) args
 Proof
-  simp[expr_sim_pre_def, well_typed_expr_def] >> strip_tac >>
+  simp[expr_body_pre_def, well_typed_expr_def] >> strip_tac >>
   drule ecrecover_typing >> simp[] >> strip_tac >>
   `LENGTH args = 4` by simp[] >>
   gvs[LENGTH_EQ_NUM_compute] >> gvs[is_word_type_def]
@@ -1576,19 +1775,18 @@ Proof
 QED
 
 Theorem ecrecover_expr_sim[local]:
-  expr_sim_pre cenv cx env (Builtin ann ECRecover args) es /\
-  EVERY (expr_sim_ok cenv) args ==>
+  expr_body_pre cenv cx env (Builtin ann ECRecover args) es /\
+  (!arg_ty. typed_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args) ==>
   expr_sim ctx func cenv cx ty (Builtin ann ECRecover args) es
 Proof
   strip_tac >> drule ecrecover_pre_types >> strip_tac >>
-  `EVERY (\e. is_word_type (expr_type e) /\ expr_sim_ok cenv e) args` by
-    gvs[EVERY_MEM] >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_sim_pre_def] >>
+  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
   `!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
-         expr_sim_pre cenv cx env e s` by
-    metis_tac[expr_sim_pre_builtin_arg] >>
-  drule_all typed_stack_args_ready >>
-  disch_then (qspecl_then [`func`, `ctx`, `\e. ty`] strip_assume_tac) >>
+         expr_body_pre cenv cx env e s /\ is_word_type (expr_type e)` by
+    (rpt strip_tac >- metis_tac[expr_body_pre_builtin_arg] >>
+     gvs[EVERY_MEM]) >>
+  `typed_args_ready ctx func cenv cx (\e. ty) (expr_sim_inv cenv cx env) args /\
+   wb_args_shape cenv (\e. ty) args` by metis_tac[typed_stack_args_shape] >>
   rewrite_tac[expr_sim_def] >> rpt gen_tac >> strip_tac >>
   reverse (Cases_on `stmt_state_rel func cenv cx es s0`)
   >- (`(\s. s = s0 /\ stmt_state_rel func cenv cx es s) = (\s. F)` by
@@ -1608,19 +1806,18 @@ Proof
     simp[builtin_args_length_ok_def] >>
   drule_all eval_expr_builtin_cases >> strip_tac
   >- (gvs[] >>
-      `expr_sim_inv cenv cx env es` by gvs[expr_sim_pre_def] >>
+      first_assum (qspec_then `\e. ty` assume_tac) >>
       drule_all lower_typed_args_sim >>
       disch_then (qspec_then `s0` mp_tac) >> simp[wb_args_exit_def] >> strip_tac >>
       irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[]) >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
   `LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                         value_has_type tv v) args vs` by
-    (drule_all typed_builtin_stack_args_values >> simp[]) >>
+    (drule_all stack_args_values_typed_body >> simp[]) >>
   `well_typed_builtin_app ann ECRecover (MAP expr_type args)` by
-    gvs[expr_sim_pre_def, well_typed_expr_def] >>
+    gvs[expr_body_pre_def, well_typed_expr_def] >>
   drule_all ecrecover_typed_result >>
   disch_then (qspec_then `es'.accounts` strip_assume_tac) >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_sim_pre_def] >>
   drule_all lower_typed_args_sim >> disch_then (qspec_then `s0` mp_tac) >>
   simp[wb_args_exit_def] >> disch_then (mp_then Any irule wb_frag_then) >> simp[] >>
   qx_gen_tac `t` >> strip_tac >> gvs[] >>
@@ -1634,21 +1831,22 @@ Proof
   metis_tac[]
 QED
 
-Theorem compile_ecrecover_call_sim:
-  !cenv ann args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (Builtin ann ECRecover args)
+Theorem compile_ecrecover_call_case:
+  !nocalls ctx func cenv cx ann args.
+    exprs_case nocalls ctx func cenv cx args ==>
+    expr_vv_case nocalls ctx func cenv cx (Builtin ann ECRecover args)
 Proof
-  rpt gen_tac >> strip_tac >>
-  `EVERY (expr_sim_ok cenv) args` by
-    (simp[EVERY_MEM] >> metis_tac[expr_sim_below_mem, expr_ok_def]) >>
-  rewrite_tac[expr_vv_ok_def] >> rpt strip_tac >>
-  `LENGTH args = 4` by
-    (drule ecrecover_pre_types >> simp[] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> rewrite_tac[expr_vv_case_def] >>
+  rpt strip_tac >> drule ecrecover_pre_types >> strip_tac >>
   irule expr_vv_sim_stack >> simp[] >> conj_tac
   >- (gen_tac >> Cases_on `compile_expr cenv ty (Builtin ann ECRecover args) sa` >>
       drule_all compile_ecrecover_stack >> simp[] >> metis_tac[]) >>
   conj_tac
   >- metis_tac[eval_expr_builtin_value] >>
-  irule ecrecover_expr_sim >> simp[] >> metis_tac[]
+  irule ecrecover_expr_sim >> qexists_tac `env` >> gvs[] >> gen_tac >>
+  irule typed_args_ready_of_case >> qexists_tac `nocalls` >> simp[] >>
+  rpt gen_tac >> strip_tac >> rpt conj_tac
+  >- metis_tac[expr_body_pre_builtin_arg]
+  >- metis_tac[int_calls_builtin_arg] >>
+  gvs[EVERY_MEM]
 QED

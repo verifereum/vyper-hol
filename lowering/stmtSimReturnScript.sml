@@ -960,11 +960,15 @@ Resume compile_return_tuple_int_frag[post]:
   `sl = return_unlock_state cenv pre` by
     (qunabbrev_tac `sl` >> qunabbrev_tac `pre` >>
      irule return_unlock_load_frame >> fs[same_blocks_def]) >>
+  `state_rel func cenv cx (es' with scopes := []) sv` by
+    (irule state_rel_scopes_nil >> fs[stmt_state_rel_def]) >>
   `state_rel func cenv cx (es' with scopes := []) pre` by
     (irule state_rel_frame >>
      simp[local_ptrs_rel_def, lookup_scopes_def, local_region_def] >>
      qexistsl [`es' with scopes := []`, `sv`] >> simp[Abbr `pre`] >>
-     irule state_rel_scopes_nil >> fs[stmt_state_rel_def]) >>
+     qpat_x_assum `state_rel _ _ _ _ sv` mp_tac >>
+     simp[state_rel_def, immutables_rel_def] >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
   `LENGTH vs = LENGTH tvs /\ LENGTH tvs = LENGTH tys` by
     (drule values_have_types_length >> drule LIST_REL_LENGTH >> simp[]) >>
   `LENGTH words = LENGTH tys` by simp[Abbr `words`, LENGTH_ZIP] >>

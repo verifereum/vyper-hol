@@ -282,7 +282,7 @@ QED
 Theorem stmt_state_rel_mcopy_alloca[local]:
   !func cenv cx es s inst p dst src sz.
     stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
-    MEM inst (fn_insts func) /\ inst.inst_outputs = [p] /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
     not_local_ptr cenv es.scopes p /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (dst, sz) ==>
     stmt_state_rel func cenv cx es (mcopy dst src sz s)
@@ -293,13 +293,29 @@ Proof
     simp[mcopy_def, write_memory_with_expansion_def, LET_THM] >>
   `!q. lookup_var q (mcopy dst src sz s) = lookup_var q s` by
     simp[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def] >>
-  irule result_state_memory_frame >> qexists_tac `s` >> simp[] >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+     (mcopy dst src sz s)` by
+    (irule immutables_rel_mem_agree >> qexists_tac `s` >>
+     conj_tac
+     >- simp[mcopy_def, immutableMemoryFrameTheory.immutable_write_memory_capacity,
+             arithmeticTheory.MAX_DEF] >>
+     conj_tac >- simp[mcopy_def, write_memory_with_expansion_def] >>
+     reverse conj_tac >- gvs[stmt_state_rel_def, state_rel_def] >>
+     rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
+     qpat_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >>
+     strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
+     disch_then drule_all >> strip_tac >>
+     qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >>
+     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+  irule result_state_memory_frame >> conj_tac
+  >- (qexists_tac `s` >> simp[] >>
   rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
   `regions_disjoint dst sz b sz'` by
     (irule local_ptrs_rel_alloca_disjoint >>
      qexistsl_tac [`cenv`, `func`, `inst`, `name`, `p`, `es.scopes`, `s`] >>
      fs[stmt_state_rel_def, state_rel_def]) >>
-  fs[regions_disjoint_def]
+  fs[compileEnvTheory.regions_disjoint_def]) >> first_assum ACCEPT_TAC
 QED
 
 Theorem mcopy_alloca_framed_frag[local]:
@@ -308,7 +324,7 @@ Theorem mcopy_alloca_framed_frag[local]:
     lookup_var p s = SOME dw /\ eval_operand src s = SOME sw /\
     sz < dimword (:256) /\
     stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
-    MEM inst (fn_insts func) /\ inst.inst_outputs = [p] /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
     not_local_ptr cenv es.scopes p /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n dw, sz) /\
     val_in_memory tv v (w2n sw) s.vs_memory /\ val_wf tv v /\
@@ -363,7 +379,8 @@ Proof
   `eval_operand src s1 = SOME sw` by simp[] >>
   `val_in_memory tv v (w2n sw) s1.vs_memory` by simp[] >>
   qabbrev_tac `inst = mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]` >>
-  `inst.inst_outputs = [p] /\ inst.inst_id = sa.cs_next_id` by
+  `inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
+   inst.inst_id = sa.cs_next_id` by
     simp[Abbr `inst`, mk_inst_def] >>
   `FLOOKUP s1.vs_allocas inst.inst_id = SOME (w2n w, sz)` by simp[] >>
   drule_all mcopy_alloca_framed_frag >>
@@ -417,6 +434,7 @@ Theorem stmt_state_rel_declare_store_frame[local]:
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!b n. b + n <= w2n w \/ w2n w + type_memory_size tyv <= b ==>
            mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
     type_memory_size tyv <= sz /\ val_wf tyv v /\
     val_in_memory tyv v (w2n w) t.vs_memory ==>
     stmt_state_rel func cenv cx
@@ -440,6 +458,20 @@ Proof
      `b + sz' <= w2n w \/ w2n w + type_memory_size tyv <= b` by
        (fs[regions_disjoint_def] >> decide_tac) >>
      metis_tac[]) >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
+    (`t.vs_data_section = s.vs_data_section` by
+       (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+        simp[venom_state_component_equality]) >>
+     irule immutables_rel_mem_agree >> qexists_tac `s` >>
+     fs[stmt_state_rel_def, state_rel_def] >>
+     fs[immutable_alloca_sep_def] >> rpt strip_tac >>
+     first_x_assum drule_all >> strip_tac >>
+     `regions_disjoint off (type_memory_size tv) (w2n w) sz` by metis_tac[] >>
+     `off + type_memory_size tv <= w2n w \/
+      w2n w + type_memory_size tyv <= off` by
+       (fs[regions_disjoint_def] >> decide_tac) >>
+     qpat_x_assum `!b n. _ ==> mem_bytes_at b n t.vs_memory = _`
+       (qspecl_then [`off`, `type_memory_size tv`] mp_tac) >> simp[]) >>
   irule stmt_state_rel_declare_memory >> simp[] >>
   qexistsl_tac [`inst`, `s`, `w`] >> gs[] >>
   qpat_x_assum `t with <|vs_memory := _; vs_vars := _|> = s` mp_tac >>
@@ -478,7 +510,7 @@ Theorem annassign_memory_store_run[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   `eval_operand (Var p) s = SOME w` by simp[eval_operand_def] >>
-  drule compile_store_memory_run_size_bound >>
+  drule compile_store_memory_run_size_bound_with_capacity >>
   disch_then (qspecl_then [`s`, `get_tenv cx`, `tyv`, `v`, `sw`, `w`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
   qmatch_goalsub_abbrev_tac `stmt_state_rel func cenv cx es'` >>
