@@ -133,7 +133,7 @@ Proof
   simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem attr_add_frag[local]:
+Theorem attr_add_frag:
   !ctx cenv ty e sa vv sm off dst sn func cx es s0 es' tv R.
     compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
     sa.cs_next_var <= sm.cs_next_var /\
@@ -157,7 +157,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem attr_extends[local]:
+Theorem attr_extends:
   !ops sa p sb. emit_op ADD ops sa = (p, sb) ==> cs_extends sa sb
 Proof
   rpt strip_tac >>
@@ -168,7 +168,7 @@ QED
 
 (* ===== The value_vv of the field ===== *)
 
-Theorem stmt_state_rel_region_lt[local]:
+Theorem stmt_state_rel_region_lt:
   !func cenv cx es s.
     stmt_state_rel func cenv cx es s ==>
     (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
@@ -252,7 +252,7 @@ QED
 
 (* A field's pointer does not wrap: the struct's bytes end below 2 ** 256,
    or it has none and the field is at offset 0. *)
-Theorem field_ptr_w2n[local]:
+Theorem field_ptr_w2n:
   !(w:bytes32) off fsz tsz.
     off + fsz <= tsz /\ (tsz = 0 \/ w2n w + tsz < dimword (:256)) ==>
     w2n (w + n2w off) = w2n w + off
