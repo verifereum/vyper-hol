@@ -626,6 +626,7 @@ Proof
   fs[state_rel_def, update_var_def, storage_rel_def,
      transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
      contract_storage_def, contract_transient_def] >> metis_tac[]
+
 QED
 
 Theorem state_rel_jump_to:
@@ -681,6 +682,7 @@ Proof
   fs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
      immutables_rel_def, logs_rel_def, call_ctx_rel_def, contract_storage_def,
      contract_transient_def] >> first_assum ACCEPT_TAC
+
 QED
 
 Theorem stmt_state_rel_jump_to:

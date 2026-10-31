@@ -58,7 +58,7 @@ Theory exprSimLeaves
 Ancestors
   list finite_map
   exprSim exprSimHyps exprSimUnwrap exprLowering exprLoweringProps
-  compileEnv loweringSlice
+  compileEnv accountsRelProps loweringSlice
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeEnv vyperTyping vyperTypeGlobalLookupSoundness
   vyperValueOperation valueEncoding fragExec venomState exprSimLiteralBuffer
@@ -481,6 +481,10 @@ Proof
       simp[fragExecTheory.frag_exec_false_pre] >>
       gvs[stmt_state_rel_def, state_rel_def]) >>
   fs[] >> drule_all toplevel_storage_ce_vars >> strip_tac >>
+  `!st. storage_read_live cx tr st (n2w slot) tvt` by
+    (gen_tac >> irule declared_storage_region_read_live >>
+     qexistsl [`src`, `id`, `[]`] >>
+     simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def]) >>
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
   simp[compile_expr_def, vyperASTTheory.expr_type_def] >>
   Cases_on `tr` >> simp[] >> strip_tac >> gvs[] >>

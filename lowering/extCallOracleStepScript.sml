@@ -7,14 +7,16 @@
  * for a static extcall), which Venom runs with exec_ext_call: it builds a
  * request from the evaluated operands (venom_call_request) and consumes
  * the outcome with consume_call_outcome.  Under state_rel the two requests
- * are the same, so both sides take the same outcome, record the same
- * request and, on success, adopt the same accounts, transient storage and
- * logs.  exec_ext_call_oracle_step is that step, for extcall and send
+ * agree (request_agree: equal but for accounts and transient storage that
+ * agree up to dead bytes), so both sides take agreeing outcomes, record
+ * agreeing requests and, on success, adopt agreeing accounts and transient
+ * storage and the same logs.  exec_ext_call_oracle_step is that step, for extcall and send
  * alike; send_call_oracle_step is send's CALL against eval_send.
  *
  * TOP-LEVEL:
- *   venom_call_request_source — Venom's request is the source's, given the
- *                            same target, value, calldata and static flag
+ *   venom_call_request_source — Venom's request agrees with the source's,
+ *                            given the same target, value, calldata and
+ *                            static flag
  *   exec_ext_call_oracle_step — CALL/STATICCALL binds the success word and
  *                            keeps state_rel with the source after
  *                            adoption, given locals and immutable bytes
@@ -45,23 +47,26 @@ Ancestors
 
 (* ===== Requests ===== *)
 
-(* The request Venom builds from CALL's or STATICCALL's operands is the one
-   the source builds: same target, value, calldata and static flag, and the
-   accounts and transient storage accounts_rel makes equal. *)
+(* The request Venom builds from CALL's or STATICCALL's operands agrees
+   with the one the source builds: same target, value, calldata and static
+   flag, and accounts and transient storage that agree as accounts_rel
+   says. *)
 Theorem venom_call_request_source:
-  !es s aw vw ao az stat target value_opt.
-    accounts_rel es s /\ w2w aw = target /\
+  !cx es s aw vw ao az stat target value_opt.
+    accounts_rel cx es s /\ w2w aw = target /\
     w2n vw = (case value_opt of NONE => 0 | SOME n => n) /\
     (stat \/ s.vs_call_ctx.cc_static) = IS_NONE value_opt ==>
-    venom_call_request s aw vw ao az stat =
-    call_outcome_request target (read_memory (w2n ao) (w2n az) s) value_opt es
+    request_agree cx
+      (call_outcome_request target (read_memory (w2n ao) (w2n az) s)
+         value_opt es)
+      (venom_call_request s aw vw ao az stat)
 Proof
   rpt strip_tac >>
   drule_then (qspecl_then [`target`, `read_memory (w2n ao) (w2n az) s`,
                            `value_opt`] strip_assume_tac)
     accounts_rel_call_request >>
-  simp[venom_call_request_def, call_request_component_equality] >>
-  simp[call_outcome_request_def]
+  gvs[request_agree_def, venom_call_request_def, call_outcome_request_def,
+      call_request_component_equality]
 QED
 
 (* ===== Frames ===== *)
@@ -93,27 +98,52 @@ QED
    fields follow from state_rel before the call, as both sides take,
    record and adopt the same outcome. *)
 Theorem state_rel_adopt_consume[local]:
-  !func cenv cx es s rq outcome rest ro rz.
-    state_rel func cenv cx es s /\
+  !func cenv cx es s rq rq' outcome rest ro rz.
+    state_rel func cenv cx es s /\ request_agree cx rq rq' /\
     take_outcome rq s.vs_outcomes = (outcome, rest) /\
     local_ptrs_rel func cenv es.scopes
-      (SND (consume_call_outcome rq ro rz s)) /\
+      (SND (consume_call_outcome rq' ro rz s)) /\
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
-      (SND (consume_call_outcome rq ro rz s)) ==>
+      (SND (consume_call_outcome rq' ro rz s)) ==>
+
     state_rel func cenv cx
       (SND (adopt_call_outcome rq outcome
               (es with <| outcomes := SOME rest;
                           requests := record_request rq es.requests |>)))
-      (SND (consume_call_outcome rq ro rz s))
+      (SND (consume_call_outcome rq' ro rz s))
 Proof
   rpt strip_tac >>
+  Cases_on `take_outcome rq' s.vs_outcomes` >>
+  rename1 `take_outcome rq' _ = (outcome', rest')` >>
+  drule_all take_outcome_agree >> strip_tac >>
+  `outcome'.co_success = outcome.co_success /\
+   outcome'.co_logs = outcome.co_logs` by
+    (qpat_x_assum `_ = outcome'` (SUBST1_TAC o SYM) >> simp[]) >>
+  `rq'.cr_static = rq.cr_static /\
+   (computed_precompile rq' <=> computed_precompile rq)` by
+    (fs[request_agree_def] >> qpat_x_assum `_ = rq'` (SUBST1_TAC o SYM) >>
+     simp[computed_precompile_def]) >>
+  `s.vs_call_ctx.cc_address = cx.txn.target` by
+    fs[state_rel_def, call_ctx_rel_def] >>
+  `accounts_rel cx
+     (SND (adopt_call_outcome rq outcome
+             (es with <| outcomes := SOME rest;
+                         requests := record_request rq es.requests |>)))
+     (SND (consume_call_outcome rq' ro rz s))` by
+    (irule accounts_rel_adopt_call_outcome >>
+     qexistsl [`es with <| outcomes := SOME rest;
+                           requests := record_request rq es.requests |>`,
+               `s.vs_logs`, `outcome`, `outcome'`, `rq`, `rq'`, `s`] >>
+     gvs[state_rel_def, adopt_call_outcome_equation, accounts_rel_def]) >>
+  drule accounts_rel_storage_transient >> simp[] >> strip_tac >>
   gvs[state_rel_def, adopt_call_outcome_equation, adopt_outcome_def,
-      logs_rel_eq] >>
+      logs_rel_eq, record_request_def] >>
   Cases_on `outcome.co_success /\ ~rq.cr_static` >>
   gvs[storage_rel_def, transient_rel_def, accounts_rel_def,
       call_ctx_rel_def, contract_storage_def, contract_transient_def] >>
   qpat_x_assum `immutables_rel _ _ _ _ es t` mp_tac >>
   simp[immutables_rel_def]
+
 QED
 
 (* TOP-LEVEL: CALL or STATICCALL in oracle mode.  Given the source took
@@ -149,27 +179,34 @@ Theorem exec_ext_call_oracle_step:
           state_rel func cenv cx (SND (adopt_call_outcome rq outcome es1)) s')
 Proof
   rpt gen_tac >> strip_tac >>
-  `accounts_rel es s /\ es.outcomes = SOME s.vs_outcomes /\
+  `accounts_rel cx es s /\ es.outcomes = SOME s.vs_outcomes /\
    ~s.vs_call_ctx.cc_static` by fs[state_rel_def] >>
-  `?rest. rq = venom_call_request s aw vw ao az stat /\
+  `?rest. rq = call_outcome_request target (read_memory (w2n ao) (w2n az) s)
+                 value_opt es /\
           take_outcome rq s.vs_outcomes = (outcome, rest) /\
           es1 = es with <| outcomes := SOME rest;
                            requests := record_request rq es.requests |>` by
-    (`venom_call_request s aw vw ao az stat =
-      call_outcome_request target (read_memory (w2n ao) (w2n az) s)
-        value_opt es` by (irule venom_call_request_source >> simp[]) >>
-     pop_assum SUBST1_TAC >>
-     qpat_x_assum `take_call_outcome _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `take_call_outcome _ _ _ _ = _` mp_tac >>
      simp[take_call_outcome_def] >> pairarg_tac >> simp[] >> rw[] >>
      qexists_tac `rest` >> simp[]) >>
-  qexists_tac `SND (consume_call_outcome rq (w2n ro) (w2n rz) s)` >>
+  `request_agree cx rq (venom_call_request s aw vw ao az stat)` by
+    (qpat_x_assum `rq = _` SUBST1_TAC >>
+     irule venom_call_request_source >> simp[]) >>
+  qabbrev_tac `rq' = venom_call_request s aw vw ao az stat` >>
+  Cases_on `take_outcome rq' s.vs_outcomes` >>
+  rename1 `take_outcome rq' _ = (outcome', rest')` >>
+  drule_all take_outcome_agree >> strip_tac >>
+  `outcome'.co_success = outcome.co_success /\
+   outcome'.co_returnData = outcome.co_returnData` by
+    (qpat_x_assum `_ = outcome'` (SUBST1_TAC o SYM) >> simp[]) >>
+  qexists_tac `SND (consume_call_outcome rq' (w2n ro) (w2n rz) s)` >>
   rpt conj_tac
-  >- gvs[exec_ext_call_def]
+  >- gvs[exec_ext_call_def, Abbr `rq'`]
   >- simp[venom_state_component_equality]
   >- simp[]
   >- simp[] >>
   strip_tac >> qpat_x_assum `es1 = _` SUBST1_TAC >>
-  irule state_rel_adopt_consume >> rpt conj_tac >> first_assum ACCEPT_TAC
+  irule state_rel_adopt_consume >> simp[]
 QED
 
 (* ===== send ===== *)

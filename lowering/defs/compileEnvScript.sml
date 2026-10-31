@@ -17,7 +17,15 @@
  *   internal_fn_label — Venom label of an internal function (Vyper's spelling)
  *   local_ptrs_rel   — live locals held through pointer variables match memory
  *   accounts_rel     — every address's accounts and transient storage match,
+ *                      the running contract's storage up to dead bytes, and
  *                      no pending deletions
+ *   dead_bytes       — the bytes of a stored value past a bytestring's
+ *                      length (or a nested DynArray's)
+ *   storage_dead     — dead_bytes of a declared storage region, which the
+ *                      lowering may overwrite
+ *   storage_agree, accounts_agree, transient_agree, request_agree
+ *                    — equality up to storage_dead
+ *   storage_read_live — a storage read sees no other value's dead bytes
  *   compile_state_ok — well-formedness: bound labels disjoint from future fresh labels
  *   label_external   — label not bound and not in future fresh-label co-domain
  *
@@ -34,7 +42,8 @@
 
 Theory compileEnv
 Ancestors
-  immutableValue immutableEncoding venomExecSemantics venomInst venomPolicyTypes
+  immutableValue immutableEncoding vyperStorageLayoutSafety
+  venomExecSemantics venomInst venomPolicyTypes
   vyperState vyperContext vyperValue vyperABI contractABI
   byte keccak finite_map pred_set list rich_list
 Libs
@@ -952,34 +961,168 @@ Definition local_ptrs_rel_def:
        regions_disjoint b1 sz1 b2 sz2)
 End
 
-(* Storage is identical between Vyper accounts and Venom state *)
-Definition storage_rel_def:
-  storage_rel (addr:address) vs ss =
-    let acct = lookup_account addr vs.accounts in
-    acct.storage = contract_storage ss
+(* ===== Storage Relation up to Dead Bytes ===== *)
+(* The source writes a bytestring as its length and the slots its bytes use
+   (encode_dyn_bytes_slots), zero-padding the last one.  The lowering copies
+   the value's whole storage block from its memory buffer
+   (compile_memory_to_storage, Python's _store_memory_to_storage), so the
+   bytes past the length, up to the capacity, hold whatever the buffer held
+   there.  A DynArray nested in another value is copied the same way, so its
+   elements past its length do too.  Nothing reads them: decoding reads a
+   length first and only the bytes or elements below it.  The relation on
+   the running contract's storage and transient storage therefore only
+   compares the bytes that are not dead.
+
+   dead_bytes st base tv j b: byte b (0 = most significant) of slot j is
+   dead in a value of type tv stored at slot base of st, by the lengths
+   that st holds:
+   - a bytestring: a data byte at or past the length, within the capacity;
+   - a DynArray: every byte of an element at or past the length, and the
+     dead bytes of the elements below it;
+   - a struct, tuple or static array: the dead bytes of its members. *)
+Definition dyn_bytes_dead_def:
+  dyn_bytes_dead (st:storage) base max (j:num) (b:num) ⇔
+    base < j ∧ j ≤ base + word_size max ∧ b < 32 ∧
+    w2n (lookup_storage (n2w base) st) ≤ 32 * (j - (base + 1)) + b
 End
 
-(* Transient storage is identical between interpreter and Venom state.
+Definition dead_bytes_def:
+  (dead_bytes st base (BaseTV (BytesT (Dynamic max))) j b ⇔
+     dyn_bytes_dead st base max j b) ∧
+  (dead_bytes st base (BaseTV (StringT max)) j b ⇔
+     dyn_bytes_dead st base max j b) ∧
+  (dead_bytes st base (BaseTV _) j b ⇔ F) ∧
+  (dead_bytes st base (FlagTV _) j b ⇔ F) ∧
+  (dead_bytes st base NoneTV j b ⇔ F) ∧
+  (dead_bytes st base (TupleTV tvs) j b ⇔ dead_bytes_list st base tvs j b) ∧
+  (dead_bytes st base (ArrayTV tv (Fixed n)) j b ⇔
+     ∃i. i < n ∧ dead_bytes st (base + i * type_slot_size tv) tv j b) ∧
+  (dead_bytes st base (ArrayTV tv (Dynamic n)) j b ⇔
+     ∃i. i < n ∧
+         if i < w2n (lookup_storage (n2w base) st) then
+           dead_bytes st (base + 1 + i * type_slot_size tv) tv j b
+         else
+           base + 1 + i * type_slot_size tv ≤ j ∧
+           j < base + 1 + (i + 1) * type_slot_size tv ∧ b < 32) ∧
+  (dead_bytes st base (StructTV fields) j b ⇔
+     dead_bytes_fields st base fields j b) ∧
+  (dead_bytes_list st base [] j b ⇔ F) ∧
+  (dead_bytes_list st base (tv::tvs) j b ⇔
+     dead_bytes st base tv j b ∨
+     dead_bytes_list st (base + type_slot_size tv) tvs j b) ∧
+  (dead_bytes_fields st base [] j b ⇔ F) ∧
+  (dead_bytes_fields st base ((_,tv)::fields) j b ⇔
+     dead_bytes st base tv j b ∨
+     dead_bytes_fields st (base + type_slot_size tv) fields j b)
+End
+
+(* Byte b of slot j is dead in the storage (tr = F) or transient storage
+   (tr = T) st of the running contract: a declared region (a variable, or a
+   hashmap leaf at a complete key) has it dead, and that region fits the slot
+   space and is disjoint from every declared region on the same backend at
+   another slot or type.  Regions are told apart by where they are, not by
+   how they are named: many keys name one hashmap leaf (encode_hashmap_key
+   sends IntV i and IntV (i + 2 ** 256) to the same word).  Asking for the
+   disjointness here keeps a byte that another region reads live, and keeps
+   a region's dead bytes fixed under writes outside it, without assuming
+   storage_layout_safe. *)
+Definition storage_dead_def:
+  storage_dead cx tr st j b ⇔
+    ∃mid n subs slot tv.
+      declared_storage_region cx mid n subs = SOME (tr, slot, tv) ∧
+      w2n slot + type_slot_size tv ≤ dimword (:256) ∧
+      (∀mid' n' subs' slot' tv'.
+         declared_storage_region cx mid' n' subs' = SOME (tr, slot', tv') ∧
+         (slot', tv') ≠ (slot, tv) ⇒
+         ranges_disjoint (w2n slot) (type_slot_size tv)
+                         (w2n slot') (type_slot_size tv')) ∧
+      dead_bytes st (w2n slot) tv j b
+End
+
+(* A read of a value of type tv at slot w on backend tr sees no dead byte of
+   st but those tv itself leaves dead at w, and the value's slots fit the
+   slot space when any byte is dead.  A read of a declared region has it
+   (storage_dead), and so does a part of a value that has it. *)
+Definition storage_read_live_def:
+  storage_read_live cx tr st (w:bytes32) tv ⇔
+    ∀j b.
+      storage_dead cx tr st j b ⇒
+      w2n w + type_slot_size tv ≤ dimword (:256) ∧
+      (w2n w ≤ j ∧ j < w2n w + type_slot_size tv ⇒
+       dead_bytes st (w2n w) tv j b)
+End
+
+(* st1 and st2 agree on every byte that is not dead by D. *)
+Definition storage_agree_def:
+  storage_agree D (st1:storage) (st2:storage) ⇔
+    ∀(k:bytes32) b.
+      b < 32 ∧ ¬D (w2n k) b ⇒
+      EL b (word_to_bytes (lookup_storage k st1) T) =
+      EL b (word_to_bytes (lookup_storage k st2) T)
+End
+
+(* Accounts a1 (source) and a2 (Venom): equal at every address but the
+   running contract's, whose accounts are equal but for their storage, which
+   agrees up to the bytes dead in a1's. *)
+Definition accounts_agree_def:
+  accounts_agree cx (a1:evm_accounts) (a2:evm_accounts) ⇔
+    (∀addr. addr ≠ cx.txn.target ⇒ a1 addr = a2 addr) ∧
+    (a1 cx.txn.target with storage := (a2 cx.txn.target).storage) =
+      a2 cx.txn.target ∧
+    storage_agree (storage_dead cx F (a1 cx.txn.target).storage)
+      (a1 cx.txn.target).storage (a2 cx.txn.target).storage
+End
+
+(* Transient storage t1 (source) and t2 (Venom): equal at every address but
+   the running contract's, which agrees up to the bytes dead in t1's. *)
+Definition transient_agree_def:
+  transient_agree cx (t1:transient_storage) (t2:transient_storage) ⇔
+    (∀addr. addr ≠ cx.txn.target ⇒ t1 addr = t2 addr) ∧
+    storage_agree (storage_dead cx T (t1 cx.txn.target))
+      (t1 cx.txn.target) (t2 cx.txn.target)
+End
+
+(* A call request recorded by the source (r1) and by Venom (r2): equal but
+   for the snapshots of the accounts and transient storage, which agree as
+   above. *)
+Definition request_agree_def:
+  request_agree cx (r1:call_request) (r2:call_request) ⇔
+    r1 with <| cr_accounts := r2.cr_accounts;
+               cr_tStorage := r2.cr_tStorage |> = r2 ∧
+    accounts_agree cx r1.cr_accounts r2.cr_accounts ∧
+    transient_agree cx r1.cr_tStorage r2.cr_tStorage
+End
+
+(* The running contract's storage, Vyper accounts against Venom state. *)
+Definition storage_rel_def:
+  storage_rel cx (addr:address) (vs:evaluation_state) ss =
+    let st = (lookup_account addr vs.accounts).storage in
+    storage_agree (storage_dead cx F st) st (contract_storage ss)
+End
+
+(* The running contract's transient storage.
    Interpreter: st.tStorage (transient_storage = address -> storage).
    Venom: ss.vs_transient (same type).
    Mirrors EIP-1153: per-address, per-transaction. *)
 Definition transient_rel_def:
-  transient_rel (addr:address) vs ss ⇔
-    (vs.tStorage addr = contract_transient ss)
+  transient_rel cx (addr:address) (vs:evaluation_state) ss ⇔
+    storage_agree (storage_dead cx T (vs.tStorage addr))
+      (vs.tStorage addr) (contract_transient ss)
 End
 
-(* The accounts and the transient storage of every address are identical,
-   and the source has no pending deletions.  Other addresses' accounts and
+(* The accounts and the transient storage of every address agree, and the
+   source has no pending deletions.  Other addresses' accounts and
    transient storage change during a body only through the call oracle,
-   whose outcome both sides adopt the same way (adopt_outcome).  Pending
-   deletions come only from create runs, which the supported subset leaves
-   out; a transaction starts with none, as call_external empties them on
-   success.  Venom has no pending deletions, so the success case of the
-   external result relation, which compares the accounts after the source
-   processes its deletions, needs them empty. *)
+   whose outcome both sides adopt the same way (adopt_outcome), which makes
+   them equal again.  Pending deletions come only from create runs, which
+   the supported subset leaves out; a transaction starts with none, as
+   call_external empties them on success.  Venom has no pending deletions,
+   so the success case of the external result relation, which compares the
+   accounts after the source processes its deletions, needs them empty. *)
 Definition accounts_rel_def:
-  accounts_rel vs ss ⇔
-    vs.accounts = ss.vs_accounts ∧ vs.tStorage = ss.vs_transient ∧
+  accounts_rel cx (vs:evaluation_state) ss ⇔
+    accounts_agree cx vs.accounts ss.vs_accounts ∧
+    transient_agree cx vs.tStorage ss.vs_transient ∧
     vs.pending_deletions = []
 End
 
@@ -1008,7 +1151,7 @@ Definition immutable_base_zero_def:
 End
 
 Definition immutables_rel_def:
-  immutables_rel cenv (addr:address) src_id_opt is_ctor vs ss <=>
+  immutables_rel cenv (addr:address) src_id_opt is_ctor (vs:evaluation_state) ss <=>
     let interp_imms = (case ALOOKUP vs.immutables addr of
                          NONE => FEMPTY
                        | SOME mod_imms => get_source_immutables src_id_opt mod_imms) in
@@ -1170,7 +1313,7 @@ End
 
 (* Logs relation: pairwise equivalence *)
 Definition logs_rel_def:
-  logs_rel cenv (addr:address) vs ss ⇔
+  logs_rel cenv (addr:address) (vs:evaluation_state) ss ⇔
     LENGTH vs.logs = LENGTH ss.vs_logs ∧
     EVERY2 (log_entry_equiv cenv addr) vs.logs ss.vs_logs
 End
@@ -1202,14 +1345,15 @@ End
    - local_ptrs_rel: locals in scope, held in memory through their pointer
      variables (PtrVar).  MemLoc variables at fixed offsets are not
      related.
-   - storage_rel, storage_vars_rel: storage, and the slots of storage
-     variables.
-   - transient_rel, transient_vars_rel: transient storage, and the slots of
-     transient variables.
-   - accounts_rel: the accounts and transient storage of every address, and
-     no pending deletions, which the success case of the external result
-     relation compares (storage_rel and transient_rel are its case for the
-     running contract).
+   - storage_rel, storage_vars_rel: storage up to dead bytes, and the slots
+     of storage variables.
+   - transient_rel, transient_vars_rel: transient storage up to dead bytes,
+     and the slots of transient variables.
+   - accounts_rel: the accounts and transient storage of every address (the
+     running contract's storage up to dead bytes), and no pending
+     deletions, which the success case of the external result relation
+     compares (storage_rel and transient_rel are its case for the running
+     contract).
    - immutables_rel: immutables (vs_immutables in a constructor, the data
      section at runtime).
    - logs_rel: emitted logs.
@@ -1218,21 +1362,22 @@ End
      assumes it and the lowered code never writes cc_static, so a CALL
      asks a static request exactly when the source does.
    - outcomes and requests: the oracle outcomes still to consume and the
-     requests recorded so far, as in the result relation. *)
+     requests recorded so far, as in the result relation; a request's
+     snapshot of the running contract's storage agrees up to dead bytes. *)
 Definition state_rel_def:
-  state_rel func cenv cx vs ss =
+  state_rel func cenv cx (vs:evaluation_state) ss =
     (local_ptrs_rel func cenv vs.scopes ss ∧
-     storage_rel cx.txn.target vs ss ∧
+     storage_rel cx cx.txn.target vs ss ∧
      storage_vars_rel cenv cx ∧
-     transient_rel cx.txn.target vs ss ∧
+     transient_rel cx cx.txn.target vs ss ∧
      transient_vars_rel cenv cx ∧
-     accounts_rel vs ss ∧
+     accounts_rel cx vs ss ∧
      immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs ss ∧
      logs_rel cenv cx.txn.target vs ss ∧
      call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
      ¬ss.vs_call_ctx.cc_static ∧
      vs.outcomes = SOME ss.vs_outcomes ∧
-     vs.requests = ss.vs_requests)
+     LIST_REL (request_agree cx) vs.requests ss.vs_requests)
 End
 
 (* ===== Result Relation ===== *)

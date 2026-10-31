@@ -8,8 +8,9 @@
  * encoding at x's declared type at the slot (write_storage_slot).  The
  * lowering evaluates e, takes x's slot as a literal (no code), unwraps the
  * value and stores it with one SSTORE or TSTORE.  Storage and transient
- * storage are identical on both sides (accounts_rel), so the write keeps
- * them so when the word stored is the one encode_value gives.
+ * storage agree on both sides but at dead bytes (accounts_rel); a write of
+ * the word encode_value gives to a one-slot declared region keeps them so,
+ * since it leaves the dead bytes as they are.
  *
  * TOP-LEVEL:
  *   eval_assign_toplevel             — the source run: the forced value of
@@ -18,7 +19,8 @@
  *   encode_value_word_typed          — a value of a word type encodes as
  *                                      its typed word, in one slot
  *   stmt_state_rel_write_storage_word — a one-slot write on both sides
- *                                      keeps stmt_state_rel
+ *                                      that keeps the dead bytes keeps
+ *                                      stmt_state_rel
  *   compile_assign_storage_stmt_frag — self.x = e for a storage or
  *                                      transient x held in one word and a
  *                                      word-typed e whose word is x's
@@ -111,11 +113,14 @@ Proof
        lookup_var_def]
 QED
 
-(* The source writes the one-slot encoding w of v at slot, and Venom stores
-   w there: stmt_state_rel holds after both. *)
+(* The source writes the one-slot encoding w of v at slot, a declared
+   region of one slot, and Venom stores w there: stmt_state_rel holds after
+   both. *)
 Theorem stmt_state_rel_write_storage_word:
   !func cenv cx es s tr slot tvt v w res es'.
     stmt_state_rel func cenv cx es s /\
+    (!u st. storage_dead cx tr (update_storage slot u st) =
+            storage_dead cx tr st) /\
     write_storage_slot cx tr slot tvt v es = (res, es') /\
     encode_value tvt v = SOME [(0, w)] ==>
     res = INL () /\
@@ -124,17 +129,18 @@ Theorem stmt_state_rel_write_storage_word:
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[write_storage_slot_eq, apply_writes_def, LET_THM] >>
-  `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel es s` by
+  `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel cx es s` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   qmatch_goalsub_abbrev_tac `stmt_state_rel _ _ _ es1 s1` >>
-  `accounts_rel es1 s1` by
+  `accounts_rel cx es1 s1` by
     (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`]
-     >- (irule accounts_rel_tstore >> qexistsl [`cx`, `es`] >>
-         gvs[set_storage_backend_eq, get_storage_def, accounts_rel_def,
-             contract_transient_def]) >>
-     irule accounts_rel_sstore >> qexistsl [`cx`, `es`] >>
-     gvs[set_storage_backend_eq, get_storage_def, accounts_rel_def,
-         contract_storage_def, vfmStateTheory.lookup_account_def]) >>
+     >- (irule accounts_rel_tstore >>
+         simp[] >> qexists_tac `es` >>
+         gvs[set_storage_backend_eq, get_storage_def, vfmStateTheory.lookup_account_def]) >>
+     irule accounts_rel_sstore >>
+     simp[] >>
+     qexists_tac `es` >>
+     gvs[set_storage_backend_eq, get_storage_def, vfmStateTheory.lookup_account_def]) >>
   `s1.vs_call_ctx = s.vs_call_ctx` by
     (Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]) >>
   drule accounts_rel_storage_transient >> strip_tac >>
@@ -282,7 +288,7 @@ Theorem assign_storage_word_success_run:
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-    evaluate_type (get_tenv cx) typ = SOME tvt /\
+    evaluate_type (get_tenv cx) typ = SOME tvt /\ type_slot_size tvt = 1 /\
     is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
     (!v es1.
@@ -324,6 +330,9 @@ Proof
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `eval_operand op s1 = SOME (typed_val_to_w256 etv v)` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
+  `declared_storage_region cx src id [] = SOME (tr, n2w slot, tvt)` by
+    simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
+  drule_all storage_dead_update_word_region >> strip_tac >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >>
   drule_all assign_storage_store_run >>
   disch_then (qspec_then `ctx` mp_tac) >> strip_tac >>
@@ -344,7 +353,7 @@ Theorem compile_assign_storage_stmt_frag:
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-    evaluate_type (get_tenv cx) typ = SOME tvt /\
+    evaluate_type (get_tenv cx) typ = SOME tvt /\ type_slot_size tvt = 1 /\
     cenv.ce_hashmap_info (module_var_key (src, id)) = NONE /\
     cenv.ce_var_type (module_var_key (src, id)) = SOME vtyp /\
     is_word_type vtyp /\ is_word_type (expr_type e) /\
@@ -424,5 +433,6 @@ Proof
        (INL v, es1) ==>
      encode_value tvt v = SOME [(0, typed_val_to_w256 tvt v)]` by
     (rpt strip_tac >> irule encode_value_word_typed >> metis_tac[]) >>
+  drule_all exprSimUnwrapTheory.word_type_slot_size >> strip_tac >>
   gvs[] >> drule_all compile_assign_storage_stmt_frag >> simp[]
 QED

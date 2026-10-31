@@ -22,7 +22,8 @@
 Theory exprSimLen
 Ancestors
   list fragExec exprSim exprSimHyps exprSimWordBuiltins exprBopLowering exprLowering
-  exprLoweringProps builtinSimple emitHelper compileEnv valueEncoding
+  exprLoweringProps builtinSimple emitHelper compileEnv accountsRelProps
+  valueEncoding
   venomExecSemantics venomInst venomState vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeSystem vyperTypeBuiltins vyperValue vyperTyping vyperStorage
   builtinProps vyperTypeInvariants context freshWrites loweringSlice emitHelperProps
@@ -271,9 +272,15 @@ Theorem storage_holds_header:
     result_array_length cx tv es = (INL n, es) ==>
     lookup_storage w
       (if tr then lookup_transient_storage cx.txn.target es.tStorage
-       else (lookup_account cx.txn.target es.accounts).storage) = n2w n
+       else (lookup_account cx.txn.target es.accounts).storage) = n2w n /\
+    storage_read_live cx tr (get_storage cx es tr) w tvt /\
+    0 < type_slot_size tvt
 Proof
   rpt gen_tac >> simp[storage_holds_def] >> strip_tac >> gvs[] >>
+  `0 < type_slot_size tvt` by
+    (drule sized_type_cases >> strip_tac >>
+     gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
+         vyperValueTheory.type_slot_size_def]) >>
   `value_has_type tvt v` by metis_tac[] >>
   `evaluate_type env.type_defs t = SOME tvt` by simp[] >>
   drule_all sized_read_result_length >> strip_tac >>
@@ -340,10 +347,15 @@ Proof
       `value_has_type tvt v` by metis_tac[] >>
       drule_all read_result_memory_header >>
       simp[ptr_load_val_def, mem_word_at_def]) >>
-  drule_all storage_holds_header >>
+  drule_all storage_holds_header >> strip_tac >>
+  `s.vs_call_ctx.cc_address = cx.txn.target` by
+    gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   gvs[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
-      ptr_load_val_def, sload_def, tload_def,
-      vfmExecutionTheory.lookup_transient_storage_def]
+      ptr_load_val_def, sload_def, tload_def, contract_storage_def,
+      contract_transient_def, vyperStorageBackendTheory.get_storage_def,
+      vfmExecutionTheory.lookup_transient_storage_def,
+      vfmStateTheory.lookup_account_def] >>
+  drule_all storage_agree_read_head >> simp[]
 QED
 
 Theorem vv_holds_sized_length_success:

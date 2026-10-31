@@ -1036,13 +1036,13 @@ Definition compile_stmt_def:
     (let event_name = nsid_to_string event_id in
      case cenv.ce_event_info event_name of
        NONE => emit_inst INVALID [] []
-     | SOME (event_hash, arg_types, indexed_flags) =>
+     | SOME (ev_hash, arg_types, indexed_flags) =>
          do eval_ops <- compile_log_eval_all cenv args;
             log_split <- return (split_log_ops eval_ops indexed_flags);
             raw_topics <- return (FST log_split);
             data_ops <- return (SND log_split);
             topic_ops <- compile_log_topic_ops raw_topics;
-            all_topics <- return (Lit (n2w event_hash) :: topic_ops);
+            all_topics <- return (Lit (n2w ev_hash) :: topic_ops);
             n_topics <- return (LENGTH all_topics);
             if NULL data_ops then
               (* Python builder.log stores LOG operands in physical stack
