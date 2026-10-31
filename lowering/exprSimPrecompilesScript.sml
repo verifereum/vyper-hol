@@ -1802,7 +1802,7 @@ Proof
   `cs_extends sm sb` by metis_tac[compile_ecrecover_extends] >>
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     metis_tac[fn_has_code_mid, cs_extends_refl] >>
-  `ECRecover <> Len /\ builtin_args_length_ok ECRecover (LENGTH args)` by
+  `ECRecover <> Len /\ ECRecover <> Env MsgGas /\ builtin_args_length_ok ECRecover (LENGTH args)` by
     simp[builtin_args_length_ok_def] >>
   drule_all eval_expr_builtin_cases >> strip_tac
   >- (gvs[] >>

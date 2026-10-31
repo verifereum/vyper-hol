@@ -1608,17 +1608,17 @@ QED
 
 Theorem eval_raw_call_preserves_contract_storage:
   protected_storage_calls_preserve cx /\ contract_storage_well_formed cx st /\
-  eval_raw_call cx flags target_addr calldata amount st = (res,st') ==>
+  eval_raw_call cx flags target_addr calldata amount gas st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
-  strip_tac >> qpat_x_assum `eval_raw_call _ _ _ _ _ _ = _` mp_tac >>
+  strip_tac >> qpat_x_assum `eval_raw_call _ _ _ _ _ _ _ = _` mp_tac >>
   reverse (Cases_on `~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
     ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)`) >>
   simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def, get_transient_storage_def]
   >- (strip_tac >> gvs[]) >>
   fs[] >>
-  (Cases_on `run_raw_call cx flags target_addr calldata amount
+  (Cases_on `run_raw_call cx flags target_addr calldata amount gas
     st.accounts st.tStorage` >>
   simp[lift_option_def, bind_def, return_def, raise_def]
   >- (strip_tac >> gvs[]) >>
@@ -1664,12 +1664,10 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Call_RawCallTarget]:
       `exprs_runtime_typed env es vs` by (
         irule eval_exprs_success_runtime_typed >> simp[] >>
         metis_tac[runtime_storage_consistent_runtime]) >>
-      `LENGTH vs = 3` by (
-        gvs[exprs_runtime_typed_def] >>
-        metis_tac[listTheory.LIST_REL_LENGTH]) >>
       mp_tac raw_call_args_runtime_typed_dest >>
       impl_tac >- simp[] >> strip_tac >> gvs[] >>
-      simp[bind_def, return_def] >> strip_tac >>
+      Cases_on `raw_call_value flags.rcf_kws (DROP 2 vs)` >>
+      simp[bind_def, return_def, raise_def] >> strip_tac >> gvs[] >>
       drule_all eval_raw_call_preserves_contract_storage >> simp[]),
       rpt strip_tac >> gvs[]])) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
@@ -1697,8 +1695,10 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Call_RawCallCalldataTar
       `exprs_runtime_typed env es vs` by (
         irule eval_exprs_success_runtime_typed >> simp[] >>
         metis_tac[runtime_storage_consistent_runtime]) >>
-      drule_all raw_call_calldata_args_runtime_typed_dest >> strip_tac >>
-      gvs[bind_def, return_def] >> strip_tac >>
+      mp_tac raw_call_calldata_args_runtime_typed_dest >>
+      impl_tac >- (Cases_on `es` >> gvs[]) >> strip_tac >>
+      Cases_on `raw_call_value flags.rcf_kws (DROP 1 vs)` >>
+      gvs[bind_def, return_def, raise_def] >> strip_tac >> gvs[] >>
       drule_all eval_raw_call_preserves_contract_storage >> simp[]),
       rpt strip_tac >> gvs[]])) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
@@ -2381,13 +2381,21 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Builtin]:
       Cases_on `q` >> gvs[return_def, raise_def] >>
       rpt strip_tac >> gvs[]) >>
     rpt strip_tac >> gvs[]) >>
+  Cases_on `bt = Env MsgGas`
+  >- (rpt strip_tac >>
+      gvs[ignore_bind_def, assert_def, bind_def, return_def] >>
+      Cases_on `next_gas_reading st` >>
+      imp_res_tac next_gas_reading_state >>
+      Cases_on `q` >> gvs[return_def, raise_def] >>
+      irule contract_storage_well_formed_accounts_transient_frame >>
+      qexists_tac `st` >> gvs[runtime_storage_consistent_def]) >>
   qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
     type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
   Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-  qpat_x_assum `∀s'' x t. _ ∧ bt ≠ Len ⇒ _`
+  qpat_x_assum `∀s'' x t. _ ∧ bt ≠ Len ∧ bt ≠ Env MsgGas ⇒ _`
     (qspecl_then [`st`, `()`, `st`] mp_tac) >>
   (impl_tac >- (simp[type_check_def, assert_def] >> metis_tac[])) >>
   strip_tac >> first_x_assum drule_all >> strip_tac >>

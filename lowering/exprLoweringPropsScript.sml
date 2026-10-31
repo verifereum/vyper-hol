@@ -3529,15 +3529,13 @@ Theorem ci_mono_compile_raw_call_calldata[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `args` >- simp[compile_call_def, pairTheory.UNCURRY, ci_mono_emit_inst] >>
-  rename1 `addr_e::rest` >> Cases_on `rest`
-  >- simp[compile_call_def, pairTheory.UNCURRY, ci_mono_emit_inst] >>
-  rename1 `addr_e::value_e::tail` >> Cases_on `tail` >>
   Cases_on `rcf.rcf_max_outsize = 0` >>
-  simp[compile_call_def, LET_THM, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
   irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_raw_call >>
-  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >>
-  irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >>
-  (conj_tac >- simp[]) >>
+  CASE_TAC >> simp[] >>
+  TRY (irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op) >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_ext_call_kwargs >>
+  simp[] >>
   irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_msg_data_to_memory >>
   irule ci_mono_lower_value_cfn >> simp[]
 QED

@@ -91,9 +91,11 @@ Theorem eval_expr_unop_cases:
          res = unop_result cx ann bi [expr_type e1] v1 es'
 Proof
   rpt gen_tac >> strip_tac >>
+  `bi <> Env MsgGas` by (strip_tac >> gvs[builtin_args_length_ok_def]) >>
   qpat_x_assum `bind _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def] >>
+  ASM_REWRITE_TAC [] >>
   simp[Once evaluate_def, bind_def, return_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
   simp[get_accounts_def, lift_sum_def, unop_result_def, read_result_def,

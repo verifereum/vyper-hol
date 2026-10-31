@@ -12,9 +12,9 @@ val _ = expect "calldata len" NONE [source "return len(msg.data)"];
 val _ = expect "calldata slice" NONE [source "return slice(msg.data, 0, 4)"];
 val _ = expect "calldata raw_call" NONE
   [source "raw_call(target, msg.data, max_outsize=32)"];
-val _ = expect "gas retained" (SOME "unsupported source pattern: msg.gas")
+val _ = expect "msg.gas" NONE
   [source "raw_call(target, msg.data, gas=msg.gas)"];
-val _ = expect "explicit gas retained" (SOME "unsupported source pattern: gas=")
+val _ = expect "explicit gas" NONE
   [source "raw_call(target, msg.data, gas=1000)"];
 val _ = expect "negative missing source" (SOME "missing source_code") [];
 val _ = expect "blank source" (SOME "blank source_code") [source " \n"];
