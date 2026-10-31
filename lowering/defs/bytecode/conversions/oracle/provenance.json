@@ -1,0 +1,63 @@
+{
+  "producer": "pinned Python Vyper",
+  "vyper_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "vyper_version": "0.5.0a4+cd74ce4f+commit.cd74ce4f",
+  "python_version": "3.11.11",
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.1.9",
+    "packaging": "26.3",
+    "pycryptodome": "3.23.0",
+    "wheel": "0.48.0"
+  },
+  "settings": {
+    "experimental_codegen": true,
+    "optimization_level": "NONE",
+    "evm_version": "prague",
+    "bytecode_metadata": false
+  },
+  "sources": {
+    "b4_to_i256.vy": "ccc646b41e49c1b73ce63c43bf04d216069ff38d7ff84956e764d25e9274776c",
+    "bool_to_i8.vy": "3ec305b7f419a7622f8dead37934977e4c7cfebdd8498735c696ae13c516f705",
+    "bys16_to_dec.vy": "97d8f6dded8445f97e60cbdaa63eecece14bd3aac2594a3e1d2a54b1069c9ae4",
+    "bys1_to_u8.vy": "088ebef4d83d52c851a291a5b180aee541782d332567f8c1495d2e8d6c8a47a4",
+    "bys20_to_addr.vy": "52f8c89806900d4381dab3e8d019b4a989ac2f994acffc1b5c6d9f861aaffb55",
+    "bys32_to_i8.vy": "af27b45d3d0a4b19db3d9c77821474d91b92a8a694f60f91e9ab914040d9aa35",
+    "bys32_to_u8.vy": "2b01dd84df7ebb2546f71afaa579c66fc90a835271d535d7c390107b1176a6c4",
+    "bys4_to_b4.vy": "f1f4a64b45dc50a7216956f608ec34638787fe19c03eae81cf79d6cf040e5535",
+    "flag_to_b32.vy": "8d84ebd09f0a5d2d0f199f6c27a8a05badee2a18c9397b8f0a4b17758b5b23af",
+    "lit_int_to_addr.vy": "10dad8cfdb0ddf31d9d1d00a3bc5ed265f8907b94ba9853e356128a99271ab19",
+    "str_to_bys.vy": "f1c089edbfced0e106d56fa14790f73eb44f3d3c3683ac6acaf4bf3eef19e2d2",
+    "u160_to_b20.vy": "8e2ed4e049b0e87437c609284a7d88fb0d096aef473718658b089470ffd6cba7",
+    "u256_to_flag.vy": "eb6f8addbe1107cb8493a5664d51051e674adc51c23e0dffef09b6022e1f1e4a"
+  },
+  "outputs": {
+    "b4_to_i256.hex": "d7e506e22241344338714b862d7590362a5056615ebd2c8cfb7a4c6784aa6b5e",
+    "b4_to_i256.json": "46781ec66dfe21ba4f8d6f304470a9d354a67dbe8b8ac1cc696c958eb3fb5161",
+    "bool_to_i8.hex": "2000263fb3ae64a6a1ae3a3cfcf88597e170be185f378e7a8bbb2c7198e70211",
+    "bool_to_i8.json": "1f36bb45745b3af55d8b70c2653d667b8f2572764f787453c7737a42b1df2722",
+    "bys16_to_dec.hex": "fc72b4f3854b989232bafa590eac0c61e076860c29ed9266659dfd30e602ec96",
+    "bys16_to_dec.json": "ff89c8763e2c00c420f11fc9c0a13cc5f3c68df41d2272f1c94526a79e4e2999",
+    "bys1_to_u8.hex": "1760c4f349b89171390d5edaf0875fb2d8a0121994872918d569a3e911e1fbb1",
+    "bys1_to_u8.json": "2aa32680cdc30d17a08883f41415d2db8bd729944897c6da9e4eabc5d579d436",
+    "bys20_to_addr.hex": "717797dbda08db96e47e749af6545dc1b9979ef4aba701506bd731ff040e9fc0",
+    "bys20_to_addr.json": "968b92dc167ddf9ba1294be0430b173945221234046a873cb18b98442452a644",
+    "bys32_to_i8.hex": "54a02bb15283afb3a48b5825bc554dc149dab0561a7423ec30c3c1f61f71b546",
+    "bys32_to_i8.json": "ab89797c535dbd09d37ef0f2fd2b5a2c25305df3651b86cda6e18b47e20333ab",
+    "bys32_to_u8.hex": "16c4947bc1e2df9e3da4408ccd3d88b082245f81fb3c074ba432381cea67b9ef",
+    "bys32_to_u8.json": "1c6bba8470f75c73dfdc826f23b5f1803252e568975aaef4481d2c5f125f6338",
+    "bys4_to_b4.hex": "0b18e229292eeff1f2da39b68e222ae66a77fb1e7831bd07cc152b39f3142d70",
+    "bys4_to_b4.json": "66746a53fb3e25f4205a19a7cef084745a966a360f1646f438d99e3ff6f86194",
+    "flag_to_b32.hex": "5dd135e8404a6b159bfa4b90e929d0b02b7a7fc5f2f6e71f5c9679852f4c9209",
+    "flag_to_b32.json": "75473db8de8dcf40733114702aba12409afa50a0211769bcd6a568182043095c",
+    "lit_int_to_addr.hex": "09e73f905b3e9aec83fdc5c60c3fba006cd8215cad1ae4ad84555c6e452f31cc",
+    "lit_int_to_addr.json": "8416df6c4cf349838b41b3f63d4ab008178e99483402eb3344b9d4aa61e924a6",
+    "str_to_bys.hex": "326b440b9b90313039b99b54e5dc204e6aec2627fe15ba6bc8b64cf37abff223",
+    "str_to_bys.json": "6182c9f3c4b0a79a8db10c8b3e96c47ef8a6bf10743eec22a269e03e40bf5319",
+    "u160_to_b20.hex": "e2fa5822993cfda16abf5da4688aaec419ade31797c7028af588bc1fa794608d",
+    "u160_to_b20.json": "714248e4a3bce826a8b51c93fa35f8a179e6187fe682b1011f2b0fb27cc18281",
+    "u256_to_flag.hex": "4ea399e0d55992d02ac1c4b415815295724221e2361c3cd5768ca99fb25b1c1e",
+    "u256_to_flag.json": "e64077f888d5056fd377a76b5e40ef5b3b5ead628dd1b4e0e0b8c1beee82829b"
+  }
+}

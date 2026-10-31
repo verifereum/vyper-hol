@@ -113,13 +113,13 @@ Theorem lowering_runtime_boundary:
   external_call_result_rel tops ret tx (INR (Error (RuntimeError msg)), am, rqs)
     (Abort kind ss) /\
   (external_call_result_rel tops ret tx (INR (Error (RuntimeError msg)), am, rqs)
-    (Halt ss) <=> decode_strictness_exempt tops (RuntimeError msg)) /\
+    (Halt ss) <=> unspecified_behaviour_exempt tops (RuntimeError msg)) /\
   ~external_call_result_rel tops ret tx (INR (Error (TypeError msg)), am, rqs)
     (Abort kind ss) /\
   ~external_call_result_rel tops ret tx (INR (Error (TypeError msg)), am, rqs)
     (Halt ss)
 Proof
-  Cases_on `kind` >> simp[external_call_result_rel_def, decode_strictness_exempt_def]
+  Cases_on `kind` >> simp[external_call_result_rel_def, unspecified_behaviour_exempt_def]
 QED
 
 (* A failed external call re-raises the callee's revert data: it may only
@@ -132,16 +132,17 @@ Theorem lowering_revert_data_boundary:
   ~external_call_result_rel tops ret tx (INR (Error (RevertData bs)), am, rqs)
     (Halt ss)
 Proof
-  simp[external_call_result_rel_def, decode_strictness_exempt_def]
+  simp[external_call_result_rel_def, unspecified_behaviour_exempt_def]
 QED
 
 Theorem lowering_decode_exemption_narrow:
-  decode_strictness_exempt tops e ==>
-  e = RuntimeError "abi_decode invalid" /\
-  ?ty. occurs_abi_decode_target ty tops /\
-       is_dynamic (vyper_to_abi_type (type_env tops) ty)
+  unspecified_behaviour_exempt tops e ==>
+  (e = RuntimeError "abi_decode invalid" /\
+   ?ty. occurs_abi_decode_target ty tops /\
+        is_dynamic (vyper_to_abi_type (type_env tops) ty)) \/
+  e = RuntimeError "convert empty bytes to signed"
 Proof
-  simp[decode_strictness_exempt_def]
+  simp[unspecified_behaviour_exempt_def]
 QED
 
 Theorem lowering_static_decode_not_exempt:
@@ -150,7 +151,7 @@ Theorem lowering_static_decode_not_exempt:
   ~external_call_result_rel tops ret tx
     (INR (Error (RuntimeError "abi_decode invalid")), am, rqs) (Halt ss)
 Proof
-  simp[external_call_result_rel_def, decode_strictness_exempt_def] >> metis_tac[]
+  simp[external_call_result_rel_def, unspecified_behaviour_exempt_def] >> metis_tac[]
 QED
 
 Theorem lowering_success_boundary:
@@ -262,3 +263,11 @@ Theorem lowering_initial_requests_empty:
 Proof
   simp[initial_venom_state_rel_def]
 QED
+
+(* Check the exact exemption boundary independently of admitted lowering proofs. *)
+val _ = List.app (fn (name, th) =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn tag => tag = "DISK_THM") oracles then ()
+    else raise Fail ("non-clean lowering boundary check: " ^ name)
+  end) (DB.thms "loweringBoundaryChecks");

@@ -4,7 +4,7 @@
  * value_transfer_ok, accounts_after_transfer, call_state_rel,
  * call_external_transaction_pending_deletions,
  * load_contract_pending_deletions, valid_vyper_call, compiled_event_info, return_bytes,
- * decode_strictness_exempt, source_exempt, call_result_rel, logs_correspond.
+ * unspecified_behaviour_exempt, source_exempt, call_result_rel, logs_correspond.
  * TASK056: all compiler/call consumers use this exact boundary; the obsolete
  * compatibility owner is deleted. No old/new equivalence is claimed.
  * DAG: source/typing/storage + supported syntax + frame/trace -> e2eDefs;
@@ -195,16 +195,17 @@ Definition return_bytes_def:
                  else enc (vyper_to_abi_type (type_env tops) ret) abi_v
 End
 
-Definition decode_strictness_exempt_def:
-  decode_strictness_exempt tops e <=>
-    e = RuntimeError "abi_decode invalid" /\
-    ?ty. occurs_abi_decode_target ty tops /\
-         is_dynamic (vyper_to_abi_type (type_env tops) ty)
+Definition unspecified_behaviour_exempt_def:
+  unspecified_behaviour_exempt tops e <=>
+    (e = RuntimeError "abi_decode invalid" /\
+     ?ty. occurs_abi_decode_target ty tops /\
+          is_dynamic (vyper_to_abi_type (type_env tops) ty)) \/
+    e = RuntimeError "convert empty bytes to signed"
 End
 
 Definition source_exempt_def:
   source_exempt tops (src : (value + exception) # abstract_machine # call_request list) <=>
-    case FST src of INR (Error e) => decode_strictness_exempt tops e | _ => F
+    case FST src of INR (Error e) => unspecified_behaviour_exempt tops e | _ => F
 End
 
 (* ===== Log Correspondence ===== *)
@@ -400,7 +401,7 @@ Definition call_result_rel_def:
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                       (exc = Reverted \/ s = "UNREACHABLE")
     | (INR (Error e), _, _) =>
-        decode_strictness_exempt tops e \/
+        unspecified_behaviour_exempt tops e \/
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
     | (INR BreakException, _, _) => F
     | (INR ContinueException, _, _) => F

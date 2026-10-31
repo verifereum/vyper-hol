@@ -1579,11 +1579,10 @@ Datatype:
   (* Bytestring conversions: src is a memory pointer to [length][data].
      Load data, shift to align, then clamp/convert. *)
   | ConvBytestringToBool
-  | ConvBytestringToInt bool num     (* is_signed_out, out_bits *)
-  | ConvBytestringToAddress
-  | ConvBytestringToDecimal num int int  (* divisor, out_lo, out_hi *)
+  | ConvBytestringToInt bool num num (* is_signed_out, out_bits, in_maxlen *)
+  | ConvBytestringToDecimal num int int num (* divisor, out_lo, out_hi, in_maxlen *)
   | ConvBytestringToBytesM num       (* out_m *)
-  | ConvBytestringCast num           (* max_len: downcast length check *)
+  | ConvBytestringCast num num       (* out_maxlen, in_maxlen *)
   | ConvFixedToBytestring num       (* m: bytesM → Bytes[N] allocation *)
   | ConvIdentity
 End
@@ -1602,6 +1601,29 @@ Definition load_bytestring_as_word_def:
        shifted <- emit_op shift_opc [num_zero_bits; data];
        return (shifted, num_zero_bits)
     od
+End
+
+(* Shared integer bound assertion, matching convert.py _int_clamp. *)
+Definition compile_int_clamp_def:
+  compile_int_clamp is_signed out_b v =
+    if is_signed then
+      let lo = i2w (- &(2 ** (out_b - 1))) : bytes32 in
+      let hi = i2w (&(2 ** (out_b - 1) - 1)) : bytes32 in
+      do ts <- emit_op SLT [v; Lit lo];
+         ok1 <- emit_op ISZERO [ts];
+         tb <- emit_op SGT [v; Lit hi];
+         ok2 <- emit_op ISZERO [tb];
+         ok <- emit_op AND [ok1; ok2];
+         emit_void ASSERT [ok];
+         return v
+      od
+    else
+      let hi = n2w (2 ** out_b - 1) : bytes32 in
+      do tb <- emit_op GT [v; Lit hi];
+         ok <- emit_op ISZERO [tb];
+         emit_void ASSERT [ok];
+         return v
+      od
 End
 
 (* Execute a type conversion operation.
@@ -1641,24 +1663,7 @@ Definition compile_type_convert_def:
           return v
        od
      else if out_b < in_b then
-       if out_s then
-         let lo = i2w (- &(2 ** (out_b - 1))) : bytes32 in
-         let hi = i2w (&(2 ** (out_b - 1) - 1)) : bytes32 in
-         do too_small <- emit_op SLT [v; Lit lo];
-            ok1 <- emit_op ISZERO [too_small];
-            too_big <- emit_op SGT [v; Lit hi];
-            ok2 <- emit_op ISZERO [too_big];
-            ok <- emit_op AND [ok1; ok2];
-            emit_void ASSERT [ok];
-            return v
-         od
-       else
-         let hi = n2w (2 ** out_b - 1) : bytes32 in
-         do too_big <- emit_op GT [v; Lit hi];
-            ok <- emit_op ISZERO [too_big];
-            emit_void ASSERT [ok];
-            return v
-         od
+       compile_int_clamp out_s out_b v
      else return v) ∧
   (* BytesM→integer: right-shift + optional clamp *)
   compile_type_convert v (ConvBytesToInt m out_s out_b) =
@@ -1666,24 +1671,7 @@ Definition compile_type_convert_def:
     do shifted <- (if out_s then emit_op SAR [Lit (n2w shift); v]
                    else emit_op SHR [Lit (n2w shift); v]);
        if m * 8 > out_b then
-         if out_s then
-           let lo = i2w (- &(2 ** (out_b - 1))) : bytes32 in
-           let hi = i2w (&(2 ** (out_b - 1) - 1)) : bytes32 in
-           do ts <- emit_op SLT [shifted; Lit lo];
-              ok1 <- emit_op ISZERO [ts];
-              tb <- emit_op SGT [shifted; Lit hi];
-              ok2 <- emit_op ISZERO [tb];
-              ok <- emit_op AND [ok1; ok2];
-              emit_void ASSERT [ok];
-              return shifted
-           od
-         else
-           let hi = n2w (2 ** out_b - 1) : bytes32 in
-           do tb <- emit_op GT [shifted; Lit hi];
-              ok <- emit_op ISZERO [tb];
-              emit_void ASSERT [ok];
-              return shifted
-           od
+         compile_int_clamp out_s out_b shifted
        else return shifted
     od) ∧
   (* Integer→bytesM: clamp + left-shift *)
@@ -1772,13 +1760,8 @@ Definition compile_type_convert_def:
     od) ∧
   (* Integer→flag: assert only valid bits set *)
   compile_type_convert v (ConvToFlag n_members) =
-    (let mask = n2w (2 ** n_members - 1) : bytes32 in
-    do inv <- emit_op NOT [Lit mask];
-       extra <- emit_op AND [v; inv];
-       ok <- emit_op ISZERO [extra];
-       emit_void ASSERT [ok];
-       return v
-    od) ∧
+    (if n_members < 256 then compile_int_clamp F n_members v
+     else return v) ∧
   (* BytesM→Decimal: right-shift by (32-m)*8 bits, then optional clamp.
      BytesM raw bits after right-alignment ARE the fixed-point representation.
      No multiplication needed — Python: convert.py _to_decimal for BytesM_T source
@@ -1818,72 +1801,39 @@ Definition compile_type_convert_def:
        z <- emit_op ISZERO [shifted];
        emit_op ISZERO [z]
     od ∧
-  (* Bytestring→Int/Uint: load data, shift (SAR for signed, SHR for unsigned), clamp.
-     Mirrors Python: convert.py _to_int bytestring path *)
-  compile_type_convert v (ConvBytestringToInt is_signed out_b) =
+  (* Bytestring conversion clamps depend on the static source maxlen. *)
+  compile_type_convert v (ConvBytestringToInt is_signed out_b in_n) =
     (let shift_opc = if is_signed then SAR else SHR in
-    do (shifted, num_zero_bits) <- load_bytestring_as_word v shift_opc;
-       (* Clamp to output type bounds *)
-       if out_b >= 256 then return shifted
-       else if is_signed then
-         do ext <- emit_op SIGNEXTEND [Lit (n2w (out_b DIV 8 - 1)); shifted];
-            ok <- emit_op EQ [ext; shifted];
-            emit_void ASSERT [ok];
-            return shifted
-         od
-       else
-         do hi_bits <- emit_op SHR [Lit (n2w out_b); shifted];
-            ok <- emit_op ISZERO [hi_bits];
-            emit_void ASSERT [ok];
-            return shifted
-         od
-    od) ∧
-  (* Bytestring→Address: load data, shift (unsigned), clamp uint160.
-     Mirrors Python: convert.py _to_address bytestring path *)
-  compile_type_convert v ConvBytestringToAddress =
-    do (shifted, num_zero_bits) <- load_bytestring_as_word v SHR;
-       (* Clamp to uint160 *)
-       hi_bits <- emit_op SHR [Lit 160w; shifted];
-       ok <- emit_op ISZERO [hi_bits];
-       emit_void ASSERT [ok];
-       return shifted
-    od ∧
-  (* Bytestring→Decimal: load data, SAR (signed), clamp 168-bit signed.
-     Mirrors Python: convert.py _to_decimal bytestring path *)
-  compile_type_convert v (ConvBytestringToDecimal divisor out_lo out_hi) =
+     do (shifted, num_zero_bits) <- load_bytestring_as_word v shift_opc;
+        if in_n * 8 > out_b then compile_int_clamp is_signed out_b shifted
+        else return shifted
+     od) ∧
+  compile_type_convert v (ConvBytestringToDecimal divisor out_lo out_hi in_n) =
     do (shifted, num_zero_bits) <- load_bytestring_as_word v SAR;
-       (* Clamp to decimal bounds *)
-       too_small <- emit_op SLT [shifted; Lit (i2w out_lo)];
-       ok1 <- emit_op ISZERO [too_small];
-       too_big <- emit_op SGT [shifted; Lit (i2w out_hi)];
-       ok2 <- emit_op ISZERO [too_big];
-       ok <- emit_op AND [ok1; ok2];
-       emit_void ASSERT [ok];
-       return shifted
-    od ∧
-  (* Bytestring→BytesM: load data, SHR to clean extra bits, SHL to restore.
-     Mirrors Python: convert.py _to_bytes_m bytestring path *)
-  compile_type_convert v (ConvBytestringToBytesM out_m) =
-    do (* SHR to get raw value right-aligned, then SHL to left-align for bytesM *)
-       (shifted_r, num_zero_bits) <- load_bytestring_as_word v SHR;
-       shifted_l <- emit_op SHL [num_zero_bits; shifted_r];
-       (* Verify no truncation: only low (32-out_m)*8 bits can be nonzero *)
-       let check_bits = (32 - out_m) * 8 in
-       do truncated <- emit_op SHL [Lit (n2w (out_m * 8)); shifted_l];
-          ok <- emit_op ISZERO [truncated];
+       if in_n * 8 ≤ 168 then return shifted else
+       do too_small <- emit_op SLT [shifted; Lit (i2w out_lo)];
+          ok1 <- emit_op ISZERO [too_small];
+          too_big <- emit_op SGT [shifted; Lit (i2w out_hi)];
+          ok2 <- emit_op ISZERO [too_big];
+          ok <- emit_op AND [ok1; ok2];
           emit_void ASSERT [ok];
-          return shifted_l
+          return shifted
        od
     od ∧
-  (* Bytestring downcast: check length <= max_len.
-     Mirrors Python: convert.py _check_bytes *)
-  compile_type_convert v (ConvBytestringCast max_len) =
-    do length <- emit_op MLOAD [v];
-       too_long <- emit_op GT [length; Lit (n2w max_len)];
-       ok <- emit_op ISZERO [too_long];
-       emit_void ASSERT [ok];
-       return v
+  (* Checker ensures source maxlen <= out_m; no truncation assert. *)
+  compile_type_convert v (ConvBytestringToBytesM out_m) =
+    do (shifted_r, num_zero_bits) <- load_bytestring_as_word v SHR;
+       emit_op SHL [num_zero_bits; shifted_r]
     od ∧
+  compile_type_convert v (ConvBytestringCast max_len in_n) =
+    (if max_len < in_n then
+       do length <- emit_op MLOAD [v];
+          too_long <- emit_op GT [length; Lit (n2w max_len)];
+          ok <- emit_op ISZERO [too_long];
+          emit_void ASSERT [ok];
+          return v
+       od
+     else return v) ∧
   (* Fixed bytes to bytestring: allocate length-prefixed buffer.
      bytesM (word value) → Bytes[N] (memory pointer to [length][data]).
      Mirrors Python: convert.py _to_Bytes for BytesM source *)
@@ -1929,20 +1879,24 @@ Definition mk_convert_op_def:
   mk_convert_op src_ty dst_ty =
     let ddiv = 10000000000:num in
     let is_bs = is_bytestring_type src_ty in
+    let in_n = (case src_ty of BaseT (BytesT (Dynamic n)) => n
+                             | BaseT (StringT n) => n | _ => 0) in
     case dst_ty of
       BaseT BoolT =>
         if is_bs then ConvBytestringToBool else ConvToBool
     | BaseT AddressT =>
-        (if is_bs then ConvBytestringToAddress
+        (if is_bs then ConvBytestringToInt F 160 in_n
          else case src_ty of
            BaseT (BytesT (Fixed m)) => ConvBytesToAddress m
+         | BaseT (UintT in_b) => ConvIntToInt F in_b F 160
+         | BaseT BoolT => ConvIdentity
          | _ => ConvToAddress)
     | BaseT (IntT out_b) =>
-        (if is_bs then ConvBytestringToInt T out_b
+        (if is_bs then ConvBytestringToInt T out_b in_n
          else case src_ty of
            BaseT (IntT in_b) => ConvIntToInt T in_b T out_b
          | BaseT (UintT in_b) => ConvIntToInt F in_b T out_b
-         | BaseT BoolT => ConvIntToInt F 8 T out_b
+         | BaseT BoolT => ConvIdentity
          | BaseT AddressT => ConvIntToInt F 160 T out_b
          | BaseT DecimalT =>
              let (in_lo, in_hi) = type_bounds (BaseT DecimalT) in
@@ -1953,11 +1907,11 @@ Definition mk_convert_op_def:
          | FlagT _ => ConvIntToInt F 256 T out_b
          | _ => ConvIdentity)
     | BaseT (UintT out_b) =>
-        (if is_bs then ConvBytestringToInt F out_b
+        (if is_bs then ConvBytestringToInt F out_b in_n
          else case src_ty of
            BaseT (IntT in_b) => ConvIntToInt T in_b F out_b
          | BaseT (UintT in_b) => ConvIntToInt F in_b F out_b
-         | BaseT BoolT => ConvIntToInt F 8 F out_b
+         | BaseT BoolT => ConvIdentity
          | BaseT AddressT => ConvIntToInt F 160 F out_b
          | BaseT DecimalT =>
              let (in_lo, in_hi) = type_bounds (BaseT DecimalT) in
@@ -1977,7 +1931,7 @@ Definition mk_convert_op_def:
          | _ => ConvIdentity)
     | BaseT DecimalT =>
         (let (out_lo, out_hi) = type_bounds (BaseT DecimalT) in
-         if is_bs then ConvBytestringToDecimal ddiv (w2i out_lo) (w2i out_hi)
+         if is_bs then ConvBytestringToDecimal ddiv (w2i out_lo) (w2i out_hi) in_n
          else case src_ty of
            BaseT (IntT in_b) =>
              ConvIntToDecimal T in_b ddiv (w2i out_lo) (w2i out_hi)
@@ -1998,16 +1952,17 @@ Definition mk_convert_op_def:
          | BaseT DecimalT => ConvIntToBytesM T 168 m
          (* BytesM→BytesM: downcast check *)
          | BaseT (BytesT (Fixed in_m)) => ConvBytesMToBytesM in_m m
+         | FlagT _ => ConvIntToBytesM F 256 m
          | _ => ConvIdentity)
     (* Bytestring/BytesM → Bytes[N]/String[N]:
        - Bytestring source (is_bs=T): downcast length check only.
        - BytesM source (is_bs=F): allocate length-prefixed buffer.
        Mirrors Python: convert.py _to_Bytes, _to_String *)
     | BaseT (BytesT (Dynamic out_n)) =>
-        (if is_bs then ConvBytestringCast out_n
+        (if is_bs then ConvBytestringCast out_n in_n
          else ConvFixedToBytestring (fixed_bytes_size src_ty))
     | BaseT (StringT out_n) =>
-        (if is_bs then ConvBytestringCast out_n
+        (if is_bs then ConvBytestringCast out_n in_n
          else ConvFixedToBytestring (fixed_bytes_size src_ty))
     | _ => ConvIdentity
 End

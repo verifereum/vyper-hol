@@ -2643,6 +2643,17 @@ Proof
   simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
 QED
 
+Theorem ci_mono_compile_int_clamp:
+  !s b v sa. ci_mono sa (SND (compile_int_clamp s b v sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[compile_int_clamp_def, LET_THM] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE IF_CASES_TAC ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+QED
+
 Theorem ci_mono_compile_type_convert[local]:
   ∀ v conv_op sa. ci_mono sa (SND (compile_type_convert v conv_op sa))
 Proof
@@ -2650,11 +2661,11 @@ Proof
   rewrite_tac[exprLoweringTheory.compile_type_convert_def, LET_THM] >> BETA_TAC >>
   rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE IF_CASES_TAC ORELSE
        (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
-                          ci_mono_compile_alloc_buffer, ci_mono_load_bytestring_as_word]) ORELSE
+                          ci_mono_compile_alloc_buffer, ci_mono_load_bytestring_as_word, ci_mono_compile_int_clamp]) ORELSE
        gen_tac ORELSE strip_tac) >>
   simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
-       ci_mono_compile_alloc_buffer, ci_mono_load_bytestring_as_word] >>
-  TRY (pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[] >>
+       ci_mono_compile_alloc_buffer, ci_mono_load_bytestring_as_word, ci_mono_compile_int_clamp] >>
+  TRY (pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[ci_mono_compile_int_clamp] >>
        rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
             (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) ORELSE
             gen_tac ORELSE strip_tac) >>
