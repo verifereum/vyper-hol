@@ -42,7 +42,8 @@
 
 Theory compileEnv
 Ancestors
-  valueEncoding vyperStorageLayoutSafety venomExecSemantics venomInst venomPolicyTypes
+  immutableValue immutableEncoding vyperStorageLayoutSafety
+  venomExecSemantics venomInst venomPolicyTypes
   vyperState vyperContext vyperValue vyperABI contractABI
   byte keccak finite_map pred_set list rich_list
 Libs
@@ -477,6 +478,7 @@ Datatype:
     (* Constructor context: T during __init__ (deploy), F at runtime.
        Affects immutable access: ctor uses ILOAD, runtime uses DLOAD. *)
     ce_is_ctor : bool;
+    ce_imm_alloca : operand option;
     (* Internal function calling convention info:
        func_label → (returns_count, return_buf_size, pass_via_stack : bool list)
        pass_via_stack: per-arg T=stack, F=memory. Order matches func_t.arguments.
@@ -1127,43 +1129,44 @@ End
 (* ===== Immutables Relation ===== *)
 (* Interpreter immutables ↔ Venom code/data section.
    During constructor: interpreter writes to st.immutables, Venom uses ISTORE/ILOAD.
-   At runtime: interpreter reads from st.immutables, Venom reads the data section.
+   At runtime: interpreter reads from st.immutables, Venom uses DLOAD from data section.
    The relation ties each interpreter name to its Venom representation.
 
    Interpreter: st.immutables : (address, module_immutables) alist
      where module_immutables = (num option, string |-> (type_value # value)) alist
      Keyed by (source_id_opt, immutable_name) → typed value.
-   Venom (ctor): ss.vs_immutables : (num, bytes32) fmap  (ILOAD/ISTORE slot → word)
-   Venom (runtime): ss.vs_data_section : byte list  (the value laid out at its
-     byte offset as val_in_memory lays it out, type_memory_size bytes)
+   Venom (ctor): ss.vs_memory holds the staged capacity-sized encoding.
+     ISTORE also records words in byte-addressed vs_immutables, but deploy
+     copies memory, so bookkeeping alone is not the representation boundary.
+   Venom (runtime): ss.vs_data_section holds the installed suffix bytes.
 
    ce_vars maps module_var_key (src_id_opt, name) to ImmutableLoc byte_offset.
-   The interpreter stores by name (string); Venom stores by byte offset. *)
+   Semantic contents and capacity bounds do not determine unused padding;
+   exact staging is tracked separately in immutableRelation. *)
+(* Base invariant is separate: register updates need not preserve it unless
+   they leave the chosen region operand alone. *)
+Definition immutable_base_zero_def:
+  immutable_base_zero cenv ss <=>
+    !base. cenv.ce_imm_alloca = SOME base ==> eval_operand base ss = SOME 0w
+End
+
 Definition immutables_rel_def:
-  immutables_rel cenv (addr:address) src_id_opt is_ctor (vs:evaluation_state) ss ⇔
+  immutables_rel cenv (addr:address) src_id_opt is_ctor (vs:evaluation_state) ss <=>
     let interp_imms = (case ALOOKUP vs.immutables addr of
                          NONE => FEMPTY
                        | SOME mod_imms => get_source_immutables src_id_opt mod_imms) in
-    if is_ctor then
-      (* Constructor: each interpreter immutable maps to vs_immutables entry *)
-      ∀ name tv v byte_offset.
-        FLOOKUP cenv.ce_vars (module_var_key (src_id_opt, name)) =
-          SOME (ImmutableLoc byte_offset) ∧
-        FLOOKUP interp_imms name = SOME (tv, v)
-        ⇒
-        (* tv from scope provides correct type for typed_val_to_w256 *)
-        FLOOKUP ss.vs_immutables (byte_offset DIV 32) = SOME (typed_val_to_w256 tv v)
-    else
-      (* Runtime: interpreter immutables encoded in data section *)
-      ∀ name tv v byte_offset.
-        FLOOKUP cenv.ce_vars (module_var_key (src_id_opt, name)) =
-          SOME (ImmutableLoc byte_offset) ∧
-        FLOOKUP interp_imms name = SOME (tv, v)
-        ⇒
-        (* The data section holds the value at byte_offset laid out as in
-           memory (val_in_memory) *)
-        byte_offset + type_memory_size tv ≤ LENGTH ss.vs_data_section ∧
-        val_in_memory tv v byte_offset ss.vs_data_section
+    !name tv v byte_offset.
+      FLOOKUP cenv.ce_vars (module_var_key (src_id_opt, name)) =
+        SOME (ImmutableLoc byte_offset) /\
+      FLOOKUP interp_imms name = SOME (tv,v) ==>
+      immutable_value_admissible tv v /\
+      byte_offset + type_memory_size tv <=
+        LENGTH (if is_ctor then ss.vs_memory else ss.vs_data_section) /\
+      val_in_memory tv v byte_offset
+        (if is_ctor then ss.vs_memory else ss.vs_data_section) /\
+      immutable_value_bytes_rel tv v
+        (mem_bytes_at byte_offset (type_memory_size tv)
+          (if is_ctor then ss.vs_memory else ss.vs_data_section))
 End
 
 (* ===== Storage Variables Relation ===== *)

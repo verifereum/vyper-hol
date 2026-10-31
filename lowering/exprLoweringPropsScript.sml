@@ -233,6 +233,107 @@ Definition alloca_room_def:
     ss.vs_alloca_next + pending_alloca_size func ss < dimword (:256)
 End
 
+(* Initialized constructor immutable capacity regions lie below the bump
+   frontier and miss every recorded ALLOCA of this function and every
+   live local region, including borrowed locals.  Restricting
+   the second clause to ALLOCA instructions is intentional: fixed immutable
+   reservations may themselves be recorded in vs_allocas.  Runtime reads
+   use the data section and impose no memory separation obligation. *)
+Definition immutable_alloca_sep_def:
+  immutable_alloca_sep func cenv cx (vs:evaluation_state) (ss:venom_state) <=>
+    cenv.ce_is_ctor ==>
+    !name tv v off.
+      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+        SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables cenv.ce_module imms) name =
+        SOME (tv,v) ==>
+      off + type_memory_size tv <= ss.vs_alloca_next /\
+      (!inst b sz.
+        MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+        FLOOKUP ss.vs_allocas inst.inst_id = SOME (b,sz) ==>
+        regions_disjoint off (type_memory_size tv) b sz) /\
+      (!id b sz. local_region cenv vs.scopes ss id b sz ==>
+        regions_disjoint off (type_memory_size tv) b sz)
+End
+
+(* A live borrowed local needs no tracked allocation.  The same initialized
+   constructor immutable admits [64,96), but rejects a local alias at zero. *)
+Theorem immutable_alloca_sep_borrowed_probe[local]:
+  !func ce cx es s entry c v t u.
+    (c,v,t,u) =
+      (ce with <| ce_is_ctor := T; ce_module := NONE;
+          ce_vars := FEMPTY |+ (module_var_key (NONE,"imm"), ImmutableLoc 0)
+                           |+ ("local", PtrVar (Var "p") 32) |>,
+       es with <| scopes := [FEMPTY |+ ("local",entry)];
+          immutables := [(cx.txn.target,
+            [(NONE,FEMPTY |+ ("imm",(BaseTV BoolT,BoolV T)))])] |>,
+       s with <| vs_allocas := FEMPTY; vs_alloca_next := 96;
+                 vs_vars := FEMPTY |+ ("p",64w) |>,
+       s with <| vs_allocas := FEMPTY; vs_alloca_next := 96;
+                 vs_vars := FEMPTY |+ ("p",0w) |>) ==>
+      local_region c v.scopes t "local" 64 32 /\
+      t.vs_allocas = FEMPTY /\
+      immutable_alloca_sep func c cx v t /\
+      local_region c v.scopes u "local" 0 32 /\
+      ~immutable_alloca_sep func c cx v u
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  simp[local_region_def, lookup_scopes_def, lookup_var_def,
+       immutable_alloca_sep_def, get_source_immutables_def,
+       finite_mapTheory.FLOOKUP_UPDATE, module_var_key_def, nsid_to_string_def,
+       type_memory_size_def, compileEnvTheory.regions_disjoint_def, wordsTheory.dimword_def,
+       venomMemPropsTheory.dimindex_256] >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[AllCaseEqs()] >>
+      Cases_on `id = "local"` >> gvs[]) >>
+  qexistsl_tac [`"local"`, `0`, `32`] >> simp[]
+QED
+
+Theorem immutable_alloca_sep_fields:
+  !func cenv cx vs vs' ss ss'.
+    immutable_alloca_sep func cenv cx vs ss /\
+    vs'.immutables = vs.immutables /\
+    ss'.vs_allocas = ss.vs_allocas /\
+    ss'.vs_alloca_next = ss.vs_alloca_next /\
+    (!id b sz. local_region cenv vs'.scopes ss' id b sz ==>
+       ?id0. local_region cenv vs.scopes ss id0 b sz) ==>
+    immutable_alloca_sep func cenv cx vs' ss'
+Proof
+  rw[immutable_alloca_sep_def] >> metis_tac[]
+QED
+
+Theorem immutable_alloca_sep_cenv_cong:
+  !func cenv cenv' cx vs ss.
+    immutable_alloca_sep func cenv' cx vs ss /\
+    (!n off. FLOOKUP cenv.ce_vars n = SOME (ImmutableLoc off) ==>
+       FLOOKUP cenv'.ce_vars n = SOME (ImmutableLoc off)) /\
+    cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor /\
+    (!id b sz. local_region cenv vs.scopes ss id b sz ==>
+       ?id0. local_region cenv' vs.scopes ss id0 b sz) ==>
+    immutable_alloca_sep func cenv cx vs ss
+Proof
+  rw[immutable_alloca_sep_def] >> metis_tac[]
+QED
+
+Theorem immutable_alloca_sep_exec_alloca:
+  !func cenv cx vs ss inst (n:bytes32) ss'.
+    immutable_alloca_sep func cenv cx vs ss /\
+    exec_alloca inst ss n = OK ss' /\
+    (!id b sz. local_region cenv vs.scopes ss' id b sz ==>
+       ?id0. local_region cenv vs.scopes ss id0 b sz) ==>
+    immutable_alloca_sep func cenv cx vs ss'
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+  simp[exec_alloca_def, AllCaseEqs(), LET_THM] >> rw[] >>
+  fs[immutable_alloca_sep_def, update_var_def] >> rpt strip_tac >>
+  qpat_x_assum `cenv.ce_is_ctor ==> _` drule_all >>
+  strip_tac >> simp[] >>
+  gvs[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()] >>
+  metis_tac[compileEnvTheory.regions_disjoint_def]
+QED
+
 (* state_rel in func, the function running, with the Venom-side facts a
    statement fragment needs and keeps:
    - alloca_inv: the recorded allocations are disjoint and below the
@@ -247,6 +348,7 @@ End
 Definition stmt_state_rel_def:
   stmt_state_rel func cenv cx vs ss ⇔
     state_rel func cenv cx vs ss ∧ alloca_inv ss ∧ alloca_room func ss ∧
+    immutable_alloca_sep func cenv cx vs ss ∧
     ∀inst n base sz.
       MEM inst (fn_insts func) ∧ inst.inst_opcode = ALLOCA ∧
       inst.inst_operands = [Lit n] ∧
@@ -268,6 +370,7 @@ QED
 Theorem stmt_state_rel_allocas_frame:
   !func cenv cx es s es' s'.
     stmt_state_rel func cenv cx es s /\ state_rel func cenv cx es' s' /\
+    immutable_alloca_sep func cenv cx es' s' /\
     s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next ==>
     stmt_state_rel func cenv cx es' s'
 Proof
@@ -521,8 +624,9 @@ Proof
   `local_ptrs_rel func cenv es.scopes (update_var name w ss)` by
     (irule local_ptrs_rel_update_var >> fs[state_rel_def]) >>
   gvs[state_rel_def, update_var_def, storage_rel_def,
-      transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
-      contract_storage_def, contract_transient_def]
+     transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
+     contract_storage_def, contract_transient_def] >> metis_tac[]
+
 QED
 
 Theorem state_rel_jump_to:
@@ -551,16 +655,19 @@ Theorem state_rel_pop_scope:
     state_rel func cenv cx (es with scopes := rest) s
 Proof
   rpt strip_tac >>
+  `local_ptrs_rel func cenv rest s` by
+    (irule local_ptrs_rel_pop_scope >> qexists_tac `sc` >>
+     fs[state_rel_def]) >>
   fs[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
-     logs_rel_def] >>
-  irule local_ptrs_rel_pop_scope >> qexists_tac `sc` >> gvs[]
+     logs_rel_def] >> metis_tac[]
 QED
 
-(* state_rel reads the Venom state only through the locals' memory and
-   the fields below. *)
+(* Frame the local and immutable memory relations separately: constructor
+   immutables share vs_memory with locals, unlike runtime data-section reads. *)
 Theorem state_rel_frame:
   !func cenv cx es es' s s'.
     state_rel func cenv cx es s /\ local_ptrs_rel func cenv es'.scopes s' /\
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s' /\
     es' = es with scopes := es'.scopes /\
     s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient /\
     s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_tx_ctx = s.vs_tx_ctx /\
@@ -573,8 +680,9 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `es' = _` SUBST1_TAC >>
   gvs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
-      immutables_rel_def, logs_rel_def, call_ctx_rel_def, contract_storage_def,
-      contract_transient_def]
+     immutables_rel_def, logs_rel_def, call_ctx_rel_def, contract_storage_def,
+     contract_transient_def] >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem stmt_state_rel_jump_to:
@@ -584,7 +692,8 @@ Theorem stmt_state_rel_jump_to:
 Proof
   simp[stmt_state_rel_def, state_rel_jump_to, jump_to_def, alloca_inv_def,
        allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
-       pending_alloca_size_def]
+       pending_alloca_size_def, immutable_alloca_sep_def,
+       local_region_def, lookup_var_def]
 QED
 
 Theorem stmt_state_rel_inst_idx:
@@ -597,7 +706,7 @@ Proof
        transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
        contract_storage_def, contract_transient_def, alloca_inv_def,
        allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
-       pending_alloca_size_def]
+       pending_alloca_size_def, immutable_alloca_sep_def]
 QED
 
 Theorem stmt_state_rel_push_scope:
@@ -605,7 +714,20 @@ Theorem stmt_state_rel_push_scope:
     stmt_state_rel func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
     stmt_state_rel func cenv cx es s
 Proof
-  simp[stmt_state_rel_def, state_rel_push_scope]
+  simp[stmt_state_rel_def, state_rel_push_scope, immutable_alloca_sep_def,
+       local_region_def, lookup_scopes_def]
+QED
+
+Theorem local_region_pop_scope:
+  !cenv sc rest s id b sz.
+    local_region cenv rest s id b sz /\
+    (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
+    local_region cenv (sc :: rest) s id b sz
+Proof
+  rw[local_region_def] >>
+  `FLOOKUP sc id = NONE` by
+    (Cases_on `FLOOKUP sc id` >> gvs[finite_mapTheory.FLOOKUP_DEF] >> metis_tac[]) >>
+  simp[lookup_scopes_def] >> metis_tac[]
 QED
 
 Theorem stmt_state_rel_pop_scope:
@@ -614,7 +736,12 @@ Theorem stmt_state_rel_pop_scope:
     (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
     stmt_state_rel func cenv cx (es with scopes := rest) s
 Proof
-  rw[stmt_state_rel_def] >> metis_tac[state_rel_pop_scope]
+  rw[stmt_state_rel_def]
+  >- (irule state_rel_pop_scope >> metis_tac[])
+  >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
+      simp[] >> rpt strip_tac >> qexists_tac `id` >>
+      gvs[] >> irule local_region_pop_scope >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem local_ptrs_rel_cenv_cong:
@@ -685,7 +812,10 @@ Theorem stmt_state_rel_cenv_cong:
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
     stmt_state_rel func cenv cx es ss
 Proof
-  rw[stmt_state_rel_def] >- (irule state_rel_cenv_cong >> metis_tac[]) >>
+  rw[stmt_state_rel_def] >- (irule state_rel_cenv_cong >> metis_tac[])
+  >- (irule immutable_alloca_sep_cenv_cong >> qexists_tac `cenv'` >>
+      simp[] >> rpt strip_tac >> qexists_tac `id` >>
+      fs[local_region_def] >> metis_tac[]) >>
   res_tac
 QED
 
@@ -698,7 +828,11 @@ Proof
   rpt strip_tac >> fs[stmt_state_rel_def] >> rpt conj_tac
   >- (irule state_rel_update_var_local >> simp[])
   >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[update_var_def])
-  >- (irule alloca_room_fields >> qexists_tac `s` >> simp[update_var_def]) >>
+  >- (irule alloca_room_fields >> qexists_tac `s` >> simp[update_var_def])
+  >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
+      simp[update_var_def] >> rpt strip_tac >> qexists_tac `id` >>
+      fs[local_region_def, lookup_var_def, not_local_ptr_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
   simp[update_var_def] >> metis_tac[]
 QED
 
@@ -1048,22 +1182,25 @@ QED
 (* compile_ptr_load: all cases are emit_op *)
 Theorem compile_ptr_load_prefix:
   !is_ctor loc op st v st'.
-    compile_ptr_load is_ctor loc op st = (v, st') ==>
+    compile_ptr_load is_ctor imm loc op st = (v, st') ==>
     isPREFIX st.cs_current_insts st'.cs_current_insts
 Proof
-  Cases_on `loc` >>
-  simp[contextTheory.compile_ptr_load_def] >>
-  rw[] >> imp_res_tac emit_op_prefix
+  Cases_on `loc` >> Cases_on `imm` >> Cases_on `is_ctor` >>
+  simp[contextTheory.compile_ptr_load_def, contextTheory.compile_imm_load_word_def,
+       emit_op_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       rich_listTheory.IS_PREFIX_APPEND]
 QED
 
 Theorem compile_ptr_load_same_blocks:
   !is_ctor loc op st v st'.
-    compile_ptr_load is_ctor loc op st = (v, st') ==>
+    compile_ptr_load is_ctor imm loc op st = (v, st') ==>
     same_blocks st st'
 Proof
-  Cases_on `loc` >>
-  simp[contextTheory.compile_ptr_load_def] >>
-  rw[] >> imp_res_tac emit_op_same_blocks
+  Cases_on `loc` >> Cases_on `imm` >> Cases_on `is_ctor` >>
+  simp[contextTheory.compile_ptr_load_def, contextTheory.compile_imm_load_word_def,
+       emit_op_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, same_blocks_def]
 QED
 
 (* new_block: always breaks same_blocks *)
@@ -1326,21 +1463,21 @@ Proof
 QED
 
 (* ci_mono for compile_ptr_load (used by unwrap_value) *)
-Theorem ci_mono_compile_ptr_load[local]:
-  ∀ is_ctor loc op sa. ci_mono sa (SND (compile_ptr_load is_ctor loc op sa))
+Theorem ci_mono_compile_ptr_load:
+  ∀ is_ctor imm loc op sa. ci_mono sa (SND (compile_ptr_load is_ctor imm loc op sa))
 Proof
-  rpt gen_tac >> Cases_on `loc` >>
-  simp[contextTheory.compile_ptr_load_def] >>
-  rw[] >> simp[ci_mono_emit_op]
+  rpt gen_tac >> Cases_on `loc` >> Cases_on `imm` >> Cases_on `is_ctor` >>
+  simp[contextTheory.compile_ptr_load_def, contextTheory.compile_imm_load_word_def] >>
+  ci_mono_chain_tac [ci_mono_emit_op]
 QED
 
 Theorem ci_mono_compile_ptr_store[local]:
-  ∀ is_ctor loc op v sa.
-    ci_mono sa (SND (compile_ptr_store is_ctor loc op v sa))
+  ∀ is_ctor imm loc op v sa.
+    ci_mono sa (SND (compile_ptr_store is_ctor imm loc op v sa))
 Proof
-  rpt gen_tac >> Cases_on `loc` >>
-  simp[contextTheory.compile_ptr_store_def] >>
-  rw[] >> simp[ci_mono_emit_void]
+  rpt gen_tac >> Cases_on `loc` >> Cases_on `imm` >> Cases_on `is_ctor` >>
+  simp[contextTheory.compile_ptr_store_def, contextTheory.compile_imm_store_word_def] >>
+  ci_mono_chain_tac [ci_mono_emit_op, ci_mono_emit_void]
 QED
 
 val ci_mono_emit_rws =
@@ -1390,15 +1527,61 @@ Proof
   ci_mono_chain_tac [ci_mono_compile_word_copy_loop]
 QED
 
+Theorem ci_mono_compile_lit_byte_offset[local]:
+  !op off sa. ci_mono sa (SND (compile_lit_byte_offset op off sa))
+Proof
+  rpt gen_tac >> simp[contextTheory.compile_lit_byte_offset_def] >>
+  IF_CASES_TAC >> simp[ci_mono_comp_return] >>
+  Cases_on `op` >> simp[ci_mono_comp_return, ci_mono_emit_op]
+QED
+
+Theorem ci_mono_compile_imm_copy_to_memory:
+  !n is_ctor imm src dst off sa.
+    ci_mono sa (SND (compile_imm_copy_to_memory is_ctor imm src dst n off sa))
+Proof
+  Induct >> rpt gen_tac >>
+  simp[contextTheory.compile_imm_copy_to_memory_def, ci_mono_comp_return] >>
+  irule ci_mono_bind >> simp[ci_mono_compile_lit_byte_offset] >>
+  rpt gen_tac >> irule ci_mono_bind >>
+  simp[GSYM contextTheory.compile_ptr_load_def, ci_mono_compile_ptr_load] >>
+  rpt gen_tac >> irule ci_mono_bind >> simp[ci_mono_compile_lit_byte_offset] >>
+  rpt gen_tac >> irule ci_mono_ignore_bind >> simp[ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_imm_store_word:
+  !imm off v sa. ci_mono sa (SND (compile_imm_store_word imm off v sa))
+Proof
+  Cases >> simp[contextTheory.compile_imm_store_word_def, ci_mono_emit_void] >>
+  rpt gen_tac >> irule ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_imm_store_words:
+  !n imm src dst off sa.
+    ci_mono sa (SND (compile_imm_store_words imm src dst n off sa))
+Proof
+  Induct >> rpt gen_tac >>
+  simp[contextTheory.compile_imm_store_words_def, ci_mono_comp_return] >>
+  irule ci_mono_bind >> simp[ci_mono_compile_lit_byte_offset] >>
+  rpt gen_tac >> irule ci_mono_bind >> simp[ci_mono_emit_op] >>
+  rpt gen_tac >> irule ci_mono_bind >> simp[ci_mono_compile_lit_byte_offset] >>
+  rpt gen_tac >> irule ci_mono_ignore_bind >>
+  simp[contextTheory.compile_imm_store_word_def] >>
+  Cases_on `imm` >> simp[ci_mono_emit_void] >>
+  irule ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_emit_void]
+QED
+
 val ci_mono_copy_rws =
   ci_mono_emit_rws @
   [ci_mono_compile_alloc_buffer, ci_mono_compile_storage_to_memory,
-   ci_mono_compile_transient_to_memory, ci_mono_compile_code_to_memory];
+   ci_mono_compile_transient_to_memory, ci_mono_compile_code_to_memory,
+   ci_mono_compile_imm_copy_to_memory];
 
+(* Storage/transient use a single load/store or a loop; code uses
+   immutable-aware unrolled loads; calldata copies and memory returns. *)
 Theorem ci_mono_compile_ensure_in_memory[local]:
   ∀ ptr_op loc mem_bytes word_count is_ctor sa.
     ci_mono sa
-      (SND (compile_ensure_in_memory ptr_op loc mem_bytes word_count is_ctor sa))
+      (SND (compile_ensure_in_memory ptr_op loc mem_bytes word_count is_ctor imm sa))
 Proof
   rpt gen_tac >> Cases_on `loc` >>
   simp[contextTheory.compile_ensure_in_memory_def] >>
@@ -1749,6 +1932,7 @@ QED
 
 Theorem ci_mono_compile_array_subscript:
   ∀ base_op idx_op is_dyn sc ws es is_signed load_opc sa.
+    (!op st. ci_mono st (SND (load_opc op st))) ==>
     ci_mono sa (SND (compile_array_subscript base_op idx_op is_dyn sc ws es is_signed load_opc sa))
 Proof
   rpt gen_tac >>
@@ -1779,12 +1963,14 @@ Proof
               simp[ci_mono_compile_keccak256_key, ci_mono_comp_return]) >>
           irule ci_mono_lower_value_cfn >> metis_tac[]) >>
       Cases_on `t` >> simp[LET_THM] >>
-      rpt (CHANGED_TAC (
-        rpt gen_tac >>
-        (irule ci_mono_bind >> conj_tac) >>
-        simp[ci_mono_comp_return, ci_mono_compile_tuple_subscript,
-             ci_mono_compile_array_subscript] >>
-        TRY (irule ci_mono_lower_value_cfn >> metis_tac[])))) >>
+      irule ci_mono_bind >> conj_tac >>
+      simp[ci_mono_comp_return, ci_mono_compile_tuple_subscript]
+      >> rpt gen_tac >> BETA_TAC
+      >>~- ([`lower_value`],
+            irule ci_mono_lower_value_cfn >> simp[]) >>
+      irule ci_mono_bind >> conj_tac >>
+      simp[ci_mono_comp_return, ci_mono_compile_array_subscript,
+           ci_mono_compile_ptr_load]) >>
   metis_tac[]
 QED
 
@@ -2140,7 +2326,7 @@ Proof
 QED
 
 Theorem ci_mono_compile_builtin_len[local]:
-  ∀ ic v loc sa. ci_mono sa (SND (compile_builtin_len ic v loc sa))
+  ∀ ic v loc sa. ci_mono sa (SND (compile_builtin_len ic imm v loc sa))
 Proof
   simp[builtinSimpleTheory.compile_builtin_len_def, ci_mono_compile_ptr_load]
 QED
@@ -2182,9 +2368,10 @@ QED
 
 Theorem ci_mono_compile_array_membership_loop[local]:
   ∀ needle arr_op len_op elem_size offset_base load_opc is_in sa.
+    (!op st. ci_mono st (SND (load_opc op st))) ==>
     ci_mono sa (SND (compile_array_membership_loop needle arr_op len_op elem_size offset_base load_opc is_in sa))
 Proof
-  rpt gen_tac >>
+  rpt gen_tac >> strip_tac >>
   rewrite_tac[exprLoweringTheory.compile_array_membership_loop_def, LET_THM] >> BETA_TAC >>
   rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
        (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
@@ -2201,7 +2388,7 @@ Theorem ci_mono_compile_var_array_membership[local]:
 Proof
   rpt gen_tac >>
   simp[exprLoweringTheory.compile_var_array_membership_def, LET_THM] >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[] >- simp[ci_mono_emit_op] >> Cases_on `rhs_ty` >> simp[ci_mono_comp_return] >> rename1 `ArrayT _ sz` >> Cases_on `sz` >> simp[ci_mono_comp_return]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[] >- (Cases_on `rhs_ty` >> simp[ci_mono_comp_return] >> rename1 `ArrayT _ sz` >> Cases_on `sz` >> simp[ci_mono_comp_return] >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> simp[ci_mono_emit_op]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> simp[ci_mono_emit_op]) >> rpt strip_tac >> simp[ci_mono_emit_inst]) >> simp[ci_mono_comp_return]) >> rpt strip_tac >> simp[ci_mono_compile_array_membership_loop]
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[] >- simp[ci_mono_compile_ptr_load] >> Cases_on `rhs_ty` >> simp[ci_mono_comp_return] >> rename1 `ArrayT _ sz` >> Cases_on `sz` >> simp[ci_mono_comp_return]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[] >- (Cases_on `rhs_ty` >> simp[ci_mono_comp_return] >> rename1 `ArrayT _ sz` >> Cases_on `sz` >> simp[ci_mono_comp_return] >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> simp[ci_mono_emit_op]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> simp[ci_mono_emit_op]) >> rpt strip_tac >> simp[ci_mono_emit_inst]) >> simp[ci_mono_comp_return]) >> rpt strip_tac >> simp[ci_mono_compile_array_membership_loop, ci_mono_compile_ptr_load]
 QED
 
 Theorem ci_mono_compile_keccak256_bytes[local]:
@@ -4228,6 +4415,19 @@ Proof
     by (irule ci_mono_same_blocks_isPREFIX >> simp[]) >>
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
+
+(* Immutable helper monotonicity interfaces share the typed-memory family
+   with aggregate construction; all must remain kernel-closed. *)
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles then ()
+     else raise Fail "admitted immutable monotonicity interface"
+  end)
+  [ci_mono_compile_lit_byte_offset, ci_mono_compile_imm_copy_to_memory,
+   ci_mono_compile_imm_store_words, ci_mono_compile_ensure_in_memory,
+   ci_mono_compile_array_subscript, ci_mono_compile_array_membership_loop,
+   ci_mono_typed_memory_family];
 
 (* Issue #560 integrity gate, including local proof-interface helpers. *)
 val () = List.app (fn th =>

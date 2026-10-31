@@ -142,7 +142,8 @@ Theorem target_map_array_continuation:
         (Literal (BaseT (UintT 256)) (IntL 1)))
       (Literal (BaseT (UintT 256)) (IntL 2))) =
   (do p <- compile_mapping_subscript (Lit 7w) (Lit 1w);
-      q <- compile_array_subscript p (Lit 2w) F 3 1 1 F TLOAD;
+      q <- compile_array_subscript p (Lit 2w) F 3 1 1 F
+             (compile_ptr_load ce.ce_is_ctor ce.ce_imm_alloca LocTransient);
       return (q, SOME LocTransient, SOME (ValPT (BaseT (UintT 256))))
    od)
 Proof
@@ -190,7 +191,7 @@ Definition target_transient_trace_def:
         let loc = (case FST (SND r) of SOME l => l | NONE => LocMemory) in
         do compile_assign_value ce (FST r) loc (Lit 9w) T NONE
              (BaseT (UintT 256)) (BaseT (UintT 256)) NONE 32;
-           compile_ptr_load F loc (FST r)
+           compile_ptr_load F ce.ce_imm_alloca loc (FST r)
         od
      od) target_test_state
 End

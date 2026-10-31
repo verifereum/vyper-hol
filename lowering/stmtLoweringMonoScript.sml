@@ -109,7 +109,9 @@ QED
 val ci_mono_stmt_rws =
   ci_mono_grows_rws @
   [ci_mono_compile_expr_sa, ci_mono_context_helpers,
-   ci_mono_compile_dynarray_append, ci_mono_comp_get];
+   ci_mono_compile_dynarray_append, ci_mono_comp_get,
+   ci_mono_compile_ptr_load, ci_mono_compile_imm_store_word,
+   ci_mono_compile_imm_store_words, ci_mono_compile_imm_copy_to_memory];
 
 Theorem ci_mono_compile_get_target_ptr:
   !bt cenv sa. ci_mono sa (SND (compile_get_target_ptr cenv bt sa))
@@ -123,7 +125,7 @@ QED
 Theorem ci_mono_stmt_helpers:
   (!cenv d l v p sl dt st da m sa.
      ci_mono sa (SND (compile_assign_value cenv d l v p sl dt st da m sa))) /\
-  (!d v l sa. ci_mono sa (SND (compile_store_at_loc d v l sa))) /\
+  (!imm d v l sa. ci_mono sa (SND (compile_store_at_loc imm d v l sa))) /\
   (!cenv e sa. ci_mono sa (SND (compile_reason_message cenv e sa))) /\
   (!cenv m t sz sa.
      ci_mono sa (SND (compile_revert_with_reason cenv m t sz sa))) /\
@@ -142,7 +144,8 @@ Proof
        ci_mono_chain_tac ci_mono_stmt_rws, ci_mono_chain_tac ci_mono_stmt_rws,
        ci_mono_chain_tac ci_mono_stmt_rws])
   >- (Cases_on `l` >> TRY (rename1 `SOME loc` >> Cases_on `loc`) >>
-      simp[compile_store_at_loc_def, ci_mono_emit_void])
+      simp[compile_store_at_loc_def, ci_mono_emit_void,
+           ci_mono_compile_imm_store_word])
   >- (Cases_on `e` >> simp[compile_reason_message_def, ci_mono_compile_expr_sa] >>
       rename1 `Literal ty lit` >> Cases_on `ty` >> Cases_on `lit` >>
       simp[compile_reason_message_def, ci_mono_compile_expr_sa] >>

@@ -72,7 +72,7 @@ Ancestors
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperEvalPreservesScopes
   vyperExprNoControl vyperValueOperation
-  venomExecSemantics venomExecProofs venomInst venomState integer_word
+  venomExecSemantics venomExecProofs venomInst venomState venomMemDefs integer_word
 Libs
   monadsyntax intLib
 
@@ -213,6 +213,101 @@ Definition stmt_frag_def:
       (?fuel r. run_from fuel ctx func s0 = r /\ exit_result r /\
                 stmt_exit RetQ es' res r)
 End
+
+(* An entry-frame version of stmt_frag.  Frame is a premise on the actual
+   target entry state, not an assertion that every related state has a
+   suitable layout.  In particular stmt_state_rel alone does not reserve
+   constructor immutable memory against ALLOCA.  The postcondition is the
+   same as stmt_frag; no preservation of an arbitrary Frame is promised. *)
+Definition stmt_framed_frag_def:
+  stmt_framed_frag Frame ctx func cx lctx RetQ cenv
+    (m : compile_env compiler) es res es' <=>
+    !sa sb s0 cenv'.
+      m sa = (cenv', sb) /\ fn_has_code sa sb func /\
+      fn_inst_ids_distinct func /\
+      local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
+      ~block_is_terminated sa /\ stmt_res_ok lctx res /\
+      Frame s0 /\ stmt_state_rel func cenv cx es s0 /\ ~s0.vs_halted /\
+      s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      (?s cenv''.
+         stmt_lands lctx sb res s /\ ~s.vs_halted /\
+         (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
+         cenv_top_ext cenv cenv'' es'.scopes /\
+         stmt_state_rel func cenv'' cx es' s /\
+         (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+                lookup_var x s = SOME w) /\
+         (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                  FLOOKUP s.vs_allocas aid = SOME b) /\
+         !fuel r. run_from fuel ctx func s = r /\ (!e. r <> Error e) ==>
+                  ?fuel'. run_from fuel' ctx func s0 = r) \/
+      (?fuel r. run_from fuel ctx func s0 = r /\ exit_result r /\
+                stmt_exit RetQ es' res r)
+End
+
+(* Both fresh and replayed ALLOCAs must start above the reserved prefix.
+   A frontier bound alone is insufficient for a replayed allocation. *)
+Definition alloca_prefix_def:
+  alloca_prefix cap (s:venom_state) <=>
+    cap <= s.vs_alloca_next /\
+    !aid b n. FLOOKUP s.vs_allocas aid = SOME (b,n) ==> cap <= b
+End
+
+Theorem stmt_framed_frag_zero:
+  stmt_framed_frag (alloca_prefix 0) ctx func cx lctx RetQ cenv m es res es'
+  <=> stmt_frag ctx func cx lctx RetQ cenv m es res es'
+Proof
+  simp[stmt_framed_frag_def, stmt_frag_def, alloca_prefix_def]
+QED
+
+Theorem immutable_prefix_bound_scopes[simp]:
+  immutable_prefix_bound cenv addr src (es with scopes := scs) cap <=>
+  immutable_prefix_bound cenv addr src es cap
+Proof
+  simp[immutable_prefix_bound_def]
+QED
+
+(* Adding a local pointer can remove, but cannot introduce, an immutable
+   binding.  Thus a prefix bound transports to the declaration environment. *)
+Theorem immutable_prefix_bound_local_entry:
+  !cenv bc id p sz addr src es cap.
+    immutable_prefix_bound cenv addr src es cap /\
+    FLOOKUP bc.ce_vars id = SOME (PtrVar p sz) /\
+    (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) ==>
+    immutable_prefix_bound bc addr src es cap
+Proof
+  rpt gen_tac >> simp[immutable_prefix_bound_def] >> rpt strip_tac >>
+  qpat_x_assum `!name tv v off. _`
+    (qspecl_then [`name`, `tv`, `v`, `off`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> Cases_on `module_var_key (src,name) = id` >> gvs[]) >>
+  simp[]
+QED
+
+Theorem exec_alloca_prefix_base:
+  !func cenv cx es inst s n s' p w cap.
+    stmt_state_rel func cenv cx es s /\ alloca_prefix cap s /\
+    inst.inst_outputs = [p] /\ exec_alloca inst s n = OK s' /\
+    lookup_var p s' = SOME w ==> cap <= w2n w
+Proof
+  rpt gen_tac >> strip_tac >>
+  `s.vs_alloca_next < dimword (:256)` by
+    metis_tac[stmt_state_rel_def, alloca_room_next_lt] >>
+  qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+  simp[exec_alloca_def, LET_THM] >>
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >> simp[]
+  >- (strip_tac >>
+      gvs[alloca_prefix_def, update_var_def, lookup_var_def,
+          FLOOKUP_UPDATE, wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD]) >>
+  rename1 `FLOOKUP s.vs_allocas inst.inst_id = SOME region` >>
+  PairCases_on `region` >> strip_tac >>
+  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `region0 < dimword (:256)` by
+    (fs[stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >>
+     res_tac >> DECIDE_TAC) >>
+  fs[alloca_prefix_def, wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
+  metis_tac[]
+QED
 
 (* The return PC stays defined and unassigned as the code goes on, where
    the variables handed out before it keep their values. *)

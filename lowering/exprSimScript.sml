@@ -712,7 +712,13 @@ Proof
     (irule alloca_inv_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `alloca_room func (s with vs_vars := V)` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
-  fs[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
+  `immutable_alloca_sep func cenv cx es (s with vs_vars := V)` by
+    (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
+     fs[stmt_state_rel_def] >>
+     rpt strip_tac >> qexists_tac `id` >>
+     fs[local_region_def] >> metis_tac[]) >>
+  fs[stmt_state_rel_def, state_rel_def,
+     storage_rel_def, transient_rel_def,
      immutables_rel_def, logs_rel_def, contract_storage_def,
      contract_transient_def] >>
   metis_tac[]

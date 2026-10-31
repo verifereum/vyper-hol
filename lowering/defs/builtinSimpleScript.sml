@@ -35,8 +35,8 @@ End
 (* len(): load length word from the first slot at pointer.
    is_ctor needed for LocCode: ctor uses ILOAD, runtime uses DLOAD. *)
 Definition compile_builtin_len_def:
-  compile_builtin_len is_ctor ptr_op loc =
-    compile_ptr_load is_ctor loc ptr_op
+  compile_builtin_len is_ctor imm ptr_op loc =
+    compile_ptr_load is_ctor imm loc ptr_op
 End
 
 Definition compile_builtin_calldatasize_def:

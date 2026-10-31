@@ -51,7 +51,7 @@ Theorem compile_storage_copy_layout[local]:
       emit_inst JNZ [done_op; Label exit; Label body] [];
       new_block body;
       src_off <- emit_op ADD [src; Var counter];
-      value <- compile_ptr_load F loc src_off;
+      value <- compile_ptr_load F NONE loc src_off;
       dst_off <- (do
         scaled <- emit_op MUL [Var counter; Lit 32w];
         emit_op ADD [dst; scaled]
@@ -117,7 +117,7 @@ Theorem compile_storage_copy_boundaries[local]:
       emit_inst JNZ [test; Label exit; Label body] [] stj = ((),st2) /\
       new_block body st2 = (oldh,stb) /\
       emit_op ADD [src; Var cv] stb = (so,s5) /\
-      compile_ptr_load F loc so s5 = (value,s6) /\
+      compile_ptr_load F NONE loc so s5 = (value,s6) /\
       emit_op MUL [Var cv; Lit 32w] s6 = (scaled,s7) /\
       emit_op ADD [dst; scaled] s7 = (dest,s8) /\
       emit_void MSTORE [dest; value] s8 = ((),s9) /\
@@ -135,7 +135,7 @@ Theorem storage_copy_body_layout[local]:
   !loc src dst cv so value scaled dest next stb s1 s2 s3 s4 s5 s6 ste.
     (loc = LocStorage \/ loc = LocTransient) /\
     emit_op ADD [src; Var cv] stb = (so,s1) /\
-    compile_ptr_load F loc so s1 = (value,s2) /\
+    compile_ptr_load F NONE loc so s1 = (value,s2) /\
     emit_op MUL [Var cv; Lit 32w] s2 = (scaled,s3) /\
     emit_op ADD [dst; scaled] s3 = (dest,s4) /\
     emit_void MSTORE [dest; value] s4 = ((),s5) /\
@@ -281,7 +281,7 @@ Proof
   rename1 `emit_inst ASSIGN [Var nv] [cv] s10 = ((),ste)` >>
   rename1 `emit_inst JMP [Label hdr] [] ste = ((),st3)` >>
   rename1 `emit_op ADD [src; Var cv] stb = (Var sv,s5)` >>
-  rename1 `compile_ptr_load F loc (Var sv) s5 = (Var vv,s6)` >>
+  rename1 `compile_ptr_load F NONE loc (Var sv) s5 = (Var vv,s6)` >>
   rename1 `emit_op MUL [Var cv; Lit 32w] s6 = (Var mv,s7)` >>
   rename1 `emit_op ADD [dst; Var mv] s7 = (Var dv,s8)` >>
   `cs_extends sa s0 /\ cs_extends sth stj /\ cs_extends stb ste` by
@@ -291,7 +291,7 @@ Proof
      metis_tac[cs_extends_trans]) >>
   map_every (fn q => qpat_x_assum q kall_tac)
     [`compile_word_copy_loop _ _ _ _ _ _ _ = _`, `fresh_var _ = _`,
-     `emit_inst ASSIGN [Lit _] _ _ = _`, `compile_ptr_load _ _ _ _ = _`,
+     `emit_inst ASSIGN [Lit _] _ _ = _`, `compile_ptr_load _ _ _ _ _ = _`,
      `emit_void _ _ _ = _`, `emit_inst ASSIGN _ _ _ = _`] >>
   rpt (qpat_x_assum `fresh_label _ _ = _` kall_tac) >>
   rpt (qpat_x_assum `emit_op ADD _ _ = _` kall_tac) >>
@@ -904,9 +904,9 @@ Proof
 QED
 
 Theorem ensure_storage_memory_layout:
-  !loc src nb n ctor.
+  !loc src nb n ctor imm.
     (loc = LocStorage \/ loc = LocTransient) ==>
-    compile_ensure_in_memory src loc nb n ctor =
+    compile_ensure_in_memory src loc nb n ctor imm =
     do buf <- compile_alloc_buffer nb;
        (if n = 1 then
           do v <- emit_op (if loc = LocStorage then SLOAD else TLOAD) [src];
@@ -924,9 +924,9 @@ Proof
 QED
 
 Theorem ensure_storage_memory_defined_frag:
-  !ctx loc src nb n ctor sa op sb sbase a R.
+  !ctx loc src nb n ctor imm sa op sb sbase a R.
     (loc = LocStorage \/ loc = LocTransient) /\
-    compile_ensure_in_memory src loc nb n ctor sa = (op,sb) /\
+    compile_ensure_in_memory src loc nb n ctor imm sa = (op,sb) /\
     (!x. src = Var x ==> not_fresh_at sa x) /\
     eval_operand src sbase = SOME a ==>
     frag_exec ctx sa sb (\s. s = sbase)
@@ -935,9 +935,9 @@ Theorem ensure_storage_memory_defined_frag:
            s.vs_labels = sbase.vs_labels) R
 Proof
   rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
-  qpat_x_assum `compile_ensure_in_memory _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_ensure_in_memory _ _ _ _ _ _ _ = _` mp_tac >>
   drule ensure_storage_memory_layout >>
-  disch_then (qspecl_then [`src`, `nb`, `n`, `ctor`] SUBST1_TAC) >>
+  disch_then (qspecl_then [`src`, `nb`, `n`, `ctor`, `imm`] SUBST1_TAC) >>
   simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
   gnvs[] >> rename1 `compile_alloc_buffer nb sa = (buf,sm)` >>

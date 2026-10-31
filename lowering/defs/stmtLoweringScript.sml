@@ -419,13 +419,10 @@ Definition compile_get_target_ptr_def:
                                     SOME (ValPT (ArrayT _ (Fixed n))) => n
                                   | _ => 0) in
               let is_signed_idx = is_signed_type (expr_type idx_e) in
-              let load_opc = (case loc of
-                                LocStorage => SLOAD
-                              | LocTransient => TLOAD
-                              | _ => MLOAD) in
+              let loader = compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc in
               do elem_ptr <-
                    compile_array_subscript base_op idx_op is_dynamic static_count
-                                           ws elem_sz is_signed_idx load_opc;
+                                           ws elem_sz is_signed_idx loader;
                  return (elem_ptr, loc_opt, SOME (ValPT elem_ty))
               od
            od
@@ -554,16 +551,24 @@ Definition compile_assign_value_def:
                   od)
         od
     | LocCode =>
-        if is_prim_word then emit_void ISTORE [dst_op; val_op]
-        else if mem_size ≤ 32 then
-          do loaded <- emit_op MLOAD [val_op];
-             emit_void ISTORE [dst_op; loaded]
-          od
-        else
-          do compile_word_copy_loop val_op dst_op
-               (mem_size DIV 32) LocMemory LocCode T;
-             return ()
-          od
+        do val_op' <-
+             (if ¬is_prim_word ∧ dst_ty ≠ src_ty
+                 ∧ ¬(is_bytestring_type dst_ty ∧ is_bytestring_type src_ty) then
+                do norm_alloc <- compile_alloc_buffer mem_size;
+                   compile_store_memory_typed cenv
+                     norm_alloc.buf_operand dst_ty val_op src_ty;
+                   return norm_alloc.buf_operand
+                od
+              else return val_op);
+           if is_prim_word then
+             compile_imm_store_word cenv.ce_imm_alloca dst_op val_op'
+           else if mem_size ≤ 32 then
+             do loaded <- emit_op MLOAD [val_op'];
+                compile_imm_store_word cenv.ce_imm_alloca dst_op loaded
+             od
+           else compile_imm_store_words cenv.ce_imm_alloca val_op' dst_op
+                  ((mem_size + 31) DIV 32) 0
+        od
     | LocCalldata =>
         (* Calldata is read-only — store is invalid *)
         do emit_inst INVALID [] [];
@@ -593,18 +598,18 @@ End
    Dispatches store opcode based on location.
    Mirrors Python: ctx.ptr_store dispatching by location. *)
 Definition compile_store_at_loc_def:
-  compile_store_at_loc dst_op val_op NONE =
+  compile_store_at_loc imm dst_op val_op NONE =
     emit_void MSTORE [dst_op; val_op] ∧
-  compile_store_at_loc dst_op val_op (SOME LocMemory) =
+  compile_store_at_loc imm dst_op val_op (SOME LocMemory) =
     emit_void MSTORE [dst_op; val_op] ∧
-  compile_store_at_loc dst_op val_op (SOME LocStorage) =
+  compile_store_at_loc imm dst_op val_op (SOME LocStorage) =
     emit_void SSTORE [dst_op; val_op] ∧
-  compile_store_at_loc dst_op val_op (SOME LocTransient) =
+  compile_store_at_loc imm dst_op val_op (SOME LocTransient) =
     emit_void TSTORE [dst_op; val_op] ∧
-  compile_store_at_loc dst_op val_op (SOME LocCode) =
+  compile_store_at_loc imm dst_op val_op (SOME LocCode) =
     (* Code location: use ISTORE for immutables in constructor context *)
-    emit_void ISTORE [dst_op; val_op] ∧
-  compile_store_at_loc dst_op val_op (SOME LocCalldata) =
+    compile_imm_store_word imm dst_op val_op ∧
+  compile_store_at_loc imm dst_op val_op (SOME LocCalldata) =
     (* Calldata is read-only — emit INVALID *)
     emit_void INVALID []
 End
@@ -639,7 +644,7 @@ Definition compile_tuple_store_all_def:
             SOME ((ems + 31) DIV 32, ems)
         | _ => NONE);
        (if src_is_word then
-          if dst_is_word then compile_store_at_loc dst_op val_op loc_opt
+          if dst_is_word then compile_store_at_loc cenv.ce_imm_alloca dst_op val_op loc_opt
           else emit_void INVALID []
         else
           compile_assign_value cenv dst_op dst_loc val_op is_prim
@@ -729,11 +734,7 @@ Definition compile_iter_elem_copy_def:
     if is_slot_addressed then
       if elem_size = 1 then
         (* Single slot: load from storage/transient, mstore to memory *)
-        let load_opc = case loc of LocStorage => SLOAD
-                                 | LocTransient => TLOAD
-                                 | LocCode => DLOAD
-                                 | _ => MLOAD in
-        do val_op <- emit_op load_opc [elem_ptr];
+        do val_op <- compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc elem_ptr;
            emit_void MSTORE [item_ptr; val_op]
         od
       else
@@ -746,11 +747,7 @@ Definition compile_iter_elem_copy_def:
          For ≤32B, single load+mstore. For >32B, location-specific bulk copy.
          Mirrors Python: self.ctx.copy_to_memory(dst, elem_addr, elem_size, location) *)
       if elem_size ≤ 32 then
-        let load_opc = case loc of
-                          LocCalldata => CALLDATALOAD
-                        | LocCode => DLOAD
-                        | _ => MLOAD in
-        do val_op <- emit_op load_opc [elem_ptr];
+        do val_op <- compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc elem_ptr;
            emit_void MSTORE [item_ptr; val_op]
         od
       else
@@ -758,7 +755,8 @@ Definition compile_iter_elem_copy_def:
            LocCalldata =>
              emit_void CALLDATACOPY [item_ptr; elem_ptr; Lit (n2w elem_size)]
          | LocCode =>
-             emit_void CODECOPY [item_ptr; elem_ptr; Lit (n2w elem_size)]
+             compile_imm_copy_to_memory cenv.ce_is_ctor cenv.ce_imm_alloca
+               elem_ptr item_ptr ((elem_size + 31) DIV 32) 0
          | _ =>
              compile_copy_memory item_ptr elem_ptr elem_size)
     else if is_word_type target_ty then
@@ -928,7 +926,7 @@ Definition compile_stmt_def:
   compile_stmt cenv lctx ty (Assign (BaseTarget bt) e) =
     (if has_length_word (expr_type e) ∧ is_empty_value_expr e then
        do tgt_result <- compile_get_target_ptr cenv bt;
-          compile_store_at_loc (FST tgt_result) (Lit 0w) (FST (SND tgt_result))
+          compile_store_at_loc cenv.ce_imm_alloca (FST tgt_result) (Lit 0w) (FST (SND tgt_result))
        od
      else
      let src_ty = lowered_value_type cenv e in
@@ -1324,7 +1322,7 @@ Definition compile_stmt_def:
         arr_op <- return (vv_operand arr_vv);
         (* Load array length *)
         len_op <-
-          (if is_dynamic then emit_op load_opc [arr_op]
+          (if is_dynamic then compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc arr_op
            else return (Lit (n2w bound)));
         body_cenv <- declare_local cenv id fty;
         emit_local_alloca body_cenv id;

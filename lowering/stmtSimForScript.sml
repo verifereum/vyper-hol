@@ -222,26 +222,21 @@ Proof
                `incr_lbl`, `sa.cs_next_id + 5`, `sa.cs_next_id + 6`,
                `sa.cs_next_id + 7`, `bbb`, `sj.cs_next_id`, `sj.cs_next_id + 1`,
                `sj.cs_next_id + 2`, `sb0`, `sb1`, `sj`, `sa`, `0`, `es`, `cc`,
-               `w`, `res`, `es'`] mp_tac for_loop >>
+               `w`, `res`, `es'`] mp_tac for_loop_alloca >>
   impl_tac
-  >- (REWRITE_TAC [for_code_def] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      TRY (simp[block_is_terminated_def, venomInstTheory.mk_inst_def,
-                is_terminator_def] >> NO_TAC) >>
-      TRY (fs[] >> NO_TAC) >>
-      TRY (simp[not_fresh_at_def] >> NO_TAC) >>
-      TRY (rw[not_fresh_at_def] >>
-           TRY (first_x_assum (qspec_then `sj.cs_next_var` mp_tac)) >>
-           simp[] >> NO_TAC) >>
-      rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
+  >- (simp[for_code_def] >> conj_tac
+      >- simp[block_is_terminated_def, venomInstTheory.mk_inst_def,
+              is_terminator_def, not_fresh_at_def] >>
+      conj_tac
+      >- (rw[not_fresh_at_def] >>
+          first_x_assum (qspec_then `sb1.cs_next_var` mp_tac) >> simp[]) >>
+      conj_tac
+      >- (rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
+      first_assum ACCEPT_TAC) >>
   strip_tac
   >- (rename1 `s9.vs_current_bb = exit_lbl` >> disj1_tac >>
       qexists_tac `s9` >> qexists_tac `cenv` >>
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-      >- simp[stmt_lands_def]
-      >- simp[block_is_terminated_def]
-      >- simp[cenv_top_ext_refl]
-      >- metis_tac[]
-      >- metis_tac[] >>
+      simp[stmt_lands_def, block_is_terminated_def, cenv_top_ext_refl] >>
       rpt strip_tac >> metis_tac[]) >>
   disj2_tac >> rename1 `exit_result r9` >>
   drule exit_result_not_error >> strip_tac >> metis_tac[]
