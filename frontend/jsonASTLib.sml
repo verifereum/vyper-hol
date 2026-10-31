@@ -389,7 +389,16 @@ val source_ref_tm : term decoder =
 
 (* Decode typeclass string to constructor *)
 (* Main type decoder - handles all json_type cases *)
-fun d_json_type () : term decoder = achoose "json_type" [
+fun d_json_type () : term decoder = let
+  val nominal_name =
+    tuple2 (orElse (JSONDecode.map mk_some
+                    (field "type_decl_node" $ field "source_id" inttm),
+                    succeed (mk_none intSyntax.int_ty)),
+            field "name" string)
+  fun array_type ctor =
+    JSONDecode.map ctor $
+      tuple2 (field "value_type" (delay d_json_type), field "length" numtm)
+in achoose "json_type" [
   (* Integer: has typeclass "integer", bits and is_signed fields *)
   check (field "typeclass" string) (fn s => s = "integer") "not integer" $
     JSONDecode.map (fn (bits, is_signed) => mk_JT_Integer(bits, is_signed)) $
@@ -417,31 +426,22 @@ fun d_json_type () : term decoder = achoose "json_type" [
 
   (* Static array: typeclass = "static_array" or "$SArray" *)
   check (field "typeclass" string) (fn s => s = "static_array" orelse s = "$SArray") "not static_array" $
-    JSONDecode.map (fn (vt, len) => mk_JT_StaticArray(vt, len)) $
-    tuple2 (field "value_type" (delay d_json_type), field "length" numtm),
+    array_type mk_JT_StaticArray,
 
   (* Dynamic array: typeclass = "dynamic_array" or name = "DynArray" *)
   check (field "typeclass" string) (fn s => s = "dynamic_array") "not dynamic_array" $
-    JSONDecode.map (fn (vt, len) => mk_JT_DynArray(vt, len)) $
-    tuple2 (field "value_type" (delay d_json_type), field "length" numtm),
+    array_type mk_JT_DynArray,
 
   check (field "name" string) (fn s => s = "DynArray") "not DynArray" $
-    JSONDecode.map (fn (vt, len) => mk_JT_DynArray(vt, len)) $
-    tuple2 (field "value_type" (delay d_json_type), field "length" numtm),
+    array_type mk_JT_DynArray,
 
   (* Struct: typeclass = "struct" *)
   check (field "typeclass" string) (fn s => s = "struct") "not struct" $
-    JSONDecode.map mk_JT_Struct $
-    tuple2 (orElse (JSONDecode.map mk_some (field "type_decl_node" $ field "source_id" inttm),
-                    succeed (mk_none intSyntax.int_ty)),
-            field "name" string),
+    JSONDecode.map mk_JT_Struct nominal_name,
 
   (* Flag: typeclass = "flag" *)
   check (field "typeclass" string) (fn s => s = "flag") "not flag" $
-    JSONDecode.map mk_JT_Flag $
-    tuple2 (orElse (JSONDecode.map mk_some (field "type_decl_node" $ field "source_id" inttm),
-                    succeed (mk_none intSyntax.int_ty)),
-            field "name" string),
+    JSONDecode.map mk_JT_Flag nominal_name,
 
   (* Tuple: typeclass = "tuple" *)
   check (field "typeclass" string) (fn s => s = "tuple") "not tuple" $
@@ -454,23 +454,16 @@ fun d_json_type () : term decoder = achoose "json_type" [
 
   (* Interface *)
   check (field "typeclass" string) (fn s => s = "interface") "not interface" $
-    JSONDecode.map mk_JT_Interface $
-    tuple2 (orElse (JSONDecode.map mk_some
-                      (field "type_decl_node" $ field "source_id" inttm),
-                    succeed (mk_none intSyntax.int_ty)),
-            field "name" string),
+    JSONDecode.map mk_JT_Interface nominal_name,
 
   (* A malformed dynamic bound must not fall through to a named type. *)
   check (field "name" string)
     (fn s => s <> "Bytes" andalso s <> "String") "invalid dynamic type" $
-    JSONDecode.map mk_JT_Named $
-      tuple2 (orElse (JSONDecode.map mk_some (field "type_decl_node" $ field "source_id" inttm),
-                      succeed (mk_none intSyntax.int_ty)),
-              field "name" string),
+    JSONDecode.map mk_JT_Named nominal_name,
 
   (* Null type *)
   null JT_None_tm
-]
+] end
 
 val json_type = delay d_json_type
 
@@ -491,29 +484,25 @@ val annotation_bound : term decoder = achoose "annotation bound" [
   field "folded_value" $ check_ast_type "Int" $ field "value" numtm
 ]
 
+(* A primitive prefix alone can also begin a user-defined type name. *)
+fun sized_annotation prefix ctor : term decoder =
+  check (field "id" string) (String.isPrefix prefix) "not primitive prefix" $
+  andThen (field "id" string) (fn name =>
+    case Int.fromString (String.extract (name, String.size prefix, NONE)) of
+      SOME n => succeed (ctor (mk_num_from_int n))
+    | NONE => fail "not a numeric type suffix")
+
 (* Type from AST node (for subscript/name patterns) *)
 fun d_ast_type () : term decoder = achoose "ast_type" [
   (* Name node - check id for primitive types *)
   check_ast_type "Name" $
   achoose "Name type" [
     (* uintN *)
-    check (field "id" string) (String.isPrefix "uint") "not uint" $
-      JSONDecode.map (fn s =>
-        let val bits = Option.valOf (Int.fromString (String.extract(s, 4, NONE)))
-        in mk_JTA_Integer(mk_num_from_int bits, false) end) $
-      field "id" string,
+    sized_annotation "uint" (fn bits => mk_JTA_Integer (bits, false)),
     (* intN *)
-    check (field "id" string) (String.isPrefix "int") "not int" $
-      JSONDecode.map (fn s =>
-        let val bits = Option.valOf (Int.fromString (String.extract(s, 3, NONE)))
-        in mk_JTA_Integer(mk_num_from_int bits, true) end) $
-      field "id" string,
+    sized_annotation "int" (fn bits => mk_JTA_Integer (bits, true)),
     (* bytesN (fixed) *)
-    check (field "id" string) (String.isPrefix "bytes") "not bytes" $
-      JSONDecode.map (fn s =>
-        let val m = Option.valOf (Int.fromString (String.extract(s, 5, NONE)))
-        in mk_JTA_BytesM(mk_num_from_int m) end) $
-      field "id" string,
+    sized_annotation "bytes" mk_JTA_BytesM,
     (* Named types *)
     JSONDecode.map (fn s => mk_JTA_Named s) (field "id" string)
   ],
@@ -849,9 +838,11 @@ fun d_json_expr () : term decoder = achoose "expr" [
                     orElse (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
                             succeed JMissingSource_tm))),
 
-  (* ExtCall - preserve target separately from ordinary arguments. *)
-  (* Signature extracted from func.type: argument_types, return_type *)
-  check_ast_type "ExtCall" $
+  check_ast_type "ExtCall" $ d_interface_call mk_JE_ExtCall,
+  check_ast_type "StaticCall" $ d_interface_call mk_JE_StaticCall
+]
+(* Preserve the target separately from arguments, with the signature from func.type. *)
+and d_interface_call ctor : term decoder =
     andThen
       (tuple3 (
         tuple3 (field "value" $ field "func" $ field "attr" string,
@@ -874,38 +865,9 @@ fun d_json_expr () : term decoder = achoose "expr" [
           SOME effective_ret =>
             if invalid_legacy_arguments (arg_types, args)
             then fail "invalid legacy interface argument signature"
-            else succeed (mk_JE_ExtCall
-              (func_name, func_src, arg_types, effective_ret, target, args, keywords))
-        | NONE => fail "legacy interface return type disagrees with callsite"),
-
-  (* StaticCall - same structure as ExtCall. *)
-  check_ast_type "StaticCall" $
-    andThen
-      (tuple3 (
-        tuple3 (field "value" $ field "func" $ field "attr" string,
-                orElse (field "value" $ field "func" $ field "type" $
-                  field "type_decl_node" $ field "source_id" source_ref_tm,
-                  succeed JMissingSource_tm),
-                field "value" $ field "func" $ field "type" $
-                  field "argument_types" (array json_type)),
-        tuple3 (field "value" $ field "func" $ field "type" $
-                  field "return_type" json_type,
-                field "value" $ field "func" $ field "value" (delay d_json_expr),
-                field "value" $ field "args" (array (delay d_json_expr))),
-        tuple2 (field "value" $
-                  orElse (field "keywords" (array (delay d_json_keyword)),
-                          succeed []),
-                orElse (field "type" json_type, succeed JT_None_tm))))
-      (fn ((func_name, func_src, arg_types), (ret_ty, target, args),
-           (keywords, result_ty)) =>
-        case normalize_interface_return (func_src, ret_ty, result_ty) of
-          SOME effective_ret =>
-            if invalid_legacy_arguments (arg_types, args)
-            then fail "invalid legacy interface argument signature"
-            else succeed (mk_JE_StaticCall
+            else succeed (ctor
               (func_name, func_src, arg_types, effective_ret, target, args, keywords))
         | NONE => fail "legacy interface return type disagrees with callsite")
-]
 and d_json_keyword () : term decoder = achoose "keyword" [
   (* ABI method IDs are compile-time constants. Preserve the compiler-validated
      four-byte folded value so jsonToVyper can attach it to AbiEncode. *)
@@ -1166,13 +1128,13 @@ val json_value_type = delay d_json_value_type
 (* ===== Top-level Decoder ===== *)
 
 val json_arg : term decoder = achoose "json_arg" [
-  (* New format: ast_type = "arg". *)
+  (* Function parameters use ast_type = "arg". *)
   check_ast_type "arg" $
     JSONDecode.map (fn (name, ty, ann) => mk_JArg(name, ty, ann)) $
     tuple3 (field "arg" string,
             orElse (field "type" json_type, succeed JT_None_tm),
             orElse (field "annotation" ast_type, succeed JTA_None_tm)),
-  (* Old format: ast_type = "AnnAssign" with nested target. *)
+  (* Struct, event and error fields use "AnnAssign" with a nested target. *)
   check_ast_type "AnnAssign" $
     JSONDecode.map (fn (name, ty, ann) => mk_JArg(name, ty, ann)) $
     tuple3 (field "target" $ check_ast_type "Name" $ field "id" string,

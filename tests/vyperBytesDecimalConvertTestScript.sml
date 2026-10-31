@@ -4,9 +4,17 @@
 Theory vyperBytesDecimalConvertTest
 Ancestors
   vyperValue vyperValueOperation vyperContext vyperTypeConversions vyperTypeSystem
-  vyperTypeContract evalCompilerSubsetScalars
+  vyperTypeContract
 Libs
   cv_transLib vyperCheckContractLib
+
+Definition scalar_convert_bytes32_to_decimal_program_def:
+  scalar_convert_bytes32_to_decimal_program =
+    [FunctionDecl External Pure F F "bytes32_to_decimal"
+       [("x", BaseT (BytesT (Fixed 32)))] ([] : expr list) (BaseT DecimalT)
+       [Return (SOME (TypeBuiltin (BaseT DecimalT) Convert (BaseT DecimalT)
+         [Name (BaseT (BytesT (Fixed 32))) "x"]))]]
+End
 
 Theorem bytes_decimal_conversion_boundary:
   evaluate_convert tenv (BytesV bs) (BaseT DecimalT) =
@@ -135,7 +143,7 @@ QED
 (* The actual formerly rejected fixture, through the sealed success-only
    checker in both runtime and deployment modes. Its AST is unchanged. *)
 val fixture_modules = rhs (concl (SIMP_CONV (srw_ss())
-  [scalar_convert_bytes32_to_decimal_program_def, scalar_convert_fn_def]
+  [scalar_convert_bytes32_to_decimal_program_def]
   ``([(NONE, scalar_convert_bytes32_to_decimal_program)]
       : (num option # toplevel list) list)``));
 val fixture_layouts =
@@ -152,7 +160,7 @@ Theorem bytes_decimal_fixture_runtime_checked:
   IS_SOME (check_contract F [] (0w : address)
     [(NONE, scalar_convert_bytes32_to_decimal_program)])
 Proof
-  simp[scalar_convert_bytes32_to_decimal_program_def, scalar_convert_fn_def] >>
+  simp[scalar_convert_bytes32_to_decimal_program_def] >>
   CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
 QED
 
@@ -160,6 +168,6 @@ Theorem bytes_decimal_fixture_deployment_checked:
   IS_SOME (check_contract T [] (0w : address)
     [(NONE, scalar_convert_bytes32_to_decimal_program)])
 Proof
-  simp[scalar_convert_bytes32_to_decimal_program_def, scalar_convert_fn_def] >>
+  simp[scalar_convert_bytes32_to_decimal_program_def] >>
   CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
 QED

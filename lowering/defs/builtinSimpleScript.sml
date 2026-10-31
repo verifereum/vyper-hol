@@ -35,8 +35,8 @@ End
 (* len(): load length word from the first slot at pointer.
    is_ctor needed for LocCode: ctor uses ILOAD, runtime uses DLOAD. *)
 Definition compile_builtin_len_def:
-  compile_builtin_len is_ctor ptr_op loc =
-    compile_ptr_load is_ctor loc ptr_op
+  compile_builtin_len is_ctor imm ptr_op loc =
+    compile_ptr_load is_ctor imm loc ptr_op
 End
 
 Definition compile_builtin_calldatasize_def:
@@ -54,7 +54,7 @@ End
 (* Zero memory region word-by-word.
    Mirrors Python: simple.py _zero_memory.
    n_words: number of 32-byte words to zero.
-   Unrolled at compile time (n_words is static). *)
+   Unrolled at compile time in ascending offset order, including ADD 0. *)
 Definition compile_zero_words_def:
   compile_zero_words (base_op:operand) (0:num) = return () ∧
   compile_zero_words base_op (SUC n) =
@@ -64,6 +64,7 @@ Definition compile_zero_words_def:
     od
 End
 
+(* Return the buffer record so callers retain allocation provenance. *)
 Definition compile_builtin_empty_complex_def:
   compile_builtin_empty_complex size is_bytestring =
     do buf_alloc <- compile_alloc_buffer size;
@@ -73,14 +74,14 @@ Definition compile_builtin_empty_complex_def:
             Length=0 means no valid data.
             Mirrors Python: simple.py lower_empty bytestring/DynArray case *)
          do emit_void MSTORE [buf; Lit 0w];
-            return buf
+            return buf_alloc
          od
        else
          (* Other complex types (struct, sarray): zero entire buffer word-by-word.
             Mirrors Python: simple.py lower_empty → _zero_memory *)
          let n_words = (size + 31) DIV 32 in
          do compile_zero_words buf n_words;
-            return buf
+            return buf_alloc
          od
     od
 End

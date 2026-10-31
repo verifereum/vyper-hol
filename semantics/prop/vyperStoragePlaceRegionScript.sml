@@ -74,7 +74,8 @@ Theorem array_subregion_end_bound[local]:
 Proof
   strip_tac >>
   `i * elem_size + elem_size <= n * elem_size` by
-    (irule array_index_element_end_bound >> simp[]) >> decide_tac
+    (irule vyperLookupStorageTheory.array_index_element_end_bound >>
+     simp[]) >> decide_tac
 QED
 
 Theorem struct_subregion_end_bound[local]:

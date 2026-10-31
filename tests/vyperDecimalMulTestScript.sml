@@ -5,9 +5,18 @@ Theory vyperDecimalMulTest
 Ancestors
   arithmetic integer intExtension vyperAST vyperValue vyperValueOperation
   vyperContext vyperDecimalBounds vyperTyping vyperTypeContract
-  vyperTypeBuiltins evalCompilerSubsetScalars
+  vyperTypeBuiltins
 Libs
   cv_transLib vyperCheckContractLib
+
+Definition scalar_arith_decimal_mul_program_def:
+  scalar_arith_decimal_mul_program =
+    [FunctionDecl External Pure F F "mul_decimal"
+       [("a", BaseT DecimalT); ("b", BaseT DecimalT)]
+       ([] : expr list) (BaseT DecimalT)
+       [Return (SOME (Builtin (BaseT DecimalT) (Bop Mul)
+         [Name (BaseT DecimalT) "a"; Name (BaseT DecimalT) "b"]))]]
+End
 
 Theorem decimal_mul_signed_result:
   evaluate_binop u tv Mul (DecimalV i) (DecimalV j) =
@@ -103,7 +112,7 @@ Theorem decimal_mul_fixture_runtime_checked:
   IS_SOME (check_contract F [] (0w : address)
     [(NONE, scalar_arith_decimal_mul_program)])
 Proof
-  simp[scalar_arith_decimal_mul_program_def, scalar_binary_bop_fn_def] >>
+  simp[scalar_arith_decimal_mul_program_def] >>
   CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
 QED
 
@@ -111,6 +120,6 @@ Theorem decimal_mul_fixture_deployment_checked:
   IS_SOME (check_contract T [] (0w : address)
     [(NONE, scalar_arith_decimal_mul_program)])
 Proof
-  simp[scalar_arith_decimal_mul_program_def, scalar_binary_bop_fn_def] >>
+  simp[scalar_arith_decimal_mul_program_def] >>
   CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
 QED

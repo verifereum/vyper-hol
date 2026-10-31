@@ -75,14 +75,14 @@ Proof
   simp[apply_writes_def]
 QED
 
-Theorem read_slot_after_apply_writes_single[local]:
+Theorem read_slot_after_apply_writes_single:
   read_slot (apply_writes (n2w base) [(0, val0)] storage) base = val0
 Proof
   simp[read_slot_def, apply_writes_def, lookup_storage_def, update_storage_def,
        APPLY_UPDATE_THM]
 QED
 
-Theorem apply_writes_append[local]:
+Theorem apply_writes_append:
   ∀ws1 ws2 base storage.
     apply_writes base (ws1 ++ ws2) storage =
     apply_writes base ws2 (apply_writes base ws1 storage)
@@ -106,7 +106,7 @@ Proof
      INST_TYPE [alpha |-> ``:256``] wordsTheory.WORD_ADD_COMM))
 QED
 
-Theorem apply_writes_shift[local]:
+Theorem apply_writes_shift:
   ∀writes k base storage.
     apply_writes (n2w base) (MAP (λ(off,s). (off + k, s)) writes) storage =
     apply_writes (n2w (base + k)) writes storage
@@ -619,7 +619,7 @@ QED
 (* ===== Dynamic Bytes/String Roundtrip ===== *)
 
 (* Helper: modular offset cancellation *)
-Theorem n2w_add_cancel[local]:
+Theorem n2w_add_cancel:
   off < dimword(:256) ∧ k < dimword(:256) ∧ off ≠ k ⇒
   n2w (x + off) ≠ (n2w (x + k) : bytes32)
 Proof
@@ -630,7 +630,7 @@ Proof
 QED
 
 (* Specialization of n2w_add_cancel for k=0 *)
-Theorem n2w_add_cancel_0[local]:
+Theorem n2w_add_cancel_0:
   off < dimword(:256) ∧ off ≠ 0 ⇒
   n2w (x + off) ≠ (n2w x : bytes32)
 Proof
@@ -1311,7 +1311,7 @@ QED
 (* ===== Compound Roundtrip ===== *)
 
 (* Helper: writes at non-overlapping offsets don't affect lookup *)
-Theorem apply_writes_lookup_miss_num[local]:
+Theorem apply_writes_lookup_miss_num:
   ∀writes base storage k.
     (∀off. MEM off (MAP FST writes) ⇒
        n2w (base + off) ≠ (n2w (base + k) : bytes32)) ⇒
@@ -1323,15 +1323,6 @@ Proof
   ONCE_REWRITE_TAC [GSYM nwn_eq] >>
   irule apply_writes_lookup_miss >>
   REWRITE_TAC [nwn_eq] >> gvs[]
-QED
-
-(* Helper: shifted writes can be un-shifted *)
-Theorem apply_writes_MAP_shift[local]:
-  ∀writes k base storage.
-    apply_writes (n2w base) (MAP (λ(off,s). (off + k, s)) writes) storage =
-    apply_writes (n2w (base + k)) writes storage
-Proof
-  REWRITE_TAC [apply_writes_shift]
 QED
 
 (* Helper: decode_value agrees with a different storage when writes are outside range *)
@@ -1757,7 +1748,7 @@ Proof
 QED
 
 (* Helper: reading slot 0 after cons write with disjoint tail *)
-Theorem read_slot_cons_0[local]:
+Theorem read_slot_cons_0:
   ∀slots val0 base storage.
     (∀off. MEM off (MAP FST slots) ⇒
       n2w (base + off) ≠ (n2w base : bytes32)) ⇒
@@ -1800,7 +1791,7 @@ Proof
 QED
 
 (* Helper: MEM implies element size < TupleTV size *)
-Theorem MEM_TupleTV_type_value_size[local]:
+Theorem MEM_TupleTV_type_value_size:
   ∀tvs tv. MEM tv tvs ⇒ type_value_size tv < type_value_size (TupleTV tvs)
 Proof
   Induct >> simp[type_value_size_def] >>
@@ -1809,7 +1800,7 @@ Proof
 QED
 
 (* Helper: MEM in fields implies type_value_size < StructTV size *)
-Theorem MEM_StructTV_type_value_size[local]:
+Theorem MEM_StructTV_type_value_size:
   ∀(fields : (string # type_value) list) nm tv.
     MEM (nm,tv) fields ⇒
     type_value_size tv < type_value_size (StructTV fields)
@@ -1909,7 +1900,6 @@ Proof
   )
 QED
 
-
 (* Helper: encode_static_array writes only at offsets for existing keys *)
 Theorem encode_static_array_miss[local]:
   ∀sparse tv writes i.
@@ -1961,7 +1951,7 @@ Proof
 QED
 
 (* Helper: GENLIST zeros make lookup return 0w *)
-Theorem genlist_zeros_lookup[local]:
+Theorem genlist_zeros_lookup:
   ∀m base storage k.
     k < m ∧ m ≤ dimword(:256) ⇒
     lookup_storage (n2w (base + k) : bytes32)
@@ -1976,7 +1966,6 @@ Proof
   ) >>
   simp[MAP_GENLIST, o_DEF, ALL_DISTINCT_GENLIST, MEM_GENLIST]
 QED
-
 
 (* Helper: Static array roundtrip *)
 Theorem encode_decode_roundtrip_static_array[local]:

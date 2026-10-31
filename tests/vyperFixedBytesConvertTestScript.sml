@@ -4,9 +4,18 @@ Theory vyperFixedBytesConvertTest
 Ancestors
   list rich_list arithmetic words vyperAST vyperValue vyperValueOperation
   vyperContext vyperTypeConversions vyperTypeSystem vyperTypeContract
-  evalCompilerSubsetScalars
 Libs
   cv_transLib vyperCheckContractLib
+
+Definition scalar_convert_bytes32_to_bytes4_program_def:
+  scalar_convert_bytes32_to_bytes4_program =
+    [FunctionDecl External Pure F F "bytes32_to_bytes4"
+       [("x", BaseT (BytesT (Fixed 32)))] ([] : expr list)
+       (BaseT (BytesT (Fixed 4)))
+       [Return (SOME (TypeBuiltin (BaseT (BytesT (Fixed 4))) Convert
+         (BaseT (BytesT (Fixed 4)))
+         [Name (BaseT (BytesT (Fixed 32))) "x"]))]]
+End
 
 Theorem fixed_bytes_conversion_boundary:
   evaluate_convert tenv (BytesV bs) (BaseT (BytesT (Fixed n))) =
@@ -135,7 +144,7 @@ Theorem fixed_bytes_fixture_runtime_checked:
   IS_SOME (check_contract F [] (0w : address)
     [(NONE, scalar_convert_bytes32_to_bytes4_program)])
 Proof
-  simp[scalar_convert_bytes32_to_bytes4_program_def, scalar_convert_fn_def] >>
+  simp[scalar_convert_bytes32_to_bytes4_program_def] >>
   CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
 QED
 
@@ -143,7 +152,7 @@ Theorem fixed_bytes_fixture_deployment_checked:
   IS_SOME (check_contract T [] (0w : address)
     [(NONE, scalar_convert_bytes32_to_bytes4_program)])
 Proof
-  simp[scalar_convert_bytes32_to_bytes4_program_def, scalar_convert_fn_def] >>
+  simp[scalar_convert_bytes32_to_bytes4_program_def] >>
   CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
 QED
 

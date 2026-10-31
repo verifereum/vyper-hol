@@ -128,64 +128,6 @@ Proof
       vfmStateTheory.update_storage_def, combinTheory.APPLY_UPDATE_THM]
 QED
 
-Theorem release_nonreentrant_lock_frame:
-  release_nonreentrant_lock addr slot st = (res,st') ==>
-  st'.accounts = st.accounts /\
-  (!read_addr read_slot.
-     read_addr <> addr \/ read_slot <> n2w slot ==>
-     lookup_storage read_slot
-       (lookup_transient_storage read_addr st'.tStorage) =
-     lookup_storage read_slot
-       (lookup_transient_storage read_addr st.tStorage))
-Proof
-  simp[release_nonreentrant_lock_eq,
-       vfmExecutionTheory.lookup_transient_storage_def,
-       vfmExecutionTheory.update_transient_storage_def,
-       vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
-       combinTheory.APPLY_UPDATE_THM] >>
-  rpt strip_tac >> Cases_on `addr = read_addr` >>
-  gvs[vfmExecutionTheory.update_transient_storage_def,
-      vfmStateTheory.update_storage_def, combinTheory.APPLY_UPDATE_THM]
-QED
-
-Theorem acquire_nonreentrant_lock_result:
-  acquire_nonreentrant_lock addr slot is_view st = (res,st') ==>
-  ((?err. res = INR err) ==>
-     res = INR (Error (RuntimeError "nonreentrant lock")) /\ st' = st) /\
-  (res = INL () /\ is_view ==> st' = st) /\
-  (res = INL () /\ ~is_view ==>
-     lookup_storage (n2w slot)
-       (lookup_transient_storage addr st'.tStorage) = 1w)
-Proof
-  Cases_on `lookup_storage (n2w slot)
-    (lookup_transient_storage addr st.tStorage) = 1w` >>
-  Cases_on `is_view` >>
-  simp[acquire_nonreentrant_lock_eq,
-       vfmExecutionTheory.lookup_transient_storage_def,
-       vfmExecutionTheory.update_transient_storage_def,
-       vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
-       combinTheory.APPLY_UPDATE_THM] >>
-  rpt strip_tac >>
-  gvs[vfmExecutionTheory.update_transient_storage_def,
-      vfmStateTheory.update_storage_def, combinTheory.APPLY_UPDATE_THM]
-QED
-
-Theorem release_nonreentrant_lock_result:
-  release_nonreentrant_lock addr slot st = (res,st') ==>
-  res = INL () /\
-  lookup_storage (n2w slot)
-    (lookup_transient_storage addr st'.tStorage) = 0w
-Proof
-  simp[release_nonreentrant_lock_eq,
-       vfmExecutionTheory.lookup_transient_storage_def,
-       vfmExecutionTheory.update_transient_storage_def,
-       vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
-       combinTheory.APPLY_UPDATE_THM] >>
-  rpt strip_tac >>
-  gvs[vfmExecutionTheory.update_transient_storage_def,
-      vfmStateTheory.update_storage_def, combinTheory.APPLY_UPDATE_THM]
-QED
-
 Theorem reserved_transient_write_preserves_contract_storage_well_formed:
   contract_storage_well_formed cx st /\
   storage_layout_safe cx /\
@@ -326,31 +268,6 @@ Proof
        get_storage_stk_scopes]
 QED
 
-Theorem push_function_preserves_storage_context:
-  push_function src_fn sc cx st = (INL cx',st') ==>
-  cx'.txn.target = cx.txn.target /\
-  cx'.nonreentrant_slot = cx.nonreentrant_slot /\
-  (storage_layout_safe cx' <=> storage_layout_safe cx) /\
-  (contract_storage_well_formed cx' st' <=>
-   contract_storage_well_formed cx st)
-Proof
-  simp[push_function_def, return_def] >>
-  rpt strip_tac >> gvs[] >>
-  simp[contract_storage_well_formed_stk_scopes]
-QED
-
-Theorem push_function_preserves_runtime_storage_boundaries:
-  storage_layout_safe cx /\
-  contract_storage_well_formed cx st /\
-  push_function src_fn sc cx st = (INL cx',st') ==>
-  storage_layout_safe cx' /\
-  contract_storage_well_formed cx' st' /\
-  cx'.txn.target = cx.txn.target /\
-  cx'.nonreentrant_slot = cx.nonreentrant_slot
-Proof
-  metis_tac[push_function_preserves_storage_context]
-QED
-
 Theorem eval_iterator_preserves_runtime_consistent[local]:
   well_typed_iterator env ty it /\ runtime_consistent env cx st /\
   functions_well_typed cx /\
@@ -362,7 +279,7 @@ Proof
   metis_tac[cj 3 eval_scc_type_sound_mutual]
 QED
 
-Theorem eval_expr_preserves_runtime_consistent[local]:
+Theorem eval_expr_preserves_runtime_consistent:
   well_typed_expr env e /\ runtime_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
@@ -413,7 +330,7 @@ Proof
   drule_all (cj 1 (SPEC_ALL (cj 5 eval_scc_type_sound_mutual))) >> simp[]
 QED
 
-Theorem eval_exprs_preserves_runtime_consistent[local]:
+Theorem eval_exprs_preserves_runtime_consistent:
   well_typed_exprs env es /\ runtime_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_exprs es) /\
@@ -482,7 +399,7 @@ Proof
   Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]
 QED
 
-Theorem contract_storage_well_formed_logs[local]:
+Theorem contract_storage_well_formed_logs:
   contract_storage_well_formed cx st ==>
   contract_storage_well_formed cx (st with logs updated_by f)
 Proof
@@ -504,18 +421,6 @@ Proof
   conj_tac >- (gen_tac >> Cases_on `b` >>
                  simp[vyperStorageBackendTheory.get_storage_def]) >>
   simp[]
-QED
-
-Theorem contract_storage_well_formed_pending_deletions[local]:
-  contract_storage_well_formed cx st ==>
-  contract_storage_well_formed cx
-    (st with pending_deletions := pending)
-Proof
-  strip_tac >>
-  irule contract_storage_well_formed_storage_frame >>
-  qexists_tac `st` >> simp[] >>
-  gen_tac >> Cases_on `b` >>
-  simp[vyperStorageBackendTheory.get_storage_def]
 QED
 
 Theorem contract_storage_well_formed_scopes[local]:
@@ -936,153 +841,7 @@ Proof
   simp[]
 QED
 
-Theorem intcall_post_defaults_preserves_contract_storage_well_formed[local]:
-  !cx src_id_opt fn args vs dflt_vs ret mut nr fn_stmts prev st res st'.
-  contract_storage_well_formed cx st /\
-  storage_layout_safe cx /\
-  (!cxf s r s'.
-     contract_storage_well_formed cx s /\
-     eval_stmts cxf fn_stmts s = (r,s') ==>
-     contract_storage_well_formed cx s') /\
-  (do
-     env <- lift_option_type
-       (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
-       "IntCall bind_arguments";
-     rtv <- lift_option_type (evaluate_type (get_tenv cx) ret)
-       "IntCall eval ret";
-     is_view <<- (mut = View \/ mut = Pure);
-     (if nr then
-        case cx.nonreentrant_slot of
-          NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot =>
-            acquire_nonreentrant_lock cx.txn.target slot is_view
-      else return ());
-     cxf <- push_function (src_id_opt,fn) env cx;
-     rv <- finally
-       (try (do eval_stmts cxf fn_stmts; return NoneV od) handle_function)
-       (do
-          pop_function prev;
-          if nr /\ ~is_view then
-            case cx.nonreentrant_slot of
-              NONE => return ()
-            | SOME slot =>
-                release_nonreentrant_lock cx.txn.target slot
-          else return ()
-        od);
-     crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
-     return (Value crv)
-   od) st = (res,st') ==>
-  contract_storage_well_formed cx st'
-Proof
-  rpt strip_tac >>
-  Cases_on `bind_arguments (get_tenv cx) args (vs ++ dflt_vs)` >>
-  gvs[lift_option_type_def, bind_apply, return_def, raise_def] >>
-  rename1 `bind_arguments (get_tenv cx) args (vs ++ dflt_vs) = SOME env` >>
-  Cases_on `evaluate_type (get_tenv cx) ret` >>
-  gvs[lift_option_type_def, bind_apply, return_def, raise_def] >>
-  rename1 `evaluate_type (get_tenv cx) ret = SOME rtv` >>
-  `!lock_res lock_st.
-     (if nr then
-        case cx.nonreentrant_slot of
-          NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-            (mut = View \/ mut = Pure)
-      else return ()) st = (lock_res,lock_st) ==>
-     contract_storage_well_formed cx lock_st` by (
-    rpt strip_tac >>
-    Cases_on `nr` >> gvs[return_def, raise_def] >>
-    Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
-    metis_tac[
-      acquire_nonreentrant_lock_preserves_contract_storage_well_formed]) >>
-  Cases_on
-    `(if nr then
-        case cx.nonreentrant_slot of
-          NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-            (mut = View \/ mut = Pure)
-      else return ()) st` >>
-  rename1 `_ st = (lock_res,lock_st)` >>
-  `contract_storage_well_formed cx lock_st` by metis_tac[] >>
-  Cases_on `lock_res` >>
-  gvs[ignore_bind_apply, bind_apply, push_function_def, return_def, raise_def] >>
-  `contract_storage_well_formed cx (lock_st with scopes := [env])` by
-    metis_tac[contract_storage_well_formed_scopes] >>
-  Cases_on
-    `finally
-       (try
-          (do
-             eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) fn_stmts;
-             return NoneV
-           od)
-          handle_function)
-       (do
-          pop_function prev;
-          if nr /\ ~(mut = View \/ mut = Pure) then
-            case cx.nonreentrant_slot of
-              NONE => return ()
-            | SOME slot =>
-                release_nonreentrant_lock cx.txn.target slot
-          else return ()
-        od)
-       (lock_st with scopes := [env])` >>
-  rename1 `_ = (body_final_res,body_final_st)` >>
-  `!r s.
-     try
-       (do
-          eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) fn_stmts;
-          return NoneV
-        od)
-       handle_function (lock_st with scopes := [env]) = (r,s) ==>
-     contract_storage_well_formed cx s` by
-    metis_tac[
-      try_eval_stmts_handle_function_preserves_contract_storage_well_formed] >>
-  `!s r s'.
-     contract_storage_well_formed cx s /\
-     (do
-        pop_function prev;
-        if nr /\ ~(mut = View \/ mut = Pure) then
-          case cx.nonreentrant_slot of
-            NONE => return ()
-          | SOME slot => release_nonreentrant_lock cx.txn.target slot
-        else return ()
-      od) s = (r,s') ==>
-     contract_storage_well_formed cx s'` by
-    metis_tac[intcall_cleanup_preserves_contract_storage_well_formed] >>
-  `contract_storage_well_formed cx body_final_st` by (
-    qspecl_then
-      [`contract_storage_well_formed cx`,
-       `try
-          (ignore_bind
-             (eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) fn_stmts)
-             (return NoneV))
-          handle_function`,
-       `ignore_bind (pop_function prev)
-          (if nr /\ ~(mut = View \/ mut = Pure) then
-             case cx.nonreentrant_slot of
-               NONE => return ()
-             | SOME slot => release_nonreentrant_lock cx.txn.target slot
-           else return ())`,
-       `lock_st with scopes := [env]`, `body_final_res`, `body_final_st`]
-      mp_tac finally_preserves_state_predicate >>
-    simp[] >> strip_tac >>
-    qpat_x_assum `_ ==> contract_storage_well_formed cx body_final_st` irule >>
-    rpt gen_tac >> strip_tac >>
-    qpat_x_assum
-      `!s r s'. contract_storage_well_formed cx s /\
-         do pop_function prev; _ od s = (r,s') ==>
-         contract_storage_well_formed cx s'`
-      (qspecl_then [`s`, `r`, `s'`] mp_tac) >>
-    ASM_REWRITE_TAC[] >> strip_tac >>
-    qpat_x_assum `_ ==> contract_storage_well_formed cx s'` irule >>
-    simp[]) >>
-  Cases_on `body_final_res` >>
-  gvs[] >>
-  rename1 `safe_cast rtv rv` >>
-  Cases_on `safe_cast rtv rv` >>
-  gvs[lift_option_type_def, return_def, raise_def]
-QED
-
-Theorem eval_expr_place_preserves_runtime_consistent[local]:
+Theorem eval_expr_place_preserves_runtime_consistent:
   (well_typed_expr env e \/ ?vt. type_place_expr env e = SOME vt) /\
   runtime_consistent env cx st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
@@ -1093,7 +852,7 @@ Proof
   metis_tac[cj 1 (SPEC_ALL (cj 5 eval_scc_type_sound_mutual))]
 QED
 
-Theorem eval_base_place_preserves_runtime_consistent[local]:
+Theorem eval_base_place_preserves_runtime_consistent:
   type_place_target env bt = SOME vt /\ runtime_consistent env cx st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt st = (res,st') ==>
@@ -1113,7 +872,7 @@ Proof
   metis_tac[cj 1 (SPEC_ALL (cj 8 eval_scc_type_sound_mutual))]
 QED
 
-Theorem eval_target_place_success_storage_type[local]:
+Theorem eval_target_place_success_storage_type:
   well_typed_target env bt ty /\ runtime_consistent env cx st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_target_place cx bt st = (INL p,st') ==>
@@ -1144,7 +903,7 @@ Proof
   simp[runtime_consistent_def] >> metis_tac[cj 9 eval_scc_type_sound_mutual]
 QED
 
-Theorem eval_expr_success_storage_facts[local]:
+Theorem eval_expr_success_storage_facts:
   well_typed_expr env e /\ runtime_consistent env cx st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
   eval_expr cx e st = (INL pv,st') ==>
@@ -1198,66 +957,6 @@ Proof
   qspecl_then [`cx`,`e`] strip_assume_tac (cj 5 eval_scc_type_sound_mutual) >>
   qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
     (qspecl_then [`env`,`st`,`res`,`st'`] mp_tac) >> simp[]
-QED
-
-Theorem eval_expr_place_success_result_typed[local]:
-  type_place_expr env e = SOME vt /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
-  eval_expr cx e st = (INL pv,st') ==>
-  eval_result_typed (env,cx,st') pv vt
-Proof
-  simp[runtime_consistent_def] >> rpt strip_tac >>
-  drule_all (cj 1 (SPEC_ALL (cj 5 eval_scc_type_sound_mutual))) >> simp[]
-QED
-
-Theorem eval_base_place_success_storage_type[local]:
-  type_place_target env bt = SOME vt /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
-  eval_base_place cx bt st = (INL pv,st') ==>
-  eval_result_typed (env,cx,st') pv vt
-Proof
-  simp[runtime_consistent_def] >> rpt strip_tac >>
-  drule_all (cj 1 (SPEC_ALL (cj 7 eval_scc_type_sound_mutual))) >> simp[]
-QED
-
-Theorem eval_base_place_storage_trace[local]:
-  type_place_target env bt = SOME vt /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
-  eval_base_place cx bt st = (res,st') ==>
-  typed_scope_transition st st'
-Proof
-  simp[runtime_consistent_def] >> rpt strip_tac >>
-  drule_all (cj 2 (SPEC_ALL (cj 7 eval_scc_type_sound_mutual))) >> simp[]
-QED
-
-Theorem eval_base_place_success_live[local]:
-  type_place_target env bt = SOME vt /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
-  eval_base_place cx bt st = (INL pv,st') ==>
-  live_memory_result st' pv
-Proof
-  simp[runtime_consistent_def] >> rpt strip_tac >>
-  drule_all (cj 3 (SPEC_ALL (cj 7 eval_scc_type_sound_mutual))) >> simp[]
-QED
-
-Theorem eval_base_place_success_writable[local]:
-  type_place_target env bt = SOME vt /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
-  eval_base_place cx bt st = (INL pv,st') ==>
-  writable_place_result cx st' pv
-Proof
-  simp[runtime_consistent_def] >> rpt strip_tac >>
-  drule_all (cj 4 (SPEC_ALL (cj 7 eval_scc_type_sound_mutual))) >> simp[]
-QED
-
-Theorem eval_target_place_success_writable[local]:
-  well_typed_target env bt ty /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
-  eval_target_place cx bt st = (INL p,st') ==>
-  writable_place_result cx st' (PlaceR p)
-Proof
-  simp[runtime_consistent_def] >> rpt strip_tac >>
-  drule_all (cj 4 (SPEC_ALL (cj 8 eval_scc_type_sound_mutual))) >> simp[]
 QED
 
 Theorem update_place_tail_preserves_storage[local]:
@@ -2596,7 +2295,7 @@ Proof
   simp[int_calls_expr_def]
 QED
 
-Theorem well_typed_named_exprs_MAP_SND_storage[local]:
+Theorem well_typed_named_exprs_MAP_SND_storage:
   !env kes. well_typed_named_exprs env kes ==>
             well_typed_exprs env (MAP SND kes)
 Proof
@@ -2718,7 +2417,7 @@ Proof
   rpt IF_CASES_TAC >> gvs[]
 QED
 
-Theorem transfer_value_preserves_contract_storage_well_formed[local]:
+Theorem transfer_value_preserves_contract_storage_well_formed:
   contract_storage_well_formed cx st /\
   transfer_value fromAddr toAddr amount st = (res,st') ==>
   contract_storage_well_formed cx st'
@@ -2729,7 +2428,7 @@ Proof
   metis_tac[transfer_value_storage_frame]
 QED
 
-Theorem adopt_call_outcome_INR_storage[local]:
+Theorem adopt_call_outcome_INR_storage:
   (adopt_call_outcome rq co s = (INR e,s')) <=> F
 Proof
   rw[vyperCallOutcomeTheory.adopt_call_outcome_def] >> pairarg_tac >>
@@ -2842,32 +2541,6 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Call_SelfDestructTarget
       rpt strip_tac >> gvs[]) >>
     rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
-QED
-
-Theorem increment_nonce_storage_frame[local]:
-  update_accounts (vfmExecution$increment_nonce addr) st = (res,st') ==>
-  !b. get_storage cx st' b = get_storage cx st b
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `update_accounts _ _ = _` mp_tac >>
-  simp[update_accounts_def, return_def] >> strip_tac >> gvs[] >>
-  Cases_on `b` >>
-  simp[vyperStorageBackendTheory.get_storage_def,
-       vfmExecutionTheory.increment_nonce_def,
-       vfmStateTheory.update_account_def, vfmStateTheory.lookup_account_def,
-       combinTheory.APPLY_UPDATE_THM, AllCaseEqs()] >>
-  rpt IF_CASES_TAC >> gvs[]
-QED
-
-Theorem increment_nonce_preserves_contract_storage_well_formed[local]:
-  contract_storage_well_formed cx st /\
-  update_accounts (vfmExecution$increment_nonce addr) st = (res,st') ==>
-  contract_storage_well_formed cx st'
-Proof
-  rpt strip_tac >>
-  irule contract_storage_well_formed_storage_frame >>
-  qexists_tac `st` >> simp[] >>
-  metis_tac[increment_nonce_storage_frame]
 QED
 
 (* An address collision bumps only the sender's nonce, which leaves both
@@ -3297,6 +2970,45 @@ Proof
             runtime_storage_consistent_layout]
 QED
 
+Theorem extcall_return_tail_preserves_contract_storage:
+  runtime_storage_consistent env cx st /\
+  functions_well_typed cx /\
+  protected_storage_calls_preserve cx /\
+  oracle_storage_ok cx st /\
+  well_typed_opt env drv /\
+  (returnData = [] /\ IS_SOME drv ==>
+    call_evaluation_safe cx (int_calls_expr (THE drv))) /\
+  (returnData = [] /\ IS_SOME drv ==>
+    !env0 st0 res0 st0'.
+      runtime_storage_consistent env0 cx st0 /\
+      functions_well_typed cx /\
+      call_evaluation_safe cx (int_calls_expr (THE drv)) /\
+      protected_storage_calls_preserve cx /\
+      oracle_storage_ok cx st0 /\
+      eval_expr cx (THE drv) st0 = (res0,st0') ==>
+      (well_typed_expr env0 (THE drv) ==>
+       contract_storage_well_formed cx st0') /\
+      (!vt. type_place_expr env0 (THE drv) = SOME vt ==>
+       contract_storage_well_formed cx st0')) /\
+  (if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+   else do
+     ret_val <- lift_sum_runtime
+       (evaluate_abi_decode_return (get_tenv cx) ret_type returnData);
+     return (Value ret_val)
+   od) st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  Cases_on `returnData = [] /\ IS_SOME drv` >> gvs[]
+  >- (Cases_on `drv` >> gvs[Once well_typed_expr_def] >>
+      first_x_assum drule_all >> strip_tac >> metis_tac[]) >>
+  qpat_x_assum `(do _ od) st = (res,st')` mp_tac >>
+  simp[lift_sum_runtime_def, bind_def, return_def, raise_def] >>
+  Cases_on `evaluate_abi_decode_return (get_tenv cx) ret_type returnData` >>
+  gvs[return_def, raise_def] >>
+  metis_tac[runtime_storage_consistent_storage]
+QED
+
 
 Resume eval_scc_storage_preservation_results_mutual[For_cons]:
   rpt gen_tac >> strip_tac >>
@@ -3500,47 +3212,6 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Subscript]:
   (strip_tac >> gvs[])
 QED
 
-
-(* Formerly local; saved under the same name for the assigned T6.2 boundary
-   and direct Hyp0/no-admission certification. No compatibility alias. *)
-Theorem extcall_return_tail_preserves_contract_storage:
-  runtime_storage_consistent env cx st /\
-  functions_well_typed cx /\
-  protected_storage_calls_preserve cx /\
-  oracle_storage_ok cx st /\
-  well_typed_opt env drv /\
-  (returnData = [] /\ IS_SOME drv ==>
-    call_evaluation_safe cx (int_calls_expr (THE drv))) /\
-  (returnData = [] /\ IS_SOME drv ==>
-    !env0 st0 res0 st0'.
-      runtime_storage_consistent env0 cx st0 /\
-      functions_well_typed cx /\
-      call_evaluation_safe cx (int_calls_expr (THE drv)) /\
-      protected_storage_calls_preserve cx /\
-      oracle_storage_ok cx st0 /\
-      eval_expr cx (THE drv) st0 = (res0,st0') ==>
-      (well_typed_expr env0 (THE drv) ==>
-       contract_storage_well_formed cx st0') /\
-      (!vt. type_place_expr env0 (THE drv) = SOME vt ==>
-       contract_storage_well_formed cx st0')) /\
-  (if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
-   else do
-     ret_val <- lift_sum_runtime
-       (evaluate_abi_decode_return (get_tenv cx) ret_type returnData);
-     return (Value ret_val)
-   od) st = (res,st') ==>
-  contract_storage_well_formed cx st'
-Proof
-  rpt strip_tac >>
-  Cases_on `returnData = [] /\ IS_SOME drv` >> gvs[]
-  >- (Cases_on `drv` >> gvs[Once well_typed_expr_def] >>
-      first_x_assum drule_all >> strip_tac >> metis_tac[]) >>
-  qpat_x_assum `(do _ od) st = (res,st')` mp_tac >>
-  simp[lift_sum_runtime_def, bind_def, return_def, raise_def] >>
-  Cases_on `evaluate_abi_decode_return (get_tenv cx) ret_type returnData` >>
-  gvs[return_def, raise_def] >>
-  metis_tac[runtime_storage_consistent_storage]
-QED
 
 Theorem eval_ext_call_effects_storage_preserved[local]:
   contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\

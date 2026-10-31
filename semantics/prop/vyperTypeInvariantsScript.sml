@@ -165,16 +165,6 @@ Definition is_bare_global_decl_def:
 End
 
 
-Theorem is_immutable_decl_imp_is_bare_global_decl:
-  is_immutable_decl id ts ==> is_bare_global_decl id ts
-Proof
-  Induct_on `ts` >>
-  rw[is_immutable_decl_def, is_bare_global_decl_def] >>
-  Cases_on `h` >>
-  gvs[is_immutable_decl_def, is_bare_global_decl_def] >>
-  TRY (Cases_on `v0` >> gvs[is_immutable_decl_def, is_bare_global_decl_def])
-QED
-
 
 Definition bare_globals_complete_def:
   bare_globals_complete bare_globals cx <=>
@@ -248,47 +238,12 @@ Definition env_context_consistent_def:
             FLOOKUP (get_tenv cx) (src,fid) = SOME (FlagArgs (LENGTH ls)))
 End
 
-Theorem env_context_consistent_static_completeness:
-  env_context_consistent env cx ==>
-    toplevel_vtypes_complete env.toplevel_vtypes cx /\
-    bare_globals_complete env.bare_globals cx /\
-    bare_global_assignable_complete env.bare_global_assignable cx /\
-    flag_members_complete env.flag_members cx
-Proof
-  rw[env_context_consistent_def]
-QED
-
-Theorem env_context_consistent_bare_global_old:
-  env_context_consistent env cx /\
-  FLOOKUP env.bare_globals (src,id) = SOME ty /\
-  get_module_code cx src = SOME ts ==>
-    FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
-    is_bare_global_decl id ts /\ ty <> NoneT
-Proof
-  rw[env_context_consistent_def] >>
-  first_x_assum drule >> rw[] >> gvs[]
-QED
-
 Theorem env_context_consistent_bare_global_find_NONE:
   env_context_consistent env cx /\
   FLOOKUP env.bare_globals (src,id) = SOME ty ==>
     ?ts. get_module_code cx src = SOME ts /\
          FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
          is_bare_global_decl id ts /\
-         find_var_decl_by_name id ts = NONE /\
-         ty <> NoneT
-Proof
-  rw[env_context_consistent_def] >>
-  first_x_assum drule >> rw[] >> gvs[]
-QED
-
-Theorem env_context_consistent_bare_global_assignable_find_NONE:
-  env_context_consistent env cx /\
-  FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==>
-    ?ts. get_module_code cx src = SOME ts /\
-         FLOOKUP env.bare_globals (src,id) = SOME ty /\
-         FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
-         is_immutable_decl id ts /\
          find_var_decl_by_name id ts = NONE /\
          ty <> NoneT
 Proof

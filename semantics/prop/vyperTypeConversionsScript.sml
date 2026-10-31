@@ -65,7 +65,7 @@ Proof
   Cases_on `v` >> simp[value_has_type_def]
 QED
 
-Triviality evaluate_type_BaseT_SOME[local]:
+Theorem evaluate_type_BaseT_SOME:
   !tenv bt tv. evaluate_type tenv (BaseT bt) = SOME tv ==> tv = BaseTV bt
 Proof
   Cases_on `bt` >> gvs[evaluate_type_def, AllCaseEqs()] >>

@@ -12,7 +12,8 @@
  *   store_lays_out               — the stored word lays out the value
  *   store_lays_out_word_value, store_lays_out_typed — its two sources
  *   stmt_state_rel_declare_store — a store into a new local's region binds
- *                                  it, for a word laying out the value
+ *                                  it, for a word laying out a value that
+ *                                  fits the region
  *   typed_word_store             — a typed value of a word type is laid out
  *                                  by its typed word, and well formed
  *   stmt_state_rel_declare_memory — copying a value into a new local's
@@ -43,6 +44,7 @@ Theorem stmt_state_rel_declare_memory:
     t.vs_block_ctx = s.vs_block_ctx /\ t.vs_logs = s.vs_logs /\
     t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
     t.vs_immutables = s.vs_immutables /\ t.vs_data_section = s.vs_data_section /\
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t /\
     (!q. q = p \/ ~not_local_ptr cenv es.scopes q ==>
          lookup_var q t = lookup_var q s) /\
     (!n b sz'. n <> id /\ local_region cenv es.scopes s n b sz' ==>
@@ -93,11 +95,29 @@ Proof
   `alloca_inv t` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
   `alloca_room func t` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+  `immutable_alloca_sep func cenv cx (es with scopes := scs') t` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >>
+     strip_tac >> simp[immutable_alloca_sep_def] >>
+     rpt strip_tac >>
+     qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
+     disch_then drule_all >> strip_tac >> simp[]
+     >- metis_tac[] >>
+     rpt strip_tac >>
+     rename1 `local_region cenv scs' t j b len` >>
+     Cases_on `j = id`
+     >- (gvs[local_region_def] >>
+         qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >> simp[]) >>
+     `local_region cenv (sc :: rest) s j b len` by
+       (gvs[local_region_def] >> metis_tac[]) >>
+     metis_tac[]) >>
   fs[stmt_state_rel_def] >> metis_tac[]
 QED
 
 (* Storing a word that lays out v into a new local's region, whose ALLOCA
-   ran, binds the local to v in the innermost scope. *)
+   ran, binds the local to v in the innermost scope.  v may occupy more than
+   the stored word (the zero length word of an empty bytestring or dynamic
+   array), as long as it fits the region. *)
 Theorem stmt_state_rel_declare_store:
   !func cenv cx es s id p sz w inst v tyv sc rest a x.
     stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -107,7 +127,7 @@ Theorem stmt_state_rel_declare_store:
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
-    32 <= sz /\ type_memory_size tyv = 32 /\
+    32 <= sz /\ type_memory_size tyv <= sz /\
     val_in_memory tyv v (w2n w) (mstore (w2n w) x s).vs_memory /\
     val_wf tyv v ==>
     stmt_state_rel func cenv cx
@@ -127,6 +147,12 @@ Proof
      `b + sz' <= w2n w \/ w2n w + 32 <= b` by
        (fs[regions_disjoint_def] >> DECIDE_TAC) >>
      irule EQ_SYM >> irule mstore_mem_bytes_at_disjoint >> simp[]) >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+     (mstore (w2n w) x s)` by
+    (irule immutables_rel_mstore_alloca >>
+     reverse conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
+     qexistsl_tac [`w2n w`, `func`, `inst`, `sz`] >>
+     fs[stmt_state_rel_def, state_rel_def]) >>
   irule stmt_state_rel_declare_memory >> simp[] >>
   qexistsl_tac [`inst`, `s`, `w`] >>
   fs[mstore_def, LET_THM, lookup_var_def] >> gs[] >> first_assum ACCEPT_TAC

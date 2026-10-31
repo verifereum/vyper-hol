@@ -14,7 +14,7 @@ Theory e2eCorrectness
 Ancestors
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect contextCodegenRel
-  vyperLoweringCorrect vfmExecution
+  vyperLoweringCorrect loweringShapeProps vfmExecution
   venomPipelineCorrect
   passSimulationDefs
   codegenCorrectness
@@ -722,12 +722,14 @@ QED
 
 *)
 
-(* ===== PLAN §2.1 call theorem: only the seven planned stage leaves ===== *)
+(* ===== PLAN §2.1 call theorem: seven stage leaves, raw O1 source domain ===== *)
+(* Runtime immutable compilation remains available, but the raw O1 shape
+   theorem excludes DLOAD and therefore requires immutable_free_program. *)
 
 Theorem vyper_call_correct:
   !policy tops deploy_bc runtime_bc am tx ret es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\
+    supported_program tops /\ immutable_free_program tops /\
     source_typing_ok tops am tx /\
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
@@ -869,9 +871,10 @@ Theorem e2e_deploy_correctness:
       (frame_resource_starved es r es' \/ precompile_call_starved es \/
        case load_contract NONE am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
-           ?lgs.
-             frame_outcome es r es' NONE runtime_bc lgs /\
-             (lookup_account tx.target es'.rollback.accounts).code = runtime_bc /\
+            ?section lgs.
+              immutables_section_rel tops (account_immutables am' tx.target) section /\
+              frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
+              (lookup_account tx.target es'.rollback.accounts).code = runtime_bc ++ section /\
              (!a. a <> tx.target ==>
                   lookup_account a es'.rollback.accounts =
                   lookup_account a am'.accounts) /\

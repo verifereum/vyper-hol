@@ -456,6 +456,41 @@ Proof
   rpt gen_tac >> strip_tac >> first_x_assum irule >> decide_tac
 QED
 
+Theorem buffer_store_memory_capacity:
+  !cenv cx src dst ty sa sb tv v s d q.
+    compile_store_memory cenv src dst ty ty sa = ((),sb) /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
+    val_wf tv v /\ expr_val_rel cx ty v src s /\
+    type_memory_bytes cenv ty = type_memory_size tv /\
+    type_memory_size tv < dimword (:256) /\ eval_operand dst s = SOME d /\
+    (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+    run_inst_seq (emitted_insts sa sb) s = OK q ==>
+    LENGTH s.vs_memory <= LENGTH q.vs_memory
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[exprSimTheory.expr_val_rel_def] >>
+  Cases_on `is_word_type ty`
+  >- (gvs[compile_store_memory_def] >>
+      drule_all literal_emit_mstore_run >> strip_tac >> gvs[] >>
+      simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
+           arithmeticTheory.MAX_DEF]) >>
+  gvs[] >> Cases_on `is_bytestring_type ty`
+  >- (gvs[compile_store_memory_def] >>
+      drule_all buffer_typed_bytestring_header >> strip_tac >>
+      `32 + 32 * word_size len <= type_memory_size tv` by
+        metis_tac[exprSimTheory.val_footprint_le] >>
+      `32 + 32 * word_size len < dimword (:256)` by
+        (simp[dimword_def] >> decide_tac) >>
+      drule_all buffer_store_bytestring_run >> strip_tac >> gvs[] >>
+      simp[mcopy_def, immutableMemoryFrameTheory.immutable_write_memory_capacity,
+           arithmeticTheory.MAX_DEF]) >>
+  gvs[compile_store_memory_def] >>
+  drule_all (SRULE [dimword_def] buffer_copy_memory_run) >> strip_tac >>
+  Cases_on `type_memory_size tv = 0` >> gvs[] >>
+  simp[mcopy_def, immutableMemoryFrameTheory.immutable_write_memory_capacity,
+       arithmeticTheory.MAX_DEF]
+QED
+
 Theorem buffer_store_state_frame:
   !func cenv cx es sa s q dst n.
     stmt_state_rel func cenv cx es s /\ local_ptrs_reserved cenv sa /\
@@ -464,12 +499,26 @@ Theorem buffer_store_state_frame:
     (!a k. a+k <= dst \/ dst+n <= a ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
     (!name b sz. local_region cenv es.scopes s name b sz ==>
-      b+sz <= dst \/ dst+n <= b) ==>
+      b+sz <= dst \/ dst+n <= b) /\
+    LENGTH s.vs_memory <= LENGTH q.vs_memory /\
+    (cenv.ce_is_ctor ==> !name tv v off.
+      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+        SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+      regions_disjoint off (type_memory_size tv) dst n) ==>
     stmt_state_rel func cenv cx es q
 Proof
   rpt gen_tac >> strip_tac >> irule literal_state_memory_frame >>
   qexists_tac `s` >> simp[] >> conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >>
+  >- (rpt strip_tac >>
+      qpat_x_assum `!a k. _ ==> mem_bytes_at a k _ = _` irule >>
+      metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
       gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
-  rpt strip_tac >> gvs[local_ptrs_reserved_def] >> metis_tac[]
+  rpt strip_tac >>
+  qpat_x_assum `!a k. _ ==> mem_bytes_at a k _ = _` irule >>
+  gvs[regions_disjoint_def] >> metis_tac[]
 QED

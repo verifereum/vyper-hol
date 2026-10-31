@@ -36,26 +36,6 @@ Definition parse_method_id_def:
   parse_method_id _ = NONE
 End
 
-(* ===== Create tuple in memory ===== *)
-(* Pack individual values into a contiguous tuple buffer in memory.
-   For primitive word types: MSTORE; for complex types: MCOPY.
-   elem_infos: list of (is_prim_word, mem_size).
-   Mirrors Python: builtins/abi.py _create_tuple_in_memory,
-                   builtins/misc.py _create_tuple_in_memory *)
-Definition compile_create_tuple_in_memory_def:
-  compile_create_tuple_in_memory (buf_op:operand) []
-    (_ :num) = return () ∧
-  compile_create_tuple_in_memory buf_op
-    ((arg_op, is_prim, mem_sz) :: rest) offset =
-    do dst <-
-         (if offset = 0 then return buf_op
-          else emit_op ADD [buf_op; Lit (n2w offset)]);
-       (if is_prim then emit_void MSTORE [dst; arg_op]
-        else emit_void MCOPY [dst; arg_op; Lit (n2w mem_sz)]);
-       compile_create_tuple_in_memory buf_op rest (offset + mem_sz)
-    od
-End
-
 (* ===== abi_encode ===== *)
 
 (* abi_encode(args, ensure_tuple, method_id) -> Bytes[N]

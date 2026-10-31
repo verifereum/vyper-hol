@@ -68,10 +68,12 @@ Proof
 QED
 
 Theorem compile_ptr_load_safe_operand:
-  compile_ptr_load is_ctor loc ptr_op sa = (op,sb) ==> safe_operand sb op
+  compile_ptr_load is_ctor imm loc ptr_op sa = (op,sb) ==> safe_operand sb op
 Proof
-  Cases_on `is_ctor` >> Cases_on `loc` >>
-  simp[compile_ptr_load_def] >> metis_tac[emit_op_safe_operand]
+  Cases_on `is_ctor` >> Cases_on `imm` >> Cases_on `loc` >>
+  simp[compile_ptr_load_def, compile_imm_load_word_def, comp_bind_def] >>
+  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[emit_op_safe_operand]
 QED
 
 Theorem unwrap_value_safe_operand:

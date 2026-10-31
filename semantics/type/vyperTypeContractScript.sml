@@ -511,6 +511,206 @@ Termination
   res_tac >> simp[]
 End
 
+(* ===== Function mutability ===== *)
+
+(* Vyper's StateMutability order pure < view < nonpayable < payable, as
+   _check_call_mutability in vyper/semantics/analysis/local.py applies it:
+   a pure or view function may only use what is at most as strong as itself,
+   while nonpayable and payable functions may use anything. *)
+Definition call_mutability_ok_def:
+  call_mutability_ok mut needed <=>
+    (mut = Pure ==> needed = Pure) /\
+    (mut = View ==> needed = Pure \/ needed = View)
+End
+
+(* Environment variables, self, msg.data, address members other than
+   .address, blockhash and blobhash read the chain, so pure functions may not
+   use them (_validate_pure_access; BlockHash and BlobHash are view builtins).
+   Every other builtin is pure. *)
+Definition builtin_mutability_def:
+  builtin_mutability (Env _) = View /\
+  builtin_mutability (Acc Address) = Pure /\
+  builtin_mutability (Acc _) = View /\
+  builtin_mutability CalldataLen = View /\
+  builtin_mutability (CalldataSlice _) = View /\
+  builtin_mutability BlockHash = View /\
+  builtin_mutability BlobHash = View /\
+  builtin_mutability _ = Pure
+End
+
+(* An internal call needs the callee's declared mutability, found as IntCall
+   finds it at runtime (lookup_callable_function outside deployment).
+   extcall needs a nonpayable function; staticcall reaches a view or pure
+   one, which ExtCall does not record, so staticcall is allowed from pure
+   functions too, where Vyper rejects a call to a view interface function.
+   raw_call is view when static and nonpayable otherwise.  send, raw_log,
+   selfdestruct and the create builtins are rejected in pure and view
+   functions by Vyper's code generator (check_is_not_constant). *)
+Definition call_target_mutability_ok_def:
+  call_target_mutability_ok mods mut (IntCall (src,fn)) =
+    (case ALOOKUP mods src of
+     | NONE => T
+     | SOME ts =>
+         case lookup_callable_function F fn ts of
+         | NONE => T
+         | SOME (callee,_) => call_mutability_ok mut callee) /\
+  call_target_mutability_ok mods mut (ExtCall is_static _ _ _) =
+    (is_static \/ call_mutability_ok mut Nonpayable) /\
+  call_target_mutability_ok mods mut (RawCallTarget flags) =
+    call_mutability_ok mut (if flags.rcf_is_static then View else Nonpayable) /\
+  call_target_mutability_ok mods mut (RawCallCalldataTarget flags) =
+    call_mutability_ok mut (if flags.rcf_is_static then View else Nonpayable) /\
+  call_target_mutability_ok mods mut RawRevert = T /\
+  call_target_mutability_ok mods mut _ = call_mutability_ok mut Nonpayable
+End
+
+Definition toplevel_target_def:
+  toplevel_target (NameTarget _) = F /\
+  toplevel_target (TopLevelNameTarget _) = T /\
+  toplevel_target (SubscriptTarget tgt _) = toplevel_target tgt /\
+  toplevel_target (AttributeTarget tgt _) = toplevel_target tgt
+End
+
+(* The mutability rules of Vyper's local.py on expressions: calls as above;
+   msg.value only in payable functions (_validate_msg_value_access); pure
+   functions read no top-level variable other than a constant
+   (_validate_pure_access); and pop() on a top-level variable writes state
+   (_handle_modification).  The evaluator ignores a Call's last field. *)
+Definition expr_mutability_ok_def:
+  expr_mutability_ok mods mut (Name _ _) = T /\
+  expr_mutability_ok mods mut (TopLevelName _ (src,id)) =
+    (mut = Pure ==> declared_constant mods src id) /\
+  expr_mutability_ok mods mut (FlagMember _ _ _) = T /\
+  expr_mutability_ok mods mut (IfExp _ c x y) =
+    (expr_mutability_ok mods mut c /\ expr_mutability_ok mods mut x /\
+     expr_mutability_ok mods mut y) /\
+  expr_mutability_ok mods mut (Literal _ _) = T /\
+  expr_mutability_ok mods mut (StructLit _ _ kes) =
+    EVERY (expr_mutability_ok mods mut) (MAP SND kes) /\
+  expr_mutability_ok mods mut (Subscript _ x y) =
+    (expr_mutability_ok mods mut x /\ expr_mutability_ok mods mut y) /\
+  expr_mutability_ok mods mut (Attribute _ x _) = expr_mutability_ok mods mut x /\
+  expr_mutability_ok mods mut (Builtin _ bt es) =
+    (call_mutability_ok mut (builtin_mutability bt) /\
+     (bt = Env ValueSent ==> mut = Payable) /\
+     EVERY (expr_mutability_ok mods mut) es) /\
+  expr_mutability_ok mods mut (TypeBuiltin _ _ _ es) =
+    EVERY (expr_mutability_ok mods mut) es /\
+  expr_mutability_ok mods mut (Pop _ tgt) =
+    ((toplevel_target tgt ==> call_mutability_ok mut Nonpayable) /\
+     target_mutability_ok mods mut tgt) /\
+  expr_mutability_ok mods mut (Call _ ct es _) =
+    (call_target_mutability_ok mods mut ct /\
+     EVERY (expr_mutability_ok mods mut) es) /\
+  target_mutability_ok mods mut (NameTarget _) = T /\
+  target_mutability_ok mods mut (TopLevelNameTarget _) = T /\
+  target_mutability_ok mods mut (SubscriptTarget tgt e) =
+    (target_mutability_ok mods mut tgt /\ expr_mutability_ok mods mut e) /\
+  target_mutability_ok mods mut (AttributeTarget tgt _) =
+    target_mutability_ok mods mut tgt
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL (_,_,e) => expr_size e
+    | INR (_,_,tgt) => base_assignment_target_size tgt)` >>
+  rw[] >>
+  TRY (Induct_on `kes` >> rw[] >> PairCases_on `h` >> rw[] >>
+       res_tac >> simp[] >> NO_TAC) >>
+  Induct_on `es` >> rw[] >> res_tac >> simp[]
+End
+
+(* A write to a top-level variable needs a nonpayable function. *)
+Definition write_mutability_ok_def:
+  write_mutability_ok mods mut tgt <=>
+    (toplevel_target tgt ==> call_mutability_ok mut Nonpayable) /\
+    target_mutability_ok mods mut tgt
+End
+
+Definition atarget_mutability_ok_def:
+  atarget_mutability_ok mods mut (BaseTarget tgt) =
+    write_mutability_ok mods mut tgt /\
+  atarget_mutability_ok mods mut (TupleTarget tgts) =
+    EVERY (atarget_mutability_ok mods mut) tgts
+Termination
+  WF_REL_TAC `measure (\(_,_,tgt). assignment_target_size tgt)` >>
+  rw[] >> Induct_on `tgts` >> rw[] >> res_tac >> simp[]
+End
+
+Definition iterator_mutability_ok_def:
+  iterator_mutability_ok mods mut (Array e) = expr_mutability_ok mods mut e /\
+  iterator_mutability_ok mods mut (Range x y) =
+    (expr_mutability_ok mods mut x /\ expr_mutability_ok mods mut y)
+End
+
+Definition assert_reason_mutability_ok_def:
+  assert_reason_mutability_ok mods mut (AssertReason e) =
+    expr_mutability_ok mods mut e /\
+  assert_reason_mutability_ok mods mut (AssertCustomError err) =
+    EVERY (expr_mutability_ok mods mut) (custom_error_exprs err) /\
+  assert_reason_mutability_ok mods mut _ = T
+End
+
+Definition raise_reason_mutability_ok_def:
+  raise_reason_mutability_ok mods mut (RaiseReason e) =
+    expr_mutability_ok mods mut e /\
+  raise_reason_mutability_ok mods mut (RaiseCustomError err) =
+    EVERY (expr_mutability_ok mods mut) (custom_error_exprs err) /\
+  raise_reason_mutability_ok mods mut _ = T
+End
+
+(* Statements add the writes of assignments and append(), and log, which
+   needs a nonpayable function (visit_Log). *)
+Definition stmt_mutability_ok_def:
+  stmt_mutability_ok mods mut Pass = T /\
+  stmt_mutability_ok mods mut Continue = T /\
+  stmt_mutability_ok mods mut Break = T /\
+  stmt_mutability_ok mods mut (Expr e) = expr_mutability_ok mods mut e /\
+  stmt_mutability_ok mods mut (For _ _ iter _ body) =
+    (iterator_mutability_ok mods mut iter /\
+     stmts_mutability_ok mods mut body) /\
+  stmt_mutability_ok mods mut (If e yes no) =
+    (expr_mutability_ok mods mut e /\ stmts_mutability_ok mods mut yes /\
+     stmts_mutability_ok mods mut no) /\
+  stmt_mutability_ok mods mut (Assert e reason) =
+    (expr_mutability_ok mods mut e /\
+     assert_reason_mutability_ok mods mut reason) /\
+  stmt_mutability_ok mods mut (Log _ es) =
+    (call_mutability_ok mut Nonpayable /\
+     EVERY (expr_mutability_ok mods mut) es) /\
+  stmt_mutability_ok mods mut (Raise reason) =
+    raise_reason_mutability_ok mods mut reason /\
+  stmt_mutability_ok mods mut (Return NONE) = T /\
+  stmt_mutability_ok mods mut (Return (SOME e)) = expr_mutability_ok mods mut e /\
+  stmt_mutability_ok mods mut (Assign tgt e) =
+    (atarget_mutability_ok mods mut tgt /\ expr_mutability_ok mods mut e) /\
+  stmt_mutability_ok mods mut (AugAssign _ tgt _ e) =
+    (write_mutability_ok mods mut tgt /\ expr_mutability_ok mods mut e) /\
+  stmt_mutability_ok mods mut (Append tgt e) =
+    (write_mutability_ok mods mut tgt /\ expr_mutability_ok mods mut e) /\
+  stmt_mutability_ok mods mut (AnnAssign _ _ e) = expr_mutability_ok mods mut e /\
+  stmts_mutability_ok mods mut [] = T /\
+  stmts_mutability_ok mods mut (s::ss) =
+    (stmt_mutability_ok mods mut s /\ stmts_mutability_ok mods mut ss)
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL (_,_,s) => stmt_size s
+    | INR (_,_,ss) => list_size stmt_size ss)` >>
+  simp[]
+End
+
+(* Vyper's semantic analysis checks every function body, called or not
+   (analyze_functions), and rejects a pure or view constructor and a
+   nonreentrant pure function (vyper/semantics/types/function.py).  The
+   code-generator rules above (send, raw_log, selfdestruct, create) only
+   reach functions Vyper compiles, so the checker also applies them to
+   uncalled internal functions. *)
+Definition function_mutability_ok_def:
+  function_mutability_ok mods vis mut nr dflts body <=>
+    (vis = Deploy ==> mut <> Pure /\ mut <> View) /\
+    (mut = Pure ==> ~nr) /\
+    EVERY (expr_mutability_ok mods mut) dflts /\
+    stmts_mutability_ok mods mut body
+End
+
 Definition lookup_var_slot_in_layouts_def:
   lookup_var_slot_in_layouts layouts addr is_transient src var_name =
     case ALOOKUP layouts addr of
@@ -684,10 +884,11 @@ Definition check_toplevel_decl_def:
     | EventDecl id fields =>
         EVERY (\((_,ty),indexed). assignable_type tenv ty) fields
     | ErrorDecl id args => params_ok tenv args
-    | FunctionDecl vis _ _ _ _ args dflts ret _ =>
+    | FunctionDecl vis mut nr _ _ args dflts ret body =>
         params_ok tenv args /\ well_formed_type tenv ret /\
         (* Vyper: "Constructor may not use default arguments" *)
-        (vis = Deploy ==> dflts = [])
+        (vis = Deploy ==> dflts = []) /\
+        function_mutability_ok mods vis mut nr dflts body
 End
 
 (* ===== Callable-body checks ===== *)
@@ -769,7 +970,7 @@ Definition exports_ok_def:
              | SOME tls => module_allocated layouts addr (SOME src) tls) exps
 End
 
-(* TOP-LEVEL: Successful checking guarantees distinct member names for every
+(* Successful checking guarantees distinct member names for every
    actual struct declaration, including declarations in imported modules. *)
 Theorem check_contract_struct_fields_distinct:
   check_contract in_deploy layouts addr mods = SOME art /\
