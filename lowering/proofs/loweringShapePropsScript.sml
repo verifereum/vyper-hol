@@ -12843,7 +12843,7 @@ Proof
   `cenv_static_ok
      (build_compile_env tops External src0 (src3:string) src4 src6 src7 use_trans)` by
     (irule build_compile_env_static >> simp[]) >>
-  fs[cenv_static_ok_def] >> first_assum ACCEPT_TAC
+  fs[cenv_static_ok_def] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem EVERY_ZIP_snd[local]:
