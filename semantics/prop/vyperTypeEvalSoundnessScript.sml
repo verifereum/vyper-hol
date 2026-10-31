@@ -5093,6 +5093,20 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
           gvs[no_type_error_result_def, expr_type_def]) >>
       simp_tac(srw_ss())[] >> strip_tac >> gvs[]) >>
   qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
+  Cases_on `bt = Env MsgGas`
+  >- (qpat_x_assum `bt = Env MsgGas` SUBST_ALL_TAC >>
+      simp_tac(srw_ss())[next_gas_reading_def, bind_def, ignore_bind_def,
+                         assert_def, return_def, raise_def] >>
+      Cases_on `st.gas_obs` >> simp_tac(srw_ss())[return_def, raise_def] >>
+      strip_tac >> gvs[no_type_error_result_def, expr_result_typed_def,
+                       expr_runtime_typed_def, expr_type_def,
+                       value_result_typed_Value] >>
+      gvs[well_typed_builtin_app_def, env_item_type_def, evaluate_type_def,
+          value_has_type_def] >>
+      rename1 `w2n (w:bytes32)` >>
+      qspec_then `w` assume_tac wordsTheory.w2n_lt >>
+      fs[wordsTheory.dimword_def]) >>
+  qpat_assum `bt <> Env MsgGas` (fn th => rewrite_tac[th]) >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
                      type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
@@ -5151,8 +5165,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
       strip_tac >>
       gvs[nested_raise_error_case, no_type_error_result_def] >>
       strip_tac >> spose_not_then assume_tac >> gvs[] >>
-      `!item. bt = Env item ==> item <> MsgGas` by
-        (rpt strip_tac >> gvs[well_typed_builtin_app_def]) >>
+      `!item. bt = Env item ==> item <> MsgGas` by (rpt strip_tac >> gvs[]) >>
       drule_all well_typed_builtin_app_no_type_error >>
       disch_then (qspec_then `msg` mp_tac) >> gvs[]]) >>
   Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
@@ -7199,17 +7212,13 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_RawCallTarget]:
       mp_tac raw_call_args_runtime_typed_dest >>
       impl_tac >- simp[] >>
       strip_tac >> gvs[] >>
-      `LENGTH vs = 3` by (gvs[exprs_runtime_typed_def] >> metis_tac[listTheory.LIST_REL_LENGTH]) >>
-      `((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)` by (
-        strip_tac >>
-        `EL 2 es = Literal (BaseT (UintT 256)) (IntL 0)` by simp[] >>
-        `2 < LENGTH es` by simp[] >>
-        drule_all eval_exprs_EL_literal >> strip_tac >>
-        gvs[evaluate_literal_def, dest_NumV_def]) >>
+      drule_then (qspec_then `2` assume_tac) exprs_runtime_typed_DROP >>
+      drule_all raw_call_value_typed >> strip_tac >>
+      TRY (qpat_x_assum `_ = (res,st')` mp_tac) >>
       simp[bind_def, return_def] >> strip_tac >>
       `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
-      mp_tac (Q.INST [`st` |-> `args_st`, `calldata` |-> `data`]
-        eval_raw_call_result_sound) >>
+      drule_at (Pat `eval_raw_call _ _ _ _ _ _ _ = _`) eval_raw_call_result_sound >>
+      disch_then (qspec_then `env` mp_tac) >>
       impl_tac >- simp[] >> strip_tac >>
       Cases_on `res` >>
       gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def] >>
@@ -7241,20 +7250,16 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_RawCallCalldataTarget]:
       drule_all >> strip_tac >>
     (Cases_on `args_res`
     >- (gvs[no_type_error_result_def] >>
-      drule_all raw_call_calldata_args_runtime_typed_dest >> strip_tac >>
-      `((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)` by (
-        strip_tac >>
-        `EL 1 es = Literal (BaseT (UintT 256)) (IntL 0)` by simp[] >>
-        `1 < LENGTH es` by (
-          Cases_on `es` >> gvs[] >>
-          rename1 `MAP expr_type rest = [_]` >>
-          Cases_on `rest` >> gvs[]) >>
-        drule_all eval_exprs_EL_literal >> strip_tac >>
-        gvs[evaluate_literal_def, dest_NumV_def]) >>
-      gvs[bind_def, return_def] >> strip_tac >>
+      rename1 `exprs_runtime_typed env es vs` >>
+      mp_tac raw_call_calldata_args_runtime_typed_dest >>
+      (impl_tac >- (Cases_on `es` >> gvs[])) >> strip_tac >>
+      drule_then (qspec_then `1` assume_tac) exprs_runtime_typed_DROP >>
+      drule_all raw_call_value_typed >> strip_tac >>
+      TRY (qpat_x_assum `_ = (res,st')` mp_tac) >>
+      simp[bind_def, return_def] >> strip_tac >>
       `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
-      mp_tac (Q.INST [`st` |-> `args_st`, `calldata` |-> `cx.txn.calldata`]
-        eval_raw_call_result_sound) >>
+      drule_at (Pat `eval_raw_call _ _ _ _ _ _ _ = _`) eval_raw_call_result_sound >>
+      disch_then (qspec_then `env` mp_tac) >>
       impl_tac >- simp[] >> strip_tac >>
       Cases_on `res` >>
       gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def] >>
@@ -8184,6 +8189,16 @@ Resume eval_scc_type_sound_results_mutual[TraceBuiltinBody]:
     (drule well_typed_builtin_app_length >> simp[]) >>
   Cases_on `bt = Len`
   >- trace_result_tac "TraceBuiltinLen" >>
+  Cases_on `bt = Env MsgGas`
+  >- (qpat_x_assum `bt = Env MsgGas` SUBST_ALL_TAC >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      qpat_assum `builtin_args_length_ok _ (LENGTH es)` (fn th =>
+        simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def, raise_def,
+          type_check_def, assert_def, th]) >>
+      simp[NoAsms, bind_def, ignore_bind_def, return_def, raise_def,
+           AllCaseEqs()] >>
+      strip_tac >> imp_res_tac next_gas_reading_state >>
+      irule typed_scope_transition_scopes >> gvs[assert_def, return_def]) >>
   drule guarded_cases >> disch_then drule >>
   (impl_tac >- simp[]) >> strip_tac >>
   rpt (qpat_x_assum `!s'' x t. type_check _ _ _ = _ /\ _ ==> _` kall_tac) >>
@@ -8193,6 +8208,7 @@ Resume eval_scc_type_sound_results_mutual[TraceBuiltinBody]:
     simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def, raise_def,
       type_check_def, assert_def, th]) >>
   qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
+  qpat_assum `bt <> Env MsgGas` (fn th => rewrite_tac[th]) >>
   Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
   asm_rewrite_tac[] >>
   simp[NoAsms, bind_def, ignore_bind_def, assert_def, return_def, raise_def,
@@ -9259,13 +9275,13 @@ Resume eval_scc_type_sound_results_mutual[Live_Send_Returned_Result]:
 QED
 
 Theorem eval_raw_call_success_value[local]:
-  eval_raw_call cx flags addr data amount st = (INL pv,st') ==>
+  eval_raw_call cx flags addr data amount gas st = (INL pv,st') ==>
   ?v. pv = Value v
 Proof
   simp[eval_raw_call_def, bind_apply, ignore_bind_apply, type_check_def,
        check_def, assert_def, get_accounts_def, get_transient_storage_def,
        return_def, raise_def] >>
-  Cases_on `run_raw_call cx flags addr data amount st.accounts st.tStorage` >>
+  Cases_on `run_raw_call cx flags addr data amount gas st.accounts st.tStorage` >>
   simp[lift_option_def, bind_apply, ignore_bind_apply, return_def, raise_def,
        update_accounts_def, update_transient_def, append_logs_def] >>
   rpt (IF_CASES_TAC >>

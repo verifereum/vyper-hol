@@ -342,6 +342,18 @@ Resume eval_expr_oracle_storage_mutual[Expr_Builtin]:
         Cases_on `q` >> gvs[return_def, raise_def] >>
         rpt strip_tac >> gvs[]) >>
     rpt strip_tac >> gvs[]) >>
+  Cases_on `bt = Env MsgGas`
+  >- (rpt strip_tac >>
+      gvs[ignore_bind_def, assert_def, bind_def, return_def] >>
+      Cases_on `next_gas_reading st` >>
+      imp_res_tac next_gas_reading_state >>
+      Cases_on `q` >> gvs[return_def, raise_def] >>
+      irule contract_storage_well_formed_storage_frame >>
+      qexists_tac `st` >>
+      gvs[runtime_storage_consistent_def] >>
+      Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+  qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
+  qpat_assum `bt <> Env MsgGas` (fn th => rewrite_tac[th]) >>
   Cases_on `bt = Bop In \/ bt = Bop NotIn` >> gvs[] >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>

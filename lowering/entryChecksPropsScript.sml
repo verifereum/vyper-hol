@@ -382,7 +382,7 @@ QED
 
 Theorem call_external_function_nonpayable_value[local]:
   mut <> Payable /\ cx.txn.value <> 0 /\ ~cx.in_deploy ==>
-  ?msg. call_external_function orc am cx F mut ts all_mods args dflts vals
+  ?msg. call_external_function orc gobs am cx F mut ts all_mods args dflts vals
           stmts ret = (INR (Error (RuntimeError msg)), am, [])
 Proof
   strip_tac >>
@@ -400,14 +400,14 @@ Theorem call_external_nonpayable_value:
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, dflts, ret, stmts) /\
     mut <> Payable /\ tx.value <> 0 ==>
-    ?msg. call_external orc am tx = (INR (Error (RuntimeError msg)), am, [])
+    ?msg. call_external orc gobs am tx = (INR (Error (RuntimeError msg)), am, [])
 Proof
   rw[source_deployment_rel_def] >>
   simp[call_external_def, find_function_module_def,
        lookup_exported_function_def, get_self_code_def, get_module_code_def,
        initial_evaluation_context_def] >>
-  qmatch_goalsub_abbrev_tac `call_external_function orc am cx` >>
-  `?msg. call_external_function orc am cx F mut tops [(NONE, tops)] args
+  qmatch_goalsub_abbrev_tac `call_external_function orc gobs am cx` >>
+  `?msg. call_external_function orc gobs am cx F mut tops [(NONE, tops)] args
           dflts tx.args stmts ret = (INR (Error (RuntimeError msg)), am, [])` by
     (irule call_external_function_nonpayable_value >> simp[Abbr `cx`]) >>
   simp[]
@@ -465,7 +465,7 @@ Theorem entry_checks_nonpayable_value:
     frag_exec ctx st st' (\s. s = s0) (\t. F)
       (\r. ?t. r = Abort Revert_abort t /\
                external_call_result_rel tops ret tx
-                 (call_external orc am tx) r)
+                 (call_external orc gobs am tx) r)
 Proof
   rpt gen_tac >> strip_tac >>
   `~is_payable` by
@@ -477,7 +477,7 @@ Proof
   drule_all compile_entry_checks_value_revert >>
   disch_then (qspec_then `ctx` assume_tac) >>
   drule_all call_external_nonpayable_value >>
-  disch_then (qspec_then `orc` strip_assume_tac) >>
+  disch_then (qspecl_then [`gobs`, `orc`] strip_assume_tac) >>
   first_x_assum (mp_tac o MATCH_MP frag_exec_weaken) >>
   disch_then irule >> rw[] >>
   simp[external_call_result_rel_def]
@@ -504,7 +504,7 @@ Theorem fallback_checks_nonpayable_value:
          frag_exec ctx st sm (\s. s = s0) (\t. F)
            (\r. ?t. r = Abort Revert_abort t /\
                     !ret. external_call_result_rel tops ret tx
-                            (call_external orc am tx) r)
+                            (call_external orc gobs am tx) r)
 Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`tops`, `NONE`, `target`, `ut`, `nkm`, `exts`, `ints`, `fb`,
@@ -512,7 +512,7 @@ Proof
   simp[] >> strip_tac >>
   `s0.vs_call_ctx.cc_callvalue <> 0w` by
     gvs[call_ctx_rel_def, call_tx_well_typed_def, dimword_def] >>
-  `?msg. call_external orc am tx = (INR (Error (RuntimeError msg)), am, [])`
+  `?msg. call_external orc gobs am tx = (INR (Error (RuntimeError msg)), am, [])`
     by (irule call_external_nonpayable_value >> gvs[] >> metis_tac[]) >>
   drule compile_fallback_body_entry >> strip_tac >>
   qexists_tac `sm` >> simp[] >>

@@ -483,7 +483,9 @@ Resume evaluate_read_only[expr_builtin]:
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def, machine_frame_primitives] >> rpt strip_tac >>
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >>
   Cases_on `bt = Len` >> simp[]
-  >- suspend "builtin_len"
+  >- suspend "builtin_len" >>
+  Cases_on `bt = Env MsgGas` >> simp[]
+  >- simp[machine_frame_next_gas_reading]
   >> suspend "builtin_other"
 QED
 

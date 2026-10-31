@@ -1055,8 +1055,9 @@ fun expr_case label e ok bad = body_case label ``NoneT`` ``[Expr ^e]`` ok bad
 
 val raw_call_flags =
   ``<| rcf_max_outsize := 0; rcf_is_delegate := F; rcf_is_static := F;
-       rcf_revert_on_failure := T |>``
-val static_raw_call_flags = ``^raw_call_flags with rcf_is_static := T``
+       rcf_revert_on_failure := T; rcf_kws := [EKValue] |>``
+val static_raw_call_flags =
+  ``^raw_call_flags with <| rcf_is_static := T; rcf_kws := [] |>``
 fun int_call name =
   ``Call (BaseT (UintT 256)) (IntCall (NONE, ^(stringSyntax.fromMLstring name)))
       [] NONE``
@@ -1126,7 +1127,7 @@ val () = expr_case "raw_call with msg.data"
   [``Nonpayable``] [``View``]
 val () = expr_case "static raw_call"
   ``Call NoneT (RawCallTarget ^static_raw_call_flags)
-      [^arg_a; ^empty_bytes; ^(uint 0)] NONE``
+      [^arg_a; ^empty_bytes] NONE``
   [``View``] [``Pure``]
 
 (* Internal calls need the callee's declared mutability or a weaker caller;
