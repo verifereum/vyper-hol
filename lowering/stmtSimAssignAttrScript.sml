@@ -230,15 +230,15 @@ QED
    local's region relates the scopes in which the local's value has v at
    fld. *)
 Theorem stmt_state_rel_write_field:
-  !func cenv cx es s id p sz w pre env entry rest fs vals flds fld ftv etv v.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx es s id p sz w pre env entry rest fs vals flds fld ftv etv v ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\
     entry.type = StructTV fs /\ entry.value = StructV vals /\
     fields_layout flds fs /\ struct_has_type fs vals /\
     ALOOKUP fs fld = SOME ftv /\ store_lays_out etv ftv v ==>
-    stmt_state_rel func cenv cx
+    stmt_state_rel ctx func cenv cx
       (es with scopes :=
          pre ++ (env |+ (id, entry with
                    <|value := StructV (AFUPDKEY fld (K v) vals);
@@ -286,7 +286,7 @@ Proof
      first_x_assum drule_all >> simp[]) >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
     (simp[Abbr `t`, Abbr `a`] >> irule local_mstore_immutables_at >>
-     conj_tac >- metis_tac[] >>
+     reverse conj_tac >- metis_tac[] >>
      qexistsl_tac [`id`, `sz`] >> gvs[type_memory_size_def]) >>
   drule_all stmt_state_rel_write_local >> simp[Abbr `t`, Abbr `a`]
 QED
@@ -341,9 +341,9 @@ QED
 (* vv_post holds of a result only where it reads (exprSimUnwrap's
    vv_post_failed_read, local there). *)
 Theorem vv_post_failed_read[local]:
-  !func cenv cx e es sa sm s0 es' raw vv s exc.
+  !func cenv cx e es sa sm s0 es' raw vv s exc ctx.
     read_result cx raw es' = (INR exc, es') ==>
-    ~vv_post func cenv cx e es sa sm s0 es' raw vv s
+    ~vv_post ctx func cenv cx e es sa sm s0 es' raw vv s
 Proof
   rpt strip_tac >> Cases_on `vv` >>
   gvs[vv_post_def, vv_holds_def, storage_holds_def, immutable_holds_def] >>
@@ -357,11 +357,11 @@ Theorem add_unwrap_post[local]:
   !func cenv cx e es sa sm sn su s0 es1 tv vv r v op dst bw off s.
     emit_op ADD [bop; Lit (n2w off)] sm = (dst, sn) /\
     ci_mono sa sm /\
-    vv_post func cenv cx e es sa sn s0 es1 tv vv r /\
+    vv_post ctx func cenv cx e es sa sn s0 es1 tv vv r /\
     eval_operand dst r = SOME (bw + n2w off) /\
-    expr_post func cenv cx e es1 (sa with cs_next_var := sn.cs_next_var)
+    expr_post ctx func cenv cx e es1 (sa with cs_next_var := sn.cs_next_var)
       su r es1 v op s ==>
-    stmt_state_rel func cenv cx es1 s /\
+    stmt_state_rel ctx func cenv cx es1 s /\
     expr_val_rel cx (expr_type e) v op s /\
     eval_operand dst s = SOME (bw + n2w off) /\
     (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
@@ -410,8 +410,8 @@ Theorem expr_add_unwrap_frag:
     expr_res_ok res /\
     (!x. bop = Var x ==> not_fresh_at sa x) /\ (!l. bop <> Label l) /\
     eval_operand bop s0 = SOME bw ==>
-    frag_exec ctx sa su (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
-      (\s. ?v. res = INL v /\ stmt_state_rel func cenv cx es1 s /\
+    frag_exec ctx sa su (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. ?v. res = INL v /\ stmt_state_rel ctx func cenv cx es1 s /\
                expr_val_rel cx (expr_type e) v op s /\
                eval_operand dst s = SOME (bw + n2w off) /\
                (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
@@ -475,9 +475,9 @@ QED
 
 Resume expr_add_unwrap_frag[read]:
   rename1 `read_result _ _ _ = (INL v, _)` >>
-  `frag_exec ctx sa sm (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+  `frag_exec ctx sa sm (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
      (\s. ?tv'. INL tv = INL tv' /\
-                vv_post func cenv cx e es sa sm s0 es1 tv' vv s)
+                vv_post ctx func cenv cx e es sa sm s0 es1 tv' vv s)
      (expr_exit (INL v))` by
     (qpat_x_assum `frag_exec _ _ _ _ _ _`
        (mp_then Any irule frag_exec_weaken) >> simp[]) >>
@@ -490,7 +490,7 @@ Resume expr_add_unwrap_frag[read]:
   >~ [`frag_exec _ _ _ _ _ _`]
   >- (rpt strip_tac >> gvs[] >>
       `frag_exec ctx sn su (\s. s = r)
-         (\s. expr_post func cenv cx e es1
+         (\s. expr_post ctx func cenv cx e es1
                 (sa with cs_next_var := sn.cs_next_var) su r es1 v op s)
          (expr_exit (INL v))` by
         (irule unwrap_value_rebased_sim >> simp[] >>
@@ -571,9 +571,9 @@ Theorem mstore_var_frag[local]:
   !ctx func cenv cx es' s1 d op wd a st st' R.
     emit_void MSTORE [Var d; op] st = ((), st') /\
     lookup_var d s1 = SOME a /\ eval_operand op s1 = SOME wd /\
-    stmt_state_rel func cenv cx es' (mstore (w2n a) wd s1) ==>
+    stmt_state_rel ctx func cenv cx es' (mstore (w2n a) wd s1) ==>
     frag_exec ctx st st' (\t. t = s1)
-      (\t. stmt_state_rel func cenv cx es' t /\
+      (\t. stmt_state_rel ctx func cenv cx es' t /\
            (!x. lookup_var x t = lookup_var x s1) /\
            (!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
                     FLOOKUP t.vs_allocas aid = SOME b)) R
@@ -593,7 +593,7 @@ Theorem assign_attr_local_store:
     emit_void MSTORE [Var d; op] su = ((), sf) /\
     lookup_var d t = SOME (w0 + n2w off) /\ lookup_var p t = SOME w0 /\
     eval_operand op t = SOME (typed_val_to_w256 ftv v) /\
-    stmt_state_rel func cenv cx es1 t /\
+    stmt_state_rel ctx func cenv cx es1 t /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     find_containing_scope id es1.scopes = SOME (pre, env1, entry, rest) /\
     entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -601,7 +601,7 @@ Theorem assign_attr_local_store:
     ALOOKUP fs fld = SOME ftv /\ store_lays_out ftv ftv v /\
     off = struct_field_offset flds fld ==>
     frag_exec ctx su sf (\s. s = t)
-      (\t'. stmt_state_rel func cenv cx
+      (\t'. stmt_state_rel ctx func cenv cx
               (es1 with scopes :=
                  pre ++ (env1 |+ (id, entry with
                            <|value := StructV (AFUPDKEY fld (K v) vals);
@@ -613,7 +613,7 @@ Proof
   rpt strip_tac >>
   `lookup_scopes id es1.scopes = SOME entry` by
     metis_tac[find_containing_scope_lookup] >>
-  `local_ptrs_rel func cenv es1.scopes t /\ alloca_room func t` by
+  `local_ptrs_rel func cenv es1.scopes t /\ alloca_room ctx func t` by
     fs[stmt_state_rel_def, state_rel_def] >>
   `w2n w0 + sz <= t.vs_alloca_next /\ type_memory_size entry.type <= sz` by
     (qpat_x_assum `local_ptrs_rel _ _ _ _`
@@ -669,8 +669,8 @@ Theorem assign_attr_local_frag:
              pre ++ (env1 |+ (id, entry with
                        <|value := StructV (AFUPDKEY fld (K v) vals);
                          popped := []|>)) :: rest) ==>
-    frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
-      (\t. res = INL () /\ stmt_state_rel func cenv cx es' t /\
+    frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\t. res = INL () /\ stmt_state_rel ctx func cenv cx es' t /\
            (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
                   lookup_var x t = SOME u) /\
            (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -678,7 +678,7 @@ Theorem assign_attr_local_frag:
       (expr_exit r)
 Proof
   rpt gen_tac >> strip_tac >>
-  reverse (Cases_on `stmt_state_rel func cenv cx es s0`)
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
   >- simp[frag_exec_def] >>
   `?w0. lookup_var p s0 = SOME w0` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>

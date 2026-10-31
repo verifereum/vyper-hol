@@ -105,7 +105,7 @@ Proof
       disch_then (qspecl_then [`sa`, `sa`, `LocatedValue t p`, `INL r`, `es'`, `s0`] mp_tac) >>
       simp[] >> strip_tac >>
       irule frag_exec_seq >>
-      qexistsl_tac [`\s. vv_post func cenv cx e es sa sa s0 es' r (LocatedValue t p) s`, `sa`] >>
+      qexistsl_tac [`\s. vv_post ctx func cenv cx e es sa sa s0 es' r (LocatedValue t p) s`, `sa`] >>
       simp[cs_extends_refl] >> conj_tac
       >- (irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
           simp[FUN_EQ_THM]) >>

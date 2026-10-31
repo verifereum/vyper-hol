@@ -828,7 +828,7 @@ Resume compile_assert_reason_lit_frag[condition]:
    s3.cs_current_insts = s1.cs_current_insts` by metis_tac[] >>
   drule_all cond_jump_frag >> strip_tac
   >- (Cases_on `b` >> gvs[switch_BoolV_def, return_def, raise_def]
-      >- (disj1_tac >> rename1 `stmt_state_rel func cenv cx es' sv` >>
+      >- (disj1_tac >> rename1 `stmt_state_rel ctx func cenv cx es' sv` >>
           qexists_tac `jump_to s7.cs_current_bb sv` >>
           gvs[stmt_lands_def, stmt_state_rel_jump_to, cenv_top_ext_refl,
               block_is_terminated_def] >>

@@ -72,7 +72,7 @@ Ancestors
 
 (* The allocation must be a generated ALLOCA, not merely a tracked map entry. *)
 Theorem aggregate_alloca_immutable_sep[local]:
-  stmt_state_rel func cenv cx es t /\
+  stmt_state_rel ctx func cenv cx es t /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = venomInst$ALLOCA /\
   FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
   cenv.ce_is_ctor ==>
@@ -85,7 +85,7 @@ Theorem aggregate_alloca_immutable_sep[local]:
     regions_disjoint io (type_memory_size itv) b sz
 Proof
   rpt strip_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
   simp[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
   qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> regions_disjoint _ _ b sz` irule >>
@@ -138,7 +138,7 @@ Proof
   disch_then (qspecl_then [`ctx`, `nocalls`] mp_tac) >>
   (impl_tac >- (rpt strip_tac >> simp[] >>
     irule aggregate_alloca_immutable_sep >>
-    goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _`)) >>
+    goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
     simp[venomInstTheory.mk_inst_def] >>
@@ -227,7 +227,7 @@ Resume compile_make_array_vv_case[tuple]:
   disch_then (qspecl_then [`env`,`ctx`,`nocalls`] mp_tac) >> simp[] >>
   (impl_tac >- (rpt strip_tac >> simp[] >>
     irule aggregate_alloca_immutable_sep >>
-    goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _`)) >>
+    goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
     simp[venomInstTheory.mk_inst_def] >>
@@ -305,7 +305,7 @@ Resume compile_make_array_vv_case[array]:
     `regions_disjoint io (type_memory_size itv) b
        (type_memory_bytes cenv (ArrayT x bnd))` by
       (irule aggregate_alloca_immutable_sep >>
-       goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _`)) >>
+       goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
        qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
        goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
        simp[venomInstTheory.mk_inst_def] >>

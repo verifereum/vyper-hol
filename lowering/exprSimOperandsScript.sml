@@ -85,8 +85,8 @@ QED
 (* Helper: the allocation of an ALLOCA of func whose output is no live
    local's pointer lies clear of every live local's region. *)
 Theorem alloca_clear_of_locals:
-  !func cenv cx es s inst q b sz n lb lsz.
-    stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
+  !func cenv cx es s inst q b sz n lb lsz ctx.
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
     not_local_ptr cenv es.scopes q /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b, sz) /\
@@ -105,8 +105,8 @@ QED
    is no live local's pointer (by fresh_not_local_ptr, one fresh at the
    expression's start). *)
 Theorem expr_val_in_alloca_intro:
-  !func cenv cx t sa sb es v op s.
-    stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
+  !func cenv cx t sa sb es v op s ctx.
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     (!tv. evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t ==>
        val_wf tv v /\
        ?w inst q b sz.
@@ -132,9 +132,9 @@ QED
 (* Helper: the first operand, a literal or a variable handed out before
    the second fragment, holds the same word at the second's end. *)
 Theorem expr_post_operand_word:
-  !func cenv cx e1 e2 es es1 es' sa s1 s2 s0 t u v1 v2 x y.
-    expr_post func cenv cx e1 es sa s1 s0 es1 v1 x t /\
-    expr_post func cenv cx e2 es1 s1 s2 t es' v2 y u /\
+  !func cenv cx e1 e2 es es1 es' sa s1 s2 s0 t u v1 v2 x y ctx.
+    expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
+    expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
     (!z. x = Var z ==> not_fresh_at s1 z) /\ (!l. x <> Label l) ==>
     ?w. eval_operand x t = SOME w /\ eval_operand x u = SOME w
 Proof
@@ -152,10 +152,10 @@ QED
    the source state after the second operand.  The latter lets a third
    operand's expr_post keep it again. *)
 Theorem expr_post_operand_kept:
-  !func cenv cx e1 e2 es es1 es' sa s1 s2 s0 t u v1 v2 x y.
-    expr_post func cenv cx e1 es sa s1 s0 es1 v1 x t /\
+  !func cenv cx e1 e2 es es1 es' sa s1 s2 s0 t u v1 v2 x y ctx.
+    expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
     expr_val_in_alloca cenv cx (expr_type e1) sa s1 es1 v1 x t /\
-    expr_post func cenv cx e2 es1 s1 s2 t es' v2 y u /\
+    expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
     (!z. x = Var z ==> not_fresh_at s1 z) /\ (!l. x <> Label l) /\
     local_ptrs_reserved cenv s1 /\ MAP FDOM es1.scopes = MAP FDOM es'.scopes /\
     s1.cs_next_id <= s2.cs_next_id ==>
@@ -168,9 +168,9 @@ Proof
   Cases_on `evaluate_type (get_tenv cx) (expr_type e1)`
   >- simp[expr_val_rel_def, expr_val_in_alloca_def] >>
   rename1 `evaluate_type _ _ = SOME tv` >>
-  qpat_x_assum `expr_post _ _ _ e1 _ _ _ _ _ _ _ _`
+  qpat_x_assum `expr_post ctx _ _ _ e1 _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-  qpat_x_assum `expr_post _ _ _ e2 _ _ _ _ _ _ _ _`
+  qpat_x_assum `expr_post ctx _ _ _ e2 _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   Cases_on `is_word_type (expr_type e1)`
   >- (simp[expr_val_in_alloca_def] >> fs[expr_val_rel_def] >> gvs[]) >>
@@ -206,10 +206,10 @@ QED
 (* expr_post_operand_kept with expr_val_at, the placement expr_post asks
    for. *)
 Theorem expr_post_operand_kept_at:
-  !func cenv cx e1 e2 es es1 es' sa s1 s2 s0 t u v1 v2 x y.
-    expr_post func cenv cx e1 es sa s1 s0 es1 v1 x t /\
+  !func cenv cx e1 e2 es es1 es' sa s1 s2 s0 t u v1 v2 x y ctx.
+    expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
     expr_val_in_alloca cenv cx (expr_type e1) sa s1 es1 v1 x t /\
-    expr_post func cenv cx e2 es1 s1 s2 t es' v2 y u /\
+    expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
     (!z. x = Var z ==> not_fresh_at s1 z) /\ (!l. x <> Label l) /\
     local_ptrs_reserved cenv s1 /\ MAP FDOM es1.scopes = MAP FDOM es'.scopes /\
     s1.cs_next_id <= s2.cs_next_id ==>

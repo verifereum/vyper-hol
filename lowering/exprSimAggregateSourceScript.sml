@@ -60,7 +60,7 @@ Proof
 QED
 
 Theorem vv_post_materialises:
-  vv_post func ce cx e es sa sb s0 es' tv vv r ==>
+  vv_post ctx func ce cx e es sa sb s0 es' tv vv r ==>
   ?v. read_result cx tv es' = (INL v,es')
 Proof
   simp[vv_post_def] >> strip_tac >> Cases_on `vv` >>

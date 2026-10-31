@@ -131,7 +131,7 @@ Proof
     (simp[exec_alloca_def] >> BasicProvers.every_case_tac >> simp[]) >>
   fs[] >>
   qspecl_then [`func`, `cenv`, `cx`, `es`, `s0`, `A`, `p`,
-               `n2w sz : bytes32`, `s1`] mp_tac stmt_state_rel_exec_alloca >>
+               `n2w sz : bytes32`, `s1`, `ctx`] mp_tac stmt_state_rel_exec_alloca >>
   impl_tac >- fs[] >> strip_tac >>
   `s1.vs_current_bb = s0.vs_current_bb /\ s1.vs_inst_idx = s0.vs_inst_idx /\
    ~s1.vs_halted /\ (!x. x <> p ==> lookup_var x s1 = lookup_var x s0) /\
@@ -177,7 +177,7 @@ Proof
   (* the state at the condition block *)
   qabbrev_tac `cc = jump_to cond_lbl (update_var ev (i2w n2)
                   (update_var cv (i2w n1) (jump_to entry_lbl s1)))` >>
-  `stmt_state_rel func cenv cx es cc` by
+  `stmt_state_rel ctx func cenv cx es cc` by
     (simp[Abbr `cc`, stmt_state_rel_jump_to] >>
      irule stmt_state_rel_update_var >>
      conj_tac >- (irule reserved_fresh_not_local >> qexists_tac `sa` >> simp[]) >>

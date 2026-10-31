@@ -492,8 +492,8 @@ Proof
 QED
 
 Theorem buffer_store_state_frame:
-  !func cenv cx es sa s q dst n.
-    stmt_state_rel func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  !func cenv cx es sa s q dst n ctx.
+    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
     (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
     (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) /\
     (!a k. a+k <= dst \/ dst+n <= a ==>
@@ -507,7 +507,7 @@ Theorem buffer_store_state_frame:
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
         | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
       regions_disjoint off (type_memory_size tv) dst n) ==>
-    stmt_state_rel func cenv cx es q
+    stmt_state_rel ctx func cenv cx es q
 Proof
   rpt gen_tac >> strip_tac >> irule literal_state_memory_frame >>
   qexists_tac `s` >> simp[] >> conj_tac
