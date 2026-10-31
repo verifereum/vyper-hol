@@ -29,7 +29,8 @@ Definition call_probe_outcome_def:
        co_accounts := ((8w:address) =+
          (empty_account_state with balance := 23)) empty_accounts;
        co_tStorage := K (K (42w:bytes32));
-       co_logs := [<| logger := 8w; topics := [1w]; data := [42w] |>] |>
+       co_logs := [<| logger := 8w; topics := [1w]; data := [42w] |>];
+       co_toDelete := [] |>
 End
 
 (* Simplify the projections before EVAL: evaluating an entire function-valued
