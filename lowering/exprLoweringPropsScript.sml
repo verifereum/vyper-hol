@@ -681,8 +681,8 @@ Proof
   qpat_x_assum `es' = _` SUBST1_TAC >>
   gvs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
      immutables_rel_def, logs_rel_def, call_ctx_rel_def, contract_storage_def,
-     contract_transient_def]
-
+     contract_transient_def] >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem stmt_state_rel_jump_to:
