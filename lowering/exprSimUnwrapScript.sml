@@ -18,14 +18,15 @@
  *                        unwrap_memory_sim (expr_post_of_vv_post_memory,
  *                        and unwrap_memory_word_sim's MLOAD),
  *                        unwrap_runtime_immutable_word_sim (DLOAD),
+ *                        unwrap_storage_word_sim (SLOAD/TLOAD),
  *                        vv_post_calldata (no calldata pointers)
  *
  * Helpers: compile_expr_extends (exprLoweringProps' compile_expr_grows),
  *   compile_ensure_in_memory_extends, unwrap_value_extends,
- *   expr_post_of_vv_post_load, step_DLOAD, immutable_holds_dload
+ *   expr_post_of_vv_post_load, step_DLOAD, immutable_holds_dload,
+ *   storage_word_load, storage_holds_load
  *
  * Cheated, each with its reason at the lemma:
- *   unwrap_storage_word_sim — a word load from storage (false as stated)
  *   unwrap_ctor_immutable_word_sim — constructor immutable word-load proof
  *   unwrap_copy_sim    — the copy of an aggregate out of storage or code
  *)
@@ -33,9 +34,11 @@
 Theory exprSimUnwrap
 Ancestors
   list finite_map
-  exprSim exprLowering compileEnv immutableEncoding valueEncoding vyperAST vyperInterpreter
+  exprSim exprLowering compileEnv immutableEncoding vyperAST vyperInterpreter
   vyperState
   loweringSlice fragExec freshWrites venomInst venomExecSemantics venomState
+  valueEncoding valueEncodingProofs vyperTypeValues vyperStorage vyperValue
+  vyperLookupStorage
 Libs
   pairLib
 
@@ -367,13 +370,53 @@ Proof
   rw[] >> metis_tac[expr_post_of_vv_post_memory]
 QED
 
-(* A word in storage or transient storage: an SLOAD or TLOAD.  Cheated:
-   storage_holds relates the slot through decode_base_from_slot, which
-   truncates, so a slot holding a word outside the type's range (0x1FF for a
-   uint8) decodes to a value of the type while the load returns the raw
-   word.  storage_rel as it stands does not rule such a slot out, so this
-   is false as stated, and so is expr_sim_of_vv_sim for such a read; the
-   fix is a storage invariant that keeps each slot in its type's range. *)
+(* A word's slot holds its value's encoding: the slot is canonical
+   (slots_in_range), so it encodes back to what it decodes to. *)
+Theorem storage_word_load[local]:
+  !cx t tvt storage w v.
+    is_word_type t /\ evaluate_type (get_tenv cx) t = SOME tvt /\
+    decode_value storage (w2n w) tvt = SOME v /\
+    slots_in_range storage (w2n w) tvt ==>
+    lookup_storage w storage = typed_val_to_w256 tvt v
+Proof
+  rpt strip_tac >>
+  drule vyperTypeValuesTheory.evaluate_type_well_formed_type_value >>
+  strip_tac >>
+  Cases_on `t` >> gvs[is_word_type_def] >>
+  TRY (rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_word_type_def]) >>
+  TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
+  gvs[is_word_type_def, evaluate_type_def, AllCaseEqs()] >>
+  gvs[decode_value_def, slots_in_range_def, word_slot_canonical_def,
+      read_slot_def, decode_base_from_slot_def, encode_base_to_slot_def,
+      typed_val_to_w256_def, val_to_w256_def, bool_to_slot_def,
+      AllCaseEqs(), valueEncodingProofsTheory.word_of_bytes_be_pad_right]
+QED
+
+(* At runtime the word a storage or transient load returns is the value's
+   (storage_rel, transient_rel). *)
+Theorem storage_holds_load[local]:
+  !func cenv cx es s t v w tr.
+    stmt_state_rel func cenv cx es s /\ is_word_type t /\
+    storage_holds cx tr t (Value v) w es ==>
+    !tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
+          (if tr then tload w s else sload w s) = typed_val_to_w256 tvt v
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  gvs[storage_holds_def, read_result_def, return_def] >>
+  gvs[read_storage_slot_def, vyperStorageBackendTheory.get_storage_backend_eq,
+      bind_def, lift_option_def, AllCaseEqs(), return_def, raise_def] >>
+  qpat_x_assum `option_CASE _ _ _ _ = _` mp_tac >> CASE_TAC >>
+  simp[raise_def, return_def] >> strip_tac >> gvs[] >>
+  drule_all storage_word_load >> strip_tac >>
+  Cases_on `tr` >>
+  gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
+      storage_rel_def, transient_rel_def, sload_def, tload_def,
+      vyperStorageBackendTheory.get_storage_def,
+      vfmStateTheory.lookup_account_def,
+      vfmExecutionTheory.lookup_transient_storage_def]
+QED
+
+(* A word in storage or transient storage: an SLOAD or TLOAD. *)
 Theorem unwrap_storage_word_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
@@ -385,7 +428,41 @@ Theorem unwrap_storage_word_sim:
              (LocatedValue t p) s)
       (\s. expr_post func cenv cx e es sa sb s0 es' v op s) R
 Proof
-  cheat
+  rpt strip_tac >>
+  gvs[unwrap_value_def, contextTheory.compile_ptr_load_def] >> (
+  irule frag_exec_pointwise >> rw[] >>
+  rename1 `vv_post _ _ _ _ _ _ _ _ _ _ _ s1` >>
+  `t = expr_type e /\
+   ?w. eval_operand p.ptr_operand s1 = SOME w /\
+       storage_holds cx (p.ptr_location = LocTransient) (expr_type e)
+         (Value v) w es' /\
+       stmt_state_rel func cenv cx es' s1` by
+    gvs[vv_post_def, vv_holds_def] >>
+  qpat_x_assum `t = _` SUBST_ALL_TAC >>
+  `!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
+         (if p.ptr_location = LocTransient then tload w s1 else sload w s1) =
+         typed_val_to_w256 tvt v` by (
+    rpt strip_tac >> drule_then drule storage_holds_load >>
+    disch_then drule >> disch_then drule >> simp[]) >>
+  drule loweringSliceTheory.emit_op_frag >>
+  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es'`, `s1`,
+    `if p.ptr_location = LocTransient then tload w s1 else sload w s1`,
+    `R`] mp_tac) >>
+  impl_tac
+  >- (rpt conj_tac >- first_assum ACCEPT_TAC >- simp[]
+      >- simp[is_terminator_def] >>
+      rpt strip_tac >> gvs[step_inst_base_def, exec_read1_def]) >>
+  strip_tac >> irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
+  simp[] >> rpt strip_tac
+  >~ [`expr_post`] >- (
+  qspecl_then [`func`, `cenv`, `cx`, `e`, `es`, `sa`, `sm`, `sb`, `s0`, `es'`,
+               `v`, `expr_type e`, `p`, `op`, `s1`, `s`,
+               `if p.ptr_location = LocTransient then tload w s1
+                else sload w s1`]
+    mp_tac expr_post_of_vv_post_load >>
+  impl_tac >- (asm_rewrite_tac[] >> rpt strip_tac >> gvs[]) >>
+  simp[]) >>
+  gvs[])
 QED
 
 (* A word immutable in the constructor: a load from the immutable buffer.

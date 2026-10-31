@@ -436,6 +436,24 @@ Proof
   first_x_assum irule >> simp[var_decl_transient_def]
 QED
 
+(* A storage or transient variable's slots are in range, as the declared
+   regions are (contract_storage_well_formed). *)
+Theorem toplevel_storage_slots_in_range:
+  !cx es src id ts tr typ id_str slot tvt.
+    contract_storage_well_formed cx es /\
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+    evaluate_type (get_tenv cx) typ = SOME tvt ==>
+    slots_in_range (get_storage cx es tr) (w2n ((n2w slot):bytes32)) tvt
+Proof
+  rpt strip_tac >>
+  `declared_storage_region cx src id [] = SOME (tr, n2w slot, tvt)` by
+    simp[declared_storage_region_def] >>
+  irule contract_storage_well_formed_region >>
+  simp[vyperStorageBackendTheory.get_storage_backend_eq] >> metis_tac[]
+QED
+
 (* A storage or transient variable whose slot decodes: a pointer to its
    slot, no code. *)
 Theorem compile_toplevel_storage_vv_sim:
@@ -449,6 +467,9 @@ Theorem compile_toplevel_storage_vv_sim:
     expr_vv_sim ctx func cenv cx ty (TopLevelName ann (src, id)) es
 Proof
   rw[expr_vv_sim_def] >>
+  `slots_in_range (get_storage cx es tr) (w2n ((n2w slot):bytes32)) tvt` by
+    (irule toplevel_storage_slots_in_range >>
+     gvs[expr_sim_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
   `typ = ann` by
     (gvs[expr_sim_pre_def, expr_sim_inv_def] >>
      metis_tac[vyperTypeGlobalLookupSoundnessTheory.TopLevelName_storage_decl_type_eq]) >>

@@ -34,6 +34,11 @@ Theory exprSimPlaces
 Ancestors
   list exprSim exprSimHyps exprSimPop exprSimAttribute vyperAST
 
+(* Cheated.  For a storage or transient subscript, storage_holds also asks
+   that the element's or hashmap leaf's slots are in range (slots_in_range);
+   the proof gets that from static_/dyn_slots_in_range and the hashmap
+   regions of contract_storage_well_formed, as toplevel_storage_slots_in_range
+   and storage_field_slots_in_range do for names and struct fields. *)
 Theorem compile_subscript_sim:
   !cenv ann base idx.
     expr_sim_below cenv (expr_size (Subscript ann base idx)) ==>
