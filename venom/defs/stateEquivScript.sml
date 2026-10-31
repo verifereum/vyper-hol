@@ -80,7 +80,8 @@ Definition observable_equiv_def:
     s1.vs_logs = s2.vs_logs /\
     s1.vs_transient = s2.vs_transient /\
     s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_requests = s2.vs_requests
+    s1.vs_requests = s2.vs_requests /\
+    s1.vs_pending_deletions = s2.vs_pending_deletions
 End
 
 (* ==========================================================================
