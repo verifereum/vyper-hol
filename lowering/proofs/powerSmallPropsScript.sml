@@ -9,19 +9,19 @@ Libs
   wordsLib
 
 Theorem power_bind_return[simp]:
-  (do v <- m; return v od) = m
+  (do v <- (m : 'a compiler); return v od) = m
 Proof
   simp[FUN_EQ_THM, comp_bind_def, comp_return_def, pairTheory.UNCURRY]
 QED
 
 Theorem power_bind_return_left[simp]:
-  (do v <- return a; f v od) = f a
+  (do v <- return a; f v od) = (f a : 'a compiler)
 Proof
   simp[FUN_EQ_THM, comp_bind_def, comp_return_def]
 QED
 
 Theorem power_bind_assoc[simp]:
-  (do b <- (do a <- m; f a od); g b od) =
+  (do b <- (do a <- (m : 'a compiler); f a od); g b od) =
   (do a <- m; b <- f a; g b od)
 Proof
   simp[FUN_EQ_THM, comp_bind_def] >> gen_tac >>

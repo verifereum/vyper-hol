@@ -258,7 +258,7 @@ Proof
   Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]
 QED
 
-Theorem contract_storage_well_formed_stk_scopes[local]:
+Theorem contract_storage_well_formed_stk_scopes:
   contract_storage_well_formed
     (cx with stk updated_by f) (st with scopes := scopes) <=>
   contract_storage_well_formed cx st
@@ -271,7 +271,7 @@ Proof
        get_storage_stk_scopes]
 QED
 
-Theorem eval_iterator_preserves_runtime_consistent[local]:
+Theorem eval_iterator_preserves_runtime_consistent:
   well_typed_iterator env ty it /\ runtime_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_iterator it) /\
@@ -282,7 +282,7 @@ Proof
   metis_tac[cj 3 eval_scc_type_sound_mutual]
 QED
 
-Theorem eval_expr_preserves_runtime_consistent[local]:
+Theorem eval_expr_preserves_runtime_consistent:
   well_typed_expr env e /\ runtime_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
@@ -333,7 +333,7 @@ Proof
   drule_all (cj 1 (SPEC_ALL (cj 5 eval_scc_type_sound_mutual))) >> simp[]
 QED
 
-Theorem eval_exprs_preserves_runtime_consistent[local]:
+Theorem eval_exprs_preserves_runtime_consistent:
   well_typed_exprs env es /\ runtime_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_exprs es) /\
@@ -359,7 +359,7 @@ Proof
 QED
 
 
-Theorem eval_expr_results_preserves_runtime_consistent_from_eval[local]:
+Theorem eval_expr_results_preserves_runtime_consistent_from_eval:
   eval_expr_results cx es st = (res,st') /\
   well_typed_exprs env es /\ runtime_consistent env cx st /\
   functions_well_typed cx /\
@@ -370,7 +370,7 @@ Proof
   drule_all (cj 1 (SPEC_ALL (cj 11 eval_scc_type_sound_results_mutual))) >> simp[]
 QED
 
-Theorem eval_expr_results_success_typed[local]:
+Theorem eval_expr_results_success_typed:
   eval_expr_results cx es st = (INL results,st') /\
   well_typed_exprs env es /\ runtime_consistent env cx st /\
   functions_well_typed cx /\
@@ -381,7 +381,7 @@ Proof
   drule_all (cj 1 (SPEC_ALL (cj 11 eval_scc_type_sound_results_mutual))) >> simp[]
 QED
 
-Theorem eval_for_preserves_runtime_consistent[local]:
+Theorem eval_for_preserves_runtime_consistent:
   evaluate_type env.type_defs ty = SOME tyv /\
   EVERY (value_has_type tyv) vs /\
   id NOTIN FDOM env.var_types /\
@@ -402,7 +402,7 @@ Proof
   Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]
 QED
 
-Theorem contract_storage_well_formed_logs[local]:
+Theorem contract_storage_well_formed_logs:
   contract_storage_well_formed cx st ==>
   contract_storage_well_formed cx (st with logs updated_by f)
 Proof
@@ -426,7 +426,7 @@ Proof
   simp[]
 QED
 
-Theorem contract_storage_well_formed_scopes[local]:
+Theorem contract_storage_well_formed_scopes:
   contract_storage_well_formed cx st ==>
   contract_storage_well_formed cx (st with scopes := scopes)
 Proof
@@ -435,7 +435,7 @@ Proof
   qexists_tac `st` >> simp[get_storage_scopes]
 QED
 
-Theorem push_scope_preserves_runtime_storage_consistent[local]:
+Theorem push_scope_preserves_runtime_storage_consistent:
   runtime_storage_consistent env cx st /\
   push_scope st = (res,st') ==>
   runtime_storage_consistent env cx st'
@@ -465,7 +465,7 @@ Proof
   metis_tac[runtime_storage_consistent_intro,
             runtime_storage_consistent_layout]
 QED
-Theorem pop_scope_preserves_contract_storage_well_formed[local]:
+Theorem pop_scope_preserves_contract_storage_well_formed:
   contract_storage_well_formed cx st /\
   pop_scope st = (res,st') ==>
   contract_storage_well_formed cx st'
@@ -499,7 +499,7 @@ Proof
   simp[get_storage_scopes]
 QED
 
-Theorem new_variable_preserves_contract_storage_well_formed[local]:
+Theorem new_variable_preserves_contract_storage_well_formed:
   contract_storage_well_formed cx st /\
   new_variable id tv v st = (res,st') ==>
   contract_storage_well_formed cx st'
@@ -633,7 +633,7 @@ Proof
   simp[]
 QED
 
-Theorem env_scopes_consistent_stk_irrelevant_storage[local]:
+Theorem env_scopes_consistent_stk_irrelevant_storage:
   !env cx f st.
     env_scopes_consistent env (cx with stk updated_by f) st <=>
     env_scopes_consistent env cx st
@@ -676,7 +676,7 @@ Proof
   simp[state_well_typed_def]
 QED
 
-Theorem env_immutables_consistent_defaults_scopes_storage[local]:
+Theorem env_immutables_consistent_defaults_scopes_storage:
   env_immutables_consistent (defaults_env env) cx st ==>
   env_immutables_consistent env cx (st with scopes := scopes)
 Proof
@@ -784,7 +784,7 @@ Proof
   gvs[lift_option_type_def, return_def, raise_def]
 QED
 
-Theorem intcall_post_push_expanded_suffix_preserves_contract_storage_well_formed[local]:
+Theorem intcall_post_push_expanded_suffix_preserves_contract_storage_well_formed:
   !cx cxf fn_stmts body_st prev nr is_view rtv res st'.
     contract_storage_well_formed cx body_st /\
     storage_layout_safe cx /\
@@ -844,7 +844,7 @@ Proof
   simp[]
 QED
 
-Theorem eval_expr_place_preserves_runtime_consistent[local]:
+Theorem eval_expr_place_preserves_runtime_consistent:
   (well_typed_expr env e \/ ?vt. type_place_expr env e = SOME vt) /\
   runtime_consistent env cx st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
@@ -855,7 +855,7 @@ Proof
   metis_tac[cj 1 (SPEC_ALL (cj 5 eval_scc_type_sound_mutual))]
 QED
 
-Theorem eval_base_place_preserves_runtime_consistent[local]:
+Theorem eval_base_place_preserves_runtime_consistent:
   type_place_target env bt = SOME vt /\ runtime_consistent env cx st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt st = (res,st') ==>
@@ -865,7 +865,7 @@ Proof
   metis_tac[cj 1 (SPEC_ALL (cj 7 eval_scc_type_sound_mutual))]
 QED
 
-Theorem eval_target_place_preserves_runtime_consistent[local]:
+Theorem eval_target_place_preserves_runtime_consistent:
   well_typed_target env bt ty /\ runtime_consistent env cx st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_target_place cx bt st = (res,st') ==>
@@ -875,7 +875,7 @@ Proof
   metis_tac[cj 1 (SPEC_ALL (cj 8 eval_scc_type_sound_mutual))]
 QED
 
-Theorem eval_target_place_success_storage_type[local]:
+Theorem eval_target_place_success_storage_type:
   well_typed_target env bt ty /\ runtime_consistent env cx st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_target_place cx bt st = (INL p,st') ==>
@@ -885,7 +885,7 @@ Proof
   drule_all (cj 1 (SPEC_ALL (cj 8 eval_scc_type_sound_mutual))) >> simp[]
 QED
 
-Theorem typed_write_place_preserves_storage[local]:
+Theorem typed_write_place_preserves_storage:
   contract_storage_well_formed cx st /\ storage_layout_safe cx /\
   storage_place_region cx p /\
   eval_result_typed (env,cx,st) (PlaceR p) (Type ty) /\
@@ -906,7 +906,7 @@ Proof
   simp[runtime_consistent_def] >> metis_tac[cj 9 eval_scc_type_sound_mutual]
 QED
 
-Theorem eval_expr_success_storage_facts[local]:
+Theorem eval_expr_success_storage_facts:
   well_typed_expr env e /\ runtime_consistent env cx st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
   eval_expr cx e st = (INL pv,st') ==>
@@ -925,7 +925,7 @@ Proof
   disch_then (qspec_then `env` mp_tac) >> simp[]
 QED
 
-Theorem eval_target_place_storage_trace[local]:
+Theorem eval_target_place_storage_trace:
   well_typed_target env bt ty /\ runtime_consistent env cx st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_target_place cx bt st = (res,st') ==>
@@ -935,7 +935,7 @@ Proof
   metis_tac[cj 2 (SPEC_ALL (cj 8 eval_scc_type_sound_mutual))]
 QED
 
-Theorem eval_target_place_success_storage_facts[local]:
+Theorem eval_target_place_success_storage_facts:
   well_typed_target env bt ty /\ runtime_consistent env cx st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_target_place cx bt st = (INL p,st') ==>
@@ -950,7 +950,7 @@ Proof
     (qspecl_then [`env`,`ty`,`st`,`INL p`,`st'`] mp_tac) >> simp[]
 QED
 
-Theorem eval_expr_storage_trace[local]:
+Theorem eval_expr_storage_trace:
   well_typed_expr env e /\ runtime_consistent env cx st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
   eval_expr cx e st = (res,st') ==>
@@ -962,7 +962,7 @@ Proof
     (qspecl_then [`env`,`st`,`res`,`st'`] mp_tac) >> simp[]
 QED
 
-Theorem update_place_tail_preserves_storage[local]:
+Theorem update_place_tail_preserves_storage:
   contract_storage_well_formed cx st /\ storage_layout_safe cx /\
   storage_place_region cx p /\ runtime_place_typed cx st p ptv /\
   evaluate_type env.type_defs ty = SOME ptv /\ value_has_type ptv cur /\
@@ -2505,7 +2505,7 @@ Proof
   rpt IF_CASES_TAC >> gvs[]
 QED
 
-Theorem transfer_value_preserves_contract_storage_well_formed[local]:
+Theorem transfer_value_preserves_contract_storage_well_formed:
   contract_storage_well_formed cx st /\
   transfer_value fromAddr toAddr amount st = (res,st') ==>
   contract_storage_well_formed cx st'
@@ -2516,7 +2516,7 @@ Proof
   metis_tac[transfer_value_storage_frame]
 QED
 
-Theorem adopt_call_outcome_INR_storage[local]:
+Theorem adopt_call_outcome_INR_storage:
   (adopt_call_outcome rq co s = (INR e,s')) <=> F
 Proof
   rw[vyperCallOutcomeTheory.adopt_call_outcome_def] >> pairarg_tac >>
@@ -2912,7 +2912,7 @@ Resume eval_scc_storage_preservation_results_mutual[StorageRawCreate]:
   gvs[] >> strip_tac >> gvs[]
 QED
 
-Theorem eval_iterator_success_values_typed[local]:
+Theorem eval_iterator_success_values_typed:
   well_typed_iterator env ty it /\ runtime_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_iterator it) /\
@@ -2985,7 +2985,7 @@ Resume eval_scc_storage_preservation_results_mutual[For]:
   rpt strip_tac >> gvs[]
 QED
 
-Theorem for_body_decompose_storage[local]:
+Theorem for_body_decompose_storage:
   stp.scopes <> [] /\
   finally (try do x <- eval_stmts cx body_stmts; return F od handle_loop_exception)
     pop_scope stp = (res,st') ==>
@@ -3014,7 +3014,7 @@ Proof
   strip_tac >> gvs[]
 QED
 
-Theorem push_scope_with_var_preserves_runtime_storage_consistent[local]:
+Theorem push_scope_with_var_preserves_runtime_storage_consistent:
   runtime_storage_consistent env cx st /\
   evaluate_type env.type_defs ty = SOME tyv /\
   value_has_type tyv v /\ well_formed_type_value tyv /\
@@ -3427,7 +3427,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem fn_sigs_consistent_FLOOKUP_storage[local]:
+Theorem fn_sigs_consistent_FLOOKUP_storage:
   fn_sigs_consistent fn_sigs cx /\
   FLOOKUP fn_sigs (src_id_opt,fn) = SOME sig ==>
   ?ts fm nr params dflts body.
@@ -3440,7 +3440,7 @@ Proof
   simp[fn_sigs_consistent_def]
 QED
 
-Theorem intcall_call_evaluation_safe_args_storage[local]:
+Theorem intcall_call_evaluation_safe_args_storage:
   call_evaluation_safe cx
     (int_calls_expr (Call loc (IntCall callee) es extra)) ==>
   call_evaluation_safe cx (int_calls_exprs es)
@@ -3468,7 +3468,7 @@ Proof
   qexists_tac `int_calls_exprs es` >> simp[int_calls_expr_def]
 QED
 
-Theorem intcall_call_evaluation_safe_body_storage[local]:
+Theorem intcall_call_evaluation_safe_body_storage:
   call_evaluation_safe cx
     (int_calls_expr (Call loc (IntCall (src_id_opt,fn)) es extra)) /\
   get_module_code cx src_id_opt = SOME ts /\
@@ -3486,7 +3486,7 @@ Proof
   qexists_tac `int_calls_exprs es` >> simp[int_calls_expr_def]
 QED
 
-Theorem contract_storage_well_formed_stk[local]:
+Theorem contract_storage_well_formed_stk:
   contract_storage_well_formed (cx with stk updated_by f) st <=>
   contract_storage_well_formed cx st
 Proof
@@ -3523,7 +3523,7 @@ Proof
 QED
 
 
-Theorem intcall_defaults_runtime_storage_consistent[local]:
+Theorem intcall_defaults_runtime_storage_consistent:
   runtime_storage_consistent env cx st /\
   functions_well_typed cx /\
   env_body.current_src = src_id_opt /\

@@ -1264,7 +1264,8 @@ Definition type_to_abi_dec_info_def:
                     type_memory_bytes cenv fty))
                 fields)) ∧
   type_to_abi_dec_info sfields cenv (FlagT nsid) =
-    DecPrimWord (IntClamp (cenv.ce_flag_n_members (nsid_to_string nsid)) F) ∧
+    (let n = cenv.ce_flag_n_members (nsid_to_string nsid) in
+     DecPrimWord (if n = 256 then NoClamp else IntClamp n F)) ∧
   type_to_abi_dec_info sfields cenv ty = DecPrimWord (type_to_abi_clamp ty)
 Termination
   WF_REL_TAC `inv_image ($< LEX $<) (λ(sfields, cenv, ty).
@@ -2174,6 +2175,19 @@ Termination
   WF_REL_TAC `measure (LENGTH o (FST o SND o SND))`
 End
 
+(* Stage evaluated arguments in the contiguous ABI tuple memory layout.
+   Keep ADD and MCOPY even at zero offsets/sizes, matching the builtin
+   tuple constructor and preserving its instruction IDs. *)
+Definition compile_store_abi_tuple_def:
+  compile_store_abi_tuple cenv buf off [] = return () ∧
+  compile_store_abi_tuple cenv buf off ((v,ty)::rest) =
+    do dst <- emit_op ADD [buf; Lit (n2w off)];
+       (if is_word_type ty then emit_void MSTORE [dst; v]
+        else emit_void MCOPY [dst; v; Lit (n2w (type_memory_bytes cenv ty))]);
+       compile_store_abi_tuple cenv buf (off + type_memory_bytes cenv ty) rest
+    od
+End
+
 (* Helper: the list callback only compiles members of its input list. *)
 Theorem compile_multi_exprs_callback_cong:
   ∀es. (∀e. MEM e es ⇒ f cenv (expr_type e) e = g cenv (expr_type e) e) ⇒
@@ -2447,11 +2461,9 @@ Definition compile_call_def:
        let args_mem_size = SUM (MAP (type_memory_bytes cenv) call_arg_types) in
        let args_abi_size = abi_size_bound cenv.ce_struct_fields (TupleT call_arg_types) in
        let args_enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT call_arg_types) in
-       let wrapped_return = (case return_type of
-                               TupleT ts =>
-                                 if LENGTH ts > 1 then return_type
-                                 else TupleT [return_type]
-                             | _ => TupleT [return_type]) in
+       let wrapped_return =
+         (if needs_external_call_wrap return_type then TupleT [return_type]
+          else return_type) in
        let return_abi_size = abi_size_bound cenv.ce_struct_fields wrapped_return in
        let min_return_size = abi_static_size cenv.ce_struct_fields wrapped_return in
        let ret_mem_bytes = type_memory_bytes cenv return_type in
@@ -3040,13 +3052,13 @@ Definition compile_type_builtin_dispatch_body_def:
           | _ => as_stack_val vv_ty (compile_type_convert v
                    (mk_convert_op src_ty ret_ty) st1))
      | Empty =>
-         if is_word_type ret_ty then (StackValue vv_ty (Lit 0w), st)
-         else
-           (let is_bs = (is_bytestring_type ret_ty ∨
-                         (case ret_ty of ArrayT _ (Dynamic _) => T | _ => F)) in
-            let (buf, st1) = compile_builtin_empty_complex
-                               (type_memory_bytes cenv ret_ty) is_bs st in
-            (LocatedValue ret_ty (mk_ptr buf LocMemory), st1))
+         (if is_word_type ret_ty then (StackValue vv_ty (Lit 0w), st)
+          else
+            let zero_length_only = (is_bytestring_type ret_ty ∨
+                  (case ret_ty of ArrayT _ (Dynamic _) => T | _ => F)) in
+            let (buf,st') = compile_builtin_empty_complex
+                  (type_memory_bytes cenv ret_ty) zero_length_only st in
+            (LocatedValue vv_ty (base_ptr buf), st'))
      | MaxValue =>
          (let (_, hi) = type_bounds ret_ty in (StackValue vv_ty (Lit hi), st))
      | MinValue =>
@@ -3156,7 +3168,7 @@ Theorem compile_empty_memory_dispatch:
       (type_memory_bytes cenv ret_ty)
       (is_bytestring_type ret_ty \/
        (case ret_ty of ArrayT _ (Dynamic _) => T | _ => F)) st in
-    (LocatedValue ret_ty (mk_ptr buf LocMemory), st1)
+    (LocatedValue vv_ty (base_ptr buf), st1)
 Proof
   simp[compile_type_builtin_dispatch_body_def]
 QED

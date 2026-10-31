@@ -4,7 +4,7 @@
 Theory bodySimBound
 Ancestors
   arithmetic list rich_list alist pair option vyperMisc vyperValue
-  bodySim bodySimStmtCases bodySimExprCases stmtSimIf supportedStmts vyperAST vyperInterpreter vyperState vyperContext
+  bodySim bodySimStmtCases bodySimDeclCases bodySimExprCases stmtSimIf supportedStmts vyperAST vyperInterpreter vyperState vyperContext
   vyperTypeCallGraph
 
 (* ===== Numeric loop bound ===== *)

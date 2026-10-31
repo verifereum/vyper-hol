@@ -25,7 +25,7 @@ Theory stmtSimAugAssign
 Ancestors
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim exprSimHyps exprSimOps exprSimBinopFrag
-  exprSimOperators exprSimLeaves loweringSlice stmtSim stmtSimDecl
+  exprSimOperators exprSimLeaves powerCheckedProps loweringSlice stmtSim stmtSimDecl
   stmtSimDeclStore stmtSimAssignStore
   exprLowering exprBopLowering stmtLowering emitHelper emitHelperProps
   exprLoweringProps compileEnv valueEncoding
@@ -143,7 +143,7 @@ Proof
   Cases_on `bop` >> rw[well_typed_binop_def, word_value_type_def] >> gvs[]
 QED
 
-Theorem word_value_type_memory_size[local]:
+Theorem word_value_type_memory_size:
   !tenv t tv.
     word_value_type t /\ evaluate_type tenv t = SOME tv ==>
     type_memory_size tv = 32
@@ -237,7 +237,7 @@ QED
 
 (* A well-formed type's width is whole bytes: Vyper's int widths are
    multiples of 8, and decimal and every other type are 168 or 256 bits. *)
-Theorem well_formed_type_bits[local]:
+Theorem well_formed_type_bits:
   !tenv ty. well_formed_type tenv ty ==> type_bits ty MOD 8 = 0
 Proof
   Cases_on `ty` >> simp[type_bits_def] >> rename1 `BaseT bt` >>
@@ -257,6 +257,33 @@ Proof
   rename1 `Literal ann lit` >> Cases_on `lit` >> simp[power_exponent_ok_def]
 QED
 
+(* Checked augmented operands provide exactly the literal provenance used by
+   compile_binop.  The left operand need not be a Name: this also covers
+   attribute and storage loads. *)
+Theorem augassign_binop_frag:
+  well_typed_binop ty bop ty (expr_type e) /\ augassign_operand_ok ty bop e /\
+  type_bits ty MOD 8 = 0 /\
+  word_value_type ty /\ word_value_type (expr_type e) /\
+  evaluate_type tenv ty = SOME tv1 /\ value_has_type tv1 v1 /\
+  evaluate_type tenv (expr_type e) = SOME tv2 /\ value_has_type tv2 v2 /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v2, es1) ==>
+  binop_frag ctx func cenv cx bop ty ty NONE
+    (if bop = Exp then expr_int_literal e else NONE)
+    [ty; expr_type e] v1 v2 es1
+Proof
+  rpt strip_tac >> reverse (Cases_on `bop = Exp`)
+  >- (irule binop_frag_word_typed >> simp[] >> metis_tac[]) >>
+  gvs[well_typed_binop_def, augassign_operand_ok_def] >>
+  `?n. expr_int_literal e = SOME n /\ 0 <= n` by
+    (Cases_on `e` >> gvs[power_exponent_ok_def] >>
+     rename1 `Literal ann lit` >> Cases_on `lit` >>
+     gvs[power_exponent_ok_def, expr_int_literal_def]) >>
+  `?a b. v1 = IntV a /\ v2 = IntV b` by metis_tac[int_type_value] >>
+  gvs[] >>
+  `b = n` by metis_tac[power_literal_value] >> gvs[] >>
+  irule binop_frag_power_values >> simp[] >> metis_tac[]
+QED
+
 (* The typing side: x op e meets expr_sim_pre where e does, x is a local
    of type ty and the type checker accepts x op= e. *)
 Theorem expr_sim_pre_augassign:
@@ -272,6 +299,7 @@ Proof
   drule augassign_builtin_operands >> strip_tac >>
   gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
       vyperASTTheory.expr_type_def]
 QED
 
@@ -289,6 +317,7 @@ Proof
   drule augassign_builtin_operands >> strip_tac >>
   gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
       vyperASTTheory.expr_type_def]
 QED
 

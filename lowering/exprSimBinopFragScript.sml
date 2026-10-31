@@ -252,6 +252,32 @@ Proof
   cheat
 QED
 
+(* Value-level power interface: literal options describe the actual operands.
+   A literal base permits a dynamic exponent; without one the exponent must
+   be a nonnegative literal.  Callers derive this from checked source code. *)
+Theorem binop_frag_power_values:
+  is_int_type ty /\
+  evaluate_type tenv ty = SOME tv /\
+  value_has_type tv (IntV a) /\ value_has_type tv (IntV e) /\
+  (bl = SOME a \/ (bl = NONE /\ el = SOME e /\ 0 <= e)) ==>
+  binop_frag ctx func cenv cx Exp ty ty bl el tys (IntV a) (IntV e) es0
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  match_mp_tac (Q.INST [`u` |->
+    `if is_signed_type ty then Signed (type_bits ty) else Unsigned (type_bits ty)`]
+    binop_frag_power_run) >> conj_tac
+  >- (drule_all int_type_value >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.INST [`signed` |-> `is_signed_type ty`,
+                   `bits` |-> `type_bits ty`, `st` |-> `sa`,
+                   `st'` |-> `sb`] power_typed_run) >>
+  Cases_on `ty` >> gvs[is_int_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_int_type_def] >>
+  gvs[vyperValueTheory.evaluate_type_def, vyperTypingTheory.value_has_type_def,
+      AllCaseEqs(), compile_binop_def, type_bits_def, is_signed_type_def,
+      vyperValueTheory.within_int_bound_def] >> metis_tac[]
+QED
+
 (* Actual checked expression and evaluations supply the literal provenance. *)
 Theorem binop_frag_pow:
   !ctx func cenv cx ann e1 e2 v1 v2 es es1 es0 env tenv tv1 tv2.
@@ -288,7 +314,8 @@ val () = List.app (fn (name,th) =>
   in if null (Thm.hyp th) andalso null axioms andalso
         List.all (fn s => s = "DISK_THM") oracles then ()
      else raise Fail ("power fragment audit: " ^ name) end)
-  (("binop_frag_pow", binop_frag_pow) :: DB.thms "powerFragProps");
+  (("binop_frag_power_values", binop_frag_power_values) ::
+   ("binop_frag_pow", binop_frag_pow) :: DB.thms "powerFragProps");
 
 (* Also #572: << of an integer narrower than 256 bits, which the lowering
    does not truncate, and a shift by a negative amount, where the source

@@ -370,19 +370,24 @@ End
 
 (* ===== Frame-aware result: outcomes in, requests compared ONLY on success ===== *)
 
+(* On success, the EVM's final accounts, transient storage and requests
+   agree with the source's: equal except at storage bytes the source
+   leaves dead (accounts_agree, compileEnv). *)
+
 Definition call_result_rel_def:
   call_result_rel tops ret am tx es r es' <=>
     let trace = call_trace es in
     case call_external (SOME (MAP SND trace)) am tx of
       (INL v, am', rqs) =>
+        let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
         ?out lgs.
           frame_outcome es r es' NONE out lgs /\
           return_bytes tops ret v out /\
-          es'.rollback.accounts = am'.accounts /\
-          es'.rollback.tStorage = am'.tStorage /\
+          accounts_agree cx am'.accounts es'.rollback.accounts /\
+          transient_agree cx am'.tStorage es'.rollback.tStorage /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs lgs /\
-          rqs = MAP FST trace
+          LIST_REL (request_agree cx) rqs (MAP FST trace)
     | (INR (AssertException s), _, _) =>
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                       (exc = Reverted \/ s = "UNREACHABLE")

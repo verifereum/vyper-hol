@@ -739,8 +739,6 @@ Proof
           eval_operand (Var tv) s = SOME (bool_to_word (k = w2n (n2w n : bytes32)))``,
         v "N" |-> ``w2n (n2w n : bytes32)``] th)))
    end) >>
-  conj_tac >- simp[eval_operand_def, lookup_var_def, jump_to_def] >>
-  conj_tac >- simp[eval_operand_def, lookup_var_def, jump_to_def] >>
   Cases_on `x0` >> Cases_on `x2` >> Cases_on `x4` >>
   goal_assum (drule_at (Pat `emit_inst JNZ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `emit_inst JMP _ _ _ = _`)) >>

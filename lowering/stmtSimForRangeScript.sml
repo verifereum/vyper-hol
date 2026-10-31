@@ -801,7 +801,7 @@ Proof
   rw[] >> intLib.ARITH_TAC
 QED
 
-Theorem range_value_has_type[local]:
+Theorem range_value_has_type:
   !tyv n1 n2.
     value_has_type tyv (IntV n1) /\ value_has_type tyv (IntV n2) /\
     n1 <= n2 ==>
