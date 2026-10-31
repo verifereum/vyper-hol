@@ -669,7 +669,7 @@ Proof
   first_x_assum irule >> metis_tac[]
 QED
 
-Theorem scope_pop_trace_keys_indexed[local]:
+Theorem scope_pop_trace_keys_indexed:
   !events sc sc'.
     scope_pop_trace sc events sc' /\ popped_keys_indexed sc ==>
     popped_keys_indexed sc'

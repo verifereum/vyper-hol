@@ -26,9 +26,12 @@
  *                        environment and compile environment it gives
  *   ce_locals_declared_declare_local, ce_locals_declared_stmt — the same
  *                        for ce_locals_declared
- *   compile_expr_open, eval_stmts_popped_keys_indexed,
- *   declared_name_not_module_key — GAP, the facts the statement and list
- *                        cases still take on trust
+ *   compile_expr_open  — a supported expression that evaluates compiles
+ *                        without terminating its block
+ *   eval_stmts_popped_keys_indexed — statement evaluation keeps
+ *                        popped_keys_indexed
+ *   declared_name_not_module_key — GAP, the fact the statement cases still
+ *                        take on trust
  *
  * Helper:
  *   stmts_env_cs_mono, stmt_env_declare, declare_stmt_local_other,
@@ -54,7 +57,7 @@ Ancestors
   vyperTypeEnvPreservation bodySimExprCases bodyStoragePreservation
   vyperCallOutcomeStorage vyperTypeStoragePreservation
   stmtSimAssignStorage supportedDecls vyperTypeContractStaticMaps
-  vyperTypeContract compileVyper supportedTypes
+  vyperTypeContract compileVyper supportedTypes stmtPoppedKeys exprOpenMain
 Libs
   monadsyntax
 
@@ -350,13 +353,8 @@ QED
 
 (* ===== The source state after a statement ===== *)
 
-(* GAP (#637 statement lists): evaluating a statement keeps
-   popped_keys_indexed, as eval_expr_popped_keys_indexed shows for an
-   expression.  A statement's own writes to the scopes declare entries
-   with no popped history, assign one (which clears it), or push and pop
-   whole scopes; the rest are its expressions' pops (record_pop).  There
-   is no scope-effect lemma for statements yet (eval_mutual_scope_pop_effect
-   covers expressions only). *)
+(* Evaluating a statement keeps popped_keys_indexed, as
+   eval_expr_popped_keys_indexed shows for an expression: stmtPoppedKeys. *)
 Theorem eval_stmts_popped_keys_indexed:
   (!cx s es res es'.
      eval_stmt cx s es = (res, es') /\ popped_keys_indexed es.scopes ==>
@@ -365,7 +363,8 @@ Theorem eval_stmts_popped_keys_indexed:
      eval_stmts cx ss es = (res, es') /\ popped_keys_indexed es.scopes ==>
      popped_keys_indexed es'.scopes)
 Proof
-  cheat
+  metis_tac[cj 1 eval_statement_loop_popped_keys_indexed,
+            cj 2 eval_statement_loop_popped_keys_indexed]
 QED
 
 (* The storage conjuncts of expr_sim_inv do not look at the scopes. *)
@@ -539,13 +538,12 @@ Proof
   drule_all type_stmt_other >> strip_tac >> gvs[]
 QED
 
-(* GAP (#637 expression statements): compile_expr leaves its block open
-   for a supported expression of the frame that evaluates.  Not every
-   expression does: the lowering's fallbacks end their block in INVALID,
-   and raw_revert ends it in REVERT.  Which fallback a module variable
+(* compile_expr leaves its block open for a supported expression of the
+   frame that evaluates.  Not every expression does: the lowering's
+   fallbacks end their block in INVALID.  Which fallback a module variable
    takes depends on cenv.ce_vars, so the storage and transient bindings
-   that state_rel gives are premises.  No lemma yet; it is an induction
-   over compile_expr, as compile_expr_ci_mono is. *)
+   that state_rel gives are premises.  The induction is exprOpenMain's
+   compile_expr_open_general. *)
 Theorem compile_expr_open:
   !tops ctx cenv cx env e es tv es1 sa vv sb.
     body_inv tops ctx cenv cx /\ supported_expr tops e /\
@@ -556,7 +554,7 @@ Theorem compile_expr_open:
     ~block_is_terminated sa ==>
     ~block_is_terminated sb
 Proof
-  cheat
+  metis_tac[compile_expr_open_general]
 QED
 
 (* An assertion with no reason: stmtSimIf's compile_assert_frag. *)
