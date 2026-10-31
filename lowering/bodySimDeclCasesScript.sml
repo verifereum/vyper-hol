@@ -7,12 +7,11 @@
  * that the declared name is unbound in the compile env or held through a
  * pointer.  The typing declares only a name not in env.var_types, and
  * ce_locals_declared (bodySim) binds no other local, so the name is
- * unbound unless it is a module variable's key, the gap
- * declared_name_unbound leaves open.  The loop's scope pop also rests on
+ * unbound (declared_name_unbound).  The loop's scope pop also rests on
  * bodySimStmtCases' GAP eval_stmts_popped_keys_indexed.
  *
  * TOP-LEVEL:
- *   declared_name_unbound        — GAP, a declared name is unbound
+ *   declared_name_unbound        — a declared name is unbound
  *   declare_local_same_frame, expr_sim_inv_declare_local — the compile
  *                                  env of a declaration is a frame where
  *                                  the statement's expressions simulate
@@ -42,21 +41,8 @@ Libs
 
 (* ===== Declared names ===== *)
 
-(* GAP (#637 declarations): the typing declares only a name it does not
-   know, which the compile env then does not bind.  False at the current
-   lowering for a local spelled as a module variable's key ("self." ++
-   ...): ce_vars holds module variables at module_var_key nsid and locals
-   at their names, so a local named so would find the module variable's
-   binding (supported_function_bindings rules such names out for a
-   supported program, but the body predicates do not carry it).  The
-   change that moves module variables to compile-env fields of their own,
-   as the Python compiler keeps them apart, makes ce_vars hold locals only;
-   ce_locals_declared then loses its module-key exception and this follows
-   from it:
-     rpt gen_tac >> strip_tac >>
-     `id NOTIN FDOM env.var_types` by gvs[type_stmt_def, AllCaseEqs()] >>
-     Cases_on `FLOOKUP cenv.ce_vars id` >> simp[] >>
-     fs[ce_locals_declared_def] >> metis_tac[] *)
+(* The typing declares only a name it does not know, which the compile env
+   then does not bind. *)
 Theorem declared_name_unbound:
   !cenv env ret_ty s env' id.
     ce_locals_declared cenv env /\ type_stmt env ret_ty s = SOME env' /\
@@ -64,7 +50,10 @@ Theorem declared_name_unbound:
      (?typ it n body. s = For id typ it n body)) ==>
     FLOOKUP cenv.ce_vars id = NONE
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `id NOTIN FDOM env.var_types` by gvs[type_stmt_def, AllCaseEqs()] >>
+  Cases_on `FLOOKUP cenv.ce_vars id` >> simp[] >>
+  fs[ce_locals_declared_def] >> metis_tac[]
 QED
 
 (* ===== The compile env of a declaration ===== *)
@@ -180,9 +169,6 @@ Proof
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          int_calls_stmt_def] >>
      qexists_tac `[]` >> simp[]) >>
-  `!x. c.ce_var_type (module_var_key (NONE, x)) =
-        cenv.ce_var_type (module_var_key (NONE, x))` by
-    metis_tac[declare_local_module_var_type, declared_name_not_module_key] >>
   metis_tac[body_expr_ok_def, body_inv_same_frame]
 QED
 
@@ -518,11 +504,7 @@ Proof
         (irule o REWRITE_RULE [body_stmts_ok_def]) >>
       simp[] >> rpt conj_tac
       >- metis_tac[stmt_exprs_ok_same_frame]
-      >- (`!x. c.ce_var_type (module_var_key (NONE, x)) =
-                cenv.ce_var_type (module_var_key (NONE, x))` by
-            metis_tac[declare_local_module_var_type,
-                      declared_name_not_module_key] >>
-          metis_tac[body_inv_same_frame])
+      >- metis_tac[body_inv_same_frame]
       >- (qexistsl_tac [`extend_local env id typ F`, `env_b`] >> simp[] >>
           metis_tac[expr_sim_inv_for_scope, ce_locals_declared_declare_local]) >>
       metis_tac[frame_ret_ok_same_frame]) >>

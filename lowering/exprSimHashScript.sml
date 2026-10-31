@@ -662,7 +662,7 @@ Theorem sha256_tail_frame:
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      b + sz <= w2n r \/ w2n r + 32 <= b) /\
   (cenv.ce_is_ctor ==> !name tv v off.
-     FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables cenv.ce_module imms) name =
@@ -760,7 +760,7 @@ Theorem emit_sha256_tail_frame:
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      b + sz <= w2n r \/ w2n r + 32 <= b) /\
   (cenv.ce_is_ctor ==> !name tv v off.
-     FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables cenv.ce_module imms) name =
@@ -843,7 +843,7 @@ Proof
     (rpt strip_tac >> first_x_assum drule >> simp[regions_disjoint_def] >> decide_tac) >>
   `mem_bytes_at (w2n p) (w2n n) allocated.vs_memory = bs` by simp[] >>
   `(cenv.ce_is_ctor ==> !name tv v off.
-     FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables cenv.ce_module imms) name =
@@ -1210,7 +1210,7 @@ Theorem hash_single_word_buffer_frame:
   (!name off len. local_region cenv es.scopes s name off len ==>
      regions_disjoint b 64 off len) /\
   (cenv.ce_is_ctor ==> !name tv iv off.
-     FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables cenv.ce_module imms) name =
@@ -1320,7 +1320,7 @@ Proof
   `w2n addr + 32 < dimword (:256)` by decide_tac >>
   `eval_operand buf.buf_operand allocated = SOME (n2w (w2n addr))` by simp[] >>
   `(cenv.ce_is_ctor ==> !name tv iv off.
-     FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables cenv.ce_module imms) name =

@@ -277,16 +277,6 @@ Proof
   strip_tac >> drule_at Any APPEND_sep_11 >> gs[]
 QED
 
-(* Key of a module-level variable (storage, transient, HashMap, immutable) in
-   the name-keyed compile_env tables. Arguments and locals use their plain
-   names; no Vyper identifier contains ".", so a local can never shadow a
-   module variable. Mirrors Python, which keeps module variables behind
-   self.<name> (codegen_venom/expr.py lower_Attribute) and locals in
-   ctx.variables (codegen_venom/context.py). *)
-Definition module_var_key_def:
-  module_var_key nsid = "self." ++ nsid_to_string nsid
-End
-
 (* ===== ABI Type Properties ===== *)
 
 (* Whether a Vyper type has dynamic ABI encoding (requires tail section).
@@ -422,26 +412,39 @@ Datatype:
   compile_env = <|
     (* Resolved target capabilities used by target-sensitive raw lowering. *)
     ce_target : target_capabilities;
+    (* Arguments and locals: name → location. *)
     ce_vars : (string, var_location) fmap;
+    (* Module variables (storage, transient, HashMap, immutable):
+       nsid → location. A table of their own, so no local can shadow one.
+       Mirrors Python, which resolves self.<name> through the declaration's
+       varinfo (codegen_venom/expr.py lower_Attribute) and locals through
+       ctx.variables (codegen_venom/context.py). *)
+    ce_module_vars : (nsid, var_location) fmap;
     ce_storage_layout : (string, bytes32) fmap;
     ce_module : num option;
     (* Struct metadata: struct_name → list of (field_name, member_type, memory_bytes) *)
     ce_struct_fields : (string, (string # type # num) list) fmap;
-    (* DynArray metadata: target_name → max capacity *)
+    (* DynArray metadata: local name → max capacity *)
     ce_dynarray_capacity : string -> num;
+    (* DynArray metadata: module variable nsid → max capacity *)
+    ce_module_dynarray_capacity : nsid -> num;
     (* Method ID lookup: func_name → 4-byte keccak selector as num *)
     ce_method_id : string -> type list -> num;
     (* Flag member index: (flag_type_name, member_name) → positional index *)
     ce_flag_member_id : string -> string -> num;
     (* Number of members in a flag type *)
     ce_flag_n_members : string -> num;
-    (* Variable type lookup: var_name → type (for Attribute dispatch) *)
+    (* Variable type lookup: local name → type (for Attribute dispatch) *)
     ce_var_type : string -> type option;
-    (* HashMap detection: var_name → T if variable is a HashMap (mapping).
-       Needed because HashMapT is a value_type, not type, so ce_var_type
-       cannot represent it. Used by compile_subscript for dispatch.
+    (* Module variable type lookup: nsid → type *)
+    ce_module_var_type : nsid -> type option;
+    (* HashMap detection: module variable nsid → SOME (transient, key type,
+       value type) if the variable is a HashMap (mapping); only module
+       variables can be. Needed because HashMapT is a value_type, not type,
+       so ce_module_var_type cannot represent it. Used by compile_subscript
+       for dispatch.
        Mirrors Python: isinstance(base_typ, HashMapT) *)
-    ce_hashmap_info : string -> (bool # type # value_type) option;
+    ce_hashmap_info : nsid -> (bool # type # value_type) option;
     (* Event metadata: event_nsid → SOME (event_hash, arg_types, indexed_flags).
        NONE means the event is not declared in this compilation unit. Keeping
        absence explicit prevents unknown events from silently compiling/logging
@@ -1140,7 +1143,7 @@ End
      copies memory, so bookkeeping alone is not the representation boundary.
    Venom (runtime): ss.vs_data_section holds the installed suffix bytes.
 
-   ce_vars maps module_var_key (src_id_opt, name) to ImmutableLoc byte_offset.
+   ce_module_vars maps (src_id_opt, name) to ImmutableLoc byte_offset.
    Semantic contents and capacity bounds do not determine unused padding;
    exact staging is tracked separately in immutableRelation. *)
 (* Base invariant is separate: register updates need not preserve it unless
@@ -1156,7 +1159,7 @@ Definition immutables_rel_def:
                          NONE => FEMPTY
                        | SOME mod_imms => get_source_immutables src_id_opt mod_imms) in
     !name tv v byte_offset.
-      FLOOKUP cenv.ce_vars (module_var_key (src_id_opt, name)) =
+      FLOOKUP cenv.ce_module_vars (src_id_opt, name) =
         SOME (ImmutableLoc byte_offset) /\
       FLOOKUP interp_imms name = SOME (tv,v) ==>
       immutable_value_admissible tv v /\
@@ -1173,7 +1176,7 @@ End
 (* Per-variable mapping between interpreter layout slots and cenv StorageLoc.
    The interpreter uses lookup_var_slot_from_layout to get a slot number,
    then read_storage_slot/write_storage_slot to access it.
-   The lowering uses FLOOKUP ce_vars (module_var_key nsid), with the
+   The lowering uses FLOOKUP ce_module_vars nsid, with the
    reference's own nsid, → StorageLoc slot → SLOAD/SSTORE.
    This relation ensures both reference the same storage slot, both ways:
    - every StorageLoc entry of the current module has the layout's slot;
@@ -1188,10 +1191,10 @@ End
    cx.layouts : (address, (layout # layout)) alist
      where layout = ((num option # string), bytes32) alist
      Maps (source_id_opt, var_name) → slot.
-   cenv.ce_vars : (string, var_location) fmap
-     Maps module_var_key (ce_module, var_name) → StorageLoc slot.
+   cenv.ce_module_vars : (nsid, var_location) fmap
+     Maps (ce_module, var_name) → StorageLoc slot.
    cenv.ce_storage_layout : (string, bytes32) fmap
-     Maps var_name → slot (redundant with ce_vars for StorageLoc). *)
+     Maps var_name → slot (redundant with ce_module_vars for StorageLoc). *)
 
 (* Whether a declaration found by find_var_decl_by_name is transient. *)
 Definition var_decl_transient_def:
@@ -1202,7 +1205,7 @@ End
 Definition storage_vars_rel_def:
   storage_vars_rel cenv (cx:evaluation_context) ⇔
     (∀ name (slot:bytes32).
-       FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
+       FLOOKUP cenv.ce_module_vars (cenv.ce_module, name) =
          SOME (StorageLoc slot) ⇒
        (* Interpreter layout maps (src_id_opt, name) → slot_num : num.
           Compile env stores slot as bytes32. Relation: n2w slot_num = slot. *)
@@ -1213,7 +1216,7 @@ Definition storage_vars_rel_def:
        find_var_decl_by_name name ts = SOME (d, id) ∧
        ¬var_decl_transient d ∧
        lookup_var_slot_from_layout cx F src id = SOME slot_num ⇒
-       FLOOKUP cenv.ce_vars (module_var_key (src, name)) =
+       FLOOKUP cenv.ce_module_vars (src, name) =
          SOME (StorageLoc (n2w slot_num)))
 End
 
@@ -1221,7 +1224,7 @@ End
 Definition transient_vars_rel_def:
   transient_vars_rel cenv (cx:evaluation_context) ⇔
     (∀ name (slot:bytes32).
-       FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
+       FLOOKUP cenv.ce_module_vars (cenv.ce_module, name) =
          SOME (TransientLoc slot) ⇒
        ∃ slot_num. lookup_var_slot_from_layout cx T cenv.ce_module name = SOME slot_num ∧
                    n2w slot_num = slot) ∧
@@ -1230,7 +1233,7 @@ Definition transient_vars_rel_def:
        find_var_decl_by_name name ts = SOME (d, id) ∧
        var_decl_transient d ∧
        lookup_var_slot_from_layout cx T src id = SOME slot_num ⇒
-       FLOOKUP cenv.ce_vars (module_var_key (src, name)) =
+       FLOOKUP cenv.ce_module_vars (src, name) =
          SOME (TransientLoc (n2w slot_num)))
 End
 

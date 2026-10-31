@@ -77,7 +77,7 @@ Theorem aggregate_alloca_immutable_sep[local]:
   FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
   cenv.ce_is_ctor ==>
   !name itv iv io.
-    FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
       SOME (ImmutableLoc io) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables cenv.ce_module imms) name =
