@@ -24,7 +24,7 @@
  * Helpers: compile_expr_extends (exprLoweringProps' compile_expr_grows),
  *   compile_ensure_in_memory_extends, unwrap_value_extends,
  *   expr_post_of_vv_post_load, step_DLOAD, immutable_holds_dload,
- *   storage_word_load, storage_holds_load
+ *   word_type_slot_size, storage_word_load, storage_holds_load
  *
  * Cheated, each with its reason at the lemma:
  *   unwrap_ctor_immutable_word_sim — a word immutable in the constructor
@@ -312,6 +312,21 @@ Proof
   rw[] >> metis_tac[expr_post_of_vv_post_memory]
 QED
 
+(* A word type takes one slot. *)
+Theorem word_type_slot_size:
+  !tenv t tv.
+    is_word_type t /\ evaluate_type tenv t = SOME tv ==> type_slot_size tv = 1
+Proof
+  rpt strip_tac >>
+  `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
+   t = BaseT BoolT \/ t = BaseT AddressT \/ t = BaseT DecimalT \/
+   (?m. t = BaseT (BytesT (Fixed m)) /\ m <= 32) \/ (?n. t = FlagT n)` by
+    (Cases_on `t` >> fs[is_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_word_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >> fs[is_word_type_def]) >>
+  gvs[evaluate_type_def, AllCaseEqs(), vyperValueTheory.type_slot_size_def]
+QED
+
 (* A word's slot holds its value's encoding: the slot is canonical
    (slots_in_range), so it encodes back to what it decodes to. *)
 Theorem storage_word_load[local]:
@@ -334,8 +349,8 @@ Proof
       AllCaseEqs(), valueEncodingProofsTheory.word_of_bytes_be_pad_right]
 QED
 
-(* At runtime the word a storage or transient load returns is the value's
-   (storage_rel, transient_rel). *)
+(* At runtime the word a storage or transient load returns is the value's:
+   the read is live, so storage_rel and transient_rel make the slot agree. *)
 Theorem storage_holds_load[local]:
   !func cenv cx es s t v w tr.
     stmt_state_rel func cenv cx es s /\ is_word_type t /\
@@ -350,12 +365,17 @@ Proof
   qpat_x_assum `option_CASE _ _ _ _ = _` mp_tac >> CASE_TAC >>
   simp[raise_def, return_def] >> strip_tac >> gvs[] >>
   drule_all storage_word_load >> strip_tac >>
-  Cases_on `tr` >>
-  gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
-      storage_rel_def, transient_rel_def, sload_def, tload_def,
-      vyperStorageBackendTheory.get_storage_def,
-      vfmStateTheory.lookup_account_def,
-      vfmExecutionTheory.lookup_transient_storage_def]
+  `0 < type_slot_size tvt` by (drule_all word_type_slot_size >> simp[]) >>
+  `storage_agree (storage_dead cx tr (get_storage cx es tr))
+     (get_storage cx es tr)
+     (if tr then contract_transient s else contract_storage s)` by
+    (Cases_on `tr` >>
+     gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
+         storage_rel_def, transient_rel_def,
+         vyperStorageBackendTheory.get_storage_def,
+         vfmStateTheory.lookup_account_def]) >>
+  drule_all accountsRelPropsTheory.storage_agree_read_head >> strip_tac >>
+  Cases_on `tr` >> gvs[sload_def, tload_def]
 QED
 
 (* A word in storage or transient storage: an SLOAD or TLOAD. *)

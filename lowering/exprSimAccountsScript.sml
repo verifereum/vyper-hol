@@ -34,7 +34,8 @@ Ancestors
   list rich_list words integer_word byte
   fragExec freshWrites varsExt loweringSlice exprSim exprSimHyps exprSimUnop
   exprSimOperators exprSimWordBuiltins exprBopLowering exprLowering
-  emitHelper emitHelperProps compileEnv exprLoweringProps valueEncoding
+  emitHelper emitHelperProps compileEnv exprLoweringProps accountsRelProps
+  valueEncoding
   valueEncodingProofs venomExecSemantics venomInst venomState venomMemProps
   vyperAST vyperInterpreter vyperContext vyperValue vyperTyping
   vyperTypeSystem vyperTypeInvariants vyperTypeBytesCrypto vfmState
@@ -213,8 +214,10 @@ Proof
       qexists_tac `n2w (LENGTH a.code)` >>
       rpt strip_tac
       >~ [`step_inst_base`]
-      >- (`ss.vs_accounts = es0.accounts` by
-            fs[stmt_state_rel_def, state_rel_def, accounts_rel_def] >>
+      >- (`!addr. (lookup_account addr ss.vs_accounts).code =
+                  (lookup_account addr es0.accounts).code` by
+            (fs[stmt_state_rel_def, state_rel_def, accounts_rel_def] >>
+             metis_tac[accounts_agree_lookup]) >>
           gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
               typed_val_to_w256_def, Abbr `a`]) >>
       drule emit_op_GT_correct >>
@@ -227,12 +230,19 @@ Proof
   simp[account_item_type_def, vyperValueTheory.evaluate_type_def,
        evaluate_account_op_def, is_word_type_def, is_terminator_def] >>
   rpt strip_tac >>
-  `ss.vs_accounts = es0.accounts` by
-    fs[stmt_state_rel_def, state_rel_def, accounts_rel_def] >>
+  `!addr. (lookup_account addr ss.vs_accounts).balance =
+          (lookup_account addr es0.accounts).balance /\
+          (lookup_account addr ss.vs_accounts).code =
+          (lookup_account addr es0.accounts).code /\
+          (lookup_account addr ss.vs_accounts).nonce =
+          (lookup_account addr es0.accounts).nonce` by
+    (fs[stmt_state_rel_def, state_rel_def, accounts_rel_def] >>
+     metis_tac[accounts_agree_lookup]) >>
   gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, Abbr `a`] >>
   simp[typed_val_to_w256_def, val_to_w256_def, i2w_def] >>
   rw[PAD_RIGHT, LENGTH_Keccak_256_w64, word_of_bytes_be_def,
-     word_of_bytes_replicate_zero]
+     word_of_bytes_replicate_zero] >>
+  gvs[vfmStateTheory.account_empty_def]
 QED
 
 (* ===== The lowering ===== *)
