@@ -89,6 +89,7 @@ Theorem for_body_entry_alloca[local]:
     (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
     FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
     (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) /\
+    bc.ce_module_vars = cenv.ce_module_vars /\
     bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor /\
     not_local_ptr cenv esk.scopes dv /\
     not_local_ptr bc (FEMPTY :: esk.scopes) p /\ dv <> p /\ dv <> cv /\
@@ -182,6 +183,7 @@ Theorem for_body_entry:
     (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
     FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
     (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) /\
+    bc.ce_module_vars = cenv.ce_module_vars /\
     bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor /\
     not_local_ptr cenv esk.scopes dv /\
     not_local_ptr bc (FEMPTY :: esk.scopes) p /\ dv <> p /\ dv <> cv /\
@@ -367,7 +369,8 @@ Theorem for_iteration_alloca[local]:
                stmt_exit RetQ (es2 with scopes := rest) r2 rr)
 Proof
   rpt gen_tac >> REWRITE_TAC [for_code_def] >> strip_tac >>
-  `bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor` by
+  `bc.ce_module_vars = cenv.ce_module_vars /\
+   bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor` by
     (qpat_assum `_ = cenv` (fn th => ONCE_REWRITE_TAC [SYM th]) >> simp[]) >>
   `not_local_ptr cenv esk.scopes dv` by metis_tac[] >>
   drule_all for_body_entry_alloca >> disch_then (qspec_then `ctx` strip_assume_tac) >>

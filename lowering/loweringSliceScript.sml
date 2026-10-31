@@ -228,7 +228,7 @@ QED
 Definition immutable_prefix_bound_def:
   immutable_prefix_bound cenv addr src (es:evaluation_state) cap <=>
     !name tv v off.
-      FLOOKUP cenv.ce_vars (module_var_key (src,name)) =
+      FLOOKUP cenv.ce_module_vars (src,name) =
         SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP es.immutables addr of NONE => FEMPTY
         | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
@@ -276,7 +276,7 @@ Theorem immutables_rel_mem_agree:
     t.vs_data_section = s.vs_data_section /\
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
     (ctor ==> !name tv v off.
-      FLOOKUP cenv.ce_vars (module_var_key (src,name)) =
+      FLOOKUP cenv.ce_module_vars (src,name) =
         SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP es.immutables addr of NONE => FEMPTY
         | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>

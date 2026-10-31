@@ -61,7 +61,7 @@ End
 
 Definition place_type_def:
   place_type cenv (TopLevelName ty nsid) =
-    (case cenv.ce_hashmap_info (module_var_key nsid) of
+    (case cenv.ce_hashmap_info nsid of
        SOME (tr, kt, vt) => MapPT kt vt
      | NONE => ValPT ty) ∧
   place_type cenv (Subscript ty base_e idx) =
@@ -78,7 +78,7 @@ Proof
 QED
 
 Theorem place_type_module_map:
-  cenv.ce_hashmap_info (module_var_key nsid) = SOME (tr, kt, vt) ⇒
+  cenv.ce_hashmap_info nsid = SOME (tr, kt, vt) ⇒
   place_type cenv (TopLevelName ty nsid) = MapPT kt vt
 Proof
   simp[place_type_def]
@@ -99,7 +99,7 @@ Proof
 QED
 
 Theorem place_type_nested_map:
-  cenv.ce_hashmap_info (module_var_key nsid) =
+  cenv.ce_hashmap_info nsid =
     SOME (tr, kt, HashMapT kt' (Type vt)) ⇒
   place_type cenv
     (Subscript vt (Subscript NoneT (TopLevelName NoneT nsid) k1) k2) =
@@ -109,7 +109,7 @@ Proof
 QED
 
 Theorem place_type_map_array:
-  cenv.ce_hashmap_info (module_var_key nsid) =
+  cenv.ce_hashmap_info nsid =
     SOME (tr, kt, Type (ArrayT et bound)) ⇒
   place_type cenv (Subscript NoneT (TopLevelName NoneT nsid) k) =
     ValPT (ArrayT et bound)
@@ -118,7 +118,7 @@ Proof
 QED
 
 Theorem place_type_map_struct:
-  cenv.ce_hashmap_info (module_var_key nsid) =
+  cenv.ce_hashmap_info nsid =
     SOME (tr, kt, Type (StructT sid)) ⇒
   place_type cenv (Subscript NoneT (TopLevelName NoneT nsid) k) =
     ValPT (StructT sid)
@@ -148,7 +148,7 @@ Proof
 QED
 
 Theorem place_type_module_value:
-  cenv.ce_hashmap_info (module_var_key nsid) = NONE ==>
+  cenv.ce_hashmap_info nsid = NONE ==>
   place_type cenv (TopLevelName ty nsid) = ValPT ty
 Proof
   simp[place_type_def]
@@ -193,7 +193,7 @@ End
 
 (* ===== Array Location Inference ===== *)
 (* Infer array data location from expression AST + compile_env.
-   TopLevelName → look up the module_var_key in ce_vars → StorageLoc/TransientLoc/ImmutableLoc.
+   TopLevelName → look up the nsid in ce_module_vars → StorageLoc/TransientLoc/ImmutableLoc.
    Name var → look up the plain name in ce_vars.
    Otherwise → LocMemory (default).
    Mirrors Python: array_vv.location or node.iter._expr_info.location
@@ -207,7 +207,7 @@ Definition infer_array_location_def:
      | SOME (ImmutableLoc _) => LocCode
      | _ => LocMemory) ∧
   infer_array_location cenv (TopLevelName _ nsid) =
-    (case FLOOKUP cenv.ce_vars (module_var_key nsid) of
+    (case FLOOKUP cenv.ce_module_vars nsid of
        SOME (StorageLoc _) => LocStorage
      | SOME (TransientLoc _) => LocTransient
      | SOME (ImmutableLoc _) => LocCode
@@ -223,7 +223,7 @@ Definition infer_array_is_dynamic_def:
        SOME (ArrayT _ (Dynamic _)) => T
      | _ => F) ∧
   infer_array_is_dynamic cenv (TopLevelName _ nsid) =
-    (case cenv.ce_var_type (module_var_key nsid) of
+    (case cenv.ce_module_var_type nsid of
        SOME (ArrayT _ (Dynamic _)) => T
      | _ => F) ∧
   infer_array_is_dynamic cenv _ = T  (* default: assume dynamic for safety *)
@@ -1554,8 +1554,7 @@ Definition compile_target_base_def:
      | SOME (PtrVar ptr_op _) => ptr_op
      | _ => Lit 0w) ∧
   compile_target_base cenv (TopLevelNameTarget nsid) =
-    (let name = module_var_key nsid in
-     case FLOOKUP cenv.ce_vars name of
+    (case FLOOKUP cenv.ce_module_vars nsid of
        SOME (StorageLoc slot) => Lit slot
      | SOME (TransientLoc slot) => Lit slot
      | SOME (ImmutableLoc offset) => Lit (n2w offset)
@@ -2740,8 +2739,7 @@ Definition compile_expr_body_def:
         let flag_id = cenv.ce_flag_member_id flag_name mem_name in
         (StackValue ret_ty (Lit (n2w (2 ** flag_id))), st))
    | TopLevelName _ nsid =>
-       (let name = module_var_key nsid in
-        case FLOOKUP cenv.ce_vars name of
+       (case FLOOKUP cenv.ce_module_vars nsid of
           SOME (StorageLoc slot) =>
             (LocatedValue ret_ty (mk_ptr (Lit slot) LocStorage), st)
         | SOME (TransientLoc slot) =>
@@ -2755,13 +2753,14 @@ Definition compile_expr_body_def:
    | Pop _ target =>
        (* Returns LocatedValue with element location. unwrap_value handles loading. *)
        (let target_op = compile_target_base cenv target in
-        let (loc, arr_name) = (case target of
-            NameTarget id => (infer_array_location cenv (Name ARB id), id)
+        let (loc, fty_opt) = (case target of
+            NameTarget id =>
+              (infer_array_location cenv (Name ARB id), cenv.ce_var_type id)
           | TopLevelNameTarget nsid =>
-              (infer_array_location cenv (TopLevelName ARB nsid), module_var_key nsid)
-          | _ => (LocMemory, "")) in
+              (infer_array_location cenv (TopLevelName ARB nsid),
+               cenv.ce_module_var_type nsid)
+          | _ => (LocMemory, cenv.ce_var_type "")) in
         let ws = word_scale loc in
-        let fty_opt = cenv.ce_var_type arr_name in
         let elem_ty = (case fty_opt of
             SOME (ArrayT t _) => t
           | _ => BaseT (IntT 256)) in

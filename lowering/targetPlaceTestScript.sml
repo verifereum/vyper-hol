@@ -35,8 +35,8 @@ End
    module binding, its descriptor, and the specified layout. *)
 Definition target_test_env_def:
   target_test_env ce vt = ce with <|
-    ce_vars := FEMPTY |++ [("self.m", TransientLoc 7w)];
-    ce_hashmap_info := (\n. if n = "self.m" then
+    ce_module_vars := FEMPTY |++ [((NONE,"m"), TransientLoc 7w)];
+    ce_hashmap_info := (\n. if n = (NONE,"m") then
       SOME (T, BaseT (UintT 256), vt) else NONE) |>
 End
 
@@ -88,7 +88,7 @@ Theorem target_nested_key_order:
    od)
 Proof
   rewrite_tac[compile_get_target_ptr_def] >>
-  simp[target_test_env_def, module_var_key_def, nsid_to_string_def,
+  simp[target_test_env_def, nsid_to_string_def,
        value_type_place_def, is_bytestring_type_def, LET_THM,
        FUPDATE_LIST_THM, FLOOKUP_UPDATE, comp_bind_assoc, target_bind_return]
 QED
@@ -96,8 +96,7 @@ QED
 Theorem target_local_module_collision:
   compile_get_target_ptr
     ((target_test_env ce vt) with <|
-      ce_vars := FEMPTY |++ [("self.m", TransientLoc 7w);
-                            ("m", MemLoc 96 64)];
+      ce_vars := FEMPTY |++ [("m", MemLoc 96 64)];
       ce_var_type := (\n. SOME (ArrayT (BaseT (UintT 256)) (Fixed 2))) |>)
     (NameTarget "m") st =
   ((Lit 96w, SOME LocMemory,
@@ -121,7 +120,7 @@ Theorem target_bytestring_key_hash:
    od)
 Proof
   rewrite_tac[compile_get_target_ptr_def] >>
-  simp[target_test_env_def, module_var_key_def, nsid_to_string_def,
+  simp[target_test_env_def, nsid_to_string_def,
        value_type_place_def, is_bytestring_type_def, LET_THM,
        FUPDATE_LIST_THM, FLOOKUP_UPDATE, comp_bind_assoc, target_bind_return]
 QED
@@ -148,7 +147,7 @@ Theorem target_map_array_continuation:
    od)
 Proof
   rewrite_tac[compile_get_target_ptr_def] >>
-  simp[target_test_env_def, module_var_key_def, nsid_to_string_def,
+  simp[target_test_env_def, nsid_to_string_def,
        value_type_place_def, is_bytestring_type_def, LET_THM,
        FUPDATE_LIST_THM, FLOOKUP_UPDATE, comp_bind_assoc, target_bind_return,
        target_literal_key, word_scale_def, expr_type_def,
@@ -173,7 +172,7 @@ Theorem target_map_struct_continuation:
    od)
 Proof
   rewrite_tac[compile_get_target_ptr_def] >>
-  simp[target_struct_env_def, target_test_env_def, module_var_key_def,
+  simp[target_struct_env_def, target_test_env_def,
        nsid_to_string_def, value_type_place_def, is_bytestring_type_def,
        LET_THM, FUPDATE_LIST_THM, FLOOKUP_UPDATE,
        comp_bind_assoc, target_bind_return, target_literal_key,

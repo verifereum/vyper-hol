@@ -2013,11 +2013,11 @@ QED
 Resume compiler_compile_var[expr_toplevel]:
   rename1 `TopLevelName ann name` >>
   simp[compile_expr_body_def, LET_THM] >>
-  Cases_on `FLOOKUP ce.ce_vars (module_var_key name)` >>
+  Cases_on `FLOOKUP ce.ce_module_vars name` >>
   simp[LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >>
   rpt strip_tac >> gvs[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
-  rename1 `FLOOKUP ce.ce_vars (module_var_key name) = SOME loc` >>
+  rename1 `FLOOKUP ce.ce_module_vars name = SOME loc` >>
   Cases_on `loc` >> gvs[contextTheory.vv_operand_def]
 QED
 

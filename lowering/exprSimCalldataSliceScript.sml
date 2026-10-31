@@ -611,7 +611,7 @@ Proof
     (gvs[wordsTheory.dimword_def] >> decide_tac) >>
   gvs[] >> drule_all literal_alloc_buffer_run >> strip_tac >>
   `(cenv.ce_is_ctor ==> !name tv v off.
-     FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables cenv.ce_module imms) name =

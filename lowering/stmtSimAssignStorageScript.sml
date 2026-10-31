@@ -167,12 +167,12 @@ QED
    code. *)
 Theorem compile_get_target_ptr_toplevel:
   !cenv nsid tr slot st.
-    FLOOKUP cenv.ce_vars (module_var_key nsid) =
+    FLOOKUP cenv.ce_module_vars nsid =
       SOME (if tr then TransientLoc slot else StorageLoc slot) /\
-    cenv.ce_hashmap_info (module_var_key nsid) = NONE ==>
+    cenv.ce_hashmap_info nsid = NONE ==>
     compile_get_target_ptr cenv (TopLevelNameTarget nsid) st =
       ((Lit slot, SOME (if tr then LocTransient else LocStorage),
-        OPTION_MAP ValPT (cenv.ce_var_type (module_var_key nsid))), st)
+        OPTION_MAP ValPT (cenv.ce_module_var_type nsid)), st)
 Proof
   Cases_on `tr` >> simp[compile_get_target_ptr_def, comp_return_def]
 QED
@@ -184,10 +184,10 @@ Theorem assign_storage_word_code_parts:
   !cenv lctx ty nsid e sa sf c func tr slot vtyp.
     stmt_env cenv lctx ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e)
       sa = (c, sf) /\
-    FLOOKUP cenv.ce_vars (module_var_key nsid) =
+    FLOOKUP cenv.ce_module_vars nsid =
       SOME (if tr then TransientLoc slot else StorageLoc slot) /\
-    cenv.ce_hashmap_info (module_var_key nsid) = NONE /\
-    cenv.ce_var_type (module_var_key nsid) = SOME vtyp /\ is_word_type vtyp /\
+    cenv.ce_hashmap_info nsid = NONE /\
+    cenv.ce_module_var_type nsid = SOME vtyp /\ is_word_type vtyp /\
     is_word_type (expr_type e) /\ fn_has_code sa sf func ==>
     c = cenv /\
     ?sb op.
@@ -354,8 +354,8 @@ Theorem compile_assign_storage_stmt_frag:
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
     evaluate_type (get_tenv cx) typ = SOME tvt /\ type_slot_size tvt = 1 /\
-    cenv.ce_hashmap_info (module_var_key (src, id)) = NONE /\
-    cenv.ce_var_type (module_var_key (src, id)) = SOME vtyp /\
+    cenv.ce_hashmap_info (src, id) = NONE /\
+    cenv.ce_module_var_type (src, id) = SOME vtyp /\
     is_word_type vtyp /\ is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
     (!v es1.
@@ -370,7 +370,7 @@ Theorem compile_assign_storage_stmt_frag:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
-  `FLOOKUP cenv.ce_vars (module_var_key (src, id)) =
+  `FLOOKUP cenv.ce_module_vars (src, id) =
      SOME (if tr then TransientLoc (n2w slot) else StorageLoc (n2w slot))` by
     (irule toplevel_storage_ce_vars >>
      gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
@@ -414,8 +414,8 @@ Theorem compile_assign_storage_typed_stmt_frag:
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
     expr_type e = typ /\ is_word_type typ /\
     evaluate_type (get_tenv cx) typ = SOME tvt /\
-    cenv.ce_hashmap_info (module_var_key (src, id)) = NONE /\
-    cenv.ce_var_type (module_var_key (src, id)) = SOME vtyp /\
+    cenv.ce_hashmap_info (src, id) = NONE /\
+    cenv.ce_module_var_type (src, id) = SOME vtyp /\
     is_word_type vtyp /\
     (!v es1.
        (do result <- eval_expr cx e; read_result cx result od) es =
