@@ -137,7 +137,7 @@ fi
 }
 
 if [ "$mode" != update ]; then
-  for corpus in memory-stores external-calls internal-frames name-collisions; do
+  for corpus in memory-stores external-calls internal-frames name-collisions abi-codegen; do
     env -u PYTHONPATH -u PYTHONHOME -u PYTHONSTARTUP \
       PATH="$venv/bin:$PATH" PYTHONSAFEPATH=1 \
       "$venv/bin/python" -I "$script_dir/memory_store_witnesses.py" prepare \

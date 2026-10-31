@@ -34,7 +34,7 @@ jobs:
     # remote login, holbuild restores the published HOL toolchain instead of
     # building a new one.
     if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 60
     environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || github.event_name == 'pull_request') && 'bazel-cache' || '' }}
     outputs:
@@ -73,7 +73,7 @@ jobs:
   build:
     if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     needs: toolchain
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 240
     # The cache login is a secret of the bazel-cache environment, which main,
     # merge-queue and pull request refs may deploy to.
@@ -138,7 +138,7 @@ jobs:
     # witness groups.
     if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     needs: toolchain
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 240
     # The cache login is a secret of the bazel-cache environment, which main,
     # merge-queue and pull request refs may deploy to.
@@ -184,7 +184,7 @@ jobs:
   witnesses:
     if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     needs: compiler
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 90
     # The cache login is a secret of the bazel-cache environment, which main,
     # merge-queue and pull request refs may deploy to.
@@ -245,7 +245,7 @@ jobs:
     # and exports the HBX of the whole project.
     if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     needs: [build, witnesses]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 240
     # The cache login is a secret of the bazel-cache environment, which main,
     # merge-queue and pull request refs may deploy to.
@@ -321,7 +321,7 @@ jobs:
     # the merge queue fast-forwards main to the commit it tested, so the push
     # run skips the tests and oracle and builds only to save main's snapshot.
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     permissions:
       actions: read
     outputs:
@@ -341,7 +341,7 @@ jobs:
     # start long before build finishes.
     needs: [toolchain, tested]
     if: ${{ !cancelled() && needs.toolchain.result == 'success' && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 240
     # The cache login is a secret of the bazel-cache environment, which main,
     # merge-queue and pull request refs may deploy to.
@@ -387,7 +387,7 @@ jobs:
   python-o1-oracle:
     needs: tested
     if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     steps:
       - uses: actions/checkout@v7
         with:
@@ -409,7 +409,7 @@ jobs:
   export-vyper-tests:
     needs: tested
     if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     outputs:
       export-cache-key: ${{ steps.exports.outputs.export-cache-key }}
     steps:
@@ -424,7 +424,7 @@ jobs:
     # the implicit success(); the result checks stand in for it.
     if: ${{ !cancelled() && needs.test-deps.result == 'success' && needs.export-vyper-tests.result == 'success' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     needs: [test-deps, export-vyper-tests]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 90
     # The cache login is a secret of the bazel-cache environment, which main,
     # merge-queue and pull request refs may deploy to.
@@ -489,7 +489,7 @@ jobs:
 
   holbuild-success:
     if: always() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     needs: [toolchain, build, compiler, witnesses, build-rollup, tested, test-deps, python-o1-oracle, export-vyper-tests, vyper-tests]
     steps:
       - name: Check all jobs succeeded

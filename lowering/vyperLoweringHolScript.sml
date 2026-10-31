@@ -17,7 +17,8 @@ Ancestors
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
   stmtSimDeclMem stmtSimDeclEmpty exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
   stmtSimAssign stmtSimAssignMem stmtSimAssignTuple stmtSimAssignTupleMem
-  stmtSimAssignStorage
+  stmtSimAssignStorage stmtSimAssignAttr stmtSimAssignAttrStorage
+  stmtSimAugAssignAttr
   valueEncodingProofs
   localPtrsProps
   immutableStagingBridge

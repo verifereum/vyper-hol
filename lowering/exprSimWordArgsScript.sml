@@ -329,15 +329,21 @@ Proof
 QED
 
 (* ===== Invariant-indexed source argument evaluation ===== *)
+(* Each operand's facts at every state of the invariant; a later operand's
+   only if the ones before it can evaluate, as evaluate_ind gives them. *)
 Definition wb_args_ready_def:
-  wb_args_ready ctx func cenv cx arg_ty I args <=>
-    !e es. MEM e args /\ I es ==>
-      expr_sim ctx func cenv cx (arg_ty e) e es /\
-      is_word_type (expr_type e) /\
-      IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
-      (!res es'. (do r <- eval_expr cx e; read_result cx r od) es = (res, es') ==> expr_res_ok res) /\
-      (!v es'. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
-        word_value v /\ I es')
+  wb_args_ready ctx func cenv cx arg_ty Inv [] = T /\
+  wb_args_ready ctx func cenv cx arg_ty Inv (e::args) =
+    ((!es. Inv es ==>
+       expr_sim ctx func cenv cx (arg_ty e) e es /\
+       is_word_type (expr_type e) /\
+       IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
+       (!res es'. (do r <- eval_expr cx e; read_result cx r od) es = (res, es') ==> expr_res_ok res) /\
+       (!v es'. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
+         word_value v /\ Inv es')) /\
+     ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
+                        read_result cx tv s1 = (INL v, t1)) ==>
+      wb_args_ready ctx func cenv cx arg_ty Inv args))
 End
 
 Theorem wb_args_ready_head:
@@ -354,11 +360,13 @@ Proof
 QED
 
 Theorem wb_args_ready_tail:
-  !ctx func cenv cx arg_ty I e args.
-    wb_args_ready ctx func cenv cx arg_ty I (e::args) ==>
+  !ctx func cenv cx arg_ty I e args es v es1.
+    wb_args_ready ctx func cenv cx arg_ty I (e::args) /\
+    (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es1) ==>
     wb_args_ready ctx func cenv cx arg_ty I args
 Proof
-  simp[wb_args_ready_def] >> metis_tac[]
+  simp[wb_args_ready_def] >> rpt strip_tac >> first_x_assum irule >>
+  drule eval_expr_read_INL >> metis_tac[]
 QED
 
 Theorem eval_exprs_nil:

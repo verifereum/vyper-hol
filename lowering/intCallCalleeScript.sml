@@ -1065,8 +1065,9 @@ Proof
   `mat_pending cenv env st s f0 mr caps` by simp[mat_pending_def] >>
   qpat_assum `mat_inv _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [mat_inv_def]) >>
-  drule_all (SRULE [arithmeticTheory.ADD_COMM] materialize_stack_step) >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `run_inst_seq _ s = OK s1` >>
+  `s.vs_alloca_next + sz < dimword (:256)` by decide_tac >>
+  drule_all materialize_stack_step >>
+  disch_then (qx_choose_then `s1` strip_assume_tac) >>
   qpat_x_assum `EVERY _ caps` kall_tac >>
   `s.vs_alloca_next < dimword (:256)` by decide_tac >>
   `mat_inv func
@@ -1074,11 +1075,13 @@ Proof
         (\m. m |+ (name, PtrVar (Var (STRING #"%" (toString st.cs_next_var))) sz)))
       env mid s1 f0 mr /\ mat_frame st s s1 /\
       s1.vs_alloca_next = s.vs_alloca_next + sz` by
-    (irule mat_inv_stack_bind >> simp[] >> conj_tac
-     >- (first_assum ACCEPT_TAC) >>
-     qexists_tac `a` >> simp[Abbr `s1`]) >>
-  qexists_tac `s1` >> simp[] >> irule mat_pending_stack_bind >>
-  simp[] >> qexists_tac `a` >> qexistsl_tac [`s`, `st`] >> simp[Abbr `s1`]
+    (irule mat_inv_stack_bind >> simp[IgnAsm `s1 = _`] >>
+     conj_tac >- (first_assum ACCEPT_TAC) >>
+     qexists_tac `a` >> simp[arithmeticTheory.ADD_COMM]) >>
+  qexists_tac `s1` >> simp[IgnAsm `s1 = _`] >>
+  irule mat_pending_stack_bind >> simp[IgnAsm `s1 = _`] >>
+  qexists_tac `a` >> qexistsl_tac [`s`, `st`] >>
+  simp[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem materialize_run_compact:
@@ -1860,7 +1863,7 @@ Proof
   simp[is_terminator_def] >> rpt strip_tac >> gvs[is_terminator_def]
 QED
 
-Theorem internal_param_decls_projection[local]:
+Theorem internal_param_decls_projection:
   !params idx st caps next st'.
     compile_internal_param_decls params idx st = ((caps,next),st') ==>
     MAP (\c. (FST c,FST (SND c))) caps = params /\

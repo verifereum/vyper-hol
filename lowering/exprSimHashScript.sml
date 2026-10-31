@@ -17,7 +17,8 @@
  *     literal signature compiles and evaluates to its 4-byte selector
  *   compile_keccak256_typed_vv_sim, compile_sha256_typed_vv_sim,
  *   compile_method_id_other_typed_vv_sim — expr_vv_sim of the three,
- *     given expr_ok of the argument (exprSimBuiltins' case lemmas)
+ *     given expr_body_pre and the argument's expr_sim (exprSimBuiltins'
+ *     case lemmas)
  *
  * Helpers: byte views of val_in_memory, memory frames, the SHA3 and
  *   STATICCALL steps, and the per-builtin runs.
@@ -1992,17 +1993,17 @@ Proof
 QED
 
 (* Forced base-typed operands have the corresponding value type. *)
-Theorem expr_sim_pre_base_result:
-  expr_sim_pre cenv cx env e es /\ expr_type e = BaseT bt /\
+Theorem expr_body_pre_base_result:
+  expr_body_pre cenv cx env e es /\ expr_type e = BaseT bt /\
   (do r <- eval_expr cx e; read_result cx r od) es = (res,es') ==>
   expr_sim_inv cenv cx env es' /\ expr_res_ok res /\
   !v. res = INL v ==> value_has_type (BaseTV bt) v
 Proof
-  strip_tac >> drule_all expr_sim_pre_eval >> strip_tac >>
+  strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
   `env.type_defs = get_tenv cx` by
-    gvs[expr_sim_pre_def, expr_sim_inv_def, env_consistent_def,
+    gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
         env_context_consistent_def] >>
-  drule_all expr_sim_pre_res_ok >> strip_tac >> simp[] >>
+  drule_all expr_body_pre_res_ok >> strip_tac >> simp[] >>
   rpt strip_tac >> first_x_assum drule >>
   simp[expr_result_typed_def, expr_runtime_typed_def,
        value_result_typed_def, value_runtime_typed_def,
@@ -2035,8 +2036,8 @@ QED
 (* Unary composition keeps the complete argument postcondition available to
    the suffix, including the footprint and protected-allocation frame. *)
 Theorem compile_typed_unary_builtin_vv_sim:
-  expr_sim_pre cenv cx env (Builtin ann bt [e]) es /\
-  expr_sim_ok cenv e /\ expr_type e = BaseT bty /\
+  expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
+  expr_sim ctx func cenv cx (expr_type e) e es /\ expr_type e = BaseT bty /\
   bt <> Len /\ builtin_args_length_ok bt 1 /\
   (!sa sb vv. compile_expr cenv ty (Builtin ann bt [e]) sa = (vv,sb) ==>
     ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
@@ -2058,18 +2059,16 @@ Theorem compile_typed_unary_builtin_vv_sim:
   expr_vv_sim ctx func cenv cx ty (Builtin ann bt [e]) es
 Proof
   strip_tac >> rewrite_tac[expr_vv_sim_def] >> rpt strip_tac >>
-  `expr_sim_pre cenv cx env e es` by
-    (drule expr_sim_pre_builtin_arg >>
-     disch_then irule >> gvs[expr_sim_pre_def]) >>
-  `expr_sim ctx func cenv cx (expr_type e) e es` by
-    metis_tac[expr_sim_ok_def] >>
+  `expr_body_pre cenv cx env e es` by
+    (drule expr_body_pre_builtin_arg >>
+     disch_then irule >> gvs[expr_body_pre_def]) >>
   qpat_x_assum `!sa sb vv. _` drule >> strip_tac >>
   `cs_appends (code x)` by simp[] >>
   drule_all hash_unary_suffix_cut >> strip_tac >>
   `!ar es1. (do r <- eval_expr cx e; read_result cx r od) es = (ar,es1) ==>
      expr_sim_inv cenv cx env es1 /\ expr_res_ok ar /\
      !v. ar = INL v ==> value_has_type (BaseTV bty) v` by
-    (rpt strip_tac >> drule_all expr_sim_pre_base_result >> simp[]) >>
+    (rpt strip_tac >> drule_all expr_body_pre_base_result >> simp[]) >>
   drule_at (Pos last) eval_expr_unary_builtin_cases >> simp[] >>
   strip_tac
   >- (gvs[] >> irule expr_sim_suffix >>
@@ -2292,8 +2291,8 @@ QED
 (* Stack-result specialization: discharge type evaluation and turn a checked
    straight-line post-run boundary into the unary continuation interface. *)
 Theorem compile_typed_stack_unary_builtin_vv_sim:
-  expr_sim_pre cenv cx env (Builtin ann bt [e]) es /\
-  expr_sim_ok cenv e /\ expr_type e = BaseT bty /\
+  expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
+  expr_sim ctx func cenv cx (expr_type e) e es /\ expr_type e = BaseT bty /\
   bt <> Len /\ builtin_args_length_ok bt 1 /\
   (!sa sb vv. compile_expr cenv ty (Builtin ann bt [e]) sa = (vv,sb) ==>
      ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
@@ -2326,11 +2325,11 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
   Cases_on `code x sm` >> simp[as_stack_val_def] >> strip_tac >> gvs[] >>
-  `expr_sim_pre cenv cx env e es'` by
-    (irule expr_sim_pre_builtin_arg >>
-     first_assum (irule_at (Pat `expr_sim_pre _ _ _ _ _`)) >> simp[]) >>
+  `expr_body_pre cenv cx env e es'` by
+    (irule expr_body_pre_builtin_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[]) >>
   `evaluate_type (get_tenv cx) (BaseT bty) = SOME (BaseTV bty)` by
-    (drule well_typed_expr_type_evaluates >>
+    (drule expr_body_pre_type_evaluates >>
      simp[vyperValueTheory.evaluate_type_def] >>
      Cases_on `bty` >> gvs[AllCaseEqs()] >>
      rename1 `expr_type e = BaseT (BytesT bd)` >>
@@ -2343,15 +2342,15 @@ Proof
 QED
 
 Theorem compile_keccak256_typed_vv_sim:
-  expr_sim_pre cenv cx env (Builtin ann Keccak256 [e]) es /\
-  expr_sim_ok cenv e ==>
+  expr_body_pre cenv cx env (Builtin ann Keccak256 [e]) es /\
+  expr_sim ctx func cenv cx (expr_type e) e es ==>
   expr_vv_sim ctx func cenv cx ty (Builtin ann Keccak256 [e]) es
 Proof
   strip_tac >>
   `is_bytes_or_string_type (expr_type e) /\ ann = BaseT (BytesT (Fixed 32))` by
     (irule (SRULE [] (Q.INST [`b` |-> `Keccak256`,
        `ts` |-> `[expr_type e]`] hash_builtin_types)) >>
-     gvs[expr_sim_pre_def, well_typed_expr_def]) >>
+     gvs[expr_body_pre_def, well_typed_expr_def]) >>
   `?bty. expr_type e = BaseT bty` by
     (Cases_on `expr_type e` >> gvs[is_bytes_or_string_type_def]) >>
   irule compile_typed_stack_unary_builtin_vv_sim >>
@@ -2514,15 +2513,15 @@ Proof
 QED
 
 Theorem compile_sha256_typed_vv_sim:
-  expr_sim_pre cenv cx env (Builtin ann Sha256 [e]) es /\
-  expr_sim_ok cenv e ==>
+  expr_body_pre cenv cx env (Builtin ann Sha256 [e]) es /\
+  expr_sim ctx func cenv cx (expr_type e) e es ==>
   expr_vv_sim ctx func cenv cx ty (Builtin ann Sha256 [e]) es
 Proof
   strip_tac >>
   `is_bytes_or_string_type (expr_type e) /\ ann = BaseT (BytesT (Fixed 32))` by
     (irule (SRULE [] (Q.INST [`b` |-> `Sha256`,
        `ts` |-> `[expr_type e]`] hash_builtin_types)) >>
-     gvs[expr_sim_pre_def, well_typed_expr_def]) >>
+     gvs[expr_body_pre_def, well_typed_expr_def]) >>
   `?bty. expr_type e = BaseT bty` by
     (Cases_on `expr_type e` >> gvs[is_bytes_or_string_type_def]) >>
   irule compile_typed_stack_unary_builtin_vv_sim >>
@@ -2813,8 +2812,8 @@ Proof
 QED
 
 Theorem compile_method_id_runtime_typed_vv_sim:
-  expr_sim_pre cenv cx env (Builtin ann MethodId [e]) es /\
-  expr_sim_ok cenv e /\ method_id_literal e = NONE ==>
+  expr_body_pre cenv cx env (Builtin ann MethodId [e]) es /\
+  expr_sim ctx func cenv cx (expr_type e) e es /\ method_id_literal e = NONE ==>
   expr_vv_sim ctx func cenv cx ty (Builtin ann MethodId [e]) es
 Proof
   strip_tac >>
@@ -2822,7 +2821,7 @@ Proof
     (ann <> BaseT (BytesT (Dynamic 4)) ==> ann = BaseT (BytesT (Fixed 4)))` by
     (mp_tac (SRULE [] (Q.INST [`b` |-> `MethodId`,
        `ty` |-> `ann`, `ts` |-> `[expr_type e]`] hash_builtin_types)) >>
-     (impl_tac >- gvs[expr_sim_pre_def, well_typed_expr_def]) >> metis_tac[]) >>
+     (impl_tac >- gvs[expr_body_pre_def, well_typed_expr_def]) >> metis_tac[]) >>
   `?bty. expr_type e = BaseT bty` by
     (Cases_on `expr_type e` >> gvs[is_bytes_or_string_type_def]) >>
   qabbrev_tac `fixed = (ann = BaseT (BytesT (Fixed 4)))` >>
@@ -2858,11 +2857,11 @@ QED
 
 Resume compile_method_id_runtime_typed_vv_sim[continuation]:
   rpt strip_tac >> pairarg_tac >> gvs[] >>
-  `expr_sim_pre cenv cx env e es'` by
-    (irule expr_sim_pre_builtin_arg >>
-     first_assum (irule_at (Pat `expr_sim_pre _ _ _ _ _`)) >> simp[]) >>
+  `expr_body_pre cenv cx env e es'` by
+    (irule expr_body_pre_builtin_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[]) >>
   `evaluate_type (get_tenv cx) (BaseT bty) = SOME (BaseTV bty)` by
-    (drule well_typed_expr_type_evaluates >>
+    (drule expr_body_pre_type_evaluates >>
      simp[vyperValueTheory.evaluate_type_def] >>
      Cases_on `bty` >> gvs[AllCaseEqs()] >>
      rename1 `expr_type e = BaseT (BytesT bd)` >>
@@ -2880,8 +2879,8 @@ QED
 Finalise compile_method_id_runtime_typed_vv_sim
 
 Theorem compile_method_id_other_typed_vv_sim:
-  expr_sim_pre cenv cx env (Builtin ann MethodId [e]) es /\
-  expr_sim_ok cenv e /\
+  expr_body_pre cenv cx env (Builtin ann MethodId [e]) es /\
+  expr_sim ctx func cenv cx (expr_type e) e es /\
   ~(ann = BaseT (BytesT (Fixed 4)) /\
     ?la l. e = Literal la l /\ IS_SOME (method_id_literal (Literal la l))) ==>
   expr_vv_sim ctx func cenv cx ty (Builtin ann MethodId [e]) es
@@ -2893,7 +2892,7 @@ Proof
     (ann <> BaseT (BytesT (Dynamic 4)) ==> ann = BaseT (BytesT (Fixed 4)))` by
     (mp_tac (SRULE [] (Q.INST [`b` |-> `MethodId`,
        `ty` |-> `ann`, `ts` |-> `[expr_type e]`] hash_builtin_types)) >>
-     (impl_tac >- gvs[expr_sim_pre_def, well_typed_expr_def]) >> metis_tac[]) >>
+     (impl_tac >- gvs[expr_body_pre_def, well_typed_expr_def]) >> metis_tac[]) >>
   `?la l. e = Literal la l` by
     (Cases_on `e` >> gvs[method_id_literal_def] >>
      rename1 `method_id_literal (Literal la l)` >> Cases_on `l` >>
@@ -2901,5 +2900,6 @@ Proof
   `IS_SOME (method_id_literal (Literal la l))` by
     (Cases_on `method_id_literal (Literal la l)` >> gvs[]) >>
   drule compile_method_id_literal_dynamic_vv_sim >>
-  simp[expr_vv_ok_def] >> metis_tac[]
+  rw[expr_vv_ok_def] >> first_x_assum irule >> qexists `env` >>
+  gvs[expr_sim_pre_body, vyperTypeCallGraphTheory.int_calls_expr_def]
 QED
