@@ -8,7 +8,10 @@
  * read is the field of the base's value (exprSimAttributeFields).
  *
  * TOP-LEVEL:
- *   compile_attribute_vv_sim — expr_vv_sim of Attribute
+ *   compile_attribute_vv_case, compile_attribute_case — Attribute's
+ *                           expr_vv_case and expr_sim_case, for
+ *                           compile_expr_sim and the body simulation;
+ *                           compile_attribute_vv_sim follows
  *
  * Helpers: vv_loc, attr_offset, compile_expr_attribute,
  *   eval_expr_attribute, attr_pre_base, attr_add_post, attr_add_frag,
@@ -88,16 +91,16 @@ QED
 
 Theorem attr_pre_base[local]:
   !cenv cx env ann obj fld es.
-    expr_sim_pre cenv cx env (Attribute ann obj fld) es ==>
-    expr_sim_pre cenv cx env obj es /\
+    expr_body_pre cenv cx env (Attribute ann obj fld) es ==>
+    expr_body_pre cenv cx env obj es /\
     ?sid. expr_type obj = StructT sid /\
           attribute_type (get_tenv cx) (StructT sid) fld = SOME ann
 Proof
   rpt gen_tac >> strip_tac >>
   `env.type_defs = get_tenv cx` by
-    fs[expr_sim_pre_def, expr_sim_inv_def, env_consistent_def,
+    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
        env_context_consistent_def] >>
-  gvs[expr_sim_pre_def, well_typed_expr_def, attribute_type_ok_def,
+  gvs[expr_body_pre_def, well_typed_expr_def, attribute_type_ok_def,
       vyperTypeCallGraphTheory.int_calls_expr_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm, byte_widths_expr_def,
       alloc_limits_expr_def] >>
@@ -426,16 +429,17 @@ QED
 
 (* ===== The simulation ===== *)
 
-Theorem compile_attribute_vv_sim:
-  !cenv obj.
-    expr_vv_ok cenv obj ==>
-    !ctx func cx env ty ann fld es.
-      expr_sim_pre cenv cx env (Attribute ann obj fld) es ==>
-      expr_vv_sim ctx func cenv cx ty (Attribute ann obj fld) es
+Theorem compile_attribute_vv_case:
+  !nocalls ctx func cenv cx ann obj fld.
+    expr_vv_case nocalls ctx func cenv cx obj ==>
+    expr_vv_case nocalls ctx func cenv cx (Attribute ann obj fld)
 Proof
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> simp[Once expr_vv_case_def] >>
+  rpt gen_tac >> strip_tac >>
   drule attr_pre_base >> strip_tac >>
-  `expr_vv_sim ctx func cenv cx ty obj es` by metis_tac[expr_vv_ok_def] >>
+  `expr_vv_sim ctx func cenv cx ty obj es` by
+    (irule (iffLR expr_vv_case_def) >>
+     gvs[vyperTypeCallGraphTheory.int_calls_expr_def] >> metis_tac[]) >>
   simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
   drule compile_expr_attribute >> strip_tac >> gvs[] >>
   rename1 `compile_expr cenv ty obj sa = (bvv, sm)` >>
@@ -444,19 +448,19 @@ Proof
   drule_all fn_has_code_split >> strip_tac >>
   gvs[eval_expr_attribute, bind_def] >>
   Cases_on `eval_expr cx obj es` >> rename1 `_ = (er, es1)` >>
-  `expr_vv_res_ok er` by (drule_all expr_sim_pre_vv_res_ok >> simp[]) >>
+  `expr_vv_res_ok er` by (drule_all expr_body_pre_vv_res_ok >> simp[]) >>
   qpat_x_assum `expr_vv_sim _ _ _ _ _ obj _` mp_tac >>
   simp[expr_vv_sim_def] >>
   disch_then drule_all >> disch_then (qspec_then `s0` assume_tac) >>
   Cases_on `er` >> gvs[]
   >- (rename1 `eval_expr cx obj es = (INL btv, es1)` >>
-      drule_all expr_sim_pre_runtime_typed >> strip_tac >> gvs[] >>
-      `expr_sim_inv cenv cx env es` by fs[expr_sim_pre_def] >>
+      drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[] >>
+      `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
       drule_all struct_fields_layout >> strip_tac >> gvs[] >>
       drule_all attribute_type_evaluates >> strip_tac >>
       `~popped_at_field btv fld es1` by
         (irule popped_keys_indexed_not_at_field >>
-         drule_all expr_sim_pre_eval_result >> simp[expr_sim_inv_def]) >>
+         drule_all expr_body_pre_eval_result >> simp[expr_sim_inv_def]) >>
       `!m. res <> INR (Error (TypeError m))` by
         (rpt strip_tac >> gvs[expr_vv_res_ok_def]) >>
       irule frag_exec_seq >>
@@ -480,4 +484,26 @@ Proof
       goal_assum (drule_at Any) >> simp[] >>
       rpt strip_tac >> gvs[]) >>
   irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem compile_attribute_case:
+  !nocalls ctx func cenv cx ann obj fld.
+    expr_vv_case nocalls ctx func cenv cx obj ==>
+    expr_sim_case nocalls ctx func cenv cx (Attribute ann obj fld) /\
+    expr_vv_case nocalls ctx func cenv cx (Attribute ann obj fld)
+Proof
+  metis_tac[compile_attribute_vv_case, expr_sim_case_of_vv]
+QED
+
+Theorem compile_attribute_vv_sim:
+  !cenv obj.
+    expr_vv_ok cenv obj ==>
+    !ctx func cx env ty ann fld es.
+      expr_sim_pre cenv cx env (Attribute ann obj fld) es ==>
+      expr_vv_sim ctx func cenv cx ty (Attribute ann obj fld) es
+Proof
+  rw[expr_vv_ok_case] >>
+  `expr_vv_case T ctx func cenv cx (Attribute ann obj fld)` by
+    simp[compile_attribute_vv_case] >>
+  gvs[expr_vv_case_def, expr_sim_pre_body] >> metis_tac[]
 QED
