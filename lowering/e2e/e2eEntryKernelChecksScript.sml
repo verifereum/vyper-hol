@@ -39,7 +39,7 @@ Theorem entry_producers_exact_schema:
     codegen_context_obligations Inv out.po_unit.cu_context cp) /\
   (!tops prog am tx es cp.
     call_state_rel tops (assemble prog) am tx es ==>
-    initial_venom_state_rel am tx (entry_venom_state prog cp es)) /\
+    initial_venom_state_rel tops am tx (entry_venom_state prog cp es)) /\
   (!prog cp es. o1_initial_state_ok (entry_venom_state prog cp es)) /\
   (!tops prog am tx es u cp.
     call_state_rel tops (assemble prog) am tx es /\ unit_shape_ok u ==>

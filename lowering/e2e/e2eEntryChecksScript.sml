@@ -55,8 +55,11 @@ QED
 Theorem entry_concrete_code_labels_and_fmp:
   let prog = [AsmOp "STOP"; AsmDataHeader "code_end"];
       cplan = cp with cp_initial_fmp := 96;
-      vs = entry_venom_state prog cplan es
-  in vs.vs_code = [0w] /\ FLOOKUP vs.vs_labels "code_end" = SOME 1w /\
+      start = es with contexts := [(ctxt with msgParams :=
+        ctxt.msgParams with code := [0w; 42w], rb)];
+      vs = entry_venom_state prog cplan start
+  in vs.vs_code = [0w; 42w] /\ vs.vs_data_section = [42w] /\
+     FLOOKUP vs.vs_labels "code_end" = SOME 1w /\
      vs.vs_fmp = 96w /\ vs.vs_call_entry_fmp = 96w /\
      vs.vs_initial_fmp = 96w /\ vs.vs_return_pc_token = 0w
 Proof

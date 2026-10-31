@@ -15,17 +15,20 @@
  *   expr_sim_inv      — the facts about the source state and the context
  *                       that every subexpression keeps: type soundness's
  *                       invariants, the locals of the type environment
- *                       held through pointer variables, and the flag
+ *                       held through pointer variables, the flag
  *                       member ids, flag member counts and struct fields
- *                       of the compile environment
+ *                       of the compile environment, and the storage
+ *                       invariants
  *   expr_sim_pre      — expr_sim_inv, the expression well typed, its
  *                       integer types of whole bytes, its buffers below
- *                       the allocation limit, and no internal call in it
+ *                       the allocation limit, and no internal call,
+ *                       raw_call or create in it
  *   byte_widths_expr  — every node's type has a width of whole bytes
  *   alloc_limits_expr, literal_alloc_ok — every static buffer the lowering
  *                       allocates for a node is below 2 ** 64 bytes
  *   expr_body_pre     — expr_sim_pre less int_calls_expr e = []: the
- *                       body simulation's (bodySim)
+ *                       body simulation's (bodySim); its calls are to
+ *                       the main module of a supported program
  *   expr_sim_ok       — expr_sim wherever expr_sim_pre holds
  *   expr_vv_ok        — expr_vv_sim wherever expr_sim_pre holds
  *   expr_ok           — both: the induction predicate
@@ -37,8 +40,8 @@
  *   compile_expr_type_builtin_dispatch — compile_expr of a type builtin is
  *                       its dispatcher's
  *   word_value_type   — the types whose values are word_values
- *   popped_keys_indexed — every key of a local's popped history ends in
- *                       an array index
+ *   popped_keys_indexed — a local's popped history is typed and keyed
+ *                       at dynamic-array indices
  *   eval_expr_popped_keys_indexed — evaluation keeps popped_keys_indexed
  *   expr_sim_pre_eval — type soundness: evaluation keeps expr_sim_inv and
  *                       raises no type error
@@ -62,6 +65,12 @@
  *                       expr_vv_ok_case, expr_ok_case)
  *   expr_sim_case_of_vv, expr_vv_case_stack — expr_ok_of_vv and
  *                       expr_ok_stack for them
+ *   exprs_case        — the operands' judgments, each one's only if the
+ *                       operands before it evaluate, as body_exprs_ok
+ *                       gives them (exprs_case_below from expr_sim_below,
+ *                       body_exprs_ok_case in bodySimExprCases)
+ *   expr_case_of_ok, expr_vv_case_nil — the judgments of a form with no
+ *                       internal call from its expr_ok or expr_vv_ok
  *
  * The type-soundness lemmas above hold of expr_body_pre too
  * (expr_body_pre_eval_result, expr_body_pre_eval, ...): they use
@@ -157,15 +166,38 @@
  *     INVOKE, whose simulation is #638's call step; until that is stated
  *     this theorem excludes them, and #638 replaces this conjunct with its
  *     hypothesis on the callees.
- *   - The popped keys clause (popped_keys_indexed): every key of a local's
- *     popped history ends in an array index.  Reading a field of a popped
- *     element reads the history, and a snapshot recorded at the field
- *     itself would be read instead of the field of the element's snapshot,
- *     which memory at the field's pointer holds.  This is a fact about the
- *     source semantics, not the compiler: pop records the element it
- *     removes at path ++ [ValueSubscript (IntV i)] (record_pop), a new
- *     local starts with no history, and evaluation changes the scopes only
- *     by pops (eval_expr_popped_keys_indexed).
+ *   - The storage clauses: the outcomes are SOME (state_rel), every
+ *     declared storage and transient region decodes
+ *     (contract_storage_well_formed), the layout is safe, and every
+ *     successful outcome still to consume keeps the regions decoding
+ *     (oracle_storage_ok).  e2eDefs's source_storage_ok and
+ *     call_outcomes_ok ask these of the entry state and the outcomes.
+ *     Without them a storage read's slot need not decode: the source
+ *     raises where the lowering reads the slot.  expr_sim_pre_eval
+ *     carries them on by exprStoragePreservation, which needs no
+ *     postulate about the code external calls run.
+ *   - ~expr_has_evm_run e: no raw_call or create.  The source runs these
+ *     on the EVM even with the outcome oracle, and a delegate raw_call can
+ *     write anything into the contract's storage, so nothing keeps the
+ *     storage clauses across them without a postulate on that code.
+ *     The supported subset excludes both (supported_expr_no_evm_run).
+ *   - The popped keys clause (popped_keys_indexed): a local's popped
+ *     history is typed, and every key is an index into a dynamic array.
+ *     Reading a field or a tuple element of a popped element reads the
+ *     history, and a snapshot recorded at the field or element itself
+ *     would be read instead of the one the element's snapshot holds, which
+ *     memory at the pointer holds.  This is a fact about the source
+ *     semantics, not the compiler: pop records the element it removes at
+ *     path ++ [ValueSubscript (IntV i)] with a dynamic array at path
+ *     (record_pop), a new local starts with no history, and evaluation
+ *     changes the scopes only by pops (eval_expr_popped_keys_indexed).
+ *   - The map table clauses: the compile environment's ce_hashmap_info
+ *     agrees with env's toplevel_vtypes on the declared names
+ *     (placeTypingProps's place_map_tables_agree_on_defined, which
+ *     placeTypingBuildProps proves of build_compile_env), and has no entry
+ *     for a bare global.  compile_subscript dispatches on place_type, which
+ *     reads ce_hashmap_info; with these a well-typed expression's
+ *     place_type is its own type (place_type_well_typed_on_defined).
  *
  *   - The struct fields clauses: the compile environment's struct field
  *     map agrees with the type environment's struct declarations, field
@@ -206,8 +238,12 @@ Ancestors
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
   vyperExprNoControl loweringSlice exprSimUnwrap exprSafeOperand
-  vyperEvalOutcomeSuffix vyperRuntimeAccounts vyperLookup
-  vyperPlaceResultTyping
+  vyperEvalOutcomeSuffix vyperRuntimeAccounts
+  vyperStorageLayoutSafety vyperTypeStoragePreservation
+  vyperTypeEvalStoragePreservation vyperCallOutcomeStorage
+  supportedExprTraverse exprStoragePreservation
+  vyperLookup vyperPlaceResultTyping supportedProgram bodyStoragePreservation
+  vyperPlaceInvariants placeTypingProps
 Libs
   pairLib
 
@@ -224,16 +260,29 @@ Definition outcomes_accounts_typed_def:
                      accounts_runtime_well_typed oc.co_accounts) os
 End
 
-(* Every key of a local's popped history ends in an array index: pop records
-   the element it removes at path ++ [ValueSubscript (IntV i)] (record_pop),
-   and replace_popped keeps the keys. *)
+(* A local's popped history is typed at its paths, and every key is an index
+   into a dynamic array: pop records the element it removes at
+   path ++ [ValueSubscript (IntV i)] where path holds a DynArrayV
+   (record_pop), and replace_popped keeps the keys. *)
 Definition popped_keys_indexed_def:
   popped_keys_indexed (scs : scope list) <=>
     EVERY (\sc. !id entry. FLOOKUP sc id = SOME entry ==>
-                 EVERY (\k. ?p i. k = p ++ [ValueSubscript i])
+                 popped_history_typed entry.type entry.popped /\
+                 EVERY (\k. ?p i etv n.
+                             k = p ++ [ValueSubscript i] /\
+                             subscripts_type entry.type p =
+                               SOME (ArrayTV etv (Dynamic n)))
                        (MAP FST entry.popped)) scs
 End
 
+(* The source takes external calls from the outcome oracle (state_rel's
+   outcomes are SOME).  The storage conjuncts: every declared storage and
+   transient region decodes (contract_storage_well_formed), the layout
+   keeps the regions in
+   range and apart (storage_layout_safe), and every successful outcome
+   still to consume leaves the regions decoding (oracle_storage_ok), as
+   e2eDefs's source_storage_ok and call_outcomes_ok ask of the entry state
+   and the outcomes. *)
 Definition expr_sim_inv_def:
   expr_sim_inv cenv cx env (es:evaluation_state) <=>
     env_consistent env cx es /\ state_well_typed es /\
@@ -256,7 +305,13 @@ Definition expr_sim_inv_def:
        EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
                                      sz = type_memory_size tv) fields) /\
     outcomes_accounts_typed es.outcomes /\
-    popped_keys_indexed es.scopes
+    IS_SOME es.outcomes /\
+    contract_storage_well_formed cx es /\ storage_layout_safe cx /\
+    oracle_storage_ok cx es /\
+    popped_keys_indexed es.scopes /\
+    place_map_tables_agree_on_defined cenv env /\
+    (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
+               cenv.ce_hashmap_info (module_var_key nsid) = NONE)
 End
 
 (* The types whose values are word_values (loweringSlice): integers,
@@ -415,16 +470,24 @@ Definition expr_sim_pre_def:
   expr_sim_pre cenv cx env e es <=>
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
-    int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e)
+    int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e) /\
+    ~expr_has_evm_run e
 End
 
 (* expr_sim_pre without int_calls_expr e = []: the body simulation's
-   (bodySim), where an operand may call an internal function. *)
+   (bodySim), where an operand may call an internal function.  Its calls
+   are to the main module of a supported program, as supported_expr's
+   are, so the callees' bodies keep storage well formed
+   (bodyStoragePreservation). *)
 Definition expr_body_pre_def:
   expr_body_pre cenv cx env e es <=>
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
-    call_evaluation_safe cx (int_calls_expr e)
+    call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
+    EVERY (\c. FST c = NONE /\
+               ?tops. supported_program tops /\
+                      get_module_code cx NONE = SOME tops)
+          (int_calls_expr e)
 End
 
 Theorem expr_sim_pre_body:
@@ -432,7 +495,7 @@ Theorem expr_sim_pre_body:
     expr_sim_pre cenv cx env e es <=>
     expr_body_pre cenv cx env e es /\ int_calls_expr e = []
 Proof
-  rw[expr_sim_pre_def, expr_body_pre_def] >> metis_tac[]
+  rw[expr_sim_pre_def, expr_body_pre_def, EQ_IMP_THM] >> gvs[]
 QED
 
 Theorem expr_sim_pre_body_pre:
@@ -484,6 +547,19 @@ Definition expr_vv_case_def:
     !env ty es.
       expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) ==>
       expr_vv_sim ctx func cenv cx ty e es
+End
+
+(* The operands of an expression, evaluated and read in order, as
+   evaluate_ind gives their judgments: each one's if the ones before it can
+   evaluate (bodySim's body_exprs_ok). *)
+Definition exprs_case_def:
+  exprs_case nocalls ctx func cenv cx [] = T /\
+  exprs_case nocalls ctx func cenv cx (e::es) =
+    (expr_sim_case nocalls ctx func cenv cx e /\
+     expr_vv_case nocalls ctx func cenv cx e /\
+     ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
+                        read_result cx tv s1 = (INL v, t1)) ==>
+      exprs_case nocalls ctx func cenv cx es))
 End
 
 (* AddMod, MulMod and PowMod256 applied to names: compile_expr lowers these
@@ -541,6 +617,44 @@ QED
 
 (* ===== Type soundness ===== *)
 
+(* The storage conjuncts of expr_sim_inv after evaluating e: with no
+   internal call by exprStoragePreservation, with one by
+   bodyStoragePreservation.  The outcomes still to consume are a suffix of
+   the earlier ones (vyperEvalOutcomeSuffix), so oracle_storage_ok
+   carries over. *)
+Theorem expr_body_pre_storage_preserved:
+  !cenv cx env e es res es'.
+    expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
+    contract_storage_well_formed cx es' /\ oracle_storage_ok cx es'
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (Cases_on `int_calls_expr e = []`
+      >- (irule eval_expr_oracle_preserves_contract_storage_well_formed >>
+          gvs[expr_body_pre_def, expr_sim_inv_def,
+              runtime_storage_consistent_def, runtime_consistent_def] >>
+          metis_tac[]) >>
+      `?tops. supported_program tops /\ get_module_code cx NONE = SOME tops`
+        by (Cases_on `int_calls_expr e` >> gvs[expr_body_pre_def] >>
+            metis_tac[]) >>
+      irule eval_expr_body_oracle_storage >>
+      gvs[expr_body_pre_def, expr_sim_inv_def, listTheory.EVERY_CONJ,
+          runtime_storage_consistent_def, runtime_consistent_def] >>
+      metis_tac[]) >>
+  irule oracle_storage_ok_suffix >> qexists_tac `es` >>
+  gvs[expr_body_pre_def, expr_sim_inv_def] >>
+  drule_then irule (cj 5 eval_outcome_suffix_mutual)
+QED
+
+(* The outcomes stay SOME: evaluation only drops some from the front. *)
+Theorem eval_expr_outcomes_some:
+  !cx e es res es'.
+    IS_SOME es.outcomes /\ eval_expr cx e es = (res, es') ==>
+    IS_SOME es'.outcomes
+Proof
+  rpt strip_tac >> drule (cj 5 eval_outcome_suffix_mutual) >>
+  rw[outcome_suffix_def] >> gvs[]
+QED
+
 Theorem replace_popped_keys[local]:
   !h tv path r h'.
     replace_popped tv path r h = SOME h' ==> MAP FST h' = MAP FST h
@@ -549,49 +663,146 @@ Proof
   simp[replace_popped_def] >> rw[AllCaseEqs()] >> gvs[] >> res_tac
 QED
 
-Theorem entry_pop_step_keys_indexed[local]:
-  !entry path entry'.
-    entry_pop_step entry path entry' /\
-    EVERY (\k. ?p i. k = p ++ [ValueSubscript i]) (MAP FST entry.popped) ==>
-    EVERY (\k. ?p i. k = p ++ [ValueSubscript i]) (MAP FST entry'.popped)
+Theorem replace_popped_history_typed[local]:
+  !h tv path ptv v h'.
+    popped_history_typed tv h /\ well_formed_type_value tv /\
+    subscripts_type tv path = SOME ptv /\ value_has_type ptv v /\
+    replace_popped tv path v h = SOME h' ==>
+    popped_history_typed tv h'
 Proof
-  rw[entry_pop_step_def] >> simp[record_pop_def] >>
-  BasicProvers.every_case_tac >> imp_res_tac replace_popped_keys >> gvs[] >>
+  Induct >> simp[replace_popped_def] >>
+  qx_gen_tac `head` >> PairCases_on `head` >> rpt gen_tac >>
+  simp[popped_history_typed_cons] >> rpt strip_tac >>
+  gvs[Once replace_popped_def, AllCaseEqs()] >>
+  simp[popped_history_typed_cons]
+  >- (irule vyperPlaceStatePreservationTheory.assign_subscripts_replace_type_metadata >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qpat_x_assum `IS_PREFIX path head0` mp_tac >>
+      simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+      gvs[rich_listTheory.DROP_LENGTH_APPEND] >>
+      metis_tac[subscripts_type_append]) >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem entry_pop_step_event_valid[local]:
+  value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
+  popped_history_typed entry.type entry.popped /\
+  entry_pop_step entry path next ==>
+  entry_pop_event_valid (entry,path)
+Proof
+  rpt strip_tac >>
+  `?arr p. read_memory_path entry path = INL arr /\
+           popped_value arr = INL p` by
+    metis_tac[entry_pop_step_def] >>
+  qpat_x_assum `entry_pop_step _ _ _` kall_tac >>
+  `?ptv. subscripts_type entry.type path = SOME ptv /\
+         value_has_type ptv arr` by
+    (qpat_x_assum `read_memory_path _ _ = _` mp_tac >>
+     simp[read_memory_path_def, AllCaseEqs()] >> strip_tac
+     >- metis_tac[vyperPlaceStatePreservationTheory.evaluate_subscripts_declared_type_exists] >>
+     metis_tac[read_popped_declared_type_exists,
+               vyperPlaceStatePreservationTheory.read_popped_type]) >>
+  Cases_on `arr` >> gvs[vyperValueOperationTheory.popped_value_def] >>
+  rename1 `popped_value (ArrayV av) = INL p` >>
+  Cases_on `av` >> gvs[vyperValueOperationTheory.popped_value_def] >>
+  Cases_on `ptv` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  rename1 `value_has_type (ArrayTV etv bound) (ArrayV (DynArrayV xs))` >>
+  Cases_on `bound` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  simp[entry_pop_event_valid_def, vyperTypingTheory.value_has_type_def]
+QED
+
+Theorem entry_pop_step_keys_indexed[local]:
+  entry_pop_step entry path next /\
+  value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
+  popped_history_typed entry.type entry.popped /\
+  EVERY (\k. ?p i etv n. k = p ++ [ValueSubscript i] /\
+    subscripts_type entry.type p = SOME (ArrayTV etv (Dynamic n)))
+    (MAP FST entry.popped) ==>
+  popped_history_typed next.type next.popped /\
+  EVERY (\k. ?p i etv n. k = p ++ [ValueSubscript i] /\
+    subscripts_type next.type p = SOME (ArrayTV etv (Dynamic n)))
+    (MAP FST next.popped)
+Proof
+  strip_tac >>
+  `entry_pop_event_valid (entry,path)` by
+    (drule_all entry_pop_step_event_valid >> simp[]) >>
+  gvs[entry_pop_event_valid_def] >>
+  `well_formed_type_value etv` by
+    (drule_all vyperPlaceStatePreservationTheory.subscripts_type_well_formed >>
+     simp[vyperTypingTheory.well_formed_type_value_def]) >>
+  qpat_x_assum `entry_pop_step _ _ _` mp_tac >>
+  simp[entry_pop_step_def] >> strip_tac >> gvs[]
+  >- (conj_tac
+      >- (irule vyperPlaceStatePreservationTheory.record_pop_history_typed_at_path >>
+          goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      Cases_on `arr` >> gvs[record_pop_def] >>
+      rename1 `ArrayV av` >> Cases_on `av` >> gvs[record_pop_def] >>
+      metis_tac[]) >>
+  `value_has_type (ArrayTV etv (Dynamic n)) shortened` by
+    metis_tac[vyperAssignPreservesTypeTheory.pop_element_preserves_type] >>
+  `popped_history_typed entry.type history` by
+    (irule replace_popped_history_typed >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  `MAP FST history = MAP FST entry.popped` by metis_tac[replace_popped_keys] >>
+  conj_tac
+  >- (irule vyperPlaceStatePreservationTheory.record_pop_history_typed_at_path >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  Cases_on `arr` >> gvs[record_pop_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >> gvs[record_pop_def] >>
   metis_tac[]
 QED
 
 Theorem scope_pop_step_keys_indexed[local]:
   !sc ev sc'.
-    scope_pop_step sc ev sc' /\ popped_keys_indexed sc ==>
-    popped_keys_indexed sc'
+    scope_pop_step sc ev sc' /\ EVERY scope_well_typed sc /\
+    popped_keys_indexed sc ==>
+    EVERY scope_well_typed sc' /\ popped_keys_indexed sc'
 Proof
-  rpt gen_tac >> PairCases_on `ev` >> rw[scope_pop_step_def] >>
+  rpt gen_tac >> PairCases_on `ev` >>
+  simp[scope_pop_step_def] >> strip_tac >>
   drule find_containing_scope_structure >> strip_tac >>
-  gvs[popped_keys_indexed_def, FLOOKUP_UPDATE] >> rw[] >> gvs[]
-  >- (irule entry_pop_step_keys_indexed >> metis_tac[]) >>
-  first_x_assum irule >> metis_tac[]
+  gvs[popped_keys_indexed_def, scope_well_typed_def] >>
+  `value_has_type ev1.type ev1.value /\ well_formed_type_value ev1.type` by
+    metis_tac[] >>
+  `popped_history_typed ev1.type ev1.popped` by metis_tac[] >>
+  `entry_pop_event_valid (ev1,ev2)` by
+    (drule_all entry_pop_step_event_valid >> simp[]) >>
+  `value_has_type next.type next.value` by
+    (drule_all vyperPlaceMutationSoundnessTheory.entry_pop_step_value_type >> simp[]) >>
+  drule entry_pop_step_metadata >> strip_tac >>
+  drule entry_pop_step_keys_indexed >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  rw[FLOOKUP_UPDATE] >> gvs[] >> metis_tac[]
 QED
 
 Theorem scope_pop_trace_keys_indexed[local]:
   !events sc sc'.
-    scope_pop_trace sc events sc' /\ popped_keys_indexed sc ==>
-    popped_keys_indexed sc'
+    scope_pop_trace sc events sc' /\ EVERY scope_well_typed sc /\
+    popped_keys_indexed sc ==>
+    EVERY scope_well_typed sc' /\ popped_keys_indexed sc'
 Proof
-  Induct >> simp[scope_pop_trace_def] >>
-  metis_tac[scope_pop_step_keys_indexed]
+  Induct >> simp[scope_pop_trace_def] >> rpt strip_tac >>
+  drule_all scope_pop_step_keys_indexed >> strip_tac >>
+  first_x_assum drule >> simp[]
 QED
 
+
 (* Evaluating an expression changes the scopes only by pops
-   (eval_mutual_scope_pop_effect), so it keeps popped_keys_indexed. *)
+   (eval_mutual_scope_pop_effect).  A pop from a well-typed local, whose
+   history is typed, removes the element of a dynamic array, records it at
+   its index and keeps the local and its history typed. *)
 Theorem eval_expr_popped_keys_indexed:
   !cx e es res es'.
-    eval_expr cx e es = (res, es') /\ popped_keys_indexed es.scopes ==>
+    eval_expr cx e es = (res, es') /\ state_well_typed es /\
+    popped_keys_indexed es.scopes ==>
     popped_keys_indexed es'.scopes
 Proof
   rpt strip_tac >>
   `scope_pop_effect (eval_expr cx e)` by
     simp[cj 5 eval_mutual_scope_pop_effect] >>
   gvs[scope_pop_effect_def] >> first_x_assum drule >> strip_tac >>
+  gvs[state_well_typed_def] >>
   drule_all scope_pop_trace_keys_indexed >> simp[]
 QED
 
@@ -602,7 +813,13 @@ Theorem expr_body_pre_eval_result:
     !tv. res = INL tv ==>
          eval_result_typed (env,cx,es') tv (Type (expr_type e))
 Proof
-  rpt gen_tac >> simp[expr_body_pre_def, expr_sim_inv_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule_all expr_body_pre_storage_preserved >> strip_tac >>
+  `IS_SOME es'.outcomes` by
+    (irule eval_expr_outcomes_some >>
+     gvs[expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+  qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+  simp[expr_body_pre_def, expr_sim_inv_def] >> strip_tac >>
   drule_all eval_expr_popped_keys_indexed >> strip_tac >>
   qspecl_then [`cx`, `e`] (mp_tac o CONJUNCT1)
     (cj 5 eval_scc_type_sound_mutual) >>
@@ -788,9 +1005,53 @@ Theorem expr_sim_pre_builtin_arg:
     expr_sim_pre cenv cx env e es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
-     byte_widths_expr_def, alloc_limits_expr_def] >>
+     byte_widths_expr_def, alloc_limits_expr_def, expr_has_evm_run_thm] >>
   drule_all well_typed_exprs_mem >> drule_all byte_widths_exprs_mem >>
-  drule_all alloc_limits_exprs_mem >> gvs[]
+  drule_all alloc_limits_exprs_mem >>
+  gvs[expr_has_evm_run_thm, EVERY_MEM, EXISTS_MEM] >> metis_tac[]
+QED
+
+Theorem well_typed_exprs_member:
+  !args env e. well_typed_exprs env args /\ MEM e args ==> well_typed_expr env e
+Proof
+  Induct >> rw[well_typed_expr_def] >> metis_tac[]
+QED
+
+Theorem call_evaluation_safe_exprs_mem:
+  !args cx e.
+    call_evaluation_safe cx (int_calls_exprs args) /\ MEM e args ==>
+    call_evaluation_safe cx (int_calls_expr e)
+Proof
+  Induct >> rw[int_calls_expr_def] >>
+  metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
+            vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right]
+QED
+
+Theorem int_calls_exprs_mem:
+  !args e. int_calls_exprs args = [] /\ MEM e args ==> int_calls_expr e = []
+Proof
+  Induct >> rw[int_calls_expr_def] >> gvs[]
+QED
+
+Theorem int_calls_exprs_every_mem:
+  !args e P. EVERY P (int_calls_exprs args) /\ MEM e args ==>
+             EVERY P (int_calls_expr e)
+Proof
+  Induct >> rw[int_calls_expr_def] >> gvs[]
+QED
+
+Theorem expr_body_pre_builtin_arg:
+  !cenv cx env ann bi args e es es'.
+    expr_body_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
+    expr_sim_inv cenv cx env es' ==>
+    expr_body_pre cenv cx env e es'
+Proof
+  rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
+     byte_widths_expr_def, alloc_limits_expr_def] >>
+  imp_res_tac int_calls_exprs_every_mem >>
+  gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
+  metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
+            alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
 QED
 
 Theorem env_consistent_var_type_evaluates:
@@ -943,6 +1204,66 @@ Theorem expr_sim_case_apply:
     expr_sim ctx func cenv cx ty e es
 Proof
   metis_tac[expr_sim_case_def]
+QED
+
+(* With no internal call in it, an expression's case judgments are its
+   expr_ok's, whatever the flag. *)
+Theorem expr_case_of_ok:
+  !nocalls ctx func cenv cx e.
+    int_calls_expr e = [] /\ expr_ok cenv e ==>
+    expr_sim_case nocalls ctx func cenv cx e /\
+    expr_vv_case nocalls ctx func cenv cx e
+Proof
+  rw[expr_ok_case] >> gvs[expr_sim_case_def, expr_vv_case_def] >>
+  metis_tac[]
+QED
+
+(* expr_vv_ok gives the vv judgment of a form the typing gives no operand,
+   so no internal call. *)
+Theorem expr_vv_case_nil:
+  !nocalls ctx func cenv cx e.
+    (!env es. expr_body_pre cenv cx env e es ==> int_calls_expr e = []) /\
+    expr_vv_ok cenv e ==>
+    expr_vv_case nocalls ctx func cenv cx e
+Proof
+  rw[expr_vv_case_def, expr_vv_ok_def, expr_sim_pre_body] >> metis_tac[]
+QED
+
+(* compile_expr_ind's induction hypothesis gives the operands' judgments
+   at nocalls = T. *)
+Theorem exprs_case_every_ok:
+  !ctx func cenv cx es.
+    EVERY (expr_ok cenv) es ==> exprs_case T ctx func cenv cx es
+Proof
+  ntac 4 gen_tac >> Induct >> rw[exprs_case_def] >> gvs[expr_ok_case]
+QED
+
+Theorem exprs_case_below:
+  !cenv args ctx func cx.
+    expr_sim_below cenv (list_size expr_size args) ==>
+    exprs_case T ctx func cenv cx args
+Proof
+  rpt strip_tac >> irule exprs_case_every_ok >> simp[EVERY_MEM] >>
+  metis_tac[expr_sim_below_mem]
+QED
+
+(* An operand of a builtin: its judgments at a state where the operands
+   before it evaluated. *)
+Theorem int_calls_builtin_arg:
+  !nocalls ann bi args e.
+    (nocalls ==> int_calls_expr (Builtin ann bi args) = []) /\ MEM e args ==>
+    (nocalls ==> int_calls_expr e = [])
+Proof
+  rw[int_calls_expr_def] >> metis_tac[int_calls_exprs_mem]
+QED
+
+Theorem int_calls_type_builtin_arg:
+  !nocalls ann tb t args e.
+    (nocalls ==> int_calls_expr (TypeBuiltin ann tb t args) = []) /\
+    MEM e args ==>
+    (nocalls ==> int_calls_expr e = [])
+Proof
+  rw[int_calls_expr_def] >> metis_tac[int_calls_exprs_mem]
 QED
 
 (* An operand evaluated and read: the condition evaluate_ind puts on the

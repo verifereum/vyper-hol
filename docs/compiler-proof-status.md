@@ -14,6 +14,16 @@ Historical snapshots:
 - [archive/compiler-proof-progress-2026-04-07.md](archive/compiler-proof-progress-2026-04-07.md)
 - [archive/compiler-proof-progress-2026-04-16.md](archive/compiler-proof-progress-2026-04-16.md)
 
+Current integration boundary:
+
+- S2 (`lower_vyper_runtime_unit_source_unit_ok`) is proved for
+  `supported_program tops /\ immutable_free_program tops`. The public
+  `vyper_call_correct` theorem carries the same explicit source restriction.
+  Immutable compilation and its encoding/deployment proofs remain available;
+  the raw O1 shape contract excludes `DLOAD` and `DLOADBYTES`, so this proof
+  does not yet cover runtime immutable reads. The dated audit's exact public
+  call schema predates this explicit restriction.
+
 Notes:
 
 - Historical snapshots are preserved for context and may contain stale counts or theorem statuses.

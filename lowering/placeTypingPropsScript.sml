@@ -2,6 +2,15 @@ Theory placeTypingProps
 Ancestors
   exprLowering compileVyper vyperTypeSystem
 
+(* `Induct` on `expr` fails on the pinned HOL (HOL-Theorem-Prover/HOL#2115),
+   so the inductions below use the datatype's own principle, as
+   exprLowering's place_type_env_cong does, discharging the mutual
+   `base_assignment_target` part as `λ_. T`, with one goal per constructor
+   and the expression's own premise put back to unfold it.  Revert with
+   #2115's fix. *)
+val expr_ind = vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `λ_. T`
+                 |> SIMP_RULE (srw_ss()) [];
+
 (* Agreement projects only map declarations. Annotation typing, struct layout
    and compiled-value locations remain separate obligations. *)
 Definition place_map_tables_agree_def:
@@ -21,14 +30,22 @@ Proof
   simp[place_map_tables_agree_def]
 QED
 
+Theorem type_place_expr_vtype_annotation:
+  !e env vt.
+    type_place_expr env e = SOME vt ==> vtype_annotation_ok vt (expr_type e)
+Proof
+  Cases >> simp[Once well_typed_expr_def, vyperASTTheory.expr_type_def] >>
+  TRY (rename1 `TopLevelName _ nsid` >> PairCases_on `nsid` >>
+       simp[Once well_typed_expr_def]) >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+
 Theorem type_place_expr_annotation:
   !e env ty. type_place_expr env e = SOME (Type ty) ==>
     expr_type e = ty
 Proof
-  Induct >> simp[Once well_typed_expr_def, vyperASTTheory.expr_type_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs(), vtype_annotation_ok_def] >>
-  PairCases_on `p` >>
-  gvs[Once well_typed_expr_def, AllCaseEqs(), vtype_annotation_ok_def]
+  rpt strip_tac >> drule type_place_expr_vtype_annotation >>
+  simp[vtype_annotation_ok_def]
 QED
 
 Theorem place_type_checked_place:
@@ -37,7 +54,9 @@ Theorem place_type_checked_place:
     type_place_expr env e = SOME vt ==>
     place_type cenv e = value_type_place vt
 Proof
-  Induct >> simp[Once well_typed_expr_def, place_type_def] >>
+  ho_match_mp_tac expr_ind >> rpt conj_tac >> rpt strip_tac >>
+  qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
+  simp[Once well_typed_expr_def, place_type_def] >>
   rpt strip_tac >> gvs[AllCaseEqs(), vtype_annotation_ok_def]
   >- (PairCases_on `p` >>
       gvs[Once well_typed_expr_def, AllCaseEqs()] >>
@@ -107,7 +126,9 @@ Theorem place_type_checked_place_on_defined:
     type_place_expr env e = SOME vt ==>
     place_type cenv e = value_type_place vt
 Proof
-  Induct >> simp[Once well_typed_expr_def, place_type_def] >>
+  ho_match_mp_tac expr_ind >> rpt conj_tac >> rpt strip_tac >>
+  qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
+  simp[Once well_typed_expr_def, place_type_def] >>
   rpt strip_tac >> gvs[AllCaseEqs(), vtype_annotation_ok_def]
   >- (PairCases_on `p` >>
       gvs[Once well_typed_expr_def, AllCaseEqs()] >>
@@ -148,6 +169,31 @@ Proof
   first_x_assum (qspec_then `nsid` mp_tac) >> simp[] >>
   Cases_on `cenv.ce_hashmap_info (module_var_key nsid)` >> simp[] >>
   simp[place_type_def]
+QED
+
+(* A well-typed expression's dispatch type is its own type, when the map
+   table agrees on the declared names and has no entry for a bare global
+   (an immutable or a constant). *)
+Theorem place_type_well_typed_on_defined:
+  !e cenv env.
+    place_map_tables_agree_on_defined cenv env /\
+    (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
+               cenv.ce_hashmap_info (module_var_key nsid) = NONE) /\
+    well_typed_expr env e ==>
+    place_type cenv e = ValPT (expr_type e)
+Proof
+  ho_match_mp_tac expr_ind >> rpt conj_tac >> rpt strip_tac >>
+  qpat_x_assum `well_typed_expr _ _` mp_tac >>
+  simp[Once well_typed_expr_def, place_type_def,
+       vyperASTTheory.expr_type_def] >>
+  rpt strip_tac >> gvs[]
+  >~ [`TopLevelName`]
+  >- (PairCases_on `p` >> gvs[Once well_typed_expr_def]
+      >- (drule_all place_type_defined_module_value >> simp[place_type_def])
+      >> first_x_assum drule >> simp[])
+  >~ [`subscript_type_ok`] >- (res_tac >> simp[])
+  >> drule_all place_type_checked_place_on_defined >> strip_tac >>
+  Cases_on `vt` >> gvs[value_type_place_def, subscript_vtype_def, AllCaseEqs()]
 QED
 
 (* Fail the build rather than silently export an admitted bridge. *)
