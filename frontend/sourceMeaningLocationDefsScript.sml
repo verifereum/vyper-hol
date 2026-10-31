@@ -24,12 +24,11 @@ Definition source_reference_target_def:
   source_reference_target cx (SMR_Local id) = do
     sc <- get_scopes;
     type_check (IS_SOME (lookup_scopes id sc)) "NameTarget not in scope";
-    return (ScopedVar id,[])
+    return (MemoryPlace id [])
   od /\
   source_reference_target cx (SMR_Global (src,id)) = do
-    ts <- lift_option_type (get_module_code cx src) "TopLevelNameTarget get_module_code";
-    if is_immutable_decl id ts then return (ImmutableVar src id,[])
-    else return (TopLevelVar src id,[])
+    res <- lookup_global cx src id;
+    get_place res
   od
 End
 
@@ -76,26 +75,21 @@ Definition source_location_eval_def:
     type_check (builtin_args_length_ok Len 1) "Builtin args";
     v <- (do
       tv <- source_location_eval cx m;
-      len <- toplevel_array_length cx tv;
+      len <- result_array_length cx tv;
       return (IntV (&len))
     od);
     return (Value v)
   od /\
   source_location_eval cx (SML_If ty c l r) = do
     tv <- source_location_eval cx c;
-    switch_BoolV tv (source_location_eval cx l) (source_location_eval cx r)
+    res <- switch_BoolV cx tv (source_location_eval cx l) (source_location_eval cx r);
+    conditional_result cx res
   od /\
   source_location_eval cx (SML_Subscript ty a i) = do
-    tv <- source_location_eval cx a;
+    res <- source_location_eval cx a;
     iv <- source_location_eval cx i;
-    v <- get_Value iv;
-    at <- lift_option_type (evaluate_type (get_tenv cx) (source_location_type a)) "Subscript array type";
-    check_array_bounds cx tv v;
-    res <- lift_sum (evaluate_subscript (get_tenv cx) at tv v);
-    case res of INL v => return v | INR (tr,slot,t) => do
-      v <- read_storage_slot cx tr slot t;
-      return (Value v)
-    od
+    v <- read_result cx iv;
+    select_result cx (source_location_type a) res (ValueSubscript v)
   od /\
   source_location_eval cx (SML_TypeApply ty b t ms) = do
     type_check (type_builtin_args_length_ok b (LENGTH ms)) "TypeBuiltin args";
@@ -124,26 +118,26 @@ Definition source_location_eval_def:
   source_location_evals cx [] = return [] /\
   source_location_evals cx (m::ms) = do
     tv <- source_location_eval cx m;
-    v <- materialise cx tv;
+    v <- read_result cx tv;
     vs <- source_location_evals cx ms;
     return (v::vs)
   od /\
   source_location_abi cx (SML_Reference ty r) = source_reference_abi cx r /\
   source_location_abi cx (SML_If ty c l r) = do
     tv <- source_location_eval cx c;
-    arg <- switch_BoolV tv (source_location_abi cx l) (source_location_abi cx r);
+    arg <- switch_BoolV cx tv (source_location_abi cx l) (source_location_abi cx r);
     unwrap_abi_operand cx arg
   od /\
   source_location_abi cx (SML_Subscript ty a i) = do
     arg <- source_location_abi cx a;
     iv <- source_location_eval cx i;
-    v <- get_Value iv;
+    v <- read_result cx iv;
     at <- lift_option_type (evaluate_type (get_tenv cx) (source_location_type a)) "Subscript array type";
     subscript_abi_operand cx at arg v
   od /\
   source_location_abi cx m = do
     tv <- source_location_eval cx m;
-    v <- materialise cx tv;
+    v <- read_result cx tv;
     return (AbiSnapshot v)
   od /\
   source_location_abis cx [] = return [] /\

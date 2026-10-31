@@ -444,6 +444,7 @@ Proof
   disch_then (qspec_then `tops` mp_tac) >>
   impl_tac >- fs[supported_declaration_headers_def] >> strip_tac >>
   fs[source_typing_ok_def] >>
+  drule check_contract_main_module_allocated >> simp[] >> strip_tac >>
   drule check_contract_runtime_function_body_MEM >>
   disch_then (qspecl_then [`External`, `tops`, `NONE`, `ret`, `raw`, `nr`,
     `mut`, `tx.function_name`, `[]`, `fbody`, `fargs`] mp_tac) >>

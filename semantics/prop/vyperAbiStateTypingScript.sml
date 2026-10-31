@@ -57,7 +57,8 @@ Theorem write_abi_memory_length:
   write_abi_memory cx id tv v subs ao st = (res,rt) ==>
   LENGTH rt.abi_memory = LENGTH st.abi_memory
 Proof
-  rw[write_abi_memory_def, AllCaseEqs(), return_def, raise_def] >>
+  rw[write_abi_memory_def, write_abi_memory_child_def,
+     AllCaseEqs(), return_def, raise_def] >>
   gvs[AllCaseEqs(), return_def, raise_def]
 QED
 
@@ -179,7 +180,8 @@ Theorem write_abi_memory_immutables:
   write_abi_memory cx id tv v subs ao st = (res,rt) ==>
   rt.abi_immutables = st.abi_immutables
 Proof
-  rw[write_abi_memory_def, AllCaseEqs(), return_def, raise_def] >>
+  rw[write_abi_memory_def, write_abi_memory_child_def,
+     AllCaseEqs(), return_def, raise_def] >>
   gvs[AllCaseEqs(), return_def, raise_def]
 QED
 

@@ -25,7 +25,7 @@ Definition abi_alias_state_def:
   abi_alias_state = empty_state with scopes :=
     [FEMPTY |+ ("a", <| assignable := T;
       type := ArrayTV (BaseTV BoolT) (Dynamic 2);
-      value := ArrayV (DynArrayV [BoolV T; BoolV F]) |>)]
+      value := ArrayV (DynArrayV [BoolV T; BoolV F]); popped := [] |>)]
 End
 
 Theorem interpreter_arguments_snapshot_before_pop:
@@ -34,5 +34,5 @@ Theorem interpreter_arguments_snapshot_before_pop:
      Pop (BaseT BoolT) (NameTarget "a")] abi_alias_state) =
   INL [ArrayV (DynArrayV [BoolV T; BoolV F]); BoolV F]
 Proof
-  EVAL_TAC
+  EVAL_TAC >> simp[return_def]
 QED

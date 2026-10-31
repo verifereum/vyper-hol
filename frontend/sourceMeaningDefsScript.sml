@@ -96,7 +96,7 @@ Definition source_meaning_args_def:
   source_meaning_args cx [] = return [] /\
   source_meaning_args cx (m::ms) = do
     tv <- m;
-    v <- materialise cx tv;
+    v <- read_result cx tv;
     vs <- source_meaning_args cx ms;
     return (v::vs)
   od
@@ -127,7 +127,8 @@ Definition source_meaning_eval_def:
       [source_meaning_eval cx meanings l; source_meaning_eval cx meanings r] /\
   source_meaning_eval cx meanings (SM_If ty c l r) = do
     tv <- source_meaning_eval cx meanings c;
-    switch_BoolV tv (source_meaning_eval cx meanings l) (source_meaning_eval cx meanings r)
+    res <- switch_BoolV cx tv (source_meaning_eval cx meanings l) (source_meaning_eval cx meanings r);
+    conditional_result cx res
   od /\
   source_meaning_eval cx meanings (SM_Revert ty e) = do
     vs <- source_meaning_args cx [source_meaning_eval cx meanings e];

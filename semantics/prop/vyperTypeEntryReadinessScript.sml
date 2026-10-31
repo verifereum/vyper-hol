@@ -179,25 +179,13 @@ Proof
   >- simp[evaluate_defaults_def] >>
   gen_tac >> rpt strip_tac >>
   gvs[well_typed_expr_def, evaluate_defaults_def, AllCaseEqs()] >>
-  Cases_on `eval_expr cx h (initial_state am [FEMPTY])` >> gvs[] >>
+  Cases_on `(do result <- eval_expr cx h; read_result cx result od)
+    (initial_state am [FEMPTY])` >> gvs[] >>
   `accounts_well_typed (initial_state am [FEMPTY]).accounts` by
     simp[initial_state_def] >>
   `call_evaluation_safe cx (int_calls_expr h)` by metis_tac[] >>
-  drule_all (cj 8 eval_all_type_sound_mutual) >>
-  simp[expr_result_typed_def, expr_runtime_typed_def,
-       toplevel_value_typed_Value]
-QED
-
-Theorem checked_defaults_ready_success:
-  checked_defaults_ready cx am args dflts vals ==>
-  LENGTH vals <= LENGTH args /\
-  LENGTH args - LENGTH vals <= LENGTH dflts /\
-  ?dflt_vs.
-    evaluate_defaults cx am
-      (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) =
-      SOME dflt_vs
-Proof
-  rw[checked_defaults_ready_def, IS_SOME_EXISTS]
+  drule_all eval_expr_read_type_sound >>
+  simp[value_runtime_typed_def]
 QED
 
 Theorem checked_defaults_ready_values_typed:
@@ -328,12 +316,3 @@ Proof
   drule_all provided_args_defaults_bind_arguments >> strip_tac >>
   qexistsl [`dflt_vs`, `scope`] >> simp[Abbr`needed`]
 QED
-
-Theorem checked_call_inputs_ready_components:
-  checked_call_inputs_ready tenv cx am args dflts vals ==>
-  provided_args_typed tenv args vals /\
-  checked_defaults_ready cx am args dflts vals
-Proof
-  simp[checked_call_inputs_ready_def]
-QED
-

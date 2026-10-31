@@ -391,18 +391,8 @@ Proof
       irule check_contract_bare_global_assignable_complete_initial >>
       qexistsl_tac [`tx.target`, `mods`] >> simp[])
   >- (simp[FOLDL_extend_local_args_static] >> metis_tac[artifact_toplevel_vtypes_lookup_transfer_initial])
-  >- (simp[FOLDL_extend_local_args_static] >>
-      PairCases_on `k` >>
-      `toplevel_vtypes_complete art.cta_toplevel_vtypes
-         (initial_evaluation_context sources layouts tx src)` by (
-        irule check_contract_toplevel_vtypes_complete_initial >>
-        qexistsl_tac [`tx.target`, `mods`] >> simp[]) >>
-      gvs[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static,
-          toplevel_vtypes_complete_def, get_module_code_def,
-          initial_evaluation_context_def] >>
-      gvs[check_contract_def] >>
-      drule_all build_contract_type_artifact_bare_globals_sound >> strip_tac >>
-      gvs[] >> first_x_assum drule_all >> simp[])
+  >- (gvs[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static] >>
+      metis_tac[check_contract_bare_global_toplevel_vtype])
   >- (simp[FOLDL_extend_local_args_static] >> metis_tac[artifact_flag_members_lookup_transfer_initial])
   >> (simp[FOLDL_extend_local_args_static] >>
       PairCases_on `k` >>
@@ -464,9 +454,10 @@ Theorem function_entry_env_static_maps_transfer_deploy[local]:
     (function_entry_env deploy_art mods entry_src args) env
 Proof
   strip_tac >>
-  `deploy_art = build_contract_type_artifact T mods /\
-   runtime_art = build_contract_type_artifact F mods` by
-    gvs[check_contract_def] >>
+  qpat_assum `check_contract T _ _ _ = _`
+    (strip_assume_tac o MATCH_MP check_contract_artifact_fields) >>
+  qpat_assum `check_contract F _ _ _ = _`
+    (strip_assume_tac o MATCH_MP check_contract_artifact_fields) >>
   mp_tac build_contract_type_artifact_nonsig_mode_irrelevant >>
   strip_tac >>
   gvs[static_maps_transfer_env_def, function_entry_env_def, artifact_env_def,
@@ -477,7 +468,7 @@ Proof
   >- (irule (cj 2 FOLDL_extend_local_args_empty_locals) >> simp[]) >>
   rpt strip_tac >>
   irule artifact_fn_sigs_lookup_transfer_mode >>
-  qexistsl [`tx.target`, `args`, `build_contract_type_artifact T mods`, `env.current_src`,
+  qexistsl [`tx.target`, `args`, `deploy_art`, `env.current_src`,
             `T`, `layouts`, `mods`, `sources`, `src`, `tx`] >>
   simp[function_entry_env_def, artifact_env_def,
        FOLDL_extend_local_args_static]
@@ -558,7 +549,8 @@ QED
 Theorem check_contract_lookup_callable_function_F_body[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP mods src = SOME ts /\
-  lookup_callable_function F fn ts = SOME (fm,nr,args,dflts,ret,body) ==>
+  lookup_callable_function F fn ts = SOME (fm,nr,args,dflts,ret,body) /\
+  function_live layouts addr mods (live_functions layouts addr mods) (src,fn) ==>
   check_function_body layouts addr mods art src fm nr args dflts ret body
 Proof
   rw[] >>
@@ -580,6 +572,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   `ALOOKUP mods src_id_opt = SOME ts` by
     gvs[get_module_code_def, initial_evaluation_context_def] >>
+  `function_live layouts addr mods (live_functions layouts addr mods) (src_id_opt,fn)` by
+    gvs[context_function_live_def, initial_evaluation_context_def] >>
   conj_tac >-
    (`check_function_body layouts addr mods art src_id_opt fm nr args dflts ret body` by
       (irule check_contract_lookup_callable_function_F_body >>
@@ -607,16 +601,6 @@ Proof
     (irule function_entry_env_static_maps_transfer_initial_explicit >> simp[]) >>
   drule_all check_function_body_static_maps_transfer_initial >>
   simp[]
-QED
-
-Theorem fn_sigs_complete_deploy_implies_nondeploy[local]:
-  fn_sigs_complete fs (cx with in_deploy := T) ==>
-  fn_sigs_complete fs (cx with in_deploy := F)
-Proof
-  rw[fn_sigs_complete_def] >>
-  first_x_assum irule >>
-  gvs[lookup_callable_function_def, get_module_code_def, AllCaseEqs()] >>
-  qexistsl [`body`, `fm`, `nr`, `ts`] >> simp[]
 QED
 
 Theorem fn_sigs_declared_complete_deploy_implies_nondeploy[local]:
@@ -687,7 +671,8 @@ Proof
   drule lookup_callable_function_T_SOME_cases >> strip_tac >> gvs[]
   >- (`check_function_body layouts tx.target mods deploy_art src_id_opt fm nr
          args dflts ret body` by
-        (drule_all check_contract_deploy_function_body_MEM >> metis_tac[]) >>
+        (irule check_contract_live_deploy_function_body_MEM >>
+         gvs[context_function_live_def, initial_evaluation_context_def] >> metis_tac[]) >>
       conj_tac
       >- (gvs[initial_evaluation_context_def, check_function_body_def] >>
           Cases_on `lookup_nonreentrant_slot layouts tx.target` >> gvs[] >>
@@ -757,7 +742,8 @@ Proof
            Once well_typed_expr_def, Once stmt_no_control_escape_def]) >>
   `check_function_body layouts tx.target mods deploy_art src_id_opt fm nr
      args dflts ret body` by
-    (drule_all check_contract_deploy_function_body_MEM >> metis_tac[]) >>
+    (irule check_contract_live_deploy_function_body_MEM >>
+     gvs[context_function_live_def, initial_evaluation_context_def] >> metis_tac[]) >>
   conj_tac
   >- (gvs[initial_evaluation_context_def, check_function_body_def] >>
       Cases_on `lookup_nonreentrant_slot layouts tx.target` >> gvs[] >>
@@ -875,6 +861,7 @@ Theorem checked_function_body_typing_package:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts /\
   vis <> Deploy ==>
   ?env_body env_after.
@@ -948,6 +935,7 @@ Theorem checked_explicit_external_post_prefix_body_return_typed_selected:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   context_well_typed cx /\ machine_well_typed am /\
@@ -998,6 +986,7 @@ Theorem checked_explicit_external_entry_establishes_type_soundness_preconditions
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts /\
   context_well_typed
     ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)]) /\
@@ -1049,6 +1038,7 @@ Theorem check_contract_explicit_external_entry_no_type_error:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts /\
   context_well_typed
     ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)]) /\
@@ -1076,6 +1066,7 @@ Theorem checked_explicit_external_post_prefix_body_no_type_error_selected:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   context_well_typed cx /\ machine_well_typed am /\
@@ -1129,4 +1120,3 @@ Proof
   rw[immutables_ready_def, get_tenv_def, get_module_code_def,
      initial_evaluation_context_def] >> metis_tac[]
 QED
-

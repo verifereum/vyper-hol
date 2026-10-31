@@ -1,5 +1,5 @@
 [holbuild]
-minimum_version = "0.11.5"
+minimum_version = "0.12.0"
 
 [project]
 name = "vyper-hol"
@@ -7,11 +7,13 @@ version = "0.2.3"
 
 [build]
 roots = ["vyperHolScript.sml",
+         "tests/vyperTestsHolScript.sml",
+         "lowering/e2eBoundaryTestScript.sml",
          "lowering/evalCompilerWitnessesScript.sml",
          "tests/vyperCheckContractLibTestScript.sml",
          "tests/vyperStringScopeTestScript.sml",
-         "frontend/vyperCheckContractFrontendLibTestScript.sml",
-         "frontend/jsonConstEvalWitnessScript.sml",
+         "tests/vyperCheckContractFrontendLibTestScript.sml",
+         "tests/jsonConstEvalWitnessScript.sml",
          "frontend/sourceConstASTLibTestScript.sml",
          "frontend/sourceConstEvalPropsScript.sml",
          "frontend/sourceConstBuiltinTestScript.sml",
@@ -103,7 +105,9 @@ roots = ["vyperHolScript.sml",
          "lowering/supported/supportedStmtPropsScript.sml",
          "lowering/supported/supportedStmtTraversePropsScript.sml",
          "lowering/supported/supportedProgramPropsScript.sml",
-         "venom/codegen/proofs/contextReachabilityChecksScript.sml"]
+         "venom/codegen/proofs/contextReachabilityChecksScript.sml",
+         "tests/vyperPlaceProbesTestScript.sml",
+         "tests/vyperPlaceSanityTestScript.sml"]
 
 # Preload the toolchain context before intLib loads hurdUtils. Its legacy
 # module manifest otherwise reaches hurdUtils.sml before this structure exists.

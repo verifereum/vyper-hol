@@ -11,11 +11,12 @@ Libs
 
 Theorem power_literal_value:
   expr_int_literal e = SOME n /\
-  eval_expr cx e es = (INL (Value (IntV a)),es') ==> a = n
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL (IntV a),es') ==> a = n
 Proof
   Cases_on `e` >> simp[expr_int_literal_def] >>
   rename1 `Literal ty lit` >> Cases_on `lit` >>
-  simp[expr_int_literal_def, Once evaluate_def, return_def, evaluate_literal_def] >> rw[]
+  simp[expr_int_literal_def, Once evaluate_def, return_def, evaluate_literal_def,
+       bind_def, read_result_def] >> rw[]
 QED
 
 Theorem power_checked_integer_info:
@@ -72,12 +73,13 @@ Proof
 QED
 
 (* All literal options are extracted from the SAME checked expression that
-   supplied the operand evaluations. Operand bounds are ordinary runtime
+   supplied the forced operand evaluations (including reads of places).
+   Operand bounds are ordinary runtime
    typing, not additional restrictions on source programs. *)
 Theorem checked_power_run:
   well_typed_expr env (Builtin ty (Bop Exp) [base_e; exponent]) /\
-  eval_expr cx base_e es = (INL (Value (IntV a)),es1) /\
-  eval_expr cx exponent es1 = (INL (Value (IntV e)),es2) /\
+  (do r <- eval_expr cx base_e; read_result cx r od) es = (INL (IntV a),es1) /\
+  (do r <- eval_expr cx exponent; read_result cx r od) es1 = (INL (IntV e),es2) /\
   within_int_bound (if is_signed_type ty then Signed (type_bits ty)
                     else Unsigned (type_bits ty)) a /\
   within_int_bound (if is_signed_type ty then Signed (type_bits ty)
@@ -103,7 +105,7 @@ Proof
     (Cases_on `expr_int_literal base_e`
      >- (drule well_typed_power_has_integer_literal >> strip_tac >>
          gvs[expr_int_literal_def, Once evaluate_def, return_def,
-             evaluate_literal_def] >>
+             evaluate_literal_def, bind_def, read_result_def] >>
          drule well_typed_power_literal_exponent_nonnegative >> simp[]) >>
      drule_all power_literal_value >> simp[]) >>
   simp[evaluate_binop_def, bounded_int_op_def] >>

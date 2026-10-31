@@ -1,7 +1,9 @@
-(* Regression: the unrestricted evaluator theorems are finalised and closed. *)
+(* Regression: the merged evaluator theorems, including delayed-result
+   collection and forcing, are finalised and kernel-closed. *)
 Theory vyperTypeAbiSoundnessTest
 Ancestors
   vyperTypeEvalSoundness vyperTypeEvalStoragePreservation vyperTypeExtCallSoundness
+  vyperTypeAbiTargetSoundness
 
 val () = let
   fun check name th = let
@@ -11,13 +13,21 @@ val () = let
          List.all (fn s => s = "DISK_THM") oracles then ()
       else raise Fail (name ^ " is not kernel-closed")
     end
-  fun mutual name th =
+  fun mutual count name th =
     (check name th;
-     if length (boolSyntax.strip_conj (Thm.concl th)) = 11 then ()
-     else raise Fail (name ^ " must retain all eleven evaluator predicates"))
+     if length (boolSyntax.strip_conj (Thm.concl th)) = count then ()
+     else raise Fail (name ^ " lost evaluator predicates"))
   in
-    mutual "eval_all_type_sound_mutual" eval_all_type_sound_mutual;
-    mutual "eval_all_storage_preservation_mutual" eval_all_storage_preservation_mutual;
+    (* The full SCC includes delayed results and the two ABI evaluators;
+       the public projection retains the ten original predicates. *)
+    mutual 13 "eval_scc_type_sound_results_mutual" eval_scc_type_sound_results_mutual;
+    mutual 13 "eval_scc_storage_preservation_results_mutual"
+      eval_scc_storage_preservation_results_mutual;
+    mutual 10 "eval_scc_type_sound_mutual" eval_scc_type_sound_mutual;
+    mutual 10 "eval_scc_storage_preservation_mutual" eval_scc_storage_preservation_mutual;
+    check "eval_expr_read_type_sound" eval_expr_read_type_sound;
+    check "target_place_pop_sound" target_place_pop_sound;
+    check "abi_target_operand_pop_sound" abi_target_operand_pop_sound;
     check "eval_ext_call_result_sound" eval_ext_call_result_sound;
     check "eval_send_result_sound" eval_send_result_sound;
     print "ABI_MAIN_SOUNDNESS_KERNEL_CLOSED\n"

@@ -69,7 +69,7 @@ Definition source_location_capture_state_def:
   source_location_capture_state = empty_state with scopes :=
     [FEMPTY |+ ("a", <| assignable := T;
       type := ArrayTV (BaseTV BoolT) (Dynamic 2);
-      value := ArrayV (DynArrayV [BoolV T;BoolV F]) |>)]
+      value := ArrayV (DynArrayV [BoolV T;BoolV F]); popped := [] |>)]
 End
 
 Theorem source_location_capture_reads_cell_type:
@@ -84,7 +84,7 @@ Theorem source_location_complex_capture_is_delayed:
   FST ((do
     args <- source_location_abis empty_evaluation_context
       [SML_Reference (ArrayT (BaseT BoolT) (Dynamic 2)) (SMR_Local "a")];
-    assign_target empty_evaluation_context (BaseTargetV (ScopedVar "a") []) PopOp;
+    pop_place empty_evaluation_context (MemoryPlace "a" []);
     stage_abi_operands empty_evaluation_context args
   od) source_location_capture_state) = INL [ArrayV (DynArrayV [BoolV T])]
 Proof
@@ -96,9 +96,9 @@ Definition source_location_index_state_def:
     [FEMPTY |+ ("rows", <| assignable := T;
       type := ArrayTV (ArrayTV (BaseTV BoolT) (Dynamic 2)) (Dynamic 2);
       value := ArrayV (DynArrayV
-        [ArrayV (DynArrayV [BoolV T;BoolV F]);ArrayV (DynArrayV [BoolV F;BoolV T])]) |>)
-      |+ ("i", <| assignable := T; type := BaseTV (UintT 256); value := IntV 1 |> )
-      |+ ("flag", <| assignable := T; type := BaseTV BoolT; value := BoolV T |>)]
+        [ArrayV (DynArrayV [BoolV T;BoolV F]);ArrayV (DynArrayV [BoolV F;BoolV T])]); popped := [] |>)
+      |+ ("i", <| assignable := T; type := BaseTV (UintT 256); value := IntV 1; popped := [] |> )
+      |+ ("flag", <| assignable := T; type := BaseTV BoolT; value := BoolV T; popped := [] |>)]
 End
 
 (* Mutating both the branch condition and index after capture must not replay
@@ -112,10 +112,10 @@ Theorem source_location_conditional_index_captured_once:
           (SML_Reference (BaseT BoolT) (SMR_Local "flag"))
           (SML_Reference (BaseT (UintT 256)) (SMR_Local "i"))
           (SML_Core (SM_Literal (BaseT (UintT 256)) (IntL 0))))];
-    assign_target empty_evaluation_context (BaseTargetV (ScopedVar "flag") []) (Replace (BoolV F));
-    assign_target empty_evaluation_context (BaseTargetV (ScopedVar "i") []) (Replace (IntV 0));
-    assign_target empty_evaluation_context
-      (BaseTargetV (ScopedVar "rows") [ValueSubscript (IntV 1)]) PopOp;
+    write_place empty_evaluation_context (MemoryPlace "flag" []) (BoolV F);
+    write_place empty_evaluation_context (MemoryPlace "i" []) (IntV 0);
+    pop_place empty_evaluation_context
+      (MemoryPlace "rows" [ValueSubscript (IntV 1)]);
     stage_abi_operands empty_evaluation_context args
   od) source_location_index_state) = INL [ArrayV (DynArrayV [BoolV F])]
 Proof

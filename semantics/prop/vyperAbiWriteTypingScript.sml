@@ -200,6 +200,6 @@ Proof
   `IS_SOME (abi_operation_writes (leaf_type tv subs) child op)` by
     (irule abi_operation_writes_typed >> simp[]) >>
   gvs[IS_SOME_EXISTS] >>
-  simp[write_abi_memory_def, return_def] >>
+  simp[write_abi_memory_def, write_abi_memory_child_def, return_def] >>
   IF_CASES_TAC >> simp[]
 QED

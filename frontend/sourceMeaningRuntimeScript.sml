@@ -7,12 +7,12 @@ Ancestors
   vyperInterpreter vyperState vyperContext vyperValueOperation vyperAST vyperValue alist
 
 (* Independent local-name denotation, without constructing/evaluating a runtime
-   AST. This is a usable instance of the otherwise abstract environment API. *)
+   AST. Capture the cell now; consumers choose when to read its value. *)
 Definition source_meaning_local_def:
   source_meaning_local id = do
     scopes <- get_scopes;
-    v <- lift_option_type (lookup_scopes_val id scopes) "Name not in scope";
-    return (Value v)
+    type_check (IS_SOME (lookup_scopes id scopes)) "Name not in scope";
+    return (PlaceR (MemoryPlace id []))
   od
 End
 
@@ -64,7 +64,7 @@ Theorem source_meaning_add_runtime:
 Proof
   simp[source_meaning_eval_def, source_meaning_type_def, source_meaning_apply_def,
        source_meaning_args_def, source_expr_binary_def,
-       builtin_args_length_ok_def, evaluate_literal_def, materialise_def,
+       builtin_args_length_ok_def, evaluate_literal_def, read_result_def,
        evaluate_builtin_def, evaluate_binop_def, bounded_int_op_def,
        bind_def, ignore_bind_def, return_def, get_accounts_def, lift_sum_def,
        type_check_def, assert_def]
@@ -82,7 +82,7 @@ Proof
     simp[source_const_value_literal_def] >>
   drule_all source_meaning_reify_evaluates >> strip_tac >>
   simp[evaluate_def, expr_type_def, builtin_args_length_ok_def,
-       evaluate_literal_def, materialise_def, evaluate_builtin_def,
+       evaluate_literal_def, read_result_def, evaluate_builtin_def,
        evaluate_binop_def, bounded_int_op_def, bind_def, ignore_bind_def,
        return_def, get_accounts_def, lift_sum_def, type_check_def, assert_def]
 QED

@@ -1,6 +1,6 @@
 (* #543: exact statement whitelist remainder. Recursive expressions and
-   the redundant Exp AugAssign literal gate are replaced. Nested target-place,
-   copy-layout and evaluation-order gates are shared with supportedStmts. *)
+   the redundant Exp AugAssign literal gate are replaced. Ordered assignment
+   targets and copy-layout gates are shared with supportedStmts. *)
 Theory sourceStmtSupport
 Ancestors
   sourceExprSupport supportedStmts supportedTargets supportedStmtTraverse supportedExprs
@@ -9,17 +9,18 @@ Ancestors
 
 Definition source_assignment_remainder_def:
   source_assignment_remainder tops bindings target e <=>
+    source_expr_remainder tops e /\
     case target of
       BaseTarget target_base =>
+        supported_target tops bindings target_base \/
         (case supported_target_info tops bindings target_base of
            SOME (ValPT ty) => supported_place_type tops ty /\
              supported_copy_types ty (expr_type e)
-         | _ => F) /\
-        (case target_base of
-           NameTarget name => source_expr_remainder tops e
-         | _ => source_pure_expr_remainder tops e /\
-              (supported_target_pure tops target_base \/ supported_uncomputed_rhs e))
-    | _ => F
+         | _ => F)
+    | TupleTarget targets =>
+        EVERY (\g. case g of
+          BaseTarget target_base => supported_target tops bindings target_base
+        | TupleTarget _ => F) targets
 End
 
 Definition source_string_reason_remainder_def:
@@ -82,8 +83,8 @@ Definition source_stmt_remainder_def:
   source_stmt_remainder tops bindings (Assign target e) =
     source_assignment_remainder tops bindings target e /\
   source_stmt_remainder tops bindings (AugAssign ty target op e) =
-    (supported_aug_target tops bindings target /\ source_pure_expr_remainder tops e /\
-     source_aug_binop_remainder op ty e) /\
+    ((supported_target tops bindings target \/ supported_aug_target tops bindings target) /\
+     source_expr_remainder tops e /\ source_aug_binop_remainder op ty e) /\
   source_stmt_remainder tops bindings (Append target e) =
     (supported_append_target tops target /\ source_pure_expr_remainder tops e) /\
   source_stmt_remainder tops bindings (If c yes no) =
@@ -106,9 +107,9 @@ Termination
   simp[stmt_size_def, list_size_def]
 End
 
-(* Acceptance may widen the assigned value. Place/copy/order restrictions,
-   including nested target keys, are shared unchanged with main support;
-   only RHS typing is needed to replace its expression remainder. *)
+(* Acceptance may widen the assigned value. Ordered target and copy-layout
+   restrictions are shared unchanged with main support; only RHS typing is
+   needed to replace its expression remainder. *)
 Theorem checked_assignment_remainder:
   atarget_accepts env target ty /\ well_typed_expr env e ==>
   (source_assignment_remainder tops bindings target e <=>

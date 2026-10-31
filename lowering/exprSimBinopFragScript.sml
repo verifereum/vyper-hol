@@ -256,8 +256,8 @@ QED
 Theorem binop_frag_pow:
   !ctx func cenv cx ann e1 e2 v1 v2 es es1 es0 env tenv tv1 tv2.
     well_typed_expr env (Builtin ann (Bop Exp) [e1;e2]) /\
-    eval_expr cx e1 es = (INL (Value v1),es1) /\
-    eval_expr cx e2 es1 = (INL (Value v2),es0) /\
+    (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1,es1) /\
+    (do r <- eval_expr cx e2; read_result cx r od) es1 = (INL v2,es0) /\
     evaluate_type tenv (expr_type e1) = SOME tv1 /\ value_has_type tv1 v1 /\
     evaluate_type tenv (expr_type e2) = SOME tv2 /\ value_has_type tv2 v2 ==>
     binop_frag ctx func cenv cx Exp (expr_type e1) ann
@@ -270,8 +270,8 @@ Proof
   qspecl_then [`tenv`,`ann`,`tv1`,`v1`] mp_tac int_type_value >>
   qspecl_then [`tenv`,`ann`,`tv2`,`v2`] mp_tac int_type_value >>
   asm_rewrite_tac[] >> rpt strip_tac >> gvs[] >>
-  rename1 `eval_expr cx e1 es = (INL (Value (IntV i1)),es1)` >>
-  rename1 `eval_expr cx e2 es1 = (INL (Value (IntV i2)),es0)` >>
+  rename1 `(do r <- eval_expr cx e1; read_result cx r od) es = (INL (IntV i1),es1)` >>
+  rename1 `(do r <- eval_expr cx e2; read_result cx r od) es1 = (INL (IntV i2),es0)` >>
   match_mp_tac (Q.INST [`u` |->
     `if is_signed_type ann then Signed (type_bits ann) else Unsigned (type_bits ann)`]
     binop_frag_power_run) >> conj_tac >- simp[] >>
@@ -462,8 +462,8 @@ Theorem binop_frag_typed:
   !ctx func cenv cx bop ann e1 e2 v1 v2 es0 tv1 tv2 env es es1.
     (bop = Exp ==>
       well_typed_expr env (Builtin ann (Bop Exp) [e1;e2]) /\
-      eval_expr cx e1 es = (INL (Value v1),es1) /\
-      eval_expr cx e2 es1 = (INL (Value v2),es0)) /\
+      (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1,es1) /\
+      (do r <- eval_expr cx e2; read_result cx r od) es1 = (INL v2,es0)) /\
     well_typed_binop ann bop (expr_type e1) (expr_type e2) /\
     type_bits (expr_type e1) MOD 8 = 0 /\
     word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
@@ -486,4 +486,3 @@ Proof
     mp_tac binop_frag_word_typed >>
   impl_tac >- asm_rewrite_tac[] >> simp[]
 QED
-

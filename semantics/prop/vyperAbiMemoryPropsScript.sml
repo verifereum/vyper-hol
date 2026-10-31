@@ -3,7 +3,7 @@
 Theory vyperAbiMemoryProps
 Ancestors
   vyperAbiOperand vyperState vyperAST vyperValue vyperStorage
-  vfmState list pair option
+  vfmState list rich_list pair option
 
 Theorem unwrap_complex_memory_keeps_address:
   ¬abi_primitive tv ⇒
@@ -29,6 +29,19 @@ Proof
   rw[capture_abi_memory_def, AllCaseEqs(), return_def, raise_def] >> simp[]
 QED
 
+Theorem capture_abi_memory_at_cell:
+  encode_value root v = SOME root_writes /\
+  encode_value tv child = SOME writes /\
+  capture_abi_memory_at cx id root v off tv child st = (INL token,rt) ==>
+  token = LENGTH st.abi_memory /\
+  oEL token rt.abi_memory = SOME ((cx.stk,id),
+    apply_writes (n2w off) writes (apply_writes 0w root_writes empty_storage)) /\
+  TAKE token rt.abi_memory = st.abi_memory
+Proof
+  simp[capture_abi_memory_at_def, return_def] >> strip_tac >> gvs[] >>
+  simp[oEL_THM, EL_APPEND_EQN, TAKE_LENGTH_APPEND]
+QED
+
 Theorem write_abi_memory_frame:
   write_abi_memory cx id tv v subs ao st = (result,rt) ⇒
   rt.scopes = st.scopes ∧ rt.accounts = st.accounts ∧
@@ -36,7 +49,8 @@ Theorem write_abi_memory_frame:
   rt.logs = st.logs ∧ rt.pending_deletions = st.pending_deletions ∧
   rt.outcomes = st.outcomes ∧ rt.requests = st.requests
 Proof
-  rw[write_abi_memory_def, AllCaseEqs(), return_def, raise_def] >>
+  rw[write_abi_memory_def, write_abi_memory_child_def,
+     AllCaseEqs(), return_def, raise_def] >>
   gvs[AllCaseEqs(), return_def, raise_def]
 QED
 

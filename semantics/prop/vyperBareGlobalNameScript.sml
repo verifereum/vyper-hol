@@ -1,7 +1,7 @@
 Theory vyperBareGlobalName
 
 Ancestors
-  vyperLookup vyperUpdateTarget vyperState vyperScopePreservation
+  vyperLookup vyperState vyperScopePreservation
   vyperLookupStorage vyperImmutablesPreservation vyperMisc
 
 Definition lookup_immutable_def:
@@ -251,6 +251,7 @@ Proof
     (irule set_global_immutables >> metis_tac[]) >>
   simp[]
 QED
+(* Legacy eager-target lemmas, superseded by the place boundary below.
 
 (**********************************************************************)
 (* Low-level lemmas about assign_target for ImmutableVar *)
@@ -332,4 +333,27 @@ Theorem update_target_immutable_subscripts:
       (update_bare_global_name cx st n a'))
 Proof
   metis_tac[update_target_def, assign_target_immutable_subscripts_state]
+QED
+*)
+
+(* Paths in places are root-first; ABI mirroring may fail after the value
+   update, so expose the exact continuation on both success and failure. *)
+Theorem write_immutable_place_subscripts:
+  ∀cx st n path v tv a a'.
+    lookup_bare_global_name cx st n = SOME (tv,a) ∧
+    assign_subscripts tv a path (Replace v) = INL a' ⇒
+    write_place cx (ImmutablePlace (current_module cx) n path) v st =
+      write_abi_immutables cx (current_module cx) n tv a' path (Replace v)
+        (update_bare_global_name cx st n a')
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[lookup_bare_global_name_def, lookup_immutable_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >>
+  simp[write_place_def, bind_def, get_immutables_def,
+       get_address_immutables_def, lift_option_type_def, lift_option_def,
+       return_def, lift_sum_def, ignore_bind_def] >>
+  simp[update_bare_global_name_def, lookup_bare_global_name_def,
+       lookup_immutable_def, set_immutable_def, bind_def,
+       get_address_immutables_def, lift_option_type_def, lift_option_def,
+       return_def, set_address_immutables_def, LET_THM, ignore_bind_def]
 QED

@@ -1,7 +1,7 @@
 Theory vyperPureExpr
 Ancestors
   vyperMisc vyperContext vyperState vyperStorageBackend vyperInterpreter vyperLookup vyperStatePreservation
-  vyperAbiOperand vyperAbiFrame vyperAbiReadOnly vyperAbiAppendFrame vyperCallOutcomeFrame
+  vyperPlaceFrames vyperAbiOperand vyperAbiFrame vyperAbiReadOnly vyperAbiAppendFrame vyperCallOutcomeFrame
 
 (* Pure expressions: expressions that do not modify state. *)
 Definition pure_expr_def:
@@ -24,6 +24,38 @@ Termination
   res_tac >> simp[]
 End
 
+(* Specialize the canonical evaluator induction theorem. Only expression
+   and expression-list evaluation carry whole-state preservation obligations. *)
+local
+  val p0 = ``\(cx:evaluation_context) (s:stmt). T``
+  val p1 = ``\(cx:evaluation_context) (ss:stmt list). T``
+  val p2 = ``\(cx:evaluation_context) (it:iterator). T``
+  val p3 = ``\(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T``
+  val p4 = ``\cx e. !st res st'. eval_expr cx e st = (res, st') ==> pure_expr e ==> st = st'``
+  val p5 = ``\cx es. !st res st'. eval_exprs cx es st = (res, st') ==> EVERY pure_expr es ==> st = st'``
+  val p6 = ``\(cx:evaluation_context) (t:base_assignment_target). T``
+  val p7 = p6
+  val p8 = ``\(cx:evaluation_context) (g:assignment_target) (v:value). T``
+  val p9 = ``\(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T``
+  val p10 = ``\(cx:evaluation_context) (es:expr list). T``
+  val p11 = ``\cx e. !st res st'. eval_abi_expr cx e st = (res,st') ==> pure_expr e ==> abi_append st st'``
+  val p12 = ``\cx es. !st res st'. eval_abi_exprs cx es st = (res,st') ==> EVERY pure_expr es ==> abi_append st st'``
+in
+  val expr_state_ind_principle =
+    CONV_RULE (DEPTH_CONV BETA_CONV)
+      (SPECL [p0,p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12] evaluate_ind)
+end
+
+Theorem canonical_observations_state[local]:
+  (read_result cx r st = (v,st') ==> st' = st) /\
+  (select_result cx ty r sb st = (w,st') ==> st' = st) /\
+  (conditional_result cx r st = (x,st') ==> st' = st) /\
+  (result_array_length cx r st = (n,st') ==> st' = st)
+Proof
+  metis_tac[read_result_state, select_result_state,
+            conditional_result_state, result_array_length_state]
+QED
+
 (* ------------------------------------------------------------------------
    Individual Case Lemmas
    ------------------------------------------------------------------------ *)
@@ -34,10 +66,11 @@ Theorem case_Name[local]:
        eval_expr cx (Name ty id) st = (res, st') ⇒
        st = st')
 Proof
-  simp[evaluate_def, bind_def, get_scopes_def, return_def,
-       lift_option_def, lift_option_type_def] >>
+  simp[evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
+       type_check_def, assert_def, return_def] >>
   rpt strip_tac >>
-  Cases_on `lookup_scopes_val id st.scopes` >> gvs[return_def, raise_def]
+  Cases_on `IS_SOME (lookup_scopes id st.scopes)` >>
+  gvs[return_def, raise_def]
 QED
 
 Theorem case_TopLevelName[local]:
@@ -75,14 +108,11 @@ Theorem case_IfExp[local]:
        pure_expr (IfExp ty e1 e2 e3) ⇒ st = st')
 Proof
   rpt strip_tac >>
-  fs[evaluate_def, bind_def, AllCaseEqs(), switch_BoolV_def, pure_expr_def, raise_def] >>
-  gvs[] >>
-  `st = s''` by (first_x_assum drule >> simp[]) >>
-  Cases_on `tv = Value (BoolV T)` >> gvs[] >-
-    (first_x_assum drule >> simp[] >> metis_tac[]) >>
-  Cases_on `tv = Value (BoolV F)` >> gvs[raise_def] >>
-  qpat_x_assum `∀s'' tv1 t. eval_expr cx e1 s'' = (INL tv1, t) ⇒ _` drule >>
-  simp[]
+  gvs[evaluate_def, bind_def, AllCaseEqs(), switch_BoolV_def,
+      pure_expr_def, raise_def] >>
+  imp_res_tac read_result_state >>
+  imp_res_tac conditional_result_state >> gvs[] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[raise_def]) >> metis_tac[]
 QED
 
 Theorem case_Literal[local]:
@@ -98,7 +128,7 @@ QED
 
    WHY THIS IS TRUE:
    Evaluates MAP SND kes as expressions, then constructs struct.
-   If eval_exprs preserves scopes (IH), result preserves scopes.
+   If eval_exprs preserves the whole state (IH), so does the result.
 
    Plan reference: Case 6 *)
 Theorem case_StructLit[local]:
@@ -128,22 +158,10 @@ Theorem case_Subscript[local]:
        eval_expr cx (Subscript ty e1 e2) st = (res, st') ⇒
        pure_expr (Subscript ty e1 e2) ⇒ st = st')
 Proof
-  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def] >>
-  imp_res_tac return_state >> imp_res_tac lift_sum_state >>
-  imp_res_tac lift_option_state >> imp_res_tac get_Value_state >>
-  imp_res_tac lift_sum_state >> imp_res_tac lift_option_type_state >>
-  gvs[check_array_bounds_def, bind_def, ignore_bind_def, AllCaseEqs(),
-      check_def, type_check_def, assert_def, return_def, raise_def] >>
-  imp_res_tac get_storage_backend_state >>
-  gvs[return_def, bind_def, AllCaseEqs(), sum_CASE_rator, prod_CASE_rator] >>
-  imp_res_tac return_state >> imp_res_tac lift_sum_state >>
-  imp_res_tac lift_option_state >> imp_res_tac get_Value_state >>
-  imp_res_tac lift_sum_state >> imp_res_tac lift_option_type_state >>
-  imp_res_tac get_Value_state >>
-  imp_res_tac read_storage_slot_state >>
-  imp_res_tac check_array_bounds_state >>
-  gvs[] >>
-  metis_tac []
+  rpt strip_tac >>
+  gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def] >>
+  imp_res_tac read_result_state >>
+  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
 QED
 
 Theorem case_Attribute[local]:
@@ -155,8 +173,7 @@ Theorem case_Attribute[local]:
        pure_expr (Attribute ty e id) ⇒ st = st')
 Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def] >>
-  imp_res_tac return_state >> imp_res_tac lift_sum_state >>
-  imp_res_tac get_Value_state >> res_tac >> gvs[]
+  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
 QED
 
 Theorem case_Builtin[local]:
@@ -175,32 +192,22 @@ Theorem case_Builtin[local]:
        eval_expr cx (Builtin ty bt es) st = (res, st') ⇒
        pure_expr (Builtin ty bt es) ⇒ st = st')
 Proof
-  rpt strip_tac >>
-  gvs[evaluate_def] >>
-  gvs[pure_expr_def] >>
-  gvs[bind_def, ignore_bind_def] >>
-  gvs[check_def, type_check_def, assert_def] >>
-  gvs[return_def, raise_def] >>
-  gvs[get_accounts_def, lift_sum_def] >>
-  gvs[AllCaseEqs()] >>
-  Cases_on `bt = Len` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def]
-  (* Len case: eval_expr (HD es) + toplevel_array_length *)
-  (* Len case *)
-  >- (gvs[toplevel_array_length_def, bind_def, AllCaseEqs(),
-          return_def, raise_def, get_accounts_def] >>
-      imp_res_tac get_storage_backend_state >> gvs[] >>
-      imp_res_tac check_array_bounds_state >> gvs[] >>
-      imp_res_tac materialise_state >> gvs[] >>
-      imp_res_tac toplevel_array_length_state >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `bt = Len`
+  >- (rpt strip_tac >>
+      gvs[evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
+          type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
+      gvs[bind_def, return_def, raise_def, AllCaseEqs()] >>
+      imp_res_tac result_array_length_state >> gvs[] >>
       `pure_expr (HD es)` by
-        (Cases_on `es` >> fs[builtin_args_length_ok_def]) >>
-      first_x_assum drule >> gvs[])
-  (* non-Len case: eval_exprs + evaluate_builtin *)
-  >> TRY (Cases_on `evaluate_builtin cx s''.accounts ty bt (MAP expr_type es) vs` >> gvs[return_def, raise_def]) >>
-  first_x_assum drule >> gvs[ETA_THM, sum_CASE_rator, CaseEq"sum",
-    return_def, raise_def, get_accounts_def, builtin_args_length_ok_def,
-    listTheory.LENGTH_EQ_NUM_compute] >>
-  imp_res_tac toplevel_array_length_state >> gvs[]
+        (Cases_on `es` >> gvs[builtin_args_length_ok_def]) >>
+      metis_tac[type_check_def, assert_def, return_def]) >>
+  rpt strip_tac >>
+  gvs[evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
+      type_check_def, assert_def, return_def, raise_def,
+      get_accounts_def, lift_sum_def, AllCaseEqs()] >>
+  gvs[get_accounts_def, ETA_THM, return_def, raise_def,
+      sum_CASE_rator, AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem case_Pop[local]:
@@ -227,9 +234,8 @@ Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, ignore_bind_def,
       check_def, type_check_def, assert_def, return_def, raise_def, lift_sum_def] >>
-  TRY (Cases_on `evaluate_type_builtin cx tb typ (MAP expr_type es) vs` >>
-       gvs[return_def, raise_def]) >>
-  first_x_assum drule >> gvs[ETA_THM]
+  gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def, ETA_THM] >>
+  metis_tac[]
 QED
 
 *)
@@ -255,7 +261,7 @@ QED
 Theorem case_eval_exprs_cons[local]:
   ∀cx e es.
     (∀s'' tv t s'3' v t'.
-       eval_expr cx e s'' = (INL tv, t) ∧ materialise cx tv s'3' = (INL v, t') ⇒
+       eval_expr cx e s'' = (INL tv, t) ∧ read_result cx tv s'3' = (INL v, t') ⇒
        ∀st res st'.
          eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st') ∧
     (∀st res st'.
@@ -265,7 +271,7 @@ Theorem case_eval_exprs_cons[local]:
        EVERY pure_expr (e::es) ⇒ st = st')
 Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-  imp_res_tac materialise_state >> gvs[] >>
+  imp_res_tac read_result_state >> gvs[] >>
   metis_tac[]
 QED
 
@@ -278,13 +284,14 @@ QED
    and all other fields. The outer AbiEncode releases both suffixes on errors too.
 
    We use a specialized version of evaluate_ind with:
-   - P0-P6 (statement predicates) = λcx args. T
-   - P7/P8 = complete state preservation under purity
-   - P9/P10 = allocation-only ABI framing under purity
+   - P0-P3 and P6-P10 (statements/places/tuple assignment/results) = T
+   - P4/P5 = complete state preservation under purity
+   - P11/P12 = allocation-only ABI framing under purity
    ------------------------------------------------------------------------ *)
 
 (* Derive specialized induction principle for expr_state_mutual.
    This encapsulates the SML needed to specialize evaluate_ind. *)
+(* Historical pre-place specialization (superseded above).
 local
   val p0 = ``\(cx:evaluation_context) (s:stmt). T``
   val p1 = ``\(cx:evaluation_context) (ss:stmt list). T``
@@ -302,6 +309,13 @@ local
 in
   val expr_state_ind_principle = save_thm("expr_state_ind_principle", spec_ind_beta)
 end
+*)
+(* The canonical place specialization assigns whole-state preservation
+   to P4 (eval_expr) and P5 (eval_exprs), and T to every other predicate.
+   Dispatch examines only the conclusion spine, never the guarded IHs.
+   ------------------------------------------------------------------------ *)
+
+(* expr_state_ind_principle is specialized above the constructor lemmas. *)
 
 (* Main mutual induction. *)
 Theorem expr_state_mutual[local]:
@@ -340,8 +354,8 @@ Proof
     simp[Once evaluate_def, bind_def, ignore_bind_def,
       return_def, raise_def, AllCaseEqs(), switch_BoolV_def] >>
     rpt strip_tac >> gvs[pure_expr_def] >>
-    imp_res_tac abi_readonly_states >> imp_res_tac get_Value_state >>
-    imp_res_tac lift_option_type_state >> imp_res_tac materialise_state >> gvs[] >>
+    imp_res_tac abi_readonly_states >>
+    imp_res_tac lift_option_type_state >> imp_res_tac read_result_state >> gvs[] >>
     TRY (FIRST [drule (lookup_abi_local_append |> SRULE [state_rel_frame_result]),
       drule (lookup_abi_global_append |> SRULE [state_rel_frame_result])] >>
       simp[] >> NO_TAC) >>
@@ -354,6 +368,60 @@ Proof
     strip_tac >> drule_all abi_append_trans >> simp[]
   ) >>
   simp[]
+(* Incoming eager-only dispatcher, superseded by ABI-aware induction above.
+  let
+    fun spine tm ants =
+      if is_forall tm then spine (snd (dest_forall tm)) ants
+      else if is_imp tm then
+        let val (a,b) = dest_imp tm in spine b (a::ants) end
+      else (tm, ants)
+    fun head_name tm =
+      let val h = fst (strip_comb tm)
+      in if is_const h then fst (dest_const h) else "" end
+    fun introduce (g as (_,w)) =
+      if is_forall w then (gen_tac >> introduce) g
+      else if is_imp w then (disch_tac >> introduce) g
+      else all_tac g
+    fun dispatch (g as (_,w)) =
+      let
+        val (concl, ants) = spine w []
+        val purity = List.find
+          (fn a => head_name a = "pure_expr" orelse head_name a = "EVERY") ants
+      in
+        if aconv concl T then
+          introduce >> ACCEPT_TAC TRUTH
+        else case purity of
+          NONE => FAIL_TAC "missing outer purity premise"
+        | SOME p =>
+          if head_name p = "EVERY" then
+            if listSyntax.is_nil (last (snd (strip_comb p))) then
+              metis_tac[case_eval_exprs_nil]
+            else ACCEPT_TAC case_eval_exprs_cons
+          else
+            case head_name (rand p) of
+              "Name" => metis_tac[case_Name]
+            | "TopLevelName" => metis_tac[case_TopLevelName]
+            | "FlagMember" => metis_tac[case_FlagMember]
+            | "IfExp" => ACCEPT_TAC case_IfExp
+            | "Literal" => metis_tac[case_Literal]
+            | "StructLit" => metis_tac[case_StructLit]
+            | "Subscript" => ACCEPT_TAC case_Subscript
+            | "Attribute" => ACCEPT_TAC case_Attribute
+            | "Builtin" => ACCEPT_TAC case_Builtin
+            | "TypeBuiltin" => ACCEPT_TAC case_TypeBuiltin
+            | "Pop" => metis_tac[case_Pop]
+            | "Call" =>
+                (introduce >>
+                 qpat_x_assum `pure_expr _` mp_tac >>
+                 CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [pure_expr_def])) >>
+                 simp_tac bool_ss [])
+            | _ => FAIL_TAC "unknown pure-expression induction constructor"
+      end g
+  in
+    mp_tac expr_state_ind_principle >>
+    (impl_tac >- (rpt conj_tac >> dispatch)) >> simp[]
+  end
+*)
 QED
 
 Resume expr_state_mutual[TypeBuiltin]:

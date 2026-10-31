@@ -90,9 +90,11 @@ End
 Definition source_meaning_defaults_def:
   source_meaning_defaults cx am [] = SOME [] /\
   source_meaning_defaults cx am (m::ms) =
-    case FST (source_meaning_eval cx (\p. source_meaning_local (LAST p)) m
-      (initial_state am [FEMPTY])) of
-      INL (Value v) => OPTION_MAP (CONS v) (source_meaning_defaults cx am ms)
+    case FST ((do
+      result <- source_meaning_eval cx (\p. source_meaning_local (LAST p)) m;
+      read_result cx result
+    od) (initial_state am [FEMPTY])) of
+      INL v => OPTION_MAP (CONS v) (source_meaning_defaults cx am ms)
     | _ => NONE
 End
 

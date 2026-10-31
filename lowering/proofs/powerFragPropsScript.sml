@@ -40,7 +40,7 @@ Proof
   qabbrev_tac `ok = (0 <= e /\ within_int_bound u rr)` >>
   qabbrev_tac `msg = if e < 0 then "Exp~" else "bounded_int_op bound"` >>
   `bop_result cx ann Exp tys (IntV a) (IntV e) es0 =
-    if ok then INL (Value (IntV rr)) else INR (Error (RuntimeError msg))` by
+    if ok then INL (IntV rr) else INR (Error (RuntimeError msg))` by
     (simp[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
           bounded_int_op_def, Abbr `ok`, Abbr `rr`, Abbr `msg`] >>
      Cases_on `e < 0` >> gvs[GSYM INT_NOT_LE] >> IF_CASES_TAC >> gvs[]) >>

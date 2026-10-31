@@ -7,24 +7,28 @@ Ancestors
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
   entryChecksProps
-  entryStateRel
+  entryStateRel entryLocals
   loweringSlice
+  memSafeRun fragExecMem
   varsExt exprSim
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
-  exprSimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
+  exprSimMain bodySimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
-  stmtSimDeclMem exprSimStorageCopy
+  stmtSimDeclMem stmtSimDeclEmpty exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
+  stmtSimAssign stmtSimAssignMem stmtSimAssignTuple stmtSimAssignTupleMem
+  stmtSimAssignStorage
   valueEncodingProofs
   localPtrsProps
   loweringShapeProps
-  intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame valueCopy
+  intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
   allocaBudgetChecks
   vyperLoweringCorrect
   configuredE2ECorrectness
+  evalAssignmentOrder
   (* focused internal-frame allocation, cleanup and whitelist regressions *)
   calleeMemoryWitness
   cleanupPromiseWitness

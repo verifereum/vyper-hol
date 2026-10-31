@@ -326,8 +326,14 @@ End
 
 val () = cv_trans decimal_scale_def;
 
+Definition decimal_bits_def[simp]:
+  decimal_bits = 168n
+End
+
+val () = cv_trans decimal_bits_def;
+
 Definition decimal_bound_def[simp]:
-  decimal_bound = Signed 168
+  decimal_bound = Signed decimal_bits
 End
 
 val () = cv_trans decimal_bound_def;
@@ -383,13 +389,20 @@ Definition is_bytestring_tv_def[simp]:
   is_bytestring_tv _ = F
 End
 
+(* The bytes of a string, one per character. *)
+Definition string_to_bytes_def[simp]:
+  string_to_bytes (s : string) = MAP ((n2w : num -> word8) o ORD) s
+End
+
+val () = cv_auto_trans string_to_bytes_def;
+
 (* Returndata of a call to a @raw_return function: the value's own bytes, with no
    length word and no padding, since ABI encoding is bypassed.  NONE when the
    value has no bytestring representation, which a safe_cast to a bytestring
    return type rules out; see safe_cast_bytestring_raw_return_bytes. *)
 Definition raw_return_bytes_def[simp]:
   raw_return_bytes (BytesV bs) = SOME bs ∧
-  raw_return_bytes (StringV s) = SOME (MAP ((n2w:num->word8) o ORD) s) ∧
+  raw_return_bytes (StringV s) = SOME (string_to_bytes s) ∧
   raw_return_bytes _ = NONE
 End
 

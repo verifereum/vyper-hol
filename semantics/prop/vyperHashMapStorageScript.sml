@@ -110,14 +110,6 @@ Proof
   rw[hashmap_slot_for_def]
 QED
 
-Theorem hashmap_read_eq_slot:
-  ∀storage base kt tv kv.
-    hashmap_read storage base kt tv kv =
-    decode_value storage (w2n (hashmap_slot_for base kt kv)) tv
-Proof
-  rw[hashmap_read_def]
-QED
-
 (* ===== Write Success ===== *)
 
 Theorem hashmap_write_some:
@@ -309,37 +301,23 @@ Proof
   simp[]
 QED
 
-(* hashmap_slot unfolds to keccak256 of concatenated bytes *)
-Theorem hashmap_slot_unfold:
-  ∀base k.
-    hashmap_slot base k =
-    word_of_bytes_be (Keccak_256_w64 (word_to_bytes_be base ++ word_to_bytes_be k))
+(* ===== Canonical selection for HashMaps ===== *)
+
+Theorem select_result_hashmap_nested:
+  select_result cx ty (HashMapRef tr slot kt (HashMapT kt' vt'))
+    (ValueSubscript kv) st =
+  (INL (HashMapRef tr (hashmap_slot slot (encode_hashmap_key kt kv)) kt' vt'),st)
 Proof
-  simp[vyperStorageTheory.hashmap_slot_def]
+  simp[select_result_def, extend_place_def, return_def]
 QED
 
-(* ===== evaluate_subscript for HashMaps ===== *)
-
-Theorem evaluate_subscript_hashmap_nested:
-  ∀tenv tv base is_transient slot kt kt' vt' kv.
-    evaluate_subscript tenv tv
-      (HashMapRef is_transient slot kt (HashMapT kt' vt')) kv =
-    INL (INL (HashMapRef is_transient
-      (hashmap_slot slot (encode_hashmap_key kt kv)) kt' vt'))
+Theorem select_result_hashmap_leaf:
+  evaluate_type (get_tenv cx) t = SOME tv ==>
+  select_result cx ty (HashMapRef tr slot kt (Type t)) (ValueSubscript kv) st =
+  (INL (PlaceR (StoragePlace tr (hashmap_slot slot (encode_hashmap_key kt kv)) tv)),st)
 Proof
-  rw[evaluate_subscript_def]
-QED
-
-Theorem evaluate_subscript_hashmap_leaf:
-  ∀tenv tv base is_transient slot kt t kv result_tv.
-    evaluate_type tenv t = SOME result_tv ⇒
-    evaluate_subscript tenv tv
-      (HashMapRef is_transient slot kt (Type t)) kv =
-    INL (INR (is_transient,
-              hashmap_slot slot (encode_hashmap_key kt kv),
-              result_tv))
-Proof
-  rw[evaluate_subscript_def]
+  simp[select_result_def, extend_place_def, lift_option_type_def,
+       lift_option_def, bind_def, return_def]
 QED
 
 (* ===== encode_hashmap_key Properties ===== *)

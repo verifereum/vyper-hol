@@ -11,7 +11,7 @@ Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperInterpreter vyperState vyperContext vyperStorage
-  vyperTyping vyperEncodeDecode vyperArith vyperTypeSystem
+  vyperTyping vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeContract
 Libs
   wordsLib
 
@@ -50,10 +50,44 @@ Definition fn_sigs_consistent_def:
         sig.num_defaults = LENGTH dflts
 End
 
+(* Every key of fn_sigs is a live function: check_contract checks the bodies of
+   live functions only. *)
+Definition fn_sigs_live_def:
+  fn_sigs_live fn_sigs cx <=>
+    !k sig. FLOOKUP fn_sigs k = SOME sig ==> context_function_live cx k
+End
+
+Theorem context_function_live_context[simp]:
+  context_function_live (cx with stk updated_by f) k =
+    context_function_live cx k /\
+  context_function_live (cx with stk := stk) k = context_function_live cx k /\
+  context_function_live (cx with in_deploy := b) k = context_function_live cx k
+Proof
+  simp[context_function_live_def]
+QED
+
+Theorem lookup_var_slot_from_layout_context[simp]:
+  lookup_var_slot_from_layout (cx with stk updated_by f) is_transient src id =
+    lookup_var_slot_from_layout cx is_transient src id /\
+  lookup_var_slot_from_layout (cx with in_deploy := b) is_transient src id =
+    lookup_var_slot_from_layout cx is_transient src id
+Proof
+  simp[lookup_var_slot_from_layout_def]
+QED
+
+Theorem fn_sigs_live_context[simp]:
+  fn_sigs_live sigs (cx with stk updated_by f) = fn_sigs_live sigs cx /\
+  fn_sigs_live sigs (cx with stk := stk) = fn_sigs_live sigs cx /\
+  fn_sigs_live sigs (cx with in_deploy := b) = fn_sigs_live sigs cx
+Proof
+  simp[fn_sigs_live_def]
+QED
+
 Definition fn_sigs_complete_def:
   fn_sigs_complete fn_sigs cx <=>
     !src_id_opt fn ts fm nr params dflts ret body.
       get_module_code cx src_id_opt = SOME ts /\
+      context_function_live cx (src_id_opt,fn) /\
       lookup_callable_function cx.in_deploy fn ts =
         SOME (fm, nr, params, dflts, ret, body) ==>
       FLOOKUP fn_sigs (src_id_opt, fn) =
@@ -72,6 +106,7 @@ Definition fn_sigs_declared_complete_def:
       get_module_code cx src = SOME ts /\
       MEM (FunctionDecl vis fm nr raw fn args dflts ret body) ts /\
       (vis = Internal \/ (cx.in_deploy /\ vis = Deploy)) /\
+      context_function_live cx (src,fn) /\
       lookup_callable_function cx.in_deploy fn ts =
         SOME (fm,nr,args,dflts,ret,body) ==>
       FLOOKUP fn_sigs (src,fn) =
@@ -103,15 +138,20 @@ Proof
   >- (first_x_assum drule_all >> simp[])
 QED
 
+(* Storage, transient and HashMap variables are required only when they have
+   a slot: an uninitialized module's state is not in the layout. *)
 Definition toplevel_vtypes_complete_def:
   toplevel_vtypes_complete toplevel_vtypes cx <=>
     (!src ts vis mut id ty init.
        get_module_code cx src = SOME ts /\
-       MEM (VariableDecl vis mut id ty init) ts ==>
+       MEM (VariableDecl vis mut id ty init) ts /\
+       (mut = Storage ==> IS_SOME (lookup_var_slot_from_layout cx F src id)) /\
+       (mut = Transient ==> IS_SOME (lookup_var_slot_from_layout cx T src id)) ==>
        FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty)) /\
     (!src ts vis is_transient id kt vt init.
        get_module_code cx src = SOME ts /\
-       MEM (HashMapDecl vis is_transient id kt vt init) ts ==>
+       MEM (HashMapDecl vis is_transient id kt vt init) ts /\
+       IS_SOME (lookup_var_slot_from_layout cx is_transient src id) ==>
        FLOOKUP toplevel_vtypes (src,id) = SOME (HashMapT kt vt))
 End
 
@@ -124,16 +164,6 @@ Definition is_bare_global_decl_def:
   is_bare_global_decl id (_ :: ts) = is_bare_global_decl id ts
 End
 
-
-Theorem is_immutable_decl_imp_is_bare_global_decl:
-  is_immutable_decl id ts ==> is_bare_global_decl id ts
-Proof
-  Induct_on `ts` >>
-  rw[is_immutable_decl_def, is_bare_global_decl_def] >>
-  Cases_on `h` >>
-  gvs[is_immutable_decl_def, is_bare_global_decl_def] >>
-  TRY (Cases_on `v0` >> gvs[is_immutable_decl_def, is_bare_global_decl_def])
-QED
 
 
 Definition bare_globals_complete_def:
@@ -166,6 +196,7 @@ Definition env_context_consistent_def:
     env.type_defs = get_tenv cx /\
     env.current_src = current_module cx /\
     fn_sigs_consistent env.fn_sigs cx /\
+    fn_sigs_live env.fn_sigs cx /\
     fn_sigs_declared_complete env.fn_sigs cx /\
     toplevel_vtypes_complete env.toplevel_vtypes cx /\
     bare_globals_complete env.bare_globals cx /\
@@ -207,47 +238,12 @@ Definition env_context_consistent_def:
             FLOOKUP (get_tenv cx) (src,fid) = SOME (FlagArgs (LENGTH ls)))
 End
 
-Theorem env_context_consistent_static_completeness:
-  env_context_consistent env cx ==>
-    toplevel_vtypes_complete env.toplevel_vtypes cx /\
-    bare_globals_complete env.bare_globals cx /\
-    bare_global_assignable_complete env.bare_global_assignable cx /\
-    flag_members_complete env.flag_members cx
-Proof
-  rw[env_context_consistent_def]
-QED
-
-Theorem env_context_consistent_bare_global_old:
-  env_context_consistent env cx /\
-  FLOOKUP env.bare_globals (src,id) = SOME ty /\
-  get_module_code cx src = SOME ts ==>
-    FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
-    is_bare_global_decl id ts /\ ty <> NoneT
-Proof
-  rw[env_context_consistent_def] >>
-  first_x_assum drule >> rw[] >> gvs[]
-QED
-
 Theorem env_context_consistent_bare_global_find_NONE:
   env_context_consistent env cx /\
   FLOOKUP env.bare_globals (src,id) = SOME ty ==>
     ?ts. get_module_code cx src = SOME ts /\
          FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
          is_bare_global_decl id ts /\
-         find_var_decl_by_name id ts = NONE /\
-         ty <> NoneT
-Proof
-  rw[env_context_consistent_def] >>
-  first_x_assum drule >> rw[] >> gvs[]
-QED
-
-Theorem env_context_consistent_bare_global_assignable_find_NONE:
-  env_context_consistent env cx /\
-  FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==>
-    ?ts. get_module_code cx src = SOME ts /\
-         FLOOKUP env.bare_globals (src,id) = SOME ty /\
-         FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
-         is_immutable_decl id ts /\
          find_var_decl_by_name id ts = NONE /\
          ty <> NoneT
 Proof
@@ -319,6 +315,7 @@ Definition functions_well_typed_def:
   functions_well_typed cx <=>
     !fn_sigs bare_globals bare_global_assignable toplevel_vtypes flag_members.
       fn_sigs_consistent fn_sigs cx /\
+      fn_sigs_live fn_sigs cx /\
       fn_sigs_declared_complete fn_sigs cx /\
       toplevel_vtypes_complete toplevel_vtypes cx /\
       bare_globals_complete bare_globals cx /\
@@ -354,6 +351,7 @@ Definition functions_well_typed_def:
               FLOOKUP (get_tenv cx) (src,fid) = SOME (FlagArgs (LENGTH ls))) ==>
       !src_id_opt fn ts fm nr args dflts ret body.
         get_module_code cx src_id_opt = SOME ts /\
+        context_function_live cx (src_id_opt,fn) /\
         lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,args,dflts,ret,body) ==>
         (nr ==> cx.nonreentrant_slot <> NONE) /\
         ?env_body ret_tv env_after.
@@ -403,9 +401,31 @@ Definition accounts_well_typed_def:
     !addr. account_well_typed (lookup_account addr acc)
 End
 
-Definition toplevel_value_typed_def:
-  (toplevel_value_typed (Value v) tyv <=> value_has_type tyv v) /\
-  (toplevel_value_typed (ArrayRef _ _ elem_tv bd) tyv <=> tyv = ArrayTV elem_tv bd) /\
-  (toplevel_value_typed (HashMapRef _ _ _ _) tyv <=> tyv = NoneTV)
+(* Captured places carry declared metadata, independently of live lengths. *)
+Definition runtime_place_typed_def:
+  runtime_place_typed cx st p tv <=>
+    well_formed_type_value tv /\
+    place_type_value cx p st = (INL tv,st)
 End
 
+(* Operations that compute a value, such as external-call decoding, expose
+   this stronger result shape rather than a deferred location. *)
+Definition value_result_typed_def:
+  value_result_typed res tv <=>
+    ?v. res = Value v /\ value_has_type tv v
+End
+
+(* Values, locations and mapping roots share one result-typing boundary.
+   The state is needed only to recover local and immutable place metadata. *)
+Definition eval_result_typed_def:
+  eval_result_typed (env,cx,st) res vt <=>
+    case vt of
+    | Type ty =>
+        ?tv. evaluate_type env.type_defs ty = SOME tv /\
+          (case res of
+           | Value v => value_has_type tv v
+           | PlaceR p => runtime_place_typed cx st p tv
+           | HashMapRef _ _ _ _ => F)
+    | HashMapT kt value_ty =>
+        ?tr slot. res = HashMapRef tr slot kt value_ty
+End

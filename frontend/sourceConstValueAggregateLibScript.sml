@@ -110,7 +110,7 @@ Theorem source_const_eval_exprs:
 Proof
   Induct >> simp[Once evaluate_def, return_def] >>
   Cases_on `h` >> rpt strip_tac >>
-  simp[Once evaluate_def, bind_def, materialise_def, return_def]
+  simp[Once evaluate_def, bind_def, read_result_def, return_def]
 QED
 
 Theorem source_const_eval_array:

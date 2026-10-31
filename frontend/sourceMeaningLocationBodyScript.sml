@@ -34,7 +34,7 @@ Definition source_location_run_def:
   source_location_run cx (SMLB_Return NONE) = raise (ReturnException NoneV) /\
   source_location_run cx (SMLB_Return (SOME m)) = do
     tv <- source_location_eval cx m;
-    v <- materialise cx tv;
+    v <- read_result cx tv;
     raise (ReturnException v)
   od /\
   source_location_run cx (SMLB_Expr m) = do
@@ -44,21 +44,19 @@ Definition source_location_run_def:
   source_location_run cx (SMLB_Local id ty m) = do
     t <- lift_option_type (evaluate_type (get_tenv cx) ty) "AnnAssign evaluate_type";
     tv <- source_location_eval cx m;
-    v <- materialise cx tv;
+    v <- read_result cx tv;
     new_variable id t v
   od /\
   source_location_run cx (SMLB_Assign r m) = do
-    gv <- (do (loc,subs) <- source_reference_target cx r;
-      return (BaseTargetV loc subs) od);
     tv <- source_location_eval cx m;
-    v <- materialise cx tv;
-    assign_target cx gv (Replace v);
-    return ()
+    p <- source_reference_target cx r;
+    v <- read_result cx tv;
+    write_place cx p v
   od /\
   source_location_run cx (SMLB_If c yes no) = do
     tv <- source_location_eval cx c;
     push_scope;
-    finally (switch_BoolV tv (source_location_runs cx yes) (source_location_runs cx no)) pop_scope
+    finally (switch_BoolV cx tv (source_location_runs cx yes) (source_location_runs cx no)) pop_scope
   od /\
   source_location_runs cx [] = return () /\
   source_location_runs cx (m::ms) = do
@@ -144,11 +142,15 @@ Inductive source_location_body_code:
 End
 
 Theorem source_reference_code_evaluates:
-  eval_base_target cx (source_reference_code r) = source_reference_target cx r
+  eval_target_place cx (source_reference_code r) = source_reference_target cx r
 Proof
-  Cases_on `r` >> simp[source_reference_code_def,source_reference_target_def,Once evaluate_def] >>
+  Cases_on `r`
+  >- (rw[source_reference_code_def, source_reference_target_def, evaluate_def,
+         FUN_EQ_THM, get_place_def, bind_def, ignore_bind_def, return_def, get_scopes_def,
+         type_check_def, assert_def, raise_def] >>
+      IF_CASES_TAC >> simp[get_place_def, return_def]) >>
   rename1 `SMR_Global gid` >> Cases_on `gid` >>
-  simp[source_reference_target_def,Once evaluate_def]
+  simp[source_reference_code_def, source_reference_target_def, evaluate_def]
 QED
 
 Theorem source_location_body_code_evaluates:

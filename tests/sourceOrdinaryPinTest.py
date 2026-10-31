@@ -124,6 +124,55 @@ class InheritedIdentityTest(unittest.TestCase):
                 legacy = json.loads((BASE/entries[0][1]).with_suffix('.json').read_text())
                 check_inherited_ids(legacy, entries, INHERITED_SOURCE_IDS[name])
 
+    def test_incoming_fixture_identities_and_capture_policy(self):
+        expected = {
+            'mutability': {('main',): 0},
+            'nonreentrancy_pragma': {('main',): 0},
+            'uninitialized_import': {('main',): 0, ('lib',): 1, ('mid',): 2},
+        }
+        for name, ids in expected.items():
+            with self.subTest(name=name):
+                self.assertNotIn(name, CASES)
+                self.assertEqual(INHERITED_SOURCE_IDS[name], ids)
+                entries = PIN_ONLY_CASES[name]
+                legacy = json.loads((BASE/entries[0][1]).with_suffix('.json').read_text())
+                check_inherited_ids(legacy, entries, ids)
+                wrong = copy.deepcopy(legacy)
+                wrong['ast']['source_id'] = 99
+                with self.assertRaises(AssertionError):
+                    check_inherited_ids(wrong, entries, ids)
+                wrong = copy.deepcopy(legacy)
+                wrong['ast']['resolved_path'] = 'other/' + entries[0][1]
+                with self.assertRaises(AssertionError):
+                    check_inherited_ids(wrong, entries, ids)
+                output = BASE/'source_ordinary'/'pin_only'
+                capture = json.loads((output/f'{name}.json').read_text())
+                annotated = json.loads((output/'annotated'/f'{name}.json').read_text())
+                self.assertEqual(capture['phase'], 'annotate_python_ast-before-get_node')
+                self.assertEqual(capture['keys'], [list(key) for key, _ in entries])
+                self.assertEqual(capture['nonreentrancy_by_default'],
+                                 [name == 'nonreentrancy_pragma'] + [False] * (len(entries) - 1))
+                self.assertEqual(capture['declaration_only'], [False] * len(entries))
+                origins = capture['inherited_origins']
+                self.assertEqual(len(origins), len(entries))
+                for i, ((key, path), origin) in enumerate(zip(entries, origins)):
+                    digest = hashlib.sha256((BASE/path).read_bytes()).hexdigest()
+                    # Captures retain the generation checkout's absolute path.
+                    # Check its complete repository-relative identity, not the
+                    # current checkout prefix (or just the file's basename).
+                    suffix = '/tests/fixtures/check_contract/' + path
+                    self.assertTrue(Path(origin['path']).is_absolute())
+                    self.assertTrue(origin['path'].endswith(suffix))
+                    self.assertEqual(origin, {
+                        'key': list(key), 'path': origin['path'],
+                        'source_id': ids[key], 'source_sha256': digest,
+                        'module_id': None if i == 0 else ids[key] + 2})
+                    for tree in [capture['annotated_ast'], annotated]:
+                        module = ([tree['ast']] + tree['imports'])[i]
+                        self.assertEqual(module['source_id'], ids[key])
+                        self.assertEqual(module['resolved_path'], origin['path'])
+                        self.assertEqual(module['source_sha256sum'], digest)
+
 
 class FixtureInventoryTest(unittest.TestCase):
     def setUp(self):
@@ -149,9 +198,10 @@ class FixtureInventoryTest(unittest.TestCase):
             'defaults_control', 'deployment', 'nonreentrant', 'transient_storage',
             'abi_encode', 'imported_interface', 'interface_struct_return', 'duplicate_interface',
             'daddy'})
-        self.assertEqual(len(CASES) + len(PIN_ONLY_CASES), 32)
+        self.assertEqual(len(CASES) + len(PIN_ONLY_CASES), 35)
         self.assertEqual(set(PIN_ONLY_CASES), {'attribute_initializes', 'nested_initializes',
-            'imported_constants', 'interface_struct', 'relative_uses'})
+            'imported_constants', 'interface_struct', 'relative_uses', 'mutability',
+            'nonreentrancy_pragma', 'uninitialized_import'})
 
     def test_new_unlisted_upstream_fixture_reject(self):
         (self.base/'new.vy').touch()
@@ -168,6 +218,17 @@ class FixtureInventoryTest(unittest.TestCase):
         (self.base/'address_bytes32.json').unlink()
         with self.assertRaisesRegex(AssertionError, "'missing': \\['address_bytes32.vy'\\]"):
             check_inventory(self.base)
+
+    def test_missing_pin_only_fixture_reject(self):
+        for name, entries in PIN_ONLY_CASES.items():
+            with self.subTest(name=name):
+                fixture = (self.base/entries[0][1]).with_suffix('.json')
+                fixture.unlink()
+                with self.assertRaises(AssertionError) as error:
+                    check_inventory(self.base)
+                self.assertEqual(error.exception.args[0], ('ordinary fixture inventory drift',
+                    {'unlisted': [], 'missing': [entries[0][1]]}))
+                fixture.touch()
 
     def test_source_captures_do_not_expand_upstream_inventory(self):
         source = self.base/'source_ordinary'/'pin_only'/'source.vy'

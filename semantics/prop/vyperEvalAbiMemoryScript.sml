@@ -5,7 +5,7 @@ Theory vyperEvalAbiMemory
 Ancestors
   list rich_list pair option arithmetic vyperMisc vyperState vyperAbiOperand vyperAbiFrame
   vyperInterpreter vyperStorageBackend vyperStatePreservation vyperLookup
-  vyperCallOutcome vyperCallOutcomeFrame vyperCreate vyperAbiStateTyping
+  vyperCallOutcome vyperCallOutcomeFrame vyperCreate vyperPlaceFrames
   vyperAbiMemoryProps
 Libs monadsyntax
 
@@ -83,31 +83,41 @@ Proof
 QED
 
 Theorem arena_extends_reads:
-  arena_extends (get_Value tv) /\ arena_extends (materialise cx tv) /\
   arena_extends get_accounts /\ arena_extends get_transient_storage /\
   arena_extends (lookup_global cx src id) /\
   arena_extends (lookup_flag_mem cx nsid mid) /\
   arena_extends (read_storage_slot cx tr slot ty) /\
   arena_extends (get_storage_backend cx tr) /\
-  arena_extends (check_array_bounds cx tv v) /\
-  arena_extends (toplevel_array_length cx tv) /\
+
   arena_extends (lift_option_type x msg) /\ arena_extends (lift_option y msg) /\
   arena_extends (lift_sum z) /\ arena_extends (lift_sum_runtime zr) /\
-  arena_extends (assign_result ty ao v subs) /\
+
   arena_extends (resolve_array_element cx tr slot ty subs) /\
   arena_extends (read_abi_operand cx arg) /\
-  arena_extends (check_abi_projection cx arg ty sub)
+  arena_extends (check_abi_projection cx arg ty sub) /\
+  arena_extends (read_result cx pv) /\
+  arena_extends (read_results cx pvs) /\
+  arena_extends (select_result cx ann pv sb) /\
+  arena_extends (conditional_result cx pv) /\
+  arena_extends (result_array_length cx pv) /\
+  arena_extends (get_place pv) /\
+  arena_extends (read_place cx p) /\
+  arena_extends (place_type_value cx p) /\
+  arena_extends (extend_place cx pv sb)
 Proof
   rpt conj_tac >> irule arena_extends_pure >> rpt strip_tac >>
-  FIRST [drule_all get_Value_state, drule_all materialise_state,
-    drule_all get_accounts_state, drule_all get_transient_storage_state,
+  FIRST [drule_all get_accounts_state, drule_all get_transient_storage_state,
     drule_all lookup_global_state, drule_all lookup_flag_mem_state,
     drule_all read_storage_slot_state, drule_all get_storage_backend_state,
-    drule_all check_array_bounds_state, drule_all toplevel_array_length_state,
     drule_all lift_option_type_state, drule_all lift_option_state,
     drule_all lift_sum_state, drule_all lift_sum_runtime_state,
-    drule_all assign_result_state, drule_all resolve_array_element_state,
-    drule_all read_abi_operand_state, drule_all check_abi_projection_state] >> simp[]
+    drule_all resolve_array_element_state,
+    drule_all read_abi_operand_state, drule_all check_abi_projection_state,
+    drule_all read_result_state, drule_all read_results_state,
+    drule_all select_result_state, drule_all conditional_result_state,
+    drule_all result_array_length_state, drule_all get_place_state,
+    drule_all read_place_state, drule_all place_type_value_state,
+    drule_all extend_place_state] >> simp[]
 QED
 
 Theorem arena_extends_primitives:
@@ -166,19 +176,17 @@ QED
 
 Theorem arena_extends_capture_write:
   arena_extends (capture_abi_memory cx id ty v) /\
+  arena_extends (capture_abi_memory_at cx id root v off ty child) /\
   arena_extends (write_abi_memory cx id ty v subs ao) /\
   arena_extends (capture_abi_immutable cx src id ty v) /\
-  arena_extends (write_abi_immutables cx src id ty v subs ao)
+  arena_extends (write_abi_immutables cx src id ty v subs ao) /\
+  arena_extends (write_abi_memory_child cx id ty subs v ao)
 Proof
-  simp[arena_extends_result] >> rpt strip_tac >>
-  imp_res_tac capture_abi_memory_length >>
-  imp_res_tac capture_abi_memory_typing_frame >>
-  imp_res_tac write_abi_memory_length >>
-  imp_res_tac write_abi_memory_immutables >>
-  imp_res_tac capture_abi_immutable_length >>
-  imp_res_tac capture_abi_immutable_frame >>
-  imp_res_tac write_abi_immutables_length >>
-  imp_res_tac write_abi_immutables_frame >> simp[]
+  simp[arena_extends_result] >>
+  rw[capture_abi_memory_def, capture_abi_memory_at_def, capture_abi_immutable_def,
+     write_abi_memory_def, write_abi_memory_child_def,
+     write_abi_immutables_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[AllCaseEqs(), return_def, raise_def]
 QED
 
 Theorem arena_extends_handlers:
@@ -244,6 +252,7 @@ Theorem arena_extends_abi:
   arena_extends (unwrap_abi_operand cx arg) /\
   arena_extends (stage_abi_operands cx args) /\
   arena_extends (lookup_abi_local cx id) /\
+  arena_extends (lookup_abi_immutable cx src id) /\
   arena_extends (lookup_abi_global cx src id) /\
   arena_extends (project_abi_operand cx arg sub) /\
   arena_extends (subscript_abi_operand cx ty arg index) /\
@@ -283,12 +292,24 @@ Proof
 QED
 
 Theorem arena_extends_assignment:
-  (!cx tgt ao. arena_extends (assign_target cx tgt ao)) /\
-  (!cx tgts vs. arena_extends (assign_targets cx tgts vs))
+  arena_extends (write_place cx p v) /\
+  arena_extends (append_place cx p v) /\
+  arena_extends (pop_place cx p)
 Proof
-  ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac >>
-  simp_tac bool_ss [Once assign_target_def, FORALL_PROD, LET_THM] >> rpt strip_tac >>
+  `!cx p v. arena_extends (write_place cx p v)` by
+    (rpt gen_tac >> Cases_on `p` >>
+     simp_tac bool_ss [write_place_def] >> ARENA_PRIMITIVE_TAC) >>
+  simp[] >> conj_tac >> Cases_on `p` >>
+  simp_tac bool_ss [oneline append_place_def, oneline pop_place_def] >>
   ARENA_PRIMITIVE_TAC
+QED
+
+Theorem arena_extends_abi_place:
+  arena_extends (abi_place_operand cx p)
+Proof
+  Cases_on `p` >> TRY (rename1 `ImmutablePlace src id path` >> Cases_on `path`) >>
+  simp_tac bool_ss [abi_place_operand_def, lookup_abi_memory_place_def] >>
+  rpt (arena_step (arena_base_facts @ CONJUNCTS (SPEC_ALL arena_extends_abi)))
 QED
 
 Theorem arena_extends_calls:
@@ -301,7 +322,7 @@ Proof
   rpt conj_tac >>
   TRY (PairCases_on `sig`) >> TRY (Cases_on `vs` >> TRY (Cases_on `t`)) >>
   simp_tac bool_ss [eval_raw_call_def, eval_send_def, eval_ext_call_def,
-    eval_create_def, create_soft_failure_def, LET_THM] >>
+    eval_ext_call_effects_def, eval_create_def, create_soft_failure_def, LET_THM] >>
   ARENA_PRIMITIVE_TAC >>
   simp[arena_extends_def, arenas_grow_def, check_create_blueprint_state]
 QED
@@ -319,7 +340,8 @@ Proof
 QED
 
 val arena_facts = arena_base_facts @ List.concat (map (CONJUNCTS o SPEC_ALL)
-  [arena_extends_abi, arena_extends_assignment, arena_extends_calls]);
+  [arena_extends_abi, arena_extends_assignment, arena_extends_abi_place,
+   arena_extends_calls]);
 val ARENA_TAC = rpt (arena_step arena_facts);
 
 fun arena_finish (g as (asl,w)) =
@@ -328,22 +350,34 @@ fun arena_finish (g as (asl,w)) =
     val atomic = List.concat (map (CONJUNCTS o ASSUME)
       (List.filter (not o is_forall) asl));
     val base = SIMP_RULE (bool_ss ++ numSimps.ARITH_ss)
-      [ignore_bind_def, oneTheory.one, FST, SND];
+      [ignore_bind_def, oneTheory.one, FST, SND, SUB_RIGHT_LESS_EQ,
+       lock_if_nr_def, unlock_if_nr_def, is_view_mut_def, return_def, raise_def];
     val atomic = map base atomic;
     val branch = List.filter (fn th => is_eq (concl th) andalso
       not (pairSyntax.is_pair (rhs (concl th)))) atomic;
+    val conditions = List.filter (not o is_eq o concl) atomic;
     val norm = SIMP_RULE (bool_ss ++ numSimps.ARITH_ss)
-      (ignore_bind_def :: oneTheory.one :: FST :: SND :: branch);
+      (ignore_bind_def :: oneTheory.one :: FST :: SND :: SUB_RIGHT_LESS_EQ ::
+       lock_if_nr_def :: unlock_if_nr_def :: is_view_mut_def ::
+       return_def :: raise_def :: conditions @ branch);
     val facts = map norm atomic @ atomic;
     val candidates = rev (List.filter (fn tm => is_forall tm andalso
       total (key o snd o strip_imp o snd o strip_forall) tm = total key w) asl);
     fun guard_conv tm =
       if is_forall tm then BINDER_CONV guard_conv tm
       else LAND_CONV (SIMP_CONV (bool_ss ++ numSimps.ARITH_ss)
-        [ignore_bind_def, oneTheory.one, FST, SND]) tm;
+        [ignore_bind_def, oneTheory.one, FST, SND, SUB_RIGHT_LESS_EQ,
+         lock_if_nr_def, unlock_if_nr_def, is_view_mut_def, return_def, raise_def]) tm;
     fun discharge th =
       if is_imp (snd (strip_forall (concl th))) then
-        discharge (tryfind (MATCH_MP (CONV_RULE guard_conv th)) (TRUTH :: facts))
+        let
+          val rule = CONV_RULE guard_conv th
+          val guard = fst (dest_imp (snd (strip_forall (concl rule))))
+          val next = tryfind (MATCH_MP rule) (TRUTH :: facts)
+            handle HOL_ERR _ =>
+              (MATCH_MP rule (REFL (lhs guard)) handle HOL_ERR _ =>
+               MATCH_MP rule (REFL (rhs guard)))
+        in discharge next end
       else base th;
     fun finish tm g =
       let
@@ -364,12 +398,14 @@ Theorem eval_arena_extends_mutual:
   (!cx s. arena_extends (eval_stmt cx s)) /\
   (!cx ss. arena_extends (eval_stmts cx ss)) /\
   (!cx it. arena_extends (eval_iterator cx it)) /\
-  (!cx tgt. arena_extends (eval_target cx tgt)) /\
-  (!cx tgts. arena_extends (eval_targets cx tgts)) /\
-  (!cx bt. arena_extends (eval_base_target cx bt)) /\
   (!cx ty id body vs. arena_extends (eval_for cx ty id body vs)) /\
   (!cx e. arena_extends (eval_expr cx e)) /\
   (!cx es. arena_extends (eval_exprs cx es)) /\
+  (!cx bt. arena_extends (eval_base_place cx bt)) /\
+  (!cx bt. arena_extends (eval_target_place cx bt)) /\
+  (!cx g v. arena_extends (assign_tuple_targets cx g v)) /\
+  (!cx gs vs. arena_extends (assign_tuple_target_list cx gs vs)) /\
+  (!cx es. arena_extends (eval_expr_results cx es)) /\
   (!cx e. arena_extends (eval_abi_expr cx e)) /\
   (!cx es. arena_extends (eval_abi_exprs cx es))
 Proof
@@ -403,12 +439,14 @@ Theorem evaluate_abi_memory_length:
   (!cx s st res rt. eval_stmt cx s st = (res,rt) ==> LENGTH st.abi_memory <= LENGTH rt.abi_memory) /\
   (!cx ss st res rt. eval_stmts cx ss st = (res,rt) ==> LENGTH st.abi_memory <= LENGTH rt.abi_memory) /\
   (!cx it st res rt. eval_iterator cx it st = (res,rt) ==> LENGTH st.abi_memory <= LENGTH rt.abi_memory) /\
-  (!cx tgt st res rt. eval_target cx tgt st = (res,rt) ==> LENGTH st.abi_memory <= LENGTH rt.abi_memory) /\
-  (!cx tgts st res rt. eval_targets cx tgts st = (res,rt) ==> LENGTH st.abi_memory <= LENGTH rt.abi_memory) /\
-  (!cx bt st res rt. eval_base_target cx bt st = (res,rt) ==> LENGTH st.abi_memory <= LENGTH rt.abi_memory) /\
   (!cx ty id body vs st res rt. eval_for cx ty id body vs st = (res,rt) ==> LENGTH st.abi_memory <= LENGTH rt.abi_memory) /\
   (!cx e st res rt. eval_expr cx e st = (res,rt) ==> LENGTH st.abi_memory <= LENGTH rt.abi_memory) /\
   (!cx es st res rt. eval_exprs cx es st = (res,rt) ==> LENGTH st.abi_memory <= LENGTH rt.abi_memory) /\
+  (!cx bt st res rt. eval_base_place cx bt st = (res,rt) ==> LENGTH st.abi_memory <= LENGTH rt.abi_memory) /\
+  (!cx bt st res rt. eval_target_place cx bt st = (res,rt) ==> LENGTH st.abi_memory <= LENGTH rt.abi_memory) /\
+  (!cx g v st res rt. assign_tuple_targets cx g v st = (res,rt) ==> LENGTH st.abi_memory <= LENGTH rt.abi_memory) /\
+  (!cx gs vs st res rt. assign_tuple_target_list cx gs vs st = (res,rt) ==> LENGTH st.abi_memory <= LENGTH rt.abi_memory) /\
+  (!cx es st res rt. eval_expr_results cx es st = (res,rt) ==> LENGTH st.abi_memory <= LENGTH rt.abi_memory) /\
   (!cx e st res rt. eval_abi_expr cx e st = (res,rt) ==> LENGTH st.abi_memory <= LENGTH rt.abi_memory) /\
   (!cx es st res rt. eval_abi_exprs cx es st = (res,rt) ==> LENGTH st.abi_memory <= LENGTH rt.abi_memory)
 Proof
@@ -416,45 +454,48 @@ Proof
 QED
 
 val eval_expr_abi_memory_length = save_thm("eval_expr_abi_memory_length",
-  List.nth (CONJUNCTS evaluate_abi_memory_length, 7));
+  List.nth (CONJUNCTS evaluate_abi_memory_length, 4));
 val eval_exprs_abi_memory_length = save_thm("eval_exprs_abi_memory_length",
-  List.nth (CONJUNCTS evaluate_abi_memory_length, 8));
+  List.nth (CONJUNCTS evaluate_abi_memory_length, 5));
 val eval_abi_expr_abi_memory_length = save_thm("eval_abi_expr_abi_memory_length",
-  List.nth (CONJUNCTS evaluate_abi_memory_length, 9));
+  List.nth (CONJUNCTS evaluate_abi_memory_length, 11));
 val eval_abi_exprs_abi_memory_length = save_thm("eval_abi_exprs_abi_memory_length",
-  List.nth (CONJUNCTS evaluate_abi_memory_length, 10));
+  List.nth (CONJUNCTS evaluate_abi_memory_length, 12));
 
 Theorem assign_target_abi_immutables_length:
-  assign_target cx tgt ao st = (res,rt) ==>
+  assign_tuple_targets cx tgt v st = (res,rt) ==>
   LENGTH st.abi_immutables <= LENGTH rt.abi_immutables
 Proof
-  metis_tac[cj 1 arena_extends_assignment, arena_extends_result]
+  metis_tac[cj 9 eval_arena_extends_mutual, arena_extends_result]
 QED
+
+val assign_tuple_targets_abi_immutables_length = save_thm(
+  "assign_tuple_targets_abi_immutables_length", assign_target_abi_immutables_length);
 
 Theorem eval_expr_abi_immutables_length:
   eval_expr cx e st = (res,rt) ==>
   LENGTH st.abi_immutables <= LENGTH rt.abi_immutables
 Proof
-  metis_tac[cj 8 eval_arena_extends_mutual, arena_extends_result]
+  metis_tac[cj 5 eval_arena_extends_mutual, arena_extends_result]
 QED
 
 Theorem eval_exprs_abi_immutables_length:
   eval_exprs cx es st = (res,rt) ==>
   LENGTH st.abi_immutables <= LENGTH rt.abi_immutables
 Proof
-  metis_tac[cj 9 eval_arena_extends_mutual, arena_extends_result]
+  metis_tac[cj 6 eval_arena_extends_mutual, arena_extends_result]
 QED
 
 Theorem eval_abi_expr_abi_immutables_length:
   eval_abi_expr cx e st = (res,rt) ==>
   LENGTH st.abi_immutables <= LENGTH rt.abi_immutables
 Proof
-  metis_tac[cj 10 eval_arena_extends_mutual, arena_extends_result]
+  metis_tac[cj 12 eval_arena_extends_mutual, arena_extends_result]
 QED
 
 Theorem eval_abi_exprs_abi_immutables_length:
   eval_abi_exprs cx es st = (res,rt) ==>
   LENGTH st.abi_immutables <= LENGTH rt.abi_immutables
 Proof
-  metis_tac[cj 11 eval_arena_extends_mutual, arena_extends_result]
+  metis_tac[cj 13 eval_arena_extends_mutual, arena_extends_result]
 QED

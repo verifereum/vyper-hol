@@ -28,6 +28,8 @@
  *                                 its compile env holds every argument
  *                                 through a pointer handed out before the
  *                                 body (local_ptrs_reserved)
+ *   package_internal_fn_prologue_ptrs — every parameter is then held
+ *                                 through a pointer variable
  *
  * Helpers:
  *   local_ptrs_rel_bind_ptr     — binding a name in scope to a region
@@ -2148,6 +2150,16 @@ Proof
   gvs[local_ptrs_reserved_def] >> metis_tac[]
 QED
 
+(* Integrity gate for preserved public prologue guarantees. *)
+val () = List.app (fn th =>
+  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
+  in if null axs andalso null (Thm.hyp th) andalso
+        List.all (fn s => s = "DISK_THM") ors
+     then print "CALLEE_FORCE_AUDIT OK\n"
+     else raise Fail "callee consumer inherited admission"
+  end) [compile_internal_function_prologue, compile_internal_param_decls_shape,
+        compile_internal_prologue_shape, compile_internal_prologue_entry,
+        compile_internal_prologue_reserved, compile_internal_prologue_code];
 (* compile_internal_prologue_code at the compile env and parameters
    package_internal_fn gives every internal function, runtime and
    constructor callees alike. *)
@@ -2182,4 +2194,79 @@ Proof
        LENGTH_compute_pass_via_stack] >>
   rpt strip_tac >> first_x_assum irule >>
   simp[MEM_MAP] >> metis_tac[MEM_EL]
+QED
+
+(* materialize_internal_params rebinds each parameter at a MemLoc slot to a
+   pointer variable, when the PARAMs' outputs are variables, and leaves a
+   variable already held through a pointer variable so held. *)
+Theorem materialize_internal_params_ptrs[local]:
+  !caps cenv st cenv' st' n.
+    materialize_internal_params cenv caps st = (cenv', st') /\
+    EVERY (\c. ?p. SND (SND c) = Var p) caps /\
+    ((MEM n (MAP FST caps) /\
+      ?off sz. FLOOKUP cenv.ce_vars n = SOME (MemLoc off sz)) \/
+     ?p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz)) ==>
+    ?p sz. FLOOKUP cenv'.ce_vars n = SOME (PtrVar (Var p) sz)
+Proof
+  Induct
+  >- (simp[materialize_internal_params_def, comp_return_def] >>
+      rpt strip_tac >> gvs[]) >>
+  PairCases >> rpt gen_tac >> simp[materialize_internal_params_def] >>
+  Cases_on `h1` >> simp[]
+  >- (Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[]
+      >- (strip_tac >> first_x_assum (drule_then irule) >> gvs[]) >>
+      rename1 `FLOOKUP cenv.ce_vars h0 = SOME loc` >>
+      Cases_on `loc` >> simp[] >~ [`emit_op _ _`]
+      >- (simp[emit_op_def, emit_void_def, comp_bind_def,
+               comp_ignore_bind_def, comp_return_def, fresh_id_def,
+               fresh_var_def, emit_def] >>
+          strip_tac >> first_x_assum (drule_then irule) >>
+          gvs[FLOOKUP_UPDATE] >> rw[] >> gvs[]) >>
+      strip_tac >> first_x_assum (drule_then irule) >> gvs[]) >>
+  strip_tac >> first_x_assum (drule_then irule) >>
+  gvs[FLOOKUP_UPDATE] >> rw[] >> gvs[]
+QED
+
+(* At the end of an internal function's prologue every parameter is held
+   through a pointer variable, as the locals clause of the simulations
+   asks (package_internal_fn_prologue_code gives local_ptrs_reserved). *)
+Theorem package_internal_fn_prologue_ptrs:
+  !tops use_trans nkey_map is_ctor_context immutables_len mut nr rr fname
+   fargs dflts ret body fn_lbl cenv params has_rb is_nr nkey use_tr is_view
+   is_ctor imm_len body' ret_type st0 cenv2 return_pc st1.
+    package_internal_fn tops use_trans nkey_map is_ctor_context immutables_len
+      (mut, nr, rr, fname, fargs, dflts, ret, body) =
+      (fn_lbl, cenv, params, has_rb, is_nr, nkey, use_tr, is_view, is_ctor,
+       imm_len, body', ret_type) /\
+    compile_internal_prologue cenv params has_rb ret_type st0 =
+      ((cenv2, return_pc), st1) ==>
+    EVERY (\a. ?p sz. FLOOKUP cenv2.ce_vars (FST a) = SOME (PtrVar (Var p) sz))
+      fargs
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[compileVyperTheory.package_internal_fn_def,
+      compileVyperTheory.update_cenv_nonreentrant_def] >>
+  qmatch_asmsub_abbrev_tac `compile_internal_prologue ce params` >>
+  `MAP FST params = MAP FST fargs` by
+    simp[Abbr `params`, MAP_ZIP, LENGTH_compute_pass_via_stack] >>
+  qspecl_then [`tops`, `if is_ctor then Deploy else Internal`, `mut`, `fname`,
+               `fargs`, `ret`, `body'`, `use_tr`]
+    strip_assume_tac compileVyperTheory.build_compile_env_vars >>
+  qpat_x_assum `compile_internal_prologue _ _ _ _ _ = _` mp_tac >>
+  simp[compile_internal_prologue_def, comp_bind_def, comp_return_def,
+       comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  dxrule compile_internal_param_decls_shape >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `materialize_internal_params ce1 caps sm = (cenv2',sn)` >>
+  `MAP FST caps = MAP FST params` by
+    (irule LIST_EQ >> simp[Abbr `caps`, EL_MAP] >> rpt strip_tac >> simp[]) >>
+  `EVERY (\c. ?p. SND (SND c) = Var p) caps` by
+    (simp[EVERY_EL, Abbr `caps`] >> rpt strip_tac >> simp[]) >>
+  `EVERY (\a. ?p sz. FLOOKUP cenv2'.ce_vars (FST a) = SOME (PtrVar (Var p) sz))
+     fargs` by
+    (simp[EVERY_MEM] >> rpt strip_tac >>
+     irule materialize_internal_params_ptrs >>
+     qexistsl_tac [`caps`, `ce1`, `sm`, `sn`] >> simp[] >> disj1_tac >>
+     gvs[Abbr `ce1`, Abbr `ce`, MEM_MAP] >> metis_tac[]) >>
+  gvs[]
 QED

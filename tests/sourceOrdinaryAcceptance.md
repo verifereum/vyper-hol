@@ -80,19 +80,29 @@ scope, independent-derivation and context premises still apply.
 
 ## Fixture provenance
 
-`sourceOrdinaryPin.py` inventories exactly 32 upstream fixtures: 27 ordinary
-cases and five pin/capture-only cases. `address_bytes32` has explicit expected
+`sourceOrdinaryPin.py` inventories exactly 35 upstream fixtures: 27 ordinary
+cases and eight pin/capture-only cases. `address_bytes32` has explicit expected
 ASTs for address-to-bytes32, address-to-bytes21 and bytes20-to-bytes32, with
 complete module/artifact and delete/poison checks. These are inherited ordinary
 runtime conversion parents, not independently inferred Source conversions.
 The separate whole-program inventory contains 36 valid witnesses.
 
-The inventory also includes five additional
+The inventory also includes eight additional
 pin/capture-only cases: `attribute_initializes`, `nested_initializes`,
-`imported_constants`, `interface_struct` and `relative_uses`. These additional
+`imported_constants`, `interface_struct`, `relative_uses`, `mutability`,
+`nonreentrancy_pragma` and `uninitialized_import`. These additional
 pairs live in `fixtures/check_contract/source_ordinary/pin_only/`; they are not
-additional elaboration, kernel-checking or backend certificates. The audit
-rejects missing or newly unlisted upstream fixtures. The separate `source_syntax`
+additional elaboration, kernel-checking or backend certificates. In particular,
+`mutability.vy` and `nonreentrancy_pragma/main.vy` explicitly inherit main source
+ID 0 (runtime module ID `NONE`), checked against `mutability.json` and
+`nonreentrancy_pragma/main.json`. `uninitialized_import/main.json` independently
+pins `main.vy`, `lib.vy` and `mid.vy` to source IDs 0, 1 and 2, respectively
+(runtime module IDs `NONE`, `SOME 3` and `SOME 4`). These are explicit namespace
+claims, not IDs inferred from compiler traversal. Genuine pre-erasure captures
+retain the nonreentrancy pragma policy and all three `uninitialized_import`
+sources; the annotated counterparts come from compilation of those same bytes
+and IDs.
+The audit rejects missing or newly unlisted upstream fixtures. The separate `source_syntax`
 and `source_loader` suites are not substitutes for this inventory.
 
 Original captures in `fixtures/check_contract/source_ordinary/` precede

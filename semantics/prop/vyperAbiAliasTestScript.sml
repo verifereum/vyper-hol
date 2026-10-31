@@ -33,7 +33,7 @@ End
 Definition alias_state_def:
   alias_state = empty_state with scopes :=
     [FEMPTY |+ ("a", <| assignable := T; type := alias_array_tv;
-      value := ArrayV (DynArrayV [BoolV T; BoolV F]) |>)]
+      value := ArrayV (DynArrayV [BoolV T; BoolV F]); popped := [] |>)]
 End
 
 Definition alias_expr_def:
@@ -96,10 +96,10 @@ Definition indexed_alias_state_def:
       type := ArrayTV alias_array_tv (Dynamic 2);
       value := ArrayV (DynArrayV
         [ArrayV (DynArrayV [BoolV T; BoolV F]);
-         ArrayV (DynArrayV [BoolV F; BoolV T])]) |>)
+         ArrayV (DynArrayV [BoolV F; BoolV T])]); popped := [] |>)
      |+ ("i", <| assignable := T;
        type := ArrayTV (BaseTV (UintT 256)) (Dynamic 1);
-       value := ArrayV (DynArrayV [IntV 1]) |>)]
+       value := ArrayV (DynArrayV [IntV 1]); popped := [] |>)]
 End
 
 (* An effectful index is captured once.  Replaying the AST would pop an empty
@@ -122,10 +122,10 @@ QED
 Definition conditional_alias_state_def:
   conditional_alias_state = alias_state with scopes :=
     [FEMPTY |+ ("a", <| assignable := T; type := alias_array_tv;
-      value := ArrayV (DynArrayV [BoolV T; BoolV F]) |>)
+      value := ArrayV (DynArrayV [BoolV T; BoolV F]); popped := [] |>)
      |+ ("cond", <| assignable := T;
        type := ArrayTV (BaseTV BoolT) (Dynamic 1);
-       value := ArrayV (DynArrayV [BoolV T]) |>)]
+       value := ArrayV (DynArrayV [BoolV T]); popped := [] |>)]
 End
 
 Theorem condition_is_evaluated_once_and_keeps_memory_alias:
@@ -145,7 +145,7 @@ Definition struct_alias_state_def:
   struct_alias_state = empty_state with scopes :=
     [FEMPTY |+ ("s", <| assignable := T;
       type := StructTV [("xs",alias_array_tv)];
-      value := StructV [("xs", ArrayV (DynArrayV [BoolV T; BoolV F]))] |>)]
+      value := StructV [("xs", ArrayV (DynArrayV [BoolV T; BoolV F]))]; popped := [] |>)]
 End
 
 Theorem attribute_keeps_memory_alias:
@@ -184,8 +184,8 @@ Theorem primitive_unwrap_is_eager:
       (Subscript (BaseT BoolT) (Name alias_array_type "a")
         (Literal (BaseT (UintT 256)) (IntL 1)));
     arg <- unwrap_abi_operand empty_evaluation_context arg;
-    assign_target empty_evaluation_context
-      (BaseTargetV (ScopedVar "a") [ValueSubscript (IntV 1)]) (Replace (BoolV T));
+    write_place empty_evaluation_context
+      (MemoryPlace "a" [ValueSubscript (IntV 1)]) (BoolV T);
     read_abi_operand empty_evaluation_context arg
   od) alias_state) = INL (BoolV F)
 Proof

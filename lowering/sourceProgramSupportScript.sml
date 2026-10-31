@@ -3,7 +3,8 @@
    and Exp AugAssign's literal gate. All headers, names, effects, widths,
    nested-place types, return layouts, loop and binding restrictions are retained. Defaults
    are still excluded by the unchanged declaration headers; their checked
-   typing/remainder fact is nevertheless exposed below.
+   typing/remainder fact is nevertheless exposed below. Body comparisons
+   apply to allocated modules: the checker may skip dead imported functions.
    This is a gate-redundancy certificate only. checked_power_run and
    binop_frag_pow separately certify checked Exp execution; the existing
    whole-compiler wrapper still inherits lower_vyper_runtime_unit_correct's
@@ -12,7 +13,7 @@ Theory sourceProgramSupport
 Ancestors
   sourceStmtSupport sourceExprSupport supportedProgram supportedStmts
   supportedStmtTraverse supportedExprTraverse supportedNames supportedDecls
-  supportedTypes vyperTypeContract vyperTypeSystem vyperAST list option
+  supportedTypes vyperTypeContract vyperTypeSystem vyperAST list option alist
 
 Definition source_function_body_remainder_def:
   source_function_body_remainder tops vis args stmts <=>
@@ -49,25 +50,28 @@ End
    environments inside type_stmts and the separate defaults environment. *)
 Theorem checked_function_body_and_defaults:
   check_contract T layouts address mods = SOME art /\
-  MEM (src,tops) mods /\
+  ALOOKUP mods src = SOME tops /\ module_allocated layouts address src tops /\
   MEM (FunctionDecl vis mut nr rr name args defaults ret stmts) tops ==>
   IS_SOME (type_stmts (function_entry_env art mods src args) ret stmts) /\
   well_typed_exprs (defaults_env (function_entry_env art mods src args)) defaults
 Proof
-  strip_tac >> gvs[check_contract_def] >>
+  strip_tac >>
+  `MEM (src,tops) mods` by metis_tac[ALOOKUP_MEM] >>
   `check_module T layouts address mods
-     (build_contract_type_artifact T mods) (src,tops)` by fs[EVERY_MEM] >>
+     (live_functions layouts address mods) art (src,tops)` by
+    (qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+     simp[check_contract_def] >> rw[] >> fs[EVERY_MEM]) >>
   fs[check_module_def, EVERY_MEM] >>
   `check_toplevel_body T layouts address mods
-     (build_contract_type_artifact T mods) src
+     (live_functions layouts address mods) art src
      (FunctionDecl vis mut nr rr name args defaults ret stmts)` by metis_tac[] >>
   fs[check_toplevel_body_def, check_function_body_in_mode_def,
-     check_function_body_def]
+     function_live_def, check_function_body_def]
 QED
 
 Theorem checked_function_defaults_remainder:
   check_contract T layouts address mods = SOME art /\
-  MEM (src,tops) mods /\
+  ALOOKUP mods src = SOME tops /\ module_allocated layouts address src tops /\
   MEM (FunctionDecl vis mut nr rr name args defaults ret stmts) tops ==>
   (source_pure_exprs_remainder tops defaults <=> supported_pure_exprs tops defaults)
 Proof
@@ -89,7 +93,8 @@ QED
    supported_declaration_body has no equation for that constructor. *)
 Theorem checked_declaration_body_remainder:
   check_contract T layouts address mods = SOME art /\
-  MEM (src,tops) mods /\ MEM top tops /\
+  ALOOKUP mods src = SOME tops /\ module_allocated layouts address src tops /\
+  MEM top tops /\
   supported_declaration_header tops top ==>
   (source_declaration_body_remainder tops top <=> supported_declaration_body tops top)
 Proof
@@ -101,7 +106,8 @@ Proof
 QED
 
 Theorem checked_program_remainder:
-  check_contract T layouts address mods = SOME art /\ MEM (src,tops) mods ==>
+  check_contract T layouts address mods = SOME art /\
+  ALOOKUP mods src = SOME tops /\ module_allocated layouts address src tops ==>
   (source_program_remainder tops <=> supported_program tops)
 Proof
   strip_tac >>
@@ -118,7 +124,12 @@ Theorem checked_remainder_supported_program:
   check_contract T layouts address [(NONE,tops)] = SOME art /\
   source_program_remainder tops ==> supported_program tops
 Proof
-  metis_tac[checked_program_remainder, MEM]
+  strip_tac >>
+  `module_allocated layouts address NONE tops` by
+    (qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+     simp[check_contract_def, main_module_allocated_def] >> rw[]) >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `src` |-> `NONE`]
+    checked_program_remainder) >> simp[]
 QED
 
 val () = List.app (fn (name,th) => let

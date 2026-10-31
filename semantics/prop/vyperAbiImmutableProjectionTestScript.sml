@@ -30,7 +30,7 @@ Definition immutable_projection_state_def:
     scopes := [FEMPTY
       |+ ("indices", <| assignable := T;
           type := ArrayTV (BaseTV (UintT 256)) (Dynamic 1);
-          value := ArrayV (DynArrayV [IntV 0]) |>)] ;
+          value := ArrayV (DynArrayV [IntV 0]); popped := [] |>)] ;
     immutables := [(0w,[(NONE,FEMPTY |+ ("a",
       (ArrayTV alias_array_tv (Dynamic 2),
        ArrayV (DynArrayV [ArrayV (DynArrayV [BoolV T;BoolV F])]))))])]
@@ -77,8 +77,8 @@ Theorem immutable_pop_pointer_retains_old_element_cell:
     arg <- abi_target_operand immutable_projection_context
       (ImmutableVar NONE "a") [ValueSubscript (IntV 0)];
     ptr <- abi_pop_pointer immutable_projection_context arg;
-    assign_target immutable_projection_context
-      (BaseTargetV (ImmutableVar NONE "a") [ValueSubscript (IntV 0)]) PopOp;
+    pop_place immutable_projection_context
+      (ImmutablePlace NONE "a" [ValueSubscript (IntV 0)]);
     read_abi_operand immutable_projection_context ptr
   od) immutable_true_last_state) = INL (BoolV T)
 Proof
@@ -123,9 +123,9 @@ QED
 Theorem immutable_lowered_location_observes_assignment_before_unwrap:
   FST ((do
     arg <- eval_abi_expr immutable_projection_context immutable_projection_expr;
-    assign_target immutable_projection_context
-      (BaseTargetV (ImmutableVar NONE "a")
-        [ValueSubscript (IntV 0);ValueSubscript (IntV 0)]) (Replace (BoolV F));
+    write_place immutable_projection_context
+      (ImmutablePlace NONE "a" [ValueSubscript (IntV 0);ValueSubscript (IntV 0)])
+      (BoolV F);
     unwrap_abi_operand immutable_projection_context arg
   od) immutable_projection_state) =
   INL (AbiSnapshot (ArrayV (DynArrayV [BoolV F;BoolV F])))
@@ -140,8 +140,8 @@ Theorem immutable_backing_outlives_nested_abi_cleanup:
     arg <- eval_abi_expr immutable_projection_context immutable_projection_expr;
     mark <- mark_abi_memory;
     release_abi_memory mark;
-    assign_target immutable_projection_context
-      (BaseTargetV (ImmutableVar NONE "a") [ValueSubscript (IntV 0)]) PopOp;
+    pop_place immutable_projection_context
+      (ImmutablePlace NONE "a" [ValueSubscript (IntV 0)]);
     read_abi_operand immutable_projection_context arg
   od) immutable_projection_state) = INL (ArrayV (DynArrayV [BoolV T]))
 Proof

@@ -103,6 +103,20 @@ Definition lookup_abi_local_def:
   od
 End
 
+(* The general evaluator has already validated this location. In particular,
+   a target index may have popped an ancestor after capturing the parent.
+   Resolve its type-directed offset, not its dynamic ancestor bounds. *)
+Definition lookup_abi_memory_place_def:
+  lookup_abi_memory_place cx id path = do
+    scopes <- get_scopes;
+    entry <- lift_option_type (lookup_scopes id scopes) "Name not in scope";
+    (off,tv) <- lift_option_type (abi_path_offset entry.type path) "ABI memory path";
+    child <- lift_sum (read_memory_path entry path);
+    token <- capture_abi_memory_at cx id entry.type entry.value off tv child;
+    return (AbiMemory token off tv)
+  od
+End
+
 Definition lookup_abi_immutable_def:
   lookup_abi_immutable cx src id = do
     imms <- get_immutables cx src;
@@ -190,10 +204,8 @@ End
 
 Definition subscript_abi_operand_def:
   subscript_abi_operand cx arr_tv (AbiSnapshot v) index = do
-    res <- lift_sum (evaluate_subscript (get_tenv cx) arr_tv (Value v) index);
-    case res of
-    | INL (Value child) => return (AbiSnapshot child)
-    | _ => raise (Error (TypeError "ABI temporary subscript"))
+    child <- lift_sum (evaluate_subscripts arr_tv v [ValueSubscript index]);
+    return (AbiSnapshot child)
   od ∧
   subscript_abi_operand cx arr_tv arg index =
     project_abi_operand cx arg (ValueSubscript index)

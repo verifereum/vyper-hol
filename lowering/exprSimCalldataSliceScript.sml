@@ -87,11 +87,19 @@ Theorem eval_calldata_slice_cases[local]:
                  | INR err => INR (Error err))
        | _ => INR (Error (TypeError "builtin")))
 Proof
-  strip_tac >> drule_at (Pos last) eval_expr_builtin_cases >>
-  simp[builtin_args_length_ok_def] >> strip_tac >> gvs[] >>
-  simp[builtin_result_def, evaluate_builtin_def] >>
-  Cases_on `vs` >> simp[] >>
-  rename1 `eval_exprs cx [e] es = (INL (v::rest),es')` >> Cases_on `rest` >> simp[]
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def] >>
+  Cases_on `eval_exprs cx [e] es` >> rename1 `_ = (rr,es1)` >>
+  Cases_on `rr` >> simp[get_accounts_def, bind_def, return_def,
+                         builtin_args_length_ok_def] >>
+  rename1 `eval_exprs cx [e] es = (INL vs,es1)` >>
+  simp[evaluate_builtin_def, lift_sum_def, bind_def, return_def, raise_def] >>
+  Cases_on `vs` >> simp[raise_def] >>
+  rename1 `eval_exprs cx [e] es = (INL (v::rest),es1)` >>
+  Cases_on `rest` >> simp[raise_def] >>
+  Cases_on `evaluate_calldata_slice cx.txn.calldata v n` >>
+  simp[return_def, raise_def] >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem slice_bounds_mod[local]:
@@ -559,7 +567,10 @@ Theorem slice_calldata_run[local]:
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP t.vs_allocas aid = SOME entry) /\
     (!aid b len. FLOOKUP s.vs_allocas aid = SOME (b,len) /\ aid < sa.cs_next_id ==>
-       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory)
+       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
+    locals_kept cenv es s t /\
+    (!nm lb len. local_region cenv es.scopes t nm lb len ==>
+       regions_disjoint (w2n w) (32 + 32 * word_size n) lb len)
 Proof
   rpt gen_tac >> strip_tac >>
   drule slice_calldata_shape >> strip_tac >>
@@ -682,9 +693,30 @@ Proof
       simp[]) >>
   simp[] >> conj_tac
   >- (asm_rewrite_tac[] >> irule calldata_slice_write_encoding >> decide_tac) >>
-  rpt strip_tac >>
-  `b + len <= w2n w \/ w2n w + 32 + n <= b` by
-    (qpat_x_assum `!aid b len. _ ==> regions_disjoint _ _ _ _` drule >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `b + len <= w2n w \/ w2n w + 32 + n <= b` by
+        (qpat_x_assum `!aid b len. _ ==> regions_disjoint _ _ _ _` drule >>
+         simp[regions_disjoint_def] >> decide_tac) >>
+      metis_tac[]) >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      `local_region cenv es.scopes t nm lb len` by
+        (irule exprSimOpsTheory.local_region_frame >> conj_tac
+         >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
+         qexistsl [`sa`, `es.scopes`, `u`] >> simp[] >>
+         rpt strip_tac >>
+         qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x u = _` drule >>
+         qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x t = _` drule >> simp[]) >>
+      qpat_x_assum `!name b len. local_region _ _ t _ _ _ ==> _` drule >>
+      pure_rewrite_tac[regions_disjoint_def] >> decide_tac) >>
+  irule locals_kept_regions >> rpt strip_tac >>
+  rename1 `local_region cenv es.scopes s nm b sz` >>
+  `local_region cenv es.scopes t nm b sz` by
+    (irule exprSimOpsTheory.local_region_frame_fwd >>
+     qexistsl [`s`, `sa`, `es.scopes`] >> simp[]) >>
+  `b + sz <= w2n w \/ w2n w + 32 + n <= b` by
+    (qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _` drule >>
      simp[regions_disjoint_def] >> decide_tac) >>
   metis_tac[]
 QED
@@ -702,7 +734,10 @@ Theorem slice_calldata_vv_post[local]:
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
     FLOOKUP t.vs_allocas aid = SOME entry) /\
   (!aid b len. FLOOKUP s.vs_allocas aid = SOME (b,len) /\ aid < sa.cs_next_id ==>
-    mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) ==>
+    mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
+  (!nm lb len. local_region cenv es.scopes t nm lb len ==>
+     regions_disjoint (w2n w) (32 + 32 * word_size n) lb len) /\
+  locals_kept cenv es s t ==>
   !k. vv_post func cenv cx e es sa sb s es
     (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))
     (LocatedValue (expr_type e) p) (t with vs_inst_idx := k)
@@ -712,13 +747,16 @@ Proof
   `eval_operand p.ptr_operand (t with vs_inst_idx := k) = SOME w` by
     (Cases_on `p.ptr_operand` >> gvs[eval_operand_def, lookup_var_def]) >>
   simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
-       materialise_def, return_def, evaluate_type_def, is_word_type_def,
-       eval_operand_def, lookup_var_def, val_wf_def, val_footprint_def] >>
+       read_result_def, return_def, evaluate_type_def, is_word_type_def,
+       eval_operand_def, lookup_var_def, val_wf_def, val_footprint_def,
+       locals_kept_inst_idx] >>
   conj_tac
   >- (strip_tac >> conj_tac
       >- simp[type_memory_size_def, word_size_capacity] >>
       disj1_tac >> qexistsl_tac [`sa.cs_next_id`,`w2n w`,`32 + 32 * word_size n`] >>
-      simp[]) >>
+      simp[] >> rpt strip_tac >>
+      qpat_x_assum `!nm lb len. local_region _ _ t _ _ _ ==> _` drule >>
+      simp[regions_disjoint_def] >> decide_tac) >>
   rpt strip_tac >> first_x_assum irule >> qexists_tac `aid` >> simp[]
 QED
 
@@ -773,8 +811,13 @@ Theorem vv_at_start_mono:
   vv_at cenv cx ty sa sb es tv vv u
 Proof
   Cases_on `vv` >> simp[vv_at_def, expr_val_at_def] >>
-  rpt strip_tac >> gvs[] >>
-  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+  rpt strip_tac >> gvs[]
+  >>~- ([`FLOOKUP u.vs_allocas aid = SOME (b,sz)`],
+        disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
+        first_assum ACCEPT_TAC)
+  >>~- ([`local_region cenv es.scopes u n b sz`],
+        disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[])
+  >> metis_tac[]
 QED
 
 Theorem vv_post_prefix_frame:
@@ -794,7 +837,7 @@ Theorem slice_calldata_uint_compose[local]:
   expr_type e = BaseT (UintT 256) /\
   expr_sim_pre cenv cx env e es /\
   expr_sim ctx func cenv cx (expr_type e) e es /\
-  eval_expr cx e es = (INL (Value (IntV (&a))),es') /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL (IntV (&a)),es') /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
   compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sm = (out,sc) /\
   context_well_typed cx /\ 0 < n /\ n < 2 ** 256 /\ a < 2 ** 256 /\
@@ -824,11 +867,18 @@ Proof
     metis_tac[fn_has_code_mid, cs_extends_refl] >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
   `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
-    metis_tac[eval_expr_preserves_scopes_dom] >>
-  `expr_exit (INL (Value (IntV (&a)))) = (\r. F)` by simp[FUN_EQ_THM] >>
-  `expr_res_ok (INL (Value (IntV (&a))))` by simp[expr_res_ok_def] >>
+    (qpat_x_assum `bind _ _ es = (INL _,es')` mp_tac >>
+     simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+     imp_res_tac read_result_state >> gvs[] >>
+     drule eval_expr_preserves_scopes_dom >> simp[]) >>
+  `expr_exit (INL (IntV (&a))) = (\r. F)` by simp[FUN_EQ_THM] >>
+  `expr_res_ok (INL (IntV (&a)))` by simp[expr_res_ok_def] >>
   drule_all expr_sim_apply >> disch_then (qspec_then `s0` mp_tac) >>
-  simp[expr_exit_def] >> disch_then (mp_then Any irule wb_frag_then) >> simp[] >>
+  simp[] >> strip_tac >>
+  irule wb_frag_then >>
+  qexistsl_tac [`\s. expr_post func cenv cx e es sa sm s0 es' (IntV (&a)) op s`, `sm`] >>
+  reverse conj_tac
+  >- (simp[] >> irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[]) >> simp[] >>
   qx_gen_tac `t` >> strip_tac >>
   `stmt_state_rel func cenv cx es' t` by metis_tac[expr_post_state] >>
   `eval_operand op t = SOME (n2w a)` by
@@ -890,14 +940,12 @@ Proof
              goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
           drule_all expr_sim_apply >>
           disch_then (qspec_then `s0` mp_tac) >> simp[] >> strip_tac >>
-          irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[])
-      >- (`word_value_type (expr_type e)` by simp[word_value_type_def] >>
-          drule_all expr_sim_pre_word_result >> simp[] >> metis_tac[]) >>
+          irule frag_exec_exit_prefix >> qexists_tac `sm` >> simp[] >>
+          irule frag_exec_conseq >> goal_assum (drule_at Any) >>
+          simp[exprSimUnwrapTheory.expr_exit_exception_transport]) >>
       gvs[eval_exprs_nil]) >>
   drule eval_exprs_cons_cases >> strip_tac
-  >- gvs[]
-  >- (`word_value_type (expr_type e)` by simp[word_value_type_def] >>
-      drule_all expr_sim_pre_word_result >> simp[] >> metis_tac[]) >>
+  >- gvs[] >>
   gvs[eval_exprs_nil] >>
   `word_value_type (expr_type e)` by simp[word_value_type_def] >>
   drule_all expr_sim_pre_word_result >> simp[] >> strip_tac >>

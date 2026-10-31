@@ -161,7 +161,7 @@ Proof
   rpt strip_tac >>
   simp[Once evaluate_def, builtin_args_length_ok_def, type_check_def,
        assert_def, ignore_bind_def, bind_def] >>
-  simp[Once evaluate_def, bind_def, materialise_def, return_def] >>
+  simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   simp[Once evaluate_def, bind_def, return_def, get_accounts_def,
        evaluate_builtin_def, lift_sum_def]
 QED
@@ -175,7 +175,7 @@ Proof
   rpt strip_tac >>
   simp[Once evaluate_def, builtin_args_length_ok_def, type_check_def,
        assert_def, ignore_bind_def, bind_def] >>
-  simp[Once evaluate_def, bind_def, materialise_def, return_def] >>
+  simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   simp[Once evaluate_def, bind_def, return_def, get_accounts_def,
        evaluate_builtin_def, lift_sum_def, raise_def]
 QED

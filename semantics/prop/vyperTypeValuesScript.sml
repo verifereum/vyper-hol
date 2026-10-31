@@ -19,19 +19,6 @@ Proof
   metis_tac[evaluate_type_well_formed]
 QED
 
-Theorem well_formed_type_evaluate_type_well_formed:
-  well_formed_type tenv ty /\ evaluate_type tenv ty = SOME tv ==>
-  well_formed_type_value tv
-Proof
-  rw[well_formed_type_def] >> drule evaluate_type_well_formed_type_value >> simp[]
-QED
-
-Theorem value_has_type_well_formed_dest:
-  value_has_type tv v /\ well_formed_type_value tv ==> value_has_type tv v
-Proof
-  simp[]
-QED
-
 Theorem value_has_type_NoneTV[simp]:
   value_has_type NoneTV v <=> v = NoneV
 Proof
@@ -44,24 +31,10 @@ Proof
   Cases_on `v` >> simp[value_has_type_def]
 QED
 
-Theorem toplevel_value_typed_BoolTV:
-  toplevel_value_typed tv (BaseTV BoolT) ==> ?b. tv = Value (BoolV b)
-Proof
-  Cases_on `tv` >> simp[toplevel_value_typed_def] >>
-  metis_tac[value_has_type_BoolTV]
-QED
-
 Theorem value_has_type_StringTV:
   value_has_type (BaseTV (StringT n)) v ==> ?s. v = StringV s
 Proof
   Cases_on `v` >> simp[value_has_type_def]
-QED
-
-Theorem toplevel_value_typed_StringTV:
-  toplevel_value_typed tv (BaseTV (StringT n)) ==> ?s. tv = Value (StringV s)
-Proof
-  Cases_on `tv` >> simp[toplevel_value_typed_def] >>
-  metis_tac[value_has_type_StringTV]
 QED
 
 Theorem evaluate_type_NoneT[simp]:
@@ -87,18 +60,6 @@ Theorem evaluate_type_BaseT_cases:
   ?btv. tv = BaseTV btv
 Proof
   Cases_on `bt` >> rw[evaluate_type_def, AllCaseEqs(), LET_THM]
-QED
-
-Theorem evaluate_type_BaseT_imp_not_ArrayTV:
-  evaluate_type tenv (BaseT bt) = SOME tyv ==> !t b. tyv <> ArrayTV t b
-Proof
-  strip_tac >> drule evaluate_type_BaseT_cases >> strip_tac >> gvs[]
-QED
-
-Theorem evaluate_type_FlagT_imp_not_ArrayTV:
-  evaluate_type tenv (FlagT fid) = SOME tyv ==> !t b. tyv <> ArrayTV t b
-Proof
-  rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs()]
 QED
 
 Theorem evaluate_type_not_ArrayT_imp_not_ArrayTV:
@@ -127,13 +88,6 @@ Proof
   >> rw[]
 QED
 
-Theorem value_has_type_evaluate_type_well_formed:
-  evaluate_type tenv ty = SOME tv /\ value_has_type tv v ==>
-  well_formed_type_value tv
-Proof
-  metis_tac[evaluate_type_well_formed_type_value]
-QED
-
 (* ===== Literal soundness ===== *)
 
 Theorem well_typed_literal_sound:
@@ -146,48 +100,25 @@ Proof
   gvs[evaluate_type_def, value_has_type_def, compatible_bound_def]
 QED
 
-Theorem literal_toplevel_value_typed:
+Theorem literal_value_result_typed:
   well_typed_literal ty lit /\ evaluate_type tenv ty = SOME tv ==>
-  toplevel_value_typed (Value (evaluate_literal lit)) tv
+  value_result_typed (Value (evaluate_literal lit)) tv
 Proof
-  rw[toplevel_value_typed_def] >> drule_all well_typed_literal_sound >> simp[]
+  rw[value_result_typed_def] >> drule_all well_typed_literal_sound >> simp[]
 QED
 
 (* ===== Lists ===== *)
 
-Theorem LIST_REL_value_has_type_well_formed:
-  LIST_REL value_has_type tvs vs /\ EVERY well_formed_type_value tvs ==>
-  LIST_REL value_has_type tvs vs
-Proof
-  simp[]
-QED
-
-Theorem evaluate_type_MAP_well_formed:
-  LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) tys tvs ==>
-  EVERY well_formed_type_value tvs
-Proof
-  qid_spec_tac`tvs` >> Induct_on `tys` >> Cases_on `tvs` >> rw[] >>
-  drule evaluate_type_well_formed_type_value >> simp[]
-QED
-
 (* ===== Top-level values ===== *)
 
-Theorem toplevel_value_typed_Value:
-  toplevel_value_typed (Value v) tv <=> value_has_type tv v
+Theorem value_result_typed_Value:
+  value_result_typed (Value v) tv <=> value_has_type tv v
 Proof
-  simp[toplevel_value_typed_def]
+  simp[value_result_typed_def]
 QED
 
-Theorem toplevel_value_typed_not_ArrayRef:
-  toplevel_value_typed tv tyv /\ tyv <> NoneTV /\ (!t b. tyv <> ArrayTV t b) ==>
-  ?v. tv = Value v
+Theorem value_result_is_value:
+  value_result_typed res tv ==> ?v. res = Value v
 Proof
-  Cases_on `tv` >> gvs[toplevel_value_typed_def] >>
-  first_x_assum irule >> simp[]
-QED
-
-Theorem toplevel_value_typed_not_hashmap_material:
-  toplevel_value_typed tv tyv /\ is_HashMapRef tv ==> tyv = NoneTV
-Proof
-  Cases_on `tv` >> simp[toplevel_value_typed_def]
+  rw[value_result_typed_def] >> metis_tac[]
 QED

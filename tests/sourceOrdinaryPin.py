@@ -49,6 +49,10 @@ PIN_ONLY_CASES = {
     'relative_uses': [(('pkg', 'mocks', 'main'), 'relative_uses/pkg/mocks/main.vy'),
         (('pkg', 'lib_a'), 'relative_uses/pkg/lib_a.vy'),
         (('pkg', 'lib_b'), 'relative_uses/pkg/lib_b.vy')],
+    'mutability': [(('main',), 'mutability.vy')],
+    'nonreentrancy_pragma': [(('main',), 'nonreentrancy_pragma/main.vy')],
+    'uninitialized_import': [(('main',), 'uninitialized_import/main.vy'),
+        (('lib',), 'uninitialized_import/lib.vy'), (('mid',), 'uninitialized_import/mid.vy')],
 }
 
 
@@ -67,6 +71,11 @@ INHERITED_SOURCE_IDS = {
     'imported_constants': {('main',): 0, ('lib1',): 2, ('lib2',): 1},
     'interface_struct': {('main',): 0, ('I',): 1},
     'relative_uses': {('pkg', 'mocks', 'main'): 0, ('pkg', 'lib_a'): 1, ('pkg', 'lib_b'): 2},
+    # Independent evidence: mutability.json and the two corresponding main.json
+    # fixtures (module resolved_path/source_id), not compiler traversal order.
+    'mutability': {('main',): 0},
+    'nonreentrancy_pragma': {('main',): 0},
+    'uninitialized_import': {('main',): 0, ('lib',): 1, ('mid',): 2},
 }
 
 
@@ -78,8 +87,8 @@ def check_inventory(base):
     assert ordinary == expected, ('ordinary fixture inventory drift',
         {'unlisted': sorted(ordinary - expected), 'missing': sorted(expected - ordinary)})
     assert len(CASES) == 27
-    assert len(PIN_ONLY_CASES) == 5
-    assert len(ordinary) == 32  # original 31 plus the covered address_bytes32 case
+    assert len(PIN_ONLY_CASES) == 8
+    assert len(ordinary) == 35  # 27 retained HOL cases plus eight pin/capture-only cases
 
 
 def check_inherited_ids(annotated, entries, ids):

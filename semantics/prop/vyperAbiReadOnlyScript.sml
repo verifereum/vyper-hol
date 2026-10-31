@@ -31,7 +31,7 @@ Theorem abi_readonly_leaves[local]:
   abi_readonly (lift_option opt msg) /\ abi_readonly (lift_option_type opt msg) /\
   abi_readonly (lift_sum rs) /\
   abi_readonly (read_storage_slot cx tr slot tv) /\
-  abi_readonly (lookup_global cx src id) /\ abi_readonly (materialise cx top) /\
+  abi_readonly (lookup_global cx src id) /\ abi_readonly (read_result cx top) /\
   abi_readonly (read_abi_operand cx arg) /\
   abi_readonly (check_abi_projection cx arg tv sub)
 Proof
@@ -40,7 +40,7 @@ Proof
   FIRST [drule return_state, drule raise_state, drule check_state,
     drule lift_option_state, drule lift_option_type_state, drule lift_sum_state,
     drule read_storage_slot_state, drule lookup_global_state,
-    drule materialise_state, drule read_abi_operand_state,
+    drule read_result_state, drule read_abi_operand_state,
     drule check_abi_projection_state] >> simp[]
 QED
 

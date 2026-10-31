@@ -55,7 +55,7 @@ Proof
     source_meaning_aggregate_value_def, source_meaning_value_def,
     source_const_value_literal_def, OPT_MMAP_def, evaluate_type_def,
     lift_option_type_def, lift_option_def, bind_def, ignore_bind_def,
-    return_def, raise_def, materialise_def, evaluate_literal_def]
+    return_def, raise_def, read_result_def, evaluate_literal_def]
 QED
 
 Theorem source_meaning_aggregate_global_source:

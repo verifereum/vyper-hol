@@ -58,8 +58,8 @@ Theorem immutable_popped_complex_raw_cell_typed:
     arg <- abi_target_operand immutable_projection_context
       (ImmutableVar NONE "a") [ValueSubscript (IntV 0)];
     ptr <- abi_pop_pointer immutable_projection_context arg;
-    assign_target immutable_projection_context
-      (BaseTargetV (ImmutableVar NONE "a") [ValueSubscript (IntV 0)]) PopOp;
+    pop_place immutable_projection_context
+      (ImmutablePlace NONE "a" [ValueSubscript (IntV 0)]);
     return ptr
   od) immutable_complex_pop_state in
   res = INL (AbiImmutable 0 5 alias_array_tv) /\

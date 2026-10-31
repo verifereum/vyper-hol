@@ -19,7 +19,7 @@ Definition source_meaning_run_def:
   source_meaning_run cx names (SBM_Return NONE) = raise (ReturnException NoneV) /\
   source_meaning_run cx names (SBM_Return (SOME e)) = do
     tv <- source_meaning_eval cx names e;
-    v <- materialise cx tv;
+    v <- read_result cx tv;
     raise (ReturnException v)
   od /\
   source_meaning_run cx names (SBM_Expr e) = do
@@ -29,21 +29,20 @@ Definition source_meaning_run_def:
   source_meaning_run cx names (SBM_Local id ty e) = do
     tyv <- lift_option_type (evaluate_type (get_tenv cx) ty) "AnnAssign evaluate_type";
     tv <- source_meaning_eval cx names e;
-    v <- materialise cx tv;
+    v <- read_result cx tv;
     new_variable id tyv v
   od /\
   source_meaning_run cx names (SBM_Assign id e) = do
+    tv <- source_meaning_eval cx names e;
     sc <- get_scopes;
     type_check (IS_SOME (lookup_scopes id sc)) "NameTarget not in scope";
-    tv <- source_meaning_eval cx names e;
-    v <- materialise cx tv;
-    assign_target cx (BaseTargetV (ScopedVar id) []) (Replace v);
-    return ()
+    v <- read_result cx tv;
+    write_place cx (MemoryPlace id []) v
   od /\
   source_meaning_run cx names (SBM_If c yes no) = do
     tv <- source_meaning_eval cx names c;
     push_scope;
-    finally (switch_BoolV tv
+    finally (switch_BoolV cx tv
       (source_meaning_runs cx names yes) (source_meaning_runs cx names no)) pop_scope
   od /\
   source_meaning_runs cx names [] = return () /\

@@ -14,9 +14,14 @@ Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperInterpreter vyperState vyperContext vyperStorage
-  vyperTyping vyperEncodeDecode vyperArith
 Libs
   wordsLib
+
+(* Keep Vyper value constructors preferred over contractABI's abi_value
+   constructors when downstream theories merge vyperTypeSystem after
+   vyperEncodeDecode. *)
+Overload IntV = ``vyperValue$IntV``
+Overload BytesV = ``vyperValue$BytesV``
 
 (* ===== Basic type classifiers ===== *)
 
@@ -363,11 +368,6 @@ End
 
 (* ===== Value-type/place typing for storage arrays and hashmaps ===== *)
 
-Definition value_type_as_type_def:
-  value_type_as_type (Type t) = SOME t /\
-  value_type_as_type (HashMapT _ _) = NONE
-End
-
 Definition vtype_annotation_ok_def:
   vtype_annotation_ok (Type t) ann_ty = (ann_ty = t) /\
   vtype_annotation_ok (HashMapT _ _) ann_ty = (ann_ty = NoneT)
@@ -625,8 +625,9 @@ Proof
       qspec_then `tys` mp_tac listTheory.APPEND_FRONT_LAST >> simp[])
 QED
 
-(* create_arg_types_ok with the RawCreate clause in its decidable form, for
-   EVAL-based checking. *)
+(* Compute twin of create_arg_types_ok_def (used by checker_defs in
+   vyperCheckContractLib) with the RawCreate clause in its decidable form;
+   keep in sync with create_arg_types_ok_def and create_arg_types_ok_raw_create. *)
 Theorem create_arg_types_ok_compute =
   LIST_CONJ
     (List.filter (not o can (find_term (same_const ``RawCreate``)) o concl)
@@ -819,10 +820,11 @@ Proof
   Cases_on `opt` >> simp[]
 QED
 
-(* well_typed_expr with each `?x. opt = SOME x /\ P x` as a case split on opt,
-   for EVAL-based checking: the split reduces once opt does, so the checker
-   needs no quantifier instantiation for it, also where it is nested in
-   another existential's body (a call as the key of a nested HashMap read). *)
+(* Compute twin of well_typed_expr_def (used by checker_defs in
+   vyperCheckContractLib), rewriting each `?x. opt = SOME x /\ P x` as a case
+   split on opt so EVAL reduces it without quantifier instantiation, including
+   inside another existential's body (a call as the key of a nested HashMap
+   read); keep in sync with well_typed_expr_def. *)
 Theorem well_typed_expr_compute =
   Ho_Rewrite.PURE_REWRITE_RULE [exists_some_option_case] well_typed_expr_def
 

@@ -53,7 +53,7 @@
  * element's fragment; the buffer's stored elements do, by the next
  * element's expr_post frame (the buffer's allocation id is below the
  * element's start counter and its region misses the live locals).  An
- * element that is a storage or transient array evaluates to an ArrayRef:
+ * element that is a storage or transient array evaluates to a captured storage place:
  * these lemmas use the induction hypothesis's expr_vv_ok of each element
  * (expr_sim_below_mem), not expr_sim_ok.
  *)
@@ -123,10 +123,10 @@ Proof
   `val_wf (StructTV (ZIP (MAP FST fields,tvs)))
     (StructV (ZIP (MAP FST fields,vs)))` by
     (irule aggregate_materialised_child_wf >>
-     simp[expr_type_def, vyperStateTheory.materialise_def,
+     simp[expr_type_def, vyperStateTheory.read_result_def,
        vyperStateTheory.return_def] >>
      goal_assum (drule_at Any) >>
-     simp[expr_type_def, vyperStateTheory.materialise_def,
+     simp[expr_type_def, vyperStateTheory.read_result_def,
        vyperStateTheory.return_def] >> metis_tac[]) >>
   `val_footprint (StructTV (ZIP (MAP FST fields,tvs)))
      (StructV (ZIP (MAP FST fields,vs))) <= type_memory_size_list tvs` by
@@ -134,6 +134,11 @@ Proof
      `LENGTH (MAP FST fields) = LENGTH tvs` by
        (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
      simp[struct_layout_size_zip]) >>
+  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
+    (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
+  `!nm lb len. local_region cenv es'.scopes s nm lb len ==>
+     b + type_memory_size_list tvs <= lb \/ lb + len <= b` by
+    (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
   irule buffer_loop_memory_vv_post >>
   simp[expr_type_def, is_word_type_def, contextTheory.mk_ptr_def, contextTheory.base_ptr_def,
     eval_operand_def, val_in_memory_def] >>
@@ -195,13 +200,18 @@ Resume compile_make_array_sim[tuple]:
   qpat_x_assum `frag_exec _ _ _ _ _ _` kall_tac >>
   `val_wf (TupleTV tvs) (ArrayV (TupleV vs))` by
     (irule aggregate_materialised_child_wf >>
-     simp[expr_type_def, vyperStateTheory.materialise_def,
+     simp[expr_type_def, vyperStateTheory.read_result_def,
        vyperStateTheory.return_def] >>
      goal_assum (drule_at Any) >>
-     simp[expr_type_def, vyperStateTheory.materialise_def,
+     simp[expr_type_def, vyperStateTheory.read_result_def,
        vyperStateTheory.return_def] >> metis_tac[]) >>
   `val_footprint (TupleTV tvs) (ArrayV (TupleV vs)) <= type_memory_size_list tvs` by
     (drule val_footprint_le >> simp[type_memory_size_def]) >>
+  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
+    (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
+  `!nm lb len. local_region cenv es'.scopes s nm lb len ==>
+     b + type_memory_size_list tvs <= lb \/ lb + len <= b` by
+    (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
   irule (buffer_loop_memory_vv_post |> Q.INST
     [`e` |-> `Builtin (TupleT (MAP expr_type args)) (MakeArray NONE bnd) args`]
     |> SIMP_RULE (srw_ss()) [expr_type_def]) >>
@@ -259,16 +269,21 @@ Resume compile_make_array_sim[array]:
   qpat_x_assum `frag_exec _ _ _ _ _ _` kall_tac >>
   `val_wf (ArrayTV tv bnd) (ArrayV (make_array_value tv bnd vs))` by
     (irule aggregate_materialised_child_wf >>
-     simp[expr_type_def, vyperStateTheory.materialise_def,
+     simp[expr_type_def, vyperStateTheory.read_result_def,
        vyperStateTheory.return_def] >>
      goal_assum (drule_at Any) >>
-     simp[expr_type_def, vyperStateTheory.materialise_def,
+     simp[expr_type_def, vyperStateTheory.read_result_def,
        vyperStateTheory.return_def] >> metis_tac[]) >>
   `val_footprint (ArrayTV tv bnd) (ArrayV (make_array_value tv bnd vs)) <=
     type_memory_bytes cenv (ArrayT x bnd)` by
     (drule val_footprint_le >>
      `type_memory_bytes cenv (ArrayT x bnd) = type_memory_size (ArrayTV tv bnd)` by
        metis_tac[expr_sim_inv_memory_size] >> simp[]) >>
+  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
+    (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
+  `!nm lb len. local_region cenv es'.scopes s nm lb len ==>
+     b + type_memory_bytes cenv (ArrayT x bnd) <= lb \/ lb + len <= b` by
+    (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
   irule (buffer_loop_memory_vv_post |> Q.INST
     [`e` |-> `Builtin (ArrayT x bnd) (MakeArray (SOME x) bnd) args`]
     |> SIMP_RULE (srw_ss()) [expr_type_def]) >>
@@ -277,6 +292,7 @@ Resume compile_make_array_sim[array]:
   qexistsl [`b`,`sm`,`type_memory_bytes cenv (ArrayT x bnd)`,`t`] >>
   simp[wordsTheory.dimword_def] >>
   conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
   conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
   `LENGTH vs = LENGTH args` by (drule eval_exprs_length >> simp[]) >>
   Cases_on `bnd`
@@ -291,21 +307,22 @@ Finalise compile_make_array_sim
 
 Theorem eval_expr_empty:
   !cx ann t args es res es'.
-    eval_expr cx (TypeBuiltin ann Empty t args) es = (res, es') /\
+    (do r <- eval_expr cx (TypeBuiltin ann Empty t args); read_result cx r od) es = (res, es') /\
     expr_res_ok res ==>
     es' = es /\ args = [] /\
     ?tv. evaluate_type (get_tenv cx) t = SOME tv /\
-         res = INL (Value (default_value tv))
+         res = INL (default_value tv)
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, lift_sum_def,
        type_builtin_args_length_ok_def] >>
   Cases_on `args` >> simp[raise_def] >>
   simp[Once evaluate_def, return_def, evaluate_type_builtin_def] >>
   Cases_on `evaluate_type (get_tenv cx) t` >>
-  simp[return_def, raise_def] >> rw[] >> gvs[expr_res_ok_def]
+  simp[return_def, raise_def, bind_def, read_result_def] >>
+  rw[] >> gvs[expr_res_ok_def]
 QED
 
 Theorem typed_val_to_w256_address_zero[local]:
@@ -380,10 +397,17 @@ Theorem compile_empty_memory_sim:
     ~is_word_type t ==> expr_vv_ok cenv (TypeBuiltin ann Empty t args)
 Proof
   rw[expr_vv_ok_def, expr_vv_sim_def] >>
-  `expr_res_ok res` by
-    (gvs[expr_vv_res_ok_def] >> drule eval_expr_type_builtin_value >>
-     strip_tac >> gvs[expr_res_ok_def]) >>
-  drule_all eval_expr_empty >> strip_tac >> gvs[] >>
+  reverse (Cases_on `res`)
+  >- (rename1 `INR exc` >>
+      `(do r <- eval_expr cx (TypeBuiltin ann Empty t args);
+            read_result cx r od) es = (INR exc,es')` by simp[bind_def] >>
+      `expr_res_ok (INR exc)` by gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
+      drule_all eval_expr_empty >> simp[]) >>
+  drule eval_expr_type_builtin_value >> strip_tac >> gvs[] >>
+  `(do r <- eval_expr cx (TypeBuiltin ann Empty t args);
+        read_result cx r od) es = (INL v,es')` by
+    simp[bind_def, read_result_def, return_def] >>
+  drule eval_expr_empty >> simp[expr_res_ok_def] >> strip_tac >> gvs[] >>
   `ann = t` by
     gvs[expr_sim_pre_def, well_typed_expr_def, type_builtin_result_ok_def] >>
   gvs[compile_expr_type_builtin_dispatch, Once compile_expr_def,
@@ -407,11 +431,22 @@ Proof
   simp[contextTheory.mk_ptr_def, valueEncodingProofsTheory.val_wf_default_value_proof] >>
   conj_tac
   >- (rpt strip_tac >>
+      qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _ \/ _` drule >>
+      strip_tac >> first_x_assum irule >> decide_tac) >>
+  conj_tac
+  >- (rpt strip_tac >>
       qpat_x_assum `!aid b len. _ ==> regions_disjoint _ _ b len` drule >>
       simp[compileEnvTheory.regions_disjoint_def] >> strip_tac >>
       first_x_assum irule >> decide_tac) >>
   drule_all expr_sim_inv_memory_size >> strip_tac >>
-  simp[val_footprint_le, valueEncodingProofsTheory.val_wf_default_value_proof]
+  simp[val_footprint_le, valueEncodingProofsTheory.val_wf_default_value_proof] >>
+  rpt strip_tac >>
+  `local_region cenv es.scopes s n lb lsz` by
+    (irule exprSimOpsTheory.local_region_frame >> conj_tac
+     >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
+     qexistsl [`sa`, `es.scopes`, `t`] >> simp[]) >>
+  qpat_x_assum `!name b len. local_region _ _ s _ _ _ ==> _` drule >>
+  simp[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem compile_empty_sim:
@@ -428,10 +463,10 @@ QED
 
 Theorem eval_expr_bound_builtin:
   !cx ann tb t args es res es'.
-    eval_expr cx (TypeBuiltin ann tb t args) es = (res, es') /\
+    (do result <- eval_expr cx (TypeBuiltin ann tb t args); read_result cx result od) es = (res, es') /\
     expr_res_ok res /\ MEM tb [MaxValue; MinValue; Epsilon] ==>
     es' = es /\ args = [] /\
-    ?v. res = INL (Value v) /\ evaluate_type_builtin cx tb t [] [] = INL v
+    ?v. res = INL v /\ evaluate_type_builtin cx tb t [] [] = INL v
 Proof
   rpt gen_tac >> strip_tac >>
   `!n. type_builtin_args_length_ok tb n <=> n = 0` by
@@ -441,15 +476,15 @@ Proof
      Cases_on `t` >> gvs[evaluate_max_value_def, evaluate_min_value_def] >>
      rename1 `BaseT bt` >> Cases_on `bt` >>
      gvs[evaluate_max_value_def, evaluate_min_value_def, AllCaseEqs()]) >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, lift_sum_def] >>
+  qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, read_result_def, return_def,
+       ignore_bind_def, type_check_def, assert_def, raise_def, lift_sum_def] >>
   Cases_on `args` >> simp[raise_def] >>
-  simp[Once evaluate_def, return_def] >>
+  simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   Cases_on `evaluate_type_builtin cx tb t [] []` >>
-  simp[return_def, raise_def] >> rw[] >> gvs[expr_res_ok_def] >>
-  (* The bound-builtin cases now expose the non-ABI eval_exprs path. *)
-  gvs[Once evaluate_def, return_def, raise_def]
+  simp[read_result_def, return_def, raise_def] >> rw[] >> gvs[expr_res_ok_def] >>
+  (* The bound-builtin cases expose the non-ABI eval_exprs path. *)
+  gvs[Once evaluate_def, read_result_def, return_def, raise_def]
 QED
 
 (* max_value, min_value and epsilon of a numeric type: a Lit of the bound,

@@ -90,9 +90,14 @@ Proof
   rw[expr_sim_ok_def] >>
   `args = [] /\ ann = BaseT (UintT 256)` by
     gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
-  gvs[] >> irule expr_sim_values >> rpt conj_tac
-  >~ [`expr_res_ok`] >- metis_tac[eval_expr_calldata_len] >>
-  rpt strip_tac >> drule eval_expr_calldata_len >> strip_tac >> gvs[] >>
+  gvs[] >>
+  `!st. eval_expr cx (Builtin (BaseT (UintT 256)) CalldataLen []) st =
+        (INL (Value (IntV &LENGTH cx.txn.calldata)), st)` by
+    (gen_tac >>
+     Cases_on `eval_expr cx (Builtin (BaseT (UintT 256)) CalldataLen []) st` >>
+     drule eval_expr_calldata_len >> simp[] >> strip_tac >> gvs[]) >>
+  irule expr_sim_values >> simp[bind_def, read_result_def, return_def] >>
+  rpt strip_tac >>
   gvs[lower_value_calldata_len] >>
   irule frag_exec_conseq >>
   qexistsl_tac [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
@@ -107,7 +112,7 @@ Proof
                 `\r. F`] >>
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
        vyperASTTheory.expr_type_def, is_word_type_def,
-       typed_val_to_w256_word_value, word_value_def] >>
+       typed_val_to_w256_word_value, word_value_def, locals_kept_mem] >>
   drule emit_op_frag >> disch_then irule >>
   simp[is_terminator_def] >> rpt strip_tac >>
   simp[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def] >>

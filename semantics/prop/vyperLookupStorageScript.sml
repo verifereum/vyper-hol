@@ -430,7 +430,6 @@ Proof
        combinTheory.APPLY_UPDATE_THM]
 QED
 
-
 Theorem nwn_eq_apply_writes[local]:
   ∀(base : num) (k : num).
     n2w (w2n (n2w base : bytes32) + k) = n2w (base + k) : bytes32
@@ -453,7 +452,6 @@ Proof
   `off < sz1` by res_tac >>
   gvs[wordsTheory.n2w_11]
 QED
-
 
 Theorem slots_in_range_disjoint_apply_writes_mutual[local]:
   (∀storage off2 tv2.
@@ -701,8 +699,9 @@ Theorem typed_lookup_from_storage_var_in_range_non_array:
     storage_var_in_range cx st mid n ∧
     storage_type_of cx mid n = SOME tv ∧
     (∀elem bd. tv ≠ ArrayTV elem bd) ⇒
-    ∃v.
-      lookup_toplevel_name cx st mid n = SOME (Value v) ∧
+    ?pv v.
+      lookup_toplevel_name cx st mid n = SOME pv /\
+      read_result cx pv st = (INL v,st) /\
       value_has_type tv v
 Proof
   rpt strip_tac >>
@@ -730,14 +729,12 @@ Proof
   (* Get typing *)
   `value_has_type tv v`
     by metis_tac[CONJUNCT1 decode_value_storable] >>
-  (* Show lookup succeeds *)
-  qexists_tac `v` >> simp[] >>
-  simp[lookup_toplevel_name_def, Once lookup_global_def, bind_def,
+  (* Resolution captures the storage location; loading is explicit. *)
+  qexistsl_tac [`PlaceR (StoragePlace b (n2w offset) tv)`, `v`] >>
+  simp[lookup_toplevel_name_def, Once lookup_global_def,
+       read_result_def, read_place_def, bind_def,
        return_def, LET_THM, lift_option_type_def, lift_option_def,
-       read_storage_slot_def, get_storage_backend_def,
-       get_accounts_def, get_transient_storage_def] >>
-  Cases_on `tv` >> gvs[] >>
-  simp[bind_def, return_def, lift_option_def]
+       read_storage_slot_def]
 QED
 
 (* Helper: extract slots_in_range from storage_var_in_range *)
@@ -758,7 +755,7 @@ Theorem typed_lookup_from_storage_var_in_range_array:
     storage_type_of cx mid n = SOME (ArrayTV elem_tv bd) ⇒
     ∃ref_v v.
       lookup_toplevel_name cx st mid n = SOME ref_v ∧
-      FST (materialise cx ref_v st) = INL v ∧
+      FST (read_result cx ref_v st) = INL v ∧
       value_has_type (ArrayTV elem_tv bd) v
 Proof
   rpt strip_tac >>
@@ -777,13 +774,13 @@ Proof
     by (irule (CONJUNCT1 decode_value_total) >> simp[]) >>
   `value_has_type (ArrayTV elem_tv bd) v`
     by metis_tac[CONJUNCT1 decode_value_storable] >>
-  MAP_EVERY qexists_tac [`ArrayRef b (n2w offset) elem_tv bd`, `v`] >>
+  MAP_EVERY qexists_tac [`PlaceR (StoragePlace b (n2w offset) (ArrayTV elem_tv bd))`, `v`] >>
   simp[] >>
   conj_tac >- (
     simp[lookup_toplevel_name_def, Once lookup_global_def, bind_def,
          return_def, LET_THM, lift_option_type_def]
   ) >>
-  simp[materialise_def, read_storage_slot_def, bind_def, return_def,
+  simp[read_result_def, read_place_def, read_storage_slot_def, bind_def, return_def,
        lift_option_def]
 QED
 
@@ -824,24 +821,13 @@ Proof
     metis_tac[decode_value_storable])
 QED
 
-Theorem storable_value_same_type:
-  ∀cx mid n v v' tv.
-    storable_value cx mid n v ∧
-    storage_type_of cx mid n = SOME tv ∧
-    value_has_type tv v' ⇒
-    storable_value cx mid n v'
-Proof
-  rw[storable_value_def]
-QED
-
 Theorem lookup_toplevel_name_after_update_core[local]:
   ∀cx st mid n v.
     var_in_storage cx mid n ∧
     storable_value cx mid n v ⇒
     ∃ref_v.
       lookup_toplevel_name cx (update_toplevel_name cx st mid n v) mid n = SOME ref_v ∧
-      FST (materialise cx ref_v (update_toplevel_name cx st mid n v)) = INL v ∧
-      ((∀av. v ≠ ArrayV av) ⇒ ref_v = Value v)
+      FST (read_result cx ref_v (update_toplevel_name cx st mid n v)) = INL v
 Proof
   rpt strip_tac >>
   fs[storable_value_def] >>
@@ -865,8 +851,8 @@ Proof
   Cases_on `tv` >>
   gvs[read_storage_slot_def, lift_option_def, bind_def,
       get_after_set_storage_backend, return_def, raise_def,
-      encode_decode_roundtrip_ok_def, materialise_def] >>
-  (* ArrayTV case: unfold set_global in materialise side *)
+      encode_decode_roundtrip_ok_def, read_result_def, read_place_def] >>
+  (* ArrayTV case: unfold set_global in read_result side *)
   simp[Once set_global_def, write_storage_slot_def,
        bind_def, lift_option_type_def, lift_option_def,
        return_def, LET_THM, raise_def,
@@ -874,13 +860,13 @@ Proof
   Cases_on `v` >> gvs[value_has_type_def]
 QED
 
-Theorem lookup_toplevel_name_materialise_after_update:
+Theorem lookup_toplevel_name_read_result_after_update:
   ∀cx st mid n v.
     var_in_storage cx mid n ∧
     storable_value cx mid n v ⇒
     ∃ref_v.
       lookup_toplevel_name cx (update_toplevel_name cx st mid n v) mid n = SOME ref_v ∧
-      FST (materialise cx ref_v (update_toplevel_name cx st mid n v)) = INL v
+      FST (read_result cx ref_v (update_toplevel_name cx st mid n v)) = INL v
 Proof
   rpt strip_tac >>
   drule_all lookup_toplevel_name_after_update_core >> strip_tac >>
@@ -893,11 +879,16 @@ Theorem lookup_toplevel_name_after_update:
     var_in_storage cx mid n ∧
     (∀av. v ≠ ArrayV av) ∧
     storable_value cx mid n v ⇒
-    lookup_toplevel_name cx (update_toplevel_name cx st mid n v) mid n = SOME (Value v)
+    ?pv. lookup_toplevel_name cx (update_toplevel_name cx st mid n v) mid n = SOME pv /\
+      read_result cx pv (update_toplevel_name cx st mid n v) =
+        (INL v, update_toplevel_name cx st mid n v)
 Proof
   rpt strip_tac >>
   drule_all lookup_toplevel_name_after_update_core >> strip_tac >>
-  first_x_assum (qspec_then `st` strip_assume_tac) >> gvs[]
+  first_x_assum (qspec_then `st` strip_assume_tac) >>
+  qexists_tac `ref_v` >> simp[] >>
+  Cases_on `read_result cx ref_v (update_toplevel_name cx st mid n v)` >>
+  gvs[] >> drule read_result_state >> simp[]
 QED
 
 Theorem decode_value_disjoint_from_encode:
@@ -957,45 +948,6 @@ Proof
   \\ rename1 `encode_value tv1 v = SOME writes`
   \\ simp[lookup_toplevel_name_def, lookup_global_def, bind_def,
        lift_option_type_def, lift_option_def, return_def, LET_THM, raise_def]
-  \\ Cases_on `b1 = b2`
-  >- (
-    pop_assum SUBST_ALL_TAC
-    >> qpat_x_assum `(_ ⇔ _) ⇒ _` (assume_tac o REWRITE_RULE [])
-    >> RULE_ASSUM_TAC (REWRITE_RULE [GSYM (EVAL ``dimword(:256)``)])
-    >> `decode_value (apply_writes (n2w off1) writes storage0)
-         (w2n ((n2w off2) : 256 word)) tv2 =
-       decode_value storage0 (w2n ((n2w off2) : 256 word)) tv2`
-    by (irule decode_value_disjoint_from_encode >> metis_tac[])
-    >> Cases_on `tv2` >> simp[return_def]
-    >> simp[read_storage_slot_def, bind_def, lift_option_def,
-         return_def, raise_def]
-    >> REWRITE_TAC [get_after_set_storage_backend] >> simp[]
-    >> qpat_x_assum `get_storage_backend _ _ st = _` (fn th => simp[th])
-    >> TRY (qpat_x_assum `decode_value _ _ _ = decode_value _ _ _`
-      (fn th => REWRITE_TAC [SIMP_RULE (srw_ss()) [] th]))
-    >> rpt (BasicProvers.PURE_CASE_TAC >> simp[return_def, raise_def])
-  )
-  \\ Cases_on `tv2` \\ simp[return_def]
-  \\ simp[read_storage_slot_def, bind_def, lift_option_def, return_def]
-  \\ `∃s2. get_storage_backend cx b2 st = (INL s2, st)` by
-    metis_tac[get_storage_backend_INL]
-  \\ `∃s2'. get_storage_backend cx b2
-    (SND (set_storage_backend cx b1
-      (apply_writes (n2w off1) writes storage0) st)) =
-    (INL s2', SND (set_storage_backend cx b1
-      (apply_writes (n2w off1) writes storage0) st))` by
-    metis_tac[get_storage_backend_INL]
-  \\ `s2' = s2` by (
-    `FST (get_storage_backend cx b2
-      (SND (set_storage_backend cx b1
-        (apply_writes (n2w off1) writes storage0) st))) =
-     FST (get_storage_backend cx b2 st)` by
-      (irule get_after_set_other_backend >> simp[]) >>
-    gvs[])
-  \\ gvs[]
-  \\ qpat_x_assum `get_storage_backend cx b2 (SND _) = _` (fn th => simp[th])
-  \\ qpat_x_assum `get_storage_backend cx b2 st = _` (fn th => simp[th])
-  \\ ntac 8 (BasicProvers.PURE_CASE_TAC >> simp[return_def, raise_def])
 QED
 
 Theorem update_toplevel_name_preserves_well_formed_storage:
@@ -1124,9 +1076,10 @@ Theorem lookup_toplevel_name_after_update_uint:
     var_in_storage cx mid n ∧
     storage_type_of cx mid n = SOME (BaseTV (UintT b)) ∧
     within_int_bound (Unsigned b) new_val ∧ b ≤ 256 ⇒
-    lookup_toplevel_name cx
-      (update_toplevel_name cx st mid n (IntV new_val))
-      mid n = SOME (Value (IntV new_val))
+    ?pv. lookup_toplevel_name cx
+      (update_toplevel_name cx st mid n (IntV new_val)) mid n = SOME pv /\
+      read_result cx pv (update_toplevel_name cx st mid n (IntV new_val)) =
+        (INL (IntV new_val), update_toplevel_name cx st mid n (IntV new_val))
 Proof
   rpt strip_tac >>
   irule lookup_toplevel_name_after_update >> simp[] >>
@@ -1139,9 +1092,10 @@ Theorem lookup_toplevel_name_after_update_int:
     var_in_storage cx mid n ∧
     storage_type_of cx mid n = SOME (BaseTV (IntT b)) ∧
     within_int_bound (Signed b) new_val ∧ b ≤ 256 ⇒
-    lookup_toplevel_name cx
-      (update_toplevel_name cx st mid n (IntV new_val))
-      mid n = SOME (Value (IntV new_val))
+    ?pv. lookup_toplevel_name cx
+      (update_toplevel_name cx st mid n (IntV new_val)) mid n = SOME pv /\
+      read_result cx pv (update_toplevel_name cx st mid n (IntV new_val)) =
+        (INL (IntV new_val), update_toplevel_name cx st mid n (IntV new_val))
 Proof
   rpt strip_tac >>
   irule lookup_toplevel_name_after_update >> simp[] >>

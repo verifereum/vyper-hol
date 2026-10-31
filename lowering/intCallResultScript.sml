@@ -383,7 +383,7 @@ Theorem buffer_vv_holds:
     val_in_memory tv v (w2n w) s.vs_memory ==>
     vv_holds cenv cx t (Value v) (LocatedValue t (base_ptr rbuf)) es s
 Proof
-  rw[vv_holds_def, base_ptr_def, materialise_def, return_def] >>
+  rw[vv_holds_def, base_ptr_def, read_result_def, return_def] >>
   drule_all val_in_memory_word >> disch_then (fn th => fs[th])
 QED
 

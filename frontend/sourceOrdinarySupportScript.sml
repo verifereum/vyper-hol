@@ -2,12 +2,13 @@
    tuple-base/ABI restrictions remain explicit in source_program_remainder. *)
 Theory sourceOrdinarySupport
 Ancestors
-  sourceOrdinaryProgram sourceProgramSupport sourceSyntax vyperTypeContract
+  sourceOrdinaryProgram sourceProgramSupport sourceSyntax vyperTypeContract alist
 
 Theorem source_ordinary_checked_remainder:
   source_ordinary_check fuel trust policies keys contexts program claims layouts address =
     SM_Ok (retained,art) /\
-  MEM (src,tops) (retained_executable retained) ==>
+  ALOOKUP (retained_executable retained) src = SOME tops /\
+  module_allocated layouts address src tops ==>
   (source_program_remainder tops <=> supported_program tops)
 Proof
   strip_tac >> drule source_ordinary_check_equations >> strip_tac >>
@@ -17,7 +18,8 @@ QED
 Theorem source_ordinary_checked_supported_program:
   source_ordinary_check fuel trust policies keys contexts program claims layouts address =
     SM_Ok (retained,art) /\
-  MEM (src,tops) (retained_executable retained) /\
+  ALOOKUP (retained_executable retained) src = SOME tops /\
+  module_allocated layouts address src tops /\
   source_program_remainder tops ==>
   supported_program tops
 Proof
@@ -29,7 +31,8 @@ QED
 Theorem source_ordinary_compiled_supported_program:
   source_ordinary_compile compiler fuel trust policies keys contexts program claims layouts address =
     SM_Ok (retained,art,bytes) /\
-  MEM (src,tops) (retained_executable retained) /\
+  ALOOKUP (retained_executable retained) src = SOME tops /\
+  module_allocated layouts address src tops /\
   source_program_remainder tops ==>
   retained_source retained = program /\
   check_contract T layouts address (retained_executable retained) = SOME art /\

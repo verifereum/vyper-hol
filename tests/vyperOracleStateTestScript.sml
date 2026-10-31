@@ -52,13 +52,13 @@ Definition oracle_state_smoke_def:
   oracle_state_smoke os rqs =
   let st = empty_state with <|outcomes := os; requests := rqs|> in
     eval_expr empty_evaluation_context
-      (Call NoneT Send
+      (Call NoneT (Send F)
         [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
          Literal (BaseT (UintT 256)) (IntL 0)] NONE) st =
       (INL (Value NoneV), st) /\
     eval_expr empty_evaluation_context
-      (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE) st =
-      (INR (Error (TypeError "ExtCall no target")), st)
+      (Call NoneT (ExtCall T F ("unused", [], NoneT) []) [] NONE) st =
+      (INR (Error (TypeError "ExtCall operands")), st)
 End
 (* CV cannot translate equality on function-valued account/storage records.
  * Check whole-state equality above by kernel reduction, and translate the
@@ -67,13 +67,13 @@ Definition oracle_state_observations_def:
   oracle_state_observations os rqs =
   let st = empty_state with <|outcomes := os; requests := rqs|> in
     FST (eval_expr empty_evaluation_context
-      (Call NoneT Send
+      (Call NoneT (Send F)
         [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
          Literal (BaseT (UintT 256)) (IntL 0)] NONE) st) =
       INL (Value NoneV) /\
     FST (eval_expr empty_evaluation_context
-      (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE) st) =
-      INR (Error (TypeError "ExtCall no target"))
+      (Call NoneT (ExtCall T F ("unused", [], NoneT) []) [] NONE) st) =
+      INR (Error (TypeError "ExtCall operands"))
 End
 (* Original precondition translation/proof retained. The now-registered
    cont_pre_eval_expr_cps closes both termination obligations during
@@ -87,7 +87,7 @@ Theorem oracle_state_observations_pre[cv_pre]:
 Proof
   rw[oracle_state_observations_pre_def, cont_pre_IS_SOME_cont] >>
   qmatch_goalsub_abbrev_tac `eval_expr_cps cx ee ss DoneK` >>
-  qspecl_then [`cx`, `ee`, `ss`, `DoneK`] mp_tac (cj 8 eval_cps_eq) >>
+  qspecl_then [`cx`, `ee`, `ss`, `DoneK`] mp_tac (cj 5 eval_cps_eq) >>
   Cases_on `eval_expr cx ee ss` >>
   rename1 `eval_expr cx ee ss = (res, st1)` >> Cases_on `res` >> simp[] >>
   disch_then (fn th => REWRITE_TAC [th]) >>
@@ -102,12 +102,12 @@ val () = oracle_state_observations_def
 Definition oracle_state_observations_pre_def:
   oracle_state_observations_pre os rqs <=>
     cont_pre (eval_expr_cps empty_evaluation_context
-      (Call NoneT Send
+      (Call NoneT (Send F)
         [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
          Literal (BaseT (UintT 256)) (IntL 0)] NONE)
       (empty_state with <|outcomes := os; requests := rqs|>) DoneK) /\
     cont_pre (eval_expr_cps empty_evaluation_context
-      (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE)
+      (Call NoneT (ExtCall T F ("unused", [], NoneT) []) [] NONE)
       (empty_state with <|outcomes := os; requests := rqs|>) DoneK)
 End
 
@@ -131,14 +131,14 @@ Theorem oracle_state_observations_pre_cases:
     oracle_state_observations_pre a0 a1 <=>
     !v. v =
       (let v0 = empty_state in
-        vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7.
-          OracleStateRecord v1 v2 v3 v4 v5 a0 a1)) ==>
+        vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7 v8.
+          OracleStateRecord v1 v2 v3 v4 v5 v6 a0 a1)) ==>
       cont_pre (eval_expr_cps empty_evaluation_context
-        (Call NoneT Send
+        (Call NoneT (Send F)
           [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
            Literal (BaseT (UintT 256)) (IntL 0)] NONE) v DoneK) /\
       cont_pre (eval_expr_cps empty_evaluation_context
-        (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE) v DoneK)
+        (Call NoneT (ExtCall T F ("unused", [], NoneT) []) [] NONE) v DoneK)
 Proof
   Cases_on `empty_state` >>
   simp[oracle_state_observations_pre_def, evaluation_state_case_def,
@@ -149,14 +149,14 @@ Theorem oracle_state_observations_pre_rules:
   !os rqs.
     (!v. v =
       (let v0 = empty_state in
-        vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7.
-          OracleStateRecord v1 v2 v3 v4 v5 os rqs)) ==>
+        vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7 v8.
+          OracleStateRecord v1 v2 v3 v4 v5 v6 os rqs)) ==>
       cont_pre (eval_expr_cps empty_evaluation_context
-        (Call NoneT Send
+        (Call NoneT (Send F)
           [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
            Literal (BaseT (UintT 256)) (IntL 0)] NONE) v DoneK) /\
       cont_pre (eval_expr_cps empty_evaluation_context
-        (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE) v DoneK)) ==>
+        (Call NoneT (ExtCall T F ("unused", [], NoneT) []) [] NONE) v DoneK)) ==>
     oracle_state_observations_pre os rqs
 Proof
   simp[oracle_state_observations_pre_cases]
@@ -167,14 +167,14 @@ Theorem oracle_state_observations_pre_ind:
     (!os rqs.
       (!v. v =
         (let v0 = empty_state in
-          vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7.
-            OracleStateRecord v1 v2 v3 v4 v5 os rqs)) ==>
+          vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7 v8.
+            OracleStateRecord v1 v2 v3 v4 v5 v6 os rqs)) ==>
         cont_pre (eval_expr_cps empty_evaluation_context
-          (Call NoneT Send
+          (Call NoneT (Send F)
             [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
              Literal (BaseT (UintT 256)) (IntL 0)] NONE) v DoneK) /\
         cont_pre (eval_expr_cps empty_evaluation_context
-          (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE) v DoneK)) ==>
+          (Call NoneT (ExtCall T F ("unused", [], NoneT) []) [] NONE) v DoneK)) ==>
       P os rqs) ==>
     !a0 a1. oracle_state_observations_pre a0 a1 ==> P a0 a1
 Proof
@@ -186,14 +186,14 @@ Theorem oracle_state_observations_pre_strongind:
     (!os rqs.
       (!v. v =
         (let v0 = empty_state in
-          vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7.
-            OracleStateRecord v1 v2 v3 v4 v5 os rqs)) ==>
+          vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7 v8.
+            OracleStateRecord v1 v2 v3 v4 v5 v6 os rqs)) ==>
         cont_pre (eval_expr_cps empty_evaluation_context
-          (Call NoneT Send
+          (Call NoneT (Send F)
             [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
              Literal (BaseT (UintT 256)) (IntL 0)] NONE) v DoneK) /\
         cont_pre (eval_expr_cps empty_evaluation_context
-          (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE) v DoneK)) ==>
+          (Call NoneT (ExtCall T F ("unused", [], NoneT) []) [] NONE) v DoneK)) ==>
       P os rqs) ==>
     !a0 a1. oracle_state_observations_pre a0 a1 ==> P a0 a1
 Proof
@@ -208,10 +208,33 @@ Proof
   EVAL_TAC >> simp[return_def, transfer_value_def]
 QED
 *)
+Theorem oracle_empty_run[local]:
+  run_ext_call empty_evaluation_context.txn.target 0w [] (SOME 0) 0
+    empty_accounts empty_transient_storage
+    (vyper_to_tx_params empty_evaluation_context.txn) =
+  SOME (T, [], empty_accounts, empty_transient_storage, [])
+Proof
+  EVAL_TAC >>
+  simp[finite_setTheory.MEM_fset_REP, finite_setTheory.fIN_fset_ABS] >>
+  once_rewrite_tac [OWHILE_THM] >>
+  EVAL_TAC >>
+  once_rewrite_tac [OWHILE_THM] >>
+  EVAL_TAC >> simp[]
+QED
+
 Theorem oracle_state_inert_eval:
   os = NONE ==> oracle_state_smoke os rqs
 Proof
-  strip_tac >> gvs[] >> EVAL_TAC >> simp[bind_def, return_def, transfer_value_def]
+  strip_tac >> gvs[] >>
+  `word_of_bytes_be (REPLICATE 20 0w) = (0w : address)` by (CONV_TAC cv_eval) >>
+  simp[oracle_state_smoke_def, evaluate_def, bind_def, ignore_bind_def,
+       read_result_def, read_results_def, return_def, eval_ext_call_def, raise_def] >>
+  simp[type_check_def, vyperValueOperationTheory.evaluate_literal_def, eval_send_def,
+       bind_def, ignore_bind_def, return_def, lift_option_type_def,
+       dest_AddressV_def, dest_NumV_def, ext_call_kwarg_def,
+       get_accounts_def, get_transient_storage_def, empty_state_def,
+       forwarded_gas_def, oracle_empty_run, assert_def, lift_option_def,
+       check_def, update_accounts_def, update_transient_def, append_logs_def]
 QED
 
 Theorem oracle_state_none_cv:

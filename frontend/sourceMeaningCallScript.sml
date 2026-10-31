@@ -53,8 +53,9 @@ Proof
   simp[constants_env_def, source_meaning_globals_def] >>
   gen_tac >> strip_tac >> rename1 `source_meaning_decl_code _ m tl` >>
   Cases_on `m` >> gvs[source_meaning_decl_code_def] >> gen_tac >>
-  simp[constants_env_def, source_meaning_globals_def, return_def] >>
-  rpt CASE_TAC >> simp[]
+  simp[constants_env_def, source_meaning_globals_def, bind_def,
+       read_result_def, return_def] >>
+  rpt CASE_TAC >> gvs[]
 QED
 
 Theorem source_meaning_set_current_tenv:

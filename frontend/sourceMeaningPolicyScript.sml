@@ -133,6 +133,6 @@ Proof
       irule sourceMeaningStmtDefsTheory.return_value >> simp[]) >>
   rpt strip_tac >>
   simp[source_meaning_execute_def, source_meaning_run_def, Once evaluate_def,
-    bind_def, ignore_bind_def, return_def, raise_def, materialise_def] >>
-  simp[Once evaluate_def, bind_def, return_def, raise_def, materialise_def]
+    bind_def, ignore_bind_def, return_def, raise_def, read_result_def] >>
+  simp[Once evaluate_def, bind_def, return_def, raise_def, read_result_def]
 QED

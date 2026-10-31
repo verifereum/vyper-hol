@@ -32,7 +32,8 @@
  * (INL); send_call_oracle_step lists that error as a case of its own.
  * Ruling it out takes an invariant that the outcomes still to consume are
  * well typed, as e2eDefs's call_outcomes_ok states for the initial ones;
- * state_rel carries no such invariant.
+ * state_rel carries no such invariant, and exprSimHyps's expr_sim_inv does
+ * (outcomes_accounts_typed), which is how exprSimSend proves send.
  *)
 
 Theory extCallOracleStep

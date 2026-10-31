@@ -132,7 +132,7 @@ Theorem source_meaning_effect_result:
     (INR (Error (RuntimeError "raw_revert")),st)
 Proof
   simp[source_meaning_eval_def, source_meaning_args_def, bind_def, return_def,
-       evaluate_literal_def, materialise_def, type_check_def, assert_def, raise_def,
+       evaluate_literal_def, read_result_def, type_check_def, assert_def, raise_def,
        ignore_bind_def]
 QED
 
@@ -143,7 +143,7 @@ Theorem source_meaning_conditional_skips_effect:
         (SM_Revert (BaseT BoolT) (SM_Literal (BaseT (BytesT (Dynamic 0))) (BytesL [])))
         (SM_Literal (BaseT BoolT) (BoolL T))) st = (INL (Value (BoolV T)),st)
 Proof
-  simp[source_meaning_eval_def, bind_def, return_def, evaluate_literal_def, switch_BoolV_def]
+  simp[source_meaning_eval_def, bind_def, return_def, evaluate_literal_def, switch_BoolV_def, read_result_def, conditional_result_def]
 QED
 
 (* Fail the target if ANY exported definition/theorem has an axiom, open

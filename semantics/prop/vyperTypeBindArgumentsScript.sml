@@ -45,12 +45,12 @@ Proof
   rpt gen_tac >> Cases_on `vs` >> simp[Once bind_arguments_def] >>
   simp[AllCaseEqs(), PULL_EXISTS] >>
   rpt strip_tac
-  >- (qexists_tac `<|assignable := T; type := tv; value := v'|>` >>
+  >- (qexists_tac `<|assignable := T; type := tv; value := v'; popped := []|>` >>
       qpat_x_assum `id = q` SUBST_ALL_TAC >>
       qpat_x_assum `typ = r` SUBST_ALL_TAC >>
       rewrite_tac[FLOOKUP_UPDATE] >> simp[]) >>
   Cases_on `q = id`
-  >- (qexists_tac `<|assignable := T; type := tv; value := v'|>` >>
+  >- (qexists_tac `<|assignable := T; type := tv; value := v'; popped := []|>` >>
       `r = typ` by metis_tac[] >>
       qpat_x_assum `r = typ` SUBST_ALL_TAC >>
       asm_rewrite_tac[FLOOKUP_UPDATE] >> simp[]) >>
@@ -59,19 +59,6 @@ Proof
   >- (rpt strip_tac >> simp[] >> metis_tac[]) >>
   strip_tac >>
   qexists_tac `entry` >> asm_rewrite_tac[FLOOKUP_UPDATE] >> simp[]
-QED
-
-Theorem param_var_types_key_agree:
-  !vt args id typ id' typ'.
-    (!x ty. MEM (x,ty) args ==> FLOOKUP vt (x) = SOME ty) /\
-    MEM (id,typ) args /\ MEM (id',typ') args /\
-    id' = id ==>
-    typ' = typ
-Proof
-  rpt strip_tac >>
-  `FLOOKUP vt (id) = SOME typ` by metis_tac[] >>
-  `FLOOKUP vt (id) = SOME typ'` by metis_tac[] >>
-  metis_tac[optionTheory.SOME_11]
 QED
 
 Theorem bind_arguments_env_var_type_scope_entry:
@@ -255,17 +242,6 @@ Proof
   `scope_well_typed sc0` by metis_tac[] >>
   gvs[scope_well_typed_def, FLOOKUP_UPDATE] >>
   rw[] >> gvs[] >> res_tac
-QED
-
-Theorem bind_arguments_state_scopes_well_typed:
-  !tenv params vals scope st.
-    bind_arguments tenv params vals = SOME scope /\
-    state_well_typed st ==>
-    state_well_typed (st with scopes := [scope])
-Proof
-  rw[state_well_typed_def] >>
-  irule bind_arguments_scope_well_typed_from_success >>
-  goal_assum drule
 QED
 
 Theorem exprs_runtime_typed_value_expr_LIST_REL:
@@ -477,5 +453,3 @@ Proof
             bind_arguments_env_scopes_consistent) >>
   disch_then irule >> metis_tac[]
 QED
-
-

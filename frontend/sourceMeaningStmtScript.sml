@@ -167,9 +167,9 @@ Proof
       drule_all source_meaning_expression_transport >> strip_tac >>
       simp[evaluate_def, source_meaning_run_def, FUN_EQ_THM,
         bind_def, ignore_bind_def, return_def, get_scopes_def,
-        type_check_def, assert_def, raise_def] >>
+        get_place_def, type_check_def, assert_def, raise_def] >>
       rpt gen_tac >> rpt (pop_assum kall_tac) >>
-      Cases_on `IS_SOME (lookup_scopes (LAST path) x.scopes)` >> simp[return_def])
+      rpt (CASE_TAC >> gvs[get_place_def, return_def]))
   >> qpat_x_assum `source_module_statement _ _ _ _ = _` mp_tac >>
   Cases_on `fuel` >> simp_tac (srw_ss()) [Once source_module_statements_def,
     source_meaning_bind_pair_success, source_meaning_bind_success] >>

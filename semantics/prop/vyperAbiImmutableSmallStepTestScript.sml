@@ -14,6 +14,15 @@ val () = List.app cv_auto_trans
    immutable_projection_context_def, immutable_projection_state_def,
    immutable_projection_expr_def];
 
+(* Global lookup now captures a place; observe its current logical contents. *)
+Definition immutable_global_read_def:
+  immutable_global_read st =
+    case lookup_global immutable_projection_context NONE "a" st of
+    | (INL res,rt) => read_result immutable_projection_context res rt
+    | (INR ex,rt) => (INR ex,rt)
+End
+val () = cv_auto_trans immutable_global_read_def;
+
 Theorem cont_pre_eval_stmts_cps[cv_pre]:
   cont_pre (eval_stmts_cps cx ss st DoneK)
 Proof
@@ -142,9 +151,8 @@ Theorem immutable_smallstep_assignment_projection_pinned_bytes:
     SOME (ArrayV (DynArrayV [])) /\
   (SND immutable_assignment_cps_result).abi_memory = [] /\
   (SND immutable_assignment_cps_result).abi_immutables = [] /\
-  FST (lookup_global immutable_projection_context NONE "a"
-    (SND immutable_assignment_cps_result)) =
-    INL (Value (ArrayV (DynArrayV [ArrayV (DynArrayV [BoolV F; BoolV F])])) )
+  FST (immutable_global_read (SND immutable_assignment_cps_result)) =
+    INL (ArrayV (DynArrayV [ArrayV (DynArrayV [BoolV F; BoolV F])]))
 Proof
   rpt conj_tac
   >- IMM_ASSIGN_CV_TAC
@@ -176,9 +184,8 @@ Theorem immutable_smallstep_error_retains_mutation_not_fresh_captures:
     INR (Error (TypeError "Name not in scope")) /\
   (SND immutable_error_cps_result).abi_memory = [] /\
   (SND immutable_error_cps_result).abi_immutables = [] /\
-  FST (lookup_global immutable_projection_context NONE "a"
-    (SND immutable_error_cps_result)) =
-    INL (Value (ArrayV (DynArrayV [ArrayV (DynArrayV [BoolV T])])) )
+  FST (immutable_global_read (SND immutable_error_cps_result)) =
+    INL (ArrayV (DynArrayV [ArrayV (DynArrayV [BoolV T])]))
 Proof
   rpt conj_tac
   >- CONV_TAC cv_eval

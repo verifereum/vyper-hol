@@ -208,7 +208,7 @@ Theorem write_abi_memory_pop_preserves_cell:
   res = INL () /\ abi_operand_typed cx rt tv (AbiMemory token off tv)
 Proof
   rpt gen_tac >>
-  rw[write_abi_memory_def, abi_path_offset_def, evaluate_subscripts_def,
+  rw[write_abi_memory_def, write_abi_memory_child_def, abi_path_offset_def, evaluate_subscripts_def,
      abi_operation_writes_def, return_def] >>
   gvs[abi_operand_typed_def, oEL_THM, EL_MAP] >>
   rw[] >> irule abi_cell_typed_pop_length >> simp[]
@@ -231,7 +231,7 @@ Theorem write_abi_memory_disjoint_preserves_cell:
   res = INL () /\ abi_operand_typed cx rt tv (AbiMemory token off tv)
 Proof
   rpt gen_tac >>
-  rw[write_abi_memory_def, return_def] >>
+  rw[write_abi_memory_def, write_abi_memory_child_def, return_def] >>
   gvs[abi_operand_typed_def, oEL_THM, EL_MAP] >>
   rw[] >> irule abi_cell_typed_disjoint_writes >> simp[] >>
   qexists_tac `sz` >> simp[]
@@ -242,7 +242,7 @@ Theorem write_abi_memory_preserves_immutable_cell:
   write_abi_memory cxf id root v subs ao st = (res,rt) ==>
   abi_operand_typed cx rt tv (AbiImmutable token off tv)
 Proof
-  rw[write_abi_memory_def, AllCaseEqs(), return_def, raise_def] >>
+  rw[write_abi_memory_def, write_abi_memory_child_def, AllCaseEqs(), return_def, raise_def] >>
   gvs[AllCaseEqs(), return_def, raise_def, abi_operand_typed_def]
 QED
 

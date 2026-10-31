@@ -4,7 +4,7 @@ Theory vyperAbiFrame
 Ancestors
   list pair option vyperState vyperStorageBackend
   vyperAbiOperand vyperAbiMemoryProps vyperStatePreservation
-  vyperCallOutcomeFrame
+  vyperCallOutcomeFrame vyperInterpreter
 
 Theorem state_rel_frame_pure:
   (!s. R s s) /\ (!s r t. f s = (r,t) ==> t = s) ==>
@@ -51,7 +51,8 @@ Theorem abi_frame_leaves[local]:
   state_rel_frame R (get_storage_backend cx tr) /\
   state_rel_frame R (lookup_global cx src id) /\
   state_rel_frame R (get_immutables cx src) /\
-  state_rel_frame R (materialise cx top) /\
+  state_rel_frame R (read_result cx top) /\
+  state_rel_frame R (capture_abi_memory_at cx id root v off tv child) /\
   state_rel_frame R (capture_abi_memory cx id tv v) /\
   state_rel_frame R (capture_abi_immutable cx src id tv v) /\
   state_rel_frame R (write_abi_memory cx id tv v subs ao) /\
@@ -70,10 +71,12 @@ Proof
     FIRST [drule return_state, drule raise_state, drule lift_option_state,
       drule lift_option_type_state, drule lift_sum_state, drule check_state,
       drule read_storage_slot_state, drule get_storage_backend_state,
-      drule lookup_global_state, drule get_immutables_state, drule materialise_state] >> simp[] >> NO_TAC) >>
+      drule lookup_global_state, drule get_immutables_state, drule read_result_state] >> simp[] >> NO_TAC) >>
   simp[state_rel_frame_def, get_scopes_def, return_def,
-    capture_abi_memory_def, capture_abi_immutable_def, write_abi_memory_def,
-    write_abi_immutables_def, mark_abi_memory_def, mark_abi_captures_def,
+    capture_abi_memory_def, capture_abi_memory_at_def,
+    capture_abi_immutable_def, write_abi_memory_def,
+    write_abi_memory_child_def, write_abi_immutables_def,
+    mark_abi_memory_def, mark_abi_captures_def,
     release_abi_memory_def] >>
   rpt gen_tac >> rpt (CASE_TAC >> simp[return_def, raise_def]) >>
   once_rewrite_tac [abi_memory_update, abi_immutables_update] >>
@@ -197,4 +200,16 @@ Proof
        (qspecl_then [`st with abi_memory := TAKE (FST marks) st.abi_memory`,
          `TAKE (SND marks) st.abi_immutables`] mp_tac) >> simp[]) >>
   simp[] >> rpt conj_tac >> ABI_FRAME_TAC
+QED
+
+Theorem state_rel_frame_abi_place:
+  (!s t u. R s t /\ R t u ==> R s u) /\
+  (!s mem. R s (s with abi_memory := mem)) /\
+  (!s mem. R s (s with abi_immutables := mem)) ==>
+  state_rel_frame R (abi_place_operand cx p)
+Proof
+  strip_tac >> drule_all state_rel_frame_abi_primitives >>
+  disch_then (map_every (assume_tac o GEN_ALL) o CONJUNCTS o SPEC_ALL) >>
+  Cases_on `p` >> TRY (rename1 `ImmutablePlace src id path` >> Cases_on `path`) >>
+  simp_tac bool_ss [abi_place_operand_def, lookup_abi_memory_place_def] >> ABI_FRAME_TAC
 QED

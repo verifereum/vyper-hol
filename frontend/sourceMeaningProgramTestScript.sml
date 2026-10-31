@@ -76,8 +76,8 @@ QED
 
 Definition source_meaning_example_initial_def:
   source_meaning_example_initial flag st = st with <| abi_memory := [];
-    scopes := [FEMPTY |+ ("x",<| assignable := T; type := BaseTV (UintT 256); value := IntV 4 |>)
-      |+ ("flag",<| assignable := T; type := BaseTV BoolT; value := BoolV flag |>)] |>
+    scopes := [FEMPTY |+ ("x",<| assignable := T; type := BaseTV (UintT 256); value := IntV 4; popped := [] |>)
+      |+ ("flag",<| assignable := T; type := BaseTV BoolT; value := BoolV flag; popped := [] |>)] |>
 End
 
 Theorem source_meaning_example_behavior:
@@ -85,10 +85,10 @@ Theorem source_meaning_example_behavior:
     (source_meaning_example_initial flag st) =
     (INR (ReturnException (IntV (if flag then 7 else 3))),
      (source_meaning_example_initial flag st) with scopes :=
-       [FEMPTY |+ ("x",<| assignable := T; type := BaseTV (UintT 256); value := IntV 4 |>)
-        |+ ("flag",<| assignable := T; type := BaseTV BoolT; value := BoolV flag |>)
+       [FEMPTY |+ ("x",<| assignable := T; type := BaseTV (UintT 256); value := IntV 4; popped := [] |>)
+        |+ ("flag",<| assignable := T; type := BaseTV BoolT; value := BoolV flag; popped := [] |>)
         |+ ("y",<| assignable := T; type := BaseTV (UintT 256);
-                   value := IntV (if flag then 7 else 3) |>)])
+                   value := IntV (if flag then 7 else 3); popped := [] |>)])
 Proof
   Cases >> gen_tac >> EVAL_TAC >> simp[]
 QED
