@@ -141,8 +141,9 @@ Proof
   Cases_on `outcome.co_success /\ ~rq.cr_static` >>
   gvs[storage_rel_def, transient_rel_def, accounts_rel_def,
       call_ctx_rel_def, contract_storage_def, contract_transient_def] >>
-  qpat_x_assum `immutables_rel _ _ _ _ es t` mp_tac >>
-  simp[immutables_rel_def]
+  gvs[immutables_rel_def] >>
+  (conj_tac >- first_assum ACCEPT_TAC >>
+   Cases_on `computed_precompile rq` >> simp[LIST_REL_APPEND])
 
 QED
 
