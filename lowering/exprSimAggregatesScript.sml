@@ -12,8 +12,10 @@
  * abi_decode.
  *
  * TOP-LEVEL:
- *   compile_struct_lit_sim, compile_make_array_sim — StructLit, MakeArray
- *                           (lists and tuples), row 1
+ *   compile_struct_lit_case, compile_make_array_case — StructLit, MakeArray
+ *                           (lists and tuples), row 1, for compile_expr_sim
+ *                           and the body simulation; compile_struct_lit_sim
+ *                           and compile_make_array_sim follow
  *   compile_empty_case    — empty(T), row 2: compile_empty_word_sim, the
  *                           literal 0, for a word type;
  *                           compile_empty_memory_sim, a zeroed buffer, for
@@ -55,8 +57,8 @@
  * element's expr_post frame (the buffer's allocation id is below the
  * element's start counter and its region misses the live locals).  An
  * element that is a storage or transient array evaluates to a captured storage place:
- * these lemmas use the induction hypothesis's expr_vv_ok of each element
- * (expr_sim_below_mem), not expr_sim_ok.
+ * these lemmas use exprs_case's expr_vv_case of each element, not its
+ * expr_sim_case.
  *)
 
 Theory exprSimAggregates
@@ -90,21 +92,20 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem compile_struct_lit_sim:
-  !cenv ann nsid fields.
-    expr_sim_below cenv (expr_size (StructLit ann nsid fields)) ==>
-    expr_vv_ok cenv (StructLit ann nsid fields)
+Theorem compile_struct_lit_vv_case:
+  !nocalls ctx func cenv cx ann nsid fields.
+    exprs_case nocalls ctx func cenv cx (MAP SND fields) ==>
+    expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
 Proof
-  rw[expr_vv_ok_def, expr_vv_sim_def] >>
+  rw[expr_vv_case_def, expr_vv_sim_def] >>
   drule compile_struct_literal_inv >> strip_tac >> gvs[] >>
   drule struct_literal_lookup_types >> strip_tac >>
   drule struct_literal_evaluated_layout >> strip_tac >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_sim_pre_def] >>
+  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
   `!e st. MEM e (MAP SND fields) /\ expr_sim_inv cenv cx env st ==>
-    expr_sim_pre cenv cx env e st` by metis_tac[expr_sim_pre_struct_field] >>
-  `EVERY (expr_ok cenv) (MAP SND fields)` by
-    (irule expr_sim_below_struct_fields >> simp[expr_size_def] >>
-     qexistsl [`ann`, `nsid`] >> simp[]) >>
+    expr_body_pre cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
+    metis_tac[expr_body_pre_struct_field] >>
+  `!e. MEM e (MAP SND fields) /\ nocalls ==> int_calls_expr e = []` by metis_tac[] >>
   Cases_on `eval_exprs cx (MAP SND fields) es` >>
   rename1 `eval_exprs cx (MAP SND fields) es = (rr,est)` >>
   drule aggregate_eval_struct >>
@@ -117,7 +118,7 @@ Proof
   `SUM (MAP (SND o SND)
     (get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid))) <
     dimword (:256)` by
-    (gvs[expr_sim_pre_def, alloc_limits_expr_def, type_memory_bytes_def] >>
+    (gvs[expr_body_pre_def, alloc_limits_expr_def, type_memory_bytes_def] >>
      simp[wordsTheory.dimword_def] >> decide_tac) >>
   qmatch_goalsub_abbrev_tac `expr_exit result` >>
   drule_all buffer_alloc_code >> strip_tac >>
@@ -125,7 +126,6 @@ Proof
   disch_then (qspecl_then [`s0`,`es`,`cx`,`ctx`,`expr_exit result`] strip_assume_tac) >>
   qpat_x_assum `frag_exec _ sa sm _ _ _` (mp_tac o MATCH_MP frag_exec_then) >>
   disch_then irule >> simp[] >> rpt strip_tac >>
-  qpat_x_assum `expr_sim_below _ _` kall_tac >>
   qpat_x_assum `compile_expr _ _ _ _ = _` kall_tac >>
   qmatch_asmsub_abbrev_tac `compile_alloc_buffer sz sa` >>
   gvs[] >>
@@ -135,7 +135,7 @@ Proof
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[] >>
-  disch_then (qspec_then `ctx` mp_tac) >>
+  disch_then (qspecl_then [`ctx`, `nocalls`] mp_tac) >>
   (impl_tac >- (rpt strip_tac >>
     irule aggregate_alloca_immutable_sep >>
     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _`)) >>
@@ -149,7 +149,7 @@ Proof
   rpt strip_tac >> gvs[Abbr `result`] >>
   qpat_x_assum `frag_exec _ _ _ _ _ _` kall_tac >>
   `ann = StructT nsid` by
-    gvs[expr_sim_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
+    gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
   gvs[] >>
   `val_wf (StructTV (ZIP (MAP FST fields,tvs)))
     (StructV (ZIP (MAP FST fields,vs)))` by
@@ -178,25 +178,26 @@ Proof
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
-Theorem compile_make_array_sim:
-  !cenv ann topt bnd args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (Builtin ann (MakeArray topt bnd) args)
+Theorem compile_make_array_vv_case:
+  !nocalls ctx func cenv cx ann topt bnd args.
+    exprs_case nocalls ctx func cenv cx args ==>
+    expr_vv_case nocalls ctx func cenv cx (Builtin ann (MakeArray topt bnd) args)
 Proof
   rpt gen_tac >> Cases_on `topt`
   >- suspend "tuple" >> suspend "array"
 QED
 
-Resume compile_make_array_sim[tuple]:
-  rw[expr_vv_ok_def, expr_vv_sim_def] >>
+Resume compile_make_array_vv_case[tuple]:
+  rw[expr_vv_case_def, expr_vv_sim_def] >>
   drule compile_tuple_literal_inv >> strip_tac >> gvs[] >>
   drule make_tuple_evaluated_layout >> strip_tac >> gvs[] >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_sim_pre_def] >>
+  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
   `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
-    expr_sim_pre cenv cx env e st` by metis_tac[expr_sim_pre_builtin_arg] >>
-  `EVERY (expr_ok cenv) args` by metis_tac[expr_sim_below_args] >>
+    expr_body_pre cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
+    metis_tac[expr_body_pre_builtin_arg, int_calls_builtin_arg] >>
+  `!e. MEM e args /\ nocalls ==> int_calls_expr e = []` by metis_tac[] >>
   `compatible_bound bnd (LENGTH args)` by
-    gvs[expr_sim_pre_def, vyperTypeSystemTheory.well_typed_expr_def,
+    gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def,
       vyperTypeSystemTheory.well_typed_builtin_app_def] >>
   Cases_on `eval_exprs cx args es` >>
   rename1 `eval_exprs cx args es = (rr,est)` >>
@@ -208,7 +209,7 @@ Resume compile_make_array_sim[tuple]:
   `cs_extends sa sm /\ cs_extends sm sb` by gvs[ci_mono_def] >>
   drule_all fn_has_code_split >> strip_tac >>
   `SUM (MAP (type_memory_bytes cenv o expr_type) args) < dimword (:256)` by
-    (gvs[expr_sim_pre_def, alloc_limits_expr_def] >>
+    (gvs[expr_body_pre_def, alloc_limits_expr_def] >>
      simp[wordsTheory.dimword_def] >> decide_tac) >>
   qmatch_goalsub_abbrev_tac `expr_exit result` >>
   `type_memory_size_list tvs < dimword (:256)` by metis_tac[] >>
@@ -217,14 +218,13 @@ Resume compile_make_array_sim[tuple]:
   disch_then (qspecl_then [`s0`,`es`,`cx`,`ctx`,`expr_exit result`] strip_assume_tac) >>
   qpat_x_assum `frag_exec _ sa sm _ _ _` (mp_tac o MATCH_MP frag_exec_then) >>
   disch_then irule >> simp[] >> rpt strip_tac >>
-  qpat_x_assum `expr_sim_below _ _` kall_tac >>
   qpat_x_assum `compile_expr _ _ _ _ = _` kall_tac >>
   gvs[] >>
   drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`) aggregate_make_tuple_sim >>
   disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
-  disch_then (qspecl_then [`env`,`ctx`] mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`env`,`ctx`,`nocalls`] mp_tac) >> simp[] >>
   (impl_tac >- (rpt strip_tac >>
     irule aggregate_alloca_immutable_sep >>
     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _`)) >>
@@ -261,16 +261,17 @@ Resume compile_make_array_sim[tuple]:
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
-Resume compile_make_array_sim[array]:
-  rw[expr_vv_ok_def, expr_vv_sim_def] >>
+Resume compile_make_array_vv_case[array]:
+  rw[expr_vv_case_def, expr_vv_sim_def] >>
   drule compile_array_literal_inv >> strip_tac >> gvs[] >>
   drule make_array_evaluated_layout >> strip_tac >> gvs[] >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_sim_pre_def] >>
+  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
   `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
-    expr_sim_pre cenv cx env e st` by metis_tac[expr_sim_pre_builtin_arg] >>
-  `EVERY (expr_ok cenv) args` by metis_tac[expr_sim_below_args] >>
+    expr_body_pre cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
+    metis_tac[expr_body_pre_builtin_arg, int_calls_builtin_arg] >>
+  `!e. MEM e args /\ nocalls ==> int_calls_expr e = []` by metis_tac[] >>
   `compatible_bound bnd (LENGTH args)` by
-    gvs[expr_sim_pre_def, vyperTypeSystemTheory.well_typed_expr_def,
+    gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def,
       vyperTypeSystemTheory.well_typed_builtin_app_def] >>
   Cases_on `eval_exprs cx args es` >>
   rename1 `eval_exprs cx args es = (rr,est)` >>
@@ -284,7 +285,7 @@ Resume compile_make_array_sim[array]:
   `cs_extends sa sm /\ cs_extends sm sb` by gvs[ci_mono_def] >>
   drule_all fn_has_code_split >> strip_tac >>
   `type_memory_bytes cenv (ArrayT x bnd) < dimword (:256)` by
-    (gvs[expr_sim_pre_def, alloc_limits_expr_def] >>
+    (gvs[expr_body_pre_def, alloc_limits_expr_def] >>
      simp[wordsTheory.dimword_def] >> decide_tac) >>
   qmatch_goalsub_abbrev_tac `expr_exit result` >>
   drule_all buffer_alloc_code >> strip_tac >>
@@ -292,7 +293,6 @@ Resume compile_make_array_sim[array]:
   disch_then (qspecl_then [`s0`,`es`,`cx`,`ctx`,`expr_exit result`] strip_assume_tac) >>
   qpat_x_assum `frag_exec _ sa sm _ _ _` (mp_tac o MATCH_MP frag_exec_then) >>
   disch_then irule >> simp[] >> rpt strip_tac >>
-  qpat_x_assum `expr_sim_below _ _` kall_tac >>
   qpat_x_assum `compile_expr _ _ _ _ = _` kall_tac >>
   gvs[] >>
   drule_at (Pat `compile_make_array _ _ _ _ _ _ _ _ = _`) aggregate_make_array_sim >>
@@ -300,7 +300,7 @@ Resume compile_make_array_sim[array]:
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[wordsTheory.dimword_def] >>
-  disch_then (qspecl_then [`env`,`ctx`] mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`env`,`ctx`,`nocalls`] mp_tac) >> simp[] >>
   (impl_tac >- (rpt strip_tac >>
     `regions_disjoint io (type_memory_size itv) b
        (type_memory_bytes cenv (ArrayT x bnd))` by
@@ -351,7 +351,48 @@ Resume compile_make_array_sim[array]:
   gvs[vyperValueTheory.make_array_value_def, val_in_memory_def]
 QED
 
-Finalise compile_make_array_sim
+Finalise compile_make_array_vv_case
+
+Theorem compile_struct_lit_case:
+  !nocalls ctx func cenv cx ann nsid fields.
+    exprs_case nocalls ctx func cenv cx (MAP SND fields) ==>
+    expr_sim_case nocalls ctx func cenv cx (StructLit ann nsid fields) /\
+    expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
+Proof
+  metis_tac[compile_struct_lit_vv_case, expr_sim_case_of_vv]
+QED
+
+Theorem compile_make_array_case:
+  !nocalls ctx func cenv cx ann topt bnd args.
+    exprs_case nocalls ctx func cenv cx args ==>
+    expr_sim_case nocalls ctx func cenv cx
+      (Builtin ann (MakeArray topt bnd) args) /\
+    expr_vv_case nocalls ctx func cenv cx
+      (Builtin ann (MakeArray topt bnd) args)
+Proof
+  metis_tac[compile_make_array_vv_case, expr_sim_case_of_vv]
+QED
+
+Theorem compile_struct_lit_sim:
+  !cenv ann nsid fields.
+    expr_sim_below cenv (expr_size (StructLit ann nsid fields)) ==>
+    expr_vv_ok cenv (StructLit ann nsid fields)
+Proof
+  rpt strip_tac >> simp[expr_vv_ok_case] >> rpt gen_tac >>
+  irule compile_struct_lit_vv_case >> irule exprs_case_every_ok >>
+  irule expr_sim_below_struct_fields >> metis_tac[]
+QED
+
+Theorem compile_make_array_sim:
+  !cenv ann topt bnd args.
+    expr_sim_below cenv (list_size expr_size args) ==>
+    expr_vv_ok cenv (Builtin ann (MakeArray topt bnd) args)
+Proof
+  rpt strip_tac >> simp[expr_vv_ok_case] >> rpt gen_tac >>
+  irule compile_make_array_vv_case >> irule exprs_case_every_ok >>
+  irule expr_sim_below_args >> first_assum ACCEPT_TAC
+QED
+
 
 (* ===== empty(T) ===== *)
 

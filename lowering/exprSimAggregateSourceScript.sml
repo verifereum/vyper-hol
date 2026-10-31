@@ -14,10 +14,11 @@
  *     materialises
  *   aggregate_materialised_child_typed, aggregate_materialised_child_wf,
  *   aggregate_child_res_ok — the materialised value is typed and val_wf
- *   expr_sim_pre_struct_field, expr_sim_below_struct_fields,
- *   expr_sim_below_args — the children's preconditions and expr_ok
+ *   expr_sim_pre_struct_field, expr_body_pre_struct_field,
+ *   expr_sim_below_struct_fields, expr_sim_below_args — the children's
+ *   preconditions and expr_ok
  *
- * Helpers: typed_value_wf, aggregate_named_child_syntax.
+ * Helpers: typed_value_wf, aggregate_named_child_body_syntax.
  *)
 Theory exprSimAggregateSource
 Ancestors
@@ -70,7 +71,7 @@ Proof
 QED
 
 Theorem aggregate_materialised_child_typed:
-  expr_sim_pre ce cx env e es /\ eval_expr cx e es = (INL tv,es') /\
+  expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL tv,es') /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
   read_result cx tv es' = (INL v,es') ==>
   value_has_type tyv v
@@ -78,7 +79,7 @@ Proof
   strip_tac >>
   `(do r <- eval_expr cx e; read_result cx r od) es = (INL v,es')` by
     simp[bind_def] >>
-  drule_all expr_sim_pre_eval >> strip_tac >>
+  drule_all expr_body_pre_eval >> strip_tac >>
   `env.type_defs = get_tenv cx` by
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   gvs[expr_result_typed_def, expr_runtime_typed_def,
@@ -86,10 +87,10 @@ Proof
 QED
 
 Theorem aggregate_child_res_ok:
-  expr_sim_pre ce cx env e es /\ eval_expr cx e es = (res,es') ==>
+  expr_body_pre ce cx env e es /\ eval_expr cx e es = (res,es') ==>
   expr_vv_res_ok res
 Proof
-  metis_tac[expr_sim_pre_vv_res_ok]
+  metis_tac[expr_body_pre_vv_res_ok]
 QED
 
 Theorem typed_value_wf:
@@ -106,7 +107,7 @@ Proof
 QED
 
 Theorem aggregate_materialised_child_wf:
-  expr_sim_pre ce cx env e es /\ eval_expr cx e es = (INL tv,es') /\
+  expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL tv,es') /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
   read_result cx tv es' = (INL v,es') ==>
   val_wf tyv v
@@ -127,13 +128,12 @@ Proof
   strip_tac >> simp[] >> Cases_on `res` >> simp[return_def]
 QED
 
-Theorem aggregate_named_child_syntax:
+Theorem aggregate_named_child_body_syntax:
   !fields env ce e.
     well_typed_named_exprs env fields /\ byte_widths_named_exprs fields /\
-    alloc_limits_named_exprs ce fields /\ int_calls_named_exprs fields = [] /\
-    MEM e (MAP SND fields) ==>
-    well_typed_expr env e /\ byte_widths_expr e /\
-    alloc_limits_expr ce e /\ int_calls_expr e = []
+    alloc_limits_named_exprs ce fields /\ MEM e (MAP SND fields) ==>
+    well_typed_expr env e /\ byte_widths_expr e /\ alloc_limits_expr ce e /\
+    !c. MEM c (int_calls_expr e) ==> MEM c (int_calls_named_exprs fields)
 Proof
   Induct_on `fields`
   >- simp[] >>
@@ -143,18 +143,38 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
+(* A field meets expr_body_pre wherever expr_sim_inv holds, and has no
+   internal call where the literal has none. *)
+Theorem expr_body_pre_struct_field:
+  !ce cx env ann nsid fields e es es'.
+    expr_body_pre ce cx env (StructLit ann nsid fields) es /\
+    MEM e (MAP SND fields) /\ expr_sim_inv ce cx env es' ==>
+    expr_body_pre ce cx env e es' /\
+    (int_calls_expr (StructLit ann nsid fields) = [] ==>
+     int_calls_expr e = [])
+Proof
+  rpt gen_tac >>
+  simp[expr_body_pre_def, well_typed_expr_def, byte_widths_expr_def,
+       alloc_limits_expr_def, int_calls_expr_def,
+       supportedExprTraverseTheory.expr_has_evm_run_thm] >>
+  strip_tac >> drule_all aggregate_named_child_body_syntax >> strip_tac >>
+  `~expr_has_evm_run e` by
+    (gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP] >> res_tac >> gvs[]) >>
+  simp[] >> rpt conj_tac
+  >- (irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono >>
+      metis_tac[])
+  >- (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  strip_tac >> gvs[] >> Cases_on `int_calls_expr e` >> gvs[] >>
+  metis_tac[MEM]
+QED
+
 Theorem expr_sim_pre_struct_field:
   !ce cx env ann nsid fields e es es'.
     expr_sim_pre ce cx env (StructLit ann nsid fields) es /\
     MEM e (MAP SND fields) /\ expr_sim_inv ce cx env es' ==>
     expr_sim_pre ce cx env e es'
 Proof
-  rw[expr_sim_pre_def, well_typed_expr_def, byte_widths_expr_def,
-     alloc_limits_expr_def, int_calls_expr_def,
-     supportedExprTraverseTheory.expr_has_evm_run_thm] >>
-  drule_all aggregate_named_child_syntax >> strip_tac >>
-  gvs[listTheory.EVERY_MEM, listTheory.EXISTS_MEM, listTheory.MEM_MAP] >>
-  metis_tac[]
+  rw[expr_sim_pre_body] >> metis_tac[expr_body_pre_struct_field]
 QED
 
 Theorem expr_sim_below_struct_fields:
