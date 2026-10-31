@@ -52,7 +52,8 @@ Ancestors
   vyperTypeEnvPreservation bodySimExprCases bodyStoragePreservation
   vyperCallOutcomeStorage vyperTypeStoragePreservation
   stmtSimAssignStorage supportedDecls vyperTypeContractStaticMaps
-  vyperTypeContract compileVyper supportedTypes
+  vyperTypeContract compileVyper supportedTypes stmtSimAssignAttr
+  stmtSimAugAssignAttr
 Libs
   monadsyntax
 
@@ -1020,6 +1021,57 @@ Proof
   gvs[value_runtime_typed_def]
 QED
 
+(* An assignment to a word field of a local struct: stmtSimAssignAttr's
+   compile_assign_attr_local_case. *)
+Theorem body_assign_attr_local[local]:
+  !cx id fld e tops ctx func cenv env env' ret_ty lctx RetQ es res es' sid
+   fty.
+    body_expr_ok cx e /\ body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty
+      (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e) =
+      SOME env' /\
+    stmt_exprs_ok cenv
+      (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e) /\
+    call_evaluation_safe cx
+      (int_calls_stmt
+         (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)) /\
+    eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)
+      es = (res, es') /\
+    FLOOKUP env.var_types id = SOME (StructT sid) /\
+    attribute_type env.type_defs (StructT sid) fld = SOME fty /\
+    is_word_type fty ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty
+         (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
+      es res es'
+Proof
+  rpt strip_tac >>
+  `well_typed_expr env e /\ expr_type e = fty` by
+    (Cases_on `type_place_target env (AttributeTarget (NameTarget id) fld)` >>
+     gvs[type_stmt_def, atarget_accepts_def] >>
+     rename1 `type_place_target _ _ = SOME vt` >> Cases_on `vt` >> gvs[] >>
+     gvs[vyperTypeEnvTheory.type_place_target_AttributeTarget,
+         vyperTypeEnvTheory.type_place_target_NameTarget] >>
+     metis_tac[type_widens_to_word]) >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    gvs[body_inv_def] >>
+  `expr_body_pre cenv cx env e es` by
+    (irule stmt_expr_body_pre >>
+     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         supported_assignment_exists_def, supported_expr_exists_def,
+         int_calls_stmt_def, int_calls_atarget_def, int_calls_expr_def] >>
+     qexists_tac `[]` >> simp[]) >>
+  `expr_vv_sim ctx func cenv cx fty e es` by metis_tac[body_expr_ok_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?fsz. ALOOKUP (get_struct_fields cenv.ce_struct_fields
+                    (nsid_to_string sid)) fld = SOME (fty, fsz)` by
+    metis_tac[attribute_type_struct_field] >>
+  irule compile_assign_attr_local_case >> simp[] >> metis_tac[]
+QED
+
 (* RESIDUAL (#637 assignments): the other base targets.
    - A local in memory: stmtSimAssignMem's
      compile_assign_local_memory_stmt_frag asks of the local's type
@@ -1034,8 +1086,16 @@ QED
      lemma.
    - A storage or transient variable that is not a word
      (supported_target_info's copies): no statement lemma.
-   - Subscript and attribute targets: no statement lemma (the simulation
-     of compile_get_target_ptr on eval_target_place). *)
+   - An attribute target other than a word field of a local struct:
+     - a word field of a storage or transient struct:
+       stmtSimAssignAttrStorage's compile_assign_attr_storage_stmt_frag
+       asks expr_vv_ok cenv e and expr_sim_pre (no internal call in e),
+       where the body gives expr_body_pre and e's own simulation;
+     - a field of a local struct that is not a word: no statement lemma
+       (the copy of an aggregate into the field);
+     - a field of a field or of a subscript: no statement lemma (the
+       simulation of compile_get_target_ptr on eval_target_place).
+   - Subscript targets: no statement lemma (#851). *)
 Theorem body_assign_other:
   !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
     (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
@@ -1050,7 +1110,12 @@ Theorem body_assign_other:
     eval_stmt cx (Assign (BaseTarget t) e) es = (res, es') /\
     ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
               is_word_type ty) /\
-    ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) ==>
+    ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
+    ~(?id fld sid fty.
+        t = AttributeTarget (NameTarget id) fld /\
+        FLOOKUP env.var_types id = SOME (StructT sid) /\
+        attribute_type env.type_defs (StructT sid) fld = SOME fty /\
+        is_word_type fty) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e)) es res es'
 Proof
@@ -1073,6 +1138,12 @@ Proof
                    supported_scalar_target tops nsid`
   >- (gvs[] >> rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
       irule body_assign_toplevel_word >> metis_tac[]) >>
+  Cases_on `?id fld sid fty.
+              t = AttributeTarget (NameTarget id) fld /\
+              FLOOKUP env.var_types id = SOME (StructT sid) /\
+              attribute_type env.type_defs (StructT sid) fld = SOME fty /\
+              is_word_type fty`
+  >- (gvs[] >> irule body_assign_attr_local >> metis_tac[]) >>
   irule body_assign_other >> metis_tac[]
 QED
 
@@ -1276,8 +1347,75 @@ Proof
   qexists_tac `F` >> simp[]
 QED
 
-(* RESIDUAL (#637 augmented assignment): the targets other than a local.
-   Storage, subscript and attribute targets have no statement lemma. *)
+(* x.f op= e on a field of a local struct: stmtSimAugAssignAttr's
+   compile_augassign_attr_local_case.  The typing makes f's type a word
+   (well_typed_binop_augassign_word), and x.f is read wherever
+   expr_sim_inv holds (augassign_attr_local_place), which gives e's
+   judgment. *)
+Theorem body_augassign_attr_local[local]:
+  !cx ty id fld bop e tops ctx func cenv env env' ret_ty lctx RetQ es res
+   es'.
+    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
+       eval_target_place cx (AttributeTarget (NameTarget id) fld) s'' =
+         (INL p,t') /\
+       read_place cx p s'3' = (INL cur,t'') /\
+       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_ok cx e) /\
+    body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty
+      (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) =
+      SOME env' /\
+    stmt_exprs_ok cenv
+      (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) /\
+    call_evaluation_safe cx
+      (int_calls_stmt
+         (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) /\
+    eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)
+      es = (res, es') ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty
+         (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+      es res es'
+Proof
+  rpt strip_tac >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    gvs[body_inv_def] >>
+  `expr_body_pre cenv cx env e es` by
+    (irule stmt_expr_body_pre >>
+     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         supported_expr_exists_def, int_calls_stmt_def,
+         int_calls_expr_def] >>
+     qexists_tac `[]` >> simp[]) >>
+  `?sid. FLOOKUP env.var_types id = SOME (StructT sid) /\
+         attribute_type env.type_defs (StructT sid) fld = SOME ty /\
+         well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\
+         bop <> NotIn` by
+    (gvs[type_stmt_def, well_typed_target_def,
+         vyperTypeEnvTheory.type_place_target_AttributeTarget,
+         vyperTypeEnvTheory.type_place_target_NameTarget] >>
+     rename1 `attribute_type _ tgt_ty fld = SOME _` >>
+     Cases_on `tgt_ty` >> gvs[attribute_type_def]) >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?fsz. ALOOKUP (get_struct_fields cenv.ce_struct_fields
+                    (nsid_to_string sid)) fld = SOME (ty, fsz)` by
+    metis_tac[attribute_type_struct_field] >>
+  `body_expr_ok cx e` by
+    (drule_all augassign_attr_local_place >> strip_tac >>
+     first_x_assum irule >> metis_tac[]) >>
+  `expr_sim ctx func cenv cx ty e es` by metis_tac[body_expr_ok_def] >>
+  irule compile_augassign_attr_local_case >> simp[] >> metis_tac[]
+QED
+
+(* RESIDUAL (#637 augmented assignment): the targets other than a local or
+   a field of a local struct.
+   - A storage or transient variable, or a field of one: no statement
+     lemma.
+   - A field of a field or of a subscript: no statement lemma (the
+     simulation of compile_get_target_ptr on eval_target_place).
+   - Subscript targets: no statement lemma (#851). *)
 Theorem body_augassign_other:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
@@ -1294,7 +1432,8 @@ Theorem body_augassign_other:
     call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
     eval_stmt cx (AugAssign ty t bop e) es = (res, es') /\
-    ~(?id. t = NameTarget id) ==>
+    ~(?id. t = NameTarget id) /\
+    ~(?id fld. t = AttributeTarget (NameTarget id) fld) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
 Proof
@@ -1314,6 +1453,8 @@ Proof
   `supported_expr tops e` by gvs[supported_stmt_def] >>
   Cases_on `?id. t = NameTarget id`
   >- (gvs[] >> irule body_augassign_local >> metis_tac[]) >>
+  Cases_on `?id fld. t = AttributeTarget (NameTarget id) fld`
+  >- (gvs[] >> irule body_augassign_attr_local >> metis_tac[]) >>
   irule body_augassign_other >> metis_tac[]
 QED
 

@@ -18,7 +18,12 @@
  *                                      relates the scopes write_place leaves
  *   expr_add_unwrap_frag             — e's code, an ADD of an offset to a
  *                                      base, and e's unwrap, run
- *   compile_assign_attr_local_stmt_frag — x.f = e, every outcome
+ *   attribute_type_struct_field      — a field the typing gives a struct is
+ *                                      in the lowering's struct table
+ *   compile_assign_attr_local_case   — x.f = e, every outcome, e's
+ *                                      simulation a premise
+ *   compile_assign_attr_local_stmt_frag — the same for an e with no
+ *                                      internal call
  *
  * Helpers: struct_field_type, eval_target_place_attr_local,
  *   write_place_attr_local, fields_in_memory_mstore_field,
@@ -79,6 +84,35 @@ Proof
   qpat_x_assum `MAP (FST o SND) fields = _` (SUBST_ALL_TAC o SYM) >>
   drule_all alookup_zip_field >> strip_tac >> simp[] >>
   metis_tac[cj 1 evaluate_type_mono]
+QED
+
+Theorem alookup_fields_args[local]:
+  !fields args fld fty.
+    MAP FST fields = MAP FST args /\ MAP (FST o SND) fields = MAP SND args /\
+    ALOOKUP args fld = SOME fty ==>
+    ?fsz. ALOOKUP fields fld = SOME (fty, fsz)
+Proof
+  Induct >> rpt gen_tac >> Cases_on `args` >> simp[] >>
+  PairCases_on `h` >> Cases_on `h'` >> rw[] >> gvs[] >> metis_tac[]
+QED
+
+(* A field the typing gives a struct is in the lowering's struct table,
+   at the type the typing gives it. *)
+Theorem attribute_type_struct_field:
+  !cenv cx env es sid fld fty.
+    expr_sim_inv cenv cx env es /\
+    attribute_type (get_tenv cx) (StructT sid) fld = SOME fty ==>
+    ?fsz. ALOOKUP (get_struct_fields cenv.ce_struct_fields
+                     (nsid_to_string sid)) fld = SOME (fty, fsz)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[vyperTypeSystemTheory.attribute_type_def, AllCaseEqs()] >>
+  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+    gvs[expr_sim_inv_def] >>
+  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
+  simp[sfields_tenv_consistent_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  simp[get_struct_fields_def] >> metis_tac[alookup_fields_args]
 QED
 
 (* The place x.f for a local x in scope whose value has field f, and only
@@ -338,19 +372,6 @@ QED
 
 (* ===== e, an ADD, and e's unwrap ===== *)
 
-(* vv_post holds of a result only where it reads (exprSimUnwrap's
-   vv_post_failed_read, local there). *)
-Theorem vv_post_failed_read[local]:
-  !func cenv cx e es sa sm s0 es' raw vv s exc.
-    read_result cx raw es' = (INR exc, es') ==>
-    ~vv_post func cenv cx e es sa sm s0 es' raw vv s
-Proof
-  rpt strip_tac >> Cases_on `vv` >>
-  gvs[vv_post_def, vv_holds_def, storage_holds_def, immutable_holds_def] >>
-  rename1 `eval_operand place_ptr.ptr_operand s = SOME word` >>
-  Cases_on `place_ptr.ptr_location` >> gvs[]
-QED
-
 (* After the ADD and the unwrap: e's value at op, the ADD's sum in dst,
    and the frame from before e. *)
 Theorem add_unwrap_post[local]:
@@ -516,7 +537,7 @@ Theorem assign_attr_local_source:
   !cx cenv env lctx id fld sid fty fsz e es res es'.
     eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)
       es = (res, es') /\
-    stmt_res_ok lctx res /\ expr_sim_pre cenv cx env e es /\
+    stmt_res_ok lctx res /\ expr_body_pre cenv cx env e es /\
     FLOOKUP env.var_types id = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (fty, fsz) /\
@@ -546,10 +567,10 @@ Proof
     (rpt strip_tac >> gvs[stmt_res_ok_def]) >>
   drule_all eval_assign_attr_local >> strip_tac >>
   qexistsl_tac [`r`, `es1`] >> simp[] >>
-  conj_tac >- (irule expr_sim_pre_res_ok >> metis_tac[]) >>
+  conj_tac >- (irule expr_body_pre_res_ok >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   drule_all write_place_attr_local >> strip_tac >> gvs[] >>
-  drule_all expr_sim_pre_eval >> strip_tac >>
+  drule_all expr_body_pre_eval >> strip_tac >>
   `evaluate_type (get_tenv cx) (StructT sid) = SOME entry.type` by
     metis_tac[expr_sim_inv_local] >>
   drule_all struct_fields_layout >> strip_tac >>
@@ -719,7 +740,44 @@ QED
 
 (* x.f = e for a local x of struct type sid, f a field of sid of a word
    type, and e of f's type, for every outcome: e's errors exit, and on a
-   value its typed word is stored at f's offset in x's region. *)
+   value its typed word is stored at f's offset in x's region.  e may call
+   internal functions: its simulation is a premise. *)
+Theorem compile_assign_attr_local_case:
+  !ctx func cx lctx RetQ cenv ty env id fld sid fty fsz e es res es'.
+    eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)
+      es = (res, es') /\
+    expr_vv_sim ctx func cenv cx (expr_type e) e es /\
+    expr_body_pre cenv cx env e es /\
+    FLOOKUP env.var_types id = SOME (StructT sid) /\
+    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+      fld = SOME (fty, fsz) /\
+    is_word_type fty /\ expr_type e = fty ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty
+         (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
+      es res es'
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  drule_all expr_sim_inv_local >> strip_tac >>
+  `cenv.ce_var_type id = SOME (StructT sid)` by fs[expr_sim_inv_def] >>
+  `is_word_type (expr_type e)` by simp[] >>
+  drule_all assign_attr_local_code_parts >> strip_tac >>
+  drule_all assign_attr_local_source >> strip_tac >>
+  qpat_x_assum `expr_type e = fty` (SUBST_ALL_TAC o SYM) >>
+  drule_all assign_attr_local_frag >>
+  disch_then (qspec_then `s0` mp_tac) >>
+  simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
+  impl_tac >- simp[] >> strip_tac
+  >- (disj1_tac >> qexistsl [`t`, `cenv`] >> gvs[] >>
+      simp[stmt_lands_def, cenv_top_ext_refl] >>
+      drule emit_void_nonterminator_open >> simp[is_terminator_def]) >>
+  Cases_on `r` >> gvs[] >>
+  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+QED
+
+(* compile_assign_attr_local_case for an e with no internal call. *)
 Theorem compile_assign_attr_local_stmt_frag:
   !ctx func cx lctx RetQ cenv ty env id fld sid fty fsz e es res es'.
     eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)
@@ -734,24 +792,9 @@ Theorem compile_assign_attr_local_stmt_frag:
          (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
       es res es'
 Proof
-  rpt gen_tac >> strip_tac >>
-  simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
-  `expr_sim_inv cenv cx env es` by fs[expr_sim_pre_def] >>
-  drule_all expr_sim_inv_local >> strip_tac >>
-  `cenv.ce_var_type id = SOME (StructT sid)` by fs[expr_sim_inv_def] >>
-  `is_word_type (expr_type e)` by simp[] >>
-  drule_all assign_attr_local_code_parts >> strip_tac >>
+  rpt strip_tac >> irule compile_assign_attr_local_case >>
+  `expr_body_pre cenv cx env e es` by fs[expr_sim_pre_body] >>
   `expr_vv_sim ctx func cenv cx (expr_type e) e es` by
     metis_tac[expr_vv_ok_def] >>
-  drule_all assign_attr_local_source >> strip_tac >>
-  qpat_x_assum `expr_type e = fty` (SUBST_ALL_TAC o SYM) >>
-  drule_all assign_attr_local_frag >>
-  disch_then (qspec_then `s0` mp_tac) >>
-  simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
-  impl_tac >- simp[] >> strip_tac
-  >- (disj1_tac >> qexistsl [`t`, `cenv`] >> gvs[] >>
-      simp[stmt_lands_def, cenv_top_ext_refl] >>
-      drule emit_void_nonterminator_open >> simp[is_terminator_def]) >>
-  Cases_on `r` >> gvs[] >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+  simp[] >> metis_tac[]
 QED

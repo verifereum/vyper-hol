@@ -20,6 +20,7 @@
  *                        unwrap_runtime_immutable_word_sim (DLOAD),
  *                        unwrap_storage_word_sim (SLOAD/TLOAD),
  *                        vv_post_calldata (no calldata pointers)
+ *   vv_post_failed_read — vv_post holds of a result only where it reads
  *
  * Helpers: compile_expr_extends (exprLoweringProps' compile_expr_grows),
  *   compile_ensure_in_memory_extends, unwrap_value_extends,
@@ -565,7 +566,8 @@ Proof
   irule unwrap_memory_sim >> simp[]
 QED
 
-Theorem vv_post_failed_read[local]:
+(* vv_post holds of a result only where it reads. *)
+Theorem vv_post_failed_read:
   !func cenv cx e es sa sm s0 es' raw vv s exc.
     read_result cx raw es' = (INR exc, es') ==>
     ~vv_post func cenv cx e es sa sm s0 es' raw vv s
