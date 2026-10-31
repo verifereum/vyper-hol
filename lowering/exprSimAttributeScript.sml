@@ -212,9 +212,11 @@ Theorem base_vv_holds_struct[local]:
     ?v. read_result cx tv es = (INL v, es) /\
         (vv_loc vv = LocMemory ==> val_in_memory stv v (w2n w) s.vs_memory) /\
         (vv_loc vv = LocStorage ==>
-           read_storage_slot cx F w stv es = (INL v, es)) /\
+           read_storage_slot cx F w stv es = (INL v, es) /\
+           slots_in_range (get_storage cx es F) (w2n w) stv) /\
         (vv_loc vv = LocTransient ==>
-           read_storage_slot cx T w stv es = (INL v, es)) /\
+           read_storage_slot cx T w stv es = (INL v, es) /\
+           slots_in_range (get_storage cx es T) (w2n w) stv) /\
         (vv_loc vv = LocCode ==>
            immutable_holds cenv cx (StructT sid) tv w es) /\
         vv_loc vv <> LocCalldata
@@ -414,6 +416,7 @@ Proof
       drule struct_field_slot_exists >> strip_tac >>
       drule_all read_storage_slot_field >> strip_tac >> gvs[] >>
       drule_all struct_field_offset_slots_eq >> strip_tac >>
+      imp_res_tac vyperLookupStorageTheory.storage_field_slots_in_range >>
       gvs[storage_holds_def])
   >~ [`vv_at _ _ _ _ _ _ _ (LocatedValue _ _) _`]
   >- (simp[expr_type_def] >> irule attr_vv_at_field >> simp[] >>
