@@ -545,6 +545,18 @@ Definition exprs_case_def:
       exprs_case nocalls ctx func cenv cx es))
 End
 
+(* The positional operands of an external call, evaluated in order and
+   read only after the keyword operands (eval_expr_results): each one's
+   judgments if the ones before it evaluate (bodySim's body_results_ok). *)
+Definition results_case_def:
+  results_case nocalls ctx func cenv cx [] = T /\
+  results_case nocalls ctx func cenv cx (e::es) =
+    (expr_sim_case nocalls ctx func cenv cx e /\
+     expr_vv_case nocalls ctx func cenv cx e /\
+     ((?s r t. eval_expr cx e s = (INL r, t)) ==>
+      results_case nocalls ctx func cenv cx es))
+End
+
 (* AddMod, MulMod and PowMod256 applied to names: compile_expr lowers these
    itself (compile_addmod_names, ...), not through
    compile_builtin_dispatch. *)
@@ -1122,6 +1134,22 @@ Theorem exprs_case_every_ok:
     EVERY (expr_ok cenv) es ==> exprs_case T ctx func cenv cx es
 Proof
   ntac 4 gen_tac >> Induct >> rw[exprs_case_def] >> gvs[expr_ok_case]
+QED
+
+Theorem results_case_every_ok:
+  !ctx func cenv cx es.
+    EVERY (expr_ok cenv) es ==> results_case T ctx func cenv cx es
+Proof
+  ntac 4 gen_tac >> Induct >> rw[results_case_def] >> gvs[expr_ok_case]
+QED
+
+Theorem results_case_below:
+  !cenv args ctx func cx.
+    expr_sim_below cenv (list_size expr_size args) ==>
+    results_case T ctx func cenv cx args
+Proof
+  rpt strip_tac >> irule results_case_every_ok >> simp[EVERY_MEM] >>
+  metis_tac[expr_sim_below_mem]
 QED
 
 Theorem exprs_case_below:

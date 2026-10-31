@@ -24,7 +24,7 @@
 Theory bodySimExprCases
 Ancestors
   list bodySim exprSim exprSimHyps exprSimOperators exprSimAttribute
-  exprSimPlaces exprSimAggregates exprSimSend exprSimMain vyperAST
+  exprSimPlaces exprSimAggregates exprSimSend exprSimExtCall exprSimMain vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph
 
 (* With no internal call in it, an expression simulates by
@@ -67,6 +67,15 @@ Theorem body_exprs_ok_case:
     exprs_case F ctx func cenv cx es
 Proof
   gen_tac >> Induct >> rw[body_exprs_ok_def, exprs_case_def] >>
+  metis_tac[body_expr_ok_case]
+QED
+
+Theorem body_results_ok_case:
+  !cx es tops ctx func cenv.
+    body_results_ok cx es /\ body_inv tops ctx cenv cx ==>
+    results_case F ctx func cenv cx es
+Proof
+  gen_tac >> Induct >> rw[body_results_ok_def, results_case_def] >>
   metis_tac[body_expr_ok_case]
 QED
 
@@ -328,7 +337,8 @@ Proof
   fs[expr_vv_case_def] >> metis_tac[]
 QED
 
-(* GAP (#636 operands with internal calls): external calls, as body_builtin_residual_case. *)
+(* exprSimExtCall's compile_extcall_case, from the operands' judgments in
+   the order the source evaluates them. *)
 Theorem body_extcall_case:
   !cx v14 is_static skip_check sig opts es v15.
     (!s'' target t nargs s'3' results t'.
@@ -343,7 +353,11 @@ Theorem body_extcall_case:
     body_exprs_ok cx (TAKE 1 es) ==>
     body_expr_ok cx (Call v14 (ExtCall is_static skip_check sig opts) es v15)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  irule compile_extcall_case >> rpt conj_tac >> rpt strip_tac
+  >- metis_tac[body_exprs_ok_case]
+  >- metis_tac[body_results_ok_case] >>
+  metis_tac[body_exprs_ok_case]
 QED
 
 (* GAP (#638 the call step): the INVOKE of an internal call.  The IHs

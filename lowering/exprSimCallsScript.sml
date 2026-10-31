@@ -3,10 +3,9 @@
  *
  * The case lemmas of compile_expr_sim (exprSimMain) for the call targets
  * but internal calls.  Proved: send (compile_send_sim, by exprSimSend's
- * compile_send_case_sim, row 2 of #636's Calls table).  Cheated, for the
- * later #636 PRs, by row of that table:
- *   1 extcall/staticcall in SOME oracle mode, including reverts and
- *     default_return_value (#553): compile_extcall_sim
+ * compile_send_case_sim, row 2 of #636's Calls table), and extcall from
+ * exprSimExtCall's compile_extcall_case_sim (row 1, whose case lemma is
+ * cheated there).  Cheated, for the later #636 PRs, by row of that table:
  *   3 raw_call (#554): compile_raw_call_sim; raw_call of msg.data:
  *     compile_raw_call_calldata_sim
  *   4 raw_log, raw_revert, selfdestruct: compile_raw_log_sim,
@@ -42,14 +41,14 @@
 
 Theory exprSimCalls
 Ancestors
-  list exprSim exprSimHyps exprSimSend vyperAST
+  list exprSim exprSimHyps exprSimSend exprSimExtCall vyperAST
 
 Theorem compile_extcall_sim:
   !cenv ann is_static skip sig opts args dflt.
     expr_sim_below cenv (expr_size (Call ann (ExtCall is_static skip sig opts) args dflt)) ==>
     expr_vv_ok cenv (Call ann (ExtCall is_static skip sig opts) args dflt)
 Proof
-  cheat
+  ACCEPT_TAC compile_extcall_case_sim
 QED
 
 Theorem compile_send_sim:
