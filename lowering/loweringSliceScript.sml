@@ -1,17 +1,16 @@
 (*
  * A first body slice of the lowering simulation (#625)
  *
- * Lemmas in the form of the statement lemmas of stmtLoweringProps: frag_exec
- * (fragExec) from stmt_state_rel at the fragment's start to stmt_state_rel
- * at its end, under fn_has_code, fn_inst_ids_distinct and
- * local_ptrs_reserved.  The sub-fragments (a right-hand side, a condition,
- * branch bodies) enter as hypotheses of the same shape, stated at the
- * source state where they run, so the lemmas compose with each other and
- * with the general statement and expression induction.  A declaration's
- * ALLOCA keeps its base below 2 ** 256 through alloca_room, which
- * stmt_state_rel carries.  Constructor declarations additionally require
- * the allocation-prefix guard that keeps their stores off immutables;
- * runtime declarations use the trivial cap = 0 guard.
+ * Lemmas stated with frag_exec (fragExec), from stmt_state_rel at the
+ * fragment's start to stmt_state_rel at its end, under fn_has_code,
+ * fn_inst_ids_distinct and local_ptrs_reserved.  The sub-fragments (a
+ * right-hand side, a condition, branch bodies) enter as hypotheses of the
+ * same shape, stated at the source state where they run, so the lemmas
+ * compose with each other and with the general statement and expression
+ * induction.  A declaration's ALLOCA keeps its base below 2 ** 256 through
+ * alloca_room, which stmt_state_rel carries.  Constructor declarations
+ * additionally require the allocation-prefix guard that keeps their stores
+ * off immutables; runtime declarations use the trivial cap = 0 guard.
  *
  * TOP-LEVEL:
  *   expr_frag               — an expression's fragment, in the form the
@@ -54,11 +53,7 @@ Libs
    state related at es, the source state where e is evaluated: it reaches
    its end related at the source state after e, with the operand holding
    e's forced value, and keeps the variables handed out before it and the
-   allocations made before it.  This is compile_expr_correct's conclusion
-   as a frag_exec; getting it from compile_expr_correct through
-   frag_exec_run_inst_seq also needs that a run_inst_seq without INVOKE
-   keeps the existing allocations, which compile_expr_correct does not
-   state. *)
+   allocations made before it. *)
 Definition expr_frag_def:
   expr_frag ctx func cenv cx ty e es R <=>
     !sa sb op v es' s0.
@@ -1042,7 +1037,7 @@ Proof
 QED
 
 (* Slice lemma 2: an if/else.  The condition is any expr_frag at es; the
-   branch bodies are fragments of the form of compile_stmts_correct, and
+   branch bodies are statement-list fragments of the same shape, and
    a body that runs to its end from a fresh block leaves the block open
    (it does not end in a return), so it falls through to the exit. *)
 Theorem compile_if_frag:
