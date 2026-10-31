@@ -569,13 +569,37 @@ val CALL_NO_CONTROL_STEP = FIRST [
   qpat_x_assum `_ = (INR _,_)` mp_tac >>
     BasicProvers.TOP_CASE_TAC >> simp[] >> strip_tac];
 
+Theorem eval_ext_call_effects_no_control[local]:
+  eval_ext_call_effects cx target_addr calldata value_opt gas accounts st =
+    (INR exc, st') ==> no_control_exc exc
+Proof
+  Cases_on `st.outcomes` >>
+  simp[eval_ext_call_effects_def, bind_def, ignore_bind_def, return_def,
+    get_transient_storage_def, lift_option_def, raise_def,
+    update_accounts_def, update_transient_def, LET_THM,
+    prod_CASE_rator, sum_CASE_rator, COND_RATOR] >>
+  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def]
+  >- (drule append_logs_no_control >> simp[no_control_exc_def])
+  >- (qpat_x_assum `_ st = (INR exc,_)` mp_tac >>
+      BasicProvers.TOP_CASE_TAC >> simp[return_def, raise_def] >>
+      strip_tac >> gvs[])
+  >- (pairarg_tac >> gvs[bind_def, return_def, raise_def,
+        adopt_call_outcome_equation, AllCaseEqs()] >>
+      Cases_on `outcome.co_success` >> gvs[return_def, raise_def])
+  >> drule take_call_outcome_error >> strip_tac >> gvs[]
+QED
+
 Theorem eval_ext_call_no_control:
   eval_ext_call cx static skip_check sig opts vs st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-  PairCases_on `sig` >> Cases_on `vs` >>
-  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >> strip_tac >>
-  rpt CALL_NO_CONTROL_STEP
+  PairCases_on `sig` >> Cases_on `vs`
+  >- simp[eval_ext_call_def, raise_def, no_control_exc_def] >>
+  simp_tac bool_ss [eval_ext_call_def, LET_THM] >> strip_tac >>
+  rpt (FIRST [
+    qpat_x_assum `eval_ext_call_effects _ _ _ _ _ _ _ = (INR _,_)`
+      (ACCEPT_TAC o MATCH_MP eval_ext_call_effects_no_control),
+    CALL_NO_CONTROL_STEP])
 QED
 
 Theorem eval_send_no_control:
