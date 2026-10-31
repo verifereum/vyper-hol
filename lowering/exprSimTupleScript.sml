@@ -15,34 +15,37 @@
  *                               no longer holds, with a popped snapshot at
  *                               the element itself
  *   tuple_popped_clash        — popped_at_elem of the evaluated base
+ *   tuple_popped_clash_unreachable — never under expr_body_pre
  *   select_tuple_read         — the source's selection reads the element
- *   compile_subscript_tuple_sim — expr_vv_sim of a tuple subscript, for no
- *                               tuple_popped_clash
+ *   compile_subscript_tuple_sim — expr_vv_case of a tuple subscript from
+ *                               its base's
  *
- * Helpers: tuple_index_typed, type_place_expr_vtype_annotation,
- *   evaluate_tuple_type, opt_mmap_el, values_have_types_el,
- *   tuple_val_wf_el, sum_take_el_le, type_memory_size_list_sum,
- *   map_elem_size_in_location, tuple_offset_memory, tuple_offset_slots,
+ * Helpers: opt_mmap_el, values_have_types_el, tuple_val_wf_el,
+ *   sum_take_el_le, compile_expr_tuple_subscript, map_elem_size_in_location,
+ *   tuple_offset_memory, tuple_offset_code, tuple_offset_slots,
  *   tuple_in_memory_elem, decode_tuple_elem, read_storage_slot_tuple_elem,
- *   evaluate_subscripts_snoc_tuple, read_popped_snoc_tuple,
- *   read_memory_path_snoc_tuple, select_tuple_read_immutable,
- *   compile_expr_tuple_subscript, eval_expr_tuple_subscript,
- *   tuple_offset_code, tuple_pre_base, immutable_holds_read,
- *   base_vv_holds_loc, base_vv_at_mem, tuple_elem_ptr, tuple_vv_at_elem,
- *   sub_layout_tuple_elem, immutable_holds_tuple_elem, tuple_vv_holds_elem,
- *   tuple_base_read, tuple_vv_post
+ *   decode_tuple_length, read_storage_slot_tuple_length,
+ *   read_storage_slot_array_not_tuple, evaluate_subscripts_snoc_tuple,
+ *   read_popped_snoc_tuple, read_memory_path_snoc_tuple,
+ *   select_tuple_read_immutable, evaluate_tuple_type, tuple_pre_base,
+ *   eval_expr_tuple_subscript, base_vv_holds_loc, base_vv_at_mem,
+ *   tuple_elem_ptr, tuple_vv_at_elem, sub_layout_tuple_elem,
+ *   immutable_holds_tuple_elem, tuple_slots_in_range_el,
+ *   tuple_elem_slots_in_range, tuple_prefix_el_bound, dead_bytes_list_el,
+ *   storage_read_live_tuple_elem, tuple_vv_holds_elem, tuple_base_read,
+ *   tuple_vv_post, lookup_scopes_popped_keys_indexed,
+ *   tuple_memory_no_snapshot
  *
  * A base in code (an immutable, LocCode) points into an immutable's data:
  * immutable_holds places the base's value inside the immutable's layout
  * (sub_layout), and the element sits inside the base's at its byte offset,
  * as for attributes (exprSimAttribute).
  *
- * Not covered, cheated in exprSimPlaces: tuple_popped_clash, where
- * read_popped may read a snapshot recorded at the element rather than the
- * element of the base's snapshot.  record_pop records snapshots at
- * dynamic-array elements only, but expr_sim_inv's popped_keys_indexed says
- * only that every key ends in an index, which a tuple element's path does
- * as well.
+ * A popped snapshot recorded at the element itself (tuple_popped_clash)
+ * would be read instead of the element of the base's snapshot.  It never
+ * is: expr_sim_inv's popped_keys_indexed keys every snapshot at an index
+ * into a dynamic array, and the element's path indexes a tuple
+ * (tuple_popped_clash_unreachable).
  *)
 
 Theory exprSimTuple
@@ -50,10 +53,11 @@ Ancestors
   list rich_list finite_map pair
   fragExec exprSim exprSimHyps exprSimUnwrap exprSimLen exprSimLeaves
   exprSimAggregateLayout exprSimAttributeFields exprSimAttribute
+  placeTypingProps
   exprLowering exprLoweringProps compileEnv context
   valueEncoding vyperAST vyperInterpreter vyperState vyperStorage vyperValue
   vyperValueOperation vyperTyping vyperTypeSystem vyperTypeExprSoundness
-  vyperPlaceResultTyping
+  vyperPlaceResultTyping valueEncodingProofs
   venomState venomInst
 Libs
   pairLib
@@ -67,15 +71,9 @@ Theorem opt_mmap_el[local]:
 Proof
   Induct >> simp[] >> rpt gen_tac >>
   Cases_on `f h` >> simp[] >> Cases_on `OPT_MMAP f l` >> simp[] >>
-  strip_tac >> gvs[] >>
-  first_x_assum (qspecl_then [`x'`, `PRE k`, `f`] mp_tac) >>
+  strip_tac >> gvs[] >> rename1 `OPT_MMAP f l = SOME tl` >>
+  first_x_assum (qspecl_then [`tl`, `PRE k`, `f`] mp_tac) >>
   Cases_on `k` >> gvs[] >> drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]
-QED
-
-Theorem values_have_types_length[local]:
-  !tvs vs. values_have_types tvs vs ==> LENGTH vs = LENGTH tvs
-Proof
-  Induct >> Cases_on `vs` >> simp[value_has_type_def]
 QED
 
 Theorem values_have_types_el[local]:
@@ -102,12 +100,6 @@ Theorem sum_take_el_le[local]:
 Proof
   Induct >> simp[] >> rpt gen_tac >> Cases_on `k` >> simp[] >>
   strip_tac >> first_x_assum drule >> simp[]
-QED
-
-Theorem type_memory_size_list_sum[local]:
-  !tvs. type_memory_size_list tvs = SUM (MAP type_memory_size tvs)
-Proof
-  Induct >> simp[type_memory_size_def]
 QED
 
 (* ===== The lowering ===== *)
@@ -462,44 +454,35 @@ Proof
   gvs[vyperValueTheory.evaluate_types_OPT_MMAP]
 QED
 
-Theorem type_place_expr_vtype_annotation:
-  !e env vt.
-    type_place_expr env e = SOME vt ==> vtype_annotation_ok vt (expr_type e)
-Proof
-  Cases >> simp[Once well_typed_expr_def, vyperASTTheory.expr_type_def] >>
-  TRY (rename1 `TopLevelName _ nsid` >> PairCases_on `nsid` >>
-       simp[Once well_typed_expr_def]) >>
-  rpt strip_tac >> gvs[AllCaseEqs()]
-QED
-
 (* A well-typed subscript of a tuple-typed base: the base's own
    precondition, and an in-range integer literal index whose element type
    is the annotation.  A place-typed base (the other branch of
    well_typed_expr) is an array or a mapping, never a tuple. *)
 Theorem tuple_pre_base[local]:
   !cenv cx env ann obj idx es tys.
-    expr_sim_pre cenv cx env (Subscript ann obj idx) es /\
+    expr_body_pre cenv cx env (Subscript ann obj idx) es /\
     expr_type obj = TupleT tys ==>
-    expr_sim_pre cenv cx env obj es /\
+    expr_body_pre cenv cx env obj es /\
+    int_calls_expr (Subscript ann obj idx) = int_calls_expr obj /\
     ?ity k. idx = Literal ity (IntL (&k)) /\ k < LENGTH tys /\
             EL k tys = ann
 Proof
   rpt gen_tac >> strip_tac >>
   `well_typed_expr env obj /\ subscript_type_ok (TupleT tys) idx ann` by
-    (qpat_x_assum `expr_sim_pre _ _ _ _ _` mp_tac >>
-     simp[expr_sim_pre_def, Once well_typed_expr_def] >>
+    (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+     simp[expr_body_pre_def, Once well_typed_expr_def] >>
      rpt strip_tac >> gvs[] >>
      drule type_place_expr_vtype_annotation >>
      Cases_on `vt` >> TRY (rename1 `Type t` >> Cases_on `t`) >>
      gvs[subscript_vtype_def, vtype_annotation_ok_def]) >>
-  conj_tac
-  >- gvs[expr_sim_pre_def, well_typed_expr_def,
-         vyperTypeCallGraphTheory.int_calls_expr_def, byte_widths_expr_def,
-         alloc_limits_expr_def] >>
-  gvs[subscript_type_ok_def] >>
-  Cases_on `idx` >> gvs[] >> rename1 `Literal _ l` >> Cases_on `l` >> gvs[] >>
-  rename1 `IntL n` >>
-  qexists_tac `Num n` >> simp[integerTheory.INT_OF_NUM]
+  `?ity k. idx = Literal ity (IntL (&k)) /\ k < LENGTH tys /\ EL k tys = ann` by
+    (gvs[subscript_type_ok_def] >>
+     Cases_on `idx` >> gvs[] >> rename1 `Literal _ l` >> Cases_on `l` >> gvs[] >>
+     rename1 `IntL n` >>
+     qexists_tac `Num n` >> simp[integerTheory.INT_OF_NUM]) >>
+  gvs[expr_body_pre_def, well_typed_expr_def,
+      vyperTypeCallGraphTheory.int_calls_expr_def, byte_widths_expr_def,
+      alloc_limits_expr_def, supportedExprTraverseTheory.expr_has_evm_run_thm]
 QED
 
 Theorem eval_expr_tuple_subscript[local]:
@@ -517,13 +500,6 @@ QED
 
 (* ===== The value_vv of the element ===== *)
 
-Theorem immutable_holds_read[local]:
-  !cenv cx t tv w es.
-    immutable_holds cenv cx t tv w es ==> ?v. read_result cx tv es = (INL v, es)
-Proof
-  rw[immutable_holds_def] >> metis_tac[]
-QED
-
 (* What a base's value_vv of a non-word type says of the value it holds,
    by location. *)
 Theorem base_vv_holds_loc[local]:
@@ -534,9 +510,13 @@ Theorem base_vv_holds_loc[local]:
     ?v. read_result cx tv es = (INL v, es) /\
         (vv_loc vv = LocMemory ==> val_in_memory tvt v (w2n w) s.vs_memory) /\
         (vv_loc vv = LocStorage ==>
-           read_storage_slot cx F w tvt es = (INL v, es)) /\
+           read_storage_slot cx F w tvt es = (INL v, es) /\
+           slots_in_range (get_storage cx es F) (w2n w) tvt /\
+           storage_read_live cx F (get_storage cx es F) w tvt) /\
         (vv_loc vv = LocTransient ==>
-           read_storage_slot cx T w tvt es = (INL v, es)) /\
+           read_storage_slot cx T w tvt es = (INL v, es) /\
+           slots_in_range (get_storage cx es T) (w2n w) tvt /\
+           storage_read_live cx T (get_storage cx es T) w tvt) /\
         (vv_loc vv = LocCode ==> immutable_holds cenv cx t tv w es) /\
         vv_loc vv <> LocCalldata
 Proof
@@ -693,6 +673,103 @@ Proof
   irule sub_layout_tuple_elem >> simp[]
 QED
 
+(* ===== A tuple element's slots in storage ===== *)
+
+Theorem tuple_slots_in_range_el[local]:
+  !tvs k off storage.
+    tuple_slots_in_range storage off tvs /\ k < LENGTH tvs ==>
+    slots_in_range storage (off + tuple_prefix_slot_size k tvs) (EL k tvs)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `tuple_slots_in_range _ _ _` mp_tac >>
+  simp[Once vyperLookupStorageTheory.slots_in_range_def] >> strip_tac >>
+  Cases_on `k` >> gvs[tuple_prefix_slot_size_def] >>
+  first_x_assum drule_all >> rewrite_tac[arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem tuple_elem_slots_in_range[local]:
+  !storage w tvs k.
+    slots_in_range storage (w2n (w:bytes32)) (TupleTV tvs) /\
+    k < LENGTH tvs ==>
+    slots_in_range storage
+      (w2n (w + n2w (tuple_prefix_slot_size k tvs))) (EL k tvs)
+Proof
+  rpt strip_tac >>
+  `slots_in_range storage (w2n w + tuple_prefix_slot_size k tvs) (EL k tvs)`
+    by (irule tuple_slots_in_range_el >>
+        gvs[Once vyperLookupStorageTheory.slots_in_range_def]) >>
+  `slots_in_range storage (w2n w + tuple_prefix_slot_size k tvs) (EL k tvs) =
+   slots_in_range storage (w2n (w + n2w (tuple_prefix_slot_size k tvs)))
+     (EL k tvs)` by
+    (irule (CONJUNCT1 vyperLookupStorageTheory.slots_in_range_offset_cong) >>
+     `w + n2w (tuple_prefix_slot_size k tvs) =
+      n2w (w2n w + tuple_prefix_slot_size k tvs)` by
+       simp[GSYM wordsTheory.word_add_n2w] >>
+     simp[wordsTheory.w2n_n2w]) >>
+  gvs[]
+QED
+
+Theorem tuple_prefix_el_bound[local]:
+  !tvs k.
+    k < LENGTH tvs ==>
+    tuple_prefix_slot_size k tvs + type_slot_size (EL k tvs) <=
+    type_slot_size (TupleTV tvs)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `k` >>
+  simp[tuple_prefix_slot_size_def, vyperValueTheory.type_slot_size_def] >>
+  strip_tac >> first_x_assum drule >>
+  simp[vyperValueTheory.type_slot_size_def]
+QED
+
+Theorem dead_bytes_list_el[local]:
+  !tvs k st base j b.
+    dead_bytes_list st base tvs j b /\ k < LENGTH tvs /\
+    base + tuple_prefix_slot_size k tvs <= j /\
+    j < base + tuple_prefix_slot_size k tvs + type_slot_size (EL k tvs) ==>
+    dead_bytes st (base + tuple_prefix_slot_size k tvs) (EL k tvs) j b
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `dead_bytes_list _ _ _ _ _` mp_tac >>
+  simp[Once dead_bytes_def] >> strip_tac >>
+  Cases_on `k` >> gvs[tuple_prefix_slot_size_def] >>
+  imp_res_tac (cj 1 accountsRelPropsTheory.dead_bytes_range) >>
+  imp_res_tac (cj 2 accountsRelPropsTheory.dead_bytes_range) >> gvs[] >>
+  first_x_assum drule >> disch_then (qspec_then `n` mp_tac) >>
+  impl_tac >- decide_tac >> rewrite_tac[arithmeticTheory.ADD_ASSOC]
+QED
+
+(* A tuple element of a value read live is read live. *)
+Theorem storage_read_live_tuple_elem[local]:
+  !cx tr st w tvs k.
+    storage_read_live cx tr st w (TupleTV tvs) /\ k < LENGTH tvs ==>
+    storage_read_live cx tr st (w + n2w (tuple_prefix_slot_size k tvs))
+      (EL k tvs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule tuple_prefix_el_bound >> strip_tac >>
+  Cases_on `type_slot_size (EL k tvs) = 0`
+  >- (simp[storage_read_live_def] >> rpt strip_tac >>
+      qspec_then `w + n2w (tuple_prefix_slot_size k tvs)` mp_tac
+        wordsTheory.w2n_lt >>
+      decide_tac) >>
+  qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+  rewrite_tac[storage_read_live_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
+  `w2n w + tuple_prefix_slot_size k tvs < dimword (:256)` by decide_tac >>
+  `w2n w + tuple_prefix_slot_size k tvs + type_slot_size (EL k tvs) <=
+   dimword (:256)` by decide_tac >>
+  `w2n (w + n2w (tuple_prefix_slot_size k tvs)) =
+   w2n w + tuple_prefix_slot_size k tvs` by
+    (Cases_on `w` >> gvs[wordsTheory.word_add_n2w]) >>
+  simp[] >> strip_tac >>
+  `w2n w <= j /\ j < w2n w + type_slot_size (TupleTV tvs)` by decide_tac >>
+  `dead_bytes_list st (w2n w) tvs j b` by
+    (qpat_x_assum `_ ==> dead_bytes _ _ _ _ _` mp_tac >>
+     simp[Once dead_bytes_def]) >>
+  drule dead_bytes_list_el >>
+  disch_then (qspec_then `k` mp_tac) >> simp[]
+QED
+
 (* The element's value_vv holds the element, from the base's. *)
 Theorem tuple_vv_holds_elem[local]:
   !func cenv cx env es sa sn es1 tv bvv q w dst tys tvs vs k tv'.
@@ -742,7 +819,8 @@ Proof
   `tuple_offset cenv tys (vv_loc bvv) k = tuple_prefix_slot_size k tvs` by
     (irule tuple_offset_slots >> simp[] >> metis_tac[]) >>
   simp[storage_holds_def] >>
-  drule_all read_storage_slot_tuple_elem >> strip_tac >> gvs[]
+  drule_all read_storage_slot_tuple_elem >> strip_tac >> gvs[] >>
+  simp[tuple_elem_slots_in_range, storage_read_live_tuple_elem]
 QED
 
 (* The base's read, a tuple of the element types. *)
@@ -802,25 +880,79 @@ QED
 (* ===== The simulation ===== *)
 
 (* The base evaluates to a local's place memory no longer holds, with a
-   popped snapshot at the element (popped_at_elem): left to exprSimPlaces. *)
+   popped snapshot at the element (popped_at_elem). *)
 Definition tuple_popped_clash_def:
   tuple_popped_clash cx obj idx es <=>
     ?r es1. eval_expr cx obj es = (INL r, es1) /\
             popped_at_elem r (literal_int_index idx) es1
 End
 
-Theorem compile_subscript_tuple_sim:
-  !cenv obj tys.
-    expr_vv_ok cenv obj /\ expr_type obj = TupleT tys /\
-    place_type cenv obj = ValPT (TupleT tys) ==>
-    !ctx func cx env ty ann idx es.
-      expr_sim_pre cenv cx env (Subscript ann obj idx) es /\
-      ~tuple_popped_clash cx obj idx es ==>
-      expr_vv_sim ctx func cenv cx ty (Subscript ann obj idx) es
+Theorem lookup_scopes_popped_keys_indexed[local]:
+  !sc id entry. popped_keys_indexed sc /\
+    lookup_scopes id sc = SOME entry ==>
+    EVERY (\k. ?p i etv n. k = p ++ [ValueSubscript i] /\
+      subscripts_type entry.type p = SOME (ArrayTV etv (Dynamic n)))
+      (MAP FST entry.popped)
 Proof
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Induct >> simp[lookup_scopes_def, popped_keys_indexed_def] >>
+  rpt gen_tac >> Cases_on `FLOOKUP h id` >>
+  simp[] >> rpt strip_tac >> gvs[] >> metis_tac[popped_keys_indexed_def]
+QED
+
+Theorem tuple_memory_no_snapshot[local]:
+  popped_keys_indexed es.scopes /\
+  runtime_place_typed cx es (MemoryPlace id path) (TupleTV tvs) /\
+  lookup_scopes id es.scopes = SOME entry ==>
+  ~MEM (path ++ [ValueSubscript i],v) entry.popped
+Proof
+  strip_tac >>
+  drule_all lookup_scopes_popped_keys_indexed >>
+  simp[EVERY_MEM, MEM_MAP] >> strip_tac >>
+  gvs[vyperPlaceTypingTheory.runtime_place_typed_memory] >>
+  strip_tac >>
+  `?p j etv n. path ++ [ValueSubscript i] = p ++ [ValueSubscript j] /\
+      subscripts_type entry.type p = SOME (ArrayTV etv (Dynamic n))` by
+    (first_x_assum irule >> goal_assum (drule_at Any) >> simp[]) >>
+  gvs[rich_listTheory.APPEND_11_LENGTH]
+QED
+
+(* Never under expr_body_pre: the base's place has its tuple type
+   (eval_expr's type soundness), while expr_sim_inv's popped_keys_indexed
+   keys every snapshot at an index into a dynamic array, which the clash's
+   key path ++ [i] would make path's type. *)
+Theorem tuple_popped_clash_unreachable:
+  !cenv cx env ann obj idx es tys.
+    expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+    expr_type obj = TupleT tys ==>
+    ~tuple_popped_clash cx obj idx es
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all tuple_pre_base >> strip_tac >>
+  simp[tuple_popped_clash_def] >> rpt strip_tac >>
+  drule_all expr_body_pre_eval_result >> strip_tac >>
+  `popped_keys_indexed es1.scopes` by gvs[expr_sim_inv_def] >>
+  Cases_on `r` >> gvs[popped_at_elem_def] >>
+  rename1 `PlaceR place` >> Cases_on `place` >> gvs[popped_at_elem_def] >>
+  gvs[vyperTypeInvariantsTheory.eval_result_typed_def] >>
+  drule evaluate_tuple_type >> strip_tac >> gvs[] >>
+  drule_all tuple_memory_no_snapshot >> metis_tac[]
+QED
+
+Theorem compile_subscript_tuple_sim:
+  !nocalls ctx func cenv cx ann obj idx tys.
+    expr_vv_case nocalls ctx func cenv cx obj /\ expr_type obj = TupleT tys /\
+    place_type cenv obj = ValPT (TupleT tys) ==>
+    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
+Proof
+  rpt gen_tac >> strip_tac >> simp[expr_vv_case_def] >>
+  rpt gen_tac >> strip_tac >>
+  `~tuple_popped_clash cx obj idx es` by
+    (drule_all tuple_popped_clash_unreachable >> simp[]) >>
   drule_all tuple_pre_base >> strip_tac >> gvs[] >>
-  `expr_vv_sim ctx func cenv cx ty obj es` by metis_tac[expr_vv_ok_def] >>
+  `expr_vv_sim ctx func cenv cx ty obj es` by
+    (qpat_x_assum `expr_vv_case _ _ _ _ _ obj` mp_tac >>
+     simp[expr_vv_case_def] >> disch_then irule >> simp[] >>
+     qexists_tac `env` >> simp[]) >>
   `literal_int_index (Literal ity (IntL (&k))) = k` by
     simp[literal_int_index_def] >>
   simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
@@ -831,15 +963,15 @@ Proof
   drule_all fn_has_code_split >> strip_tac >>
   gvs[eval_expr_tuple_subscript, bind_def] >>
   Cases_on `eval_expr cx obj es` >> rename1 `_ = (er, es1)` >>
-  `expr_vv_res_ok er` by (drule_all expr_sim_pre_vv_res_ok >> simp[]) >>
+  `expr_vv_res_ok er` by (drule_all expr_body_pre_vv_res_ok >> simp[]) >>
   qpat_x_assum `expr_vv_sim _ _ _ _ _ obj _` mp_tac >>
   simp[expr_vv_sim_def] >>
   disch_then drule_all >> disch_then (qspec_then `s0` assume_tac) >>
   Cases_on `er` >> gvs[]
   >- (rename1 `eval_expr cx obj es = (INL btv, es1)` >>
-      drule_all expr_sim_pre_runtime_typed >> strip_tac >> gvs[] >>
+      drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[] >>
       drule evaluate_tuple_type >> strip_tac >> gvs[] >>
-      `expr_sim_inv cenv cx env es` by fs[expr_sim_pre_def] >>
+      `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
       `~popped_at_elem btv k es1` by
         (fs[tuple_popped_clash_def] >> metis_tac[]) >>
       `!m. res <> INR (Error (TypeError m))` by

@@ -2,7 +2,8 @@
  * Array subscripts: the bounds check and the element pointer (#636,
  * Places row 1)
  *
- * compile_array_subscript reads the array's length (a load at the base for
+ * compile_array_subscript reads the array's length (a load at the base, by
+ * its loader compile_ptr_load, for
  * a dynamic array, the static count otherwise), asserts the index is in
  * range (not negative, for a signed index, and below the length), and
  * hands out the element's pointer: the base, past the length word for a
@@ -14,13 +15,18 @@
  * oob" check), which expr_exit relates to any Abort.
  *
  * TOP-LEVEL:
+ *   array_bounds_valid, array_bounds_valid_run — the range test before
+ *                                the ASSERT, and its code
  *   array_bounds_check, array_elem_ptr — the two halves of
  *                                compile_array_subscript after the length
  *   compile_array_subscript_split — compile_array_subscript is the length,
  *                                the check and the pointer in turn
  *   array_len_ok               — the length operand's code runs to the
- *                                length: a load for a dynamic array
- *   array_len_ok_MLOAD, array_len_ok_SLOAD, array_len_ok_static
+ *                                length: the loader's for a dynamic array
+ *   array_len_ok_MLOAD, array_len_ok_SLOAD, array_len_ok_TLOAD,
+ *   array_len_ok_CALLDATALOAD — compile_ptr_load at memory, storage,
+ *                                transient and calldata
+ *   array_len_ok_static
  *   idx_in_range               — the index is not negative (for a signed
  *                                index) and below the length
  *   array_bounds_check_ok, array_bounds_check_oob — the check passes an
@@ -28,85 +34,23 @@
  *   array_elem_ptr_run         — the pointer's code
  *   compile_array_subscript_ok, compile_array_subscript_oob — the whole
  *                                subscript, by the index's range
+ *   straight_fresh_array_check_ptr — the check and the pointer write only
+ *                                fresh variables
  *
- * Helpers: elim_lit, forward_all_evals, collapse_run, chain_step (the
- *   tactics of arithmeticProps), bool_to_word_eq_0, word_or_bool_to_word,
- *   array_bounds_valid_run
+ * The proofs chain the emitted instructions with emitTacticsLib's tactics.
+ *
+ * Helpers: comp_bind_FST_SND, bool_to_word_eq_0,
+ *   word_or_bool_to_word, current_insts_emitted, array_bounds_valid_extends,
+ *   array_bounds_check_extends, array_elem_ptr_extends,
+ *   compile_array_subscript_extends, compile_array_subscript_run
  *)
 
 Theory exprSimArrayIndex
 Ancestors
-  arithmeticProps exprLoweringProps emitHelperProps
+  arithmeticProps exprLoweringProps emitHelperProps freshWrites
   exprLowering compileEnv venomExecSemantics venomState venomInst
-
-(* ===== Tactics (as in arithmeticProps) ===== *)
-
-(* Specialize the n-th operand of an emit_op_*_correct theorem to a Lit. *)
-fun elim_lit n th =
-  let
-    val (vars, _) = strip_forall (concl th)
-    val op_var = List.nth (vars, n-1)
-    val v_var = List.nth (vars, n+1)
-    val lit_const = prim_mk_const{Name="Lit",Thy="venomState"}
-  in
-    th |> SPEC_ALL
-       |> INST [op_var |-> mk_comb(lit_const, v_var)]
-       |> SIMP_RULE (srw_ss()) [eval_operand_lit]
-       |> GENL (List.filter (fn v => not (aconv v op_var)) vars)
-  end;
-
-(* Forward every eval_operand fact through every preservation fact
-   (oldest first). *)
-fun forward_all_evals (asl, g) =
-  let
-    fun is_pres t =
-      (let val (vs, body) = strip_forall t
-       in length vs = 2 andalso is_imp body andalso
-          let val (ant, _) = dest_imp body
-              val (lhs_t, _) = dest_eq ant
-              val (f, _) = strip_comb lhs_t
-          in fst (dest_const f) = "eval_operand"
-          end
-       end) handle _ => false
-    fun is_eval t =
-      (not (is_forall t) andalso
-       let val (lhs_t, rhs_t) = dest_eq t
-           val (f, _) = strip_comb lhs_t
-           val (some_c, _) = dest_comb rhs_t
-       in fst (dest_const f) = "eval_operand" andalso
-          fst (dest_const some_c) = "SOME"
-       end) handle _ => false
-    val pres_list = rev (List.filter is_pres asl)
-    fun apply_one_pres pres_t (asl', g') =
-      let val pres_th = ASSUME pres_t
-          val evals = List.filter is_eval asl'
-          fun forward_one eval_t (asl'', g'') =
-            (let val new_th = MATCH_MP (SPEC_ALL pres_th) (ASSUME eval_t)
-             in if List.exists (aconv (concl new_th)) asl''
-                then ALL_TAC (asl'', g'')
-                else assume_tac new_th (asl'', g'')
-             end handle _ => ALL_TAC (asl'', g''))
-      in EVERY (map forward_one evals) (asl', g')
-      end
-  in
-    EVERY (map apply_one_pres pres_list) (asl, g)
-  end;
-
-fun collapse_run (eq_th : thm) : tactic = fn (asl, g) =>
-  let val rhs_tm = rhs (concl eq_th)
-      fun matches_rhs a =
-        (aconv (lhs (concl (ASSUME a))) rhs_tm) handle _ => false
-  in case List.find matches_rhs asl of
-       SOME a_str => assume_tac (TRANS eq_th (ASSUME a_str)) (asl, g)
-     | NONE => raise mk_HOL_ERR "collapse_run" "collapse_run" "no matching run"
-  end;
-
-fun chain_step th : tactic =
-  forward_all_evals >>
-  drule_all th >> strip_tac >>
-  TRY (imp_res_tac emit_op_extends >>
-       drule_all run_inst_seq_chain >> strip_tac >>
-       qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` collapse_run);
+Libs
+  emitTacticsLib
 
 (* ===== The lowering, split ===== *)
 
@@ -143,9 +87,9 @@ Proof
 QED
 
 Theorem compile_array_subscript_split:
-  !base_op idx_op dyn cnt ws esz sgn opc.
-    compile_array_subscript base_op idx_op dyn cnt ws esz sgn opc =
-    comp_bind (if dyn then emit_op opc [base_op]
+  !base_op idx_op dyn cnt ws esz sgn loader.
+    compile_array_subscript base_op idx_op dyn cnt ws esz sgn loader =
+    comp_bind (if dyn then loader base_op
                else comp_return (Lit (n2w cnt))) (\len_op.
     comp_ignore_bind (array_bounds_check idx_op len_op sgn)
       (array_elem_ptr base_op idx_op dyn ws esz))
@@ -171,13 +115,15 @@ QED
 
 (* ===== The length ===== *)
 
-(* The length operand's code, from st, runs to the length len: a load at
-   the base for a dynamic array, the static count otherwise. *)
+(* The length operand's code, from st, only appends instructions and runs
+   to the length len: the loader's load at the base for a dynamic array,
+   the static count otherwise. *)
 Definition array_len_ok_def:
-  array_len_ok dyn cnt opc base_op ss len <=>
+  array_len_ok dyn cnt loader base_op ss len <=>
     if dyn then
       !st lop st'.
-        emit_op opc [base_op] st = (lop, st') /\ fresh_vars_wrt st ss ==>
+        loader base_op st = (lop, st') /\ fresh_vars_wrt st ss ==>
+        st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' /\
         ?ss'. run_inst_seq (emitted_insts st st') ss = OK ss' /\
               eval_operand lop ss' = SOME len /\
               same_blocks st st' /\ fresh_vars_wrt st' ss' /\
@@ -187,27 +133,56 @@ Definition array_len_ok_def:
 End
 
 Theorem array_len_ok_static:
-  !cnt opc base_op ss. array_len_ok F cnt opc base_op ss (n2w cnt)
+  !cnt loader base_op ss. array_len_ok F cnt loader base_op ss (n2w cnt)
 Proof
   simp[array_len_ok_def]
 QED
 
 Theorem array_len_ok_MLOAD:
-  !cnt base_op ss b.
+  !c imm cnt base_op ss b.
     eval_operand base_op ss = SOME b ==>
-    array_len_ok T cnt MLOAD base_op ss (mload (w2n b) ss)
+    array_len_ok T cnt (compile_ptr_load c imm LocMemory) base_op ss (mload (w2n b) ss)
 Proof
-  rw[array_len_ok_def] >> drule_all emit_op_MLOAD_correct >>
+  rw[array_len_ok_def, contextTheory.compile_ptr_load_def] >>
+  imp_res_tac emit_op_extends >> drule_all emit_op_MLOAD_correct >>
   strip_tac >> metis_tac[]
 QED
 
 Theorem array_len_ok_SLOAD:
-  !cnt base_op ss b.
+  !c imm cnt base_op ss b.
     eval_operand base_op ss = SOME b ==>
-    array_len_ok T cnt SLOAD base_op ss (sload b ss)
+    array_len_ok T cnt (compile_ptr_load c imm LocStorage) base_op ss (sload b ss)
 Proof
-  rw[array_len_ok_def] >> drule_all emit_op_SLOAD_correct >>
+  rw[array_len_ok_def, contextTheory.compile_ptr_load_def] >>
+  imp_res_tac emit_op_extends >> drule_all emit_op_SLOAD_correct >>
   strip_tac >> metis_tac[]
+QED
+
+Theorem array_len_ok_TLOAD:
+  !c imm cnt base_op ss b.
+    eval_operand base_op ss = SOME b ==>
+    array_len_ok T cnt (compile_ptr_load c imm LocTransient) base_op ss (tload b ss)
+Proof
+  rw[array_len_ok_def, contextTheory.compile_ptr_load_def] >>
+  imp_res_tac emit_op_extends >>
+  qspecl_then [`TLOAD`, `tload`] mp_tac emit_op_read1_correct >>
+  disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
+  simp[step_inst_base_def, exec_read1_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`b`, `ss`] mp_tac) >> simp[] >>
+  strip_tac >> metis_tac[]
+QED
+
+Theorem array_len_ok_CALLDATALOAD:
+  !c imm cnt base_op ss b.
+    eval_operand base_op ss = SOME b ==>
+    array_len_ok T cnt (compile_ptr_load c imm LocCalldata) base_op ss
+      (word_of_bytes T (0w:bytes32)
+         (TAKE 32 (DROP (w2n b) ss.vs_call_ctx.cc_calldata ++
+                   REPLICATE 32 0w)))
+Proof
+  rw[array_len_ok_def, contextTheory.compile_ptr_load_def] >>
+  imp_res_tac emit_op_extends >> drule_all emit_op_CALLDATALOAD_correct >>
+  simp[] >> strip_tac >> metis_tac[]
 QED
 
 (* ===== The bounds check ===== *)
@@ -377,12 +352,30 @@ QED
 
 (* ===== The whole subscript ===== *)
 
-Theorem compile_array_subscript_ok:
-  !base_op idx_op dyn cnt ws esz sgn opc st p st' ss b i len.
-    compile_array_subscript base_op idx_op dyn cnt ws esz sgn opc st =
+Theorem compile_array_subscript_extends[local]:
+  !base_op idx_op dyn cnt ws esz sgn loader st p st' ss len.
+    compile_array_subscript base_op idx_op dyn cnt ws esz sgn loader st =
+      (p, st') /\
+    fresh_vars_wrt st ss /\ array_len_ok dyn cnt loader base_op ss len ==>
+    st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st'
+Proof
+  rpt gen_tac >>
+  simp[compile_array_subscript_split, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> irule current_insts_emitted >>
+  imp_res_tac array_bounds_check_extends >>
+  imp_res_tac array_elem_ptr_extends >>
+  Cases_on `dyn` >> gvs[comp_return_def, array_len_ok_def]
+  >- (first_x_assum drule_all >> strip_tac >> gvs[] >>
+      metis_tac[listTheory.APPEND_ASSOC]) >>
+  metis_tac[listTheory.APPEND_ASSOC]
+QED
+
+Theorem compile_array_subscript_run[local]:
+  !base_op idx_op dyn cnt ws esz sgn loader st p st' ss b i len.
+    compile_array_subscript base_op idx_op dyn cnt ws esz sgn loader st =
       (p, st') /\
     eval_operand base_op ss = SOME b /\ eval_operand idx_op ss = SOME i /\
-    fresh_vars_wrt st ss /\ array_len_ok dyn cnt opc base_op ss len /\
+    fresh_vars_wrt st ss /\ array_len_ok dyn cnt loader base_op ss len /\
     idx_in_range sgn i len ==>
     ?ss'. run_inst_seq (emitted_insts st st') ss = OK ss' /\
           same_blocks st st' /\ fresh_vars_wrt st' ss' /\
@@ -416,12 +409,50 @@ Proof
   metis_tac[same_blocks_trans]
 QED
 
-Theorem compile_array_subscript_oob:
-  !base_op idx_op dyn cnt ws esz sgn opc st p st' ss b i len.
-    compile_array_subscript base_op idx_op dyn cnt ws esz sgn opc st =
+Theorem compile_array_subscript_ok:
+  !base_op idx_op dyn cnt ws esz sgn loader st p st' ss b i len.
+    compile_array_subscript base_op idx_op dyn cnt ws esz sgn loader st =
       (p, st') /\
     eval_operand base_op ss = SOME b /\ eval_operand idx_op ss = SOME i /\
-    fresh_vars_wrt st ss /\ array_len_ok dyn cnt opc base_op ss len /\
+    fresh_vars_wrt st ss /\ array_len_ok dyn cnt loader base_op ss len /\
+    idx_in_range sgn i len ==>
+    ?ss'. run_inst_seq (emitted_insts st st') ss = OK ss' /\
+          st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' /\
+          same_blocks st st' /\ fresh_vars_wrt st' ss' /\
+          (!op w. eval_operand op ss = SOME w ==>
+                  eval_operand op ss' = SOME w) /\
+          eval_operand p ss' =
+            SOME ((if dyn then b + n2w ws else b) + i * n2w esz)
+Proof
+  rpt strip_tac >> drule_all compile_array_subscript_extends >> strip_tac >>
+  drule_all compile_array_subscript_run >> simp[]
+QED
+
+(* The code after the length (the check and the pointer) only computes
+   into fresh variables: frag_exec_straight_fresh applies to it, and the
+   length's load is a fragment of its own. *)
+Theorem straight_fresh_array_check_ptr:
+  !idx_op len_op sgn base_op dyn ws esz.
+    straight_fresh
+      (comp_ignore_bind (array_bounds_check idx_op len_op sgn)
+         (array_elem_ptr base_op idx_op dyn ws esz))
+Proof
+  rw[array_bounds_check_def, array_bounds_valid_def, array_elem_ptr_def] >>
+  rpt (FIRST [irule straight_fresh_bind >> conj_tac,
+              irule straight_fresh_ignore_bind >> conj_tac,
+              gen_tac >> BETA_TAC,
+              irule straight_fresh_emit_op >> simp[fresh_write_op_def] >> NO_TAC,
+              irule straight_fresh_emit_void >> simp[fresh_write_op_def] >> NO_TAC,
+              MATCH_ACCEPT_TAC straight_fresh_return,
+              IF_CASES_TAC])
+QED
+
+Theorem compile_array_subscript_oob:
+  !base_op idx_op dyn cnt ws esz sgn loader st p st' ss b i len.
+    compile_array_subscript base_op idx_op dyn cnt ws esz sgn loader st =
+      (p, st') /\
+    eval_operand base_op ss = SOME b /\ eval_operand idx_op ss = SOME i /\
+    fresh_vars_wrt st ss /\ array_len_ok dyn cnt loader base_op ss len /\
     ~idx_in_range sgn i len ==>
     ?ss'. run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
@@ -430,14 +461,14 @@ Proof
   simp[compile_array_subscript_split, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >> fs[oneTheory.one] >>
   drule array_elem_ptr_extends >> strip_tac >>
-  Cases_on `dyn` >> gvs[comp_return_def, array_len_ok_def] >>
-  TRY (`eval_operand (Lit (n2w cnt)) ss = SOME (n2w cnt)` by
-         simp[eval_operand_lit] >>
-       drule_all array_bounds_check_oob >> strip_tac >>
-       qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts st mid) ss = _` >>
-       imp_res_tac array_bounds_check_extends >>
-       qspecl_then [`st`, `mid`, `st'`, `ss`] mp_tac abort_propagates >>
-       simp[] >> NO_TAC) >>
+  reverse (Cases_on `dyn`) >> gvs[comp_return_def, array_len_ok_def]
+  >- (`eval_operand (Lit (n2w cnt)) ss = SOME (n2w cnt)` by
+        simp[eval_operand_lit] >>
+      drule_all array_bounds_check_oob >> strip_tac >>
+      qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts st mid) ss = _` >>
+      imp_res_tac array_bounds_check_extends >>
+      qspecl_then [`st`, `mid`, `st'`, `ss`] mp_tac abort_propagates >>
+      simp[]) >>
   first_x_assum drule_all >> strip_tac >>
   imp_res_tac emit_op_extends >> forward_all_evals >>
   drule_all array_bounds_check_oob >> strip_tac >>

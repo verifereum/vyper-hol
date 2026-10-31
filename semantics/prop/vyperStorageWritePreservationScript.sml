@@ -70,16 +70,6 @@ Proof
        arithmeticTheory.MOD_LESS]
 QED
 
-Theorem array_index_element_end_bound:
-  i < n ==> i * sz + sz <= n * sz
-Proof
-  strip_tac >>
-  irule arithmeticTheory.LESS_EQ_TRANS >>
-  qexists `(i + 1) * sz` >>
-  simp[arithmeticTheory.LEFT_ADD_DISTRIB, arithmeticTheory.ADD_COMM,
-       arithmeticTheory.LESS_MONO_MULT]
-QED
-
 Theorem fixed_array_child_region_bounds:
   w2n (base_slot:bytes32) + type_slot_size (ArrayTV tv (Fixed n)) <=
     dimword(:256) /\

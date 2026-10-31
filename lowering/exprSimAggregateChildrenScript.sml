@@ -343,7 +343,12 @@ Theorem aggregate_store_rebased_slice_run:
   type_memory_size tv < dimword (:256) /\
   stmt_state_rel func ce cx es' r /\
   (!n b k. local_region ce es'.scopes r n b k ==>
-    b + k <= w2n w \/ w2n w + type_memory_size tv <= b) ==>
+    b + k <= w2n w \/ w2n w + type_memory_size tv <= b) /\
+  (ce.ce_is_ctor ==> !name itv iv off.
+    FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+    regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size tv)) ==>
   ?q. run_inst_seq (emitted_insts su sb) s = OK q /\
     val_in_memory tv v (w2n w) q.vs_memory /\
     stmt_state_rel func ce cx es' q /\
@@ -379,6 +384,8 @@ Proof
    stmt_state_rel func ce cx es' s` by gvs[expr_post_def] >>
   `eval_operand (Var x) s = SOME w` by simp[eval_operand_def] >>
   drule_all (SRULE [] buffer_store_memory_encoding) >> strip_tac >>
+  `LENGTH s.vs_memory <= LENGTH q.vs_memory` by
+    (drule_all (SRULE [] buffer_store_memory_capacity) >> simp[]) >>
   `stmt_state_rel func ce cx es' q` by
     (irule buffer_store_state_frame >>
      qexistsl_tac [`w2n w`, `type_memory_size tv`, `s`, `su`] >>
@@ -435,7 +442,12 @@ Theorem aggregate_store_rebased_slice_sim:
   type_memory_size tv < dimword (:256) /\
   stmt_state_rel func ce cx es' r /\
   (!n b k. local_region ce es'.scopes r n b k ==>
-    b + k <= w2n w \/ w2n w + type_memory_size tv <= b) ==>
+    b + k <= w2n w \/ w2n w + type_memory_size tv <= b) /\
+  (ce.ce_is_ctor ==> !name itv iv off.
+    FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+    regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size tv)) ==>
   frag_exec ctx su sb
     (\s. expr_post func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
       su r es' v op s)
@@ -519,6 +531,11 @@ Theorem aggregate_unwrap_store_slice_sim:
   stmt_state_rel func ce cx es' r /\
   (!n b k. local_region ce es'.scopes r n b k ==>
     b + k <= w2n w \/ w2n w + type_memory_size tv <= b) /\
+  (ce.ce_is_ctor ==> !name itv iv off.
+    FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+    regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size tv)) /\
   (!q. val_in_memory tv v (w2n w) q.vs_memory /\
       stmt_state_rel func ce cx es' q /\
       (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==>

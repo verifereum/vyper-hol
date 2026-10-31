@@ -29,10 +29,11 @@
  *                              expr_sim_ok (the first for stmtSimAugAssign)
  *   expr_body_pre_bop, expr_sim_pre_bop — the operands of a well-typed
  *                              binary operator meet the precondition
- *   compile_not_sim, compile_abs_sim — not and abs: exprSimUnop's
+ *   compile_not_case, compile_abs_case — not and abs, from the
+ *                              operand's exprs_case: exprSimUnop's
  *                              compile_unop_sim with compile_not_frag and
  *                              compile_abs_frag
- *   compile_neg_sim          — unary -
+ *   compile_neg_case         — unary -
  *   compile_ifexp_case       — x if c else y: compile_ifexp_word_case for
  *                              word types, compile_ifexp_aggregate_case
  *                              for the rest
@@ -48,7 +49,7 @@
  *   compile_bop_in_literal_sim — the same row for in and not in on an
  *                              array literal, from its elements'
  *                              simulation
- *   compile_neg_sim (#572)   — row 7; not and abs are proved
+ *   compile_neg_case (#572)  — row 7; not and abs are proved
  *   compile_ifexp_aggregate_case — row 9 for aggregate ternaries (#561,
  *                              #674); word ternaries are proved
  *                              (compile_ifexp_word_case), and so are row
@@ -63,8 +64,8 @@
  *                              returns a variable it handed out or a literal
  *   compile_binop_shape      — compile_binop only appends
  * compile_bop_word_case rests on these two and on binop_frag_typed, and
- * compile_ifexp_word_case, compile_not_sim, compile_abs_sim and
- * exprSimConvert's compile_convert_word_sim on lower_value_word_shape.
+ * compile_ifexp_word_case, compile_not_case, compile_abs_case and
+ * exprSimConvert's compile_convert_word_case on lower_value_word_shape.
  *
  * Helpers: expr_body_pre_lower_value_word_shape, expr_body_pre_word_value,
  *   expr_body_pre_word_type_result, expr_body_pre_ifexp and their
@@ -214,7 +215,11 @@ Theorem expr_body_pre_bop:
 Proof
   rpt gen_tac >>
   simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
-       int_calls_expr_def, byte_widths_expr_def, alloc_limits_expr_def] >>
+       int_calls_expr_def, byte_widths_expr_def, alloc_limits_expr_def,
+       supportedExprTraverseTheory.expr_has_evm_run_def,
+       supportedExprTraverseTheory.supported_expr_exists_def,
+       supportedExprTraverseTheory.expr_evm_run_root_def,
+       listTheory.EVERY_APPEND] >>
   strip_tac >>
   metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
             vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right]
@@ -570,34 +575,48 @@ QED
 
 (* ===== Unary operators ===== *)
 
+(* A unary builtin's operand: its expr_sim at the builtin's state, from
+   the operand's exprs_case. *)
+Theorem unop_operand_sim:
+  !nocalls ctx func cenv cx env ann bi e1 ty1 es.
+    exprs_case nocalls ctx func cenv cx [e1] /\
+    expr_body_pre cenv cx env (Builtin ann bi [e1]) es /\
+    (nocalls ==> int_calls_expr (Builtin ann bi [e1]) = []) ==>
+    expr_body_pre cenv cx env e1 es /\ expr_sim ctx func cenv cx ty1 e1 es
+Proof
+  rpt gen_tac >> strip_tac >>
+  `expr_body_pre cenv cx env e1 es` by
+    (drule expr_body_pre_builtin_arg >> disch_then irule >>
+     gvs[expr_body_pre_def]) >>
+  gvs[exprs_case_def] >> irule expr_sim_case_apply >>
+  conj_tac >- (qexists `env` >> simp[]) >>
+  qexists `nocalls` >> simp[] >>
+  metis_tac[int_calls_builtin_arg, listTheory.MEM]
+QED
+
 (* not: ISZERO, NOT or the flag mask's XOR on the operand
    (exprSimUnop's compile_not_frag); the operand's compile-state shape is
    lower_value_word_shape's. *)
-Theorem compile_not_sim:
-  !cenv ann args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (Builtin ann Not args)
+Theorem compile_not_case:
+  !nocalls ctx func cenv cx ann args.
+    exprs_case nocalls ctx func cenv cx args ==>
+    expr_vv_case nocalls ctx func cenv cx (Builtin ann Not args)
 Proof
-  rpt strip_tac >>
-  `expr_ok cenv (Builtin ann Not args)` suffices_by simp[expr_ok_def] >>
-  irule expr_ok_stack >> rpt conj_tac
+  rpt strip_tac >> irule expr_vv_case_stack >> rpt conj_tac
   >- metis_tac[eval_expr_builtin_value]
   >- simp[compile_not_abs_stack] >>
-  rw[expr_sim_ok_def] >>
+  rw[expr_sim_case_def] >>
   `?e1. args = [e1] /\ ann = expr_type e1` by
-    (gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+    (gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
      Cases_on `args` >> gvs[] >> rename1 `h::t` >> Cases_on `t` >> gvs[]) >>
   gvs[] >>
   Q.SUBGOAL_THEN `is_bool_type (expr_type e1) \/
                   is_uint256_type (expr_type e1) \/
                   is_bytes32_type (expr_type e1) \/ is_flag_type (expr_type e1)`
     ASSUME_TAC
-  >- gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
-  `expr_ok cenv e1` by
-    (fs[expr_sim_below_def] >> first_x_assum irule >> simp[]) >>
-  `expr_sim_pre cenv cx env e1 es` by
-    (drule expr_sim_pre_builtin_arg >> disch_then irule >>
-     gvs[expr_sim_pre_def]) >>
+  >- gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  `expr_body_pre cenv cx env e1 es /\ expr_sim ctx func cenv cx ty e1 es` by
+    metis_tac[unop_operand_sim] >>
   `is_word_type (expr_type e1)` by
     (drule not_type_cases >> rw[] >> gvs[is_word_type_def]) >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ty`, `expr_type e1`, `Not`,
@@ -613,24 +632,24 @@ Proof
     >- simp[]
     >- (rpt strip_tac >> drule lower_value_not >> simp[])
     >- (rpt gen_tac >> strip_tac >>
-        drule expr_sim_pre_lower_value_word_shape >> disch_then drule >> simp[])
+        drule expr_body_pre_lower_value_word_shape >> disch_then drule >> simp[])
     >- (rpt gen_tac >> strip_tac >> drule_at Any straight_fresh_cs_extends >>
         simp[straight_fresh_not])
-    >- metis_tac[expr_ok_def, expr_sim_ok_def] >>
-    rpt strip_tac >> drule_all expr_sim_pre_word_value >> strip_tac >> gvs[] >>
+    >- metis_tac[unop_operand_sim] >>
+    rpt strip_tac >> drule_all expr_body_pre_word_value >> strip_tac >> gvs[] >>
     irule_at Any compile_not_frag >> gvs[] >>
     rpt strip_tac >> gvs[] >>
-    qpat_x_assum `expr_sim_pre _ _ _ (Builtin _ _ _) _` mp_tac >>
-    simp[expr_sim_pre_def, expr_sim_inv_def] >> rpt strip_tac >>
+    qpat_x_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` mp_tac >>
+    simp[expr_body_pre_def, expr_sim_inv_def] >> rpt strip_tac >>
     first_x_assum irule >>
     gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
   simp[]
 QED
 
-Theorem compile_neg_sim:
-  !cenv ann args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (Builtin ann Neg args)
+Theorem compile_neg_case:
+  !nocalls ctx func cenv cx ann args.
+    exprs_case nocalls ctx func cenv cx args ==>
+    expr_vv_case nocalls ctx func cenv cx (Builtin ann Neg args)
 Proof
   cheat
 QED
@@ -638,27 +657,22 @@ QED
 (* abs: compile_builtin_abs on the operand (exprSimUnop's
    compile_abs_frag); the operand's compile-state shape is
    lower_value_word_shape's. *)
-Theorem compile_abs_sim:
-  !cenv ann args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (Builtin ann Abs args)
+Theorem compile_abs_case:
+  !nocalls ctx func cenv cx ann args.
+    exprs_case nocalls ctx func cenv cx args ==>
+    expr_vv_case nocalls ctx func cenv cx (Builtin ann Abs args)
 Proof
-  rpt strip_tac >>
-  `expr_ok cenv (Builtin ann Abs args)` suffices_by simp[expr_ok_def] >>
-  irule expr_ok_stack >> rpt conj_tac
+  rpt strip_tac >> irule expr_vv_case_stack >> rpt conj_tac
   >- metis_tac[eval_expr_builtin_value]
   >- simp[compile_not_abs_stack] >>
-  rw[expr_sim_ok_def] >>
+  rw[expr_sim_case_def] >>
   `?e1. args = [e1] /\ ann = BaseT (IntT 256) /\
         expr_type e1 = BaseT (IntT 256)` by
-    (gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+    (gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
      Cases_on `args` >> gvs[] >> rename1 `h::t` >> Cases_on `t` >> gvs[]) >>
   gvs[] >>
-  `expr_ok cenv e1` by
-    (fs[expr_sim_below_def] >> first_x_assum irule >> simp[]) >>
-  `expr_sim_pre cenv cx env e1 es` by
-    (drule expr_sim_pre_builtin_arg >> disch_then irule >>
-     gvs[expr_sim_pre_def]) >>
+  `expr_body_pre cenv cx env e1 es /\ expr_sim ctx func cenv cx ty e1 es` by
+    metis_tac[unop_operand_sim] >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ty`, `BaseT (IntT 256)`, `Abs`,
                `e1`, `ty`, `compile_builtin_abs`, `es`]
     mp_tac compile_unop_sim >>
@@ -670,14 +684,14 @@ Proof
     >- simp[is_word_type_def]
     >- (rpt strip_tac >> drule lower_value_abs >> simp[])
     >- (rpt gen_tac >> strip_tac >>
-        drule expr_sim_pre_lower_value_word_shape >> disch_then drule >>
+        drule expr_body_pre_lower_value_word_shape >> disch_then drule >>
         simp[is_word_type_def])
     >- (rpt gen_tac >> strip_tac >> drule_at Any straight_fresh_cs_extends >>
         simp[straight_fresh_abs])
-    >- metis_tac[expr_ok_def, expr_sim_ok_def] >>
+    >- simp[] >>
     rpt strip_tac >>
     qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `v1`, `es1`] mp_tac
-      expr_sim_pre_word_value >>
+      expr_body_pre_word_value >>
     simp[is_word_type_def] >> strip_tac >>
     gvs[vyperValueTheory.evaluate_type_def, compile_abs_frag]) >>
   simp[]
@@ -695,7 +709,11 @@ Theorem expr_body_pre_ifexp:
 Proof
   rpt gen_tac >>
   simp[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
-       byte_widths_expr_def, alloc_limits_expr_def] >>
+       byte_widths_expr_def, alloc_limits_expr_def,
+       supportedExprTraverseTheory.expr_has_evm_run_def,
+       supportedExprTraverseTheory.supported_expr_exists_def,
+       supportedExprTraverseTheory.expr_evm_run_root_def,
+       listTheory.EVERY_APPEND] >>
   strip_tac >>
   metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
             vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right]
@@ -710,6 +728,7 @@ Theorem expr_sim_pre_ifexp:
           expr_sim_pre cenv cx env a es' /\ expr_sim_pre cenv cx env b es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
+     supportedExprTraverseTheory.expr_has_evm_run_thm,
      byte_widths_expr_def, alloc_limits_expr_def] >> gvs[]
 QED
 
