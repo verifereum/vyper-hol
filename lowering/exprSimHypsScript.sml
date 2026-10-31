@@ -212,8 +212,8 @@
  *     capacities, method ids) is not related to the source context.  The
  *     cases that read it (Attribute, ...) will need a clause each in
  *     expr_sim_inv, as pop has the local types clause, and
- *     TopLevelName needs every immutable to be in ce_vars (#563); storage
- *     and transient variables are there by storage_vars_rel and
+ *     TopLevelName needs every immutable to be in ce_module_vars (#563);
+ *     storage and transient variables are there by storage_vars_rel and
  *     transient_vars_rel.  Each is to match what Vyper's compiler
  *     guarantees.
  *   - Keeping an operand's value_vv through the code between compile_expr
