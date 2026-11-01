@@ -13,7 +13,8 @@ Definition abi_encoder_registered_effect_def:
         a < b \/ b+sz <= a) ==>
       mem_bytes_at a 1 s.vs_memory = mem_bytes_at a 1 s0.vs_memory) /\
     s.vs_accounts = s0.vs_accounts /\ s.vs_transient = s0.vs_transient /\
-    s.vs_logs = s0.vs_logs /\ s.vs_requests = s0.vs_requests
+    s.vs_logs = s0.vs_logs /\ s.vs_requests = s0.vs_requests /\
+    s.vs_pending_deletions = s0.vs_pending_deletions
 End
 
 Theorem abi_encoder_registered_effect_refl:

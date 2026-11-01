@@ -226,7 +226,7 @@ Theorem constructor_entry_contract_storage_well_formed:
   (!n. read_slot (am.tStorage cx.txn.target) n = 0w) /\
   (!n. read_slot ((am.accounts cx.txn.target).storage) n = 0w) ==>
   contract_storage_well_formed cx
-    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>)
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)
 Proof
   strip_tac >> irule zero_read_storage_contract_storage_well_formed >>
   Cases >>
@@ -239,9 +239,9 @@ Theorem constructor_entry_runtime_storage_consistent:
   (!n. read_slot ((am.accounts cx.txn.target).storage) n = 0w) /\
   storage_layout_safe cx /\
   runtime_consistent env cx
-    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) ==>
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) ==>
   runtime_storage_consistent env cx
-    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>)
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)
 Proof
   simp[runtime_storage_consistent_def] >>
   metis_tac[constructor_entry_contract_storage_well_formed]
@@ -256,8 +256,8 @@ Definition protected_storage_calls_preserve_def:
        contract_storage_well_formed cx st ==>
        contract_storage_well_formed cx
          (st with <| accounts := accounts'; tStorage := tStorage' |>)) /\
-    (!callee calldata st success returndata accounts' tStorage' emitted_logs.
-       run_delegate_call cx callee calldata st.accounts st.tStorage =
+    (!callee calldata gas st success returndata accounts' tStorage' emitted_logs.
+       run_delegate_call cx callee calldata gas st.accounts st.tStorage =
          SOME (success,returndata,accounts',tStorage',emitted_logs) /\
        contract_storage_well_formed cx st ==>
        contract_storage_well_formed cx
@@ -278,7 +278,7 @@ QED
 
 Theorem protected_storage_calls_preserve_run_delegate_call:
   protected_storage_calls_preserve cx /\
-  run_delegate_call cx callee calldata st.accounts st.tStorage =
+  run_delegate_call cx callee calldata gas st.accounts st.tStorage =
     SOME (success,returndata,accounts',tStorage',emitted_logs) /\
   contract_storage_well_formed cx st ==>
   contract_storage_well_formed cx
@@ -289,7 +289,7 @@ QED
 
 Theorem protected_storage_calls_preserve_run_raw_call:
   protected_storage_calls_preserve cx /\
-  run_raw_call cx flags callee calldata amount st.accounts st.tStorage =
+  run_raw_call cx flags callee calldata amount gas st.accounts st.tStorage =
     SOME (success,returndata,accounts',tStorage',emitted_logs) /\
   contract_storage_well_formed cx st ==>
   contract_storage_well_formed cx

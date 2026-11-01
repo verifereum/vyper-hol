@@ -117,16 +117,16 @@ Proof
 QED
 
 Theorem literal_mstore_state_rel:
-  !func cenv cx es s a (w:bytes32) inst b sz.
-    stmt_state_rel func cenv cx es s /\ b <= a /\ a + 32 <= b + sz /\
+  !func cenv cx es s a (w:bytes32) inst b sz ctx.
+    stmt_state_rel ctx func cenv cx es s /\ b <= a /\ a + 32 <= b + sz /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
     (!name lb lsz. local_region cenv es.scopes s name lb lsz ==>
        b + sz <= lb \/ lb + lsz <= b) ==>
-    stmt_state_rel func cenv cx es (mstore a w s)
+    stmt_state_rel ctx func cenv cx es (mstore a w s)
 Proof
   rpt strip_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
   rewrite_tac[Once exprLoweringPropsTheory.stmt_state_rel_def] >> strip_tac >>
   `local_ptrs_rel func cenv es.scopes (mstore a w s)` by
     (irule localPtrsPropsTheory.local_ptrs_rel_mstore >>
@@ -175,13 +175,13 @@ QED
 (* ALLOCA may reuse its instruction's existing region.  In either case it
    preserves memory and all old entries, and supplies a disjoint buffer. *)
 Theorem literal_alloca_run[local]:
-  !func cenv cx es s inst p (n:bytes32).
-    stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
+  !func cenv cx es s inst p (n:bytes32) ctx.
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_operands = [Lit n] /\ inst.inst_outputs = [p] /\
     not_local_ptr cenv es.scopes p ==>
     ?t w. exec_alloca inst s n = OK t /\
-      stmt_state_rel func cenv cx es t /\ lookup_var p t = SOME w /\
+      stmt_state_rel ctx func cenv cx es t /\ lookup_var p t = SOME w /\
       FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n w, w2n n) /\
       w2n w + w2n n < dimword (:256) /\ t.vs_memory = s.vs_memory /\
       (!x. x <> p ==> lookup_var x t = lookup_var x s) /\
@@ -236,14 +236,14 @@ Proof
 QED
 
 Theorem literal_alloc_buffer_run:
-  !func cenv cx es sa sm buf sz s.
+  !func cenv cx es sa sm buf sz s ctx.
     compile_alloc_buffer sz sa = (buf,sm) /\
-    stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
     ?t w. run_inst_seq (emitted_insts sa sm) s = OK t /\
-      stmt_state_rel func cenv cx es t /\
+      stmt_state_rel ctx func cenv cx es t /\
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword (:256) /\ t.vs_memory = s.vs_memory /\
@@ -469,8 +469,8 @@ QED
 Finalise literal_chunks_run
 
 Theorem literal_state_memory_frame:
-  !func cenv cx es s t.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx es s t ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
     (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
        FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
@@ -485,7 +485,7 @@ Theorem literal_state_memory_frame:
         | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
       mem_bytes_at off (type_memory_size tv) t.vs_memory =
         mem_bytes_at off (type_memory_size tv) s.vs_memory) ==>
-    stmt_state_rel func cenv cx es t
+    stmt_state_rel ctx func cenv cx es t
 Proof
   rpt strip_tac >>
   `t = s with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>` by
@@ -504,7 +504,7 @@ Proof
   `alloca_inv t` by
     (irule localPtrsPropsTheory.alloca_inv_fields >> qexists_tac `s` >>
      gvs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
-  `alloca_room func t` by
+  `alloca_room ctx func t` by
     (irule exprLoweringPropsTheory.alloca_room_fields >> qexists_tac `s` >>
      gvs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
@@ -594,16 +594,16 @@ Proof
 QED
 
 Theorem literal_bytelike_run[local]:
-  !func cenv cx es bs sa sb buf s.
+  !func cenv cx es bs sa sb buf s ctx.
     compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
-    stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     32 + 32 * word_size (LENGTH bs) < dimword (:256) /\
     MEM (mk_inst sa.cs_next_id ALLOCA
       [Lit (n2w (32 + 32 * word_size (LENGTH bs)))]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
     ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      stmt_state_rel func cenv cx es t /\
+      stmt_state_rel ctx func cenv cx es t /\
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id =
         SOME (w2n w,32 + 32 * word_size (LENGTH bs)) /\
@@ -643,7 +643,7 @@ Proof
     (irule literal_emit_mstore_run >> simp[eval_operand_def] >>
      qexistsl_tac [`buf.buf_operand`, `Lit (n2w (LENGTH bs))`] >>
      simp[eval_operand_def]) >>
-  `stmt_state_rel func cenv cx es (mstore (w2n w) (n2w (LENGTH bs)) t)` by
+  `stmt_state_rel ctx func cenv cx es (mstore (w2n w) (n2w (LENGTH bs)) t)` by
     (irule literal_mstore_state_rel >> simp[] >> qexistsl_tac
       [`w2n w`, `mk_inst sa.cs_next_id ALLOCA
         [Lit (n2w (32 + 32 * word_size (LENGTH bs)))]
@@ -673,7 +673,7 @@ Resume literal_bytelike_run[chunks]:
   qpat_x_assum `compile_alloc_buffer _ _ = _` kall_tac >>
   qpat_x_assum `emit_void _ _ _ = _` kall_tac >>
   qpat_x_assum `compile_store_byte_chunks _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ (mstore _ _ _)` kall_tac >>
+  qpat_x_assum `stmt_state_rel ctx _ _ _ _ (mstore _ _ _)` kall_tac >>
   qpat_x_assum `final with <|vs_vars := (mstore _ _ _).vs_vars; vs_memory := _|> = _` kall_tac >>
   qpat_x_assum `!a len. _ ==> _ = mem_bytes_at _ _ (mstore _ _ _).vs_memory` kall_tac >>
   qpat_x_assum `eval_operand _ (mstore _ _ _) = _` kall_tac >>
@@ -686,8 +686,8 @@ QED
 Resume literal_bytelike_run[frame]:
   `!x. not_fresh_at sa x ==> lookup_var x final = lookup_var x t` by
     (rpt strip_tac >> first_x_assum irule >> gvs[not_fresh_at_def]) >>
-  `stmt_state_rel func cenv cx es final` by
-    (qspecl_then [`func`, `cenv`, `cx`, `es`, `t`, `final`]
+  `stmt_state_rel ctx func cenv cx es final` by
+    (qspecl_then [`func`, `cenv`, `cx`, `es`, `t`, `final`, `ctx`]
        mp_tac literal_state_memory_frame >>
      impl_tac >- (rpt conj_tac
        >- first_assum ACCEPT_TAC
@@ -706,7 +706,7 @@ Resume literal_bytelike_run[frame]:
        rpt strip_tac >>
        `regions_disjoint off (type_memory_size tv) (w2n w)
           (32 + 32 * word_size (LENGTH bs))` by
-         (qpat_x_assum `stmt_state_rel _ _ _ _ t` mp_tac >>
+         (qpat_x_assum `stmt_state_rel ctx _ _ _ _ t` mp_tac >>
           simp[exprLoweringPropsTheory.stmt_state_rel_def,
                exprLoweringPropsTheory.immutable_alloca_sep_def] >>
           strip_tac >> first_x_assum drule_all >> strip_tac >>
@@ -894,11 +894,11 @@ Proof
 QED
 
 Theorem literal_memory_vv_post[local]:
-  !func cenv cx e es sa sb s0 t v tvt buf w sz.
+  !func cenv cx e es sa sb s0 t v tvt buf w sz ctx.
     ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
-    stmt_state_rel func cenv cx es t /\
+    stmt_state_rel ctx func cenv cx es t /\
     eval_operand buf.buf_operand t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tvt v <= sz /\
@@ -912,7 +912,7 @@ Theorem literal_memory_vv_post[local]:
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
     (!name b len. local_region cenv es.scopes s0 name b len ==>
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) ==>
-    vv_post func cenv cx e es sa sb s0 es (Value v)
+    vv_post ctx func cenv cx e es sa sb s0 es (Value v)
       (LocatedValue (expr_type e) (base_ptr buf))
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)
 Proof

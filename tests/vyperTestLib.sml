@@ -271,8 +271,6 @@ val unsupported_code = [
 ]
 
 val unsupported_patterns = unsupported_code @ [
-  "msg.mana", "msg.gas",
-  "gas=",
 ]
 
 fun has_unsupported_patterns src =
@@ -298,6 +296,12 @@ fun source_codes_json j =
   in
     gather j
   end
+
+(* Sources reading msg.gas get GAS readings from an EVM run of each call. *)
+fun reads_gas_source_json j =
+  List.exists (fn src => String.isSubstring "msg.gas" src orelse
+                         String.isSubstring "msg.mana" src)
+    (source_codes_json j)
 
 fun first_some [] = NONE
   | first_some (NONE::xs) = first_some xs
@@ -530,7 +534,7 @@ val raw_deployment : term decoder =
 
 val deployment : term decoder =
   check_trace_type "deployment" $
-  JSONDecode.map (fn (((((srcs_exps_imap,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl),bp) =>
+  JSONDecode.map (fn ((((((srcs_exps_imap,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl),bp),rg) =>
              (* translate_annotated_ast returns (sources, exports, import_map) *)
              let val (srcs, exps_import_map) = pairSyntax.dest_pair srcs_exps_imap
                  val (exps, import_map) = pairSyntax.dest_pair exps_import_map in
@@ -553,9 +557,10 @@ val deployment : term decoder =
                ("callData", d),
                ("runtimeBytecode", bc),
                ("storageLayout", sl),
-               ("isBlueprint", bp)
+               ("isBlueprint", bp),
+               ("readsGas", rg)
              ]) end)
-          (tuple2 (tuple2 (tuple2 (tuple2 (tuple4 (toplevels_via_jsonast,
+          (tuple2 (tuple2 (tuple2 (tuple2 (tuple2 (tuple4 (toplevels_via_jsonast,
                            tuple3 (
                              field "contract_abi" (array abiEntry),
                              field "env" $ field "block" $
@@ -576,7 +581,9 @@ val deployment : term decoder =
                   field "runtime_bytecode" bytes),
                  field "storage_layout" storage_layout),
                 JSONDecode.map (fn s => mk_bool (s = "blueprint"))
-                  (field "deployment_type" string)))
+                  (field "deployment_type" string)),
+               JSONDecode.map (fn kvs => mk_bool (reads_gas_source_json (JSON.OBJECT kvs)))
+                 rawObject))
 
 val trace : term decoder =
   andThen (field "trace_type" string) (fn kind =>

@@ -117,21 +117,21 @@ QED
    region of one slot, and Venom stores w there: stmt_state_rel holds after
    both. *)
 Theorem stmt_state_rel_write_storage_word:
-  !func cenv cx es s tr slot tvt v w res es'.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx es s tr slot tvt v w res es' ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     (!u st. storage_dead cx tr (update_storage slot u st) =
             storage_dead cx tr st) /\
     write_storage_slot cx tr slot tvt v es = (res, es') /\
     encode_value tvt v = SOME [(0, w)] ==>
     res = INL () /\
-    stmt_state_rel func cenv cx es'
+    stmt_state_rel ctx func cenv cx es'
       (if tr then tstore slot w s else sstore slot w s)
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[write_storage_slot_eq, apply_writes_def, LET_THM] >>
   `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel cx es s` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel _ _ _ es1 s1` >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel ctx _ _ _ es1 s1` >>
   `accounts_rel cx es1 s1` by
     (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`]
      >- (irule accounts_rel_tstore >>
@@ -241,9 +241,9 @@ Theorem assign_storage_store_run:
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     eval_operand op s = SOME w /\
-    stmt_state_rel func cenv cx es'
+    stmt_state_rel ctx func cenv cx es'
       (if tr then tstore slot w s else sstore slot w s) ==>
-    ?t. stmt_state_rel func cenv cx es' t /\
+    ?t. stmt_state_rel ctx func cenv cx es' t /\
         ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
         t.vs_inst_idx = LENGTH st'.cs_current_insts /\
         (!x. lookup_var x t = lookup_var x s) /\
@@ -254,7 +254,7 @@ Theorem assign_storage_store_run:
 Proof
   rpt strip_tac >>
   `frag_exec ctx st st' (\t. t = s)
-     (\t. stmt_state_rel func cenv cx es' t /\
+     (\t. stmt_state_rel ctx func cenv cx es' t /\
           (!x. lookup_var x t = lookup_var x s) /\
           (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                    FLOOKUP t.vs_allocas aid = SOME b)) (\r. F)` by
@@ -301,10 +301,10 @@ Theorem assign_storage_word_success_run:
       ((), sf) /\
     fn_has_code sa sb func /\ fn_has_code sb sf func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    stmt_state_rel func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel func cenv cx es' t /\ ~t.vs_halted /\
+    ?t. stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
         t.vs_current_bb = sf.cs_current_bb /\
         t.vs_inst_idx = LENGTH sf.cs_current_insts /\
         (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
@@ -325,8 +325,8 @@ Proof
   impl_tac >- simp[expr_res_ok_def] >>
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
-  rename1 `expr_post _ _ _ _ _ _ _ _ _ _ _ s1` >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _`
+  rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
+  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `eval_operand op s1 = SOME (typed_val_to_w256 etv v)` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
@@ -335,7 +335,7 @@ Proof
   drule_all storage_dead_update_word_region >> strip_tac >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >>
   drule_all assign_storage_store_run >>
-  disch_then (qspec_then `ctx` mp_tac) >> strip_tac >>
+  strip_tac >>
   qexists_tac `t` >> simp[] >> metis_tac[]
 QED
 
