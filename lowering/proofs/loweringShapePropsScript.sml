@@ -11732,14 +11732,14 @@ Proof
 
 QED
 
-Theorem shape_state_initial_compile_state[local]:
+Theorem shape_state_initial_compile_state:
   !lbl. shape_state (initial_compile_state lbl)
 Proof
   simp[initial_compile_state_def, shape_state_def, opaque_insts_ok_def,
        state_insts_def, all_blocks_def]
 QED
 
-Theorem runtime_entry_blocks_shape[local]:
+Theorem runtime_entry_blocks_shape:
   !st. shape_extends F jump_label_ok (initial_compile_state "__entry") st ==>
     all_blocks st <> [] /\
     (HD (all_blocks st)).bb_label = "__entry" /\
@@ -11796,7 +11796,7 @@ Proof
   simp[jump_label_ok_def]
 QED
 
-Theorem runtime_entry_prefix_shape[local]:
+Theorem runtime_entry_prefix_shape:
   !selectors external_fns fallback_fn.
     EVERY (\(sel, lbl, z). isPREFIX "fn_" lbl) selectors /\
     EVERY external_fn_shape_ok external_fns /\ fallback_shape_ok fallback_fn ==>
@@ -11942,8 +11942,8 @@ Proof
   ho_match_mp_tac supportedExprsTheory.supported_effect_expr_ind >>
   rw[supportedExprsTheory.supported_effect_expr_def,
      supported_expr_exists_def, expr_shape_root_def] >>
-  metis_tac[supported_pure_shape, supported_expr_exists_def,
-            expr_shape_root_def]
+  imp_res_tac supported_pure_shape >>
+  fs[supported_expr_exists_def, expr_shape_root_def]
 QED
 
 Theorem supported_expr_shape[local]:

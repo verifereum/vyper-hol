@@ -82,7 +82,7 @@ Proof
   rw[internal_fn_matches_descriptor_def] >> gvs[internal_fn_matches_descriptor_def]
 QED
 
-Theorem lookup_function_distinct_mem[local]:
+Theorem lookup_function_distinct_mem:
   !fns f.
     ALL_DISTINCT (MAP (\f. f.fn_name) fns) /\ MEM f fns ==>
     lookup_function f.fn_name fns = SOME f
