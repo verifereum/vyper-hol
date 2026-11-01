@@ -385,3 +385,28 @@ Proof
   irule compiler_label_hoare_preserving_bind >>
   simp[compiler_label_hoare_bytelike_literal, compiler_label_hoare_typed_primitives]
 QED
+
+Theorem compiler_block_tail_name_vv:
+  compiler_block_tail (compile_name_vv cenv ty name)
+Proof
+  rewrite_tac[compile_name_vv_def] >> Cases_on `FLOOKUP cenv.ce_vars name` >>
+  simp[comp_ignore_bind_def, compiler_block_tail_primitives]
+  >- (irule compiler_block_tail_bind >> simp[compiler_block_tail_primitives]) >>
+  rename1 `FLOOKUP cenv.ce_vars name = SOME loc` >> Cases_on `loc` >>
+  simp[comp_ignore_bind_def, compiler_block_tail_primitives] >>
+  irule compiler_block_tail_bind >> simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_name_vv:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_name_vv cenv ty name) (\r out. compiler_label_reservation origin pending out)
+Proof
+  rewrite_tac[compile_name_vv_def] >> Cases_on `FLOOKUP cenv.ce_vars name` >>
+  simp[comp_ignore_bind_def, compiler_label_hoare_typed_primitives]
+  >- (irule compiler_label_hoare_preserving_bind >>
+      simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]) >>
+  rename1 `FLOOKUP cenv.ce_vars name = SOME loc` >> Cases_on `loc` >>
+  simp[comp_ignore_bind_def, compiler_label_hoare_typed_primitives] >>
+  irule compiler_label_hoare_preserving_bind >>
+  simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]
+QED
