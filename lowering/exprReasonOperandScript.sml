@@ -64,17 +64,6 @@ Proof
   simp[reason_result_shape_def, reason_code_vv_def, is_word_type_def]
 QED
 
-Theorem reason_infer_array_location[local]:
-  infer_array_location cenv e = LocMemory \/
-  infer_array_location cenv e = LocStorage \/
-  infer_array_location cenv e = LocTransient \/
-  infer_array_location cenv e = LocCode
-Proof
-  Cases_on `e` >> simp[infer_array_location_def] >>
-  BasicProvers.TOP_CASE_TAC >> simp[] >>
-  rename1 `FLOOKUP _ _ = SOME bnd` >> Cases_on `bnd` >> gvs[]
-QED
-
 Theorem reason_compile_name[local]:
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   compile_name_vv cenv t id sa = (vv,sb) ==>
@@ -169,21 +158,40 @@ Proof
   metis_tac[reason_projection_operand])
 QED
 
+(* The location a target's pointer lives in comes from its root name, at
+   every compile state. *)
+Theorem reason_target_ptr_loc[local]:
+  !bt. ?lo. (!l. lo = SOME l ==>
+               l = LocMemory \/ l = LocStorage \/ l = LocTransient \/ l = LocCode) /\
+    !sa r sb. compile_get_target_ptr cfn cenv bt sa = (r,sb) ==> FST (SND r) = lo
+Proof
+  measureInduct_on `base_assignment_target_size bt` >>
+  Cases_on `bt` >> simp[compile_get_target_ptr_def]
+  >- (BasicProvers.every_case_tac >> simp[comp_return_def])
+  >- (simp[LET_THM] >> BasicProvers.every_case_tac >> simp[comp_return_def]) >>
+  rename1 `compile_get_target_ptr cfn cenv b` >>
+  first_x_assum (qspec_then `b` mp_tac) >>
+  simp[] >> strip_tac >>
+  qexists_tac `lo` >> simp[] >>
+  simp[comp_bind_def, comp_return_def, LET_THM] >>
+  rpt gen_tac >> rpt (pairarg_tac >> gvs[]) >>
+  BasicProvers.every_case_tac >>
+  gvs[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >> res_tac >> gvs[]
+QED
+
 Theorem reason_compile_pop[local]:
   ?loc. (loc = LocMemory \/ loc = LocStorage \/ loc = LocTransient \/ loc = LocCode) /\
     !sa vv sb. compile_expr_body f g h cenv ty (Pop t target) sa = (vv,sb) ==>
       reason_result_shape t loc vv
 Proof
-  qexists_tac `case target of
-    NameTarget id => infer_array_location cenv (Name ARB id)
-  | TopLevelNameTarget nsid => infer_array_location cenv (TopLevelName ARB nsid)
-  | _ => LocMemory` >>
-  conj_tac
-  >- (Cases_on `target` >> simp[] >> metis_tac[reason_infer_array_location]) >>
-  Cases_on `target` >>
+  qspecl_then [`target`] strip_assume_tac
+    (Q.GENL [`cfn`, `cenv`] reason_target_ptr_loc |> Q.SPECL [`f`, `cenv`]) >>
+  qexists_tac `case lo of SOME l => l | NONE => LocMemory` >>
+  conj_tac >- (Cases_on `lo` >> simp[]) >>
   simp[compile_expr_body_def, expr_type_def, LET_THM] >>
   rpt gen_tac >> rpt (pairarg_tac >> gvs[]) >>
-  strip_tac >> gvs[reason_result_shape_def, mk_ptr_def] >>
+  strip_tac >> res_tac >> gvs[reason_result_shape_def, mk_ptr_def] >>
   metis_tac[reason_pop_operand]
 QED
 

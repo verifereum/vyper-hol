@@ -268,10 +268,10 @@ Proof
 QED
 
 (* GAP (#636 operands with internal calls): pop on a nested target whose
-   subscript key makes an internal call.  Blocked on the lowering of a
-   nested pop (exprSimPlaces' compile_pop_nested_sim) and on a target/place
-   judgment: the induction hypotheses give only body_base_target_ok of the
-   target. *)
+   subscript key makes an internal call.  Blocked on the target/place
+   judgment that exprSimPlaces' compile_pop_nested_sim needs, here for
+   indices that make internal calls: the induction hypotheses give only
+   body_base_target_ok of the target. *)
 Theorem body_pop_nested_case:
   !cx v10 bt.
     (!id. bt <> NameTarget id) /\ (!nid. bt <> TopLevelNameTarget nid) /\
