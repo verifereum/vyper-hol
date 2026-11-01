@@ -1117,10 +1117,12 @@ End
    source has no pending deletions.  Other addresses' accounts and
    transient storage change during a body only through the call oracle,
    whose outcome both sides adopt the same way (adopt_outcome), which makes
-   them equal again.  Pending deletions come only from create runs, which
-   the supported subset leaves out; a transaction starts with none, as
-   call_external empties them on success.  Venom has no pending deletions,
-   so the success case of the external result relation, which compares the
+   them equal again.  The source's pending deletions come only from create
+   runs, which the supported subset leaves out; a transaction starts with
+   none, as call_external empties them on success.  Venom also adds the
+   callee's deletions (co_toDelete) on a successful call; the source does
+   not adopt them yet, so this relation says nothing about Venom's queue.
+   The success case of the external result relation, which compares the
    accounts after the source processes its deletions, needs them empty. *)
 Definition accounts_rel_def:
   accounts_rel cx (vs:evaluation_state) ss ⇔
