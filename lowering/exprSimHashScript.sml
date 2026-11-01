@@ -1539,6 +1539,7 @@ Proof
     (gvs[expr_sim_pre_def] >>
      simp[well_typed_expr_def, well_typed_literal_def,
        well_formed_type_def, byte_widths_expr_def, alloc_limits_expr_def,
+       type_alloc_ok_def, type_memory_bytes_def,
        literal_alloc_ok_def, vyperTypeCallGraphTheory.int_calls_expr_def,
        supportedExprTraverseTheory.expr_has_evm_run_thm, type_bits_def,
        vfmConstantsTheory.word_size_def, vyperValueTheory.evaluate_type_def,

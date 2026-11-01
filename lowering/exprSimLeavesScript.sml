@@ -42,10 +42,10 @@
  * state_rel or in the judgment before their PRs:
  *   compile_toplevel_immutable_sim — immutables and constants (row 3),
  *                              which lookup_global reads from the
- *                              immutables: nothing puts them in
- *                              ce_module_vars,
+ *                              immutables: no expr_sim_inv clause puts
+ *                              them in ce_module_vars as ImmutableLoc,
  *                              so the lowering may emit INVALID where the
- *                              source reads a value (#563 for immutables).
+ *                              source reads a value.
  *   compile_prevhash_sim     — block.prevhash (row 5): the source raises a
  *                              RuntimeError where BLOCKHASH returns 0 (#671),
  *                              and call_ctx_rel does not relate the block
@@ -561,10 +561,11 @@ Proof
 QED
 
 (* An immutable or a constant (no storage declaration of the name; both
-   are read from the immutables).  Cheated, and false as stated: nothing in
-   expr_sim_inv puts them in ce_module_vars (the lowering has no ImmutableLoc for
-   immutables yet, #563), so the lowering may emit INVALID where the source
-   reads a value.  Where it does, immutable_holds also needs the
+   are read from the immutables).  Cheated, and false as stated: the
+   lowering reads an immutable through its ImmutableLoc entry in
+   ce_module_vars, but no expr_sim_inv clause says the entry is there (see
+   "Not here yet" in exprSimHyps), so the lowering may emit INVALID where
+   the source reads a value.  Where it does, immutable_holds also needs the
    immutable's bytes to end below 2 ** 256 and the value typed. *)
 Theorem compile_toplevel_immutable_sim:
   !ctx func cenv cx env ty ann src id es ts.

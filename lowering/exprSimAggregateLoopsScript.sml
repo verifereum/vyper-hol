@@ -246,7 +246,7 @@ Resume aggregate_make_tuple_sim[after_add]:
   `expr_sim_inv ce cx env es1` by
     (drule_all expr_body_pre_eval_result >> simp[]) >>
   `type_memory_bytes ce (expr_type h) = type_memory_size h'` by
-    metis_tac[exprSimAggregateLayoutTheory.expr_sim_inv_memory_size] >>
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
   drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
   qpat_x_assum `dst = Var _` SUBST_ALL_TAC >>
   qmatch_asmsub_abbrev_tac `eval_operand (Var d) r` >>

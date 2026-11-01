@@ -78,7 +78,12 @@ Theorem unwrap_value_materialise_sim:
     unwrap_value cenv vv sm = (op,sb) /\
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
-    read_result cx tv es' = (INL v,es') ==>
+    read_result cx tv es' = (INL v,es') /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+           ~is_word_type (expr_type e) ==>
+           type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) ==>
     frag_exec ctx sm sb
       (\s. vv_post ctx func cenv cx e es sa sm s0 es' tv vv s)
       (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
@@ -302,7 +307,12 @@ Theorem unwrap_value_rebased_sim:
   unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
   sa.cs_next_id <= sm.cs_next_id /\
   read_result cx tv es' = (INL v,es') /\
-  vv_post ctx func ce cx e es sa sm s0 es' tv vv r ==>
+  vv_post ctx func ce cx e es sa sm s0 es' tv vv r /\
+  fn_has_code sm su func /\ fn_inst_ids_distinct func /\
+    (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+           ~is_word_type (expr_type e) ==>
+           type_memory_bytes ce (expr_type e) = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) ==>
   frag_exec ctx sm su (\s. s = r)
     (\s. expr_post ctx func ce cx e es'
       (sa with cs_next_var := sm.cs_next_var) su r es' v op s) R
@@ -528,6 +538,8 @@ Theorem aggregate_unwrap_store_slice_sim:
   value_has_type tv v /\ val_wf tv v /\
   type_memory_bytes ce (expr_type e) = type_memory_size tv /\
   type_memory_size tv < dimword (:256) /\
+  (~is_word_type (expr_type e) ==> type_memory_size tv < 2 ** 64) /\
+  fn_has_code sm su func /\ fn_inst_ids_distinct func /\
   stmt_state_rel ctx func ce cx es' r /\
   (!n b k. local_region ce es'.scopes r n b k ==>
     b + k <= w2n w \/ w2n w + type_memory_size tv <= b) /\

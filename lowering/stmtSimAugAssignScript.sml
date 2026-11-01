@@ -247,6 +247,20 @@ QED
 
 (* The typing side: x op e meets expr_sim_pre where e does, x is a local
    of type ty and the type checker accepts x op= e. *)
+(* The target of an augmented assignment has a word type, so nothing of
+   its size is asked for alloc_limits_expr. *)
+Theorem well_typed_binop_augassign_alloc_ok[local]:
+  !cenv ty bop t2. well_typed_binop ty bop ty t2 ==> type_alloc_ok cenv ty
+Proof
+  rpt strip_tac >>
+  Cases_on `bop = In`
+  >- gvs[well_typed_binop_def, type_alloc_ok_def, is_word_type_def] >>
+  Cases_on `bop = NotIn`
+  >- gvs[well_typed_binop_def, type_alloc_ok_def, is_word_type_def] >>
+  drule_all well_typed_binop_augassign_word >> strip_tac >>
+  drule exprSimOperatorsTheory.word_value_type_word >> simp[type_alloc_ok_def]
+QED
+
 Theorem expr_sim_pre_augassign:
   !cenv cx env ty id bop e es.
     expr_sim_pre cenv cx env e es /\ FLOOKUP env.var_types id = SOME ty /\
@@ -257,6 +271,7 @@ Proof
   drule expr_sim_pre_var_types_well_formed >>
   disch_then drule >> strip_tac >>
   drule well_formed_type_bits >> strip_tac >>
+  drule well_typed_binop_augassign_alloc_ok >> strip_tac >>
   gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm,
@@ -274,6 +289,7 @@ Proof
   drule expr_body_pre_var_types_well_formed >>
   disch_then drule >> strip_tac >>
   drule well_formed_type_bits >> strip_tac >>
+  drule well_typed_binop_augassign_alloc_ok >> strip_tac >>
   gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm,
