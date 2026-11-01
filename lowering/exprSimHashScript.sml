@@ -655,6 +655,7 @@ Proof
   `!x. eval_operand x s0 = eval_operand x s` by
     (Cases >> simp[Abbr `s0`, eval_operand_def, lookup_var_def]) >>
   `!y. lookup_var y s0 = lookup_var y s` by simp[Abbr `s0`, lookup_var_def] >>
+  `s0.vs_labels = s.vs_labels` by simp[Abbr `s0`] >>
   `mem_bytes_at (w2n p) (w2n n) s0.vs_memory = bs` by simp[Abbr `s0`] >>
   `eval_operand ptr_op (update_var gas_var g s0) = SOME p /\
    eval_operand len_op (update_var gas_var g s0) = SOME n /\
