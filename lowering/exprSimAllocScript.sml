@@ -179,3 +179,17 @@ Proof
       fs[local_region_def, lookup_var_def]) >>
   simp[mstore_def] >> metis_tac[]
 QED
+
+(* Allocation preserves label operands as well as older registers. *)
+Theorem hash_alloc_buffer_labels:
+  compile_alloc_buffer sz sa = (buf,sm) /\
+  run_inst_seq (emitted_insts sa sm) s = OK t ==>
+  t.vs_labels = s.vs_labels
+Proof
+  simp[contextTheory.compile_alloc_buffer_def, emitHelperTheory.emit_op_def, comp_bind_def,
+       comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
+       emit_def] >> strip_tac >> gvs[emitted_insts_def,
+       rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def,
+       step_inst_base_def, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+  gvs[update_var_def]
+QED

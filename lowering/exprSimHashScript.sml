@@ -291,19 +291,6 @@ Proof
                        finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
-Theorem hash_alloc_buffer_labels[local]:
-  compile_alloc_buffer sz sa = (buf,sm) /\
-  run_inst_seq (emitted_insts sa sm) s = OK t ==>
-  t.vs_labels = s.vs_labels
-Proof
-  simp[contextTheory.compile_alloc_buffer_def, emit_op_def, comp_bind_def,
-       comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
-       emit_def] >> strip_tac >> gvs[emitted_insts_def,
-       rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def,
-       step_inst_base_def, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
-  gvs[update_var_def]
-QED
-
 (* Allocate and stage one word, protecting every earlier allocation. *)
 Theorem hash_alloc_mstore_frame:
   compile_alloc_buffer 32 sa = (buf, sm) /\
