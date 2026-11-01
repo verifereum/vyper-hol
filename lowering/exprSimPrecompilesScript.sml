@@ -1904,7 +1904,7 @@ Proof
   >- (simp[lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
       rpt strip_tac >> IF_CASES_TAC >> gvs[not_fresh_at_def]) >>
   rpt strip_tac >> irule exprSimOpsTheory.local_region_frame_fwd >>
-  qexistsl_tac [`s`, `sm`, `es.scopes`] >> simp[Abbr `s0`, update_var_def] >>
+  qexistsl_tac [`s`, `sm`, `es.scopes`] >> simp[update_var_def] >>
   simp[lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rpt strip_tac >> IF_CASES_TAC >> gvs[not_fresh_at_def]
 QED
