@@ -143,9 +143,9 @@ Proof
 QED
 
 Theorem compile_array_subscript_split:
-  !base_op idx_op dyn cnt ws esz sgn opc.
-    compile_array_subscript base_op idx_op dyn cnt ws esz sgn opc =
-    comp_bind (if dyn then emit_op opc [base_op]
+  !base_op idx_op dyn cnt ws esz sgn ld.
+    compile_array_subscript base_op idx_op dyn cnt ws esz sgn ld =
+    comp_bind (if dyn then ld base_op
                else comp_return (Lit (n2w cnt))) (\len_op.
     comp_ignore_bind (array_bounds_check idx_op len_op sgn)
       (array_elem_ptr base_op idx_op dyn ws esz))
@@ -174,12 +174,14 @@ QED
 (* The length operand's code, from st, runs to the length len: a load at
    the base for a dynamic array, the static count otherwise. *)
 Definition array_len_ok_def:
-  array_len_ok dyn cnt opc base_op ss len <=>
+  array_len_ok dyn cnt ld base_op ss len <=>
     if dyn then
       !st lop st'.
-        emit_op opc [base_op] st = (lop, st') /\ fresh_vars_wrt st ss ==>
+        ld base_op st = (lop, st') /\ fresh_vars_wrt st ss ==>
         ?ss'. run_inst_seq (emitted_insts st st') ss = OK ss' /\
               eval_operand lop ss' = SOME len /\
+              st'.cs_current_insts =
+                st.cs_current_insts ++ emitted_insts st st' /\
               same_blocks st st' /\ fresh_vars_wrt st' ss' /\
               (!op w. eval_operand op ss = SOME w ==>
                       eval_operand op ss' = SOME w)
@@ -187,26 +189,30 @@ Definition array_len_ok_def:
 End
 
 Theorem array_len_ok_static:
-  !cnt opc base_op ss. array_len_ok F cnt opc base_op ss (n2w cnt)
+  !cnt ld base_op ss. array_len_ok F cnt ld base_op ss (n2w cnt)
 Proof
   simp[array_len_ok_def]
 QED
 
 Theorem array_len_ok_MLOAD:
-  !cnt base_op ss b.
+  !ctor imm cnt base_op ss b.
     eval_operand base_op ss = SOME b ==>
-    array_len_ok T cnt MLOAD base_op ss (mload (w2n b) ss)
+    array_len_ok T cnt (compile_ptr_load ctor imm LocMemory) base_op ss
+      (mload (w2n b) ss)
 Proof
-  rw[array_len_ok_def] >> drule_all emit_op_MLOAD_correct >>
+  rw[array_len_ok_def, contextTheory.compile_ptr_load_def] >>
+  imp_res_tac emit_op_extends >> drule_all emit_op_MLOAD_correct >>
   strip_tac >> metis_tac[]
 QED
 
 Theorem array_len_ok_SLOAD:
-  !cnt base_op ss b.
+  !ctor imm cnt base_op ss b.
     eval_operand base_op ss = SOME b ==>
-    array_len_ok T cnt SLOAD base_op ss (sload b ss)
+    array_len_ok T cnt (compile_ptr_load ctor imm LocStorage) base_op ss
+      (sload b ss)
 Proof
-  rw[array_len_ok_def] >> drule_all emit_op_SLOAD_correct >>
+  rw[array_len_ok_def, contextTheory.compile_ptr_load_def] >>
+  imp_res_tac emit_op_extends >> drule_all emit_op_SLOAD_correct >>
   strip_tac >> metis_tac[]
 QED
 
@@ -378,11 +384,11 @@ QED
 (* ===== The whole subscript ===== *)
 
 Theorem compile_array_subscript_ok:
-  !base_op idx_op dyn cnt ws esz sgn opc st p st' ss b i len.
-    compile_array_subscript base_op idx_op dyn cnt ws esz sgn opc st =
+  !base_op idx_op dyn cnt ws esz sgn ld st p st' ss b i len.
+    compile_array_subscript base_op idx_op dyn cnt ws esz sgn ld st =
       (p, st') /\
     eval_operand base_op ss = SOME b /\ eval_operand idx_op ss = SOME i /\
-    fresh_vars_wrt st ss /\ array_len_ok dyn cnt opc base_op ss len /\
+    fresh_vars_wrt st ss /\ array_len_ok dyn cnt ld base_op ss len /\
     idx_in_range sgn i len ==>
     ?ss'. run_inst_seq (emitted_insts st st') ss = OK ss' /\
           same_blocks st st' /\ fresh_vars_wrt st' ss' /\
@@ -417,11 +423,11 @@ Proof
 QED
 
 Theorem compile_array_subscript_oob:
-  !base_op idx_op dyn cnt ws esz sgn opc st p st' ss b i len.
-    compile_array_subscript base_op idx_op dyn cnt ws esz sgn opc st =
+  !base_op idx_op dyn cnt ws esz sgn ld st p st' ss b i len.
+    compile_array_subscript base_op idx_op dyn cnt ws esz sgn ld st =
       (p, st') /\
     eval_operand base_op ss = SOME b /\ eval_operand idx_op ss = SOME i /\
-    fresh_vars_wrt st ss /\ array_len_ok dyn cnt opc base_op ss len /\
+    fresh_vars_wrt st ss /\ array_len_ok dyn cnt ld base_op ss len /\
     ~idx_in_range sgn i len ==>
     ?ss'. run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof

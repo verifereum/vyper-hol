@@ -10,11 +10,12 @@
  * TOP-LEVEL:
  *   compile_literal_other_vv_sim — the buffer simulates the literal
  *                              (expr_vv_ok)
+ *   alloc_buffer_frame_run — allocation execution preserving a buffer frame
  *)
 
 Theory exprSimLiteralBuffer
 Ancestors
-  list finite_map
+  list finite_map exprSimWordArgs loweringHalt exprLoweringProps
   exprSim exprSimOps exprSimHyps exprLowering compileEnv loweringSlice
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperValueOperation valueEncoding fragExec venomState
@@ -35,8 +36,11 @@ Ancestors
    - The ALLOCA's output is a fresh variable, no live local's pointer
      (local_ptrs_reserved), so its allocation misses every live local
      (local_ptrs_rel_alloca_disjoint) and the MSTOREs keep local_ptrs_rel
-     (local_ptrs_rel_mstore) and so stmt_state_rel (state_rel_frame,
-     alloca_inv_fields, alloca_room_fields).
+     (local_ptrs_rel_mstore).  immutable_alloca_sep additionally keeps the
+     buffer off each initialized constructor immutable's full capacity
+     region, even when the ALLOCA reuses an existing allocation.  The
+     stores never shrink memory, so capacity-sized memory agreement keeps
+     immutables_rel, including its capacity bound and byte relation.
    - The allocation's id is sa.cs_next_id, one of the expression's own, as
      vv_at asks; alloca_inv's disjointness keeps the memory of every other
      allocation, which vv_post's frame asks for those below sa.cs_next_id.
@@ -114,29 +118,44 @@ Proof
 QED
 
 Theorem literal_mstore_state_rel:
-  !func cenv cx es s a (w:bytes32) b sz.
-    stmt_state_rel func cenv cx es s /\ b <= a /\ a + 32 <= b + sz /\
+  !func cenv cx es s a (w:bytes32) inst b sz ctx.
+    stmt_state_rel ctx func cenv cx es s /\ b <= a /\ a + 32 <= b + sz /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
     (!name lb lsz. local_region cenv es.scopes s name lb lsz ==>
        b + sz <= lb \/ lb + lsz <= b) ==>
-    stmt_state_rel func cenv cx es (mstore a w s)
+    stmt_state_rel ctx func cenv cx es (mstore a w s)
 Proof
   rpt strip_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
   rewrite_tac[Once exprLoweringPropsTheory.stmt_state_rel_def] >> strip_tac >>
   `local_ptrs_rel func cenv es.scopes (mstore a w s)` by
     (irule localPtrsPropsTheory.local_ptrs_rel_mstore >>
      reverse conj_tac >- gvs[state_rel_def] >>
-     rpt strip_tac >> first_x_assum drule >> decide_tac) >>
+     rpt strip_tac >>
+     qpat_x_assum `!name lb lsz. local_region _ _ _ _ _ _ ==> _` drule >>
+     decide_tac) >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+     (mstore a w s)` by
+    (irule immutables_rel_mstore_alloca >> conj_tac
+     >- (qexistsl_tac [`b`, `func`, `inst`, `sz`] >> simp[]) >>
+     gvs[state_rel_def]) >>
   rewrite_tac[exprLoweringPropsTheory.stmt_state_rel_def] >>
   conj_tac
   >- (irule exprLoweringPropsTheory.state_rel_frame >>
-      simp[mstore_def] >> qexistsl_tac [`es`, `s`] >> simp[]) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qexistsl_tac [`es`, `s`] >> simp[] >> simp[mstore_def]) >>
   conj_tac
   >- (irule localPtrsPropsTheory.alloca_inv_fields >>
       qexists_tac `s` >> simp[mstore_def]) >>
   conj_tac
   >- (irule exprLoweringPropsTheory.alloca_room_fields >>
       qexists_tac `s` >> simp[mstore_def]) >>
+  conj_tac
+  >- (irule exprLoweringPropsTheory.immutable_alloca_sep_fields >>
+      qexistsl_tac [`s`, `es`] >> simp[mstore_def] >>
+      rpt strip_tac >> qexists_tac `id` >>
+      fs[local_region_def, lookup_var_def]) >>
   simp[mstore_def] >> metis_tac[]
 QED
 
@@ -157,13 +176,13 @@ QED
 (* ALLOCA may reuse its instruction's existing region.  In either case it
    preserves memory and all old entries, and supplies a disjoint buffer. *)
 Theorem literal_alloca_run[local]:
-  !func cenv cx es s inst p (n:bytes32).
-    stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
+  !func cenv cx es s inst p (n:bytes32) ctx.
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_operands = [Lit n] /\ inst.inst_outputs = [p] /\
     not_local_ptr cenv es.scopes p ==>
     ?t w. exec_alloca inst s n = OK t /\
-      stmt_state_rel func cenv cx es t /\ lookup_var p t = SOME w /\
+      stmt_state_rel ctx func cenv cx es t /\ lookup_var p t = SOME w /\
       FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n w, w2n n) /\
       w2n w + w2n n < dimword (:256) /\ t.vs_memory = s.vs_memory /\
       (!x. x <> p ==> lookup_var x t = lookup_var x s) /\
@@ -218,14 +237,14 @@ Proof
 QED
 
 Theorem literal_alloc_buffer_run:
-  !func cenv cx es sa sm buf sz s.
+  !func cenv cx es sa sm buf sz s ctx.
     compile_alloc_buffer sz sa = (buf,sm) /\
-    stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
     ?t w. run_inst_seq (emitted_insts sa sm) s = OK t /\
-      stmt_state_rel func cenv cx es t /\
+      stmt_state_rel ctx func cenv cx es t /\
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword (:256) /\ t.vs_memory = s.vs_memory /\
@@ -309,6 +328,7 @@ Theorem literal_chunk_head_run[local]:
     sa.cs_next_id <= sb.cs_next_id /\
     ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
       t.vs_memory = (mstore (w2n (w + off)) value s).vs_memory /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory /\
       (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
 Proof
@@ -321,6 +341,10 @@ Proof
        venomExecSemanticsTheory.exec_pure2_def,
        venomExecSemanticsTheory.exec_write2_def, eval_operand_def,
        venomExecSemanticsTheory.bind_outputs_def, emitHelperPropsTheory.lookup_var_update_var] >>
+  conj_tac >- simp[mstore_def, update_var_def] >>
+  conj_tac
+  >- simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
+          update_var_def, arithmeticTheory.MAX_DEF] >>
   simp[mstore_def, update_var_def] >>
   rpt strip_tac >> gvs[not_fresh_at_def]
 QED
@@ -350,6 +374,7 @@ Theorem literal_chunks_run[local]:
     sa.cs_next_id <= sb.cs_next_id /\
     ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
       mem_bytes_at (b+off) (LENGTH bs) t.vs_memory = bs /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory /\
       (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!a len. a + len <= b + off \/
@@ -419,6 +444,7 @@ Resume literal_chunks_run[compose]:
   conj_tac
   >- (irule literal_chunk_assemble >>
       asm_simp_tac bool_ss [GSYM arithmeticTheory.ADD_ASSOC]) >>
+  conj_tac >- decide_tac >>
   conj_tac
   >- (qpat_x_assum `final with <|vs_vars := _; vs_memory := _|> = t`
        (mp_tac o AP_TERM ``\z. z with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>``) >>
@@ -444,15 +470,23 @@ QED
 Finalise literal_chunks_run
 
 Theorem literal_state_memory_frame:
-  !func cenv cx es s t.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx es s t ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
     (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
        FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
        lookup_var p t = lookup_var p s) /\
     (!name b sz. local_region cenv es.scopes s name b sz ==>
-       mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) ==>
-    stmt_state_rel func cenv cx es t
+       mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+    (cenv.ce_is_ctor ==> !name tv v off.
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+        SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+      mem_bytes_at off (type_memory_size tv) t.vs_memory =
+        mem_bytes_at off (type_memory_size tv) s.vs_memory) ==>
+    stmt_state_rel ctx func cenv cx es t
 Proof
   rpt strip_tac >>
   `t = s with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>` by
@@ -471,14 +505,26 @@ Proof
   `alloca_inv t` by
     (irule localPtrsPropsTheory.alloca_inv_fields >> qexists_tac `s` >>
      gvs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
-  `alloca_room func t` by
+  `alloca_room ctx func t` by
     (irule exprLoweringPropsTheory.alloca_room_fields >> qexists_tac `s` >>
      gvs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
+    (irule immutables_rel_mem_agree >> qexists_tac `s` >>
+     qpat_assum `t = _ with <|vs_vars := _; vs_memory := _|>`
+       (fn th => once_rewrite_tac[th]) >>
+     gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def] >>
+     first_assum ACCEPT_TAC) >>
+  `immutable_alloca_sep func cenv cx es t` by
+    (irule exprLoweringPropsTheory.immutable_alloca_sep_fields >>
+     qexistsl_tac [`s`, `es`] >>
+     gvs[exprLoweringPropsTheory.stmt_state_rel_def] >>
+     rpt strip_tac >> qexists_tac `id` >>
+     fs[local_region_def] >> metis_tac[]) >>
   rewrite_tac[exprLoweringPropsTheory.stmt_state_rel_def] >>
   conj_tac
   >- (irule exprLoweringPropsTheory.state_rel_frame >>
       conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl_tac [`es`, `s`] >>
+      qexistsl_tac [`es`, `s`] >> simp[] >>
       qpat_assum `t = _ with <|vs_vars := _; vs_memory := _|>`
         (fn th => once_rewrite_tac[th]) >>
       gvs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
@@ -549,16 +595,16 @@ Proof
 QED
 
 Theorem literal_bytelike_run[local]:
-  !func cenv cx es bs sa sb buf s.
+  !func cenv cx es bs sa sb buf s ctx.
     compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
-    stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     32 + 32 * word_size (LENGTH bs) < dimword (:256) /\
     MEM (mk_inst sa.cs_next_id ALLOCA
       [Lit (n2w (32 + 32 * word_size (LENGTH bs)))]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
     ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      stmt_state_rel func cenv cx es t /\
+      stmt_state_rel ctx func cenv cx es t /\
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id =
         SOME (w2n w,32 + 32 * word_size (LENGTH bs)) /\
@@ -598,10 +644,15 @@ Proof
     (irule literal_emit_mstore_run >> simp[eval_operand_def] >>
      qexistsl_tac [`buf.buf_operand`, `Lit (n2w (LENGTH bs))`] >>
      simp[eval_operand_def]) >>
-  `stmt_state_rel func cenv cx es (mstore (w2n w) (n2w (LENGTH bs)) t)` by
+  `stmt_state_rel ctx func cenv cx es (mstore (w2n w) (n2w (LENGTH bs)) t)` by
     (irule literal_mstore_state_rel >> simp[] >> qexistsl_tac
-      [`w2n w`, `32 + 32 * word_size (LENGTH bs)`] >>
-     simp[] >> rpt strip_tac >> first_x_assum drule >>
+      [`w2n w`, `mk_inst sa.cs_next_id ALLOCA
+        [Lit (n2w (32 + 32 * word_size (LENGTH bs)))]
+        [STRING #"%" (toString sa.cs_next_var)]`,
+       `32 + 32 * word_size (LENGTH bs)`] >>
+     gvs[venomInstTheory.mk_inst_def] >>
+     rpt strip_tac >>
+     qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _` drule >>
      simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
   suspend "chunks"
 QED
@@ -620,11 +671,10 @@ Resume literal_bytelike_run[chunks]:
   drule literal_buffer_header >> strip_tac >>
   drule literal_buffer_reset >> strip_tac >>
   qpat_x_assum `fn_inst_ids_distinct _` kall_tac >>
-  qpat_x_assum `MEM _ _` kall_tac >>
   qpat_x_assum `compile_alloc_buffer _ _ = _` kall_tac >>
   qpat_x_assum `emit_void _ _ _ = _` kall_tac >>
   qpat_x_assum `compile_store_byte_chunks _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ (mstore _ _ _)` kall_tac >>
+  qpat_x_assum `stmt_state_rel ctx _ _ _ _ (mstore _ _ _)` kall_tac >>
   qpat_x_assum `final with <|vs_vars := (mstore _ _ _).vs_vars; vs_memory := _|> = _` kall_tac >>
   qpat_x_assum `!a len. _ ==> _ = mem_bytes_at _ _ (mstore _ _ _).vs_memory` kall_tac >>
   qpat_x_assum `eval_operand _ (mstore _ _ _) = _` kall_tac >>
@@ -637,19 +687,35 @@ QED
 Resume literal_bytelike_run[frame]:
   `!x. not_fresh_at sa x ==> lookup_var x final = lookup_var x t` by
     (rpt strip_tac >> first_x_assum irule >> gvs[not_fresh_at_def]) >>
-  `stmt_state_rel func cenv cx es final` by
-    (irule literal_state_memory_frame >> qexists_tac `t` >>
-     conj_tac
-     >- (rpt strip_tac >>
-         qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ final.vs_memory = _` irule >>
-         qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _` drule >>
-         simp[regions_disjoint_def] >> decide_tac) >>
-     conj_tac
-     >- (map_every qx_gen_tac [`nm`, `ent`, `lp`, `lsz`] >> strip_tac >>
-         `not_fresh_at sa lp` by
-           (gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
-         first_x_assum irule >> simp[]) >>
-     simp[]) >>
+  `stmt_state_rel ctx func cenv cx es final` by
+    (qspecl_then [`func`, `cenv`, `cx`, `es`, `t`, `final`, `ctx`]
+       mp_tac literal_state_memory_frame >>
+     impl_tac >- (rpt conj_tac
+       >- first_assum ACCEPT_TAC
+       >- first_assum ACCEPT_TAC
+       >- (map_every qx_gen_tac [`nm`, `ent`, `lp`, `lsz`] >> strip_tac >>
+           `not_fresh_at sa lp` by
+             (gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+           first_x_assum irule >> simp[])
+       >- (rpt strip_tac >>
+           qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ final.vs_memory = _` irule >>
+           qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _` drule >>
+           simp[regions_disjoint_def] >> decide_tac)
+       >- (qpat_x_assum `LENGTH (mstore _ _ _).vs_memory <= _` mp_tac >>
+           simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
+                arithmeticTheory.MAX_DEF] >> IF_CASES_TAC >> decide_tac) >>
+       rpt strip_tac >>
+       `regions_disjoint off (type_memory_size tv) (w2n w)
+          (32 + 32 * word_size (LENGTH bs))` by
+         (qpat_x_assum `stmt_state_rel ctx _ _ _ _ t` mp_tac >>
+          simp[exprLoweringPropsTheory.stmt_state_rel_def,
+               exprLoweringPropsTheory.immutable_alloca_sep_def] >>
+          strip_tac >> first_x_assum drule_all >> strip_tac >>
+          qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> regions_disjoint _ _ b sz` irule >>
+          goal_assum (drule_at Any) >>
+          simp[venomInstTheory.mk_inst_def]) >>
+       qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ final.vs_memory = _` irule >>
+       gvs[regions_disjoint_def] >> decide_tac) >> simp[]) >>
   suspend "finish"
 QED
 
@@ -829,11 +895,11 @@ Proof
 QED
 
 Theorem literal_memory_vv_post[local]:
-  !func cenv cx e es sa sb s0 t v tvt buf w sz.
+  !func cenv cx e es sa sb s0 t v tvt buf w sz ctx.
     ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
-    stmt_state_rel func cenv cx es t /\
+    stmt_state_rel ctx func cenv cx es t /\
     eval_operand buf.buf_operand t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tvt v <= sz /\
@@ -847,7 +913,7 @@ Theorem literal_memory_vv_post[local]:
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
     (!name b len. local_region cenv es.scopes s0 name b len ==>
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) ==>
-    vv_post func cenv cx e es sa sb s0 es (Value v)
+    vv_post ctx func cenv cx e es sa sb s0 es (Value v)
       (LocatedValue (expr_type e) (base_ptr buf))
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)
 Proof
@@ -956,3 +1022,54 @@ Resume compile_literal_other_vv_sim[string]:
 QED
 
 Finalise compile_literal_other_vv_sim
+
+(* Allocation execution with the frame used by composed buffer payloads. *)
+Theorem alloc_buffer_frame_run:
+  !func cenv cx es sa sm buf sz s.
+    context$compile_alloc_buffer sz sa = (buf,sm) /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
+    MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+      [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
+    ?t w. run_inst_seq (emitted_insts sa sm) s = OK t /\
+      stmt_state_rel ctx func cenv cx es t /\
+      eval_operand buf.buf_operand t = SOME w /\
+      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
+      w2n w + sz < dimword (:256) /\ t.vs_memory = s.vs_memory /\
+      sa.cs_next_id < sm.cs_next_id /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+         FLOOKUP t.vs_allocas aid = SOME entry) /\
+      (!aid b len. aid < sa.cs_next_id /\
+         FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+         regions_disjoint (w2n w) sz b len) /\
+      (!name b len. local_region cenv es.scopes t name b len ==>
+         regions_disjoint (w2n w) sz b len) /\
+      (?p. buf.buf_operand = Var p /\ not_fresh_at sm p) /\
+      t.vs_labels = s.vs_labels /\ wb_frame cenv es sa s t
+Proof
+  rpt strip_tac >> drule_all literal_alloc_buffer_run >> strip_tac >>
+  `t.vs_labels = s.vs_labels` by
+    (drule compile_alloc_buffer_insts >> strip_tac >>
+     qspecl_then [`sa.cs_next_id`, `n2w sz`,
+       `STRING #"%" (toString sa.cs_next_var)`, `s`] strip_assume_tac
+       step_alloca_frame >>
+     gvs[emitted_insts_def, rich_listTheory.DROP_APPEND1, run_inst_seq_def]) >>
+  `wb_frame cenv es sa s t` by
+    (simp[wb_frame_def] >> metis_tac[locals_kept_mem]) >>
+  qexistsl_tac [`t`, `w`] >> simp[] >> metis_tac[]
+QED
+
+(* The new shared contract and literal simulation must not depend on the
+   legacy expression-correctness admissions in exprLoweringProps. *)
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles then ()
+     else raise Fail "admitted constructor-safe literal-buffer interface"
+  end)
+  [exprLoweringPropsTheory.immutable_alloca_sep_fields,
+   exprLoweringPropsTheory.immutable_alloca_sep_cenv_cong,
+   exprLoweringPropsTheory.immutable_alloca_sep_exec_alloca,
+   stmt_state_rel_exec_alloca, immutables_rel_mem_agree,
+   immutables_rel_mstore_alloca, compile_literal_other_vv_sim];

@@ -12,6 +12,9 @@ roots = ["vyperHolScript.sml",
          "lowering/evalCompilerWitnessesScript.sml",
          "lowering/targetPlaceTestScript.sml",
          "venom/passes/dft/tests/dftEffectOrderTestScript.sml",
+         "lowering/defs/bytecode/eval/evalCompilerAbiTupleStringScript.sml",
+         "lowering/defs/bytecode/eval/evalCompilerAbiCodegenScript.sml",
+         "lowering/abiProofsScript.sml",
          "lowering/supported/supportedTypePropsScript.sml",
          "lowering/supported/supportedNamePropsScript.sml",
          "lowering/supported/supportedDeclPropsScript.sml",
@@ -23,6 +26,14 @@ roots = ["vyperHolScript.sml",
          "venom/codegen/proofs/contextReachabilityChecksScript.sml",
          "tests/vyperPlaceProbesTestScript.sml",
          "tests/vyperPlaceSanityTestScript.sml"]
+
+[[executable]]
+name = "bytecode_parity_native"
+output = "lowering/defs/bytecode/native/bytecode_parity_native.exe"
+objects = ["compilerNativeParity"]
+
+[actions.compilerNativeParity]
+deps = ["compilerNativeEmitTheory"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"

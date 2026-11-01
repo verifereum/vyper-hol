@@ -9,7 +9,7 @@ val () = monadsyntax.enable_monad "vyper_evaluation";
 
 Theorem run_raw_call_static_frame:
   flags.rcf_is_static /\ ~flags.rcf_is_delegate /\
-  run_raw_call cx flags addr data amount accounts transient =
+  run_raw_call cx flags addr data amount gas accounts transient =
     SOME (ok,ret,accounts',transient',logs') ==>
   accounts' = accounts /\ transient' = transient /\ logs' = []
 Proof
@@ -18,16 +18,16 @@ QED
 
 Theorem machine_frame_raw_call_active[local]:
   flags.rcf_is_static /\ ~flags.rcf_is_delegate /\ amount = 0 /\
-  eval_raw_call cx flags addr data amount st = (res,st') ==>
+  eval_raw_call cx flags addr data amount gas st = (res,st') ==>
   machine_frame st st'
 Proof
   strip_tac >>
   gvs[eval_raw_call_def, type_check_def, assert_def, bind_def,
       ignore_bind_def, return_def, get_accounts_def,
       get_transient_storage_def] >>
-  Cases_on `run_raw_call cx flags addr data 0 st.accounts st.tStorage` >>
+  Cases_on `run_raw_call cx flags addr data 0 gas st.accounts st.tStorage` >>
   gvs[lift_option_def, bind_def, return_def, raise_def, machine_frame_def] >>
-  rename1 `run_raw_call _ _ _ _ _ _ _ = SOME call_result` >>
+  rename1 `run_raw_call _ _ _ _ _ _ _ _ = SOME call_result` >>
   PairCases_on `call_result` >>
   drule_all run_raw_call_static_frame >> strip_tac >> gvs[] >>
   Cases_on `flags.rcf_revert_on_failure` >> Cases_on `call_result0` >>
@@ -38,7 +38,7 @@ QED
 
 Theorem machine_frame_raw_call:
   flags.rcf_is_static /\
-  eval_raw_call cx flags addr data amount st = (res,st') ==>
+  eval_raw_call cx flags addr data amount gas st = (res,st') ==>
   machine_frame st st'
 Proof
   strip_tac >> Cases_on `~flags.rcf_is_delegate /\ amount = 0`

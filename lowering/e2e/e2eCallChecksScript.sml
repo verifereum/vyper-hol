@@ -1,11 +1,13 @@
-(* TASK056 exact public schema and saved-kernel/classification gate.
+(* TASK056 public schema and saved-kernel/classification gate.
+ * Raw O1 call correctness is restricted to immutable-free programs because
+ * its source-shape invariant excludes DLOAD; immutable compilation is unchanged.
  * Not a stage producer, definitionless rollup, or full-project audit.
  * Substantive grouped boundary consumer below needs no stage admission.
  *)
 Theory e2eCallChecks
 Ancestors
   e2eCorrectness configuredE2ECorrectness e2eProducers e2eEntry
-  e2eDefs codegenCorrectness vyperLoweringCorrect unitTransformDefs
+  e2eDefs codegenCorrectness vyperLoweringCorrect loweringShapeProps unitTransformDefs
   contextPlanLayoutProps unitShapeDefs frameOutcome emitHelperProps
   compilePhasesProps venomExecSemantics venomState
   e2eBoundaryTest e2eSourceBoundaryCVTest vyperOracleEntryTest
@@ -32,7 +34,7 @@ QED
 val expected_top = ``
   !policy tops deploy_bc runtime_bc am tx ret es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\
+    supported_program tops /\ immutable_free_program tops /\
     source_typing_ok tops am tx /\
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
@@ -46,7 +48,7 @@ val expected_top = ``
        call_result_rel tops ret am tx es r es')``;
 val saved_top = DB.fetch "e2eCorrectness" "vyper_call_correct";
 val () = if aconv expected_top (Thm.concl saved_top) then
-  print "TASK056 EXACT PLAN 2.1: PASS; seven premises, no extra gas/state/memory/shape/ctx premise\n"
+  print "TASK056 RAW O1 CALL SCHEMA: PASS; immutable-free source domain, no extra gas/state/memory/shape/ctx premise\n"
   else raise Fail "TASK056 public call schema changed";
 
 fun check_object admitted (thy,name) = let

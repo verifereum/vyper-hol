@@ -495,7 +495,8 @@ Proof
   conj_tac
   >- gvs[expr_sim_pre_def, well_typed_expr_def,
          vyperTypeCallGraphTheory.int_calls_expr_def, byte_widths_expr_def,
-         alloc_limits_expr_def] >>
+         alloc_limits_expr_def,
+         supportedExprTraverseTheory.expr_has_evm_run_thm] >>
   gvs[subscript_type_ok_def] >>
   Cases_on `idx` >> gvs[] >> rename1 `Literal _ l` >> Cases_on `l` >> gvs[] >>
   rename1 `IntL n` >>
@@ -534,9 +535,13 @@ Theorem base_vv_holds_loc[local]:
     ?v. read_result cx tv es = (INL v, es) /\
         (vv_loc vv = LocMemory ==> val_in_memory tvt v (w2n w) s.vs_memory) /\
         (vv_loc vv = LocStorage ==>
-           read_storage_slot cx F w tvt es = (INL v, es)) /\
+           read_storage_slot cx F w tvt es = (INL v, es) /\
+           slots_in_range (get_storage cx es F) (w2n w) tvt /\
+           storage_read_live cx F (get_storage cx es F) w tvt) /\
         (vv_loc vv = LocTransient ==>
-           read_storage_slot cx T w tvt es = (INL v, es)) /\
+           read_storage_slot cx T w tvt es = (INL v, es) /\
+           slots_in_range (get_storage cx es T) (w2n w) tvt /\
+           storage_read_live cx T (get_storage cx es T) w tvt) /\
         (vv_loc vv = LocCode ==> immutable_holds cenv cx t tv w es) /\
         vv_loc vv <> LocCalldata
 Proof
@@ -575,8 +580,8 @@ QED
 (* The element's pointer in memory: the element lies inside the base's
    bytes, so its address does not wrap, and the base sits where vv_at says. *)
 Theorem tuple_elem_ptr[local]:
-  !func cenv cx env es sa sn es1 tv bvv q w tys tvs vs k.
-    stmt_state_rel func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
+  !func cenv cx env es sa sn es1 tv bvv q w tys tvs vs k ctx.
+    stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
     vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
     eval_operand (vv_operand bvv) q = SOME w /\ vv_loc bvv = LocMemory /\
@@ -619,10 +624,106 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+(* ===== A tuple element's storage slots ===== *)
+
+Theorem tuple_slots_in_range_el[local]:
+  !tvs storage off k.
+    tuple_slots_in_range storage off tvs /\ k < LENGTH tvs ==>
+    slots_in_range storage (off + tuple_prefix_slot_size k tvs) (EL k tvs)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> Cases_on `k` >>
+  simp[vyperLookupStorageTheory.slots_in_range_def,
+       tuple_prefix_slot_size_def] >>
+  rpt strip_tac >> first_x_assum drule_all >>
+  rewrite_tac[arithmeticTheory.ADD_ASSOC]
+QED
+
+(* A tuple element's slots are in range when the tuple's are. *)
+Theorem tuple_elem_slots_in_range[local]:
+  !storage (w:bytes32) tvs k.
+    slots_in_range storage (w2n w) (TupleTV tvs) /\ k < LENGTH tvs ==>
+    slots_in_range storage (w2n (w + n2w (tuple_prefix_slot_size k tvs)))
+      (EL k tvs)
+Proof
+  rpt strip_tac >>
+  `slots_in_range storage (w2n w + tuple_prefix_slot_size k tvs) (EL k tvs)`
+    by (irule tuple_slots_in_range_el >>
+        gvs[Once vyperLookupStorageTheory.slots_in_range_def]) >>
+  `slots_in_range storage (w2n w + tuple_prefix_slot_size k tvs) (EL k tvs) =
+   slots_in_range storage (w2n (w + n2w (tuple_prefix_slot_size k tvs)))
+     (EL k tvs)` by
+    (irule (CONJUNCT1 vyperLookupStorageTheory.slots_in_range_offset_cong) >>
+     `w + n2w (tuple_prefix_slot_size k tvs) =
+      n2w (w2n w + tuple_prefix_slot_size k tvs)` by
+       simp[GSYM wordsTheory.word_add_n2w] >>
+     simp[wordsTheory.w2n_n2w]) >>
+  gvs[]
+QED
+
+Theorem tuple_prefix_slot_size_el_le[local]:
+  !tvs k.
+    k < LENGTH tvs ==>
+    tuple_prefix_slot_size k tvs + type_slot_size (EL k tvs) <=
+      type_slot_size_list tvs
+Proof
+  Induct >- simp[] >> rpt gen_tac >> Cases_on `k` >>
+  simp[tuple_prefix_slot_size_def, vyperValueTheory.type_slot_size_def] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+(* A dead byte of a tuple within element k's slots is dead in element k. *)
+Theorem dead_bytes_list_selected[local]:
+  !tvs st base k j b.
+    k < LENGTH tvs /\ dead_bytes_list st base tvs j b /\
+    base + tuple_prefix_slot_size k tvs <= j /\
+    j < base + tuple_prefix_slot_size k tvs + type_slot_size (EL k tvs) ==>
+    dead_bytes st (base + tuple_prefix_slot_size k tvs) (EL k tvs) j b
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `dead_bytes_list _ _ _ _ _` mp_tac >>
+  simp[Once dead_bytes_def] >> strip_tac >>
+  Cases_on `k` >> gvs[tuple_prefix_slot_size_def] >>
+  TRY (drule (cj 1 accountsRelPropsTheory.dead_bytes_range) >> simp[] >>
+       NO_TAC) >>
+  TRY (drule (cj 2 accountsRelPropsTheory.dead_bytes_range) >> simp[] >>
+       NO_TAC) >>
+  rewrite_tac[arithmeticTheory.ADD_ASSOC] >> first_x_assum irule >> simp[]
+QED
+
+Theorem storage_read_live_tuple_elem[local]:
+  !cx tr st w tvs k.
+    storage_read_live cx tr st w (TupleTV tvs) /\ k < LENGTH tvs ==>
+    storage_read_live cx tr st (w + n2w (tuple_prefix_slot_size k tvs))
+      (EL k tvs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule tuple_prefix_slot_size_el_le >> strip_tac >>
+  `type_slot_size (TupleTV tvs) = type_slot_size_list tvs` by
+    simp[vyperValueTheory.type_slot_size_def] >>
+  Cases_on `type_slot_size (EL k tvs) = 0`
+  >- (simp[storage_read_live_def] >>
+      rpt strip_tac >>
+      qspec_then `w + n2w (tuple_prefix_slot_size k tvs)` mp_tac
+        wordsTheory.w2n_lt >>
+      decide_tac) >>
+  qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+  rewrite_tac[storage_read_live_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
+  `w2n w + tuple_prefix_slot_size k tvs < dimword (:256)` by decide_tac >>
+  `w2n (w + n2w (tuple_prefix_slot_size k tvs)) =
+   w2n w + tuple_prefix_slot_size k tvs` by
+    (Cases_on `w` >> gvs[wordsTheory.word_add_n2w]) >>
+  simp[] >> strip_tac >>
+  `dead_bytes_list st (w2n w) tvs j b` by
+    (qpat_x_assum `_ ==> dead_bytes _ _ _ _ _` mp_tac >>
+     simp[Once dead_bytes_def]) >>
+  irule dead_bytes_list_selected >> simp[]
+QED
+
 (* The element's placement in memory, from the base's. *)
 Theorem tuple_vv_at_elem[local]:
-  !func cenv cx env es sa sn es1 tv bvv q w dst tys tvs vs k tv' t.
-    stmt_state_rel func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
+  !func cenv cx env es sa sn es1 tv bvv q w dst tys tvs vs k tv' t ctx.
+    stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
     vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
     read_result cx tv' es1 = (INL (EL k vs), es1) /\
@@ -695,8 +796,8 @@ QED
 
 (* The element's value_vv holds the element, from the base's. *)
 Theorem tuple_vv_holds_elem[local]:
-  !func cenv cx env es sa sn es1 tv bvv q w dst tys tvs vs k tv'.
-    stmt_state_rel func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
+  !func cenv cx env es sa sn es1 tv bvv q w dst tys tvs vs k tv' ctx.
+    stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
     vv_holds cenv cx (TupleT tys) tv bvv es1 q /\
     vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
@@ -742,13 +843,16 @@ Proof
   `tuple_offset cenv tys (vv_loc bvv) k = tuple_prefix_slot_size k tvs` by
     (irule tuple_offset_slots >> simp[] >> metis_tac[]) >>
   simp[storage_holds_def] >>
-  drule_all read_storage_slot_tuple_elem >> strip_tac >> gvs[]
+  drule_all read_storage_slot_tuple_elem >> strip_tac >> gvs[] >>
+  rpt conj_tac >>
+  FIRST [irule tuple_elem_slots_in_range,
+         irule storage_read_live_tuple_elem] >> simp[]
 QED
 
 (* The base's read, a tuple of the element types. *)
 Theorem tuple_base_read[local]:
-  !func cenv cx obj es sa sb s0 es1 btv bvv s w tys tvs.
-    vv_post func cenv cx obj es sa sb s0 es1 btv bvv s /\
+  !func cenv cx obj es sa sb s0 es1 btv bvv s w tys tvs ctx.
+    vv_post ctx func cenv cx obj es sa sb s0 es1 btv bvv s /\
     expr_type obj = TupleT tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     eval_operand (vv_operand bvv) s = SOME w /\
@@ -771,8 +875,8 @@ QED
 
 (* The element's value_vv after the ADD, from the base's. *)
 Theorem tuple_vv_post[local]:
-  !func cenv cx env obj idx es sa sn s0 es1 tv bvv q w dst tys tvs vs k tv'.
-    vv_post func cenv cx obj es sa sn s0 es1 tv bvv q /\
+  !func cenv cx env obj idx es sa sn s0 es1 tv bvv q w dst tys tvs vs k tv' ctx.
+    vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
     expr_sim_inv cenv cx env es /\
     eval_operand (vv_operand bvv) q = SOME w /\
     eval_operand dst q =
@@ -784,18 +888,18 @@ Theorem tuple_vv_post[local]:
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
     values_have_types tvs vs /\
     read_result cx tv' es1 = (INL (EL k vs), es1) ==>
-    vv_post func cenv cx (Subscript (EL k tys) obj idx) es sa sn s0 es1 tv'
+    vv_post ctx func cenv cx (Subscript (EL k tys) obj idx) es sa sn s0 es1 tv'
       (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `vv_post _ _ _ obj _ _ _ _ _ _ _ _`
+  qpat_x_assum `vv_post _ _ _ _ obj _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   rewrite_tac[vv_post_def] >> gvs[vyperASTTheory.expr_type_def] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
   >- (irule tuple_vv_holds_elem >> simp[] >> metis_tac[]) >>
   qspecl_then [`func`, `cenv`, `cx`, `env`, `es`, `sa`, `sn`, `es1`, `tv`,
                `bvv`, `q`, `w`, `dst`, `tys`, `tvs`, `vs`, `k`, `tv'`,
-               `EL k tys`] mp_tac tuple_vv_at_elem >>
+               `EL k tys`, `ctx`] mp_tac tuple_vv_at_elem >>
   imp_res_tac values_have_types_length >> simp[]
 QED
 
@@ -847,7 +951,7 @@ Proof
       `LENGTH tvs = LENGTH tys` by
         (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
       irule frag_exec_seq >>
-      qexistsl_tac [`\s. vv_post func cenv cx obj es sa sm s0 es1 btv bvv s`,
+      qexistsl_tac [`\s. vv_post ctx func cenv cx obj es sa sm s0 es1 btv bvv s`,
                     `sm`] >>
       simp[] >> conj_tac
       >- (irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[]) >>

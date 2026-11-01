@@ -35,8 +35,8 @@ End
    module binding, its descriptor, and the specified layout. *)
 Definition target_test_env_def:
   target_test_env ce vt = ce with <|
-    ce_vars := FEMPTY |++ [("self.m", TransientLoc 7w)];
-    ce_hashmap_info := (\n. if n = "self.m" then
+    ce_module_vars := FEMPTY |++ [((NONE,"m"), TransientLoc 7w)];
+    ce_hashmap_info := (\n. if n = (NONE,"m") then
       SOME (T, BaseT (UintT 256), vt) else NONE) |>
 End
 
@@ -88,7 +88,7 @@ Theorem target_nested_key_order:
    od)
 Proof
   rewrite_tac[compile_get_target_ptr_def] >>
-  simp[target_test_env_def, module_var_key_def, nsid_to_string_def,
+  simp[target_test_env_def, nsid_to_string_def,
        value_type_place_def, is_bytestring_type_def, LET_THM,
        FUPDATE_LIST_THM, FLOOKUP_UPDATE, comp_bind_assoc, target_bind_return]
 QED
@@ -96,8 +96,7 @@ QED
 Theorem target_local_module_collision:
   compile_get_target_ptr
     ((target_test_env ce vt) with <|
-      ce_vars := FEMPTY |++ [("self.m", TransientLoc 7w);
-                            ("m", MemLoc 96 64)];
+      ce_vars := FEMPTY |++ [("m", MemLoc 96 64)];
       ce_var_type := (\n. SOME (ArrayT (BaseT (UintT 256)) (Fixed 2))) |>)
     (NameTarget "m") st =
   ((Lit 96w, SOME LocMemory,
@@ -121,7 +120,7 @@ Theorem target_bytestring_key_hash:
    od)
 Proof
   rewrite_tac[compile_get_target_ptr_def] >>
-  simp[target_test_env_def, module_var_key_def, nsid_to_string_def,
+  simp[target_test_env_def, nsid_to_string_def,
        value_type_place_def, is_bytestring_type_def, LET_THM,
        FUPDATE_LIST_THM, FLOOKUP_UPDATE, comp_bind_assoc, target_bind_return]
 QED
@@ -142,12 +141,13 @@ Theorem target_map_array_continuation:
         (Literal (BaseT (UintT 256)) (IntL 1)))
       (Literal (BaseT (UintT 256)) (IntL 2))) =
   (do p <- compile_mapping_subscript (Lit 7w) (Lit 1w);
-      q <- compile_array_subscript p (Lit 2w) F 3 1 1 F TLOAD;
+      q <- compile_array_subscript p (Lit 2w) F 3 1 1 F
+             (compile_ptr_load ce.ce_is_ctor ce.ce_imm_alloca LocTransient);
       return (q, SOME LocTransient, SOME (ValPT (BaseT (UintT 256))))
    od)
 Proof
   rewrite_tac[compile_get_target_ptr_def] >>
-  simp[target_test_env_def, module_var_key_def, nsid_to_string_def,
+  simp[target_test_env_def, nsid_to_string_def,
        value_type_place_def, is_bytestring_type_def, LET_THM,
        FUPDATE_LIST_THM, FLOOKUP_UPDATE, comp_bind_assoc, target_bind_return,
        target_literal_key, word_scale_def, expr_type_def,
@@ -172,7 +172,7 @@ Theorem target_map_struct_continuation:
    od)
 Proof
   rewrite_tac[compile_get_target_ptr_def] >>
-  simp[target_struct_env_def, target_test_env_def, module_var_key_def,
+  simp[target_struct_env_def, target_test_env_def,
        nsid_to_string_def, value_type_place_def, is_bytestring_type_def,
        LET_THM, FUPDATE_LIST_THM, FLOOKUP_UPDATE,
        comp_bind_assoc, target_bind_return, target_literal_key,
@@ -190,7 +190,7 @@ Definition target_transient_trace_def:
         let loc = (case FST (SND r) of SOME l => l | NONE => LocMemory) in
         do compile_assign_value ce (FST r) loc (Lit 9w) T NONE
              (BaseT (UintT 256)) (BaseT (UintT 256)) NONE 32;
-           compile_ptr_load F loc (FST r)
+           compile_ptr_load F ce.ce_imm_alloca loc (FST r)
         od
      od) target_test_state
 End

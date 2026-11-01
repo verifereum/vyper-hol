@@ -4,8 +4,9 @@
  * body_sim_mutual: by evaluate_ind, every statement, statement list and
  * expression of a frame of the lowered program simulates (bodySim's
  * predicates), internal calls included.  Each case of the induction is a
- * case lemma of bodySimStmtCases or bodySimExprCases, or a short tactic
- * below.
+ * case lemma of bodySimStmtCases, bodySimDeclCases or bodySimExprCases, or
+ * a short tactic below.  bodySimEntry gives ce_locals_declared at a body's
+ * entry.
  *
  * TOP-LEVEL:
  *   body_sim_mutual  — the eleven predicates, by evaluate_ind
@@ -14,7 +15,9 @@
 
 Theory bodySimMain
 Ancestors
-  list bodySim bodySimStmtCases bodySimExprCases stmtSimIf supportedStmts
+  list bodySim bodySimStmtCases bodySimDeclCases bodySimExprCases
+  bodySimEntry stmtSimIf
+  supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeCallGraph
 
 val body_ind = evaluate_ind
@@ -110,7 +113,7 @@ QED
 Theorem body_stmts_sim:
   !tops bindings ctx func cenv cx env env' ret_ty lctx RetQ ss es res es'.
     body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     type_stmts env ret_ty ss = SOME env' /\
     EVERY (stmt_exprs_ok cenv) ss /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
@@ -125,7 +128,7 @@ QED
 Theorem body_stmt_sim:
   !tops bindings ctx func cenv cx env env' ret_ty lctx RetQ s es res es'.
     body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\
     call_evaluation_safe cx (int_calls_stmt s) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
