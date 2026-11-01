@@ -4,6 +4,7 @@ Ancestors
   intCallLookup intCallCallee fragExec loweringShapeProps list
   moduleLowering compileEnv stmtSim vyperCompiler venomInst bodyIntCallLabels
   bodyIntCallLabelFrame bodyIntCallContextLabels bodyIntCallMaterialLabels
+  bodyIntCallExprLabels
 
 Theorem compile_internal_fn_bodies_append:
   !xs ys st.
