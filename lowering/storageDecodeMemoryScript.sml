@@ -334,3 +334,165 @@ Theorem none_decode_in_memory:
 Proof
   simp[decode_base_from_slot_def, val_in_memory_def]
 QED
+
+Theorem slots_to_bytes_take[local]:
+  !slots n. slots_to_bytes n slots =
+    TAKE n (FLAT (MAP (\w. word_to_bytes (w:bytes32) T) slots))
+Proof
+  Induct >> simp[slots_to_bytes_def] >>
+  gen_tac >> Cases_on `n` >>
+  simp[slots_to_bytes_def, byteTheory.word_to_bytes_be_def,
+       TAKE_APPEND, byteTheory.LENGTH_word_to_bytes, LENGTH_TAKE_EQ,
+       arithmeticTheory.MIN_DEF] >>
+  IF_CASES_TAC >>
+  simp[byteTheory.LENGTH_word_to_bytes, TAKE_LENGTH_TOO_LONG]
+QED
+
+Theorem read_slots_length[local]:
+  !n st bs. LENGTH (read_slots st bs n) = n
+Proof
+  Induct >> simp[read_slots_def]
+QED
+
+Theorem read_slots_index[local]:
+  !n st bs i. i < n ==>
+    EL i (read_slots st bs n) = read_slot st (bs + i)
+Proof
+  Induct >> simp[read_slots_def] >>
+  rpt gen_tac >> Cases_on `i`
+  >- simp[read_slot_def] >>
+  simp[] >> strip_tac >>
+  pure_rewrite_tac[arithmeticTheory.ADD1] >>
+  simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
+Theorem flat_word_bytes_length[local]:
+  !ws. LENGTH (FLAT (MAP (\w. word_to_bytes (w:bytes32) T) ws)) =
+       32 * LENGTH ws
+Proof
+  Induct >> simp[byteTheory.LENGTH_word_to_bytes]
+QED
+
+Theorem flat_word_bytes_index[local]:
+  !ws k. k < 32 * LENGTH ws ==>
+    EL k (FLAT (MAP (\w. word_to_bytes (w:bytes32) T) ws)) =
+    EL (k MOD 32) (word_to_bytes (EL (k DIV 32) ws) T)
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  Cases_on `k < 32`
+  >- simp[EL_APPEND1, byteTheory.LENGTH_word_to_bytes,
+          arithmeticTheory.LESS_DIV_EQ_ZERO, arithmeticTheory.LESS_MOD] >>
+  `?j. k = 32 + j` by (qexists `k - 32` >> decide_tac) >>
+  gvs[EL_APPEND2, byteTheory.LENGTH_word_to_bytes,
+      arithmeticTheory.ADD_DIV_ADD_DIV, arithmeticTheory.ADD_MOD,
+      arithmeticTheory.MULT_CLAUSES] >>
+  `(j + 32) DIV 32 = SUC (j DIV 32)` by
+    (`j + 32 = 1 * 32 + j` by simp[] >>
+     pop_assum SUBST1_TAC >> simp[arithmeticTheory.ADD_DIV_ADD_DIV]) >>
+  asm_rewrite_tac[EL, TL]
+QED
+
+Theorem word_size_capacity[local]:
+  !n. n <= 32 * word_size n
+Proof
+  simp[vfmConstantsTheory.word_size_def] >> gen_tac >>
+  qspec_then `32` mp_tac arithmeticTheory.DIVISION >>
+  simp[] >> disch_then (qspec_then `n + 31` strip_assume_tac) >>
+  `((n + 31) MOD 32) < 32` by simp[] >> decide_tac
+QED
+
+Theorem decode_dyn_bytes_observations:
+  !st bs max vs.
+    decode_dyn_bytes st bs max = SOME vs ==>
+    LENGTH vs = w2n (read_slot st bs) /\ LENGTH vs <= max /\
+    (!k. k < LENGTH vs ==>
+      EL k vs = EL (k MOD 32)
+        (word_to_bytes (read_slot st (bs + 1 + k DIV 32)) T))
+Proof
+  simp[decode_dyn_bytes_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[GSYM read_slot_def, slots_to_bytes_take] >>
+  `w2n (read_slot st bs) <=
+     LENGTH (FLAT (MAP (\w. word_to_bytes (w:bytes32) T)
+       (read_slots st (bs + 1) (word_size (w2n (read_slot st bs))))))` by
+    simp[flat_word_bytes_length, read_slots_length, word_size_capacity] >>
+  gvs[LENGTH_TAKE_EQ] >>
+  simp[EL_TAKE] >>
+  `k < 32 * word_size (w2n (read_slot st bs))` by
+    (mp_tac (Q.SPEC `w2n (read_slot st bs)` word_size_capacity) >> decide_tac) >>
+  simp[flat_word_bytes_index, read_slots_length] >>
+  `k DIV 32 < word_size (w2n (read_slot st bs))` by
+    simp[arithmeticTheory.DIV_LT_X] >>
+  simp[read_slots_index] >>
+  pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >>
+  simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
+Theorem copy_dyn_bytes_contents[local]:
+  !st bs max dst mem vs.
+    copy_bytes st bs (1 + word_size max) (dyn_bytes_dead st bs max) dst mem /\
+    decode_dyn_bytes st bs max = SOME vs ==>
+    mem_word_at dst mem = n2w (LENGTH vs) /\
+    mem_bytes_at (dst + 32) (LENGTH vs) mem = vs
+Proof
+  rpt strip_tac >>
+  drule decode_dyn_bytes_observations >> strip_tac
+  >- (irule copy_bytes_word >> rpt strip_tac >>
+      qpat_x_assum `copy_bytes _ _ _ _ _ _` mp_tac >>
+      simp[copy_bytes_def] >>
+      disch_then (qspecl_then [`0`, `b`] mp_tac) >>
+      simp[dyn_bytes_dead_def]) >>
+  irule LIST_EQ >> simp[valueEncodingProofsTheory.LENGTH_mem_bytes_at_proof] >>
+  qx_gen_tac `k` >> strip_tac >>
+  `k DIV 32 < word_size max` by
+    (simp[arithmeticTheory.DIV_LT_X] >>
+     mp_tac (Q.SPEC `max` word_size_capacity) >> decide_tac) >>
+  `k MOD 32 < 32` by simp[] >>
+  `k = 32 * (k DIV 32) + k MOD 32` by
+    (qspec_then `32` mp_tac arithmeticTheory.DIVISION >>
+     simp[] >> disch_then (qspec_then `k` mp_tac) >> decide_tac) >>
+  qpat_x_assum `copy_bytes _ _ _ _ _ _` mp_tac >>
+  simp[copy_bytes_def] >>
+  disch_then (qspecl_then [`1 + k DIV 32`, `k MOD 32`] mp_tac) >>
+  simp[dyn_bytes_dead_def, GSYM read_slot_def] >>
+  strip_tac >>
+  `dst + 32 * (k DIV 32 + 1) + k MOD 32 = dst + 32 + k` by decide_tac >>
+  gvs[valueEncodingProofsTheory.EL_mem_bytes_at]
+QED
+
+Theorem dynamic_bytes_decode_in_memory:
+  !st bs max dst mem vs.
+    storage_live_memory st bs (BaseTV (BytesT (Dynamic max))) dst mem /\
+    decode_dyn_bytes st bs max = SOME vs ==>
+    val_in_memory (BaseTV (BytesT (Dynamic max))) (BytesV vs) dst mem
+Proof
+  `!st bs max. dead_bytes st bs (BaseTV (BytesT (Dynamic max))) =
+                dyn_bytes_dead st bs max` by
+    simp[FUN_EQ_THM, dead_bytes_def] >>
+  simp[storage_live_memory_def, type_slot_size_def, val_in_memory_def] >>
+  metis_tac[copy_dyn_bytes_contents, arithmeticTheory.ADD_COMM]
+QED
+
+Theorem bytes_string_roundtrip[local]:
+  !bs:byte list. MAP (n2w o ORD) (MAP (CHR o w2n) bs) = bs
+Proof
+  Induct >> simp[] >> gen_tac >>
+  `w2n (h:byte) < 256` by
+    (mp_tac (Q.ISPEC `h:byte` wordsTheory.w2n_lt) >>
+     simp[wordsTheory.dimword_8]) >>
+  simp[stringTheory.ORD_CHR]
+QED
+
+Theorem string_decode_in_memory:
+  !st bs max dst mem vs.
+    storage_live_memory st bs (BaseTV (StringT max)) dst mem /\
+    decode_dyn_bytes st bs max = SOME vs ==>
+    val_in_memory (BaseTV (StringT max))
+      (StringV (MAP (CHR o w2n) vs)) dst mem
+Proof
+  `!st bs max. dead_bytes st bs (BaseTV (StringT max)) =
+                dyn_bytes_dead st bs max` by
+    simp[FUN_EQ_THM, dead_bytes_def] >>
+  simp[storage_live_memory_def, type_slot_size_def,
+       val_in_memory_def, bytes_string_roundtrip] >>
+  metis_tac[copy_dyn_bytes_contents, arithmeticTheory.ADD_COMM]
+QED
