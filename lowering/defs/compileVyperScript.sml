@@ -27,6 +27,7 @@ Ancestors
   jumptableUtils
   vyperContext
   vyperEvent
+  valueEncoding
   compileEnv
   vyperAST
   byte
@@ -74,6 +75,9 @@ Definition build_struct_fields_one_def:
     MAP (λ(name, ty). (name, ty, field_mem_bytes tenv ty)) args
 End
 
+(* Field sizes use the complete semantic environment, so a reference to a
+   later struct declaration has the same layout as an earlier reference.
+   Invalid field types are rejected by check_contract before compilation. *)
 Definition build_struct_fields_map_def:
   build_struct_fields_map tenv []
     (sft : (string, (string # type # num) list) fmap) = sft ∧
@@ -342,6 +346,94 @@ Definition add_module_var_locations_def:
     add_module_var_locations rest vars'
 End
 
+(* Immutable offsets use the same module namespace as storage variables. *)
+Definition add_immutable_locations_def:
+  add_immutable_locations sft ([] : toplevel list) (off : num) vars = vars /\
+  add_immutable_locations sft (top :: rest) off vars =
+    case top of
+      VariableDecl _ Immutable name ty _ =>
+        add_immutable_locations sft rest (off + type_mem_bytes sft ty)
+          (vars |+ (module_var_key (NONE, name), ImmutableLoc off))
+    | _ => add_immutable_locations sft rest off vars
+End
+
+Theorem compute_immutables_len_append:
+  !xs ys. compute_immutables_len sft (xs ++ ys) =
+    compute_immutables_len sft xs + compute_immutables_len sft ys
+Proof
+  Induct >> simp[compute_immutables_len_def] >>
+  Cases_on `h` >> simp[compute_immutables_len_def] >>
+  CASE_TAC >> decide_tac
+QED
+
+Theorem add_immutable_locations_append:
+  !xs ys off vars.
+    add_immutable_locations sft (xs ++ ys) off vars =
+    add_immutable_locations sft ys (off + compute_immutables_len sft xs)
+      (add_immutable_locations sft xs off vars)
+Proof
+  Induct >> simp[add_immutable_locations_def, compute_immutables_len_def] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[add_immutable_locations_def, compute_immutables_len_def] >>
+  CASE_TAC >>
+  simp[add_immutable_locations_def, compute_immutables_len_def, arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem add_immutable_locations_lookup_unchanged:
+  !tops off vars key.
+    (!vis name ty slot.
+      MEM (VariableDecl vis Immutable name ty slot) tops ==>
+      module_var_key (NONE, name) <> key) ==>
+    FLOOKUP (add_immutable_locations sft tops off vars) key = FLOOKUP vars key
+Proof
+  Induct >- simp[add_immutable_locations_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `h` >>
+  gvs[add_immutable_locations_def] >>
+  (CASE_TAC ORELSE all_tac) >>
+  gvs[add_immutable_locations_def] >>
+  TRY (last_x_assum irule >> metis_tac[] >> NO_TAC) >>
+  rename1 `add_immutable_locations sft tops (off + type_mem_bytes sft ty)
+    (vars |+ (module_var_key (NONE, name), ImmutableLoc off))` >>
+  `module_var_key (NONE, name) <> key` by metis_tac[] >>
+  last_x_assum (qspecl_then
+    [`off + type_mem_bytes sft ty`,
+     `vars |+ (module_var_key (NONE, name), ImmutableLoc off)`, `key`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem add_immutable_locations_declaration_lookup:
+  (!vis' name' ty' slot'.
+    MEM (VariableDecl vis' Immutable name' ty' slot') suffix ==>
+    module_var_key (NONE, name') <> module_var_key (NONE, name)) ==>
+  FLOOKUP (add_immutable_locations sft
+    (prefix ++ VariableDecl vis Immutable name ty slot :: suffix) off vars)
+    (module_var_key (NONE, name)) =
+  SOME (ImmutableLoc (off + compute_immutables_len sft prefix))
+Proof
+  strip_tac >> simp[add_immutable_locations_append,
+    add_immutable_locations_def] >>
+  drule add_immutable_locations_lookup_unchanged >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem immutable_declaration_interval_bound:
+  off + compute_immutables_len sft prefix + type_mem_bytes sft ty <=
+  off + compute_immutables_len sft
+    (prefix ++ VariableDecl vis Immutable name ty slot :: suffix)
+Proof
+  simp[compute_immutables_len_append, compute_immutables_len_def]
+QED
+
+Theorem last_immutable_region_end:
+  off + compute_immutables_len sft prefix + type_mem_bytes sft ty =
+  off + compute_immutables_len sft
+    (prefix ++ [VariableDecl vis Immutable name ty slot])
+Proof
+  simp[compute_immutables_len_append, compute_immutables_len_def]
+QED
+
 (* ===== Dynamic Array Capacity ===== *)
 
 Definition dynarray_capacity_of_type_def:
@@ -496,7 +588,8 @@ Definition build_compile_env_def:
     let is_external = (vis = External) in
     let rc = returns_stack_count sft_types ret_type in
     let has_return_buf = (rc = 0 ∧ ret_type ≠ NoneT) in
-    let module_vars = add_module_var_locations tops FEMPTY in
+    let module_vars = add_immutable_locations sft_fn tops 0
+      (add_module_var_locations tops FEMPTY) in
     let (arg_vars, args_end) = allocate_args sft_fn args 0 module_vars in
     let locals = collect_locals body in
     (* Every body allocates each local at its declaration (declare_local), so
@@ -537,6 +630,7 @@ Definition build_compile_env_def:
        ce_max_return_size := 0;
        (* Default: overridden by package_internal_fn for ctor context *)
        ce_is_ctor := (vis = Deploy);
+       ce_imm_alloca := NONE;
        ce_func_info := func_info;
        ce_func_param_types := build_func_param_types tops;
        ce_func_ids := build_func_ids 0 tops;
@@ -714,6 +808,18 @@ Proof
   rw[finite_mapTheory.FLOOKUP_UPDATE] >> simp[]
 QED
 
+Theorem add_immutable_locations_FLOOKUP:
+  !sft tops off vars n loc.
+    FLOOKUP (add_immutable_locations sft tops off vars) n = SOME loc ==>
+    FLOOKUP vars n = SOME loc \/ ?imm_off. loc = ImmutableLoc imm_off
+Proof
+  gen_tac >> Induct >> simp[add_immutable_locations_def] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[add_immutable_locations_def] >> rpt (CASE_TAC >> simp[]) >>
+  strip_tac >> first_x_assum drule >>
+  rw[finite_mapTheory.FLOOKUP_UPDATE] >> simp[]
+QED
+
 (* build_compile_env holds the parameters at MemLoc slots and module
    variables at storage slots: no other MemLoc variable and no PtrVar. *)
 Theorem build_compile_env_vars:
@@ -736,10 +842,12 @@ Proof
        ?off sz. FLOOKUP arg_vars n = SOME (MemLoc off sz)`
     by (rpt strip_tac >> drule_all allocate_args_FLOOKUP_arg >> simp[]) >>
   `!n loc. FLOOKUP arg_vars n = SOME loc /\ ~MEM n (MAP FST args) ==>
-           ?slot. loc = StorageLoc slot \/ loc = TransientLoc slot`
+           (?slot. loc = StorageLoc slot \/ loc = TransientLoc slot) \/
+           (?imm_off. loc = ImmutableLoc imm_off)`
     by (rpt strip_tac >> drule_all allocate_args_FLOOKUP_other >>
         strip_tac >> gvs[] >>
-        drule add_module_var_locations_FLOOKUP >> simp[]) >>
+        drule add_immutable_locations_FLOOKUP >> strip_tac
+        >- (drule add_module_var_locations_FLOOKUP >> simp[]) >> simp[]) >>
   rw[] >> spose_not_then assume_tac >>
   Cases_on `MEM n (MAP FST args)` >> gvs[]
   >- (first_x_assum drule >> strip_tac >> gvs[])
@@ -748,9 +856,18 @@ QED
 
 
 Definition external_return_needs_wrap_def:
-  external_return_needs_wrap (TupleT (_::_::_)) = F /\
-  external_return_needs_wrap _ = T
+  external_return_needs_wrap ret_type = needs_external_call_wrap ret_type
 End
+
+Theorem external_return_needs_wrap_cases:
+  external_return_needs_wrap ty =
+    (case ty of TupleT (_::_::_) => F | _ => T)
+Proof
+  Cases_on `ty` >>
+  simp[external_return_needs_wrap_def, vyperABITheory.needs_external_call_wrap_def] >>
+  rename1 `LENGTH ts` >> Cases_on `ts` >> simp[] >>
+  rename1 `LENGTH rest` >> Cases_on `rest` >> simp[]
+QED
 
 Definition update_cenv_ret_abi_def:
   update_cenv_ret_abi cenv ret_type =

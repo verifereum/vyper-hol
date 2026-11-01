@@ -207,7 +207,7 @@ Proof
   ho_match_mp_tac vyperLookupStorageTheory.slots_in_range_ind >>
   rpt conj_tac >> rpt gen_tac >> strip_tac >>
   PURE_ONCE_REWRITE_TAC[vyperLookupStorageTheory.slots_in_range_def] >>
-  gvs[] >>
+  gvs[vyperLookupStorageTheory.word_slot_canonical_zero] >>
   metis_tac[]
 QED
 

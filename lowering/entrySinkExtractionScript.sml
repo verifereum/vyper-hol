@@ -46,10 +46,16 @@ Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `i.inst_opcode` >> gvs[is_terminator_def] >>
   asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
-  simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def,
-       exec_ext_call_def, exec_delegatecall_def, exec_create_def,
-       exec_alloca_def, AllCaseEqs()]
+  simp[exec_pure1_def, AllCaseEqs()] >>
+  simp[exec_pure2_def, AllCaseEqs()] >>
+  simp[exec_pure3_def, AllCaseEqs()] >>
+  simp[exec_read0_def, AllCaseEqs()] >>
+  simp[exec_read1_def, AllCaseEqs()] >>
+  simp[exec_write2_def, AllCaseEqs()] >>
+  simp[exec_ext_call_def, AllCaseEqs()] >>
+  simp[exec_delegatecall_def, AllCaseEqs()] >>
+  simp[exec_create_def, AllCaseEqs()] >>
+  simp[exec_alloca_def, AllCaseEqs()]
 QED
 
 Theorem drop_cons_instruction[local]:

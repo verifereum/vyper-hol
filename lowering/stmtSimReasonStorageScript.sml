@@ -61,7 +61,7 @@ Proof
   qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
   simp[unwrap_value_def] >> strip_tac >>
   irule (INST_TYPE [alpha |-> ``:bool``] ensure_storage_memory_defined_frag) >>
-  goal_assum (drule_at (Pat `compile_ensure_in_memory _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_ensure_in_memory _ _ _ _ _ _ _ = _`)) >>
   simp[] >> metis_tac[]
 QED
 

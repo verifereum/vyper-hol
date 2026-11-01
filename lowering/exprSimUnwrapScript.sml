@@ -18,24 +18,27 @@
  *                        unwrap_memory_sim (expr_post_of_vv_post_memory,
  *                        and unwrap_memory_word_sim's MLOAD),
  *                        unwrap_runtime_immutable_word_sim (DLOAD),
+ *                        unwrap_storage_word_sim (SLOAD/TLOAD),
  *                        vv_post_calldata (no calldata pointers)
  *
  * Helpers: compile_expr_extends (exprLoweringProps' compile_expr_grows),
  *   compile_ensure_in_memory_extends, unwrap_value_extends,
- *   expr_post_of_vv_post_load, step_DLOAD, immutable_holds_dload
+ *   expr_post_of_vv_post_load, step_DLOAD, immutable_holds_dload,
+ *   word_type_slot_size, storage_word_load, storage_holds_load
  *
  * Cheated, each with its reason at the lemma:
- *   unwrap_storage_word_sim — a word load from storage (false as stated)
- *   unwrap_ctor_immutable_word_sim — a word immutable in the constructor
- *                        (the lowering differs from Python)
+ *   unwrap_ctor_immutable_word_sim — constructor immutable word-load proof
  *   unwrap_copy_sim    — the copy of an aggregate out of storage or code
  *)
 
 Theory exprSimUnwrap
 Ancestors
   list finite_map
-  exprSim exprLowering compileEnv vyperAST vyperInterpreter vyperState
+  exprSim exprLowering compileEnv immutableEncoding vyperAST vyperInterpreter
+  vyperState
   loweringSlice fragExec freshWrites venomInst venomExecSemantics venomState
+  valueEncoding valueEncodingProofs vyperTypeValues vyperStorage vyperValue
+  vyperLookupStorage
 Libs
   pairLib
 
@@ -53,35 +56,67 @@ Proof
   drule (cj 1 exprLoweringPropsTheory.compile_expr_grows) >> simp[]
 QED
 
+Theorem compile_imm_load_word_appends[local]:
+  !is_ctor imm off.
+    cs_appends (context$compile_imm_load_word is_ctor imm off)
+Proof
+  rpt gen_tac >> Cases_on `imm` >> Cases_on `is_ctor` >>
+  simp[contextTheory.compile_imm_load_word_def, cs_appends_emit_helpers] >>
+  irule cs_appends_bind >> simp[cs_appends_emit_helpers]
+QED
+
+Theorem compile_lit_byte_offset_appends[local]:
+  !op off. cs_appends (context$compile_lit_byte_offset op off)
+Proof
+  rpt gen_tac >> Cases_on `op` >>
+  rw[contextTheory.compile_lit_byte_offset_def,
+     cs_appends_return, cs_appends_emit_helpers]
+QED
+
+Theorem compile_imm_copy_to_memory_appends[local]:
+  !n is_ctor imm src dst off.
+    cs_appends (context$compile_imm_copy_to_memory is_ctor imm src dst n off)
+Proof
+  Induct >> rw[contextTheory.compile_imm_copy_to_memory_def,
+               cs_appends_return] >>
+  rpt (FIRST [irule cs_appends_bind, irule cs_appends_ignore_bind] >>
+       rw[compile_lit_byte_offset_appends, compile_imm_load_word_appends,
+          cs_appends_emit_helpers]) >>
+  simp[]
+QED
+
 Theorem compile_ensure_in_memory_appends[local]:
-  !pop loc mem_bytes word_count is_ctor.
-    cs_appends (compile_ensure_in_memory pop loc mem_bytes word_count is_ctor)
+  !pop loc mem_bytes word_count is_ctor imm.
+    cs_appends
+      (compile_ensure_in_memory pop loc mem_bytes word_count is_ctor imm)
 Proof
   rw[contextTheory.compile_ensure_in_memory_def,
      contextTheory.compile_alloc_buffer_def,
      contextTheory.compile_storage_to_memory_def,
      contextTheory.compile_transient_to_memory_def,
-     contextTheory.compile_code_to_memory_def,
+     compile_imm_copy_to_memory_appends,
      contextTheory.compile_word_copy_loop_def,
      contextTheory.compile_ptr_load_def, contextTheory.compile_ptr_store_def,
      word_scale_def] >>
   Cases_on `loc` >> rw[] >>
   rpt (FIRST [irule cs_appends_bind, irule cs_appends_ignore_bind,
               IF_CASES_TAC] >>
-       rw[cs_appends_prims, cs_appends_return, cs_appends_emit_helpers]) >>
-  rw[cs_appends_prims, cs_appends_return, cs_appends_emit_helpers]
+       rw[cs_appends_prims, cs_appends_return, cs_appends_emit_helpers,
+          compile_imm_copy_to_memory_appends]) >>
+  rw[cs_appends_prims, cs_appends_return, cs_appends_emit_helpers,
+     compile_imm_copy_to_memory_appends]
 QED
 
 (* compile_ensure_in_memory's copy only appends to the compile state. *)
 Theorem compile_ensure_in_memory_extends:
-  !pop loc mem_bytes word_count is_ctor sm op sb.
-    compile_ensure_in_memory pop loc mem_bytes word_count is_ctor sm =
+  !pop loc mem_bytes word_count is_ctor imm sm op sb.
+    compile_ensure_in_memory pop loc mem_bytes word_count is_ctor imm sm =
       (op, sb) ==>
     cs_extends sm sb
 Proof
   rpt strip_tac >>
   `cs_appends (compile_ensure_in_memory pop loc mem_bytes word_count
-                 is_ctor)` by simp[compile_ensure_in_memory_appends] >>
+                 is_ctor imm)` by simp[compile_ensure_in_memory_appends] >>
   fs[cs_appends_def] >> first_x_assum drule >> simp[]
 QED
 
@@ -98,9 +133,10 @@ Theorem unwrap_value_extends:
 Proof
   Cases_on `vv` >>
   rw[unwrap_value_def, comp_return_def, cs_extends_refl]
-  >- (rename1 `compile_ptr_load _ loc` >> Cases_on `loc` >>
+  >- (rename1 `compile_ptr_load _ _ loc` >> Cases_on `loc` >>
       gvs[contextTheory.compile_ptr_load_def, AllCaseEqs()] >>
-      metis_tac[emit_op_cs_extends]) >>
+      metis_tac[emit_op_cs_extends, cs_appends_def,
+                compile_imm_load_word_appends]) >>
   rename1 `p.ptr_location` >> Cases_on `p.ptr_location` >>
   gvs[comp_return_def, cs_extends_refl] >>
   metis_tac[compile_ensure_in_memory_extends]
@@ -226,12 +262,37 @@ Proof
      venomExecSemanticsTheory.exec_read1_def]
 QED
 
-(* At runtime a word at an immutable's code pointer is in the data
-   section, where immutables_rel lays the immutable out. *)
+(* Admissibility rules out type/value mismatches; a word type's memory
+   representation is its typed word encoding, including zero padding. *)
+Theorem immutable_word_mem_word_at[local]:
+  !tenv t tv v off mem.
+    evaluate_type tenv t = SOME tv /\ is_word_type t /\
+    immutable_value_admissible tv v /\ val_in_memory tv v off mem ==>
+    mem_word_at off mem = typed_val_to_w256 tv v
+Proof
+  rpt strip_tac >> Cases_on `t`
+  >~ [`BaseT bt`]
+  >- (Cases_on `bt` >>
+      TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
+      gvs[vyperValueTheory.evaluate_type_def, is_word_type_def,
+          AllCaseEqs()] >>
+      Cases_on `v` >>
+      gvs[immutable_value_admissible_def,
+          valueEncodingPropsTheory.val_in_memory_fixed_bytes,
+          valueEncodingPropsTheory.val_in_memory_address,
+          val_in_memory_def, typed_val_to_w256_def]) >>
+  gvs[is_word_type_def, vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `v` >>
+  gvs[immutable_value_admissible_def, val_in_memory_def,
+      typed_val_to_w256_def]
+QED
+
+(* At runtime a word immutable is in the data section at its offset, as
+   immutables_rel says.  Aggregates instead occupy their full memory layout. *)
 Theorem immutable_holds_dload:
   !func cenv cx es s t v w.
-    stmt_state_rel func cenv cx es s /\ ~cenv.ce_is_ctor /\ is_word_type t /\
-    immutable_holds cenv cx t (Value v) w es ==>
+    stmt_state_rel func cenv cx es s /\ ~cenv.ce_is_ctor /\
+    is_word_type t /\ immutable_holds cenv cx t (Value v) w es ==>
     ?tvt. evaluate_type (get_tenv cx) t = SOME tvt /\
           word_of_bytes T (0w:bytes32)
             (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w)) =
@@ -309,13 +370,73 @@ Proof
   rw[] >> metis_tac[expr_post_of_vv_post_memory]
 QED
 
-(* A word in storage or transient storage: an SLOAD or TLOAD.  Cheated:
-   storage_holds relates the slot through decode_base_from_slot, which
-   truncates, so a slot holding a word outside the type's range (0x1FF for a
-   uint8) decodes to a value of the type while the load returns the raw
-   word.  storage_rel as it stands does not rule such a slot out, so this
-   is false as stated, and so is expr_sim_of_vv_sim for such a read; the
-   fix is a storage invariant that keeps each slot in its type's range. *)
+(* A word type takes one slot. *)
+Theorem word_type_slot_size:
+  !tenv t tv.
+    is_word_type t /\ evaluate_type tenv t = SOME tv ==> type_slot_size tv = 1
+Proof
+  rpt strip_tac >>
+  `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
+   t = BaseT BoolT \/ t = BaseT AddressT \/ t = BaseT DecimalT \/
+   (?m. t = BaseT (BytesT (Fixed m)) /\ m <= 32) \/ (?n. t = FlagT n)` by
+    (Cases_on `t` >> fs[is_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_word_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >> fs[is_word_type_def]) >>
+  gvs[evaluate_type_def, AllCaseEqs(), vyperValueTheory.type_slot_size_def]
+QED
+
+(* A word's slot holds its value's encoding: the slot is canonical
+   (slots_in_range), so it encodes back to what it decodes to. *)
+Theorem storage_word_load[local]:
+  !cx t tvt storage w v.
+    is_word_type t /\ evaluate_type (get_tenv cx) t = SOME tvt /\
+    decode_value storage (w2n w) tvt = SOME v /\
+    slots_in_range storage (w2n w) tvt ==>
+    lookup_storage w storage = typed_val_to_w256 tvt v
+Proof
+  rpt strip_tac >>
+  drule vyperTypeValuesTheory.evaluate_type_well_formed_type_value >>
+  strip_tac >>
+  Cases_on `t` >> gvs[is_word_type_def] >>
+  TRY (rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_word_type_def]) >>
+  TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
+  gvs[is_word_type_def, evaluate_type_def, AllCaseEqs()] >>
+  gvs[decode_value_def, slots_in_range_def, word_slot_canonical_def,
+      read_slot_def, decode_base_from_slot_def, encode_base_to_slot_def,
+      typed_val_to_w256_def, val_to_w256_def, bool_to_slot_def,
+      AllCaseEqs(), valueEncodingProofsTheory.word_of_bytes_be_pad_right]
+QED
+
+(* At runtime the word a storage or transient load returns is the value's:
+   the read is live, so storage_rel and transient_rel make the slot agree. *)
+Theorem storage_holds_load[local]:
+  !func cenv cx es s t v w tr.
+    stmt_state_rel func cenv cx es s /\ is_word_type t /\
+    storage_holds cx tr t (Value v) w es ==>
+    !tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
+          (if tr then tload w s else sload w s) = typed_val_to_w256 tvt v
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  gvs[storage_holds_def, read_result_def, return_def] >>
+  gvs[read_storage_slot_def, vyperStorageBackendTheory.get_storage_backend_eq,
+      bind_def, lift_option_def, AllCaseEqs(), return_def, raise_def] >>
+  qpat_x_assum `option_CASE _ _ _ _ = _` mp_tac >> CASE_TAC >>
+  simp[raise_def, return_def] >> strip_tac >> gvs[] >>
+  drule_all storage_word_load >> strip_tac >>
+  `0 < type_slot_size tvt` by (drule_all word_type_slot_size >> simp[]) >>
+  `storage_agree (storage_dead cx tr (get_storage cx es tr))
+     (get_storage cx es tr)
+     (if tr then contract_transient s else contract_storage s)` by
+    (Cases_on `tr` >>
+     gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
+         storage_rel_def, transient_rel_def,
+         vyperStorageBackendTheory.get_storage_def,
+         vfmStateTheory.lookup_account_def]) >>
+  drule_all accountsRelPropsTheory.storage_agree_read_head >> strip_tac >>
+  Cases_on `tr` >> gvs[sload_def, tload_def]
+QED
+
+(* A word in storage or transient storage: an SLOAD or TLOAD. *)
 Theorem unwrap_storage_word_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
@@ -327,15 +448,46 @@ Theorem unwrap_storage_word_sim:
              (LocatedValue t p) s)
       (\s. expr_post func cenv cx e es sa sb s0 es' v op s) R
 Proof
-  cheat
+  rpt strip_tac >>
+  gvs[unwrap_value_def, contextTheory.compile_ptr_load_def] >> (
+  irule frag_exec_pointwise >> rw[] >>
+  rename1 `vv_post _ _ _ _ _ _ _ _ _ _ _ s1` >>
+  `t = expr_type e /\
+   ?w. eval_operand p.ptr_operand s1 = SOME w /\
+       storage_holds cx (p.ptr_location = LocTransient) (expr_type e)
+         (Value v) w es' /\
+       stmt_state_rel func cenv cx es' s1` by
+    gvs[vv_post_def, vv_holds_def] >>
+  qpat_x_assum `t = _` SUBST_ALL_TAC >>
+  `!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
+         (if p.ptr_location = LocTransient then tload w s1 else sload w s1) =
+         typed_val_to_w256 tvt v` by (
+    rpt strip_tac >> drule_then drule storage_holds_load >>
+    disch_then drule >> disch_then drule >> simp[]) >>
+  drule loweringSliceTheory.emit_op_frag >>
+  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es'`, `s1`,
+    `if p.ptr_location = LocTransient then tload w s1 else sload w s1`,
+    `R`] mp_tac) >>
+  impl_tac
+  >- (rpt conj_tac >- first_assum ACCEPT_TAC >- simp[]
+      >- simp[is_terminator_def] >>
+      rpt strip_tac >> gvs[step_inst_base_def, exec_read1_def]) >>
+  strip_tac >> irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
+  simp[] >> rpt strip_tac
+  >~ [`expr_post`] >- (
+  qspecl_then [`func`, `cenv`, `cx`, `e`, `es`, `sa`, `sm`, `sb`, `s0`, `es'`,
+               `v`, `expr_type e`, `p`, `op`, `s1`, `s`,
+               `if p.ptr_location = LocTransient then tload w s1
+                else sload w s1`]
+    mp_tac expr_post_of_vv_post_load >>
+  impl_tac >- (asm_rewrite_tac[] >> rpt strip_tac >> gvs[]) >>
+  simp[]) >>
+  gvs[])
 QED
 
-(* A word immutable in the constructor: an ILOAD.  Cheated, and not
-   provable: the lowering differs from Python here.  compile_ptr_load emits
-   ILOAD at the immutable's offset, and ILOAD reads memory there, while
-   Python's load_word adds the immutables' buffer first
-   (iload(add(offset, immutables_alloca))); and immutables_rel relates the
-   constructor's immutables to vs_immutables, not to memory. *)
+(* A word immutable in the constructor: a load from the immutable buffer.
+   Issue #563 supplies the buffer-relative lowering and memory relation;
+   the corresponding fragment-execution proof remains admitted here. *)
 Theorem unwrap_ctor_immutable_word_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
@@ -351,14 +503,10 @@ QED
 
 (* An aggregate in storage, transient storage or code: a copy into a buffer
    of the expression's own, allocated at instruction id sm.cs_next_id.
-   Cheated.  From storage and transient storage it is the copy loop's
-   proof.  From code at runtime it is the copy's too: immutables_rel lays
-   the immutable out in the data section as val_in_memory does, and
-   immutable_holds places the value inside that layout.  In the constructor
-   the lowering differs from Python:
-   compile_code_to_memory copies with DLOAD from the data section, where
-   Python's load_word reads the immutables' buffer with ILOAD, so it needs
-   a lowering fix as well. *)
+   Cheated: the copy-loop simulation remains to be proved for each source
+   location.  Issue #563 supplies full-layout immutable relations and
+   buffer-relative constructor copies; those are no longer lowering or
+   relation blockers. *)
 Theorem unwrap_copy_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
@@ -411,7 +559,8 @@ Proof
       Cases_on `cenv.ce_is_ctor`
       >- (irule unwrap_ctor_immutable_word_sim >> gvs[]) >>
       irule unwrap_runtime_immutable_word_sim >>
-      gvs[unwrap_value_def, contextTheory.compile_ptr_load_def]) >>
+      gvs[unwrap_value_def, contextTheory.compile_ptr_load_def,
+          contextTheory.compile_imm_load_word_def]) >>
   `p.ptr_location = LocMemory` by (Cases_on `p.ptr_location` >> gvs[]) >>
   irule unwrap_memory_sim >> simp[]
 QED

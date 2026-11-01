@@ -1,0 +1,12 @@
+tup_string_arg
+arr_string_arg
+st_string_field_arg
+arr_dyn_of_fixed
+arr_struct_noclamp
+arr_string_ret
+enc_multi
+enc_ensT_bytes
+dec_bytes_unwrapT
+dec_uint_unwrapT
+flag256_arg
+flag256_array_arg
