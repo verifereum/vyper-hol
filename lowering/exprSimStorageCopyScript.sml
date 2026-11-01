@@ -552,6 +552,32 @@ Proof
   simp[mstore_def, write_memory_with_expansion_def]
 QED
 
+(* Exact sequence equations complement the register-frame run boundaries. *)
+Theorem storage_copy_source_run_effect[local]:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  eval_operand src s = SOME a /\ eval_operand (Var cv) s = SOME k /\
+  (!x. src = Var x ==> x <> sv) ==>
+  run_inst_seq
+    [mk_inst id ADD [src; Var cv] [sv];
+     mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv]] s =
+  OK (update_var vv (copy_runtime_word loc s (a+k))
+        (update_var sv (a+k) s))
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id ADD [src; Var cv] [sv]) s =
+     OK (update_var sv (a+k) s)` by (irule step_ADD >> simp[]) >>
+  `copy_runtime_word loc (update_var sv (a+k) s) (a+k) =
+     copy_runtime_word loc s (a+k)` by
+    (irule copy_runtime_word_static >> simp[]) >>
+  `step_inst_base
+     (mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv])
+     (update_var sv (a+k) s) =
+     OK (update_var vv (copy_runtime_word loc (update_var sv (a+k) s) (a+k))
+           (update_var sv (a+k) s))` by
+    (irule storage_copy_load_exact >> simp[eval_operand_update_var]) >>
+  gvs[] >> simp[run_inst_seq_def]
+QED
+
 Theorem storage_copy_source_run[local]:
   !opc src a cv sv vv id s k.
     (opc = SLOAD \/ opc = TLOAD) /\
@@ -584,6 +610,37 @@ Proof
   gvs[ALL_DISTINCT, eval_operand_def, lookup_var_update_var] >>
   irule storage_copy_operand_frame >>
   qexistsl [`[sv; vv]`, `s`] >> simp[] >> metis_tac[]
+QED
+
+Theorem storage_copy_destination_run_effect[local]:
+  eval_operand dst s = SOME b /\ eval_operand (Var cv) s = SOME k /\
+  eval_operand (Var vv) s = SOME v /\
+  vv <> mv /\ vv <> dv /\
+  (!x. dst = Var x ==> x <> mv) ==>
+  run_inst_seq
+    [mk_inst id MUL [Var cv; Lit 32w] [mv];
+     mk_inst (id+1) ADD [dst; Var mv] [dv];
+     mk_inst (id+2) MSTORE [Var dv; Var vv] []] s =
+  OK (mstore (w2n (b+k*32w)) v
+        (update_var dv (b+k*32w) (update_var mv (k*32w) s)))
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id MUL [Var cv; Lit 32w] [mv]) s =
+     OK (update_var mv (k*32w) s)` by
+    (irule step_MUL >> simp[eval_operand_lit]) >>
+  `eval_operand dst (update_var mv (k*32w) s) = SOME b` by
+    (Cases_on `dst` >> gvs[eval_operand_def, lookup_var_update_var]) >>
+  `step_inst_base (mk_inst (id+1) ADD [dst; Var mv] [dv])
+     (update_var mv (k*32w) s) =
+     OK (update_var dv (b+k*32w) (update_var mv (k*32w) s))` by
+    (irule step_ADD >> simp[eval_operand_update_var]) >>
+  `step_inst_base (mk_inst (id+2) MSTORE [Var dv; Var vv] [])
+     (update_var dv (b+k*32w) (update_var mv (k*32w) s)) =
+     OK (mstore (w2n (b+k*32w)) v
+           (update_var dv (b+k*32w) (update_var mv (k*32w) s)))` by
+    (irule storage_copy_store_exact >>
+     simp[eval_operand_update_var, eval_operand_update_other]) >>
+  simp[run_inst_seq_def]
 QED
 
 Theorem storage_copy_destination_run[local]:
@@ -629,6 +686,21 @@ Proof
        t.vs_halted = s2.vs_halted /\ t.vs_labels = s2.vs_labels` by
     (irule storage_copy_store_step >> simp[]) >>
   qexists_tac `t` >> simp[run_inst_seq_def] >> metis_tac[]
+QED
+
+Theorem storage_copy_increment_run_effect[local]:
+  eval_operand (Var cv) s = SOME k ==>
+  run_inst_seq
+    [mk_inst id ADD [Var cv; Lit 1w] [nv];
+     mk_inst (id+1) ASSIGN [Var nv] [cv]] s =
+  OK (update_var cv (k+1w) (update_var nv (k+1w) s))
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id ADD [Var cv; Lit 1w] [nv]) s =
+     OK (update_var nv (k+1w) s)` by
+    (irule step_ADD >> simp[eval_operand_lit]) >>
+  simp[run_inst_seq_def] >>
+  simp[step_inst_base_def, mk_inst_def, eval_operand_update_var]
 QED
 
 Theorem storage_copy_increment_run[local]:
