@@ -172,7 +172,7 @@ cd vyper-src
 git fetch --unshallow --tags
 git checkout --detach "$(tr -d '[:space:]' < ../VYPER_PIN)"
 git config core.abbrev 8
-SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0a4+cd74ce4f \
+SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0a4+9362e36b \
   PIP_CONSTRAINT="../tests/semantics-test-constraints.txt ../tests/semantics-build-constraints.txt" \
   pip install . --group test
 cd ..
