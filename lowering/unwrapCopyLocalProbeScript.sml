@@ -197,3 +197,95 @@ Proof
       simp[local_probe_old_region] >> EVAL_TAC) >>
   EVAL_TAC
 QED
+
+(* STOP preserves the observed memory, so result inclusion observes the
+   protected bytes even for unreachable alternative endpoint states. *)
+Theorem local_probe_run_from:
+  run_from fuel local_probe_ctx local_probe_func local_probe_start =
+    Halt (halt_state local_probe_final)
+Proof
+  EVAL_TAC
+QED
+
+Theorem local_probe_continuation:
+  s.vs_current_bb = "entry" /\ s.vs_inst_idx = 3 ==>
+  run_from 0 local_probe_ctx local_probe_func s =
+    Halt (halt_state (s with vs_returndata := []))
+Proof
+  strip_tac >> irule run_from_halt >>
+  qexistsl_tac [`<| bb_label := "entry"; bb_instructions :=
+                    local_probe_insts ++ [mk_inst 3 STOP [] []] |>`,
+                 `mk_inst 3 STOP [] []`] >>
+  simp[local_probe_func_def, mk_raw_function_def, lookup_block_def,
+       get_instruction_def, local_probe_insts_def, mk_inst_def] >> EVAL_TAC
+QED
+
+Theorem local_probe_locals_halt:
+  locals_kept cenv es s0 (halt_state (s with vs_returndata := [])) =
+  locals_kept cenv es s0 s
+Proof
+  simp[locals_kept_def, halt_state_def]
+QED
+
+Theorem local_probe_bad_final:
+  ~locals_kept local_probe_env local_probe_old local_probe_start
+    (halt_state local_probe_final)
+Proof
+  simp[locals_kept_def, halt_state_def] >>
+  qexistsl_tac [`"old"`, `0`, `32`, `0`, `32`] >>
+  simp[local_probe_old_region] >> EVAL_TAC
+QED
+
+Theorem local_probe_not_frag:
+  expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 1) ==>
+  ~frag_exec local_probe_ctx local_probe_sm local_probe_sb
+    (\s. vv_post local_probe_ctx local_probe_func local_probe_env
+       empty_evaluation_context e local_probe_old local_probe_sm local_probe_sm
+       local_probe_start local_probe_source (Value local_probe_value)
+       (LocatedValue (ArrayT (BaseT (UintT 256)) (Fixed 1))
+         (mk_ptr (Lit 32w) LocStorage)) s)
+    (\s. expr_post local_probe_ctx local_probe_func local_probe_env
+       empty_evaluation_context e local_probe_old local_probe_sm local_probe_sb
+       local_probe_start local_probe_source local_probe_value (Var "%1") s)
+    (\r. F)
+Proof
+  strip_tac >> simp[frag_exec_def] >>
+  qexistsl_tac [`local_probe_func`, `local_probe_start`] >>
+  simp[local_probe_has_code, local_probe_vv_post, local_probe_controls] >>
+  simp[local_probe_compile, local_probe_insts_def] >>
+  qx_gen_tac `s'` >> rpt disch_tac >>
+  Cases_on `locals_kept local_probe_env local_probe_old local_probe_start s'`
+  >- (disj2_tac >> disj2_tac >> qexists_tac `0` >>
+      simp[local_probe_continuation, local_probe_run_from] >>
+      metis_tac[local_probe_bad_final, local_probe_locals_halt]) >>
+  disj1_tac >> simp[expr_post_def]
+QED
+
+(* Exact existential negation of the task's frozen storage theorem. *)
+Theorem unwrap_storage_copy_local_counterexample:
+  ?ctx func cenv cx e es sa sm sb s0 es' v t p op R.
+    unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
+    (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+    ~is_word_type t /\
+    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
+           type_memory_bytes cenv t = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) /\
+    ~frag_exec ctx sm sb
+      (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+             (LocatedValue t p) s)
+      (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
+Proof
+  qexistsl_tac [`local_probe_ctx`, `local_probe_func`, `local_probe_env`,
+    `empty_evaluation_context`,
+    `Name (ArrayT (BaseT (UintT 256)) (Fixed 1)) "probe"`,
+    `local_probe_old`, `local_probe_sm`, `local_probe_sm`, `local_probe_sb`,
+    `local_probe_start`, `local_probe_source`, `local_probe_value`,
+    `ArrayT (BaseT (UintT 256)) (Fixed 1)`,
+    `mk_ptr (Lit 32w) LocStorage`, `Var "%1"`, `\r. F`] >>
+  simp[local_probe_storage_antecedent] >>
+  irule local_probe_not_frag >> EVAL_TAC
+QED
