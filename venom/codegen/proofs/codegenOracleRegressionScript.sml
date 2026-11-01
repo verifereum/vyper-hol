@@ -22,12 +22,12 @@ Proof
        venom_asm_terminal_rel_def]
 QED
 
-(* The planned running substrate accepts arbitrary assembly readings, but
-   rejects either shared-list mismatch. Context and function-local relations
+(* The planned running substrate rejects any mismatch of the shared lists
+   (outcomes, requests, GAS readings). Context and function-local relations
    agree on these oracle fields even with an empty context spill mask. *)
 Theorem running_oracle_and_gas_boundary:
   let vs = init_venom_state "entry" in
-  let as1 = asm_oracle_initial with as_gas_readings := readings in
+  let as1 = asm_oracle_initial in
   let rq = venom_call_request vs 8w 0w 0w 0w F in
     venom_asm_rel FEMPTY (init_plan_state 0) vs as1 /\
     context_venom_asm_rel cp FEMPTY (init_plan_state 0) vs as1 /\
@@ -35,10 +35,14 @@ Theorem running_oracle_and_gas_boundary:
       (as1 with as_outcomes := [failed_outcome rq]) /\
     ~venom_asm_rel FEMPTY (init_plan_state 0) vs
       (as1 with as_requests := [rq]) /\
+    ~venom_asm_rel FEMPTY (init_plan_state 0) vs
+      (as1 with as_gas_readings := [r]) /\
     ~context_venom_asm_rel cp FEMPTY (init_plan_state 0) vs
       (as1 with as_outcomes := [failed_outcome rq]) /\
     ~context_venom_asm_rel cp FEMPTY (init_plan_state 0) vs
-      (as1 with as_requests := [rq])
+      (as1 with as_requests := [rq]) /\
+    ~context_venom_asm_rel cp FEMPTY (init_plan_state 0) vs
+      (as1 with as_gas_readings := [r])
 Proof
   simp[init_venom_state_def, asm_oracle_initial_def, init_plan_state_def,
        venom_asm_rel_def, context_venom_asm_rel_def, plan_stack_rel_def,

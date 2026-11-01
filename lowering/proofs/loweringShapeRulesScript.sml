@@ -776,14 +776,13 @@ Theorem opaque_insts_ok_opaque_use_ok:
     (!inst. MEM inst (fn_insts fn) ==> MEM inst insts) ==>
     opaque_use_ok fn
 Proof
-  rpt strip_tac >> simp[opaque_use_ok_def, gas_var_def, retpc_var_def] >>
-  rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> simp[opaque_use_ok_def, retpc_var_def] >>
+  rpt strip_tac >>
   `MEM inst insts` by res_tac >>
-  rpt conj_tac >> strip_tac >>
   drule copy_phi_var_opaque_out >>
   disch_then (qspec_then `insts` mp_tac) >>
   (impl_tac >- fs[]) >> strip_tac >>
   qpat_x_assum `opaque_insts_ok _`
     (qspecl_then [`inst`, `x`] mp_tac o REWRITE_RULE [opaque_insts_ok_def]) >>
-  simp[gas_use_ok_def, retpc_use_ok_def] >> metis_tac[]
+  simp[retpc_use_ok_def] >> metis_tac[]
 QED

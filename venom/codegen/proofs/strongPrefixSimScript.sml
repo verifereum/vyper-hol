@@ -120,6 +120,7 @@ Theorem pop_k_concrete[local]:
           st'.as_outcomes = st.as_outcomes /\
           st'.as_requests = st.as_requests /\
           st'.as_pending_deletions = st.as_pending_deletions /\
+          st'.as_gas_readings = st.as_gas_readings /\
           st'.as_call_ctx = st.as_call_ctx /\
           st'.as_tx_ctx = st.as_tx_ctx /\
           st'.as_block_ctx = st.as_block_ctx /\
@@ -228,6 +229,7 @@ Theorem asm_single_step_rel[local]:
           st'.as_outcomes = st.as_outcomes /\
           st'.as_requests = st.as_requests /\
           st'.as_pending_deletions = st.as_pending_deletions /\
+          st'.as_gas_readings = st.as_gas_readings /\
           st'.as_call_ctx = st.as_call_ctx /\
           st'.as_tx_ctx = st.as_tx_ctx /\
           st'.as_block_ctx = st.as_block_ctx /\

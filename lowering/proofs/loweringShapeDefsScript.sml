@@ -8,9 +8,9 @@
  * TOP-LEVEL:
  *   all_blocks, state_insts      — the blocks and instructions of a state
  *   added_insts, added_labels    — what a compile action appended
- *   opaque_out, opaque_insts_ok  — GAS / RETPC_PARAM outputs used only where
- *                                  gas_use_ok / retpc_use_ok allow, and never
- *                                  copied
+ *   opaque_out, opaque_insts_ok  — GAS outputs used only as a call's gas
+ *                                  operand, RETPC_PARAM outputs only where
+ *                                  retpc_use_ok allows, and neither copied
  *   plain_operand                — an operand the lowering may pass anywhere
  *   label_or_plain               — a plain operand or a label
  *   compiler_label, jump_label_ok, inst_jump_labels_ok

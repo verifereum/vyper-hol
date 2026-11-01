@@ -260,7 +260,7 @@ Proof
                    as_outcomes := vs.vs_outcomes;
                    as_requests := vs.vs_requests;
                    as_pending_deletions := vs.vs_pending_deletions;
-                   as_gas_readings := [] |>` >>
+                   as_gas_readings := vs.vs_gas_readings |>` >>
   gvs[initial_state_rel_def, msg_ctx_rel_def, tx_ctx_rel_def,
       block_ctx_rel_def, blockhash_rel_def, stack_params_rel_def,
       context_venom_asm_rel_def, fn_init_ps_def,
@@ -340,7 +340,8 @@ Definition initial_ctx_rel_def:
       vs.vs_vars = FEMPTY /\
       (!l. FLOOKUP vs.vs_labels l =
            OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
-      vs.vs_outcomes = MAP SND (call_trace es) /\ vs.vs_requests = []
+      vs.vs_outcomes = MAP SND (call_trace es) /\ vs.vs_requests = [] /\
+      vs.vs_gas_readings = gas_readings es
 End
 
 (* Terminal oracle leftovers are not observable. Only success compares the
@@ -365,7 +366,8 @@ End
 
 (* PLANNED ADMISSION S7; proof owner Milestones 2.1 and 4.
    Compose frame-aware Venom/assembly simulation with the observed EVM run.
-   Assembly starts with gas_readings es, NOT an equality with Venom GAS.
+   Venom starts with the frame's GAS readings (gas_readings es); generated
+   assembly pops the same list in the same order.
    Actual reachability supplies memory obligations and shape excludes opaque
    GAS misuse/forbidden opcodes/label collisions. Resource and valid-computed-
    precompile starvation are explicit disjuncts. No sufficient-gas existential,
