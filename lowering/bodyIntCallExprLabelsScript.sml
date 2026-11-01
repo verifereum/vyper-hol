@@ -277,3 +277,36 @@ Proof
                compiler_label_hoare_store_memory] >> gen_tac >> BETA_TAC) >>
   first_x_assum irule >> simp[]
 QED
+
+Theorem compiler_block_tail_concat:
+  !es infos off. EVERY (\e. compiler_block_tail (cfn cenv (expr_type e) e)) es ==>
+  compiler_block_tail (compile_concat cfn cenv es dst infos off)
+Proof
+  Induct >> simp[compile_concat_def, compiler_block_tail_primitives] >>
+  ntac 3 gen_tac >> Cases_on `infos` >>
+  simp[compile_concat_def, compiler_block_tail_primitives] >>
+  PairCases_on `h'` >> Cases_on `h'0` >>
+  simp[compile_concat_def, comp_ignore_bind_def] >> strip_tac >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives, compiler_block_tail_lower_value] >>
+       gen_tac >> BETA_TAC) >> first_x_assum irule >> simp[]
+QED
+
+Theorem compiler_label_hoare_concat:
+  !es infos off. EVERY (\e. !origin pending.
+    compiler_label_hoare (compiler_label_reservation origin pending)
+      (cfn cenv (expr_type e) e) (\r out. compiler_label_reservation origin pending out)) es ==>
+  !origin pending. compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_concat cfn cenv es dst infos off)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  Induct >- simp[compile_concat_def, compiler_label_hoare_typed_primitives] >>
+  ntac 3 gen_tac >> Cases_on `infos` >>
+  simp[compile_concat_def, compiler_label_hoare_typed_primitives] >>
+  PairCases_on `h'` >> Cases_on `h'0` >>
+  simp[compile_concat_def, comp_ignore_bind_def] >> strip_tac >> ntac 2 gen_tac >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives,
+               compiler_label_hoare_lower_value] >> gen_tac >> BETA_TAC) >>
+  first_x_assum irule >> simp[]
+QED
