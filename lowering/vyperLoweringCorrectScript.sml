@@ -12,7 +12,7 @@
  *   Layer 2 - Argument decoding: ABI-encoded calldata decoded to values
  *     matching tx.args (abiEncoderProps, valueEncodingProofs)
  *   Layer 3 - Function body: compiled Venom body preserves semantics
- *     (stmtLoweringProps, exprLoweringProps)
+ *     (bodySimMain: body_sim_mutual, body_stmts_sim)
  *
  * TOP-LEVEL:
  *   venom_env_rel, initial_venom_state_rel -- PLAN 5.7 entry boundary
