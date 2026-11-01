@@ -1900,6 +1900,35 @@ Proof
          simp[ci_mono_emit_op, ci_mono_comp_return, LET_THM])))
 QED
 
+Theorem ci_mono_compile_get_target_ptr_cfn:
+  ∀ cfn bt cenv sa.
+    (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_get_target_ptr cfn cenv bt sa))
+Proof
+  gen_tac >> measureInduct_on `base_assignment_target_size bt` >>
+  Cases_on `bt` >> rpt gen_tac >> strip_tac >>
+  drule ci_mono_lower_value_cfn >> strip_tac >>
+  simp[Once compile_get_target_ptr_def]
+  >- (every_case_tac >> simp[ci_mono_comp_return])
+  >- (every_case_tac >> simp[ci_mono_comp_return])
+  >- (irule ci_mono_bind >> conj_tac >> rpt gen_tac
+      >~ [`compile_get_target_ptr cfn cenv b sa`]
+      >- (first_x_assum irule >> gvs[]) >>
+      simp[LET_THM] >> every_case_tac >>
+      rpt (CHANGED_TAC (rpt gen_tac >>
+        TRY (irule ci_mono_bind >> conj_tac) >> BETA_TAC >>
+        TRY IF_CASES_TAC >>
+        asm_simp_tac (srw_ss())
+          [ci_mono_comp_return, ci_mono_compile_keccak256_key,
+           ci_mono_compile_mapping_subscript, ci_mono_compile_array_subscript,
+           ci_mono_compile_ptr_load]))) >>
+  irule ci_mono_bind >> conj_tac >> rpt gen_tac
+  >~ [`compile_get_target_ptr cfn cenv b sa`]
+  >- (first_x_assum irule >> gvs[]) >>
+  simp[LET_THM] >>
+  irule ci_mono_bind >> simp[ci_mono_comp_return, ci_mono_emit_op]
+QED
+
 Theorem ci_mono_compile_subscript_cfn[local]:
   ∀ cfn cenv ret_ty ty base_e idx_e sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
@@ -3709,11 +3738,14 @@ Proof
 QED
 
 Theorem ci_mono_compile_expr_pop[local]:
+  (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
   ci_mono st (SND (compile_expr_body f g h cenv ty (Pop ann target) st))
 Proof
-  simp[compile_expr_body_def, LET_THM] >>
-  Cases_on `target` >> simp[] >>
-  irule ci_mono_uncurry >>
+  strip_tac >> simp[compile_expr_body_def, LET_THM] >>
+  irule ci_mono_uncurry >> conj_tac >> rpt gen_tac
+  >~ [`compile_get_target_ptr`]
+  >- (irule ci_mono_compile_get_target_ptr_cfn >> first_assum ACCEPT_TAC) >>
+  PairCases_on `a` >> simp[] >> irule ci_mono_uncurry >>
   simp[ci_mono_compile_dynarray_pop, ci_mono_refl]
 QED
 

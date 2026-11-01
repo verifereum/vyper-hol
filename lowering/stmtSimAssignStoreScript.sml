@@ -36,7 +36,7 @@ Ancestors
 Theorem compile_get_target_ptr_local:
   !cenv id op sz st.
     FLOOKUP cenv.ce_vars id = SOME (PtrVar op sz) ==>
-    compile_get_target_ptr cenv (NameTarget id) st =
+    compile_get_target_ptr compile_expr cenv (NameTarget id) st =
       ((op, SOME LocMemory, OPTION_MAP ValPT (cenv.ce_var_type id)), st)
 Proof
   simp[compile_get_target_ptr_def, comp_return_def]
