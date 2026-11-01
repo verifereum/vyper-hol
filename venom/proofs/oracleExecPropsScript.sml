@@ -93,3 +93,12 @@ Proof
   simp[Once step_inst_def] >> strip_tac >> gvs[] >>
   drule step_inst_base_oracle >> simp[]
 QED
+
+Theorem step_inst_noninvoke_gas_readings:
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> GAS /\
+  step_inst fuel ctx inst s = OK s' ==>
+  s'.vs_gas_readings = s.vs_gas_readings
+Proof
+  simp[Once step_inst_def] >> strip_tac >> gvs[] >>
+  drule_all step_inst_base_gas_readings >> simp[]
+QED

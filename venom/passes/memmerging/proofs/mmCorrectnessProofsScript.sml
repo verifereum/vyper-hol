@@ -3173,7 +3173,7 @@ QED
 Resume mode_inst_ok_only_ok_or_error[nop_load]:
   fs[] >> Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
   fs[step_inst_non_invoke, inst_wf_def] >>
-  simp[step_inst_base_def, exec_read1_def] >>
+  simp[step_inst_base_opcode_eqs, exec_read1_def] >>
   BasicProvers.every_case_tac
 QED
 

@@ -2096,6 +2096,37 @@ Proof
             concretize_pointer_confined_def]
 QED
 
+(* GAS pops the same reading on both sides: CR's frame includes the
+   readings, and the output is non-pv. *)
+Triviality concretize_step_gas:
+  !inst amap fn livesets init s1 s2.
+    inst.inst_opcode = GAS /\
+    (!v. MEM v inst.inst_outputs ==>
+         v NOTIN pointer_derived_vars fn (FDOM amap)) /\
+    concretize_rel amap fn livesets init s1 s2 ==>
+    lift_result
+      (concretize_rel amap fn livesets init)
+      (concretize_rel amap fn livesets init)
+      (concretize_rel amap fn livesets init)
+      (step_inst_base inst s1)
+      (step_inst_base inst s2)
+Proof
+  rpt strip_tac >>
+  `concretize_frame s1 = concretize_frame s2` by fs[concretize_rel_def, LET_THM] >>
+  `s1.vs_gas_readings = s2.vs_gas_readings` by
+    (qpat_x_assum `concretize_frame _ = _`
+       (mp_tac o AP_TERM ``venom_state_vs_gas_readings``) >>
+     simp[concretize_frame_def]) >>
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+  simp[exec_gas_def] >>
+  Cases_on `inst.inst_outputs` >> simp[lift_result_def] >>
+  Cases_on `t` >> simp[lift_result_def] >>
+  Cases_on `s2.vs_gas_readings` >> gvs[lift_result_def] >>
+  irule cr_update_var_non_pv >> simp[] >>
+  irule concretize_rel_frame >> qexistsl [`s1`, `s2`] >>
+  simp[] >> fs[concretize_frame_def]
+QED
+
 (* Pointer-preserving ops (ADD/SUB with pv, PHI, ASSIGN):
    displacement invariant maintained for pv outputs.
 
@@ -2710,6 +2741,7 @@ Triviality concretize_step_non_mem_identity:
     inst.inst_opcode <> DJMP /\
     inst.inst_opcode <> INVOKE /\
     inst.inst_opcode <> NOP /\
+    inst.inst_opcode <> GAS /\
     Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
     Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
@@ -5608,6 +5640,10 @@ Proof
     metis_tac[non_alloca_non_pp_output_not_pv]
   ) >>
   (* Non-effect-free ops *)
+  Cases_on `inst.inst_opcode = GAS`
+  >- (qexists `init` >> irule concretize_step_gas >> simp[] >>
+      rpt strip_tac >> irule non_alloca_non_pp_output_not_pv >>
+      simp[is_pointer_preserving_op_def, is_alloca_op_def] >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = RETURN`
   >- (qexists `init` >> irule concretize_step_return >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = DALLOCA`
