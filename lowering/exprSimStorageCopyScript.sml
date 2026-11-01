@@ -14,7 +14,7 @@
  * of bytes outside the destination buffer, under no-wrap bounds.
  *
  * TOP-LEVEL:
- *   compile_storage_copy_content_frag — loop contents and full frame
+ *   compile_storage_copy_content_capacity_frag — loop contents and full frame
  *   storage_copy_suffix_content_frag  — uniform zero/one/many-word copy
  *   storage_copy_operand_preserved    — recover framed operand values
  *   compile_storage_copy_defined_frag  — the copy loop runs to its exit
@@ -1029,9 +1029,11 @@ Theorem storage_copy_body_content_frag[local]:
     k < n /\ b+32*n < 2**256 ==>
     frag_exec ctx stb ste
       (\s. eval_operand (Var cv) s = SOME (n2w k) /\ storage_copy_frame ds sbase s /\
-           copy_prefix loc a b n sbase k s)
+           copy_prefix loc a b n sbase k s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory)
       (\s. eval_operand (Var cv) s = SOME (n2w (k+1)) /\ storage_copy_frame ds sbase s /\
-           copy_prefix loc a b n sbase (k+1) s) R
+           copy_prefix loc a b n sbase (k+1) s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory) R
 Proof
   rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
   irule frag_exec_run_inst_seq >>
@@ -1057,6 +1059,11 @@ Proof
   `copy_prefix loc a b n sbase (k+1) t` by
     (gvs[] >> irule storage_copy_body_prefix >> simp[] >>
      goal_assum (drule_at (Pat `run_inst_seq _ _ = OK _`)) >> simp[] >> metis_tac[]) >>
+  `LENGTH sbase.vs_memory <= LENGTH t.vs_memory` by
+    (drule_at (Pat `run_inst_seq _ _ = OK _`) storage_copy_body_run_effect >>
+     disch_then (qspecl_then [`n2w k`, `n2w b`, `a`] mp_tac) >>
+     (impl_tac >- (simp[ALL_DISTINCT] >> metis_tac[])) >> strip_tac >>
+     gvs[immutableMemoryFrameTheory.immutable_mstore_capacity] >> decide_tac) >>
   disj1_tac >> qexists_tac `t` >>
   gvs[GSYM mk_inst_def, control_moves_keep_vars, wordsTheory.word_add_n2w] >>
   irule storage_copy_frame_step >> qexists_tac `s` >> simp[] >>
@@ -1089,7 +1096,8 @@ Theorem storage_copy_init_content_frag[local]:
     MEM cv ds ==>
     frag_exec ctx sa s0 (\s. s = sbase)
       (\s. eval_operand (Var cv) s = SOME 0w /\ storage_copy_frame ds sbase s /\
-           copy_prefix loc a b n sbase 0 s) R
+           copy_prefix loc a b n sbase 0 s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory) R
 Proof
   rpt gen_tac >> strip_tac >> irule frag_exec_run_inst_seq >>
   fs[same_blocks_def] >> simp[mk_inst_def, is_terminator_def] >>
@@ -1107,9 +1115,11 @@ Theorem storage_copy_header_content_frag[local]:
     cv <> tv /\ MEM tv ds ==>
     frag_exec ctx sth stj
       (\s. eval_operand (Var cv) s = SOME (n2w k) /\ storage_copy_frame ds sbase s /\
-           copy_prefix loc a b n sbase k s)
+           copy_prefix loc a b n sbase k s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory)
       (\s. eval_operand (Var cv) s = SOME (n2w k) /\ storage_copy_frame ds sbase s /\
            copy_prefix loc a b n sbase k s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory /\
            eval_operand (Var tv) s = SOME (bool_to_word (n2w k = n2w n : bytes32))) R
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1192,13 +1202,15 @@ QED
 Definition storage_copy_inv_def:
   storage_copy_inv cv ds loc a b n sbase k s <=>
     eval_operand (Var cv) s = SOME (n2w k) /\ storage_copy_frame ds sbase s /\
-    copy_prefix loc a b n sbase k s
+    copy_prefix loc a b n sbase k s /\
+    LENGTH sbase.vs_memory <= LENGTH s.vs_memory
 End
 
 Theorem storage_copy_inv_eta[local]:
   storage_copy_inv cv ds loc a b n sbase k =
     (\s. eval_operand (Var cv) s = SOME (n2w k) /\ storage_copy_frame ds sbase s /\
-         copy_prefix loc a b n sbase k s)
+         copy_prefix loc a b n sbase k s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory)
 Proof
   simp[FUN_EQ_THM, storage_copy_inv_def]
 QED
@@ -1232,8 +1244,8 @@ Proof
     [`I` |-> `storage_copy_inv cv ds loc a b n sbase`,
      `J` |-> `storage_copy_test cv tv ds loc a b n sbase`, `N` |-> `n`]
     (SPEC_ALL frag_exec_loop)) >>
-  conj_tac >- simp[storage_copy_inv_def, control_moves_keep_vars] >>
-  conj_tac >- simp[storage_copy_test_def, storage_copy_inv_def, control_moves_keep_vars] >>
+  conj_tac >- simp[storage_copy_inv_def, control_moves_keep_vars, jump_to_def] >>
+  conj_tac >- simp[storage_copy_test_def, storage_copy_inv_def, control_moves_keep_vars, jump_to_def] >>
   Cases_on `x0` >> Cases_on `x2` >> Cases_on `x4` >>
   goal_assum (drule_at (Pat `emit_inst JNZ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `emit_inst JMP _ _ _ = _`)) >>
@@ -1258,7 +1270,7 @@ Proof
   drule storage_copy_header_layout >> simp[same_blocks_def]
 QED
 
-Theorem compile_storage_copy_content_frag:
+Theorem compile_storage_copy_content_capacity_frag:
   !ctx loc src dst n sa u sb sbase a b R.
     (loc = LocStorage \/ loc = LocTransient) /\
     compile_word_copy_loop src dst n loc LocMemory F sa = (u,sb) /\
@@ -1267,6 +1279,7 @@ Theorem compile_storage_copy_content_frag:
     n < 2**256 /\ b+32*n < 2**256 ==>
     frag_exec ctx sa sb (\s. s = sbase)
       (\s. copy_prefix loc a b n sbase n s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory /\
            (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase)) R
 Proof
   rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
@@ -1302,6 +1315,23 @@ Proof
   reverse conj_tac >- simp[] >>
   goal_assum (drule_at (Pat `emitted_insts _ _ = _`)) >>
   gvs[Abbr `ds`, ALL_DISTINCT] >> metis_tac[]
+QED
+
+Theorem compile_storage_copy_content_frag:
+  !ctx loc src dst n sa u sb sbase a b R.
+    (loc = LocStorage \/ loc = LocTransient) /\
+    compile_word_copy_loop src dst n loc LocMemory F sa = (u,sb) /\
+    (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+    eval_operand src sbase = SOME a /\ eval_operand dst sbase = SOME (n2w b) /\
+    n < 2**256 /\ b+32*n < 2**256 ==>
+    frag_exec ctx sa sb (\s. s = sbase)
+      (\s. copy_prefix loc a b n sbase n s /\
+           (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase)) R
+Proof
+  rpt gen_tac >> strip_tac >> irule frag_exec_conseq >>
+  irule_at Any compile_storage_copy_content_capacity_frag >>
+  goal_assum (drule_at (Pat `compile_word_copy_loop _ _ _ _ _ _ _ = _`)) >>
+  qexistsl_tac [`sbase`, `b`, `a`, `R`] >> simp[] >> metis_tac[]
 QED
 
 Theorem compile_storage_copy_defined_frag:
@@ -1450,6 +1480,7 @@ Theorem storage_copy_word_content_frag[local]:
     b+32 < 2**256 ==>
     frag_exec ctx sa sb (\s. s = sbase)
       (\s. copy_prefix loc a b 1 sbase 1 s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory /\
            (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase)) R
 Proof
   rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
@@ -1483,6 +1514,8 @@ Proof
           (update_var v w sbase))` by
         (irule copy_prefix_extend >> simp[copy_prefix_zero]) >>
       gvs[Abbr `w`, wordsTheory.WORD_ADD_0]) >>
+  conj_tac
+  >- simp[immutableMemoryFrameTheory.immutable_mstore_capacity, update_var_def] >>
   simp[mstore_def, write_memory_with_expansion_def, lookup_var_update_var] >>
   metis_tac[]
 QED
@@ -1490,6 +1523,55 @@ QED
 (* After rewriting ensure_storage_memory_layout, compose the allocation
    boundary and instantiate sbase with its resulting state.  This suffix
    covers zero words too: no positivity hypothesis is used by the loop. *)
+Theorem storage_copy_suffix_extends:
+  !loc src dst n sa u sb.
+    (loc = LocStorage \/ loc = LocTransient) /\
+    (if n = 1 then
+       do v <- emit_op (if loc = LocStorage then SLOAD else TLOAD) [src];
+          emit_void MSTORE [dst; v] od
+     else do compile_word_copy_loop src dst n loc LocMemory F; return () od)
+      sa = (u,sb) ==>
+    cs_extends sa sb
+Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  Cases_on `n = 1` >> gnvs[]
+  >- (drule_all storage_copy_word_layout >>
+      simp[cs_extends_def, same_blocks_def] >> strip_tac >>
+      qexists_tac `[]` >> simp[]) >>
+  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >> irule compile_storage_copy_extends >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem storage_copy_suffix_content_capacity_frag:
+  !ctx loc src dst n sa u sb sbase a b R.
+    (loc = LocStorage \/ loc = LocTransient) /\
+    (if n = 1 then
+       do v <- emit_op (if loc = LocStorage then SLOAD else TLOAD) [src];
+          emit_void MSTORE [dst; v] od
+     else do compile_word_copy_loop src dst n loc LocMemory F; return () od)
+      sa = (u,sb) /\
+    (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+    eval_operand src sbase = SOME a /\ eval_operand dst sbase = SOME (n2w b) /\
+    n < 2**256 /\ b+32*n < 2**256 ==>
+    frag_exec ctx sa sb (\s. s = sbase)
+      (\s. copy_prefix loc a b n sbase n s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory /\
+           (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase)) R
+Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  Cases_on `n = 1`
+  >- (gnvs[] >> irule storage_copy_word_content_frag >>
+      conj_tac >- gvs[] >> reverse conj_tac >- simp[] >>
+      goal_assum (drule_at (Pat `comp_bind _ _ _ = _`)) >> simp[] >> metis_tac[]) >>
+  gnvs[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> gnvs[] >> irule compile_storage_copy_content_capacity_frag >>
+  conj_tac >- (gvs[] >> decide_tac) >> conj_tac >- gvs[] >>
+  reverse conj_tac >- simp[] >>
+  goal_assum (drule_at (Pat `compile_word_copy_loop _ _ _ _ _ _ _ = _`)) >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem storage_copy_suffix_content_frag:
   !ctx loc src dst n sa u sb sbase a b R.
     (loc = LocStorage \/ loc = LocTransient) /\
@@ -1505,17 +1587,10 @@ Theorem storage_copy_suffix_content_frag:
       (\s. copy_prefix loc a b n sbase n s /\
            (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase)) R
 Proof
-  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
-  Cases_on `n = 1`
-  >- (gnvs[] >> irule storage_copy_word_content_frag >>
-      conj_tac >- gvs[] >> reverse conj_tac >- simp[] >>
-      goal_assum (drule_at (Pat `comp_bind _ _ _ = _`)) >> simp[] >> metis_tac[]) >>
-  gnvs[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
-  pairarg_tac >> gnvs[] >> irule compile_storage_copy_content_frag >>
-  conj_tac >- (gvs[] >> decide_tac) >> conj_tac >- gvs[] >>
-  reverse conj_tac >- simp[] >>
-  goal_assum (drule_at (Pat `compile_word_copy_loop _ _ _ _ _ _ _ = _`)) >>
-  simp[] >> metis_tac[]
+  rpt gen_tac >> strip_tac >> irule frag_exec_conseq >>
+  irule_at Any storage_copy_suffix_content_capacity_frag >>
+  goal_assum (drule_at (Pat `(if _ then _ else _) _ = _`)) >>
+  qexistsl_tac [`sbase`, `b`, `a`, `R`] >> simp[] >> metis_tac[]
 QED
 
 Theorem storage_copy_operand_preserved:

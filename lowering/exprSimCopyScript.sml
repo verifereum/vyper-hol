@@ -98,6 +98,27 @@ Theorem unwrap_storage_copy_sim:
              (LocatedValue t p) s)
       (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
 Proof
+  rpt gen_tac >> strip_tac >>
+  `compile_ensure_in_memory p.ptr_operand p.ptr_location
+     (type_memory_bytes cenv t) ((type_memory_bytes cenv t + 31) DIV 32)
+     cenv.ce_is_ctor cenv.ce_imm_alloca sm = (op,sb)` by
+    (qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
+     Cases_on `p.ptr_location` >> gvs[unwrap_value_def]) >>
+  qpat_x_assum `unwrap_value _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_ensure_in_memory _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[ensure_storage_memory_layout,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
+  gvs[] >> rename1 `compile_alloc_buffer _ sm = (buf,mid)` >>
+  irule frag_exec_pointwise >> qx_gen_tac `s1` >> simp[] >> strip_tac >>
+  `t = expr_type e` by
+    gvs[vv_post_def, vv_holds_def] >>
+  `?a. eval_operand p.ptr_operand s1 = SOME a /\
+       storage_holds cx (p.ptr_location = LocTransient)
+         (expr_type e) (Value v) a es'` by
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     Cases_on `p.ptr_location` >>
+     gvs[vv_post_def, vv_holds_def]) >>
   cheat
 QED
 
