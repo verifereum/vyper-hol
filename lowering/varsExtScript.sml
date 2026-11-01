@@ -182,6 +182,16 @@ Proof
   simp exec_simps
 QED
 
+Theorem exec_gas_vars_ext:
+  !inst s V.
+    s.vs_vars SUBMAP V ==>
+    vars_ext_result (exec_gas inst s) (exec_gas inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> Cases_on `exec_gas inst s` >>
+  gvs[vars_ext_result_def, exec_gas_def, AllCaseEqs()] >>
+  simp exec_simps
+QED
+
 Theorem exec_read1_vars_ext:
   !f inst s V.
     s.vs_vars SUBMAP V /\ (!w. f w (s with vs_vars := V) = f w s) ==>
@@ -225,6 +235,8 @@ Proof
         irule exec_pure3_vars_ext >> simp[])
   >>~- ([`vars_ext_result (exec_read0 _ _ _) _`],
         irule exec_read0_vars_ext >> asm_simp_tac (srw_ss()) ext_simps)
+  >>~- ([`vars_ext_result (exec_gas _ _) _`],
+        irule exec_gas_vars_ext >> simp[])
   >>~- ([`vars_ext_result (exec_read1 _ _ _) _`],
         irule exec_read1_vars_ext >> asm_simp_tac (srw_ss()) ext_simps)
   >>~- ([`vars_ext_result (exec_write2 _ _ _) _`],
