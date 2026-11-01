@@ -22,6 +22,7 @@
  *)
 Theory exprSimAggregateSource
 Ancestors
+  allocLimits
   exprSim exprSimAggregateChildren exprSimHyps
   vyperInterpreter vyperValueOperation vyperState vyperTyping
   valueEncoding valueEncodingProofs vyperStatePreservation

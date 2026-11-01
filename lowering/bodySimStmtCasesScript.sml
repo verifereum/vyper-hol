@@ -42,7 +42,7 @@
 
 Theory bodySimStmtCases
 Ancestors
-  list finite_map bodySim exprSim exprSimHyps exprLoweringProps stmtSim
+  list finite_map bodySim allocLimitsProps exprSim exprSimHyps exprLoweringProps stmtSim
   stmtSimIf stmtLoweringMono stmtLowering compileEnv fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
@@ -248,38 +248,6 @@ Theorem frame_ret_ok_same_frame:
 Proof
   rw[frame_ret_ok_def] >> first_x_assum irule >>
   metis_tac[same_frame_trans]
-QED
-
-Theorem type_memory_bytes_struct_fields[local]:
-  !c ty c'. c'.ce_struct_fields = c.ce_struct_fields ==>
-            type_memory_bytes c' ty = type_memory_bytes c ty
-Proof
-  recInduct type_memory_bytes_ind >> rw[type_memory_bytes_def] >>
-  AP_TERM_TAC >> irule MAP_CONG >> simp[]
-QED
-
-Theorem type_memory_bytes_frame[local]:
-  !c c'. c'.ce_struct_fields = c.ce_struct_fields ==>
-         type_memory_bytes c' = type_memory_bytes c
-Proof
-  rw[FUN_EQ_THM] >> irule type_memory_bytes_struct_fields >> simp[]
-QED
-
-Theorem alloc_limits_struct_fields[local]:
-  (!c e c'. c'.ce_struct_fields = c.ce_struct_fields ==>
-            alloc_limits_expr c' e = alloc_limits_expr c e) /\
-  (!c tgt c'. c'.ce_struct_fields = c.ce_struct_fields ==>
-              alloc_limits_target c' tgt = alloc_limits_target c tgt) /\
-  (!c es c'. c'.ce_struct_fields = c.ce_struct_fields ==>
-             alloc_limits_exprs c' es = alloc_limits_exprs c es) /\
-  (!c opt c'. c'.ce_struct_fields = c.ce_struct_fields ==>
-              alloc_limits_opt c' opt = alloc_limits_opt c opt) /\
-  (!c kes c'. c'.ce_struct_fields = c.ce_struct_fields ==>
-              alloc_limits_named_exprs c' kes = alloc_limits_named_exprs c kes)
-Proof
-  ho_match_mp_tac alloc_limits_expr_ind >> rpt conj_tac >> rpt gen_tac >>
-  rpt strip_tac >> drule type_memory_bytes_frame >> strip_tac >>
-  simp[alloc_limits_expr_def]
 QED
 
 Theorem stmt_exprs_ok_same_frame:
