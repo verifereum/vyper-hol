@@ -33,7 +33,8 @@
  *     output_type=bytes4 by compile_method_id_literal_word_sim (the folded
  *     selector, a word literal), the rest in compile_method_id_other_case
  *   8 ecrecover, ecadd, ecmul: exprSimPrecompiles'
- *     compile_ecrecover_call_case; compile_ecadd_sim and compile_ecmul_sim,
+ *     compile_ecrecover_call_case; compile_ecadd_sim and compile_ecmul_sim
+ *     (by exprSimECArith's compile_ecadd_call_case, compile_ecmul_call_case),
  *     still stated over expr_sim_below, so for compile_expr_sim only
  *
  * Unprovable as the definitions stand, to be fixed in the lowering or in
@@ -73,7 +74,7 @@ Ancestors
   valueEncoding fragExec vyperInterpreter vyperState vyperContext
   vyperValueOperation venomState exprSimAccounts exprSimUnop
   exprSimOperators exprBopLowering builtinMisc venomExecSemantics venomInst
-  exprSimCalldata exprSimCalldataSlice exprSimLen exprSimPrecompiles
+  exprSimCalldata exprSimCalldataSlice exprSimLen exprSimPrecompiles exprSimECArith
   vyperValue exprLoweringProps vyperTyping
 
 (* ===== Lengths and calldata ===== *)
@@ -493,7 +494,8 @@ Theorem compile_ecadd_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann ECAdd args)
 Proof
-  cheat
+  simp[expr_vv_ok_case] >>
+  metis_tac[compile_ecadd_call_case, exprs_case_below]
 QED
 
 Theorem compile_ecmul_sim:
@@ -501,5 +503,6 @@ Theorem compile_ecmul_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann ECMul args)
 Proof
-  cheat
+  simp[expr_vv_ok_case] >>
+  metis_tac[compile_ecmul_call_case, exprs_case_below]
 QED
