@@ -358,7 +358,8 @@ Proof
   PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   mp_tac (Q.INST [`s` |-> `initial:venom_state`, `site` |-> `st.cs_next_id`,
     `outsz` |-> `maxlen+32+(case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)`]
-    abi_scratch_builtin_allocate_buffers) >> impl_tac >- asm_simp_tac bool_ss [] >>
+    abi_scratch_builtin_allocate_buffers) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qabbrev_tac `allocated = abi_builtin_allocate_state st.cs_next_id
     (maxlen+32+(case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)) initial` >>
