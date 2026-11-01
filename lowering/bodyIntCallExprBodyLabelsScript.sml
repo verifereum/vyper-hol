@@ -272,3 +272,88 @@ Proof
    gen_tac >> BETA_TAC >> simp[compiler_label_hoare_def])
 QED
 
+
+Theorem compile_call_send_action[local]:
+  compile_call cfn cenv ret_ty ty (Send has_gas) args default_ret =
+    (\st. case args of
+       (addr_e :: val_e :: gas_es) =>
+         if LENGTH gas_es = (if has_gas then 1 else 0) then
+           let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
+           let (val_op, st2) = lower_value cfn cenv (BaseT (UintT 256)) val_e st1 in
+           let (gas_op, st2') =
+             (case gas_es of
+                [gas_e] => lower_value cfn cenv (BaseT (UintT 256)) gas_e st2
+              | _ => (Lit 0w, st2)) in
+           let (success, st3) = emit_op CALL [gas_op; addr_op; val_op;
+                                              Lit 0w; Lit 0w; Lit 0w; Lit 0w] st2' in
+           let (_, st4) = emit_void ASSERT [success] st3 in
+           (StackValue ret_ty (Lit 0w), st4)
+         else let (_, st') = emit_inst INVALID [] [] st in
+              (StackValue ret_ty (Lit 0w), st')
+     | _ => let (_, st') = emit_inst INVALID [] [] st in
+            (StackValue ret_ty (Lit 0w), st'))
+Proof
+  simp[FUN_EQ_THM, exprLoweringTheory.compile_call_def]
+QED
+
+Theorem compiler_block_tail_send:
+  (!e ce t. MEM e args ==> compiler_block_tail (cfn ce t e)) ==>
+  compiler_block_tail (compile_call cfn ce rt ty (Send has_gas) args dflt)
+Proof
+  strip_tac >> rewrite_tac[compile_call_send_action] >>
+  namedCases_on `args` ["", "addr rest"] >> simp[]
+  >- (ho_match_mp_tac compiler_block_tail_pair_bind >> conj_tac
+      >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[compiler_block_tail_primitives]) >>
+      gen_tac >> BETA_TAC >> simp[compiler_block_tail_def]) >>
+  namedCases_on `rest` ["", "value gas_es"] >> simp[]
+  >- (ho_match_mp_tac compiler_block_tail_pair_bind >> conj_tac
+      >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[compiler_block_tail_primitives]) >>
+      gen_tac >> BETA_TAC >> simp[compiler_block_tail_def]) >>
+  Cases_on `LENGTH gas_es = (if has_gas then 1 else 0)` >> simp[]
+  >- (rpt (ho_match_mp_tac compiler_block_tail_pair_bind >> conj_tac
+       >- (CONV_TAC (DEPTH_CONV ETA_CONV) >>
+           irule compiler_block_tail_lower_value >> gvs[]) >> gen_tac >> BETA_TAC) >>
+      Cases_on `has_gas` >> gvs[listTheory.LENGTH_EQ_1] >>
+      rpt (ho_match_mp_tac compiler_block_tail_pair_bind >> conj_tac
+        >- (CONV_TAC (DEPTH_CONV ETA_CONV) >>
+            simp[compiler_block_tail_lower_value, compiler_block_tail_primitives]) >>
+        gen_tac >> BETA_TAC) >> simp[compiler_block_tail_def]) >>
+  ho_match_mp_tac compiler_block_tail_pair_bind >> conj_tac
+  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[compiler_block_tail_primitives]) >>
+  gen_tac >> BETA_TAC >> simp[compiler_block_tail_def]
+QED
+
+Theorem compiler_label_hoare_send:
+  (!e ce t. MEM e args ==>
+    compiler_label_hoare (compiler_label_reservation origin pending)
+      (cfn ce t e) (\r out. compiler_label_reservation origin pending out)) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_call cfn ce rt ty (Send has_gas) args dflt)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >> rewrite_tac[compile_call_send_action] >>
+  namedCases_on `args` ["", "addr rest"] >> simp[]
+  >- (ho_match_mp_tac compiler_label_hoare_pair_bind >> conj_tac
+      >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+          simp[compiler_label_hoare_context_primitives]) >>
+      gen_tac >> BETA_TAC >> simp[compiler_label_hoare_def]) >>
+  namedCases_on `rest` ["", "value gas_es"] >> simp[]
+  >- (ho_match_mp_tac compiler_label_hoare_pair_bind >> conj_tac
+      >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+          simp[compiler_label_hoare_context_primitives]) >>
+      gen_tac >> BETA_TAC >> simp[compiler_label_hoare_def]) >>
+  Cases_on `LENGTH gas_es = (if has_gas then 1 else 0)` >> simp[]
+  >- (ntac 2 (ho_match_mp_tac compiler_label_hoare_pair_bind >> conj_tac
+       >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+           irule compiler_label_hoare_lower_value >> gvs[]) >> gen_tac >> BETA_TAC) >>
+      Cases_on `has_gas` >> gvs[listTheory.LENGTH_EQ_1] >>
+      rpt (ho_match_mp_tac compiler_label_hoare_pair_bind >> conj_tac
+        >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+            simp[compiler_label_hoare_lower_value, compiler_label_hoare_context_primitives,
+                 compiler_label_hoare_typed_primitives]) >>
+        gen_tac >> BETA_TAC) >> simp[compiler_label_hoare_def]) >>
+  ho_match_mp_tac compiler_label_hoare_pair_bind >> conj_tac
+  >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+      simp[compiler_label_hoare_context_primitives]) >>
+  gen_tac >> BETA_TAC >> simp[compiler_label_hoare_def]
+QED
