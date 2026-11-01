@@ -21,12 +21,62 @@
 
 Theory exprSimCopy
 Ancestors
+  exprSimAlloc
   list finite_map
   exprSim exprLowering compileEnv context vyperAST vyperInterpreter
   vyperState valueEncoding
   fragExec localPtrsProps loweringSlice exprLoweringProps emitHelperProps
   exprSimStorageCopy immutableCopyExecution
   venomInst venomExecSemantics venomState
+
+Theorem copy_buffer_mstore_locals_kept:
+  !cenv es s0 s a (w:bytes32) b sz.
+    locals_kept cenv es s0 s /\ b <= a /\ a + 32 <= b + sz /\
+    (!name lb len. local_region cenv es.scopes s0 name lb len ==>
+       b + sz <= lb \/ lb + len <= b) ==>
+    locals_kept cenv es s0 (mstore a w s)
+Proof
+  rpt strip_tac >> irule locals_kept_regions_tail >>
+  qexists_tac `s` >> simp[] >> rpt strip_tac >>
+  irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+  qpat_x_assum `!name lb len. local_region _ _ _ _ _ _ ==> _` drule >>
+  decide_tac
+QED
+
+(* A copied buffer may be allocated after the expression starts. *)
+Theorem copy_buffer_expr_post:
+  !ctx func cenv cx e es sa sb s0 es' s v tv op w aid sz.
+    ~is_word_type (expr_type e) /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+    val_wf tv v /\ val_in_memory tv v (w2n w) s.vs_memory /\
+    stmt_state_rel ctx func cenv cx es' s /\
+    eval_operand op s = SOME w /\
+    FLOOKUP s.vs_allocas aid = SOME (w2n w,sz) /\
+    sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+    val_footprint tv v <= sz /\
+    (!name b len. local_region cenv es'.scopes s name b len ==>
+       w2n w + sz <= b \/ b + len <= w2n w) /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+       lookup_var x s = SOME w) /\
+    (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
+       FLOOKUP s.vs_allocas id = SOME entry) /\
+    (!id off len. FLOOKUP s0.vs_allocas id = SOME (off,len) /\
+       id < sa.cs_next_id /\
+       (!name b k. local_region cenv es.scopes s0 name b k ==>
+          off + len <= b \/ b + k <= off) ==>
+       mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory) /\
+    locals_kept cenv es s0 s ==>
+    expr_post ctx func cenv cx e es sa sb s0 es' v op s
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[expr_post_def, expr_val_rel_def, expr_val_at_def] >>
+  conj_tac
+  >- (disj1_tac >> qexistsl [`aid`, `w2n w`, `sz`] >>
+      simp[] >> rpt strip_tac >>
+      qpat_x_assum `!name b len. local_region _ es'.scopes _ _ _ _ ==> _` drule >>
+      decide_tac) >>
+  metis_tac[]
+QED
 
 (* An aggregate in storage or transient storage: SLOAD or TLOAD and an
    MSTORE for one word, a word-copy loop from slot i to buffer word i

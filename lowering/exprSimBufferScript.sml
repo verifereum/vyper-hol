@@ -17,6 +17,7 @@
  *)
 Theory exprSimBuffer
 Ancestors
+  exprSimAlloc
   exprSimLiteralBuffer emitHelperProps exprLoweringProps compileEnv
   context venomInst venomState words fragExec rich_list list
   exprSimWordArgs exprSimOps exprSim
@@ -52,23 +53,6 @@ Proof
                   (w + n2w off) s)` by
     (irule step_ADD >> simp[eval_operand_def]) >>
   simp[run_inst_seq_def]
-QED
-
-Theorem buffer_alloc_code:
-  !size sa sb buf func.
-    compile_alloc_buffer size sa = (buf, sb) /\
-    fn_has_code sa sb func ==>
-    MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w size)]
-         [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)
-Proof
-  rpt strip_tac >>
-  gvs[compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
-      comp_bind_def, comp_return_def] >>
-  gvs[fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
-      comp_ignore_bind_def, comp_return_def] >>
-  gvs[fn_has_code_def, IS_PREFIX_APPEND] >>
-  irule lookup_block_fn_insts >> goal_assum (drule_at Any) >>
-  simp[MEM_APPEND]
 QED
 
 Theorem buffer_memory_vv_post_general:

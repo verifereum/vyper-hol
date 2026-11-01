@@ -21,6 +21,7 @@
 
 Theory exprSimCalldataSlice
 Ancestors
+  exprSimAlloc
   list fragExec loweringSlice builtinBytes exprSim exprSimHyps exprBopLowering
   exprSimOperators vyperEvalExprPreservesScopesDom
   exprLowering exprLoweringProps builtinSimple emitHelper compileEnv

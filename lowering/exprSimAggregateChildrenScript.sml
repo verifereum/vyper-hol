@@ -24,6 +24,7 @@
  *)
 Theory exprSimAggregateChildren
 Ancestors
+  exprSimAlloc
   exprSim exprSimHyps exprSimUnwrap exprSimBufferStore exprSimBuffer
   vyperInterpreter vyperValueOperation vyperState fragExec
   compileEnv context exprSimLiteralBuffer exprSimOps venomState
