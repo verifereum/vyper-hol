@@ -990,9 +990,14 @@ Theorem callable_entry_no_type_error:
   no_type_error_eval (eval_stmts cx body
     (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>))
 Proof
+  strip_tac >>
+  `source_supply (initial_state am [scope] with
+     <|outcomes := orc; requests := rqs; gas_obs := gobs|>)` by
+    fs[machine_supply_def, vyperSourceSupplyDefsTheory.source_supply_def,
+       initial_state_def] >>
   metis_tac[
     callable_entry_establishes_type_soundness_preconditions,
-    machine_supply_initial_state, eval_stmts_no_type_error]
+    eval_stmts_no_type_error]
 QED
 
 (* Explicit non-vacuity corollary: there exists a concrete configuration
