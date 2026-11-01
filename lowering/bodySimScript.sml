@@ -44,7 +44,9 @@ Ancestors
    unit, cenv is a runtime function's compile env with the program's
    function ids and parameter types (so compile_call gives an internal
    call the label package_internal_fn gave the callee:
-   compile_call_intcall_label), the program's events, and its locals in
+   compile_call_intcall_label) and its function info (so the caller reads
+   the callee's results the way the callee returns them), the program's
+   events, and its locals in
    allocas, as build_compile_env makes every body's, and the source finds
    its functions in tops.  tops's module variables have distinct names, as
    the type checker gives (source_typing_ok_vtype_keys_distinct), and cenv
@@ -59,6 +61,8 @@ Definition body_inv_def:
                     ctx = unit.cu_context) /\
     get_module_code cx NONE = SOME tops /\
     cenv.ce_func_ids = build_func_ids 0 tops /\
+    cenv.ce_func_info =
+      build_func_info (get_struct_fields (make_struct_fields_map tops)) tops /\
     cenv.ce_func_param_types = build_func_param_types tops /\
     cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
     ~cenv.ce_is_ctor /\ cenv.ce_alloca_locals /\
