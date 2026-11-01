@@ -302,3 +302,35 @@ Proof
     arithmeticTheory.MULT_RIGHT_1] >>
   asm_simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
 QED
+
+Theorem canonical_primitive_in_memory:
+  !tv w dst mem.
+    well_formed_type_value tv /\ word_slot_canonical w tv /\
+    mem_word_at dst mem = w /\
+    ((?bt. tv = BaseTV bt /\ (!n. bt <> BytesT (Dynamic n)) /\
+                              (!n. bt <> StringT n)) \/
+     (?m. tv = FlagTV m)) ==>
+    val_in_memory tv (decode_base_from_slot w tv) dst mem
+Proof
+  rpt gen_tac >> strip_tac >>
+  `encode_base_to_slot (decode_base_from_slot w tv) tv = SOME w` by
+    gvs[word_slot_canonical_def] >>
+  gvs[]
+  >- (Cases_on `bt` >>
+      gvs[decode_base_from_slot_def, encode_base_to_slot_def,
+          val_in_memory_def, val_to_w256_def, typed_val_to_w256_def,
+          bool_to_slot_def, AllCaseEqs()] >>
+      Cases_on `b` >>
+      gvs[decode_base_from_slot_def, encode_base_to_slot_def,
+          val_in_memory_def, typed_val_to_w256_def,
+          valueEncodingProofsTheory.word_of_bytes_be_pad_right,
+          AllCaseEqs()])
+  >> gvs[decode_base_from_slot_def, encode_base_to_slot_def,
+         val_in_memory_def, val_to_w256_def]
+QED
+
+Theorem none_decode_in_memory:
+  !w dst mem. val_in_memory NoneTV (decode_base_from_slot w NoneTV) dst mem
+Proof
+  simp[decode_base_from_slot_def, val_in_memory_def]
+QED
