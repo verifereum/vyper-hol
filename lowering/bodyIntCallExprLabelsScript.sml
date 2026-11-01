@@ -310,3 +310,78 @@ Proof
                compiler_label_hoare_lower_value] >> gen_tac >> BETA_TAC) >>
   first_x_assum irule >> simp[]
 QED
+
+Theorem compiler_block_tail_store_byte_chunks:
+  !dst bs off. compiler_block_tail (compile_store_byte_chunks dst bs off)
+Proof
+  recInduct compile_store_byte_chunks_ind >> rpt strip_tac >>
+  once_rewrite_tac[compile_store_byte_chunks_def] >>
+  simp[comp_ignore_bind_def, compiler_block_tail_primitives] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+  first_x_assum mp_tac >> simp[]
+QED
+
+Theorem compiler_label_hoare_store_byte_chunks:
+  !dst bs off. compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_store_byte_chunks dst bs off) (\r out. compiler_label_reservation origin pending out)
+Proof
+  recInduct compile_store_byte_chunks_ind >> rpt strip_tac >>
+  once_rewrite_tac[compile_store_byte_chunks_def] >>
+  simp[comp_ignore_bind_def, compiler_label_hoare_typed_primitives] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
+       gen_tac >> BETA_TAC) >> first_x_assum mp_tac >> simp[]
+QED
+
+Theorem compiler_block_tail_bytelike_literal:
+  compiler_block_tail (compile_bytelike_literal bs n)
+Proof
+  simp[compile_bytelike_literal_def, comp_ignore_bind_def] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives, compiler_block_tail_alloc_buffer,
+               compiler_block_tail_store_byte_chunks] >>
+       gen_tac >> BETA_TAC) >> simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_bytelike_literal:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_bytelike_literal bs n) (\r out. compiler_label_reservation origin pending out)
+Proof
+  simp[compile_bytelike_literal_def, comp_ignore_bind_def] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_typed_primitives, compiler_label_hoare_store_byte_chunks,
+               compiler_label_hoare_storage_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_typed_primitives]
+QED
+
+Theorem compiler_block_tail_literal_vv:
+  compiler_block_tail (compile_literal_vv ty lit)
+Proof
+  Cases_on `lit` >> simp[compile_literal_vv_def, compiler_block_tail_primitives]
+  >- (Cases_on `b` >> simp[compile_literal_vv_def, compiler_block_tail_primitives])
+  >- (Cases_on `ty` >> simp[] >>
+      irule compiler_block_tail_bind >>
+      simp[compiler_block_tail_bytelike_literal, compiler_block_tail_primitives]) >>
+  Cases_on `ty` >> simp[compiler_block_tail_primitives] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >> simp[compiler_block_tail_primitives] >>
+  rename1 `BytesT bound` >> Cases_on `bound` >> simp[compiler_block_tail_primitives] >>
+  irule compiler_block_tail_bind >>
+  simp[compiler_block_tail_bytelike_literal, compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_literal_vv:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_literal_vv ty lit) (\r out. compiler_label_reservation origin pending out)
+Proof
+  Cases_on `lit` >> simp[compile_literal_vv_def, compiler_label_hoare_typed_primitives]
+  >- (Cases_on `b` >> simp[compile_literal_vv_def, compiler_label_hoare_typed_primitives])
+  >- (Cases_on `ty` >> simp[] >>
+      irule compiler_label_hoare_preserving_bind >>
+      simp[compiler_label_hoare_bytelike_literal, compiler_label_hoare_typed_primitives]) >>
+  Cases_on `ty` >> simp[compiler_label_hoare_typed_primitives] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >> simp[compiler_label_hoare_typed_primitives] >>
+  rename1 `BytesT bound` >> Cases_on `bound` >> simp[compiler_label_hoare_typed_primitives] >>
+  irule compiler_label_hoare_preserving_bind >>
+  simp[compiler_label_hoare_bytelike_literal, compiler_label_hoare_typed_primitives]
+QED
