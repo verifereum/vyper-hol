@@ -555,8 +555,8 @@ QED
 (* The element's pointer in memory: the element lies inside the base's
    bytes, so its address does not wrap, and the base sits where vv_at says. *)
 Theorem tuple_elem_ptr[local]:
-  !func cenv cx env es sa sn es1 tv bvv q w tys tvs vs k.
-    stmt_state_rel func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
+  !func cenv cx env es sa sn es1 tv bvv q w tys tvs vs k ctx.
+    stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
     vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
     eval_operand (vv_operand bvv) q = SOME w /\ vv_loc bvv = LocMemory /\
@@ -601,8 +601,8 @@ QED
 
 (* The element's placement in memory, from the base's. *)
 Theorem tuple_vv_at_elem[local]:
-  !func cenv cx env es sa sn es1 tv bvv q w dst tys tvs vs k tv' t.
-    stmt_state_rel func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
+  !func cenv cx env es sa sn es1 tv bvv q w dst tys tvs vs k tv' t ctx.
+    stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
     vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
     read_result cx tv' es1 = (INL (EL k vs), es1) /\
@@ -772,8 +772,8 @@ QED
 
 (* The element's value_vv holds the element, from the base's. *)
 Theorem tuple_vv_holds_elem[local]:
-  !func cenv cx env es sa sn es1 tv bvv q w dst tys tvs vs k tv'.
-    stmt_state_rel func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
+  !func cenv cx env es sa sn es1 tv bvv q w dst tys tvs vs k tv' ctx.
+    stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
     vv_holds cenv cx (TupleT tys) tv bvv es1 q /\
     vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
@@ -825,8 +825,8 @@ QED
 
 (* The base's read, a tuple of the element types. *)
 Theorem tuple_base_read[local]:
-  !func cenv cx obj es sa sb s0 es1 btv bvv s w tys tvs.
-    vv_post func cenv cx obj es sa sb s0 es1 btv bvv s /\
+  !func cenv cx obj es sa sb s0 es1 btv bvv s w tys tvs ctx.
+    vv_post ctx func cenv cx obj es sa sb s0 es1 btv bvv s /\
     expr_type obj = TupleT tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     eval_operand (vv_operand bvv) s = SOME w /\
@@ -849,8 +849,8 @@ QED
 
 (* The element's value_vv after the ADD, from the base's. *)
 Theorem tuple_vv_post[local]:
-  !func cenv cx env obj idx es sa sn s0 es1 tv bvv q w dst tys tvs vs k tv'.
-    vv_post func cenv cx obj es sa sn s0 es1 tv bvv q /\
+  !func cenv cx env obj idx es sa sn s0 es1 tv bvv q w dst tys tvs vs k tv' ctx.
+    vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
     expr_sim_inv cenv cx env es /\
     eval_operand (vv_operand bvv) q = SOME w /\
     eval_operand dst q =
@@ -862,18 +862,18 @@ Theorem tuple_vv_post[local]:
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
     values_have_types tvs vs /\
     read_result cx tv' es1 = (INL (EL k vs), es1) ==>
-    vv_post func cenv cx (Subscript (EL k tys) obj idx) es sa sn s0 es1 tv'
+    vv_post ctx func cenv cx (Subscript (EL k tys) obj idx) es sa sn s0 es1 tv'
       (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `vv_post _ _ _ obj _ _ _ _ _ _ _ _`
+  qpat_x_assum `vv_post _ _ _ _ obj _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   rewrite_tac[vv_post_def] >> gvs[vyperASTTheory.expr_type_def] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
   >- (irule tuple_vv_holds_elem >> simp[] >> metis_tac[]) >>
   qspecl_then [`func`, `cenv`, `cx`, `env`, `es`, `sa`, `sn`, `es1`, `tv`,
                `bvv`, `q`, `w`, `dst`, `tys`, `tvs`, `vs`, `k`, `tv'`,
-               `EL k tys`] mp_tac tuple_vv_at_elem >>
+               `EL k tys`, `ctx`] mp_tac tuple_vv_at_elem >>
   imp_res_tac values_have_types_length >> simp[]
 QED
 
@@ -979,7 +979,7 @@ Proof
       `LENGTH tvs = LENGTH tys` by
         (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
       irule frag_exec_seq >>
-      qexistsl_tac [`\s. vv_post func cenv cx obj es sa sm s0 es1 btv bvv s`,
+      qexistsl_tac [`\s. vv_post ctx func cenv cx obj es sa sm s0 es1 btv bvv s`,
                     `sm`] >>
       simp[] >> conj_tac
       >- (irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[]) >>

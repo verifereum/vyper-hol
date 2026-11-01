@@ -15,7 +15,7 @@ Definition asm_oracle_initial_def:
        as_logs := []; as_pc := 0; as_call_ctx := empty_call_context;
        as_tx_ctx := empty_tx_context; as_block_ctx := empty_block_context;
        as_code := []; as_prev_hashes := []; as_outcomes := [];
-       as_requests := []; as_gas_readings := [] |>
+       as_requests := []; as_pending_deletions := []; as_gas_readings := [] |>
 End
 
 Definition gas_counter_asm_def:

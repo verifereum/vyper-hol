@@ -175,7 +175,7 @@ QED
 
 Theorem immutable_relation_write_disjoint:
   (!name tv v off.
-    FLOOKUP cenv.ce_vars (module_var_key (src,name)) = SOME (ImmutableLoc off) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP vs.immutables addr of NONE => FEMPTY
       | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     immutable_value_admissible tv v /\

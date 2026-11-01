@@ -16,7 +16,7 @@ val expr_ind = vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `λ_. T`
 Definition place_map_tables_agree_def:
   place_map_tables_agree cenv env <=>
     !nsid. OPTION_MAP (\(tr,kt,vt). (kt,vt))
-             (cenv.ce_hashmap_info (module_var_key nsid)) =
+             (cenv.ce_hashmap_info nsid) =
       (case FLOOKUP env.toplevel_vtypes nsid of
          SOME (HashMapT kt vt) => SOME (kt,vt)
        | _ => NONE)
@@ -65,7 +65,7 @@ Proof
       disch_then (qspec_then `(p0,p1)` mp_tac) >>
       Cases_on `vt` >>
       gvs[vtype_annotation_ok_def, value_type_place_def] >>
-      Cases_on `cenv.ce_hashmap_info (module_var_key (p0,p1))` >>
+      Cases_on `cenv.ce_hashmap_info (p0,p1)` >>
       gvs[] >> PairCases_on `x` >> gvs[])
   >> `place_type cenv e = value_type_place vt'` by metis_tac[]
   >> Cases_on `vt'`
@@ -90,7 +90,7 @@ Definition place_map_tables_agree_on_defined_def:
   place_map_tables_agree_on_defined cenv env <=>
     !nsid vt. FLOOKUP env.toplevel_vtypes nsid = SOME vt ==>
       OPTION_MAP (\(tr,kt,vt). (kt,vt))
-        (cenv.ce_hashmap_info (module_var_key nsid)) =
+        (cenv.ce_hashmap_info nsid) =
       (case vt of HashMapT kt v => SOME (kt,v) | _ => NONE)
 End
 
@@ -138,7 +138,7 @@ Proof
       disch_then (qspec_then `vt` mp_tac) >>
       Cases_on `vt` >>
       gvs[vtype_annotation_ok_def, value_type_place_def] >>
-      Cases_on `cenv.ce_hashmap_info (module_var_key (p0,p1))` >>
+      Cases_on `cenv.ce_hashmap_info (p0,p1)` >>
       gvs[] >> PairCases_on `x` >> gvs[])
   >> `place_type cenv e = value_type_place vt'` by metis_tac[]
   >> Cases_on `vt'`
@@ -155,7 +155,7 @@ Theorem place_type_defined_module_map:
 Proof
   rw[place_map_tables_agree_on_defined_def] >>
   first_x_assum (qspec_then `nsid` mp_tac) >> simp[] >>
-  Cases_on `cenv.ce_hashmap_info (module_var_key nsid)` >> simp[] >>
+  Cases_on `cenv.ce_hashmap_info nsid` >> simp[] >>
   PairCases_on `x` >> simp[] >> rpt strip_tac >>
   simp[place_type_def]
 QED
@@ -167,7 +167,7 @@ Theorem place_type_defined_module_value:
 Proof
   rw[place_map_tables_agree_on_defined_def] >>
   first_x_assum (qspec_then `nsid` mp_tac) >> simp[] >>
-  Cases_on `cenv.ce_hashmap_info (module_var_key nsid)` >> simp[] >>
+  Cases_on `cenv.ce_hashmap_info nsid` >> simp[] >>
   simp[place_type_def]
 QED
 

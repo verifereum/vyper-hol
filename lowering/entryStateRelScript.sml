@@ -30,12 +30,6 @@ Libs
 
 (* ===== Module variables in the compiler's env ===== *)
 
-Theorem module_var_key_none_11[local]:
-  !a b. module_var_key (NONE, a) = module_var_key (NONE, b) <=> a = b
-Proof
-  simp[module_var_key_def, nsid_to_string_def]
-QED
-
 (* Where a module variable's entry in add_module_var_locations comes
    from: the starting map, or a declaration with a slot. *)
 Theorem add_module_var_locations_cases:
@@ -44,12 +38,12 @@ Theorem add_module_var_locations_cases:
     FLOOKUP vars k = SOME loc \/
     (?vis mut name ty n.
        MEM (VariableDecl vis mut name ty (SOME n)) tops /\
-       k = module_var_key (NONE, name) /\
+       k = (NONE, name) /\
        ((mut = Storage /\ loc = StorageLoc (n2w n)) \/
         (mut = Transient /\ loc = TransientLoc (n2w n)))) \/
     (?vis tr name kt vt n.
        MEM (HashMapDecl vis tr name kt vt (SOME n)) tops /\
-       k = module_var_key (NONE, name) /\
+       k = (NONE, name) /\
        loc = if tr then TransientLoc (n2w n) else StorageLoc (n2w n))
 Proof
   Induct >- simp[add_module_var_locations_def] >>
@@ -63,13 +57,13 @@ QED
 Theorem add_module_var_locations_other:
   !tops vars name.
     ~MEM (NONE, name) (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) ==>
-    FLOOKUP (add_module_var_locations tops vars) (module_var_key (NONE, name)) =
-    FLOOKUP vars (module_var_key (NONE, name))
+    FLOOKUP (add_module_var_locations tops vars) ((NONE, name)) =
+    FLOOKUP vars ((NONE, name))
 Proof
   Induct >- simp[add_module_var_locations_def] >>
   rpt gen_tac >> simp[add_module_var_locations_def] >> strip_tac >>
   BasicProvers.every_case_tac >>
-  gvs[toplevel_vtype_keys_toplevel_def, FLOOKUP_UPDATE, module_var_key_none_11]
+  gvs[toplevel_vtype_keys_toplevel_def, FLOOKUP_UPDATE]
 QED
 
 (* With distinct names, a declared module variable's entry is the one its
@@ -78,9 +72,9 @@ Theorem add_module_var_locations_mem:
   !tops vars top name.
     ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
     MEM top tops /\ toplevel_vtype_keys_toplevel (NONE:num option) top = [(NONE, name)] /\
-    FLOOKUP vars (module_var_key (NONE, name)) = NONE ==>
-    FLOOKUP (add_module_var_locations tops vars) (module_var_key (NONE, name)) =
-    FLOOKUP (add_module_var_locations [top] FEMPTY) (module_var_key (NONE, name))
+    FLOOKUP vars ((NONE, name)) = NONE ==>
+    FLOOKUP (add_module_var_locations tops vars) ((NONE, name)) =
+    FLOOKUP (add_module_var_locations [top] FEMPTY) ((NONE, name))
 Proof
   Induct >- simp[] >>
   rpt gen_tac >> strip_tac >> gvs[ALL_DISTINCT_APPEND]
@@ -91,7 +85,7 @@ Proof
   first_x_assum irule >> simp[] >>
   Cases_on `h` >> gvs[toplevel_vtype_keys_toplevel_def] >>
   BasicProvers.every_case_tac >>
-  gvs[FLOOKUP_UPDATE, module_var_key_none_11, MEM_FLAT, MEM_MAP] >>
+  gvs[FLOOKUP_UPDATE, MEM_FLAT, MEM_MAP] >>
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `!l. _` mp_tac >> simp[] >>
   qexists_tac `toplevel_vtype_keys_toplevel (NONE:num option) top` >>
@@ -173,11 +167,9 @@ QED
 (* ===== storage_vars_rel and transient_vars_rel ===== *)
 
 (* The compiler's env for a function of tops holds the module variables
-   add_module_var_locations gives (build_compile_env starts from it, and
-   nothing later binds a key module_var_key gives, unless a parameter is
-   so named).  For a deployment of tops alone, with its slots as the
-   layout's, both directions of the storage and transient relations
-   hold. *)
+   add_module_var_locations gives (build_compile_env's ce_module_vars).
+   For a deployment of tops alone, with its slots as the layout's, both
+   directions of the storage and transient relations hold. *)
 Theorem entry_storage_vars_rel:
   !tops am tx cenv cx.
     supported_declaration_headers tops /\
@@ -186,9 +178,9 @@ Theorem entry_storage_vars_rel:
     cx.sources = am.sources /\ cx.layouts = am.layouts /\
     cx.txn.target = tx.target /\
     cenv.ce_module = NONE /\
-    (!name. FLOOKUP cenv.ce_vars (module_var_key (NONE, name)) =
+    (!name. FLOOKUP cenv.ce_module_vars (NONE, name) =
             FLOOKUP (add_module_var_locations tops FEMPTY)
-              (module_var_key (NONE, name))) ==>
+              ((NONE, name))) ==>
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx
 Proof
   rpt gen_tac >> strip_tac >> fs[source_deployment_rel_def] >>
@@ -199,11 +191,11 @@ Proof
   rpt gen_tac >> strip_tac
   >~ [`FLOOKUP _ _ = SOME (StorageLoc slot)`]
   >- (drule add_module_var_locations_cases >> rw[] >>
-      gvs[module_var_key_none_11] >> res_tac >> simp[] >>
+      gvs[] >> res_tac >> simp[] >>
       Cases_on `tr` >> gvs[] >> res_tac >> simp[])
   >~ [`FLOOKUP _ _ = SOME (TransientLoc slot)`]
   >- (drule add_module_var_locations_cases >> rw[] >>
-      gvs[module_var_key_none_11] >> res_tac >> simp[] >>
+      gvs[] >> res_tac >> simp[] >>
       Cases_on `tr` >> gvs[] >> res_tac >> simp[]) >>
   first_x_assum drule >> strip_tac >> gvs[] >>
   drule find_var_decl_by_name_mem >> strip_tac >>
@@ -249,7 +241,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `!vis name ty slot.
      MEM (VariableDecl vis Immutable name ty slot) tops ==>
-     module_var_key (NONE, name) <> key` by
+     (NONE, name) <> key` by
     (rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
      drule_then (qspecl_then
        [`FEMPTY`, `VariableDecl vis Immutable name ty slot`, `name`] mp_tac)
@@ -266,16 +258,17 @@ Theorem entry_storage_vars_rel_immutable[local]:
     source_deployment_rel tops am tx /\
     cx.sources = am.sources /\ cx.layouts = am.layouts /\
     cx.txn.target = tx.target /\ cenv.ce_module = NONE /\
-    (!name. FLOOKUP cenv.ce_vars (module_var_key (NONE, name)) =
+    (!name. FLOOKUP cenv.ce_module_vars (NONE, name) =
       FLOOKUP (add_immutable_locations
         (get_struct_fields (make_struct_fields_map tops)) tops 0
-        (add_module_var_locations tops FEMPTY)) (module_var_key (NONE, name))) ==>
+        (add_module_var_locations tops FEMPTY)) ((NONE, name))) ==>
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx
 Proof
   rpt gen_tac >> strip_tac >>
-  `storage_vars_rel (cenv with ce_vars := add_module_var_locations tops FEMPTY) cx /\
-   transient_vars_rel (cenv with ce_vars := add_module_var_locations tops FEMPTY) cx` by
-    (irule entry_storage_vars_rel >> simp[] >> metis_tac[]) >>
+  `storage_vars_rel (cenv with ce_module_vars := add_module_var_locations tops FEMPTY) cx /\
+   transient_vars_rel (cenv with ce_module_vars := add_module_var_locations tops FEMPTY) cx` by
+    (irule entry_storage_vars_rel >> simp[] >>
+     qexistsl_tac [`am`, `tops`, `tx`] >> simp[]) >>
   `!key slot.
     (FLOOKUP (add_immutable_locations
       (get_struct_fields (make_struct_fields_map tops)) tops 0
@@ -334,7 +327,7 @@ Theorem body_entry_state_rel:
     ss.vs_outcomes = vs.vs_outcomes /\ ss.vs_requests = vs.vs_requests /\
     local_ptrs_rel func cenv [env] ss /\
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
-    (!n off. FLOOKUP cenv.ce_vars n <> SOME (ImmutableLoc off)) ==>
+    (!n off. FLOOKUP cenv.ce_module_vars n <> SOME (ImmutableLoc off)) ==>
     state_rel func cenv cx es ss
 Proof
   rpt gen_tac >> strip_tac >>
@@ -416,21 +409,24 @@ Theorem package_external_fn_vars:
     cenv.ce_module = NONE /\
     EVERY (\a. ?off. FLOOKUP cenv.ce_vars (FST a) =
                      SOME (MemLoc off (type_memory_bytes cenv (SND a)))) fargs /\
-    (!k. ~MEM k (MAP FST fargs) ==>
-         FLOOKUP cenv.ce_vars k =
-         FLOOKUP
-           (add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
-             tops 0 (add_module_var_locations tops FEMPTY)) k)
+    (!k. ~MEM k (MAP FST fargs) ==> FLOOKUP cenv.ce_vars k = NONE) /\
+    cenv.ce_module_vars =
+      add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
+        tops 0 (add_module_var_locations tops FEMPTY)
 Proof
   rpt gen_tac >> strip_tac >>
   `cenv.ce_vars =
    FST (allocate_args (get_struct_fields (make_struct_fields_map tops)) fargs 0
-          (add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
-            tops 0 (add_module_var_locations tops FEMPTY))) /\
+          FEMPTY) /\
+   cenv.ce_module_vars =
+     add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
+       tops 0 (add_module_var_locations tops FEMPTY) /\
    cenv.ce_module = NONE /\
    cenv.ce_struct_fields = make_struct_fields_map tops` by (
     `cenv.ce_vars = (build_compile_env tops External mut fname fargs ret fbody
                        use_trans).ce_vars /\
+     cenv.ce_module_vars = (build_compile_env tops External mut fname fargs ret
+                              fbody use_trans).ce_module_vars /\
      cenv.ce_module = (build_compile_env tops External mut fname fargs ret fbody
                          use_trans).ce_module /\
      cenv.ce_struct_fields = (build_compile_env tops External mut fname fargs
@@ -440,8 +436,7 @@ Proof
     simp[build_compile_env_ce_struct_fields] >>
     simp[build_compile_env_def] >> rpt (pairarg_tac >> gvs[])) >>
   drule_then (qspecl_then [`get_struct_fields (make_struct_fields_map tops)`,
-    `0`, `add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
-      tops 0 (add_module_var_locations tops FEMPTY)`] strip_assume_tac)
+    `0`, `FEMPTY`] strip_assume_tac)
     allocate_args_lookup >>
   gvs[] >> rpt strip_tac >>
   gvs[EVERY_MEM, GSYM type_mem_bytes_type_memory_bytes] >> metis_tac[]
@@ -496,12 +491,11 @@ Theorem register_positional_args_immutable_layout[local]:
   ~cenv'.ce_is_ctor /\ immutable_section_layout cenv' tops
 Proof
   strip_tac >> drule compile_register_positional_args_cenv >>
-  strip_tac >> conj_tac
-  >- (qpat_x_assum `cenv' = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
-  rw[immutable_section_layout_def] >>
-  first_x_assum drule >> strip_tac
-  >- (gvs[immutable_section_layout_def] >> metis_tac[]) >>
-  gvs[]
+  strip_tac >>
+  `cenv'.ce_is_ctor = cenv.ce_is_ctor /\
+   cenv'.ce_module_vars = cenv.ce_module_vars` by
+    (qpat_x_assum `cenv' = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  fs[immutable_section_layout_def]
 QED
 
 (* ===== The selected function's parameters ===== *)
@@ -535,15 +529,6 @@ Proof
   Cases_on `h` >> gvs[supported_declaration_header_def, lookup_function_def] >>
   BasicProvers.every_case_tac >> gvs[lookup_function_def, AllCaseEqs()] >>
   metis_tac[]
-QED
-
-(* No supported binding contains ".", so none is a module variable's key. *)
-Theorem supported_bindings_not_module_var_key[local]:
-  supported_function_bindings tops args locals loops ==>
-    ~MEM (module_var_key (NONE, m)) (MAP FST args ++ locals ++ loops)
-Proof
-  simp[supported_function_bindings_def, EVERY_MEM] >> rpt strip_tac >>
-  first_x_assum drule >> simp[module_var_key_def]
 QED
 
 (* The source typing check gives the parameters distinct names and
@@ -682,16 +667,6 @@ Proof
   `supported_declaration_headers tops` by fs[supported_program_def] >>
   `params_ok (type_env tops) fargs` by metis_tac[source_typing_ok_params_ok] >>
   `ALL_DISTINCT (MAP FST fargs)` by fs[params_ok_def] >>
-  `!m. ~MEM (module_var_key (NONE, m)) (MAP FST fargs)` by
-    (drule_at (Pos last) lookup_function_external_decl >>
-     disch_then (qspec_then `tops` mp_tac) >>
-     impl_tac >- fs[supported_declaration_headers_def] >> strip_tac >>
-     `supported_declaration_names tops` by fs[supported_program_def] >>
-     `supported_function_header_names tops
-        (FunctionDecl External mut F raw tx.function_name fargs [] ret fbody)`
-       by fs[supported_declaration_names_def, EVERY_MEM] >>
-     pop_assum mp_tac >> simp[supported_function_header_names_def] >>
-     strip_tac >> drule supported_bindings_not_module_var_key >> simp[]) >>
   drule_at (Pos last) package_external_fn_dec_cenv_agrees >>
   impl_tac >- metis_tac[source_typing_ok_type_def_keys_distinct] >>
   strip_tac >> gvs[] >>
@@ -732,7 +707,7 @@ Proof
       qpat_x_assum `!fuel r. _`
         (qspecl_then [`fuel`, `run_from fuel ctx func t`] mp_tac) >>
       simp[]) >>
-  `cenv.ce_module = NONE` by
+  `cenv.ce_module = NONE /\ cenv.ce_module_vars = cenv0.ce_module_vars` by
     (qpat_x_assum `cenv = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   `storage_vars_rel cenv
      (initial_evaluation_context am.sources am.layouts tx NONE) /\

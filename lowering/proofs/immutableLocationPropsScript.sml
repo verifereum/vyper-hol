@@ -31,7 +31,7 @@ Theorem immutable_locations_cons:
   add_immutable_locations sft (top::tops) off vars =
   add_immutable_locations sft tops (off + compute_immutables_len sft [top])
     (case top of VariableDecl _ Immutable name ty _ =>
-       vars |+ (module_var_key (NONE,name), ImmutableLoc off) | _ => vars)
+       vars |+ ((NONE,name), ImmutableLoc off) | _ => vars)
 Proof
   Cases_on `top` >> simp[add_immutable_locations_def, compute_immutables_len_def] >>
   CASE_TAC >> simp[add_immutable_locations_def, compute_immutables_len_def]
@@ -39,11 +39,11 @@ QED
 
 Theorem immutable_locations_step_origin:
   FLOOKUP (case top of VariableDecl _ Immutable name ty _ =>
-     vars |+ (module_var_key (NONE,name), ImmutableLoc off) | _ => vars) key =
+     vars |+ ((NONE,name), ImmutableLoc off) | _ => vars) key =
     SOME (ImmutableLoc loc) ==>
   FLOOKUP vars key = SOME (ImmutableLoc loc) \/
   ?vis name ty slot. top = VariableDecl vis Immutable name ty slot /\
-    key = module_var_key (NONE,name) /\ loc = off
+    key = (NONE,name) /\ loc = off
 Proof
   Cases_on `top` >> simp[] >> CASE_TAC >> simp[FLOOKUP_UPDATE] >>
   rw[] >> metis_tac[]
@@ -62,7 +62,7 @@ Theorem immutable_locations_origin:
   FLOOKUP vars key = SOME (ImmutableLoc loc) \/
   ?pre post vis name ty slot.
     tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
-    key = module_var_key (NONE,name) /\
+    key = (NONE,name) /\
     loc = off + compute_immutables_len sft pre
 Proof
   Induct >- simp[add_immutable_locations_def] >>
@@ -85,10 +85,9 @@ Theorem immutable_build_compile_env_layout:
 Proof
   rpt gen_tac >> simp[immutable_section_layout_def] >> rpt gen_tac >>
   simp[build_compile_env_def] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  drule_all immutable_allocate_args_origin >> strip_tac >>
   (drule immutable_locations_origin >> strip_tac
    >- (drule immutable_module_vars_origin >> simp[FLOOKUP_DEF]) >>
-   gvs[module_var_key_def, nsid_to_string_def] >>
+   gvs[nsid_to_string_def] >>
    qmatch_goalsub_rename_tac `VariableDecl decl_vis Immutable _ decl_ty decl_slot` >>
    qexistsl [`pre`,`post`,`decl_vis`,`decl_ty`,`decl_slot`] >> simp[])
 QED

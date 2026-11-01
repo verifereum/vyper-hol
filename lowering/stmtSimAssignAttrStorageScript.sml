@@ -210,10 +210,10 @@ Theorem assign_attr_storage_code_parts:
     stmt_env cenv lctx ty
       (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id)) fld))
          e) sa = (c, sf) /\
-    FLOOKUP cenv.ce_vars (module_var_key (src, id)) =
+    FLOOKUP cenv.ce_module_vars (src, id) =
       SOME (if tr then TransientLoc slot else StorageLoc slot) /\
-    cenv.ce_hashmap_info (module_var_key (src, id)) = NONE /\
-    cenv.ce_var_type (module_var_key (src, id)) = SOME (StructT sid) /\
+    cenv.ce_hashmap_info (src, id) = NONE /\
+    cenv.ce_module_var_type (src, id) = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (fty, fsz) /\
     is_word_type fty /\ is_word_type (expr_type e) ==>
@@ -232,7 +232,7 @@ Proof
     metis_tac[is_word_type_no_length_word] >>
   drule_all compile_get_target_ptr_toplevel >> strip_tac >>
   drule stmt_env_assign >> strip_tac >> gvs[] >>
-  rename1 `FLOOKUP cenv.ce_vars _` >>
+  rename1 `FLOOKUP cenv.ce_module_vars _` >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   Cases_on `tr` >>
   asm_simp_tac (srw_ss())
@@ -261,17 +261,17 @@ Theorem store_var_frag[local]:
   !ctx func cenv cx es' s1 tr d a op w st st' R.
     emit_void (if tr then TSTORE else SSTORE) [Var d; op] st = ((), st') /\
     lookup_var d s1 = SOME a /\ eval_operand op s1 = SOME w /\
-    stmt_state_rel func cenv cx es'
+    stmt_state_rel ctx func cenv cx es'
       (if tr then tstore a w s1 else sstore a w s1) ==>
     frag_exec ctx st st' (\t. t = s1)
-      (\t. stmt_state_rel func cenv cx es' t /\
+      (\t. stmt_state_rel ctx func cenv cx es' t /\
            (!x. lookup_var x t = lookup_var x s1) /\
            (!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
                     FLOOKUP t.vs_allocas aid = SOME b)) R
 Proof
   rpt strip_tac >>
   `frag_exec ctx st st' (\t. t = s1)
-     (\t. stmt_state_rel func cenv cx es' t /\
+     (\t. stmt_state_rel ctx func cenv cx es' t /\
           (!x. lookup_var x t = lookup_var x s1) /\
           (!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
                    FLOOKUP t.vs_allocas aid = SOME b)) (\r. F)` by
@@ -317,8 +317,8 @@ Theorem assign_attr_storage_frag:
                !u st.
                  storage_dead cx tr (update_storage (n2w slot + n2w off) u st) =
                  storage_dead cx tr st) ==>
-    frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
-      (\t. res = INL () /\ stmt_state_rel func cenv cx es' t /\
+    frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\t. res = INL () /\ stmt_state_rel ctx func cenv cx es' t /\
            (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
                   lookup_var x t = SOME u) /\
            (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -365,8 +365,8 @@ Theorem compile_assign_attr_storage_stmt_frag:
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr (StructT sid), id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-    cenv.ce_hashmap_info (module_var_key (src, id)) = NONE /\
-    cenv.ce_var_type (module_var_key (src, id)) = SOME (StructT sid) /\
+    cenv.ce_hashmap_info (src, id) = NONE /\
+    cenv.ce_module_var_type (src, id) = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (fty, fsz) /\
     is_word_type fty /\ expr_type e = fty /\
@@ -379,7 +379,7 @@ Theorem compile_assign_attr_storage_stmt_frag:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
-  `FLOOKUP cenv.ce_vars (module_var_key (src, id)) =
+  `FLOOKUP cenv.ce_module_vars (src, id) =
      SOME (if tr then TransientLoc (n2w slot) else StorageLoc (n2w slot))` by
     (irule toplevel_storage_ce_vars >>
      gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>

@@ -20,7 +20,7 @@
  *   compile_literal_word_sim — bool, integer and decimal literals
  *   compile_name_word_sim  — a word local
  *   compile_env_sim        — environment reads (msg.sender, block.number,
- *                            ...), all but block.prevhash
+ *                            ...), all but block.prevhash and msg.gas
  *   expr_val_rel_mem_agree — a non-word operand's value survives code that
  *                            keeps its type_memory_size bytes
  *   val_footprint, val_footprint_le, val_in_memory_footprint_agree,
@@ -38,7 +38,8 @@
  *   locals_kept_refl, locals_kept_inst_idx — reflexivity and instruction-index
  *                            normalization of the local frame
  *
- * Helpers: expr_exit_INL, typed_val_to_w256_word_value, eval_expr_env,
+ * Helpers: expr_exit_INL, expr_exit_success_map, expr_val_at_start_mono,
+ *   typed_val_to_w256_word_value, eval_expr_env,
  *   lower_value_env
  *
  * Values are related by expr_val_rel, by the expression's type: a word
@@ -67,15 +68,14 @@
  *     block number is 0 or the hash list is too short, while Venom's
  *     BLOCKHASH is total, so the lowered code does not abort there; and
  *     call_ctx_rel does not relate bc_blockhash to the transaction's block
- *     hashes.  expr_sim is unprovable for it as things stand.
+ *     hashes.  expr_sim is unprovable for it as things stand;
+ *   - msg.gas: the source reads the next of the state's gas readings
+ *     (gas_obs), while the lowering emits GAS, and call_ctx_rel does not
+ *     relate the two.
  * Nor does the memory frame in expr_post follow from stmt_state_rel for an
  * expression whose lowering writes a DALLOCA buffer (raw_call of msg.data,
  * the create copy and blueprint lowerings): DALLOCA allocates at vs_fmp,
  * which stmt_state_rel does not relate to the ALLOCA allocations.
- * compile_env_sim holds for msg.gas only because the source raises a
- * TypeError for it (vyperContext's evaluate_builtin), which expr_sim
- * leaves out, while the lowering emits GAS: the two do not agree on
- * msg.gas.
  *)
 
 Theory exprSim
@@ -108,6 +108,18 @@ Theorem expr_exit_INL[simp]:
   !x r. ~expr_exit (INL x) r
 Proof
   Cases_on `r` >> simp[expr_exit_def]
+QED
+
+(* Exit predicates are insensitive to the successful result representation. *)
+Theorem expr_exit_success_map:
+  !f r. expr_exit (case r of INL v => INL (f v) | INR ex => INR ex) =
+        expr_exit r
+Proof
+  rpt gen_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `r` >- simp[] >>
+  rename1 `INR ex` >> Cases_on `ex` >>
+  Cases_on `x` >> simp[expr_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
 QED
 
 (* The source results the judgment speaks of: a value, an error other than
@@ -275,6 +287,18 @@ Definition expr_val_at_def:
            val_footprint tv v = 0)
 End
 
+Theorem expr_val_at_start_mono:
+  sa.cs_next_id <= s1.cs_next_id /\
+  expr_val_at cenv cx ty s1 sm es v p s ==>
+  expr_val_at cenv cx ty sa sm es v p s
+Proof
+  simp[expr_val_at_def] >> rpt strip_tac >>
+  first_x_assum drule_all >> strip_tac >> qexists_tac `w` >> simp[]
+  >- (disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
+      first_assum ACCEPT_TAC) >>
+  disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[]
+QED
+
 (* Operand composition: the value of a non-word operand survives code that
    keeps the operand and the bytes of the value's footprint, the
    type_memory_size bytes at its address (val_in_memory_mem_agree). *)
@@ -411,8 +435,8 @@ QED
    (locals_kept), so a value an earlier operand left in a local survives
    too, where it does not cover that word (expr_val_at). *)
 Definition expr_post_def:
-  expr_post func cenv cx e es sa sb s0 es' v op s <=>
-    stmt_state_rel func cenv cx es' s /\
+  expr_post ctx func cenv cx e es sa sb s0 es' v op s <=>
+    stmt_state_rel ctx func cenv cx es' s /\
     expr_val_rel cx (expr_type e) v op s /\
     expr_val_at cenv cx (expr_type e) sa sb es' v op s /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
@@ -440,9 +464,9 @@ Definition expr_sim_def:
       (do result <- eval_expr cx e; read_result cx result od) es = (res, es') /\ expr_res_ok res /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
         (\s. ?v. res = INL v /\
-                 expr_post func cenv cx e es sa sb s0 es' v op s)
+                 expr_post ctx func cenv cx e es sa sb s0 es' v op s)
         (expr_exit res)
 End
 
@@ -491,7 +515,7 @@ End
 Definition immutable_holds_def:
   immutable_holds cenv cx t tv (w:bytes32) (es:evaluation_state) <=>
     ?name off itv iv k tvt v.
-      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module, name) =
         SOME (ImmutableLoc off) /\ w = n2w (off + k) /\
       off + type_memory_size itv < dimword (:256) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
@@ -554,8 +578,8 @@ End
 
 (* expr_post with a value_vv in place of an operand. *)
 Definition vv_post_def:
-  vv_post func cenv cx e es sa sb s0 es' tv vv s <=>
-    stmt_state_rel func cenv cx es' s /\
+  vv_post ctx func cenv cx e es sa sb s0 es' tv vv s <=>
+    stmt_state_rel ctx func cenv cx es' s /\
     vv_holds cenv cx (expr_type e) tv vv es' s /\
     vv_at cenv cx (expr_type e) sa sb es' tv vv s /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
@@ -598,9 +622,9 @@ Definition expr_vv_sim_def:
       eval_expr cx e es = (res, es') /\ expr_vv_res_ok res /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
         (\s. ?tv. res = INL tv /\
-                  vv_post func cenv cx e es sa sb s0 es' tv vv s)
+                  vv_post ctx func cenv cx e es sa sb s0 es' tv vv s)
         (expr_exit res)
 End
 
@@ -677,8 +701,8 @@ Theorem expr_sim_values:
        (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es') /\
        fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
        local_ptrs_reserved cenv sa ==>
-       frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
-         (expr_post func cenv cx e es sa sb s0 es' v op) (\r. F)) ==>
+       frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+         (expr_post ctx func cenv cx e es sa sb s0 es' v op) (\r. F)) ==>
     expr_sim ctx func cenv cx ty e es
 Proof
   rpt gen_tac >> strip_tac >> simp[expr_sim_def] >> rpt strip_tac >>
@@ -694,13 +718,13 @@ QED
 (* stmt_state_rel reads the variables only through the pointers of the
    live locals. *)
 Theorem stmt_state_rel_vars_frame:
-  !func cenv cx es s V.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx es s V ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     (!name entry p sz.
        lookup_scopes name es.scopes = SOME entry /\
        FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
        lookup_var p (s with vs_vars := V) = lookup_var p s) ==>
-    stmt_state_rel func cenv cx es (s with vs_vars := V)
+    stmt_state_rel ctx func cenv cx es (s with vs_vars := V)
 Proof
   rpt strip_tac >>
   `local_ptrs_rel func cenv es.scopes (s with vs_vars := V)` by
@@ -710,7 +734,7 @@ Proof
      rpt strip_tac >> gvs[]) >>
   `alloca_inv (s with vs_vars := V)` by
     (irule alloca_inv_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
-  `alloca_room func (s with vs_vars := V)` by
+  `alloca_room ctx func (s with vs_vars := V)` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `immutable_alloca_sep func cenv cx es (s with vs_vars := V)` by
     (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
@@ -725,9 +749,9 @@ Proof
 QED
 
 Theorem stmt_state_rel_vars_ext:
-  !func cenv cx es t t'.
-    stmt_state_rel func cenv cx es t /\ vars_ext t t' ==>
-    stmt_state_rel func cenv cx es t'
+  !func cenv cx es t t' ctx.
+    stmt_state_rel ctx func cenv cx es t /\ vars_ext t t' ==>
+    stmt_state_rel ctx func cenv cx es t'
 Proof
   rw[vars_ext_def] >>
   qpat_x_assum `t' = _` (fn th => ONCE_REWRITE_TAC [th]) >>
@@ -738,10 +762,10 @@ Proof
 QED
 
 Theorem stmt_state_rel_drop_fresh:
-  !func cenv cx es st s.
+  !func cenv cx es st s ctx.
     local_ptrs_reserved cenv st ==>
-    (stmt_state_rel func cenv cx es (drop_fresh st s) <=>
-     stmt_state_rel func cenv cx es s)
+    (stmt_state_rel ctx func cenv cx es (drop_fresh st s) <=>
+     stmt_state_rel ctx func cenv cx es s)
 Proof
   rpt strip_tac >> eq_tac >> strip_tac
   >- (irule stmt_state_rel_vars_ext >> qexists_tac `drop_fresh st s` >>
@@ -832,7 +856,7 @@ QED
 Theorem eval_expr_env:
   !cx ann item es res es'.
     (do result <- eval_expr cx (Builtin ann (Env item) []); read_result cx result od) es = (res, es') /\
-    expr_res_ok res /\ item <> PrevHash ==>
+    expr_res_ok res /\ item <> PrevHash /\ item <> MsgGas ==>
     es' = es /\
     ?v. res = INL v /\
         evaluate_builtin cx es.accounts ann (Env item) [] [] = INL v
@@ -860,12 +884,11 @@ Proof
 QED
 
 (* An environment read (msg.sender, block.timestamp, ...) annotated with
-   its type, but block.prevhash, for which expr_sim does not hold (see the
-   header).  msg.gas holds vacuously: the source raises a TypeError for
-   it. *)
+   its type, but block.prevhash and msg.gas, for which expr_sim does not
+   hold (see the header). *)
 Theorem compile_env_sim:
   !ctx func cenv cx ty ann item es.
-    item <> PrevHash /\ ann = env_item_type item ==>
+    item <> PrevHash /\ item <> MsgGas /\ ann = env_item_type item ==>
     expr_sim ctx func cenv cx ty (Builtin ann (Env item) []) es
 Proof
   rpt strip_tac >> irule expr_sim_values >>
@@ -885,8 +908,8 @@ Proof
      simp_tac (srw_ss() ++ wordsLib.SIZES_ss) []) >>
   drule lower_value_env >> strip_tac >>
   irule frag_exec_conseq >>
-  qexistsl_tac [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
-                `\s. stmt_state_rel func cenv cx es s /\
+  qexistsl_tac [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
+                `\s. stmt_state_rel ctx func cenv cx es s /\
                      eval_operand op s = SOME (val_to_w256 v) /\
                      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                             lookup_var x s = SOME w) /\

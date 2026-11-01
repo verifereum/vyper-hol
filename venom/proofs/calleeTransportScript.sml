@@ -73,7 +73,9 @@ QED
 
 Theorem merge_callee_state_oracle[simp]:
   (merge_callee_state caller callee).vs_outcomes = callee.vs_outcomes /\
-  (merge_callee_state caller callee).vs_requests = callee.vs_requests
+  (merge_callee_state caller callee).vs_requests = callee.vs_requests /\
+  (merge_callee_state caller callee).vs_pending_deletions =
+    callee.vs_pending_deletions
 Proof
   simp[merge_callee_state_def]
 QED

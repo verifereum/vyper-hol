@@ -17,6 +17,8 @@
  *                       supported expression or reason runs no EVM code
  *                       and calls only the main module's functions
  *   reason_covered    — a reason compiles to a form the reason lemmas take
+ *   supported_reason_code — a supported reason they don't take is an
+ *                       immutable's, a pointer into code
  *   no_internal_call_int_calls, supported_pure_int_calls — no internal
  *                       call means int_calls_* = []
  *   expr_body_pre_eval_result, expr_body_pre_eval — evaluation keeps
@@ -26,14 +28,12 @@
  *                        environment and compile environment it gives
  *   ce_locals_declared_declare_local, ce_locals_declared_stmt — the same
  *                        for ce_locals_declared
- *   compile_expr_open, eval_stmts_popped_keys_indexed,
- *   declared_name_not_module_key — GAP, the facts the statement and list
- *                        cases still take on trust
+ *   compile_expr_open, eval_stmts_popped_keys_indexed — GAP, the facts
+ *                        the statement and list cases still take on trust
  *
  * Helper:
  *   stmts_env_cs_mono, stmt_env_declare, declare_stmt_local_other,
- *   type_stmt_other, declare_local_module_var_type,
- *   stmt_env_module_var_type — stmt_env and type_stmt of a statement
+ *   type_stmt_other    — stmt_env and type_stmt of a statement
  *   same_frame_trans, body_inv_same_frame, frame_ret_ok_same_frame,
  *   stmt_exprs_ok_same_frame, stmts_exprs_ok_EVERY — the frame facts
  *                        at a later compile env of the same body
@@ -50,11 +50,13 @@ Ancestors
   stmtSimReasonStorage supportedExprs stmtSimAssign stmtSimDeclStore
   stmtSimAugAssign vyperTypeEvalSoundness vyperTypeInvariants
   vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimMain
+  exprReasonOperand
   vyperTypeValues vyperTyping vyperTypeDefaults stmtSimAssignTuple
   vyperTypeEnvPreservation bodySimExprCases bodyStoragePreservation
   vyperCallOutcomeStorage vyperTypeStoragePreservation
   stmtSimAssignStorage supportedDecls vyperTypeContractStaticMaps
-  vyperTypeContract compileVyper supportedTypes
+  vyperTypeContract compileVyper supportedTypes stmtSimAssignAttr
+  stmtSimAugAssignAttr
 Libs
   monadsyntax
 
@@ -231,60 +233,12 @@ QED
 
 Theorem body_inv_same_frame:
   !tops ctx cenv c cx.
-    body_inv tops ctx cenv cx /\ same_frame cenv c /\
-    (!id. c.ce_var_type (module_var_key (NONE, id)) =
-          cenv.ce_var_type (module_var_key (NONE, id))) ==>
+    body_inv tops ctx cenv cx /\ same_frame cenv c ==>
     body_inv tops ctx c cx
 Proof
   rpt strip_tac >>
   fs[body_inv_def, same_frame_def, compile_env_component_equality] >>
   metis_tac[]
-QED
-
-(* A declaration keeps cenv's type at a module key ("self." ++ name)
-   unless it declares that very key. *)
-Theorem declare_local_module_var_type:
-  !cenv id ty st c st1 x.
-    declare_local cenv id ty st = (c, st1) /\
-    id <> module_var_key (NONE, x) ==>
-    c.ce_var_type (module_var_key (NONE, x)) =
-    cenv.ce_var_type (module_var_key (NONE, x))
-Proof
-  rpt gen_tac >> simp[declare_local_def] >>
-  Cases_on `cenv.ce_alloca_locals` >>
-  simp[comp_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  gvs[comp_return_def, combinTheory.APPLY_UPDATE_THM]
-QED
-
-Theorem stmt_env_module_var_type:
-  !cenv lctx ret_ty s sa c sb id.
-    stmt_env cenv lctx ret_ty s sa = (c, sb) /\
-    (!t e. s <> AnnAssign (module_var_key (NONE, id)) t e) ==>
-    c.ce_var_type (module_var_key (NONE, id)) =
-    cenv.ce_var_type (module_var_key (NONE, id))
-Proof
-  rpt strip_tac >> drule stmt_env_declare >> strip_tac >>
-  reverse (Cases_on `?x t e. s = AnnAssign x t e`)
-  >- (drule_all declare_stmt_local_other >> simp[]) >>
-  gvs[declare_stmt_local_def] >>
-  drule declare_local_module_var_type >> simp[]
-QED
-
-(* GAP (#637 declarations): the typing declares no module key.  Declared
-   names are dot-free (supported_function_bindings), which the body
-   predicates do not carry yet, as for bodySimDeclCases's
-   declared_name_unbound; module variables in compile-env fields of their
-   own would make this unnecessary.  False for a local spelled as a module
-   key. *)
-Theorem declared_name_not_module_key:
-  !env ret_ty s env' id x.
-    type_stmt env ret_ty s = SOME env' /\
-    ((?typ e. s = AnnAssign id typ e) \/
-     (?typ it n body. s = For id typ it n body)) ==>
-    id <> module_var_key (NONE, x)
-Proof
-  cheat
 QED
 
 Theorem frame_ret_ok_same_frame:
@@ -552,8 +506,8 @@ QED
    for a supported expression of the frame that evaluates.  Not every
    expression does: the lowering's fallbacks end their block in INVALID,
    and raw_revert ends it in REVERT.  Which fallback a module variable
-   takes depends on cenv.ce_vars, so the storage and transient bindings
-   that state_rel gives are premises.  No lemma yet; it is an induction
+   takes depends on cenv.ce_module_vars, so the storage and transient
+   bindings that state_rel gives are premises.  No lemma yet; it is an induction
    over compile_expr, as compile_expr_ci_mono is. *)
 Theorem compile_expr_open:
   !tops ctx cenv cx env e es tv es1 sa vv sb.
@@ -660,14 +614,47 @@ Definition reason_covered_def:
                 reason_storage_vv vv)
 End
 
-(* RESIDUAL (#637 raise/assert with a reason): a reason whose compiled
-   value reason_covered does not cover.  Only a TopLevelName bound to an
-   ImmutableLoc compiles to another form (LocCode, compile_expr's
-   TopLevelName case).  A supported program declares no immutables
-   (supported_immutables_constants_rejected), so build_compile_env binds
-   none, but body_inv fixes only cenv's hashmaps and types at module keys,
-   not its bindings: closing this needs a body_inv clause saying cenv
-   binds no ImmutableLoc. *)
+Theorem well_typed_literal_string[local]:
+  !ty s. well_typed_literal ty (StringL s) ==> ?n. ty = BaseT (StringT n)
+Proof
+  Cases >> simp[well_typed_literal_def] >>
+  rename1 `BaseT b` >> Cases_on `b` >> simp[well_typed_literal_def]
+QED
+
+(* A supported reason is a string expression (supported_string_reason),
+   so it compiles to a memory or stack value, a storage or transient
+   pointer, or a pointer into code (compile_expr_string_reason):
+   expr_sim_inv holds each local through a variable pointer.  The first
+   two are reason_covered. *)
+Theorem supported_reason_code:
+  !cenv cx env es tops e.
+    expr_sim_inv cenv cx env es /\
+    supported_string_reason tops e /\ well_typed_expr env e /\
+    ~reason_covered cenv e ==>
+    !sa vv sb. compile_expr cenv (expr_type e) e sa = (vv, sb) ==>
+               reason_code_vv vv
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?n. expr_type e = BaseT (StringT n)` by
+    (Cases_on `?t str. e = Literal t (StringL str)`
+     >- (gvs[well_typed_expr_def, expr_type_def] >>
+         metis_tac[well_typed_literal_string]) >>
+     `case expr_type e of BaseT (StringT _) => T | _ => F` by
+       (Cases_on `e` >> fs[supported_string_reason_def] >>
+        rename1 `Literal _ lit` >> Cases_on `lit` >>
+        fs[supported_string_reason_def]) >>
+     Cases_on `expr_type e` >> fs[] >>
+     rename1 `BaseT b` >> Cases_on `b` >> fs[]) >>
+  qspecl_then [`cenv`, `env`, `e`, `n`] mp_tac compile_expr_string_reason >>
+  impl_tac >- (fs[expr_sim_inv_def] >> metis_tac[]) >>
+  fs[reason_covered_def] >> metis_tac[]
+QED
+
+(* RESIDUAL (#637 raise/assert with a reason): a reason read from an
+   immutable, whose compiled value is a pointer into code
+   (supported_reason_code).  The revert's encoder would copy it out of
+   code; stmtSimReasonStorage does that only for storage and transient
+   storage, and no lemma does it for code yet. *)
 Theorem body_raise_reason_other:
   !ctx func cx lctx RetQ cenv tops bindings env ret_ty e es res es'.
     body_inv tops ctx cenv cx /\
@@ -679,7 +666,8 @@ Theorem body_raise_reason_other:
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
     eval_stmt cx (Raise (RaiseReason e)) es = (res, es') /\
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
-    ~reason_covered cenv e ==>
+    (!sa vv sb. compile_expr cenv (expr_type e) e sa = (vv, sb) ==>
+                reason_code_vv vv) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Raise (RaiseReason e))) es res es'
 Proof
@@ -712,7 +700,11 @@ Proof
       >- (irule compile_raise_reason_frag >> simp[] >> metis_tac[])
       >- (irule compile_raise_storage_reason_frag >> simp[] >> metis_tac[])) >>
   irule body_raise_reason_other >> simp[] >>
-  conj_tac >- metis_tac[] >> qexists_tac `env` >> simp[]
+  reverse conj_tac >-
+    (conj_tac >- metis_tac[] >> qexists_tac `env` >> simp[]) >>
+  rpt gen_tac >> strip_tac >> irule supported_reason_code >>
+  gvs[supported_stmt_def, supported_raise_reason_def, type_stmt_def] >>
+  metis_tac[]
 QED
 
 (* RESIDUAL (#637 raise/assert with a reason): as body_raise_reason_other,
@@ -731,7 +723,8 @@ Theorem body_assert_reason_other:
     (!es1. (do raw <- eval_expr cx e; read_result cx raw od) es =
              (INL (BoolV F), es1) ==>
            expr_vv_sim ctx func cenv cx (expr_type se) se es1) /\
-    ~reason_covered cenv se ==>
+    (!sa vv sb. compile_expr cenv (expr_type se) se sa = (vv, sb) ==>
+                reason_code_vv vv) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assert e (AssertReason se))) es res es'
 Proof
@@ -814,7 +807,9 @@ Proof
       >- (irule compile_assert_storage_reason_frag >> simp[] >>
           metis_tac[])) >>
   irule body_assert_reason_other >> simp[] >>
-  conj_tac >- metis_tac[] >> qexists_tac `env` >> simp[]
+  reverse conj_tac >-
+    (conj_tac >- metis_tac[] >> qexists_tac `env` >> simp[]) >>
+  rpt gen_tac >> strip_tac >> irule supported_reason_code >> simp[] >> metis_tac[]
 QED
 
 (* GAP (#637 log): no statement lemma for Log yet.  body_inv ties
@@ -958,21 +953,14 @@ Proof
   rw[supported_variable_decl_def] >> metis_tac[]
 QED
 
-Theorem module_var_key_none_11[local]:
-  !a b. module_var_key (NONE, a) = module_var_key (NONE, b) <=> a = b
-Proof
-  simp[module_var_key_def, nsid_to_string_def]
-QED
-
 Theorem build_hashmap_info_absent[local]:
   !tops id.
     ~MEM (NONE, id)
        (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) ==>
-    build_hashmap_info tops (module_var_key (NONE, id)) = NONE
+    build_hashmap_info tops (NONE, id) = NONE
 Proof
   Induct >> simp[build_hashmap_info_def] >> Cases >>
-  simp[build_hashmap_info_def, toplevel_vtype_keys_toplevel_def,
-       module_var_key_none_11]
+  simp[build_hashmap_info_def, toplevel_vtype_keys_toplevel_def]
 QED
 
 (* With distinct names, cenv's maps at a module variable's key are its
@@ -982,13 +970,12 @@ Theorem build_maps_variable[local]:
     ALL_DISTINCT
       (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
     MEM (VariableDecl vis mut id ty init) tops ==>
-    build_hashmap_info tops (module_var_key (NONE, id)) = NONE /\
-    build_var_type_map tops (module_var_key (NONE, id)) = SOME ty
+    build_hashmap_info tops (NONE, id) = NONE /\
+    build_var_type_map tops (NONE, id) = SOME ty
 Proof
   Induct >> simp[] >> rpt gen_tac >> strip_tac >> Cases_on `h` >>
   gvs[build_hashmap_info_def, build_var_type_map_def,
-      toplevel_vtype_keys_toplevel_def, ALL_DISTINCT_APPEND,
-      module_var_key_none_11] >>
+      toplevel_vtype_keys_toplevel_def, ALL_DISTINCT_APPEND] >>
   metis_tac[build_hashmap_info_absent, module_toplevel_vtype_key_MEM_Variable]
 QED
 
@@ -1048,8 +1035,8 @@ Proof
    ALL_DISTINCT
      (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
    cenv.ce_hashmap_info = build_hashmap_info tops /\
-   cenv.ce_var_type (module_var_key (NONE, id)) =
-     build_var_type_map tops (module_var_key (NONE, id))` by
+   cenv.ce_module_var_type (NONE, id) =
+     build_var_type_map tops (NONE, id)` by
     fs[body_inv_def] >>
   drule_all build_maps_variable >> strip_tac >>
   `env_consistent env cx es` by fs[expr_sim_inv_def] >>
@@ -1087,6 +1074,57 @@ Proof
   gvs[value_runtime_typed_def]
 QED
 
+(* An assignment to a word field of a local struct: stmtSimAssignAttr's
+   compile_assign_attr_local_case. *)
+Theorem body_assign_attr_local[local]:
+  !cx id fld e tops ctx func cenv env env' ret_ty lctx RetQ es res es' sid
+   fty.
+    body_expr_ok cx e /\ body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty
+      (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e) =
+      SOME env' /\
+    stmt_exprs_ok cenv
+      (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e) /\
+    call_evaluation_safe cx
+      (int_calls_stmt
+         (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)) /\
+    eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)
+      es = (res, es') /\
+    FLOOKUP env.var_types id = SOME (StructT sid) /\
+    attribute_type env.type_defs (StructT sid) fld = SOME fty /\
+    is_word_type fty ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty
+         (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
+      es res es'
+Proof
+  rpt strip_tac >>
+  `well_typed_expr env e /\ expr_type e = fty` by
+    (Cases_on `type_place_target env (AttributeTarget (NameTarget id) fld)` >>
+     gvs[type_stmt_def, atarget_accepts_def] >>
+     rename1 `type_place_target _ _ = SOME vt` >> Cases_on `vt` >> gvs[] >>
+     gvs[vyperTypeEnvTheory.type_place_target_AttributeTarget,
+         vyperTypeEnvTheory.type_place_target_NameTarget] >>
+     metis_tac[type_widens_to_word]) >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    gvs[body_inv_def] >>
+  `expr_body_pre cenv cx env e es` by
+    (irule stmt_expr_body_pre >>
+     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         supported_assignment_exists_def, supported_expr_exists_def,
+         int_calls_stmt_def, int_calls_atarget_def, int_calls_expr_def] >>
+     qexists_tac `[]` >> simp[]) >>
+  `expr_vv_sim ctx func cenv cx fty e es` by metis_tac[body_expr_ok_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?fsz. ALOOKUP (get_struct_fields cenv.ce_struct_fields
+                    (nsid_to_string sid)) fld = SOME (fty, fsz)` by
+    metis_tac[attribute_type_struct_field] >>
+  irule compile_assign_attr_local_case >> simp[] >> metis_tac[]
+QED
+
 (* RESIDUAL (#637 assignments): the other base targets.
    - A local in memory: stmtSimAssignMem's
      compile_assign_local_memory_stmt_frag asks of the local's type
@@ -1101,8 +1139,16 @@ QED
      lemma.
    - A storage or transient variable that is not a word
      (supported_target_info's copies): no statement lemma.
-   - Subscript and attribute targets: no statement lemma (the simulation
-     of compile_get_target_ptr on eval_target_place). *)
+   - An attribute target other than a word field of a local struct:
+     - a word field of a storage or transient struct:
+       stmtSimAssignAttrStorage's compile_assign_attr_storage_stmt_frag
+       asks expr_vv_ok cenv e and expr_sim_pre (no internal call in e),
+       where the body gives expr_body_pre and e's own simulation;
+     - a field of a local struct that is not a word: no statement lemma
+       (the copy of an aggregate into the field);
+     - a field of a field or of a subscript: no statement lemma (the
+       simulation of compile_get_target_ptr on eval_target_place).
+   - Subscript targets: no statement lemma (#851). *)
 Theorem body_assign_other:
   !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
     (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
@@ -1117,7 +1163,12 @@ Theorem body_assign_other:
     eval_stmt cx (Assign (BaseTarget t) e) es = (res, es') /\
     ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
               is_word_type ty) /\
-    ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) ==>
+    ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
+    ~(?id fld sid fty.
+        t = AttributeTarget (NameTarget id) fld /\
+        FLOOKUP env.var_types id = SOME (StructT sid) /\
+        attribute_type env.type_defs (StructT sid) fld = SOME fty /\
+        is_word_type fty) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e)) es res es'
 Proof
@@ -1140,6 +1191,12 @@ Proof
                    supported_scalar_target tops nsid`
   >- (gvs[] >> rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
       irule body_assign_toplevel_word >> metis_tac[]) >>
+  Cases_on `?id fld sid fty.
+              t = AttributeTarget (NameTarget id) fld /\
+              FLOOKUP env.var_types id = SOME (StructT sid) /\
+              attribute_type env.type_defs (StructT sid) fld = SOME fty /\
+              is_word_type fty`
+  >- (gvs[] >> irule body_assign_attr_local >> metis_tac[]) >>
   irule body_assign_other >> metis_tac[]
 QED
 
@@ -1343,8 +1400,75 @@ Proof
   qexists_tac `F` >> simp[]
 QED
 
-(* RESIDUAL (#637 augmented assignment): the targets other than a local.
-   Storage, subscript and attribute targets have no statement lemma. *)
+(* x.f op= e on a field of a local struct: stmtSimAugAssignAttr's
+   compile_augassign_attr_local_case.  The typing makes f's type a word
+   (well_typed_binop_augassign_word), and x.f is read wherever
+   expr_sim_inv holds (augassign_attr_local_place), which gives e's
+   judgment. *)
+Theorem body_augassign_attr_local[local]:
+  !cx ty id fld bop e tops ctx func cenv env env' ret_ty lctx RetQ es res
+   es'.
+    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
+       eval_target_place cx (AttributeTarget (NameTarget id) fld) s'' =
+         (INL p,t') /\
+       read_place cx p s'3' = (INL cur,t'') /\
+       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_ok cx e) /\
+    body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty
+      (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) =
+      SOME env' /\
+    stmt_exprs_ok cenv
+      (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) /\
+    call_evaluation_safe cx
+      (int_calls_stmt
+         (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) /\
+    eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)
+      es = (res, es') ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty
+         (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+      es res es'
+Proof
+  rpt strip_tac >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    gvs[body_inv_def] >>
+  `expr_body_pre cenv cx env e es` by
+    (irule stmt_expr_body_pre >>
+     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         supported_expr_exists_def, int_calls_stmt_def,
+         int_calls_expr_def] >>
+     qexists_tac `[]` >> simp[]) >>
+  `?sid. FLOOKUP env.var_types id = SOME (StructT sid) /\
+         attribute_type env.type_defs (StructT sid) fld = SOME ty /\
+         well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\
+         bop <> NotIn` by
+    (gvs[type_stmt_def, well_typed_target_def,
+         vyperTypeEnvTheory.type_place_target_AttributeTarget,
+         vyperTypeEnvTheory.type_place_target_NameTarget] >>
+     rename1 `attribute_type _ tgt_ty fld = SOME _` >>
+     Cases_on `tgt_ty` >> gvs[attribute_type_def]) >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?fsz. ALOOKUP (get_struct_fields cenv.ce_struct_fields
+                    (nsid_to_string sid)) fld = SOME (ty, fsz)` by
+    metis_tac[attribute_type_struct_field] >>
+  `body_expr_ok cx e` by
+    (drule_all augassign_attr_local_place >> strip_tac >>
+     first_x_assum irule >> metis_tac[]) >>
+  `expr_sim ctx func cenv cx ty e es` by metis_tac[body_expr_ok_def] >>
+  irule compile_augassign_attr_local_case >> simp[] >> metis_tac[]
+QED
+
+(* RESIDUAL (#637 augmented assignment): the targets other than a local or
+   a field of a local struct.
+   - A storage or transient variable, or a field of one: no statement
+     lemma.
+   - A field of a field or of a subscript: no statement lemma (the
+     simulation of compile_get_target_ptr on eval_target_place).
+   - Subscript targets: no statement lemma (#851). *)
 Theorem body_augassign_other:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
@@ -1361,7 +1485,8 @@ Theorem body_augassign_other:
     call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
     eval_stmt cx (AugAssign ty t bop e) es = (res, es') /\
-    ~(?id. t = NameTarget id) ==>
+    ~(?id. t = NameTarget id) /\
+    ~(?id fld. t = AttributeTarget (NameTarget id) fld) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
 Proof
@@ -1381,6 +1506,8 @@ Proof
   `supported_expr tops e` by gvs[supported_stmt_def] >>
   Cases_on `?id. t = NameTarget id`
   >- (gvs[] >> irule body_augassign_local >> metis_tac[]) >>
+  Cases_on `?id fld. t = AttributeTarget (NameTarget id) fld`
+  >- (gvs[] >> irule body_augassign_attr_local >> metis_tac[]) >>
   irule body_augassign_other >> metis_tac[]
 QED
 
@@ -1499,8 +1626,7 @@ Proof
      metis_tac[call_evaluation_safe_append_left]) >>
   `ce_locals_declared c env1` by metis_tac[ce_locals_declared_stmt] >>
   `body_inv tops ctx c cx` by
-    metis_tac[body_inv_same_frame, stmt_env_module_var_type,
-              declared_name_not_module_key] >>
+    metis_tac[body_inv_same_frame] >>
   `frame_ret_ok ctx func cx RetQ c ret_ty` by
     metis_tac[frame_ret_ok_same_frame] >>
   qpat_x_assum `!s'' t. _ ==> body_stmts_ok _ _` drule >>

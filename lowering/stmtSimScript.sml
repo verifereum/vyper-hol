@@ -196,14 +196,14 @@ Definition stmt_frag_def:
       fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
       ~block_is_terminated sa /\ stmt_res_ok lctx res /\
-      stmt_state_rel func cenv cx es s0 /\ ~s0.vs_halted /\
+      stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       (?s cenv''.
          stmt_lands lctx sb res s /\ ~s.vs_halted /\
          (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
          cenv_top_ext cenv cenv'' es'.scopes /\
-         stmt_state_rel func cenv'' cx es' s /\
+         stmt_state_rel ctx func cenv'' cx es' s /\
          (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                 lookup_var x s = SOME w) /\
          (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -227,14 +227,14 @@ Definition stmt_framed_frag_def:
       fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
       ~block_is_terminated sa /\ stmt_res_ok lctx res /\
-      Frame s0 /\ stmt_state_rel func cenv cx es s0 /\ ~s0.vs_halted /\
+      Frame s0 /\ stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       (?s cenv''.
          stmt_lands lctx sb res s /\ ~s.vs_halted /\
          (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
          cenv_top_ext cenv cenv'' es'.scopes /\
-         stmt_state_rel func cenv'' cx es' s /\
+         stmt_state_rel ctx func cenv'' cx es' s /\
          (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                 lookup_var x s = SOME w) /\
          (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -267,26 +267,20 @@ Proof
   simp[immutable_prefix_bound_def]
 QED
 
-(* Adding a local pointer can remove, but cannot introduce, an immutable
-   binding.  Thus a prefix bound transports to the declaration environment. *)
+(* Locals live outside the module table, so a prefix bound transports to
+   the declaration environment. *)
 Theorem immutable_prefix_bound_local_entry:
-  !cenv bc id p sz addr src es cap.
+  !cenv bc addr src es cap.
     immutable_prefix_bound cenv addr src es cap /\
-    FLOOKUP bc.ce_vars id = SOME (PtrVar p sz) /\
-    (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) ==>
+    bc.ce_module_vars = cenv.ce_module_vars ==>
     immutable_prefix_bound bc addr src es cap
 Proof
-  rpt gen_tac >> simp[immutable_prefix_bound_def] >> rpt strip_tac >>
-  qpat_x_assum `!name tv v off. _`
-    (qspecl_then [`name`, `tv`, `v`, `off`] mp_tac) >>
-  impl_tac
-  >- (simp[] >> Cases_on `module_var_key (src,name) = id` >> gvs[]) >>
-  simp[]
+  rw[immutable_prefix_bound_def] >> metis_tac[]
 QED
 
 Theorem exec_alloca_prefix_base:
-  !func cenv cx es inst s n s' p w cap.
-    stmt_state_rel func cenv cx es s /\ alloca_prefix cap s /\
+  !func cenv cx es inst s n s' p w cap ctx.
+    stmt_state_rel ctx func cenv cx es s /\ alloca_prefix cap s /\
     inst.inst_outputs = [p] /\ exec_alloca inst s n = OK s' /\
     lookup_var p s' = SOME w ==> cap <= w2n w
 Proof
@@ -472,28 +466,25 @@ QED
 (* Leaving the innermost scope of a list's extended environment goes back
    to the environment the list started in. *)
 Theorem stmt_state_rel_pop_top_ext:
-  !func cenv cenv' cx es ss sc rest.
-    stmt_state_rel func cenv' cx es ss /\ cenv_top_ext cenv cenv' es.scopes /\
+  !func cenv cenv' cx es ss sc rest ctx.
+    stmt_state_rel ctx func cenv' cx es ss /\ cenv_top_ext cenv cenv' es.scopes /\
     es.scopes = sc :: rest /\
     (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
-    stmt_state_rel func cenv cx (es with scopes := rest) ss
+    stmt_state_rel ctx func cenv cx (es with scopes := rest) ss
 Proof
   rpt strip_tac >>
   drule_all stmt_state_rel_pop_scope >> strip_tac >>
   irule stmt_state_rel_cenv_cong >>
-  qexists_tac `cenv'` >> fs[cenv_top_ext_def] >> rpt conj_tac
+  qexists_tac `cenv'` >> fs[cenv_top_ext_def] >>
+  `cenv'.ce_module_vars = cenv.ce_module_vars` by
+    (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
+  rpt conj_tac
   >- (rpt strip_tac >> CCONTR_TAC >>
       qpat_x_assum `!n. FLOOKUP cenv'.ce_vars n <> _ ==> _`
         (qspec_then `n` mp_tac) >>
       simp[] >> rpt strip_tac >> gvs[])
-  >- (rpt strip_tac >> spose_not_then assume_tac >>
-      qpat_x_assum `!n. FLOOKUP cenv'.ce_vars n <> _ ==> _`
-        (qspec_then `n` mp_tac) >>
-      simp[] >> metis_tac[])
-  >- (rpt strip_tac >> spose_not_then assume_tac >>
-      qpat_x_assum `!n. FLOOKUP cenv'.ce_vars n <> _ ==> _`
-        (qspec_then `n` mp_tac) >>
-      simp[] >> metis_tac[]) >>
+  >- simp[]
+  >- simp[] >>
   fs[compileEnvTheory.compile_env_component_equality]
 QED
 
@@ -596,7 +587,7 @@ Proof
     simp[stmt_res_ok_def, stmt_exit_def] >> strip_tac >>
     qpat_x_assum `stmt_lands _ _ _ _`
       (strip_assume_tac o SIMP_RULE (srw_ss()) [stmt_lands_def]) >>
-    rename1 `stmt_state_rel func c cx es1 s1` >>
+    rename1 `stmt_state_rel ctx func c cx es1 s1` >>
     `ret_pc_ok c sm s1` by
       (qspecl_then [`cenv`, `c`, `sa`, `sm`, `s0`, `s1`] mp_tac
          ret_pc_ok_frame >>
@@ -608,7 +599,7 @@ Proof
     disch_then (qspecl_then [`sm`, `sb`, `s1`, `cenv'`] mp_tac) >>
     simp[] >> strip_tac
     >- (
-      disj1_tac >> rename1 `stmt_state_rel func c3 cx es' s2` >>
+      disj1_tac >> rename1 `stmt_state_rel ctx func c3 cx es' s2` >>
       qexistsl_tac [`s2`, `c3`] >> simp[] >>
       `cenv_top_ext cenv c3 es'.scopes` by
         (irule cenv_top_ext_trans >> qexistsl_tac [`c`, `es1.scopes`] >>
@@ -640,7 +631,7 @@ Proof
   rpt strip_tac >> gvs[stmt_frag_def] >>
   first_x_assum (qspecl_then [`sa`, `sm`, `s0`, `c`] mp_tac) >>
   simp[] >> strip_tac
-  >- (disj1_tac >> rename1 `stmt_state_rel func c4 cx es' s4` >>
+  >- (disj1_tac >> rename1 `stmt_state_rel ctx func c4 cx es' s4` >>
       qexistsl_tac [`s4`, `c4`] >> fs[stmt_lands_def]) >>
   disj2_tac >> qexists_tac `fuel` >> simp[]
 QED
@@ -763,7 +754,7 @@ Proof
   disch_then (qspec_then `func` mp_tac) >> impl_tac >- fs[] >> strip_tac
   >- (gvs[vv_post_def] >> Cases_on `is_HashMapRef tv` >>
       gvs[stmt_res_ok_def] >>
-      disj1_tac >> rename1 `stmt_state_rel func cenv cx _ s1` >>
+      disj1_tac >> rename1 `stmt_state_rel ctx func cenv cx _ s1` >>
       qexists_tac `s1` >>
       simp[stmt_lands_def, cenv_top_ext_refl] >> metis_tac[]) >>
   disj2_tac >> qexists_tac `fuel` >> gvs[stmt_exit_def] >>
