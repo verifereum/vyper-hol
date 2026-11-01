@@ -43,6 +43,88 @@ Proof
   decide_tac
 QED
 
+Theorem copy_buffer_local_region_frame:
+  !cenv st s t scopes name b sz.
+    local_ptrs_reserved cenv st /\
+    (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) ==>
+    (local_region cenv scopes t name b sz <=>
+     local_region cenv scopes s name b sz)
+Proof
+  rpt strip_tac >> simp[local_region_def] >>
+  `!p. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+       lookup_var p t = lookup_var p s` by
+    (rpt strip_tac >> first_x_assum irule >>
+     gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem copy_buffer_locals_kept_frame:
+  !cenv es0 s0 s t b sz.
+    locals_kept cenv es0 s0 s /\
+    (!name lb len. local_region cenv es0.scopes s0 name lb len ==>
+       b + sz <= lb \/ lb + len <= b) /\
+    (!off len. off + len <= b \/ b + sz <= off ==>
+       mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) ==>
+    locals_kept cenv es0 s0 t
+Proof
+  rpt strip_tac >> irule locals_kept_regions_tail >>
+  qexists_tac `s` >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >>
+  qpat_x_assum `!name lb len. local_region _ _ _ _ _ _ ==> _` drule >>
+  decide_tac
+QED
+
+Theorem copy_buffer_state_rel_frame:
+  !ctx func cenv cx es st s t inst b sz.
+    stmt_state_rel ctx func cenv cx es s /\
+    local_ptrs_reserved cenv st /\ copy_static t = copy_static s /\
+    (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
+    (!name lb len. local_region cenv es.scopes s name lb len ==>
+       b + sz <= lb \/ lb + len <= b) /\
+    (!off len. off + len <= b \/ b + sz <= off ==>
+       mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) ==>
+    stmt_state_rel ctx func cenv cx es t
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule copy_static_fields >> strip_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[Once stmt_state_rel_def] >> strip_tac >>
+  `local_ptrs_rel func cenv es.scopes t` by
+    (irule local_ptrs_rel_mem_agree >> qexists_tac `s` >>
+     simp[] >> conj_tac
+     >- (rpt strip_tac >> sym_tac >>
+         qpat_x_assum `!off len. _ ==> mem_bytes_at _ _ _ = _` irule >>
+         qpat_x_assum `!name lb len. local_region _ _ _ _ _ _ ==> _` drule >>
+         decide_tac) >>
+     conj_tac
+     >- (rpt strip_tac >> first_x_assum irule >>
+         gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+     conj_tac >- (rpt strip_tac >> gvs[]) >>
+     gvs[state_rel_def]) >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
+    (irule immutables_rel_mem_agree >> qexists_tac `s` >>
+     simp[] >> reverse conj_tac >- gvs[state_rel_def] >>
+     fs[immutable_alloca_sep_def] >> rpt strip_tac >>
+     first_x_assum drule_all >> strip_tac >>
+     `regions_disjoint off (type_memory_size tv) b sz` by metis_tac[] >>
+     qpat_x_assum `!off len. _ ==> mem_bytes_at _ _ _ = _` irule >>
+     gvs[regions_disjoint_def] >> decide_tac) >>
+  rewrite_tac[stmt_state_rel_def] >> conj_tac
+  >- (irule state_rel_frame >> conj_tac >- first_assum ACCEPT_TAC >>
+      qexistsl_tac [`es`, `s`] >> simp[] >>
+      gvs[copy_static_def, venom_state_component_equality]) >>
+  conj_tac >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
+  conj_tac >- (irule alloca_room_fields >> qexists_tac `s` >> simp[]) >>
+  conj_tac
+  >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
+      simp[] >> rpt strip_tac >> qexists_tac `id` >> simp[] >>
+      metis_tac[copy_buffer_local_region_frame]) >>
+  metis_tac[]
+QED
+
 (* A copied buffer may be allocated after the expression starts. *)
 Theorem copy_buffer_expr_post:
   !ctx func cenv cx e es sa sb s0 es' s v tv op w aid sz.
