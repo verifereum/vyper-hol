@@ -153,3 +153,62 @@ Proof
   gvs[compiler_label_reservation_def, SUBSET_DEF, label_external_def] >>
   metis_tac[]
 QED
+
+Theorem compiler_label_hoare_preserving_bind:
+  compiler_label_hoare P m (\x st. P st) /\
+  (!x. compiler_label_hoare P (k x) R) ==>
+  compiler_label_hoare P (comp_bind m k) R
+Proof
+  strip_tac >> irule compiler_label_hoare_bind >>
+  qexists_tac `\x st. P st` >> simp[ETA_THM]
+QED
+
+Theorem compiler_label_hoare_pure_pre:
+  (b ==> compiler_label_hoare P m Q) ==>
+  compiler_label_hoare (\st. b /\ P st) m Q
+Proof
+  simp[compiler_label_hoare_def] >> metis_tac[]
+QED
+
+Theorem compiler_label_hoare_fresh_bind:
+  (!lbl. lbl NOTIN pending ==>
+    compiler_label_hoare (compiler_label_reservation origin (lbl INSERT pending))
+      (k lbl) R) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (comp_bind (fresh_label suffix) k) R
+Proof
+  strip_tac >> irule compiler_label_hoare_bind >>
+  qexists_tac `\lbl out. lbl NOTIN pending /\
+    compiler_label_reservation origin (lbl INSERT pending) out` >>
+  simp[compiler_label_hoare_fresh_label] >> gen_tac >>
+  irule compiler_label_hoare_pure_pre >> simp[]
+QED
+
+Theorem compiler_label_hoare_new_block_bind:
+  lbl IN pending /\
+  (!x. compiler_label_hoare
+    (compiler_label_reservation origin (pending DELETE lbl)) (k x) R) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (comp_bind (new_block lbl) k) R
+Proof
+  strip_tac >> irule compiler_label_hoare_bind >>
+  qexists_tac `\x out. compiler_label_reservation origin (pending DELETE lbl) out` >>
+  simp[compiler_label_hoare_new_block] >>
+  gvs[compiler_label_hoare_def] >> metis_tac[]
+QED
+
+Theorem compiler_label_hoare_label_bounds:
+  (!origin. compiler_label_hoare (compiler_label_reservation origin {}) m
+    (\r out. compiler_label_reservation origin {} out)) ==>
+  !st r out. m st = (r,out) /\ compile_state_ok st ==>
+    compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+    bound_labels out SUBSET
+      (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  simp[compiler_label_hoare_def] >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `compiler_label_reservation st {} st` by
+    simp[compiler_label_reservation_init] >>
+  `compiler_label_reservation st {} out` by metis_tac[] >>
+  drule compiler_label_reservation_finish >> simp[]
+QED

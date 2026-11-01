@@ -310,3 +310,78 @@ Resume compiler_block_tail_typed_copy[struct]:
   simp[]
 QED
 Finalise compiler_block_tail_typed_copy
+
+Theorem compiler_label_hoare_context_primitives:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (emit_op opc ops) (\r out. compiler_label_reservation origin pending out) /\
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (emit_inst opc ops outs) (\r out. compiler_label_reservation origin pending out) /\
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    fresh_var (\r out. compiler_label_reservation origin pending out) /\
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_ptr_load ctor imm loc ptrop)
+    (\r out. compiler_label_reservation origin pending out) /\
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_ptr_store ctor imm loc ptrop valop)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  rpt conj_tac >> irule compiler_label_hoare_preserves_reservation >>
+  rpt gen_tac >> strip_tac
+  >- (drule_all compile_state_ok_emit_op >> simp[SUBSET_DEF])
+  >- (drule_all compile_state_ok_emit_inst >> simp[SUBSET_DEF])
+  >- (drule_all compile_state_ok_fresh_var >> simp[SUBSET_DEF])
+  >- (drule_all compile_ptr_load_label_bounds >> simp[])
+  >- (drule_all compile_ptr_store_label_bounds >> simp[])
+QED
+
+Theorem compiler_label_hoare_scaled_offset:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (if scale = 1 then emit_op ADD [ptrop; Var counter] else
+       comp_bind (emit_op MUL [Var counter; Lit (n2w scale)])
+         (\scaled. emit_op ADD [ptrop; scaled]))
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  Cases_on `scale = 1` >> simp[compiler_label_hoare_context_primitives] >>
+  irule compiler_label_hoare_preserving_bind >>
+  simp[compiler_label_hoare_context_primitives]
+QED
+
+Theorem compiler_label_hoare_word_copy_loop:
+  compiler_label_hoare (compiler_label_reservation origin {})
+    (compile_word_copy_loop src dst nwords load_loc store_loc ctor)
+    (\r out. compiler_label_reservation origin {} out)
+Proof
+  rewrite_tac[compile_word_copy_loop_def, LET_THM, comp_ignore_bind_def] >>
+  BETA_TAC >>
+  ntac 3 (irule compiler_label_hoare_fresh_bind >> gen_tac >> strip_tac >> BETA_TAC) >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
+  irule compiler_label_hoare_new_block_bind >> simp[] >>
+  BETA_TAC >> gvs[] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
+  irule compiler_label_hoare_new_block_bind >> simp[] >>
+  BETA_TAC >> gvs[] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_scaled_offset] >> gen_tac >> BETA_TAC) >>
+  simp[DELETE_INSERT] >>
+  rename1 `compiler_label_hoare _ (new_block lastlbl) _` >>
+  qspec_then `{lastlbl}` mp_tac
+    (Q.GEN `pending` (Q.INST [`lbl` |-> `lastlbl`] compiler_label_hoare_new_block)) >>
+  simp[]
+QED
+
+Theorem compile_word_copy_loop_label_bounds:
+  compile_word_copy_loop src dst nwords load_loc store_loc ctor st = (v,out) /\
+  compile_state_ok st ==>
+  compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+  bound_labels out SUBSET
+    (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  map_every qid_spec_tac [`out`, `v`, `st`] >>
+  ho_match_mp_tac compiler_label_hoare_label_bounds >>
+  gen_tac >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  MATCH_ACCEPT_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)
+    compiler_label_hoare_word_copy_loop)
+QED
