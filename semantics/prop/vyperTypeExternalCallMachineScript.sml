@@ -613,6 +613,57 @@ Proof
   gvs[machine_well_typed_def, abstract_machine_from_state_def,
       state_well_typed_def]
 *)
+Theorem call_external_function_nondeploy_success_states[local]:
+  ~cx.in_deploy /\
+  LENGTH vals <= LENGTH args /\ LENGTH args - LENGTH vals <= LENGTH dflts /\
+  evaluate_defaults cx am gobs
+    (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) =
+      SOME (dflt_vs,gobs') /\
+  bind_arguments (type_env_all_modules mods) args (vals ++ dflt_vs) = SOME scope /\
+  call_external_function orc gobs am cx nr mut ts mods args dflts vals body ret =
+    (INL v,am',rqs) ==>
+  ?res st_body st_out.
+    (do
+       (if nr then
+          case cx.nonreentrant_slot of
+            NONE => raise (Error (TypeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                           (mut = View \/ mut = Pure)
+        else return ());
+       send_call_value mut cx;
+       eval_stmts cx body
+     od) (initial_state am [scope] with
+            <|outcomes := orc; requests := []; gas_obs := gobs'|>) = (res,st_body) /\
+    (res = INL () \/ (?w. res = INR (ReturnException w))) /\
+    (if nr /\ ~(mut = View \/ mut = Pure) then
+       case cx.nonreentrant_slot of
+         NONE => return ()
+       | SOME slot => release_nonreentrant_lock cx.txn.target slot
+     else return ()) st_body = (INL (),st_out) /\
+    am' = abstract_machine_from_state am.sources am.exports am.layouts st_out
+Proof
+  strip_tac >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  gvs[] >>
+  simp[Once call_external_function_def, lock_if_nr_def, unlock_if_nr_def,
+       is_view_mut_def] >>
+  qmatch_goalsub_abbrev_tac `do action; send_call_value mut cx; eval_stmts cx body od entry` >>
+  Cases_on `do action; send_call_value mut cx; eval_stmts cx body od entry` >>
+  Cases_on `q` >> gvs[]
+  >- (Cases_on `(if nr /\ mut <> View /\ mut <> Pure then case cx.nonreentrant_slot of NONE => return () | SOME slot => release_nonreentrant_lock cx.txn.target slot else return ()) r` >> Cases_on `q` >> simp[] >>
+      strip_tac >> gvs[] >> metis_tac[]) >>
+  Cases_on `y` >> gvs[AllCaseEqs()] >>
+  Cases_on `(if nr /\ mut <> View /\ mut <> Pure then
+               case cx.nonreentrant_slot of NONE => return ()
+               | SOME slot => release_nonreentrant_lock cx.txn.target slot
+             else return ()) r` >>
+  Cases_on `q` >> simp[] >>
+  Cases_on `evaluate_type (type_env_all_modules mods) ret` >> simp[] >>
+  rename1 `safe_cast tv w` >>
+  Cases_on `safe_cast tv w` >> simp[] >>
+  strip_tac >> gvs[] >> metis_tac[]
+QED
+
 Theorem call_external_function_selected_getter_success_machine_well_typed[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\ machine_well_typed am /\ machine_supply am orc /\
@@ -630,7 +681,17 @@ Theorem call_external_function_selected_getter_success_machine_well_typed[local]
     (INL v,am',rqs) ==>
   machine_well_typed am'
 Proof
-  cheat
+  strip_tac >>
+  `~cx.in_deploy` by simp[initial_evaluation_context_def] >>
+  drule_all call_external_function_nondeploy_success_states >> strip_tac >>
+  `state_well_typed st_body /\ accounts_well_typed st_body.accounts` by
+    (drule_at (Pat `bind_arguments _ _ _ = _`)
+       checked_getter_call_run_components >>
+     disch_then (drule_at (Pat `_ = (res,st')`)) >>
+     simp[] >> disch_then irule >> simp[] >> metis_tac[]) >>
+  drule_all release_action_success_machine_well_typed >>
+  disch_then (qspecl_then [`am.sources`, `am.layouts`, `am.exports`] mp_tac) >>
+  simp[]
 QED
 
 Theorem call_external_function_selected_getter_halt_machine_well_typed[local]:
