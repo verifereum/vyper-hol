@@ -2096,37 +2096,6 @@ Proof
             concretize_pointer_confined_def]
 QED
 
-(* GAS pops the same reading on both sides: CR's frame includes the
-   readings, and the output is non-pv. *)
-Triviality concretize_step_gas:
-  !inst amap fn livesets init s1 s2.
-    inst.inst_opcode = GAS /\
-    (!v. MEM v inst.inst_outputs ==>
-         v NOTIN pointer_derived_vars fn (FDOM amap)) /\
-    concretize_rel amap fn livesets init s1 s2 ==>
-    lift_result
-      (concretize_rel amap fn livesets init)
-      (concretize_rel amap fn livesets init)
-      (concretize_rel amap fn livesets init)
-      (step_inst_base inst s1)
-      (step_inst_base inst s2)
-Proof
-  rpt strip_tac >>
-  `concretize_frame s1 = concretize_frame s2` by fs[concretize_rel_def, LET_THM] >>
-  `s1.vs_gas_readings = s2.vs_gas_readings` by
-    (qpat_x_assum `concretize_frame _ = _`
-       (mp_tac o AP_TERM ``venom_state_vs_gas_readings``) >>
-     simp[concretize_frame_def]) >>
-  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
-  simp[exec_gas_def] >>
-  Cases_on `inst.inst_outputs` >> simp[lift_result_def] >>
-  Cases_on `t` >> simp[lift_result_def] >>
-  Cases_on `s2.vs_gas_readings` >> gvs[lift_result_def] >>
-  irule cr_update_var_non_pv >> simp[] >>
-  irule concretize_rel_frame >> qexistsl [`s1`, `s2`] >>
-  simp[] >> fs[concretize_frame_def]
-QED
-
 (* Pointer-preserving ops (ADD/SUB with pv, PHI, ASSIGN):
    displacement invariant maintained for pv outputs.
 
@@ -2725,6 +2694,41 @@ Proof
   irule cr_update_var_non_pv >> simp[] >>
   irule concretize_rel_update_fmp_same >> simp[]
 QED
+(* GAS pops the same reading on both sides: CR's frame includes the
+   readings, and the output is non-pv. *)
+Triviality concretize_step_gas:
+  !inst amap fn livesets init s1 s2.
+    inst.inst_opcode = GAS /\
+    (!v. MEM v inst.inst_outputs ==>
+         v NOTIN pointer_derived_vars fn (FDOM amap)) /\
+    concretize_rel amap fn livesets init s1 s2 ==>
+    lift_result
+      (concretize_rel amap fn livesets init)
+      (concretize_rel amap fn livesets init)
+      (concretize_rel amap fn livesets init)
+      (step_inst_base inst s1)
+      (step_inst_base inst s2)
+Proof
+  rpt strip_tac >>
+  `concretize_frame s1 = concretize_frame s2` by fs[concretize_rel_def, LET_THM] >>
+  `s1.vs_gas_readings = s2.vs_gas_readings` by
+    (qpat_x_assum `concretize_frame _ = _`
+       (mp_tac o AP_TERM ``venom_state_vs_gas_readings``) >>
+     simp[concretize_frame_def]) >>
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+  simp[exec_gas_def] >>
+  Cases_on `inst.inst_outputs` >> simp[lift_result_def] >>
+  Cases_on `t` >> simp[lift_result_def] >>
+  Cases_on `s2.vs_gas_readings` >> gvs[lift_result_def] >>
+  irule cr_update_var_non_pv >> simp[] >>
+  irule concretize_rel_frame >> conj_tac
+  >- (`!s r. concretize_frame (s with vs_gas_readings := r) =
+             concretize_frame s with vs_gas_readings := r` by
+        simp[concretize_frame_def, venom_state_component_equality] >>
+      fs[concretize_rel_def, LET_THM]) >>
+  qexistsl [`s1`, `s2`] >> simp[]
+QED
+
 (* Non-memory, non-ext-call, non-effect-free, non-branch ops:
    Covers SSTORE, TSTORE, and non-branch terminators (STOP, SINK,
    INVALID, SELFDESTRUCT, RET). Operands non-pv, scalar fields agree,
@@ -2796,7 +2800,8 @@ Proof
    s1.vs_return_pc_token = s2.vs_return_pc_token /\
    s1.vs_pending_deletions = s2.vs_pending_deletions` by
     fs[concretize_rel_def, LET_THM] >>
-  `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests` by
+  `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests /\
+   s1.vs_gas_readings = s2.vs_gas_readings` by
     fs[concretize_rel_def, LET_THM] >>
   (* Step 5: case split on opcode — SSTORE, TSTORE, STOP, SINK,
      INVALID, SELFDESTRUCT, RET remain (RETURN/REVERT eliminated by
@@ -5641,9 +5646,10 @@ Proof
   ) >>
   (* Non-effect-free ops *)
   Cases_on `inst.inst_opcode = GAS`
-  >- (qexists `init` >> irule concretize_step_gas >> simp[] >>
-      rpt strip_tac >> irule non_alloca_non_pp_output_not_pv >>
-      simp[is_pointer_preserving_op_def, is_alloca_op_def] >> metis_tac[]) >>
+  >- (`~is_pointer_preserving_op inst.inst_opcode` by
+        simp[is_pointer_preserving_op_def] >>
+      qexists `init` >> irule concretize_step_gas >>
+      metis_tac[non_alloca_non_pp_output_not_pv]) >>
   Cases_on `inst.inst_opcode = RETURN`
   >- (qexists `init` >> irule concretize_step_return >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = DALLOCA`
