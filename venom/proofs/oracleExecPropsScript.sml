@@ -1,4 +1,5 @@
-(* Non-CALL/non-STATICCALL primitives preserve oracle lists and deletion queues.
+(* Non-CALL/non-STATICCALL primitives preserve oracle lists and deletion queues;
+ * non-GAS primitives preserve the gas readings.
  * Activated-call counterexamples live in venomCallActivationRegression.
  * INVOKE transport remains the calleeTransport boundary. *)
 Theory oracleExecProps
@@ -36,6 +37,28 @@ Proof
   gvs[AllCaseEqs()] >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
      exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
+     exec_ext_call_def, exec_delegatecall_def,
+     exec_create_def, exec_alloca_def, extract_venom_result_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  fs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
+     istore_def, write_memory_with_expansion_def, mcopy_def,
+     revert_state_def, eval_operands_def, jump_to_def]
+QED
+
+(* Only GAS pops the gas readings; INVOKE's callee is step_inst's. *)
+Theorem step_inst_base_gas_readings:
+  inst.inst_opcode <> GAS /\ step_inst_base inst s = OK s' ==>
+  s'.vs_gas_readings = s.vs_gas_readings
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[] >>
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  step_inst_base_opcode_tac >>
+  gvs[AllCaseEqs()] >>
+  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def,
      exec_ext_call_def, exec_delegatecall_def,
      exec_create_def, exec_alloca_def, extract_venom_result_def] >>
   gvs[AllCaseEqs()] >>
