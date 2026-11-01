@@ -271,6 +271,10 @@ Resume aggregate_make_tuple_sim[after_add]:
               ci_mono_def, cs_extends_trans] >>
   `!z. op = Var z ==> not_fresh_at su z` by
     metis_tac[aggregate_child_unwrap_var, ci_mono_def] >>
+  `!z. vv_operand vv = Var z ==> not_fresh_at sn z` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sm` >> fs[ci_mono_def] >>
+     drule (cj 1 exprOperandVarTheory.compiler_compile_var) >> simp[]) >>
   `stmt_state_rel ctx func ce cx es1 r /\
    FLOOKUP r.vs_allocas inst.inst_id = SOME (b,asz)` by
     (fs[vv_post_def] >> metis_tac[]) >>

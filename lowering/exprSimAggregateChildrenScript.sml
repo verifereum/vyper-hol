@@ -80,6 +80,7 @@ Theorem unwrap_value_materialise_sim:
     sa.cs_next_id <= sm.cs_next_id /\
     read_result cx tv es' = (INL v,es') /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
     (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
            ~is_word_type (expr_type e) ==>
            type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
@@ -309,6 +310,7 @@ Theorem unwrap_value_rebased_sim:
   read_result cx tv es' = (INL v,es') /\
   vv_post ctx func ce cx e es sa sm s0 es' tv vv r /\
   fn_has_code sm su func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
     (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
            ~is_word_type (expr_type e) ==>
            type_memory_bytes ce (expr_type e) = type_memory_size tvt /\
@@ -540,6 +542,7 @@ Theorem aggregate_unwrap_store_slice_sim:
   type_memory_size tv < dimword (:256) /\
   (~is_word_type (expr_type e) ==> type_memory_size tv < 2 ** 64) /\
   fn_has_code sm su func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   stmt_state_rel ctx func ce cx es' r /\
   (!n b k. local_region ce es'.scopes r n b k ==>
     b + k <= w2n w \/ w2n w + type_memory_size tv <= b) /\

@@ -39,6 +39,7 @@ Theorem unwrap_storage_copy_sim:
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
            type_memory_bytes cenv t = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) ==>
@@ -60,6 +61,7 @@ Theorem unwrap_runtime_code_copy_sim:
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
            type_memory_bytes cenv t = type_memory_size tvt) ==>
     frag_exec ctx sm sb
@@ -82,7 +84,8 @@ Theorem unwrap_ctor_code_copy_sim:
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
     p.ptr_location = LocCode /\ cenv.ce_is_ctor /\ ~is_word_type t /\
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-    sa.cs_next_id <= sm.cs_next_id ==>
+    sa.cs_next_id <= sm.cs_next_id /\
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) ==>
     frag_exec ctx sm sb
       (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
              (LocatedValue t p) s)

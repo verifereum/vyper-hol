@@ -19,6 +19,7 @@ Theorem unwrap_storage_copy_sim:
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
            type_memory_bytes cenv t = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) ==>
@@ -34,6 +35,7 @@ Theorem unwrap_runtime_code_copy_sim:
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
            type_memory_bytes cenv t = type_memory_size tvt) ==>
     frag_exec ctx sm sb
@@ -127,6 +129,13 @@ last unproved steps of `unwrap_copy_sim` in `exprSimUnwrapScript.sml`.
 | repo conventions | AGENTS.md | proof style rules for this repo |
 
 ## Notes
+
+- A previous run found that without the `not_fresh_at sm` premise on the
+  pointer operand the storage statement is false: the buffer's ALLOCA can
+  write the pointer's own variable. That premise is now in both statements
+  (its evidence, `unwrapCopyProbeTheory`, is on branch
+  `bot/opus/seq-479-copy-alan`); callers discharge it with
+  `exprOperandVarTheory.compiler_compile_var`.
 
 - `vv_holds` forces the value_vv's type to be `expr_type e`, so `t =
   expr_type e` under the precondition.

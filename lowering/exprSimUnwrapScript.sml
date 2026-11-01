@@ -39,7 +39,7 @@ Ancestors
   exprSim exprLowering compileEnv immutableEncoding vyperAST vyperInterpreter
   vyperState
   loweringSlice fragExec freshWrites venomInst venomExecSemantics venomState
-  exprSimCopy
+  exprSimCopy exprOperandVar
   valueEncoding valueEncodingProofs vyperTypeValues vyperStorage vyperValue
   vyperLookupStorage
 Libs
@@ -520,6 +520,7 @@ Theorem unwrap_copy_sim:
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
     (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
            ~is_word_type (expr_type e) ==>
            type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
@@ -556,6 +557,7 @@ Theorem unwrap_value_sim:
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
     (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
            ~is_word_type (expr_type e) ==>
            type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
@@ -568,6 +570,7 @@ Proof
   >- (gvs[unwrap_value_def, comp_return_def] >> irule frag_exec_refl >>
       rw[] >> metis_tac[expr_post_of_vv_post_stack]) >>
   rename1 `LocatedValue t p` >>
+  RULE_ASSUM_TAC (REWRITE_RULE [contextTheory.vv_operand_def]) >>
   Cases_on `p.ptr_location = LocCalldata`
   >- (irule frag_exec_conseq >>
       qexistsl_tac [`\s. F`, `\s. F`, `R`] >>
@@ -652,6 +655,7 @@ Theorem unwrap_read_result_sim[local]:
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
     (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
            ~is_word_type (expr_type e) ==>
            type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
@@ -698,6 +702,8 @@ Proof
     metis_tac[fn_has_code_split] >>
   `local_ptrs_reserved cenv sm` by
     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
+    (drule (cj 1 exprOperandVarTheory.compiler_compile_var) >> simp[]) >>
   Cases_on `eval_expr cx e es` >> rename1 `_ = (raw, est)` >>
   qpat_x_assum `(do result <- _; _ od) _ = _` mp_tac >>
   simp[bind_def] >>

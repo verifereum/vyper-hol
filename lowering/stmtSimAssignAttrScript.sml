@@ -450,6 +450,10 @@ Proof
   `fn_has_code sa sm func /\ fn_has_code sn su func` by
     (fs[ci_mono_def] >> metis_tac[fn_has_code_split, cs_extends_trans]) >>
   `local_ptrs_reserved cenv sn` by metis_tac[compiler_ci_mono_reserved] >>
+  `!z. vv_operand vv = Var z ==> not_fresh_at sn z` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sm` >> fs[ci_mono_def] >>
+     drule (cj 1 exprOperandVarTheory.compiler_compile_var) >> simp[]) >>
   qpat_x_assum `(do _ <- _; _ od) _ = _` mp_tac >> simp[bind_def] >>
   Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (raw, est)` >>
   Cases_on `raw` >> simp[]
