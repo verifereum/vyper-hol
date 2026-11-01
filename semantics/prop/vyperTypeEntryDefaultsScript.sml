@@ -93,7 +93,8 @@ Proof
   Cases_on `(do result <- eval_expr cx e; read_result cx result od)
               (initial_state am [FEMPTY] with gas_obs := g)` >>
   rename1 `_ = (res1,st1)` >>
-  `source_supply (initial_state am [FEMPTY])` by simp[] >>
+  `source_supply (initial_state am [FEMPTY] with gas_obs := g)` by
+    simp[vyperSourceSupplyDefsTheory.source_supply_def, initial_state_def] >>
   drule_all eval_expr_read_type_sound >> strip_tac >>
   Cases_on `res1` >> gvs[]
 QED

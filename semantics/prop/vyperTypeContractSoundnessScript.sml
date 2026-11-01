@@ -3307,7 +3307,8 @@ Proof
     simp[initial_state_def] >>
   `source_supply
      (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)` by
-    (irule machine_supply_initial_state >> first_assum ACCEPT_TAC) >>
+    fs[vyperSourceSupplyFieldsTheory.machine_supply_def,
+       vyperSourceSupplyDefsTheory.source_supply_def, initial_state_def] >>
   drule_all checked_public_getter_post_prefix_body_execution_selected >>
   simp[]
 QED

@@ -188,7 +188,8 @@ Proof
    state_well_typed (initial_state am [FEMPTY] with gas_obs := gobs)` by
     simp[] >>
   `call_evaluation_safe cx (int_calls_expr h)` by metis_tac[] >>
-  `source_supply (initial_state am [FEMPTY])` by simp[] >>
+  `source_supply (initial_state am [FEMPTY] with gas_obs := gobs)` by
+    simp[vyperSourceSupplyDefsTheory.source_supply_def, initial_state_def] >>
   drule_all eval_expr_read_type_sound >>
   simp[value_runtime_typed_def] >>
   strip_tac >>
