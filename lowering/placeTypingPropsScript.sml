@@ -178,7 +178,7 @@ Theorem place_type_well_typed_on_defined:
   !e cenv env.
     place_map_tables_agree_on_defined cenv env /\
     (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
-               cenv.ce_hashmap_info (module_var_key nsid) = NONE) /\
+               cenv.ce_hashmap_info nsid = NONE) /\
     well_typed_expr env e ==>
     place_type cenv e = ValPT (expr_type e)
 Proof

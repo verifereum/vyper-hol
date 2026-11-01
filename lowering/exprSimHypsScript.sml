@@ -311,7 +311,7 @@ Definition expr_sim_inv_def:
     popped_keys_indexed es.scopes /\
     place_map_tables_agree_on_defined cenv env /\
     (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
-               cenv.ce_hashmap_info (module_var_key nsid) = NONE)
+               cenv.ce_hashmap_info nsid = NONE)
 End
 
 (* The types whose values are word_values (loweringSlice): integers,
