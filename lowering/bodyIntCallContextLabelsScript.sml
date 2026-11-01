@@ -1209,3 +1209,62 @@ Proof
    irule compiler_label_hoare_new_block_bind >> simp[] >> BETA_TAC >>
    simp[compiler_label_hoare_typed_primitives])
 QED
+
+Theorem compiler_block_tail_context_accessors:
+  compiler_block_tail (compile_load_memory src prim) /\
+  compiler_block_tail (compile_bytes_data_ptr src loc) /\
+  compiler_block_tail (compile_bytestring_length ctor imm src loc) /\
+  compiler_block_tail (compile_encode_log_topic src bytestring)
+Proof
+  rpt conj_tac
+  >- (Cases_on `prim` >> simp[compile_load_memory_def, compiler_block_tail_primitives])
+  >- simp[compile_bytes_data_ptr_def, compiler_block_tail_primitives]
+  >- simp[compile_bytestring_length_def, compiler_block_tail_primitives] >>
+  rewrite_tac[compile_encode_log_topic_def] >> Cases_on `bytestring` >>
+  simp[compiler_block_tail_primitives] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compile_load_memory_label_bounds:
+  compile_load_memory src prim st = (v,out) /\ compile_state_ok st ==>
+  compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+  bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  Cases_on `prim` >> simp[compile_load_memory_def, comp_return_def] >>
+  strip_tac >> gvs[] >> drule_all compile_state_ok_emit_op >> simp[SUBSET_DEF]
+QED
+
+Theorem compile_bytes_data_ptr_label_bounds:
+  compile_bytes_data_ptr src loc st = (v,out) /\ compile_state_ok st ==>
+  compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+  bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  simp[compile_bytes_data_ptr_def] >> strip_tac >>
+  drule_all compile_state_ok_emit_op >> simp[SUBSET_DEF]
+QED
+
+Theorem compile_bytestring_length_label_bounds:
+  compile_bytestring_length ctor imm src loc st = (v,out) /\ compile_state_ok st ==>
+  compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+  bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  rewrite_tac[compile_bytestring_length_def] >>
+  MATCH_ACCEPT_TAC compile_ptr_load_label_bounds
+QED
+
+Theorem compile_encode_log_topic_label_bounds:
+  compile_encode_log_topic src bytestring st = (v,out) /\ compile_state_ok st ==>
+  compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+  bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  map_every qid_spec_tac [`out`, `v`, `st`] >>
+  ho_match_mp_tac compiler_label_hoare_label_bounds >> gen_tac >>
+  CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+  rewrite_tac[compile_encode_log_topic_def] >> Cases_on `bytestring` >>
+  simp[compiler_label_hoare_typed_primitives] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_context_primitives]
+QED

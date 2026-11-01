@@ -3,7 +3,7 @@ Theory bodyIntCallCode
 Ancestors
   intCallLookup intCallCallee fragExec loweringShapeProps list
   moduleLowering compileEnv stmtSim vyperCompiler venomInst bodyIntCallLabels
-  bodyIntCallLabelFrame bodyIntCallContextLabels
+  bodyIntCallLabelFrame bodyIntCallContextLabels bodyIntCallMaterialLabels
 
 Theorem compile_internal_fn_bodies_append:
   !xs ys st.
