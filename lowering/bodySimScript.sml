@@ -49,10 +49,12 @@ Ancestors
    its functions in tops.  tops's module variables have distinct names, as
    the type checker gives (source_typing_ok_vtype_keys_distinct), and cenv
    has build_compile_env's hashmaps and module variable types, which no
-   declaration changes. *)
+   declaration changes.  The source runs the runtime code (~cx.in_deploy),
+   so an internal call finds its callee among the runtime unit's
+   functions. *)
 Definition body_inv_def:
   body_inv tops ctx cenv cx <=>
-    supported_program tops /\
+    supported_program tops /\ ~cx.in_deploy /\
     (?rpolicy unit. lower_vyper_runtime_unit tops rpolicy = SOME unit /\
                     ctx = unit.cu_context) /\
     get_module_code cx NONE = SOME tops /\

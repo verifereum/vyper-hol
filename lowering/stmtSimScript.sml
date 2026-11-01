@@ -172,11 +172,17 @@ End
 (* The return PC of an internal function's frame (ce_return_pc, the
    variable RETPC_PARAM binds at the function's entry) is defined, and it
    was handed out before sa, so stmt_frag's frame on old variables keeps
-   it.  RET reads it; an external function has none. *)
+   it.  RET reads it; an external function has none.  The same for the
+   return buffer of a memory return (ce_return_buf, the caller's buffer of
+   sz bytes, which the return writes), and the buffer and the 64 bytes
+   above it fit below 2 ** 256. *)
 Definition ret_pc_ok_def:
   ret_pc_ok cenv sa s <=>
-    !x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
-           not_fresh_at sa x /\ ?w. lookup_var x s = SOME w
+    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+            not_fresh_at sa x /\ ?w. lookup_var x s = SOME w) /\
+    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+            not_fresh_at sa x /\
+            ?w. lookup_var x s = SOME w /\ w2n w + sz + 64 < dimword (:256))
 End
 
 (* The code m (a statement with its declaration, or a statement list),
@@ -303,21 +309,31 @@ Proof
   metis_tac[]
 QED
 
-(* The return PC stays defined and unassigned as the code goes on, where
-   the variables handed out before it keep their values. *)
+(* The return PC and buffer stay defined and unassigned as the code goes
+   on, where the variables handed out before them keep their values. *)
 Theorem ret_pc_ok_frame:
   !cenv cenv' sa sb s s'.
     ret_pc_ok cenv sa s /\ cenv'.ce_return_pc = cenv.ce_return_pc /\
+    cenv'.ce_return_buf = cenv.ce_return_buf /\
     sa.cs_next_var <= sb.cs_next_var /\
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
            lookup_var x s' = SOME w) ==>
     ret_pc_ok cenv' sb s'
 Proof
-  rw[ret_pc_ok_def] >> qpat_x_assum `!x sz. _` drule >> strip_tac
-  >- (fs[not_fresh_at_def] >> rpt strip_tac >>
+  rw[ret_pc_ok_def]
+  >- (qpat_x_assum `!x sz. cenv.ce_return_pc = _ ==> _` drule >> strip_tac >>
+      fs[not_fresh_at_def] >> rpt strip_tac >>
+      qpat_x_assum `!n. sa.cs_next_var <= n ==> _` (qspec_then `n` mp_tac) >>
+      simp[])
+  >- (qpat_x_assum `!x sz. cenv.ce_return_pc = _ ==> _` drule >> strip_tac >>
+      rename1 `lookup_var x s = SOME w` >> qexists_tac `w` >>
+      qpat_x_assum `!x w. _ ==> _` irule >> simp[])
+  >- (qpat_x_assum `!x sz. cenv.ce_return_buf = _ ==> _` drule >> strip_tac >>
+      fs[not_fresh_at_def] >> rpt strip_tac >>
       qpat_x_assum `!n. sa.cs_next_var <= n ==> _` (qspec_then `n` mp_tac) >>
       simp[]) >>
-  rename1 `lookup_var x s = SOME w` >> qexists_tac `w` >>
+  qpat_x_assum `!x sz. cenv.ce_return_buf = _ ==> _` drule >> strip_tac >>
+  rename1 `lookup_var x s = SOME w` >> qexists_tac `w` >> simp[] >>
   qpat_x_assum `!x w. _ ==> _` irule >> simp[]
 QED
 
@@ -329,6 +345,13 @@ QED
 
 Theorem cenv_top_ext_return_pc:
   !cenv c sc. cenv_top_ext cenv c sc ==> c.ce_return_pc = cenv.ce_return_pc
+Proof
+  rw[cenv_top_ext_def] >>
+  qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]
+QED
+
+Theorem cenv_top_ext_return_buf:
+  !cenv c sc. cenv_top_ext cenv c sc ==> c.ce_return_buf = cenv.ce_return_buf
 Proof
   rw[cenv_top_ext_def] >>
   qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]
@@ -591,7 +614,9 @@ Proof
     `ret_pc_ok c sm s1` by
       (qspecl_then [`cenv`, `c`, `sa`, `sm`, `s0`, `s1`] mp_tac
          ret_pc_ok_frame >>
-       impl_tac >- (fs[] >> drule cenv_top_ext_return_pc >> simp[]) >>
+       impl_tac
+       >- (fs[] >> drule cenv_top_ext_return_pc >> drule cenv_top_ext_return_buf >>
+           simp[]) >>
        simp[]) >>
     qpat_x_assum `!c' sa' sm'. _ ==> stmt_frag _ _ _ _ _ _ _ _ _ _`
       (qspecl_then [`c`, `sa`, `sm`] mp_tac) >>

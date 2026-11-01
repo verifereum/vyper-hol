@@ -382,6 +382,8 @@ Proof
          >- first_assum ACCEPT_TAC
          >- (qpat_assum `_ = cenv` (fn th => ONCE_REWRITE_TAC [SYM th]) >>
              simp[])
+         >- (qpat_assum `_ = cenv` (fn th => ONCE_REWRITE_TAC [SYM th]) >>
+             simp[])
          >- first_assum ACCEPT_TAC >>
          rpt strip_tac >>
          qpat_x_assum `!x. not_fresh_at st x ==> _` drule >> strip_tac >>
