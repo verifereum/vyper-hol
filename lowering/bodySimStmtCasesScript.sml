@@ -17,6 +17,8 @@
  *                       supported expression or reason runs no EVM code
  *                       and calls only the main module's functions
  *   reason_covered    — a reason compiles to a form the reason lemmas take
+ *   supported_reason_code — a supported reason they don't take is an
+ *                       immutable's, a pointer into code
  *   no_internal_call_int_calls, supported_pure_int_calls — no internal
  *                       call means int_calls_* = []
  *   expr_body_pre_eval_result, expr_body_pre_eval — evaluation keeps
@@ -48,6 +50,7 @@ Ancestors
   stmtSimReasonStorage supportedExprs stmtSimAssign stmtSimDeclStore
   stmtSimAugAssign vyperTypeEvalSoundness vyperTypeInvariants
   vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimMain
+  exprReasonOperand
   vyperTypeValues vyperTyping vyperTypeDefaults stmtSimAssignTuple
   vyperTypeEnvPreservation bodySimExprCases bodyStoragePreservation
   vyperCallOutcomeStorage vyperTypeStoragePreservation
@@ -601,14 +604,47 @@ Definition reason_covered_def:
                 reason_storage_vv vv)
 End
 
-(* RESIDUAL (#637 raise/assert with a reason): a reason whose compiled
-   value reason_covered does not cover.  Only a TopLevelName bound to an
-   ImmutableLoc compiles to another form (LocCode, compile_expr's
-   TopLevelName case).  A supported program declares no immutables
-   (supported_immutables_constants_rejected), so build_compile_env binds
-   none, but body_inv fixes only the hashmaps and types of cenv's module
-   variables, not their bindings: closing this needs a body_inv clause
-   saying cenv binds no ImmutableLoc. *)
+Theorem well_typed_literal_string[local]:
+  !ty s. well_typed_literal ty (StringL s) ==> ?n. ty = BaseT (StringT n)
+Proof
+  Cases >> simp[well_typed_literal_def] >>
+  rename1 `BaseT b` >> Cases_on `b` >> simp[well_typed_literal_def]
+QED
+
+(* A supported reason is a string expression (supported_string_reason),
+   so it compiles to a memory or stack value, a storage or transient
+   pointer, or a pointer into code (compile_expr_string_reason):
+   expr_sim_inv holds each local through a variable pointer.  The first
+   two are reason_covered. *)
+Theorem supported_reason_code:
+  !cenv cx env es tops e.
+    expr_sim_inv cenv cx env es /\
+    supported_string_reason tops e /\ well_typed_expr env e /\
+    ~reason_covered cenv e ==>
+    !sa vv sb. compile_expr cenv (expr_type e) e sa = (vv, sb) ==>
+               reason_code_vv vv
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?n. expr_type e = BaseT (StringT n)` by
+    (Cases_on `?t str. e = Literal t (StringL str)`
+     >- (gvs[well_typed_expr_def, expr_type_def] >>
+         metis_tac[well_typed_literal_string]) >>
+     `case expr_type e of BaseT (StringT _) => T | _ => F` by
+       (Cases_on `e` >> fs[supported_string_reason_def] >>
+        rename1 `Literal _ lit` >> Cases_on `lit` >>
+        fs[supported_string_reason_def]) >>
+     Cases_on `expr_type e` >> fs[] >>
+     rename1 `BaseT b` >> Cases_on `b` >> fs[]) >>
+  qspecl_then [`cenv`, `env`, `e`, `n`] mp_tac compile_expr_string_reason >>
+  impl_tac >- (fs[expr_sim_inv_def] >> metis_tac[]) >>
+  fs[reason_covered_def] >> metis_tac[]
+QED
+
+(* RESIDUAL (#637 raise/assert with a reason): a reason read from an
+   immutable, whose compiled value is a pointer into code
+   (supported_reason_code).  The revert's encoder would copy it out of
+   code; stmtSimReasonStorage does that only for storage and transient
+   storage, and no lemma does it for code yet. *)
 Theorem body_raise_reason_other:
   !ctx func cx lctx RetQ cenv tops bindings env ret_ty e es res es'.
     body_inv tops ctx cenv cx /\
@@ -620,7 +656,8 @@ Theorem body_raise_reason_other:
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
     eval_stmt cx (Raise (RaiseReason e)) es = (res, es') /\
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
-    ~reason_covered cenv e ==>
+    (!sa vv sb. compile_expr cenv (expr_type e) e sa = (vv, sb) ==>
+                reason_code_vv vv) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Raise (RaiseReason e))) es res es'
 Proof
@@ -653,7 +690,11 @@ Proof
       >- (irule compile_raise_reason_frag >> simp[] >> metis_tac[])
       >- (irule compile_raise_storage_reason_frag >> simp[] >> metis_tac[])) >>
   irule body_raise_reason_other >> simp[] >>
-  conj_tac >- metis_tac[] >> qexists_tac `env` >> simp[]
+  reverse conj_tac >-
+    (conj_tac >- metis_tac[] >> qexists_tac `env` >> simp[]) >>
+  rpt gen_tac >> strip_tac >> irule supported_reason_code >>
+  gvs[supported_stmt_def, supported_raise_reason_def, type_stmt_def] >>
+  metis_tac[]
 QED
 
 (* RESIDUAL (#637 raise/assert with a reason): as body_raise_reason_other,
@@ -672,7 +713,8 @@ Theorem body_assert_reason_other:
     (!es1. (do raw <- eval_expr cx e; read_result cx raw od) es =
              (INL (BoolV F), es1) ==>
            expr_vv_sim ctx func cenv cx (expr_type se) se es1) /\
-    ~reason_covered cenv se ==>
+    (!sa vv sb. compile_expr cenv (expr_type se) se sa = (vv, sb) ==>
+                reason_code_vv vv) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assert e (AssertReason se))) es res es'
 Proof
@@ -755,7 +797,9 @@ Proof
       >- (irule compile_assert_storage_reason_frag >> simp[] >>
           metis_tac[])) >>
   irule body_assert_reason_other >> simp[] >>
-  conj_tac >- metis_tac[] >> qexists_tac `env` >> simp[]
+  reverse conj_tac >-
+    (conj_tac >- metis_tac[] >> qexists_tac `env` >> simp[]) >>
+  rpt gen_tac >> strip_tac >> irule supported_reason_code >> simp[] >> metis_tac[]
 QED
 
 (* GAP (#637 log): no statement lemma for Log yet.  body_inv ties
