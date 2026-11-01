@@ -410,3 +410,24 @@ Proof
   irule compiler_label_hoare_preserving_bind >>
   simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]
 QED
+
+Theorem compiler_block_tail_clamp:
+  compiler_block_tail (compile_clamp v ty)
+Proof
+  rewrite_tac[compile_clamp_def] >> Cases_on `type_bounds ty` >> simp[] >>
+  Cases_on `is_signed_type ty` >> simp[] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_clamp:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_clamp v ty) (\r out. compiler_label_reservation origin pending out)
+Proof
+  rewrite_tac[compile_clamp_def] >> Cases_on `type_bounds ty` >> simp[] >>
+  Cases_on `is_signed_type ty` >> simp[] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_typed_primitives]
+QED
