@@ -47,7 +47,7 @@ Ancestors
   supportedExprTraverse supportedStmtTraverse supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness stmtSimReason stmtSimReasonExpr
-  stmtSimReasonStorage supportedExprs stmtSimAssign stmtSimDeclStore
+  stmtSimReasonStorage stmtSimReasonCode supportedExprs stmtSimAssign stmtSimDeclStore
   stmtSimAugAssign vyperTypeEvalSoundness vyperTypeInvariants
   vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimMain
   exprReasonOperand
@@ -641,11 +641,10 @@ Proof
   fs[reason_covered_def] >> metis_tac[]
 QED
 
-(* RESIDUAL (#637 raise/assert with a reason): a reason read from an
-   immutable, whose compiled value is a pointer into code
-   (supported_reason_code).  The revert's encoder would copy it out of
-   code; stmtSimReasonStorage does that only for storage and transient
-   storage, and no lemma does it for code yet. *)
+(* A reason read from an immutable, whose compiled value is a pointer into
+   code (supported_reason_code): the revert's encoder copies it out of code
+   (stmtSimReasonCode), the body being runtime code (body_inv).  A string
+   literal goes to stmtSimReason. *)
 Theorem body_raise_reason_other:
   !ctx func cx lctx RetQ cenv tops bindings env ret_ty e es res es'.
     body_inv tops ctx cenv cx /\
@@ -662,11 +661,15 @@ Theorem body_raise_reason_other:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Raise (RaiseReason e))) es res es'
 Proof
-  cheat
+  rpt strip_tac >> `~cenv.ce_is_ctor` by fs[body_inv_def] >>
+  Cases_on `?ml str. e = Literal (BaseT (StringT ml)) (StringL str)`
+  >- (gvs[] >> irule compile_raise_reason_lit_frag >> simp[]) >>
+  irule compile_raise_code_reason_frag >> gvs[] >> metis_tac[]
 QED
 
-(* A string literal reason (stmtSimReason), or one whose compiled value
-   reason_covered covers (stmtSimReasonExpr, stmtSimReasonStorage). *)
+(* A string literal reason (stmtSimReason), one whose compiled value
+   reason_covered covers (stmtSimReasonExpr, stmtSimReasonStorage), or a
+   pointer into code (body_raise_reason_other). *)
 Theorem body_raise_reason_case:
   !cx e. body_expr_ok cx e ==> body_stmt_ok cx (Raise (RaiseReason e))
 Proof
@@ -698,8 +701,7 @@ Proof
   metis_tac[]
 QED
 
-(* RESIDUAL (#637 raise/assert with a reason): as body_raise_reason_other,
-   after the condition fails. *)
+(* As body_raise_reason_other, after the condition fails. *)
 Theorem body_assert_reason_other:
   !ctx func cx lctx RetQ cenv tops bindings env ret_ty e se es res es'.
     body_inv tops ctx cenv cx /\
@@ -719,7 +721,12 @@ Theorem body_assert_reason_other:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assert e (AssertReason se))) es res es'
 Proof
-  cheat
+  rpt strip_tac >> `~cenv.ce_is_ctor` by fs[body_inv_def] >>
+  `expr_type e = BaseT BoolT` by gvs[type_stmt_def] >>
+  Cases_on `?ml str. se = Literal (BaseT (StringT ml)) (StringL str)`
+  >- (gvs[] >> irule compile_assert_reason_lit_frag >> simp[] >>
+      metis_tac[compile_expr_grows]) >>
+  irule compile_assert_code_reason_frag >> gvs[] >> metis_tac[]
 QED
 
 (* The reason simulates where the condition is false: both are pure, so
