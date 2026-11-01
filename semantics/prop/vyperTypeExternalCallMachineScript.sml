@@ -555,64 +555,6 @@ Proof
   gvs[state_well_typed_def]
 QED
 
-(* TEMPORARILY CHEATED: frozen gas-observation migration repair;
-   original proof preserved below.
-Proof
-  rpt strip_tac >>
-  `nr = F /\ mut = View /\ dflts = [] /\ ?exp. body = [Return (SOME exp)]` by
-    (Cases_on `decl` >> gvs[is_public_getter_decl_def, external_getter_tuple_def]
-     >- (rename1 `is_public_getter_decl _
-           (VariableDecl vis storage id ty init)` >>
-         Cases_on `vis` >> gvs[is_public_getter_decl_def] >>
-         Cases_on `storage` >> gvs[] >>
-         Cases_on `is_ArrayT ty` >> gvs[] >>
-         FIRST
-           [drule_all array_public_getter_tuple_shape >> metis_tac[],
-            gvs[external_getter_tuple_def]]) >>
-     rename1 `is_public_getter_decl _
-       (HashMapDecl vis transient id kt vt init)` >>
-     Cases_on `vis` >> gvs[is_public_getter_decl_def] >>
-     drule_all hashmap_public_getter_tuple_shape >> metis_tac[]) >>
-  gvs[] >>
-  qabbrev_tac `getter_run =
-    do send_call_value View
-         (initial_evaluation_context am.sources am.layouts tx src);
-       eval_stmts (initial_evaluation_context am.sources am.layouts tx src)
-         [Return (SOME exp)]
-    od (initial_state am [scope] with <|outcomes := orc; requests := []; gas_obs := gobs'|>)` >>
-  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[Once call_external_function_def] >>
-  gvs[AllCaseEqs(), initial_evaluation_context_def] >> strip_tac >>
-  gvs[bind_def, ignore_bind_def, return_def] >>
-  qabbrev_tac `getter_res = FST getter_run` >>
-  PairCases_on `getter_run` >> Cases_on `getter_run0` >>
-  gvs[AllCaseEqs()] >> TRY (Cases_on `y` >> gvs[]) >>
-  `state_well_typed getter_run1 /\
-   accounts_well_typed getter_run1.accounts` by (
-    gvs[initial_state_def] >>
-    funpow 7 drule_then drule (SRULE [initial_state_def]
-      (Q.INST [`rqs` |-> `[]`]
-        checked_getter_send_eval_success_components)) >>
-    simp[Abbr`getter_res`, initial_evaluation_context_def] >>
-    strip_tac >>
-    first_x_assum irule >>
-    qexistsl [`gobs'`, `orc`] >>
-    qexistsl
-      [`FST
-         (do send_call_value View
-               (initial_evaluation_context am.sources am.layouts tx src);
-             eval_stmts
-               (initial_evaluation_context am.sources am.layouts tx src)
-               [Return (SOME exp)]
-          od (initial_state am [scope] with <|outcomes := orc; requests := []; gas_obs := gobs'|>))`,
-       `scope`, `vals ++ dflt_vs`] >>
-    gvs[bind_def, ignore_bind_def, initial_evaluation_context_def, initial_state_def] >>
-    first_assum ACCEPT_TAC) >>
-  Cases_on `evaluate_type (type_env_all_modules mods) ret` >> gvs[] >>
-  Cases_on `safe_cast x v'` >> gvs[] >>
-  gvs[machine_well_typed_def, abstract_machine_from_state_def,
-      state_well_typed_def]
-*)
 Theorem call_external_function_nondeploy_success_states[local]:
   ~cx.in_deploy /\
   LENGTH vals <= LENGTH args /\ LENGTH args - LENGTH vals <= LENGTH dflts /\
