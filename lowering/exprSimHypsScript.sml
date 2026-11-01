@@ -235,7 +235,7 @@ Ancestors
   vyperTypeEvalStoragePreservation vyperCallOutcomeStorage
   supportedExprTraverse exprStoragePreservation
   vyperLookup vyperPlaceResultTyping supportedProgram bodyStoragePreservation
-  structFieldsProps vyperTypeABI vyperValue vfmConstants valueEncoding
+  structFieldsProps vyperTypeABI vyperValue vfmConstants valueEncoding pair
 Libs
   pairLib
 
@@ -1177,9 +1177,8 @@ Theorem expr_sim_case_of_vv:
     expr_sim_case nocalls ctx func cenv cx e
 Proof
   rw[expr_sim_case_def, expr_vv_case_def] >> irule expr_sim_of_vv_sim >>
-  rpt strip_tac
-  >~ [`expr_vv_sim`] >- metis_tac[] >>
-  metis_tac[expr_body_pre_copy_ok]
+  conj_tac >- (rpt strip_tac >> drule_all expr_body_pre_copy_ok >> simp[]) >>
+  metis_tac[]
 QED
 
 (* expr_ok_stack for one ctx, func and cx. *)

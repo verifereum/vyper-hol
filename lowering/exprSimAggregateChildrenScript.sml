@@ -571,6 +571,7 @@ Proof
         su r es' v op s`, `su`] >> simp[] >>
   conj_tac
   >- (irule unwrap_value_rebased_sim >> simp[] >>
+      conj_tac >- (strip_tac >> fs[]) >>
       qexistsl_tac [`es`, `s0`, `tvv`, `vv`] >> simp[]) >>
   drule_all aggregate_store_rebased_slice_sim >>
   disch_then (qspecl_then [`sa`, `R`] mp_tac) >>

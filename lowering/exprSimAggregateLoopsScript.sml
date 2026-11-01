@@ -247,6 +247,18 @@ Resume aggregate_make_tuple_sim[after_add]:
     (drule_all expr_body_pre_eval_result >> simp[]) >>
   `type_memory_bytes ce (expr_type h) = type_memory_size h'` by
     metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  `cs_extends sa sn /\ cs_extends sn su /\ cs_extends su sb` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
+  `cs_extends sn sb` by (irule cs_extends_trans >> qexists_tac `su` >> simp[]) >>
+  `fn_has_code sn sb func` by
+    (qspecl_then [`sa`, `sn`, `sb`, `func`] mp_tac fn_has_code_split >>
+     simp[]) >>
+  `fn_has_code sn su func` by
+    (qspecl_then [`sn`, `su`, `sb`, `func`] mp_tac fn_has_code_split >>
+     simp[]) >>
+  `~is_word_type (expr_type h) ==> type_memory_size h' < 2 ** 64` by
+    (strip_tac >> drule_all exprSimHypsTheory.expr_body_pre_copy_ok >>
+     simp[]) >>
   drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
   qpat_x_assum `dst = Var _` SUBST_ALL_TAC >>
   qmatch_asmsub_abbrev_tac `eval_operand (Var d) r` >>

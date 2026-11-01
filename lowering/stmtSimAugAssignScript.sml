@@ -258,7 +258,8 @@ Proof
   Cases_on `bop = NotIn`
   >- gvs[well_typed_binop_def, type_alloc_ok_def, is_word_type_def] >>
   drule_all well_typed_binop_augassign_word >> strip_tac >>
-  drule exprSimOperatorsTheory.word_value_type_word >> simp[type_alloc_ok_def]
+  imp_res_tac exprSimOperatorsTheory.word_value_type_word >>
+  simp[type_alloc_ok_def]
 QED
 
 Theorem expr_sim_pre_augassign:
