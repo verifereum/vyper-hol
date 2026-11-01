@@ -876,6 +876,62 @@ Proof
   qexistsl [`[cv; sv; vv; mv; dv; nv]`, `s`] >> gvs[] >> metis_tac[])
 QED
 
+(* Exact observations complement the register-frame existence theorem. *)
+Theorem storage_copy_body_run_effect[local]:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
+  eval_operand (Var cv) s = SOME k /\
+  ALL_DISTINCT [cv; sv; vv; mv; dv; nv] /\
+  (!x. src = Var x \/ dst = Var x ==>
+       ~MEM x [cv; sv; vv; mv; dv; nv]) /\
+  run_inst_seq
+    [mk_inst id ADD [src; Var cv] [sv];
+     mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+     mk_inst (id+2) MUL [Var cv; Lit 32w] [mv];
+     mk_inst (id+3) ADD [dst; Var mv] [dv];
+     mk_inst (id+4) MSTORE [Var dv; Var vv] [];
+     mk_inst (id+5) ADD [Var cv; Lit 1w] [nv];
+     mk_inst (id+6) ASSIGN [Var nv] [cv]] s = OK t ==>
+  copy_static t = copy_static s /\
+  t.vs_memory =
+    (mstore (w2n (b+k*32w)) (copy_runtime_word loc s (a+k)) s).vs_memory
+Proof
+  strip_tac >>
+  qabbrev_tac `w = copy_runtime_word loc s (a+k)` >>
+  qabbrev_tac `s1 = update_var vv w (update_var sv (a+k) s)` >>
+  `run_inst_seq
+     [mk_inst id ADD [src; Var cv] [sv];
+      mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv]] s = OK s1` by
+    (simp[NoAsms, Abbr `s1`, Abbr `w`] >> irule storage_copy_source_run_effect >>
+     gvs[] >> metis_tac[]) >>
+  `eval_operand dst s1 = SOME b /\ eval_operand (Var cv) s1 = SOME k /\
+   eval_operand (Var vv) s1 = SOME w` by
+    (simp[Abbr `s1`, eval_operand_update_var] >>
+     Cases_on `dst` >> gvs[ALL_DISTINCT, eval_operand_def, lookup_var_update_var] >>
+     metis_tac[]) >>
+  qabbrev_tac `s2 = mstore (w2n (b+k*32w)) w
+    (update_var dv (b+k*32w) (update_var mv (k*32w) s1))` >>
+  `run_inst_seq
+     [mk_inst (id+2) MUL [Var cv; Lit 32w] [mv];
+      mk_inst ((id+2)+1) ADD [dst; Var mv] [dv];
+      mk_inst ((id+2)+2) MSTORE [Var dv; Var vv] []] s1 = OK s2` by
+    (qunabbrev_tac `s2` >> irule storage_copy_destination_run_effect >>
+     gvs[ALL_DISTINCT] >> metis_tac[]) >>
+  `eval_operand (Var cv) s2 = SOME k` by
+    (gvs[Abbr `s2`, ALL_DISTINCT, mstore_def, write_memory_with_expansion_def,
+         eval_operand_def, lookup_var_update_var]) >>
+  drule storage_copy_increment_run_effect >>
+  disch_then (qspecl_then [`nv`, `id+5`] assume_tac) >>
+  qpat_x_assum `run_inst_seq [_;_;_] _ = OK _`
+    (assume_tac o SRULE [GSYM arithmeticTheory.ADD_ASSOC] o MATCH_MP run_inst_seq_append) >>
+  rpt (qpat_x_assum `run_inst_seq [_;_] _ = OK _`
+    (assume_tac o SRULE [GSYM arithmeticTheory.ADD_ASSOC] o MATCH_MP run_inst_seq_append)) >>
+  qpat_x_assum `run_inst_seq [_;_;_;_;_;_;_] _ = OK _` mp_tac >>
+  asm_rewrite_tac[] >> simp[run_inst_seq_def] >> strip_tac >>
+  gvs[Abbr `s2`, Abbr `s1`, Abbr `w`, copy_static_def,
+      mstore_def, write_memory_with_expansion_def, update_var_def]
+QED
+
 Theorem storage_copy_body_frag[local]:
   !ctx loc src dst cv sv vv mv dv nv stb ste ds sbase a b k R.
     (loc = LocStorage \/ loc = LocTransient) /\
