@@ -385,3 +385,228 @@ Proof
   MATCH_ACCEPT_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)
     compiler_label_hoare_word_copy_loop)
 QED
+
+Theorem compiler_label_hoare_typed_primitives:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (emit_void opc ops) (\r out. compiler_label_reservation origin pending out) /\
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_copy_memory dst src sz) (\r out. compiler_label_reservation origin pending out) /\
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_copy_memory_dynamic dst src lenop) (\r out. compiler_label_reservation origin pending out) /\
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_store_bytestring src dst) (\r out. compiler_label_reservation origin pending out) /\
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_with_byte_offset dst off) (\r out. compiler_label_reservation origin pending out) /\
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (comp_return x) (\r out. compiler_label_reservation origin pending out)
+Proof
+  rpt conj_tac >> irule compiler_label_hoare_preserves_reservation >>
+  rpt gen_tac >> strip_tac
+  >- (drule_all compile_state_ok_emit_void >> simp[SUBSET_DEF])
+  >- (drule_all compile_copy_memory_label_bounds >> simp[])
+  >- (drule_all compile_copy_memory_dynamic_label_bounds >> simp[])
+  >- (drule_all compile_store_bytestring_label_bounds >> simp[])
+  >- (drule_all compile_with_byte_offset_label_bounds >> simp[])
+  >- gvs[comp_return_def, SUBSET_DEF]
+QED
+
+Theorem typed_copy_label_bounds:
+  (!cenv dst dst_ty src src_ty st v out.
+    compile_store_memory_typed cenv dst dst_ty src src_ty st = (v,out) /\ compile_state_ok st ==>
+    compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+    bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)) /\
+  (!cenv dst src dst_tys src_tys dst_off src_off st v out.
+    compile_typed_copy_fields cenv dst src dst_tys src_tys dst_off src_off st = (v,out) /\ compile_state_ok st ==>
+    compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+    bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)) /\
+  (!cenv dst dst_elem src src_elem nwords st v out.
+    compile_copy_sarray_typed cenv dst dst_elem src src_elem nwords st = (v,out) /\ compile_state_ok st ==>
+    compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+    bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)) /\
+  (!cenv dst dst_elem cap src src_elem st v out.
+    compile_copy_dynarray_typed cenv dst dst_elem cap src src_elem st = (v,out) /\ compile_state_ok st ==>
+    compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+    bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)) /\
+  (!cenv dst src dst_fields src_fields dst_off src_off st v out.
+    compile_struct_typed_copy cenv dst src dst_fields src_fields dst_off src_off st = (v,out) /\ compile_state_ok st ==>
+    compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+    bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label))
+Proof
+  ho_match_mp_tac compile_store_memory_typed_ind >>
+  conj_tac >- suspend "dispatch" >>
+  conj_tac >- suspend "fields_nil" >>
+  conj_tac >- suspend "fields_src_nil" >>
+  conj_tac >- suspend "fields" >>
+  conj_tac >- suspend "sarray" >>
+  conj_tac >- suspend "dynarray" >>
+  conj_tac >- suspend "struct_nil" >>
+  suspend "struct"
+QED
+
+Resume typed_copy_label_bounds[fields_nil]:
+  simp[Once compile_store_memory_typed_def, comp_return_def] >> rpt strip_tac >> gvs[SUBSET_DEF]
+QED
+Resume typed_copy_label_bounds[fields_src_nil]:
+  simp[Once compile_store_memory_typed_def, comp_return_def] >> rpt strip_tac >> gvs[SUBSET_DEF]
+QED
+Resume typed_copy_label_bounds[struct_nil]:
+  simp[Once compile_store_memory_typed_def, comp_return_def] >> rpt strip_tac >> gvs[SUBSET_DEF]
+QED
+Resume typed_copy_label_bounds[dispatch]:
+  rpt gen_tac >> strip_tac >>
+  pure_once_rewrite_tac[compile_store_memory_typed_def] >>
+  IF_CASES_TAC
+  >- (ho_match_mp_tac comp_bind_label_bounds >> conj_tac
+      >- (rpt gen_tac >> strip_tac >> drule_all compile_state_ok_emit_op >> simp[SUBSET_DEF]) >>
+      rpt gen_tac >> strip_tac >> drule_all compile_state_ok_emit_void >> simp[SUBSET_DEF]) >>
+  IF_CASES_TAC
+  >- (rpt gen_tac >> strip_tac >> drule_all compile_store_bytestring_label_bounds >> simp[]) >>
+  IF_CASES_TAC
+  >- (rpt gen_tac >> strip_tac >> drule_all compile_state_ok_emit_void >> simp[SUBSET_DEF]) >>
+  Cases_on `dst_ty` >> Cases_on `src_ty` >>
+  simp[NoAsms] >> gvs[NoAsms] >> rpt gen_tac >> strip_tac
+  >>~- ([`compile_copy_memory _ _ _ _ = _`],
+    drule_all compile_copy_memory_label_bounds >> simp[]) >>
+  Cases_on `b` >> Cases_on `b'` >> gvs[NoAsms] >>
+  rule_assum_tac (SRULE [])
+  >>~- ([`compile_copy_memory _ _ _ _ = _`],
+    drule_all compile_copy_memory_label_bounds >> simp[]) >>
+  first_assum drule_all >> simp[]
+QED
+
+Resume typed_copy_label_bounds[fields]:
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[Once compile_store_memory_typed_def, LET_THM, comp_ignore_bind_def] >>
+  BETA_TAC >>
+  rule_assum_tac (SRULE []) >>
+  ntac 2 (ho_match_mp_tac comp_bind_label_bounds >> conj_tac
+    >- (rpt gen_tac >> strip_tac >> drule_all compile_with_byte_offset_label_bounds >> simp[]) >>
+    gen_tac >> BETA_TAC) >>
+  ho_match_mp_tac comp_bind_label_bounds >> conj_tac
+  >- (simp[NoAsms] >> rpt gen_tac >> strip_tac >> first_assum drule_all >> simp[]) >>
+  gen_tac >> simp[NoAsms] >> rpt gen_tac >> strip_tac >> first_assum drule_all >> simp[]
+QED
+
+Resume typed_copy_label_bounds[sarray]:
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[Once compile_store_memory_typed_def, LET_THM, comp_ignore_bind_def] >>
+  BETA_TAC >> IF_CASES_TAC
+  >- (rpt gen_tac >> strip_tac >> drule_all compile_copy_memory_label_bounds >> simp[]) >>
+  rule_assum_tac (SRULE []) >>
+  ho_match_mp_tac compiler_label_hoare_label_bounds >> gen_tac >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  ntac 3 (irule compiler_label_hoare_fresh_bind >> gen_tac >> strip_tac >> BETA_TAC) >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
+  irule compiler_label_hoare_new_block_bind >> simp[] >> BETA_TAC >> gvs[NoAsms] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
+  irule compiler_label_hoare_new_block_bind >> simp[] >> BETA_TAC >> gvs[NoAsms] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- (irule compiler_label_hoare_preserves_reservation >>
+      simp[NoAsms] >> rpt gen_tac >> strip_tac >> first_assum drule_all >> simp[]) >>
+  gen_tac >> BETA_TAC >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[DELETE_INSERT] >>
+  rename1 `compiler_label_hoare _ (comp_bind (new_block lastlbl) _) _` >>
+  irule compiler_label_hoare_new_block_bind >> simp[] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  MATCH_ACCEPT_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)
+    (cj 6 compiler_label_hoare_typed_primitives))
+QED
+
+Resume typed_copy_label_bounds[struct]:
+  rpt gen_tac >> strip_tac >>
+  pure_once_rewrite_tac[compile_store_memory_typed_def] >>
+  rewrite_tac[LET_THM] >> pairarg_tac >>
+  asm_rewrite_tac[] >> CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  rewrite_tac[comp_ignore_bind_def] >> BETA_TAC >>
+  rule_assum_tac (SRULE []) >>
+  ntac 2 (ho_match_mp_tac comp_bind_label_bounds >> conj_tac
+    >- (rpt gen_tac >> strip_tac >> drule_all compile_with_byte_offset_label_bounds >> simp[]) >>
+    gen_tac >> BETA_TAC) >>
+  ho_match_mp_tac comp_bind_label_bounds >> conj_tac
+  >- (simp[NoAsms] >> rpt gen_tac >> strip_tac >> metis_tac[]) >>
+  gen_tac >> simp[NoAsms] >> rpt gen_tac >> strip_tac >> metis_tac[]
+QED
+
+Resume typed_copy_label_bounds[dynarray]:
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[Once compile_store_memory_typed_def, LET_THM, comp_ignore_bind_def] >>
+  BETA_TAC >>
+  Cases_on `type_memory_bytes cenv dst_elem = type_memory_bytes cenv src_elem /\ dst_elem = src_elem` >>
+  asm_rewrite_tac[] >> rule_assum_tac (SRULE []) >>
+  ho_match_mp_tac compiler_label_hoare_label_bounds >> gen_tac >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
+       gen_tac >> BETA_TAC)
+  >- MATCH_ACCEPT_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)
+       (cj 3 compiler_label_hoare_typed_primitives)) >>
+  gvs[NoAsms] >>
+  ntac 3 (irule compiler_label_hoare_fresh_bind >> gen_tac >> strip_tac >> BETA_TAC) >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
+  irule compiler_label_hoare_new_block_bind >> simp[] >> BETA_TAC >> gvs[NoAsms] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
+  irule compiler_label_hoare_new_block_bind >> simp[] >> BETA_TAC >> gvs[NoAsms] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- (irule compiler_label_hoare_preserves_reservation >>
+      simp[NoAsms] >> rpt gen_tac >> strip_tac >> first_assum drule_all >> simp[]) >>
+  gen_tac >> BETA_TAC >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[DELETE_INSERT] >>
+  irule compiler_label_hoare_new_block_bind >> simp[] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  MATCH_ACCEPT_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)
+    (cj 6 compiler_label_hoare_typed_primitives))
+QED
+
+Finalise typed_copy_label_bounds
+
+Theorem compile_store_memory_typed_label_bounds:
+  compile_store_memory_typed cenv dst dst_ty src src_ty st = (v,out) /\ compile_state_ok st ==>
+  compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+  bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  MATCH_ACCEPT_TAC (cj 1 typed_copy_label_bounds)
+QED
+
+Theorem compile_typed_copy_fields_label_bounds:
+  compile_typed_copy_fields cenv dst src dst_tys src_tys dst_off src_off st = (v,out) /\ compile_state_ok st ==>
+  compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+  bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  MATCH_ACCEPT_TAC (cj 2 typed_copy_label_bounds)
+QED
+
+Theorem compile_copy_sarray_typed_label_bounds:
+  compile_copy_sarray_typed cenv dst dst_elem src src_elem nwords st = (v,out) /\ compile_state_ok st ==>
+  compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+  bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  MATCH_ACCEPT_TAC (cj 3 typed_copy_label_bounds)
+QED
+
+Theorem compile_copy_dynarray_typed_label_bounds:
+  compile_copy_dynarray_typed cenv dst dst_elem cap src src_elem st = (v,out) /\ compile_state_ok st ==>
+  compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+  bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  MATCH_ACCEPT_TAC (cj 4 typed_copy_label_bounds)
+QED
+
+Theorem compile_struct_typed_copy_label_bounds:
+  compile_struct_typed_copy cenv dst src dst_fields src_fields dst_off src_off st = (v,out) /\ compile_state_ok st ==>
+  compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+  bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  MATCH_ACCEPT_TAC (cj 5 typed_copy_label_bounds)
+QED
