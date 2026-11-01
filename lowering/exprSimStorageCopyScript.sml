@@ -304,6 +304,83 @@ Proof
   simp[ALL_DISTINCT] >> metis_tac[]
 QED
 
+(* Freeze every field except registers, memory and execution position. *)
+Definition copy_static_def:
+  copy_static s = s with <| vs_memory := []; vs_vars := FEMPTY;
+    vs_prev_bb := NONE; vs_current_bb := ""; vs_inst_idx := 0 |>
+End
+
+Definition copy_runtime_word_def:
+  copy_runtime_word loc s a =
+    if loc = LocStorage then sload a s else tload a s
+End
+
+Theorem copy_static_update_var[local,simp]:
+  copy_static (update_var x w s) = copy_static s
+Proof
+  simp[copy_static_def, update_var_def]
+QED
+
+Theorem copy_static_jump[local,simp]:
+  copy_static (jump_to l s) = copy_static s
+Proof
+  simp[copy_static_def, jump_to_def]
+QED
+
+Theorem copy_static_idx[local,simp]:
+  copy_static (s with vs_inst_idx := i) = copy_static s
+Proof
+  simp[copy_static_def]
+QED
+
+Theorem copy_static_mstore[local,simp]:
+  copy_static (mstore b w s) = copy_static s
+Proof
+  simp[copy_static_def, mstore_def, write_memory_with_expansion_def]
+QED
+
+Theorem copy_static_fields:
+  copy_static s = copy_static t ==>
+  s.vs_accounts = t.vs_accounts /\
+  s.vs_transient = t.vs_transient /\
+  s.vs_call_ctx = t.vs_call_ctx /\
+  s.vs_allocas = t.vs_allocas /\
+  s.vs_alloca_next = t.vs_alloca_next /\
+  s.vs_labels = t.vs_labels /\
+  s.vs_halted = t.vs_halted /\
+  s.vs_data_section = t.vs_data_section
+Proof
+  simp[copy_static_def, venom_state_component_equality]
+QED
+
+Theorem copy_runtime_word_static[local]:
+  copy_static s = copy_static t ==>
+  copy_runtime_word loc s a = copy_runtime_word loc t a
+Proof
+  strip_tac >> drule copy_static_fields >>
+  simp[copy_runtime_word_def, sload_def, tload_def,
+       contract_storage_def, contract_transient_def]
+QED
+
+Theorem storage_copy_load_exact[local]:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  eval_operand op s = SOME a ==>
+  step_inst_base
+    (mk_inst id (if loc = LocStorage then SLOAD else TLOAD) [op] [out]) s =
+  OK (update_var out (copy_runtime_word loc s a) s)
+Proof
+  strip_tac >> gvs[step_inst_base_def, exec_read1_def, mk_inst_def,
+                          copy_runtime_word_def]
+QED
+
+Theorem storage_copy_store_exact[local]:
+  eval_operand op1 s = SOME a /\ eval_operand op2 s = SOME w ==>
+  step_inst_base (mk_inst id MSTORE [op1; op2] []) s =
+  OK (mstore (w2n a) w s)
+Proof
+  strip_tac >> irule step_MSTORE >> simp[]
+QED
+
 (* Both slot spaces are total reads, independent of the stored contents. *)
 Theorem storage_copy_load_step[local]:
   !opc op v id out s.
