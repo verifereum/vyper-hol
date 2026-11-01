@@ -610,3 +610,164 @@ Theorem compile_struct_typed_copy_label_bounds:
 Proof
   MATCH_ACCEPT_TAC (cj 5 typed_copy_label_bounds)
 QED
+
+Theorem compiler_block_tail_storage_transfers:
+  compiler_block_tail (compile_storage_to_memory slot buf nwords) /\
+  compiler_block_tail (compile_memory_to_storage buf slot nwords) /\
+  compiler_block_tail (compile_transient_to_memory slot buf nwords) /\
+  compiler_block_tail (compile_memory_to_transient buf slot nwords)
+Proof
+  simp[compile_storage_to_memory_def, compile_memory_to_storage_def,
+       compile_transient_to_memory_def, compile_memory_to_transient_def,
+       compiler_block_tail_word_copy_loop]
+QED
+
+Theorem compile_storage_to_memory_label_bounds:
+  compile_storage_to_memory slot buf nwords st = (v,out) /\ compile_state_ok st ==>
+  compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+  bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  rewrite_tac[compile_storage_to_memory_def] >>
+  MATCH_ACCEPT_TAC compile_word_copy_loop_label_bounds
+QED
+
+Theorem compile_memory_to_storage_label_bounds:
+  compile_memory_to_storage buf slot nwords st = (v,out) /\ compile_state_ok st ==>
+  compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+  bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  rewrite_tac[compile_memory_to_storage_def] >>
+  MATCH_ACCEPT_TAC compile_word_copy_loop_label_bounds
+QED
+
+Theorem compile_transient_to_memory_label_bounds:
+  compile_transient_to_memory slot buf nwords st = (v,out) /\ compile_state_ok st ==>
+  compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+  bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  rewrite_tac[compile_transient_to_memory_def] >>
+  MATCH_ACCEPT_TAC compile_word_copy_loop_label_bounds
+QED
+
+Theorem compile_memory_to_transient_label_bounds:
+  compile_memory_to_transient buf slot nwords st = (v,out) /\ compile_state_ok st ==>
+  compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+  bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  rewrite_tac[compile_memory_to_transient_def] >>
+  MATCH_ACCEPT_TAC compile_word_copy_loop_label_bounds
+QED
+
+Theorem compiler_label_hoare_storage_primitives:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_alloc_buffer sz) (\r out. compiler_label_reservation origin pending out) /\
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_storage_to_memory src dst nwords) (\r out. compiler_label_reservation origin pending out) /\
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_transient_to_memory src dst nwords) (\r out. compiler_label_reservation origin pending out) /\
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_memory_to_storage src dst nwords) (\r out. compiler_label_reservation origin pending out) /\
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_memory_to_transient src dst nwords) (\r out. compiler_label_reservation origin pending out)
+Proof
+  rpt conj_tac >> irule compiler_label_hoare_preserves_reservation >>
+  rpt gen_tac >> strip_tac
+  >- (drule_all compile_alloc_buffer_label_bounds >> simp[])
+  >- (drule_all compile_storage_to_memory_label_bounds >> simp[])
+  >- (drule_all compile_transient_to_memory_label_bounds >> simp[])
+  >- (drule_all compile_memory_to_storage_label_bounds >> simp[])
+  >- (drule_all compile_memory_to_transient_label_bounds >> simp[])
+QED
+
+Theorem compiler_block_tail_load_storage:
+  compiler_block_tail (compile_load_storage slot prim nwords sz)
+Proof
+  rewrite_tac[compile_load_storage_def, comp_ignore_bind_def] >>
+  Cases_on `prim` >> Cases_on `nwords = 1` >> simp[compiler_block_tail_primitives] >>
+  (irule compiler_block_tail_bind >> reverse conj_tac
+   >- simp[compiler_block_tail_alloc_buffer] >>
+   gen_tac >> simp[LET_THM] >>
+   rpt (irule compiler_block_tail_bind >> reverse conj_tac
+        >- simp[compiler_block_tail_primitives, compiler_block_tail_storage_transfers] >>
+        gen_tac >> BETA_TAC) >>
+   simp[compiler_block_tail_primitives])
+QED
+
+Theorem compile_load_storage_label_bounds:
+  compile_load_storage slot prim nwords sz st = (v,out) /\ compile_state_ok st ==>
+  compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+  bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  map_every qid_spec_tac [`out`, `v`, `st`] >>
+  ho_match_mp_tac compiler_label_hoare_label_bounds >> gen_tac >>
+  CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+  rewrite_tac[compile_load_storage_def, comp_ignore_bind_def] >>
+  Cases_on `prim` >> Cases_on `nwords = 1` >>
+  simp[compiler_label_hoare_context_primitives] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives,
+               compiler_label_hoare_storage_primitives] >>
+       gen_tac >> simp[LET_THM]) >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  MATCH_ACCEPT_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)
+    (cj 6 compiler_label_hoare_typed_primitives))
+QED
+
+Theorem compiler_block_tail_load_transient:
+  compiler_block_tail (compile_load_transient slot prim nwords sz)
+Proof
+  rewrite_tac[compile_load_transient_def, comp_ignore_bind_def] >>
+  Cases_on `prim` >> Cases_on `nwords = 1` >> simp[compiler_block_tail_primitives] >>
+  (irule compiler_block_tail_bind >> reverse conj_tac
+   >- simp[compiler_block_tail_alloc_buffer] >>
+   gen_tac >> simp[LET_THM] >>
+   rpt (irule compiler_block_tail_bind >> reverse conj_tac
+        >- simp[compiler_block_tail_primitives, compiler_block_tail_storage_transfers] >>
+        gen_tac >> BETA_TAC) >>
+   simp[compiler_block_tail_primitives])
+QED
+
+Theorem compile_load_transient_label_bounds:
+  compile_load_transient slot prim nwords sz st = (v,out) /\ compile_state_ok st ==>
+  compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+  bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  map_every qid_spec_tac [`out`, `v`, `st`] >>
+  ho_match_mp_tac compiler_label_hoare_label_bounds >> gen_tac >>
+  CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+  rewrite_tac[compile_load_transient_def, comp_ignore_bind_def] >>
+  Cases_on `prim` >> Cases_on `nwords = 1` >>
+  simp[compiler_label_hoare_context_primitives] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives,
+               compiler_label_hoare_storage_primitives] >>
+       gen_tac >> simp[LET_THM]) >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  MATCH_ACCEPT_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)
+    (cj 6 compiler_label_hoare_typed_primitives))
+QED
+
+Theorem compiler_block_tail_store_storage:
+  compiler_block_tail (compile_store_storage valop slot prim nwords)
+Proof
+  rewrite_tac[compile_store_storage_def, comp_ignore_bind_def] >>
+  Cases_on `prim` >> Cases_on `nwords = 1` >> simp[compiler_block_tail_primitives] >>
+  (irule compiler_block_tail_bind >>
+   simp[compiler_block_tail_primitives, compiler_block_tail_storage_transfers])
+QED
+
+Theorem compile_store_storage_label_bounds:
+  compile_store_storage valop slot prim nwords st = (v,out) /\ compile_state_ok st ==>
+  compile_state_ok out /\ st.cs_next_label <= out.cs_next_label /\
+  bound_labels out SUBSET (bound_labels st UNION compiler_labels_future st.cs_next_label)
+Proof
+  map_every qid_spec_tac [`out`, `v`, `st`] >>
+  ho_match_mp_tac compiler_label_hoare_label_bounds >> gen_tac >>
+  CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+  rewrite_tac[compile_store_storage_def, comp_ignore_bind_def] >>
+  Cases_on `prim` >> Cases_on `nwords = 1` >>
+  simp[compiler_label_hoare_typed_primitives] >>
+  (irule compiler_label_hoare_preserving_bind >>
+   simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives,
+        compiler_label_hoare_storage_primitives])
+QED
