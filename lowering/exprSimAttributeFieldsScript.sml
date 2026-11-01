@@ -31,6 +31,7 @@
 
 Theory exprSimAttributeFields
 Ancestors
+  storageDecodeMemory
   list rich_list finite_map pair
   exprSimHyps compileEnv valueEncoding
   vyperAST vyperInterpreter vyperState vyperStorage vyperValue
@@ -40,15 +41,6 @@ Libs
 
 (* ===== Struct layout ===== *)
 
-Theorem type_memory_size_slots:
-  (!tv. type_memory_size tv = 32 * type_slot_size tv) /\
-  (!tvs. type_memory_size_list tvs = 32 * type_slot_size_list tvs) /\
-  (!fields. type_memory_size_fields fields = 32 * type_slot_size_fields fields)
-Proof
-  ho_match_mp_tac type_memory_size_ind >>
-  simp[type_memory_size_def, type_slot_size_def,
-       arithmeticTheory.LEFT_ADD_DISTRIB]
-QED
 
 Theorem slot_count_of_memory_size[local]:
   !tv. (type_memory_size tv + 31) DIV 32 = type_slot_size tv
