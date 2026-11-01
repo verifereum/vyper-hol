@@ -109,14 +109,14 @@ Proof
 QED
 
 Theorem attr_add_post[local]:
-  !cenv ty e sa vv sm off dst sn func cx es s0 es' tv s w.
+  !cenv ty e sa vv sm off dst sn func cx es s0 es' tv s w ctx.
     compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
     sa.cs_next_var <= sm.cs_next_var /\
     emit_op ADD [vv_operand vv; Lit (n2w off)] sm = (dst,sn) /\
-    vv_post func cenv cx e es sa sm s0 es' tv vv s /\
+    vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
     eval_operand (vv_operand vv) s = SOME w ==>
     ?q. run_inst_seq (emitted_insts sm sn) s = OK q /\
-        vv_post func cenv cx e es sa sn s0 es' tv vv q /\
+        vv_post ctx func cenv cx e es sa sn s0 es' tv vv q /\
         eval_operand (vv_operand vv) q = SOME w /\
         eval_operand dst q = SOME (w + n2w off)
 Proof
@@ -144,8 +144,8 @@ Theorem attr_add_frag[local]:
     sa.cs_next_var <= sm.cs_next_var /\
     emit_op ADD [vv_operand vv; Lit (n2w off)] sm = (dst,sn) ==>
     frag_exec ctx sm sn
-      (\s. vv_post func cenv cx e es sa sm s0 es' tv vv s)
-      (\s. ?w. vv_post func cenv cx e es sa sn s0 es' tv vv s /\
+      (\s. vv_post ctx func cenv cx e es sa sm s0 es' tv vv s)
+      (\s. ?w. vv_post ctx func cenv cx e es sa sn s0 es' tv vv s /\
                eval_operand (vv_operand vv) s = SOME w /\
                eval_operand dst s = SOME (w + n2w off)) R
 Proof
@@ -174,8 +174,8 @@ QED
 (* ===== The value_vv of the field ===== *)
 
 Theorem stmt_state_rel_region_lt[local]:
-  !func cenv cx es s.
-    stmt_state_rel func cenv cx es s ==>
+  !func cenv cx es s ctx.
+    stmt_state_rel ctx func cenv cx es s ==>
     (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
                 b + sz < dimword (:256)) /\
     (!n b sz. local_region cenv es.scopes s n b sz ==>
@@ -274,8 +274,8 @@ QED
 
 (* The field's placement in memory, from the base's. *)
 Theorem attr_vv_at_field[local]:
-  !func cenv cx sid sa sn es1 tv bvv q w dst ann fld fs ftv vals fv tv'.
-    stmt_state_rel func cenv cx es1 q /\
+  !func cenv cx sid sa sn es1 tv bvv q w dst ann fld fs ftv vals fv tv' ctx.
+    stmt_state_rel ctx func cenv cx es1 q /\
     vv_at cenv cx (StructT sid) sa sn es1 tv bvv q /\
     read_result cx tv es1 = (INL (StructV vals), es1) /\
     read_result cx tv' es1 = (INL fv, es1) /\
@@ -361,8 +361,8 @@ QED
 
 (* The field's value_vv after the ADD, from the base's. *)
 Theorem attr_vv_post[local]:
-  !func cenv cx obj es sa sn s0 es1 tv bvv q w dst ann fld sid fs ftv tv'.
-    vv_post func cenv cx obj es sa sn s0 es1 tv bvv q /\
+  !func cenv cx obj es sa sn s0 es1 tv bvv q w dst ann fld sid fs ftv tv' ctx.
+    vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
     eval_operand (vv_operand bvv) q = SOME w /\
     eval_operand dst q =
       SOME (w + n2w (attr_offset cenv (StructT sid) (vv_loc bvv) fld)) /\
@@ -376,11 +376,11 @@ Theorem attr_vv_post[local]:
     (!vals. read_result cx tv es1 = (INL (StructV vals), es1) ==>
        ?fv. ALOOKUP vals fld = SOME fv /\
             read_result cx tv' es1 = (INL fv, es1)) ==>
-    vv_post func cenv cx (Attribute ann obj fld) es sa sn s0 es1 tv'
+    vv_post ctx func cenv cx (Attribute ann obj fld) es sa sn s0 es1 tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) q
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `vv_post _ _ _ obj _ _ _ _ _ _ _ _`
+  qpat_x_assum `vv_post ctx _ _ _ obj _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   gvs[] >>
   drule_all base_vv_holds_struct >> strip_tac >>
@@ -470,7 +470,7 @@ Proof
       `!m. res <> INR (Error (TypeError m))` by
         (rpt strip_tac >> gvs[expr_vv_res_ok_def]) >>
       irule frag_exec_seq >>
-      qexistsl_tac [`\s. vv_post func cenv cx obj es sa sm s0 es1 btv bvv s`,
+      qexistsl_tac [`\s. vv_post ctx func cenv cx obj es sa sm s0 es1 btv bvv s`,
                     `sm`] >>
       simp[] >> conj_tac
       >- (irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[]) >>

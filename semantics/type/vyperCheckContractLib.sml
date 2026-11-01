@@ -167,6 +167,7 @@ val checker_defs =
    vyperABITheory.vyper_is_dynamic_def,
    contractABITheory.ceil32_def,
    raw_call_return_type_def,
+   raw_call_kws_ok_def,
    ext_call_opts_ok_def,
    ext_call_kw_type_def,
    arg_type_fits_def,

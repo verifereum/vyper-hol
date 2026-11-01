@@ -206,9 +206,9 @@ QED
      regions (step_inst_invoke_live_regions's premises). *)
 Theorem immutables_rel_env_transport[local]:
   immutables_rel cenv' addr src ctor es ss /\
-  (!n off. FLOOKUP cenv.ce_vars (module_var_key (src,n)) =
+  (!n off. FLOOKUP cenv.ce_module_vars (src,n) =
              SOME (ImmutableLoc off) ==>
-           FLOOKUP cenv'.ce_vars (module_var_key (src,n)) =
+           FLOOKUP cenv'.ce_module_vars (src,n) =
              SOME (ImmutableLoc off)) ==>
   immutables_rel cenv addr src ctor es ss
 Proof
@@ -230,20 +230,20 @@ Theorem invoke_intret_state_rel:
     LENGTH inst.inst_outputs = LENGTH ret.iret_values /\
     ALL_DISTINCT inst.inst_outputs /\
     EVERY (not_local_ptr cenv es.scopes) inst.inst_outputs /\
-    stmt_state_rel func cenv cx es s /\
+    stmt_state_rel ctx func cenv cx es s /\
     immutable_alloca_sep func cenv cx (es2 with scopes := es.scopes) s /\
     intret_q callee cenv' cx' tv v (es2 with scopes := []) (IntRet ret cs') /\
     cx'.txn = cx.txn /\ cx'.sources = cx.sources /\ cx'.layouts = cx.layouts /\
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor /\
-    (!n off. FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, n)) =
+    (!n off. FLOOKUP cenv.ce_module_vars (cenv.ce_module, n) =
                SOME (ImmutableLoc off) ==>
-             FLOOKUP cenv'.ce_vars (module_var_key (cenv.ce_module, n)) =
+             FLOOKUP cenv'.ce_module_vars (cenv.ce_module, n) =
                SOME (ImmutableLoc off)) /\
     callee_writes_above s.vs_alloca_next excl s.vs_memory cs'.vs_memory /\
     (!n lo sz. local_region cenv es.scopes s n lo sz ==>
        EVERY (\(eb,esz). regions_disjoint lo sz eb esz) excl) ==>
     ?s'. step_inst fuel ctx inst s = OK s' /\
-         stmt_state_rel func cenv cx (es2 with scopes := es.scopes) s' /\
+         stmt_state_rel ctx func cenv cx (es2 with scopes := es.scopes) s' /\
          intret_vals_match tv v ret.iret_values /\
          (!i. i < LENGTH inst.inst_outputs ==>
               lookup_var (EL i inst.inst_outputs) s' =
@@ -289,7 +289,7 @@ Proof
       qpat_x_assum `!x. ~MEM x inst.inst_outputs ==> _` drule >>
       gvs[lookup_var_def]) >>
   reverse conj_tac >- (qexistsl_tac [`es`, `s`] >> simp[]) >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
   qpat_x_assum `state_rel _ _ _ _ cs'` mp_tac >>
   simp[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
        accounts_rel_def, logs_rel_def, call_ctx_rel_def,

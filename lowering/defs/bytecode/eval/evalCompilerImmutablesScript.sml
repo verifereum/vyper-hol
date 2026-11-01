@@ -32,7 +32,7 @@ QED
 
 Definition p23_source_deployment_def:
   p23_source_deployment =
-    load_contract NONE initial_machine_state
+    load_contract NONE [] initial_machine_state
       (empty_call_txn with
         <|target := 2w; sender := 1w; function_name := "__init__"|>)
       [(NONE, ^(rand (#term p23_imm_uint256)))] []
@@ -40,7 +40,7 @@ End
 
 Theorem p23_source_deploy_get_42:
   ISL p23_source_deployment /\
-  FST (call_external NONE (FST (OUTL p23_source_deployment))
+  FST (call_external NONE [] (FST (OUTL p23_source_deployment))
     (empty_call_txn with
       <|target := 2w; sender := 1w; function_name := "get"|>)) = INL (IntV 42)
 Proof

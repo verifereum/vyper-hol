@@ -34,9 +34,9 @@ Theorem word_compile_expr_toplevelname:
   word_result_ok sb vv
 Proof
   simp[compile_expr_body_def, expr_type_def, LET_THM] >>
-  Cases_on `FLOOKUP cenv.ce_vars (module_var_key nsid)` >> simp[] >-
+  Cases_on `FLOOKUP cenv.ce_module_vars nsid` >> simp[] >-
     (strip_tac >> rpt (pairarg_tac >> gvs[word_result_ok_def])) >>
-  rename1 `FLOOKUP cenv.ce_vars _ = SOME bnd` >> Cases_on `bnd` >> simp[] >>
+  rename1 `FLOOKUP cenv.ce_module_vars _ = SOME bnd` >> Cases_on `bnd` >> simp[] >>
   strip_tac >>
   rpt (pairarg_tac >> gvs[word_result_ok_def]) >> gvs[word_result_ok_def]
 QED
@@ -312,7 +312,7 @@ QED
 
 (* ===== The induction ===== *)
 
-Theorem word_list_result_elim[local]:
+Theorem word_list_result_elim:
   (list_CASE xs n c = r ==> Q) <=>
   (xs = [] ==> n = r ==> Q) /\
   (!h t. xs = h::t ==> c h t = r ==> Q)
@@ -320,7 +320,7 @@ Proof
   Cases_on `xs` >> simp[]
 QED
 
-Theorem word_expr_result_elim[local]:
+Theorem word_expr_result_elim:
   (expr_CASE e f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 = r ==> Q) <=>
   (!a b. e = Name a b ==> f1 a b = r ==> Q) /\
   (!a b. e = TopLevelName a b ==> f2 a b = r ==> Q) /\

@@ -37,7 +37,7 @@ Theorem immutable_constructor_section:
     LENGTH ss.vs_memory /\
   (!pre vis name ty slot post.
     tops = pre ++ VariableDecl vis Immutable name ty slot :: post ==>
-    FLOOKUP cenv.ce_vars (module_var_key (NONE,name)) =
+    FLOOKUP cenv.ce_module_vars (NONE,name) =
       SOME (ImmutableLoc (compute_immutables_len
         (get_struct_fields (make_struct_fields_map tops)) pre)) /\
     ?tv v. FLOOKUP (get_source_immutables NONE imms) name = SOME (tv,v) /\

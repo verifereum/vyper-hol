@@ -46,10 +46,11 @@
  *                                 invariants (proof-internal)
  *
  * alloca_room: under INVOKE's semantics the callee inherits the
- * caller's allocation frontier (setup_callee keeps vs_alloca_next), so
- * alloca_room at callee entry is not implied by the caller's state.  The
- * entry lemma takes it as a hypothesis on the entry state, for the call
- * site to discharge, and also takes the bound the materialization proof
+ * caller's allocation frontier (setup_callee keeps vs_alloca_next).  The
+ * entry lemma takes alloca_room on the entry state as a hypothesis, for
+ * the call site to discharge from the caller's (alloca_room_callee:
+ * the caller's room covers the callee's frame), and also takes the bound
+ * the materialization proof
  * uses directly: the frontier at the call plus internal_stack_size is
  * below 2 ** 256, so the arguments' ALLOCAs do not wrap.
  *)
@@ -1764,7 +1765,7 @@ Definition internal_immutable_regions_def:
   internal_immutable_regions cenv cx (vs:evaluation_state) frontier <=>
     cenv.ce_is_ctor ==>
     !name tv v off.
-      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module, name) =
         SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of
                  NONE => FEMPTY
@@ -1787,7 +1788,7 @@ Proof
   >- (simp[immutables_rel_def] >> strip_tac >> gvs[]) >>
   simp[internal_immutable_regions_def, immutables_rel_def] >>
   strip_tac >> rpt gen_tac >> strip_tac >>
-  rename1 `FLOOKUP cenv.ce_vars _ = SOME (ImmutableLoc off)` >>
+  rename1 `FLOOKUP cenv.ce_module_vars _ = SOME (ImmutableLoc off)` >>
   qpat_x_assum `!name tv v byte_offset. _ /\ _ ==> _ /\ _ /\ _ /\ _`
     drule_all >> strip_tac >>
   qpat_x_assum `!name tv v off. _ /\ _ ==> val_wf _ _ /\ _`
@@ -2030,10 +2031,10 @@ QED
    func's frame: a fresh ALLOCA moves its size from the pending sizes to
    the frontier, and nothing else moves either. *)
 Theorem step_inst_base_alloca_room[local]:
-  !func inst s s'.
+  !func inst s s' ctx.
     step_inst_base inst s = OK s' /\ MEM inst (fn_insts func) /\
-    inst.inst_opcode <> INVOKE /\ alloca_room func s ==>
-    alloca_room func s'
+    inst.inst_opcode <> INVOKE /\ alloca_room ctx func s ==>
+    alloca_room ctx func s'
 Proof
   rpt strip_tac >> Cases_on `inst.inst_opcode = ALLOCA`
   >- (qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
@@ -2055,11 +2056,11 @@ Proof
 QED
 
 Theorem run_inst_seq_alloca_room[local]:
-  !is func s t.
+  !is func s t ctx.
     run_inst_seq is s = OK t /\
     EVERY (\i. MEM i (fn_insts func) /\ i.inst_opcode <> INVOKE) is /\
-    alloca_room func s ==>
-    alloca_room func t
+    alloca_room ctx func s ==>
+    alloca_room ctx func t
 Proof
   Induct >> simp[run_inst_seq_def] >> rpt gen_tac >>
   Cases_on `step_inst_base h s` >> simp[] >> strip_tac >>
@@ -2082,7 +2083,7 @@ Theorem internal_prologue_run:
     (cenv.ce_is_ctor ==> !i po psz name tv iv io.
       i < LENGTH params /\ ~SND (EL i params) /\
       FLOOKUP cenv.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
-      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
         SOME (ImmutableLoc io) /\
       FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
         | SOME imms => get_source_immutables cenv.ce_module imms) name =
@@ -2232,12 +2233,9 @@ Resume internal_prologue_run[separation]:
   drule materialize_nonptr_binding >> disch_then assume_tac >>
   `cenv2.ce_module = cenv.ce_module /\
    cenv2.ce_is_ctor = cenv.ce_is_ctor /\
-   (!name off. FLOOKUP cenv2.ce_vars name = SOME (ImmutableLoc off) ==>
-      FLOOKUP cenv.ce_vars name = SOME (ImmutableLoc off))` by
-    (asm "cenv_stage" mp_tac >> simp[] >> strip_tac >>
-     rpt strip_tac >>
-     qpat_x_assum `!name loc. _`
-       (qspecl_then [`name`, `ImmutableLoc off`] mp_tac) >> simp[]) >>
+   (!name off. FLOOKUP cenv2.ce_module_vars name = SOME (ImmutableLoc off) ==>
+      FLOOKUP cenv.ce_module_vars name = SOME (ImmutableLoc off))` by
+    (asm "cenv_stage" mp_tac >> simp[]) >>
   `caller.vs_alloca_next <= t'.vs_alloca_next` by
     (qpat_x_assum `caller.vs_alloca_next <= u.vs_alloca_next` mp_tac >>
      qpat_x_assum `u.vs_alloca_next <= t'.vs_alloca_next` mp_tac >>
@@ -2260,13 +2258,13 @@ Resume internal_prologue_run[separation]:
   qpat_x_assum `!n b sz. local_region cenv2 [env] t' _ _ _ ==> _` mp_tac >>
   qpat_x_assum `!aid b sz. FLOOKUP t'.vs_allocas aid = _ ==> _` mp_tac >>
   qpat_x_assum `caller.vs_alloca_next <= t'.vs_alloca_next` mp_tac >>
-  qpat_x_assum `!name off. FLOOKUP cenv2.ce_vars name = _ ==> _` mp_tac >>
+  qpat_x_assum `!name off. FLOOKUP cenv2.ce_module_vars name = _ ==> _` mp_tac >>
   qpat_x_assum `cenv2.ce_is_ctor = cenv.ce_is_ctor` mp_tac >>
   qpat_x_assum `cenv2.ce_module = cenv.ce_module` mp_tac >>
   qpat_x_assum `ce.ce_vars = cenv.ce_vars` mp_tac >>
   rpt (pop_assum kall_tac) >> rpt strip_tac >>
   simp[immutable_alloca_sep_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
-  `FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+  `FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
      SOME (ImmutableLoc off)` by
     (qpat_x_assum `!name off. _` drule >> simp[]) >>
   `off + type_memory_size tv <= caller.vs_alloca_next` by
@@ -2326,7 +2324,7 @@ Theorem compile_internal_prologue_entry:
     (cenv.ce_is_ctor ==> !i po psz name tv iv io.
       i < LENGTH params /\ ~SND (EL i params) /\
       FLOOKUP cenv.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
-      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
         SOME (ImmutableLoc io) /\
       FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
         | SOME imms => get_source_immutables cenv.ce_module imms) name =
@@ -2335,11 +2333,11 @@ Theorem compile_internal_prologue_entry:
         (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
     caller.vs_alloca_next + internal_stack_size cenv params
       < dimword (:256) /\
-    alloca_room func s0 ==>
+    alloca_room ctx func s0 ==>
     ?s1.
       ~s1.vs_halted /\ s1.vs_current_bb = st1.cs_current_bb /\
       s1.vs_inst_idx = LENGTH st1.cs_current_insts /\
-      stmt_state_rel func (cenv2 with ce_alloca_locals := T) cx
+      stmt_state_rel ctx func (cenv2 with ce_alloca_locals := T) cx
         (vs with scopes := [env]) s1 /\
       fresh_vars_wrt st1 s1 /\
       (?x. return_pc = Var x /\ not_fresh_at st1 x /\
@@ -2365,7 +2363,7 @@ Proof
   simp[frag_exec_def] >>
   disch_then (qspec_then `func` mp_tac) >>
   simp[] >> strip_tac >>
-  `alloca_room func t` by
+  `alloca_room ctx func t` by
     (irule run_inst_seq_alloca_room >>
      qexistsl_tac [`emitted_insts st0 st1`, `s0`] >> simp[] >>
      fs[EVERY_MEM, emitted_insts_def, DROP_LENGTH_APPEND] >>

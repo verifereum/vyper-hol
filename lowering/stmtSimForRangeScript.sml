@@ -973,16 +973,16 @@ Resume compile_for_range_checked_frag[ends]:
   >- (gvs[] >> strip_tac >> disj2_tac >> qexists_tac `fuel` >> simp[] >>
       irule expr_exit_stmt_exit >> qexists `INR ex` >> simp[]) >>
   qpat_x_assum `r1 = _` SUBST_ALL_TAC >> simp[] >> strip_tac >>
-  rename1 `expr_post func cenv cx e1 es sa s1 s0 es1 (IntV n1) op1 t1` >>
+  rename1 `expr_post ctx func cenv cx e1 es sa s1 s0 es1 (IntV n1) op1 t1` >>
   qpat_x_assum `!tv es1. (do raw <- eval_expr cx e1; read_result cx raw od) es = _ ==> _` drule >> strip_tac >>
   qpat_x_assum `IntV n1 = _`
     (SUBST_ALL_TAC o SYM o SIMP_RULE (srw_ss()) []) >>
   `eval_operand op1 t1 = SOME (i2w n1)` by
-    (qpat_x_assum `expr_post _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post ctx _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def, expr_val_rel_def] >> rpt strip_tac >>
      TRY (first_x_assum (qspec_then `tyv` mp_tac)) >>
      gvs[typed_val_to_w256_word_value, word_value_def, val_to_w256_def]) >>
-  `stmt_state_rel func cenv cx es1 t1` by fs[expr_post_def] >>
+  `stmt_state_rel ctx func cenv cx es1 t1` by fs[expr_post_def] >>
   qpat_x_assum `expr_sim _ _ _ _ _ e2 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`s1`, `s2`, `op2`, `r2`, `es2`, `t1`] mp_tac) >>
@@ -1001,7 +1001,7 @@ Resume compile_for_range_checked_frag[ends]:
       qexists_tac `f0` >> simp[] >>
       irule expr_exit_stmt_exit >> qexists `INR ex` >> simp[]) >>
   qpat_x_assum `r2 = _` SUBST_ALL_TAC >> simp[] >> strip_tac >>
-  rename1 `expr_post func cenv cx e2 es1 s1 s2 t1 es2 (IntV n2) op2 t2` >>
+  rename1 `expr_post ctx func cenv cx e2 es1 s1 s2 t1 es2 (IntV n2) op2 t2` >>
   suspend "alloca"
 QED
 
@@ -1009,9 +1009,9 @@ Resume compile_for_range_checked_frag[alloca]:
   `value_has_type tyv (IntV n2) /\ P es2` by
     (qpat_x_assum `!tv2 es2. (do raw <- eval_expr cx e2; read_result cx raw od) es1 = _ ==> _` drule >>
      simp[]) >>
-  `stmt_state_rel func cenv cx es2 t2` by fs[expr_post_def] >>
+  `stmt_state_rel ctx func cenv cx es2 t2` by fs[expr_post_def] >>
   `eval_operand op2 t2 = SOME (i2w n2)` by
-    (qpat_x_assum `expr_post _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post ctx _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def, expr_val_rel_def] >> rpt strip_tac >>
      TRY (first_x_assum (qspec_then `tyv` mp_tac)) >>
      gvs[typed_val_to_w256_word_value, word_value_def, val_to_w256_def]) >>
@@ -1055,7 +1055,7 @@ Resume compile_for_range_checked_frag[alloca]:
     (simp[exec_alloca_def] >> BasicProvers.every_case_tac >> simp[]) >>
   `step_inst_base A t2 = OK sA` by fs[] >>
   qspecl_then [`func`, `cenv`, `cx`, `es2`, `t2`, `A`, `p`,
-               `n2w sz : bytes32`, `sA`] mp_tac stmt_state_rel_exec_alloca >>
+               `n2w sz : bytes32`, `sA`, `ctx`] mp_tac stmt_state_rel_exec_alloca >>
   impl_tac >- fs[] >>
   disch_then (CONJUNCTS_THEN2 assume_tac
     (qx_choose_then `wp` strip_assume_tac)) >>
@@ -1185,7 +1185,7 @@ Resume compile_for_range_checked_frag[state]:
   `!q. not_fresh_at s2 q ==> ~MEM q [cv; rv; g1; z1; g2; z2; ev] /\ q <> p` by
     (rpt strip_tac >> fs[not_fresh_at_def] >> rw[] >>
      first_x_assum irule >> simp[]) >>
-  `stmt_state_rel func cenv cx es2 cc` by
+  `stmt_state_rel ctx func cenv cx es2 cc` by
     (simp[Abbr `cc`, stmt_state_rel_jump_to] >>
      irule stmt_state_rel_vars_frame >> simp[stmt_state_rel_jump_to] >>
      qx_genl_tac [`nm`, `en`, `q`, `qsz`] >> strip_tac >>
