@@ -12,6 +12,18 @@ Libs
 val () = monadsyntax.enable_monad "vyper_evaluation";
 val () = Parse.type_abbrev ("exception", ``:vyperState$exception``);
 
+Theorem source_supply_action_gas:
+  source_supply_action next_gas_reading
+Proof
+  irule source_supply_action_exact_frame >>
+  qx_genl_tac [`st`, `result`, `post`] >>
+  Cases_on `st.gas_obs` >>
+  rw[next_gas_reading_def, return_def, raise_def] >>
+  Cases_on `st` >>
+  simp[vyperStateTheory.evaluation_state_fn_updates,
+       vyperStateTheory.evaluation_state_accessors]
+QED
+
 Theorem source_supply_reads:
   source_supply_action (get_place tv) /\
   source_supply_action get_accounts /\

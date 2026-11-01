@@ -50,7 +50,8 @@ Definition cpscv_outcome_def:
         (update_account 13w (empty_account_state with code := [0w]) empty_accounts);
       co_tStorage := vfmExecution$update_transient_storage 11w
         (update_storage 1w 8w empty_storage) empty_transient_storage;
-      co_logs := [<|logger := 11w; topics := [1w]; data := [8w]|>]; co_toDelete := [] |>
+      co_logs := [<|logger := 11w; topics := [1w]; data := [8w]|>];
+      co_toDelete := []|>
 End
 val () = cv_auto_trans cpscv_outcome_def;
 

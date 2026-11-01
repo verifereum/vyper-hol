@@ -33,7 +33,7 @@ Theorem call_external_function_read_only:
   ~cx.in_deploy /\
   state_rel_frame machine_frame (eval_stmts cx body) /\
   (mut = View \/ mut = Pure) /\
-  call_external_function orc am cx nr mut ts mods args dflts vals body ret =
+  call_external_function orc gobs am cx nr mut ts mods args dflts vals body ret =
     (INL v, am', rqs) ==>
   am' = am
 Proof
@@ -47,18 +47,19 @@ Proof
          else return ());
         send_call_value mut cx; eval_stmts cx body od)` by
     (irule machine_frame_external_body >> simp[]) >>
-  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[call_external_function_def] >>
   IF_CASES_TAC >> simp[] >>
-  Cases_on `evaluate_defaults cx am (DROP (LENGTH dflts + LENGTH vals - LENGTH args) dflts)` >>
-  simp[] >> rename1 `SOME dvs` >>
+  Cases_on `evaluate_defaults cx am gobs (DROP (LENGTH dflts + LENGTH vals - LENGTH args) dflts)` >>
+  simp[] >> rename1 `SOME dvg` >> Cases_on `dvg` >> simp[] >>
+  rename1 `bind_arguments _ _ (vals ++ dvs)` >>
   Cases_on `bind_arguments (type_env_all_modules mods) args (vals ++ dvs)` >>
   simp[] >> rename1 `SOME env` >>
-  qmatch_goalsub_abbrev_tac `action (initial_state am [env] with <|outcomes := orc; requests := []|>)` >>
+  qmatch_goalsub_abbrev_tac `action (initial_state am [env] with <|outcomes := orc; requests := []; gas_obs := gobs'|>)` >>
   qpat_x_assum `state_rel_frame machine_frame action`
-    (qspec_then `initial_state am [env] with <|outcomes := orc; requests := []|>` mp_tac o
+    (qspec_then `initial_state am [env] with <|outcomes := orc; requests := []; gas_obs := gobs'|>` mp_tac o
      REWRITE_RULE [state_rel_frame_def]) >>
-  Cases_on `action (initial_state am [env] with <|outcomes := orc; requests := []|>)` >>
+  Cases_on `action (initial_state am [env] with <|outcomes := orc; requests := []; gas_obs := gobs'|>)` >>
   simp[] >> strip_tac >> rename1 `machine_frame _ st` >>
   `abstract_machine_from_state am.sources am.exports am.layouts st = am` by
     (irule machine_frame_reconstruct >>
@@ -74,7 +75,7 @@ Theorem selected_entry_external_function_frame:
   check_contract F am.layouts tx.target mods = SOME art /\
   selected_entry am tx mods (mut,nr,args,dflts,ret,body) /\
   (mut = View \/ mut = Pure) /\
-  call_external_function orc am
+  call_external_function orc gobs am
     (initial_evaluation_context am.sources am.layouts tx
       (find_function_module am tx.target tx.function_name))
     nr mut ts mods args dflts vals body ret = (INL v, am', rqs) ==>

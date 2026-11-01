@@ -61,11 +61,13 @@ val _ = Theory.add_ML_dependency "stateEquivMaskLib";
  *   - vs_accounts  : Account states (including persistent storage)
  *   - vs_returndata: Return value or revert reason
  *   - vs_halted    : Whether execution halted
+ *   - vs_logs      : Emitted logs
  *   - vs_transient : Transient storage (persists across successful subcalls,
  *                    rolled back on revert, cleared at tx boundary)
  *   - vs_immutables: Immutable storage (written by ISTORE in constructor,
  *                    baked into deployed bytecode, read-only at runtime)
  *   - vs_requests  : External-call requests, compared on success only
+ *   - vs_pending_deletions: Deletions deferred to the end of the transaction
  * Leftover outcomes are not observable; aborts still use revert_equiv.
  *
  * USE FOR: Proving that two executions have the same external effect,

@@ -25,7 +25,7 @@ QED
 
 Theorem delegate_call_initial_supply:
   accounts_supply_bounded accounts ==>
-  supply_state (2 ** 256) (make_delegate_call_state cx target data accounts ts)
+  supply_state (2 ** 256) (make_delegate_call_state cx target data gas accounts ts)
 Proof
   rw[supply_state_def] >> FIRST [
     (simp[make_delegate_call_state_def] >> pairarg_tac >> simp[]) >> NO_TAC,
@@ -132,12 +132,12 @@ QED
 
 Theorem run_delegate_call_supply:
   accounts_supply_bounded accounts /\
-  run_delegate_call cx target data accounts ts =
+  run_delegate_call cx target data gas accounts ts =
     SOME (success,returndata,accounts',ts',logs, deletions) ==>
   accounts_supply_bounded accounts'
 Proof
   strip_tac >>
-  `supply_state (2 ** 256) (make_delegate_call_state cx target data accounts ts)` by
+  `supply_state (2 ** 256) (make_delegate_call_state cx target data gas accounts ts)` by
     (irule delegate_call_initial_supply >> simp[]) >>
   gvs[run_delegate_call_def, AllCaseEqs()] >> FIRST [
     drule_all (SRULE [] run_call_extract_supply) >> simp[],

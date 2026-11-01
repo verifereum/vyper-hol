@@ -147,7 +147,7 @@ val () = cv_auto_trans system_machine_def;
 
 Definition system_external_halt_observation_def:
   system_external_halt_observation orc =
-    let r = call_external orc system_machine
+    let r = call_external orc [] system_machine
       (empty_call_txn with <|target := 11w; function_name := "foo"|>) in
     FST r = INR HaltException /\
     let am = FST (SND r) in
@@ -175,7 +175,7 @@ Definition system_constructor_observation_def:
     let am = initial_machine_state with accounts :=
       update_account 11w (empty_account_state with balance := 17)
         (update_account 12w (empty_account_state with balance := 5) empty_accounts) in
-    case load_contract NONE am
+    case load_contract NONE [] am
       (empty_call_txn with <|target := 11w; function_name := "__init__"|>)
       [(NONE,prog)] [] of
     | INR _ => F
@@ -215,7 +215,8 @@ Theorem adoption_deletion_prefix_all_stages:
         DROP (off + LENGTH (TAKE ret_size outcome.co_returnData)) asm.as_memory |>))
 Proof
   simp[adopt_call_outcome_equation, consume_call_outcome_def,
-       asm_consume_call_outcome_def, adopt_outcome_def] >>
+       asm_consume_call_outcome_def, adopt_outcome_def,
+       adopt_outcome_deletions_def] >>
   rpt strip_tac >> simp[]
 QED
 
@@ -226,7 +227,8 @@ Theorem static_and_failed_deletions_are_ignored:
   (SND (consume_call_outcome rq off ret_size vs)).vs_pending_deletions =
     vs.vs_pending_deletions
 Proof
-  rw[adopt_call_outcome_equation, consume_call_outcome_def, adopt_outcome_def]
+  rw[adopt_call_outcome_equation, consume_call_outcome_def, adopt_outcome_def,
+     adopt_outcome_deletions_def]
 QED
 
 Definition deletion_outcome_def:
@@ -287,7 +289,7 @@ Definition deletion_direct_call_def:
     if raw then
       Call NoneT (RawCallTarget
         <|rcf_max_outsize := 0; rcf_is_delegate := F;
-          rcf_is_static := F; rcf_revert_on_failure := T|>)
+          rcf_is_static := F; rcf_revert_on_failure := T; rcf_kws := [EKValue]|>)
         [system_address 42w;
          Literal (BaseT (BytesT (Dynamic 0))) (BytesL []);
          Literal (BaseT (UintT 256)) (IntL 0)] NONE

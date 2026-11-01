@@ -595,8 +595,8 @@ End
 Definition asm_consume_call_outcome_def:
   asm_consume_call_outcome rq ro rs stk s =
     let (outcome, rest) = take_outcome rq s.as_outcomes;
-        (accounts, ts, logs, pending) = adopt_outcome rq outcome
-          (s.as_accounts, s.as_transient, s.as_logs, s.as_pending_deletions);
+        (accounts, ts, logs) = adopt_outcome rq outcome
+          (s.as_accounts, s.as_transient, s.as_logs);
         bytes = TAKE rs outcome.co_returnData;
         output : bytes32 = if outcome.co_success then 1w else 0w
     in AsmOK (asm_next (s with <|
@@ -606,7 +606,8 @@ Definition asm_consume_call_outcome_def:
          as_accounts := accounts;
          as_transient := ts;
          as_logs := logs;
-          as_pending_deletions := pending;
+         as_pending_deletions :=
+           adopt_outcome_deletions rq outcome s.as_pending_deletions;
          as_returndata := outcome.co_returnData;
          as_memory := TAKE ro s.as_memory ++ bytes ++
                       DROP (ro + LENGTH bytes) s.as_memory |>))

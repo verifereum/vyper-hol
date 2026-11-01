@@ -14,6 +14,7 @@ Theorem stop_view_fields:
   s.vs_allocas = t.vs_allocas /\ s.vs_alloca_next = t.vs_alloca_next /\
   s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient /\
   s.vs_logs = t.vs_logs /\ s.vs_requests = t.vs_requests /\
+  s.vs_pending_deletions = t.vs_pending_deletions /\
   s.vs_labels = t.vs_labels
 Proof
   simp[stop_view_def, halt_state_def, venom_state_component_equality]

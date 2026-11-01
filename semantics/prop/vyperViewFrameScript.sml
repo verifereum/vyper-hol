@@ -52,7 +52,7 @@ Theorem call_external_view_frame:
   check_contract F am.layouts tx.target mods = SOME art /\
   selected_entry am tx mods (mut,nr,args,dflts,ret,body) /\
   (mut = View \/ mut = Pure) /\
-  call_external orc am tx = (INL v, am', rqs) ==>
+  call_external orc gobs am tx = (INL v, am', rqs) ==>
   am' = finalize_pending_deletions am
 Proof
   strip_tac >>
@@ -61,16 +61,16 @@ Proof
                 mp_tac) >>
   simp[] >> strip_tac >>
   (* Replaced proof-local equation (omitted Halt finalization):
-  `call_external orc am tx =
-     case call_external_function orc am
+  `call_external orc gobs am tx =
+     case call_external_function orc gobs am
             (initial_evaluation_context am.sources am.layouts tx
                (find_function_module am tx.target tx.function_name))
             nr mut ts mods args dflts tx.args body ret of
        (INL value, am1, rqs1) => (INL value, finalize_pending_deletions am1, rqs1)
      | failure => failure` by (irule call_external_selected_entry >> fs[]) >>
   *)
-  `call_external orc am tx =
-     case call_external_function orc am
+  `call_external orc gobs am tx =
+     case call_external_function orc gobs am
             (initial_evaluation_context am.sources am.layouts tx
                (find_function_module am tx.target tx.function_name))
             nr mut ts mods args dflts tx.args body ret of

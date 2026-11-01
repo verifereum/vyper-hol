@@ -66,7 +66,7 @@ Theorem aggregate_immutable_footprint_transport[local]:
   immutable_metadata_frame es es1 /\
   (ce.ce_is_ctor ==>
    !name itv iv io.
-     FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) =
+     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables ce.ce_module imms) name =
@@ -74,7 +74,7 @@ Theorem aggregate_immutable_footprint_transport[local]:
      regions_disjoint io (type_memory_size itv) b n) ==>
   (ce.ce_is_ctor ==>
    !name itv iv io.
-     FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) =
+     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es1.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables ce.ce_module imms) name =
@@ -114,7 +114,7 @@ Theorem aggregate_make_tuple_sim:
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
    !name itv iv io.
-     FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) =
+     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables ce.ce_module imms) name =
@@ -238,7 +238,7 @@ Resume aggregate_make_tuple_sim[after_add]:
   drule_all aggregate_child_metadata_frame >> strip_tac >>
   `(ce.ce_is_ctor ==>
     !name itv iv io.
-      FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) = SOME (ImmutableLoc io) /\
+      FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
       FLOOKUP (case ALOOKUP es1.immutables cx.txn.target of NONE => FEMPTY
         | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
       regions_disjoint io (type_memory_size itv) (b+off)
@@ -511,7 +511,7 @@ Theorem aggregate_struct_fields_sim:
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
    !name itv iv io.
-     FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) =
+     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables ce.ce_module imms) name =
@@ -587,7 +587,7 @@ Theorem aggregate_make_array_elems_sim:
   off + LENGTH args * type_memory_size tv <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
    !name itv iv io.
-     FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) =
+     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables ce.ce_module imms) name =
@@ -658,7 +658,7 @@ Theorem aggregate_make_array_start_sim:
   b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
    !name itv iv io.
-     FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) =
+     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables ce.ce_module imms) name =
@@ -732,7 +732,7 @@ Theorem aggregate_make_array_sim:
   b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
    !name itv iv io.
-     FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) =
+     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables ce.ce_module imms) name =

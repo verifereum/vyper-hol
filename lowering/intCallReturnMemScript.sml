@@ -76,7 +76,7 @@ Theorem compile_internal_return_memory_frag:
     val_wf tv v /\ type_memory_bytes cenv ty = type_memory_size tv /\
     w2n bw + type_memory_size tv + 64 < dimword (:256) /\
     (cenv.ce_is_ctor ==> !name itv iv off.
-       FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+       FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
          SOME (ImmutableLoc off) /\
        FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
          | SOME imms => get_source_immutables cenv.ce_module imms) name =

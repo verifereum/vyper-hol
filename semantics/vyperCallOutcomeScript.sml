@@ -38,11 +38,13 @@ val () = take_call_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_tr
 
 Definition adopt_call_outcome_def:
   adopt_call_outcome rq outcome st =
-    let (accounts, tStorage, logs, pending) =
+    let (accounts, tStorage, logs) =
       adopt_outcome rq outcome
-        (st.accounts, st.tStorage, st.logs, st.pending_deletions) in
+        (st.accounts, st.tStorage, st.logs) in
     return () (st with <| accounts := accounts; tStorage := tStorage;
-                         logs := logs; pending_deletions := pending |>)
+                         logs := logs;
+                         pending_deletions := adopt_outcome_deletions rq outcome
+                           st.pending_deletions |>)
 End
 val () = adopt_call_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_trans;
 
@@ -66,7 +68,8 @@ Theorem adopt_call_outcome_equation:
                   pending_deletions := outcome.co_toDelete ++ st.pending_deletions|>
      else st)
 Proof
-  rw[adopt_call_outcome_def, adopt_outcome_def, return_def]
+  rw[adopt_call_outcome_def, adopt_outcome_def,
+     adopt_outcome_deletions_def, return_def]
 QED
 
 Theorem adopt_call_outcome_frame:

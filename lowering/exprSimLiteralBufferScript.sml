@@ -479,7 +479,7 @@ Theorem literal_state_memory_frame:
        mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) /\
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
     (cenv.ce_is_ctor ==> !name tv v off.
-      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
         SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
         | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>

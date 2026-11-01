@@ -279,9 +279,8 @@ Proof
   simp[call_outcome_component_equality]
 QED
 
-(* Both sides adopt accounts, transient storage, logs and pending deletions
-   with adopt_outcome. Their outcomes and requests agree as take_outcome_agree
-   gives; pending lists may grow before outer finalization. *)
+(* Both sides adopt the agreed outcome. Pending lists may grow before
+   outer finalization. *)
 Theorem accounts_rel_adopt_call_outcome:
   !cx rq rq' outcome outcome' es es' s s' logs.
     accounts_rel cx es s /\ adopt_call_outcome rq outcome es = (INL (), es') /\
@@ -292,11 +291,10 @@ Theorem accounts_rel_adopt_call_outcome:
     transient_agree cx outcome.co_tStorage outcome'.co_tStorage /\
     s'.vs_accounts =
       FST (adopt_outcome rq' outcome'
-             (s.vs_accounts, s.vs_transient, logs, s.vs_pending_deletions)) /\
+             (s.vs_accounts, s.vs_transient, logs)) /\
     s'.vs_transient =
       FST (SND (adopt_outcome rq' outcome'
-                  (s.vs_accounts, s.vs_transient, logs,
-                   s.vs_pending_deletions))) ==>
+                  (s.vs_accounts, s.vs_transient, logs))) ==>
     accounts_rel cx es' s'
 Proof
   rw[adopt_call_outcome_equation] >>

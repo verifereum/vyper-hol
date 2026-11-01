@@ -145,7 +145,7 @@ Theorem compile_zero_words_run:
     (!name b len. local_region cenv es.scopes s name b len ==>
        w2n w+sz <= b \/ b+len <= w2n w) /\
     (cenv.ce_is_ctor ==> !name tv v off.
-      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) = SOME (ImmutableLoc off) /\
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
         | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
       regions_disjoint off (type_memory_size tv) (w2n w) (32*n)) ==>
@@ -198,7 +198,7 @@ Theorem empty_tail_run[local]:
     (!name b len. local_region cenv es.scopes s name b len ==>
       w2n w+sz <= b \/ b+len <= w2n w) /\
     (cenv.ce_is_ctor ==> !name tv v off.
-      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) = SOME (ImmutableLoc off) /\
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
         | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
       regions_disjoint off (type_memory_size tv) (w2n w) (if header then 32 else sz)) ==>

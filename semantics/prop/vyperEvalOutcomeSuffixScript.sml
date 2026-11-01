@@ -151,9 +151,11 @@ Theorem outcomes_frame_primitives[simp]:
   outcomes_frame (transfer_value sender target amount) /\
   outcomes_frame (acquire_nonreentrant_lock target lock view) /\
   outcomes_frame (release_nonreentrant_lock target lock) /\
-  outcomes_frame (push_function fn sc cx) /\ outcomes_frame (pop_function scs)
+  outcomes_frame (push_function fn sc cx) /\ outcomes_frame (pop_function scs) /\
+  outcomes_frame next_gas_reading
 Proof
   simp[outcomes_frame_def, check_def, type_check_def, assert_def,
+    next_gas_reading_def,
     get_scopes_def, set_scopes_def, push_scope_def, pop_scope_def,
     push_scope_with_var_def, new_variable_def, update_accounts_def,
     update_transient_def, append_logs_def, update_pending_deletions_def, push_log_def,
@@ -320,7 +322,7 @@ Proof
 QED
 
 Theorem outcomes_frame_raw_call[simp]:
-  outcomes_frame (eval_raw_call cx flags target_addr calldata amount)
+  outcomes_frame (eval_raw_call cx flags target_addr calldata amount gas)
 Proof
   simp_tac bool_ss [eval_raw_call_def, LET_THM] >>
   rpt (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
@@ -486,6 +488,7 @@ Theorem outcomes_frame_adopt:
   outcomes_frame (adopt_call_outcome rq co)
 Proof
   simp[outcomes_frame_def, adopt_call_outcome_def, extCallOracleTheory.adopt_outcome_def,
+       extCallOracleTheory.adopt_outcome_deletions_def,
        return_def] >> rpt gen_tac >> CASE_TAC >> simp[]
 QED
 

@@ -21,7 +21,8 @@ val supply_facts = List.concat (map (CONJUNCTS o SPEC_ALL)
    source_supply_check_create_blueprint, source_supply_action_raw_call,
    source_supply_action_ext_call, source_supply_action_send,
    source_supply_action_create, source_supply_action_transfer,
-   source_supply_action_read, source_supply_action_take]);
+   source_supply_action_read, source_supply_action_take,
+   source_supply_action_gas]);
 
 val supply_net = vyperSupplyProofLib.fact_net supply_facts
   [source_supply_action_bind, source_supply_action_finally,

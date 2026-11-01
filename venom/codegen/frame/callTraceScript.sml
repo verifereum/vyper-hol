@@ -16,14 +16,15 @@ Libs
 
 (* ===== Observer state and extraction ===== *)
 
+(* pending saves the caller's log and deletion counts. Descendants must not
+ * overwrite this frame's pending request. Deletions grow by consing, unlike
+ * logs. *)
 Datatype:
   trace_obs = <| entries : (call_request # call_outcome) list;
                  readings : bytes32 list;
                  pending : (call_request # num # num) option |>
 End
 
-(* Save the caller's log and deletion counts. Descendants must not overwrite
- * this frame's pending request. Deletions grow by consing, unlike logs. *)
 Definition next_opcode_def:
   next_opcode c =
     if LENGTH c.msgParams.code <= c.pc then SOME Stop
@@ -54,7 +55,8 @@ Definition request_of_def:
 End
 
 (* The caller's post-step top stack word is the success flag. Only logs
- * after the saved pre-call count belong to this outcome. *)
+ * after the saved pre-call count n, and deletions consed on top of the saved
+ * pre-call count m, belong to this outcome. *)
 Definition outcome_of_def:
   outcome_of s n m =
     let c = FST (HD s.contexts)
@@ -63,7 +65,8 @@ Definition outcome_of_def:
           co_accounts := s.rollback.accounts;
           co_tStorage := s.rollback.tStorage;
           co_logs := DROP n c.logs;
-          co_toDelete := TAKE (LENGTH s.rollback.toDelete - m) s.rollback.toDelete |>
+          co_toDelete :=
+            TAKE (LENGTH s.rollback.toDelete - m) s.rollback.toDelete |>
 End
 
 (* ===== Exact observer table (PLAN section 5.2) ===== *)

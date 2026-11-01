@@ -21,7 +21,8 @@ val dispatch_defs =
    call_probe_outcome_def, init_venom_state_def, empty_call_context_def,
    venom_call_request_def, read_memory_def, consume_call_outcome_def,
    take_outcome_def, computed_precompile_addresses, record_request_def,
-   failed_outcome_def, adopt_outcome_def, write_memory_with_expansion_def,
+   failed_outcome_def, adopt_outcome_def, adopt_outcome_deletions_def,
+   write_memory_with_expansion_def,
    update_var_def, lookup_var_def, mk_inst_def, step_inst_base_def,
    exec_ext_call_def, eval_operand_def, w2w_n2w];
 
@@ -150,6 +151,7 @@ val computed_defs =
    exec_ext_call_def, venom_call_request_def, read_memory_def,
    consume_call_outcome_def, take_outcome_def,
    record_request_def, computed_precompile_def, adopt_outcome_def,
+   adopt_outcome_deletions_def,
    failed_outcome_def, write_memory_with_expansion_def,
    lookup_var_def, update_var_def, w2w_n2w,
    precompile_result_empty_ecrecover, precompile_result_empty_ec,
@@ -194,21 +196,6 @@ Proof
   mp_tac consume_computed_empty_ec >>
   simp[Excl "consume_call_outcome_eq", LET_THM] >> strip_tac >>
   simp[Excl "consume_call_outcome_eq", probe_computed_dispatch]
-QED
-
-Theorem consume_empty_return_size[local]:
-  consume_call_outcome rq ro ret_size s = (word, t) ==>
-  t.vs_returndata = [] ==>
-  !new_size. consume_call_outcome rq ro new_size s = (word, t)
-Proof
-  rpt strip_tac >>
-  `(FST (take_outcome rq s.vs_outcomes)).co_returnData = []` by
-    (qpat_x_assum `consume_call_outcome _ _ _ _ = _`
-       (mp_tac o AP_TERM ``\p:bytes32 # venom_state. (SND p).vs_returndata``) >>
-     PURE_REWRITE_TAC[consume_call_outcome_eq] >> simp[]) >>
-  `consume_call_outcome rq ro new_size s = consume_call_outcome rq ro ret_size s` by
-    (PURE_REWRITE_TAC[consume_call_outcome_eq] >> simp[]) >>
-  gvs[Excl "consume_call_outcome_eq"]
 QED
 
 Theorem consume_invalid_ec_zero_output[local]:

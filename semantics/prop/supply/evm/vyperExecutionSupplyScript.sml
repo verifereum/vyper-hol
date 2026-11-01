@@ -114,7 +114,7 @@ QED
 Theorem make_delegate_call_state_supply:
   account_supply_bound budget accounts ==>
   execution_supply_bound budget
-    (make_delegate_call_state cx target data accounts ts)
+    (make_delegate_call_state cx target data gas accounts ts)
 Proof
   simp[make_delegate_call_state_def] >>
   pairarg_tac >> simp[execution_supply_bound_def]

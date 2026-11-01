@@ -11,7 +11,8 @@ Ancestors
 Theorem abi_encoder_sequence_post_registered:
   abi_encoder_sequence_post at av out st limit_st d initial actual /\
   actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
-  actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests ==>
+  actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
+  actual.vs_pending_deletions = initial.vs_pending_deletions ==>
   abi_encoder_registered_effect ids [(d,LENGTH (enc at av))] initial actual
 Proof
   simp_tac bool_ss [abi_encoder_sequence_post_def, abi_decode_frame_def,
@@ -37,6 +38,7 @@ Theorem abi_encoder_shared_leaf_sequence:
   abi_encoder_sequence_post at av out start limit_st d initial raw /\
   raw.vs_accounts = initial.vs_accounts /\ raw.vs_transient = initial.vs_transient /\
   raw.vs_logs = initial.vs_logs /\ raw.vs_requests = initial.vs_requests /\
+  raw.vs_pending_deletions = initial.vs_pending_deletions /\
   fn_has_code start end_st func /\ abi_decoder_budget first last b cap initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
   initial.vs_inst_idx = LENGTH start.cs_current_insts ==>

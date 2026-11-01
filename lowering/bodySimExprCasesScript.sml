@@ -187,7 +187,7 @@ Theorem body_builtin_rest_case:
     (!bop. bt <> Bop bop) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len ==>
+       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas ==>
        body_exprs_ok cx es) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
@@ -213,7 +213,9 @@ Proof
            (first_x_assum irule >> simp[type_check_def, assert_def]) >>
          simp[exprs_case_def] >> metis_tac[body_expr_ok_case]) >>
      `body_exprs_ok cx es` by
-       (first_x_assum irule >> simp[type_check_def, assert_def]) >>
+       (Cases_on `bt = Env MsgGas`
+        >- gvs[builtin_args_length_ok_def, body_exprs_ok_def] >>
+        first_x_assum irule >> simp[type_check_def, assert_def]) >>
      metis_tac[body_exprs_ok_case]) >>
   irule compile_builtin_case >> gvs[]
 QED
@@ -236,7 +238,7 @@ Theorem body_builtin_case:
   !cx ty bt es.
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len ==>
+       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas ==>
        body_exprs_ok cx es) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =

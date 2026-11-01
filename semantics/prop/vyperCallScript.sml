@@ -197,8 +197,8 @@ Proof
 QED
 
 Theorem call_external_transaction_clears_input_logs:
-  call_external_transaction orc (am with logs := logs) tx =
-  call_external_transaction orc am tx
+  call_external_transaction orc gobs (am with logs := logs) tx =
+  call_external_transaction orc gobs am tx
 Proof
   simp[call_external_transaction_def, clear_machine_logs_def]
 QED
@@ -225,7 +225,7 @@ in
 end;
 
 Theorem call_external_function_error_rollback:
-  call_external_function orc am cx nr mut ts all_mods args dflts vals body ret = (INR e, am', rqs) /\
+  call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret = (INR e, am', rqs) /\
   e <> HaltException ⇒
   am' = am
 Proof
@@ -234,7 +234,7 @@ Proof
 QED
 
 Theorem call_external_error_rollback:
-  call_external orc am tx = (INR e, am', rqs) /\ e <> HaltException ⇒
+  call_external orc gobs am tx = (INR e, am', rqs) /\ e <> HaltException ⇒
   am' = am
 Proof
   simp[Once call_external_def] >> strip_tac >> gvs[AllCaseEqs()] >>
@@ -242,7 +242,7 @@ Proof
 QED
 
 Theorem call_external_transaction_error_logs_empty:
-  call_external_transaction orc am tx = (INR e, am', rqs) /\ e <> HaltException ⇒ am'.logs = []
+  call_external_transaction orc gobs am tx = (INR e, am', rqs) /\ e <> HaltException ⇒ am'.logs = []
 Proof
   rw[call_external_transaction_def] >>
   drule_all call_external_error_rollback >>
@@ -250,7 +250,7 @@ Proof
 QED
 
 Theorem call_external_error_no_state_change:
-  call_external orc am tx = (INR e, am', rqs) /\ e <> HaltException ⇒
+  call_external orc gobs am tx = (INR e, am', rqs) /\ e <> HaltException ⇒
   am'.accounts = am.accounts ∧
   am'.tStorage = am.tStorage ∧
   am'.immutables = am.immutables

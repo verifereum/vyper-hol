@@ -108,7 +108,7 @@ Proof
        computed_precompile_addresses, send_outcome_def, cpscv_outcome_def,
        send_state_def, cpscv_state_def, empty_state_def, UNCURRY,
        (send_success_payload_account_guard |> SRULE [send_outcome_def, cpscv_outcome_def]),
-       adopt_call_outcome_def, adopt_outcome_def,
+       adopt_call_outcome_def, adopt_outcome_def, adopt_outcome_deletions_def,
        vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
        vyperStateTheory.append_logs_def,
        empty_account_state_def])

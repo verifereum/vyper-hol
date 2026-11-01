@@ -2803,11 +2803,11 @@ Proof
   qabbrev_tac `bytes = TAKE rs (FST (take_outcome rq s2.vs_outcomes)).co_returnData` >>
   qabbrev_tac `rd = (FST (take_outcome rq s2.vs_outcomes)).co_returnData` >>
   qabbrev_tac `ac = FST (adopt_outcome rq (FST (take_outcome rq s2.vs_outcomes))
-                         (s2.vs_accounts,s2.vs_transient,s2.vs_logs,s2.vs_pending_deletions))` >>
+                         (s2.vs_accounts,s2.vs_transient,s2.vs_logs))` >>
   qabbrev_tac `ts = FST (SND (adopt_outcome rq (FST (take_outcome rq s2.vs_outcomes))
-                         (s2.vs_accounts,s2.vs_transient,s2.vs_logs,s2.vs_pending_deletions)))` >>
-  qabbrev_tac `lgs = FST (SND (SND (adopt_outcome rq (FST (take_outcome rq s2.vs_outcomes))
-                         (s2.vs_accounts,s2.vs_transient,s2.vs_logs,s2.vs_pending_deletions))))` >>
+                         (s2.vs_accounts,s2.vs_transient,s2.vs_logs)))` >>
+  qabbrev_tac `lgs = SND (SND (adopt_outcome rq (FST (take_outcome rq s2.vs_outcomes))
+                         (s2.vs_accounts,s2.vs_transient,s2.vs_logs)))` >>
   `m2v_inv_noix fn
     (s1 with <| vs_memory := (write_memory_with_expansion ro bytes s1).vs_memory;
                 vs_transient := ts; vs_returndata := rd;
@@ -2819,8 +2819,8 @@ Proof
      rpt strip_tac >> first_x_assum irule >> simp[]) >>
   mp_tac (Q.SPECL [`record_request rq s2.vs_requests`,
                  `SND (take_outcome rq s2.vs_outcomes)`,
-                 `SND (SND (SND (adopt_outcome rq (FST (take_outcome rq s2.vs_outcomes))
-                   (s2.vs_accounts,s2.vs_transient,s2.vs_logs,s2.vs_pending_deletions))))`]
+                 `adopt_outcome_deletions rq (FST (take_outcome rq s2.vs_outcomes))
+                   s2.vs_pending_deletions`]
     (Q.INST
       [`s1` |-> `s1 with
          <|vs_memory := (write_memory_with_expansion ro bytes s1).vs_memory;

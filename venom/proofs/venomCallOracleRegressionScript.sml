@@ -29,7 +29,8 @@ Definition call_probe_outcome_def:
        co_accounts := ((8w:address) =+
          (empty_account_state with balance := 23)) empty_accounts;
        co_tStorage := K (K (42w:bytes32));
-       co_logs := [<| logger := 8w; topics := [1w]; data := [42w] |>] ; co_toDelete := [] |>
+       co_logs := [<| logger := 8w; topics := [1w]; data := [42w] |>];
+       co_toDelete := [] |>
 End
 
 (* Simplify the projections before EVAL: evaluating an entire function-valued
@@ -39,7 +40,8 @@ val probe_defs =
    init_venom_state_def, empty_call_context_def, venom_call_request_def,
    read_memory_def, consume_call_outcome_def, take_outcome_def,
    computed_precompile_addresses, record_request_def, failed_outcome_def,
-   adopt_outcome_def, write_memory_with_expansion_def,
+   adopt_outcome_def, adopt_outcome_deletions_def,
+   write_memory_with_expansion_def,
    update_var_def, lookup_var_def, mk_inst_def, step_inst_base_def,
    w2w_n2w];
 
@@ -186,7 +188,8 @@ Proof
   simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,
        take_outcome_def, record_request_def, computed_precompile_def,
        precompile_result_empty_ecrecover, failed_outcome_def,
-       adopt_outcome_def, write_memory_with_expansion_def,
+       adopt_outcome_def, adopt_outcome_deletions_def,
+       write_memory_with_expansion_def,
        call_probe_state_def, init_venom_state_def, empty_call_context_def,
        w2w_n2w]
 QED
@@ -203,7 +206,8 @@ Theorem consume_computed_sha256:
 Proof
   simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,
        take_outcome_def, record_request_def, computed_precompile_def,
-       failed_outcome_def, adopt_outcome_def, write_memory_with_expansion_def,
+       failed_outcome_def, adopt_outcome_def, adopt_outcome_deletions_def,
+       write_memory_with_expansion_def,
        call_probe_state_def, init_venom_state_def, empty_call_context_def,
        byteTheory.LENGTH_word_to_bytes, w2w_n2w]
 QED
@@ -221,6 +225,7 @@ Proof
   simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,
        take_outcome_def, record_request_def, computed_precompile_def,
        precompile_result_empty_ec, failed_outcome_def, adopt_outcome_def,
+       adopt_outcome_deletions_def,
        write_memory_with_expansion_def, call_probe_state_def,
        init_venom_state_def, empty_call_context_def, w2w_n2w]
 QED
@@ -238,6 +243,7 @@ Proof
   simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,
        take_outcome_def, record_request_def, computed_precompile_def,
        precompile_result_invalid_ec, failed_outcome_def, adopt_outcome_def,
+       adopt_outcome_deletions_def,
        write_memory_with_expansion_def, call_probe_state_def,
        init_venom_state_def, empty_call_context_def, w2w_n2w,
        TAKE_APPEND1, TAKE_APPEND2] >> EVAL_TAC
@@ -255,6 +261,23 @@ Theorem consume_nonzero_precompile_ordinary:
      t.vs_outcomes = [failed_outcome call_probe_request] /\
      t.vs_requests = [call_probe_request; rq] /\ t.vs_returndata = [9w] /\
      t.vs_memory = [1w; 9w; 3w; 4w]
+Proof
+  simp probe_defs >> EVAL_TAC
+QED
+
+(* A successful non-static outcome prepends its deletion delta to the queue;
+ * a static request or a failed outcome leaves the queue alone. *)
+Theorem consume_deletion_delta:
+  let out = call_probe_outcome with co_toDelete := [5w];
+      s = call_probe_state with <|
+        vs_outcomes := [out]; vs_pending_deletions := [7w] |>;
+      sf = s with vs_outcomes := [out with co_success := F];
+      rq_static = call_probe_request with cr_static := T
+  in (SND (consume_call_outcome call_probe_request 1 3 s)).vs_pending_deletions
+       = [5w; 7w] /\
+     (SND (consume_call_outcome rq_static 1 3 s)).vs_pending_deletions = [7w] /\
+     (SND (consume_call_outcome call_probe_request 1 3 sf)).vs_pending_deletions
+       = [7w]
 Proof
   simp probe_defs >> EVAL_TAC
 QED

@@ -206,9 +206,9 @@ QED
      regions (step_inst_invoke_live_regions's premises). *)
 Theorem immutables_rel_env_transport[local]:
   immutables_rel cenv' addr src ctor es ss /\
-  (!n off. FLOOKUP cenv.ce_vars (module_var_key (src,n)) =
+  (!n off. FLOOKUP cenv.ce_module_vars (src,n) =
              SOME (ImmutableLoc off) ==>
-           FLOOKUP cenv'.ce_vars (module_var_key (src,n)) =
+           FLOOKUP cenv'.ce_module_vars (src,n) =
              SOME (ImmutableLoc off)) ==>
   immutables_rel cenv addr src ctor es ss
 Proof
@@ -235,9 +235,9 @@ Theorem invoke_intret_state_rel:
     intret_q callee cenv' cx' tv v (es2 with scopes := []) (IntRet ret cs') /\
     cx'.txn = cx.txn /\ cx'.sources = cx.sources /\ cx'.layouts = cx.layouts /\
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor /\
-    (!n off. FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, n)) =
+    (!n off. FLOOKUP cenv.ce_module_vars (cenv.ce_module, n) =
                SOME (ImmutableLoc off) ==>
-             FLOOKUP cenv'.ce_vars (module_var_key (cenv.ce_module, n)) =
+             FLOOKUP cenv'.ce_module_vars (cenv.ce_module, n) =
                SOME (ImmutableLoc off)) /\
     callee_writes_above s.vs_alloca_next excl s.vs_memory cs'.vs_memory /\
     (!n lo sz. local_region cenv es.scopes s n lo sz ==>

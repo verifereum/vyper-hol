@@ -34,9 +34,9 @@ Theorem word_compile_expr_toplevelname:
   word_result_ok sb vv
 Proof
   simp[compile_expr_body_def, expr_type_def, LET_THM] >>
-  Cases_on `FLOOKUP cenv.ce_vars (module_var_key nsid)` >> simp[] >-
+  Cases_on `FLOOKUP cenv.ce_module_vars nsid` >> simp[] >-
     (strip_tac >> rpt (pairarg_tac >> gvs[word_result_ok_def])) >>
-  rename1 `FLOOKUP cenv.ce_vars _ = SOME bnd` >> Cases_on `bnd` >> simp[] >>
+  rename1 `FLOOKUP cenv.ce_module_vars _ = SOME bnd` >> Cases_on `bnd` >> simp[] >>
   strip_tac >>
   rpt (pairarg_tac >> gvs[word_result_ok_def]) >> gvs[word_result_ok_def]
 QED

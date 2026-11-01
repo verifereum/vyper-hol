@@ -95,7 +95,7 @@ Proof
   strip_tac >> drule computed_precompile_no_observation >>
   disch_then (qspecl_then [`s.vs_requests`, `s.vs_outcomes`] strip_assume_tac) >>
   `rq.cr_static` by simp[venom_call_request_def] >>
-  simp[consume_call_outcome_eq, adopt_outcome_def,
+  simp[consume_call_outcome_eq, adopt_outcome_def, adopt_outcome_deletions_def,
        write_memory_with_expansion_def, venom_state_component_equality]
 QED
 
@@ -648,7 +648,7 @@ Theorem ecrecover_input_stores_sim[local]:
      FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
      regions_disjoint (w2n p) 128 b sz) /\
   (cenv.ce_is_ctor ==> !name tv iv off.
-     FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables cenv.ce_module imms) name =
@@ -824,7 +824,7 @@ Theorem precompile_alloca_immutable_disjoint[local]:
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
   (cenv.ce_is_ctor ==> !name tv iv off.
-     FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables cenv.ce_module imms) name =
@@ -874,7 +874,7 @@ Theorem ecrecover_buffers_run[local]:
       FLOOKUP t.vs_allocas aid = SOME (b,sz) ==>
       regions_disjoint (w2n po) 32 b sz) /\
     (cenv.ce_is_ctor ==> !name tv iv off.
-       FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+       FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
          SOME (ImmutableLoc off) /\
        FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
          | SOME imms => get_source_immutables cenv.ce_module imms) name =
@@ -918,7 +918,7 @@ Proof
     (simp[] >> rpt strip_tac >> gvs[] >>
      gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
   `(cenv.ce_is_ctor ==> !name tv iv off.
-     FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables cenv.ce_module imms) name =
@@ -1243,7 +1243,7 @@ QED
 Theorem precompile_write_immutables[local]:
   stmt_state_rel func cenv cx es s /\ LENGTH data <= cap /\
   (cenv.ce_is_ctor ==> !name tv iv off.
-     FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables cenv.ce_module imms) name =
@@ -1283,7 +1283,7 @@ Theorem ecrecover_suffix_preserves[local]:
   (!aid b sz. aid < sf.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
     regions_disjoint (w2n wo) 32 b sz) /\
   (cenv.ce_is_ctor ==> !name tv iv off.
-     FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables cenv.ce_module imms) name =
@@ -1805,7 +1805,7 @@ Proof
   `cs_extends sm sb` by metis_tac[compile_ecrecover_extends] >>
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     metis_tac[fn_has_code_mid, cs_extends_refl] >>
-  `ECRecover <> Len /\ builtin_args_length_ok ECRecover (LENGTH args)` by
+  `ECRecover <> Len /\ ECRecover <> Env MsgGas /\ builtin_args_length_ok ECRecover (LENGTH args)` by
     simp[builtin_args_length_ok_def] >>
   drule_all eval_expr_builtin_cases >> strip_tac
   >- (gvs[] >>

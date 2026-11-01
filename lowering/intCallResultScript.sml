@@ -448,7 +448,7 @@ Theorem store_multi_results_frag:
     (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
        w2n w + 32 * LENGTH results <= lb \/ lb + lsz <= w2n w) /\
     (cenv.ce_is_ctor ==> !name itv iv off.
-       FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+       FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
          SOME (ImmutableLoc off) /\
        FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
          | SOME imms => get_source_immutables cenv.ce_module imms) name =

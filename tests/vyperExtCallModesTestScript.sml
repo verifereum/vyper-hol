@@ -69,7 +69,8 @@ Theorem activated_precompile_does_not_consume_or_record:
   ISL (FST (eval_expr empty_evaluation_context sha256_expr counter_state))
 Proof
   simp (sha256_expr_def :: sha256_fixture_address :: precompile_result_sha256 ::
-        adopt_call_outcome_def :: adopt_outcome_def :: EXT_CALL_FIXTURE_SIMP) >>
+        adopt_call_outcome_def :: adopt_outcome_def ::
+        adopt_outcome_deletions_def :: EXT_CALL_FIXTURE_SIMP) >>
   CONV_TAC cv_eval
 QED
 
@@ -110,7 +111,7 @@ Theorem activated_default_path_checks_code:
               empty_return_state))
 Proof
   simp (default_expr_def :: empty_return_state_def :: adopt_call_outcome_def ::
-        adopt_outcome_def :: EXT_CALL_FIXTURE_SIMP) >>
+        adopt_outcome_def :: adopt_outcome_deletions_def :: EXT_CALL_FIXTURE_SIMP) >>
   CONV_TAC cv_eval
 QED
 

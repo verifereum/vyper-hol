@@ -69,13 +69,13 @@ Theorem entry_venom_state_frame_fields:
   !prog cp es.
   (entry_venom_state prog cp es).vs_accounts = es.rollback.accounts /\
   (entry_venom_state prog cp es).vs_transient = es.rollback.tStorage /\
-  (entry_venom_state prog cp es).vs_pending_deletions = es.rollback.toDelete /\
   (entry_venom_state prog cp es).vs_code =
     (FST (HD es.contexts)).msgParams.code /\
   (entry_venom_state prog cp es).vs_data_section =
     DROP (LENGTH (assemble prog)) (FST (HD es.contexts)).msgParams.code /\
   (entry_venom_state prog cp es).vs_outcomes = MAP SND (call_trace es) /\
   (entry_venom_state prog cp es).vs_requests = [] /\
+  (entry_venom_state prog cp es).vs_pending_deletions = es.rollback.toDelete /\
   (!l. FLOOKUP (entry_venom_state prog cp es).vs_labels l =
        OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l))
 Proof
