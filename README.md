@@ -120,7 +120,9 @@ This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.o
 
 The project is built with [`holbuild`](https://github.com/charles-cooper/holbuild). The repository's `holproject.toml` is the source of truth for the project configuration and pinned HOL dependencies, including the compatible [Verifereum](https://github.com/verifereum/verifereum) revision. Vyper functional tests are generated from the upstream commit pinned in [`VYPER_PIN`](VYPER_PIN). The CI workflow (`.github/workflows/holbuild.yml`) is the recommended reference for the exact automated build.
 
-For a local build, install `holbuild` v0.12.0 or newer and run:
+CI pins `holbuild-ref: v0.12.1` in `.github/actions/setup-holbuild-project/action.yml`, shared by its build and test jobs. Update that input to upgrade CI; `minimum_version` in `holproject.toml` is the compatibility floor.
+
+For a local build, install `holbuild` v0.12.1 or newer (`minimum_version` in `holproject.toml`) and run:
 
 ```bash
 holbuild buildhol
