@@ -3,7 +3,7 @@ Theory bodyIntCallBuiltinLabels
 Ancestors
   bodyIntCallExprClosure bodyIntCallExprLabels bodyIntCallLabelFrame
   bodyIntCallContextLabels bodyIntCallLabelReservations
-  supportedExprForms exprLowering compileEnv builtinMath builtinMisc list
+  supportedExprForms exprLowering compileEnv builtinMath builtinMisc builtinSimple list
 
 Theorem compiler_block_tail_env_var:
   compiler_block_tail (compile_env_var item)
@@ -252,4 +252,133 @@ Proof
        irule compiler_label_hoare_lower_value >> simp[]) >>
    gen_tac >> BETA_TAC >> irule compiler_label_hoare_as_stack_val >>
    simp[compiler_label_hoare_block_blob_hash])
+QED
+
+Theorem compiler_block_tail_unary:
+  compiler_block_tail (compile_invert v ety cenv) /\
+  compiler_block_tail (compile_neg v ety) /\
+  compiler_block_tail (compile_builtin_abs v)
+Proof
+  conj_tac
+  >- (Cases_on `ety` >> simp[compile_invert_def, compiler_block_tail_primitives]) >>
+  Cases_on `type_bounds ety` >>
+  simp[compile_neg_def, compile_builtin_abs_def, compile_select_def,
+       comp_ignore_bind_def, compiler_block_tail_primitives] >>
+  conj_tac >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_unary:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_invert v ety cenv) (\r out. compiler_label_reservation origin pending out) /\
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_neg v ety) (\r out. compiler_label_reservation origin pending out) /\
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_builtin_abs v) (\r out. compiler_label_reservation origin pending out)
+Proof
+  conj_tac
+  >- (Cases_on `ety` >> simp[compile_invert_def, compiler_label_hoare_context_primitives]) >>
+  Cases_on `type_bounds ety` >>
+  simp[compile_neg_def, compile_builtin_abs_def, compile_select_def,
+       comp_ignore_bind_def, compiler_label_hoare_context_primitives] >>
+  conj_tac >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
+       gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]
+QED
+
+Theorem compiler_block_tail_unary_dispatch:
+  (bi = Not \/ bi = Neg \/ bi = Abs) /\
+  (!ce t. compiler_block_tail (cfn ce t e)) ==>
+  compiler_block_tail (compile_builtin_dispatch_body cfn cenv ann ty bi [e])
+Proof
+  strip_tac >> gvs[] >>
+  rewrite_tac[lambdify compile_builtin_dispatch_body_def] >> simp[] >>
+  (ho_match_mp_tac compiler_block_tail_pair_bind >> conj_tac
+   >- (CONV_TAC (DEPTH_CONV ETA_CONV) >>
+       irule compiler_block_tail_lower_value >> simp[]) >>
+   gen_tac >> BETA_TAC >>
+   Cases_on `expr_type e = BaseT BoolT` >> simp[] >>
+   irule compiler_block_tail_as_stack_val >>
+   simp[compiler_block_tail_unary, compiler_block_tail_primitives])
+QED
+
+Theorem compiler_label_hoare_unary_dispatch:
+  (bi = Not \/ bi = Neg \/ bi = Abs) /\
+  (!ce t. compiler_label_hoare (compiler_label_reservation origin pending)
+    (cfn ce t e) (\r out. compiler_label_reservation origin pending out)) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_builtin_dispatch_body cfn cenv ann ty bi [e])
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >> gvs[] >>
+  rewrite_tac[lambdify compile_builtin_dispatch_body_def] >> simp[] >>
+  (ho_match_mp_tac compiler_label_hoare_pair_bind >> conj_tac
+   >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+       irule compiler_label_hoare_lower_value >> simp[]) >>
+   gen_tac >> BETA_TAC >>
+   Cases_on `expr_type e = BaseT BoolT` >> simp[] >>
+   irule compiler_label_hoare_as_stack_val >>
+   simp[compiler_label_hoare_unary, compiler_label_hoare_context_primitives])
+QED
+
+Theorem compiler_block_tail_as_wei:
+  compiler_block_tail (compile_as_wei_value_int v scale signed) /\
+  compiler_block_tail (compile_as_wei_value_decimal v scale divisor)
+Proof
+  Cases_on `scale = 1` >> Cases_on `signed` >>
+  simp[compile_as_wei_value_int_def, compile_as_wei_value_decimal_def,
+       comp_ignore_bind_def, comp_bind_assoc, compiler_block_tail_primitives] >>
+  rpt conj_tac >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_as_wei:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_as_wei_value_int v scale signed)
+    (\r out. compiler_label_reservation origin pending out) /\
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_as_wei_value_decimal v scale divisor)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  Cases_on `scale = 1` >> Cases_on `signed` >>
+  simp[compile_as_wei_value_int_def, compile_as_wei_value_decimal_def,
+       comp_ignore_bind_def, comp_bind_assoc, compiler_label_hoare_context_primitives] >>
+  rpt conj_tac >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
+       gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]
+QED
+
+Theorem compiler_block_tail_as_wei_dispatch:
+  (!ce t. compiler_block_tail (cfn ce t e)) ==>
+  compiler_block_tail (compile_builtin_dispatch_body cfn cenv ann ty (AsWeiValue denom) [e])
+Proof
+  strip_tac >> rewrite_tac[lambdify compile_builtin_dispatch_body_def] >> simp[] >>
+  ho_match_mp_tac compiler_block_tail_pair_bind >> conj_tac
+  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >>
+      irule compiler_block_tail_lower_value >> simp[]) >>
+  gen_tac >> BETA_TAC >> Cases_on `is_decimal_type (expr_type e)` >> simp[] >>
+  irule compiler_block_tail_as_stack_val >> simp[compiler_block_tail_as_wei]
+QED
+
+Theorem compiler_label_hoare_as_wei_dispatch:
+  (!ce t. compiler_label_hoare (compiler_label_reservation origin pending)
+    (cfn ce t e) (\r out. compiler_label_reservation origin pending out)) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_builtin_dispatch_body cfn cenv ann ty (AsWeiValue denom) [e])
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >> rewrite_tac[lambdify compile_builtin_dispatch_body_def] >> simp[] >>
+  ho_match_mp_tac compiler_label_hoare_pair_bind >> conj_tac
+  >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+      irule compiler_label_hoare_lower_value >> simp[]) >>
+  gen_tac >> BETA_TAC >> Cases_on `is_decimal_type (expr_type e)` >> simp[] >>
+  irule compiler_label_hoare_as_stack_val >> simp[compiler_label_hoare_as_wei]
 QED
