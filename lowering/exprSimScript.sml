@@ -38,7 +38,8 @@
  *   locals_kept_refl, locals_kept_inst_idx — reflexivity and instruction-index
  *                            normalization of the local frame
  *
- * Helpers: expr_exit_INL, typed_val_to_w256_word_value, eval_expr_env,
+ * Helpers: expr_exit_INL, expr_exit_success_map, expr_val_at_start_mono,
+ *   typed_val_to_w256_word_value, eval_expr_env,
  *   lower_value_env
  *
  * Values are related by expr_val_rel, by the expression's type: a word
@@ -107,6 +108,18 @@ Theorem expr_exit_INL[simp]:
   !x r. ~expr_exit (INL x) r
 Proof
   Cases_on `r` >> simp[expr_exit_def]
+QED
+
+(* Exit predicates are insensitive to the successful result representation. *)
+Theorem expr_exit_success_map:
+  !f r. expr_exit (case r of INL v => INL (f v) | INR ex => INR ex) =
+        expr_exit r
+Proof
+  rpt gen_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `r` >- simp[] >>
+  rename1 `INR ex` >> Cases_on `ex` >>
+  Cases_on `x` >> simp[expr_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
 QED
 
 (* The source results the judgment speaks of: a value, an error other than
@@ -273,6 +286,18 @@ Definition expr_val_at_def:
                       b + 32 <= w2n w)) \/
            val_footprint tv v = 0)
 End
+
+Theorem expr_val_at_start_mono:
+  sa.cs_next_id <= s1.cs_next_id /\
+  expr_val_at cenv cx ty s1 sm es v p s ==>
+  expr_val_at cenv cx ty sa sm es v p s
+Proof
+  simp[expr_val_at_def] >> rpt strip_tac >>
+  first_x_assum drule_all >> strip_tac >> qexists_tac `w` >> simp[]
+  >- (disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
+      first_assum ACCEPT_TAC) >>
+  disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[]
+QED
 
 (* Operand composition: the value of a non-word operand survives code that
    keeps the operand and the bytes of the value's footprint, the
