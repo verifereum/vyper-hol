@@ -96,15 +96,20 @@ Proof
   metis_tac[body_exprs_ok_case]
 QED
 
-(* GAP (#636 operands with internal calls): subscripts.  Its case lemma is
-   still stated over expr_sim_below, for compile_expr_sim only. *)
+(* exprSimPlaces' compile_subscript_case, whose array and mapping cases are
+   cheated there for compile_expr_sim too. *)
 Theorem body_subscript_case:
   !cx v8 e1 e2.
     (!s'' res t. eval_expr cx e1 s'' = (INL res,t) ==> body_expr_ok cx e2) /\
     body_expr_ok cx e1 ==>
     body_expr_ok cx (Subscript v8 e1 e2)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  `expr_vv_case F ctx func cenv cx (Subscript v8 e1 e2)` by
+    (irule exprSimPlacesTheory.compile_subscript_case >> conj_tac
+     >- metis_tac[body_expr_ok_case] >>
+     rpt strip_tac >> metis_tac[body_expr_ok_case]) >>
+  simp[expr_sim_case_of_vv]
 QED
 
 (* exprSimAttribute's compile_attribute_case. *)

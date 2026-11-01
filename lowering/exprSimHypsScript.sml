@@ -40,8 +40,8 @@
  *   compile_expr_type_builtin_dispatch — compile_expr of a type builtin is
  *                       its dispatcher's
  *   word_value_type   — the types whose values are word_values
- *   popped_keys_indexed — every key of a local's popped history ends in
- *                       an array index
+ *   popped_keys_indexed — a local's popped history is typed and keyed
+ *                       at dynamic-array indices
  *   eval_expr_popped_keys_indexed — evaluation keeps popped_keys_indexed
  *   expr_sim_pre_eval — type soundness: evaluation keeps expr_sim_inv and
  *                       raises no type error
@@ -181,15 +181,23 @@
  *     write anything into the contract's storage, so nothing keeps the
  *     storage clauses across them without a postulate on that code.
  *     The supported subset excludes both (supported_expr_no_evm_run).
- *   - The popped keys clause (popped_keys_indexed): every key of a local's
- *     popped history ends in an array index.  Reading a field of a popped
- *     element reads the history, and a snapshot recorded at the field
- *     itself would be read instead of the field of the element's snapshot,
- *     which memory at the field's pointer holds.  This is a fact about the
- *     source semantics, not the compiler: pop records the element it
- *     removes at path ++ [ValueSubscript (IntV i)] (record_pop), a new
- *     local starts with no history, and evaluation changes the scopes only
- *     by pops (eval_expr_popped_keys_indexed).
+ *   - The popped keys clause (popped_keys_indexed): a local's popped
+ *     history is typed, and every key is an index into a dynamic array.
+ *     Reading a field or a tuple element of a popped element reads the
+ *     history, and a snapshot recorded at the field or element itself
+ *     would be read instead of the one the element's snapshot holds, which
+ *     memory at the pointer holds.  This is a fact about the source
+ *     semantics, not the compiler: pop records the element it removes at
+ *     path ++ [ValueSubscript (IntV i)] with a dynamic array at path
+ *     (record_pop), a new local starts with no history, and evaluation
+ *     changes the scopes only by pops (eval_expr_popped_keys_indexed).
+ *   - The map table clauses: the compile environment's ce_hashmap_info
+ *     agrees with env's toplevel_vtypes on the declared names
+ *     (placeTypingProps's place_map_tables_agree_on_defined, which
+ *     placeTypingBuildProps proves of build_compile_env), and has no entry
+ *     for a bare global.  compile_subscript dispatches on place_type, which
+ *     reads ce_hashmap_info; with these a well-typed expression's
+ *     place_type is its own type (place_type_well_typed_on_defined).
  *
  *   - The struct fields clauses: the compile environment's struct field
  *     map agrees with the type environment's struct declarations, field
@@ -235,6 +243,7 @@ Ancestors
   vyperTypeEvalStoragePreservation vyperCallOutcomeStorage
   supportedExprTraverse exprStoragePreservation
   vyperLookup vyperPlaceResultTyping supportedProgram bodyStoragePreservation
+  vyperPlaceInvariants placeTypingProps
 Libs
   pairLib
 
@@ -251,13 +260,18 @@ Definition outcomes_accounts_typed_def:
                      accounts_runtime_well_typed oc.co_accounts) os
 End
 
-(* Every key of a local's popped history ends in an array index: pop records
-   the element it removes at path ++ [ValueSubscript (IntV i)] (record_pop),
-   and replace_popped keeps the keys. *)
+(* A local's popped history is typed at its paths, and every key is an index
+   into a dynamic array: pop records the element it removes at
+   path ++ [ValueSubscript (IntV i)] where path holds a DynArrayV
+   (record_pop), and replace_popped keeps the keys. *)
 Definition popped_keys_indexed_def:
   popped_keys_indexed (scs : scope list) <=>
     EVERY (\sc. !id entry. FLOOKUP sc id = SOME entry ==>
-                 EVERY (\k. ?p i. k = p ++ [ValueSubscript i])
+                 popped_history_typed entry.type entry.popped /\
+                 EVERY (\k. ?p i etv n.
+                             k = p ++ [ValueSubscript i] /\
+                             subscripts_type entry.type p =
+                               SOME (ArrayTV etv (Dynamic n)))
                        (MAP FST entry.popped)) scs
 End
 
@@ -294,7 +308,10 @@ Definition expr_sim_inv_def:
     IS_SOME es.outcomes /\
     contract_storage_well_formed cx es /\ storage_layout_safe cx /\
     oracle_storage_ok cx es /\
-    popped_keys_indexed es.scopes
+    popped_keys_indexed es.scopes /\
+    place_map_tables_agree_on_defined cenv env /\
+    (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
+               cenv.ce_hashmap_info nsid = NONE)
 End
 
 (* The types whose values are word_values (loweringSlice): integers,
@@ -646,49 +663,146 @@ Proof
   simp[replace_popped_def] >> rw[AllCaseEqs()] >> gvs[] >> res_tac
 QED
 
-Theorem entry_pop_step_keys_indexed[local]:
-  !entry path entry'.
-    entry_pop_step entry path entry' /\
-    EVERY (\k. ?p i. k = p ++ [ValueSubscript i]) (MAP FST entry.popped) ==>
-    EVERY (\k. ?p i. k = p ++ [ValueSubscript i]) (MAP FST entry'.popped)
+Theorem replace_popped_history_typed[local]:
+  !h tv path ptv v h'.
+    popped_history_typed tv h /\ well_formed_type_value tv /\
+    subscripts_type tv path = SOME ptv /\ value_has_type ptv v /\
+    replace_popped tv path v h = SOME h' ==>
+    popped_history_typed tv h'
 Proof
-  rw[entry_pop_step_def] >> simp[record_pop_def] >>
-  BasicProvers.every_case_tac >> imp_res_tac replace_popped_keys >> gvs[] >>
+  Induct >> simp[replace_popped_def] >>
+  qx_gen_tac `head` >> PairCases_on `head` >> rpt gen_tac >>
+  simp[popped_history_typed_cons] >> rpt strip_tac >>
+  gvs[Once replace_popped_def, AllCaseEqs()] >>
+  simp[popped_history_typed_cons]
+  >- (irule vyperPlaceStatePreservationTheory.assign_subscripts_replace_type_metadata >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qpat_x_assum `IS_PREFIX path head0` mp_tac >>
+      simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+      gvs[rich_listTheory.DROP_LENGTH_APPEND] >>
+      metis_tac[subscripts_type_append]) >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem entry_pop_step_event_valid[local]:
+  value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
+  popped_history_typed entry.type entry.popped /\
+  entry_pop_step entry path next ==>
+  entry_pop_event_valid (entry,path)
+Proof
+  rpt strip_tac >>
+  `?arr p. read_memory_path entry path = INL arr /\
+           popped_value arr = INL p` by
+    metis_tac[entry_pop_step_def] >>
+  qpat_x_assum `entry_pop_step _ _ _` kall_tac >>
+  `?ptv. subscripts_type entry.type path = SOME ptv /\
+         value_has_type ptv arr` by
+    (qpat_x_assum `read_memory_path _ _ = _` mp_tac >>
+     simp[read_memory_path_def, AllCaseEqs()] >> strip_tac
+     >- metis_tac[vyperPlaceStatePreservationTheory.evaluate_subscripts_declared_type_exists] >>
+     metis_tac[read_popped_declared_type_exists,
+               vyperPlaceStatePreservationTheory.read_popped_type]) >>
+  Cases_on `arr` >> gvs[vyperValueOperationTheory.popped_value_def] >>
+  rename1 `popped_value (ArrayV av) = INL p` >>
+  Cases_on `av` >> gvs[vyperValueOperationTheory.popped_value_def] >>
+  Cases_on `ptv` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  rename1 `value_has_type (ArrayTV etv bound) (ArrayV (DynArrayV xs))` >>
+  Cases_on `bound` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  simp[entry_pop_event_valid_def, vyperTypingTheory.value_has_type_def]
+QED
+
+Theorem entry_pop_step_keys_indexed[local]:
+  entry_pop_step entry path next /\
+  value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
+  popped_history_typed entry.type entry.popped /\
+  EVERY (\k. ?p i etv n. k = p ++ [ValueSubscript i] /\
+    subscripts_type entry.type p = SOME (ArrayTV etv (Dynamic n)))
+    (MAP FST entry.popped) ==>
+  popped_history_typed next.type next.popped /\
+  EVERY (\k. ?p i etv n. k = p ++ [ValueSubscript i] /\
+    subscripts_type next.type p = SOME (ArrayTV etv (Dynamic n)))
+    (MAP FST next.popped)
+Proof
+  strip_tac >>
+  `entry_pop_event_valid (entry,path)` by
+    (drule_all entry_pop_step_event_valid >> simp[]) >>
+  gvs[entry_pop_event_valid_def] >>
+  `well_formed_type_value etv` by
+    (drule_all vyperPlaceStatePreservationTheory.subscripts_type_well_formed >>
+     simp[vyperTypingTheory.well_formed_type_value_def]) >>
+  qpat_x_assum `entry_pop_step _ _ _` mp_tac >>
+  simp[entry_pop_step_def] >> strip_tac >> gvs[]
+  >- (conj_tac
+      >- (irule vyperPlaceStatePreservationTheory.record_pop_history_typed_at_path >>
+          goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      Cases_on `arr` >> gvs[record_pop_def] >>
+      rename1 `ArrayV av` >> Cases_on `av` >> gvs[record_pop_def] >>
+      metis_tac[]) >>
+  `value_has_type (ArrayTV etv (Dynamic n)) shortened` by
+    metis_tac[vyperAssignPreservesTypeTheory.pop_element_preserves_type] >>
+  `popped_history_typed entry.type history` by
+    (irule replace_popped_history_typed >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  `MAP FST history = MAP FST entry.popped` by metis_tac[replace_popped_keys] >>
+  conj_tac
+  >- (irule vyperPlaceStatePreservationTheory.record_pop_history_typed_at_path >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  Cases_on `arr` >> gvs[record_pop_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >> gvs[record_pop_def] >>
   metis_tac[]
 QED
 
 Theorem scope_pop_step_keys_indexed[local]:
   !sc ev sc'.
-    scope_pop_step sc ev sc' /\ popped_keys_indexed sc ==>
-    popped_keys_indexed sc'
+    scope_pop_step sc ev sc' /\ EVERY scope_well_typed sc /\
+    popped_keys_indexed sc ==>
+    EVERY scope_well_typed sc' /\ popped_keys_indexed sc'
 Proof
-  rpt gen_tac >> PairCases_on `ev` >> rw[scope_pop_step_def] >>
+  rpt gen_tac >> PairCases_on `ev` >>
+  simp[scope_pop_step_def] >> strip_tac >>
   drule find_containing_scope_structure >> strip_tac >>
-  gvs[popped_keys_indexed_def, FLOOKUP_UPDATE] >> rw[] >> gvs[]
-  >- (irule entry_pop_step_keys_indexed >> metis_tac[]) >>
-  first_x_assum irule >> metis_tac[]
+  gvs[popped_keys_indexed_def, scope_well_typed_def] >>
+  `value_has_type ev1.type ev1.value /\ well_formed_type_value ev1.type` by
+    metis_tac[] >>
+  `popped_history_typed ev1.type ev1.popped` by metis_tac[] >>
+  `entry_pop_event_valid (ev1,ev2)` by
+    (drule_all entry_pop_step_event_valid >> simp[]) >>
+  `value_has_type next.type next.value` by
+    (drule_all vyperPlaceMutationSoundnessTheory.entry_pop_step_value_type >> simp[]) >>
+  drule entry_pop_step_metadata >> strip_tac >>
+  drule entry_pop_step_keys_indexed >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  rw[FLOOKUP_UPDATE] >> gvs[] >> metis_tac[]
 QED
 
 Theorem scope_pop_trace_keys_indexed[local]:
   !events sc sc'.
-    scope_pop_trace sc events sc' /\ popped_keys_indexed sc ==>
-    popped_keys_indexed sc'
+    scope_pop_trace sc events sc' /\ EVERY scope_well_typed sc /\
+    popped_keys_indexed sc ==>
+    EVERY scope_well_typed sc' /\ popped_keys_indexed sc'
 Proof
-  Induct >> simp[scope_pop_trace_def] >>
-  metis_tac[scope_pop_step_keys_indexed]
+  Induct >> simp[scope_pop_trace_def] >> rpt strip_tac >>
+  drule_all scope_pop_step_keys_indexed >> strip_tac >>
+  first_x_assum drule >> simp[]
 QED
 
+
 (* Evaluating an expression changes the scopes only by pops
-   (eval_mutual_scope_pop_effect), so it keeps popped_keys_indexed. *)
+   (eval_mutual_scope_pop_effect).  A pop from a well-typed local, whose
+   history is typed, removes the element of a dynamic array, records it at
+   its index and keeps the local and its history typed. *)
 Theorem eval_expr_popped_keys_indexed:
   !cx e es res es'.
-    eval_expr cx e es = (res, es') /\ popped_keys_indexed es.scopes ==>
+    eval_expr cx e es = (res, es') /\ state_well_typed es /\
+    popped_keys_indexed es.scopes ==>
     popped_keys_indexed es'.scopes
 Proof
   rpt strip_tac >>
   `scope_pop_effect (eval_expr cx e)` by
     simp[cj 5 eval_mutual_scope_pop_effect] >>
   gvs[scope_pop_effect_def] >> first_x_assum drule >> strip_tac >>
+  gvs[state_well_typed_def] >>
   drule_all scope_pop_trace_keys_indexed >> simp[]
 QED
 

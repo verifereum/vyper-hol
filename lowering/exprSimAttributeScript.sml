@@ -12,13 +12,14 @@
  *                           expr_vv_case and expr_sim_case, for
  *                           compile_expr_sim and the body simulation;
  *                           compile_attribute_vv_sim follows
+ *   attr_add_frag, attr_extends, stmt_state_rel_region_lt,
+ *   immutable_holds_read, field_ptr_w2n — the offset's fragment and the
+ *                           pointer facts, which exprSimTuple shares
  *
  * Helpers: vv_loc, attr_offset, compile_expr_attribute,
- *   eval_expr_attribute, attr_pre_base, attr_add_post, attr_add_frag,
- *   attr_extends, stmt_state_rel_region_lt, struct_value_shape,
- *   immutable_holds_read, base_vv_holds_struct, base_vv_at_struct,
- *   field_ptr_w2n, attr_vv_at_field, sub_layout_field,
- *   immutable_holds_field, attr_vv_post
+ *   eval_expr_attribute, attr_pre_base, attr_add_post, struct_value_shape,
+ *   base_vv_holds_struct, base_vv_at_struct, attr_vv_at_field,
+ *   sub_layout_field, immutable_holds_field, attr_vv_post
  *
  * Where the base is a local's place memory no longer holds (a popped
  * element), the source reads the field from the popped history, which
@@ -200,7 +201,7 @@ Proof
   rename1 `ArrayV av` >> Cases_on `av` >> simp[value_has_type_def]
 QED
 
-Theorem immutable_holds_read[local]:
+Theorem immutable_holds_read:
   !cenv cx t tv w es.
     immutable_holds cenv cx t tv w es ==> ?v. read_result cx tv es = (INL v, es)
 Proof
