@@ -610,3 +610,47 @@ Theorem decode_value_live_memory:
 Proof
   metis_tac[decode_live_memory_mutual]
 QED
+
+Theorem copied_storage_live_memory:
+  !cx tr st rt w tv dst mem.
+    storage_read_live cx tr st w tv /\
+    storage_agree (storage_dead cx tr st) st rt /\
+    (!i. i < type_slot_size tv ==>
+      mem_word_at (dst + 32 * i) mem = lookup_storage (w + n2w i) rt) ==>
+    storage_live_memory st (w2n w) tv dst mem
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[storage_live_memory_def, copy_bytes_def] >> rpt strip_tac >>
+  `~storage_dead cx tr st (w2n (w + n2w i)) b` by
+    (strip_tac >>
+     qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[storage_read_live_def] >>
+     disch_then drule >> strip_tac >>
+     `w2n w + i < dimword (:256)` by decide_tac >>
+     `w2n (w + n2w i) = w2n w + i` by
+       (Cases_on `w` >> fs[wordsTheory.word_add_n2w]) >>
+     gvs[] >> first_x_assum irule >> decide_tac) >>
+  qpat_x_assum `!i. i < _ ==> _` drule >> strip_tac >>
+  simp[valueEncodingProofsTheory.mem_bytes_at_word] >>
+  qpat_x_assum `storage_agree _ _ _` mp_tac >>
+  simp[storage_agree_def] >>
+  disch_then (qspecl_then [`w + n2w i`, `b`] mp_tac) >>
+  simp[read_slot_def] >>
+  Cases_on `w` >> fs[wordsTheory.word_add_n2w, arithmeticTheory.ADD_COMM]
+QED
+
+Theorem copied_storage_decode_in_memory:
+  !cx tr st rt w tv v dst mem.
+    well_formed_type_value tv /\ slots_in_range st (w2n w) tv /\
+    decode_value st (w2n w) tv = SOME v /\
+    storage_read_live cx tr st w tv /\
+    storage_agree (storage_dead cx tr st) st rt /\
+    (!i. i < type_slot_size tv ==>
+      mem_word_at (dst + 32 * i) mem = lookup_storage (w + n2w i) rt) ==>
+    val_in_memory tv v dst mem
+Proof
+  rpt strip_tac >> irule decode_value_live_memory >> simp[] >>
+  qexistsl_tac [`w2n w`, `st`] >> simp[] >>
+  irule copied_storage_live_memory >>
+  qexistsl_tac [`cx`, `rt`, `tr`] >> simp[]
+QED
