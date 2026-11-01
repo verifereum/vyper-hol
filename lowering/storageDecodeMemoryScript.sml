@@ -3,7 +3,7 @@ Theory storageDecodeMemory
 Ancestors
   list rich_list words valueEncoding valueEncodingProps compileEnv
   vyperLookupStorage vyperStorage vyperValue accountsRelProps venomMemProps
-  exprSimAggregateEncoding
+  exprSimAggregateEncoding vyperTyping
 
 Definition copy_bytes_def:
   copy_bytes st bs n D dst mem <=>
@@ -52,7 +52,7 @@ Proof
   `off + i < n` by decide_tac >>
   rename1 `~D' (bs + (i + off)) b` >>
   `~D (bs + (i + off)) b` by
-    (first_x_assum irule >> simp[]) >>
+    (first_x_assum irule >> fs[ETA_THM, combinTheory.o_DEF]) >>
   `off + i = i + off` by decide_tac >>
   `32 * (off + i) = 32 * i + 32 * off` by decide_tac >>
   asm_rewrite_tac[]
@@ -496,4 +496,117 @@ Proof
   simp[storage_live_memory_def, type_slot_size_def,
        val_in_memory_def, bytes_string_roundtrip] >>
   metis_tac[copy_dyn_bytes_contents, arithmeticTheory.ADD_COMM]
+QED
+
+Theorem decode_live_memory_mutual[local]:
+  (!st bs tv. !v dst mem.
+    well_formed_type_value tv /\ slots_in_range st bs tv /\
+    decode_value st bs tv = SOME v /\ storage_live_memory st bs tv dst mem ==>
+    val_in_memory tv v dst mem) /\
+  (!st bs tvs. !vs dst mem.
+    EVERY well_formed_type_value tvs /\ tuple_slots_in_range st bs tvs /\
+    decode_tuple st bs tvs = SOME vs /\ storage_live_list st bs tvs dst mem ==>
+    tuple_in_memory vs tvs dst mem) /\
+  (!st bs tv n. !vs dst mem.
+    well_formed_type_value tv /\ static_slots_in_range st bs tv n /\
+    decode_static_array st bs tv n = SOME vs /\
+    storage_live_elements st bs tv n dst mem ==>
+    LENGTH vs = n /\ elems_in_memory vs dst tv mem) /\
+  (!st bs tv n. !vs dst mem.
+    well_formed_type_value tv /\ dyn_slots_in_range st bs tv n /\
+    decode_dyn_array st bs tv n = SOME vs /\
+    storage_live_elements st bs tv n dst mem ==>
+    LENGTH vs = n /\ elems_in_memory vs dst tv mem) /\
+  (!st bs fs. !vs dst mem.
+    EVERY (\p. well_formed_type_value (SND p)) fs /\
+    struct_slots_in_range st bs fs /\ decode_struct st bs fs = SOME vs /\
+    storage_live_fields st bs fs dst mem ==>
+    fields_in_memory vs fs dst mem)
+Proof
+  ho_match_mp_tac decode_value_ind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[Once decode_value_def, AllCaseEqs()] >>
+      irule dynamic_bytes_decode_in_memory >> metis_tac[])
+  >- (rpt strip_tac >> gvs[Once decode_value_def, AllCaseEqs()] >>
+      irule string_decode_in_memory >> metis_tac[])
+  >- (rpt strip_tac >> gvs[Once decode_value_def, slots_in_range_def] >>
+      irule canonical_primitive_in_memory >> simp[] >>
+      irule storage_live_memory_head >> goal_assum (drule_at Any) >> simp[type_slot_size_def])
+  >- (rpt strip_tac >> gvs[Once decode_value_def, slots_in_range_def] >>
+      irule canonical_primitive_in_memory >> simp[] >>
+      irule storage_live_memory_head >> goal_assum (drule_at Any) >> simp[type_slot_size_def])
+  >- (rpt strip_tac >> gvs[Once decode_value_def, slots_in_range_def] >>
+      irule canonical_primitive_in_memory >> simp[] >>
+      irule storage_live_memory_head >> goal_assum (drule_at Any) >> simp[type_slot_size_def])
+  >- (rpt strip_tac >> gvs[Once decode_value_def, slots_in_range_def] >>
+      irule canonical_primitive_in_memory >> simp[] >>
+      irule storage_live_memory_head >> goal_assum (drule_at Any) >> simp[type_slot_size_def])
+  >- (rpt strip_tac >> gvs[Once decode_value_def, slots_in_range_def] >>
+      irule canonical_primitive_in_memory >> simp[] >>
+      irule storage_live_memory_head >> goal_assum (drule_at Any) >> simp[type_slot_size_def])
+  >- (rpt strip_tac >> gvs[Once decode_value_def, slots_in_range_def] >>
+      irule canonical_primitive_in_memory >> simp[] >>
+      irule storage_live_memory_head >> goal_assum (drule_at Any) >> simp[type_slot_size_def])
+  >- (rpt strip_tac >> gvs[Once decode_value_def, slots_in_range_def] >>
+      irule canonical_primitive_in_memory >> simp[] >>
+      irule storage_live_memory_head >> goal_assum (drule_at Any) >> simp[type_slot_size_def])
+  >- simp[Once decode_value_def, val_in_memory_def]
+  >- (rpt strip_tac >>
+      gvs[Once decode_value_def, AllCaseEqs(), val_in_memory_def,
+          well_formed_type_value_def, slots_in_range_def, storage_live_memory_tuple] >>
+      first_x_assum irule >> fs[ETA_THM, combinTheory.o_DEF])
+  >- (rpt strip_tac >>
+      gvs[Once decode_value_def, AllCaseEqs(), slots_in_range_def,
+          well_formed_type_value_def] >>
+      drule storage_live_fixed_elements >> strip_tac >>
+      first_x_assum (drule_then strip_assume_tac) >>
+      irule (REWRITE_RULE[make_array_value_def] fixed_array_from_dense) >> simp[])
+  >- (rpt strip_tac >>
+      gvs[Once decode_value_def, AllCaseEqs(), slots_in_range_def,
+          well_formed_type_value_def] >>
+      `storage_live_elements st (bs + 1) tv (w2n (read_slot st bs))
+          (dst + 32) mem` by
+        (irule storage_live_dynamic_elements >> simp[read_slot_def] >>
+         qexists_tac `max` >> fs[read_slot_def]) >>
+      `MIN (w2n (read_slot st bs)) max = w2n (read_slot st bs)` by
+        (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+      gvs[] >> first_x_assum (drule_then strip_assume_tac) >>
+      simp[val_in_memory_def] >> irule storage_live_memory_head >>
+      goal_assum (drule_at Any) >> simp[type_slot_size_def])
+  >- (rpt strip_tac >>
+      gvs[Once decode_value_def, AllCaseEqs(), val_in_memory_def,
+          well_formed_type_value_def, slots_in_range_def, storage_live_memory_struct] >>
+      first_x_assum irule >> fs[ETA_THM, combinTheory.o_DEF])
+  >- simp[decode_value_def, val_in_memory_def]
+  >- (rpt strip_tac >>
+      gvs[Once decode_value_def, AllCaseEqs(), slots_in_range_def] >>
+      drule storage_live_list_cons >> strip_tac >>
+      simp[val_in_memory_def, type_memory_size_slots])
+  >- simp[decode_value_def, val_in_memory_def]
+  >- (rpt strip_tac >>
+      gvs[Once decode_value_def, AllCaseEqs(), slots_in_range_def,
+          storage_live_elements_cons] >>
+      first_x_assum (drule_then strip_assume_tac) >>
+      first_x_assum (drule_then strip_assume_tac) >>
+      simp[val_in_memory_def, type_memory_size_slots])
+  >- simp[decode_value_def, val_in_memory_def]
+  >- (rpt strip_tac >>
+      gvs[Once decode_value_def, AllCaseEqs(), slots_in_range_def,
+          storage_live_elements_cons] >>
+      first_x_assum (drule_then strip_assume_tac) >>
+      first_x_assum (drule_then strip_assume_tac) >>
+      simp[val_in_memory_def, type_memory_size_slots])
+  >- simp[decode_value_def, val_in_memory_def]
+  >> rpt strip_tac >>
+  gvs[Once decode_value_def, AllCaseEqs(), slots_in_range_def] >>
+  drule storage_live_fields_cons >> strip_tac >>
+  simp[val_in_memory_def, type_memory_size_slots]
+QED
+
+Theorem decode_value_live_memory:
+  !st bs tv v dst mem.
+    well_formed_type_value tv /\ slots_in_range st bs tv /\
+    decode_value st bs tv = SOME v /\ storage_live_memory st bs tv dst mem ==>
+    val_in_memory tv v dst mem
+Proof
+  metis_tac[decode_live_memory_mutual]
 QED
