@@ -10,12 +10,13 @@
  * TOP-LEVEL:
  *   compile_literal_other_vv_sim — the buffer simulates the literal
  *                              (expr_vv_ok)
+ *   alloc_buffer_frame_run — allocation execution preserving a buffer frame
  *)
 
 Theory exprSimLiteralBuffer
 Ancestors
   allocLimits
-  list finite_map
+  list finite_map exprSimWordArgs loweringHalt exprLoweringProps
   exprSim exprSimOps exprSimHyps exprLowering compileEnv loweringSlice
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperValueOperation valueEncoding fragExec venomState
@@ -1022,6 +1023,43 @@ Resume compile_literal_other_vv_sim[string]:
 QED
 
 Finalise compile_literal_other_vv_sim
+
+(* Allocation execution with the frame used by composed buffer payloads. *)
+Theorem alloc_buffer_frame_run:
+  !func cenv cx es sa sm buf sz s.
+    context$compile_alloc_buffer sz sa = (buf,sm) /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
+    MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+      [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
+    ?t w. run_inst_seq (emitted_insts sa sm) s = OK t /\
+      stmt_state_rel ctx func cenv cx es t /\
+      eval_operand buf.buf_operand t = SOME w /\
+      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
+      w2n w + sz < dimword (:256) /\ t.vs_memory = s.vs_memory /\
+      sa.cs_next_id < sm.cs_next_id /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+         FLOOKUP t.vs_allocas aid = SOME entry) /\
+      (!aid b len. aid < sa.cs_next_id /\
+         FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+         regions_disjoint (w2n w) sz b len) /\
+      (!name b len. local_region cenv es.scopes t name b len ==>
+         regions_disjoint (w2n w) sz b len) /\
+      (?p. buf.buf_operand = Var p /\ not_fresh_at sm p) /\
+      t.vs_labels = s.vs_labels /\ wb_frame cenv es sa s t
+Proof
+  rpt strip_tac >> drule_all literal_alloc_buffer_run >> strip_tac >>
+  `t.vs_labels = s.vs_labels` by
+    (drule compile_alloc_buffer_insts >> strip_tac >>
+     qspecl_then [`sa.cs_next_id`, `n2w sz`,
+       `STRING #"%" (toString sa.cs_next_var)`, `s`] strip_assume_tac
+       step_alloca_frame >>
+     gvs[emitted_insts_def, rich_listTheory.DROP_APPEND1, run_inst_seq_def]) >>
+  `wb_frame cenv es sa s t` by
+    (simp[wb_frame_def] >> metis_tac[locals_kept_mem]) >>
+  qexistsl_tac [`t`, `w`] >> simp[] >> metis_tac[]
+QED
 
 (* The new shared contract and literal simulation must not depend on the
    legacy expression-correctness admissions in exprLoweringProps. *)
