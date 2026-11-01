@@ -431,3 +431,47 @@ Proof
        >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
   simp[compiler_label_hoare_typed_primitives]
 QED
+
+Theorem compiler_block_tail_clamp_and_return:
+  compiler_block_tail (clamp_and_return v ty)
+Proof
+  rewrite_tac[clamp_and_return_def, comp_ignore_bind_def] >>
+  irule compiler_block_tail_bind >>
+  simp[compiler_block_tail_clamp, compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_clamp_and_return:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (clamp_and_return v ty) (\r out. compiler_label_reservation origin pending out)
+Proof
+  rewrite_tac[clamp_and_return_def, comp_ignore_bind_def] >>
+  irule compiler_label_hoare_preserving_bind >>
+  simp[compiler_label_hoare_clamp, compiler_label_hoare_typed_primitives]
+QED
+
+Theorem compiler_block_tail_safe_add:
+  compiler_block_tail (compile_safe_add x y ty)
+Proof
+  rewrite_tac[compile_safe_add_def, LET_THM] >> BETA_TAC >>
+  irule compiler_block_tail_bind >> reverse conj_tac
+  >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC >>
+  Cases_on `type_bits ty < 256` >> simp[compiler_block_tail_clamp_and_return] >>
+  Cases_on `is_signed_type ty` >> simp[comp_ignore_bind_def] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_safe_add:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_safe_add x y ty) (\r out. compiler_label_reservation origin pending out)
+Proof
+  rewrite_tac[compile_safe_add_def, LET_THM] >> BETA_TAC >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC >>
+  Cases_on `type_bits ty < 256` >> simp[compiler_label_hoare_clamp_and_return] >>
+  Cases_on `is_signed_type ty` >> simp[comp_ignore_bind_def] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
+       gen_tac >> BETA_TAC) >> simp[compiler_label_hoare_typed_primitives]
+QED
