@@ -1,7 +1,7 @@
 (* Label boundaries for the selected callee's context/memory helpers. *)
 Theory bodyIntCallContextLabels
 Ancestors
-  bodyIntCallLabelFrame bodyIntCallLabels context emitHelperProps
+  bodyIntCallLabelFrame bodyIntCallLabelReservations context emitHelperProps
   compileEnv list pred_set
 
 Theorem compile_ptr_load_label_fields:
@@ -123,25 +123,6 @@ Theorem compiler_block_tail_copy_memory:
 Proof
   Cases_on `sz` >>
   simp[compile_copy_memory_def, compiler_block_tail_primitives]
-QED
-
-Theorem compiler_label_bounds_trans:
-  st.cs_next_label <= mid.cs_next_label /\
-  bound_labels mid SUBSET
-    (bound_labels st UNION compiler_labels_future st.cs_next_label) /\
-  mid.cs_next_label <= out.cs_next_label /\
-  bound_labels out SUBSET
-    (bound_labels mid UNION compiler_labels_future mid.cs_next_label) ==>
-  st.cs_next_label <= out.cs_next_label /\
-  bound_labels out SUBSET
-    (bound_labels st UNION compiler_labels_future st.cs_next_label)
-Proof
-  strip_tac >>
-  `compiler_labels_future mid.cs_next_label SUBSET
-     compiler_labels_future st.cs_next_label` by
-    (irule compiler_labels_future_antimono >> simp[]) >>
-  conj_tac >- decide_tac >>
-  gvs[SUBSET_DEF] >> metis_tac[]
 QED
 
 Theorem comp_bind_label_bounds:
