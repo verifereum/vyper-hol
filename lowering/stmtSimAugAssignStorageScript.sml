@@ -36,7 +36,7 @@
 
 Theory stmtSimAugAssignStorage
 Ancestors
-  list finite_map
+  allocLimits list finite_map
   fragExec exprSim exprSimHyps exprSimOps exprSimOperators exprSimLeaves
   stmtSim stmtSimAssign stmtSimAssignMem stmtSimAssignStorage
   stmtSimAugAssign

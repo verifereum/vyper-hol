@@ -63,6 +63,7 @@
 
 Theory exprSimAggregates
 Ancestors
+  allocLimits
   list exprSim exprSimHyps exprSimConvert exprLowering compileEnv
   valueEncoding vyperAST vyperInterpreter vyperState vyperContext
   vyperValueOperation vyperTypeSystem fragExec venomState

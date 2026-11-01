@@ -16,10 +16,8 @@
  *                              frame
  *   alloca_room_callee       — a callee, entered at the caller's frontier,
  *                              has room
- *   compile_expr_correct     — main expression lowering correctness
  *   compile_literal_vv_correct  — word literal case
  *   compile_name_correct     — variable lookup case
- *   compile_binop_correct    — binary operation case
  *   compile_expr_grows, compile_binop_grows — compile_expr, lower_value
  *                              and compile_binop only append (cs_extends)
  *                              and grow the counters
@@ -168,19 +166,8 @@ Definition same_blocks_def:
     st'.cs_current_bb = st.cs_current_bb
 End
 
-(* ===== Main Correctness Theorem ===== *)
-
-(* For a "simple" (single-block) expression:
-   - The emitted instructions run successfully on the Venom state
-   - The returned operand evaluates to the encoded Vyper value
-   - State relation is preserved
-
-   NOTE: This covers Literal, Name, BinOp, Compare, UnaryOp, Env vars.
-   IfExp (multi-block) needs a separate theorem using run_block. *)
 (* Supported expressions: single-block compilation forms.
-   Handles: Literal, Name, Env vars, Not, Neg, BinOp.
-   IfExp is multi-block (separate theorem needed).
-   Other forms are not yet implemented in compile_expr. *)
+   Handles: Literal, Name, Env vars, Not, Neg, BinOp. *)
 Definition supported_expr_def:
   supported_expr (Literal _ _) = T ∧
   supported_expr (Name _ _) = T ∧
@@ -190,31 +177,6 @@ Definition supported_expr_def:
   supported_expr (Builtin _ (Bop _) (e1::e2::_)) =
     (supported_expr e1 ∧ supported_expr e2) ∧
   supported_expr _ = F
-End
-
-(* well_annotated: annotation types in the AST agree with operand types
-   where the evaluator uses them for bounds checking.
-   - BoolV Not: evaluator ignores annotation, compiler dispatches on expr_type
-   - IntV Not: evaluator uses type_to_int_bound ann for bounds
-   - Neg: evaluator uses type_to_int_bound ann for bounds
-   - BinOp: evaluator uses type_to_int_bound ann for arithmetic bounds;
-     for comparisons type_to_int_bound ann = NONE (vacuously true). *)
-Definition well_annotated_def:
-  well_annotated (Literal ann l) = T ∧
-  well_annotated (Name ann id) = T ∧
-  well_annotated (Builtin ann (Env item) args) = T ∧
-  well_annotated (Builtin ann Not (e::rest)) =
-    ((expr_type e ≠ BaseT BoolT ⇒
-      type_to_int_bound ann = type_to_int_bound (expr_type e)) ∧
-     well_annotated e) ∧
-  well_annotated (Builtin ann Neg (e::rest)) =
-    (type_to_int_bound ann = type_to_int_bound (expr_type e) ∧
-     well_annotated e) ∧
-  well_annotated (Builtin ann (Bop bop) (e1::e2::rest)) =
-    ((∀u. type_to_int_bound ann = SOME u ⇒
-          type_to_int_bound (expr_type e1) = SOME u) ∧
-     well_annotated e1 ∧ well_annotated e2) ∧
-  well_annotated _ = T
 End
 
 (* The size an ALLOCA asks for: its literal operand.  An ALLOCA with any
@@ -507,40 +469,6 @@ Proof
   `frame * SUC (CARD below) <= frame * CARD above`
     by simp[arithmeticTheory.LE_MULT_LCANCEL] >>
   full_simp_tac bool_ss [arithmeticTheory.MULT_CLAUSES] >> decide_tac
-QED
-
-(* The expression lemmas relate states with stmt_state_rel func, where func
-   is the function the code runs in, under the code premises of the
-   statement lemmas (stmtLoweringProps), with fn_has_code, which is defined
-   above this theory, replaced by its single-block consequence: the emitted
-   instructions are func's.  An ALLOCA of the expression (a buffer) then
-   misses every live local, and a Name reads a pointer local, not a MemLoc
-   variable, which state_rel does not relate. *)
-Theorem compile_expr_correct:
-  ∀ func cenv cx ty e es ss st op st' v es' ctx.
-    stmt_state_rel ctx func cenv cx es ss ∧
-    supported_expr e ∧
-    well_annotated e ∧
-    (do result <- eval_expr cx e; read_result cx result od) es =
-      (INL v, es') ∧
-    lower_value compile_expr cenv ty e st = (op, st') ∧
-    (∀i. MEM i (emitted_insts st st') ⇒ MEM i (fn_insts func)) ∧
-    fn_inst_ids_distinct func ∧ local_ptrs_reserved cenv st
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand op ss' = SOME (val_to_w256 v) ∧
-      stmt_state_rel ctx func cenv cx es' ss' ∧
-      same_blocks st st' ∧
-      st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
-      ¬ss'.vs_halted ∧
-      EVERY (λi. ¬is_terminator i.inst_opcode ∧ i.inst_opcode ≠ INVOKE)
-        (emitted_insts st st') ∧
-      (∀x w. not_fresh_at st x ∧ lookup_var x ss = SOME w ⇒
-             lookup_var x ss' = SOME w) ∧
-      (∀x. op = Var x ⇒ not_fresh_at st' x)
-Proof
-  cheat
 QED
 
 (* ===== Infrastructure Lemmas ===== *)
@@ -1084,35 +1012,6 @@ Proof
   simp[] >> irule word_val_in_memory_mem_word_at >> simp[]
 QED
 
-(* --- BinOp (safe arithmetic) --- *)
-(* For compile_binop: the emitted instructions compute the correct
-   result and any overflow checks correctly abort on invalid inputs *)
-(* NOTE: original statement was FALSE when annotation type has different
-   bounds than expr_type e1. Evaluator uses type_to_int_bound ann for
-   bounds checking, compiler uses type_bounds(expr_type e1).
-   Fix: added type consistency + fresh_vars_wrt + named annotation.
-   fresh_vars_wrt is now dropped (see stmt_state_rel): local_ptrs_reserved
-   keeps the temporaries off the locals' pointers. *)
-Theorem compile_binop_correct:
-  ∀ func cenv cx ty ann bop e1 e2 es ss st op st' v es' ctx.
-    stmt_state_rel ctx func cenv cx es ss ∧
-    (∀u. type_to_int_bound ann = SOME u ⇒
-         type_to_int_bound (expr_type e1) = SOME u) ∧
-    (do result <- eval_expr cx (Builtin ann (Bop bop) [e1; e2]);
-        read_result cx result od) es =
-      (INL v, es') ∧
-    lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1; e2]) st = (op, st') ∧
-    (∀i. MEM i (emitted_insts st st') ⇒ MEM i (fn_insts func)) ∧
-    fn_inst_ids_distinct func ∧ local_ptrs_reserved cenv st
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand op ss' = SOME (val_to_w256 v) ∧
-      stmt_state_rel ctx func cenv cx es' ss'
-Proof
-  cheat
-QED
-
 (* --- Not (boolean negation) --- *)
 (* The ISZERO instruction correctly computes boolean NOT.
    Sub-expression correctness is handled by the main induction. *)
@@ -1162,32 +1061,6 @@ Theorem emit_void_assert_inst:
 Proof
   simp[emit_void_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
        emit_def, venomInstTheory.mk_inst_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
-QED
-
-(* NOTE: original statement was FALSE when annotation type has different
-   bounds than expr_type e. Compiler uses type_bounds(expr_type e) but
-   evaluator uses type_to_int_bound(annotation type). Additionally, Neg
-   is only defined for signed integers — unsigned annotation (e.g.
-   UintT 256 with IntV 0) gave a spurious counterexample.
-   Fix: named annotation, added type_to_int_bound constraint, and
-   restricted ann to signed IntT. *)
-Theorem compile_neg_correct:
-  ∀ func cenv cx ty ann e es ss st op st' v es' n ctx.
-    stmt_state_rel ctx func cenv cx es ss ∧
-    (do result <- eval_expr cx (Builtin ann Neg [e]); read_result cx result od) es =
-      (INL v, es') ∧
-    ann = BaseT (IntT n) ∧
-    type_to_int_bound ann = type_to_int_bound (expr_type e) ∧
-    lower_value compile_expr cenv ty (Builtin ann Neg [e]) st = (op, st') ∧
-    (∀i. MEM i (emitted_insts st st') ⇒ MEM i (fn_insts func)) ∧
-    fn_inst_ids_distinct func ∧ local_ptrs_reserved cenv st
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand op ss' = SOME (val_to_w256 v) ∧
-      stmt_state_rel ctx func cenv cx es' ss'
-Proof
-  cheat
 QED
 
 (* --- Environment variables (CALLER, TIMESTAMP, etc.) --- *)
@@ -4553,8 +4426,7 @@ val () = List.app (fn th =>
 val () = List.app
   (fn (name,th) =>
     if List.exists (fn allowed => name = allowed)
-      ["compile_expr_correct", "compile_binop_correct", "compile_neg_correct",
-       "compile_expr_ci_mono", "compile_expr_extends_insts"] then ()
+      ["compile_expr_ci_mono", "compile_expr_extends_insts"] then ()
     else let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
       if null (Thm.hyp th) andalso null axioms andalso
          List.all (fn oracle => oracle = "DISK_THM") oracles then ()
