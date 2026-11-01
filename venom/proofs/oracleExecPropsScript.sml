@@ -69,6 +69,21 @@ Proof
      revert_state_def, eval_operands_def, jump_to_def]
 QED
 
+(* Two GAS steps from equal readings pop the same reading. *)
+Theorem step_inst_base_gas_agree:
+  inst.inst_opcode = GAS /\ step_inst_base inst s1 = OK v1 /\
+  step_inst_base inst s2 = OK v2 /\
+  s1.vs_gas_readings = s2.vs_gas_readings ==>
+  v1.vs_gas_readings = v2.vs_gas_readings /\
+  !x. MEM x inst.inst_outputs ==> lookup_var x v1 = lookup_var x v2
+Proof
+  strip_tac >>
+  rpt (qpat_x_assum `step_inst_base inst _ = _` mp_tac) >>
+  step_inst_base_opcode_tac >>
+  simp[exec_gas_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
 Theorem step_inst_noninvoke_oracle:
   inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> CALL /\
   inst.inst_opcode <> STATICCALL /\ step_inst fuel ctx inst s = OK s' ==>
