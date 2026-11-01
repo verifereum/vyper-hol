@@ -14,9 +14,14 @@ Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperInterpreter vyperState vyperContext vyperStorage
-  vyperTyping vyperEncodeDecode vyperArith
 Libs
   wordsLib
+
+(* Keep Vyper value constructors preferred over contractABI's abi_value
+   constructors when downstream theories merge vyperTypeSystem after
+   vyperEncodeDecode. *)
+Overload IntV = ``vyperValue$IntV``
+Overload BytesV = ``vyperValue$BytesV``
 
 (* ===== Basic type classifiers ===== *)
 
@@ -326,11 +331,6 @@ End
 
 (* ===== Value-type/place typing for storage arrays and hashmaps ===== *)
 
-Definition value_type_as_type_def:
-  value_type_as_type (Type t) = SOME t /\
-  value_type_as_type (HashMapT _ _) = NONE
-End
-
 Definition vtype_annotation_ok_def:
   vtype_annotation_ok (Type t) ann_ty = (ann_ty = t) /\
   vtype_annotation_ok (HashMapT _ _) ann_ty = (ann_ty = NoneT)
@@ -427,8 +427,9 @@ Definition valid_conversion_def:
   valid_conversion (BaseT (IntT _)) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT AddressT) (BaseT (UintT _)) = T /\
-  (* Wider bytes require left padding for addresses, unlike BytesV conversion. *)
-  valid_conversion (BaseT AddressT) (BaseT (BytesT bd)) = (bd = Fixed 20) /\
+  (* Vyper's to_bytes_m needs 160 <= 8 * m; evaluate_convert_from left-pads. *)
+  valid_conversion (BaseT AddressT) (BaseT (BytesT (Fixed m))) =
+    (20 <= m /\ m <= 32) /\
   valid_conversion (BaseT (UintT _)) (BaseT AddressT) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT AddressT) = T /\
   valid_conversion (FlagT _) (BaseT (IntT _)) = T /\
@@ -597,8 +598,9 @@ Proof
       qspec_then `tys` mp_tac listTheory.APPEND_FRONT_LAST >> simp[])
 QED
 
-(* create_arg_types_ok with the RawCreate clause in its decidable form, for
-   EVAL-based checking. *)
+(* Compute twin of create_arg_types_ok_def (used by checker_defs in
+   vyperCheckContractLib) with the RawCreate clause in its decidable form;
+   keep in sync with create_arg_types_ok_def and create_arg_types_ok_raw_create. *)
 Theorem create_arg_types_ok_compute =
   LIST_CONJ
     (List.filter (not o can (find_term (same_const ``RawCreate``)) o concl)
@@ -747,21 +749,12 @@ Termination
     | INL (_, e) => expr_size e
     | INR (INL (_, e)) => expr_size e
     | INR (INR (INL (_, tgt))) => base_assignment_target_size tgt
-    | INR (INR (INR (INL (_, es)))) => expr4_size es
-    | INR (INR (INR (INR (INL (_, opt))))) => expr3_size opt
-    | INR (INR (INR (INR (INR (_, kes))))) => expr1_size kes)`
-  \\ simp[expr_size_def]
-  \\ qsuff_tac
-       `(!es. expr4_size es = list_size expr_size es) /\
-        (!drv. expr3_size drv = option_size expr_size drv) /\
-        (!kes. expr1_size kes =
-               list_size (pair_size (list_size char_size) expr_size) kes)`
-  >- (strip_tac \\ asm_rewrite_tac[] \\ DECIDE_TAC)
-  \\ rpt conj_tac
-  \\ TRY (Induct \\ simp[expr_size_def, listTheory.list_size_def,
-            basicSizeTheory.pair_size_def])
-  \\ Cases
-  \\ simp[expr_size_def, basicSizeTheory.option_size_def]
+    | INR (INR (INR (INL (_, es)))) => list_size expr_size es
+    | INR (INR (INR (INR (INL (_, opt))))) => option_size expr_size opt
+    | INR (INR (INR (INR (INR (_, kes))))) =>
+        list_size (pair_size (list_size char_size) expr_size) kes)`
+  \\ simp[expr_size_def, listTheory.list_size_def,
+          basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def]
 End
 
 Theorem exists_some_option_case[local]:
@@ -770,10 +763,11 @@ Proof
   Cases_on `opt` >> simp[]
 QED
 
-(* well_typed_expr with each `?x. opt = SOME x /\ P x` as a case split on opt,
-   for EVAL-based checking: the split reduces once opt does, so the checker
-   needs no quantifier instantiation for it, also where it is nested in
-   another existential's body (a call as the key of a nested HashMap read). *)
+(* Compute twin of well_typed_expr_def (used by checker_defs in
+   vyperCheckContractLib), rewriting each `?x. opt = SOME x /\ P x` as a case
+   split on opt so EVAL reduces it without quantifier instantiation, including
+   inside another existential's body (a call as the key of a nested HashMap
+   read); keep in sync with well_typed_expr_def. *)
 Theorem well_typed_expr_compute =
   Ho_Rewrite.PURE_REWRITE_RULE [exists_some_option_case] well_typed_expr_def
 
@@ -809,6 +803,12 @@ Definition well_typed_iterator_def:
      is_int_type typ /\ expr_type e1 = typ /\ expr_type e2 = typ)
 End
 
+Definition well_typed_custom_error_def:
+  well_typed_custom_error env err =
+    well_typed_exprs env (custom_error_exprs err)
+End
+
+
 (* ===== Executable statement typing ===== *)
 
 Definition type_stmt_def:
@@ -826,6 +826,8 @@ Definition type_stmt_def:
   type_stmt env ret_ty (Raise RaiseUnreachable) = SOME env /\
   type_stmt env ret_ty (Raise (RaiseReason e)) =
     (if well_typed_expr env e /\ (?n. expr_type e = BaseT (StringT n)) then SOME env else NONE) /\
+  type_stmt env ret_ty (Raise (RaiseCustomError err)) =
+    (if well_typed_custom_error env err then SOME env else NONE) /\
   type_stmt env ret_ty (Assert e AssertBare) =
     (if well_typed_expr env e /\ expr_type e = BaseT BoolT then SOME env else NONE) /\
   type_stmt env ret_ty (Assert e AssertUnreachable) =
@@ -833,6 +835,9 @@ Definition type_stmt_def:
   type_stmt env ret_ty (Assert e (AssertReason se)) =
     (if well_typed_expr env e /\ well_typed_expr env se /\ expr_type e = BaseT BoolT /\
         (?n. expr_type se = BaseT (StringT n)) then SOME env else NONE) /\
+  type_stmt env ret_ty (Assert e (AssertCustomError err)) =
+    (if well_typed_expr env e ∧ expr_type e = BaseT BoolT ∧
+        well_typed_custom_error env err then SOME env else NONE) /\
   type_stmt env ret_ty (Log id es) =
     (if well_typed_exprs env es then SOME env else NONE) /\
   type_stmt env ret_ty (AnnAssign id typ e) =
@@ -871,14 +876,6 @@ Termination
   WF_REL_TAC `measure (\x.
     case x of INL(_,_,t) => stmt_size t
             | INR(_,_,ts) => list_size stmt_size ts)`
-End
-
-Definition well_typed_stmt_def:
-  well_typed_stmt env ret_ty s = IS_SOME (type_stmt env ret_ty s)
-End
-
-Definition well_typed_stmts_def:
-  well_typed_stmts env ret_ty ss = IS_SOME (type_stmts env ret_ty ss)
 End
 
 (* Conservative syntactic control-flow predicate for callable bodies.  If this

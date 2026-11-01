@@ -77,6 +77,38 @@ Definition supported_tuple_type_def:
   supported_tuple_type _ = F
 End
 
+(* Structural place types. The fuel bounds only named-struct expansion;
+   well-typed acyclic declarations need at most LENGTH tops expansions. Array
+   and tuple traversal is structural and consumes no declaration budget. *)
+Definition supported_nested_type_def:
+  supported_nested_type leaf (fuel : num) tops ty <=>
+    leaf ty \/
+    case ty of
+      ArrayT elem (Fixed n) =>
+        0 < n /\ supported_nested_type leaf fuel tops elem
+    | ArrayT elem (Dynamic n) => supported_nested_type leaf fuel tops elem
+    | TupleT tys => ~NULL tys /\ EVERY (supported_nested_type leaf fuel tops) tys
+    | StructT id =>
+        (if fuel = 0 then F
+        else case supported_struct_fields tops id of
+           NONE => F
+         | SOME fields =>
+             EVERY (supported_nested_type leaf (fuel - 1) tops o SND) fields)
+    | _ => F
+Termination
+  (* `fuel : num` is spelled out in both places: the definition and this
+     quotation are typed independently, and an unconstrained numeric type
+     here resolves to `rat`, which makes the WF obligation `WF rat$<` and
+     so unprovable by WF_TAC's lemmas (they are all about `num`). *)
+  WF_REL_TAC `inv_image ($< LEX $<)
+    (λ(leaf,fuel,tops,ty). ((fuel : num), type_size ty))` >> rw[] >> simp[]
+End
+
+Definition supported_place_type_def:
+  supported_place_type tops ty <=>
+    supported_nested_type supported_scalar_type (LENGTH tops) tops ty
+End
+
 Definition supported_value_type_def:
   supported_value_type tops ty <=>
     supported_scalar_type ty \/
@@ -91,22 +123,36 @@ Definition supported_value_type_def:
     | _ => F
 End
 
+(* Equal aggregate types have identical copy layouts. Other complex subtype
+   casts remain guarded until #560. Word casts and bytelike bound changes
+   use the existing scalar store paths. Source typing checks compatibility. *)
+Definition supported_copy_types_def:
+  supported_copy_types dst src <=>
+    dst = src \/
+    (supported_word_type dst /\ supported_word_type src) \/
+    (case (dst,src) of
+       (BaseT (StringT _), BaseT (StringT _)) => T
+     | (BaseT (BytesT (Dynamic _)), BaseT (BytesT (Dynamic _))) => T
+     | _ => F)
+End
+
 Definition supported_storage_type_def:
   supported_storage_type tops ty <=>
-    supported_full_word_type ty \/
-    case ty of
-      ArrayT elem (Fixed n) => supported_full_word_type elem /\ 0 < n
-    | ArrayT elem (Dynamic n) => supported_full_word_type elem
-    | StructT id =>
-        (case supported_struct_fields tops id of
-           SOME fields => EVERY (supported_full_word_type o SND) fields
-         | NONE => F)
-    | _ => F
+    supported_nested_type supported_full_word_type (LENGTH tops) tops ty
 End
 
 Definition supported_hashmap_key_type_def:
   supported_hashmap_key_type ty <=>
-    supported_integer_type ty \/ ty = BaseT BoolT \/ ty = BaseT AddressT
+    supported_integer_type ty \/ ty = BaseT BoolT \/ ty = BaseT AddressT \/
+    ty = BaseT (BytesT (Fixed 32)) \/ supported_string_type ty
+End
+
+(* Map traversal carries the value descriptor through every key. Aggregate
+   leaves retain the independent storage-value restrictions. *)
+Definition supported_hashmap_value_def:
+  supported_hashmap_value tops (Type ty) = supported_storage_type tops ty /\
+  supported_hashmap_value tops (HashMapT kt vt) =
+    (supported_hashmap_key_type kt /\ supported_hashmap_value tops vt)
 End
 
 Definition supported_return_type_def:
@@ -163,9 +209,11 @@ QED
 
 Theorem supported_storage_array_depth:
   (supported_storage_type tops (ArrayT elem (Fixed n)) <=>
-     supported_full_word_type elem /\ 0 < n) /\
+     supported_storage_type tops elem /\ 0 < n) /\
   (supported_storage_type tops (ArrayT elem (Dynamic n)) <=>
-     supported_full_word_type elem)
+     supported_storage_type tops elem)
 Proof
-  simp[supported_storage_type_def, supported_full_word_type_def]
+  conj_tac >> rewrite_tac[supported_storage_type_def] >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [supported_nested_type_def])) >>
+  simp[supported_full_word_type_def, CONJ_COMM]
 QED

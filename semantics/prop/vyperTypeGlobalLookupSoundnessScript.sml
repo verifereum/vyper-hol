@@ -10,8 +10,8 @@ Ancestors
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeEnvExtension vyperTypeEnvPreservation vyperTypeScopePop
   vyperTypeABI vyperTypeBindArguments vyperTypeExprResult vyperTypeStmtResult
-  vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness
-  vyperAssignTarget vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
+  vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness vyperPlaceTyping
+  vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
   vyperEvalMisc vyperStatePreservation vyperAssignPreservesType vyperTypeStatePreservation
 Libs
   wordsLib markerLib intLib
@@ -102,77 +102,6 @@ Proof
   simp[]
 QED
 
-Theorem TopLevelName_missing_address_immutables_TypeError:
-  !cx st src id ty code.
-    get_module_code cx src = SOME code /\
-    find_var_decl_by_name id code = NONE /\
-    ALOOKUP st.immutables cx.txn.target = NONE ==>
-    eval_expr cx (TopLevelName ty (src,id)) st =
-      (INR (Error (TypeError "get_address_immutables")), st)
-Proof
-  simp[Once evaluate_def, Once lookup_global_def, bind_def,
-       lift_option_type_def, get_immutables_def, get_address_immutables_def,
-       return_def, raise_def]
-QED
-
-Theorem TopLevelName_missing_immutable_branch_TypeError:
-  !cx st src id ty code imms.
-    get_module_code cx src = SOME code /\
-    find_var_decl_by_name id code = NONE /\
-    ALOOKUP st.immutables cx.txn.target = SOME imms /\
-    FLOOKUP (get_source_immutables src imms) id = NONE ==>
-    ?msg.
-      eval_expr cx (TopLevelName ty (src,id)) st =
-        (INR (Error (TypeError msg)), st)
-Proof
-  rpt strip_tac >>
-  qexists_tac `"lookup_global: var not found"` >>
-  simp[Once evaluate_def, Once lookup_global_def, bind_def,
-       lift_option_type_def, get_immutables_def, get_address_immutables_def,
-       lift_option_def, return_def, raise_def]
-QED
-
-Theorem TopLevelName_missing_address_immutables_characterisation:
-  !env cx st src id ty code.
-    well_typed_expr env (TopLevelName ty (src,id)) /\
-    env_consistent env cx st /\
-    functions_well_typed cx /\
-    get_module_code cx src = SOME code /\
-    find_var_decl_by_name id code = NONE /\
-    ALOOKUP st.immutables cx.txn.target = NONE ==>
-    FLOOKUP env.bare_globals (src,id) <> NONE /\
-    src <> env.current_src
-Proof
-  rpt strip_tac >>
-  `~IS_SOME (FLOOKUP
-      (get_source_immutables src
-        (case ALOOKUP st.immutables cx.txn.target of NONE => [] | SOME m => m))
-      id)` by simp[get_source_immutables_def] >>
-  drule_all TopLevelName_missing_immutable_branch_characterisation >>
-  simp[]
-QED
-
-Theorem TopLevelName_missing_source_immutable_characterisation:
-  !env cx st src id ty code imms.
-    well_typed_expr env (TopLevelName ty (src,id)) /\
-    env_consistent env cx st /\
-    functions_well_typed cx /\
-    get_module_code cx src = SOME code /\
-    find_var_decl_by_name id code = NONE /\
-    ALOOKUP st.immutables cx.txn.target = SOME imms /\
-    FLOOKUP (get_source_immutables src imms) id = NONE ==>
-    FLOOKUP env.bare_globals (src,id) <> NONE /\
-    src <> env.current_src
-Proof
-  rpt gen_tac >> strip_tac >>
-  `~IS_SOME (FLOOKUP
-      (get_source_immutables src
-        (case ALOOKUP st.immutables cx.txn.target of NONE => [] | SOME m => m))
-      id)` by simp[] >>
-  drule_all TopLevelName_missing_immutable_branch_characterisation >>
-  simp[]
-QED
-
 Theorem TopLevelName_missing_immutable_impossible:
   !env cx st src id ty code.
     well_typed_expr env (TopLevelName ty (src,id)) /\
@@ -237,7 +166,7 @@ Theorem lookup_global_TopLevelName_find_NONE_success_typed:
     get_module_code cx src = SOME code /\
     find_var_decl_by_name id code = NONE /\
     lookup_global cx src id st = (INL tvl,st') ==>
-    expr_result_typed env (TopLevelName ty (src,id)) tvl
+    eval_result_typed (env,cx,st') tvl (Type ty)
 Proof
   rpt strip_tac >>
   `FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty)` by (
@@ -262,8 +191,7 @@ Proof
           simp[]) >>
       strip_tac >> gvs[return_def] >>
       PairCases_on `x'` >> rename1 `SOME (imm_tv,imm_v)` >> gvs[] >>
-      simp[expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
-           toplevel_value_typed_Value] >>
+      simp[eval_result_typed_def] >>
       qexists_tac `imm_tv` >> simp[] >>
       conj_tac >- (
         drule get_immutables_success >> strip_tac >> gvs[] >>
@@ -275,12 +203,11 @@ Proof
         simp[] >> strip_tac >>
         first_x_assum (qspecl_then [`id`, `imm_tv`, `imm_v`] mp_tac) >>
         simp[]) >>
-      drule get_immutables_success >> strip_tac >> gvs[] >>
-      `imms_well_typed
-         (case ALOOKUP r.immutables cx.txn.target of NONE => [] | SOME m => m)` by
-        (irule current_immutables_well_typed >> simp[]) >>
-      drule_all imms_well_typed_get_source_immutables >>
-      simp[]) >>
+      simp[runtime_place_typed_immutable, subscripts_type_def] >>
+      conj_tac
+      >- metis_tac[vyperPlaceTypingTheory.get_immutables_success_typed] >>
+      goal_assum (drule_at Any) >>
+      metis_tac[get_immutables_success]) >>
   simp[bind_def, return_def, raise_def]
 QED
 
@@ -353,7 +280,7 @@ Theorem lookup_global_TopLevelName_storage_success_typed:
     find_var_decl_by_name id code =
       SOME (StorageVarDecl is_transient typ,id_str) /\
     lookup_global cx src id st = (INL tvl,st') ==>
-    expr_result_typed env (TopLevelName ty (src,id)) tvl
+    eval_result_typed (env,cx,st') tvl (Type ty)
 Proof
   rpt strip_tac >>
   `typ = ty` by metis_tac[TopLevelName_storage_decl_type_eq] >> gvs[] >>
@@ -366,20 +293,8 @@ Proof
   Cases_on `lookup_var_slot_from_layout cx is_transient src id_str` >> gvs[] >>
   Cases_on `evaluate_type (get_tenv cx) ty` >> gvs[] >>
   rename1 `evaluate_type (get_tenv cx) ty = SOME tv` >>
-  Cases_on `tv` >> simp[return_def] >>
-  rpt strip_tac >> gvs[expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
-                       toplevel_value_typed_def]
-  >- (`well_formed_type_value (BaseTV b)` by metis_tac[evaluate_type_well_formed_type_value] >>
-      drule_all read_storage_slot_success_type >> simp[])
-  >- (`well_formed_type_value (TupleTV l)` by metis_tac[evaluate_type_well_formed_type_value] >>
-      drule_all read_storage_slot_success_type >> simp[])
-  >- (`well_formed_type_value (StructTV l)` by metis_tac[evaluate_type_well_formed_type_value] >>
-      drule_all read_storage_slot_success_type >> simp[])
-  >- (`well_formed_type_value (FlagTV n)` by metis_tac[evaluate_type_well_formed_type_value] >>
-      drule_all read_storage_slot_success_type >> simp[]) >>
-  `well_formed_type_value NoneTV` by metis_tac[evaluate_type_well_formed_type_value] >>
-  drule_all read_storage_slot_success_type >> strip_tac >>
-  gvs[value_has_type_NoneTV]
+  rpt strip_tac >> gvs[eval_result_typed_def] >>
+  metis_tac[evaluate_type_well_formed_type_value]
 QED
 
 Theorem TopLevelName_Type_HashMapVarDecl_impossible:
@@ -399,19 +314,6 @@ Proof
     metis_tac[TopLevelName_toplevel_vtypes_Type] >>
   `runtime_consistent env cx st` by simp[runtime_consistent_def] >>
   metis_tac[top_level_Type_not_hashmap_decl]
-QED
-
-Theorem duplicate_storage_and_immutable_scanners_probe:
-  !id typ imm_typ.
-    find_var_decl_by_name id
-      [VariableDecl Private Storage id typ NONE;
-       VariableDecl Private Immutable id imm_typ NONE] =
-      SOME (StorageVarDecl F typ,id) /\
-    is_immutable_decl id
-      [VariableDecl Private Storage id typ NONE;
-       VariableDecl Private Immutable id imm_typ NONE]
-Proof
-  simp[find_var_decl_by_name_def, is_immutable_decl_def]
 QED
 
 
@@ -470,7 +372,7 @@ Theorem lookup_global_TopLevelName_success_typed:
     accounts_well_typed st.accounts /\
     functions_well_typed cx /\
     lookup_global cx src id st = (INL tvl,st') ==>
-    expr_result_typed env (TopLevelName ty (src,id)) tvl
+    eval_result_typed (env,cx,st') tvl (Type ty)
 Proof
   rpt strip_tac >>
   `FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty)` by
@@ -497,24 +399,13 @@ Theorem lookup_global_TopLevelName_sound:
     lookup_global cx src id st = (res,st') ==>
     no_type_error_result res /\
     (case res of
-     | INL tvl => expr_result_typed env (TopLevelName ty (src,id)) tvl
+     | INL tvl => eval_result_typed (env,cx,st') tvl (Type ty)
      | INR _ => T)
 Proof
   rpt gen_tac >> strip_tac >>
   conj_tac >- metis_tac[lookup_global_TopLevelName_no_type_error] >>
   Cases_on `res` >> simp[] >>
   metis_tac[lookup_global_TopLevelName_success_typed]
-QED
-
-Theorem expr_result_typed_TopLevelName_Type_place:
-  expr_result_typed env (TopLevelName ty (src,id)) tvl /\
-  type_place_expr env (TopLevelName ty (src,id)) = SOME (Type ty) ==>
-  place_expr_result_typed env tvl (Type ty)
-Proof
-  rw[expr_result_typed_def, expr_runtime_typed_def,
-     place_expr_result_typed_def, expr_type_def] >>
-  qexists_tac `tv` >> simp[] >>
-  strip_tac >> gvs[]
 QED
 
 Theorem lookup_global_TopLevelName_place_sound:
@@ -528,7 +419,7 @@ Theorem lookup_global_TopLevelName_place_sound:
     lookup_global cx src id st = (res,st') ==>
     no_type_error_result res /\
     (case res of
-     | INL tvl => place_expr_result_typed env tvl vt
+     | INL tvl => eval_result_typed (env,cx,st') tvl vt
      | INR _ => T)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -560,19 +451,8 @@ Proof
       simp[lookup_global_def, bind_def, lift_option_type_def, return_def, raise_def,
            LET_THM, option_CASE_rator, var_decl_info_CASE_rator, prod_CASE_rator,
            type_value_CASE_rator, AllCaseEqs()] >>
-      Cases_on `x` >> simp[return_def] >>
-      rpt strip_tac >> gvs[place_expr_result_typed_def, toplevel_value_typed_def,
-                           is_HashMapRef_def]
-      >- (`well_formed_type_value (BaseTV b)` by metis_tac[evaluate_type_well_formed_type_value] >>
-          drule_all read_storage_slot_success_type >> simp[])
-      >- (`well_formed_type_value (TupleTV l)` by metis_tac[evaluate_type_well_formed_type_value] >>
-          drule_all read_storage_slot_success_type >> simp[])
-      >- (`well_formed_type_value (StructTV l)` by metis_tac[evaluate_type_well_formed_type_value] >>
-          drule_all read_storage_slot_success_type >> simp[])
-      >- (`well_formed_type_value (FlagTV n)` by metis_tac[evaluate_type_well_formed_type_value] >>
-          drule_all read_storage_slot_success_type >> simp[]) >>
-      `well_formed_type_value NoneTV` by metis_tac[evaluate_type_well_formed_type_value] >>
-      drule_all read_storage_slot_success_type >> simp[]) >>
+      rpt strip_tac >> gvs[return_def, eval_result_typed_def] >>
+      metis_tac[evaluate_type_well_formed_type_value]) >>
     `well_formed_type env.type_defs t` by
       metis_tac[env_consistent_def, env_context_consistent_def,
                 well_formed_vtype_def] >>
@@ -583,10 +463,7 @@ Proof
       simp[well_typed_expr_def] >>
     drule_all lookup_global_TopLevelName_sound >> strip_tac >>
     conj_tac >- simp[] >>
-    Cases_on `res` >>
-    gvs[place_expr_result_typed_def, expr_result_typed_def,
-        expr_runtime_typed_def, expr_type_def] >>
-    strip_tac >> gvs[well_typed_expr_def, vtype_annotation_ok_def]) >>
+    Cases_on `res` >> gvs[]) >>
   rename1 `FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt vt)` >>
   `?code is_transient id_str.
       get_module_code cx src = SOME code /\
@@ -599,6 +476,5 @@ Proof
      gvs[]) >>
   gvs[IS_SOME_EXISTS] >>
   drule_all lookup_global_HashMapVarDecl_returns_HashMapRef >>
-  strip_tac >> gvs[no_type_error_result_def, place_expr_result_typed_def]
+  strip_tac >> gvs[no_type_error_result_def, eval_result_typed_def]
 QED
-

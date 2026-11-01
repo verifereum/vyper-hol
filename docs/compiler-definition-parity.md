@@ -148,6 +148,9 @@ convert the upstream compile-only tests into replayed tests.
 
 ### Fixtures
 
+The encoder's descriptor, physical-scratch and source-value proof interfaces
+are described in [abi-encoder-contracts.md](abi-encoder-contracts.md).
+
 | HOL file/area | Purpose | Status | Notes |
 |---|---|---|---|
 | `lowering/defs/bytecode/eval/evalCompilerScript.sml` and `evalCompilerSubset*` | checked compiler fixture programs | reviewed for the frozen 101-fixture supported-subset corpus | Program definitions correspond to the tracked Vyper sources; the original 23 fixtures remain the first milestone. |

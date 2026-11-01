@@ -1,0 +1,50 @@
+name: 'Restore run cache'
+description: 'Restores a cache entry an earlier job of this run saved or restored, trying three times before failing the job'
+
+inputs:
+  path:
+    description: 'Path to restore into'
+    required: true
+  key:
+    description: 'Exact cache key'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    # A download from the Actions cache can stall and be aborted, which the
+    # restore reports as a miss. An earlier job of this run saved or restored
+    # the entry, so a miss is almost always such an abort, and a second
+    # download succeeds.
+    - name: Restore cache
+      id: attempt-1
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ inputs.path }}
+        key: ${{ inputs.key }}
+
+    - name: Wait before retrying
+      if: ${{ steps.attempt-1.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: sleep 15
+
+    - name: Restore cache (attempt 2)
+      id: attempt-2
+      if: ${{ steps.attempt-1.outputs.cache-hit != 'true' }}
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ inputs.path }}
+        key: ${{ inputs.key }}
+
+    - name: Wait before retrying
+      if: ${{ steps.attempt-1.outputs.cache-hit != 'true' && steps.attempt-2.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: sleep 30
+
+    - name: Restore cache (attempt 3)
+      if: ${{ steps.attempt-1.outputs.cache-hit != 'true' && steps.attempt-2.outputs.cache-hit != 'true' }}
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ inputs.path }}
+        key: ${{ inputs.key }}
+        fail-on-cache-miss: true

@@ -1,8 +1,7 @@
 (* PLAN 5.6 name whitelist. TOP-LEVEL: supported_declaration_names,
    supported_function_bindings, supported_selectors_distinct.
    Helpers: supported_module_names, supported_function_names,
-   supported_event_names,
-   supported_function_header_names, supported_struct_field_names.
+   supported_event_names, supported_function_header_names.
    TASK_021 supplies ALL AnnAssign and For names (including nested branches)
    to supported_function_bindings. No body traversal or body placeholder. *)
 Theory supportedNames
@@ -35,13 +34,10 @@ Definition supported_event_names_def:
 End
 
 (* Lists, not sets: repeated names in different branches/loops must fail.
-   Concatenating catches cross-class collisions as well as duplicates.
-   No binding contains "." (no Vyper identifier does), so none is a
-   module_var_key ("self." ++ name) and none shadows a module variable. *)
+   Concatenating catches cross-class collisions as well as duplicates. *)
 Definition supported_function_bindings_def:
   supported_function_bindings tops (args : argument list) locals loops <=>
-    ALL_DISTINCT (MAP FST args ++ locals ++ loops) /\
-    EVERY (\n. ~MEM #"." n) (MAP FST args ++ locals ++ loops)
+    ALL_DISTINCT (MAP FST args ++ locals ++ loops)
 End
 
 Definition supported_function_header_names_def:
@@ -50,14 +46,6 @@ Definition supported_function_header_names_def:
       FunctionDecl vis mut nr rr name args defaults ret stmts =>
         (name = "__default__" ==> NULL args) /\
         supported_function_bindings tops args [] []
-    | _ => T
-End
-
-Definition supported_struct_field_names_def:
-  supported_struct_field_names tops top <=>
-    case top of
-      StructDecl name fields =>
-        EVERY (\field. ~MEM (FST field) (supported_module_names tops)) fields
     | _ => T
 End
 
@@ -76,7 +64,6 @@ Definition supported_declaration_names_def:
     ALL_DISTINCT (supported_function_names tops) /\
     ALL_DISTINCT (supported_event_names tops) /\
     EVERY (supported_function_header_names tops) tops /\
-    EVERY (supported_struct_field_names tops) tops /\
     supported_selectors_distinct tops
 End
 
@@ -104,12 +91,4 @@ Theorem supported_declaration_names_unique:
     supported_selectors_distinct tops
 Proof
   simp[supported_declaration_names_def]
-QED
-
-Theorem supported_struct_fields_no_module_collision:
-  supported_struct_field_names tops (StructDecl s fields) /\
-  MEM (name, ty) fields ==>
-  ~MEM name (supported_module_names tops)
-Proof
-  simp[supported_struct_field_names_def, EVERY_MEM] >> metis_tac[FST]
 QED

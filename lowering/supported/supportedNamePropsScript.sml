@@ -37,7 +37,7 @@ Proof
   EVAL_TAC
 QED
 
-(* Module variables are keyed "self." ++ name in compile_env, so locals may
+(* Module variables have their own compile_env tables, so locals may
    shadow them as in Python Vyper (#557, a04-03). *)
 Theorem supported_module_binding_shadowing_accept:
   supported_function_bindings supported_test_declarations
@@ -50,14 +50,6 @@ Theorem supported_module_binding_shadowing_accept:
   supported_declaration_names
     [VariableDecl Private Storage "x" (BaseT (UintT 256)) (SOME 0);
      FunctionDecl External View F F "f" [("x", BaseT BoolT)] [] NoneT []]
-Proof
-  EVAL_TAC
-QED
-
-Theorem supported_dotted_binding_reject:
-  ~supported_function_bindings [] [("self.x", BaseT BoolT)] [] [] /\
-  ~supported_function_bindings [] [] ["self.x"] [] /\
-  ~supported_function_bindings [] [] [] ["self.x"]
 Proof
   EVAL_TAC
 QED
@@ -87,14 +79,13 @@ Proof
 QED
 
 Theorem supported_struct_module_collisions_contract:
-  supported_struct_field_names supported_test_declarations
-    (StructDecl "Good" [("a", BaseT (UintT 256)); ("b", BaseT BoolT)]) /\
-  ~supported_struct_field_names supported_test_declarations
-    (StructDecl "Bad" [("number", BaseT (UintT 256))]) /\
-  ~supported_struct_field_names supported_test_declarations
-    (StructDecl "Bad" [("scratch", BaseT (UintT 256))]) /\
-  ~supported_struct_field_names supported_test_declarations
-    (StructDecl "Bad" [("map", BaseT (UintT 256))])
+  supported_declaration_names
+    [VariableDecl Private Storage "number" (BaseT (UintT 256)) (SOME 0);
+     VariableDecl Private Transient "scratch" (BaseT (UintT 256)) (SOME 1);
+     HashMapDecl Private F "map" (BaseT AddressT)
+       (Type (BaseT (UintT 256))) (SOME 2);
+     StructDecl "Fields" [("number", BaseT (UintT 256));
+       ("scratch", BaseT (UintT 256)); ("map", BaseT (UintT 256))]]
 Proof
   EVAL_TAC
 QED
@@ -117,12 +108,21 @@ Proof
   EVAL_TAC
 QED
 
+(* Internal labels are compiler-generated, so user function names no longer
+   need to avoid the compiler's label spellings. *)
+Theorem supported_internal_label_names_accept:
+  supported_declaration_names
+    [FunctionDecl Internal Pure F F "return_label_42" [] [] NoneT [];
+     FunctionDecl Internal Pure F F "revert" [] [] NoneT [];
+     FunctionDecl Internal Pure F F "code_end" [] [] NoneT [];
+     FunctionDecl Internal Pure F F "reachable_0" [] [] NoneT []]
+Proof
+  EVAL_TAC
+QED
+
 Theorem supported_declaration_name_checks_reject:
   ~supported_declaration_names
-    [FunctionDecl External Payable F F "__default__" [("x", BaseT BoolT)] [] NoneT []] /\
-  ~supported_declaration_names
-    [HashMapDecl Private F "m" (BaseT BoolT) (Type (BaseT (UintT 256))) (SOME 0);
-     StructDecl "S" [("m", BaseT (UintT 256))]]
+    [FunctionDecl External Payable F F "__default__" [("x", BaseT BoolT)] [] NoneT []]
 Proof
   EVAL_TAC
 QED

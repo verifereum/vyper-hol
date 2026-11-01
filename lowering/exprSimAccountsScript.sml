@@ -12,7 +12,7 @@
  * emit_op_frag, then straight-line code on its result.
  *
  * TOP-LEVEL:
- *   compile_acc_read_sim   — expr_vv_ok of an account read other than
+ *   compile_acc_read_case  — expr_vv_case of an account read other than
  *                            .code
  *   lower_value_acc        — how an account read lowers
  *   compile_acc_frag       — unop_frag of each read's code
@@ -34,7 +34,8 @@ Ancestors
   list rich_list words integer_word byte
   fragExec freshWrites varsExt loweringSlice exprSim exprSimHyps exprSimUnop
   exprSimOperators exprSimWordBuiltins exprBopLowering exprLowering
-  emitHelper emitHelperProps compileEnv exprLoweringProps valueEncoding
+  emitHelper emitHelperProps compileEnv exprLoweringProps accountsRelProps
+  valueEncoding
   valueEncodingProofs venomExecSemantics venomInst venomState venomMemProps
   vyperAST vyperInterpreter vyperContext vyperValue vyperTyping
   vyperTypeSystem vyperTypeInvariants vyperTypeBytesCrypto vfmState
@@ -60,7 +61,7 @@ Proof
   pop_assum SUBST1_TAC >> simp[w2w_w2w, WORD_ALL_BITS]
 QED
 
-Theorem emit_op_extends_next_var[local]:
+Theorem emit_op_extends_next_var:
   !opc ops sa v sb.
     emit_op opc ops sa = (v, sb) ==>
     cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var
@@ -82,7 +83,7 @@ Theorem unop_frag_read_then:
     (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
           w = typed_val_to_w256 tv v) /\
     (!x ss n out.
-       eval_operand x ss = SOME w1 /\ ss.vs_accounts = es0.accounts ==>
+       eval_operand x ss = SOME w1 /\ stmt_state_rel ctx func cenv cx es0 ss ==>
        step_inst_base (mk_inst n opc [x] [out]) ss =
          OK (update_var out r ss)) /\
     (!c sa sb op ss.
@@ -91,7 +92,7 @@ Theorem unop_frag_read_then:
        ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
              eval_operand op ss' = SOME w) ==>
     unop_frag ctx func cenv cx (\x. comp_bind (emit_op opc [x]) g) w1 t
-      (INL (Value v)) es0
+      (INL v) es0
 Proof
   rpt gen_tac >> strip_tac >> simp[unop_frag_def] >> rpt gen_tac >>
   strip_tac >>
@@ -115,9 +116,9 @@ Proof
   `!z. not_fresh_at sa z ==> not_fresh_at s1 z` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >>
      asm_rewrite_tac[]) >>
-  `(\s. s = s0 /\ stmt_state_rel func cenv cx es0 s /\
+  `(\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s /\
         eval_operand x s = SOME w1) =
-   (\s. s = s0 /\ stmt_state_rel func cenv cx es0 s)` by
+   (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s)` by
     (rw[FUN_EQ_THM] >> eq_tac >> rw[] >> gvs[]) >>
   pop_assum SUBST1_TAC >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`, `opc`, `[x]`, `sa`, `c`,
@@ -125,14 +126,13 @@ Proof
     mp_tac emit_op_frag >>
   impl_tac
   >- (asm_rewrite_tac[] >> strip_tac >> gen_tac >>
-      qpat_x_assum `!x ss n out. _` irule >>
-      gvs[stmt_state_rel_def, state_rel_def, accounts_rel_def]) >>
+      qpat_x_assum `!x ss n out. _` irule >> asm_rewrite_tac[]) >>
   disch_then (fn th => irule (MATCH_MP frag_exec_then (SPEC_ALL th))) >>
   asm_rewrite_tac[] >> BETA_TAC >> rpt strip_tac >>
   rename1 `eval_operand c u = SOME r` >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`, `g c`, `s1`, `sb`, `op`,
                `w`, `\ss. eval_operand c ss = SOME r`, `\a. F`,
-               `expr_exit (INL (Value v))`, `u`]
+               `expr_exit (INL v)`, `u`]
     mp_tac frag_exec_straight_fresh >>
   impl_tac
   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac
@@ -158,10 +158,10 @@ Theorem unop_frag_read:
     (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
           r = typed_val_to_w256 tv v) /\
     (!x ss n out.
-       eval_operand x ss = SOME w1 /\ ss.vs_accounts = es0.accounts ==>
+       eval_operand x ss = SOME w1 /\ stmt_state_rel ctx func cenv cx es0 ss ==>
        step_inst_base (mk_inst n opc [x] [out]) ss =
          OK (update_var out r ss)) ==>
-    unop_frag ctx func cenv cx (\x. emit_op opc [x]) w1 t (INL (Value v)) es0
+    unop_frag ctx func cenv cx (\x. emit_op opc [x]) w1 t (INL v) es0
 Proof
   rpt strip_tac >>
   `(\x. emit_op opc [x]) = (\x. comp_bind (emit_op opc [x]) comp_return)` by
@@ -214,8 +214,12 @@ Proof
       qexists_tac `n2w (LENGTH a.code)` >>
       rpt strip_tac
       >~ [`step_inst_base`]
-      >- gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
-             typed_val_to_w256_def, Abbr `a`] >>
+      >- (`!addr. (lookup_account addr ss.vs_accounts).code =
+                  (lookup_account addr es0.accounts).code` by
+            (fs[stmt_state_rel_def, state_rel_def, accounts_rel_def] >>
+             metis_tac[accounts_agree_lookup]) >>
+          gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
+              typed_val_to_w256_def, Abbr `a`]) >>
       drule emit_op_GT_correct >>
       disch_then (qspecl_then [`n2w (LENGTH a.code)`, `0w`, `ss`] mp_tac) >>
       impl_tac >- gvs[eval_operand_def] >>
@@ -226,10 +230,19 @@ Proof
   simp[account_item_type_def, vyperValueTheory.evaluate_type_def,
        evaluate_account_op_def, is_word_type_def, is_terminator_def] >>
   rpt strip_tac >>
+  `!addr. (lookup_account addr ss.vs_accounts).balance =
+          (lookup_account addr es0.accounts).balance /\
+          (lookup_account addr ss.vs_accounts).code =
+          (lookup_account addr es0.accounts).code /\
+          (lookup_account addr ss.vs_accounts).nonce =
+          (lookup_account addr es0.accounts).nonce` by
+    (fs[stmt_state_rel_def, state_rel_def, accounts_rel_def] >>
+     metis_tac[accounts_agree_lookup]) >>
   gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, Abbr `a`] >>
   simp[typed_val_to_w256_def, val_to_w256_def, i2w_def] >>
   rw[PAD_RIGHT, LENGTH_Keccak_256_w64, word_of_bytes_be_def,
-     word_of_bytes_replicate_zero]
+     word_of_bytes_replicate_zero] >>
+  gvs[vfmStateTheory.account_empty_def]
 QED
 
 (* ===== The lowering ===== *)
@@ -292,28 +305,23 @@ QED
 
 (* An account read other than .code: compile_unop_sim with the address
    operand lowered as an address, and compile_acc_frag. *)
-Theorem compile_acc_read_sim:
-  !cenv ann item args.
-    item <> Code /\ expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (Builtin ann (Acc item) args)
+Theorem compile_acc_read_case:
+  !nocalls ctx func cenv cx ann item args.
+    item <> Code /\ exprs_case nocalls ctx func cenv cx args ==>
+    expr_vv_case nocalls ctx func cenv cx (Builtin ann (Acc item) args)
 Proof
-  rpt strip_tac >>
-  `expr_ok cenv (Builtin ann (Acc item) args)` suffices_by
-    simp[expr_ok_def] >>
-  irule expr_ok_stack >> rpt conj_tac
+  rpt strip_tac >> irule expr_vv_case_stack >> rpt conj_tac
   >- metis_tac[eval_expr_builtin_value]
   >- simp[compile_acc_stack] >>
-  rw[expr_sim_ok_def] >>
+  rw[expr_sim_case_def] >>
   `?e1. args = [e1] /\ ann = account_item_type item /\
         expr_type e1 = BaseT AddressT` by
-    (gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+    (gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
      Cases_on `args` >> gvs[] >> rename1 `h::t` >> Cases_on `t` >> gvs[]) >>
   gvs[] >>
-  `expr_ok cenv e1` by
-    (fs[expr_sim_below_def] >> first_x_assum irule >> simp[]) >>
-  `expr_sim_pre cenv cx env e1 es` by
-    (drule expr_sim_pre_builtin_arg >> disch_then irule >>
-     gvs[expr_sim_pre_def]) >>
+  `expr_body_pre cenv cx env e1 es /\
+   expr_sim ctx func cenv cx (BaseT AddressT) e1 es` by
+    metis_tac[unop_operand_sim] >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ty`, `account_item_type item`,
                `Acc item`, `e1`, `BaseT AddressT`,
                `\x. case item of
@@ -334,22 +342,21 @@ Proof
     >- simp[is_word_type_def]
     >- (rpt strip_tac >> drule_all lower_value_acc >> simp[])
     >- (rpt gen_tac >> strip_tac >>
-        drule expr_sim_pre_lower_value_word_shape >> disch_then drule >>
+        drule expr_body_pre_lower_value_word_shape >> disch_then drule >>
         simp[is_word_type_def])
     >- (rpt gen_tac >> strip_tac >>
         Cases_on `item` >> gvs[comp_return_def, cs_extends_refl, comp_bind_def] >>
         rpt (pairarg_tac >> gvs[]) >>
         imp_res_tac emit_op_extends_next_var >>
         metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS])
-    >- metis_tac[expr_sim_pre_word_value, is_word_type_def]
-    >- metis_tac[expr_ok_def, expr_sim_ok_def] >>
+    >- simp[] >>
     rpt strip_tac >>
-    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `Value v1`, `es1`] mp_tac
-      expr_sim_pre_word_value >>
+    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `v1`, `es1`] mp_tac
+      expr_body_pre_word_value >>
     simp[is_word_type_def] >> strip_tac >>
     gvs[vyperValueTheory.evaluate_type_def] >>
     Cases_on `v1` >> gvs[value_has_type_def] >>
     irule compile_acc_frag >> simp[] >>
-    drule_all expr_sim_pre_eval >> simp[expr_sim_inv_def]) >>
+    drule_all expr_body_pre_eval >> simp[expr_sim_inv_def]) >>
   simp[]
 QED

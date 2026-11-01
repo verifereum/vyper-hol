@@ -26,7 +26,7 @@ Theory intCallResult
 Ancestors
   list rich_list arithmetic
   exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
-  freshWrites valueEncoding valueEncodingProps entryDecodeProps
+  freshWrites valueEncoding valueEncodingProps entryDecodeProps immutableMemoryFrame
   exprSim fragExec localPtrsProps context valueCopy
   vyperTyping vyperValue vyperState venomExecSemantics venomState
 
@@ -122,7 +122,7 @@ QED
    32 * i, with an ADD for each address.  The operands are the INVOKE's
    outputs, older than the ADDs' fresh variables, so the ADDs do not
    change them. *)
-Theorem store_multi_results_run:
+Theorem store_multi_results_run_capacity[local]:
   !ops buf_op off sa sb s b ws.
     store_multi_results buf_op ops off sa = ((),sb) /\
     (!x. buf_op = Var x ==> not_fresh_at sa x) /\
@@ -139,7 +139,8 @@ Theorem store_multi_results_run:
       (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!a len. a + len <= b + off \/ b + off + 32 * LENGTH ops <= a ==>
-         mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
+         mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   Induct
   >- (rpt gen_tac >> strip_tac >>
@@ -157,10 +158,12 @@ Proof
   rename1 `eval_operand h s = SOME x` >>
   `!y. h = Var y ==> not_fresh_at sa y` by metis_tac[] >>
   drule_all store_result_head_run >> strip_tac >>
+  `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    (simp[immutable_mstore_capacity, MAX_DEF]) >>
   suspend "tail"
 QED
 
-Resume store_multi_results_run[tail]:
+Resume store_multi_results_run_capacity[tail]:
   `(!x. buf_op = Var x ==> not_fresh_at post x) /\
    (!x. MEM (Var x) ops ==> not_fresh_at post x)` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
@@ -207,12 +210,37 @@ Resume store_multi_results_run[tail]:
       `not_fresh_at post y` by
         (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
       metis_tac[])
-  >> rpt gen_tac >> strip_tac >>
-  irule EQ_TRANS >> qexists_tac `mem_bytes_at a len t.vs_memory` >>
-  conj_tac >> first_x_assum irule >> decide_tac
+  >- (rpt gen_tac >> strip_tac >>
+      irule EQ_TRANS >> qexists_tac `mem_bytes_at a len t.vs_memory` >>
+      conj_tac >> first_x_assum irule >> decide_tac) >>
+  decide_tac
 QED
 
-Finalise store_multi_results_run
+Finalise store_multi_results_run_capacity
+
+Theorem store_multi_results_run:
+  !ops buf_op off sa sb s b ws.
+    store_multi_results buf_op ops off sa = ((),sb) /\
+    (!x. buf_op = Var x ==> not_fresh_at sa x) /\
+    (!x. MEM (Var x) ops ==> not_fresh_at sa x) /\
+    eval_operand buf_op s = SOME (n2w b) /\
+    MAP (\op. eval_operand op s) ops = MAP SOME ws /\
+    b + off + 32 * LENGTH ops < dimword (:256) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sa.cs_next_id <= sb.cs_next_id /\
+    ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      (!i. i < LENGTH ws ==>
+           mem_word_at (b + off + 32 * i) t.vs_memory = EL i ws) /\
+      (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!a len. a + len <= b + off \/ b + off + 32 * LENGTH ops <= a ==>
+         mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all store_multi_results_run_capacity >> strip_tac >>
+  asm_rewrite_tac[] >> qexists_tac `t` >> asm_rewrite_tac[]
+QED
 
 (* ===== The stored words hold the value ===== *)
 
@@ -333,15 +361,16 @@ Finalise stack_results_val_in_memory
    keeping the live locals' pointer variables and the bytes of their
    regions (as literal_state_memory_frame in exprSimLiteralBuffer). *)
 Theorem result_state_memory_frame:
-  !func cenv cx es s t.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx es s t ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
     (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
        FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
        lookup_var p t = lookup_var p s) /\
     (!name b sz. local_region cenv es.scopes s name b sz ==>
-       mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) ==>
-    stmt_state_rel func cenv cx es t
+       mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) /\
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t ==>
+    stmt_state_rel ctx func cenv cx es t
 Proof
   rpt strip_tac >>
   `t = s with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>` by
@@ -360,8 +389,12 @@ Proof
      rpt conj_tac >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
   `alloca_inv t` by
     (irule alloca_inv_fields >> qexists_tac `s` >> gvs[stmt_state_rel_def]) >>
-  `alloca_room func t` by
+  `alloca_room ctx func t` by
     (irule alloca_room_fields >> qexists_tac `s` >> gvs[stmt_state_rel_def]) >>
+  `immutable_alloca_sep func cenv cx es t` by
+    (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
+     gvs[stmt_state_rel_def] >> rpt strip_tac >> qexists_tac `id` >>
+     fs[local_region_def] >> metis_tac[]) >>
   rewrite_tac[stmt_state_rel_def] >>
   conj_tac
   >- (irule state_rel_frame >>
@@ -369,7 +402,7 @@ Proof
       qexistsl_tac [`es`, `s`] >>
       qpat_assum `t = _ with <|vs_vars := _; vs_memory := _|>`
         (fn th => once_rewrite_tac[th]) >>
-      gvs[stmt_state_rel_def]) >>
+      gvs[stmt_state_rel_def] >> metis_tac[]) >>
   gvs[stmt_state_rel_def] >> first_assum ACCEPT_TAC
 QED
 
@@ -383,7 +416,7 @@ Theorem buffer_vv_holds:
     val_in_memory tv v (w2n w) s.vs_memory ==>
     vv_holds cenv cx t (Value v) (LocatedValue t (base_ptr rbuf)) es s
 Proof
-  rw[vv_holds_def, base_ptr_def, materialise_def, return_def] >>
+  rw[vv_holds_def, base_ptr_def, read_result_def, return_def] >>
   drule_all val_in_memory_word >> disch_then (fn th => fs[th])
 QED
 
@@ -408,14 +441,22 @@ Theorem store_multi_results_frag:
                           evaluate_type (get_tenv cx) t' = SOME etv)
           (MAP SND ftvs))) /\
     intret_vals_match tv v ws /\ ws <> [] /\
-    stmt_state_rel func cenv cx es s0 /\
+    stmt_state_rel ctx func cenv cx es s0 /\
     eval_operand rbuf.buf_operand s0 = SOME w /\
     MAP (\op. eval_operand op s0) results = MAP SOME ws /\
     w2n w + 32 * LENGTH results < dimword (:256) /\
     (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
-       w2n w + 32 * LENGTH results <= lb \/ lb + lsz <= w2n w) ==>
+       w2n w + 32 * LENGTH results <= lb \/ lb + lsz <= w2n w) /\
+    (cenv.ce_is_ctor ==> !name itv iv off.
+       FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+         SOME (ImmutableLoc off) /\
+       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+         | SOME imms => get_source_immutables cenv.ce_module imms) name =
+         SOME (itv,iv) ==>
+       regions_disjoint (w2n w) (32 * LENGTH results) off
+         (type_memory_size itv)) ==>
     frag_exec ctx sa sb (\s. s = s0)
-      (\s. stmt_state_rel func cenv cx es s /\
+      (\s. stmt_state_rel ctx func cenv cx es s /\
            vv_holds cenv cx t (Value v) (LocatedValue t (base_ptr rbuf)) es s /\
            (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x s0) /\
            s.vs_allocas = s0.vs_allocas /\
@@ -431,7 +472,7 @@ Proof
   asm_simp_tac (srw_ss()) [IS_PREFIX_APPEND] >>
   rpt strip_tac >>
   qspecl_then [`results`, `rbuf.buf_operand`, `0`, `sa`, `sb`, `s0`, `w2n w`,
-               `ws`] mp_tac store_multi_results_run >>
+               `ws`] mp_tac store_multi_results_run_capacity >>
   impl_tac >- simp[] >> strip_tac >>
   rename1 `run_inst_seq _ s0 = OK s1` >>
   qexists_tac `s1` >> simp[stmt_state_rel_inst_idx] >>
@@ -446,12 +487,32 @@ Proof
 QED
 
 Resume store_multi_results_frag[post]:
+  `s1.vs_data_section = s0.vs_data_section` by
+    (qpat_x_assum `_ with <|vs_vars := _; vs_memory := _|> = _`
+       (mp_tac o AP_TERM ``\z. z.vs_data_section``) >> simp[]) >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s0` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s1` by
+    (irule loweringSliceTheory.immutables_rel_mem_agree >> qexists_tac `s0` >>
+     simp[] >>
+     rpt strip_tac >>
+     qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
+     disch_then drule_all >>
+     simp[regions_disjoint_def] >> strip_tac >>
+     first_x_assum irule >> simp[]) >>
   rpt conj_tac
-  >- (irule result_state_memory_frame >> qexists_tac `s0` >> simp[] >>
-      rpt strip_tac
-      >~ [`lookup_var p _ = _`]
-      >- (first_x_assum irule >> gvs[local_ptrs_reserved_def] >> metis_tac[])
-      >> first_x_assum irule >> first_x_assum drule >> simp[])
+  >- (irule result_state_memory_frame >> simp[] >> qexists_tac `s0` >>
+      asm_rewrite_tac[] >>
+      conj_tac
+      >- (rpt strip_tac >>
+          qpat_assum `!n lb lsz. local_region _ _ _ _ _ _ ==> _` drule >>
+          simp[] >> strip_tac >>
+          qpat_x_assum `!a len. _` (qspecl_then [`b`, `sz`] mp_tac) >> simp[]) >>
+      conj_tac
+      >- (rpt strip_tac >>
+          `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+          metis_tac[]) >>
+      fs[venom_state_component_equality])
   >- (match_mp_tac buffer_vv_holds >> qexistsl_tac [`tv`, `w`] >> simp[] >>
       conj_tac
       >- (Cases_on `rbuf.buf_operand` >> gvs[eval_operand_def, lookup_var_def]) >>

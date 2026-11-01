@@ -79,7 +79,7 @@ Ancestors
   list rich_list finite_map
   fragExec loweringSlice accountsRelProps
   stmtLowering moduleLowering context emitHelper emitHelperProps compileEnv
-  abiEncoder abiEncoderProps
+  abiEncoder abiEncoderProps abiEncoderFragment
   valueEncoding valueEncodingProps
   e2eDefs vyperABI contractABI vyperInterpreter vyperState vyperValue
   vyperValueOperation vfmExecution
@@ -868,6 +868,43 @@ Proof
             arithmeticTheory.LESS_EQ_ADD]
 QED
 
+Theorem emit_inst_fn_member:
+  !sa sb func opc args outs.
+    emit_inst opc args outs sa = ((),sb) /\ fn_has_code sa sb func ==>
+    MEM (mk_inst sa.cs_next_id opc args outs) (fn_insts func)
+Proof
+  rpt strip_tac >> drule emit_inst_extends >> strip_tac >>
+  `?bb. lookup_block sb.cs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX sb.cs_current_insts bb.bb_instructions` by
+    gvs[fn_has_code_def] >>
+  `MEM (mk_inst sa.cs_next_id opc args outs) bb.bb_instructions` by
+    gvs[IS_PREFIX_APPEND] >>
+  metis_tac[lookup_block_fn_insts]
+QED
+
+Theorem compile_alloc_buffer_emission:
+  !sz sa buf sm.
+    compile_alloc_buffer sz sa = (buf,sm) ==>
+    ?sx p. sx = sa with cs_next_var := sa.cs_next_var + 1 /\
+      buf.buf_operand = Var p /\
+      ~not_fresh_at sa p /\ not_fresh_at sm p /\
+      sm.cs_next_var = sa.cs_next_var + 1 /\
+      emit_inst ALLOCA [Lit (n2w sz)] [p] sx = ((),sm) /\
+      cs_extends sa sx /\ cs_extends sx sm
+Proof
+  rpt strip_tac >> drule compile_alloc_buffer_parts >> strip_tac >>
+  qabbrev_tac `sx = sa with cs_next_var := sa.cs_next_var + 1` >>
+  `emit_inst ALLOCA [Lit (n2w sz)]
+    [STRING #"%" (toString sa.cs_next_var)] sx = ((),sm)` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[compile_alloc_buffer_def, emit_op_def, emit_inst_def, fresh_var_def,
+       fresh_id_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, Abbr `sx`] >> strip_tac >> gvs[]) >>
+  `cs_extends sx sm` by metis_tac[cs_appends_def, cs_appends_emit_helpers] >>
+  qexistsl [`sx`, `STRING #"%" (toString sa.cs_next_var)`] >>
+  simp[Abbr `sx`, cs_extends_def, emitted_blocks_def]
+QED
+
 Theorem compile_alloc_buffer_frag:
   !ctx n st buf st' P Q R.
     compile_alloc_buffer n st = (buf,st') /\
@@ -1084,7 +1121,7 @@ Theorem compile_abi_encode_return_frag:
     frag_exec ctx sa sf (\s. s = s1) Q R
 Proof
   rpt strip_tac >>
-  drule_all (cj 2 compile_abi_encode_frag) >>
+  drule_all compile_abi_encode_to_buf_frag >>
   disch_then (qspec_then `ctx` assume_tac) >>
   drule compile_abi_encode_to_buf_extends >> strip_tac >>
   drule emit_inst_metadata >> strip_tac >>
@@ -1600,7 +1637,7 @@ QED
    were, except for the optional unlock's TSTORE, gives the effects
    external_call_result_rel compares on success, from the state es' after
    the source releases the lock at the same key. *)
-Theorem external_halt_success_unlock:
+Theorem external_halt_success_unlock_helper[local]:
   !func cenv cx es es' s ss nr nkey iv tops tx srcs exps layouts.
     state_rel func cenv cx es s /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
@@ -1610,35 +1647,90 @@ Theorem external_halt_success_unlock:
       (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
        else s.vs_transient) /\
     ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
-    ss.vs_accounts =
+    accounts_agree cx
       (finalize_pending_deletions
-         (abstract_machine_from_state srcs exps layouts es')).accounts /\
-    ss.vs_transient =
+         (abstract_machine_from_state srcs exps layouts es')).accounts
+      ss.vs_accounts /\
+    transient_agree cx
       (finalize_pending_deletions
-         (abstract_machine_from_state srcs exps layouts es')).tStorage /\
+         (abstract_machine_from_state srcs exps layouts es')).tStorage
+      ss.vs_transient /\
     logs_correspond (compiled_event_info tops) (type_env tops) tx.target
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es')).logs
       ss.vs_logs /\
-    ss.vs_requests = es'.requests
+    LIST_REL (request_agree cx) es'.requests ss.vs_requests
 Proof
   rpt gen_tac >> strip_tac >>
   drule state_rel_accounts >> strip_tac >>
-  `es' = es with tStorage := ss.vs_transient` by
+  `s.vs_call_ctx.cc_address = cx.txn.target` by
+    fs[state_rel_def, call_ctx_rel_def] >>
+  `es' = es with tStorage :=
+     if nr /\ ~iv then
+       (cx.txn.target =+
+          update_storage (n2w nkey) 0w (es.tStorage cx.txn.target))
+         es.tStorage
+     else es.tStorage` by
     (Cases_on `nr` >> Cases_on `iv` >>
      gvs[release_nonreentrant_lock_def, vyperStateTheory.bind_def,
          get_transient_storage_def, update_transient_def,
-         vyperStateTheory.return_def, tstore_def, state_rel_def,
-         call_ctx_rel_def, update_transient_storage_def,
+         vyperStateTheory.return_def, update_transient_storage_def,
          lookup_transient_storage_def,
          evaluation_state_component_equality]) >>
+  `transient_agree cx es'.tStorage ss.vs_transient` by
+    (Cases_on `nr /\ ~iv` >> gvs[tstore_def] >>
+     irule transient_agree_update >> simp[storage_dead_update_zero]) >>
   `log_entry_equiv cenv cx.txn.target = $= /\
    log_entry_corresponds (compiled_event_info tops) (type_env tops)
      tx.target = $=` by
     simp[FUN_EQ_THM, log_entry_equiv_def,
          log_entry_corresponds_concrete_event] >>
-  fs[state_rel_def, logs_rel_def, logs_correspond_def, LIST_REL_eq,
-     finalize_pending_deletions_def, abstract_machine_from_state_def]
+  gvs[state_rel_def, logs_rel_def, logs_correspond_def, LIST_REL_eq,
+      finalize_pending_deletions_def, abstract_machine_from_state_def,
+      process_deletions_def]
+QED
+
+(* The same, with the agreements at the context the external call result
+   relation uses, which has cx's sources, layouts and running contract. *)
+Theorem external_halt_success_unlock:
+  !func cenv cx es es' s ss nr nkey iv tops tx srcs exps layouts.
+    state_rel func cenv cx es s /\
+    cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
+    (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
+     else vyperState$return ()) es = (INL (), es') /\
+    ss.vs_accounts = s.vs_accounts /\
+    ss.vs_transient =
+      (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
+       else s.vs_transient) /\
+    ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+    accounts_agree (initial_evaluation_context srcs layouts tx NONE)
+      (finalize_pending_deletions
+         (abstract_machine_from_state srcs exps layouts es')).accounts
+      ss.vs_accounts /\
+    transient_agree (initial_evaluation_context srcs layouts tx NONE)
+      (finalize_pending_deletions
+         (abstract_machine_from_state srcs exps layouts es')).tStorage
+      ss.vs_transient /\
+    logs_correspond (compiled_event_info tops) (type_env tops) tx.target
+      (finalize_pending_deletions
+         (abstract_machine_from_state srcs exps layouts es')).logs
+      ss.vs_logs /\
+    LIST_REL (request_agree (initial_evaluation_context srcs layouts tx NONE))
+      es'.requests ss.vs_requests
+Proof
+  rpt strip_tac >> gvs[] >>
+  `accounts_agree (initial_evaluation_context cx.sources cx.layouts tx NONE) =
+     accounts_agree cx /\
+   transient_agree (initial_evaluation_context cx.sources cx.layouts tx NONE) =
+     transient_agree cx /\
+   request_agree (initial_evaluation_context cx.sources cx.layouts tx NONE) =
+     request_agree cx` by
+    (irule agree_cx_cong >> simp[initial_evaluation_context_def]) >>
+  asm_rewrite_tac[] >>
+  qspecl_then [`func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
+               `iv`, `tops`, `tx`, `cx.sources`, `exps`, `cx.layouts`] mp_tac
+    external_halt_success_unlock_helper >>
+  simp[]
 QED
 
 (* With state_rel at the return, a Halt that leaves the effects as they
@@ -1646,19 +1738,23 @@ QED
 Theorem external_halt_success:
   !func cenv cx es s ss tops tx srcs exps layouts.
     state_rel func cenv cx es s /\
+    cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
     ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
-    ss.vs_accounts =
+    accounts_agree (initial_evaluation_context srcs layouts tx NONE)
       (finalize_pending_deletions
-         (abstract_machine_from_state srcs exps layouts es)).accounts /\
-    ss.vs_transient =
+         (abstract_machine_from_state srcs exps layouts es)).accounts
+      ss.vs_accounts /\
+    transient_agree (initial_evaluation_context srcs layouts tx NONE)
       (finalize_pending_deletions
-         (abstract_machine_from_state srcs exps layouts es)).tStorage /\
+         (abstract_machine_from_state srcs exps layouts es)).tStorage
+      ss.vs_transient /\
     logs_correspond (compiled_event_info tops) (type_env tops) tx.target
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es)).logs
       ss.vs_logs /\
-    ss.vs_requests = es.requests
+    LIST_REL (request_agree (initial_evaluation_context srcs layouts tx NONE))
+      es.requests ss.vs_requests
 Proof
   rpt strip_tac >>
   qspecl_then [`func`, `cenv`, `cx`, `es`, `es`, `s`, `ss`, `F`, `0`, `F`,

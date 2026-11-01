@@ -184,7 +184,7 @@ QED
    the clamp type_to_abi_dec_info gives its type, ends as the value in
    memory at the destination.  The load step says which word is loaded:
    CALLDATALOAD at a gives mem_word_at (w2n a) of the calldata
-   (step_CALLDATALOAD).  The int-width and flag premises are those of
+   (step_CALLDATALOAD).  The flag premise is that of
    word_arg_clamp_ok. *)
 Theorem compile_abi_decode_static_correct:
   !src_op dst_op load_opc sfields cenv st st' s p tenv ty tv v.
@@ -198,7 +198,6 @@ Theorem compile_abi_decode_static_correct:
     eval_operand dst_op s = SOME p /\ fresh_vars_wrt st s /\
     is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
     value_has_type tv v /\
-    (!m. ty = BaseT (IntT m) ==> m MOD 8 = 0) /\
     (!nsid m. FLOOKUP tenv nsid = SOME (FlagArgs m) ==>
               cenv.ce_flag_n_members (nsid_to_string nsid) = m) ==>
     ?t. run_inst_seq (emitted_insts st st') s = OK t /\
@@ -426,8 +425,8 @@ Proof
 QED
 
 Theorem getelemptr_static_emit:
-  !src k opc st es st1.
-    compile_getelemptr_abi src F k opc st = (es, st1) ==>
+  !src k opc hi st es st1.
+    compile_getelemptr_abi src F k opc hi st = (es, st1) ==>
     emit_op ADD [src; Lit (n2w k)] st = (es, st1)
 Proof
   simp[compile_getelemptr_abi_def, comp_bind_def, comp_return_def] >>
@@ -437,7 +436,7 @@ QED
 (* The element pointers of a static element at head offset k. *)
 Theorem decode_elem_ptrs:
   !src dst k st es st1 ed st2 s a p.
-    compile_getelemptr_abi src F k CALLDATALOAD st = (es, st1) /\
+    compile_getelemptr_abi src F k CALLDATALOAD (Lit 0w) st = (es, st1) /\
     emit_op ADD [dst; Lit (n2w k)] st1 = (ed, st2) /\
     eval_operand src s = SOME a /\ eval_operand dst s = SOME p /\
     fresh_vars_wrt st s ==>
@@ -486,7 +485,7 @@ Theorem decode_elems_cons_phases:
       ((ei, m, m)::elems) k k st = ((), st') /\
     static_dec ei m ==>
     ?es st1 ed st2 st3.
-      compile_getelemptr_abi src F k CALLDATALOAD st = (es, st1) /\
+      compile_getelemptr_abi src F k CALLDATALOAD (Lit 0w) st = (es, st1) /\
       emit_op ADD [dst; Lit (n2w k)] st1 = (ed, st2) /\
       compile_abi_decode_to_buf ed es CALLDATALOAD (Lit 0w) ei st2 =
         ((), st3) /\
@@ -495,8 +494,8 @@ Theorem decode_elems_cons_phases:
 Proof
   rpt gen_tac >> strip_tac >> drule static_dec_shape >> strip_tac >> gvs[] >>
   qpat_x_assum `_ = ((), st')` mp_tac >>
-  simp[Once compile_abi_decode_to_buf_def, comp_bind_def,
-       comp_ignore_bind_def] >>
+  simp[Once compile_abi_decode_to_buf_def, dec_info_needs_offset_def,
+       comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[]
 QED
 
@@ -530,7 +529,7 @@ QED
 Theorem decode_elem_step:
   !ei m es st1 ed st2 st3 src dst k st s p a.
     static_dec ei m /\
-    compile_getelemptr_abi src F k CALLDATALOAD st = (es, st1) /\
+    compile_getelemptr_abi src F k CALLDATALOAD (Lit 0w) st = (es, st1) /\
     emit_op ADD [dst; Lit (n2w k)] st1 = (ed, st2) /\
     compile_abi_decode_to_buf ed es CALLDATALOAD (Lit 0w) ei st2 =
       ((), st3) /\

@@ -3,7 +3,7 @@
    TOP-LEVEL: supported_expr_exists, supported_target_exists,
    supported_exprs_exists, supported_opt_exists, supported_fields_exists;
    expr_has_effect, expr_has_internal_call, target_has_internal_call,
-   expr_has_dynamic_decode, target_has_dynamic_decode. *)
+   expr_has_dynamic_decode, target_has_dynamic_decode, expr_has_evm_run. *)
 Theory supportedExprTraverse
 Ancestors
   supportedExprs vyperAST vyperABI vyperContext list pair
@@ -50,20 +50,12 @@ Termination
   WF_REL_TAC `measure (\x. case x of
       INL (_, e) => expr_size e
     | INR (INL (_, target)) => base_assignment_target_size target
-    | INR (INR (INL (_, es))) => expr4_size es
-    | INR (INR (INR (INL (_, opt)))) => expr3_size opt
-    | INR (INR (INR (INR (_, fields)))) => expr1_size fields)` >>
-  simp[expr_size_def] >>
-  qsuff_tac
-    `(!es. expr4_size es = list_size expr_size es) /\
-     (!opt. expr3_size opt = option_size expr_size opt) /\
-     (!fields. expr1_size fields =
-       list_size (pair_size (list_size char_size) expr_size) fields)`
-  >- (strip_tac >> asm_rewrite_tac[] >> DECIDE_TAC) >>
-  rpt conj_tac >>
-  TRY (Induct >> simp[expr_size_def, listTheory.list_size_def,
-    basicSizeTheory.pair_size_def]) >>
-  Cases >> simp[expr_size_def, basicSizeTheory.option_size_def]
+    | INR (INR (INL (_, es))) => list_size expr_size es
+    | INR (INR (INR (INL (_, opt)))) => option_size expr_size opt
+    | INR (INR (INR (INR (_, fields)))) =>
+        list_size (pair_size (list_size char_size) expr_size) fields)` >>
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def]
 End
 
 Definition expr_effect_root_def:
@@ -96,6 +88,20 @@ End
 Definition target_has_internal_call_def:
   target_has_internal_call target <=>
     supported_target_exists expr_internal_call_root target
+End
+
+(* The calls the source runs on the EVM even when it takes external calls
+   from the outcome oracle: raw_call (eval_raw_call's run_raw_call) and the
+   creates (eval_create's run_create_evm). *)
+Definition expr_evm_run_root_def:
+  expr_evm_run_root (Call ty (RawCallTarget flags) es default) = T /\
+  expr_evm_run_root (Call ty (RawCallCalldataTarget flags) es default) = T /\
+  expr_evm_run_root (Call ty (CreateTarget kind has_salt rof) es default) = T /\
+  expr_evm_run_root _ = F
+End
+
+Definition expr_has_evm_run_def:
+  expr_has_evm_run e <=> supported_expr_exists expr_evm_run_root e
 End
 
 Definition expr_has_dynamic_decode_def:
@@ -144,13 +150,47 @@ Proof
   Cases_on `h` >> simp[supported_expr_exists_def]
 QED
 
+(* expr_has_evm_run by constructor. *)
+Theorem expr_has_evm_run_thm:
+  (expr_has_evm_run (Name ty name) <=> F) /\
+  (expr_has_evm_run (Literal ty lit) <=> F) /\
+  (expr_has_evm_run (TopLevelName ty id) <=> F) /\
+  (expr_has_evm_run (FlagMember ty id mem) <=> F) /\
+  (expr_has_evm_run (IfExp ty c a b) <=>
+     expr_has_evm_run c \/ expr_has_evm_run a \/ expr_has_evm_run b) /\
+  (expr_has_evm_run (StructLit ty id fields) <=>
+     EXISTS (expr_has_evm_run o SND) fields) /\
+  (expr_has_evm_run (Subscript ty e1 e2) <=>
+     expr_has_evm_run e1 \/ expr_has_evm_run e2) /\
+  (expr_has_evm_run (Attribute ty e1 fname) <=> expr_has_evm_run e1) /\
+  (expr_has_evm_run (Builtin ty blt es) <=> EXISTS expr_has_evm_run es) /\
+  (expr_has_evm_run (TypeBuiltin ty tb t0 es) <=>
+     EXISTS expr_has_evm_run es) /\
+  (expr_has_evm_run (Pop ty target) <=>
+     supported_target_exists expr_evm_run_root target) /\
+  (expr_has_evm_run (Call ty ct es default) <=>
+     expr_evm_run_root (Call ty ct es default) \/
+     EXISTS expr_has_evm_run es \/
+     (case default of NONE => F | SOME e => expr_has_evm_run e))
+Proof
+  `expr_has_evm_run = supported_expr_exists expr_evm_run_root` by
+    simp[FUN_EQ_THM, expr_has_evm_run_def] >>
+  pop_assum SUBST1_TAC >>
+  simp[supported_expr_exists_def, expr_evm_run_root_def,
+       supported_exprs_exists_every, supported_fields_exists_every,
+       combinTheory.o_DEF, SF ETA_ss] >>
+  Cases_on `default` >> simp[supported_expr_exists_def]
+QED
+
 Theorem supported_pure_no_effect:
   (!tops e. supported_pure_expr tops e ==>
       ~supported_expr_exists expr_effect_root e) /\
   (!tops es. supported_pure_exprs tops es ==>
       ~supported_exprs_exists expr_effect_root es) /\
   (!tops fields. supported_pure_fields tops fields ==>
-      ~supported_fields_exists expr_effect_root fields)
+      ~supported_fields_exists expr_effect_root fields) /\
+  (!tops e. supported_place_expr tops e ==>
+      ~supported_expr_exists expr_effect_root e)
 Proof
   ho_match_mp_tac supported_pure_expr_ind >>
   simp[supported_pure_expr_def, supported_expr_exists_def, expr_effect_root_def] >>
@@ -167,8 +207,11 @@ Proof
   qexists_tac `tops` >> simp[]
 QED
 
-Theorem supported_effect_root:
-  supported_effect_expr tops e ==> expr_effect_root e
+Theorem supported_effect_shape:
+  supported_effect_expr tops e ==>
+    expr_effect_root e \/
+    (?ty base key. e = Subscript ty base key) \/
+    (?ty base field. e = Attribute ty base field)
 Proof
   Cases_on `e` >> simp[supported_effect_expr_def, expr_effect_root_def] >>
   rename1 `Call ty target args default` >>
@@ -193,17 +236,60 @@ Proof
   metis_tac[supported_pure_expr_effect_free, expr_internal_call_is_effect]
 QED
 
-Theorem supported_effect_expr_has_effect:
-  supported_effect_expr tops e ==> expr_has_effect e
+Theorem supported_effects_have_effect:
+  (!tops e. supported_effect_expr tops e ==> expr_has_effect e) /\
+  (!tops e. supported_effect_place_expr tops e ==> expr_has_effect e)
 Proof
-  strip_tac >> simp[expr_has_effect_def] >>
-  irule supported_expr_exists_root >>
-  drule supported_effect_root >> simp[]
+  ho_match_mp_tac supported_effect_expr_ind >>
+  simp[supported_effect_expr_def, expr_has_effect_def,
+       supported_expr_exists_def, expr_effect_root_def] >>
+  rpt conj_tac >> rpt gen_tac >> simp[] >> metis_tac[]
 QED
+
+Theorem supported_effect_expr_has_effect = CONJUNCT1 supported_effects_have_effect
 
 Theorem supported_effect_classification:
   supported_expr tops e /\ expr_has_effect e <=> supported_effect_expr tops e
 Proof
   metis_tac[supported_expr_def, supported_pure_expr_effect_free,
     supported_effect_expr_has_effect]
+QED
+
+(* The supported subset has no raw_call or create, the calls the source
+   runs on the EVM even with the outcome oracle. *)
+Theorem supported_pure_no_evm_run[local]:
+  (!tops e. supported_pure_expr tops e ==>
+      ~supported_expr_exists expr_evm_run_root e) /\
+  (!tops es. supported_pure_exprs tops es ==>
+      ~supported_exprs_exists expr_evm_run_root es) /\
+  (!tops fields. supported_pure_fields tops fields ==>
+      ~supported_fields_exists expr_evm_run_root fields) /\
+  (!tops e. supported_place_expr tops e ==>
+      ~supported_expr_exists expr_evm_run_root e)
+Proof
+  ho_match_mp_tac supported_pure_expr_ind >>
+  simp[supported_pure_expr_def, supported_expr_exists_def, expr_evm_run_root_def] >>
+  rpt conj_tac >> rpt gen_tac >>
+  TRY (Cases_on `base`) >>
+  simp[supported_pure_expr_def, supported_expr_exists_def, expr_evm_run_root_def]
+QED
+
+Theorem supported_effect_no_evm_run[local]:
+  (!tops e. supported_effect_expr tops e ==>
+      ~supported_expr_exists expr_evm_run_root e) /\
+  (!tops e. supported_effect_place_expr tops e ==>
+      ~supported_expr_exists expr_evm_run_root e)
+Proof
+  ho_match_mp_tac supported_effect_expr_ind >>
+  simp[supported_effect_expr_def, supported_expr_exists_def,
+       expr_evm_run_root_def] >>
+  rpt conj_tac >> rpt gen_tac >> simp[] >>
+  metis_tac[supported_pure_no_evm_run]
+QED
+
+Theorem supported_expr_no_evm_run:
+  supported_expr tops e ==> ~expr_has_evm_run e
+Proof
+  rw[supported_expr_def, expr_has_evm_run_def] >>
+  metis_tac[supported_pure_no_evm_run, supported_effect_no_evm_run]
 QED

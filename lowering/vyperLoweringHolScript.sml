@@ -7,33 +7,35 @@ Ancestors
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
   entryChecksProps
-  entryStateRel
+  entryStateRel entryLocals
   loweringSlice
+  memSafeRun fragExecMem
   varsExt exprSim
   exprBopLowering
-  exprSimOps exprSimCompare exprSimArith intBits freshWrites
-  exprSimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
-  stmtSimReason stmtSimReasonExpr stmtSimForRange
+  exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
+  exprSimMain bodySimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
+  stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
+  stmtSimDeclMem stmtSimDeclEmpty exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
+  stmtSimAssign stmtSimAssignMem stmtSimAssignTuple stmtSimAssignTupleMem
+  stmtSimAssignStorage stmtSimStoreCopy stmtSimAssignAttr
+  stmtSimAssignAttrStorage stmtSimAugAssignAttr
   valueEncodingProofs
   localPtrsProps
+  immutableStagingBridge
+  immutableCodeLayout
+  immutableLocationProps
+  loweringShapeDefs
   loweringShapeProps
-  intCallStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem valueCopy
+  intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
   allocaBudgetChecks
   vyperLoweringCorrect
   configuredE2ECorrectness
-  evalCompilerMemoryStores
-  evalCompilerExternalCalls
-  evalCompilerNameCollisions
-  evalCompilerCtorLocals
-  evalCompilerInternalLabels
-  evalCompilerSliceBuffers
-  evalCompilerPhiPointers
-  evalCompilerInternalFrames
+  evalCompilerInternalImmutables
+  evalAssignmentOrder
   (* focused internal-frame allocation, cleanup and whitelist regressions *)
   calleeMemoryWitness
   cleanupPromiseWitness
   internalFrameWhitelistDiagnostic
-  evalCompilerAllocationLimit

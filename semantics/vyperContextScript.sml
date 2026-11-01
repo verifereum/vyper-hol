@@ -219,29 +219,6 @@ End
 
 val () = cv_auto_trans get_tenv_def;
 
-(* Look up an interface by nsid (source_id, name) *)
-Definition lookup_interface_def:
-  lookup_interface cx (src_id_opt, iface_name) =
-    case get_module_code cx src_id_opt of
-    | NONE => NONE
-    | SOME ts =>
-        case FLOOKUP (type_env_for_module src_id_opt ts) (src_id_opt, iface_name) of
-        | SOME (InterfaceArgs funcs) => SOME funcs
-        | _ => NONE
-End
-
-val () = cv_auto_trans lookup_interface_def;
-
-(* Look up a function signature within an interface *)
-Definition lookup_interface_func_def:
-  lookup_interface_func [] fn_name = NONE ∧
-  lookup_interface_func ((name, args, ret_ty, mutability) :: rest) fn_name =
-    if name = fn_name then SOME (args, ret_ty, mutability)
-    else lookup_interface_func rest fn_name
-End
-
-val () = cv_auto_trans lookup_interface_func_def;
-
 Definition evaluate_extract32_def:
   evaluate_extract32 bs n bt =
   if n < LENGTH bs then let
@@ -268,22 +245,22 @@ End
 val () = cv_auto_trans evaluate_extract32_def;
 
 Definition evaluate_type_builtin_def:
-  evaluate_type_builtin cx Empty typ vs =
+  evaluate_type_builtin cx Empty typ tys vs =
   (case evaluate_type (get_tenv cx) typ
    of SOME tv => INL $ default_value tv
     | NONE => INR (TypeError "Empty evaluate_type")) ∧
-  evaluate_type_builtin cx MaxValue typ vs =
+  evaluate_type_builtin cx MaxValue typ tys vs =
     evaluate_max_value typ ∧
-  evaluate_type_builtin cx MinValue typ vs =
+  evaluate_type_builtin cx MinValue typ tys vs =
     evaluate_min_value typ ∧
-  evaluate_type_builtin cx Convert typ [v] =
-    evaluate_convert (get_tenv cx) v typ ∧
-  evaluate_type_builtin cx Epsilon typ [] =
+  evaluate_type_builtin cx Convert typ [from_ty] [v] =
+    evaluate_convert_from (get_tenv cx) from_ty v typ ∧
+  evaluate_type_builtin cx Epsilon typ tys [] =
     (if typ = BaseT DecimalT then INL $ DecimalV 1
      else INR (TypeError "Epsilon: not decimal")) ∧
-  evaluate_type_builtin cx Extract32 (BaseT bt) [BytesV bs; IntV i] =
+  evaluate_type_builtin cx Extract32 (BaseT bt) tys [BytesV bs; IntV i] =
     evaluate_extract32 bs (Num i) bt ∧
-  evaluate_type_builtin cx (AbiDecode unwrap) typ [BytesV bs] =
+  evaluate_type_builtin cx (AbiDecode unwrap) typ tys [BytesV bs] =
     (let tenv = get_tenv cx in
      if unwrap ∧ needs_external_call_wrap typ then
        case evaluate_abi_decode tenv (TupleT [typ]) bs of
@@ -294,9 +271,9 @@ Definition evaluate_type_builtin_def:
        case evaluate_abi_decode tenv typ bs of
          INL v => INL v
        | INR str => INR (RuntimeError str)) ∧
-  evaluate_type_builtin _ (AbiDecode _) _ _ =
+  evaluate_type_builtin _ (AbiDecode _) _ _ _ =
     INR (TypeError "abi_decode args") ∧
-  evaluate_type_builtin cx (AbiEncode ensure method_id) typ vs =
+  evaluate_type_builtin cx (AbiEncode ensure method_id) typ tys vs =
     (let tenv = get_tenv cx in
      let unwrap = (¬ensure ∧ needs_external_call_wrap typ) in
      let encoded =
@@ -309,7 +286,7 @@ Definition evaluate_type_builtin_def:
        INL bs =>
          INL (BytesV (abi_encode_method_id_bytes method_id ++ bs))
      | INR str => INR (RuntimeError str)) ∧
-  evaluate_type_builtin _ _ _ _ =
+  evaluate_type_builtin _ _ _ _ _ =
     INR (TypeError "evaluate_type_builtin")
 End
 
@@ -507,7 +484,7 @@ Definition evaluate_builtin_def:
         (case vs of
          | [BytesV ls] => INL $ BytesV $ Keccak_256_w64 ls
          | [StringV s] => INL $ BytesV $
-             Keccak_256_w64 (MAP (n2w o ORD) s)
+             Keccak_256_w64 (string_to_bytes s)
          | _ => INR (TypeError "builtin"))
     | Sha256 =>
         (* TODO(semantic-limitation): BytesV bounds are not validated before Keccak256. *)
@@ -515,7 +492,7 @@ Definition evaluate_builtin_def:
          | [BytesV ls] => INL $ BytesV $
              word_to_bytes (SHA_256_bytes ls : bytes32) T
          | [StringV s] => INL $ BytesV $
-             word_to_bytes (SHA_256_bytes (MAP (n2w o ORD) s) : bytes32) T
+             word_to_bytes (SHA_256_bytes (string_to_bytes s) : bytes32) T
          | _ => INR (TypeError "builtin"))
     | Uint2Str n =>
         (case vs of
@@ -606,7 +583,7 @@ Definition evaluate_builtin_def:
     | MethodId =>
         (* method_id: compute keccak256(signature)[:4] - returns 4-byte function selector *)
         (case vs of
-         | [StringV sig] => INL $ BytesV (TAKE 4 (Keccak_256_w64 (MAP (n2w o ORD) sig)))
+         | [StringV sig] => INL $ BytesV (TAKE 4 (Keccak_256_w64 (string_to_bytes sig)))
          | [BytesV bs] => INL $ BytesV (TAKE 4 (Keccak_256_w64 bs))
          | _ => INR (TypeError "builtin"))
     | ECRecover => evaluate_ecrecover vs

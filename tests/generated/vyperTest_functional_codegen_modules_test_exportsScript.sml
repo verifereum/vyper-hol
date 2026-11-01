@@ -1,4 +1,4 @@
 Theory vyperTest_functional_codegen_modules_test_exports[no_sig_docs]
 Ancestors vyperTestDefs_functional_codegen_modules_test_exports
 Libs vyperTestRunnerLib
-val () = List.app run_test_on_traces $ all_traces "vyperTestDefs_functional_codegen_modules_test_exports";
+val () = run_tests_on_traces $ all_traces "vyperTestDefs_functional_codegen_modules_test_exports";

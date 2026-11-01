@@ -29,9 +29,25 @@ end
 fun compile_term tops =
   ``compile_vyper (K SOME) (o1_policy all_capabilities) ^tops``
 
+fun report text =
+  (TextIO.output (TextIO.stdErr, text ^ "\n"); TextIO.flushOut TextIO.stdErr)
+
+(* Runs f on x and returns its result with the CPU seconds it took. *)
+fun cpu_seconds f x = let
+  val timer = Timer.startCPUTimer ()
+  val result = f x
+  val {usr, sys} = Timer.checkCPUTimer timer
+in (result, Time.toReal (Time.+ (usr, sys))) end
+
+(* Prints "WITNESS <name> frontend=<s> eval=<s>" (CPU seconds) so a build log
+   gives each fixture's cost. *)
 fun evaluate root name = let
-  val term = compile_term (program root name)
-in {term = term, evaluation = EVAL term} end
+  val (tops, frontend) = cpu_seconds (program root) name
+  val term = compile_term tops
+  val (evaluation, eval) = cpu_seconds EVAL term
+  val _ = report ("WITNESS " ^ name ^ " frontend=" ^ Real.fmt (StringCvt.FIX (SOME 1)) frontend
+                  ^ " eval=" ^ Real.fmt (StringCvt.FIX (SOME 1)) eval)
+in {term = term, evaluation = evaluation} end
 
 fun oracle root name = let
   val lines = String.tokens (fn ch => ch = #"\n")
@@ -53,9 +69,6 @@ in if size text = 1 then "0" ^ text else text end
 
 fun hex_list term = String.map Char.toLower
   (String.concat (map hex_byte (#1 (listSyntax.dest_list term))))
-
-fun report text =
-  (TextIO.output (TextIO.stdErr, text ^ "\n"); TextIO.flushOut TextIO.stdErr)
 
 fun probe root output_root name = let
   fun status message = report ("WITNESS " ^ name ^ " " ^ message)

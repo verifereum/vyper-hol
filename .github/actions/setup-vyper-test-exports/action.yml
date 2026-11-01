@@ -12,7 +12,7 @@ runs:
     - name: Setup Python
       uses: actions/setup-python@v6
       with:
-        python-version: '3.11.11'
+        python-version: '3.11.17'
 
     - name: Get Vyper revision
       id: vyper-rev

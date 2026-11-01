@@ -64,9 +64,11 @@ Definition translate_var_mutability_def:
     else Storage
 End
 
+(* Vyper's #pragma nonreentrancy makes external functions nonreentrant by
+   default, except pure ones (vyper/semantics/types/function.py). *)
 Definition effective_decorators_def:
   effective_decorators nr_default decs =
-    if nr_default ∧ MEM "external" decs ∧
+    if nr_default ∧ MEM "external" decs ∧ ¬MEM "pure" decs ∧
        ¬MEM "nonreentrant" decs ∧ ¬MEM "reentrant" decs
     then decs ++ ["nonreentrant"]
     else decs
@@ -112,6 +114,11 @@ Definition translate_toplevel_def:
   (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_EventDef name args) =
     SOME (EventDecl name (MAP (λ(a,idx).
       (translate_arg nominal_index all_import_maps type_ctx a, idx)) args))) /\
+
+  (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default
+      (JTL_ErrorDef name args) =
+    SOME (ErrorDecl name
+      (MAP (translate_arg nominal_index all_import_maps type_ctx) args))) /\
 
   (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_StructDef name args) =
     SOME (StructDecl name

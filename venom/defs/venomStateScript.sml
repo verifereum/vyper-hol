@@ -98,6 +98,7 @@ Datatype:
     vs_logs : event list;            (* Log/event accumulator *)
     vs_outcomes : extCallOracle$call_outcome list; (* Remaining external-call outcomes *)
     vs_requests : extCallOracle$call_request list; (* External-call request accumulator *)
+    vs_pending_deletions : address list; (* Deletions from successful CALLs *)
     vs_gas_readings : bytes32 list;  (* Remaining GAS readings, popped in order *)
     vs_immutables : (num, bytes32) fmap; (* Immutable storage (ILOAD/ISTORE) *)
     vs_data_section : byte list;     (* Read-only data section (DLOAD/DLOADBYTES) *)
@@ -166,6 +167,7 @@ Definition init_venom_state_def:
     vs_logs := [];
     vs_outcomes := [];
     vs_requests := [];
+    vs_pending_deletions := [];
     vs_gas_readings := [];
     vs_immutables := FEMPTY;
     vs_data_section := [];

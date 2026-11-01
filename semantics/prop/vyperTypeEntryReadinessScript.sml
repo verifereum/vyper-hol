@@ -187,24 +187,11 @@ Proof
    state_well_typed (initial_state am [FEMPTY] with gas_obs := gobs)` by
     simp[] >>
   `call_evaluation_safe cx (int_calls_expr h)` by metis_tac[] >>
-  drule_all (cj 8 eval_all_type_sound_mutual) >>
-  simp[expr_result_typed_def, expr_runtime_typed_def,
-       toplevel_value_typed_Value] >>
+  drule_all eval_expr_read_type_sound >>
+  simp[value_runtime_typed_def] >>
   strip_tac >>
   first_x_assum (drule_at (Pat `evaluate_defaults _ _ _ _ = _`)) >>
   simp[] >> metis_tac[]
-QED
-
-Theorem checked_defaults_ready_success:
-  checked_defaults_ready cx am gobs args dflts vals ==>
-  LENGTH vals <= LENGTH args /\
-  LENGTH args - LENGTH vals <= LENGTH dflts /\
-  ?dflt_vs gobs'.
-    evaluate_defaults cx am gobs
-      (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) =
-      SOME (dflt_vs, gobs')
-Proof
-  rw[checked_defaults_ready_def, IS_SOME_EXISTS, EXISTS_PROD]
 QED
 
 Theorem checked_defaults_ready_values_typed:
@@ -335,12 +322,3 @@ Proof
   drule_all provided_args_defaults_bind_arguments >> strip_tac >>
   qexistsl [`dflt_vs`, `gobs'`, `scope`] >> simp[Abbr`needed`]
 QED
-
-Theorem checked_call_inputs_ready_components:
-  checked_call_inputs_ready tenv cx am gobs args dflts vals ==>
-  provided_args_typed tenv args vals /\
-  checked_defaults_ready cx am gobs args dflts vals
-Proof
-  simp[checked_call_inputs_ready_def]
-QED
-

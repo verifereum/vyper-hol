@@ -433,4 +433,3 @@ Proof
     mp_tac binop_frag_word_typed >>
   impl_tac >- asm_rewrite_tac[] >> simp[]
 QED
-

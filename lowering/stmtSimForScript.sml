@@ -75,18 +75,18 @@ Theorem compile_for_range_frag:
        eval_stmts cx stmts
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) = (r2, es2) ==>
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) ==>
        stmt_frag ctx func cx (InLoop ex inc) RetQ c
          (stmts_env c (InLoop ex inc) ty stmts)
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) r2 es2) /\
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) r2 es2) /\
     (!ei j r2 es2 sc rest.
        P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
        eval_stmts cx stmts
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) = (r2, es2) /\
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) /\
        (r2 = INL () \/ r2 = INR ContinueException) /\
        es2.scopes = sc :: rest ==>
        P (es2 with scopes := rest)) ==>
@@ -131,7 +131,7 @@ Proof
     (simp[exec_alloca_def] >> BasicProvers.every_case_tac >> simp[]) >>
   fs[] >>
   qspecl_then [`func`, `cenv`, `cx`, `es`, `s0`, `A`, `p`,
-               `n2w sz : bytes32`, `s1`] mp_tac stmt_state_rel_exec_alloca >>
+               `n2w sz : bytes32`, `s1`, `ctx`] mp_tac stmt_state_rel_exec_alloca >>
   impl_tac >- fs[] >> strip_tac >>
   `s1.vs_current_bb = s0.vs_current_bb /\ s1.vs_inst_idx = s0.vs_inst_idx /\
    ~s1.vs_halted /\ (!x. x <> p ==> lookup_var x s1 = lookup_var x s0) /\
@@ -177,7 +177,7 @@ Proof
   (* the state at the condition block *)
   qabbrev_tac `cc = jump_to cond_lbl (update_var ev (i2w n2)
                   (update_var cv (i2w n1) (jump_to entry_lbl s1)))` >>
-  `stmt_state_rel func cenv cx es cc` by
+  `stmt_state_rel ctx func cenv cx es cc` by
     (simp[Abbr `cc`, stmt_state_rel_jump_to] >>
      irule stmt_state_rel_update_var >>
      conj_tac >- (irule reserved_fresh_not_local >> qexists_tac `sa` >> simp[]) >>
@@ -222,26 +222,21 @@ Proof
                `incr_lbl`, `sa.cs_next_id + 5`, `sa.cs_next_id + 6`,
                `sa.cs_next_id + 7`, `bbb`, `sj.cs_next_id`, `sj.cs_next_id + 1`,
                `sj.cs_next_id + 2`, `sb0`, `sb1`, `sj`, `sa`, `0`, `es`, `cc`,
-               `w`, `res`, `es'`] mp_tac for_loop >>
+               `w`, `res`, `es'`] mp_tac for_loop_alloca >>
   impl_tac
-  >- (REWRITE_TAC [for_code_def] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      TRY (simp[block_is_terminated_def, venomInstTheory.mk_inst_def,
-                is_terminator_def] >> NO_TAC) >>
-      TRY (fs[] >> NO_TAC) >>
-      TRY (simp[not_fresh_at_def] >> NO_TAC) >>
-      TRY (rw[not_fresh_at_def] >>
-           TRY (first_x_assum (qspec_then `sj.cs_next_var` mp_tac)) >>
-           simp[] >> NO_TAC) >>
-      rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
+  >- (simp[for_code_def] >> conj_tac
+      >- simp[block_is_terminated_def, venomInstTheory.mk_inst_def,
+              is_terminator_def, not_fresh_at_def] >>
+      conj_tac
+      >- (rw[not_fresh_at_def] >>
+          first_x_assum (qspec_then `sb1.cs_next_var` mp_tac) >> simp[]) >>
+      conj_tac
+      >- (rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
+      first_assum ACCEPT_TAC) >>
   strip_tac
   >- (rename1 `s9.vs_current_bb = exit_lbl` >> disj1_tac >>
       qexists_tac `s9` >> qexists_tac `cenv` >>
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-      >- simp[stmt_lands_def]
-      >- simp[block_is_terminated_def]
-      >- simp[cenv_top_ext_refl]
-      >- metis_tac[]
-      >- metis_tac[] >>
+      simp[stmt_lands_def, block_is_terminated_def, cenv_top_ext_refl] >>
       rpt strip_tac >> metis_tac[]) >>
   disj2_tac >> rename1 `exit_result r9` >>
   drule exit_result_not_error >> strip_tac >> metis_tac[]
@@ -269,18 +264,18 @@ Theorem compile_for_range_lit_frag:
        eval_stmts cx stmts
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) = (r2, es2) ==>
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) ==>
        stmt_frag ctx func cx (InLoop ex inc) RetQ c
          (stmts_env c (InLoop ex inc) ty stmts)
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) r2 es2) /\
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) r2 es2) /\
     (!ei j r2 es2 sc rest.
        P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
        eval_stmts cx stmts
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) = (r2, es2) /\
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) /\
        (r2 = INL () \/ r2 = INR ContinueException) /\
        es2.scopes = sc :: rest ==>
        P (es2 with scopes := rest)) ==>
@@ -332,3 +327,14 @@ Proof
   >- (qpat_x_assum `!c lc sa sb. _` drule >> simp[]) >>
   qpat_x_assum `!st0 c st1 ex inc es1 r2 es2. _` irule >> metis_tac[]
 QED
+
+(* Integrity gate for the preserved public literal-range guarantees. *)
+val () = List.app (fn th =>
+  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
+  in if null axs andalso null (Thm.hyp th) andalso
+        List.all (fn s => s = "DISK_THM") ors
+     then print "FOR_FORCE_AUDIT OK\n"
+     else raise Fail "range consumer inherited admission"
+  end) [compile_for_range_parts, compile_for_range_lit_parts,
+        compile_for_range_frag, compile_for_range_lit_frag,
+        compile_for_range_lit_frag_simple];

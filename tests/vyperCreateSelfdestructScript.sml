@@ -241,6 +241,64 @@ val () = cv_auto_trans blueprint_test_nested_create_def;
    The identical nested deployment in the constructor suffix must not run.
    Nonce three and the first deployed account survive the expression error;
    the second prospective deployment is still absent. *)
+Theorem blueprint_nested_deployment[local]:
+  eval_expr blueprint_test_context blueprint_test_nested_create
+    (blueprint_test_state []) =
+  (INL (Value (AddressV (vfmContext$address_for_create 41w 2))),
+   blueprint_test_state [] with accounts :=
+     update_account (vfmContext$address_for_create 41w 2)
+       (empty_account_state with nonce := 1)
+       (update_account 41w
+         (empty_account_state with <|balance := 100; nonce := 3; code := [0w]|>)
+         (update_account 42w
+           (empty_account_state with <|balance := 7; nonce := 4; code := []|>)
+           empty_accounts)))
+Proof
+  rewrite_tac[vyperSmallStepTheory.eval_expr_eq_cont_cps] >>
+  CONV_TAC cv_eval
+QED
+
+Theorem blueprint_empty_source_check[local]:
+  let st = blueprint_test_state [] with accounts :=
+     update_account (vfmContext$address_for_create 41w 2)
+       (empty_account_state with nonce := 1)
+       (update_account 41w
+         (empty_account_state with <|balance := 100; nonce := 3; code := [0w]|>)
+         (update_account 42w
+           (empty_account_state with <|balance := 7; nonce := 4; code := []|>)
+           empty_accounts)) in
+  check_create_blueprint salted
+    ([AddressV (vfmContext$address_for_create 41w 2); IntV 0] ++
+     (if salted then [BytesV (REPLICATE 32 0w)] else []) ++ [IntV 0]) st =
+  (INR (Error (RuntimeError "create source has no deployable code")),st)
+Proof
+  Cases_on `salted` >> CONV_TAC cv_eval
+QED
+
+Theorem blueprint_invalid_source_result[local]:
+  eval_expr blueprint_test_context
+    (blueprint_test_expr blueprint_test_nested_create F salted rof 0
+      [blueprint_test_nested_create]) (blueprint_test_state []) =
+  (INR (Error (RuntimeError "create source has no deployable code")),
+   blueprint_test_state [] with accounts :=
+     update_account (vfmContext$address_for_create 41w 2)
+       (empty_account_state with nonce := 1)
+       (update_account 41w
+         (empty_account_state with <|balance := 100; nonce := 3; code := [0w]|>)
+         (update_account 42w
+           (empty_account_state with <|balance := 7; nonce := 4; code := []|>)
+           empty_accounts)))
+Proof
+  Cases_on `salted` >>
+  simp[blueprint_test_expr_def, evaluate_def, blueprint_nested_deployment,
+       SRULE [LET_THM] (Q.INST [`salted` |-> `F`] blueprint_empty_source_check),
+       SRULE [LET_THM] (Q.INST [`salted` |-> `T`] blueprint_empty_source_check),
+       vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.return_def, vyperStateTheory.read_result_def,
+       vyperStateTheory.read_results_def, vyperValueOperationTheory.evaluate_literal_def] >>
+  CONV_TAC cv_eval
+QED
+
 Theorem blueprint_invalid_source_precedes_constructor_effects:
   EVERY (\salted.
     EVERY (\rof.
@@ -261,8 +319,9 @@ Theorem blueprint_invalid_source_precedes_constructor_effects:
     [F;T])
   [F;T]
 Proof
-  simp[vyperSmallStepTheory.eval_expr_eq_cont_cps,
-       GSYM blueprint_test_run_def, listTheory.EVERY_DEF] >>
+  rewrite_tac[blueprint_test_run_def,
+              GSYM vyperSmallStepTheory.eval_expr_eq_cont_cps] >>
+  simp[listTheory.EVERY_DEF, blueprint_invalid_source_result] >>
   CONV_TAC cv_eval
 QED
 
@@ -326,5 +385,94 @@ Theorem blueprint_size_is_captured_before_constructor_changes_source:
 Proof
   simp[vyperSmallStepTheory.eval_expr_eq_cont_cps,
        GSYM blueprint_test_run_def] >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
   CONV_TAC cv_eval
+QED
+
+(* The constructor tuple is (DynArray[uint256,3],uint256), whose array-length
+   word is 64 bytes into its ABI encoding. This loader returns that word from
+   initcode offset 12+64 as the deployed runtime. *)
+Definition create_argument_loader_def:
+  create_argument_loader : byte list =
+    [0x60w;32w;0x60w;76w;0x60w;0w;0x39w;
+     0x60w;32w;0x60w;0w;0xf3w]
+End
+val () = cv_auto_trans create_argument_loader_def;
+
+Definition create_argument_state_def:
+  create_argument_state =
+    blueprint_test_state ([0xfew;0x71w;0w] ++ create_argument_loader) with
+      scopes := [FEMPTY |+ ("d",
+        <|assignable := T;
+          type := ArrayTV (BaseTV (UintT 256)) (Dynamic 3);
+          value := ArrayV (DynArrayV [IntV 1; IntV 2; IntV 3]); popped := []|>)]
+End
+val () = cv_auto_trans create_argument_state_def;
+
+Definition create_argument_expr_def:
+  create_argument_expr raw =
+    let salt = TypeBuiltin (BaseT (BytesT (Fixed 32))) Convert
+      (BaseT (BytesT (Fixed 32)))
+      [Pop (BaseT (UintT 256)) (NameTarget "d")];
+        ctor = [Name (ArrayT (BaseT (UintT 256)) (Dynamic 3)) "d";
+                Pop (BaseT (UintT 256)) (NameTarget "d")]
+    in if raw then
+      Call (BaseT AddressT) (CreateTarget RawCreate T T)
+        ([blueprint_test_raw_arg create_argument_loader;
+          Literal (BaseT (UintT 256)) (IntL 0)] ++ ctor ++ [salt]) NONE
+    else
+      Call (BaseT AddressT) (CreateTarget (CreateFromBlueprint F) T T)
+        ([blueprint_test_address;
+          Literal (BaseT (UintT 256)) (IntL 0); salt;
+          Literal (BaseT (UintT 256)) (IntL 3)] ++ ctor) NONE
+End
+val () = cv_auto_trans create_argument_expr_def;
+
+Definition create_argument_result_def:
+  create_argument_result raw =
+    blueprint_test_run (create_argument_expr raw) create_argument_state
+End
+val () = cv_auto_trans create_argument_result_def;
+
+(* Raw creation reads constructor arguments before evaluating salt; blueprint
+   creation evaluates salt in its prefix. Both read the array after the later
+   constructor pop. The differing deployed lengths distinguish all three stages. *)
+Theorem create_constructor_reads_and_salt_order:
+  EVERY (\raw.
+    eval_expr blueprint_test_context (create_argument_expr raw)
+      create_argument_state = create_argument_result raw /\
+    (lookup_account 41w (SND (create_argument_result raw)).accounts).nonce = 3 /\
+    (case FST (create_argument_result raw) of
+     | INL (Value result) =>
+         (case dest_AddressV result of
+          | SOME address =>
+              (lookup_account address (SND (create_argument_result raw)).accounts).nonce = 1 /\
+              (lookup_account address (SND (create_argument_result raw)).accounts).code =
+                REPLICATE 31 0w ++ [if raw then 2w else 1w]
+          | NONE => F)
+     | _ => F) /\
+    OPTION_MAP (\entry. entry.value)
+      (lookup_scopes "d" (SND (create_argument_result raw)).scopes) =
+        SOME (ArrayV (DynArrayV [IntV 1])))
+  [F;T]
+Proof
+  simp[vyperSmallStepTheory.eval_expr_eq_cont_cps,
+       GSYM blueprint_test_run_def, create_argument_result_def,
+       listTheory.EVERY_DEF, Excl "OPTION_MAP_EQ_SOME"] >>
+  conj_tac
+  >- (conj_tac >- CONV_TAC cv_eval >>
+      conj_tac >- CONV_TAC cv_eval >>
+      CONV_TAC (LAND_CONV (RAND_CONV cv_eval)) >> simp[]) >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
+  CONV_TAC (LAND_CONV (RAND_CONV cv_eval)) >> simp[]
 QED

@@ -2,6 +2,7 @@
 Theory vyperDecimalMulAudit
 Ancestors
   vyperValueOperation vyperTypeBuiltins vyperTypeStatePreservation vyperDecimalMulTest
+  vyperAugAssignWriteSoundness
 
 fun check_saved (thy, name) =
   let
@@ -30,7 +31,7 @@ val () = List.app check_saved
    ("vyperTypeBuiltins", "well_typed_binop_success_type"),
    ("vyperTypeBuiltins", "well_typed_builtin_app_no_type_error"),
    ("vyperTypeBuiltins", "well_typed_builtin_app_success_type"),
-   ("vyperTypeStatePreservation", "assign_operation_leaf_type_update"),
+   ("vyperAugAssignWriteSoundness", "update_place_tail_sound"),
    ("vyperTypeStatePreservation", "well_typed_update_binop_no_type_error")];
 val () = List.app (fn (name, _) => check_saved ("vyperDecimalMulTest", name))
                  (DB.thms "vyperDecimalMulTest");

@@ -26,26 +26,24 @@
  *   compile_toplevel_name_sim — storage, transient, immutable and constant
  *                              reads: a storage or transient variable by
  *                              compile_toplevel_storage_vv_sim, a pointer
- *                              to its slot, whose ce_vars entry comes from
- *                              storage_vars_rel and transient_vars_rel
+ *                              to its slot, whose ce_module_vars entry
+ *                              comes from storage_vars_rel and
+ *                              transient_vars_rel; its slot decodes by
+ *                              expr_sim_inv's storage clauses
+ *                              (compile_toplevel_storage_undecodable_sim)
  *   compile_flag_member_case_sim — a flag member: the literal 2 ** id, by
  *                              expr_sim_inv's flag members clause
  *
- * Helpers: expr_sim_of_vv_sim_memory, val_in_memory_word_type,
- *   eval_expr_toplevel_storage, toplevel_storage_ce_vars,
+ * Helpers: expr_sim_of_vv_sim_memory, eval_expr_toplevel_storage,
+ *   toplevel_storage_ce_vars, toplevel_storage_read_decodes,
  *   compile_toplevel_no_module_sim
  *
  * Unprovable as the definitions stand, to be fixed in the lowering, in
  * state_rel or in the judgment before their PRs:
- *   compile_toplevel_storage_undecodable_sim — a storage or transient
- *                              variable whose slot does not decode (row 3):
- *                              the source raises a RuntimeError where the
- *                              lowering emits no code.  It needs a storage
- *                              invariant keeping the variables' slots
- *                              decodable.
  *   compile_toplevel_immutable_sim — immutables and constants (row 3),
  *                              which lookup_global reads from the
- *                              immutables: nothing puts them in ce_vars,
+ *                              immutables: nothing puts them in
+ *                              ce_module_vars,
  *                              so the lowering may emit INVALID where the
  *                              source reads a value (#563 for immutables).
  *   compile_prevhash_sim     — block.prevhash (row 5): the source raises a
@@ -65,10 +63,11 @@ Theory exprSimLeaves
 Ancestors
   list finite_map
   exprSim exprSimHyps exprSimUnwrap exprLowering exprLoweringProps
-  compileEnv loweringSlice
+  compileEnv accountsRelProps loweringSlice
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeEnv vyperTyping vyperTypeGlobalLookupSoundness
   vyperValueOperation valueEncoding fragExec venomState exprSimLiteralBuffer
+  vyperStorageLayoutSafety vyperLookupStorage vyperTypeValues
 
 val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
                   basicSizeTheory.option_size_def];
@@ -91,54 +90,53 @@ Proof
   qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
   simp[lower_value_def, comp_bind_def] >>
   Cases_on `compile_expr cenv ty e sa` >> rename1 `_ = (vv, sm)` >>
-  qpat_x_assum `!sa vv sm. _` (drule_then strip_assume_tac) >>
-  gvs[] >> strip_tac >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `!sa vv sm. compile_expr _ _ _ _ = _ ==> _` drule >>
+  strip_tac >> gvs[] >>
   drule unwrap_value_extends >> strip_tac >>
-  `fn_has_code sa sa func` by metis_tac[fn_has_code_split, cs_extends_refl] >>
-  `expr_vv_res_ok res` by simp[expr_vv_res_ok_def] >>
+  `fn_has_code sa sa func` by
+    (irule (cj 1 fn_has_code_split) >> simp[cs_extends_refl] >>
+     qexists_tac `sb` >> simp[]) >>
+  Cases_on `eval_expr cx e es` >> rename1 `_ = (raw, est)` >>
+  qpat_x_assum `(do result <- _; _ od) _ = _` mp_tac >>
+  simp[bind_def] >> Cases_on `raw`
+  >- (rename1 `eval_expr cx e es = (INL r, est)` >> simp[] >> strip_tac >>
+      drule read_result_state >> strip_tac >> gvs[] >>
+      `expr_vv_res_ok (INL r)` by
+        (Cases_on `r` >> gvs[expr_vv_res_ok_def, read_result_def,
+                             raise_def, expr_res_ok_def]) >>
+      qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
+        (mp_tac o SIMP_RULE std_ss [expr_vv_sim_def]) >>
+      disch_then (qspecl_then [`sa`, `sa`, `LocatedValue t p`, `INL r`, `es'`, `s0`] mp_tac) >>
+      simp[] >> strip_tac >>
+      irule frag_exec_seq >>
+      qexistsl_tac [`\s. vv_post ctx func cenv cx e es sa sa s0 es' r (LocatedValue t p) s`, `sa`] >>
+      simp[cs_extends_refl] >> conj_tac
+      >- (irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
+          simp[FUN_EQ_THM]) >>
+      irule unwrap_memory_read_result_sim >> simp[]) >>
+  rename1 `eval_expr cx e es = (INR exc, est)` >> strip_tac >> gvs[] >>
+  `expr_vv_res_ok (INR exc)` by gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
   qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
     (mp_tac o SIMP_RULE std_ss [expr_vv_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sa`, `LocatedValue t p`, `res`, `es'`, `s0`]
-                mp_tac) >>
+  disch_then (qspecl_then [`sa`, `sa`, `LocatedValue t p`, `INR exc`, `es'`, `s0`] mp_tac) >>
   simp[] >> strip_tac >>
-  irule frag_exec_seq >> first_x_assum (irule_at Any) >>
-  simp[cs_extends_refl] >>
-  Cases_on `?v. res = INL (Value v)`
-  >- (gvs[] >>
-      qspecl_then [`ctx`, `func`, `cenv`, `cx`, `e`, `es`, `sa`, `sa`, `sb`,
-                   `s0`, `es'`, `v`, `t`, `p`, `op`,
-                   `expr_exit (INL (Value v))`]
-        mp_tac unwrap_memory_sim >>
-      impl_tac >- asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL] >>
-      strip_tac >> irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
-      simp[] >> rpt strip_tac >> gvs[]) >>
-  irule frag_exec_conseq >>
-  qexistsl_tac [`\s. F`, `\s. F`, `expr_exit res`] >>
-  simp[fragExecTheory.frag_exec_false_pre] >>
-  gvs[expr_res_ok_def]
+  irule frag_exec_seq >> qexistsl_tac [`\s. F`, `sa`] >> simp[cs_extends_refl] >> conj_tac
+  >- (irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
+      simp[expr_exit_exception_transport]) >>
+  simp[fragExecTheory.frag_exec_false_pre]
 QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag expr_sim_of_vv_sim_memory)
+  in
+    if null axioms andalso null (Thm.hyp expr_sim_of_vv_sim_memory) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print "MEMORY_FORCE_AUDIT expr_sim_of_vv_sim_memory OK\n"
+    else raise Fail "expr_sim_of_vv_sim_memory: admitted proof dependency"
+  end;
 
 (* ===== Locals ===== *)
-
-(* A value of a word type in memory: its word is the typed encoding. *)
-Theorem val_in_memory_word_type:
-  !tenv t tvt v off mem.
-    is_word_type t /\ evaluate_type tenv t = SOME tvt /\
-    value_has_type tvt v /\ val_in_memory tvt v off mem ==>
-    mem_word_at off mem = typed_val_to_w256 tvt v
-Proof
-  rpt strip_tac >>
-  `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
-   t = BaseT BoolT \/ t = BaseT AddressT \/ t = BaseT DecimalT \/
-   (?m. t = BaseT (BytesT (Fixed m)) /\ m <= 32) \/ (?n. t = FlagT n)` by
-    (Cases_on `t` >> fs[is_word_type_def] >>
-     rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_word_type_def] >>
-     rename1 `BytesT bd` >> Cases_on `bd` >> fs[is_word_type_def]) >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-  Cases_on `v` >>
-  gvs[vyperTypingTheory.value_has_type_def, val_in_memory_def,
-      typed_val_to_w256_def]
-QED
 
 (* A local held through its pointer variable p, as expr_sim_inv's locals
    clause has every local: its value_vv is p as a memory pointer, no code,
@@ -156,7 +154,17 @@ Proof
      gvs[env_consistent_def, env_context_consistent_def]) >>
   `?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
     gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
+  `cenv.ce_var_type id = SOME ann` by
+    gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
   drule_then (qspecl_then [`cx`, `ann`] assume_tac) eval_name_word >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       type_check_def, assert_def, check_def, ignore_bind_def] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       type_check_def, assert_def, check_def, ignore_bind_def,
+       read_result_def] >> strip_tac >>
   gvs[compile_expr_def, compile_name_vv_def, comp_return_def,
       contextTheory.mk_ptr_def, vyperASTTheory.expr_type_def] >>
   irule frag_exec_refl >> rpt strip_tac >> gvs[] >>
@@ -165,11 +173,13 @@ Proof
        val_in_memory entry.type entry.value (w2n w) s.vs_memory` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
      first_x_assum drule_all >> metis_tac[]) >>
-  simp[vv_post_def, vv_holds_def, vv_at_def, materialise_def, return_def,
+  simp[vv_post_def, vv_holds_def, vv_at_def, read_result_def, return_def,
        vyperASTTheory.expr_type_def, eval_operand_def] >>
   rpt conj_tac
   >- metis_tac[val_in_memory_word_type]
-  >- (qexistsl_tac [`id`, `w2n w`, `sz`] >> simp[local_region_def] >>
+  >- (disj2_tac >> disj1_tac >>
+      qexistsl_tac [`id`, `w2n w`, `sz`] >>
+      asm_simp_tac (srw_ss()) [local_region_def, dynarray_local_def] >>
       drule val_footprint_le >> decide_tac) >>
   rpt strip_tac >> gvs[]
 QED
@@ -215,7 +225,7 @@ QED
 val literal_bytes_word_tac =
   gvs[lower_value_def, compile_expr_def, comp_bind_def, comp_return_def,
       compile_literal_vv_def, unwrap_value_def, evaluate_literal_def,
-      vyperASTTheory.expr_type_def] >>
+      vyperASTTheory.expr_type_def, bind_def, read_result_def, return_def] >>
   irule frag_exec_refl >>
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
        vyperASTTheory.expr_type_def, eval_operand_def, is_word_type_def,
@@ -404,9 +414,9 @@ val lookup_global_tac =
   simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
        return_def, raise_def, LET_THM];
 
-(* A storage or transient variable whose slot decodes at es: the source
-   reads it (an aggregate array stays an ArrayRef, which materialise reads
-   the same way) and leaves the state alone. *)
+(* A storage or transient variable whose slot decodes at es: evaluation
+   returns a StoragePlace for every type; read_result reads that place
+   and leaves the state alone. *)
 Theorem eval_expr_toplevel_storage:
   !cx ann src id es res es' ts tr typ id_str slot tvt v.
     eval_expr cx (TopLevelName ann (src, id)) es = (res, es') /\
@@ -415,12 +425,12 @@ Theorem eval_expr_toplevel_storage:
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
     evaluate_type (get_tenv cx) typ = SOME tvt /\
     read_storage_slot cx tr (n2w slot) tvt es = (INL v, es) ==>
-    es' = es /\ ?tv. res = INL tv /\ materialise cx tv es = (INL v, es)
+    es' = es /\ ?tv. res = INL tv /\ read_result cx tv es = (INL v, es)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >> lookup_global_tac >>
-  Cases_on `tvt` >> gvs[return_def, bind_def, materialise_def] >>
-  rpt strip_tac >> gvs[materialise_def, return_def, bind_def]
+  rpt strip_tac >>
+  gvs[read_result_def, read_place_def, return_def, bind_def]
 QED
 
 (* The compile environment holds a storage or transient variable at the
@@ -431,12 +441,30 @@ Theorem toplevel_storage_ce_vars:
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot ==>
-    FLOOKUP cenv.ce_vars (module_var_key (src, id)) =
+    FLOOKUP cenv.ce_module_vars (src, id) =
       SOME (if tr then TransientLoc (n2w slot) else StorageLoc (n2w slot))
 Proof
   rpt strip_tac >> Cases_on `tr` >>
   gvs[storage_vars_rel_def, transient_vars_rel_def] >>
   first_x_assum irule >> simp[var_decl_transient_def]
+QED
+
+(* A storage or transient variable's slots are in range, as the declared
+   regions are (contract_storage_well_formed). *)
+Theorem toplevel_storage_slots_in_range:
+  !cx es src id ts tr typ id_str slot tvt.
+    contract_storage_well_formed cx es /\
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+    evaluate_type (get_tenv cx) typ = SOME tvt ==>
+    slots_in_range (get_storage cx es tr) (w2n ((n2w slot):bytes32)) tvt
+Proof
+  rpt strip_tac >>
+  `declared_storage_region cx src id [] = SOME (tr, n2w slot, tvt)` by
+    simp[declared_storage_region_def] >>
+  irule contract_storage_well_formed_region >>
+  simp[vyperStorageBackendTheory.get_storage_backend_eq] >> metis_tac[]
 QED
 
 (* A storage or transient variable whose slot decodes: a pointer to its
@@ -452,6 +480,9 @@ Theorem compile_toplevel_storage_vv_sim:
     expr_vv_sim ctx func cenv cx ty (TopLevelName ann (src, id)) es
 Proof
   rw[expr_vv_sim_def] >>
+  `slots_in_range (get_storage cx es tr) (w2n ((n2w slot):bytes32)) tvt` by
+    (irule toplevel_storage_slots_in_range >>
+     gvs[expr_sim_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
   `typ = ann` by
     (gvs[expr_sim_pre_def, expr_sim_inv_def] >>
      metis_tac[vyperTypeGlobalLookupSoundnessTheory.TopLevelName_storage_decl_type_eq]) >>
@@ -463,6 +494,10 @@ Proof
       simp[fragExecTheory.frag_exec_false_pre] >>
       gvs[stmt_state_rel_def, state_rel_def]) >>
   fs[] >> drule_all toplevel_storage_ce_vars >> strip_tac >>
+  `!st. storage_read_live cx tr st (n2w slot) tvt` by
+    (gen_tac >> irule declared_storage_region_read_live >>
+     qexistsl [`src`, `id`, `[]`] >>
+     simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def]) >>
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
   simp[compile_expr_def, vyperASTTheory.expr_type_def] >>
   Cases_on `tr` >> simp[] >> strip_tac >> gvs[] >>
@@ -472,13 +507,36 @@ Proof
        vyperASTTheory.expr_type_def]
 QED
 
-(* A storage or transient variable whose slot does not decode at es (a
-   dynamic array, bytestring or string, or an aggregate holding one, whose
-   length word is above its bound).  Cheated, and false as stated: the
-   source raises a RuntimeError reading it (or materialising the ArrayRef
-   later), where the lowering emits no code and hands out the slot.
-   Nothing in stmt_state_rel keeps a variable's slots decodable; the fix is
-   a storage invariant, as for exprSimUnwrap's unwrap_storage_word_sim. *)
+(* A storage or transient variable's slot decodes wherever the declared
+   regions do (contract_storage_well_formed,
+   decode_value_from_slots_in_range). *)
+Theorem toplevel_storage_read_decodes:
+  !cx es src id ts tr typ id_str slot tvt.
+    contract_storage_well_formed cx es /\
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+    evaluate_type (get_tenv cx) typ = SOME tvt ==>
+    ?v. read_storage_slot cx tr (n2w slot) tvt es = (INL v, es)
+Proof
+  rpt strip_tac >>
+  `declared_storage_region cx src id [] = SOME (tr, n2w slot, tvt)` by
+    simp[declared_storage_region_def] >>
+  `?storage. get_storage_backend cx tr es = (INL storage, es)` by
+    (Cases_on `tr` >>
+     simp[get_storage_backend_def, bind_def, return_def,
+          get_transient_storage_def, get_accounts_def]) >>
+  drule_all contract_storage_well_formed_region >> strip_tac >>
+  drule evaluate_type_well_formed_type_value >> strip_tac >>
+  drule_all decode_value_from_slots_in_range >> strip_tac >>
+  gvs[read_storage_slot_def, bind_def, lift_option_def, return_def,
+      wordsTheory.w2n_n2w]
+QED
+
+(* A storage or transient variable whose slot does not decode at es: the
+   source raises a TypeError when the layout has no slot for it or its
+   type does not evaluate, and otherwise the slot decodes
+   (toplevel_storage_read_decodes, by expr_sim_inv's storage clauses). *)
 Theorem compile_toplevel_storage_undecodable_sim:
   !ctx func cenv cx env ty ann src id es ts tr typ id_str.
     expr_sim_pre cenv cx env (TopLevelName ann (src, id)) es /\
@@ -489,14 +547,25 @@ Theorem compile_toplevel_storage_undecodable_sim:
                    read_storage_slot cx tr (n2w slot) tvt es = (INL v, es)) ==>
     expr_vv_sim ctx func cenv cx ty (TopLevelName ann (src, id)) es
 Proof
-  cheat
+  rpt strip_tac >> simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
+  `F` suffices_by simp[] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >> lookup_global_tac >>
+  Cases_on `lookup_var_slot_from_layout cx tr src id_str` >>
+  simp[raise_def, return_def]
+  >- (strip_tac >> gvs[expr_vv_res_ok_def]) >>
+  Cases_on `evaluate_type (get_tenv cx) typ` >> simp[raise_def, return_def]
+  >- (strip_tac >> gvs[expr_vv_res_ok_def]) >>
+  `contract_storage_well_formed cx es` by
+    gvs[expr_sim_pre_def, expr_sim_inv_def] >>
+  drule_all toplevel_storage_read_decodes >> metis_tac[]
 QED
 
 (* An immutable or a constant (no storage declaration of the name; both
    are read from the immutables).  Cheated, and false as stated: nothing in
-   expr_sim_inv puts them in ce_vars (the lowering has no ImmutableLoc for
-   immutables yet, #563) nor bounds their offsets (immutable_holds), so the
-   lowering may emit INVALID where the source reads a value. *)
+   expr_sim_inv puts them in ce_module_vars (the lowering has no ImmutableLoc for
+   immutables yet, #563), so the lowering may emit INVALID where the source
+   reads a value.  Where it does, immutable_holds also needs the
+   immutable's bytes to end below 2 ** 256 and the value typed. *)
 Theorem compile_toplevel_immutable_sim:
   !ctx func cenv cx env ty ann src id es ts.
     expr_sim_pre cenv cx env (TopLevelName ann (src, id)) es /\
@@ -544,16 +613,23 @@ QED
 
 Theorem eval_expr_flag_member:
   !cx ann src fid mid es res es'.
-    eval_expr cx (FlagMember ann (src, fid) mid) es = (res, es') /\
+    (do result <- eval_expr cx (FlagMember ann (src, fid) mid); read_result cx result od) es = (res, es') /\
     expr_res_ok res ==>
     es' = es /\
     ?ts ls i. get_module_code cx src = SOME ts /\
               lookup_flag fid ts = SOME ls /\ INDEX_OF mid ls = SOME i /\
-              res = INL (Value (FlagV (2 ** i)))
+              res = INL (FlagV (2 ** i))
 Proof
-  rpt gen_tac >> simp[Once evaluate_def, lookup_flag_mem_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[raise_def, return_def]) >>
-  rw[] >> gvs[expr_res_ok_def]
+  rpt gen_tac >>
+  simp[Once evaluate_def, lookup_flag_mem_def] >>
+  Cases_on `get_module_code cx src` >>
+  gvs[bind_def, raise_def, return_def, expr_res_ok_def] >>
+  rename1 `get_module_code cx src = SOME ts` >>
+  Cases_on `lookup_flag fid ts` >>
+  gvs[bind_def, raise_def, return_def, expr_res_ok_def] >>
+  rename1 `lookup_flag fid ts = SOME ls` >>
+  Cases_on `INDEX_OF mid ls` >>
+  gvs[bind_def, read_result_def, raise_def, return_def, expr_res_ok_def]
 QED
 
 (* A flag member is the literal 2 ** id, id its index in its flag's
@@ -589,3 +665,14 @@ Theorem compile_flag_member_sim:
 Proof
   metis_tac[compile_flag_member_case_sim, expr_ok_def]
 QED
+
+(* Integrity gate: memory forcing must not introduce admitted dependencies
+   into the existing Name and memory-literal consumers. *)
+val () = List.app (fn th =>
+  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
+  in if null axs andalso null (Thm.hyp th) andalso
+        List.all (fn s => s = "DISK_THM") ors
+     then print "MEMORY_CONSUMER_AUDIT OK\n"
+     else raise Fail "memory consumer inherited admission"
+  end) [compile_name_other_sim, compile_name_sim, compile_name_case_sim,
+        compile_literal_memory_sim];

@@ -399,17 +399,15 @@ Proof
 QED
 
 (* A well-typed word argument passes the clamp the compiler picks for its
-   type.  Two hypotheses tie the compiler's view to the source:
-   - signed integer widths are multiples of 8: Vyper has only int8 ...
-     int256, and the clamp sign-extends from byte bits DIV 8 - 1;
-     evaluate_type does not rule other widths out yet;
-   - a flag's member count in the compile env is the source's (the same
-     clause exprSimHyps uses). *)
+   type.  The signed clamp sign-extends from byte bits DIV 8 - 1, which is
+   right because evaluate_type only admits widths that are multiples of 8.
+   One hypothesis ties the compiler's view to the source: a flag's member
+   count in the compile env is the source's (the same clause exprSimHyps
+   uses). *)
 Theorem word_arg_clamp_ok:
   !tenv sfields cenv ty tv v.
     is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
     value_has_type tv v /\
-    (!m. ty = BaseT (IntT m) ==> m MOD 8 = 0) /\
     (!nsid m. FLOOKUP tenv nsid = SOME (FlagArgs m) ==>
               cenv.ce_flag_n_members (nsid_to_string nsid) = m) ==>
     abi_clamp_ok
@@ -917,7 +915,6 @@ Theorem compile_decode_word_arg_correct:
     eval_operand dst s0 = SOME p /\ fresh_vars_wrt st s0 /\
     is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
     value_has_type tv v /\
-    (!m. ty = BaseT (IntT m) ==> m MOD 8 = 0) /\
     (!nsid m. FLOOKUP tenv nsid = SOME (FlagArgs m) ==>
               cenv0.ce_flag_n_members (nsid_to_string nsid) = m) /\
     mem_word_at off s0.vs_call_ctx.cc_calldata = typed_val_to_w256 tv v ==>

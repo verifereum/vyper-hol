@@ -124,11 +124,11 @@ QED
 
 (* Check actual type-builtin dispatch, not only evaluate_convert directly. *)
 Theorem decimal_convert_builtin_boundaries_cv:
-  evaluate_type_builtin empty_evaluation_context Convert (BaseT (IntT 8))
+  evaluate_type_builtin empty_evaluation_context Convert (BaseT (IntT 8)) [BaseT DecimalT]
     [DecimalV 1270000000001] = INR (RuntimeError "convert decimal int") ∧
-  evaluate_type_builtin empty_evaluation_context Convert (BaseT (UintT 8))
+  evaluate_type_builtin empty_evaluation_context Convert (BaseT (UintT 8)) [BaseT DecimalT]
     [DecimalV (-1)] = INR (RuntimeError "convert decimal uint") ∧
-  evaluate_type_builtin empty_evaluation_context Convert (BaseT (IntT 8))
+  evaluate_type_builtin empty_evaluation_context Convert (BaseT (IntT 8)) [BaseT DecimalT]
     [DecimalV (-10000000001)] = INL (IntV (-1))
 Proof
   simp[evaluate_type_builtin_def, get_tenv_def,
