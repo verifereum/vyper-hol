@@ -29,7 +29,8 @@
  * Helpers:
  *   stmt_state_rel_exec_alloca, stmt_state_rel_declare_word,
  *   eval_name_word, lower_value_name_word, step_name_word,
- *   eval_stmt_if_success, eval_stmt_annassign_value, compile_if_parts,
+ *   eval_stmt_if_success, eval_stmt_annassign_value,
+ *   eval_stmt_annassign_read_value, compile_if_parts,
  *   compile_if_taken_branch, if_branch_to_exit, compile_annassign_word_parts,
  *   bounded_int_op_add_overflow, word_value_in_memory, word_value_wf
  *)
@@ -376,6 +377,25 @@ Proof
   qpat_x_assum `(case es2.scopes of [] => _ | _ => _) _ = _` mp_tac >>
   Cases_on `es2.scopes` >> simp[raise_def, set_scopes_def, return_def] >>
   strip_tac >> gvs[]
+QED
+
+Theorem eval_stmt_annassign_read_value:
+  !cx id typ e es es'.
+    eval_stmt cx (AnnAssign id typ e) es = (INL (), es') ==>
+    ?tyv v es1 sc rest.
+      evaluate_type (get_tenv cx) typ = SOME tyv /\
+      (do tv <- eval_expr cx e; read_result cx tv od) es = (INL v, es1) /\
+      lookup_scopes id es1.scopes = NONE /\ es1.scopes = sc :: rest /\
+      es' = es1 with scopes :=
+        (sc |+ (id, <| assignable := T; type := tyv; value := v; popped := [] |>))
+        :: rest
+Proof
+  rpt strip_tac >> drule eval_stmt_annassign_value >> strip_tac >>
+  rename1 `evaluate_type (get_tenv cx) typ = SOME runtime_ty` >>
+  rename1 `read_result cx result after_eval = (INL value, after_read)` >>
+  rename1 `after_read.scopes = frame :: tail` >>
+  qexistsl_tac [`runtime_ty`, `value`, `after_read`, `frame`, `tail`] >>
+  simp[bind_def]
 QED
 
 Theorem local_region_exec_alloca[local]:
