@@ -3,6 +3,7 @@ Theory storageDecodeMemory
 Ancestors
   list rich_list words valueEncoding valueEncodingProps compileEnv
   vyperLookupStorage vyperStorage vyperValue accountsRelProps venomMemProps
+  exprSimAggregateEncoding
 
 Definition copy_bytes_def:
   copy_bytes st bs n D dst mem <=>
