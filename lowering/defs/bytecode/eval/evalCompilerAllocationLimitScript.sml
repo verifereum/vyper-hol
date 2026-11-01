@@ -4,8 +4,9 @@
    on each valued return; the runtime lowering rejects the same programs.
    It does the same for a function's locals, as Context.new_variable
    allocates each, and for its parameters, which an external function
-   decodes into such a variable, and for its return type, as a caller stages
-   an internal call's result in a temporary.
+   decodes into such a variable, for its return type, as a caller stages
+   an internal call's result in a temporary, and for the staging buffer of
+   a tuple assignment from a memory view.
    TOP-LEVEL: allocation_limit_return_rejected,
               allocation_limit_raise_return_buffer_ok,
               allocation_limit_boundary_ok,
@@ -14,7 +15,8 @@
               allocation_limit_local_boundary_ok,
               allocation_limit_local_boundary_rejected,
               allocation_limit_param_rejected,
-              allocation_limit_internal_return_rejected. *)
+              allocation_limit_internal_return_rejected,
+              allocation_limit_tuple_stage_rejected. *)
 Theory evalCompilerAllocationLimit
 Ancestors compileVyper
 
@@ -186,4 +188,49 @@ Theorem allocation_limit_internal_return_rejected:
       BaseT (BytesT (Dynamic (2 ** 64))), [Pass])
 Proof
   ACCEPT_TAC (EQF_ELIM allocation_limit_internal_return_rejected_eval)
+QED
+
+(* a, b = x
+   where x is a memory tuple (Bytes[2**64 - 64], uint256): Python stages x
+   (_lower_tuple_unpack) in new_temporary_value of
+   (32 + 2**64 - 64) + 32 = 2**64 bytes. *)
+val allocation_limit_tuple_stage_rejected_eval =
+  EVAL ``fn_allocs_ok []
+           (Nonpayable, F, F, "f", [] : (string # type) list,
+            [] : expr list, NoneT,
+            [Assign (TupleTarget [BaseTarget (NameTarget "a");
+                                  BaseTarget (NameTarget "b")])
+               (Name (TupleT [BaseT (BytesT (Dynamic (2 ** 64 - 64)));
+                              BaseT (UintT 256)]) "x")])``
+
+Theorem allocation_limit_tuple_stage_rejected:
+  ¬fn_allocs_ok []
+     (Nonpayable, F, F, "f", [] : (string # type) list, [] : expr list, NoneT,
+      [Assign (TupleTarget [BaseTarget (NameTarget "a");
+                            BaseTarget (NameTarget "b")])
+         (Name (TupleT [BaseT (BytesT (Dynamic (2 ** 64 - 64)));
+                        BaseT (UintT 256)]) "x")])
+Proof
+  ACCEPT_TAC (EQF_ELIM allocation_limit_tuple_stage_rejected_eval)
+QED
+
+(* The same with Bytes[2**64 - 96]: a buffer of 2**64 - 32 bytes is allowed. *)
+val allocation_limit_tuple_stage_accepted_eval =
+  EVAL ``fn_allocs_ok []
+           (Nonpayable, F, F, "f", [] : (string # type) list,
+            [] : expr list, NoneT,
+            [Assign (TupleTarget [BaseTarget (NameTarget "a");
+                                  BaseTarget (NameTarget "b")])
+               (Name (TupleT [BaseT (BytesT (Dynamic (2 ** 64 - 96)));
+                              BaseT (UintT 256)]) "x")])``
+
+Theorem allocation_limit_tuple_stage_accepted:
+  fn_allocs_ok []
+    (Nonpayable, F, F, "f", [] : (string # type) list, [] : expr list, NoneT,
+     [Assign (TupleTarget [BaseTarget (NameTarget "a");
+                           BaseTarget (NameTarget "b")])
+        (Name (TupleT [BaseT (BytesT (Dynamic (2 ** 64 - 96)));
+                       BaseT (UintT 256)]) "x")])
+Proof
+  ACCEPT_TAC (EQT_ELIM allocation_limit_tuple_stage_accepted_eval)
 QED

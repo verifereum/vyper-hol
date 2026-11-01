@@ -14,7 +14,7 @@
  *)
 Theory allocLimits
 Ancestors
-  compileEnv vyperAST vfmConstants list pair
+  stmtLowering compileEnv vyperAST vfmConstants list pair
 
 (* The buffer the lowering allocates for a bytes or string literal, its
    length word and its data rounded up to whole words, is below 2 ** 64
@@ -138,7 +138,13 @@ End
 
 (* alloc_limits_expr of every expression of a statement, targets' keys
    included, and the limit for every local it declares: Python allocates a
-   declared local and a loop variable with Context.new_variable. *)
+   declared local and a loop variable with Context.new_variable.  A tuple
+   assignment from a memory view (is_memory_view) needs a buffer of the
+   source's size: a memory source may be staged in one (compile_tuple_unpack;
+   Python's _lower_tuple_unpack allocates it with
+   Context.new_temporary_value), and a storage, transient or immutable source
+   is read into one (compile_ensure_in_memory; Python's Context.unwrap).  The
+   check covers both, so don't narrow it to the staging condition alone. *)
 Definition alloc_limits_stmt_def:
   alloc_limits_stmt cenv Pass = T ∧
   alloc_limits_stmt cenv Break = T ∧
@@ -148,7 +154,11 @@ Definition alloc_limits_stmt_def:
   alloc_limits_stmt cenv (AnnAssign id ty e) =
     (type_memory_bytes cenv ty < 2 ** 64 ∧ alloc_limits_expr cenv e) ∧
   alloc_limits_stmt cenv (Assign g e) =
-    (alloc_limits_assignment cenv g ∧ alloc_limits_expr cenv e) ∧
+    (alloc_limits_assignment cenv g ∧ alloc_limits_expr cenv e ∧
+     (case g of
+        TupleTarget _ =>
+          is_memory_view e ⇒ type_memory_bytes cenv (expr_type e) < 2 ** 64
+      | _ => T)) ∧
   alloc_limits_stmt cenv (AugAssign ty tgt op e) =
     (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e) ∧
   alloc_limits_stmt cenv (Append tgt e) =

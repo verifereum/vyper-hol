@@ -73,7 +73,8 @@ Definition evaluate_type_def:
     (case evaluate_type tenv t of
      | SOME tv =>
        let atv = ArrayTV tv bd in
-       if 0 < type_slot_size tv ∧ type_slot_size atv < dimword(:256)
+       if 0 < bound_length bd ∧ 0 < type_slot_size tv ∧
+          type_slot_size atv < dimword(:256)
        then SOME atv else NONE
      | _ => NONE) ∧
   evaluate_type tenv (StructT nsid) =
