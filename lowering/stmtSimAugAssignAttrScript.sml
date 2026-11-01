@@ -155,8 +155,8 @@ QED
 (* A word field of a local struct, at x's pointer plus the field's
    offset: the word the field's value is held in. *)
 Theorem stmt_state_rel_field_word:
-  !func cenv cx es s id p sz w0 entry fs vals flds fld ftv fv fty.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx es s id p sz w0 entry fs vals flds fld ftv fv fty ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w0 /\
     lookup_scopes id es.scopes = SOME entry /\
@@ -169,7 +169,7 @@ Theorem stmt_state_rel_field_word:
       typed_val_to_w256 ftv fv
 Proof
   rpt strip_tac >>
-  `local_ptrs_rel func cenv es.scopes s /\ alloca_room func s` by
+  `local_ptrs_rel func cenv es.scopes s /\ alloca_room ctx func s` by
     fs[stmt_state_rel_def, state_rel_def] >>
   `w2n w0 + sz <= s.vs_alloca_next /\ type_memory_size entry.type <= sz /\
    val_in_memory entry.type entry.value (w2n w0) s.vs_memory` by
@@ -200,8 +200,8 @@ Theorem attr_load_frag:
     emit_op MLOAD [dst] sn = (cur, s1) /\
     local_ptrs_reserved cenv sa /\ not_fresh_at sa p /\
     lookup_var p s0 = SOME w0 ==>
-    frag_exec ctx sa s1 (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
-      (\s. stmt_state_rel func cenv cx es s /\
+    frag_exec ctx sa s1 (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. stmt_state_rel ctx func cenv cx es s /\
            eval_operand dst s = SOME (w0 + n2w off) /\
            eval_operand cur s = SOME (mload (w2n (w0 + n2w off)) s0) /\
            (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
@@ -272,10 +272,10 @@ Theorem augassign_attr_bop_frag:
           expr_res_ok (bop_result cx ty bop [ty; expr_type e] v1 v2 es1) /\
           binop_frag ctx func cenv cx bop ty ty NONE el [ty; expr_type e]
             v1 v2 es1) ==>
-    frag_exec ctx sa s3 (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+    frag_exec ctx sa s3 (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
       (\s. ?v2 v. r1 = INL v2 /\
                   bop_result cx ty bop [ty; expr_type e] v1 v2 es1 = INL v /\
-                  word_value v /\ stmt_state_rel func cenv cx es1 s /\
+                  word_value v /\ stmt_state_rel ctx func cenv cx es1 s /\
                   eval_operand res_op s = SOME (val_to_w256 v) /\
                   eval_operand dst s = SOME (w0 + n2w off) /\
                   (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
@@ -344,8 +344,8 @@ Proof
   impl_tac >- fs[] >>
   disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
   fs[] >> rpt strip_tac >>
-  rename1 `expr_post _ _ _ _ _ _ _ _ _ _ _ u` >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _`
+  rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ u` >>
+  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `?tv2. evaluate_type (get_tenv cx) (expr_type e) = SOME tv2` by
     fs[optionTheory.IS_SOME_EXISTS] >>
@@ -429,7 +429,7 @@ Theorem augassign_attr_local_frag:
     fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    (!s. stmt_state_rel func cenv cx es s ==>
+    (!s. stmt_state_rel ctx func cenv cx es s ==>
          ?w0. lookup_var p s = SOME w0 /\
               mload (w2n (w0 + n2w (struct_field_offset flds fld))) s =
                 val_to_w256 v1) /\
@@ -457,8 +457,8 @@ Theorem augassign_attr_local_frag:
                 pre ++ (env1 |+ (id, entry with
                           <|value := StructV (AFUPDKEY fld (K v) vals);
                             popped := []|>)) :: rest) ==>
-    frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
-      (\t. res = INL () /\ stmt_state_rel func cenv cx es' t /\
+    frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\t. res = INL () /\ stmt_state_rel ctx func cenv cx es' t /\
            (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
                   lookup_var x t = SOME u) /\
            (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -468,9 +468,9 @@ Theorem augassign_attr_local_frag:
                   | INR ex => INR ex))
 Proof
   rpt gen_tac >> strip_tac >>
-  reverse (Cases_on `stmt_state_rel func cenv cx es s0`)
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
   >- simp[frag_exec_def] >>
-  qpat_x_assum `!s. stmt_state_rel _ _ _ _ s ==> _` drule >> strip_tac >>
+  qpat_x_assum `!s. stmt_state_rel ctx _ _ _ _ s ==> _` drule >> strip_tac >>
   `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
   `ci_mono s3 sf` by metis_tac[ci_mono_emit_void, pairTheory.SND] >>
   `ci_mono sa sn /\ ci_mono sn s1` by
@@ -608,7 +608,7 @@ Resume compile_augassign_attr_local_stmt_frag[frag_pre]:
                    `entry`, `fs`, `vals`,
                    `get_struct_fields cenv.ce_struct_fields
                       (nsid_to_string sid)`,
-                   `fld`, `ftv`, `fv`, `ty`]
+                   `fld`, `ftv`, `fv`, `ty`, `ctx`]
         mp_tac stmt_state_rel_field_word >>
       impl_tac >- fs[] >>
       simp[typed_val_to_w256_word_value])

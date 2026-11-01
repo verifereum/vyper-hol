@@ -411,8 +411,8 @@ Proof
   impl_tac >- simp[expr_res_ok_def] >>
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
-  rename1 `expr_post func cenv cx _ es sa s3 s0 es1 v res_op u` >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  rename1 `expr_post ctx func cenv cx _ es sa s3 s0 es1 v res_op u` >>
+  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def, expr_val_rel_def, vyperASTTheory.expr_type_def] >>
   strip_tac >>
   `eval_operand res_op u = SOME (typed_val_to_w256 entry1.type v)` by
@@ -421,7 +421,7 @@ Proof
     (irule store_lays_out_word_value >>
      metis_tac[word_value_type_memory_size]) >>
   drule_all assign_local_store_run >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  strip_tac >>
   disj1_tac >> qexists_tac `t` >>
   simp[stmt_lands_def, cenv_top_ext_refl] >>
   conj_tac

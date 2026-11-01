@@ -246,14 +246,14 @@ Proof
 QED
 
 Theorem bytes_buffer_write_state_rel:
-  !func cenv cx es s p data sz.
-  stmt_state_rel func cenv cx es s /\ 32 + LENGTH data <= sz /\
+  !func cenv cx es s p data sz ctx.
+  stmt_state_rel ctx func cenv cx es s /\ 32 + LENGTH data <= sz /\
   (!name b len. local_region cenv es.scopes s name b len ==>
      b + len <= p \/ p + sz <= b) /\
   immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
     (mstore p (n2w (LENGTH data))
       (write_memory_with_expansion (p + 32) data s)) ==>
-  stmt_state_rel func cenv cx es
+  stmt_state_rel ctx func cenv cx es
     (mstore p (n2w (LENGTH data))
       (write_memory_with_expansion (p + 32) data s))
 Proof
@@ -270,7 +270,7 @@ Proof
          first_x_assum drule >> decide_tac) >>
      simp_tac (srw_ss()) [mstore_def, write_memory_with_expansion_def, lookup_var_def, LET_THM] >>
      rpt strip_tac >> gvs[]) >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
   rewrite_tac[Once stmt_state_rel_def] >> strip_tac >>
   rewrite_tac[stmt_state_rel_def] >> conj_tac
   >- (irule state_rel_frame >> simp[] >> qexistsl_tac [`es`, `s`] >>
@@ -575,10 +575,10 @@ QED
 
 
 Theorem slice_calldata_run[local]:
-  !op n sa ptr sb func cenv cx es s a.
+  !op n sa ptr sb func cenv cx es s a ctx.
   compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sa = (ptr,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel func cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
   context_well_typed cx /\ 0 < n /\ n < dimword (:256) /\ a < dimword (:256) /\
   32 + 32 * word_size n < 2 ** 64 /\
   eval_operand op s = SOME (n2w a) /\
@@ -586,7 +586,7 @@ Theorem slice_calldata_run[local]:
   if dimword (:256) <= a+n \/ LENGTH cx.txn.calldata < a+n then
     ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
   else ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel func cenv cx es t /\ eval_operand ptr t = SOME w /\
+    stmt_state_rel ctx func cenv cx es t /\ eval_operand ptr t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,32 + 32 * word_size n) /\
     val_in_memory (BaseTV (BytesT (Dynamic n)))
       (BytesV (TAKE n (DROP a cx.txn.calldata))) (w2n w) t.vs_memory /\
@@ -619,7 +619,7 @@ Proof
      regions_disjoint off (type_memory_size tv) (w2n w)
        (32 * word_size n + 32))` by
     (rpt strip_tac >>
-     qpat_assum `stmt_state_rel func cenv cx es t` mp_tac >>
+     qpat_assum `stmt_state_rel ctx func cenv cx es t` mp_tac >>
      pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
      qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then drule_all >> strip_tac >>
@@ -780,10 +780,10 @@ Proof
 QED
 
 Theorem slice_calldata_vv_post[local]:
-  !func cenv cx e es sa sb s t p a n w.
+  !func cenv cx e es sa sb s t p a n w ctx.
   expr_type e = BaseT (BytesT (Dynamic n)) /\ p.ptr_location = LocMemory /\
   eval_operand p.ptr_operand t = SOME w /\ a+n <= LENGTH cx.txn.calldata /\
-  stmt_state_rel func cenv cx es t /\
+  stmt_state_rel ctx func cenv cx es t /\
   FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,32 + 32 * word_size n) /\
   sa.cs_next_id < sb.cs_next_id /\
   val_in_memory (BaseTV (BytesT (Dynamic n)))
@@ -796,7 +796,7 @@ Theorem slice_calldata_vv_post[local]:
   (!nm lb len. local_region cenv es.scopes t nm lb len ==>
      regions_disjoint (w2n w) (32 + 32 * word_size n) lb len) /\
   locals_kept cenv es s t ==>
-  !k. vv_post func cenv cx e es sa sb s es
+  !k. vv_post ctx func cenv cx e es sa sb s es
     (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))
     (LocatedValue (expr_type e) p) (t with vs_inst_idx := k)
 Proof
@@ -831,9 +831,9 @@ Theorem slice_calldata_frag[local]:
   res = (case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
            INL v => INL (Value v) | INR err => INR (Error err)) ==>
   frag_exec ctx sa sb
-    (\s. s = s0 /\ stmt_state_rel func cenv cx es s /\
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
          eval_operand op s = SOME (n2w a))
-    (\t. ?tv. res = INL tv /\ vv_post func cenv cx e es sa sb s0 es tv
+    (\t. ?tv. res = INL tv /\ vv_post ctx func cenv cx e es sa sb s0 es tv
            (LocatedValue (expr_type e) p) t)
     (expr_exit res)
 Proof
@@ -879,12 +879,12 @@ Proof
 QED
 
 Theorem vv_post_prefix_frame:
-  stmt_state_rel func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   wb_frame cenv es sa s0 t /\
-  vv_post func cenv cx e es1 sm sb t es2 tv vv u ==>
-  vv_post func cenv cx e es sa sb s0 es2 tv vv u
+  vv_post ctx func cenv cx e es1 sm sb t es2 tv vv u ==>
+  vv_post ctx func cenv cx e es sa sb s0 es2 tv vv u
 Proof
   simp[vv_post_def, GSYM wb_frame_def] >> rpt strip_tac
   >- metis_tac[vv_at_start_mono] >>
@@ -903,16 +903,16 @@ Theorem slice_calldata_uint_compose[local]:
   fn_has_code sa sc func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   res = (case evaluate_calldata_slice cx.txn.calldata (IntV (&a)) n of
            INL v => INL (Value v) | INR err => INR (Error err)) ==>
-  frag_exec ctx sa sc (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+  frag_exec ctx sa sc (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
     (\s. ?tv. res = INL tv /\
-      vv_post func cenv cx (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e])
+      vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e])
         es sa sc s0 es' tv
         (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr out LocMemory)) s)
     (expr_exit res)
 Proof
   strip_tac >>
-  reverse (Cases_on `stmt_state_rel func cenv cx es s0`)
-  >- (`(\s. s = s0 /\ stmt_state_rel func cenv cx es s) = (\s. F)` by
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
+  >- (`(\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s) = (\s. F)` by
         (simp[FUN_EQ_THM] >> metis_tac[]) >>
       simp[] >> irule frag_exec_false_pre) >>
   `is_word_type (expr_type e)` by simp[is_word_type_def] >>
@@ -934,11 +934,11 @@ Proof
   drule_all expr_sim_apply >> disch_then (qspec_then `s0` mp_tac) >>
   simp[] >> strip_tac >>
   irule wb_frag_then >>
-  qexistsl_tac [`\s. expr_post func cenv cx e es sa sm s0 es' (IntV (&a)) op s`, `sm`] >>
+  qexistsl_tac [`\s. expr_post ctx func cenv cx e es sa sm s0 es' (IntV (&a)) op s`, `sm`] >>
   reverse conj_tac
   >- (simp[] >> irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[]) >> simp[] >>
   qx_gen_tac `t` >> strip_tac >>
-  `stmt_state_rel func cenv cx es' t` by metis_tac[expr_post_state] >>
+  `stmt_state_rel ctx func cenv cx es' t` by metis_tac[expr_post_state] >>
   `eval_operand op t = SOME (n2w a)` by
     (drule expr_post_word_operand >>
      simp[evaluate_type_def, is_word_type_def, word_value_def, val_to_w256_def,

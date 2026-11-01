@@ -261,17 +261,17 @@ Theorem store_var_frag[local]:
   !ctx func cenv cx es' s1 tr d a op w st st' R.
     emit_void (if tr then TSTORE else SSTORE) [Var d; op] st = ((), st') /\
     lookup_var d s1 = SOME a /\ eval_operand op s1 = SOME w /\
-    stmt_state_rel func cenv cx es'
+    stmt_state_rel ctx func cenv cx es'
       (if tr then tstore a w s1 else sstore a w s1) ==>
     frag_exec ctx st st' (\t. t = s1)
-      (\t. stmt_state_rel func cenv cx es' t /\
+      (\t. stmt_state_rel ctx func cenv cx es' t /\
            (!x. lookup_var x t = lookup_var x s1) /\
            (!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
                     FLOOKUP t.vs_allocas aid = SOME b)) R
 Proof
   rpt strip_tac >>
   `frag_exec ctx st st' (\t. t = s1)
-     (\t. stmt_state_rel func cenv cx es' t /\
+     (\t. stmt_state_rel ctx func cenv cx es' t /\
           (!x. lookup_var x t = lookup_var x s1) /\
           (!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
                    FLOOKUP t.vs_allocas aid = SOME b)) (\r. F)` by
@@ -317,8 +317,8 @@ Theorem assign_attr_storage_frag:
                !u st.
                  storage_dead cx tr (update_storage (n2w slot + n2w off) u st) =
                  storage_dead cx tr st) ==>
-    frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
-      (\t. res = INL () /\ stmt_state_rel func cenv cx es' t /\
+    frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\t. res = INL () /\ stmt_state_rel ctx func cenv cx es' t /\
            (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
                   lookup_var x t = SOME u) /\
            (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
