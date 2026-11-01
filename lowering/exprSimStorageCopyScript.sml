@@ -25,7 +25,7 @@
 
 Theory exprSimStorageCopy
 Ancestors
-  list rich_list finite_map pred_set
+  list rich_list finite_map pred_set valueEncodingProps
   fragExec localPtrsProps exprSim loweringSlice
   exprLowering emitHelper emitHelperProps exprLoweringProps
   context compileEnv moduleLoweringProps
@@ -360,6 +360,91 @@ Proof
   strip_tac >> drule copy_static_fields >>
   simp[copy_runtime_word_def, sload_def, tload_def,
        contract_storage_def, contract_transient_def]
+QED
+
+(* Memory observations include zero-extended bytes outside the buffer. *)
+Definition copy_prefix_def:
+  copy_prefix loc a b n sbase k s <=>
+    k <= n /\ copy_static s = copy_static sbase /\
+    (!i. i < k ==> mem_word_at (b+32*i) s.vs_memory =
+       copy_runtime_word loc sbase (a+n2w i)) /\
+    (!off len. off+len <= b \/ b+32*n <= off ==>
+       mem_bytes_at off len s.vs_memory = mem_bytes_at off len sbase.vs_memory)
+End
+
+Theorem copy_prefix_zero[local]:
+  copy_prefix loc a b n s 0 s
+Proof
+  simp[copy_prefix_def]
+QED
+
+Theorem copy_prefix_transfer[local]:
+  copy_prefix loc a b n sbase k s /\
+  copy_static t = copy_static s /\ t.vs_memory = s.vs_memory ==>
+  copy_prefix loc a b n sbase k t
+Proof
+  rw[copy_prefix_def] >> metis_tac[]
+QED
+
+Theorem copy_prefix_update_var[local,simp]:
+  copy_prefix loc a b n sbase k (update_var x w s) =
+  copy_prefix loc a b n sbase k s
+Proof
+  simp[copy_prefix_def, update_var_def]
+QED
+
+Theorem copy_prefix_jump[local,simp]:
+  copy_prefix loc a b n sbase k (jump_to l s) =
+  copy_prefix loc a b n sbase k s
+Proof
+  simp[copy_prefix_def, jump_to_def]
+QED
+
+Theorem copy_prefix_idx[local,simp]:
+  copy_prefix loc a b n sbase k (s with vs_inst_idx := i) =
+  copy_prefix loc a b n sbase k s
+Proof
+  simp[copy_prefix_def]
+QED
+
+Theorem copy_prefix_word:
+  copy_prefix loc a b n sbase n s /\ i < n ==>
+  mem_word_at (b+32*i) s.vs_memory = copy_runtime_word loc sbase (a+n2w i)
+Proof
+  simp[copy_prefix_def]
+QED
+
+Theorem copy_prefix_bytes:
+  copy_prefix loc a b n sbase k s /\
+  (off+len <= b \/ b+32*n <= off) ==>
+  mem_bytes_at off len s.vs_memory = mem_bytes_at off len sbase.vs_memory
+Proof
+  rw[copy_prefix_def] >> metis_tac[]
+QED
+
+Theorem copy_prefix_extend[local]:
+  copy_prefix loc a b n sbase k s /\ k < n ==>
+  copy_prefix loc a b n sbase (k+1)
+    (mstore (b+32*k) (copy_runtime_word loc sbase (a+n2w k)) s)
+Proof
+  rw[copy_prefix_def]
+  >- (Cases_on `i = k` >- simp[mstore_mem_word_at_same] >>
+      `i < k` by decide_tac >>
+      `b+32*i+32 <= b+32*k` by decide_tac >>
+      simp[mstore_mem_word_at_disjoint]) >>
+  `off+len <= b+32*k \/ b+32*k+32 <= off` by decide_tac >>
+  simp[mstore_mem_bytes_at_disjoint]
+QED
+
+Theorem copy_destination_no_wrap[local]:
+  k < n /\ b+32*n < 2**256 ==>
+  w2n (n2w b + n2w k * 32w : bytes32) = b+32*k
+Proof
+  strip_tac >>
+  `b+32*k < 2**256` by decide_tac >>
+  simp[wordsTheory.word_mul_n2w, wordsTheory.word_add_n2w,
+       wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
+  gvs[]
 QED
 
 Theorem storage_copy_load_exact[local]:
