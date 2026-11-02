@@ -11,6 +11,8 @@ Ancestors
   evalCompilerCtorLocals
   evalCompilerInternalLabels
   evalCompilerSliceBuffers
+  evalCompilerBuiltinForms
   evalCompilerPhiPointers
   evalCompilerInternalFrames
   evalCompilerAllocationLimit
+  evalCompilerRawCalls
