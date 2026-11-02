@@ -300,16 +300,17 @@ Proof
 QED
 
 Theorem generate_phi_plan_no_push_ofst[local]:
-  generate_phi_plan inst live ps = (ops, ps') ==>
+  generate_phi_plan inst live halting ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
   simp[generate_phi_plan_def] >>
   Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
               ps.ps_stack` >> simp[] >>
-  IF_CASES_TAC >> simp[]
-  >- (pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
-      metis_tac[do_dup_no_push_ofst]) >>
-  rw[] >> simp[]
+  Cases_on `MEM (operand_to_string (stack_peek x ps.ps_stack)) live` >>
+  simp[] >> rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> rpt (pairarg_tac >> gvs[]) >>
+  imp_res_tac do_dup_no_push_ofst >> imp_res_tac popmany_plan_no_push_ofst >>
+  gvs[]
 QED
 
 Theorem generate_regular_inst_plan_no_push_ofst[local]:
