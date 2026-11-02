@@ -1307,6 +1307,127 @@ Proof
   metis_tac[dft_block_suffix_terminator_order, id_before_distinct_endpoints]
 QED
 
+Theorem dft_block_rel_refl:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  pseudos_prefix bb ==> dft_block_rel bb bb
+Proof
+  strip_tac >> simp[dft_block_rel_def] >>
+  qexists `FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions` >>
+  conj_tac
+  >- (qpat_x_assum `pseudos_prefix bb` mp_tac >>
+      simp[pseudos_prefix_def] >>
+      Q.SPEC_TAC (`bb.bb_instructions`, `l`) >> Induct >> simp[] >>
+      gen_tac >> ASM_CASES_TAC ``is_pseudo h.inst_opcode`` >> simp[] >> strip_tac
+      >- (first_x_assum irule >> rpt strip_tac >>
+          qpat_x_assum `!i j. _`
+            (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]) >>
+      `EVERY (\i. ~is_pseudo i.inst_opcode) l` by
+        (simp[EVERY_MEM] >> rpt strip_tac >>
+         `?j. j < LENGTH l /\ EL j l = i` by metis_tac[MEM_EL] >>
+         qpat_x_assum `!i j. _`
+           (qspecl_then [`0`, `SUC j`] mp_tac) >> simp[]) >>
+      `FILTER (\i. is_pseudo i.inst_opcode) l = []` by
+        (simp[FILTER_EQ_NIL, EVERY_MEM] >> gvs[EVERY_MEM]) >>
+      `FILTER (\i. ~is_pseudo i.inst_opcode) l = l` by
+        simp[FILTER_EQ_ID] >> simp[]) >>
+  simp[EVERY_MEM, MEM_FILTER, from_block_def] >>
+  metis_tac[id_before_non_pseudo]
+QED
+
+Theorem dft_block_rel_body:
+  dft_block_rel a b ==>
+  b.bb_instructions = FILTER (\i. is_pseudo i.inst_opcode) a.bb_instructions ++
+    FILTER (\i. ~is_pseudo i.inst_opcode) b.bb_instructions
+Proof
+  rw[dft_block_rel_def] >> rename1 `EVERY (from_block _) bod` >>
+  `EVERY (\i. ~is_pseudo i.inst_opcode) bod` by
+    (gvs[EVERY_MEM, from_block_def] >> metis_tac[flip_operands_is_pseudo]) >>
+  simp[rich_listTheory.FILTER_APPEND, rich_listTheory.FILTER_FILTER,
+       FILTER_EQ_NIL, FILTER_EQ_ID, EVERY_MEM] >> gvs[EVERY_MEM]
+QED
+
+Theorem dft_block_rel_pseudos:
+  dft_block_rel a b ==>
+  FILTER (\i. is_pseudo i.inst_opcode) b.bb_instructions =
+  FILTER (\i. is_pseudo i.inst_opcode) a.bb_instructions
+Proof
+  strip_tac >> drule dft_block_rel_body >> disch_then SUBST1_TAC >>
+  simp[rich_listTheory.FILTER_APPEND, rich_listTheory.FILTER_FILTER,
+       FILTER_EQ_NIL]
+QED
+
+Theorem dft_block_rel_normal:
+  dft_block_rel a b ==>
+  b.bb_label = a.bb_label /\
+  b.bb_instructions = FILTER (\i. is_pseudo i.inst_opcode) a.bb_instructions ++
+    FILTER (\i. ~is_pseudo i.inst_opcode) b.bb_instructions /\
+  PERM (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) b.bb_instructions))
+       (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) a.bb_instructions)) /\
+  EVERY (from_block a.bb_instructions)
+    (FILTER (\i. ~is_pseudo i.inst_opcode) b.bb_instructions) /\
+  (!x y. MEM x a.bb_instructions /\ MEM y a.bb_instructions /\
+    ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) a.bb_instructions) x.inst_id y.inst_id /\
+    dft_must_order x y ==>
+    id_before (MAP (\i. i.inst_id)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) b.bb_instructions)) x.inst_id y.inst_id)
+Proof
+  strip_tac >> drule dft_block_rel_body >>
+  gvs[dft_block_rel_def] >> disch_then (SUBST1_TAC o SYM) >> simp[]
+QED
+
+Theorem dft_block_rel_representative:
+  dft_block_rel a b /\ MEM x a.bb_instructions /\ ~is_pseudo x.inst_opcode ==>
+  ?z. MEM z b.bb_instructions /\ ~is_pseudo z.inst_opcode /\
+      from_block a.bb_instructions z /\ z.inst_id = x.inst_id
+Proof
+  strip_tac >> drule dft_block_rel_normal >> strip_tac >>
+  `MEM x.inst_id
+    (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) b.bb_instructions))` by
+    (drule sortingTheory.PERM_MEM_EQ >> simp[MEM_MAP, MEM_FILTER] >> metis_tac[]) >>
+  gvs[MEM_MAP, MEM_FILTER, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem dft_block_rel_trans:
+  ALL_DISTINCT (MAP (\i. i.inst_id) a.bb_instructions) /\
+  dft_block_rel a b /\ dft_block_rel b c ==> dft_block_rel a c
+Proof
+  strip_tac >>
+  `FILTER (\i. is_pseudo i.inst_opcode) b.bb_instructions =
+   FILTER (\i. is_pseudo i.inst_opcode) a.bb_instructions` by
+    metis_tac[dft_block_rel_pseudos] >>
+  qpat_assum `dft_block_rel b c` (strip_assume_tac o MATCH_MP dft_block_rel_normal) >>
+  qpat_assum `dft_block_rel a b` (strip_assume_tac o MATCH_MP dft_block_rel_normal) >>
+  simp[dft_block_rel_def] >>
+  qexists `FILTER (\i. ~is_pseudo i.inst_opcode) c.bb_instructions` >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[sortingTheory.PERM_TRANS] >>
+  conj_tac
+  >- (simp[EVERY_MEM, MEM_FILTER] >> rpt strip_tac >>
+      irule from_block_trans >> qexists `b.bb_instructions` >>
+      gvs[EVERY_MEM, MEM_FILTER] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  `?u. MEM u b.bb_instructions /\ ~is_pseudo u.inst_opcode /\
+       from_block a.bb_instructions u /\ u.inst_id = x.inst_id` by
+    metis_tac[dft_block_rel_representative] >>
+  `?v. MEM v b.bb_instructions /\ ~is_pseudo v.inst_opcode /\
+       from_block a.bb_instructions v /\ v.inst_id = y.inst_id` by
+    metis_tac[dft_block_rel_representative] >>
+  `dft_must_order u v` by
+    (irule (iffRL from_block_must_order) >>
+     qexistsl [`a.bb_instructions`, `x`, `y`] >> simp[]) >>
+  `id_before (MAP (\i. i.inst_id)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) b.bb_instructions)) x.inst_id y.inst_id` by
+    metis_tac[] >>
+  `!pre. id_before (pre ++ MAP (\i. i.inst_id)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) b.bb_instructions)) x.inst_id y.inst_id` by
+    (Induct >> simp[id_before_cons]) >>
+  `id_before (MAP (\i. i.inst_id) b.bb_instructions) u.inst_id v.inst_id` by
+    (qpat_x_assum `b.bb_instructions = _` (fn th => once_rewrite_tac[th]) >>
+     simp[MAP_APPEND]) >>
+  metis_tac[]
+QED
+
 (* These probes deliberately have indirect conflicts: a cleared reader and
    a superseded writer must still precede the third instruction by transitivity.
    MCOPY also tests the same-effect read/write update. *)
