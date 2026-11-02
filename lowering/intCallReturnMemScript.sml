@@ -209,9 +209,17 @@ Theorem compile_internal_return_memory_frag:
     (!x. rpc = Var x ==> not_fresh_at sa x) /\
     evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
     val_wf tv v /\ type_memory_bytes cenv ty = type_memory_size tv /\
-    w2n bw + type_memory_size tv + 64 < dimword (:256) ==>
+    w2n bw + type_memory_size tv + 64 < dimword (:256) /\
+    (cenv.ce_is_ctor ==> !name itv iv off.
+       FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+         SOME (ImmutableLoc off) /\
+       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+         | SOME imms => get_source_immutables cenv.ce_module imms) name =
+         SOME (itv,iv) ==>
+       regions_disjoint off (type_memory_size itv) (w2n bw)
+         (type_memory_size tv)) ==>
     frag_exec ctx sa sb
-      (\s. stmt_state_rel func cenv cx (es with scopes := []) s /\
+      (\s. stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
            expr_val_rel cx ty v val_op s /\
            eval_operand buf_op s = SOME bw /\
            ?pc. eval_operand rpc s = SOME pc)
@@ -220,7 +228,7 @@ Theorem compile_internal_return_memory_frag:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[frag_exec_def] >> rpt strip_tac >>
-  rename1 `stmt_state_rel func cenv cx (es with scopes := []) s0` >>
+  rename1 `stmt_state_rel ctx func cenv cx (es with scopes := []) s0` >>
   drule compile_return_unlock_shape >> strip_tac >>
   `(!x. val_op = Var x ==> not_fresh_at su x) /\
    (!x. buf_op = Var x ==> not_fresh_at su x) /\
@@ -236,7 +244,7 @@ Proof
   first_x_assum drule >> strip_tac >>
   qspecl_then [`cenv`, `val_op`, `buf_op`, `ty`, `su`, `sm`,
                `return_unlock_state cenv s0`, `get_tenv cx`, `tv`, `v`, `w`, `bw`]
-    mp_tac compile_store_memory_run >>
+    mp_tac compile_store_memory_run_capacity >>
   impl_tac >- simp[eval_operand_return_unlock] >> strip_tac >>
   rename1 `run_inst_seq _ (return_unlock_state cenv s0) = OK t` >>
   suspend "frame"
@@ -258,15 +266,25 @@ Resume compile_internal_return_memory_frag[frame]:
      qspecl_then [`cenv`, `s0`, `t.vs_vars`, `t.vs_memory`,
                   `LENGTH sm.cs_current_insts`, `sa.cs_next_id`]
        mp_tac return_unlock_memory_frame >> simp[Abbr `pre`]) >>
-  `stmt_state_rel func cenv cx (es with scopes := [])
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
+     (es with scopes := []) s0` by fs[stmt_state_rel_def, state_rel_def] >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
+     (es with scopes := [])
      (s0 with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>)` by
-    (irule result_state_memory_frame >> qexists_tac `s0` >>
+    (irule loweringSliceTheory.immutables_rel_mem_agree >> qexists_tac `s0` >>
+     fs[return_unlock_frames] >> rpt strip_tac >>
+     qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
+     disch_then drule_all >> simp[regions_disjoint_def] >> strip_tac >>
+     first_x_assum irule >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx (es with scopes := [])
+     (s0 with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>)` by
+    (irule result_state_memory_frame >> simp[] >> qexists_tac `s0` >>
      simp[local_region_def, lookup_scopes_def]) >>
-  `stmt_state_rel func cenv cx (es with scopes := []) pre` by
+  `stmt_state_rel ctx func cenv cx (es with scopes := []) pre` by
     (qspecl_then [`func`, `cenv`, `cx`, `es with scopes := []`,
        `s0 with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>`,
        `LENGTH sm.cs_current_insts -
-          LENGTH (return_unlock_insts cenv sa.cs_next_id)`]
+          LENGTH (return_unlock_insts cenv sa.cs_next_id)`, `ctx`]
        mp_tac stmt_state_rel_inst_idx >> simp[Abbr `pre`]) >>
   suspend "fragments"
 QED
