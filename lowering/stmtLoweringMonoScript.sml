@@ -114,12 +114,10 @@ val ci_mono_stmt_rws =
    ci_mono_compile_imm_store_words, ci_mono_compile_imm_copy_to_memory];
 
 Theorem ci_mono_compile_get_target_ptr:
-  !bt cenv sa. ci_mono sa (SND (compile_get_target_ptr cenv bt sa))
+  !bt cenv sa. ci_mono sa (SND (compile_get_target_ptr compile_expr cenv bt sa))
 Proof
-  measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
-  rpt gen_tac >> simp[Once compile_get_target_ptr_def] >|
-  [ci_mono_chain_tac ci_mono_stmt_rws, ci_mono_chain_tac ci_mono_stmt_rws,
-   ci_mono_chain_tac ci_mono_stmt_rws, ci_mono_chain_tac ci_mono_stmt_rws]
+  rpt gen_tac >> irule ci_mono_compile_get_target_ptr_cfn >>
+  simp[ci_mono_compile_expr_sa]
 QED
 
 Theorem ci_mono_stmt_helpers:

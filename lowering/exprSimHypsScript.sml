@@ -24,8 +24,6 @@
  *                       the allocation limit, and no internal call,
  *                       raw_call or create in it
  *   byte_widths_expr  — every node's type has a width of whole bytes
- *   alloc_limits_expr, literal_alloc_ok — every static buffer the lowering
- *                       allocates for a node is below 2 ** 64 bytes
  *   expr_body_pre     — expr_sim_pre less int_calls_expr e = []: the
  *                       body simulation's (bodySim); its calls are to
  *                       the main module of a supported program
@@ -152,7 +150,8 @@
  *     word literal and cannot fail, so a buffer of 2 ** 256 bytes or more
  *     would wrap; evaluate_type admits Bytes[n] and String[n] for any
  *     n < 2 ** 256.  return_buffer_ok is the same limit for an external
- *     function's return buffer.
+ *     function's return buffer.  lower_vyper_runtime_unit checks both
+ *     (compileVyper's fn_allocs_ok).
  *   - The outcomes clause (outcomes_accounts_typed): every successful call
  *     outcome still to consume adopts runtime well-typed accounts.
  *     take_call_outcome raises "call outcome accounts" on a successful
@@ -236,6 +235,7 @@ Ancestors
   supportedExprTraverse exprStoragePreservation
   vyperLookup vyperPlaceResultTyping supportedProgram bodyStoragePreservation
   structFieldsProps vyperTypeABI vyperValue vfmConstants valueEncoding pair
+  allocLimits
 Libs
   pairLib
 
@@ -360,107 +360,6 @@ Termination
         list_size (pair_size (list_size char_size) expr_size) kes)` >>
   conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
   PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def] >>
-  simp[expr_size_def, listTheory.list_size_def,
-       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
-       bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
-       listTheory.list_size_map, SF ETA_ss]
-End
-
-(* The buffer the lowering allocates for a bytes or string literal, its
-   length word and its data rounded up to whole words, is below 2 ** 64
-   bytes.  A bytesN or address literal has at most 32 bytes and no buffer,
-   and the bound holds of it all the same. *)
-Definition literal_alloc_ok_def:
-  literal_alloc_ok (BytesL bs) = (32 + 32 * word_size (LENGTH bs) < 2 ** 64) /\
-  literal_alloc_ok (StringL str) =
-    (32 + 32 * word_size (LENGTH str) < 2 ** 64) /\
-  literal_alloc_ok _ = T
-End
-
-(* A value of type t that is not a word fits below Python's allocation
-   limit, 2 ** 64 bytes, in memory.  unwrap_value copies an aggregate held
-   in storage, transient storage or code into a buffer of this size. *)
-Definition type_alloc_ok_def:
-  type_alloc_ok cenv t <=>
-    (~is_word_type t ==> type_memory_bytes cenv t < 2 ** 64)
-End
-
-(* Every static buffer the lowering allocates for a node of the expression
-   is below Python's allocation limit, 2 ** 64 bytes: the buffers of bytes
-   and string literals, struct and array literals, empty(T) of a type that
-   is not a word, the output of a calldata slice, and the copy unwrap_value
-   makes of the node's value when it is not in memory, which every node's
-   type_alloc_ok bounds.  The same recursion as byte_widths_expr. *)
-Definition alloc_limits_expr_def:
-  alloc_limits_expr cenv (Name t _) = type_alloc_ok cenv t /\
-  alloc_limits_expr cenv (TopLevelName t _) = type_alloc_ok cenv t /\
-  alloc_limits_expr cenv (FlagMember t _ _) = type_alloc_ok cenv t /\
-  alloc_limits_expr cenv (IfExp t c x y) =
-    (type_alloc_ok cenv t /\ alloc_limits_expr cenv c /\
-     alloc_limits_expr cenv x /\ alloc_limits_expr cenv y) /\
-  alloc_limits_expr cenv (Literal t l) =
-    (type_alloc_ok cenv t /\ literal_alloc_ok l) /\
-  alloc_limits_expr cenv (StructLit t nsid kes) =
-    (type_alloc_ok cenv t /\
-     type_memory_bytes cenv (StructT nsid) < 2 ** 64 /\
-     alloc_limits_named_exprs cenv kes) /\
-  alloc_limits_expr cenv (Subscript t x y) =
-    (type_alloc_ok cenv t /\ alloc_limits_expr cenv x /\
-     alloc_limits_expr cenv y) /\
-  alloc_limits_expr cenv (Attribute t x _) =
-    (type_alloc_ok cenv t /\ alloc_limits_expr cenv x) /\
-  alloc_limits_expr cenv (Builtin t bi es) =
-    (type_alloc_ok cenv t /\
-     (case bi of
-        MakeArray NONE _ =>
-          SUM (MAP (type_memory_bytes cenv o expr_type) es) < 2 ** 64
-      | MakeArray (SOME _) _ => type_memory_bytes cenv t < 2 ** 64
-      | CalldataSlice n => 32 + 32 * word_size n < 2 ** 64
-      | _ => T) /\
-     alloc_limits_exprs cenv es) /\
-  alloc_limits_expr cenv (TypeBuiltin t tb ty es) =
-    (type_alloc_ok cenv t /\
-     (tb = Empty /\ ~is_word_type ty ==> type_memory_bytes cenv ty < 2 ** 64) /\
-     alloc_limits_exprs cenv es) /\
-  alloc_limits_expr cenv (Pop t tgt) =
-    (type_alloc_ok cenv t /\ alloc_limits_target cenv tgt) /\
-  alloc_limits_expr cenv (Call t _ es dflt) =
-    (type_alloc_ok cenv t /\ alloc_limits_exprs cenv es /\
-     alloc_limits_opt cenv dflt) /\
-
-  alloc_limits_target cenv (NameTarget _) = T /\
-  alloc_limits_target cenv (TopLevelNameTarget _) = T /\
-  alloc_limits_target cenv (SubscriptTarget tgt e) =
-    (alloc_limits_target cenv tgt /\ alloc_limits_expr cenv e) /\
-  alloc_limits_target cenv (AttributeTarget tgt _) =
-    alloc_limits_target cenv tgt /\
-
-  alloc_limits_exprs cenv [] = T /\
-  alloc_limits_exprs cenv (e::es) =
-    (alloc_limits_expr cenv e /\ alloc_limits_exprs cenv es) /\
-
-  alloc_limits_opt cenv NONE = T /\
-  alloc_limits_opt cenv (SOME e) = alloc_limits_expr cenv e /\
-
-  alloc_limits_named_exprs cenv [] = T /\
-  alloc_limits_named_exprs cenv ((_,e)::kes) =
-    (alloc_limits_expr cenv e /\ alloc_limits_named_exprs cenv kes)
-Termination
-  (* as above: container sizes, not the package's per-instance size functions. *)
-  qexists_tac `measure (\(x : compile_env # expr + compile_env #
-                              base_assignment_target + compile_env # expr list +
-                              compile_env # expr option +
-                              compile_env # (identifier # expr) list).
-    case x of
-    | INL (_, e) => expr_size e
-    | INR (INL (_, tgt)) => base_assignment_target_size tgt
-    | INR (INR (INL (_, es))) => list_size expr_size es
-    | INR (INR (INR (INL (_, opt)))) => option_size expr_size opt
-    | INR (INR (INR (INR (_, kes)))) =>
-        list_size (pair_size (list_size char_size) expr_size) kes)` >>
-  conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
-  PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def,
-                    pairTheory.pair_case_def] >>
   simp[expr_size_def, listTheory.list_size_def,
        basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
        bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,

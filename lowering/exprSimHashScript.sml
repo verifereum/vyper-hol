@@ -26,6 +26,7 @@
 Theory exprSimHash
 Ancestors
   exprSimAlloc
+  allocLimits
   list rich_list byte words fragExec ASCIInumbers
   venomExecSemantics venomInst venomState emitHelper emitHelperProps
   builtinHashing exprLoweringProps compileEnv
