@@ -789,25 +789,29 @@ QED
 (* ========== generate_phi_plan ========== *)
 
 Theorem generate_phi_plan_spill_base:
-  !inst next_liveness ps ops ps'.
-    generate_phi_plan inst next_liveness ps = (ops, ps') ==>
+  !inst next_liveness is_halting ps ops ps'.
+    generate_phi_plan inst next_liveness is_halting ps = (ops, ps') ==>
     ps'.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base
 Proof
   rpt gen_tac >> simp[generate_phi_plan_def] >>
-  every_case_tac >> gvs[] >> strip_tac >> gvs[] >>
-  Cases_on `do_dup x ps` >> gvs[] >>
-  metis_tac[do_dup_spill_base]
+  every_case_tac >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac popmany_plan_spill_base >>
+  imp_res_tac do_dup_spill_base >> gvs[]
 QED
 
 Theorem generate_phi_plan_next_offset:
-  !inst next_liveness ps ops ps'.
-    generate_phi_plan inst next_liveness ps = (ops, ps') ==>
+  !inst next_liveness is_halting ps ops ps'.
+    generate_phi_plan inst next_liveness is_halting ps = (ops, ps') ==>
     ps.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset
 Proof
   rpt gen_tac >> simp[generate_phi_plan_def] >>
-  every_case_tac >> gvs[] >> strip_tac >> gvs[] >>
-  Cases_on `do_dup x ps` >> gvs[] >>
-  metis_tac[do_dup_next_offset]
+  every_case_tac >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac popmany_plan_next_offset >>
+  imp_res_tac do_dup_next_offset >> gvs[]
 QED
 
 (* ========== generate_offset_plan ========== *)
