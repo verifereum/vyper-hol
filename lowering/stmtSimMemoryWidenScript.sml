@@ -179,6 +179,27 @@ Proof
   simp[lowered_value_type_def, is_bytestring_type_def, LET_THM]
 QED
 
+Theorem compile_intcall_stack_operand_zero[local]:
+  !cfn cenv ret_ty ty fid args default_ret sa vt op sb.
+    compile_call cfn cenv ret_ty ty (IntCall fid) args default_ret sa =
+      (StackValue vt op, sb) ==>
+    op = Lit 0w
+Proof
+  rpt gen_tac >>
+  simp[compile_call_def] >>
+  pairarg_tac >> simp[] >>
+  Cases_on `compile_multi_vvs cfn cenv args sa` >> simp[] >>
+  rename1 `compile_multi_vvs _ _ _ _ = (avs,s1)` >>
+  Cases_on `returns_count > 0`
+  >- (simp[] >> Cases_on `compile_alloc_buffer (32 * returns_count) s1` >>
+      simp[] >> rpt (pairarg_tac >> gvs[])) >>
+  Cases_on `return_buf_size > 0`
+  >- (simp[] >> Cases_on `compile_alloc_buffer return_buf_size s1` >>
+      simp[] >> rpt (pairarg_tac >> gvs[])) >>
+  simp[] >> rpt (pairarg_tac >> gvs[])
+
+QED
+
 Theorem typed_memory_expr_source:
   !ctx func cenv cx e es sa sb s0 es1 v op s stv.
     expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
