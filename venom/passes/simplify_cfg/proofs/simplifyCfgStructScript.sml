@@ -281,3 +281,108 @@ Proof
   >- metis_tac[remove_unreachable_blocks_closed] >>
   metis_tac[remove_unreachable_blocks_ids, wf_function_def]
 QED
+
+Theorem perm_partition:
+  PERM (FILTER P xs ++ FILTER (\x. ~P x) xs) xs
+Proof
+  mp_tac (Q.INST [`R` |-> `\x y. P x`] PERM3_FILTER) >>
+  disch_then (qspecl_then [`xs`, `ARB`] mp_tac) >>
+  Cases_on `P ARB` >> simp[PERM_SYM, ETA_THM]
+QED
+
+Theorem fix_phis_in_block_perm:
+  PERM (fix_phis_in_block actual_preds bb).bb_instructions
+       (MAP (fix_phi_inst actual_preds) bb.bb_instructions)
+Proof
+  simp[fix_phis_in_block_def, perm_partition]
+QED
+
+Theorem fix_phis_in_block_ids:
+  PERM (MAP (\i. i.inst_id)
+            (fix_phis_in_block actual_preds bb).bb_instructions)
+       (MAP (\i. i.inst_id) bb.bb_instructions)
+Proof
+  `MAP (\i. i.inst_id) bb.bb_instructions =
+   MAP (\i. i.inst_id) (MAP (fix_phi_inst actual_preds) bb.bb_instructions)` by
+    simp[MAP_MAP_o, combinTheory.o_DEF, fix_phi_inst_id] >>
+  pop_assum SUBST1_TAC >>
+  irule PERM_MAP >> simp[fix_phis_in_block_perm]
+QED
+
+Theorem fix_phi_inst_outputs_sublist:
+  sublist (fix_phi_inst actual_preds inst).inst_outputs inst.inst_outputs
+Proof
+  mp_tac fix_phi_inst_outputs >> strip_tac >>
+  simp[sublist_nil, sublist_refl]
+QED
+
+Theorem fix_phi_outputs_flat_sublist:
+  !xs. sublist
+    (FLAT (MAP (\i. (fix_phi_inst actual_preds i).inst_outputs) xs))
+    (FLAT (MAP (\i. i.inst_outputs) xs))
+Proof
+  Induct >> simp[sublist_refl] >> gen_tac >>
+  irule sublist_append_pair >> simp[fix_phi_inst_outputs_sublist]
+QED
+Theorem fix_all_phis_ids:
+  fn_inst_ids_distinct func ==> fn_inst_ids_distinct (fix_all_phis func)
+Proof
+  simp[fn_inst_ids_distinct_def, fix_all_phis_def, MAP_MAP_o,
+       combinTheory.o_DEF] >> strip_tac >>
+  `PERM
+    (FLAT (MAP (\bb. MAP (\i. i.inst_id)
+       (fix_phis_in_block (pred_labels func bb.bb_label) bb).bb_instructions)
+       func.fn_blocks))
+    (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) func.fn_blocks))` by
+    (Q.SPEC_TAC (`func.fn_blocks`, `bbs`) >> Induct >> simp[] >>
+     gen_tac >> irule PERM_CONG >> simp[fix_phis_in_block_ids]) >>
+  metis_tac[ALL_DISTINCT_PERM]
+QED
+
+Theorem fix_phi_blocks_outputs_sublist:
+  !bbs. sublist
+    (FLAT (MAP (\bb. FLAT (MAP (\i.
+       (fix_phi_inst (pred_fn bb.bb_label) i).inst_outputs)
+       bb.bb_instructions)) bbs))
+    (FLAT (MAP (\bb. FLAT (MAP (\i. i.inst_outputs)
+       bb.bb_instructions)) bbs))
+Proof
+  Induct >> simp[sublist_refl] >> gen_tac >>
+  irule sublist_append_pair >> simp[fix_phi_outputs_flat_sublist]
+QED
+
+Theorem fix_phis_blocks_outputs_distinct:
+  ALL_DISTINCT (FLAT (MAP (\bb. FLAT (MAP (\i. i.inst_outputs)
+    bb.bb_instructions)) bbs)) ==>
+  ALL_DISTINCT (FLAT (MAP (\bb. FLAT (MAP (\i. i.inst_outputs)
+    (fix_phis_in_block (pred_fn bb.bb_label) bb).bb_instructions)) bbs))
+Proof
+  strip_tac >>
+  `PERM
+    (FLAT (MAP (\bb. FLAT (MAP (\i. i.inst_outputs)
+       (fix_phis_in_block (pred_fn bb.bb_label) bb).bb_instructions)) bbs))
+    (FLAT (MAP (\bb. FLAT (MAP (\i.
+       (fix_phi_inst (pred_fn bb.bb_label) i).inst_outputs)
+       bb.bb_instructions)) bbs))` by
+    (qid_spec_tac `bbs` >> Induct >> simp[] >> gen_tac >>
+     irule PERM_CONG >> conj_tac
+     >- (rewrite_tac[GSYM combinTheory.o_DEF, GSYM MAP_MAP_o] >>
+         pure_rewrite_tac[ETA_THM] >>
+         irule PERM_FLAT >> irule PERM_MAP >> simp[fix_phis_in_block_perm]) >>
+     simp[]) >>
+  `ALL_DISTINCT
+    (FLAT (MAP (\bb. FLAT (MAP (\i.
+       (fix_phi_inst (pred_fn bb.bb_label) i).inst_outputs)
+       bb.bb_instructions)) bbs))` by
+    (irule sublist_ALL_DISTINCT >> goal_assum (drule_at Any) >>
+     simp[fix_phi_blocks_outputs_sublist]) >>
+  metis_tac[ALL_DISTINCT_PERM]
+QED
+
+Theorem fix_all_phis_ssa:
+  ssa_form func ==> ssa_form (fix_all_phis func)
+Proof
+  simp[ssa_form_def, fn_insts_def, fn_insts_projection_blocks,
+       fix_all_phis_def, MAP_MAP_o, combinTheory.o_DEF] >>
+  strip_tac >> irule fix_phis_blocks_outputs_distinct >> simp[]
+QED
