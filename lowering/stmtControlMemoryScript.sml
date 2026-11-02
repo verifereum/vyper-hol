@@ -503,6 +503,42 @@ Proof
   disj2_tac >> qexists_tac `fuel` >> fs[stmt_exit_def]
 QED
 
+Theorem if_branch_frag_mem_join[local]:
+  !d ctx func cx lctx RetQ cenv ty ss esA res es2 sc rest sa sb st' s0.
+    stmt_frag_mem d ctx func cx lctx RetQ cenv (stmts_env cenv lctx ty ss)
+      esA res es2 /\
+    compile_stmts cenv lctx ty ss sa = ((), sb) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
+    return_buf_frame d cenv sa s0 /\ sa.cs_next_var <= st'.cs_next_var /\
+    sa.cs_current_insts = [] /\ stmt_res_ok lctx res /\
+    stmt_state_rel ctx func cenv cx esA s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = 0 /\
+    es2.scopes = sc :: rest /\
+    (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) /\
+    (~block_is_terminated sb ==> st'.cs_current_insts = [] /\
+     ?sj sx lbl' x. emit_inst JMP [Label st'.cs_current_bb] [] sb = ((), sj) /\
+                    new_block lbl' sj = (x, sx) /\ fn_has_code sb sx func) ==>
+    (?s. stmt_lands lctx st' res s /\ ~s.vs_halted /\
+         (res = INL () ==> ~block_is_terminated sb) /\
+         stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s /\
+         (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+                lookup_var x s = SOME w) /\
+         (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                  FLOOKUP s.vs_allocas aid = SOME b) /\
+         return_buf_frame d cenv st' s /\
+         s0.vs_alloca_next <= s.vs_alloca_next /\
+         !fuel r. run_from fuel ctx func s = r /\ (!e. r <> Error e) ==>
+                  ?fuel'. run_from fuel' ctx func s0 = r /\
+                    (mem_safe_run fuel ctx func s ==> mem_safe_run fuel' ctx func s0)) \/
+    (?fuel r. run_from fuel ctx func s0 = r /\ exit_result r /\
+              stmt_exit RetQ (es2 with scopes := rest) res r /\
+              mem_safe_run fuel ctx func s0)
+Proof
+  rpt strip_tac >> Cases_on `block_is_terminated sb` >>
+  irule if_branch_frag_mem >> metis_tac[]
+QED
+
 Theorem compile_break_frag_mem:
   !d ctx func cx RetQ cenv ty ex inc es.
     stmt_frag_mem d ctx func cx (InLoop ex inc) RetQ cenv
