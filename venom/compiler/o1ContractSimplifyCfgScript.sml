@@ -260,8 +260,56 @@ Proof
   metis_tac[]
 QED
 
-(* The pre-walk run: lowering output (no PHI, definite assignment) to
-   MakeSSA's input (every block reachable, definite assignment kept). *)
+Theorem simplify_cfg_stage_bisim:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
+  o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions ==>
+  ctx_bisim C C'
+Proof
+  strip_tac >> drule simplify_cfg_stage_functions >> strip_tac >>
+  irule fn_bisim_ctx_bisim >> simp[LIST_REL_MAP2, LIST_REL_EL_EQN] >>
+  gvs[o1_ctx_shape_def, EVERY_MEM] >> rpt strip_tac >>
+  simp[EL_MAP] >> irule simplify_cfg_fn_correct >>
+  metis_tac[o1_fn_shape_def, MEM_EL]
+QED
+
+Theorem simplify_cfg_stage_sim:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
+  o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
+  o1_run_state_ok vs ==> ctx_sim C C' vs vs
+Proof
+  strip_tac >>
+  `ctx_bisim C C'` by metis_tac[simplify_cfg_stage_bisim] >>
+  irule ctx_bisim_ctx_sim >>
+  gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  metis_tac[o1_ctx_shape_no_intret, ctx_pass_stage_def]
+QED
+
+Theorem simplify_cfg_stage_mem_inv:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
+  o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
+  o1_run_state_ok vs /\ mem_corr_closed M /\ mem_inv M C vs ==>
+  mem_inv M C' vs
+Proof
+  strip_tac >>
+  `ctx_bisim C C'` by metis_tac[simplify_cfg_stage_bisim] >>
+  irule frame_sim_mem_inv >>
+  gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  `C'.ctx_entry = C.ctx_entry` by gvs[ctx_pass_stage_def] >> simp[] >>
+  drule simplify_cfg_stage_functions >> strip_tac >>
+  qexists_tac `C` >> simp[LIST_REL_MAP2, LIST_REL_EL_EQN] >>
+  rpt gen_tac >> strip_tac >> simp[EL_MAP] >>
+  `MEM (EL n C.ctx_functions) C.ctx_functions` by metis_tac[MEM_EL] >>
+  `o1_fn_shape C (EL n C.ctx_functions) /\
+   simplify_cfg_fn_ok (EL n C.ctx_functions)` by
+    gvs[o1_ctx_shape_def, EVERY_MEM] >>
+  `fn_bisim (EL n C.ctx_functions) (simplify_cfg_fn (EL n C.ctx_functions))` by
+    (irule simplify_cfg_fn_correct >> gvs[o1_fn_shape_def]) >>
+  conj_tac >- gvs[fn_bisim_def] >>
+  conj_tac >- gvs[fn_bisim_def] >>
+  irule simplify_cfg_frame_sim >> gvs[o1_fn_shape_def]
+QED
+
+(* Pre-walk output: every block reachable, definite assignment kept. *)
 Theorem simplify_cfg_stage_pre_walk:
   !view. o1_stage_contract rpolicy (CFP_Simple VP_SimplifyCFG) view no_pre
            o1_pre_walk_inv o1_walk_src_inv
