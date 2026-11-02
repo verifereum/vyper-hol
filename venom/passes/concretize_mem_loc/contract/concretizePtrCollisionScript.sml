@@ -1,7 +1,7 @@
 (* Production-layout probe for cross-function allocation identity collisions. *)
 Theory concretizePtrCollision
 Ancestors concretizeMemLocDefs venomPassDispatcher venomExecSemantics
-  venomFnScheduleRunner
+  venomFnScheduleRunner o1PassContract ptrDiscipline o1SourceUnitCheck
 Libs wordsLib
 
 Definition collision_a_def:
@@ -1180,7 +1180,7 @@ Theorem collision_main_entry_facts[local]:
   phi_prefix_length collision_output_main_bb.bb_instructions = 0 /\
   (collision_start with vs_inst_idx := 0) = collision_start
 Proof
-  EVAL_TAC
+  rpt conj_tac >> EVAL_TAC
 QED
 
 Theorem collision_main_continuations:
@@ -1251,4 +1251,83 @@ Theorem collision_stage_leaf_mismatch:
   collision_transform collision_ctx collision_b <> collision_scheduled collision_b
 Proof
   EVAL_TAC
+QED
+
+Theorem collision_input_syntax:
+  o1_run_state_ok collision_start /\
+  EVERY (\fn. fn.fn_eom = NONE) collision_ctx.ctx_functions /\
+  fixed_region_reserved 0 collision_ctx /\
+  EVERY ssa_form collision_ctx.ctx_functions /\
+  ~ctx_has_dalloca collision_ctx
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem collision_output_bound:
+  ctx_eom_bounded 64 collision_output_ctx
+Proof
+  EVAL_TAC >> rpt strip_tac >> gvs[]
+QED
+
+Theorem collision_shape_check:
+  EVERY fn_shape_check collision_ctx.ctx_functions
+Proof
+  EVAL_TAC
+QED
+
+Theorem collision_shapes:
+  EVERY fn_shape_ok collision_ctx.ctx_functions
+Proof
+  mp_tac collision_shape_check >>
+  simp[listTheory.EVERY_MEM] >> metis_tac[fn_shape_check_sound]
+QED
+
+Theorem collision_context_shape:
+  o1_ctx_shape collision_ctx
+Proof
+  mp_tac (SRULE [collision_ctx_def, venomInstTheory.mk_venom_context_def] collision_shapes) >> strip_tac >>
+  simp[o1_ctx_shape_def, collision_ctx_def, venomInstTheory.mk_venom_context_def,
+    o1_fn_shape_def] >>
+  EVAL_TAC >> rpt strip_tac >> gvs[]
+QED
+
+Definition collision_stage_unit_def:
+  collision_stage_unit fn =
+    <| cu_context := if fn = collision_main then collision_finished_ctx else collision_ctx;
+       cu_data_segment := [] |>
+End
+
+Definition collision_stage_out_def:
+  collision_stage_out fn =
+    <| fpo_function := collision_transform (collision_stage_unit fn).cu_context fn;
+       fpo_label_map := []; fpo_supply := init_ir_supply (collision_stage_unit fn) |>
+End
+
+Theorem collision_stage_units:
+  collision_stage_unit collision_a =
+    <| cu_context := collision_ctx; cu_data_segment := [] |> /\
+  collision_stage_unit collision_b =
+    <| cu_context := collision_ctx; cu_data_segment := [] |> /\
+  collision_stage_unit collision_main =
+    <| cu_context := collision_finished_ctx; cu_data_segment := [] |>
+Proof
+  `collision_a <> collision_main /\ collision_b <> collision_main` by EVAL_TAC >>
+  simp[collision_stage_unit_def]
+QED
+
+Theorem collision_option_result[local]:
+  OPTION_MAP f x = SOME y ==> x = SOME (THE x)
+Proof
+  Cases_on `x` >> simp[]
+QED
+
+Theorem collision_concretize_results:
+  !fn. MEM fn [collision_a; collision_b; collision_main] ==>
+    concretize_function_fuel_in_context (concretize_memloc_fuel fn)
+      (collision_stage_unit fn).cu_context [] fn =
+    SOME (collision_transform (collision_stage_unit fn).cu_context fn)
+Proof
+  pure_rewrite_tac[listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  simp[collision_stage_units, collision_transform_def] >>
+  metis_tac[collision_option_result, collision_leaf_layouts, collision_finished_layout]
 QED
