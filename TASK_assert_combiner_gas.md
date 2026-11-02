@@ -106,3 +106,7 @@ The old `ac_safe_between_effect_free` classification is false for GAS. Replace i
 ## Notes
 
 The exact Abort relation migration was approved by argon after checking real GAS-retaining assertion-combiner output. No executable/API redesign is authorized here. The owner independently audits the frozen statement and forces proof replay after Alan finishes.
+
+Independent frozen-file verdict: PROVABLE on inspection. The existing `block_sim_function_inv_cross` hardcodes the same relation on Halt and Abort; add a proof-only three-relation variant if needed. Retain `valid_state_rel R_ok R_term` unchanged. Abort propagates immediately, so its relation needs no such validity premise; do not instantiate R_term with the weaker gas-forgetting relation. The approved Abort relation is transitive.
+
+Owner prerequisite build 11859 stopped in the expected legacy GAS classification, before reaching the top statement: `Failed to prove theorem "ac_safe_between_effect_free"`, residual `read_effects GAS <> {}`. Repair that classification as part of this task. The top theorem's existing proof is retained, not replaced by a placeholder. The amended statement was independently inspected in both script and task.
