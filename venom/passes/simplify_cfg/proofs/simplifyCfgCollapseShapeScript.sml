@@ -257,3 +257,34 @@ Theorem simplify_cfg_round_empty:
 Proof
   simp[simplify_cfg_round_with_labels_def, fn_entry_label_def, entry_block_def]
 QED
+
+val iteration_shape = ``\e f. ^structural_shape e f /\ fn_label_refs_ok f /\
+  EVERY (\i. i.inst_opcode <> PHI) (HD f.fn_blocks).bb_instructions``;
+
+Theorem simplify_cfg_iter_structural_shape:
+  !n f. ^iteration_shape e f ==>
+    ^iteration_shape e (FST (simplify_cfg_iter_with_labels n f))
+Proof
+  Induct_on `n`
+  >- simp[simplify_cfg_iter_with_labels_def] >>
+  rpt gen_tac >> strip_tac >>
+  `^structural_shape e f` by gvs[] >>
+  drule simplify_cfg_round_collapse_shape >> strip_tac >>
+  drule simplify_cfg_round_label_refs_ok >> strip_tac >>
+  Cases_on `simplify_cfg_round_with_labels f` >> fs[] >>
+  `^iteration_shape e q` by gvs[] >>
+  pure_once_rewrite_tac[simplify_cfg_iter_with_labels_def] >> simp[] >>
+  Cases_on `q.fn_blocks = f.fn_blocks`
+  >- simp[] >>
+  first_x_assum drule >>
+  Cases_on `simplify_cfg_iter_with_labels n q` >> simp[] >> metis_tac[]
+QED
+
+Theorem simplify_cfg_fn_structural_shape:
+  ^iteration_shape e f ==>
+  ^iteration_shape e (FST (simplify_cfg_fn_with_labels f))
+Proof
+  rewrite_tac[simplify_cfg_fn_with_labels_def] >>
+  strip_tac >> drule simplify_cfg_iter_structural_shape >>
+  disch_then (qspec_then `LENGTH f.fn_blocks` mp_tac) >> simp[]
+QED
