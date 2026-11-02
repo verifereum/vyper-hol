@@ -79,14 +79,14 @@ End
    position of the callee, by a pointer-preserving op, compared with
    another pointer variable (LT, GT, EQ; access_ok asks them to point into
    the same site), or as the address operand of a memory access, once.
-   At INVOKE, the pointer positions are exactly the arguments that are
-   pointer variables. *)
+   At INVOKE, every argument that is a pointer variable is at a pointer
+   position of the callee. *)
 Definition ptr_use_ok_def:
   ptr_use_ok P pv inst <=>
     (inst.inst_opcode = INVOKE ==>
      ?nm args. decode_invoke inst = SOME (nm,args) /\
-               !k. k < LENGTH args ==>
-                   (k IN P nm <=> ?v. EL k args = Var v /\ v IN pv)) /\
+               !k v. k < LENGTH args /\ EL k args = Var v /\ v IN pv ==>
+                     k IN P nm) /\
     !v. MEM (Var v) inst.inst_operands /\ v IN pv /\
         inst.inst_opcode <> INVOKE /\
         ~is_pointer_preserving_op inst.inst_opcode /\
@@ -483,7 +483,8 @@ End
 (* Each nonempty write ending above lo lies inside the site its address
    operand points into; a read ending above lo goes through a pointer and
    starts in its site, and the bytes past the site are tainted
-   (site_untainted).  Two compared pointers point into the same site. *)
+   (site_untainted).  Two compared pointers point into the same site, or
+   just past its end. *)
 Definition access_ok_def:
   access_ok lo G fn inst s <=>
     about_to_revert fn inst s \/
@@ -507,7 +508,8 @@ Definition access_ok_def:
        ?b sz x y. FLOOKUP G u = SOME (b,sz) /\ FLOOKUP G w = SOME (b,sz) /\
                   eval_operand (Var u) s = SOME x /\
                   eval_operand (Var w) s = SOME y /\
-                  no_wrap b (w2n x) /\ no_wrap b (w2n y))
+                  b <= w2n x /\ w2n x <= b + sz /\
+                  b <= w2n y /\ w2n y <= b + sz)
 End
 
 (* Tainted data is only copied around and stored: a tainted variable is
@@ -517,13 +519,13 @@ End
    tainted. *)
 Definition taint_ok_def:
   taint_ok G fn tn inst s <=>
-    about_to_revert fn inst s \/
     (!op. MEM op inst.inst_operands /\ op_taint tn op <> {} ==>
           inst.inst_opcode = ASSIGN \/
           ((inst.inst_opcode = MSTORE \/ inst.inst_opcode = SSTORE \/
             inst.inst_opcode = TSTORE \/ inst.inst_opcode = ISTORE) /\
            ?a. inst.inst_operands = [a; op] /\ op_taint tn a = {})) /\
-    (!off len i.
+    (~about_to_revert fn inst s ==>
+     !off len i.
        MEM (off,len) (source_memory_read_ranges inst s) /\
        off <= i /\ i < off + len /\
        (i IN tn.t_mem \/
@@ -542,14 +544,16 @@ Definition ctx_has_dalloca_def:
       ctx.ctx_functions
 End
 
-(* ALLOCA sites lie below the free memory pointer, so DALLOCA regions never
-   overlap them.  Only asked of programs that use DALLOCA: the initial
+(* ALLOCA sites lie below the initial free memory pointer, which the free
+   memory pointer never drops below, so DALLOCA regions never overlap
+   them.  Only asked of programs that use DALLOCA: the initial
    free memory pointer is the packed static size, below the bump
    allocator's unpacked total. *)
 Definition allocas_below_fmp_def:
   allocas_below_fmp s <=>
+    w2n s.vs_initial_fmp <= w2n s.vs_fmp /\
     !aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-               b + sz <= w2n s.vs_fmp
+               b + sz <= w2n s.vs_initial_fmp
 End
 
 (* ALLOCA sites lie at or above lo: below it is the fixed region, which

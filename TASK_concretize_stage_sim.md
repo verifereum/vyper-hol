@@ -1,4 +1,4 @@
-# TASK: ConcretizeMemLoc stage simulation and static memory bound
+# TASK: ConcretizeMemLoc stage simulation
 
 ## Meta
 Status: planned
@@ -14,22 +14,27 @@ In `venom/passes/concretize_mem_loc/contract/concretizeStageSimScript.sml`:
 Theorem concretize_stage_sim:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_initial_state_ok vs /\
-  mem_inv raw_mem_ok C vs /\ ptr_discipline 0 C vs /\
-  EVERY ssa_form C.ctx_functions ==>
-  ctx_sim C C' vs vs
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions ==>
+  ctx_sim_dead D C C' vs
 
-Theorem concretize_stage_static_mem:
+Theorem concretize_stage_taint:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_initial_state_ok vs /\
-  mem_inv raw_mem_ok C vs /\ ptr_discipline 0 C vs /\
-  EVERY ssa_form C.ctx_functions /\ ctx_eom_bounded eom C C' ==>
-  mem_inv (static_mem_ok eom) C' vs
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions ==>
+  taint_within D C' vs
 ```
 
 Supporting definitions: `ptr_discipline`, `frame_reachable`, `access_ok`,
-`fn_ptr_ok` in `venom/compiler/ptrDisciplineScript.sml`; `ctx_pass_stage`,
+`taint_ok`, `fn_ptr_ok`, `fixed_region_reserved`, `taint_within`, `dead_wf`,
+`dead_result_rel`, `ctx_sim_dead` in `venom/compiler/ptrDisciplineScript.sml`; `ctx_pass_stage`,
 `o1_walk_view`, `walk_view`, `fn_pass_step`, `fn_steps`, `ctx_sim`,
 `o1_ctx_shape`, `ctx_eom_bounded` in `venom/compiler/o1PassContractScript.sml`;
 `mem_inv`, `raw_mem_ok`, `static_mem_ok`, `inst_mem_ranges` in
@@ -97,10 +102,18 @@ callee allocations are imported via `fn_mems_used`). The contract says
 every terminating run of the input context is matched by the output
 context, and the output only touches memory below the layout end.
 `ptr_discipline` is the input fact that makes this true: pointers flow
-only into addresses, affine arithmetic, ASSIGN/PHI and pointer
-arguments; every access lies inside the allocation its address operand
-points into (ghost provenance `G` of `frame_reachable`) and reads only
-bytes written since that allocation (ghost `W`).
+only into addresses, affine arithmetic, ASSIGN/PHI, pointer arguments and
+compares of two pointers into the same site; every write above the fixed
+region `lo` lies inside the allocation its address operand points into
+(ghost provenance `G` of `frame_reachable`); reads through a pointer may
+run past its site, and every byte read that is fresh (never written since
+its allocation) or outside the pointer's site is tainted (ghost `tn`).
+Tainted data only moves (ASSIGN, stores of the value, MLOAD/MCOPY/RETURN),
+never decides anything, and `taint_within D` says it only ever reaches
+storage/transient/immutables/return-data bytes in `D`, which the result
+relation `dead_result_rel D` doesn't compare. Hence the conclusion is
+`ctx_sim_dead D`, not exact equivalence: the packed run reads stale bytes
+where the raw run read zeros, and they may reach dead storage bytes.
 
 The old single-function proof
 (`concretizeMemLocCorrectnessScript.sml`, `concretize_function_correct`)
@@ -137,6 +150,19 @@ excludes INVOKE; reuse what helps, don't build on its statement.
 
 ## Notes
 
+- `concretize_stage_taint` follows the same simulation: the output's taint at
+  matching steps is at most the input's, and `dead_wf D` moves `D` across the
+  states that agree outside it.
+- The output invariants (`concretize_stage_ptr`, `concretize_stage_static_mem`)
+  are a separate task in `concretizeStagePtrScript.sml`
+  (TASK_concretize_stage_ptr.md), run in parallel; don't touch that file.
+  Layout facts both need (positions avoid `ctx_global_reserved`, sites
+  that are live together don't overlap) go in a helper theory of your own;
+  name it `concretizeLayout*` and say so in your report.
+- The REVERT exemption (`about_to_revert`): a RETURNDATACOPY right before a
+  REVERT, and the REVERT, may access anything; both runs then revert, and
+  `dead_result_rel` doesn't compare revert payloads.
+
 - The intuition and the known obligations (analysis fuel, fn_mems_used of
   observed callees, callee accesses inside fn_mems_used) are in the SML
   comment above the theorems.
@@ -144,3 +170,7 @@ excludes INVOKE; reuse what helps, don't build on its statement.
   allocas at the same position is a counterexample (seen in an earlier run).
   `fn_ptr_ok` now requires `fn.fn_forced_alloc_positions = FEMPTY`, which
   rules it out; the frozen statements are unchanged.
+- Don't use `vs_alloca_next = 0` from `o1_run_state_ok`/`o1_initial_state_ok`:
+  it is about to be relaxed so a deploy unit's raw allocator starts at the
+  end of its reserved region. Take ALLOCA sites' position from
+  `allocas_from lo s` (part of `ptr_discipline`) instead.

@@ -5,8 +5,10 @@
  * callees are in their final form, o1_walk_view).
  *
  * TOP-LEVEL:
- *   concretize_stage_sim         - every terminating run of C is matched
- *   concretize_stage_static_mem  - C' accesses memory below the layout end
+ *   concretize_stage_sim    - every terminating run of C is matched by
+ *                             C', up to dead bytes
+ *   concretize_stage_taint  - C''s taint stays within D
+ * The output's invariants are in concretizeStagePtr.
  *)
 
 Theory concretizeStageSim
@@ -56,6 +58,7 @@ Theorem concretize_stage_sim:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
   dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions ==>
@@ -64,27 +67,15 @@ Proof
   cheat
 QED
 
-Theorem concretize_stage_ptr:
+Theorem concretize_stage_taint:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
-  ctx_eom_bounded eom C' ==>
-  ptr_discipline eom C' vs /\ taint_within D C' vs
-Proof
-  cheat
-QED
-
-Theorem concretize_stage_static_mem:
-  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-    (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ctx_eom_bounded eom C' ==>
-  mem_inv (static_mem_ok eom) C' vs
+  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions ==>
+  taint_within D C' vs
 Proof
   cheat
 QED
