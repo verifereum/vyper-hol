@@ -390,6 +390,108 @@ Proof
     (qspec_then `dst` mp_tac) >> simp[] >> metis_tac[]
 QED
 
+Theorem decode_static_buf_mem_ok:
+  (!info n. static_dec info n ==>
+     !dst src st st' s p a.
+       compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info st = ((), st') /\
+       eval_operand dst s = SOME p /\ eval_operand src s = SOME a /\
+       fresh_vars_wrt st s /\
+       w2n p + n < dimword (:256) /\ w2n a + n < dimword (:256) /\
+       w2n p + n <= s.vs_alloca_next ==>
+       run_inst_seq_mem_ok (emitted_insts st st') s) /\
+  (!elems n. static_decs elems n ==>
+     !dst src k st st' s p a.
+       compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+         elems k k st = ((), st') /\
+       eval_operand dst s = SOME p /\ eval_operand src s = SOME a /\
+       fresh_vars_wrt st s /\
+       w2n p + k + n < dimword (:256) /\ w2n a + k + n < dimword (:256) /\
+       w2n p + k + n <= s.vs_alloca_next ==>
+       run_inst_seq_mem_ok (emitted_insts st st') s)
+Proof
+  ho_match_mp_tac static_dec_strongind >> rpt conj_tac
+  >- (rpt strip_tac >> fs[compile_abi_decode_to_buf_def] >>
+      irule compile_abi_decode_static_mem_ok >>
+      simp[] >> qexistsl [`c`, `dst`, `p`, `src`] >> simp[])
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      fs[compile_abi_decode_to_buf_def] >> first_x_assum irule >>
+      simp[] >> qexistsl [`a`, `dst`, `0`, `p`, `src`] >> simp[])
+  >- (rpt strip_tac >>
+      gvs[compile_abi_decode_to_buf_def, comp_return_def,
+          emitted_insts_def, run_inst_seq_mem_ok_def]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  suspend "cons"
+QED
+
+Resume decode_static_buf_mem_ok[cons]:
+  rename1 `static_dec ei m` >> rename1 `static_decs elems n` >>
+  drule_all decode_elems_cons_phases >> strip_tac >>
+  drule_all decode_elem_ptrs >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st st2) s = OK t2` >>
+  `dec_straight st2 st3 /\ dec_straight st3 st'` by
+    metis_tac[static_dec_straight] >>
+  `inst_extends st st2 /\ inst_extends st2 st3 /\ inst_extends st3 st'` by
+    fs[dec_straight_def] >>
+  `inst_extends st2 st'` by metis_tac[inst_extends_trans] >>
+  `emitted_insts st st' = emitted_insts st st2 ++ emitted_insts st2 st'` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  qpat_x_assum `emitted_insts st st' = _` SUBST1_TAC >>
+  match_mp_tac run_inst_seq_mem_ok_append >> conj_tac
+  >- suspend "pointers" >>
+  rpt strip_tac >> gvs[] >> rename1 `vars_pc_only s t2` >>
+  `w2n (p + n2w k) = w2n p + k /\ w2n (a + n2w k) = w2n a + k` by
+    (conj_tac >> irule w2n_add_n2w_lt >> decide_tac) >>
+  `t2.vs_alloca_next = s.vs_alloca_next` by
+    (qpat_x_assum `vars_pc_only s t2` mp_tac >>
+     rw[moduleLoweringPropsTheory.vars_pc_only_def] >>
+     pop_assum (SUBST1_TAC o SYM) >> simp[]) >>
+  `emitted_insts st2 st' = emitted_insts st2 st3 ++ emitted_insts st3 st'` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  qpat_x_assum `emitted_insts st2 st' = _` SUBST1_TAC >>
+  match_mp_tac run_inst_seq_mem_ok_append >> conj_tac
+  >- suspend "child" >>
+  suspend "tail"
+QED
+
+Resume decode_static_buf_mem_ok[pointers]:
+  qpat_x_assum `!dst src st st' s p a. _` kall_tac >>
+  qpat_x_assum `!dst src st st' s p a. _` kall_tac >>
+  drule getelemptr_static_emit >> strip_tac >>
+  `inst_extends st st1 /\ inst_extends st1 st2` by
+    metis_tac[inst_extends_emit_op] >>
+  `emitted_insts st st2 = emitted_insts st st1 ++ emitted_insts st1 st2` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  irule run_inst_seq_mem_ok_every >>
+  qpat_x_assum `emit_op ADD [src; _] st = _`
+    (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+  qpat_x_assum `emit_op ADD [dst; _] st1 = _`
+    (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+  simp[] >> rpt strip_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]
+QED
+Resume decode_static_buf_mem_ok[child]:
+  qpat_x_assum `!dst src k st st' s p a. _` kall_tac >>
+  first_x_assum irule >> simp[] >>
+  qexistsl [`a + n2w k`, `ed`, `p + n2w k`, `es`] >> simp[] >> decide_tac
+QED
+Resume decode_static_buf_mem_ok[tail]:
+  qpat_x_assum `!dst src st st' s p a. compile_abi_decode_to_buf _ _ _ _ _ _ = _ /\ _ ==> _`
+    kall_tac >>
+  drule (CONJUNCT1 decode_static_buf_run) >> disch_then drule >>
+  disch_then (qspecl_then [`t2`, `p + n2w k`, `a + n2w k`] mp_tac) >>
+  (impl_tac >- (simp[] >> decide_tac)) >>
+  simp[dec_run_def] >>
+  IF_CASES_TAC >> simp[] >> strip_tac >> rpt strip_tac >> gvs[] >>
+  rename1 `dec_frame st2 _ m t2 t3` >>
+  `t3.vs_alloca_next = s.vs_alloca_next` by
+    (drule dec_frame_allocas >> simp[]) >>
+  `eval_operand dst t2 = SOME p /\ eval_operand src t2 = SOME a` by metis_tac[] >>
+  `eval_operand dst t3 = SOME p /\ eval_operand src t3 = SOME a` by
+    metis_tac[dec_frame_eval] >>
+  first_x_assum irule >> simp[] >>
+  qexistsl [`a`, `dst`, `k + m`, `p`, `src`] >> simp[] >> decide_tac
+QED
+Finalise decode_static_buf_mem_ok
+
 (* entry_decode_arg_run's premises, with the argument's buffer [p, p + its
    memory size) below the frontier: every instruction the decode runs is
    below the frontier where it runs. *)
