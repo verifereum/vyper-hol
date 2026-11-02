@@ -438,7 +438,7 @@ Proof
 QED
 
 Theorem is_extcode_characterization:
-  ∀src_e. is_extcode src_e ⇔ ∃ann addr. src_e = Attribute ann addr "code"
+  ∀src_e. is_extcode src_e ⇔ ∃ann addr. src_e = Builtin ann (Acc Code) [addr]
 Proof
   ho_match_mp_tac is_extcode_ind >> simp[is_extcode_def] >>
   rw[] >> gvs[AllCaseEqs()] >> BasicProvers.every_case_tac >> gvs[]

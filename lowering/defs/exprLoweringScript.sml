@@ -272,6 +272,34 @@ Definition clamp_and_return_def:
     od
 End
 
+(* Range check of an extract32 result, returning the value.  Mirrors Python's
+   arithmetic.py clamp_basetype for extract32's output types (bytesM, address,
+   intN, uintN); other types are returned unchecked.  The address bound is
+   spelled out because type_bounds gives addresses the 256-bit range. *)
+Definition compile_clamp_basetype_def:
+  compile_clamp_basetype val_op (BaseT (BytesT (Fixed m))) =
+    (if m < 32 then
+       do shifted <- emit_op SHL [Lit (n2w (m * 8)); val_op];
+          ok <- emit_op ISZERO [shifted];
+          emit_void ASSERT [ok];
+          return val_op
+       od
+     else return val_op) ∧
+  compile_clamp_basetype val_op (BaseT AddressT) =
+    do gt_hi <- emit_op GT [val_op; Lit (n2w (2 ** 160 - 1))];
+       ok <- emit_op ISZERO [gt_hi];
+       emit_void ASSERT [ok];
+       return val_op
+    od ∧
+  compile_clamp_basetype val_op (BaseT (UintT n)) =
+    (if n < 256 then clamp_and_return val_op (BaseT (UintT n))
+     else return val_op) ∧
+  compile_clamp_basetype val_op (BaseT (IntT n)) =
+    (if n < 256 then clamp_and_return val_op (BaseT (IntT n))
+     else return val_op) ∧
+  compile_clamp_basetype val_op _ = return val_op
+End
+
 (* Safe add: ADD + overflow check *)
 Definition compile_safe_add_def:
   compile_safe_add x y ty =
@@ -2164,32 +2192,37 @@ End
 
 (* ===== Expression compilation helpers (parameterized on cfn) ===== *)
 
-(* Concat args into output buffer at data_ptr + offset_op.
+(* Concat args into output buffer at data_ptr + the offset word at off_ptr.
    Each arg_info = (is_bytestring, fixed_m).
    Bytestring args: ensure in memory, copy dynamic length data.
    BytesM args: MSTORE value (left-aligned, full 32 bytes), advance by m.
-   Mirrors Python: bytes.py lower_concat per-arg loop. *)
+   Mirrors Python: bytes.py lower_concat per-arg loop, which keeps the running
+   offset in memory (offset_local) and reloads it after lowering each arg. *)
 Definition compile_concat_def:
-  compile_concat cfn cenv [] data_ptr arg_infos offset_op =
-    return offset_op ∧
-  compile_concat cfn cenv (e::es) data_ptr ((is_bs, fixed_m)::infos) offset_op =
+  compile_concat cfn cenv [] data_ptr arg_infos (off_ptr:operand) =
+    return () ∧
+  compile_concat cfn cenv (e::es) data_ptr ((is_bs, fixed_m)::infos) off_ptr =
     (if is_bs then
        do mem_ptr <- lower_value cfn cenv (expr_type e) e;
           arg_len <- emit_op MLOAD [mem_ptr];
           arg_data <- emit_op ADD [mem_ptr; Lit 32w];
+          offset_op <- emit_op MLOAD [off_ptr];
           dst <- emit_op ADD [data_ptr; offset_op];
           emit_void MCOPY [dst; arg_data; arg_len];
           new_offset <- emit_op ADD [offset_op; arg_len];
-          compile_concat cfn cenv es data_ptr infos new_offset
+          emit_void MSTORE [off_ptr; new_offset];
+          compile_concat cfn cenv es data_ptr infos off_ptr
        od
      else
        do v <- lower_value cfn cenv (expr_type e) e;
+          offset_op <- emit_op MLOAD [off_ptr];
           dst <- emit_op ADD [data_ptr; offset_op];
           emit_void MSTORE [dst; v];
           new_offset <- emit_op ADD [offset_op; Lit (n2w fixed_m)];
-          compile_concat cfn cenv es data_ptr infos new_offset
+          emit_void MSTORE [off_ptr; new_offset];
+          compile_concat cfn cenv es data_ptr infos off_ptr
        od) ∧
-  compile_concat cfn cenv _ data_ptr _ offset_op = return offset_op
+  compile_concat cfn cenv _ data_ptr _ off_ptr = return ()
 Termination
   WF_REL_TAC `measure (λ(cfn,cenv,es,dp,infos,off). LENGTH es)` >> simp[]
 End
@@ -2673,18 +2706,19 @@ Definition method_id_literal_def:
   method_id_literal _ = NONE
 End
 
+(* self.code and <addr>.code, as the frontend translates them. *)
 Definition is_self_code_def:
-  is_self_code (Attribute _ (Name _ "self") "code") = T ∧
+  is_self_code (Builtin _ (Acc Code) [Builtin _ (Env SelfAddr) []]) = T ∧
   is_self_code _ = F
 End
 
 Definition is_extcode_def:
-  is_extcode (Attribute _ _ "code") = T ∧
+  is_extcode (Builtin _ (Acc Code) [_]) = T ∧
   is_extcode _ = F
 End
 
 Definition extcode_addr_expr_def:
-  extcode_addr_expr (Attribute _ addr_e "code") = addr_e ∧
+  extcode_addr_expr (Builtin _ (Acc Code) [addr_e]) = addr_e ∧
   extcode_addr_expr _ = Literal ARB (IntL 0)
 End
 
@@ -3061,8 +3095,12 @@ Definition compile_builtin_dispatch_body_def:
                     let (buf_op_alloc, st2) = compile_alloc_buffer alloc_size st in
                     let buf_op = buf_op_alloc.buf_operand in
           let (data_ptr, st3) = emit_op ADD [buf_op; Lit 32w] st2 in
-          let (final_offset, st4) = compile_concat compile_expr cenv args
-                                      data_ptr arg_infos (Lit 0w) st3 in
+          let (off_alloc, st3a) = compile_alloc_buffer 64 st3 in
+          let off_ptr = off_alloc.buf_operand in
+          let (_, st3b) = emit_void MSTORE [off_ptr; Lit 0w] st3a in
+          let (_, st4a) = compile_concat compile_expr cenv args
+                                      data_ptr arg_infos off_ptr st3b in
+          let (final_offset, st4) = emit_op MLOAD [off_ptr] st4a in
           let (_, st5) = emit_void MSTORE [buf_op; final_offset] st4 in
           (LocatedValue ret_ty (base_ptr buf_op_alloc), st5))
      | Slice max_len =>
@@ -3077,11 +3115,11 @@ Definition compile_builtin_dispatch_body_def:
              let (len_op, st2) = lower_value compile_expr cenv ty len_e st1 in
              as_ptr_val ret_ty LocMemory (compile_slice_code start_op len_op out_size st2))
           else if is_extcode src_e then
-            (let addr_e = extcode_addr_expr src_e in
-             let (addr_op, st1) = lower_value compile_expr cenv ty addr_e st in
-             let (start_op, st2) = lower_value compile_expr cenv ty start_e st1 in
-             let (len_op, st3) = lower_value compile_expr cenv ty len_e st2 in
-             let ((out_buf, out_data), st4) = compile_slice_out_buf out_size st3 in
+            (let (start_op, st1) = lower_value compile_expr cenv ty start_e st in
+             let (len_op, st2) = lower_value compile_expr cenv ty len_e st1 in
+             let ((out_buf, out_data), st3) = compile_slice_out_buf out_size st2 in
+             let addr_e = extcode_addr_expr src_e in
+             let (addr_op, st4) = lower_value compile_expr cenv ty addr_e st3 in
              as_ptr_val ret_ty LocMemory
                (compile_slice_extcode addr_op start_op len_op out_buf out_data st4))
           else
@@ -3095,15 +3133,15 @@ Definition compile_builtin_dispatch_body_def:
                as_ptr_val ret_ty LocMemory
                  (compile_slice_data src_len src_data start_op len_op out_size st4)
              else
-               let (start_op, st2) = lower_value compile_expr cenv ty start_e st1 in
-               let (len_op, st3) = lower_value compile_expr cenv ty len_e st2 in
-               let m = fixed_bytes_size src_ty in
-                              let (tmp_buf_alloc, st5) = compile_alloc_buffer 64 st3 in
-                              let tmp_buf = tmp_buf_alloc.buf_operand in
-               let (_, st6) = emit_void MSTORE [tmp_buf; Lit (n2w m)] st5 in
-               let (data_ptr, st7) = emit_op ADD [tmp_buf; Lit 32w] st6 in
-               let (_, st8) = emit_void MSTORE [data_ptr; src_op] st7 in
-               as_ptr_val ret_ty LocMemory (compile_slice_memory tmp_buf start_op len_op out_size st8)))
+               (* bytesM: a 32-byte scratch copy and the literal length m *)
+               let (tmp_alloc, st2) = compile_alloc_buffer 32 st1 in
+               let tmp = tmp_alloc.buf_operand in
+               let (_, st3) = emit_void MSTORE [tmp; src_op] st2 in
+               let (start_op, st4) = lower_value compile_expr cenv ty start_e st3 in
+               let (len_op, st5) = lower_value compile_expr cenv ty len_e st4 in
+               as_ptr_val ret_ty LocMemory
+                 (compile_slice_data (Lit (n2w (fixed_bytes_size src_ty))) tmp
+                    start_op len_op out_size st5)))
      | Uint2Str max_len =>
          (let e1 = HD args in
           let (v, st1) = lower_value compile_expr cenv ty e1 st in
@@ -3186,10 +3224,10 @@ Definition compile_type_builtin_dispatch_body_def:
          (let src_e = HD args in let offset_e = EL 1 args in
           let (src_mem, st1) = lower_value compile_expr cenv
                                  (expr_type src_e) src_e st in
-          let (off_op, st2) = lower_value compile_expr cenv ty offset_e st1 in
-          let (raw, st3) = compile_extract32 src_mem off_op st2 in
-          let clamp = mk_extract32_clamp ret_ty in
-          as_stack_val vv_ty (compile_clamp_extract32 raw clamp st3))
+          let ((src_len, src_data), st2) = compile_bytestring_src src_mem st1 in
+          let (off_op, st3) = lower_value compile_expr cenv ty offset_e st2 in
+          let (raw, st4) = compile_extract32_load src_len src_data off_op st3 in
+          as_stack_val vv_ty (compile_clamp_basetype raw ret_ty st4))
      | AbiEncode ensure method_id =>
          (let method_id_word = OPTION_MAP bytes_method_id_word method_id in
           if LENGTH args = 1 ∧ ¬ensure then

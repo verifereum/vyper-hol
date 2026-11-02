@@ -226,23 +226,29 @@ Proof
   gvs[safe_operand_def, not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
-Theorem compile_extract32_safe_operand:
-  compile_extract32 p v sa = (r,sb) ==> safe_operand sb r
+Theorem compile_extract32_load_safe_operand:
+  compile_extract32_load l d v sa = (r,sb) ==> safe_operand sb r
 Proof
-  simp[compile_extract32_def, comp_bind_def, comp_ignore_bind_def] >>
+  simp[compile_extract32_load_def, comp_bind_def, comp_ignore_bind_def] >>
   strip_tac >> rpt (pairarg_tac >> gvs[]) >> metis_tac[emit_op_safe_operand]
 QED
 
-Theorem compile_clamp_extract32_safe_operand:
-  safe_operand sa v /\ compile_clamp_extract32 v clamp sa = (r,sb) ==>
+Theorem compile_clamp_basetype_returns:
+  !v ty sa r sb. compile_clamp_basetype v ty sa = (r,sb) ==>
+    r = v /\ sa.cs_next_var <= sb.cs_next_var
+Proof
+  ho_match_mp_tac compile_clamp_basetype_ind >>
+  rw[compile_clamp_basetype_def, clamp_and_return_def, emit_op_def,
+     emit_void_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+     fresh_id_def, fresh_var_def, emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> imp_res_tac compile_clamp_next_var >> gvs[]
+QED
+
+Theorem compile_clamp_basetype_safe_operand:
+  safe_operand sa v /\ compile_clamp_basetype v ty sa = (r,sb) ==>
   safe_operand sb r
 Proof
-  Cases_on `clamp` >>
-  simp[compile_clamp_extract32_def, LET_THM, emit_op_def, emit_void_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, fresh_var_def, emit_def] >>
-  strip_tac >> gvs[] >>
-  gvs[safe_operand_def, not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  metis_tac[compile_clamp_basetype_returns, safe_operand_mono]
 QED
 
 Theorem compile_method_id_word_safe_operand:

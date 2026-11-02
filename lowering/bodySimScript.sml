@@ -20,8 +20,10 @@
  *   body_inv            — the frame's cenv and ctx are the program's
  *   ce_locals_declared  — every local the compile env binds is one of the
  *                         type environment's
+ *   locals_alloc_ok     — every local's type is below the allocation limit
  *   stmt_exprs_ok       — the byte_widths and alloc_limits premises of
- *                         expr_sim_pre for each expression of a statement
+ *                         expr_sim_pre for each expression of a statement,
+ *                         and alloc_limits_stmt
  *   same_frame, frame_ret_ok — the frame's RetQ accepts its returns
  *   body_stmt_ok, body_stmts_ok, body_iterator_ok, body_for_ok,
  *   body_expr_ok, body_exprs_ok, body_base_target_ok,
@@ -75,12 +77,25 @@ Definition ce_locals_declared_def:
     !n l. FLOOKUP cenv.ce_vars n = SOME l ==> n IN FDOM env.var_types
 End
 
+(* Every local of the type environment has a type below Python's
+   allocation limit: Context.new_variable allocates each with
+   allocate_buffer, which rejects 2 ** 64 bytes or more.  fn_allocs_ok_body
+   gives it for the parameters, and stmt_exprs_ok's alloc_limits_stmt for
+   each declaration. *)
+Definition locals_alloc_ok_def:
+  locals_alloc_ok cenv env <=>
+    !id ty. FLOOKUP env.var_types id = SOME ty ==>
+            type_memory_bytes cenv ty < 2 ** 64
+End
+
 (* expr_sim_pre's byte_widths_expr and alloc_limits_expr for every
-   expression of a statement, targets' keys included. *)
+   expression of a statement, targets' keys included, and alloc_limits_stmt,
+   which also bounds the type of each local the statement declares. *)
 Definition stmt_exprs_ok_def:
   stmt_exprs_ok cenv s <=>
     ~supported_stmt_expr_exists
-       (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) s
+       (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) s /\
+    alloc_limits_stmt cenv s
 End
 
 (* The compile envs of one function's body: cenv' is cenv but for the
@@ -153,6 +168,7 @@ Definition body_stmt_ok_def:
     !tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
       body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
       expr_sim_inv cenv cx env es /\ source_supply es /\ ce_locals_declared cenv env /\
+      locals_alloc_ok cenv env /\
       type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\
       call_evaluation_safe cx (int_calls_stmt s) /\
       frame_ret_ok ctx func cx RetQ cenv ret_ty /\
@@ -166,6 +182,7 @@ Definition body_stmts_ok_def:
     !tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
       body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
       expr_sim_inv cenv cx env es /\ source_supply es /\ ce_locals_declared cenv env /\
+      locals_alloc_ok cenv env /\
       type_stmts env ret_ty ss = SOME env' /\
       EVERY (stmt_exprs_ok cenv) ss /\
       call_evaluation_safe cx (int_calls_stmts ss) /\
