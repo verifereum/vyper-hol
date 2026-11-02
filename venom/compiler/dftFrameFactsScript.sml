@@ -3,7 +3,7 @@ Theory dftFrameFacts
 Ancestors
   dftDefs unitShapeDefs venomExecSemantics venomWf venomState venomInst
   venomEffects finite_map list option o1PassLift ctxLookupAgreeHelpers
-  contextCodegenRel codegenRel unitMemInv venomMemProps
+  contextCodegenRel codegenRel unitMemInv stateFrame passSharedDefs venomMemProps
 
 Theorem dft_operand_defined:
   (!v. MEM (Var v) ops ==> v IN FDOM s.vs_vars) /\
@@ -206,4 +206,62 @@ Theorem dft_mem_corr_same_inst:
   mem_corr i s i t
 Proof
   strip_tac >> drule_all dft_inst_mem_ranges_cong >> simp[mem_corr_def]
+QED
+
+Theorem dft_call_corr_decoded:
+  i.inst_opcode = INVOKE /\ decode_invoke i = SOME (nm,ops) /\
+  execution_frame t = execution_frame s /\
+  (!op. MEM op ops ==> eval_operand op s = eval_operand op t) ==>
+  call_corr i s i t
+Proof
+  strip_tac >> drule dft_eval_operands_cong >>
+  gvs[call_corr_def, execution_frame_def]
+QED
+
+Theorem dft_flippable_observations[local]:
+  is_flippable i.inst_opcode ==>
+  inst_mem_ranges i s = [] /\ i.inst_opcode <> INVOKE
+Proof
+  Cases_on `i.inst_opcode` >>
+  simp[is_flippable_def, is_commutative_def,
+       passSharedDefsTheory.is_comparator_def] >>
+  simp[inst_mem_ranges_def, source_memory_read_ranges_def,
+       source_memory_write_ranges_def]
+QED
+
+Theorem dft_flip_flippable[local]:
+  is_flippable i.inst_opcode ==> is_flippable (flip_operands i).inst_opcode
+Proof
+  strip_tac >> Cases_on `i.inst_operands` >> simp[flip_operands_def] >>
+  rename1 `i.inst_operands = a::rest` >> Cases_on `rest` >>
+  simp[flip_operands_def] >>
+  rename1 `i.inst_operands = a::b::tail` >> Cases_on `tail` >>
+  simp[flip_operands_def] >>
+  Cases_on `i.inst_opcode` >>
+  gvs[is_flippable_def, is_commutative_def, is_comparator_def,
+      flip_comparison_opcode_def]
+QED
+
+Theorem dft_flip_inst_mem_ranges:
+  is_flippable i.inst_opcode ==>
+  inst_mem_ranges (flip_operands i) s = inst_mem_ranges i s
+Proof
+  strip_tac >> drule dft_flip_flippable >> strip_tac >>
+  imp_res_tac dft_flippable_observations >> simp[]
+QED
+
+Theorem dft_call_corr_flip_left:
+  is_flippable i.inst_opcode ==>
+  (call_corr (flip_operands i) s j t <=> call_corr i s j t)
+Proof
+  strip_tac >> drule dft_flip_flippable >> strip_tac >>
+  imp_res_tac dft_flippable_observations >> simp[call_corr_def]
+QED
+
+Theorem dft_call_corr_flip_right:
+  is_flippable j.inst_opcode ==>
+  (call_corr i s (flip_operands j) t <=> call_corr i s j t)
+Proof
+  strip_tac >> drule dft_flip_flippable >> strip_tac >>
+  imp_res_tac dft_flippable_observations >> simp[call_corr_def]
 QED
