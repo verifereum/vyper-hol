@@ -27,7 +27,7 @@
  *)
 Theory dftScheduleOrder
 Ancestors
-  dftCorrectness dftStructural dftDefs dftTopoSort dftWf passSharedDefs venomWf venomInst venomEffects list rich_list
+  dftCorrectness dftStructural dftDefs dftTopoSort dftWf dftIdempotent passSharedDefs venomWf venomInst venomEffects list rich_list
 
 (* a comes before b in the list l. *)
 Definition id_before_def:
@@ -838,6 +838,112 @@ Proof
       metis_tac[]) >>
   qexistsl [`bb.bb_instructions`, `prefix`, `suffix`] >> simp[] >>
   metis_tac[output_eda_order_edge]
+QED
+
+Theorem inst_data_deps_has_outputs:
+  !bi order i d. MEM d (inst_data_deps bi order i) ==> d.inst_outputs <> []
+Proof
+  rpt gen_tac >>
+  simp[inst_data_deps_def, MEM_nub_first, MEM_MAP, MEM_FILTER] >>
+  Cases_on `is_terminator i.inst_opcode` >> simp[MEM_MAP, MEM_FILTER] >>
+  rpt strip_tac >> gvs[optionTheory.IS_SOME_EXISTS] >>
+  TRY (rename1 `operand_producer bi op = SOME _` >>
+       Cases_on `op` >> gvs[operand_producer_def]) >>
+  metis_tac[producing_inst_mem_outputs, MEM]
+QED
+
+Theorem compute_effect_dep_frontier:
+  MEM d (FST (compute_effect_deps et inst)) ==>
+  ?eff. MEM d (et_get_reads et eff) \/
+        FLOOKUP et.et_last_write eff = SOME d
+Proof
+  simp[compute_effect_deps_def, MEM_nub_first, MEM_FLAT, MEM_MAP,
+       MEM_FILTER, PULL_EXISTS] >>
+  rpt strip_tac
+  >- metis_tac[]
+  >- (Cases_on `FLOOKUP et.et_last_write weff` >> gvs[] >> metis_tac[]) >>
+  gvs[optionTheory.IS_SOME_EXISTS, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem compute_effect_dep_has_effects:
+  effect_history R prefix et /\ MEM d (FST (compute_effect_deps et inst)) ==>
+  read_effects d.inst_opcode <> empty_effects \/
+  write_effects d.inst_opcode <> empty_effects
+Proof
+  strip_tac >> drule compute_effect_dep_frontier >> strip_tac >>
+  gvs[effect_history_def] >>
+  `effects_to_list empty_effects = []` by EVAL_TAC >>
+  metis_tac[MEM]
+QED
+
+Theorem effect_scan_deps_have_effects:
+  !suffix prefix acc et.
+  effect_history (\a b. T) prefix et /\
+  (!k ds d. FLOOKUP acc k = SOME ds /\ MEM d ds ==>
+    read_effects d.inst_opcode <> empty_effects \/
+    write_effects d.inst_opcode <> empty_effects) ==>
+  !k ds d.
+    FLOOKUP (FST (FOLDL (\(m, s) i.
+      (m |+ (i.inst_id, FST (compute_effect_deps s i)),
+       SND (compute_effect_deps s i))) (acc, et) suffix)) k = SOME ds /\
+    MEM d ds ==>
+    read_effects d.inst_opcode <> empty_effects \/
+    write_effects d.inst_opcode <> empty_effects
+Proof
+  Induct >- (simp[] >> metis_tac[]) >>
+  pure_rewrite_tac[FOLDL] >> CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then
+    [`prefix ++ [h]`, `acc |+ (h.inst_id, FST (compute_effect_deps et h))`,
+     `SND (compute_effect_deps et h)`] mp_tac) >>
+  impl_tac >- (conj_tac
+  >- (irule effect_history_step >> simp[relationTheory.transitive_def]) >>
+  rpt gen_tac >> simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `h.inst_id = k` >> simp[] >> rpt strip_tac >>
+  metis_tac[compute_effect_dep_has_effects]) >> simp[]
+QED
+
+Theorem build_eda_deps_have_effects:
+  FLOOKUP (build_eda bi) k = SOME ds /\ MEM d ds ==>
+  read_effects d.inst_opcode <> empty_effects \/
+  write_effects d.inst_opcode <> empty_effects
+Proof
+  qspecl_then [`FILTER (\i. ~is_pseudo i.inst_opcode) bi`, `[]`,
+               `FEMPTY`, `empty_effect_track`]
+    mp_tac effect_scan_deps_have_effects >>
+  simp[effect_history_empty, finite_mapTheory.FLOOKUP_EMPTY] >>
+  simp[build_eda_scan] >> metis_tac[]
+QED
+
+Theorem root_not_dep_target:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\ MEM r bi /\
+  r.inst_outputs = [] /\ read_effects r.inst_opcode = empty_effects /\
+  write_effects r.inst_opcode = empty_effects /\
+  MEM d (inst_all_deps bi order (build_eda bi) i) ==>
+  d.inst_id <> r.inst_id
+Proof
+  rpt strip_tac >>
+  `MEM d bi` by metis_tac[inst_all_deps_mem, build_eda_wf] >>
+  `d = r` by metis_tac[all_distinct_map_mem_inj] >> gvs[] >>
+  qpat_x_assum `MEM _ (inst_all_deps _ _ _ _)` mp_tac >>
+  simp[inst_all_deps_def, MEM_nub_first] >> strip_tac
+  >- metis_tac[inst_data_deps_has_outputs] >>
+  Cases_on `FLOOKUP (build_eda bi) i.inst_id` >> gvs[] >>
+  metis_tac[build_eda_deps_have_effects]
+QED
+
+Theorem root_is_entry:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\ MEM r bi /\
+  ~is_pseudo r.inst_opcode /\ r.inst_outputs = [] /\
+  read_effects r.inst_opcode = empty_effects /\
+  write_effects r.inst_opcode = empty_effects ==>
+  MEM r (entry_instructions bi order (build_eda bi))
+Proof
+  rpt strip_tac >>
+  simp[entry_instructions_def, MEM_FILTER, MEM_nub] >>
+  spose_not_then assume_tac >>
+  gvs[MEM_FLAT, MEM_MAP, MEM_FILTER] >>
+  metis_tac[root_not_dep_target]
 QED
 
 (* These probes deliberately have indirect conflicts: a cleared reader and
