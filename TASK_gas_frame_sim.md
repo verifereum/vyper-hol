@@ -140,9 +140,9 @@ Venom GAS now pops vs_gas_readings, defaulting to zero at exhaustion. Assembly G
 
 ## Available Resources
 
-- `venom/codegen/proofs/genFrameSimScript.sml`: existing per-instruction frame statement and helpers.
+- `venom/codegen/proofs/genFrameSimScript.sml`: existing jump/frame simulation helpers; the frozen GAS statement was specialized from the parked general instruction statement.
 - `venom/codegen/proofs/genBlockSimScript.sml`: instruction-plan decomposition and prefix execution.
-- `venom/codegen/proofs/frameViewStepScript.sml`: execution through the return-PC variable view.
+- Prove GAS transport through `frame_view` directly. The parked general `frameViewStep` theorem is admitted and is neither imported nor available on this base.
 - `venom/codegen/defs/frameRelScript.sml`: fn_frame_inv and frame_view.
 - `venom/codegen/defs/codegenRelScript.sml` and `venom/codegen/defs/contextCodegenRelScript.sml`: stack, spill, memory, and shared oracle equality.
 - `venom/codegen/proofs/asmFrameScript.sml`: extending executions below the frame.
@@ -154,3 +154,5 @@ Venom GAS now pops vs_gas_readings, defaulting to zero at exhaustion. Assembly G
 ## Notes
 
 The statement has an independent audit before the proof run. Its placeholder build may stop in inherited ancestors; if so the owner records that limitation and checks the final proof after those dependencies build.
+
+Current base: current main plus checked spill-planner proof repair and the oracle branch. The initial build on the old instruction-worker base stopped in `doSwapSim$spill_alloc_wf_after_spill` at the default step timeout before this statement parsed. That allocator proof was separately repaired without changing statements or definitions. The GAS statement remains byte-identical; only the missing, admitted general frame-view import was removed. Re-audit against the current planner definitions before starting Alan.
