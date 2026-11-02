@@ -226,3 +226,49 @@ Proof
   drule_all dft_prefix_fdom >> strip_tac >> simp[] >>
   rpt strip_tac >> simp[] >> metis_tac[]
 QED
+
+Theorem dft_initialized_prefix_fdom:
+  !pre s t.
+  EVERY (\i. inst_wf i /\ ~is_terminator i.inst_opcode) pre /\
+  FOLDR (dft_exec_cons fuel C) OK pre s = OK t ==>
+  FDOM t.vs_vars = FDOM s.vs_vars UNION
+    set (FLAT (MAP (\i. i.inst_outputs) pre))
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  gvs[dft_exec_cons_def, AllCaseEqs()] >>
+  `h.inst_opcode <> PHI` by metis_tac[step_inst_ok_imp_not_phi] >>
+  drule_all step_inst_fdom >> strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  gvs[] >> pred_setLib.SET_TAC[]
+QED
+
+Theorem dft_pseudo_initialization:
+  !pre s u t fuel C.
+  EVERY (\i. inst_wf i /\ ~is_terminator i.inst_opcode) pre /\
+  eval_phis s pre = OK u /\
+  FOLDR (dft_exec_cons fuel C) OK (DROP (phi_prefix_length pre) pre)
+    (u with vs_inst_idx := phi_prefix_length pre) = OK t ==>
+  t.vs_current_bb = s.vs_current_bb /\ t.vs_labels = s.vs_labels /\
+  FDOM s.vs_vars SUBSET FDOM t.vs_vars /\
+  (!d v. MEM d pre /\ MEM v d.inst_outputs ==> v IN FDOM t.vs_vars)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `EVERY (\i. inst_wf i /\ ~is_terminator i.inst_opcode)
+    (DROP (phi_prefix_length pre) pre)` by metis_tac[TAKE_DROP, EVERY_APPEND] >>
+  drule_all dft_initialized_prefix_fdom >> simp[] >> strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode)
+    (DROP (phi_prefix_length pre) pre)` by fs[EVERY_MEM] >>
+  drule_all dft_prefix_frame >> simp[] >> strip_tac >>
+  drule eval_phis_vars_grow >> strip_tac >>
+  drule eval_phis_only_updates_vs_vars >> strip_tac >>
+  `u.vs_current_bb = s.vs_current_bb /\ u.vs_labels = s.vs_labels` by
+    (qpat_x_assum `u = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  simp[] >> conj_tac
+  >- (fs[pred_setTheory.SUBSET_DEF] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `MEM d (TAKE (phi_prefix_length pre) pre) \/
+   MEM d (DROP (phi_prefix_length pre) pre)` by
+    metis_tac[TAKE_DROP, MEM_APPEND] 
+  >- (`v IN FDOM u.vs_vars` by metis_tac[eval_phis_outputs_in_fdom_mem] >> simp[]) >>
+  simp[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED

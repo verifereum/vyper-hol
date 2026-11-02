@@ -1110,6 +1110,35 @@ Proof
   disch_then (qspecl_then [`fuel`, `C`] mp_tac) >> simp[]
 QED
 
+Theorem dft_remaining_inv_initialized:
+  !fn bb s u t fuel C.
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  EVERY inst_wf bb.bb_instructions /\
+  bb.bb_label = s.vs_current_bb /\ strict_dom_vars_defined fn s /\
+  (!i l. MEM i bb.bb_instructions /\ ~is_pseudo i.inst_opcode /\
+     ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+     MEM (Label l) i.inst_operands ==> l IN FDOM s.vs_labels) /\
+  eval_phis s (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions) = OK u /\
+  FOLDR (dft_exec_cons fuel C) OK
+    (DROP (phi_prefix_length (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions))
+      (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions))
+    (u with vs_inst_idx :=
+      phi_prefix_length (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions)) = OK t ==>
+  dft_remaining_inv fn bb
+    (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions) t
+Proof
+  rpt gen_tac >> strip_tac >>
+  `EVERY (\i. inst_wf i /\ ~is_terminator i.inst_opcode)
+    (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions)` by
+    (simp[EVERY_MEM, MEM_FILTER] >> rpt gen_tac >> strip_tac >>
+     conj_tac >- fs[EVERY_MEM] >>
+     Cases_on `i.inst_opcode` >> gvs[is_pseudo_def, is_terminator_def]) >>
+  drule_all dft_pseudo_initialization >> strip_tac >>
+  irule dft_remaining_inv_initial >> simp[] >>
+  fs[sccpCorrectnessProofsTheory.strict_dom_vars_defined_def,
+     pred_setTheory.SUBSET_DEF, MEM_FILTER] >> metis_tac[]
+QED
+
 (* Why it holds (unchecked notes):
    - Same fuel works: fuel is per block and per call depth, and the
      schedule visits the same blocks and makes the same calls.
