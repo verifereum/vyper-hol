@@ -16,7 +16,7 @@ Theorem dft_run_blocks_rel:
       lookup_function name C.ctx_functions = SOME fn /\
       lookup_function name C'.ctx_functions = SOME fn' /\
       fn_entry_label fn = SOME s.vs_current_bb /\
-      ctx_labels_bound C s ==>
+      ctx_labels_bound C s.vs_labels ==>
       dft_res_rel (run_blocks fuel C fn s) (run_blocks fuel C' fn' s)
 ```
 
@@ -34,12 +34,12 @@ Definition dft_res_rel_def:
     | Error e => (!s. r' <> OK s) /\ (!v s. r' <> IntRet v s)
 End
 Definition ctx_labels_bound_def:
-  ctx_labels_bound C s <=>
+  ctx_labels_bound C L <=>
     !fn inst l.
       MEM fn C.ctx_functions /\ MEM inst (fn_insts fn) /\
       MEM (Label l) inst.inst_operands /\ inst.inst_opcode <> INVOKE /\
       ~is_terminator inst.inst_opcode /\ ~is_pseudo inst.inst_opcode ==>
-      l IN FDOM s.vs_labels
+      l IN FDOM L
 End
 Definition dft_fn_rel_def:
   dft_fn_rel fn fn' <=>

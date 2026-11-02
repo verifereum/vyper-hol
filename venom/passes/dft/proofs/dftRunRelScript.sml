@@ -32,15 +32,16 @@ Definition dft_res_rel_def:
     | Error e => (!s. r' <> OK s) /\ (!v s. r' <> IntRet v s)
 End
 
-(* Every label an instruction reads as a value is bound.  Jumps, INVOKE
-   and PHIs use their labels as targets, not values. *)
+(* Every label an instruction reads as a value is bound in the label map L
+   (a state's vs_labels, which no step changes).  Jumps, INVOKE and PHIs
+   use their labels as targets, not values. *)
 Definition ctx_labels_bound_def:
-  ctx_labels_bound C s <=>
+  ctx_labels_bound C L <=>
     !fn inst l.
       MEM fn C.ctx_functions /\ MEM inst (fn_insts fn) /\
       MEM (Label l) inst.inst_operands /\ inst.inst_opcode <> INVOKE /\
       ~is_terminator inst.inst_opcode /\ ~is_pseudo inst.inst_opcode ==>
-      l IN FDOM s.vs_labels
+      l IN FDOM L
 End
 
 (* fn' is a DFT schedule of the well-formed, ALLOCA-free SSA function fn
@@ -83,7 +84,7 @@ Theorem dft_run_blocks_rel:
       lookup_function name C.ctx_functions = SOME fn /\
       lookup_function name C'.ctx_functions = SOME fn' /\
       fn_entry_label fn = SOME s.vs_current_bb /\
-      ctx_labels_bound C s ==>
+      ctx_labels_bound C s.vs_labels ==>
       dft_res_rel (run_blocks fuel C fn s) (run_blocks fuel C' fn' s)
 Proof
   cheat
