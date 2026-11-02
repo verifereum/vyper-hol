@@ -42,6 +42,82 @@ Proof
   gvs[] >> metis_tac[sue_boundary_defined_phis]
 QED
 
+Theorem sue_frame_defined_next:
+  wf_function fn /\ fn_inst_wf fn /\ sue_frame_defined fn st /\
+  active_inst fn inst st /\ ~is_terminator inst.inst_opcode /\
+  step_inst fuel ctx inst st = OK st' ==>
+  sue_frame_defined fn (st' with vs_inst_idx := SUC st.vs_inst_idx)
+Proof
+  strip_tac >>
+  `st'.vs_current_bb = st.vs_current_bb` by
+    metis_tac[venomInstPropsTheory.step_preserves_control_flow] >>
+  fs[sue_frame_defined_def] >>
+  simp[sue_frame_defined_def] >> rpt gen_tac >> strip_tac >>
+  fs[contextCodegenRelTheory.active_inst_def] >>
+  rename1 `MEM bb' fn.fn_blocks` >>
+  `bb' = bb` by metis_tac[venomExecProofsTheory.same_label_same_block] >>
+  gvs[] >>
+  `bb_well_formed bb` by metis_tac[venomExecProofsTheory.wf_function_bb_well_formed] >>
+  `inst_wf (EL st.vs_inst_idx bb.bb_instructions)` by
+    metis_tac[venomExecProofsTheory.fn_inst_wf_every_bb, listTheory.EVERY_EL] >>
+  `sue_boundary_defined fn bb st.vs_inst_idx st /\
+   phi_prefix_length bb.bb_instructions <= st.vs_inst_idx` by metis_tac[] >>
+  conj_tac >- (irule sue_boundary_defined_step >>
+    metis_tac[sue_phi_suffix_nonphi]) >> decide_tac
+QED
+
+Theorem sue_frame_defined_block:
+  wf_function fn /\ fn_inst_wf fn /\ sue_frame_defined fn st /\
+  active_inst fn inst st /\ is_terminator inst.inst_opcode /\
+  step_inst fuel ctx inst st = OK st' /\ ~st'.vs_halted /\
+  enters_block fn st' st1 ==>
+  sue_frame_defined fn st1
+Proof
+  strip_tac >> irule sue_frame_defined_enter >>
+  fs[contextCodegenRelTheory.active_inst_def, sue_frame_defined_def] >>
+  `bb_well_formed bb` by
+    metis_tac[venomExecProofsTheory.wf_function_bb_well_formed] >>
+  `EVERY inst_wf bb.bb_instructions` by
+    metis_tac[venomExecProofsTheory.fn_inst_wf_every_bb] >>
+  `fn_cfg_edge fn st.vs_current_bb st'.vs_current_bb` by
+    metis_tac[sue_terminator_cfg_edge] >>
+  `FDOM st.vs_vars SUBSET FDOM st'.vs_vars` by
+    metis_tac[sue_terminator_domain_mono] >>
+  `strict_dom_vars_defined fn st'` by
+    (irule sue_boundary_defined_exit >> metis_tac[]) >>
+  metis_tac[venomExecProofsTheory.fn_reachable_step]
+QED
+
+Theorem sue_frame_reach_defined:
+  !ctx fn s0 inst st. frame_reach ctx fn s0 inst st ==>
+    active_inst fn inst st /\
+    (wf_function fn /\ fn_inst_wf fn /\ fn_entry_state fn s0 ==>
+     sue_frame_defined fn st)
+Proof
+  ho_match_mp_tac frame_reach_ind >> rpt conj_tac >> rpt gen_tac >> strip_tac
+  >- (conj_tac >- simp[] >> strip_tac >>
+      irule sue_frame_defined_enter >> simp[] >> qexists_tac `s0` >>
+      fs[fn_entry_state_def] >>
+      `strict_dom_vars_defined fn s0` by
+        metis_tac[sccpCorrectnessProofsTheory.strict_dom_vars_defined_entry] >>
+      simp[fn_reachable_def])
+  >- (conj_tac >- simp[] >> strip_tac >>
+      irule sue_frame_defined_next >> metis_tac[])
+  >- (conj_tac >- simp[] >> strip_tac >>
+      irule sue_frame_defined_block >> metis_tac[])
+QED
+
+Theorem sue_frame_reach_operand_defined:
+  wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\
+  fn_entry_state fn s0 /\ frame_reach ctx fn s0 inst st /\
+  inst.inst_opcode <> PHI /\ MEM (Var v) inst.inst_operands ==>
+  v IN FDOM st.vs_vars
+Proof
+  strip_tac >> drule sue_frame_reach_defined >> strip_tac >>
+  fs[contextCodegenRelTheory.active_inst_def, sue_frame_defined_def] >>
+  irule sue_boundary_operand_defined >> metis_tac[]
+QED
+
 (* Runs of the expanded function correspond to runs of the original, in
    any context. *)
 Theorem sue_expand_function_supply_fn_bisim:
