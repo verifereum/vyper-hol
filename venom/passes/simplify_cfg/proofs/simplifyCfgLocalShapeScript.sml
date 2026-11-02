@@ -299,3 +299,122 @@ Proof
   simp[fix_all_phis_def, EVERY_MAP, EVERY_MEM, MEM_MAP] >>
   metis_tac[fix_phis_in_block_bb_well_formed]
 QED
+
+Theorem phi_subst_inst_wf:
+  i.inst_opcode = PHI /\ inst_wf i ==>
+  inst_wf (subst_label_inst a b i)
+Proof
+  strip_tac >> gvs[subst_label_inst_def, inst_wf_def,
+    phi_well_formed_subst_label]
+QED
+
+Theorem phi_subst_label_positions:
+  i.inst_opcode = PHI ==>
+  label_positions_ok (subst_label_inst a b i)
+Proof
+  strip_tac >> simp[subst_label_inst_def,
+    unitShapeDefsTheory.label_positions_ok_def]
+QED
+
+Theorem bypass_terminator_wf:
+  is_terminator i.inst_opcode /\ inst_wf i /\ label_positions_ok i ==>
+  inst_wf (canon_jnz_inst (subst_label_inst a b i))
+Proof
+  strip_tac >> irule canon_jnz_inst_wf >>
+  Cases_on `i.inst_opcode = JMP`
+  >- (gvs[inst_wf_def] >>
+      simp[subst_label_inst_def, subst_label_op_def, inst_wf_def] >>
+      IF_CASES_TAC >> simp[]) >>
+  Cases_on `i.inst_opcode = JNZ`
+  >- (gvs[inst_wf_def] >>
+      simp[subst_label_inst_def, subst_label_op_def, inst_wf_def] >>
+      rpt IF_CASES_TAC >> simp[]) >>
+  `EVERY (\op. ~is_label_operand op) i.inst_operands` by
+    (Cases_on `i.inst_opcode` >>
+     gvs[is_terminator_def, unitShapeDefsTheory.label_positions_ok_def]) >>
+  metis_tac[subst_label_inst_no_label_operands]
+QED
+
+Theorem chain_merge_inst_wf:
+  EVERY inst_wf (fn_insts f) /\
+  lookup_block lbl f.fn_blocks = SOME a /\
+  lookup_block next f.fn_blocks = SOME b ==>
+  EVERY inst_wf (fn_insts (f with fn_blocks :=
+    update_succ_phi_labels next lbl
+      (replace_block lbl (merge_blocks a b) (remove_block next f.fn_blocks))
+      (bb_succs (merge_blocks a b))))
+Proof
+  strip_tac >> irule chain_merge_every >> simp[phi_subst_inst_wf] >>
+  metis_tac[]
+QED
+
+Theorem chain_merge_label_positions:
+  EVERY label_positions_ok (fn_insts f) /\
+  lookup_block lbl f.fn_blocks = SOME a /\
+  lookup_block next f.fn_blocks = SOME b ==>
+  EVERY label_positions_ok (fn_insts (f with fn_blocks :=
+    update_succ_phi_labels next lbl
+      (replace_block lbl (merge_blocks a b) (remove_block next f.fn_blocks))
+      (bb_succs (merge_blocks a b))))
+Proof
+  strip_tac >> irule chain_merge_every >> simp[phi_subst_label_positions] >>
+  metis_tac[]
+QED
+
+Theorem do_merge_jump_instruction_shape:
+  EVERY inst_wf (fn_insts f) /\
+  EVERY label_positions_ok (fn_insts f) /\
+  lookup_block a.bb_label f.fn_blocks = SOME a /\
+  do_merge_jump f a b lm = SOME (g,lm') ==>
+  EVERY (\i. inst_wf i /\ label_positions_ok i) (fn_insts g)
+Proof
+  strip_tac >> irule do_merge_jump_every >>
+  simp[EVERY_MEM] >>
+  metis_tac[bypass_terminator_wf, bypass_terminator_label_positions,
+    update_phi_bypass_wf, update_phi_bypass_label_positions, EVERY_MEM]
+QED
+
+Theorem do_merge_jump_inst_wf:
+  EVERY inst_wf (fn_insts f) /\
+  EVERY label_positions_ok (fn_insts f) /\
+  lookup_block a.bb_label f.fn_blocks = SOME a /\
+  do_merge_jump f a b lm = SOME (g,lm') ==>
+  EVERY inst_wf (fn_insts g)
+Proof
+  strip_tac >> drule_all do_merge_jump_instruction_shape >>
+  simp[EVERY_MEM]
+QED
+
+Theorem do_merge_jump_label_positions:
+  EVERY inst_wf (fn_insts f) /\
+  EVERY label_positions_ok (fn_insts f) /\
+  lookup_block a.bb_label f.fn_blocks = SOME a /\
+  do_merge_jump f a b lm = SOME (g,lm') ==>
+  EVERY label_positions_ok (fn_insts g)
+Proof
+  strip_tac >> drule_all do_merge_jump_instruction_shape >>
+  simp[EVERY_MEM]
+QED
+
+Theorem fix_all_phis_inst_wf:
+  EVERY inst_wf (fn_insts f) ==>
+  EVERY inst_wf (fn_insts (fix_all_phis f))
+Proof
+  strip_tac >> irule fix_all_phis_every >> simp[fix_phi_inst_wf]
+QED
+
+Theorem fix_all_phis_instruction_shape:
+  EVERY inst_wf (fn_insts f) /\ EVERY label_positions_ok (fn_insts f) ==>
+  EVERY (\i. inst_wf i /\ label_positions_ok i) (fn_insts (fix_all_phis f))
+Proof
+  strip_tac >> irule fix_all_phis_every >>
+  simp[EVERY_MEM] >> metis_tac[fix_phi_inst_wf, fix_phi_inst_label_positions,
+    EVERY_MEM]
+QED
+
+Theorem fix_all_phis_label_positions:
+  EVERY inst_wf (fn_insts f) /\ EVERY label_positions_ok (fn_insts f) ==>
+  EVERY label_positions_ok (fn_insts (fix_all_phis f))
+Proof
+  strip_tac >> drule_all fix_all_phis_instruction_shape >> simp[EVERY_MEM]
+QED

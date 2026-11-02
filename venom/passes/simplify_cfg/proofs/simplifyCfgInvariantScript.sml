@@ -167,7 +167,8 @@ Proof
 QED
 
 Theorem update_succ_phi_labels_every:
-  (!old new i. P i ==> P (subst_label_inst old new i)) ==>
+  (!old new i. P i /\ i.inst_opcode = PHI ==>
+    P (subst_label_inst old new i)) ==>
   !succs bbs. EVERY (\bb. EVERY P bb.bb_instructions) bbs ==>
   EVERY (\bb. EVERY P bb.bb_instructions)
     (update_succ_phi_labels old new bbs succs)
@@ -187,7 +188,8 @@ Proof
 QED
 
 Theorem chain_merge_every:
-  (!old new i. P i ==> P (subst_label_inst old new i)) /\
+  (!old new i. P i /\ i.inst_opcode = PHI ==>
+    P (subst_label_inst old new i)) /\
   EVERY P (fn_insts f) /\
   lookup_block lbl f.fn_blocks = SOME a /\
   lookup_block next f.fn_blocks = SOME b ==>
@@ -206,8 +208,8 @@ Proof
 QED
 
 Theorem do_merge_jump_every:
-  (!old new i. P i ==> P (subst_label_inst old new i)) /\
-  (!i. P i ==> P (canon_jnz_inst i)) /\
+  (!old new i. P i /\ is_terminator i.inst_opcode ==>
+    P (canon_jnz_inst (subst_label_inst old new i))) /\
   (!al bl i. P i ==> P (update_phi_bypass al bl i)) /\
   EVERY P (fn_insts f) /\
   lookup_block a.bb_label f.fn_blocks = SOME a /\
