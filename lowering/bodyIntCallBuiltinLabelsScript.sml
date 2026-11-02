@@ -1083,8 +1083,8 @@ Proof
   simp[supported_word_type_def, is_bytestring_type_def]
 QED
 
-Theorem compiler_block_tail_supported_builtin:
-  supported_builtin_form tops ty bi es /\
+Theorem compiler_block_tail_supported_builtin_general:
+  supported_builtin_form tops support_ann bi es /\
   (!e ce t. MEM e es ==> compiler_block_tail (cfn ce t e)) ==>
   compiler_block_tail (compile_builtin_dispatch_body cfn cenv ann ty bi es)
 Proof
@@ -1114,8 +1114,8 @@ Proof
   irule compiler_block_tail_bop_dispatch >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-Theorem compiler_label_hoare_supported_builtin:
-  supported_builtin_form tops ty bi es /\
+Theorem compiler_label_hoare_supported_builtin_general:
+  supported_builtin_form tops support_ann bi es /\
   (!e ce t origin pending. MEM e es ==>
     compiler_label_hoare (compiler_label_reservation origin pending)
       (cfn ce t e) (\r out. compiler_label_reservation origin pending out)) ==>
@@ -1147,4 +1147,44 @@ Proof
   >~ [`MulMod`] >- (irule compiler_label_hoare_modular_dispatch >> simp[] >> metis_tac[]) >>
   drule supported_binop_scalar_dispatch >> strip_tac >>
   irule compiler_label_hoare_bop_dispatch >> simp[] >> metis_tac[]
+QED
+
+Theorem compiler_block_tail_supported_builtin_source:
+  supported_builtin_form tops ann bi es /\
+  (!e ce t. MEM e es ==> compiler_block_tail (cfn ce t e)) ==>
+  compiler_block_tail (compile_builtin_dispatch_body cfn cenv ann ty bi es)
+Proof
+  metis_tac[compiler_block_tail_supported_builtin_general]
+QED
+
+Theorem compiler_block_tail_supported_builtin:
+  supported_builtin_form tops ty bi es /\
+  (!e ce t. MEM e es ==> compiler_block_tail (cfn ce t e)) ==>
+  compiler_block_tail (compile_builtin_dispatch_body cfn cenv ann ty bi es)
+Proof
+  metis_tac[compiler_block_tail_supported_builtin_general]
+QED
+
+Theorem compiler_label_hoare_supported_builtin_source:
+  supported_builtin_form tops ann bi es /\
+  (!e ce t origin pending. MEM e es ==>
+    compiler_label_hoare (compiler_label_reservation origin pending)
+      (cfn ce t e) (\r out. compiler_label_reservation origin pending out)) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_builtin_dispatch_body cfn cenv ann ty bi es)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  metis_tac[compiler_label_hoare_supported_builtin_general]
+QED
+
+Theorem compiler_label_hoare_supported_builtin:
+  supported_builtin_form tops ty bi es /\
+  (!e ce t origin pending. MEM e es ==>
+    compiler_label_hoare (compiler_label_reservation origin pending)
+      (cfn ce t e) (\r out. compiler_label_reservation origin pending out)) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_builtin_dispatch_body cfn cenv ann ty bi es)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  metis_tac[compiler_label_hoare_supported_builtin_general]
 QED
