@@ -625,6 +625,61 @@ Definition wf_ssa_def:
   wf_ssa fn <=> ssa_form fn /\ def_dominates_uses fn
 End
 
+(* v is written on every CFG path from the entry to a point of bb: in an
+   earlier block of the path, or in bb before the point.  The point is as in
+   def_available_at: NONE is the end of bb, SOME use_inst just before
+   use_inst.  Unlike def_available_at, different paths may use different
+   definitions, so this holds of code that is not in SSA form. *)
+Definition def_on_all_paths_def:
+  def_on_all_paths fn bb use_inst_opt v <=>
+    !path.
+      is_fn_path fn path /\ path <> [] /\
+      (?entry. fn_entry_label fn = SOME entry /\ HD path = entry) /\
+      LAST path = bb.bb_label ==>
+      (?k def_bb def_inst.
+         k < LENGTH path - 1 /\
+         MEM def_bb fn.fn_blocks /\ def_bb.bb_label = EL k path /\
+         MEM def_inst def_bb.bb_instructions /\
+         MEM v def_inst.inst_outputs) \/
+      (?i. i < LENGTH bb.bb_instructions /\
+           MEM v (EL i bb.bb_instructions).inst_outputs /\
+           case use_inst_opt of
+             NONE => T
+           | SOME use_inst =>
+               ?j. i < j /\ j < LENGTH bb.bb_instructions /\
+                   EL j bb.bb_instructions = use_inst)
+End
+
+(* Definite assignment: every ordinary use, and every PHI value at the end
+   of its predecessor, is written on every path from the entry.  Uses in
+   unreachable blocks hold vacuously. *)
+Definition fn_defs_reach_uses_def:
+  fn_defs_reach_uses fn <=>
+    !bb inst.
+      MEM bb fn.fn_blocks /\
+      MEM inst bb.bb_instructions ==>
+      if inst.inst_opcode = PHI then
+        !pred v pred_bb.
+          MEM (pred,v) (phi_pairs inst.inst_operands) /\
+          MEM pred_bb fn.fn_blocks /\ pred_bb.bb_label = pred /\
+          fn_cfg_edge fn pred bb.bb_label ==>
+          def_on_all_paths fn pred_bb NONE v
+      else
+        !v. MEM (Var v) inst.inst_operands ==>
+            def_on_all_paths fn bb (SOME inst) v
+End
+
+(* Every variable a PHI reads is written by at most one instruction. *)
+Definition fn_phi_operands_single_def_def:
+  fn_phi_operands_single_def fn <=>
+    !bb inst pred v.
+      MEM bb fn.fn_blocks /\
+      MEM inst bb.bb_instructions /\
+      inst.inst_opcode = PHI /\
+      MEM (pred,v) (phi_pairs inst.inst_operands) ==>
+      LENGTH (FILTER (\i. MEM v i.inst_outputs) (fn_insts fn)) <= 1
+End
+
 (* Check if instruction is a PHI. *)
 Definition is_phi_inst_def:
   is_phi_inst inst <=> inst.inst_opcode = PHI
