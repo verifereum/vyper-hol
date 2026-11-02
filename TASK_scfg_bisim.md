@@ -102,6 +102,7 @@ lets an INVOKE step in C' be matched in C (`ctx_bisim_step_inst`).
 | Semantics lemmas | venom/proofs/venomExecProofsScript.sml, venom/props/venomExecPropsScript.sml, venomInstProofs* (rg `Theory venomInstProofs`) | |
 | Lift layer | venom/compiler/o1PassLiftScript.sml | `fn_bisim`, `frame_result_rel`, `execution_frame` use |
 | A sibling pass proof of the same shape | venom/compiler/o1ContractSueScript.sml | SUE's `fn_bisim` statement |
+| Older SimplifyCFG proof (reference only, older semantics, never landed) | git ref `refs/scfg/pr307`: `git show refs/scfg/pr307:venom/passes/simplify_cfg/proofs/<file>` | collapse/merge (`simplifyCfgCollapse*`), prev_bb (`simplifyCfgPrevBB`), step, wf (`simplifyCfgWf`), helpers; port ideas, don't copy |
 | Older cfg pass proofs | venom/passes/cfg_normalization/ | block-level simulation patterns |
 
 ## Notes
