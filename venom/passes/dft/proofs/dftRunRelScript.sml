@@ -267,6 +267,83 @@ Proof
   gvs[] >> simp[LAST_APPEND_NOT_NIL]
 QED
 
+Theorem id_before_asym:
+  ALL_DISTINCT xs /\ id_before xs a b ==> ~id_before xs b a
+Proof
+  strip_tac >> pure_rewrite_tac[id_before_def] >> strip_tac >>
+  qpat_x_assum `id_before _ _ _` mp_tac >>
+  pure_rewrite_tac[id_before_def] >> strip_tac >>
+  `i < LENGTH xs /\ i' < LENGTH xs` by simp[] >>
+  `i = j' /\ j = i'` by metis_tac[ALL_DISTINCT_EL_IMP] >> gvs[]
+QED
+
+Theorem dft_inversion_compatible:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb'.bb_instructions) /\
+  (!x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+         ~abort_compatible x.inst_opcode y.inst_opcode /\
+         id_before (MAP (\i. i.inst_id) bb.bb_instructions)
+           x.inst_id y.inst_id ==>
+         id_before (MAP (\i. i.inst_id) bb'.bb_instructions)
+           x.inst_id y.inst_id) /\
+  MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+  id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+  id_before (MAP (\i. i.inst_id) bb'.bb_instructions) y.inst_id x.inst_id ==>
+  abort_compatible x.inst_opcode y.inst_opcode
+Proof
+  metis_tac[id_before_asym]
+QED
+
+Theorem dft_target_head_extract:
+  PERM (MAP (\i. i.inst_id) src) (x.inst_id :: MAP (\i. i.inst_id) rest) ==>
+  ?pre y post. src = pre ++ y :: post /\ y.inst_id = x.inst_id /\
+    PERM (MAP (\i. i.inst_id) (pre ++ post))
+         (MAP (\i. i.inst_id) rest)
+Proof
+  strip_tac >>
+  `MEM x.inst_id (MAP (\i. i.inst_id) src)` by metis_tac[PERM_MEM_EQ, MEM] >>
+  fs[MEM_MAP] >> rename1 `MEM y src` >>
+  qpat_x_assum `MEM y src` mp_tac >>
+  simp[MEM_SPLIT] >> strip_tac >> gvs[] >>
+  qexistsl_tac [`l1`, `y`, `l2`] >> simp[] >>
+  irule perm_cons_delete >>
+  qexists_tac `x.inst_id` >> gvs[MAP_APPEND]
+QED
+
+Theorem dft_must_order_invokes:
+  ~dft_must_order x y ==>
+  ~(x.inst_opcode = INVOKE /\ y.inst_opcode = INVOKE)
+Proof
+  rpt strip_tac >>
+  fs[dft_must_order_def, read_effects_def, write_effects_def,
+     all_effects_def, pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+  metis_tac[]
+QED
+Theorem id_before_append_right:
+  id_before ys a b ==> id_before (xs ++ ys) a b
+Proof
+  simp[id_before_def] >> rpt strip_tac >>
+  qexistsl_tac [`LENGTH xs + i`, `LENGTH xs + j`] >>
+  simp[EL_APPEND2]
+QED
+
+Theorem dft_inversion_not_must_order:
+  dft_block_rel bb bb' /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb'.bb_instructions) /\
+  MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+  ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+  id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+  id_before (MAP (\i. i.inst_id) bb'.bb_instructions) y.inst_id x.inst_id ==>
+  ~dft_must_order x y
+Proof
+  strip_tac >> strip_tac >> fs[dft_block_rel_def] >>
+  rename1 `EVERY (from_block bb.bb_instructions) scheduled` >>
+  `id_before (MAP (\i. i.inst_id) scheduled) x.inst_id y.inst_id` by metis_tac[] >>
+  `id_before (MAP (\i. i.inst_id) bb'.bb_instructions) x.inst_id y.inst_id` by
+    (gvs[MAP_APPEND] >> irule id_before_append_right >> simp[]) >>
+  metis_tac[id_before_asym]
+QED
+
+
 (* Why it holds (unchecked notes):
    - Same fuel works: fuel is per block and per call depth, and the
      schedule visits the same blocks and makes the same calls.
