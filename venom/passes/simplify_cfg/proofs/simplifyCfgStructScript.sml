@@ -1853,3 +1853,99 @@ Proof
   rpt strip_tac >> gvs[Once try_bypass_def, AllCaseEqs()] >>
   metis_tac[do_merge_jump_jnz_distinct]
 QED
+
+Theorem collapse_property_joint:
+  !P.
+  (!func a b. P func /\
+     lookup_block a.bb_label func.fn_blocks = SOME a /\
+     lookup_block b.bb_label func.fn_blocks = SOME b /\
+     can_merge_blocks func a b ==>
+     P (func with fn_blocks :=
+       update_succ_phi_labels b.bb_label a.bb_label
+         (replace_block a.bb_label (merge_blocks a b)
+           (remove_block b.bb_label func.fn_blocks))
+         (bb_succs (merge_blocks a b)))) /\
+  (!func lm a succs func' lm'. P func /\
+     lookup_block a.bb_label func.fn_blocks = SOME a /\
+     try_bypass func lm a succs = (func',lm',T) ==> P func') ==>
+  ((!func lm visited lbl. P func ==>
+      P (FST (collapse_dfs func lm visited lbl))) /\
+   (!func lm visited succs. P func ==>
+      P (FST (collapse_dfs_succs func lm visited succs))))
+Proof
+  gen_tac >> strip_tac >> ho_match_mp_tac collapse_dfs_ind >> rpt conj_tac
+  >- suspend "dfs"
+  >- simp[collapse_dfs_def]
+  >> suspend "succs"
+QED
+
+Resume collapse_property_joint[dfs]:
+  rpt strip_tac >> simp[NoAsms, Once collapse_dfs_def] >>
+  Cases_on `lookup_block lbl func.fn_blocks` >- simp[] >>
+  rename1 `lookup_block lbl func.fn_blocks = SOME bb` >>
+  Cases_on `bb_succs bb` >- (Cases_on `MEM lbl visited` >> gvs[try_bypass_def]) >>
+  Cases_on `t`
+  >- (Cases_on `lookup_block h func.fn_blocks`
+      >- (Cases_on `MEM lbl visited` >> gvs[]) >>
+      rename1 `lookup_block h func.fn_blocks = SOME next_bb` >>
+      Cases_on `can_merge_blocks func bb next_bb`
+      >- (gvs[] >> first_x_assum irule >>
+          `bb.bb_label = lbl /\ next_bb.bb_label = h` by
+            metis_tac[lookup_block_member_label] >> metis_tac[]) >>
+      Cases_on `MEM lbl visited` >> gvs[]) >>
+  Cases_on `try_bypass func lm bb (h::h'::t')` >> PairCases_on `r` >>
+  `lookup_block bb.bb_label func.fn_blocks = SOME bb` by
+    metis_tac[lookup_block_member_label] >>
+  Cases_on `r1`
+  >- (gvs[] >> `P q` by metis_tac[] >> gvs[]) >>
+  drule_all try_bypass_failed_unchanged >> strip_tac >>
+  gvs[] >> Cases_on `MEM lbl visited` >> gvs[]
+QED
+
+Resume collapse_property_joint[succs]:
+  rpt strip_tac >> simp[NoAsms, Once collapse_dfs_def] >>
+  Cases_on `collapse_dfs func lm visited lbl` >> PairCases_on `r` >> gvs[]
+QED
+
+Finalise collapse_property_joint
+
+Theorem collapse_wf_joint:
+  (!func lm visited lbl. wf_function func ==>
+    wf_function (FST (collapse_dfs func lm visited lbl))) /\
+  (!func lm visited succs. wf_function func ==>
+    wf_function (FST (collapse_dfs_succs func lm visited succs)))
+Proof
+  ho_match_mp_tac collapse_dfs_ind >> rpt conj_tac
+  >- suspend "dfs"
+  >- simp[collapse_dfs_def]
+  >> suspend "succs"
+QED
+
+Resume collapse_wf_joint[dfs]:
+  rpt strip_tac >> simp[NoAsms, Once collapse_dfs_def] >>
+  Cases_on `lookup_block lbl func.fn_blocks` >- simp[] >>
+  rename1 `lookup_block lbl func.fn_blocks = SOME bb` >>
+  Cases_on `bb_succs bb` >- (Cases_on `MEM lbl visited` >> gvs[try_bypass_def]) >>
+  Cases_on `t`
+  >- (Cases_on `lookup_block h func.fn_blocks`
+      >- (Cases_on `MEM lbl visited` >> gvs[]) >>
+      rename1 `lookup_block h func.fn_blocks = SOME next_bb` >>
+      Cases_on `can_merge_blocks func bb next_bb`
+      >- (gvs[] >> first_x_assum irule >>
+          `bb.bb_label = lbl /\ next_bb.bb_label = h` by
+            metis_tac[lookup_block_member_label] >>
+          metis_tac[chain_merge_wf]) >>
+      Cases_on `MEM lbl visited` >> gvs[]) >>
+  Cases_on `try_bypass func lm bb (h::h'::t')` >> PairCases_on `r` >>
+  `lookup_block bb.bb_label func.fn_blocks = SOME bb` by
+    metis_tac[lookup_block_member_label] >>
+  `wf_function q` by metis_tac[try_bypass_wf] >>
+  Cases_on `r1` >> gvs[] >> Cases_on `MEM lbl visited` >> gvs[]
+QED
+
+Resume collapse_wf_joint[succs]:
+  rpt strip_tac >> simp[Once collapse_dfs_def] >>
+  Cases_on `collapse_dfs func lm visited lbl` >> PairCases_on `r` >> gvs[]
+QED
+
+Finalise collapse_wf_joint
