@@ -434,7 +434,7 @@ QED
 
 (* The guarded body's code from sa: the body's statements to sb, then (if
    the block is still open) the end, to st'. *)
-Theorem guarded_body_code[local]:
+Theorem guarded_body_code:
   !cenv nkey ut iv fbody rt sa st'.
     compile_guarded_body cenv F nkey ut iv fbody rt sa = ((), st') ==>
     ?sb. compile_stmts cenv NoLoop
@@ -466,7 +466,7 @@ QED
    the return type the typing checks the body against, while
    compile_guarded_body compiles a function without a return type at
    BaseT BoolT. *)
-Theorem guarded_body_stmts_env[local]:
+Theorem guarded_body_stmts_env:
   !tops bindings ctx cx cenv fbody ret rt env_t env' sa sb.
     supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
     rt = (if ret = NoneT then NONE else SOME ret) /\

@@ -32,6 +32,7 @@ Ancestors
   vyperCompiler
   allocaBudgetChecks
   vyperLoweringCorrect
+  loweringMemCorrect
   configuredE2ECorrectness
   evalCompilerInternalImmutables
   evalAssignmentOrder

@@ -28,15 +28,10 @@
  *     whose return may release a transient nonreentrant lock
  *   (S1, lower_vyper_runtime_unit_correct, is in loweringRuntimeCorrect)
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
- *   lower_vyper_runtime_unit_run_mem_safe -- S3's memory-safe run (planned
- *     admission, Milestone 5)
- *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5), from the run
- *     through mem_safe_raw_unit_memory_ok
+ *   (S3, lower_vyper_runtime_unit_memory_ok, is in loweringMemCorrect)
  *
  * TASK056: obsolete NONE-mode relation retained as inactive source provenance.
- * STATUS: S2 is proved; S3 is proved from the admitted memory-safe run
- *   lower_vyper_runtime_unit_run_mem_safe, so it is NOT yet a proved
- *   correctness certificate.
+ * STATUS: S2 is proved.
  * Before major proof repair, check lowering definitions against the chosen
  * upstream compiler target; see docs/compiler-definition-parity.md.
  *)
@@ -902,86 +897,6 @@ Proof
   rpt gen_tac >> simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
   strip_tac >> metis_tac[]
-QED
-
-(* The run from the unit's entry is memory-safe: every instruction it
-   executes, callee frames included, reads and writes memory below the
-   allocation frontier.  Planned admission, Milestone 5: the memory-safe
-   form of S1's entry, body and halt simulation, whose leaves are the
-   footprint lemmas (fragExecMem, allocaFootprint) and whose composition
-   over compile_guarded_body is S1's run transfer.  Excluding
-   source_exempt is essential: dynamic decoding can read unchecked
-   offsets. *)
-Theorem lower_vyper_runtime_unit_run_mem_safe:
-  !tops rpolicy unit am tx ret vs fn lbl.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
-    lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
-    fn_entry_label fn = SOME lbl
-    ==>
-    !fuel. mem_safe_blocks fuel unit.cu_context fn
-             (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                         vs_inst_idx := 0 |>)
-Proof
-  cheat
-QED
-
-(* S3, Milestone 5: the memory-safe run (above) through the bridge
-   mem_safe_raw_unit_memory_ok, with alloca_frontier_inv as the frontier
-   bound.  The bridge's structural premises (an entry function with an entry
-   block, distinct labels, an acyclic reachable call graph, the allocation
-   budget below the word size) are lowering_context_ok, which run_lowering
-   checks. *)
-Theorem lower_vyper_runtime_unit_memory_ok:
-  !tops rpolicy unit am tx ret vs.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
-    ==> raw_unit_memory_ok unit.cu_context vs
-Proof
-  rpt strip_tac >>
-  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  drule run_lowering_context_ok >> strip_tac >>
-  drule run_lowering_entry >> strip_tac >>
-  drule lowering_context_ok_bridge >> strip_tac >>
-  drule lowering_context_ok_integrity >> strip_tac >>
-  drule lowering_context_ok_static_integrity >> strip_tac >>
-  drule lowering_context_ok_alloca_budget >> strip_tac >>
-  `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
-    metis_tac[lookup_function_MEM, lookup_function_result_name] >>
-  `ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
-  `?lbl. fn_entry_label fn = SOME lbl` by
-    (Cases_on `fn.fn_blocks` >>
-     gvs[fn_has_entry_def, fn_entry_label_def, entry_block_def]) >>
-  qspecl_then [`unit.cu_context`, `vs`, `"__entry"`, `fn`, `lbl`,
-               `alloca_frontier_inv`] mp_tac mem_safe_raw_unit_memory_ok >>
-  impl_tac
-  >- (rpt conj_tac
-      >- simp[]
-      >- simp[]
-      >- simp[]
-      >- fs[listTheory.EVERY_MEM]
-      >- (irule alloca_frontier_inv_closed >> simp[])
-      >- (irule alloca_frontier_inv_entry >>
-          simp[ctx_wf_def, ctx_has_entry_def, ctx_fn_names_def, listTheory.MEM_MAP,
-               reachable_call_graph_acyclic_def] >>
-          fs[initial_venom_state_rel_def] >> metis_tac[])
-      >- metis_tac[alloca_frontier_inv_bound]
-      >> drule_all lower_vyper_runtime_unit_run_mem_safe >> simp[]) >>
-  simp[]
 QED
 
 (* ===== Superseded admission provenance ===== *)
