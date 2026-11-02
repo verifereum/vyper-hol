@@ -18,7 +18,7 @@ Theorem simplify_cfg_frame_sim:
   ctx_bisim C C' /\
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
   simplify_cfg_fn_ok fn ==>
-  frame_sim C C' fn (simplify_cfg_fn fn)
+  frame_sim L C C' fn (simplify_cfg_fn fn)
 ```
 
 Supporting definitions (do not change them):

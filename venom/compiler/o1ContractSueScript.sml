@@ -37,7 +37,7 @@ Theorem sue_expand_function_supply_frame_sim:
   EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn) /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
   sue_expand_function_supply s fn = (fn',s') ==>
-  frame_sim C C' fn fn'
+  frame_sim L C C' fn fn'
 Proof
   cheat
 QED

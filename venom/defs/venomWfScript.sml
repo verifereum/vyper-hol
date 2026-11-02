@@ -680,6 +680,18 @@ Definition fn_phi_operands_single_def_def:
       LENGTH (FILTER (\i. MEM v i.inst_outputs) (fn_insts fn)) <= 1
 End
 
+(* Every PHI has an operand for every CFG edge into its block, so entering
+   the block never fails to resolve it. *)
+Definition fn_phis_cover_preds_def:
+  fn_phis_cover_preds fn <=>
+    !bb inst pred.
+      MEM bb fn.fn_blocks /\
+      MEM inst bb.bb_instructions /\
+      inst.inst_opcode = PHI /\
+      fn_cfg_edge fn pred bb.bb_label ==>
+      ?v. MEM (pred,v) (phi_pairs inst.inst_operands)
+End
+
 (* Check if instruction is a PHI. *)
 Definition is_phi_inst_def:
   is_phi_inst inst <=> inst.inst_opcode = PHI

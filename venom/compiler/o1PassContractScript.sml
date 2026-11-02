@@ -379,7 +379,7 @@ Definition o1_walk_src_inv_def:
   o1_walk_src_inv C vs <=>
     o1_src_inv C vs /\
     EVERY (\fn. all_reachable fn /\ fn_defs_reach_uses fn /\
-                fn_phi_operands_single_def fn)
+                fn_phi_operands_single_def fn /\ fn_phis_cover_preds fn)
       C.ctx_functions
 End
 
