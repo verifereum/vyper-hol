@@ -38,6 +38,48 @@ Proof
        step_inst_base_def, mk_inst_def, FIND_def, INDEX_FIND_def]
 QED
 
+Theorem exec_pure1_no_exit[local]:
+  (!h. exec_pure1 f i s <> Halt h) /\
+  (!v t. exec_pure1 f i s <> IntRet v t)
+Proof
+  simp[exec_pure1_def, AllCaseEqs()]
+QED
+
+Theorem exec_pure2_no_exit[local]:
+  (!h. exec_pure2 f i s <> Halt h) /\
+  (!v t. exec_pure2 f i s <> IntRet v t)
+Proof
+  simp[exec_pure2_def, AllCaseEqs()]
+QED
+
+Theorem exec_pure3_no_exit[local]:
+  (!h. exec_pure3 f i s <> Halt h) /\
+  (!v t. exec_pure3 f i s <> IntRet v t)
+Proof
+  simp[exec_pure3_def, AllCaseEqs()]
+QED
+
+Theorem exec_read0_no_exit[local]:
+  (!h. exec_read0 f i s <> Halt h) /\
+  (!v t. exec_read0 f i s <> IntRet v t)
+Proof
+  simp[exec_read0_def, AllCaseEqs()]
+QED
+
+Theorem exec_read1_no_exit[local]:
+  (!h. exec_read1 f i s <> Halt h) /\
+  (!v t. exec_read1 f i s <> IntRet v t)
+Proof
+  simp[exec_read1_def, AllCaseEqs()]
+QED
+
+Theorem exec_write2_no_exit[local]:
+  (!h. exec_write2 f i s <> Halt h) /\
+  (!v t. exec_write2 f i s <> IntRet v t)
+Proof
+  simp[exec_write2_def, AllCaseEqs()]
+QED
+
 Theorem step_inst_base_nonterminator_no_exit:
   !i s. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode ==>
     (!h. step_inst_base i s <> Halt h) /\
@@ -46,12 +88,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `i.inst_opcode` >> gvs[is_terminator_def] >>
   asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
-  simp[exec_pure1_def, AllCaseEqs()] >>
-  simp[exec_pure2_def, AllCaseEqs()] >>
-  simp[exec_pure3_def, AllCaseEqs()] >>
-  simp[exec_read0_def, AllCaseEqs()] >>
-  simp[exec_read1_def, AllCaseEqs()] >>
-  simp[exec_write2_def, AllCaseEqs()] >>
+  simp[exec_pure1_no_exit, exec_pure2_no_exit, exec_pure3_no_exit,
+       exec_read0_no_exit, exec_read1_no_exit, exec_write2_no_exit] >>
   simp[exec_ext_call_def, AllCaseEqs()] >>
   simp[exec_delegatecall_def, AllCaseEqs()] >>
   simp[exec_create_def, AllCaseEqs()] >>
