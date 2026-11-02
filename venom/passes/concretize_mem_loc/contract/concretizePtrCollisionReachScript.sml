@@ -692,3 +692,64 @@ Proof
   gen_tac >> Cases_on `op` >> simp[] >> rpt IF_CASES_TAC >> simp[]
 QED
 
+
+Theorem collision_pointer_roots:
+  ptr_roots (K {}) collision_a = {"a_p"} /\
+  ptr_roots (K {}) collision_b = {"b_p"} /\
+  ptr_roots (K {}) collision_main = {"p"}
+Proof
+  simp[ptr_roots_def, pointerConfinedDefsTheory.alloca_roots_def,
+    collision_a_def, collision_b_def, collision_main_def, fn_insts_def,
+    mk_raw_function_def, fn_insts_blocks_def, mk_inst_def,
+    pred_setTheory.EXTENSION] >>
+  rpt conj_tac >> gen_tac >>
+  simp[inst_output_def, DISJ_IMP_THM, LEFT_AND_OVER_OR,
+    RIGHT_AND_OVER_OR, EXISTS_OR_THM]
+QED
+
+Theorem collision_pointer_closures:
+  pointerConfinedDefs$pointer_use_vars collision_a ["a_p"] = ["a_p"] /\
+  pointerConfinedDefs$pointer_use_vars collision_b ["b_p"] = ["b_p"; "b_q"] /\
+  pointerConfinedDefs$pointer_use_vars collision_main ["p"] = ["p"]
+Proof
+  EVAL_TAC >> rpt conj_tac >> simp[Ntimes WhileTheory.OWHILE_THM 4]
+QED
+
+Theorem collision_pointer_variables:
+  fn_pv (K {}) collision_a = {"a_p"} /\
+  fn_pv (K {}) collision_b = {"b_p"; "b_q"} /\
+  fn_pv (K {}) collision_main = {"p"}
+Proof
+  simp[fn_pv_def, pointerConfinedDefsTheory.pointer_derived_vars_def,
+    collision_pointer_roots, listTheory.SET_TO_LIST_SING,
+    collision_pointer_closures]
+QED
+
+Theorem collision_source_pointer_syntax:
+  EVERY (fn_ptr_ok (K {})) collision_ctx.ctx_functions
+Proof
+  simp[collision_ctx_def, mk_venom_context_def, fn_ptr_ok_def,
+    collision_pointer_variables,
+    pointerConfinedDefsTheory.affine_pointer_ops_def,
+    GSYM fn_pv_def, collision_pointer_variables] >>
+  simp[collision_a_def, collision_b_def, collision_main_def,
+    mk_raw_function_def, fn_insts_def, fn_insts_blocks_def,
+    DISJ_IMP_THM, FORALL_AND_THM] >>
+  EVAL_TAC >> simp[pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY] >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >> gvs[mk_inst_def]
+QED
+
+Theorem collision_source_pointer_discipline:
+  ptr_discipline 0 collision_ctx collision_start
+Proof
+  simp[ptr_discipline_def] >> qexists_tac `K {}` >>
+  simp[collision_source_pointer_syntax,
+    SRULE [] (cj 5 collision_input_syntax), allocas_from_def] >> rpt strip_tac >>
+  drule collision_frame_envelope >> strip_tac >>
+  fs[collision_raw_envelope_def] >>
+  mp_tac collision_raw_rows_access >> mp_tac collision_raw_rows_taint >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> first_x_assum drule >>
+  gvs[collision_config_at_def, allocas_from_def] >>
+  EVAL_TAC
+QED
