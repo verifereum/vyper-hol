@@ -11,7 +11,13 @@ Ancestors
   vyperTypeExprResult vyperValue vyperTypeEnv
   vyperTypeInvariants vyperTypeAssignContext vyperTypeBuiltins
   vyperTypeEvalSoundness vyperTypeValues
-Libs monadsyntax
+Libs monadsyntax vyperSourceSupplyLib
+
+val storage_gvs = gvs;
+val storage_drule_all = drule_all;
+fun gvs thms = vyperSourceSupplyLib.forward >> storage_gvs thms >>
+  vyperSourceSupplyLib.forward;
+fun drule_all th = vyperSourceSupplyLib.forward >> storage_drule_all th;
 
 Theorem eval_expr_oracle_storage_mutual:
   (!cx s. eval_stmt cx s = eval_stmt cx s) /\
@@ -19,7 +25,7 @@ Theorem eval_expr_oracle_storage_mutual:
   (!cx it. eval_iterator cx it = eval_iterator cx it) /\
   (!cx tyv id body vs. eval_for cx tyv id body vs = eval_for cx tyv id body vs) /\
   (!cx e. !env st res st'.
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr e) /\ int_calls_expr e = [] /\
     ~supported_expr_exists expr_evm_run_root e /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -27,19 +33,19 @@ Theorem eval_expr_oracle_storage_mutual:
     (well_typed_expr env e ==> contract_storage_well_formed cx st') /\
     (!vt. type_place_expr env e = SOME vt ==> contract_storage_well_formed cx st')) /\
   (!cx es. !env st res st'.
-    well_typed_exprs env es /\ runtime_storage_consistent env cx st /\
+    well_typed_exprs env es /\ runtime_storage_consistent env cx st /\ source_supply st /\
     functions_well_typed cx /\ call_evaluation_safe cx (int_calls_exprs es) /\
     int_calls_exprs es = [] /\ ~supported_exprs_exists expr_evm_run_root es /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_exprs cx es st = (res,st') ==> contract_storage_well_formed cx st') /\
   (!cx bt. !env vt st res st'.
-    type_place_target env bt = SOME vt /\ runtime_storage_consistent env cx st /\
+    type_place_target env bt = SOME vt /\ runtime_storage_consistent env cx st /\ source_supply st /\
     functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
     int_calls_target bt = [] /\ ~supported_target_exists expr_evm_run_root bt /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_base_place cx bt st = (res,st') ==> contract_storage_well_formed cx st') /\
   (!cx tgt. !env ty st res st'.
-    well_typed_target env tgt ty /\ runtime_storage_consistent env cx st /\
+    well_typed_target env tgt ty /\ runtime_storage_consistent env cx st /\ source_supply st /\
     functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target tgt) /\
     int_calls_target tgt = [] /\ ~supported_target_exists expr_evm_run_root tgt /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -47,7 +53,7 @@ Theorem eval_expr_oracle_storage_mutual:
   (!cx tgt v. assign_tuple_targets cx tgt v = assign_tuple_targets cx tgt v) /\
   (!cx tgts vs. assign_tuple_target_list cx tgts vs = assign_tuple_target_list cx tgts vs) /\
   (!cx es. !env st res st'.
-    well_typed_exprs env es /\ runtime_storage_consistent env cx st /\
+    well_typed_exprs env es /\ runtime_storage_consistent env cx st /\ source_supply st /\
     functions_well_typed cx /\ call_evaluation_safe cx (int_calls_exprs es) /\
     int_calls_exprs es = [] /\ ~supported_exprs_exists expr_evm_run_root es /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\

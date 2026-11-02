@@ -12,7 +12,7 @@
  *   Layer 2 - Argument decoding: ABI-encoded calldata decoded to values
  *     matching tx.args (abiEncoderProps, valueEncodingProofs)
  *   Layer 3 - Function body: compiled Venom body preserves semantics
- *     (stmtLoweringProps, exprLoweringProps)
+ *     (bodySimMain: body_sim_mutual, body_stmts_sim)
  *
  * TOP-LEVEL:
  *   venom_env_rel, initial_venom_state_rel -- PLAN 5.7 entry boundary
@@ -952,7 +952,7 @@ Theorem vyper_to_venom_correct:
   !tenv selectors ext_fns int_fns fb_fn dispatch
     bucket_count fn_meta_bytes dense_buckets entry_info entry_label
     vs am tx sel fn_lbl htz cenv
-    args dflts ret body mut nr.
+    args dflts ret body mut nr ctx.
   let (ctx, _) = run_lowering_pair_compat selectors ext_fns int_fns fb_fn
                    dispatch bucket_count fn_meta_bytes
                    dense_buckets entry_info entry_label in

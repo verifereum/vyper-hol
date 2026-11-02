@@ -383,6 +383,7 @@ val excluded_test_names = [
   (* Tests using shift() builtin which is not yet translated.
      TODO: add shift builtin support *)
   "test_uint256_mulmod_complex",
+  "test_shift_builtin_negative_literal*",
   (* Out-of-gas test - we don't model gas *)
   "test_ecrecover_oog_handling"
 ]

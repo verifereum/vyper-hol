@@ -1770,6 +1770,22 @@ Proof
   gvs[comp_bind_def, LET_THM, pairTheory.UNCURRY_DEF]
 QED
 
+Theorem compiler_get_target_ptr_reserved_cong:
+  (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
+  (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) ==>
+  !bt sa. local_ptrs_reserved ce sa ==>
+    compile_get_target_ptr f ce bt sa = compile_get_target_ptr g ce bt sa
+Proof
+  strip_tac >> measureInduct_on `base_assignment_target_size bt` >>
+  Cases_on `bt` >> rpt strip_tac >> simp[compile_get_target_ptr_def] >>
+  irule compiler_reserved_bind_cong >>
+  simp[ci_mono_compile_get_target_ptr_cfn] >> qexists `ce` >> simp[] >>
+  rpt strip_tac >> simp[LET_THM] >> BasicProvers.every_case_tac >>
+  irule compiler_reserved_bind_cong >>
+  simp[ci_mono_lower_value_cfn] >> qexists `ce` >>
+  simp[compiler_lower_value_reserved_cong]
+QED
+
 Theorem compiler_expr_body_reserved_cong:
   (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
   (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
@@ -1788,7 +1804,12 @@ Proof
   >~ [`compile_subscript _ _ _ _ _ _ _`] >-
     (irule compiler_subscript_reserved_cong >> simp[])
   >~ [`compile_attribute _ _ _ _ _ _ _`] >-
-    (irule compiler_attribute_reserved_cong >> simp[]) >>
+    (irule compiler_attribute_reserved_cong >> simp[])
+  >~ [`compile_get_target_ptr _ _ _ _`] >-
+    (rename1 `compile_get_target_ptr f ce tgt sa` >>
+     `compile_get_target_ptr f ce tgt sa = compile_get_target_ptr g ce tgt sa` by
+       (irule compiler_get_target_ptr_reserved_cong >> simp[]) >>
+     simp[]) >>
   irule compiler_call_reserved_cong >> simp[]
 QED
 

@@ -40,3 +40,8 @@ verifereum-ref
 
 # Generated raw-system bytecode and per-run validation output
 lowering/defs/bytecode/raw-system/hol/
+
+# Generated native bytecode parity runner
+lowering/defs/bytecode/native/compilerNativeML.sml
+lowering/defs/bytecode/native/bytecode_parity_native.exe
+lowering/defs/bytecode/native/bytecode_parity_native.mlton

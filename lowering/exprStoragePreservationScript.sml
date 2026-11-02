@@ -27,7 +27,7 @@ Ancestors
 Theorem eval_expr_oracle_preserves_contract_storage_well_formed:
   !cx e env st res st'.
     well_typed_expr env e /\
-    runtime_storage_consistent env cx st /\
+    runtime_storage_consistent env cx st /\ source_supply st /\
     functions_well_typed cx /\
     int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e) /\
     ~expr_has_evm_run e /\

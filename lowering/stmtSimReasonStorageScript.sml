@@ -147,7 +147,7 @@ Theorem reason_storage_expr_revert_frag:
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     (!rr. expr_exit res1 rr ==> R rr) /\ (!t. R (Abort Revert_abort t)) ==>
-    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
       (\s. F) R
 Proof
   rpt gen_tac >> strip_tac >>
@@ -185,7 +185,7 @@ Theorem reason_storage_expr_revert_forced_frag[local]:
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     (!rr. expr_exit res1 rr ==> R rr) /\ (!t. R (Abort Revert_abort t)) ==>
-    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
       (\s. F) R
 Proof
   rpt gen_tac >> strip_tac >>
@@ -258,7 +258,7 @@ Proof
   impl_tac >- fs[] >> strip_tac >>
   `!t. stmt_exit RetQ es' res (Abort Revert_abort t)` by
     gvs[expr_res_ok_def, stmt_res_ok_def, stmt_exit_def, expr_exit_def] >>
-  `frag_exec ctx sa sfin (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+  `frag_exec ctx sa sfin (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
       (\s. F) (stmt_exit RetQ es' res)` by
     (irule (INST_TYPE [alpha |-> ``:type``] reason_storage_expr_revert_forced_frag) >> simp[] >>
      goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>

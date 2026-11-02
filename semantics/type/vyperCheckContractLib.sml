@@ -140,6 +140,7 @@ val checker_defs =
    expr_no_fallthrough_def,
    stmt_no_control_escape_def,
    vyperValueTheory.evaluate_type_def,
+   vyperASTTheory.bound_length_def,
    vyperValueTheory.type_slot_size_def,
    vfmConstantsTheory.word_size_def,
    vyperValueTheory.compatible_bound_def,

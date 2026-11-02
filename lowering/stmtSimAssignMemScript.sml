@@ -90,7 +90,7 @@ QED
 
 (* A write within a live local is disjoint from initialized immutables. *)
 Theorem local_copy_immutables[local]:
-  stmt_state_rel func cenv cx es s /\
+  stmt_state_rel ctx func cenv cx es s /\
   local_region cenv es.scopes s id b sz /\ n <= sz /\
   t.vs_data_section = s.vs_data_section /\
   LENGTH s.vs_memory <= LENGTH t.vs_memory /\
@@ -102,7 +102,7 @@ Proof
   simp[] >> reverse conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
   rpt strip_tac >>
   `regions_disjoint off (type_memory_size tv) b sz` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
      simp[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
      first_x_assum drule_all >> strip_tac >>
      qpat_x_assum `!id b sz. local_region _ _ _ id b sz ==> _` drule >> simp[]) >>
@@ -125,14 +125,14 @@ Theorem local_memory_store_run_framed:
     (ty = sty \/ is_bytestring_type ty /\ is_bytestring_type sty) /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel func cenv cx es s /\
+    stmt_state_rel ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?dw t. lookup_var p s = SOME dw /\
-        stmt_state_rel func cenv cx
+        stmt_state_rel ctx func cenv cx
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
              rest) t /\
@@ -168,7 +168,7 @@ Proof
     (rpt strip_tac >> first_x_assum irule >>
      fs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
   qpat_x_assum `entry.type = tyv` (SUBST_ALL_TAC o SYM) >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel func cenv cx es1` >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel ctx func cenv cx es1` >>
   `type_memory_size entry.type <= sz` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >> metis_tac[]) >>
   `local_region cenv es.scopes s id (w2n w) sz` by simp[local_region_def] >>
@@ -178,16 +178,17 @@ Proof
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
     (irule local_copy_immutables >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
-     qexistsl_tac [`func`, `type_memory_size entry.type`] >> simp[] >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     qexists_tac `type_memory_size entry.type` >> simp[] >>
      rpt strip_tac >> qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ _ = _` irule >>
      decide_tac) >>
-  `stmt_state_rel func cenv cx es1 t` by
+  `stmt_state_rel ctx func cenv cx es1 t` by
     (drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
   `t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
   `frag_exec ctx sa sb (\u. u = s)
-     (\u. stmt_state_rel func cenv cx es1 u /\
+     (\u. stmt_state_rel ctx func cenv cx es1 u /\
           (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
           u.vs_allocas = s.vs_allocas /\
           (!a len. a + len <= w2n w \/
@@ -213,13 +214,13 @@ Theorem local_memory_store_run:
     val_in_memory tyv v (w2n sw) s.vs_memory /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel func cenv cx es s /\
+    stmt_state_rel ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel func cenv cx
+    ?t. stmt_state_rel ctx func cenv cx
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
              rest) t /\
@@ -235,7 +236,7 @@ Proof
   drule_all (local_memory_store_run_framed |> SPEC_ALL
     |> Q.INST [`sty` |-> `ty`, `stv` |-> `tyv`]
     |> GEN_ALL |> PURE_REWRITE_RULE [REFL_CLAUSE, OR_CLAUSES, AND_CLAUSES]) >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  strip_tac >>
   qexists_tac `t` >> simp[] >> rpt strip_tac >> first_x_assum irule >>
   simp[] >> qexists_tac `fuel` >> simp[]
 QED
@@ -254,13 +255,13 @@ Theorem local_memory_assign_run:
     val_in_memory tyv v (w2n sw) s.vs_memory /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel func cenv cx
+    ?t. stmt_state_rel ctx func cenv cx
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
              rest) t /\
@@ -296,14 +297,13 @@ Proof
       `s.vs_current_bb = sx.cs_current_bb /\
        s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
       drule_all alloc_copy_memory_framed_run >>
-      disch_then (qspec_then `ctx`
-        (qx_choosel_then [`u`, `uw`] strip_assume_tac)) >>
+      disch_then
+        (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
       `local_ptrs_reserved cenv sn` by
         (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
       `!x. Var tmp = Var x ==> not_fresh_at sn x` by simp[] >>
       `eval_operand (Var tmp) u = SOME uw` by simp[eval_operand_def] >>
       drule_all local_memory_store_run >>
-      disch_then (qspec_then `ctx` mp_tac) >>
       disch_then (qx_choose_then `t` strip_assume_tac) >>
       qexists_tac `t` >> simp[] >> conj_tac
       >- (rpt strip_tac >>
@@ -314,7 +314,7 @@ Proof
   `compile_store_memory cenv src (Var p) ty ty sa = ((),sb)` by
     gvs[compile_assign_value_def] >>
   drule_all local_memory_store_run >>
-  disch_then (qspec_then `ctx` ACCEPT_TAC)
+  disch_then ACCEPT_TAC
 QED
 
 (* On a value: e's fragment ends in expr_post with the value in memory at
@@ -338,10 +338,10 @@ Theorem assign_local_memory_success_run:
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     type_memory_bytes cenv (expr_type e) = type_memory_size tyv /\
     0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel func cenv cx es' t /\ ~t.vs_halted /\
+    ?t. stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
         t.vs_current_bb = sf.cs_current_bb /\
         t.vs_inst_idx = LENGTH sf.cs_current_insts /\
         (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
@@ -365,8 +365,8 @@ Proof
   impl_tac >- simp[expr_res_ok_def] >>
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
-  rename1 `expr_post _ _ _ _ _ _ _ _ _ _ _ s1` >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _`
+  rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
+  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `val_wf tyv v` by gvs[expr_val_at_def] >>
   `?sw. eval_operand op s1 = SOME sw /\
@@ -376,7 +376,7 @@ Proof
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   drule_all local_memory_assign_run >>
-  disch_then (qspec_then `ctx` mp_tac) >> strip_tac >>
+  strip_tac >>
   qexists_tac `t` >> simp[] >> conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sb x` by
