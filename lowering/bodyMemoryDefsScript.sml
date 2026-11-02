@@ -58,6 +58,7 @@ Definition expr_sim_mem_def:
       lower_value compile_expr cenv ty e sa = (op, sb) /\
       (do result <- eval_expr cx e; read_result cx result od) es = (res, es') /\
       expr_res_ok res /\ fn_has_code sa sb func /\
+      res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
       fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
       frag_exec_mem ctx sa sb
         (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
@@ -73,6 +74,7 @@ Definition expr_vv_sim_mem_def:
     !sa sb vv res es' s0.
       compile_expr cenv ty e sa = (vv, sb) /\
       eval_expr cx e es = (res, es') /\ expr_vv_res_ok res /\
+      res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
       frag_exec_mem ctx sa sb
@@ -96,6 +98,7 @@ Definition stmt_frag_mem_def:
       local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
       return_buf_frame d cenv sa s0 /\
       ~block_is_terminated sa /\ stmt_res_ok lctx res /\
+      res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
       stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
       ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
