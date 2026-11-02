@@ -6,6 +6,7 @@ Ancestors
 Theorem try_bypass_preserves_predicate:
   (!f lm a b g lm'.
     Q f /\ lookup_block a.bb_label f.fn_blocks = SOME a /\
+    lookup_block b.bb_label f.fn_blocks = SOME b /\ can_bypass_jump f a b /\
     do_merge_jump f a b lm = SOME (g,lm') ==> Q g) ==>
   !succs f lm a.
     Q f /\ lookup_block a.bb_label f.fn_blocks = SOME a ==>
@@ -16,6 +17,8 @@ Proof
   simp[Once try_bypass_def] >>
   Cases_on `lookup_block h f.fn_blocks` >> simp[] >>
   rename1 `lookup_block h f.fn_blocks = SOME b` >>
+  `lookup_block b.bb_label f.fn_blocks = SOME b` by
+    metis_tac[lookup_block_member_label] >>
   Cases_on `can_bypass_jump f a b` >> simp[] >>
   Cases_on `lookup_block (HD (bb_succs b)) f.fn_blocks` >> simp[] >>
   rename1 `lookup_block (HD (bb_succs b)) f.fn_blocks = SOME target` >>
@@ -28,6 +31,7 @@ QED
 Theorem collapse_dfs_preserves_predicate_joint:
   (!f lm a b g lm'.
     Q f /\ lookup_block a.bb_label f.fn_blocks = SOME a /\
+    lookup_block b.bb_label f.fn_blocks = SOME b /\ can_bypass_jump f a b /\
     do_merge_jump f a b lm = SOME (g,lm') ==> Q g) /\
   (!f lbl next a b.
     Q f /\ lookup_block lbl f.fn_blocks = SOME a /\
@@ -71,6 +75,7 @@ QED
 Theorem collapse_dfs_preserves_predicate:
   (!f lm a b g lm'.
     Q f /\ lookup_block a.bb_label f.fn_blocks = SOME a /\
+    lookup_block b.bb_label f.fn_blocks = SOME b /\ can_bypass_jump f a b /\
     do_merge_jump f a b lm = SOME (g,lm') ==> Q g) /\
   (!f lbl next a b.
     Q f /\ lookup_block lbl f.fn_blocks = SOME a /\
@@ -86,6 +91,7 @@ QED
 Theorem collapse_dfs_succs_preserves_predicate:
   (!f lm a b g lm'.
     Q f /\ lookup_block a.bb_label f.fn_blocks = SOME a /\
+    lookup_block b.bb_label f.fn_blocks = SOME b /\ can_bypass_jump f a b /\
     do_merge_jump f a b lm = SOME (g,lm') ==> Q g) /\
   (!f lbl next a b.
     Q f /\ lookup_block lbl f.fn_blocks = SOME a /\
