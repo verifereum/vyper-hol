@@ -39,6 +39,69 @@ Ancestors
 Libs
   wordsLib
 
+Theorem compile_selector_checks_state_ok:
+  !selectors method_id sa sd.
+    compile_selector_checks method_id selectors sa = ((), sd) /\
+    compile_state_ok sa ==> compile_state_ok sd
+Proof
+  Induct_on `selectors`
+  >- simp[compile_selector_checks_def, comp_return_def] >>
+  qx_gen_tac `h` >> PairCases_on `h` >> rpt gen_tac >>
+  simp[Once compile_selector_checks_def, comp_return_def, comp_bind_def,
+       comp_ignore_bind_def, emitHelperTheory.emit_op_def,
+       emitHelperTheory.emit_inst_def, fresh_var_def,
+       fresh_id_def, fresh_label_def, emit_def, new_block_def] >>
+  strip_tac >> qpat_x_assum `compile_state_ok sa` mp_tac >>
+  first_x_assum (drule_at Any) >> disch_tac >> strip_tac >>
+  first_x_assum irule >>
+  qpat_x_assum `compile_selector_checks _ _ _ = _` kall_tac >>
+  fs[compile_state_ok_def, bound_labels_def, pred_setTheory.IN_DISJOINT] >>
+  simp[fresh_label_output_in_future, fresh_label_output_inj] >>
+  conj_tac
+  >- (gen_tac >> Cases_on `x IN compiler_labels_future (sa.cs_next_label + 2)` >> simp[] >>
+      `x IN compiler_labels_future sa.cs_next_label` by
+        (fs[compiler_labels_future_def] >>
+         metis_tac[DECIDE ``n + 2 <= k ==> n <= k``]) >>
+      `x <> fresh_label_output "next" (sa.cs_next_label + 1) /\
+       x <> fresh_label_output "match" sa.cs_next_label` by
+        (rpt strip_tac >> gvs[fresh_label_output_in_future]) >>
+      metis_tac[]) >>
+  `fresh_label_output "next" (sa.cs_next_label + 1) <>
+   fresh_label_output "match" sa.cs_next_label` by
+    (strip_tac >> drule fresh_label_output_inj >> simp[]) >>
+  first_assum (qspec_then `fresh_label_output "next" (sa.cs_next_label + 1)` mp_tac) >>
+  first_x_assum (qspec_then `fresh_label_output "match" sa.cs_next_label` mp_tac) >>
+  simp[fresh_label_output_in_future]
+QED
+
+Theorem compile_selector_dispatch_linear_state_ok:
+  !selectors fallback sa sd.
+    compile_selector_dispatch_linear selectors fallback sa = ((), sd) /\
+    compile_state_ok sa ==> compile_state_ok sd
+Proof
+  rpt gen_tac >>
+  simp[compile_selector_dispatch_linear_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def,
+       emitHelperTheory.emit_op_def, emitHelperTheory.emit_inst_def,
+       fresh_var_def, fresh_id_def, fresh_label_def, emit_def, new_block_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `compile_state_ok cs'` suffices_by simp[compile_state_ok_def, bound_labels_def] >>
+  drule compile_selector_checks_state_ok >> disch_then irule >>
+  qpat_x_assum `compile_selector_checks _ _ _ = _` kall_tac >>
+  fs[compile_state_ok_def, bound_labels_def, pred_setTheory.IN_DISJOINT] >>
+  simp[fresh_label_output_in_future] >>
+  conj_tac
+  >- (gen_tac >> Cases_on `x IN compiler_labels_future (sa.cs_next_label + 1)` >> simp[] >>
+      `x IN compiler_labels_future sa.cs_next_label` by
+        (fs[compiler_labels_future_def] >>
+         metis_tac[DECIDE ``n + 1 <= k ==> n <= k``]) >>
+      `x <> fresh_label_output "dispatch" sa.cs_next_label` by
+        (strip_tac >> gvs[fresh_label_output_in_future]) >>
+      metis_tac[]) >>
+  first_x_assum (qspec_then `fresh_label_output "dispatch" sa.cs_next_label` mp_tac) >>
+  simp[fresh_label_output_in_future]
+QED
+
 (* ===== Selector Dispatch =====
 
    Linear dispatch ends in jumps to labels it does not emit: the function
