@@ -764,8 +764,8 @@ End
      there fails, and the pass would turn it into a NOP);
    - a PHI's output is written by no other instruction;
    - in a reachable block, each PHI has a value for each reachable
-     predecessor, a literal or a variable defined at the predecessor's end,
-     and each JNZ condition variable is defined at the JNZ. *)
+     predecessor, defined at the predecessor's end, and each JNZ condition
+     variable is defined at the JNZ. *)
 Definition simplify_cfg_fn_ok_def:
   simplify_cfg_fn_ok fn <=>
     EVERY (\inst. inst.inst_opcode <> PHI) (HD fn.fn_blocks).bb_instructions /\
@@ -782,7 +782,6 @@ Definition simplify_cfg_fn_ok_def:
             MEM pred_bb fn.fn_blocks /\ fn_reachable fn pred_bb.bb_label /\
             MEM bb.bb_label (bb_succs pred_bb) ==>
             ?op. resolve_phi pred_bb.bb_label inst.inst_operands = SOME op /\
-                 (!l. op <> Label l) /\
                  (!v. op = Var v ==> def_available_at fn pred_bb NONE v)) /\
        (inst.inst_opcode = JNZ ==>
           !v. MEM (Var v) inst.inst_operands ==>

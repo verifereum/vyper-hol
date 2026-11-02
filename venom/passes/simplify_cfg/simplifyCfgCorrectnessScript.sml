@@ -9,7 +9,7 @@ Ancestors
   simplifyCfgProof cfgWf
 
 Theorem simplify_cfg_pass_correct:
-  wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
   simplify_cfg_fn_ok fn ==>
   fn_bisim fn (simplify_cfg_fn fn)
 Proof
