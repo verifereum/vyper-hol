@@ -3373,6 +3373,9 @@ Theorem log_inst_ok_sim:
     ~MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
     (* Dischargeable at block level from codegen_ready_fn + MEM bb/inst *)
     inst_wf inst /\
+    (* The EVM has LOG0 to LOG4 only; inst_wf allows larger topic counts. *)
+    (inst.inst_opcode = LOG ==>
+     ?tc rest. inst.inst_operands = Lit tc :: rest /\ w2n tc <= 4) /\
     (* EVM compatibility: DUP depth limit. Dischargeable from evm_compatible
        (LOG tc <= 4, INVOKE args bounded by fn arity). Pipeline obligation. *)
     LENGTH (compute_operands inst) <= 16 /\
@@ -3471,6 +3474,8 @@ Theorem assert_inst_ok_sim:
     ~MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
     (* Dischargeable at block level from codegen_ready_fn + MEM bb/inst *)
     inst_wf inst /\
+    (* ASSERT's failure branch pushes the shared revert label. *)
+    (inst.inst_opcode = ASSERT ==> IS_SOME (FLOOKUP lo "revert")) /\
     (* EVM compatibility: DUP depth limit. Dischargeable from evm_compatible
        (LOG tc <= 4, INVOKE args bounded by fn arity). Pipeline obligation. *)
     LENGTH (compute_operands inst) <= 16 /\
@@ -3692,6 +3697,11 @@ Theorem gen_inst_ok_sim:
     ~MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
     (* Dischargeable at block level from codegen_ready_fn + MEM bb/inst *)
     inst_wf inst /\
+    (* The EVM has LOG0 to LOG4 only; inst_wf allows larger topic counts. *)
+    (inst.inst_opcode = LOG ==>
+     ?tc rest. inst.inst_operands = Lit tc :: rest /\ w2n tc <= 4) /\
+    (* ASSERT's failure branch pushes the shared revert label. *)
+    (inst.inst_opcode = ASSERT ==> IS_SOME (FLOOKUP lo "revert")) /\
     (* EVM compatibility: DUP depth limit. Dischargeable from evm_compatible
        (LOG tc <= 4, INVOKE args bounded by fn arity). Pipeline obligation. *)
     LENGTH (compute_operands inst) <= 16 /\
