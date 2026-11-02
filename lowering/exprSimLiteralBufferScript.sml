@@ -336,12 +336,12 @@ Proof
   rpt gen_tac >> strip_tac >>
   gvs[emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def, comp_bind_def, comp_ignore_bind_def,
       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
-  simp[exprLoweringPropsTheory.emitted_insts_def, exprLoweringPropsTheory.same_blocks_def, rich_listTheory.DROP_APPEND1,
-       exprLoweringPropsTheory.run_inst_seq_def,
-       venomExecSemanticsTheory.step_inst_base_def,
-       venomExecSemanticsTheory.exec_pure2_def,
-       venomExecSemanticsTheory.exec_write2_def, eval_operand_def,
-       venomExecSemanticsTheory.bind_outputs_def, emitHelperPropsTheory.lookup_var_update_var] >>
+  simp[exprLoweringPropsTheory.emitted_insts_def, exprLoweringPropsTheory.same_blocks_def, rich_listTheory.DROP_APPEND1] >>
+  simp[exprLoweringPropsTheory.run_inst_seq_def] >>
+  simp[venomExecSemanticsTheory.step_inst_base_def] >>
+  simp[venomExecSemanticsTheory.exec_pure2_def,
+       venomExecSemanticsTheory.exec_write2_def, eval_operand_def] >>
+  simp[venomExecSemanticsTheory.bind_outputs_def, emitHelperPropsTheory.lookup_var_update_var] >>
   conj_tac >- simp[mstore_def, update_var_def] >>
   conj_tac
   >- simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
