@@ -47,6 +47,7 @@ Ancestors
   list pair fragExec stmtSim bodySim bodySimMain loweringHalt stmtLoweringMono exprSim exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering
   e2eDefs supportedProgram vyperLoweringCorrect entryChecksProps moduleLoweringProps
+  entryDispatchProps supportedNames
   supportedDecls supportedExprForms supportedStmts
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperInterpreter vyperState vyperContext
@@ -117,6 +118,55 @@ Proof
 QED
 
 (* ===== The entry (#639) ===== *)
+
+Theorem supported_entry_no_getters[local]:
+  supported_program tops ==>
+  (!mut ty x name. ~MEM (VariableDecl Public mut name ty x) tops) /\
+  (!b kt vt x name. ~MEM (HashMapDecl Public b name kt vt x) tops)
+Proof
+  simp[supported_program_def, supported_declaration_headers_def,
+       EVERY_MEM] >> rpt strip_tac >>
+  qpat_x_assum `!e. MEM e tops ==> supported_declaration_header tops e`
+    drule >> simp[supported_declaration_header_def]
+QED
+
+Theorem selected_external_dispatch[local]:
+  supported_program tops /\ valid_vyper_call tops tx cd ret /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut, F, args, [], ret, fbody) ==>
+  (?rr. MEM (mut, F, rr, tx.function_name, args, [], ret, fbody)
+          (FST (classify_functions tops))) /\
+  (!fb. linear_dispatch_target cd
+    (MAP (\(sel, lbl, _). (sel, lbl))
+      (build_selectors (type_env tops) (FST (classify_functions tops)))) fb =
+    "fn_" ++ tx.function_name)
+Proof
+  strip_tac >>
+  drule supported_entry_no_getters >> strip_tac >>
+  gvs[valid_vyper_call_def] >> conj_tac
+  >- (irule lookup_function_external_mem >> simp[] >>
+      qexists_tac `NONE` >> simp[]) >>
+  gen_tac >>
+  `ALL_DISTINCT (MAP FST (build_selectors (type_env tops)
+     (FST (classify_functions tops))))` by
+    gvs[supported_program_def, supported_declaration_names_def,
+        supported_selectors_distinct_def] >>
+  drule linear_dispatch_selects_function >> simp[] >>
+  disch_then (qspec_then `tx.args` mp_tac) >> simp[]
+QED
+
+Theorem selected_external_package[local]:
+  !tops target mut rr name args ret fbody.
+  ?cenv pos_args min_cds is_payable nkey ut iv rt.
+    set_external_package_target target
+      (package_external_fn tops F (assign_nkeys tops 0)
+        (mut, F, rr, name, args, ([] : expr list), ret, fbody)) =
+    ("fn_" ++ name, cenv, pos_args, min_cds, is_payable, F,
+     nkey, ut, iv, fbody, rt)
+Proof
+  rpt gen_tac >>
+  simp[package_external_fn_def, set_external_package_target_def, LET_THM]
+QED
 
 (* ADMITTED (#639): the run from __entry reaches the start st of the entry
    checks of the function the source selects: run_context starts the entry
