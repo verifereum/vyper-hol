@@ -18,7 +18,7 @@
 Theory o1ContractLowerDload
 Ancestors
   o1PassContract lowerDloadDefs lowerDloadSupplyProofs venomPassDispatcher venomFnScheduleRunner
-  unitShapeDefs venomWf irSupply venomInst stackPlanTypes list
+  unitShapeDefs venomWf irSupply venomInst stackPlanTypes list rich_list
 
 (* Why these hold: the expansion of DLOAD/DLOADBYTES only inserts
    non-terminators (ALLOCA, ADD, CODECOPY, MLOAD) in place of a
@@ -222,6 +222,152 @@ Proof
     gvs[ir_supply_covers_fn_def, list_subset_def] >>
   drule_all lower_dload_function_supply_contract >>
   simp[ld_ids_supply_ok_def]
+QED
+
+Theorem lower_dload_insts_supply_member:
+  !s xs t j. lower_dload_insts_supply s ins = (xs,t) /\ MEM j xs ==>
+  ?i u ys v. MEM i ins /\ lower_dload_inst_supply u i = (ys,v) /\ MEM j ys
+Proof
+  Induct_on `ins`
+  >- simp[lower_dload_insts_supply_def] >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem lower_dload_blocks_supply_member:
+  !s bs t b j. lower_dload_blocks_supply s bbs = (bs,t) /\
+  MEM b bs /\ MEM j b.bb_instructions ==>
+  ?a i u ys v. MEM a bbs /\ MEM i a.bb_instructions /\
+    lower_dload_inst_supply u i = (ys,v) /\ MEM j ys
+Proof
+  Induct_on `bbs`
+  >- simp[lower_dload_blocks_supply_def] >>
+  simp[Once lower_dload_blocks_supply_def, lower_dload_block_supply_def,
+       AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  metis_tac[lower_dload_insts_supply_member]
+QED
+
+Theorem lower_dload_insts_blocks_member[local]:
+  MEM j (fn_insts_blocks bs) <=> ?b. MEM b bs /\ MEM j b.bb_instructions
+Proof
+  Induct_on `bs` >> simp[fn_insts_blocks_def] >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_member:
+  lower_dload_function_supply s f = (g,t) /\ MEM j (fn_insts g) ==>
+  ?i u ys v. MEM i (fn_insts f) /\
+    lower_dload_inst_supply u i = (ys,v) /\ MEM j ys
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >>
+  strip_tac >> gvs[fn_insts_def, lower_dload_insts_blocks_member] >>
+  drule_all lower_dload_blocks_supply_member >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_every:
+  (!u i ys v. lower_dload_inst_supply u i = (ys,v) /\ P i ==> EVERY P ys) /\
+  lower_dload_function_supply s f = (g,t) /\ EVERY P (fn_insts f) ==>
+  EVERY P (fn_insts g)
+Proof
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  drule_all lower_dload_function_supply_member >> strip_tac >>
+  metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_control:
+  lower_dload_function_supply s f = (g,t) /\ MEM j (fn_insts g) /\
+  (is_terminator j.inst_opcode \/ j.inst_opcode = PHI \/
+   MEM j.inst_opcode [GAS; RETPC_PARAM; ASSIGN; PARAM; INVOKE; RET; STOP; RETURN]) ==>
+  MEM j (fn_insts f)
+Proof
+  strip_tac >> drule_all lower_dload_function_supply_member >> strip_tac >>
+  metis_tac[lower_dload_inst_supply_control]
+QED
+
+Theorem lower_dload_blocks_supply_labels:
+  !s bs t. lower_dload_blocks_supply s bbs = (bs,t) ==>
+  MAP (\b. b.bb_label) bs = MAP (\b. b.bb_label) bbs
+Proof
+  Induct_on `bbs`
+  >- simp[lower_dload_blocks_supply_def] >>
+  simp[Once lower_dload_blocks_supply_def, lower_dload_block_supply_def,
+       AllCaseEqs()] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_labels:
+  lower_dload_function_supply s f = (g,t) ==>
+  fn_labels g = fn_labels f /\ g.fn_name = f.fn_name /\
+  fn_entry_label g = fn_entry_label f /\ (fn_has_entry g <=> fn_has_entry f)
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule lower_dload_blocks_supply_labels >>
+  simp[fn_labels_def, fn_entry_label_def, entry_block_def, fn_has_entry_def] >>
+  Cases_on `bbs` >> Cases_on `f.fn_blocks` >> simp[]
+QED
+
+Theorem lower_dload_inst_supply_last_successors:
+  lower_dload_inst_supply s i = (xs,t) ==>
+  get_successors (LAST xs) = get_successors i
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      strip_tac >> gvs[get_successors_def, is_terminator_def]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      strip_tac >> gvs[get_successors_def, is_terminator_def]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[]
+QED
+
+Theorem lower_dload_insts_supply_last_successors:
+  !s xs t. lower_dload_insts_supply s ins = (xs,t) ==>
+  (xs = [] <=> ins = []) /\
+  (ins <> [] ==> get_successors (LAST xs) = get_successors (LAST ins))
+Proof
+  Induct_on `ins`
+  >- simp[lower_dload_insts_supply_def] >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  drule_all lower_dload_inst_supply_nonempty >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  Cases_on `ins = []` >> gvs[LAST_APPEND_NOT_NIL, LAST_DEF] >>
+  metis_tac[lower_dload_inst_supply_last_successors]
+QED
+
+Theorem lower_dload_block_supply_structure:
+  lower_dload_block_supply s b = (c,t) ==>
+  c.bb_label = b.bb_label /\ bb_succs c = bb_succs b
+Proof
+  simp[lower_dload_block_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule lower_dload_insts_supply_last_successors >>
+  simp[bb_succs_def] >> strip_tac >>
+  Cases_on `b.bb_instructions` >> Cases_on `insts` >> gvs[]
+QED
+
+Theorem lower_dload_blocks_supply_cfg:
+  !s bs t. lower_dload_blocks_supply s bbs = (bs,t) ==>
+  MAP (\b. (b.bb_label, bb_succs b)) bs =
+  MAP (\b. (b.bb_label, bb_succs b)) bbs
+Proof
+  Induct_on `bbs`
+  >- simp[lower_dload_blocks_supply_def] >>
+  simp[Once lower_dload_blocks_supply_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  drule lower_dload_block_supply_structure >> strip_tac >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_succs_closed:
+  lower_dload_function_supply s f = (g,t) /\ fn_succs_closed f ==>
+  fn_succs_closed g
+Proof
+  strip_tac >>
+  drule lower_dload_function_supply_labels >> strip_tac >>
+  gvs[lower_dload_function_supply_def, AllCaseEqs()] >>
+  drule lower_dload_blocks_supply_cfg >> strip_tac >>
+  rw[fn_succs_closed_def] >>
+  `MEM (bb.bb_label, bb_succs bb)
+    (MAP (\b. (b.bb_label, bb_succs b)) f.fn_blocks)` by
+    (first_x_assum (SUBST1_TAC o GSYM) >> simp[MEM_MAP] >> metis_tac[]) >>
+  gvs[MEM_MAP, fn_succs_closed_def] >> metis_tac[]
 QED
 
 Theorem lower_dload_function_supply_wf_function:
