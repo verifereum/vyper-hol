@@ -562,3 +562,49 @@ Proof
       listTheory.EVERY_MEM] >>
   metis_tac[]
 QED
+
+Theorem supply_entry_defined_entry:
+  fn_entry_label f = SOME st.vs_current_bb ==> supply_entry_defined f st
+Proof
+  strip_tac >> simp[supply_entry_defined_def] >> conj_tac
+  >- (simp[fn_reachable_def] >> metis_tac[relationTheory.RTC_REFL]) >>
+  drule strict_dom_vars_defined_entry >> simp[]
+QED
+
+Theorem supply_entry_defined_run_block_entry:
+  wf_function f /\ fn_inst_wf f /\ supply_entry_defined f st /\
+  MEM bb f.fn_blocks /\ bb.bb_label = st.vs_current_bb /\
+  run_block_entry fuel ctx bb st = OK sp /\ ~sp.vs_halted ==>
+  supply_entry_defined f sp
+Proof
+  rpt strip_tac >>
+  `EVERY inst_wf bb.bb_instructions` by
+    (gvs[fn_inst_wf_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `bb_well_formed bb` by gvs[wf_function_def] >>
+  gvs[supply_entry_defined_def] >> reverse conj_tac
+  >- (drule_all strict_dom_vars_defined_run_block_entry >> simp[]) >>
+  `!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode` by
+    (gvs[bb_well_formed_def] >> rpt strip_tac >>
+     `i < LENGTH bb.bb_instructions` by decide_tac >>
+     `i = PRE (LENGTH bb.bb_instructions)` by metis_tac[] >> decide_tac) >>
+  `bb.bb_instructions <> []` by gvs[bb_well_formed_def] >>
+  `MEM sp.vs_current_bb (bb_succs bb)` by
+    metis_tac[run_block_current_bb_in_succs] >>
+  irule venomExecProofsTheory.fn_reachable_step >>
+  qexists `st.vs_current_bb` >> simp[fn_cfg_edge_def] >> metis_tac[]
+QED
+
+Theorem phi_forward_sources_entry_defined:
+  wf_ssa f /\ wf_function f /\ fn_inst_wf f /\ supply_entry_defined f st /\
+  MEM pred f.fn_blocks /\ MEM target f.fn_blocks /\
+  pred.bb_label = st.vs_current_bb /\
+  run_block_entry fuel ctx pred st = OK sp /\
+  MEM v (phi_vars_needing_forward pred.bb_label pred target.bb_instructions) ==>
+  v IN FDOM sp.vs_vars
+Proof
+  rpt strip_tac >> gvs[supply_entry_defined_def] >>
+  irule phi_forward_sources_run_block_entry_defined >>
+  qexistsl [`ctx`, `f`, `fuel`, `pred`, `st`, `target`] >>
+  gvs[fn_inst_wf_def, listTheory.EVERY_MEM] >> metis_tac[]
+QED
