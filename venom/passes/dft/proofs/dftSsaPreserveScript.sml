@@ -10,7 +10,7 @@
 Theory dftSsaPreserve
 Ancestors
   dftScheduleOrder dftStructural dftDefs venomWf venomInst list
-  venomEffects passSharedDefs sorting dftCorrectness
+  venomEffects passSharedDefs sorting dftCorrectness dftHelpers
 
 Theorem flip_operands_var_mem:
   !i v. MEM (Var v) (flip_operands i).inst_operands <=>
@@ -95,6 +95,50 @@ Proof
   rename1 `MEM z bb.bb_instructions` >>
   `z = x` by metis_tac[all_distinct_map_mem_inj] >>
   gvs[] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem dft_block_rel_outputs_perm:
+  !bb bb'. dft_block_rel bb bb' /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) ==>
+    PERM (MAP (\i. i.inst_outputs) bb'.bb_instructions)
+         (MAP (\i. i.inst_outputs) bb.bb_instructions)
+Proof
+  rpt strip_tac >> irule PERM_TRANSFER_inst_id_inst_outputs >>
+  simp[dft_block_rel_ids_perm] >>
+  conj_tac >- (
+    rpt strip_tac >> drule_all dft_block_rel_origin >> strip_tac >>
+    metis_tac[all_distinct_map_mem_inj, flip_operands_inst_outputs]) >>
+  metis_tac[dft_block_rel_ids_distinct]
+QED
+
+Theorem dft_blocks_outputs_perm:
+  !bs cs. LIST_REL dft_block_rel bs cs /\
+    EVERY (\bb. ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)) bs ==>
+    PERM (FLAT (MAP (\bb. MAP (\i. i.inst_outputs) bb.bb_instructions) cs))
+         (FLAT (MAP (\bb. MAP (\i. i.inst_outputs) bb.bb_instructions) bs))
+Proof
+  Induct >> Cases_on `cs` >> simp[] >> rpt strip_tac >>
+  irule PERM_CONG >> conj_tac
+  >- metis_tac[dft_block_rel_outputs_perm] >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem dft_block_rel_ssa_form:
+  !fn bbs. wf_function fn /\ ssa_form fn /\
+    LIST_REL dft_block_rel fn.fn_blocks bbs ==>
+    ssa_form (fn with fn_blocks := bbs)
+Proof
+  rpt strip_tac >>
+  `EVERY (\bb. ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions))
+      fn.fn_blocks` by
+    (simp[EVERY_MEM] >> metis_tac[bb_inst_ids_distinct]) >>
+  `!bs. MAP (\i. i.inst_outputs) (fn_insts_blocks bs) =
+     FLAT (MAP (\bb. MAP (\i. i.inst_outputs) bb.bb_instructions) bs)` by
+    (Induct >> simp[fn_insts_blocks_def]) >>
+  drule_all dft_blocks_outputs_perm >>
+  gvs[ssa_form_def, fn_insts_def] >> strip_tac >>
+  drule PERM_FLAT >>
+  metis_tac[ALL_DISTINCT_PERM, PERM_SYM]
 QED
 
 (* Why it holds (unchecked notes):
