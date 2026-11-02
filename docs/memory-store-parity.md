@@ -35,6 +35,8 @@ field naming a later struct) make 43, and `p20_nested_pop` (pops from
 arrays nested in memory, storage and hashmap places) makes 44. The `p16` bytecode matches the oracle. The
 `set_byte_bit_field_insert` rule is no longer needed: `word_of_bytes_T_0w_256` in
 `vyperMiscScript.sml` lets EVAL compute 256-bit words built from bytes.
+With the `raw_call` lowering of #554, `rc07_rof_false_tuple` matches the oracle
+(369 B); it is checked as a parity fixture of the `raw-calls` corpus.
 
 `MATCH` means both deployment and runtime bytes are identical. Difference cells
 show HOL/Vyper runtime lengths and the first differing byte (zero-based).
@@ -84,7 +86,7 @@ control whether a witness is compiled.
 | `r08_assert_ctrl_literal` | T → T | MATCH (337 B) | MATCH (337 B) |  |
 | `r10_raise_uint2str_reason` | F → F | 389/396 B, rt@54 | 389/396 B, rt@54 | [#561](https://github.com/verifereum/vyper-hol/issues/561) |
 | `r11_assert_long_literal_reason` | T → T | MATCH (376 B) | MATCH (376 B) |  |
-| `rc07_rof_false_tuple` | F → F | NONE | NONE | [#554](https://github.com/verifereum/vyper-hol/issues/554) |
+| `rc07_rof_false_tuple` | F → F | NONE | NONE | MATCH since #554 (see above) |
 | `rc16_msgdata_tuple` | F → F | 248/370 B, rt@1 | 419/370 B, rt@57 | [#552](https://github.com/verifereum/vyper-hol/issues/552), [#554](https://github.com/verifereum/vyper-hol/issues/554) |
 | `storage_one_word_array` | F → F | 142/104 B, rt@54 | MATCH (104 B) |  |
 | `t01_tuple_assign_intcall` | F → F | 182/184 B, rt@54 | MATCH (184 B) |  |

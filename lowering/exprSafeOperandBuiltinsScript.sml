@@ -315,14 +315,15 @@ Proof
   strip_tac >> gvs[word_result_ok_def]
 QED
 
-Theorem compile_raw_call_zero_safe_operand:
-  compile_raw_call addr p len gas value ct 0 rof sa = (r,sb) ==>
+Theorem compile_raw_call_finish_zero_safe_operand:
+  compile_raw_call_finish addr p len gas value ct 0 rof ov optr sa = (r,sb) ==>
   safe_operand sb r
 Proof
   Cases_on `ct` >> Cases_on `rof` >>
-  simp[compile_raw_call_def, emit_op_def, emit_void_def, emit_inst_def,
+  simp[compile_raw_call_finish_def, emit_op_def, emit_void_def, emit_inst_def,
        fresh_label_def, new_block_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+       comp_return_def, fresh_id_def, fresh_var_def, emit_def,
+       compile_alloc_buffer_def] >>
   strip_tac >> gvs[] >>
   simp[safe_operand_def, not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
@@ -337,18 +338,30 @@ Proof
   strip_tac >> rpt (pairarg_tac >> gvs[])
 QED
 
+(* Both raw_call forms: splitting off a second argument is needed for the
+   byte-string form and harmless for the msg.data one. *)
+val word_raw_call_tac =
+  Cases_on `args` >-
+    (simp[compile_call_def, LET_THM] >> strip_tac >>
+     rpt (pairarg_tac >> gvs[]) >> gvs[word_result_ok_def]) >>
+  Cases_on `t` >> simp[compile_call_def, LET_THM] >> strip_tac >>
+  rpt (pairarg_tac >> gvs[]) >>
+  Cases_on `r.rcf_max_outsize = 0` >> gvs[word_result_ok_def] >>
+  metis_tac[compile_raw_call_finish_zero_safe_operand]
+
 Theorem compile_call_word_result_ok:
   is_word_type rt /\ compile_call cfn cenv rt ty target args default_ret sa = (vv,sb) ==>
   word_result_ok sb vv
 Proof
-  Cases_on `target` >>
+  Cases_on `target`
+  >~ [`RawCallTarget`] >- word_raw_call_tac
+  >~ [`RawCallCalldataTarget`] >- word_raw_call_tac >>
   simp[compile_call_def, LET_THM] >>
   strip_tac >> rpt (pairarg_tac >> gvs[]) >>
   gvs[word_result_ok_def]
   >~ [`cenv.ce_func_info name = info`] >- suspend "internal"
   >~ [`compile_call cfn cenv rt ty (ExtCall b b0 p l) args default_ret sa = _`]
     >- suspend "external"
-  >~ [`r.rcf_max_outsize`] >- suspend "raw"
   >> suspend "send"
 QED
 
@@ -365,13 +378,6 @@ Resume compile_call_word_result_ok[external]:
   qpat_x_assum `(if _ then _ else _) = (vv,sb)` mp_tac >>
   IF_CASES_TAC >> simp[] >> strip_tac >> gvs[word_result_ok_def] >>
   metis_tac[compile_external_call_zero_safe_operand]
-QED
-
-Resume compile_call_word_result_ok[raw]:
-  Cases_on `args` >> gvs[word_result_ok_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `r.rcf_max_outsize = 0` >> gvs[word_result_ok_def] >>
-  metis_tac[compile_raw_call_zero_safe_operand]
 QED
 
 Resume compile_call_word_result_ok[send]:

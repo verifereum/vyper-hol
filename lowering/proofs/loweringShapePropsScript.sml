@@ -9,8 +9,8 @@
  *
  * TOP-LEVEL:
  *   expr_shape_root            — the source forms whose lowering breaks the
- *                                shape (msg.gas, raw_call(msg.data)) and
- *                                builtins with too few arguments
+ *                                shape (msg.gas, raw_call) and builtins with
+ *                                too few arguments
  *   cenv_shape_ok, cenv_static_ok, value_shape_ok, loop_ctx_shape_ok
  *   external_fn_shape_ok, fallback_shape_ok, internal_fn_shape_ok
  *   internal_segment_ok        — one internal function's blocks
@@ -61,12 +61,13 @@ Definition type_builtin_arity_def:
     | _ => 0
 End
 
-(* msg.gas returns a GAS output as an ordinary value; raw_call(t, msg.data)
-   lowers to DALLOCA (and DELEGATECALL with is_delegate_call); a builtin
-   with too few arguments compiles HD []. *)
+(* msg.gas returns a GAS output as an ordinary value; raw_call lowers to
+   DELEGATECALL with is_delegate_call, and raw_call(t, msg.data) to DALLOCA;
+   a builtin with too few arguments compiles HD []. *)
 Definition expr_shape_root_def:
   expr_shape_root e <=>
     (?ty es. e = Builtin ty (Env MsgGas) es) \/
+    (?ty flags es d. e = Call ty (RawCallTarget flags) es d) \/
     (?ty flags es d. e = Call ty (RawCallCalldataTarget flags) es d) \/
     (?ty bi es. e = Builtin ty bi es /\ LENGTH es < builtin_arity bi) \/
     (?ty tb target es. e = TypeBuiltin ty tb target es /\

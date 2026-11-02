@@ -13,7 +13,6 @@
  *                                    reverts exactly on MIN_INT
  *   compile_builtin_abs_correct    — the same, as "outputs |v| or reverts"
  *   compile_builtin_len_correct    — compiled len outputs stored length via ptr_load
- *   compile_raw_call_correct       — compiled raw_call: OK or revert [CHEATED]
  *   compile_raw_create_correct     — compiled raw_create: OK or revert [CHEATED]
  *
  * Source: builtins/*.py
@@ -2032,34 +2031,13 @@ QED
 
 (* ===== System Builtins ===== *)
 
-(* TODO: compile_raw_call_correct, compile_send_correct, and
-   compile_raw_create_correct need proofs that reason about
-   exec_ext_call / exec_ext_create, which invoke verifereum's `run`.
+(* TODO: compile_send_correct and compile_raw_create_correct need proofs
+   that reason about exec_ext_call / exec_ext_create, which invoke
+   verifereum's `run`.
    Note: `run` always terminates (run_eq_tr from vfmDecreasesGasTheory),
    so the NONE branch in extract_venom_result is dead for the run result.
    The remaining difficulty is showing extract_venom_result returns SOME,
    which requires the callee's context stack to be a singleton on return. *)
-
-(* raw_call: low-level CALL with optional output buffer *)
-Theorem compile_raw_call_correct:
-  ∀ to_op data_ptr data_len gas_op value_op
-    call_ty max_outsize revert_on_failure ss st op st'
-    tv dv dlv gv vv.
-    compile_raw_call to_op data_ptr data_len gas_op value_op
-      call_ty max_outsize revert_on_failure st = (op, st') ∧
-    eval_operand to_op ss = SOME tv ∧
-    eval_operand data_ptr ss = SOME dv ∧
-    eval_operand data_len ss = SOME dlv ∧
-    eval_operand gas_op ss = SOME gv ∧
-    eval_operand value_op ss = SOME vv ∧
-    fresh_vars_wrt st ss ⇒
-    ∃ ss'.
-      (* Either succeeds or reverts *)
-      (run_inst_seq (emitted_insts st st') ss = OK ss' ∨
-       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss')
-Proof
-  cheat
-QED
 
 (* send: CALL with zero-length data, asserts success *)
 Theorem compile_send_correct:
