@@ -224,3 +224,73 @@ Proof
   Cases_on `is_terminator inst.inst_opcode` >>
   gvs[EVERY_MEM]
 QED
+
+Theorem collapse_dfs_every:
+  (!al bl i. P i ==> P (subst_label_inst al bl i)) /\
+  (!al bl i. P i ==> P (update_phi_bypass al bl i)) /\
+  (!i. P i ==> P (canon_jnz_inst i)) ==>
+  !f lm vis lbl. EVERY P (fn_insts f) ==>
+  EVERY P (fn_insts (FST (collapse_dfs f lm vis lbl)))
+Proof
+  strip_tac >>
+  ho_match_mp_tac collapse_dfs_preserves_predicate >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> irule do_merge_jump_every >> metis_tac[]) >>
+  rpt strip_tac >> irule chain_merge_every >> metis_tac[]
+QED
+
+Theorem simplify_cfg_round_with_labels_every:
+  (!ps i. P i ==> P (fix_phi_inst ps i)) /\
+  (!al bl i. P i ==> P (subst_label_inst al bl i)) /\
+  (!al bl i. P i ==> P (update_phi_bypass al bl i)) /\
+  (!i. P i ==> P (canon_jnz_inst i)) /\
+  (!lm i. P i ==> P (subst_block_labels_inst lm i)) /\
+  EVERY P (fn_insts f) ==>
+  EVERY P (fn_insts (FST (simplify_cfg_round_with_labels f)))
+Proof
+  strip_tac >>
+  `EVERY P (fn_insts (fix_all_phis (remove_unreachable_blocks f)))` by
+    metis_tac[fix_all_phis_every, remove_unreachable_blocks_every] >>
+  simp[NoAsms, simplify_cfg_round_with_labels_def] >>
+  Cases_on `fn_entry_label f` >> simp[] >>
+  Cases_on `collapse_dfs (fix_all_phis (remove_unreachable_blocks f)) [] [] x` >>
+  PairCases_on `r` >> gvs[] >>
+  `EVERY P (fn_insts q)` by metis_tac[collapse_dfs_every, pairTheory.FST] >>
+  irule fix_all_phis_every >> simp[] >>
+  irule remove_unreachable_blocks_every >>
+  Cases_on `r0 = []` >> simp[] >>
+  irule subst_block_labels_fn_every >> simp[]
+QED
+
+Theorem simplify_cfg_iter_with_labels_every:
+  (!ps i. P i ==> P (fix_phi_inst ps i)) /\
+  (!al bl i. P i ==> P (subst_label_inst al bl i)) /\
+  (!al bl i. P i ==> P (update_phi_bypass al bl i)) /\
+  (!i. P i ==> P (canon_jnz_inst i)) /\
+  (!lm i. P i ==> P (subst_block_labels_inst lm i)) ==>
+  !n f. EVERY P (fn_insts f) ==>
+  EVERY P (fn_insts (FST (simplify_cfg_iter_with_labels n f)))
+Proof
+  strip_tac >> Induct_on `n` >> simp[simplify_cfg_iter_with_labels_def] >>
+  rpt strip_tac >>
+  Cases_on `simplify_cfg_round_with_labels f` >>
+  rename1 `simplify_cfg_round_with_labels f = (g,lm)` >> simp[] >>
+  Cases_on `g.fn_blocks = f.fn_blocks` >> simp[] >>
+  `EVERY P (fn_insts g)` by
+    metis_tac[simplify_cfg_round_with_labels_every, pairTheory.FST] >>
+  Cases_on `simplify_cfg_iter_with_labels n g` >> gvs[] >>
+  first_x_assum (qspec_then `g` mp_tac) >> simp[]
+QED
+
+Theorem simplify_cfg_fn_with_labels_every:
+  (!ps i. P i ==> P (fix_phi_inst ps i)) /\
+  (!al bl i. P i ==> P (subst_label_inst al bl i)) /\
+  (!al bl i. P i ==> P (update_phi_bypass al bl i)) /\
+  (!i. P i ==> P (canon_jnz_inst i)) /\
+  (!lm i. P i ==> P (subst_block_labels_inst lm i)) /\
+  EVERY P (fn_insts f) ==>
+  EVERY P (fn_insts (FST (simplify_cfg_fn_with_labels f)))
+Proof
+  strip_tac >> simp[simplify_cfg_fn_with_labels_def] >>
+  irule simplify_cfg_iter_with_labels_every >> simp[]
+QED
