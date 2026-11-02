@@ -32,6 +32,24 @@ Definition dft_res_rel_def:
     | Error e => (!s. r' <> OK s) /\ (!v s. r' <> IntRet v s)
 End
 
+Theorem dft_res_rel_trans:
+  dft_res_rel r r' /\ dft_res_rel r' r'' ==> dft_res_rel r r''
+Proof
+  Cases_on `r` >> Cases_on `r'` >> Cases_on `r''` >>
+  simp[dft_res_rel_def] >> metis_tac[]
+QED
+
+Theorem dft_res_rel_ok_continuation:
+  dft_res_rel r r' ==>
+  dft_res_rel
+    (case r of OK s => k s | other => other)
+    (case r' of OK s => k s | other => other)
+Proof
+  Cases_on `r` >> Cases_on `r'` >>
+  simp[dft_res_rel_def] >> rpt strip_tac >>
+  Cases_on `k v` >> simp[dft_res_rel_def]
+QED
+
 (* Every label an instruction reads as a value is bound in the label map L
    (a state's vs_labels, which no step changes).  Jumps, INVOKE and PHIs
    use their labels as targets, not values. *)
