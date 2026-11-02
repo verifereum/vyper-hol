@@ -1,7 +1,7 @@
 Theory cfgNormSupplySim
 Ancestors
   cfgNormSupplyProofs cfgTransformProps cfgNormDefs cfgTransform venomExecProps venomInst venomWf
-  sccpCorrectnessProofs finite_map venomFnScheduleRunner unitShapeDefs
+  sccpCorrectnessProofs finite_map venomFnScheduleRunner unitShapeDefs stateFrame
 
 Theorem find_and_split_supply_cases:
   !bbs fn s fn' changed s'.
@@ -2199,4 +2199,55 @@ Theorem cfg_norm_function_supply_norm_inv:
 Proof
   simp[cfg_norm_function_supply_def] >>
   metis_tac[cfg_norm_iter_supply_norm_inv]
+QED
+
+(* Agreement deliberately ignores fresh variables and control fields. *)
+Definition supply_state_agree_def:
+  supply_state_agree fn st st' <=>
+    execution_frame st = execution_frame st' /\
+    !v. MEM v (irSupply$fn_ir_vars fn) ==> lookup_var v st = lookup_var v st'
+End
+
+Theorem supply_state_agree_refl[simp]:
+  supply_state_agree fn st st
+Proof
+  simp[supply_state_agree_def]
+QED
+
+Theorem supply_state_agree_sym:
+  supply_state_agree fn st st' ==> supply_state_agree fn st' st
+Proof
+  simp[supply_state_agree_def] >> metis_tac[]
+QED
+
+Theorem supply_state_agree_trans:
+  supply_state_agree fn st1 st2 /\ supply_state_agree fn st2 st3 ==>
+  supply_state_agree fn st1 st3
+Proof
+  simp[supply_state_agree_def] >> metis_tac[]
+QED
+
+Theorem supply_state_agree_lookup:
+  supply_state_agree fn st st' /\ MEM v (irSupply$fn_ir_vars fn) ==>
+  lookup_var v st = lookup_var v st'
+Proof
+  simp[supply_state_agree_def]
+QED
+
+Theorem supply_state_agree_update_fresh:
+  supply_state_agree fn st st' /\ ~MEM v (irSupply$fn_ir_vars fn) ==>
+  supply_state_agree fn st (update_var v value st')
+Proof
+  simp[supply_state_agree_def, venomStateTheory.update_var_def, venomStateTheory.lookup_var_def,
+       execution_frame_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
+Theorem supply_state_agree_update:
+  supply_state_agree fn st st' ==>
+  supply_state_agree fn (update_var v value st) (update_var v value st')
+Proof
+  simp[supply_state_agree_def, venomStateTheory.update_var_def, venomStateTheory.lookup_var_def,
+       execution_frame_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> Cases_on `v' = v` >> simp[]
 QED
