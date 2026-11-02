@@ -27,7 +27,7 @@ Ancestors
   entryArgPtrs entryDecodePlanProps abiDecodeStaticProps
   compileEnv stmtLowering moduleLowering emitHelper abiBuiltinAllocation
   unitTransformDefs venomState venomInst venomExecSemantics venomMemDefs
-  words
+  words instMemFrontier venomExecProofs emitHelperProps instIdxIndep
 
 (* ===== STOP ===== *)
 
@@ -80,6 +80,70 @@ Proof
 QED
 
 (* ===== Returned buffers ===== *)
+Theorem return_word_mem_safe[local]:
+  !fuel ctx fn s bb id buf op w b.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id ALLOCA [Lit 32w] [buf]) /\
+    get_instruction bb (s.vs_inst_idx + 1) =
+      SOME (mk_inst (id + 1) MSTORE [Var buf; op] []) /\
+    get_instruction bb (s.vs_inst_idx + 2) =
+      SOME (mk_inst (id + 2) RETURN [Var buf; Lit 32w] []) /\
+    eval_operand op s = SOME w /\ op <> Var buf /\ alloca_next_valid s /\
+    FLOOKUP (abi_builtin_allocate_state id 32 s).vs_allocas id = SOME (b,32)
+    ==> mem_safe_run fuel ctx fn s
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all alloca_site_frontier >> strip_tac >>
+  `32 < dimword (:256)` by simp[dimword_def] >>
+  drule_all step_alloca_site >>
+  disch_then (qspec_then `buf` assume_tac) >>
+  qabbrev_tac `s1 = update_var buf (n2w b)
+    (abi_builtin_allocate_state id 32 s)` >>
+  `eval_operand (Var buf) s1 = SOME (n2w b) /\
+   eval_operand op s1 = SOME w /\
+   s1.vs_current_bb = s.vs_current_bb /\
+   s1.vs_alloca_next = (abi_builtin_allocate_state id 32 s).vs_alloca_next` by
+    (Cases_on `op` >> gvs[Abbr `s1`, eval_operand_def, lookup_var_def,
+      update_var_def, abi_builtin_allocate_state_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+     Cases_on `FLOOKUP s.vs_allocas id = NONE` >> gvs[]) >>
+  `w2n (n2w b : bytes32) + 32 <= s1.vs_alloca_next` by
+    (simp[wordsTheory.w2n_n2w] >> irule arithmeticTheory.LESS_EQ_TRANS >>
+     qexists_tac `b + 32` >> simp[arithmeticTheory.MOD_LESS_EQ]) >>
+  `mem_safe_step fuel ctx (mk_inst id ALLOCA [Lit 32w] [buf]) s` by
+    (simp[mem_safe_step_non_invoke, mk_inst_def] >>
+     irule below_frontier_no_ranges >> simp[]) >>
+  `step_inst fuel ctx (mk_inst id ALLOCA [Lit 32w] [buf]) s = OK s1` by
+    simp[step_inst_non_invoke, mk_inst_def] >>
+  drule mem_safe_run_step >>
+  disch_then drule >> disch_then drule >>
+  simp[mk_inst_def, is_terminator_def] >> disch_then SUBST1_TAC >>
+  simp[] >>
+  qabbrev_tac `t1 = s1 with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `lookup_block t1.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb t1.vs_inst_idx =
+     SOME (mk_inst (id + 1) MSTORE [Var buf; op] []) /\
+   step_inst fuel ctx (mk_inst (id + 1) MSTORE [Var buf; op] []) t1 =
+     OK (mstore (w2n (n2w b : bytes32)) w t1) /\
+   mem_safe_step fuel ctx (mk_inst (id + 1) MSTORE [Var buf; op] []) t1` by
+    (simp[Abbr `t1`, arithmeticTheory.ADD1, step_inst_non_invoke,
+       step_inst_base_def, exec_write2_def, mk_inst_def,
+       mem_safe_step_non_invoke, below_frontier_MSTORE,
+       eval_op_inst_idx] >>
+     rpt strip_tac >> gvs[]) >>
+  qpat_x_assum `step_inst _ _ _ s = _` kall_tac >>
+  qpat_x_assum `get_instruction bb s.vs_inst_idx = _` kall_tac >>
+  qpat_x_assum `lookup_block s.vs_current_bb _ = _` kall_tac >>
+  drule mem_safe_run_step >> disch_then drule >> disch_then drule >>
+  simp[mk_inst_def, is_terminator_def] >> disch_then SUBST1_TAC >>
+  simp[] >>
+  irule return_buffer_mem_safe >>
+  qexistsl_tac [`n2w b`, `bb`, `Var buf`, `id + 2`, `32w`, `Lit 32w`] >>
+  gvs[Abbr `t1`, mstore_def, arithmeticTheory.ADD1, eval_operand_def,
+      lookup_var_def]
+
+QED
+
 
 (* The return buffer's ALLOCA site, if it already ran (a loop), holds a
    32-byte allocation, as the site's own literal size gives; the existing
@@ -101,7 +165,28 @@ Theorem compile_external_return_word_frag_mem:
             R (Halt ss)) ==>
     frag_exec_mem ctx st st' P Q R
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_external_return_word_parts >> strip_tac >>
+  simp[frag_exec_mem_def] >> rpt strip_tac >> disj2_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `op <> Var buf` by metis_tac[] >>
+  `eval_operand op s = SOME w /\ alloca_next_valid s /\
+   ?b. FLOOKUP (abi_builtin_allocate_state st.cs_next_id 32 s).vs_allocas
+          st.cs_next_id = SOME (b,32)` by metis_tac[] >>
+  `get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst st.cs_next_id ALLOCA [Lit 32w] [buf]) /\
+   get_instruction bb (s.vs_inst_idx + 1) =
+      SOME (mk_inst (st.cs_next_id + 1) MSTORE [Var buf; op] []) /\
+   get_instruction bb (s.vs_inst_idx + 2) =
+      SOME (mk_inst (st.cs_next_id + 2) RETURN [Var buf; Lit 32w] [])` by
+    (qpat_x_assum `!i. _` (fn th =>
+       map_every (fn n => mp_tac (Q.SPEC n th)) [`0`, `1`, `2`]) >> simp[]) >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by metis_tac[] >>
+  drule_all return_word_run >>
+  disch_then (qspecl_then [`0`, `ctx`] strip_assume_tac) >>
+  qexists_tac `0` >> simp[exit_result_def] >>
+  conj_tac >- metis_tac[] >>
+  irule return_word_mem_safe >> metis_tac[]
 QED
 
 (* The MCOPY reads the value's m bytes at its address p, which the caller
