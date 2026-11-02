@@ -1471,3 +1471,40 @@ Proof
   strip_tac >> drule_all sue_expanded_phi_entry >>
   simp[sue_result_rel_def, lift_result_def]
 QED
+
+Theorem sue_exec_block_defined_exit:
+  !i st u.
+  wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\
+  MEM bb fn.fn_blocks /\ bb.bb_label = st.vs_current_bb /\
+  fn_reachable fn st.vs_current_bb /\
+  phi_prefix_length bb.bb_instructions <= i /\ i <= LENGTH bb.bb_instructions /\
+  st.vs_inst_idx = i /\ sue_boundary_defined fn bb i st /\
+  exec_block fuel ctx bb st = OK u /\ ~u.vs_halted ==>
+  fn_reachable fn u.vs_current_bb /\ strict_dom_vars_defined fn u
+Proof
+  measureInduct_on `LENGTH bb.bb_instructions - i` >> rpt gen_tac >> strip_tac >>
+  `bb_well_formed bb` by metis_tac[wf_function_def] >>
+  `EVERY inst_wf bb.bb_instructions` by
+    (fs[fn_inst_wf_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  simp[Once exec_block_def, get_instruction_def] >>
+  Cases_on `i < LENGTH bb.bb_instructions` >> simp[] >>
+  Cases_on `step_inst fuel ctx (EL i bb.bb_instructions) st` >> simp[] >>
+  rename1 `step_inst fuel ctx (EL i bb.bb_instructions) st = OK next` >>
+  Cases_on `is_terminator (EL i bb.bb_instructions).inst_opcode` >> simp[]
+  >- (Cases_on `next.vs_halted` >> simp[] >> strip_tac >> gvs[] >>
+      `fn_cfg_edge fn st.vs_current_bb next.vs_current_bb` by
+        metis_tac[sue_terminator_cfg_edge] >>
+      conj_tac >- metis_tac[fn_reachable_step] >>
+      irule sue_boundary_defined_exit >>
+      metis_tac[sue_terminator_domain_mono]) >>
+  strip_tac >>
+  `sue_boundary_defined fn bb (SUC i) (next with vs_inst_idx := SUC i)` by
+    (irule sue_boundary_defined_step >>
+     metis_tac[sue_phi_suffix_nonphi, listTheory.EVERY_EL]) >>
+  `next.vs_current_bb = st.vs_current_bb` by
+    metis_tac[venomInstPropsTheory.step_preserves_control_flow] >>
+  first_x_assum (qspec_then `SUC i` mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`next with vs_inst_idx := SUC i`, `u`] mp_tac) >>
+  simp[]
+QED
