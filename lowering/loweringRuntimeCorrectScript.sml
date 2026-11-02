@@ -47,6 +47,7 @@ Ancestors
   list pair fragExec stmtSim bodySim bodySimMain loweringHalt stmtLoweringMono exprSim exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering
   e2eDefs supportedProgram vyperLoweringCorrect entryChecksProps moduleLoweringProps
+  supportedDecls supportedExprForms supportedStmts
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperInterpreter vyperState vyperContext
   venomState venomExecSemantics venomWf
@@ -450,9 +451,11 @@ Theorem body_inv_dynarrays_typed[local]:
     ?t b. cenv.ce_module_var_type id = SOME (ArrayT t b)
 Proof
   rw[body_inv_def] >> PairCases_on `id` >>
-  Cases_on `id0` >>
-  gvs[supported_storage_dynamic_array_def, AllCaseEqs()] >>
-  TRY (Cases_on `tops` >> gvs[supported_variable_decl_def] >> NO_TAC) >>
+  `id0 = NONE` by
+    (CCONTR_TAC >> Cases_on `tops` >>
+     gvs[supported_storage_dynamic_array_def, supported_variable_decl_def]) >>
+  gvs[supported_storage_dynamic_array_def] >>
+  BasicProvers.every_case_tac >> gvs[] >>
   drule supported_variable_decl_var_type >> simp[]
 QED
 
@@ -462,7 +465,8 @@ Theorem declare_local_module_var_type[local]:
     c.ce_module_var_type = cenv.ce_module_var_type
 Proof
   rw[declare_local_def, comp_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[])
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[compileEnvTheory.compile_env_accfupds]
 QED
 
 Theorem declare_stmt_local_module_var_type[local]:
@@ -474,28 +478,27 @@ Proof
   metis_tac[declare_local_module_var_type]
 QED
 
-val ret_ty_simple_tac =
-  rpt strip_tac >> ONCE_REWRITE_TAC [compile_stmt_def] >>
-  gvs[supported_stmt_def, stmt_valued_return_def];
+(* Congruences for simp: under a declaration's binder, the declared
+   environment keeps the module variable types. *)
+Theorem declare_local_bind_cong[local]:
+  !cenv id t f1 f2.
+    (!c. c.ce_module_var_type = cenv.ce_module_var_type ==> f1 c = f2 c) ==>
+    comp_bind (declare_local cenv id t) f1 =
+    comp_bind (declare_local cenv id t) f2
+Proof
+  rw[FUN_EQ_THM, comp_bind_def] >> pairarg_tac >> gvs[] >>
+  imp_res_tac declare_local_module_var_type >> res_tac >> simp[]
+QED
 
-val ret_ty_loop_tac =
-  rpt strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
-  ONCE_REWRITE_TAC [compile_stmt_def] >>
-  gvs[supported_stmt_def, stmt_valued_return_def] >>
-  simp[comp_bind_def, comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> gvs[] >>
-       imp_res_tac declare_local_module_var_type >>
-       gvs[]);
-
-val ret_ty_cons_tac =
-  rpt strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
-  ONCE_REWRITE_TAC [compile_stmt_def] >>
-  gvs[supported_stmt_def, stmt_valued_return_def] >>
-  simp[comp_bind_def, comp_ignore_bind_def, comp_get_def] >>
-  IF_CASES_TAC >> simp[] >>
-  rpt (pairarg_tac >> gvs[] >>
-       imp_res_tac declare_stmt_local_module_var_type >>
-       gvs[]);
+Theorem declare_stmt_local_bind_cong[local]:
+  !cenv s f1 f2.
+    (!c. c.ce_module_var_type = cenv.ce_module_var_type ==> f1 c = f2 c) ==>
+    comp_bind (declare_stmt_local cenv s) f1 =
+    comp_bind (declare_stmt_local cenv s) f2
+Proof
+  rw[FUN_EQ_THM, comp_bind_def] >> pairarg_tac >> gvs[] >>
+  imp_res_tac declare_stmt_local_module_var_type >> res_tac >> simp[]
+QED
 
 (* compile_stmt reads the return type only to compile a valued return and
    as the element type of an Append whose target root has no array type; a
@@ -515,8 +518,24 @@ Theorem compile_stmt_ret_ty[local]:
      ~stmts_valued_return ss ==>
      compile_stmts cenv lctx ty ss = compile_stmts cenv lctx ty' ss)
 Proof
-  ho_match_mp_tac compile_stmt_ind >> rpt conj_tac >> rpt gen_tac >>
-  goalStack.print_tac "PROBE" >> cheat
+  ho_match_mp_tac compile_stmt_ind >> rpt conj_tac >> rpt gen_tac
+  >~ [`compile_stmts _ _ _ (_::_)`]
+  >- (rpt strip_tac >> simp[FUN_EQ_THM] >> qx_gen_tac `cs0` >>
+      ONCE_REWRITE_TAC [compile_stmt_def] >>
+      simp[comp_bind_def, comp_get_def] >>
+      IF_CASES_TAC >> simp[] >>
+      rpt (qpat_x_assum `!cs cenv. _` (qspec_then `cs0` mp_tac)) >>
+      gvs[supported_stmt_def, stmt_valued_return_def] >> rpt strip_tac >>
+      simp[Cong declare_stmt_local_bind_cong])
+  >~ [`Append target _`]
+  >- (rpt strip_tac >> Cases_on `target` >>
+      gvs[supported_stmt_def, supported_append_target_def,
+          stmt_valued_return_def] >>
+      first_x_assum (drule_then strip_assume_tac) >>
+      ONCE_REWRITE_TAC [compile_stmt_def] >> simp[target_root_type_def]) >>
+  rpt strip_tac >> gvs[supported_stmt_def, stmt_valued_return_def] >>
+  ONCE_REWRITE_TAC [compile_stmt_def] >>
+  simp[Cong declare_local_bind_cong]
 QED
 
 (* A supported body without a valued return compiles the same at every
@@ -534,16 +553,15 @@ Proof
   qpat_x_assum `body_inv _ _ _ _` kall_tac >>
   pop_assum mp_tac >> pop_assum mp_tac >> pop_assum mp_tac >>
   qid_spec_tac `cenv` >> Induct_on `ss` >> simp[stmts_env_def] >>
-  rpt strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  rpt strip_tac >> simp[FUN_EQ_THM] >> qx_gen_tac `cs0` >>
   gvs[supported_stmt_def, stmt_valued_return_def] >>
-  simp[comp_bind_def, comp_ignore_bind_def, comp_get_def] >>
+  simp[comp_bind_def, comp_get_def] >>
   IF_CASES_TAC >> simp[] >>
-  pairarg_tac >> gvs[] >>
-  rename1 `declare_stmt_local cenv h _ = (c, _)` >>
-  imp_res_tac declare_stmt_local_module_var_type >>
-  `compile_stmt c lctx ty h = compile_stmt c lctx ty' h` by
-    (irule (cj 1 compile_stmt_ret_ty) >> simp[] >> metis_tac[]) >>
-  simp[] >> pairarg_tac >> gvs[]
+  `!c. c.ce_module_var_type = cenv.ce_module_var_type ==>
+       compile_stmt c lctx ty h = compile_stmt c lctx ty' h` by
+    (rpt strip_tac >> irule (cj 1 compile_stmt_ret_ty) >> simp[] >>
+     metis_tac[]) >>
+  simp[Cong declare_stmt_local_bind_cong]
 QED
 
 (* type_stmt rejects Return (SOME e) at NoneT. *)
