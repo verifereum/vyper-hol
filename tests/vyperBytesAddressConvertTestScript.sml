@@ -120,6 +120,16 @@ Proof
        dividesTheory.compute_divides] >> EVAL_TAC
 QED
 
+(* Like Vyper, extract32 needs 32 bytes from start, whatever the output type. *)
+Theorem extract32_short_tail_eval:
+  evaluate_extract32 (REPLICATE 10 1w) 0 (UintT 256) =
+    INR (RuntimeError "evaluate_extract32 start") ∧
+  evaluate_extract32 (REPLICATE 4 1w ++ REPLICATE 28 0w) 1 (BytesT (Fixed 3)) =
+    INR (RuntimeError "evaluate_extract32 start")
+Proof
+  EVAL_TAC
+QED
+
 (* Exercise the repository's success-only checker against the ACTUAL unchanged
    formerly rejected fixture, in runtime and deployment modes. Unfolding only
    its fixture definition keeps the core checker's compset sealed. *)
