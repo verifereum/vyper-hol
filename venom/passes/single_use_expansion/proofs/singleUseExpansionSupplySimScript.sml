@@ -4,7 +4,7 @@ Ancestors
   singleUseExpansionSupplyProofs singleUseExpansionDefs irSupply
   stateFrame stateEquiv venomExecProps venomExecProofs
   venomExecSemantics venomWf venomInst venomState sccpCorrectnessProofs
-  analysisSimDefs
+  analysisSimDefs instIdxIndep
 
 (* Control indices are related separately by segment alignment. *)
 Definition sue_state_rel_def:
@@ -1041,4 +1041,54 @@ Proof
   disch_then (qspecl_then [`LENGTH assigns`, `fuel`, `ctx`] strip_assume_tac) >>
   gvs[] >>
   drule_all sue_expand_ops_supply_eval >> simp[]
+QED
+
+Definition sue_term_rel_def:
+  sue_term_rel protected st tt <=>
+    execution_frame st = execution_frame tt /\
+    (!v. v IN protected ==> FLOOKUP st.vs_vars v = FLOOKUP tt.vs_vars v)
+End
+
+Definition sue_result_rel_def:
+  sue_result_rel protected r r' <=>
+    lift_result (sue_state_rel protected) (sue_term_rel protected)
+                (sue_term_rel protected) r r'
+End
+
+Theorem sue_term_rel_execution_equiv:
+  sue_term_rel protected st tt <=> execution_equiv (COMPL protected) st tt
+Proof
+  simp[sue_term_rel_def, execution_equiv_def, lookup_var_def] >> metis_tac[]
+QED
+
+Theorem sue_state_rel_idx[simp]:
+  sue_state_rel protected (st with vs_inst_idx := n) (tt with vs_inst_idx := m) <=>
+  sue_state_rel protected st tt
+Proof
+  simp[sue_state_rel_def]
+QED
+
+Theorem sue_term_rel_idx[simp]:
+  sue_term_rel protected (st with vs_inst_idx := n) (tt with vs_inst_idx := m) <=>
+  sue_term_rel protected st tt
+Proof
+  simp[sue_term_rel_def]
+QED
+
+Theorem sue_state_rel_state_equiv:
+  sue_state_rel protected st tt <=>
+  state_equiv (COMPL protected) (st with vs_inst_idx := 0) (tt with vs_inst_idx := 0)
+Proof
+  simp[state_equiv_def, execution_equiv_def, sue_state_rel_def, lookup_var_def] >>
+  metis_tac[]
+QED
+
+Theorem sue_result_rel_idx[simp]:
+  sue_result_rel protected
+    (exec_result_map (\u. u with vs_inst_idx := n) r)
+    (exec_result_map (\u. u with vs_inst_idx := m) r') <=>
+  sue_result_rel protected r r'
+Proof
+  Cases_on `r` >> Cases_on `r'` >>
+  simp[sue_result_rel_def, lift_result_def, exec_result_map_def]
 QED
