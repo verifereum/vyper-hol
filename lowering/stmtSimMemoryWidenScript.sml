@@ -288,6 +288,107 @@ Proof
   drule_all typed_source_decl_alloca_separate >> simp[]
 QED
 
+Theorem typed_expr_source_end_lt[local]:
+  !ctx func cenv cx es s t sa sb v op tv w.
+    stmt_state_rel ctx func cenv cx es s /\
+    expr_val_at cenv cx t sa sb es v op s /\
+    evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
+    ~is_bytestring_type t /\ 0 < type_memory_size tv /\
+    eval_operand op s = SOME w ==>
+    w2n w + type_memory_size tv < dimword (:256)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `val_footprint tv v = type_memory_size tv` by
+    metis_tac[nonbytestring_full_footprint] >>
+  `s.vs_alloca_next < dimword (:256)` by
+    metis_tac[exprLoweringPropsTheory.stmt_state_rel_def,
+              exprLoweringPropsTheory.alloca_room_next_lt] >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >>
+  gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
+      venomMemDefsTheory.alloca_inv_def,
+      venomMemDefsTheory.alloca_next_valid_def]
+  >- (first_x_assum drule >> decide_tac) >>
+  gvs[local_region_def, local_ptrs_rel_def] >>
+  first_x_assum drule_all >> strip_tac >> gvs[] >> decide_tac
+QED
+
+Theorem typed_alloca_end_lt[local]:
+  !ctx func cenv cx es s aid b sz n.
+    stmt_state_rel ctx func cenv cx es s /\
+    FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ n <= sz ==>
+    b + n < dimword (:256)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `s.vs_alloca_next < dimword (:256)` by
+    metis_tac[exprLoweringPropsTheory.stmt_state_rel_def,
+              exprLoweringPropsTheory.alloca_room_next_lt] >>
+  gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
+      venomMemDefsTheory.alloca_inv_def,
+      venomMemDefsTheory.alloca_next_valid_def] >>
+  first_x_assum drule >> decide_tac
+QED
+
+Theorem typed_decl_post_copy_run[local]:
+  !ctx func cenv cx env e es sa sb sf s0 es1 v op s stv dtv
+   inst p dw dsz dty.
+    expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
+    expr_sim_inv cenv cx env es /\
+    ~is_bytestring_type (lowered_value_type cenv e) /\
+    ~is_word_type (lowered_value_type cenv e) /\
+    evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
+    0 < type_memory_size stv /\
+    not_fresh_at sa p /\ lookup_var p s0 = SOME dw /\
+    FLOOKUP s0.vs_allocas inst.inst_id = SOME (w2n dw,dsz) /\
+    MEM inst (fn_insts func) /\ inst.inst_outputs = [p] /\
+    inst.inst_id < sa.cs_next_id /\
+    not_local_ptr cenv es1.scopes p /\ fn_inst_ids_distinct func /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    type_widens_to (get_tenv cx) (lowered_value_type cenv e) dty /\
+    evaluate_type (get_tenv cx) dty = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\
+    0 < type_memory_size dtv /\ type_memory_size dtv <= dsz /\
+    compile_store_memory_typed cenv (Var p) dty op
+      (lowered_value_type cenv e) sb = ((),sf) /\
+    fn_has_code sb sf func /\
+    (!x. op = Var x ==> not_fresh_at sb x) /\ not_fresh_at sb p /\
+    ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+    ?t. val_in_memory dtv v (w2n dw) t.vs_memory /\
+      ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+      (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+                vs_prev_bb := s.vs_prev_bb; vs_current_bb := s.vs_current_bb;
+                vs_inst_idx := s.vs_inst_idx|>) = s /\
+      (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
+      (!a len. a + len <= w2n dw \/ w2n dw + type_memory_size dtv <= a ==>
+        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+      (!fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
+        ?fuel'. run_from fuel' ctx func s = r)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `0 < dsz` by decide_tac >>
+  drule_all typed_decl_post_separate >> strip_tac >>
+  drule_all typed_memory_expr_source >> strip_tac >>
+  gvs[] >>
+  `stmt_state_rel ctx func cenv cx es1 s /\
+   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n dw,dsz)` by
+    (gvs[expr_post_def] >> metis_tac[]) >>
+  `w2n dw + type_memory_size dtv < dimword (:256)` by
+    (drule_all typed_alloca_end_lt >> simp[]) >>
+  `w2n sw + type_memory_size stv < dimword (:256)` by
+    (drule_all typed_expr_source_end_lt >> simp[]) >>
+  `val_wf stv v /\ val_wf dtv v` by
+    metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  drule compile_store_memory_typed_run >>
+  disch_then (qspec_then `get_tenv cx` mp_tac) >>
+  simp[venomStateTheory.eval_operand_def] >>
+  disch_then irule >>
+  gvs[expr_sim_inv_def] >> rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC, decide_tac, metis_tac[]]
+QED
+
 Theorem unstaged_overlap_value_types[local]:
   let u = BaseT (UintT 256);
       sty = TupleT [TupleT [BaseT (BytesT (Dynamic 1));u];u];
