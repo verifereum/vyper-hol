@@ -86,3 +86,72 @@ Proof
   gvs[wf_function_def] >>
   metis_tac[entry_path_member_reachable]
 QED
+
+Definition chain_chunk_def:
+  chain_chunk a b x = if x = a then [a;b] else [x]
+End
+
+Definition chain_prefix_def:
+  chain_prefix a b p = FLAT (MAP (chain_chunk a b) (FRONT p))
+End
+
+Theorem chain_chunk_mem:
+  MEM d (chain_chunk a b x) <=> d = x \/ (d = b /\ x = a)
+Proof
+  Cases_on `x = a` >> simp[chain_chunk_def] >> metis_tac[]
+QED
+
+Theorem chain_prefix_mem:
+  MEM d (chain_prefix a b p) <=>
+  MEM d (FRONT p) \/ (d = b /\ MEM a (FRONT p))
+Proof
+  simp[chain_prefix_def, MEM_FLAT, MEM_MAP] >> metis_tac[chain_chunk_mem]
+QED
+
+Theorem chain_prefix_singleton[simp]:
+  chain_prefix a b [x] = []
+Proof
+  simp[chain_prefix_def]
+QED
+
+Theorem chain_prefix_loop[simp]:
+  chain_prefix a b [a;a] = [a;b]
+Proof
+  simp[chain_prefix_def, chain_chunk_def]
+QED
+
+Theorem chain_prefix_last[simp]:
+  LAST (chain_prefix a b p ++ [z]) = z
+Proof
+  simp[]
+QED
+
+Theorem chain_prefix_front[simp]:
+  FRONT (chain_prefix a b p ++ [z]) = chain_prefix a b p
+Proof
+  simp[FRONT_APPEND]
+QED
+
+Theorem chain_prefix_front_pair[simp]:
+  FRONT (chain_prefix a b p ++ [a;b]) = chain_prefix a b p ++ [a]
+Proof
+  simp[FRONT_APPEND]
+QED
+
+Theorem chain_prefix_head:
+  p <> [] ==> HD (chain_prefix a b p ++ [LAST p]) = HD p
+Proof
+  Cases_on `p` >> simp[] >> Cases_on `t` >>
+  simp[chain_prefix_def, chain_chunk_def, FRONT_DEF] >>
+  Cases_on `h = a` >> simp[chain_chunk_def]
+QED
+
+Theorem mem_front_index:
+  p <> [] ==>
+  (MEM d (FRONT p) <=> ?k. k < LENGTH p - 1 /\ EL k p = d)
+Proof
+  strip_tac >>
+  `PRE (LENGTH p) = LENGTH p - 1` by decide_tac >>
+  simp[MEM_EL, LENGTH_FRONT, SF CONJ_ss, EL_FRONT, NULL_EQ] >>
+  metis_tac[]
+QED
