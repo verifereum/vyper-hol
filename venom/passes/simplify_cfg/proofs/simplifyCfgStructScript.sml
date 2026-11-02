@@ -1915,37 +1915,89 @@ Theorem collapse_wf_joint:
   (!func lm visited succs. wf_function func ==>
     wf_function (FST (collapse_dfs_succs func lm visited succs)))
 Proof
-  ho_match_mp_tac collapse_dfs_ind >> rpt conj_tac
-  >- suspend "dfs"
-  >- simp[collapse_dfs_def]
-  >> suspend "succs"
+  irule (collapse_property_joint |> Q.SPEC `wf_function`) >>
+  metis_tac[chain_merge_wf, try_bypass_wf]
 QED
 
-Resume collapse_wf_joint[dfs]:
-  rpt strip_tac >> simp[NoAsms, Once collapse_dfs_def] >>
-  Cases_on `lookup_block lbl func.fn_blocks` >- simp[] >>
-  rename1 `lookup_block lbl func.fn_blocks = SOME bb` >>
-  Cases_on `bb_succs bb` >- (Cases_on `MEM lbl visited` >> gvs[try_bypass_def]) >>
-  Cases_on `t`
-  >- (Cases_on `lookup_block h func.fn_blocks`
-      >- (Cases_on `MEM lbl visited` >> gvs[]) >>
-      rename1 `lookup_block h func.fn_blocks = SOME next_bb` >>
-      Cases_on `can_merge_blocks func bb next_bb`
-      >- (gvs[] >> first_x_assum irule >>
-          `bb.bb_label = lbl /\ next_bb.bb_label = h` by
-            metis_tac[lookup_block_member_label] >>
-          metis_tac[chain_merge_wf]) >>
-      Cases_on `MEM lbl visited` >> gvs[]) >>
-  Cases_on `try_bypass func lm bb (h::h'::t')` >> PairCases_on `r` >>
-  `lookup_block bb.bb_label func.fn_blocks = SOME bb` by
-    metis_tac[lookup_block_member_label] >>
-  `wf_function q` by metis_tac[try_bypass_wf] >>
-  Cases_on `r1` >> gvs[] >> Cases_on `MEM lbl visited` >> gvs[]
+Theorem collapse_ssa_joint:
+  (!func lm visited lbl. wf_function func /\ ssa_form func ==>
+    wf_function (FST (collapse_dfs func lm visited lbl)) /\
+    ssa_form (FST (collapse_dfs func lm visited lbl))) /\
+  (!func lm visited succs. wf_function func /\ ssa_form func ==>
+    wf_function (FST (collapse_dfs_succs func lm visited succs)) /\
+    ssa_form (FST (collapse_dfs_succs func lm visited succs)))
+Proof
+  irule (collapse_property_joint |> Q.SPEC `\func. wf_function func /\ ssa_form func`
+    |> BETA_RULE) >>
+  conj_tac
+  >- (rpt strip_tac
+      >- (irule chain_merge_wf >> metis_tac[])
+      >> irule chain_merge_ssa >> metis_tac[lookup_block_member_label]) >>
+  rpt strip_tac
+  >- (irule try_bypass_wf >> metis_tac[]) >>
+  irule try_bypass_ssa >> metis_tac[]
 QED
 
-Resume collapse_wf_joint[succs]:
-  rpt strip_tac >> simp[Once collapse_dfs_def] >>
-  Cases_on `collapse_dfs func lm visited lbl` >> PairCases_on `r` >> gvs[]
+Theorem collapse_no_entry_preds_joint:
+  (!func lm visited lbl. wf_function func /\ first_block_no_preds func ==>
+    wf_function (FST (collapse_dfs func lm visited lbl)) /\
+    first_block_no_preds (FST (collapse_dfs func lm visited lbl))) /\
+  (!func lm visited succs. wf_function func /\ first_block_no_preds func ==>
+    wf_function (FST (collapse_dfs_succs func lm visited succs)) /\
+    first_block_no_preds (FST (collapse_dfs_succs func lm visited succs)))
+Proof
+  irule (collapse_property_joint |>
+    Q.SPEC `\func. wf_function func /\ first_block_no_preds func` |> BETA_RULE) >>
+  metis_tac[chain_merge_wf, chain_merge_first_block_no_preds,
+    try_bypass_wf, try_bypass_first_block_no_preds, lookup_block_member_label]
 QED
 
-Finalise collapse_wf_joint
+Theorem collapse_phi_operands_joint:
+  (!func lm visited lbl.
+    (!inst. MEM inst (fn_insts func) /\ inst.inst_opcode = PHI ==>
+      phi_well_formed inst.inst_operands) ==>
+    !inst. MEM inst (fn_insts (FST (collapse_dfs func lm visited lbl))) /\
+      inst.inst_opcode = PHI ==> phi_well_formed inst.inst_operands) /\
+  (!func lm visited succs.
+    (!inst. MEM inst (fn_insts func) /\ inst.inst_opcode = PHI ==>
+      phi_well_formed inst.inst_operands) ==>
+    !inst. MEM inst (fn_insts (FST (collapse_dfs_succs func lm visited succs))) /\
+      inst.inst_opcode = PHI ==> phi_well_formed inst.inst_operands)
+Proof
+  match_mp_tac (collapse_property_joint |> Q.SPEC
+    `\func. !inst. MEM inst (fn_insts func) /\ inst.inst_opcode = PHI ==>
+      phi_well_formed inst.inst_operands` |> BETA_RULE) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> match_mp_tac chain_merge_phi_operands >>
+      metis_tac[lookup_block_member_label]) >>
+  rpt gen_tac >> strip_tac >>
+  `MEM a func.fn_blocks` by metis_tac[lookup_block_member_label] >>
+  match_mp_tac (GEN_ALL try_bypass_phi_operands) >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem collapse_jnz_distinct_joint:
+  (!func lm visited lbl.
+    (!inst. MEM inst (fn_insts func) /\ inst.inst_opcode = JNZ ==>
+      ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f) ==>
+    !inst. MEM inst (fn_insts (FST (collapse_dfs func lm visited lbl))) /\
+      inst.inst_opcode = JNZ ==>
+      ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f) /\
+  (!func lm visited succs.
+    (!inst. MEM inst (fn_insts func) /\ inst.inst_opcode = JNZ ==>
+      ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f) ==>
+    !inst. MEM inst (fn_insts (FST (collapse_dfs_succs func lm visited succs))) /\
+      inst.inst_opcode = JNZ ==>
+      ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f)
+Proof
+  match_mp_tac (collapse_property_joint |> Q.SPEC
+    `\func. !inst. MEM inst (fn_insts func) /\ inst.inst_opcode = JNZ ==>
+      ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f` |> BETA_RULE) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> match_mp_tac chain_merge_jnz_distinct >>
+      metis_tac[lookup_block_member_label]) >>
+  rpt gen_tac >> strip_tac >>
+  `MEM a func.fn_blocks` by metis_tac[lookup_block_member_label] >>
+  match_mp_tac (GEN_ALL try_bypass_jnz_distinct) >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
