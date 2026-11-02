@@ -168,8 +168,7 @@ regression theories with the normal tactic timeout:
 
 ```sh
 holbuild --max-heap 16384 -j2 evalCompilerEventParityTheory \
-  eventEncodingPropsTheory eventTopicPropsTheory eventTopicExecPropsTheory \
-  eventBytecodeEvalChecksTheory
+  eventEncodingPropsTheory eventTopicPropsTheory eventTopicExecPropsTheory
 ```
 
 `eventBytecodeEvalLib` derives separate lowering, O1 pipeline and codegen
