@@ -48,7 +48,7 @@ Supporting definitions (do not change them):
 2. `simplifyCfgCorrectnessTheory` (re-exports it as
    `simplify_cfg_pass_correct`) builds.
 3. No duplicate or near-duplicate lemmas.
-4. Leave the three obligations in simplifyCfgCorrectnessScript.sml alone
+4. Leave the other obligations in simplifyCfgCorrectnessScript.sml alone
    (another run proves them). Do not edit `venom/compiler/` or any
    definition.
 
@@ -105,6 +105,14 @@ lets an INVOKE step in C' be matched in C (`ctx_bisim_step_inst`).
 | Older cfg pass proofs | venom/passes/cfg_normalization/ | block-level simulation patterns |
 
 ## Notes
+
+- The pass definitions changed since an earlier run of this task:
+  `do_merge_jump` now canonicalizes `jnz c @L @L` to `jmp @L`
+  (`canon_jnz_inst`) and, when the bypass target is the source block
+  itself, applies the PHI update to it too.  `simplify_cfg_fn_ok` was
+  restated (its first conjunct: no PHI in the first block).  Recheck any
+  lemma about `do_merge_jump` or `simplify_cfg_fn_ok` against the new
+  definitions.
 
 - `simplify_cfg_fn fn = FST (simplify_cfg_fn_with_labels fn)`.
 - `first_block_no_preds` keeps the entry block from ever being merged
