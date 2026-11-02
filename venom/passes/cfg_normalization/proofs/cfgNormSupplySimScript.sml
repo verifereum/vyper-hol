@@ -1504,3 +1504,206 @@ Proof
   drule supply_block_image_index >> strip_tac >>
   simp[] >> metis_tac[listTheory.MEM_EL, supply_block_image_length]
 QED
+
+Theorem supply_phi_pairs_update:
+  !old new repls ops.
+    phi_pairs (update_phi_ops old new repls ops) =
+    MAP (\p. if FST p = old then
+          (new, case ALOOKUP repls (SND p) of NONE => SND p | SOME v => v)
+        else p) (phi_pairs ops)
+Proof
+  recInduct cfgNormDefsTheory.update_phi_ops_ind >>
+  rw[update_phi_ops_def, phi_pairs_def]
+  >- (Cases_on `val_op` >> simp[phi_pairs_def] >>
+      CASE_TAC >> simp[phi_pairs_def])
+  >- (Cases_on `val_op` >> simp[phi_pairs_def]) >>
+  Cases_on `y` >> simp[phi_pairs_def]
+QED
+
+Theorem supply_phi_pairs_update_labels:
+  MAP FST (phi_pairs (update_phi_ops old new repls ops)) =
+  MAP (\l. if l = old then new else l) (MAP FST (phi_pairs ops))
+Proof
+  simp[supply_phi_pairs_update, listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+  irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >>
+  Cases_on `x` >> simp[] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem supply_phi_pairs_update_distinct:
+  ALL_DISTINCT (MAP FST (phi_pairs ops)) /\
+  ~MEM new (MAP FST (phi_pairs ops)) ==>
+  ALL_DISTINCT (MAP FST (phi_pairs (update_phi_ops old new repls ops)))
+Proof
+  simp[supply_phi_pairs_update_labels] >> strip_tac >>
+  irule listTheory.ALL_DISTINCT_MAP_INJ >> simp[] >>
+  rpt strip_tac >> Cases_on `x = old` >> Cases_on `y = old` >> gvs[]
+QED
+
+Theorem supply_phi_pairs_update_mem:
+  MEM (l,v) (phi_pairs (update_phi_ops old new repls ops)) <=>
+  (?w. MEM (old,w) (phi_pairs ops) /\ l = new /\
+       v = case ALOOKUP repls w of NONE => w | SOME u => u) \/
+  (l <> old /\ MEM (l,v) (phi_pairs ops))
+Proof
+  simp[supply_phi_pairs_update, listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+  eq_tac
+  >- (strip_tac >> Cases_on `p_1 = old` >> gvs[] >> metis_tac[]) >>
+  strip_tac
+  >- (qexistsl [`old`, `w`] >> simp[]) >>
+  qexistsl [`l`, `v`] >> simp[]
+QED
+
+Theorem supply_definition_available_endpoint:
+  MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+  MEM v inst.inst_outputs /\ fn_reachable fn bb.bb_label ==>
+  def_available_at fn bb NONE v
+Proof
+  strip_tac >> simp[def_available_at_def] >>
+  qexistsl [`bb`, `inst`] >> simp[supply_dominates_refl]
+QED
+
+Theorem supply_forward_outputs_distinct:
+  !vars s repls insts s'.
+    ir_supply_inst_ok s /\
+    build_forwarding_assigns_supply s vars = (repls,insts,s') ==>
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) insts)) /\
+    EVERY (\v. ~MEM v s.irs_used_vars)
+      (FLAT (MAP (\i. i.inst_outputs) insts))
+Proof
+  Induct_on `vars` >> rpt gen_tac >> strip_tac
+  >- gvs[build_forwarding_assigns_supply_def] >>
+  Cases_on `fresh_ir_var s` >> rename1 `fresh_ir_var s = (nv,s1)` >>
+  Cases_on `fresh_inst_id s1` >> rename1 `fresh_inst_id s1 = (id,s2)` >>
+  Cases_on `build_forwarding_assigns_supply s2 vars` >> PairCases_on `r` >>
+  rename1 `build_forwarding_assigns_supply s2 vars = (rs,is,s3)` >>
+  `ir_supply_inst_ok s1` by
+    metis_tac[fresh_ir_var_cfg_supply_extends, cfg_supply_extends_def] >>
+  drule_all irSupplyTheory.fresh_inst_id_contract >> strip_tac >>
+  drule irSupplyTheory.fresh_ir_var_contract >> strip_tac >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  gvs[build_forwarding_assigns_supply_def, listTheory.EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem supply_split_outputs_distinct:
+  ir_supply_inst_ok s /\
+  build_split_block_supply s pred target = (split,repls,s') ==>
+  ALL_DISTINCT (cfg_block_decl_vars split) /\
+  EVERY (\v. ~MEM v s.irs_used_vars) (cfg_block_decl_vars split)
+Proof
+  strip_tac >>
+  Cases_on `fresh_ir_label s` >> rename1 `fresh_ir_label s = (lab,s1)` >>
+  Cases_on `build_forwarding_assigns_supply s1
+    (nub (phi_vars_needing_forward pred.bb_label pred target.bb_instructions))` >>
+  PairCases_on `r` >>
+  rename1 `build_forwarding_assigns_supply s1 _ = (rs,is,s2)` >>
+  Cases_on `fresh_inst_id s2` >>
+  `ir_supply_inst_ok s1` by
+    metis_tac[fresh_ir_label_cfg_supply_extends, cfg_supply_extends_def] >>
+  drule_all supply_forward_outputs_distinct >> strip_tac >>
+  drule irSupplyTheory.fresh_ir_label_contract >> strip_tac >>
+  gvs[build_split_block_supply_def, cfg_block_decl_vars_def, listTheory.MAP_APPEND]
+QED
+
+Theorem supply_decl_vars_insts_blocks:
+  !bbs. FLAT (MAP cfg_block_decl_vars bbs) =
+    FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs))
+Proof
+  Induct >> simp[cfg_block_decl_vars_def, fn_insts_blocks_def, listTheory.MAP_APPEND]
+QED
+
+Theorem supply_ssa_form_decl_vars:
+  ssa_form fn <=> ALL_DISTINCT (cfg_fn_decl_vars fn)
+Proof
+  simp[ssa_form_def, cfg_fn_decl_vars_def, fn_insts_def, supply_decl_vars_insts_blocks]
+QED
+
+Theorem supply_decl_var_ir_var:
+  MEM v (cfg_fn_decl_vars fn) ==> MEM v (irSupply$fn_ir_vars fn)
+Proof
+  strip_tac >>
+  gvs[cfg_fn_decl_vars_def, cfg_block_decl_vars_def,
+      listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+  simp[irSupplyTheory.fn_ir_vars_def, irSupplyTheory.block_ir_vars_def,
+       listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+  qexists `FLAT (MAP inst_ir_vars y.bb_instructions)` >>
+  conj_tac >- (qexists `y` >> simp[]) >>
+  simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+  qexists `inst_ir_vars i` >>
+  conj_tac >- (qexists `i` >> simp[]) >>
+  simp[irSupplyTheory.inst_ir_vars_def]
+QED
+
+Theorem insert_split_supply_ssa_form:
+  wf_function fn /\ ssa_form fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s fn pred target = (fn',s') ==>
+  ssa_form fn'
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (fn_labels fn)` by gvs[wf_function_def] >>
+  drule_all insert_split_supply_decl_vars >> strip_tac >>
+  `split_bb = split` by metis_tac[pairTheory.PAIR_EQ] >> gvs[] >>
+  drule_all supply_split_outputs_distinct >> strip_tac >>
+  gvs[supply_ssa_form_decl_vars, listTheory.ALL_DISTINCT_APPEND,
+      listTheory.EVERY_MEM] >>
+  rpt strip_tac >>
+  `MEM e s.irs_used_vars` by
+    (gvs[ir_supply_covers_fn_def, list_subset_def, listTheory.EVERY_MEM] >>
+     metis_tac[supply_decl_var_ir_var]) >>
+  metis_tac[]
+QED
+
+Theorem supply_forward_replacement_assign:
+  !vars s repls insts s'.
+    build_forwarding_assigns_supply s vars = (repls,insts,s') ==>
+    !v w. MEM (v,w) repls ==>
+      ?id. MEM <|inst_id := id; inst_opcode := ASSIGN;
+                 inst_operands := [Var v]; inst_outputs := [w]|> insts
+Proof
+  Induct_on `vars` >> rpt gen_tac >> strip_tac
+  >- gvs[build_forwarding_assigns_supply_def] >>
+  Cases_on `fresh_ir_var s` >> rename1 `fresh_ir_var s = (nv,s1)` >>
+  Cases_on `fresh_inst_id s1` >> rename1 `fresh_inst_id s1 = (id,s2)` >>
+  Cases_on `build_forwarding_assigns_supply s2 vars` >> PairCases_on `r` >>
+  gvs[build_forwarding_assigns_supply_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem supply_split_replacement_definition:
+  build_split_block_supply s pred target = (split,repls,s') /\
+  MEM (v,w) repls ==>
+  ?inst. MEM inst split.bb_instructions /\ MEM w inst.inst_outputs
+Proof
+  strip_tac >>
+  Cases_on `fresh_ir_label s` >> rename1 `fresh_ir_label s = (lab,s1)` >>
+  Cases_on `build_forwarding_assigns_supply s1
+    (nub (phi_vars_needing_forward pred.bb_label pred target.bb_instructions))` >>
+  PairCases_on `r` >>
+  Cases_on `fresh_inst_id r1` >>
+  gvs[build_split_block_supply_def] >>
+  drule supply_forward_replacement_assign >>
+  disch_then (drule_then strip_assume_tac) >>
+  qexists `<|inst_id := id; inst_opcode := ASSIGN;
+              inst_operands := [Var v]; inst_outputs := [w]|>` >> simp[]
+QED
+
+Theorem insert_split_supply_replacement_available:
+  wf_function fn /\ ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\
+  fn_cfg_edge fn pred.bb_label target.bb_label /\ fn_reachable fn pred.bb_label /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s fn pred target = (fn',s') /\ MEM (v,w) repls ==>
+  def_available_at fn' split NONE w
+Proof
+  strip_tac >>
+  drule_all supply_split_label_not_old >> strip_tac >>
+  `~MEM split.bb_label (MAP (\b. b.bb_label) fn.fn_blocks)` by gvs[fn_labels_def] >>
+  drule_all insert_split_supply_split_lookup >> strip_tac >>
+  `MEM split fn'.fn_blocks` by metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
+  drule_all insert_split_supply_reachable_split >> strip_tac >>
+  drule_all supply_split_replacement_definition >> strip_tac >>
+  irule supply_definition_available_endpoint >> metis_tac[]
+QED
