@@ -321,9 +321,11 @@ Theorem o1_pipeline_stage_facts:
   unit_entry_no_params unit /\ unit_first_block_no_phi unit ==>
   o1_ctx_shape out.po_unit.cu_context /\
   entry_fn_first out.po_unit.cu_context /\
-  !D vs. dead_wf D /\ o1_run_state_ok vs /\ o1_src_inv unit.cu_context vs ==>
-         ctx_sim D unit.cu_context out.po_unit.cu_context vs vs /\
-         o1_lowered_inv out.po_unit.cu_context vs
+  !D vs_out. dead_wf D /\ o1_run_state_ok vs_out ==>
+    ?vs_in. gas_variant vs_in vs_out /\
+      (o1_src_inv unit.cu_context vs_in ==>
+       ctx_sim D unit.cu_context out.po_unit.cu_context vs_in vs_out /\
+       o1_lowered_inv out.po_unit.cu_context vs_out)
 Proof
   strip_tac >> drule o1_driver_runs >> strip_tac >>
   `o1_ctx_shape unit.cu_context` by metis_tac[o1_source_unit_ok_ctx_shape] >>

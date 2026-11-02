@@ -250,10 +250,10 @@ Proof
   metis_tac[unit_result_rel_dead_result_rel]
 QED
 
-(* The gas-oracle hook: two initial states that may differ only in the
-   oracle list of GAS readings.  Equality until the oracle lands. *)
+(* Initial states may differ only in their GAS-reading oracle. *)
 Definition gas_variant_def:
-  gas_variant (s : venom_state) s' <=> s' = s
+  gas_variant (s : venom_state) s' <=>
+    s' = (s with vs_gas_readings := s'.vs_gas_readings)
 End
 
 (* ===== One pass run ===== *)
@@ -510,14 +510,16 @@ Definition o1_stage_contract_def:
       ctx_sim D C C' vs vs /\ I' C' vs
 End
 
-(* Every initial state vs' of the output has a gas variant vs from which
-   the input's terminating runs are matched by the output's runs from vs'. *)
+(* Choose the input oracle before testing its invariant.  Reachability-based
+   memory invariants can depend on GAS values.  At the lowering boundary the
+   source producer supplies the invariant for the chosen input. *)
 Definition o1_stage_contract_gas_def:
   o1_stage_contract_gas rpolicy D pass view pre I I' <=>
     !C C' vs'.
       ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\
-      o1_ctx_shape C /\ o1_run_state_ok vs' /\ I C vs' ==>
-      ?vs. gas_variant vs vs' /\ ctx_sim D C C' vs vs' /\ I' C' vs'
+      o1_ctx_shape C /\ o1_run_state_ok vs' ==>
+      ?vs. gas_variant vs vs' /\
+           (I C vs ==> ctx_sim D C C' vs vs' /\ I' C' vs')
 End
 
 Definition any_view_def:
