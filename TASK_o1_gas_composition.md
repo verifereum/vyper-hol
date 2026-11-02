@@ -1,7 +1,7 @@
 # TASK: Compose O1 stages with reconstructed input gas oracles
 
 ## Meta
-Status: planned
+Status: ready for proof
 Priority: P1
 Created: 2026-11-02
 Location: venom/compiler
@@ -74,3 +74,5 @@ Existing preserving-pass contracts remain same-state. The existing DFT contract 
 ## Notes
 
 The shared definition boundary was approved by argon after actual DFT scheduling, current S3 producer and dead-byte composition checks. Source semantics and the final call theorem stay unchanged here. The owner independently checks frozen statements and forces replay after Alan returns.
+
+Owner prerequisite build12024 reached `o1PipelineComposeTheory` and failed at the expected obsolete `o1_stage_contract_gas_imp`: the guarded input-oracle contract cannot imply same-state simulation. The frozen final theorem has not yet been reached by that build. Its exact statement and approved definitions were independently checked PROVABLE before this task. Owner then merged dead-byte owner53f3fe47f in376a8480b, retaining the approved guarded definitions and frozen final statement, while taking the owner's proof repairs and source-result transport files unchanged. No additional assumption was introduced.
