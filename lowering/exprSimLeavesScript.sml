@@ -177,6 +177,7 @@ Proof
        vyperASTTheory.expr_type_def, eval_operand_def] >>
   rpt conj_tac
   >- metis_tac[val_in_memory_word_type]
+  >~ [`local_place_at`] >- simp[local_place_at_def, mem_path_offset_def, wordsTheory.WORD_ADD_0]
   >- (disj2_tac >> disj1_tac >>
       qexistsl_tac [`id`, `w2n w`, `sz`] >>
       asm_simp_tac (srw_ss()) [local_region_def, dynarray_local_def] >>
@@ -331,7 +332,7 @@ Proof
   irule expr_ok_stack >> simp[compile_literal_sim] >> rpt conj_tac
   >~ [`dynarray_type`]
   >- (rw[expr_sim_pre_def, well_typed_expr_def, vyperASTTheory.expr_type_def, dynarray_type_def] >>
-      Cases_on `l` >> gvs[well_typed_literal_def])
+      CCONTR_TAC >> gvs[] >> Cases_on `l` >> gvs[well_typed_literal_def])
   >~ [`eval_expr`]
   >- (rpt strip_tac >> drule eval_expr_literal_value >> simp[]) >>
   Cases_on `l` >> gvs[]
