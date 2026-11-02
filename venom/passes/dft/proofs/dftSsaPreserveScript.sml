@@ -459,7 +459,48 @@ Proof
   simp[] >> qexistsl [`bb`, `v`, `def_inst`, `u`] >> simp[]
 QED
 
-(* Why it holds (unchecked notes):
+Theorem dft_block_rel_phi_edges:
+  !fn bbs bb bb' i. wf_function fn /\
+    LIST_REL dft_block_rel fn.fn_blocks bbs /\ dft_block_rel bb bb' /\
+    phi_edge_uses_wf fn bb i ==>
+    phi_edge_uses_wf (fn with fn_blocks := bbs) bb' i
+Proof
+  rpt strip_tac >>
+  `bb'.bb_label = bb.bb_label` by metis_tac[dft_block_rel_label] >>
+  `fn_cfg_edge (fn with fn_blocks := bbs) = fn_cfg_edge fn` by
+    metis_tac[dft_block_rel_cfg] >>
+  qpat_x_assum `phi_edge_uses_wf _ _ _` mp_tac >>
+  simp[phi_edge_uses_wf_def] >> strip_tac >> simp[] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  drule_all dft_blocks_member_left >> strip_tac >>
+  qexists_tac `bb''` >> simp[] >>
+  metis_tac[dft_block_rel_label, dft_block_rel_available_end]
+QED
+
+Theorem dft_block_rel_def_dominates_uses:
+  !fn bbs. wf_function fn /\ fn_pseudos_prefix fn /\
+    LIST_REL dft_block_rel fn.fn_blocks bbs /\ def_dominates_uses fn ==>
+    def_dominates_uses (fn with fn_blocks := bbs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[def_dominates_uses_def] >> rpt gen_tac >> strip_tac >>
+  drule_all dft_blocks_member_right >> strip_tac >>
+  rename1 `dft_block_rel src bb` >>
+  drule_all dft_block_rel_origin >> strip_tac >>
+  (`if x.inst_opcode = PHI then phi_edge_uses_wf fn src x
+   else !v. MEM (Var v) x.inst_operands ==>
+            def_available_at fn src (SOME x) v` by
+    metis_tac[def_dominates_uses_def] >>
+  Cases_on `x.inst_opcode = PHI`
+  >- (gvs[] >> metis_tac[ssa_flippable_classes, dft_block_rel_phi_edges]) >>
+  `inst.inst_opcode <> PHI` by metis_tac[flip_operands_phi_test] >>
+  simp[] >> rpt strip_tac >>
+  `MEM (Var v) x.inst_operands` by metis_tac[flip_operands_var_mem] >>
+  irule dft_block_rel_available_use >>
+  metis_tac[])
+QED
+
+(* Why it holds:
    - ssa_form: the same instructions up to flip_operands, which keeps
      outputs.
    - bb_succs reads the last instruction: the terminator in both
@@ -475,5 +516,8 @@ Theorem dft_block_rel_wf_ssa:
     LIST_REL dft_block_rel fn.fn_blocks bbs ==>
     wf_ssa (fn with fn_blocks := bbs)
 Proof
-  cheat
+  rpt gen_tac >> simp[wf_ssa_def] >> strip_tac >>
+  conj_tac
+  >- (irule dft_block_rel_ssa_form >> simp[]) >>
+  irule dft_block_rel_def_dominates_uses >> simp[]
 QED
