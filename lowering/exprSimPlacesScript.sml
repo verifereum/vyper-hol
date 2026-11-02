@@ -101,8 +101,9 @@ Proof
   measureInduct_on `expr_size obj` >> rpt strip_tac >>
   Cases_on `obj`
   >~ [`TopLevelName`] >- simp[compile_toplevel_map_case]
-  >~ [`Subscript ann base idx`]
-  >- (irule compile_subscript_map_map_case >> conj_tac
+  >~ [`Subscript _ _ _`]
+  >- (rename1 `Subscript ann obj0 idx` >>
+      irule compile_subscript_map_map_case >> conj_tac
       >- (rpt strip_tac >>
           `expr_ok cenv idx` by
             (fs[expr_sim_below_def] >> first_x_assum irule >>
@@ -110,7 +111,7 @@ Proof
           gvs[expr_ok_case]) >>
       first_x_assum irule >> simp[expr_size_def] >>
       irule expr_sim_below_mono >>
-      qexists_tac `expr_size (Subscript ann base idx)` >>
+      qexists_tac `expr_size (Subscript ann obj0 idx)` >>
       simp[expr_size_def]) >>
   irule expr_map_case_other >> simp[]
 QED
