@@ -172,8 +172,23 @@ Proof
   simp[artifact_env_def] >> metis_tac[]
 QED
 
+
+
+Theorem checked_single_module_bare_global_no_hashmap:
+  check_contract F layouts addr [(NONE,tops)] = SOME art /\
+  FLOOKUP art.cta_bare_globals nsid = SOME ty ==>
+  build_hashmap_info tops nsid = NONE
+Proof
+  Cases_on `nsid` >> rw[check_contract_def] >>
+  gvs[live_artifact_fields] >>
+  drule_all build_contract_type_artifact_bare_globals_sound >>
+  strip_tac >> gvs[] >>
+  irule build_hashmap_info_variable >>
+  gvs[contract_namespaces_ok_def, contract_keys_def] >>
+  metis_tac[]
+QED
+
 val _ = List.app (fn (name,th) =>
   if List.exists (fn s => s <> "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
   then raise Fail ("oracle dependency: " ^ name) else ())
   (DB.thms "placeTypingBuildProps");
-
