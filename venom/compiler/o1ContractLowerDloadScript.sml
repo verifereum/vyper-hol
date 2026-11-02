@@ -882,14 +882,9 @@ Proof
   qexistsl [`f`,`s`,`t`] >> metis_tac[]
 QED
 
-Theorem lower_dload_step_shape:
-  !rpolicy observed s fn out.
-    fn_pass_step rpolicy (CFP_Simple VP_LowerDload) observed s fn out /\
-    o1_ctx_shape observed.cu_context /\
-    ir_supply_inst_ok s /\ ir_supply_covers_unit s observed ==>
-    o1_fn_shape observed.cu_context out.fpo_function /\
-    fresh_names_ok s fn out.fpo_function /\
-    label_map_sources_ok fn out.fpo_function out.fpo_label_map
+(* The step part of LowerDload's contract (o1_contract_lower_dload). *)
+Theorem lower_dload_step_contract:
+  o1_step_contract rpolicy (CFP_Simple VP_LowerDload)
 Proof
   cheat
 QED

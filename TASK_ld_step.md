@@ -21,19 +21,13 @@ Theorem lower_dload_function_supply_ssa_form:
     lower_dload_function_supply s fn = (fn',s') ==>
     ssa_form fn'
 
-Theorem lower_dload_step_shape:
-  !rpolicy observed s fn out.
-    fn_pass_step rpolicy (CFP_Simple VP_LowerDload) observed s fn out /\
-    o1_ctx_shape observed.cu_context /\
-    ir_supply_inst_ok s /\ ir_supply_covers_unit s observed ==>
-    o1_fn_shape observed.cu_context out.fpo_function /\
-    fresh_names_ok s fn out.fpo_function /\
-    label_map_sources_ok fn out.fpo_function out.fpo_label_map
+Theorem lower_dload_step_contract:
+  o1_step_contract rpolicy (CFP_Simple VP_LowerDload)
 ```
 
 **Do not modify these statements.** Prove them as-is, or produce a counterexample.
 Do not modify any definition (in particular `label_positions_ok`, `o1_fn_shape`,
-`fn_pass_step`, `lower_dload_*_supply`). Helper lemmas may go in new theories or in
+`fn_pass_step`, `o1_step_contract`, `lower_dload_*_supply`). Helper lemmas may go in new theories or in
 `venom/compiler/o1ContractLowerDloadScript.sml` above the frozen theorems.
 
 ## Completion Criteria
@@ -59,8 +53,11 @@ O1 function shape (`o1_fn_shape`), take fresh names from the IR supply
 `DLOAD`/`DLOADBYTES` into ALLOCA/ADD/CODECOPY/MLOAD with ids and variables from the
 supply. `label_positions_ok` admits `ADD [op; Label "code_end"]` for this.
 The first two theorems are general facts about the transform; the third is the
-step part of the contract, with the input-supply facts the schedule runner keeps
-as hypotheses.
+step part of the contract (`o1_step_contract`: keep `o1_fn_shape`, fresh names,
+label-map sources, and `ir_supply_inst_ok` of the output supply). The contract's
+definitions changed since the earlier session (o1_fn_shape gained
+`first_block_no_phi`, `entry_fn_no_return`, `entry_fn_no_params`; `fn_pass_step`
+carries `ir_supply_covers_unit`); existing helpers may need adapting.
 
 ## Domain Constraints
 
