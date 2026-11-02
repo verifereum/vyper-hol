@@ -296,13 +296,17 @@ QED
    with no popped history, assign one (which clears it), or push and pop
    whole scopes; the rest are its expressions' pops (record_pop).  There
    is no scope-effect lemma for statements yet (eval_mutual_scope_pop_effect
-   covers expressions only). *)
+   covers expressions only).  It needs the state well typed, as the
+   expression lemma does: popped_keys_indexed asks each key's front to have
+   a dynamic array type, and pop_place checks only the entry's value. *)
 Theorem eval_stmts_popped_keys_indexed:
   (!cx s es res es'.
-     eval_stmt cx s es = (res, es') /\ popped_keys_indexed es.scopes ==>
+     eval_stmt cx s es = (res, es') /\ state_well_typed es /\
+     popped_keys_indexed es.scopes ==>
      popped_keys_indexed es'.scopes) /\
   (!cx ss es res es'.
-     eval_stmts cx ss es = (res, es') /\ popped_keys_indexed es.scopes ==>
+     eval_stmts cx ss es = (res, es') /\ state_well_typed es /\
+     popped_keys_indexed es.scopes ==>
      popped_keys_indexed es'.scopes)
 Proof
   cheat
@@ -437,6 +441,11 @@ Proof
                    ce_dynarray_capacity := _ |> = cenv`
         (strip_assume_tac o
          SIMP_RULE (srw_ss()) [compile_env_component_equality]) >>
+      `(place_map_tables_agree_on_defined c (extend_local env id typ T) <=>
+        place_map_tables_agree_on_defined cenv env) /\
+       (extend_local env id typ T).bare_globals = env.bare_globals` by
+        (conj_tac >- (irule placeTypingPropsTheory.place_map_tables_agree_on_defined_cong >> fs[extend_local_def]) >>
+         simp[extend_local_def]) >>
       qpat_x_assum `expr_sim_inv _ _ _ es`
         (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
       ASM_REWRITE_TAC [expr_sim_inv_def]) >>
