@@ -48,6 +48,7 @@ Ancestors
   compileEnv compileVyper moduleLowering stmtLowering
   e2eDefs supportedProgram vyperLoweringCorrect
   vyperTypeSelectedEntrySoundness vyperTypeSystem
+  vyperTypeStmtSoundness vyperTypeEvalSoundness vyperTypeExprSoundness
   entryStateRel supportedDecls vyperTypeContractFunction vyperTypeContractSoundness
   vyperTypeContractContext vyperTypeContract
   vyperTypeInitialState vyperTypeBindArguments vyperTypeInvariants
@@ -319,7 +320,23 @@ Theorem external_body_source_ok:
       fbody es0 = (res, es') ==>
     stmt_res_ok NoLoop res /\ (res = INL () ==> ret = NoneT)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all external_selected_body_typing >> strip_tac >>
+  `machine_well_typed am` by gvs[source_typing_ok_def] >>
+  drule_all external_body_prefix_state >> strip_tac >>
+  drule_all external_selected_env_consistent >> strip_tac >>
+  drule external_source_context_typed >> strip_tac >>
+  drule_all eval_stmts_no_type_error >>
+  simp[no_type_error_eval_def] >> strip_tac >>
+  conj_tac
+  >- (Cases_on `res` >> simp[stmt_res_ok_def] >>
+      drule_all stmts_no_control_escape_eval_stmts_no_loop_control >>
+      strip_tac >> Cases_on `y` >> gvs[stmt_res_ok_def] >>
+      rename1 `Error e` >> Cases_on `e` >>
+      gvs[stmt_res_ok_def, no_type_error_result_def]) >>
+  strip_tac >> Cases_on `ret = NoneT` >> simp[] >>
+  `stmts_no_fallthrough fbody` by simp[] >>
+  drule (cj 2 no_fallthrough_eval_no_success) >> metis_tac[]
 QED
 
 (* ===== The entry (#639) ===== *)
