@@ -97,6 +97,50 @@ Proof
   gvs[exec_gas_def, update_var_def, venom_state_component_equality]
 QED
 
+Theorem gas_dead_popmany[local]:
+  !out ps.
+    popmany_plan [Var out]
+      (ps with ps_stack := SNOC (Var out) ps.ps_stack) =
+    ([SOPop 1], ps)
+Proof
+  rpt gen_tac >>
+  `stack_get_depth (Var out) (SNOC (Var out) ps.ps_stack) = SOME 0` by
+    simp[stack_get_depth_def, REVERSE_SNOC, stack_find_def] >>
+  simp[popmany_plan_def, is_contiguous_top_def,
+       sortingTheory.QSORT_DEF, sortingTheory.PARTITION_DEF,
+       sortingTheory.PART_DEF, popmany_individual_def, stack_pop_def,
+       FOLDL, LENGTH_SNOC] >>
+  Cases_on `ps` >> simp[SNOC_APPEND, TAKE_APPEND1,
+                        plan_state_component_equality]
+QED
+
+Theorem gas_plan_shape[local]:
+  inst.inst_opcode = GAS /\ inst.inst_operands = [] /\
+  inst.inst_outputs = [out] ==>
+  generate_inst_plan liveness dfg cfg fn inst next_liveness
+    is_halting next_is_term bb_label ps =
+  SOME (if MEM out next_liveness then
+      let (tail, ps9) = optimistic_swap_plan dfg inst next_liveness
+        next_is_term (ps with ps_stack := SNOC (Var out) ps.ps_stack) in
+      (SOEmit "GAS" :: tail, release_dead_spills next_liveness ps9)
+    else if is_halting then
+      ([SOEmit "GAS"], release_dead_spills next_liveness
+        (ps with ps_stack := SNOC (Var out) ps.ps_stack))
+    else ([SOEmit "GAS"; SOPop 1], release_dead_spills next_liveness ps))
+Proof
+  strip_tac >>
+  simp[generate_inst_plan_def, generate_regular_inst_plan_def,
+       compute_operands_def, python_stack_operands_def,
+       is_pre_codegen_opcode_def, is_param_opcode_def,
+       is_unlowered_fmp_opcode_def, is_raw_fmp_opcode_def,
+       is_unlowered_internal_call_opcode_def,
+       generate_emit_ops_def, venom_to_evm_name_def,
+       stack_pop_def, stack_push_def] >>
+  `!p. popmany_plan [] p = ([],p)` by simp[popmany_plan_def] >>
+  Cases_on `MEM out next_liveness` >> simp[gas_dead_popmany] >>
+  Cases_on `is_halting` >> simp[gas_dead_popmany]
+QED
+
 Theorem gas_inst_frame_sim:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0.
