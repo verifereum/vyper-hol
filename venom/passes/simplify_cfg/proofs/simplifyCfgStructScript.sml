@@ -1732,3 +1732,124 @@ Proof
   strip_tac >> irule try_bypass_property >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[do_merge_jump_first_block_no_preds]
 QED
+
+Theorem do_merge_jump_every_inst:
+  EVERY (\bb. EVERY P bb.bb_instructions) fn.fn_blocks /\ MEM a fn.fn_blocks /\
+  (!inst. P inst ==> P (update_phi_bypass a.bb_label b.bb_label inst)) /\
+  (!inst lbl. P inst ==> P
+    (if ~is_terminator inst.inst_opcode then inst
+     else canon_jnz_inst (subst_label_inst b.bb_label lbl inst))) /\
+  do_merge_jump fn a b lm = SOME (fn', lm') ==>
+  EVERY (\bb. EVERY P bb.bb_instructions) fn'.fn_blocks
+Proof
+  strip_tac >>
+  `EVERY P a.bb_instructions` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  fs[do_merge_jump_def, AllCaseEqs()] >>
+  drule lookup_block_member_label >> strip_tac >>
+  `EVERY P target.bb_instructions` by (fs[EVERY_MEM] >> metis_tac[]) >> gvs[] >>
+  irule EVERY_replace_block >> conj_tac
+  >- (IF_CASES_TAC >> simp[EVERY_MAP] >> fs[EVERY_MEM] >> metis_tac[]) >>
+  irule EVERY_replace_block >> simp[EVERY_MAP, remove_block_def, EVERY_FILTER] >>
+  fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem phi_well_formed_remove_phi_label:
+  !ops. phi_well_formed ops ==> phi_well_formed (remove_phi_label lbl ops)
+Proof
+  recInduct phi_well_formed_ind >>
+  simp[phi_well_formed_def, remove_phi_label_def] >>
+  rpt strip_tac >> IF_CASES_TAC >> simp[phi_well_formed_def]
+QED
+
+Theorem update_phi_bypass_phi_operands:
+  (inst.inst_opcode = PHI ==> phi_well_formed inst.inst_operands) ==>
+  ((update_phi_bypass a_lbl b_lbl inst).inst_opcode = PHI ==>
+    phi_well_formed (update_phi_bypass a_lbl b_lbl inst).inst_operands)
+Proof
+  Cases_on `inst.inst_opcode = PHI` >> simp[update_phi_bypass_def] >>
+  Cases_on `MEM (Label a_lbl) inst.inst_operands` >>
+  simp[phi_well_formed_remove_phi_label] >> strip_tac >>
+  `phi_well_formed (MAP (subst_label_op b_lbl a_lbl) inst.inst_operands)` by
+    simp[phi_well_formed_subst_label_ops] >>
+  qmatch_goalsub_abbrev_tac `MAP f _` >>
+  `f = subst_label_op b_lbl a_lbl` by
+    (simp[FUN_EQ_THM, Abbr `f`] >> Cases >> simp[subst_label_op_def]) >>
+  gvs[]
+QED
+
+Theorem do_merge_jump_phi_operands:
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands) /\ MEM a fn.fn_blocks /\
+  do_merge_jump fn a b lm = SOME (fn', lm') ==>
+  !inst. MEM inst (fn_insts fn') /\ inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands
+Proof
+  strip_tac >>
+  `EVERY (\bb. EVERY (\inst. inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands) bb.bb_instructions) fn'.fn_blocks` by
+    (irule do_merge_jump_every_inst >> goal_assum (drule_at Any) >>
+     simp[update_phi_bypass_phi_operands] >> conj_tac
+     >- (rpt gen_tac >> IF_CASES_TAC >> simp[canon_jnz_inst_shape,
+           subst_label_inst_shape, is_terminator_def] >>
+         rpt strip_tac >> gvs[is_terminator_def]) >>
+     fs[EVERY_MEM, fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]) >>
+  fs[EVERY_MEM, fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]
+QED
+
+Theorem canon_subst_jnz_distinct:
+  (inst.inst_opcode = JNZ ==>
+    ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f) ==>
+  (canon_jnz_inst (subst_label_inst old_lbl new_lbl inst)).inst_opcode = JNZ ==>
+  ?c t f. (canon_jnz_inst (subst_label_inst old_lbl new_lbl inst)).inst_operands =
+    [c; Label t; Label f] /\ t <> f
+Proof
+  Cases_on `inst.inst_opcode = JNZ`
+  >- (simp[] >> strip_tac >> gvs[subst_label_inst_def, subst_label_op_def] >>
+      rpt IF_CASES_TAC >> gvs[canon_jnz_inst_def] >>
+      rpt IF_CASES_TAC >> gvs[]) >>
+  simp[canon_jnz_inst_def, subst_label_inst_def] >> rpt CASE_TAC >> simp[]
+QED
+
+Theorem do_merge_jump_jnz_distinct:
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = JNZ ==>
+    ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f) /\
+  MEM a fn.fn_blocks /\ do_merge_jump fn a b lm = SOME (fn', lm') ==>
+  !inst. MEM inst (fn_insts fn') /\ inst.inst_opcode = JNZ ==>
+    ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f
+Proof
+  strip_tac >>
+  `EVERY (\bb. EVERY (\inst. inst.inst_opcode = JNZ ==>
+    ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f)
+      bb.bb_instructions) fn'.fn_blocks` by
+    (irule do_merge_jump_every_inst >> goal_assum (drule_at Any) >> simp[] >>
+     rpt conj_tac
+     >- (rpt gen_tac >> IF_CASES_TAC >> simp[canon_subst_jnz_distinct])
+     >- (gen_tac >> Cases_on `inst.inst_opcode = PHI` >>
+         simp[update_phi_bypass_def] >> rpt IF_CASES_TAC >> simp[]) >>
+     fs[EVERY_MEM, fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]) >>
+  fs[EVERY_MEM, fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]
+QED
+
+Theorem try_bypass_phi_operands:
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands) /\ MEM a fn.fn_blocks /\
+  try_bypass fn lm a succs = (fn', lm', changed) ==>
+  !inst. MEM inst (fn_insts fn') /\ inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands
+Proof
+  qid_spec_tac `succs` >> Induct >- simp[try_bypass_def] >>
+  rpt strip_tac >> gvs[Once try_bypass_def, AllCaseEqs()] >>
+  metis_tac[do_merge_jump_phi_operands]
+QED
+
+Theorem try_bypass_jnz_distinct:
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = JNZ ==>
+    ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f) /\
+  MEM a fn.fn_blocks /\ try_bypass fn lm a succs = (fn', lm', changed) ==>
+  !inst. MEM inst (fn_insts fn') /\ inst.inst_opcode = JNZ ==>
+    ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f
+Proof
+  qid_spec_tac `succs` >> Induct >- simp[try_bypass_def] >>
+  rpt strip_tac >> gvs[Once try_bypass_def, AllCaseEqs()] >>
+  metis_tac[do_merge_jump_jnz_distinct]
+QED
