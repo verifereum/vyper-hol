@@ -50,6 +50,7 @@ Ancestors
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   entryStateRel supportedDecls vyperTypeContractFunction vyperTypeContractSoundness
   vyperTypeContractContext vyperTypeContract
+  vyperTypeInitialState vyperTypeBindArguments vyperTypeInvariants
   vyperInterpreter vyperState vyperContext
   venomState venomExecSemantics venomWf
 
@@ -141,6 +142,38 @@ Proof
   conj_tac >- gvs[check_function_body_def] >>
   drule checked_explicit_external_body_call_evaluation_safe >>
   simp[] >> disch_then drule >> simp[]
+QED
+
+Theorem external_send_call_value_frame:
+  send_call_value mut cx st = (res,st') ==>
+  st' with accounts := st.accounts = st
+Proof
+  rw[send_call_value_def, transfer_value_def, bind_def, ignore_bind_def,
+     get_accounts_def, check_def, assert_def, update_accounts_def,
+     return_def, raise_def] >>
+  gvs[AllCaseEqs(), return_def, raise_def]
+QED
+
+Theorem external_body_prefix_state:
+  machine_well_typed am /\
+  bind_arguments tenv args vals = SOME env /\
+  send_call_value mut cx
+    (initial_state am [env] with <|outcomes := SOME os; requests := []|>) =
+    (INL (),es0) ==>
+  es0.scopes = [env] /\ es0.immutables = am.immutables /\
+  es0.outcomes = SOME os /\ es0.requests = [] /\
+  state_well_typed es0 /\ accounts_well_typed es0.accounts
+Proof
+  strip_tac >>
+  `scope_well_typed env` by
+    metis_tac[bind_arguments_scope_well_typed_from_success] >>
+  `accounts_well_typed es0.accounts` by
+    (irule send_call_value_accounts_well_typed_c53 >>
+     goal_assum (drule_at Any) >>
+     simp[initial_state_accounts_well_typed_simple]) >>
+  drule external_send_call_value_frame >>
+  simp[evaluation_state_component_equality, initial_state_def] >>
+  strip_tac >> gvs[state_well_typed_def, machine_well_typed_def]
 QED
 
 (* ADMITTED (typing soundness): the body of a checked external function
