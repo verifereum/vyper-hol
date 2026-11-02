@@ -606,7 +606,8 @@ Proof
 QED
 
 Theorem fix_all_phis_phi_arity:
-  fn_inst_wf func ==>
+  (!inst. MEM inst (fn_insts func) /\ inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands) ==>
   !inst. MEM inst (fn_insts (fix_all_phis func)) /\ inst.inst_opcode = PHI ==>
          2 <= LENGTH (phi_pairs inst.inst_operands)
 Proof
@@ -616,8 +617,8 @@ Proof
   `old_inst.inst_opcode = PHI` by
     (Cases_on `old_inst.inst_opcode = PHI` >>
      gvs[fix_phi_inst_non_phi]) >>
-  `inst_wf old_inst` by metis_tac[fn_inst_wf_def] >>
-  `phi_well_formed old_inst.inst_operands` by gvs[inst_wf_def] >>
+  `phi_well_formed old_inst.inst_operands` by
+    metis_tac[fn_insts_def, fn_insts_blocks_mem] >>
   irule fix_phi_inst_phi_arity >> simp[]
 QED
 
@@ -2000,4 +2001,319 @@ Proof
   `MEM a func.fn_blocks` by metis_tac[lookup_block_member_label] >>
   match_mp_tac (GEN_ALL try_bypass_jnz_distinct) >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem subst_block_labels_inst_shape:
+  (subst_block_labels_inst lm inst).inst_opcode = inst.inst_opcode /\
+  (subst_block_labels_inst lm inst).inst_id = inst.inst_id /\
+  (subst_block_labels_inst lm inst).inst_outputs = inst.inst_outputs
+Proof
+  simp[subst_block_labels_inst_def, subst_label_map_inst_def] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem phi_well_formed_subst_label_map_ops:
+  !ops. phi_well_formed ops ==>
+    phi_well_formed (MAP (subst_label_map_op lm) ops)
+Proof
+  recInduct phi_well_formed_ind >>
+  simp[phi_well_formed_def, subst_label_map_op_def] >>
+  rpt strip_tac >> CASE_TAC >> simp[phi_well_formed_def]
+QED
+
+Theorem subst_block_labels_phi_operands:
+  (inst.inst_opcode = PHI ==> phi_well_formed inst.inst_operands) ==>
+  (subst_block_labels_inst lm inst).inst_opcode = PHI ==>
+    phi_well_formed (subst_block_labels_inst lm inst).inst_operands
+Proof
+  simp[subst_block_labels_inst_shape] >> strip_tac >> strip_tac >>
+  gvs[subst_block_labels_inst_def, subst_label_map_inst_def,
+    is_block_label_opcode_def, phi_well_formed_subst_label_map_ops]
+QED
+
+Theorem bb_well_formed_subst_block_labels:
+  bb_well_formed bb ==>
+  bb_well_formed (subst_block_labels_block lm bb)
+Proof
+  strip_tac >> simp[subst_block_labels_block_def] >>
+  irule bb_well_formed_map_classification >>
+  simp[subst_block_labels_inst_shape]
+QED
+
+Theorem subst_block_labels_fn_ssa:
+  ssa_form (subst_block_labels_fn lm fn) = ssa_form fn
+Proof
+  simp[ssa_form_def, fn_insts_def, fn_insts_projection_blocks,
+    subst_block_labels_fn_def,
+    subst_block_labels_block_def, MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF,
+    subst_block_labels_inst_shape]
+QED
+
+Theorem subst_block_labels_fn_ids:
+  fn_inst_ids_distinct (subst_block_labels_fn lm fn) =
+  fn_inst_ids_distinct fn
+Proof
+  simp[fn_inst_ids_distinct_def, subst_block_labels_fn_def,
+    subst_block_labels_block_def, MAP_MAP_o, combinTheory.o_DEF,
+    subst_block_labels_inst_shape]
+QED
+
+Theorem subst_label_map_op_absent:
+  (!l. op = Label l ==> ~MEM l (MAP FST lm)) ==>
+  subst_label_map_op lm op = op
+Proof
+  Cases_on `op` >> simp[subst_label_map_op_def] >>
+  strip_tac >> `ALOOKUP lm s = NONE` by
+    metis_tac[alistTheory.ALOOKUP_NONE] >> simp[]
+QED
+
+Theorem get_successors_subst_block_labels_absent:
+  (!l. MEM l (get_successors inst) ==> ~MEM l (MAP FST lm)) ==>
+  get_successors (subst_block_labels_inst lm inst) = get_successors inst
+Proof
+  strip_tac >> Cases_on `is_terminator inst.inst_opcode`
+  >- (`MAP (subst_label_map_op lm) inst.inst_operands = inst.inst_operands` by
+        (GEN_REWRITE_TAC RAND_CONV empty_rewrites [GSYM MAP_ID] >>
+         irule MAP_CONG >> simp[] >> rpt strip_tac >>
+         irule subst_label_map_op_absent >> rpt strip_tac >>
+         qpat_x_assum `!l. MEM l _ ==> _` (qspec_then `l` mp_tac) >>
+         simp[] >>
+         simp[get_successors_def, MEM_MAP, MEM_FILTER] >>
+         qexists `SOME l` >> simp[] >> qexists `Label l` >>
+         gvs[venomStateTheory.get_label_def]) >>
+      gvs[subst_block_labels_inst_def, is_block_label_opcode_def,
+        subst_label_map_inst_def]) >>
+  simp[get_successors_def, subst_block_labels_inst_shape]
+QED
+
+Theorem bb_succs_subst_block_labels_absent:
+  (!l. MEM l (bb_succs bb) ==> ~MEM l (MAP FST lm)) ==>
+  bb_succs (subst_block_labels_block lm bb) = bb_succs bb
+Proof
+  Cases_on `bb.bb_instructions = []`
+  >- simp[bb_succs_def, subst_block_labels_block_def] >>
+  simp[bb_succs_def, subst_block_labels_block_def, LAST_MAP] >>
+  strip_tac >>
+  `get_successors (subst_block_labels_inst lm (LAST bb.bb_instructions)) =
+   get_successors (LAST bb.bb_instructions)` by
+    (irule get_successors_subst_block_labels_absent >>
+     Cases_on `bb.bb_instructions` >> gvs[MEM_nub, MEM_REVERSE]) >>
+  Cases_on `bb.bb_instructions` >> gvs[] >>
+  pure_rewrite_tac[GSYM MAP, LAST_MAP] >> simp[]
+QED
+
+Theorem subst_block_labels_fn_closed:
+  fn_succs_closed fn /\
+  (!l. MEM l (fn_labels fn) ==> ~MEM l (MAP FST lm)) ==>
+  fn_succs_closed (subst_block_labels_fn lm fn)
+Proof
+  strip_tac >>
+  simp[fn_succs_closed_def, subst_block_labels_fn_def, MEM_MAP] >>
+  rpt strip_tac >> gvs[] >>
+  `bb_succs (subst_block_labels_block lm y) = bb_succs y` by
+    (irule bb_succs_subst_block_labels_absent >>
+     fs[fn_succs_closed_def] >> metis_tac[]) >>
+  gvs[fn_labels_def, MAP_MAP_o, combinTheory.o_DEF,
+    subst_block_labels_block_def] >>
+  fs[fn_succs_closed_def, fn_labels_def, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem subst_block_labels_fn_wf:
+  wf_function fn /\
+  (!l. MEM l (fn_labels fn) ==> ~MEM l (MAP FST lm)) ==>
+  wf_function (subst_block_labels_fn lm fn)
+Proof
+  strip_tac >>
+  `fn_succs_closed (subst_block_labels_fn lm fn)` by
+    (irule subst_block_labels_fn_closed >> fs[wf_function_def]) >>
+  simp[wf_function_def, subst_block_labels_fn_ids] >>
+  fs[wf_function_def] >>
+  simp[subst_block_labels_fn_def, fn_labels_def, MAP_MAP_o,
+    combinTheory.o_DEF, subst_block_labels_block_def, fn_has_entry_def,
+    MEM_MAP] >>
+  rpt strip_tac >> gvs[fn_labels_def, fn_has_entry_def] >>
+  metis_tac[bb_well_formed_subst_block_labels, subst_block_labels_block_def]
+QED
+
+Theorem collapse_dfs_sources_absent:
+  ALL_DISTINCT (fn_labels fn) /\
+  collapse_dfs fn [] visited lbl = (fn',lm,visited') ==>
+  (!l. MEM l (fn_labels fn') ==> ~MEM l (MAP FST lm))
+Proof
+  strip_tac >>
+  mp_tac (cj 1 collapse_events_joint) >>
+  disch_then (qspecl_then [`fn`, `[]`, `visited`, `lbl`] mp_tac) >>
+  simp[collapse_dfs_result_def, collapse_result_events_def,
+    fn_result_events_def] >>
+  strip_tac >> gvs[] >>
+  drule label_event_trace_sources_absent >>
+  simp[EVERY_MEM, MEM_MAP, MEM_REVERSE] >> metis_tac[]
+QED
+
+Theorem simplify_cfg_round_wf:
+  wf_function fn ==> wf_function (simplify_cfg_round fn)
+Proof
+  strip_tac >> Cases_on `fn_entry_label fn`
+  >- simp[simplify_cfg_round_def, simplify_cfg_round_with_labels_def] >>
+  `wf_function (fix_all_phis (remove_unreachable_blocks fn))` by
+    metis_tac[fix_all_phis_wf, remove_unreachable_blocks_wf] >>
+  Cases_on `collapse_dfs (fix_all_phis (remove_unreachable_blocks fn)) [] [] x` >>
+  PairCases_on `r` >>
+  `wf_function q` by (qspec_then `fix_all_phis (remove_unreachable_blocks fn)` mp_tac
+      (cj 1 collapse_wf_joint) >> simp[] >>
+      disch_then (qspecl_then [`[]`, `[]`, `x`] mp_tac) >> simp[]) >>
+  `!l. MEM l (fn_labels q) ==> ~MEM l (MAP FST r0)` by
+    (match_mp_tac (GEN_ALL collapse_dfs_sources_absent) >>
+     goal_assum (drule_at Any) >> fs[wf_function_def]) >>
+  `wf_function (if r0 = [] then q else subst_block_labels_fn r0 q)` by
+    (IF_CASES_TAC >> simp[] >> irule subst_block_labels_fn_wf >> simp[]) >>
+  simp[simplify_cfg_round_def, simplify_cfg_round_with_labels_def] >>
+  metis_tac[fix_all_phis_wf, remove_unreachable_blocks_wf]
+QED
+
+Theorem simplify_cfg_round_ssa:
+  wf_function fn /\ ssa_form fn ==> ssa_form (simplify_cfg_round fn)
+Proof
+  strip_tac >> Cases_on `fn_entry_label fn`
+  >- simp[simplify_cfg_round_def, simplify_cfg_round_with_labels_def] >>
+  `wf_function (fix_all_phis (remove_unreachable_blocks fn)) /\
+   ssa_form (fix_all_phis (remove_unreachable_blocks fn))` by
+    metis_tac[fix_all_phis_wf, remove_unreachable_blocks_wf,
+      fix_all_phis_ssa, remove_unreachable_blocks_ssa] >>
+  Cases_on `collapse_dfs (fix_all_phis (remove_unreachable_blocks fn)) [] [] x` >>
+  PairCases_on `r` >>
+  `ssa_form q` by
+    (qspec_then `fix_all_phis (remove_unreachable_blocks fn)` mp_tac
+      (cj 1 collapse_ssa_joint) >> simp[] >>
+     disch_then (qspecl_then [`[]`, `[]`, `x`] mp_tac) >> simp[]) >>
+  `ssa_form (if r0 = [] then q else subst_block_labels_fn r0 q)` by
+    (IF_CASES_TAC >> simp[subst_block_labels_fn_ssa]) >>
+  simp[simplify_cfg_round_def, simplify_cfg_round_with_labels_def] >>
+  metis_tac[fix_all_phis_ssa, remove_unreachable_blocks_ssa]
+QED
+
+Theorem simplify_cfg_round_reachable:
+  wf_function fn ==> all_reachable (simplify_cfg_round fn)
+Proof
+  strip_tac >> Cases_on `fn_entry_label fn`
+  >- (fs[fn_entry_label_def, entry_block_def, wf_function_def,
+         fn_has_entry_def] >> Cases_on `fn.fn_blocks` >> gvs[]) >>
+  `wf_function (fix_all_phis (remove_unreachable_blocks fn))` by
+    metis_tac[fix_all_phis_wf, remove_unreachable_blocks_wf] >>
+  Cases_on `collapse_dfs (fix_all_phis (remove_unreachable_blocks fn)) [] [] x` >>
+  PairCases_on `r` >>
+  `wf_function q` by
+    (qspec_then `fix_all_phis (remove_unreachable_blocks fn)` mp_tac
+      (cj 1 collapse_wf_joint) >> simp[] >>
+     disch_then (qspecl_then [`[]`, `[]`, `x`] mp_tac) >> simp[]) >>
+  `!l. MEM l (fn_labels q) ==> ~MEM l (MAP FST r0)` by
+    (match_mp_tac (GEN_ALL collapse_dfs_sources_absent) >>
+     goal_assum (drule_at Any) >> fs[wf_function_def]) >>
+  `wf_function (if r0 = [] then q else subst_block_labels_fn r0 q)` by
+    (IF_CASES_TAC >> simp[] >> irule subst_block_labels_fn_wf >> simp[]) >>
+  simp[simplify_cfg_round_def, simplify_cfg_round_with_labels_def] >>
+  irule fix_all_phis_all_reachable >>
+  metis_tac[remove_unreachable_blocks_reachable, remove_unreachable_blocks_wf]
+QED
+
+Theorem fix_phi_inst_phi_operands:
+  (inst.inst_opcode = PHI ==> phi_well_formed inst.inst_operands) ==>
+  (fix_phi_inst actual_preds inst).inst_opcode = PHI ==>
+  phi_well_formed (fix_phi_inst actual_preds inst).inst_operands
+Proof
+  Cases_on `inst.inst_opcode = PHI`
+  >- (simp[fix_phi_inst_def] >> strip_tac >>
+      `phi_well_formed (filter_phi_ops actual_preds inst.inst_operands)` by
+        simp[filter_phi_ops_well_formed] >>
+      Cases_on `filter_phi_ops actual_preds inst.inst_operands` >> gvs[] >>
+      Cases_on `t` >> gvs[phi_well_formed_def] >>
+      Cases_on `t'` >> gvs[phi_well_formed_def]) >>
+  simp[fix_phi_inst_non_phi]
+QED
+
+Theorem fix_all_phis_phi_operands:
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands) ==>
+  !inst. MEM inst (fn_insts (fix_all_phis fn)) /\ inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands
+Proof
+  simp[fn_insts_def, fn_insts_blocks_mem, fix_all_phis_def,
+    MEM_MAP, PULL_EXISTS, fix_phis_in_block_mem] >>
+  rpt strip_tac >> gvs[] >>
+  irule fix_phi_inst_phi_operands >> simp[] >> metis_tac[]
+QED
+
+Theorem subst_block_labels_fn_phi_operands:
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands) ==>
+  !inst. MEM inst (fn_insts (subst_block_labels_fn lm fn)) /\ inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands
+Proof
+  simp[fn_insts_def, fn_insts_blocks_mem, subst_block_labels_fn_def,
+    subst_block_labels_block_def, MEM_MAP, PULL_EXISTS] >>
+  rpt strip_tac >> gvs[] >>
+  irule subst_block_labels_phi_operands >> simp[] >> metis_tac[]
+QED
+
+Theorem remove_unreachable_blocks_inst_property:
+  (!inst. MEM inst (fn_insts fn) ==> P inst) ==>
+  !inst. MEM inst (fn_insts (remove_unreachable_blocks fn)) ==> P inst
+Proof
+  Cases_on `fn_entry_label fn` >>
+  simp[remove_unreachable_blocks_def, fn_insts_def, fn_insts_blocks_mem,
+    MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem simplify_cfg_round_phi_properties:
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands) ==>
+  !inst. MEM inst (fn_insts (simplify_cfg_round fn)) /\ inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands /\
+    2 <= LENGTH (phi_pairs inst.inst_operands)
+Proof
+  strip_tac >> Cases_on `fn_entry_label fn`
+  >- (simp[simplify_cfg_round_def, simplify_cfg_round_with_labels_def] >>
+      fs[fn_entry_label_def, entry_block_def] >>
+      Cases_on `fn.fn_blocks` >> gvs[fn_insts_def, fn_insts_blocks_def]) >>
+  `!inst. MEM inst (fn_insts (remove_unreachable_blocks fn)) ==>
+    (inst.inst_opcode = PHI ==> phi_well_formed inst.inst_operands)` by
+    (ho_match_mp_tac (GEN_ALL remove_unreachable_blocks_inst_property) >> simp[]) >>
+  `!inst. MEM inst (fn_insts (fix_all_phis (remove_unreachable_blocks fn))) /\
+    inst.inst_opcode = PHI ==> phi_well_formed inst.inst_operands` by
+    (match_mp_tac (GEN_ALL fix_all_phis_phi_operands) >> metis_tac[]) >>
+  Cases_on `collapse_dfs (fix_all_phis (remove_unreachable_blocks fn)) [] [] x` >>
+  PairCases_on `r` >>
+  `!inst. MEM inst (fn_insts q) /\ inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands` by
+    (qspec_then `fix_all_phis (remove_unreachable_blocks fn)` mp_tac
+      (cj 1 collapse_phi_operands_joint) >> simp[] >>
+     disch_then (qspecl_then [`[]`, `[]`, `x`] mp_tac) >> simp[]) >>
+  `!inst. MEM inst (fn_insts (if r0 = [] then q else subst_block_labels_fn r0 q)) /\
+    inst.inst_opcode = PHI ==> phi_well_formed inst.inst_operands` by
+    (IF_CASES_TAC >> simp[] >>
+     match_mp_tac (GEN_ALL subst_block_labels_fn_phi_operands) >> simp[]) >>
+  simp[simplify_cfg_round_def, simplify_cfg_round_with_labels_def] >>
+  `!inst. MEM inst (fn_insts (remove_unreachable_blocks
+      (if r0 = [] then q else subst_block_labels_fn r0 q))) ==>
+    (inst.inst_opcode = PHI ==> phi_well_formed inst.inst_operands)` suffices_by
+      metis_tac[fix_all_phis_phi_operands, fix_all_phis_phi_arity] >>
+  ho_match_mp_tac (GEN_ALL remove_unreachable_blocks_inst_property) >> metis_tac[]
+QED
+
+Theorem simplify_cfg_round_phi_operands:
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands) ==>
+  !inst. MEM inst (fn_insts (simplify_cfg_round fn)) /\ inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands
+Proof
+  metis_tac[simplify_cfg_round_phi_properties]
+QED
+
+Theorem simplify_cfg_round_phi_arity:
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands) ==>
+  !inst. MEM inst (fn_insts (simplify_cfg_round fn)) /\ inst.inst_opcode = PHI ==>
+    2 <= LENGTH (phi_pairs inst.inst_operands)
+Proof
+  metis_tac[simplify_cfg_round_phi_properties]
 QED

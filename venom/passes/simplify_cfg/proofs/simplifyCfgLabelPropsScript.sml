@@ -361,7 +361,7 @@ Proof
   simp[collapse_result_events_def]
 QED
 
-Theorem collapse_events_joint[local]:
+Theorem collapse_events_joint:
   (!func incoming visited lbl.
      ALL_DISTINCT (fn_labels func) ==>
      collapse_dfs_result
@@ -663,7 +663,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem label_event_trace_sources_absent[local]:
+Theorem label_event_trace_sources_absent:
   !initial events final.
     label_event_trace initial events final ==>
     EVERY (\entry. ~MEM (FST entry) final) events
