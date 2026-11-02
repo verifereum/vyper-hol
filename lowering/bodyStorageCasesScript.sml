@@ -18,7 +18,9 @@ Ancestors
   vyperStatePreservation vyperTypeAssignContext vyperStoragePlaceProvenance
   vyperPlaceStoragePreservation vyperValue vyperMachineFrame
   vyperTypeContractStaticMaps supportedDecls supportedStmts supportedExprs
-  supportedTargets supportedStmtTraverse list
+  supportedTargets supportedStmtTraverse list vyperSourceSupplyDefs
+Libs
+  vyperSourceSupplyLib
 
 Theorem supported_callable_body_contract:
   supported_program tops /\
@@ -313,14 +315,14 @@ QED
 (* List sequencing is independent of the syntactic source of the recursive
    preservation premises.  Consumers discharge these premises using their IH. *)
 Theorem body_eval_expr_results_cons_storage:
-  (!s r s'. runtime_storage_consistent env cx s /\
+  (!s r s'. runtime_storage_consistent env cx s /\ source_supply s /\
     IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
     eval_expr cx e s = (r,s') ==> contract_storage_well_formed cx s') /\
   (!tv s r s'. eval_expr cx e st = (INL tv,s) /\
-    runtime_storage_consistent env cx s /\
+    runtime_storage_consistent env cx s /\ source_supply s /\
     IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
     eval_expr_results cx es s = (r,s') ==> contract_storage_well_formed cx s') /\
-  well_typed_expr env e /\ runtime_storage_consistent env cx st /\
+  well_typed_expr env e /\ runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
   eval_expr_results cx (e::es) st = (res,st') ==>
@@ -331,6 +333,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def] >>
   Cases_on `eval_expr cx e st` >>
   rename1 `eval_expr cx e st = (head_res,head_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx head_st` by metis_tac[] >>
   `runtime_consistent env cx head_st` by
     metis_tac[eval_expr_preserves_runtime_consistent,
@@ -345,14 +348,15 @@ Proof
   Cases_on `tail_res` >> gvs[bind_def] >> rpt strip_tac >> gvs[]
 QED
 Theorem body_eval_exprs_cons_storage:
-  (!s r s'. runtime_storage_consistent env cx s /\
+  (!s r s'. runtime_storage_consistent env cx s /\ source_supply s /\
     IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
     eval_expr cx e s = (r,s') ==> contract_storage_well_formed cx s') /\
   (!tv v s r s'. eval_expr cx e st = (INL tv,s) /\
     read_result cx tv s = (INL v,s) /\ runtime_storage_consistent env cx s /\
+    source_supply s /\
     IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
     eval_exprs cx es s = (r,s') ==> contract_storage_well_formed cx s') /\
-  well_typed_expr env e /\ runtime_storage_consistent env cx st /\
+  well_typed_expr env e /\ runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
   eval_exprs cx (e::es) st = (res,st') ==>
@@ -363,6 +367,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def] >>
   Cases_on `eval_expr cx e st` >>
   rename1 `eval_expr cx e st = (head_res,head_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx head_st` by metis_tac[] >>
   `runtime_consistent env cx head_st` by
     metis_tac[eval_expr_preserves_runtime_consistent,
