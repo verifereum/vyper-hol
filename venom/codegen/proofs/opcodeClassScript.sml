@@ -239,7 +239,7 @@ Triviality nonterminator_opcode_class[local]:
     is_ext_call_op op \/
     op = SSTORE \/ op = TSTORE \/ op = ISTORE \/ op = LOG \/
     op = SETFMP \/ op = DALLOCA \/
-    op = ASSERT \/ op = ASSERT_UNREACHABLE \/ op = INVOKE
+    op = ASSERT \/ op = ASSERT_UNREACHABLE \/ op = INVOKE \/ op = GAS
 Proof
   Cases >> EVAL_TAC
 QED
@@ -626,7 +626,7 @@ Triviality storage_imm_log_assert_not_halt[local]:
      inst.inst_opcode = ISTORE \/ inst.inst_opcode = LOG \/
      inst.inst_opcode = SETFMP \/ inst.inst_opcode = DALLOCA \/
      inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE \/
-     inst.inst_opcode = INVOKE) ==>
+     inst.inst_opcode = INVOKE \/ inst.inst_opcode = GAS) ==>
     step_inst_base inst s <> Halt vs'
 Proof
   rpt strip_tac >> gvs[] >>
@@ -640,7 +640,7 @@ Triviality nofail_storage_imm_log_not_abort[local]:
     (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
      inst.inst_opcode = ISTORE \/ inst.inst_opcode = LOG \/
      inst.inst_opcode = SETFMP \/ inst.inst_opcode = DALLOCA \/
-     inst.inst_opcode = INVOKE) ==>
+     inst.inst_opcode = INVOKE \/ inst.inst_opcode = GAS) ==>
     step_inst_base inst s <> Abort a vs'
 Proof
   rpt strip_tac >> gvs[] >>

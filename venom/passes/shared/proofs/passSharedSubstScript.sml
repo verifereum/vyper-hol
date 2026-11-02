@@ -253,6 +253,10 @@ QED
 val exec_pos_thms = [exec_pure1_pos, exec_pure2_pos, exec_pure3_pos,
                      exec_read0_pos, exec_read1_pos, exec_write2_pos];
 
+Triviality exec_gas_inst_operands[local]:
+  !inst ops s. exec_gas (inst with inst_operands := ops) s = exec_gas inst s
+Proof rw[exec_gas_def]
+QED
 Triviality exec_create_inst_operands[local]:
   !inst ops s v o' sz salt.
     exec_create (inst with inst_operands := ops) s v o' sz salt =
@@ -272,8 +276,9 @@ Triviality exec_delegatecall_inst_operands[local]:
 Proof rw[exec_delegatecall_def]
 QED
 
-val exec_inst_operands_thms = [exec_create_inst_operands,
-  exec_ext_call_inst_operands, exec_delegatecall_inst_operands];
+val exec_inst_operands_thms = [exec_gas_inst_operands,
+  exec_create_inst_operands, exec_ext_call_inst_operands,
+  exec_delegatecall_inst_operands];
 
 Triviality eval_operands_map_thm[local]:
   !g ops s.
@@ -961,7 +966,7 @@ val wf_opcode_contra_tac =
 
 val pos_semantics_ss = pos_finish_ss ++ rewrites
   [exec_pure1_def, exec_pure2_def, exec_pure3_def,
-   exec_read0_def, exec_read1_def, exec_write2_def];
+   exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def];
 
 (* Try the positional helper before expanding fixed operand shapes. Most
    opcodes then need no list witnesses or instantiated index hypotheses. *)

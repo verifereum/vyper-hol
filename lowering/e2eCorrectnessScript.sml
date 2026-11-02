@@ -14,7 +14,7 @@ Theory e2eCorrectness
 Ancestors
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
-  vyperLoweringCorrect loweringShapeProps vfmExecution
+  vyperLoweringCorrect loweringRuntimeCorrect loweringShapeProps vfmExecution
   venomPipelineCorrect
   passSimulationDefs
   codegenCorrectness

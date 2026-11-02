@@ -143,6 +143,15 @@ Proof
   rw[exec_read0_def] >> gvs[AllCaseEqs()]
 QED
 
+Triviality exec_gas_ok_transfer[local]:
+  !inst s v s'.
+    exec_gas inst s = OK v ==>
+    ?v'. exec_gas inst s' = OK v'
+Proof
+  rw[exec_gas_def] >> gvs[AllCaseEqs()] >>
+  Cases_on `s'.vs_gas_readings` >> simp[]
+QED
+
 Triviality exec_read1_ok_transfer[local]:
   !f inst s v s'.
     exec_read1 f inst s = OK v /\
@@ -163,7 +172,8 @@ QED
 
 val exec_ok_transfer_thms =
   [exec_pure1_ok_transfer, exec_pure2_ok_transfer, exec_pure3_ok_transfer,
-   exec_read0_ok_transfer, exec_read1_ok_transfer, exec_write2_ok_transfer];
+   exec_read0_ok_transfer, exec_gas_ok_transfer, exec_read1_ok_transfer,
+   exec_write2_ok_transfer];
 
 val exec_ok_transfer_tac =
   FIRST (map (fn th => drule_all th >> simp[]) exec_ok_transfer_thms);
@@ -190,7 +200,7 @@ val transfer_determined_finish_tac =
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
   ASM_REWRITE_TAC[opcode_case_def] >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def] >>
+       exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def] >>
   ntac 2 strip_tac >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
@@ -202,7 +212,7 @@ val output_vars_finish_tac =
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
   ASM_REWRITE_TAC[opcode_case_def] >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def] >>
+       exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def] >>
   rpt strip_tac >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
@@ -450,6 +460,7 @@ Theorem step_inst_base_scalar_agree:
     s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
     s1.vs_initial_fmp = s2.vs_initial_fmp /\
     s1.vs_return_pc_token = s2.vs_return_pc_token /\
+    s1.vs_gas_readings = s2.vs_gas_readings /\
     (s1.vs_halted <=> s2.vs_halted) /\
     s1.vs_returndata = s2.vs_returndata /\
     (Eff_MEMORY IN read_effects inst.inst_opcode ==>
@@ -474,7 +485,8 @@ Theorem step_inst_base_scalar_agree:
     v1.vs_prev_bb = v2.vs_prev_bb /\
     v1.vs_current_bb = v2.vs_current_bb /\
     v1.vs_inst_idx = v2.vs_inst_idx /\
-    v1.vs_prev_hashes = v2.vs_prev_hashes
+    v1.vs_prev_hashes = v2.vs_prev_hashes /\
+    v1.vs_gas_readings = v2.vs_gas_readings
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `inst.inst_opcode` >>
@@ -494,7 +506,7 @@ Proof
       PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
       ASM_REWRITE_TAC[opcode_case_def] >>
       simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-           exec_read0_def, exec_read1_def, exec_write2_def] >>
+           exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def] >>
       ntac 2 strip_tac >>
       gvs[AllCaseEqs()] >>
       rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
@@ -504,7 +516,7 @@ Proof
       PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
       ASM_REWRITE_TAC[opcode_case_def] >>
       simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-           exec_read0_def, exec_read1_def, exec_write2_def] >>
+           exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def] >>
       ntac 2 strip_tac >>
       gvs[AllCaseEqs()] >>
       rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
@@ -578,7 +590,7 @@ Proof
       PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
       ASM_REWRITE_TAC[opcode_case_def] >>
       simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-           exec_read0_def, exec_read1_def, exec_write2_def] >>
+           exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def] >>
       ntac 2 strip_tac >>
       gvs[AllCaseEqs()] >>
       rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
@@ -624,6 +636,7 @@ Theorem step_inst_base_output_vars_agree:
     s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
     s1.vs_initial_fmp = s2.vs_initial_fmp /\
     s1.vs_return_pc_token = s2.vs_return_pc_token /\
+    s1.vs_gas_readings = s2.vs_gas_readings /\
     (s1.vs_halted <=> s2.vs_halted) /\
     s1.vs_returndata = s2.vs_returndata /\
     LENGTH s1.vs_memory = LENGTH s2.vs_memory /\

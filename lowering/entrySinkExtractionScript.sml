@@ -50,6 +50,7 @@ Proof
   simp[exec_pure2_def, AllCaseEqs()] >>
   simp[exec_pure3_def, AllCaseEqs()] >>
   simp[exec_read0_def, AllCaseEqs()] >>
+  simp[exec_gas_def, AllCaseEqs()] >>
   simp[exec_read1_def, AllCaseEqs()] >>
   simp[exec_write2_def, AllCaseEqs()] >>
   simp[exec_ext_call_def, AllCaseEqs()] >>

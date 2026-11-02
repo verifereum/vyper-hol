@@ -78,7 +78,7 @@ Triviality exec_result_helpers_no_halt_abort[simp]:
   (!inst s alloc_size a s'. exec_alloca inst s alloc_size <> Abort a s')
 Proof
   rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_alloca_def] >>
   gvs[AllCaseEqs()]
 QED
@@ -93,7 +93,7 @@ Triviality exec_result_helpers_not_intret[simp]:
   (!inst s alloc_size vs s'. exec_alloca inst s alloc_size <> IntRet vs s')
 Proof
   rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_alloca_def] >>
   gvs[AllCaseEqs()]
 QED
@@ -402,7 +402,7 @@ Theorem step_inst_ok_state_equiv[local]:
     step_inst fuel ctx inst s = OK s' /\
     ~is_terminator inst.inst_opcode /\
     ~is_alloca_op inst.inst_opcode /\
-    write_effects inst.inst_opcode = {} ==>
+    write_effects inst.inst_opcode = {} /\ inst.inst_opcode <> GAS ==>
     state_equiv (set inst.inst_outputs) s s'
 Proof
   rpt strip_tac >>
@@ -553,7 +553,7 @@ QED
 Theorem cross_case_result_equiv[local]:
   !fuel ctx inst_a inst_b s v.
     step_inst fuel ctx inst_a s = OK v /\
-    write_effects inst_a.inst_opcode = {} /\
+    write_effects inst_a.inst_opcode = {} /\ inst_a.inst_opcode <> GAS /\
     DISJOINT (set (inst_defs inst_a)) (set (inst_uses inst_b)) /\
     ~is_terminator inst_a.inst_opcode /\
     ~is_terminator inst_b.inst_opcode /\
@@ -793,7 +793,7 @@ Theorem ok_ok_case_a[local]:
     DISJOINT (set (inst_defs inst_a)) (set (inst_uses inst_b)) /\
     DISJOINT (set (inst_defs inst_b)) (set (inst_uses inst_a)) /\
     DISJOINT (set (inst_defs inst_a)) (set (inst_defs inst_b)) /\
-    inst_a.inst_opcode <> INVOKE /\
+    inst_a.inst_opcode <> INVOKE /\ inst_a.inst_opcode <> GAS /\
     ~is_terminator inst_a.inst_opcode /\
     ~is_terminator inst_b.inst_opcode /\
     ~is_alloca_op inst_a.inst_opcode /\
@@ -1402,7 +1402,8 @@ Theorem ok_ok_case_general[local]:
     ~is_terminator inst1.inst_opcode /\ ~is_terminator inst2.inst_opcode /\
     ~is_alloca_op inst1.inst_opcode /\ ~is_alloca_op inst2.inst_opcode /\
     ~is_ext_call_op inst1.inst_opcode /\ ~is_ext_call_op inst2.inst_opcode /\
-    inst1.inst_opcode <> INVOKE /\ inst2.inst_opcode <> INVOKE ==>
+    inst1.inst_opcode <> INVOKE /\ inst2.inst_opcode <> INVOKE /\
+    inst1.inst_opcode <> GAS /\ inst2.inst_opcode <> GAS ==>
     ?s12 s21.
       step_inst fuel ctx inst2 v1 = OK s12 /\
       step_inst fuel ctx inst1 v2 = OK s21 /\
@@ -1495,6 +1496,7 @@ Proof
    inst2.inst_opcode <> CALL /\ inst2.inst_opcode <> STATICCALL` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   imp_res_tac step_inst_base_oracle >>
+  imp_res_tac step_inst_base_gas_readings >>
   (* Close commute_equiv — all needed equalities are in assumptions.
      Each field is s12.F = X = ... = s21.F via transitivity of 2-4 equalities.
      metis_tac[] handles this since all equalities are in assumptions. *)
@@ -1560,7 +1562,8 @@ Theorem commute_base_case[local]:
     ~is_terminator inst1.inst_opcode /\ ~is_terminator inst2.inst_opcode /\
     ~is_alloca_op inst1.inst_opcode /\ ~is_alloca_op inst2.inst_opcode /\
     ~is_ext_call_op inst1.inst_opcode /\ ~is_ext_call_op inst2.inst_opcode /\
-    inst1.inst_opcode <> INVOKE /\ inst2.inst_opcode <> INVOKE ==>
+    inst1.inst_opcode <> INVOKE /\ inst2.inst_opcode <> INVOKE /\
+    inst1.inst_opcode <> GAS /\ inst2.inst_opcode <> GAS ==>
     let r1 = (case step_inst fuel ctx inst1 s of
                 OK s1 => step_inst fuel ctx inst2 s1
               | other => other) in
@@ -1630,6 +1633,7 @@ Theorem commute_one_empty_write[local]:
   !fuel ctx inst1 inst2 s.
     write_effects inst1.inst_opcode = {} /\
     inst1.inst_opcode <> INVOKE /\
+    inst1.inst_opcode <> GAS /\ inst2.inst_opcode <> GAS /\
     DISJOINT (set (inst_defs inst1)) (set (inst_uses inst2)) /\
     DISJOINT (set (inst_defs inst2)) (set (inst_uses inst1)) /\
     DISJOINT (set (inst_defs inst1)) (set (inst_defs inst2)) /\
@@ -1725,6 +1729,7 @@ Theorem commute_one_empty_write_sym[local]:
   !fuel ctx inst1 inst2 s.
     write_effects inst2.inst_opcode = {} /\
     inst2.inst_opcode <> INVOKE /\
+    inst1.inst_opcode <> GAS /\ inst2.inst_opcode <> GAS /\
     DISJOINT (set (inst_defs inst1)) (set (inst_uses inst2)) /\
     DISJOINT (set (inst_defs inst2)) (set (inst_uses inst1)) /\
     DISJOINT (set (inst_defs inst1)) (set (inst_defs inst2)) /\
@@ -1783,7 +1788,8 @@ Theorem effects_independent_commute:
     ~is_terminator inst1.inst_opcode /\
     ~is_terminator inst2.inst_opcode /\
     ~is_alloca_op inst1.inst_opcode /\
-    ~is_alloca_op inst2.inst_opcode ==>
+    ~is_alloca_op inst2.inst_opcode /\
+    inst1.inst_opcode <> GAS /\ inst2.inst_opcode <> GAS ==>
     let r1 = (case step_inst fuel ctx inst1 s of
                 OK s1 => step_inst fuel ctx inst2 s1
               | other => other) in

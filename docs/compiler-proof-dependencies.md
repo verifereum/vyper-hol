@@ -85,13 +85,15 @@ or pretends an implemented universal storage validator exists.
 
 ## S1–S7: current admitted producers
 
-Each row is **ADMITTED**, a final statement/memo with future proof owner.
-The actual built top has precisely these seven leaves; generic composition
-and each L1–L13 have zero. See [source owners and receipt](compiler-proof-status-2026-10-09.md#built-logical-admission-path).
+Each row except S1 is **ADMITTED**, a final statement/memo with future
+proof owner. S1 is proved from the entry bridge, `body_stmts_sim` and the
+halt bridge, and rests on the named admissions listed in
+`lowering/loweringRuntimeCorrectScript.sml` and on `body_stmts_sim`'s case
+admissions. Generic composition and each L1–L13 have none. See [source owners and receipt](compiler-proof-status-2026-10-09.md#built-logical-admission-path).
 
 | ID | Saved export | Consumes / produces | Future owner |
 |---|---|---|---|
-| S1 | `vyperLoweringCorrect.lower_vyper_runtime_unit_correct` | raw lowering, boundary/entry facts -> terminating source-unit execution | Milestone 6 |
+| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` | raw lowering, boundary/entry facts -> terminating source-unit execution | Milestone 6 |
 | S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` | lowering + supported syntax -> `o1_source_unit_ok` | Milestone 5 |
 | S3 | `vyperLoweringCorrect.lower_vyper_runtime_unit_memory_ok` | S1 boundary + non-exemption -> `raw_unit_memory_ok` | Milestone 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` | exact O1 success, raw shape/entry/memory -> forward simulation up to any well-formed dead-byte set `D` (`ctx_sim D`, `dead_wf D`) | Milestone 3 |

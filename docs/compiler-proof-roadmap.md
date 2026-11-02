@@ -50,7 +50,7 @@ Their exact premises are in the linked owners and
 
 | Stage | Actual export / owner | Contract to prove later | Owner milestone |
 |---|---|---|---|
-| S1 | `vyperLoweringCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/vyperLoweringCorrectScript.sml)) | Raw lowering + supported syntax + typing/storage/deployment/valid call/initial state/outcome guards -> terminating `source_unit_execution_correct` | 6 |
+| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/loweringRuntimeCorrectScript.sml)) | Raw lowering + supported syntax + typing/storage/deployment/valid call/initial state/outcome guards -> terminating `source_unit_execution_correct` | 6 |
 | S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` (same owner) | Lowering + supported syntax -> `o1_source_unit_ok` | 5 |
 | S3 | `vyperLoweringCorrect.lower_vyper_runtime_unit_memory_ok` (same owner) | S1 boundary + **non-exemption** -> `raw_unit_memory_ok` | 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` ([source](../venom/compiler/o1PipelineCorrectScript.sml)) | Actual O1 success + raw shape/entry/memory -> forward simulation up to any well-formed dead-byte set `D` (`ctx_sim D`, `dead_wf D`) | 3 |
@@ -537,7 +537,7 @@ that accesses avoid them. No safety fact may be fabricated on the exempt path.
 
 ## Milestone 6: Lowering leg
 
-**Owner: Milestone 6 / vyperLoweringCorrect S1 and lowering proof owners.**
+**Owner: Milestone 6 / loweringRuntimeCorrect S1 and lowering proof owners.**
 H6-compare below transcribes the construct/failure comparison inputs of PLAN
 §6 into a durable handoff. These are **definition comparisons and conditions**,
 not proofs of S1 or a claim all inputs compile successfully. Definition owners:

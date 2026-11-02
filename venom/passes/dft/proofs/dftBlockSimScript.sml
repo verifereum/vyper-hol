@@ -266,7 +266,7 @@ Proof
           lookup_account_def] >> metis_tac[])
   >- (qpat_x_assum `step_inst_base inst s1 = OK r1` mp_tac >>
       qpat_x_assum `step_inst_base inst s2 = OK r2` mp_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >> simp[exec_read0_def] >>
+      ASM_REWRITE_TAC[step_inst_base_def] >> simp[exec_read0_def, exec_gas_def] >>
       rpt strip_tac >>
       gvs[AllCaseEqs(), update_var_def, lookup_var_def, FLOOKUP_UPDATE,
           lookup_account_def] >> metis_tac[])

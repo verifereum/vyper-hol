@@ -143,6 +143,7 @@ Proof
     irule vsr_step_inst_pure1 >> simp[] >> metis_tac[],
     irule vsr_step_inst_pure3 >> simp[] >> metis_tac[],
     irule vsr_step_inst_read0 >> simp[] >> metis_tac[],
+    irule vsr_step_inst_gas >> simp[] >> metis_tac[],
     irule vsr_step_inst_read1 >> simp[] >> metis_tac[],
     irule vsr_step_inst_extcodehash >> simp[] >> metis_tac[],
     irule vsr_step_inst_write2 >> simp[] >> metis_tac[],

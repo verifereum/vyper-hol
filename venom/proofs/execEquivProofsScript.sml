@@ -163,6 +163,35 @@ Proof
   irule update_var_preserves >> simp[]
 QED
 
+(* Equivalent states hold the same gas readings, so GAS pops the same one. *)
+Triviality state_equiv_gas_readings:
+  !vars s1 s2 g.
+    state_equiv vars s1 s2 ==>
+    s1.vs_gas_readings = s2.vs_gas_readings /\
+    state_equiv vars (s1 with vs_gas_readings := g)
+                     (s2 with vs_gas_readings := g)
+Proof
+  simp[state_equiv_frame, stateFrameTheory.state_frame_def, lookup_var_def,
+       venom_state_component_equality]
+QED
+
+Triviality exec_gas_result_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 ==>
+    result_equiv vars (exec_gas inst s1) (exec_gas inst s2)
+Proof
+  rpt strip_tac >>
+  `s1.vs_gas_readings = s2.vs_gas_readings`
+    by (drule state_equiv_gas_readings >> simp[]) >>
+  simp[exec_gas_def] >>
+  Cases_on `inst.inst_outputs` >>
+  simp[result_equiv_def, revert_equiv_def] >>
+  Cases_on `t` >>
+  simp[result_equiv_def, revert_equiv_def] >>
+  Cases_on `s2.vs_gas_readings` >> gvs[result_equiv_def] >>
+  irule update_var_preserves >> simp[state_equiv_gas_readings]
+QED
+
 Triviality exec_read1_result_equiv:
   !vars f inst s1 s2.
     state_equiv vars s1 s2 /\
@@ -267,7 +296,7 @@ Triviality step_inst_read0_equiv:
   !vars inst s1 s2.
     state_equiv vars s1 s2 /\
     MEM inst.inst_opcode
-      [CALLER; ADDRESS; CALLVALUE; GAS; ORIGIN; GASPRICE;
+      [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE;
        CHAINID; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO;
        GASLIMIT; BASEFEE; BLOBBASEFEE; SELFBALANCE;
        CALLDATASIZE; RETURNDATASIZE; MEMTOP; CODESIZE] ==>
@@ -276,6 +305,15 @@ Proof
   rw[] >> step_inst_base_opcode_tac >> simp[] >>
   irule exec_read0_result_equiv >> simp[] >>
   fs[state_equiv_def, execution_equiv_def]
+QED
+
+Triviality step_inst_gas_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\ inst.inst_opcode = GAS ==>
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
+Proof
+  rw[] >> step_inst_base_opcode_tac >> simp[] >>
+  irule exec_gas_result_equiv >> simp[]
 QED
 
 (* Opcodes that use exec_read1 — one operand, reads from state *)
@@ -1553,7 +1591,7 @@ Proof
   FIRST [
     FIRST (map (fn th => irule th >> simp[] >> NO_TAC)
       [step_inst_pure2_equiv, step_inst_pure1_equiv,
-       step_inst_pure3_equiv, step_inst_read0_equiv,
+       step_inst_pure3_equiv, step_inst_read0_equiv, step_inst_gas_equiv,
        step_inst_read1_equiv, step_inst_extcodehash_equiv,
        step_inst_write2_equiv, step_inst_terminator_equiv,
        step_inst_return_equiv, step_inst_revert_equiv,

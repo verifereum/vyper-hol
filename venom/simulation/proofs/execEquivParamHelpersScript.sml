@@ -136,7 +136,7 @@ Theorem vsr_step_inst_read0:
   !R_ok R_term inst s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     MEM inst.inst_opcode
-      [CALLER;ADDRESS;CALLVALUE;GAS;ORIGIN;GASPRICE;CHAINID;
+      [CALLER;ADDRESS;CALLVALUE;ORIGIN;GASPRICE;CHAINID;
        COINBASE;TIMESTAMP;NUMBER;PREVRANDAO;GASLIMIT;BASEFEE;
        BLOBBASEFEE;SELFBALANCE;CALLDATASIZE;RETURNDATASIZE;MEMTOP;
        CODESIZE] ==>
@@ -144,6 +144,15 @@ Theorem vsr_step_inst_read0:
 Proof
   rw[] >> vsr_opcode_tac () >> simp[] >>
   vsr_irule vsr_exec_read0 >> simp[] >> vsr_read_eq_tac ()
+QED
+
+Theorem vsr_step_inst_gas:
+  !R_ok R_term inst s1 s2.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\ inst.inst_opcode = GAS ==>
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
+Proof
+  rw[] >> vsr_opcode_tac () >> simp[] >>
+  vsr_irule vsr_exec_gas >> simp[]
 QED
 
 Theorem vsr_step_inst_read1:

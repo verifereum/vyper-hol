@@ -5,8 +5,8 @@
  * simulation (bodySimExprCases) for the builtins that are neither operators
  * nor aggregates.  Each is stated over exprSimHyps' shared judgments: from
  * exprs_case of the operands, expr_vv_case of the builtin.  Row 3's word
- * builtins but ceil (exprSimWordBuiltins' word_builtin_case), rows 2 and 7
- * on exprSimHash's machinery, row 5 (here), row 6's account reads but
+ * builtins (exprSimWordBuiltins' word_builtin_case and compile_ceil_case),
+ * rows 2 and 7 on exprSimHash's machinery, row 5 (here), row 6's account reads but
  * .code (in exprSimAccounts) and ecrecover are proved; the rest are
  * cheated, for the later #636 PRs.  Each #636 Builtins row is:
  *   1 len, len(msg.data), msg.data slices: compile_len_case (by
@@ -203,7 +203,14 @@ Theorem compile_ceil_case:
     exprs_case nocalls ctx func cenv cx args ==>
     expr_vv_case nocalls ctx func cenv cx (Builtin ann Ceil args)
 Proof
-  cheat
+  rpt gen_tac >> disch_tac >>
+  rewrite_tac[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
+  irule ceil_ready_vv_sim >> qexists_tac `env` >> simp[] >>
+  gen_tac >> irule wb_args_ready_of_case >> qexists_tac `nocalls` >> simp[] >>
+  rpt gen_tac >> strip_tac >> rpt conj_tac
+  >- metis_tac[expr_body_pre_builtin_arg]
+  >- metis_tac[int_calls_builtin_arg] >>
+  drule ceil_operand_types >> simp[EVERY_MEM]
 QED
 
 Theorem compile_addmod_names_sim:

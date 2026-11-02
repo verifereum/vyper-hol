@@ -71,19 +71,6 @@ Proof
   metis_tac[venomMemProofsTheory.allocas_non_overlapping_empty_proof]
 QED
 
-Theorem allocas_non_overlapping_shared_point:
-  allocas_non_overlapping s /\
-  FLOOKUP s.vs_allocas aid1 = SOME (b1,sz1) /\
-  FLOOKUP s.vs_allocas aid2 = SOME (b2,sz2) /\
-  b1 <= off /\ off < b1 + sz1 /\
-  b2 <= off /\ off < b2 + sz2 ==>
-  aid1 = aid2
-Proof
-  strip_tac >> spose_not_then assume_tac >>
-  fs[allocas_non_overlapping_def] >>
-  `b1 + sz1 <= b2 \/ b2 + sz2 <= b1` by metis_tac[] >> decide_tac
-QED
-
 Theorem alloca_inv_empty:
   ∀s. s.vs_allocas = FEMPTY ⇒ alloca_inv s
 Proof

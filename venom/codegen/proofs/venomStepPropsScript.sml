@@ -99,6 +99,13 @@ Proof
   rw[exec_read0_def] >> every_case_tac >> gvs[]
 QED
 
+Theorem exec_gas_ok_halted:
+  !inst (st:venom_state) st'.
+    exec_gas inst st = OK st' ==> st'.vs_halted = st.vs_halted
+Proof
+  rw[exec_gas_def] >> every_case_tac >> gvs[]
+QED
+
 Theorem exec_read1_ok_halted:
   !f inst (st:venom_state) st'.
     exec_read1 f inst st = OK st' ==> st'.vs_halted = st.vs_halted
@@ -171,6 +178,7 @@ Proof
   TRY (imp_res_tac exec_pure2_ok_halted >> gvs[] >> NO_TAC) >>
   TRY (imp_res_tac exec_pure3_ok_halted >> gvs[] >> NO_TAC) >>
   TRY (imp_res_tac exec_read0_ok_halted >> gvs[] >> NO_TAC) >>
+  TRY (imp_res_tac exec_gas_ok_halted >> gvs[] >> NO_TAC) >>
   TRY (imp_res_tac exec_read1_ok_halted >> gvs[] >> NO_TAC) >>
   TRY (imp_res_tac exec_ext_call_ok_halted >> gvs[] >> NO_TAC) >>
   TRY (imp_res_tac exec_delegatecall_ok_halted >> gvs[] >> NO_TAC) >>

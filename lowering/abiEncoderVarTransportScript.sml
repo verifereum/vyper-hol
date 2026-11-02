@@ -144,7 +144,16 @@ Theorem abi_encoder_vars_extend_frame[local]:
   s.vs_memory = t.vs_memory /\ s.vs_call_ctx = t.vs_call_ctx /\
   s.vs_tx_ctx = t.vs_tx_ctx /\ s.vs_block_ctx = t.vs_block_ctx /\
   s.vs_accounts = t.vs_accounts /\ s.vs_returndata = t.vs_returndata /\
-  s.vs_code = t.vs_code
+  s.vs_code = t.vs_code /\ s.vs_gas_readings = t.vs_gas_readings
+Proof
+  rw[abi_decoder_vars_extend_def, Excl "vsr_complete_mask_equality"] >>
+  fs[vsr_frame_def, venom_state_component_equality]
+QED
+
+Theorem abi_decoder_vars_extend_gas_readings[local]:
+  abi_decoder_vars_extend extras s t ==>
+  abi_decoder_vars_extend extras (s with vs_gas_readings := r)
+    (t with vs_gas_readings := r)
 Proof
   rw[abi_decoder_vars_extend_def, Excl "vsr_complete_mask_equality"] >>
   fs[vsr_frame_def, venom_state_component_equality]
@@ -155,7 +164,14 @@ Theorem abi_encoder_step_extend_ignored[local]:
   step_inst_base inst s = OK u ==>
   ?v. step_inst_base inst t = OK v /\ abi_decoder_vars_extend extras u v
 Proof
-  strip_tac >> Cases_on `inst.inst_opcode` >>
+  strip_tac >> Cases_on `inst.inst_opcode = GAS`
+  >- (drule abi_encoder_vars_extend_frame >> strip_tac >>
+      qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
+      asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs, exec_gas_def] >>
+      strip_tac >> gvs[AllCaseEqs()] >>
+      irule abi_decoder_vars_extend_update >>
+      simp[abi_decoder_vars_extend_gas_readings]) >>
+  Cases_on `inst.inst_opcode` >>
   gvs[abi_encoder_ignored_inputs_def] >>
   qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
   asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs, exec_read0_def] >>

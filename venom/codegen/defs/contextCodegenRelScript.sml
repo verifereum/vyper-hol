@@ -26,7 +26,7 @@ Definition context_memory_rel_def:
 End
 (* Context-facing Venom/assembly relation.  Unlike venom_asm_rel, its memory
    mask covers every spill region in the complete context plan.  Its running
-   oracle/request clauses match venom_asm_rel; GAS readings remain free. *)
+   oracle, GAS-reading and request clauses match venom_asm_rel. *)
 Definition context_venom_asm_rel_def:
   context_venom_asm_rel cp label_offsets ps vs as <=>
     plan_stack_rel label_offsets vs ps.ps_stack as.as_stack /\
@@ -37,6 +37,7 @@ Definition context_venom_asm_rel_def:
     as.as_returndata = vs.vs_returndata /\
     as.as_logs = vs.vs_logs /\
     as.as_outcomes = vs.vs_outcomes /\
+    as.as_gas_readings = vs.vs_gas_readings /\
     as.as_requests = vs.vs_requests /\
     as.as_pending_deletions = vs.vs_pending_deletions /\
     as.as_call_ctx = vs.vs_call_ctx /\

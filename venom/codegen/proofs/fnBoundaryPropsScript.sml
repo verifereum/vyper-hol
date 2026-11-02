@@ -4,7 +4,7 @@
  * semantics only. No admitted simulator is used. *)
 Theory fnBoundaryProps
 Ancestors
-  venomToAsmProps codegenRel contextCodegenRel contextCodegenRelProps
+  venomToAsmProps frameRel codegenRel contextCodegenRel contextCodegenRelProps
   venomExecSemantics venomState asmSem list rich_list arithmetic
 
 (* Verifereum's overloaded [cp] is not a context-plan variable. *)
@@ -56,15 +56,16 @@ Proof
        merge_callee_state_def, venom_asm_terminal_rel_def]
 QED
 
-(* No GAS premise is smuggled into any of the new function relations. *)
-Theorem fn_boundary_gas_readings_free:
-  (shared_state_rel vs (as with as_gas_readings := readings) <=>
-   shared_state_rel vs as) /\
-  (fn_entry_state_rel cp fn vs (as with as_gas_readings := readings) ra rest <=>
-   fn_entry_state_rel cp fn vs as ra rest) /\
+(* Entry and return states share the remaining GAS readings; the caller's
+   pre-call readings are not constrained by the return relation. *)
+Theorem fn_boundary_gas_readings:
+  (shared_state_rel vs as ==> as.as_gas_readings = vs.vs_gas_readings) /\
+  (fn_entry_state_rel cp fn vs as ra rest ==>
+   as.as_gas_readings = vs.vs_gas_readings) /\
+  (fn_return_state_rel ctx cp fn vs' as as' ==>
+   as'.as_gas_readings = vs'.vs_gas_readings) /\
   (fn_return_state_rel ctx cp fn vs'
-     (as with as_gas_readings := before_readings)
-     (as' with as_gas_readings := after_readings) <=>
+     (as with as_gas_readings := before_readings) as' <=>
    fn_return_state_rel ctx cp fn vs' as as')
 Proof
   simp[shared_state_rel_def, fn_entry_state_rel_def, fn_return_state_rel_def,

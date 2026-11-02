@@ -246,3 +246,44 @@ Theorem delegate_designation_executes_implementation_in_proxy_context:
 Proof
   simp[EVERY_DEF] >> CONV_TAC cv_eval
 QED
+
+(* gas= is forwarded as the call's gas: a callee that needs more gas than it
+   is given halts exceptionally, so the call returns false and the callee's
+   writes roll back; an error in the gas= expression stops before the call.
+   The order of gas= and value= is checked by the rc21 bytecode witness. *)
+Definition gas_flags_def:
+  gas_flags = (regular_flags 0 F) with rcf_kws := [EKGas; EKValue]
+End
+val () = cv_auto_trans gas_flags_def;
+
+Definition gas_expression_def:
+  gas_expression gas_e =
+    Call (raw_call_return_type gas_flags) (RawCallTarget gas_flags)
+      [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [42w]));
+       Literal (BaseT (BytesT (Dynamic 5))) (BytesL [1w;2w;3w;4w;99w]);
+       gas_e; Literal (BaseT (UintT 256)) (IntL 0)] NONE
+End
+val () = cv_auto_trans gas_expression_def;
+
+(* The result and the callee's slot 0, which its code sets to 42. *)
+Definition gas_observe_def:
+  gas_observe gas_e =
+    let r = vyperSmallStep$fromtvk (vyperSmallStep$cont
+      (vyperSmallStep$eval_expr_cps delegate_context (gas_expression gas_e)
+        (delegate_state delegate_success_code) vyperSmallStep$DoneK)) in
+    (FST r, lookup_storage 0w (lookup_account 42w (SND r).accounts).storage)
+End
+val () = cv_auto_trans gas_observe_def;
+
+Theorem raw_call_gas_operand_limits_and_precedes_call:
+  gas_observe (Literal (BaseT (UintT 256)) (IntL 100)) =
+    (INL (Value (BoolV F)), 99w) /\
+  gas_observe (Literal (BaseT (UintT 256)) (IntL 1000000)) =
+    (INL (Value (BoolV T)), 42w) /\
+  gas_observe (Builtin (BaseT (UintT 256)) (Bop Div)
+                 [Literal (BaseT (UintT 256)) (IntL 1);
+                  Literal (BaseT (UintT 256)) (IntL 0)]) =
+    (INR (Error (RuntimeError "Div0")), 99w)
+Proof
+  CONV_TAC cv_eval
+QED

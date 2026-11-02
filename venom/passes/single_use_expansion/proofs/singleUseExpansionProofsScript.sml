@@ -957,7 +957,7 @@ local
     simp[step_inst_non_invoke] >>
     ONCE_ASM_REWRITE_TAC [sb] >>
     FULL_SIMP_TAC (srw_ss()) [iw, exec_pure1_def, exec_pure2_def,
-        exec_pure3_def, exec_read0_def, exec_read1_def, exec_write2_def,
+        exec_pure3_def, exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
         eval_operands_def, eval_operand_def] >>
     BasicProvers.EVERY_CASE_TAC >>
       gvs[eval_operand_def, eval_operands_def] >>

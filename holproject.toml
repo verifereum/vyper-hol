@@ -1,5 +1,5 @@
 [holbuild]
-minimum_version = "0.12.1"
+minimum_version = "0.12.0"
 
 [project]
 name = "vyper-hol"
@@ -11,6 +11,7 @@ roots = ["vyperHolScript.sml",
          "lowering/e2eBoundaryTestScript.sml",
          "lowering/evalCompilerWitnessesScript.sml",
          "lowering/targetPlaceTestScript.sml",
+         "lowering/targetPlaceSimCasesScript.sml",
          "venom/passes/dft/tests/dftEffectOrderTestScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerAbiTupleStringScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerAbiCodegenScript.sml",
@@ -24,7 +25,7 @@ roots = ["vyperHolScript.sml",
          "lowering/supported/supportedStmtTraversePropsScript.sml",
          "lowering/supported/supportedProgramPropsScript.sml",
          "venom/codegen/proofs/contextReachabilityChecksScript.sml",
-         "venom/passes/concretize_mem_loc/proofs/concretizeMemInvTransportScript.sml",
+         "venom/codegen/proofs/genFrameSimScript.sml",
          "tests/vyperPlaceProbesTestScript.sml",
          "tests/vyperPlaceSanityTestScript.sml"]
 

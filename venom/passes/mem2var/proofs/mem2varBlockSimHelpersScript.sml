@@ -980,7 +980,8 @@ Theorem m2v_step_nonpromoted:
      s1.vs_logs = s2.vs_logs) /\
     (!op. MEM op inst.inst_operands ==>
           eval_operand op s1 = eval_operand op s2) /\
-    (~is_effect_free_op inst.inst_opcode ==> inst.inst_outputs = []) /\
+    (~is_effect_free_op inst.inst_opcode /\ inst.inst_opcode <> GAS ==>
+     inst.inst_outputs = []) /\
     (!v. MEM v inst.inst_outputs ==> v NOTIN m2v_fresh_vars fn) /\
     (!ao pvar sz. MEM (ao,pvar,sz) (m2v_promo_list fn) ==>
       ~MEM ao inst.inst_outputs) /\
@@ -1023,7 +1024,8 @@ Theorem m2v_inv_noix_step_nonpromoted:
      s1.vs_logs = s2.vs_logs) /\
     (!op. MEM op inst.inst_operands ==>
           eval_operand op s1 = eval_operand op s2) /\
-    (~is_effect_free_op inst.inst_opcode ==> inst.inst_outputs = []) /\
+    (~is_effect_free_op inst.inst_opcode /\ inst.inst_opcode <> GAS ==>
+     inst.inst_outputs = []) /\
     (!v. MEM v inst.inst_outputs ==> v NOTIN m2v_fresh_vars fn) /\
     (!ao pvar sz. MEM (ao,pvar,sz) (m2v_promo_list fn) ==>
       ~MEM ao inst.inst_outputs) /\
@@ -1054,6 +1056,18 @@ Proof
   `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   imp_res_tac step_inst_base_oracle >>
+  `s1.vs_gas_readings = s2.vs_gas_readings` by
+    (qpat_x_assum `m2v_inv_noix _ _ _` mp_tac >>
+     simp[m2v_inv_noix_def] >> strip_tac >>
+     qpat_x_assum `m2v_frame _ = m2v_frame _`
+       (mp_tac o Q.AP_TERM `venom_state_vs_gas_readings`) >>
+     simp[m2v_frame_def]) >>
+  `v1.vs_gas_readings = v2.vs_gas_readings /\
+   (inst.inst_opcode = GAS ==>
+    !x. MEM x inst.inst_outputs ==> lookup_var x v1 = lookup_var x v2)` by
+    (Cases_on `inst.inst_opcode = GAS`
+     >- (drule_all step_inst_base_gas_agree >> simp[]) >>
+     imp_res_tac step_inst_base_gas_readings >> simp[]) >>
   imp_res_tac step_inst_preserves_alloca_state >>
   imp_res_tac step_inst_preserves_all >>
   imp_res_tac no_mem_write_excludes_others >>
@@ -1094,7 +1108,7 @@ Resume m2v_inv_noix_step_nonpromoted[g1]:
           >- (qpat_x_assum `step_inst_base inst s1 = OK v1` mp_tac >>
               simp[step_inst_base_phi_error]) >>
           metis_tac[])
-      >> gvs[])
+      >> Cases_on `inst.inst_opcode = GAS` >> gvs[])
   >> metis_tac[]
 QED
 
@@ -4754,7 +4768,7 @@ Triviality exec_result_helpers_no_halt_abort[simp]:
   (!inst s alloc_size a s'. exec_alloca inst s alloc_size <> Abort a s')
 Proof
   rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_alloca_def] >>
   gvs[AllCaseEqs()]
 QED
@@ -4769,7 +4783,7 @@ Triviality exec_result_helpers_not_intret[simp]:
   (!inst s alloc_size vs s'. exec_alloca inst s alloc_size <> IntRet vs s')
 Proof
   rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_alloca_def] >>
   gvs[AllCaseEqs()]
 QED

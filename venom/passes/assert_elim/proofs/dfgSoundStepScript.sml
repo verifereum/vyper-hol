@@ -488,7 +488,7 @@ fun dfg_eq_condition_tac () =
 
 fun step_vars_fupdate_finish_tac () =
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_ext_call_def, exec_delegatecall_def,
      exec_create_def, exec_alloca_def,
      extract_venom_result_def] >>
