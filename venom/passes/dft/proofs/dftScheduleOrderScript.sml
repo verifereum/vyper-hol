@@ -77,8 +77,23 @@ Definition dft_fallible_order_kept_def:
       fn.fn_blocks fn'.fn_blocks
 End
 
+(* Why it holds (unchecked notes):
+   - Permutation, flips, labels and pseudo prefix: dft_fn_all_perm_of and
+     dft_fn_dft_inv (dftCorrectness).  Blocks the loop never reaches come out
+     unchanged, which is why fn_pseudos_prefix is needed.
+   - A root (no outputs, no effects) is never a dependency: inst_data_deps
+     (terminator order deps too) only finds producers, build_eda only records
+     instructions with effects.  So it is an entry; entries are processed in
+     block order, every dependency is earlier in the block (SSA
+     defs-before-uses), so nothing after a root is emitted before it.  The
+     terminator is the last entry.
+   - Effect conflicts: WAW chain, RAW to the last writer, WAR (reads are
+     cleared after a write, but ordered through the intermediate writer).
+     schedule_output_eda_before (dftTopoSort) gives dependencies first.
+   - Each loop iteration keeps dft_inv, flip_operands keeps outputs, used
+     variables, effects and is_terminator, and flips are involutive. *)
 Theorem dft_fn_block_rel:
-  !fn. wf_ssa fn /\ wf_function fn ==>
+  !fn. wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn ==>
        (dft_fn fn).fn_name = fn.fn_name /\
        LIST_REL dft_block_rel fn.fn_blocks (dft_fn fn).fn_blocks
 Proof

@@ -54,6 +54,28 @@ Definition dft_fn_rel_def:
     dft_fallible_order_kept fn fn'
 End
 
+(* Why it holds (unchecked notes):
+   - Same fuel works: fuel is per block and per call depth, and the
+     schedule visits the same blocks and makes the same calls.
+   - Non-terminator Abort/Halt comes only from fallible opcodes (ASSERT,
+     ASSERT_UNREACHABLE, RETURNDATACOPY) and INVOKE, which keep their order.
+   - A non-fallible instruction with no effects (pure ops, ASSIGN, BUMP,
+     OFFSET, environment reads such as GAS) changes only vs_vars and
+     vs_inst_idx, and returns OK when inst_wf holds, its variables are
+     defined and its labels are bound (ctx_labels_bound; nothing writes
+     vs_labels).
+   - Definedness at the earlier position: def_dominates_uses plus a
+     strict-dominator invariant on the original run, like
+     strict_dom_vars_defined (sccpCorrectnessProofs); vacuous at the entry.
+   - Instructions with no must-order relation commute: the declared effects
+     cover every state field each opcode reads or writes (STATICCALL changes
+     no accounts, CREATE's memory write is empty, SSTORE only storage).
+   - INVOKE: setup_callee resets vs_vars and vs_inst_idx, so hoisted
+     effect-free instructions don't change the callee's run;
+     merge_callee_state keeps the caller's variables and SSA keeps
+     bind_outputs' names distinct from theirs.
+   - Halt states are equal: a terminator runs last, after the whole block,
+     and an INVOKE's halt is the callee's state. *)
 Theorem dft_run_blocks_rel:
   !C C'.
     LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions ==>
