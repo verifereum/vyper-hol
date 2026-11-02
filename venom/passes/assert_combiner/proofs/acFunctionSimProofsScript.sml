@@ -20,14 +20,13 @@ Theorem ac_block_sim_function_inv_cross:
    (R_term : venom_state -> venom_state -> bool)
    (R_abort : venom_state -> venom_state -> bool) bt fn
    (Inv : venom_state -> bool).
-    let fn' = function_map_transform bt fn in
     valid_state_rel R_ok R_term /\
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb fuel ctx s s'.
        MEM bb fn.fn_blocks /\ Inv s /\
        run_block fuel ctx bb s = OK s' /\ ~s'.vs_halted ==> Inv s') /\
     (!bb fuel ctx s s'.
-       MEM bb fn'.fn_blocks /\ Inv s /\
+       MEM bb (function_map_transform bt fn).fn_blocks /\ Inv s /\
        run_block fuel ctx bb s = OK s' /\ ~s'.vs_halted ==> Inv s') /\
     (!bb fuel ctx s1 s2.
        MEM bb fn.fn_blocks /\ R_ok s1 s2 /\ Inv s1 /\ Inv s2 ==>
@@ -36,7 +35,7 @@ Theorem ac_block_sim_function_inv_cross:
     !fuel ctx s.
       Inv s /\ s.vs_inst_idx = 0 ==>
       lift_result R_ok R_term R_abort (run_blocks fuel ctx fn s)
-        (run_blocks fuel ctx fn' s)
+        (run_blocks fuel ctx (function_map_transform bt fn) s)
 Proof
   simp_tac std_ss [LET_THM] >> rpt gen_tac >> strip_tac >>
   qabbrev_tac `fn' = function_map_transform bt fn` >>
