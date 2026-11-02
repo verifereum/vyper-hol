@@ -362,15 +362,14 @@ Proof
   Cases_on `conv`
   >~ [`compile_type_convert v ConvBytestringToBool`] >-
     (metis_tac[compile_type_convert_bytestring_safe, listTheory.MEM, safe_operand_def])
-  >~ [`compile_type_convert v (ConvBytestringToInt s n)`] >-
+  >~ [`compile_type_convert v (ConvBytestringToInt s n in_n)`] >-
     (metis_tac[compile_type_convert_bytestring_safe, listTheory.MEM, safe_operand_def])
-  >~ [`compile_type_convert v ConvBytestringToAddress`] >-
-    (metis_tac[compile_type_convert_bytestring_safe, listTheory.MEM, safe_operand_def])
-  >~ [`compile_type_convert v (ConvBytestringToDecimal d lo hi)`] >-
+  >~ [`compile_type_convert v (ConvBytestringToDecimal d lo hi in_n)`] >-
     (metis_tac[compile_type_convert_bytestring_safe, listTheory.MEM, safe_operand_def])
   >~ [`compile_type_convert v (ConvBytestringToBytesM m)`] >-
     (metis_tac[compile_type_convert_bytestring_safe, listTheory.MEM, safe_operand_def]) >>
-  simp[compile_type_convert_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_type_convert_def, compile_int_clamp_def,
+       comp_bind_def, comp_ignore_bind_def,
        comp_return_def, LET_THM] >>
   rpt (IF_CASES_TAC >> simp[comp_bind_def, comp_ignore_bind_def,
                            comp_return_def, LET_THM]) >>
