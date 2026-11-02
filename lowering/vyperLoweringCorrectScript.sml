@@ -907,14 +907,14 @@ QED
 (* S2b: planned admission, Milestone 5. The lowering's PHI-free code
    refers to labels only in jumps to blocks of the same function, in
    reserved labels, and in INVOKE targets; its entry function reads
-   calldata, never a PARAM; and, having no PHI at all, no first block has
-   one. *)
+   calldata, never a PARAM; having no PHI at all, no first block has
+   one; and every variable a use reads is written on every path to it. *)
 Theorem lower_vyper_runtime_unit_o1_shape_extras:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
     immutable_free_program tops
     ==> unit_label_refs_ok unit /\ unit_entry_no_params unit /\
-        unit_first_block_no_phi unit
+        unit_first_block_no_phi unit /\ unit_defs_reach_uses unit
 Proof
   cheat
 QED

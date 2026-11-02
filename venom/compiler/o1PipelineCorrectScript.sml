@@ -27,7 +27,9 @@ End
  * Premises added to the original admission: the source's non-INVOKE label
  * operands are local (unit_label_refs_ok), which unit_wf does not give for
  * PHI; its entry function has no PARAM (unit_entry_no_params); no
- * function has a PHI in its first block (unit_first_block_no_phi); and
+ * function has a PHI in its first block (unit_first_block_no_phi); every
+ * variable a use reads is written on every path to it
+ * (unit_defs_reach_uses), which SimplifyCFG's pre-walk needs; and
  * the initial state's dynamic-memory pointer is its initial free-memory
  * pointer (o1_run_state_ok), as the entry state has it. *)
 Theorem run_venom_pipeline_correct:
@@ -35,7 +37,7 @@ Theorem run_venom_pipeline_correct:
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
     unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
-    o1_run_state_ok vs /\
+    unit_defs_reach_uses unit /\ o1_run_state_ok vs /\
     raw_unit_memory_ok unit.cu_context vs
     ==>
     checked_unit_transform_correct o1_pipeline rpolicy unit vs
@@ -43,6 +45,7 @@ Proof
   rpt strip_tac >>
   simp[checked_unit_transform_correct_def, ctx_transform_correct_ctx_sim] >>
   fs[o1_pipeline_def, raw_unit_memory_ok_mem_inv, GSYM o1_src_inv_def] >>
+  drule_all o1_source_pre_walk_inv >> strip_tac >>
   drule_all o1_pipeline_stage_facts >> strip_tac >> metis_tac[]
 QED
 
@@ -53,7 +56,7 @@ Theorem run_venom_pipeline_mem_inv:
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
     unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
-    o1_run_state_ok vs /\
+    unit_defs_reach_uses unit /\ o1_run_state_ok vs /\
     raw_unit_memory_ok unit.cu_context vs
     ==>
     ?eom. mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp))
@@ -61,6 +64,7 @@ Theorem run_venom_pipeline_mem_inv:
 Proof
   rpt strip_tac >>
   fs[o1_pipeline_def, raw_unit_memory_ok_mem_inv, GSYM o1_src_inv_def] >>
+  drule_all o1_source_pre_walk_inv >> strip_tac >>
   drule_all o1_pipeline_stage_facts >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
   fs[o1_lowered_inv_def] >>

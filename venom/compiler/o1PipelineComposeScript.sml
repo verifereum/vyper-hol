@@ -118,12 +118,23 @@ Proof
   >> strip_tac >> drule_all source_internal_shape >> simp[]
 QED
 
+(* The pre-walk's input invariant: the source has no PHI. *)
+Theorem o1_source_pre_walk_inv:
+  o1_source_unit_ok unit /\ unit_defs_reach_uses unit /\
+  o1_src_inv unit.cu_context vs ==>
+  o1_pre_walk_inv unit.cu_context vs
+Proof
+  rw[o1_pre_walk_inv_def, o1_source_unit_ok_def, unit_defs_reach_uses_def,
+     raw_opcode_ok_def] >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED
+
 (* ===== One pre-walk schedule ===== *)
 
-(* A pass mapped over every function, keeping an invariant. *)
+(* A pass mapped over every function, taking one invariant to another. *)
 Theorem o1_mapped_pass_sim:
   o1_step_contract rpolicy pass /\
-  (!view. o1_stage_contract rpolicy pass view no_pre stage_inv stage_inv) /\
+  (!view. o1_stage_contract rpolicy pass view no_pre stage_inv stage_inv') /\
   run_mapped_functions rpolicy pass unit s = SOME (unit', s') /\
   o1_ctx_shape unit.cu_context /\
   ALL_DISTINCT (unit_label_namespace unit) /\ ir_supply_inst_ok s ==>
@@ -133,7 +144,7 @@ Theorem o1_mapped_pass_sim:
   unit'.cu_context.ctx_global_reserved = unit.cu_context.ctx_global_reserved /\
   ctx_fn_names unit'.cu_context = ctx_fn_names unit.cu_context /\
   !vs. o1_run_state_ok vs /\ stage_inv unit.cu_context vs ==>
-       ctx_sim unit.cu_context unit'.cu_context vs vs /\ stage_inv unit'.cu_context vs
+       ctx_sim unit.cu_context unit'.cu_context vs vs /\ stage_inv' unit'.cu_context vs
 Proof
   strip_tac >> drule_all mapped_pass_stage >> strip_tac >>
   simp[] >> rpt gen_tac >> strip_tac >>
@@ -152,9 +163,9 @@ Theorem o1_pre_walk_sim:
   unit'.cu_context.ctx_entry = unit.cu_context.ctx_entry /\
   unit'.cu_context.ctx_global_reserved = unit.cu_context.ctx_global_reserved /\
   ctx_fn_names unit'.cu_context = ctx_fn_names unit.cu_context /\
-  !vs. o1_run_state_ok vs /\ o1_src_inv unit.cu_context vs ==>
+  !vs. o1_run_state_ok vs /\ o1_pre_walk_inv unit.cu_context vs ==>
        ctx_sim unit.cu_context unit'.cu_context vs vs /\
-       o1_src_inv unit'.cu_context vs
+       o1_walk_src_inv unit'.cu_context vs
 Proof
   strip_tac >> drule o1_pre_walk_runs >> strip_tac >>
   `o1_ctx_shape mid.cu_context /\ unit_labels_wf mid /\
@@ -162,14 +173,21 @@ Proof
    mid.cu_context.ctx_entry = unit.cu_context.ctx_entry /\
    mid.cu_context.ctx_global_reserved = unit.cu_context.ctx_global_reserved /\
    ctx_fn_names mid.cu_context = ctx_fn_names unit.cu_context /\
-   !vs. o1_run_state_ok vs /\ o1_src_inv unit.cu_context vs ==>
-     ctx_sim unit.cu_context mid.cu_context vs vs /\ o1_src_inv mid.cu_context vs` by
+   !vs. o1_run_state_ok vs /\ o1_pre_walk_inv unit.cu_context vs ==>
+     ctx_sim unit.cu_context mid.cu_context vs vs /\
+     o1_walk_src_inv mid.cu_context vs` by
     (irule o1_mapped_pass_sim >> metis_tac[o1_contract_simplify_cfg_pre_walk]) >>
   drule unit_labels_wf_namespace >> strip_tac >>
-  drule_at (Pos (el 3)) o1_mapped_pass_sim >>
-  disch_then (qspec_then `o1_src_inv` mp_tac) >>
-  impl_tac >- simp[o1_contract_dret_desugar_pre_walk] >>
-  strip_tac >> simp[] >> rpt gen_tac >> strip_tac >>
+  `o1_ctx_shape unit'.cu_context /\ unit_labels_wf unit' /\
+   ir_supply_inst_ok s' /\
+   unit'.cu_context.ctx_entry = mid.cu_context.ctx_entry /\
+   unit'.cu_context.ctx_global_reserved = mid.cu_context.ctx_global_reserved /\
+   ctx_fn_names unit'.cu_context = ctx_fn_names mid.cu_context /\
+   !vs. o1_run_state_ok vs /\ o1_walk_src_inv mid.cu_context vs ==>
+     ctx_sim mid.cu_context unit'.cu_context vs vs /\
+     o1_walk_src_inv unit'.cu_context vs` by
+    (irule o1_mapped_pass_sim >> metis_tac[o1_contract_dret_desugar_pre_walk]) >>
+  simp[] >> rpt gen_tac >> strip_tac >>
   metis_tac[ctx_sim_trans]
 QED
 
@@ -212,6 +230,14 @@ Proof
   qexists_tac `fcg_is_reachable fcg` >>
   qexists_tac `unit.cu_context` >>
   gvs[] >> metis_tac[rangewise_mem_fact_ctx]
+QED
+
+(* Pruning keeps a fact of every function. *)
+Theorem o1_prune_every:
+  EVERY P unit.cu_context.ctx_functions ==>
+  EVERY P (prune_unit_fcg_unreachable unit fcg).cu_context.ctx_functions
+Proof
+  simp[prune_unit_fcg_unreachable_def, EVERY_FILTER_IMP]
 QED
 
 (* ===== The walk ===== *)
@@ -286,7 +312,7 @@ Theorem o1_walk_sim:
   ctx_fn_names unit'.cu_context =
     ctx_fn_names (prune_unit_fcg_unreachable unit fcg).cu_context /\
   !vs. o1_run_state_ok vs /\
-       o1_src_inv (prune_unit_fcg_unreachable unit fcg).cu_context vs ==>
+       o1_walk_src_inv (prune_unit_fcg_unreachable unit fcg).cu_context vs ==>
        ctx_sim (prune_unit_fcg_unreachable unit fcg).cu_context
                unit'.cu_context vs vs /\
        o1_lowered_inv unit'.cu_context vs
@@ -303,7 +329,7 @@ Proof
     (qpat_x_assum `!k. k <= _ ==> _` (qspec_then `LENGTH o1_fn_passes` mp_tac) >>
      gvs[prune_unit_fcg_unreachable_fields]) >>
   simp[] >> rpt gen_tac >> strip_tac >>
-  `o1_inv 0 = o1_src_inv /\ o1_inv (LENGTH o1_fn_passes) = o1_lowered_inv` by
+  `o1_inv 0 = o1_walk_src_inv /\ o1_inv (LENGTH o1_fn_passes) = o1_lowered_inv` by
     simp[o1_inv_def, o1_fn_passes_def] >>
   `ctx_sim (stage 0) (stage (LENGTH o1_fn_passes)) vs vs /\
    o1_inv (LENGTH o1_fn_passes) (stage (LENGTH o1_fn_passes)) vs` by
@@ -321,7 +347,7 @@ Theorem o1_pipeline_stage_facts:
   unit_entry_no_params unit /\ unit_first_block_no_phi unit ==>
   o1_ctx_shape out.po_unit.cu_context /\
   entry_fn_first out.po_unit.cu_context /\
-  !vs. o1_run_state_ok vs /\ o1_src_inv unit.cu_context vs ==>
+  !vs. o1_run_state_ok vs /\ o1_pre_walk_inv unit.cu_context vs ==>
        ctx_sim unit.cu_context out.po_unit.cu_context vs vs /\
        o1_lowered_inv out.po_unit.cu_context vs
 Proof
@@ -345,7 +371,7 @@ Proof
       gvs[prune_unit_fcg_unreachable_fields]) >>
   rpt gen_tac >> strip_tac >>
   `ctx_sim unit.cu_context pre.cu_context vs vs /\
-   o1_src_inv pre.cu_context vs` by metis_tac[] >>
+   o1_walk_src_inv pre.cu_context vs` by metis_tac[] >>
   `(!fuel vs. run_context fuel pre.cu_context vs =
       run_context fuel (prune_unit_fcg_unreachable pre
         (fcg_analyze pre.cu_context)).cu_context vs) /\
@@ -353,9 +379,9 @@ Proof
      mem_inv raw_mem_ok (prune_unit_fcg_unreachable pre
        (fcg_analyze pre.cu_context)).cu_context vs` by
     (irule o1_prune_sim >> metis_tac[rangewise_raw_mem_ok]) >>
-  `o1_src_inv (prune_unit_fcg_unreachable pre
-                 (fcg_analyze pre.cu_context)).cu_context vs` by
-    fs[o1_src_inv_def] >>
+  `o1_walk_src_inv (prune_unit_fcg_unreachable pre
+                      (fcg_analyze pre.cu_context)).cu_context vs` by
+    fs[o1_walk_src_inv_def, o1_src_inv_def, o1_prune_every] >>
   `ctx_sim unit.cu_context
       (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context vs vs` by
     (irule ctx_sim_run_context_eq >> qexists_tac `pre.cu_context` >> simp[]) >>
