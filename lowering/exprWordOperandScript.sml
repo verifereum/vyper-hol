@@ -10,6 +10,9 @@
  * pointer from cenv through.
  *
  * TOP-LEVEL:
+ *   nonword_builtin_cases, nonword_type_builtin_cases — typed non-word
+ *                              dispatch classifications
+ *   typed_convert_child — conversion annotation and typed child
  *   compile_expr_word_result — by induction over compile_expr, for
  *                              compile_expr and both builtin dispatchers
  *   lower_value_word_safe_operand — the operand of lower_value compile_expr
@@ -25,6 +28,68 @@ Ancestors
   exprLoweringProps freshWrites compileEnv emitHelper context
   exprLowering exprCallBounds vyperTypeSystem vyperValue vyperAST vyperTypeBuiltins
   builtinSimple builtinMath builtinHashing builtinMisc builtinBytes builtinSystem
+
+(* Non-word dispatch cases: typing excludes arithmetic and word-only
+   builtins, but conversions may forward a child's operand. *)
+Theorem nonword_type_builtin_cases:
+  well_typed_expr env (TypeBuiltin ann tb target args) /\
+  ~is_word_type ann ==>
+  tb = Convert \/ tb = Empty \/
+  (?ensure mid. tb = AbiEncode ensure mid) \/ (?ensure. tb = AbiDecode ensure)
+Proof
+  Cases_on `tb` >>
+  simp[well_typed_expr_def, type_builtin_result_ok_def,
+       well_typed_type_builtin_args_def, is_numeric_type_def,
+       extract32_result_base_ok_def, is_int_type_def, is_word_type_def] >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `ann` >> gvs[is_word_type_def, is_int_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[is_word_type_def, is_int_type_def, extract32_result_base_ok_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[is_word_type_def, extract32_result_base_ok_def,
+       well_formed_type_def, evaluate_type_def, AllCaseEqs()] >>
+  metis_tac[]
+QED
+
+Theorem nonword_builtin_cases:
+  well_typed_expr env (Builtin ann bi args) /\ ~is_word_type ann ==>
+  (?n. bi = CalldataSlice n) \/ (?n. bi = Concat n) \/
+  (?n. bi = Slice n) \/ (?n. bi = Uint2Str n) \/ bi = MethodId \/
+  (?elem bd. bi = MakeArray elem bd) \/ bi = ECAdd \/ bi = ECMul \/
+  bi = Acc Code
+Proof
+  Cases_on `bi` >>
+  simp[well_typed_expr_def, well_typed_builtin_app_def, is_word_type_def] >>
+  rpt strip_tac >> gvs[]
+  >- (Cases_on `HD (MAP expr_type args)` >>
+      simp[is_bool_type_def, is_uint256_type_def, is_bytes32_type_def,
+           is_flag_type_def, is_word_type_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >>
+      simp[is_bool_type_def, is_uint256_type_def, is_bytes32_type_def,
+           is_word_type_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >>
+      simp[is_bytes32_type_def, is_word_type_def] >> metis_tac[])
+  >- (Cases_on `ann` >> simp[is_int_type_def, is_word_type_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >>
+      simp[is_int_type_def, is_word_type_def])
+  >- (Cases_on `b` >> simp[well_typed_binop_def] >>
+      Cases_on `ann` >> simp[is_int_type_def, is_word_type_def,
+        is_numeric_type_def, is_bool_type_def, is_flag_type_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >>
+      simp[is_int_type_def, is_word_type_def, is_bool_type_def] >> metis_tac[])
+  >- (Cases_on `e` >> simp[env_item_type_def, is_word_type_def])
+  >> Cases_on `a` >> gvs[account_item_type_def, is_word_type_def]
+QED
+
+Theorem typed_convert_child:
+  well_typed_expr env (TypeBuiltin ann Convert target args) ==>
+  ann = target /\ ?arg. args = [arg] /\ well_typed_expr env arg
+Proof
+  simp[well_typed_expr_def, type_builtin_result_ok_def,
+       well_typed_type_builtin_args_def] >>
+  Cases_on `args` >> simp[] >> rename1 `arg::rest` >>
+  Cases_on `rest` >> simp[well_typed_expr_def] >> metis_tac[]
+QED
 
 (* ===== The cases of compile_expr_body and the dispatchers ===== *)
 
@@ -312,7 +377,7 @@ QED
 
 (* ===== The induction ===== *)
 
-Theorem word_list_result_elim[local]:
+Theorem word_list_result_elim:
   (list_CASE xs n c = r ==> Q) <=>
   (xs = [] ==> n = r ==> Q) /\
   (!h t. xs = h::t ==> c h t = r ==> Q)
@@ -320,7 +385,7 @@ Proof
   Cases_on `xs` >> simp[]
 QED
 
-Theorem word_expr_result_elim[local]:
+Theorem word_expr_result_elim:
   (expr_CASE e f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 = r ==> Q) <=>
   (!a b. e = Name a b ==> f1 a b = r ==> Q) /\
   (!a b. e = TopLevelName a b ==> f2 a b = r ==> Q) /\

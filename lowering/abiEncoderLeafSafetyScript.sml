@@ -141,7 +141,8 @@ Theorem abi_word_prefix_public_state:
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   local_prefix ctx fn (st'.cs_current_bb,LENGTH st'.cs_current_insts) s t ==>
   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-  t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+  t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests /\
+  t.vs_pending_deletions = s.vs_pending_deletions
 Proof
   strip_tac >> drule_all abi_word_prefix_state >> strip_tac >>
   gvs[mstore_def, write_memory_with_expansion_def, update_var_def]

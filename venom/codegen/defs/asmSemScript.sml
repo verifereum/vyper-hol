@@ -41,6 +41,7 @@ Datatype:
     as_prev_hashes : bytes32 list;
     as_outcomes : call_outcome list;
     as_requests : call_request list;
+    as_pending_deletions : address list;
     as_gas_readings : bytes32 list
   |>
 End
@@ -605,6 +606,8 @@ Definition asm_consume_call_outcome_def:
          as_accounts := accounts;
          as_transient := ts;
          as_logs := logs;
+         as_pending_deletions :=
+           adopt_outcome_deletions rq outcome s.as_pending_deletions;
          as_returndata := outcome.co_returnData;
          as_memory := TAKE ro s.as_memory ++ bytes ++
                       DROP (ro + LENGTH bytes) s.as_memory |>))

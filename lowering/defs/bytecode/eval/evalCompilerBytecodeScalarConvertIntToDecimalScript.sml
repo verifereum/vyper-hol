@@ -125,6 +125,11 @@ val scalar_convert_int_to_decimal_external_fns =
 val scalar_convert_int_to_decimal_return_buffers_ok_eval = save_thm
   ("scalar_convert_int_to_decimal_return_buffers_ok_eval",
    EQT_ELIM (EVAL ``EVERY external_return_buffer_ok ^scalar_convert_int_to_decimal_external_fns``))
+val scalar_convert_int_to_decimal_allocs_ok_eval = save_thm
+  ("scalar_convert_int_to_decimal_allocs_ok_eval",
+   EQT_ELIM (EVAL ``EVERY (fn_allocs_ok ^scalar_convert_int_to_decimal_tops)
+      (^scalar_convert_int_to_decimal_external_sources ++ ^scalar_convert_int_to_decimal_internal_sources ++
+       (case ^scalar_convert_int_to_decimal_fallback_source of NONE => [] | SOME f => [f]))``))
 val scalar_convert_int_to_decimal_internal_fns_eval = save_thm
   ("scalar_convert_int_to_decimal_internal_fns_eval",
    evalCompilerBytecodeLib.weak_eval ``MAP (set_internal_package_target
@@ -507,7 +512,8 @@ val scalar_convert_int_to_decimal_runtime_unit_eval = save_thm
       scalar_convert_int_to_decimal_fallback_fn_eval,
       scalar_convert_int_to_decimal_entry_info_eval,
       scalar_convert_int_to_decimal_run_lowering_eval,
-      scalar_convert_int_to_decimal_return_buffers_ok_eval, boolTheory.COND_CLAUSES,
+      scalar_convert_int_to_decimal_return_buffers_ok_eval, scalar_convert_int_to_decimal_allocs_ok_eval,
+      boolTheory.AND_CLAUSES, boolTheory.COND_CLAUSES,
       LET_THM, pairTheory.FST, pairTheory.SND,
       pairTheory.UNCURRY_DEF, pairTheory.pair_case_def] @
      CONJUNCTS

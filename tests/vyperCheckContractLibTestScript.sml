@@ -877,6 +877,14 @@ val () = check_rejects empty_layouts
          [Return (SOME (Call ^s10 (IntCall (NONE,"_g")) [] NONE))]])]
     : (num option # toplevel list) list``
 
+(* Like Vyper (_SequenceT.__init__), an array of bound 0 is not a type. *)
+fun array_param ty = one_fn ``[("xs", ^ty)]`` ``NoneT`` ``[Pass]``
+val () = app (check_rejects empty_layouts o array_param)
+  [``ArrayT (BaseT (UintT 256)) (Fixed 0)``,
+   ``ArrayT (BaseT (UintT 256)) (Dynamic 0)``]
+val () = check_accepts "array of bound 1" false empty_layouts
+  (array_param ``ArrayT (BaseT (UintT 256)) (Fixed 1)``)
+
 val widen_map_layouts =
   ``([((0w : address), ([((NONE, "m"), 0)] : storage_layout,
                         [] : storage_layout))]
@@ -1127,8 +1135,8 @@ val () = body_case "log" ``NoneT`` ``[Log (NONE, "E") []]``
   [``Nonpayable``] [``View``, ``Pure``]
 val () = expr_case "raw_log"
   ``Call NoneT RawLog
-      [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic 0))
-         (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic 0)) [];
+      [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic 4))
+         (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic 4)) [];
        ^empty_bytes] NONE``
   [``Nonpayable``] [``View``]
 val () = expr_case "send" ``Call NoneT (Send F) [^arg_a; ^(uint 1)] NONE``

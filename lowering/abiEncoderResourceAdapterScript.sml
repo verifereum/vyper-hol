@@ -1,5 +1,7 @@
 (* Resource-boundary diagnostics for the frozen source encoder contract.
-   These concern internal runner premises, not execution counterexamples. *)
+   These concern internal runner premises, not execution counterexamples.
+   The zero-size source type below no longer evaluates: evaluate_type
+   rejects an array of bound 0, as Vyper does. *)
 Theory abiEncoderResourceAdapter
 Ancestors
   abiEncoderProps abiEncoderOpenInput abiEncoderOpenInputFrame
@@ -10,8 +12,7 @@ Ancestors
 
 Theorem abi_encoder_zero_source_separation_diagnostic:
   evaluate_type FEMPTY
-    (TupleT [ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 0)]) =
-    SOME (TupleTV [ArrayTV (BaseTV (BytesT (Dynamic 1))) (Fixed 0)]) /\
+    (TupleT [ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 0)]) = NONE /\
   type_memory_size
     (TupleTV [ArrayTV (BaseTV (BytesT (Dynamic 1))) (Fixed 0)]) = 0 /\
   venomMemDefs$regions_disjoint (16,0) (0,32) /\

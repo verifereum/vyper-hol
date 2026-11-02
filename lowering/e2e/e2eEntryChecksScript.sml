@@ -164,7 +164,8 @@ Theorem entry_trace_two_step_call:
   7 <= LENGTH (FST (HD es.contexts)).stack /\
   ~computed_precompile (request_of es) ==>
   call_trace es =
-    [(request_of es, outcome_of post (LENGTH (FST (HD es.contexts)).logs))]
+    [(request_of es, outcome_of post (LENGTH (FST (HD es.contexts)).logs)
+       (LENGTH es.rollback.toDelete))]
 Proof
   rpt strip_tac >>
   simp[call_trace_def, full_call_trace_def, frame_obs_def] >>
@@ -183,7 +184,8 @@ Proof
   rename1 `step post_state = (last_result, last_state)` >> gvs[] >>
   `call_trace entry_trace_es =
     [(request_of entry_trace_es,
-      outcome_of post_state (LENGTH (FST (HD entry_trace_es.contexts)).logs))]` by
+      outcome_of post_state (LENGTH (FST (HD entry_trace_es.contexts)).logs)
+        (LENGTH entry_trace_es.rollback.toDelete))]` by
     (irule entry_trace_two_step_call >> simp[] >>
      simp[entry_trace_es_def, make_asm_call_state_def, next_opcode_def,
           entry_trace_encoding, initial_context_def, initial_msg_params_def,

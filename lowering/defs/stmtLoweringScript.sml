@@ -374,94 +374,6 @@ Definition compile_external_return_def:
     od
 End
 
-(* ===== Get Target Ptr ===== *)
-(* Full target pointer dispatch for assignments.
-   Mirrors Python: vyper/codegen_venom/stmt.py:_get_target_ptr
-   Returns (operand, data_location option, place_ty option).
-   The descriptor tracks the current place, consuming one map/array layer
-   per subscript rather than inspecting the root target name. *)
-Definition compile_get_target_ptr_def:
-  compile_get_target_ptr cenv (NameTarget id) =
-    (case FLOOKUP cenv.ce_vars id of
-       SOME (MemLoc offset _) =>
-         return (Lit (n2w offset), SOME LocMemory, OPTION_MAP ValPT (cenv.ce_var_type id))
-     | SOME (PtrVar ptr_op _) =>
-         return (ptr_op, SOME LocMemory, OPTION_MAP ValPT (cenv.ce_var_type id))
-     | SOME (ImmutableLoc offset) =>
-         return (Lit (n2w offset), SOME LocCode, OPTION_MAP ValPT (cenv.ce_var_type id))
-     | _ => return (Lit 0w, NONE, NONE)) ∧
-  compile_get_target_ptr cenv (TopLevelNameTarget nsid) =
-    (let pt = (case cenv.ce_hashmap_info nsid of
-                  SOME (_, kt, vt) => SOME (MapPT kt vt)
-                | NONE => OPTION_MAP ValPT (cenv.ce_module_var_type nsid)) in
-     case FLOOKUP cenv.ce_module_vars nsid of
-       SOME (StorageLoc slot) => return (Lit slot, SOME LocStorage, pt)
-     | SOME (TransientLoc slot) => return (Lit slot, SOME LocTransient, pt)
-     | SOME (ImmutableLoc offset) =>
-         return (Lit (n2w offset), SOME LocCode,
-                 OPTION_MAP ValPT (cenv.ce_module_var_type nsid))
-     | _ => return (Lit 0w, NONE, NONE)) ∧
-  compile_get_target_ptr cenv (SubscriptTarget bt idx_e) =
-    do result <- compile_get_target_ptr cenv bt;
-       let base_op = FST result in
-       let loc_opt = FST (SND result) in
-       let base_type_opt = SND (SND result) in
-       case base_type_opt of
-         SOME (MapPT kt vt) =>
-           do key_op <- lower_value compile_expr cenv (expr_type idx_e) idx_e;
-              hashed_key <- (if is_bytestring_type kt then
-                               compile_keccak256_key key_op F
-                             else return key_op);
-              slot_op <- compile_mapping_subscript base_op hashed_key;
-              return (slot_op, loc_opt, SOME (value_type_place vt))
-           od
-       | _ =>
-           do idx_op <- lower_value compile_expr cenv (expr_type idx_e) idx_e;
-              let loc = (case loc_opt of SOME l => l | NONE => LocMemory) in
-              let is_dynamic = (case base_type_opt of
-                                  SOME (ValPT (ArrayT _ (Dynamic _))) => T
-                                | _ => F) in
-              let elem_ty = (case base_type_opt of
-                               SOME (ValPT (ArrayT t _)) => t
-                             | _ => BaseT (UintT 256)) in
-              let ws = word_scale loc in
-              let elem_sz = elem_size_in_location cenv loc elem_ty in
-              let static_count = (case base_type_opt of
-                                    SOME (ValPT (ArrayT _ (Fixed n))) => n
-                                  | _ => 0) in
-              let is_signed_idx = is_signed_type (expr_type idx_e) in
-              let loader = compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc in
-              do elem_ptr <-
-                   compile_array_subscript base_op idx_op is_dynamic static_count
-                                           ws elem_sz is_signed_idx loader;
-                 return (elem_ptr, loc_opt, SOME (ValPT elem_ty))
-              od
-           od
-    od ∧
-  compile_get_target_ptr cenv (AttributeTarget bt field) =
-    do result <- compile_get_target_ptr cenv bt;
-       let base_op = FST result in
-       let loc_opt = FST (SND result) in
-       let base_type_opt = SND (SND result) in
-       let struct_name = (case base_type_opt of
-                            SOME (ValPT (StructT sn)) => nsid_to_string sn
-                          | _ => "") in
-       let fields = get_struct_fields cenv.ce_struct_fields struct_name in
-       let is_storage = (case loc_opt of
-                           SOME LocStorage => T
-                         | SOME LocTransient => T
-                         | _ => F) in
-       let field_offset =
-         (if is_storage then struct_field_offset_slots fields field
-          else struct_field_offset fields field) in
-       let field_type = (case ALOOKUP fields field of
-                           SOME (fty, _) => SOME (ValPT fty) | NONE => NONE) in
-       do ptr <- emit_op ADD [base_op; Lit (n2w field_offset)];
-          return (ptr, loc_opt, field_type)
-       od
-    od
-End
-
 (* ===== Assign Value ===== *)
 (* Dispatch assign by location and type.
 
@@ -638,7 +550,7 @@ End
 Definition compile_tuple_store_all_def:
   compile_tuple_store_all cenv [] [] [] = return () ∧
   compile_tuple_store_all cenv (src_ty :: src_tys) (BaseTarget bt :: targets) (val_op :: vals) =
-    do result <- compile_get_target_ptr cenv bt;
+    do result <- compile_get_target_ptr compile_expr cenv bt;
        dst_op <- return (FST result);
        loc_opt <- return (FST (SND result));
        dst_ty_opt <- return (SND (SND result));
@@ -948,13 +860,13 @@ Definition compile_stmt_def:
      Mirrors Python: vyper/codegen_venom/stmt.py:lower_Assign with _assign_value *)
   compile_stmt cenv lctx ty (Assign (BaseTarget bt) e) =
     (if has_length_word (expr_type e) ∧ is_empty_value_expr e then
-       do tgt_result <- compile_get_target_ptr cenv bt;
+       do tgt_result <- compile_get_target_ptr compile_expr cenv bt;
           compile_store_at_loc cenv.ce_imm_alloca (FST tgt_result) (Lit 0w) (FST (SND tgt_result))
        od
      else
      let src_ty = lowered_value_type cenv e in
      do src_vv <- compile_expr cenv (expr_type e) e;
-        tgt_result <- compile_get_target_ptr cenv bt;
+        tgt_result <- compile_get_target_ptr compile_expr cenv bt;
         dst_op <- return (FST tgt_result);
         dst_loc_opt <- return (FST (SND tgt_result));
         dst_ty_opt <- return (SND (SND tgt_result));
@@ -981,7 +893,7 @@ Definition compile_stmt_def:
      Handles memory, storage, transient targets.
      Mirrors Python: vyper/codegen_venom/stmt.py:lower_AugAssign *)
   compile_stmt cenv lctx ty (AugAssign target_ty bt bop e) =
-    do tgt_result <- compile_get_target_ptr cenv bt;
+    do tgt_result <- compile_get_target_ptr compile_expr cenv bt;
        dst_op <- return (FST tgt_result);
        dst_loc_opt <- return (FST (SND tgt_result));
        (* Python order: get_target → load current → eval RHS → binop → store *)
