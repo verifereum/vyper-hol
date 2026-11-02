@@ -3,7 +3,7 @@ Theory bodyIntCallBuiltinLabels
 Ancestors
   bodyIntCallExprClosure bodyIntCallExprLabels bodyIntCallLabelFrame
   bodyIntCallContextLabels bodyIntCallLabelReservations
-  supportedExprForms exprLowering compileEnv builtinMath builtinMisc builtinSimple list
+  supportedExprForms supportedTypes exprLowering compileEnv builtinMath builtinMisc builtinSimple list
 
 Theorem compiler_block_tail_env_var:
   compiler_block_tail (compile_env_var item)
@@ -1067,4 +1067,84 @@ Proof
        >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
            irule compiler_label_hoare_lower_value >> simp[]) >> gen_tac >> BETA_TAC) >>
   irule compiler_label_hoare_as_stack_val >> simp[compiler_label_hoare_binop]
+QED
+
+Theorem supported_binop_scalar_dispatch:
+  supported_binop op ty rhs lit nonneg ==>
+  op <> In /\ op <> NotIn /\ ~is_bytestring_type ty
+Proof
+  Cases_on `op` >> simp[supported_binop_def] >>
+  Cases_on `ty` >> simp[supported_numeric_type_def, supported_integer_type_def,
+    supported_word_type_def, is_bytestring_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[supported_numeric_type_def, supported_integer_type_def,
+    supported_word_type_def, is_bytestring_type_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[supported_word_type_def, is_bytestring_type_def]
+QED
+
+Theorem compiler_block_tail_supported_builtin:
+  supported_builtin_form tops ty bi es /\
+  (!e ce t. MEM e es ==> compiler_block_tail (cfn ce t e)) ==>
+  compiler_block_tail (compile_builtin_dispatch_body cfn cenv ann ty bi es)
+Proof
+  strip_tac >> Cases_on `bi` >> gvs[supported_builtin_form_def, AllCaseEqs()]
+  >~ [`(MakeArray elem bd)`] >- (irule compiler_block_tail_make_array_dispatch >> simp[]) >>
+  qpat_x_assum `case es of [] => _ | _::_ => _` (mp_tac o EQT_INTRO) >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[]
+  >~ [`CalldataSlice n`] >- (irule compiler_block_tail_calldata_slice_dispatch >> simp[])
+  >~ [`Uint2Str n`] >- (irule compiler_block_tail_uint2str_dispatch >> simp[])
+  >~ [`ECRecover`] >- (irule compiler_block_tail_ecrecover_dispatch >> simp[] >> metis_tac[])
+  >~ [`ECAdd`] >- (irule compiler_block_tail_ecadd_dispatch >> simp[] >> first_assum ACCEPT_TAC)
+  >~ [`ECMul`] >- (irule compiler_block_tail_ecmul_dispatch >> simp[] >> first_assum ACCEPT_TAC)
+  >~ [`BlockHash`] >- (irule compiler_block_tail_block_blob_hash_dispatch >> simp[])
+  >~ [`BlobHash`] >- (irule compiler_block_tail_block_blob_hash_dispatch >> simp[])
+  >~ [`Acc item`] >- (irule compiler_block_tail_acc_dispatch >> simp[])
+  >~ [`Env item`] >- simp[compiler_block_tail_env_dispatch]
+  >~ [`AsWeiValue d`] >- (irule compiler_block_tail_as_wei_dispatch >> simp[])
+  >>~- ([`compile_builtin_dispatch_body _ _ _ _ Not _`],
+          irule compiler_block_tail_unary_dispatch >> simp[])
+  >>~- ([`compile_builtin_dispatch_body _ _ _ _ Neg _`],
+          irule compiler_block_tail_unary_dispatch >> simp[])
+  >~ [`Abs`] >- (irule compiler_block_tail_unary_dispatch >> simp[])
+  >~ [`PowMod256`] >- (irule compiler_block_tail_powmod_dispatch >> simp[])
+  >~ [`AddMod`] >- (irule compiler_block_tail_modular_dispatch >> simp[] >> first_assum ACCEPT_TAC)
+  >~ [`MulMod`] >- (irule compiler_block_tail_modular_dispatch >> simp[] >> first_assum ACCEPT_TAC) >>
+  drule supported_binop_scalar_dispatch >> strip_tac >>
+  irule compiler_block_tail_bop_dispatch >> simp[] >> first_assum ACCEPT_TAC
+QED
+
+Theorem compiler_label_hoare_supported_builtin:
+  supported_builtin_form tops ty bi es /\
+  (!e ce t origin pending. MEM e es ==>
+    compiler_label_hoare (compiler_label_reservation origin pending)
+      (cfn ce t e) (\r out. compiler_label_reservation origin pending out)) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_builtin_dispatch_body cfn cenv ann ty bi es)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >> Cases_on `bi` >> gvs[supported_builtin_form_def, AllCaseEqs()]
+  >~ [`MakeArray elem bd`] >- (irule compiler_label_hoare_make_array_dispatch >> simp[]) >>
+  qpat_x_assum `case es of [] => _ | _::_ => _` (mp_tac o EQT_INTRO) >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[]
+  >~ [`CalldataSlice n`] >- (irule compiler_label_hoare_calldata_slice_dispatch >> simp[])
+  >~ [`Uint2Str n`] >- (irule compiler_label_hoare_uint2str_dispatch >> simp[])
+  >~ [`ECRecover`] >- (irule compiler_label_hoare_ecrecover_dispatch >> simp[] >> metis_tac[])
+  >~ [`ECAdd`] >- (irule compiler_label_hoare_ecadd_dispatch >> simp[] >> metis_tac[])
+  >~ [`ECMul`] >- (irule compiler_label_hoare_ecmul_dispatch >> simp[] >> metis_tac[])
+  >~ [`BlockHash`] >- (irule compiler_label_hoare_block_blob_hash_dispatch >> simp[])
+  >~ [`BlobHash`] >- (irule compiler_label_hoare_block_blob_hash_dispatch >> simp[])
+  >~ [`Acc item`] >- (irule compiler_label_hoare_acc_dispatch >> simp[])
+  >~ [`Env item`] >- simp[compiler_label_hoare_env_dispatch]
+  >~ [`AsWeiValue d`] >- (irule compiler_label_hoare_as_wei_dispatch >> simp[])
+  >>~- ([`compile_builtin_dispatch_body _ _ _ _ Not _`],
+          irule compiler_label_hoare_unary_dispatch >> simp[])
+  >>~- ([`compile_builtin_dispatch_body _ _ _ _ Neg _`],
+          irule compiler_label_hoare_unary_dispatch >> simp[])
+  >~ [`Abs`] >- (irule compiler_label_hoare_unary_dispatch >> simp[])
+  >~ [`PowMod256`] >- (irule compiler_label_hoare_powmod_dispatch >> simp[])
+  >~ [`AddMod`] >- (irule compiler_label_hoare_modular_dispatch >> simp[] >> metis_tac[])
+  >~ [`MulMod`] >- (irule compiler_label_hoare_modular_dispatch >> simp[] >> metis_tac[]) >>
+  drule supported_binop_scalar_dispatch >> strip_tac >>
+  irule compiler_label_hoare_bop_dispatch >> simp[] >> metis_tac[]
 QED
