@@ -349,9 +349,10 @@ Definition ctx_eom_bounded_def:
 End
 
 (* Before ConcretizeMemLoc: the raw phase of the shared memory invariant,
-   S3's conclusion. *)
+   S3's conclusion, and the no-wrap bound on DLOAD/DLOADBYTES source
+   offsets that LowerDload's expansion needs (S3 owes it too). *)
 Definition o1_src_inv_def:
-  o1_src_inv C vs <=> mem_inv raw_mem_ok C vs
+  o1_src_inv C vs <=> mem_inv raw_mem_ok C vs /\ mem_inv dload_offset_ok C vs
 End
 
 (* After ConcretizeMemLoc: every access below a bound on every function's

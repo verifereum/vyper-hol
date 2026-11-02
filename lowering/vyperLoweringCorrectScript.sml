@@ -938,6 +938,27 @@ Proof
   cheat
 QED
 
+(* S3': planned admission, Milestone 5. Every reachable DLOAD/DLOADBYTES
+   offset, added to the start of the code's data section, stays below
+   2^256, so LowerDload's code_end-relative CODECOPY offset does not wrap.
+   Proof idea: immutable offsets are compile-time constants inside the
+   immutable section, and the runtime code is far shorter than 2^255. *)
+Theorem lower_vyper_runtime_unit_dload_offset_ok:
+  !tops rpolicy unit am tx ret vs.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
+    ==> mem_inv dload_offset_ok unit.cu_context vs
+Proof
+  cheat
+QED
+
 (* ===== Superseded admission provenance ===== *)
 (* TASK051 full-token consumer audit found no source consumer of
    vyper_to_venom_correct. Its original statement/proof below is INACTIVE,

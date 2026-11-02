@@ -190,6 +190,26 @@ Proof
 
 QED
 
+(* Pruning keeps any memory fact that doesn't read the context. *)
+Theorem o1_prune_ctx_free_mem_inv:
+  fcg = fcg_analyze unit.cu_context /\ o1_ctx_shape unit.cu_context /\
+  unit.cu_context.ctx_entry = SOME entry /\
+  (!ctx ctx' fn inst s. M ctx fn inst s ==> M ctx' fn inst s) /\
+  mem_inv M unit.cu_context vs ==>
+  mem_inv M (prune_unit_fcg_unreachable unit fcg).cu_context vs
+Proof
+  strip_tac >>
+  `ctx_wf unit.cu_context /\ wf_invoke_targets unit.cu_context` by
+    metis_tac[o1_ctx_shape_wf] >>
+  drule_all prune_unit_ctx_agree >> strip_tac >>
+  `fcg_is_reachable fcg entry` by metis_tac[fcg_analyze_entry_reachable] >>
+  irule mem_inv_ctx_agree >>
+  simp[prune_unit_fcg_unreachable_fields] >>
+  qexists_tac `fcg_is_reachable fcg` >>
+  qexists_tac `unit.cu_context` >>
+  gvs[] >> metis_tac[]
+QED
+
 Theorem o1_prune_sim:
   fcg = fcg_analyze unit.cu_context /\ o1_ctx_shape unit.cu_context /\
   unit.cu_context.ctx_entry = SOME entry /\ rangewise_mem_fact M ==>
@@ -353,6 +373,10 @@ Proof
      mem_inv raw_mem_ok (prune_unit_fcg_unreachable pre
        (fcg_analyze pre.cu_context)).cu_context vs` by
     (irule o1_prune_sim >> metis_tac[rangewise_raw_mem_ok]) >>
+  `mem_inv dload_offset_ok (prune_unit_fcg_unreachable pre
+     (fcg_analyze pre.cu_context)).cu_context vs` by
+    (irule o1_prune_ctx_free_mem_inv >> simp[lowerDloadDefsTheory.dload_offset_ok_def] >>
+     fs[o1_src_inv_def] >> metis_tac[]) >>
   `o1_src_inv (prune_unit_fcg_unreachable pre
                  (fcg_analyze pre.cu_context)).cu_context vs` by
     fs[o1_src_inv_def] >>

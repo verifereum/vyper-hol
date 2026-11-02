@@ -793,6 +793,7 @@ Proof
       qexists_tac `fuel` >> gvs[]) >> strip_tac >>
   `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by simp[] >>
   drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_dload_offset_ok >> strip_tac >>
   `o1_run_state_ok vs` by
     (fs[o1_run_state_ok_def] >> simp[Abbr`vs`, entry_venom_state_def]) >>
   drule_all run_venom_pipeline_correct >> strip_tac >>
