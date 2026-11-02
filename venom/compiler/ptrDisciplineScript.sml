@@ -453,12 +453,9 @@ End
 (* ===== The per-state part and the stage fact ===== *)
 
 (* Each nonempty access ending above lo lies inside the site its address
-   operand points into, and ALLOCA sites lie below the free memory
-   pointer, so DALLOCA regions never overlap them. *)
+   operand points into. *)
 Definition access_ok_def:
   access_ok lo G inst s <=>
-    (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-                b + sz <= w2n s.vs_fmp) /\
     (!off len.
        MEM (off,len) (source_memory_write_ranges inst s) /\ len <> 0 /\
        lo < off + len ==>
@@ -495,12 +492,29 @@ Definition taint_ok_def:
      tn.t_stor = {} /\ tn.t_trans = {})
 End
 
+Definition ctx_has_dalloca_def:
+  ctx_has_dalloca ctx <=>
+    EXISTS (\fn. EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts fn))
+      ctx.ctx_functions
+End
+
+(* ALLOCA sites lie below the free memory pointer, so DALLOCA regions never
+   overlap them.  Only asked of programs that use DALLOCA: the initial
+   free memory pointer is the packed static size, below the bump
+   allocator's unpacked total. *)
+Definition allocas_below_fmp_def:
+  allocas_below_fmp s <=>
+    !aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
+               b + sz <= w2n s.vs_fmp
+End
+
 Definition ptr_discipline_def:
   ptr_discipline (lo:num) ctx vs <=>
     ?P. EVERY (fn_ptr_ok P) ctx.ctx_functions /\
         !stk PG G tn fn inst s.
           frame_reachable vs ctx stk PG G tn fn inst s ==>
-          access_ok lo G inst s /\ taint_ok tn inst s
+          access_ok lo G inst s /\ taint_ok tn inst s /\
+          (ctx_has_dalloca ctx ==> allocas_below_fmp s)
 End
 
 (* ===== The stage relation ===== *)
@@ -546,7 +560,7 @@ Definition taint_within_def:
   taint_within D ctx vs <=>
     (!stk PG G tn fn inst s fuel s'.
        frame_reachable vs ctx stk PG G tn fn inst s /\ active_inst fn inst s /\
-       step_inst fuel ctx inst s = OK s' /\
+       inst.inst_opcode <> INVOKE /\ step_inst fuel ctx inst s = OK s' /\
        LENGTH s.vs_requests < LENGTH s'.vs_requests ==>
        tn.t_stor SUBSET
          D.d_stor (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
@@ -626,6 +640,21 @@ Definition dead_result_rel_def:
           s.vs_requests s'.vs_requests
     | (Abort a s, Abort a' s') => (a = Revert_abort ==> a' = Revert_abort)
     | _ => F
+End
+
+(* The dead bytes are fixed by the bytes that aren't: two states that agree
+   outside the first's dead bytes have the same dead bytes.  storage_dead
+   has this (dead_bytes_frame), and it makes dead_result_rel transitive. *)
+Definition dead_wf_def:
+  dead_wf D <=>
+    (!st1 st2. storage_agree_except (D.d_stor st1) st1 st2 ==>
+               D.d_stor st2 = D.d_stor st1) /\
+    (!st1 st2. storage_agree_except (D.d_trans st1) st1 st2 ==>
+               D.d_trans st2 = D.d_trans st1) /\
+    (!i1 i2. imms_agree_except D i1 i2 ==> D.d_imm i2 = D.d_imm i1) /\
+    (!r1 r2. LENGTH r1 = LENGTH r2 /\
+             (!i. i < LENGTH r1 /\ i NOTIN D.d_ret r1 ==> EL i r1 = EL i r2) ==>
+             D.d_ret r2 = D.d_ret r1)
 End
 
 (* ctx_sim up to dead bytes. *)
