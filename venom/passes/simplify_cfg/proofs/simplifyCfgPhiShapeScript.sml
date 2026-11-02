@@ -313,3 +313,161 @@ Proof
   gvs[can_bypass_jump_def, num_succs_def] >>
   Cases_on `bb_succs b` >> gvs[] >> Cases_on `t` >> gvs[]
 QED
+
+Theorem subst_label_inst_label:
+  MEM (Label l) (subst_label_inst old new i).inst_operands <=>
+  ?k. MEM (Label k) i.inst_operands /\ l = (if k = old then new else k)
+Proof
+  simp[subst_label_inst_def, MEM_MAP] >> eq_tac >> rpt strip_tac
+  >- (rename1 `MEM op i.inst_operands` >>
+      Cases_on `op` >> gvs[subst_label_op_def] >>
+      rename1 `MEM (Label k) i.inst_operands` >>
+      qexists_tac `k` >> Cases_on `k = old` >> gvs[]) >>
+  qexists_tac `Label k` >> Cases_on `k = old` >> simp[subst_label_op_def]
+QED
+
+Theorem update_phi_block_label_provenance[local]:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bs) /\
+  lookup_block s bs = SOME hit /\
+  MEM bb' (replace_block s
+    (hit with bb_instructions := MAP (\i.
+      if i.inst_opcode <> PHI then i else subst_label_inst old new i)
+      hit.bb_instructions) bs) /\
+  MEM i' bb'.bb_instructions /\ i'.inst_opcode = PHI /\
+  MEM (Label l) i'.inst_operands ==>
+  ?bb i k. MEM bb bs /\ bb'.bb_label = bb.bb_label /\
+    MEM i bb.bb_instructions /\ i.inst_opcode = PHI /\
+    MEM (Label k) i.inst_operands /\
+    l = (if bb.bb_label = s /\ k = old then new else k)
+Proof
+  strip_tac >>
+  `hit.bb_label = s` by metis_tac[lookup_block_member_label] >>
+  qpat_x_assum `MEM bb' _` mp_tac >>
+  simp[replace_block_def, MEM_MAP] >> strip_tac >> gvs[] >>
+  rename1 `MEM bb bs` >> Cases_on `bb.bb_label = hit.bb_label` >> gvs[]
+  >- (`bb = hit` by
+        (`lookup_block hit.bb_label bs = SOME bb` by
+          (irule venomExecPropsTheory.MEM_lookup_block >> simp[]) >> gvs[]) >>
+      gvs[MEM_MAP] >> rename1 `MEM i hit.bb_instructions` >>
+      Cases_on `i.inst_opcode = PHI` >> gvs[subst_label_inst_def] >>
+      `MEM (Label l) (subst_label_inst old new i).inst_operands` by
+        simp[subst_label_inst_def] >>
+      qpat_x_assum `MEM (Label l) (subst_label_inst _ _ _).inst_operands`
+        (strip_assume_tac o REWRITE_RULE [subst_label_inst_label]) >>
+      qexistsl_tac [`hit`, `i`, `k`] >> simp[]) >>
+  qexistsl_tac [`bb`, `i'`, `l`] >> simp[]
+QED
+
+Theorem update_succ_phi_labels_phi_labels:
+  !ss bs bb' i' l.
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bs) /\ old <> new /\
+  MEM bb' (update_succ_phi_labels old new bs ss) /\
+  MEM i' bb'.bb_instructions /\ i'.inst_opcode = PHI /\
+  MEM (Label l) i'.inst_operands ==>
+  ?bb i k. MEM bb bs /\ bb'.bb_label = bb.bb_label /\
+    MEM i bb.bb_instructions /\ i.inst_opcode = PHI /\
+    MEM (Label k) i.inst_operands /\
+    l = (if MEM bb.bb_label ss /\ k = old then new else k)
+Proof
+  Induct >> simp[update_succ_phi_labels_def] >> rpt strip_tac
+  >- (qexistsl_tac [`bb'`, `i'`] >> simp[]) >>
+  qpat_x_assum `!bs bb i l. _` (assume_tac o SRULE [update_succ_phi_labels_def]) >>
+  Cases_on `lookup_block h bs` >> gvs[]
+  >- (first_x_assum drule_all >> strip_tac >>
+      qexistsl_tac [`bb`, `i`, `k`] >> simp[] >>
+      `bb.bb_label <> h` by
+        (strip_tac >> `lookup_block h bs = SOME bb` by
+          (irule venomExecPropsTheory.MEM_lookup_block >> simp[]) >> gvs[]) >>
+      simp[]) >>
+  rename1 `lookup_block h bs = SOME hit` >>
+  `hit.bb_label = h` by metis_tac[lookup_block_member_label] >>
+  qmatch_asmsub_abbrev_tac `MEM bb' (FOLDL act changed ss)` >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) changed)` by
+    simp[Abbr `changed`, fn_labels_replace_block] >>
+  first_x_assum drule_all >> strip_tac >>
+  fs[Abbr `changed`] >> drule_all update_phi_block_label_provenance >>
+  disch_then (qx_choose_then `orig` (qx_choose_then `oi`
+    (qx_choose_then `ok` strip_assume_tac))) >>
+  qexistsl_tac [`orig`, `oi`, `ok`] >> simp[] >>
+  Cases_on `orig.bb_label = h` >> Cases_on `MEM orig.bb_label ss` >>
+  Cases_on `ok = old` >> gvs[]
+QED
+
+Theorem chain_merge_phi_origin[local]:
+  no_phis b /\ MEM a bs /\
+  MEM bb (replace_block a.bb_label (merge_blocks a b)
+    (remove_block b.bb_label bs)) /\
+  MEM i bb.bb_instructions /\ i.inst_opcode = PHI ==>
+  ?orig. MEM orig bs /\ orig.bb_label = bb.bb_label /\
+    MEM i orig.bb_instructions
+Proof
+  simp[replace_block_def, remove_block_def, MEM_MAP, MEM_FILTER] >>
+  strip_tac >> gvs[] >> rename1 `MEM orig bs` >>
+  Cases_on `orig.bb_label = a.bb_label` >>
+  gvs[merge_blocks_def, MEM_APPEND, no_phis_def, EVERY_MEM]
+  >- (
+      qexists_tac `a` >> simp[] >>
+      Cases_on `a.bb_instructions = []` >- gvs[] >>
+      metis_tac[APPEND_FRONT_LAST, MEM_APPEND, MEM]) >>
+  qexists_tac `orig` >> simp[]
+QED
+
+Theorem pred_labels_lookup_edge:
+  ALL_DISTINCT (fn_labels f) /\
+  lookup_block lbl f.fn_blocks = SOME bb /\ MEM lbl (pred_labels f x) ==>
+  MEM x (bb_succs bb)
+Proof
+  simp[pred_labels_mem] >> strip_tac >>
+  `bb' = bb` by (irule member_lookup_block_eq >> metis_tac[]) >> gvs[]
+QED
+
+Theorem chain_merge_phi_preds:
+  ALL_DISTINCT (fn_labels f) /\
+  EVERY (\bb. bb_well_formed bb) f.fn_blocks /\
+  EVERY inst_wf (fn_insts f) /\
+  (!bb i l. MEM bb f.fn_blocks /\ MEM i bb.bb_instructions /\
+    i.inst_opcode = PHI /\ MEM (Label l) i.inst_operands ==>
+    MEM l (pred_labels f bb.bb_label)) /\
+  lookup_block a.bb_label f.fn_blocks = SOME a /\
+  lookup_block b.bb_label f.fn_blocks = SOME b /\
+  can_merge_blocks f a b /\
+  g = f with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label f.fn_blocks))
+      (bb_succs (merge_blocks a b)) ==>
+  !bb i l. MEM bb g.fn_blocks /\ MEM i bb.bb_instructions /\
+    i.inst_opcode = PHI /\ MEM (Label l) i.inst_operands ==>
+    MEM l (pred_labels g bb.bb_label)
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `MEM a f.fn_blocks /\ MEM b f.fn_blocks` by
+    metis_tac[lookup_block_member_label] >>
+  `a.bb_label <> b.bb_label /\ no_phis b` by gvs[can_merge_blocks_def] >>
+  `b.bb_instructions <> []` by gvs[EVERY_MEM, bb_well_formed_def] >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label)
+    (replace_block a.bb_label (merge_blocks a b)
+      (remove_block b.bb_label f.fn_blocks)))` by
+    (simp[fn_labels_replace_block, merge_blocks_def] >>
+     irule ALL_DISTINCT_remove_block >> gvs[fn_labels_def]) >>
+  `MEM bb (update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label f.fn_blocks))
+      (bb_succs (merge_blocks a b)))` by gvs[] >>
+  `b.bb_label <> a.bb_label` by simp[] >>
+  drule_all update_succ_phi_labels_phi_labels >>
+  disch_then (qx_choose_then `mid` (qx_choose_then `oi`
+    (qx_choose_then `k` strip_assume_tac))) >>
+  drule_all chain_merge_phi_origin >>
+  disch_then (qx_choose_then `orig` strip_assume_tac) >>
+  `MEM k (pred_labels f orig.bb_label)` by metis_tac[] >>
+  `MEM bb.bb_label (fn_labels g)` by
+    (simp[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `MEM (if k = b.bb_label then a.bb_label else k)
+    (pred_labels g bb.bb_label)` by
+    (irule chain_merge_pred_labels >> metis_tac[]) >>
+  Cases_on `k = b.bb_label` >> gvs[] >>
+  `MEM orig.bb_label (bb_succs b)` by
+    (irule pred_labels_lookup_edge >> metis_tac[]) >>
+  gvs[merge_blocks_succs]
+QED
