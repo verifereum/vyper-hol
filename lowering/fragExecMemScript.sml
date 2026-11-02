@@ -508,6 +508,14 @@ Proof
   Cases_on `step_inst_base h s` >> gvs[exec_result_map_def]
 QED
 
+Theorem run_inst_seq_mem_ok_every:
+  !code s. EVERY (\i. !t. inst_mem_below_frontier i t) code ==>
+    run_inst_seq_mem_ok code s
+Proof
+  Induct >> simp[run_inst_seq_mem_ok_def] >>
+  rpt strip_tac >> Cases_on `step_inst_base h s` >> simp[]
+QED
+
 Theorem run_inst_seq_mem_ok_last:
   run_inst_seq_mem_ok [i] s <=> inst_mem_below_frontier i s
 Proof
