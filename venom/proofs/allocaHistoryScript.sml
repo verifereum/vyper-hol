@@ -1,0 +1,102 @@
+(* Allocation order within a block survives reuse of its allocation sites.
+   The instruction cursor records which sites must already exist. *)
+Theory allocaHistory
+Ancestors
+  venomInst venomWf venomState venomExecSemantics venomExecProps
+  venomMemDefs venomMemProofs finite_map list arithmetic
+
+Definition alloca_block_order_def:
+  alloca_block_order bb (sites : (num, num # num) fmap) <=>
+    !i j earlier later b sz.
+      i < j /\ get_instruction bb i = SOME earlier /\
+      get_instruction bb j = SOME later /\
+      earlier.inst_opcode = ALLOCA /\ later.inst_opcode = ALLOCA /\
+      FLOOKUP sites later.inst_id = SOME (b,sz) ==>
+      ?a n. FLOOKUP sites earlier.inst_id = SOME (a,n) /\ a + n <= b
+End
+
+Definition alloca_history_def:
+  alloca_history func s <=>
+    (!bb. MEM bb func.fn_blocks ==> alloca_block_order bb s.vs_allocas) /\
+    (!bb k inst.
+      lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+      k < s.vs_inst_idx /\ get_instruction bb k = SOME inst /\
+      inst.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP s.vs_allocas inst.inst_id))
+End
+
+Theorem alloca_history_empty:
+  !func s. s.vs_allocas = FEMPTY /\ s.vs_inst_idx = 0 ==>
+    alloca_history func s
+Proof
+  cheat
+QED
+
+Theorem alloca_history_frame:
+  !func s t.
+    alloca_history func s /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx ==>
+    alloca_history func t
+Proof
+  cheat
+QED
+
+Theorem alloca_history_jump:
+  !func s t.
+    alloca_history func s /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_inst_idx = 0 ==> alloca_history func t
+Proof
+  cheat
+QED
+
+Theorem alloca_history_pair:
+  !func s bb i j earlier later b sz.
+    alloca_history func s /\ MEM bb func.fn_blocks /\ i < j /\
+    get_instruction bb i = SOME earlier /\
+    get_instruction bb j = SOME later /\
+    earlier.inst_opcode = ALLOCA /\ later.inst_opcode = ALLOCA /\
+    FLOOKUP s.vs_allocas later.inst_id = SOME (b,sz) ==>
+    ?a n. FLOOKUP s.vs_allocas earlier.inst_id = SOME (a,n) /\ a + n <= b
+Proof
+  cheat
+QED
+
+Theorem alloca_history_step:
+  !func s bb inst fuel ctx t.
+    fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    step_inst fuel ctx inst s = OK t ==>
+    alloca_history func
+      (if is_terminator inst.inst_opcode then t
+       else t with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  cheat
+QED
+
+Theorem alloca_history_exec_block:
+  !func s bb fuel ctx t ret.
+    fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    (exec_block fuel ctx bb s = OK t \/
+     exec_block fuel ctx bb s = IntRet ret t) ==>
+    alloca_history func t
+Proof
+  cheat
+QED
+
+Theorem alloca_history_run_blocks:
+  !func s fuel ctx t ret.
+    fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
+    run_blocks fuel ctx func s = IntRet ret t ==> alloca_history func t
+Proof
+  cheat
+QED
+
+Theorem alloca_history_callee_entry:
+  !func args s t. setup_callee func args s = SOME t ==>
+    alloca_history func t
+Proof
+  cheat
+QED
+
