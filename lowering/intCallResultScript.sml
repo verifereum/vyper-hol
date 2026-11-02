@@ -100,8 +100,9 @@ Proof
   `emitted_insts sa sb = emitted_insts sa post ++ emitted_insts post sb` by
     (irule emitted_insts_append >> simp[]) >>
   asm_rewrite_tac[EVERY_APPEND, APPEND_ASSOC] >>
-  rpt conj_tac >> TRY decide_tac >> simp[] >>
-  metis_tac[same_blocks_trans]
+  rpt conj_tac
+  >~ [`same_blocks _ _`] >- metis_tac[same_blocks_trans] >>
+  decide_tac
 QED
 
 Theorem store_result_operand_frame:
