@@ -18,7 +18,7 @@ Ancestors
   o1ContractSimplifyCfgStep o1PassContract o1PassLift simplifyCfgCorrectness simplifyCfgProof
   simplifyCfgDefs unitMemInv venomPassSchedule venomCompilerTypes
   venomWf cfgWf simplifyCfgLabelProps venomPassDispatcher
-  opcodeClass ctxLookupAgreeHelpers venomExecSemantics venomExecProofs list rich_list arithmetic
+  opcodeClass ctxLookupAgreeHelpers venomExecSemantics venomExecProofs list rich_list arithmetic simplifyCfgPhiProps allocaRemapSSA venomInst
 
 Theorem simplify_cfg_pass_step_function:
   fn_pass_step rpolicy (CFP_Simple VP_SimplifyCFG) observed s fn out ==>
@@ -178,6 +178,86 @@ Proof
       `source = pred_bb` by metis_tac[same_label_same_block] >>
       gvs[] >> irule def_available_on_all_paths >> metis_tac[]) >>
   rpt strip_tac >> irule def_available_on_all_paths >> metis_tac[]
+QED
+
+Theorem phi_pairs_resolve_phi_some:
+  !ops l v. MEM (l,v) (phi_pairs ops) ==> ?op. resolve_phi l ops = SOME op
+Proof
+  recInduct phi_pairs_ind >> simp[phi_pairs_def, resolve_phi_def] >>
+  rpt strip_tac >> gvs[] >>
+  rpt CASE_TAC >> simp[]
+  >- metis_tac[] >>
+  rename1 `resolve_phi _ (head::_::_)` >>
+  Cases_on `head` >> gvs[resolve_phi_def] >>
+  rpt CASE_TAC >> simp[] >> metis_tac[]
+QED
+
+Theorem simplify_cfg_fn_ok_no_phi:
+  wf_function fn /\ fn_defs_reach_uses fn /\
+  EVERY (\i. i.inst_opcode <> PHI) (fn_insts fn) ==>
+  simplify_cfg_fn_ok fn
+Proof
+  strip_tac >>
+  `fn.fn_blocks <> []` by gvs[wf_function_def, fn_has_entry_def] >>
+  `!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
+     inst.inst_opcode <> PHI` by
+    (rpt gen_tac >> strip_tac >>
+     `EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions` by
+       (irule EVERY_fn_block >> metis_tac[]) >>
+     gvs[EVERY_MEM]) >>
+  simp[simplify_cfg_fn_ok_def] >> conj_tac
+  >- (irule EVERY_fn_block >> qexists_tac `fn` >> Cases_on `fn.fn_blocks` >> gvs[]) >>
+  metis_tac[]
+QED
+
+Theorem simplify_cfg_fn_ok_ssa:
+  wf_function fn /\ wf_ssa fn /\ first_block_no_phi fn ==>
+  simplify_cfg_fn_ok fn
+Proof
+  strip_tac >>
+  `fn_defs_reach_uses fn` by metis_tac[wf_ssa_defs_reach_uses] >>
+  simp[simplify_cfg_fn_ok_def, GSYM first_block_no_phi_def] >>
+  conj_tac
+  >- (rpt strip_tac >> irule ssa_unique_output >>
+      conj_tac
+      >- (qexists_tac `fn` >> gvs[wf_ssa_def] >>
+          metis_tac[mem_fn_insts_intro]) >>
+      qexists_tac `v` >> simp[]) >>
+  rpt strip_tac >>
+  `phi_edge_uses_wf fn bb inst` by
+    (gvs[wf_ssa_def, def_dominates_uses_def] >> metis_tac[]) >>
+  `fn_cfg_edge fn pred_bb.bb_label bb.bb_label` by
+    (simp[fn_cfg_edge_def] >> metis_tac[]) >>
+  qpat_x_assum `phi_edge_uses_wf _ _ _` mp_tac >>
+  simp[phi_edge_uses_wf_def] >> strip_tac >>
+  `?p. MEM p (phi_pairs inst.inst_operands) /\ FST p = pred_bb.bb_label` by
+    metis_tac[] >>
+  PairCases_on `p` >> gvs[] >> irule phi_pairs_resolve_phi_some >> metis_tac[]
+QED
+
+Theorem simplify_cfg_pre_walk_structure:
+  o1_fn_shape C fn /\ fn_defs_reach_uses fn /\
+  EVERY (\i. i.inst_opcode <> PHI) (fn_insts fn) ==>
+  all_reachable (simplify_cfg_fn fn) /\
+  fn_defs_reach_uses (simplify_cfg_fn fn) /\
+  fn_phi_operands_single_def (simplify_cfg_fn fn) /\
+  fn_phis_cover_preds (simplify_cfg_fn fn)
+Proof
+  strip_tac >>
+  `wf_function fn` by gvs[o1_fn_shape_def] >>
+  `simplify_cfg_fn_ok fn` by metis_tac[simplify_cfg_fn_ok_no_phi] >>
+  `EVERY (\i. i.inst_opcode <> PHI) (fn_insts (simplify_cfg_fn fn))` by
+    metis_tac[simplify_cfg_fn_no_phi] >>
+  conj_tac >- metis_tac[simplify_cfg_establishes_all_reachable] >>
+  conj_tac
+  >- (irule simplify_cfg_preserves_defs_reach_uses >> gvs[o1_fn_shape_def]) >>
+  `!bb inst. MEM bb (simplify_cfg_fn fn).fn_blocks /\
+    MEM inst bb.bb_instructions ==> inst.inst_opcode <> PHI` by
+    (rpt gen_tac >> strip_tac >>
+     `EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions` by
+       (irule EVERY_fn_block >> metis_tac[]) >> gvs[EVERY_MEM]) >>
+  simp[fn_phi_operands_single_def_def, fn_phis_cover_preds_def] >>
+  metis_tac[]
 QED
 
 (* The pre-walk run: lowering output (no PHI, definite assignment) to
