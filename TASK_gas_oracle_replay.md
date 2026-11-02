@@ -11,32 +11,44 @@ Location: venom/proofs/gasOracleReplayScript.sml
 ```sml
 Theorem gas_oracle_replay:
   (!fuel ctx inst s.
-     ?prefix. !tail.
+     ?n. !tail.
        lift_result
-         (\a b. b = (a with vs_gas_readings := tail))
-         (\a b. b = (a with vs_gas_readings := tail))
-         (\a b. b = (a with vs_gas_readings := tail))
+         (\a b. a.vs_gas_readings = DROP n s.vs_gas_readings /\
+                  b = (a with vs_gas_readings := tail))
+         (\a b. a.vs_gas_readings = DROP n s.vs_gas_readings /\
+                  b = (a with vs_gas_readings := tail))
+         (\a b. a.vs_gas_readings = DROP n s.vs_gas_readings /\
+                  b = (a with vs_gas_readings := tail))
          (step_inst fuel ctx inst s)
          (step_inst fuel ctx inst
-           (s with vs_gas_readings := prefix ++ tail))) /\
+           (s with vs_gas_readings :=
+             TAKE n (s.vs_gas_readings ++ REPLICATE n 0w) ++ tail))) /\
   (!fuel ctx bb s.
-     ?prefix. !tail.
+     ?n. !tail.
        lift_result
-         (\a b. b = (a with vs_gas_readings := tail))
-         (\a b. b = (a with vs_gas_readings := tail))
-         (\a b. b = (a with vs_gas_readings := tail))
+         (\a b. a.vs_gas_readings = DROP n s.vs_gas_readings /\
+                  b = (a with vs_gas_readings := tail))
+         (\a b. a.vs_gas_readings = DROP n s.vs_gas_readings /\
+                  b = (a with vs_gas_readings := tail))
+         (\a b. a.vs_gas_readings = DROP n s.vs_gas_readings /\
+                  b = (a with vs_gas_readings := tail))
          (exec_block fuel ctx bb s)
          (exec_block fuel ctx bb
-           (s with vs_gas_readings := prefix ++ tail))) /\
+           (s with vs_gas_readings :=
+             TAKE n (s.vs_gas_readings ++ REPLICATE n 0w) ++ tail))) /\
   (!fuel ctx func s.
-     ?prefix. !tail.
+     ?n. !tail.
        lift_result
-         (\a b. b = (a with vs_gas_readings := tail))
-         (\a b. b = (a with vs_gas_readings := tail))
-         (\a b. b = (a with vs_gas_readings := tail))
+         (\a b. a.vs_gas_readings = DROP n s.vs_gas_readings /\
+                  b = (a with vs_gas_readings := tail))
+         (\a b. a.vs_gas_readings = DROP n s.vs_gas_readings /\
+                  b = (a with vs_gas_readings := tail))
+         (\a b. a.vs_gas_readings = DROP n s.vs_gas_readings /\
+                  b = (a with vs_gas_readings := tail))
          (run_blocks fuel ctx func s)
          (run_blocks fuel ctx func
-           (s with vs_gas_readings := prefix ++ tail)))
+           (s with vs_gas_readings :=
+             TAKE n (s.vs_gas_readings ++ REPLICATE n 0w) ++ tail)))
 ```
 
 Do not modify this statement. Prove it as-is, or produce a counterexample.
@@ -75,4 +87,4 @@ Venom GAS pops an ordered oracle, including inside INVOKE callees. Passes that r
 
 ## Notes
 
-An independent checker inspected GAS, every step_inst_base branch, call/precompile extraction, setup/merge, PHIs and mutual recursion and returned PROVABLE with no extra premise. That was a definition audit, not a proof build. Parent will perform forced replay and review afterward. The placeholder parse build's result must be read before claiming the statement parsed.
+An independent checker inspected GAS, every step_inst_base branch, call/precompile extraction, setup/merge, PHIs and mutual recursion and returned PROVABLE for this exact strengthened actual-prefix and final-suffix statement with no extra premise. That was a definition audit, not a proof build. Parent will perform forced replay and review afterward. The placeholder parse build's result must be read before claiming the statement parsed.
