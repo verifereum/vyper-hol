@@ -14,7 +14,7 @@
 Theory loweringShapeRules
 Ancestors
   list rich_list compileEnv emitHelper emitHelperProps fragExec venomInst
-  unitShapeDefs loweringShapeDefs
+  unitShapeDefs loweringShapeDefs cfgNormSim
 
 (* ===== Composition rules ===== *)
 
@@ -786,4 +786,55 @@ Proof
   qpat_x_assum `opaque_insts_ok _`
     (qspecl_then [`inst`, `x`] mp_tac o REWRITE_RULE [opaque_insts_ok_def]) >>
   simp[gas_use_ok_def, retpc_use_ok_def] >> metis_tac[]
+QED
+
+(* Chronological streams retain the first occurrence of an open block. *)
+Theorem cs_extends_block_stream:
+  !sa sb. cs_extends sa sb ==>
+    ?bb tail.
+      all_blocks sb = REVERSE sa.cs_blocks ++ bb::tail /\
+      bb.bb_label = sa.cs_current_bb /\
+      isPREFIX sa.cs_current_insts bb.bb_instructions /\
+      MAP (\b. b.bb_label) tail = added_labels sa sb
+Proof
+  rpt gen_tac >> simp[cs_extends_def] >> strip_tac >>
+  Cases_on `new = []`
+  >- (gvs[] >>
+      qexistsl_tac [`<| bb_label := sb.cs_current_bb;
+                        bb_instructions := sb.cs_current_insts |>`, `[]`] >>
+      simp[all_blocks_def, added_labels_def]) >>
+  `?h t. REVERSE new = h::t` by
+    (Cases_on `REVERSE new` >> gvs[]) >>
+  `new = REVERSE t ++ [h]` by metis_tac[REVERSE_REVERSE, REVERSE_DEF] >>
+  gvs[LAST_APPEND_NOT_NIL] >>
+  qexistsl_tac [`h`, `t ++ [<| bb_label := sb.cs_current_bb;
+                             bb_instructions := sb.cs_current_insts |>]`] >>
+  simp[all_blocks_def, added_labels_def, REVERSE_APPEND, DROP_LENGTH_APPEND,
+       DROP_APPEND, LENGTH_MAP, DROP_LENGTH_TOO_LONG] >>
+  `1 - SUC (LENGTH t) = 0` by decide_tac >> simp[]
+QED
+
+Theorem cs_extends_finished_lookup:
+  !sa sb lbl bb.
+    cs_extends sa sb /\
+    lookup_block lbl (REVERSE sa.cs_blocks) = SOME bb ==>
+    lookup_block lbl (all_blocks sb) = SOME bb
+Proof
+  rpt strip_tac >> drule cs_extends_block_stream >> strip_tac >>
+  gvs[lookup_block_APPEND]
+QED
+
+Theorem cs_extends_open_lookup:
+  !sa sb.
+    cs_extends sa sb /\
+    ~MEM sa.cs_current_bb
+      (MAP (\b. b.bb_label) (REVERSE sa.cs_blocks)) ==>
+    ?bb. lookup_block sa.cs_current_bb (all_blocks sb) = SOME bb /\
+         isPREFIX sa.cs_current_insts bb.bb_instructions
+Proof
+  rpt strip_tac >> drule cs_extends_block_stream >> strip_tac >>
+  `lookup_block sa.cs_current_bb (REVERSE sa.cs_blocks) = NONE` by
+    simp[lookup_block_NONE] >>
+  qexists_tac `bb` >> simp[lookup_block_APPEND] >>
+  simp[lookup_block_def, FIND_thm]
 QED
