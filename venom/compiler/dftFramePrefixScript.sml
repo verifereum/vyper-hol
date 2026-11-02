@@ -2,7 +2,7 @@
 Theory dftFramePrefix
 Ancestors
   dftFrameFacts dftFrameCertificate dftFrameNormalize dftPermSim venomExecSemantics venomWf venomInst
-  o1PassLift dftDefs passSharedDefs venomEffects instIdxIndep list relation
+  o1PassLift contextCodegenRel venomState dftDefs passSharedDefs venomEffects venomInstProofs instIdxIndep list relation
 
 Theorem dft_assert_unreachable_ok_identity:
   inst_wf b /\ b.inst_opcode = ASSERT_UNREACHABLE /\
@@ -94,4 +94,68 @@ Theorem dft_noninvoke_step_index:
 Proof
   strip_tac >> gvs[step_inst_non_invoke] >>
   drule step_inst_inst_idx_indep >> simp[exec_result_map_def]
+QED
+
+Theorem dft_prefix_control:
+  !is s t. dft_prefix C is s t ==>
+    t.vs_current_bb = s.vs_current_bb /\
+    t.vs_inst_idx = s.vs_inst_idx + LENGTH is
+Proof
+  Induct >> simp[dft_prefix_cons] >> rpt strip_tac >>
+  drule_all step_preserves_control_flow >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem dft_prefix_frame_reach:
+  !is s t pre post j.
+    dft_prefix C is s t /\
+    MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb /\
+    bb.bb_instructions = pre ++ is ++ j::post /\
+    s.vs_inst_idx = LENGTH pre /\
+    frame_reach C fn s0 (HD (is ++ [j])) s ==>
+    frame_reach C fn s0 j t
+Proof
+  Induct >> simp[dft_prefix_cons] >> rpt strip_tac >> gvs[] >>
+  rename1 `step_inst fuel C h s = OK u` >>
+  drule_all step_preserves_control_flow >> strip_tac >>
+  first_x_assum irule >>
+  qexistsl [`post`, `pre ++ [h]`,
+            `u with vs_inst_idx := SUC s.vs_inst_idx`] >>
+  simp[APPEND_ASSOC] >>
+  qpat_assum `s.vs_inst_idx = _` (fn th => rewrite_tac[GSYM th]) >>
+  irule (cj 2 frame_reach_rules) >>
+  reverse conj_tac >- (qexistsl [`fuel`, `h`] >> simp[]) >>
+  simp[active_inst_def] >> qexists_tac `bb` >>
+  simp[] >> Cases_on `is` >> simp[EL_APPEND_EQN, arithmeticTheory.ADD1]
+QED
+
+Theorem dft_bind_outputs_index[local]:
+  !outs vals s n. bind_outputs outs vals (s with vs_inst_idx := n) =
+    OPTION_MAP (\t. t with vs_inst_idx := n) (bind_outputs outs vals s)
+Proof
+  rpt gen_tac >> simp[bind_outputs_def] >> IF_CASES_TAC >> simp[] >>
+  qid_spec_tac `s` >>
+  qspec_tac (`ZIP (outs,vals)`, `kvs`) >>
+  Induct >> simp[] >> Cases_on `h` >> gen_tac >>
+  `update_var q r (s with vs_inst_idx := n) =
+     (update_var q r s) with vs_inst_idx := n` by
+    simp[update_var_def] >>
+  simp[pairTheory.UNCURRY_DEF]
+QED
+
+Theorem dft_step_index:
+  ~is_terminator i.inst_opcode /\ step_inst fuel C i s = OK t ==>
+  step_inst fuel C i (s with vs_inst_idx := n) = OK (t with vs_inst_idx := n)
+Proof
+  strip_tac >> Cases_on `i.inst_opcode = INVOKE`
+  >- (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+      simp[Once step_inst_def] >>
+      simp[Once step_inst_def, eval_ops_inst_idx, setup_callee_def] >>
+      simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+      `adopt_return_fmp ret (merge_callee_state (s with vs_inst_idx := n) callee_s') =
+         (adopt_return_fmp ret (merge_callee_state s callee_s')) with vs_inst_idx := n` by
+        (Cases_on `ret.iret_adopt_fmp` >>
+         simp[adopt_return_fmp_def, merge_callee_state_def]) >>
+      asm_rewrite_tac[] >> simp[dft_bind_outputs_index]) >>
+  irule dft_noninvoke_step_index >> simp[] >> metis_tac[]
 QED
