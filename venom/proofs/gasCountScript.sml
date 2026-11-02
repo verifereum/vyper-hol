@@ -5,7 +5,7 @@ Ancestors
   gasOracleReplay venomExecSemantics venomExecProofs venomInst venomState list arithmetic
 
 Definition gas_count_defs:
-  (gas_count_step fuel ctx inst s =
+  ((gas_count_step fuel ctx inst s : num) =
     if inst.inst_opcode = GAS then 1
     else if inst.inst_opcode = INVOKE then
       case decode_invoke inst of
@@ -21,7 +21,7 @@ Definition gas_count_defs:
                     NONE => 0
                   | SOME callee_s => gas_count_blocks fuel ctx callee_fn callee_s
     else 0) /\
-  (gas_count_block fuel ctx bb s =
+  ((gas_count_block fuel ctx bb s : num) =
     case get_instruction bb s.vs_inst_idx of
       NONE => 0
     | SOME inst =>
@@ -32,7 +32,7 @@ Definition gas_count_defs:
              else gas_count_block fuel ctx bb
                     (s' with vs_inst_idx := SUC s.vs_inst_idx)
          | _ => 0)) /\
-  (gas_count_blocks fuel ctx fn s =
+  ((gas_count_blocks fuel ctx fn s : num) =
     case fuel of
       0 => 0
     | SUC fuel' =>
