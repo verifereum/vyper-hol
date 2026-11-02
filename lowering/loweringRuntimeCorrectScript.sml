@@ -419,6 +419,26 @@ QED
 
 (* ===== The body's frame (#637) ===== *)
 
+Theorem external_selected_args_distinct:
+  supported_program tops /\ source_typing_ok tops am tx /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,F,args,[],ret,fbody) ==>
+  ALL_DISTINCT (MAP FST args)
+Proof
+  strip_tac >>
+  `?raw. MEM (FunctionDecl External mut F raw tx.function_name args [] ret fbody) tops` by
+    (irule lookup_function_external_decl >> simp[] >>
+     qexists `tops` >> gvs[supported_program_def, supported_declaration_headers_def]) >>
+  gvs[source_typing_ok_def] >>
+  `module_allocated am.layouts tx.target NONE tops` by
+    (drule check_contract_main_module_allocated >> simp[]) >>
+  `check_function_body am.layouts tx.target [(NONE,tops)] art NONE
+     mut F args [] ret fbody` by
+    (irule check_contract_runtime_function_body_MEM >> simp[] >>
+     qexistsl [`tx.function_name`, `raw`, `External`] >> simp[]) >>
+  gvs[check_function_body_def, params_ok_def]
+QED
+
 Theorem external_package_body_inv:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\

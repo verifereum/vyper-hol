@@ -586,6 +586,48 @@ Proof
   disch_then (qspec_then `h0` mp_tac) >> gvs[FLOOKUP_UPDATE]
 QED
 
+Theorem package_external_target_param_memory:
+  set_external_package_target target
+    (package_external_fn tops use_trans nkey_map
+      (mut,nr,rr,fname,fargs,dflts,ret,fbody)) =
+    (lbl,cenv,pos_args,rest) /\ ALL_DISTINCT (MAP FST fargs) ==>
+  EVERY (\a. ?off sz. FLOOKUP cenv.ce_vars (FST a) =
+                       SOME (MemLoc off sz)) fargs /\
+  MAP FST pos_args = MAP FST fargs
+Proof
+  strip_tac >>
+  Cases_on `package_external_fn tops use_trans nkey_map
+    (mut,nr,rr,fname,fargs,dflts,ret,fbody)` >>
+  PairCases_on `r` >> gvs[set_external_package_target_def] >>
+  drule_all package_external_fn_vars >> strip_tac >>
+  conj_tac
+  >- (gvs[EVERY_MEM] >> rpt strip_tac >> first_x_assum drule >>
+      metis_tac[]) >>
+  qpat_x_assum `package_external_fn _ _ _ _ = _` mp_tac >>
+  simp[package_external_fn_def] >> strip_tac >>
+  gvs[build_positional_args_names]
+QED
+
+Theorem external_entry_target_param_pointer:
+  set_external_package_target target
+    (package_external_fn tops use_trans nkey_map
+      (mut,nr,rr,fname,fargs,dflts,ret,fbody)) =
+    (lbl,cenv0,pos_args,rest) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,st') /\
+  ALL_DISTINCT (MAP FST fargs) /\ MEM (id,ty) fargs ==>
+  ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)
+Proof
+  strip_tac >> drule_all package_external_target_param_memory >>
+  strip_tac >> gvs[EVERY_MEM] >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  `MEM id (MAP FST pos_args)` by
+    (qpat_x_assum `MAP FST pos_args = _` SUBST1_TAC >>
+     simp[MEM_MAP] >> qexists `(id,ty)` >> simp[]) >>
+  `var_location_memory_size (MemLoc off sz) = SOME sz` by
+    simp[var_location_memory_size_def] >>
+  drule_all compile_register_positional_args_ptrs >> metis_tac[]
+QED
+
 (* Since #733, evaluate_type only accepts whole-byte integer widths. *)
 Theorem evaluate_type_int_byte_widths:
   (!tenv ty tv. evaluate_type tenv ty = SOME tv ==> int_byte_widths tv) /\
