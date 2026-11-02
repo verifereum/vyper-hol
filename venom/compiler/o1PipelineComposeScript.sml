@@ -256,9 +256,11 @@ Proof
      `o1_run_contract rpolicy k` by simp[o1_run_contracts] >>
      `o1_pre k (stage k) (stage (SUC k))` by
        (rw[o1_pre_def] >> irule o1_dft_keeps_fallible_order >>
-        qpat_assum `!k. _ ==> ctx_pass_stage _ _ _ _ _`
+        qexistsl [`rpolicy`, `o1_walk_view rpolicy 7`] >>
+        `EL 7 o1_fn_passes = CFP_Simple VP_DFT` by simp[o1_fn_passes_def] >>
+        qpat_x_assum `!k. _ ==> ctx_pass_stage _ _ _ _ _`
           (qspec_then `7` mp_tac) >>
-        simp[o1_fn_passes_def] >> metis_tac[]) >>
+        simp[]) >>
      gvs[o1_run_contract_def, o1_stage_contract_def] >>
      `k <= LENGTH o1_fn_passes` by simp[] >>
      first_x_assum (qspecl_then [`stage k`, `stage (SUC k)`, `vs`] mp_tac) >>
