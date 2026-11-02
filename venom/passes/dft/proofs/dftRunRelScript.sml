@@ -20,6 +20,7 @@ Theory dftRunRel
 Ancestors
   dftScheduleOrder dftStructural dftPermSim dftDefs passSharedDefs venomExecSemantics venomWf
   venomInst venomState venomEffects venomExecProps list finite_map sorting rich_list dftCorrectness
+  dftAvailability dftSuccessSwap dftWf
 
 Definition dft_res_rel_def:
   dft_res_rel r r' <=>
@@ -293,6 +294,46 @@ Proof
   pure_rewrite_tac[id_before_def] >> strip_tac >>
   `i < LENGTH xs /\ i' < LENGTH xs` by simp[] >>
   `i = j' /\ j = i'` by metis_tac[ALL_DISTINCT_EL_IMP] >> gvs[]
+QED
+
+Theorem dft_reverse_dependency_disjoint:
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+  ~is_pseudo x.inst_opcode /\
+  id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id ==>
+  DISJOINT (set (inst_defs y)) (set (inst_uses x))
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[wf_fn_block_inst_ids_distinct] >>
+  simp[inst_defs_def, inst_uses_def, pred_setTheory.DISJOINT_DEF,
+       pred_setTheory.EXTENSION, MEM_operand_vars_iff] >>
+  spose_not_then strip_assume_tac >>
+  `id_before (MAP (\i. i.inst_id) bb.bb_instructions) y.inst_id x.inst_id` by
+    metis_tac[dft_local_producer_before] >>
+  metis_tac[id_before_asym]
+QED
+
+Theorem dft_ssa_inversion_pair:
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+  ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+  ~is_terminator x.inst_opcode /\
+  ~is_alloca_op x.inst_opcode /\ ~is_alloca_op y.inst_opcode /\
+  abort_compatible x.inst_opcode y.inst_opcode /\
+  id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+  ~dft_must_order x y ==>
+  dft_ok_swap_pair x y
+Proof
+  strip_tac >>
+  `x <> y` by metis_tac[id_before_asym, wf_fn_block_inst_ids_distinct] >>
+  `DISJOINT (set (inst_defs x)) (set (inst_defs y))` by
+    metis_tac[ssa_disjoint_defs, wf_ssa_def] >>
+  `DISJOINT (set (inst_defs y)) (set (inst_uses x))` by
+    metis_tac[dft_reverse_dependency_disjoint] >>
+  gvs[dft_ok_swap_pair_def, dft_must_order_def, effects_independent_def,
+      pred_setTheory.DISJOINT_UNION] >>
+  metis_tac[pred_setTheory.DISJOINT_SYM]
 QED
 
 Theorem dft_inversion_compatible:

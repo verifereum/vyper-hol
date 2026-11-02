@@ -4,6 +4,7 @@ Theory dftAvailability
 Ancestors
   dftScheduleOrder dftCorrectness sccpCorrectnessProofs venomWf
   venomExecSemantics venomExecProofs venomState list finite_map
+  dftWf dftIdempotent dftTopoSort venomInst dftIndexedExec
 
 Theorem dft_ready_operand_defined:
   wf_ssa fn /\ wf_function fn /\
@@ -115,4 +116,43 @@ Proof
   impl_tac >- (rpt strip_tac >> first_x_assum irule >>
     qexists_tac `i'` >> simp[]) >> simp[]
 
+QED
+
+Theorem dft_local_producer_before:
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  MEM d bb.bb_instructions /\ MEM u bb.bb_instructions /\
+  ~is_pseudo u.inst_opcode /\ MEM v d.inst_outputs /\
+  MEM (Var v) u.inst_operands ==>
+  id_before (MAP (\i. i.inst_id) bb.bb_instructions) d.inst_id u.inst_id
+Proof
+  strip_tac >>
+  `np_defs_before_uses bb.bb_instructions` by metis_tac[wf_ssa_defs_before_uses] >>
+  `producing_inst bb.bb_instructions v = SOME d` by
+    (irule producing_inst_unique_definer >> simp[] >>
+     rpt strip_tac >>
+     `DISJOINT (set (inst_defs d)) (set (inst_defs j))` by
+       metis_tac[ssa_disjoint_defs, wf_ssa_def] >>
+     gvs[inst_defs_def, pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+     metis_tac[]) >>
+  `?k. k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = u` by
+    metis_tac[MEM_EL] >>
+  `?j. j < k /\ EL j bb.bb_instructions = d` by
+    (gvs[np_defs_before_uses_def] >> metis_tac[]) >>
+  simp[id_before_def] >> qexistsl_tac [`j`, `k`] >> simp[EL_MAP]
+QED
+
+Theorem dft_prefix_fdom:
+  !pre s t.
+  EVERY (\i. inst_wf i /\ ~is_pseudo i.inst_opcode /\
+             ~is_terminator i.inst_opcode) pre /\
+  FOLDR (dft_exec_cons fuel C) OK pre s = OK t ==>
+  FDOM t.vs_vars = FDOM s.vs_vars UNION
+    set (FLAT (MAP (\i. i.inst_outputs) pre))
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  gvs[dft_exec_cons_def, AllCaseEqs()] >>
+  `h.inst_opcode <> PHI` by (strip_tac >> gvs[is_pseudo_def]) >>
+  drule_all step_inst_fdom >> strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  gvs[] >> pred_setLib.SET_TAC[]
 QED
