@@ -328,6 +328,68 @@ Proof
   drule compile_abi_clamp_basetype_footprint >> simp[]
 QED
 
+Theorem compile_abi_decode_static_mem_ok:
+  !src dst cl st st' s p.
+    compile_abi_decode_static src dst CALLDATALOAD
+      (\v. compile_abi_clamp_basetype v cl) st = ((), st') /\
+    eval_operand dst s = SOME p /\ fresh_vars_wrt st s /\
+    w2n p + 32 <= s.vs_alloca_next ==>
+    run_inst_seq_mem_ok (emitted_insts st st') s
+Proof
+  simp[compile_abi_decode_static_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt gen_tac >> strip_tac >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `emit_op CALLDATALOAD [src] st = (v, st1)` >>
+  rename1 `compile_abi_clamp_basetype v cl st1 = (_, st2)` >>
+  `compile_abi_clamp_basetype v cl st1 = ((), st2)` by
+    metis_tac[oneTheory.one] >>
+  `inst_extends st st1` by metis_tac[inst_extends_emit_op] >>
+  `inst_extends st1 st2` by (drule compile_abi_clamp_structure >> simp[]) >>
+  `inst_extends st2 st'` by metis_tac[inst_extends_emit_void] >>
+  `inst_extends st1 st'` by metis_tac[inst_extends_trans] >>
+  `emitted_insts st st' = emitted_insts st st1 ++ emitted_insts st1 st'` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  `emitted_insts st1 st' = emitted_insts st1 st2 ++ emitted_insts st2 st'` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  qpat_x_assum `emitted_insts st st' = _` SUBST1_TAC >>
+  match_mp_tac run_inst_seq_mem_ok_append >> conj_tac
+  >- (drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+      simp[run_inst_seq_mem_ok_last] >> irule below_frontier_no_ranges >>
+      simp[mk_inst_def]) >>
+  Cases_on `eval_operand src s`
+  >- (drule emitted_insts_emit_op >> strip_tac >>
+      simp[run_inst_seq_def, step_inst_base_def, exec_read1_def, mk_inst_def]) >>
+  rename1 `eval_operand src s = SOME a` >>
+  `!id out. step_inst_base (mk_inst id CALLDATALOAD [src] [out]) s =
+      OK (update_var out (mem_word_at (w2n a) s.vs_call_ctx.cc_calldata) s)` by
+    (rpt gen_tac >> drule step_CALLDATALOAD >> simp[valueEncodingTheory.mem_word_at_def]) >>
+  drule decode_emit_update_frame >>
+  disch_then (qspecl_then [`s`, `mem_word_at (w2n a) s.vs_call_ctx.cc_calldata`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  rpt strip_tac >> gvs[] >>
+  match_mp_tac run_inst_seq_mem_ok_append >> conj_tac
+  >- (irule compile_abi_clamp_basetype_mem_ok >> goal_assum (drule_at Any)) >>
+  drule_all decode_clamp_frame >>
+  Cases_on `abi_clamp_ok cl (mem_word_at (w2n a) s.vs_call_ctx.cc_calldata)` >>
+  simp[] >> strip_tac >> rpt strip_tac >> gvs[] >>
+  drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
+  simp[run_inst_seq_mem_ok_last, below_frontier_MSTORE] >>
+  `eval_operand dst s' = SOME p` by metis_tac[] >>
+  `eval_operand dst s'' = SOME p` by metis_tac[] >>
+  `s''.vs_alloca_next = s'.vs_alloca_next` by
+    (qpat_x_assum `vars_pc_only s' s''` mp_tac >>
+     rw[moduleLoweringPropsTheory.vars_pc_only_def] >>
+     pop_assum (SUBST1_TAC o SYM) >> simp[]) >>
+  `s'.vs_alloca_next = s.vs_alloca_next` by
+    (qpat_x_assum `vars_pc_only s s'` mp_tac >>
+     rw[moduleLoweringPropsTheory.vars_pc_only_def] >>
+     pop_assum (SUBST1_TAC o SYM) >> simp[]) >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `!op v. eval_operand op s' = SOME v ==> _`
+    (qspec_then `dst` mp_tac) >>
+  qpat_x_assum `!op a. eval_operand op s = SOME a ==> _`
+    (qspec_then `dst` mp_tac) >> simp[] >> metis_tac[]
+QED
+
 (* entry_decode_arg_run's premises, with the argument's buffer [p, p + its
    memory size) below the frontier: every instruction the decode runs is
    below the frontier where it runs. *)
