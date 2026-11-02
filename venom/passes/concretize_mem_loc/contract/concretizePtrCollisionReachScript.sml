@@ -838,3 +838,156 @@ Proof
   strip_tac >> fs[collision_raw_at_def] >>
   drule collision_envelope_memory >> simp[]
 QED
+
+Theorem collision_output_entry_facts:
+  collision_output_ctx.ctx_entry = SOME "main" /\
+  lookup_function "main" collision_output_ctx.ctx_functions = SOME collision_output_main /\
+  fn_entry_label collision_output_main = SOME "main" /\
+  (collision_start with <|vs_prev_bb := NONE; vs_current_bb := "main";
+                         vs_inst_idx := 0|>) = collision_start /\
+  enters_block collision_output_main collision_start collision_start /\
+  active_inst collision_output_main (mk_inst 1 ASSIGN [Lit (32w:256 word)] ["p"])
+    collision_start
+Proof
+  EVAL_TAC >> simp[eval_phis_def, phi_prefix_length_def,
+    LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM]
+QED
+
+Theorem collision_output_raw_entry:
+  raw_reachable collision_start collision_output_ctx collision_output_main
+    (mk_inst 1 ASSIGN [Lit (32w:256 word)] ["p"]) collision_start
+Proof
+  irule (cj 1 raw_reachable_rules) >>
+  metis_tac[collision_output_entry_facts]
+QED
+
+Definition collision_output_states_def:
+  collision_output_states =
+    [collision_start; collision_packed_allocated with vs_inst_idx := 1;
+     collision_packed_call_a; collision_packed_call_b; collision_packed_load;
+     collision_packed_branch]
+End
+
+Theorem collision_output_active_rows:
+  !n. n < 6 ==>
+    active_inst collision_output_main
+      (EL n collision_output_main_bb.bb_instructions)
+      (EL n collision_output_states)
+Proof
+  rpt strip_tac >>
+  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4 \/ n = 5` by decide_tac >>
+  gvs[collision_output_states_def, collision_main_blocks] >>
+  EVAL_TAC >> simp[LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM]
+QED
+
+Theorem collision_output_next_rows:
+  !n. n < 5 ==>
+    ~is_terminator (EL n collision_output_main_bb.bb_instructions).inst_opcode /\
+    ?post. step_inst 1 collision_output_ctx
+      (EL n collision_output_main_bb.bb_instructions)
+      (EL n collision_output_states) = OK post /\
+      (post with vs_inst_idx := SUC (EL n collision_output_states).vs_inst_idx) =
+        EL (SUC n) collision_output_states
+Proof
+  rpt strip_tac >>
+  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4` by decide_tac >>
+  gvs[collision_output_states_def, collision_main_blocks, mk_inst_def,
+    is_terminator_def] >>
+  simp[SRULE [mk_inst_def] (Q.SPEC `0` collision_packed_a_invoke),
+    SRULE [mk_inst_def] (Q.SPEC `0` collision_packed_b_invoke),
+    collision_main_updates, collision_main_indices] >>
+  once_rewrite_tac[step_inst_def] >>
+  simp[SRULE [mk_inst_def] collision_initial_allocations,
+    SRULE [mk_inst_def] collision_initial_stores,
+    SRULE [mk_inst_def] collision_packed_a_invoke,
+    SRULE [mk_inst_def] collision_packed_b_invoke,
+    SRULE [mk_inst_def] collision_loads_diverge,
+    collision_main_updates, collision_main_indices]
+QED
+
+Theorem collision_output_raw_prefix:
+  !n. n < 6 ==>
+    raw_reachable collision_start collision_output_ctx collision_output_main
+      (EL n collision_output_main_bb.bb_instructions)
+      (EL n collision_output_states)
+Proof
+  Induct
+  >- simp[collision_output_states_def, collision_main_blocks,
+          collision_output_raw_entry] >>
+  strip_tac >> `n < 5` by decide_tac >>
+  `n < 6` by decide_tac >> gvs[] >>
+  drule collision_output_next_rows >> strip_tac >>
+  `active_inst collision_output_main
+      (EL n collision_output_main_bb.bb_instructions)
+      (EL n collision_output_states)` by
+    (irule collision_output_active_rows >> decide_tac) >>
+  `active_inst collision_output_main
+      (EL (SUC n) collision_output_main_bb.bb_instructions)
+      (EL (SUC n) collision_output_states)` by
+    (irule collision_output_active_rows >> decide_tac) >>
+  metis_tac[cj 2 raw_reachable_rules]
+QED
+
+Theorem collision_output_bad_edge:
+  step_inst 0 collision_output_ctx
+    (mk_inst 6 JNZ [Var "x"; Label "bad"; Label "exit"] [])
+    collision_packed_branch = OK collision_bad_entry /\
+  ~collision_bad_entry.vs_halted /\
+  enters_block collision_output_main collision_bad_entry collision_bad_entry /\
+  active_inst collision_output_main
+    (mk_inst 7 MLOAD [Lit (1024w:256 word)] ["bad_x"]) collision_bad_entry
+Proof
+  conj_tac
+  >- (once_rewrite_tac[step_inst_def] >>
+      simp[mk_inst_def, SRULE [mk_inst_def] collision_branch_steps,
+        collision_bad_entry_def]) >>
+  EVAL_TAC >> simp[eval_phis_def, phi_prefix_length_def,
+    LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM]
+QED
+
+Theorem collision_output_raw_bad:
+  raw_reachable collision_start collision_output_ctx collision_output_main
+    (mk_inst 7 MLOAD [Lit (1024w:256 word)] ["bad_x"]) collision_bad_entry
+Proof
+  mp_tac (Q.SPEC `5` collision_output_raw_prefix) >>
+  simp[collision_output_states_def, collision_main_blocks] >> strip_tac >>
+  irule (cj 3 raw_reachable_rules) >>
+  conj_tac >- simp[collision_output_bad_edge] >>
+  qexistsl_tac [`0`, `mk_inst 6 JNZ [Var "x"; Label "bad"; Label "exit"] []`,
+               `collision_packed_branch`, `collision_bad_entry`] >>
+  simp[collision_output_bad_edge, mk_inst_def, is_terminator_def] >>
+  mp_tac (Q.SPEC `5` collision_output_active_rows) >>
+  simp[collision_output_states_def, collision_main_blocks, mk_inst_def]
+QED
+
+Theorem collision_output_bad_memory:
+  ~static_mem_ok 64 collision_output_ctx collision_output_main
+    (mk_inst 7 MLOAD [Lit (1024w:256 word)] ["bad_x"]) collision_bad_entry
+Proof
+  EVAL_TAC
+QED
+
+Theorem collision_output_not_static:
+  ~mem_inv (static_mem_ok 64) collision_output_ctx collision_start
+Proof
+  strip_tac >> fs[mem_inv_def] >>
+  drule raw_reachable_least >> strip_tac >>
+  metis_tac[collision_output_raw_bad, collision_output_bad_memory]
+QED
+
+Theorem collision_static_counterexample:
+  ctx_pass_stage ARB (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view ARB 2) collision_ctx collision_output_ctx /\
+  o1_ctx_shape collision_ctx /\ o1_run_state_ok collision_start /\
+  EVERY (\fn. fn.fn_eom = NONE) collision_ctx.ctx_functions /\
+  mem_inv raw_mem_ok collision_ctx collision_start /\
+  fixed_region_reserved 0 collision_ctx /\
+  ptr_discipline 0 collision_ctx collision_start /\
+  EVERY ssa_form collision_ctx.ctx_functions /\ ~ctx_has_dalloca collision_ctx /\
+  ctx_eom_bounded 64 collision_output_ctx /\
+  ~mem_inv (static_mem_ok 64) collision_output_ctx collision_start
+Proof
+  simp[collision_actual_stage, collision_context_shape, collision_input_syntax,
+    collision_source_memory_invariant, collision_source_pointer_discipline,
+    collision_output_bound, collision_output_not_static]
+QED
