@@ -18,6 +18,7 @@
  *
  * TOP-LEVEL:
  *   gen_jmp_frame_sim — JMP: join reorder, push label, jump
+ *   gen_jnz_frame_sim — JNZ: condition to the top, JUMPI, JUMP
  *)
 
 Theory genFrameSim
@@ -312,4 +313,57 @@ Proof
         first_x_assum irule >> metis_tac[closure_spill_byte_own]) >>
       metis_tac[])
   >> qexists_tac `r` >> simp[]
+QED
+
+(* ===== JNZ ===== *)
+
+(* JNZ against the frame invariant.  Its plan brings the condition to the
+   top of the stack (emit_input_plan, reorder_plan), then
+   PUSH if_nz; JUMPI; PUSH if_z; JUMP; the planner pops the condition and
+   releases dead spills.  The condition premises are gen_inst_ok_sim's,
+   read through the frame view on the assembly side: the Venom step reads
+   the condition from vs, the code from the frame view.  The premises on
+   r are the invariant's region clause for the output planner state, as in
+   gen_jmp_frame_sim. *)
+Theorem gen_jnz_frame_sim:
+  !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
+   is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
+   cond_op if_nz if_z off_nz off_z pc_nz pc_z.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    inst.inst_opcode = JNZ /\
+    inst.inst_operands = [cond_op; Label if_nz; Label if_z] /\
+    inst.inst_outputs = [] /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+    ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    generated_plan_state_wf base ps /\
+    1 <= LENGTH (SND (emit_input_plan JNZ [cond_op] next_liveness ps)).ps_stack /\
+    (is_var_operand cond_op ==>
+      (?d. stack_get_depth cond_op ps.ps_stack = SOME d /\ d <= 15) \/
+      IS_SOME (FLOOKUP ps.ps_spilled cond_op)) /\
+    (!l. cond_op = Label l ==> IS_SOME (FLOOKUP lo l)) /\
+    eval_operand cond_op vs = operand_val (frame_view fn ra vs) lo cond_op /\
+    (!op at. operand_equiv dfg op at ==>
+       operand_val (frame_view fn ra vs) lo op =
+       operand_val (frame_view fn ra vs) lo at) /\
+    cond_op <> dead_stack_marker /\
+    (!at. operand_equiv dfg cond_op at ==> at <> dead_stack_marker) /\
+    prefix_spill_wf cp.cp_initial_fmp lo (FRONT ops) ps /\
+    FLOOKUP lo if_nz = SOME off_nz /\ off_nz < dimword (:256) /\
+    FLOOKUP o2pc off_nz = SOME pc_nz /\
+    FLOOKUP lo if_z = SOME off_z /\ off_z < dimword (:256) /\
+    FLOOKUP o2pc off_z = SOME pc_z /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
+    generate_inst_plan liveness dfg cfg fn inst next_liveness is_halting
+      next_is_term bb_label ps = SOME (ops, ps') /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
+    !vs'. step_inst fuel ctx inst vs = OK vs' ==>
+      ?n as'.
+        asm_steps lo o2pc prog n as = AsmOK as' /\
+        fn_frame_inv ctx cp lo fn ra rest mem0 ps' vs' as' /\
+        ((vs' = jump_to if_nz vs /\ as'.as_pc = pc_nz) \/
+         (vs' = jump_to if_z vs /\ as'.as_pc = pc_z))
+Proof
+  cheat
 QED

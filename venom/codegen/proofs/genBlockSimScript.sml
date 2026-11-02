@@ -1370,6 +1370,9 @@ Theorem gen_inst_halt_sim:
     label_offsets = SND (compute_label_offsets prog) /\
     offset_to_pc = build_offset_to_pc prog /\
     codegen_ready_fn fn /\
+    (* INVOKE runs the callee; its terminal cases are the function
+       induction's, which has the callee's simulation as hypothesis. *)
+    inst.inst_opcode <> INVOKE /\
     (* Dischargeable at block level from codegen_ready_fn + MEM bb/inst *)
     inst_wf inst /\
     ~is_param_opcode inst.inst_opcode /\
@@ -1429,8 +1432,7 @@ Proof
     qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
     simp[generate_inst_plan_def, is_pre_codegen_opcode_def]
   )
-  >- suspend "selfdestruct"
-  >- suspend "invoke"
+  >> suspend "selfdestruct"
 QED
 
 Resume gen_inst_halt_sim[stop]:
@@ -1589,22 +1591,20 @@ Resume gen_inst_halt_sim[selfdestruct]:
   ASM_REWRITE_TAC[]
 QED
 
-Resume gen_inst_halt_sim[invoke]:
-  cheat
-QED
-
 Finalise gen_inst_halt_sim;
 
 (* ===== Per-instruction Abort simulation ===== *)
 
-(* When step_inst returns Abort, the generated plan produces AsmRevert/AsmFault *)
-Theorem gen_inst_abort_sim:
+(* ASSERT case of gen_inst_abort_sim: on a zero condition JUMPI jumps to the shared revert postamble, whose PUSH 0; DUP1; REVERT reverts with empty data. *)
+Theorem assert_abort_sim:
   !fuel ctx label_offsets offset_to_pc prog
    liveness dfg cfg fn inst next_liveness is_halting
    next_is_term bb_label ps vs as ops ps' a.
-    label_offsets = SND (compute_label_offsets prog) /\
-    offset_to_pc = build_offset_to_pc prog /\
+    inst.inst_opcode = ASSERT /\
     codegen_ready_fn fn /\
+    (* INVOKE runs the callee; its terminal cases are the function
+       induction's, which has the callee's simulation as hypothesis. *)
+    inst.inst_opcode <> INVOKE /\
     (* Dischargeable at block level from codegen_ready_fn + MEM bb/inst *)
     inst_wf inst /\
     ~is_param_opcode inst.inst_opcode /\
@@ -1621,6 +1621,113 @@ Theorem gen_inst_abort_sim:
        Pipeline obligation: compute_label_offsets covers all labels in program. *)
     (!lbl. MEM (AsmPushLabel lbl) (execute_plan initial_fmp ops) ==>
            IS_SOME (FLOOKUP label_offsets lbl)) /\
+    (* ASSERT's failure branch jumps to the shared revert postamble that
+       codegen appends after the functions' code (context_plan_ops). *)
+    (inst.inst_opcode = ASSERT ==>
+     ?off pc. FLOOKUP label_offsets "revert" = SOME off /\
+              off < dimword (:256) /\
+              FLOOKUP offset_to_pc off = SOME pc /\
+              asm_block_at prog pc (execute_plan initial_fmp revert_postamble)) /\
+    (* Provable from generate_inst_plan output (needs new lemma) *)
+    prefix_spill_wf initial_fmp label_offsets (FRONT ops) ps /\
+    (* Spill offsets are non-overlapping.
+       Dischargeable from spill_alloc_wf invariant maintained by plan_state. *)
+    (!op1 off1 op2 off2.
+       FLOOKUP ps.ps_spilled op1 = SOME off1 /\
+       FLOOKUP ps.ps_spilled op2 = SOME off2 /\
+       op1 <> op2 ==> off1 + 32 <= off2 \/ off2 + 32 <= off1) /\
+    (* After prefix execution, operand values are on the asm stack.
+       Plan stacks are bottom-first while assembly stacks are top-first. *)
+    (!st_mid. venom_asm_rel label_offsets
+        (apply_prefix_ops initial_fmp label_offsets (FRONT ops) ps) vs st_mid ==>
+      LENGTH (compute_operands inst) <= LENGTH st_mid.as_stack /\
+      !i. i < LENGTH (compute_operands inst) ==>
+        eval_operand (EL i (REVERSE (compute_operands inst))) vs =
+          SOME (EL i st_mid.as_stack)) /\
+    (* Label operands have consistent values between eval_operand
+       and operand_val (the plan-stack-based evaluation).
+       Dischargeable: trivially true when vs.vs_labels = FEMPTY (normal case). *)
+    (!op. MEM op (compute_operands inst) ==>
+          eval_operand op vs = operand_val vs label_offsets op) /\
+    (* DFG operand_equiv is sound: equivalent operands have the same
+       runtime value. Dischargeable from DFG construction correctness. *)
+    (!op1 op2. MEM op1 (compute_operands inst) /\
+               operand_equiv dfg op1 op2 ==>
+               operand_val vs label_offsets op1 =
+               operand_val vs label_offsets op2) /\
+    (* Live source operands cannot be dead markers or their DFG aliases. *)
+    (!op. MEM op (compute_operands inst) ==>
+       op <> dead_stack_marker /\
+       !at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
+    (* RETURN/REVERT: read range below fn_eom (outside spill region).
+       Dischargeable: Vyper memory allocator keeps user data below fn_eom. *)
+    (!off_v sz_v.
+      (inst.inst_opcode = RETURN \/ inst.inst_opcode = REVERT) /\
+      eval_operand (EL 0 inst.inst_operands) vs = SOME off_v /\
+      eval_operand (EL 1 inst.inst_operands) vs = SOME sz_v ==>
+      w2n off_v + w2n sz_v <= ps.ps_alloc.sa_spill_base) /\
+    (* Non-spilled Var operands on the stack have depth <= 15.
+       Dischargeable: invariant maintained by reduce_depth in input plan. *)
+    (!op d. MEM op (compute_operands inst) /\
+            is_var_operand op /\
+            ~IS_SOME (FLOOKUP ps.ps_spilled op) /\
+            stack_get_depth op ps.ps_stack = SOME d ==> d <= 15) /\
+    (* Operands are accessible: on stack or spilled.
+       Dischargeable from def_dominates_uses + plan_state invariant
+       (all defined vars tracked in stack or spills). *)
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+          (?d. stack_get_depth op ps.ps_stack = SOME d) \/
+          IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    venom_asm_rel label_offsets ps vs as /\
+    generate_inst_plan liveness dfg cfg fn inst
+      next_liveness is_halting next_is_term bb_label ps =
+      SOME (ops, ps') /\
+    asm_block_at prog as.as_pc (execute_plan initial_fmp ops) ==>
+    !vs'. step_inst fuel ctx inst vs = Abort a vs' ==>
+      ?n as'.
+        ((a = Revert_abort /\
+          asm_steps label_offsets offset_to_pc prog n as = AsmRevert as') \/
+         (a = ExHalt_abort /\
+          asm_steps label_offsets offset_to_pc prog n as = AsmFault as')) /\
+        venom_asm_terminal_rel vs' as'
+Proof
+  cheat
+QED
+
+(* When step_inst returns Abort, the generated plan produces AsmRevert/AsmFault *)
+Theorem gen_inst_abort_sim:
+  !fuel ctx label_offsets offset_to_pc prog
+   liveness dfg cfg fn inst next_liveness is_halting
+   next_is_term bb_label ps vs as ops ps' a.
+    label_offsets = SND (compute_label_offsets prog) /\
+    offset_to_pc = build_offset_to_pc prog /\
+    codegen_ready_fn fn /\
+    (* INVOKE runs the callee; its terminal cases are the function
+       induction's, which has the callee's simulation as hypothesis. *)
+    inst.inst_opcode <> INVOKE /\
+    (* Dischargeable at block level from codegen_ready_fn + MEM bb/inst *)
+    inst_wf inst /\
+    ~is_param_opcode inst.inst_opcode /\
+    (* EVM compatibility: pipeline obligation *)
+    LENGTH (compute_operands inst) <= 16 /\
+    (* Stack depth: plan_state invariant *)
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) next_liveness ps)).ps_stack /\
+    (* Label resolution: pipeline obligation from compute_label_offsets *)
+    (!l. MEM (Label l) (compute_operands inst) ==>
+         IS_SOME (FLOOKUP label_offsets l)) /\
+    (* All AsmPushLabel in the executed plan have resolved labels.
+       Pipeline obligation: compute_label_offsets covers all labels in program. *)
+    (!lbl. MEM (AsmPushLabel lbl) (execute_plan initial_fmp ops) ==>
+           IS_SOME (FLOOKUP label_offsets lbl)) /\
+    (* ASSERT's failure branch jumps to the shared revert postamble that
+       codegen appends after the functions' code (context_plan_ops). *)
+    (inst.inst_opcode = ASSERT ==>
+     ?off pc. FLOOKUP label_offsets "revert" = SOME off /\
+              off < dimword (:256) /\
+              FLOOKUP offset_to_pc off = SOME pc /\
+              asm_block_at prog pc (execute_plan initial_fmp revert_postamble)) /\
     (* Provable from generate_inst_plan output (needs new lemma) *)
     prefix_spill_wf initial_fmp label_offsets (FRONT ops) ps /\
     (* Spill offsets are non-overlapping.
@@ -1685,6 +1792,14 @@ Theorem gen_inst_abort_sim:
         venom_asm_terminal_rel vs' as'
 Proof
   rpt strip_tac >>
+  (* ASSERT is assert_abort_sim above. *)
+  Cases_on `inst.inst_opcode = ASSERT`
+  >- (qspecl_then [`fuel`, `ctx`, `label_offsets`, `offset_to_pc`, `prog`,
+        `liveness`, `dfg`, `cfg`, `fn`, `inst`, `next_liveness`, `is_halting`,
+        `next_is_term`, `bb_label`, `ps`, `vs`, `as`, `ops`, `ps'`, `a`]
+        mp_tac assert_abort_sim >>
+      impl_tac >- ASM_REWRITE_TAC[] >>
+      disch_then (qspec_then `vs'` mp_tac) >> ASM_REWRITE_TAC[]) >>
   (* Proved cases are map-parametric; deferred jumps require concrete maps. *)
   qpat_x_assum `label_offsets = SND (compute_label_offsets prog)` kall_tac >>
   qpat_x_assum `offset_to_pc = build_offset_to_pc prog` kall_tac >>
@@ -1692,16 +1807,6 @@ Proof
   gvs[]
   >- suspend "revert"
   >- suspend "invalid"
-  >- (
-    (* ASSERT — maps to [ISZERO; PushLabel "revert"; JUMPI]
-       Abort case (cond = 0w): ISZERO yields 1w => JUMPI jumps to revert label.
-       BLOCKER: Cross-block property — revert_postamble is appended in
-       codegen_def. Needs:
-         (1) FLOOKUP label_offsets "revert" = SOME off,
-         (2) revert_postamble at that offset does [PUSH 0; PUSH 0; REVERT]
-         (3) asm_steps through the postamble yields AsmRevert. *)
-    cheat
-  )
   >- (
     (* ASSERT_UNREACHABLE — maps to
        [SOPushLabel end_lbl; SOEmit "JUMPI"; SOEmit "INVALID"; SOLabel end_lbl]
@@ -1718,17 +1823,7 @@ Proof
        no cross-block dependency. *)
     suspend "assert_unreachable"
   )
-  >- suspend "returndatacopy"
-  >- (
-    (* INVOKE — recursive: step_inst uses fuel, invokes run_blocks on callee.
-       Plan: [SOPushLabel ret_lbl; SOPushLabel fn_lbl; SOEmit "JUMP";
-              SOLabel ret_lbl]
-       INVOKE abort requires proving that the callee's execution produces
-       a corresponding abort in the generated assembly. This needs
-       gen_fn_simulation as an inductive hypothesis (mutual recursion
-       between instruction-level simulation and gen_fn_simulation). *)
-    cheat
-  )
+  >> suspend "returndatacopy"
 QED
 
 Resume gen_inst_abort_sim[revert]:
@@ -2999,24 +3094,32 @@ Proof
   qexistsl [`dfg`, `1`, `h'`, `step_ops`, `ps''`] >> simp[]
 QED
 
-(* Comprehensive local non-call per-instruction OK simulation.
-   Explicit preconditions and guarantees:
-   - excludes INVOKE, whose atomic source semantics require context-wide
-     callee and return invariants absent from this local theorem
-   - requires inst_wf, operand bound, label resolution, prefix_spill_wf
-   - provides PC tracking (as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
-   These extra preconditions are derivable at block level from
-   codegen_ready_fn + MEM inst bb.bb_instructions. *)
-Theorem gen_inst_ok_sim:
+(* ASSIGN case of gen_inst_ok_sim: input emission, reorder, then the copied value stays on the stack under the output name (live) or is popped (dead); the existing partial proof is in the Resume gen_inst_ok_sim[assign*] blocks below. *)
+Theorem assign_inst_ok_sim:
   !fuel ctx lo o2pc prog
    liveness dfg cfg fn inst next_liveness is_halting
    next_is_term bb_label base ps vs as ops ps'.
-    lo = SND (compute_label_offsets prog) /\
-    o2pc = build_offset_to_pc prog /\
+    inst.inst_opcode = ASSIGN /\
     inst.inst_opcode <> INVOKE /\
+    (* GAS readings are opaque at this level: venom_asm_rel deliberately does
+       not relate them to Venom's GAS value.  The frame-aware invariant owns
+       GAS, as it owns INVOKE. *)
+    inst.inst_opcode <> GAS /\
+    (* Source memory reads avoid the compiler-owned spill interval, mirroring
+       source_memory_writes_disjoint and the context-level
+       source_memory_reads_disjoint; memory_rel says nothing inside it. *)
+    EVERY (\(off,len). len = 0 \/ off + len <= ps'.ps_alloc.sa_spill_base \/
+                       ps'.ps_alloc.sa_next_offset <= off)
+      (source_memory_read_ranges inst vs) /\
     generated_plan_state_wf base ps /\
     codegen_ready_fn fn /\
     MEM inst (fn_insts fn) /\
+    (* Jumps are simulated against the frame invariant (genFrameSim), whose
+       statements carry the join-reorder and target-resolution premises a
+       jump needs and land at the target block's pc.  DJMP is outside
+       unit_shape_ok, and Venom's DJMP indexes its label list while the
+       generated code jumps to the selector value. *)
+    ~MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
     (* Dischargeable at block level from codegen_ready_fn + MEM bb/inst *)
     inst_wf inst /\
     (* EVM compatibility: DUP depth limit. Dischargeable from evm_compatible
@@ -3086,7 +3189,592 @@ Theorem gen_inst_ok_sim:
         (~is_terminator inst.inst_opcode ==>
          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
 Proof
+  (* Partial proof from before the case became a standalone lemma.  It ran
+     inside gen_inst_ok_sim after its opcode dispatch, as Resume blocks:
+
+  Resume gen_inst_ok_sim[assign]:
+    qpat_x_assum `inst_wf inst` mp_tac >>
+    qpat_x_assum `inst.inst_opcode = ASSIGN`
+      (fn opc_th => rewrite_tac [opc_th] >> assume_tac opc_th) >>
+    simp[inst_wf_def] >> strip_tac >>
+    qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+    `inst.inst_opcode <> INVOKE` by simp[] >>
+    drule step_inst_non_invoke >> disch_then (fn th => simp[th]) >>
+    simp[step_inst_base_def] >>
+    Cases_on `inst.inst_operands` >> gvs[] >>
+    Cases_on `inst.inst_outputs` >> gvs[] >>
+    strip_tac >>
+    Cases_on `eval_operand h vs` >> gvs[] >>
+    qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    simp[generate_regular_inst_plan_def, compute_operands_def,
+         is_commutative_def, venom_to_evm_name_def,
+         generate_emit_ops_def] >>
+    pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+    pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+    strip_tac >> gvs[] >>
+    Cases_on `is_halting` >> Cases_on `MEM h' next_liveness` >> gvs[] >>
+    TRY pairarg_tac >> gvs[]
+    >- suspend "assign_live_nohalt"
+    >- suspend "assign_dead_nohalt"
+    >- suspend "assign_live_halt"
+    >> suspend "assign_dead_halt"
+  QED
+
+  Resume gen_inst_ok_sim[assign_live_nohalt]:
+    cheat
+  QED
+
+  Resume gen_inst_ok_sim[assign_dead_nohalt]:
+    gvs[compute_operands_def, python_stack_operands_def,
+        ir_specific_operand_order_def] >>
+    cheat
+  QED
+
+  Resume gen_inst_ok_sim[assign_live_halt]:
+    cheat
+  QED
+
+  Resume gen_inst_ok_sim[assign_dead_halt]:
+    gvs[compute_operands_def, python_stack_operands_def,
+        ir_specific_operand_order_def] >>
+    (* pop_ops = [SOPop 1], ps8 = ... *)
+    qpat_x_assum `popmany_plan _ _ = _` mp_tac >>
+    simp[popmany_plan_def, LET_THM, stack_get_depth_def, stack_push_def,
+         REVERSE_SNOC, stack_find_def, is_contiguous_top_def,
+         sortingTheory.QSORT_DEF, sortingTheory.PARTITION_DEF,
+         sortingTheory.PART_DEF, popmany_individual_def, do_swap_def,
+         stack_pop_def, FOLDL] >>
+    strip_tac >> gvs[] >>
+    `prefix_wf lo (LENGTH ps.ps_stack) input_ops /\
+      prefix_end_len lo (LENGTH ps.ps_stack) input_ops = LENGTH ps1.ps_stack /\
+      prefix_wf lo (LENGTH ps1.ps_stack) reorder_ops /\
+      prefix_end_len lo (LENGTH ps1.ps_stack) reorder_ops = LENGTH ps4.ps_stack` by
+      (qspecl_then [`[h]`, `ASSIGN`, `next_liveness`, `ps`, `lo`]
+         mp_tac emit_input_plan_wf_len >>
+       (impl_tac >- simp[]) >>
+       (impl_tac >- (rpt strip_tac >> gvs[])) >>
+       strip_tac >>
+       qspecl_then [`dfg`, `[h]`, `ps1`, `lo`] mp_tac
+         (CONV_RULE (DEPTH_CONV pairLib.GEN_BETA_CONV)
+            (REWRITE_RULE [LET_THM] reorder_plan_wf_len)) >>
+       (impl_tac >- gvs[]) >> gvs[]) >>
+    (* prefix_spill_wf initial_fmp FULL from FRONT *)
+    `prefix_spill_wf initial_fmp lo (input_ops ++ reorder_ops ++ [SOPop 1]) ps` by (
+      qsuff_tac `prefix_spill_wf initial_fmp lo ((input_ops ++ reorder_ops) ++ [SOPop 1]) ps`
+      >- simp[] >>
+      rewrite_tac[prefix_spill_wf_snoc] >>
+      conj_tac >- gvs[FRONT_APPEND_NOT_NIL]
+      >- simp[spill_op_wf_def]) >>
+    `1 <= LENGTH ps4.ps_stack` by
+      (`(reorder_ops,ps4) =
+         (\(ops,ps'). ([] ++ ops,ps')) (reorder_one dfg [h] 0 h ps1)` by
+        (qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
+         simp[Once reorder_plan_def, indexedListsTheory.MAPi_def] >>
+         Cases_on `reorder_one dfg [h] 0 h ps1` >> simp[]) >>
+       Cases_on `reorder_one dfg [h] 0 h ps1` >> gvs[] >>
+       mp_tac (Q.SPECL [`dfg`,`[h]`,`0`,`h`,`ps1`,`lo`] reorder_one_wf_len) >>
+       simp[]) >>
+    `prefix_wf lo (LENGTH ps.ps_stack) (input_ops ++ reorder_ops ++ [SOPop 1])` by
+      (`prefix_wf lo (LENGTH ps.ps_stack) (input_ops ++ reorder_ops)` by
+         (irule prefix_wf_append >> gvs[]) >>
+       `prefix_end_len lo (LENGTH ps.ps_stack) (input_ops ++ reorder_ops) =
+        LENGTH ps4.ps_stack` by (simp[prefix_end_len_append] >> gvs[]) >>
+       drule prefix_wf_append >>
+       disch_then (qspec_then `[SOPop 1]` mp_tac) >>
+       simp[prefix_wf_def, stack_op_wf_def, LET_THM]) >>
+    qpat_x_assum `prefix_wf lo (LENGTH ps.ps_stack) input_ops`
+      (fn th => assume_tac th >>
+                assume_tac (MATCH_MP prefix_wf_every_prefix_op th)) >>
+    qpat_x_assum `prefix_wf lo (LENGTH ps1.ps_stack) reorder_ops`
+      (fn th => assume_tac th >>
+                assume_tac (MATCH_MP prefix_wf_every_prefix_op th)) >>
+    `EVERY is_prefix_op (input_ops ++ reorder_ops ++ [SOPop 1])` by
+      (gvs[EVERY_APPEND] >> EVAL_TAC) >>
+    mp_tac mixed_prefix_venom_asm_rel >>
+    disch_then (qspecl_then [`input_ops ++ reorder_ops ++ [SOPop 1]`,
+      `initial_fmp`,`lo`,`o2pc`,`prog`,`ps`,`vs`,`as`] mp_tac) >>
+    (impl_tac >- gvs[EVERY_APPEND]) >>
+    disch_then strip_assume_tac >>
+    qexistsl [`LENGTH (execute_plan initial_fmp (input_ops ++ reorder_ops ++ [SOPop 1]))`,
+              `st'`] >>
+    rpt conj_tac
+    >- first_assum ACCEPT_TAC
+    >- (
+      irule venom_asm_rel_release_dead_spills >>
+      irule venom_asm_rel_update_var >>
+      `~MEM (Var h') ps.ps_stack` by
+        (strip_tac >> gvs[EVERY_MEM] >> res_tac >> gvs[]) >>
+      `Var h' NOTIN FDOM ps.ps_spilled` by
+        (strip_tac >> res_tac >> gvs[]) >>
+      drule_all apply_prefix_ops_preserves_not_mem >> strip_tac >> gvs[] >>
+      qsuff_tac
+        `(apply_prefix_ops initial_fmp lo (input_ops ++ reorder_ops ++ [SOPop 1]) ps).ps_spilled =
+         (ps4 with ps_stack :=
+           TAKE (LENGTH ps4.ps_stack - 1)
+             (SNOC (Var h')
+                (TAKE (LENGTH ps4.ps_stack - 1) ps4.ps_stack))).ps_spilled /\
+         (apply_prefix_ops initial_fmp lo (input_ops ++ reorder_ops ++ [SOPop 1]) ps).ps_stack =
+         (ps4 with ps_stack :=
+           TAKE (LENGTH ps4.ps_stack - 1)
+             (SNOC (Var h')
+                (TAKE (LENGTH ps4.ps_stack - 1) ps4.ps_stack))).ps_stack /\
+         (apply_prefix_ops initial_fmp lo (input_ops ++ reorder_ops ++ [SOPop 1]) ps).ps_alloc =
+         (ps4 with ps_stack :=
+           TAKE (LENGTH ps4.ps_stack - 1)
+             (SNOC (Var h')
+                (TAKE (LENGTH ps4.ps_stack - 1) ps4.ps_stack))).ps_alloc` >- (
+        strip_tac >>
+        conj_tac >- (
+          rpt strip_tac >>
+          qpat_x_assum `Var h' NOTIN FDOM (apply_prefix_ops initial_fmp _ _ _).ps_spilled`
+            mp_tac >> gvs[] >> strip_tac >>
+          Cases_on `op` >> gvs[] >> CCONTR_TAC >> gvs[]) >>
+        conj_tac >- (
+          qpat_x_assum `~MEM (Var h') (apply_prefix_ops initial_fmp _ _ _).ps_stack`
+            mp_tac >> gvs[] >> strip_tac >>
+          simp[EVERY_MEM] >> rpt strip_tac >>
+          Cases_on `op` >> simp[] >> CCONTR_TAC >> gvs[] >>
+          metis_tac[MEM]) >>
+        qpat_x_assum `venom_asm_rel lo (apply_prefix_ops initial_fmp _ _ _) vs st'`
+          mp_tac >>
+        simp[venom_asm_rel_def] >> gvs[] >> metis_tac[]) >>
+      simp[apply_prefix_ops_append, sopop_align] >> cheat)
+    >- gvs[Once ADD_COMM]
+  QED
+  *)
+  cheat
+QED
+
+(* LOG case of gen_inst_ok_sim: LOGn reads the memory range and topics off the stack and appends the log entry. *)
+Theorem log_inst_ok_sim:
+  !fuel ctx lo o2pc prog
+   liveness dfg cfg fn inst next_liveness is_halting
+   next_is_term bb_label base ps vs as ops ps'.
+    inst.inst_opcode = LOG /\
+    inst.inst_opcode <> INVOKE /\
+    (* GAS readings are opaque at this level: venom_asm_rel deliberately does
+       not relate them to Venom's GAS value.  The frame-aware invariant owns
+       GAS, as it owns INVOKE. *)
+    inst.inst_opcode <> GAS /\
+    (* Source memory reads avoid the compiler-owned spill interval, mirroring
+       source_memory_writes_disjoint and the context-level
+       source_memory_reads_disjoint; memory_rel says nothing inside it. *)
+    EVERY (\(off,len). len = 0 \/ off + len <= ps'.ps_alloc.sa_spill_base \/
+                       ps'.ps_alloc.sa_next_offset <= off)
+      (source_memory_read_ranges inst vs) /\
+    generated_plan_state_wf base ps /\
+    codegen_ready_fn fn /\
+    MEM inst (fn_insts fn) /\
+    (* Jumps are simulated against the frame invariant (genFrameSim), whose
+       statements carry the join-reorder and target-resolution premises a
+       jump needs and land at the target block's pc.  DJMP is outside
+       unit_shape_ok, and Venom's DJMP indexes its label list while the
+       generated code jumps to the selector value. *)
+    ~MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
+    (* Dischargeable at block level from codegen_ready_fn + MEM bb/inst *)
+    inst_wf inst /\
+    (* EVM compatibility: DUP depth limit. Dischargeable from evm_compatible
+       (LOG tc <= 4, INVOKE args bounded by fn arity). Pipeline obligation. *)
+    LENGTH (compute_operands inst) <= 16 /\
+    (* Stack depth after input emission >= operand count.
+       Dischargeable from plan_state invariant (stack tracks emitted inputs). *)
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) next_liveness ps)).ps_stack /\
+    (* Every variable input must be owned by the planner: each is either
+       shallow enough to duplicate or available from the spill map.
+       generated_plan_state_wf is structural and does not imply ownership. *)
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+      (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
+      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    (* Label resolution: all label operands in label_offsets.
+       Pipeline obligation from compute_label_offsets over full program. *)
+    (!l. MEM (Label l) (compute_operands inst) ==>
+         IS_SOME (FLOOKUP lo l)) /\
+    (* Cross-layer operand evaluation agreement.  In particular, Label
+       operands must agree between vs_labels and generated label offsets. *)
+    (!op. MEM op (compute_operands inst) ==>
+          eval_operand op vs = operand_val vs lo op) /\
+    (* DFG alias soundness: planner-equivalent operands denote the same
+       runtime word under the current value state and label environment.
+       This is an explicit pipeline obligation for alias-only reorder steps. *)
+    (!op at. operand_equiv dfg op at ==>
+             operand_val vs lo op = operand_val vs lo at) /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+      (compute_operands inst) /\
+    (* SSA freshness: output variables not yet in plan state.
+       Dischargeable from ssa_form + plan_state invariant
+       (plan tracks defined vars, SSA ensures no redefinition). *)
+    EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+                      inst.inst_outputs) ps.ps_stack /\
+    (!op. op IN FDOM ps.ps_spilled ==>
+          EVERY (\out. case op of Var x => x <> out | _ => T)
+                inst.inst_outputs) /\
+    (* PHI soundness: stack-found phi var evaluates to resolved phi value.
+       Dischargeable from block entry invariant: predecessor placed the
+       resolved PHI value at the expected stack position. *)
+    (!dist prev val_op.
+       inst.inst_opcode = PHI /\
+       stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
+         ps.ps_stack = SOME dist /\
+       vs.vs_prev_bb = SOME prev /\
+       resolve_phi prev inst.inst_operands = SOME val_op ==>
+       operand_val vs lo (stack_peek dist ps.ps_stack) =
+         eval_operand val_op vs) /\
+    (* Spill well-formedness for prefix ops.
+       Dischargeable: provable from generate_inst_plan output
+       (plan generator produces spill-well-formed prefixes). *)
+    prefix_spill_wf initial_fmp lo (FRONT ops) ps /\
+    venom_asm_rel lo ps vs as /\
+    n2w initial_fmp = vs.vs_initial_fmp /\
+    generate_inst_plan liveness dfg cfg fn inst
+      next_liveness is_halting next_is_term bb_label ps =
+      SOME (ops, ps') /\
+    asm_block_at prog as.as_pc (execute_plan initial_fmp ops) ==>
+    !vs'. step_inst fuel ctx inst vs = OK vs' /\
+          inst_memory_safe ps'.ps_alloc inst vs vs' ==>
+      ?n as'.
+        asm_steps lo o2pc prog n as = AsmOK as' /\
+        venom_asm_rel lo ps' vs' as' /\
+        (~is_terminator inst.inst_opcode ==>
+         as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
+Proof
+  cheat
+QED
+
+(* ASSERT case of gen_inst_ok_sim, success path: ISZERO; PUSH revert; JUMPI falls through on a nonzero condition. *)
+Theorem assert_inst_ok_sim:
+  !fuel ctx lo o2pc prog
+   liveness dfg cfg fn inst next_liveness is_halting
+   next_is_term bb_label base ps vs as ops ps'.
+    inst.inst_opcode = ASSERT /\
+    inst.inst_opcode <> INVOKE /\
+    (* GAS readings are opaque at this level: venom_asm_rel deliberately does
+       not relate them to Venom's GAS value.  The frame-aware invariant owns
+       GAS, as it owns INVOKE. *)
+    inst.inst_opcode <> GAS /\
+    (* Source memory reads avoid the compiler-owned spill interval, mirroring
+       source_memory_writes_disjoint and the context-level
+       source_memory_reads_disjoint; memory_rel says nothing inside it. *)
+    EVERY (\(off,len). len = 0 \/ off + len <= ps'.ps_alloc.sa_spill_base \/
+                       ps'.ps_alloc.sa_next_offset <= off)
+      (source_memory_read_ranges inst vs) /\
+    generated_plan_state_wf base ps /\
+    codegen_ready_fn fn /\
+    MEM inst (fn_insts fn) /\
+    (* Jumps are simulated against the frame invariant (genFrameSim), whose
+       statements carry the join-reorder and target-resolution premises a
+       jump needs and land at the target block's pc.  DJMP is outside
+       unit_shape_ok, and Venom's DJMP indexes its label list while the
+       generated code jumps to the selector value. *)
+    ~MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
+    (* Dischargeable at block level from codegen_ready_fn + MEM bb/inst *)
+    inst_wf inst /\
+    (* EVM compatibility: DUP depth limit. Dischargeable from evm_compatible
+       (LOG tc <= 4, INVOKE args bounded by fn arity). Pipeline obligation. *)
+    LENGTH (compute_operands inst) <= 16 /\
+    (* Stack depth after input emission >= operand count.
+       Dischargeable from plan_state invariant (stack tracks emitted inputs). *)
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) next_liveness ps)).ps_stack /\
+    (* Every variable input must be owned by the planner: each is either
+       shallow enough to duplicate or available from the spill map.
+       generated_plan_state_wf is structural and does not imply ownership. *)
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+      (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
+      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    (* Label resolution: all label operands in label_offsets.
+       Pipeline obligation from compute_label_offsets over full program. *)
+    (!l. MEM (Label l) (compute_operands inst) ==>
+         IS_SOME (FLOOKUP lo l)) /\
+    (* Cross-layer operand evaluation agreement.  In particular, Label
+       operands must agree between vs_labels and generated label offsets. *)
+    (!op. MEM op (compute_operands inst) ==>
+          eval_operand op vs = operand_val vs lo op) /\
+    (* DFG alias soundness: planner-equivalent operands denote the same
+       runtime word under the current value state and label environment.
+       This is an explicit pipeline obligation for alias-only reorder steps. *)
+    (!op at. operand_equiv dfg op at ==>
+             operand_val vs lo op = operand_val vs lo at) /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+      (compute_operands inst) /\
+    (* SSA freshness: output variables not yet in plan state.
+       Dischargeable from ssa_form + plan_state invariant
+       (plan tracks defined vars, SSA ensures no redefinition). *)
+    EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+                      inst.inst_outputs) ps.ps_stack /\
+    (!op. op IN FDOM ps.ps_spilled ==>
+          EVERY (\out. case op of Var x => x <> out | _ => T)
+                inst.inst_outputs) /\
+    (* PHI soundness: stack-found phi var evaluates to resolved phi value.
+       Dischargeable from block entry invariant: predecessor placed the
+       resolved PHI value at the expected stack position. *)
+    (!dist prev val_op.
+       inst.inst_opcode = PHI /\
+       stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
+         ps.ps_stack = SOME dist /\
+       vs.vs_prev_bb = SOME prev /\
+       resolve_phi prev inst.inst_operands = SOME val_op ==>
+       operand_val vs lo (stack_peek dist ps.ps_stack) =
+         eval_operand val_op vs) /\
+    (* Spill well-formedness for prefix ops.
+       Dischargeable: provable from generate_inst_plan output
+       (plan generator produces spill-well-formed prefixes). *)
+    prefix_spill_wf initial_fmp lo (FRONT ops) ps /\
+    venom_asm_rel lo ps vs as /\
+    n2w initial_fmp = vs.vs_initial_fmp /\
+    generate_inst_plan liveness dfg cfg fn inst
+      next_liveness is_halting next_is_term bb_label ps =
+      SOME (ops, ps') /\
+    asm_block_at prog as.as_pc (execute_plan initial_fmp ops) ==>
+    !vs'. step_inst fuel ctx inst vs = OK vs' /\
+          inst_memory_safe ps'.ps_alloc inst vs vs' ==>
+      ?n as'.
+        asm_steps lo o2pc prog n as = AsmOK as' /\
+        venom_asm_rel lo ps' vs' as' /\
+        (~is_terminator inst.inst_opcode ==>
+         as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
+Proof
+  cheat
+QED
+
+(* ASSERT_UNREACHABLE case of gen_inst_ok_sim, success path: PUSH end; JUMPI jumps over INVALID to the fresh end label on a nonzero condition. *)
+Theorem assert_unreachable_inst_ok_sim:
+  !fuel ctx lo o2pc prog
+   liveness dfg cfg fn inst next_liveness is_halting
+   next_is_term bb_label base ps vs as ops ps'.
+    inst.inst_opcode = ASSERT_UNREACHABLE /\
+    inst.inst_opcode <> INVOKE /\
+    (* GAS readings are opaque at this level: venom_asm_rel deliberately does
+       not relate them to Venom's GAS value.  The frame-aware invariant owns
+       GAS, as it owns INVOKE. *)
+    inst.inst_opcode <> GAS /\
+    (* Source memory reads avoid the compiler-owned spill interval, mirroring
+       source_memory_writes_disjoint and the context-level
+       source_memory_reads_disjoint; memory_rel says nothing inside it. *)
+    EVERY (\(off,len). len = 0 \/ off + len <= ps'.ps_alloc.sa_spill_base \/
+                       ps'.ps_alloc.sa_next_offset <= off)
+      (source_memory_read_ranges inst vs) /\
+    generated_plan_state_wf base ps /\
+    codegen_ready_fn fn /\
+    MEM inst (fn_insts fn) /\
+    (* Jumps are simulated against the frame invariant (genFrameSim), whose
+       statements carry the join-reorder and target-resolution premises a
+       jump needs and land at the target block's pc.  DJMP is outside
+       unit_shape_ok, and Venom's DJMP indexes its label list while the
+       generated code jumps to the selector value. *)
+    ~MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
+    (* Dischargeable at block level from codegen_ready_fn + MEM bb/inst *)
+    inst_wf inst /\
+    (* EVM compatibility: DUP depth limit. Dischargeable from evm_compatible
+       (LOG tc <= 4, INVOKE args bounded by fn arity). Pipeline obligation. *)
+    LENGTH (compute_operands inst) <= 16 /\
+    (* Stack depth after input emission >= operand count.
+       Dischargeable from plan_state invariant (stack tracks emitted inputs). *)
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) next_liveness ps)).ps_stack /\
+    (* Every variable input must be owned by the planner: each is either
+       shallow enough to duplicate or available from the spill map.
+       generated_plan_state_wf is structural and does not imply ownership. *)
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+      (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
+      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    (* Label resolution: all label operands in label_offsets.
+       Pipeline obligation from compute_label_offsets over full program. *)
+    (!l. MEM (Label l) (compute_operands inst) ==>
+         IS_SOME (FLOOKUP lo l)) /\
+    (* Labels defined in the instruction's own code resolve to their own
+       positions (labels are unique in prog). *)
+    (!lbl i. i < LENGTH (execute_plan initial_fmp ops) /\
+             EL i (execute_plan initial_fmp ops) = AsmLabel lbl ==>
+             ?off. FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
+                   FLOOKUP o2pc off = SOME (as.as_pc + i)) /\
+    (* Cross-layer operand evaluation agreement.  In particular, Label
+       operands must agree between vs_labels and generated label offsets. *)
+    (!op. MEM op (compute_operands inst) ==>
+          eval_operand op vs = operand_val vs lo op) /\
+    (* DFG alias soundness: planner-equivalent operands denote the same
+       runtime word under the current value state and label environment.
+       This is an explicit pipeline obligation for alias-only reorder steps. *)
+    (!op at. operand_equiv dfg op at ==>
+             operand_val vs lo op = operand_val vs lo at) /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+      (compute_operands inst) /\
+    (* SSA freshness: output variables not yet in plan state.
+       Dischargeable from ssa_form + plan_state invariant
+       (plan tracks defined vars, SSA ensures no redefinition). *)
+    EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+                      inst.inst_outputs) ps.ps_stack /\
+    (!op. op IN FDOM ps.ps_spilled ==>
+          EVERY (\out. case op of Var x => x <> out | _ => T)
+                inst.inst_outputs) /\
+    (* PHI soundness: stack-found phi var evaluates to resolved phi value.
+       Dischargeable from block entry invariant: predecessor placed the
+       resolved PHI value at the expected stack position. *)
+    (!dist prev val_op.
+       inst.inst_opcode = PHI /\
+       stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
+         ps.ps_stack = SOME dist /\
+       vs.vs_prev_bb = SOME prev /\
+       resolve_phi prev inst.inst_operands = SOME val_op ==>
+       operand_val vs lo (stack_peek dist ps.ps_stack) =
+         eval_operand val_op vs) /\
+    (* Spill well-formedness for prefix ops.
+       Dischargeable: provable from generate_inst_plan output
+       (plan generator produces spill-well-formed prefixes). *)
+    prefix_spill_wf initial_fmp lo (FRONT ops) ps /\
+    venom_asm_rel lo ps vs as /\
+    n2w initial_fmp = vs.vs_initial_fmp /\
+    generate_inst_plan liveness dfg cfg fn inst
+      next_liveness is_halting next_is_term bb_label ps =
+      SOME (ops, ps') /\
+    asm_block_at prog as.as_pc (execute_plan initial_fmp ops) ==>
+    !vs'. step_inst fuel ctx inst vs = OK vs' /\
+          inst_memory_safe ps'.ps_alloc inst vs vs' ==>
+      ?n as'.
+        asm_steps lo o2pc prog n as = AsmOK as' /\
+        venom_asm_rel lo ps' vs' as' /\
+        (~is_terminator inst.inst_opcode ==>
+         as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
+Proof
+  cheat
+QED
+
+(* Close a gen_inst_ok_sim case from its standalone lemma, all of whose
+   premises are among gen_inst_ok_sim's (after rpt strip_tac). *)
+fun ok_case_lemma_tac th =
+  mp_tac th >>
+  disch_then (qspecl_then [`fuel`, `ctx`, `lo`, `o2pc`, `prog`, `liveness`,
+    `dfg`, `cfg`, `fn`, `inst`, `next_liveness`, `is_halting`,
+    `next_is_term`, `bb_label`, `base'`, `ps`, `vs`, `as`, `ops`, `ps'`]
+    mp_tac) >>
+  impl_tac >- ASM_REWRITE_TAC[] >>
+  disch_then (qspec_then `vs'` mp_tac) >> ASM_REWRITE_TAC[];
+
+(* Comprehensive local non-call per-instruction OK simulation.
+   Explicit preconditions and guarantees:
+   - excludes INVOKE, whose atomic source semantics require context-wide
+     callee and return invariants absent from this local theorem
+   - requires inst_wf, operand bound, label resolution, prefix_spill_wf
+   - provides PC tracking (as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
+   These extra preconditions are derivable at block level from
+   codegen_ready_fn + MEM inst bb.bb_instructions. *)
+Theorem gen_inst_ok_sim:
+  !fuel ctx lo o2pc prog
+   liveness dfg cfg fn inst next_liveness is_halting
+   next_is_term bb_label base ps vs as ops ps'.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    inst.inst_opcode <> INVOKE /\
+    (* GAS readings are opaque at this level: venom_asm_rel deliberately does
+       not relate them to Venom's GAS value.  The frame-aware invariant owns
+       GAS, as it owns INVOKE. *)
+    inst.inst_opcode <> GAS /\
+    (* Source memory reads avoid the compiler-owned spill interval, mirroring
+       source_memory_writes_disjoint and the context-level
+       source_memory_reads_disjoint; memory_rel says nothing inside it. *)
+    EVERY (\(off,len). len = 0 \/ off + len <= ps'.ps_alloc.sa_spill_base \/
+                       ps'.ps_alloc.sa_next_offset <= off)
+      (source_memory_read_ranges inst vs) /\
+    generated_plan_state_wf base ps /\
+    codegen_ready_fn fn /\
+    MEM inst (fn_insts fn) /\
+    (* Jumps are simulated against the frame invariant (genFrameSim), whose
+       statements carry the join-reorder and target-resolution premises a
+       jump needs and land at the target block's pc.  DJMP is outside
+       unit_shape_ok, and Venom's DJMP indexes its label list while the
+       generated code jumps to the selector value. *)
+    ~MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
+    (* Dischargeable at block level from codegen_ready_fn + MEM bb/inst *)
+    inst_wf inst /\
+    (* EVM compatibility: DUP depth limit. Dischargeable from evm_compatible
+       (LOG tc <= 4, INVOKE args bounded by fn arity). Pipeline obligation. *)
+    LENGTH (compute_operands inst) <= 16 /\
+    (* Stack depth after input emission >= operand count.
+       Dischargeable from plan_state invariant (stack tracks emitted inputs). *)
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) next_liveness ps)).ps_stack /\
+    (* Every variable input must be owned by the planner: each is either
+       shallow enough to duplicate or available from the spill map.
+       generated_plan_state_wf is structural and does not imply ownership. *)
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+      (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
+      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    (* Label resolution: all label operands in label_offsets.
+       Pipeline obligation from compute_label_offsets over full program. *)
+    (!l. MEM (Label l) (compute_operands inst) ==>
+         IS_SOME (FLOOKUP lo l)) /\
+    (* Labels defined in the instruction's own code resolve to their own
+       positions (labels are unique in prog). *)
+    (!lbl i. i < LENGTH (execute_plan initial_fmp ops) /\
+             EL i (execute_plan initial_fmp ops) = AsmLabel lbl ==>
+             ?off. FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
+                   FLOOKUP o2pc off = SOME (as.as_pc + i)) /\
+    (* Cross-layer operand evaluation agreement.  In particular, Label
+       operands must agree between vs_labels and generated label offsets. *)
+    (!op. MEM op (compute_operands inst) ==>
+          eval_operand op vs = operand_val vs lo op) /\
+    (* DFG alias soundness: planner-equivalent operands denote the same
+       runtime word under the current value state and label environment.
+       This is an explicit pipeline obligation for alias-only reorder steps. *)
+    (!op at. operand_equiv dfg op at ==>
+             operand_val vs lo op = operand_val vs lo at) /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+      (compute_operands inst) /\
+    (* SSA freshness: output variables not yet in plan state.
+       Dischargeable from ssa_form + plan_state invariant
+       (plan tracks defined vars, SSA ensures no redefinition). *)
+    EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+                      inst.inst_outputs) ps.ps_stack /\
+    (!op. op IN FDOM ps.ps_spilled ==>
+          EVERY (\out. case op of Var x => x <> out | _ => T)
+                inst.inst_outputs) /\
+    (* PHI soundness: stack-found phi var evaluates to resolved phi value.
+       Dischargeable from block entry invariant: predecessor placed the
+       resolved PHI value at the expected stack position. *)
+    (!dist prev val_op.
+       inst.inst_opcode = PHI /\
+       stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
+         ps.ps_stack = SOME dist /\
+       vs.vs_prev_bb = SOME prev /\
+       resolve_phi prev inst.inst_operands = SOME val_op ==>
+       operand_val vs lo (stack_peek dist ps.ps_stack) =
+         eval_operand val_op vs) /\
+    (* Spill well-formedness for prefix ops.
+       Dischargeable: provable from generate_inst_plan output
+       (plan generator produces spill-well-formed prefixes). *)
+    prefix_spill_wf initial_fmp lo (FRONT ops) ps /\
+    venom_asm_rel lo ps vs as /\
+    n2w initial_fmp = vs.vs_initial_fmp /\
+    generate_inst_plan liveness dfg cfg fn inst
+      next_liveness is_halting next_is_term bb_label ps =
+      SOME (ops, ps') /\
+    asm_block_at prog as.as_pc (execute_plan initial_fmp ops) ==>
+    !vs'. step_inst fuel ctx inst vs = OK vs' /\
+          inst_memory_safe ps'.ps_alloc inst vs vs' ==>
+      ?n as'.
+        asm_steps lo o2pc prog n as = AsmOK as' /\
+        venom_asm_rel lo ps' vs' as' /\
+        (~is_terminator inst.inst_opcode ==>
+         as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
+Proof
   rpt strip_tac >>
+  (* ASSIGN, LOG, ASSERT and ASSERT_UNREACHABLE are the lemmas above. *)
+  Cases_on `inst.inst_opcode = ASSIGN`
+  >- ok_case_lemma_tac assign_inst_ok_sim >>
+  Cases_on `inst.inst_opcode = LOG`
+  >- ok_case_lemma_tac log_inst_ok_sim >>
+  Cases_on `inst.inst_opcode = ASSERT`
+  >- ok_case_lemma_tac assert_inst_ok_sim >>
+  Cases_on `inst.inst_opcode = ASSERT_UNREACHABLE`
+  >- ok_case_lemma_tac assert_unreachable_inst_ok_sim >>
   (* Do not substitute concrete maps into the preserved map-parametric proofs. *)
   qpat_x_assum `lo = SND (compute_label_offsets prog)` kall_tac >>
   qpat_x_assum `o2pc = build_offset_to_pc prog` kall_tac >>
@@ -5302,14 +5990,7 @@ Resume gen_inst_ok_sim[none]:
           qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
           simp[step_inst_non_invoke, Once step_inst_base_def] >>
           every_case_tac >> simp[] >> NO_TAC)
-  >- suspend "istore"
-  >- suspend "jmp"
-  >- suspend "jnz"
-  >- suspend "djmp"
-  >- suspend "assign"
-  >- suspend "log"
-  >- suspend "assert_ok"
-  >> suspend "assert_unreachable_ok"
+  >> suspend "istore"
 QED
 
 (* Saved concrete baseline check: includes every assembly record field. *)
@@ -5659,180 +6340,6 @@ Proof
        dead_stack_marker_def, byteTheory.LENGTH_word_to_bytes,
        TAKE_LENGTH_ID_rwt, venomMemPropsTheory.dimindex_256,
        vfmTypesTheory.word_to_bytes_word_of_bytes_256]
-QED
-
-Resume gen_inst_ok_sim[jmp]:
-  cheat
-QED
-
-Resume gen_inst_ok_sim[jnz]:
-  cheat
-QED
-
-Resume gen_inst_ok_sim[djmp]:
-  cheat
-QED
-
-Resume gen_inst_ok_sim[assign]:
-  qpat_x_assum `inst_wf inst` mp_tac >>
-  qpat_x_assum `inst.inst_opcode = ASSIGN`
-    (fn opc_th => rewrite_tac [opc_th] >> assume_tac opc_th) >>
-  simp[inst_wf_def] >> strip_tac >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  `inst.inst_opcode <> INVOKE` by simp[] >>
-  drule step_inst_non_invoke >> disch_then (fn th => simp[th]) >>
-  simp[step_inst_base_def] >>
-  Cases_on `inst.inst_operands` >> gvs[] >>
-  Cases_on `inst.inst_outputs` >> gvs[] >>
-  strip_tac >>
-  Cases_on `eval_operand h vs` >> gvs[] >>
-  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[generate_regular_inst_plan_def, compute_operands_def,
-       is_commutative_def, venom_to_evm_name_def,
-       generate_emit_ops_def] >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  strip_tac >> gvs[] >>
-  Cases_on `is_halting` >> Cases_on `MEM h' next_liveness` >> gvs[] >>
-  TRY pairarg_tac >> gvs[]
-  >- suspend "assign_live_nohalt"
-  >- suspend "assign_dead_nohalt"
-  >- suspend "assign_live_halt"
-  >> suspend "assign_dead_halt"
-QED
-
-Resume gen_inst_ok_sim[assign_live_nohalt]:
-  cheat
-QED
-
-Resume gen_inst_ok_sim[assign_dead_nohalt]:
-  gvs[compute_operands_def, python_stack_operands_def,
-      ir_specific_operand_order_def] >>
-  cheat
-QED
-
-Resume gen_inst_ok_sim[assign_live_halt]:
-  cheat
-QED
-
-Resume gen_inst_ok_sim[assign_dead_halt]:
-  gvs[compute_operands_def, python_stack_operands_def,
-      ir_specific_operand_order_def] >>
-  (* pop_ops = [SOPop 1], ps8 = ... *)
-  qpat_x_assum `popmany_plan _ _ = _` mp_tac >>
-  simp[popmany_plan_def, LET_THM, stack_get_depth_def, stack_push_def,
-       REVERSE_SNOC, stack_find_def, is_contiguous_top_def,
-       sortingTheory.QSORT_DEF, sortingTheory.PARTITION_DEF,
-       sortingTheory.PART_DEF, popmany_individual_def, do_swap_def,
-       stack_pop_def, FOLDL] >>
-  strip_tac >> gvs[] >>
-  `prefix_wf lo (LENGTH ps.ps_stack) input_ops /\
-    prefix_end_len lo (LENGTH ps.ps_stack) input_ops = LENGTH ps1.ps_stack /\
-    prefix_wf lo (LENGTH ps1.ps_stack) reorder_ops /\
-    prefix_end_len lo (LENGTH ps1.ps_stack) reorder_ops = LENGTH ps4.ps_stack` by
-    (qspecl_then [`[h]`, `ASSIGN`, `next_liveness`, `ps`, `lo`]
-       mp_tac emit_input_plan_wf_len >>
-     (impl_tac >- simp[]) >>
-     (impl_tac >- (rpt strip_tac >> gvs[])) >>
-     strip_tac >>
-     qspecl_then [`dfg`, `[h]`, `ps1`, `lo`] mp_tac
-       (CONV_RULE (DEPTH_CONV pairLib.GEN_BETA_CONV)
-          (REWRITE_RULE [LET_THM] reorder_plan_wf_len)) >>
-     (impl_tac >- gvs[]) >> gvs[]) >>
-  (* prefix_spill_wf initial_fmp FULL from FRONT *)
-  `prefix_spill_wf initial_fmp lo (input_ops ++ reorder_ops ++ [SOPop 1]) ps` by (
-    qsuff_tac `prefix_spill_wf initial_fmp lo ((input_ops ++ reorder_ops) ++ [SOPop 1]) ps`
-    >- simp[] >>
-    rewrite_tac[prefix_spill_wf_snoc] >>
-    conj_tac >- gvs[FRONT_APPEND_NOT_NIL]
-    >- simp[spill_op_wf_def]) >>
-  `1 <= LENGTH ps4.ps_stack` by
-    (`(reorder_ops,ps4) =
-       (\(ops,ps'). ([] ++ ops,ps')) (reorder_one dfg [h] 0 h ps1)` by
-      (qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
-       simp[Once reorder_plan_def, indexedListsTheory.MAPi_def] >>
-       Cases_on `reorder_one dfg [h] 0 h ps1` >> simp[]) >>
-     Cases_on `reorder_one dfg [h] 0 h ps1` >> gvs[] >>
-     mp_tac (Q.SPECL [`dfg`,`[h]`,`0`,`h`,`ps1`,`lo`] reorder_one_wf_len) >>
-     simp[]) >>
-  `prefix_wf lo (LENGTH ps.ps_stack) (input_ops ++ reorder_ops ++ [SOPop 1])` by
-    (`prefix_wf lo (LENGTH ps.ps_stack) (input_ops ++ reorder_ops)` by
-       (irule prefix_wf_append >> gvs[]) >>
-     `prefix_end_len lo (LENGTH ps.ps_stack) (input_ops ++ reorder_ops) =
-      LENGTH ps4.ps_stack` by (simp[prefix_end_len_append] >> gvs[]) >>
-     drule prefix_wf_append >>
-     disch_then (qspec_then `[SOPop 1]` mp_tac) >>
-     simp[prefix_wf_def, stack_op_wf_def, LET_THM]) >>
-  qpat_x_assum `prefix_wf lo (LENGTH ps.ps_stack) input_ops`
-    (fn th => assume_tac th >>
-              assume_tac (MATCH_MP prefix_wf_every_prefix_op th)) >>
-  qpat_x_assum `prefix_wf lo (LENGTH ps1.ps_stack) reorder_ops`
-    (fn th => assume_tac th >>
-              assume_tac (MATCH_MP prefix_wf_every_prefix_op th)) >>
-  `EVERY is_prefix_op (input_ops ++ reorder_ops ++ [SOPop 1])` by
-    (gvs[EVERY_APPEND] >> EVAL_TAC) >>
-  mp_tac mixed_prefix_venom_asm_rel >>
-  disch_then (qspecl_then [`input_ops ++ reorder_ops ++ [SOPop 1]`,
-    `initial_fmp`,`lo`,`o2pc`,`prog`,`ps`,`vs`,`as`] mp_tac) >>
-  (impl_tac >- gvs[EVERY_APPEND]) >>
-  disch_then strip_assume_tac >>
-  qexistsl [`LENGTH (execute_plan initial_fmp (input_ops ++ reorder_ops ++ [SOPop 1]))`,
-            `st'`] >>
-  rpt conj_tac
-  >- first_assum ACCEPT_TAC
-  >- (
-    irule venom_asm_rel_release_dead_spills >>
-    irule venom_asm_rel_update_var >>
-    `~MEM (Var h') ps.ps_stack` by
-      (strip_tac >> gvs[EVERY_MEM] >> res_tac >> gvs[]) >>
-    `Var h' NOTIN FDOM ps.ps_spilled` by
-      (strip_tac >> res_tac >> gvs[]) >>
-    drule_all apply_prefix_ops_preserves_not_mem >> strip_tac >> gvs[] >>
-    qsuff_tac
-      `(apply_prefix_ops initial_fmp lo (input_ops ++ reorder_ops ++ [SOPop 1]) ps).ps_spilled =
-       (ps4 with ps_stack :=
-         TAKE (LENGTH ps4.ps_stack - 1)
-           (SNOC (Var h')
-              (TAKE (LENGTH ps4.ps_stack - 1) ps4.ps_stack))).ps_spilled /\
-       (apply_prefix_ops initial_fmp lo (input_ops ++ reorder_ops ++ [SOPop 1]) ps).ps_stack =
-       (ps4 with ps_stack :=
-         TAKE (LENGTH ps4.ps_stack - 1)
-           (SNOC (Var h')
-              (TAKE (LENGTH ps4.ps_stack - 1) ps4.ps_stack))).ps_stack /\
-       (apply_prefix_ops initial_fmp lo (input_ops ++ reorder_ops ++ [SOPop 1]) ps).ps_alloc =
-       (ps4 with ps_stack :=
-         TAKE (LENGTH ps4.ps_stack - 1)
-           (SNOC (Var h')
-              (TAKE (LENGTH ps4.ps_stack - 1) ps4.ps_stack))).ps_alloc` >- (
-      strip_tac >>
-      conj_tac >- (
-        rpt strip_tac >>
-        qpat_x_assum `Var h' NOTIN FDOM (apply_prefix_ops initial_fmp _ _ _).ps_spilled`
-          mp_tac >> gvs[] >> strip_tac >>
-        Cases_on `op` >> gvs[] >> CCONTR_TAC >> gvs[]) >>
-      conj_tac >- (
-        qpat_x_assum `~MEM (Var h') (apply_prefix_ops initial_fmp _ _ _).ps_stack`
-          mp_tac >> gvs[] >> strip_tac >>
-        simp[EVERY_MEM] >> rpt strip_tac >>
-        Cases_on `op` >> simp[] >> CCONTR_TAC >> gvs[] >>
-        metis_tac[MEM]) >>
-      qpat_x_assum `venom_asm_rel lo (apply_prefix_ops initial_fmp _ _ _) vs st'`
-        mp_tac >>
-      simp[venom_asm_rel_def] >> gvs[] >> metis_tac[]) >>
-    simp[apply_prefix_ops_append, sopop_align] >> cheat)
-  >- gvs[Once ADD_COMM]
-QED
-
-Resume gen_inst_ok_sim[log]:
-  cheat
-QED
-
-Resume gen_inst_ok_sim[assert_ok]:
-  cheat
-QED
-
-Resume gen_inst_ok_sim[assert_unreachable_ok]:
-  cheat
 QED
 
 Resume gen_inst_ok_sim[some_name]:
