@@ -7,18 +7,20 @@ Libs wordsLib
 Definition collision_a_def:
   collision_a = mk_raw_function "a"
     [<| bb_label := "a"; bb_instructions :=
-      [mk_inst 100 ALLOCA [Lit (32w:256 word)] ["a_p"];
+      [mk_inst 106 RETPC_PARAM [Lit (0w:256 word)] ["a_rpc"];
+       mk_inst 100 ALLOCA [Lit (32w:256 word)] ["a_p"];
        mk_inst 101 MSTORE [Var "a_p"; Lit 0w] [];
-       mk_inst 102 RET [] []] |>]
+       mk_inst 102 RET [Var "a_rpc"] []] |>]
 End
 
 Definition collision_b_def:
   collision_b = mk_raw_function "b"
     [<| bb_label := "b"; bb_instructions :=
-      [mk_inst 100 ALLOCA [Lit (64w:256 word)] ["b_p"];
+      [mk_inst 107 RETPC_PARAM [Lit (0w:256 word)] ["b_rpc"];
+       mk_inst 100 ALLOCA [Lit (64w:256 word)] ["b_p"];
        mk_inst 103 ADD [Var "b_p"; Lit 32w] ["b_q"];
        mk_inst 104 MSTORE [Var "b_q"; Lit 1w] [];
-       mk_inst 105 RET [] []] |>]
+       mk_inst 105 RET [Var "b_rpc"] []] |>]
 End
 
 Definition collision_main_def:
@@ -94,9 +96,10 @@ Theorem collision_a_exact:
   collision_transform collision_ctx collision_a =
     (mk_raw_function "a"
       [<| bb_label := "a"; bb_instructions :=
-        [mk_inst 100 ASSIGN [Lit (0w:256 word)] ["a_p"];
+        [mk_inst 106 RETPC_PARAM [Lit (0w:256 word)] ["a_rpc"];
+         mk_inst 100 ASSIGN [Lit (0w:256 word)] ["a_p"];
          mk_inst 101 MSTORE [Var "a_p"; Lit 0w] [];
-         mk_inst 102 RET [] []] |>]) with
+         mk_inst 102 RET [Var "a_rpc"] []] |>]) with
       <| fn_eom := SOME 32; fn_mems_used := [(Allocation 100,0,32)] |>
 Proof
   EVAL_TAC
@@ -106,20 +109,59 @@ Theorem collision_b_exact:
   collision_transform collision_ctx collision_b =
     (mk_raw_function "b"
       [<| bb_label := "b"; bb_instructions :=
-        [mk_inst 100 ASSIGN [Lit (0w:256 word)] ["b_p"];
+        [mk_inst 107 RETPC_PARAM [Lit (0w:256 word)] ["b_rpc"];
+         mk_inst 100 ASSIGN [Lit (0w:256 word)] ["b_p"];
          mk_inst 103 ADD [Var "b_p"; Lit 32w] ["b_q"];
          mk_inst 104 MSTORE [Var "b_q"; Lit 1w] [];
-         mk_inst 105 RET [] []] |>]) with
+         mk_inst 105 RET [Var "b_rpc"] []] |>]) with
       <| fn_eom := SOME 64; fn_mems_used := [(Allocation 100,0,64)] |>
 Proof
   EVAL_TAC
 QED
 
-Theorem collision_fmp_a_rejected:
+Theorem collision_return_prefixes:
+  canonical_param_prefix collision_a /\ canonical_param_prefix collision_b
+Proof
+  EVAL_TAC
+QED
+
+
+Definition collision_sealed_def:
+  collision_sealed fn = (collision_transform collision_ctx fn) with
+    fn_fmp_signature := SOME <| fms_has_fmp_param := F; fms_publishes := F |>
+End
+
+Theorem collision_fmp_exact:
   execute_configured_fn_pass ARB (CFP_Simple VP_FmpLowering)
     collision_unit (init_ir_supply collision_unit)
-    (collision_transform collision_ctx collision_a) = NONE
+    (collision_transform collision_ctx collision_a) =
+      SOME <| fpo_function := collision_sealed collision_a;
+              fpo_label_map := []; fpo_supply := init_ir_supply collision_unit |> /\
+  execute_configured_fn_pass ARB (CFP_Simple VP_FmpLowering)
+    collision_unit (init_ir_supply collision_unit)
+    (collision_transform collision_ctx collision_b) =
+      SOME <| fpo_function := collision_sealed collision_b;
+              fpo_label_map := []; fpo_supply := init_ir_supply collision_unit |>
 Proof
-  rewrite_tac[collision_unit_def, collision_observed_def,
-    collision_a_exact, collision_b_exact] >> EVAL_TAC >> simp[finite_mapTheory.FEVERY_DEF]
+  rewrite_tac[collision_sealed_def, collision_unit_def, collision_observed_def,
+    collision_a_exact, collision_b_exact] >>
+  conj_tac >> EVAL_TAC >> simp[finite_mapTheory.FEVERY_DEF]
+QED
+
+Theorem collision_seals_valid:
+  fmp_signature_syntax_wf
+    <| fms_has_fmp_param := F; fms_publishes := F |> (collision_sealed collision_a) /\
+  fmp_signature_syntax_wf
+    <| fms_has_fmp_param := F; fms_publishes := F |> (collision_sealed collision_b)
+Proof
+  rewrite_tac[collision_sealed_def, collision_a_exact, collision_b_exact] >> EVAL_TAC
+QED
+
+Theorem collision_zero_user_returns:
+  fmp_unique_return_arity
+    <| fms_has_fmp_param := F; fms_publishes := F |> collision_a = SOME 0 /\
+  fmp_unique_return_arity
+    <| fms_has_fmp_param := F; fms_publishes := F |> collision_b = SOME 0
+Proof
+  EVAL_TAC
 QED
