@@ -1,7 +1,7 @@
 (* Parametric preservation separates DFS control from instruction properties. *)
 Theory simplifyCfgInvariant
 Ancestors
-  simplifyCfgDefs cfgTransform venomInst ctxLookupAgreeHelpers list rich_list
+  simplifyCfgDefs simplifyCfgShape cfgTransform venomInst ctxLookupAgreeHelpers list rich_list
 
 Theorem try_bypass_preserves_predicate:
   (!f lm a b g lm'.
@@ -293,4 +293,36 @@ Theorem simplify_cfg_fn_with_labels_every:
 Proof
   strip_tac >> simp[simplify_cfg_fn_with_labels_def] >>
   irule simplify_cfg_iter_with_labels_every >> simp[]
+QED
+
+Theorem simplify_cfg_fn_with_labels_ids:
+  MEM id (MAP (\i. i.inst_id)
+    (fn_insts (FST (simplify_cfg_fn_with_labels f)))) ==>
+  MEM id (MAP (\i. i.inst_id) (fn_insts f))
+Proof
+  `EVERY (\i. MEM i.inst_id (MAP (\j. j.inst_id) (fn_insts f)))
+     (fn_insts (FST (simplify_cfg_fn_with_labels f)))` suffices_by
+    (simp[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
+  irule simplify_cfg_fn_with_labels_every >>
+  simp[fix_phi_inst_id, update_phi_bypass_id, canon_jnz_inst_id,
+       subst_label_inst_def, subst_block_labels_inst_def,
+       subst_label_map_inst_def, EVERY_MEM, MEM_MAP] >>
+  conj_tac
+  >- (rpt gen_tac >> Cases_on `is_block_label_opcode i.inst_opcode` >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem simplify_cfg_fn_with_labels_opcodes:
+  R NOP /\ R ASSIGN /\ R JMP /\
+  EVERY (\i. R i.inst_opcode) (fn_insts f) ==>
+  EVERY (\i. R i.inst_opcode)
+    (fn_insts (FST (simplify_cfg_fn_with_labels f)))
+Proof
+  strip_tac >> irule simplify_cfg_fn_with_labels_every >>
+  simp[subst_label_inst_def, subst_block_labels_inst_def,
+       update_phi_bypass_opcode] >>
+  conj_tac >- metis_tac[canon_jnz_inst_opcode_property] >>
+  conj_tac >- metis_tac[fix_phi_inst_opcode_property] >>
+  rpt gen_tac >> Cases_on `is_block_label_opcode i.inst_opcode` >>
+  simp[subst_label_map_inst_def]
 QED

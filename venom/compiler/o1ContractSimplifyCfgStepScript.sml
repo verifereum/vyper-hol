@@ -12,7 +12,23 @@
 Theory o1ContractSimplifyCfgStep
 Ancestors
   o1PassContract simplifyCfgCorrectness simplifyCfgLabelProps
-  simplifyCfgDefs venomPassDispatcher venomWf
+  simplifyCfgDefs simplifyCfgInvariant venomPassDispatcher venomWf
+
+Theorem simplify_cfg_entry_no_return:
+  entry_fn_no_return f ==>
+  entry_fn_no_return (FST (simplify_cfg_fn_with_labels f))
+Proof
+  rewrite_tac[entry_fn_no_return_def] >> strip_tac >>
+  ho_match_mp_tac simplify_cfg_fn_with_labels_opcodes >> simp[]
+QED
+
+Theorem simplify_cfg_entry_no_params:
+  entry_fn_no_params f ==>
+  entry_fn_no_params (FST (simplify_cfg_fn_with_labels f))
+Proof
+  rewrite_tac[entry_fn_no_params_def] >> strip_tac >>
+  ho_match_mp_tac simplify_cfg_fn_with_labels_opcodes >> simp[venomInstTheory.is_param_opcode_def]
+QED
 
 Theorem simplify_cfg_step_contract:
   o1_step_contract rpolicy (CFP_Simple VP_SimplifyCFG)
