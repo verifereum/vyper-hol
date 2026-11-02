@@ -35,3 +35,15 @@ Theorem simplify_cfg_preserves_wf_function:
 Proof
   cheat
 QED
+
+(* Run 5 of the O1 walk runs after MakeSSA and before passes that need
+   wf_ssa (SingleUseExpansion, DFT), so it must keep it.  A merged block's
+   uses are dominated through its sole predecessor; a bypass replaces a
+   PHI's label b by b's sole predecessor a (or drops it when a is already
+   there, with the same value), and a dominates b. *)
+Theorem simplify_cfg_preserves_wf_ssa:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn ==>
+  wf_ssa (simplify_cfg_fn fn)
+Proof
+  cheat
+QED
