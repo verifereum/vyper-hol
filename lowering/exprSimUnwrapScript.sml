@@ -177,7 +177,9 @@ Proof
   rename1 `LocatedValue t p` >> Cases_on `p.ptr_location = LocMemory`
   >- (gvs[vv_post_def, vv_holds_def, vv_at_def, read_result_def,
           return_def] >> metis_tac[]) >>
-  metis_tac[vv_post_read_result]
+  qspecl_then [`func`, `cenv`, `cx`, `e`, `es`, `sa`, `sb`, `s0`, `es'`, `tv`,
+               `v`, `LocatedValue t p`, `s`, `ctx`] mp_tac vv_post_read_result >>
+  simp[]
 QED
 
 (* ===== unwrap_value's code ===== *)
