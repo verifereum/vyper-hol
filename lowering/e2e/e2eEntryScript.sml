@@ -43,7 +43,8 @@ Definition entry_venom_state_def:
         vs_call_entry_fmp := n2w cp.cp_initial_fmp;
         vs_initial_fmp := n2w cp.cp_initial_fmp;
         vs_outcomes := MAP SND (call_trace es);
-        vs_requests := [] |>
+        vs_requests := [];
+        vs_pending_deletions := es.rollback.toDelete |>
 End
 
 (* Fresh fields inherited from init_venom_state; FMP fields are permanent. *)
@@ -75,6 +76,7 @@ Theorem entry_venom_state_frame_fields:
     DROP (LENGTH (assemble prog)) (FST (HD es.contexts)).msgParams.code /\
   (entry_venom_state prog cp es).vs_outcomes = MAP SND (call_trace es) /\
   (entry_venom_state prog cp es).vs_requests = [] /\
+  (entry_venom_state prog cp es).vs_pending_deletions = es.rollback.toDelete /\
   (!l. FLOOKUP (entry_venom_state prog cp es).vs_labels l =
        OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l))
 Proof

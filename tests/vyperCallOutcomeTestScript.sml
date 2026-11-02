@@ -22,7 +22,8 @@ Definition outcome_test_outcome_def:
       co_accounts := update_account 11w (empty_account_state with balance := balance) empty_accounts;
       co_tStorage := update_transient_storage 11w
         (update_storage 1w 8w empty_storage) empty_transient_storage;
-      co_logs := [<|logger := 11w; topics := [1w]; data := [8w]|>]|>
+      co_logs := [<|logger := 11w; topics := [1w]; data := [8w]|>];
+      co_toDelete := []|>
 End
 val () = cv_auto_trans outcome_test_outcome_def;
 

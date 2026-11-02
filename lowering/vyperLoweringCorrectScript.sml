@@ -12,7 +12,7 @@
  *   Layer 2 - Argument decoding: ABI-encoded calldata decoded to values
  *     matching tx.args (abiEncoderProps, valueEncodingProofs)
  *   Layer 3 - Function body: compiled Venom body preserves semantics
- *     (stmtLoweringProps, exprLoweringProps)
+ *     (bodySimMain: body_sim_mutual, body_stmts_sim)
  *
  * TOP-LEVEL:
  *   venom_env_rel, initial_venom_state_rel -- PLAN 5.7 entry boundary
@@ -195,7 +195,7 @@ End
 Definition source_unit_execution_correct_def:
   source_unit_execution_correct tops ret am tx unit vs <=>
     ?fuel. external_call_result_rel tops ret tx
-             (call_external (SOME vs.vs_outcomes) am tx)
+             (call_external (SOME vs.vs_outcomes) [] am tx)
              (run_context fuel unit.cu_context vs)
 End
 
@@ -915,7 +915,7 @@ Theorem lower_vyper_runtime_unit_memory_ok:
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok tops am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) am tx)
+    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
     ==> raw_unit_memory_ok unit.cu_context vs
 Proof
   cheat
@@ -940,7 +940,7 @@ Theorem vyper_to_venom_correct:
   !tenv selectors ext_fns int_fns fb_fn dispatch
     bucket_count fn_meta_bytes dense_buckets entry_info entry_label
     vs am tx sel fn_lbl htz cenv
-    args dflts ret body mut nr.
+    args dflts ret body mut nr ctx.
   let (ctx, _) = run_lowering_pair_compat selectors ext_fns int_fns fb_fn
                    dispatch bucket_count fn_meta_bytes
                    dense_buckets entry_info entry_label in

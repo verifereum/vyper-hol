@@ -297,8 +297,8 @@ QED
 (* At runtime the value at an immutable's code pointer is in the data
    section, laid out as in memory. *)
 Theorem immutable_holds_data[local]:
-  !func cenv cx es s t tv w.
-    stmt_state_rel func cenv cx es s /\ ~cenv.ce_is_ctor /\
+  !func cenv cx es s t tv w ctx.
+    stmt_state_rel ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
     immutable_holds cenv cx t tv w es ==>
     ?tvt v. evaluate_type (get_tenv cx) t = SOME tvt /\
             read_result cx tv es = (INL v, es) /\
@@ -313,8 +313,8 @@ Proof
 QED
 
 Theorem vv_holds_len_header:
-  !env func cenv cx es s t tvt tv vv n.
-    stmt_state_rel func cenv cx es s /\ vv_holds cenv cx t tv vv es s /\
+  !env func cenv cx es s t tvt tv vv n ctx.
+    stmt_state_rel ctx func cenv cx es s /\ vv_holds cenv cx t tv vv es s /\
     is_sized_type t /\ evaluate_type (get_tenv cx) t = SOME tvt /\
     env.type_defs = get_tenv cx /\
     eval_result_typed (env,cx,es) tv (Type t) /\
@@ -378,15 +378,15 @@ Proof
 QED
 
 Theorem len_vv_post_load[local]:
-  !func cenv cx e es sa sm sb s0 es' tv vv s1 op s n.
-    vv_post func cenv cx e es sa sm s0 es' tv vv s1 /\
+  !func cenv cx e es sa sm sb s0 es' tv vv s1 op s n ctx.
+    vv_post ctx func cenv cx e es sa sm s0 es' tv vv s1 /\
     sa.cs_next_var <= sm.cs_next_var /\
-    stmt_state_rel func cenv cx es' s /\ eval_operand op s = SOME (n2w n) /\
+    stmt_state_rel ctx func cenv cx es' s /\ eval_operand op s = SOME (n2w n) /\
     (!x w. not_fresh_at sm x /\ lookup_var x s1 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
              FLOOKUP s.vs_allocas aid = SOME b) /\ s.vs_memory = s1.vs_memory ==>
-    vv_post func cenv cx (Builtin (BaseT (UintT 256)) Len [e]) es
+    vv_post ctx func cenv cx (Builtin (BaseT (UintT 256)) Len [e]) es
       sa sb s0 es' (Value (IntV (&n))) (StackValue (BaseT (UintT 256)) op) s
 Proof
   rw[vv_post_def]
@@ -410,8 +410,8 @@ Theorem len_load_frag[local]:
     (loc = LocCode ==> ~is_ctor) /\ loc <> LocCalldata /\
     local_ptrs_reserved cenv sm /\
     eval_operand pop s0 = SOME w ==>
-    frag_exec ctx sm sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
-      (\s. stmt_state_rel func cenv cx es s /\
+    frag_exec ctx sm sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. stmt_state_rel ctx func cenv cx es s /\
            eval_operand op s = SOME (ptr_load_val is_ctor loc w s0) /\
            (!x w'. not_fresh_at sm x /\ lookup_var x s0 = SOME w' ==>
                    lookup_var x s = SOME w') /\
@@ -447,15 +447,15 @@ Theorem compile_len_vv_frag[local]:
     eval_result_typed (env,cx,es') tv (Type (expr_type e)) /\
     (!v. read_result cx tv es' = (INL v,es') ==> value_has_type tvt v) /\
     (vv_location vv = SOME LocCode ==> ~cenv.ce_is_ctor) ==>
-    frag_exec ctx sm sb (vv_post func cenv cx e es sa sm s0 es' tv vv)
+    frag_exec ctx sm sb (vv_post ctx func cenv cx e es sa sm s0 es' tv vv)
       (\s. ?n. result_array_length cx tv es' = (INL n,es') /\
-        vv_post func cenv cx (Builtin (BaseT (UintT 256)) Len [e]) es
+        vv_post ctx func cenv cx (Builtin (BaseT (UintT 256)) Len [e]) es
           sa sb s0 es' (Value (IntV (&n)))
           (StackValue (BaseT (UintT 256)) op) s) R
 Proof
   rpt gen_tac >> strip_tac >> irule frag_exec_pointwise >>
   qx_gen_tac `s1` >> strip_tac >>
-  `stmt_state_rel func cenv cx es' s1 /\
+  `stmt_state_rel ctx func cenv cx es' s1 /\
    vv_holds cenv cx (expr_type e) tv vv es' s1` by fs[vv_post_def] >>
   drule_all vv_holds_sized_length_success >> strip_tac >>
   drule_all vv_holds_len_header >> strip_tac >>
@@ -530,7 +530,7 @@ Proof
       `ls = es1` by metis_tac[vyperStatePreservationTheory.result_array_length_state] >>
       gvs[] >>
       irule frag_exec_seq >>
-      qexistsl_tac [`\s. vv_post func cenv cx e es sa sm s0 es1 etv evv s`, `sm`] >>
+      qexistsl_tac [`\s. vv_post ctx func cenv cx e es sa sm s0 es1 etv evv s`, `sm`] >>
       simp[expr_exit_def] >>
       conj_tac >- (irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[expr_exit_def]) >>
       `vv_location evv = SOME LocCode ==> ~cenv.ce_is_ctor` by

@@ -1994,6 +1994,96 @@ Proof
   rpt strip_tac >> gvs[lower_value_def, comp_bind_def]
 QED
 
+(* ===== Get Target Ptr ===== *)
+(* Full target pointer dispatch for assignments.
+   Mirrors Python: vyper/codegen_venom/stmt.py:_get_target_ptr
+   Returns (operand, data_location option, place_ty option).
+   cfn compiles the index expressions (compile_expr; compile_expr_body
+   passes its structurally bounded callback, as for compile_subscript).
+   The descriptor tracks the current place, consuming one map/array layer
+   per subscript rather than inspecting the root target name. *)
+Definition compile_get_target_ptr_def:
+  compile_get_target_ptr cfn cenv (NameTarget id) =
+    (case FLOOKUP cenv.ce_vars id of
+       SOME (MemLoc offset _) =>
+         return (Lit (n2w offset), SOME LocMemory, OPTION_MAP ValPT (cenv.ce_var_type id))
+     | SOME (PtrVar ptr_op _) =>
+         return (ptr_op, SOME LocMemory, OPTION_MAP ValPT (cenv.ce_var_type id))
+     | SOME (ImmutableLoc offset) =>
+         return (Lit (n2w offset), SOME LocCode, OPTION_MAP ValPT (cenv.ce_var_type id))
+     | _ => return (Lit 0w, NONE, NONE)) ∧
+  compile_get_target_ptr cfn cenv (TopLevelNameTarget nsid) =
+    (let pt = (case cenv.ce_hashmap_info nsid of
+                  SOME (_, kt, vt) => SOME (MapPT kt vt)
+                | NONE => OPTION_MAP ValPT (cenv.ce_module_var_type nsid)) in
+     case FLOOKUP cenv.ce_module_vars nsid of
+       SOME (StorageLoc slot) => return (Lit slot, SOME LocStorage, pt)
+     | SOME (TransientLoc slot) => return (Lit slot, SOME LocTransient, pt)
+     | SOME (ImmutableLoc offset) =>
+         return (Lit (n2w offset), SOME LocCode,
+                 OPTION_MAP ValPT (cenv.ce_module_var_type nsid))
+     | _ => return (Lit 0w, NONE, NONE)) ∧
+  compile_get_target_ptr cfn cenv (SubscriptTarget bt idx_e) =
+    do result <- compile_get_target_ptr cfn cenv bt;
+       let base_op = FST result in
+       let loc_opt = FST (SND result) in
+       let base_type_opt = SND (SND result) in
+       case base_type_opt of
+         SOME (MapPT kt vt) =>
+           do key_op <- lower_value cfn cenv (expr_type idx_e) idx_e;
+              hashed_key <- (if is_bytestring_type kt then
+                               compile_keccak256_key key_op F
+                             else return key_op);
+              slot_op <- compile_mapping_subscript base_op hashed_key;
+              return (slot_op, loc_opt, SOME (value_type_place vt))
+           od
+       | _ =>
+           do idx_op <- lower_value cfn cenv (expr_type idx_e) idx_e;
+              let loc = (case loc_opt of SOME l => l | NONE => LocMemory) in
+              let is_dynamic = (case base_type_opt of
+                                  SOME (ValPT (ArrayT _ (Dynamic _))) => T
+                                | _ => F) in
+              let elem_ty = (case base_type_opt of
+                               SOME (ValPT (ArrayT t _)) => t
+                             | _ => BaseT (UintT 256)) in
+              let ws = word_scale loc in
+              let elem_sz = elem_size_in_location cenv loc elem_ty in
+              let static_count = (case base_type_opt of
+                                    SOME (ValPT (ArrayT _ (Fixed n))) => n
+                                  | _ => 0) in
+              let is_signed_idx = is_signed_type (expr_type idx_e) in
+              let loader = compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc in
+              do elem_ptr <-
+                   compile_array_subscript base_op idx_op is_dynamic static_count
+                                           ws elem_sz is_signed_idx loader;
+                 return (elem_ptr, loc_opt, SOME (ValPT elem_ty))
+              od
+           od
+    od ∧
+  compile_get_target_ptr cfn cenv (AttributeTarget bt field) =
+    do result <- compile_get_target_ptr cfn cenv bt;
+       let base_op = FST result in
+       let loc_opt = FST (SND result) in
+       let base_type_opt = SND (SND result) in
+       let struct_name = (case base_type_opt of
+                            SOME (ValPT (StructT sn)) => nsid_to_string sn
+                          | _ => "") in
+       let fields = get_struct_fields cenv.ce_struct_fields struct_name in
+       let is_storage = (case loc_opt of
+                           SOME LocStorage => T
+                         | SOME LocTransient => T
+                         | _ => F) in
+       let field_offset =
+         (if is_storage then struct_field_offset_slots fields field
+          else struct_field_offset fields field) in
+       let field_type = (case ALOOKUP fields field of
+                           SOME (fty, _) => SOME (ValPT fty) | NONE => NONE) in
+       do ptr <- emit_op ADD [base_op; Lit (n2w field_offset)];
+          return (ptr, loc_opt, field_type)
+       od
+    od
+End
+
 (* Like lower_value but also returns the source data_location option.
    SOME loc for LocatedValues (ptr_location), NONE for StackValues.
    Mirrors Python: _copy_complex_type reads src_vv.location before unwrap. *)
@@ -2453,11 +2543,16 @@ Definition compile_call_def:
      (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty (RawCallCalldataTarget rcf) args default_ret st =
     (case args of
-       [addr_e; value_e] =>
+       (addr_e :: kw_es) =>
          let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
          let ((data_ptr, data_len), st2) = compile_msg_data_to_memory st1 in
-         let (value_op, st3) = lower_value cfn cenv (BaseT (UintT 256)) value_e st2 in
-         let (gas_op, st4) = emit_op GAS [] st3 in
+         (* Python lowers value= and gas= in source order, then reads GAS
+            when there is no gas= *)
+         let ((value_opt, gas_opt, _), st3) =
+           compile_ext_call_kwargs cfn cenv NoneT rcf.rcf_kws kw_es st2 in
+         let value_op = (case value_opt of SOME v => v | NONE => Lit 0w) in
+         let (gas_op, st4) =
+           (case gas_opt of SOME g => (g, st3) | NONE => emit_op GAS [] st3) in
          let call_ty = if rcf.rcf_is_delegate then DelegateCall
                        else if rcf.rcf_is_static then StaticCall
                        else RegularCall in
@@ -2686,27 +2781,26 @@ Definition compile_expr_body_def:
    | Call _ target args default_ret =>
        compile_call compile_expr cenv ret_ty ty target args default_ret st
    | Pop _ target =>
-       (* Returns LocatedValue with element location. unwrap_value handles loading. *)
-       (let target_op = compile_target_base cenv target in
-        let (loc, fty_opt) = (case target of
-            NameTarget id =>
-              (infer_array_location cenv (Name ARB id), cenv.ce_var_type id)
-          | TopLevelNameTarget nsid =>
-              (infer_array_location cenv (TopLevelName ARB nsid),
-               cenv.ce_module_var_type nsid)
-          | _ => (LocMemory, cenv.ce_var_type "")) in
+       (* The array is the target's place: its pointer, location and type,
+          for any target, as for an assignment.  Returns LocatedValue with
+          the element's location; unwrap_value handles loading.
+          Mirrors Python: expr.py _lower_dynarray_pop (darray_vv, its
+          location, darray_typ.value_type) *)
+       (let ((target_op, loc_opt, pt_opt), st1) =
+          compile_get_target_ptr compile_expr cenv target st in
+        let loc = (case loc_opt of SOME l => l | NONE => LocMemory) in
         let ws = word_scale loc in
-        let elem_ty = (case fty_opt of
-            SOME (ArrayT t _) => t
+        let elem_ty = (case pt_opt of
+            SOME (ValPT (ArrayT t _)) => t
           | _ => BaseT (IntT 256)) in
         let elem_size = elem_size_in_location cenv loc elem_ty in
         let load_opc = (case loc of
            LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD) in
         let store_opc = (case loc of
            LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE) in
-        let (elem_ptr, st1) =
-          compile_dynarray_pop target_op ws elem_size load_opc store_opc st in
-        (LocatedValue ret_ty (mk_ptr elem_ptr loc), st1)))
+        let (elem_ptr, st2) =
+          compile_dynarray_pop target_op ws elem_size load_opc store_opc st1 in
+        (LocatedValue ret_ty (mk_ptr elem_ptr loc), st2)))
 End
 
 Definition compile_builtin_dispatch_body_def:

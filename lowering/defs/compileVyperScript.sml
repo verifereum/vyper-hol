@@ -19,7 +19,7 @@
 
 Theory compileVyper
 Ancestors
-  exprLowering
+  allocLimits exprLowering
   vyperCompiler
   venomPipeline
   codegen
@@ -1032,6 +1032,21 @@ Definition external_return_buffer_ok_def:
         return_buffer_ok cenv
 End
 
+(* Every buffer a function's lowering allocates statically is below Python's
+   allocation limit: its parameters', which an external function decodes
+   from calldata into Context.new_variable's and a caller stages for an
+   internal call in new_temporary_value's, those of its defaults and its
+   body (alloc_limits_stmts), and its return type's, which a caller stages
+   for an internal call's result in new_temporary_value.  The compile env
+   only supplies struct sizes, which every function's has the same. *)
+Definition fn_allocs_ok_def:
+  fn_allocs_ok tops (mut, nr, rr, fname, fargs, dflts, ret, body) ⇔
+    let cenv = build_compile_env tops Internal mut fname fargs ret body F in
+    EVERY (λ(_,ty). type_memory_bytes cenv ty < 2 ** 64) fargs ∧
+    alloc_limits_exprs cenv dflts ∧ alloc_limits_stmts cenv body ∧
+    type_memory_bytes cenv ret < 2 ** 64
+End
+
 (* Package an internal function for compilation.
    is_ctor_context: T in deploy context (internal fns called from __init__),
                     F in runtime context.
@@ -1352,7 +1367,10 @@ Definition lower_vyper_runtime_unit_def:
           set_fallback_package_target rpolicy.rpol_target
             (package_fallback_fn tops use_trans nkey_map fb_fn) in
     let entry_info = build_dense_entry_info selectors external_fns in
-    if EVERY external_return_buffer_ok external_fns then
+    if EVERY external_return_buffer_ok external_fns ∧
+       EVERY (fn_allocs_ok tops)
+         (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f]))
+    then
       run_lowering selectors external_fns runtime_int_fns fallback_fn
         rpolicy 0 0 ([] : dense_bucket list) entry_info "__entry"
     else NONE
@@ -1369,6 +1387,19 @@ Theorem lower_vyper_runtime_unit_return_buffer_ok:
 Proof
   rw[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
   gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP, PULL_EXISTS]
+QED
+
+(* A unit that lowers has every function's static buffers below the limit. *)
+Theorem lower_vyper_runtime_unit_allocs_ok:
+  ∀tops rpolicy unit exts ints fb ctor f.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit ∧
+    classify_functions tops = (exts, ints, fb, ctor) ∧
+    (MEM f exts ∨ MEM f ints ∨ fb = SOME f) ⇒
+    fn_allocs_ok tops f
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[lower_vyper_runtime_unit_def, AllCaseEqs(), listTheory.EVERY_MEM] >>
+  first_x_assum irule >> simp[]
 QED
 
 (* Deploy lowering receives the actual runtime bytes.  Their size and data
@@ -1390,6 +1421,9 @@ Definition lower_vyper_deploy_unit_def:
                  package_internal_fn tops use_trans nkey_map T immutables_len)
                 int_fns
           else [] in
+    if ¬EVERY (fn_allocs_ok tops)
+          (int_fns ++ (case ctor_fn of NONE => [] | SOME f => [f]))
+    then NONE else
     let (ctor_cenv, ctor_args, ctor_payable, ctor_nr, ctor_nkey,
          ctor_trans, ctor_body, ctor_ret) =
       set_constructor_package_target rpolicy.rpol_target
@@ -1401,6 +1435,20 @@ Definition lower_vyper_deploy_unit_def:
       immutables_len ctor_args 0 deploy_int_fns ctor_cenv ctor_body
       ctor_payable ctor_nr ctor_nkey ctor_trans "__deploy"
 End
+
+(* A deploy unit that lowers has the constructor's and every internal
+   function's static buffers below the limit. *)
+Theorem lower_vyper_deploy_unit_allocs_ok:
+  ∀tops rpolicy bytes unit exts ints fb ctor f.
+    lower_vyper_deploy_unit tops rpolicy bytes = SOME unit ∧
+    classify_functions tops = (exts, ints, fb, ctor) ∧
+    (MEM f ints ∨ ctor = SOME f) ⇒
+    fn_allocs_ok tops f
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[lower_vyper_deploy_unit_def, AllCaseEqs(), listTheory.EVERY_MEM] >>
+  first_x_assum irule >> simp[]
+QED
 
 
 (* Run one complete compilation unit through a resolved-policy pipeline and

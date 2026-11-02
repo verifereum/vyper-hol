@@ -289,7 +289,7 @@ QED
 
 (* ===== Result cases: success REQUESTS, not remaining OUTCOMES ===== *)
 Theorem success_requires_requests_and_effects:
-  call_external (SOME (MAP SND (call_trace es))) am tx = (INL v,am',rqs) /\
+  call_external (SOME (MAP SND (call_trace es))) [] am tx = (INL v,am',rqs) /\
   cx = initial_evaluation_context am'.sources am'.layouts tx NONE ==>
   (call_result_rel tops ret am tx es r es' <=>
     ?out lgs. frame_outcome es r es' NONE out lgs /\
@@ -303,7 +303,7 @@ Proof
 QED
 
 Theorem assert_result_does_not_compare_requests:
-  call_external (SOME (MAP SND (call_trace es))) am tx =
+  call_external (SOME (MAP SND (call_trace es))) [] am tx =
     (INR (AssertException s),am',rqs) ==>
   (call_result_rel tops ret am tx es r es' <=>
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
@@ -313,7 +313,7 @@ Proof
 QED
 
 Theorem error_result_only_exact_exemption_or_failure:
-  call_external (SOME (MAP SND (call_trace es))) am tx = (INR (Error e),am',rqs) ==>
+  call_external (SOME (MAP SND (call_trace es))) [] am tx = (INR (Error e),am',rqs) ==>
   (call_result_rel tops ret am tx es r es' <=>
     unspecified_behaviour_exempt tops e \/
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs)
@@ -322,7 +322,7 @@ Proof
 QED
 
 Theorem empty_signed_conversion_accepts_any_outcome:
-  call_external (SOME (MAP SND (call_trace es))) am tx =
+  call_external (SOME (MAP SND (call_trace es))) [] am tx =
     (INR (Error (RuntimeError "convert empty bytes to signed")),am',rqs) ==>
   call_result_rel tops ret am tx es r es'
 Proof
@@ -339,13 +339,13 @@ Proof
 QED
 
 Theorem escaped_control_is_not_related:
-  (call_external (SOME (MAP SND (call_trace es))) am tx =
+  (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR BreakException,am',rqs) ==>
      ~call_result_rel tops ret am tx es r es') /\
-  (call_external (SOME (MAP SND (call_trace es))) am tx =
+  (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR ContinueException,am',rqs) ==>
      ~call_result_rel tops ret am tx es r es') /\
-  (call_external (SOME (MAP SND (call_trace es))) am tx =
+  (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR (ReturnException v),am',rqs) ==>
      ~call_result_rel tops ret am tx es r es')
 Proof

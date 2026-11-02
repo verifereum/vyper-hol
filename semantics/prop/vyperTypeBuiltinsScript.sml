@@ -1668,7 +1668,7 @@ QED
 (* Boundary lemma: extract_ec_point succeeds on any typed uint256[2] value.
    Proof avoids gvs on the ≠ NONE goal; uses fs only on value_has_type assumptions
    and simp to expand extract_ec_point/array_index definitions. *)
-Theorem extract_ec_point_uint256_2_not_none[local]:
+Theorem extract_ec_point_uint256_2_not_none:
   !v. value_has_type (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) v ⇒
       extract_ec_point v ≠ NONE
 Proof
@@ -1899,7 +1899,7 @@ Proof
   rewrite_tac[bn254p_lt_2_256] >> simp[]
 QED
 
-Theorem addAffine_bounded[local]:
+Theorem addAffine_bounded:
   !a b. FST (bn254$addAffine a b) < 2 ** 256 /\
         SND (bn254$addAffine a b) < 2 ** 256
 Proof
@@ -1913,7 +1913,7 @@ Proof
   conj_tac >> irule lt_bn254p_lt_2_256 >> simp[]
 QED
 
-Theorem mulAffine_bounded[local]:
+Theorem mulAffine_bounded:
   !a n. FST a < bn254$bn254p /\ SND a < bn254$bn254p ==>
         FST (bn254$mulAffine a n) < 2 ** 256 /\
         SND (bn254$mulAffine a n) < 2 ** 256
