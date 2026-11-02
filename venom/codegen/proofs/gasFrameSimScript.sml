@@ -410,6 +410,109 @@ Resume gas_plan_local_sim[pop]:
 QED
 Finalise gas_plan_local_sim
 
+Theorem gas_plan_rels_memory[local]:
+  (plan_stack_rel lo (v with vs_memory := m) stk astk <=>
+   plan_stack_rel lo v stk astk) /\
+  (plan_spill_rel lo (v with vs_memory := m) sp am <=>
+   plan_spill_rel lo v sp am)
+Proof
+  `!op. operand_val (v with vs_memory := m) lo op = operand_val v lo op` by
+    (Cases >> simp[operand_val_def]) >>
+  simp[plan_stack_rel_def, plan_spill_rel_def]
+QED
+
+Theorem gas_context_local[local]:
+  !cp lo ps v st.
+  context_venom_asm_rel (cp:context_plan) lo ps v st ==>
+  venom_asm_rel lo ps (v with vs_memory := st.as_memory) st
+Proof
+  simp[context_venom_asm_rel_def, venom_asm_rel_def, gas_plan_rels_memory,
+       memory_rel_refl]
+QED
+
+Theorem gas_local_context[local]:
+  !cp lo ps v st m.
+  venom_asm_rel lo ps (v with vs_memory := m) st /\
+  context_memory_rel (cp:context_plan) v.vs_memory st.as_memory ==>
+  context_venom_asm_rel (cp:context_plan) lo ps v st
+Proof
+  simp[context_venom_asm_rel_def, venom_asm_rel_def, gas_plan_rels_memory]
+QED
+
+Theorem gas_memory_outside[local]:
+  memory_rel alloc m m' /\
+  r.sr_spill_base <= alloc.sa_spill_base /\
+  alloc.sa_next_offset <= r.sr_spill_end /\
+  ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+  read_byte b m = read_byte b m'
+Proof
+  rw[memory_rel_def] >> first_x_assum irule >> decide_tac
+QED
+
+Theorem gas_closure_own[local]:
+  !ctx cp fn r b.
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= b /\ b < r.sr_spill_end ==>
+  closure_spill_byte ctx cp fn.fn_name b
+Proof
+  rw[closure_spill_byte_def, fcg_path_def] >>
+  qexists_tac `r` >> simp[relationTheory.RTC_REFL]
+QED
+
+Theorem gas_frame_lift[local]:
+  !ctx cp lo fn ra rest mem0 ps vs ast r ps' vs' o2pc prog n count.
+  fn_frame_inv ctx cp lo fn ra rest mem0 ps vs ast /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+  ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  vs'.vs_halted = vs.vs_halted /\
+  vs'.vs_initial_fmp = vs.vs_initial_fmp /\
+  vs'.vs_memory = vs.vs_memory /\
+  (!top. ast.as_stack = top ++ rest ==>
+    ?st'. asm_steps lo o2pc prog n (ast with as_stack := top) = AsmOK st' /\
+      venom_asm_rel lo ps'
+        (frame_view fn ra vs' with vs_memory := ast.as_memory) st' /\
+      st'.as_pc = ast.as_pc + count) ==>
+  ?ast'. asm_steps lo o2pc prog n ast = AsmOK ast' /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps' vs' ast' /\
+    ast'.as_pc = ast.as_pc + count
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `MEM r cplan.cp_regions` >>
+  qpat_x_assum `fn_frame_inv _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[fn_frame_inv_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `asm_steps lo o2pc prog n ast =
+    AsmOK (st' with as_stack := st'.as_stack ++ rest)` by
+    (`ast with as_stack := top ++ rest = ast` by
+       simp[asm_state_component_equality] >>
+     drule asm_steps_frame >> disch_then (qspec_then `rest` mp_tac) >>
+     asm_rewrite_tac[]) >>
+  `memory_rel ps'.ps_alloc ast.as_memory st'.as_memory` by
+    fs[venom_asm_rel_def] >>
+  `!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+    read_byte b ast.as_memory = read_byte b st'.as_memory` by
+    metis_tac[gas_memory_outside] >>
+  `context_venom_asm_rel cplan lo ps' (frame_view fn ra vs') st'` by
+    (irule gas_local_context >> conj_tac
+     >- (simp[frame_view_def, context_memory_rel_def] >> rpt strip_tac >>
+         `read_byte i vs.vs_memory = read_byte i ast.as_memory` by
+           (qpat_x_assum `context_venom_asm_rel _ _ _ _ _` mp_tac >>
+            simp[context_venom_asm_rel_def, context_memory_rel_def,
+                 frame_view_def]) >>
+         `read_byte i ast.as_memory = read_byte i st'.as_memory` by
+           (first_x_assum irule >> metis_tac[context_spill_byte_of_region]) >>
+         simp[]) >>
+     qexists_tac `ast.as_memory` >> simp[]) >>
+  qexists_tac `st' with as_stack := st'.as_stack ++ rest` >>
+  simp[fn_frame_inv_def] >> rpt conj_tac
+  >- (rpt strip_tac >>
+      `read_byte b ast.as_memory = read_byte b mem0` by metis_tac[] >>
+      `read_byte b ast.as_memory = read_byte b st'.as_memory` by
+        (first_x_assum irule >> metis_tac[gas_closure_own]) >> metis_tac[]) >>
+  qexists_tac `r` >> simp[]
+QED
+
 Theorem gas_inst_frame_sim:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0.
