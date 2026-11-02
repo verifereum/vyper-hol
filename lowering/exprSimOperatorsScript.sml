@@ -74,6 +74,7 @@
 
 Theory exprSimOperators
 Ancestors
+  allocLimits
   list finite_map
   fragExec exprSim exprSimHyps exprSimOps exprSimIfExp exprSimBinopFrag
   exprSimUnop exprSimCompare

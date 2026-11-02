@@ -405,8 +405,8 @@ QED
 (* A non-word value's footprint fits below 2 ** 256: it sits in an
    allocation or a live local's region, both below the frontier. *)
 Theorem expr_val_at_bound:
-  !func cenv cx t sa sb es v op s tv w.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx t sa sb es v op s tv w ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     expr_val_at cenv cx t sa sb es v op s /\
     evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
     eval_operand op s = SOME w ==>
@@ -624,7 +624,7 @@ Resume compile_return_tuple_int_frag[code]:
 QED
 
 Resume compile_return_tuple_int_frag[value]:
-  rename1 `expr_post func cenv cx e es sa s1 s0 es1 v op sv` >>
+  rename1 `expr_post ctx func cenv cx e es sa s1 s0 es1 v op sv` >>
   `value_has_type ret_tv v` by
     (qpat_x_assum `!v es1. _ ==> _` (qspecl_then [`v`, `es1`] mp_tac) >>
      simp[]) >>

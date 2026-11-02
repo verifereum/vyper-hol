@@ -197,13 +197,14 @@ Definition compile_floor_def:
 End
 
 (* ceil(x): round decimal toward +infinity
-   For positive: add (divisor-1) before dividing *)
+   For non-negative: add (divisor-1) before dividing.
+   Mirrors Python: misc.py lower_ceil *)
 Definition compile_ceil_def:
   compile_ceil val_op divisor =
-    do is_pos <- emit_op SGT [val_op; Lit 0w];
+    do is_neg <- emit_op SLT [val_op; Lit 0w];
        adjusted <- emit_op ADD [val_op; Lit (n2w (divisor - 1))];
-       (* select: is_pos ? adjusted : val_op *)
-       input <- compile_select is_pos adjusted val_op;
+       (* select: is_neg ? val_op : adjusted *)
+       input <- compile_select is_neg val_op adjusted;
        emit_op SDIV [input; Lit (n2w divisor)]
     od
 End
