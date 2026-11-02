@@ -1,6 +1,6 @@
 Theory dftFrameVars
 Ancestors
-  sccpCorrectnessProofs contextCodegenRel venomExecProofs venomExecProps
+  sccpCorrectnessProofs o1PassLift contextCodegenRel venomExecProofs venomExecProps
   venomWf cfgDefs finite_map venomInstProps venomExecSemantics venomInst venomState pred_set list
 Libs
   BasicProvers
@@ -150,4 +150,39 @@ Proof
        metis_tac[fn_dominates_predecessor] >>
      fs[dft_frame_prefix_def, strict_dom_vars_defined_def] >> metis_tac[]) >>
   drule_all dft_frame_prefix_enters >> simp[]
+QED
+
+Theorem dft_frame_reach_prefix:
+  !C f s0 i s. frame_reach C f s0 i s ==>
+  wf_function f /\ fn_inst_wf f /\
+  fn_entry_label f = SOME s0.vs_current_bb ==> dft_frame_prefix f s
+Proof
+  ho_match_mp_tac frame_reach_strongind >> rpt conj_tac >> rpt strip_tac
+  >- (`strict_dom_vars_defined f s0` by
+        metis_tac[strict_dom_vars_defined_entry] >>
+      `fn_reachable f s0.vs_current_bb` by
+        simp[fn_reachable_def] >>
+      drule_all dft_frame_prefix_enters >> simp[])
+  >- (`dft_frame_prefix f s` by simp[] >>
+      `active_inst f i s` by metis_tac[frame_reach_active] >>
+      drule_all dft_frame_prefix_step >> simp[]) >>
+  `dft_frame_prefix f s` by simp[] >>
+  `active_inst f i s` by metis_tac[frame_reach_active] >>
+  drule_all dft_frame_prefix_terminator >> simp[]
+QED
+
+Theorem dft_frame_reach_operands:
+  wf_function f /\ wf_ssa f /\ fn_inst_wf f /\
+  fn_entry_label f = SOME s0.vs_current_bb /\ frame_reach C f s0 i s /\
+  i.inst_opcode <> PHI /\ MEM (Var v) i.inst_operands ==>
+  v IN FDOM s.vs_vars
+Proof
+  rpt strip_tac >>
+  `dft_frame_prefix f s` by metis_tac[dft_frame_reach_prefix] >>
+  `active_inst f i s` by metis_tac[frame_reach_active] >>
+  fs[active_inst_def, dft_frame_prefix_def] >>
+  qpat_x_assum `!bb. _` (drule_then mp_tac) >> simp[] >> strip_tac >>
+  drule operand_vars_in_fdom >>
+  disch_then (qspecl_then [`bb`, `s.vs_inst_idx`, `s`] mp_tac) >>
+  simp[] >> metis_tac[]
 QED
