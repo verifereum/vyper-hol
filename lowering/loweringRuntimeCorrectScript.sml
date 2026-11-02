@@ -47,7 +47,7 @@ Ancestors
   list pair fragExec stmtSim bodySim bodySimMain loweringHalt stmtLoweringMono exprSim exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering
   e2eDefs supportedProgram vyperLoweringCorrect entryChecksProps moduleLoweringProps
-  entryDispatchProps supportedNames
+  entryDispatchProps supportedNames abiDecoderCounters
   supportedDecls supportedExprForms supportedStmts
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperInterpreter vyperState vyperContext
@@ -153,6 +153,53 @@ Proof
         supported_selectors_distinct_def] >>
   drule linear_dispatch_selects_function >> simp[] >>
   disch_then (qspec_then `tx.args` mp_tac) >> simp[]
+QED
+
+Theorem compile_decode_args_vars_mono[local]:
+  !args cenv offset opc hi base.
+    abi_decoder_vars_mono (compile_decode_args cenv args offset opc hi base)
+Proof
+  Induct >> simp[compile_decode_args_def, abi_decoder_vars_mono_return] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  Cases_on `h1` >> Cases_on `h2` >>
+  simp[compile_decode_args_def, LET_THM] >>
+  rpt (FIRST [
+    CHANGED_TAC (simp[abi_decoder_vars_mono_prims,
+      abi_decoder_vars_mono_return, abi_decoder_vars_mono_abi_clamp,
+      abi_decoder_vars_mono_mutual]),
+    (ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac),
+    (ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac),
+    gen_tac,
+    (CASE_TAC >> simp[])])
+QED
+
+Theorem compile_register_positional_args_vars_mono[local]:
+  !args cenv offset.
+    abi_decoder_vars_mono (compile_register_positional_args cenv args offset)
+Proof
+  Induct >> simp[compile_register_positional_args_def,
+                 abi_decoder_vars_mono_return] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[compile_register_positional_args_def] >>
+  Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[] >>
+  Cases_on `var_location_memory_size x` >> simp[] >>
+  ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac
+  >- simp[abi_decoder_vars_mono_abi_alloc_buffer] >>
+  gen_tac >> ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac
+  >- simp[abi_decoder_vars_mono_return] >>
+  gen_tac >> ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >>
+  simp[compile_decode_args_vars_mono]
+QED
+
+Theorem compile_register_positional_args_next_var[local]:
+  compile_register_positional_args cenv args offset sa = (ce, sb) ==>
+  sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >>
+  mp_tac (Q.SPECL [`args`, `cenv`, `offset`]
+    compile_register_positional_args_vars_mono) >>
+  simp[abi_decoder_vars_mono_def] >>
+  disch_then (qspec_then `sa` mp_tac) >> simp[]
 QED
 
 Theorem selected_external_package[local]:
