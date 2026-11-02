@@ -1034,6 +1034,82 @@ Proof
   metis_tac[]
 QED
 
+Theorem dft_exec_suffix_cong:
+  !xs ys.
+    LIST_REL (\x y. is_terminator x.inst_opcode = is_terminator y.inst_opcode /\
+      (!fuel C s. step_inst fuel C x s = step_inst fuel C y s)) xs ys ==>
+    !fuel C s. dft_exec_suffix fuel C xs s = dft_exec_suffix fuel C ys s
+Proof
+  Induct >> Cases_on `ys` >> simp[] >> rpt strip_tac >>
+  simp[dft_exec_suffix_def] >>
+  qpat_x_assum `!fuel C s. _` (qspecl_then [`fuel`,`C`,`s`] assume_tac) >>
+  gvs[] >> Cases_on `step_inst fuel C h s` >> simp[] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem dft_from_block_terminator:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\ MEM j bi /\
+  from_block bi i /\ j.inst_id = i.inst_id ==>
+  is_terminator j.inst_opcode = is_terminator i.inst_opcode
+Proof
+  simp[from_block_def] >> rpt strip_tac >> gvs[]
+  >- metis_tac[all_distinct_map_mem_inj] >>
+  rename1 `is_terminator (flip_operands original).inst_opcode` >>
+  `j = original` by metis_tac[all_distinct_map_mem_inj, flip_operands_inst_id] >>
+  gvs[] >> rw[flip_operands_def] >>
+  Cases_on `j.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >> Cases_on `t'` >> simp[] >>
+  Cases_on `is_comparator j.inst_opcode` >> simp[] >>
+  Cases_on `j.inst_opcode` >>
+  gvs[is_comparator_def, flip_comparison_opcode_def, is_terminator_def]
+QED
+
+Theorem dft_normalized_suffix_eq:
+  !bi norm scheduled fuel C s.
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+  EVERY (\j. MEM j bi) norm /\ EVERY (from_block bi) scheduled /\
+  LIST_REL (\j i. j.inst_id = i.inst_id /\
+    (!fuel C s. step_inst fuel C j s = step_inst fuel C i s)) norm scheduled ==>
+  dft_exec_suffix fuel C norm s = dft_exec_suffix fuel C scheduled s
+Proof
+  rpt gen_tac >> strip_tac >> irule dft_exec_suffix_cong >>
+  qpat_x_assum `LIST_REL _ norm scheduled` mp_tac >>
+  qpat_x_assum `EVERY _ scheduled` mp_tac >>
+  qpat_x_assum `EVERY _ norm` mp_tac >>
+  qid_spec_tac `scheduled` >> qid_spec_tac `norm` >>
+  Induct >> Cases_on `scheduled` >> simp[] >> rpt strip_tac >>
+  fs[] >> irule dft_from_block_terminator >> simp[] >> qexists_tac `bi` >> simp[]
+QED
+
+Theorem dft_scheduled_body_rel:
+  !fn bb bb' scheduled s fuel C.
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  dft_block_rel bb bb' /\
+  bb'.bb_instructions = FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions ++ scheduled /\
+  (!x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~abort_compatible x.inst_opcode y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id ==>
+    id_before (MAP (\i. i.inst_id) bb'.bb_instructions) x.inst_id y.inst_id) /\
+  dft_remaining_inv fn bb (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions) s ==>
+  dft_res_rel
+    (dft_exec_suffix fuel C (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions) s)
+    (dft_exec_suffix fuel C scheduled s)
+Proof
+  rpt gen_tac >> strip_tac >> drule_all dft_block_head_bubbles >> strip_tac >>
+  gvs[] >> rename1 `LIST_REL _ norm actual` >>
+  `EVERY (\j. MEM j bb.bb_instructions) norm` by
+    (fs[EVERY_MEM] >> metis_tac[PERM_MEM_EQ, MEM_FILTER]) >>
+  `EVERY (from_block bb.bb_instructions) actual` by
+    (fs[dft_block_rel_def] >> gvs[]) >>
+  `dft_exec_suffix fuel C norm s = dft_exec_suffix fuel C actual s` by
+    (irule dft_normalized_suffix_eq >> simp[] >> qexists_tac `bb.bb_instructions` >> simp[]) >>
+  drule_all dft_remaining_suffix_rel >>
+  disch_then (qspecl_then [`fuel`, `C`] mp_tac) >> simp[]
+QED
+
 (* Why it holds (unchecked notes):
    - Same fuel works: fuel is per block and per call depth, and the
      schedule visits the same blocks and makes the same calls.
