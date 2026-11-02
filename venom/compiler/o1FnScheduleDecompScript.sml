@@ -204,6 +204,12 @@ Theorem run_configured_fn_pass_fold_chain:
              (replace_fn fn.fn_name (EL k fs) unit.cu_context.ctx_functions)) /\
       EVERY (o1_fn_shape unit.cu_context) fs /\
       (!j. j < LENGTH fs ==> o1_fn_row (k + j) (EL j fs)) /\
+      EVERY (\u. o1_ctx_shape u.cu_context) obs /\
+      list_subset s.irs_used_inst_ids s'.irs_used_inst_ids /\
+      (!f id. MEM f fs /\ MEM id (fn_ir_inst_ids f) ==>
+        MEM id (fn_ir_inst_ids fn) \/ ~MEM id s.irs_used_inst_ids) /\
+      (!f id. MEM f fs /\ MEM id (fn_ir_inst_ids f) ==>
+        MEM id s'.irs_used_inst_ids) /\
       label_map_dead s0 fn0 fn' new /\
       (!l. MEM l (fn_labels fn') ==>
            MEM l (fn_labels fn0) \/ ~MEM l s0.irs_used_labels) /\
@@ -212,12 +218,20 @@ Proof
   Induct
   >- (rpt gen_tac >> simp[run_configured_fn_pass_fold_def] >>
       strip_tac >> gvs[] >> qexistsl_tac [`[fn]`,`[]`] >>
-      simp[fn_chain_def, label_map_dead_def] >> Cases >> simp[]) >>
+      simp[fn_chain_def, label_map_dead_def, list_subset_def, EVERY_MEM] >>
+      conj_tac >- (Cases >> simp[]) >>
+      qpat_x_assum `fn.fn_name = _` (SUBST_ALL_TAC o SYM) >>
+      qpat_x_assum `ir_supply_covers_unit _ _` mp_tac >>
+      simp[unit_with_fns_def, replace_fn_def] >> strip_tac >>
+      drule covers_unit_replacement_inst_ids >> simp[]) >>
   rpt gen_tac >> pure_rewrite_tac[o1_step_contracts_from_def] >> strip_tac >>
   drule run_configured_fn_pass_fold_cons_step >>
   impl_tac >- gvs[unit_with_fns_def, replace_fn_def] >>
   strip_tac >>
   drule_all observed_step_contract_at >> strip_tac >>
+  `o1_ctx_shape (unit_with_fns unit
+     (replace_fn fn0.fn_name fn unit.cu_context.ctx_functions)).cu_context`
+    by (simp[unit_with_fns_def] >> irule o1_ctx_shape_replace >> metis_tac[]) >>
   `out.fpo_function.fn_name = fn.fn_name /\
    list_subset s.irs_used_labels out.fpo_supply.irs_used_labels`
     by fs[fn_pass_step_def, ir_supply_extends_def] >>
@@ -250,6 +264,26 @@ Proof
   impl_tac >- gvs[unit_with_fns_def, replace_fn_def] >> strip_tac >>
   `label_map_dead s0 fn0 fn' out.fpo_label_map`
     by (drule_all step_map_dead_after_fold >> simp[]) >>
+  `list_subset s.irs_used_inst_ids out.fpo_supply.irs_used_inst_ids`
+    by fs[fn_pass_step_def, ir_supply_extends_def] >>
+  `list_subset s.irs_used_inst_ids s'.irs_used_inst_ids`
+    by (irule list_subset_trans >> goal_assum (drule_at Any) >> simp[]) >>
+  `!f id. MEM f fs /\ MEM id (fn_ir_inst_ids f) ==>
+     MEM id (fn_ir_inst_ids fn) \/ ~MEM id s.irs_used_inst_ids`
+    by (qpat_x_assum `!f id. MEM f fs /\ _ ==> _ \/ _` mp_tac >>
+        qpat_x_assum `fresh_names_ok s fn out.fpo_function` mp_tac >>
+        qpat_x_assum `list_subset s.irs_used_inst_ids out.fpo_supply.irs_used_inst_ids` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        simp[fresh_names_ok_def, list_subset_def, EVERY_MEM] >> metis_tac[]) >>
+  `!id. MEM id (fn_ir_inst_ids fn) ==> MEM id s.irs_used_inst_ids`
+    by (qpat_x_assum `fn.fn_name = _` (SUBST_ALL_TAC o SYM) >>
+        qpat_x_assum `ir_supply_covers_unit s _` mp_tac >>
+        simp[unit_with_fns_def, replace_fn_def] >> strip_tac >>
+        drule covers_unit_replacement_inst_ids >> simp[]) >>
+  `!id. MEM id (fn_ir_inst_ids fn) ==> MEM id s'.irs_used_inst_ids`
+    by (qpat_x_assum `!id. MEM id (fn_ir_inst_ids fn) ==> _` mp_tac >>
+        qpat_x_assum `list_subset s.irs_used_inst_ids s'.irs_used_inst_ids` mp_tac >>
+        rpt (pop_assum kall_tac) >> simp[list_subset_def, EVERY_MEM]) >>
   `fs <> []` by (drule fn_chain_length >> strip_tac >> Cases_on `fs` >> fs[]) >>
   Cases_on `fs` >- fs[] >>
   rename1 `fn_chain rpolicy passes out.fpo_supply (next::rest) obs` >>
@@ -265,7 +299,11 @@ Proof
   conj_tac
   >- (simp[fn_chain_def] >> metis_tac[]) >>
   reverse conj_tac
-  >- fs[label_map_dead_def, LAST_DEF] >>
+  >- (fs[label_map_dead_def, LAST_DEF] >>
+      qpat_x_assum `!f id. _ ==> _ \/ ~MEM id s.irs_used_inst_ids` mp_tac >>
+      qpat_x_assum `!f id. _ ==> MEM id s'.irs_used_inst_ids` mp_tac >>
+      qpat_x_assum `!id. MEM id (fn_ir_inst_ids fn) ==> MEM id s'.irs_used_inst_ids` mp_tac >>
+      rpt (pop_assum kall_tac) >> metis_tac[]) >>
   Cases >> simp[] >> fs[unit_with_fns_def, replace_fn_def]
 QED
 
@@ -300,6 +338,12 @@ Theorem run_configured_fn_passes_decomp:
            (replace_fn name (EL k fs) unit.cu_context.ctx_functions)) /\
     EVERY (o1_fn_shape unit.cu_context) fs /\
     (!j. j < LENGTH fs ==> o1_fn_row j (EL j fs)) /\
+    EVERY (\u. o1_ctx_shape u.cu_context) obs /\
+    list_subset s.irs_used_inst_ids s'.irs_used_inst_ids /\
+    (!f id. MEM f fs /\ MEM id (fn_ir_inst_ids f) ==>
+      MEM id (fn_ir_inst_ids fn) \/ ~MEM id s.irs_used_inst_ids) /\
+    (!f id. MEM f fs /\ MEM id (fn_ir_inst_ids f) ==>
+      MEM id s'.irs_used_inst_ids) /\
     unit'.cu_context =
       unit.cu_context with ctx_functions :=
         replace_fn name (LAST fs) unit.cu_context.ctx_functions /\
@@ -336,6 +380,7 @@ Proof
       replace_fn name fn' unit.cu_context.ctx_functions`
     by (drule apply_unit_label_map_context >>
         simp[replace_fn_def] >> metis_tac[replace_fn_def]) >>
-  qexistsl_tac [`fs`,`obs`] >> simp[]
+  qexistsl_tac [`fs`,`obs`] >> simp[] >>
+  conj_tac >> first_assum ACCEPT_TAC
 QED
 
