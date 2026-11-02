@@ -29,7 +29,7 @@ Proof
   simp[collapse_dfs_result_def, collapse_dfs_succs_result_def]
 QED
 
-Theorem fn_labels_update_succ_phi_labels[local]:
+Theorem fn_labels_update_succ_phi_labels:
   !old new bbs succs.
     MAP (\bb. bb.bb_label) (update_succ_phi_labels old new bbs succs) =
     MAP (\bb. bb.bb_label) bbs

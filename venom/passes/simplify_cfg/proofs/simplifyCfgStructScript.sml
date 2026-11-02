@@ -778,6 +778,19 @@ Proof
   fs[EVERY_MEM]
 QED
 
+Theorem chain_merge_base_bb_wf:
+  wf_function fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  can_merge_blocks fn a b ==>
+  EVERY bb_well_formed (replace_block a.bb_label (merge_blocks a b)
+    (remove_block b.bb_label fn.fn_blocks))
+Proof
+  strip_tac >> irule EVERY_replace_block >> conj_tac
+  >- (irule bb_well_formed_merge_blocks >>
+      fs[wf_function_def, can_merge_blocks_def] >> metis_tac[]) >>
+  fs[remove_block_def, EVERY_MEM, MEM_FILTER, wf_function_def] >>
+  metis_tac[]
+QED
+
 Theorem chain_merge_bb_wf:
   wf_function fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
   can_merge_blocks fn a b ==>
@@ -787,11 +800,7 @@ Theorem chain_merge_bb_wf:
         (remove_block b.bb_label fn.fn_blocks)) (bb_succs (merge_blocks a b)))
 Proof
   strip_tac >> irule update_succ_phi_labels_bb_wf >>
-  irule EVERY_replace_block >> conj_tac
-  >- (irule bb_well_formed_merge_blocks >>
-      fs[wf_function_def, can_merge_blocks_def] >> metis_tac[]) >>
-  fs[remove_block_def, EVERY_MEM, MEM_FILTER, wf_function_def] >>
-  metis_tac[]
+  irule chain_merge_base_bb_wf >> simp[]
 QED
 
 Theorem chain_merge_labels_entry:
@@ -833,4 +842,110 @@ Proof
   gvs[merge_blocks_def, bb_succs_def, LAST_APPEND_CONS] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND, LAST_DEF,
                    APPEND_eq_NIL, LAST_APPEND_CONS] >> simp[]
+QED
+
+Theorem bb_succs_subst_phi_labels:
+  bb_well_formed bb ==>
+  bb_succs (bb with bb_instructions :=
+    MAP (\inst. if inst.inst_opcode <> PHI then inst
+                else subst_label_inst old_lbl new_lbl inst) bb.bb_instructions) =
+  bb_succs bb
+Proof
+  strip_tac >> irule bb_succs_map_nonterminators >> simp[] >>
+  rpt strip_tac >> `inst.inst_opcode <> PHI` by
+    (strip_tac >> fs[is_terminator_def]) >> simp[]
+QED
+
+Theorem update_succ_phi_labels_cfg_property:
+  !succs bbs. EVERY bb_well_formed bbs /\
+  EVERY (\bb. P bb.bb_label (bb_succs bb)) bbs ==>
+  EVERY (\bb. P bb.bb_label (bb_succs bb))
+    (update_succ_phi_labels old_lbl new_lbl bbs succs)
+Proof
+  Induct_on `succs` >> fs[update_succ_phi_labels_def] >>
+  rpt strip_tac >> Cases_on `lookup_block h bbs` >> simp[] >>
+  first_x_assum irule >>
+  `bb_well_formed x /\ P x.bb_label (bb_succs x)` by
+    (drule lookup_block_member_label >> strip_tac >> fs[EVERY_MEM]) >>
+  conj_tac
+  >- (irule EVERY_replace_block >> simp[bb_well_formed_subst_phi_labels]) >>
+  irule EVERY_replace_block >> simp[bb_succs_subst_phi_labels]
+QED
+
+Theorem num_preds_one_unique:
+  num_preds fn lbl = 1 /\ MEM a fn.fn_blocks /\ MEM lbl (bb_succs a) /\
+  MEM bb fn.fn_blocks /\ MEM lbl (bb_succs bb) ==> bb = a
+Proof
+  strip_tac >>
+  `MEM a (block_preds fn lbl) /\ MEM bb (block_preds fn lbl)` by
+    simp[block_preds_def, MEM_FILTER] >>
+  fs[num_preds_def] >>
+  Cases_on `block_preds fn lbl` >> gvs[] >>
+  Cases_on `t` >> gvs[]
+QED
+
+Theorem can_merge_blocks_unique_pred:
+  can_merge_blocks fn a b /\ MEM a fn.fn_blocks /\
+  MEM bb fn.fn_blocks /\ MEM b.bb_label (bb_succs bb) ==> bb = a
+Proof
+  strip_tac >> irule num_preds_one_unique >>
+  qexistsl [`fn`, `b.bb_label`] >> fs[can_merge_blocks_def]
+QED
+
+Theorem chain_merge_fn_labels:
+  fn_labels (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label fn.fn_blocks)) (bb_succs (merge_blocks a b))) =
+  FILTER (\lbl. lbl <> b.bb_label) (fn_labels fn)
+Proof
+  simp[fn_labels_def, fn_labels_update_succ_phi_labels, merge_blocks_def,
+       cfgTransformPropsTheory.fn_labels_replace_block,
+       cfgTransformPropsTheory.fn_labels_remove_block]
+QED
+
+Theorem chain_merge_base_closed:
+  wf_function fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  can_merge_blocks fn a b ==>
+  !bb succ.
+    MEM bb (replace_block a.bb_label (merge_blocks a b)
+      (remove_block b.bb_label fn.fn_blocks)) /\ MEM succ (bb_succs bb) ==>
+    MEM succ (FILTER (\lbl. lbl <> b.bb_label) (fn_labels fn))
+Proof
+  strip_tac >> qx_gen_tac `bb` >> qx_gen_tac `succ` >> strip_tac >>
+  qpat_x_assum `MEM bb (replace_block _ _ _)` mp_tac >>
+  simp[replace_block_def, remove_block_def, MEM_MAP, MEM_FILTER] >>
+  disch_then (qx_choose_then `orig` strip_assume_tac) >>
+  Cases_on `orig.bb_label = a.bb_label` >> gvs[]
+  >- (`b.bb_instructions <> []` by fs[wf_function_def, bb_well_formed_def] >>
+      gvs[bb_succs_merge_blocks] >>
+      `succ <> b.bb_label` by
+        (strip_tac >> gvs[] >> drule_all can_merge_blocks_unique_pred >>
+         strip_tac >> gvs[can_merge_blocks_def]) >>
+      fs[MEM_FILTER, wf_function_def, fn_succs_closed_def] >> metis_tac[]) >>
+  `succ <> b.bb_label` by
+    (strip_tac >> gvs[] >> drule_all can_merge_blocks_unique_pred >> strip_tac >> gvs[]) >>
+  fs[MEM_FILTER, wf_function_def, fn_succs_closed_def] >> metis_tac[]
+QED
+
+Theorem chain_merge_succs_closed:
+  wf_function fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  can_merge_blocks fn a b ==>
+  fn_succs_closed (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label fn.fn_blocks)) (bb_succs (merge_blocks a b)))
+Proof
+  strip_tac >>
+  simp[fn_succs_closed_def, chain_merge_fn_labels] >>
+  `EVERY (\bb. !succ. MEM succ (bb_succs bb) ==>
+      MEM succ (FILTER (\lbl. lbl <> b.bb_label) (fn_labels fn)))
+    (update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label fn.fn_blocks)) (bb_succs (merge_blocks a b)))` by
+    (ho_match_mp_tac update_succ_phi_labels_cfg_property >> conj_tac
+     >- (irule chain_merge_base_bb_wf >> simp[]) >>
+     simp[EVERY_MEM] >> rpt strip_tac >>
+     drule_all chain_merge_base_closed >> simp[]) >>
+  fs[EVERY_MEM] >> metis_tac[]
 QED
