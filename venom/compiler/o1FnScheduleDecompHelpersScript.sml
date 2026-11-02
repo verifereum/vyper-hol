@@ -349,6 +349,19 @@ Proof
   rpt strip_tac >> metis_tac[]
 QED
 
+Theorem covers_unit_replacement_inst_ids:
+  ir_supply_covers_unit s
+    (unit with cu_context := unit.cu_context with ctx_functions :=
+      MAP (\f. if f.fn_name = fn.fn_name then fn else f)
+        unit.cu_context.ctx_functions) /\
+  MEM fn.fn_name (ctx_fn_names unit.cu_context) ==>
+  (!id. MEM id (fn_ir_inst_ids fn) ==> MEM id s.irs_used_inst_ids)
+Proof
+  simp[ir_supply_covers_unit_def, list_subset_def, EVERY_MEM,
+       unit_ir_inst_ids_def, ctx_fn_names_def, MEM_MAP, MEM_FLAT,
+       PULL_EXISTS] >> rpt strip_tac >> metis_tac[]
+QED
+
 
 Theorem observed_step_contract:
   o1_step_contract rpolicy pass /\
