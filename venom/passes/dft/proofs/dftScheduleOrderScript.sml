@@ -377,6 +377,314 @@ Proof
   >> metis_tac[dft_block_suffix_terminator_order, id_before_distinct_endpoints]
 QED
 
+(* Exact effect-state projections.  Membership is enough for the read frontier,
+   so repeated effects do not require a list-normalization convention. *)
+Theorem write_effect_fold_lookup:
+  !effs et inst eff.
+    FLOOKUP (FOLDL (\acc weff.
+      <| et_last_write := acc.et_last_write |+ (weff, inst);
+         et_all_reads := acc.et_all_reads |+ (weff, []) |>)
+      et effs).et_last_write eff =
+    if MEM eff effs then SOME inst else FLOOKUP et.et_last_write eff
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `h = eff` >> simp[finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem write_effect_fold_reads:
+  !effs et inst eff.
+    et_get_reads (FOLDL (\acc weff.
+      <| et_last_write := acc.et_last_write |+ (weff, inst);
+         et_all_reads := acc.et_all_reads |+ (weff, []) |>)
+      et effs) eff =
+    if MEM eff effs then [] else et_get_reads et eff
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `h = eff` >>
+  simp[et_get_reads_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem read_effect_fold_reads:
+  !effs et inst eff r.
+    MEM r (et_get_reads (FOLDL (\acc reff.
+      acc with et_all_reads :=
+        acc.et_all_reads |+ (reff, et_get_reads acc reff ++ [inst]))
+      et effs) eff) <=>
+    MEM r (et_get_reads et eff) \/ (MEM eff effs /\ r = inst)
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `h = eff` >>
+  simp[et_get_reads_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
+Theorem compute_effect_last_write:
+  FLOOKUP (SND (compute_effect_deps et inst)).et_last_write eff =
+    if MEM eff (effects_to_list (write_effects inst.inst_opcode))
+    then SOME inst else FLOOKUP et.et_last_write eff
+Proof
+  simp[compute_effect_deps_def, read_foldl_last_write,
+       write_effect_fold_lookup]
+QED
+
+Theorem compute_effect_reads:
+  MEM r (et_get_reads (SND (compute_effect_deps et inst)) eff) <=>
+    (~MEM eff (effects_to_list (write_effects inst.inst_opcode)) /\
+       MEM r (et_get_reads et eff)) \/
+    (MEM eff (effects_to_list (read_effects inst.inst_opcode)) /\ r = inst)
+Proof
+  simp[compute_effect_deps_def, read_effect_fold_reads,
+       write_effect_fold_reads] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem compute_effect_write_dep:
+  MEM eff (effects_to_list (write_effects inst.inst_opcode)) /\
+  (MEM d (et_get_reads et eff) \/
+   FLOOKUP et.et_last_write eff = SOME d) ==>
+  MEM d (FST (compute_effect_deps et inst))
+Proof
+  strip_tac >>
+  simp[compute_effect_deps_def, MEM_FLAT, MEM_MAP, MEM_FILTER, PULL_EXISTS] >>
+  disj1_tac >> qexists `eff` >> simp[] >>
+  Cases_on `FLOOKUP et.et_last_write eff` >> gvs[]
+QED
+
+Theorem compute_effect_read_dep:
+  MEM eff (effects_to_list (read_effects inst.inst_opcode)) /\
+  FLOOKUP et.et_last_write eff = SOME d /\
+  d.inst_id <> inst.inst_id ==>
+  MEM d (FST (compute_effect_deps et inst))
+Proof
+  rpt strip_tac >>
+  Cases_on `MEM eff (effects_to_list (write_effects inst.inst_opcode))`
+  >- (irule compute_effect_write_dep >> metis_tac[]) >>
+  simp[compute_effect_deps_def, MEM_FLAT, MEM_MAP, MEM_FILTER, PULL_EXISTS] >>
+  disj2_tac >> qexists `eff` >> simp[]
+QED
+
+(* A writer frontier summarizes all preceding writers; a reader either remains
+   active or has already been ordered before the writer that cleared it. *)
+Definition effect_history_def:
+  effect_history R prefix et <=>
+    (!eff w. MEM w prefix /\
+       MEM eff (effects_to_list (write_effects w.inst_opcode)) ==>
+       ?last. FLOOKUP et.et_last_write eff = SOME last /\
+         (w.inst_id = last.inst_id \/ R w.inst_id last.inst_id)) /\
+    (!eff r. MEM r prefix /\
+       MEM eff (effects_to_list (read_effects r.inst_opcode)) ==>
+       MEM r (et_get_reads et eff) \/
+       ?last. FLOOKUP et.et_last_write eff = SOME last /\
+         R r.inst_id last.inst_id) /\
+    (!eff w. FLOOKUP et.et_last_write eff = SOME w ==>
+       MEM w prefix /\ MEM eff (effects_to_list (write_effects w.inst_opcode))) /\
+    (!eff r. MEM r (et_get_reads et eff) ==>
+       MEM r prefix /\ MEM eff (effects_to_list (read_effects r.inst_opcode)))
+End
+
+Theorem effect_history_empty:
+  effect_history R [] empty_effect_track
+Proof
+  simp[effect_history_def, empty_effect_track_def, et_get_reads_def,
+       finite_mapTheory.FLOOKUP_EMPTY]
+QED
+
+Theorem effect_history_write_conflict:
+  effect_history R prefix et /\ transitive R /\
+  (!d. MEM d (FST (compute_effect_deps et inst)) ==>
+       R d.inst_id inst.inst_id) /\
+  MEM x prefix /\
+  MEM eff (effects_to_list (write_effects inst.inst_opcode)) /\
+  (MEM eff (effects_to_list (write_effects x.inst_opcode)) \/
+   MEM eff (effects_to_list (read_effects x.inst_opcode))) ==>
+  R x.inst_id inst.inst_id
+Proof
+  simp[effect_history_def, relationTheory.transitive_def] >>
+  rpt strip_tac >>
+  metis_tac[compute_effect_write_dep]
+QED
+
+Theorem effect_history_read_conflict:
+  effect_history R prefix et /\ transitive R /\
+  (!d. MEM d (FST (compute_effect_deps et inst)) ==>
+       R d.inst_id inst.inst_id) /\
+  (!d. MEM d prefix ==> d.inst_id <> inst.inst_id) /\
+  MEM x prefix /\
+  MEM eff (effects_to_list (read_effects inst.inst_opcode)) /\
+  MEM eff (effects_to_list (write_effects x.inst_opcode)) ==>
+  R x.inst_id inst.inst_id
+Proof
+  simp[effect_history_def, relationTheory.transitive_def] >>
+  rpt strip_tac >>
+  metis_tac[compute_effect_read_dep]
+QED
+
+Theorem effect_history_conflict:
+  effect_history R prefix et /\ transitive R /\
+  (!d. MEM d (FST (compute_effect_deps et inst)) ==>
+       R d.inst_id inst.inst_id) /\
+  (!d. MEM d prefix ==> d.inst_id <> inst.inst_id) /\
+  MEM x prefix /\
+  ~effects_independent x.inst_opcode inst.inst_opcode ==>
+  R x.inst_id inst.inst_id
+Proof
+  `!eff s. MEM eff (effects_to_list s) <=> eff IN s` by
+    (rpt gen_tac >> once_rewrite_tac[effects_to_list_def] >>
+     simp_tac pure_ss [MEM_FILTER] >> Cases_on `eff` >> simp[]) >>
+  simp[effects_independent_def, pred_setTheory.DISJOINT_DEF,
+       pred_setTheory.EXTENSION, pred_setTheory.IN_INTER,
+       pred_setTheory.IN_UNION, pred_setTheory.NOT_IN_EMPTY] >>
+  metis_tac[effect_history_write_conflict, effect_history_read_conflict]
+QED
+
+Theorem effect_history_step:
+  effect_history R prefix et /\ transitive R /\
+  (!d. MEM d (FST (compute_effect_deps et inst)) ==>
+       R d.inst_id inst.inst_id) ==>
+  effect_history R (prefix ++ [inst]) (SND (compute_effect_deps et inst))
+Proof
+  rpt strip_tac >>
+  `!eff x. MEM x prefix /\
+     MEM eff (effects_to_list (write_effects inst.inst_opcode)) /\
+     (MEM eff (effects_to_list (write_effects x.inst_opcode)) \/
+      MEM eff (effects_to_list (read_effects x.inst_opcode))) ==>
+     R x.inst_id inst.inst_id` by
+    metis_tac[effect_history_write_conflict] >>
+  qpat_x_assum `effect_history _ _ _` mp_tac >>
+  simp[effect_history_def] >> strip_tac >>
+  simp[effect_history_def, MEM_APPEND] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      Cases_on `MEM eff (effects_to_list (write_effects inst.inst_opcode))` >>
+      simp[compute_effect_last_write] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      Cases_on `MEM eff (effects_to_list (write_effects inst.inst_opcode))` >>
+      simp[compute_effect_reads, compute_effect_last_write] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt gen_tac >>
+      Cases_on `MEM eff (effects_to_list (write_effects inst.inst_opcode))` >>
+      simp[compute_effect_last_write] >> metis_tac[]) >>
+  rpt gen_tac >> simp[compute_effect_reads] >> metis_tac[]
+QED
+
+Theorem effect_scan_lookup_preserved:
+  !suffix acc et k.
+    ~MEM k (MAP (\i. i.inst_id) suffix) ==>
+    FLOOKUP (FST (FOLDL (\(m, s) i.
+      (m |+ (i.inst_id, FST (compute_effect_deps s i)),
+       SND (compute_effect_deps s i))) (acc, et) suffix)) k =
+    FLOOKUP acc k
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum (qspecl_then
+    [`acc |+ (h.inst_id, FST (compute_effect_deps et h))`,
+     `SND (compute_effect_deps et h)`, `k`] mp_tac) >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem effect_scan_lookup_source:
+  !prefix acc et k ds.
+  FLOOKUP (FST (FOLDL (\(m, s) i.
+    (m |+ (i.inst_id, FST (compute_effect_deps s i)),
+     SND (compute_effect_deps s i))) (acc, et) prefix)) k = SOME ds ==>
+  MEM k (MAP (\i. i.inst_id) prefix) \/ FLOOKUP acc k = SOME ds
+Proof
+  rpt gen_tac >> Cases_on `MEM k (MAP (\i. i.inst_id) prefix)` >>
+  simp[effect_scan_lookup_preserved]
+QED
+
+Theorem effect_scan_history:
+  !suffix prefix acc et R.
+    ALL_DISTINCT (MAP (\i. i.inst_id) (prefix ++ suffix)) /\
+    effect_history R prefix et /\ transitive R /\
+    (!k ds d.
+       FLOOKUP (FST (FOLDL (\(m, s) i.
+         (m |+ (i.inst_id, FST (compute_effect_deps s i)),
+          SND (compute_effect_deps s i))) (acc, et) suffix)) k = SOME ds /\
+       MEM d ds ==> R d.inst_id k) ==>
+    effect_history R (prefix ++ suffix)
+      (SND (FOLDL (\(m, s) i.
+         (m |+ (i.inst_id, FST (compute_effect_deps s i)),
+          SND (compute_effect_deps s i))) (acc, et) suffix))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  `~MEM h.inst_id (MAP (\i. i.inst_id) suffix)` by
+    gvs[ALL_DISTINCT_APPEND] >>
+  `!d. MEM d (FST (compute_effect_deps et h)) ==> R d.inst_id h.inst_id` by
+    (rpt strip_tac >>
+     qpat_x_assum `!k ds d. _` (qspecl_then
+       [`h.inst_id`, `FST (compute_effect_deps et h)`, `d`] mp_tac) >>
+     simp[effect_scan_lookup_preserved, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `effect_history R (prefix ++ [h]) (SND (compute_effect_deps et h))` by
+    (irule effect_history_step >> simp[]) >>
+  first_x_assum (qspecl_then
+    [`prefix ++ [h]`, `acc |+ (h.inst_id, FST (compute_effect_deps et h))`,
+     `SND (compute_effect_deps et h)`, `R`] mp_tac) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]
+QED
+
+Theorem effect_scan_prefix_history:
+  ALL_DISTINCT (MAP (\i. i.inst_id) (prefix ++ suffix)) /\ transitive R /\
+  FOLDL (\(m, s) i.
+    (m |+ (i.inst_id, FST (compute_effect_deps s i)),
+     SND (compute_effect_deps s i))) (FEMPTY, empty_effect_track) prefix =
+    (acc, et) /\
+  (!k ds d.
+    FLOOKUP (FST (FOLDL (\(m, s) i.
+      (m |+ (i.inst_id, FST (compute_effect_deps s i)),
+       SND (compute_effect_deps s i))) (acc, et) suffix)) k = SOME ds /\
+    MEM d ds ==> R d.inst_id k) ==>
+  effect_history R prefix et
+Proof
+  rpt strip_tac >>
+  `!k ds. FLOOKUP acc k = SOME ds ==>
+           MEM k (MAP (\i. i.inst_id) prefix)` by
+    (rpt strip_tac >>
+     qspecl_then [`prefix`, `FEMPTY`, `empty_effect_track`]
+       mp_tac effect_scan_lookup_source >>
+     simp[finite_mapTheory.FLOOKUP_EMPTY] >>
+     disch_then drule >> simp[]) >>
+  `!k ds d. FLOOKUP acc k = SOME ds /\ MEM d ds ==> R d.inst_id k` by
+    (rpt strip_tac >>
+     `~MEM k (MAP (\i. i.inst_id) suffix)` by
+       (gvs[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+     qpat_x_assum `!k ds d. _` (qspecl_then [`k`, `ds`, `d`] mp_tac) >>
+     simp[effect_scan_lookup_preserved]) >>
+  qspecl_then [`prefix`, `[]`] mp_tac effect_scan_history >>
+  disch_then (qspecl_then [`FEMPTY`, `empty_effect_track`, `R`] mp_tac) >>
+  gvs[effect_history_empty, ALL_DISTINCT_APPEND]
+QED
+
+(* These probes deliberately have indirect conflicts: a cleared reader and
+   a superseded writer must still precede the third instruction by transitivity.
+   MCOPY also tests the same-effect read/write update. *)
+Theorem effect_read_write_write_probe[local]:
+  let a = mk_inst 0 MLOAD [] ["a"];
+      b = mk_inst 1 MCOPY [] [];
+      c = mk_inst 2 MSTORE [] [];
+      s1 = SND (compute_effect_deps empty_effect_track a);
+      s2 = SND (compute_effect_deps s1 b) in
+  MAP (\i. i.inst_id) (FST (compute_effect_deps s1 b)) = [0] /\
+  MAP (\i. i.inst_id) (FST (compute_effect_deps s2 c)) = [1] /\
+  FLOOKUP s2.et_last_write Eff_MEMORY = SOME b /\
+  et_get_reads s2 Eff_MEMORY = [b]
+Proof
+  EVAL_TAC
+QED
+
+Theorem effect_write_write_read_probe[local]:
+  let a = mk_inst 0 MSTORE [] [];
+      b = mk_inst 1 MSTORE [] [];
+      c = mk_inst 2 MLOAD [] ["c"];
+      s1 = SND (compute_effect_deps empty_effect_track a);
+      s2 = SND (compute_effect_deps s1 b) in
+  MAP (\i. i.inst_id) (FST (compute_effect_deps s1 b)) = [0] /\
+  MAP (\i. i.inst_id) (FST (compute_effect_deps s2 c)) = [1]
+Proof
+  EVAL_TAC
+QED
+
 (* Why it holds (unchecked notes):
    - Permutation, flips, labels and pseudo prefix: dft_fn_all_perm_of and
      dft_fn_dft_inv (dftCorrectness).  Blocks the loop never reaches come out
