@@ -1100,8 +1100,9 @@ Theorem contract_namespaces_ok_event_decl_unique:
   event_decl_unique name tls
 Proof
   rw[contract_namespaces_ok_def] >>
-  irule module_event_keys_unique >>
-  metis_tac[contract_keys_module_distinct]
+  `ALL_DISTINCT (FLAT (MAP (event_keys_toplevel src) tls))` by
+    (irule contract_keys_module_distinct >> qexists_tac `mods` >> simp[]) >>
+  drule module_event_keys_unique >> simp[]
 QED
 
 Theorem check_contract_event_decl_unique:
