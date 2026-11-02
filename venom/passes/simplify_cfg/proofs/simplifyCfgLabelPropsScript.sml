@@ -69,7 +69,7 @@ Proof
   simp[MEM_MAP, FILTER_ALL_DISTINCT] >> metis_tac[]
 QED
 
-Theorem can_bypass_jump_target_distinct[local]:
+Theorem can_bypass_jump_target_distinct:
   !func a b target.
     ALL_DISTINCT (fn_labels func) /\
     lookup_block a.bb_label func.fn_blocks = SOME a /\
