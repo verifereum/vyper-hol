@@ -314,14 +314,46 @@ Theorem simplify_cfg_stage_pre_walk:
   !view. o1_stage_contract rpolicy (CFP_Simple VP_SimplifyCFG) view no_pre
            o1_pre_walk_inv o1_walk_src_inv
 Proof
-  cheat
+  simp[o1_stage_contract_def, no_pre_def] >> rpt gen_tac >> strip_tac >>
+  `EVERY simplify_cfg_fn_ok C.ctx_functions` by
+    (gvs[o1_ctx_shape_def, o1_pre_walk_inv_def, EVERY_MEM] >>
+     rpt strip_tac >> irule simplify_cfg_fn_ok_no_phi >>
+     simp[EVERY_MEM] >> metis_tac[o1_fn_shape_def]) >>
+  conj_tac >- metis_tac[simplify_cfg_stage_sim] >>
+  simp[o1_walk_src_inv_def] >> conj_tac
+  >- (gvs[o1_pre_walk_inv_def, o1_src_inv_def] >>
+      irule simplify_cfg_stage_mem_inv >>
+      metis_tac[mem_corr_closed_raw_mem_ok]) >>
+  drule simplify_cfg_stage_functions >> strip_tac >>
+  simp[EVERY_MEM, MEM_MAP] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  irule simplify_cfg_pre_walk_structure >>
+  gvs[o1_ctx_shape_def, o1_pre_walk_inv_def, EVERY_MEM] >>
+  metis_tac[]
 QED
 
 (* The walk run, stage 5: wf_ssa in, wf_ssa out. *)
 Theorem simplify_cfg_stage_walk:
   o1_run_contract rpolicy 5
 Proof
-  cheat
+  simp[o1_run_contract_def, o1_fn_passes_def, o1_inv_def,
+       o1_stage_contract_def, o1_pre_def] >> rpt gen_tac >> strip_tac >>
+  `EVERY simplify_cfg_fn_ok C.ctx_functions` by
+    (gvs[o1_ctx_shape_def, o1_ssa_inv_def, EVERY_MEM] >>
+     rpt strip_tac >> irule simplify_cfg_fn_ok_ssa >>
+     metis_tac[o1_fn_shape_def]) >>
+  conj_tac >- metis_tac[simplify_cfg_stage_sim] >>
+  simp[o1_ssa_inv_def] >> conj_tac
+  >- (gvs[o1_ssa_inv_def, o1_lowered_inv_def] >>
+      qexists_tac `eom` >> conj_tac
+      >- metis_tac[simplify_cfg_stage_eom_bounded] >>
+      irule simplify_cfg_stage_mem_inv >>
+      metis_tac[mem_corr_closed_lowered_mem_fact]) >>
+  drule simplify_cfg_stage_functions >> strip_tac >>
+  simp[EVERY_MEM, MEM_MAP] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  irule simplify_cfg_preserves_wf_ssa >>
+  gvs[o1_ctx_shape_def, o1_ssa_inv_def, EVERY_MEM] >>
+  `o1_fn_shape C y` by metis_tac[] >>
+  gvs[o1_fn_shape_def, first_block_no_phi_def, EVERY_MEM]
 QED
 
 Theorem o1_contract_simplify_cfg_pre_walk:
