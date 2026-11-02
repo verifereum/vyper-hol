@@ -557,6 +557,199 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
+Theorem gas_base_data_dispatch:
+  MEM inst.inst_opcode
+    [MCOPY; ISTORE; CALLDATACOPY; RETURNDATACOPY; SHA3; DLOADBYTES;
+     CODECOPY; EXTCODECOPY; LOG; SELFDESTRUCT; CALL; STATICCALL;
+     DELEGATECALL; CREATE; CREATE2; ALLOCA] ==>
+  gas_replay_at 0 (step_inst_base inst) s
+Proof
+  simp[MEM] >> strip_tac >> rewrite_tac[gas_replay_at_def] >>
+  qpat_assum `inst.inst_opcode = _` gas_opcode_rewrite >> gen_tac >> simp[]
+  >~ [`inst.inst_opcode = MCOPY`] >- suspend "mcopy"
+  >~ [`inst.inst_opcode = ISTORE`] >- suspend "istore"
+  >~ [`inst.inst_opcode = CALLDATACOPY`] >- suspend "calldatacopy"
+  >~ [`inst.inst_opcode = RETURNDATACOPY`] >- suspend "returndatacopy"
+  >~ [`inst.inst_opcode = SHA3`] >- suspend "sha3"
+  >~ [`inst.inst_opcode = DLOADBYTES`] >- suspend "dloadbytes"
+  >~ [`inst.inst_opcode = CODECOPY`] >- suspend "codecopy"
+  >~ [`inst.inst_opcode = EXTCODECOPY`] >- suspend "extcodecopy"
+  >~ [`inst.inst_opcode = LOG`] >- suspend "log"
+  >~ [`inst.inst_opcode = SELFDESTRUCT`] >- suspend "selfdestruct"
+  >~ [`inst.inst_opcode = CALL`] >- suspend "call"
+  >~ [`inst.inst_opcode = STATICCALL`] >- suspend "staticcall"
+  >~ [`inst.inst_opcode = DELEGATECALL`] >- suspend "delegatecall"
+  >~ [`inst.inst_opcode = CREATE`] >- suspend "create"
+  >~ [`inst.inst_opcode = CREATE2`] >- suspend "create2"
+  >> suspend "alloca"
+QED
+
+Resume gas_base_data_dispatch[mcopy]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b rest"] >> simp[lift_result_def] >>
+  namedCases_on `rest` ["", "c last"] >> simp[lift_result_def] >>
+  Cases_on `last` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand c s` >> simp[lift_result_def]
+QED
+Resume gas_base_data_dispatch[istore]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b rest"] >> simp[lift_result_def] >>
+  Cases_on `rest` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def]
+QED
+Resume gas_base_data_dispatch[calldatacopy]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b rest"] >> simp[lift_result_def] >>
+  namedCases_on `rest` ["", "c last"] >> simp[lift_result_def] >>
+  Cases_on `last` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand c s` >> simp[lift_result_def]
+QED
+Resume gas_base_data_dispatch[returndatacopy]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b rest"] >> simp[lift_result_def] >>
+  namedCases_on `rest` ["", "c last"] >> simp[lift_result_def] >>
+  Cases_on `last` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand c s` >> simp[lift_result_def] >>
+  IF_CASES_TAC >> simp[lift_result_def]
+QED
+Resume gas_base_data_dispatch[sha3]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b rest"] >> simp[lift_result_def] >>
+  Cases_on `rest` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def] >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
+  Cases_on `outs` >> simp[lift_result_def]
+QED
+Resume gas_base_data_dispatch[dloadbytes]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b rest"] >> simp[lift_result_def] >>
+  namedCases_on `rest` ["", "c last"] >> simp[lift_result_def] >>
+  Cases_on `last` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand c s` >> simp[lift_result_def]
+QED
+Resume gas_base_data_dispatch[codecopy]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b rest"] >> simp[lift_result_def] >>
+  namedCases_on `rest` ["", "c last"] >> simp[lift_result_def] >>
+  Cases_on `last` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand c s` >> simp[lift_result_def]
+QED
+Resume gas_base_data_dispatch[extcodecopy]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b rest"] >> simp[lift_result_def] >>
+  namedCases_on `rest` ["", "c last"] >> simp[lift_result_def] >>
+  namedCases_on `last` ["", "d extra"] >> simp[lift_result_def] >>
+  Cases_on `extra` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand c s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand d s` >> simp[lift_result_def]
+QED
+Resume gas_base_data_dispatch[log]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  Cases_on `a` >> simp[lift_result_def] >>
+  IF_CASES_TAC >> simp[lift_result_def] >>
+  Cases_on `eval_operand (HD (REVERSE ops)) s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand (EL 1 (REVERSE ops)) s` >> simp[lift_result_def] >>
+  Cases_on `eval_operands (DROP 2 (REVERSE ops)) s` >> simp[lift_result_def]
+QED
+Resume gas_base_data_dispatch[selfdestruct]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  Cases_on `ops` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def, halt_state_def]
+QED
+Resume gas_base_data_dispatch[call]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b r1"] >> simp[lift_result_def] >>
+  namedCases_on `r1` ["", "c r2"] >> simp[lift_result_def] >>
+  namedCases_on `r2` ["", "d r3"] >> simp[lift_result_def] >>
+  namedCases_on `r3` ["", "e r4"] >> simp[lift_result_def] >>
+  namedCases_on `r4` ["", "f r5"] >> simp[lift_result_def] >>
+  namedCases_on `r5` ["", "g r6"] >> simp[lift_result_def] >>
+  Cases_on `r6` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand c s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand d s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand e s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand f s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand g s` >> simp[lift_result_def] >>
+  irule (SRULE [gas_replay_at_def] gas_exec_ext_call)
+QED
+Resume gas_base_data_dispatch[staticcall]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b r1"] >> simp[lift_result_def] >>
+  namedCases_on `r1` ["", "c r2"] >> simp[lift_result_def] >>
+  namedCases_on `r2` ["", "d r3"] >> simp[lift_result_def] >>
+  namedCases_on `r3` ["", "e r4"] >> simp[lift_result_def] >>
+  namedCases_on `r4` ["", "f r5"] >> simp[lift_result_def] >>
+  Cases_on `r5` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand c s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand d s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand e s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand f s` >> simp[lift_result_def] >>
+  irule (SRULE [gas_replay_at_def] gas_exec_ext_call)
+QED
+Resume gas_base_data_dispatch[delegatecall]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b r1"] >> simp[lift_result_def] >>
+  namedCases_on `r1` ["", "c r2"] >> simp[lift_result_def] >>
+  namedCases_on `r2` ["", "d r3"] >> simp[lift_result_def] >>
+  namedCases_on `r3` ["", "e r4"] >> simp[lift_result_def] >>
+  namedCases_on `r4` ["", "f r5"] >> simp[lift_result_def] >>
+  Cases_on `r5` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand c s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand d s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand e s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand f s` >> simp[lift_result_def] >>
+  irule (SRULE [gas_replay_at_def] gas_exec_delegatecall)
+QED
+Resume gas_base_data_dispatch[create]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b r1"] >> simp[lift_result_def] >>
+  namedCases_on `r1` ["", "c r2"] >> simp[lift_result_def] >>
+  Cases_on `r2` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand c s` >> simp[lift_result_def] >>
+  irule (SRULE [gas_replay_at_def] gas_exec_create)
+QED
+Resume gas_base_data_dispatch[create2]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b r1"] >> simp[lift_result_def] >>
+  namedCases_on `r1` ["", "c r2"] >> simp[lift_result_def] >>
+  namedCases_on `r2` ["", "d r3"] >> simp[lift_result_def] >>
+  Cases_on `r3` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand c s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand d s` >> simp[lift_result_def] >>
+  irule (SRULE [gas_replay_at_def] gas_exec_create)
+QED
+Resume gas_base_data_dispatch[alloca]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  Cases_on `ops` >> simp[lift_result_def] >>
+  Cases_on `a` >> simp[lift_result_def] >>
+  irule (SRULE [gas_replay_at_def] gas_exec_alloca)
+QED
+Finalise gas_base_data_dispatch
+
 Theorem gas_oracle_replay:
   (!fuel ctx inst s.
      ?n. !tail.
