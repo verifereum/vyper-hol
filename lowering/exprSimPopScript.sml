@@ -684,8 +684,8 @@ Theorem pop_local_place_at[local]:
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME w /\ cenv.ce_var_type id = SOME t0 /\
   evaluate_type (get_tenv cx) t0 = SOME (ArrayTV etv (Dynamic n)) /\
-  0 < L /\ L <= n ==>
-  local_place_at cenv cx s id [ValueSubscript (IntV (&(L - 1)))]
+  evaluate_type (get_tenv cx) et = SOME etv /\ 0 < L /\ L <= n ==>
+  local_place_at cenv cx s id [ValueSubscript (IntV (&(L - 1)))] et
     (w + 32w + (n2w L - 1w) * n2w (type_memory_size etv))
 Proof
   strip_tac >> simp[local_place_at_def] >>

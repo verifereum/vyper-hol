@@ -42,7 +42,7 @@
  * The steps (fields, subscripts) and the induction over targets are in
  * targetPlaceSimCases.
  *
- * Helpers: mem_field_offset_layout, mem_path_offset_snoc, target_pre_sub,
+ * Helpers: mem_path_offset_snoc, target_pre_sub,
  *   expr_sim_inv_local, target_post_refl, toplevel_decl_ce_vars, toplevel_target_decl
  *)
 
@@ -58,21 +58,6 @@ Libs
   pairLib
 
 (* ===== Offsets in memory ===== *)
-
-(* A field of a struct ce_struct_fields lays out as its type value: its
-   offset is struct_field_offset's. *)
-Theorem mem_field_offset_layout:
-  !flds fs fld ftv.
-    fields_layout flds fs /\ ALOOKUP fs fld = SOME ftv ==>
-    mem_field_offset fs fld = SOME (struct_field_offset flds fld, ftv)
-Proof
-  simp[fields_layout_def] >>
-  Induct >> simp[] >> PairCases >> Cases >> simp[] >>
-  PairCases_on `h` >>
-  simp[struct_field_offset_def, mem_field_offset_def] >>
-  rpt gen_tac >> strip_tac >> gvs[] >> IF_CASES_TAC >> gvs[] >>
-  first_x_assum drule_all >> simp[]
-QED
 
 (* ===== The judgment ===== *)
 

@@ -145,16 +145,18 @@ QED
 
 (* Captured results with the same read have the same compiled-value
    relation, but for a pointer into memory, where a local's place also fixes
-   the pointer (local_place_at). *)
+   the pointer (local_place_at), and for an aggregate stack value, which
+   holds no memory place. *)
 Theorem vv_post_read_result:
   !func cenv cx e es sa sb s0 es' tv v vv s ctx.
     read_result cx tv es' = (INL v, es') /\
-    (!t p. vv = LocatedValue t p ==> p.ptr_location <> LocMemory) ==>
+    (!t p. vv = LocatedValue t p ==> p.ptr_location <> LocMemory) /\
+    (!t op. vv = StackValue t op ==> is_word_type (expr_type e)) ==>
     (vv_post ctx func cenv cx e es sa sb s0 es' tv vv s <=>
      vv_post ctx func cenv cx e es sa sb s0 es' (Value v) vv s)
 Proof
   rpt strip_tac >> Cases_on `vv`
-  >- simp[vv_post_def, vv_holds_def, vv_at_def, read_result_def, return_def] >>
+  >- gvs[vv_post_def, vv_holds_def, vv_at_def, read_result_def, return_def] >>
   rename1 `LocatedValue t p` >> Cases_on `p.ptr_location` >> gvs[] >>
   simp[vv_post_def, vv_holds_def, vv_at_def, storage_holds_def,
        immutable_holds_def, read_result_def, return_def]
@@ -178,7 +180,7 @@ Proof
           return_def] >> metis_tac[]) >>
   qspecl_then [`func`, `cenv`, `cx`, `e`, `es`, `sa`, `sb`, `s0`, `es'`, `tv`,
                `v`, `LocatedValue t p`, `s`, `ctx`] mp_tac vv_post_read_result >>
-  simp[]
+  simp[] >> metis_tac[]
 QED
 
 (* ===== unwrap_value's code ===== *)
@@ -682,15 +684,17 @@ Proof
   >- (gvs[] >> irule unwrap_memory_read_result_sim >> simp[]) >>
   Cases_on `res`
   >- (rename1 `read_result cx raw es' = (INL v, es')` >>
-      `!s. vv_post ctx func cenv cx e es sa sm s0 es' raw vv s <=>
+      `!s. vv_post ctx func cenv cx e es sa sm s0 es' raw vv s ==>
            vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s` by
-        (gen_tac >> irule vv_post_read_result >> metis_tac[]) >>
+        (rpt strip_tac >> irule vv_post_read_result_value >> metis_tac[]) >>
       irule frag_exec_conseq >>
       qexistsl_tac
         [`\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s`,
          `\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s`,
          `\r. F`] >>
-      simp[] >> irule unwrap_value_sim >> simp[]) >>
+      simp[] >> rpt conj_tac >~ [`frag_exec`]
+      >- (irule unwrap_value_sim >> simp[]) >>
+      first_assum ACCEPT_TAC) >>
   rename1 `read_result cx raw es' = (INR exc, es')` >>
   irule frag_exec_conseq >> qexistsl_tac [`\s. F`, `\s. F`, `\r. F`] >>
   simp[fragExecTheory.frag_exec_false_pre] >> metis_tac[vv_post_failed_read]

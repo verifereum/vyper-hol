@@ -607,6 +607,7 @@ QED
 Theorem readable_eval_frag_transport[local]:
   eval_expr cx e es = (raw,es') /\ expr_read_res_ok cx es' raw /\
   (!t p. vv = LocatedValue t p ==> p.ptr_location <> LocMemory) /\
+  (!t op. vv = StackValue t op ==> is_word_type (expr_type e)) /\
   (!res. (do result <- eval_expr cx e; read_result cx result od) es = (res,es') /\
          expr_res_ok res ==>
          frag_exec ctx sa sb P
@@ -727,8 +728,8 @@ Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `?rv. vv = StackValue t (Var rv)` by
     (drule_all compile_expr_ifexp_states >> strip_tac >> gvs[]) >>
-  irule readable_eval_frag_transport >> simp[] >> rpt strip_tac >>
-  irule compile_ifexp_forced_frag >> simp[] >>
+  irule readable_eval_frag_transport >> simp[vyperASTTheory.expr_type_def] >>
+  rpt strip_tac >> irule compile_ifexp_forced_frag >> simp[] >>
   conj_tac >- metis_tac[is_word_type_not_dynarray] >>
   qexists_tac `ty` >> simp[] >> first_assum ACCEPT_TAC
 QED

@@ -121,10 +121,10 @@ Proof
 QED
 
 Theorem local_place_at_vars_frame:
-  local_place_at cenv cx s id path w /\
+  local_place_at cenv cx s id path ty w /\
   (!n q sq w. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) sq) /\
               lookup_var q s = SOME w ==> lookup_var q t = SOME w) ==>
-  local_place_at cenv cx t id path w
+  local_place_at cenv cx t id path ty w
 Proof
   rw[local_place_at_def] >> metis_tac[]
 QED
