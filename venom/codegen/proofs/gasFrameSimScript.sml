@@ -120,9 +120,10 @@ Theorem gas_plan_shape[local]:
   generate_inst_plan liveness dfg cfg fn inst next_liveness
     is_halting next_is_term bb_label ps =
   SOME (if MEM out next_liveness then
-      let (tail, ps9) = optimistic_swap_plan dfg inst next_liveness
-        next_is_term (ps with ps_stack := SNOC (Var out) ps.ps_stack) in
-      (SOEmit "GAS" :: tail, release_dead_spills next_liveness ps9)
+      case optimistic_swap_plan dfg inst next_liveness
+        next_is_term (ps with ps_stack := SNOC (Var out) ps.ps_stack) of
+        (tail, ps9) =>
+          (SOEmit "GAS" :: tail, release_dead_spills next_liveness ps9)
     else if is_halting then
       ([SOEmit "GAS"], release_dead_spills next_liveness
         (ps with ps_stack := SNOC (Var out) ps.ps_stack))
