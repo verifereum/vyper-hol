@@ -1707,3 +1707,374 @@ Proof
   drule_all supply_split_replacement_definition >> strip_tac >>
   irule supply_definition_available_endpoint >> metis_tac[]
 QED
+
+Theorem supply_available_reachable:
+  def_available_at fn bb use_inst_opt v ==> fn_reachable fn bb.bb_label
+Proof
+  simp[def_available_at_def, fn_dominates_def] >> metis_tac[]
+QED
+
+Theorem insert_split_supply_phi_pair_available:
+  wf_function fn /\ ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\
+  fn_cfg_edge fn pred.bb_label target.bb_label /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s fn pred target = (fn',s') /\
+  (!l v. MEM (l,v) (phi_pairs ops) ==>
+    ?bb. MEM bb fn.fn_blocks /\ bb.bb_label = l /\
+         def_available_at fn bb NONE v) /\
+  MEM (l,v) (phi_pairs
+    (update_phi_ops pred.bb_label split.bb_label repls ops)) ==>
+  ?bb. MEM bb fn'.fn_blocks /\ bb.bb_label = l /\
+       def_available_at fn' bb NONE v
+Proof
+  strip_tac >>
+  qpat_x_assum `MEM (l,v) _` mp_tac >>
+  simp[supply_phi_pairs_update_mem] >> strip_tac
+  >- (gvs[] >>
+      first_x_assum (drule_then strip_assume_tac) >>
+      `bb = pred` by metis_tac[venomExecProofsTheory.same_label_same_block] >>
+      qpat_x_assum `bb = pred` SUBST_ALL_TAC >>
+      `fn_reachable fn pred.bb_label` by
+        metis_tac[supply_available_reachable] >>
+      `MEM split fn'.fn_blocks` by
+        (drule_all supply_split_label_not_old >> strip_tac >>
+         `~MEM split.bb_label (MAP (\b. b.bb_label) fn.fn_blocks)` by
+           gvs[fn_labels_def] >>
+         drule_all insert_split_supply_split_lookup >> strip_tac >>
+         metis_tac[venomExecProofsTheory.lookup_block_MEM]) >>
+      qexists `split` >> simp[] >>
+      Cases_on `ALOOKUP repls w` >> gvs[]
+      >- (irule insert_split_supply_available_split >> metis_tac[]) >>
+      irule insert_split_supply_replacement_available >>
+      metis_tac[alistTheory.ALOOKUP_MEM]) >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  qexists `supply_block_image pred target split repls bb` >>
+  simp[supply_block_image_label] >> conj_tac
+  >- (irule insert_split_supply_image_mem >> metis_tac[]) >>
+  irule insert_split_supply_available_endpoint >> metis_tac[]
+QED
+
+Theorem insert_split_supply_incoming_edges:
+  wf_function fn /\ ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\ MEM bb fn.fn_blocks /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s fn pred target = (fn',s') ==>
+  (fn_cfg_edge fn' a bb.bb_label <=>
+    if bb.bb_label = target.bb_label then
+      a = split.bb_label \/ (a <> pred.bb_label /\ fn_cfg_edge fn a bb.bb_label)
+    else fn_cfg_edge fn a bb.bb_label)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (fn_labels fn)` by gvs[wf_function_def] >>
+  `MEM bb.bb_label (fn_labels fn)` by
+    (simp[fn_labels_def, listTheory.MEM_MAP] >> metis_tac[]) >>
+  drule_all supply_split_label_not_old >> strip_tac >>
+  `bb.bb_label <> split.bb_label` by metis_tac[] >>
+  `fn_cfg_edge fn pred.bb_label bb.bb_label <=> MEM bb.bb_label (bb_succs pred)` by
+    (irule fn_cfg_edge_member_label >> simp[]) >>
+  drule_all insert_split_supply_cfg_edges >>
+  disch_then (qspecl_then [`bb.bb_label`, `a`] mp_tac) >>
+  Cases_on `bb.bb_label = target.bb_label` >>
+  Cases_on `a = pred.bb_label` >> simp[] >> metis_tac[]
+QED
+
+Theorem insert_split_supply_phi_edge_target:
+  wf_function fn /\ ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\
+  fn_cfg_edge fn pred.bb_label target.bb_label /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s fn pred target = (fn',s') /\
+  phi_edge_uses_wf fn target inst ==>
+  phi_edge_uses_wf fn'
+    (supply_block_image pred target split repls target)
+    (inst with inst_operands :=
+      update_phi_ops pred.bb_label split.bb_label repls inst.inst_operands)
+Proof
+  strip_tac >>
+  `~MEM split.bb_label (fn_labels fn)` by
+    (irule supply_split_label_not_old >> metis_tac[]) >>
+  `!l v. MEM (l,v) (phi_pairs inst.inst_operands) ==>
+    ?bb. MEM bb fn.fn_blocks /\ bb.bb_label = l /\
+         def_available_at fn bb NONE v` by
+    metis_tac[phi_edge_uses_wf_def] >>
+  `~MEM split.bb_label (MAP FST (phi_pairs inst.inst_operands))` by
+    (simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+     metis_tac[fn_labels_def, listTheory.MEM_MAP]) >>
+  simp[phi_edge_uses_wf_def] >> conj_tac
+  >- (irule supply_phi_well_formed_update >>
+      gvs[phi_edge_uses_wf_def]) >>
+  conj_tac
+  >- (irule supply_phi_pairs_update_distinct >>
+      gvs[phi_edge_uses_wf_def]) >>
+  conj_tac
+  >- (gen_tac >>
+      drule_all insert_split_supply_incoming_edges >>
+      disch_then (qspec_then `pred'` mp_tac) >>
+      simp[supply_phi_pairs_update_mem, pairTheory.EXISTS_PROD] >>
+      gvs[phi_edge_uses_wf_def, pairTheory.EXISTS_PROD] >>
+      disch_tac >> Cases_on `pred' = split.bb_label` >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  drule_all insert_split_supply_phi_pair_available >> strip_tac >>
+  qexists `bb` >> simp[] >>
+  drule_all insert_split_supply_incoming_edges >>
+  disch_then (qspec_then `pred'` mp_tac) >> simp[] >>
+  qpat_x_assum `MEM (pred',v) _` mp_tac >>
+  simp[supply_phi_pairs_update_mem] >>
+  gvs[phi_edge_uses_wf_def] >> metis_tac[]
+QED
+
+Theorem insert_split_supply_phi_edge_other:
+  wf_function fn /\ ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\ MEM bb fn.fn_blocks /\
+  bb.bb_label <> target.bb_label /\
+  fn_cfg_edge fn pred.bb_label target.bb_label /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s fn pred target = (fn',s') /\
+  phi_edge_uses_wf fn bb inst ==>
+  phi_edge_uses_wf fn' (supply_block_image pred target split repls bb) inst
+Proof
+  strip_tac >>
+  `!a. fn_cfg_edge fn' a bb.bb_label <=> fn_cfg_edge fn a bb.bb_label` by
+    (drule_all insert_split_supply_incoming_edges >> simp[]) >>
+  qpat_x_assum `phi_edge_uses_wf fn bb inst` mp_tac >>
+  simp[phi_edge_uses_wf_def] >> strip_tac >>
+  rpt conj_tac >> simp[] >> rpt strip_tac >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  qexists `supply_block_image pred target split repls pred_bb` >>
+  simp[] >> conj_tac
+  >- (irule insert_split_supply_image_mem >> metis_tac[]) >>
+  conj_tac >- metis_tac[] >>
+  irule insert_split_supply_available_endpoint >> metis_tac[]
+QED
+
+Theorem supply_subst_terminator_index:
+  i < LENGTH bb.bb_instructions ==>
+  EL i (subst_label_terminator old new bb).bb_instructions =
+    if is_terminator (EL i bb.bb_instructions).inst_opcode then
+      subst_label_inst old new (EL i bb.bb_instructions)
+    else EL i bb.bb_instructions
+Proof
+  simp[subst_label_terminator_def, listTheory.EL_MAP]
+QED
+
+Theorem supply_update_phis_index:
+  i < LENGTH bb.bb_instructions ==>
+  EL i (update_phis_for_split old new repls bb).bb_instructions =
+    if (EL i bb.bb_instructions).inst_opcode = PHI then
+      (EL i bb.bb_instructions) with inst_operands :=
+        update_phi_ops old new repls (EL i bb.bb_instructions).inst_operands
+    else EL i bb.bb_instructions
+Proof
+  simp[update_phis_for_split_def, listTheory.EL_MAP] >>
+  strip_tac >> Cases_on `(EL i bb.bb_instructions).inst_opcode = PHI` >> simp[]
+QED
+
+Theorem supply_subst_label_ops_vars:
+  MEM (Var v) (MAP (subst_label_op old new) ops) <=>
+  MEM (Var v) ops
+Proof
+  simp[listTheory.MEM_MAP] >>
+  eq_tac >- (strip_tac >> Cases_on `y` >> gvs[subst_label_op_def] >>
+    Cases_on `s = old` >> gvs[]) >>
+  strip_tac >> qexists `Var v` >> simp[subst_label_op_def]
+QED
+
+Theorem supply_subst_terminator_index_vars:
+  i < LENGTH bb.bb_instructions ==>
+  (MEM (Var v) (EL i (subst_label_terminator old new bb).bb_instructions).inst_operands <=>
+   MEM (Var v) (EL i bb.bb_instructions).inst_operands)
+Proof
+  strip_tac >> simp[supply_subst_terminator_index] >>
+  IF_CASES_TAC >> simp[subst_label_inst_def, supply_subst_label_ops_vars]
+QED
+
+Theorem supply_block_image_index_vars:
+  i < LENGTH bb.bb_instructions /\ (EL i bb.bb_instructions).inst_opcode <> PHI ==>
+  (MEM (Var v) (EL i (supply_block_image pred target split repls bb).bb_instructions).inst_operands <=>
+   MEM (Var v) (EL i bb.bb_instructions).inst_operands)
+Proof
+  strip_tac >>
+  Cases_on `is_terminator (EL i bb.bb_instructions).inst_opcode` >>
+  simp[supply_block_image_def] >> rpt IF_CASES_TAC >>
+  simp[supply_update_phis_index, subst_label_terminator_def,
+       listTheory.EL_MAP, subst_label_inst_def] >>
+  simp[supply_subst_label_ops_vars]
+QED
+
+Theorem supply_block_image_index_phi:
+  i < LENGTH bb.bb_instructions /\ (EL i bb.bb_instructions).inst_opcode = PHI ==>
+  EL i (supply_block_image pred target split repls bb).bb_instructions =
+    if bb.bb_label = target.bb_label then
+      (EL i bb.bb_instructions) with inst_operands :=
+        update_phi_ops pred.bb_label split.bb_label repls
+          (EL i bb.bb_instructions).inst_operands
+    else EL i bb.bb_instructions
+Proof
+  strip_tac >> simp[supply_block_image_def] >> rpt IF_CASES_TAC >>
+  simp[supply_update_phis_index, subst_label_terminator_def,
+       listTheory.EL_MAP, is_terminator_def]
+QED
+
+Theorem insert_split_supply_old_block_uses:
+  wf_function fn /\ def_dominates_uses fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\ MEM bb fn.fn_blocks /\
+  fn_cfg_edge fn pred.bb_label target.bb_label /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s fn pred target = (fn',s') /\
+  i < LENGTH bb.bb_instructions ==>
+  if (EL i (supply_block_image pred target split repls bb).bb_instructions).inst_opcode = PHI then
+    phi_edge_uses_wf fn' (supply_block_image pred target split repls bb)
+      (EL i (supply_block_image pred target split repls bb).bb_instructions)
+  else
+    !v. MEM (Var v)
+      (EL i (supply_block_image pred target split repls bb).bb_instructions).inst_operands ==>
+      def_available_at fn' (supply_block_image pred target split repls bb)
+        (SOME (EL i (supply_block_image pred target split repls bb).bb_instructions)) v
+Proof
+  strip_tac >>
+  `MEM (EL i bb.bb_instructions) bb.bb_instructions` by
+    metis_tac[listTheory.MEM_EL] >>
+  qpat_x_assum `def_dominates_uses fn` mp_tac >>
+  simp[def_dominates_uses_def] >>
+  disch_then (drule_then (drule_then assume_tac)) >>
+  drule supply_block_image_index >> strip_tac >> simp[] >>
+  Cases_on `(EL i bb.bb_instructions).inst_opcode = PHI`
+  >- (gvs[] >> simp[supply_block_image_index_phi] >>
+      Cases_on `bb.bb_label = target.bb_label`
+      >- (`bb = target` by metis_tac[venomExecProofsTheory.same_label_same_block] >>
+          qpat_x_assum `bb = target` SUBST_ALL_TAC >> simp[] >>
+          irule insert_split_supply_phi_edge_target >> metis_tac[]) >>
+      simp[] >> irule insert_split_supply_phi_edge_other >> metis_tac[]) >>
+  gvs[] >> rpt strip_tac >>
+  `MEM (Var v) (EL i bb.bb_instructions).inst_operands` by
+    metis_tac[supply_block_image_index_vars] >>
+  irule insert_split_supply_available_inst >> metis_tac[]
+QED
+
+Theorem supply_forward_inst_source:
+  !vars s repls insts s'.
+    build_forwarding_assigns_supply s vars = (repls,insts,s') ==>
+    !inst. MEM inst insts ==>
+      inst.inst_opcode = ASSIGN /\
+      ?v. MEM v vars /\ inst.inst_operands = [Var v]
+Proof
+  Induct_on `vars` >> rpt gen_tac >> strip_tac
+  >- gvs[build_forwarding_assigns_supply_def] >>
+  Cases_on `fresh_ir_var s` >> rename1 `fresh_ir_var s = (nv,s1)` >>
+  Cases_on `fresh_inst_id s1` >> rename1 `fresh_inst_id s1 = (id,s2)` >>
+  Cases_on `build_forwarding_assigns_supply s2 vars` >> PairCases_on `r` >>
+  gvs[build_forwarding_assigns_supply_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem supply_split_inst_source:
+  build_split_block_supply s pred target = (split,repls,s') /\
+  MEM inst split.bb_instructions ==>
+  (inst.inst_opcode = JMP /\ inst.inst_operands = [Label target.bb_label]) \/
+  (inst.inst_opcode = ASSIGN /\
+   ?v. MEM v (phi_vars_needing_forward pred.bb_label pred target.bb_instructions) /\
+       inst.inst_operands = [Var v])
+Proof
+  strip_tac >>
+  Cases_on `fresh_ir_label s` >> rename1 `fresh_ir_label s = (lab,s1)` >>
+  Cases_on `build_forwarding_assigns_supply s1
+    (nub (phi_vars_needing_forward pred.bb_label pred target.bb_instructions))` >>
+  PairCases_on `r` >>
+  Cases_on `fresh_inst_id r1` >>
+  gvs[build_split_block_supply_def, listTheory.MEM_APPEND] >>
+  drule supply_forward_inst_source >>
+  disch_then (drule_then strip_assume_tac) >>
+  simp[] >> metis_tac[listTheory.MEM_nub]
+QED
+
+Theorem insert_split_supply_split_uses:
+  wf_function fn /\ wf_ssa fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\
+  fn_cfg_edge fn pred.bb_label target.bb_label /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s fn pred target = (fn',s') /\
+  MEM inst split.bb_instructions ==>
+  inst.inst_opcode <> PHI /\
+  !v. MEM (Var v) inst.inst_operands ==>
+    def_available_at fn' split (SOME inst) v
+Proof
+  strip_tac >> drule_all supply_split_inst_source >> strip_tac >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  `def_available_at fn pred NONE v` by
+    (irule phi_forward_sources_available >> metis_tac[]) >>
+  irule insert_split_supply_available_split >> metis_tac[]
+QED
+
+Theorem insert_split_supply_block_cases:
+  wf_function fn /\ ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s fn pred target = (fn',s') /\ MEM bb' fn'.fn_blocks ==>
+  bb' = split \/
+  ?bb. MEM bb fn.fn_blocks /\ bb' = supply_block_image pred target split repls bb
+Proof
+  strip_tac >>
+  `wf_function fn'` by metis_tac[insert_split_supply_wf_function] >>
+  drule_all supply_split_label_not_old >> strip_tac >>
+  `fn_labels fn' = fn_labels fn ++ [split.bb_label]` by
+    (drule insert_split_supply_labels >> strip_tac >>
+     metis_tac[pairTheory.PAIR_EQ]) >>
+  Cases_on `bb'.bb_label = split.bb_label`
+  >- (disj1_tac >>
+      `~MEM split.bb_label (MAP (\b. b.bb_label) fn.fn_blocks)` by
+        gvs[fn_labels_def] >>
+      drule_all insert_split_supply_split_lookup >> strip_tac >>
+      `MEM split fn'.fn_blocks` by metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
+      metis_tac[venomExecProofsTheory.same_label_same_block]) >>
+  disj2_tac >>
+  `MEM bb'.bb_label (fn_labels fn)` by
+    (`MEM bb'.bb_label (fn_labels fn')` by
+       (pure_rewrite_tac[fn_labels_def, listTheory.MEM_MAP] >>
+        qexists `bb'` >> simp[]) >>
+     gvs[listTheory.MEM_APPEND]) >>
+  `?bb. MEM bb fn.fn_blocks /\ bb.bb_label = bb'.bb_label` by
+    (qpat_x_assum `MEM bb'.bb_label (fn_labels fn)` mp_tac >>
+     pure_rewrite_tac[fn_labels_def, listTheory.MEM_MAP] >> metis_tac[]) >>
+  qexists `bb` >> simp[] >>
+  `MEM (supply_block_image pred target split repls bb) fn'.fn_blocks` by
+    (irule insert_split_supply_image_mem >> metis_tac[]) >>
+  metis_tac[venomExecProofsTheory.same_label_same_block, supply_block_image_label]
+QED
+
+Theorem insert_split_supply_def_dominates_uses:
+  wf_function fn /\ wf_ssa fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\
+  fn_cfg_edge fn pred.bb_label target.bb_label /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s fn pred target = (fn',s') ==>
+  def_dominates_uses fn'
+Proof
+  strip_tac >> simp[def_dominates_uses_def] >> rpt strip_tac >>
+  drule_all insert_split_supply_block_cases >> strip_tac
+  >- (gvs[] >> drule_all insert_split_supply_split_uses >> simp[]) >>
+  gvs[] >>
+  rename1 `MEM inst (supply_block_image pred target split repls old_bb).bb_instructions` >>
+  `?i. i < LENGTH old_bb.bb_instructions /\
+       inst = EL i (supply_block_image pred target split repls old_bb).bb_instructions` by
+    metis_tac[listTheory.MEM_EL, supply_block_image_length] >>
+  gvs[] >> irule insert_split_supply_old_block_uses >>
+  gvs[wf_ssa_def] >> metis_tac[]
+QED
+
+Theorem insert_split_supply_wf_ssa:
+  wf_function fn /\ wf_ssa fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\
+  fn_cfg_edge fn pred.bb_label target.bb_label /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s fn pred target = (fn',s') ==>
+  wf_ssa fn'
+Proof
+  strip_tac >> simp[wf_ssa_def] >> conj_tac
+  >- (irule insert_split_supply_ssa_form >> gvs[wf_ssa_def] >> metis_tac[]) >>
+  irule insert_split_supply_def_dominates_uses >> metis_tac[]
+QED
