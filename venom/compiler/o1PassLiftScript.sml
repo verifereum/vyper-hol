@@ -78,19 +78,22 @@ End
 Definition ctx_bisim_def:
   ctx_bisim C C' <=>
     ctx_fn_names C' = ctx_fn_names C /\
-    !name fn s.
-      lookup_function name C.ctx_functions = SOME fn /\
-      fn_entry_state fn s ==>
+    !name fn.
+      lookup_function name C.ctx_functions = SOME fn ==>
       ?fn'. lookup_function name C'.ctx_functions = SOME fn' /\
             fn_entry_label fn' = fn_entry_label fn /\
-            (!fuel. terminates (run_blocks fuel C fn s) ==>
-               ?fuel'. frame_result_rel (run_blocks fuel C fn s)
-                                        (run_blocks fuel' C' fn' s)) /\
-            (!fuel'. terminates (run_blocks fuel' C' fn' s) ==>
-               ?fuel. frame_result_rel (run_blocks fuel C fn s)
-                                       (run_blocks fuel' C' fn' s))
+            !s. fn_entry_state fn s ==>
+              (!fuel. terminates (run_blocks fuel C fn s) ==>
+                 ?fuel'. frame_result_rel (run_blocks fuel C fn s)
+                                          (run_blocks fuel' C' fn' s)) /\
+              (!fuel'. terminates (run_blocks fuel' C' fn' s) ==>
+                 ?fuel. frame_result_rel (run_blocks fuel C fn s)
+                                         (run_blocks fuel' C' fn' s))
 End
 
+(* Forward: fn in C matches fn in C' (induction on fuel; a callee runs on
+   less fuel), then fn_bisim at C'.  Backward: fn' in C' matches fn' in C,
+   then fn_bisim at C. *)
 Theorem fn_bisim_ctx_bisim:
   LIST_REL fn_bisim C.ctx_functions C'.ctx_functions ==> ctx_bisim C C'
 Proof
