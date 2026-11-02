@@ -160,3 +160,31 @@ Resume dft_guarded_nofail_total[log_total]:
 QED
 
 Finalise dft_guarded_nofail_total
+
+Theorem dft_empty_write_ok_updates:
+  ~is_pseudo inst.inst_opcode /\ ~is_terminator inst.inst_opcode /\
+  inst.inst_opcode <> ALLOCA /\
+  write_effects inst.inst_opcode = empty_effects /\
+  step_inst fuel C inst s = OK t ==>
+  ?updates.
+    EVERY (\p. MEM (FST p) inst.inst_outputs) updates /\
+    t = FOLDL (\u p. update_var (FST p) (SND p) u) s updates
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode` >>
+  fs[is_pseudo_def, is_terminator_def, write_effects_def,
+     empty_effects_def, all_effects_def] >>
+  fs[Once step_inst_non_invoke] >>
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  qpat_assum `inst.inst_opcode = _`
+    (fn th => CONV_TAC (LAND_CONV (LHS_CONV (dft_opcode_dispatch_conv th)))) >>
+  gvs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+      exec_read0_def, exec_read1_def, AllCaseEqs()] >>
+  strip_tac >> gvs[]
+  >>~- ([`EVERY (\p. FST p = out) _`],
+    qmatch_goalsub_abbrev_tac `update_var out value s` >>
+    qexists_tac `[(out,value)]` >> simp[])
+  >>~- ([`inst.inst_opcode = BUMP`],
+    qexists_tac `[(ptr_out,base_val); (next_out,base_val + sz)]` >> simp[])
+  >> qexists_tac `[]` >> simp[]
+QED
