@@ -1360,15 +1360,32 @@ Proof
   irule compile_assign_attr_storage_case >> simp[] >> metis_tac[]
 QED
 
+(* A local assigned to takes memory: its type is a widening of the assigned
+   value's type, which is assignable. *)
+Theorem assign_local_memory_bytes_pos[local]:
+  !cenv cx env es ret_ty id e env' ty.
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
+    FLOOKUP env.var_types id = SOME ty ==>
+    0 < type_memory_bytes cenv ty
+Proof
+  rpt strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `assignable_type env.type_defs ty` by
+    (gvs[type_stmt_def, atarget_accepts_def, AllCaseEqs()] >>
+     Cases_on `type_place_target env (NameTarget id)` >> gvs[] >>
+     rename1 `type_place_target _ _ = SOME vt` >> Cases_on `vt` >> gvs[] >>
+     gvs[vyperTypeEnvTheory.type_place_target_NameTarget] >>
+     metis_tac[vyperTypeArgFitsTheory.type_widens_to_assignable_type]) >>
+  irule exprSimAggregateLayoutTheory.expr_sim_inv_memory_bytes_pos >>
+  metis_tac[]
+QED
+
 (* RESIDUAL (#637 assignments): the other base targets.
    - A local in memory that body_assign_local_memory leaves: a value
      that widens to a type other than a bytestring (type_widens_to: a
-     DynArray of a smaller bound, elementwise) has no statement lemma, and
-     a type of size 0 (a static array of no elements) fails
-     compile_assign_local_memory_stmt_frag's 0 < type_memory_size tyv.
-     Python rejects a static array bound of 0 (get_index_value's
-     "Subscript must be greater than 0"), where evaluate_type accepts
-     it, so that case closes by rejecting it in the source typing.
+     DynArray of a smaller bound, elementwise) has no statement lemma.
    - A storage or transient variable that is not a word
      (supported_target_info's copies): no statement lemma.
    - An attribute target other than a word field of a local struct or of
@@ -1393,7 +1410,7 @@ Theorem body_assign_other:
     ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
               is_word_type ty) /\
     ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
-              ~is_word_type ty /\ 0 < type_memory_bytes cenv ty /\
+              ~is_word_type ty /\
               (expr_type e = ty \/ is_bytestring_type ty \/
                has_length_word (expr_type e) /\ is_empty_value_expr e)) /\
     ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
@@ -1425,10 +1442,14 @@ Proof
                     is_word_type ty`
   >- (gvs[] >> irule body_assign_local_word >> metis_tac[]) >>
   Cases_on `?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
-                    ~is_word_type ty /\ 0 < type_memory_bytes cenv ty /\
+                    ~is_word_type ty /\
                     (expr_type e = ty \/ is_bytestring_type ty \/
                      has_length_word (expr_type e) /\ is_empty_value_expr e)`
-  >- (gvs[] >> irule body_assign_local_memory >> metis_tac[]) >>
+  >- (`!id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty ==>
+              0 < type_memory_bytes cenv ty` by
+        (rpt strip_tac >> gvs[] >>
+         metis_tac[assign_local_memory_bytes_pos]) >>
+      gvs[] >> irule body_assign_local_memory >> metis_tac[]) >>
   Cases_on `?nsid. t = TopLevelNameTarget nsid /\
                    supported_scalar_target tops nsid`
   >- (gvs[] >> rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
@@ -1611,10 +1632,41 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
+(* The locals a tuple is assigned to take memory: their types are the
+   tuple's element types, which are assignable, so they take a storage slot
+   (assignable_type_slot_size_pos). *)
+Theorem assign_tuple_locals_bytes_pos[local]:
+  !cenv cx env es ret_ty ids e env'.
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty
+      (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) =
+      SOME env' ==>
+    EVERY (\id. !ty. FLOOKUP env.var_types id = SOME ty ==>
+                     0 < type_memory_bytes cenv ty) ids
+Proof
+  rpt strip_tac >>
+  `?tys. LIST_REL (\tgt ty. well_typed_atarget env tgt ty)
+           (MAP (BaseTarget o NameTarget) ids) tys /\
+         assignable_type env.type_defs (TupleT tys)` by
+    (gvs[type_stmt_def, atarget_accepts_def, well_typed_atarget_def,
+         AllCaseEqs()] >> metis_tac[]) >>
+  `EVERY (assignable_type env.type_defs) tys` by fs[assignable_type_def, EVERY_MEM] >>
+  rw[EVERY_EL] >>
+  `n < LENGTH tys /\
+   well_typed_atarget env (BaseTarget (NameTarget (EL n ids))) (EL n tys)` by
+    (fs[LIST_REL_EL_EQN] >> first_x_assum (qspec_then `n` mp_tac) >>
+     simp[EL_MAP]) >>
+  `ty = EL n tys` by
+    gvs[well_typed_atarget_def, well_typed_target_def, vyperTypeEnvTheory.type_place_target_NameTarget,
+        AllCaseEqs()] >>
+  `assignable_type env.type_defs ty` by metis_tac[EVERY_EL] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  irule exprSimAggregateLayoutTheory.expr_sim_inv_memory_bytes_pos >>
+  metis_tac[]
+QED
+
 (* RESIDUAL (#637 tuple assignments): the other tuple targets.
-   - A local in memory of size 0 (an empty struct or tuple type), which
-     compile_assign_tuple_locals_memory_stmt_frag's
-     0 < type_memory_size vtv excludes, as for Assign.
    - Storage, subscript and attribute elements: no statement lemma for
      compile_tuple_store_all.
    An empty tuple target is supported but has no lemma either.  A nested
@@ -1633,8 +1685,7 @@ Theorem body_assign_tuple_other:
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
     eval_stmt cx (Assign (TupleTarget gs) e) es = (res, es') /\
     ~(?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
-            EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
-                             0 < type_memory_bytes cenv ty) ids) ==>
+            EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e)) es res es'
 Proof
@@ -1652,9 +1703,12 @@ Proof
   `supported_expr tops e` by
     gvs[supported_stmt_def, supported_assignment_def] >>
   Cases_on `?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
-                  EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
-                                   0 < type_memory_bytes cenv ty) ids`
-  >- (gvs[] >> irule body_assign_tuple_locals >> metis_tac[]) >>
+                  EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids`
+  >- (gvs[] >> drule_all assign_tuple_locals_bytes_pos >> strip_tac >>
+      `EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
+                        0 < type_memory_bytes cenv ty) ids` by
+        (fs[EVERY_MEM] >> metis_tac[]) >>
+      irule body_assign_tuple_locals >> metis_tac[]) >>
   irule body_assign_tuple_other >> metis_tac[]
 QED
 
