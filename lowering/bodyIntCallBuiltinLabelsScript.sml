@@ -663,3 +663,90 @@ Proof
     gen_tac >> BETA_TAC) >>
   simp[compiler_label_hoare_typed_primitives]
 QED
+
+Theorem compiler_block_tail_calldata_slice_dispatch:
+  (!ce t. compiler_block_tail (cfn ce t e)) ==>
+  compiler_block_tail (compile_builtin_dispatch_body cfn cenv ann ty (CalldataSlice n) [e])
+Proof
+  strip_tac >> rewrite_tac[lambdify compile_builtin_dispatch_body_def] >> simp[HD] >>
+  ho_match_mp_tac compiler_block_tail_pair_bind >> conj_tac
+  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> irule compiler_block_tail_lower_value >> simp[]) >>
+  gen_tac >> BETA_TAC >> irule compiler_block_tail_as_ptr_val >>
+  simp[compiler_block_tail_slice_calldata]
+QED
+
+Theorem compiler_label_hoare_calldata_slice_dispatch:
+  (!ce t. compiler_label_hoare (compiler_label_reservation origin pending)
+    (cfn ce t e) (\r out. compiler_label_reservation origin pending out)) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_builtin_dispatch_body cfn cenv ann ty (CalldataSlice n) [e])
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >> rewrite_tac[lambdify compile_builtin_dispatch_body_def] >> simp[HD] >>
+  ho_match_mp_tac compiler_label_hoare_pair_bind >> conj_tac
+  >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+      irule compiler_label_hoare_lower_value >> simp[]) >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_as_ptr_val >>
+  simp[compiler_label_hoare_slice_calldata]
+QED
+
+Theorem compiler_block_tail_uint2str:
+  compiler_block_tail (compile_uint2str v n sz)
+Proof
+  rewrite_tac[builtinStringsTheory.compile_uint2str_def, comp_ignore_bind_def] >>
+  simp[comp_bind_assoc] >>
+  rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+    >- simp[compiler_block_tail_primitives, compiler_block_tail_alloc_buffer] >>
+    gen_tac >> BETA_TAC) >> simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_uint2str:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_uint2str v n sz) (\r out. compiler_label_reservation origin pending out)
+Proof
+  rewrite_tac[builtinStringsTheory.compile_uint2str_def, comp_ignore_bind_def] >>
+  simp[comp_bind_assoc] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+    >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives,
+            compiler_label_hoare_storage_primitives] >> gen_tac >> BETA_TAC) >>
+  ntac 6 (irule compiler_label_hoare_fresh_bind >> gen_tac >> strip_tac >> BETA_TAC) >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+    >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
+    gen_tac >> BETA_TAC) >>
+  ho_match_mp_tac compiler_label_hoare_new_block_bind >> conj_tac >- simp[] >>
+  gen_tac >> BETA_TAC >> gvs[] >>
+  simp[pred_setTheory.DELETE_INSERT, pred_setTheory.DELETE_NON_ELEMENT_RWT] >>
+  ntac 5
+    (rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+      >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
+      gen_tac >> BETA_TAC) >>
+     ho_match_mp_tac compiler_label_hoare_new_block_bind >> conj_tac >- simp[] >>
+     gen_tac >> BETA_TAC >> simp[pred_setTheory.DELETE_INSERT, pred_setTheory.DELETE_NON_ELEMENT_RWT]) >>
+  simp[compiler_label_hoare_typed_primitives]
+QED
+
+Theorem compiler_block_tail_uint2str_dispatch:
+  (!ce t. compiler_block_tail (cfn ce t e)) ==>
+  compiler_block_tail (compile_builtin_dispatch_body cfn cenv ann ty (Uint2Str n) [e])
+Proof
+  strip_tac >> rewrite_tac[lambdify compile_builtin_dispatch_body_def] >> simp[HD] >>
+  ho_match_mp_tac compiler_block_tail_pair_bind >> conj_tac
+  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> irule compiler_block_tail_lower_value >> simp[]) >>
+  gen_tac >> BETA_TAC >> irule compiler_block_tail_as_ptr_val >>
+  simp[compiler_block_tail_uint2str]
+QED
+
+Theorem compiler_label_hoare_uint2str_dispatch:
+  (!ce t. compiler_label_hoare (compiler_label_reservation origin pending)
+    (cfn ce t e) (\r out. compiler_label_reservation origin pending out)) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_builtin_dispatch_body cfn cenv ann ty (Uint2Str n) [e])
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >> rewrite_tac[lambdify compile_builtin_dispatch_body_def] >> simp[HD] >>
+  ho_match_mp_tac compiler_label_hoare_pair_bind >> conj_tac
+  >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+      irule compiler_label_hoare_lower_value >> simp[]) >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_as_ptr_val >>
+  simp[compiler_label_hoare_uint2str]
+QED
