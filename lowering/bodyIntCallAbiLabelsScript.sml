@@ -975,3 +975,46 @@ Theorem compiler_label_hoare_abi_decode_dyn_loop:
 Proof
   MATCH_ACCEPT_TAC (cj 3 compiler_label_hoare_abi_decode_mutual)
 QED
+
+Theorem compiler_block_tail_lower_abi_decode:
+  compiler_block_tail (lower_abi_decode data info lo hi sz)
+Proof
+  simp[lower_abi_decode_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac) >>
+  ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+  >- (IF_CASES_TAC >>
+      (rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+            >- simp[compiler_block_tail_primitives] >> gen_tac) >>
+       simp[compiler_block_tail_primitives])) >> gen_tac >>
+  ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+  >- simp[compiler_block_tail_alloc_buffer] >> gen_tac >> simp[] >>
+  rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+       >- simp[compiler_block_tail_primitives,
+               compiler_block_tail_abi_decode_to_buf] >> gen_tac) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_lower_abi_decode:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (lower_abi_decode data info lo hi sz)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  simp[lower_abi_decode_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives] >> gen_tac) >>
+  ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+  >- (IF_CASES_TAC >>
+      (rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+            >- simp[compiler_label_hoare_context_primitives,
+                    compiler_label_hoare_typed_primitives] >> gen_tac) >>
+       simp[compiler_label_hoare_typed_primitives])) >> gen_tac >>
+  ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+  >- simp[compiler_label_hoare_storage_primitives] >> gen_tac >> simp[] >>
+  rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives,
+               compiler_label_hoare_abi_decode_to_buf] >> gen_tac) >>
+  simp[compiler_label_hoare_typed_primitives]
+QED

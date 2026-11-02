@@ -163,3 +163,154 @@ Proof
   gen_tac >> BETA_TAC >> Cases_on `rt` >> simp[] >>
   irule compiler_label_hoare_as_stack_val >> simp[compiler_label_hoare_type_convert]
 QED
+
+Theorem compiler_block_tail_as_ptr_val:
+  compiler_block_tail m ==> compiler_block_tail (\st. as_ptr_val ty loc (m st))
+Proof
+  strip_tac >>
+  `!st. as_ptr_val ty loc (m st) =
+    (LocatedValue ty (mk_ptr (FST (m st)) loc), SND (m st))` by
+    (gen_tac >> Cases_on `m st` >> simp[as_ptr_val_def]) >>
+  simp[] >> ho_match_mp_tac compiler_block_tail_result_map >> simp[]
+QED
+
+Theorem compiler_label_hoare_as_ptr_val:
+  compiler_label_hoare P m (\r out. P out) ==>
+  compiler_label_hoare P (\st. as_ptr_val ty loc (m st)) (\r out. P out)
+Proof
+  strip_tac >>
+  `!st. as_ptr_val ty loc (m st) =
+    (LocatedValue ty (mk_ptr (FST (m st)) loc), SND (m st))` by
+    (gen_tac >> Cases_on `m st` >> simp[as_ptr_val_def]) >>
+  simp[] >> ho_match_mp_tac compiler_label_hoare_result_map >> simp[]
+QED
+
+Theorem compiler_block_tail_abi_decode_dispatch:
+  (!ce t. compiler_block_tail (cfn ce t e)) ==>
+  compiler_block_tail
+    (compile_type_builtin_dispatch_body cfn cenv ann ty (AbiDecode uw) rt [e])
+Proof
+  strip_tac >> rewrite_tac[lambdify compile_type_builtin_dispatch_body_def] >> simp[] >>
+  ho_match_mp_tac compiler_block_tail_pair_bind >> conj_tac
+  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
+  gen_tac >> BETA_TAC >>
+  ho_match_mp_tac compiler_block_tail_pair_bind >> conj_tac
+  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[compiler_block_tail_unwrap_value]) >>
+  gen_tac >> BETA_TAC >>
+  irule compiler_block_tail_as_ptr_val >> simp[compiler_block_tail_lower_abi_decode]
+QED
+
+Theorem compiler_label_hoare_abi_decode_dispatch:
+  (!ce t. compiler_label_hoare (compiler_label_reservation origin pending)
+    (cfn ce t e) (\r out. compiler_label_reservation origin pending out)) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_type_builtin_dispatch_body cfn cenv ann ty (AbiDecode uw) rt [e])
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >> rewrite_tac[lambdify compile_type_builtin_dispatch_body_def] >> simp[] >>
+  ho_match_mp_tac compiler_label_hoare_pair_bind >> conj_tac
+  >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >> simp[]) >>
+  gen_tac >> BETA_TAC >>
+  ho_match_mp_tac compiler_label_hoare_pair_bind >> conj_tac
+  >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+      simp[compiler_label_hoare_unwrap_value]) >> gen_tac >> BETA_TAC >>
+  irule compiler_label_hoare_as_ptr_val >> simp[compiler_label_hoare_lower_abi_decode]
+QED
+
+Theorem compiler_block_tail_abi_encode_dispatch:
+  (!ce t. compiler_block_tail (cfn ce t e)) ==>
+  compiler_block_tail
+    (compile_type_builtin_dispatch_body cfn cenv ann ty (AbiEncode F mid) rt [e])
+Proof
+  strip_tac >> rewrite_tac[lambdify compile_type_builtin_dispatch_body_def] >> simp[] >>
+  Cases_on `is_word_type (expr_type e)` >> simp[]
+  >- (ho_match_mp_tac compiler_block_tail_pair_bind >> conj_tac
+      >- (CONV_TAC (DEPTH_CONV ETA_CONV) >>
+          irule compiler_block_tail_lower_value >> simp[]) >>
+      gen_tac >> BETA_TAC >>
+      ho_match_mp_tac compiler_block_tail_pair_bind >> conj_tac
+      >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[compiler_block_tail_alloc_buffer]) >>
+      gen_tac >> BETA_TAC >>
+      ho_match_mp_tac compiler_block_tail_pair_bind >> conj_tac
+      >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[compiler_block_tail_primitives]) >>
+      gen_tac >> BETA_TAC >> irule compiler_block_tail_as_ptr_val >>
+      simp[compiler_block_tail_lower_abi_encode]) >>
+  ho_match_mp_tac compiler_block_tail_pair_bind >> conj_tac
+  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
+  gen_tac >> BETA_TAC >>
+  ho_match_mp_tac compiler_block_tail_pair_bind >> conj_tac
+  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[compiler_block_tail_unwrap_value]) >>
+  gen_tac >> BETA_TAC >> irule compiler_block_tail_as_ptr_val >>
+  simp[compiler_block_tail_lower_abi_encode]
+QED
+
+Theorem compiler_label_hoare_abi_encode_dispatch:
+  (!ce t. compiler_label_hoare (compiler_label_reservation origin pending)
+    (cfn ce t e) (\r out. compiler_label_reservation origin pending out)) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_type_builtin_dispatch_body cfn cenv ann ty (AbiEncode F mid) rt [e])
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >> rewrite_tac[lambdify compile_type_builtin_dispatch_body_def] >> simp[] >>
+  Cases_on `is_word_type (expr_type e)` >> simp[]
+  >- (ho_match_mp_tac compiler_label_hoare_pair_bind >> conj_tac
+      >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+          irule compiler_label_hoare_lower_value >> simp[]) >>
+      gen_tac >> BETA_TAC >>
+      ho_match_mp_tac compiler_label_hoare_pair_bind >> conj_tac
+      >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+          simp[compiler_label_hoare_storage_primitives]) >>
+      gen_tac >> BETA_TAC >>
+      ho_match_mp_tac compiler_label_hoare_pair_bind >> conj_tac
+      >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+          simp[compiler_label_hoare_typed_primitives]) >>
+      gen_tac >> BETA_TAC >> irule compiler_label_hoare_as_ptr_val >>
+      simp[compiler_label_hoare_lower_abi_encode]) >>
+  ho_match_mp_tac compiler_label_hoare_pair_bind >> conj_tac
+  >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >> simp[]) >>
+  gen_tac >> BETA_TAC >>
+  ho_match_mp_tac compiler_label_hoare_pair_bind >> conj_tac
+  >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+      simp[compiler_label_hoare_unwrap_value]) >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_as_ptr_val >>
+  simp[compiler_label_hoare_lower_abi_encode]
+QED
+
+Theorem compiler_block_tail_supported_type_builtin:
+  supported_type_builtin_form tops ann tb rt args /\
+  (!e ce t. MEM e args ==> compiler_block_tail (cfn ce t e)) ==>
+  compiler_block_tail
+    (compile_type_builtin_dispatch_body cfn cenv ann ty tb rt args)
+Proof
+  strip_tac >> Cases_on `args`
+  >- (Cases_on `tb` >> gvs[supported_type_builtin_form_def] >>
+      simp[compiler_block_tail_empty_dispatch, compiler_block_tail_type_extrema_dispatch]) >>
+  rename1 `supported_type_builtin_form tops ann tb rt (a::rest)` >> Cases_on `rest`
+  >- (Cases_on `tb` >> gvs[supported_type_builtin_form_def, AllCaseEqs()]
+      >- (irule compiler_block_tail_convert_dispatch >> simp[])
+      >- (irule compiler_block_tail_abi_decode_dispatch >> simp[]) >>
+      rename1 `AbiEncode b mid` >> Cases_on `mid` >> gvs[] >>
+      irule compiler_block_tail_abi_encode_dispatch >> simp[]) >>
+  gvs[supported_type_builtin_form_def]
+QED
+
+Theorem compiler_label_hoare_supported_type_builtin:
+  supported_type_builtin_form tops ann tb rt args /\
+  (!e ce t. MEM e args ==>
+    compiler_label_hoare (compiler_label_reservation origin pending)
+      (cfn ce t e) (\r out. compiler_label_reservation origin pending out)) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_type_builtin_dispatch_body cfn cenv ann ty tb rt args)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >> Cases_on `args`
+  >- (Cases_on `tb` >> gvs[supported_type_builtin_form_def] >>
+      simp[compiler_label_hoare_empty_dispatch, compiler_label_hoare_type_extrema_dispatch]) >>
+  rename1 `supported_type_builtin_form tops ann tb rt (a::rest)` >> Cases_on `rest`
+  >- (Cases_on `tb` >> gvs[supported_type_builtin_form_def, AllCaseEqs()]
+      >- (irule compiler_label_hoare_convert_dispatch >> simp[])
+      >- (irule compiler_label_hoare_abi_decode_dispatch >> simp[]) >>
+      rename1 `AbiEncode b mid` >> Cases_on `mid` >> gvs[] >>
+      irule compiler_label_hoare_abi_encode_dispatch >> simp[]) >>
+  gvs[supported_type_builtin_form_def]
+QED
