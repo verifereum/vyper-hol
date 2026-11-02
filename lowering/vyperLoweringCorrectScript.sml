@@ -54,7 +54,7 @@ Ancestors
   venomExecSemantics
   venomState
   compileEnv e2eDefs supportedProgram compileVyper immutableSectionRel
-  unitTransformDefs unitShapeDefs
+  unitTransformDefs unitShapeDefs unitMemInv o1PassContract
   fragExec loweringHalt loweringShapeProps retAbiPlanProps
 
 (* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
@@ -902,9 +902,23 @@ Proof
   ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_names
 QED
 
+(* S2b: planned admission, Milestone 5. The lowering's PHI-free code
+   refers to labels only in jumps to blocks of the same function, in
+   reserved labels, and in INVOKE targets. *)
+Theorem lower_vyper_runtime_unit_label_refs_ok:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+    immutable_free_program tops
+    ==> unit_label_refs_ok unit
+Proof
+  cheat
+QED
+
 (* S3: planned admission, Milestone 5. Proof idea: allocation-budget and
    buffer-layout induction bound each reachable raw memory access. Excluding
-   source_exempt is essential: dynamic decoding can read unchecked offsets. *)
+   source_exempt is essential: dynamic decoding can read unchecked offsets.
+   Conclusion strengthened from raw_unit_memory_ok to the site form of the
+   shared memory invariant, which the O1 pipeline's contracts consume. *)
 Theorem lower_vyper_runtime_unit_memory_ok:
   !tops rpolicy unit am tx ret vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -916,7 +930,7 @@ Theorem lower_vyper_runtime_unit_memory_ok:
     initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok tops am tx vs.vs_outcomes /\
     ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
-    ==> raw_unit_memory_ok unit.cu_context vs
+    ==> mem_inv site_mem_ok unit.cu_context vs
 Proof
   cheat
 QED

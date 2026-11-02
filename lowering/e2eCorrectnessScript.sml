@@ -747,6 +747,7 @@ Proof
   rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
   qpat_x_assum `runtime_bc = assemble _` SUBST_ALL_TAC >>
   drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_label_refs_ok >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   drule_all entry_venom_state_initial_venom_state_rel >>
   disch_then (qspec_then `cplan` assume_tac) >>
@@ -773,6 +774,7 @@ Proof
   `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by simp[] >>
   drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
   drule_all run_venom_pipeline_correct >> strip_tac >>
+  drule mem_inv_site_mem_ok_raw >> strip_tac >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
   conj_tac
