@@ -438,14 +438,6 @@ Proof
   metis_tac[reason_alloc_operand]
 QED
 
-Theorem reason_slice_memory[local]:
-  compile_slice_memory srcop start lenop sz sa = (op,sb) ==> !l. op <> Label l
-Proof
-  simp[builtinBytesTheory.compile_slice_memory_def, comp_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  metis_tac[reason_slice_data]
-QED
-
 Theorem reason_slice_adhoc[local]:
   (!start lenop sz sa op sb.
     compile_slice_calldata start lenop sz sa = (op,sb) ==> !l. op <> Label l) /\
@@ -504,7 +496,7 @@ Proof
   Cases_on `res` >> gvs[as_ptr_val_def, markerTheory.Abbrev_def] >>
   strip_tac >> gvs[reason_result_shape_def, mk_ptr_def] >>
   metis_tac[reason_slice_adhoc, reason_slice_out_buf, reason_slice_data,
-            reason_slice_memory, reason_ec_points, reason_uint2str]
+            reason_ec_points, reason_uint2str]
 QED
 
 Theorem reason_builtin_makearray[local]:
@@ -658,9 +650,9 @@ Proof
      qmatch_goalsub_abbrev_tac `as_stack_val vt res` >>
      Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
      strip_tac >> gvs[reason_result_shape_def] >>
-     drule exprSafeOperandBuiltinsTheory.compile_extract32_safe_operand >>
+     drule exprSafeOperandBuiltinsTheory.compile_extract32_load_safe_operand >>
      strip_tac >>
-     metis_tac[exprSafeOperandBuiltinsTheory.compile_clamp_extract32_safe_operand,
+     metis_tac[exprSafeOperandBuiltinsTheory.compile_clamp_basetype_safe_operand,
                safe_operand_def]) >>
   gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
   qpat_x_assum `as_ptr_val _ _ _ = _` mp_tac >>
