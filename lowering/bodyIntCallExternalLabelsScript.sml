@@ -6,25 +6,6 @@ Ancestors
   bodyIntCallContextLabels bodyIntCallLabelFrame bodyIntCallLabelReservations
   compileEnv list pred_set
 
-Theorem compiler_block_tail_select:
-  compiler_block_tail (compile_select cond_op then_op else_op)
-Proof
-  rewrite_tac[compile_select_def] >>
-  rpt (irule compiler_block_tail_bind >> reverse conj_tac
-       >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
-  simp[compiler_block_tail_primitives]
-QED
-
-Theorem compiler_label_hoare_select:
-  compiler_label_hoare (compiler_label_reservation origin pending)
-    (compile_select cond_op then_op else_op)
-    (\r out. compiler_label_reservation origin pending out)
-Proof
-  rewrite_tac[compile_select_def] >>
-  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
-       >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
-  simp[compiler_label_hoare_context_primitives]
-QED
 
 Theorem compiler_block_tail_extcodesize_check:
   compiler_block_tail (compile_extcodesize_check addr)

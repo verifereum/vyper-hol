@@ -750,3 +750,321 @@ Proof
   gen_tac >> BETA_TAC >> irule compiler_label_hoare_as_ptr_val >>
   simp[compiler_label_hoare_uint2str]
 QED
+
+Theorem compiler_block_tail_safe_sub:
+  compiler_block_tail (compile_safe_sub x y ty)
+Proof
+  rewrite_tac[compile_safe_sub_def, LET_THM] >> BETA_TAC >>
+  irule compiler_block_tail_bind >> reverse conj_tac
+  >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC >>
+  Cases_on `type_bits ty < 256` >> simp[compiler_block_tail_clamp_and_return] >>
+  Cases_on `is_signed_type ty` >> simp[comp_ignore_bind_def] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_safe_sub:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_safe_sub x y ty) (\r out. compiler_label_reservation origin pending out)
+Proof
+  rewrite_tac[compile_safe_sub_def, LET_THM] >> BETA_TAC >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC >>
+  Cases_on `type_bits ty < 256` >> simp[compiler_label_hoare_clamp_and_return] >>
+  Cases_on `is_signed_type ty` >> simp[comp_ignore_bind_def] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
+       gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]
+QED
+
+Theorem compiler_block_tail_mul_overflow_check:
+  compiler_block_tail (compile_mul_overflow_check x y res signed bits)
+Proof
+  rewrite_tac[compile_mul_overflow_check_def, LET_THM] >> BETA_TAC >>
+  Cases_on `signed /\ bits = 256` >> simp[comp_bind_assoc] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_mul_overflow_check:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_mul_overflow_check x y res signed bits)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  rewrite_tac[compile_mul_overflow_check_def, LET_THM] >> BETA_TAC >>
+  Cases_on `signed /\ bits = 256` >> simp[comp_bind_assoc] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
+       gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]
+QED
+
+Theorem compiler_block_tail_safe_mul:
+  compiler_block_tail (compile_safe_mul x y ty)
+Proof
+  rewrite_tac[compile_safe_mul_def, LET_THM, comp_ignore_bind_def] >> BETA_TAC >>
+  Cases_on `type_bits ty > 128` >> Cases_on `is_decimal_type ty` >>
+  Cases_on `type_bits ty < 256` >> simp[] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives, compiler_block_tail_mul_overflow_check] >>
+       gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives, compiler_block_tail_clamp_and_return]
+QED
+
+Theorem compiler_label_hoare_safe_mul:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_safe_mul x y ty) (\r out. compiler_label_reservation origin pending out)
+Proof
+  rewrite_tac[compile_safe_mul_def, LET_THM, comp_ignore_bind_def] >> BETA_TAC >>
+  Cases_on `type_bits ty > 128` >> Cases_on `is_decimal_type ty` >>
+  Cases_on `type_bits ty < 256` >> simp[] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives,
+               compiler_label_hoare_mul_overflow_check] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives,
+       compiler_label_hoare_clamp_and_return]
+QED
+
+Theorem compiler_block_tail_safe_div:
+  compiler_block_tail (compile_safe_div x y ty)
+Proof
+  rewrite_tac[compile_safe_div_def, comp_ignore_bind_def] >>
+  Cases_on `is_signed_type ty` >> Cases_on `type_bits ty = 256` >>
+  Cases_on `type_bits ty < 256` >> simp[] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives, compiler_block_tail_clamp_and_return]
+QED
+
+Theorem compiler_label_hoare_safe_div:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_safe_div x y ty) (\r out. compiler_label_reservation origin pending out)
+Proof
+  rewrite_tac[compile_safe_div_def, comp_ignore_bind_def] >>
+  Cases_on `is_signed_type ty` >> Cases_on `type_bits ty = 256` >>
+  Cases_on `type_bits ty < 256` >> simp[] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
+       gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives,
+       compiler_label_hoare_clamp_and_return]
+QED
+
+Theorem compiler_block_tail_safe_decimal_div:
+  compiler_block_tail (compile_safe_decimal_div x y divisor ty)
+Proof
+  rewrite_tac[compile_safe_decimal_div_def, comp_ignore_bind_def] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_clamp_and_return]
+QED
+
+Theorem compiler_label_hoare_safe_decimal_div:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_safe_decimal_div x y divisor ty)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  rewrite_tac[compile_safe_decimal_div_def, comp_ignore_bind_def] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
+       gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_clamp_and_return]
+QED
+
+Theorem compiler_block_tail_safe_mod:
+  compiler_block_tail (compile_safe_mod x y ty)
+Proof
+  rewrite_tac[compile_safe_mod_def, comp_ignore_bind_def] >>
+  Cases_on `is_signed_type ty` >> simp[] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_safe_mod:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_safe_mod x y ty) (\r out. compiler_label_reservation origin pending out)
+Proof
+  rewrite_tac[compile_safe_mod_def, comp_ignore_bind_def] >>
+  Cases_on `is_signed_type ty` >> simp[] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
+       gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]
+QED
+
+Theorem compiler_block_tail_safe_pow:
+  compiler_block_tail (compile_safe_pow x y ty base_literal exp_literal)
+Proof
+  rewrite_tac[compile_safe_pow_def, LET_THM] >> BETA_TAC >>
+  Cases_on `base_literal` >> simp[]
+  >- (Cases_on `exp_literal` >> simp[comp_ignore_bind_def]
+      >- (irule compiler_block_tail_bind >> simp[compiler_block_tail_primitives] >>
+          gen_tac >> BETA_TAC >> irule compiler_block_tail_bind >>
+          simp[compiler_block_tail_clamp, compiler_block_tail_primitives]) >>
+      rename1 `Num exponent_int` >>
+      Cases_on `exponent_int = 0 \/ Num exponent_int = 1` >> simp[] >>
+      Cases_on `is_signed_type ty` >> simp[] >>
+      rpt (irule compiler_block_tail_bind >> reverse conj_tac
+           >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+      simp[compiler_block_tail_primitives]) >>
+  rename1 `base_int = -1` >>
+  Cases_on `base_int = -1 \/ base_int = 0 \/ base_int = 1` >> simp[] >>
+  Cases_on `is_signed_type ty` >> simp[comp_bind_assoc, comp_ignore_bind_def] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_safe_pow:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_safe_pow x y ty base_literal exp_literal)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  rewrite_tac[compile_safe_pow_def, LET_THM] >> BETA_TAC >>
+  Cases_on `base_literal` >> simp[]
+  >- (Cases_on `exp_literal` >> simp[comp_ignore_bind_def]
+      >- (irule compiler_label_hoare_preserving_bind >>
+          simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC >>
+          irule compiler_label_hoare_preserving_bind >>
+          simp[compiler_label_hoare_clamp, compiler_label_hoare_typed_primitives]) >>
+      rename1 `Num exponent_int` >>
+      Cases_on `exponent_int = 0 \/ Num exponent_int = 1` >> simp[] >>
+      Cases_on `is_signed_type ty` >> simp[] >>
+      rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+           >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
+           gen_tac >> BETA_TAC) >>
+      simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]) >>
+  rename1 `base_int = -1` >>
+  Cases_on `base_int = -1 \/ base_int = 0 \/ base_int = 1` >> simp[] >>
+  Cases_on `is_signed_type ty` >> simp[comp_bind_assoc, comp_ignore_bind_def] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
+       gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]
+QED
+
+Theorem compiler_block_tail_compare:
+  compiler_block_tail (compile_compare op x y ty)
+Proof
+  Cases_on `op` >> Cases_on `is_uint256 ty` >>
+  simp[compile_compare_def, comp_ignore_bind_def, compiler_block_tail_primitives] >>
+  irule compiler_block_tail_bind >> simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_compare:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_compare op x y ty) (\r out. compiler_label_reservation origin pending out)
+Proof
+  Cases_on `op` >> Cases_on `is_uint256 ty` >>
+  simp[compile_compare_def, comp_ignore_bind_def, compiler_label_hoare_context_primitives,
+       compiler_label_hoare_typed_primitives] >>
+  irule compiler_label_hoare_preserving_bind >>
+  simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]
+QED
+
+Theorem compiler_block_tail_wrap_truncate:
+  compiler_block_tail (wrap_truncate res ty)
+Proof
+  Cases_on `type_bits ty < 256` >> Cases_on `is_signed_type ty` >>
+  simp[wrap_truncate_def, compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_wrap_truncate:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (wrap_truncate res ty) (\r out. compiler_label_reservation origin pending out)
+Proof
+  Cases_on `type_bits ty < 256` >> Cases_on `is_signed_type ty` >>
+  simp[wrap_truncate_def, compiler_label_hoare_context_primitives,
+       compiler_label_hoare_typed_primitives]
+QED
+
+Theorem compiler_block_tail_select:
+  compiler_block_tail (compile_select cond_op then_op else_op)
+Proof
+  rewrite_tac[compile_select_def] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_select:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_select cond_op then_op else_op)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  rewrite_tac[compile_select_def] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_context_primitives]
+QED
+
+Theorem compiler_block_tail_binop:
+  compiler_block_tail (compile_binop op x y ty base_literal exp_literal)
+Proof
+  Cases_on `op` >> Cases_on `is_decimal_type ty` >>
+  Cases_on `is_signed_type ty` >> Cases_on `is_uint256 ty` >>
+  simp[compile_binop_def, LET_THM, comp_ignore_bind_def,
+       compiler_block_tail_safe_add, compiler_block_tail_safe_sub,
+       compiler_block_tail_safe_mul, compiler_block_tail_safe_div,
+       compiler_block_tail_safe_decimal_div, compiler_block_tail_safe_mod,
+       compiler_block_tail_safe_pow, compiler_block_tail_compare,
+       compiler_block_tail_primitives] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives, compiler_block_tail_wrap_truncate,
+       compiler_block_tail_select]
+QED
+
+Theorem compiler_label_hoare_binop:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_binop op x y ty base_literal exp_literal)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  Cases_on `op` >> Cases_on `is_decimal_type ty` >>
+  Cases_on `is_signed_type ty` >> Cases_on `is_uint256 ty` >>
+  simp[compile_binop_def, LET_THM, comp_ignore_bind_def,
+       compiler_label_hoare_safe_add, compiler_label_hoare_safe_sub,
+       compiler_label_hoare_safe_mul, compiler_label_hoare_safe_div,
+       compiler_label_hoare_safe_decimal_div, compiler_label_hoare_safe_mod,
+       compiler_label_hoare_safe_pow, compiler_label_hoare_compare,
+       compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
+       gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives,
+       compiler_label_hoare_wrap_truncate, compiler_label_hoare_select]
+QED
+
+Theorem compiler_block_tail_bop_dispatch:
+  op <> In /\ op <> NotIn /\ ~is_bytestring_type (expr_type a) /\
+  (!e ce t. MEM e [a;b] ==> compiler_block_tail (cfn ce t e)) ==>
+  compiler_block_tail (compile_builtin_dispatch_body cfn cenv ann ty (Bop op) [a;b])
+Proof
+  strip_tac >> rewrite_tac[lambdify compile_builtin_dispatch_body_def] >>
+  simp[HD, TL] >>
+  rpt (ho_match_mp_tac compiler_block_tail_pair_bind >> conj_tac
+       >- (CONV_TAC (DEPTH_CONV ETA_CONV) >>
+           irule compiler_block_tail_lower_value >> simp[]) >> gen_tac >> BETA_TAC) >>
+  irule compiler_block_tail_as_stack_val >> simp[compiler_block_tail_binop]
+QED
+
+Theorem compiler_label_hoare_bop_dispatch:
+  op <> In /\ op <> NotIn /\ ~is_bytestring_type (expr_type a) /\
+  (!e ce t. MEM e [a;b] ==>
+    compiler_label_hoare (compiler_label_reservation origin pending)
+      (cfn ce t e) (\r out. compiler_label_reservation origin pending out)) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_builtin_dispatch_body cfn cenv ann ty (Bop op) [a;b])
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >> rewrite_tac[lambdify compile_builtin_dispatch_body_def] >>
+  simp[HD, TL] >>
+  rpt (ho_match_mp_tac compiler_label_hoare_pair_bind >> conj_tac
+       >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+           irule compiler_label_hoare_lower_value >> simp[]) >> gen_tac >> BETA_TAC) >>
+  irule compiler_label_hoare_as_stack_val >> simp[compiler_label_hoare_binop]
+QED
