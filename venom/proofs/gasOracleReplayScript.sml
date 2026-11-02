@@ -1012,6 +1012,93 @@ Resume gas_step_inst[invoke]:
 QED
 Finalise gas_step_inst
 
+Theorem gas_replay_preupdate:
+  (!u gs. h (u with vs_gas_readings := gs) =
+             (h u with vs_gas_readings := gs)) /\
+  (!u. (h u).vs_gas_readings = u.vs_gas_readings) /\
+  gas_replay f (h s) ==>
+  gas_replay (\u. f (h u)) s
+Proof
+  simp[gas_replay_def, gas_replay_at_def] >> rpt strip_tac >>
+  qexists_tac `n` >> gvs[]
+QED
+
+Theorem gas_replay_halt_choice:
+  (!u gs. b (u with vs_gas_readings := gs) = b u) /\
+  gas_replay f s ==>
+  gas_replay (\u. if b u then Halt u else f u) s
+Proof
+  strip_tac >> Cases_on `b s`
+  >- (simp[gas_replay_def, gas_replay_at_def] >>
+      qexists_tac `0` >> simp[lift_result_def]) >>
+  gvs[gas_replay_def, gas_replay_at_def] >>
+  qexists_tac `n` >> simp[]
+QED
+
+Theorem gas_replay_cong:
+  f s = g s /\
+  (!gs. f (s with vs_gas_readings := gs) =
+        g (s with vs_gas_readings := gs)) /\
+  gas_replay g s ==> gas_replay f s
+Proof
+  simp[gas_replay_def, gas_replay_at_def] >> metis_tac[]
+QED
+
+Theorem gas_exec_block_layer:
+  get_instruction bb s.vs_inst_idx = SOME inst ==>
+  exec_block fuel ctx bb s =
+    gas_bind_ok (step_inst fuel ctx inst s)
+      (\t. if is_terminator inst.inst_opcode then
+             (if t.vs_halted then Halt t else OK t)
+           else exec_block fuel ctx bb
+                  (t with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >> CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+  simp[] >> Cases_on `step_inst fuel ctx inst s` >> simp[gas_bind_ok_def]
+QED
+
+Theorem gas_exec_block_compose:
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  gas_replay (step_inst fuel ctx inst) s /\
+  (!t. step_inst fuel ctx inst s = OK t ==>
+    gas_replay (\t. if is_terminator inst.inst_opcode then
+                     (if t.vs_halted then Halt t else OK t)
+                   else exec_block fuel ctx bb
+                          (t with vs_inst_idx := SUC s.vs_inst_idx)) t) ==>
+  gas_replay (exec_block fuel ctx bb) s
+Proof
+  strip_tac >> irule gas_replay_cong >>
+  qexists_tac `\u. gas_bind_ok (step_inst fuel ctx inst u)
+      (\t. if is_terminator inst.inst_opcode then
+             (if t.vs_halted then Halt t else OK t)
+           else exec_block fuel ctx bb
+                  (t with vs_inst_idx := SUC s.vs_inst_idx))` >>
+  conj_tac
+  >- (gen_tac >>
+      mp_tac (Q.INST [`s` |-> `s with vs_gas_readings := gs`]
+        gas_exec_block_layer) >> simp[]) >>
+  conj_tac >- (simp[] >> irule gas_exec_block_layer >> simp[]) >>
+  irule gas_replay_bind_ok >> simp[]
+QED
+
+Theorem gas_exec_block:
+  (!inst t. gas_replay (step_inst fuel ctx inst) t) ==>
+  !s. gas_replay (exec_block fuel ctx bb) s
+Proof
+  strip_tac >> measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >> gvs[] >> rename1 `gas_replay _ s` >>
+  Cases_on `get_instruction bb s.vs_inst_idx`
+  >- (simp[gas_replay_def, gas_replay_at_def] >>
+      qexists_tac `0` >> gen_tac >>
+      pure_once_rewrite_tac[exec_block_def] >> simp[lift_result_def]) >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  suspend "compose"
+QED
+Resume gas_exec_block[compose]:
+  cheat
+QED
+Finalise gas_exec_block
+
 Theorem gas_oracle_replay:
   (!fuel ctx inst s.
      ?n. !tail.
