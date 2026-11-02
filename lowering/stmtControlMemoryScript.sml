@@ -420,6 +420,89 @@ Proof
   disj2_tac >> qexists_tac `fuel` >> fs[]
 QED
 
+Theorem if_branch_frag_mem[local]:
+  !d ctx func cx lctx RetQ cenv ty ss esA res es2 sc rest sa sb sj sx lbl' x
+   exit_lbl st' s0.
+    stmt_frag_mem d ctx func cx lctx RetQ cenv (stmts_env cenv lctx ty ss)
+      esA res es2 /\
+    compile_stmts cenv lctx ty ss sa = ((), sb) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
+    return_buf_frame d cenv sa s0 /\ sa.cs_next_var <= st'.cs_next_var /\
+    sa.cs_current_insts = [] /\ stmt_res_ok lctx res /\
+    stmt_state_rel ctx func cenv cx esA s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = 0 /\
+    es2.scopes = sc :: rest /\
+    (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) /\
+    (~block_is_terminated sb ==>
+     emit_inst JMP [Label exit_lbl] [] sb = ((), sj) /\
+     new_block lbl' sj = (x, sx) /\ fn_has_code sb sx func /\
+     st'.cs_current_bb = exit_lbl /\ st'.cs_current_insts = []) ==>
+    (?s. stmt_lands lctx st' res s /\ ~s.vs_halted /\
+         (res = INL () ==> ~block_is_terminated sb) /\
+         stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s /\
+         (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+                lookup_var x s = SOME w) /\
+         (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                  FLOOKUP s.vs_allocas aid = SOME b) /\
+         return_buf_frame d cenv st' s /\
+         s0.vs_alloca_next <= s.vs_alloca_next /\
+         !fuel r. run_from fuel ctx func s = r /\ (!e. r <> Error e) ==>
+                  ?fuel'. run_from fuel' ctx func s0 = r /\
+                    (mem_safe_run fuel ctx func s ==> mem_safe_run fuel' ctx func s0)) \/
+    (?fuel r. run_from fuel ctx func s0 = r /\ exit_result r /\
+              stmt_exit RetQ (es2 with scopes := rest) res r /\
+              mem_safe_run fuel ctx func s0)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `stmt_frag_mem _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[stmt_frag_mem_def] >>
+  disch_then (qspecl_then [`sa`, `sb`, `s0`,
+                           `FST (stmts_env cenv lctx ty ss sa)`] mp_tac) >>
+  (impl_tac
+   >- (fs[compile_stmts_env, block_is_terminated_def] >>
+       Cases_on `stmts_env cenv lctx ty ss sa` >> gvs[])) >>
+  strip_tac
+  >- (rename1 `stmt_state_rel ctx func cenv2 cx es2 s1` >>
+      `stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s1` by
+        (irule stmt_state_rel_pop_top_ext >> metis_tac[]) >>
+      `return_buf_frame d cenv st' s1` by
+        (irule return_buf_frame_frame >> metis_tac[]) >>
+      qpat_x_assum `stmt_lands _ _ _ _`
+        (strip_assume_tac o SIMP_RULE (srw_ss()) [stmt_lands_def])
+      >- (fs[] >> drule emit_inst_extends >> strip_tac >>
+          `cs_extends sb sj /\ cs_extends sj sx` by
+            metis_tac[cs_appends_emit_helpers, cs_appends_def, cs_extends_new_block] >>
+          `fn_has_code sb sj func` by metis_tac[fn_has_code_split] >>
+          `!fuel r. run_from fuel ctx func (jump_to exit_lbl s1) = r /\
+                    (!e. r <> Error e) ==>
+                    ?fj. run_from fj ctx func s1 = r /\
+                      (mem_safe_run fuel ctx func (jump_to exit_lbl s1) ==>
+                       mem_safe_run fj ctx func s1)` by
+            (match_mp_tac run_from_jump_end_mem >>
+             qexistsl_tac [`sb`, `sj`, `mk_inst sb.cs_next_id JMP [Label exit_lbl] []`] >>
+             simp[mk_inst_def, step_jmp_behavior, is_terminator_def] >>
+             irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+          disj1_tac >> qexists_tac `jump_to exit_lbl s1` >>
+          simp[stmt_lands_def, stmt_state_rel_jump_to, return_buf_frame_jump_to] >>
+          conj_tac >- simp[jump_to_def] >>
+          conj_tac >- simp[jump_to_def] >>
+          conj_tac
+          >- (simp[jump_to_def, lookup_var_def] >> metis_tac[lookup_var_def]) >>
+          conj_tac >- simp[jump_to_def] >>
+          conj_tac >- simp[jump_to_def] >>
+          rpt strip_tac >>
+          qpat_x_assum `!fuel r. run_from fuel ctx func (jump_to _ _) = r /\ _ ==> _`
+            (qspecl_then [`fuel`, `run_from fuel ctx func (jump_to exit_lbl s1)`] mp_tac) >>
+          simp[] >> strip_tac >>
+          qpat_x_assum `!fuel. (!e. run_from fuel ctx func s1 <> Error e) ==> _`
+            (qspec_then `fj` mp_tac) >>
+          (impl_tac >- metis_tac[]) >> strip_tac >>
+          qexists_tac `fuel'` >> fs[]) >>
+      disj1_tac >> qexists_tac `s1` >> fs[stmt_lands_def]) >>
+  disj2_tac >> qexists_tac `fuel` >> fs[stmt_exit_def]
+QED
+
 Theorem compile_break_frag_mem:
   !d ctx func cx RetQ cenv ty ex inc es.
     stmt_frag_mem d ctx func cx (InLoop ex inc) RetQ cenv
