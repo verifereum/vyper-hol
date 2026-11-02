@@ -6,8 +6,7 @@
  * external_return_static_result_rel, external_return_abi_result_rel,
  * external_return_none_result_rel, external_fallthrough_result_rel and
  * their _unlock versions).  The fragment lemmas are stated with frag_exec
- * (fragExec), like the statement lemmas of stmtLoweringProps and
- * loweringSlice.
+ * (fragExec), like the lemmas of loweringSlice.
  *
  * Main lemmas:
  *   return_bytes_prim_value — the canonical return bytes of a value of a
@@ -487,8 +486,7 @@ QED
 
 (* Returning a primitive word: the code of
    compile_external_return_word_parts halts with the word as return data.
-   The returned operand is no temporary of the return sequence, as
-   compile_expr_correct says of an expression's operand. *)
+   The returned operand is no temporary of the return sequence. *)
 Theorem compile_external_return_word_frag:
   !ctx op ei msz nr nkey ut iv st x st' w P Q R.
     compile_external_return (SOME op) T F ei msz nr nkey ut iv st =

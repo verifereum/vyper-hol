@@ -83,7 +83,7 @@ Theorem unop_frag_read_then:
     (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
           w = typed_val_to_w256 tv v) /\
     (!x ss n out.
-       eval_operand x ss = SOME w1 /\ stmt_state_rel func cenv cx es0 ss ==>
+       eval_operand x ss = SOME w1 /\ stmt_state_rel ctx func cenv cx es0 ss ==>
        step_inst_base (mk_inst n opc [x] [out]) ss =
          OK (update_var out r ss)) /\
     (!c sa sb op ss.
@@ -116,9 +116,9 @@ Proof
   `!z. not_fresh_at sa z ==> not_fresh_at s1 z` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >>
      asm_rewrite_tac[]) >>
-  `(\s. s = s0 /\ stmt_state_rel func cenv cx es0 s /\
+  `(\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s /\
         eval_operand x s = SOME w1) =
-   (\s. s = s0 /\ stmt_state_rel func cenv cx es0 s)` by
+   (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s)` by
     (rw[FUN_EQ_THM] >> eq_tac >> rw[] >> gvs[]) >>
   pop_assum SUBST1_TAC >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`, `opc`, `[x]`, `sa`, `c`,
@@ -158,7 +158,7 @@ Theorem unop_frag_read:
     (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
           r = typed_val_to_w256 tv v) /\
     (!x ss n out.
-       eval_operand x ss = SOME w1 /\ stmt_state_rel func cenv cx es0 ss ==>
+       eval_operand x ss = SOME w1 /\ stmt_state_rel ctx func cenv cx es0 ss ==>
        step_inst_base (mk_inst n opc [x] [out]) ss =
          OK (update_var out r ss)) ==>
     unop_frag ctx func cenv cx (\x. emit_op opc [x]) w1 t (INL v) es0

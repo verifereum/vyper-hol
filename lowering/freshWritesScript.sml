@@ -184,8 +184,8 @@ Theorem frag_exec_writes_fresh:
        (?a ss'. run_inst_seq (emitted_insts sa sb) ss = Abort a ss' /\ A a)) /\
     (!a ss. A a ==> R (Abort a ss)) ==>
     frag_exec ctx sa sb
-      (\ss. ss = s0 /\ stmt_state_rel func cenv cx es ss /\ P ss)
-      (\ss. stmt_state_rel func cenv cx es ss /\ eval_operand op ss = SOME w /\
+      (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\ P ss)
+      (\ss. stmt_state_rel ctx func cenv cx es ss /\ eval_operand op ss = SOME w /\
             (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
                     lookup_var x ss = SOME w') /\
             (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -260,7 +260,7 @@ Theorem frag_exec_writes_fresh_abort:
        ?a ss'. run_inst_seq (emitted_insts sa sb) ss = Abort a ss' /\ A a) /\
     (!a ss. A a ==> R (Abort a ss)) ==>
     frag_exec ctx sa sb
-      (\ss. ss = s0 /\ stmt_state_rel func cenv cx es ss /\ P ss) Q R
+      (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\ P ss) Q R
 Proof
   rpt strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
@@ -344,8 +344,8 @@ Theorem frag_exec_straight_fresh:
        (?a ss'. run_inst_seq (emitted_insts sa sb) ss = Abort a ss' /\ A a)) /\
     (!a ss. A a ==> R (Abort a ss)) ==>
     frag_exec ctx sa sb
-      (\ss. ss = s0 /\ stmt_state_rel func cenv cx es ss /\ P ss)
-      (\ss. stmt_state_rel func cenv cx es ss /\ eval_operand op ss = SOME w /\
+      (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\ P ss)
+      (\ss. stmt_state_rel ctx func cenv cx es ss /\ eval_operand op ss = SOME w /\
             (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
                     lookup_var x ss = SOME w') /\
             (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -368,7 +368,7 @@ Theorem frag_exec_straight_fresh_abort:
        ?a ss'. run_inst_seq (emitted_insts sa sb) ss = Abort a ss' /\ A a) /\
     (!a ss. A a ==> R (Abort a ss)) ==>
     frag_exec ctx sa sb
-      (\ss. ss = s0 /\ stmt_state_rel func cenv cx es ss /\ P ss) Q R
+      (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\ P ss) Q R
 Proof
   rpt strip_tac >> irule frag_exec_writes_fresh_abort >>
   qpat_x_assum `straight_fresh _` (mp_tac o REWRITE_RULE [straight_fresh_def]) >>

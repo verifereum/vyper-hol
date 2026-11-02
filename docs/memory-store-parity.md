@@ -21,7 +21,7 @@ the existing finite-map compset and `fmap_to_alist_FEMPTY`, `i2w_pos` and
 substitution. The diagnostic per-source bound
 was 900 seconds; the proof-step timeout was unchanged.
 
-The oracle is Vyper `0.5.0a4+cd74ce4f+commit.cd74ce4f`, pinned by `VYPER_PIN`,
+The oracle is Vyper `0.5.0a4+9362e36b+commit.9362e36b`, pinned by `VYPER_PIN`,
 with experimental codegen, no optimization, Prague and bytecode metadata disabled.
 The retained 29 JSON/bytecode fixtures and dependency provenance reproduced
 byte for byte with `prepare --check`. Diagnostic probes used holbuild 0.11.4;
@@ -31,7 +31,8 @@ py-evm 0.12.1b1 (PragueVM) and eth-abi 6.0.0.
 Since this comparison, `p16_return_tuple_bytes_widen` from #542 and 11
 memory-construction fixtures from #560 have been added, bringing the retained
 parity suite to 41 fixtures; `method_id_lit` and `st_forward_ref_lit` (a struct
-field naming a later struct) make 43. The `p16` bytecode matches the oracle. The
+field naming a later struct) make 43, and `p20_nested_pop` (pops from
+arrays nested in memory, storage and hashmap places) makes 44. The `p16` bytecode matches the oracle. The
 `set_byte_bit_field_insert` rule is no longer needed: `word_of_bytes_T_0w_256` in
 `vyperMiscScript.sml` lets EVAL compute 256-bit words built from bytes.
 

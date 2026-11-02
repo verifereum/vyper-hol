@@ -112,11 +112,11 @@ Theorem cond_jump_frag:
               bb_instructions := s4.cs_current_insts |> /\
     fn_has_code sa s1 func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    stmt_state_rel func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     (?b s. r1 = INL (BoolV b) /\
-           stmt_state_rel func cenv cx es1 s /\ ~s.vs_halted /\
+           stmt_state_rel ctx func cenv cx es1 s /\ ~s.vs_halted /\
            (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                   lookup_var x s = SOME w) /\
            (!aid bnd. FLOOKUP s0.vs_allocas aid = SOME bnd ==>
@@ -135,7 +135,7 @@ Proof
   disch_then (qspec_then `func` mp_tac) >> impl_tac >- fs[] >> strip_tac
   >- (
     disj1_tac >> gvs[expr_post_def] >>
-    rename1 `stmt_state_rel func cenv cx es1 sv` >> qexists_tac `sv` >>
+    rename1 `stmt_state_rel ctx func cenv cx es1 sv` >> qexists_tac `sv` >>
     simp[] >> rpt strip_tac >>
     drule emit_inst_extends >> strip_tac >>
     qabbrev_tac `jnz = mk_inst s3.cs_next_id JNZ [op; Label lt; Label lf] []` >>
@@ -292,7 +292,7 @@ Theorem if_branch_frag[local]:
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
     sa.cs_current_insts = [] /\ stmt_res_ok lctx res /\
-    stmt_state_rel func cenv cx esA s0 /\ ~s0.vs_halted /\
+    stmt_state_rel ctx func cenv cx esA s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = 0 /\
     es2.scopes = sc :: rest /\
     (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) /\
@@ -302,7 +302,7 @@ Theorem if_branch_frag[local]:
      st'.cs_current_bb = exit_lbl /\ st'.cs_current_insts = []) ==>
     (?s. stmt_lands lctx st' res s /\ ~s.vs_halted /\
          (res = INL () ==> ~block_is_terminated sb) /\
-         stmt_state_rel func cenv cx (es2 with scopes := rest) s /\
+         stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s /\
          (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                 lookup_var x s = SOME w) /\
          (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -322,9 +322,9 @@ Proof
       Cases_on `stmts_env cenv lctx ty ss sa` >> gvs[]) >>
   strip_tac
   >- (
-    rename1 `stmt_state_rel func cenv2 cx es2 s1` >>
-    `stmt_state_rel func cenv cx (es2 with scopes := rest) s1` by
-      (qspecl_then [`func`, `cenv`, `cenv2`, `cx`, `es2`, `s1`, `sc`, `rest`]
+    rename1 `stmt_state_rel ctx func cenv2 cx es2 s1` >>
+    `stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s1` by
+      (qspecl_then [`func`, `cenv`, `cenv2`, `cx`, `es2`, `s1`, `sc`, `rest`, `ctx`]
          mp_tac stmt_state_rel_pop_top_ext >> simp[]) >>
     qpat_x_assum `stmt_lands _ _ _ _`
       (strip_assume_tac o SIMP_RULE (srw_ss()) [stmt_lands_def])
@@ -459,7 +459,7 @@ Proof
                `s5`, `then_lbl`, `else_lbl`, `s0`] mp_tac cond_jump_frag >>
   impl_tac >- fs[expr_res_ok_def] >>
   strip_tac >> fs[] >>
-  rename1 `stmt_state_rel func cenv cx es1 sv` >>
+  rename1 `stmt_state_rel ctx func cenv cx es1 sv` >>
   rename1 `jump_to (if bj then then_lbl else else_lbl) sv` >>
   `!st l. sa.cs_next_var <= st.cs_next_var ==>
           ret_pc_ok cenv st (jump_to l sv)` by
@@ -492,7 +492,7 @@ Proof
     strip_tac
     >- (
       disj1_tac >>
-      rename1 `stmt_state_rel func cenv cx (es2 with scopes := rest) sz` >>
+      rename1 `stmt_state_rel ctx func cenv cx (es2 with scopes := rest) sz` >>
       qexistsl_tac [`sz`, `cenv`] >> fs[cenv_top_ext_refl] >> rpt conj_tac
       >- (strip_tac >> fs[] >>
           `?x11. new_block exit_lbl s11 = (x11, sb)` by metis_tac[] >>
@@ -645,13 +645,13 @@ Proof
       Cases_on `b` >> gvs[switch_BoolV_def, return_def, raise_def]
       >- (
         (* the condition holds: the ok block, where the code ends *)
-        disj1_tac >> rename1 `stmt_state_rel func cenv cx es' sv` >>
+        disj1_tac >> rename1 `stmt_state_rel ctx func cenv cx es' sv` >>
         qexists_tac `jump_to s7.cs_current_bb sv` >>
         gvs[stmt_lands_def, stmt_state_rel_jump_to, cenv_top_ext_refl,
             block_is_terminated_def] >>
         simp[jump_to_def, lookup_var_def] >> fs[lookup_var_def, jump_to_def]) >>
       (* it fails: the fail block aborts *)
-      disj2_tac >> rename1 `stmt_state_rel func cenv cx es' sv` >>
+      disj2_tac >> rename1 `stmt_state_rel ctx func cenv cx es' sv` >>
       qmatch_goalsub_abbrev_tac `stmt_exit RetQ es' rres _` >>
       qspecl_then [`ctx`, `func`, `opc`, `ops`, `s5`, `s6`,
                    `jump_to s5.cs_current_bb sv`, `RetQ`, `es'`, `rres`]
