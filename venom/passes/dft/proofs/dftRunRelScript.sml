@@ -420,6 +420,56 @@ Proof
   simp[dft_id_before_cons]
 QED
 
+Theorem dft_perm_map_members[local]:
+  !f xs ys. ALL_DISTINCT (MAP f xs) /\ EVERY (\x. MEM x xs) ys /\
+  PERM (MAP f xs) (MAP f ys) ==> PERM xs ys
+Proof
+  rpt gen_tac >> strip_tac >> irule PERM_ALL_DISTINCT >>
+  `ALL_DISTINCT (MAP f ys)` by metis_tac[ALL_DISTINCT_PERM] >>
+  `ALL_DISTINCT xs /\ ALL_DISTINCT ys` by metis_tac[ALL_DISTINCT_MAP] >>
+  simp[] >> gvs[EVERY_MEM] >> rpt strip_tac >> eq_tac
+  >- (strip_tac >>
+      `MEM (f x) (MAP f ys)` by metis_tac[PERM_MEM_EQ, MEM_MAP] >>
+      gvs[MEM_MAP] >> metis_tac[all_distinct_map_mem_inj]) >>
+  metis_tac[]
+QED
+
+Theorem dft_body_originals[local]:
+  !body. EVERY (from_block bi) body ==>
+  ?norm. EVERY (\j. MEM j bi /\ ~is_pseudo j.inst_opcode) norm /\
+    MAP (\i. i.inst_id) norm = MAP (\i. i.inst_id) body /\
+    LIST_REL (\j i. j.inst_id = i.inst_id /\
+      (!fuel ctx s. step_inst fuel ctx j s = step_inst fuel ctx i s)) norm body
+Proof
+  Induct >- (strip_tac >> qexists_tac `[]` >> simp[]) >>
+  rpt strip_tac >> fs[] >>
+  qpat_x_assum `from_block bi h` mp_tac >> simp[from_block_def] >> strip_tac >> gvs[]
+  >- (qexists_tac `h::norm` >> simp[]) >>
+  qexists_tac `j::norm` >> simp[flip_operands_inst_id, flip_operands_step_inst]
+QED
+
+Theorem dft_body_normalize:
+  !bb body.
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  EVERY (from_block bb.bb_instructions) body /\
+  PERM (MAP (\i. i.inst_id) body)
+       (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions)) ==>
+  ?norm.
+    PERM (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions) norm /\
+    MAP (\i. i.inst_id) norm = MAP (\i. i.inst_id) body /\
+    LIST_REL (\j i. j.inst_id = i.inst_id /\
+      (!fuel ctx s. step_inst fuel ctx j s = step_inst fuel ctx i s)) norm body
+Proof
+  rpt gen_tac >> strip_tac >> drule dft_body_originals >> strip_tac >>
+  qexists_tac `norm` >> simp[] >>
+  irule (Q.ISPEC `\i. i.inst_id` dft_perm_map_members) >>
+  conj_tac
+  >- (irule all_distinct_map_filter >> simp[]) >>
+  conj_tac
+  >- gvs[EVERY_MEM, MEM_FILTER] >>
+  metis_tac[PERM_SYM]
+QED
+
 (* Why it holds (unchecked notes):
    - Same fuel works: fuel is per block and per call depth, and the
      schedule visits the same blocks and makes the same calls.
