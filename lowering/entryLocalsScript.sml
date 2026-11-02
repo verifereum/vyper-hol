@@ -282,7 +282,8 @@ Theorem fallback_entry_locals:
       SOME (cenv, rest) ==>
     local_ptrs_reserved cenv st
 Proof
-  rpt gen_tac >> simp[package_fallback_fn_def] >> strip_tac >>
+  rpt gen_tac >>
+  simp[package_fallback_fn_def, update_cenv_nonreentrant_def] >> strip_tac >>
   qspecl_then [`tops`, `External`, `mut`, `fname`, `[]`, `ret`, `fbody`,
                `use_trans`] strip_assume_tac build_compile_env_vars >>
   gvs[local_ptrs_reserved_def] >> metis_tac[]

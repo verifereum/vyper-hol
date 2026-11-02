@@ -3350,6 +3350,7 @@ Theorem eval_ext_call_storage_preserved[local]:
 Proof
   PairCases_on `sig` >>
   Cases_on `vs` >- (simp[eval_ext_call_def, raise_def] >> rw[] >> gvs[]) >>
+  rename1 `head::tail` >>
   Cases_on `static` >> Cases_on `st.outcomes` >>
   asm_simp_tac (srw_ss())
       [eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,

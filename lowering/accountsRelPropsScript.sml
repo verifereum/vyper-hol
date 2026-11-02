@@ -49,7 +49,7 @@
 Theory accountsRelProps
 Ancestors
   compileEnv vyperState vyperCallOutcome extCallOracle vyperStoragePlaceRegion
-  venomState venomCallOracleDefs vfmExecution vfmState
+  venomState venomCallOracleDefs vfmExecution vfmState vyperStorageLayoutSafety
 
 (* ===== Reflexivity ===== *)
 
@@ -477,6 +477,49 @@ Proof
      asm_simp_tac pure_ss [wordsTheory.w2n_n2w,
                           arithmeticTheory.LESS_MOD] >> simp[]) >>
   simp[lookup_storage_def, update_storage_def, combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem nonreentrant_slot_read_live:
+  nonreentrant_slot_separated cx /\ cx.nonreentrant_slot = SOME key ==>
+  storage_read_live cx T st (n2w key) (BaseTV (UintT 256))
+Proof
+  strip_tac >> gvs[nonreentrant_slot_separated_def] >>
+  `key < dimword (:256)` by decide_tac >>
+  simp[storage_read_live_def, wordsTheory.w2n_n2w,
+       arithmeticTheory.LESS_MOD, vyperValueTheory.type_slot_size_def] >>
+  rpt strip_tac >> gvs[storage_dead_def] >>
+  qpat_x_assum `!mid n subs slot tv. _ ==> ranges_disjoint key 1 _ _`
+    (qspecl_then [`mid`, `n`, `subs`, `slot`, `tv`] mp_tac) >>
+  simp[] >>
+  drule (cj 1 dead_bytes_range) >>
+  simp[vyperStorageFrameTheory.ranges_disjoint_def] >>
+  rpt strip_tac >> decide_tac
+QED
+
+Theorem nonreentrant_slot_dead_preserved:
+  nonreentrant_slot_separated cx /\ cx.nonreentrant_slot = SOME key /\
+  storage_dead cx T st j b ==>
+  storage_dead cx T (update_storage (n2w key) value st) j b
+Proof
+  strip_tac >> gvs[nonreentrant_slot_separated_def] >>
+  `key < dimword (:256)` by decide_tac >>
+  qpat_x_assum `storage_dead _ _ _ _ _` mp_tac >>
+  rewrite_tac[storage_dead_def] >> strip_tac >>
+  rename1 `dead_bytes st (w2n slot) tv j b` >>
+  `ranges_disjoint (w2n slot) (type_slot_size tv) (w2n (n2w key:bytes32)) 1` by
+    (qpat_x_assum `!mid n subs slot tv. _ ==> ranges_disjoint key 1 _ _`
+       (qspecl_then [`mid`, `n`, `subs`, `slot`, `tv`] mp_tac) >>
+     simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD,
+          vyperStorageFrameTheory.ranges_disjoint_def] >>
+     decide_tac) >>
+  `dead_bytes (update_storage (n2w key) value st) (w2n slot) tv j b <=>
+   dead_bytes st (w2n slot) tv j b` by
+    (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
+     irule disjoint_word_update_lookup >>
+     qexistsl_tac [`w2n slot`, `type_slot_size tv`] >> simp[]) >>
+  qexistsl_tac [`mid`, `n`, `subs`, `slot`, `tv`] >>
+  gvs[pairTheory.PAIR_EQ] >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
 Theorem update_storage_lookup_other[local]:

@@ -1224,7 +1224,7 @@ fun read_definition_tests select_tests json_path = let
     handle e => (tests, (name, e)::failures)
   val (reversed_tests, decode_fails) = List.foldl decode_test ([], []) tests_json
   val tests = List.rev reversed_tests
-  val () = case decode_fails of
+  val () = case List.rev decode_fails of
       [] => ()
     | (name, err)::_ => raise Fail (String.concat
         ["decode failure in ", json_path, ": ", name, " - ", exnMessage err,

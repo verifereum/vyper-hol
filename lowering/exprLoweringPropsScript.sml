@@ -2939,6 +2939,12 @@ Proof
   rpt gen_tac >> once_rewrite_tac[exprLoweringTheory.compile_return_value_decode_def] >> BETA_TAC >> rpt (FIRST [irule ci_mono_bind, irule ci_mono_ignore_bind] >> conj_tac >| [rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select], all_tac]) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select]
 QED
 
+val _ = List.app (fn th =>
+  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
+     andalso null (#2 (Tag.dest_tag (Thm.tag th))) then ()
+  else raise Fail "oracle in dynamic-pointer build prerequisites")
+  [ci_mono_compile_abi_decode_dyn_elem_ptr, ci_mono_typed_memory_family];
+
 (* ABI staging reuses the memory-copy interfaces proved above. *)
 Theorem ci_mono_compile_store_abi_tuple[local]:
   ∀cenv buf off elems sa.
