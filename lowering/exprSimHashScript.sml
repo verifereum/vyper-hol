@@ -1132,8 +1132,9 @@ Proof
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[run_inst_seq_def, step_SHR, step_SHL, mk_inst_def,
        eval_operand_def, lookup_var_update_var, bind_outputs_def] >>
-  simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
-       bind_outputs_def, lookup_var_update_var] >>
+  simp[step_inst_base_def] >>
+  simp[exec_pure2_def, eval_operand_def] >>
+  simp[bind_outputs_def, lookup_var_update_var] >>
   simp[dimword_def, update_var_def] >> rpt strip_tac >>
   gvs[not_fresh_at_def] >>
   first_assum (qspec_then `sa.cs_next_var + 1` assume_tac) >>
@@ -1958,7 +1959,7 @@ Proof
   strip_tac >> irule vv_post_frame_intro >>
   simp[vv_holds_def, vv_at_def, expr_val_rel_def, expr_val_at_def,
        read_result_def, return_def] >>
-  metis_tac[]
+  metis_tac[is_word_type_not_dynarray]
 QED
 
 Theorem hash_run_frag:
@@ -2108,7 +2109,8 @@ Theorem vv_post_inst_idx[simp]:
 Proof
   Cases_on `vv` >>
   simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
-       expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def]
+       expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def,
+       local_place_at_def]
 QED
 
 Theorem hash_buffer_suffix_shape:
