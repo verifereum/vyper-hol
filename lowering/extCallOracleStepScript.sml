@@ -19,8 +19,8 @@
  *                            static flag
  *   exec_ext_call_oracle_step — CALL/STATICCALL binds the success word and
  *                            keeps state_rel with the source after
- *                            adoption, given the locals survive the
- *                            return-buffer write
+ *                            adoption, given locals and immutable bytes
+ *                            survive the return-buffer write
  *   send_call_oracle_step  — send's CALL against eval_send: success binds
  *                            1w with state_rel kept, failure binds 0w
  *
@@ -82,10 +82,11 @@ QED
 (* local_ptrs_rel reads none of the fields an oracle call changes but
    memory. *)
 Theorem local_ptrs_rel_oracle_fields:
-  !func cenv sc s os rqs acc ts lg rd.
+  !func cenv sc s os rqs acc ts lg pending rd.
     local_ptrs_rel func cenv sc
       (s with <| vs_outcomes := os; vs_requests := rqs; vs_accounts := acc;
-                 vs_transient := ts; vs_logs := lg; vs_returndata := rd |>) <=>
+                 vs_transient := ts; vs_logs := lg;
+                 vs_pending_deletions := pending; vs_returndata := rd |>) <=>
     local_ptrs_rel func cenv sc s
 Proof
   simp[local_ptrs_rel_def, local_region_def, local_backed_def, lookup_var_def]
@@ -94,14 +95,18 @@ QED
 (* ===== The shared step ===== *)
 
 (* The adopted source state against Venom's state after consuming the
-   outcome: everything but the locals follows from state_rel before the
-   call, as both sides take, record and adopt the same outcome. *)
+   outcome: locals and immutable bytes need output preservation; other
+   fields follow from state_rel before the call, as both sides take,
+   record and adopt the same outcome. *)
 Theorem state_rel_adopt_consume[local]:
   !func cenv cx es s rq rq' outcome rest ro rz.
     state_rel func cenv cx es s /\ request_agree cx rq rq' /\
     take_outcome rq s.vs_outcomes = (outcome, rest) /\
     local_ptrs_rel func cenv es.scopes
+      (SND (consume_call_outcome rq' ro rz s)) /\
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
       (SND (consume_call_outcome rq' ro rz s)) ==>
+
     state_rel func cenv cx
       (SND (adopt_call_outcome rq outcome
               (es with <| outcomes := SOME rest;
@@ -135,15 +140,19 @@ Proof
   gvs[state_rel_def, adopt_call_outcome_equation, adopt_outcome_def,
       logs_rel_eq, record_request_def] >>
   Cases_on `outcome.co_success /\ ~rq.cr_static` >>
-  gvs[immutables_rel_def, call_ctx_rel_def] >>
-  rw[]
+  gvs[storage_rel_def, transient_rel_def, accounts_rel_def,
+      call_ctx_rel_def, contract_storage_def, contract_transient_def] >>
+  gvs[immutables_rel_def] >>
+  (conj_tac >- first_assum ACCEPT_TAC >>
+   Cases_on `computed_precompile rq` >> simp[LIST_REL_APPEND])
+
 QED
 
 (* TOP-LEVEL: CALL or STATICCALL in oracle mode.  Given the source took
    outcome for the request the operands describe, Venom binds the success
    word, consumes the same outcome and writes the return buffer; once the
-   locals survive that write, state_rel holds with the source after it
-   adopts the outcome (on failure adoption changes nothing, so this is the
+   locals and immutable bytes survive that write, state_rel holds with the
+   source after it adopts the outcome (on failure adoption changes nothing, so this is the
    source state as taken). *)
 Theorem exec_ext_call_oracle_step:
   !func cenv cx es s inst gas aw vw ao az ro rz stat out target
@@ -161,13 +170,15 @@ Theorem exec_ext_call_oracle_step:
                         vs_accounts := s'.vs_accounts;
                         vs_transient := s'.vs_transient;
                         vs_logs := s'.vs_logs;
+                        vs_pending_deletions := s'.vs_pending_deletions;
                         vs_returndata := s'.vs_returndata;
                         vs_memory := s'.vs_memory |> /\
          s'.vs_memory =
            (write_memory_with_expansion (w2n ro)
               (TAKE (w2n rz) outcome.co_returnData) s).vs_memory /\
          s'.vs_returndata = outcome.co_returnData /\
-         (local_ptrs_rel func cenv es.scopes s' ==>
+         (local_ptrs_rel func cenv es.scopes s' /\
+          immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s' ==>
           state_rel func cenv cx (SND (adopt_call_outcome rq outcome es1)) s')
 Proof
   rpt gen_tac >> strip_tac >>
@@ -228,6 +239,7 @@ Theorem send_call_oracle_step:
                         vs_accounts := s'.vs_accounts;
                         vs_transient := s'.vs_transient;
                         vs_logs := s'.vs_logs;
+                        vs_pending_deletions := s'.vs_pending_deletions;
                         vs_returndata := s'.vs_returndata |> /\
          ((res = INL (Value NoneV) /\
            step_inst_base inst s = OK (update_var out 1w s') /\
@@ -263,6 +275,7 @@ Proof
                       vs_accounts := s'.vs_accounts;
                       vs_transient := s'.vs_transient;
                       vs_logs := s'.vs_logs;
+                      vs_pending_deletions := s'.vs_pending_deletions;
                       vs_returndata := s'.vs_returndata |>` by
         (qpat_x_assum `s'.vs_memory = _` mp_tac >>
          qpat_x_assum `s' = _` mp_tac >>
@@ -270,6 +283,12 @@ Proof
       `local_ptrs_rel func cenv es.scopes s'` by
         (qpat_x_assum `s' = _` (fn th => ONCE_REWRITE_TAC [th]) >>
          simp[local_ptrs_rel_oracle_fields] >> first_assum ACCEPT_TAC) >>
+      `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s'` by
+        (`immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s`
+           by fs[state_rel_def] >>
+         qpat_x_assum `immutables_rel _ _ _ _ es s` mp_tac >>
+         qpat_x_assum `s' = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+         simp[immutables_rel_def]) >>
       qexists_tac `s'` >> conj_tac
       >- (qpat_x_assum `s' = _` (fn th => ONCE_REWRITE_TAC [th]) >>
           simp[venom_state_component_equality]) >>

@@ -21,14 +21,15 @@
  *                              (exprSimLiteralBuffer)
  *   compile_env_case_sim     — an environment read: by compile_env_sim
  *                              (exprSim), block.prevhash by
- *                              compile_prevhash_sim
+ *                              compile_prevhash_sim, msg.gas by
+ *                              compile_msg_gas_sim
  *   compile_toplevel_name_sim — storage, transient, immutable and constant
  *                              reads: a storage or transient variable by
  *                              compile_toplevel_storage_vv_sim, a pointer
- *                              to its slot, whose ce_vars entry comes from
- *                              storage_vars_rel and transient_vars_rel;
- *                              its slot decodes by expr_sim_inv's storage
- *                              clauses
+ *                              to its slot, whose ce_module_vars entry
+ *                              comes from storage_vars_rel and
+ *                              transient_vars_rel; its slot decodes by
+ *                              expr_sim_inv's storage clauses
  *                              (compile_toplevel_storage_undecodable_sim)
  *   compile_flag_member_case_sim — a flag member: the literal 2 ** id, by
  *                              expr_sim_inv's flag members clause
@@ -41,17 +42,21 @@
  * state_rel or in the judgment before their PRs:
  *   compile_toplevel_immutable_sim — immutables and constants (row 3),
  *                              which lookup_global reads from the
- *                              immutables: nothing puts them in ce_vars,
+ *                              immutables: nothing puts them in
+ *                              ce_module_vars,
  *                              so the lowering may emit INVALID where the
  *                              source reads a value (#563 for immutables).
  *   compile_prevhash_sim     — block.prevhash (row 5): the source raises a
  *                              RuntimeError where BLOCKHASH returns 0 (#671),
  *                              and call_ctx_rel does not relate the block
  *                              hashes.
- *
- * msg.gas is not a typed expression (well_typed_builtin_app excludes it),
- * so expr_sim_ok says nothing about it; the source raises a TypeError for
- * it too, while the lowering emits GAS.
+ *   compile_msg_gas_sim      — msg.gas: the source reads the next of the
+ *                              state's gas readings where the lowering emits
+ *                              GAS, and call_ctx_rel does not relate the two;
+ *                              with no readings left the source raises a
+ *                              RuntimeError where GAS does not abort.  It
+ *                              needs call_ctx_rel to relate gas_obs to the
+ *                              frame's GAS readings.
  *)
 
 Theory exprSimLeaves
@@ -106,7 +111,7 @@ Proof
       disch_then (qspecl_then [`sa`, `sa`, `LocatedValue t p`, `INL r`, `es'`, `s0`] mp_tac) >>
       simp[] >> strip_tac >>
       irule frag_exec_seq >>
-      qexistsl_tac [`\s. vv_post func cenv cx e es sa sa s0 es' r (LocatedValue t p) s`, `sa`] >>
+      qexistsl_tac [`\s. vv_post ctx func cenv cx e es sa sa s0 es' r (LocatedValue t p) s`, `sa`] >>
       simp[cs_extends_refl] >> conj_tac
       >- (irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
           simp[FUN_EQ_THM]) >>
@@ -350,11 +355,19 @@ Proof
   cheat
 QED
 
+Theorem compile_msg_gas_sim:
+  !cenv ann args. expr_sim_ok cenv (Builtin ann (Env MsgGas) args)
+Proof
+  cheat
+QED
+
 Theorem compile_env_case_sim:
   !cenv ann item args. expr_sim_ok cenv (Builtin ann (Env item) args)
 Proof
   rpt gen_tac >> Cases_on `item = PrevHash`
   >- simp[compile_prevhash_sim] >>
+  Cases_on `item = MsgGas`
+  >- simp[compile_msg_gas_sim] >>
   rw[expr_sim_ok_def] >>
   `args = [] /\ ann = env_item_type item` by
     gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
@@ -431,7 +444,7 @@ Theorem toplevel_storage_ce_vars:
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot ==>
-    FLOOKUP cenv.ce_vars (module_var_key (src, id)) =
+    FLOOKUP cenv.ce_module_vars (src, id) =
       SOME (if tr then TransientLoc (n2w slot) else StorageLoc (n2w slot))
 Proof
   rpt strip_tac >> Cases_on `tr` >>
@@ -552,7 +565,7 @@ QED
 
 (* An immutable or a constant (no storage declaration of the name; both
    are read from the immutables).  Cheated, and false as stated: nothing in
-   expr_sim_inv puts them in ce_vars (the lowering has no ImmutableLoc for
+   expr_sim_inv puts them in ce_module_vars (the lowering has no ImmutableLoc for
    immutables yet, #563), so the lowering may emit INVALID where the source
    reads a value.  Where it does, immutable_holds also needs the
    immutable's bytes to end below 2 ** 256 and the value typed. *)

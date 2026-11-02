@@ -36,22 +36,22 @@ Theorem bytestring_abi_pre_allocas:
     source_base <= w2n src_addr /\
     w2n src_addr + 32 + LENGTH bs <= source_base + source_size /\
     target_base <= w2n dst_addr /\
-    w2n dst_addr + 32 + ceil32 (LENGTH bs) <= target_base + target_size /\
+    w2n dst_addr + 32 + contractABI$ceil32 (LENGTH bs) <= target_base + target_size /\
     target_base + target_size <= dimword(:256) /\
-    32 + ceil32 (LENGTH bs) < dimword(:256) /\
+    32 + contractABI$ceil32 (LENGTH bs) < dimword(:256) /\
     mload (w2n src_addr) ss = n2w (LENGTH bs) /\
     read_memory (w2n src_addr + 32) (LENGTH bs) ss = bs ==>
     bytestring_abi_pre dst_addr src_addr bs ss /\
     (w2n src_addr + 32 + LENGTH bs <= w2n dst_addr \/
-     w2n dst_addr + 32 + ceil32 (LENGTH bs) <= w2n src_addr)
+     w2n dst_addr + 32 + contractABI$ceil32 (LENGTH bs) <= w2n src_addr)
 Proof
   rpt gen_tac >> strip_tac >>
   `w2n src_addr + 32 + LENGTH bs <= w2n dst_addr \/
-   w2n dst_addr + 32 + ceil32 (LENGTH bs) <= w2n src_addr` by
+   w2n dst_addr + 32 + contractABI$ceil32 (LENGTH bs) <= w2n src_addr` by
     (mp_tac (Q.SPECL [`ss`, `source_id`, `target_id`, `source_base`, `source_size`,
        `target_base`, `target_size`, `w2n (src_addr:bytes32)`,
        `32 + LENGTH (bs:word8 list)`, `w2n (dst_addr:bytes32)`,
-       `32 + ceil32 (LENGTH (bs:word8 list))`] allocated_windows_disjoint) >>
+       `32 + contractABI$ceil32 (LENGTH (bs:word8 list))`] allocated_windows_disjoint) >>
      impl_tac >- (asm_simp_tac bool_ss [] >> decide_tac) >> decide_tac) >>
   asm_simp_tac bool_ss [bytestring_abi_pre_def] >> decide_tac
 QED

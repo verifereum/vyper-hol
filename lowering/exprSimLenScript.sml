@@ -56,7 +56,7 @@ Theorem compile_expr_len[local]:
     compile_expr cenv ty (Builtin ann Len [e]) st =
     (let (vv, st1) = compile_expr cenv ty e st in
        as_stack_val ann
-         (compile_builtin_len cenv.ce_is_ctor (vv_operand vv)
+         (compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand vv)
            (case vv_location vv of SOME l => l | NONE => LocMemory) st1))
 Proof
   rpt gen_tac >>
@@ -297,8 +297,8 @@ QED
 (* At runtime the value at an immutable's code pointer is in the data
    section, laid out as in memory. *)
 Theorem immutable_holds_data[local]:
-  !func cenv cx es s t tv w.
-    stmt_state_rel func cenv cx es s /\ ~cenv.ce_is_ctor /\
+  !func cenv cx es s t tv w ctx.
+    stmt_state_rel ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
     immutable_holds cenv cx t tv w es ==>
     ?tvt v. evaluate_type (get_tenv cx) t = SOME tvt /\
             read_result cx tv es = (INL v, es) /\
@@ -313,8 +313,8 @@ Proof
 QED
 
 Theorem vv_holds_len_header:
-  !env func cenv cx es s t tvt tv vv n.
-    stmt_state_rel func cenv cx es s /\ vv_holds cenv cx t tv vv es s /\
+  !env func cenv cx es s t tvt tv vv n ctx.
+    stmt_state_rel ctx func cenv cx es s /\ vv_holds cenv cx t tv vv es s /\
     is_sized_type t /\ evaluate_type (get_tenv cx) t = SOME tvt /\
     env.type_defs = get_tenv cx /\
     eval_result_typed (env,cx,es) tv (Type t) /\
@@ -378,15 +378,15 @@ Proof
 QED
 
 Theorem len_vv_post_load[local]:
-  !func cenv cx e es sa sm sb s0 es' tv vv s1 op s n.
-    vv_post func cenv cx e es sa sm s0 es' tv vv s1 /\
+  !func cenv cx e es sa sm sb s0 es' tv vv s1 op s n ctx.
+    vv_post ctx func cenv cx e es sa sm s0 es' tv vv s1 /\
     sa.cs_next_var <= sm.cs_next_var /\
-    stmt_state_rel func cenv cx es' s /\ eval_operand op s = SOME (n2w n) /\
+    stmt_state_rel ctx func cenv cx es' s /\ eval_operand op s = SOME (n2w n) /\
     (!x w. not_fresh_at sm x /\ lookup_var x s1 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
              FLOOKUP s.vs_allocas aid = SOME b) /\ s.vs_memory = s1.vs_memory ==>
-    vv_post func cenv cx (Builtin (BaseT (UintT 256)) Len [e]) es
+    vv_post ctx func cenv cx (Builtin (BaseT (UintT 256)) Len [e]) es
       sa sb s0 es' (Value (IntV (&n))) (StackValue (BaseT (UintT 256)) op) s
 Proof
   rw[vv_post_def]
@@ -405,13 +405,13 @@ Proof
 QED
 
 Theorem len_load_frag[local]:
-  !ctx func cenv cx es is_ctor pop loc sm op sb s0 w R.
-    compile_builtin_len is_ctor pop loc sm = (op, sb) /\
+  !ctx func cenv cx es is_ctor imm pop loc sm op sb s0 w R.
+    compile_builtin_len is_ctor imm pop loc sm = (op, sb) /\
     (loc = LocCode ==> ~is_ctor) /\ loc <> LocCalldata /\
     local_ptrs_reserved cenv sm /\
     eval_operand pop s0 = SOME w ==>
-    frag_exec ctx sm sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
-      (\s. stmt_state_rel func cenv cx es s /\
+    frag_exec ctx sm sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. stmt_state_rel ctx func cenv cx es s /\
            eval_operand op s = SOME (ptr_load_val is_ctor loc w s0) /\
            (!x w'. not_fresh_at sm x /\ lookup_var x s0 = SOME w' ==>
                    lookup_var x s = SOME w') /\
@@ -420,7 +420,8 @@ Theorem len_load_frag[local]:
            s.vs_memory = s0.vs_memory) R
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `loc` >>
-  gvs[compile_builtin_len_def, compile_ptr_load_def, ptr_load_val_def] >>
+  gvs[compile_builtin_len_def, compile_ptr_load_def,
+      compile_imm_load_word_runtime, ptr_load_val_def] >>
   irule emit_op_frag >> (reverse conj_tac >- simp[])
   >~ [`emit_op MLOAD [pop] sm = _`]
   >- (qexistsl [`[pop]`, `MLOAD`] >> simp[is_terminator_def] >>
@@ -437,7 +438,7 @@ QED
 
 Theorem compile_len_vv_frag[local]:
   !env ctx func cenv cx e es sa sm sb s0 es' tv vv op tvt R.
-    compile_builtin_len cenv.ce_is_ctor (vv_operand vv)
+    compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand vv)
       (case vv_location vv of SOME l => l | NONE => LocMemory) sm = (op,sb) /\
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     is_sized_type (expr_type e) /\
@@ -446,15 +447,15 @@ Theorem compile_len_vv_frag[local]:
     eval_result_typed (env,cx,es') tv (Type (expr_type e)) /\
     (!v. read_result cx tv es' = (INL v,es') ==> value_has_type tvt v) /\
     (vv_location vv = SOME LocCode ==> ~cenv.ce_is_ctor) ==>
-    frag_exec ctx sm sb (vv_post func cenv cx e es sa sm s0 es' tv vv)
+    frag_exec ctx sm sb (vv_post ctx func cenv cx e es sa sm s0 es' tv vv)
       (\s. ?n. result_array_length cx tv es' = (INL n,es') /\
-        vv_post func cenv cx (Builtin (BaseT (UintT 256)) Len [e]) es
+        vv_post ctx func cenv cx (Builtin (BaseT (UintT 256)) Len [e]) es
           sa sb s0 es' (Value (IntV (&n)))
           (StackValue (BaseT (UintT 256)) op) s) R
 Proof
   rpt gen_tac >> strip_tac >> irule frag_exec_pointwise >>
   qx_gen_tac `s1` >> strip_tac >>
-  `stmt_state_rel func cenv cx es' s1 /\
+  `stmt_state_rel ctx func cenv cx es' s1 /\
    vv_holds cenv cx (expr_type e) tv vv es' s1` by fs[vv_post_def] >>
   drule_all vv_holds_sized_length_success >> strip_tac >>
   drule_all vv_holds_len_header >> strip_tac >>
@@ -473,12 +474,13 @@ Proof
 QED
 
 Theorem len_load_extends[local]:
-  !ctor pop loc sa op sb.
-    compile_builtin_len ctor pop loc sa = (op,sb) /\
+  !ctor imm pop loc sa op sb.
+    compile_builtin_len ctor imm pop loc sa = (op,sb) /\
     (loc = LocCode ==> ~ctor) ==> cs_extends sa sb
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `loc` >>
-  gvs[compile_builtin_len_def, compile_ptr_load_def] >>
+  gvs[compile_builtin_len_def, compile_ptr_load_def,
+      compile_imm_load_word_runtime] >>
   drule emitted_insts_emit_op >> drule emit_op_extends >> rpt strip_tac >>
   irule cs_extends_same_block >> gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND3]
 QED
@@ -500,7 +502,7 @@ Proof
   simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
   gvs[compile_expr_len] >> pairarg_tac >> gvs[] >>
   rename1 `compile_expr cenv ty e sa = (evv, sm)` >>
-  Cases_on `compile_builtin_len cenv.ce_is_ctor (vv_operand evv)
+  Cases_on `compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand evv)
     (case vv_location evv of SOME l => l | NONE => LocMemory) sm` >>
   gvs[as_stack_val_def] >>
   `(case vv_location evv of SOME l => l | NONE => LocMemory) = LocCode ==>
@@ -528,7 +530,7 @@ Proof
       `ls = es1` by metis_tac[vyperStatePreservationTheory.result_array_length_state] >>
       gvs[] >>
       irule frag_exec_seq >>
-      qexistsl_tac [`\s. vv_post func cenv cx e es sa sm s0 es1 etv evv s`, `sm`] >>
+      qexistsl_tac [`\s. vv_post ctx func cenv cx e es sa sm s0 es1 etv evv s`, `sm`] >>
       simp[expr_exit_def] >>
       conj_tac >- (irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[expr_exit_def]) >>
       `vv_location evv = SOME LocCode ==> ~cenv.ce_is_ctor` by

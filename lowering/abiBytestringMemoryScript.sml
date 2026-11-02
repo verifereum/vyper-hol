@@ -26,17 +26,17 @@ QED
 
 Theorem bytestring_round_word_n2w:
   !n. n + 31 < dimword(:256) ==>
-    bytestring_round_word (n2w n) = n2w (ceil32 n)
+    bytestring_round_word (n2w n) = n2w (contractABI$ceil32 n)
 Proof
   rpt gen_tac >> strip_tac >> fs[] >>
   simp[bytestring_round_word_def, word_and_ceil32_mask, word_add_n2w,
-    GSYM n2w_DIV, word_lsl_n2w, ceil32_def, ADD_COMM, MULT_COMM]
+    GSYM n2w_DIV, word_lsl_n2w, contractABITheory.ceil32_def, ADD_COMM, MULT_COMM]
 QED
 
 Theorem ceil32_bounds:
-  !n. n <= ceil32 n /\ ceil32 n < n + 32
+  !n. n <= contractABI$ceil32 n /\ contractABI$ceil32 n < n + 32
 Proof
-  gen_tac >> conj_tac >- simp[] >> rewrite_tac[ceil32_def] >>
+  gen_tac >> conj_tac >- simp[] >> rewrite_tac[contractABITheory.ceil32_def] >>
   mp_tac (Q.SPEC `n + 31` (MATCH_MP DIVISION (DECIDE ``0 < 32n``))) >>
   simp[MULT_COMM] >> decide_tac
 QED
@@ -44,24 +44,24 @@ QED
 Theorem bytestring_copy_state_natural:
   !dst_addr src_addr ss n.
     mload (w2n src_addr) ss = n2w n /\
-    32 + ceil32 n < dimword(:256) /\
-    w2n dst_addr + ceil32 n < dimword(:256) ==>
+    32 + contractABI$ceil32 n < dimword(:256) /\
+    w2n dst_addr + contractABI$ceil32 n < dimword(:256) ==>
     bytestring_copy_state dst_addr src_addr ss =
       mcopy (w2n dst_addr) (w2n src_addr) (32 + n)
-        (mstore (w2n dst_addr + ceil32 n) 0w ss)
+        (mstore (w2n dst_addr + contractABI$ceil32 n) 0w ss)
 Proof
   rpt gen_tac >> strip_tac >>
-  `n <= ceil32 n` by simp[] >>
+  `n <= contractABI$ceil32 n` by simp[] >>
   `n + 31 < dimword(:256) /\ n + 32 < dimword(:256) /\
-   ceil32 n < dimword(:256)` by decide_tac >>
-  `bytestring_round_word (n2w n) = n2w (ceil32 n)` by
+   contractABI$ceil32 n < dimword(:256)` by decide_tac >>
+  `bytestring_round_word (n2w n) = n2w (contractABI$ceil32 n)` by
     (irule bytestring_round_word_n2w >> simp[]) >>
   fs[] >>
   simp[bytestring_copy_state_def, LET_THM, word_add_def, w2n_n2w, ADD_COMM]
 QED
 
 Theorem bytestring_encoded_size:
-  !bs. LENGTH (enc (Bytes NONE) (contractABI$BytesV bs)) = 32 + ceil32 (LENGTH bs)
+  !bs. LENGTH (enc (Bytes NONE) (contractABI$BytesV bs)) = 32 + contractABI$ceil32 (LENGTH bs)
 Proof
   gen_tac >> simp[enc_def, LET_THM] >>
   mp_tac (Q.SPEC `LENGTH (bs:word8 list)` ceil32_bounds) >> decide_tac
@@ -71,11 +71,11 @@ Theorem bytestring_copy_state_encoded:
   !dst_addr src_addr ss bs.
     mload (w2n src_addr) ss = n2w (LENGTH bs) /\
     read_memory (w2n src_addr + 32) (LENGTH bs) ss = bs /\
-    32 + ceil32 (LENGTH bs) < dimword(:256) /\
-    w2n dst_addr + ceil32 (LENGTH bs) < dimword(:256) /\
-    (w2n src_addr + 32 + LENGTH bs <= w2n dst_addr + ceil32 (LENGTH bs) \/
-     w2n dst_addr + ceil32 (LENGTH bs) + 32 <= w2n src_addr) ==>
-    read_memory (w2n dst_addr) (32 + ceil32 (LENGTH bs))
+    32 + contractABI$ceil32 (LENGTH bs) < dimword(:256) /\
+    w2n dst_addr + contractABI$ceil32 (LENGTH bs) < dimword(:256) /\
+    (w2n src_addr + 32 + LENGTH bs <= w2n dst_addr + contractABI$ceil32 (LENGTH bs) \/
+     w2n dst_addr + contractABI$ceil32 (LENGTH bs) + 32 <= w2n src_addr) ==>
+    read_memory (w2n dst_addr) (32 + contractABI$ceil32 (LENGTH bs))
       (bytestring_copy_state dst_addr src_addr ss) =
     enc (Bytes NONE) (contractABI$BytesV bs)
 Proof
@@ -91,7 +91,7 @@ QED
 Theorem bytestring_encoded_size_word:
   !src_addr ss bs.
     mload (w2n src_addr) ss = n2w (LENGTH bs) /\
-    32 + ceil32 (LENGTH bs) < dimword(:256) ==>
+    32 + contractABI$ceil32 (LENGTH bs) < dimword(:256) ==>
     32w + bytestring_round_word (mload (w2n src_addr) ss) =
       n2w (LENGTH (enc (Bytes NONE) (contractABI$BytesV bs)))
 Proof
@@ -104,10 +104,10 @@ QED
 Theorem bytestring_copy_state_frame:
   !offset read_len dst_addr src_addr ss n.
     mload (w2n src_addr) ss = n2w n /\
-    32 + ceil32 n < dimword(:256) /\
-    w2n dst_addr + ceil32 n < dimword(:256) /\
+    32 + contractABI$ceil32 n < dimword(:256) /\
+    w2n dst_addr + contractABI$ceil32 n < dimword(:256) /\
     (offset + read_len <= w2n dst_addr \/
-     w2n dst_addr + ceil32 n + 32 <= offset) ==>
+     w2n dst_addr + contractABI$ceil32 n + 32 <= offset) ==>
     read_memory offset read_len (bytestring_copy_state dst_addr src_addr ss) =
       read_memory offset read_len ss
 Proof

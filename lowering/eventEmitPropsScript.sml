@@ -63,7 +63,7 @@ Theorem state_rel_simple_append_event:
 Proof
   rpt gen_tac >> strip_tac >>
   fs[state_rel_simple_def, vars_rel_def, storage_rel_def, transient_rel_def,
-    immutables_rel_def, logs_rel_def, log_entry_equiv_def,
+    immutables_rel_simple_def, logs_rel_def, log_entry_equiv_def,
     LIST_REL_APPEND_suff, contract_storage_def, contract_transient_def] >>
   first_assum ACCEPT_TAC
 QED

@@ -140,6 +140,7 @@ Definition initial_state_rel_def:
          (* Live accounts and transient storage *)
          es.rollback.accounts = vs.vs_accounts ∧
          es.rollback.tStorage = vs.vs_transient ∧
+         es.rollback.toDelete = vs.vs_pending_deletions ∧
          ctxt.returnData = vs.vs_returndata ∧
          ctxt.logs = vs.vs_logs ∧
          (* Equality is required only outside every context spill region. *)
@@ -179,7 +180,8 @@ Definition final_state_rel_def:
          ctxt.returnData = vs.vs_returndata ∧
          ctxt.logs = vs.vs_logs ∧
          es.rollback.accounts = vs.vs_accounts ∧
-         es.rollback.tStorage = vs.vs_transient
+         es.rollback.tStorage = vs.vs_transient ∧
+         es.rollback.toDelete = vs.vs_pending_deletions
      | [] => F)
 End
 
@@ -257,6 +259,7 @@ Proof
                    as_prev_hashes := vs.vs_prev_hashes;
                    as_outcomes := vs.vs_outcomes;
                    as_requests := vs.vs_requests;
+                   as_pending_deletions := vs.vs_pending_deletions;
                    as_gas_readings := [] |>` >>
   gvs[initial_state_rel_def, msg_ctx_rel_def, tx_ctx_rel_def,
       block_ctx_rel_def, blockhash_rel_def, stack_params_rel_def,
@@ -331,10 +334,10 @@ Definition initial_ctx_rel_def:
       initial_codegen_state_rel cp vs /\
       wf_state es /\ (?d. es.msdomain = Collect d) /\
       ~ctxt.msgParams.static /\
-      ctxt.msgParams.code = assemble prog /\
-      ctxt.msgParams.parsed = parse_code 0 FEMPTY (assemble prog) /\
-      LENGTH (assemble prog) <= 24576 /\
-      vs.vs_vars = FEMPTY /\ vs.vs_data_section = [] /\
+      ctxt.msgParams.code = assemble prog ++ vs.vs_data_section /\
+      ctxt.msgParams.parsed = parse_code 0 FEMPTY ctxt.msgParams.code /\
+      LENGTH ctxt.msgParams.code <= 24576 /\
+      vs.vs_vars = FEMPTY /\
       (!l. FLOOKUP vs.vs_labels l =
            OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
       vs.vs_outcomes = MAP SND (call_trace es) /\ vs.vs_requests = []
@@ -348,6 +351,7 @@ Definition venom_frame_rel_def:
       Halt vs' =>
         frame_outcome es r es' NONE vs'.vs_returndata vs'.vs_logs /\
         es'.rollback.accounts = vs'.vs_accounts /\
+        es'.rollback.toDelete = vs'.vs_pending_deletions /\
         es'.rollback.tStorage = vs'.vs_transient /\
         vs'.vs_requests = MAP FST (call_trace es)
     | Abort Revert_abort vs' =>

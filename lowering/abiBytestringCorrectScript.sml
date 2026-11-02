@@ -13,20 +13,20 @@ Definition bytestring_abi_pre_def:
   bytestring_abi_pre (dst_addr:bytes32) (src_addr:bytes32) bs ss <=>
     mload (w2n src_addr) ss = n2w (LENGTH bs) /\
     read_memory (w2n src_addr + 32) (LENGTH bs) ss = bs /\
-    32 + ceil32 (LENGTH bs) < dimword(:256) /\
-    w2n dst_addr + ceil32 (LENGTH bs) < dimword(:256) /\
-    (w2n src_addr + 32 + LENGTH bs <= w2n dst_addr + ceil32 (LENGTH bs) \/
-     w2n dst_addr + ceil32 (LENGTH bs) + 32 <= w2n src_addr)
+    32 + contractABI$ceil32 (LENGTH bs) < dimword(:256) /\
+    w2n dst_addr + contractABI$ceil32 (LENGTH bs) < dimword(:256) /\
+    (w2n src_addr + 32 + LENGTH bs <= w2n dst_addr + contractABI$ceil32 (LENGTH bs) \/
+     w2n dst_addr + contractABI$ceil32 (LENGTH bs) + 32 <= w2n src_addr)
 End
 
 Theorem bytestring_abi_pre_bytes:
   !dst_addr src_addr bs ss source_cap.
     val_in_memory (BaseTV (BytesT (Dynamic source_cap))) (vyperValue$BytesV bs)
       (w2n src_addr) ss.vs_memory /\
-    32 + ceil32 (LENGTH bs) < dimword(:256) /\
-    w2n dst_addr + ceil32 (LENGTH bs) < dimword(:256) /\
-    (w2n src_addr + 32 + LENGTH bs <= w2n dst_addr + ceil32 (LENGTH bs) \/
-     w2n dst_addr + ceil32 (LENGTH bs) + 32 <= w2n src_addr) ==>
+    32 + contractABI$ceil32 (LENGTH bs) < dimword(:256) /\
+    w2n dst_addr + contractABI$ceil32 (LENGTH bs) < dimword(:256) /\
+    (w2n src_addr + 32 + LENGTH bs <= w2n dst_addr + contractABI$ceil32 (LENGTH bs) \/
+     w2n dst_addr + contractABI$ceil32 (LENGTH bs) + 32 <= w2n src_addr) ==>
     bytestring_abi_pre dst_addr src_addr bs ss
 Proof
   simp[bytestring_abi_pre_def, val_in_memory_def,
@@ -37,10 +37,10 @@ Theorem bytestring_abi_pre_string:
   !dst_addr src_addr text ss source_cap.
     val_in_memory (BaseTV (StringT source_cap)) (StringV text)
       (w2n src_addr) ss.vs_memory /\
-    32 + ceil32 (LENGTH text) < dimword(:256) /\
-    w2n dst_addr + ceil32 (LENGTH text) < dimword(:256) /\
-    (w2n src_addr + 32 + LENGTH text <= w2n dst_addr + ceil32 (LENGTH text) \/
-     w2n dst_addr + ceil32 (LENGTH text) + 32 <= w2n src_addr) ==>
+    32 + contractABI$ceil32 (LENGTH text) < dimword(:256) /\
+    w2n dst_addr + contractABI$ceil32 (LENGTH text) < dimword(:256) /\
+    (w2n src_addr + 32 + LENGTH text <= w2n dst_addr + contractABI$ceil32 (LENGTH text) \/
+     w2n dst_addr + contractABI$ceil32 (LENGTH text) + 32 <= w2n src_addr) ==>
     bytestring_abi_pre dst_addr src_addr (MAP (n2w o ORD) text) ss
 Proof
   simp[bytestring_abi_pre_def, val_in_memory_def, LET_THM,
@@ -65,7 +65,7 @@ Theorem bytestring_execution_encoding:
       enc (Bytes NONE) (contractABI$BytesV bs) /\
     (!offset read_len.
       offset + read_len <= w2n dst_addr \/
-      w2n dst_addr + ceil32 (LENGTH bs) + 32 <= offset ==>
+      w2n dst_addr + contractABI$ceil32 (LENGTH bs) + 32 <= offset ==>
       read_memory offset read_len out = read_memory offset read_len ss)
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
@@ -110,7 +110,7 @@ Theorem compile_abi_bytestring_correct:
         eval_operand arg_op out = eval_operand arg_op ss) /\
       (!offset read_len.
         offset + read_len <= w2n dst_addr \/
-        w2n dst_addr + ceil32 (LENGTH bs) + 32 <= offset ==>
+        w2n dst_addr + contractABI$ceil32 (LENGTH bs) + 32 <= offset ==>
         read_memory offset read_len out = read_memory offset read_len ss)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -154,7 +154,7 @@ Theorem compile_abi_bytestring_correct_path:
         eval_operand arg_op out = eval_operand arg_op ss) /\
       (!offset read_len.
         offset + read_len <= w2n dst_addr \/
-        w2n dst_addr + ceil32 (LENGTH bs) + 32 <= offset ==>
+        w2n dst_addr + contractABI$ceil32 (LENGTH bs) + 32 <= offset ==>
         read_memory offset read_len out = read_memory offset read_len ss)
 Proof
   rpt gen_tac >> strip_tac >>

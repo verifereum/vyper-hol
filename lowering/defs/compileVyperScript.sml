@@ -19,7 +19,7 @@
 
 Theory compileVyper
 Ancestors
-  exprLowering
+  allocLimits exprLowering
   vyperCompiler
   venomPipeline
   codegen
@@ -127,11 +127,11 @@ Definition build_flag_info_def:
 End
 
 Definition build_var_type_map_def:
-  build_var_type_map ([] : toplevel list) = (K NONE : string -> type option) ∧
+  build_var_type_map ([] : toplevel list) = (K NONE : nsid -> type option) ∧
   build_var_type_map (top :: rest) =
     case top of
       VariableDecl _ _ vname ty _ =>
-        (λn. if n = module_var_key (NONE, vname) then SOME ty
+        (λn. if n = (NONE, vname) then SOME ty
              else build_var_type_map rest n)
     | _ => build_var_type_map rest
 End
@@ -149,24 +149,24 @@ End
 
 Definition build_hashmap_info_def:
   build_hashmap_info ([] : toplevel list) =
-    (K NONE : string -> (bool # type # value_type) option) ∧
+    (K NONE : nsid -> (bool # type # value_type) option) ∧
   build_hashmap_info (top :: rest) =
     case top of
       HashMapDecl _ tr hname kt vt _ =>
-        (λn. if n = module_var_key (NONE, hname) then SOME (tr, kt, vt)
+        (λn. if n = (NONE, hname) then SOME (tr, kt, vt)
              else build_hashmap_info rest n)
     | _ => build_hashmap_info rest
 End
 
 Theorem build_hashmap_info_head[simp]:
   build_hashmap_info (HashMapDecl vis tr name kt vt slot :: rest)
-    (module_var_key (NONE, name)) = SOME (tr, kt, vt)
+    ((NONE, name)) = SOME (tr, kt, vt)
 Proof
   simp[build_hashmap_info_def]
 QED
 
 Theorem build_hashmap_info_other:
-  n ≠ module_var_key (NONE, name) ⇒
+  n ≠ (NONE, name) ⇒
   build_hashmap_info (HashMapDecl vis tr name kt vt slot :: rest) n =
     build_hashmap_info rest n
 Proof
@@ -175,7 +175,7 @@ QED
 
 Theorem build_hashmap_info_transient:
   build_hashmap_info [HashMapDecl vis T name kt vt slot]
-    (module_var_key (NONE, name)) = SOME (T, kt, vt)
+    ((NONE, name)) = SOME (T, kt, vt)
 Proof
   simp[build_hashmap_info_def]
 QED
@@ -197,7 +197,7 @@ Theorem build_hashmap_info_some:
     build_hashmap_info tops n = SOME (tr, kt, vt) ==>
     ?pre post vis name slot.
       tops = pre ++ HashMapDecl vis tr name kt vt slot :: post /\
-      n = module_var_key (NONE, name) /\
+      n = (NONE, name) /\
       build_hashmap_info pre n = NONE
 Proof
   Induct >> simp[build_hashmap_info_def] >>
@@ -341,21 +341,114 @@ Definition allocate_internal_special_vars_def:
 End
 
 Definition add_module_var_locations_def:
-  add_module_var_locations ([] : toplevel list) vars = vars ∧
+  add_module_var_locations ([] : toplevel list)
+    (vars : (nsid, var_location) fmap) = vars ∧
   add_module_var_locations (top :: rest) vars =
     let vars' =
       case top of
         VariableDecl _ Storage name _ (SOME slot) =>
-          vars |+ (module_var_key (NONE, name), StorageLoc (n2w slot))
+          vars |+ ((NONE, name), StorageLoc (n2w slot))
       | VariableDecl _ Transient name _ (SOME slot) =>
-          vars |+ (module_var_key (NONE, name), TransientLoc (n2w slot))
+          vars |+ ((NONE, name), TransientLoc (n2w slot))
       | HashMapDecl _ transient name _ _ (SOME slot) =>
-          vars |+ (module_var_key (NONE, name),
+          vars |+ ((NONE, name),
             if transient then TransientLoc (n2w slot)
             else StorageLoc (n2w slot))
       | _ => vars in
     add_module_var_locations rest vars'
 End
+
+(* Immutable offsets use the same module namespace as storage variables. *)
+Definition add_immutable_locations_def:
+  add_immutable_locations sft ([] : toplevel list) (off : num)
+    (vars : (nsid, var_location) fmap) = vars /\
+  add_immutable_locations sft (top :: rest) off vars =
+    case top of
+      VariableDecl _ Immutable name ty _ =>
+        add_immutable_locations sft rest (off + type_mem_bytes sft ty)
+          (vars |+ ((NONE, name), ImmutableLoc off))
+    | _ => add_immutable_locations sft rest off vars
+End
+
+Theorem compute_immutables_len_append:
+  !xs ys. compute_immutables_len sft (xs ++ ys) =
+    compute_immutables_len sft xs + compute_immutables_len sft ys
+Proof
+  Induct >> simp[compute_immutables_len_def] >>
+  Cases_on `h` >> simp[compute_immutables_len_def] >>
+  CASE_TAC >> decide_tac
+QED
+
+Theorem add_immutable_locations_append:
+  !xs ys off vars.
+    add_immutable_locations sft (xs ++ ys) off vars =
+    add_immutable_locations sft ys (off + compute_immutables_len sft xs)
+      (add_immutable_locations sft xs off vars)
+Proof
+  Induct >> simp[add_immutable_locations_def, compute_immutables_len_def] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[add_immutable_locations_def, compute_immutables_len_def] >>
+  CASE_TAC >>
+  simp[add_immutable_locations_def, compute_immutables_len_def, arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem add_immutable_locations_lookup_unchanged:
+  !tops off vars key.
+    (!vis name ty slot.
+      MEM (VariableDecl vis Immutable name ty slot) tops ==>
+      (NONE, name) <> key) ==>
+    FLOOKUP (add_immutable_locations sft tops off vars) key = FLOOKUP vars key
+Proof
+  Induct >- simp[add_immutable_locations_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `h` >>
+  gvs[add_immutable_locations_def] >>
+  (CASE_TAC ORELSE all_tac) >>
+  gvs[add_immutable_locations_def] >>
+  TRY (last_x_assum irule >> metis_tac[] >> NO_TAC) >>
+  rename1 `add_immutable_locations sft tops (off + type_mem_bytes sft ty)
+    (vars |+ ((NONE, name), ImmutableLoc off))` >>
+  `(NONE, name) <> key` by metis_tac[] >>
+  last_x_assum (qspecl_then
+    [`off + type_mem_bytes sft ty`,
+     `vars |+ ((NONE, name), ImmutableLoc off)`, `key`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem add_immutable_locations_declaration_lookup:
+  (!vis' name' ty' slot'.
+    MEM (VariableDecl vis' Immutable name' ty' slot') suffix ==>
+    name' <> name) ==>
+  FLOOKUP (add_immutable_locations sft
+    (prefix ++ VariableDecl vis Immutable name ty slot :: suffix) off vars)
+    ((NONE, name)) =
+  SOME (ImmutableLoc (off + compute_immutables_len sft prefix))
+Proof
+  strip_tac >> simp[add_immutable_locations_append,
+    add_immutable_locations_def] >>
+  qmatch_goalsub_abbrev_tac `FLOOKUP (add_immutable_locations sft suffix o2 v2) _` >>
+  `FLOOKUP (add_immutable_locations sft suffix o2 v2) (NONE,name) =
+   FLOOKUP v2 (NONE,name)`
+    by (irule add_immutable_locations_lookup_unchanged >> simp[] >>
+        metis_tac[]) >>
+  simp[Abbr `v2`, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem immutable_declaration_interval_bound:
+  off + compute_immutables_len sft prefix + type_mem_bytes sft ty <=
+  off + compute_immutables_len sft
+    (prefix ++ VariableDecl vis Immutable name ty slot :: suffix)
+Proof
+  simp[compute_immutables_len_append, compute_immutables_len_def]
+QED
+
+Theorem last_immutable_region_end:
+  off + compute_immutables_len sft prefix + type_mem_bytes sft ty =
+  off + compute_immutables_len sft
+    (prefix ++ [VariableDecl vis Immutable name ty slot])
+Proof
+  simp[compute_immutables_len_append, compute_immutables_len_def]
+QED
 
 (* ===== Dynamic Array Capacity ===== *)
 
@@ -365,7 +458,7 @@ Definition dynarray_capacity_of_type_def:
 End
 
 Definition build_dynarray_capacity_def:
-  build_dynarray_capacity ([] : (string # type) list) = (K 0n : string -> num) ∧
+  build_dynarray_capacity ([] : ('a # type) list) = (K 0n : 'a -> num) ∧
   build_dynarray_capacity ((vname, ty) :: rest) =
     let rest_map = build_dynarray_capacity rest in
     case dynarray_capacity_of_type ty of
@@ -374,10 +467,10 @@ Definition build_dynarray_capacity_def:
 End
 
 Definition collect_module_vars_def:
-  collect_module_vars ([] : toplevel list) = ([] : (string # type) list) ∧
+  collect_module_vars ([] : toplevel list) = ([] : (nsid # type) list) ∧
   collect_module_vars (top :: rest) =
     (case top of
-       VariableDecl _ _ vname ty _ => [(module_var_key (NONE, vname), ty)]
+       VariableDecl _ _ vname ty _ => [((NONE, vname), ty)]
      | _ => []) ++ collect_module_vars rest
 End
 
@@ -511,8 +604,9 @@ Definition build_compile_env_def:
     let is_external = (vis = External) in
     let rc = returns_stack_count sft_types ret_type in
     let has_return_buf = (rc = 0 ∧ ret_type ≠ NoneT) in
-    let module_vars = add_module_var_locations tops FEMPTY in
-    let (arg_vars, args_end) = allocate_args sft_fn args 0 module_vars in
+    let module_vars = add_immutable_locations sft_fn tops 0
+      (add_module_var_locations tops FEMPTY) in
+    let (arg_vars, args_end) = allocate_args sft_fn args 0 FEMPTY in
     let locals = collect_locals body in
     (* Every body allocates each local at its declaration (declare_local), so
        locals get no slot here.
@@ -520,26 +614,26 @@ Definition build_compile_env_def:
     let (ret_buf, ret_pc) =
       if is_external then (NONE, NONE)
       else allocate_internal_special_vars has_return_buf args_end in
-    let all_decls = collect_module_vars tops ++ args ++ locals in
-    let dynarray_cap = build_dynarray_capacity all_decls in
+    let dynarray_cap = build_dynarray_capacity (args ++ locals) in
     let func_info = build_func_info sft_fn tops in
-    let local_var_type = (λn.
-          case ALOOKUP (REVERSE (args ++ locals)) n of
-            SOME ty => SOME ty
-          | NONE => var_type_map n) in
+    let local_var_type = (λn. ALOOKUP (REVERSE (args ++ locals)) n) in
     <| ce_target := all_capabilities;
        ce_vars := arg_vars;
+       ce_module_vars := module_vars;
        ce_storage_layout := storage_layout;
        (* TODO: NONE = main module. For multi-module (imports), should
           be SOME src_id. Currently single-module only. *)
        ce_module := NONE;
        ce_struct_fields := sft;
        ce_dynarray_capacity := dynarray_cap;
+       ce_module_dynarray_capacity :=
+         build_dynarray_capacity (collect_module_vars tops);
        ce_method_id := (λs tys. w2n (calldata_method_id
                           (function_selector s (vyper_to_abi_types tenv tys))));
        ce_flag_member_id := flag_member_id;
        ce_flag_n_members := flag_n_members;
        ce_var_type := local_var_type;
+       ce_module_var_type := var_type_map;
        ce_hashmap_info := hashmap_info;
        ce_event_info := event_info;
        ce_type_env := tenv;
@@ -552,6 +646,7 @@ Definition build_compile_env_def:
        ce_max_return_size := 0;
        (* Default: overridden by package_internal_fn for ctor context *)
        ce_is_ctor := (vis = Deploy);
+       ce_imm_alloca := NONE;
        ce_func_info := func_info;
        ce_func_param_types := build_func_param_types tops;
        ce_func_ids := build_func_ids 0 tops;
@@ -664,7 +759,6 @@ QED
 
 Theorem build_compile_env_external_single_uint_arg_lookup:
   !tops mut func_name arg_name ret_type (body : stmt list) use_trans.
-    add_module_var_locations tops FEMPTY = FEMPTY /\
     collect_locals body = [] ==>
     FLOOKUP
       (build_compile_env tops External mut func_name
@@ -729,8 +823,20 @@ Proof
   rw[finite_mapTheory.FLOOKUP_UPDATE] >> simp[]
 QED
 
-(* build_compile_env holds the parameters at MemLoc slots and module
-   variables at storage slots: no other MemLoc variable and no PtrVar. *)
+Theorem add_immutable_locations_FLOOKUP:
+  !sft tops off vars n loc.
+    FLOOKUP (add_immutable_locations sft tops off vars) n = SOME loc ==>
+    FLOOKUP vars n = SOME loc \/ ?imm_off. loc = ImmutableLoc imm_off
+Proof
+  gen_tac >> Induct >> simp[add_immutable_locations_def] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[add_immutable_locations_def] >> rpt (CASE_TAC >> simp[]) >>
+  strip_tac >> first_x_assum drule >>
+  rw[finite_mapTheory.FLOOKUP_UPDATE] >> simp[]
+QED
+
+(* build_compile_env holds the parameters at MemLoc slots and nothing else
+   in ce_vars: no other MemLoc variable and no PtrVar. *)
 Theorem build_compile_env_vars:
   !tops vis mut func_name args ret_type (body : stmt list) use_trans.
     (!n. MEM n (MAP FST args) ==>
@@ -750,15 +856,14 @@ Proof
   `!n. MEM n (MAP FST args) ==>
        ?off sz. FLOOKUP arg_vars n = SOME (MemLoc off sz)`
     by (rpt strip_tac >> drule_all allocate_args_FLOOKUP_arg >> simp[]) >>
-  `!n loc. FLOOKUP arg_vars n = SOME loc /\ ~MEM n (MAP FST args) ==>
-           ?slot. loc = StorageLoc slot \/ loc = TransientLoc slot`
-    by (rpt strip_tac >> drule_all allocate_args_FLOOKUP_other >>
-        strip_tac >> gvs[] >>
-        drule add_module_var_locations_FLOOKUP >> simp[]) >>
-  rw[] >> spose_not_then assume_tac >>
-  Cases_on `MEM n (MAP FST args)` >> gvs[]
-  >- (first_x_assum drule >> strip_tac >> gvs[])
-  >> first_x_assum drule_all >> strip_tac >> gvs[]
+  `!n loc. FLOOKUP arg_vars n = SOME loc ==> MEM n (MAP FST args)`
+    by (rpt strip_tac >> spose_not_then assume_tac >>
+        drule_all allocate_args_FLOOKUP_other >> simp[]) >>
+  rpt conj_tac
+  >- metis_tac[]
+  >- metis_tac[] >>
+  rpt strip_tac >> `MEM n (MAP FST args)` by metis_tac[] >>
+  qpat_x_assum `!n. MEM n _ ==> _` drule >> strip_tac >> gvs[]
 QED
 
 
@@ -936,6 +1041,21 @@ Definition external_return_buffer_ok_def:
     | SOME ret =>
         ¬cenv.ce_raw_return ∧ ¬is_word_type ret ∧ stmts_valued_return body ⇒
         return_buffer_ok cenv
+End
+
+(* Every buffer a function's lowering allocates statically is below Python's
+   allocation limit: its parameters', which an external function decodes
+   from calldata into Context.new_variable's and a caller stages for an
+   internal call in new_temporary_value's, those of its defaults and its
+   body (alloc_limits_stmts), and its return type's, which a caller stages
+   for an internal call's result in new_temporary_value.  The compile env
+   only supplies struct sizes, which every function's has the same. *)
+Definition fn_allocs_ok_def:
+  fn_allocs_ok tops (mut, nr, rr, fname, fargs, dflts, ret, body) ⇔
+    let cenv = build_compile_env tops Internal mut fname fargs ret body F in
+    EVERY (λ(_,ty). type_memory_bytes cenv ty < 2 ** 64) fargs ∧
+    alloc_limits_exprs cenv dflts ∧ alloc_limits_stmts cenv body ∧
+    type_memory_bytes cenv ret < 2 ** 64
 End
 
 (* Package an internal function for compilation.
@@ -1258,7 +1378,10 @@ Definition lower_vyper_runtime_unit_def:
           set_fallback_package_target rpolicy.rpol_target
             (package_fallback_fn tops use_trans nkey_map fb_fn) in
     let entry_info = build_dense_entry_info selectors external_fns in
-    if EVERY external_return_buffer_ok external_fns then
+    if EVERY external_return_buffer_ok external_fns ∧
+       EVERY (fn_allocs_ok tops)
+         (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f]))
+    then
       run_lowering selectors external_fns runtime_int_fns fallback_fn
         rpolicy 0 0 ([] : dense_bucket list) entry_info "__entry"
     else NONE
@@ -1275,6 +1398,19 @@ Theorem lower_vyper_runtime_unit_return_buffer_ok:
 Proof
   rw[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
   gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP, PULL_EXISTS]
+QED
+
+(* A unit that lowers has every function's static buffers below the limit. *)
+Theorem lower_vyper_runtime_unit_allocs_ok:
+  ∀tops rpolicy unit exts ints fb ctor f.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit ∧
+    classify_functions tops = (exts, ints, fb, ctor) ∧
+    (MEM f exts ∨ MEM f ints ∨ fb = SOME f) ⇒
+    fn_allocs_ok tops f
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[lower_vyper_runtime_unit_def, AllCaseEqs(), listTheory.EVERY_MEM] >>
+  first_x_assum irule >> simp[]
 QED
 
 (* Deploy lowering receives the actual runtime bytes.  Their size and data
@@ -1296,6 +1432,9 @@ Definition lower_vyper_deploy_unit_def:
                  package_internal_fn tops use_trans nkey_map T immutables_len)
                 int_fns
           else [] in
+    if ¬EVERY (fn_allocs_ok tops)
+          (int_fns ++ (case ctor_fn of NONE => [] | SOME f => [f]))
+    then NONE else
     let (ctor_cenv, ctor_args, ctor_payable, ctor_nr, ctor_nkey,
          ctor_trans, ctor_body, ctor_ret) =
       set_constructor_package_target rpolicy.rpol_target
@@ -1307,6 +1446,20 @@ Definition lower_vyper_deploy_unit_def:
       immutables_len ctor_args 0 deploy_int_fns ctor_cenv ctor_body
       ctor_payable ctor_nr ctor_nkey ctor_trans "__deploy"
 End
+
+(* A deploy unit that lowers has the constructor's and every internal
+   function's static buffers below the limit. *)
+Theorem lower_vyper_deploy_unit_allocs_ok:
+  ∀tops rpolicy bytes unit exts ints fb ctor f.
+    lower_vyper_deploy_unit tops rpolicy bytes = SOME unit ∧
+    classify_functions tops = (exts, ints, fb, ctor) ∧
+    (MEM f ints ∨ ctor = SOME f) ⇒
+    fn_allocs_ok tops f
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[lower_vyper_deploy_unit_def, AllCaseEqs(), listTheory.EVERY_MEM] >>
+  first_x_assum irule >> simp[]
+QED
 
 
 (* Run one complete compilation unit through a resolved-policy pipeline and

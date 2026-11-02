@@ -12,7 +12,7 @@ Theorem state_rel_simple_inst_idx[simp]:
     state_rel_simple cenv cx es (ss with vs_inst_idx := index) = state_rel_simple cenv cx es ss
 Proof
   simp[state_rel_simple_def, vars_rel_def, storage_rel_def, transient_rel_def,
-    immutables_rel_def, logs_rel_def, call_ctx_rel_def,
+    immutables_rel_simple_def, logs_rel_def, call_ctx_rel_def,
     contract_storage_def, contract_transient_def]
 QED
 

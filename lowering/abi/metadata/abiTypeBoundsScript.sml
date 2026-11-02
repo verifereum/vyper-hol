@@ -97,9 +97,9 @@ Theorem abi_base_size_bound:
     abi_size_bound sfields (BaseT bt) = vyper_abi_size_bound tenv (BaseT bt)
 Proof
   rpt gen_tac >> Cases_on `bt` >>
-  simp[Once abi_size_bound_def, Once vyper_abi_size_bound_def, abi_static_size_def, ceil32_def, MULT_COMM] >>
+  simp[Once abi_size_bound_def, Once vyper_abi_size_bound_def, abi_static_size_def, contractABITheory.ceil32_def, MULT_COMM] >>
   qmatch_goalsub_rename_tac `BytesT byte_bound` >> Cases_on `byte_bound` >>
-  simp[Once abi_size_bound_def, Once vyper_abi_size_bound_def, abi_static_size_def, ceil32_def, MULT_COMM]
+  simp[Once abi_size_bound_def, Once vyper_abi_size_bound_def, abi_static_size_def, contractABITheory.ceil32_def, MULT_COMM]
 QED
 
 Theorem abi_bound_tuple_case:

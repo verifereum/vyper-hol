@@ -62,7 +62,7 @@ Theorem bytes_snapshot_result_copy_frame:
       (bytes_snapshot_result id var_base capacity src_addr ss).vs_memory
 Proof
   rpt gen_tac >> strip_tac >> drule_all typed_memory_bytestring_view >> strip_tac >>
-  `32 + ceil32 (LENGTH bs) < dimword(:256)` by decide_tac >>
+  `32 + contractABI$ceil32 (LENGTH bs) < dimword(:256)` by decide_tac >>
   mp_tac (Q.SPECL [`id`, `var_base`, `capacity`, `src_addr`, `ss`, `LENGTH (bs:byte list)`]
     bytes_snapshot_result_natural_memory) >> impl_tac >- simp[] >> DISCH_TAC >>
   asm_simp_tac (srw_ss()) [array_copy_frame_def] >> rpt gen_tac >> strip_tac >>

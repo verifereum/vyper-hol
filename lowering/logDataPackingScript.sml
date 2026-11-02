@@ -132,6 +132,7 @@ Definition log_packing_public_frame_def:
       mem_bytes_at b n after.vs_memory = mem_bytes_at b n before.vs_memory) /\
     after.vs_accounts = before.vs_accounts /\
     after.vs_transient = before.vs_transient /\
+    after.vs_pending_deletions = before.vs_pending_deletions /\
     after.vs_requests = before.vs_requests /\
     after.vs_call_ctx = before.vs_call_ctx /\
     after.vs_data_section = before.vs_data_section /\
@@ -621,10 +622,14 @@ Theorem log_data_result_logs:
   out.vs_logs = before.vs_logs ++
     [<|logger := w2w before.vs_call_ctx.cc_address; topics := ws; data := bytes|>] /\
   out.vs_call_ctx = before.vs_call_ctx /\
-  out.vs_data_section = before.vs_data_section /\ alloca_inv out
+  out.vs_data_section = before.vs_data_section /\ alloca_inv out /\
+  out.vs_pending_deletions = before.vs_pending_deletions
 Proof
   strip_tac >> drule copy_state_frame_external >> strip_tac >>
   drule abi_state_frame_observables >> strip_tac >>
   drule abi_state_frame_source_fields >> strip_tac >>
-  fs[log_data_result_def, log_packing_public_frame_def] >> metis_tac[]
+  fs[log_data_result_def, log_packing_public_frame_def,
+     memory_snapshot_allocated_def, memory_snapshot_alloc_frame_def,
+     update_var_def] >>
+  IF_CASES_TAC >> gvs[]
 QED

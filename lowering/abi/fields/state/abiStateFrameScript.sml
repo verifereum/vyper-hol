@@ -1,6 +1,6 @@
 (* TOP-LEVEL: ABI encoders may change memory, SSA bindings, allocation records
    and control position. Every other state component, including existing logs,
-   accounts, call context and outcome supply, is preserved. *)
+   accounts, pending deletions, call context and outcome supply, is preserved. *)
 Theory abiStateFrame
 Ancestors
   venomState venomExecSemantics finite_map list words
@@ -63,6 +63,7 @@ Theorem abi_state_frame_observables:
   !before after. abi_state_frame before after ==>
     after.vs_logs = before.vs_logs /\ after.vs_call_ctx = before.vs_call_ctx /\
     after.vs_accounts = before.vs_accounts /\ after.vs_transient = before.vs_transient /\
+    after.vs_pending_deletions = before.vs_pending_deletions /\
     after.vs_immutables = before.vs_immutables /\ after.vs_requests = before.vs_requests /\
     after.vs_outcomes = before.vs_outcomes /\ after.vs_returndata = before.vs_returndata /\
     after.vs_halted = before.vs_halted

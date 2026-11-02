@@ -13,7 +13,10 @@
  *   eval_assign_attr_toplevel          — the source run: e's forced
  *                                        value, then write_storage_slot at
  *                                        the field's slot
- *   compile_assign_attr_storage_stmt_frag — self.x.f = e, every outcome
+ *   compile_assign_attr_storage_case  — self.x.f = e, every outcome, e's
+ *                                        simulation a premise
+ *   compile_assign_attr_storage_stmt_frag — the same for an e with no
+ *                                        internal call
  *
  * Helpers: struct_field_slot_alookup, extend_storage_place_attr,
  *   eval_target_place_attr_toplevel, assign_attr_storage_source,
@@ -146,7 +149,7 @@ Theorem assign_attr_storage_source:
     eval_stmt cx
       (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id)) fld))
          e) es = (res, es') /\
-    stmt_res_ok lctx res /\ expr_sim_pre cenv cx env e es /\
+    stmt_res_ok lctx res /\ expr_body_pre cenv cx env e es /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr (StructT sid), id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -178,15 +181,15 @@ Proof
     (rpt strip_tac >> gvs[stmt_res_ok_def]) >>
   drule_all eval_assign_attr_toplevel >> strip_tac >>
   qexistsl_tac [`r`, `es1`] >> simp[] >>
-  conj_tac >- (irule expr_sim_pre_res_ok >> metis_tac[]) >>
+  conj_tac >- (irule expr_body_pre_res_ok >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   rename1 `struct_field_slot fs fld = SOME (off, ftv)` >>
-  `expr_sim_inv cenv cx env es` by fs[expr_sim_pre_def] >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   drule_all struct_fields_layout >> strip_tac >> gvs[] >>
   drule_all struct_field_offset_slots_eq >> strip_tac >> gvs[] >>
   drule_all struct_field_type >> strip_tac >>
   imp_res_tac struct_field_slot_alookup >> gvs[] >>
-  drule_all expr_sim_pre_eval >> strip_tac >>
+  drule_all expr_body_pre_eval >> strip_tac >>
   `env.type_defs = get_tenv cx` by
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   gvs[expr_result_typed_def, expr_runtime_typed_def,
@@ -210,10 +213,10 @@ Theorem assign_attr_storage_code_parts:
     stmt_env cenv lctx ty
       (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id)) fld))
          e) sa = (c, sf) /\
-    FLOOKUP cenv.ce_vars (module_var_key (src, id)) =
+    FLOOKUP cenv.ce_module_vars (src, id) =
       SOME (if tr then TransientLoc slot else StorageLoc slot) /\
-    cenv.ce_hashmap_info (module_var_key (src, id)) = NONE /\
-    cenv.ce_var_type (module_var_key (src, id)) = SOME (StructT sid) /\
+    cenv.ce_hashmap_info (src, id) = NONE /\
+    cenv.ce_module_var_type (src, id) = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (fty, fsz) /\
     is_word_type fty /\ is_word_type (expr_type e) ==>
@@ -232,7 +235,7 @@ Proof
     metis_tac[is_word_type_no_length_word] >>
   drule_all compile_get_target_ptr_toplevel >> strip_tac >>
   drule stmt_env_assign >> strip_tac >> gvs[] >>
-  rename1 `FLOOKUP cenv.ce_vars _` >>
+  rename1 `FLOOKUP cenv.ce_module_vars _` >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   Cases_on `tr` >>
   asm_simp_tac (srw_ss())
@@ -261,17 +264,17 @@ Theorem store_var_frag[local]:
   !ctx func cenv cx es' s1 tr d a op w st st' R.
     emit_void (if tr then TSTORE else SSTORE) [Var d; op] st = ((), st') /\
     lookup_var d s1 = SOME a /\ eval_operand op s1 = SOME w /\
-    stmt_state_rel func cenv cx es'
+    stmt_state_rel ctx func cenv cx es'
       (if tr then tstore a w s1 else sstore a w s1) ==>
     frag_exec ctx st st' (\t. t = s1)
-      (\t. stmt_state_rel func cenv cx es' t /\
+      (\t. stmt_state_rel ctx func cenv cx es' t /\
            (!x. lookup_var x t = lookup_var x s1) /\
            (!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
                     FLOOKUP t.vs_allocas aid = SOME b)) R
 Proof
   rpt strip_tac >>
   `frag_exec ctx st st' (\t. t = s1)
-     (\t. stmt_state_rel func cenv cx es' t /\
+     (\t. stmt_state_rel ctx func cenv cx es' t /\
           (!x. lookup_var x t = lookup_var x s1) /\
           (!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
                    FLOOKUP t.vs_allocas aid = SOME b)) (\r. F)` by
@@ -317,8 +320,8 @@ Theorem assign_attr_storage_frag:
                !u st.
                  storage_dead cx tr (update_storage (n2w slot + n2w off) u st) =
                  storage_dead cx tr st) ==>
-    frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
-      (\t. res = INL () /\ stmt_state_rel func cenv cx es' t /\
+    frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\t. res = INL () /\ stmt_state_rel ctx func cenv cx es' t /\
            (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
                   lookup_var x t = SOME u) /\
            (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -355,8 +358,9 @@ QED
 (* self.x.f = e for a storage or transient struct x the lowering holds by
    slot (no hashmap) and a field f of a word type that e has, for every
    outcome: e's errors exit, and on a value its word is stored at the
-   field's slot. *)
-Theorem compile_assign_attr_storage_stmt_frag:
+   field's slot.  e may call internal functions: its simulation is a
+   premise. *)
+Theorem compile_assign_attr_storage_case:
   !ctx func cx lctx RetQ cenv ty env src id fld sid fty fsz e es res es' ts
    tr id_str slot.
     eval_stmt cx
@@ -365,12 +369,13 @@ Theorem compile_assign_attr_storage_stmt_frag:
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr (StructT sid), id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-    cenv.ce_hashmap_info (module_var_key (src, id)) = NONE /\
-    cenv.ce_var_type (module_var_key (src, id)) = SOME (StructT sid) /\
+    cenv.ce_hashmap_info (src, id) = NONE /\
+    cenv.ce_module_var_type (src, id) = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (fty, fsz) /\
     is_word_type fty /\ expr_type e = fty /\
-    expr_vv_ok cenv e /\ expr_sim_pre cenv cx env e es ==>
+    expr_vv_sim ctx func cenv cx (expr_type e) e es /\
+    expr_body_pre cenv cx env e es ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id))
@@ -379,14 +384,12 @@ Theorem compile_assign_attr_storage_stmt_frag:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
-  `FLOOKUP cenv.ce_vars (module_var_key (src, id)) =
+  `FLOOKUP cenv.ce_module_vars (src, id) =
      SOME (if tr then TransientLoc (n2w slot) else StorageLoc (n2w slot))` by
     (irule toplevel_storage_ce_vars >>
      gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
   `is_word_type (expr_type e)` by simp[] >>
   drule_all assign_attr_storage_code_parts >> strip_tac >>
-  `expr_vv_sim ctx func cenv cx (expr_type e) e es` by
-    metis_tac[expr_vv_ok_def] >>
   drule_all assign_attr_storage_source >> strip_tac >>
   qpat_x_assum `expr_type e = fty` (SUBST_ALL_TAC o SYM) >>
   drule_all assign_attr_storage_frag >>
@@ -399,4 +402,33 @@ Proof
       simp[is_terminator_def]) >>
   Cases_on `r` >> gvs[] >>
   disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+QED
+
+(* compile_assign_attr_storage_case for an e with no internal call. *)
+Theorem compile_assign_attr_storage_stmt_frag:
+  !ctx func cx lctx RetQ cenv ty env src id fld sid fty fsz e es res es' ts
+   tr id_str slot.
+    eval_stmt cx
+      (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id)) fld))
+         e) es = (res, es') /\
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (StorageVarDecl tr (StructT sid), id_str) /\
+    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+    cenv.ce_hashmap_info (src, id) = NONE /\
+    cenv.ce_module_var_type (src, id) = SOME (StructT sid) /\
+    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+      fld = SOME (fty, fsz) /\
+    is_word_type fty /\ expr_type e = fty /\
+    expr_vv_ok cenv e /\ expr_sim_pre cenv cx env e es ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty
+         (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id))
+            fld)) e))
+      es res es'
+Proof
+  rpt strip_tac >> irule compile_assign_attr_storage_case >>
+  `expr_body_pre cenv cx env e es` by fs[expr_sim_pre_body] >>
+  `expr_vv_sim ctx func cenv cx (expr_type e) e es` by
+    metis_tac[expr_vv_ok_def] >>
+  simp[] >> metis_tac[]
 QED

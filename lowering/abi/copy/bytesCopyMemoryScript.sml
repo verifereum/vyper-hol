@@ -38,9 +38,9 @@ QED
 Theorem bytes_copy_result_natural_memory:
   !var_base dst_addr src_addr ss payload_len.
     mload (w2n src_addr) ss = n2w payload_len /\
-    32 + ceil32 payload_len < dimword(:256) ==>
+    32 + contractABI$ceil32 payload_len < dimword(:256) ==>
     (bytes_copy_result var_base dst_addr src_addr ss).vs_memory =
-      (mcopy (w2n dst_addr) (w2n src_addr) (32 + ceil32 payload_len) ss).vs_memory
+      (mcopy (w2n dst_addr) (w2n src_addr) (32 + contractABI$ceil32 payload_len) ss).vs_memory
 Proof
   rpt gen_tac >> strip_tac >>
   `payload_len + 31 < dimword(:256)` by
@@ -56,12 +56,12 @@ Theorem bytes_copy_result_layout:
       (bytes_copy_result var_base dst_addr src_addr ss).vs_memory
 Proof
   rpt gen_tac >> strip_tac >> drule_all typed_memory_bytestring_view >> strip_tac >>
-  `32 + ceil32 (LENGTH bs) < dimword(:256)` by decide_tac >>
+  `32 + contractABI$ceil32 (LENGTH bs) < dimword(:256)` by decide_tac >>
   mp_tac (Q.SPECL [`var_base`, `dst_addr`, `src_addr`, `ss`, `LENGTH (bs:byte list)`]
     bytes_copy_result_natural_memory) >> impl_tac >- simp[] >> DISCH_TAC >>
   asm_rewrite_tac [] >>
   mp_tac (Q.SPECL [`tenv`, `ty`, `tv`, `v`, `bs`, `w2n (src_addr:bytes32)`,
-    `w2n (dst_addr:bytes32)`, `32 + ceil32 (LENGTH (bs:byte list))`, `ss`]
+    `w2n (dst_addr:bytes32)`, `32 + contractABI$ceil32 (LENGTH (bs:byte list))`, `ss`]
     mcopy_memory_value_bytestring) >> simp[]
 QED
 
@@ -98,11 +98,11 @@ Theorem typed_bytestring_payload_size:
   !tenv ty tv v bs.
     is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv /\
     value_has_type tv v /\ raw_return_bytes v = SOME bs ==>
-    32 + ceil32 (LENGTH bs) <= type_memory_size tv
+    32 + contractABI$ceil32 (LENGTH bs) <= type_memory_size tv
 Proof
   rpt gen_tac >> strip_tac >> drule_all bytestring_value_size_bound >> DISCH_TAC >>
   Cases_on `v` >>
-  gvs[raw_return_bytes_def, val_memory_size_def, ceil32_def, vfmConstantsTheory.word_size_def]
+  gvs[raw_return_bytes_def, val_memory_size_def, contractABITheory.ceil32_def, vfmConstantsTheory.word_size_def]
 QED
 
 Theorem bytes_copy_result_preserves_field_region:
@@ -119,14 +119,14 @@ Theorem bytes_copy_result_preserves_field_region:
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
   drule_all typed_memory_bytestring_view >> strip_tac >>
-  `32 + ceil32 (LENGTH bs) < dimword(:256)` by decide_tac >>
-  `32 + ceil32 (LENGTH bs) <= type_memory_size ftv` by
+  `32 + contractABI$ceil32 (LENGTH bs) < dimword(:256)` by decide_tac >>
+  `32 + contractABI$ceil32 (LENGTH bs) <= type_memory_size ftv` by
     (mp_tac (Q.SPECL [`tenv`, `fty`, `ftv`, `v`, `bs`] typed_bytestring_payload_size) >> simp[]) >>
   mp_tac (Q.SPECL [`var_base`, `dst_addr`, `src_addr`, `ss`, `LENGTH (bs:byte list)`]
     bytes_copy_result_natural_memory) >> impl_tac >- simp[] >> DISCH_TAC >>
   asm_rewrite_tac [] >>
   mp_tac (Q.SPECL [`other_tv`, `other_v`, `other_offset`, `w2n (dst_addr:bytes32)`,
-    `w2n (src_addr:bytes32)`, `32 + ceil32 (LENGTH (bs:byte list))`, `ss`]
+    `w2n (src_addr:bytes32)`, `32 + contractABI$ceil32 (LENGTH (bs:byte list))`, `ss`]
     mcopy_preserves_memory_value_rel) >>
   impl_tac >- (conj_tac >- simp[] >> conj_tac >- simp[] >> decide_tac) >> simp[]
 QED

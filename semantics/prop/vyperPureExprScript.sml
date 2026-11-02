@@ -3,7 +3,8 @@ Ancestors
   vyperExprEffects vyperMisc vyperContext vyperState vyperStorageBackend
   vyperInterpreter vyperLookup vyperStatePreservation vyperPlaceFrames
 
-(* Re-export the shared syntax definition for existing proof clients. *)
+(* Re-export the shared syntax definition for existing proof clients.
+   msg.gas is excluded there because it consumes a gas reading. *)
 Theorem pure_expr_def = vyperExprEffectsTheory.pure_expr_def;
 
 (* Specialize the canonical evaluator induction theorem. Only expression
@@ -160,7 +161,7 @@ Theorem case_Builtin[local]:
   ∀cx ty bt es.
     (∀s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ∧
-       bt ≠ Len ⇒
+       bt ≠ Len ∧ bt ≠ Env MsgGas ⇒
        ∀st res st'.
          eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st') ∧
     (∀s'' x t.

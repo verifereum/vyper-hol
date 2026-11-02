@@ -59,6 +59,11 @@ bridges typed packing to the canonical `val_in_memory` relation.
 [`checkedLogDataExecution`](../lowering/checkedLogDataExecutionScript.sml)
 composes argument evaluation, topics, buffer allocation, packing and encoding,
 preserving source-state and local pointer relations and the source event.
+These standalone event proofs use the legacy fixed-offset `state_rel_simple`
+relation, including `immutables_rel_simple`'s word-indexed constructor
+bookkeeping. This is separate from `state_rel` and its `immutables_rel`
+constructor-memory/deployment invariant; no implication between the two state
+relations is claimed.
 
 The former native recursive Log encoder and its array, resource and trace
 machinery are retired. Log uses the shared encoder's `enc_scratch`/`enc_frame`

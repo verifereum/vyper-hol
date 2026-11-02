@@ -172,6 +172,6 @@ Proof
   drule_all log_public_vars_rel >> strip_tac >>
   drule_all log_public_local_ptrs >> strip_tac >> simp[] >>
   fs[state_rel_simple_def, logs_rel_eq, log_packing_public_frame_def,
-    storage_rel_def, transient_rel_def, immutables_rel_def,
+    storage_rel_def, transient_rel_def, immutables_rel_simple_def,
     contract_storage_def, contract_transient_def]
 QED

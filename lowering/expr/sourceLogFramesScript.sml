@@ -39,7 +39,7 @@ Theorem state_rel_simple_logs_append:
   !cenv cx es ss events. state_rel_simple cenv cx es ss ==>
     state_rel_simple cenv cx (es with logs := es.logs ++ events) (ss with vs_logs := ss.vs_logs ++ events)
 Proof
-  simp[state_rel_simple_def, logs_rel_eq, storage_rel_def, transient_rel_def, immutables_rel_def,
+  simp[state_rel_simple_def, logs_rel_eq, storage_rel_def, transient_rel_def, immutables_rel_simple_def,
     contract_storage_def, contract_transient_def] >>
   rpt strip_tac >> simp[]
 QED

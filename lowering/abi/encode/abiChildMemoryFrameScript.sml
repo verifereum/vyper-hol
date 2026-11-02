@@ -18,7 +18,7 @@ Theorem abi_bytestring_read_memory_frame:
   !dst_addr bs before after.
     (!offset read_len.
       offset + read_len <= w2n (dst_addr:bytes32) \/
-      w2n dst_addr + ceil32 (LENGTH (bs:word8 list)) + 32 <= offset ==>
+      w2n dst_addr + contractABI$ceil32 (LENGTH (bs:word8 list)) + 32 <= offset ==>
       read_memory offset read_len (after:venom_state) = read_memory offset read_len before) ==>
     abi_memory_frame [(w2n dst_addr,LENGTH (enc (Bytes NONE) (contractABI$BytesV bs)))] before after
 Proof
@@ -34,7 +34,7 @@ Theorem abi_child_bytes_read_memory_frame:
   !dst_addr bs var_base head_offset parent_addr dyn_addr ss index after.
     (!offset read_len.
       offset + read_len <= w2n (dst_addr:bytes32) \/
-      w2n dst_addr + ceil32 (LENGTH (bs:word8 list)) + 32 <= offset ==>
+      w2n dst_addr + contractABI$ceil32 (LENGTH (bs:word8 list)) + 32 <= offset ==>
       read_memory offset read_len (after:venom_state) =
       read_memory offset read_len
         ((abi_child_prefix_state var_base head_offset parent_addr dyn_addr ss) with vs_inst_idx := index)) ==>

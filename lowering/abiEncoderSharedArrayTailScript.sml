@@ -135,7 +135,8 @@ Proof
   `ready.vs_accounts = initial.vs_accounts /\ ready.vs_transient = initial.vs_transient /\
    ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests /\
    ready.vs_tx_ctx = initial.vs_tx_ctx /\ ready.vs_block_ctx = initial.vs_block_ctx /\
-   ready.vs_immutables = initial.vs_immutables /\ ready.vs_outcomes = initial.vs_outcomes` by
+   ready.vs_immutables = initial.vs_immutables /\ ready.vs_outcomes = initial.vs_outcomes /\
+   ready.vs_pending_deletions = initial.vs_pending_deletions` by
     (irule abi_encoder_member_phase_globals >> goal_assum (drule_at Any) >>
      drule abi_encoder_array_spine_tail_opcodes >> simp[]) >>
   gvs[abi_decoder_address_frame_def, abi_encoder_registered_effect_def,

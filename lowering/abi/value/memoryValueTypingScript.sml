@@ -8,7 +8,7 @@ Ancestors
 Theorem memory_capacity_covers_bound:
   !bound. bound <= 32 * word_size bound
 Proof
-  simp[vfmConstantsTheory.word_size_def, GSYM ceil32_def]
+  simp[vfmConstantsTheory.word_size_def, GSYM contractABITheory.ceil32_def]
 QED
 
 Theorem memory_length_fits_capacity:

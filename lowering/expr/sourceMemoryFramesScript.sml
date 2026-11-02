@@ -68,8 +68,9 @@ Theorem state_rel_simple_external_vars_frame:
 Proof
   rpt gen_tac >> strip_tac >> drule abi_state_frame_observables >> strip_tac >>
   drule abi_state_frame_source_fields >> strip_tac >>
-  fs[state_rel_simple_def, storage_rel_def, transient_rel_def, immutables_rel_def,
-    logs_rel_def, call_ctx_rel_def, contract_storage_def, contract_transient_def]
+  fs[state_rel_simple_def, storage_rel_def, transient_rel_def, immutables_rel_simple_def,
+    logs_rel_def, call_ctx_rel_def, contract_storage_def, contract_transient_def] >>
+  gvs[]
 QED
 
 Theorem source_memloc_copy_frame:

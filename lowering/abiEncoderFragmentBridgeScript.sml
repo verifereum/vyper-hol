@@ -19,7 +19,8 @@ Theorem enc_frame_assemble:
          FLOOKUP s.vs_allocas i = SOME r) /\
   enc_scratch (frag_ids st st') lo top s /\
   s.vs_accounts = s0.vs_accounts /\ s.vs_transient = s0.vs_transient /\
-  s.vs_logs = s0.vs_logs /\ s.vs_requests = s0.vs_requests ==>
+  s.vs_logs = s0.vs_logs /\ s.vs_requests = s0.vs_requests /\
+  s.vs_pending_deletions = s0.vs_pending_deletions ==>
   enc_frame st st' lo top outs s0 s
 Proof
   rewrite_tac[enc_frame_def] >> strip_tac >> asm_rewrite_tac[]

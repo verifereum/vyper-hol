@@ -36,7 +36,7 @@ Ancestors
 Theorem compile_get_target_ptr_local:
   !cenv id op sz st.
     FLOOKUP cenv.ce_vars id = SOME (PtrVar op sz) ==>
-    compile_get_target_ptr cenv (NameTarget id) st =
+    compile_get_target_ptr compile_expr cenv (NameTarget id) st =
       ((op, SOME LocMemory, OPTION_MAP ValPT (cenv.ce_var_type id)), st)
 Proof
   simp[compile_get_target_ptr_def, comp_return_def]
@@ -74,8 +74,8 @@ QED
    type lays out at its base, where it lays out v.  Then t is related to
    the scopes write_place leaves. *)
 Theorem stmt_state_rel_write_local:
-  !func cenv cx es s t id p sz w pre env entry rest v.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx es s t id p sz w pre env entry rest v ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\
@@ -83,8 +83,9 @@ Theorem stmt_state_rel_write_local:
     (!q. ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s) /\
     (!b n. b + n <= w2n w \/ w2n w + type_memory_size entry.type <= b ==>
            mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t /\
     val_wf entry.type v /\ val_in_memory entry.type v (w2n w) t.vs_memory ==>
-    stmt_state_rel func cenv cx
+    stmt_state_rel ctx func cenv cx
       (es with scopes :=
          pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
       t
@@ -140,29 +141,70 @@ Proof
   `local_ptrs_rel func cenv scs' t` by
     (irule local_ptrs_rel_write_local >>
      qexistsl_tac [`entry'`, `id`, `p`, `es.scopes`, `s`, `sz`, `w`] >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     rpt strip_tac >> gvs[]) >>
+     rpt conj_tac >> asm_rewrite_tac[] >> rpt strip_tac >> gvs[]) >>
   `state_rel func cenv cx (es with scopes := scs') t` by
     (irule state_rel_frame >> conj_tac >- simp[] >>
      qexists_tac `es` >> qexists_tac `s` >>
      simp[vyperStateTheory.evaluation_state_component_equality] >>
      fs[stmt_state_rel_def]) >>
   `alloca_inv t` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
-  `alloca_room func t` by
+  `alloca_room ctx func t` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+  `immutable_alloca_sep func cenv cx (es with scopes := scs') t` by
+    (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
+     simp[] >> reverse conj_tac >- fs[stmt_state_rel_def] >>
+     rpt strip_tac >> qexists_tac `id'` >>
+     gvs[local_region_def] >>
+     qpat_x_assum `!n e q sq. _ ==> lookup_var q t = _` drule_all >>
+     strip_tac >> Cases_on `id' = id` >> gvs[] >> metis_tac[]) >>
   fs[stmt_state_rel_def] >> metis_tac[]
 QED
 
+(* One MSTORE of a word inside a local's region. *)
+Theorem local_mstore_immutables_at:
+  stmt_state_rel ctx func cenv cx es s /\
+  local_region cenv es.scopes s id b sz /\ k + 32 <= sz ==>
+  immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+    (mstore (b + k) wd s)
+Proof
+  strip_tac >> irule immutables_rel_mem_agree >> qexists_tac `s` >>
+  conj_tac
+  >- simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
+          arithmeticTheory.MAX_DEF] >>
+  conj_tac >- simp[mstore_def] >>
+  reverse conj_tac >- gvs[stmt_state_rel_def, state_rel_def] >>
+  rpt strip_tac >>
+  `regions_disjoint off (type_memory_size tv) b sz` by
+    (qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >>
+     strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
+     disch_then drule_all >> strip_tac >> metis_tac[]) >>
+  irule mstore_mem_bytes_at_disjoint >>
+  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+QED
+
 (* One MSTORE of a word that lays v out at the local's base. *)
+Theorem local_mstore_immutables[local]:
+  stmt_state_rel ctx func cenv cx es s /\
+  local_region cenv es.scopes s id b sz /\ 32 <= sz ==>
+  immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+    (mstore b wd s)
+Proof
+  strip_tac >>
+  qspecl_then [`b`, `0`] mp_tac
+    (Q.GENL [`b`, `k`] local_mstore_immutables_at) >>
+  simp[] >> disch_then irule >> metis_tac[]
+QED
+
 Theorem stmt_state_rel_write_local_word:
-  !func cenv cx es s id p sz w pre env entry rest v wd.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx es s id p sz w pre env entry rest v wd ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\
     type_memory_size entry.type = 32 /\ val_wf entry.type v /\
     val_in_memory entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
-    stmt_state_rel func cenv cx
+    stmt_state_rel ctx func cenv cx
       (es with scopes :=
          pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
       (mstore (w2n w) wd s)
@@ -178,22 +220,28 @@ Proof
          mem_bytes_at b n (mstore (w2n w) wd s).vs_memory =
          mem_bytes_at b n s.vs_memory` by
     (rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >> gvs[]) >>
-  qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `mstore (w2n w) wd s`, `id`,
-               `p`, `sz`, `w`, `pre`, `env`, `entry`, `rest`, `v`]
-    mp_tac stmt_state_rel_write_local >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  simp[]
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  `local_region cenv es.scopes s id (w2n w) sz` by simp[local_region_def] >>
+  `32 <= sz` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+     first_x_assum drule_all >> simp[]) >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+     (mstore (w2n w) wd s)` by (drule_all local_mstore_immutables >> simp[]) >>
+  irule stmt_state_rel_write_local >> asm_rewrite_tac[] >>
+  qexistsl_tac [`p`, `s`, `sz`, `w`] >> asm_rewrite_tac[] >>
+  rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >> simp[]
 QED
 
 (* The typed word of a value of the local's type that the store lays out
    (store_lays_out: a word_value, or an address or bytesN of that type). *)
 Theorem stmt_state_rel_write_local_store:
-  !func cenv cx es s id p sz w pre env entry rest v etv.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx es s id p sz w pre env entry rest v etv ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\ store_lays_out etv entry.type v ==>
-    stmt_state_rel func cenv cx
+    stmt_state_rel ctx func cenv cx
       (es with scopes :=
          pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
       (mstore (w2n w) (typed_val_to_w256 etv v) s)
@@ -212,12 +260,12 @@ Theorem assign_local_store_run_framed:
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     eval_operand op s = SOME (typed_val_to_w256 etv v) /\
-    stmt_state_rel func cenv cx es s /\
+    stmt_state_rel ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     store_lays_out etv entry.type v ==>
     ?dw t. lookup_var p s = SOME dw /\
-        stmt_state_rel func cenv cx
+        stmt_state_rel ctx func cenv cx
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
              rest) t /\
@@ -237,13 +285,13 @@ Proof
   `?w. lookup_var p s = SOME w` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
      metis_tac[]) >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel func cenv cx es1` >>
-  `stmt_state_rel func cenv cx es1
+  qmatch_goalsub_abbrev_tac `stmt_state_rel ctx func cenv cx es1` >>
+  `stmt_state_rel ctx func cenv cx es1
      (mstore (w2n w) (typed_val_to_w256 etv v) s)` by
     (simp[Abbr `es1`] >> irule stmt_state_rel_write_local_store >>
      metis_tac[]) >>
   `frag_exec ctx st st' (\t. t = s)
-     (\t. stmt_state_rel func cenv cx es1 t /\
+     (\t. stmt_state_rel ctx func cenv cx es1 t /\
           (!x. lookup_var x t = lookup_var x s) /\
           (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                    FLOOKUP t.vs_allocas aid = SOME b) /\
@@ -277,11 +325,11 @@ Theorem assign_local_store_run:
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     eval_operand op s = SOME (typed_val_to_w256 etv v) /\
-    stmt_state_rel func cenv cx es s /\
+    stmt_state_rel ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     store_lays_out etv entry.type v ==>
-    ?t. stmt_state_rel func cenv cx
+    ?t. stmt_state_rel ctx func cenv cx
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
              rest) t /\
@@ -294,7 +342,7 @@ Theorem assign_local_store_run:
                  ?fuel'. run_from fuel' ctx func s = r
 Proof
   rpt strip_tac >> drule_all assign_local_store_run_framed >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  strip_tac >>
   qexists `t` >> simp[] >> rpt strip_tac >>
   first_x_assum irule >> simp[] >> qexists `fuel` >> simp[]
 QED
