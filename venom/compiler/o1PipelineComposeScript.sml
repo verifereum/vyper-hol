@@ -154,22 +154,37 @@ Theorem o1_pre_walk_sim:
          o1_src_inv unit'.cu_context vs
 Proof
   strip_tac >> drule o1_pre_walk_runs >> strip_tac >>
-  `o1_ctx_shape mid.cu_context /\ unit_labels_wf mid /\
-   ir_supply_inst_ok t /\
-   mid.cu_context.ctx_entry = unit.cu_context.ctx_entry /\
-   mid.cu_context.ctx_global_reserved = unit.cu_context.ctx_global_reserved /\
-   ctx_fn_names mid.cu_context = ctx_fn_names unit.cu_context /\
-   !D vs. o1_run_state_ok vs /\ o1_src_inv unit.cu_context vs ==>
-     ctx_sim D unit.cu_context mid.cu_context vs vs /\
-     o1_src_inv mid.cu_context vs` by
+  `!D. o1_ctx_shape mid.cu_context /\ unit_labels_wf mid /\
+       ir_supply_inst_ok t /\
+       mid.cu_context.ctx_entry = unit.cu_context.ctx_entry /\
+       mid.cu_context.ctx_global_reserved =
+         unit.cu_context.ctx_global_reserved /\
+       ctx_fn_names mid.cu_context = ctx_fn_names unit.cu_context /\
+       !vs. o1_run_state_ok vs /\ o1_src_inv unit.cu_context vs ==>
+         ctx_sim D unit.cu_context mid.cu_context vs vs /\
+         o1_src_inv mid.cu_context vs` by
     (gen_tac >> irule o1_mapped_pass_sim >>
      metis_tac[o1_contract_simplify_cfg_pre_walk]) >>
+  first_assum (strip_assume_tac o Q.SPEC `ARB`) >>
   drule unit_labels_wf_namespace >> strip_tac >>
+  `!D. o1_ctx_shape unit'.cu_context /\ unit_labels_wf unit' /\
+       ir_supply_inst_ok s' /\
+       unit'.cu_context.ctx_entry = mid.cu_context.ctx_entry /\
+       unit'.cu_context.ctx_global_reserved =
+         mid.cu_context.ctx_global_reserved /\
+       ctx_fn_names unit'.cu_context = ctx_fn_names mid.cu_context /\
+       !vs. o1_run_state_ok vs /\ o1_src_inv mid.cu_context vs ==>
+         ctx_sim D mid.cu_context unit'.cu_context vs vs /\
+         o1_src_inv unit'.cu_context vs` by
+    (gen_tac >> irule o1_mapped_pass_sim >>
+     metis_tac[o1_contract_dret_desugar_pre_walk]) >>
+  first_assum (strip_assume_tac o Q.SPEC `ARB`) >>
   simp[] >> rpt gen_tac >> strip_tac >>
-  drule_at (Pos (el 3)) o1_mapped_pass_sim >>
-  disch_then (qspecl_then [`o1_src_inv`, `D`] mp_tac) >>
-  impl_tac >- simp[o1_contract_dret_desugar_pre_walk] >>
-  strip_tac >> metis_tac[ctx_sim_trans]
+  `ctx_sim D unit.cu_context mid.cu_context vs vs /\
+   o1_src_inv mid.cu_context vs` by metis_tac[] >>
+  `ctx_sim D mid.cu_context unit'.cu_context vs vs /\
+   o1_src_inv unit'.cu_context vs` by metis_tac[] >>
+  metis_tac[ctx_sim_trans]
 QED
 
 (* ===== Pruning ===== *)

@@ -14,7 +14,7 @@ Theory e2eCorrectness
 Ancestors
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
-  vyperLoweringCorrect loweringRuntimeCorrect loweringShapeProps vfmExecution
+  vyperLoweringCorrect loweringShapeProps vfmExecution
   venomPipelineCorrect
   passSimulationDefs
   codegenCorrectness
@@ -782,12 +782,13 @@ Proof
   drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
   `o1_run_state_ok vs` by
     (fs[o1_run_state_ok_def] >> simp[Abbr`vs`, entry_venom_state_def]) >>
-  qspecl_then [`tx`, `call_external (SOME vs.vs_outcomes) [] am tx`]
-    assume_tac external_call_dead_wf >>
+  `dead_wf (external_call_dead tx
+              (call_external (SOME vs.vs_outcomes) [] am tx))` by
+    simp[external_call_dead_wf] >>
   drule_all run_venom_pipeline_correct >> strip_tac >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
-  conj_tac >- simp[] >>
+  conj_tac >- gvs[] >>
   gen_tac >> irule codegen_correct >> simp[] >>
   qexistsl_tac [`Inv`, `prog`, `rpolicy`] >> simp[]
 QED

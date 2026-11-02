@@ -453,9 +453,9 @@ QED
 (* Two element slot ranges of an array that share a slot x are the same
    element's. *)
 Theorem element_slots_same[local]:
-  !base i i' sz x.
-    base + i * sz <= x /\ x < base + i * sz + sz /\
-    base + i' * sz <= x /\ x < base + i' * sz + sz ==>
+  !bs i i' sz x.
+    bs + i * sz <= x /\ x < bs + i * sz + sz /\
+    bs + i' * sz <= x /\ x < bs + i' * sz + sz ==>
     i = i'
 Proof
   rpt strip_tac >> CCONTR_TAC >>
@@ -472,61 +472,58 @@ QED
 
 (* A dead byte of a static array in an element's slots is that element's. *)
 Theorem fixed_array_elem_dead[local]:
-  !st base tv n i x c.
-    dead_bytes st base (ArrayTV tv (Fixed n)) x c /\ i < n /\
-    base + i * type_slot_size tv <= x /\
-    x < base + i * type_slot_size tv + type_slot_size tv ==>
-    dead_bytes st (base + i * type_slot_size tv) tv x c
+  !st bs tv n i x c.
+    dead_bytes st bs (ArrayTV tv (Fixed n)) x c /\ i < n /\
+    bs + i * type_slot_size tv <= x /\
+    x < bs + i * type_slot_size tv + type_slot_size tv ==>
+    dead_bytes st (bs + i * type_slot_size tv) tv x c
 Proof
   rpt strip_tac >>
   qpat_x_assum `dead_bytes _ _ (ArrayTV _ _) _ _` mp_tac >>
   simp[Once dead_bytes_def] >> strip_tac >> rename1 `i2 < n` >>
   drule (cj 1 dead_bytes_range) >> strip_tac >>
   `i2 = i` by
-    (irule element_slots_same >>
-     qexistsl_tac [`base`, `type_slot_size tv`, `x`] >>
-     rpt conj_tac >> decide_tac) >>
+    (qspecl_then [`bs`, `i2`, `i`, `type_slot_size tv`, `x`] mp_tac
+       element_slots_same >> impl_tac >- decide_tac >> simp[]) >>
   gvs[]
 QED
 
 (* A dead byte of a DynArray in the slots of an element below its length is
    that element's. *)
 Theorem dyn_array_elem_dead[local]:
-  !st base tv n i x c.
-    dead_bytes st base (ArrayTV tv (Dynamic n)) x c /\ i < n /\
-    i < w2n (lookup_storage (n2w base) st) /\
-    base + 1 + i * type_slot_size tv <= x /\
-    x < base + 1 + i * type_slot_size tv + type_slot_size tv ==>
-    dead_bytes st (base + 1 + i * type_slot_size tv) tv x c
+  !st bs tv n i x c.
+    dead_bytes st bs (ArrayTV tv (Dynamic n)) x c /\ i < n /\
+    i < w2n (lookup_storage (n2w bs) st) /\
+    bs + 1 + i * type_slot_size tv <= x /\
+    x < bs + 1 + i * type_slot_size tv + type_slot_size tv ==>
+    dead_bytes st (bs + 1 + i * type_slot_size tv) tv x c
 Proof
   rpt strip_tac >>
   qpat_x_assum `dead_bytes _ _ (ArrayTV _ _) _ _` mp_tac >>
   simp[Once dead_bytes_def] >> strip_tac >> rename1 `i2 < n` >>
-  Cases_on `i2 < w2n (lookup_storage (n2w base) st)` >>
+  Cases_on `i2 < w2n (lookup_storage (n2w bs) st)` >>
   fs[arithmeticTheory.RIGHT_ADD_DISTRIB]
   >- (drule (cj 1 dead_bytes_range) >> strip_tac >>
       `i2 = i` by
-        (irule element_slots_same >>
-         qexistsl_tac [`base + 1`, `type_slot_size tv`, `x`] >>
-         rpt conj_tac >> decide_tac) >>
+        (qspecl_then [`bs + 1`, `i2`, `i`, `type_slot_size tv`, `x`] mp_tac
+           element_slots_same >> impl_tac >- decide_tac >> simp[]) >>
       gvs[]) >>
   `i2 = i` by
-    (irule element_slots_same >>
-     qexistsl_tac [`base + 1`, `type_slot_size tv`, `x`] >>
-     rpt conj_tac >> decide_tac) >>
+    (qspecl_then [`bs + 1`, `i2`, `i`, `type_slot_size tv`, `x`] mp_tac
+       element_slots_same >> impl_tac >- decide_tac >> simp[]) >>
   gvs[]
 QED
 
 (* A value's first slot holds no dead byte, so storage that agrees with st
    on the value's live bytes holds the same word there. *)
 Theorem dead_bytes_head_eq[local]:
-  !st st' base tv.
-    (!i c. base <= i /\ i < base + type_slot_size tv /\ c < 32 /\
-           ~dead_bytes st base tv i c ==>
+  !st st' bs tv.
+    (!i c. bs <= i /\ i < bs + type_slot_size tv /\ c < 32 /\
+           ~dead_bytes st bs tv i c ==>
            EL c (word_to_bytes (lookup_storage (n2w i) st') T) =
            EL c (word_to_bytes (lookup_storage (n2w i) st) T)) /\
     0 < type_slot_size tv ==>
-    lookup_storage (n2w base) st' = lookup_storage (n2w base) st
+    lookup_storage (n2w bs) st' = lookup_storage (n2w bs) st
 Proof
   rpt strip_tac >> irule word_to_bytes_EL_eq >> rpt strip_tac >>
   first_x_assum irule >> simp[] >> strip_tac >>
@@ -536,24 +533,24 @@ QED
 (* Which bytes of a value are dead depends only on its live bytes: the
    lengths that decide them are never dead. *)
 Theorem dead_bytes_live_frame:
-  (!st base tv j b st'.
-     (!i c. base <= i /\ i < base + type_slot_size tv /\ c < 32 /\
-            ~dead_bytes st base tv i c ==>
+  (!st bs tv j b st'.
+     (!i c. bs <= i /\ i < bs + type_slot_size tv /\ c < 32 /\
+            ~dead_bytes st bs tv i c ==>
             EL c (word_to_bytes (lookup_storage (n2w i) st') T) =
             EL c (word_to_bytes (lookup_storage (n2w i) st) T)) ==>
-     (dead_bytes st' base tv j b <=> dead_bytes st base tv j b)) /\
-  (!st base tvs j b st'.
-     (!i c. base <= i /\ i < base + type_slot_size_list tvs /\ c < 32 /\
-            ~dead_bytes_list st base tvs i c ==>
+     (dead_bytes st' bs tv j b <=> dead_bytes st bs tv j b)) /\
+  (!st bs tvs j b st'.
+     (!i c. bs <= i /\ i < bs + type_slot_size_list tvs /\ c < 32 /\
+            ~dead_bytes_list st bs tvs i c ==>
             EL c (word_to_bytes (lookup_storage (n2w i) st') T) =
             EL c (word_to_bytes (lookup_storage (n2w i) st) T)) ==>
-     (dead_bytes_list st' base tvs j b <=> dead_bytes_list st base tvs j b)) /\
-  (!st base fs j b st'.
-     (!i c. base <= i /\ i < base + type_slot_size_fields fs /\ c < 32 /\
-            ~dead_bytes_fields st base fs i c ==>
+     (dead_bytes_list st' bs tvs j b <=> dead_bytes_list st bs tvs j b)) /\
+  (!st bs fs j b st'.
+     (!i c. bs <= i /\ i < bs + type_slot_size_fields fs /\ c < 32 /\
+            ~dead_bytes_fields st bs fs i c ==>
             EL c (word_to_bytes (lookup_storage (n2w i) st') T) =
             EL c (word_to_bytes (lookup_storage (n2w i) st) T)) ==>
-     (dead_bytes_fields st' base fs j b <=> dead_bytes_fields st base fs j b))
+     (dead_bytes_fields st' bs fs j b <=> dead_bytes_fields st bs fs j b))
 Proof
   ho_match_mp_tac dead_bytes_ind >> rpt strip_tac
   (* bytestrings: the length word is live *)
@@ -572,90 +569,82 @@ Proof
   >- (ONCE_REWRITE_TAC [dead_bytes_def] >> first_x_assum irule >>
       fs[dead_bytes_def, vyperValueTheory.type_slot_size_def])
   >~ [`dead_bytes _ _ (ArrayTV _ (Fixed _))`]
-  >- (ONCE_REWRITE_TAC [dead_bytes_def] >>
+  >- (rename1 `dead_bytes _ bs (ArrayTV tv (Fixed n)) j b` >>
+      ONCE_REWRITE_TAC [dead_bytes_def] >>
       `!i. i < n ==>
-           (dead_bytes st' (base + i * type_slot_size tv) tv j b <=>
-            dead_bytes st (base + i * type_slot_size tv) tv j b)`
+           (dead_bytes st' (bs + i * type_slot_size tv) tv j b <=>
+            dead_bytes st (bs + i * type_slot_size tv) tv j b)`
         suffices_by metis_tac[] >>
-      rpt strip_tac >> first_x_assum drule >> disch_then irule >>
+      rpt strip_tac >> last_x_assum (qspec_then `i` mp_tac) >>
+      rpt (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+      disch_then irule >>
       rpt strip_tac >> first_x_assum irule >>
-      qpat_x_assum `i < n` (mp_tac o MATCH_MP array_element_slot_bound) >>
-      disch_then (qspecl_then [`type_slot_size tv`, `base`] assume_tac) >>
+      qpat_assum `i < n` (mp_tac o MATCH_MP array_element_slot_bound) >>
+      disch_then (qspecl_then [`type_slot_size tv`, `bs`] assume_tac) >>
       rpt conj_tac
-      >- decide_tac
-      >- (PURE_REWRITE_TAC [vyperValueTheory.type_slot_size_def] >>
-          decide_tac)
-      >- decide_tac >>
-      strip_tac >> drule_all fixed_array_elem_dead >> fs[])
+      >~ [`~dead_bytes _ _ _ _ _`]
+      >- (strip_tac >> drule_all fixed_array_elem_dead >> fs[]) >>
+      PURE_REWRITE_TAC [vyperValueTheory.type_slot_size_def] >> decide_tac)
   >~ [`dead_bytes _ _ (ArrayTV _ (Dynamic _))`]
-  >- (drule dead_bytes_head_eq >>
+  >- (rename1 `dead_bytes _ bs (ArrayTV tv (Dynamic n)) j b` >>
+      drule dead_bytes_head_eq >>
       impl_tac >- simp[vyperValueTheory.type_slot_size_def] >>
       disch_then (fn th => ONCE_REWRITE_TAC [dead_bytes_def] >>
                            REWRITE_TAC [th]) >>
-      `!i. i < n /\ i < w2n (lookup_storage (n2w base) st) ==>
-           (dead_bytes st' (base + 1 + i * type_slot_size tv) tv j b <=>
-            dead_bytes st (base + 1 + i * type_slot_size tv) tv j b)`
+      `!i. i < n /\ i < w2n (lookup_storage (n2w bs) st) ==>
+           (dead_bytes st' (bs + 1 + i * type_slot_size tv) tv j b <=>
+            dead_bytes st (bs + 1 + i * type_slot_size tv) tv j b)`
         suffices_by metis_tac[] >>
-      rpt strip_tac >> first_x_assum drule_all >> disch_then irule >>
+      rpt strip_tac >> last_x_assum (qspec_then `i` mp_tac) >>
+      rpt (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+      disch_then irule >>
       rpt strip_tac >> first_x_assum irule >>
-      qpat_x_assum `i < n` (mp_tac o MATCH_MP array_element_slot_bound) >>
-      disch_then (qspecl_then [`type_slot_size tv`, `base + 1`] assume_tac) >>
+      qpat_assum `i < n` (mp_tac o MATCH_MP array_element_slot_bound) >>
+      disch_then (qspecl_then [`type_slot_size tv`, `bs + 1`] assume_tac) >>
       rpt conj_tac
-      >- decide_tac
-      >- (PURE_REWRITE_TAC [vyperValueTheory.type_slot_size_def] >>
-          decide_tac)
-      >- decide_tac >>
-      strip_tac >> drule_all dyn_array_elem_dead >> fs[])
+      >~ [`~dead_bytes _ _ _ _ _`]
+      >- (strip_tac >> drule_all dyn_array_elem_dead >> fs[]) >>
+      PURE_REWRITE_TAC [vyperValueTheory.type_slot_size_def] >> decide_tac)
   >~ [`dead_bytes_list _ _ (_ :: _)`]
-  >- (ONCE_REWRITE_TAC [dead_bytes_def] >>
-      `(dead_bytes st' base tv j b <=> dead_bytes st base tv j b) /\
-       (dead_bytes_list st' (base + type_slot_size tv) tvs j b <=>
-        dead_bytes_list st (base + type_slot_size tv) tvs j b)`
+  >- (rename1 `dead_bytes_list _ bs (tv :: tvs) j b` >>
+      ONCE_REWRITE_TAC [dead_bytes_def] >>
+      `(dead_bytes st' bs tv j b <=> dead_bytes st bs tv j b) /\
+       (dead_bytes_list st' (bs + type_slot_size tv) tvs j b <=>
+        dead_bytes_list st (bs + type_slot_size tv) tvs j b)`
         suffices_by simp[] >>
       conj_tac
       >- (first_x_assum irule >> rpt strip_tac >> first_x_assum irule >>
           rpt conj_tac
-          >- decide_tac
-          >- (PURE_REWRITE_TAC [vyperValueTheory.type_slot_size_def] >>
-              decide_tac)
-          >- decide_tac >>
-          PURE_ONCE_REWRITE_TAC [dead_bytes_def] >> strip_tac
-          >- fs[] >>
-          drule (cj 2 dead_bytes_range) >> strip_tac >> decide_tac) >>
+          >~ [`~dead_bytes_list _ _ _ _ _`]
+          >- (PURE_ONCE_REWRITE_TAC [dead_bytes_def] >> strip_tac >>
+              imp_res_tac dead_bytes_range >> fs[]) >>
+          PURE_REWRITE_TAC [vyperValueTheory.type_slot_size_def] >> decide_tac) >>
       first_x_assum irule >> rpt strip_tac >> first_x_assum irule >>
       rpt conj_tac
-      >- decide_tac
-      >- (PURE_REWRITE_TAC [vyperValueTheory.type_slot_size_def] >>
-          decide_tac)
-      >- decide_tac >>
-      PURE_ONCE_REWRITE_TAC [dead_bytes_def] >> strip_tac
-      >- (drule (cj 1 dead_bytes_range) >> strip_tac >> decide_tac) >>
-      fs[])
+      >~ [`~dead_bytes_list _ _ _ _ _`]
+      >- (PURE_ONCE_REWRITE_TAC [dead_bytes_def] >> strip_tac >>
+              imp_res_tac dead_bytes_range >> fs[]) >>
+      PURE_REWRITE_TAC [vyperValueTheory.type_slot_size_def] >> decide_tac)
   >~ [`dead_bytes_fields _ _ (_ :: _)`]
-  >- (ONCE_REWRITE_TAC [dead_bytes_def] >>
-      `(dead_bytes st' base tv j b <=> dead_bytes st base tv j b) /\
-       (dead_bytes_fields st' (base + type_slot_size tv) fs j b <=>
-        dead_bytes_fields st (base + type_slot_size tv) fs j b)`
+  >- (rename1 `dead_bytes_fields _ bs ((nm, ftv) :: fs) j b` >>
+      ONCE_REWRITE_TAC [dead_bytes_def] >>
+      `(dead_bytes st' bs ftv j b <=> dead_bytes st bs ftv j b) /\
+       (dead_bytes_fields st' (bs + type_slot_size ftv) fs j b <=>
+        dead_bytes_fields st (bs + type_slot_size ftv) fs j b)`
         suffices_by simp[] >>
       conj_tac
       >- (first_x_assum irule >> rpt strip_tac >> first_x_assum irule >>
           rpt conj_tac
-          >- decide_tac
-          >- (PURE_REWRITE_TAC [vyperValueTheory.type_slot_size_def] >>
-              decide_tac)
-          >- decide_tac >>
-          PURE_ONCE_REWRITE_TAC [dead_bytes_def] >> strip_tac
-          >- fs[] >>
-          drule (cj 3 dead_bytes_range) >> strip_tac >> decide_tac) >>
+          >~ [`~dead_bytes_fields _ _ _ _ _`]
+          >- (PURE_ONCE_REWRITE_TAC [dead_bytes_def] >> strip_tac >>
+              imp_res_tac dead_bytes_range >> fs[]) >>
+          PURE_REWRITE_TAC [vyperValueTheory.type_slot_size_def] >> decide_tac) >>
       first_x_assum irule >> rpt strip_tac >> first_x_assum irule >>
       rpt conj_tac
-      >- decide_tac
-      >- (PURE_REWRITE_TAC [vyperValueTheory.type_slot_size_def] >>
-          decide_tac)
-      >- decide_tac >>
-      PURE_ONCE_REWRITE_TAC [dead_bytes_def] >> strip_tac
-      >- (drule (cj 1 dead_bytes_range) >> strip_tac >> decide_tac) >>
-      fs[]) >>
+      >~ [`~dead_bytes_fields _ _ _ _ _`]
+      >- (PURE_ONCE_REWRITE_TAC [dead_bytes_def] >> strip_tac >>
+              imp_res_tac dead_bytes_range >> fs[]) >>
+      PURE_REWRITE_TAC [vyperValueTheory.type_slot_size_def] >> decide_tac) >>
   simp[dead_bytes_def]
 QED
 
@@ -667,7 +656,8 @@ Theorem storage_agree_storage_dead:
     storage_agree (storage_dead cx tr st1) st1 st2 ==>
     storage_dead cx tr st2 = storage_dead cx tr st1
 Proof
-  rw[FUN_EQ_THM, storage_dead_def] >>
+  rpt strip_tac >> simp[FUN_EQ_THM] >> rpt gen_tac >>
+  PURE_REWRITE_TAC [storage_dead_def] >>
   `!slot tv mid n subs.
      declared_storage_region cx mid n subs = SOME (tr,slot,tv) /\
      w2n slot + type_slot_size tv <= dimword (:256) /\
@@ -677,7 +667,11 @@ Proof
         ranges_disjoint (w2n slot) (type_slot_size tv) (w2n slot')
           (type_slot_size tv')) ==>
      (dead_bytes st2 (w2n slot) tv x x' <=> dead_bytes st1 (w2n slot) tv x x')`
-    suffices_by metis_tac[] >>
+    suffices_by (
+      strip_tac >> eq_tac >> strip_tac >> first_x_assum drule_all >>
+      strip_tac >>
+      qexistsl_tac [`mid`, `n`, `subs`, `slot`, `tv`] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[]) >>
   rpt strip_tac >> irule (cj 1 dead_bytes_live_frame) >>
   rpt strip_tac >>
   qpat_x_assum `storage_agree _ _ _` mp_tac >>
@@ -688,9 +682,14 @@ Proof
     simp[storage_dead_def] >> rpt strip_tac >>
     rename1 `dead_bytes st1 (w2n slot') tv' i c` >>
     Cases_on `(slot', tv') = (slot, tv)` >- gvs[] >>
-    first_x_assum drule_all >>
-    drule (cj 1 dead_bytes_range) >>
-    simp[vyperStorageFrameTheory.ranges_disjoint_def]) >>
+    first_x_assum drule_all >> strip_tac >>
+    Cases_on `dead_bytes st1 (w2n slot') tv' i c` >- (
+      qsuff_tac `F` >- simp[] >>
+      drule (cj 1 dead_bytes_range) >>
+      qpat_x_assum `ranges_disjoint _ _ _ _` mp_tac >>
+      PURE_REWRITE_TAC [vyperStorageFrameTheory.ranges_disjoint_def] >>
+      decide_tac) >>
+    asm_rewrite_tac[]) >>
   simp[]
 QED
 
