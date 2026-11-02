@@ -709,3 +709,269 @@ Proof
            compiler_label_hoare_typed_primitives]) >>
   simp[compiler_label_hoare_typed_primitives]
 QED
+
+Theorem compiler_block_tail_abi_decode_mutual:
+  (!dst src opc hi info.
+    compiler_block_tail (compile_abi_decode_to_buf dst src opc hi info)) /\
+  (!dst src opc hi elems ao vo.
+    compiler_block_tail (compile_abi_decode_complex_elems dst src opc hi elems ao vo)) /\
+  (!dst src opc hi info asz msz ip cnt.
+    compiler_block_tail (compile_abi_decode_dyn_loop dst src opc hi info asz msz ip cnt))
+Proof
+  ho_match_mp_tac compile_abi_decode_to_buf_ind >> rpt conj_tac
+  >- suspend "word"
+  >- suspend "bytes"
+  >- suspend "array"
+  >- suspend "complex"
+  >- suspend "nil"
+  >- suspend "cons"
+  >> suspend "loop"
+QED
+
+Resume compiler_block_tail_abi_decode_mutual[word]:
+  simp[Once compile_abi_decode_to_buf_def, compiler_block_tail_abi_decode_static,
+       compiler_block_tail_abi_clamp_basetype]
+QED
+
+Resume compiler_block_tail_abi_decode_mutual[nil]:
+  simp[Once compile_abi_decode_to_buf_def, compiler_block_tail_primitives]
+QED
+
+Resume compiler_block_tail_abi_decode_mutual[bytes]:
+  rpt gen_tac >> Cases_on `hi = Lit 0w`
+  >- (Cases_on `opc` >>
+      (simp[Once compile_abi_decode_to_buf_def, comp_ignore_bind_def] >>
+       rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+            >- simp[compiler_block_tail_primitives] >> gen_tac) >>
+       simp[compiler_block_tail_primitives])) >>
+  simp[Once compile_abi_decode_to_buf_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac) >>
+  ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+  >- (rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+           >- simp[compiler_block_tail_primitives] >> gen_tac) >>
+      simp[compiler_block_tail_primitives]) >>
+  gen_tac >> Cases_on `opc` >> simp[compiler_block_tail_primitives]
+QED
+
+Resume compiler_block_tail_abi_decode_mutual[array]:
+  rpt gen_tac >> strip_tac >>
+  simp[Once compile_abi_decode_to_buf_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac) >>
+  ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+  >- (Cases_on `hi = Lit 0w` >> simp[compiler_block_tail_primitives] >>
+      rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+           >- simp[compiler_block_tail_primitives] >> gen_tac) >>
+      simp[compiler_block_tail_primitives]) >> gen_tac >>
+  rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac) >>
+  IF_CASES_TAC
+  >- (Cases_on `opc` >>
+      (simp[] >> rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+                     >- simp[compiler_block_tail_primitives] >> gen_tac) >>
+       simp[compiler_block_tail_primitives])) >>
+  ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+  >- simp[compiler_block_tail_alloc_buffer] >> qx_gen_tac `da` >> simp[] >>
+  ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+  >- simp[compiler_block_tail_primitives] >> gen_tac >>
+  first_x_assum irule >> gvs[] >> qexists_tac `da` >> simp[]
+QED
+Resume compiler_block_tail_abi_decode_mutual[complex]:
+  rpt gen_tac >> strip_tac >> Cases_on `hi = Lit 0w` >>
+  simp[Once compile_abi_decode_to_buf_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac) >>
+  gvs[]
+QED
+Resume compiler_block_tail_abi_decode_mutual[cons]:
+  rpt gen_tac >> strip_tac >>
+  simp[Once compile_abi_decode_to_buf_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+       >- simp[compiler_block_tail_primitives, compiler_block_tail_getelemptr_abi] >> gen_tac) >>
+  gvs[]
+QED
+Resume compiler_block_tail_abi_decode_mutual[loop]:
+  rpt gen_tac >> strip_tac >>
+  simp[Once compile_abi_decode_to_buf_def, comp_ignore_bind_def] >>
+  Cases_on `dec_info_needs_offset info` >> gvs[] >>
+  rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+       >- simp[compiler_block_tail_primitives,
+               compiler_block_tail_abi_decode_dyn_elem_ptr] >> gen_tac) >>
+  simp[compiler_block_tail_primitives]
+QED
+Finalise compiler_block_tail_abi_decode_mutual
+
+Theorem compiler_label_hoare_abi_decode_mutual:
+  (!dst src opc hi info origin pending.
+    compiler_label_hoare (compiler_label_reservation origin pending)
+      (compile_abi_decode_to_buf dst src opc hi info)
+      (\r out. compiler_label_reservation origin pending out)) /\
+  (!dst src opc hi elems ao vo origin pending.
+    compiler_label_hoare (compiler_label_reservation origin pending)
+      (compile_abi_decode_complex_elems dst src opc hi elems ao vo)
+      (\r out. compiler_label_reservation origin pending out)) /\
+  (!dst src opc hi info asz msz ip cnt origin pending.
+    compiler_label_hoare (compiler_label_reservation origin pending)
+      (compile_abi_decode_dyn_loop dst src opc hi info asz msz ip cnt)
+      (\r out. compiler_label_reservation origin pending out))
+Proof
+  ho_match_mp_tac compile_abi_decode_to_buf_ind >> rpt conj_tac
+  >- suspend "word"
+  >- suspend "bytes"
+  >- suspend "array"
+  >- suspend "complex"
+  >- suspend "nil"
+  >- suspend "cons"
+  >> suspend "loop"
+QED
+
+Resume compiler_label_hoare_abi_decode_mutual[word]:
+  simp[Once compile_abi_decode_to_buf_def, compiler_label_hoare_abi_decode_static,
+       compiler_label_hoare_abi_clamp_basetype]
+QED
+
+Resume compiler_label_hoare_abi_decode_mutual[nil]:
+  simp[Once compile_abi_decode_to_buf_def, compiler_label_hoare_typed_primitives]
+QED
+
+Resume compiler_label_hoare_abi_decode_mutual[bytes]:
+  rpt gen_tac >> Cases_on `hi = Lit 0w`
+  >- (Cases_on `opc` >>
+      (simp[Once compile_abi_decode_to_buf_def, comp_ignore_bind_def] >>
+       rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+            >- simp[compiler_label_hoare_context_primitives,
+                    compiler_label_hoare_typed_primitives] >> gen_tac) >>
+       simp[compiler_label_hoare_typed_primitives])) >>
+  simp[Once compile_abi_decode_to_buf_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives] >> gen_tac) >>
+  ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+  >- (rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+           >- simp[compiler_label_hoare_context_primitives,
+                   compiler_label_hoare_typed_primitives] >> gen_tac) >>
+      simp[compiler_label_hoare_typed_primitives]) >>
+  gen_tac >> Cases_on `opc` >> simp[compiler_label_hoare_typed_primitives]
+QED
+
+Resume compiler_label_hoare_abi_decode_mutual[array]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[Once compile_abi_decode_to_buf_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives] >> gen_tac) >>
+  ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+  >- (Cases_on `hi = Lit 0w` >> simp[compiler_label_hoare_typed_primitives] >>
+      rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+           >- simp[compiler_label_hoare_context_primitives,
+                   compiler_label_hoare_typed_primitives] >> gen_tac) >>
+      simp[compiler_label_hoare_typed_primitives]) >> gen_tac >>
+  rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives] >> gen_tac) >>
+  IF_CASES_TAC
+  >- (Cases_on `opc` >>
+      (simp[] >> rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+                     >- simp[compiler_label_hoare_context_primitives,
+                             compiler_label_hoare_typed_primitives] >> gen_tac) >>
+       simp[compiler_label_hoare_typed_primitives])) >>
+  ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+  >- simp[compiler_label_hoare_storage_primitives] >> qx_gen_tac `da` >> simp[] >>
+  ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+  >- simp[compiler_label_hoare_typed_primitives] >> gen_tac >>
+  first_x_assum irule >> gvs[] >> qexists_tac `da` >> simp[]
+QED
+
+Resume compiler_label_hoare_abi_decode_mutual[complex]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> Cases_on `hi = Lit 0w` >>
+  simp[Once compile_abi_decode_to_buf_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives] >> gen_tac) >>
+  gvs[]
+QED
+
+Resume compiler_label_hoare_abi_decode_mutual[cons]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[Once compile_abi_decode_to_buf_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives,
+               compiler_label_hoare_getelemptr_abi] >> gen_tac) >>
+  gvs[]
+QED
+
+Resume compiler_label_hoare_abi_decode_mutual[loop]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[Once compile_abi_decode_to_buf_def, comp_ignore_bind_def] >>
+  ntac 3 (irule compiler_label_hoare_fresh_bind >>
+          gen_tac >> strip_tac >> BETA_TAC) >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives] >> gen_tac >> BETA_TAC) >>
+  irule compiler_label_hoare_new_block_bind >> simp[] >> BETA_TAC >> gvs[NoAsms] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives] >> gen_tac >> BETA_TAC) >>
+  irule compiler_label_hoare_new_block_bind >> simp[] >> BETA_TAC >> gvs[NoAsms] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives] >> gen_tac >> BETA_TAC) >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- (IF_CASES_TAC >> simp[compiler_label_hoare_abi_decode_dyn_elem_ptr,
+                          compiler_label_hoare_typed_primitives]) >>
+  gen_tac >> BETA_TAC >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[DELETE_INSERT] >>
+  irule compiler_label_hoare_new_block_bind >> simp[] >> BETA_TAC >>
+  simp[DELETE_INSERT] >>
+  rename1 `compiler_label_reservation origin (pending DELETE h DELETE b DELETE e)` >>
+  `pending DELETE h DELETE b DELETE e = pending` by ASM_SET_TAC [] >>
+  simp[compiler_label_hoare_typed_primitives]
+QED
+Finalise compiler_label_hoare_abi_decode_mutual
+
+Theorem compiler_block_tail_abi_decode_to_buf:
+  compiler_block_tail (compile_abi_decode_to_buf dst src opc hi info)
+Proof
+  MATCH_ACCEPT_TAC (cj 1 compiler_block_tail_abi_decode_mutual)
+QED
+
+Theorem compiler_label_hoare_abi_decode_to_buf:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_abi_decode_to_buf dst src opc hi info)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  MATCH_ACCEPT_TAC (cj 1 compiler_label_hoare_abi_decode_mutual)
+QED
+
+Theorem compiler_block_tail_abi_decode_complex_elems:
+  compiler_block_tail (compile_abi_decode_complex_elems dst src opc hi elems ao vo)
+Proof
+  MATCH_ACCEPT_TAC (cj 2 compiler_block_tail_abi_decode_mutual)
+QED
+
+Theorem compiler_label_hoare_abi_decode_complex_elems:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_abi_decode_complex_elems dst src opc hi elems ao vo)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  MATCH_ACCEPT_TAC (cj 2 compiler_label_hoare_abi_decode_mutual)
+QED
+
+Theorem compiler_block_tail_abi_decode_dyn_loop:
+  compiler_block_tail (compile_abi_decode_dyn_loop dst src opc hi info asz msz ip cnt)
+Proof
+  MATCH_ACCEPT_TAC (cj 3 compiler_block_tail_abi_decode_mutual)
+QED
+
+Theorem compiler_label_hoare_abi_decode_dyn_loop:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_abi_decode_dyn_loop dst src opc hi info asz msz ip cnt)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  MATCH_ACCEPT_TAC (cj 3 compiler_label_hoare_abi_decode_mutual)
+QED
