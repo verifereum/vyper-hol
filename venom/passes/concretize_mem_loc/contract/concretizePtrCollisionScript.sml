@@ -165,3 +165,131 @@ Theorem collision_zero_user_returns:
 Proof
   EVAL_TAC
 QED
+
+Definition collision_current_unit_def:
+  collision_current_unit fn = collision_unit with cu_context :=
+    collision_observed with ctx_functions :=
+      MAP (\f. if f.fn_name = fn.fn_name then fn else f)
+        collision_observed.ctx_functions
+End
+
+Theorem collision_ssa_exact:
+  !fn. MEM fn [collision_a; collision_b] ==>
+  execute_configured_fn_pass ARB (CFP_Simple VP_MakeSSA)
+    (collision_current_unit (collision_sealed fn))
+    (init_ir_supply collision_unit) (collision_sealed fn) =
+      SOME <| fpo_function := collision_sealed fn;
+              fpo_label_map := []; fpo_supply := init_ir_supply collision_unit |>
+Proof
+  pure_rewrite_tac[listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  rewrite_tac[collision_current_unit_def, collision_sealed_def,
+    collision_unit_def, collision_observed_def, collision_a_exact,
+    collision_b_exact] >> EVAL_TAC
+QED
+
+Theorem collision_simplify_exact:
+  !fn. MEM fn [collision_a; collision_b] ==>
+  execute_configured_fn_pass ARB (CFP_Simple VP_SimplifyCFG)
+    (collision_current_unit (collision_sealed fn))
+    (init_ir_supply collision_unit) (collision_sealed fn) =
+      SOME <| fpo_function := collision_sealed fn;
+              fpo_label_map := []; fpo_supply := init_ir_supply collision_unit |>
+Proof
+  pure_rewrite_tac[listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  rewrite_tac[collision_current_unit_def, collision_sealed_def,
+    collision_unit_def, collision_observed_def, collision_a_exact,
+    collision_b_exact] >> EVAL_TAC
+QED
+
+Definition collision_expanded_def:
+  collision_expanded fn = (collision_sealed fn) with fn_blocks :=
+    if fn = collision_a then
+      [<| bb_label := "a"; bb_instructions :=
+        [mk_inst 106 RETPC_PARAM [Lit (0w:256 word)] ["a_rpc"];
+         mk_inst 100 ASSIGN [Lit 0w] ["a_p"];
+         mk_inst 108 ASSIGN [Lit 0w] ["formal_var_0"];
+         mk_inst 101 MSTORE [Var "a_p"; Var "formal_var_0"] [];
+         mk_inst 102 RET [Var "a_rpc"] []] |>]
+    else
+      [<| bb_label := "b"; bb_instructions :=
+        [mk_inst 107 RETPC_PARAM [Lit (0w:256 word)] ["b_rpc"];
+         mk_inst 100 ASSIGN [Lit 0w] ["b_p"];
+         mk_inst 108 ASSIGN [Lit 32w] ["formal_var_0"];
+         mk_inst 103 ADD [Var "b_p"; Var "formal_var_0"] ["b_q"];
+         mk_inst 109 ASSIGN [Lit 1w] ["formal_var_1"];
+         mk_inst 104 MSTORE [Var "b_q"; Var "formal_var_1"] [];
+         mk_inst 105 RET [Var "b_rpc"] []] |>]
+End
+
+Definition collision_expanded_supply_def:
+  collision_expanded_supply fn = (init_ir_supply collision_unit) with
+    <| irs_next_inst := if fn = collision_a then 109 else 110;
+       irs_next_var := if fn = collision_a then 1 else 2;
+       irs_used_inst_ids := (if fn = collision_a then [108] else [109;108]) ++
+         (init_ir_supply collision_unit).irs_used_inst_ids;
+       irs_used_vars :=
+         (if fn = collision_a then ["formal_var_0"] else ["formal_var_1";"formal_var_0"]) ++
+         (init_ir_supply collision_unit).irs_used_vars |>
+End
+
+Theorem collision_expansion_exact:
+  !fn. MEM fn [collision_a; collision_b] ==>
+  execute_configured_fn_pass ARB (CFP_Simple VP_SingleUseExpansion)
+    (collision_current_unit (collision_sealed fn))
+    (init_ir_supply collision_unit) (collision_sealed fn) =
+      SOME <| fpo_function := collision_expanded fn;
+              fpo_label_map := []; fpo_supply := collision_expanded_supply fn |>
+Proof
+  pure_rewrite_tac[listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  rewrite_tac[collision_expanded_def, collision_expanded_supply_def,
+    collision_current_unit_def, collision_sealed_def,
+    collision_unit_def, collision_observed_def, collision_a_exact,
+    collision_b_exact] >> EVAL_TAC
+QED
+
+Definition collision_scheduled_def:
+  collision_scheduled fn = (collision_expanded fn) with fn_blocks :=
+    [<| bb_label := fn.fn_name; bb_instructions :=
+      MAP (\i. EL i (HD (collision_expanded fn).fn_blocks).bb_instructions)
+        (if fn = collision_a then [0;2;1;3;4] else [0;4;2;1;3;5;6]) |>]
+End
+
+Theorem collision_dft_exact:
+  !fn. MEM fn [collision_a; collision_b] ==>
+  execute_configured_fn_pass ARB (CFP_Simple VP_DFT)
+    (collision_current_unit (collision_expanded fn))
+    (collision_expanded_supply fn) (collision_expanded fn) =
+      SOME <| fpo_function := collision_scheduled fn;
+              fpo_label_map := []; fpo_supply := collision_expanded_supply fn |>
+Proof
+  pure_rewrite_tac[listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  rewrite_tac[collision_scheduled_def, collision_expanded_def,
+    collision_expanded_supply_def, collision_current_unit_def, collision_sealed_def,
+    collision_unit_def, collision_observed_def, collision_a_exact,
+    collision_b_exact] >> EVAL_TAC
+QED
+
+Theorem collision_normalization_exact:
+  !fn. MEM fn [collision_a; collision_b] ==>
+  execute_configured_fn_pass ARB (CFP_Simple VP_CFGNormalization)
+    (collision_current_unit (collision_scheduled fn))
+    (collision_expanded_supply fn) (collision_scheduled fn) =
+      SOME <| fpo_function := collision_scheduled fn;
+              fpo_label_map := []; fpo_supply := collision_expanded_supply fn |>
+Proof
+  pure_rewrite_tac[listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  rewrite_tac[collision_scheduled_def, collision_expanded_def,
+    collision_expanded_supply_def, collision_current_unit_def, collision_sealed_def,
+    collision_unit_def, collision_observed_def, collision_a_exact,
+    collision_b_exact] >> EVAL_TAC
+QED
+
+Theorem collision_final_metadata:
+  (collision_scheduled collision_a).fn_mems_used = [(Allocation 100,0,32)] /\
+  (collision_scheduled collision_a).fn_eom = SOME 32 /\
+  (collision_scheduled collision_b).fn_mems_used = [(Allocation 100,0,64)] /\
+  (collision_scheduled collision_b).fn_eom = SOME 64
+Proof
+  rewrite_tac[collision_scheduled_def, collision_expanded_def,
+    collision_sealed_def, collision_a_exact, collision_b_exact] >> EVAL_TAC
+QED
