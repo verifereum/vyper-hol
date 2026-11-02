@@ -85,10 +85,14 @@ Proof
           LET_THM] >> strip_tac >> gvs[]) >>
   `c.ce_flag_member_id = cenv.ce_flag_member_id /\
    c.ce_flag_n_members = cenv.ce_flag_n_members /\
-   c.ce_struct_fields = cenv.ce_struct_fields` by
+   c.ce_struct_fields = cenv.ce_struct_fields /\
+   c.ce_hashmap_info = cenv.ce_hashmap_info` by
     (qpat_x_assum `_ with <| ce_vars := _; ce_var_type := _;
                              ce_dynarray_capacity := _ |> = cenv`
        (SUBST1_TAC o SYM) >> simp[]) >>
+  `place_map_tables_agree_on_defined c env <=>
+   place_map_tables_agree_on_defined cenv env` by
+    (irule placeTypingPropsTheory.place_map_tables_agree_on_defined_cong >> simp[]) >>
   qpat_x_assum `expr_sim_inv _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
   `!n t. FLOOKUP env.var_types n = SOME t ==> n <> id` by
@@ -441,6 +445,11 @@ Proof
                ce_dynarray_capacity := _ |> = cenv`
     (strip_assume_tac o
      SIMP_RULE (srw_ss()) [compile_env_component_equality]) >>
+  `(place_map_tables_agree_on_defined c (extend_local env id fty F) <=>
+    place_map_tables_agree_on_defined cenv env) /\
+   (extend_local env id fty F).bare_globals = env.bare_globals` by
+    (conj_tac >- (irule placeTypingPropsTheory.place_map_tables_agree_on_defined_cong >> fs[extend_local_def]) >>
+     simp[extend_local_def]) >>
   ASM_REWRITE_TAC [expr_sim_inv_def] >> simp[] >>
   irule storage_conjs_scopes >> simp[]
 QED
