@@ -2251,3 +2251,17 @@ Proof
        execution_frame_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rpt strip_tac >> Cases_on `v' = v` >> simp[]
 QED
+
+Theorem supply_fresh_assign_agree:
+  supply_state_agree fn st st' /\ ~MEM out (irSupply$fn_ir_vars fn) /\
+  lookup_var src st' = SOME value ==>
+  step_inst_base
+    <|inst_id := id; inst_opcode := ASSIGN;
+      inst_operands := [Var src]; inst_outputs := [out]|> st' =
+      OK (update_var out value st') /\
+  supply_state_agree fn st (update_var out value st')
+Proof
+  strip_tac >> conj_tac
+  >- simp[venomExecSemanticsTheory.step_inst_base_def, venomStateTheory.eval_operand_def] >>
+  irule supply_state_agree_update_fresh >> simp[]
+QED
