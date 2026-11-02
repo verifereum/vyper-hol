@@ -139,7 +139,7 @@ Proof
       Cases_on `bb.bb_instructions` >> gvs[] >>
       simp[bb_succs_def, get_successors_def, MEM_MAP, MEM_FILTER,
            PULL_EXISTS] >>
-      qexists_tac `Label l` >> simp[get_label_def]) >>
+      qexists_tac `Label l` >> simp[venomStateTheory.get_label_def]) >>
   simp[reserved_label_def]
 QED
 
@@ -151,7 +151,7 @@ Theorem pseudos_prefix_no_params[local]:
   get_params bb.bb_instructions = [] ==>
   EVERY (\i. ~is_param_opcode i.inst_opcode) bb.bb_instructions
 Proof
-  rw[pseudos_prefix_def, EVERY_EL] >> CCONTR_TAC >> fs[] >>
+  rw[venomWfTheory.pseudos_prefix_def, EVERY_EL] >> CCONTR_TAC >> fs[] >>
   `is_pseudo (EL 0 bb.bb_instructions).inst_opcode` by
     (Cases_on `n` >> fs[]
      >- (Cases_on `(EL 0 bb.bb_instructions).inst_opcode` >>
@@ -161,7 +161,7 @@ Proof
      gvs[is_pseudo_def, is_param_opcode_def]) >>
   `0 < LENGTH bb.bb_instructions` by simp[] >>
   first_x_assum (qspec_then `0` mp_tac) >> simp[] >>
-  Cases_on `bb.bb_instructions` >> gvs[get_params_def, AllCaseEqs()] >>
+  Cases_on `bb.bb_instructions` >> gvs[stackPlanGenTheory.get_params_def, AllCaseEqs()] >>
   Cases_on `h.inst_opcode` >> gvs[is_pseudo_def, is_param_opcode_def]
 QED
 
@@ -189,8 +189,8 @@ Proof
       rw[fn_shape_ok_def, wf_function_def, fn_has_entry_def,
          entry_fn_no_params_def] >>
       Cases_on `fn.fn_blocks` >> gvs[fn_insts_def, fn_insts_blocks_def] >>
-      gvs[fn_insts_blocks_MEM, EVERY_MEM, no_param_insts_def,
-          fn_pseudos_prefix_def, raw_opcode_ok_def] >>
+      gvs[fn_insts_blocks_MEM, EVERY_MEM, callLayoutDefsTheory.no_param_insts_def,
+          venomWfTheory.fn_pseudos_prefix_def, raw_opcode_ok_def] >>
       `EVERY (\i. ~is_param_opcode i.inst_opcode) h.bb_instructions` by
         (irule pseudos_prefix_no_params >> gvs[EVERY_MEM] >>
          rpt strip_tac >> res_tac >> fs[]) >>

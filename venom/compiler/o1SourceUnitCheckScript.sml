@@ -183,7 +183,7 @@ Theorem fn_shape_check_sound:
   fn_shape_check fn ==> fn_shape_ok fn
 Proof
   rw[fn_shape_check_def, fn_shape_ok_def, opaque_use_check_sound,
-     retpc_shape_check_sound, fn_pseudos_prefix_def, pseudos_prefix_dropWhile] >>
+     retpc_shape_check_sound, venomWfTheory.fn_pseudos_prefix_def, pseudos_prefix_dropWhile] >>
   gvs[EVERY_MEM]
 QED
 

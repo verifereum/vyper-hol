@@ -12512,7 +12512,7 @@ Theorem lowered_fn_ok:
     first_block_no_preds fn
 Proof
   rpt gen_tac >> strip_tac >>
-  `fn_pseudos_prefix fn` by fs[fn_pseudos_prefix_def, EVERY_MEM] >>
+  `fn_pseudos_prefix fn` by fs[venomWfTheory.fn_pseudos_prefix_def, EVERY_MEM] >>
   `EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks)`
     by (Cases_on `fn.fn_blocks` >> gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS] >>
         metis_tac[jump_label_ok_not_internal]) >>

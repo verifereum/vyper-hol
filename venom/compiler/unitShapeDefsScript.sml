@@ -227,7 +227,7 @@ Theorem pseudos_prefix_dropWhile:
        EVERY (\i. ~is_pseudo i.inst_opcode)
          (dropWhile (\i. is_pseudo i.inst_opcode) bb.bb_instructions)
 Proof
-  simp[pseudos_prefix_def] >> gen_tac >>
+  simp[venomWfTheory.pseudos_prefix_def] >> gen_tac >>
   qspec_tac (`bb.bb_instructions`, `l`) >> Induct >> simp[] >>
   rw[]
   >- (eq_tac >> rpt strip_tac

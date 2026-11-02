@@ -255,7 +255,7 @@ Theorem empty_block_pseudo_ok[simp]:
   !lbl. pseudos_prefix <| bb_label := lbl; bb_instructions := [] |> /\
         no_param_insts []
 Proof
-  simp[pseudos_prefix_def, no_param_insts_def]
+  simp[venomWfTheory.pseudos_prefix_def, callLayoutDefsTheory.no_param_insts_def]
 QED
 
 Theorem shape_step_new_block:
@@ -357,7 +357,7 @@ Theorem pseudos_prefix_snoc[local]:
     (is_pseudo x.inst_opcode ==> EVERY (\i. is_pseudo i.inst_opcode) l) ==>
     pseudos_prefix <| bb_label := lbl; bb_instructions := l ++ [x] |>
 Proof
-  rw[pseudos_prefix_def] >>
+  rw[venomWfTheory.pseudos_prefix_def] >>
   Cases_on `j < LENGTH l`
   >- (gvs[EL_APPEND1] >> first_x_assum irule >> qexists_tac `j` >> simp[]) >>
   `j = LENGTH l` by decide_tac >>
@@ -383,7 +383,7 @@ Proof
   gvs[all_blocks_def, EVERY_APPEND, pseudos_open_def] >> conj_tac
   >- (irule pseudos_prefix_snoc >> simp[]) >>
   Cases_on `internal_label_ok st.cs_current_bb` >> simp[] >>
-  gvs[no_param_insts_def, is_pseudo_param_iff]
+  gvs[callLayoutDefsTheory.no_param_insts_def, is_pseudo_param_iff]
 QED
 
 (* Appending one instruction to the open block: a pseudo only to an internal
