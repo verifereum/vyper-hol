@@ -174,7 +174,7 @@ Theorem compile_expr_pop_name:
 Proof
   rpt strip_tac >>
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
-       expr_type_def, compile_target_base_def, infer_array_location_def,
+       expr_type_def, compile_get_target_ptr_def, comp_return_def,
        word_scale_def, elem_size_in_location_def, is_slot_addressed_def] >>
   pairarg_tac >> simp[]
 QED

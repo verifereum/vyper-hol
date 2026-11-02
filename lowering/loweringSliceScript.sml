@@ -1,17 +1,16 @@
 (*
  * A first body slice of the lowering simulation (#625)
  *
- * Lemmas in the form of the statement lemmas of stmtLoweringProps: frag_exec
- * (fragExec) from stmt_state_rel at the fragment's start to stmt_state_rel
- * at its end, under fn_has_code, fn_inst_ids_distinct and
- * local_ptrs_reserved.  The sub-fragments (a right-hand side, a condition,
- * branch bodies) enter as hypotheses of the same shape, stated at the
- * source state where they run, so the lemmas compose with each other and
- * with the general statement and expression induction.  A declaration's
- * ALLOCA keeps its base below 2 ** 256 through alloca_room, which
- * stmt_state_rel carries.  Constructor declarations additionally require
- * the allocation-prefix guard that keeps their stores off immutables;
- * runtime declarations use the trivial cap = 0 guard.
+ * Lemmas stated with frag_exec (fragExec), from stmt_state_rel at the
+ * fragment's start to stmt_state_rel at its end, under fn_has_code,
+ * fn_inst_ids_distinct and local_ptrs_reserved.  The sub-fragments (a
+ * right-hand side, a condition, branch bodies) enter as hypotheses of the
+ * same shape, stated at the source state where they run, so the lemmas
+ * compose with each other and with the general statement and expression
+ * induction.  A declaration's ALLOCA keeps its base below 2 ** 256 through
+ * alloca_room, which stmt_state_rel carries.  Constructor declarations
+ * additionally require the allocation-prefix guard that keeps their stores
+ * off immutables; runtime declarations use the trivial cap = 0 guard.
  *
  * TOP-LEVEL:
  *   expr_frag               — an expression's fragment, in the form the
@@ -29,7 +28,8 @@
  * Helpers:
  *   stmt_state_rel_exec_alloca, stmt_state_rel_declare_word,
  *   eval_name_word, lower_value_name_word, step_name_word,
- *   eval_stmt_if_success, eval_stmt_annassign_value, compile_if_parts,
+ *   eval_stmt_if_success, eval_stmt_annassign_value,
+ *   eval_stmt_annassign_read_value, compile_if_parts,
  *   compile_if_taken_branch, if_branch_to_exit, compile_annassign_word_parts,
  *   bounded_int_op_add_overflow, word_value_in_memory, word_value_wf
  *)
@@ -54,11 +54,7 @@ Libs
    state related at es, the source state where e is evaluated: it reaches
    its end related at the source state after e, with the operand holding
    e's forced value, and keeps the variables handed out before it and the
-   allocations made before it.  This is compile_expr_correct's conclusion
-   as a frag_exec; getting it from compile_expr_correct through
-   frag_exec_run_inst_seq also needs that a run_inst_seq without INVOKE
-   keeps the existing allocations, which compile_expr_correct does not
-   state. *)
+   allocations made before it. *)
 Definition expr_frag_def:
   expr_frag ctx func cenv cx ty e es R <=>
     !sa sb op v es' s0.
@@ -376,6 +372,25 @@ Proof
   qpat_x_assum `(case es2.scopes of [] => _ | _ => _) _ = _` mp_tac >>
   Cases_on `es2.scopes` >> simp[raise_def, set_scopes_def, return_def] >>
   strip_tac >> gvs[]
+QED
+
+Theorem eval_stmt_annassign_read_value:
+  !cx id typ e es es'.
+    eval_stmt cx (AnnAssign id typ e) es = (INL (), es') ==>
+    ?tyv v es1 sc rest.
+      evaluate_type (get_tenv cx) typ = SOME tyv /\
+      (do tv <- eval_expr cx e; read_result cx tv od) es = (INL v, es1) /\
+      lookup_scopes id es1.scopes = NONE /\ es1.scopes = sc :: rest /\
+      es' = es1 with scopes :=
+        (sc |+ (id, <| assignable := T; type := tyv; value := v; popped := [] |>))
+        :: rest
+Proof
+  rpt strip_tac >> drule eval_stmt_annassign_value >> strip_tac >>
+  rename1 `evaluate_type (get_tenv cx) typ = SOME runtime_ty` >>
+  rename1 `read_result cx result after_eval = (INL value, after_read)` >>
+  rename1 `after_read.scopes = frame :: tail` >>
+  qexistsl_tac [`runtime_ty`, `value`, `after_read`, `frame`, `tail`] >>
+  simp[bind_def]
 QED
 
 Theorem local_region_exec_alloca[local]:
@@ -1042,7 +1057,7 @@ Proof
 QED
 
 (* Slice lemma 2: an if/else.  The condition is any expr_frag at es; the
-   branch bodies are fragments of the form of compile_stmts_correct, and
+   branch bodies are statement-list fragments of the same shape, and
    a body that runs to its end from a fresh block leaves the block open
    (it does not end in a return), so it falls through to the exit. *)
 Theorem compile_if_frag:

@@ -18,8 +18,9 @@
  *   expr_sim_inv_for_scope, expr_sim_inv_for_pop — expr_sim_inv into
  *                                  and out of a loop iteration's scope
  *   body_annassign_case, body_for_case — the cases
+ *   body_annassign_memory        — the declarations in memory
  *   body_annassign_other         — RESIDUAL, the declarations not of a
- *                                  word type
+ *                                  word type that it leaves
  *   body_for_other               — RESIDUAL, the loops but over a range
  *                                  of literals
  *)
@@ -27,8 +28,9 @@
 Theory bodySimDeclCases
 Ancestors
   vyperTypeStoragePreservation
-  list finite_map bodySim bodySimStmtCases exprSim exprSimHyps
+  list finite_map bodySim bodySimStmtCases allocLimits exprSim exprSimHyps
   exprLoweringProps stmtSim stmtSimDecl stmtSimReturn stmtSimAssign
+  stmtSimDeclMem stmtSimDeclEmpty memoryLocalRhsProps
   stmtSimFor stmtSimForParts stmtSimForRange stmtLowering stmtLoweringMono
   fragExec compileEnv supportedStmts supportedStmtTraverse vyperAST
   vyperInterpreter vyperState vyperValue vyperTypeSystem
@@ -176,22 +178,149 @@ Proof
   metis_tac[body_expr_ok_def, body_inv_same_frame]
 QED
 
+Theorem body_annassign_rhs_pre[local]:
+  !cenv cx env e es tops id typ ctx.
+    body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    stmt_exprs_ok cenv (AnnAssign id typ e) /\
+    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) ==>
+    expr_body_pre cenv cx env e es
+Proof
+  rpt strip_tac >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  irule stmt_expr_body_pre >>
+  gvs[body_inv_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+      int_calls_stmt_def] >>
+  qexists_tac `[]` >> simp[]
+QED
+
+Theorem body_annassign_declared_rhs[local]:
+  !cenv cx env e es tops id typ st c st1 ctx func.
+    body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    id NOTIN FDOM env.var_types /\ FLOOKUP cenv.ce_vars id = NONE /\
+    stmt_exprs_ok cenv (AnnAssign id typ e) /\
+    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
+    body_expr_ok cx e /\ declare_local cenv id typ st = (c,st1) ==>
+    expr_sim ctx func c cx (expr_type e) e es /\
+    expr_vv_sim ctx func c cx (expr_type e) e es
+Proof
+  rpt strip_tac >>
+  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
+  `same_frame cenv c` by
+    (drule_then irule declare_local_same_frame >> simp[]) >>
+  `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
+  `stmt_exprs_ok c (AnnAssign id typ e)` by
+    metis_tac[stmt_exprs_ok_same_frame] >>
+  `expr_sim_inv c cx env es` by metis_tac[expr_sim_inv_declare_local] >>
+  `expr_body_pre c cx env e es` by metis_tac[body_annassign_rhs_pre] >>
+  metis_tac[body_expr_ok_def]
+QED
+
+(* A declaration of a type that is not a word, from a value of the type
+   itself, a bytestring (a narrower one widens), or an empty value of a
+   type with a length word: stmtSimDeclMem's
+   compile_annassign_memory_widen_stmt_frag and stmtSimDeclEmpty's
+   compile_annassign_empty_stmt_frag.  The declared type is below 2 ** 64
+   (alloc_limits_stmt), so its buffer and a bytestring copy's length word
+   fit below 2 ** 256. *)
+Theorem body_annassign_memory:
+  !cx id typ e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res
+   es'.
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_expr_ok cx e) /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (AnnAssign id typ e) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
+    stmt_exprs_ok cenv (AnnAssign id typ e) /\
+    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
+    eval_stmt cx (AnnAssign id typ e) es = (res, es') /\
+    ~is_word_type typ /\ 0 < type_memory_bytes cenv typ /\
+    (expr_type e = typ \/ is_bytestring_type typ \/
+     has_length_word typ /\ is_empty_value_expr e) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (AnnAssign id typ e)) es res es'
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `FLOOKUP cenv.ce_vars id = NONE` by
+    (irule declared_name_unbound >> metis_tac[]) >>
+  `well_typed_expr env e /\ assignable_type env.type_defs typ /\
+   type_widens_to env.type_defs (expr_type e) typ /\
+   id NOTIN FDOM env.var_types` by gvs[type_stmt_def, AllCaseEqs()] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?tyv. evaluate_type (get_tenv cx) typ = SOME tyv` by
+    metis_tac[assignable_type_well_formed, well_formed_type_def,
+              optionTheory.IS_SOME_EXISTS] >>
+  `body_expr_ok cx e` by
+    (first_x_assum irule >>
+     qexistsl_tac [`es`, `es`, `get_tenv cx`, `tyv`] >>
+     simp[lift_option_type_def, return_def]) >>
+  `supported_expr tops e` by gvs[supported_stmt_def] >>
+  `expr_body_pre cenv cx env e es` by metis_tac[body_annassign_rhs_pre] >>
+  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
+  `lookup_scopes id es.scopes = NONE` by
+    (Cases_on `lookup_scopes id es.scopes` >> simp[] >>
+     gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     res_tac >> gvs[FLOOKUP_DEF]) >>
+  `type_memory_bytes cenv typ = type_memory_size tyv` by
+    metis_tac[exprSimAggregateLayoutTheory.expr_sim_inv_memory_size] >>
+  `type_memory_bytes cenv typ < 2 ** 64` by
+    gvs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  `type_memory_size tyv + 64 < dimword (:256)` by
+    metis_tac[allocation_limit_word_room] >>
+  Cases_on `has_length_word typ /\ is_empty_value_expr e`
+  >- suspend "empty" >>
+  suspend "copy"
+QED
+
+Resume body_annassign_memory[copy]:
+  `expr_type e = typ \/ is_bytestring_type typ` by metis_tac[] >>
+  `0 < type_memory_bytes cenv (lowered_value_type cenv e) /\
+   type_memory_bytes cenv (lowered_value_type cenv e) <= type_memory_bytes cenv typ` by
+    metis_tac[memory_rhs_destination_bound] >>
+  drule expr_body_pre_type_evaluates >>
+  disch_then (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
+  `type_memory_bytes cenv (lowered_value_type cenv e) < 2 ** 64` by decide_tac >>
+  drule_all memory_rhs_lowered_runtime_layout >> strip_tac >>
+  irule compile_annassign_memory_widen_stmt_frag >>
+  gns[] >> rpt conj_tac
+  >>~- ([`expr_sim _ _ _ _ _ _ _`],
+    rpt gen_tac >> strip_tac >>
+    metis_tac[body_annassign_declared_rhs, exprLoweringPropsTheory.compile_expr_grows])
+  >>~- ([`value_has_type _ _`],
+    rpt gen_tac >> strip_tac >>
+    `value_runtime_typed env typ v /\
+     value_runtime_typed env (lowered_value_type cenv e) v` by
+      metis_tac[memory_rhs_read_destination_typed, memory_rhs_read_lowered_typed,
+                type_widens_to_def] >>
+    gvs[value_runtime_typed_def]) >>
+  metis_tac[lowered_value_type_shape, type_widens_to_def,
+            arg_type_fits_bytestring_source]
+QED
+
+Resume body_annassign_memory[empty]:
+  irule compile_annassign_empty_stmt_frag >> gns[] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      metis_tac[body_annassign_declared_rhs, exprLoweringPropsTheory.compile_expr_grows]) >>
+  rpt gen_tac >> strip_tac >>
+  metis_tac[memory_rhs_empty_eval_destination]
+QED
+
+Finalise body_annassign_memory
+
 (* RESIDUAL (#637 declarations): a declaration of a type that is not a
-   word.  The name is unbound (declared_name_unbound), but:
-   - a value in memory: stmtSimDeclMem's
-     compile_annassign_memory_stmt_frag and
-     compile_annassign_memory_widen_stmt_frag ask of the declared type
-     type_memory_bytes cenv vtyp = type_memory_size tyv,
-     0 < type_memory_size tyv and type_memory_size tyv + 64 < dimword (:256),
-     and the last has nothing behind it: no clause bounds a local's size
-     (Python's allocator rejects a frame past 2 ** 64 bytes,
-     MemoryAllocationException; the lowering has no such check), as for
-     Assign's memory locals (body_assign_other);
-   - empty(T) of a type with a length word: stmtSimDeclEmpty's
-     compile_annassign_empty_stmt_frag asks
-     type_memory_size tyv < dimword (:256) of the declared type, which may
-     be wider than e's (type_widens_to), so alloc_limits_expr of e does
-     not bound it either. *)
+   word, which body_annassign_memory leaves: a value that widens to a type
+   other than a bytestring (type_widens_to: a DynArray of a smaller bound,
+   elementwise) has no statement lemma, and a type of size 0 (a static
+   array of no elements) fails the lemmas' 0 < type_memory_size tyv, a
+   type Python rejects (a static array bound must be greater than 0) and
+   evaluate_type accepts. *)
 Theorem body_annassign_other:
   !cx id typ e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res
    es'.
@@ -208,7 +337,10 @@ Theorem body_annassign_other:
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
     eval_stmt cx (AnnAssign id typ e) es = (res, es') /\
-    ~is_word_type typ ==>
+    ~is_word_type typ /\
+    ~(0 < type_memory_bytes cenv typ /\
+      (expr_type e = typ \/ is_bytestring_type typ \/
+       has_length_word typ /\ is_empty_value_expr e)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AnnAssign id typ e)) es res es'
 Proof
@@ -228,6 +360,10 @@ Proof
   `supported_expr tops e` by gvs[supported_stmt_def] >>
   Cases_on `is_word_type typ`
   >- (irule body_annassign_word >> metis_tac[]) >>
+  Cases_on `0 < type_memory_bytes cenv typ /\
+            (expr_type e = typ \/ is_bytestring_type typ \/
+             has_length_word typ /\ is_empty_value_expr e)`
+  >- (irule body_annassign_memory >> metis_tac[]) >>
   irule body_annassign_other >> metis_tac[]
 QED
 
@@ -438,6 +574,7 @@ Theorem body_for_range_lit[local]:
       (For id typ (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) n
          stmts) /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
     type_stmt env ret_ty
       (For id typ (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) n
          stmts) = SOME env' /\
@@ -493,9 +630,9 @@ Proof
   drule_all word_type_sizes >> disch_then (qspec_then `cenv` strip_assume_tac) >>
   `call_evaluation_safe cx (int_calls_stmts stmts)` by
     (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
-  `EVERY (stmt_exprs_ok cenv) stmts` by
+  `EVERY (stmt_exprs_ok cenv) stmts /\ type_memory_bytes cenv typ < 2 ** 64` by
     fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-       stmts_exprs_ok_EVERY] >>
+       stmts_exprs_ok_EVERY, alloc_limits_stmt_def] >>
   MATCH_MP_TAC
     (BETA_RULE (Q.SPEC `\ei. expr_sim_inv cenv cx env ei`
                   compile_for_range_lit_frag)) >>
@@ -515,7 +652,10 @@ Proof
       >- metis_tac[stmt_exprs_ok_same_frame]
       >- metis_tac[body_inv_same_frame]
       >- (qexistsl_tac [`extend_local env id typ F`, `env_b`] >> simp[] >>
-          metis_tac[expr_sim_inv_for_scope, ce_locals_declared_declare_local]) >>
+          `c.ce_struct_fields = cenv.ce_struct_fields` by
+            metis_tac[same_frame_struct_fields] >>
+          metis_tac[expr_sim_inv_for_scope, ce_locals_declared_declare_local,
+                    locals_alloc_ok_extend]) >>
       metis_tac[frame_ret_ok_same_frame]) >>
   rpt strip_tac >>
   `value_has_type tyv (IntV (n1 + &j))` by

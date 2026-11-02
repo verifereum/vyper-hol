@@ -34,6 +34,7 @@
 
 Theory exprSimAttribute
 Ancestors
+  allocLimits
   list rich_list finite_map pair
   fragExec exprSim exprSimHyps exprSimUnwrap exprSimLen exprSimLeaves
   exprSimBuffer exprSimAggregateChildren exprSimAttributeFields

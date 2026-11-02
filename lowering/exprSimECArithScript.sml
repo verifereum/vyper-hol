@@ -264,6 +264,7 @@ Resume ec_point_lower_value_safe_operand[pop]:
   `!l. op <> Label l` by
     (qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
      simp[unwrap_value_def, is_word_type_def] >> strip_tac >>
+     qmatch_asmsub_abbrev_tac `mk_ptr _ loc` >>
      Cases_on `loc` >> gvs[contextTheory.mk_ptr_def, comp_return_def] >>
      drule ensure_memory_not_label >> simp[]) >>
   Cases_on `op` >> gvs[safe_operand_def]

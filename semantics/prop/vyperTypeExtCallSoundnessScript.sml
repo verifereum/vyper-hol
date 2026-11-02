@@ -10,7 +10,7 @@ Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair sum
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperCreate vyperCreateFrame vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
-  vyperRuntimeAccounts vyperCallFrame
+  vyperRuntimeAccounts vyperCallFrame vfmExecutionProp[ignore_grammar]
   vyperTypeExtCallCore[ignore_grammar] vyperTypeCallOutcome[ignore_grammar] vyperCallOutcomeProps[ignore_grammar]
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeArgFits
@@ -830,7 +830,18 @@ Proof
   simp[account_well_typed_def, vfmStateTheory.empty_account_state_def]
 QED
 
-(* The target account is not reset: its existing balance plus the endowment
+Theorem accounts_well_typed_clear_storage[local]:
+  accounts_well_typed accounts ==>
+  accounts_well_typed (vfmExecution$clear_storage address accounts)
+Proof
+  rw[accounts_well_typed_def, account_well_typed_def,
+     vfmExecutionTheory.clear_storage_def,
+     vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
+     combinTheory.APPLY_UPDATE_THM] >>
+  IF_CASES_TAC >> gvs[]
+QED
+
+(* The target balance is preserved: its existing balance plus the endowment
    must fit in a 256-bit word before the prelude can preserve typedness. *)
 Theorem create_prelude_accounts_well_typed:
   !sender address value accounts.
@@ -844,7 +855,8 @@ Proof
   simp[create_prelude_accounts_def, combinTheory.o_THM] >>
   irule vfm_transfer_value_accounts_well_typed >>
   simp[lookup_account_increment_nonce_balance,
-       accounts_well_typed_increment_nonce] >>
+       clear_storage_nonce_code_balance,
+       accounts_well_typed_increment_nonce, accounts_well_typed_clear_storage] >>
   CONV_TAC (LAND_CONV (REWR_CONV arithmeticTheory.ADD_COMM)) >>
   qpat_x_assum `_ + value < _` mp_tac >> simp[]
 QED

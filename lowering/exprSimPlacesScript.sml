@@ -38,9 +38,10 @@
  * carries the inner keys' simulation to the outer subscript.
  *
  * compile_subscript dispatches on place_type of the base, the base's own
- * type for a nested place, so nested subscripts are lowered at their
- * element type.  pop still falls back to a dynamic uint256 array in memory
- * when the target is not a Name.
+ * type for a nested place, and pop takes its target's place from
+ * compile_get_target_ptr, so nested subscripts and pops are lowered at
+ * their element type.  (compile_attribute finds the struct from the base's
+ * type.)
  *)
 
 Theory exprSimPlaces
@@ -256,10 +257,19 @@ Proof
   cheat
 QED
 
-(* pop on a nested target (x.a.pop(), x[i].pop()).  Cheated: the lowering
-   falls back to a uint256 array in memory at the base's operand when the
-   target is not a name (this file's header), and MSTOREs at the base's
-   first word, which for x.a.pop() is a live local's (locals_kept). *)
+(* pop on a nested target (x.a.pop(), x[i].pop(), self.s.a.pop()).
+   Cheated: the lowering takes the array's pointer, location and type from
+   compile_get_target_ptr, as an assignment does, but no lemma relates
+   compile_get_target_ptr to the source's eval_target_place for a target
+   deeper than a name.  The proof needs that target/place judgment: by
+   induction on the target, with the hypothesis for the indices, the
+   pointer is the place's in memory (with the array bounds abort of each
+   index) or its slot in storage (with the mapping slot of each key); the
+   subscript lemmas need the same judgment for their bases (this file's
+   header).  Given it, a memory target pops as compile_pop_name_sim does at
+   the array's pointer, inside the local's region (locals_kept), and a
+   storage target as compile_pop_storage_sim does, which waits on the new
+   storage statement of #713. *)
 Theorem compile_pop_nested_sim:
   !cenv ann tgt.
     (!id. tgt <> NameTarget id) /\ (!nid. tgt <> TopLevelNameTarget nid) /\

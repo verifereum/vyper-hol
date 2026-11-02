@@ -482,7 +482,8 @@ Proof
      qexists_tac `Num n` >> simp[integerTheory.INT_OF_NUM]) >>
   gvs[expr_body_pre_def, well_typed_expr_def,
       vyperTypeCallGraphTheory.int_calls_expr_def, byte_widths_expr_def,
-      alloc_limits_expr_def, supportedExprTraverseTheory.expr_has_evm_run_thm]
+      allocLimitsTheory.alloc_limits_expr_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm]
 QED
 
 Theorem eval_expr_tuple_subscript[local]:
