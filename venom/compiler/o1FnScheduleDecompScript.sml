@@ -135,7 +135,9 @@ Proof
 QED
 
 Theorem o1_ctx_shape_replace:
-  o1_ctx_shape ctx /\ o1_fn_shape ctx g /\ g.fn_name = name ==>
+  o1_ctx_shape ctx /\ o1_fn_shape ctx g /\ g.fn_name = name /\
+  (!h id. MEM h ctx.ctx_functions /\ h.fn_name <> name /\
+     MEM id (fn_ir_inst_ids g) ==> ~MEM id (fn_ir_inst_ids h)) ==>
   o1_ctx_shape (ctx with ctx_functions := replace_fn name g ctx.ctx_functions)
 Proof
   simp[replace_fn_def] >> metis_tac[o1_ctx_shape_MAP_replace]
@@ -184,6 +186,8 @@ Theorem run_configured_fn_pass_fold_chain:
     o1_ctx_shape unit.cu_context /\
     MEM fn.fn_name (ctx_fn_names unit.cu_context) /\
     o1_fn_shape unit.cu_context fn /\ fn.fn_name = fn0.fn_name /\
+    (!h id. MEM h unit.cu_context.ctx_functions /\ h.fn_name <> fn.fn_name /\
+       MEM id (fn_ir_inst_ids fn) ==> ~MEM id (fn_ir_inst_ids h)) /\
     ir_supply_covers_unit s
       (unit_with_fns unit (replace_fn fn0.fn_name fn unit.cu_context.ctx_functions)) /\
     (!l. MEM l (fn_labels fn) ==>
@@ -232,6 +236,13 @@ Proof
      (unit_with_fns unit
         (replace_fn fn0.fn_name out.fpo_function unit.cu_context.ctx_functions))`
     by gvs[unit_with_fns_def, replace_fn_def] >>
+  `!h id. MEM h unit.cu_context.ctx_functions /\
+     h.fn_name <> out.fpo_function.fn_name /\
+     MEM id (fn_ir_inst_ids out.fpo_function) ==> ~MEM id (fn_ir_inst_ids h)`
+    by (qpat_x_assum `!s fn label_map fn' label_map' s' s0 fn0. _` kall_tac >>
+        drule fresh_inst_ids_separate >>
+        disch_then (qspec_then `unit` mp_tac) >>
+        fs[unit_with_fns_def, replace_fn_def] >> metis_tac[]) >>
   first_x_assum drule_all >> strip_tac >>
   drule_at (Pat `run_configured_fn_pass_fold _ _ _ _ _ _ _ = _`)
     contracted_fold_invariant >>
@@ -304,7 +315,10 @@ Proof
     run_configured_fn_pass_fold_chain >>
   disch_then (qspecl_then [`0`,`s`,`fn`] mp_tac) >>
   simp[list_subset_def, EVERY_MEM, replace_fn_unique_id] >>
-  strip_tac >>
+  (impl_tac >- (rpt strip_tac >>
+    `ALL_DISTINCT (FLAT (MAP fn_ir_inst_ids unit.cu_context.ctx_functions))`
+      by fs[o1_ctx_shape_def, ctx_inst_ids_distinct_ir_ids] >>
+    metis_tac[distinct_flat_map_members_disjoint])) >> strip_tac >>
   drule replace_unique_function_MAP >> strip_tac >>
   `o1_fn_shape unit.cu_context fn'`
     by (drule fn_chain_length >> strip_tac >>
