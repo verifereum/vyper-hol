@@ -156,6 +156,7 @@ Definition fn_shape_ok_def:
   fn_shape_ok fn <=>
     fn_entry_label fn = SOME fn.fn_name /\ opaque_use_ok fn /\
     retpc_shape_ok fn /\ fn_pseudos_prefix fn /\
+    EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks) /\
     EVERY (\bb. ~reserved_label bb.bb_label) fn.fn_blocks /\
     EVERY inst_shape_ok (fn_insts fn)
 End

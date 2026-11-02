@@ -174,6 +174,7 @@ Definition fn_shape_check_def:
     EVERY (\bb. EVERY (\i. ~is_pseudo i.inst_opcode)
              (dropWhile (\i. is_pseudo i.inst_opcode) bb.bb_instructions))
           fn.fn_blocks /\
+    EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks) /\
     EVERY (\bb. ~reserved_label bb.bb_label) fn.fn_blocks /\
     EVERY inst_shape_ok (fn_insts fn)
 End

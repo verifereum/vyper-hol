@@ -12455,6 +12455,8 @@ Theorem lowered_fn_ok:
     EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) fn.fn_blocks)) /\
     EVERY (\bb. EVERY (code_inst_ok b) bb.bb_instructions) fn.fn_blocks /\
     EVERY pseudos_prefix fn.fn_blocks /\
+    EVERY (\bb. internal_label_ok bb.bb_label \/
+               no_param_insts bb.bb_instructions) fn.fn_blocks /\
     opaque_insts_ok insts /\
     (!inst. MEM inst (fn_insts fn) ==> MEM inst insts) /\
     (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = RET ==>
@@ -12465,6 +12467,9 @@ Theorem lowered_fn_ok:
 Proof
   rpt gen_tac >> strip_tac >>
   `fn_pseudos_prefix fn` by fs[fn_pseudos_prefix_def, EVERY_MEM] >>
+  `EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks)`
+    by (Cases_on `fn.fn_blocks` >> gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS] >>
+        metis_tac[jump_label_ok_not_internal]) >>
   `EVERY (code_inst_ok b) (fn_insts fn)`
     by (gvs[EVERY_MEM, fn_insts_def, MEM_fn_insts_blocks_iff] >>
         metis_tac[]) >>
@@ -12496,6 +12501,8 @@ Theorem internal_fns_ok:
     LIST_REL internal_segment_ok descs segs /\
     EVERY (\d. internal_label_ok (FST d)) descs /\
     EVERY pseudos_prefix (FLAT segs) /\
+    EVERY (\bb. internal_label_ok bb.bb_label \/
+               no_param_insts bb.bb_instructions) (FLAT segs) /\
     opaque_insts_ok insts /\
     (!inst. MEM inst (FLAT (MAP (\bb. bb.bb_instructions) (FLAT segs))) ==>
             MEM inst insts) /\
@@ -12513,7 +12520,10 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all LIST_REL_MEM_MAP2 >> strip_tac >> gvs[] >>
   PairCases_on `x` >> fs[internal_segment_ok_def] >>
-  `EVERY pseudos_prefix y` by (fs[EVERY_MEM, MEM_FLAT] >> metis_tac[]) >>
+  `EVERY pseudos_prefix y /\
+   EVERY (\bb. internal_label_ok bb.bb_label \/
+              no_param_insts bb.bb_instructions) y`
+    by (fs[EVERY_MEM, MEM_FLAT] >> metis_tac[]) >>
   `internal_label_ok x0` by (fs[EVERY_MEM] >> res_tac >> fs[]) >>
   `~jump_label_ok x0` by metis_tac[jump_label_ok_names] >>
   `~reserved_label x0` by metis_tac[internal_label_not_reserved] >>
@@ -12562,7 +12572,9 @@ Theorem lowered_unit_source_ok:
     opaque_insts_ok
       (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
     rets_scoped (entry ++ FLAT segs) /\
-    EVERY pseudos_prefix (entry ++ FLAT segs) ==>
+    EVERY pseudos_prefix (entry ++ FLAT segs) /\
+    EVERY (\bb. internal_label_ok bb.bb_label \/
+               no_param_insts bb.bb_instructions) (entry ++ FLAT segs) ==>
     o1_source_unit_ok
       <| cu_context :=
            mk_venom_context
@@ -12695,7 +12707,9 @@ Proof
     by (qpat_x_assum `shape_state st1` mp_tac >>
         simp[shape_state_def, state_insts_def] >>
         qpat_x_assum `all_blocks st1 = _` (fn th => simp[th])) >>
-  `EVERY pseudos_prefix (entry_blocks ++ FLAT segs)`
+  `EVERY pseudos_prefix (entry_blocks ++ FLAT segs) /\
+   EVERY (\bb. internal_label_ok bb.bb_label \/
+              no_param_insts bb.bb_instructions) (entry_blocks ++ FLAT segs)`
     by (qpat_x_assum `shape_state st1` mp_tac >> simp[shape_state_def] >>
         qpat_x_assum `all_blocks st1 = _` (fn th => simp[th])) >>
   `package_internal_blocks (internal_fn_descriptors internal_fns)
