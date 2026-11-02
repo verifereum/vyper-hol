@@ -1374,3 +1374,100 @@ Proof
   pure_rewrite_tac[arithmeticTheory.ADD_CLAUSES] >>
   disch_then irule >> simp[]
 QED
+
+Theorem sue_segments_phi_offset:
+  !insts dfg supply segs supply'.
+    ir_supply_inst_ok supply /\
+    sue_segments_supply dfg supply insts = (segs,supply') ==>
+    sue_segment_offset segs (phi_prefix_length insts) = phi_prefix_length insts
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[sue_segments_supply_def, phi_prefix_length_def] >>
+  Cases_on `sue_expand_inst_supply dfg supply h` >>
+  Cases_on `sue_segments_supply dfg r insts` >>
+  gvs[sue_segments_supply_def] >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (`sue_should_skip h.inst_opcode` by simp[sue_should_skip_def] >>
+      drule_all sue_expand_inst_supply_skip >> strip_tac >> gvs[] >>
+      first_x_assum drule_all >> simp[phi_prefix_length_def]) >>
+  simp[phi_prefix_length_def]
+QED
+
+Theorem sue_eval_phis_idx[local]:
+  !insts s n.
+    eval_phis (s with vs_inst_idx := n) insts =
+    exec_result_map (\u. u with vs_inst_idx := n) (eval_phis s insts)
+Proof
+  Induct >> rpt gen_tac >> simp[eval_phis_def, exec_result_map_def] >>
+  `!op. eval_operand op (s with vs_inst_idx := n) = eval_operand op s` by
+    (Cases >> simp[eval_operand_def, lookup_var_def]) >>
+  `eval_one_phi (s with vs_inst_idx := n) h = eval_one_phi s h` by
+    simp[eval_one_phi_def] >>
+  simp[] >> Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  Cases_on `eval_one_phi s h` >> simp[exec_result_map_def] >>
+  PairCases_on `x` >> simp[] >>
+  Cases_on `eval_phis s insts` >>
+  simp[exec_result_map_def, update_var_def]
+QED
+
+Theorem sue_eval_phis_shape[local]:
+  !insts s. (?u. eval_phis s insts = OK u) \/
+    eval_phis s insts = Error "phi evaluation failed"
+Proof
+  Induct >> simp[eval_phis_def] >> rpt gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  Cases_on `eval_one_phi s h` >> simp[] >> PairCases_on `x` >>
+  first_x_assum (qspec_then `s` strip_assume_tac) >> simp[]
+QED
+
+Theorem sue_eval_phis_rel_normalized[local]:
+  sue_state_rel P s t /\ s.vs_inst_idx = t.vs_inst_idx /\
+  EVERY (\inst. inst.inst_opcode = PHI ==>
+    !v. MEM (Var v) inst.inst_operands ==> v IN P) insts ==>
+  sue_result_rel P (eval_phis s insts) (eval_phis t insts)
+Proof
+  strip_tac >>
+  qspecl_then [`insts`,`s`] strip_assume_tac sue_eval_phis_shape
+  >- (drule_all sue_eval_phis_entry >> strip_tac >>
+      simp[sue_result_rel_def, lift_result_def]) >>
+  qspecl_then [`insts`,`t`] strip_assume_tac sue_eval_phis_shape
+  >- (`sue_state_rel P t s` by
+        (gvs[sue_state_rel_def] >> metis_tac[]) >>
+      `t.vs_inst_idx = s.vs_inst_idx` by simp[] >>
+      drule_all sue_eval_phis_entry >> strip_tac >> gvs[]) >>
+  simp[sue_result_rel_def, lift_result_def]
+QED
+
+Theorem sue_expanded_phi_entry:
+  ir_supply_inst_ok supply /\
+  sue_segments_supply dfg supply bb.bb_instructions = (segs,supply') /\
+  EVERY (\inst. inst.inst_opcode = PHI ==>
+    !v. MEM (Var v) inst.inst_operands ==> v IN P) bb.bb_instructions /\
+  sue_state_rel P s t ==>
+  sue_result_rel P (eval_phis s bb.bb_instructions) (eval_phis t (FLAT segs))
+Proof
+  strip_tac >> drule sue_segments_supply_flat >> strip_tac >>
+  drule_all sue_expand_insts_supply_phis >>
+  disch_then (qspec_then `t` strip_assume_tac) >> simp[] >>
+  `sue_result_rel P
+     (eval_phis (s with vs_inst_idx := 0) bb.bb_instructions)
+     (eval_phis (t with vs_inst_idx := 0) bb.bb_instructions)` by
+    (irule sue_eval_phis_rel_normalized >> simp[]) >>
+  gvs[sue_eval_phis_idx]
+QED
+
+Theorem sue_expanded_phi_entry_ok:
+  ir_supply_inst_ok supply /\
+  sue_segments_supply dfg supply bb.bb_instructions = (segs,supply') /\
+  EVERY (\inst. inst.inst_opcode = PHI ==>
+    !v. MEM (Var v) inst.inst_operands ==> v IN P) bb.bb_instructions /\
+  sue_state_rel P s t /\
+  eval_phis s bb.bb_instructions = OK u /\
+  eval_phis t (FLAT segs) = OK v ==>
+  sue_state_rel P
+    (u with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+    (v with vs_inst_idx := sue_segment_offset segs (phi_prefix_length bb.bb_instructions))
+Proof
+  strip_tac >> drule_all sue_expanded_phi_entry >>
+  simp[sue_result_rel_def, lift_result_def]
+QED
