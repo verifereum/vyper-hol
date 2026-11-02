@@ -538,13 +538,13 @@ Proof
      Cases_on `result` >> gvs[as_ptr_val_def, markerTheory.Abbrev_def] >>
      rpt strip_tac >> gvs[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
      metis_tac[compiler_lower_abi_decode_var])
-  >~ [`compile_clamp_extract32 _ _ _`] >-
+  >~ [`compile_clamp_basetype _ _ _`] >-
     (qmatch_goalsub_abbrev_tac `as_stack_val vt result` >>
      Cases_on `result` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
      rpt strip_tac >> gvs[contextTheory.vv_operand_def] >>
-     drule exprSafeOperandBuiltinsTheory.compile_extract32_safe_operand >> strip_tac >>
-     qpat_x_assum `_ = compile_clamp_extract32 _ _ _` (assume_tac o SYM) >>
-     drule_all exprSafeOperandBuiltinsTheory.compile_clamp_extract32_safe_operand >>
+     drule exprSafeOperandBuiltinsTheory.compile_extract32_load_safe_operand >> strip_tac >>
+     qpat_x_assum `_ = compile_clamp_basetype _ _ _` (assume_tac o SYM) >>
+     drule_all exprSafeOperandBuiltinsTheory.compile_clamp_basetype_safe_operand >>
      simp[exprSafeOperandTheory.safe_operand_def]) >>
   rpt strip_tac >> gvs[contextTheory.vv_operand_def]
 QED
@@ -833,8 +833,6 @@ QED
 Theorem compiler_slice_var:
   (!sa op sb. compile_slice_data len data start sz n sa = (op,sb) ==>
      !x. op = Var x ==> not_fresh_at sb x) /\
-  (!sa op sb. compile_slice_memory src start sz n sa = (op,sb) ==>
-     !x. op = Var x ==> not_fresh_at sb x) /\
   (!sa op sb. compile_slice_calldata start sz n sa = (op,sb) ==>
      !x. op = Var x ==> not_fresh_at sb x) /\
   (!sa op sb. compile_slice_code start sz n sa = (op,sb) ==>
@@ -847,7 +845,6 @@ Theorem compiler_slice_var:
 Proof
   rpt conj_tac >>
   simp[builtinBytesTheory.compile_slice_data_def,
-       builtinBytesTheory.compile_slice_memory_def,
        builtinBytesTheory.compile_slice_calldata_def,
        builtinBytesTheory.compile_slice_code_def,
        builtinBytesTheory.compile_slice_out_buf_def,
@@ -902,19 +899,29 @@ Proof
   simp[compile_builtin_dispatch_body_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   gvs[contextTheory.vv_operand_def, contextTheory.base_ptr_def] >>
-  drule compiler_alloc_buffer_var >> strip_tac >>
+  qpat_assum `compile_alloc_buffer _ sa = _`
+    (strip_assume_tac o MATCH_MP compiler_alloc_buffer_var) >>
   irule freshWritesTheory.not_fresh_at_mono >>
   rename1 `compile_alloc_buffer _ sa = (buf,sm)` >> qexists `sm` >>
   reverse conj_tac >- metis_tac[] >>
   rename1 `emit_op ADD _ sm = (_,sn)` >>
-  rename1 `compile_concat _ _ _ _ _ _ sn = (_,sk)` >>
+  rename1 `compile_alloc_buffer 64 sn = (_,so)` >>
+  rename1 `emit_void MSTORE _ so = (_,sp)` >>
+  rename1 `compile_concat _ _ _ _ _ _ sp = (_,sk)` >>
+  rename1 `emit_op MLOAD _ sk = (_,sr)` >>
   `sm.cs_next_var <= sn.cs_next_var` by
     metis_tac[compiler_counter_emit, pairTheory.SND] >>
-  `sn.cs_next_var <= sk.cs_next_var` by
-    metis_tac[ci_mono_compile_concat_cfn, ci_mono_def, pairTheory.SND] >>
-  `sk.cs_next_var <= sb.cs_next_var` by
+  `sn.cs_next_var <= so.cs_next_var` by
+    metis_tac[ci_mono_compile_alloc_buffer, ci_mono_def, pairTheory.SND] >>
+  `so.cs_next_var <= sp.cs_next_var` by
     metis_tac[compiler_counter_emit, pairTheory.SND] >>
-  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+  `sp.cs_next_var <= sk.cs_next_var` by
+    metis_tac[ci_mono_compile_concat_cfn, ci_mono_def, pairTheory.SND] >>
+  `sk.cs_next_var <= sr.cs_next_var` by
+    metis_tac[compiler_counter_emit, pairTheory.SND] >>
+  `sr.cs_next_var <= sb.cs_next_var` by
+    metis_tac[compiler_counter_emit, pairTheory.SND] >>
+  simp[]
 QED
 
 (* Both value wrappers expose the same Var-only result obligation. *)
@@ -1045,8 +1052,12 @@ Resume compiler_builtin_var[slice]:
   >- (builtin_ptr_var_tac >> metis_tac[compiler_slice_var]) >>
   IF_CASES_TAC
   >- (builtin_ptr_var_tac >>
-      `!x. out_buf = Var x ==> not_fresh_at st4 x` by
+      `!x. out_buf = Var x ==> not_fresh_at st3 x` by
         metis_tac[compiler_slice_var] >>
+      `st3.cs_next_var <= st4.cs_next_var` by
+        metis_tac[ci_mono_lower_value_cfn, ci_mono_def, pairTheory.SND] >>
+      `!x. out_buf = Var x ==> not_fresh_at st4 x` by
+        metis_tac[freshWritesTheory.not_fresh_at_mono] >>
       metis_tac[compiler_slice_var]) >>
   rpt (pairarg_tac >> gvs[]) >>
   IF_CASES_TAC >> builtin_ptr_var_tac >>
@@ -1339,12 +1350,11 @@ Proof
   simp[ci_mono_lower_value_cfn] >> qexists `ce` >>
   simp[compiler_lower_value_reserved_cong] >>
   rpt gen_tac >> strip_tac >>
-  rpt (irule compiler_reserved_bind_cong >> simp[ci_mono_emit_op] >>
-       qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac) >>
-  irule compiler_reserved_ignore_bind_cong >> simp[ci_mono_emit_void] >>
-  qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac >>
-  irule compiler_reserved_bind_cong >> simp[ci_mono_emit_op] >>
-  qexists `ce` >> simp[]
+  rpt (FIRST [irule compiler_reserved_bind_cong >> simp[ci_mono_emit_op] >>
+              qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac,
+              irule compiler_reserved_ignore_bind_cong >>
+              simp[ci_mono_emit_void] >>
+              qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac])
 QED
 
 Theorem compiler_attribute_reserved_cong:
@@ -1564,7 +1574,14 @@ Proof
       `local_ptrs_reserved ce sb` by
         (irule compiler_ci_mono_reserved >> qexists `sa` >>
          metis_tac[ci_mono_lower_value_cfn, pairTheory.SND]) >>
-      AP_TERM_TAC >> irule compiler_lower_value_reserved_cong >> simp[]) >>
+      Cases_on `compile_bytestring_src v sb` >>
+      rename1 `compile_bytestring_src v sb = (lp,sc)` >> PairCases_on `lp` >>
+      `local_ptrs_reserved ce sc` by
+        (irule compiler_ci_mono_reserved >> qexists `sb` >>
+         metis_tac[ci_mono_compile_bytestring_src, pairTheory.SND]) >>
+      `lower_value f ce ty (EL 1 args) sc = lower_value g ce ty (EL 1 args) sc` by
+        (irule compiler_lower_value_reserved_cong >> simp[]) >>
+      simp[]) >>
   simp[]
 QED
 
@@ -1640,8 +1657,18 @@ Resume compiler_builtin_reserved_cong[concat]:
   `local_ptrs_reserved ce sc` by
     (irule compiler_ci_mono_reserved >> qexists `sb` >>
      metis_tac[ci_mono_emit_op, pairTheory.SND]) >>
-  `!infos off. compile_concat f ce args dp infos off sc =
-              compile_concat g ce args dp infos off sc` by
+  Cases_on `compile_alloc_buffer 64 sc` >> simp[] >>
+  rename1 `compile_alloc_buffer 64 sc = (oa,sd)` >>
+  `local_ptrs_reserved ce sd` by
+    (irule compiler_ci_mono_reserved >> qexists `sc` >>
+     metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND]) >>
+  Cases_on `emit_void MSTORE [oa.buf_operand; Lit 0w] sd` >> simp[] >>
+  rename1 `emit_void MSTORE _ sd = (u,se)` >>
+  `local_ptrs_reserved ce se` by
+    (irule compiler_ci_mono_reserved >> qexists `sd` >>
+     metis_tac[ci_mono_emit_void, pairTheory.SND]) >>
+  `!infos off. compile_concat f ce args dp infos off se =
+              compile_concat g ce args dp infos off se` by
     (rpt gen_tac >> irule compiler_concat_reserved_cong >> simp[]) >>
   simp[]
 QED
@@ -1666,7 +1693,13 @@ Resume compiler_builtin_reserved_cong[slice]:
   IF_CASES_TAC >> simp[]
   >- rpt compiler_reserved_pair_tac >>
   IF_CASES_TAC >> simp[]
-  >- rpt compiler_reserved_pair_tac >>
+  >- (compiler_reserved_pair_tac >> compiler_reserved_pair_tac >>
+      pairarg_tac >> gvs[] >>
+      rename1 `compile_slice_out_buf _ st2 = (_,st3)` >>
+      `local_ptrs_reserved ce st3` by
+        (irule compiler_ci_mono_reserved >> qexists `st2` >>
+         metis_tac[ci_mono_compile_slice_out_buf, pairTheory.SND]) >>
+      simp[] >> rpt compiler_reserved_pair_tac) >>
   compiler_reserved_pair_tac >> IF_CASES_TAC >> simp[]
   >- (pairarg_tac >> gvs[] >>
       rename1 `compile_bytestring_src _ st1 = (_,st2)` >>
@@ -1674,7 +1707,17 @@ Resume compiler_builtin_reserved_cong[slice]:
         (irule compiler_ci_mono_reserved >> qexists `st1` >>
          metis_tac[ci_mono_compile_bytestring_src, pairTheory.SND]) >>
       simp[] >> rpt compiler_reserved_pair_tac) >>
-  rpt compiler_reserved_pair_tac
+  pairarg_tac >> gvs[] >>
+  rename1 `compile_alloc_buffer 32 st1 = (_,st2)` >>
+  `local_ptrs_reserved ce st2` by
+    (irule compiler_ci_mono_reserved >> qexists `st1` >>
+     metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND]) >>
+  pairarg_tac >> gvs[] >>
+  rename1 `emit_void MSTORE _ st2 = (_,st3)` >>
+  `local_ptrs_reserved ce st3` by
+    (irule compiler_ci_mono_reserved >> qexists `st2` >>
+     metis_tac[ci_mono_emit_void, pairTheory.SND]) >>
+  simp[] >> rpt compiler_reserved_pair_tac
 QED
 
 Finalise compiler_builtin_reserved_cong
