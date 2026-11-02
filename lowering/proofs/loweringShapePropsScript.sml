@@ -11912,9 +11912,8 @@ Proof
   Cases_on `compiler_label x /\ label_sfx "fallback" x`
   >- (fs[] >>
       `~label_sfx "dispatch" x`
-        by (strip_tac >> `x <> x` suffices_by simp[] >>
-            irule label_sfx_distinct >>
-            qexistsl_tac [`"fallback"`, `"dispatch"`] >> simp[]) >>
+        by (`"fallback" <> "dispatch"` by EVAL_TAC >>
+            metis_tac[label_sfx_distinct]) >>
       irule shape_step_conseq >>
       qexistsl_tac [`jump_label_ok`, `\st. T`, `\x st. T`] >>
       simp[] >>

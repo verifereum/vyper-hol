@@ -16,6 +16,8 @@
  *   compiler_label, jump_label_ok, inst_jump_labels_ok
  *                                — labels a terminator may jump to: compiler
  *                                  labels or "fn_" function entries
+ *   label_sfx                    — the fresh_label suffix a label was made
+ *                                  with; different suffixes, different labels
  *   lowered_inst_ok              — the per-instruction shape; `internal`
  *                                  selects internal-function or entry code
  *   shape_state, shape_extends   — the state invariant and the append step
