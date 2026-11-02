@@ -29,11 +29,6 @@ Theory dftScheduleOrder
 Ancestors
   dftCorrectness dftStructural dftDefs dftTopoSort dftWf passSharedDefs venomWf venomInst venomEffects list
 
-(* a comes before b in the list l. *)
-Definition id_before_def:
-  id_before l a b <=> ?i j. i < j /\ j < LENGTH l /\ EL i l = a /\ EL j l = b
-End
-
 Definition dft_must_order_def:
   dft_must_order x y <=>
     ~DISJOINT (set (inst_defs x)) (set (inst_uses y)) \/
@@ -61,20 +56,6 @@ Definition dft_block_rel_def:
               x.inst_id y.inst_id /\
             dft_must_order x y ==>
             id_before (MAP (\i. i.inst_id) body) x.inst_id y.inst_id
-End
-
-(* Fallible instructions keep their relative order in every block. *)
-Definition dft_fallible_order_kept_def:
-  dft_fallible_order_kept fn fn' <=>
-    LIST_REL
-      (\bb bb'.
-         !x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
-               is_fallible x /\ is_fallible y /\
-               id_before (MAP (\i. i.inst_id) bb.bb_instructions)
-                 x.inst_id y.inst_id ==>
-               id_before (MAP (\i. i.inst_id) bb'.bb_instructions)
-                 x.inst_id y.inst_id)
-      fn.fn_blocks fn'.fn_blocks
 End
 
 Theorem id_before_cons:

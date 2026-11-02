@@ -370,17 +370,31 @@ End
    fact a run needs of its input is a conjunct of its row, put there by
    the run that establishes it, and a conjunct of row 0 is a premise of
    S4 that the lowering stage owes. *)
+(* DFT's input (row 7): SSA, and no ALLOCA (ConcretizeMemLoc removed
+   them), which an ALLOCA's unlisted effect on the frame would need. *)
+Definition dft_in_ok_def:
+  dft_in_ok C <=>
+    EVERY (\fn. wf_ssa fn /\ EVERY (\i. i.inst_opcode <> ALLOCA) (fn_insts fn))
+      C.ctx_functions
+End
+
 Definition o1_inv_def:
   o1_inv (k : num) =
     if k <= 2 then o1_src_inv
     else if k = 3 then o1_static_inv
+    else if k = 7 then (\C vs. o1_lowered_inv C vs /\ dft_in_ok C)
+    else if k = 8 then
+      (\C vs. o1_lowered_inv C vs /\ EVERY wf_ssa C.ctx_functions)
     else o1_lowered_inv
 End
 
-(* The input-to-output relation the k-th run's contract may assume; none
-   today. *)
+(* The input-to-output relation the k-th run's contract may assume.  DFT
+   (run 7): its output keeps every block's fallible instructions in order,
+   which the pinned DFT does not do (o1_dft_keeps_fallible_order). *)
 Definition o1_pre_def:
-  o1_pre (k : num) (C : venom_context) (C' : venom_context) <=> T
+  o1_pre (k : num) (C : venom_context) (C' : venom_context) <=>
+    (k = 7 ==>
+     LIST_REL dft_fallible_order_kept C.ctx_functions C'.ctx_functions)
 End
 
 (* ===== The schedule ===== *)

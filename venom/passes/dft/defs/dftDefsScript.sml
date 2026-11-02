@@ -169,6 +169,29 @@ Definition is_fallible_def:
   is_fallible inst <=> opcode_fail_class inst.inst_opcode <> NoFail
 End
 
+(* a comes before b in the list l. *)
+Definition id_before_def:
+  id_before l a b <=> ?i j. i < j /\ j < LENGTH l /\ EL i l = a /\ EL j l = b
+End
+
+(* fn' keeps the relative order of fn's fallible instructions in every
+   block.  dft_fn does not (it schedules over build_eda, which leaves an
+   ASSERT free to move above an INVOKE); chaining them (add_abort_deps)
+   would.  The O1 contract assumes it of DFT's output until the pinned
+   Vyper orders them. *)
+Definition dft_fallible_order_kept_def:
+  dft_fallible_order_kept fn fn' <=>
+    LIST_REL
+      (\bb bb'.
+         !x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+               is_fallible x /\ is_fallible y /\
+               id_before (MAP (\i. i.inst_id) bb.bb_instructions)
+                 x.inst_id y.inst_id ==>
+               id_before (MAP (\i. i.inst_id) bb'.bb_instructions)
+                 x.inst_id y.inst_id)
+      fn.fn_blocks fn'.fn_blocks
+End
+
 (* Chain all fallible instructions so abort-incompatible pairs can never
    be reordered. Ensures abort_compatible for every reorderable pair.
    (Diverges from Python DFT which lacks this — upstream bug.) *)
