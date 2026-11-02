@@ -7,6 +7,7 @@ Theory o1DftStep
 Ancestors
   o1PassContract unitShapeDefs venomPassDispatcher dftStructural dftDefs
   dftLifting dftShape dftCorrectness unitLabelMapIdentity
+  venomFnScheduleRunnerProps
   venomWf venomInst venomEffects passSharedDefs list
 Libs
   BasicProvers
@@ -222,7 +223,7 @@ Proof
   qexists_tac `ctx` >> simp[]
 QED
 
-(* Why it holds (unchecked notes):
+(* Proof summary:
    - Without SSA, dft_fn can drop an instruction (a block whose ADD reads
      its own output: nothing reaches it from the entries), but it never
      duplicates one (distinct ids, ds_visited) and every output
@@ -245,5 +246,13 @@ QED
 Theorem dft_step_contract:
   o1_step_contract rpolicy (CFP_Simple VP_DFT)
 Proof
-  cheat
+  simp[o1_step_contract_def, fn_pass_step_def] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  `MEM fn observed.cu_context.ctx_functions` by
+    metis_tac[lookup_unique_function_member] >>
+  `o1_fn_shape observed.cu_context fn` by
+    gvs[o1_ctx_shape_def, EVERY_MEM] >>
+  simp[label_map_sources_ok_def] >> conj_tac
+  >- metis_tac[dft_shape_o1_fn] >>
+  simp[fresh_names_ok_def, fn_labels_def, dft_fn_labels_map] >>
+  metis_tac[dft_fn_ir_inst_ids_subset, o1_fn_shape_def, fn_shape_ok_def]
 QED
