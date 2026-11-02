@@ -197,6 +197,13 @@ Proof
   SIMP_TAC asm_dispatch_ss asm_dispatch_thms
 QED
 
+Theorem asm_step_jump:
+  !lo o2pc (s:asm_state).
+    asm_step lo o2pc (AsmOp "JUMP") s = asm_jump o2pc s
+Proof
+  SIMP_TAC asm_dispatch_ss asm_dispatch_thms
+QED
+
 Theorem asm_step_iszero:
   !lo o2pc (s:asm_state).
     asm_step lo o2pc (AsmOp "ISZERO") s =
