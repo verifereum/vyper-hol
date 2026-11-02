@@ -833,3 +833,105 @@ Proof
   strip_tac >> drule_all supply_split_path_edges >> strip_tac >>
   irule supply_expand_path_valid >> metis_tac[]
 QED
+
+Theorem supply_reachable_transport:
+  fn_entry_label g = fn_entry_label f /\
+  (!a b. fn_cfg_edge f a b ==> RTC (fn_cfg_edge g) a b) ==>
+  !n. fn_reachable f n ==> fn_reachable g n
+Proof
+  strip_tac >> simp[fn_reachable_def] >> rpt strip_tac >>
+  qexists `entry` >> simp[] >>
+  `RTC (RTC (fn_cfg_edge g)) entry n` suffices_by
+    simp[relationTheory.RTC_RTC] >>
+  irule relationTheory.RTC_MONOTONE >>
+  qexists `fn_cfg_edge f` >> simp[]
+QED
+
+Theorem insert_split_supply_reachable:
+  wf_function f /\ ir_supply_covers_fn s f /\ ir_supply_inst_ok s /\
+  MEM pred f.fn_blocks /\ MEM target f.fn_blocks /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s f pred target = (g,s') ==>
+  !n. fn_reachable f n ==> fn_reachable g n
+Proof
+  strip_tac >>
+  `f.fn_blocks <> []` by gvs[wf_function_def, fn_has_entry_def] >>
+  `fn_entry_label g = fn_entry_label f` by metis_tac[insert_split_supply_entry] >>
+  drule_all supply_split_path_edges >> strip_tac >>
+  match_mp_tac supply_reachable_transport >> simp[] >>
+  rpt strip_tac >> Cases_on `a = pred.bb_label /\ b = target.bb_label`
+  >- (gvs[] >> metis_tac[relationTheory.RTC_SINGLE, relationTheory.RTC_TRANS]) >>
+  metis_tac[relationTheory.RTC_SINGLE]
+QED
+
+Theorem insert_split_supply_reachable_split:
+  wf_function f /\ ir_supply_covers_fn s f /\ ir_supply_inst_ok s /\
+  MEM pred f.fn_blocks /\ MEM target f.fn_blocks /\
+  fn_cfg_edge f pred.bb_label target.bb_label /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s f pred target = (g,s') /\ fn_reachable f pred.bb_label ==>
+  fn_reachable g split.bb_label
+Proof
+  strip_tac >>
+  `fn_reachable g pred.bb_label` by metis_tac[insert_split_supply_reachable] >>
+  drule_all supply_split_path_edges >> strip_tac >>
+  irule venomExecProofsTheory.fn_reachable_step >>
+  qexists `pred.bb_label` >> simp[] >> metis_tac[]
+QED
+
+Theorem insert_split_supply_dominates:
+  wf_function f /\ ir_supply_covers_fn s f /\ ir_supply_inst_ok s /\
+  MEM pred f.fn_blocks /\ MEM target f.fn_blocks /\
+  fn_cfg_edge f pred.bb_label target.bb_label /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s f pred target = (g,s') /\
+  MEM n (fn_labels f) /\ fn_dominates f d n ==>
+  fn_dominates g d n
+Proof
+  strip_tac >>
+  `fn_reachable f n` by gvs[fn_dominates_def] >>
+  `fn_reachable g n` by metis_tac[insert_split_supply_reachable] >>
+  `n <> split.bb_label` by metis_tac[supply_split_label_not_old] >>
+  `f.fn_blocks <> []` by gvs[wf_function_def, fn_has_entry_def] >>
+  `fn_entry_label g = fn_entry_label f` by metis_tac[insert_split_supply_entry] >>
+  simp[fn_dominates_def] >> rpt strip_tac >>
+  `fn_entry_label g = SOME (HD path)` by metis_tac[] >>
+  drule_all insert_split_supply_contract_path >> strip_tac >>
+  `MEM d (FILTER (\l. l <> split.bb_label) path)` by
+    (qpat_x_assum `fn_dominates f d n` mp_tac >>
+     simp[fn_dominates_def] >> strip_tac >>
+     first_x_assum irule >> simp[] >> metis_tac[]) >>
+  gvs[listTheory.MEM_FILTER]
+QED
+
+Theorem insert_split_supply_dominates_split:
+  wf_function f /\ ir_supply_covers_fn s f /\ ir_supply_inst_ok s /\
+  MEM pred f.fn_blocks /\ MEM target f.fn_blocks /\
+  fn_cfg_edge f pred.bb_label target.bb_label /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s f pred target = (g,s') /\
+  fn_dominates f d pred.bb_label ==>
+  fn_dominates g d split.bb_label
+Proof
+  strip_tac >>
+  `fn_reachable f pred.bb_label` by gvs[fn_dominates_def] >>
+  `fn_reachable g split.bb_label` by
+    metis_tac[insert_split_supply_reachable_split] >>
+  `f.fn_blocks <> []` by gvs[wf_function_def, fn_has_entry_def] >>
+  `fn_entry_label g = fn_entry_label f` by metis_tac[insert_split_supply_entry] >>
+  simp[fn_dominates_def] >> rpt strip_tac >>
+  `fn_entry_label g = SOME (HD path)` by metis_tac[] >>
+  drule_all insert_split_supply_contract_path >> strip_tac >>
+  `MEM d (FILTER (\l. l <> split.bb_label) path)` by
+    (qpat_x_assum `fn_dominates f d pred.bb_label` mp_tac >>
+     simp[fn_dominates_def] >> strip_tac >>
+     first_x_assum irule >> simp[] >> metis_tac[]) >>
+  gvs[listTheory.MEM_FILTER]
+QED
+
+Theorem supply_dominates_refl:
+  fn_reachable f n ==> fn_dominates f n n
+Proof
+  simp[fn_dominates_def] >> rpt strip_tac >>
+  Cases_on `path` >> gvs[rich_listTheory.MEM_LAST]
+QED
