@@ -2,7 +2,7 @@ Theory cfgNormSupplySim
 Ancestors
   cfgNormSupplyProofs cfgTransformProps cfgNormDefs cfgTransform venomExecProps venomInst venomWf
   sccpCorrectnessProofs finite_map venomFnScheduleRunner unitShapeDefs stateFrame
-  analysisSimProofsBase analysisSimDefs
+  analysisSimProofsBase analysisSimDefs cfgNormSim
 
 Theorem find_and_split_supply_cases:
   !bbs fn s fn' changed s'.
@@ -2441,4 +2441,175 @@ Proof
   >- (irule supply_assigns_exec_jmp >> simp[] >> metis_tac[]) >>
   gvs[venomStateTheory.jump_to_def, venomStateTheory.lookup_var_def,
       execution_frame_def] >> metis_tac[]
+QED
+
+(* Resolution is independent of PHI writes: both reads use fixed snapshots. *)
+Theorem supply_eval_one_phi_split:
+  st.vs_prev_bb = SOME pred /\ st'.vs_prev_bb = SOME split /\
+  resolve_phi split inst.inst_operands = NONE /\
+  (!op. resolve_phi pred inst.inst_operands = SOME op ==>
+    eval_operand
+      (case op of Var v =>
+        (case ALOOKUP repls v of NONE => Var v | SOME w => Var w)
+       | x => x) st' = eval_operand op st) ==>
+  eval_one_phi st'
+    (inst with inst_operands := update_phi_ops pred split repls inst.inst_operands) =
+  eval_one_phi st inst
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_outputs` >- simp[venomExecSemanticsTheory.eval_one_phi_def] >>
+  Cases_on `t` >> simp[venomExecSemanticsTheory.eval_one_phi_def] >>
+  Cases_on `resolve_phi pred inst.inst_operands`
+  >- (Cases_on `resolve_phi split
+        (update_phi_ops pred split repls inst.inst_operands)` >> simp[] >>
+      drule_all resolve_phi_update_phi_ops_match_rev >> simp[]) >>
+  drule_all resolve_phi_update_phi_ops_match >> disch_tac >>
+  gvs[]
+QED
+
+(* Sources are evaluated in st/st' throughout the induction, not in the
+   recursively returned states. This also covers self-loop PHIs. *)
+Theorem supply_eval_phis_agree:
+  !insts insts' st st' out.
+  LIST_REL (\i j. i.inst_opcode = j.inst_opcode /\
+    (i.inst_opcode = PHI ==> eval_one_phi st i = eval_one_phi st' j)) insts insts' /\
+  supply_state_agree fn st st' /\ eval_phis st insts = OK out ==>
+  ?out'. eval_phis st' insts' = OK out' /\ supply_state_agree fn out out'
+Proof
+  Induct_on `insts` >> Cases_on `insts'` >>
+  simp[venomExecSemanticsTheory.eval_phis_def] >> rpt strip_tac >>
+  rename1 `i.inst_opcode = j.inst_opcode` >>
+  Cases_on `i.inst_opcode = PHI`
+  >- (gvs[] >>
+      Cases_on `eval_one_phi st' j` >>
+      gvs[venomExecSemanticsTheory.eval_phis_def] >>
+      PairCases_on `x` >>
+      Cases_on `eval_phis st insts` >> gvs[] >>
+      first_x_assum (qspecl_then [`t`, `st`, `st'`, `v`] mp_tac) >>
+      simp[] >> strip_tac >>
+      qexists_tac `update_var x0 x1 out'` >>
+      simp[venomExecSemanticsTheory.eval_phis_def] >>
+      irule supply_state_agree_update >> simp[]) >>
+  gvs[venomExecSemanticsTheory.eval_phis_def] >> metis_tac[]
+QED
+
+Theorem supply_eval_operand_agree:
+  supply_state_agree fn st st' /\
+  (!v. op = Var v ==> MEM v (irSupply$fn_ir_vars fn)) ==>
+  eval_operand op st = eval_operand op st'
+Proof
+  strip_tac >> Cases_on `op` >>
+  simp[venomStateTheory.eval_operand_def]
+  >- metis_tac[supply_state_agree_lookup] >>
+  `st.vs_labels = st'.vs_labels` by
+    (gvs[supply_state_agree_def] >>
+     qpat_x_assum `execution_frame _ = execution_frame _`
+       (mp_tac o AP_TERM ``\s:venom_state. s.vs_labels``) >>
+     simp[execution_frame_def]) >> simp[]
+QED
+
+Theorem supply_eval_operand_replacement:
+  eval_operand op st' = eval_operand op st /\
+  (!v w. op = Var v /\ ALOOKUP repls v = SOME w ==>
+     lookup_var w st' = lookup_var v st) ==>
+  eval_operand
+    (case op of Var v =>
+       (case ALOOKUP repls v of NONE => Var v | SOME w => Var w)
+     | x => x) st' = eval_operand op st
+Proof
+  Cases_on `op` >> simp[venomStateTheory.eval_operand_def] >>
+  Cases_on `ALOOKUP repls s` >> simp[venomStateTheory.eval_operand_def]
+QED
+
+Theorem supply_eval_phis_split:
+  supply_state_agree fn st st' /\
+  st.vs_prev_bb = SOME pred /\ st'.vs_prev_bb = SOME split /\
+  (!inst. MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI ==>
+    resolve_phi split inst.inst_operands = NONE /\
+    (!op. resolve_phi pred inst.inst_operands = SOME op ==>
+      eval_operand
+        (case op of Var v =>
+          (case ALOOKUP repls v of NONE => Var v | SOME w => Var w)
+         | x => x) st' = eval_operand op st)) /\
+  eval_phis st bb.bb_instructions = OK out ==>
+  ?out'. eval_phis st'
+    (update_phis_for_split pred split repls bb).bb_instructions = OK out' /\
+    supply_state_agree fn out out'
+Proof
+  strip_tac >>
+  simp[update_phis_for_split_def] >>
+  irule supply_eval_phis_agree >>
+  qexistsl_tac [`bb.bb_instructions`, `st`] >> simp[] >>
+  simp[listTheory.EVERY2_MAP] >>
+  irule listTheory.EVERY2_refl >> rpt strip_tac >>
+  rename1 `MEM inst bb.bb_instructions` >>
+  Cases_on `inst.inst_opcode = PHI` >> simp[] >>
+  irule EQ_SYM >> irule supply_eval_one_phi_split >>
+  simp[] >> first_x_assum drule >> simp[]
+QED
+
+Theorem supply_eval_one_phi_other:
+  st.vs_prev_bb = SOME prev /\ st'.vs_prev_bb = SOME prev /\
+  prev <> pred /\ prev <> split /\
+  (!op. resolve_phi prev inst.inst_operands = SOME op ==>
+     eval_operand op st' = eval_operand op st) ==>
+  eval_one_phi st'
+    (inst with inst_operands := update_phi_ops pred split repls inst.inst_operands) =
+  eval_one_phi st inst
+Proof
+  strip_tac >>
+  `resolve_phi prev (update_phi_ops pred split repls inst.inst_operands) =
+    resolve_phi prev inst.inst_operands` by
+    (irule resolve_phi_update_phi_ops_other >> simp[]) >>
+  Cases_on `inst.inst_outputs` >- simp[venomExecSemanticsTheory.eval_one_phi_def] >>
+  Cases_on `t` >> simp[venomExecSemanticsTheory.eval_one_phi_def] >>
+  Cases_on `resolve_phi prev inst.inst_operands` >> gvs[]
+QED
+
+Theorem supply_eval_phis_other:
+  supply_state_agree fn st st' /\
+  st.vs_prev_bb = SOME prev /\ st'.vs_prev_bb = SOME prev /\
+  prev <> pred /\ prev <> split /\
+  (!inst op. MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
+     resolve_phi prev inst.inst_operands = SOME op ==>
+     eval_operand op st' = eval_operand op st) /\
+  eval_phis st bb.bb_instructions = OK out ==>
+  ?out'. eval_phis st'
+    (update_phis_for_split pred split repls bb).bb_instructions = OK out' /\
+    supply_state_agree fn out out'
+Proof
+  strip_tac >> simp[update_phis_for_split_def] >>
+  irule supply_eval_phis_agree >>
+  qexistsl_tac [`bb.bb_instructions`, `st`] >> simp[] >>
+  simp[listTheory.EVERY2_MAP] >>
+  irule listTheory.EVERY2_refl >> rpt strip_tac >>
+  rename1 `MEM inst bb.bb_instructions` >>
+  Cases_on `inst.inst_opcode = PHI` >> simp[] >>
+  irule EQ_SYM >> irule supply_eval_one_phi_other >> simp[] >>
+  metis_tac[]
+QED
+
+(* A lookup-level interface for callers of the split execution boundary.
+   Non-forwarded operands use old-variable agreement; forwarded operands
+   use the original pre-PHI snapshot, even on self-loops. *)
+Theorem supply_eval_phis_forwarded:
+  supply_state_agree fn st st' /\
+  st.vs_prev_bb = SOME pred /\ st'.vs_prev_bb = SOME split /\
+  (!inst. MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI ==>
+    resolve_phi split inst.inst_operands = NONE /\
+    (!v. MEM (Var v) inst.inst_operands ==> MEM v (irSupply$fn_ir_vars fn))) /\
+  (!src dst. ALOOKUP repls src = SOME dst ==>
+    lookup_var dst st' = lookup_var src st) /\
+  eval_phis st bb.bb_instructions = OK out ==>
+  ?out'. eval_phis st'
+    (update_phis_for_split pred split repls bb).bb_instructions = OK out' /\
+    supply_state_agree fn out out'
+Proof
+  strip_tac >> irule supply_eval_phis_split >> simp[] >>
+  qexists_tac `st` >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!inst. MEM inst _ /\ _ ==> _` drule >>
+  simp[] >> strip_tac >> simp[] >> rpt strip_tac >>
+  irule supply_eval_operand_replacement >> simp[] >>
+  irule EQ_SYM >> irule supply_eval_operand_agree >> simp[] >>
+  metis_tac[execEquivParamBaseTheory.resolve_phi_MEM]
 QED
