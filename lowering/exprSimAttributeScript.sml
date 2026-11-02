@@ -361,6 +361,53 @@ Proof
   strip_tac >> gvs[]
 QED
 
+(* A selection whose result is a memory place extends a memory place by the
+   subscript. *)
+Theorem select_result_memory_place:
+  select_result cx ty tv sb es = (INL (PlaceR (MemoryPlace id path)), es1) ==>
+  ?p0. tv = PlaceR (MemoryPlace id p0) /\ path = p0 ++ [sb]
+Proof
+  Cases_on `tv` >> TRY (Cases_on `p`) >> TRY (Cases_on `sb`) >>
+  simp[select_result_def, extend_place_def, extend_memory_place_def,
+       bind_def, ignore_bind_def, return_def, raise_def, lift_sum_def,
+       lift_option_type_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+  >~ [`HashMapRef`]
+  >- gvs[value_type_CASE_rator, bind_def, return_def, raise_def,
+         AllCaseEqs()] >>
+  drule vyperStoragePlaceProvenanceTheory.extend_storage_place_subregion >>
+  simp[]
+QED
+
+(* An aggregate's memory place is held by a pointer to the place in its
+   local. *)
+Theorem vv_holds_memory_place_at:
+  vv_holds cenv cx t (PlaceR (MemoryPlace id path)) vv es s /\
+  ~is_word_type t /\ vv_loc vv = LocMemory /\
+  eval_operand (vv_operand vv) s = SOME w ==>
+  local_place_at cenv cx s id path t w
+Proof
+  Cases_on `vv` >>
+  simp[vv_holds_def, vv_loc_def, vv_location_def, vv_operand_def] >>
+  Cases_on `p.ptr_location` >> simp[] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem local_place_at_field[local]:
+  local_place_at cenv cx s id p0 bt w /\
+  evaluate_type (get_tenv cx) bt = SOME (StructTV fs) /\
+  fields_layout flds fs /\ ALOOKUP fs fld = SOME ftv /\
+  evaluate_type (get_tenv cx) ann = SOME ftv ==>
+  local_place_at cenv cx s id (p0 ++ [AttrSubscript fld]) ann
+    (w + n2w (struct_field_offset flds fld))
+Proof
+  rw[local_place_at_def] >> gvs[] >>
+  drule_all mem_field_offset_layout >> strip_tac >>
+  drule_then (qspecl_then [`AttrSubscript fld`, `struct_field_offset flds fld`,
+                           `ftv`] mp_tac) mem_path_offset_snoc >>
+  simp[mem_step_offset_def] >> strip_tac >>
+  simp[GSYM wordsTheory.WORD_ADD_ASSOC, wordsTheory.word_add_n2w]
+QED
+
 (* The field's value_vv after the ADD, from the base's. *)
 Theorem attr_vv_post[local]:
   !func cenv cx obj es sa sn s0 es1 tv bvv q w dst ann fld sid fs ftv tv' ctx.
@@ -377,7 +424,10 @@ Theorem attr_vv_post[local]:
          value_has_type (StructTV fs) v) /\
     (!vals. read_result cx tv es1 = (INL (StructV vals), es1) ==>
        ?fv. ALOOKUP vals fld = SOME fv /\
-            read_result cx tv' es1 = (INL fv, es1)) ==>
+            read_result cx tv' es1 = (INL fv, es1)) /\
+    (!id path. tv' = PlaceR (MemoryPlace id path) ==>
+       ?p0. tv = PlaceR (MemoryPlace id p0) /\
+            path = p0 ++ [AttrSubscript fld]) ==>
     vv_post ctx func cenv cx (Attribute ann obj fld) es sa sn s0 es1 tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) q
 Proof
@@ -420,7 +470,14 @@ Proof
           qspecl_then [`get_tenv cx`, `ann`, `ftv`, `fv`,
                        `w2n w + struct_field_offset fields fld`, `q.vs_memory`]
             mp_tac val_in_memory_word_type >>
-          simp[wordsTheory.WORD_ADD_0])
+          simp[wordsTheory.WORD_ADD_0] >> rpt strip_tac >>
+          qpat_x_assum `!id path. tv' = _ ==> _` drule >> strip_tac >>
+          gvs[] >>
+          `local_place_at cenv cx q id p0 (StructT sid) w` by
+            (irule vv_holds_memory_place_at >>
+             simp[compileEnvTheory.is_word_type_def] >>
+             qexistsl_tac [`es1`, `bvv`] >> simp[]) >>
+          drule_all local_place_at_field >> simp[wordsTheory.WORD_ADD_0])
       >~ [`immutable_holds`]
       >- (irule immutable_holds_field >> simp[] >> metis_tac[]) >>
       drule struct_field_slot_exists >> strip_tac >>
@@ -490,7 +547,8 @@ Proof
       drule_all select_attr_read >> strip_tac >> gvs[] >>
       irule attr_vv_post >> simp[Abbr `off`] >>
       goal_assum (drule_at Any) >> simp[] >>
-      rpt strip_tac >> gvs[]) >>
+      rpt strip_tac >> gvs[] >>
+      metis_tac[select_result_memory_place]) >>
   irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[]
 QED
 

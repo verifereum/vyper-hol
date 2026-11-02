@@ -404,6 +404,8 @@ Theorem pop_name_facts:
       cenv.ce_var_type id = SOME (ArrayT ann (Dynamic n)) /\
       lookup_scopes id es.scopes = SOME entry /\ entry.assignable /\
       evaluate_type (get_tenv cx) ann = SOME etv /\
+      evaluate_type (get_tenv cx) (ArrayT ann (Dynamic n)) =
+        SOME (ArrayTV etv (Dynamic n)) /\
       entry.type = ArrayTV etv (Dynamic n) /\
       entry.value = ArrayV (DynArrayV vs) /\
       LENGTH vs <= n /\ n < dimword (:256) /\ elems_val_wf vs etv /\
@@ -436,6 +438,8 @@ Proof
   qpat_x_assum `evaluate_type _ (ArrayT _ _) = _` mp_tac >>
   simp[evaluate_type_def, AllCaseEqs()] >> strip_tac >>
   rename1 `evaluate_type _ ann = SOME etv` >>
+  `evaluate_type (get_tenv cx) (ArrayT ann (Dynamic n)) =
+     SOME (ArrayTV etv (Dynamic n))` by (simp[evaluate_type_def] >> fs[]) >>
   `entry.type = ArrayTV etv (Dynamic n)` by simp[] >>
   `value_has_type (ArrayTV etv (Dynamic n)) entry.value` by metis_tac[] >>
   drule value_has_type_dynarray >> strip_tac >>
@@ -674,6 +678,25 @@ Proof
   gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
 QED
 
+(* The popped element's pointer is its place's: the local's pointer plus
+   the element's offset. *)
+Theorem pop_local_place_at[local]:
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  lookup_var p s = SOME w /\ cenv.ce_var_type id = SOME t0 /\
+  evaluate_type (get_tenv cx) t0 = SOME (ArrayTV etv (Dynamic n)) /\
+  evaluate_type (get_tenv cx) et = SOME etv /\ 0 < L /\ L <= n ==>
+  local_place_at cenv cx s id [ValueSubscript (IntV (&(L - 1)))] et
+    (w + 32w + (n2w L - 1w) * n2w (type_memory_size etv))
+Proof
+  strip_tac >> simp[local_place_at_def] >>
+  `L - 1 < n /\ 1 <= L` by decide_tac >>
+  asm_simp_tac (srw_ss()) [mem_path_offset_def, mem_step_offset_def] >>
+  `n2w L - 1w = n2w (L - 1) : 256 word` by
+    asm_simp_tac (srw_ss()) [wordsTheory.n2w_sub] >>
+  simp[wordsTheory.word_mul_n2w, GSYM wordsTheory.WORD_ADD_ASSOC,
+       wordsTheory.word_add_n2w]
+QED
+
 Theorem pop_vv_post:
   !func cenv cx ann id es sa sb s0 u k pre envs entry rest p sz w etv n vs x6 ctx.
     stmt_state_rel ctx func cenv cx es s0 /\
@@ -695,7 +718,9 @@ Theorem pop_vv_post:
     lookup_var x6 u =
       SOME (w + 32w + (n2w (LENGTH vs) - 1w) * n2w (type_memory_size etv)) /\
     EVERY (value_has_type etv) vs /\
-    evaluate_type (get_tenv cx) ann = SOME etv ==>
+    evaluate_type (get_tenv cx) ann = SOME etv /\
+    evaluate_type (get_tenv cx) (ArrayT ann (Dynamic n)) =
+      SOME (ArrayTV etv (Dynamic n)) ==>
     vv_post ctx func cenv cx (Pop ann (NameTarget id)) es sa sb s0
       (es with scopes :=
          pre ++ envs |+ (id, pop_name_entry entry vs)
@@ -750,7 +775,10 @@ Proof
       `val_in_memory etv (LAST vs)
          (w2n w + 32 + (LENGTH vs - 1) * type_memory_size etv) u.vs_memory` by
         (irule pop_elem_in_memory >> simp[] >> metis_tac[]) >>
-      simp[] >> rpt strip_tac >>
+      simp[] >> rpt strip_tac
+      >~ [`local_place_at`]
+      >- (irule pop_local_place_at >> simp[lookup_var_inst_idx] >>
+          metis_tac[]) >>
       TRY (qpat_x_assum `val_in_memory etv (LAST vs) _ _` mp_tac >>
            simp[] >> NO_TAC) >>
       irule val_in_memory_word_type >> rpt conj_tac

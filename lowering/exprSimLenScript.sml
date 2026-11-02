@@ -395,7 +395,7 @@ Proof
           evaluate_type_def, typed_val_to_w256_def, val_to_w256_def,
           integer_wordTheory.i2w_def]
   >~ [`vv_at`]
-  >- simp[vv_at_def, expr_val_at_def, expr_type_def, is_word_type_def]
+  >- simp[vv_at_def, expr_val_at_def, expr_type_def, is_word_type_def, dynarray_type_def]
   >~ [`lookup_var x s`]
   >- (fs[vv_post_def] >> metis_tac[not_fresh_at_mono])
   >~ [`FLOOKUP s.vs_allocas`] >- (fs[vv_post_def] >> metis_tac[])

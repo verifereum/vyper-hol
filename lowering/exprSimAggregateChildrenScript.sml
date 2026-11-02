@@ -120,13 +120,28 @@ Proof
   metis_tac[eval_expr_preserves_scopes_dom]
 QED
 
+Theorem local_place_at_vars_frame:
+  local_place_at cenv cx s id path ty w /\
+  (!n q sq w. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) sq) /\
+              lookup_var q s = SOME w ==> lookup_var q t = SOME w) ==>
+  local_place_at cenv cx t id path ty w
+Proof
+  rw[local_place_at_def] >> metis_tac[]
+QED
+
 Theorem vv_holds_vars_frame:
   vv_holds cenv cx ty tv vv es s /\ t.vs_memory = s.vs_memory /\
-  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s ==>
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  (!n q sq w. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) sq) /\
+              lookup_var q s = SOME w ==> lookup_var q t = SOME w) ==>
   vv_holds cenv cx ty tv vv es t
 Proof
-  Cases_on `vv` >>
-  simp[vv_holds_def, vv_operand_def, expr_val_rel_def] >>
+  Cases_on `vv`
+  >- (simp[vv_holds_def, vv_operand_def, expr_val_rel_def] >> metis_tac[]) >>
+  simp[vv_holds_def, vv_operand_def] >>
+  rpt strip_tac >> gvs[] >> Cases_on `p.ptr_location` >> gvs[] >>
+  rw[] >~ [`local_place_at`]
+  >- (irule local_place_at_vars_frame >> metis_tac[]) >>
   metis_tac[]
 QED
 
@@ -171,7 +186,9 @@ Proof
   qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   `vv_holds cenv cx (expr_type e) tv vv es' t` by
-    (drule_all vv_holds_vars_frame >> simp[]) >>
+    (irule vv_holds_vars_frame >> qexists_tac `s` >> simp[] >>
+     rpt strip_tac >> first_x_assum irule >>
+     fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   `vv_at cenv cx (expr_type e) sa sn es' tv vv t` by
     (irule vv_at_vars_frame >> qexistsl_tac [`s`, `sm`] >>
      simp[] >> conj_tac

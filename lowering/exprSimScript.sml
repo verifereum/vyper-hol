@@ -658,17 +658,19 @@ Proof
 QED
 
 (* w points into the region of the local id at the place of path in it:
-   the local's pointer plus the path's offset in the local's declared type.
-   compile_expr's pointer for a local's place, which the place reads from,
-   and not a copy of its bytes elsewhere. *)
+   the local's pointer plus the path's offset in the local's declared type,
+   where the path reaches a value of type t.  compile_expr's pointer for a
+   local's place, which the place reads from, and not a copy of its bytes
+   elsewhere. *)
 Definition local_place_at_def:
-  local_place_at cenv cx s id path (w:bytes32) <=>
+  local_place_at cenv cx s id path t (w:bytes32) <=>
     ?p sz b t0 tv0 k tv.
       FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
       lookup_var p s = SOME b /\
       cenv.ce_var_type id = SOME t0 /\
       evaluate_type (get_tenv cx) t0 = SOME tv0 /\
       mem_path_offset tv0 path = SOME (k,tv) /\
+      evaluate_type (get_tenv cx) t = SOME tv /\
       w = b + n2w k
 End
 
@@ -678,10 +680,13 @@ End
    place is the place's own address in the local's region
    (local_place_at), so code run after it that changes the local (a pop in
    a subscript's index) changes what the pointer reads as it changes the
-   place.  No current compiler case returns a calldata pointer. *)
+   place.  An aggregate's place in a local is never a stack value, so a
+   field or element of it is a pointer into the local too.  No current
+   compiler case returns a calldata pointer. *)
 Definition vv_holds_def:
   (vv_holds cenv cx t tv (StackValue t' op) es s <=>
-     ?v. read_result cx tv es = (INL v, es) /\ expr_val_rel cx t v op s) /\
+     (?v. read_result cx tv es = (INL v, es) /\ expr_val_rel cx t v op s) /\
+     (~is_word_type t ==> !id path. tv <> PlaceR (MemoryPlace id path))) /\
   (vv_holds cenv cx t tv (LocatedValue t' p) es s <=>
      t' = t /\
      ?w. eval_operand p.ptr_operand s = SOME w /\
@@ -694,7 +699,7 @@ Definition vv_holds_def:
                          mem_word_at (w2n w) s.vs_memory =
                            typed_val_to_w256 tvt v)) /\
              (!id path. tv = PlaceR (MemoryPlace id path) ==>
-                        local_place_at cenv cx s id path w)
+                        local_place_at cenv cx s id path t w)
          | LocStorage => storage_holds cx F t tv w es
          | LocTransient => storage_holds cx T t tv w es
          | LocCode => immutable_holds cenv cx t tv w es
@@ -705,10 +710,7 @@ End
    StackValue, expr_val_at itself, and never a dynamic array; for a pointer
    into memory, the value's bytes inside one of the expression's own
    allocations or a live local's region, word types included, unless it
-   occupies none.  Only a place of a dynamic array local n may sit at n's
-   length word: code run after it may pop n, which changes that word, and
-   then changes the place as well (x[x.pop()]), but would leave a value
-   read earlier as it was. *)
+   occupies none. *)
 Definition vv_at_def:
   (vv_at cenv cx t sa sb es tv (StackValue t' op) s <=>
      ~dynarray_type t /\
@@ -726,9 +728,7 @@ Definition vv_at_def:
                                     b + sz <= lb \/ lb + lsz <= b)) \/
             (?n b sz. local_region cenv es.scopes s n b sz /\
                       b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
-                      (dynarray_local cenv n /\
-                       (~dynarray_type t \/
-                        !path. tv <> PlaceR (MemoryPlace n path)) ==>
+                      (dynarray_local cenv n /\ ~dynarray_type t ==>
                        b + 32 <= w2n w)) \/
             val_footprint tvt v = 0))
 End

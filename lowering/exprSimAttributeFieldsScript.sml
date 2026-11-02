@@ -69,6 +69,21 @@ Definition fields_layout_def:
       fields fs
 End
 
+(* A field of a struct ce_struct_fields lays out as its type value: its
+   offset is struct_field_offset's. *)
+Theorem mem_field_offset_layout:
+  !flds fs fld ftv.
+    fields_layout flds fs /\ ALOOKUP fs fld = SOME ftv ==>
+    mem_field_offset fs fld = SOME (struct_field_offset flds fld, ftv)
+Proof
+  simp[fields_layout_def] >>
+  Induct >> simp[] >> PairCases >> Cases >> simp[] >>
+  PairCases_on `h` >>
+  simp[struct_field_offset_def, exprSimTheory.mem_field_offset_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >> IF_CASES_TAC >> gvs[] >>
+  first_x_assum drule_all >> simp[]
+QED
+
 Theorem fields_layout_zip[local]:
   !fields tvs.
     OPT_MMAP (evaluate_type tenv) (MAP (FST o SND) fields) = SOME tvs /\

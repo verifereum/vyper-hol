@@ -328,12 +328,36 @@ Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`cx`, `ann`, `if mm = Min then Lt else Gt`, `ty`, `tv`, `v1`,
                `v2`, `es`] mp_tac bop_result_compare >>
-  fs[word_value_def] >> gvs[] >> Cases_on `v2` >>
-  gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-      expr_res_ok_def] >>
-  (impl_tac >- asm_rewrite_tac[]) >>
-  disch_then (fn th => rewrite_tac [GSYM th]) >> rw[word_value_def] >>
-  `n = i` by ARITH_TAC >> simp[]
+  fs[word_value_def] >> gvs[]
+  (* one kind of v1 at a time, as in bop_result_compare *)
+  >>~- ([`value_has_type _ (IntV _)`],
+        Cases_on `v2` >>
+        gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
+            expr_res_ok_def] >>
+        (impl_tac >- asm_rewrite_tac[]) >>
+        disch_then (fn th => rewrite_tac [GSYM th]) >> rw[word_value_def] >>
+        `n = i` by ARITH_TAC >> simp[])
+  >>~- ([`value_has_type _ (BoolV _)`],
+        Cases_on `v2` >>
+        gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
+            expr_res_ok_def] >>
+        (impl_tac >- asm_rewrite_tac[]) >>
+        disch_then (fn th => rewrite_tac [GSYM th]) >> rw[word_value_def] >>
+        `n = i` by ARITH_TAC >> simp[])
+  >>~- ([`value_has_type _ (FlagV _)`],
+        Cases_on `v2` >>
+        gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
+            expr_res_ok_def] >>
+        (impl_tac >- asm_rewrite_tac[]) >>
+        disch_then (fn th => rewrite_tac [GSYM th]) >> rw[word_value_def] >>
+        `n = i` by ARITH_TAC >> simp[])
+  >>~- ([`value_has_type _ (DecimalV _)`],
+        Cases_on `v2` >>
+        gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
+            expr_res_ok_def] >>
+        (impl_tac >- asm_rewrite_tac[]) >>
+        disch_then (fn th => rewrite_tac [GSYM th]) >> rw[word_value_def] >>
+        `n = i` by ARITH_TAC >> simp[])
 QED
 
 (* The run of the lowered Min or Max from a state with the fresh variables
