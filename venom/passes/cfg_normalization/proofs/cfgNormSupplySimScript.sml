@@ -485,3 +485,80 @@ Proof
      qexistsl [`target.bb_instructions`, `target`] >> gvs[]) >>
   drule_all def_available_at_run_block_entry_endpoint >> simp[]
 QED
+
+Definition supply_entry_defined_def:
+  supply_entry_defined f st <=>
+    fn_reachable f st.vs_current_bb /\ strict_dom_vars_defined f st
+End
+
+Definition supply_prefix_defined_def:
+  supply_prefix_defined f st <=>
+    supply_entry_defined f st /\
+    (!bb j v. MEM bb f.fn_blocks /\ bb.bb_label = st.vs_current_bb /\
+      j < st.vs_inst_idx /\ j < LENGTH bb.bb_instructions /\
+      MEM v (EL j bb.bb_instructions).inst_outputs ==>
+      v IN FDOM st.vs_vars)
+End
+
+Theorem supply_prefix_defined_eval_phis:
+  wf_function f /\ supply_entry_defined f st /\ MEM bb f.fn_blocks /\
+  bb.bb_label = st.vs_current_bb /\
+  eval_phis st bb.bb_instructions = OK sp ==>
+  supply_prefix_defined f
+    (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+Proof
+  rpt strip_tac >>
+  `sp.vs_current_bb = st.vs_current_bb` by
+    metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb] >>
+  simp[supply_prefix_defined_def] >> conj_tac
+  >- (gvs[supply_entry_defined_def] >>
+      drule_all strict_dom_vars_defined_eval_phis >> simp[]) >>
+  rpt strip_tac >>
+  `bb' = bb` by metis_tac[venomExecProofsTheory.same_label_same_block] >>
+  gvs[] >> drule_all venomExecProofsTheory.eval_phis_outputs_in_fdom_idx >> simp[]
+QED
+
+Theorem supply_prefix_defined_step:
+  wf_function f /\ fn_inst_wf f /\ supply_prefix_defined f st /\
+  MEM bb f.fn_blocks /\ bb.bb_label = st.vs_current_bb /\
+  st.vs_inst_idx < LENGTH bb.bb_instructions /\
+  EL st.vs_inst_idx bb.bb_instructions = inst /\
+  ~is_terminator inst.inst_opcode /\ step_inst fuel ctx inst st = OK sp ==>
+  supply_prefix_defined f (sp with vs_inst_idx := SUC st.vs_inst_idx)
+Proof
+  rpt strip_tac >>
+  `sp.vs_current_bb = st.vs_current_bb` by
+    metis_tac[venomInstPropsTheory.step_preserves_control_flow] >>
+  `inst_wf inst` by
+    (gvs[fn_inst_wf_def] >> metis_tac[listTheory.MEM_EL, listTheory.EVERY_MEM]) >>
+  `inst.inst_opcode <> PHI` by
+    metis_tac[venomExecProofsTheory.step_inst_ok_imp_not_phi] >>
+  `FDOM sp.vs_vars = FDOM st.vs_vars UNION set inst.inst_outputs` by
+    metis_tac[venomExecProofsTheory.step_inst_fdom] >>
+  gvs[supply_prefix_defined_def, supply_entry_defined_def] >> conj_tac
+  >- (gvs[strict_dom_vars_defined_def] >> metis_tac[]) >>
+  rpt strip_tac >> Cases_on `j < st.vs_inst_idx`
+  >- metis_tac[] >>
+  `j = st.vs_inst_idx` by decide_tac >>
+  `bb' = bb` by metis_tac[venomExecProofsTheory.same_label_same_block] >>
+  gvs[]
+QED
+
+Theorem phi_forward_sources_exec_block_defined:
+  wf_ssa f /\ wf_function f /\ fn_inst_wf f /\ supply_prefix_defined f st /\
+  MEM pred f.fn_blocks /\ MEM target f.fn_blocks /\
+  pred.bb_label = st.vs_current_bb /\
+  exec_block fuel ctx pred st = OK sp /\
+  MEM v (phi_vars_needing_forward pred.bb_label pred target.bb_instructions) ==>
+  v IN FDOM sp.vs_vars
+Proof
+  rpt strip_tac >>
+  `def_available_at f pred NONE v` by
+    (irule phi_forward_sources_available >> simp[] >>
+     qexistsl [`target.bb_instructions`, `target`] >> gvs[]) >>
+  irule def_available_at_exec_block_endpoint >>
+  qexistsl [`pred`, `ctx`, `f`, `fuel`, `st`] >>
+  gvs[supply_prefix_defined_def, supply_entry_defined_def, fn_inst_wf_def,
+      listTheory.EVERY_MEM] >>
+  metis_tac[]
+QED
