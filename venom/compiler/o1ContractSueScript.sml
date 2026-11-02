@@ -310,7 +310,20 @@ Theorem sue_expand_function_supply_fn_bisim:
   sue_expand_function_supply s fn = (fn',s') ==>
   fn_bisim fn fn'
 Proof
-  cheat
+  strip_tac >> drule sue_expand_function_supply_identity >> strip_tac >>
+  simp[fn_bisim_def] >> rpt gen_tac >> strip_tac >>
+  `!fuel. sue_result_rel (set (fn_ir_vars fn))
+    (run_blocks fuel ctx fn s'') (run_blocks fuel ctx fn' s'')` by
+    (gen_tac >> irule sue_run_blocks_supply_entry >> metis_tac[]) >>
+  conj_tac >> gen_tac >> strip_tac
+  >- (qexists_tac `fuel` >> irule sue_run_result_frame >> metis_tac[]) >>
+  qexists_tac `fuel'` >> irule sue_run_result_frame >>
+  reverse conj_tac >- (qexists_tac `set (fn_ir_vars fn)` >> simp[]) >>
+  first_x_assum (qspec_then `fuel'` mp_tac) >>
+  Cases_on `run_blocks fuel' ctx fn s''` >>
+  Cases_on `run_blocks fuel' ctx fn' s''` >>
+  gvs[sue_result_rel_def, stateEquivTheory.lift_result_def,
+      passSimulationDefsTheory.terminates_def]
 QED
 
 (* Every state a frame of the expanded function reaches corresponds to one
