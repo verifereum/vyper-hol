@@ -95,3 +95,11 @@ Definition fn_frame_inv_def:
          r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
          ps.ps_alloc.sa_next_offset <= r.sr_spill_end)
 End
+
+Theorem fn_frame_inv_gas_readings:
+  fn_frame_inv ctx cp lo fn ra rest mem0 ps vs ast ==>
+  ast.as_gas_readings = vs.vs_gas_readings
+Proof
+  rw[fn_frame_inv_def] >>
+  fs[context_venom_asm_rel_def, frame_view_def]
+QED
