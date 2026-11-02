@@ -256,6 +256,20 @@ Definition gas_variant_def:
     s' = (s with vs_gas_readings := s'.vs_gas_readings)
 End
 
+Theorem gas_variant_refl:
+  gas_variant s s
+Proof
+  simp[gas_variant_def]
+QED
+
+Theorem gas_variant_trans:
+  gas_variant s1 s2 /\ gas_variant s2 s3 ==> gas_variant s1 s3
+Proof
+  rw[gas_variant_def] >>
+  qpat_x_assum `s3 = _` SUBST1_TAC >>
+  qpat_x_assum `s2 = _` SUBST1_TAC >> simp[]
+QED
+
 (* ===== One pass run ===== *)
 
 (* What run_configured_fn_pass_fold does for one pass on one function:
@@ -521,6 +535,24 @@ Definition o1_stage_contract_gas_def:
       ?vs. gas_variant vs vs' /\
            (I C vs ==> ctx_sim D C C' vs vs' /\ I' C' vs')
 End
+
+Theorem gas_variant_run_state_ok:
+  gas_variant vs_in vs_out /\ o1_run_state_ok vs_out ==>
+  o1_run_state_ok vs_in
+Proof
+  rw[gas_variant_def] >>
+  qpat_x_assum `vs_out = _` mp_tac >>
+  disch_then (fn th => RULE_ASSUM_TAC (ONCE_REWRITE_RULE [th])) >>
+  gvs[o1_run_state_ok_def, o1_initial_state_ok_def]
+QED
+
+Theorem o1_stage_contract_imp_gas:
+  o1_stage_contract rp D pass view pre Inv Inv' ==>
+  o1_stage_contract_gas rp D pass view pre Inv Inv'
+Proof
+  rw[o1_stage_contract_def, o1_stage_contract_gas_def] >>
+  qexists_tac `vs'` >> simp[gas_variant_refl] >> metis_tac[]
+QED
 
 Definition any_view_def:
   any_view (C' : venom_context) (fn : ir_function)
