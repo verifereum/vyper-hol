@@ -718,6 +718,41 @@ Proof
   metis_tac[]
 QED
 
+Theorem dft_remaining_inv_ready:
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  dft_remaining_inv fn bb (pre ++ y::post) s /\ pre <> [] /\
+  EVERY (\x. ~dft_must_order x y) pre ==>
+  (!v. MEM (Var v) y.inst_operands ==> v IN FDOM s.vs_vars) /\
+  (y.inst_opcode <> INVOKE ==>
+    !l. MEM (Label l) y.inst_operands ==> l IN FDOM s.vs_labels)
+Proof
+  strip_tac >> drule dft_remaining_inv_head_order >> strip_tac >>
+  `~is_terminator y.inst_opcode` by
+    (Cases_on `pre` >> fs[EVERY_DEF, dft_must_order_def]) >>
+  conj_tac
+  >- (rpt strip_tac >> irule dft_bubble_head_ready >>
+      qexistsl_tac [`bb`, `fn`, `post`, `pre`, `y`] >>
+      fs[dft_remaining_inv_def] >> metis_tac[]) >>
+  fs[dft_remaining_inv_def] >> metis_tac[]
+QED
+
+Theorem dft_wf_order_nonterminator:
+  wf_function fn /\ MEM bb fn.fn_blocks /\ MEM x bb.bb_instructions /\
+  id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id ==>
+  ~is_terminator x.inst_opcode
+Proof
+  rpt strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[wf_fn_block_inst_ids_distinct] >>
+  `bb_well_formed bb` by fs[wf_function_def] >>
+  `x = LAST bb.bb_instructions` by
+    (qpat_x_assum `MEM x _` mp_tac >> simp[MEM_EL] >> strip_tac >>
+     `n = PRE (LENGTH bb.bb_instructions)` by
+       (fs[bb_well_formed_def] >> metis_tac[]) >>
+     fs[bb_well_formed_def, LAST_EL]) >>
+  gvs[] >> metis_tac[id_before_map_last_left]
+QED
+
 Theorem dft_bubble_executed_ready:
   wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
   bb.bb_label = s.vs_current_bb /\ strict_dom_vars_defined fn s /\
@@ -940,6 +975,41 @@ Proof
   simp[] >> conj_tac
   >- (irule dft_inversion_not_must_order >> simp[] >> metis_tac[]) >>
   irule dft_inversion_compatible >> simp[] >> metis_tac[]
+QED
+
+Theorem dft_remaining_suffix_rel:
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions ==>
+  !src dst.
+    dft_head_bubbles
+      (\x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+        ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+        id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+        ~dft_must_order x y /\ abort_compatible x.inst_opcode y.inst_opcode)
+      src dst ==>
+    !s. dft_remaining_inv fn bb src s ==>
+      dft_res_rel (dft_exec_suffix fuel C src s)
+                  (dft_exec_suffix fuel C dst s)
+Proof
+  strip_tac >> ho_match_mp_tac dft_head_bubbles_exec_moving >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `~is_terminator x.inst_opcode` by metis_tac[dft_wf_order_nonterminator] >>
+      `dft_ok_swap_pair x y` by
+        (irule dft_ssa_inversion_pair >> fs[EVERY_MEM] >>
+         qexistsl_tac [`bb`, `fn`] >> simp[]) >>
+      fs[EVERY_MEM, dft_must_order_def]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `MEM y bb.bb_instructions /\ ~is_pseudo y.inst_opcode` by
+        metis_tac[dft_remaining_inv_head_order] >>
+      `inst_wf y` by fs[EVERY_MEM] >> simp[] >>
+      `EVERY (\x. ~dft_must_order x y) pre` by
+        (fs[EVERY_MEM] >> metis_tac[]) >>
+      drule_all dft_remaining_inv_ready >> simp[]) >>
+  rpt strip_tac >> irule dft_remaining_inv_step >> simp[] >>
+  qexistsl_tac [`C`, `fuel`, `y`] >> simp[]
 QED
 
 (* Why it holds (unchecked notes):
