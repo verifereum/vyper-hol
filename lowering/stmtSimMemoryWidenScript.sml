@@ -389,6 +389,53 @@ Proof
   FIRST [first_assum ACCEPT_TAC, decide_tac, metis_tac[]]
 QED
 
+Theorem typed_decl_staged_code_parts[local]:
+  !cenv dst src dty sty info bytes sa sb func.
+    compile_assign_value cenv dst LocMemory src F (SOME LocMemory)
+      dty sty info bytes sa = ((),sb) /\
+    0 < type_memory_bytes cenv sty /\ fn_has_code sa sb func ==>
+    ?sx sm sn tmp.
+      sx = sa with cs_next_var := sa.cs_next_var + 1 /\
+      ~not_fresh_at sa tmp /\ not_fresh_at sn tmp /\
+      emit_inst ALLOCA [Lit (n2w (type_memory_bytes cenv sty))] [tmp]
+        sx = ((),sm) /\
+      emit_void MCOPY [Var tmp; src; Lit (n2w (type_memory_bytes cenv sty))]
+        sm = ((),sn) /\
+      compile_store_memory cenv (Var tmp) dst dty sty sn = ((),sb) /\
+      cs_extends sa sx /\ cs_extends sx sm /\ cs_extends sm sn /\ cs_extends sn sb /\
+      fn_has_code sx sm func /\ fn_has_code sm sn func /\
+      fn_has_code sn sb func
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_assign_value_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  drule loweringHaltTheory.compile_alloc_buffer_emission >>
+  disch_then (qx_choosel_then [`sx`, `tmp`] strip_assume_tac) >>
+  rename1 `compile_copy_memory _ _ _ sm = ((),sn)` >>
+  `emit_void MCOPY [Var tmp; src; Lit (n2w (type_memory_bytes cenv sty))]
+      sm = ((),sn)` by
+    (Cases_on `type_memory_bytes cenv sty` >> gvs[contextTheory.compile_copy_memory_def]) >>
+  `cs_extends sm sn` by
+    metis_tac[cs_appends_def, cs_appends_emit_helpers] >>
+  `cs_extends sn sb` by
+    (`exprLoweringProps$ci_mono sn
+       (SND (compile_store_memory cenv (Var tmp) dst dty sty sn))` suffices_by
+       gvs[exprLoweringPropsTheory.ci_mono_def] >>
+     simp[exprLoweringPropsTheory.ci_mono_compile_store_memory]) >>
+  `cs_extends sx sn /\ cs_extends sa sn` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sn func /\ fn_has_code sn sb func` by metis_tac[fn_has_code_split] >>
+  `fn_has_code sa sx func /\ fn_has_code sx sn func` by metis_tac[fn_has_code_split] >>
+  `fn_has_code sx sm func /\ fn_has_code sm sn func` by metis_tac[fn_has_code_split] >>
+  `sm.cs_next_var = sn.cs_next_var` by
+    (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
+     simp[emitHelperTheory.emit_void_def, emit_def, fresh_id_def, comp_bind_def, comp_return_def] >>
+     strip_tac >> gvs[]) >>
+  qexistsl [`sm`, `sn`, `tmp`] >> gvs[] >>
+  irule freshWritesTheory.not_fresh_at_mono >> qexists `sm` >> simp[]
+QED
+
 Theorem unstaged_overlap_value_types[local]:
   let u = BaseT (UintT 256);
       sty = TupleT [TupleT [BaseT (BytesT (Dynamic 1));u];u];
