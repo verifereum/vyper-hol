@@ -2,6 +2,7 @@
 Theory dftGuards
 Ancestors
   venomState venomExecSemantics venomWf venomEffects venomInst finite_map list
+  dftCommutation
 
 Theorem dft_operand_defined:
   (!v. MEM (Var v) ops ==> v IN FDOM s.vs_vars) /\
@@ -187,4 +188,56 @@ Proof
   >>~- ([`inst.inst_opcode = BUMP`],
     qexists_tac `[(ptr_out,base_val); (next_out,base_val + sz)]` >> simp[])
   >> qexists_tac `[]` >> simp[]
+QED
+
+Theorem dft_update_var_error_iff[local]:
+  ~MEM (Var v) inst.inst_operands /\ ~MEM v inst.inst_outputs ==>
+  (step_inst fuel C inst (update_var v w s) = Error e <=>
+   step_inst fuel C inst s = Error e)
+Proof
+  strip_tac >>
+  `!y. MEM (Var y) inst.inst_operands ==> v <> y` by metis_tac[] >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (drule_all step_inst_invoke_frame >>
+      disch_then (qspecl_then [`fuel`,`C`,`s`,`w`] mp_tac) >>
+      Cases_on `step_inst fuel C inst s` >> simp[]) >>
+  drule_all step_inst_frame >>
+  disch_then (qspecl_then [`fuel`,`C`,`s`,`w`] mp_tac) >>
+  Cases_on `step_inst fuel C inst s` >> simp[map_result_state_def]
+QED
+
+Theorem dft_output_updates_error_iff[local]:
+  !updates s.
+    EVERY (\p. ~MEM (Var (FST p)) inst.inst_operands /\
+                ~MEM (FST p) inst.inst_outputs) updates ==>
+    (step_inst fuel C inst
+       (FOLDL (\u p. update_var (FST p) (SND p) u) s updates) = Error e <=>
+     step_inst fuel C inst s = Error e)
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum (qspec_then `update_var (FST h) (SND h) s` mp_tac) >>
+  simp[dft_update_var_error_iff]
+QED
+
+Theorem dft_empty_write_error_iff:
+  ~is_pseudo x.inst_opcode /\ ~is_terminator x.inst_opcode /\
+  x.inst_opcode <> ALLOCA /\ write_effects x.inst_opcode = empty_effects /\
+  step_inst fuel C x s = OK t /\
+  (!v. MEM v x.inst_outputs ==>
+       ~MEM (Var v) y.inst_operands /\ ~MEM v y.inst_outputs) ==>
+  (step_inst fuel C y t = Error e <=> step_inst fuel C y s = Error e)
+Proof
+  strip_tac >> drule_all dft_empty_write_ok_updates >> strip_tac >>
+  gvs[] >> irule dft_output_updates_error_iff >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem dft_all_read_independent_empty_write:
+  read_effects y.inst_opcode = all_effects /\
+  effects_independent x.inst_opcode y.inst_opcode ==>
+  write_effects x.inst_opcode = empty_effects
+Proof
+  strip_tac >> gvs[effects_independent_def] >>
+  Cases_on `x.inst_opcode` >>
+  gvs[write_effects_def, all_effects_def, empty_effects_def]
 QED
