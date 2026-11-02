@@ -339,7 +339,7 @@ Proof
     by (simp[gas_var_def] >> irule copy_phi_var_no_seed >>
         simp[mk_inst_def] >> rw[] >> simp[]) >>
   `retpc_shape_ok callee`
-    by (simp[retpc_shape_ok_def, DISJ_IMP_THM, FORALL_AND_THM, mk_inst_def] >>
+    by (rw[retpc_shape_ok_def, mk_inst_def] >> gvs[] >>
         qexistsl_tac [`[]`, `"pc"`] >> simp[]) >>
   `fn_shape_ok callee`
     by (simp[fn_shape_ok_def, opaque_use_ok_def, retpc_use_ok_def,
