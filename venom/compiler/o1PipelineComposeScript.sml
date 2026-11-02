@@ -12,9 +12,9 @@
  * memory invariant, and the lowered memory
  * invariant of the output.  o1PipelineCorrect states S4 and S6 from it.
  *
- * The gas form of the DFT contract is used through gas_variant being
- * equality: when SEQ-243's oracle makes it a real relation, the
- * composition and S4 take the forall-out exists-in form too.
+ * The DFT gas contract chooses an input oracle for each output oracle.
+ * Composition chooses these inputs backwards, then propagates invariants
+ * forwards under the chosen source input's invariant guard.
  *)
 Theory o1PipelineCompose
 Ancestors
