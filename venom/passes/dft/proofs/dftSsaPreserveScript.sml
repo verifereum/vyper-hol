@@ -235,7 +235,272 @@ Proof
   metis_tac[dft_block_rel_data_ids]
 QED
 
-(* Why it holds (unchecked notes):
+Theorem id_before_last:
+  !l x. l <> [] /\ MEM x l /\ x <> LAST l ==> id_before l x (LAST l)
+Proof
+  rpt strip_tac >> gvs[MEM_EL, id_before_def] >>
+  qexistsl [`n`, `PRE (LENGTH l)`] >>
+  `0 < LENGTH l` by (Cases_on `l` >> gvs[]) >>
+  `EL (PRE (LENGTH l)) l = LAST l` by metis_tac[LAST_EL] >>
+  `n <> PRE (LENGTH l)` by metis_tac[] >> simp[]
+QED
+
+Theorem id_before_not_last:
+  !l x. l <> [] /\ ALL_DISTINCT l ==> ~id_before l (LAST l) x
+Proof
+  rpt strip_tac >> gvs[id_before_def] >>
+  `0 < LENGTH l` by (Cases_on `l` >> gvs[]) >>
+  `EL (PRE (LENGTH l)) l = LAST l` by metis_tac[LAST_EL] >>
+  `i < LENGTH l /\ PRE (LENGTH l) < LENGTH l` by decide_tac >>
+  `i = PRE (LENGTH l)` by metis_tac[ALL_DISTINCT_EL_IMP] >>
+  decide_tac
+QED
+
+Theorem dft_block_rel_term_order:
+  !bb bb' x t. dft_block_rel bb bb' /\ MEM x bb.bb_instructions /\
+    MEM t bb.bb_instructions /\ is_terminator t.inst_opcode /\
+    id_before bb.bb_instructions x t ==>
+    id_before (MAP (\i. i.inst_id) bb'.bb_instructions) x.inst_id t.inst_id
+Proof
+  rpt strip_tac >>
+  `~is_pseudo t.inst_opcode` by
+    (Cases_on `t.inst_opcode` >> gvs[is_terminator_def, is_pseudo_def]) >>
+  `id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id t.inst_id`
+    by metis_tac[id_before_map] >>
+  qpat_x_assum `dft_block_rel _ _` mp_tac >>
+  simp[dft_block_rel_def] >> strip_tac >>
+  simp[MAP_APPEND, id_before_append] >>
+  Cases_on `is_pseudo x.inst_opcode`
+  >- (disj2_tac >> disj2_tac >> simp[MEM_MAP, MEM_FILTER] >>
+      conj_tac >- metis_tac[] >>
+      drule PERM_MEM_EQ >> disch_then (qspec_then `t.inst_id` mp_tac) >>
+      simp[MEM_MAP, MEM_FILTER] >> metis_tac[]) >>
+  disj2_tac >> disj1_tac >> first_x_assum irule >>
+  simp[dft_must_order_def]
+QED
+
+Theorem dft_block_rel_last:
+  !bb bb'. dft_block_rel bb bb' /\ bb_well_formed bb /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) ==>
+    bb'.bb_instructions <> [] /\
+    LAST bb'.bb_instructions = LAST bb.bb_instructions
+Proof
+  rpt gen_tac >> strip_tac >>
+  `bb.bb_instructions <> [] /\
+   is_terminator (LAST bb.bb_instructions).inst_opcode` by
+    gvs[bb_well_formed_def] >>
+  `MEM (LAST bb.bb_instructions) bb.bb_instructions` by
+    (simp[MEM_EL] >> qexists_tac `PRE (LENGTH bb.bb_instructions)` >>
+     simp[LAST_EL] >> Cases_on `bb.bb_instructions` >> gvs[]) >>
+  drule_all dft_block_rel_member >> strip_tac >>
+  `y = LAST bb.bb_instructions` by metis_tac[ssa_flippable_classes] >>
+  gvs[] >>
+  `bb'.bb_instructions <> []` by metis_tac[MEM] >> simp[] >>
+  `MEM (LAST bb'.bb_instructions) bb'.bb_instructions` by
+    (simp[MEM_EL] >> qexists_tac `PRE (LENGTH bb'.bb_instructions)` >>
+     simp[LAST_EL] >> Cases_on `bb'.bb_instructions` >> gvs[]) >>
+  `~is_flippable (LAST bb.bb_instructions).inst_opcode` by
+    metis_tac[ssa_flippable_classes] >>
+  drule_all dft_block_rel_origin >> strip_tac >>
+  Cases_on `x = LAST bb.bb_instructions` >> fs[] >>
+  `id_before bb.bb_instructions x (LAST bb.bb_instructions)` by
+    metis_tac[id_before_last] >>
+  drule_all dft_block_rel_term_order >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb'.bb_instructions)` by
+    metis_tac[dft_block_rel_ids_distinct] >>
+  `MAP (\i. i.inst_id) bb'.bb_instructions <> []` by simp[] >>
+  `LAST (MAP (\i. i.inst_id) bb'.bb_instructions) = x.inst_id` by
+    simp[LAST_MAP] >>
+  metis_tac[id_before_not_last]
+QED
+
+Theorem dft_block_rel_label:
+  !bb bb'. dft_block_rel bb bb' ==> bb'.bb_label = bb.bb_label
+Proof
+  simp[dft_block_rel_def]
+QED
+
+Theorem dft_block_rel_succs:
+  !bb bb'. dft_block_rel bb bb' /\ bb_well_formed bb /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) ==>
+    bb_succs bb' = bb_succs bb
+Proof
+  rpt strip_tac >> drule_all dft_block_rel_last >> strip_tac >>
+  `bb.bb_instructions <> []` by gvs[bb_well_formed_def] >>
+  simp[bb_succs_def] >>
+  Cases_on `bb'.bb_instructions` >> Cases_on `bb.bb_instructions` >> gvs[]
+QED
+
+Theorem dft_blocks_member_left:
+  !bs cs bb. LIST_REL dft_block_rel bs cs /\ MEM bb bs ==>
+    ?bb'. MEM bb' cs /\ dft_block_rel bb bb'
+Proof
+  Induct >> Cases_on `cs` >> simp[] >> rpt strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem dft_blocks_member_right:
+  !bs cs bb'. LIST_REL dft_block_rel bs cs /\ MEM bb' cs ==>
+    ?bb. MEM bb bs /\ dft_block_rel bb bb'
+Proof
+  Induct >> Cases_on `cs` >> simp[] >> rpt strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem dft_blocks_source_unique:
+  !fn bbs bb1 bb2 bb'. wf_function fn /\
+    MEM bb1 fn.fn_blocks /\ MEM bb2 fn.fn_blocks /\
+    dft_block_rel bb1 bb' /\ dft_block_rel bb2 bb' ==> bb1 = bb2
+Proof
+  rpt strip_tac >>
+  `bb1.bb_label = bb2.bb_label` by metis_tac[dft_block_rel_label] >>
+  metis_tac[all_distinct_map_mem_inj, wf_function_def, fn_labels_def]
+QED
+
+Theorem dft_block_rel_cfg:
+  !fn bbs. wf_function fn /\ LIST_REL dft_block_rel fn.fn_blocks bbs ==>
+    fn_cfg_edge (fn with fn_blocks := bbs) = fn_cfg_edge fn
+Proof
+  rpt strip_tac >> simp[FUN_EQ_THM, fn_cfg_edge_def] >> rpt gen_tac >>
+  eq_tac >> strip_tac
+  >- (drule_all dft_blocks_member_right >> strip_tac >>
+      `bb_succs bb = bb_succs bb'` by
+        metis_tac[dft_block_rel_succs, bb_inst_ids_distinct, wf_function_def] >>
+      metis_tac[dft_block_rel_label]) >>
+  drule_all dft_blocks_member_left >> strip_tac >>
+  `bb_succs bb' = bb_succs bb` by
+    metis_tac[dft_block_rel_succs, bb_inst_ids_distinct, wf_function_def] >>
+  metis_tac[dft_block_rel_label]
+QED
+
+Theorem dft_block_rel_entry:
+  !fn bbs. LIST_REL dft_block_rel fn.fn_blocks bbs ==>
+    fn_entry_label (fn with fn_blocks := bbs) = fn_entry_label fn
+Proof
+  rpt strip_tac >> Cases_on `fn.fn_blocks` >> Cases_on `bbs` >>
+  gvs[fn_entry_label_def, entry_block_def] >>
+  metis_tac[dft_block_rel_label]
+QED
+
+Theorem dft_block_rel_path:
+  !fn bbs p. wf_function fn /\ LIST_REL dft_block_rel fn.fn_blocks bbs ==>
+    (is_fn_path (fn with fn_blocks := bbs) p <=> is_fn_path fn p)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `fn_cfg_edge (fn with fn_blocks := bbs) = fn_cfg_edge fn` by
+    metis_tac[dft_block_rel_cfg] >>
+  Induct_on `p` >> simp[is_fn_path_def] >>
+  Cases_on `p` >> gvs[is_fn_path_def]
+QED
+
+Theorem dft_block_rel_reachable:
+  !fn bbs n. wf_function fn /\ LIST_REL dft_block_rel fn.fn_blocks bbs ==>
+    (fn_reachable (fn with fn_blocks := bbs) n <=> fn_reachable fn n)
+Proof
+  rpt strip_tac >>
+  drule_all dft_block_rel_cfg >> drule dft_block_rel_entry >>
+  simp[fn_reachable_def]
+QED
+
+Theorem dft_block_rel_dominates:
+  !fn bbs d n. wf_function fn /\ LIST_REL dft_block_rel fn.fn_blocks bbs ==>
+    (fn_dominates (fn with fn_blocks := bbs) d n <=> fn_dominates fn d n)
+Proof
+  rpt strip_tac >>
+  simp[fn_dominates_def, dft_block_rel_reachable,
+       dft_block_rel_path, dft_block_rel_entry]
+QED
+
+Theorem dft_block_rel_available_end:
+  !fn bbs bb bb' v. wf_function fn /\
+    LIST_REL dft_block_rel fn.fn_blocks bbs /\
+    dft_block_rel bb bb' /\ def_available_at fn bb NONE v ==>
+    def_available_at (fn with fn_blocks := bbs) bb' NONE v
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `def_available_at _ _ _ _` mp_tac >>
+  simp[def_available_at_def] >> strip_tac >>
+  drule_all dft_blocks_member_left >> strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) def_bb.bb_instructions)` by
+    metis_tac[bb_inst_ids_distinct] >>
+  drule_all dft_block_rel_member >> strip_tac >>
+  simp[def_available_at_def] >>
+  qexistsl [`bb''`, `y`] >>
+  simp[] >>
+  metis_tac[dft_block_rel_label, dft_block_rel_dominates,
+            flip_operands_inst_outputs]
+QED
+
+Theorem dft_block_rel_available_use:
+  !fn bbs bb bb' u u' v. wf_function fn /\ fn_pseudos_prefix fn /\
+    LIST_REL dft_block_rel fn.fn_blocks bbs /\
+    MEM bb fn.fn_blocks /\ dft_block_rel bb bb' /\
+    MEM u bb.bb_instructions /\ MEM u' bb'.bb_instructions /\
+    u'.inst_id = u.inst_id /\ MEM (Var v) u.inst_operands /\
+    def_available_at fn bb (SOME u) v ==>
+    def_available_at (fn with fn_blocks := bbs) bb' (SOME u') v
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `def_available_at _ _ _ _` mp_tac >>
+  simp[def_available_at_def, GSYM id_before_def] >> strip_tac >>
+  drule_all dft_blocks_member_left >> strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) def_bb.bb_instructions)` by
+    metis_tac[bb_inst_ids_distinct] >>
+  drule_all dft_block_rel_member >> strip_tac >>
+  `y.inst_outputs = def_inst.inst_outputs` by
+    metis_tac[flip_operands_inst_outputs] >>
+  `fn_dominates (fn with fn_blocks := bbs) bb''.bb_label bb'.bb_label` by
+    metis_tac[dft_block_rel_label, dft_block_rel_dominates] >>
+  simp[def_available_at_def, GSYM id_before_def] >>
+  qexistsl [`bb''`, `y`] >> simp[] >> strip_tac >>
+  `def_bb = bb` by metis_tac[dft_blocks_source_unique] >>
+  gvs[fn_pseudos_prefix_def] >>
+  irule dft_block_rel_data_order >>
+  simp[] >> qexistsl [`bb`, `v`, `def_inst`, `u`] >> simp[]
+QED
+
+Theorem dft_block_rel_phi_edges:
+  !fn bbs bb bb' i. wf_function fn /\
+    LIST_REL dft_block_rel fn.fn_blocks bbs /\ dft_block_rel bb bb' /\
+    phi_edge_uses_wf fn bb i ==>
+    phi_edge_uses_wf (fn with fn_blocks := bbs) bb' i
+Proof
+  rpt strip_tac >>
+  `bb'.bb_label = bb.bb_label` by metis_tac[dft_block_rel_label] >>
+  `fn_cfg_edge (fn with fn_blocks := bbs) = fn_cfg_edge fn` by
+    metis_tac[dft_block_rel_cfg] >>
+  qpat_x_assum `phi_edge_uses_wf _ _ _` mp_tac >>
+  simp[phi_edge_uses_wf_def] >> strip_tac >> simp[] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  drule_all dft_blocks_member_left >> strip_tac >>
+  qexists_tac `bb''` >> simp[] >>
+  metis_tac[dft_block_rel_label, dft_block_rel_available_end]
+QED
+
+Theorem dft_block_rel_def_dominates_uses:
+  !fn bbs. wf_function fn /\ fn_pseudos_prefix fn /\
+    LIST_REL dft_block_rel fn.fn_blocks bbs /\ def_dominates_uses fn ==>
+    def_dominates_uses (fn with fn_blocks := bbs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[def_dominates_uses_def] >> rpt gen_tac >> strip_tac >>
+  drule_all dft_blocks_member_right >> strip_tac >>
+  rename1 `dft_block_rel src bb` >>
+  drule_all dft_block_rel_origin >> strip_tac >>
+  (`if x.inst_opcode = PHI then phi_edge_uses_wf fn src x
+   else !v. MEM (Var v) x.inst_operands ==>
+            def_available_at fn src (SOME x) v` by
+    metis_tac[def_dominates_uses_def] >>
+  Cases_on `x.inst_opcode = PHI`
+  >- (gvs[] >> metis_tac[ssa_flippable_classes, dft_block_rel_phi_edges]) >>
+  `inst.inst_opcode <> PHI` by metis_tac[flip_operands_phi_test] >>
+  simp[] >> rpt strip_tac >>
+  `MEM (Var v) x.inst_operands` by metis_tac[flip_operands_var_mem] >>
+  irule dft_block_rel_available_use >>
+  metis_tac[])
+QED
+
+(* Why it holds:
    - ssa_form: the same instructions up to flip_operands, which keeps
      outputs.
    - bb_succs reads the last instruction: the terminator in both
@@ -251,5 +516,8 @@ Theorem dft_block_rel_wf_ssa:
     LIST_REL dft_block_rel fn.fn_blocks bbs ==>
     wf_ssa (fn with fn_blocks := bbs)
 Proof
-  cheat
+  rpt gen_tac >> simp[wf_ssa_def] >> strip_tac >>
+  conj_tac
+  >- (irule dft_block_rel_ssa_form >> simp[]) >>
+  irule dft_block_rel_def_dominates_uses >> simp[]
 QED
