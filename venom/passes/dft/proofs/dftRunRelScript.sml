@@ -662,6 +662,62 @@ Proof
   disj1_tac >> first_x_assum irule >> qexists_tac `d` >> simp[]
 QED
 
+Definition dft_remaining_inv_def:
+  dft_remaining_inv fn bb todo s <=>
+    EVERY (\i. MEM i bb.bb_instructions /\ ~is_pseudo i.inst_opcode) todo /\
+    ALL_DISTINCT todo /\
+    (!x y. id_before todo x y ==>
+       id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id) /\
+    bb.bb_label = s.vs_current_bb /\ strict_dom_vars_defined fn s /\
+    (!d v. MEM d bb.bb_instructions /\ MEM v d.inst_outputs /\ ~MEM d todo ==>
+       v IN FDOM s.vs_vars) /\
+    (!i l. MEM i bb.bb_instructions /\ ~is_pseudo i.inst_opcode /\
+       ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+       MEM (Label l) i.inst_operands ==> l IN FDOM s.vs_labels)
+End
+
+Theorem dft_remaining_inv_head_order:
+  dft_remaining_inv fn bb (pre ++ y::post) s ==>
+    MEM y bb.bb_instructions /\ ~is_pseudo y.inst_opcode /\
+    (!d. MEM d post ==>
+       id_before (MAP (\i. i.inst_id) bb.bb_instructions) y.inst_id d.inst_id)
+Proof
+  simp[dft_remaining_inv_def] >> rpt strip_tac >>
+  first_x_assum irule >> irule id_before_append_right >>
+  simp[dft_id_before_cons]
+QED
+
+Theorem dft_remaining_inv_step:
+  wf_function fn /\ EVERY inst_wf bb.bb_instructions /\
+  dft_remaining_inv fn bb (pre ++ y::post) s /\
+  ~is_terminator y.inst_opcode /\ step_inst fuel C y s = OK t ==>
+  dft_remaining_inv fn bb (pre ++ post)
+    (t with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  strip_tac >>
+  `MEM y bb.bb_instructions /\ ~is_pseudo y.inst_opcode` by
+    metis_tac[dft_remaining_inv_head_order] >>
+  `inst_wf y` by fs[EVERY_MEM] >>
+  `EVERY (\i. inst_wf i /\ ~is_pseudo i.inst_opcode /\
+               ~is_terminator i.inst_opcode) [y]` by simp[] >>
+  `FOLDR (dft_exec_cons fuel C) OK [y] s =
+     OK (t with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[dft_exec_cons_def] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) [y]` by simp[] >>
+  drule_all dft_prefix_frame >> simp[] >> strip_tac >>
+  fs[dft_remaining_inv_def] >>
+  `strict_dom_vars_defined fn (t with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule dft_prefix_dominators >> qexistsl_tac [`C`, `fuel`, `[y]`, `s`] >> simp[]) >>
+  simp[dft_remaining_inv_def] >> rpt conj_tac
+  >- (gvs[ALL_DISTINCT_APPEND] >> metis_tac[])
+  >- (rpt strip_tac >> first_x_assum irule >>
+      irule dft_id_before_insert >> simp[])
+  >- (drule_at (Pat `step_inst _ _ _ _ = OK _`) dft_remaining_producers_step >>
+      disch_then (qspecl_then [`pre`, `post`, `bb.bb_instructions`] mp_tac) >>
+      simp[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 Theorem dft_bubble_executed_ready:
   wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
   bb.bb_label = s.vs_current_bb /\ strict_dom_vars_defined fn s /\
