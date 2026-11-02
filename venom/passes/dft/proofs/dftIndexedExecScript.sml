@@ -2,6 +2,7 @@
 Theory dftIndexedExec
 Ancestors
   venomExecSemantics venomInst venomState list rich_list arithmetic
+  analysisSimProofsBase instIdxIndep
 
 (* Unlike run_insts, this evaluator accounts for the index after each
    successful non-terminator, and for early termination. *)
@@ -192,4 +193,17 @@ Proof
               dft_probe_revert_run) >>
      simp[Abbr `st`]) >>
   gvs[]
+QED
+
+(* OK-only index transport also covers INVOKE: its stopping results instead
+   carry the callee index, so no all-results index-map law is asserted. *)
+Theorem dft_step_ok_idx:
+  ~is_terminator inst.inst_opcode /\
+  step_inst fuel ctx inst s = OK t ==>
+  step_inst fuel ctx inst (s with vs_inst_idx := n) =
+    OK (t with vs_inst_idx := n)
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = INVOKE`
+  >- simp[invoke_step_inst_idx_OK_only] >>
+  simp[step_inst_idx_indep, exec_result_map_def]
 QED
