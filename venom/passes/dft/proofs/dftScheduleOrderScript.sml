@@ -946,6 +946,341 @@ Proof
   metis_tac[root_not_dep_target]
 QED
 
+(* A cut separates all work strictly earlier than a distinguished root from
+   the untouched suffix of entries. Process items retain source instructions;
+   emit items need only retain their IDs (operand flipping is harmless). *)
+Definition dfs_cut_work_def:
+  (dfs_cut_work bi P (DfsProcess i) <=> MEM i bi /\ P i.inst_id) /\
+  (dfs_cut_work bi P (DfsEmit i) <=> P i.inst_id)
+End
+
+Definition dfs_cut_done_def:
+  dfs_cut_done P rid out <=>
+    ?pre post. MAP (\i. i.inst_id) out = pre ++ [rid] ++ post /\ EVERY P pre
+End
+
+Definition dfs_cut_def:
+  dfs_cut bi P r s <=>
+    dfs_cut_done P r.inst_id s.ds_output \/
+    (EVERY (\i. P i.inst_id) s.ds_output /\
+     ?work tail marker.
+       s.ds_stack = work ++ [marker] ++ tail /\
+       EVERY (dfs_cut_work bi P) work /\
+       ((marker = DfsProcess r /\ ~MEM r.inst_id s.ds_visited) \/
+        ?i. marker = DfsEmit i /\ i.inst_id = r.inst_id))
+End
+
+Theorem dfs_cut_init:
+  EVERY (\i. MEM i bi /\ P i.inst_id) pre ==>
+  dfs_cut bi P r
+    <| ds_stack := MAP DfsProcess pre ++ [DfsProcess r] ++ MAP DfsProcess post;
+       ds_output := []; ds_visited := [] |>
+Proof
+  strip_tac >> simp[dfs_cut_def] >> disj2_tac >>
+  qexistsl [`MAP DfsProcess pre`, `MAP DfsProcess post`, `DfsProcess r`] >>
+  gvs[EVERY_MAP, EVERY_MEM, dfs_cut_work_def]
+QED
+
+Theorem dfs_cut_done_append:
+  dfs_cut_done P rid out ==> dfs_cut_done P rid (out ++ more)
+Proof
+  rw[dfs_cut_done_def] >> qexistsl [`pre`, `post ++ MAP (\i. i.inst_id) more`] >>
+  simp[]
+QED
+
+Theorem dfs_cut_done_step:
+  dfs_cut_done P rid s.ds_output ==>
+  dfs_cut_done P rid (dfs_step bi order eda om do_flip s).ds_output
+Proof
+  strip_tac >> Cases_on `s.ds_stack` >> simp[dfs_step_def] >>
+  rename1 `item :: rest` >> Cases_on `item` >>
+  simp[dfs_step_def, LET_THM, dfs_cut_done_append] >>
+  rpt IF_CASES_TAC >> simp[]
+QED
+
+Theorem dfs_cut_children:
+  (!i d. MEM i bi /\ ~is_pseudo i.inst_opcode /\
+         (P i.inst_id \/ i.inst_id = r.inst_id) /\
+         MEM d (inst_all_deps bi order eda i) ==> MEM d bi /\ P d.inst_id) /\
+  MEM i bi /\ ~is_pseudo i.inst_opcode /\
+  (P i.inst_id \/ i.inst_id = r.inst_id) ==>
+  EVERY (dfs_cut_work bi P)
+    (MAP DfsProcess
+      (sort_children bi order eda om i (inst_all_deps bi order eda i)))
+Proof
+  simp[EVERY_MAP, EVERY_MEM, dfs_cut_work_def] >>
+  metis_tac[sort_children_mem]
+QED
+
+Theorem dfs_cut_pending:
+  EVERY (\i. P i.inst_id) s.ds_output /\
+  s.ds_stack = work ++ [marker] ++ tail /\
+  EVERY (dfs_cut_work bi P) work /\
+  ((marker = DfsProcess r /\ ~MEM r.inst_id s.ds_visited) \/
+   ?i. marker = DfsEmit i /\ i.inst_id = r.inst_id) ==>
+  dfs_cut bi P r s
+Proof
+  simp[dfs_cut_def] >> metis_tac[]
+QED
+
+Theorem dfs_cut_work_step:
+  (!i d. MEM i bi /\ ~is_pseudo i.inst_opcode /\
+         (P i.inst_id \/ i.inst_id = r.inst_id) /\
+         MEM d (inst_all_deps bi order eda i) ==> MEM d bi /\ P d.inst_id) /\
+  ~P r.inst_id /\
+  EVERY (\i. P i.inst_id) s.ds_output /\
+  s.ds_stack = (h :: work) ++ [marker] ++ tail /\
+  dfs_cut_work bi P h /\ EVERY (dfs_cut_work bi P) work /\
+  ((marker = DfsProcess r /\ ~MEM r.inst_id s.ds_visited) \/
+   ?i. marker = DfsEmit i /\ i.inst_id = r.inst_id) ==>
+  dfs_cut bi P r (dfs_step bi order eda om do_flip s)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `h` >> gns[dfs_cut_work_def]
+  >- (rename1 `MEM inst bi /\ P inst.inst_id` >>
+      `inst.inst_id <> r.inst_id` by metis_tac[] >>
+      Cases_on `MEM inst.inst_id s.ds_visited`
+      >- (irule dfs_cut_pending >>
+          (conj_tac >- simp[dfs_step_def]) >>
+          qexistsl [`marker`, `tail`, `work`] >>
+          simp[dfs_step_def]) >>
+      Cases_on `is_pseudo inst.inst_opcode`
+      >- (irule dfs_cut_pending >>
+          (conj_tac >- simp[dfs_step_def]) >>
+          qexistsl [`marker`, `tail`, `work`] >>
+          simp[dfs_step_def]) >>
+      `EVERY (dfs_cut_work bi P)
+        (MAP DfsProcess (sort_children bi order eda om inst
+          (inst_all_deps bi order eda inst)))` by
+        (irule dfs_cut_children >> metis_tac[]) >>
+      irule dfs_cut_pending >>
+      (conj_tac >- simp[dfs_step_def, LET_THM]) >>
+      qexistsl [`marker`, `tail`,
+        `MAP DfsProcess (sort_children bi order eda om inst
+          (inst_all_deps bi order eda inst)) ++
+         [DfsEmit (if do_flip /\ is_flippable inst.inst_opcode /\
+           sort_children bi order eda om inst (inst_all_deps bi order eda inst) <>
+             inst_all_deps bi order eda inst
+          then flip_operands inst else inst)] ++ work`] >>
+      simp[dfs_step_def, LET_THM, dfs_cut_work_def] >>
+      IF_CASES_TAC >> simp[]) >>
+  irule dfs_cut_pending >> (conj_tac >- simp[dfs_step_def]) >>
+  qexistsl [`marker`, `tail`, `work`] >> simp[dfs_step_def]
+QED
+
+Theorem dfs_cut_marker_step:
+  (!i d. MEM i bi /\ ~is_pseudo i.inst_opcode /\
+         (P i.inst_id \/ i.inst_id = r.inst_id) /\
+         MEM d (inst_all_deps bi order eda i) ==> MEM d bi /\ P d.inst_id) /\
+  MEM r bi /\ ~is_pseudo r.inst_opcode /\
+  EVERY (\i. P i.inst_id) s.ds_output /\
+  s.ds_stack = marker :: tail /\
+  ((marker = DfsProcess r /\ ~MEM r.inst_id s.ds_visited) \/
+   ?i. marker = DfsEmit i /\ i.inst_id = r.inst_id) ==>
+  dfs_cut bi P r (dfs_step bi order eda om do_flip s)
+Proof
+  strip_tac >> gvs[]
+  >- (`EVERY (dfs_cut_work bi P)
+        (MAP DfsProcess (sort_children bi order eda om r
+          (inst_all_deps bi order eda r)))` by
+        (irule dfs_cut_children >> metis_tac[]) >>
+      simp[dfs_step_def, LET_THM] >>
+      qmatch_goalsub_abbrev_tac `DfsEmit inst` >>
+      `inst.inst_id = r.inst_id` by (simp[Abbr `inst`] >>
+        IF_CASES_TAC >> simp[]) >>
+      irule dfs_cut_pending >> simp[] >>
+      qexistsl [`DfsEmit inst`, `tail`,
+        `MAP DfsProcess (sort_children bi order eda om r
+          (inst_all_deps bi order eda r))`] >> simp[]) >>
+  simp[dfs_step_def, dfs_cut_def] >> disj1_tac >>
+  simp[dfs_cut_done_def] >>
+  qexistsl [`MAP (\i. i.inst_id) s.ds_output`, `[]`] >>
+  gvs[EVERY_MAP]
+QED
+
+Theorem dfs_cut_step:
+  (!i d. MEM i bi /\ ~is_pseudo i.inst_opcode /\
+         (P i.inst_id \/ i.inst_id = r.inst_id) /\
+         MEM d (inst_all_deps bi order eda i) ==> MEM d bi /\ P d.inst_id) /\
+  MEM r bi /\ ~is_pseudo r.inst_opcode /\ ~P r.inst_id /\
+  dfs_cut bi P r s ==>
+  dfs_cut bi P r (dfs_step bi order eda om do_flip s)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `dfs_cut bi P r s`
+    (strip_assume_tac o REWRITE_RULE [dfs_cut_def])
+  >- (simp[dfs_cut_def] >> metis_tac[dfs_cut_done_step]) >>
+  (Cases_on `work`
+   >- (irule dfs_cut_marker_step >> gvs[] >> metis_tac[])) >>
+  irule dfs_cut_work_step >> gvs[] >> metis_tac[]
+QED
+
+Theorem dfs_cut_run:
+  (!i d. MEM i bi /\ ~is_pseudo i.inst_opcode /\
+         (P i.inst_id \/ i.inst_id = r.inst_id) /\
+         MEM d (inst_all_deps bi order eda i) ==> MEM d bi /\ P d.inst_id) /\
+  MEM r bi /\ ~is_pseudo r.inst_opcode /\ ~P r.inst_id /\
+  dfs_cut bi P r s ==>
+  dfs_cut bi P r (FUNPOW (dfs_step bi order eda om do_flip) n s)
+Proof
+  qid_spec_tac `s` >> Induct_on `n` >> simp[arithmeticTheory.FUNPOW] >>
+  rpt strip_tac >> first_x_assum irule >>
+  (conj_tac >- metis_tac[]) >> simp[] >>
+  irule dfs_cut_step >> simp[] >> metis_tac[]
+QED
+
+Theorem dfs_cut_done_before:
+  dfs_cut_done P rid out /\ ~P rid /\ ~P yid /\ rid <> yid /\
+  MEM yid (MAP (\i. i.inst_id) out) ==>
+  id_before (MAP (\i. i.inst_id) out) rid yid
+Proof
+  rw[dfs_cut_done_def] >>
+  `~MEM rid pre /\ ~MEM yid pre` by (gvs[EVERY_MEM] >> metis_tac[]) >>
+  gvs[] >> pure_once_rewrite_tac[GSYM APPEND_ASSOC] >>
+  asm_rewrite_tac[APPEND] >> simp[id_before_append_suffix, id_before_cons]
+QED
+
+Theorem dfs_cut_before:
+  dfs_cut bi P r s /\ ~P r.inst_id /\ ~P yid /\ r.inst_id <> yid /\
+  MEM yid (MAP (\i. i.inst_id) s.ds_output) ==>
+  id_before (MAP (\i. i.inst_id) s.ds_output) r.inst_id yid
+Proof
+  rw[dfs_cut_def]
+  >- metis_tac[dfs_cut_done_before] >>
+  gvs[EVERY_MEM, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem schedule_cut_before:
+  (!i d. MEM i bi /\ ~is_pseudo i.inst_opcode /\
+         (P i.inst_id \/ i.inst_id = r.inst_id) /\
+         MEM d (inst_all_deps bi order eda i) ==> MEM d bi /\ P d.inst_id) /\
+  MEM r bi /\ ~is_pseudo r.inst_opcode /\ ~P r.inst_id /\
+  EVERY (\i. MEM i bi /\ P i.inst_id) pre /\
+  ~P yid /\ r.inst_id <> yid /\
+  MEM yid (MAP (\i. i.inst_id)
+    (schedule_from_entries bi order eda om (pre ++ [r] ++ post))) ==>
+  id_before (MAP (\i. i.inst_id)
+    (schedule_from_entries bi order eda om (pre ++ [r] ++ post))) r.inst_id yid
+Proof
+  rpt strip_tac >> fs[schedule_from_entries_def, LET_THM] >>
+  irule dfs_cut_before >> simp[] >>
+  qexistsl [`P`, `bi`] >> simp[] >>
+  irule dfs_cut_run >> simp[dfs_cut_init] >> metis_tac[]
+QED
+
+Definition dft_root_cut_def:
+  dft_root_cut bi rid iid <=>
+    (?i. MEM i bi /\ is_pseudo i.inst_opcode /\ i.inst_id = iid) \/
+    id_before (MAP (\i. i.inst_id) bi) iid rid
+End
+
+Theorem dft_root_cut_non_pseudo:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\ MEM i bi /\
+  ~is_pseudo i.inst_opcode ==>
+  (dft_root_cut bi rid i.inst_id <=>
+   id_before (MAP (\i. i.inst_id) bi) i.inst_id rid)
+Proof
+  rw[dft_root_cut_def] >>
+  metis_tac[all_distinct_map_mem_inj]
+QED
+
+Theorem dft_root_cut_closed:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+  eda_wf eda bi /\ eda_topo_compatible bi eda order /\
+  MEM i bi /\ ~is_pseudo i.inst_opcode /\
+  (dft_root_cut bi r.inst_id i.inst_id \/ i.inst_id = r.inst_id) /\
+  MEM d (inst_all_deps bi order eda i) ==>
+  MEM d bi /\ dft_root_cut bi r.inst_id d.inst_id
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `MEM d bi` by metis_tac[inst_all_deps_mem] >> simp[] >>
+  Cases_on `is_pseudo d.inst_opcode`
+  >- (simp[dft_root_cut_def] >> metis_tac[]) >>
+  `id_before (MAP (\i. i.inst_id) bi) d.inst_id i.inst_id` by
+    (fs[eda_topo_compatible_def] >>
+     qpat_x_assum `!inst dep. _`
+       (qspecl_then [`i`, `d`] mp_tac) >> simp[] >>
+     strip_tac >> rename1 `EL k bi = d` >>
+     simp[id_before_def] >> qexistsl [`k`, `j`] >> simp[EL_MAP]) >>
+  simp[dft_root_cut_def] >> disj2_tac >>
+  metis_tac[dft_root_cut_non_pseudo, id_before_trans]
+QED
+
+Theorem id_before_append_member:
+  MEM a pre /\ MEM b post ==> id_before (pre ++ post) a b
+Proof
+  Induct_on `pre` >> simp[id_before_cons] >> metis_tac[MEM_APPEND]
+QED
+
+Theorem dft_root_cut_entries:
+  MEM r (FILTER Q bi) ==>
+  ?pre post. FILTER Q bi = pre ++ [r] ++ post /\
+    EVERY (\i. MEM i bi /\ dft_root_cut bi r.inst_id i.inst_id) pre
+Proof
+  simp[MEM_FILTER] >> strip_tac >>
+  `?prefix suffix. bi = prefix ++ r::suffix` by metis_tac[MEM_SPLIT] >>
+  qpat_x_assum `bi = _` SUBST_ALL_TAC >>
+  qexistsl [`FILTER Q prefix`, `FILTER Q suffix`] >>
+  simp[rich_listTheory.FILTER_APPEND, EVERY_MEM, MEM_FILTER] >> rpt strip_tac >>
+  simp[dft_root_cut_def] >> disj2_tac >>
+  simp[] >> irule id_before_append_member >> simp[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem schedule_root_cut_before:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+  eda_wf eda bi /\ eda_topo_compatible bi eda order /\
+  MEM r bi /\ ~is_pseudo r.inst_opcode /\
+  MEM y bi /\ ~is_pseudo y.inst_opcode /\
+  id_before (MAP (\i. i.inst_id) bi) r.inst_id y.inst_id /\
+  MEM r (entry_instructions bi order eda) /\
+  MEM y.inst_id (MAP (\i. i.inst_id)
+    (schedule_from_entries bi order eda om (entry_instructions bi order eda))) ==>
+  id_before (MAP (\i. i.inst_id)
+    (schedule_from_entries bi order eda om (entry_instructions bi order eda)))
+    r.inst_id y.inst_id
+Proof
+  rpt strip_tac >>
+  `?Q. entry_instructions bi order eda = FILTER Q bi` by
+    (simp[entry_instructions_def, rich_listTheory.FILTER_FILTER] >> metis_tac[]) >>
+  `?pre post. entry_instructions bi order eda = pre ++ [r] ++ post /\
+     EVERY (\i. MEM i bi /\ dft_root_cut bi r.inst_id i.inst_id) pre` by
+    metis_tac[dft_root_cut_entries] >>
+  `~dft_root_cut bi r.inst_id r.inst_id /\
+   ~dft_root_cut bi r.inst_id y.inst_id /\ r.inst_id <> y.inst_id` by
+    (simp[dft_root_cut_non_pseudo] >>
+     metis_tac[id_before_distinct_endpoints, id_before_trans]) >>
+  qpat_x_assum `entry_instructions _ _ _ = pre ++ [r] ++ post` SUBST_ALL_TAC >>
+  irule schedule_cut_before >> simp[] >>
+  qexists `dft_root_cut bi r.inst_id` >> simp[] >>
+  metis_tac[dft_root_cut_closed]
+QED
+
+Theorem dft_block_suffix_root_order:
+  bb_well_formed bb /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  non_pseudo_defs_before_uses bb.bb_instructions /\
+  MEM r bb.bb_instructions /\ MEM y bb.bb_instructions /\
+  ~is_pseudo r.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+  r.inst_outputs = [] /\ read_effects r.inst_opcode = empty_effects /\
+  write_effects r.inst_opcode = empty_effects /\
+  id_before (MAP (\i. i.inst_id) bb.bb_instructions) r.inst_id y.inst_id ==>
+  id_before
+    (MAP (\i. i.inst_id)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) (dft_block order bb).bb_instructions))
+    r.inst_id y.inst_id
+Proof
+  rpt strip_tac >>
+  `MEM y.inst_id (MAP (\i. i.inst_id)
+     (FILTER (\i. ~is_pseudo i.inst_opcode) (dft_block order bb).bb_instructions))` by
+    (drule_all dft_block_suffix_representative >> strip_tac >>
+     simp[MEM_MAP] >> metis_tac[MEM_EL, flip_operands_inst_id]) >>
+  qspecl_then [`order`, `bb`] mp_tac dft_block_suffix_decomposition >>
+  simp[Once dft_block_def, LET_THM] >> disch_then (SUBST_ALL_TAC o SYM) >>
+  irule schedule_root_cut_before >> simp[build_eda_wf, root_is_entry] >>
+  irule eda_topo_compatible_gen_weak_plain >>
+  gvs[bb_well_formed_def, non_pseudo_defs_before_uses_def]
+QED
+
 (* These probes deliberately have indirect conflicts: a cleared reader and
    a superseded writer must still precede the third instruction by transitivity.
    MCOPY also tests the same-effect read/write update. *)
