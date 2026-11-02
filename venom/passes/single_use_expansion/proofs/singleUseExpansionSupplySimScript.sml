@@ -1508,3 +1508,110 @@ Proof
   disch_then (qspecl_then [`next with vs_inst_idx := SUC i`, `u`] mp_tac) >>
   simp[]
 QED
+
+Theorem sue_result_step_indices[local]:
+  sue_result_rel P (step_inst fuel ctx inst s)
+    (step_inst fuel ctx inst' (t with vs_inst_idx := k)) <=>
+  sue_result_rel P (step_inst fuel ctx inst s) (step_inst fuel ctx inst' t)
+Proof
+  once_rewrite_tac[GSYM (Q.INST [`n` |-> `0`, `m` |-> `0`] sue_result_rel_idx)] >>
+  pure_rewrite_tac[sue_step_inst_idx_norm] >> simp[]
+QED
+
+Theorem sue_drop_prefix_index[local]:
+  !prefix xs k inst tail. DROP k xs = prefix ++ inst::tail ==>
+    k + LENGTH prefix < LENGTH xs /\ EL (k + LENGTH prefix) xs = inst
+Proof
+  Induct >> rpt gen_tac >> simp[]
+  >- metis_tac[sue_drop_cons_index] >>
+  strip_tac >> drule sue_drop_cons_index >> strip_tac >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND]) >>
+  first_x_assum (qspecl_then [`xs`, `SUC k`, `inst`, `tail`] mp_tac) >>
+  simp[arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem sue_segment_indexed_step:
+  ir_supply_inst_ok supply /\ P SUBSET set supply.irs_used_vars /\
+  sue_segments_supply dfg supply bb.bb_instructions = (segs,supply') /\
+  i < LENGTH bb.bb_instructions /\ bb' = bb with bb_instructions := FLAT segs /\
+  inst = EL i bb.bb_instructions /\ inst_wf inst /\ ~is_alloca_op inst.inst_opcode /\
+  (!v. MEM (Var v) inst.inst_operands ==> v IN P) /\
+  (~sue_should_skip inst.inst_opcode ==>
+    !v. MEM (Var v) inst.inst_operands ==> v IN FDOM s.vs_vars) /\
+  sue_state_rel P s t /\ t.vs_inst_idx = sue_segment_offset segs i ==>
+  ?k u inst'.
+    exec_block fuel ctx bb' t = exec_block fuel ctx bb' u /\
+    u.vs_inst_idx = k /\ k < LENGTH bb'.bb_instructions /\
+    EL k bb'.bb_instructions = inst' /\ inst'.inst_opcode = inst.inst_opcode /\
+    SUC k = sue_segment_offset segs (SUC i) /\
+    sue_result_rel P (step_inst fuel ctx inst s) (step_inst fuel ctx inst' u)
+Proof
+  strip_tac >> drule_all sue_segments_supply_index_ready >> strip_tac >>
+  `i < LENGTH segs` by metis_tac[sue_segments_supply_length] >>
+  drule sue_segment_offset_drop >> strip_tac >>
+  drule sue_segment_offset_suc >> strip_tac >>
+  Cases_on `sue_should_skip inst.inst_opcode`
+  >- suspend "skip" >>
+  Cases_on `sue_expand_ops_supply dfg inst si inst.inst_operands 0` >>
+  PairCases_on `r` >>
+  rename1 `sue_expand_ops_supply dfg inst si inst.inst_operands 0 = (assigns,ops,sj')` >>
+  `EL i segs = assigns ++ [inst with inst_operands := ops]` by
+    gvs[sue_expand_inst_supply_def] >>
+  `!a v. MEM a assigns /\ a.inst_operands = [Var v] ==> v IN FDOM s.vs_vars` by
+    (drule sue_expand_ops_supply_copy_sources >>
+     simp[listTheory.EVERY_MEM] >> metis_tac[listTheory.CONS_11]) >>
+  drule_all sue_expand_ops_supply_step_sim >>
+  disch_then (qspecl_then [`fuel`, `ctx`] strip_assume_tac) >>
+  suspend "expanded"
+QED
+
+Resume sue_segment_indexed_step[skip]:
+  `EL i segs = [inst]` by metis_tac[sue_expand_inst_supply_skip, pairTheory.PAIR_EQ] >>
+  `sue_segment_offset segs i < LENGTH (FLAT segs) /\
+   EL (sue_segment_offset segs i) (FLAT segs) = inst` by
+    (fs[] >> metis_tac[sue_drop_cons_index]) >>
+  qexistsl [`sue_segment_offset segs i`, `t`, `inst`] >>
+  simp[] >> irule sue_step_inst_preserves >> simp[]
+QED
+
+Resume sue_segment_indexed_step[expanded]:
+  `EVERY (\a. a.inst_opcode = ASSIGN) assigns` by
+    (drule_all sue_expand_ops_supply_prefix >>
+     simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `DROP (sue_segment_offset segs i) bb'.bb_instructions =
+    assigns ++ (inst with inst_operands := ops)::FLAT (DROP (SUC i) segs)` by
+    (simp[] >> pure_asm_rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND]) >>
+  `t with vs_inst_idx := sue_segment_offset segs i = t` by
+    (qpat_x_assum `t.vs_inst_idx = _` (SUBST1_TAC o SYM) >> simp[]) >>
+  drule_all sue_exec_block_assign_prefix >> strip_tac >>
+  `sue_segment_offset segs i + LENGTH assigns < LENGTH bb'.bb_instructions /\
+    EL (sue_segment_offset segs i + LENGTH assigns) bb'.bb_instructions =
+      inst with inst_operands := ops` by
+    metis_tac[sue_drop_prefix_index] >>
+  qexistsl [`sue_segment_offset segs i + LENGTH assigns`,
+    `u with vs_inst_idx := sue_segment_offset segs i + LENGTH assigns`,
+    `inst with inst_operands := ops`] >>
+  simp[] >> conj_tac
+  >- metis_tac[arithmeticTheory.ADD_COMM] >>
+  gvs[sue_result_step_indices]
+QED
+
+Finalise sue_segment_indexed_step
+
+Theorem sue_original_operand_covered:
+  MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+  MEM (Var v) inst.inst_operands ==> v IN set (fn_ir_vars fn)
+Proof
+  strip_tac >>
+  `!ops. MEM (Var v) ops ==> MEM v (venomInst$operand_vars ops)` by
+    (Induct >> simp[venomInstTheory.operand_vars_def] >> Cases_on `h` >>
+     simp[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def] >> metis_tac[]) >>
+  simp[fn_ir_vars_def, block_ir_vars_def, listTheory.MEM_FLAT,
+       listTheory.MEM_MAP] >>
+  qexists_tac `block_ir_vars bb` >> conj_tac
+  >- (qexists_tac `bb` >> simp[block_ir_vars_def]) >>
+  simp[block_ir_vars_def, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+  qexists_tac `inst_ir_vars inst` >> conj_tac
+  >- metis_tac[] >>
+  simp[inst_ir_vars_def, venomInstTheory.inst_uses_def] >> metis_tac[]
+QED

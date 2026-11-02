@@ -187,7 +187,7 @@ Theorem sue_rewritten_read_ranges_plain[local]:
   source_memory_read_ranges inst s
 Proof
   strip_tac >> Cases_on `inst.inst_opcode` >>
-  gvs[contextCodegenRelTheory.source_memory_read_ranges_def] >>
+  simp[contextCodegenRelTheory.source_memory_read_ranges_def] >>
   rpt (qmatch_asmsub_rename_tac `LIST_REL _ xs ys` >>
     Cases_on `xs` >> Cases_on `ys` >>
     gvs[contextCodegenRelTheory.memory_range_of_operands_def])
