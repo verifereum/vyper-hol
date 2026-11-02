@@ -291,6 +291,7 @@ Theorem complete_unit_shape_checks:
 Proof
   simp[unit_shape_ok_def, o1_source_unit_ok_def, shape_probe_unit_def,
        entry_fn_first_def, fn_shape_ok_def, shape_probe_fn_def,
+       retpc_shape_ok_def,
        mk_venom_context_def, mk_raw_function_def, fn_entry_label_def,
        entry_block_def, opaque_use_ok_def, fn_insts_def, fn_insts_blocks_def,
        entry_fn_no_ret_def, get_params_def, inst_shape_ok_def,
@@ -300,8 +301,8 @@ Proof
        is_terminator_def, is_param_opcode_def, mk_inst_def] >> EVAL_TAC
 QED
 
-(* Output shape permits hidden parameters and internal RET; the raw-only
- * FMP_PARAM exclusion must not leak into the output shape. *)
+(* Output shape permits hidden parameters and internal RET to a return PC;
+ * the raw-only FMP_PARAM exclusion must not leak into the output shape. *)
 Theorem internal_output_shape_check:
   unit_shape_ok
     <| cu_context := mk_venom_context
@@ -309,14 +310,38 @@ Theorem internal_output_shape_check:
           mk_raw_function "callee"
             [<| bb_label := "callee";
                 bb_instructions := [mk_inst 1 FMP_PARAM [Lit 0w] ["fmp"];
-                                    mk_inst 2 RET [Lit 0w] []] |>]]
+                                    mk_inst 2 RETPC_PARAM [Lit 0w] ["pc"];
+                                    mk_inst 3 RET [Var "pc"] []] |>]]
          (SOME "entry");
        cu_data_segment := [] |>
 Proof
+  qmatch_goalsub_abbrev_tac `[shape_probe_fn _; callee]` >>
+  `fn_insts callee =
+     [mk_inst 1 FMP_PARAM [Lit 0w] ["fmp"]; mk_inst 2 RETPC_PARAM [Lit 0w] ["pc"];
+      mk_inst 3 RET [Var "pc"] []]`
+    by simp[Abbr `callee`, mk_raw_function_def, fn_insts_def,
+            fn_insts_blocks_def] >>
+  `retpc_var callee "pc"`
+    by (simp[retpc_var_def] >> irule copy_phi_var_seed >>
+        qexists_tac `mk_inst 2 RETPC_PARAM [Lit 0w] ["pc"]` >>
+        simp[mk_inst_def]) >>
+  `!x. ~gas_var callee x`
+    by (simp[gas_var_def] >> irule copy_phi_var_no_seed >>
+        simp[mk_inst_def] >> rw[] >> simp[]) >>
+  `retpc_shape_ok callee`
+    by (simp[retpc_shape_ok_def, DISJ_IMP_THM, FORALL_AND_THM, mk_inst_def] >>
+        qexistsl_tac [`[]`, `"pc"`] >> simp[]) >>
+  `fn_shape_ok callee`
+    by (simp[fn_shape_ok_def, opaque_use_ok_def, retpc_use_ok_def,
+             DISJ_IMP_THM, FORALL_AND_THM, inst_shape_ok_def,
+             is_read0_opcode_def, label_positions_ok_def, is_label_operand_def,
+             mk_inst_def] >>
+        simp[Abbr `callee`, mk_raw_function_def, fn_entry_label_def,
+             entry_block_def, reserved_label_def]) >>
   simp[unit_shape_ok_def, entry_fn_first_def, fn_shape_ok_def,
        shape_probe_fn_def, mk_venom_context_def, mk_raw_function_def,
        fn_entry_label_def, entry_block_def, opaque_use_ok_def,
-       GSYM AND_IMP_INTRO, DISJ_IMP_THM, FORALL_AND_THM,
+       retpc_shape_ok_def, GSYM AND_IMP_INTRO, DISJ_IMP_THM, FORALL_AND_THM,
        fn_insts_def, fn_insts_blocks_def, entry_fn_no_ret_def,
        get_params_def, inst_shape_ok_def, is_read0_opcode_def,
        label_positions_ok_def, is_label_operand_def, reserved_label_def,

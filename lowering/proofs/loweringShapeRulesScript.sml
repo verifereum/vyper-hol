@@ -235,9 +235,24 @@ Proof
   pop_assum SUBST1_TAC >> simp[DROP_LENGTH_APPEND]
 QED
 
+(* The labels steps may start are never internal entry labels. *)
+Theorem compiler_label_not_internal[simp]:
+  !l. compiler_label l ==> ~internal_label_ok l
+Proof
+  rw[compiler_label_def, compiler_labels_future_def, fresh_label_output_def,
+     internal_label_ok_def]
+QED
+
+Theorem jump_label_ok_not_internal[simp]:
+  !l. jump_label_ok l ==> ~internal_label_ok l
+Proof
+  rw[jump_label_ok_def] >- metis_tac[compiler_label_not_internal] >>
+  gvs[internal_label_ok_def, IS_PREFIX_APPEND]
+QED
+
 Theorem shape_step_new_block:
   !internal LP R lbl.
-    shape_stable R /\ LP lbl ==>
+    shape_stable R /\ LP lbl /\ ~internal_label_ok lbl ==>
     shape_step internal LP R (new_block lbl) (\x st'. R st')
 Proof
   simp[shape_step_def, new_block_def, PULL_FORALL, AND_IMP_INTRO] >>
@@ -345,7 +360,10 @@ Theorem shape_append_inst:
        (opaque_out RETPC_PARAM (state_insts st ++ [inst]) x ==>
           inst.inst_opcode = RET /\
           ?front. inst.inst_operands = front ++ [Var x] /\
-                  ~MEM (Var x) front)) ==>
+                  ~MEM (Var x) front)) /\
+    (inst.inst_opcode = RET ==>
+       ?front x. inst.inst_operands = front ++ [Var x] /\
+                 opaque_out RETPC_PARAM (cur_fn_insts st) x) ==>
     shape_extends internal LP st st' /\ shape_state st'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -428,7 +446,7 @@ QED
 Theorem ret_append_ok:
   !st front r inst.
     inst.inst_opcode = RET /\ inst.inst_operands = front ++ [r] /\
-    (retpc_operand st r \/ plain_operand st r) /\
+    retpc_operand st r /\
     EVERY (plain_operand st) front ==>
     (!x. MEM (Var x) inst.inst_operands ==> not_fresh_at st x) /\
     (!x. MEM (Var x) inst.inst_operands ==>
@@ -480,7 +498,7 @@ QED
 Theorem shape_step_emit:
   !internal LP R inst.
     shape_stable R /\ lowered_inst_ok internal inst /\
-    ~MEM inst.inst_opcode [GAS; RETPC_PARAM] ==>
+    ~MEM inst.inst_opcode [GAS; RETPC_PARAM; RET] ==>
     shape_step internal LP
       (\st. R st /\ EVERY (label_or_plain st) inst.inst_operands)
       (emit inst) (\x st'. R st')
@@ -549,7 +567,7 @@ QED
 
 Theorem shape_step_emit_op:
   !internal LP R opc ops.
-    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM] /\
+    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
     (!id outs. lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
     shape_step internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
       (emit_op opc ops) (\x st'. R st' /\ plain_operand st' x)
@@ -573,7 +591,7 @@ QED
 
 Theorem shape_step_emit_inst:
   !internal LP R opc ops outs.
-    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM] /\
+    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
     (!id. lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
     shape_step internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
       (emit_inst opc ops outs) (\x st'. R st')
@@ -596,7 +614,7 @@ QED
 
 Theorem shape_step_emit_void:
   !internal LP R opc ops.
-    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM] /\
+    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
     (!id. lowered_inst_ok internal (mk_inst id opc ops [])) ==>
     shape_step internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
       (emit_void opc ops) (\x st'. R st')
@@ -631,7 +649,7 @@ QED
 (* Multi-return INVOKE: every output is a plain variable. *)
 Theorem shape_step_emit_multi_op:
   !internal LP R opc ops n.
-    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM] /\
+    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
     (!id outs. lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
     shape_step internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
       (emit_multi_op opc ops n)
@@ -747,8 +765,7 @@ Theorem shape_step_emit_inst_ret:
     shape_stable R /\
     (!id. lowered_inst_ok T (mk_inst id RET (front ++ [r]) [])) ==>
     shape_step T LP
-      (\st. R st /\ EVERY (plain_operand st) front /\
-            (retpc_operand st r \/ plain_operand st r))
+      (\st. R st /\ EVERY (plain_operand st) front /\ retpc_operand st r)
       (emit_inst RET (front ++ [r]) []) (\x st'. R st')
 Proof
   rpt strip_tac >> simp[shape_step_def, emit_inst_eq] >>

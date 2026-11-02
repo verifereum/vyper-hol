@@ -7,6 +7,12 @@
  *
  * TOP-LEVEL:
  *   all_blocks, state_insts      — the blocks and instructions of a state
+ *   internal_label_ok            — internal entry labels ("internal ..."),
+ *                                  which start each internal function
+ *   fn_suffix, cur_fn_insts      — the blocks and instructions of the
+ *                                  function being compiled
+ *   rets_scoped                  — every RET returns to a return PC of its
+ *                                  own function
  *   added_insts, added_labels    — what a compile action appended
  *   opaque_out, opaque_insts_ok  — GAS / RETPC_PARAM outputs used only where
  *                                  gas_use_ok / retpc_use_ok allow, and never
@@ -22,7 +28,8 @@
  *   shape_step                   — Hoare-style judgment on compile actions
  *   shape_stable                 — a state predicate kept by every append
  *   gas_operand, retpc_operand   — a variable holding a GAS / RETPC_PARAM
- *                                  output
+ *                                  output (RETPC_PARAM: of the current
+ *                                  function)
  *
  * The rules for shape_step are in loweringShapeRules.
  *)
@@ -45,6 +52,27 @@ End
 Definition state_insts_def:
   state_insts (st : compile_state) =
     FLAT (MAP (\bb. bb.bb_instructions) (all_blocks st))
+End
+
+(* Internal entry labels are internal_fn_label's "internal ..." spelling;
+   every internal function's code starts with a block of one, and no other
+   block has one. *)
+Definition internal_label_ok_def:
+  internal_label_ok lbl <=> isPREFIX "internal " lbl
+End
+
+(* The blocks of the function being compiled: from the last block with an
+   internal entry label on, or all of them in entry code. *)
+Definition fn_suffix_def:
+  fn_suffix [] = [] /\
+  fn_suffix (bb :: bbs) =
+    if EXISTS (\b. internal_label_ok b.bb_label) bbs then fn_suffix bbs
+    else bb :: bbs
+End
+
+Definition cur_fn_insts_def:
+  cur_fn_insts (st : compile_state) =
+    FLAT (MAP (\bb. bb.bb_instructions) (fn_suffix (all_blocks st)))
 End
 
 (* Under cs_extends st st', state_insts st is a prefix of state_insts st'
@@ -77,6 +105,19 @@ Definition opaque_insts_ok_def:
       (opaque_out RETPC_PARAM insts x ==>
          inst.inst_opcode = RET /\
          ?front. inst.inst_operands = front ++ [Var x] /\ ~MEM (Var x) front)
+End
+
+(* Every RET's last operand is a RETPC_PARAM output of its own function:
+   of the blocks up to the RET's own since that function's entry block. *)
+Definition rets_scoped_def:
+  rets_scoped bbs <=>
+    !pre bb post inst.
+      bbs = pre ++ [bb] ++ post /\ MEM inst bb.bb_instructions /\
+      inst.inst_opcode = RET ==>
+      ?front x. inst.inst_operands = front ++ [Var x] /\
+                opaque_out RETPC_PARAM
+                  (FLAT (MAP (\b. b.bb_instructions) (fn_suffix (pre ++ [bb]))))
+                  x
 End
 
 (* An operand that may appear in any position: no label, no compiler
@@ -137,7 +178,7 @@ End
 
 Definition shape_state_def:
   shape_state (st : compile_state) <=>
-    opaque_insts_ok (state_insts st) /\
+    opaque_insts_ok (state_insts st) /\ rets_scoped (all_blocks st) /\
     (!inst x. MEM inst (state_insts st) /\ MEM (Var x) inst.inst_operands ==>
               not_fresh_at st x) /\
     (!inst x. MEM inst (state_insts st) /\
@@ -145,12 +186,14 @@ Definition shape_state_def:
               MEM x inst.inst_outputs ==> not_fresh_at st x)
 End
 
-(* LP constrains the labels of the blocks started on the way. *)
+(* LP constrains the labels of the blocks started on the way; none starts
+   another internal function. *)
 Definition shape_extends_def:
   shape_extends internal (LP : string -> bool) st st' <=>
     cs_extends st st' /\ st.cs_next_var <= st'.cs_next_var /\
     EVERY (lowered_inst_ok internal) (added_insts st st') /\
     EVERY LP (added_labels st st') /\
+    EVERY (\l. ~internal_label_ok l) (added_labels st st') /\
     !inst x. MEM inst (added_insts st st') /\
              MEM inst.inst_opcode [GAS; RETPC_PARAM] /\
              MEM x inst.inst_outputs ==> ~not_fresh_at st x
@@ -180,7 +223,7 @@ End
 Definition retpc_operand_def:
   retpc_operand (st : compile_state) op <=>
     ?r. op = Var r /\ not_fresh_at st r /\
-        opaque_out RETPC_PARAM (state_insts st) r /\
+        opaque_out RETPC_PARAM (cur_fn_insts st) r /\
         ~opaque_out GAS (state_insts st) r
 End
 

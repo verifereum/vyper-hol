@@ -1,7 +1,8 @@
 (*
  * Syntactic unit hypotheses for PLAN §5.8 (not compiler checks).
- * TOP-LEVEL: gas_var, retpc_var, opaque_use_ok, label_positions_ok,
- *   reserved_label, entry_fn_first, unit_shape_ok, o1_source_unit_ok;
+ * TOP-LEVEL: gas_var, retpc_var, opaque_use_ok, retpc_shape_ok,
+ *   label_positions_ok, reserved_label, entry_fn_first, unit_shape_ok,
+ *   o1_source_unit_ok;
  *   entry_fn_first_lookup (L4).
  * Helpers: copy_phi_var is the least seeded ASSIGN/PHI closure;
  *   gas_use_ok / retpc_use_ok specify opaque operand positions;
@@ -96,6 +97,20 @@ Proof
   metis_tac[opaque_use_ok_def]
 QED
 
+(* The generated code for RET jumps to its last operand, so the function
+   theorem can land at the caller's return pc only if that operand is a
+   return-PC variable; and a PHI that merges a return-PC variable with an
+   ordinary one would read as ra on the ordinary path too.  opaque_use_ok
+   restricts where return-PC variables may be used but requires neither. *)
+Definition retpc_shape_ok_def:
+  retpc_shape_ok fn <=>
+    (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = RET ==>
+       ?front x. inst.inst_operands = front ++ [Var x] /\ retpc_var fn x) /\
+    (!inst x y. MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
+       MEM (Var x) inst.inst_operands /\ MEM (Var y) inst.inst_operands /\
+       retpc_var fn x ==> retpc_var fn y)
+End
+
 Definition label_positions_ok_def:
   label_positions_ok inst <=>
     case (inst.inst_opcode, inst.inst_operands) of
@@ -140,7 +155,7 @@ End
 Definition fn_shape_ok_def:
   fn_shape_ok fn <=>
     fn_entry_label fn = SOME fn.fn_name /\ opaque_use_ok fn /\
-    EVERY (\bb. ~reserved_label bb.bb_label) fn.fn_blocks /\
+    retpc_shape_ok fn /\ EVERY (\bb. ~reserved_label bb.bb_label) fn.fn_blocks /\
     EVERY inst_shape_ok (fn_insts fn)
 End
 
