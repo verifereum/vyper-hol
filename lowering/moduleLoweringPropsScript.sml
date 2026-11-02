@@ -32,7 +32,7 @@ Ancestors
   emitHelperProps
   exprLoweringProps
   moduleLowering compileEnv context
-  venomExecSemantics venomState venomInst venomExecProofs
+  venomExecSemantics venomState venomInst venomExecProofs venomMemProps
   stateEquiv
   abiEncoder
   fragExec selectorDispatch byte vyperMisc list rich_list finite_map words
@@ -1038,6 +1038,289 @@ Resume compile_constructor_epilogue_correct[imm_zero]:
 QED
 
 Finalise compile_constructor_epilogue_correct
+
+Theorem epilogue_ALLOCA_exact[local]:
+  emit_op ALLOCA [Lit (n2w sz)] st = (v, st') /\
+  fresh_vars_wrt st ss /\
+  FLOOKUP ss.vs_allocas st.cs_next_id = NONE ==>
+  ?ss1. run_inst_seq (emitted_insts st st') ss = OK ss1 /\
+    eval_operand v ss1 = SOME (n2w ss.vs_alloca_next) /\
+    same_blocks st st' /\ fresh_vars_wrt st' ss1 /\
+    (!op w. eval_operand op ss = SOME w ==> eval_operand op ss1 = SOME w) /\
+    ss1.vs_memory = ss.vs_memory /\
+    ss1.vs_accounts = ss.vs_accounts /\
+    ss1.vs_transient = ss.vs_transient /\
+    ss1.vs_logs = ss.vs_logs /\ ss1.vs_code = ss.vs_code /\
+    ss1.vs_call_ctx = ss.vs_call_ctx /\ ss1.vs_labels = ss.vs_labels
+Proof
+  rpt strip_tac >>
+  drule_all emit_op_ALLOCA_correct >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  qexists_tac `ss'` >> asm_rewrite_tac[] >>
+  qpat_x_assum `run_inst_seq _ _ = OK ss'` mp_tac >>
+  asm_rewrite_tac[run_inst_seq_def, step_inst_base_def, mk_inst_def,
+                  exec_alloca_def] >>
+  simp[] >> disch_then (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `eval_operand v _ = _` mp_tac >>
+  simp[eval_operand_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem epilogue_ADD_exact[local]:
+  emit_op ADD [op1; op2] st = (v, st') /\
+  eval_operand op1 ss = SOME v1 /\ eval_operand op2 ss = SOME v2 /\
+  fresh_vars_wrt st ss ==>
+  ?ss1. run_inst_seq (emitted_insts st st') ss = OK ss1 /\
+    eval_operand v ss1 = SOME (v1 + v2) /\
+    same_blocks st st' /\ fresh_vars_wrt st' ss1 /\
+    (!op w. eval_operand op ss = SOME w ==> eval_operand op ss1 = SOME w) /\
+    ss1.vs_memory = ss.vs_memory /\
+    ss1.vs_accounts = ss.vs_accounts /\
+    ss1.vs_transient = ss.vs_transient /\
+    ss1.vs_logs = ss.vs_logs /\ ss1.vs_code = ss.vs_code /\
+    ss1.vs_call_ctx = ss.vs_call_ctx /\ ss1.vs_labels = ss.vs_labels
+Proof
+  rpt strip_tac >>
+  drule_all emit_op_ADD_correct >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `step_inst_base
+    (mk_inst st.cs_next_id ADD [op1; op2]
+      [STRING #"%" (toString st.cs_next_var)]) ss =
+    OK (update_var (STRING #"%" (toString st.cs_next_var)) (v1 + v2) ss)` by
+    (irule step_ADD >> simp[]) >>
+  gvs[run_inst_seq_def] >> simp[update_var_def]
+QED
+
+Theorem epilogue_CODECOPY_exact[local]:
+  emit_void CODECOPY [op_dst; op_src; op_sz] st = ((), st') /\
+  eval_operand op_dst ss = SOME dst_v /\
+  eval_operand op_src ss = SOME src_v /\
+  eval_operand op_sz ss = SOME sz_v /\ fresh_vars_wrt st ss ==>
+  ?ss1. run_inst_seq (emitted_insts st st') ss = OK ss1 /\
+    ss1 = write_memory_with_expansion (w2n dst_v)
+      (TAKE (w2n sz_v) (DROP (w2n src_v) ss.vs_code ++
+        REPLICATE (w2n sz_v) 0w)) ss /\
+    same_blocks st st' /\ fresh_vars_wrt st' ss1 /\
+    (!op w. eval_operand op ss = SOME w ==> eval_operand op ss1 = SOME w)
+Proof
+  rpt strip_tac >>
+  drule_all emit_void_CODECOPY_correct >> strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  qexists_tac `ss'` >> asm_rewrite_tac[] >>
+  qpat_x_assum `run_inst_seq _ _ = OK ss'` mp_tac >>
+  simp[run_inst_seq_def, step_inst_base_def]
+QED
+
+Theorem epilogue_RETURN_exact[local]:
+  emit_inst RETURN [op1; op2] [] st = ((), st') /\
+  eval_operand op1 ss = SOME v1 /\ eval_operand op2 ss = SOME v2 ==>
+  ?ss1. run_inst_seq (emitted_insts st st') ss = Halt ss1 /\
+    ss1.vs_returndata = read_memory (w2n v1) (w2n v2) ss /\
+    ss1.vs_accounts = ss.vs_accounts /\
+    ss1.vs_transient = ss.vs_transient /\
+    ss1.vs_logs = ss.vs_logs /\ ss1.vs_code = ss.vs_code /\
+    ss1.vs_call_ctx = ss.vs_call_ctx
+Proof
+  rpt strip_tac >>
+  drule emitted_insts_emit_inst >> strip_tac >>
+  simp[run_inst_seq_def, step_inst_base_def, halt_state_def,
+       set_returndata_def, read_memory_def]
+QED
+
+Theorem epilogue_padded_slice[local]:
+  TAKE n (DROP b (mem:word8 list)) = bs /\ LENGTH bs = n ==>
+  TAKE n (DROP b mem ++ REPLICATE n 0w) = bs
+Proof
+  rpt strip_tac >>
+  `n <= LENGTH (DROP b mem)` by
+    (qpat_x_assum `TAKE _ _ = _` (mp_tac o AP_TERM ``LENGTH:word8 list -> num``) >>
+     simp[LENGTH_TAKE_EQ] >> decide_tac) >>
+  simp[TAKE_APPEND1]
+QED
+
+Theorem epilogue_read_write[local]:
+  read_memory b (LENGTH bs) (write_memory_with_expansion b bs s) = bs
+Proof
+  simp[read_memory_def] >> irule epilogue_padded_slice >>
+  simp[write_memory_with_expansion_read_self]
+QED
+
+Theorem epilogue_read_adjacent[local]:
+  read_memory b (LENGTH rt + LENGTH sec)
+    (write_memory_with_expansion b rt
+      (write_memory_with_expansion (b + LENGTH rt) sec s)) = rt ++ sec
+Proof
+  simp[read_memory_def] >> irule epilogue_padded_slice >> simp[] >>
+  qmatch_goalsub_abbrev_tac `DROP b s2.vs_memory` >>
+  qabbrev_tac `s1 = write_memory_with_expansion (b + LENGTH rt) sec s` >>
+  `TAKE (LENGTH rt) (DROP b s2.vs_memory) = rt` by
+    simp[Abbr `s2`, write_memory_with_expansion_read_self] >>
+  `b + LENGTH rt + LENGTH sec <= LENGTH s1.vs_memory` by
+    simp[Abbr `s1`, LENGTH_write_memory_with_expansion, arithmeticTheory.MAX_DEF] >>
+  `TAKE (LENGTH sec) (DROP (b + LENGTH rt) s2.vs_memory) = sec` by
+    (simp[Abbr `s2`, write_memory_with_expansion_disjoint_read] >>
+     simp[Abbr `s1`, write_memory_with_expansion_read_self]) >>
+  simp[TAKE_SUM, DROP_DROP_T, arithmeticTheory.ADD_COMM]
+QED
+
+Theorem epilogue_write_frame[local]:
+  (write_memory_with_expansion off bytes s).vs_accounts = s.vs_accounts /\
+  (write_memory_with_expansion off bytes s).vs_transient = s.vs_transient /\
+  (write_memory_with_expansion off bytes s).vs_logs = s.vs_logs /\
+  (write_memory_with_expansion off bytes s).vs_code = s.vs_code /\
+  (write_memory_with_expansion off bytes s).vs_call_ctx = s.vs_call_ctx
+Proof
+  simp[write_memory_with_expansion_def]
+QED
+
+(* The deployment consumer needs the exact runtime and immutable suffix,
+   rather than only the existence of a halting epilogue execution. *)
+Theorem compile_constructor_epilogue_bytes:
+  !runtime section prefix args immutables_buf ss st st'.
+    compile_constructor_epilogue (LENGTH runtime) (LENGTH section)
+      immutables_buf st = ((), st') /\
+    fresh_vars_wrt st ss /\
+    FLOOKUP ss.vs_allocas st.cs_next_id = NONE /\
+    ss.vs_alloca_next + LENGTH runtime + LENGTH section < dimword(:256) /\
+    LENGTH prefix < dimword(:256) /\
+    ss.vs_code = prefix ++ runtime ++ args /\
+    FLOOKUP ss.vs_labels "runtime_begin" = SOME (n2w (LENGTH prefix)) /\
+    (section <> [] ==>
+      ?p. eval_operand immutables_buf ss = SOME p /\
+          TAKE (LENGTH section)
+            (DROP (w2n p) ss.vs_memory ++ REPLICATE (LENGTH section) 0w) = section)
+    ==>
+    ?ss'.
+      run_inst_seq (emitted_insts st st') ss = Halt ss' /\
+      ss'.vs_returndata = runtime ++ section /\
+      ss'.vs_accounts = ss.vs_accounts /\
+      ss'.vs_transient = ss.vs_transient /\
+      ss'.vs_logs = ss.vs_logs /\
+      ss'.vs_code = ss.vs_code /\
+      ss'.vs_call_ctx = ss.vs_call_ctx
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH runtime < dimword(:256) /\
+   LENGTH section < dimword(:256) /\
+   ss.vs_alloca_next < dimword(:256) /\
+   ss.vs_alloca_next + LENGTH runtime < dimword(:256) /\
+   LENGTH section + LENGTH runtime < dimword(:256)` by decide_tac >>
+  qpat_x_assum `compile_constructor_epilogue _ _ _ _ = _` mp_tac >>
+  simp[compile_constructor_epilogue_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, LET_THM] >>
+  Cases_on `section = []` >> gvs[]
+  >- suspend "empty"
+  >> suspend "suffix"
+QED
+
+Resume compile_constructor_epilogue_bytes[empty]:
+  strip_tac >>
+  gvs[compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  drule_all epilogue_ALLOCA_exact >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st cs1) ss = OK ss1` >>
+  `eval_operand (Label "runtime_begin") ss1 = SOME (n2w (LENGTH prefix))`
+    by simp[eval_operand_def] >>
+  `eval_operand (Lit (n2w (LENGTH runtime))) ss1 = SOME (n2w (LENGTH runtime))`
+    by simp[eval_operand_def] >>
+  drule_all epilogue_CODECOPY_exact >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts cs1 cs2) ss1 = OK ss2` >>
+  `LENGTH runtime < dimword(:256) /\ ss.vs_alloca_next < dimword(:256)`
+    by (simp[dimword_def] >> decide_tac) >>
+  `ss2 = write_memory_with_expansion ss.vs_alloca_next runtime ss1` by
+    (`LENGTH runtime - (LENGTH args + LENGTH runtime) = 0` by decide_tac >>
+     qpat_x_assum `ss2 = _` mp_tac >>
+     simp[DROP_APPEND, TAKE_APPEND]) >>
+  `eval_operand op ss2 = SOME (n2w ss.vs_alloca_next)` by metis_tac[] >>
+  `eval_operand (Lit (n2w (LENGTH runtime))) ss2 = SOME (n2w (LENGTH runtime))`
+    by simp[eval_operand_def] >>
+  drule_all epilogue_RETURN_exact >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts cs2 st') ss2 = Halt ss3` >>
+  imp_res_tac inst_extends_emit_op >>
+  imp_res_tac inst_extends_emit_void >>
+  imp_res_tac inst_extends_emit_inst >>
+  `run_inst_seq (emitted_insts st cs2) ss = OK ss2`
+    by (imp_res_tac run_inst_seq_emit_extend >> gvs[]) >>
+  `inst_extends st cs2` by metis_tac[inst_extends_trans] >>
+  `run_inst_seq (emitted_insts st st') ss = Halt ss3`
+    by (drule_all run_inst_seq_emit_extend >> simp[]) >>
+  `read_memory ss.vs_alloca_next (LENGTH runtime) ss2 = runtime` by
+    (qpat_x_assum `ss2 = write_memory_with_expansion ss.vs_alloca_next runtime _`
+      (fn th => rewrite_tac[th]) >> irule epilogue_read_write) >>
+  qexists_tac `ss3` >> simp[IgnAsm `ss2 = _`] >>
+  simp[epilogue_write_frame]
+QED
+
+Resume compile_constructor_epilogue_bytes[suffix]:
+  `LENGTH section > 0` by (Cases_on `section` >> gvs[] >> decide_tac) >> simp[] >>
+  strip_tac >> gvs[comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  `LENGTH runtime < dimword(:256) /\ LENGTH section < dimword(:256) /\
+   ss.vs_alloca_next < dimword(:256) /\
+   ss.vs_alloca_next + LENGTH runtime < dimword(:256) /\
+   LENGTH runtime + LENGTH section < dimword(:256)`
+    by (simp[dimword_def] >> decide_tac) >>
+  drule_all epilogue_ALLOCA_exact >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st cs1) ss = OK ss1` >>
+  drule epilogue_ADD_exact >> disch_then drule >>
+  disch_then (qspec_then `n2w (LENGTH runtime)` mp_tac) >>
+  (impl_tac >- simp[eval_operand_def]) >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts cs1 cs2) ss1 = OK ss2` >>
+  `eval_operand immutables_buf ss2 = SOME p` by metis_tac[] >>
+  `eval_operand (Lit (n2w (LENGTH section))) ss2 = SOME (n2w (LENGTH section))`
+    by simp[eval_operand_def] >>
+  drule_all emit_void_MCOPY_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts cs2 cs3) ss2 = OK ss3` >>
+  `ss3 = write_memory_with_expansion (ss.vs_alloca_next + LENGTH runtime) section ss2` by
+    (qpat_x_assum `ss3 = _` mp_tac >>
+     simp[mcopy_def, word_add_n2w]) >>
+  `eval_operand deploy_buf ss3 = SOME (n2w ss.vs_alloca_next)` by metis_tac[] >>
+  `eval_operand (Label "runtime_begin") ss3 = SOME (n2w (LENGTH prefix))` by
+    (qpat_x_assum `!op w. eval_operand op ss2 = _ ==> _` irule >>
+     simp[eval_operand_def]) >>
+  `eval_operand (Lit (n2w (LENGTH runtime))) ss3 = SOME (n2w (LENGTH runtime))`
+    by simp[eval_operand_def] >>
+  drule_all epilogue_CODECOPY_exact >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts cs3 cs4) ss3 = OK ss4` >>
+  `LENGTH runtime - (LENGTH args + LENGTH runtime) = 0` by decide_tac >>
+  `ss3.vs_code = prefix ++ runtime ++ args` by
+    simp[epilogue_write_frame] >>
+  `ss4 = write_memory_with_expansion ss.vs_alloca_next runtime ss3` by
+    (qpat_x_assum `ss4 = _` mp_tac >> simp[DROP_APPEND, TAKE_APPEND]) >>
+  suspend "finish_suffix"
+QED
+
+Resume compile_constructor_epilogue_bytes[finish_suffix]:
+  qpat_x_assum `ss3 = mcopy _ _ _ _` kall_tac >>
+  qpat_x_assum `ss4 = write_memory_with_expansion (w2n _) _ _` kall_tac >>
+  `read_memory ss.vs_alloca_next (LENGTH runtime + LENGTH section) ss4 = runtime ++ section` by
+    (qpat_x_assum `ss4 = _` (fn th => rewrite_tac[th]) >>
+     qpat_x_assum `ss3 = _` (fn th => rewrite_tac[th]) >>
+     irule epilogue_read_adjacent) >>
+  `eval_operand deploy_buf ss4 = SOME (n2w ss.vs_alloca_next)` by metis_tac[] >>
+  `eval_operand (Lit (n2w (LENGTH runtime + LENGTH section))) ss4 =
+    SOME (n2w (LENGTH runtime + LENGTH section))` by simp[eval_operand_def] >>
+  drule_all epilogue_RETURN_exact >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts cs4 st') ss4 = Halt ss5` >>
+  imp_res_tac inst_extends_emit_op >>
+  imp_res_tac inst_extends_emit_void >>
+  imp_res_tac inst_extends_emit_inst >>
+  `run_inst_seq (emitted_insts st cs2) ss = OK ss2`
+    by (imp_res_tac run_inst_seq_emit_extend >> gvs[]) >>
+  `inst_extends st cs2` by metis_tac[inst_extends_trans] >>
+  `run_inst_seq (emitted_insts st cs3) ss = OK ss3`
+    by (imp_res_tac run_inst_seq_emit_extend >> gvs[]) >>
+  `inst_extends st cs3` by metis_tac[inst_extends_trans] >>
+  `run_inst_seq (emitted_insts st cs4) ss = OK ss4`
+    by (imp_res_tac run_inst_seq_emit_extend >> gvs[]) >>
+  `inst_extends st cs4` by metis_tac[inst_extends_trans] >>
+  `run_inst_seq (emitted_insts st st') ss = Halt ss5`
+    by (drule_all run_inst_seq_emit_extend >> simp[]) >>
+  qexists_tac `ss5` >> simp[IgnAsm `ss4 = _`, IgnAsm `ss3 = _`] >>
+  simp[epilogue_write_frame]
+QED
+
+Finalise compile_constructor_epilogue_bytes
 
 Theorem run_inst_seq_ok_not_halted:
   ∀ is ss ss'.

@@ -15,4 +15,5 @@ Ancestors
   evalCompilerPhiPointers
   evalCompilerInternalFrames
   evalCompilerAllocationLimit
+  evalCompilerConversions
   evalCompilerRawCalls

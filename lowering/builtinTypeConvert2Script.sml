@@ -1,6 +1,6 @@
 Theory builtinTypeConvert2
 Ancestors
-  exprLoweringProps exprLowering emitHelperProps emitHelper
+  builtinTypeConvert1 builtinConvertPrefix builtinIntClamp exprLoweringProps exprLowering emitHelperProps emitHelper
   context compileEnv venomExecSemantics venomState venomInst
 Libs
   dep_rewrite
@@ -89,8 +89,27 @@ Proof
   metis_tac[fresh_var_distinct]
 QED
 
+Theorem conversion_mload_step[local]:
+  !id ops outs ss. step_inst_base (mk_inst id MLOAD ops outs) ss =
+    exec_read1 (\w ss. mload (w2n w) ss) (mk_inst id MLOAD ops outs) ss
+Proof
+  pure_rewrite_tac[step_inst_base_def, mk_inst_def, instruction_accfupds,
+    instruction_accessors, combinTheory.K_THM, opcode_case_def] >> simp[]
+QED
+
+Theorem conversion_memory_steps[local]:
+  (!id ops outs ss. step_inst_base (mk_inst id ADD ops outs) ss =
+    exec_pure2 word_add (mk_inst id ADD ops outs) ss) /\
+  (!id ops outs ss. step_inst_base (mk_inst id MSTORE ops outs) ss =
+    exec_write2 (\a v ss. mstore (w2n a) v ss) (mk_inst id MSTORE ops outs) ss)
+Proof
+  pure_rewrite_tac[step_inst_base_def, mk_inst_def, instruction_accfupds,
+    instruction_accessors, combinTheory.K_THM, opcode_case_def] >> simp[]
+QED
+
 val weak_spec_step_tac =
-  simp[Once run_inst_seq_def, step_inst_base_def,
+  rewrite_tac[GSYM mk_inst_def] >>
+  simp[Once run_inst_seq_def, conversion_memory_steps, conversion_mload_step, conversion_step_equations, clamp_step_equations, clamp_assert_step,
        exec_pure2_def, exec_pure1_def, exec_read1_def,
        exec_write2_def, mk_inst_def, eval_operand_def,
        lookup_var_update_var, eval_operand_update_var_if, fresh_var_name_eq];
@@ -160,19 +179,14 @@ Proof
   rpt (BasicProvers.FULL_CASE_TAC >> fs[]) >> gvs compile_defs >>
   TRY (gvs[emitted_insts_def, run_inst_seq_def, SF SFY_ss] >> NO_TAC) >>
   emitted_insts_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_close_tac
+  rewrite_tac[GSYM mk_inst_def] >>
+  simp[run_inst_seq_def, conversion_step_equations, clamp_step_equations,
+       clamp_assert_step, exec_pure2_def, exec_pure1_def, mk_inst_def,
+       eval_operand_def, lookup_var_update_var, fresh_var_name_eq] >>
+  pure_rewrite_tac[conversion_result_case_id] >>
+  TRY (simp[lookup_var_update_var, SF SFY_ss] >> NO_TAC) >>
+  ho_match_mp_tac conversion_assert_outcome >>
+  simp[lookup_var_update_var, fresh_var_name_eq, SF SFY_ss]
 QED
 
 Theorem compile_type_convert_12:
@@ -207,218 +221,95 @@ Theorem compile_type_convert_13:
        eval_operand op ss' = SOME result) ∨
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
-  (* Original proof: arm_tac; its definition is preserved above. *)
-  rpt strip_tac >> unfold_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> fs[]) >> gvs compile_defs >>
-  TRY (gvs[emitted_insts_def, run_inst_seq_def, SF SFY_ss] >> NO_TAC) >>
-  emitted_insts_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_close_tac
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_type_convert _ _ _ = _` mp_tac >>
+  simp_tac pure_ss [compile_type_convert_def, comp_bind_def, comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  drule load_bytestring_as_word_exec >>
+  disch_then (qspecl_then [`ss`,`w`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `ss1` strip_assume_tac) >>
+  gvs[comp_bind_def] >> rpt (pairarg_tac >> gvs[]) >>
+  rename1 `emit_op ISZERO [r] st1 = (z,st2)` >>
+  drule emit_op_ISZERO_correct >>
+  disch_then (qspecl_then [`x`,`ss1`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `ss2` strip_assume_tac) >>
+  qpat_assum `emit_op ISZERO [z] _ = _` (mp_then Any mp_tac emit_op_ISZERO_correct) >>
+  disch_then (qspecl_then [`bool_to_word (x = 0w)`,`ss2`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `ss3` strip_assume_tac) >>
+  imp_res_tac inst_extends_load_bytestring_as_word >>
+  imp_res_tac inst_extends_emit_op >>
+  `inst_extends st st2` by metis_tac[inst_extends_trans] >>
+  `run_inst_seq (emitted_insts st st2) ss = OK ss2` by
+    (irule run_inst_seq_compose_ok >> qexistsl [`ss1`,`st1`] >> simp[]) >>
+  `run_inst_seq (emitted_insts st st') ss = OK ss3` by
+    (irule run_inst_seq_compose_ok >> qexistsl [`ss2`,`st2`] >> simp[]) >>
+  metis_tac[]
 QED
 
 Theorem compile_type_convert_14:
-  ∀ v a b w ss st op st'.
-    compile_type_convert v (ConvBytestringToInt a b) st = (op, st') ∧
-    eval_operand v ss = SOME w ∧ fresh_vars_wrt st ss ⇒
-    ∃ ss' result.
-      (run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-       eval_operand op ss' = SOME result) ∨
+  !v a b n w ss st op st'.
+    compile_type_convert v (ConvBytestringToInt a b n) st = (op,st') /\
+    eval_operand v ss = SOME w /\ fresh_vars_wrt st ss ==>
+    ?ss' result.
+      (run_inst_seq (emitted_insts st st') ss = OK ss' /\
+       eval_operand op ss' = SOME result) \/
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
-  (* Original proof: arm_tac; its definition is preserved above. *)
-  rpt strip_tac >> unfold_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> fs[]) >> gvs compile_defs >>
-  TRY (gvs[emitted_insts_def, run_inst_seq_def, SF SFY_ss] >> NO_TAC) >>
-  emitted_insts_tac >>
-  (* Split before the shared prefix as in TASK_003, so every original
-     instruction stage is timed independently in its path Resume. *)
-  ALL_TAC >| [suspend "path0", suspend "path1",
-              suspend "path2", suspend "path3"]
-QED
-
-Resume compile_type_convert_14[path0]:
-  markerLib.RESUME_TAC >>
-  (* Twelve stages moved unchanged from the shared prefix. *)
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_close_tac
-QED
-
-Resume compile_type_convert_14[path1]:
-  markerLib.RESUME_TAC >>
-  (* Twelve stages moved unchanged from the shared prefix. *)
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_close_tac
-QED
-
-Resume compile_type_convert_14[path2]:
-  markerLib.RESUME_TAC >>
-  (* Twelve stages moved unchanged from the shared prefix. *)
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_close_tac
-QED
-
-Resume compile_type_convert_14[path3]:
-  markerLib.RESUME_TAC >>
-  (* Twelve stages moved unchanged from the shared prefix. *)
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_close_tac
-QED
-
-Finalise compile_type_convert_14
-
-Theorem compile_type_convert_15:
-  ∀ v w ss st op st'.
-    compile_type_convert v ConvBytestringToAddress st = (op, st') ∧
-    eval_operand v ss = SOME w ∧ fresh_vars_wrt st ss ⇒
-    ∃ ss' result.
-      (run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-       eval_operand op ss' = SOME result) ∨
-      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
-Proof
-  (* Original proof: arm_tac; its definition is preserved above. *)
-  rpt strip_tac >> unfold_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> fs[]) >> gvs compile_defs >>
-  TRY (gvs[emitted_insts_def, run_inst_seq_def, SF SFY_ss] >> NO_TAC) >>
-  emitted_insts_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_close_tac
+  rpt gen_tac >> strip_tac >> Cases_on `a` >>
+  qpat_x_assum `compile_type_convert _ _ _ = _` mp_tac >>
+  simp_tac pure_ss [compile_type_convert_def, comp_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  drule load_bytestring_as_word_exec >>
+  disch_then (qspecl_then [`ss`,`w`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `ss1` strip_assume_tac) >>
+  imp_res_tac inst_extends_load_bytestring_as_word >>
+  (Cases_on `n * 8 > b` >> gvs[comp_return_def]
+   >- (imp_res_tac inst_extends_compile_int_clamp >>
+       drule_all prefix_compile_int_clamp_exec >> simp[]) >>
+   metis_tac[])
 QED
 
 Theorem compile_type_convert_16:
-  ∀ v a b c w ss st op st'.
-    compile_type_convert v (ConvBytestringToDecimal a b c) st = (op, st') ∧
+  ∀ v a b c n w ss st op st'.
+    compile_type_convert v (ConvBytestringToDecimal a b c n) st = (op, st') ∧
     eval_operand v ss = SOME w ∧ fresh_vars_wrt st ss ⇒
     ∃ ss' result.
       (run_inst_seq (emitted_insts st st') ss = OK ss' ∧
        eval_operand op ss' = SOME result) ∨
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
-  (* Original proof: arm_tac; its definition is preserved above. *)
-  rpt strip_tac >> unfold_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> fs[]) >> gvs compile_defs >>
-  TRY (gvs[emitted_insts_def, run_inst_seq_def, SF SFY_ss] >> NO_TAC) >>
-  emitted_insts_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_close_tac
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_type_convert _ _ _ = _` mp_tac >>
+  simp_tac pure_ss [compile_type_convert_def, comp_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  drule load_bytestring_as_word_exec >>
+  disch_then (qspecl_then [`ss`,`w`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `ss1` strip_assume_tac) >>
+  imp_res_tac inst_extends_load_bytestring_as_word >>
+  Cases_on `n * 8 <= 168` >- (gvs[comp_return_def] >> metis_tac[]) >>
+  gvs[comp_return_def] >>
+  rename1 `load_bytestring_as_word v SAR st = ((r,k),st1)` >>
+  `inst_extends st1 st'` by
+    (gvs compile_defs >> simp[inst_extends_def, emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND]) >>
+  drule_all run_inst_seq_emit_extend >> disch_then SUBST1_TAC >>
+  gvs compile_defs >> emitted_insts_tac >>
+  qspecl_then [`st1`,`ss1`,`op`,`x`] mp_tac fresh_vars_wrt_eval_operand >>
+  simp[] >> disch_tac >> Cases_on `op` >> gvs[eval_operand_def] >>
+  TRY (rename1 `lookup_var input_name ss1 = SOME value` >>
+       `!j. st1.cs_next_var <= j ==> input_name <> STRING #"%" (toString j)` by
+         (rpt strip_tac >> first_x_assum drule >> simp[])) >>
+  rewrite_tac[GSYM mk_inst_def] >>
+  simp[run_inst_seq_def, conversion_step_equations, clamp_step_equations,
+       clamp_assert_step, exec_pure2_def, exec_pure1_def, mk_inst_def,
+       eval_operand_def, lookup_var_update_var, fresh_var_name_eq] >>
+  pure_rewrite_tac[conversion_result_case_id] >>
+  ho_match_mp_tac conversion_assert_outcome >>
+  simp[lookup_var_update_var, update_var_def, SF SFY_ss]
 QED
 
 Theorem compile_type_convert_17:
@@ -431,46 +322,51 @@ Theorem compile_type_convert_17:
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
   (* Original proof: arm_tac; its definition is preserved above. *)
-  rpt strip_tac >> unfold_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> fs[]) >> gvs compile_defs >>
-  TRY (gvs[emitted_insts_def, run_inst_seq_def, SF SFY_ss] >> NO_TAC) >>
-  emitted_insts_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_close_tac
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_type_convert _ _ _ = _` mp_tac >>
+  simp_tac pure_ss [compile_type_convert_def, comp_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  drule load_bytestring_as_word_exec >>
+  disch_then (qspecl_then [`ss`,`w`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `ss1` strip_assume_tac) >>
+  drule emit_conversion_shift_exec >>
+  disch_then (qspecl_then [`ss1`,`y`,`x`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `ss2` strip_assume_tac) >>
+  imp_res_tac inst_extends_load_bytestring_as_word >>
+  imp_res_tac inst_extends_emit_op >>
+  rename1 `load_bytestring_as_word v SHR st = ((r,k),st1)` >>
+  `run_inst_seq (emitted_insts st st') ss = OK ss2` by
+    (irule run_inst_seq_compose_ok >> qexistsl [`ss1`,`st1`] >> simp[]) >>
+  metis_tac[]
 QED
 
 Theorem compile_type_convert_18:
-  ∀ v a w ss st op st'.
-    compile_type_convert v (ConvBytestringCast a) st = (op, st') ∧
+  ∀ v a n w ss st op st'.
+    compile_type_convert v (ConvBytestringCast a n) st = (op, st') ∧
     eval_operand v ss = SOME w ∧ fresh_vars_wrt st ss ⇒
     ∃ ss' result.
       (run_inst_seq (emitted_insts st st') ss = OK ss' ∧
        eval_operand op ss' = SOME result) ∨
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
-  (* Original proof: arm_tac; its definition is preserved above. *)
-  rpt strip_tac >> unfold_tac >>
+  rpt strip_tac >> fs[compile_type_convert_def, LET_THM] >>
   rpt (BasicProvers.FULL_CASE_TAC >> fs[]) >> gvs compile_defs >>
   TRY (gvs[emitted_insts_def, run_inst_seq_def, SF SFY_ss] >> NO_TAC) >>
   emitted_insts_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_close_tac
+  qspecl_then [`st`,`ss`,`op`,`w`] mp_tac fresh_vars_wrt_eval_operand >>
+  simp[] >> disch_tac >> Cases_on `op` >> gvs[eval_operand_def] >>
+  TRY (rename1 `lookup_var input_name ss = SOME value` >>
+       `!j. st.cs_next_var <= j ==> input_name <> STRING #"%" (toString j)` by
+         (rpt strip_tac >> first_x_assum drule >> simp[])) >>
+  rewrite_tac[GSYM mk_inst_def] >>
+  simp[run_inst_seq_def, conversion_mload_step, clamp_step_equations,
+       clamp_assert_step, exec_read1_def, exec_pure2_def, exec_pure1_def,
+       mk_inst_def, eval_operand_def, lookup_var_update_var, fresh_var_name_eq] >>
+  pure_rewrite_tac[conversion_result_case_id] >>
+  ho_match_mp_tac conversion_assert_outcome >>
+  simp[lookup_var_update_var, update_var_def, SF SFY_ss]
 QED
 
 (* ConvFixedToBytestring — needs ALLOCA + MSTORE, separate proof *)

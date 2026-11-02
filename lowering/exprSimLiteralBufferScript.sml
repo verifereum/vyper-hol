@@ -319,6 +319,26 @@ Proof
   gvs[LENGTH_DROP] >> simp[TAKE_DROP]
 QED
 
+(* Execute the chunk's two instructions through the opcode interfaces. *)
+Theorem literal_add_mstore_seq[local]:
+  !ptr off value i j p s w. eval_operand ptr s = SOME w ==>
+    run_inst_seq
+      [mk_inst i ADD [ptr; Lit off] [p];
+       mk_inst j MSTORE [Var p; Lit value] []] s =
+    OK (mstore (w2n (w + off)) value (update_var p (w + off) s))
+Proof
+  rpt strip_tac >> rename1 `eval_operand pop s = SOME w` >>
+  `step_inst_base (mk_inst i ADD [pop; Lit off] [p]) s =
+    OK (update_var p (w + off) s)` by
+    (irule emitHelperPropsTheory.step_ADD >> simp[eval_operand_def]) >>
+  `step_inst_base (mk_inst j MSTORE [Var p; Lit value] [])
+      (update_var p (w + off) s) =
+    OK (mstore (w2n (w + off)) value (update_var p (w + off) s))` by
+    (irule emitHelperPropsTheory.step_MSTORE >>
+     simp[eval_operand_def, emitHelperPropsTheory.lookup_var_update_var]) >>
+  simp[run_inst_seq_def]
+QED
+
 Theorem literal_chunk_head_run[local]:
   !ptr off value sa dst sm sb s w.
     emit_op ADD [ptr; Lit off] sa = (dst,sm) /\
@@ -336,18 +356,20 @@ Proof
   rpt gen_tac >> strip_tac >>
   gvs[emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def, comp_bind_def, comp_ignore_bind_def,
       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
-  simp[exprLoweringPropsTheory.emitted_insts_def, exprLoweringPropsTheory.same_blocks_def, rich_listTheory.DROP_APPEND1,
-       exprLoweringPropsTheory.run_inst_seq_def,
-       venomExecSemanticsTheory.step_inst_base_def,
-       venomExecSemanticsTheory.exec_pure2_def,
-       venomExecSemanticsTheory.exec_write2_def, eval_operand_def,
-       venomExecSemanticsTheory.bind_outputs_def, emitHelperPropsTheory.lookup_var_update_var] >>
+  simp[exprLoweringPropsTheory.emitted_insts_def,
+       exprLoweringPropsTheory.same_blocks_def, rich_listTheory.DROP_APPEND1] >>
+  qexists_tac `mstore (w2n (w + off)) value
+    (update_var (STRING #"%" (toString sa.cs_next_var)) (w + off) s)` >>
+  conj_tac >- (irule literal_add_mstore_seq >> simp[]) >>
   conj_tac >- simp[mstore_def, update_var_def] >>
   conj_tac
   >- simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
           update_var_def, arithmeticTheory.MAX_DEF] >>
   simp[mstore_def, update_var_def] >>
-  rpt strip_tac >> gvs[not_fresh_at_def]
+  rpt strip_tac >> gvs[not_fresh_at_def] >>
+  `x <> STRING #"%" (toString sa.cs_next_var)` by
+    (first_x_assum irule >> simp[]) >>
+  simp[lookup_var_def, FLOOKUP_UPDATE]
 QED
 
 Theorem literal_operand_frame:
