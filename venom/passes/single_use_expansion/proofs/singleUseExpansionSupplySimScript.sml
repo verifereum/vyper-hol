@@ -4,7 +4,7 @@ Ancestors
   singleUseExpansionSupplyProofs singleUseExpansionDefs irSupply
   stateFrame stateEquiv venomExecProps venomExecProofs
   venomExecSemantics venomWf venomInst venomState sccpCorrectnessProofs
-  analysisSimDefs instIdxIndep
+  analysisSimDefs instIdxIndep execEquivParamProofs passSharedSubst
 
 (* Control indices are related separately by segment alignment. *)
 Definition sue_state_rel_def:
@@ -1159,4 +1159,125 @@ Proof
   >- metis_tac[terminator_step_inst_base_idx_norm0] >>
   simp[step_inst_inst_idx_indep] >>
   Cases_on `step_inst_base inst s` >> simp[exec_result_map_def]
+QED
+
+Theorem sue_lift_result_state_equiv[local]:
+  lift_result (state_equiv (COMPL P)) (execution_equiv (COMPL P))
+    (execution_equiv (COMPL P)) r r' ==>
+  sue_result_rel P r r'
+Proof
+  Cases_on `r` >> Cases_on `r'` >>
+  simp[lift_result_def, sue_result_rel_def, sue_term_rel_execution_equiv] >>
+  simp[state_equiv_def, execution_equiv_def, sue_state_rel_def, lookup_var_def] >>
+  metis_tac[]
+QED
+
+Theorem sue_step_inst_preserves:
+  sue_state_rel P s t /\
+  (!x. MEM (Var x) inst.inst_operands ==> x IN P) ==>
+  sue_result_rel P (step_inst fuel ctx inst s) (step_inst fuel ctx inst t)
+Proof
+  rpt strip_tac >>
+  `state_equiv (COMPL P) (s with vs_inst_idx := 0)
+                         (t with vs_inst_idx := 0)` by
+    simp[GSYM sue_state_rel_state_equiv] >>
+  `!x. MEM (Var x) inst.inst_operands ==>
+       lookup_var x (s with vs_inst_idx := 0) =
+       lookup_var x (t with vs_inst_idx := 0)` by
+    (gvs[sue_state_rel_def, lookup_var_def] >> metis_tac[]) >>
+  `sue_result_rel P (step_inst fuel ctx inst (s with vs_inst_idx := 0))
+                    (step_inst fuel ctx inst (t with vs_inst_idx := 0))` by
+    (irule sue_lift_result_state_equiv >>
+     irule step_inst_preserves_R_proof >>
+     simp[state_equiv_execution_equiv_valid_state_rel_proof]) >>
+  `sue_result_rel P
+     (exec_result_map (\u. u with vs_inst_idx := 0)
+       (step_inst fuel ctx inst (s with vs_inst_idx := 0)))
+     (exec_result_map (\u. u with vs_inst_idx := 0)
+       (step_inst fuel ctx inst (t with vs_inst_idx := 0)))` by simp[] >>
+  qpat_x_assum `sue_result_rel _ (exec_result_map _ _) _` mp_tac >>
+  pure_rewrite_tac[sue_step_inst_idx_norm] >> simp[]
+QED
+
+Theorem sue_step_inst_rewritten:
+  sue_state_rel P s t /\
+  (!x. MEM (Var x) inst.inst_operands ==> x IN P) /\
+  inst_wf inst /\ ~is_alloca_op inst.inst_opcode /\
+  inst.inst_opcode <> PARAM /\ inst.inst_opcode <> FMP_PARAM /\
+  inst.inst_opcode <> RETPC_PARAM /\ inst.inst_opcode <> PHI /\
+  LENGTH ops = LENGTH inst.inst_operands /\
+  (inst.inst_opcode = DRET ==>
+    parse_dret_shape (inst with inst_operands := ops) = parse_dret_shape inst) /\
+  (!i. i < LENGTH inst.inst_operands ==>
+    eval_operand (EL i ops) t = eval_operand (EL i inst.inst_operands) t) /\
+  (!i. i < LENGTH inst.inst_operands ==>
+    !lbl. EL i inst.inst_operands = Label lbl ==> EL i ops = Label lbl) /\
+  (inst.inst_opcode = LOG ==> HD ops = HD inst.inst_operands) ==>
+  sue_result_rel P (step_inst fuel ctx inst s)
+    (step_inst fuel ctx (inst with inst_operands := ops) t)
+Proof
+  strip_tac >> drule_all step_inst_operands_equiv >>
+  disch_then (qspecl_then [`fuel`, `ctx`] assume_tac) >>
+  simp[] >> irule sue_step_inst_preserves >> simp[]
+QED
+
+Theorem sue_expand_ops_supply_structure:
+  sue_expand_ops_supply dfg inst s inst.inst_operands 0 = (assigns,ops,s') ==>
+  LENGTH ops = LENGTH inst.inst_operands /\
+  (!i. i < LENGTH inst.inst_operands ==>
+    !lbl. EL i inst.inst_operands = Label lbl ==> EL i ops = Label lbl) /\
+  (inst.inst_opcode = LOG ==> HD ops = HD inst.inst_operands) /\
+  (inst.inst_opcode = DRET ==>
+    parse_dret_shape (inst with inst_operands := ops) = parse_dret_shape inst)
+Proof
+  strip_tac >>
+  drule sue_expand_ops_supply_operand_labels >> strip_tac >>
+  `LENGTH ops = LENGTH inst.inst_operands` by
+    metis_tac[listTheory.LENGTH_MAP] >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `EL i (MAP sue_operand_label ops) =
+       EL i (MAP sue_operand_label inst.inst_operands)` by simp[] >>
+      gvs[listTheory.EL_MAP, sue_operand_label_def] >>
+      Cases_on `EL i ops` >> gvs[sue_operand_label_def]) >>
+  `inst.inst_opcode = LOG \/ inst.inst_opcode = DRET ==>
+   HD ops = HD inst.inst_operands` by
+    (disch_tac >> Cases_on `inst.inst_operands`
+     >- gvs[sue_expand_ops_supply_def] >>
+     `?rest. ops = h::rest` by metis_tac[sue_expand_ops_supply_structural_head] >>
+     simp[]) >>
+  simp[] >> strip_tac >>
+  Cases_on `inst.inst_operands`
+  >- gvs[sue_expand_ops_supply_def, dretShapeDefsTheory.parse_dret_shape_def] >>
+  `?rest. ops = h::rest` by metis_tac[sue_expand_ops_supply_structural_head] >>
+  gvs[dretShapeDefsTheory.parse_dret_shape_def]
+QED
+
+Theorem sue_expand_ops_supply_step_sim:
+  ir_supply_inst_ok supply /\
+  sue_expand_ops_supply dfg inst supply inst.inst_operands 0 = (assigns,ops,supply') /\
+  P SUBSET set supply.irs_used_vars /\
+  (!v. MEM (Var v) inst.inst_operands ==> v IN P) /\
+  (!a v. MEM a assigns /\ a.inst_operands = [Var v] ==> v IN FDOM s.vs_vars) /\
+  sue_state_rel P s t /\ inst_wf inst /\
+  ~is_alloca_op inst.inst_opcode /\ ~sue_should_skip inst.inst_opcode ==>
+  ?u. run_insts fuel ctx assigns t = OK u /\ sue_state_rel P s u /\
+      u.vs_inst_idx = t.vs_inst_idx /\
+      sue_result_rel P (step_inst fuel ctx inst s)
+        (step_inst fuel ctx (inst with inst_operands := ops) u)
+Proof
+  strip_tac >> drule_all sue_expand_ops_supply_sim >>
+  disch_then (qspecl_then [`fuel`, `ctx`] strip_assume_tac) >>
+  qexists_tac `uu` >> simp[] >>
+  drule sue_expand_ops_supply_structure >> strip_tac >>
+  gvs[sue_should_skip_def, is_param_opcode_iff] >>
+  irule sue_step_inst_rewritten >> simp[] >>
+  rpt strip_tac >>
+  `eval_operand (EL i ops) uu = eval_operand (EL i inst.inst_operands) s` by
+    (fs[listTheory.LIST_REL_EL_EQN] >> metis_tac[]) >>
+  `eval_operand (EL i inst.inst_operands) s =
+   eval_operand (EL i inst.inst_operands) uu` by
+    (sym_tac >> irule sue_state_rel_eval_operand >> qexists_tac `P` >> simp[] >>
+     rpt strip_tac >> first_x_assum irule >>
+     simp[listTheory.MEM_EL] >> qexists_tac `i` >> simp[]) >> simp[]
 QED
