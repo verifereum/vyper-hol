@@ -15,9 +15,6 @@
  *
  * Unprovable as the definitions stand (for raw_call and the creates, once
  * expr_sim_pre's exclusion of them, below, is lifted):
- *   - compile_raw_log_sim and compile_selfdestruct_sim: compile_call
- *     lowers RawLog and SelfDestructTarget to INVALID, where the source
- *     can succeed.
  *   - compile_raw_call_sim and compile_raw_call_calldata_sim: the source
  *     raw_call runs the callee on the EVM even with the outcome oracle,
  *     where the lowered CALL/STATICCALL consumes an oracle outcome. With
@@ -33,6 +30,12 @@
  *     stmt_state_rel does not relate to the ALLOCA allocations, so
  *     expr_post's memory frame does not follow (#668, #636 Infrastructure
  *     row 2).
+ *
+ * RawLog, RawRevert and SelfDestructTarget are wired into compile_call.
+ * Their case lemmas remain admitted.  For SelfDestructTarget, expr_exit
+ * now covers HaltException by Halt with empty returndata only; full
+ * terminal effects correctness is the separate loweringHalt/e2e bridge's
+ * responsibility.
  *
  * expr_sim_pre excludes raw_call and the creates (~expr_has_evm_run e),
  * so compile_raw_call_sim, compile_raw_call_calldata_sim and

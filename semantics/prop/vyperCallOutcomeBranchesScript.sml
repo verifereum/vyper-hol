@@ -140,7 +140,7 @@ Proof
 QED
 
 (* Real request snapshots, not an unconstrained rq: at the continuation entry
-   the residual frame is unchanged outside the five observable/oracle fields.
+   the residual frame is unchanged outside the observable/oracle fields.
    This intentionally does not assert arbitrary adopted storage is preserved. *)
 Theorem checked_call_outcome_success_frame:
   take_call_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\

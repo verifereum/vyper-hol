@@ -121,6 +121,7 @@ QED
 
 Theorem updated_statement_storage_consumer:
   type_stmt env ret_ty s = SOME env' /\ runtime_storage_consistent env cx st /\
+  source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_stmt s) /\
   protected_storage_calls_preserve cx /\ protected_storage_creates_preserve cx /\
   oracle_storage_ok cx st /\

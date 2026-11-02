@@ -113,7 +113,7 @@ QED
 Theorem body_stmts_sim:
   !tops bindings ctx func cenv cx env env' ret_ty lctx RetQ ss es res es'.
     body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmts env ret_ty ss = SOME env' /\
     EVERY (stmt_exprs_ok cenv) ss /\
@@ -129,7 +129,7 @@ QED
 Theorem body_stmt_sim:
   !tops bindings ctx func cenv cx env env' ret_ty lctx RetQ s es res es'.
     body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\
     call_evaluation_safe cx (int_calls_stmt s) /\

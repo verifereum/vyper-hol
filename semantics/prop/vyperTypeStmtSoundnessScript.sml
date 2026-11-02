@@ -17,7 +17,7 @@ Ancestors
   vyperTypeExtCallSoundness vyperTypeGlobalLookupSoundness vyperTypeAssignContext vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness
   vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
   vyperEvalMisc vyperStatePreservation vyperAssignPreservesType vyperTypeStatePreservation
-  vyperTypeEvalSoundness
+  vyperSourceSupplyDefs vyperTypeEvalSoundness
 Libs
   wordsLib markerLib intLib
 
@@ -25,7 +25,7 @@ Libs
 
 Theorem eval_stmt_type_preservation_success:
   type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_stmt s) /\
   eval_stmt cx s st = (INL u, st') ==>
   state_well_typed st' /\ env_consistent env' cx st' /\ accounts_well_typed st'.accounts
@@ -37,7 +37,7 @@ QED
 
 Theorem eval_stmts_no_type_error:
   type_stmts env ret_ty ss = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_stmts ss) ==>
   no_type_error_eval (eval_stmts cx ss st)
 Proof
@@ -49,7 +49,7 @@ QED
 
 Theorem eval_stmts_type_preservation_success:
   type_stmts env ret_ty ss = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_stmts ss) /\
   eval_stmts cx ss st = (INL u, st') ==>
   state_well_typed st' /\ env_consistent env' cx st' /\ accounts_well_typed st'.accounts
@@ -61,7 +61,7 @@ QED
 
 Theorem eval_stmts_type_preservation_exception:
   type_stmts env ret_ty ss = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_stmts ss) /\
   eval_stmts cx ss st = (INR exn, st') ==>
   state_well_typed st' /\ stmt_error_ok env ret_ty (INR exn)
@@ -76,7 +76,7 @@ QED
 Theorem eval_stmts_preserves_state_and_accounts_well_typed:
   type_stmts env ret_ty ss = SOME env' /\ env_consistent env cx st /\
   state_well_typed st /\ context_well_typed cx /\
-  accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  accounts_well_typed st.accounts /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_stmts ss) /\
   eval_stmts cx ss st = (res,st') ==>
   state_well_typed st' /\ accounts_well_typed st'.accounts
@@ -87,7 +87,7 @@ Proof
 QED
 
 Theorem function_body_type_sound:
-  functions_well_typed cx /\ context_well_typed cx /\ accounts_well_typed st.accounts /\
+  functions_well_typed cx /\ context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\
   state_well_typed st /\ env_consistent env cx st /\
   call_evaluation_safe cx (int_calls_stmts body_stmts) /\
   type_stmts env ret_ty body_stmts = SOME env_after ==>

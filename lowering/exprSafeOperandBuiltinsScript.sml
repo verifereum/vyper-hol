@@ -459,6 +459,9 @@ Proof
     >- suspend "external"
   >~ [`as_stack_val rt (compile_create_call cfn cenv ck salted rof args sa)`]
     >- suspend "create"
+  >~ [`raw_log_topic_exprs _`] >- suspend "log"
+  >~ [`compile_raw_revert _ _`] >- suspend "revert"
+  >~ [`compile_selfdestruct _ _`] >- suspend "selfdestruct"
   >> suspend "send"
 QED
 
@@ -480,6 +483,29 @@ QED
 Resume compile_call_word_result_ok[create]:
   irule as_stack_val_word_result_ok >>
   metis_tac[compile_create_call_safe_operand]
+QED
+
+(* These system calls return a literal placeholder on every path, including
+   invalid arities. Split their argument shapes before destructing the lets. *)
+Resume compile_call_word_result_ok[log]:
+  Cases_on `args` >> gvs[word_result_ok_def] >> rename1 `list_CASE args1 _ _` >>
+  Cases_on `args1` >> gvs[word_result_ok_def] >> rename1 `list_CASE args2 _ _` >>
+  Cases_on `args2` >> gvs[word_result_ok_def] >>
+  rename1 `expr_type data_e = BaseT (BytesT (Fixed 32))` >>
+  Cases_on `expr_type data_e = BaseT (BytesT (Fixed 32))` >>
+  gvs[word_result_ok_def] >> rpt (pairarg_tac >> gvs[word_result_ok_def])
+QED
+
+Resume compile_call_word_result_ok[revert]:
+  Cases_on `args` >> gvs[word_result_ok_def] >> rename1 `list_CASE rest _ _` >>
+  Cases_on `rest` >> gvs[word_result_ok_def] >>
+  rpt (pairarg_tac >> gvs[word_result_ok_def])
+QED
+
+Resume compile_call_word_result_ok[selfdestruct]:
+  Cases_on `args` >> gvs[word_result_ok_def] >> rename1 `list_CASE rest _ _` >>
+  Cases_on `rest` >> gvs[word_result_ok_def] >>
+  rpt (pairarg_tac >> gvs[word_result_ok_def])
 QED
 
 Resume compile_call_word_result_ok[send]:

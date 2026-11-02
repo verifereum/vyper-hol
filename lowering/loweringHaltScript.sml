@@ -1713,6 +1713,10 @@ Proof
      tx.target = $=` by
     simp[FUN_EQ_THM, log_entry_equiv_def,
          log_entry_corresponds_concrete_event] >>
+  `accounts_agree cx
+     (process_deletions es.pending_deletions es.accounts)
+     (process_deletions es.pending_deletions s.vs_accounts)` by
+    (irule accounts_agree_process_deletions >> first_assum ACCEPT_TAC) >>
   gvs[state_rel_def, logs_rel_def, logs_correspond_def, LIST_REL_eq,
       finalize_pending_deletions_def, abstract_machine_from_state_def]
 QED

@@ -102,8 +102,8 @@ Proof
   drule compile_struct_literal_inv >> strip_tac >> gvs[] >>
   drule struct_literal_lookup_types >> strip_tac >>
   drule struct_literal_evaluated_layout >> strip_tac >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
-  `!e st. MEM e (MAP SND fields) /\ expr_sim_inv cenv cx env st ==>
+  `expr_sim_inv cenv cx env es /\ source_supply es` by gvs[expr_body_pre_def] >>
+  `!e st. MEM e (MAP SND fields) /\ expr_sim_inv cenv cx env st /\ source_supply st ==>
     expr_body_pre cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
     metis_tac[expr_body_pre_struct_field] >>
   `!e. MEM e (MAP SND fields) /\ nocalls ==> int_calls_expr e = []` by metis_tac[] >>
@@ -192,8 +192,8 @@ Resume compile_make_array_vv_case[tuple]:
   rw[expr_vv_case_def, expr_vv_sim_def] >>
   drule compile_tuple_literal_inv >> strip_tac >> gvs[] >>
   drule make_tuple_evaluated_layout >> strip_tac >> gvs[] >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
-  `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
+  `expr_sim_inv cenv cx env es /\ source_supply es` by gvs[expr_body_pre_def] >>
+  `!e st. MEM e args /\ expr_sim_inv cenv cx env st /\ source_supply st ==>
     expr_body_pre cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
     metis_tac[expr_body_pre_builtin_arg, int_calls_builtin_arg] >>
   `!e. MEM e args /\ nocalls ==> int_calls_expr e = []` by metis_tac[] >>
@@ -266,8 +266,8 @@ Resume compile_make_array_vv_case[array]:
   rw[expr_vv_case_def, expr_vv_sim_def] >>
   drule compile_array_literal_inv >> strip_tac >> gvs[] >>
   drule make_array_evaluated_layout >> strip_tac >> gvs[] >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
-  `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
+  `expr_sim_inv cenv cx env es /\ source_supply es` by gvs[expr_body_pre_def] >>
+  `!e st. MEM e args /\ expr_sim_inv cenv cx env st /\ source_supply st ==>
     expr_body_pre cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
     metis_tac[expr_body_pre_builtin_arg, int_calls_builtin_arg] >>
   `!e. MEM e args /\ nocalls ==> int_calls_expr e = []` by metis_tac[] >>

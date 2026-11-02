@@ -137,6 +137,7 @@ val checker_defs =
    well_typed_custom_error_def,
    type_stmt_def,
    stmt_no_fallthrough_def,
+   expr_no_fallthrough_def,
    stmt_no_control_escape_def,
    vyperValueTheory.evaluate_type_def,
    vyperASTTheory.bound_length_def,

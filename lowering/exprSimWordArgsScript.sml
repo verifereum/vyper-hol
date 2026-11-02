@@ -322,7 +322,7 @@ Proof
       qexists_tac `n` >> irule local_region_frame >>
       conj_tac >- (qexists_tac `func` >>
         gvs[stmt_state_rel_def, state_rel_def]) >>
-      qexistsl_tac [`sa`, `es1.scopes`, `t`] >> simp[]) 
+      qexistsl_tac [`sa`, `es1.scopes`, `t`] >> simp[])
   >- (irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
       qexists_tac `sa.cs_next_id` >> simp[]) >>
   qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = _ ==> _` irule >> simp[]

@@ -58,7 +58,7 @@ Definition integration_machine_snapshot_def:
     (lookup_account 11w am.accounts).balance = balance /\
     lookup_storage 1w (lookup_account 11w am.accounts).storage = persistent /\
     lookup_storage 1w (vfmExecution$lookup_transient_storage 11w am.tStorage) = transient /\
-    am.logs = logs
+    am.logs = logs /\ am.pending_deletions = []
 End
 val () = cv_auto_trans integration_machine_snapshot_def;
 
@@ -186,7 +186,7 @@ QED
 (* The complete rollback equality is certified separately from computable
    snapshots; CV does not decide equality of function-valued account maps. *)
 Theorem public_failure_whole_machine_rollback:
-  call_external orc gobs integration_machine tx = (INR exc,am,rqs) ==>
+  call_external orc gobs integration_machine tx = (INR exc,am,rqs) /\ exc <> HaltException ==>
   am = integration_machine
 Proof
   metis_tac[call_external_error_rollback]

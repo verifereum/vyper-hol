@@ -205,6 +205,7 @@ Definition run_deployment_def:
           ; gas_price := dt.gasPrice
           ; chain_id := dt.chainId
           ; is_creation := T
+           ; created_in_tx := T
           ; coinbase := 0w
           ; gas_limit := 0
           ; base_fee := 0
@@ -235,6 +236,7 @@ Definition call_trace_txn_def:
      ; gas_price := ct.gasPrice
      ; chain_id := ct.chainId
      ; is_creation := F
+      ; created_in_tx := F
      ; coinbase := 0w
      ; gas_limit := ct.gasLimit
      ; base_fee := 0
@@ -381,6 +383,7 @@ Definition run_call_def:
           ; gas_price := ct.gasPrice
           ; chain_id := ct.chainId
           ; is_creation := F
+           ; created_in_tx := F
           ; coinbase := 0w
           ; gas_limit := ct.gasLimit
           ; base_fee := 0
@@ -406,11 +409,12 @@ Definition raw_call_evm_def:
     case run_ext_call ct.sender ct.target ct.callData value_opt default_evm_gas_limit
                       am.accounts am.tStorage txParams of
     | NONE => (INR (Error $ RuntimeError "raw_call_evm"), am)
-    | SOME (success, returnData, accounts, tStorage, emitted_logs) =>
+    | SOME (success, returnData, accounts, tStorage, emitted_logs, deletions) =>
         let am' = am with <| accounts := accounts;
                             tStorage := tStorage;
-                            logs updated_by (λls. ls ++ emitted_logs) |> in
-        if success then (INL returnData, am')
+                            logs updated_by (λls. ls ++ emitted_logs);
+                            pending_deletions updated_by (APPEND deletions) |> in
+        if success then (INL returnData, finalize_pending_deletions am')
         else (INR (Error $ RuntimeError "raw_call_evm reverted"), am')
 End
 
@@ -546,7 +550,9 @@ Definition run_trace_def:
       res = if dt.deploymentSuccess then
               (* Set the bytecode in accounts after successful deployment *)
               case res of
-                INL am' => INL (am' with
+                INL am' => if IS_NONE (ALOOKUP am'.sources dt.deployedAddress)
+                  then INL am'
+                  else INL (am' with
                   accounts updated_by
                     (update_account dt.deployedAddress
                       ((lookup_account dt.deployedAddress am'.accounts)
@@ -557,7 +563,11 @@ Definition run_trace_def:
       res = case res of
               INL am' => INL (increment_account_nonce dt.deployer am')
             | INR e => INR e;
-      snss = (dt.deployedAddress,(dt.readsGas,sns))::snss;
+      snss = (case res of
+                INL am' =>
+                  if IS_SOME (ALOOKUP am'.sources dt.deployedAddress)
+                  then (dt.deployedAddress,(dt.readsGas,sns))::snss else snss
+              | INR _ => snss);
     in
       (snss, res)
    | RawDeployment dt =>
@@ -592,6 +602,9 @@ Definition run_trace_def:
         am = SND call_res in
        case FST call_res
        of (* TODO(test-semantics): decide whether AssertException should satisfy expected failure traces. *)
+        | INR HaltException =>
+            if ct.expectedOutput = SOME [] then INL am
+            else INR (Error $ RuntimeError "halt output mismatch")
        | INR ex => if IS_NONE ct.expectedOutput then INL am
                    else INR ex
        | INL v =>

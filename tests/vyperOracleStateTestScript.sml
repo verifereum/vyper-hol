@@ -1,12 +1,15 @@
-(* Record migration regressions refreshed for Send/ExtCall constructors.
- * The concrete zero-value Send to an empty account remains inert; ordinary
- * SOME Send consumes/records an outcome. Original claims are retained below. *)
+(* Record migration regressions refreshed for the current call AST. Concrete
+ * NONE with empty accounts remains inert; ordinary SOME Send consumes/records
+ * an outcome. Original pre-activation claims are retained below.
+ * ExtCall opts describe source-ordered keyword operands; these malformed
+ * no-target calls have no keywords and keep Call's final argument NONE. *)
 Theory vyperOracleStateTest
 Ancestors
   arithmetic integer words list option finite_map finite_set cv_type While
   vfmState[ignore_grammar] vfmContext[ignore_grammar] vfmExecution[ignore_grammar]
   vyperAST vyperValue vyperValueOperation vyperContext vyperEvmBoundary
   vyperState vyperInterpreter vyperSmallStep extCallOracle
+  vyperOracleInitialStateTest
 Libs
   cv_transLib wordsLib
 
@@ -255,7 +258,7 @@ QED
 
 Theorem oracle_empty_run_ext_call:
   run_ext_call 0w 0w [] (SOME 0) 0 empty_accounts tStorage txParams =
-    SOME (T, [], empty_accounts, tStorage, [])
+    SOME (T, [], empty_accounts, tStorage, [], [])
 Proof
   simp[run_ext_call_def, oracle_empty_call_precheck, oracle_empty_call_run] >>
   EVAL_TAC >> simp[]

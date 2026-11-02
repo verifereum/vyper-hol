@@ -56,7 +56,7 @@ Ancestors
   vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimMain
   exprReasonOperand
   vyperTypeValues vyperTyping vyperTypeDefaults stmtSimAssignTuple
-  vyperTypeEnvPreservation bodySimExprCases bodyStoragePreservation
+  vyperTypeEnvPreservation vyperSourceSupplyDefs vyperEvalSupply bodySimExprCases bodyStoragePreservation
   vyperCallOutcomeStorage vyperTypeStoragePreservation
   stmtSimAssignStorage supportedDecls vyperTypeContractStaticMaps
   vyperTypeContract compileVyper supportedTypes stmtSimAssignAttr
@@ -170,7 +170,7 @@ QED
 (* A statement's expression meets expr_body_pre. *)
 Theorem stmt_expr_body_pre:
   !cenv cx env e es calls.
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\ well_typed_expr env e /\
     ~supported_expr_exists
        (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
@@ -393,7 +393,7 @@ Theorem expr_sim_inv_stmt:
   !tops bindings cenv cx env ret_ty s env' es es1 lctx sa c sm.
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     supported_stmt tops bindings s /\
-    expr_sim_inv cenv cx env es /\ cenv.ce_alloca_locals /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\ cenv.ce_alloca_locals /\
     type_stmt env ret_ty s = SOME env' /\
     call_evaluation_safe cx (int_calls_stmt s) /\
     eval_stmt cx s es = (INL (), es1) /\
@@ -870,7 +870,7 @@ QED
 Theorem expr_body_pre_eval_result:
   !cenv cx env e es res es'.
     expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
-    expr_sim_inv cenv cx env es'
+    expr_sim_inv cenv cx env es' /\ source_supply es'
 Proof
   metis_tac[exprSimHypsTheory.expr_body_pre_eval_result]
 QED
@@ -879,7 +879,7 @@ Theorem expr_body_pre_eval:
   !cenv cx env e es res es'.
     expr_body_pre cenv cx env e es /\
     (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\
     !v. res = INL v ==> value_runtime_typed env (expr_type e) v
 Proof
   rpt strip_tac >>
@@ -913,7 +913,7 @@ Theorem body_assign_local_word[local]:
   !cx id e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'
    ty.
     body_expr_ok cx e /\ body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\
     type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
     call_evaluation_safe cx
@@ -1048,7 +1048,7 @@ Theorem body_assign_toplevel_word[local]:
   !cx src id e tops ctx func cenv env env' ret_ty lctx RetQ es res es'.
     body_expr_ok cx e /\ body_inv tops ctx cenv cx /\
     supported_scalar_target tops (src, id) /\ supported_expr tops e /\
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\
     type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget (src, id))) e) =
       SOME env' /\
     stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget (src, id))) e) /\
@@ -1542,7 +1542,7 @@ QED
 Theorem body_assign_tuple_locals[local]:
   !cx ids e tops ctx func cenv env env' ret_ty lctx RetQ es res es'.
     body_expr_ok cx e /\ body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
+    expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\ source_supply es /\
     type_stmt env ret_ty
       (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) =
       SOME env' /\
@@ -1670,7 +1670,7 @@ Theorem body_augassign_local[local]:
        place_type_value cx p s'4' = (INL ptv,t'3') ==>
        body_expr_ok cx e) /\
     body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\
     type_stmt env ret_ty (AugAssign ty (NameTarget id) bop e) = SOME env' /\
     stmt_exprs_ok cenv (AugAssign ty (NameTarget id) bop e) /\
     call_evaluation_safe cx
@@ -2033,8 +2033,10 @@ Proof
     (`push_scope es1 = (INL (), es1 with scopes updated_by CONS FEMPTY)` by
        simp[push_scope_def, return_def] >>
      metis_tac[]) >>
-  `expr_sim_inv cenv cx env es1` by
+  `expr_sim_inv cenv cx env es1 /\ source_supply es1` by
     (drule_all expr_body_pre_eval >> simp[]) >>
+  `source_supply (es1 with scopes updated_by CONS FEMPTY)` by
+    gvs[source_supply_def] >>
   drule expr_sim_inv_push_scope >> strip_tac >>
   rpt (qpat_x_assum `body_stmts_ok _ _`
          (strip_assume_tac o REWRITE_RULE [body_stmts_ok_def])) >>
@@ -2102,6 +2104,10 @@ Proof
      simp[Once evaluate_def, bind_def, ignore_bind_def]) >>
   `stmt_exprs_ok c = stmt_exprs_ok cenv` by
     metis_tac[stmt_exprs_ok_same_frame] >>
+  `source_supply es1` by
+    (qspecl_then [`cx`, `s`, `es`] mp_tac
+       (REWRITE_RULE [source_supply_action_def] (cj 1 eval_source_supply_mutual)) >>
+     simp[]) >>
   `expr_sim_inv c cx env1 es1` by
     (irule expr_sim_inv_stmt >> fs[body_inv_def] >>
      metis_tac[call_evaluation_safe_append_left]) >>
