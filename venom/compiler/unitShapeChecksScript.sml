@@ -348,7 +348,9 @@ Proof
              is_read0_opcode_def, label_positions_ok_def, is_label_operand_def,
              mk_inst_def] >>
         simp[Abbr `callee`, mk_raw_function_def, fn_entry_label_def,
-             entry_block_def, reserved_label_def]) >>
+             entry_block_def, reserved_label_def, mk_inst_def,
+             is_pseudo_def] >>
+        rw[] >> qexists_tac `[]` >> simp[]) >>
   simp[unit_shape_ok_def, entry_fn_first_def, fn_shape_ok_def,
        shape_probe_fn_def, mk_venom_context_def, mk_raw_function_def,
        fn_entry_label_def, entry_block_def, opaque_use_ok_def,
