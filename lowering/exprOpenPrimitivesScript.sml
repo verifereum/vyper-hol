@@ -7,7 +7,7 @@
  * TOP-LEVEL:
  *   emit_nonterminator_open, emit_op_nonterminator_open, new_block_open
  *                         — the emit steps that leave a block open
- *   compile_*_open        — names, literals, environment variables,
+ *   compile_*_open        — literals, environment variables, loads,
  *                           comparisons, safe arithmetic, binops, clamps,
  *                           subscripts, attributes, IfExp and pop
  *)
@@ -108,17 +108,6 @@ Proof
   drule emit_op_nonterminator_open >> simp[is_terminator_def]
 QED
 
-Theorem compile_name_vv_open:
-  !cenv ty id sa vv sb.
-    (?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar p sz)) \/
-    (?off sz. FLOOKUP cenv.ce_vars id = SOME (MemLoc off sz)) ==>
-    ~block_is_terminated sa /\ compile_name_vv cenv ty id sa = (vv,sb) ==>
-    ~block_is_terminated sb
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[compile_name_vv_def, comp_return_def] >> rpt strip_tac >> gvs[]
-QED
-
 Theorem compile_acc_open:
   !cfn cenv e item sa v sb.
     item <> Code /\ item <> Address /\
@@ -130,13 +119,26 @@ Proof
   drule emit_op_nonterminator_open >> simp[is_terminator_def]
 QED
 
-Theorem compile_ptr_load_open:
-  !ctor loc op sa v sb.
-    compile_ptr_load ctor loc op sa = (v,sb) ==>
+Theorem compile_imm_load_word_open:
+  !ctor imm op sa v sb.
+    compile_imm_load_word ctor imm op sa = (v,sb) ==>
     ~block_is_terminated sb
 Proof
-  rpt gen_tac >> Cases_on `ctor` >> Cases_on `loc` >>
-  simp[compile_ptr_load_def] >> strip_tac >>
+  rpt gen_tac >> Cases_on `ctor` >> Cases_on `imm` >>
+  simp[compile_imm_load_word_def, comp_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  drule_at (Pat `emit_op _ _ _ = (v,sb)`) emit_op_nonterminator_open >>
+  simp[is_terminator_def]
+QED
+
+Theorem compile_ptr_load_open:
+  !ctor imm loc op sa v sb.
+    compile_ptr_load ctor imm loc op sa = (v,sb) ==>
+    ~block_is_terminated sb
+Proof
+  rpt gen_tac >> Cases_on `loc = LocCode`
+  >- (simp[compile_ptr_load_def] >> metis_tac[compile_imm_load_word_open]) >>
+  Cases_on `loc` >> gvs[compile_ptr_load_def] >> strip_tac >>
   drule emit_op_nonterminator_open >> simp[is_terminator_def]
 QED
 

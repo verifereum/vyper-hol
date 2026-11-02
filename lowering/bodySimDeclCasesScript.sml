@@ -8,7 +8,7 @@
  * pointer.  The typing declares only a name not in env.var_types, and
  * ce_locals_declared (bodySim) binds no other local, so the name is
  * unbound (declared_name_unbound).  The loop's scope pop also rests on
- * bodySimStmtCases' GAP eval_stmts_popped_keys_indexed.
+ * bodySimStmtCases' eval_stmts_popped_keys_indexed.
  *
  * TOP-LEVEL:
  *   declared_name_unbound        — a declared name is unbound

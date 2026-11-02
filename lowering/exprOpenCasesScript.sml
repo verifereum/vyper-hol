@@ -4,7 +4,7 @@
  * TOP-LEVEL:
  *   compile_expr_name_open     — a local the typing knows is bound
  *   compile_expr_toplevel_open — a supported module variable that
- *                                evaluates is bound in ce_vars, by the
+ *                                evaluates is bound in ce_module_vars, by the
  *                                storage and transient relations
  *   compile_subscript_open, compile_supported_call_open,
  *   compile_struct_literal_body_open — the other compound cases
@@ -49,8 +49,8 @@ Theorem eval_toplevel_decl_bound:
     get_module_code cx src = SOME tops /\
     find_var_decl_by_name id tops = SOME (decl,key) /\
     eval_expr cx (TopLevelName ann (src,id)) es = (INL tv,es1) ==>
-    ?slot. FLOOKUP cenv.ce_vars (module_var_key (src,id)) = SOME (StorageLoc slot) \/
-           FLOOKUP cenv.ce_vars (module_var_key (src,id)) = SOME (TransientLoc slot)
+    ?slot. FLOOKUP cenv.ce_module_vars (src,id) = SOME (StorageLoc slot) \/
+           FLOOKUP cenv.ce_module_vars (src,id) = SOME (TransientLoc slot)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>

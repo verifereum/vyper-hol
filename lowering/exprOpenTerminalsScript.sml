@@ -4,7 +4,7 @@
  * TOP-LEVEL:
  *   compile_abi_decode_open_mutual, lower_abi_decode_open,
  *   lower_abi_encode_open — ABI decoding and encoding
- *   compile_word_copy_loop_open, compile_code_to_memory_open,
+ *   compile_word_copy_loop_open, compile_imm_copy_to_memory_open,
  *   compile_ensure_in_memory_open — copies (loops end with new_block)
  *   compile_intcall_open, compile_extcall_open, compile_send_open
  *                         — calls, their default-return and failure paths
@@ -41,23 +41,26 @@ Proof
   drule new_block_open >> simp[]
 QED
 
-Theorem compile_code_to_memory_open:
-  !src dst count sa u sb.
+Theorem compile_imm_copy_to_memory_open:
+  !n ctor imm src dst off sa u sb.
     ~block_is_terminated sa /\
-    compile_code_to_memory src dst count sa = (u,sb) ==>
+    compile_imm_copy_to_memory ctor imm src dst n off sa = (u,sb) ==>
     ~block_is_terminated sb
 Proof
-  rpt gen_tac >> simp[compile_code_to_memory_def] >>
-  IF_CASES_TAC >- (simp[comp_return_def] >> metis_tac[]) >>
-  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  drule compile_word_copy_loop_open >> simp[]
+  Induct >>
+  simp[compile_imm_copy_to_memory_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt gen_tac >> rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  last_x_assum (drule_at (Pat `compile_imm_copy_to_memory _ _ _ _ _ _ _ = _`)) >>
+  disch_then irule >>
+  drule_at (Pat `emit_void _ _ _ = _`) emit_void_terminated >>
+  simp[is_terminator_def]
 QED
 
 Theorem compile_ensure_in_memory_open:
-  !ptr loc bytes words ctor sa v sb.
+  !ptr loc bytes words ctor imm sa v sb.
     ~block_is_terminated sa /\
-    compile_ensure_in_memory ptr loc bytes words ctor sa = (v,sb) ==>
+    compile_ensure_in_memory ptr loc bytes words ctor imm sa = (v,sb) ==>
     ~block_is_terminated sb
 Proof
   rpt gen_tac >> Cases_on `loc`
@@ -96,7 +99,7 @@ Resume compile_ensure_in_memory_open[code]:
   simp[compile_ensure_in_memory_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>
   ntac 2 (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-  metis_tac[compile_alloc_buffer_open, compile_code_to_memory_open]
+  metis_tac[compile_alloc_buffer_open, compile_imm_copy_to_memory_open]
 QED
 
 Resume compile_ensure_in_memory_open[calldata]:
@@ -270,19 +273,6 @@ Proof
        comp_return_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
   drule new_block_open >> simp[]
-QED
-
-Theorem compile_dynarray_append_open:
-  !cenv base val_op scale size dty sty cap prim load store sa u sb.
-    ~is_terminator store /\
-    compile_dynarray_append cenv base val_op scale size dty sty cap prim
-      load store sa = (u,sb) ==>
-    ~block_is_terminated sb
-Proof
-  rpt gen_tac >>
-  simp[compile_dynarray_append_def, comp_bind_def, comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >>
-  drule emit_void_terminated >> simp[]
 QED
 
 Theorem compile_external_call_kwargs_open:

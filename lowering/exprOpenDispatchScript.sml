@@ -2,8 +2,8 @@
  * compile_expr keeps its block open: builtin and type-builtin dispatch
  *
  * TOP-LEVEL:
- *   compile_supported_builtin_dispatch_open,
- *   compile_supported_type_dispatch_open — every supported builtin
+ *   compile_dispatch_*_open, compile_type_dispatch_*_open — the
+ *     supported builtin and type-builtin forms, one lemma per group
  *   compile_builtin_body_open, compile_pop_body_open — the bodies
  *     compile_expr gives them
  *)
@@ -181,69 +181,6 @@ Proof
   Cases_on `item = Address`
   >- gvs[compile_acc_def] >>
   drule_all compile_acc_open >> simp[]
-QED
-
-Theorem compile_supported_type_dispatch_open:
-  !cfn tops cenv vty ty tb rty args sa vv sb.
-    supported_type_builtin_form tops vty tb rty args /\
-    ~block_is_terminated sa /\
-    (!v st. lower_value cfn cenv (expr_type (HD args)) (HD args) sa = (v,st) ==>
-      ~block_is_terminated st) /\
-    compile_type_builtin_dispatch_body cfn cenv vty ty tb rty args sa = (vv,sb) ==>
-    ~block_is_terminated sb
-Proof
-  rpt gen_tac >> Cases_on `tb`
-  >~ [`Convert`] >- metis_tac[compile_type_dispatch_convert_open]
-  >~ [`Empty`] >- metis_tac[compile_type_dispatch_constant_open]
-  >~ [`MaxValue`] >- metis_tac[compile_type_dispatch_constant_open]
-  >~ [`MinValue`] >- metis_tac[compile_type_dispatch_constant_open]
-  >~ [`Epsilon`] >- metis_tac[compile_type_dispatch_constant_open]
-  >~ [`AbiEncode`] >- metis_tac[compile_type_dispatch_abi_open]
-  >~ [`AbiDecode`] >- metis_tac[compile_type_dispatch_abi_open] >>
-  Cases_on `args` >> simp[supported_type_builtin_form_def] >>
-  rename1 `compile_type_builtin_dispatch_body _ _ _ _ _ _ (a::rest) _ = _` >> Cases_on `rest` >> simp[supported_type_builtin_form_def]
-QED
-
-Theorem compile_supported_builtin_dispatch_open:
-  !cfn tops cenv rty ty bi args sa vv sb.
-    supported_builtin_form tops rty bi args /\
-    (!aty e v st. MEM e args /\ lower_value cfn cenv aty e sa = (v,st) ==>
-      ~block_is_terminated st) /\
-    compile_builtin_dispatch_body cfn cenv rty ty bi args sa = (vv,sb) ==>
-    ~block_is_terminated sb
-Proof
-  rpt gen_tac >> Cases_on `bi`
-  >~ [`Not`] >- metis_tac[compile_dispatch_not_open]
-  >~ [`Neg`] >- metis_tac[compile_dispatch_terminal_open]
-  >~ [`Abs`] >- metis_tac[compile_dispatch_terminal_open]
-  >~ [`AddMod`] >- metis_tac[compile_dispatch_terminal_open]
-  >~ [`MulMod`] >- metis_tac[compile_dispatch_terminal_open]
-  >~ [`PowMod256`] >- metis_tac[compile_dispatch_terminal_open]
-  >~ [`Env`] >- metis_tac[compile_dispatch_terminal_open]
-  >~ [`BlockHash`] >- metis_tac[compile_dispatch_terminal_open]
-  >~ [`BlobHash`] >- metis_tac[compile_dispatch_terminal_open]
-  >~ [`ECRecover`] >- metis_tac[compile_dispatch_terminal_open]
-  >~ [`ECAdd`] >- metis_tac[compile_dispatch_terminal_open]
-  >~ [`ECMul`] >- metis_tac[compile_dispatch_terminal_open]
-  >~ [`Uint2Str`] >- metis_tac[compile_dispatch_terminal_open]
-  >~ [`CalldataSlice`] >- metis_tac[compile_dispatch_terminal_open]
-  >~ [`MakeArray elem bound`]
-    >- (Cases_on `elem` >> simp[supported_builtin_form_def] >>
-        strip_tac >> irule compile_dispatch_make_array_open >>
-        goal_assum (drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)) >>
-        gvs[] >> metis_tac[]) >>
-  Cases_on `args` >> simp[supported_builtin_form_def] >>
-  rename1 `compile_builtin_dispatch_body _ _ _ _ _ (arg_e::rest) _ = _` >>
-  Cases_on `rest` >> simp[supported_builtin_form_def]
-  >~ [`Bop op`] >- (rename1 `compile_builtin_dispatch_body _ _ _ _ _ (arg_e::arg2_e::rest) _ = _` >>
-      Cases_on `rest` >> simp[supported_builtin_form_def] >>
-      metis_tac[compile_dispatch_bop_open])
-  >~ [`AsWeiValue`] >- (strip_tac >> irule compile_dispatch_as_wei_value_open >>
-      goal_assum (drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)) >>
-      simp[] >> metis_tac[MEM]) >>
-  strip_tac >> irule compile_dispatch_acc_open >>
-  goal_assum (drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)) >>
-  simp[] >> metis_tac[MEM]
 QED
 
 Theorem compile_builtin_body_open:

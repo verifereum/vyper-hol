@@ -39,15 +39,6 @@ Proof
             cj 6 eval_mutual_scope_pop_effect]
 QED
 
-Theorem eval_base_place_popped_keys_indexed:
-  !cx e st res st'.
-    eval_base_place cx e st = (res,st') /\ popped_keys_indexed st.scopes ==>
-    popped_keys_indexed st'.scopes
-Proof
-  metis_tac[scope_pop_effect_popped_keys_indexed,
-            cj 7 eval_mutual_scope_pop_effect]
-QED
-
 Theorem eval_target_place_popped_keys_indexed:
   !cx e st res st'.
     eval_target_place cx e st = (res,st') /\ popped_keys_indexed st.scopes ==>

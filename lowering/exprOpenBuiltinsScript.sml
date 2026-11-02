@@ -3,7 +3,7 @@
  *
  * TOP-LEVEL:
  *   compile_*_open — arithmetic builtins, block/blob hashes, precompiles,
- *                    slice, uint2str, empty, and list/array membership
+ *                    slice, uint2str and empty
  *)
 
 Theory exprOpenBuiltins
@@ -184,55 +184,4 @@ Proof
   >- (drule emit_void_terminated >> simp[is_terminator_def]) >>
   irule compile_zero_words_open >> goal_assum (drule_at Any) >>
   drule compile_alloc_buffer_open >> simp[]
-QED
-
-Theorem compile_list_membership_in_open:
-  !needle xs sa r sb.
-    ~block_is_terminated sa /\ compile_list_membership_in needle xs sa = (r,sb) ==>
-    ~block_is_terminated sb
-Proof
-  rpt gen_tac >> Cases_on `xs` >- (simp[compile_list_membership_in_def, comp_return_def] >> metis_tac[]) >>
-  rename1 `compile_list_membership_in needle (x::rest)` >> Cases_on `rest` >>
-  simp[compile_list_membership_in_def, comp_bind_def] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >>
-  drule emit_op_nonterminator_open >> simp[is_terminator_def]
-QED
-
-Theorem compile_list_membership_notin_open:
-  !needle xs sa r sb.
-    ~block_is_terminated sa /\ compile_list_membership_notin needle xs sa = (r,sb) ==>
-    ~block_is_terminated sb
-Proof
-  rpt gen_tac >> Cases_on `xs` >- (simp[compile_list_membership_notin_def, comp_return_def] >> metis_tac[]) >>
-  rename1 `compile_list_membership_notin needle (x::rest)` >> Cases_on `rest` >>
-  simp[compile_list_membership_notin_def, comp_bind_def] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >>
-  drule emit_op_nonterminator_open >> simp[is_terminator_def]
-QED
-
-Theorem compile_array_membership_loop_open:
-  !needle arr len elem offset load is_in sa r sb.
-    compile_array_membership_loop needle arr len elem offset load is_in sa = (r,sb) ==>
-    ~block_is_terminated sb
-Proof
-  rpt gen_tac >>
-  simp[compile_array_membership_loop_def, comp_bind_def, comp_ignore_bind_def] >>
-  ntac 8 (pairarg_tac >> simp[]) >>
-  ntac 8 (pairarg_tac >> simp[]) >>
-  ntac 8 (pairarg_tac >> simp[]) >>
-  ntac 7 (pairarg_tac >> simp[]) >> Cases_on `is_in` >>
-  simp[comp_return_def] >> strip_tac >> gvs[]
-  >- (drule new_block_open >> simp[]) >>
-  drule emit_op_nonterminator_open >> simp[is_terminator_def]
-QED
-
-Theorem compile_var_array_membership_open:
-  !cenv needle arr ty is_in sa r sb.
-    compile_var_array_membership cenv needle arr ty is_in sa = (r,sb) ==>
-    ~block_is_terminated sb
-Proof
-  rpt gen_tac >>
-  simp[compile_var_array_membership_def, comp_bind_def, comp_ignore_bind_def] >>
-  ntac 2 (pairarg_tac >> simp[]) >> strip_tac >>
-  drule compile_array_membership_loop_open >> simp[]
 QED

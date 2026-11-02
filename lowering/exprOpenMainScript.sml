@@ -57,11 +57,12 @@ Proof
 QED
 
 Resume compile_expr_open_general[toplevel]:
-  PairCases_on `p` >>
+  rename1 `TopLevelName _ nsid` >> PairCases_on `nsid` >>
   irule compile_expr_toplevel_open >>
   goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
   gvs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
-      body_inv_def] >> metis_tac[]
+      body_inv_def] >>
+  qexistsl_tac [`cx`, `es`, `es1`, `tops`, `tv`] >> simp[]
 QED
 
 Resume compile_expr_open_general[builtin]:
