@@ -96,6 +96,112 @@ Proof
   first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
+(* ===== The label, PARAM and PHI facts the source shape implies ===== *)
+
+Theorem bb_well_formed_terminator_last[local]:
+  bb_well_formed bb /\ MEM inst bb.bb_instructions /\
+  is_terminator inst.inst_opcode ==>
+  inst = LAST bb.bb_instructions
+Proof
+  rw[bb_well_formed_def, MEM_EL] >>
+  `n = PRE (LENGTH bb.bb_instructions)` by metis_tac[] >>
+  simp[LAST_EL]
+QED
+
+(* Outside INVOKE and PHI, a label operand is a jump target or LowerDload's
+   "code_end". *)
+Theorem label_positions_ok_label[local]:
+  label_positions_ok inst /\ MEM (Label l) inst.inst_operands /\
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> PHI ==>
+  is_terminator inst.inst_opcode \/ l = "code_end"
+Proof
+  simp[label_positions_ok_def] >>
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
+  every_case_tac >> gvs[EVERY_MEM] >>
+  metis_tac[stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem source_fn_label_refs_ok[local]:
+  wf_function fn /\ EVERY inst_shape_ok (fn_insts fn) /\
+  EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts fn) ==>
+  fn_label_refs_ok fn
+Proof
+  rw[fn_label_refs_ok_def, EVERY_MEM] >>
+  `label_positions_ok inst /\ inst.inst_opcode <> PHI` by
+    (res_tac >> fs[inst_shape_ok_def, raw_opcode_ok_def]) >>
+  drule_all label_positions_ok_label >> strip_tac
+  >- (disj1_tac >>
+      gvs[fn_insts_def, fn_insts_blocks_MEM, wf_function_def,
+          fn_succs_closed_def] >>
+      first_x_assum irule >> qexists_tac `bb` >> simp[] >>
+      `inst = LAST bb.bb_instructions` by
+        metis_tac[bb_well_formed_terminator_last] >>
+      Cases_on `bb.bb_instructions` >> gvs[] >>
+      simp[bb_succs_def, get_successors_def, MEM_MAP, MEM_FILTER,
+           PULL_EXISTS] >>
+      qexists_tac `Label l` >> simp[get_label_def]) >>
+  simp[reserved_label_def]
+QED
+
+(* With no PHI, a block whose pseudos form a prefix and that starts with no
+   parameter has no parameter at all. *)
+Theorem pseudos_prefix_no_params[local]:
+  pseudos_prefix bb /\
+  EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions /\
+  get_params bb.bb_instructions = [] ==>
+  EVERY (\i. ~is_param_opcode i.inst_opcode) bb.bb_instructions
+Proof
+  rw[pseudos_prefix_def, EVERY_EL] >> CCONTR_TAC >> fs[] >>
+  `is_pseudo (EL 0 bb.bb_instructions).inst_opcode` by
+    (Cases_on `n` >> fs[]
+     >- (Cases_on `(EL 0 bb.bb_instructions).inst_opcode` >>
+         gvs[is_pseudo_def, is_param_opcode_def]) >>
+     first_x_assum irule >> qexists_tac `SUC n'` >> simp[] >>
+     Cases_on `(EL (SUC n') bb.bb_instructions).inst_opcode` >>
+     gvs[is_pseudo_def, is_param_opcode_def]) >>
+  `0 < LENGTH bb.bb_instructions` by simp[] >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[] >>
+  Cases_on `bb.bb_instructions` >> gvs[get_params_def, AllCaseEqs()] >>
+  Cases_on `h.inst_opcode` >> gvs[is_pseudo_def, is_param_opcode_def]
+QED
+
+Theorem o1_source_unit_extras:
+  unit_wf u /\ o1_source_unit_ok u ==>
+  unit_label_refs_ok u /\ unit_entry_no_params u /\ unit_first_block_no_phi u
+Proof
+  strip_tac >>
+  `!fn. MEM fn u.cu_context.ctx_functions ==>
+        wf_function fn /\ fn_shape_ok fn /\
+        EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts fn)` by
+    gvs[unit_wf_def, venom_wf_def, o1_source_unit_ok_def, unit_shape_ok_def,
+        EVERY_MEM] >>
+  rpt conj_tac
+  >- (simp[unit_label_refs_ok_def, EVERY_MEM] >> rpt strip_tac >>
+      irule source_fn_label_refs_ok >> gvs[fn_shape_ok_def] >> metis_tac[])
+  >- (simp[unit_entry_no_params_def] >> rpt strip_tac >>
+      `fn = HD u.cu_context.ctx_functions` by
+        (fs[o1_source_unit_ok_def, unit_shape_ok_def, entry_fn_first_def] >>
+         drule unit_wf_distinct_fn_names >>
+         gvs[ctx_fn_names_def] >> strip_tac >> gvs[MEM_MAP] >>
+         metis_tac[]) >>
+      first_x_assum drule >>
+      fs[o1_source_unit_ok_def, unit_shape_ok_def] >>
+      rw[fn_shape_ok_def, wf_function_def, fn_has_entry_def,
+         entry_fn_no_params_def] >>
+      Cases_on `fn.fn_blocks` >> gvs[fn_insts_def, fn_insts_blocks_def] >>
+      gvs[fn_insts_blocks_MEM, EVERY_MEM, no_param_insts_def,
+          fn_pseudos_prefix_def, raw_opcode_ok_def] >>
+      `EVERY (\i. ~is_param_opcode i.inst_opcode) h.bb_instructions` by
+        (irule pseudos_prefix_no_params >> gvs[EVERY_MEM] >>
+         rpt strip_tac >> res_tac >> fs[]) >>
+      gvs[EVERY_MEM] >> metis_tac[]) >>
+  simp[unit_first_block_no_phi_def, EVERY_MEM, first_block_no_phi_def] >>
+  rpt strip_tac >> first_x_assum drule >>
+  rw[wf_function_def, fn_has_entry_def, fn_insts_def, EVERY_MEM,
+     raw_opcode_ok_def] >>
+  Cases_on `fn.fn_blocks` >> gvs[fn_insts_blocks_def] >> metis_tac[]
+QED
+
 Theorem entry_shape_from_members:
   entry_fn_first C /\ EVERY (o1_fn_shape C) C.ctx_functions ==>
   entry_fn_no_ret (HD C.ctx_functions) /\

@@ -24,17 +24,13 @@ End
 (* ===== S4: semantic forward simulation ===== *)
 
 (* S4 -- Milestone 3, from the per-pass contracts.
- * Premises added to the original admission: the source's non-INVOKE label
- * operands are local (unit_label_refs_ok), which unit_wf does not give for
- * PHI; its entry function has no PARAM (unit_entry_no_params); no
- * function has a PHI in its first block (unit_first_block_no_phi); and
- * the initial state's dynamic-memory pointer is its initial free-memory
- * pointer (o1_run_state_ok), as the entry state has it. *)
+ * Premise added to the original admission: the initial state's
+ * dynamic-memory pointer is its initial free-memory pointer
+ * (o1_run_state_ok), as the entry state has it. *)
 Theorem run_venom_pipeline_correct:
   !rpolicy unit out vs.
     o1_pipeline rpolicy unit = SOME out /\
-    o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
-    unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
+    o1_source_unit_ok unit /\
     o1_run_state_ok vs /\
     raw_unit_memory_ok unit.cu_context vs
     ==>
@@ -51,8 +47,7 @@ QED
 Theorem run_venom_pipeline_mem_inv:
   !rpolicy unit out vs.
     o1_pipeline rpolicy unit = SOME out /\
-    o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
-    unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
+    o1_source_unit_ok unit /\
     o1_run_state_ok vs /\
     raw_unit_memory_ok unit.cu_context vs
     ==>
@@ -94,14 +89,10 @@ QED
 
 (* ===== S6: output shape without new compiler checks ===== *)
 
-(* S6 -- Milestone 3, from the per-pass contracts.
- * Premises added from the original admission: unit_label_refs_ok,
- * unit_entry_no_params and unit_first_block_no_phi, as S4. *)
+(* S6 -- Milestone 3, from the per-pass contracts. *)
 Theorem run_venom_pipeline_output_shape:
   !rpolicy unit out.
-    o1_pipeline rpolicy unit = SOME out /\ o1_source_unit_ok unit /\
-    unit_label_refs_ok unit /\ unit_entry_no_params unit /\
-    unit_first_block_no_phi unit
+    o1_pipeline rpolicy unit = SOME out /\ o1_source_unit_ok unit
     ==> unit_shape_ok out.po_unit
 Proof
   rpt strip_tac >> fs[o1_pipeline_def] >>
