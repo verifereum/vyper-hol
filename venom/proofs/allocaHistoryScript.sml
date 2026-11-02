@@ -114,6 +114,73 @@ Proof
   metis_tac[ALL_DISTINCT_EL_IMP, EL_MAP, LENGTH_MAP]
 QED
 
+Theorem history_fresh_insert[local]:
+  !func s bb inst n.
+    fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    inst.inst_opcode = ALLOCA /\ FLOOKUP s.vs_allocas inst.inst_id = NONE ==>
+    alloca_history func
+      (s with <|vs_allocas := s.vs_allocas |+ (inst.inst_id,(s.vs_alloca_next,n));
+                vs_inst_idx := SUC s.vs_inst_idx|>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM bb func.fn_blocks` by metis_tac[history_lookup_block_mem] >>
+  fs[alloca_history_def, alloca_inv_def, alloca_next_valid_def] >>
+  simp[alloca_history_def] >> conj_tac
+  >- (rw[alloca_block_order_def, FLOOKUP_UPDATE] >>
+      Cases_on `inst.inst_id = later.inst_id`
+      >- (`bb = bb' /\ s.vs_inst_idx = j` by
+            metis_tac[history_site_position_unique] >>
+          gvs[] >>
+          `IS_SOME (FLOOKUP s.vs_allocas earlier.inst_id)` by metis_tac[] >>
+          Cases_on `FLOOKUP s.vs_allocas earlier.inst_id` >> gvs[] >>
+          PairCases_on `x` >> gvs[] >>
+          `inst.inst_id <> earlier.inst_id` by metis_tac[optionTheory.NOT_NONE_SOME] >>
+          simp[] >> metis_tac[]) >>
+      gvs[] >>
+      `?a m. FLOOKUP s.vs_allocas earlier.inst_id = SOME (a,m) /\ a + m <= b` by
+        metis_tac[alloca_block_order_def] >>
+      `inst.inst_id <> earlier.inst_id` by metis_tac[optionTheory.NOT_NONE_SOME] >>
+      simp[] >> metis_tac[]) >>
+  rw[FLOOKUP_UPDATE] >>
+  Cases_on `k = s.vs_inst_idx`
+  >- (gvs[] >> metis_tac[optionTheory.SOME_11]) >>
+  `k < s.vs_inst_idx` by decide_tac >> metis_tac[]
+QED
+
+Theorem history_allocated_advance[local]:
+  !func s bb inst.
+    alloca_history func s /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    IS_SOME (FLOOKUP s.vs_allocas inst.inst_id) ==>
+    alloca_history func (s with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rw[alloca_history_def] >>
+  Cases_on `k = s.vs_inst_idx`
+  >- (gvs[] >> metis_tac[optionTheory.SOME_11]) >>
+  `k < s.vs_inst_idx` by decide_tac >> metis_tac[]
+QED
+
+Theorem history_exec_alloca[local]:
+  !func s bb inst size t.
+    fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\ inst.inst_opcode = ALLOCA /\
+    exec_alloca inst s size = OK t ==>
+    alloca_history func (t with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[exec_alloca_def, AllCaseEqs()]
+  >- (drule_all history_fresh_insert >>
+      disch_then (qspec_then `w2n size'` mp_tac) >>
+      simp[alloca_history_def, update_var_def] >> metis_tac[]) >>
+  `IS_SOME (FLOOKUP s.vs_allocas inst.inst_id)` by simp[] >>
+  drule_all history_allocated_advance >>
+  simp[alloca_history_def, update_var_def] >> metis_tac[]
+QED
+
 Theorem alloca_history_step:
   !func s bb inst fuel ctx t.
     fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
