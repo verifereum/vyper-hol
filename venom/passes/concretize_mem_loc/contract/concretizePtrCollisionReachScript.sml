@@ -753,3 +753,88 @@ Proof
   gvs[collision_config_at_def, allocas_from_def] >>
   EVAL_TAC
 QED
+
+Theorem collision_raw_invoke_sources:
+  MEM q collision_raw_configs /\ q.cc_inst.inst_opcode = INVOKE ==>
+  q = collision_rc2 \/ q = collision_rc7
+Proof
+  simp[collision_raw_configs_def] >> strip_tac >> gvs[] >>
+  gvs[collision_rc_instructions, mk_inst_def]
+QED
+
+Theorem collision_raw_invoke_next:
+  MEM q collision_raw_configs /\ q.cc_inst.inst_opcode = INVOKE /\
+  step_inst fuel collision_ctx q.cc_inst q.cc_state = OK s' /\
+  active_inst q.cc_fn inst' (s' with vs_inst_idx := SUC q.cc_state.vs_inst_idx) ==>
+  ?r. MEM r collision_raw_configs /\ r.cc_fn = q.cc_fn /\
+      r.cc_inst = inst' /\
+      r.cc_state = (s' with vs_inst_idx := SUC q.cc_state.vs_inst_idx)
+Proof
+  rpt strip_tac >> drule_all collision_raw_invoke_sources >> strip_tac >>
+  gvs[] >>
+  Cases_on `fuel = 0` >> fs[collision_raw_call_results] >>
+  gvs[collision_rc_states, collision_rc_functions,
+    collision_raw_call_a_def, collision_raw_call_b_def,
+    collision_active_main, collision_main_bb_def] >>
+  simp[collision_raw_configs_def] >>
+  simp[collision_rc_states, collision_rc_functions, collision_rc_instructions,
+    collision_raw_call_a_def, collision_raw_call_b_def,
+    collision_raw_load_def, collision_main_def, mk_raw_function_def,
+    LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM]
+QED
+
+Definition collision_raw_at_def:
+  collision_raw_at fn inst s <=>
+  ?stk PG G tn. collision_raw_envelope stk PG G tn fn inst s
+End
+
+Theorem collision_raw_at_rows:
+  collision_raw_at fn inst s <=>
+  ?q. MEM q collision_raw_configs /\ q.cc_fn = fn /\
+      q.cc_inst = inst /\ q.cc_state = s
+Proof
+  simp[collision_raw_at_def, collision_raw_envelope_def,
+    collision_config_at_def] >> metis_tac[]
+QED
+
+Theorem collision_raw_at_next:
+  collision_raw_at fn inst s /\ active_inst fn inst s /\
+  ~is_terminator inst.inst_opcode /\ step_inst fuel collision_ctx inst s = OK s' /\
+  active_inst fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) ==>
+  collision_raw_at fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (simp[collision_raw_at_rows] >> rpt strip_tac >> gvs[] >>
+      drule_all collision_raw_invoke_next >> metis_tac[]) >>
+  simp[collision_raw_at_def] >> rpt strip_tac >>
+  drule_all collision_envelope_next >> metis_tac[]
+QED
+
+Theorem collision_raw_envelope_all:
+  !vs0 ctx fn inst s. raw_reachable vs0 ctx fn inst s ==>
+  vs0 = collision_start /\ ctx = collision_ctx ==> collision_raw_at fn inst s
+Proof
+  ho_match_mp_tac raw_reachable_ind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[] >> simp[collision_raw_at_def,
+        collision_raw_envelope_def] >>
+      qexistsl_tac [`[]`, `[]`, `FEMPTY`, `entry_taint`, `collision_rc0`] >>
+      simp[collision_raw_configs_def] >>
+      metis_tac[collision_source_entry_inv])
+  >- (rpt strip_tac >> gvs[] >> metis_tac[collision_raw_at_next])
+  >- (rpt strip_tac >> gvs[collision_raw_at_def] >>
+      drule_all collision_envelope_block >> metis_tac[]) >>
+  rpt strip_tac >> gvs[collision_raw_at_def] >>
+  drule_all collision_envelope_call >> metis_tac[]
+QED
+
+Theorem collision_source_memory_invariant:
+  mem_inv raw_mem_ok collision_ctx collision_start
+Proof
+  simp[mem_inv_def] >> qexists_tac `raw_reachable collision_start` >>
+  conj_tac
+  >- (irule raw_reachable_package >>
+      metis_tac[collision_source_entry]) >>
+  rpt strip_tac >> drule collision_raw_envelope_all >> simp[] >>
+  strip_tac >> fs[collision_raw_at_def] >>
+  drule collision_envelope_memory >> simp[]
+QED
