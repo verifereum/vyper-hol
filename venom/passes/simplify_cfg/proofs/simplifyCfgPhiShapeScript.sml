@@ -471,3 +471,93 @@ Proof
     (irule pred_labels_lookup_edge >> metis_tac[]) >>
   gvs[merge_blocks_succs]
 QED
+
+Theorem bypass_terminator_phi[local]:
+  (if ~is_terminator i.inst_opcode then i
+   else canon_jnz_inst (subst_label_inst old new i)).inst_opcode = PHI ==>
+  (if ~is_terminator i.inst_opcode then i
+   else canon_jnz_inst (subst_label_inst old new i)) = i /\
+  i.inst_opcode = PHI
+Proof
+  Cases_on `is_terminator i.inst_opcode` >> simp[] >> strip_tac >>
+  `canon_jnz_inst (subst_label_inst old new i) = subst_label_inst old new i` by
+    (irule canon_jnz_inst_not_jmp >> simp[]) >>
+  gvs[subst_label_inst_def, is_terminator_def]
+QED
+
+Theorem do_merge_jump_phi_origin[local]:
+  ALL_DISTINCT (fn_labels f) /\
+  lookup_block a.bb_label f.fn_blocks = SOME a /\
+  do_merge_jump f a b lm = SOME (g,lm') /\
+  MEM bb g.fn_blocks /\ MEM i bb.bb_instructions /\ i.inst_opcode = PHI ==>
+  ?orig oi. MEM orig f.fn_blocks /\ orig.bb_label = bb.bb_label /\
+    MEM oi orig.bb_instructions /\ oi.inst_opcode = PHI /\
+    i = (if MEM orig.bb_label (bb_succs b) then
+      update_phi_bypass a.bb_label b.bb_label oi else oi)
+Proof
+  strip_tac >>
+  `MEM a f.fn_blocks` by metis_tac[lookup_block_member_label] >>
+  qpat_x_assum `do_merge_jump f a b lm = _` mp_tac >>
+  simp[do_merge_jump_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  rename1 `lookup_block target_lbl f.fn_blocks = SOME target` >>
+  `MEM target f.fn_blocks /\ target.bb_label = target_lbl` by
+    metis_tac[lookup_block_member_label] >>
+  qpat_x_assum `MEM bb _` mp_tac >>
+  simp[replace_block_def, remove_block_def, MEM_MAP, MEM_FILTER] >>
+  strip_tac >> gvs[] >> rename1 `MEM orig f.fn_blocks` >>
+  Cases_on `target.bb_label = a.bb_label` >>
+  gvs[] >> Cases_on `orig.bb_label = a.bb_label` >>
+  gvs[MEM_MAP, update_phi_bypass_opcode]
+  >- (drule bypass_terminator_phi >> strip_tac >>
+      qexistsl_tac [`a`, `inst`] >> simp[])
+  >- (qexistsl_tac [`orig`, `i`] >> simp[])
+  >- (drule bypass_terminator_phi >> strip_tac >>
+      qexistsl_tac [`a`, `inst`] >> simp[]) >>
+  Cases_on `orig.bb_label = target.bb_label` >>
+  gvs[MEM_MAP, update_phi_bypass_opcode]
+  >- (rename1 `MEM oi target.bb_instructions` >>
+      qexistsl_tac [`target`, `oi`] >> simp[]) >>
+  qexistsl_tac [`orig`, `i`] >> simp[]
+QED
+
+Theorem do_merge_jump_phi_preds:
+  ALL_DISTINCT (fn_labels f) /\
+  EVERY (\bb. bb_well_formed bb) f.fn_blocks /\
+  EVERY inst_wf (fn_insts f) /\
+  EVERY label_positions_ok (fn_insts f) /\
+  (!bb i l. MEM bb f.fn_blocks /\ MEM i bb.bb_instructions /\
+    i.inst_opcode = PHI /\ MEM (Label l) i.inst_operands ==>
+    MEM l (pred_labels f bb.bb_label)) /\
+  lookup_block a.bb_label f.fn_blocks = SOME a /\
+  lookup_block b.bb_label f.fn_blocks = SOME b /\
+  can_bypass_jump f a b /\
+  do_merge_jump f a b lm = SOME (g,lm') ==>
+  !bb i l. MEM bb g.fn_blocks /\ MEM i bb.bb_instructions /\
+    i.inst_opcode = PHI /\ MEM (Label l) i.inst_operands ==>
+    MEM l (pred_labels g bb.bb_label)
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `a.bb_label <> b.bb_label` by
+    metis_tac[can_bypass_jump_source_distinct] >>
+  drule_all do_merge_jump_phi_origin >>
+  disch_then (qx_choose_then `orig` (qx_choose_then `oi` strip_assume_tac)) >>
+  `inst_wf oi` by
+    metis_tac[ctxLookupAgreeHelpersTheory.EVERY_fn_block, EVERY_MEM] >>
+  `phi_well_formed oi.inst_operands` by gvs[inst_wf_def] >>
+  `MEM bb.bb_label (fn_labels g)` by
+    (simp[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `!k. MEM (Label k) oi.inst_operands ==>
+    MEM (if k = b.bb_label then a.bb_label else k)
+      (pred_labels g bb.bb_label)` by
+    (rpt strip_tac >> irule do_merge_jump_pred_labels >> metis_tac[]) >>
+  Cases_on `MEM orig.bb_label (bb_succs b)` >> gvs[]
+  >- (qpat_x_assum `MEM (Label l) _` mp_tac >>
+      simp[update_phi_bypass_label] >>
+      Cases_on `MEM (Label a.bb_label) oi.inst_operands` >> simp[] >>
+      rpt strip_tac >> metis_tac[]) >>
+  `l <> b.bb_label` by
+    (strip_tac >>
+     `MEM b.bb_label (pred_labels f orig.bb_label)` by metis_tac[] >>
+     drule_all pred_labels_lookup_edge >> simp[]) >>
+  metis_tac[]
+QED
