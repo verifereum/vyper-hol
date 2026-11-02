@@ -189,6 +189,71 @@ Proof
   irule return_word_mem_safe >> metis_tac[]
 QED
 
+Theorem return_copy_mem_safe[local]:
+  !fuel ctx fn s bb id buf op p m n b.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id ALLOCA [Lit (n2w n)] [buf]) /\
+    get_instruction bb (s.vs_inst_idx + 1) =
+      SOME (mk_inst (id + 1) MCOPY [Var buf; op; Lit (n2w m)] []) /\
+    get_instruction bb (s.vs_inst_idx + 2) =
+      SOME (mk_inst (id + 2) RETURN [Var buf; Lit (n2w m)] []) /\
+    eval_operand op s = SOME p /\ op <> Var buf /\ alloca_next_valid s /\
+    FLOOKUP (abi_builtin_allocate_state id n s).vs_allocas id = SOME (b,n) /\
+    m <= n /\ n < dimword (:256) /\
+    (m = 0 \/ w2n p + m <= s.vs_alloca_next)
+    ==> mem_safe_run fuel ctx fn s
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all alloca_site_frontier >> strip_tac >>
+  drule_all step_alloca_site >>
+  disch_then (qspec_then `buf` assume_tac) >>
+  qabbrev_tac `s1 = update_var buf (n2w b)
+    (abi_builtin_allocate_state id n s)` >>
+  `eval_operand (Var buf) s1 = SOME (n2w b) /\
+   eval_operand op s1 = SOME p /\
+   s1.vs_current_bb = s.vs_current_bb /\
+   s1.vs_alloca_next = (abi_builtin_allocate_state id n s).vs_alloca_next /\
+   s.vs_alloca_next <= s1.vs_alloca_next` by
+    (Cases_on `op` >> gvs[Abbr `s1`, eval_operand_def, lookup_var_def,
+      update_var_def, abi_builtin_allocate_state_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+     Cases_on `FLOOKUP s.vs_allocas id = NONE` >> gvs[]) >>
+  `m < dimword (:256)` by decide_tac >>
+  `w2n (n2w b : bytes32) + m <= s1.vs_alloca_next` by
+    (`b MOD dimword (:256) <= b` by simp[arithmeticTheory.MOD_LESS_EQ] >>
+     gvs[wordsTheory.w2n_n2w] >> decide_tac) >>
+  `mem_safe_step fuel ctx (mk_inst id ALLOCA [Lit (n2w n)] [buf]) s` by
+    (simp[mem_safe_step_non_invoke, mk_inst_def] >>
+     irule below_frontier_no_ranges >> simp[]) >>
+  `step_inst fuel ctx (mk_inst id ALLOCA [Lit (n2w n)] [buf]) s = OK s1` by
+    simp[step_inst_non_invoke, mk_inst_def] >>
+  drule mem_safe_run_step >> disch_then drule >> disch_then drule >>
+  simp[mk_inst_def, is_terminator_def] >> disch_then SUBST1_TAC >>
+  simp[] >>
+  qabbrev_tac `t1 = s1 with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `lookup_block t1.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb t1.vs_inst_idx =
+     SOME (mk_inst (id + 1) MCOPY [Var buf; op; Lit (n2w m)] []) /\
+   step_inst fuel ctx (mk_inst (id + 1) MCOPY [Var buf; op; Lit (n2w m)] []) t1 =
+     OK (mcopy (w2n (n2w b : bytes32)) (w2n p) m t1) /\
+   mem_safe_step fuel ctx (mk_inst (id + 1) MCOPY [Var buf; op; Lit (n2w m)] []) t1` by
+    (simp[Abbr `t1`, arithmeticTheory.ADD1, step_inst_non_invoke,
+       step_inst_base_def, mk_inst_def,
+       mem_safe_step_non_invoke, below_frontier_MCOPY,
+       eval_op_inst_idx, eval_operand_def] >>
+     rpt strip_tac >> gvs[eval_operand_def, lookup_var_def] >> decide_tac) >>
+  qpat_x_assum `step_inst _ _ _ s = _` kall_tac >>
+  qpat_x_assum `get_instruction bb s.vs_inst_idx = _` kall_tac >>
+  qpat_x_assum `lookup_block s.vs_current_bb _ = _` kall_tac >>
+  drule mem_safe_run_step >> disch_then drule >> disch_then drule >>
+  simp[mk_inst_def, is_terminator_def] >> disch_then SUBST1_TAC >>
+  simp[] >>
+  irule return_buffer_mem_safe >>
+  qexistsl_tac [`n2w b`, `bb`, `Var buf`, `id + 2`, `n2w m`, `Lit (n2w m)`] >>
+  gvs[Abbr `t1`, mcopy_def, write_memory_with_expansion_def,
+      arithmeticTheory.ADD1, eval_operand_def, lookup_var_def]
+QED
+
 (* The MCOPY reads the value's m bytes at its address p, which the caller
    puts below the frontier (a local's region, local_ptrs_rel), and writes
    them into the buffer, msz >= m bytes. *)
@@ -211,7 +276,26 @@ Theorem compile_external_return_copy_frag_mem:
                   R (Halt ss)) ==>
     frag_exec_mem ctx st st' P Q R
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_external_return_copy_parts >> strip_tac >>
+  simp[frag_exec_mem_def] >> rpt strip_tac >> disj2_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `op <> Var buf` by metis_tac[] >>
+  qpat_x_assum `!s. P s ==> _` drule >> strip_tac >>
+  `m < dimword (:256)` by decide_tac >>
+  `get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst st.cs_next_id ALLOCA [Lit (n2w msz)] [buf]) /\
+   get_instruction bb (s.vs_inst_idx + 1) =
+      SOME (mk_inst (st.cs_next_id + 1) MCOPY [Var buf; op; Lit (n2w m)] []) /\
+   get_instruction bb (s.vs_inst_idx + 2) =
+      SOME (mk_inst (st.cs_next_id + 2) RETURN [Var buf; Lit (n2w m)] [])` by
+    (qpat_x_assum `!i. _` (fn th =>
+       map_every (fn n => mp_tac (Q.SPEC n th)) [`0`, `1`, `2`]) >> simp[]) >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by metis_tac[] >>
+  drule_all return_copy_run >>
+  disch_then (qspecl_then [`0`, `ctx`] strip_assume_tac) >>
+  qexists_tac `0` >> simp[exit_result_def] >>
+  irule return_copy_mem_safe >> metis_tac[]
 QED
 
 (* ===== The entry's static argument decode ===== *)
