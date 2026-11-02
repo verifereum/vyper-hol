@@ -17,18 +17,42 @@ Theorem simplify_cfg_preserves_ssa_form:
 
 Theorem simplify_cfg_preserves_wf_function:
   ∀func. wf_function func ⇒ wf_function (simplify_cfg_fn func)
+
+Theorem simplify_cfg_preserves_wf_ssa:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  EVERY (\inst. inst.inst_opcode <> PHI) (HD fn.fn_blocks).bb_instructions ==>
+  wf_ssa (simplify_cfg_fn fn)
+
+Theorem simplify_cfg_preserves_defs_reach_uses:
+  wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
+  simplify_cfg_fn_ok fn ==>
+  fn_defs_reach_uses (simplify_cfg_fn fn)
+
+Theorem simplify_cfg_phi_two_pairs:
+  wf_function fn /\ fn_inst_wf fn ==>
+  !inst. MEM inst (fn_insts (simplify_cfg_fn fn)) /\ inst.inst_opcode = PHI ==>
+         2 <= LENGTH (phi_pairs inst.inst_operands)
+
+Theorem simplify_cfg_jnz_targets_distinct:
+  wf_function fn /\ fn_shape_ok fn /\
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = JNZ ==>
+          ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f) ==>
+  !inst. MEM inst (fn_insts (simplify_cfg_fn fn)) /\ inst.inst_opcode = JNZ ==>
+         ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f
 ```
 
 Supporting definitions (do not change them): the pass in
 `venom/passes/simplify_cfg/defs/simplifyCfgDefsScript.sml`; `wf_function`,
-`ssa_form` in `venom/defs/venomWfScript.sml`; `all_reachable` (rg
+`ssa_form`, `wf_ssa`, `fn_defs_reach_uses` in `venom/defs/venomWfScript.sml`;
+`fn_shape_ok`, `first_block_no_preds` (rg); `simplify_cfg_fn_ok`,
+`canon_jnz_inst` in the pass's defs; `all_reachable` (rg
 `all_reachable_def`).
 
 **Do not modify these statements.** Prove them as-is, or produce a counterexample.
 
 ## Completion Criteria
 
-1. The three theorems build with no cheat; put helper lemmas in a new
+1. The seven theorems build with no cheat; put helper lemmas in a new
    theory under venom/passes/simplify_cfg/proofs/ and import it.
 2. Leave `simplify_cfg_pass_correct` and venom/passes/simplify_cfg/proofs/simplifyCfgProofScript.sml
    alone (another run proves them). Do not edit `venom/compiler/` or any
@@ -78,6 +102,14 @@ its output.
 | Older cfg pass proofs | venom/passes/cfg_normalization/ | block-level simulation patterns |
 
 ## Notes
+
+- The pass definitions changed since an earlier run of this task:
+  `do_merge_jump` now canonicalizes `jnz c @L @L` to `jmp @L`
+  (`canon_jnz_inst`) and, when the bypass target is the source block
+  itself, applies the PHI update to it too.  `simplify_cfg_fn_ok` was
+  restated.  simplifyCfgLabelProps was adapted and builds.
+- simplifyCfgLabelProps may be edited (e.g. to export a `[local]`
+  lemma); keep its existing theorems' statements.
 
 - `simplify_cfg_fn fn = FST (simplify_cfg_fn_with_labels fn)`.
 - `first_block_no_preds` keeps the entry block from ever being merged

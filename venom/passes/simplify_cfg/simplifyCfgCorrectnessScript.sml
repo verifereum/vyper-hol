@@ -6,7 +6,7 @@
 
 Theory simplifyCfgCorrectness
 Ancestors
-  simplifyCfgProof cfgWf
+  simplifyCfgProof cfgWf unitShapeDefs venomInst
 
 Theorem simplify_cfg_pass_correct:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
@@ -42,8 +42,43 @@ QED
    PHI's label b by b's sole predecessor a (or drops it when a is already
    there, with the same value), and a dominates b. *)
 Theorem simplify_cfg_preserves_wf_ssa:
-  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn ==>
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  EVERY (\inst. inst.inst_opcode <> PHI) (HD fn.fn_blocks).bb_instructions ==>
   wf_ssa (simplify_cfg_fn fn)
+Proof
+  cheat
+QED
+
+(* The pre-walk run feeds MakeSSA, which needs its input's uses defined on
+   every path. *)
+Theorem simplify_cfg_preserves_defs_reach_uses:
+  wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
+  simplify_cfg_fn_ok fn ==>
+  fn_defs_reach_uses (simplify_cfg_fn fn)
+Proof
+  cheat
+QED
+
+(* ===== Output shape ===== *)
+
+(* fix_phi_inst turns a PHI left with fewer than two inputs into a NOP or
+   an ASSIGN. *)
+Theorem simplify_cfg_phi_two_pairs:
+  wf_function fn /\ fn_inst_wf fn ==>
+  !inst. MEM inst (fn_insts (simplify_cfg_fn fn)) /\ inst.inst_opcode = PHI ==>
+         2 <= LENGTH (phi_pairs inst.inst_operands)
+Proof
+  cheat
+QED
+
+(* A bypass that makes a JNZ's targets meet turns it into a JMP
+   (canon_jnz_inst); no other step changes a kept JNZ's targets. *)
+Theorem simplify_cfg_jnz_targets_distinct:
+  wf_function fn /\ fn_shape_ok fn /\
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = JNZ ==>
+          ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f) ==>
+  !inst. MEM inst (fn_insts (simplify_cfg_fn fn)) /\ inst.inst_opcode = JNZ ==>
+         ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f
 Proof
   cheat
 QED
