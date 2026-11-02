@@ -17,7 +17,7 @@
  *)
 Theory o1ContractDft
 Ancestors
-  o1DftLift dftSsaPreserve dftRunRel dftScheduleOrder dftDefs o1PassLift
+  o1DftStep o1DftLift dftSsaPreserve dftRunRel dftScheduleOrder dftDefs o1PassLift
   o1PassContract unitMemInv unitShapeDefs lowerDloadDefs venomPassDispatcher
   venomExecSemantics venomWf venomInst list
 
@@ -29,14 +29,6 @@ Proof
   rw[ctx_pass_stage_def] >>
   irule LIST_REL_mono >> goal_assum (drule_at Any) >>
   rw[fn_pass_step_def] >> gvs[]
-QED
-
-(* The step part: dft_fn keeps the shape, takes no new names, renames no
-   label and leaves the supply alone. *)
-Theorem dft_step_contract:
-  o1_step_contract rpolicy (CFP_Simple VP_DFT)
-Proof
-  cheat
 QED
 
 (* label_positions_ok leaves one value use of a label outside jumps,
