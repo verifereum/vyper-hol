@@ -95,6 +95,44 @@ Proof
   metis_tac[mem_safe_fuel_mono_up]
 QED
 
+(* A safe terminating continuation covers every smaller prefix and every
+   larger fuel budget.  A fragment's conditional transfer needs such a
+   continuation; it does not establish one by itself. *)
+Theorem mem_safe_run_all_fuel:
+  !fuel ctx fn s.
+    mem_safe_run fuel ctx fn s /\ (!e. run_from fuel ctx fn s <> Error e) ==>
+    !m. mem_safe_run m ctx fn s
+Proof
+  rpt strip_tac >> Cases_on `m <= fuel`
+  >- metis_tac[mem_safe_run_fuel_mono_down] >>
+  irule mem_safe_run_fuel_mono_up >> qexists_tac `fuel` >> simp[]
+QED
+
+(* Entry/halt composition supplies a safe terminal continuation at every
+   normal body landing.  Exits already carry their own terminal witness. *)
+Theorem frag_exec_mem_complete:
+  !ctx sa sb P Q R fn s0.
+    frag_exec_mem ctx sa sb P Q R /\ fn_has_code sa sb fn /\
+    P s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    (!s. Q s /\ ~s.vs_halted /\
+         s.vs_current_bb = sb.cs_current_bb /\
+         s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+         ?fuel r. run_from fuel ctx fn s = r /\ (!e. r <> Error e) /\
+                  mem_safe_run fuel ctx fn s) ==>
+    !fuel. mem_safe_run fuel ctx fn s0
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `frag_exec_mem _ _ _ _ _ _`
+    (mp_tac o SIMP_RULE std_ss [frag_exec_mem_def]) >>
+  disch_then (qspecl_then [`fn`, `s0`] mp_tac) >> simp[] >> strip_tac
+  >- (qpat_x_assum `!s. Q s /\ _ ==> _`
+        (qspec_then `s'` mp_tac) >> simp[] >> strip_tac >>
+      metis_tac[mem_safe_run_all_fuel]) >>
+  metis_tac[exit_result_not_error, mem_safe_run_all_fuel]
+QED
+
 (* ===== Judgment rules ===== *)
 
 Theorem frag_exec_mem_conseq:
