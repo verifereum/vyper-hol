@@ -3,7 +3,7 @@ Theory dftFrameFacts
 Ancestors
   dftDefs unitShapeDefs venomExecSemantics venomWf venomState venomInst
   venomEffects finite_map list option o1PassLift ctxLookupAgreeHelpers
-  contextCodegenRel venomMemProps
+  contextCodegenRel codegenRel unitMemInv venomMemProps
 
 Theorem dft_operand_defined:
   (!v. MEM (Var v) ops ==> v IN FDOM s.vs_vars) /\
@@ -135,4 +135,75 @@ Proof
   `i.inst_opcode <> ALLOCA` by (drule_all EVERY_active_inst >> simp[]) >>
   drule_all dft_step_alloca_fields >> strip_tac >>
   drule dft_enters_block_alloca_fields >> simp[]
+QED
+
+Theorem dft_eval_operands_cong[local]:
+  !ops s t.
+    (!op. MEM op ops ==> eval_operand op s = eval_operand op t) ==>
+    eval_operands ops s = eval_operands ops t
+Proof
+  Induct >> simp[eval_operands_def] >> rpt strip_tac >>
+  gvs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  first_x_assum (drule_then (fn th => rewrite_tac[th]))
+QED
+
+Theorem dft_source_read_ranges_cong[local]:
+  (!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t) ==>
+  source_memory_read_ranges i s = source_memory_read_ranges i t
+Proof
+  strip_tac >> Cases_on `i.inst_opcode` >>
+  simp[source_memory_read_ranges_def] >>
+  simp[dret_memory_read_ranges_def, memory_range_of_operands_def] >>
+  simp[Cong list_case_cong]
+  >- (drule dft_eval_operands_cong >> disch_then (fn th => rewrite_tac[th])) >>
+  Cases_on `i.inst_operands` >> simp[] >>
+  rename1 `i.inst_operands = h::ops` >> Cases_on `h` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  `!op. MEM op (REVERSE ops) ==> eval_operand op s = eval_operand op t`
+    by (rpt strip_tac >> first_x_assum irule >> gvs[MEM_REVERSE]) >>
+  `eval_operands (DROP 2 (REVERSE ops)) s =
+   eval_operands (DROP 2 (REVERSE ops)) t`
+    by (irule dft_eval_operands_cong >> rpt strip_tac >>
+        qpat_x_assum `!op. MEM op (REVERSE ops) ==> _` irule >>
+        gvs[MEM_DROP] >> once_rewrite_tac[GSYM MEM_REVERSE] >>
+        pure_rewrite_tac[MEM_EL] >> qexists_tac `m + 2` >> simp[]) >>
+  `eval_operand (HD (REVERSE ops)) s = eval_operand (HD (REVERSE ops)) t`
+    by (first_x_assum irule >> Cases_on `REVERSE ops` >> gvs[]) >>
+  `eval_operand (EL 1 (REVERSE ops)) s = eval_operand (EL 1 (REVERSE ops)) t`
+    by (first_x_assum irule >> pure_rewrite_tac[MEM_EL] >>
+        qexists_tac `1` >> simp[] >> decide_tac) >>
+  simp[]
+QED
+
+Theorem dft_source_write_ranges_cong[local]:
+  (!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t) /\
+  (i.inst_opcode = DRET ==> s.vs_call_entry_fmp = t.vs_call_entry_fmp) ==>
+  source_memory_write_ranges i s = source_memory_write_ranges i t
+Proof
+  strip_tac >> Cases_on `i.inst_opcode` >>
+  simp[source_memory_write_ranges_def] >>
+  simp[fixed_source_write_range_def, sized_source_write_range_def] >>
+  simp[Cong list_case_cong]
+  >- (drule dft_eval_operands_cong >> disch_then (fn th => rewrite_tac[th]) >>
+      simp[])
+QED
+
+Theorem dft_inst_mem_ranges_cong:
+  (!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t) /\
+  (i.inst_opcode = DRET ==> s.vs_call_entry_fmp = t.vs_call_entry_fmp) ==>
+  inst_mem_ranges i s = inst_mem_ranges i t
+Proof
+  strip_tac >> simp[inst_mem_ranges_def] >>
+  drule dft_source_read_ranges_cong >>
+  drule_all dft_source_write_ranges_cong >> simp[]
+QED
+
+Theorem dft_mem_corr_same_inst:
+  t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
+  t.vs_initial_fmp = s.vs_initial_fmp /\
+  (!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t) /\
+  (i.inst_opcode = DRET ==> s.vs_call_entry_fmp = t.vs_call_entry_fmp) ==>
+  mem_corr i s i t
+Proof
+  strip_tac >> drule_all dft_inst_mem_ranges_cong >> simp[mem_corr_def]
 QED
