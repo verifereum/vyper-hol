@@ -15,7 +15,8 @@ Theorem concretize_stage_sim:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_initial_state_ok vs /\
-  mem_inv raw_mem_ok C vs /\ ptr_discipline C vs ==>
+  mem_inv raw_mem_ok C vs /\ ptr_discipline C vs /\
+  EVERY ssa_form C.ctx_functions ==>
   ctx_sim C C' vs vs
 
 Theorem concretize_stage_static_mem:
@@ -23,7 +24,7 @@ Theorem concretize_stage_static_mem:
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_initial_state_ok vs /\
   mem_inv raw_mem_ok C vs /\ ptr_discipline C vs /\
-  ctx_eom_bounded eom C C' ==>
+  EVERY ssa_form C.ctx_functions /\ ctx_eom_bounded eom C C' ==>
   mem_inv (static_mem_ok eom) C' vs
 ```
 
@@ -55,8 +56,12 @@ Supporting definitions: `ptr_discipline`, `frame_reachable`, `access_ok`,
 
 The definitions in `ptrDisciplineScript.sml` are weakly frozen: they may
 be changed only if the theorem is false with them and the change is the
-tightest fix; say so in the report. Everything else outside the new proof
-theories is frozen: no change to the pass, the semantics, or the contract
+tightest fix; say so in the report. The premises are frozen except for one allowance: if the analyses'
+convergence within their fuel or the base-pointer analysis's soundness
+needs definitions to dominate their uses, you may add the tightest such
+premise, preferring the existing `def_available_at`
+(venom/defs/venomWfScript.sml), and say so in the report. Everything else
+outside the new proof theories is frozen: no change to the pass, the semantics, or the contract
 definitions.
 
 ## Completion Criteria
