@@ -1323,3 +1323,54 @@ Proof
       pred_setTheory.SUBSET_DEF] >>
   metis_tac[listTheory.MEM_APPEND]
 QED
+
+Theorem sue_segment_offset_drop:
+  !segs i. i < LENGTH segs ==>
+  DROP (sue_segment_offset segs i) (FLAT segs) =
+    EL i segs ++ FLAT (DROP (SUC i) segs)
+Proof
+  Induct >> Cases_on `i` >> simp[sue_segment_offset_cons,
+    listTheory.DROP_APPEND, listTheory.DROP_LENGTH_TOO_LONG] >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+Theorem sue_assign_step_idx[local]:
+  a.inst_opcode = ASSIGN ==>
+  step_inst fuel ctx a (t with vs_inst_idx := k) =
+  exec_result_map (\u. u with vs_inst_idx := k) (step_inst fuel ctx a t)
+Proof
+  strip_tac >> simp[Once step_inst_def] >>
+  simp[Once step_inst_def] >>
+  irule step_inst_inst_idx_indep >> simp[is_terminator_def]
+QED
+
+Theorem sue_drop_cons_index[local]:
+  !xs k. DROP k xs = h::tail ==>
+    k < LENGTH xs /\ EL k xs = h /\ DROP (SUC k) xs = tail
+Proof
+  Induct >> Cases_on `k` >> simp[] >> metis_tac[]
+QED
+
+Theorem sue_exec_block_assign_prefix:
+  !assigns k bb tail t u.
+  EVERY (\a. a.inst_opcode = ASSIGN) assigns /\
+  DROP k bb.bb_instructions = assigns ++ tail /\
+  run_insts fuel ctx assigns t = OK u ==>
+  exec_block fuel ctx bb (t with vs_inst_idx := k) =
+  exec_block fuel ctx bb (u with vs_inst_idx := k + LENGTH assigns)
+Proof
+  Induct >> rpt gen_tac
+  >- simp[run_insts_def] >>
+  strip_tac >> fs[] >>
+  `k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = h` by
+    metis_tac[sue_drop_cons_index] >>
+  `DROP (SUC k) bb.bb_instructions = assigns ++ tail` by
+    metis_tac[sue_drop_cons_index] >>
+  Cases_on `step_inst fuel ctx h t` >>
+  gvs[run_insts_def] >>
+  simp[Once exec_block_def, get_instruction_def, sue_assign_step_idx,
+       is_terminator_def, exec_result_map_def] >>
+  first_x_assum (qspec_then `SUC k` mp_tac) >>
+  pure_rewrite_tac[arithmeticTheory.ADD_CLAUSES] >>
+  disch_then irule >> simp[]
+QED
