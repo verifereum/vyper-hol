@@ -750,6 +750,160 @@ Resume gas_base_data_dispatch[alloca]:
 QED
 Finalise gas_base_data_dispatch
 
+Theorem gas_base_control_dispatch:
+  MEM inst.inst_opcode
+    [JMP; JNZ; DJMP; GETFMP; SETFMP; DALLOCA; INITIAL_FMP; BUMP;
+     FMP_PARAM; RETPC_PARAM; PARAM; RET; RETFMP; DRET; STOP;
+     RETURN; REVERT; SINK; ASSERT; ASSERT_UNREACHABLE; INVALID] ==>
+  gas_replay_at 0 (step_inst_base inst) s
+Proof
+  simp[MEM] >> strip_tac >> rewrite_tac[gas_replay_at_def] >>
+  qpat_assum `inst.inst_opcode = _` gas_opcode_rewrite >> gen_tac >>
+  simp[lift_result_def]
+  >~ [`inst.inst_opcode = JMP`] >- suspend "jmp"
+  >~ [`inst.inst_opcode = JNZ`] >- suspend "jnz"
+  >~ [`inst.inst_opcode = DJMP`] >- suspend "djmp"
+  >~ [`inst.inst_opcode = GETFMP`] >- suspend "getfmp"
+  >~ [`inst.inst_opcode = SETFMP`] >- suspend "setfmp"
+  >~ [`inst.inst_opcode = DALLOCA`] >- suspend "dalloca"
+  >~ [`inst.inst_opcode = INITIAL_FMP`] >- suspend "initial_fmp"
+  >~ [`inst.inst_opcode = BUMP`] >- suspend "bump"
+  >~ [`inst.inst_opcode = FMP_PARAM`] >- suspend "fmp_param"
+  >~ [`inst.inst_opcode = RETPC_PARAM`] >- suspend "retpc_param"
+  >~ [`inst.inst_opcode = PARAM`] >- suspend "param"
+  >~ [`inst.inst_opcode = RET`] >- suspend "ret"
+  >~ [`inst.inst_opcode = RETFMP`] >- suspend "retfmp"
+  >~ [`inst.inst_opcode = DRET`] >- suspend "dret"
+  >~ [`inst.inst_opcode = STOP`] >- simp[halt_state_def]
+  >~ [`inst.inst_opcode = RETURN`] >- suspend "return"
+  >~ [`inst.inst_opcode = REVERT`] >- suspend "revert"
+  >~ [`inst.inst_opcode = ASSERT`] >- suspend "assert"
+  >~ [`inst.inst_opcode = ASSERT_UNREACHABLE`] >- suspend "assert_unreachable"
+QED
+Resume gas_base_control_dispatch[jmp]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  Cases_on `ops` >> simp[lift_result_def] >>
+  Cases_on `a` >> simp[lift_result_def]
+QED
+Resume gas_base_control_dispatch[jnz]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b r1"] >> simp[lift_result_def] >>
+  Cases_on `b` >> simp[lift_result_def] >>
+  namedCases_on `r1` ["", "c r2"] >> simp[lift_result_def] >>
+  Cases_on `c` >> simp[lift_result_def] >>
+  Cases_on `r2` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  IF_CASES_TAC >> simp[lift_result_def]
+QED
+Resume gas_base_control_dispatch[djmp]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `extract_labels ops` >> simp[lift_result_def] >>
+  IF_CASES_TAC >> simp[lift_result_def]
+QED
+Resume gas_base_control_dispatch[getfmp]:
+  Cases_on `inst.inst_operands` >> simp[lift_result_def] >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
+  Cases_on `outs` >> simp[lift_result_def]
+QED
+Resume gas_base_control_dispatch[setfmp]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  Cases_on `ops` >> simp[lift_result_def] >>
+  Cases_on `inst.inst_outputs` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def]
+QED
+Resume gas_base_control_dispatch[dalloca]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  Cases_on `ops` >> simp[lift_result_def] >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
+  Cases_on `outs` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def]
+QED
+Resume gas_base_control_dispatch[initial_fmp]:
+  Cases_on `inst.inst_operands` >> simp[lift_result_def] >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
+  Cases_on `outs` >> simp[lift_result_def]
+QED
+Resume gas_base_control_dispatch[bump]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b r1"] >> simp[lift_result_def] >>
+  Cases_on `r1` >> simp[lift_result_def] >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
+  namedCases_on `outs` ["", "out2 rest"] >> simp[lift_result_def] >>
+  Cases_on `rest` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def]
+QED
+Resume gas_base_control_dispatch[fmp_param]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  Cases_on `a` >> simp[lift_result_def] >>
+  Cases_on `ops` >> simp[lift_result_def] >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
+  Cases_on `outs` >> simp[lift_result_def] >>
+  IF_CASES_TAC >> simp[lift_result_def]
+QED
+Resume gas_base_control_dispatch[retpc_param]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  Cases_on `a` >> simp[lift_result_def] >>
+  Cases_on `ops` >> simp[lift_result_def] >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
+  Cases_on `outs` >> simp[lift_result_def]
+QED
+Resume gas_base_control_dispatch[param]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  Cases_on `a` >> simp[lift_result_def] >>
+  Cases_on `ops` >> simp[lift_result_def] >>
+  IF_CASES_TAC >> simp[lift_result_def] >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
+  Cases_on `outs` >> simp[lift_result_def]
+QED
+Resume gas_base_control_dispatch[ret]:
+  Cases_on `eval_operands inst.inst_operands s` >> simp[lift_result_def] >>
+  Cases_on `x` >> simp[lift_result_def]
+QED
+Resume gas_base_control_dispatch[retfmp]:
+  Cases_on `eval_operands inst.inst_operands s` >> simp[lift_result_def] >>
+  Cases_on `x` >> simp[lift_result_def]
+QED
+Resume gas_base_control_dispatch[dret]:
+  Cases_on `inst.inst_outputs = []` >> simp[lift_result_def] >>
+  Cases_on `parse_dret_shape inst` >> simp[lift_result_def] >>
+  PairCases_on `x` >> simp[] >>
+  Cases_on `eval_operands inst.inst_operands s` >> simp[lift_result_def] >>
+  Cases_on `pair_dret_words (TAKE (2 * x1) (DROP (x0 + 1) x))` >>
+  simp[lift_result_def] >>
+  pairarg_tac >> gvs[] >>
+  drule gas_pack_dret_transport >> disch_then (qspec_then `tail` assume_tac) >>
+  rev_drule gas_pack_dret_readings >> simp[lift_result_def]
+QED
+Resume gas_base_control_dispatch[return]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b rest"] >> simp[lift_result_def] >>
+  Cases_on `rest` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def]
+QED
+Resume gas_base_control_dispatch[revert]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b rest"] >> simp[lift_result_def] >>
+  Cases_on `rest` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def]
+QED
+Resume gas_base_control_dispatch[assert]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  Cases_on `ops` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  IF_CASES_TAC >> simp[lift_result_def]
+QED
+Resume gas_base_control_dispatch[assert_unreachable]:
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  Cases_on `ops` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  IF_CASES_TAC >> simp[lift_result_def]
+QED
+Finalise gas_base_control_dispatch
+
 Theorem gas_oracle_replay:
   (!fuel ctx inst s.
      ?n. !tail.
