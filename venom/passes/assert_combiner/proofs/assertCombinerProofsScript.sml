@@ -1638,7 +1638,9 @@ Theorem ac_transform_function_correct_proof:
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0'))) /\
     s.vs_inst_idx = 0 ==>
     lift_result (state_equiv (ac_fresh_vars_fn fn))
-               (execution_equiv UNIV) (execution_equiv UNIV)
+               (execution_equiv UNIV)
+               (\s1 s2. ?gs. execution_equiv UNIV s1
+                 (s2 with vs_gas_readings := gs))
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx fn' s)
 Proof
