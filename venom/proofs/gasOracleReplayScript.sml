@@ -243,6 +243,19 @@ Proof
   simp[next_inst_def, jump_to_def, halt_state_def, revert_state_def]
 QED
 
+Theorem gas_exec_gas:
+  gas_replay_at 1 (exec_gas inst) s
+Proof
+  simp[gas_replay_at_def] >> gen_tac >>
+  rewrite_tac[arithmeticTheory.ONE] >>
+  Cases_on `s.vs_gas_readings` >>
+  simp[gas_prefix_suc, exec_gas_def] >>
+  Cases_on `inst.inst_outputs` >> simp[lift_result_def] >>
+  qpat_x_assum `inst.inst_outputs = _` mp_tac >>
+  rename1 `inst.inst_outputs = out::outs` >>
+  Cases_on `outs` >> simp[lift_result_def]
+QED
+
 Theorem gas_oracle_replay:
   (!fuel ctx inst s.
      ?n. !tail.
