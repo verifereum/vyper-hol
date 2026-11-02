@@ -110,12 +110,11 @@ cheat delta is zero.
   is the exact operator table. Comparison restrictions use the **operand** type,
   not their bool result. TASK_021 can reuse it for AugAssign with literal_base=F.
 - `supported_unsigned_type`, `supported_signed_type`,
-  `supported_fixed_bytes_type`, `supported_numeric_type`,
-  `supported_short_bytes_type`, `supported_integer_literal`,
-  `supported_nonnegative_literal`; widths/bytes20 reuse the foundation limits.
-- `supported_conversion src dst` is the directed conversion whitelist, not the
-  source type system's broader conversion relation. Signed decimal inputs must
-  have N <= 134 (thus the largest supported byte-aligned width is 128).
+  `supported_numeric_type`, `supported_integer_literal`,
+  `supported_nonnegative_literal`; widths reuse the foundation limits.
+- Conversion forms use the source type system's width-aware
+  `valid_conversion src dst` relation directly; there is no separate conversion
+  whitelist.
 - `supported_builtin_form tops ty builtin args` and
   `supported_type_builtin_form ty builtin target args` encode exact forms and
   arities, including the ABI flags/method-id/single-argument restrictions.
@@ -187,7 +186,7 @@ Proof paths: `lowering/supported/supportedExprFormPropsScript.sml` (F below)
 | Not, Neg, Abs, AsWeiValue, AddMod, MulMod, PowMod256 | F `supported_unary_modular_builtin_coverage` |
 | Every Env/Acc item; BlockHash, BlobHash, ECRecover, ECAdd, ECMul | F `supported_environment_crypto_builtin_coverage` |
 | Empty, MaxValue, MinValue, Epsilon, Extract32 exclusion | F `supported_type_builtin_coverage` |
-| Every admitted conversion family; out-of-list, width, bytes20, N>=135 exclusions | F `supported_conversion_whitelist_coverage`, `supported_conversion_exclusion_coverage` |
+| Checker conversion domain and accepted/rejected width boundaries | F `supported_convert_checker_domain`, `conversion_width_boundary_acceptance`, `conversion_width_boundary_rejection` |
 | ABI encode/decode exact flags, method-id size, tuple depth/length, arity | F `supported_abi_forms_coverage` |
 | Uint2Str (unsigned argument), CalldataSlice; Len, hashes, Concat, Slice, typed/dynamic MakeArray, Ceil, Floor, MethodId and wrong arities excluded | F `supported_builtin_exclusion_coverage` |
 | IntCall, Send, storage dynamic Pop; namespace/visibility/base exclusions | X `supported_internal_send_pop_rows` |

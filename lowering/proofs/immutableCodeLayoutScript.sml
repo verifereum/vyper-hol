@@ -6,7 +6,7 @@ Ancestors
   e2eDefs e2eEntry e2eProducers lowerDloadDefs asmEncodeParse asmToBytecodeProofs
   asmWf asmSem asmIR symbolResolve finite_map list arithmetic
   stackPlanGen planExec codegen
-  rich_list codegenRel
+  rich_list codegenRel codegenEncodingWf
 
 Theorem immutable_runtime_codegen_nonempty:
   codegen_assembly policy unit = SOME prog ==> assemble prog <> []
@@ -102,6 +102,22 @@ Proof
   irule entry_venom_state_code_layout >>
   goal_assum (drule_at Any) >> simp[] >>
   metis_tac[APPEND_ASSOC]
+QED
+
+(* unit_shape_ok rules out OFFSET, the only source of unbounded push
+   offsets, and call_state_rel bounds the code size, so codegen's output
+   meets asm_encoding_wf. *)
+Theorem generated_entry_code_layout_shape:
+  !tops prog am tx es cp policy unit.
+  call_state_rel tops (assemble prog) am tx es /\
+  codegen_assembly policy unit = SOME prog /\ unit_shape_ok unit ==>
+  code_layout_valid (entry_venom_state prog cp es)
+Proof
+  rpt strip_tac >>
+  `LENGTH (assemble prog) < 65536` by
+    gvs[call_state_rel_def, immutableSectionRelTheory.installed_code_rel_def] >>
+  drule_all codegen_assembly_asm_encoding_wf >> strip_tac >>
+  metis_tac[generated_entry_immutable_code_layout]
 QED
 
 val _ = List.app (fn (name, th) => let
