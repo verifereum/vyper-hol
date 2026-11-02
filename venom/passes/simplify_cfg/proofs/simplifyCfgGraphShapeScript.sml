@@ -408,3 +408,244 @@ Proof
     (irule num_preds_one_unique >> gvs[can_merge_blocks_def] >>
      metis_tac[]) >> gvs[]
 QED
+
+Theorem canon_jnz_inst_successors_mem:
+  MEM lbl (get_successors (canon_jnz_inst i)) ==>
+  MEM lbl (get_successors i)
+Proof
+  simp[canon_jnz_inst_def] >>
+  Cases_on `i.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >> Cases_on `t'` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `i.inst_opcode = JNZ /\ h' = h''` >> simp[] >>
+  gvs[get_successors_def, is_terminator_def] >>
+  Cases_on `h` >> Cases_on `h'` >> simp[venomStateTheory.get_label_def]
+QED
+
+Theorem subst_label_inst_successors_mem:
+  MEM lbl (get_successors (subst_label_inst old new i)) <=>
+  ?l. MEM l (get_successors i) /\ lbl = (if l = old then new else l)
+Proof
+  simp[subst_label_inst_def, get_successors_def] >>
+  Cases_on `is_terminator i.inst_opcode` >> simp[] >>
+  simp[MEM_MAP, MEM_FILTER, MAP_MAP_o, combinTheory.o_DEF] >>
+  eq_tac >> rpt strip_tac
+  >- (rename1 `MEM op i.inst_operands` >> Cases_on `op` >>
+      gvs[subst_label_op_def, venomStateTheory.get_label_def] >>
+      qexists_tac `s` >> Cases_on `s = old` >>
+      simp[venomStateTheory.get_label_def] >>
+      qexists_tac `SOME s` >> simp[] >>
+      qexists_tac `Label s` >> simp[venomStateTheory.get_label_def]) >>
+  rename1 `MEM op i.inst_operands` >> Cases_on `op` >>
+  gvs[subst_label_op_def, venomStateTheory.get_label_def] >>
+  qexists_tac `SOME (if l = old then new else l)` >> simp[] >>
+  qexists_tac `Label (if l = old then new else l)` >>
+  simp[venomStateTheory.get_label_def] >>
+  qexists_tac `Label l` >> simp[subst_label_op_def] >>
+  Cases_on `l = old` >> simp[]
+QED
+
+Theorem bypass_inst_successors_mem:
+  MEM lbl (get_successors
+    (if ~is_terminator i.inst_opcode then i
+     else canon_jnz_inst (subst_label_inst old new i))) ==>
+  ?l. MEM l (get_successors i) /\ lbl = (if l = old then new else l)
+Proof
+  Cases_on `is_terminator i.inst_opcode` >> simp[]
+  >- (strip_tac >> drule canon_jnz_inst_successors_mem >>
+      simp[subst_label_inst_successors_mem]) >>
+  simp[get_successors_def]
+QED
+
+Theorem bb_succs_map_mem:
+  !tr redirect. (!i l. MEM l (get_successors (tr i)) ==>
+         ?k. MEM k (get_successors i) /\ l = redirect k) ==>
+  !bb lbl. MEM lbl
+    (bb_succs (bb with bb_instructions := MAP tr bb.bb_instructions)) ==>
+    ?l. MEM l (bb_succs bb) /\ lbl = redirect l
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> Cases_on `bb.bb_instructions` >>
+  simp[bb_succs_def] >>
+  qspecl_then [`h::t`, `tr`] mp_tac LAST_MAP >>
+  (impl_tac >- simp[]) >>
+  pure_rewrite_tac[MAP] >> disch_then SUBST1_TAC >>
+  simp[MEM_nub] >> metis_tac[]
+QED
+
+Theorem bypass_block_successors_mem:
+  MEM lbl (bb_succs
+    (bb with bb_instructions := MAP (\i.
+      if ~is_terminator i.inst_opcode then i
+      else canon_jnz_inst (subst_label_inst old new i)) bb.bb_instructions)) ==>
+  ?l. MEM l (bb_succs bb) /\ lbl = (if l = old then new else l)
+Proof
+  qspecl_then
+    [`\i. if ~is_terminator i.inst_opcode then i else
+       canon_jnz_inst (subst_label_inst old new i)`,
+     `\l. if l = old then new else l`] mp_tac bb_succs_map_mem >>
+  simp[bypass_inst_successors_mem]
+QED
+
+Theorem bb_succs_update_phi_bypass_map:
+  bb_succs (bb with bb_instructions := MAP (update_phi_bypass a b) insts) =
+  bb_succs (bb with bb_instructions := insts)
+Proof
+  Cases_on `insts` >> simp[bb_succs_def] >>
+  qspecl_then [`h::t`, `update_phi_bypass a b`] mp_tac LAST_MAP >>
+  (impl_tac >- simp[]) >> pure_rewrite_tac[MAP] >>
+  disch_then SUBST1_TAC >> simp[update_phi_bypass_successors]
+QED
+
+Theorem do_merge_jump_successor_cases:
+  do_merge_jump fn a b lm = SOME (fn',lm') /\
+  MEM bb fn'.fn_blocks /\ MEM lbl (bb_succs bb) ==>
+  (?old. MEM old fn.fn_blocks /\ old.bb_label <> b.bb_label /\
+         old.bb_label <> a.bb_label /\ MEM lbl (bb_succs old)) \/
+  (?target l. bb_succs b = [target] /\ MEM l (bb_succs a) /\
+              lbl = (if l = b.bb_label then target else l))
+Proof
+  simp[do_merge_jump_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  rename1 `lookup_block target_lbl fn.fn_blocks = SOME target` >>
+  `MEM target fn.fn_blocks /\ target.bb_label = target_lbl` by
+    metis_tac[lookup_block_member_label] >>
+  qmatch_asmsub_abbrev_tac `replace_block a.bb_label source
+    (replace_block target_lbl dest rest)` >>
+  `bb_succs dest = bb_succs target` by
+    (simp[Abbr `dest`] >> irule bb_succs_map_preserve >>
+     simp[update_phi_bypass_successors]) >>
+  `!l. MEM l (bb_succs source) ==>
+    ?k. MEM k (bb_succs a) /\
+      l = (if k = b.bb_label then target_lbl else k)` by
+    (simp[Abbr `source`] >> Cases_on `target_lbl = a.bb_label` >>
+     simp[bb_succs_update_phi_bypass_map, bypass_block_successors_mem]) >>
+  `dest.bb_label = target_lbl` by simp[Abbr `dest`] >>
+  gvs[replace_block_def, MEM_MAP] >>
+  rename1 `MEM old rest` >>
+  Cases_on `old.bb_label = target.bb_label` >> gvs[] >>
+  Cases_on `target.bb_label = a.bb_label` >> gvs[] >>
+  Cases_on `old.bb_label = a.bb_label` >>
+  gvs[Abbr `rest`, remove_block_def, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem do_merge_jump_first_no_preds:
+  ALL_DISTINCT (fn_labels fn) /\
+  fn.fn_blocks <> [] /\ first_block_no_preds fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\
+  can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') ==>
+  first_block_no_preds fn'
+Proof
+  strip_tac >>
+  `(HD fn'.fn_blocks).bb_label = (HD fn.fn_blocks).bb_label` by
+    (irule do_merge_jump_entry_label >> metis_tac[]) >>
+  `MEM a fn.fn_blocks /\ MEM b fn.fn_blocks` by
+    metis_tac[lookup_block_member_label] >>
+  simp[first_block_no_preds_def, EVERY_MEM] >> rpt strip_tac >>
+  drule_all do_merge_jump_successor_cases >> strip_tac
+  >- metis_tac[incoming_not_entry] >>
+  Cases_on `l = b.bb_label` >> gvs[] >>
+  metis_tac[incoming_not_entry, MEM]
+QED
+
+Theorem do_merge_jump_labels:
+  do_merge_jump fn a b lm = SOME (fn',lm') ==>
+  fn_labels fn' = FILTER (\l. l <> b.bb_label) (fn_labels fn)
+Proof
+  simp[do_merge_jump_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  rename1 `lookup_block target_lbl fn.fn_blocks = SOME target` >>
+  `target.bb_label = target_lbl` by metis_tac[lookup_block_member_label] >>
+  simp[fn_labels_def, fn_labels_replace_block, fn_labels_remove_block]
+QED
+
+Theorem do_merge_jump_succs_closed:
+  ALL_DISTINCT (fn_labels fn) /\
+  fn.fn_blocks <> [] /\ first_block_no_preds fn /\ fn_succs_closed fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\
+  can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') ==>
+  fn_succs_closed fn'
+Proof
+  strip_tac >>
+  `MEM a fn.fn_blocks /\ MEM b fn.fn_blocks` by
+    metis_tac[lookup_block_member_label] >>
+  drule do_merge_jump_labels >> strip_tac >>
+  simp[fn_succs_closed_def] >> rpt gen_tac >> strip_tac >>
+  drule_all do_merge_jump_successor_cases >> strip_tac
+  >- (simp[MEM_FILTER] >> reverse conj_tac
+      >- metis_tac[fn_succs_closed_def] >> strip_tac >>
+      `old = a` by (irule num_preds_one_unique >>
+        gvs[can_bypass_jump_def] >> metis_tac[]) >> gvs[]) >>
+  Cases_on `l = b.bb_label` >> gvs[MEM_FILTER]
+  >- (reverse conj_tac
+      >- metis_tac[fn_succs_closed_def, MEM] >> strip_tac >>
+      `b = a` by (irule num_preds_one_unique >>
+        gvs[can_bypass_jump_def] >> metis_tac[]) >>
+      gvs[can_bypass_jump_def]) >>
+  metis_tac[fn_succs_closed_def]
+QED
+
+Theorem try_bypass_result_cases:
+  !succs fn lm a fn' lm' changed.
+  try_bypass fn lm a succs = (fn',lm',changed) ==>
+  (fn' = fn /\ lm' = lm /\ ~changed) \/
+  (?b. lookup_block b.bb_label fn.fn_blocks = SOME b /\
+       can_bypass_jump fn a b /\
+       do_merge_jump fn a b lm = SOME (fn',lm') /\ changed)
+Proof
+  Induct >> simp[try_bypass_def] >> rpt gen_tac >>
+  Cases_on `lookup_block h fn.fn_blocks` >> simp[] >>
+  rename1 `lookup_block h fn.fn_blocks = SOME b` >>
+  `b.bb_label = h` by metis_tac[lookup_block_member_label] >>
+  Cases_on `can_bypass_jump fn a b` >> simp[] >>
+  Cases_on `lookup_block (HD (bb_succs b)) fn.fn_blocks` >> simp[] >>
+  rename1 `lookup_block (HD (bb_succs b)) fn.fn_blocks = SOME target` >>
+  Cases_on `phi_values_agree a.bb_label b.bb_label target.bb_instructions` >> simp[] >>
+  Cases_on `do_merge_jump fn a b lm` >> simp[] >>
+  PairCases_on `x` >> simp[] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem try_bypass_blocks_nonempty:
+  ALL_DISTINCT (fn_labels fn) /\
+  fn.fn_blocks <> [] /\ first_block_no_preds fn /\ fn_succs_closed fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  try_bypass fn lm a succs = (fn',lm',changed) ==>
+  fn'.fn_blocks <> []
+Proof
+  strip_tac >> drule try_bypass_result_cases >> strip_tac >> gvs[] >>
+  metis_tac[do_merge_jump_blocks_nonempty]
+QED
+
+Theorem try_bypass_entry_label:
+  ALL_DISTINCT (fn_labels fn) /\
+  fn.fn_blocks <> [] /\ first_block_no_preds fn /\ fn_succs_closed fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  try_bypass fn lm a succs = (fn',lm',changed) ==>
+  (HD fn'.fn_blocks).bb_label = (HD fn.fn_blocks).bb_label
+Proof
+  strip_tac >> drule try_bypass_result_cases >> strip_tac >> gvs[] >>
+  metis_tac[do_merge_jump_entry_label]
+QED
+
+Theorem try_bypass_first_no_preds:
+  ALL_DISTINCT (fn_labels fn) /\
+  fn.fn_blocks <> [] /\ first_block_no_preds fn /\ fn_succs_closed fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  try_bypass fn lm a succs = (fn',lm',changed) ==>
+  first_block_no_preds fn'
+Proof
+  strip_tac >> drule try_bypass_result_cases >> strip_tac >> gvs[] >>
+  metis_tac[do_merge_jump_first_no_preds]
+QED
+
+Theorem try_bypass_succs_closed:
+  ALL_DISTINCT (fn_labels fn) /\
+  fn.fn_blocks <> [] /\ first_block_no_preds fn /\ fn_succs_closed fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  try_bypass fn lm a succs = (fn',lm',changed) ==>
+  fn_succs_closed fn'
+Proof
+  strip_tac >> drule try_bypass_result_cases >> strip_tac >> gvs[] >>
+  metis_tac[do_merge_jump_succs_closed]
+QED
