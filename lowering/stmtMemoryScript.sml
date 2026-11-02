@@ -10,7 +10,10 @@ Theorem compile_pass_frag_mem:
     stmt_frag_mem d ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty Pass) es
       (INL ()) es
 Proof
-  cheat
+  rw[stmt_frag_mem_def, stmt_env_def, declare_stmt_local_def, comp_bind_def,
+     comp_ignore_bind_def, compile_stmt_def, comp_return_def] >>
+  disj1_tac >> qexists_tac `s0` >>
+  simp[stmt_lands_def, cenv_top_ext_refl] >> metis_tac[]
 QED
 
 Theorem stmt_frag_nil_mem:
@@ -18,7 +21,9 @@ Theorem stmt_frag_nil_mem:
     stmt_frag_mem d ctx func cx lctx RetQ cenv (stmts_env cenv lctx ty []) es
       (INL ()) es
 Proof
-  cheat
+  rw[stmt_frag_mem_def, stmts_env_def, comp_return_def] >>
+  disj1_tac >> qexists_tac `s0` >>
+  simp[stmt_lands_def, cenv_top_ext_refl] >> metis_tac[]
 QED
 
 Theorem stmt_frag_cons_env_mem:
