@@ -3,7 +3,7 @@ Theory bodyIntCallExternalLabels
 Ancestors
   bodyIntCallExprLabels bodyIntCallAbiLabels builtinSimple exprLowering
   bodyIntCallContextLabels bodyIntCallLabelFrame bodyIntCallLabelReservations
-  compileEnv list
+  compileEnv list pred_set
 
 Theorem compiler_block_tail_select:
   compiler_block_tail (compile_select cond_op then_op else_op)
@@ -185,4 +185,90 @@ Proof
   gen_tac >> PairCases_on `x` >> simp[] >>
   irule compiler_label_hoare_preserving_bind >> reverse conj_tac >- simp[] >>
   gen_tac >> PairCases_on `x` >> simp[compiler_label_hoare_typed_primitives]
+QED
+
+Theorem compiler_block_tail_default_return_path:
+  compiler_block_tail
+    (compile_default_return_path ce rt dt buf result def addr skip lo hi info)
+Proof
+  rewrite_tac[compile_default_return_path_def, comp_ignore_bind_def] >>
+  Cases_on `skip` >> simp[] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives, compiler_block_tail_store_memory,
+               compiler_block_tail_extcodesize_check,
+               compiler_block_tail_return_value_decode,
+               compiler_block_tail_abi_decode_to_buf] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_default_return_path:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_default_return_path ce rt dt buf result def addr skip lo hi info)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  rewrite_tac[compile_default_return_path_def, comp_ignore_bind_def] >>
+  ntac 2 (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+    >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
+  ntac 3 (irule compiler_label_hoare_fresh_bind >> gen_tac >> strip_tac >> BETA_TAC) >>
+  gvs[] >> Cases_on `skip` >> simp[] >>
+  ntac 3
+    (rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+      >- simp[compiler_label_hoare_context_primitives,
+              compiler_label_hoare_typed_primitives, compiler_label_hoare_store_memory,
+              compiler_label_hoare_extcodesize_check, compiler_label_hoare_return_value_decode,
+              compiler_label_hoare_abi_decode_to_buf] >> gen_tac >> BETA_TAC) >>
+     ho_match_mp_tac compiler_label_hoare_new_block_bind >> conj_tac >- simp[] >>
+     gen_tac >> BETA_TAC >> simp[DELETE_INSERT, DELETE_NON_ELEMENT_RWT]) >>
+  simp[compiler_label_hoare_typed_primitives]
+QED
+
+Theorem compiler_block_tail_external_call_kwargs:
+  compiler_block_tail
+    (compile_external_call_kwargs ce addr vals tys am aa mid ra lo rm
+      static value gas skip has_default def rt dt enc_info dec_info)
+Proof
+  rewrite_tac[compile_external_call_kwargs_def, LET_THM, comp_ignore_bind_def,
+              comp_bind_assoc] >>
+  Cases_on `vals = []` >> Cases_on `ra = 0` >> Cases_on `skip` >>
+  Cases_on `static` >> Cases_on `has_default` >> simp[] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives, compiler_block_tail_alloc_buffer,
+               compiler_block_tail_extcall_store_values,
+               compiler_block_tail_abi_encode_to_buf,
+               compiler_block_tail_extcodesize_check,
+               compiler_block_tail_default_return_path,
+               compiler_block_tail_return_value_decode,
+               compiler_block_tail_abi_decode_to_buf] >> gen_tac >> BETA_TAC >>
+       simp[comp_bind_assoc]) >>
+  simp[compiler_block_tail_primitives, compiler_block_tail_default_return_path]
+QED
+
+Theorem compiler_label_hoare_external_call_kwargs:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_external_call_kwargs ce addr vals tys am aa mid ra lo rm
+      static value gas skip has_default def rt dt enc_info dec_info)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  rewrite_tac[compile_external_call_kwargs_def, LET_THM, comp_ignore_bind_def,
+              comp_bind_assoc] >>
+  Cases_on `vals = []` >> Cases_on `ra = 0` >> Cases_on `skip` >>
+  Cases_on `static` >> Cases_on `has_default` >> simp[] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives,
+               compiler_label_hoare_alloc_buffer, compiler_label_hoare_extcall_store_values,
+               compiler_label_hoare_abi_encode_to_buf, compiler_label_hoare_extcodesize_check] >>
+       gen_tac >> BETA_TAC >> simp[comp_bind_assoc]) >>
+  ntac 2 (irule compiler_label_hoare_fresh_bind >> gen_tac >> strip_tac >> BETA_TAC) >>
+  gvs[] >>
+  ntac 2
+    (rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+      >- simp[compiler_label_hoare_context_primitives,
+              compiler_label_hoare_typed_primitives, compiler_label_hoare_alloc_buffer] >>
+      gen_tac >> BETA_TAC >> simp[comp_bind_assoc]) >>
+     ho_match_mp_tac compiler_label_hoare_new_block_bind >> conj_tac >- simp[] >>
+     gen_tac >> BETA_TAC >> simp[DELETE_INSERT, DELETE_NON_ELEMENT_RWT]) >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+    >- simp[compiler_label_hoare_alloc_buffer, compiler_label_hoare_return_value_decode,
+            compiler_label_hoare_abi_decode_to_buf] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_typed_primitives, compiler_label_hoare_default_return_path]
 QED
