@@ -317,7 +317,9 @@ Theorem storage_copy_load_step[local]:
         t.vs_labels = s.vs_labels
 Proof
   rpt strip_tac >>
-  gvs[step_inst_base_def, exec_read1_def, mk_inst_def] >>
+  gvs[mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs] >>
+  simp[exec_read1_def] >>
   simp[lookup_var_update_var, update_var_def] >> metis_tac[]
 QED
 

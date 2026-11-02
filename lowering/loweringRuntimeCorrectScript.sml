@@ -48,6 +48,8 @@ Ancestors
   compileEnv compileVyper moduleLowering stmtLowering
   e2eDefs supportedProgram vyperLoweringCorrect
   vyperTypeSelectedEntrySoundness vyperTypeSystem
+  entryStateRel supportedDecls vyperTypeContractFunction vyperTypeContractSoundness
+  vyperTypeContractContext vyperTypeContract
   vyperInterpreter vyperState vyperContext
   venomState venomExecSemantics venomWf
 
@@ -85,6 +87,60 @@ Proof
      irule call_external_function_body >>
      simp[evaluate_defaults_def, Abbr `cx`]) >>
   simp[]
+QED
+
+Theorem external_selected_body_typing:
+  supported_program tops /\ source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut, F, args, [], ret, fbody) ==>
+  ?art env_t env'.
+    check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
+    checked_contract_runtime_ready art [(NONE,tops)] am tx /\
+    env_t.current_src = NONE /\
+    env_t.type_defs = get_tenv
+      (initial_evaluation_context am.sources am.layouts tx NONE) /\
+    env_t.fn_sigs = art.cta_fn_sigs /\
+    env_t.bare_globals = art.cta_bare_globals /\
+    env_t.bare_global_assignable = art.cta_bare_global_assignable /\
+    env_t.toplevel_vtypes = art.cta_toplevel_vtypes /\
+    env_t.flag_members = art.cta_flag_members /\
+    type_stmts env_t ret fbody = SOME env' /\
+    (!id ty. MEM (id,ty) args ==>
+      FLOOKUP env_t.var_types id = SOME ty /\
+      FLOOKUP env_t.var_assignable id = SOME T) /\
+    (!n ty. FLOOKUP env_t.var_types n = SOME ty ==>
+      MEM (n,ty) args) /\
+    (!n b. FLOOKUP env_t.var_assignable n = SOME b ==>
+      ?ty. MEM (n,ty) args /\ b = T) /\
+    stmts_no_control_escape fbody /\
+    (ret <> NoneT ==> stmts_no_fallthrough fbody) /\
+    call_evaluation_safe
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (int_calls_stmts fbody)
+Proof
+  strip_tac >>
+  `?raw. MEM (FunctionDecl External mut F raw tx.function_name args [] ret fbody) tops` by
+    (irule lookup_function_external_decl >> simp[] >>
+     qexists `tops` >> gvs[supported_program_def, supported_declaration_headers_def]) >>
+  gvs[source_typing_ok_def, source_deployment_rel_def] >>
+  `module_allocated am.layouts tx.target NONE tops` by
+    (drule check_contract_main_module_allocated >> simp[]) >>
+  `External <> Deploy` by simp[] >>
+  `ALOOKUP [(NONE,tops)] NONE = SOME tops` by simp[] >>
+  drule checked_function_body_typing_package >>
+  simp[] >> disch_then drule >> simp[] >>
+  strip_tac >>
+  qexistsl [`env_body`, `env_after`] >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  `check_function_body am.layouts tx.target [(NONE,tops)] art NONE
+     mut F args [] ret fbody` by
+    (irule check_contract_runtime_function_body_MEM >> simp[] >>
+     qexistsl [`tx.function_name`, `raw`, `External`] >> simp[]) >>
+  conj_tac >- gvs[check_function_body_def] >>
+  conj_tac >- gvs[check_function_body_def] >>
+  drule checked_explicit_external_body_call_evaluation_safe >>
+  simp[] >> disch_then drule >> simp[]
 QED
 
 (* ADMITTED (typing soundness): the body of a checked external function

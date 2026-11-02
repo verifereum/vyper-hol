@@ -517,7 +517,7 @@ QED
 
 (* With no public variables, an external function lookup_function selects
    is a declared function, not a getter. *)
-Theorem lookup_function_external_decl[local]:
+Theorem lookup_function_external_decl:
   !tops tops0 name mut nr args dflts ret fbody.
     EVERY (supported_declaration_header tops0) tops /\
     lookup_function NONE name External tops =

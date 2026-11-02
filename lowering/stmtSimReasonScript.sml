@@ -70,10 +70,10 @@ Proof
   rpt gen_tac >> strip_tac >>
   gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
-  simp[emitted_insts_def, same_blocks_def, DROP_APPEND1,
-       run_inst_seq_def, step_inst_base_def, exec_pure2_def,
-       exec_write2_def, eval_operand_def, bind_outputs_def,
-       lookup_var_update_var] >>
+  simp[emitted_insts_def, same_blocks_def, DROP_APPEND1] >>
+  simp[run_inst_seq_def, mk_inst_def, step_inst_base_opcode_eqs] >>
+  simp[exec_pure2_def, exec_write2_def, eval_operand_def,
+       bind_outputs_def, lookup_var_update_var] >>
   rpt strip_tac >> simp[lookup_var_mstore, lookup_var_update_var] >>
   gvs[not_fresh_at_def]
 QED
