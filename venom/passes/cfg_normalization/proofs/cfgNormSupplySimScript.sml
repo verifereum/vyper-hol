@@ -383,3 +383,105 @@ Proof
       drule_all venomExecProofsTheory.eval_phis_outputs_in_fdom_idx >> simp[]) >>
   drule_all strict_dom_vars_defined_eval_phis >> simp[]
 QED
+
+Theorem def_available_at_exec_block_endpoint:
+  wf_function f /\ MEM bb f.fn_blocks /\
+  bb.bb_label = st.vs_current_bb /\
+  strict_dom_vars_defined f st /\
+  EVERY inst_wf bb.bb_instructions /\
+  exec_block fuel ctx bb st = OK st' /\
+  (!j w. j < st.vs_inst_idx /\ j < LENGTH bb.bb_instructions /\
+         MEM w (EL j bb.bb_instructions).inst_outputs ==>
+         w IN FDOM st.vs_vars) /\
+  def_available_at f bb NONE v ==>
+  v IN FDOM st'.vs_vars
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `def_available_at _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE[def_available_at_def]) >>
+  Cases_on `def_bb.bb_label = bb.bb_label`
+  >- (`def_bb = bb` by
+        metis_tac[venomExecProofsTheory.same_label_same_block] >> gvs[] >>
+      `?idx. idx < LENGTH bb.bb_instructions /\
+             EL idx bb.bb_instructions = def_inst` by
+        metis_tac[listTheory.MEM_EL] >>
+      `~is_terminator def_inst.inst_opcode` by
+        (strip_tac >>
+         `def_inst.inst_outputs = []` by
+           metis_tac[venomExecProofsTheory.terminator_no_outputs,
+                     listTheory.EVERY_MEM] >> gvs[]) >>
+      irule exec_block_outputs_in_fdom_from_prefix >>
+      qexistsl [`bb`, `ctx`, `fuel`, `idx`, `st`] >> simp[] >>
+      gvs[wf_function_def] >> metis_tac[]) >>
+  `v IN FDOM st.vs_vars` by
+    (gvs[strict_dom_vars_defined_def] >> metis_tac[]) >>
+  drule exec_block_fdom_mono >> simp[pred_setTheory.SUBSET_DEF] >>
+  gvs[wf_function_def] >> metis_tac[]
+QED
+
+Theorem def_available_at_run_block_entry_endpoint:
+  wf_function f /\ MEM bb f.fn_blocks /\
+  bb.bb_label = st.vs_current_bb /\
+  strict_dom_vars_defined f st /\
+  EVERY inst_wf bb.bb_instructions /\
+  run_block_entry fuel ctx bb st = OK st' /\
+  def_available_at f bb NONE v ==>
+  v IN FDOM st'.vs_vars
+Proof
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`st`, `bb.bb_instructions`]
+    venomExecSemanticsTheory.eval_phis_ok_or_error_defs) >> strip_tac >>
+  gvs[venomExecSemanticsTheory.run_block_def] >>
+  rename1 `eval_phis st bb.bb_instructions = OK st_phi` >>
+  irule def_available_at_exec_block_endpoint >>
+  qexistsl [`bb`, `ctx`, `f`, `fuel`,
+            `st_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`] >>
+  simp[] >>
+  `st_phi.vs_current_bb = st.vs_current_bb` by
+    metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      drule_all venomExecProofsTheory.eval_phis_outputs_in_fdom_idx >> simp[]) >>
+  drule_all strict_dom_vars_defined_eval_phis >> simp[]
+QED
+
+Theorem phi_forward_sources_available:
+  !insts f pred target v.
+    wf_ssa f /\ wf_function f /\
+    MEM pred f.fn_blocks /\ MEM target f.fn_blocks /\
+    (!inst. MEM inst insts ==> MEM inst target.bb_instructions) /\
+    MEM v (phi_vars_needing_forward pred.bb_label pred insts) ==>
+    def_available_at f pred NONE v
+Proof
+  Induct_on `insts` >- simp[phi_vars_needing_forward_def] >>
+  rpt gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >>
+  simp[phi_vars_needing_forward_def] >> rpt strip_tac >>
+  gvs[listTheory.MEM_APPEND, listTheory.MEM_MAP, listTheory.MEM_FILTER,
+      pairTheory.EXISTS_PROD]
+  >- (gvs[wf_ssa_def, def_dominates_uses_def] >>
+      `phi_edge_uses_wf f target h` by metis_tac[listTheory.MEM] >>
+      gvs[phi_edge_uses_wf_def] >>
+      `?p. MEM p f.fn_blocks /\ p.bb_label = pred.bb_label /\
+           def_available_at f p NONE v` by metis_tac[] >>
+      `p = pred` by metis_tac[venomExecProofsTheory.same_label_same_block] >>
+      gvs[]) >>
+  first_x_assum irule >> simp[] >> qexists `target` >> simp[] >> metis_tac[]
+QED
+
+Theorem phi_forward_sources_run_block_entry_defined:
+  wf_ssa f /\ wf_function f /\
+  MEM pred f.fn_blocks /\ MEM target f.fn_blocks /\
+  pred.bb_label = st.vs_current_bb /\
+  strict_dom_vars_defined f st /\
+  EVERY inst_wf pred.bb_instructions /\
+  run_block_entry fuel ctx pred st = OK st' /\
+  MEM v (phi_vars_needing_forward pred.bb_label pred target.bb_instructions) ==>
+  v IN FDOM st'.vs_vars
+Proof
+  rpt strip_tac >>
+  `def_available_at f pred NONE v` by
+    (irule phi_forward_sources_available >> simp[] >>
+     qexistsl [`target.bb_instructions`, `target`] >> gvs[]) >>
+  drule_all def_available_at_run_block_entry_endpoint >> simp[]
+QED
