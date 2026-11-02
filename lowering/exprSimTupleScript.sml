@@ -771,6 +771,29 @@ Proof
   disch_then (qspec_then `k` mp_tac) >> simp[]
 QED
 
+Theorem type_memory_size_list_take[local]:
+  !tvs k. type_memory_size_list (TAKE k tvs) =
+          SUM (TAKE k (MAP type_memory_size tvs))
+Proof
+  Induct >> simp[type_memory_size_def] >> rpt gen_tac >> Cases_on `k` >>
+  simp[type_memory_size_def]
+QED
+
+Theorem local_place_at_tuple_elem[local]:
+  local_place_at cenv cx s id p0 bt w /\
+  evaluate_type (get_tenv cx) bt = SOME (TupleTV tvs) /\ k < LENGTH tvs /\
+  evaluate_type (get_tenv cx) et = SOME (EL k tvs) ==>
+  local_place_at cenv cx s id (p0 ++ [ValueSubscript (IntV (&k))]) et
+    (w + n2w (SUM (TAKE k (MAP type_memory_size tvs))))
+Proof
+  rw[local_place_at_def] >> gvs[] >>
+  drule_then (qspecl_then [`ValueSubscript (IntV (&k))`,
+                           `SUM (TAKE k (MAP type_memory_size tvs))`,
+                           `EL k tvs`] mp_tac) mem_path_offset_snoc >>
+  simp[mem_step_offset_def, type_memory_size_list_take] >> strip_tac >>
+  simp[GSYM wordsTheory.WORD_ADD_ASSOC, wordsTheory.word_add_n2w]
+QED
+
 (* The element's value_vv holds the element, from the base's. *)
 Theorem tuple_vv_holds_elem[local]:
   !func cenv cx env es sa sn es1 tv bvv q w dst tys tvs vs k tv' ctx.
@@ -785,7 +808,10 @@ Theorem tuple_vv_holds_elem[local]:
       SOME (w + n2w (tuple_offset cenv tys (vv_loc bvv) k)) /\
     OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
-    k < LENGTH tvs ==>
+    k < LENGTH tvs /\
+    (!id path. tv' = PlaceR (MemoryPlace id path) ==>
+       ?p0. tv = PlaceR (MemoryPlace id p0) /\
+            path = p0 ++ [ValueSubscript (IntV (&k))]) ==>
     vv_holds cenv cx (EL k tys) tv'
       (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) es1 q
 Proof
@@ -811,7 +837,12 @@ Proof
       qspecl_then [`get_tenv cx`, `EL k tys`, `EL k tvs`, `EL k vs`,
                    `SUM (TAKE k (MAP type_memory_size tvs)) + w2n w`,
                    `q.vs_memory`] mp_tac val_in_memory_word_type >>
-      gvs[])
+      gvs[] >> rpt strip_tac >>
+      qpat_x_assum `!id path. tv' = _ ==> _` drule >> strip_tac >> gvs[] >>
+      `local_place_at cenv cx q id p0 (TupleT tys) w` by
+        (irule vv_holds_memory_place_at >> simp[is_word_type_def] >>
+         qexistsl_tac [`es1`, `bvv`] >> simp[]) >>
+      drule_all local_place_at_tuple_elem >> simp[wordsTheory.WORD_ADD_0])
   >~ [`immutable_holds`]
   >- (drule_all tuple_offset_code >>
       disch_then (qspec_then `k` assume_tac) >> gvs[] >>
@@ -862,7 +893,10 @@ Theorem tuple_vv_post[local]:
     k < LENGTH tvs /\
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
     values_have_types tvs vs /\
-    read_result cx tv' es1 = (INL (EL k vs), es1) ==>
+    read_result cx tv' es1 = (INL (EL k vs), es1) /\
+    (!id path. tv' = PlaceR (MemoryPlace id path) ==>
+       ?p0. tv = PlaceR (MemoryPlace id p0) /\
+            path = p0 ++ [ValueSubscript (IntV (&k))]) ==>
     vv_post ctx func cenv cx (Subscript (EL k tys) obj idx) es sa sn s0 es1 tv'
       (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q
 Proof
@@ -996,6 +1030,7 @@ Proof
       simp[] >> strip_tac >> gvs[] >>
       irule tuple_vv_post >> simp[Abbr `off`] >>
       conj_tac >- metis_tac[] >>
-      qexistsl [`btv`, `vs`] >> simp[]) >>
+      qexistsl [`btv`, `vs`] >> simp[] >>
+      metis_tac[select_result_memory_place]) >>
   irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[]
 QED
