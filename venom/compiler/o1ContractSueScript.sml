@@ -179,6 +179,112 @@ Proof
   irule sue_eval_operands_related >> simp[]
 QED
 
+Theorem sue_rewritten_read_ranges_plain[local]:
+  inst.inst_opcode <> LOG /\ inst.inst_opcode <> DRET /\
+  LIST_REL (\op newop. eval_operand newop t = eval_operand op s)
+    inst.inst_operands ops ==>
+  source_memory_read_ranges (inst with inst_operands := ops) t =
+  source_memory_read_ranges inst s
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode` >>
+  gvs[contextCodegenRelTheory.source_memory_read_ranges_def] >>
+  rpt (qmatch_asmsub_rename_tac `LIST_REL _ xs ys` >>
+    Cases_on `xs` >> Cases_on `ys` >>
+    gvs[contextCodegenRelTheory.memory_range_of_operands_def])
+QED
+
+Theorem sue_rewritten_write_ranges_plain[local]:
+  inst.inst_opcode <> DRET /\
+  LIST_REL (\op newop. eval_operand newop t = eval_operand op s)
+    inst.inst_operands ops ==>
+  source_memory_write_ranges (inst with inst_operands := ops) t =
+  source_memory_write_ranges inst s
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode` >>
+  gvs[codegenRelTheory.source_memory_write_ranges_def] >>
+  rpt (qmatch_asmsub_rename_tac `LIST_REL _ xs ys` >>
+    Cases_on `xs` >> Cases_on `ys` >>
+    gvs[codegenRelTheory.fixed_source_write_range_def,
+        codegenRelTheory.sized_source_write_range_def])
+QED
+
+Theorem sue_rewritten_dret_ranges[local]:
+  inst.inst_opcode = DRET /\ s.vs_call_entry_fmp = t.vs_call_entry_fmp /\
+  parse_dret_shape (inst with inst_operands := ops) = parse_dret_shape inst /\
+  LIST_REL (\op newop. eval_operand newop t = eval_operand op s)
+    inst.inst_operands ops ==>
+  inst_mem_ranges (inst with inst_operands := ops) t = inst_mem_ranges inst s
+Proof
+  strip_tac >> drule sue_eval_operands_related >> strip_tac >>
+  simp[unitMemInvTheory.inst_mem_ranges_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       contextCodegenRelTheory.dret_memory_read_ranges_def,
+       codegenRelTheory.source_memory_write_ranges_def]
+QED
+
+Theorem sue_rewritten_log_ranges[local]:
+  inst_wf inst /\ inst.inst_opcode = LOG /\
+  HD ops = HD inst.inst_operands /\
+  LIST_REL (\op newop. eval_operand newop t = eval_operand op s)
+    inst.inst_operands ops ==>
+  source_memory_read_ranges (inst with inst_operands := ops) t =
+  source_memory_read_ranges inst s
+Proof
+  strip_tac >> gvs[inst_wf_def] >>
+  rename1 `LIST_REL _ rest tail` >>
+  `LENGTH tail = LENGTH rest` by metis_tac[listTheory.LIST_REL_LENGTH] >>
+  `LIST_REL (\op newop. eval_operand newop t = eval_operand op s)
+     (REVERSE rest) (REVERSE tail)` by
+    metis_tac[listTheory.LIST_REL_REVERSE] >>
+  `eval_operands (DROP 2 (REVERSE tail)) t =
+   eval_operands (DROP 2 (REVERSE rest)) s` by
+    (irule sue_eval_operands_related >>
+     irule rich_listTheory.LIST_REL_DROP >> simp[]) >>
+  `eval_operand (EL 0 (REVERSE tail)) t =
+   eval_operand (EL 0 (REVERSE rest)) s /\
+   eval_operand (EL 1 (REVERSE tail)) t =
+   eval_operand (EL 1 (REVERSE rest)) s` by
+    (qpat_x_assum `LIST_REL _ (REVERSE _) (REVERSE _)` mp_tac >>
+     pure_rewrite_tac[listTheory.LIST_REL_EL_EQN, listTheory.LENGTH_REVERSE] >>
+     strip_tac >> conj_tac
+     >- (first_x_assum (qspec_then `0` mp_tac) >>
+         BETA_TAC >> disch_then irule >> decide_tac) >>
+     first_x_assum (qspec_then `1` mp_tac) >>
+     BETA_TAC >> disch_then irule >> decide_tac) >>
+  qpat_x_assum `eval_operand (EL 0 _) _ = _`
+    (assume_tac o REWRITE_RULE[listTheory.EL]) >>
+  simp[contextCodegenRelTheory.source_memory_read_ranges_def,
+       contextCodegenRelTheory.memory_range_of_operands_def]
+QED
+
+Theorem sue_rewritten_mem_observation:
+  inst_wf inst /\ execution_frame s = execution_frame t /\
+  LIST_REL (\op newop. eval_operand newop t = eval_operand op s)
+    inst.inst_operands ops /\
+  (inst.inst_opcode = LOG ==> HD ops = HD inst.inst_operands) /\
+  (inst.inst_opcode = DRET ==>
+    parse_dret_shape (inst with inst_operands := ops) = parse_dret_shape inst) ==>
+  mem_corr inst s (inst with inst_operands := ops) t
+Proof
+  strip_tac >>
+  `t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
+   t.vs_initial_fmp = s.vs_initial_fmp /\
+   s.vs_call_entry_fmp = t.vs_call_entry_fmp` by
+    (fs[stateFrameTheory.execution_frame_def,
+        venomStateTheory.venom_state_component_equality]) >>
+  simp[mem_corr_def] >> disj2_tac >>
+  Cases_on `inst.inst_opcode = DRET`
+  >- (irule sue_rewritten_dret_ranges >> simp[]) >>
+  simp[unitMemInvTheory.inst_mem_ranges_def] >>
+  `source_memory_write_ranges (inst with inst_operands := ops) t =
+   source_memory_write_ranges inst s` by
+    (irule sue_rewritten_write_ranges_plain >> simp[]) >>
+  simp[] >>
+  Cases_on `inst.inst_opcode = LOG`
+  >- (irule sue_rewritten_log_ranges >> simp[]) >>
+  irule sue_rewritten_read_ranges_plain >> simp[]
+QED
+
 (* Runs of the expanded function correspond to runs of the original, in
    any context. *)
 Theorem sue_expand_function_supply_fn_bisim:
