@@ -48,3 +48,22 @@ Proof
   qexistsl_tac [`bb`, `ctx`, `fuel`, `i`,
     `LENGTH bb.bb_instructions - s.vs_inst_idx`, `s`] >> simp[]
 QED
+
+Theorem dft_dominance_transfer:
+  wf_function fn /\ ssa_form fn /\ MEM bb fn.fn_blocks /\
+  bb.bb_label = s.vs_current_bb /\ fn_reachable fn s.vs_current_bb /\
+  fn_cfg_edge fn s.vs_current_bb t.vs_current_bb /\
+  strict_dom_vars_defined fn s /\
+  FDOM s.vs_vars SUBSET FDOM t.vs_vars /\
+  (!inst v. MEM inst bb.bb_instructions /\ MEM v inst.inst_outputs ==>
+            v IN FDOM t.vs_vars) ==>
+  strict_dom_vars_defined fn t
+Proof
+  rw[strict_dom_vars_defined_def] >>
+  Cases_on `d_bb.bb_label = s.vs_current_bb`
+  >- (`d_bb = bb` by metis_tac[same_label_same_block] >>
+      gvs[] >> metis_tac[]) >>
+  `fn_dominates fn d_bb.bb_label s.vs_current_bb` by
+    metis_tac[fn_dominates_predecessor] >>
+  fs[pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
