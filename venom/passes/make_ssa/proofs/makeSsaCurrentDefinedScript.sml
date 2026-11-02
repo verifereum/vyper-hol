@@ -206,3 +206,44 @@ Proof
   eq_tac >> rpt strip_tac >>
   rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]
 QED
+
+Theorem current_all_paths_endpoint_binding:
+  wf_function fn /\ fn_inst_wf fn /\ MEM bb fn.fn_blocks /\
+  def_on_all_paths fn bb NONE v /\
+  current_completed_blocks fn ctx path st out /\ is_fn_path fn path /\
+  path <> [] /\
+  (?entry. fn_entry_label fn = SOME entry /\ HD path = entry) /\
+  LAST path = bb.bb_label ==> v IN FDOM out.vs_vars
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `def_on_all_paths _ _ _ _` mp_tac >>
+  simp[def_on_all_paths_def] >>
+  disch_then (qspec_then `path` mp_tac) >> simp[] >> strip_tac
+  >- (`MEM def_bb.bb_label path` by
+        (gvs[] >> irule EL_MEM >> decide_tac) >>
+      `lookup_block def_bb.bb_label fn.fn_blocks = SOME def_bb` by
+        (irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
+      irule current_completed_blocks_output >> metis_tac[]) >>
+  `MEM bb.bb_label path` by
+    (Cases_on `path` using SNOC_CASES >> gvs[]) >>
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
+  `MEM (EL i bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
+  irule current_completed_blocks_output >> metis_tac[]
+QED
+
+Theorem current_phi_edge_endpoint_binding:
+  wf_function fn /\ fn_inst_wf fn /\ MEM bb fn.fn_blocks /\
+  fn_defs_reach_uses fn /\ MEM succ fn.fn_blocks /\
+  MEM phi succ.bb_instructions /\ phi.inst_opcode = PHI /\
+  MEM (bb.bb_label,v) (phi_pairs phi.inst_operands) /\
+  fn_cfg_edge fn bb.bb_label succ.bb_label /\
+  current_completed_blocks fn ctx path st out /\ is_fn_path fn path /\
+  path <> [] /\
+  (?entry. fn_entry_label fn = SOME entry /\ HD path = entry) /\
+  LAST path = bb.bb_label ==> v IN FDOM out.vs_vars
+Proof
+  rpt strip_tac >> irule current_all_paths_endpoint_binding >>
+  qexistsl_tac [`bb`, `ctx`, `fn`, `path`, `st`] >> simp[] >>
+  gvs[fn_defs_reach_uses_def] >> metis_tac[]
+QED
