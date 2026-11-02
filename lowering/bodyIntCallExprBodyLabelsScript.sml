@@ -358,3 +358,62 @@ Proof
       simp[compiler_label_hoare_context_primitives]) >>
   gen_tac >> BETA_TAC >> simp[compiler_label_hoare_def]
 QED
+
+
+Theorem compile_expr_body_builtin_nil[local]:
+  compile_expr_body cfn bfn tfn ce ty (Builtin ann bi []) st =
+  bfn ce (expr_type (Builtin ann bi [])) ty bi [] st
+Proof
+  Cases_on `bi` >> simp[compile_expr_body_def]
+QED
+
+Theorem compile_expr_body_builtin_single[local]:
+  compile_expr_body cfn bfn tfn ce ty (Builtin ann bi [a]) st =
+  bfn ce (expr_type (Builtin ann bi [a])) ty bi [a] st
+Proof
+  Cases_on `bi` >> Cases_on `a` >> simp[compile_expr_body_def]
+QED
+
+Theorem compile_expr_body_ordinary_builtin_two[local]:
+  bi <> AddMod /\ bi <> MulMod /\ bi <> PowMod256 ==>
+  compile_expr_body cfn bfn tfn ce ty (Builtin ann bi [a;b]) st =
+  bfn ce (expr_type (Builtin ann bi [a;b])) ty bi [a;b] st
+Proof
+  strip_tac >> Cases_on `bi` >> gvs[] >>
+  Cases_on `a` >> simp[compile_expr_body_def] >>
+  Cases_on `b` >> simp[]
+QED
+
+Theorem compile_expr_body_ordinary_builtin_three[local]:
+  bi <> AddMod /\ bi <> MulMod /\ bi <> PowMod256 ==>
+  compile_expr_body cfn bfn tfn ce ty (Builtin ann bi [a;b;c]) st =
+  bfn ce (expr_type (Builtin ann bi [a;b;c])) ty bi [a;b;c] st
+Proof
+  strip_tac >> Cases_on `bi` >> gvs[] >>
+  Cases_on `a` >> simp[compile_expr_body_def] >>
+  Cases_on `b` >> simp[] >> Cases_on `c` >> simp[]
+QED
+
+Theorem compile_expr_body_builtin_long[local]:
+  compile_expr_body cfn bfn tfn ce ty (Builtin ann bi (a::b::c::d::rest)) st =
+  bfn ce (expr_type (Builtin ann bi (a::b::c::d::rest))) ty bi (a::b::c::d::rest) st
+Proof
+  Cases_on `bi` >> Cases_on `a` >> simp[compile_expr_body_def] >>
+  Cases_on `b` >> simp[] >> Cases_on `c` >> simp[]
+QED
+
+Theorem compile_expr_body_ordinary_builtin[local]:
+  bi <> AddMod /\ bi <> MulMod /\ bi <> PowMod256 ==>
+  compile_expr_body cfn bfn tfn ce ty (Builtin ann bi args) =
+  bfn ce (expr_type (Builtin ann bi args)) ty bi args
+Proof
+  strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `args` >- simp[compile_expr_body_builtin_nil] >>
+  rename1 `a::rest` >>
+  Cases_on `rest` >- simp[compile_expr_body_builtin_single] >>
+  rename1 `a::b::rest` >>
+  Cases_on `rest` >- simp[compile_expr_body_ordinary_builtin_two] >>
+  rename1 `a::b::c::rest` >>
+  Cases_on `rest` >- simp[compile_expr_body_ordinary_builtin_three] >>
+  simp[compile_expr_body_builtin_long]
+QED
