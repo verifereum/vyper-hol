@@ -115,10 +115,16 @@ Theorem label_positions_ok_label[local]:
   inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> PHI ==>
   is_terminator inst.inst_opcode \/ l = "code_end"
 Proof
-  simp[label_positions_ok_def] >>
-  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
-  every_case_tac >> gvs[EVERY_MEM] >>
-  metis_tac[stackPlanTypesTheory.is_label_operand_def]
+  strip_tac >>
+  Cases_on `inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ`
+  >- gvs[is_terminator_def] >>
+  Cases_on `inst.inst_opcode = ADD`
+  >- (gvs[label_positions_ok_def] >> every_case_tac >> gvs[EVERY_MEM] >>
+      metis_tac[stackPlanTypesTheory.is_label_operand_def]) >>
+  `EVERY (\op. ~is_label_operand op) inst.inst_operands` by
+    (qpat_x_assum `label_positions_ok _` mp_tac >>
+     simp[label_positions_ok_def] >> Cases_on `inst.inst_opcode` >> gvs[]) >>
+  gvs[EVERY_MEM] >> res_tac >> fs[stackPlanTypesTheory.is_label_operand_def]
 QED
 
 Theorem source_fn_label_refs_ok[local]:
