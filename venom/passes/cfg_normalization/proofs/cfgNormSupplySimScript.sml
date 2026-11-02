@@ -1,7 +1,7 @@
 Theory cfgNormSupplySim
 Ancestors
   cfgNormSupplyProofs cfgTransformProps cfgNormDefs cfgTransform venomExecProps venomInst venomWf
-  sccpCorrectnessProofs finite_map venomFnScheduleRunner
+  sccpCorrectnessProofs finite_map venomFnScheduleRunner unitShapeDefs
 
 Theorem find_and_split_supply_cases:
   !bbs fn s fn' changed s'.
@@ -2077,4 +2077,126 @@ Proof
   strip_tac >> simp[wf_ssa_def] >> conj_tac
   >- (irule insert_split_supply_ssa_form >> gvs[wf_ssa_def] >> metis_tac[]) >>
   irule insert_split_supply_def_dominates_uses >> metis_tac[]
+QED
+
+Theorem supply_first_block_no_preds:
+  wf_function fn ==>
+  (first_block_no_preds fn <=>
+   !a. ~fn_cfg_edge fn a (HD fn.fn_blocks).bb_label)
+Proof
+  simp[first_block_no_preds_def, fn_cfg_edge_def, listTheory.EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem insert_split_supply_first_block_no_preds:
+  wf_function fn /\ first_block_no_preds fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\
+  fn_cfg_edge fn pred.bb_label target.bb_label /\
+  insert_split_supply s fn pred target = (fn',s') ==>
+  first_block_no_preds fn'
+Proof
+  strip_tac >>
+  `wf_function fn'` by metis_tac[insert_split_supply_wf_function] >>
+  `fn.fn_blocks <> [] /\ fn'.fn_blocks <> []` by
+    gvs[wf_function_def, fn_has_entry_def] >>
+  `fn_entry_label fn' = fn_entry_label fn` by
+    (irule insert_split_supply_entry >> metis_tac[]) >>
+  `(HD fn'.fn_blocks).bb_label = (HD fn.fn_blocks).bb_label` by
+    (Cases_on `fn.fn_blocks` >> Cases_on `fn'.fn_blocks` >>
+     gvs[fn_entry_label_def, entry_block_def]) >>
+  `MEM (HD fn.fn_blocks).bb_label (fn_labels fn)` by
+    (simp[fn_labels_def, listTheory.MEM_MAP] >>
+     qexists `HD fn.fn_blocks` >> Cases_on `fn.fn_blocks` >> gvs[]) >>
+  `~?a. fn_cfg_edge fn a (HD fn.fn_blocks).bb_label` by
+    metis_tac[supply_first_block_no_preds] >>
+  drule_all insert_split_supply_no_incoming >>
+  metis_tac[supply_first_block_no_preds]
+QED
+
+Definition supply_norm_inv_def:
+  supply_norm_inv s fn <=>
+    wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\ first_block_no_preds fn /\
+    ir_supply_covers_fn s fn /\ ir_supply_inst_ok s
+End
+
+Theorem supply_norm_inv_projections:
+  supply_norm_inv s fn ==>
+  wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\ first_block_no_preds fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s
+Proof
+  simp[supply_norm_inv_def]
+QED
+
+Theorem insert_split_supply_norm_inv:
+  supply_norm_inv s fn /\ MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\
+  fn_cfg_edge fn pred.bb_label target.bb_label /\
+  insert_split_supply s fn pred target = (fn',s') ==>
+  supply_norm_inv s' fn'
+Proof
+  strip_tac >> drule supply_norm_inv_projections >> strip_tac >>
+  Cases_on `build_split_block_supply s pred target` >> PairCases_on `r` >>
+  rename1 `build_split_block_supply s pred target = (split,repls,s1)` >>
+  `s1 = s'` by gvs[insert_split_supply_def] >> gvs[] >>
+  `wf_ssa fn'` by (irule insert_split_supply_wf_ssa >> metis_tac[]) >>
+  `fn_inst_wf fn'` by metis_tac[insert_split_supply_fn_inst_wf] >>
+  `wf_function fn'` by metis_tac[insert_split_supply_wf_function] >>
+  `first_block_no_preds fn'` by metis_tac[insert_split_supply_first_block_no_preds] >>
+  drule_all insert_split_supply_contract >> strip_tac >>
+  `ir_supply_inst_ok s'` by
+    gvs[cfg_fn_supply_contract_def, cfg_supply_extends_def] >>
+  `cfg_supply_covers_fn s fn` by
+    gvs[cfg_supply_covers_fn_def, ir_supply_covers_fn_def,
+      list_subset_def, listTheory.EVERY_MEM] >>
+  `cfg_supply_covers_block s pred /\ cfg_supply_covers_block s target` by
+    (gvs[cfg_supply_covers_fn_blocks, listTheory.EVERY_MEM] >> metis_tac[]) >>
+  drule_all insert_split_supply_covered >> strip_tac >>
+  gvs[supply_norm_inv_def, cfg_supply_covers_fn_def, ir_supply_covers_fn_def,
+      list_subset_def, irSupplyTheory.ir_supply_inst_ok_def, listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem find_and_split_supply_norm_inv:
+  supply_norm_inv s fn /\ EVERY (\bb. MEM bb fn.fn_blocks) bbs /\
+  find_and_split_supply fn s bbs = (fn',changed,s') ==>
+  supply_norm_inv s' fn'
+Proof
+  strip_tac >> drule find_and_split_supply_cases >> strip_tac
+  >- gvs[] >>
+  `MEM target fn.fn_blocks` by
+    (gvs[listTheory.EVERY_MEM] >> first_x_assum irule >> simp[]) >>
+  `fn_cfg_edge fn pred.bb_label target.bb_label` by
+    (simp[fn_cfg_edge_def] >> qexists `pred` >> simp[]) >>
+  irule insert_split_supply_norm_inv >> metis_tac[]
+QED
+
+Theorem cfg_norm_round_supply_norm_inv:
+  supply_norm_inv s fn /\ cfg_norm_round_supply s fn = (fn',changed,s') ==>
+  supply_norm_inv s' fn'
+Proof
+  simp[cfg_norm_round_supply_def] >> strip_tac >>
+  irule find_and_split_supply_norm_inv >>
+  qexistsl [`fn.fn_blocks`, `changed`, `fn`, `s`] >>
+  simp[listTheory.EVERY_MEM]
+QED
+
+Theorem cfg_norm_iter_supply_norm_inv:
+  !n s fn fn' s'.
+    supply_norm_inv s fn /\ cfg_norm_iter_supply n s fn = (fn',s') ==>
+    supply_norm_inv s' fn'
+Proof
+  Induct_on `n` >> rpt gen_tac
+  >- (strip_tac >> gvs[cfg_norm_iter_supply_def]) >>
+  strip_tac >>
+  Cases_on `cfg_norm_round_supply s fn` >> PairCases_on `r` >>
+  rename1 `cfg_norm_round_supply s fn = (mid,changed,s1)` >>
+  `supply_norm_inv s1 mid` by metis_tac[cfg_norm_round_supply_norm_inv] >>
+  Cases_on `changed` >> gvs[cfg_norm_iter_supply_def] >> metis_tac[]
+QED
+
+Theorem cfg_norm_function_supply_norm_inv:
+  supply_norm_inv s fn /\ cfg_norm_function_supply s fn = (fn',s') ==>
+  supply_norm_inv s' fn'
+Proof
+  simp[cfg_norm_function_supply_def] >>
+  metis_tac[cfg_norm_iter_supply_norm_inv]
 QED
