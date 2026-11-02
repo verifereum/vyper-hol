@@ -655,3 +655,40 @@ Proof
     collision_rc_instructions, mk_inst_def, collision_main_def,
         collision_main_bb_def, mk_raw_function_def]
 QED
+
+Theorem collision_frame_envelope:
+  !vs0 ctx stk PG G tn fn inst s.
+  frame_reachable vs0 ctx stk PG G tn fn inst s ==>
+  vs0 = collision_start /\ ctx = collision_ctx ==>
+  collision_raw_envelope stk PG G tn fn inst s
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[] >>
+      simp[collision_raw_envelope_def] >> qexists_tac `collision_rc0` >>
+      simp[collision_raw_configs_def] >> metis_tac[collision_source_entry_inv])
+  >- (rpt strip_tac >> gvs[] >> metis_tac[collision_envelope_next])
+  >- (rpt strip_tac >> gvs[] >> metis_tac[collision_envelope_block])
+  >- (rpt strip_tac >> gvs[] >> metis_tac[collision_envelope_call]) >>
+  rpt strip_tac >> gvs[] >> metis_tac[collision_envelope_ret]
+QED
+
+Theorem collision_raw_rows_access:
+  EVERY (\q. access_ok 0 q.cc_prov q.cc_inst q.cc_state)
+    collision_raw_configs
+Proof
+  simp[collision_raw_configs_def, collision_rc_instructions,
+    collision_rc_states, mk_inst_def, access_ok_def] >> rpt conj_tac >>
+  EVAL_TAC >> simp[finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem collision_raw_rows_taint:
+  EVERY (\q. taint_ok q.cc_fn q.cc_taint q.cc_inst q.cc_state)
+    collision_raw_configs
+Proof
+  simp[collision_raw_configs_def, collision_rc_instructions,
+    collision_rc_functions, collision_rc_states, mk_inst_def, taint_ok_def,
+    about_to_revert_def] >> rpt conj_tac >> EVAL_TAC >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE, finite_mapTheory.FLOOKUP_EMPTY] >>
+  gen_tac >> Cases_on `op` >> simp[] >> rpt IF_CASES_TAC >> simp[]
+QED
+
