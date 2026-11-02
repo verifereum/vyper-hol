@@ -1,7 +1,7 @@
 Theory cfgNormSupplySim
 Ancestors
   cfgNormSupplyProofs cfgTransformProps cfgNormDefs cfgTransform venomExecProps venomInst venomWf
-  sccpCorrectnessProofs finite_map
+  sccpCorrectnessProofs finite_map venomFnScheduleRunner
 
 Theorem find_and_split_supply_cases:
   !bbs fn s fn' changed s'.
@@ -607,4 +607,229 @@ Proof
   irule phi_forward_sources_run_block_entry_defined >>
   qexistsl [`ctx`, `f`, `fuel`, `pred`, `st`, `target`] >>
   gvs[fn_inst_wf_def, listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+(* Insert the split label between adjacent endpoints, including self-loops. *)
+Definition supply_expand_path_def:
+  supply_expand_path p t z [] = [] /\
+  supply_expand_path p t z [a] = [a] /\
+  supply_expand_path p t z (a::b::rest) =
+    if a = p /\ b = t then
+      a::z::supply_expand_path p t z (b::rest)
+    else a::supply_expand_path p t z (b::rest)
+End
+
+Theorem supply_expand_path_endpoints:
+  !q. supply_expand_path p t z q = [] <=> q = []
+Proof
+  Induct >> simp[supply_expand_path_def] >>
+  Cases_on `q` >> simp[supply_expand_path_def] >>
+  gen_tac >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem supply_expand_path_hd_last:
+  !q. q <> [] ==>
+    HD (supply_expand_path p t z q) = HD q /\
+    LAST (supply_expand_path p t z q) = LAST q
+Proof
+  Induct >> simp[supply_expand_path_def] >>
+  Cases_on `q` >> simp[supply_expand_path_def] >>
+  gen_tac >> IF_CASES_TAC >>
+  gvs[listTheory.LAST_DEF, supply_expand_path_endpoints]
+QED
+
+Theorem supply_expand_path_mem:
+  !q. d <> z ==> (MEM d (supply_expand_path p t z q) <=> MEM d q)
+Proof
+  Induct >> simp[supply_expand_path_def] >>
+  Cases_on `q` >> simp[supply_expand_path_def] >>
+  rpt gen_tac >> strip_tac >> IF_CASES_TAC >> gvs[]
+QED
+
+Theorem supply_contract_path_mem:
+  d <> z ==> (MEM d (FILTER (\l. l <> z) q) <=> MEM d q)
+Proof
+  simp[listTheory.MEM_FILTER]
+QED
+
+Theorem supply_expand_self_loop[simp]:
+  supply_expand_path p p z [p;p] = [p;z;p]
+Proof
+  simp[supply_expand_path_def]
+QED
+
+Theorem supply_path_cons:
+  is_fn_path f (a::q) <=>
+  is_fn_path f q /\ (q = [] \/ fn_cfg_edge f a (HD q))
+Proof
+  Cases_on `q` >> simp[is_fn_path_def, boolTheory.CONJ_COMM]
+QED
+
+Theorem supply_expand_path_valid:
+  (!a b. fn_cfg_edge f a b ==>
+    if a = p /\ b = t then
+      fn_cfg_edge g a z /\ fn_cfg_edge g z b
+    else fn_cfg_edge g a b) ==>
+  !q. is_fn_path f q ==> is_fn_path g (supply_expand_path p t z q)
+Proof
+  strip_tac >> Induct >> simp[supply_expand_path_def, is_fn_path_def] >>
+  Cases_on `q` >> simp[supply_expand_path_def, is_fn_path_def] >>
+  rpt strip_tac >> IF_CASES_TAC >>
+  simp[supply_path_cons, supply_expand_path_endpoints,
+       supply_expand_path_hd_last] >> metis_tac[]
+QED
+
+Theorem supply_contract_path_head:
+  !q. q <> [] /\ HD q <> z ==>
+    FILTER (\l. l <> z) q <> [] /\
+    HD (FILTER (\l. l <> z) q) = HD q
+Proof
+  Cases >> simp[]
+QED
+
+Theorem supply_contract_path_valid:
+  p <> z /\ t <> z /\ fn_cfg_edge f p t /\
+  (!a. fn_cfg_edge g a z ==> a = p) /\
+  (!b. fn_cfg_edge g z b ==> b = t) /\
+  (!a b. fn_cfg_edge g a b /\ a <> z /\ b <> z ==> fn_cfg_edge f a b) ==>
+  !q. is_fn_path g q ==> is_fn_path f (FILTER (\l. l <> z) q)
+Proof
+  strip_tac >> Induct
+  >- simp[is_fn_path_def] >>
+  gen_tac >> Cases_on `q`
+  >- (Cases_on `h = z` >> simp[is_fn_path_def]) >>
+  simp[is_fn_path_def] >> rpt strip_tac >>
+  Cases_on `h = z`
+  >- gvs[] >>
+  Cases_on `h' = z`
+  >- (Cases_on `t'` >> gvs[is_fn_path_def] >>
+      `h'' = t` by metis_tac[] >>
+      gvs[supply_path_cons] >> metis_tac[]) >>
+  `is_fn_path f (FILTER (\l. l <> z) (h'::t'))` by metis_tac[] >>
+  gvs[supply_path_cons] >> metis_tac[]
+QED
+
+Theorem supply_path_snoc:
+  !q. is_fn_path f (SNOC a q) <=>
+    is_fn_path f q /\ (q = [] \/ fn_cfg_edge f (LAST q) a)
+Proof
+  Induct >> simp[is_fn_path_def] >>
+  Cases_on `q` >> gvs[is_fn_path_def] >> metis_tac[]
+QED
+
+Theorem supply_contract_path_last:
+  (!a. fn_cfg_edge g a z ==> a = p) ==>
+  !q. q <> [] /\ HD q <> z /\ is_fn_path g q ==>
+    LAST (FILTER (\l. l <> z) q) = (if LAST q = z then p else LAST q)
+Proof
+  strip_tac >> ho_match_mp_tac listTheory.SNOC_INDUCT >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `q`
+  >- simp[is_fn_path_def] >>
+  simp[supply_path_snoc] >> rpt strip_tac >>
+  Cases_on `x = z` >> Cases_on `p = z` >>
+  gvs[listTheory.SNOC_APPEND, listTheory.FILTER_APPEND_DISTRIB,
+      listTheory.LAST_APPEND_CONS, listTheory.LAST_DEF] >> metis_tac[]
+QED
+
+Theorem supply_split_label_not_old:
+  ir_supply_covers_fn s f /\ ir_supply_inst_ok s /\
+  build_split_block_supply s pred target = (split,repls,s') ==>
+  ~MEM split.bb_label (fn_labels f)
+Proof
+  rpt strip_tac >>
+  `~MEM split.bb_label s.irs_used_labels` by
+    metis_tac[build_split_block_supply_label_fresh] >>
+  `MEM split.bb_label (fn_ir_labels f)` by
+    metis_tac[MEM_fn_labels_fn_ir_labels] >>
+  gvs[ir_supply_covers_fn_def, list_subset_def, listTheory.EVERY_MEM]
+QED
+
+Theorem supply_fresh_label_no_edges:
+  wf_function f /\ ~MEM z (fn_labels f) ==>
+  (!b. ~fn_cfg_edge f z b) /\ (!a. ~fn_cfg_edge f a z)
+Proof
+  simp[wf_function_def, fn_succs_closed_def, fn_cfg_edge_def,
+       fn_labels_def, listTheory.MEM_MAP] >> metis_tac[]
+QED
+
+Theorem supply_split_path_edges:
+  wf_function f /\ ir_supply_covers_fn s f /\ ir_supply_inst_ok s /\
+  MEM pred f.fn_blocks /\ MEM target f.fn_blocks /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s f pred target = (g,s') ==>
+  pred.bb_label <> split.bb_label /\ target.bb_label <> split.bb_label /\
+  (!a. fn_cfg_edge g a split.bb_label ==> a = pred.bb_label) /\
+  (!b. fn_cfg_edge g split.bb_label b ==> b = target.bb_label) /\
+  (!a b. fn_cfg_edge g a b /\ a <> split.bb_label /\ b <> split.bb_label ==>
+         fn_cfg_edge f a b) /\
+  (!a b. fn_cfg_edge f a b ==>
+    if a = pred.bb_label /\ b = target.bb_label then
+      fn_cfg_edge g a split.bb_label /\ fn_cfg_edge g split.bb_label b
+    else fn_cfg_edge g a b)
+Proof
+  strip_tac >>
+  `~MEM split.bb_label (fn_labels f)` by
+    metis_tac[supply_split_label_not_old] >>
+  `pred.bb_label <> split.bb_label /\ target.bb_label <> split.bb_label` by
+    (gvs[fn_labels_def, listTheory.MEM_MAP] >> metis_tac[]) >>
+  `!b. ~fn_cfg_edge f split.bb_label b` by
+    metis_tac[supply_fresh_label_no_edges] >>
+  `!a. ~fn_cfg_edge f a split.bb_label` by
+    metis_tac[supply_fresh_label_no_edges] >>
+  `ALL_DISTINCT (fn_labels f)` by gvs[wf_function_def] >>
+  `!a b. fn_cfg_edge g a b <=>
+    (a = split.bb_label /\ b = target.bb_label) \/
+    (a = pred.bb_label /\ ?k. MEM k (bb_succs pred) /\
+      b = (if k = target.bb_label then split.bb_label else k)) \/
+    (a <> pred.bb_label /\ fn_cfg_edge f a b)` by
+    (rpt gen_tac >> drule_all insert_split_supply_cfg_edges >> simp[]) >>
+  `!b. MEM b (bb_succs pred) <=> fn_cfg_edge f pred.bb_label b` by
+    metis_tac[fn_cfg_edge_member_label] >>
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem supply_entry_label_member:
+  fn_entry_label f = SOME e ==> MEM e (fn_labels f)
+Proof
+  Cases_on `f.fn_blocks` >>
+  simp[fn_entry_label_def, entry_block_def, fn_labels_def]
+QED
+
+Theorem insert_split_supply_contract_path:
+  wf_function f /\ ir_supply_covers_fn s f /\ ir_supply_inst_ok s /\
+  MEM pred f.fn_blocks /\ MEM target f.fn_blocks /\
+  fn_cfg_edge f pred.bb_label target.bb_label /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s f pred target = (g,s') /\
+  q <> [] /\ fn_entry_label g = SOME (HD q) /\ is_fn_path g q ==>
+  FILTER (\l. l <> split.bb_label) q <> [] /\
+  HD (FILTER (\l. l <> split.bb_label) q) = HD q /\
+  is_fn_path f (FILTER (\l. l <> split.bb_label) q) /\
+  LAST (FILTER (\l. l <> split.bb_label) q) =
+    (if LAST q = split.bb_label then pred.bb_label else LAST q)
+Proof
+  strip_tac >>
+  `f.fn_blocks <> []` by gvs[wf_function_def, fn_has_entry_def] >>
+  `fn_entry_label g = fn_entry_label f` by metis_tac[insert_split_supply_entry] >>
+  `HD q <> split.bb_label` by
+    metis_tac[supply_split_label_not_old, supply_entry_label_member] >>
+  drule_all supply_split_path_edges >> strip_tac >>
+  rpt conj_tac
+  >- metis_tac[supply_contract_path_head]
+  >- metis_tac[supply_contract_path_head]
+  >- (irule supply_contract_path_valid >> metis_tac[]) >>
+  irule supply_contract_path_last >> metis_tac[]
+QED
+
+Theorem insert_split_supply_expand_path:
+  wf_function f /\ ir_supply_covers_fn s f /\ ir_supply_inst_ok s /\
+  MEM pred f.fn_blocks /\ MEM target f.fn_blocks /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s f pred target = (g,s') /\ is_fn_path f q ==>
+  is_fn_path g (supply_expand_path pred.bb_label target.bb_label split.bb_label q)
+Proof
+  strip_tac >> drule_all supply_split_path_edges >> strip_tac >>
+  irule supply_expand_path_valid >> metis_tac[]
 QED
