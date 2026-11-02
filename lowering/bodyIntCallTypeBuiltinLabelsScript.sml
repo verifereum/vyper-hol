@@ -2,7 +2,7 @@
 Theory bodyIntCallTypeBuiltinLabels
 Ancestors
   bodyIntCallBuiltinLabels bodyIntCallLabelFrame bodyIntCallLabelReservations
-  bodyIntCallContextLabels bodyIntCallExprLabels
+  bodyIntCallContextLabels bodyIntCallExprLabels bodyIntCallAbiLabels
   supportedExprForms exprLowering compileEnv builtinSimple
 
 Theorem compiler_block_tail_type_extrema_dispatch:
