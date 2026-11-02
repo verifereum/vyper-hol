@@ -908,6 +908,81 @@ Proof
   qexists `fuel` >> simp[]
 QED
 
+Theorem annassign_memory_typed_read_success_run[local]:
+  !ctx func cenv cx env id dty e es es' stv dtv sa sb sf op p sz s0 dw inst loc info bytes.
+    eval_stmt cx (AnnAssign id dty e) es = (INL (),es') /\
+    expr_sim_inv cenv cx env es /\ acyclic_struct_metadata cenv.ce_struct_fields /\
+    ~is_word_type dty /\ ~is_bytestring_type dty /\
+    ~is_word_type (lowered_value_type cenv e) /\
+    ~is_bytestring_type (lowered_value_type cenv e) /\
+    type_widens_to (get_tenv cx) (lowered_value_type cenv e) dty /\
+    evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
+    evaluate_type (get_tenv cx) dty = SOME dtv /\
+    type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size stv /\
+    type_memory_bytes cenv dty = type_memory_size dtv /\
+    0 < type_memory_size stv /\ type_memory_size stv < dimword (:256) /\
+    0 < type_memory_size dtv /\ type_memory_size dtv <= sz /\
+    type_memory_size dtv + 64 < dimword (:256) /\
+    (!v es1. (do raw <- eval_expr cx e; read_result cx raw od) es = (INL v,es1) ==>
+       value_has_type stv v /\ value_has_type dtv v) /\
+    expr_sim ctx func cenv cx (expr_type e) e es /\
+    lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\ cs_extends sa sb /\
+    compile_assign_value cenv (Var p) LocMemory op F loc dty
+      (lowered_value_type cenv e) info bytes sb = ((),sf) /\
+    fn_has_code sa sb func /\ fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\ not_fresh_at sa p /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    lookup_var p s0 = SOME dw /\ MEM inst (fn_insts func) /\
+    inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
+    FLOOKUP s0.vs_allocas inst.inst_id = SOME (w2n dw,sz) /\
+    inst.inst_id < sa.cs_next_id ==>
+    ?t. stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
+        t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+        (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==> lookup_var x t = SOME u) /\
+        (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
+                     FLOOKUP t.vs_allocas aid = SOME entry) /\
+        !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
+                 ?fuel'. run_from fuel' ctx func s0 = r
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule loweringSliceTheory.eval_stmt_annassign_read_value >> strip_tac >>
+  rename1 `(do raw <- eval_expr cx e; read_result cx raw od) es = (INL v,es1)` >>
+  `value_has_type stv v /\ value_has_type dtv v` by metis_tac[] >>
+  `not_local_ptr cenv es1.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+  disch_then (qspecl_then [`sa`, `sb`, `op`, `INL v`, `es1`, `s0`] mp_tac) >>
+  (impl_tac >- simp[expr_res_ok_def]) >>
+  simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
+  (impl_tac >- simp[]) >> simp[] >> strip_tac >>
+  `tyv = dtv` by metis_tac[optionTheory.SOME_11] >>
+  qpat_x_assum `tyv = dtv` SUBST_ALL_TAC >>
+  `sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id` by
+    metis_tac[exprLoweringPropsTheory.compile_expr_grows] >>
+  `not_fresh_at sb p` by
+    (irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> simp[]) >>
+  `local_ptrs_reserved cenv sb` by
+    (irule local_ptrs_reserved_next_var >> qexists `sa` >> simp[]) >>
+  `inst.inst_id < sb.cs_next_id` by decide_tac >>
+  `!x. op = Var x ==> not_fresh_at sb x` by
+    metis_tac[exprOperandVarTheory.compile_lower_value_var] >>
+  drule_all typed_decl_store_post_run >>
+  disch_then (qspec_then `T` mp_tac) >> strip_tac >>
+  qexists `t` >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sb x` by
+        (irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> simp[]) >>
+      qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[expr_post_def] >> metis_tac[]) >>
+  conj_tac
+  >- (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[expr_post_def] >> metis_tac[]) >>
+  qpat_x_assum `!fuel. _ ==> ?fuel'. run_from fuel' ctx func s0 = _` mp_tac >>
+  qpat_x_assum `!fuel r. _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> metis_tac[]
+QED
+
 
 Theorem unstaged_overlap_value_types[local]:
   let u = BaseT (UintT 256);
