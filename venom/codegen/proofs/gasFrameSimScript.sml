@@ -141,6 +141,83 @@ Proof
   Cases_on `is_halting` >> simp[gas_dead_popmany]
 QED
 
+Theorem gas_push_relation[local]:
+  venom_asm_rel lo ps vs st /\
+  EVERY (\op. case op of Var x => x <> out | _ => T) ps.ps_stack /\
+  (!op. op IN FDOM ps.ps_spilled ==>
+     case op of Var x => x <> out | _ => T) ==>
+  venom_asm_rel lo (ps with ps_stack := SNOC (Var out) ps.ps_stack)
+    (update_var out value vs) (st with as_stack := value :: st.as_stack)
+Proof
+  strip_tac >> drule_all venom_asm_rel_update_var >>
+  disch_then (qspec_then `value` assume_tac) >>
+  gvs[venom_asm_rel_def] >>
+  irule plan_stack_rel_push >>
+  simp[operand_val_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem gas_asm_step[local]:
+  asm_step lo o2pc (AsmOp "GAS") st = asm_gas st
+Proof
+  simp[asm_step_def, asm_step_op_def, asm_step_arith_def,
+       asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+       asm_step_control_def, asm_step_extcall_def, asm_step_copy_def,
+       asm_step_context_def]
+QED
+
+Theorem gas_readings_relation[local]:
+  venom_asm_rel lo ps vs st ==>
+  venom_asm_rel lo ps (vs with vs_gas_readings := readings)
+    (st with as_gas_readings := readings)
+Proof
+  `!op. operand_val (vs with vs_gas_readings := readings) lo op =
+        operand_val vs lo op` by (Cases >> simp[operand_val_def]) >>
+  simp[venom_asm_rel_def, plan_stack_rel_def, plan_spill_rel_def] >>
+  metis_tac[]
+QED
+
+Theorem gas_emit_relation[local]:
+  venom_asm_rel lo ps vs st /\
+  EVERY (\op. case op of Var x => x <> out | _ => T) ps.ps_stack /\
+  (!op. op IN FDOM ps.ps_spilled ==>
+     case op of Var x => x <> out | _ => T) ==>
+  ?st'. asm_step lo o2pc (AsmOp "GAS") st = AsmOK st' /\
+    venom_asm_rel lo (ps with ps_stack := SNOC (Var out) ps.ps_stack)
+      (update_var out (HD (vs.vs_gas_readings ++ [0w]))
+        (vs with vs_gas_readings := TL vs.vs_gas_readings)) st' /\
+    st'.as_pc = st.as_pc + 1 /\ st'.as_memory = st.as_memory
+Proof
+  strip_tac >>
+  `st.as_gas_readings = vs.vs_gas_readings` by fs[venom_asm_rel_def] >>
+  drule gas_readings_relation >>
+  disch_then (qspec_then `TL vs.vs_gas_readings` assume_tac) >>
+  drule_all gas_push_relation >>
+  disch_then (qspec_then `HD (vs.vs_gas_readings ++ [0w])` assume_tac) >>
+  Cases_on `vs.vs_gas_readings` >>
+  simp[gas_asm_step, asm_gas_def, asm_push_val_def, asm_next_def] >>
+  fs[venom_asm_rel_def, plan_stack_rel_def, plan_spill_rel_def,
+     update_var_def]
+QED
+
+Theorem gas_emit_steps[local]:
+  venom_asm_rel lo ps vs st /\
+  EVERY (\op. case op of Var x => x <> out | _ => T) ps.ps_stack /\
+  (!op. op IN FDOM ps.ps_spilled ==>
+     case op of Var x => x <> out | _ => T) /\
+  asm_block_at prog st.as_pc [AsmOp "GAS"] ==>
+  ?st'. asm_steps lo o2pc prog 1 st = AsmOK st' /\
+    venom_asm_rel lo (ps with ps_stack := SNOC (Var out) ps.ps_stack)
+      (update_var out (HD (vs.vs_gas_readings ++ [0w]))
+        (vs with vs_gas_readings := TL vs.vs_gas_readings)) st' /\
+    st'.as_pc = st.as_pc + 1 /\ st'.as_memory = st.as_memory
+Proof
+  strip_tac >> drule_all gas_emit_relation >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexists_tac `st'` >> simp[] >>
+  fs[asm_block_at_def] >>
+  once_rewrite_tac[arithmeticTheory.ONE] >> simp[asm_steps_def]
+QED
+
 Theorem gas_inst_frame_sim:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0.
