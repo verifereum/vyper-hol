@@ -7,7 +7,7 @@
 Theory acBaseProofs
 Ancestors
   assertCombinerDefs venomInstProps venomExecProofs venomExecSemantics venomWf
-  venomState
+  venomState execEquivParamHelpers
 Libs
   pred_setTheory listTheory
 
@@ -25,8 +25,10 @@ in
   srw_ss() ++ simpLib.rewrites facts
 end;
 
-Theorem ac_safe_between_effect_free:
-  !inst. ac_is_safe_between inst ==> is_effect_free_op inst.inst_opcode
+(* GAS is safe between assertions, but consumes a gas reading. *)
+Theorem ac_safe_between_effect_free_or_gas:
+  !inst. ac_is_safe_between inst ==>
+    is_effect_free_op inst.inst_opcode \/ inst.inst_opcode = GAS
 Proof
   Cases_on `inst` >> rename1 `instruction _ opc _ _` >>
   Cases_on `opc` >>
@@ -48,6 +50,18 @@ Proof
   rw[step_inst_base_def, exec_pure1_def, update_var_def]
 QED
 
+Theorem gas_wf_step_ok:
+  !inst (s:venom_state) fuel ctx.
+    inst.inst_opcode = GAS /\ inst_wf inst ==>
+    ?s'. step_inst fuel ctx inst s = OK s'
+Proof
+  rpt strip_tac >>
+  `LENGTH inst.inst_outputs = 1` by gvs[inst_wf_def] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute] >>
+  simp[step_inst_non_invoke, step_inst_base_def, exec_gas_def] >>
+  Cases_on `s.vs_gas_readings` >> simp[]
+QED
+
 (* safe_between + inst_wf + operands evaluate ==> step_inst = OK *)
 Theorem safe_between_wf_step_ok:
   !inst (s:venom_state) fuel ctx.
@@ -56,8 +70,10 @@ Theorem safe_between_wf_step_ok:
     ?s'. step_inst fuel ctx inst s = OK s'
 Proof
   rpt strip_tac >>
+  Cases_on `inst.inst_opcode = GAS`
+  >- metis_tac[gas_wf_step_ok] >>
   `is_effect_free_op inst.inst_opcode` by
-    metis_tac[ac_safe_between_effect_free] >>
+    metis_tac[ac_safe_between_effect_free_or_gas] >>
   `inst.inst_opcode <> INVOKE` by (
     strip_tac >> gvs[ac_is_safe_between_def,
       venomEffectsTheory.write_effects_def,
@@ -89,4 +105,17 @@ Proof
   rpt strip_tac >>
   `inst.inst_opcode <> PHI` by gvs[ac_is_safe_between_def] >>
   metis_tac[step_inst_lookup_mono]
+QED
+
+(* Paired GAS consumes the same reading on both sides, not an invisible step. *)
+Theorem gas_step_sim:
+  !R_ok R_term inst s1 s2 fuel ctx.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    inst.inst_opcode = GAS ==>
+    lift_result R_ok R_term R_term
+      (step_inst fuel ctx inst s1) (step_inst fuel ctx inst s2)
+Proof
+  rpt strip_tac >>
+  simp[step_inst_non_invoke] >>
+  irule vsr_step_inst_gas >> simp[]
 QED
