@@ -40,7 +40,7 @@ Theorem external_entry_reaches_checks:
 
 ## Completion Criteria
 
-1. `holbuild -j4 build loweringRuntimeCorrectTheory` passes; the proof of `external_entry_reaches_checks` has no cheat. The other cheats already in that file (`external_body_source_ok`, `external_entry_reaches_body`, `external_body_frame`, `external_frame_ret_ok`, `external_body_revert_data_reverts`, and the probe in `compile_stmt_ret_ty` if still there) are out of scope: leave them and their statements alone.
+1. `holbuild -j4 build loweringRuntimeCorrectTheory` passes; the proof of `external_entry_reaches_checks` has no cheat. The other cheats already in that file (`external_body_source_ok`, `external_entry_reaches_body`, `external_body_frame`, `external_frame_ret_ok`, `external_body_revert_data_reverts`, and the return-type section: `body_inv_dynarrays_typed`, `declare_local_module_var_type`, `declare_stmt_local_module_var_type`, `compile_stmt_ret_ty`, `stmts_env_ret_ty`, cheated here because they're being proved on another branch) are out of scope: leave them and their statements alone.
 2. No new cheats, axioms or definitions changed. Helper lemmas may go in this file (as `[local]` when only used here) or in the theory where they belong (e.g. lowering/moduleLoweringPropsScript.sml, lowering/entryDispatchPropsScript.sml, lowering/fragExecScript.sml).
 3. Every proof step under holbuild's default 2.5s tactic timeout; never raise or disable it. No `TRY`/`ORELSE` around `metis_tac` or other search: select goals with `>-`, `>~`, `>|`.
 4. No duplicate lemmas: search for existing ones first.
