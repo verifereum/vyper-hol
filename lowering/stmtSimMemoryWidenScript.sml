@@ -501,8 +501,8 @@ Proof
 QED
 
 Theorem typed_owned_allocas_copy_run[local]:
-  !ctx func cenv cx env es s sa sf src p sw dw aid bid stv dtv v sty dty dsz.
-    stmt_state_rel ctx func cenv cx es s /\ expr_sim_inv cenv cx env es /\
+  !ctx func cenv cx env es0 es s sa sf src p sw dw aid bid stv dtv v sty dty dsz.
+    stmt_state_rel ctx func cenv cx es s /\ expr_sim_inv cenv cx env es0 /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
     FLOOKUP s.vs_allocas aid = SOME (w2n sw,type_memory_size stv) /\
     FLOOKUP s.vs_allocas bid = SOME (w2n dw,dsz) /\ aid <> bid /\
@@ -605,13 +605,13 @@ Proof
 QED
 
 Theorem typed_decl_staged_convert_run[local]:
-  !ctx func cenv cx env es sb sf s op dty sty info bytes stv dtv v sw p dw aid dsz.
+  !ctx func cenv cx env es0 es sb sf s op dty sty info bytes stv dtv v sw p dw aid dsz.
     compile_assign_value cenv (Var p) LocMemory op F (SOME LocMemory)
       dty sty info bytes sb = ((),sf) /\
     type_memory_bytes cenv sty = type_memory_size stv /\
     0 < type_memory_size stv /\ type_memory_size stv < dimword (:256) /\
     0 < type_memory_size dtv /\ type_memory_size dtv <= dsz /\
-    stmt_state_rel ctx func cenv cx es s /\ expr_sim_inv cenv cx env es /\
+    stmt_state_rel ctx func cenv cx es s /\ expr_sim_inv cenv cx env es0 /\
     acyclic_struct_metadata cenv.ce_struct_fields /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sb /\
     (!x. op = Var x ==> not_fresh_at sb x) /\ not_fresh_at sb p /\
@@ -690,6 +690,93 @@ Proof
   qpat_x_assum `!fuel r. run_from fuel ctx func u = r /\ _ ==> _` drule >>
   simp[]
 QED
+Theorem typed_decl_post_assign_run[local]:
+  !ctx func cenv cx env e es sa sb sf s0 es1 v op s stv dtv
+   inst p dw dsz dty loc info bytes.
+    expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
+    expr_sim_inv cenv cx env es /\
+    ~is_bytestring_type (lowered_value_type cenv e) /\
+    ~is_word_type (lowered_value_type cenv e) /\
+    ~is_word_type dty /\ ~is_bytestring_type dty /\
+    evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
+    0 < type_memory_size stv /\ type_memory_size stv < dimword (:256) /\
+    type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size stv /\
+    type_memory_bytes cenv dty = type_memory_size dtv /\
+    type_memory_size dtv + 64 < dimword (:256) /\
+    not_fresh_at sa p /\ lookup_var p s0 = SOME dw /\
+    FLOOKUP s0.vs_allocas inst.inst_id = SOME (w2n dw,dsz) /\
+    MEM inst (fn_insts func) /\ inst.inst_outputs = [p] /\
+    inst.inst_id < sa.cs_next_id /\ inst.inst_id < sb.cs_next_id /\
+    not_local_ptr cenv es1.scopes p /\ fn_inst_ids_distinct func /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    type_widens_to (get_tenv cx) (lowered_value_type cenv e) dty /\
+    evaluate_type (get_tenv cx) dty = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\
+    0 < type_memory_size dtv /\ type_memory_size dtv <= dsz /\
+    compile_assign_value cenv (Var p) LocMemory op F loc dty
+      (lowered_value_type cenv e) info bytes sb = ((),sf) /\
+    fn_has_code sb sf func /\ local_ptrs_reserved cenv sb /\
+    (!x. op = Var x ==> not_fresh_at sb x) /\ not_fresh_at sb p /\
+    ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+    ?sn u t.
+      cs_extends sb sn /\ sb.cs_next_var <= sn.cs_next_var /\
+      stmt_state_rel ctx func cenv cx es1 u /\ lookup_var p u = SOME dw /\
+      (!x. not_fresh_at sb x ==> lookup_var x u = lookup_var x s) /\
+      (!a entry. FLOOKUP s.vs_allocas a = SOME entry ==>
+                 FLOOKUP u.vs_allocas a = SOME entry) /\
+      val_in_memory dtv v (w2n dw) t.vs_memory /\
+      ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+      (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
+                vs_prev_bb := u.vs_prev_bb; vs_current_bb := u.vs_current_bb;
+                vs_inst_idx := u.vs_inst_idx|>) = u /\
+      (!x. not_fresh_at sn x ==> lookup_var x t = lookup_var x u) /\
+      (!a len. a + len <= w2n dw \/ w2n dw + type_memory_size dtv <= a ==>
+        mem_bytes_at a len t.vs_memory = mem_bytes_at a len u.vs_memory) /\
+      LENGTH u.vs_memory <= LENGTH t.vs_memory /\
+      (!fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
+        ?fuel'. run_from fuel' ctx func s = r)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all typed_memory_expr_source >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx es1 s /\
+   lookup_var p s = SOME dw /\
+   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n dw,dsz)` by
+    (gvs[expr_post_def] >> metis_tac[]) >>
+  `val_footprint stv v <= type_memory_size stv` by
+    metis_tac[nonbytestring_full_footprint, arithmeticTheory.LESS_EQ_REFL] >>
+  Cases_on `loc = SOME LocMemory`
+  >- (qpat_x_assum `loc = SOME LocMemory` SUBST_ALL_TAC >>
+      drule_all typed_decl_staged_convert_run >> simp[]) >>
+  `compile_store_memory cenv op (Var p) dty (lowered_value_type cenv e) sb = ((),sf)` by
+    gvs[compile_assign_value_def] >>
+  qexistsl [`sb`, `s`] >> simp[compileEnvTheory.cs_extends_refl] >>
+  Cases_on `dty = lowered_value_type cenv e`
+  >- suspend "same" >>
+  suspend "different"
+QED
+
+Resume typed_decl_post_assign_run[same]:
+  qpat_x_assum `dty = lowered_value_type cenv e` SUBST_ALL_TAC >>
+  `stv = dtv` by
+    (qpat_x_assum `evaluate_type _ _ = SOME stv` mp_tac >>
+     qpat_x_assum `evaluate_type _ _ = SOME dtv` mp_tac >> simp[]) >>
+  qpat_x_assum `stv = dtv` SUBST_ALL_TAC >>
+  `!x. Var p = Var x ==> not_fresh_at sb x` by simp[] >>
+  `eval_operand (Var p) s = SOME dw` by simp[venomStateTheory.eval_operand_def] >>
+  drule_all typed_same_layout_store_run >> simp[]
+QED
+
+Resume typed_decl_post_assign_run[different]:
+  `compile_store_memory_typed cenv (Var p) dty op
+     (lowered_value_type cenv e) sb = ((),sf)` by
+    gvs[contextTheory.compile_store_memory_def] >>
+  drule_all typed_decl_post_copy_run >> simp[]
+QED
+
+Finalise typed_decl_post_assign_run
+
 
 Theorem unstaged_overlap_value_types[local]:
   let u = BaseT (UintT 256);
