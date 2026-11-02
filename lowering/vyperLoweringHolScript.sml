@@ -26,6 +26,7 @@ Ancestors
   immutableLocationProps
   loweringShapeDefs
   loweringShapeProps
+  ctorShapeProps
   intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
   structFieldsProps
   (* compiler + correctness *)
