@@ -24,6 +24,7 @@ roots = ["vyperHolScript.sml",
          "lowering/supported/supportedStmtTraversePropsScript.sml",
          "lowering/supported/supportedProgramPropsScript.sml",
          "venom/codegen/proofs/contextReachabilityChecksScript.sml",
+         "venom/passes/concretize_mem_loc/proofs/concretizeMemInvTransportScript.sml",
          "tests/vyperPlaceProbesTestScript.sml",
          "tests/vyperPlaceSanityTestScript.sml"]
 
