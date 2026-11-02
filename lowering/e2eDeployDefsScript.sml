@@ -88,6 +88,7 @@ Definition deploy_state_rel_def:
       ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\
       ctxt.msgParams.outputTo = Code tx.target /\
       ctxt.msgParams.code = deploy_bc ++ args_bytes /\
+      LENGTH ctxt.msgParams.code <= 49152 /\
       ctxt.msgParams.parsed = parse_code 0 FEMPTY (deploy_bc ++ args_bytes) /\
       buffer_to_list ctxt.msgParams.data = [] /\
       constructor_args_encode tops tx args_bytes /\

@@ -360,6 +360,23 @@ Definition ld_dload_safe_def:
           w2n v < dimword(:256) DIV 2)
 End
 
+(* The expansion computes the code offset of a DLOAD/DLOADBYTES source
+   offset as ADD [off; Label "code_end"], in word arithmetic, so it reads
+   the bytes DLOAD reads only when the sum does not wrap: when the offset
+   plus the code prefix length (code_layout_valid's "code_end") fits in a
+   word.  Stated per reachable state (mem_inv), since constructor-argument
+   offsets are computed at run time. *)
+Definition dload_offset_ok_def:
+  dload_offset_ok (ctx:venom_context) (fn:ir_function) inst s <=>
+    !op off.
+      ((inst.inst_opcode = DLOAD /\ inst.inst_operands = [op]) \/
+       (inst.inst_opcode = DLOADBYTES /\
+        ?dst n. inst.inst_operands = [dst; op; n])) /\
+      eval_operand op s = SOME off ==>
+      w2n off + (LENGTH s.vs_code - LENGTH s.vs_data_section) <
+        dimword (:256)
+End
+
 (* ===== Lower-DLOAD Equivalence ===== *)
 
 (* Tightest correct equivalence for lower_dload: everything in
