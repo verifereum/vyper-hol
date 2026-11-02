@@ -90,6 +90,42 @@ Proof
   gvs[] >> drule build_compile_env_bound >> simp[]
 QED
 
+Theorem external_entry_target_declared:
+  !tops use_trans nkey_map mut nr rr fname fargs dflts ret fbody
+   target lbl cenv0 pos_args rest st cenv st' n l.
+    set_external_package_target target
+      (package_external_fn tops use_trans nkey_map
+        (mut,nr,rr,fname,fargs,dflts,ret,fbody)) =
+      (lbl,cenv0,pos_args,rest) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv,st') /\
+    FLOOKUP cenv.ce_vars n = SOME l ==>
+    MEM n (MAP FST fargs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `cenv0.ce_vars = (build_compile_env tops External mut fname fargs ret fbody
+                    use_trans).ce_vars` by
+    (gvs[package_external_fn_def, set_external_package_target_def,
+         update_cenv_nonreentrant_def] >> rw[update_cenv_ret_abi_def]) >>
+  drule_all compile_register_positional_args_bound >> strip_tac >>
+  gvs[] >> drule build_compile_env_bound >> simp[]
+QED
+
+Theorem external_entry_target_locals_declared:
+  set_external_package_target target
+    (package_external_fn tops use_trans nkey_map
+      (mut,nr,rr,fname,fargs,dflts,ret,fbody)) =
+    (lbl,cenv0,pos_args,rest) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,st') /\
+  (!id ty. MEM (id,ty) fargs ==> FLOOKUP env.var_types id = SOME ty) ==>
+  ce_locals_declared cenv env
+Proof
+  rw[ce_locals_declared_def] >>
+  drule_all external_entry_target_declared >>
+  simp[MEM_MAP, PULL_EXISTS] >> strip_tac >>
+  PairCases_on `y` >> gvs[] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> simp[FLOOKUP_DEF] >> metis_tac[]
+QED
+
 Theorem constructor_entry_declared:
   !tops use_trans nkey_map mut nr rr fname fargs dflts ret fbody
    cenv0 pos_args rest dsz st cenv st' n l.

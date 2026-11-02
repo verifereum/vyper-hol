@@ -49,7 +49,7 @@ Ancestors
   e2eDefs supportedProgram vyperLoweringCorrect
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperTypeStmtSoundness vyperTypeEvalSoundness vyperTypeExprSoundness
-  entryStateRel supportedDecls vyperTypeContractFunction vyperTypeContractSoundness
+  entryStateRel bodySimEntry supportedDecls vyperTypeContractFunction vyperTypeContractSoundness
   vyperTypeContractContext vyperTypeContract
   vyperTypeInitialState vyperTypeBindArguments vyperTypeInvariants
   vyperTypeEvalStoragePreservation vyperTypeStoragePreservation exprSimHyps
@@ -418,6 +418,35 @@ Proof
 QED
 
 (* ===== The body's frame (#637) ===== *)
+
+Theorem external_package_body_inv:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\
+  set_external_package_target rpolicy.rpol_target
+    (package_external_fn tops F (assign_nkeys tops 0)
+      (mut,F,F,tx.function_name,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
+  body_inv tops unit.cu_context cenv
+    (initial_evaluation_context am.sources am.layouts tx NONE) /\
+  cenv.ce_return_pc = NONE
+Proof
+  strip_tac >>
+  drule compile_register_positional_args_cenv >> strip_tac >>
+  qpat_x_assum `cenv = _` SUBST1_TAC >>
+  `ALL_DISTINCT
+     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_vtype_keys_distinct] >>
+  gvs[set_external_package_target_def, package_external_fn_def] >>
+  Cases_on `ret = NoneT` >>
+  gvs[update_cenv_nonreentrant_def, update_cenv_ret_abi_def] >>
+  simp[body_inv_def, build_compile_env_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[source_deployment_rel_def, get_module_code_def,
+      initial_evaluation_context_def] >>
+  metis_tac[]
+QED
 
 (* ADMITTED (#637): at the start of the selected function's body, the
    premises of body_stmts_sim other than the frame's returns: the frame is
