@@ -7,7 +7,47 @@ Location: project root
 
 ## Theorem Statement (FROZEN)
 
-The exact statement of `eval_expr_oracle_storage_mutual` in `lowering/exprOracleStoragePreservationScript.sml`, from `Theorem` to `Proof`, is frozen byte for byte. Its five meaningful projections already include `source_supply st`.
+```sml
+Theorem eval_expr_oracle_storage_mutual:
+  (!cx s. eval_stmt cx s = eval_stmt cx s) /\
+  (!cx ss. eval_stmts cx ss = eval_stmts cx ss) /\
+  (!cx it. eval_iterator cx it = eval_iterator cx it) /\
+  (!cx tyv id body vs. eval_for cx tyv id body vs = eval_for cx tyv id body vs) /\
+  (!cx e. !env st res st'.
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_expr e) /\ int_calls_expr e = [] /\
+    ~supported_expr_exists expr_evm_run_root e /\
+    IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+    eval_expr cx e st = (res,st') ==>
+    (well_typed_expr env e ==> contract_storage_well_formed cx st') /\
+    (!vt. type_place_expr env e = SOME vt ==> contract_storage_well_formed cx st')) /\
+  (!cx es. !env st res st'.
+    well_typed_exprs env es /\ runtime_storage_consistent env cx st /\ source_supply st /\
+    functions_well_typed cx /\ call_evaluation_safe cx (int_calls_exprs es) /\
+    int_calls_exprs es = [] /\ ~supported_exprs_exists expr_evm_run_root es /\
+    IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+    eval_exprs cx es st = (res,st') ==> contract_storage_well_formed cx st') /\
+  (!cx bt. !env vt st res st'.
+    type_place_target env bt = SOME vt /\ runtime_storage_consistent env cx st /\ source_supply st /\
+    functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
+    int_calls_target bt = [] /\ ~supported_target_exists expr_evm_run_root bt /\
+    IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+    eval_base_place cx bt st = (res,st') ==> contract_storage_well_formed cx st') /\
+  (!cx tgt. !env ty st res st'.
+    well_typed_target env tgt ty /\ runtime_storage_consistent env cx st /\ source_supply st /\
+    functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target tgt) /\
+    int_calls_target tgt = [] /\ ~supported_target_exists expr_evm_run_root tgt /\
+    IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+    eval_target_place cx tgt st = (res,st') ==> contract_storage_well_formed cx st') /\
+  (!cx tgt v. assign_tuple_targets cx tgt v = assign_tuple_targets cx tgt v) /\
+  (!cx tgts vs. assign_tuple_target_list cx tgts vs = assign_tuple_target_list cx tgts vs) /\
+  (!cx es. !env st res st'.
+    well_typed_exprs env es /\ runtime_storage_consistent env cx st /\ source_supply st /\
+    functions_well_typed cx /\ call_evaluation_safe cx (int_calls_exprs es) /\
+    int_calls_exprs es = [] /\ ~supported_exprs_exists expr_evm_run_root es /\
+    IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+    eval_expr_results cx es st = (res,st') ==> contract_storage_well_formed cx st')
+```
 
 Do not modify this statement. Prove it as-is, or produce a counterexample.
 All other existing theorem statements and executable definitions are frozen.
