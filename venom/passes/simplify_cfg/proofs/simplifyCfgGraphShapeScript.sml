@@ -1,7 +1,8 @@
 (* Entry and successor closure at SimplifyCFG's graph-edit boundary. *)
 Theory simplifyCfgGraphShape
 Ancestors
-  simplifyCfgShape simplifyCfgDefs cfgTransformProps cfgTransform venomWf venomInst
+  simplifyCfgShape simplifyCfgDefs simplifyCfgLabelProps simplifyCfgInvariant
+  cfgTransformProps cfgTransform venomWf venomInst
   unitShapeDefs list rich_list
 
 Theorem remove_unreachable_blocks_head:
@@ -174,4 +175,175 @@ Proof
    MAP (\bb. (bb.bb_label, bb_succs bb)) bbs` by
     (irule replace_block_graph >> metis_tac[]) >>
   first_x_assum drule >> simp[]
+QED
+
+Theorem chain_merge_blocks_nonempty:
+  ALL_DISTINCT (fn_labels fn) /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\
+  can_merge_blocks fn a b /\
+  fn' = fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label fn.fn_blocks))
+      (bb_succs (merge_blocks a b)) ==>
+  fn'.fn_blocks <> []
+Proof
+  strip_tac >>
+  qspecl_then [`fn`, `a`, `b.bb_label`, `b`] mp_tac chain_merge_event_labels >>
+  simp[] >> strip_tac >> Cases_on `fn'.fn_blocks` >> gvs[fn_labels_def]
+QED
+
+Theorem do_merge_jump_blocks_nonempty:
+  ALL_DISTINCT (fn_labels fn) /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\
+  can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') ==>
+  fn'.fn_blocks <> []
+Proof
+  strip_tac >> drule_all do_merge_jump_event_labels >>
+  strip_tac >> Cases_on `fn'.fn_blocks` >> gvs[fn_labels_def]
+QED
+
+Theorem replace_block_head_label:
+  bbs <> [] /\ bb.bb_label = lbl ==>
+  replace_block lbl bb bbs <> [] /\
+  (HD (replace_block lbl bb bbs)).bb_label = (HD bbs).bb_label
+Proof
+  Cases_on `bbs` >> simp[replace_block_def] >> strip_tac >>
+  Cases_on `h.bb_label = lbl` >> simp[]
+QED
+
+Theorem update_succ_phi_labels_head_label:
+  !succs bbs. bbs <> [] ==>
+  update_succ_phi_labels old new bbs succs <> [] /\
+  (HD (update_succ_phi_labels old new bbs succs)).bb_label =
+  (HD bbs).bb_label
+Proof
+  Induct >> gvs[update_succ_phi_labels_def] >> rpt gen_tac >> disch_tac >>
+  Cases_on `lookup_block h bbs` >> simp[] >>
+  rename1 `lookup_block h bbs = SOME bb` >>
+  `bb.bb_label = h` by metis_tac[lookup_block_member_label] >>
+  qmatch_goalsub_abbrev_tac `replace_block h changed bbs` >>
+  `changed.bb_label = h` by simp[Abbr `changed`] >>
+  `replace_block h changed bbs <> [] /\
+   (HD (replace_block h changed bbs)).bb_label = (HD bbs).bb_label` by
+    (irule replace_block_head_label >> simp[]) >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem remove_block_head:
+  bbs <> [] /\ lbl <> (HD bbs).bb_label ==>
+  remove_block lbl bbs <> [] /\ HD (remove_block lbl bbs) = HD bbs
+Proof
+  Cases_on `bbs` >> simp[remove_block_def] >> strip_tac >> simp[]
+QED
+
+Theorem chain_merge_entry_label:
+  fn.fn_blocks <> [] /\ first_block_no_preds fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  can_merge_blocks fn a b /\
+  fn' = fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label fn.fn_blocks))
+      (bb_succs (merge_blocks a b)) ==>
+  (HD fn'.fn_blocks).bb_label = (HD fn.fn_blocks).bb_label
+Proof
+  strip_tac >>
+  `b.bb_label <> (HD fn.fn_blocks).bb_label` by
+    (irule can_merge_blocks_not_entry >> metis_tac[]) >>
+  `remove_block b.bb_label fn.fn_blocks <> [] /\
+   HD (remove_block b.bb_label fn.fn_blocks) = HD fn.fn_blocks` by
+    (irule remove_block_head >> simp[]) >>
+  `replace_block a.bb_label (merge_blocks a b)
+     (remove_block b.bb_label fn.fn_blocks) <> [] /\
+   (HD (replace_block a.bb_label (merge_blocks a b)
+     (remove_block b.bb_label fn.fn_blocks))).bb_label =
+   (HD fn.fn_blocks).bb_label` by
+    (drule replace_block_head_label >>
+     disch_then (qspecl_then [`a.bb_label`, `merge_blocks a b`] mp_tac) >>
+     simp[merge_blocks_def]) >>
+  drule update_succ_phi_labels_head_label >> simp[] >> metis_tac[]
+QED
+
+Theorem do_merge_jump_entry_label:
+  fn.fn_blocks <> [] /\ first_block_no_preds fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') ==>
+  (HD fn'.fn_blocks).bb_label = (HD fn.fn_blocks).bb_label
+Proof
+  strip_tac >>
+  `b.bb_label <> (HD fn.fn_blocks).bb_label` by
+    (irule can_bypass_jump_not_entry >> metis_tac[]) >>
+  `remove_block b.bb_label fn.fn_blocks <> [] /\
+   HD (remove_block b.bb_label fn.fn_blocks) = HD fn.fn_blocks` by
+    (irule remove_block_head >> simp[]) >>
+  qpat_x_assum `do_merge_jump _ _ _ _ = _` mp_tac >>
+  simp[do_merge_jump_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  rename1 `lookup_block target_lbl fn.fn_blocks = SOME target` >>
+  `target.bb_label = target_lbl` by metis_tac[lookup_block_member_label] >>
+  qmatch_goalsub_abbrev_tac `replace_block a.bb_label source
+    (replace_block target_lbl dest rest)` >>
+  `source.bb_label = a.bb_label /\ dest.bb_label = target_lbl` by
+    simp[Abbr `source`, Abbr `dest`] >>
+  `rest <> [] /\ (HD rest).bb_label = (HD fn.fn_blocks).bb_label` by
+    simp[Abbr `rest`] >>
+  `replace_block target_lbl dest rest <> [] /\
+   (HD (replace_block target_lbl dest rest)).bb_label = (HD rest).bb_label` by
+    (irule replace_block_head_label >> simp[]) >>
+  metis_tac[replace_block_head_label]
+QED
+
+Theorem block_graph_every:
+  MAP (\bb. (bb.bb_label, bb_succs bb)) bs1 =
+    MAP (\bb. (bb.bb_label, bb_succs bb)) bs2 /\
+  EVERY (\bb. P bb.bb_label (bb_succs bb)) bs2 ==>
+  EVERY (\bb. P bb.bb_label (bb_succs bb)) bs1
+Proof
+  strip_tac >>
+  `EVERY (\p. P (FST p) (SND p))
+     (MAP (\bb. (bb.bb_label, bb_succs bb)) bs1)` suffices_by
+    simp[EVERY_MAP] >>
+  asm_rewrite_tac[] >> simp[EVERY_MAP]
+QED
+
+Theorem update_succ_phi_labels_graph_every:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
+  EVERY (\bb. P bb.bb_label (bb_succs bb)) bbs ==>
+  EVERY (\bb. P bb.bb_label (bb_succs bb))
+    (update_succ_phi_labels old new bbs succs)
+Proof
+  strip_tac >> irule block_graph_every >> qexists_tac `bbs` >>
+  simp[update_succ_phi_labels_graph]
+QED
+
+Theorem chain_merge_first_no_preds:
+  ALL_DISTINCT (fn_labels fn) /\
+  fn.fn_blocks <> [] /\ first_block_no_preds fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\
+  can_merge_blocks fn a b /\ b.bb_instructions <> [] /\
+  fn' = fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label fn.fn_blocks))
+      (bb_succs (merge_blocks a b)) ==>
+  first_block_no_preds fn'
+Proof
+  strip_tac >>
+  `(HD fn'.fn_blocks).bb_label = (HD fn.fn_blocks).bb_label` by
+    (irule chain_merge_entry_label >> metis_tac[]) >>
+  rewrite_tac[first_block_no_preds_def] >> asm_rewrite_tac[] >>
+  qpat_x_assum `fn' = _` SUBST1_TAC >> simp[] >>
+  ho_match_mp_tac update_succ_phi_labels_graph_every >> conj_tac
+  >- (simp[fn_labels_replace_block, merge_blocks_def] >>
+      irule ALL_DISTINCT_remove_block >> gvs[fn_labels_def]) >>
+  irule replace_block_every >> reverse conj_tac
+  >- (irule remove_block_every >> gvs[first_block_no_preds_def]) >>
+  simp[merge_blocks_succs] >>
+  gvs[first_block_no_preds_def, EVERY_MEM] >>
+  metis_tac[lookup_block_member_label]
 QED
