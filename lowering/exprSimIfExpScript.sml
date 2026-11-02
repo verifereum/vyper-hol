@@ -618,9 +618,9 @@ Proof
   strip_tac >> fs[expr_read_res_ok_def] >> gvs[]
   >- (qpat_x_assum `!res. _` (qspec_then `INL v` mp_tac) >>
       simp[bind_def, expr_res_ok_def] >>
-      drule vv_post_read_result >>
-      disch_then (qspec_then `vv` mp_tac) >> impl_tac >- metis_tac[] >>
-      strip_tac >>
+      `!s. vv_post ctx func cenv cx e es sa sb s0 es' r vv s <=>
+           vv_post ctx func cenv cx e es sa sb s0 es' (Value v) vv s` by
+        (gen_tac >> irule vv_post_read_result >> metis_tac[]) >>
       `expr_exit (INL v) = (\r. F)` by simp[FUN_EQ_THM] >>
       `expr_exit (INL r) = (\r. F)` by simp[FUN_EQ_THM] >>
       simp[]) >>

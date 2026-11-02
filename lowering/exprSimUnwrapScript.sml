@@ -208,7 +208,12 @@ Theorem expr_post_of_vv_post_memory_read:
     expr_post ctx func cenv cx e es sa sb s0 es' v p.ptr_operand s
 Proof
   rw[vv_post_def, expr_post_def, vv_holds_def, vv_at_def] >>
-  gvs[expr_val_rel_def, expr_val_at_def] >> metis_tac[]
+  gvs[expr_val_rel_def, expr_val_at_def]
+  >~ [`val_footprint`]
+  >- (rpt strip_tac >>
+      qpat_x_assum `!tvt. _ ==> val_wf _ _ /\ _` drule >>
+      strip_tac >> gvs[] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem expr_post_of_vv_post_memory:
@@ -218,7 +223,11 @@ Theorem expr_post_of_vv_post_memory:
     expr_post ctx func cenv cx e es sa sb s0 es' v p.ptr_operand s
 Proof
   rw[vv_post_def, expr_post_def, vv_holds_def, vv_at_def] >>
-  gvs[read_result_def, return_def, expr_val_rel_def, expr_val_at_def] >>
+  gvs[read_result_def, return_def, expr_val_rel_def, expr_val_at_def]
+  >~ [`val_footprint`]
+  >- (rpt strip_tac >>
+      qpat_x_assum `!tvt. _ ==> val_wf _ _ /\ _` drule >>
+      strip_tac >> gvs[] >> metis_tac[]) >>
   metis_tac[]
 QED
 
@@ -683,9 +692,9 @@ Proof
   >- (gvs[] >> irule unwrap_memory_read_result_sim >> simp[]) >>
   Cases_on `res`
   >- (rename1 `read_result cx raw es' = (INL v, es')` >>
-      drule vv_post_read_result >>
-      disch_then (qspec_then `vv` mp_tac) >> impl_tac >- metis_tac[] >>
-      strip_tac >>
+      `!s. vv_post ctx func cenv cx e es sa sm s0 es' raw vv s <=>
+           vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s` by
+        (gen_tac >> irule vv_post_read_result >> metis_tac[]) >>
       irule frag_exec_conseq >>
       qexistsl_tac
         [`\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s`,
