@@ -962,6 +962,56 @@ Proof
   Cases_on `eval_operand a s` >> simp[lift_result_def]
 QED
 
+Theorem gas_step_inst:
+  (!fn t. gas_replay (run_blocks fuel ctx fn) t) ==>
+  gas_replay (step_inst fuel ctx inst) s
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = INVOKE`
+  >- suspend "invoke" >>
+  Cases_on `inst.inst_opcode = GAS`
+  >- (rewrite_tac[gas_replay_def] >> qexists_tac `1` >>
+      rewrite_tac[gas_replay_at_def] >>
+      simp[step_inst_def] >>
+      qpat_assum `inst.inst_opcode = GAS` gas_opcode_rewrite >>
+      rewrite_tac[GSYM gas_replay_at_def] >> irule gas_exec_gas) >>
+  rewrite_tac[gas_replay_def] >> qexists_tac `0` >>
+  rewrite_tac[gas_replay_at_def] >> simp[step_inst_def] >>
+  irule (SRULE [gas_replay_at_def] gas_base_non_gas) >> simp[]
+QED
+Resume gas_step_inst[invoke]:
+  Cases_on `decode_invoke inst`
+  >- simp[gas_replay_def, gas_replay_at_def, step_inst_def, lift_result_def] >>
+  PairCases_on `x` >>
+  Cases_on `lookup_function x0 ctx.ctx_functions`
+  >- simp[gas_replay_def, gas_replay_at_def, step_inst_def, lift_result_def] >>
+  rename1 `lookup_function x0 ctx.ctx_functions = SOME fn` >>
+  Cases_on `eval_operands x1 s`
+  >- simp[gas_replay_def, gas_replay_at_def, step_inst_def, lift_result_def] >>
+  rename1 `eval_operands x1 s = SOME args` >>
+  Cases_on `setup_callee fn args s`
+  >- simp[gas_replay_def, gas_replay_at_def, step_inst_def,
+          gas_setup_callee, lift_result_def] >>
+  rename1 `setup_callee fn args s = SOME cs` >>
+  first_x_assum (qspecl_then [`fn`, `cs`] mp_tac) >>
+  rewrite_tac[gas_replay_def] >> strip_tac >> qexists_tac `n` >>
+  qpat_x_assum `gas_replay_at n _ _` mp_tac >>
+  simp[gas_replay_at_def, step_inst_def, gas_setup_callee] >>
+  drule gas_setup_callee_readings >> strip_tac >>
+  disch_tac >> gen_tac >>
+  first_x_assum (qspec_then `tail` mp_tac) >>
+  Cases_on `run_blocks fuel ctx fn cs` >>
+  Cases_on `run_blocks fuel ctx fn
+    (cs with vs_gas_readings := gas_prefix n s.vs_gas_readings ++ tail)` >>
+  gvs[lift_result_def, gas_merge_callee, gas_adopt_return, gas_bind_outputs] >>
+  strip_tac >> gvs[] >>
+  Cases_on `bind_outputs inst.inst_outputs i.iret_values
+    (adopt_return_fmp i (merge_callee_state s v))` >>
+  simp[lift_result_def] >>
+  drule gas_bind_outputs_readings >>
+  simp[gas_adopt_return_readings]
+QED
+Finalise gas_step_inst
+
 Theorem gas_oracle_replay:
   (!fuel ctx inst s.
      ?n. !tail.
