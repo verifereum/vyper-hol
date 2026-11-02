@@ -6,14 +6,13 @@
  * the contract asks that one run keeps the O1 function shape, takes fresh
  * ids, and maps no labels.  The run's input supply must be well formed
  * (ir_supply_inst_ok: every used id is below the next one) and cover the
- * observed unit; the schedule runner establishes both at its start and
- * every step's checks keep them, but fn_pass_step does not say so yet, so
- * they are hypotheses here.
+ * observed unit. The step supplies coverage through fn_pass_step; initial
+ * instruction-supply well-formedness is an explicit contract hypothesis.
  *
  * TOP-LEVEL:
  *   lower_dload_function_supply_wf_function  - well-formedness kept
  *   lower_dload_function_supply_ssa_form     - SSA kept
- *   lower_dload_step_shape                   - the step part of the contract
+ *   lower_dload_step_contract                - the step part of the contract
  *)
 Theory o1ContractLowerDload
 Ancestors
@@ -952,9 +951,46 @@ Proof
   qexistsl [`f`,`s`,`t`] >> simp[]
 QED
 
+Theorem lower_dload_covers_member[local]:
+  ir_supply_covers_unit s u /\ MEM f u.cu_context.ctx_functions ==>
+  ir_supply_covers_fn s f
+Proof
+  simp[ir_supply_covers_unit_def, ir_supply_covers_fn_def, list_subset_def,
+       unit_ir_inst_ids_def, unit_ir_vars_def, unit_ir_labels_def,
+       EVERY_MEM, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+  rpt strip_tac >> metis_tac[]
+QED
+
 (* The step part of LowerDload's contract (o1_contract_lower_dload). *)
 Theorem lower_dload_step_contract:
   o1_step_contract rpolicy (CFP_Simple VP_LowerDload)
 Proof
-  cheat
+  pure_rewrite_tac[o1_step_contract_def] >> rpt gen_tac >> strip_tac >>
+  gvs[fn_pass_step_def, AllCaseEqs()] >>
+  `MEM fn observed.cu_context.ctx_functions` by
+    (gvs[lookup_unique_function_def, AllCaseEqs()] >>
+     `MEM fn (FILTER (\f. f.fn_name = fn.fn_name)
+               observed.cu_context.ctx_functions)` by simp[] >>
+     gvs[MEM_FILTER]) >>
+  `ir_supply_covers_fn s fn` by metis_tac[lower_dload_covers_member] >>
+  `o1_fn_shape observed.cu_context fn` by
+    (gvs[o1_ctx_shape_def, EVERY_MEM] >> metis_tac[]) >>
+  `ld_ids_supply_ok s (fn_ir_inst_ids fn) (fn_ir_inst_ids fn') s''` by
+    (irule lower_dload_function_supply_contract >>
+     gvs[o1_fn_shape_def, wf_function_def, fn_inst_ids_distinct_def,
+         ir_supply_covers_fn_def, list_subset_def, fn_ir_inst_ids_def,
+         lambdify block_ir_inst_ids_def] >> metis_tac[]) >>
+  rpt conj_tac
+  >- metis_tac[lower_dload_function_supply_o1_shape]
+  >- (drule lower_dload_function_supply_labels >>
+      gvs[fresh_names_ok_def, ld_ids_supply_ok_def] >> metis_tac[])
+  >- simp[label_map_sources_ok_def] >>
+  gvs[ld_ids_supply_ok_def, ld_supply_extends_def] >>
+  Cases_on `MEM "code_end" s''.irs_used_labels` >> gvs[ir_supply_inst_ok_def]
 QED
+
+(* Check the proof certificates of the frozen public obligations. *)
+val _ = (Globals.show_tags := true);
+val _ = List.app print_thm
+  [lower_dload_function_supply_wf_function,
+   lower_dload_function_supply_ssa_form, lower_dload_step_contract];
