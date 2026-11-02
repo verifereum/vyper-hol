@@ -271,9 +271,9 @@ The generic control proofs need the same history and guard plumbing.
   expression/statement/return memory siblings.
 - lowering/stmtMemoryScript.sml, stmtControlMemoryScript.sml,
   fragLoopMemoryScript.sml: ten checked prior generic rules, to migrate.
-- lowering/fragExecMemScript.sml and venom/proofs/memSafeRunScript.sml:
+- lowering/fragExecMemScript.sml and venom/compiler/memSafeRunScript.sml:
   prefix/fuel and fragment memory transfer.
-- venom/proofs/instMemFrontierScript.sml and
+- lowering/instMemFrontierScript.sml and
   lowering/allocaFootprintScript.sml: opcode, buffer/local/return leaf tools.
 - venom/proofs/allocaHistoryScript.sml and
   lowering/allocaHistoryFragmentScript.sml: actual cursor/allocation-history
