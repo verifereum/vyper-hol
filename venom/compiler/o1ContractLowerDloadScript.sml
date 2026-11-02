@@ -19,6 +19,7 @@ Theory o1ContractLowerDload
 Ancestors
   o1PassContract lowerDloadDefs lowerDloadSupplyProofs venomPassDispatcher venomFnScheduleRunner
   unitShapeDefs venomWf irSupply venomInst stackPlanTypes list rich_list
+  contextCodegenRel stackPlanGen
 
 (* Why these hold: the expansion of DLOAD/DLOADBYTES only inserts
    non-terminators (ALLOCA, ADD, CODECOPY, MLOAD) in place of a
@@ -226,25 +227,31 @@ QED
 
 Theorem lower_dload_insts_supply_member:
   !s xs t j. lower_dload_insts_supply s ins = (xs,t) /\ MEM j xs ==>
-  ?i u ys v. MEM i ins /\ lower_dload_inst_supply u i = (ys,v) /\ MEM j ys
+  ?i u ys v. MEM i ins /\ lower_dload_inst_supply u i = (ys,v) /\ MEM j ys /\
+    EVERY (\k. MEM k xs) ys
 Proof
   Induct_on `ins`
   >- simp[lower_dload_insts_supply_def] >>
   simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
+  rpt strip_tac >> gvs[EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem lower_dload_blocks_supply_member:
   !s bs t b j. lower_dload_blocks_supply s bbs = (bs,t) /\
   MEM b bs /\ MEM j b.bb_instructions ==>
   ?a i u ys v. MEM a bbs /\ MEM i a.bb_instructions /\
-    lower_dload_inst_supply u i = (ys,v) /\ MEM j ys
+    lower_dload_inst_supply u i = (ys,v) /\ MEM j ys /\
+    EVERY (\k. ?c. MEM c bs /\ MEM k c.bb_instructions) ys
 Proof
   Induct_on `bbs`
   >- simp[lower_dload_blocks_supply_def] >>
   simp[Once lower_dload_blocks_supply_def, lower_dload_block_supply_def,
-       AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-  metis_tac[lower_dload_insts_supply_member]
+       AllCaseEqs()] >> rpt strip_tac >> gvs[EVERY_MEM]
+  >- (drule_all lower_dload_insts_supply_member >> strip_tac >>
+      qexistsl [`h`,`i`,`u`,`ys`,`v`] >> simp[] >> rpt strip_tac >>
+      qexists `h with bb_instructions := insts` >> gvs[EVERY_MEM]) >>
+  first_x_assum drule_all >> strip_tac >>
+  qexistsl [`a`,`i`,`u`,`ys`,`v`] >> simp[] >> metis_tac[]
 QED
 
 Theorem lower_dload_insts_blocks_member[local]:
@@ -256,11 +263,13 @@ QED
 Theorem lower_dload_function_supply_member:
   lower_dload_function_supply s f = (g,t) /\ MEM j (fn_insts g) ==>
   ?i u ys v. MEM i (fn_insts f) /\
-    lower_dload_inst_supply u i = (ys,v) /\ MEM j ys
+    lower_dload_inst_supply u i = (ys,v) /\ MEM j ys /\
+    EVERY (\k. MEM k (fn_insts g)) ys
 Proof
   simp[lower_dload_function_supply_def, AllCaseEqs()] >>
   strip_tac >> gvs[fn_insts_def, lower_dload_insts_blocks_member] >>
-  drule_all lower_dload_blocks_supply_member >> metis_tac[]
+  drule_all lower_dload_blocks_supply_member >>
+  simp[EVERY_MEM, fn_insts_def, lower_dload_insts_blocks_member] >> metis_tac[]
 QED
 
 Theorem lower_dload_function_supply_every:
@@ -368,6 +377,287 @@ Proof
     (MAP (\b. (b.bb_label, bb_succs b)) f.fn_blocks)` by
     (first_x_assum (SUBST1_TAC o GSYM) >> simp[MEM_MAP] >> metis_tac[]) >>
   gvs[MEM_MAP, fn_succs_closed_def] >> metis_tac[]
+QED
+
+Theorem lower_dload_prefix_cons[local]:
+  (!i j. i < j /\ j < LENGTH (h::xs) /\ P (EL j (h::xs)) ==>
+         P (EL i (h::xs))) <=>
+  ((!i j. i < j /\ j < LENGTH xs /\ P (EL j xs) ==> P (EL i xs)) /\
+   ((?x. MEM x xs /\ P x) ==> P h))
+Proof
+  simp[MEM_EL, PULL_EXISTS] >> eq_tac
+  >- (rpt strip_tac
+      >- (first_x_assum (qspecl_then [`SUC i`,`SUC j`] mp_tac) >> simp[])
+      >> first_x_assum (qspecl_then [`0`,`SUC n`] mp_tac) >> simp[]) >>
+  strip_tac >> Cases_on `i` >> Cases_on `j` >> simp[] >> metis_tac[]
+QED
+
+Theorem lower_dload_insts_supply_every:
+  (!u i ys v. lower_dload_inst_supply u i = (ys,v) /\ P i ==> EVERY P ys) /\
+  lower_dload_insts_supply s ins = (xs,t) /\ EVERY P ins ==> EVERY P xs
+Proof
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  drule_all lower_dload_insts_supply_member >> strip_tac >> metis_tac[]
+QED
+
+Theorem lower_dload_inst_supply_noncontrol:
+  lower_dload_inst_supply s i = (xs,t) /\
+  ~is_terminator i.inst_opcode /\ i.inst_opcode <> PHI ==>
+  EVERY (\j. ~is_terminator j.inst_opcode /\ j.inst_opcode <> PHI) xs
+Proof
+  rw[EVERY_MEM] >> metis_tac[lower_dload_inst_supply_control]
+QED
+
+Theorem lower_dload_insts_supply_phi_prefix:
+  !s xs t. lower_dload_insts_supply s ins = (xs,t) /\
+  (!i j. i < j /\ j < LENGTH ins /\ (EL j ins).inst_opcode = PHI ==>
+         (EL i ins).inst_opcode = PHI) ==>
+  (!i j. i < j /\ j < LENGTH xs /\ (EL j xs).inst_opcode = PHI ==>
+         (EL i xs).inst_opcode = PHI)
+Proof
+  Induct_on `ins`
+  >- simp[lower_dload_insts_supply_def] >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs(), lower_dload_prefix_cons] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (`lower_dload_inst_supply s h = ([h],s)` by
+        (irule lower_dload_inst_supply_special >> simp[]) >>
+      gvs[] >>
+      first_x_assum (qspecl_then [`s`,`outs`,`t`] mp_tac) >>
+      simp[] >> strip_tac >>
+      Cases_on `i` >> Cases_on `j` >> simp[GSYM arithmeticTheory.ADD1] >> metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode <> PHI) ins` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode <> PHI) (out ++ outs)` by
+    (simp[EVERY_APPEND] >> conj_tac
+     >- (rw[EVERY_MEM] >> metis_tac[lower_dload_inst_supply_control]) >>
+     irule lower_dload_insts_supply_every >> conj_tac
+     >- (rw[EVERY_MEM] >> metis_tac[lower_dload_inst_supply_control]) >>
+     qexistsl [`ins`,`s1`,`t`] >> simp[]) >>
+  gvs[] >> rpt strip_tac >>
+  `MEM (EL j (out ++ outs)) (out ++ outs)` by
+    (irule EL_MEM >> simp[]) >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem lower_dload_terminal_cons[local]:
+  (Q (LAST (h::xs)) /\
+   (!i. i < LENGTH (h::xs) /\ Q (EL i (h::xs)) ==>
+        i = PRE (LENGTH (h::xs)))) <=>
+  if xs = [] then Q h else
+    ~Q h /\ Q (LAST xs) /\
+    (!i. i < LENGTH xs /\ Q (EL i xs) ==> i = PRE (LENGTH xs))
+Proof
+  Cases_on `xs = []` >- gvs[] >>
+  simp[LAST_DEF] >> eq_tac
+  >- (strip_tac >> conj_tac
+      >- (strip_tac >> first_x_assum (qspec_then `0` mp_tac) >>
+          Cases_on `xs` >> gvs[]) >>
+      simp[] >> rpt strip_tac >>
+      first_x_assum (qspec_then `SUC i` mp_tac) >>
+      Cases_on `xs` >> gvs[]) >>
+  strip_tac >> simp[] >> Cases >> simp[] >>
+  Cases_on `xs` >> gvs[]
+QED
+
+Theorem lower_dload_terminal_decomp[local]:
+  (xs <> [] /\ Q (LAST xs) /\
+   (!i. i < LENGTH xs /\ Q (EL i xs) ==> i = PRE (LENGTH xs))) <=>
+  ?pre z. xs = pre ++ [z] /\ EVERY (\x. ~Q x) pre /\ Q z
+Proof
+  Induct_on `xs`
+  >- simp[] >>
+  gen_tac >>
+  pure_rewrite_tac[NOT_CONS_NIL, boolTheory.NOT_CLAUSES,
+                   boolTheory.AND_CLAUSES, lower_dload_terminal_cons] >>
+  Cases_on `xs = []`
+  >- gvs[] >>
+  simp[] >> eq_tac
+  >- (strip_tac >>
+      `?pre z. xs = pre ++ [z] /\ EVERY (\x. ~Q x) pre /\ Q z` by
+        metis_tac[] >>
+      qexistsl [`h::pre`,`z`] >> simp[]) >>
+  strip_tac >> Cases_on `pre` >> gvs[] >> metis_tac[]
+QED
+
+Theorem lower_dload_insts_supply_append:
+  !s xs t. lower_dload_insts_supply s (as ++ bs) = (xs,t) ==>
+  ?ys u zs. lower_dload_insts_supply s as = (ys,u) /\
+    lower_dload_insts_supply u bs = (zs,t) /\ xs = ys ++ zs
+Proof
+  Induct_on `as`
+  >- (simp[lower_dload_insts_supply_def] >> metis_tac[]) >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  simp[Once lower_dload_insts_supply_def] >> metis_tac[APPEND_ASSOC]
+QED
+
+Theorem lower_dload_insts_supply_terminal:
+  lower_dload_insts_supply s ins = (xs,t) /\ ins <> [] /\
+  is_terminator (LAST ins).inst_opcode /\
+  (!i. i < LENGTH ins /\ is_terminator (EL i ins).inst_opcode ==>
+       i = PRE (LENGTH ins)) ==>
+  xs <> [] /\ is_terminator (LAST xs).inst_opcode /\
+  (!i. i < LENGTH xs /\ is_terminator (EL i xs).inst_opcode ==>
+       i = PRE (LENGTH xs))
+Proof
+  strip_tac >>
+  `?pre z. ins = pre ++ [z] /\
+    EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+    is_terminator z.inst_opcode` by
+    (ho_match_mp_tac (iffLR lower_dload_terminal_decomp) >> simp[]) >>
+  gvs[] >> drule lower_dload_insts_supply_append >> strip_tac >>
+  `lower_dload_inst_supply u z = ([z],u)` by
+    (irule lower_dload_inst_supply_special >>
+     Cases_on `z.inst_opcode` >> gvs[is_terminator_def]) >>
+  gvs[lower_dload_insts_supply_def] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) ys` by
+    (irule lower_dload_insts_supply_every >> conj_tac
+     >- (rw[EVERY_MEM] >> metis_tac[lower_dload_inst_supply_control]) >>
+     qexistsl [`pre`,`s`,`t`] >> simp[]) >>
+  rpt strip_tac >> Cases_on `i < LENGTH ys`
+  >- (`EL i (ys ++ [z]) = EL i ys` by (irule EL_APPEND1 >> simp[]) >>
+      gvs[EVERY_EL]) >> decide_tac
+QED
+
+Theorem lower_dload_block_supply_well_formed:
+  lower_dload_block_supply s b = (c,t) /\ bb_well_formed b ==>
+  bb_well_formed c
+Proof
+  simp[lower_dload_block_supply_def, AllCaseEqs()] >> strip_tac >>
+  gvs[bb_well_formed_def] >>
+  drule_all lower_dload_insts_supply_terminal >> strip_tac >> simp[] >>
+  metis_tac[lower_dload_insts_supply_phi_prefix]
+QED
+
+Theorem lower_dload_blocks_supply_every:
+  (!u b c v. lower_dload_block_supply u b = (c,v) /\ P b ==> P c) ==>
+  !bbs s bs t. lower_dload_blocks_supply s bbs = (bs,t) /\ EVERY P bbs ==>
+    EVERY P bs
+Proof
+  strip_tac >> Induct_on `bbs`
+  >- simp[lower_dload_blocks_supply_def] >>
+  simp[Once lower_dload_blocks_supply_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_blocks_wf:
+  lower_dload_function_supply s f = (g,t) /\ EVERY bb_well_formed f.fn_blocks ==>
+  EVERY bb_well_formed g.fn_blocks
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  irule lower_dload_blocks_supply_every
+  >- metis_tac[lower_dload_block_supply_well_formed] >>
+  qexistsl [`f.fn_blocks`,`s`,`t`] >> simp[]
+QED
+
+Theorem lower_dload_function_supply_inst_wf:
+  lower_dload_function_supply s f = (g,t) /\ fn_inst_wf f ==> fn_inst_wf g
+Proof
+  strip_tac >>
+  `EVERY inst_wf (fn_insts f)` by
+    gvs[fn_inst_wf_def, fn_insts_def, lower_dload_insts_blocks_member, EVERY_MEM] >>
+  `EVERY inst_wf (fn_insts g)` by
+    (irule lower_dload_function_supply_every >> conj_tac
+     >- metis_tac[lower_dload_inst_supply_wf] >>
+     qexistsl [`f`,`s`,`t`] >> simp[]) >>
+  gvs[fn_inst_wf_def, fn_insts_def, lower_dload_insts_blocks_member, EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_no_returns:
+  lower_dload_function_supply s f = (g,t) /\
+  EVERY (\i. ~MEM i.inst_opcode ops) (fn_insts f) /\
+  EVERY (\op. MEM op [RET; STOP; RETURN]) ops ==>
+  EVERY (\i. ~MEM i.inst_opcode ops) (fn_insts g)
+Proof
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  rename1 `MEM j (fn_insts g)` >>
+  drule_all lower_dload_function_supply_member >> strip_tac >>
+  `j = i` by (irule lower_dload_inst_supply_control >> simp[] >> metis_tac[]) >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_entry_no_ret:
+  lower_dload_function_supply s f = (g,t) /\ entry_fn_no_ret f ==>
+  entry_fn_no_ret g
+Proof
+  strip_tac >>
+  `EVERY (\i. ~MEM i.inst_opcode [RET]) (fn_insts f)` by
+    gvs[entry_fn_no_ret_def, fn_insts_def, lower_dload_insts_blocks_member, EVERY_MEM] >>
+  `EVERY (\i. ~MEM i.inst_opcode [RET]) (fn_insts g)` by
+    (irule lower_dload_function_supply_no_returns >> simp[] >>
+     qexistsl [`f`,`s`,`t`] >> gvs[]) >>
+  gvs[entry_fn_no_ret_def, fn_insts_def, lower_dload_insts_blocks_member, EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_first_no_preds:
+  lower_dload_function_supply s f = (g,t) /\ first_block_no_preds f ==>
+  first_block_no_preds g
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule lower_dload_blocks_supply_cfg >> strip_tac >>
+  drule lower_dload_blocks_supply_labels >> strip_tac >>
+  Cases_on `f.fn_blocks = []`
+  >- (Cases_on `bbs` >> gvs[first_block_no_preds_def]) >>
+  `(HD bbs).bb_label = (HD f.fn_blocks).bb_label` by
+    (Cases_on `f.fn_blocks` >> Cases_on `bbs` >> gvs[]) >>
+  rw[first_block_no_preds_def, EVERY_MEM] >>
+  `MEM (bb.bb_label, bb_succs bb)
+       (MAP (\b. (b.bb_label, bb_succs b)) f.fn_blocks)` by
+    (qpat_x_assum `MAP (\b. (b.bb_label, bb_succs b)) _ = _`
+       (SUBST1_TAC o GSYM) >>
+     simp[MEM_MAP] >> metis_tac[]) >>
+  gvs[MEM_MAP, first_block_no_preds_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem lower_dload_inst_supply_hd_not_param:
+  lower_dload_inst_supply s i = (xs,t) /\ ~is_param_opcode i.inst_opcode ==>
+  ~is_param_opcode (HD xs).inst_opcode
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[is_param_opcode_def]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[is_param_opcode_def]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[]
+QED
+
+Theorem lower_dload_insts_supply_no_params:
+  lower_dload_insts_supply s ins = (xs,t) /\ get_params ins = [] ==>
+  get_params xs = []
+Proof
+  Cases_on `ins` >- simp[lower_dload_insts_supply_def, get_params_def] >>
+  simp[lower_dload_insts_supply_def, AllCaseEqs(), get_params_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  drule_all lower_dload_inst_supply_hd_not_param >>
+  drule lower_dload_inst_supply_nonempty >>
+  Cases_on `out` >> gvs[get_params_def]
+QED
+
+Theorem lower_dload_function_supply_no_params:
+  lower_dload_function_supply s f = (g,t) /\ f.fn_blocks <> [] /\
+  get_params (HD f.fn_blocks).bb_instructions = [] ==>
+  get_params (HD g.fn_blocks).bb_instructions = []
+Proof
+  Cases_on `f.fn_blocks` >>
+  simp[lower_dload_function_supply_def, lower_dload_blocks_supply_def,
+       lower_dload_block_supply_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  metis_tac[lower_dload_insts_supply_no_params]
+QED
+
+Theorem lower_dload_function_supply_operand_provenance:
+  lower_dload_function_supply s f = (g,t) /\ MEM j (fn_insts g) /\
+  MEM op j.inst_operands ==>
+  (?i. MEM i (fn_insts f) /\ MEM op i.inst_operands) \/
+  (?v. op = Var v /\ MEM v (FLAT (MAP (\k. k.inst_outputs) (fn_insts g)))) \/
+  op = Label "code_end" \/ op = Lit 32w
+Proof
+  strip_tac >> drule_all lower_dload_function_supply_member >> strip_tac >>
+  drule_all lower_dload_inst_supply_operand_provenance >>
+  gvs[EVERY_MEM, MEM_FLAT, MEM_MAP] >> metis_tac[]
 QED
 
 Theorem lower_dload_function_supply_wf_function:
