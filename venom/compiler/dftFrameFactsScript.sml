@@ -2,7 +2,8 @@
 Theory dftFrameFacts
 Ancestors
   dftDefs unitShapeDefs venomExecSemantics venomWf venomState venomInst
-  venomEffects finite_map list option
+  venomEffects finite_map list option o1PassLift ctxLookupAgreeHelpers
+  contextCodegenRel venomMemProps
 
 Theorem dft_operand_defined:
   (!v. MEM (Var v) ops ==> v IN FDOM s.vs_vars) /\
@@ -48,4 +49,90 @@ Proof
   rpt pairarg_tac >> gvs[] >>
   simp[REVERSE_APPEND, AllCaseEqs()] >>
   metis_tac[dft_operands_defined, MEM_REVERSE]
+QED
+
+Theorem dft_mem_corr_trans:
+  mem_corr i s j t /\ mem_corr j t k u ==> mem_corr i s k u
+Proof
+  rw[mem_corr_def] >> metis_tac[]
+QED
+
+Theorem dft_call_corr_trans:
+  call_corr i s j t /\ call_corr j t k u ==> call_corr i s k u
+Proof
+  rw[call_corr_def] >> gvs[] >> metis_tac[]
+QED
+
+Theorem dft_frame_reach_initial_fmp:
+  !C fn s0 i s. frame_reach C fn s0 i s ==>
+    s.vs_initial_fmp = s0.vs_initial_fmp
+Proof
+  ho_match_mp_tac frame_reach_ind >> rpt strip_tac >>
+  imp_res_tac enters_block_initial_fmp >>
+  imp_res_tac step_inst_initial_fmp >> simp[]
+QED
+
+Theorem dft_fold_update_alloca_fields[local]:
+  !xs s. (FOLDL (\s (x,v). update_var x v s) s xs).vs_allocas = s.vs_allocas /\
+         (FOLDL (\s (x,v). update_var x v s) s xs).vs_alloca_next = s.vs_alloca_next
+Proof
+  Induct >> simp[] >> Cases_on `h` >> simp[] >>
+  simp[update_var_def]
+QED
+
+Theorem dft_bind_outputs_alloca_fields[local]:
+  bind_outputs outs vals s = SOME t ==>
+  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  simp[bind_outputs_def] >> strip_tac >>
+  gvs[AllCaseEqs(), dft_fold_update_alloca_fields]
+QED
+
+Theorem dft_step_alloca_fields:
+  i.inst_opcode <> ALLOCA /\ step_inst fuel C i s = OK t ==>
+  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >> Cases_on `i.inst_opcode = INVOKE`
+  >- (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+      simp[Once step_inst_def] >> strip_tac >> gvs[AllCaseEqs()] >>
+      drule dft_bind_outputs_alloca_fields >>
+      Cases_on `ret.iret_adopt_fmp` >>
+      simp[merge_callee_state_def, adopt_return_fmp_def]) >>
+  `step_inst_base i s = OK t` by metis_tac[step_inst_non_invoke] >>
+  metis_tac[step_inst_base_preserves_allocas,
+            step_inst_base_preserves_alloca_next]
+QED
+
+Theorem dft_eval_phis_alloca_fields[local]:
+  !is s t. eval_phis s is = OK t ==>
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  Induct >> simp[Once eval_phis_def] >> rpt gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  gvs[AllCaseEqs()] >> strip_tac >> gvs[update_var_def] >>
+  metis_tac[]
+QED
+
+Theorem dft_enters_block_alloca_fields[local]:
+  enters_block fn s t ==>
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  rw[enters_block_def] >> drule dft_eval_phis_alloca_fields >> simp[]
+QED
+
+Theorem dft_frame_reach_alloca_fields:
+  !C fn s0 i s. frame_reach C fn s0 i s ==>
+    EVERY (\i. i.inst_opcode <> ALLOCA) (fn_insts fn) ==>
+    s.vs_allocas = s0.vs_allocas /\ s.vs_alloca_next = s0.vs_alloca_next
+Proof
+  ho_match_mp_tac frame_reach_strongind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >> disch_tac
+  >- metis_tac[dft_enters_block_alloca_fields]
+  >- (drule frame_reach_active >> strip_tac >>
+      `i.inst_opcode <> ALLOCA` by (drule_all EVERY_active_inst >> simp[]) >>
+      drule_all dft_step_alloca_fields >> simp[])
+  >> drule frame_reach_active >> strip_tac >>
+  `i.inst_opcode <> ALLOCA` by (drule_all EVERY_active_inst >> simp[]) >>
+  drule_all dft_step_alloca_fields >> strip_tac >>
+  drule dft_enters_block_alloca_fields >> simp[]
 QED
