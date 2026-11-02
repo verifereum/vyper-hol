@@ -2,7 +2,8 @@
 Theory dftFramePair
 Ancestors
   dftFramePrefix dftFrameSwap dftPermSim venomEffects dftDefs
-  unitShapeDefs venomInst venomExecSemantics venomWf pred_set
+  unitShapeDefs venomInst venomExecSemantics venomWf venomState dftCommutation
+  pred_set list
 
 Theorem dft_cross_effects:
   dft_cross a b ==> effects_independent a.inst_opcode b.inst_opcode
@@ -77,4 +78,41 @@ Proof
   `step_inst fb C a s = OK sa` by gvs[step_inst_non_invoke] >>
   drule_all step_swap_ok_ext >> strip_tac >>
   qexists_tac `sb` >> gvs[step_inst_non_invoke]
+QED
+
+Theorem dft_step_frame_updates:
+  !pairs s. i.inst_opcode <> INVOKE /\
+    EVERY (\kv. (!y. MEM (Var y) i.inst_operands ==> FST kv <> y) /\
+                ~MEM (FST kv) i.inst_outputs) pairs ==>
+    step_inst fuel C i
+      (FOLDL (\st (out,value). update_var out value st) s pairs) =
+    map_result_state
+      (\st. FOLDL (\st (out,value). update_var out value st) st pairs)
+      (step_inst fuel C i s)
+Proof
+  Induct >- (rpt gen_tac >> Cases_on `step_inst fuel C i s` >>
+             simp[map_result_state_def]) >>
+  simp[] >> rpt gen_tac >>
+  Cases_on `h` >> simp[] >> strip_tac >>
+  first_x_assum (qspec_then `update_var q r s` mp_tac) >>
+  simp[] >> strip_tac >>
+  `step_inst fuel C i (update_var q r s) =
+     map_result_state (update_var q r) (step_inst fuel C i s)` by
+    (irule step_inst_frame >> simp[]) >> simp[] >>
+  Cases_on `step_inst fuel C i s` >> simp[map_result_state_def]
+QED
+
+Theorem dft_step_frame_updates_ok:
+  i.inst_opcode <> INVOKE /\
+  EVERY (\kv. (!y. MEM (Var y) i.inst_operands ==> FST kv <> y) /\
+              ~MEM (FST kv) i.inst_outputs) pairs ==>
+  (step_inst fuel C i
+     (FOLDL (\st (out,value). update_var out value st) s pairs) = OK t <=>
+   ?u. step_inst fuel C i s = OK u /\
+       t = FOLDL (\st (out,value). update_var out value st) u pairs)
+Proof
+  strip_tac >> drule_all dft_step_frame_updates >>
+  disch_then (qspecl_then [`fuel`, `C`, `s`] mp_tac) >>
+  Cases_on `step_inst fuel C i s` >> simp[map_result_state_def] >>
+  metis_tac[]
 QED
