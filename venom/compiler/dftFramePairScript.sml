@@ -1,9 +1,9 @@
 (* Semantic classification and successful-pair boundaries for crossings. *)
 Theory dftFramePair
 Ancestors
-  dftFramePrefix dftFrameSwap dftPermSim venomEffects dftDefs
+  dftFramePrefix dftFrameSwap dftPermSim dftBlockSim venomEffects dftDefs
   unitShapeDefs venomInst venomExecSemantics venomWf venomState dftCommutation
-  venomCallOracleDefs extCallOracle pred_set list
+  venomCallOracleDefs extCallOracle pred_set list finite_map
 
 Theorem dft_cross_effects:
   dft_cross a b ==> effects_independent a.inst_opcode b.inst_opcode
@@ -304,4 +304,181 @@ Proof
   asm_simp_tac bool_ss dft_opcode_eqs >> strip_tac >>
   gvs[AllCaseEqs()] >>
   gvs[exec_ext_call_def, consume_call_outcome_eq, AllCaseEqs(), update_var_def]
+QED
+
+Theorem dft_step_operand_agreement:
+  step_inst fuel C e s = OK u /\ ~is_terminator e.inst_opcode /\
+  DISJOINT (set (inst_defs e)) (set (inst_uses p)) ==>
+  !op. MEM op p.inst_operands ==> eval_operand op s = eval_operand op u
+Proof
+  strip_tac >> rpt strip_tac >>
+  drule eval_operand_step_pres >>
+  disch_then (qspec_then `op` mp_tac) >>
+  simp[] >> impl_tac
+  >- (rpt strip_tac >> gvs[inst_defs_def, inst_uses_def, DISJOINT_DEF,
+                          EXTENSION] >> metis_tac[mem_var_operand_vars]) >>
+  simp[]
+QED
+
+Theorem dft_external_replay:
+  (e.inst_opcode = CALL \/ e.inst_opcode = STATICCALL) /\
+  effects_independent e.inst_opcode p.inst_opcode /\
+  DISJOINT (set (inst_defs e)) (set (inst_uses p)) /\
+  inst_wf p /\ inst_shape_ok p /\
+  ~is_terminator p.inst_opcode /\ p.inst_opcode <> ALLOCA /\
+  (step_inst fe C e s = OK u \/ step_inst fe C e u = OK s) /\
+  step_inst fp C p s = OK t ==>
+  ?pairs. MAP FST pairs = p.inst_outputs /\
+    t = FOLDL (\st (out,value). update_var out value st) s pairs /\
+    step_inst fp C p u =
+      OK (FOLDL (\st (out,value). update_var out value st) u pairs)
+Proof
+  strip_tac >>
+  `~is_terminator e.inst_opcode` by gvs[is_terminator_def] >>
+  drule dft_external_observer >> simp[] >> strip_tac >>
+  `!op. MEM op p.inst_operands ==> eval_operand op s = eval_operand op u` by
+    metis_tac[dft_step_operand_agreement] >>
+  qpat_assum `step_inst fe C e _ = OK _`
+    (mp_then (Pat `step_inst _ _ _ _ = OK _`) mp_tac dft_external_step_metadata) >>
+  simp[] >> strip_tac >>
+  (Cases_on `read_effects p.inst_opcode = {}`
+  >- (gvs[step_inst_def] >> irule dft_empty_read_replay >> simp[]) >> gvs[] >>
+  `e.inst_opcode = STATICCALL` by metis_tac[] >>
+  `DISJOINT (read_effects p.inst_opcode) {Eff_MEMORY; Eff_RETURNDATA}` by
+    gvs[write_effects_def] >>
+  qpat_assum `step_inst fe C e _ = OK _`
+    (mp_then (Pat `step_inst _ _ _ _ = OK _`) mp_tac dft_static_step_read_fields) >>
+  simp[] >> strip_tac >>
+  drule_all dft_static_read_observer >> strip_tac >>
+  gvs[step_inst_def] >>
+  qpat_assum `step_inst_base p s = OK t`
+    (mp_then (Pat `step_inst_base _ _ = OK _`) mp_tac dft_static_read_replay) >>
+  disch_then (qspec_then `u` mp_tac) >> simp[] >> strip_tac >>
+  qexists_tac `[(out,value)]` >> simp[])
+QED
+
+Theorem dft_external_observer_updates:
+  (e.inst_opcode = CALL \/ e.inst_opcode = STATICCALL) /\
+  effects_independent e.inst_opcode p.inst_opcode /\
+  inst_wf p /\ inst_shape_ok p /\
+  ~is_terminator p.inst_opcode /\ p.inst_opcode <> ALLOCA /\
+  step_inst fp C p s = OK t ==>
+  ?pairs. MAP FST pairs = p.inst_outputs /\
+    t = FOLDL (\st (out,value). update_var out value st) s pairs
+Proof
+  strip_tac >> drule dft_external_observer >> simp[] >> strip_tac >>
+  (Cases_on `read_effects p.inst_opcode = {}`
+  >- (gvs[step_inst_def] >>
+      qpat_assum `step_inst_base p s = OK t`
+        (mp_then (Pat `step_inst_base _ _ = OK _`) mp_tac dft_empty_read_replay) >>
+      disch_then (qspec_then `s` mp_tac) >> simp[] >> metis_tac[]) >>
+  `e.inst_opcode = STATICCALL` by metis_tac[] >>
+  `DISJOINT (read_effects p.inst_opcode) {Eff_MEMORY; Eff_RETURNDATA}` by
+    gvs[write_effects_def] >>
+  drule_all dft_static_read_observer >> strip_tac >>
+  gvs[step_inst_def] >>
+  qpat_assum `step_inst_base p s = OK t`
+    (mp_then (Pat `step_inst_base _ _ = OK _`) mp_tac dft_static_read_replay) >>
+  disch_then (qspec_then `s` mp_tac) >> simp[] >> strip_tac >>
+  qexists_tac `[(out,value)]` >> simp[])
+QED
+
+Theorem dft_updates_independent:
+  MAP FST pairs = p.inst_outputs /\
+  DISJOINT (set (inst_defs p)) (set (inst_uses e)) /\
+  DISJOINT (set (inst_defs p)) (set (inst_defs e)) ==>
+  EVERY (\kv. (!y. MEM (Var y) e.inst_operands ==> FST kv <> y) /\
+              ~MEM (FST kv) e.inst_outputs) pairs
+Proof
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  `MEM (FST kv) p.inst_outputs` by metis_tac[MEM_MAP] >>
+  gvs[inst_defs_def, inst_uses_def, DISJOINT_DEF, EXTENSION] >>
+  metis_tac[mem_var_operand_vars]
+QED
+
+Theorem dft_updates_vars:
+  !pairs s. FOLDL (\st (out,value). update_var out value st) s pairs =
+    s with vs_vars := FOLDL (\vs kv. vs |+ kv) s.vs_vars pairs
+Proof
+  Induct >> simp[] >> Cases_on `h` >>
+  simp[update_var_def]
+QED
+
+Theorem dft_updates_lookup:
+  !pairs s u k.
+  FLOOKUP (FOLDL (\vs kv. vs |+ kv) s pairs) k =
+    if MEM k (MAP FST pairs) then
+      FLOOKUP (FOLDL (\vs kv. vs |+ kv) u pairs) k
+    else FLOOKUP s k
+Proof
+  Induct >- simp[] >> Cases_on `h` >> rpt gen_tac >>
+  simp[] >> first_assum (qspecl_then [`u |+ (q,r)`, `u |+ (q,r)`, `k`] mp_tac) >>
+  first_x_assum (qspecl_then [`s |+ (q,r)`, `u |+ (q,r)`, `k`] mp_tac) >>
+  Cases_on `MEM k (MAP FST pairs)` >> simp[] >>
+  Cases_on `k = q` >> simp[FLOOKUP_UPDATE]
+QED
+
+Theorem dft_updates_transfer:
+  MAP FST pairs = MAP FST pairs' /\
+  FOLDL (\st (out,value). update_var out value st) s pairs =
+  FOLDL (\st (out,value). update_var out value st) s pairs' ==>
+  FOLDL (\st (out,value). update_var out value st) u pairs =
+  FOLDL (\st (out,value). update_var out value st) u pairs'
+Proof
+  simp[dft_updates_vars] >> strip_tac >>
+  `FOLDL (\vs kv. vs |+ kv) s.vs_vars pairs =
+   FOLDL (\vs kv. vs |+ kv) s.vs_vars pairs'` by
+    (qpat_x_assum `s with vs_vars := _ = _`
+       (mp_tac o Q.AP_TERM `\st. st.vs_vars`) >> simp[]) >>
+  AP_THM_TAC >> AP_TERM_TAC >> AP_TERM_TAC >>
+  simp[FLOOKUP_EXT, FUN_EQ_THM] >> gen_tac >>
+  qspec_then `pairs` (qspecl_then [`u.vs_vars`, `s.vs_vars`, `x`] mp_tac) dft_updates_lookup >>
+  qspec_then `pairs'` (qspecl_then [`u.vs_vars`, `s.vs_vars`, `x`] mp_tac) dft_updates_lookup >>
+  simp[]
+QED
+
+Theorem dft_external_pair:
+  (e.inst_opcode = CALL \/ e.inst_opcode = STATICCALL) /\
+  effects_independent e.inst_opcode p.inst_opcode /\
+  DISJOINT (set (inst_defs e)) (set (inst_uses p)) /\
+  DISJOINT (set (inst_defs p)) (set (inst_uses e)) /\
+  DISJOINT (set (inst_defs p)) (set (inst_defs e)) /\
+  inst_wf p /\ inst_shape_ok p /\
+  ~is_terminator p.inst_opcode /\ p.inst_opcode <> ALLOCA ==>
+  ((?se. step_inst fe C e s = OK se /\ step_inst fp C p se = OK t) <=>
+   (?sp. step_inst fp C p s = OK sp /\ step_inst fe C e sp = OK t))
+Proof
+  strip_tac >> (`e.inst_opcode <> INVOKE` by gvs[] >> eq_tac
+  >- (strip_tac >>
+      qpat_assum `step_inst fp C p se = OK t`
+        (mp_then (Pat `step_inst _ _ _ _ = OK _`) mp_tac dft_external_replay) >>
+      disch_then (qspecl_then [`s`, `fe`, `e`] mp_tac) >> simp[] >>
+      strip_tac >>
+      `EVERY (\kv. (!y. MEM (Var y) e.inst_operands ==> FST kv <> y) /\
+                    ~MEM (FST kv) e.inst_outputs) pairs` by
+        (irule dft_updates_independent >> metis_tac[]) >>
+      qexists_tac `FOLDL (\st (out,value). update_var out value st) s pairs` >>
+      simp[] >> drule_all dft_step_frame_updates >>
+      disch_then (qspecl_then [`fe`, `C`, `s`] mp_tac) >>
+      simp[map_result_state_def]) >>
+  strip_tac >>
+  qpat_assum `step_inst fp C p s = OK sp`
+    (mp_then (Pat `step_inst _ _ _ _ = OK _`) mp_tac dft_external_observer_updates) >>
+  disch_then (qspec_then `e` mp_tac) >> simp[] >> strip_tac >>
+  `EVERY (\kv. (!y. MEM (Var y) e.inst_operands ==> FST kv <> y) /\
+                ~MEM (FST kv) e.inst_outputs) pairs` by
+    (irule dft_updates_independent >> metis_tac[]) >>
+  drule_all dft_step_frame_updates_ok >>
+  disch_then (qspecl_then [`t`, `s`, `fe`, `C`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `?u. step_inst fe C e s = OK u /\
+       t = FOLDL (\st (out,value). update_var out value st) u pairs` by metis_tac[] >>
+  qpat_assum `step_inst fp C p s = OK sp`
+    (mp_then (Pat `step_inst _ _ _ _ = OK _`) mp_tac dft_external_replay) >>
+  disch_then (qspecl_then [`u`, `fe`, `e`] mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `pairs'` strip_assume_tac) >>
+  `FOLDL (\st (out,value). update_var out value st) u pairs' =
+   FOLDL (\st (out,value). update_var out value st) u pairs` by
+    (irule dft_updates_transfer >> metis_tac[]) >>
+  simp[])
 QED
