@@ -344,6 +344,82 @@ Proof
 QED
 
 
+Inductive dft_head_bubbles:
+  dft_head_bubbles A [] [] /\
+  (!pre y post rest.
+    EVERY (\x. A x y) pre /\ dft_head_bubbles A (pre ++ post) rest ==>
+    dft_head_bubbles A (pre ++ y::post) (y::rest))
+End
+
+Theorem dft_head_bubbles_refl:
+  !xs. dft_head_bubbles A xs xs
+Proof
+  Induct >- simp[dft_head_bubbles_rules] >> gen_tac >>
+  simp[Once dft_head_bubbles_cases] >>
+  qexistsl_tac [`[]`,`xs`] >> simp[]
+QED
+
+Theorem dft_head_bubbles_cross:
+  A x y ==> dft_head_bubbles A [x;y] [y;x]
+Proof
+  strip_tac >> simp[Once dft_head_bubbles_cases] >>
+  qexistsl_tac [`[x]`,`[]`] >> simp[dft_head_bubbles_refl]
+QED
+
+Theorem dft_id_before_cons[local]:
+  id_before (h::xs) a b <=>
+  (h = a /\ MEM b xs) \/ id_before xs a b
+Proof
+  simp[id_before_def, MEM_EL] >> eq_tac
+  >- (rpt strip_tac >> Cases_on `i` >> Cases_on `j` >> gvs[] >>
+      metis_tac[]) >>
+  rpt strip_tac
+  >- (qexistsl_tac [`0`,`SUC n`] >> simp[]) >>
+  qexistsl_tac [`SUC i`,`SUC j`] >> simp[]
+QED
+
+Theorem dft_id_before_insert[local]:
+  !pre. id_before (pre ++ post) a b ==>
+        id_before (pre ++ y::post) a b
+Proof
+  Induct >> simp[dft_id_before_cons] >>
+  metis_tac[MEM_APPEND, MEM]
+QED
+
+Theorem dft_id_before_prefix[local]:
+  !pre. MEM x pre ==> id_before (pre ++ y::post) x y
+Proof
+  Induct >> simp[dft_id_before_cons] >> metis_tac[MEM_APPEND, MEM]
+QED
+
+Theorem dft_head_bubbles_complete:
+  !dst src.
+    PERM src dst /\ ALL_DISTINCT src /\
+    (!x y. id_before src x y /\ id_before dst y x ==> A x y) ==>
+    dft_head_bubbles A src dst
+Proof
+  Induct >- simp[dft_head_bubbles_refl] >> rpt strip_tac >>
+  `MEM h src` by metis_tac[PERM_MEM_EQ, MEM] >>
+  qpat_x_assum `MEM h src` mp_tac >> simp[MEM_SPLIT] >> strip_tac >> gvs[] >>
+  `PERM (l1 ++ l2) dst` by
+    (irule perm_cons_delete >> qexists_tac `h` >> simp[]) >>
+  simp[Once dft_head_bubbles_cases] >>
+  qexistsl_tac [`l1`,`l2`] >> simp[] >>
+  conj_tac
+  >- (simp[EVERY_MEM] >> rpt strip_tac >>
+      `id_before (l1 ++ [h] ++ l2) x h` by
+        (rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> irule dft_id_before_prefix >> simp[]) >>
+      `MEM x dst` by
+        (gvs[ALL_DISTINCT_APPEND] >> metis_tac[PERM_MEM_EQ, MEM_APPEND, MEM]) >>
+      first_x_assum irule >> simp[dft_id_before_cons]) >>
+  first_x_assum irule >> simp[] >> reverse conj_tac
+  >- (gvs[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+  rpt strip_tac >> first_x_assum irule >>
+  conj_tac
+  >- (rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> irule dft_id_before_insert >> simp[]) >>
+  simp[dft_id_before_cons]
+QED
+
 (* Why it holds (unchecked notes):
    - Same fuel works: fuel is per block and per call depth, and the
      schedule visits the same blocks and makes the same calls.
