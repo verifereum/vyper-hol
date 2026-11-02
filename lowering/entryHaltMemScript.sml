@@ -28,6 +28,7 @@ Ancestors
   compileEnv stmtLowering moduleLowering emitHelper abiBuiltinAllocation
   unitTransformDefs venomState venomInst venomExecSemantics venomMemDefs
   words instMemFrontier venomExecProofs emitHelperProps instIdxIndep
+  abiEncoder exprLoweringProps entryDecodeProps
 
 (* ===== STOP ===== *)
 
@@ -299,6 +300,33 @@ Proof
 QED
 
 (* ===== The entry's static argument decode ===== *)
+
+Theorem compile_abi_clamp_basetype_footprint:
+  !cl op st st'.
+    compile_abi_clamp_basetype op cl st = ((), st') ==>
+    EVERY (\i. !s. inst_mem_below_frontier i s) (emitted_insts st st')
+Proof
+  Cases >> rpt gen_tac >>
+  simp[compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
+       compile_abi_bytes_clamp_def] >>
+  TRY (rename1 `if signed then _ else _` >> Cases_on `signed`) >>
+  simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+  simp[] >> rpt strip_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]
+QED
+
+Theorem compile_abi_clamp_basetype_mem_ok:
+  !cl op st st' s.
+    compile_abi_clamp_basetype op cl st = ((), st') ==>
+    run_inst_seq_mem_ok (emitted_insts st st') s
+Proof
+  rpt strip_tac >> irule run_inst_seq_mem_ok_every >>
+  drule compile_abi_clamp_basetype_footprint >> simp[]
+QED
 
 (* entry_decode_arg_run's premises, with the argument's buffer [p, p + its
    memory size) below the frontier: every instruction the decode runs is
