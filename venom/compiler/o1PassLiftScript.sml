@@ -200,20 +200,27 @@ Proof
   cheat
 QED
 
-Theorem mem_corr_closed_site_mem_ok:
-  mem_corr_closed site_mem_ok
+Theorem mem_corr_closed_raw_mem_ok:
+  mem_corr_closed raw_mem_ok
 Proof
-  cheat
+  `!inst s. inst_mem_below_frontier inst s <=>
+            EVERY (\(off,len). len = 0 \/ off + len <= s.vs_alloca_next)
+              (inst_mem_ranges inst s)`
+    by simp_tac std_ss [inst_mem_below_frontier_def, inst_mem_ranges_def] >>
+  pop_assum (fn th => rw[mem_corr_closed_def, mem_corr_def, raw_mem_ok_def,
+                         th]) >>
+  fs[]
 QED
 
 Theorem mem_corr_closed_static_mem_ok:
   mem_corr_closed (static_mem_ok eom)
 Proof
-  cheat
+  rw[mem_corr_closed_def, mem_corr_def, static_mem_ok_def] >> fs[]
 QED
 
 Theorem mem_corr_closed_lowered_mem_fact:
   mem_corr_closed (lowered_mem_fact eom)
 Proof
-  cheat
+  rw[mem_corr_closed_def, mem_corr_def, lowered_mem_fact_def,
+     lowered_mem_ok_def] >> fs[]
 QED
