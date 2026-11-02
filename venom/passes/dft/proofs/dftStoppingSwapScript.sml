@@ -2,7 +2,9 @@
 Theory dftStoppingSwap
 Ancestors
   dftSuccessSwap dftCommutation analysisSimProofsBase venomExecSemantics
-  venomState venomInst venomEffects venomWf instIdxIndep list
+  venomState venomInst venomEffects venomWf instIdxIndep list opcodeClass
+Libs
+  stepInstBaseLib
 
 Theorem dft_abort_update_iff[local]:
   ~MEM (Var v) i.inst_operands /\ ~MEM v i.inst_outputs ==>
@@ -157,3 +159,35 @@ QED
    Thus the next stopping theorem must be DIRECTIONAL and include the root
    inversion restriction; operand readiness alone is not its full interface.
 *)
+
+Theorem dft_canexhalt_operand_defined:
+  inst_wf i /\ opcode_fail_class i.inst_opcode = CanExHalt /\
+  (!op. MEM op i.inst_operands ==> ?v. eval_operand op s = SOME v) ==>
+  (?t. step_inst fuel C i s = OK t) \/
+  (?t. step_inst fuel C i s = Abort ExHalt_abort t)
+Proof
+  strip_tac >>
+  `i.inst_opcode = ASSERT_UNREACHABLE \/
+   i.inst_opcode = RETURNDATACOPY \/ i.inst_opcode = INVALID` by
+    (Cases_on `i.inst_opcode` >> gvs[opcode_fail_class_def]) >>
+  gvs[inst_wf_def] >>
+  simp[step_inst_non_invoke] >>
+  with_opcode_clause simp >>
+  gvs[LENGTH_EQ_NUM_compute] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  `?a. eval_operand h s = SOME a` by metis_tac[] >>
+  `?b. eval_operand h' s = SOME b` by metis_tac[] >>
+  `?c. eval_operand h'' s = SOME c` by metis_tac[] >>
+  simp[] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem dft_nonterminator_no_intret:
+  ~is_terminator i.inst_opcode ==> step_inst fuel C i s <> IntRet vs t
+Proof
+  strip_tac >> Cases_on `i.inst_opcode = INVOKE`
+  >- (simp[step_inst_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[AllCaseEqs()]) >>
+  simp[step_inst_non_invoke] >> strip_tac >>
+  drule step_inst_base_intret_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
+QED
