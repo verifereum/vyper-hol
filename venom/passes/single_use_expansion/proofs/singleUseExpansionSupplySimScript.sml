@@ -5,6 +5,7 @@ Ancestors
   stateFrame stateEquiv venomExecProps venomExecProofs
   venomExecSemantics venomWf venomInst venomState sccpCorrectnessProofs
   analysisSimDefs instIdxIndep execEquivParamProofs passSharedSubst
+  venomFnScheduleRunner
 
 (* Control indices are related separately by segment alignment. *)
 Definition sue_state_rel_def:
@@ -1291,4 +1292,34 @@ Proof
   rename1 `run_block fuel ctx bb s` >>
   Cases_on `run_block fuel ctx bb s` >> simp[] >>
   IF_CASES_TAC >> simp[]
+QED
+
+Theorem sue_segments_supply_index_ready:
+  sue_segments_supply dfg supply insts = (segs,supply') /\
+  ir_supply_inst_ok supply /\ P SUBSET set supply.irs_used_vars /\ i < LENGTH insts ==>
+  ?si sj. sue_expand_inst_supply dfg si (EL i insts) = (EL i segs,sj) /\
+          ir_supply_inst_ok si /\ P SUBSET set si.irs_used_vars
+Proof
+  strip_tac >> drule_all sue_segments_supply_index >> strip_tac >>
+  qexistsl [`si`, `sj`] >> simp[] >>
+  gvs[sue_supply_extends_def] >>
+  fs[pred_setTheory.SUBSET_DEF] >> metis_tac[listTheory.MEM_APPEND]
+QED
+
+Theorem sue_function_lookup_ready:
+  sue_expand_function_supply supply fn = (fn',supply') /\
+  ir_supply_inst_ok supply /\ ir_supply_covers_fn supply fn /\
+  lookup_block lbl fn.fn_blocks = SOME bb ==>
+  ?bb' si sj segs. lookup_block lbl fn'.fn_blocks = SOME bb' /\
+    sue_segments_supply (dfg_build_function fn) si bb.bb_instructions = (segs,sj) /\
+    bb' = bb with bb_instructions := FLAT segs /\
+    ir_supply_inst_ok si /\ set (fn_ir_vars fn) SUBSET set si.irs_used_vars
+Proof
+  strip_tac >> drule_all sue_expand_function_supply_lookup >> strip_tac >>
+  drule sue_expand_block_supply_segments >> strip_tac >>
+  qexistsl [`bb'`, `si`, `sj`, `segs`] >> simp[] >>
+  gvs[sue_supply_extends_def, ir_supply_covers_fn_def,
+      list_subset_def, listTheory.EVERY_MEM,
+      pred_setTheory.SUBSET_DEF] >>
+  metis_tac[listTheory.MEM_APPEND]
 QED
