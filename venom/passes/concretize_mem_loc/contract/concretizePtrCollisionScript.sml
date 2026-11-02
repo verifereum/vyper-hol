@@ -1331,3 +1331,99 @@ Proof
   simp[collision_stage_units, collision_transform_def] >>
   metis_tac[collision_option_result, collision_leaf_layouts, collision_finished_layout]
 QED
+
+Theorem collision_stage_reserved:
+  !fn. MEM fn [collision_a; collision_b; collision_main] ==>
+    (collision_stage_unit fn).cu_context.ctx_global_reserved = []
+Proof
+  pure_rewrite_tac[listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  simp[collision_stage_units, collision_ctx_def, collision_finished_ctx_def,
+    venomInstTheory.mk_venom_context_def]
+QED
+
+Theorem collision_stage_execute:
+  !fn s. MEM fn [collision_a; collision_b; collision_main] ==>
+    execute_configured_fn_pass ARB (CFP_Simple VP_ConcretizeMemLoc)
+      (collision_stage_unit fn) s fn =
+    SOME ((collision_stage_out fn) with fpo_supply := s)
+Proof
+  rpt strip_tac >> drule collision_concretize_results >> strip_tac >>
+  drule collision_stage_reserved >> strip_tac >>
+  simp[execute_configured_fn_pass_def, collision_stage_out_def]
+QED
+
+Theorem collision_output_main_exact:
+  collision_output_main = collision_main with
+    <| fn_blocks :=
+         (HD collision_main.fn_blocks with bb_instructions :=
+            mk_inst 1 ASSIGN [Lit (32w:256 word)] ["p"] ::
+            TL (HD collision_main.fn_blocks).bb_instructions) ::
+         TL collision_main.fn_blocks;
+       fn_eom := SOME 64;
+       fn_mems_used := [(Allocation 1,32,32); (Allocation 100,0,32)] |>
+Proof
+  EVAL_TAC
+QED
+
+Theorem collision_stage_effects:
+  !fn. MEM fn [collision_a; collision_b; collision_main] ==>
+    (collision_stage_out fn).fpo_function.fn_name = fn.fn_name /\
+    fn_pass_effects_hold VP_ConcretizeMemLoc fn (collision_stage_out fn) /\
+    introduces_no_invoke_edges fn (collision_stage_out fn).fpo_function
+Proof
+  pure_rewrite_tac[listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  simp[collision_stage_out_def, collision_stage_units,
+    GSYM collision_output_main_def, collision_output_main_exact,
+    collision_a_exact, collision_b_exact] >>
+  rpt conj_tac >> EVAL_TAC
+QED
+
+Theorem collision_stage_lookups:
+  !fn. MEM fn [collision_a; collision_b; collision_main] ==>
+    lookup_unique_function fn.fn_name
+      (collision_stage_unit fn).cu_context.ctx_functions = SOME fn
+Proof
+  pure_rewrite_tac[listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  simp[collision_stage_units, collision_ctx_def, collision_finished_ctx_def,
+    venomInstTheory.mk_venom_context_def, lookup_unique_function_def,
+    collision_scheduled_def, collision_expanded_def, collision_sealed_def,
+    collision_a_exact, collision_b_exact,
+    collision_a_def, collision_b_def, collision_main_def,
+    venomInstTheory.mk_raw_function_def]
+QED
+
+Theorem collision_stage_supplies:
+  !fn. MEM fn [collision_a; collision_b; collision_main] ==>
+    ir_supply_covers_unit (init_ir_supply (collision_stage_unit fn))
+      (collision_stage_unit fn) /\
+    ir_supply_extends (init_ir_supply (collision_stage_unit fn))
+      (collision_stage_out fn).fpo_supply /\
+    ir_supply_covers_fn (collision_stage_out fn).fpo_supply
+      (collision_stage_out fn).fpo_function /\
+    ir_supply_covers_unit (collision_stage_out fn).fpo_supply
+      (collision_stage_unit fn)
+Proof
+  pure_rewrite_tac[listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  simp[collision_stage_out_def, collision_stage_units,
+    GSYM collision_output_main_def, collision_output_main_exact,
+    collision_a_exact, collision_b_exact] >>
+  rewrite_tac[collision_finished_ctx_def, collision_scheduled_def,
+    collision_expanded_def, collision_sealed_def, collision_a_exact,
+    collision_b_exact] >>
+  rpt conj_tac >> EVAL_TAC
+QED
+
+Theorem collision_stage_steps:
+  !fn. MEM fn [collision_a; collision_b; collision_main] ==>
+    fn_pass_step ARB (CFP_Simple VP_ConcretizeMemLoc)
+      (collision_stage_unit fn) (init_ir_supply (collision_stage_unit fn))
+      fn (collision_stage_out fn)
+Proof
+  rpt strip_tac >>
+  drule collision_stage_lookups >> strip_tac >>
+  drule collision_stage_effects >> strip_tac >>
+  drule collision_stage_supplies >> strip_tac >>
+  drule collision_stage_execute >>
+  disch_then (qspec_then `init_ir_supply (collision_stage_unit fn)` assume_tac) >>
+  gvs[fn_pass_step_def, venomPassScheduleTheory.fn_pass_tag_def, collision_stage_out_def]
+QED
