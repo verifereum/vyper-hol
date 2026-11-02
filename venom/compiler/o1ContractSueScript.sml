@@ -261,6 +261,56 @@ Proof
   gvs[]
 QED
 
+(* The explicit witnesses are the elimination interface of sue_frame_align.
+   A copy advances only the target cursor, never the source reachability. *)
+Theorem sue_frame_align_copy_advance:
+  wf_function fn /\ sue_expand_function_supply supply fn = (fn',supply') /\
+  frame_reach C fn s0 (EL i bb.bb_instructions) u /\
+  lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+  lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+  sue_segments_supply (dfg_build_function fn) bs bb.bb_instructions = (segs,be) /\
+  bb' = bb with bb_instructions := FLAT segs /\
+  ir_supply_inst_ok bs /\ set (fn_ir_vars fn) SUBSET set bs.irs_used_vars /\
+  i < LENGTH bb.bb_instructions /\ u.vs_inst_idx = i /\
+  phi_prefix_length bb.bb_instructions <= i /\
+  j < LENGTH (BUTLAST (EL i segs)) /\
+  t.vs_inst_idx = sue_segment_offset segs i + j /\
+  inst' = EL j (EL i segs) /\ b.vs_inst_idx = 0 /\
+  sue_state_rel (set (fn_ir_vars fn)) u b /\
+  run_insts 0 C' (TAKE j (BUTLAST (EL i segs))) b = OK (sue_idx0 t) /\
+  step_inst fuel C' inst' t = OK v /\
+  active_inst fn' next (v with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  sue_frame_align C C' fn fn' s0 next (v with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >>
+  drule_all sue_segments_supply_index_ready >> strip_tac >>
+  drule_all sue_expand_inst_supply_segment >> strip_tac >>
+  `BUTLAST (EL i segs) = assigns` by
+    simp[rich_listTheory.FRONT_APPEND_NOT_NIL] >>
+  `j < LENGTH assigns /\ SUC j < LENGTH (EL i segs)` by fs[] >>
+  `EL j (EL i segs) = EL j assigns` by
+    simp[listTheory.EL_APPEND_EQN] >>
+  `EVERY (\a. a.inst_opcode = ASSIGN) assigns` by
+    fs[listTheory.EVERY_MEM] >>
+  `run_insts 0 C' (TAKE (SUC j) (BUTLAST (EL i segs))) b =
+    OK (sue_idx0 (v with vs_inst_idx := SUC t.vs_inst_idx))` by
+    (irule sue_assign_prefix_advance >>
+     goal_assum (drule_at Any) >> fs[] >> metis_tac[]) >>
+  `inst'.inst_opcode = ASSIGN` by fs[listTheory.EVERY_EL] >>
+  `v.vs_current_bb = t.vs_current_bb` by
+    (drule venomInstProofsTheory.step_preserves_control_flow >>
+     simp[venomInstTheory.is_terminator_def]) >>
+  drule_all sue_expanded_active_lookup >> strip_tac >>
+  `bb'' = bb'` by gvs[] >>
+  `i < LENGTH segs` by metis_tac[sue_segments_supply_length] >>
+  `next = EL (SUC j) (EL i segs)` by
+    (drule_all sue_segment_offset_el >> strip_tac >>
+     gvs[arithmeticTheory.ADD_CLAUSES]) >>
+  pure_rewrite_tac[sue_frame_align_def] >>
+  qexistsl [`bb`, `bb'`, `bs`, `be`, `segs`, `i`, `SUC j`, `u`, `b`] >>
+  simp[] >> decide_tac
+QED
+
 Theorem sue_frame_align_state:
   sue_frame_align C C' fn fn' s0 inst' t ==>
   ?inst u. frame_reach C fn s0 inst u /\
