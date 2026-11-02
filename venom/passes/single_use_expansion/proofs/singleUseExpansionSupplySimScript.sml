@@ -1880,3 +1880,21 @@ Theorem sue_expand_ops_supply_normalized_eval:
 Proof
   strip_tac >> drule_all sue_expand_ops_supply_eval >> simp[]
 QED
+
+Theorem sue_function_lookup_ready_back:
+  sue_expand_function_supply supply fn = (fn',supply') /\
+  ir_supply_inst_ok supply /\ ir_supply_covers_fn supply fn /\
+  lookup_block lbl fn'.fn_blocks = SOME bb' ==>
+  ?bb si sj segs. lookup_block lbl fn.fn_blocks = SOME bb /\
+    sue_segments_supply (dfg_build_function fn) si bb.bb_instructions = (segs,sj) /\
+    bb' = bb with bb_instructions := FLAT segs /\
+    ir_supply_inst_ok si /\ set (fn_ir_vars fn) SUBSET set si.irs_used_vars
+Proof
+  strip_tac >>
+  `?bb. lookup_block lbl fn.fn_blocks = SOME bb` by
+    (Cases_on `sue_expand_blocks_supply (dfg_build_function fn) supply fn.fn_blocks` >>
+     gvs[sue_expand_function_supply_def] >>
+     drule_all sue_expand_blocks_supply_lookup_back >> metis_tac[]) >>
+  drule_all sue_function_lookup_ready >> strip_tac >>
+  gvs[] >> metis_tac[]
+QED
