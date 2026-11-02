@@ -140,3 +140,7 @@ excludes INVOKE; reuse what helps, don't build on its statement.
 - The intuition and the known obligations (analysis fuel, fn_mems_used of
   observed callees, callee accesses inside fn_mems_used) are in the SML
   comment above the theorems.
+- Forced alloca positions: an input with two forced, simultaneously live
+  allocas at the same position is a counterexample (seen in an earlier run).
+  `fn_ptr_ok` now requires `fn.fn_forced_alloc_positions = FEMPTY`, which
+  rules it out; the frozen statements are unchanged.

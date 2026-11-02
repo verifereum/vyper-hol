@@ -76,9 +76,13 @@ Definition ptr_use_ok_def:
               ops.iao_ofst = Var v
 End
 
-(* MEMTOP observes the memory size, which the static layout changes. *)
+(* MEMTOP observes the memory size, which the static layout changes.
+   Forced alloca positions are taken as given by the layout, so two forced
+   allocas that are live together can overlap; the lowering never forces
+   any. *)
 Definition fn_ptr_ok_def:
   fn_ptr_ok P fn <=>
+    fn.fn_forced_alloc_positions = FEMPTY /\
     (!inst. MEM inst (fn_insts fn) ==>
             inst.inst_opcode <> MEMTOP /\ inst.inst_opcode <> DRET /\
             ptr_use_ok P (fn_pv P fn) inst) /\
