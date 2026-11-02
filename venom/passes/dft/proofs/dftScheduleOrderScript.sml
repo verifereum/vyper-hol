@@ -27,7 +27,7 @@
  *)
 Theory dftScheduleOrder
 Ancestors
-  dftCorrectness dftStructural dftDefs dftTopoSort dftWf passSharedDefs venomWf venomInst venomEffects list
+  dftCorrectness dftStructural dftDefs dftTopoSort dftWf passSharedDefs venomWf venomInst venomEffects list rich_list
 
 (* a comes before b in the list l. *)
 Definition id_before_def:
@@ -654,6 +654,66 @@ Proof
   qspecl_then [`prefix`, `[]`] mp_tac effect_scan_history >>
   disch_then (qspecl_then [`FEMPTY`, `empty_effect_track`, `R`] mp_tac) >>
   gvs[effect_history_empty, ALL_DISTINCT_APPEND]
+QED
+
+Theorem effect_scan_conflict:
+  ALL_DISTINCT (MAP (\i. i.inst_id) (prefix ++ inst::suffix)) /\ transitive R /\
+  (!k ds d.
+    FLOOKUP (FST (FOLDL (\(m, s) i.
+      (m |+ (i.inst_id, FST (compute_effect_deps s i)),
+       SND (compute_effect_deps s i)))
+      (FEMPTY, empty_effect_track) (prefix ++ inst::suffix))) k = SOME ds /\
+    MEM d ds ==> R d.inst_id k) /\
+  MEM x prefix /\ ~effects_independent x.inst_opcode inst.inst_opcode ==>
+  R x.inst_id inst.inst_id
+Proof
+  rpt strip_tac >>
+  Cases_on `FOLDL (\(m, s) i.
+    (m |+ (i.inst_id, FST (compute_effect_deps s i)),
+     SND (compute_effect_deps s i))) (FEMPTY, empty_effect_track) prefix` >>
+  rename1 `_ = (acc, et)` >>
+  `effect_history R prefix et` by
+    (irule effect_scan_prefix_history >> simp[] >>
+     qexists `inst::suffix` >>
+     gvs[FOLDL_APPEND]) >>
+  `~MEM inst.inst_id (MAP (\i. i.inst_id) suffix)` by
+    gvs[ALL_DISTINCT_APPEND] >>
+  `!d. MEM d (FST (compute_effect_deps et inst)) ==> R d.inst_id inst.inst_id` by
+    (rpt strip_tac >>
+     qpat_x_assum `!k ds d. _` (qspecl_then
+       [`inst.inst_id`, `FST (compute_effect_deps et inst)`, `d`] mp_tac) >>
+     simp[FOLDL_APPEND, effect_scan_lookup_preserved,
+          finite_mapTheory.FLOOKUP_UPDATE]) >>
+  irule effect_history_conflict >> simp[] >>
+  qexistsl [`et`, `prefix`] >> simp[] >>
+  gvs[ALL_DISTINCT_APPEND, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem build_eda_scan:
+  build_eda bi =
+    FST (FOLDL (\(m, s) i.
+      (m |+ (i.inst_id, FST (compute_effect_deps s i)),
+       SND (compute_effect_deps s i)))
+      (FEMPTY, empty_effect_track) (FILTER (\i. ~is_pseudo i.inst_opcode) bi))
+Proof
+  simp[build_eda_def] >>
+  AP_TERM_TAC >> AP_THM_TAC >> AP_THM_TAC >> AP_TERM_TAC >>
+  simp[FUN_EQ_THM] >> Cases >> rpt gen_tac >>
+  rename1 `compute_effect_deps et inst` >>
+  Cases_on `compute_effect_deps et inst` >> simp[]
+QED
+
+Theorem build_eda_conflict_order:
+  ALL_DISTINCT (MAP (\i. i.inst_id)
+    (FILTER (\i. ~is_pseudo i.inst_opcode) bi)) /\ transitive R /\
+  (!k ds d. FLOOKUP (build_eda bi) k = SOME ds /\ MEM d ds ==>
+            R d.inst_id k) /\
+  FILTER (\i. ~is_pseudo i.inst_opcode) bi = prefix ++ y::suffix /\
+  MEM x prefix /\ ~effects_independent x.inst_opcode y.inst_opcode ==>
+  R x.inst_id y.inst_id
+Proof
+  rpt strip_tac >> irule effect_scan_conflict >> simp[] >>
+  qexistsl [`prefix`, `suffix`] >> gvs[build_eda_scan]
 QED
 
 (* These probes deliberately have indirect conflicts: a cleared reader and
