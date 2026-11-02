@@ -735,6 +735,21 @@ Proof
   metis_tac[]
 QED
 
+Theorem sue_frame_reach_align:
+  !C' fn' s0 inst' t. frame_reach C' fn' s0 inst' t ==>
+  !C fn supply supply'.
+    ctx_bisim C C' /\ wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\
+    EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn) /\
+    ir_supply_covers_fn supply fn /\ ir_supply_inst_ok supply /\
+    sue_expand_function_supply supply fn = (fn',supply') /\ fn_entry_state fn s0 ==>
+    sue_frame_align C C' fn fn' s0 inst' t
+Proof
+  ho_match_mp_tac frame_reach_ind >> rpt conj_tac >> rpt gen_tac >> strip_tac
+  >- (rpt gen_tac >> strip_tac >> irule sue_frame_align_initial >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >> irule sue_frame_align_next >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >> irule sue_frame_align_block >> metis_tac[])
+QED
+
 (* Runs of the expanded function correspond to runs of the original, in
    any context. *)
 Theorem sue_expand_function_supply_fn_bisim:
@@ -771,5 +786,7 @@ Theorem sue_expand_function_supply_frame_sim:
   sue_expand_function_supply s fn = (fn',s') ==>
   frame_sim C C' fn fn'
 Proof
-  cheat
+  strip_tac >> rw[frame_sim_def] >>
+  drule_all sue_frame_reach_align >> strip_tac >>
+  irule sue_frame_align_observations >> metis_tac[]
 QED
