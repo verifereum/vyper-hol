@@ -5,7 +5,7 @@ Ancestors
   moduleLowering compileEnv stmtSim vyperCompiler venomInst bodyIntCallLabels
   bodyIntCallLabelFrame bodyIntCallContextLabels bodyIntCallMaterialLabels
   bodyIntCallBuiltinLabels bodyIntCallTypeBuiltinLabels bodyIntCallExprBodyLabels
-  bodyIntCallSupportedExprLabels
+  bodyIntCallSupportedExprLabels bodyIntCallStmtHelperLabels
 
 Theorem compile_internal_fn_bodies_append:
   !xs ys st.
