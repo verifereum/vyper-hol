@@ -143,4 +143,4 @@ These rules lift memory-safe expression fragments through effect-only expression
 
 ## Notes
 
-All five exact statements were independently classified PROVABLE against the actual definitions before this task was frozen. They will be parsed before launch. New definitions and theorem hypotheses are outside this task; report a real contradiction rather than amending them.
+All five exact statements were independently classified PROVABLE against the actual definitions before this task was frozen. They parsed successfully before launch, and parsed again after integrating the approved revert-forward memory boundary. The frame and all-fuel helper kernel audits also passed on that merged boundary. New definitions and theorem hypotheses are outside this task; report a real contradiction rather than amending them.
