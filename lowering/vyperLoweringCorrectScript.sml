@@ -29,9 +29,11 @@
  *   lower_vyper_runtime_unit_correct -- S1 (planned admission, Milestone 6)
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
  *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5)
+ *   lower_vyper_runtime_unit_o1_shape_extras -- S2b (planned admission,
+ *     Milestone 5): the non-INVOKE label operands are local
  *
  * TASK056: obsolete NONE-mode relation retained as inactive source provenance.
- * STATUS: S2 is proved; S1 and S3 are statements, NOT proved correctness
+ * STATUS: S2 is proved; S1, S2b and S3 are statements, NOT proved correctness
  *   certificates.
  * Before major proof repair, check lowering definitions against the chosen
  * upstream compiler target; see docs/compiler-definition-parity.md.
@@ -54,7 +56,7 @@ Ancestors
   venomExecSemantics
   venomState
   compileEnv e2eDefs supportedProgram compileVyper immutableSectionRel
-  unitTransformDefs unitShapeDefs
+  unitTransformDefs unitShapeDefs o1PassContract
   fragExec loweringHalt loweringShapeProps retAbiPlanProps
 
 (* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
@@ -900,6 +902,21 @@ Theorem lower_vyper_runtime_unit_source_unit_ok:
     ==> o1_source_unit_ok unit
 Proof
   ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_names
+QED
+
+(* S2b: planned admission, Milestone 5. The lowering's PHI-free code
+   refers to labels only in jumps to blocks of the same function, in
+   reserved labels, and in INVOKE targets; its entry function reads
+   calldata, never a PARAM; and, having no PHI at all, no first block has
+   one. *)
+Theorem lower_vyper_runtime_unit_o1_shape_extras:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+    immutable_free_program tops
+    ==> unit_label_refs_ok unit /\ unit_entry_no_params unit /\
+        unit_first_block_no_phi unit
+Proof
+  cheat
 QED
 
 (* S3: planned admission, Milestone 5. Proof idea: allocation-budget and
