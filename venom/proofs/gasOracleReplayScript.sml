@@ -1095,7 +1095,14 @@ Proof
   suspend "compose"
 QED
 Resume gas_exec_block[compose]:
-  cheat
+  irule gas_exec_block_compose >> simp[] >>
+  gen_tac >> strip_tac >> Cases_on `is_terminator inst.inst_opcode`
+  >- (simp[] >> irule gas_replay_halt_choice >> simp[] >>
+      simp[gas_replay_def, gas_replay_at_def] >>
+      qexists_tac `0` >> simp[lift_result_def]) >>
+  simp[] >> irule gas_replay_preupdate >> simp[] >>
+  first_x_assum irule >> simp[] >>
+  gvs[venomInstTheory.get_instruction_def] >> decide_tac
 QED
 Finalise gas_exec_block
 
