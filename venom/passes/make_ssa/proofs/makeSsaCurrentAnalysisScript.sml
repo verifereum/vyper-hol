@@ -2,7 +2,7 @@
 Theory makeSsaCurrentAnalysis
 Ancestors
   makeSsaCurrentDefs cfgAnalysisProps cfgHelpers dominatorAnalysisProps
-  dominatorQueryProofs dominatorDefs
+  dominatorQueryProofs dominatorRankProofs makeSsaCurrentTree dominatorDefs
   venomWf cfgWf cfgDefs venomInst relation list
 
 Theorem current_cfg_edge_succs:
@@ -91,4 +91,90 @@ Proof
     (irule current_dom_child_reachable >> metis_tac[]) >>
   gvs[dominated_query_membership] >>
   metis_tac[idom_is_immediate]
+QED
+
+Theorem current_dom_child_rank:
+  wf_function fn /\ all_reachable fn /\ MEM n (fn_labels fn) /\
+  current_tree_edge (dom_analyze (cfg_analyze fn) fn) n c ==>
+  MEM c (fn_labels fn) /\ dominator_query_rank fn n < dominator_query_rank fn c
+Proof
+  simp[current_tree_edge_def] >> strip_tac >>
+  `MEM c (fn_labels fn)` by metis_tac[dominated_query_membership] >>
+  simp[] >> irule dominator_query_rank_strict >> simp[] >>
+  metis_tac[current_all_labels_reachable, current_dom_child_strict]
+QED
+
+Theorem current_dom_parent_exists:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME bb /\
+  MEM z (fn_labels fn) /\ z <> bb.bb_label ==>
+  ?p. MEM p (fn_labels fn) /\
+    current_tree_edge (dom_analyze (cfg_analyze fn) fn) p z
+Proof
+  rpt strip_tac >>
+  `cfg_reachable_of (cfg_analyze fn) z` by metis_tac[current_all_labels_reachable] >>
+  `?p. idom_of (dom_analyze (cfg_analyze fn) fn) z = SOME p` by
+    metis_tac[idom_exists] >>
+  `strict_dominates (dom_analyze (cfg_analyze fn) fn) p z` by
+    metis_tac[idom_is_immediate] >>
+  `MEM p (fn_labels fn)` by
+    (gvs[strict_dominates_def, dominates_def] >> metis_tac[dom_labels_bounded]) >>
+  qexists_tac `p` >> simp[current_tree_edge_def, dominated_query_membership]
+QED
+
+Theorem current_dom_aux_postorder_perm:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME bb ==>
+  PERM (dom_tree_postorder (current_dom_tree_aux
+    (dom_analyze (cfg_analyze fn) fn) (LENGTH (fn_labels fn)) bb.bb_label))
+    (fn_labels fn)
+Proof
+  strip_tac >> irule current_tree_postorder_perm >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[current_tree_edge_def, dominated_query_membership]) >>
+  conj_tac >- metis_tac[current_dom_parent_exists] >>
+  conj_tac >- simp[dominated_query_distinct] >>
+  conj_tac
+  >- (qexists_tac `dominator_query_rank fn` >>
+      metis_tac[current_dom_child_rank, dominator_query_rank_bound]) >>
+  conj_tac >- gvs[wf_function_def] >>
+  gvs[entry_block_def, fn_labels_def, AllCaseEqs()] >>
+  Cases_on `fn.fn_blocks` >> gvs[]
+QED
+
+Theorem current_dom_postorder_perm:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME bb ==>
+  PERM (current_dom_postorder fn) (fn_labels fn)
+Proof
+  strip_tac >>
+  `fn_entry_label fn = SOME bb.bb_label` by simp[fn_entry_label_def] >>
+  simp[current_dom_postorder_def, current_dom_tree_def] >>
+  metis_tac[current_dom_aux_postorder_perm]
+QED
+
+Theorem current_dom_root_fuel_stable:
+  wf_function fn /\ all_reachable fn /\ MEM root (fn_labels fn) ==>
+  !extra. current_dom_tree_aux (dom_analyze (cfg_analyze fn) fn)
+    (LENGTH (fn_labels fn)) root =
+    current_dom_tree_aux (dom_analyze (cfg_analyze fn) fn)
+    (LENGTH (fn_labels fn) + extra) root
+Proof
+  strip_tac >> irule current_tree_root_fuel_stable >>
+  simp[] >> qexists_tac `dominator_query_rank fn` >>
+  metis_tac[current_dom_child_rank, dominator_query_rank_bound]
+QED
+
+Theorem current_frontier_query_correct:
+  wf_function fn /\ MEM n (fn_labels fn) /\
+  cfg_reachable_of (cfg_analyze fn) n /\
+  cfg_reachable_of (cfg_analyze fn) y /\
+  LENGTH (cfg_preds_of (cfg_analyze fn) y) > 1 /\
+  fn_entry_label fn <> SOME y /\
+  (!p. MEM p (cfg_preds_of (cfg_analyze fn) y) ==>
+       cfg_reachable_of (cfg_analyze fn) p) ==>
+  (MEM y (THE (ALOOKUP (current_frontier_map fn) n)) <=>
+   ?p. MEM p (cfg_preds_of (cfg_analyze fn) y) /\
+       dominates (dom_analyze (cfg_analyze fn) fn) n p /\
+       ~strict_dominates (dom_analyze (cfg_analyze fn) fn) n y)
+Proof
+  strip_tac >> simp[ALOOKUP_current_frontier_map] >>
+  metis_tac[dom_frontier_correct]
 QED
