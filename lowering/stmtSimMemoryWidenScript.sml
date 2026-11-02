@@ -3,7 +3,8 @@ Theory stmtSimMemoryWiden
 Ancestors
   list finite_map exprSim exprSimHyps stmtSim stmtSimDeclMem
   stmtSimAssignMem stmtSimAssignTupleMem typedMemoryCopy
-  stmtSimAssignStore fragExec
+  stmtSimAssignStore fragExec stmtSimDeclStore localPtrsProps
+  exprLoweringProps venomState venomMemDefs
   stmtLowering exprLowering compileEnv valueEncoding vyperTypeSystem
   vyperInterpreter vyperState
 Libs
@@ -776,6 +777,136 @@ Resume typed_decl_post_assign_run[different]:
 QED
 
 Finalise typed_decl_post_assign_run
+
+Theorem typed_decl_store_frame[local]:
+  !func cenv cx es s t sa id p sz w inst v tyv sc rest a ctx.
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_outputs = [p] /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
+    local_ptrs_reserved cenv sa /\ not_fresh_at sa p /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+              vs_prev_bb := s.vs_prev_bb; vs_current_bb := s.vs_current_bb;
+              vs_inst_idx := s.vs_inst_idx|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!b n. b + n <= w2n w \/ w2n w + type_memory_size tyv <= b ==>
+           mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+    type_memory_size tyv <= sz /\ val_wf tyv v /\
+    val_in_memory tyv v (w2n w) t.vs_memory ==>
+    stmt_state_rel ctx func cenv cx
+      (es with scopes :=
+        (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!q. q = p \/ ~not_local_ptr cenv es.scopes q ==>
+       lookup_var q t = lookup_var q s` by
+    (rpt strip_tac >- simp[] >>
+     `not_fresh_at sa q` by
+       (gvs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >> simp[]) >>
+  `!n b sz'. n <> id /\ local_region cenv es.scopes s n b sz' ==>
+       mem_bytes_at b sz' s.vs_memory = mem_bytes_at b sz' t.vs_memory` by
+    (rpt strip_tac >>
+     `regions_disjoint (w2n w) sz b sz'` by
+       (irule local_ptrs_rel_alloca_disjoint >>
+        qexistsl [`cenv`, `func`, `inst`, `n`, `p`, `es.scopes`, `s`] >>
+        fs[stmt_state_rel_def, state_rel_def]) >>
+     `b + sz' <= w2n w \/ w2n w + type_memory_size tyv <= b` by
+       (fs[regions_disjoint_def] >> decide_tac) >> metis_tac[]) >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
+    (`t.vs_data_section = s.vs_data_section` by
+       (qpat_x_assum `t with <|vs_vars := _; vs_memory := _; vs_prev_bb := _;
+                              vs_current_bb := _; vs_inst_idx := _|> = s` mp_tac >>
+        simp[venom_state_component_equality]) >>
+     irule loweringSliceTheory.immutables_rel_mem_agree >> qexists `s` >>
+     fs[stmt_state_rel_def, state_rel_def] >>
+     fs[immutable_alloca_sep_def] >> rpt strip_tac >>
+     first_x_assum drule_all >> strip_tac >>
+     `regions_disjoint off (type_memory_size tv) (w2n w) sz` by metis_tac[] >>
+     `off + type_memory_size tv <= w2n w \/
+      w2n w + type_memory_size tyv <= off` by
+       (fs[regions_disjoint_def] >> decide_tac) >>
+     qpat_x_assum `!b n. _ ==> mem_bytes_at b n t.vs_memory = _`
+       (qspecl_then [`off`, `type_memory_size tv`] mp_tac) >> simp[]) >>
+  irule stmt_state_rel_declare_memory >> simp[] >>
+  qexistsl [`inst`, `s`, `w`] >> gs[] >>
+  qpat_x_assum `t with <|vs_memory := _; vs_vars := _; vs_prev_bb := _;
+                         vs_current_bb := _; vs_inst_idx := _|> = s` mp_tac >>
+  simp[venom_state_component_equality] >> strip_tac >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem typed_decl_store_post_run[local]:
+  !ctx func cenv cx env e es sa sb sf s0 es1 v op s stv dtv
+   inst p dw dsz dty loc info bytes sc rest id a.
+    expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
+    expr_sim_inv cenv cx env es /\
+    ~is_bytestring_type (lowered_value_type cenv e) /\
+    ~is_word_type (lowered_value_type cenv e) /\
+    ~is_word_type dty /\ ~is_bytestring_type dty /\
+    evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
+    0 < type_memory_size stv /\ type_memory_size stv < dimword (:256) /\
+    type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size stv /\
+    type_memory_bytes cenv dty = type_memory_size dtv /\
+    type_memory_size dtv + 64 < dimword (:256) /\
+    not_fresh_at sa p /\ lookup_var p s0 = SOME dw /\
+    FLOOKUP s0.vs_allocas inst.inst_id = SOME (w2n dw,dsz) /\
+    MEM inst (fn_insts func) /\ inst.inst_outputs = [p] /\
+    inst.inst_opcode = ALLOCA /\
+    inst.inst_id < sa.cs_next_id /\ inst.inst_id < sb.cs_next_id /\
+    not_local_ptr cenv es1.scopes p /\ fn_inst_ids_distinct func /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    type_widens_to (get_tenv cx) (lowered_value_type cenv e) dty /\
+    evaluate_type (get_tenv cx) dty = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\
+    0 < type_memory_size dtv /\ type_memory_size dtv <= dsz /\
+    compile_assign_value cenv (Var p) LocMemory op F loc dty
+      (lowered_value_type cenv e) info bytes sb = ((),sf) /\
+    fn_has_code sb sf func /\ local_ptrs_reserved cenv sb /\
+    (!x. op = Var x ==> not_fresh_at sb x) /\ not_fresh_at sb p /\
+    ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    es1.scopes = sc :: rest /\ lookup_scopes id es1.scopes = NONE /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) dsz) ==>
+    ?t. stmt_state_rel ctx func cenv cx
+          (es1 with scopes :=
+            (sc |+ (id, <|assignable := a; type := dtv; value := v; popped := []|>)) :: rest) t /\
+      ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+      (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
+      (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+                   FLOOKUP t.vs_allocas aid = SOME entry) /\
+      (!fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
+        ?fuel'. run_from fuel' ctx func s = r)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all typed_decl_post_assign_run >>
+  disch_then (qx_choosel_then [`sn`, `u`, `t`] strip_assume_tac) >>
+  `FLOOKUP u.vs_allocas inst.inst_id = SOME (w2n dw,dsz)` by
+    (gvs[expr_post_def] >> metis_tac[]) >>
+  `local_ptrs_reserved cenv sn` by
+    (irule local_ptrs_reserved_next_var >> qexists `sb` >> simp[]) >>
+  `not_fresh_at sn p` by
+    (irule freshWritesTheory.not_fresh_at_mono >> qexists `sb` >> simp[]) >>
+  `val_wf dtv v` by metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  `stmt_state_rel ctx func cenv cx
+      (es1 with scopes :=
+        (sc |+ (id, <|assignable := a; type := dtv; value := v; popped := []|>)) :: rest) t` by
+    (drule_all typed_decl_store_frame >> simp[]) >>
+  `t.vs_allocas = u.vs_allocas` by
+    (qpat_x_assum `_ = u` mp_tac >> simp[venom_state_component_equality]) >>
+  qexists `t` >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sn x` by
+        (irule freshWritesTheory.not_fresh_at_mono >> qexists `sb` >> simp[]) >>
+      simp[]) >>
+  rpt strip_tac >> simp[] >>
+  qpat_x_assum `!fuel r. _` irule >> simp[] >>
+  qexists `fuel` >> simp[]
+QED
 
 
 Theorem unstaged_overlap_value_types[local]:
