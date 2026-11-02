@@ -27,6 +27,128 @@ Proof
   rw[vyper_valid_enc_def]
 QED
 
+(* Strict ABI encodings also satisfy Vyper's validation, which ignores
+   unused dynamic Bytes/String padding. *)
+Theorem valid_enc_vyper_decode_valid_enc_mutual:
+  (!t bs. valid_enc t bs ==> vyper_decode_valid_enc t bs) /\
+  (!n l t bs hds. valid_enc_array n l t bs hds ==>
+     vyper_decode_valid_enc_array n l t bs hds) /\
+  (!ts bs hds. valid_enc_tuple ts bs hds ==>
+     vyper_decode_valid_enc_tuple ts bs hds)
+Proof
+  ho_match_mp_tac valid_enc_ind >>
+  rpt strip_tac >>
+  fs[Once valid_enc_def] >>
+  simp[Once vyper_decode_valid_enc_def] >>
+  gvs[] >> Cases_on `is_dynamic t` >> gvs[]
+QED
+
+Theorem valid_enc_vyper_decode_valid_enc:
+  !t bs. valid_enc t bs ==> vyper_decode_valid_enc t bs
+Proof
+  metis_tac[valid_enc_vyper_decode_valid_enc_mutual]
+QED
+
+Theorem vyper_decode_valid_enc_bytes_payload:
+  (!bs. vyper_decode_valid_enc (Bytes NONE) bs ==>
+     32 <= LENGTH bs /\
+     dest_NumV (dec_number (Uint 256) (TAKE 32 bs)) <= LENGTH (DROP 32 bs)) /\
+  (!bs. vyper_decode_valid_enc String bs ==>
+     32 <= LENGTH bs /\
+     dest_NumV (dec_number (Uint 256) (TAKE 32 bs)) <= LENGTH (DROP 32 bs))
+Proof
+  simp[vyper_decode_valid_enc_def]
+QED
+
+Theorem vyper_decode_valid_enc_fixed_bytes:
+  !m bs. vyper_decode_valid_enc (Bytes (SOME m)) bs =
+    valid_enc (Bytes (SOME m)) bs
+Proof
+  simp[vyper_decode_valid_enc_def, valid_enc_def]
+QED
+
+Theorem vyper_decode_dec_has_type_mutual:
+  (!t bs. vyper_decode_valid_enc t bs ==> has_type t (dec t bs)) /\
+  (!n b t bs hds acc.
+     vyper_decode_valid_enc_array n b t bs hds /\
+     n + LENGTH acc < dimword (:256) /\ have_type t (REVERSE acc) ==>
+     has_type (Array NONE t) (dec_array n b t bs hds acc) /\
+     has_type (Array (SOME (n + LENGTH acc)) t) (dec_array n b t bs hds acc)) /\
+  (!ts bs hds acc ats.
+     vyper_decode_valid_enc_tuple ts bs hds /\
+     LENGTH ts + LENGTH acc < dimword (:256) /\ has_types ats (REVERSE acc) ==>
+     has_type (Tuple (ats ++ ts)) (dec_tuple ts bs hds acc))
+Proof
+  ho_match_mp_tac dec_ind >> rpt strip_tac >>
+  fs[Once vyper_decode_valid_enc_def] >> simp[Once dec_def]
+  >- (first_x_assum (qspec_then `[]` mp_tac) >> rw[])
+  >- (qmatch_goalsub_abbrev_tac `w2n w` >>
+      qspec_then `w` mp_tac wordsTheory.w2n_lt >> rw[] >> gvs[LENGTH_TAKE_EQ])
+  >- (qmatch_goalsub_abbrev_tac `w2n w` >>
+      qspec_then `w` mp_tac wordsTheory.w2n_lt >> rw[] >> gvs[LENGTH_TAKE_EQ])
+  >- (qpat_x_assum `has_types _ _ ==> _` mp_tac >>
+      (impl_tac >- (rewrite_tac[GSYM REPLICATE, GSYM SNOC_REPLICATE, SNOC_APPEND] >>
+        gvs[has_types_LIST_REL, LIST_REL_APPEND_EQ])) >>
+      simp[ADD1])
+  >- (qpat_x_assum `has_types _ _ ==> _` mp_tac >>
+      (impl_tac >- (rewrite_tac[GSYM REPLICATE, GSYM SNOC_REPLICATE, SNOC_APPEND] >>
+        gvs[has_types_LIST_REL, LIST_REL_APPEND_EQ])) >>
+      simp[ADD1])
+  >- (qpat_x_assum `has_types _ _ ==> _` mp_tac >>
+      (impl_tac >- (rewrite_tac[GSYM REPLICATE, GSYM SNOC_REPLICATE, SNOC_APPEND] >>
+        gvs[has_types_LIST_REL, LIST_REL_APPEND_EQ])) >>
+      simp[ADD1])
+  >- (qpat_x_assum `has_types _ _ ==> _` mp_tac >>
+      (impl_tac >- (rewrite_tac[GSYM REPLICATE, GSYM SNOC_REPLICATE, SNOC_APPEND] >>
+        gvs[has_types_LIST_REL, LIST_REL_APPEND_EQ])) >>
+      simp[ADD1])
+  >> Cases_on `is_dynamic t` >> gvs[] >>
+  first_x_assum (qspec_then `ats ++ [t]` mp_tac) >>
+  simp[has_types_LIST_REL, LIST_REL_APPEND_EQ] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  fs[has_types_LIST_REL]
+QED
+
+Theorem vyper_decode_dec_has_type:
+  !t bs. vyper_decode_valid_enc t bs ==> has_type t (dec t bs)
+Proof
+  metis_tac[vyper_decode_dec_has_type_mutual]
+QED
+
+Theorem vyper_decode_valid_enc_tuple_REPLICATE:
+  !n t bs hds.
+    vyper_decode_valid_enc_tuple (REPLICATE n t) bs hds =
+    vyper_decode_valid_enc_array n
+      (if is_dynamic t then NONE else SOME (static_length t)) t bs hds
+Proof
+  Induct_on `n` >> simp[Once vyper_decode_valid_enc_def] >>
+  rpt gen_tac >> Cases_on `is_dynamic t` >>
+  simp[vyper_decode_valid_enc_def]
+QED
+
+Theorem vyper_decode_valid_enc_static_mutual:
+  (!t bs. ~is_dynamic t /\ vyper_decode_valid_enc t bs ==> valid_enc t bs) /\
+  (!n l t bs hds. ~is_dynamic t /\ vyper_decode_valid_enc_array n l t bs hds ==>
+     valid_enc_array n l t bs hds) /\
+  (!ts bs hds. EVERY (\t. ~is_dynamic t) ts /\
+     vyper_decode_valid_enc_tuple ts bs hds ==> valid_enc_tuple ts bs hds)
+Proof
+  ho_match_mp_tac valid_enc_ind >> rpt strip_tac >>
+  fs[Once vyper_decode_valid_enc_def] >>
+  simp[Once valid_enc_def] >> gvs[] >>
+  first_x_assum irule >>
+  qpat_x_assum `~any_dynamic ts` mp_tac >>
+  qpat_x_assum `LENGTH ts < _` kall_tac >>
+  qpat_x_assum `vyper_decode_valid_enc_tuple _ _ _` kall_tac >>
+  Induct_on `ts` >> simp[is_dynamic_def]
+QED
+
+Theorem vyper_decode_valid_enc_static:
+  !t bs. ~is_dynamic t /\ vyper_decode_valid_enc t bs ==> valid_enc t bs
+Proof
+  metis_tac[vyper_decode_valid_enc_static_mutual]
+QED
+
 (* ===== Content of the size window (issue checks 4 and 5) ===== *)
 
 (* Minimum expected ABI encoding size: the declared type's head is readable. *)

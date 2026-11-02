@@ -13,7 +13,8 @@
  *     compile_raw_revert_sim, compile_selfdestruct_sim
  *   5 the creates: compile_create_sim
  *
- * Unprovable as the definitions stand:
+ * Unprovable as the definitions stand (for raw_call and the creates, once
+ * expr_sim_pre's exclusion of them, below, is lifted):
  *   - compile_raw_call_sim, compile_raw_log_sim and compile_selfdestruct_sim:
  *     compile_call lowers RawCallTarget, RawLog and SelfDestructTarget to
  *     INVALID, where the source can succeed.
@@ -22,10 +23,11 @@
  *     stmt_state_rel does not relate to the ALLOCA allocations, so
  *     expr_post's memory frame does not follow (#668, #636 Infrastructure
  *     row 2).
- *   - compile_create_sim, once the create lowerings are wired in, for a
- *     second reason: a create stores its run's pending deletions in the
- *     source (eval_create), which state_rel's accounts_rel requires empty,
- *     while Venom's create result (extract_venom_result) drops them.
+ *
+ * expr_sim_pre excludes raw_call and the creates (~expr_has_evm_run e),
+ * so compile_raw_call_sim, compile_raw_call_calldata_sim and
+ * compile_create_sim hold vacuously for now; they stay cheated until that
+ * exclusion is lifted.
  *
  * Internal calls (row 6) have no lemma: expr_sim_pre excludes them
  * (int_calls_expr e = []) until #638 states the INVOKE hypothesis.

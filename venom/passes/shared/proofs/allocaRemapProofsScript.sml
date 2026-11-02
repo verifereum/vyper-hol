@@ -53,9 +53,10 @@ Theorem remap_step_oracle:
   alloca_remap_rel fn roots remap s1 s2 /\
   inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
   inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2 /\
+  inst.inst_opcode <> DELEGATECALL /\
   step_inst_base inst s1 = OK v1 /\ step_inst_base inst s2 = OK v2 ==>
   v1.vs_outcomes = v2.vs_outcomes /\ v1.vs_requests = v2.vs_requests /\
-  v1.vs_toDelete = v2.vs_toDelete
+  v1.vs_pending_deletions = v2.vs_pending_deletions
 Proof
   rw[alloca_remap_rel_def] >>
   imp_res_tac step_inst_base_oracle >> gvs[]
@@ -1550,7 +1551,8 @@ Proof
   (impl_tac >- gvs[]) >> strip_tac >>
   (* Step 8: Reconstruct alloca_remap_rel *)
   `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
-   inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2` by
+   inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2 /\
+   inst.inst_opcode <> DELEGATECALL` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   drule_all remap_step_oracle >> strip_tac >>
   irule remap_rel_from_equiv >>
@@ -3467,7 +3469,8 @@ Proof
   impl_tac >- simp[] >> strip_tac >>
   (* 10. Reconstruct alloca_remap_rel *)
   `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
-   inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2` by
+   inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2 /\
+   inst.inst_opcode <> DELEGATECALL` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   drule_all remap_step_oracle >> strip_tac >>
   irule remap_rel_from_equiv >> gvs[] >> rpt conj_tac

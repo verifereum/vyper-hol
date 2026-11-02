@@ -41,7 +41,7 @@ Datatype:
     as_prev_hashes : bytes32 list;
     as_outcomes : call_outcome list;
     as_requests : call_request list;
-    as_toDelete : address list;
+    as_pending_deletions : address list;
     as_gas_readings : bytes32 list
   |>
 End
@@ -566,7 +566,10 @@ Definition extract_asm_result_def:
              as_accounts := accounts;
              as_logs := s.as_logs ++ new_logs;
              as_memory := new_memory;
-             as_transient := new_transient
+             as_transient := new_transient;
+             as_pending_deletions := if success
+               then final_state.rollback.toDelete ++ s.as_pending_deletions
+               else s.as_pending_deletions
            |> in
            SOME (output, s')
        | _ => NONE)
@@ -608,8 +611,8 @@ Definition asm_consume_call_outcome_def:
          as_accounts := accounts;
          as_transient := ts;
          as_logs := logs;
-         as_toDelete := if computed_precompile rq then s.as_toDelete
-                        else adopt_outcome_deletions rq outcome s.as_toDelete;
+         as_pending_deletions :=
+           adopt_outcome_deletions rq outcome s.as_pending_deletions;
          as_returndata := outcome.co_returnData;
          as_memory := TAKE ro s.as_memory ++ bytes ++
                       DROP (ro + LENGTH bytes) s.as_memory |>))

@@ -31,7 +31,7 @@ Theorem consume_create_head:
        vs_accounts := outcome.co_accounts;
        vs_transient := outcome.co_tStorage;
        vs_logs := if outcome.co_success then s.vs_logs ++ outcome.co_logs else s.vs_logs;
-       vs_toDelete := if outcome.co_success then outcome.co_toDelete else s.vs_toDelete;
+       vs_pending_deletions := if outcome.co_success then outcome.co_toDelete ++ s.vs_pending_deletions else s.vs_pending_deletions;
        vs_returndata := outcome.co_returnData |>)
 Proof
   strip_tac >> simp[consume_create_outcome_eq, take_outcome_def, record_request_def] >>
@@ -89,22 +89,21 @@ Proof
 QED
 
 Theorem consume_call_deletions[local]:
-  (SND (consume_call_outcome rq ro rs s)).vs_toDelete =
-  if computed_precompile rq then s.vs_toDelete
-  else adopt_outcome_deletions rq
-    (FST (take_outcome rq s.vs_outcomes)) s.vs_toDelete
+  (SND (consume_call_outcome rq ro rs s)).vs_pending_deletions =
+  adopt_outcome_deletions rq
+    (FST (take_outcome rq s.vs_outcomes)) s.vs_pending_deletions
 Proof
   simp[]
 QED
 
 Theorem consume_static_call_deletions:
   rq.cr_static ==>
-  (SND (consume_call_outcome rq ro rs s)).vs_toDelete = s.vs_toDelete
+  (SND (consume_call_outcome rq ro rs s)).vs_pending_deletions = s.vs_pending_deletions
 Proof
   simp[adopt_outcome_deletions_def]
 QED
 
-(* Regressions quantify over the observed snapshots, rather than running any
+(* Regressions quantify over the observed outcomes, rather than running any
    particular constructor.  Both salts use exactly the same consumption path. *)
 Theorem create_oracle_request_regression:
   let rq = venom_create_request s value offset sz salt in
@@ -129,7 +128,7 @@ Theorem exec_create_success_regression:
         vs_accounts := outcome.co_accounts;
         vs_transient := outcome.co_tStorage;
         vs_logs := s.vs_logs ++ outcome.co_logs;
-        vs_toDelete := outcome.co_toDelete;
+        vs_pending_deletions := outcome.co_toDelete ++ s.vs_pending_deletions;
         vs_returndata := outcome.co_returnData |>))
 Proof
   strip_tac >> drule consume_create_head >> disch_then assume_tac >>
@@ -148,7 +147,7 @@ Theorem exec_create_failure_regression:
         vs_accounts := outcome.co_accounts;
         vs_transient := outcome.co_tStorage;
         vs_logs := s.vs_logs;
-        vs_toDelete := s.vs_toDelete;
+        vs_pending_deletions := s.vs_pending_deletions;
         vs_returndata := outcome.co_returnData |>))
 Proof
   strip_tac >> drule consume_create_head >> disch_then assume_tac >>
@@ -169,7 +168,7 @@ Theorem exec_create_preentry_failure_regression:
         vs_accounts := outcome.co_accounts;
         vs_transient := outcome.co_tStorage;
         vs_logs := s.vs_logs;
-        vs_toDelete := s.vs_toDelete;
+        vs_pending_deletions := s.vs_pending_deletions;
         vs_returndata := [] |>))
 Proof
   strip_tac >> drule_all exec_create_failure_regression >> simp[]

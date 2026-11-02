@@ -23,6 +23,7 @@
 
 Theory stmtSimAugAssign
 Ancestors
+  allocLimits
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim exprSimHyps exprSimOps exprSimBinopFrag
   exprSimOperators exprSimLeaves loweringSlice stmtSim stmtSimDecl
@@ -143,7 +144,7 @@ Proof
   Cases_on `bop` >> rw[well_typed_binop_def, word_value_type_def] >> gvs[]
 QED
 
-Theorem word_value_type_memory_size[local]:
+Theorem word_value_type_memory_size:
   !tenv t tv.
     word_value_type t /\ evaluate_type tenv t = SOME tv ==>
     type_memory_size tv = 32
@@ -237,7 +238,7 @@ QED
 
 (* A well-formed type's width is whole bytes: Vyper's int widths are
    multiples of 8, and decimal and every other type are 168 or 256 bits. *)
-Theorem well_formed_type_bits[local]:
+Theorem well_formed_type_bits:
   !tenv ty. well_formed_type tenv ty ==> type_bits ty MOD 8 = 0
 Proof
   Cases_on `ty` >> simp[type_bits_def] >> rename1 `BaseT bt` >>
@@ -259,6 +260,7 @@ Proof
   drule well_formed_type_bits >> strip_tac >>
   gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
       vyperASTTheory.expr_type_def]
 QED
 
@@ -275,6 +277,7 @@ Proof
   drule well_formed_type_bits >> strip_tac >>
   gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
       vyperASTTheory.expr_type_def]
 QED
 
@@ -409,8 +412,8 @@ Proof
   impl_tac >- simp[expr_res_ok_def] >>
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
-  rename1 `expr_post func cenv cx _ es sa s3 s0 es1 v res_op u` >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  rename1 `expr_post ctx func cenv cx _ es sa s3 s0 es1 v res_op u` >>
+  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def, expr_val_rel_def, vyperASTTheory.expr_type_def] >>
   strip_tac >>
   `eval_operand res_op u = SOME (typed_val_to_w256 entry1.type v)` by
@@ -419,7 +422,7 @@ Proof
     (irule store_lays_out_word_value >>
      metis_tac[word_value_type_memory_size]) >>
   drule_all assign_local_store_run >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  strip_tac >>
   disj1_tac >> qexists_tac `t` >>
   simp[stmt_lands_def, cenv_top_ext_refl] >>
   conj_tac

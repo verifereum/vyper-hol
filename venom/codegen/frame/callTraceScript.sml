@@ -8,7 +8,7 @@
  *)
 Theory callTrace
 Ancestors
-  arithmetic list option pair sum relation finite_map words byte
+  arithmetic list rich_list option pair sum relation finite_map words byte
   extCallOracle vfmTypes vfmBuffer vfmState vfmContext vfmExecution
   vfmExecutionProp vfmDecreasesGas
 Libs
@@ -16,14 +16,15 @@ Libs
 
 (* ===== Observer state and extraction ===== *)
 
+(* pending saves the caller's log and deletion counts. Descendants must not
+ * overwrite this frame's pending request. Deletions grow by consing, unlike
+ * logs. *)
 Datatype:
   trace_obs = <| entries : (call_request # call_outcome) list;
                  readings : bytes32 list;
-                 pending : (call_request # num) option |>
+                 pending : (call_request # num # num) option |>
 End
 
-(* pending stores our request and our pre-call log count, not a callee's
- * log count. Descendant calls must not overwrite it. *)
 Definition next_opcode_def:
   next_opcode c =
     if LENGTH c.msgParams.code <= c.pc then SOME Stop
@@ -69,20 +70,29 @@ Definition request_of_def:
 End
 
 (* The caller's post-step top stack word is the success flag. Only logs
- * after the saved pre-call count belong to this outcome. *)
+ * after the saved pre-call count n, and deletions consed on top of the saved
+ * pre-call count m, belong to this outcome. *)
 Definition outcome_of_def:
-  outcome_of kind s n =
+  outcome_of kind s n m =
     let c = FST (HD s.contexts)
     in <| co_created := if kind = MessageCall then 0w else w2w (HD c.stack);
-          co_toDelete := s.rollback.toDelete;
           co_success := (HD c.stack <> 0w);
           co_returnData := c.returnData;
           co_accounts := s.rollback.accounts;
           co_tStorage := s.rollback.tStorage;
-          co_logs := DROP n c.logs |>
+          co_logs := DROP n c.logs;
+          co_toDelete :=
+            TAKE (LENGTH s.rollback.toDelete - m) s.rollback.toDelete |>
 End
 
 (* ===== Exact observer table (PLAN section 5.2) ===== *)
+
+Theorem outcome_of_added_deletions:
+  s.rollback.toDelete = added ++ previous ==>
+  (outcome_of kind s log_count (LENGTH previous)).co_toDelete = added
+Proof
+  simp[outcome_of_def, TAKE_LENGTH_APPEND]
+QED
 
 Definition observe_def:
   observe d s (r, s') obs =
@@ -95,16 +105,18 @@ Definition observe_def:
            else if observable_call c then
              if LENGTH s'.contexts = d then
                obs with entries := obs.entries ++
-                 [(request_of s, outcome_of (request_of s).cr_kind s' (LENGTH c.logs))]
+                 [(request_of s, outcome_of (request_of s).cr_kind s' (LENGTH c.logs)
+                    (LENGTH s.rollback.toDelete))]
              else if LENGTH s'.contexts = d + 1 then
-               obs with pending := SOME (request_of s, LENGTH c.logs)
+               obs with pending := SOME
+                 (request_of s, LENGTH c.logs, LENGTH s.rollback.toDelete)
              else obs
            else obs
          else if LENGTH s.contexts > d /\ LENGTH s'.contexts = d then
            case obs.pending of
              NONE => obs
-           | SOME (rq, n) => obs with
-               <| entries := obs.entries ++ [(rq, outcome_of rq.cr_kind s' n)];
+           | SOME (rq, n, m) => obs with
+               <| entries := obs.entries ++ [(rq, outcome_of rq.cr_kind s' n m)];
                   pending := NONE |>
          else obs
     else obs
@@ -220,13 +232,14 @@ QED
    longer identifies the creating opcode. Failed outcomes keep live accounts
    (including the nonce increment); adoption filters logs/deletions separately. *)
 Theorem outcome_of_fields:
-  (outcome_of kind s n).co_accounts = s.rollback.accounts /\
-  (outcome_of kind s n).co_tStorage = s.rollback.tStorage /\
-  (outcome_of kind s n).co_toDelete = s.rollback.toDelete /\
-  (outcome_of kind s n).co_logs = DROP n (FST (HD s.contexts)).logs /\
-  (outcome_of kind s n).co_returnData = (FST (HD s.contexts)).returnData /\
-  ((outcome_of kind s n).co_success <=> HD (FST (HD s.contexts)).stack <> 0w) /\
-  (outcome_of kind s n).co_created =
+  (outcome_of kind s n m).co_accounts = s.rollback.accounts /\
+  (outcome_of kind s n m).co_tStorage = s.rollback.tStorage /\
+  (outcome_of kind s n m).co_toDelete =
+    TAKE (LENGTH s.rollback.toDelete - m) s.rollback.toDelete /\
+  (outcome_of kind s n m).co_logs = DROP n (FST (HD s.contexts)).logs /\
+  (outcome_of kind s n m).co_returnData = (FST (HD s.contexts)).returnData /\
+  ((outcome_of kind s n m).co_success <=> HD (FST (HD s.contexts)).stack <> 0w) /\
+  (outcome_of kind s n m).co_created =
     (if kind = MessageCall then 0w else w2w (HD (FST (HD s.contexts)).stack))
 Proof
   simp[outcome_of_def]
@@ -241,7 +254,7 @@ Theorem observe_same_depth_create:
   observe d s (INL (), post) obs =
     obs with entries := obs.entries ++
       [(request_of s, outcome_of (request_of s).cr_kind post
-         (LENGTH (FST (HD s.contexts)).logs))]
+         (LENGTH (FST (HD s.contexts)).logs) (LENGTH s.rollback.toDelete))]
 Proof
   strip_tac >> simp[observe_def, observable_call_def]
 QED
@@ -253,16 +266,17 @@ Theorem observe_enter_create:
    (next_opcode (FST (HD s.contexts)) = SOME Create2 /\
       4 <= LENGTH (FST (HD s.contexts)).stack)) ==>
   observe d s (INL (), post) obs =
-    obs with pending := SOME (request_of s, LENGTH (FST (HD s.contexts)).logs)
+    obs with pending := SOME
+      (request_of s, LENGTH (FST (HD s.contexts)).logs, LENGTH s.rollback.toDelete)
 Proof
   strip_tac >> simp[observe_def, observable_call_def]
 QED
 
 Theorem observe_return_pending:
   d < LENGTH s.contexts /\ LENGTH post.contexts = d /\
-  obs.pending = SOME (rq, n) ==>
+  obs.pending = SOME (rq, n, m) ==>
   observe d s (INL (), post) obs =
-    obs with <| entries := obs.entries ++ [(rq, outcome_of rq.cr_kind post n)];
+    obs with <| entries := obs.entries ++ [(rq, outcome_of rq.cr_kind post n m)];
                 pending := NONE |>
 Proof
   rpt strip_tac >> simp[observe_def]
@@ -276,7 +290,8 @@ Theorem create_trace_same_depth:
    (next_opcode (FST (HD es.contexts)) = SOME Create2 /\
       4 <= LENGTH (FST (HD es.contexts)).stack)) ==>
   call_trace es = [(request_of es,
-    outcome_of (request_of es).cr_kind post (LENGTH (FST (HD es.contexts)).logs))]
+    outcome_of (request_of es).cr_kind post (LENGTH (FST (HD es.contexts)).logs)
+      (LENGTH es.rollback.toDelete))]
 Proof
   strip_tac >>
   simp[call_trace_def, full_call_trace_def, frame_obs_def] >>
@@ -294,7 +309,8 @@ Theorem create_trace_enter_return:
    (next_opcode (FST (HD es.contexts)) = SOME Create2 /\
       4 <= LENGTH (FST (HD es.contexts)).stack)) ==>
   call_trace es = [(request_of es,
-    outcome_of (request_of es).cr_kind post (LENGTH (FST (HD es.contexts)).logs))]
+    outcome_of (request_of es).cr_kind post (LENGTH (FST (HD es.contexts)).logs)
+      (LENGTH es.rollback.toDelete))]
 Proof
   strip_tac >>
   simp[call_trace_def, full_call_trace_def, frame_obs_def] >>
@@ -327,18 +343,18 @@ QED
 
 Theorem create_outcome_zero_probe:
   HD (FST (HD s.contexts)).stack = 0w ==>
-  ~(outcome_of CreateCall s n).co_success /\
-  (outcome_of CreateCall s n).co_created = 0w /\
-  (outcome_of CreateCall s n).co_accounts = s.rollback.accounts
+  ~(outcome_of CreateCall s n m).co_success /\
+  (outcome_of CreateCall s n m).co_created = 0w /\
+  (outcome_of CreateCall s n m).co_accounts = s.rollback.accounts
 Proof
   simp[outcome_of_def, w2w_def]
 QED
 
 Theorem create_outcome_address_probe:
   HD (FST (HD s.contexts)).stack = 42w ==>
-  (outcome_of (Create2Call salt) s n).co_success /\
-  (outcome_of (Create2Call salt) s n).co_created = 42w /\
-  (outcome_of MessageCall s n).co_created = 0w
+  (outcome_of (Create2Call salt) s n m).co_success /\
+  (outcome_of (Create2Call salt) s n m).co_created = 42w /\
+  (outcome_of MessageCall s n m).co_created = 0w
 Proof
   simp[outcome_of_def, w2w_def, dimword_def, trace_dimindex_256] >> EVAL_TAC
 QED

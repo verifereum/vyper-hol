@@ -55,8 +55,11 @@ QED
 Theorem entry_concrete_code_labels_and_fmp:
   let prog = [AsmOp "STOP"; AsmDataHeader "code_end"];
       cplan = cp with cp_initial_fmp := 96;
-      vs = entry_venom_state prog cplan es
-  in vs.vs_code = [0w] /\ FLOOKUP vs.vs_labels "code_end" = SOME 1w /\
+      start = es with contexts := [(ctxt with msgParams :=
+        ctxt.msgParams with code := [0w; 42w], rb)];
+      vs = entry_venom_state prog cplan start
+  in vs.vs_code = [0w; 42w] /\ vs.vs_data_section = [42w] /\
+     FLOOKUP vs.vs_labels "code_end" = SOME 1w /\
      vs.vs_fmp = 96w /\ vs.vs_call_entry_fmp = 96w /\
      vs.vs_initial_fmp = 96w /\ vs.vs_return_pc_token = 0w
 Proof
@@ -161,7 +164,8 @@ Theorem entry_trace_two_step_call:
   7 <= LENGTH (FST (HD es.contexts)).stack /\
   ~computed_precompile (request_of es) ==>
   call_trace es =
-    [(request_of es, outcome_of (request_of es).cr_kind post (LENGTH (FST (HD es.contexts)).logs))]
+    [(request_of es, outcome_of (request_of es).cr_kind post (LENGTH (FST (HD es.contexts)).logs)
+       (LENGTH es.rollback.toDelete))]
 Proof
   rpt strip_tac >>
   simp[call_trace_def, full_call_trace_def, frame_obs_def] >>
@@ -180,7 +184,8 @@ Proof
   rename1 `step post_state = (last_result, last_state)` >> gvs[] >>
   `call_trace entry_trace_es =
     [(request_of entry_trace_es,
-      outcome_of (request_of entry_trace_es).cr_kind post_state (LENGTH (FST (HD entry_trace_es.contexts)).logs))]` by
+      outcome_of (request_of entry_trace_es).cr_kind post_state (LENGTH (FST (HD entry_trace_es.contexts)).logs)
+        (LENGTH entry_trace_es.rollback.toDelete))]` by
     (irule entry_trace_two_step_call >> simp[] >>
      simp[entry_trace_es_def, make_asm_call_state_def, next_opcode_def,
           entry_trace_encoding, initial_context_def, initial_msg_params_def,

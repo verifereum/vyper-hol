@@ -306,7 +306,7 @@ Theorem venom_asm_terminal_rel_intro:
     as1.as_returndata = vs.vs_returndata /\
     as1.as_logs = vs.vs_logs /\
     as1.as_requests = vs.vs_requests /\
-    as1.as_toDelete = vs.vs_toDelete ==>
+    as1.as_pending_deletions = vs.vs_pending_deletions ==>
     venom_asm_terminal_rel vs as1
 Proof
   simp[venom_asm_terminal_rel_def]
@@ -317,7 +317,7 @@ Theorem halt_state_fields[simp]:
   (halt_state vs).vs_transient = vs.vs_transient /\
   (halt_state vs).vs_returndata = vs.vs_returndata /\
   (halt_state vs).vs_logs = vs.vs_logs /\
-  (halt_state vs).vs_toDelete = vs.vs_toDelete
+  (halt_state vs).vs_pending_deletions = vs.vs_pending_deletions
 Proof
   EVAL_TAC
 QED

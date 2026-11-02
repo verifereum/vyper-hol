@@ -14,7 +14,7 @@ Theory e2eCorrectness
 Ancestors
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect contextCodegenRel
-  vyperLoweringCorrect vfmExecution
+  vyperLoweringCorrect loweringShapeProps vfmExecution
   venomPipelineCorrect
   passSimulationDefs
   codegenCorrectness
@@ -209,9 +209,9 @@ Theorem e2e_vyper_to_evm:
   !tops ret am tx ctx ctx' vs es.
     vs.vs_outcomes = MAP SND (call_trace es) /\
     (?fuel. external_call_result_rel tops ret tx
-              (call_external (SOME vs.vs_outcomes) am tx)
+              (call_external (SOME vs.vs_outcomes) [] am tx)
               (run_context fuel ctx vs)) /\
-    (~source_exempt tops (call_external (SOME vs.vs_outcomes) am tx) ==>
+    (~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) ==>
        ctx_transform_correct ctx ctx' vs /\
        !fuel. ?r es'.
          run_call es = SOME (r, es') /\
@@ -225,7 +225,7 @@ Proof
   rpt strip_tac >>
   qspec_then `es` strip_assume_tac run_call_total >>
   qexistsl_tac [`r`, `es'`] >> simp[] >>
-  Cases_on `source_exempt tops (call_external (SOME vs.vs_outcomes) am tx)`
+  Cases_on `source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)`
   >- (disj2_tac >> disj2_tac >>
       irule source_exempt_call_result_rel >> gvs[]) >>
   gvs[] >>
@@ -722,12 +722,14 @@ QED
 
 *)
 
-(* ===== PLAN §2.1 call theorem: only the seven planned stage leaves ===== *)
+(* ===== PLAN §2.1 call theorem: seven stage leaves, raw O1 source domain ===== *)
+(* Runtime immutable compilation remains available, but the raw O1 shape
+   theorem excludes DLOAD and therefore requires immutable_free_program. *)
 
 Theorem vyper_call_correct:
   !policy tops deploy_bc runtime_bc am tx ret es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\
+    supported_program tops /\ immutable_free_program tops /\
     source_typing_ok tops am tx /\
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
@@ -768,7 +770,7 @@ Proof
   simp[] >> conj_tac
   >- (fs[source_unit_execution_correct_def] >>
       qexists_tac `fuel` >> gvs[]) >> strip_tac >>
-  `~source_exempt tops (call_external (SOME vs.vs_outcomes) am tx)` by simp[] >>
+  `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by simp[] >>
   drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
   drule_all run_venom_pipeline_correct >> strip_tac >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
@@ -850,7 +852,7 @@ QED
  * account fields, transient storage and logs; use explicit source failure
  * cases, exempting only the existing exact dynamic ABI strictness predicate.
  *
- * load_contract NONE is deliberate: constructor_call_free excludes EVERY Call
+ * load_contract NONE [] is deliberate: constructor_call_free excludes EVERY Call
  * (including internal calls and Send), while checked constant initializers are
  * pure. No oracle/callee is needed. The theorem does not claim agreement for
  * malformed constructors excluded by constructor_args_encode. There is no
@@ -867,11 +869,12 @@ Theorem e2e_deploy_correctness:
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/ precompile_call_starved es \/
-       case load_contract NONE am tx [(NONE, tops)] [] of
+       case load_contract NONE [] am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
-           ?lgs.
-             frame_outcome es r es' NONE runtime_bc lgs /\
-             (lookup_account tx.target es'.rollback.accounts).code = runtime_bc /\
+            ?section lgs.
+              immutables_section_rel tops (account_immutables am' tx.target) section /\
+              frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
+              (lookup_account tx.target es'.rollback.accounts).code = runtime_bc ++ section /\
              (!a. a <> tx.target ==>
                   lookup_account a es'.rollback.accounts =
                   lookup_account a am'.accounts) /\
@@ -912,7 +915,7 @@ val _ =
       ?r es'. run_call es = SOME (r,es') /\
         (frame_resource_starved es r es' \/ precompile_call_starved es \/
          deploy_result_rel tops runtime_bc tx es r es'
-           (load_contract NONE am tx [(NONE,tops)] []))``;
+           (load_contract NONE [] am tx [(NONE,tops)] []))``;
     val expanded = concl (REWRITE_RULE [deploy_result_rel_def] (ASSUME expected));
     val (oracles, axioms) = Tag.dest_tag (Thm.tag savedDeploymentAdmission);
   in

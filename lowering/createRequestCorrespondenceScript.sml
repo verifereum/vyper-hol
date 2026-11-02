@@ -8,7 +8,7 @@ Ancestors
 Definition create_world_rel_def:
   create_world_rel st s <=>
     st.accounts = s.vs_accounts /\ st.tStorage = s.vs_transient /\
-    st.logs = s.vs_logs /\ st.pending_deletions = s.vs_toDelete /\
+    st.logs = s.vs_logs /\ st.pending_deletions = s.vs_pending_deletions /\
     st.outcomes = SOME s.vs_outcomes /\ st.requests = s.vs_requests
 End
 
@@ -176,7 +176,7 @@ Theorem observed_failed_create_adoption:
   kind <> MessageCall /\
   HD (FST (HD post.contexts)).stack = 0w ==>
   let rq = create_outcome_request kind value initcode st;
-      outcome = outcome_of kind post n;
+      outcome = outcome_of kind post n m;
       st' = SND (adopt_call_outcome rq outcome st)
   in st'.accounts = post.rollback.accounts /\
      st'.tStorage = post.rollback.tStorage /\
