@@ -863,6 +863,72 @@ Proof
   irule lower_dload_function_supply_outputs >> metis_tac[]
 QED
 
+Theorem lower_dload_insts_supply_no_phi:
+  lower_dload_insts_supply s ins = (xs,t) /\
+  EVERY (\i. i.inst_opcode <> PHI) ins ==>
+  EVERY (\i. i.inst_opcode <> PHI) xs
+Proof
+  strip_tac >> irule lower_dload_insts_supply_every >> conj_tac
+  >- (rw[EVERY_MEM] >> metis_tac[lower_dload_inst_supply_control]) >>
+  qexistsl [`ins`,`s`,`t`] >> simp[]
+QED
+
+Theorem lower_dload_function_supply_first_no_phi:
+  lower_dload_function_supply s f = (g,t) /\ f.fn_blocks <> [] /\
+  first_block_no_phi f ==> first_block_no_phi g
+Proof
+  Cases_on `f.fn_blocks` >>
+  simp[lower_dload_function_supply_def, lower_dload_blocks_supply_def,
+       lower_dload_block_supply_def, first_block_no_phi_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[lower_dload_insts_supply_no_phi]
+QED
+
+Theorem lower_dload_inst_supply_no_return:
+  lower_dload_inst_supply s i = (xs,t) /\
+  ~MEM i.inst_opcode [RET; RETFMP; DRET] ==>
+  EVERY (\j. ~MEM j.inst_opcode [RET; RETFMP; DRET]) xs
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[]
+QED
+
+Theorem lower_dload_inst_supply_no_params:
+  lower_dload_inst_supply s i = (xs,t) /\ ~is_param_opcode i.inst_opcode ==>
+  EVERY (\j. ~is_param_opcode j.inst_opcode) xs
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[is_param_opcode_def]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[is_param_opcode_def]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[]
+QED
+
+Theorem lower_dload_function_supply_entry_no_return:
+  lower_dload_function_supply s f = (g,t) /\ entry_fn_no_return f ==>
+  entry_fn_no_return g
+Proof
+  simp[entry_fn_no_return_def] >> strip_tac >>
+  irule lower_dload_function_supply_every >> conj_tac
+  >- (rpt strip_tac >>
+      irule (SRULE [] lower_dload_inst_supply_no_return) >> metis_tac[]) >>
+  qexistsl [`f`,`s`,`t`] >> simp[]
+QED
+
+Theorem lower_dload_function_supply_entry_no_params:
+  lower_dload_function_supply s f = (g,t) /\ entry_fn_no_params f ==>
+  entry_fn_no_params g
+Proof
+  simp[entry_fn_no_params_def] >> strip_tac >>
+  irule lower_dload_function_supply_every >> conj_tac
+  >- metis_tac[lower_dload_inst_supply_no_params] >>
+  qexistsl [`f`,`s`,`t`] >> simp[]
+QED
+
 Theorem lower_dload_function_supply_o1_shape:
   o1_fn_shape ctx f /\ ir_supply_inst_ok s /\ ir_supply_covers_fn s f /\
   lower_dload_function_supply s f = (g,t) ==> o1_fn_shape ctx g
@@ -873,13 +939,17 @@ Proof
   >- metis_tac[lower_dload_function_supply_inst_wf]
   >- metis_tac[lower_dload_function_supply_fn_shape]
   >- metis_tac[lower_dload_function_supply_first_no_preds]
+  >- (irule lower_dload_function_supply_first_no_phi >>
+      qexistsl [`f`,`s`,`t`] >> gvs[wf_function_def, fn_has_entry_def])
   >- metis_tac[lower_dload_function_supply_invoke_ok]
   >- metis_tac[lower_dload_function_supply_label_refs]
-  >- metis_tac[lower_dload_function_supply_entry_no_ret]
-  >- (strip_tac >> irule lower_dload_function_supply_no_params >>
-      qexistsl [`f`,`s`,`t`] >> gvs[wf_function_def]) >>
-  strip_tac >> irule lower_dload_function_supply_no_returns >> simp[] >>
-  qexistsl [`f`,`s`,`t`] >> metis_tac[]
+  >- (strip_tac >> gvs[] >> conj_tac
+      >- metis_tac[lower_dload_function_supply_entry_no_return] >>
+      metis_tac[lower_dload_function_supply_entry_no_params]) >>
+  strip_tac >>
+  irule (SRULE [] (Q.INST [`ops` |-> `[STOP; RETURN]`]
+                    lower_dload_function_supply_no_returns)) >>
+  qexistsl [`f`,`s`,`t`] >> simp[]
 QED
 
 (* The step part of LowerDload's contract (o1_contract_lower_dload). *)
