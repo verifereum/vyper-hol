@@ -95,6 +95,9 @@ End
 
 (* MEMTOP observes the memory size, which the static layout changes, and
    GETFMP/SETFMP/RETFMP the free memory pointer, which FmpLowering changes.
+   ISTORE records its address in vs_immutables, so its address (and
+   ILOAD's) is never a pointer; the lowering addresses immutables from a
+   fixed region.
    Forced alloca positions are taken as given by the layout, so two forced
    allocas that are live together can overlap; the lowering never forces
    any. *)
@@ -105,6 +108,8 @@ Definition fn_ptr_ok_def:
             inst.inst_opcode <> MEMTOP /\ inst.inst_opcode <> DRET /\
             inst.inst_opcode <> GETFMP /\ inst.inst_opcode <> SETFMP /\
             inst.inst_opcode <> RETFMP /\
+            ((inst.inst_opcode = ISTORE \/ inst.inst_opcode = ILOAD) ==>
+             !v. MEM (Var v) inst.inst_operands ==> v NOTIN fn_pv P fn) /\
             ptr_use_ok P (fn_pv P fn) inst) /\
     affine_pointer_ops fn (ptr_roots P fn)
 End
@@ -336,11 +341,14 @@ Definition imm_taint_def:
     else tn.t_imm
 End
 
-(* An external call that adopts its outcome's storage replaces it in both
-   runs alike, clearing its taint.  A call that changes nothing keeps it. *)
+(* An oracle call (CALL, STATICCALL) that adopts its outcome's storage
+   replaces it in both runs alike, clearing its taint.  A call that changes
+   nothing keeps it.  DELEGATECALL and CREATE run real code on each run's
+   own storage, so taint_ok requires none to be tainted there. *)
 Definition adopt_reset_def:
   adopt_reset inst changed (X:'a set) =
-    if is_ext_call_op inst.inst_opcode /\ changed then {} else X
+    if (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\ changed
+    then {} else X
 End
 
 Definition step_taint_def:
@@ -445,9 +453,12 @@ End
 (* ===== The per-state part and the stage fact ===== *)
 
 (* Each nonempty access ending above lo lies inside the site its address
-   operand points into. *)
+   operand points into, and ALLOCA sites lie below the free memory
+   pointer, so DALLOCA regions never overlap them. *)
 Definition access_ok_def:
   access_ok lo G inst s <=>
+    (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
+                b + sz <= w2n s.vs_fmp) /\
     (!off len.
        MEM (off,len) (source_memory_write_ranges inst s) /\ len <> 0 /\
        lo < off + len ==>
@@ -464,7 +475,9 @@ End
 
 (* Tainted data is only copied around and stored: a tainted variable is
    only ASSIGNed or stored as the value of a store with an untainted
-   address, and tainted memory is only loaded, copied or returned. *)
+   address, and tainted memory is only loaded, copied or returned.  Code
+   that runs on this contract's storage (DELEGATECALL, CREATE) sees none
+   tainted. *)
 Definition taint_ok_def:
   taint_ok tn inst s <=>
     (!op. MEM op inst.inst_operands /\ op_taint tn op <> {} ==>
@@ -476,7 +489,10 @@ Definition taint_ok_def:
        MEM (off,len) (source_memory_read_ranges inst s) /\
        off <= i /\ i < off + len /\ i IN tn.t_mem ==>
        inst.inst_opcode = MLOAD \/ inst.inst_opcode = ILOAD \/
-       inst.inst_opcode = MCOPY \/ inst.inst_opcode = RETURN)
+       inst.inst_opcode = MCOPY \/ inst.inst_opcode = RETURN) /\
+    ((inst.inst_opcode = DELEGATECALL \/ inst.inst_opcode = CREATE \/
+      inst.inst_opcode = CREATE2) ==>
+     tn.t_stor = {} /\ tn.t_trans = {})
 End
 
 Definition ptr_discipline_def:
