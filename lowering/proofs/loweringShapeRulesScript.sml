@@ -10,6 +10,8 @@
  *   *_append_ok                  — appending one instruction keeps the
  *                                  invariant, by operand kind
  *   opaque_insts_ok_opaque_use_ok — the invariant gives opaque_use_ok
+ *   label_sfx_distinct            — fresh labels with different suffixes
+ *                                  differ
  *)
 Theory loweringShapeRules
 Ancestors
@@ -199,6 +201,30 @@ Proof
         simp[Abbr `st1`]) >>
   simp[compiler_label_def, fresh_label_output_in_future] >>
   metis_tac[shape_stable_def]
+QED
+
+Theorem shape_step_fresh_label_sfx:
+  !internal LP R sfx.
+    shape_stable R ==>
+    shape_step internal LP R (fresh_label sfx)
+      (\l st'. R st' /\ compiler_label l /\ label_sfx sfx l)
+Proof
+  simp[shape_step_def, PULL_FORALL, AND_IMP_INTRO] >>
+  rpt gen_tac >> strip_tac >> gvs[fresh_label_def] >>
+  qmatch_goalsub_abbrev_tac `shape_extends _ _ st st1` >>
+  `shape_extends internal LP st st1`
+    by (irule shape_extends_same_code >> simp[Abbr `st1`]) >>
+  `shape_state st1`
+    by (irule shape_state_same_code >> qexists_tac `st` >>
+        simp[Abbr `st1`]) >>
+  simp[compiler_label_def, fresh_label_output_in_future, label_sfx_def] >>
+  metis_tac[shape_stable_def]
+QED
+
+Theorem label_sfx_distinct:
+  label_sfx s1 l1 /\ label_sfx s2 l2 /\ s1 <> s2 ==> l1 <> l2
+Proof
+  rw[label_sfx_def] >> metis_tac[fresh_label_output_inj]
 QED
 
 Theorem DROP_LENGTH_MAP_APPEND[local]:
