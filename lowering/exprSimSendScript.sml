@@ -338,7 +338,7 @@ Proof
 QED
 
 Theorem send_call_read_step[local]:
-  stmt_state_rel func cenv cx es1 t /\
+  stmt_state_rel ctx func cenv cx es1 t /\
   outcomes_accounts_typed es1.outcomes /\
   accounts_runtime_well_typed es1.accounts /\
   IS_SOME (eval_operand gas_op t) /\
