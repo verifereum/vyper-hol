@@ -2333,3 +2333,112 @@ Proof
   gvs[supply_state_agree_def, ir_supply_covers_fn_def,
       list_subset_def, listTheory.EVERY_MEM] >> metis_tac[]
 QED
+
+
+Theorem supply_forwarding_exec_prefix:
+  ir_supply_inst_ok s /\
+  build_forwarding_assigns_supply s vars = (repls,insts,s') /\
+  EVERY (\v. MEM v s.irs_used_vars /\ IS_SOME (lookup_var v st)) vars /\
+  bb.bb_instructions = insts ++ rest ==>
+  ?out. exec_block fuel ctx bb (st with vs_inst_idx := 0) =
+          exec_block fuel ctx bb (out with vs_inst_idx := LENGTH insts) /\
+    execution_frame out = execution_frame st /\
+    (!v. MEM v s.irs_used_vars ==> lookup_var v out = lookup_var v st) /\
+    (!src dst. MEM (src,dst) repls ==>
+      MEM src vars /\ lookup_var dst out = lookup_var src st)
+Proof
+  strip_tac >> drule_all supply_forwarding_run >>
+  disch_then (qspecl_then [`fuel`, `ctx`] strip_assume_tac) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) insts` by
+    (drule supply_forwarding_opcodes >>
+     rewrite_tac[listTheory.EVERY_MEM] >> disch_tac >>
+     rpt strip_tac >>
+     qpat_x_assum `!i. MEM i insts ==> _` drule >>
+     simp[venomInstTheory.is_terminator_def]) >>
+  qexists_tac `out` >> conj_tac
+  >- (drule_at (Pat `run_insts _ _ _ _ = _`) exec_block_skip_prefix >>
+      disch_then (qspecl_then [`bb`, `0`] mp_tac) >>
+      simp[listTheory.EL_APPEND_EQN]) >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem supply_assigns_run_control:
+  !insts st out fuel ctx.
+    EVERY (\i. i.inst_opcode = ASSIGN) insts /\
+    run_insts fuel ctx insts st = OK out ==>
+    out.vs_current_bb = st.vs_current_bb /\
+    out.vs_prev_bb = st.vs_prev_bb /\
+    out.vs_inst_idx = st.vs_inst_idx
+Proof
+  Induct_on `insts`
+  >- simp[run_insts_def] >>
+  rpt gen_tac >> simp[run_insts_def] >> strip_tac >>
+  Cases_on `step_inst fuel ctx h st` >> gvs[] >>
+  first_x_assum drule_all >> strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[venomExecSemanticsTheory.step_inst_def,
+       venomExecSemanticsTheory.step_inst_base_def] >>
+  simp[AllCaseEqs()] >> rpt strip_tac >>
+  gvs[venomStateTheory.update_var_def]
+QED
+
+Theorem supply_assigns_exec_jmp:
+  EVERY (\i. i.inst_opcode = ASSIGN) insts /\
+  run_insts fuel ctx insts st = OK out /\ ~out.vs_halted /\
+  bb.bb_instructions = insts ++
+    [<|inst_id := id; inst_opcode := JMP;
+       inst_operands := [Label target]; inst_outputs := []|>] ==>
+  exec_block fuel ctx bb (st with vs_inst_idx := 0) =
+    OK (jump_to target (out with vs_inst_idx := LENGTH insts))
+Proof
+  strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) insts` by
+    (qpat_x_assum `EVERY _ insts` mp_tac >>
+     rewrite_tac[listTheory.EVERY_MEM] >> disch_tac >> rpt strip_tac >>
+     qpat_x_assum `!i. MEM i insts ==> _` drule >>
+     simp[venomInstTheory.is_terminator_def]) >>
+  drule_at (Pat `run_insts _ _ _ _ = _`) exec_block_skip_prefix >>
+  disch_then (qspecl_then [`bb`, `0`] mp_tac) >>
+  simp[listTheory.EL_APPEND_EQN] >> disch_then SUBST1_TAC >>
+  once_rewrite_tac[venomExecSemanticsTheory.exec_block_def] >>
+  simp[venomInstTheory.get_instruction_def, listTheory.EL_APPEND_EQN,
+       venomExecSemanticsTheory.step_inst_def,
+       venomExecSemanticsTheory.step_inst_base_def,
+       venomInstTheory.is_terminator_def, venomStateTheory.jump_to_def]
+QED
+
+Theorem supply_split_exec:
+  ir_supply_inst_ok s /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  EVERY (\v. MEM v s.irs_used_vars /\ IS_SOME (lookup_var v st))
+    (nub (phi_vars_needing_forward pred.bb_label pred target.bb_instructions)) /\
+  ~st.vs_halted ==>
+  ?out. exec_block fuel ctx split (st with vs_inst_idx := 0) = OK out /\
+    execution_frame out = execution_frame st /\
+    (!v. MEM v s.irs_used_vars ==> lookup_var v out = lookup_var v st) /\
+    (!src dst. MEM (src,dst) repls ==> lookup_var dst out = lookup_var src st) /\
+    out.vs_current_bb = target.bb_label /\
+    out.vs_prev_bb = SOME st.vs_current_bb /\ out.vs_inst_idx = 0
+Proof
+  strip_tac >>
+  Cases_on `fresh_ir_label s` >> rename1 `fresh_ir_label s = (lbl,s1)` >>
+  Cases_on `build_forwarding_assigns_supply s1
+    (nub (phi_vars_needing_forward pred.bb_label pred target.bb_instructions))` >>
+  PairCases_on `r` >>
+  Cases_on `fresh_inst_id r1` >>
+  gvs[build_split_block_supply_def] >>
+  drule irSupplyTheory.fresh_ir_label_contract >> strip_tac >>
+  `ir_supply_inst_ok s1` by gvs[irSupplyTheory.ir_supply_inst_ok_def] >>
+  `EVERY (\v. MEM v s1.irs_used_vars /\ IS_SOME (lookup_var v st))
+     (nub (phi_vars_needing_forward pred.bb_label pred target.bb_instructions))` by simp[] >>
+  drule_all supply_forwarding_run >>
+  disch_then (qspecl_then [`fuel`, `ctx`] strip_assume_tac) >>
+  drule supply_forwarding_opcodes >> disch_tac >>
+  `~out.vs_halted` by gvs[] >>
+  drule_all supply_assigns_run_control >> strip_tac >>
+  qexists_tac `jump_to target.bb_label (out with vs_inst_idx := LENGTH r0)` >>
+  conj_tac
+  >- (irule supply_assigns_exec_jmp >> simp[] >> metis_tac[]) >>
+  gvs[venomStateTheory.jump_to_def, venomStateTheory.lookup_var_def,
+      execution_frame_def] >> metis_tac[]
+QED
