@@ -9,7 +9,93 @@ Ancestors
   codegenRel contextCodegenRel planExec asmSem stackPlanGen stackPlanTypes
   stackPlanOps stackModel venomExecSemantics venomState venomInst
   allocMono contextCodegenRelProps asmIR venomEffects fcgDefs livenessDefs
-  dfgDefs list rich_list deepDupCallerSim
+  dfgDefs list rich_list deepDupCallerSim venomWf opcodeClass unitShapeDefs finite_map
+
+Theorem gas_source_shape[local]:
+  inst.inst_opcode = GAS /\ inst_wf inst /\
+  (ef_read0 inst.inst_opcode ==> inst.inst_operands = []) ==>
+  inst.inst_operands = [] /\ ?out. inst.inst_outputs = [out]
+Proof
+  simp[inst_wf_def, ef_read0_def] >>
+  Cases_on `inst.inst_outputs` >> simp[] >>
+  Cases_on `t` >> simp[]
+QED
+
+Theorem gas_distinct_outputs_unique[local]:
+  !xs i j x.
+    ALL_DISTINCT (FLAT (MAP (\i:instruction. i.inst_outputs) xs)) /\
+    MEM i xs /\ MEM j xs /\
+    MEM x i.inst_outputs /\ MEM x j.inst_outputs ==> i = j
+Proof
+  Induct >> simp[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP] >>
+  metis_tac[]
+QED
+
+Theorem gas_output_non_retpc[local]:
+  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = GAS /\ MEM out inst.inst_outputs ==>
+  ~retpc_var fn out
+Proof
+  simp[retpc_var_def] >> rpt strip_tac >>
+  fs[codegen_ready_fn_def, ssa_form_def] >>
+  qpat_x_assum `copy_phi_var _ _ _` mp_tac >>
+  simp[Once copy_phi_var_cases] >> rpt strip_tac >>
+  CCONTR_TAC >> gvs[] >>
+  `inst = inst'` by metis_tac[gas_distinct_outputs_unique] >> gvs[]
+QED
+
+Theorem gas_frame_view_update[local]:
+  ~retpc_var fn out ==>
+  frame_view fn ra (update_var out value vs) =
+  update_var out value (frame_view fn ra vs)
+Proof
+  strip_tac >> simp[frame_view_def, update_var_def] >>
+  `(FMAP_MAP2 (\(x,v). if retpc_var fn x then ra else v)
+      (vs.vs_vars |+ (out,value))) =
+    (FMAP_MAP2 (\(x,v). if retpc_var fn x then ra else v)
+      vs.vs_vars) |+ (out,value)` suffices_by simp[] >>
+  simp[fmap_eq_flookup, FLOOKUP_FMAP_MAP2, FLOOKUP_UPDATE] >>
+  gen_tac >> Cases_on `out = x` >> gvs[]
+QED
+
+Theorem gas_frame_view_readings[local]:
+  frame_view fn ra (vs with vs_gas_readings := readings) =
+  (frame_view fn ra vs) with vs_gas_readings := readings
+Proof
+  simp[frame_view_def]
+QED
+
+Theorem gas_step_frame_view[local]:
+  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = GAS /\ inst.inst_outputs = [out] /\
+  step_inst fuel ctx inst vs = OK vs' ==>
+  step_inst fuel ctx inst (frame_view fn ra vs) =
+  OK (frame_view fn ra vs')
+Proof
+  strip_tac >>
+  `~retpc_var fn out` by
+    (irule gas_output_non_retpc >> simp[] >> metis_tac[MEM]) >>
+  gvs[Once step_inst_def, step_inst_base_def] >>
+  Cases_on `vs.vs_gas_readings` >>
+  gvs[exec_gas_def] >>
+  simp[Once step_inst_def, step_inst_base_def, exec_gas_def,
+       gas_frame_view_update, gas_frame_view_readings,
+       GSYM frame_view_def] >>
+  ` (frame_view fn ra vs).vs_gas_readings = vs.vs_gas_readings` by
+    simp[frame_view_def] >>
+  simp[exec_gas_def, gas_frame_view_update, gas_frame_view_readings]
+QED
+
+Theorem gas_step_result[local]:
+  inst.inst_opcode = GAS /\ inst.inst_outputs = [out] /\
+  step_inst fuel ctx inst vs = OK vs' ==>
+  vs' = update_var out (HD (vs.vs_gas_readings ++ [0w]))
+          (vs with vs_gas_readings := TL vs.vs_gas_readings)
+Proof
+  strip_tac >> gvs[Once step_inst_def, step_inst_base_def] >>
+  Cases_on `vs.vs_gas_readings` >>
+  gvs[exec_gas_def, update_var_def, venom_state_component_equality]
+QED
 
 Theorem gas_inst_frame_sim:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
