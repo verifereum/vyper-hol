@@ -19,7 +19,7 @@
 Theory dftRunRel
 Ancestors
   dftScheduleOrder dftStructural dftPermSim dftDefs passSharedDefs venomExecSemantics venomWf
-  venomInst venomState venomEffects list finite_map sorting rich_list dftCorrectness
+  venomInst venomState venomEffects venomExecProps list finite_map sorting rich_list dftCorrectness
 
 Definition dft_res_rel_def:
   dft_res_rel r r' <=>
@@ -43,6 +43,27 @@ Definition ctx_labels_bound_def:
       ~is_terminator inst.inst_opcode /\ ~is_pseudo inst.inst_opcode ==>
       l IN FDOM L
 End
+
+Theorem ctx_labels_bound_step:
+  ctx_labels_bound C s.vs_labels /\ step_inst fuel D inst s = OK t ==>
+  ctx_labels_bound C t.vs_labels
+Proof
+  metis_tac[step_inst_preserves_labels_always]
+QED
+
+Theorem ctx_labels_bound_run_block:
+  ctx_labels_bound C s.vs_labels /\ run_block fuel D bb s = OK t ==>
+  ctx_labels_bound C t.vs_labels
+Proof
+  metis_tac[run_block_preserves_labels]
+QED
+
+Theorem ctx_labels_bound_setup_callee:
+  ctx_labels_bound C s.vs_labels /\ setup_callee fn args s = SOME t ==>
+  ctx_labels_bound C t.vs_labels
+Proof
+  rw[setup_callee_def] >> gvs[AllCaseEqs()]
+QED
 
 (* fn' is a DFT schedule of the well-formed, ALLOCA-free SSA function fn
    that keeps its fallible instructions in order. *)
