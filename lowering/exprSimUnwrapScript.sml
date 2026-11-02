@@ -410,7 +410,7 @@ QED
 
 (* At runtime the word a storage or transient load returns is the value's:
    the read is live, so storage_rel and transient_rel make the slot agree. *)
-Theorem storage_holds_load[local]:
+Theorem storage_holds_load:
   !func cenv cx es s t v w tr ctx.
     stmt_state_rel ctx func cenv cx es s /\ is_word_type t /\
     storage_holds cx tr t (Value v) w es ==>
