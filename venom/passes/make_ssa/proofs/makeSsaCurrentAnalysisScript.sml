@@ -1,9 +1,9 @@
 (* Current-analysis adapters used by the supply-aware SSA proof. *)
 Theory makeSsaCurrentAnalysis
 Ancestors
-  makeSsaCurrentDefs cfgAnalysisProps cfgHelpers dominatorAnalysisProps
+  makeSsaCurrentDefs makeSsaDefs cfgAnalysisProps cfgHelpers dominatorAnalysisProps
   dominatorQueryProofs dominatorRankProofs makeSsaCurrentTree dominatorDefs
-  venomWf cfgWf cfgDefs venomInst relation list
+  venomWf cfgWf cfgDefs venomInst venomExecProps relation list sorting
 
 Theorem current_cfg_edge_succs:
   wf_function fn ==>
@@ -177,4 +177,71 @@ Theorem current_frontier_query_correct:
 Proof
   strip_tac >> simp[ALOOKUP_current_frontier_map] >>
   metis_tac[dom_frontier_correct]
+QED
+
+Theorem lookup_block_labels_identity:
+  ALL_DISTINCT (MAP (\b. b.bb_label) bbs) ==>
+  MAP THE (FILTER IS_SOME
+    (MAP (\lbl. lookup_block lbl bbs) (MAP (\b. b.bb_label) bbs))) = bbs
+Proof
+  strip_tac >>
+  `MAP (\lbl. lookup_block lbl bbs) (MAP (\b. b.bb_label) bbs) = MAP SOME bbs` by
+    (simp[MAP_MAP_o, combinTheory.o_DEF] >> irule MAP_CONG >> simp[] >>
+     rpt strip_tac >> irule MEM_lookup_block >> simp[]) >>
+  simp[] >> pop_assum kall_tac >> pop_assum kall_tac >>
+  Induct_on `bbs` >> simp[]
+QED
+
+Theorem lookup_block_labels_perm:
+  ALL_DISTINCT (MAP (\b. b.bb_label) bbs) /\
+  PERM labels (MAP (\b. b.bb_label) bbs) ==>
+  PERM (MAP THE (FILTER IS_SOME
+    (MAP (\lbl. lookup_block lbl bbs) labels))) bbs
+Proof
+  strip_tac >>
+  `PERM (MAP (\lbl. lookup_block lbl bbs) labels)
+    (MAP (\lbl. lookup_block lbl bbs) (MAP (\b. b.bb_label) bbs))` by
+    metis_tac[PERM_MAP] >>
+  drule PERM_FILTER >> disch_then (qspec_then `IS_SOME` mp_tac) >>
+  strip_tac >>
+  `bbs = MAP THE (FILTER IS_SOME
+    (MAP (\lbl. lookup_block lbl bbs) (MAP (\b. b.bb_label) bbs)))` by
+    metis_tac[lookup_block_labels_identity] >>
+  metis_tac[PERM_MAP]
+QED
+
+Theorem current_ordered_blocks_perm:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME bb ==>
+  PERM (MAP THE (FILTER IS_SOME
+    (MAP (\lbl. lookup_block lbl fn.fn_blocks) (current_dom_postorder fn))))
+    fn.fn_blocks
+Proof
+  strip_tac >> irule lookup_block_labels_perm >>
+  conj_tac >- gvs[wf_function_def, fn_labels_def] >>
+  metis_tac[current_dom_postorder_perm, fn_labels_def]
+QED
+
+Theorem current_compute_defs_complete:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME bb /\
+  MEM b fn.fn_blocks /\ MEM v (block_assignments b) ==>
+  ?dbs. ALOOKUP (compute_defs (MAP THE (FILTER IS_SOME
+    (MAP (\lbl. lookup_block lbl fn.fn_blocks) (current_dom_postorder fn))))) v = SOME dbs /\
+    MEM b.bb_label dbs
+Proof
+  strip_tac >> irule compute_defs_complete >> simp[] >>
+  drule_all current_ordered_blocks_perm >> metis_tac[PERM_MEM_EQ]
+QED
+
+Theorem current_compute_defs_keys:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME bb ==>
+  (MEM v (MAP FST (compute_defs (MAP THE (FILTER IS_SOME
+    (MAP (\lbl. lookup_block lbl fn.fn_blocks) (current_dom_postorder fn)))))) <=>
+   MEM v (FLAT (MAP block_assignments fn.fn_blocks)))
+Proof
+  strip_tac >>
+  qmatch_goalsub_abbrev_tac `compute_defs ordered` >>
+  `PERM ordered fn.fn_blocks` by
+    (simp[Abbr `ordered`] >> metis_tac[current_ordered_blocks_perm]) >>
+  simp[compute_defs_keys, MEM_FLAT, MEM_MAP] >>
+  metis_tac[PERM_MEM_EQ]
 QED
