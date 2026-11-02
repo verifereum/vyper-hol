@@ -18,7 +18,7 @@
  *)
 Theory dftRunRel
 Ancestors
-  dftScheduleOrder dftStructural dftDefs venomExecSemantics venomWf
+  dftScheduleOrder dftStructural dftPermSim dftDefs passSharedDefs venomExecSemantics venomWf
   venomInst venomState venomEffects list finite_map sorting rich_list dftCorrectness
 
 Definition dft_res_rel_def:
@@ -115,6 +115,135 @@ Proof
   fs[EVERY_MEM] >>
   simp[FILTER_APPEND_DISTRIB, FILTER_FILTER, FILTER_EQ_ID, FILTER_EQ_NIL,
        GSYM EVERY_NOT_EXISTS, EVERY_MEM]
+QED
+
+Theorem dft_block_rel_pseudos:
+  wf_function fn /\ MEM bb fn.fn_blocks /\ dft_block_rel bb bb' ==>
+  FILTER (\i. is_pseudo i.inst_opcode) bb'.bb_instructions =
+  FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions
+Proof
+  rpt strip_tac >>
+  drule_all dft_block_rel_perm_of >> strip_tac >>
+  `bb.bb_label = bb'.bb_label` by fs[dft_block_rel_def] >>
+  drule_all block_perm_of_elim >> simp[]
+QED
+
+Theorem dft_block_rel_pseudos_prefix:
+  dft_block_rel bb bb' ==> pseudos_prefix bb'
+Proof
+  rw[dft_block_rel_def] >>
+  rename1 `EVERY (from_block bb.bb_instructions) scheduled` >>
+  `EVERY (\i. ~is_pseudo i.inst_opcode) scheduled` by
+    (fs[EVERY_MEM, from_block_def] >>
+     metis_tac[flip_operands_is_pseudo]) >>
+  `EVERY (\i. is_pseudo i.inst_opcode)
+     (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions)` by
+    simp[EVERY_FILTER, EVERY_MEM] >>
+  qmatch_goalsub_abbrev_tac `pseudos_prefix b` >>
+  simp[Abbr `b`, pseudos_prefix_def] >> rpt strip_tac >>
+  Cases_on `j < LENGTH (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions)`
+  >- (fs[EVERY_EL] >> simp[EL_APPEND] >>
+      first_x_assum irule >> decide_tac) >>
+  fs[EL_APPEND, EVERY_EL] >>
+  qpat_x_assum `!n. n < LENGTH scheduled ==> ~is_pseudo _`
+    (qspec_then `j - LENGTH
+      (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions)` mp_tac) >>
+  simp[]
+QED
+
+Theorem dft_block_rel_source:
+  wf_function fn /\ MEM bb fn.fn_blocks /\ dft_block_rel bb bb' /\
+  MEM i bb'.bb_instructions ==>
+  ?j. MEM j bb.bb_instructions /\ j.inst_id = i.inst_id /\
+      (!k. MEM k bb.bb_instructions /\ k.inst_id = i.inst_id ==> k = j) /\
+      !fuel ctx s. step_inst fuel ctx i s = step_inst fuel ctx j s
+Proof
+  rpt strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[bb_inst_ids_distinct] >>
+  gvs[dft_block_rel_def, MEM_APPEND, MEM_FILTER] >-
+    (qexists_tac `i` >> simp[] >>
+     metis_tac[all_distinct_map_mem_inj]) >>
+  rename1 `EVERY (from_block bb.bb_instructions) scheduled` >>
+  `from_block bb.bb_instructions i` by fs[EVERY_MEM] >>
+  fs[from_block_def] >> gvs[] >-
+    (qexists_tac `i` >> simp[] >>
+     metis_tac[all_distinct_map_mem_inj]) >>
+  qexists_tac `j` >> simp[flip_operands_step_inst] >>
+  metis_tac[all_distinct_map_mem_inj]
+QED
+
+Theorem id_before_map_last[local]:
+  xs <> [] /\ MEM x xs /\ x <> LAST xs ==>
+  id_before (MAP f xs) (f x) (f (LAST xs))
+Proof
+  strip_tac >> fs[MEM_EL] >>
+  rename1 `k < LENGTH xs` >>
+  `LAST xs = EL (PRE (LENGTH xs)) xs` by metis_tac[LAST_EL] >>
+  `k < PRE (LENGTH xs)` by
+    (Cases_on `k = PRE (LENGTH xs)` >- gvs[] >>
+     Cases_on `xs` >> fs[] >> decide_tac) >>
+  simp[id_before_def] >> qexistsl_tac [`k`, `PRE (LENGTH xs)`] >>
+  simp[EL_MAP, LAST_EL] >> Cases_on `xs` >> fs[]
+QED
+
+Theorem id_before_map_last_left[local]:
+  ALL_DISTINCT (MAP f xs) ==> ~id_before (MAP f xs) (f (LAST xs)) a
+Proof
+  strip_tac >> pure_rewrite_tac[id_before_def] >> strip_tac >>
+  `xs <> []` by (Cases_on `xs` >> fs[]) >>
+  `i < LENGTH xs /\ PRE (LENGTH xs) < LENGTH xs` by
+    (Cases_on `xs` >> fs[] >> decide_tac) >>
+  `EL i (MAP f xs) = EL (PRE (LENGTH xs)) (MAP f xs)` by
+    simp[EL_MAP, LAST_EL] >>
+  `i = PRE (LENGTH xs)` by metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP] >>
+  Cases_on `xs` >> fs[]
+QED
+
+Theorem dft_block_rel_last:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  bb_well_formed bb /\ dft_block_rel bb bb' ==>
+  LAST bb'.bb_instructions = LAST bb.bb_instructions
+Proof
+  rpt strip_tac >>
+  `bb.bb_instructions <> [] /\
+   is_terminator (LAST bb.bb_instructions).inst_opcode` by
+    fs[bb_well_formed_def] >>
+  `~is_pseudo (LAST bb.bb_instructions).inst_opcode /\
+   ~is_flippable (LAST bb.bb_instructions).inst_opcode` by
+    (Cases_on `(LAST bb.bb_instructions).inst_opcode` >>
+     fs[is_terminator_def, is_pseudo_def, is_flippable_def,
+        is_commutative_def, is_comparator_def]) >>
+  `MEM (LAST bb.bb_instructions) bb.bb_instructions` by
+    simp[MEM_LAST_NOT_NIL] >>
+  fs[dft_block_rel_def] >>
+  rename1 `EVERY (from_block bb.bb_instructions) scheduled` >>
+  `scheduled <> []` by
+    (strip_tac >> gvs[] >> fs[MEM_FILTER, FILTER_EQ_NIL, EVERY_MEM] >>
+     metis_tac[]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id)
+     (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions))` by
+    (irule all_distinct_map_filter >> simp[]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) scheduled)` by
+    metis_tac[ALL_DISTINCT_PERM, PERM_SYM] >>
+  `from_block bb.bb_instructions (LAST scheduled)` by
+    (fs[EVERY_MEM] >> metis_tac[MEM_LAST_NOT_NIL]) >>
+  `?j. MEM j bb.bb_instructions /\ ~is_pseudo j.inst_opcode /\
+       j.inst_id = (LAST scheduled).inst_id /\
+       (LAST scheduled = j \/
+        (LAST scheduled = flip_operands j /\ is_flippable j.inst_opcode))` by
+    (fs[from_block_def] >> metis_tac[flip_operands_inst_id]) >>
+  `j = LAST bb.bb_instructions` by
+    (spose_not_then assume_tac >>
+     `id_before (MAP (\i. i.inst_id) bb.bb_instructions)
+       j.inst_id (LAST bb.bb_instructions).inst_id` by
+       (ho_match_mp_tac id_before_map_last >> simp[]) >>
+     `dft_must_order j (LAST bb.bb_instructions)` by
+       simp[dft_must_order_def] >>
+     `id_before (MAP (\i. i.inst_id) scheduled)
+       j.inst_id (LAST bb.bb_instructions).inst_id` by metis_tac[] >>
+     metis_tac[id_before_map_last_left]) >>
+  gvs[] >> simp[LAST_APPEND_NOT_NIL]
 QED
 
 (* Why it holds (unchecked notes):
