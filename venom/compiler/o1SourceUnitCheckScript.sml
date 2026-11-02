@@ -88,7 +88,7 @@ End
 Definition retpc_use_check_def:
   retpc_use_check inst x <=>
     inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PHI \/
-    (inst.inst_opcode = RET /\ inst.inst_operands <> [] /\
+    (MEM inst.inst_opcode [RET; RETFMP; DRET] /\ inst.inst_operands <> [] /\
      LAST inst.inst_operands = Var x /\
      ~MEM (Var x) (FRONT inst.inst_operands))
 End
@@ -130,19 +130,56 @@ Proof
   metis_tac[copy_phi_closed_sound, gas_use_check_sound, retpc_use_check_sound]
 QED
 
+(* A RET's last operand must be a RETPC_PARAM output itself (a seed), and no
+   PHI may read a variable of the return-PC closure: enough for raw units,
+   which copy no return PC and have no PHI. *)
+Definition retpc_shape_check_def:
+  retpc_shape_check fn <=>
+    let retpc = copy_phi_vars RETPC_PARAM fn in
+    copy_phi_closed RETPC_PARAM fn retpc /\
+    EVERY (\inst.
+      (MEM inst.inst_opcode [RET; RETFMP; DRET] ==>
+         inst.inst_operands <> [] /\
+         case LAST inst.inst_operands of
+           Var x => EXISTS (\i. i.inst_opcode = RETPC_PARAM /\
+                                MEM x i.inst_outputs) (fn_insts fn)
+         | _ => F) /\
+      (inst.inst_opcode = PHI ==>
+         EVERY (\op. case op of Var y => ~MEM y retpc | _ => T)
+           inst.inst_operands)) (fn_insts fn)
+End
+
+Theorem retpc_shape_check_sound:
+  retpc_shape_check fn ==> retpc_shape_ok fn
+Proof
+  rw[retpc_shape_check_def, retpc_shape_ok_def, retpc_var_def, EVERY_MEM,
+     LET_THM]
+  >~ [`inst.inst_opcode = PHI`]
+  >- (first_x_assum drule >> simp[] >> strip_tac >>
+      first_x_assum (qspec_then `Var x` mp_tac) >> simp[] >>
+      metis_tac[copy_phi_closed_sound]) >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  Cases_on `LAST inst.inst_operands` >> gvs[EXISTS_MEM] >>
+  rename1 `LAST inst.inst_operands = Var r` >>
+  qexistsl_tac [`FRONT inst.inst_operands`, `r`] >>
+  (conj_tac >- metis_tac[APPEND_FRONT_LAST] >>
+   irule copy_phi_var_seed >> metis_tac[])
+QED
+
 (* ===== Unit check ===== *)
 
 Definition fn_shape_check_def:
   fn_shape_check fn <=>
     fn_entry_label fn = SOME fn.fn_name /\ opaque_use_check fn /\
-    EVERY (\bb. ~reserved_label bb.bb_label) fn.fn_blocks /\
+    retpc_shape_check fn /\ EVERY (\bb. ~reserved_label bb.bb_label) fn.fn_blocks /\
     EVERY inst_shape_ok (fn_insts fn)
 End
 
 Theorem fn_shape_check_sound:
   fn_shape_check fn ==> fn_shape_ok fn
 Proof
-  rw[fn_shape_check_def, fn_shape_ok_def, opaque_use_check_sound]
+  rw[fn_shape_check_def, fn_shape_ok_def, opaque_use_check_sound,
+     retpc_shape_check_sound]
 QED
 
 (* Checking every non-head function is stronger than internal_termination_ok

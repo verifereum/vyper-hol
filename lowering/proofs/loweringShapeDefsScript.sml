@@ -7,6 +7,12 @@
  *
  * TOP-LEVEL:
  *   all_blocks, state_insts      — the blocks and instructions of a state
+ *   internal_label_ok            — internal entry labels ("internal ..."),
+ *                                  which start each internal function
+ *   fn_suffix, cur_fn_insts      — the blocks and instructions of the
+ *                                  function being compiled
+ *   rets_scoped                  — every RET returns to a return PC of its
+ *                                  own function
  *   added_insts, added_labels    — what a compile action appended
  *   opaque_out, opaque_insts_ok  — GAS / RETPC_PARAM outputs used only where
  *                                  gas_use_ok / retpc_use_ok allow, and never
@@ -24,7 +30,8 @@
  *   shape_step                   — Hoare-style judgment on compile actions
  *   shape_stable                 — a state predicate kept by every append
  *   gas_operand, retpc_operand   — a variable holding a GAS / RETPC_PARAM
- *                                  output
+ *                                  output (RETPC_PARAM: of the current
+ *                                  function)
  *
  * The rules for shape_step are in loweringShapeRules.
  *)
@@ -47,6 +54,27 @@ End
 Definition state_insts_def:
   state_insts (st : compile_state) =
     FLAT (MAP (\bb. bb.bb_instructions) (all_blocks st))
+End
+
+(* Internal entry labels are internal_fn_label's "internal ..." spelling;
+   every internal function's code starts with a block of one, and no other
+   block has one. *)
+Definition internal_label_ok_def:
+  internal_label_ok lbl <=> isPREFIX "internal " lbl
+End
+
+(* The blocks of the function being compiled: from the last block with an
+   internal entry label on, or all of them in entry code. *)
+Definition fn_suffix_def:
+  fn_suffix [] = [] /\
+  fn_suffix (bb :: bbs) =
+    if EXISTS (\b. internal_label_ok b.bb_label) bbs then fn_suffix bbs
+    else bb :: bbs
+End
+
+Definition cur_fn_insts_def:
+  cur_fn_insts (st : compile_state) =
+    FLAT (MAP (\bb. bb.bb_instructions) (fn_suffix (all_blocks st)))
 End
 
 (* Under cs_extends st st', state_insts st is a prefix of state_insts st'
@@ -79,6 +107,19 @@ Definition opaque_insts_ok_def:
       (opaque_out RETPC_PARAM insts x ==>
          inst.inst_opcode = RET /\
          ?front. inst.inst_operands = front ++ [Var x] /\ ~MEM (Var x) front)
+End
+
+(* Every RET's last operand is a RETPC_PARAM output of its own function:
+   of the blocks up to the RET's own since that function's entry block. *)
+Definition rets_scoped_def:
+  rets_scoped bbs <=>
+    !pre bb post inst.
+      bbs = pre ++ [bb] ++ post /\ MEM inst bb.bb_instructions /\
+      inst.inst_opcode = RET ==>
+      ?front x. inst.inst_operands = front ++ [Var x] /\
+                opaque_out RETPC_PARAM
+                  (FLAT (MAP (\b. b.bb_instructions) (fn_suffix (pre ++ [bb]))))
+                  x
 End
 
 (* An operand that may appear in any position: no label, no compiler
@@ -139,7 +180,7 @@ End
 
 Definition shape_state_def:
   shape_state (st : compile_state) <=>
-    opaque_insts_ok (state_insts st) /\
+    opaque_insts_ok (state_insts st) /\ rets_scoped (all_blocks st) /\
     (!inst x. MEM inst (state_insts st) /\ MEM (Var x) inst.inst_operands ==>
               not_fresh_at st x) /\
     (!inst x. MEM inst (state_insts st) /\
@@ -147,12 +188,14 @@ Definition shape_state_def:
               MEM x inst.inst_outputs ==> not_fresh_at st x)
 End
 
-(* LP constrains the labels of the blocks started on the way. *)
+(* LP constrains the labels of the blocks started on the way; none starts
+   another internal function. *)
 Definition shape_extends_def:
   shape_extends internal (LP : string -> bool) st st' <=>
     cs_extends st st' /\ st.cs_next_var <= st'.cs_next_var /\
     EVERY (lowered_inst_ok internal) (added_insts st st') /\
     EVERY LP (added_labels st st') /\
+    EVERY (\l. ~internal_label_ok l) (added_labels st st') /\
     !inst x. MEM inst (added_insts st st') /\
              MEM inst.inst_opcode [GAS; RETPC_PARAM] /\
              MEM x inst.inst_outputs ==> ~not_fresh_at st x
@@ -182,7 +225,7 @@ End
 Definition retpc_operand_def:
   retpc_operand (st : compile_state) op <=>
     ?r. op = Var r /\ not_fresh_at st r /\
-        opaque_out RETPC_PARAM (state_insts st) r /\
+        opaque_out RETPC_PARAM (cur_fn_insts st) r /\
         ~opaque_out GAS (state_insts st) r
 End
 
@@ -218,6 +261,101 @@ Proof
   `new = FRONT new ++ [LAST new]` by simp[APPEND_FRONT_LAST] >>
   pop_assum SUBST1_TAC >>
   simp[REVERSE_APPEND, MAP_APPEND]
+QED
+
+Theorem fn_suffix_mem:
+  !bbs bb. MEM bb (fn_suffix bbs) ==> MEM bb bbs
+Proof
+  Induct >> simp[fn_suffix_def] >> rpt strip_tac >>
+  Cases_on `EXISTS (\b. internal_label_ok b.bb_label) bbs` >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem fn_suffix_append:
+  !xs ys. EVERY (\b. ~internal_label_ok b.bb_label) ys ==>
+    fn_suffix (xs ++ ys) = fn_suffix xs ++ ys
+Proof
+  Induct >> simp[fn_suffix_def] >-
+    (Induct_on `ys` >> simp[fn_suffix_def, EVERY_MEM, EXISTS_MEM] >>
+     metis_tac[]) >>
+  rpt strip_tac >>
+  `~EXISTS (\b. internal_label_ok b.bb_label) ys`
+    by gvs[EVERY_MEM, EXISTS_MEM] >>
+  simp[fn_suffix_def, EXISTS_APPEND] >>
+  Cases_on `EXISTS (\b. internal_label_ok b.bb_label) xs` >> simp[]
+QED
+
+Theorem fn_suffix_last_update:
+  !xs bb bb'. bb.bb_label = bb'.bb_label /\
+    isPREFIX bb.bb_instructions bb'.bb_instructions ==>
+    !i. MEM i (FLAT (MAP (\b. b.bb_instructions) (fn_suffix (xs ++ [bb])))) ==>
+        MEM i (FLAT (MAP (\b. b.bb_instructions) (fn_suffix (xs ++ [bb']))))
+Proof
+  Induct >> simp[fn_suffix_def] >-
+    (rpt strip_tac >> gvs[IS_PREFIX_APPEND] >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then [`bb`, `bb'`] mp_tac) >>
+  simp[] >> strip_tac >>
+  Cases_on `EXISTS (\b. internal_label_ok b.bb_label) xs` >>
+  Cases_on `internal_label_ok bb.bb_label` >>
+  simp[fn_suffix_def, EXISTS_APPEND] >>
+  gvs[IS_PREFIX_APPEND] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem fn_suffix_last_mem:
+  !bbs bb. MEM bb (fn_suffix (bbs ++ [bb]))
+Proof
+  Induct >> simp[fn_suffix_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem cur_fn_insts_state_insts:
+  !st i. MEM i (cur_fn_insts st) ==> MEM i (state_insts st)
+Proof
+  simp[cur_fn_insts_def, state_insts_def, MEM_FLAT, MEM_MAP] >>
+  metis_tac[fn_suffix_mem]
+QED
+
+Theorem cur_fn_insts_mono:
+  !internal LP st st'. shape_extends internal LP st st' ==>
+    !i. MEM i (cur_fn_insts st) ==> MEM i (cur_fn_insts st')
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[shape_extends_def, cs_extends_def] >>
+  Cases_on `new = []` >> gvs[] >-
+    (simp[cur_fn_insts_def, all_blocks_def] >>
+     rpt strip_tac >> irule fn_suffix_last_update >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `new = FRONT new ++ [LAST new]` by simp[APPEND_FRONT_LAST] >>
+  qpat_x_assum `EVERY (\l. ~internal_label_ok l) _` mp_tac >>
+  simp[added_labels_def, all_blocks_def, REVERSE_APPEND, MAP_APPEND,
+       DROP_LENGTH_APPEND, DROP_LENGTH_TOO_LONG, DROP_APPEND] >>
+  strip_tac >>
+  simp[cur_fn_insts_def, all_blocks_def, REVERSE_APPEND] >>
+  `REVERSE new = LAST new :: REVERSE (FRONT new)`
+    by metis_tac[REVERSE_APPEND, REVERSE_DEF, APPEND] >>
+  pop_assum SUBST_ALL_TAC >>
+  `1 <= LENGTH new` by (Cases_on `new` >> gvs[]) >>
+  qpat_x_assum `EVERY _ (DROP (1 - LENGTH new) _)` mp_tac >>
+  `1 - LENGTH new = 0` by decide_tac >>
+  pop_assum SUBST1_TAC >> simp[] >> strip_tac >>
+  fs[] >>
+  `EVERY (\b. ~internal_label_ok b.bb_label)
+    (REVERSE (FRONT new) ++
+     [<| bb_label := st'.cs_current_bb;
+         bb_instructions := st'.cs_current_insts |>])`
+    by fs[EVERY_MAP] >>
+  `REVERSE st.cs_blocks ++ LAST new :: REVERSE (FRONT new) ++
+     [<| bb_label := st'.cs_current_bb;
+         bb_instructions := st'.cs_current_insts |>] =
+   (REVERSE st.cs_blocks ++ [LAST new]) ++
+     (REVERSE (FRONT new) ++
+      [<| bb_label := st'.cs_current_bb;
+          bb_instructions := st'.cs_current_insts |>])` by simp[] >>
+  pop_assum SUBST1_TAC >>
+  asm_simp_tac std_ss [fn_suffix_append, MAP_APPEND, FLAT_APPEND, MEM_APPEND] >>
+  rpt strip_tac >> disj1_tac >>
+  irule fn_suffix_last_update >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem not_fresh_at_mono:
@@ -288,7 +426,12 @@ Theorem retpc_operand_mono:
     shape_extends internal LP st st' /\ retpc_operand st op ==>
     retpc_operand st' op
 Proof
-  rw[retpc_operand_def, shape_extends_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule cur_fn_insts_mono >> strip_tac >>
+  gvs[retpc_operand_def] >>
+  `opaque_out RETPC_PARAM (cur_fn_insts st') r`
+    by (fs[opaque_out_def] >> metis_tac[]) >>
+  fs[shape_extends_def] >>
   imp_res_tac state_insts_cs_extends >> gvs[] >>
   gvs[opaque_out_def] >> metis_tac[not_fresh_at_mono]
 QED
