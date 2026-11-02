@@ -25,7 +25,7 @@
  *)
 Theory exprSimAggregateLayout
 Ancestors
-  structFieldsProps vyperTypeSystem valueEncoding compileEnv
+  structFieldsProps vyperTypeSystem valueEncoding valueEncodingProps compileEnv
   exprSimHyps exprSimBufferEmpty vyperValue list pair finite_map vfmConstants
   exprCallbackContracts exprLowering exprSimWordBuiltins
 
@@ -111,6 +111,23 @@ Proof
   gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
       type_memory_bytes_def, type_memory_size_def, word_size_def] >>
   metis_tac[]
+QED
+
+(* A variable's type takes memory: it takes a storage slot
+   (assignable_type_slot_size_pos), so it takes memory. *)
+Theorem expr_sim_inv_memory_bytes_pos:
+  !cenv ty cx env es.
+    expr_sim_inv cenv cx env es /\
+    assignable_type (get_tenv cx) ty ==>
+    0 < type_memory_bytes cenv ty
+Proof
+  rpt strip_tac >>
+  `?tv. evaluate_type (get_tenv cx) ty = SOME tv` by
+    metis_tac[assignable_type_well_formed, well_formed_type_def,
+              optionTheory.IS_SOME_EXISTS] >>
+  drule_all expr_sim_inv_memory_size >> strip_tac >>
+  simp[] >> irule (CONJUNCT1 type_memory_size_pos) >>
+  metis_tac[assignable_type_slot_size_pos]
 QED
 
 
