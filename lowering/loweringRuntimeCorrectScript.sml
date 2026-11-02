@@ -46,7 +46,7 @@ Theory loweringRuntimeCorrect
 Ancestors
   list pair fragExec stmtSim bodySim bodySimMain loweringHalt stmtLoweringMono exprSim exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering
-  e2eDefs supportedProgram vyperLoweringCorrect
+  e2eDefs supportedProgram vyperLoweringCorrect entryChecksProps moduleLoweringProps
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperInterpreter vyperState vyperContext
   venomState venomExecSemantics venomWf
@@ -139,7 +139,7 @@ Theorem external_entry_reaches_checks:
      s0.
       set_external_package_target rpolicy.rpol_target
         (package_external_fn tops F (assign_nkeys tops 0)
-           (mut, F, rr, tx.function_name, args, [], ret, fbody)) =
+           (mut, F, rr, tx.function_name, args, ([] : expr list), ret, fbody)) =
         (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
          rt) /\
       compile_entry_checks min_cds is_payable st = ((), st') /\
@@ -209,23 +209,23 @@ Proof
   `call_ctx_rel tx s0.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx` by
     fs[initial_venom_state_rel_def, venom_env_rel_def] >>
   `?c. package_external_fn tops F (assign_nkeys tops 0)
-         (mut, F, rr, tx.function_name, args, [], ret, fbody) =
+         (mut, F, rr, tx.function_name, args, ([] : expr list), ret, fbody) =
        (lbl, c, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody, rt)` by
     (qmatch_asmsub_abbrev_tac `set_external_package_target _ pkg = _` >>
      PairCases_on `pkg` >>
      gvs[set_external_package_target_def, markerTheory.Abbrev_def]) >>
   qspecl_then [`tops`, `am`, `tx`, `SOME vs.vs_outcomes`, `ret`, `F`,
-               `assign_nkeys tops 0`, `mut`, `rr`, `args`, `[]`, `fbody`,
+               `assign_nkeys tops 0`, `mut`, `rr`, `args`, `[] : expr list`, `fbody`,
                `lbl`, `c`, `pos_args`, `min_cds`, `is_payable`,
                `(F, nkey, ut', iv, fbody, rt)`, `sc`, `sc'`,
                `unit.cu_context`, `s0`, `vs.vs_tx_ctx`, `vs.vs_block_ctx`]
     mp_tac (Q.INST [`gobs` |-> `[]`] entry_checks_nonpayable_value) >>
   impl_tac >- simp[] >>
-  simp[frag_exec_def] >> disch_then (qspecl_then [`func`, `s0`] mp_tac) >>
+  simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   simp[] >> strip_tac >>
   simp[source_unit_execution_correct_def] >>
   first_x_assum (qspecl_then [`fuel`, `Abort Revert_abort t`] mp_tac) >>
-  simp[] >> strip_tac >> qexists_tac `fuel'` >> simp[]
+  simp[] >> strip_tac >> qexists_tac `fuel'` >> gvs[]
 QED
 
 (* ADMITTED (#639): the run from __entry reaches the start sa of the
