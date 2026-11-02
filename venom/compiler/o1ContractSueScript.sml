@@ -197,6 +197,67 @@ Proof
   metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb]
 QED
 
+Theorem sue_frame_align_enter:
+  wf_function fn /\
+  ir_supply_covers_fn supply fn /\ ir_supply_inst_ok supply /\
+  sue_expand_function_supply supply fn = (fn',supply') /\
+  sue_state_rel (set (fn_ir_vars fn)) s t /\
+  enters_block fn' t t1 /\ active_inst fn' inst' t1 /\
+  (!u inst. enters_block fn s u /\ active_inst fn inst u ==>
+      frame_reach C fn s0 inst u) ==>
+  sue_frame_align C C' fn fn' s0 inst' t1
+Proof
+  strip_tac >>
+  `?bt z. lookup_block t.vs_current_bb fn'.fn_blocks = SOME bt /\
+          eval_phis t bt.bb_instructions = OK z /\
+          t1 = z with vs_inst_idx := phi_prefix_length bt.bb_instructions` by
+    fs[contextCodegenRelTheory.enters_block_def] >>
+  drule_all sue_function_lookup_ready_back >> strip_tac >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by fs[sue_state_rel_def] >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
+  `EVERY (\inst. inst.inst_opcode = PHI ==>
+    !v. MEM (Var v) inst.inst_operands ==> v IN set (fn_ir_vars fn))
+    bb.bb_instructions` by
+    (simp[listTheory.EVERY_MEM] >> metis_tac[sue_original_operand_covered]) >>
+  `?u. enters_block fn s u /\ sue_state_rel (set (fn_ir_vars fn)) u t1 /\
+       u.vs_inst_idx = phi_prefix_length bb.bb_instructions /\
+       t1.vs_inst_idx = sue_segment_offset segs (phi_prefix_length bb.bb_instructions) /\
+       u.vs_current_bb = s.vs_current_bb /\ t1.vs_current_bb = t.vs_current_bb` by
+    (irule sue_paired_block_entry >> simp[] >>
+     conj_tac >- metis_tac[] >> qexists_tac `fn'` >> fs[]) >>
+  `?bb1. lookup_block t1.vs_current_bb fn'.fn_blocks = SOME bb1 /\
+         t1.vs_inst_idx < LENGTH bb1.bb_instructions /\
+         EL t1.vs_inst_idx bb1.bb_instructions = inst'` by
+    metis_tac[sue_expanded_active_lookup] >>
+  `bb1 = bt` by metis_tac[optionTheory.SOME_11] >>
+  `phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions` by
+    (drule sue_segments_supply_length >> strip_tac >>
+     `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
+       simp[venomExecProofsTheory.phi_prefix_length_le] >>
+     spose_not_then assume_tac >>
+     `phi_prefix_length bb.bb_instructions = LENGTH segs` by decide_tac >>
+     `t1.vs_inst_idx = LENGTH (FLAT segs)` by metis_tac[sue_segment_offset_end] >>
+     `bt.bb_instructions = FLAT segs` by simp[] >> metis_tac[prim_recTheory.LESS_REFL]) >>
+  `0 < LENGTH (EL (phi_prefix_length bb.bb_instructions) segs)` by
+    (drule sue_segments_supply_length >> strip_tac >>
+     drule sue_segments_supply_nonempty >> simp[listTheory.EVERY_EL] >> strip_tac >>
+     `EL (phi_prefix_length bb.bb_instructions) segs <> []` by metis_tac[] >>
+     Cases_on `EL (phi_prefix_length bb.bb_instructions) segs` >> fs[]) >>
+  `EL (sue_segment_offset segs (phi_prefix_length bb.bb_instructions)) (FLAT segs) =
+   EL 0 (EL (phi_prefix_length bb.bb_instructions) segs)` by
+    (qspec_then `segs` (qspec_then `phi_prefix_length bb.bb_instructions`
+       (qspec_then `0` mp_tac)) sue_segment_offset_el >>
+     drule sue_segments_supply_length >> simp[]) >>
+  `active_inst fn (EL u.vs_inst_idx bb.bb_instructions) u` by
+    (simp[contextCodegenRelTheory.active_inst_def] >> qexists_tac `bb` >>
+     simp[] >> metis_tac[venomExecProofsTheory.lookup_block_label]) >>
+  `frame_reach C fn s0 (EL u.vs_inst_idx bb.bb_instructions) u` by metis_tac[] >>
+  pure_rewrite_tac[sue_frame_align_def] >>
+  qexistsl [`bb`, `bt`, `si`, `sj`, `segs`, `u.vs_inst_idx`, `0`, `u`, `sue_idx0 t1`] >>
+  simp[sue_idx0_def, sue_state_rel_def, stateFrameTheory.execution_frame_def,
+       analysisSimDefsTheory.run_insts_def] >> gvs[]
+QED
+
 Theorem sue_frame_align_initial:
   wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\
   EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn) /\
@@ -205,60 +266,71 @@ Theorem sue_frame_align_initial:
   fn_entry_state fn s0 /\ enters_block fn' s0 t /\ active_inst fn' inst' t ==>
   sue_frame_align C C' fn fn' s0 inst' t
 Proof
+  strip_tac >> irule sue_frame_align_enter >> simp[] >>
+  conj_tac >- (qexistsl [`supply`, `supply'`] >> simp[]) >>
+  qexistsl [`s0`, `s0`] >> simp[sue_state_rel_def] >>
+  metis_tac[frame_reach_rules]
+QED
+
+Theorem sue_expand_inst_supply_final_ok_back:
+  ctx_bisim C C' /\ ir_supply_inst_ok supply /\
+  sue_expand_inst_supply dfg supply inst = (segment,supply') /\
+  P SUBSET set supply.irs_used_vars /\
+  (!x. MEM (Var x) inst.inst_operands ==> x IN P) /\
+  inst_wf inst /\ ~is_alloca_op inst.inst_opcode /\
+  sue_state_rel P s b /\
+  run_insts 0 C' (BUTLAST segment) b = OK (sue_idx0 t) /\
+  step_inst fuel C' (LAST segment) t = OK v ==>
+  ?fuel0 u. step_inst fuel0 C inst s = OK u /\ sue_state_rel P u v
+Proof
   strip_tac >>
-  `?bt z. lookup_block s0.vs_current_bb fn'.fn_blocks = SOME bt /\
-          eval_phis s0 bt.bb_instructions = OK z /\
-          t = z with vs_inst_idx := phi_prefix_length bt.bb_instructions` by
-    fs[contextCodegenRelTheory.enters_block_def] >>
-  drule_all sue_function_lookup_ready_back >> strip_tac >>
+  `sue_result_rel P (step_inst fuel C' inst s) (OK v)` by
+    metis_tac[sue_expand_inst_supply_final_step] >>
+  `?u. step_inst fuel C' inst s = OK u /\ sue_state_rel P u v` by
+    (Cases_on `step_inst fuel C' inst s` >>
+     gvs[sue_result_rel_def, stateEquivTheory.lift_result_def]) >>
+  drule (cj 2 ctx_bisim_step_inst) >>
+  disch_then (qspecl_then [`fuel`, `inst`, `s`] mp_tac) >>
+  simp[passSimulationDefsTheory.terminates_def] >> strip_tac >>
+  Cases_on `step_inst fuel' C inst s` >>
+  gvs[step_result_rel_def, frame_result_rel_def] >> metis_tac[]
+QED
+
+Theorem sue_segment_final_ok_back:
+  ctx_bisim C C' /\ fn_inst_wf fn /\
+  EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn) /\
+  lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+  sue_segments_supply (dfg_build_function fn) bs bb.bb_instructions = (segs,be) /\
+  ir_supply_inst_ok bs /\ set (fn_ir_vars fn) SUBSET set bs.irs_used_vars /\
+  i < LENGTH bb.bb_instructions /\
+  sue_state_rel (set (fn_ir_vars fn)) u b /\
+  run_insts 0 C' (BUTLAST (EL i segs)) b = OK (sue_idx0 t) /\
+  step_inst fuel C' (LAST (EL i segs)) t = OK v ==>
+  (LAST (EL i segs)).inst_opcode = (EL i bb.bb_instructions).inst_opcode /\
+  ?fuel0 w. step_inst fuel0 C (EL i bb.bb_instructions) u = OK w /\
+            sue_state_rel (set (fn_ir_vars fn)) w v
+Proof
+  strip_tac >>
+  drule_all sue_segments_supply_index_ready >> strip_tac >>
   `MEM bb fn.fn_blocks` by metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
-  `EVERY (\inst. inst.inst_opcode = PHI ==>
-    !v. MEM (Var v) inst.inst_operands ==> v IN set (fn_ir_vars fn))
-    bb.bb_instructions` by
-    (simp[listTheory.EVERY_MEM] >> metis_tac[sue_original_operand_covered]) >>
-  `?u. enters_block fn s0 u /\ sue_state_rel (set (fn_ir_vars fn)) u t /\
-       u.vs_inst_idx = phi_prefix_length bb.bb_instructions /\
-       t.vs_inst_idx = sue_segment_offset segs (phi_prefix_length bb.bb_instructions) /\
-       u.vs_current_bb = s0.vs_current_bb /\ t.vs_current_bb = s0.vs_current_bb` by
-    (irule sue_paired_block_entry >> simp[] >>
-     conj_tac >- metis_tac[] >> qexists_tac `fn'` >> fs[]) >>
-  drule_all sue_expanded_active_lookup >> strip_tac >>
-  `bb' = bt` by metis_tac[optionTheory.SOME_11] >>
-  `phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions` by
-    (drule sue_segments_supply_length >> strip_tac >>
-     `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
-       simp[venomExecProofsTheory.phi_prefix_length_le] >>
-     spose_not_then assume_tac >>
-     `phi_prefix_length bb.bb_instructions = LENGTH segs` by decide_tac >>
-     `t.vs_inst_idx = LENGTH (FLAT segs)` by metis_tac[sue_segment_offset_end] >>
-     `bt.bb_instructions = FLAT segs` by simp[] >> metis_tac[prim_recTheory.LESS_REFL]) >>
-  `EL (sue_segment_offset segs (phi_prefix_length bb.bb_instructions)) (FLAT segs) =
-   EL 0 (EL (phi_prefix_length bb.bb_instructions) segs)` by
-    (qspec_then `segs` (qspec_then `phi_prefix_length bb.bb_instructions`
-       (qspec_then `0` mp_tac)) sue_segment_offset_el >>
-     drule sue_segments_supply_length >> strip_tac >>
-     drule sue_segments_supply_nonempty >>
-     simp[listTheory.EVERY_EL] >> strip_tac >>
-     `EL (phi_prefix_length bb.bb_instructions) segs <> []` by metis_tac[] >>
-     `0 < LENGTH (EL (phi_prefix_length bb.bb_instructions) segs)` by
-       (Cases_on `EL (phi_prefix_length bb.bb_instructions) segs` >> fs[]) >>
-     simp[]) >>
-  `active_inst fn (EL u.vs_inst_idx bb.bb_instructions) u` by
-    (simp[contextCodegenRelTheory.active_inst_def] >> qexists_tac `bb` >>
-     simp[] >> metis_tac[venomExecProofsTheory.lookup_block_label]) >>
-  `frame_reach C fn s0 (EL u.vs_inst_idx bb.bb_instructions) u` by
-    metis_tac[frame_reach_rules] >>
-  pure_rewrite_tac[sue_frame_align_def] >>
-  qexistsl [`bb`, `bt`, `si`, `sj`, `segs`, `u.vs_inst_idx`, `0`, `u`, `sue_idx0 t`] >>
-  simp[sue_idx0_def, sue_state_rel_def, stateFrameTheory.execution_frame_def,
-       analysisSimDefsTheory.run_insts_def] >>
+  `MEM (EL i bb.bb_instructions) bb.bb_instructions` by simp[listTheory.EL_MEM] >>
+  `inst_wf (EL i bb.bb_instructions)` by
+    metis_tac[venomExecProofsTheory.fn_inst_wf_every_bb, listTheory.EVERY_MEM] >>
+  `MEM (EL i bb.bb_instructions) (fn_insts fn)` by
+    (`!bbs. MEM bb bbs ==> MEM (EL i bb.bb_instructions) (fn_insts_blocks bbs)` by
+       (Induct >> simp[venomInstTheory.fn_insts_blocks_def] >> metis_tac[]) >>
+     simp[venomInstTheory.fn_insts_def]) >>
+  `(EL i bb.bb_instructions).inst_opcode <> ALLOCA` by
+    (qpat_x_assum `EVERY (\inst. inst.inst_opcode <> ALLOCA) _` mp_tac >>
+     simp[listTheory.EVERY_MEM] >> disch_then drule >> simp[]) >>
+  `~is_alloca_op (EL i bb.bb_instructions).inst_opcode` by
+    (Cases_on `(EL i bb.bb_instructions).inst_opcode` >>
+     fs[venomInstTheory.is_alloca_op_def]) >>
   conj_tac
-  >- (drule sue_segments_supply_length >> strip_tac >>
-      drule sue_segments_supply_nonempty >> simp[listTheory.EVERY_EL] >>
-      strip_tac >>
-      `EL (phi_prefix_length bb.bb_instructions) segs <> []` by metis_tac[] >>
-      Cases_on `EL (phi_prefix_length bb.bb_instructions) segs` >> fs[]) >>
-  gvs[]
+  >- (drule_all sue_expand_inst_supply_segment >> strip_tac >> simp[]) >>
+  irule sue_expand_inst_supply_final_ok_back >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[sue_original_operand_covered]
 QED
 
 (* The explicit witnesses are the elimination interface of sue_frame_align.
@@ -309,6 +381,99 @@ Proof
   pure_rewrite_tac[sue_frame_align_def] >>
   qexistsl [`bb`, `bb'`, `bs`, `be`, `segs`, `i`, `SUC j`, `u`, `b`] >>
   simp[] >> decide_tac
+QED
+
+Theorem sue_frame_align_next:
+  ctx_bisim C C' /\ fn_inst_wf fn /\ wf_function fn /\
+  EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn) /\
+  sue_expand_function_supply supply fn = (fn',supply') /\
+  sue_frame_align C C' fn fn' s0 inst' t /\
+  ~is_terminator inst'.inst_opcode /\ step_inst fuel C' inst' t = OK v /\
+  active_inst fn' next (v with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  sue_frame_align C C' fn fn' s0 next (v with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >> qpat_x_assum `sue_frame_align _ _ _ _ _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE[sue_frame_align_def]) >>
+  Cases_on `j < LENGTH (BUTLAST (EL i segs))`
+  >- (irule sue_frame_align_copy_advance >> goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> metis_tac[]) >>
+  `EL i segs <> []` by
+    (drule sue_segments_supply_nonempty >>
+     drule sue_segments_supply_length >> simp[listTheory.EVERY_EL] >> metis_tac[]) >>
+  `j = LENGTH (BUTLAST (EL i segs)) /\ EL j (EL i segs) = LAST (EL i segs)` by
+    (Cases_on `EL i segs` >> fs[rich_listTheory.LENGTH_BUTLAST,
+       listTheory.LAST_EL] >> `j = LENGTH t'` by decide_tac >> simp[]) >>
+  `run_insts 0 C' (BUTLAST (EL i segs)) b = OK (sue_idx0 t)` by fs[] >>
+  `step_inst fuel C' (LAST (EL i segs)) t = OK v` by metis_tac[] >>
+  drule_all sue_segment_final_ok_back >> strip_tac >>
+  `~is_terminator (EL i bb.bb_instructions).inst_opcode` by metis_tac[] >>
+  `w.vs_current_bb = u.vs_current_bb /\ v.vs_current_bb = t.vs_current_bb` by
+    metis_tac[venomInstProofsTheory.step_preserves_control_flow] >>
+  `LENGTH segs = LENGTH bb.bb_instructions` by metis_tac[sue_segments_supply_length] >>
+  `SUC t.vs_inst_idx = sue_segment_offset segs (SUC i)` by
+    (qspec_then `segs` (qspec_then `i` mp_tac) sue_segment_offset_suc >>
+     Cases_on `EL i segs` >> fs[rich_listTheory.LENGTH_BUTLAST] >> decide_tac) >>
+  drule_all sue_expanded_active_lookup >> strip_tac >>
+  `bb'' = bb'` by gvs[] >>
+  `SUC i < LENGTH bb.bb_instructions` by
+    (spose_not_then assume_tac >> `SUC i = LENGTH segs` by decide_tac >>
+     `sue_segment_offset segs (SUC i) = LENGTH (FLAT segs)` by
+       metis_tac[sue_segment_offset_end] >> gvs[]) >>
+  `EL (SUC i) segs <> []` by
+    (drule sue_segments_supply_nonempty >> simp[listTheory.EVERY_EL] >> metis_tac[]) >>
+  `next = EL 0 (EL (SUC i) segs)` by
+    (qspec_then `segs` (qspec_then `SUC i` (qspec_then `0` mp_tac)) sue_segment_offset_el >>
+     Cases_on `EL (SUC i) segs` >> gvs[]) >>
+  `active_inst fn (EL (SUC i) bb.bb_instructions)
+     (w with vs_inst_idx := SUC u.vs_inst_idx)` by
+    (simp[contextCodegenRelTheory.active_inst_def] >> qexists_tac `bb` >>
+     simp[] >> metis_tac[venomExecProofsTheory.lookup_block_label,
+                            venomExecProofsTheory.lookup_block_MEM]) >>
+  `frame_reach C fn s0 (EL (SUC i) bb.bb_instructions)
+     (w with vs_inst_idx := SUC u.vs_inst_idx)` by metis_tac[frame_reach_rules] >>
+  pure_rewrite_tac[sue_frame_align_def] >>
+  qexistsl [`bb`, `bb'`, `bs`, `be`, `segs`, `SUC i`, `0`,
+    `w with vs_inst_idx := SUC u.vs_inst_idx`, `sue_idx0 v`] >>
+  simp[sue_state_rel_def, sue_idx0_def, stateFrameTheory.execution_frame_def,
+       analysisSimDefsTheory.run_insts_def] >>
+  conj_tac >- (Cases_on `EL (SUC i) segs` >> fs[]) >>
+  fs[sue_state_rel_def, stateFrameTheory.execution_frame_def]
+QED
+
+Theorem sue_frame_align_block:
+  ctx_bisim C C' /\ fn_inst_wf fn /\ wf_function fn /\
+  EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn) /\
+  ir_supply_covers_fn supply fn /\ ir_supply_inst_ok supply /\
+  sue_expand_function_supply supply fn = (fn',supply') /\
+  sue_frame_align C C' fn fn' s0 inst' t /\
+  is_terminator inst'.inst_opcode /\ step_inst fuel C' inst' t = OK v /\
+  ~v.vs_halted /\ enters_block fn' v t1 /\ active_inst fn' next t1 ==>
+  sue_frame_align C C' fn fn' s0 next t1
+Proof
+  strip_tac >> qpat_x_assum `sue_frame_align _ _ _ _ _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE[sue_frame_align_def]) >>
+  drule_all sue_segments_supply_index_ready >> strip_tac >>
+  drule_all sue_expand_inst_supply_segment >> strip_tac >>
+  `BUTLAST (EL i segs) = assigns` by
+    simp[rich_listTheory.FRONT_APPEND_NOT_NIL] >>
+  `~(j < LENGTH assigns)` by
+    (strip_tac >>
+     `inst'.inst_opcode = ASSIGN` by
+       fs[listTheory.EL_APPEND_EQN, listTheory.EVERY_EL] >>
+     fs[venomInstTheory.is_terminator_def]) >>
+  `j = LENGTH assigns` by fs[] >>
+  `inst' = LAST (EL i segs) /\ j = LENGTH (BUTLAST (EL i segs))` by
+    fs[listTheory.EL_APPEND_EQN] >>
+  `run_insts 0 C' (BUTLAST (EL i segs)) b = OK (sue_idx0 t) /\
+   step_inst fuel C' (LAST (EL i segs)) t = OK v` by fs[] >>
+  drule_all sue_segment_final_ok_back >> strip_tac >>
+  `is_terminator (EL i bb.bb_instructions).inst_opcode /\ ~w.vs_halted` by
+    fs[sue_state_rel_def, stateFrameTheory.execution_frame_def] >>
+  irule sue_frame_align_enter >> simp[] >>
+  conj_tac >- (qexistsl [`supply`, `supply'`] >> simp[]) >>
+  qexistsl [`w`, `v`] >> simp[] >> rpt gen_tac >> strip_tac >>
+  irule (cj 3 frame_reach_rules) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> metis_tac[]
 QED
 
 Theorem sue_frame_align_state:

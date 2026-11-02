@@ -1898,3 +1898,46 @@ Proof
   drule_all sue_function_lookup_ready >> strip_tac >>
   gvs[] >> metis_tac[]
 QED
+
+(* A successful completed copy prefix is enough for final-step simulation;
+   no separate operand-definedness premise is needed here. *)
+Theorem sue_expand_inst_supply_final_step:
+  ir_supply_inst_ok supply /\
+  sue_expand_inst_supply dfg supply inst = (segment,supply') /\
+  P SUBSET set supply.irs_used_vars /\
+  (!x. MEM (Var x) inst.inst_operands ==> x IN P) /\
+  inst_wf inst /\ ~is_alloca_op inst.inst_opcode /\
+  sue_state_rel P s b /\
+  run_insts 0 ctx (BUTLAST segment) b = OK (sue_idx0 t) ==>
+  sue_result_rel P (step_inst fuel ctx inst s)
+    (step_inst fuel ctx (LAST segment) t)
+Proof
+  strip_tac >> Cases_on `sue_should_skip inst.inst_opcode`
+  >- (drule_all sue_expand_inst_supply_skip >> strip_tac >>
+      gvs[analysisSimDefsTheory.run_insts_def] >>
+      irule sue_step_inst_preserves >> fs[]) >>
+  Cases_on `sue_expand_ops_supply dfg inst supply inst.inst_operands 0` >>
+  PairCases_on `r` >>
+  `segment = q ++ [inst with inst_operands := r0] /\ supply' = r1` by
+    fs[sue_expand_inst_supply_def] >>
+  `run_insts 0 ctx q b = OK (sue_idx0 t)` by
+    fs[rich_listTheory.FRONT_APPEND_NOT_NIL] >>
+  drule_all sue_expand_ops_supply_normalized_eval >> strip_tac >>
+  `sue_state_rel P s t` by
+    (irule sue_assign_prefix_normalized_rel >>
+     qexistsl [`q`, `b`, `ctx`, `LENGTH q`] >> simp[] >>
+     drule sue_expand_ops_supply_prefix >>
+     fs[listTheory.EVERY_MEM, listTheory.MEM_FLAT,
+        listTheory.MEM_MAP, pred_setTheory.SUBSET_DEF] >> metis_tac[]) >>
+  drule sue_expand_ops_supply_structure >> strip_tac >>
+  simp[] >> irule sue_step_inst_rewritten >>
+  fs[sue_should_skip_def, is_param_opcode_iff] >>
+  rpt strip_tac >>
+  `eval_operand (EL i r0) t = eval_operand (EL i inst.inst_operands) s` by
+    fs[listTheory.LIST_REL_EL_EQN] >>
+  `eval_operand (EL i inst.inst_operands) s =
+   eval_operand (EL i inst.inst_operands) t` by
+    (sym_tac >> irule sue_state_rel_eval_operand >> qexists_tac `P` >> simp[] >>
+     rpt strip_tac >> first_x_assum irule >>
+     simp[listTheory.MEM_EL] >> qexists_tac `i` >> simp[]) >> simp[]
+QED
