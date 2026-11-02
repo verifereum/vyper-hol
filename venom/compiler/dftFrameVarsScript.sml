@@ -1,7 +1,7 @@
 Theory dftFrameVars
 Ancestors
   sccpCorrectnessProofs contextCodegenRel venomExecProofs venomExecProps
-  venomWf cfgDefs finite_map
+  venomWf cfgDefs finite_map venomInstProps venomExecSemantics list
 Libs
   BasicProvers
 
@@ -40,4 +40,36 @@ Proof
   `bb' = bb` by metis_tac[same_label_same_block] >>
   gvs[] >>
   metis_tac[eval_phis_outputs_in_fdom_idx]
+QED
+
+Theorem dft_frame_prefix_step:
+  wf_function f /\ fn_inst_wf f /\ dft_frame_prefix f s /\
+  active_inst f i s /\ ~is_terminator i.inst_opcode /\
+  step_inst fuel C i s = OK t /\
+  active_inst f j (t with vs_inst_idx := SUC s.vs_inst_idx) ==>
+  dft_frame_prefix f (t with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rpt strip_tac >>
+  `t.vs_current_bb = s.vs_current_bb` by
+    metis_tac[step_preserves_control_flow] >>
+  `i.inst_opcode <> PHI` by
+    (strip_tac >>
+     fs[step_inst_non_invoke, step_inst_base_def]) >>
+  `inst_wf i` by
+    (gvs[active_inst_def, fn_inst_wf_def, EVERY_MEM] >> metis_tac[MEM_EL]) >>
+  drule_all step_inst_fdom >> strip_tac >>
+  fs[active_inst_def] >>
+  `bb' = bb` by metis_tac[same_label_same_block] >>
+  gvs[dft_frame_prefix_def] >>
+  conj_tac
+  >- (rw[strict_dom_vars_defined_def] >>
+      `v IN FDOM s.vs_vars` by metis_tac[strict_dom_vars_defined_def] >>
+      simp[]) >>
+  rpt strip_tac >>
+  `bb' = bb` by metis_tac[same_label_same_block] >>
+  gvs[]
+  >- (first_x_assum (drule_then mp_tac) >> simp[]) >>
+  Cases_on `j = s.vs_inst_idx` >> gvs[] >>
+  `j < s.vs_inst_idx` by decide_tac >>
+  `v IN FDOM s.vs_vars` by metis_tac[] >> simp[]
 QED
