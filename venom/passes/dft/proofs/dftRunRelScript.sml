@@ -470,6 +470,119 @@ Proof
   metis_tac[PERM_SYM]
 QED
 
+Theorem dft_block_lookup_aligned[local]:
+  !bs bs' name.
+    LIST_REL dft_block_rel bs bs' /\ LIST_REL R bs bs' ==>
+    OPTREL (\bb bb'. dft_block_rel bb bb' /\ R bb bb')
+      (lookup_block name bs) (lookup_block name bs')
+Proof
+  Induct >> Cases_on `bs'` >> simp[lookup_block_def, FIND_thm] >>
+  rpt strip_tac >>
+  `h'.bb_label = h.bb_label` by fs[dft_block_rel_def] >>
+  simp[] >> IF_CASES_TAC >> gvs[lookup_block_def]
+QED
+
+Theorem dft_fn_rel_lookup_order:
+  dft_fn_rel fn fn' /\
+  lookup_block name fn.fn_blocks = SOME bb /\
+  lookup_block name fn'.fn_blocks = SOME bb' ==>
+  dft_block_rel bb bb' /\
+  (!x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~abort_compatible x.inst_opcode y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id ==>
+    id_before (MAP (\i. i.inst_id) bb'.bb_instructions) x.inst_id y.inst_id)
+Proof
+  strip_tac >> fs[dft_fn_rel_def, dft_fallible_order_kept_def] >>
+  drule_all dft_block_lookup_aligned >>
+  disch_then (qspec_then `name` mp_tac) >> simp[]
+QED
+
+Theorem dft_id_before_map[local]:
+  id_before xs a b ==> id_before (MAP f xs) (f a) (f b)
+Proof
+  simp[id_before_def] >> rpt strip_tac >>
+  qexistsl_tac [`i`,`j`] >> simp[EL_MAP]
+QED
+
+Theorem dft_id_before_filter[local]:
+  !xs. id_before (FILTER P xs) a b ==> id_before xs a b
+Proof
+  Induct >> simp[dft_id_before_cons] >> gen_tac >>
+  Cases_on `P h` >> simp[dft_id_before_cons, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem dft_schedule_ids_distinct[local]:
+  !bi body.
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+  PERM (MAP (\i. i.inst_id) body)
+       (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bi)) ==>
+  ALL_DISTINCT (MAP (\i. i.inst_id)
+    (FILTER (\i. is_pseudo i.inst_opcode) bi ++ body))
+Proof
+  qx_gen_tac `bi` >> qx_gen_tac `scheduled` >> strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. is_pseudo i.inst_opcode) bi)) /\
+   ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bi))` by
+    (conj_tac >> irule all_distinct_map_filter >> simp[]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) scheduled)` by metis_tac[ALL_DISTINCT_PERM] >>
+  simp[MAP_APPEND, ALL_DISTINCT_APPEND] >>
+  rpt strip_tac >>
+  `MEM e (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bi))`
+    by metis_tac[PERM_MEM_EQ] >>
+  gvs[MEM_MAP, MEM_FILTER] >> metis_tac[all_distinct_map_mem_inj]
+QED
+
+Theorem dft_id_before_mem[local]:
+  id_before xs a b ==> MEM a xs /\ MEM b xs
+Proof
+  simp[id_before_def] >> rpt strip_tac >>
+  metis_tac[EL_MEM, arithmeticTheory.LESS_TRANS]
+QED
+
+Theorem dft_block_head_bubbles:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  dft_block_rel bb bb' /\
+  (!x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~abort_compatible x.inst_opcode y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id ==>
+    id_before (MAP (\i. i.inst_id) bb'.bb_instructions) x.inst_id y.inst_id) ==>
+  ?body norm.
+    bb'.bb_instructions = FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions ++ body /\
+    PERM (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions) norm /\
+    MAP (\i. i.inst_id) norm = MAP (\i. i.inst_id) body /\
+    LIST_REL (\j i. j.inst_id = i.inst_id /\
+      (!fuel ctx s. step_inst fuel ctx j s = step_inst fuel ctx i s)) norm body /\
+    dft_head_bubbles
+      (\x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+        ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+        id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+        ~dft_must_order x y /\ abort_compatible x.inst_opcode y.inst_opcode)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions) norm
+Proof
+  strip_tac >> drule (iffLR dft_block_rel_def) >> strip_tac >>
+  rename1 `EVERY (from_block bb.bb_instructions) scheduled` >>
+  drule_all dft_body_normalize >> strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb'.bb_instructions)` by
+    (drule_all dft_schedule_ids_distinct >> simp[]) >>
+  `ALL_DISTINCT (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions)` by
+    metis_tac[all_distinct_map_filter, ALL_DISTINCT_MAP] >>
+  qexistsl_tac [`scheduled`,`norm`] >> simp[] >>
+  irule dft_head_bubbles_complete >> simp[] >> rpt gen_tac >> strip_tac >>
+  `MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+   ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode` by
+    (qpat_x_assum `id_before (FILTER _ _) x y`
+       (mp_tac o MATCH_MP dft_id_before_mem) >> simp[MEM_FILTER]) >>
+  `id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id` by
+    (ho_match_mp_tac dft_id_before_map >> irule dft_id_before_filter >>
+     qexists_tac `\i. ~is_pseudo i.inst_opcode` >> simp[]) >>
+  `id_before (MAP (\i. i.inst_id) bb'.bb_instructions) y.inst_id x.inst_id` by
+    (gvs[MAP_APPEND] >> irule id_before_append_right >>
+     `id_before (MAP (\i. i.inst_id) norm) y.inst_id x.inst_id` by
+       (ho_match_mp_tac dft_id_before_map >> simp[]) >> metis_tac[]) >>
+  simp[] >> conj_tac
+  >- (irule dft_inversion_not_must_order >> simp[] >> metis_tac[]) >>
+  irule dft_inversion_compatible >> simp[] >> metis_tac[]
+QED
+
 (* Why it holds (unchecked notes):
    - Same fuel works: fuel is per block and per call depth, and the
      schedule visits the same blocks and makes the same calls.
