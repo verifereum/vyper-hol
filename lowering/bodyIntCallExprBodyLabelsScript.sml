@@ -2,6 +2,7 @@
 Theory bodyIntCallExprBodyLabels
 Ancestors
   bodyIntCallExprClosure bodyIntCallExprLabels bodyIntCallBuiltinLabels
+  bodyIntCallExternalLabels
   bodyIntCallContextLabels bodyIntCallLabelFrame bodyIntCallLabelReservations
   exprLowering compileEnv pred_set
 
