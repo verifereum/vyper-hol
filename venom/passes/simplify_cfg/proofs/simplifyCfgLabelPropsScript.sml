@@ -640,7 +640,7 @@ Proof
   gen_tac >> Cases_on `pred h.bb_label` >> simp[]
 QED
 
-Theorem fn_labels_remove_unreachable_all_distinct[local]:
+Theorem fn_labels_remove_unreachable_all_distinct:
   ALL_DISTINCT (fn_labels func) ==>
   ALL_DISTINCT (fn_labels (remove_unreachable_blocks func))
 Proof
@@ -1272,7 +1272,7 @@ Proof
             venomExecPropsTheory.lookup_block_label]
 QED
 
-Theorem fn_reachable_iff_reachable[local]:
+Theorem fn_reachable_iff_reachable:
   ALL_DISTINCT (fn_labels func) ==>
   (fn_reachable func lbl <=> reachable func lbl)
 Proof
