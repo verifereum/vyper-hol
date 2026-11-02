@@ -350,14 +350,14 @@ Proof
   fs[target_post_def] >>
   `stmt_state_rel ctx func cenv cx es' (update_var x (w0 + n2w off) s)` by
     metis_tac[stmt_state_rel_update_var] >>
-  simp[eval_operand_def, lookup_var_update_var] >> rpt conj_tac >>
-  TRY (irule place_ptr_rel_vars_frame >> metis_tac[] >> NO_TAC) >>
-  TRY (simp[Abbr `x`, not_fresh_at_def, ASCIInumbersTheory.toString_11] >>
-       NO_TAC) >>
-  TRY (irule locals_kept_mem_tail >> qexists_tac `s` >>
-       simp[update_var_def] >> NO_TAC) >>
-  TRY (simp[update_var_def] >> metis_tac[] >> NO_TAC) >>
-  metis_tac[]
+  simp[eval_operand_def, lookup_var_update_var] >> rpt conj_tac
+  >~ [`place_ptr_rel _ _ (update_var _ _ _) _ _ _ _`]
+  >- (irule place_ptr_rel_vars_frame >> metis_tac[])
+  >~ [`not_fresh_at sb _`]
+  >- simp[Abbr `x`, not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  >~ [`locals_kept _ _ _ (update_var _ _ _)`]
+  >- (irule locals_kept_mem_tail >> qexists_tac `s` >> simp[update_var_def]) >>
+  simp[update_var_def] >> metis_tac[]
 QED
 
 Theorem target_attr_add_frag[local]:
@@ -534,13 +534,18 @@ Finalise target_attr_case
    (compile_mapping_subscript, with compile_keccak256_key for a bytes or
    string key) or the bounds check and the element's pointer
    (compile_array_subscript).  Cheated, for the later #636 PRs:
+   - the shared locals_kept frame exempts only a root DynArray's length.
+     A nested pop in an index, such as x[0][x[0].pop()], writes an inner
+     length word that this frame preserves.  Both target_post and the
+     index's expr_vv_case inherit this restriction; their shared frame
+     must be repaired before this case covers nested-pop indices;
    - the index runs after the base, so the base's target_post must survive
      its fragment: place_ptr_rel does (place_ptr_rel_vars_frame: the local
      pointers and the base's operand are not fresh at the index's start),
      but place_readable does not, as the index can pop the base's array;
      the source then reads the base from the popped history
      (read_memory_path), and the element's bytes are still in memory, as
-     pop writes only the length word (locals_kept), but nothing relates
+     a root pop writes only its exempt length word, but nothing relates
      the popped history to memory yet;
    - the bounds check: a source RuntimeError for an index out of range
      (evaluate_subscripts array_index for a local's place,

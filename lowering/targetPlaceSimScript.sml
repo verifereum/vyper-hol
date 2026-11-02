@@ -228,7 +228,10 @@ End
    fragment's end, so code lowered after it keeps it.  The frame is
    vv_post's: the variables and allocations from before, the memory of the
    allocations made before the fragment's start but those holding a local,
-   and the live locals' memory but their DynArray length words. *)
+   and the live locals' memory but their root DynArray length words.
+   Nested length words are not exempt: indices that pop nested arrays
+   require a repair of the shared expression/target frame (see
+   target_subscript_case). *)
 Definition target_post_def:
   target_post ctx func cenv cx es sa sb s0 es' pv vt
     (r : operand # data_location option # place_ty option) s <=>
