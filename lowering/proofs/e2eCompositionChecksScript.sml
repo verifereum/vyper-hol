@@ -5,7 +5,8 @@
 Theory e2eCompositionChecks
 Ancestors
   e2eComposition e2eCorrectness configuredE2ECorrectness
-  e2eDefs vyperLoweringCorrect unitTransformDefs codegenCorrectness
+  e2eDefs vyperLoweringCorrect unitTransformDefs o1PassContract
+  codegenCorrectness
   venomExecSemantics venomState stateEquiv vyperInterpreter vyperValue
   frameOutcome callTrace vfmDecreasesGas list
 
@@ -96,7 +97,9 @@ val expected_composition = ``
               (call_external (SOME vs.vs_outcomes) [] am tx)
               (run_context fuel ctx vs)) /\
     (~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) ==>
-       ctx_transform_correct ctx ctx' vs /\
+       ctx_sim (external_call_dead tx
+                  (call_external (SOME vs.vs_outcomes) [] am tx))
+         ctx ctx' vs vs /\
        !fuel. ?r es'.
          run_call es = SOME (r, es') /\
          (frame_resource_starved es r es' \/ precompile_call_starved es \/
