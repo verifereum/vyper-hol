@@ -50,7 +50,7 @@ val () = List.app (fn (label,fty,aty,id) =>
    ("e11_indexed_array",``ArrayT ^u256 (Fixed 2)``,
        ``ArrayT ^u256 (Fixed 2)``,eid)];
 val () = List.app (fn (label,mut) =>
-  regression label true (event_program u256 u256 ``F`` mut eid))
+  regression label false (event_program u256 u256 ``F`` mut eid))
   [("LOG_VIEW",``View``),("LOG_PURE",``Pure``)];
 
 val () = regression "ARITY" false
