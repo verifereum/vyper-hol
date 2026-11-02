@@ -1,10 +1,12 @@
 (*
  * The three planned O1 producers, PLAN §5.8 S4-S6.
- * S4 and S6 follow from the per-pass contracts (o1PassContract) by the
+ * S4 and S6 follow from the per-pass contracts (o1ContractTheorems) by the
  * composition in o1PipelineCompose; the only admissions on their path are
  * the nine contract theorems, one per pass tag.  S5 stays an authorized
  * planned admission.
  * No compiler hook or final-unit check is changed to obtain output shape.
+ * run_venom_pipeline_mem_inv is the output's memory invariant in lowered
+ * form, which codegen consumes.
  *)
 Theory o1PipelineCorrect
 Ancestors
@@ -19,34 +21,28 @@ Definition o1_pipeline_def:
     run_venom_pipeline (K T) (K T) (K T) rpolicy o1_pipeline_spec unit
 End
 
-(* The site form of the shared invariant gives the original raw premise. *)
-Theorem mem_inv_site_mem_ok_raw:
-  mem_inv site_mem_ok ctx vs ==> raw_unit_memory_ok ctx vs
-Proof
-  simp[raw_unit_memory_ok_mem_inv] >> strip_tac >>
-  irule mem_inv_mono >> qexists_tac `site_mem_ok` >>
-  simp[site_mem_ok_raw]
-QED
-
 (* ===== S4: semantic forward simulation ===== *)
 
 (* S4 -- Milestone 3, from the per-pass contracts.
- * Premises changed from the original admission: the raw memory invariant
- * is the site form of the shared invariant (mem_inv site_mem_ok, which
- * implies raw_unit_memory_ok), and the source's non-INVOKE label operands
- * are local (unit_label_refs_ok), which unit_wf does not give for PHI. *)
+ * Premises added to the original admission: the source's non-INVOKE label
+ * operands are local (unit_label_refs_ok), which unit_wf does not give for
+ * PHI; its entry function has no PARAM (unit_entry_no_params); no
+ * function has a PHI in its first block (unit_first_block_no_phi); and
+ * the initial state's dynamic-memory pointer is its initial free-memory
+ * pointer (o1_run_state_ok), as the entry state has it. *)
 Theorem run_venom_pipeline_correct:
   !rpolicy unit out vs.
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
-    o1_initial_state_ok vs /\
-    mem_inv site_mem_ok unit.cu_context vs
+    unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
+    o1_run_state_ok vs /\
+    raw_unit_memory_ok unit.cu_context vs
     ==>
     checked_unit_transform_correct o1_pipeline rpolicy unit vs
 Proof
   rpt strip_tac >>
   simp[checked_unit_transform_correct_def, ctx_transform_correct_ctx_sim] >>
-  fs[o1_pipeline_def] >>
+  fs[o1_pipeline_def, raw_unit_memory_ok_mem_inv, GSYM o1_src_inv_def] >>
   drule_all o1_pipeline_stage_facts >> strip_tac >> metis_tac[]
 QED
 
@@ -56,15 +52,18 @@ Theorem run_venom_pipeline_mem_inv:
   !rpolicy unit out vs.
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
-    o1_initial_state_ok vs /\
-    mem_inv site_mem_ok unit.cu_context vs
+    unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
+    o1_run_state_ok vs /\
+    raw_unit_memory_ok unit.cu_context vs
     ==>
     ?eom. mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp))
             out.po_unit.cu_context vs
 Proof
-  rpt strip_tac >> fs[o1_pipeline_def] >>
+  rpt strip_tac >>
+  fs[o1_pipeline_def, raw_unit_memory_ok_mem_inv, GSYM o1_src_inv_def] >>
   drule_all o1_pipeline_stage_facts >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
+  fs[o1_lowered_inv_def] >>
   qexists_tac `eom` >> fs[mem_inv_raw_reachable] >>
   rpt strip_tac >> first_x_assum drule >>
   drule raw_reachable_initial_fmp >> simp[lowered_mem_fact_def]
@@ -96,11 +95,13 @@ QED
 (* ===== S6: output shape without new compiler checks ===== *)
 
 (* S6 -- Milestone 3, from the per-pass contracts.
- * Premise added from the original admission: unit_label_refs_ok, as S4. *)
+ * Premises added from the original admission: unit_label_refs_ok,
+ * unit_entry_no_params and unit_first_block_no_phi, as S4. *)
 Theorem run_venom_pipeline_output_shape:
   !rpolicy unit out.
     o1_pipeline rpolicy unit = SOME out /\ o1_source_unit_ok unit /\
-    unit_label_refs_ok unit
+    unit_label_refs_ok unit /\ unit_entry_no_params unit /\
+    unit_first_block_no_phi unit
     ==> unit_shape_ok out.po_unit
 Proof
   rpt strip_tac >> fs[o1_pipeline_def] >>
