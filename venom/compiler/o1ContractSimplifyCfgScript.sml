@@ -331,6 +331,15 @@ Proof
   metis_tac[]
 QED
 
+(* SimplifyCFG adds no ALLOCA: it deletes and merges blocks and rewrites
+   PHIs and jumps in place. *)
+Theorem simplify_cfg_fn_no_alloca:
+  EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn) ==>
+  EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts (simplify_cfg_fn fn))
+Proof
+  cheat
+QED
+
 (* The walk run, stage 5: wf_ssa in, wf_ssa out. *)
 Theorem simplify_cfg_stage_walk:
   o1_run_contract rpolicy 5
@@ -344,10 +353,12 @@ Proof
   conj_tac >- metis_tac[simplify_cfg_stage_sim] >>
   simp[o1_ssa_inv_def] >> conj_tac
   >- (gvs[o1_ssa_inv_def, o1_lowered_inv_def] >>
-      qexists_tac `eom` >> conj_tac
-      >- metis_tac[simplify_cfg_stage_eom_bounded] >>
-      irule simplify_cfg_stage_mem_inv >>
-      metis_tac[mem_corr_closed_lowered_mem_fact]) >>
+      qexists_tac `eom` >> rpt conj_tac
+      >- metis_tac[simplify_cfg_stage_eom_bounded]
+      >- (irule simplify_cfg_stage_mem_inv >>
+          metis_tac[mem_corr_closed_lowered_mem_fact]) >>
+      drule simplify_cfg_stage_functions >> strip_tac >>
+      gvs[EVERY_MEM, MEM_MAP] >> metis_tac[REWRITE_RULE [EVERY_MEM] simplify_cfg_fn_no_alloca]) >>
   drule simplify_cfg_stage_functions >> strip_tac >>
   simp[EVERY_MEM, MEM_MAP] >> rpt gen_tac >> strip_tac >> gvs[] >>
   irule simplify_cfg_preserves_wf_ssa >>

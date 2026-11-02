@@ -384,16 +384,21 @@ Definition o1_walk_src_inv_def:
 End
 
 (* After ConcretizeMemLoc: every access below a bound on every function's
-   static layout. *)
+   static layout, and no ALLOCA left (the later passes add none). *)
 Definition o1_static_inv_def:
   o1_static_inv C vs <=>
-    ?eom. ctx_eom_bounded eom C /\ mem_inv (static_mem_ok eom) C vs
+    ?eom. ctx_eom_bounded eom C /\ mem_inv (static_mem_ok eom) C vs /\
+    EVERY (\fn. EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn))
+      C.ctx_functions
 End
 
-(* After FmpLowering: static, or dynamic at or above the initial fmp. *)
+(* After FmpLowering: static, or dynamic at or above the initial fmp; still
+   no ALLOCA. *)
 Definition o1_lowered_inv_def:
   o1_lowered_inv C vs <=>
-    ?eom. ctx_eom_bounded eom C /\ mem_inv (lowered_mem_fact eom) C vs
+    ?eom. ctx_eom_bounded eom C /\ mem_inv (lowered_mem_fact eom) C vs /\
+    EVERY (\fn. EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn))
+      C.ctx_functions
 End
 
 (* Rows 5 and 6 (SimplifyCFG's input, SUE's input) add wf_ssa: MakeSSA's

@@ -320,14 +320,16 @@ Theorem contracted_fold_invariant:
 Proof
   Induct
   >- simp[run_configured_fn_pass_fold_def, list_subset_def, EVERY_MEM] >>
-  rpt gen_tac >> pure_rewrite_tac[EVERY_DEF] >> strip_tac >> gvs[] >>
+  rpt gen_tac >> pure_rewrite_tac[EVERY_DEF] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   drule_all run_configured_fn_pass_fold_cons_step >> strip_tac >>
   drule_all observed_step_contract >> strip_tac >>
   `out.fpo_function.fn_name = fn.fn_name` by fs[fn_pass_step_def] >>
   `ir_supply_covers_unit out.fpo_supply
      (unit with cu_context := unit.cu_context with ctx_functions :=
         MAP (\f. if f.fn_name = out.fpo_function.fn_name then out.fpo_function
-                 else f) unit.cu_context.ctx_functions)` by simp[] >>
+                 else f) unit.cu_context.ctx_functions)`
+    by (qpat_x_assum `out.fpo_function.fn_name = _` SUBST1_TAC >>
+        first_assum ACCEPT_TAC) >>
   first_x_assum drule_all >> strip_tac >>
   fs[fn_pass_step_def, ir_supply_extends_def, fresh_names_ok_def] >>
   conj_tac

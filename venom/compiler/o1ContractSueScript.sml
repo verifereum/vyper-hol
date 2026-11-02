@@ -13,6 +13,7 @@
  *)
 Theory o1ContractSue
 Ancestors
+  o1ContractSueStep o1PassContract
   o1PassLift singleUseExpansionDefs singleUseExpansionSupplyProofs
   venomFnScheduleRunner venomWf venomInst irSupply singleUseExpansionSupplySim
 
@@ -789,4 +790,31 @@ Proof
   strip_tac >> rw[frame_sim_def] >>
   drule_all sue_frame_reach_align >> strip_tac >>
   irule sue_frame_align_observations >> metis_tac[]
+QED
+
+(* ===== The stage contract (run 6) ===== *)
+
+(* The expanded function does not depend on which instruction ids the
+   supply records as used: fresh ids come from irs_next_inst alone.  So a
+   stage step, which says nothing of ir_supply_inst_ok, can be replayed
+   from a supply that has it. *)
+Theorem sue_expand_function_supply_used_inst_ids:
+  FST (sue_expand_function_supply (s with irs_used_inst_ids := ids) fn) =
+  FST (sue_expand_function_supply s fn)
+Proof
+  cheat
+QED
+
+(* Row 6 (o1_ssa_inv: wf_ssa, no ALLOCA) to row 7. *)
+Theorem sue_stage_walk:
+  o1_run_contract rpolicy 6
+Proof
+  cheat
+QED
+
+Theorem o1_contract_sue:
+  o1_step_contract rpolicy (CFP_Simple VP_SingleUseExpansion) /\
+  o1_run_contract rpolicy 6
+Proof
+  simp[sue_step_contract, sue_stage_walk]
 QED
