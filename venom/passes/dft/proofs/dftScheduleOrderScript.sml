@@ -1428,6 +1428,88 @@ Proof
   metis_tac[]
 QED
 
+Theorem dft_block_rel_replace:
+  EVERY (\a. ALL_DISTINCT (MAP (\i. i.inst_id) a.bb_instructions)) orig /\
+  LIST_REL dft_block_rel orig curr /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) curr) /\ MEM bb curr /\
+  dft_block_rel bb bb' ==>
+  LIST_REL dft_block_rel orig
+    (MAP (\b. if b.bb_label = bb.bb_label then bb' else b) curr)
+Proof
+  strip_tac >> simp[LIST_REL_EL_EQN] >>
+  `LENGTH orig = LENGTH curr` by gvs[LIST_REL_EL_EQN] >> simp[] >>
+  rpt strip_tac >> simp[EL_MAP] >>
+  Cases_on `(EL n curr).bb_label = bb.bb_label`
+  >- (`EL n curr = bb` by
+        (irule (Q.ISPEC `\b. b.bb_label` all_distinct_map_mem_inj) >>
+         simp[] >> qexists `curr` >> simp[MEM_EL] >> metis_tac[]) >>
+      simp[] >> irule dft_block_rel_trans >> conj_tac
+      >- (gvs[EVERY_EL] >> metis_tac[]) >>
+      qexists `bb` >> gvs[LIST_REL_EL_EQN] >> metis_tac[]) >>
+  gvs[LIST_REL_EL_EQN]
+QED
+
+Theorem dft_block_rel_labels:
+  LIST_REL dft_block_rel orig curr ==>
+  MAP (\b. b.bb_label) orig = MAP (\b. b.bb_label) curr
+Proof
+  qid_spec_tac `curr` >> Induct_on `orig` >> Cases_on `curr` >>
+  simp[] >> rpt strip_tac >>
+  imp_res_tac dft_block_rel_normal >> simp[]
+QED
+
+Theorem dft_process_one_block_rel:
+  EVERY (\a. ALL_DISTINCT (MAP (\i. i.inst_id) a.bb_instructions)) orig /\
+  LIST_REL dft_block_rel orig st.dls_blocks /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) st.dls_blocks) /\ dft_inv st.dls_blocks ==>
+  LIST_REL dft_block_rel orig (FST (dft_process_one cfg lr fn st lbl)).dls_blocks
+Proof
+  strip_tac >> simp[dft_process_one_def, LET_THM] >>
+  Cases_on `lookup_block lbl st.dls_blocks` >> simp[] >>
+  rename1 `SOME bb` >>
+  `MEM bb st.dls_blocks /\ bb.bb_label = lbl` by
+    (gvs[lookup_block_def] >> drule venomExecPropsTheory.FIND_P >>
+     simp[] >> metis_tac[venomExecPropsTheory.FIND_MEM]) >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  qpat_x_assum `bb.bb_label = lbl` (SUBST1_TAC o SYM) >>
+  irule dft_block_rel_replace >> simp[] >>
+  irule dft_block_rel_step >> gvs[dft_inv_def, EVERY_MEM]
+QED
+
+Theorem dft_loop_step_block_rel:
+  EVERY (\a. ALL_DISTINCT (MAP (\i. i.inst_id) a.bb_instructions)) orig /\
+  LIST_REL dft_block_rel orig (FST trip).dls_blocks /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) (FST trip).dls_blocks) /\
+  dft_inv (FST trip).dls_blocks ==>
+  LIST_REL dft_block_rel orig (FST (dft_loop_step cfg lr fn trip)).dls_blocks
+Proof
+  PairCases_on `trip` >> simp[dft_loop_step_def, LET_THM] >>
+  IF_CASES_TAC >> simp[] >> Cases_on `trip1` >> simp[] >> strip_tac >>
+  `LIST_REL dft_block_rel orig
+    (FST (dft_process_one cfg lr fn trip0 h)).dls_blocks` by
+    (irule dft_process_one_block_rel >> simp[]) >>
+  pairarg_tac >> simp[] >> IF_CASES_TAC >> gvs[]
+QED
+
+Theorem funpow_dft_loop_block_rel:
+  !n trip.
+  EVERY (\a. ALL_DISTINCT (MAP (\i. i.inst_id) a.bb_instructions)) orig /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) orig) /\
+  LIST_REL dft_block_rel orig (FST trip).dls_blocks /\
+  dft_inv (FST trip).dls_blocks ==>
+  LIST_REL dft_block_rel orig (FST (FUNPOW (dft_loop_step cfg lr fn) n trip)).dls_blocks
+Proof
+  Induct >> simp[arithmeticTheory.FUNPOW_SUC] >> rpt strip_tac >>
+  irule dft_loop_step_block_rel >> simp[] >>
+  `LIST_REL dft_block_rel orig
+     (FST (FUNPOW (dft_loop_step cfg lr fn) n trip)).dls_blocks` by
+    (first_x_assum irule >> simp[]) >>
+  drule dft_block_rel_labels >> strip_tac >> simp[] >> conj_tac
+  >- metis_tac[] >>
+  irule funpow_dft_loop_preserves_inv >> simp[]
+QED
+
 (* These probes deliberately have indirect conflicts: a cleared reader and
    a superseded writer must still precede the third instruction by transitivity.
    MCOPY also tests the same-effect read/write update. *)
@@ -1477,5 +1559,17 @@ Theorem dft_fn_block_rel:
        (dft_fn fn).fn_name = fn.fn_name /\
        LIST_REL dft_block_rel fn.fn_blocks (dft_fn fn).fn_blocks
 Proof
-  cheat
+  rpt strip_tac >>
+  `dft_inv fn.fn_blocks` by (irule wf_fn_initial_dft_inv >> simp[]) >>
+  `EVERY (\a. ALL_DISTINCT (MAP (\i. i.inst_id) a.bb_instructions)) fn.fn_blocks` by
+    (gvs[dft_inv_def, EVERY_MEM]) >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    gvs[wf_function_def, fn_labels_def] >>
+  `LIST_REL dft_block_rel fn.fn_blocks fn.fn_blocks` by
+    (simp[LIST_REL_EL_EQN] >> rpt strip_tac >>
+     irule dft_block_rel_refl >>
+     gvs[EVERY_EL, fn_pseudos_prefix_def] >> metis_tac[MEM_EL]) >>
+  simp[dft_fn_def, LET_THM] >>
+  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >> simp[] >>
+  irule funpow_dft_loop_block_rel >> simp[]
 QED
