@@ -21,7 +21,7 @@
  *     none (an inserted instruction that touches no memory).  Every
  *     function pair related by frame_sim transports the shared memory
  *     invariant for any memory fact closed under that correspondence
- *     (frame_sim_mem_inv), which every phase fact is (mem_corr_closed_*).
+ *     (frame_sim_mem_inv), which every phase fact is.
  *)
 Theory o1PassLift
 Ancestors
@@ -112,11 +112,11 @@ Proof
   cheat
 QED
 
-(* The entry function has no RET, so the context run never returns. *)
+(* A context run that never ends in an internal return (its entry function
+   has no RET, RETFMP or DRET) is simulated. *)
 Theorem ctx_bisim_ctx_sim:
   ctx_bisim C C' /\ C'.ctx_entry = C.ctx_entry /\
-  EVERY (\fn. C.ctx_entry = SOME fn.fn_name ==> entry_fn_no_ret fn)
-        C.ctx_functions /\
+  (!fuel v t. run_context fuel C vs <> IntRet v t) /\
   vs.vs_vars = FEMPTY /\ ~vs.vs_halted ==>
   ctx_sim C C' vs vs
 Proof
