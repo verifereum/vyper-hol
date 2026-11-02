@@ -19,7 +19,7 @@
 Theory entryStateRel
 Ancestors
   list rich_list finite_map alist
-  e2eDefs vyperLoweringCorrect entryDecodePlanProps entryArgPtrs fragExec
+  placeTypingBuildProps e2eDefs vyperLoweringCorrect entryDecodePlanProps entryArgPtrs fragExec
   compileEnv compileVyper moduleLowering supportedProgram supportedNames
   supportedDecls immutableLocationProps immutableSectionRel immutableRelation
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeContractContext
@@ -768,4 +768,21 @@ Proof
                           vs_alloca_next := _; vs_inst_idx := _ |> = s0`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [venom_state_component_equality]) >>
   gvs[initial_evaluation_context_def]
+QED
+
+Theorem external_package_registered_hashmap_info:
+  set_external_package_target target
+    (package_external_fn tops use_trans nkey_map
+      (mut,nr,rr,fname,args,dflts,ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,nr',nkey,ut',iv,fbody',rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
+  cenv.ce_hashmap_info = build_hashmap_info tops
+Proof
+  strip_tac >>
+  drule compile_register_positional_args_cenv >> strip_tac >>
+  qpat_x_assum `cenv = _` SUBST1_TAC >>
+  gvs[package_external_fn_def, set_external_package_target_def] >>
+  Cases_on `ret = NoneT` >>
+  gvs[update_cenv_nonreentrant_def, update_cenv_ret_abi_def,
+      build_compile_env_ce_hashmap_info]
 QED

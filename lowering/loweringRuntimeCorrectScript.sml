@@ -49,7 +49,7 @@ Ancestors
   e2eDefs supportedProgram vyperLoweringCorrect
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperTypeStmtSoundness vyperTypeEvalSoundness vyperTypeExprSoundness
-  allocLimitsProps entryDecodePlanProps structFieldsProps entryStateRel bodySimEntry supportedDecls vyperTypeContractFunction vyperTypeContractSoundness
+  placeTypingBuildProps allocLimitsProps entryDecodePlanProps structFieldsProps entryStateRel bodySimEntry supportedDecls vyperTypeContractFunction vyperTypeContractSoundness
   vyperTypeContractContext vyperTypeContract
   vyperTypeInitialState vyperTypeBindArguments vyperTypeInvariants
   vyperTypeEvalStoragePreservation vyperTypeStoragePreservation exprSimHyps
@@ -553,6 +553,28 @@ Proof
       initial_evaluation_context_def, get_module_code_def,
       type_env_all_modules_def, GSYM type_env_def] >>
   irule make_struct_fields_map_fields >> metis_tac[]
+QED
+
+Theorem external_package_global_maps:
+  set_external_package_target target
+    (package_external_fn tops F (assign_nkeys tops 0)
+      (mut,F,F,tx.function_name,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+  check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
+  env_t.toplevel_vtypes = art.cta_toplevel_vtypes /\
+  env_t.bare_globals = art.cta_bare_globals ==>
+  place_map_tables_agree_on_defined cenv env_t /\
+  (!nsid ty. FLOOKUP env_t.bare_globals nsid = SOME ty ==>
+     cenv.ce_hashmap_info nsid = NONE)
+Proof
+  strip_tac >>
+  drule_all external_package_registered_hashmap_info >> strip_tac >>
+  conj_tac
+  >- (drule checked_single_module_defined_map_agreement >>
+      disch_then irule >> simp[]) >>
+  rpt strip_tac >> gvs[] >>
+  drule_all checked_single_module_bare_global_no_hashmap >> simp[]
 QED
 
 (* ADMITTED (#637): at the start of the selected function's body, the
