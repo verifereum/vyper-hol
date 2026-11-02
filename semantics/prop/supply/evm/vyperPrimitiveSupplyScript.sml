@@ -171,20 +171,11 @@ Theorem proceed_create_supply:
   execution_supply_bound budget
     (SND (proceed_create sender address value code cappedGas st))
 Proof
-  (* TEMPORARY: preserve the old creation proof while repairing the storage-clear migration.
   strip_tac >>
   `account_supply_bound budget
-     (vfmExecution$increment_nonce address
-       (vfmExecution$increment_nonce sender st.rollback.accounts))` by
-    gvs[execution_supply_bound_def, account_supply_bound_nonce] >>
-  `account_supply_bound budget
-     (vfmExecution$transfer_value sender address value
-       (vfmExecution$increment_nonce address
-         (vfmExecution$increment_nonce sender st.rollback.accounts)))` by
-    (irule account_supply_bound_transfer >> simp[] >>
-     gvs[vfmExecutionTheory.increment_nonce_def, lookup_account_def,
-         update_account_def, combinTheory.APPLY_UPDATE_THM] >>
-     rpt (IF_CASES_TAC >> gvs[])) >>
+     (create_prelude_accounts sender address value st.rollback.accounts)` by
+    (irule account_supply_bound_create_prelude >>
+     gvs[execution_supply_bound_def]) >>
   Cases_on `st.contexts = []`
   >- gvs[proceed_create_def, vfmExecutionTheory.update_accounts_def,
          get_rollback_def, get_original_def, fail_def,
@@ -197,9 +188,8 @@ Proof
       vfmExecutionTheory.return_def, vfmExecutionTheory.bind_def,
       vfmExecutionTheory.ignore_bind_def, execution_supply_bound_def,
       bounded_set_last_accounts, account_supply_bound_clear,
-      account_supply_bound_nonce]
-  *)
-  cheat
+      account_supply_bound_nonce, vyperCreateTheory.create_prelude_accounts_def,
+      combinTheory.o_THM]
 QED
 
 val () = proofAuditLib.check_theory "vyperPrimitiveSupply";
