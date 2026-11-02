@@ -386,3 +386,237 @@ Proof
        fix_all_phis_def, MAP_MAP_o, combinTheory.o_DEF] >>
   strip_tac >> irule fix_phis_blocks_outputs_distinct >> simp[]
 QED
+
+Theorem bb_well_formed_front_nonterminators:
+  bb_well_formed bb ==>
+  EVERY (\inst. ~is_terminator inst.inst_opcode) (FRONT bb.bb_instructions)
+Proof
+  simp[bb_well_formed_def, EVERY_EL] >> rpt strip_tac >>
+  rename1 `is_terminator (EL i (FRONT bb.bb_instructions)).inst_opcode` >>
+  `i < LENGTH bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> gvs[LENGTH_FRONT]) >>
+  `EL i (FRONT bb.bb_instructions) = EL i bb.bb_instructions` by
+    (irule EL_FRONT >> gvs[LENGTH_FRONT] >>
+     Cases_on `bb.bb_instructions` >> gvs[]) >>
+  gvs[] >>
+  qpat_x_assum `!i. _ /\ is_terminator _ ==> _` drule >>
+  gvs[LENGTH_FRONT]
+QED
+
+Theorem phi_partition_prefix:
+  EVERY (\inst. inst.inst_opcode = PHI) phis /\
+  EVERY (\inst. inst.inst_opcode <> PHI) body_insts ==>
+  !i j. i < j /\ j < LENGTH (phis ++ body_insts) /\
+        (EL j (phis ++ body_insts)).inst_opcode = PHI ==>
+        (EL i (phis ++ body_insts)).inst_opcode = PHI
+Proof
+  simp[EVERY_EL, EL_APPEND_EQN] >> rpt strip_tac >>
+  Cases_on `j < LENGTH phis` >> gvs[]
+QED
+
+Theorem bb_well_formed_partition:
+  EVERY (\inst. ~is_terminator inst.inst_opcode) xs /\
+  is_terminator term_inst.inst_opcode ==>
+  bb_well_formed (bb with bb_instructions :=
+    FILTER (\inst. inst.inst_opcode = PHI) xs ++
+    FILTER (\inst. inst.inst_opcode <> PHI) xs ++ [term_inst])
+Proof
+  strip_tac >>
+  `term_inst.inst_opcode <> PHI` by
+    (strip_tac >> gvs[is_terminator_def]) >>
+  `!i j. i < j /\
+    j < LENGTH (FILTER (\inst. inst.inst_opcode = PHI) xs ++
+                (FILTER (\inst. inst.inst_opcode <> PHI) xs ++ [term_inst])) /\
+    (EL j (FILTER (\inst. inst.inst_opcode = PHI) xs ++
+           (FILTER (\inst. inst.inst_opcode <> PHI) xs ++ [term_inst]))).inst_opcode = PHI ==>
+    (EL i (FILTER (\inst. inst.inst_opcode = PHI) xs ++
+           (FILTER (\inst. inst.inst_opcode <> PHI) xs ++ [term_inst]))).inst_opcode = PHI` by
+    (rpt gen_tac >> strip_tac >> irule phi_partition_prefix >>
+     simp[EVERY_FILTER, EVERY_MEM] >> qexists `j` >>
+     gvs[APPEND_ASSOC]) >>
+  qmatch_goalsub_abbrev_tac `pre_insts ++ [term_inst]` >>
+  `EVERY (\inst. ~is_terminator inst.inst_opcode) pre_insts` by
+    (qpat_x_assum `!i j. _` kall_tac >>
+     simp[Abbr `pre_insts`, EVERY_APPEND, EVERY_FILTER, EVERY_MEM,
+          is_terminator_def] >> gvs[EVERY_MEM] >> metis_tac[]) >>
+  gvs[bb_well_formed_def, APPEND_ASSOC] >> conj_tac
+  >- (simp[EL_APPEND_EQN] >> rpt strip_tac >>
+      Cases_on `i < LENGTH pre_insts` >> gvs[EVERY_EL] >>
+      `i = LENGTH pre_insts` by decide_tac >> simp[]) >>
+  map_every qx_gen_tac [`i`, `j`] >> strip_tac >>
+  qpat_x_assum `!i j. _` (qspecl_then [`i`, `j`] mp_tac) >>
+  gvs[Abbr `pre_insts`]
+QED
+
+Theorem fix_phis_in_block_wf:
+  bb_well_formed bb ==> bb_well_formed (fix_phis_in_block actual_preds bb)
+Proof
+  strip_tac >>
+  `bb.bb_instructions <> [] /\
+   is_terminator (LAST bb.bb_instructions).inst_opcode` by
+    gvs[bb_well_formed_def] >>
+  `EVERY (\inst. ~is_terminator inst.inst_opcode)
+     (MAP (fix_phi_inst actual_preds) (FRONT bb.bb_instructions))` by
+    simp[EVERY_MAP, fix_phi_inst_terminator, bb_well_formed_front_nonterminators] >>
+  `(LAST bb.bb_instructions).inst_opcode <> PHI` by
+    (strip_tac >> gvs[is_terminator_def]) >>
+  `bb.bb_instructions = FRONT bb.bb_instructions ++ [LAST bb.bb_instructions]` by
+    simp[APPEND_FRONT_LAST] >>
+  simp[fix_phis_in_block_def] >>
+  qpat_x_assum `bb.bb_instructions = _` (fn th => once_rewrite_tac [th]) >>
+  simp[MAP_APPEND, FILTER_APPEND, fix_phi_inst_non_phi] >>
+  irule bb_well_formed_partition >> simp[]
+QED
+
+Theorem fix_phis_in_block_last:
+  bb_well_formed bb ==>
+  LAST (fix_phis_in_block actual_preds bb).bb_instructions = LAST bb.bb_instructions
+Proof
+  strip_tac >>
+  `bb.bb_instructions <> [] /\
+   is_terminator (LAST bb.bb_instructions).inst_opcode` by
+    gvs[bb_well_formed_def] >>
+  `(LAST bb.bb_instructions).inst_opcode <> PHI` by
+    (strip_tac >> gvs[is_terminator_def]) >>
+  `bb.bb_instructions = FRONT bb.bb_instructions ++ [LAST bb.bb_instructions]` by
+    simp[APPEND_FRONT_LAST] >>
+  simp[fix_phis_in_block_def] >>
+  qpat_x_assum `bb.bb_instructions = _` (fn th => once_rewrite_tac [th]) >>
+  simp[MAP_APPEND, FILTER_APPEND, fix_phi_inst_non_phi]
+QED
+
+Theorem fix_phis_in_block_succs:
+  bb_well_formed bb ==>
+  bb_succs (fix_phis_in_block actual_preds bb) = bb_succs bb
+Proof
+  strip_tac >>
+  `bb_well_formed (fix_phis_in_block actual_preds bb)` by
+    simp[fix_phis_in_block_wf] >>
+  `bb.bb_instructions <> [] /\
+   (fix_phis_in_block actual_preds bb).bb_instructions <> []` by
+    gvs[bb_well_formed_def] >>
+  `LAST (fix_phis_in_block actual_preds bb).bb_instructions =
+   LAST bb.bb_instructions` by simp[fix_phis_in_block_last] >>
+  Cases_on `bb.bb_instructions` >>
+  Cases_on `(fix_phis_in_block actual_preds bb).bb_instructions` >>
+  gvs[bb_succs_def]
+QED
+
+Theorem fix_all_phis_entry:
+  fn_entry_label (fix_all_phis func) = fn_entry_label func
+Proof
+  Cases_on `func.fn_blocks` >>
+  simp[fix_all_phis_def, fn_entry_label_def, entry_block_def,
+       bb_label_fix_phis_in_block]
+QED
+
+Theorem fix_all_phis_edge:
+  (!bb. MEM bb func.fn_blocks ==> bb_well_formed bb) ==>
+  (fn_cfg_edge (fix_all_phis func) src dst <=> fn_cfg_edge func src dst)
+Proof
+  strip_tac >>
+  simp[fn_cfg_edge_def, fix_all_phis_def, MEM_MAP, PULL_EXISTS,
+       bb_label_fix_phis_in_block] >>
+  metis_tac[fix_phis_in_block_succs]
+QED
+
+Theorem fix_all_phis_reachable:
+  (!bb. MEM bb func.fn_blocks ==> bb_well_formed bb) ==>
+  (fn_reachable (fix_all_phis func) lbl <=> fn_reachable func lbl)
+Proof
+  strip_tac >>
+  `fn_cfg_edge (fix_all_phis func) = fn_cfg_edge func` by
+    simp[FUN_EQ_THM, fix_all_phis_edge] >>
+  simp[fn_reachable_def, fix_all_phis_entry]
+QED
+
+Theorem fix_all_phis_all_reachable:
+  wf_function func /\ all_reachable func ==> all_reachable (fix_all_phis func)
+Proof
+  strip_tac >>
+  `!lbl. fn_reachable (fix_all_phis func) lbl <=> fn_reachable func lbl` by
+    (gen_tac >> irule fix_all_phis_reachable >> gvs[wf_function_def]) >>
+  simp[all_reachable_def] >>
+  simp[fix_all_phis_def, MEM_MAP, PULL_EXISTS, bb_label_fix_phis_in_block] >>
+  gvs[all_reachable_def]
+QED
+
+Theorem fix_all_phis_closed:
+  wf_function func ==> fn_succs_closed (fix_all_phis func)
+Proof
+  strip_tac >>
+  simp[fn_succs_closed_def, fn_labels_fix_all_phis] >>
+  simp[fix_all_phis_def, MEM_MAP, PULL_EXISTS] >>
+  metis_tac[wf_function_def, fn_succs_closed_def, fix_phis_in_block_succs]
+QED
+
+Theorem fix_all_phis_wf:
+  wf_function func ==> wf_function (fix_all_phis func)
+Proof
+  strip_tac >>
+  `fn_has_entry (fix_all_phis func)` by
+    gvs[wf_function_def, fn_has_entry_def, fix_all_phis_def] >>
+  `fn_inst_ids_distinct (fix_all_phis func)` by
+    metis_tac[fix_all_phis_ids, wf_function_def] >>
+  simp[wf_function_def, fn_labels_fix_all_phis, fix_all_phis_closed] >>
+  conj_tac >- gvs[wf_function_def] >>
+  simp[fix_all_phis_def, MEM_MAP, PULL_EXISTS] >>
+  metis_tac[wf_function_def, fix_phis_in_block_wf]
+QED
+
+Theorem filter_phi_ops_well_formed:
+  !actual_preds ops. phi_well_formed ops ==>
+    phi_well_formed (filter_phi_ops actual_preds ops)
+Proof
+  gen_tac >> recInduct phi_well_formed_ind >>
+  simp[filter_phi_ops_def, phi_well_formed_def] >>
+  rpt strip_tac >> IF_CASES_TAC >> simp[phi_well_formed_def]
+QED
+
+Theorem phi_well_formed_pairs_length:
+  !ops. phi_well_formed ops ==> LENGTH ops = 2 * LENGTH (phi_pairs ops)
+Proof
+  recInduct phi_pairs_ind >> simp[phi_well_formed_def, phi_pairs_def]
+QED
+
+Theorem fix_phi_inst_phi_arity:
+  phi_well_formed inst.inst_operands /\
+  (fix_phi_inst actual_preds inst).inst_opcode = PHI ==>
+  2 <= LENGTH (phi_pairs (fix_phi_inst actual_preds inst).inst_operands)
+Proof
+  strip_tac >>
+  `phi_well_formed (filter_phi_ops actual_preds inst.inst_operands)` by
+    simp[filter_phi_ops_well_formed] >>
+  `LENGTH (filter_phi_ops actual_preds inst.inst_operands) =
+   2 * LENGTH (phi_pairs (filter_phi_ops actual_preds inst.inst_operands))` by
+    simp[phi_well_formed_pairs_length] >>
+  Cases_on `inst.inst_opcode = PHI` >> gvs[fix_phi_inst_def] >>
+  Cases_on `filter_phi_ops actual_preds inst.inst_operands` >> gvs[] >>
+  Cases_on `t` >> gvs[phi_well_formed_def] >>
+  Cases_on `t'` >> gvs[]
+QED
+
+Theorem fix_phis_in_block_mem:
+  MEM inst (fix_phis_in_block actual_preds bb).bb_instructions <=>
+  ?old_inst. MEM old_inst bb.bb_instructions /\
+             inst = fix_phi_inst actual_preds old_inst
+Proof
+  simp[fix_phis_in_block_def, MEM_APPEND, MEM_FILTER, MEM_MAP] >>
+  metis_tac[]
+QED
+
+Theorem fix_all_phis_phi_arity:
+  fn_inst_wf func ==>
+  !inst. MEM inst (fn_insts (fix_all_phis func)) /\ inst.inst_opcode = PHI ==>
+         2 <= LENGTH (phi_pairs inst.inst_operands)
+Proof
+  simp[fn_insts_def, fn_insts_blocks_mem, fix_all_phis_def,
+       MEM_MAP, PULL_EXISTS, fix_phis_in_block_mem] >>
+  rpt strip_tac >> gvs[] >>
+  `old_inst.inst_opcode = PHI` by
+    (Cases_on `old_inst.inst_opcode = PHI` >>
+     gvs[fix_phi_inst_non_phi]) >>
+  `inst_wf old_inst` by metis_tac[fn_inst_wf_def] >>
+  `phi_well_formed old_inst.inst_operands` by gvs[inst_wf_def] >>
+  irule fix_phi_inst_phi_arity >> simp[]
+QED

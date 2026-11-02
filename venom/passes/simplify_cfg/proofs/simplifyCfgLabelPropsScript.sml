@@ -593,14 +593,14 @@ Proof
   >> gvs[]
 QED
 
-Theorem bb_label_fix_phis_in_block[local]:
+Theorem bb_label_fix_phis_in_block:
   (fix_phis_in_block actual_preds bb).bb_label = bb.bb_label
 Proof
   simp[fix_phis_in_block_def] >>
   pairarg_tac >> simp[]
 QED
 
-Theorem fn_labels_fix_all_phis[local]:
+Theorem fn_labels_fix_all_phis:
   fn_labels (fix_all_phis func) = fn_labels func
 Proof
   simp[fix_all_phis_def, venomInstTheory.fn_labels_def,
@@ -1066,7 +1066,7 @@ Proof
   rpt gen_tac >> rpt CASE_TAC >> gvs[]
 QED
 
-Theorem fn_insts_blocks_mem[local]:
+Theorem fn_insts_blocks_mem:
   !blocks inst.
     MEM inst (fn_insts_blocks blocks) <=>
     ?bb. MEM bb blocks /\ MEM inst bb.bb_instructions
