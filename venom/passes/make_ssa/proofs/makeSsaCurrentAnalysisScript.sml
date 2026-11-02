@@ -2,6 +2,7 @@
 Theory makeSsaCurrentAnalysis
 Ancestors
   makeSsaCurrentDefs cfgAnalysisProps cfgHelpers dominatorAnalysisProps
+  dominatorQueryProofs dominatorDefs
   venomWf cfgWf cfgDefs venomInst relation list
 
 Theorem current_cfg_edge_succs:
@@ -69,4 +70,25 @@ Theorem current_all_labels_reachable:
 Proof
   simp[current_cfg_reachable] >>
   rw[all_reachable_def, fn_labels_def, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem current_dom_child_reachable:
+  wf_function fn /\ all_reachable fn /\
+  MEM c (dominated_of (dom_analyze (cfg_analyze fn) fn) n) ==>
+  cfg_reachable_of (cfg_analyze fn) c
+Proof
+  rw[dominated_query_membership] >>
+  irule current_all_labels_reachable >> simp[]
+QED
+
+Theorem current_dom_child_strict:
+  wf_function fn /\ all_reachable fn /\
+  MEM c (dominated_of (dom_analyze (cfg_analyze fn) fn) n) ==>
+  strict_dominates (dom_analyze (cfg_analyze fn) fn) n c
+Proof
+  rpt strip_tac >>
+  `cfg_reachable_of (cfg_analyze fn) c` by
+    (irule current_dom_child_reachable >> metis_tac[]) >>
+  gvs[dominated_query_membership] >>
+  metis_tac[idom_is_immediate]
 QED
