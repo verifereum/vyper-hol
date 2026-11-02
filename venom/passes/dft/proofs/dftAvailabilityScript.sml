@@ -29,3 +29,22 @@ Proof
       simp[EL_MAP]) >>
   fs[strict_dom_vars_defined_def] >> metis_tac[]
 QED
+
+Theorem dft_exec_block_initialized_outputs:
+  exec_block fuel ctx bb s = OK t /\
+  bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions /\
+  (!i v. i < s.vs_inst_idx /\ i < LENGTH bb.bb_instructions /\
+         MEM v (EL i bb.bb_instructions).inst_outputs ==> v IN FDOM s.vs_vars)
+  ==> !i v. i < LENGTH bb.bb_instructions /\
+            ~is_terminator (EL i bb.bb_instructions).inst_opcode /\
+            MEM v (EL i bb.bb_instructions).inst_outputs ==>
+            v IN FDOM t.vs_vars
+Proof
+  rpt strip_tac >> Cases_on `i < s.vs_inst_idx`
+  >- (`v IN FDOM s.vs_vars` by metis_tac[] >>
+      drule_all exec_block_fdom_mono >>
+      simp[pred_setTheory.SUBSET_DEF]) >>
+  irule exec_block_output_in_fdom_aux >>
+  qexistsl_tac [`bb`, `ctx`, `fuel`, `i`,
+    `LENGTH bb.bb_instructions - s.vs_inst_idx`, `s`] >> simp[]
+QED
