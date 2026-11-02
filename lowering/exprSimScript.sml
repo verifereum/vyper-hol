@@ -705,10 +705,7 @@ End
    StackValue, expr_val_at itself, and never a dynamic array; for a pointer
    into memory, the value's bytes inside one of the expression's own
    allocations or a live local's region, word types included, unless it
-   occupies none.  Only a place of a dynamic array local n may sit at n's
-   length word: code run after it may pop n, which changes that word, and
-   then changes the place as well (x[x.pop()]), but would leave a value
-   read earlier as it was. *)
+   occupies none. *)
 Definition vv_at_def:
   (vv_at cenv cx t sa sb es tv (StackValue t' op) s <=>
      ~dynarray_type t /\
@@ -726,9 +723,7 @@ Definition vv_at_def:
                                     b + sz <= lb \/ lb + lsz <= b)) \/
             (?n b sz. local_region cenv es.scopes s n b sz /\
                       b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
-                      (dynarray_local cenv n /\
-                       (~dynarray_type t \/
-                        !path. tv <> PlaceR (MemoryPlace n path)) ==>
+                      (dynarray_local cenv n /\ ~dynarray_type t ==>
                        b + 32 <= w2n w)) \/
             val_footprint tvt v = 0))
 End
