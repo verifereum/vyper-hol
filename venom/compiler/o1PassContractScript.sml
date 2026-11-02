@@ -43,7 +43,7 @@ Ancestors
   unitTransformDefs unitShapeDefs unitMemInv venomPipelineDriver
   venomPassSchedule venomFnScheduleRunner venomPassDispatcher venomWf
   venomExecSemantics venomInst irSupply contextCodegenRel stackPlanGen
-  venomState list
+  venomState lowerDloadDefs list
 
 (* ===== Simulation between two initial states ===== *)
 
@@ -279,10 +279,12 @@ End
 (* The initial state of a stage run: the pipeline's initial state, with
    the dynamic-memory pointer at the run's initial free-memory pointer,
    as the entry state has it (FmpLowering seeds its pointer variable from
-   vs_initial_fmp). *)
+   vs_initial_fmp), and "code_end" bound to the code/data boundary
+   (code_layout_valid), which LowerDload's ADD [_; Label "code_end"] reads. *)
 Definition o1_run_state_ok_def:
   o1_run_state_ok vs <=>
-    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp
+    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs
 End
 
 (* The memory facts of unitMemInv depend on a state only through the
