@@ -129,3 +129,9 @@ Proof
   simp[dft_flip_fn_def] >>
   drule_all dft_swap_RTC_invariant >> simp[]
 QED
+
+Theorem ctx_labels_bound_function:
+  ctx_labels_bound C L /\ MEM f C.ctx_functions ==> dft_labels_bound f L
+Proof
+  simp[ctx_labels_bound_def, dft_labels_bound_def] >> metis_tac[]
+QED
