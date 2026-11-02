@@ -1615,3 +1615,83 @@ Proof
   >- metis_tac[] >>
   simp[inst_ir_vars_def, venomInstTheory.inst_uses_def] >> metis_tac[]
 QED
+
+Theorem sue_exec_block_supply_sim:
+  !i s t.
+  wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  bb.bb_label = s.vs_current_bb /\ fn_reachable fn s.vs_current_bb /\
+  EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn) /\
+  ir_supply_inst_ok supply /\ set (fn_ir_vars fn) SUBSET set supply.irs_used_vars /\
+  sue_segments_supply (dfg_build_function fn) supply bb.bb_instructions = (segs,supply') /\
+  bb' = bb with bb_instructions := FLAT segs /\
+  phi_prefix_length bb.bb_instructions <= i /\ i <= LENGTH bb.bb_instructions /\
+  s.vs_inst_idx = i /\ t.vs_inst_idx = sue_segment_offset segs i /\
+  sue_boundary_defined fn bb i s /\ sue_state_rel (set (fn_ir_vars fn)) s t ==>
+  sue_result_rel (set (fn_ir_vars fn))
+    (exec_block fuel ctx bb s) (exec_block fuel ctx bb' t)
+Proof
+  measureInduct_on `LENGTH bb.bb_instructions - i` >> rpt gen_tac >> strip_tac >>
+  Cases_on `i = LENGTH bb.bb_instructions`
+  >- (`LENGTH segs = LENGTH bb.bb_instructions` by metis_tac[sue_segments_supply_length] >>
+      `sue_segment_offset segs i = LENGTH (FLAT segs)` by metis_tac[sue_segment_offset_end] >>
+      gvs[] >> simp[Once exec_block_def, get_instruction_def] >>
+      simp[Once exec_block_def, get_instruction_def, sue_result_rel_def, lift_result_def]) >>
+  `i < LENGTH bb.bb_instructions` by decide_tac >>
+  `bb_well_formed bb` by metis_tac[wf_function_def] >>
+  `EVERY inst_wf bb.bb_instructions` by
+    (fs[fn_inst_wf_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `inst_wf (EL i bb.bb_instructions)` by metis_tac[listTheory.EVERY_EL] >>
+  `!v. MEM (Var v) (EL i bb.bb_instructions).inst_operands ==>
+       v IN set (fn_ir_vars fn)` by metis_tac[sue_original_operand_covered, listTheory.MEM_EL] >>
+  `(EL i bb.bb_instructions).inst_opcode <> PHI` by metis_tac[sue_phi_suffix_nonphi] >>
+  `!v. MEM (Var v) (EL i bb.bb_instructions).inst_operands ==> v IN FDOM s.vs_vars` by
+    metis_tac[sue_boundary_operand_defined] >>
+  `MEM (EL i bb.bb_instructions) (fn_insts fn)` by
+    (`!bbs. MEM bb bbs ==> MEM (EL i bb.bb_instructions) (fn_insts_blocks bbs)` by
+       (Induct >> simp[fn_insts_blocks_def] >> metis_tac[listTheory.MEM_EL]) >>
+     simp[fn_insts_def]) >>
+  `(EL i bb.bb_instructions).inst_opcode <> ALLOCA` by
+    (qpat_x_assum `EVERY (\inst. inst.inst_opcode <> ALLOCA) _` mp_tac >>
+     simp[listTheory.EVERY_MEM] >> disch_then drule >> simp[]) >>
+  `~is_alloca_op (EL i bb.bb_instructions).inst_opcode` by
+    (qpat_x_assum `(EL i bb.bb_instructions).inst_opcode <> ALLOCA` mp_tac >>
+     Cases_on `(EL i bb.bb_instructions).inst_opcode` >> simp[is_alloca_op_def]) >>
+  `?k u inst'.
+    exec_block fuel ctx bb' t = exec_block fuel ctx bb' u /\
+    u.vs_inst_idx = k /\ k < LENGTH bb'.bb_instructions /\
+    EL k bb'.bb_instructions = inst' /\
+    inst'.inst_opcode = (EL i bb.bb_instructions).inst_opcode /\
+    SUC k = sue_segment_offset segs (SUC i) /\
+    sue_result_rel (set (fn_ir_vars fn))
+      (step_inst fuel ctx (EL i bb.bb_instructions) s) (step_inst fuel ctx inst' u)` by
+    (irule sue_segment_indexed_step >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `exec_block fuel ctx bb' t = _` SUBST1_TAC >>
+  `get_instruction bb s.vs_inst_idx = SOME (EL i bb.bb_instructions)` by
+    simp[get_instruction_def] >>
+  `get_instruction bb' u.vs_inst_idx = SOME inst'` by
+    gvs[get_instruction_def] >>
+  pure_once_rewrite_tac[exec_block_def] >>
+  qpat_x_assum `get_instruction bb _ = _` (fn th => rewrite_tac[th]) >>
+  qpat_x_assum `get_instruction bb' _ = _` (fn th => rewrite_tac[th]) >>
+  Cases_on `step_inst fuel ctx (EL i bb.bb_instructions) s` >>
+  Cases_on `step_inst fuel ctx inst' u` >>
+  fs[sue_result_rel_def, lift_result_def] >>
+  rename1 `sue_state_rel (set (fn_ir_vars fn)) v v'` >>
+  Cases_on `is_terminator (EL i bb.bb_instructions).inst_opcode`
+  >- (`v.vs_halted = v'.vs_halted` by
+        (fs[sue_state_rel_def] >>
+         qpat_x_assum `execution_frame v = _` mp_tac >>
+         simp[execution_frame_def, venom_state_component_equality]) >>
+      Cases_on `v'.vs_halted` >>
+      fs[lift_result_def, sue_term_rel_def, sue_state_rel_def]) >>
+  simp[] >>
+  `v.vs_current_bb = s.vs_current_bb` by
+    metis_tac[venomInstPropsTheory.step_preserves_control_flow] >>
+  `sue_boundary_defined fn bb (SUC i) (v with vs_inst_idx := SUC i)` by
+    (irule sue_boundary_defined_step >> simp[] >> metis_tac[]) >>
+  first_x_assum (qspec_then `SUC i` mp_tac) >>
+  impl_tac >- decide_tac >>
+  disch_then (qspecl_then [`v with vs_inst_idx := SUC i`,
+    `v' with vs_inst_idx := sue_segment_offset segs (SUC i)`] mp_tac) >>
+  simp[]
+QED
