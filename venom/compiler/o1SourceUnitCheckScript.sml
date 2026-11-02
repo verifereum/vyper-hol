@@ -170,7 +170,11 @@ QED
 Definition fn_shape_check_def:
   fn_shape_check fn <=>
     fn_entry_label fn = SOME fn.fn_name /\ opaque_use_check fn /\
-    retpc_shape_check fn /\ EVERY (\bb. ~reserved_label bb.bb_label) fn.fn_blocks /\
+    retpc_shape_check fn /\
+    EVERY (\bb. EVERY (\i. ~is_pseudo i.inst_opcode)
+             (dropWhile (\i. is_pseudo i.inst_opcode) bb.bb_instructions))
+          fn.fn_blocks /\
+    EVERY (\bb. ~reserved_label bb.bb_label) fn.fn_blocks /\
     EVERY inst_shape_ok (fn_insts fn)
 End
 
@@ -178,7 +182,8 @@ Theorem fn_shape_check_sound:
   fn_shape_check fn ==> fn_shape_ok fn
 Proof
   rw[fn_shape_check_def, fn_shape_ok_def, opaque_use_check_sound,
-     retpc_shape_check_sound]
+     retpc_shape_check_sound, fn_pseudos_prefix_def, pseudos_prefix_dropWhile] >>
+  gvs[EVERY_MEM]
 QED
 
 (* Checking every non-head function is stronger than internal_termination_ok

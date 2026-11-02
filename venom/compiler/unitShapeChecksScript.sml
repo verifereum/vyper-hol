@@ -291,7 +291,7 @@ Theorem complete_unit_shape_checks:
 Proof
   simp[unit_shape_ok_def, o1_source_unit_ok_def, shape_probe_unit_def,
        entry_fn_first_def, fn_shape_ok_def, shape_probe_fn_def,
-       retpc_shape_ok_def,
+       retpc_shape_ok_def, fn_pseudos_prefix_def, pseudos_prefix_dropWhile,
        mk_venom_context_def, mk_raw_function_def, fn_entry_label_def,
        entry_block_def, opaque_use_ok_def, fn_insts_def, fn_insts_blocks_def,
        entry_fn_no_ret_def, get_params_def, inst_shape_ok_def,
@@ -333,6 +333,7 @@ Proof
         qexistsl_tac [`[]`, `"pc"`] >> simp[]) >>
   `fn_shape_ok callee`
     by (simp[fn_shape_ok_def, opaque_use_ok_def, retpc_use_ok_def,
+             fn_pseudos_prefix_def, pseudos_prefix_dropWhile,
              DISJ_IMP_THM, FORALL_AND_THM, inst_shape_ok_def,
              is_read0_opcode_def, label_positions_ok_def, is_label_operand_def,
              mk_inst_def] >>

@@ -22,8 +22,14 @@
  *   compiler_label, jump_label_ok, inst_jump_labels_ok
  *                                — labels a terminator may jump to: compiler
  *                                  labels or "fn_" function entries
- *   lowered_inst_ok              — the per-instruction shape; `internal`
- *                                  selects internal-function or entry code
+ *   code_inst_ok                 — the per-instruction shape of all code;
+ *                                  `internal` selects internal-function or
+ *                                  entry code
+ *   lowered_inst_ok              — code_inst_ok without PARAM/RETPC_PARAM:
+ *                                  everything but an internal function's
+ *                                  parameter prologue
+ *   pseudos_open                 — the open block holds only pseudos, so a
+ *                                  prologue PARAM may follow
  *   shape_state, shape_extends   — the state invariant and the append step
  *   shape_step                   — Hoare-style judgment on compile actions
  *   shape_stable                 — a state predicate kept by every append
@@ -165,8 +171,8 @@ End
 (* Entry code (internal = F) never returns through RET and declares no
    parameters; internal-function code (internal = T) never halts the
    transaction with STOP or RETURN. *)
-Definition lowered_inst_ok_def:
-  lowered_inst_ok internal inst <=>
+Definition code_inst_ok_def:
+  code_inst_ok internal inst <=>
     raw_opcode_ok inst.inst_opcode /\ inst_shape_ok inst /\
     inst_jump_labels_ok inst /\
     (internal ==> ~MEM inst.inst_opcode [STOP; RETURN]) /\
@@ -174,11 +180,31 @@ Definition lowered_inst_ok_def:
                    ~is_param_opcode inst.inst_opcode)
 End
 
+(* What the generators other than the parameter prologue emit: no parameter
+   declarations, so with raw_opcode_ok no pseudo instruction at all. *)
+Definition lowered_inst_ok_def:
+  lowered_inst_ok internal inst <=>
+    raw_opcode_ok inst.inst_opcode /\ inst_shape_ok inst /\
+    inst_jump_labels_ok inst /\ ~is_param_opcode inst.inst_opcode /\
+    (internal ==> ~MEM inst.inst_opcode [STOP; RETURN]) /\
+    (~internal ==> inst.inst_opcode <> RET)
+End
+
+Definition pseudos_open_def:
+  pseudos_open (st : compile_state) <=>
+    EVERY (\i. is_pseudo i.inst_opcode) st.cs_current_insts
+End
+
 (* ===== State invariant and the append step ===== *)
 
+(* Pseudos open every block, and only internal entry blocks declare
+   parameters. *)
 Definition shape_state_def:
   shape_state (st : compile_state) <=>
     opaque_insts_ok (state_insts st) /\ rets_scoped (all_blocks st) /\
+    EVERY pseudos_prefix (all_blocks st) /\
+    EVERY (\bb. internal_label_ok bb.bb_label \/
+               no_param_insts bb.bb_instructions) (all_blocks st) /\
     (!inst x. MEM inst (state_insts st) /\ MEM (Var x) inst.inst_operands ==>
               not_fresh_at st x) /\
     (!inst x. MEM inst (state_insts st) /\
@@ -191,7 +217,7 @@ End
 Definition shape_extends_def:
   shape_extends internal (LP : string -> bool) st st' <=>
     cs_extends st st' /\ st.cs_next_var <= st'.cs_next_var /\
-    EVERY (lowered_inst_ok internal) (added_insts st st') /\
+    EVERY (code_inst_ok internal) (added_insts st st') /\
     EVERY LP (added_labels st st') /\
     EVERY (\l. ~internal_label_ok l) (added_labels st st') /\
     !inst x. MEM inst (added_insts st st') /\
@@ -332,4 +358,18 @@ Proof
   rw[retpc_operand_def, shape_extends_def] >>
   imp_res_tac state_insts_cs_extends >> gvs[] >>
   gvs[opaque_out_def] >> metis_tac[not_fresh_at_mono]
+QED
+
+Theorem is_pseudo_param_iff:
+  !op. is_pseudo op <=> op = PHI \/ is_param_opcode op
+Proof
+  Cases >> simp[is_pseudo_def, is_param_opcode_def]
+QED
+
+Theorem lowered_inst_ok_code:
+  !internal inst. lowered_inst_ok internal inst ==>
+    code_inst_ok internal inst /\ ~is_pseudo inst.inst_opcode
+Proof
+  rw[lowered_inst_ok_def, code_inst_ok_def, is_pseudo_param_iff] >>
+  gvs[raw_opcode_ok_def]
 QED

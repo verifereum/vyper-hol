@@ -155,7 +155,8 @@ End
 Definition fn_shape_ok_def:
   fn_shape_ok fn <=>
     fn_entry_label fn = SOME fn.fn_name /\ opaque_use_ok fn /\
-    retpc_shape_ok fn /\ EVERY (\bb. ~reserved_label bb.bb_label) fn.fn_blocks /\
+    retpc_shape_ok fn /\ fn_pseudos_prefix fn /\
+    EVERY (\bb. ~reserved_label bb.bb_label) fn.fn_blocks /\
     EVERY inst_shape_ok (fn_insts fn)
 End
 
@@ -203,4 +204,23 @@ Theorem entry_fn_first_lookup:
   efn = HD ctx.ctx_functions
 Proof
   rw[entry_fn_first_def] >> gvs[lookup_function_def, FIND_thm]
+QED
+
+(* ===== Pseudo prefix by computation ===== *)
+
+Theorem pseudos_prefix_dropWhile:
+  !bb. pseudos_prefix bb <=>
+       EVERY (\i. ~is_pseudo i.inst_opcode)
+         (dropWhile (\i. is_pseudo i.inst_opcode) bb.bb_instructions)
+Proof
+  simp[pseudos_prefix_def] >> gen_tac >>
+  qspec_tac (`bb.bb_instructions`, `l`) >> Induct >> simp[] >>
+  rw[]
+  >- (eq_tac >> rpt strip_tac
+      >- (first_x_assum irule >> qexists_tac `SUC j` >> simp[])
+      >> Cases_on `i` >> simp[] >>
+      Cases_on `j` >> gvs[] >> first_x_assum irule >> metis_tac[]) >>
+  simp[EVERY_EL] >> eq_tac >> rpt strip_tac
+  >- (first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]) >>
+  Cases_on `j` >> gvs[] >> first_x_assum drule >> simp[]
 QED

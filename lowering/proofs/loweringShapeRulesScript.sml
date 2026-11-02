@@ -129,7 +129,7 @@ Theorem shape_state_same_code:
     shape_state st'
 Proof
   rpt strip_tac >>
-  `state_insts st' = state_insts st`
+  `state_insts st' = state_insts st /\ all_blocks st' = all_blocks st`
     by gs[state_insts_def, all_blocks_def] >>
   gs[shape_state_def] >> metis_tac[not_fresh_at_mono]
 QED
@@ -250,6 +250,14 @@ Proof
   gvs[internal_label_ok_def, IS_PREFIX_APPEND]
 QED
 
+(* An empty block keeps the pseudo-prefix and parameter conjuncts. *)
+Theorem empty_block_pseudo_ok[simp]:
+  !lbl. pseudos_prefix <| bb_label := lbl; bb_instructions := [] |> /\
+        no_param_insts []
+Proof
+  simp[pseudos_prefix_def, no_param_insts_def]
+QED
+
 Theorem shape_step_new_block:
   !internal LP R lbl.
     shape_stable R /\ LP lbl /\ ~internal_label_ok lbl ==>
@@ -343,10 +351,48 @@ Proof
   >> gvs[]
 QED
 
-(* Appending one instruction to the open block. *)
-Theorem shape_append_inst:
+Theorem pseudos_prefix_snoc[local]:
+  !lbl l x.
+    pseudos_prefix <| bb_label := lbl; bb_instructions := l |> /\
+    (is_pseudo x.inst_opcode ==> EVERY (\i. is_pseudo i.inst_opcode) l) ==>
+    pseudos_prefix <| bb_label := lbl; bb_instructions := l ++ [x] |>
+Proof
+  rw[pseudos_prefix_def] >>
+  Cases_on `j < LENGTH l`
+  >- (gvs[EL_APPEND1] >> first_x_assum irule >> qexists_tac `j` >> simp[]) >>
+  `j = LENGTH l` by decide_tac >>
+  gvs[EL_APPEND1, EL_LENGTH_APPEND, EVERY_EL]
+QED
+
+(* Only a pseudo may follow pseudos, and only an internal entry block
+   declares parameters. *)
+Theorem shape_blocks_snoc[local]:
+  !st st' inst.
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    st'.cs_current_insts = st.cs_current_insts ++ [inst] /\
+    EVERY pseudos_prefix (all_blocks st) /\
+    EVERY (\bb. internal_label_ok bb.bb_label \/
+               no_param_insts bb.bb_instructions) (all_blocks st) /\
+    (is_pseudo inst.inst_opcode ==>
+       pseudos_open st /\ internal_label_ok st.cs_current_bb) ==>
+    EVERY pseudos_prefix (all_blocks st') /\
+    EVERY (\bb. internal_label_ok bb.bb_label \/
+               no_param_insts bb.bb_instructions) (all_blocks st')
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[all_blocks_def, EVERY_APPEND, pseudos_open_def] >> conj_tac
+  >- (irule pseudos_prefix_snoc >> simp[]) >>
+  Cases_on `internal_label_ok st.cs_current_bb` >> simp[] >>
+  gvs[no_param_insts_def, is_pseudo_param_iff]
+QED
+
+(* Appending one instruction to the open block: a pseudo only to an internal
+   entry block that holds only pseudos. *)
+Theorem shape_append_code:
   !internal LP st st' inst.
-    shape_state st /\ lowered_inst_ok internal inst /\
+    shape_state st /\ code_inst_ok internal inst /\
+    (is_pseudo inst.inst_opcode ==>
+       pseudos_open st /\ internal_label_ok st.cs_current_bb) /\
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
     st'.cs_current_insts = st.cs_current_insts ++ [inst] /\
     st.cs_next_var <= st'.cs_next_var /\
@@ -381,15 +427,49 @@ Proof
       qpat_assum `added_insts _ _ = _` (fn th => simp[th]) >>
       qpat_assum `added_labels _ _ = _` (fn th => simp[th]) >>
       rpt strip_tac >> gs[]) >>
+  `EVERY pseudos_prefix (all_blocks st') /\
+   EVERY (\bb. internal_label_ok bb.bb_label \/
+              no_param_insts bb.bb_instructions) (all_blocks st')`
+    by (match_mp_tac (Q.SPECL [`st`, `st'`, `inst`] shape_blocks_snoc) >>
+        gs[]) >>
   REWRITE_TAC [shape_state_def] >>
   qpat_assum `state_insts st' = _` (fn th => REWRITE_TAC [th]) >>
   rpt conj_tac
+  >~ [`EVERY pseudos_prefix _`] >- first_assum ACCEPT_TAC
+  >~ [`EVERY (\bb. internal_label_ok _ \/ _) _`] >- first_assum ACCEPT_TAC
   >- (match_mp_tac (Q.SPECL [`st`, `st'`] opaque_insts_ok_snoc) >>
       rpt conj_tac >> first_assum ACCEPT_TAC)
   >- (match_mp_tac (Q.SPECL [`st`, `st'`] operands_not_fresh_snoc) >>
       rpt conj_tac >> first_assum ACCEPT_TAC)
   >> match_mp_tac (Q.SPECL [`st`, `st'`] opaque_outputs_not_fresh_snoc) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+(* Appending a non-pseudo. *)
+Theorem shape_append_inst:
+  !internal LP st st' inst.
+    shape_state st /\ lowered_inst_ok internal inst /\
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    st'.cs_current_insts = st.cs_current_insts ++ [inst] /\
+    st.cs_next_var <= st'.cs_next_var /\
+    (!x. MEM (Var x) inst.inst_operands ==> not_fresh_at st x) /\
+    (MEM inst.inst_opcode [GAS; RETPC_PARAM] ==>
+       !x. MEM x inst.inst_outputs ==> ~not_fresh_at st x /\ not_fresh_at st' x) /\
+    (!x. MEM (Var x) inst.inst_operands ==>
+       (opaque_out GAS (state_insts st ++ [inst]) x ==>
+          (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
+          ?rest. inst.inst_operands = Var x :: rest /\ ~MEM (Var x) rest) /\
+       (opaque_out RETPC_PARAM (state_insts st ++ [inst]) x ==>
+          inst.inst_opcode = RET /\
+          ?front. inst.inst_operands = front ++ [Var x] /\
+                  ~MEM (Var x) front)) /\
+    (inst.inst_opcode = RET ==>
+       ?front x. inst.inst_operands = front ++ [Var x] /\
+                 opaque_out RETPC_PARAM (cur_fn_insts st) x) ==>
+    shape_extends internal LP st st' /\ shape_state st'
+Proof
+  rpt gen_tac >> strip_tac >> drule lowered_inst_ok_code >> strip_tac >>
+  match_mp_tac shape_append_code >> gs[]
 QED
 
 Theorem plain_operand_not_opaque:
@@ -741,7 +821,9 @@ QED
 Theorem shape_step_emit_op_retpc:
   !LP R w.
     shape_stable R ==>
-    shape_step T LP R (emit_op RETPC_PARAM [Lit w])
+    shape_step T LP
+      (\st. R st /\ pseudos_open st /\ internal_label_ok st.cs_current_bb)
+      (emit_op RETPC_PARAM [Lit w])
       (\x st'. R st' /\ retpc_operand st' x)
 Proof
   simp[shape_step_def, PULL_FORALL, AND_IMP_INTRO] >>
@@ -751,13 +833,39 @@ Proof
   `inst.inst_opcode = RETPC_PARAM /\ inst.inst_operands = [Lit w] /\
    inst.inst_outputs = [out]`
     by simp[Abbr `inst`, mk_inst_def] >>
-  `lowered_inst_ok T inst` by (simp[Abbr `inst`] >> EVAL_TAC) >>
+  `code_inst_ok T inst` by (simp[Abbr `inst`] >> EVAL_TAC) >>
   `shape_extends T LP st st' /\ shape_state st'`
-    by (match_mp_tac (Q.SPECL [`T`, `LP`, `st`, `st'`, `inst`] shape_append_inst) >>
+    by (match_mp_tac (Q.SPECL [`T`, `LP`, `st`, `st'`, `inst`] shape_append_code) >>
         gs[]) >>
   `R st'` by metis_tac[shape_stable_def] >>
   qspecl_then [`st`, `st'`, `inst`, `out`] mp_tac fresh_out_opaque >>
   gs[retpc_operand_def]
+QED
+
+(* A parameter declaration of the internal-entry prologue. *)
+Theorem shape_step_emit_op_param:
+  !LP R w.
+    shape_stable R ==>
+    shape_step T LP
+      (\st. R st /\ pseudos_open st /\ internal_label_ok st.cs_current_bb)
+      (emit_op PARAM [Lit w])
+      (\x st'. R st' /\ pseudos_open st' /\
+               internal_label_ok st'.cs_current_bb /\ plain_operand st' x)
+Proof
+  simp[shape_step_def, PULL_FORALL, AND_IMP_INTRO] >>
+  rpt gen_tac >> strip_tac >>
+  drule emit_op_facts >> strip_tac >>
+  qabbrev_tac `inst = mk_inst st.cs_next_id PARAM [Lit w] [out]` >>
+  `inst.inst_opcode = PARAM /\ inst.inst_operands = [Lit w] /\
+   inst.inst_outputs = [out]`
+    by simp[Abbr `inst`, mk_inst_def] >>
+  `code_inst_ok T inst` by (simp[Abbr `inst`] >> EVAL_TAC) >>
+  `shape_extends T LP st st' /\ shape_state st'`
+    by (match_mp_tac (Q.SPECL [`T`, `LP`, `st`, `st'`, `inst`] shape_append_code) >>
+        gs[]) >>
+  `R st'` by metis_tac[shape_stable_def] >>
+  gs[pseudos_open_def, is_pseudo_def] >>
+  match_mp_tac (Q.SPECL [`st`, `st'`, `inst`] fresh_out_plain) >> gs[]
 QED
 
 Theorem shape_step_emit_inst_ret:
