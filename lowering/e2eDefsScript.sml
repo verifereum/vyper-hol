@@ -128,6 +128,7 @@ Definition call_state_rel_def:
       ctxt.returnData = [] /\ buffer_to_list ctxt.memory = [] /\
       value_transfer_ok tx am.accounts /\
       es.rollback.accounts = accounts_after_transfer tx am.accounts /\
+      es.rollback.toDelete = am.pending_deletions /\
       es.rollback.tStorage = am.tStorage /\ am.logs = [] /\
       am.pending_deletions = [] /\
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
@@ -392,7 +393,8 @@ Definition call_result_rel_def:
         ?out lgs.
           frame_outcome es r es' NONE out lgs /\
           return_bytes tops ret v out /\
-          accounts_agree cx am'.accounts es'.rollback.accounts /\
+          accounts_agree cx am'.accounts
+            (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
           transient_agree cx am'.tStorage es'.rollback.tStorage /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs lgs /\

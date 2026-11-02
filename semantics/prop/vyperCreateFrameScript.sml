@@ -162,7 +162,9 @@ Proof
 QED
 
 (* Reduce only the executed monadic head. In particular, never simplify a
-   continuation or the context containing the guarded operand equations. *)
+   continuation or the context containing the guarded operand equations.
+   Stop at either execution boundary: the EVM tail or create_oracle_result.
+   The oracle boundary lemmas remain in vyperCreate for its direct consumers. *)
 local
   val head_rules = map (REWR_CONV o CONV_RULE (DEPTH_CONV ETA_CONV))
     (List.concat (map (CONJUNCTS o SPEC_ALL)
@@ -215,7 +217,7 @@ local
         else create_guard (rator tm)
       end;
 
-  fun create_paths tail finish (asl,w) =
+  fun create_paths tail oracle finish (asl,w) =
     let
       val cv = create_head_conv (map ASSUME asl);
       val tm = lhs (fst (dest_imp w));
@@ -225,11 +227,12 @@ local
     in
       (reduce >>
        (case total create_guard next of
-          SOME guard => ASM_CASES_TAC guard >> create_paths tail finish
+          SOME guard => ASM_CASES_TAC guard >> create_paths tail oracle finish
         | NONE =>
             DISCH_THEN (fn result =>
               if pairSyntax.is_pair next then finish (SOME result)
-              else mp_tac (MATCH_MP tail result) >> finish NONE))) (asl,w)
+              else (FIRST (map (fn lemma => fn g => mp_tac (MATCH_MP lemma result) g)
+                    [tail, oracle]) >> finish NONE)))) (asl,w)
     end;
 
   (* Only substitute the final-state equation in the goal; leave the
@@ -257,18 +260,18 @@ local
          in
            if aconv (concl outcome) F then CONTR_TAC outcome
            else SUBST1_TAC (SYM outcome)
-         end) >> simp_tac error_ss [];
+         end) >> simp_tac error_ss [] >> metis_tac[];
 
 in
-  fun create_result_tac tail finish =
+  fun create_result_tac tail oracle finish =
     qpat_x_assum `eval_create _ _ _ _ _ _ _ _ = _` mp_tac >>
-    create_paths (REWRITE_RULE [GSYM ignore_bind_def] tail) finish;
+    create_paths (REWRITE_RULE [GSYM ignore_bind_def] tail) oracle finish;
   val create_frame_tac =
-    create_result_tac create_tail_preserves_scopes (create_state_finish frame_ss);
+    create_result_tac create_tail_preserves_scopes create_oracle_result_frame (create_state_finish frame_ss);
   val create_logs_tac =
-    create_result_tac create_tail_log_extends (create_state_finish log_ss);
-  fun create_outcome_tac tail = create_result_tac tail create_error_finish;
-  val create_exception_tac = create_outcome_tac create_tail_exception_is_error;
+    create_result_tac create_tail_log_extends create_oracle_result_frame (create_state_finish log_ss);
+  fun create_outcome_tac tail = create_result_tac tail create_oracle_result_no_type_error create_error_finish;
+  val create_exception_tac = create_result_tac create_tail_exception_is_error create_oracle_result_exception create_error_finish;
 end;
 
 (* Constructor events extend, rather than preserve, the log sequence. *)

@@ -225,6 +225,16 @@ Proof
        asm_state_component_equality]
 QED
 
+Theorem asm_invalid_ec_request[local]:
+  s.as_memory = REPLICATE 63 0w ++ [1w] /\ (addr = 6w \/ addr = 7w) ==>
+  take_outcome (asm_call_request s addr 0w 0 64 static) os =
+    (failed_outcome (asm_call_request s addr 0w 0 64 static),os) /\
+  record_request (asm_call_request s addr 0w 0 64 static) rqs = rqs
+Proof
+  strip_tac >> irule take_outcome_invalid_ec >>
+  simp[asm_call_request_def, asm_expand_memory_def, TAKE_LENGTH_TOO_LONG]
+QED
+
 Theorem computed_invalid_ec_dispatch:
   s.as_memory = REPLICATE 63 (0w:byte) ++ [1w] ==>
   asm_step lo otp (AsmOp "CALL")
@@ -295,4 +305,15 @@ Proof
   rewrite_tac[DECIDE ``1 = SUC 0``] >>
   simp[Once asm_steps_def, asm_step_call_staticcall_gas,
        asm_gas_def, asm_push_val_def, asm_next_def] >> simp[asm_steps_def]
+QED
+
+Theorem concrete_result_deletion_delta:
+  es.contexts = [(ctxt,rb)] /\ es.rollback.toDelete = [5w] /\
+  s.as_pending_deletions = [7w] ==>
+  (SND (THE (extract_asm_result s 1w 0 0
+        (SOME (INR NONE,es))))).as_pending_deletions = [5w;7w] /\
+  (SND (THE (extract_asm_result s 1w 0 0
+        (SOME (INR (SOME Reverted),es))))).as_pending_deletions = [7w]
+Proof
+  strip_tac >> simp[extract_asm_result_def]
 QED
