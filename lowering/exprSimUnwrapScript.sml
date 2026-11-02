@@ -39,7 +39,7 @@ Ancestors
   exprSim exprLowering compileEnv immutableEncoding vyperAST vyperInterpreter
   vyperState
   loweringSlice fragExec freshWrites venomInst venomExecSemantics venomState
-  exprSimCopy exprOperandVar
+  exprSimCopy exprOperandVar vyperEvalExprPreservesScopesDom
   valueEncoding valueEncodingProofs vyperTypeValues vyperStorage vyperValue
   vyperLookupStorage
 Libs
@@ -517,7 +517,8 @@ Theorem unwrap_copy_sim:
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
     (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient \/
      p.ptr_location = LocCode) /\ ~is_word_type t /\
-    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+    local_ptrs_reserved cenv sm /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
     (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
@@ -554,7 +555,8 @@ QED
 Theorem unwrap_value_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v vv op R.
     unwrap_value cenv vv sm = (op, sb) /\
-    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+    local_ptrs_reserved cenv sm /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
     (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
@@ -652,7 +654,8 @@ Theorem unwrap_read_result_sim[local]:
   !ctx func cenv cx e es sa sm sb s0 es' raw res vv op.
     read_result cx raw es' = (res, es') /\
     unwrap_value cenv vv sm = (op, sb) /\
-    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+    local_ptrs_reserved cenv sm /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
     (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
@@ -722,6 +725,9 @@ Proof
       simp[] >> conj_tac
       >- (irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
           simp[FUN_EQ_THM]) >>
+      `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
+        (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
+         simp[]) >>
       irule unwrap_read_result_sim >> simp[]) >>
   rename1 `eval_expr cx e es = (INR exc, est)` >>
   strip_tac >> gvs[] >>

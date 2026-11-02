@@ -16,7 +16,8 @@ Theorem unwrap_storage_copy_sim:
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
     (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
     ~is_word_type t /\
-    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+    local_ptrs_reserved cenv sm /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
     (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
@@ -32,7 +33,8 @@ Theorem unwrap_runtime_code_copy_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
     p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ ~is_word_type t /\
-    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+    local_ptrs_reserved cenv sm /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
     (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
@@ -136,6 +138,15 @@ last unproved steps of `unwrap_copy_sim` in `exprSimUnwrapScript.sml`.
   (its evidence, `unwrapCopyProbeTheory`, is on branch
   `bot/opus/seq-479-copy-alan`); callers discharge it with
   `exprOperandVarTheory.compiler_compile_var`.
+- A later run found the storage statement false a second way: `es` (whose
+  locals `expr_post` protects) and `es'` (the state `vv_post` relates)
+  could have different scopes, so the buffer's ALLOCA could land on a local
+  of `es` that nothing reserves. Both statements now require
+  `MAP FDOM es.scopes = MAP FDOM es'.scopes`; callers get it from
+  `eval_expr_preserves_scopes_dom`. The groundwork lemmas that run proved
+  (exprSimAlloc, storageDecodeMemory, exprSimStorageCopy, exprSimCopy) are
+  kept; the probe theories unwrapCopyLocalProbe and
+  unwrapCopyBoundaryProbe are evidence for the old statement only.
 
 - `vv_holds` forces the value_vv's type to be `expr_type e`, so `t =
   expr_type e` under the precondition.
