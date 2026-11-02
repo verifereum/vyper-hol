@@ -328,7 +328,7 @@ Theorem eval_stmts_storage_conjs:
   (!tops bindings cx s env ret_ty env' st res st'.
      supported_program tops /\ get_module_code cx NONE = SOME tops /\
      supported_stmt tops bindings s /\ type_stmt env ret_ty s = SOME env' /\
-     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+     runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
      call_evaluation_safe cx (int_calls_stmt s) /\
      IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
      eval_stmt cx s st = (res, st') ==>
@@ -337,7 +337,7 @@ Theorem eval_stmts_storage_conjs:
   (!tops bindings cx ss env ret_ty env' st res st'.
      supported_program tops /\ get_module_code cx NONE = SOME tops /\
      supported_stmts tops bindings ss /\ type_stmts env ret_ty ss = SOME env' /\
-     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+     runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
      call_evaluation_safe cx (int_calls_stmts ss) /\
      IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
      eval_stmts cx ss st = (res, st') ==>
