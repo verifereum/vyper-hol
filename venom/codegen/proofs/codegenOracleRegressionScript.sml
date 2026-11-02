@@ -6,6 +6,23 @@ Ancestors
   asmCallOracleProps asmCallActivationRegression venomExecSemantics
   stackPlanGen stackPlanTypes extCallOracle finite_map list rich_list
 
+(* The actual GAS steps agree on the value and remaining readings,
+   including the shared zero result after exhaustion. *)
+Theorem gas_steps_read_and_consume_together:
+  inst.inst_opcode = GAS /\ inst.inst_outputs = [out] /\
+  vs.vs_gas_readings = ast.as_gas_readings ==>
+  ?vs' ast'.
+    step_inst_base inst vs = OK vs' /\ asm_gas ast = AsmOK ast' /\
+    vs'.vs_gas_readings = ast'.as_gas_readings /\
+    lookup_var out vs' = SOME (HD (vs.vs_gas_readings ++ [0w])) /\
+    ast'.as_stack = HD (vs.vs_gas_readings ++ [0w]) :: ast.as_stack
+Proof
+  strip_tac >> Cases_on `vs.vs_gas_readings` >>
+  Cases_on `ast.as_gas_readings` >>
+  gvs[step_inst_base_def, exec_gas_def, asm_gas_def, asm_push_val_def,
+      asm_next_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
+QED
+
 (* Closed witness for the obsolete four-field terminal constructor: its
    premises hold, but it cannot establish observable request equality. *)
 Theorem terminal_constructor_missing_requests_counterexample:
