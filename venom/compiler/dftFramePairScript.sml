@@ -2,7 +2,7 @@
 Theory dftFramePair
 Ancestors
   dftFramePrefix dftFrameSwap dftPermSim venomEffects dftDefs
-  unitShapeDefs venomInst pred_set
+  unitShapeDefs venomInst venomExecSemantics venomWf pred_set
 
 Theorem dft_cross_effects:
   dft_cross a b ==> effects_independent a.inst_opcode b.inst_opcode
@@ -60,4 +60,21 @@ Proof
   fs[read_effects_def, write_effects_def, empty_effects_def,
      is_ext_call_op_def] >>
   fs[all_effects_def]
+QED
+
+Theorem dft_step_swap_two_fuels:
+  ext_bi_independent a b /\
+  ~(a.inst_opcode = INVOKE /\ b.inst_opcode = INVOKE) /\
+  inst_wf a /\ inst_wf b /\
+  step_inst fa C a s = OK sa /\ step_inst fb C b sa = OK t ==>
+  ?sb. step_inst fb C b s = OK sb /\ step_inst fa C a sb = OK t
+Proof
+  strip_tac >> Cases_on `a.inst_opcode = INVOKE`
+  >- (`b.inst_opcode <> INVOKE` by metis_tac[] >>
+      `step_inst fa C b sa = OK t` by gvs[step_inst_non_invoke] >>
+      drule_all step_swap_ok_ext >> strip_tac >>
+      qexists_tac `sb` >> gvs[step_inst_non_invoke]) >>
+  `step_inst fb C a s = OK sa` by gvs[step_inst_non_invoke] >>
+  drule_all step_swap_ok_ext >> strip_tac >>
+  qexists_tac `sb` >> gvs[step_inst_non_invoke]
 QED
