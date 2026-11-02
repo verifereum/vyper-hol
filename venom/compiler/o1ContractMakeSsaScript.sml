@@ -41,7 +41,7 @@ Theorem make_ssa_current_fn_frame_sim:
   first_block_no_preds fn /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
   make_ssa_current_fn s fn = (fn',s') ==>
-  frame_sim C C' fn fn'
+  frame_sim L C C' fn fn'
 Proof
   cheat
 QED

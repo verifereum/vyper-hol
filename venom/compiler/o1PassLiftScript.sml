@@ -15,7 +15,7 @@
  *     pair related by fn_bisim gives ctx_bisim C C' (an induction on
  *     fuel through INVOKE), and that gives ctx_sim (ctx_bisim_ctx_sim).
  *
- *   - frame_sim C C' fn fn': every state a frame of fn' reaches in C'
+ *   - frame_sim L C C' fn fn': every state a frame of fn' reaches in C'
  *     corresponds to one a frame of fn reaches in C from the same entry
  *     state, with the same alloca frame and the same memory ranges, or
  *     none (an inserted instruction that touches no memory).  Every
@@ -702,11 +702,14 @@ Definition call_corr_def:
 End
 
 (* Every state a frame of fn' reaches in C' corresponds to one a frame of
-   fn reaches in C from the same entry state. *)
+   fn reaches in C from the same entry state, for entry states whose label
+   table is L.  Every frame of a context run shares the run's label table,
+   so L is the initial state's. *)
 Definition frame_sim_def:
-  frame_sim C C' fn fn' <=>
+  frame_sim L C C' fn fn' <=>
     !s0 inst' s'.
-      fn_entry_state fn s0 /\ frame_reach C' fn' s0 inst' s' ==>
+      fn_entry_state fn s0 /\ s0.vs_labels = L /\
+      frame_reach C' fn' s0 inst' s' ==>
       ?inst s. frame_reach C fn s0 inst s /\
                mem_corr inst s inst' s' /\ call_corr inst s inst' s'
 End
@@ -718,9 +721,20 @@ Definition mem_corr_closed_def:
       M ctx fn inst s /\ mem_corr inst s inst' s' ==> M ctx' fn' inst' s'
 End
 
+Theorem raw_reachable_labels:
+  !vs C fn inst s. raw_reachable vs C fn inst s ==> s.vs_labels = vs.vs_labels
+Proof
+  ho_match_mp_tac raw_reachable_ind >>
+  rw[contextCodegenRelTheory.enters_block_def, setup_callee_def] >>
+  imp_res_tac venomExecPropsTheory.eval_phis_preserves_labels >>
+  imp_res_tac venomExecPropsTheory.step_inst_preserves_labels_always >>
+  gvs[setup_callee_def, AllCaseEqs()]
+QED
+
 Definition frame_origin_def:
   frame_origin vs C C' fn' inst' s' <=>
-    ?fn s0. fn_entry_state fn s0 /\ frame_sim C C' fn fn' /\
+    ?fn s0. fn_entry_state fn s0 /\ s0.vs_labels = vs.vs_labels /\
+      frame_sim vs.vs_labels C C' fn fn' /\
       frame_reach C' fn' s0 inst' s' /\
       (!i t. enters_block fn s0 t /\ active_inst fn i t ==>
              raw_reachable vs C fn i t)
@@ -732,8 +746,9 @@ Theorem frame_origin_correspondence:
               mem_corr inst s inst' s' /\ call_corr inst s inst' s'
 Proof
   rw[frame_origin_def] >>
-  fs[frame_sim_def] >> first_x_assum drule >>
-  disch_then drule >> strip_tac >>
+  fs[frame_sim_def] >>
+  first_x_assum (qspecl_then [`s0`, `inst'`, `s'`] mp_tac) >>
+  simp[] >> strip_tac >>
   metis_tac[frame_reach_raw_reachable, frame_reach_active]
 QED
 
@@ -741,7 +756,7 @@ Theorem frame_sim_raw_origins:
   !vs C' fn' inst' s'. raw_reachable vs C' fn' inst' s' ==>
   !C. LIST_REL (\fn fn'. fn'.fn_name = fn.fn_name /\
                          fn_entry_label fn' = fn_entry_label fn /\
-                         frame_sim C C' fn fn')
+                         frame_sim vs.vs_labels C C' fn fn')
                C.ctx_functions C'.ctx_functions /\
       C'.ctx_entry = C.ctx_entry /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted ==>
       frame_origin vs C C' fn' inst' s'
@@ -776,6 +791,10 @@ Proof
     (irule setup_callee_execution_frame >> asm_rewrite_tac[]) >>
   `setup_callee x args s = SOME cs` by metis_tac[] >>
   gvs[] >>
+  `cs.vs_labels = vs.vs_labels` by
+    (imp_res_tac raw_reachable_labels >>
+     qpat_x_assum `setup_callee x args s = SOME cs` mp_tac >>
+     rw[setup_callee_def] >> simp[]) >>
   rw[frame_origin_def] >> qexistsl_tac [`x`, `cs`] >> simp[] >>
   conj_tac >- metis_tac[setup_callee_fn_entry_state] >>
   conj_tac >- metis_tac[frame_reach_rules] >>
@@ -785,7 +804,7 @@ QED
 Theorem frame_sim_raw_correspondence:
   LIST_REL (\fn fn'. fn'.fn_name = fn.fn_name /\
                      fn_entry_label fn' = fn_entry_label fn /\
-                     frame_sim C C' fn fn')
+                     frame_sim vs.vs_labels C C' fn fn')
            C.ctx_functions C'.ctx_functions /\
   C'.ctx_entry = C.ctx_entry /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
   raw_reachable vs C' fn' inst' s' ==>
@@ -799,7 +818,7 @@ QED
 Theorem frame_sim_mem_inv:
   LIST_REL (\fn fn'. fn'.fn_name = fn.fn_name /\
                      fn_entry_label fn' = fn_entry_label fn /\
-                     frame_sim C C' fn fn')
+                     frame_sim vs.vs_labels C C' fn fn')
            C.ctx_functions C'.ctx_functions /\
   C'.ctx_entry = C.ctx_entry /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
   mem_corr_closed M /\ mem_inv M C vs ==>
