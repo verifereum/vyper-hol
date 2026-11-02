@@ -1281,6 +1281,32 @@ Proof
   gvs[bb_well_formed_def, non_pseudo_defs_before_uses_def]
 QED
 
+Theorem dft_block_rel_step:
+  bb_well_formed bb /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  non_pseudo_defs_before_uses bb.bb_instructions /\
+  ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) ==>
+  dft_block_rel bb (dft_block order bb)
+Proof
+  strip_tac >> simp[dft_block_rel_def] >> conj_tac
+  >- simp[dft_block_def, LET_THM] >>
+  qexists `FILTER (\i. ~is_pseudo i.inst_opcode)
+    (dft_block order bb).bb_instructions` >>
+  simp[GSYM dft_block_suffix_decomposition] >> conj_tac
+  >- metis_tac[dft_block_suffix_structure] >> conj_tac
+  >- metis_tac[dft_block_suffix_structure] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `dft_must_order x y`
+    (strip_assume_tac o REWRITE_RULE [dft_must_order_def])
+  >- metis_tac[dft_block_suffix_data_order]
+  >- (irule dft_block_suffix_effect_order >> simp[] >>
+      simp[effects_independent_def] >> metis_tac[])
+  >- (irule dft_block_suffix_effect_order >> simp[] >>
+      simp[effects_independent_def] >> metis_tac[])
+  >- metis_tac[dft_block_suffix_root_order] >>
+  metis_tac[dft_block_suffix_terminator_order, id_before_distinct_endpoints]
+QED
+
 (* These probes deliberately have indirect conflicts: a cleared reader and
    a superseded writer must still precede the third instruction by transitivity.
    MCOPY also tests the same-effect read/write update. *)
