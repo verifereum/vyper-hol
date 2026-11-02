@@ -318,3 +318,158 @@ Proof
   Cases_on `bb.bb_instructions` >>
   Cases_on `(dft_block order bb).bb_instructions` >> gvs[]
 QED
+
+(* A pure instruction has no incoming effect edges, regardless of cycles
+   in the independent data-dependency graph. *)
+Theorem compute_effect_deps_empty:
+  read_effects inst.inst_opcode = {} /\ write_effects inst.inst_opcode = {} ==>
+  FST (compute_effect_deps et inst) = []
+Proof
+  simp[compute_effect_deps_def, effects_to_list_def, passSharedDefsTheory.nub_first_def]
+QED
+
+Theorem eda_fold_pure_lookup[local]:
+  !xs acc et id.
+  EVERY (\i. i.inst_id = id ==>
+     read_effects i.inst_opcode = {} /\ write_effects i.inst_opcode = {}) xs /\
+  (FLOOKUP acc id = NONE \/ FLOOKUP acc id = SOME []) ==>
+  let result = FST (FOLDL (\(m,e) i.
+    let (deps,e') = compute_effect_deps e i in (m |+ (i.inst_id,deps),e'))
+    (acc,et) xs) in
+  FLOOKUP result id = NONE \/ FLOOKUP result id = SOME []
+Proof
+  Induct >> simp[LET_THM] >> rpt gen_tac >> strip_tac >>
+  pairarg_tac >> gvs[LET_THM] >> first_x_assum irule >> simp[FLOOKUP_UPDATE] >>
+  Cases_on `h.inst_id = id` >> gvs[] >>
+  drule_all compute_effect_deps_empty >>
+  disch_then (qspec_then `et` mp_tac) >> gvs[]
+QED
+
+Theorem build_eda_pure_lookup:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\ MEM inst bi /\
+  read_effects inst.inst_opcode = {} /\ write_effects inst.inst_opcode = {} ==>
+  FLOOKUP (build_eda bi) inst.inst_id = NONE \/
+  FLOOKUP (build_eda bi) inst.inst_id = SOME []
+Proof
+  strip_tac >> simp[build_eda_def] >>
+  irule (SIMP_RULE (srw_ss()) [LET_THM] eda_fold_pure_lookup) >>
+  simp[EVERY_MEM, MEM_FILTER] >> rpt gen_tac >> strip_tac >> strip_tac >>
+  `i = inst` by metis_tac[dftCorrectnessTheory.all_distinct_map_mem_inj] >>
+  gvs[]
+QED
+
+Theorem sort_children_short:
+  LENGTH children <= 1 ==>
+  sort_children bi order eda om inst children = children
+Proof
+  Cases_on `children` >> simp[sort_children_def, sortingTheory.QSORT_DEF,
+    sortingTheory.PARTITION_DEF, sortingTheory.PART_DEF] >>
+  Cases_on `t` >> simp[sort_children_def, sortingTheory.QSORT_DEF,
+    sortingTheory.PARTITION_DEF, sortingTheory.PART_DEF]
+QED
+
+Theorem add_label_data_deps_short:
+  inst.inst_opcode = ADD /\ inst.inst_operands = [op; Label lbl] ==>
+  LENGTH (inst_data_deps bi order inst) <= 1
+Proof
+  strip_tac >>
+  simp[inst_data_deps_def, is_terminator_def,
+       python_stack_operands_def, ir_specific_operand_order_def, operand_producer_def] >>
+  Cases_on `operand_producer bi op` >>
+  simp[passSharedDefsTheory.nub_first_def, nub_def]
+QED
+
+Theorem add_label_children_sorted:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\ MEM inst bi /\
+  inst.inst_opcode = ADD /\ inst.inst_operands = [op; Label lbl] ==>
+  sort_children bi order (build_eda bi) om inst
+    (inst_all_deps bi order (build_eda bi) inst) =
+    inst_all_deps bi order (build_eda bi) inst
+Proof
+  strip_tac >> irule sort_children_short >>
+  `read_effects inst.inst_opcode = {} /\ write_effects inst.inst_opcode = {}` by
+    simp[venomEffectsTheory.read_effects_def, venomEffectsTheory.write_effects_def,
+         venomEffectsTheory.empty_effects_def] >>
+  drule_all build_eda_pure_lookup >> strip_tac >>
+  `LENGTH (inst_data_deps bi order inst) <= 1` by
+    (irule add_label_data_deps_short >> simp[] >> metis_tac[]) >>
+  simp[inst_all_deps_def] >>
+  Cases_on `inst_data_deps bi order inst` >>
+  gvs[passSharedDefsTheory.nub_first_def, nub_def] >>
+  Cases_on `t` >> gvs[nub_def]
+QED
+
+(* The predicate boundary retains original Process items, but permits Emit
+   items to satisfy any property stable under the scheduler's guarded flip. *)
+Definition dfs_pred_state_def:
+  dfs_pred_state P bi st <=>
+    EVERY (\item. case item of DfsProcess i => MEM i bi | DfsEmit i => P i)
+      st.ds_stack /\ EVERY P st.ds_output
+End
+
+Theorem dfs_step_preserves_pred:
+  eda_wf eda bi /\ EVERY P bi /\
+  (!i. MEM i bi /\ ~is_pseudo i.inst_opcode /\ is_flippable i.inst_opcode /\
+       sort_children bi order eda om i (inst_all_deps bi order eda i) <>
+       inst_all_deps bi order eda i ==> P (flip_operands i)) /\
+  dfs_pred_state P bi st ==>
+  dfs_pred_state P bi (dfs_step bi order eda om T st)
+Proof
+  simp[dfs_pred_state_def] >> strip_tac >>
+  Cases_on `st.ds_stack` >- simp[dfs_step_def, dfs_pred_state_def] >>
+  Cases_on `h` >> gvs[dfs_step_def, EVERY_APPEND] >>
+  rename1 `MEM i bi` >>
+  Cases_on `MEM i.inst_id st.ds_visited` >> gvs[] >>
+  Cases_on `is_pseudo i.inst_opcode` >> gvs[] >>
+  simp[EVERY_APPEND, EVERY_MAP, EVERY_MEM] >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[sort_children_mem] >>
+      metis_tac[inst_all_deps_mem]) >>
+  Cases_on `is_flippable i.inst_opcode /\
+    sort_children bi order eda om i (inst_all_deps bi order eda i) <>
+      inst_all_deps bi order eda i` >>
+  gvs[EVERY_MEM]
+QED
+
+Theorem dfs_funpow_preserves_pred:
+  !n st. eda_wf eda bi /\ EVERY P bi /\
+  (!i. MEM i bi /\ ~is_pseudo i.inst_opcode /\ is_flippable i.inst_opcode /\
+       sort_children bi order eda om i (inst_all_deps bi order eda i) <>
+       inst_all_deps bi order eda i ==> P (flip_operands i)) /\
+  dfs_pred_state P bi st ==>
+  dfs_pred_state P bi (FUNPOW (dfs_step bi order eda om T) n st)
+Proof
+  Induct >> simp[FUNPOW_SUC] >> rpt gen_tac >> strip_tac >>
+  irule dfs_step_preserves_pred >> simp[]
+QED
+
+Theorem schedule_output_pred:
+  eda_wf eda bi /\ EVERY P bi /\ EVERY (\i. MEM i bi) entries /\
+  (!i. MEM i bi /\ ~is_pseudo i.inst_opcode /\ is_flippable i.inst_opcode /\
+       sort_children bi order eda om i (inst_all_deps bi order eda i) <>
+       inst_all_deps bi order eda i ==> P (flip_operands i)) ==>
+  EVERY P (schedule_from_entries bi order eda om entries)
+Proof
+  strip_tac >> simp[schedule_from_entries_def] >>
+  qmatch_goalsub_abbrev_tac `FUNPOW dfs fuel initial` >>
+  `dfs_pred_state P bi (FUNPOW dfs fuel initial)` by
+    (simp[Abbr `dfs`] >> irule dfs_funpow_preserves_pred >>
+     simp[Abbr `initial`, dfs_pred_state_def, EVERY_MAP]) >>
+  gvs[dfs_pred_state_def]
+QED
+
+Theorem dft_block_pred:
+  EVERY P bb.bb_instructions /\
+  (!i. MEM i bb.bb_instructions /\ ~is_pseudo i.inst_opcode /\ is_flippable i.inst_opcode /\
+       sort_children bb.bb_instructions order (build_eda bb.bb_instructions)
+         (build_offspring_map bb.bb_instructions order) i
+         (inst_all_deps bb.bb_instructions order (build_eda bb.bb_instructions) i) <>
+       inst_all_deps bb.bb_instructions order (build_eda bb.bb_instructions) i ==>
+       P (flip_operands i)) ==>
+  EVERY P (dft_block order bb).bb_instructions
+Proof
+  strip_tac >> simp[dft_block_def, EVERY_APPEND] >> conj_tac
+  >- (gvs[EVERY_MEM, MEM_FILTER]) >>
+  irule schedule_output_pred >>
+  simp[build_eda_wf, entry_instructions_mem]
+QED
