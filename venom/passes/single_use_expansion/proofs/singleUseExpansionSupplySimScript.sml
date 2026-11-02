@@ -1092,3 +1092,71 @@ Proof
   Cases_on `r` >> Cases_on `r'` >>
   simp[sue_result_rel_def, lift_result_def, exec_result_map_def]
 QED
+
+Theorem sue_setup_callee_idx[local]:
+  setup_callee fn args (s with vs_inst_idx := n) = setup_callee fn args s
+Proof
+  simp[setup_callee_def]
+QED
+
+Theorem sue_fold_updates_idx[local]:
+  !xs s. FOLDL (\st (v,w). update_var v w st)
+    (s with vs_inst_idx := n) xs =
+    (FOLDL (\st (v,w). update_var v w st) s xs) with vs_inst_idx := n
+Proof
+  Induct >> simp[] >> Cases_on `h` >> gen_tac >>
+  `update_var q r (s with vs_inst_idx := n) =
+   (update_var q r s) with vs_inst_idx := n` by simp[update_var_def] >>
+  simp[]
+QED
+
+Theorem sue_bind_outputs_idx[local]:
+  bind_outputs outs vals (s with vs_inst_idx := n) =
+  OPTION_MAP (\st. st with vs_inst_idx := n) (bind_outputs outs vals s)
+Proof
+  Cases_on `LENGTH outs = LENGTH vals` >>
+  simp[bind_outputs_def, sue_fold_updates_idx]
+QED
+
+Theorem sue_merge_callee_idx[local]:
+  merge_callee_state (s with vs_inst_idx := n) t =
+  (merge_callee_state s t) with vs_inst_idx := n
+Proof
+  simp[merge_callee_state_def]
+QED
+
+Theorem sue_adopt_return_idx[local]:
+  adopt_return_fmp ret (s with vs_inst_idx := n) =
+  (adopt_return_fmp ret s) with vs_inst_idx := n
+Proof
+  Cases_on `ret.iret_adopt_fmp` >> simp[adopt_return_fmp_def]
+QED
+
+Theorem sue_step_inst_idx_norm:
+  !fuel ctx inst s n.
+  exec_result_map (\u. u with vs_inst_idx := 0)
+    (step_inst fuel ctx inst (s with vs_inst_idx := n)) =
+  exec_result_map (\u. u with vs_inst_idx := 0)
+    (step_inst fuel ctx inst s)
+Proof
+  rpt gen_tac >> Cases_on `inst.inst_opcode = INVOKE`
+  >- (simp[Once step_inst_def] >>
+      simp[Once step_inst_def, eval_ops_inst_idx, sue_setup_callee_idx,
+           sue_merge_callee_idx, sue_adopt_return_idx, sue_bind_outputs_idx] >>
+      Cases_on `decode_invoke inst` >> simp[] >>
+      rename1 `SOME p` >> PairCases_on `p` >> simp[] >>
+      Cases_on `lookup_function p0 ctx.ctx_functions` >> simp[] >>
+      Cases_on `eval_operands p1 s` >> simp[] >>
+      rename1 `setup_callee fn args s` >>
+      Cases_on `setup_callee fn args s` >> simp[] >>
+      rename1 `run_blocks fuel ctx fn callee` >>
+      Cases_on `run_blocks fuel ctx fn callee` >> simp[exec_result_map_def] >>
+      rename1 `bind_outputs inst.inst_outputs ret.iret_values st` >>
+      Cases_on `bind_outputs inst.inst_outputs ret.iret_values st` >>
+      simp[exec_result_map_def]) >>
+  simp[step_inst_non_invoke] >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- metis_tac[terminator_step_inst_base_idx_norm0] >>
+  simp[step_inst_inst_idx_indep] >>
+  Cases_on `step_inst_base inst s` >> simp[exec_result_map_def]
+QED
