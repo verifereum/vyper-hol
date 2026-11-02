@@ -20,7 +20,7 @@ Theory dftRunRel
 Ancestors
   dftScheduleOrder dftStructural dftPermSim dftDefs passSharedDefs venomExecSemantics venomWf
   venomInst venomState venomEffects venomExecProps list finite_map sorting rich_list dftCorrectness
-  dftAvailability dftSuccessSwap dftWf
+  dftAvailability dftSuccessSwap dftWf dftStoppingSwap dftIndexedExec
 
 Definition dft_res_rel_def:
   dft_res_rel r r' <=>
@@ -49,6 +49,87 @@ Proof
   Cases_on `r` >> Cases_on `r'` >>
   simp[dft_res_rel_def] >> rpt strip_tac >>
   Cases_on `k v` >> simp[dft_res_rel_def]
+QED
+
+Theorem dft_exec_prefix_continue:
+  !pre s.
+  EVERY (\i. ~is_terminator i.inst_opcode) pre ==>
+  FOLDR (dft_exec_cons fuel C) k pre s =
+    case FOLDR (dft_exec_cons fuel C) OK pre s of
+      OK t => k t | other => other
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  simp[dft_exec_cons_def] >>
+  Cases_on `step_inst fuel C h s` >> simp[]
+QED
+
+Theorem dft_exec_prefix_rel:
+  EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+  (!t. FOLDR (dft_exec_cons fuel C) OK pre s = OK t ==>
+       dft_res_rel (k t) (k' t)) ==>
+  dft_res_rel (FOLDR (dft_exec_cons fuel C) k pre s)
+              (FOLDR (dft_exec_cons fuel C) k' pre s)
+Proof
+  strip_tac >> simp[Once dft_exec_prefix_continue] >>
+  Cases_on `FOLDR (dft_exec_cons fuel C) OK pre s` >> gvs[] >>
+  simp[Once dft_exec_prefix_continue] >> simp[dft_res_rel_def]
+QED
+
+Theorem dft_suffix_prefix_rel:
+  EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+  (!t. FOLDR (dft_exec_cons fuel C) OK pre s = OK t ==>
+       dft_res_rel (dft_exec_suffix fuel C xs t)
+                   (dft_exec_suffix fuel C ys t)) ==>
+  dft_res_rel (dft_exec_suffix fuel C (pre ++ xs) s)
+              (dft_exec_suffix fuel C (pre ++ ys) s)
+Proof
+  strip_tac >> rewrite_tac[dft_exec_suffix_append] >>
+  irule dft_exec_prefix_rel >> simp[]
+QED
+
+Theorem dft_suffix_swap_rel:
+  dft_ok_swap_pair x y /\ inst_wf x /\ inst_wf y /\
+  (!v. MEM (Var v) y.inst_operands ==> v IN FDOM s.vs_vars) /\
+  (y.inst_opcode <> INVOKE ==>
+    !l. MEM (Label l) y.inst_operands ==> l IN FDOM s.vs_labels) /\
+  ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
+    write_effects x.inst_opcode = empty_effects) ==>
+  dft_res_rel (dft_exec_suffix fuel C (x::y::tail) s)
+              (dft_exec_suffix fuel C (y::x::tail) s)
+Proof
+  simp[dft_res_rel_def] >> strip_tac >>
+  irule dft_exec_suffix_swap >> simp[]
+QED
+
+Theorem dft_bubble_move_rel:
+  !pre s.
+  EVERY (\x. dft_ok_swap_pair x y /\ inst_wf x /\
+     ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
+       write_effects x.inst_opcode = empty_effects)) pre /\
+  inst_wf y /\
+  (!v. MEM (Var v) y.inst_operands ==> v IN FDOM s.vs_vars) /\
+  (y.inst_opcode <> INVOKE ==>
+    !l. MEM (Label l) y.inst_operands ==> l IN FDOM s.vs_labels) ==>
+  dft_res_rel (dft_exec_suffix fuel C (pre ++ y::post) s)
+              (dft_exec_suffix fuel C (y::(pre ++ post)) s)
+Proof
+  Induct >- (simp[dft_res_rel_def] >> Cases_on `dft_exec_suffix fuel C (y::post) s` >>
+             simp[]) >> rpt strip_tac >> fs[] >>
+  `~is_terminator h.inst_opcode /\ ~is_pseudo h.inst_opcode` by
+    gvs[dft_ok_swap_pair_def] >>
+  irule dft_res_rel_trans >>
+  qexists_tac `dft_exec_suffix fuel C (h::y::(pre ++ post)) s` >>
+  conj_tac
+  >- (`dft_res_rel
+         (dft_exec_suffix fuel C ([h] ++ (pre ++ y::post)) s)
+         (dft_exec_suffix fuel C ([h] ++ (y::(pre ++ post))) s)` suffices_by simp[] >>
+      irule dft_suffix_prefix_rel >> simp[] >> rpt strip_tac >>
+      `EVERY (\i. inst_wf i /\ ~is_pseudo i.inst_opcode /\
+                   ~is_terminator i.inst_opcode) [h]` by simp[] >>
+      `FOLDR (dft_exec_cons fuel C) OK [h] s = OK t` by simp[] >>
+      drule_all dft_prefix_ready_preserved >> strip_tac >>
+      first_x_assum irule >> simp[]) >>
+  irule dft_suffix_swap_rel >> simp[]
 QED
 
 (* Every label an instruction reads as a value is bound in the label map L
