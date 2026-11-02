@@ -1,6 +1,6 @@
 Theory sourceMeaningCall
 Ancestors
-  sourceMeaningCallDefs sourceMeaningProgram sourceMeaningProgramDefs sourceMeaningStmt
+  sourceMeaningCallDefs sourceMeaningProgramDefs sourceMeaningStmt
   sourceMeaningStmtDefs sourceMeaningDefs sourceMeaningValue sourceMeaningRuntime sourceModuleDecl
   sourceModuleDefs sourceTypeDefs sourceSyntax vyperInterpreter vyperState
   vyperContext vyperAST vyperValue finite_map alist list rich_list pair option
@@ -28,17 +28,16 @@ End
 Theorem source_meaning_defaults_transport:
   !ms es. LIST_REL (\m e. eval_expr cx e =
     source_meaning_eval cx (\p. source_meaning_local (LAST p)) m) ms es ==>
-  evaluate_defaults cx am es = source_meaning_defaults cx am ms
+  !gobs. evaluate_defaults cx am gobs es = source_meaning_defaults cx am gobs ms
 Proof
   Induct >> Cases_on `es` >> simp[source_meaning_defaults_def,
-    evaluate_defaults_def] >> rpt strip_tac >> gvs[] >>
-  Cases_on `source_meaning_defaults cx am ms` >> simp[]
+    evaluate_defaults_def] >> rpt strip_tac >> gvs[]
 QED
 
 Theorem source_meaning_defaults_drop:
   LIST_REL (\m e. eval_expr cx e =
     source_meaning_eval cx (\p. source_meaning_local (LAST p)) m) ms es ==>
-  evaluate_defaults cx am (DROP n es) = source_meaning_defaults cx am (DROP n ms)
+  evaluate_defaults cx am gobs (DROP n es) = source_meaning_defaults cx am gobs (DROP n ms)
 Proof
   strip_tac >> irule source_meaning_defaults_transport >>
   irule EVERY2_DROP >> simp[]
@@ -116,11 +115,12 @@ Theorem source_meaning_invoke_transport:
   LIST_REL (\m e. eval_expr cx e =
     source_meaning_eval cx (\p. source_meaning_local (LAST p)) m) dms ds /\
   eval_stmts cx ss = source_meaning_execute cx bms ==>
-  call_external_function orc am cx nr mut ts [(NONE,ts)] args ds vals ss ret =
-    source_meaning_invoke orc am cx meanings nr mut [(NONE,ts)] args dms vals bms ret
+  call_external_function orc gobs am cx nr mut ts [(NONE,ts)] args ds vals ss ret =
+    source_meaning_invoke orc gobs am cx meanings nr mut [(NONE,ts)] args dms vals bms ret
 Proof
   strip_tac >> drule LIST_REL_LENGTH >> strip_tac >>
   drule source_meaning_defaults_drop >> strip_tac >>
   drule source_meaning_install_transport >> strip_tac >>
-  fs[call_external_function_def, source_meaning_invoke_def, source_meaning_result_eta]
+  fs[call_external_function_def, source_meaning_invoke_def, source_meaning_result_eta,
+     lock_if_nr_def, unlock_if_nr_def]
 QED

@@ -4,7 +4,11 @@ Ancestors
 Libs
   sourceOrdinaryProgramTestLib sourceBytecodeFixtureLib
 fun holbuild_extra_deps (_:string list) = ();
+(* The shared fixture helper validates these inventories when it is loaded. *)
 val () = holbuild_extra_deps ["fixtures/check_contract/source_syntax",
+  "../lowering/defs/bytecode/folded-value-sources",
+  "../lowering/defs/bytecode/folded-value-witnesses.txt",
+  "../lowering/defs/bytecode/folded-value-parity-fixtures.txt",
   "../lowering/defs/bytecode/folded-value-oracle"];
 val names = List.filter (fn name => name <> "method_id_var") sourceBytecodeFixtureLib.names;
 val () = if length names = 36 then () else raise Fail "whole program inventory";

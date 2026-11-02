@@ -249,8 +249,8 @@ QED
 (* Environment/initial entry stay independent of Venom's ordinary GAS value,
    arbitrary outcome list and the raw unit's unobserved source fields. *)
 Theorem lowering_initial_gas_oracle_free:
-  initial_venom_state_rel am tx vs ==>
-  initial_venom_state_rel am tx
+  initial_venom_state_rel tops am tx vs ==>
+  initial_venom_state_rel tops am tx
     (vs with <| vs_outcomes := os;
       vs_call_ctx := vs.vs_call_ctx with cc_gas := gas |>)
 Proof
@@ -258,7 +258,7 @@ Proof
 QED
 
 Theorem lowering_initial_requests_empty:
-  initial_venom_state_rel am tx vs ==> vs.vs_requests = []
+  initial_venom_state_rel tops am tx vs ==> vs.vs_requests = []
 Proof
   simp[initial_venom_state_rel_def]
 QED

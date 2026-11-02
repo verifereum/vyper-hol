@@ -135,12 +135,14 @@ Definition source_ordinary_call_def:
              (source_expr_required fuel env.type_defs scopes table constants (BaseT (UintT 256)) len)
              (build (BaseT (UintT 256)) start astart)
        | _ => SC_Invalid SCErr_Arity)
+    (* Match rcf_kws exactly: absent value=/gas= have no operand, and present
+       operands retain source order. Execution supplies absent defaults. *)
     else if is_raw_call_calldata_call func args then
       (case (source_args,args) of
          ([target;data],[atarget;adata]) =>
            source_const_combine (\t ks.
              SC_Value (Call expected (RawCallCalldataTarget (raw_call_flags_of_kwargs ks))
-               [t;kwarg_expr "value" ks (Literal (BaseT (UintT 256)) (IntL 0))] NONE))
+               (t :: MAP SND (ext_call_kwargs ks)) NONE))
              (build (BaseT AddressT) target atarget)
              (source_const_collect (MAP (\(key,(syntax,result)).
                source_const_then result (\e. SC_Value (key,e))) keywords))

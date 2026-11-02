@@ -29,13 +29,13 @@ Theorem source_meaning_compile_program:
       !meanings. source_meaning_module ctx syntax meanings ==>
         LIST_REL (source_meaning_decl_code ctx.sm_env.type_defs) meanings tops /\
         (type_env_all_modules [(NONE,tops)] = ctx.sm_env.type_defs ==>
-          (!orc am tx.
+          (!orc gobs am tx.
             ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
             ALOOKUP am.exports tx.target = NONE ==>
-            call_external orc am tx = source_meaning_call orc am tx meanings) /\
-          (!orc am tx exps.
-            load_contract orc am tx [(NONE,tops)] exps =
-              source_meaning_load orc am tx [(NONE,tops)] exps meanings))
+            call_external orc gobs am tx = source_meaning_call orc gobs am tx meanings) /\
+          (!orc gobs am tx exps.
+            load_contract orc gobs am tx [(NONE,tops)] exps =
+              source_meaning_load orc gobs am tx [(NONE,tops)] exps meanings))
 Proof
   strip_tac >> drule source_module_compile_equations >> strip_tac >> simp[] >>
   drule source_meaning_elaborate_member >> strip_tac >>

@@ -45,7 +45,7 @@ uv tool run --from uv==0.10.11 uv venv --managed-python --python 3.11.11 \
   "$generator/venv"
 UV_CONSTRAINT="$PWD/lowering/defs/bytecode/python-o1-oracle-constraints.txt" \
 UV_BUILD_CONSTRAINT="$PWD/lowering/defs/bytecode/python-o1-oracle-constraints.txt" \
-SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0a4+cd74ce4f \
+SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0a4+9362e36b \
   uv tool run --from uv==0.10.11 uv pip install \
     --python "$generator/venv/bin/python" "$generator/vyper-src"
 env -u PYTHONPATH -u PYTHONHOME -u PYTHONSTARTUP \

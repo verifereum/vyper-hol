@@ -1,7 +1,7 @@
 Theory sourceMeaningModules
 Ancestors
   sourceMeaningDispatch sourceMeaningCall sourceMeaningCallDefs sourceMeaningDecl
-  sourceMeaningPolicy sourceMeaningPolicyDecl sourceMeaningProgramDefs sourceMeaningDefs sourceMeaningRuntime
+  sourceMeaningProgramDefs sourceMeaningDefs sourceMeaningRuntime
   sourceMeaningStmtDefs vyperInterpreter vyperState vyperContext vyperAST
   alist list option pair
 
@@ -37,12 +37,13 @@ Theorem source_meaning_invoke_modules_transport:
   LIST_REL (\m e. eval_expr cx e =
     source_meaning_eval cx (\p. source_meaning_local (LAST p)) m) dms ds /\
   eval_stmts cx ss = source_meaning_execute cx bms ==>
-  call_external_function orc am cx nr mut (ts : toplevel list) modules args ds vals ss ret =
-    source_meaning_invoke orc am cx meanings nr mut modules args dms vals bms ret
+  call_external_function orc gobs am cx nr mut (ts : toplevel list) modules args ds vals ss ret =
+    source_meaning_invoke orc gobs am cx meanings nr mut modules args dms vals bms ret
 Proof
   strip_tac >> drule LIST_REL_LENGTH >> strip_tac >>
   drule source_meaning_defaults_drop >> strip_tac >>
-  fs[call_external_function_def, source_meaning_invoke_def, source_meaning_result_eta]
+  fs[call_external_function_def, source_meaning_invoke_def, source_meaning_result_eta,
+     lock_if_nr_def, unlock_if_nr_def]
 QED
 
 (* A successful source-selected imported external entry has exactly this API
@@ -57,8 +58,8 @@ Theorem source_meaning_exported_call_transport:
   source_meaning_lookup tx.function_name External meanings =
     SOME (mut,nr,args,dms,ret,bms) ==>
   let cx = initial_evaluation_context am.sources am.layouts tx (SOME src) in
-  call_external orc am tx =
-    case source_meaning_invoke orc am cx meanings nr mut modules args dms tx.args bms ret of
+  call_external orc gobs am tx =
+    case source_meaning_invoke orc gobs am cx meanings nr mut modules args dms tx.args bms ret of
       (INL v,am',rqs) => (INL v,finalize_pending_deletions am',rqs)
     | failure => failure
 Proof
@@ -74,9 +75,9 @@ Proof
   rename1 `lookup_function (SOME src) tx.function_name External tops =
     SOME (mut,nr,args,ds,ret,ss)` >>
   first_x_assum drule >> strip_tac >>
-  `call_external_function orc am cx nr mut tops modules args ds
+  `call_external_function orc gobs am cx nr mut tops modules args ds
       tx.args ss ret =
-    source_meaning_invoke orc am cx meanings nr mut modules args dms tx.args bms ret` by
+    source_meaning_invoke orc gobs am cx meanings nr mut modules args dms tx.args bms ret` by
     (irule source_meaning_invoke_modules_transport >> simp[]) >>
   simp[call_external_def, find_function_module_def, lookup_exported_function_def,
     get_module_code_def, initial_evaluation_context_def, Abbr`cx`] >>

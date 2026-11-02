@@ -94,7 +94,8 @@ Definition source_expr_raw_flags_def:
       (source_expr_keyword_bool fuel env.type_defs scopes table constants keywords "revert_on_failure" T) (\revert.
         case out of SCV_Int n => if 0 <= n /\ ~(delegate /\ static) then
           SC_Value <| rcf_max_outsize := Num n; rcf_is_delegate := delegate;
-            rcf_is_static := static; rcf_revert_on_failure := revert |>
+            rcf_is_static := static; rcf_revert_on_failure := revert;
+            rcf_kws := if IS_SOME (ALOOKUP keywords "value") then [EKValue] else [] |>
         else SC_Invalid SCErr_Type | _ => SC_Invalid SCErr_Type))))
 End
 

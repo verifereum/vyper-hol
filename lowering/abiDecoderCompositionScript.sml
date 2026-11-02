@@ -52,13 +52,10 @@ Proof
     simp[abi_decode_copy_bytes_def] >>
   conj_tac
   >- metis_tac[write_memory_mem_bytes_at_same] >>
-  conj_tac
-  >- (simp[abi_decode_frame_def] >> conj_tac
-      >- (rpt strip_tac >> irule write_memory_mem_bytes_at_disjoint >>
-          simp[] >> decide_tac) >>
-      simp[write_memory_with_expansion_def]) >>
-  Cases_on `op` >> simp[eval_operand_def, write_memory_with_expansion_def,
-                            lookup_var_def]
+  simp[abi_decode_frame_def] >> conj_tac
+  >- (rpt strip_tac >> irule write_memory_mem_bytes_at_disjoint >>
+      simp[] >> decide_tac) >>
+  simp[write_memory_with_expansion_def]
 QED
 
 (* Straight-line prefix -> child -> continuation; the middle fragment may

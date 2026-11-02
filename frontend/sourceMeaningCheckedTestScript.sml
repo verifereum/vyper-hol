@@ -36,7 +36,7 @@ Theorem source_meaning_checked_compiler_and_call:
     [(0w:address,([]:storage_layout,[]:storage_layout))] (0w:address) finalizer policy =
       SM_Ok (SourceRetained (SourceProgram source_meaning_call_syntax [])
         [(NONE,source_meaning_call_tops)],art,bytes)) /\
-  FST (call_external NONE source_meaning_call_machine
+  FST (call_external NONE gobs source_meaning_call_machine
     (empty_call_txn with function_name := "f")) = INL (IntV 6)
 Proof
   strip_tac >> simp[source_meaning_call_runtime_return, source_module_compile_def,

@@ -16,11 +16,17 @@
  * variable defined before them, dst among them.
  *
  * TOP-LEVEL:
- *   compile_augassign_attr_local_stmt_frag — x.f op= e, every outcome
+ *   compile_augassign_attr_local_case — x.f op= e, every outcome, e's
+ *                                      simulation a premise
+ *   compile_augassign_attr_local_stmt_frag — the same for an e with no
+ *                                      internal call
+ *   augassign_attr_local_place       — x.f's place, value and type are read
+ *                                      where expr_sim_inv holds
  *
  * Helpers: struct_has_type_field, eval_augassign_attr_local,
  *   augassign_attr_local_code_parts, stmt_state_rel_field_word,
- *   attr_load_frag, augassign_attr_bop_frag, augassign_attr_local_frag
+ *   attr_load_frag, augassign_attr_bop_frag, write_attr_local_typed,
+ *   augassign_attr_local_frag
  *)
 
 Theory stmtSimAugAssignAttr
@@ -155,8 +161,8 @@ QED
 (* A word field of a local struct, at x's pointer plus the field's
    offset: the word the field's value is held in. *)
 Theorem stmt_state_rel_field_word:
-  !func cenv cx es s id p sz w0 entry fs vals flds fld ftv fv fty.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx es s id p sz w0 entry fs vals flds fld ftv fv fty ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w0 /\
     lookup_scopes id es.scopes = SOME entry /\
@@ -169,7 +175,7 @@ Theorem stmt_state_rel_field_word:
       typed_val_to_w256 ftv fv
 Proof
   rpt strip_tac >>
-  `local_ptrs_rel func cenv es.scopes s /\ alloca_room func s` by
+  `local_ptrs_rel func cenv es.scopes s /\ alloca_room ctx func s` by
     fs[stmt_state_rel_def, state_rel_def] >>
   `w2n w0 + sz <= s.vs_alloca_next /\ type_memory_size entry.type <= sz /\
    val_in_memory entry.type entry.value (w2n w0) s.vs_memory` by
@@ -200,8 +206,8 @@ Theorem attr_load_frag:
     emit_op MLOAD [dst] sn = (cur, s1) /\
     local_ptrs_reserved cenv sa /\ not_fresh_at sa p /\
     lookup_var p s0 = SOME w0 ==>
-    frag_exec ctx sa s1 (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
-      (\s. stmt_state_rel func cenv cx es s /\
+    frag_exec ctx sa s1 (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. stmt_state_rel ctx func cenv cx es s /\
            eval_operand dst s = SOME (w0 + n2w off) /\
            eval_operand cur s = SOME (mload (w2n (w0 + n2w off)) s0) /\
            (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
@@ -272,10 +278,10 @@ Theorem augassign_attr_bop_frag:
           expr_res_ok (bop_result cx ty bop [ty; expr_type e] v1 v2 es1) /\
           binop_frag ctx func cenv cx bop ty ty NONE el [ty; expr_type e]
             v1 v2 es1) ==>
-    frag_exec ctx sa s3 (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+    frag_exec ctx sa s3 (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
       (\s. ?v2 v. r1 = INL v2 /\
                   bop_result cx ty bop [ty; expr_type e] v1 v2 es1 = INL v /\
-                  word_value v /\ stmt_state_rel func cenv cx es1 s /\
+                  word_value v /\ stmt_state_rel ctx func cenv cx es1 s /\
                   eval_operand res_op s = SOME (val_to_w256 v) /\
                   eval_operand dst s = SOME (w0 + n2w off) /\
                   (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
@@ -344,8 +350,8 @@ Proof
   impl_tac >- fs[] >>
   disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
   fs[] >> rpt strip_tac >>
-  rename1 `expr_post _ _ _ _ _ _ _ _ _ _ _ u` >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _`
+  rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ u` >>
+  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `?tv2. evaluate_type (get_tenv cx) (expr_type e) = SOME tv2` by
     fs[optionTheory.IS_SOME_EXISTS] >>
@@ -412,6 +418,43 @@ Proof
   drule_all write_place_attr_local >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
+(* x.f for x a local of struct type sid in a state the expression invariant
+   holds of, f one of sid's fields: its place, value and type are read. *)
+Theorem augassign_attr_local_place:
+  !cx cenv env es id fld sid fty fsz.
+    expr_sim_inv cenv cx env es /\
+    FLOOKUP env.var_types id = SOME (StructT sid) /\
+    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+      fld = SOME (fty, fsz) ==>
+    ?cur ptv.
+      eval_target_place cx (AttributeTarget (NameTarget id) fld) es =
+        (INL (MemoryPlace id [AttrSubscript fld]), es) /\
+      read_place cx (MemoryPlace id [AttrSubscript fld]) es = (INL cur, es) /\
+      place_type_value cx (MemoryPlace id [AttrSubscript fld]) es =
+        (INL ptv, es)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all expr_sim_inv_local >> strip_tac >>
+  `evaluate_type (get_tenv cx) (StructT sid) = SOME entry.type` by
+    metis_tac[] >>
+  drule_all struct_fields_layout >> strip_tac >> gvs[] >>
+  drule_all struct_field_type >> strip_tac >>
+  `value_has_type entry.type entry.value` by
+    (fs[expr_sim_inv_def, state_well_typed_def] >>
+     metis_tac[scope_well_typed_lookup_scopes]) >>
+  Cases_on `entry.value` >> gvs[value_has_type_def] >>
+  drule_all struct_has_type_field >> strip_tac >>
+  simp[Once evaluate_def, bind_def] >>
+  simp[Once evaluate_def, bind_def] >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
+       type_check_def, assert_def, return_def, get_place_def] >>
+  simp[extend_place_def, place_type_value_def, read_place_def, bind_def,
+       get_scopes_def, lift_option_type_def, return_def,
+       read_memory_path_def, evaluate_subscripts_def, subscripts_type_def,
+       subscript_type_def, lift_sum_def, extend_memory_place_def,
+       get_place_def, ignore_bind_def]
+QED
+
 (* x.f op= e as one fragment: e's errors and the operator's exit, and on
    a value of the operator the MSTORE writes it at x.f, related at the
    scopes write_place leaves. *)
@@ -429,7 +472,7 @@ Theorem augassign_attr_local_frag:
     fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    (!s. stmt_state_rel func cenv cx es s ==>
+    (!s. stmt_state_rel ctx func cenv cx es s ==>
          ?w0. lookup_var p s = SOME w0 /\
               mload (w2n (w0 + n2w (struct_field_offset flds fld))) s =
                 val_to_w256 v1) /\
@@ -457,8 +500,8 @@ Theorem augassign_attr_local_frag:
                 pre ++ (env1 |+ (id, entry with
                           <|value := StructV (AFUPDKEY fld (K v) vals);
                             popped := []|>)) :: rest; abi_memory := abi|>) ==>
-    frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
-      (\t. res = INL () /\ stmt_state_rel func cenv cx es' t /\
+    frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\t. res = INL () /\ stmt_state_rel ctx func cenv cx es' t /\
            (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
                   lookup_var x t = SOME u) /\
            (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -468,9 +511,9 @@ Theorem augassign_attr_local_frag:
                   | INR ex => INR ex))
 Proof
   rpt gen_tac >> strip_tac >>
-  reverse (Cases_on `stmt_state_rel func cenv cx es s0`)
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
   >- simp[frag_exec_def] >>
-  qpat_x_assum `!s. stmt_state_rel _ _ _ _ s ==> _` drule >> strip_tac >>
+  qpat_x_assum `!s. stmt_state_rel ctx _ _ _ _ s ==> _` drule >> strip_tac >>
   `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
   `ci_mono s3 sf` by metis_tac[ci_mono_emit_void, pairTheory.SND] >>
   `ci_mono sa sn /\ ci_mono sn s1` by
@@ -513,12 +556,13 @@ QED
 (* x.f op= e for a local x of struct type sid and f a field of sid of type
    ty, ty a word_value_type, for every outcome: e's errors and the
    operator's (overflow, division by zero) exit, and on a value the MSTORE
-   writes it at f's offset in x's region. *)
-Theorem compile_augassign_attr_local_stmt_frag:
+   writes it at f's offset in x's region.  e may call internal functions:
+   its simulation at f's type is a premise. *)
+Theorem compile_augassign_attr_local_case:
   !ctx func cx lctx RetQ cenv ty0 env ty id fld sid fsz bop e es res es'.
     eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)
       es = (res, es') /\
-    expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
+    expr_sim ctx func cenv cx ty e es /\ expr_body_pre cenv cx env e es /\
     FLOOKUP env.var_types id = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (ty, fsz) /\
@@ -533,7 +577,7 @@ Proof
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
   `!m. res <> INR (Error (TypeError m))` by
     (rpt strip_tac >> gvs[stmt_res_ok_def]) >>
-  `expr_sim_inv cenv cx env es` by fs[expr_sim_pre_def] >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   drule_all expr_sim_inv_local >> strip_tac >>
   `cenv.ce_var_type id = SOME (StructT sid)` by fs[expr_sim_inv_def] >>
   drule_all augassign_attr_local_code_parts >> strip_tac >>
@@ -560,9 +604,8 @@ Proof
   `type_memory_size ftv = 32` by metis_tac[word_value_type_memory_size] >>
   (* the source *)
   drule_all eval_augassign_attr_local >> strip_tac >>
-  `expr_sim ctx func cenv cx ty e es` by metis_tac[expr_sim_ok_apply] >>
   qspecl_then [`cenv`, `cx`, `env`, `e`, `es`, `r1`, `es1`] mp_tac
-    expr_sim_pre_word_result >>
+    expr_body_pre_word_result >>
   impl_tac >- fs[] >> strip_tac >>
   `!v2. bop_result cx ty bop [ty; expr_type e] fv v2 es1 =
         case evaluate_binop
@@ -574,7 +617,7 @@ Proof
   (* the code *)
   `cs_extends s1 s2 /\ s1.cs_next_var <= s2.cs_next_var /\
    (!z. rhs = Var z ==> not_fresh_at s2 z) /\ (!l. rhs <> Label l)` by
-    (drule_all expr_sim_pre_lower_value_word_shape >> simp[]) >>
+    (drule_all expr_body_pre_lower_value_word_shape >> simp[]) >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `ty`, `bop`, `e`,
                `if bop = Exp then expr_int_literal e else NONE`, `id`, `fld`,
                `p`, `sz`,
@@ -597,7 +640,7 @@ Proof
   metis_tac[expr_exit_INR_type]
 QED
 
-Resume compile_augassign_attr_local_stmt_frag[frag_pre]:
+Resume compile_augassign_attr_local_case[frag_pre]:
   fs[] >> rpt conj_tac
   >~ [`mload`]
   >- (rpt strip_tac >>
@@ -609,7 +652,7 @@ Resume compile_augassign_attr_local_stmt_frag[frag_pre]:
                    `entry`, `fs`, `vals`,
                    `get_struct_fields cenv.ce_struct_fields
                       (nsid_to_string sid)`,
-                   `fld`, `ftv`, `fv`, `ty`]
+                   `fld`, `ftv`, `fv`, `ty`, `ctx`]
         mp_tac stmt_state_rel_field_word >>
       impl_tac >- fs[] >>
       simp[typed_val_to_w256_word_value])
@@ -631,4 +674,26 @@ Resume compile_augassign_attr_local_stmt_frag[frag_pre]:
   disch_then drule_all >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Finalise compile_augassign_attr_local_stmt_frag
+Finalise compile_augassign_attr_local_case
+
+(* compile_augassign_attr_local_case for an e with no internal call. *)
+Theorem compile_augassign_attr_local_stmt_frag:
+  !ctx func cx lctx RetQ cenv ty0 env ty id fld sid fsz bop e es res es'.
+    eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)
+      es = (res, es') /\
+    expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
+    augassign_operand_ok ty bop e /\
+    FLOOKUP env.var_types id = SOME (StructT sid) /\
+    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+      fld = SOME (ty, fsz) /\
+    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty0
+         (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+      es res es'
+Proof
+  rpt strip_tac >> irule compile_augassign_attr_local_case >>
+  `expr_body_pre cenv cx env e es` by fs[expr_sim_pre_body] >>
+  `expr_sim ctx func cenv cx ty e es` by metis_tac[expr_sim_ok_apply] >>
+  simp[] >> metis_tac[]
+QED

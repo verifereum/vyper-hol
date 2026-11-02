@@ -3,7 +3,7 @@
 Theory sourceMeaningLocationDefs
 Ancestors
   sourceMeaningRuntime sourceMeaningDefs sourceMeaningValue sourceExprDefs
-  vyperInterpreter vyperAbiOperand vyperState vyperAST vyperValue
+  vyperInterpreter vyperAbiOperand vyperEvmBoundary vyperState vyperAST vyperValue
   vyperValueOperation vyperContext list
 
 Datatype:
@@ -64,7 +64,7 @@ Definition source_location_eval_def:
   source_location_eval cx (SML_Reference ty r) = source_reference_read cx r /\
   source_location_eval cx (SML_Apply ty b ms) = do
     type_check (builtin_args_length_ok b (LENGTH ms)) "Builtin args";
-    v <- (do
+    v <- (if b = Env MsgGas then next_gas_reading else do
       vs <- source_location_evals cx ms;
       acc <- get_accounts;
       lift_sum (evaluate_builtin cx acc ty b (MAP source_location_type ms) vs)
@@ -107,13 +107,14 @@ Definition source_location_eval_def:
     raise (Error (RuntimeError "raw_revert"))
   od /\
   source_location_eval cx (SML_RawCall ty flags t d v) = do
-    vs <- source_meaning_args cx [source_location_eval cx t;source_location_eval cx d;
-      source_location_eval cx v];
-    type_check (LENGTH vs = 3) "raw_call args";
+    vs <- source_meaning_args cx ([source_location_eval cx t;source_location_eval cx d] ++
+      if flags.rcf_kws = [] then [] else [source_location_eval cx v]);
+    type_check (LENGTH vs = (if flags.rcf_kws = [] then 2 else 3)) "raw_call args";
     target <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
     data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_call data";
-    amount <- lift_option_type (dest_NumV (EL 2 vs)) "raw_call value";
-    eval_raw_call cx flags target data amount
+    amount <- (if flags.rcf_kws = [] then return 0 else
+      lift_option_type (dest_NumV (EL 2 vs)) "raw_call value");
+    eval_raw_call cx flags target data amount default_evm_gas_limit
   od /\
   source_location_evals cx [] = return [] /\
   source_location_evals cx (m::ms) = do

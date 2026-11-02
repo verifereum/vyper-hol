@@ -27,7 +27,7 @@ val () = cv_auto_trans decimal_frontend_machine_def;
 
 Definition decimal_frontend_call_def:
   decimal_frontend_call name =
-    FST (call_external NONE decimal_frontend_machine
+    FST (call_external NONE [] decimal_frontend_machine
       (empty_call_txn with <| function_name := name; target := 0w |>))
 End
 val () = cv_auto_trans decimal_frontend_call_def;

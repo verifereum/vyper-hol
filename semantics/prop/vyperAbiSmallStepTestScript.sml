@@ -208,6 +208,48 @@ Proof
   CONV_TAC cv_eval
 QED
 
+(* Gas observations are effects, including inside ABI operand evaluation.
+   Staging must not replay reads, and arena cleanup must not restore gas_obs. *)
+Definition abi_gas_expr_def:
+  abi_gas_expr = TypeBuiltin (BaseT (BytesT (Dynamic 224))) (AbiEncode F NONE)
+    (TupleT [alias_array_type; BaseT (UintT 256); BaseT BoolT;
+             BaseT (UintT 256)])
+    [Name alias_array_type "a";
+     Builtin (BaseT (UintT 256)) (Env MsgGas) [];
+     Pop (BaseT BoolT) (NameTarget "a");
+     Builtin (BaseT (UintT 256)) (Env MsgGas) []]
+End
+val () = cv_auto_trans abi_gas_expr_def;
+
+Theorem smallstep_abi_gas_reads_once_without_snapshotting_memory:
+  let run = abi_cps_run abi_gas_expr
+      (alias_state with gas_obs := [7w; 11w; 13w]) in
+    FST run = INL (Value (BytesV
+      (REPLICATE 31 0w ++ [128w] ++ REPLICATE 31 0w ++ [7w] ++
+       REPLICATE 32 0w ++ REPLICATE 31 0w ++ [11w] ++
+       REPLICATE 31 0w ++ [1w] ++ REPLICATE 31 0w ++ [1w]))) /\
+    (SND run).gas_obs = [13w] /\
+    (SND run).abi_memory = [] /\
+    (SND run).abi_immutables = [] /\
+    lookup_scopes_val "a" (SND run).scopes =
+      SOME (ArrayV (DynArrayV [BoolV T]))
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem smallstep_abi_gas_exhaustion_keeps_effects_and_releases_captures:
+  let run = abi_cps_run abi_gas_expr
+      (alias_state with gas_obs := [7w]) in
+    FST run = INR (Error (RuntimeError "msg.gas: no gas reading")) /\
+    (SND run).gas_obs = [] /\
+    (SND run).abi_memory = [] /\
+    (SND run).abi_immutables = [] /\
+    lookup_scopes_val "a" (SND run).scopes =
+      SOME (ArrayV (DynArrayV [BoolV T]))
+Proof
+  CONV_TAC cv_eval
+QED
+
 (* Verify the connection/translation exports and every regression are closed.
    DISK_THM is the standard saved-theorem tag, not an admission oracle. *)
 fun check_abi_closed (thy,n) = let

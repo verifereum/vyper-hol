@@ -443,13 +443,23 @@ val (RaiseCustomError_tm, mk_RaiseCustomError_tm,
      dest_RaiseCustomError_tm, is_RaiseCustomError) =
   syntax_fns1 "vyperAST" "RaiseCustomError"
 
-fun mk_raw_call_flags {max_outsize, is_delegate, is_static, revert_on_failure} =
+fun mk_raw_call_flags
+      {max_outsize, is_delegate, is_static, revert_on_failure, kws} =
   TypeBase.mk_record
     (raw_call_flags_ty,
      [("rcf_max_outsize", max_outsize),
       ("rcf_is_delegate", is_delegate),
       ("rcf_is_static", is_static),
-      ("rcf_revert_on_failure", revert_on_failure)])
+      ("rcf_revert_on_failure", revert_on_failure),
+      ("rcf_kws", kws)])
+
+(* Former operand convention: an explicit value operand, with implicit gas. *)
+fun mk_raw_call_flags_simple
+      {max_outsize, is_delegate, is_static, revert_on_failure} =
+  mk_raw_call_flags
+    {max_outsize = max_outsize, is_delegate = is_delegate,
+     is_static = is_static, revert_on_failure = revert_on_failure,
+     kws = mk_term_list ext_call_kw_ty [EKValue_tm]}
 
 fun dest_raw_call_flags tm =
   let
@@ -463,7 +473,8 @@ fun dest_raw_call_flags tm =
       {max_outsize = field "rcf_max_outsize",
        is_delegate = field "rcf_is_delegate",
        is_static = field "rcf_is_static",
-       revert_on_failure = field "rcf_revert_on_failure"}
+       revert_on_failure = field "rcf_revert_on_failure",
+       kws = field "rcf_kws"}
     else raise ERR "dest_raw_call_flags" "wrong record type"
   end
 

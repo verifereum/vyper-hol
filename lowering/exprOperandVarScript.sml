@@ -82,18 +82,22 @@ QED
 
 Theorem compiler_counter_ptr_load:
   s.cs_next_var <=
-    (SND (compile_ptr_load ctor loc ptr_op s)).cs_next_var
+    (SND (compile_ptr_load ctor imm loc ptr_op s)).cs_next_var
 Proof
-  Cases_on `ctor` >> Cases_on `loc` >>
-  simp[contextTheory.compile_ptr_load_def, compiler_counter_emit]
+  Cases_on `ctor` >> Cases_on `loc` >> Cases_on `imm` >>
+  simp[contextTheory.compile_ptr_load_def, contextTheory.compile_imm_load_word_def,
+       compiler_counter_emit] >>
+  irule compiler_counter_bind >> simp[compiler_counter_emit]
 QED
 
 Theorem compiler_counter_ptr_store:
   s.cs_next_var <=
-    (SND (compile_ptr_store ctor loc ptr_op v s)).cs_next_var
+    (SND (compile_ptr_store ctor imm loc ptr_op v s)).cs_next_var
 Proof
-  Cases_on `ctor` >> Cases_on `loc` >>
-  simp[contextTheory.compile_ptr_store_def, compiler_counter_emit]
+  Cases_on `ctor` >> Cases_on `loc` >> Cases_on `imm` >>
+  simp[contextTheory.compile_ptr_store_def, contextTheory.compile_imm_store_word_def,
+       compiler_counter_emit] >>
+  irule compiler_counter_bind >> simp[compiler_counter_emit]
 QED
 
 Theorem compiler_counter_word_copy:
@@ -125,6 +129,39 @@ Proof
   rpt gen_tac >> IF_CASES_TAC >>
   simp[compiler_counter_word_copy, compiler_counter_return,
        compiler_counter_bind, compiler_counter_ignore_bind]
+QED
+
+Theorem compiler_counter_lit_byte_offset[local]:
+  !op off s. s.cs_next_var <=
+    (SND (compile_lit_byte_offset op off s)).cs_next_var
+Proof
+  rpt gen_tac >> Cases_on `off = 0`
+  >- simp[contextTheory.compile_lit_byte_offset_def, compiler_counter_return] >>
+  Cases_on `op` >>
+  simp[contextTheory.compile_lit_byte_offset_def, compiler_counter_return,
+       compiler_counter_emit]
+QED
+
+Theorem compiler_counter_imm_load_word[local]:
+  !ctor imm op s. s.cs_next_var <=
+    (SND (compile_imm_load_word ctor imm op s)).cs_next_var
+Proof
+  rpt gen_tac >> Cases_on `ctor` >> Cases_on `imm` >>
+  simp[contextTheory.compile_imm_load_word_def, compiler_counter_emit] >>
+  irule compiler_counter_bind >> simp[compiler_counter_emit]
+QED
+
+Theorem compiler_counter_imm_copy_to_memory[local]:
+  !n ctor imm src dst off s. s.cs_next_var <=
+    (SND (compile_imm_copy_to_memory ctor imm src dst n off s)).cs_next_var
+Proof
+  Induct >> simp[Once contextTheory.compile_imm_copy_to_memory_def,
+                 compiler_counter_return] >>
+  rpt gen_tac >>
+  simp[Once contextTheory.compile_imm_copy_to_memory_def, comp_ignore_bind_def] >>
+  rpt (irule compiler_counter_bind >> conj_tac >> rpt gen_tac >> BETA_TAC) >>
+  simp[compiler_counter_lit_byte_offset, compiler_counter_imm_load_word,
+       compiler_counter_emit]
 QED
 
 Theorem compiler_alloc_buffer_var:
@@ -166,7 +203,7 @@ val allocated_memory_var_tac =
   metis_tac[pairTheory.SND];
 
 Theorem compiler_ensure_memory_var:
-  compile_ensure_in_memory p loc bytes wc ctor sa = (op,sb) /\
+  compile_ensure_in_memory p loc bytes wc ctor imm sa = (op,sb) /\
   (!x. p = Var x ==> not_fresh_at sa x) ==>
   !x. op = Var x ==> not_fresh_at sb x
 Proof
@@ -174,7 +211,14 @@ Proof
   >- (simp[comp_return_def] >> metis_tac[])
   >- allocated_memory_var_tac
   >- allocated_memory_var_tac
-  >- allocated_memory_var_tac >>
+  >- (Cases_on `compile_alloc_buffer bytes sa` >>
+      rename1 `compile_alloc_buffer bytes sa = (buf,sm)` >>
+      simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+      pairarg_tac >> gvs[] >> rpt strip_tac >> gvs[] >>
+      drule compiler_alloc_buffer_var >> disch_then (qspec_then `x` mp_tac) >>
+      simp[] >> strip_tac >>
+      irule freshWritesTheory.not_fresh_at_mono >> qexists `sm` >>
+      metis_tac[compiler_counter_imm_copy_to_memory, pairTheory.SND]) >>
   Cases_on `emit_op CALLDATALOAD [p] sa` >>
   rename1 `emit_op CALLDATALOAD [p] sa = (len,sl)` >>
   Cases_on `compile_alloc_buffer (bytes + 32) sl` >>
@@ -685,13 +729,9 @@ Proof
 QED
 
 Resume compiler_call_var[rawcalldata]:
-  namedCases_on `args` ["", "addr_e rest"] >-
+  namedCases_on `args` ["", "addr_e kw_es"] >-
     (simp[compile_call_def] >> pairarg_tac >> rpt strip_tac >>
      gvs[contextTheory.vv_operand_def]) >>
-  namedCases_on `rest` ["", "value_e remaining"] >-
-    (simp[compile_call_def] >> pairarg_tac >> rpt strip_tac >>
-     gvs[contextTheory.vv_operand_def]) >>
-  Cases_on `remaining` >>
   simp[compile_call_def, LET_THM, contextTheory.vv_operand_def] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   gvs[contextTheory.vv_operand_def] >>
@@ -1056,8 +1096,9 @@ Resume compiler_builtin_var[calldata]:
 QED
 Resume compiler_builtin_var[len]:
   builtin_stack_var_tac >>
-  metis_tac[exprSafeOperandBuiltinsTheory.compile_builtin_len_safe_operand,
-            exprSafeOperandTheory.safe_operand_def]
+  qpat_x_assum `_ = compile_builtin_len _ _ _ _ _` (assume_tac o SYM) >>
+  drule exprSafeOperandBuiltinsTheory.compile_builtin_len_safe_operand >>
+  simp[exprSafeOperandTheory.safe_operand_def]
 QED
 Resume compiler_builtin_var[ecadd]:
   builtin_ptr_var_tac >> metis_tac[compiler_ec_points_var]
@@ -1463,27 +1504,25 @@ Theorem compiler_raw_call_calldata_reserved_cong:
   compile_call g ce rt ty (RawCallCalldataTarget rcf) args dr sa
 Proof
   strip_tac >> Cases_on `args` >- simp[compile_call_def] >>
-  rename1 `addr_e::args` >> Cases_on `args` >- simp[compile_call_def] >>
-  rename1 `addr_e::value_e::tail` >> Cases_on `tail`
-  >- (`lower_value f ce (BaseT AddressT) addr_e sa =
-       lower_value g ce (BaseT AddressT) addr_e sa` by
-        (irule compiler_lower_value_reserved_cong >> simp[]) >>
-      Cases_on `lower_value f ce (BaseT AddressT) addr_e sa` >>
-      rename1 `lower_value f _ _ _ _ = (addr,sb)` >>
-      `local_ptrs_reserved ce sb` by
-        (irule compiler_ci_mono_reserved >> qexists `sa` >>
-         metis_tac[ci_mono_lower_value_cfn, pairTheory.SND]) >>
-      Cases_on `compile_msg_data_to_memory sb` >>
-      rename1 `compile_msg_data_to_memory sb = (data,sc)` >>
-      `local_ptrs_reserved ce sc` by
-        (irule compiler_ci_mono_reserved >> qexists `sb` >>
-         metis_tac[ci_mono_compile_msg_data_to_memory, pairTheory.SND]) >>
-      `lower_value f ce (BaseT (UintT 256)) value_e sc =
-       lower_value g ce (BaseT (UintT 256)) value_e sc` by
-        (irule compiler_lower_value_reserved_cong >> simp[]) >>
-      qpat_x_assum `(addr,sb) = _` (assume_tac o SYM) >>
-      Cases_on `data` >> simp[compile_call_def]) >>
-  simp[compile_call_def]
+  rename1 `addr_e::kw_es` >>
+  `lower_value f ce (BaseT AddressT) addr_e sa =
+   lower_value g ce (BaseT AddressT) addr_e sa` by
+    (irule compiler_lower_value_reserved_cong >> simp[]) >>
+  Cases_on `lower_value f ce (BaseT AddressT) addr_e sa` >>
+  rename1 `lower_value f _ _ _ _ = (addr,sb)` >>
+  `local_ptrs_reserved ce sb` by
+    (irule compiler_ci_mono_reserved >> qexists `sa` >>
+     metis_tac[ci_mono_lower_value_cfn, pairTheory.SND]) >>
+  Cases_on `compile_msg_data_to_memory sb` >>
+  rename1 `compile_msg_data_to_memory sb = (data,sc)` >>
+  `local_ptrs_reserved ce sc` by
+    (irule compiler_ci_mono_reserved >> qexists `sb` >>
+     metis_tac[ci_mono_compile_msg_data_to_memory, pairTheory.SND]) >>
+  `compile_ext_call_kwargs f ce NoneT rcf.rcf_kws kw_es sc =
+   compile_ext_call_kwargs g ce NoneT rcf.rcf_kws kw_es sc` by
+    (irule compiler_ext_call_kwargs_reserved_cong >> simp[]) >>
+  qpat_x_assum `(addr,sb) = _` (assume_tac o SYM) >>
+  Cases_on `data` >> simp[compile_call_def]
 QED
 
 Theorem compiler_call_reserved_cong:
@@ -1652,6 +1691,22 @@ Proof
   gvs[comp_bind_def, LET_THM, pairTheory.UNCURRY_DEF]
 QED
 
+Theorem compiler_get_target_ptr_reserved_cong:
+  (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
+  (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) ==>
+  !bt sa. local_ptrs_reserved ce sa ==>
+    compile_get_target_ptr f ce bt sa = compile_get_target_ptr g ce bt sa
+Proof
+  strip_tac >> measureInduct_on `base_assignment_target_size bt` >>
+  Cases_on `bt` >> rpt strip_tac >> simp[compile_get_target_ptr_def] >>
+  irule compiler_reserved_bind_cong >>
+  simp[ci_mono_compile_get_target_ptr_cfn] >> qexists `ce` >> simp[] >>
+  rpt strip_tac >> simp[LET_THM] >> BasicProvers.every_case_tac >>
+  irule compiler_reserved_bind_cong >>
+  simp[ci_mono_lower_value_cfn] >> qexists `ce` >>
+  simp[compiler_lower_value_reserved_cong]
+QED
+
 Theorem compiler_expr_body_reserved_cong:
   (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
   (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
@@ -1670,7 +1725,12 @@ Proof
   >~ [`compile_subscript _ _ _ _ _ _ _`] >-
     (irule compiler_subscript_reserved_cong >> simp[])
   >~ [`compile_attribute _ _ _ _ _ _ _`] >-
-    (irule compiler_attribute_reserved_cong >> simp[]) >>
+    (irule compiler_attribute_reserved_cong >> simp[])
+  >~ [`compile_get_target_ptr _ _ _ _`] >-
+    (rename1 `compile_get_target_ptr f ce tgt sa` >>
+     `compile_get_target_ptr f ce tgt sa = compile_get_target_ptr g ce tgt sa` by
+       (irule compiler_get_target_ptr_reserved_cong >> simp[]) >>
+     simp[]) >>
   irule compiler_call_reserved_cong >> simp[]
 QED
 
@@ -1934,11 +1994,11 @@ QED
 Resume compiler_compile_var[expr_toplevel]:
   rename1 `TopLevelName ann name` >>
   simp[compile_expr_body_def, LET_THM] >>
-  Cases_on `FLOOKUP ce.ce_vars (module_var_key name)` >>
+  Cases_on `FLOOKUP ce.ce_module_vars name` >>
   simp[LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >>
   rpt strip_tac >> gvs[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
-  rename1 `FLOOKUP ce.ce_vars (module_var_key name) = SOME loc` >>
+  rename1 `FLOOKUP ce.ce_module_vars name = SOME loc` >>
   Cases_on `loc` >> gvs[contextTheory.vv_operand_def]
 QED
 

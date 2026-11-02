@@ -34,13 +34,15 @@ Theorem call_ordinary_success:
     as_requests := s.as_requests ++ [asm_call_request s 8w 0w 0 0 F];
     as_accounts := outcome.co_accounts; as_transient := outcome.co_tStorage;
     as_logs := s.as_logs ++ outcome.co_logs;
+    as_pending_deletions := outcome.co_toDelete ++ s.as_pending_deletions;
     as_returndata := outcome.co_returnData |>))
 Proof
   strip_tac >>
   simp[asm_step_call_staticcall_gas, asm_exec_call_def,
        asm_consume_call_outcome_eq, asm_call_memory_def, asm_call_request_def,
        computed_precompile_addresses, take_outcome_def, record_request_def,
-       adopt_outcome_def, asm_next_def, asm_state_component_equality]
+       adopt_outcome_def, adopt_outcome_deletions_def,
+       asm_next_def, asm_state_component_equality]
 QED
 
 Theorem call_ordinary_failure:
@@ -56,7 +58,8 @@ Proof
   simp[asm_step_call_staticcall_gas, asm_exec_call_def,
        asm_consume_call_outcome_eq, asm_call_memory_def, asm_call_request_def,
        computed_precompile_addresses, take_outcome_def, record_request_def,
-       adopt_outcome_def, asm_next_def, asm_state_component_equality]
+       adopt_outcome_def, adopt_outcome_deletions_def,
+       asm_next_def, asm_state_component_equality]
 QED
 
 Theorem call_inherits_staticness:
@@ -74,7 +77,8 @@ Proof
   simp[asm_step_call_staticcall_gas, asm_exec_call_def,
        asm_consume_call_outcome_eq, asm_call_memory_def, asm_call_request_def,
        computed_precompile_addresses, take_outcome_def, record_request_def,
-       adopt_outcome_def, asm_next_def, asm_state_component_equality]
+       adopt_outcome_def, adopt_outcome_deletions_def,
+       asm_next_def, asm_state_component_equality]
 QED
 
 Theorem staticcall_success_zero_value:
@@ -92,7 +96,8 @@ Proof
   simp[asm_step_call_staticcall_gas, asm_exec_staticcall_def,
        asm_consume_call_outcome_eq, asm_call_memory_def, asm_call_request_def,
        computed_precompile_addresses, take_outcome_def, record_request_def,
-       adopt_outcome_def, asm_next_def, asm_state_component_equality]
+       adopt_outcome_def, adopt_outcome_deletions_def,
+       asm_next_def, asm_state_component_equality]
 QED
 
 Theorem call_and_staticcall_exhaustion:
@@ -112,7 +117,8 @@ Proof
   simp[asm_step_call_staticcall_gas, asm_exec_call_def, asm_exec_staticcall_def,
        asm_consume_call_outcome_eq, asm_call_memory_def, asm_call_request_def,
        computed_precompile_addresses, take_outcome_def, record_request_def,
-       adopt_outcome_def, failed_outcome_def, asm_next_def,
+       adopt_outcome_def, adopt_outcome_deletions_def,
+       failed_outcome_def, asm_next_def,
        asm_state_component_equality]
 QED
 
@@ -128,7 +134,8 @@ Proof
        asm_consume_call_outcome_eq, asm_call_memory_def, asm_call_request_def,
        computed_precompile_addresses, take_outcome_def, record_request_def,
        precompile_result_empty_ecrecover, failed_outcome_def,
-       adopt_outcome_def, asm_next_def, asm_state_component_equality]
+       adopt_outcome_def, adopt_outcome_deletions_def,
+       asm_next_def, asm_state_component_equality]
 QED
 
 (* Concrete short write: two returned bytes at 2, requested size 8. The
@@ -152,12 +159,14 @@ Theorem call_staticcall_short_write:
     as_returndata := [77w; 88w];
     as_memory := REPLICATE 2 9w ++ [77w; 88w] ++ REPLICATE 28 9w |>))
 Proof
-  strip_tac >>
-  simp[asm_step_call_staticcall_gas, asm_exec_call_def, asm_exec_staticcall_def,
-       asm_consume_call_outcome_eq, asm_call_memory_def, asm_call_request_def,
-       asm_expand_memory_def, computed_precompile_addresses, take_outcome_def,
-       record_request_def, adopt_outcome_def, asm_next_def,
-       REPLICATE, asm_state_component_equality] >> EVAL_TAC
+  strip_tac >> conj_tac >>
+  simp[Excl "asm_consume_call_outcome_eq", asm_step_call_staticcall_gas,
+       asm_exec_call_def, asm_exec_staticcall_def] >>
+  simp[asm_consume_call_outcome_eq, asm_call_memory_def, asm_call_request_def] >>
+  simp[asm_expand_memory_def, computed_precompile_addresses, take_outcome_def,
+       record_request_def, adopt_outcome_def, adopt_outcome_deletions_def,
+       asm_next_def,
+       asm_state_component_equality] >> EVAL_TAC
 QED
 
 Theorem gas_live_readings_and_exhaustion:
@@ -206,11 +215,13 @@ Theorem computed_sha256_and_ec_dispatch:
   AsmOK (asm_next (s with <| as_stack := [1w];
                             as_returndata := REPLICATE 64 0w |>))
 Proof
+  rpt conj_tac >>
   simp[asm_step_call_staticcall_gas, asm_exec_call_def, asm_exec_staticcall_def,
        asm_consume_call_outcome_eq, asm_call_memory_def, asm_call_request_def,
        computed_precompile_addresses, take_outcome_def, record_request_def,
        precompile_result_empty_sha256, precompile_result_empty_ec,
-       failed_outcome_def, adopt_outcome_def, asm_next_def,
+       failed_outcome_def, adopt_outcome_def, adopt_outcome_deletions_def,
+       asm_next_def,
        asm_state_component_equality]
 QED
 
@@ -223,13 +234,16 @@ Theorem computed_invalid_ec_dispatch:
     (s with as_stack := [gas; 7w; 0w; 64w; 0w; 0w]) =
   AsmOK (asm_next (s with <| as_stack := [0w]; as_returndata := [] |>))
 Proof
-  strip_tac >>
-  simp[asm_step_call_staticcall_gas, asm_exec_call_def, asm_exec_staticcall_def,
-       asm_consume_call_outcome_eq, asm_call_memory_def, asm_call_request_def,
-       asm_expand_memory_def, TAKE_LENGTH_TOO_LONG,
-       computed_precompile_addresses, take_outcome_def, record_request_def,
+  strip_tac >> conj_tac >>
+  simp[Excl "asm_consume_call_outcome_eq", asm_step_call_staticcall_gas,
+       asm_exec_call_def, asm_exec_staticcall_def] >>
+  simp[Excl "asm_consume_call_outcome_eq", asm_call_memory_def,
+       asm_call_request_def, asm_expand_memory_def, TAKE_LENGTH_TOO_LONG] >>
+  simp[asm_consume_call_outcome_eq, computed_precompile_addresses,
+       take_outcome_def, record_request_def,
        precompile_result_invalid_ec, failed_outcome_def,
-       adopt_outcome_def, asm_next_def, asm_state_component_equality]
+       adopt_outcome_def, adopt_outcome_deletions_def,
+       asm_next_def, asm_state_component_equality]
 QED
 
 Theorem nonzero_value_precompile_shaped_call:
@@ -245,7 +259,8 @@ Proof
   simp[asm_step_call_staticcall_gas, asm_exec_call_def,
        asm_consume_call_outcome_eq, asm_call_memory_def, asm_call_request_def,
        computed_precompile_addresses, take_outcome_def, record_request_def,
-       adopt_outcome_def, asm_next_def, asm_state_component_equality]
+       adopt_outcome_def, adopt_outcome_deletions_def,
+       asm_next_def, asm_state_component_equality]
 QED
 
 Theorem call_zero_size_does_not_expand:

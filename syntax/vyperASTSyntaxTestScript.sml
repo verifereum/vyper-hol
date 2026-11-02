@@ -162,12 +162,14 @@ val stmt_samples =
   ];
 val _ = List.app (fn tm => ignore (vyperASTSyntax.view_stmt tm)) stmt_samples;
 
-val flags = vyperASTSyntax.mk_raw_call_flags
+fun flags_with_kws kws = vyperASTSyntax.mk_raw_call_flags
   { max_outsize = numSyntax.term_of_int 32
   , is_delegate = boolSyntax.F
   , is_static = boolSyntax.T
   , revert_on_failure = boolSyntax.T
+  , kws = kws
   };
+val flags = flags_with_kws ``[] : ext_call_opts``;
 val call_target_samples =
   [ vyperASTSyntax.mk_IntCall_tm nsid
   , vyperASTSyntax.mk_ExtCall_tm
@@ -202,16 +204,46 @@ val _ =
           (vyperASTSyntax.mk_CreateFromBlueprint_tm boolSyntax.T))
        boolSyntax.T
   then () else raise Fail "CreateFromBlueprint raw_args";
-val _ =
-  if vyperASTSyntax.is_raw_call_flags flags then
-    let val decoded = vyperASTSyntax.dest_raw_call_flags flags in
-      if same_term (#max_outsize decoded) (numSyntax.term_of_int 32) andalso
+(* Check complete records, not just projections: omitted fields must not leave
+   free variables, and keyword operand order must survive both directions. *)
+val _ = List.app
+  (fn kws =>
+    let
+      val tm = flags_with_kws kws
+      val expected = ``<| rcf_max_outsize := 32; rcf_is_delegate := F;
+                         rcf_is_static := T; rcf_revert_on_failure := T;
+                         rcf_kws := ^kws |>``
+      val decoded = vyperASTSyntax.dest_raw_call_flags tm
+    in
+      if vyperASTSyntax.is_raw_call_flags tm andalso
+         same_term tm expected andalso null (free_vars tm) andalso
+         same_term (#max_outsize decoded) (numSyntax.term_of_int 32) andalso
          same_term (#is_delegate decoded) boolSyntax.F andalso
          same_term (#is_static decoded) boolSyntax.T andalso
-         same_term (#revert_on_failure decoded) boolSyntax.T
-      then () else raise Fail "raw_call_flags fields"
-    end
-  else raise Fail "raw_call_flags recognizer";
+         same_term (#revert_on_failure decoded) boolSyntax.T andalso
+         same_term (#kws decoded) kws andalso
+         same_term (vyperASTSyntax.mk_raw_call_flags decoded) tm andalso
+         same_term
+           (vyperASTSyntax.mk_raw_call_flags
+             (vyperASTSyntax.dest_raw_call_flags expected)) expected
+      then () else raise Fail "raw_call_flags roundtrip"
+    end)
+  [``[] : ext_call_opts``, ``[EKGas]``, ``[EKValue]``,
+   ``[EKGas; EKValue]``, ``[EKValue; EKGas]``];
+val simple_flags = vyperASTSyntax.mk_raw_call_flags_simple
+  { max_outsize = numSyntax.term_of_int 32
+  , is_delegate = boolSyntax.F
+  , is_static = boolSyntax.T
+  , revert_on_failure = boolSyntax.T
+  };
+val _ =
+  if same_term simple_flags (flags_with_kws ``[EKValue]``) andalso
+     same_term (#kws (vyperASTSyntax.dest_raw_call_flags simple_flags))
+       ``[EKValue]``
+  then () else raise Fail "raw_call_flags_simple explicit value";
+val _ =
+  if not (vyperASTSyntax.is_raw_call_flags name_tm) then ()
+  else raise Fail "raw_call_flags recognizer negative";
 
 val no_slot = optionSyntax.mk_none numSyntax.num;
 val empty_fields = listSyntax.mk_list ([], vyperASTSyntax.argument_ty);

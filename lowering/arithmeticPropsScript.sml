@@ -3140,8 +3140,9 @@ Proof
       ostep emit_op_AND_correct `emit_op AND [ok; not_special] _ = _` >>
       forward_all_evals >>
       imp_res_tac emit_void_extends >>
-      drule_all_then strip_assume_tac assert_chain >>
-      TRY (gvs[] >> NO_TAC) >>
+      drule_all_then strip_assume_tac assert_chain
+      >>~- ([`(_ && _) <> 0w`],
+        qpat_x_assum `(_ && _) <> 0w` mp_tac >> simp[]) >>
       first_assum (irule_at Any)) >>
   Cases_on `is_signed` >> gvs[]
   >- mul_check_plain_tac emit_op_SDIV_correct `emit_op SDIV _ _ = _` >>

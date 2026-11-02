@@ -6,7 +6,7 @@ Ancestors
   sourceModuleContext sourceModuleSignature sourceModuleElaborate sourceModuleEnv sourceModuleDecl sourceModuleDefs sourceSyntax
   sourceResolveModules sourceResolve sourceExprDefs sourceTypeDefs sourceConstAST sourceConstAnnotation
   sourceConstEval sourceConstValue sourceConstEnv vyperInterpreter vyperState vyperContext
-  vyperAST vyperValue finite_map alist list
+  vyperAST vyperValue vyperValueOperation finite_map alist list
 Libs
   intLib wordsLib
 
@@ -117,10 +117,10 @@ Proof
 QED
 
 Theorem source_meaning_call_dispatch:
-  !orc tx. ALOOKUP source_meaning_call_machine.exports tx.target = NONE /\
+  !orc gobs tx. ALOOKUP source_meaning_call_machine.exports tx.target = NONE /\
     tx.target = 0w ==>
-  call_external orc source_meaning_call_machine tx =
-    source_meaning_call orc source_meaning_call_machine tx source_meaning_call_denotation
+  call_external orc gobs source_meaning_call_machine tx =
+    source_meaning_call orc gobs source_meaning_call_machine tx source_meaning_call_denotation
 Proof
   rpt strip_tac >> irule source_meaning_call_transport >> simp[] >>
   qexists_tac `source_meaning_call_tops` >>
@@ -128,15 +128,26 @@ Proof
   simp[source_meaning_call_code] >> EVAL_TAC
 QED
 
+(* Non-observing defaults retain every supplied gas reading for the body. *)
+Theorem source_meaning_literal_defaults_gas:
+  source_meaning_defaults cx am gobs
+    [SM_Literal (BaseT (UintT 256)) (IntL 3);
+     SM_Literal (BaseT (UintT 256)) (IntL 4)] =
+      SOME ([IntV 3;IntV 4],gobs)
+Proof
+  simp[source_meaning_defaults_def, source_meaning_eval_def,
+    read_result_def, bind_def, return_def, evaluate_literal_def]
+QED
+
 Theorem source_meaning_call_default_return:
-  FST (source_meaning_call NONE source_meaning_call_machine
+  FST (source_meaning_call NONE gobs source_meaning_call_machine
     (empty_call_txn with function_name := "f") source_meaning_call_denotation) = INL (IntV 6)
 Proof
   EVAL_TAC
 QED
 
 Theorem source_meaning_call_argument_return:
-  FST (source_meaning_call NONE source_meaning_call_machine
+  FST (source_meaning_call NONE gobs source_meaning_call_machine
     (empty_call_txn with <| function_name := "f"; args := [IntV 7] |>)
       source_meaning_call_denotation) = INL (IntV 10)
 Proof
@@ -144,7 +155,7 @@ Proof
 QED
 
 Theorem source_meaning_call_excess_arguments:
-  FST (source_meaning_call NONE source_meaning_call_machine
+  FST (source_meaning_call NONE gobs source_meaning_call_machine
     (empty_call_txn with <| function_name := "f"; args := [IntV 7;IntV 8] |>)
       source_meaning_call_denotation) = INR (Error (RuntimeError "call args length"))
 Proof
@@ -152,9 +163,9 @@ Proof
 QED
 
 Theorem source_meaning_call_constructor:
-  load_contract orc initial_machine_state
+  load_contract orc gobs initial_machine_state
     (empty_call_txn with function_name := "__init__") [(NONE,source_meaning_call_tops)] [] =
-  source_meaning_load orc initial_machine_state
+  source_meaning_load orc gobs initial_machine_state
     (empty_call_txn with function_name := "__init__") [(NONE,source_meaning_call_tops)] []
       source_meaning_call_denotation
 Proof
@@ -170,12 +181,12 @@ Proof
 QED
 
 Theorem source_meaning_call_runtime_return:
-  FST (call_external NONE source_meaning_call_machine
+  FST (call_external NONE gobs source_meaning_call_machine
     (empty_call_txn with function_name := "f")) = INL (IntV 6)
 Proof
-  `call_external NONE source_meaning_call_machine
+  `call_external NONE gobs source_meaning_call_machine
       (empty_call_txn with function_name := "f") =
-    source_meaning_call NONE source_meaning_call_machine
+    source_meaning_call NONE gobs source_meaning_call_machine
       (empty_call_txn with function_name := "f") source_meaning_call_denotation` by
     (irule source_meaning_call_dispatch >> EVAL_TAC) >>
   simp[source_meaning_call_default_return]
@@ -183,7 +194,7 @@ QED
 
 Theorem source_meaning_call_default_constructor_store:
   ?am rqs imms.
-    source_meaning_load NONE initial_machine_state
+    source_meaning_load NONE gobs initial_machine_state
       (empty_call_txn with function_name := "__init__") [(NONE,source_meaning_call_tops)] []
         source_meaning_call_denotation = INL (am,rqs) /\
     ALOOKUP am.immutables 0w = SOME imms /\
@@ -233,8 +244,8 @@ Proof
 QED
 
 Theorem source_meaning_call_explicit_constructor:
-  load_contract orc am tx [(NONE,source_meaning_call_ctor_code::source_meaning_call_tops)] exps =
-  source_meaning_load orc am tx [(NONE,source_meaning_call_ctor_code::source_meaning_call_tops)] exps
+  load_contract orc gobs am tx [(NONE,source_meaning_call_ctor_code::source_meaning_call_tops)] exps =
+  source_meaning_load orc gobs am tx [(NONE,source_meaning_call_ctor_code::source_meaning_call_tops)] exps
     (source_meaning_call_ctor_meaning::source_meaning_call_denotation)
 Proof
   `type_env_all_modules [(NONE,source_meaning_call_ctor_code::source_meaning_call_tops)] = FEMPTY`

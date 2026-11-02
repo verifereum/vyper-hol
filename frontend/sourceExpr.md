@@ -53,9 +53,11 @@ Errors are eager even below False Boolean heads or beside dynamic operands.
   `ensure_tuple`/`unwrap_tuple` flags, four-byte `method_id` prefixes, duplicate
   and unknown keyword rejection, and independently resolved decode type operands.
   Tuple operands are not flattened and argument order is preserved.
-* The currently supported no-keyword `raw_call(target,data)` (zero output,
-  nondelegate, nonstatic, revert-on-failure, zero value) and `raw_revert(data)`.
-  This is not general raw-call keyword coverage.
+* `raw_call(target,data)` and `raw_revert(data)`. Raw calls accept original
+  constant output-size/Boolean flags and a typed dynamic `value` keyword.
+  Canonical operands include `value` and `EKValue` only when explicitly supplied
+  (even explicit zero); omission means zero without an implicit AST operand.
+  Raw-call `gas` keywords are not yet supported by this source checker.
 * `sourceExprCall` additionally constructs internal calls and interface-based
   external/static calls from resolved source signatures, including original
   `skip_contract_check` constants and typed external-call keywords. This

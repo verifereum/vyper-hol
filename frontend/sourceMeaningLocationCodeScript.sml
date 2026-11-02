@@ -2,7 +2,7 @@ Theory sourceMeaningLocationCode
 Ancestors
   sourceMeaningLocationDefs sourceMeaningCode sourceMeaningDefs sourceMeaningRuntime
   sourceExprDefs vyperInterpreter vyperAbiOperand vyperState vyperAST
-  vyperValue vyperValueOperation vyperContext list
+  vyperValue vyperValueOperation vyperEvmBoundary vyperContext list
 
 (* This relation is a proof bridge only. Source derivations are defined in a
    separate theory and never consult this relation or runtime expressions. *)
@@ -37,10 +37,17 @@ Inductive source_location_code:
   source_location_code tenv m e ==>
   source_location_code tenv (SML_Revert ty m) (Call ty RawRevert [e] NONE)
 [raw_call:]
+  flags.rcf_kws = [EKValue] /\
   source_location_code tenv t te /\ source_location_code tenv d de /\
   source_location_code tenv v ve ==>
   source_location_code tenv (SML_RawCall ty flags t d v)
     (Call ty (RawCallTarget flags) [te;de;ve] NONE)
+[raw_call_default:]
+  flags.rcf_kws = [] /\
+  source_location_code tenv t te /\ source_location_code tenv d de ==>
+  source_location_code tenv
+    (SML_RawCall ty flags t d (SML_Core (SM_Literal (BaseT (UintT 256)) (IntL 0))))
+    (Call ty (RawCallTarget flags) [te;de] NONE)
 [empty_codes:]
   source_location_codes tenv [] []
 [cons:]
@@ -65,6 +72,58 @@ Theorem source_location_core_runtime:
 Proof
   strip_tac >> simp[source_location_eval_def] >>
   irule source_meaning_code_evaluates >> qexists_tac `[]` >> simp[]
+QED
+
+(* The length check justifies selecting the explicit value operand.  Keeping
+   this protocol lemma separate avoids splitting the three effectful children. *)
+Theorem source_location_raw_call_protocol:
+  flags.rcf_kws = [EKValue] ==>
+  (do
+    type_check (LENGTH vs = 2 + LENGTH flags.rcf_kws) "raw_call args";
+    target <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
+    data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_call data";
+    amount <- lift_option_type (raw_call_value flags.rcf_kws (DROP 2 vs)) "raw_call value";
+    eval_raw_call cx flags target data amount
+      (forwarded_gas default_evm_gas_limit
+        (ext_call_kwarg EKGas flags.rcf_kws (DROP 2 vs)))
+  od) =
+  (do
+    type_check (LENGTH vs = 3) "raw_call args";
+    target <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
+    data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_call data";
+    amount <- lift_option_type (dest_NumV (EL 2 vs)) "raw_call value";
+    eval_raw_call cx flags target data amount default_evm_gas_limit
+  od)
+Proof
+  strip_tac >> Cases_on `LENGTH vs = 3`
+  >- (gvs[] >> gvs[LENGTH_EQ_NUM_compute,raw_call_value_def,
+        ext_call_kwarg_def,forwarded_gas_def]) >>
+  simp[FUN_EQ_THM,ignore_bind_def,bind_def,type_check_def,assert_def]
+QED
+
+(* With no value keyword the canonical AST has only target and data. The
+   independent source rule still ties the semantic default to literal zero. *)
+Theorem source_location_raw_call_default_protocol:
+  flags.rcf_kws = [] ==>
+  (do
+    type_check (LENGTH vs = 2 + LENGTH flags.rcf_kws) "raw_call args";
+    target <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
+    data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_call data";
+    amount <- lift_option_type (raw_call_value flags.rcf_kws (DROP 2 vs)) "raw_call value";
+    eval_raw_call cx flags target data amount
+      (forwarded_gas default_evm_gas_limit
+        (ext_call_kwarg EKGas flags.rcf_kws (DROP 2 vs)))
+  od) =
+  (do
+    type_check (LENGTH vs = 2) "raw_call args";
+    target <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
+    data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_call data";
+    amount <- return 0;
+    eval_raw_call cx flags target data amount default_evm_gas_limit
+  od)
+Proof
+  simp[raw_call_value_def,ext_call_kwarg_def,forwarded_gas_def,
+       lift_option_type_def,return_def,bind_def]
 QED
 
 (* The simultaneous theorem is essential: ordinary name reads alone cannot
@@ -99,7 +158,10 @@ Proof
   >- (imp_res_tac (CONJUNCT2 (SPEC_ALL source_location_code_types)) >>
       simp[evaluate_def,source_location_eval_def])
   >- simp[evaluate_def,source_location_eval_def,source_meaning_args_def]
-  >- simp[evaluate_def,source_location_eval_def,source_meaning_args_def]
+  >- simp[evaluate_def,source_location_eval_def,source_meaning_args_def,
+       source_location_raw_call_protocol]
+  >- simp[evaluate_def,source_location_eval_def,source_meaning_args_def,
+       source_location_raw_call_default_protocol]
   >- simp[evaluate_def,source_location_eval_def]
   >> simp[evaluate_def,source_location_eval_def]
 QED

@@ -17,6 +17,9 @@
  *   well_typed_expr_type_well_formed — a well-typed expression's type is
  *                              well formed, given the local types are
  *   compile_binop_safe_operand
+ *   alloc_buffer_not_label, ensure_memory_not_label,
+ *   unwrap_value_not_label — pointer-valued result safety without
+ *                              freshness premises
  *
  * Helpers: one *_safe_operand lemma per lowering helper.
  *)
@@ -68,10 +71,12 @@ Proof
 QED
 
 Theorem compile_ptr_load_safe_operand:
-  compile_ptr_load is_ctor loc ptr_op sa = (op,sb) ==> safe_operand sb op
+  compile_ptr_load is_ctor imm loc ptr_op sa = (op,sb) ==> safe_operand sb op
 Proof
-  Cases_on `is_ctor` >> Cases_on `loc` >>
-  simp[compile_ptr_load_def] >> metis_tac[emit_op_safe_operand]
+  Cases_on `is_ctor` >> Cases_on `imm` >> Cases_on `loc` >>
+  simp[compile_ptr_load_def, compile_imm_load_word_def, comp_bind_def] >>
+  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[emit_op_safe_operand]
 QED
 
 Theorem unwrap_value_safe_operand:
@@ -83,7 +88,40 @@ Proof
   metis_tac[compile_ptr_load_safe_operand]
 QED
 
-(* ===== Conversions ===== *)
+(* Pointer-valued results need only exclude labels, independently of
+   variable freshness or whether their type fits in a word. *)
+Theorem alloc_buffer_not_label:
+  compile_alloc_buffer bytes sa = (buf,sb) ==>
+  !l. buf.buf_operand <> Label l
+Proof
+  simp[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+  drule emit_op_safe_operand >> simp[safe_operand_def]
+QED
+
+Theorem ensure_memory_not_label:
+  compile_ensure_in_memory p loc bytes wc ctor imm sa = (op,sb) /\
+  (!l. p <> Label l) ==> !l. op <> Label l
+Proof
+  Cases_on `loc` >> simp[contextTheory.compile_ensure_in_memory_def, comp_return_def]
+  >- metis_tac[] >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  metis_tac[alloc_buffer_not_label]
+QED
+
+Theorem unwrap_value_not_label:
+  unwrap_value cenv vv sa = (op,sb) /\
+  (!l. vv_operand vv <> Label l) ==> !l. op <> Label l
+Proof
+  Cases_on `vv` >> simp[unwrap_value_def, contextTheory.vv_operand_def, comp_return_def]
+  >- metis_tac[] >>
+  rename1 `is_word_type ty` >> Cases_on `is_word_type ty` >> simp[]
+  >- metis_tac[compile_ptr_load_safe_operand, safe_operand_def] >>
+  Cases_on `p.ptr_location` >> simp[comp_return_def] >>
+  metis_tac[ensure_memory_not_label]
+QED
+
 
 Theorem compile_type_convert_safe_input:
   safe_operand sa v /\ compile_type_convert v conv sa = (r,sb) ==>

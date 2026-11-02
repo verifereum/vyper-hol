@@ -12,7 +12,7 @@
  *   Layer 2 - Argument decoding: ABI-encoded calldata decoded to values
  *     matching tx.args (abiEncoderProps, valueEncodingProofs)
  *   Layer 3 - Function body: compiled Venom body preserves semantics
- *     (stmtLoweringProps, exprLoweringProps)
+ *     (bodySimMain: body_sim_mutual, body_stmts_sim)
  *
  * TOP-LEVEL:
  *   venom_env_rel, initial_venom_state_rel -- PLAN 5.7 entry boundary
@@ -53,7 +53,7 @@ Ancestors
   vyperContext
   venomExecSemantics
   venomState
-  compileEnv e2eDefs supportedProgram compileVyper
+  compileEnv e2eDefs supportedProgram compileVyper immutableSectionRel
   unitTransformDefs unitShapeDefs
   fragExec loweringHalt loweringShapeProps retAbiPlanProps
 
@@ -131,7 +131,7 @@ Definition venom_env_rel_def:
 End
 
 Definition initial_venom_state_rel_def:
-  initial_venom_state_rel am tx vs <=>
+  initial_venom_state_rel tops am tx vs <=>
     value_transfer_ok tx am.accounts /\
     vs.vs_accounts = accounts_after_transfer tx am.accounts /\
     vs.vs_transient = am.tStorage /\ am.logs = [] /\ vs.vs_logs = [] /\
@@ -139,7 +139,8 @@ Definition initial_venom_state_rel_def:
     tx_env_ok tx /\ venom_env_rel tx vs /\
     vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
     vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0 /\
-    vs.vs_returndata = [] /\ vs.vs_requests = []
+    vs.vs_returndata = [] /\ vs.vs_requests = [] /\
+    immutables_section_rel tops (account_immutables am tx.target) vs.vs_data_section
 End
 
 (* The calldata Venom reads is the transaction's, which the source typing
@@ -154,7 +155,7 @@ Proof
 QED
 
 Theorem initial_venom_state_calldata_length:
-  source_typing_ok tops am tx /\ initial_venom_state_rel am tx vs ==>
+  source_typing_ok tops am tx /\ initial_venom_state_rel tops am tx vs ==>
   LENGTH vs.vs_call_ctx.cc_calldata < dimword (:256)
 Proof
   rw[source_typing_ok_def, initial_venom_state_rel_def, venom_env_rel_def] >>
@@ -194,7 +195,7 @@ End
 Definition source_unit_execution_correct_def:
   source_unit_execution_correct tops ret am tx unit vs <=>
     ?fuel. external_call_result_rel tops ret tx
-             (call_external (SOME vs.vs_outcomes) am tx)
+             (call_external (SOME vs.vs_outcomes) [] am tx)
              (run_context fuel unit.cu_context vs)
 End
 
@@ -880,7 +881,7 @@ Theorem lower_vyper_runtime_unit_correct:
     source_storage_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel am tx vs /\
+    initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok tops am tx vs.vs_outcomes
     ==>
     source_unit_execution_correct tops ret am tx unit vs
@@ -889,10 +890,13 @@ Proof
 QED
 
 (* S2, Milestone 5: proved in loweringShapeProps as
-   lower_vyper_runtime_unit_source_unit_ok_names. *)
+   lower_vyper_runtime_unit_source_unit_ok_names. Raw O1 shape excludes
+   DLOAD; the immutable-free hypothesis restricts this theorem's source
+   domain, not the runtime immutable compiler. *)
 Theorem lower_vyper_runtime_unit_source_unit_ok:
   !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+    immutable_free_program tops
     ==> o1_source_unit_ok unit
 Proof
   ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_names
@@ -909,9 +913,9 @@ Theorem lower_vyper_runtime_unit_memory_ok:
     source_storage_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel am tx vs /\
+    initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok tops am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) am tx)
+    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
     ==> raw_unit_memory_ok unit.cu_context vs
 Proof
   cheat
@@ -936,7 +940,7 @@ Theorem vyper_to_venom_correct:
   !tenv selectors ext_fns int_fns fb_fn dispatch
     bucket_count fn_meta_bytes dense_buckets entry_info entry_label
     vs am tx sel fn_lbl htz cenv
-    args dflts ret body mut nr.
+    args dflts ret body mut nr ctx.
   let (ctx, _) = run_lowering_pair_compat selectors ext_fns int_fns fb_fn
                    dispatch bucket_count fn_meta_bytes
                    dense_buckets entry_info entry_label in

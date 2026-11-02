@@ -1,5 +1,5 @@
 [holbuild]
-minimum_version = "0.12.0"
+minimum_version = "0.12.1"
 
 [project]
 name = "vyper-hol"
@@ -134,6 +134,14 @@ jsonToVyperExprTheory = { loads = ["hurdUtilsContextTheory"] }
 jsonToVyperTopLevelTheory = { loads = ["hurdUtilsContextTheory"] }
 jsonToVyperTheory = { loads = ["hurdUtilsContextTheory"] }
 
+[[executable]]
+name = "bytecode_parity_native"
+output = "lowering/defs/bytecode/native/bytecode_parity_native.exe"
+objects = ["compilerNativeParity"]
+
+[actions.compilerNativeParity]
+deps = ["compilerNativeEmitTheory"]
+
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
-rev = "6991326b80f0b603fc79d2681f19aa1205c2015c"
+rev = "47a9174eb5214df0837b3cf3ca42f12c68b39abb"

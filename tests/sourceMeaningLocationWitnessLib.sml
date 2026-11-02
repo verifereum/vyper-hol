@@ -148,13 +148,24 @@ fun derive refs type_ids scopes table constants ty original = let
       else if name = "raw_call" then let
         val target = hd args val data = List.nth(args,1) val dty = infer data
         val (tm,tt) = child ``BaseT AddressT`` target val (dm,dt) = child dty data
-        val vm = ``SML_Core (SM_Literal (BaseT (UintT 256)) (IntL 0))``
-        val flags = ``<|rcf_max_outsize := 0; rcf_is_delegate := F;
-          rcf_is_static := F; rcf_revert_on_failure := T|>``
+        val (vm,value_facts,opts) = case one "SOME" (computed ``ALOOKUP ^kws "value"``) of
+            NONE => (``SML_Core (SM_Literal (BaseT (UintT 256)) (IntL 0))``,[],``[]:ext_call_kw list``)
+          | SOME value => let val (m,th) = child ``BaseT (UintT 256)`` value
+              in (m,[th],``[EKValue]``) end
+        val (out,out_facts) = case one "SOME" (computed ``ALOOKUP ^kws "max_outsize"``) of
+            NONE => (``0:num``,[])
+          | SOME e => let val (res,th) = stage scopes table constants e
+              val n = valOf(one "SCV_Int" (valOf(one "SC_Value" res)))
+              in (computed ``Num ^n``,[th]) end
+        val delegate = flag kws "is_delegate_call" false
+        val static = flag kws "is_static_call" false
+        val revert = flag kws "revert_on_failure" true
+        val flags = ``<|rcf_max_outsize := ^out; rcf_is_delegate := ^delegate;
+          rcf_is_static := ^static; rcf_revert_on_failure := ^revert; rcf_kws := ^opts|>``
         in mk sourceMeaningLocationSourceTheory.raw_call ``SML_RawCall ^ty ^flags ^tm ^dm ^vm``
-          [`et` |-> `^dty`] [intrinsic callee name,tt,dt,
-            flag_th kws "is_delegate_call" F F,flag_th kws "is_static_call" F F,
-            flag_th kws "revert_on_failure" T T] end
+          [`et` |-> `^dty`] ([intrinsic callee name,tt,dt,
+            flag_th kws "is_delegate_call" F delegate,flag_th kws "is_static_call" F static,
+            flag_th kws "revert_on_failure" T revert] @ value_facts @ out_facts) end
       else let
         val b = some ``source_expr_builtin_identity ^scopes ^table ^callee``
         val bt = some ``source_expr_builtin ^b``
@@ -232,12 +243,12 @@ fun derive refs type_ids scopes table constants ty original = let
 (* Separate proof recursion checks the independent semantic term against code.
    It never invents a semantic term from runtime syntax. *)
 fun code tenv m e = let
+  val m = computed m val e = computed e
   fun relation m e = ``source_location_code ^tenv ^m ^e``
   fun codes ms es = prove(``source_location_codes ^tenv ^ms ^es``,
     MAP_EVERY (fn th => ASSUME_TAC th) (ListPair.mapEq (fn (m,e) => code tenv m e) (items ms,items es)) >>
     simp[source_location_code_rules])
   fun mk rule facts = prove(relation m e,irule rule >> simp facts >> EVAL_TAC)
-  val m = computed m val e = computed e
   val (h,args) = strip_comb m val (_,es) = strip_comb e
   in case (fst(dest_const h),args) of
     ("SML_Core",[core]) => let
@@ -263,8 +274,12 @@ fun code tenv m e = let
       [code tenv a (List.nth(es,1)),code tenv i (List.nth(es,2))]
   | ("SML_TypeApply",[ty,b,t,ms]) => mk sourceMeaningLocationCodeTheory.type_apply [codes ms (List.nth(es,3))]
   | ("SML_Revert",[ty,c]) => mk sourceMeaningLocationCodeTheory.revert [code tenv c (hd(items(List.nth(es,2))))]
-  | ("SML_RawCall",[ty,f,t,d,v]) => let val [te,de,ve] = items(List.nth(es,2)) in
-      mk sourceMeaningLocationCodeTheory.raw_call [code tenv t te,code tenv d de,code tenv v ve] end
+  | ("SML_RawCall",[ty,f,t,d,v]) => (case items(List.nth(es,2)) of
+        [te,de] => mk sourceMeaningLocationCodeTheory.raw_call_default
+          [code tenv t te,code tenv d de]
+      | [te,de,ve] => mk sourceMeaningLocationCodeTheory.raw_call
+          [code tenv t te,code tenv d de,code tenv v ve]
+      | _ => fail e)
   | _ => fail m end;
 
 fun bodies refs type_ids ctx ret originals = let

@@ -64,6 +64,58 @@ Proof
                    power_program_remainder_nonvacuous]
 QED
 
+(* Preserve main's immutable support through the original-source checker and
+   the public replacement lemma, including a constructor write and nested read. *)
+Definition source_support_immutable_program_def:
+  source_support_immutable_program = SourceProgram (SourceModule
+    [SD_Variable "seed" (SCA_Qualified SCQ_Immutable (SCA_Name ["uint256"])) NONE;
+     SD_Function "__init__" [SX_Name "deploy"] [] [] NONE
+       [SS_Assign (SX_Name "seed") (SX_Literal (SCL_Int 7))];
+     SD_Function "f" [SX_Name "external"; SX_Name "view"] [] []
+       (SOME (SCA_Name ["uint256"]))
+       [SS_Return (SOME (SX_Binary SCB_Add (SX_Name "seed")
+         (SX_Literal (SCL_Int 1))))]]) []
+End
+
+val checked_immutable = sourceModuleFrontendLib.check
+  {fuel=``30:num``,trust=``source_support_power_trust``,
+   policies=``[(["main"],SourceModulePolicy F F)]``,keys=``[["main"]]``,
+   program=``source_support_immutable_program``}
+  {layouts=``[(0w:address,([]:storage_layout,[]:storage_layout))]``,address=``0w:address``};
+val source_support_immutable_check_phase =
+  save_thm ("source_support_immutable_check_phase", #composition checked_immutable);
+val immutable_elaboration = save_thm ("source_support_immutable_elaboration_phase",
+  #equation (#elaboration checked_immutable));
+
+Theorem source_support_immutable_elaboration:
+  source_module_elaborate 30 source_support_power_trust
+    [(["main"],SourceModulePolicy F F)] [["main"]] source_support_immutable_program =
+  SM_Ok (SourceRetained source_support_immutable_program [(NONE,source_support_immutable_tops)])
+Proof
+  CONV_TAC (LAND_CONV (REWR_CONV immutable_elaboration)) >> EVAL_TAC
+QED
+
+Theorem source_support_immutable_public_replacement:
+  ?retained art.
+    source_module_check 30 source_support_power_trust
+      [(["main"],SourceModulePolicy F F)] [["main"]] source_support_immutable_program
+      [(0w:address,([]:storage_layout,[]:storage_layout))] (0w:address) =
+        SM_Ok (retained,art) /\
+    retained_source retained = source_support_immutable_program /\
+    retained_executable retained = [(NONE,source_support_immutable_tops)] /\
+    source_program_remainder source_support_immutable_tops /\
+    supported_program source_support_immutable_tops
+Proof
+  mp_tac source_support_immutable_check_phase >> strip_tac >>
+  drule source_module_check_equations >> strip_tac >>
+  gvs[source_support_immutable_elaboration] >>
+  simp[retained_source_def, retained_executable_def,
+       immutable_program_checked_remainder] >>
+  drule source_module_checked_supported_program >>
+  simp_tac std_ss [retained_executable_def, GSYM source_support_immutable_tops_def,
+                   CONJUNCT1 immutable_program_checked_remainder]
+QED
+
 val () = List.app (fn (name,th) => let
     val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
   in if null (hyp th) andalso null axioms andalso

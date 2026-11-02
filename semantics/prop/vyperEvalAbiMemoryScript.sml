@@ -120,6 +120,13 @@ Proof
     drule_all extend_place_state] >> simp[]
 QED
 
+Theorem arena_extends_next_gas_reading:
+  arena_extends next_gas_reading
+Proof
+  simp[arena_extends_def, arenas_grow_def, next_gas_reading_def] >>
+  gen_tac >> Cases_on `st.gas_obs` >> simp[return_def, raise_def]
+QED
+
 Theorem arena_extends_primitives:
   arena_extends (return x) /\ arena_extends (raise e) /\
   arena_extends (λs. return (g s) s) /\
@@ -233,7 +240,8 @@ fun ARENA_CASE_TAC (g as (old,_)) =
 
 val arena_base_facts = List.concat (map (CONJUNCTS o SPEC_ALL)
   [arena_extends_reads, arena_extends_primitives, arena_extends_capture_write,
-   arena_extends_handlers, arena_extends_outcomes]);
+   arena_extends_handlers, arena_extends_outcomes,
+   arena_extends_next_gas_reading]);
 
 fun arena_step facts =
   let val net = arena_net facts
@@ -313,7 +321,7 @@ Proof
 QED
 
 Theorem arena_extends_calls:
-  arena_extends (eval_raw_call cx flags target data amount) /\
+  arena_extends (eval_raw_call cx flags target data amount gas) /\
   arena_extends (eval_send cx has_gas vs) /\
   arena_extends (eval_ext_call cx static skip sig opts vs) /\
   arena_extends (eval_create cx kind salt rof tys vs blueprint_size) /\

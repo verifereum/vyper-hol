@@ -87,8 +87,8 @@ Theorem source_meaning_export_dispatch:
   ALOOKUP am.sources tx.target = SOME source_meaning_aggregate_modules /\
   ALOOKUP am.exports tx.target = SOME [("read",1)] /\ tx.function_name = "read" ==>
   let cx = initial_evaluation_context am.sources am.layouts tx (SOME 1) in
-  call_external orc am tx =
-    case source_meaning_invoke orc am cx
+  call_external orc gobs am tx =
+    case source_meaning_invoke orc gobs am cx
       [SDM_Constant "A" (BaseT (UintT 256)) (IntL 6);source_meaning_export_meaning]
       F Pure source_meaning_aggregate_modules [] [] tx.args
       [SBM_Return (SOME (SM_Literal (BaseT (UintT 256)) (IntL 6)))] (BaseT (UintT 256)) of

@@ -117,21 +117,21 @@ QED
    region of one slot, and Venom stores w there: stmt_state_rel holds after
    both. *)
 Theorem stmt_state_rel_write_storage_word:
-  !func cenv cx es s tr slot tvt v w res es'.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx es s tr slot tvt v w res es' ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     (!u st. storage_dead cx tr (update_storage slot u st) =
             storage_dead cx tr st) /\
     write_storage_slot cx tr slot tvt v es = (res, es') /\
     encode_value tvt v = SOME [(0, w)] ==>
     res = INL () /\
-    stmt_state_rel func cenv cx es'
+    stmt_state_rel ctx func cenv cx es'
       (if tr then tstore slot w s else sstore slot w s)
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[write_storage_slot_eq, apply_writes_def, LET_THM] >>
   `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel cx es s` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel _ _ _ es1 s1` >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel ctx _ _ _ es1 s1` >>
   `accounts_rel cx es1 s1` by
     (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`]
      >- (irule accounts_rel_tstore >>
@@ -144,16 +144,21 @@ Proof
   `s1.vs_call_ctx = s.vs_call_ctx` by
     (Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]) >>
   drule accounts_rel_storage_transient >> strip_tac >>
-  irule stmt_state_rel_allocas_frame >>
-  `s1.vs_allocas = s.vs_allocas /\ s1.vs_alloca_next = s.vs_alloca_next` by
-    (Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]) >>
-  reverse conj_tac >- (qexistsl [`es`, `s`] >> simp[]) >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
-  Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`] >>
-  simp[stmt_state_rel_def, state_rel_def, sstore_def, tstore_def, LET_THM,
-       set_storage_def, local_ptrs_rel_storage_fields, immutables_rel_def,
-       logs_rel_def] >>
-  gvs[sstore_def, tstore_def, LET_THM]
+  `state_rel func cenv cx es1 s1` by
+    (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`] >>
+     fs[stmt_state_rel_def, state_rel_def, sstore_def, tstore_def, LET_THM,
+        set_storage_def, local_ptrs_rel_storage_fields, immutables_rel_def,
+        logs_rel_def] >> gvs[] >> metis_tac[]) >>
+  `immutable_alloca_sep func cenv cx es1 s1` by
+    (`immutable_alloca_sep func cenv cx es s` by fs[stmt_state_rel_def] >>
+     irule immutable_alloca_sep_fields >> qexistsl [`s`, `es`] >>
+     simp[] >> Cases_on `tr` >>
+     simp[Abbr `s1`, Abbr `es1`, sstore_def, tstore_def, LET_THM,
+          set_storage_def, local_region_def, lookup_var_def] >>
+     metis_tac[]) >>
+  irule stmt_state_rel_allocas_frame >> simp[] >>
+  qexistsl [`es`, `s`] >> simp[] >>
+  Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]
 QED
 
 (* ===== The lowering ===== *)
@@ -162,12 +167,12 @@ QED
    code. *)
 Theorem compile_get_target_ptr_toplevel:
   !cenv nsid tr slot st.
-    FLOOKUP cenv.ce_vars (module_var_key nsid) =
+    FLOOKUP cenv.ce_module_vars nsid =
       SOME (if tr then TransientLoc slot else StorageLoc slot) /\
-    cenv.ce_hashmap_info (module_var_key nsid) = NONE ==>
-    compile_get_target_ptr cenv (TopLevelNameTarget nsid) st =
+    cenv.ce_hashmap_info nsid = NONE ==>
+    compile_get_target_ptr compile_expr cenv (TopLevelNameTarget nsid) st =
       ((Lit slot, SOME (if tr then LocTransient else LocStorage),
-        OPTION_MAP ValPT (cenv.ce_var_type (module_var_key nsid))), st)
+        OPTION_MAP ValPT (cenv.ce_module_var_type nsid)), st)
 Proof
   Cases_on `tr` >> simp[compile_get_target_ptr_def, comp_return_def]
 QED
@@ -179,10 +184,10 @@ Theorem assign_storage_word_code_parts:
   !cenv lctx ty nsid e sa sf c func tr slot vtyp.
     stmt_env cenv lctx ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e)
       sa = (c, sf) /\
-    FLOOKUP cenv.ce_vars (module_var_key nsid) =
+    FLOOKUP cenv.ce_module_vars nsid =
       SOME (if tr then TransientLoc slot else StorageLoc slot) /\
-    cenv.ce_hashmap_info (module_var_key nsid) = NONE /\
-    cenv.ce_var_type (module_var_key nsid) = SOME vtyp /\ is_word_type vtyp /\
+    cenv.ce_hashmap_info nsid = NONE /\
+    cenv.ce_module_var_type nsid = SOME vtyp /\ is_word_type vtyp /\
     is_word_type (expr_type e) /\ fn_has_code sa sf func ==>
     c = cenv /\
     ?sb op.
@@ -229,9 +234,9 @@ Theorem assign_storage_store_run:
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     eval_operand op s = SOME w /\
-    stmt_state_rel func cenv cx es'
+    stmt_state_rel ctx func cenv cx es'
       (if tr then tstore slot w s else sstore slot w s) ==>
-    ?t. stmt_state_rel func cenv cx es' t /\
+    ?t. stmt_state_rel ctx func cenv cx es' t /\
         ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
         t.vs_inst_idx = LENGTH st'.cs_current_insts /\
         (!x. lookup_var x t = lookup_var x s) /\
@@ -242,7 +247,7 @@ Theorem assign_storage_store_run:
 Proof
   rpt strip_tac >>
   `frag_exec ctx st st' (\t. t = s)
-     (\t. stmt_state_rel func cenv cx es' t /\
+     (\t. stmt_state_rel ctx func cenv cx es' t /\
           (!x. lookup_var x t = lookup_var x s) /\
           (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                    FLOOKUP t.vs_allocas aid = SOME b)) (\r. F)` by
@@ -289,10 +294,10 @@ Theorem assign_storage_word_success_run:
       ((), sf) /\
     fn_has_code sa sb func /\ fn_has_code sb sf func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    stmt_state_rel func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel func cenv cx es' t /\ ~t.vs_halted /\
+    ?t. stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
         t.vs_current_bb = sf.cs_current_bb /\
         t.vs_inst_idx = LENGTH sf.cs_current_insts /\
         (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
@@ -313,8 +318,8 @@ Proof
   impl_tac >- simp[expr_res_ok_def] >>
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
-  rename1 `expr_post _ _ _ _ _ _ _ _ _ _ _ s1` >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _`
+  rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
+  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `eval_operand op s1 = SOME (typed_val_to_w256 etv v)` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
@@ -323,7 +328,7 @@ Proof
   drule_all storage_dead_update_word_region >> strip_tac >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >>
   drule_all assign_storage_store_run >>
-  disch_then (qspec_then `ctx` mp_tac) >> strip_tac >>
+  strip_tac >>
   qexists_tac `t` >> simp[] >> metis_tac[]
 QED
 
@@ -342,8 +347,8 @@ Theorem compile_assign_storage_stmt_frag:
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
     evaluate_type (get_tenv cx) typ = SOME tvt /\ type_slot_size tvt = 1 /\
-    cenv.ce_hashmap_info (module_var_key (src, id)) = NONE /\
-    cenv.ce_var_type (module_var_key (src, id)) = SOME vtyp /\
+    cenv.ce_hashmap_info (src, id) = NONE /\
+    cenv.ce_module_var_type (src, id) = SOME vtyp /\
     is_word_type vtyp /\ is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
     (!v es1.
@@ -358,7 +363,7 @@ Theorem compile_assign_storage_stmt_frag:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
-  `FLOOKUP cenv.ce_vars (module_var_key (src, id)) =
+  `FLOOKUP cenv.ce_module_vars (src, id) =
      SOME (if tr then TransientLoc (n2w slot) else StorageLoc (n2w slot))` by
     (irule toplevel_storage_ce_vars >>
      gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
@@ -402,8 +407,8 @@ Theorem compile_assign_storage_typed_stmt_frag:
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
     expr_type e = typ /\ is_word_type typ /\
     evaluate_type (get_tenv cx) typ = SOME tvt /\
-    cenv.ce_hashmap_info (module_var_key (src, id)) = NONE /\
-    cenv.ce_var_type (module_var_key (src, id)) = SOME vtyp /\
+    cenv.ce_hashmap_info (src, id) = NONE /\
+    cenv.ce_module_var_type (src, id) = SOME vtyp /\
     is_word_type vtyp /\
     (!v es1.
        (do result <- eval_expr cx e; read_result cx result od) es =

@@ -1,6 +1,6 @@
 Theory sourceExprTest
 Ancestors
-  sourceExprProps sourceExprElaborate sourceExprDefs sourceExprWitnessDefs sourceConstValue
+  sourceExprProps sourceExprElaborate sourceExprCall sourceExprDefs sourceExprWitnessDefs sourceConstValue
   sourceSyntax sourceResolve sourceTypeResolve sourceTypeDefs sourceConstAnnotation
   sourceConstEval sourceConstAST
   sourceConstBuiltin sourceConstBuiltinTest sourceConstValueStructured
@@ -43,6 +43,41 @@ Definition source_expr_test_elaborate_def:
       source_expr_test_scopes source_expr_test_table []
       (source_expr_test_variables ty) ty source
 End
+
+(* Canonical runtime syntax contains only explicitly supplied dynamic options. *)
+Theorem source_expr_raw_call_default_keywords:
+  source_expr_raw_flags fuel env scopes table constants [] =
+    SC_Value <| rcf_max_outsize := 0; rcf_is_delegate := F;
+      rcf_is_static := F; rcf_revert_on_failure := T; rcf_kws := [] |>
+Proof
+  EVAL_TAC
+QED
+
+Theorem source_expr_raw_call_canonical_operands:
+  let runtime = [(["t"],Name (BaseT AddressT) "t");
+        (["d"],Name (BaseT (BytesT (Dynamic 4))) "d");
+        (["v"],Name (BaseT (UintT 256)) "v")];
+      flags = <| rcf_max_outsize := 0; rcf_is_delegate := F;
+        rcf_is_static := F; rcf_revert_on_failure := T; rcf_kws := [] |> in
+  source_expr_witness_elaborate env runtime [] NoneT
+    (SX_Call (SX_Name "raw_call") [SX_Name "t";SX_Name "d"] []) =
+      SC_Value (Call NoneT (RawCallTarget flags)
+        [Name (BaseT AddressT) "t";Name (BaseT (BytesT (Dynamic 4))) "d"] NONE) /\
+  source_expr_witness_elaborate env runtime [] NoneT
+    (SX_Call (SX_Name "raw_call") [SX_Name "t";SX_Name "d"] [("value",SX_Name "v")]) =
+      SC_Value (Call NoneT (RawCallTarget (flags with rcf_kws := [EKValue]))
+        [Name (BaseT AddressT) "t";Name (BaseT (BytesT (Dynamic 4))) "d";
+         Name (BaseT (UintT 256)) "v"] NONE) /\
+  source_expr_witness_elaborate env runtime [] NoneT
+    (SX_Call (SX_Name "raw_call") [SX_Name "t";SX_Name "d"]
+      [("value",SX_Literal (SCL_Int 0))]) =
+      SC_Value (Call NoneT (RawCallTarget (flags with rcf_kws := [EKValue]))
+        [Name (BaseT AddressT) "t";Name (BaseT (BytesT (Dynamic 4))) "d";
+         Literal (BaseT (UintT 256)) (IntL 0)] NONE)
+Proof
+  EVAL_TAC >> simp[source_expr_exists_equality] >> EVAL_TAC >>
+  simp[source_expr_exists_equality]
+QED
 
 Theorem source_expr_constant_subtree_power_exponent:
   source_expr_test_elaborate env (BaseT (UintT 256))

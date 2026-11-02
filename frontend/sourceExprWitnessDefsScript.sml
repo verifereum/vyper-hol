@@ -174,8 +174,8 @@ Definition source_expr_witnesses_def:
      ("rc09_abi_encode_data",X ++ [(["t"],Name addr "t")],[],NoneT,
         call "raw_call" [SX_Name "t";enc (SX_Name "x") [("method_id",mid "f(uint256)")]],
         SC_Value (Call NoneT (RawCallTarget <| rcf_max_outsize := 0;rcf_is_delegate := F;
-          rcf_is_static := F;rcf_revert_on_failure := T |>)
-          [Name addr "t";enc_ast d36 T Fsel x;li u 0] NONE));
+          rcf_is_static := F;rcf_revert_on_failure := T;rcf_kws := [] |>)
+          [Name addr "t";enc_ast d36 T Fsel x] NONE));
      ("rr03_abi",X,[],NoneT,
         call "raw_revert" [enc (SX_Name "x") [("method_id",mid "E(uint256)")]],
         SC_Value (Call NoneT RawRevert [enc_ast d36 T Esel x] NONE))]

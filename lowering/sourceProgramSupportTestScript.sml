@@ -151,6 +151,59 @@ Proof
   drule checked_remainder_supported_program >> simp[]
 QED
 
+(* Immutable reads and constructor targets use the same gates as main support.
+   In particular, the read remains supported underneath a pure builtin. *)
+Definition source_support_immutable_tops_def:
+  source_support_immutable_tops =
+    [VariableDecl Private Immutable "seed" (BaseT (UintT 256)) NONE;
+     FunctionDecl Deploy Nonpayable F F "__init__" [] [] NoneT
+       [Assign (BaseTarget (TopLevelNameTarget (NONE,"seed")))
+         (Literal (BaseT (UintT 256)) (IntL 7))];
+     FunctionDecl External View F F "f" [] [] (BaseT (UintT 256))
+       [Return (SOME (Builtin (BaseT (UintT 256)) (Bop Add)
+         [TopLevelName (BaseT (UintT 256)) (NONE,"seed");
+          Literal (BaseT (UintT 256)) (IntL 1)]))]]
+End
+
+Theorem immutable_program_checked_remainder:
+  source_program_remainder source_support_immutable_tops /\
+  (?art. check_contract T [] (0w:address)
+    [(NONE,source_support_immutable_tops)] = SOME art)
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem immutable_program_supported_by_replacement:
+  supported_program source_support_immutable_tops
+Proof
+  strip_assume_tac immutable_program_checked_remainder >>
+  drule checked_remainder_supported_program >> simp[]
+QED
+
+(* Immutable acceptance does not erase type, namespace, layout or visibility
+   restrictions, nor does it turn immutable roots into storage places. *)
+Theorem remainder_immutable_boundaries_retained:
+  source_pure_expr_remainder source_support_immutable_tops
+    (TopLevelName (BaseT (UintT 256)) (NONE,"seed")) /\
+  ~source_pure_expr_remainder source_support_immutable_tops
+    (TopLevelName (BaseT BoolT) (NONE,"seed")) /\
+  ~source_pure_expr_remainder source_support_immutable_tops
+    (TopLevelName (BaseT (UintT 256)) (SOME 1,"seed")) /\
+  ~source_place_expr_remainder source_support_immutable_tops
+    (TopLevelName (BaseT (UintT 256)) (NONE,"seed")) /\
+  ~source_pure_expr_remainder
+    [VariableDecl Private Immutable "bad" (BaseT (BytesT (Fixed 20))) NONE]
+    (TopLevelName (BaseT (BytesT (Fixed 20))) (NONE,"bad")) /\
+  ~source_pure_expr_remainder
+    [VariableDecl Private Immutable "bad" (BaseT (UintT 256)) (SOME 0)]
+    (TopLevelName (BaseT (UintT 256)) (NONE,"bad")) /\
+  ~source_pure_expr_remainder
+    [VariableDecl Public Immutable "bad" (BaseT (UintT 256)) NONE]
+    (TopLevelName (BaseT (UintT 256)) (NONE,"bad"))
+Proof
+  EVAL_TAC
+QED
+
 (* Body expression support does not discharge the declared return layout. *)
 Theorem remainder_return_layout_retained:
   source_function_body_remainder [] External

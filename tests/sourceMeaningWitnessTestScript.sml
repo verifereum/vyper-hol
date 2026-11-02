@@ -11,7 +11,10 @@ Libs
   sourceModuleParityLib intLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ();
-val () = holbuild_extra_deps ["fixtures/check_contract/source_syntax",
+(* sourceModuleParityLib dynamically loads the shared fixture helper. *)
+val () = holbuild_extra_deps ["sourceBytecodeFixtureLib.sml",
+  "fixtures/check_contract/source_syntax",
+  "../lowering/defs/bytecode/folded-value-sources",
   "../lowering/defs/bytecode/folded-value-witnesses.txt",
   "../lowering/defs/bytecode/folded-value-parity-fixtures.txt"];
 

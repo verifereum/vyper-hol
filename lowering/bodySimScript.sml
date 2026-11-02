@@ -46,9 +46,8 @@ Ancestors
    allocas, as build_compile_env makes every body's, and the source finds
    its functions in tops.  tops's module variables have distinct names, as
    the type checker gives (source_typing_ok_vtype_keys_distinct), and cenv
-   has build_compile_env's hashmaps and module variable types.  A
-   declaration keeps those types only if its name is not a module key
-   ("self." ...): bodySimStmtCases's stmt_env_module_var_type. *)
+   has build_compile_env's hashmaps and module variable types, which no
+   declaration changes. *)
 Definition body_inv_def:
   body_inv tops ctx cenv cx <=>
     supported_program tops /\
@@ -62,21 +61,18 @@ Definition body_inv_def:
     ALL_DISTINCT
       (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
     cenv.ce_hashmap_info = build_hashmap_info tops /\
-    (!id. cenv.ce_var_type (module_var_key (NONE, id)) =
-          build_var_type_map tops (module_var_key (NONE, id)))
+    (!id. cenv.ce_module_var_type (NONE, id) =
+          build_var_type_map tops (NONE, id))
 End
 
 (* The compile env binds no local the typing does not know: every name
-   ce_vars binds, but a module variable's key, is a local of the type
-   environment.  build_compile_env binds the parameters and the module
-   variables' keys, and each declaration binds its name as the typing
+   ce_vars binds is a local of the type environment.  build_compile_env
+   binds the parameters, and each declaration binds its name as the typing
    adds it.  A name the typing declares (it is not in env.var_types) is
-   then unbound unless it is a module variable's key. *)
+   then unbound. *)
 Definition ce_locals_declared_def:
   ce_locals_declared cenv env <=>
-    !n l. FLOOKUP cenv.ce_vars n = SOME l /\
-          (!nsid. n <> module_var_key nsid) ==>
-          n IN FDOM env.var_types
+    !n l. FLOOKUP cenv.ce_vars n = SOME l ==> n IN FDOM env.var_types
 End
 
 (* expr_sim_pre's byte_widths_expr and alloc_limits_expr for every
@@ -88,9 +84,9 @@ Definition stmt_exprs_ok_def:
 End
 
 (* The compile envs of one function's body: cenv' is cenv but for the
-   fields a declaration changes, as in cenv_top_ext, and its variables
-   differ only at names unbound or held through a pointer on both sides,
-   so module variables (immutables above all) keep their bindings. *)
+   fields a declaration changes, as in cenv_top_ext, so module variables
+   (immutables above all) keep their bindings, and its locals differ only
+   at names unbound or held through a pointer on both sides. *)
 Definition same_frame_def:
   same_frame cenv cenv' <=>
     cenv' with <| ce_vars := cenv.ce_vars; ce_var_type := cenv.ce_var_type;

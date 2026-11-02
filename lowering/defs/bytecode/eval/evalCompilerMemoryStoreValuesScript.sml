@@ -154,3 +154,11 @@ Theorem method_id_lit_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation method_id_lit))) >> EVAL_TAC
 QED
+
+val p20_nested_pop = memoryStoreWitnessLib.evaluate fixture_root "p20_nested_pop"
+Theorem p20_nested_pop_matches_python_oracle:
+  ^(#term p20_nested_pop) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "p20_nested_pop")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation p20_nested_pop))) >> EVAL_TAC
+QED

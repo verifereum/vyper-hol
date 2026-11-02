@@ -181,6 +181,9 @@ Definition eval_expr_cps_def:
     (case type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st of
        (INR ex, st) => AK cx8 (ApplyExc ex) st k
      | (INL (), st) => if bt = Len then eval_expr_cps cx8 (HD es) st (LenK k)
+                       else if bt = Env MsgGas then
+                         liftk cx8 ApplyTv
+                           (do v <- next_gas_reading; return $ Value v od st) k
                        else eval_exprs_cps cx8 es st (BuiltinK ty bt (MAP expr_type es) k)) ∧
   eval_expr_cps cx8 (Pop _ bt) st k =
     eval_target_place_cps cx8 bt st (PopK k) ∧
@@ -849,20 +852,26 @@ Definition apply_vals_def:
   (* ===== Chain interaction builtins ===== *)
   apply_vals cx vs st (RawCallK ty flags k) =
     (case do
-      type_check (LENGTH vs = 3) "raw_call args";
+      type_check (LENGTH vs = 2 + LENGTH flags.rcf_kws) "raw_call args";
       target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
       calldata <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_call data";
-      amount <- lift_option_type (dest_NumV (EL 2 vs)) "raw_call value";
+      amount <- lift_option_type (raw_call_value flags.rcf_kws (DROP 2 vs))
+                  "raw_call value";
       eval_raw_call cx flags target_addr calldata amount
+        (forwarded_gas default_evm_gas_limit
+           (ext_call_kwarg EKGas flags.rcf_kws (DROP 2 vs)))
     od st
     of (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
   apply_vals cx vs st (RawCallCalldataK flags k) =
     (case do
-      type_check (LENGTH vs = 2) "raw_call calldata args";
+      type_check (LENGTH vs = 1 + LENGTH flags.rcf_kws) "raw_call calldata args";
       target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
-      amount <- lift_option_type (dest_NumV (EL 1 vs)) "raw_call value";
+      amount <- lift_option_type (raw_call_value flags.rcf_kws (DROP 1 vs))
+                  "raw_call value";
       eval_raw_call cx flags target_addr cx.txn.calldata amount
+        (forwarded_gas default_evm_gas_limit
+           (ext_call_kwarg EKGas flags.rcf_kws (DROP 1 vs)))
     od st
     of (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
@@ -1138,14 +1147,6 @@ Theorem type_builtin_CASE_abi:
 Proof
   Cases_on `tb` >> simp[]
 QED
-
-val TYPE_BUILTIN_SNAPSHOT_CPS_TAC =
-  rw[eval_expr_cps_def, Once evaluate_def, ignore_bind_def, bind_def] >>
-  CASE_TAC >> gvs[cont_def] >> reverse CASE_TAC >>
-  gvs[] >> first_x_assum drule >> rw[] >>
-  CASE_TAC >> gvs[cont_def] >> reverse CASE_TAC
-  >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, liftk1];
 
 val ABI_CPS_CASE_TAC =
   simp[bind_def, return_def, liftk1, cont_frame, stepk_def,
@@ -1616,6 +1617,9 @@ Proof
   \\ conj_tac >- ( (* eval_expr (Builtin bt es) *)
     simp[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
     \\ rpt strip_tac
+    \\ Cases_on `bt = Env MsgGas`
+    >- (gvs[next_gas_reading_def, return_def, raise_def]
+        \\ rpt (CASE_TAC \\ gvs[liftk1, return_def, raise_def]))
     \\ BasicProvers.TOP_CASE_TAC
     \\ gvs[cont_def]
     \\ BasicProvers.TOP_CASE_TAC
@@ -1637,11 +1641,15 @@ Proof
   \\ conj_tac >- ( (* eval_expr (TypeBuiltin ...): ABI has its own operand phase. *)
     rpt gen_tac \\ strip_tac
     \\ reverse (Cases_on `∃a b. tb = AbiEncode a b`)
-    >- (Cases_on `tb` \\ gvs[] >|
-      [TYPE_BUILTIN_SNAPSHOT_CPS_TAC, TYPE_BUILTIN_SNAPSHOT_CPS_TAC,
-       TYPE_BUILTIN_SNAPSHOT_CPS_TAC, TYPE_BUILTIN_SNAPSHOT_CPS_TAC,
-       TYPE_BUILTIN_SNAPSHOT_CPS_TAC, TYPE_BUILTIN_SNAPSHOT_CPS_TAC,
-       TYPE_BUILTIN_SNAPSHOT_CPS_TAC])
+    (* Keep the shared snapshot proof as individually timed steps: the
+       composite tactic exceeds the 2.5s contract for Epsilon after merging. *)
+    >- (Cases_on `tb` \\ gvs[] \\ (
+        rw[eval_expr_cps_def, Once evaluate_def, ignore_bind_def, bind_def]
+        \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
+        \\ gvs[] \\ first_x_assum drule \\ rw[]
+        \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
+        >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+        >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, liftk1]))
     \\ gvs[]
     \\ rw[eval_expr_cps_def, Once evaluate_def, ignore_bind_def, bind_def]
     \\ CASE_TAC \\ gvs[] \\ reverse CASE_TAC \\ gvs[]
@@ -2310,9 +2318,10 @@ val evaluate_defaults_pre_def = evaluate_defaults_def
   |> cv_auto_trans_pre "evaluate_defaults_pre";
 
 Theorem evaluate_defaults_pre[cv_pre]:
-  ∀cx am v. evaluate_defaults_pre cx am v
+  ∀cx am gobs v. evaluate_defaults_pre cx am gobs v
 Proof
   ntac 2 gen_tac
+  \\ simp[Once SWAP_FORALL_THM]
   \\ Induct \\ rw[]
   \\ rw[Once evaluate_defaults_pre_def]
   \\ gs[bind_def, eval_expr_eq_cont_cps]
@@ -2336,7 +2345,7 @@ val call_external_function_pre_def = call_external_function_def
      |> cv_auto_trans_pre "call_external_function_pre";
 
 Theorem call_external_function_pre[cv_pre]:
-  call_external_function_pre orc am cx nr mut ts all_mods args dflts vals
+  call_external_function_pre orc gobs am cx nr mut ts all_mods args dflts vals
     (bod:stmt list) ret
 Proof
   rw[call_external_function_pre_def]

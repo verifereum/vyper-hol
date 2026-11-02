@@ -167,6 +167,7 @@ Inductive source_location_source:
     (SML_TypeApply ty (AbiDecode unwrap) ty [m])
 [raw_call:]
   source_location_intrinsic scopes table callee "raw_call" /\
+  flags.rcf_kws = (if IS_SOME (ALOOKUP kws "value") then [EKValue] else []) /\
   ALL_DISTINCT (MAP FST kws) /\
   EVERY (\k. MEM k ["value";"max_outsize";"is_delegate_call";"is_static_call";"revert_on_failure"]) (MAP FST kws) /\
   source_location_flag scopes table constants kws "is_delegate_call" F flags.rcf_is_delegate /\

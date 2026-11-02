@@ -87,14 +87,19 @@ Definition source_meaning_lookup_def:
     source_meaning_lookup name vis rest
 End
 
+(* Defaults have fresh scopes/stores, but share the ordered gas observations
+   with subsequent defaults and the body, just as the runtime call protocol. *)
 Definition source_meaning_defaults_def:
-  source_meaning_defaults cx am [] = SOME [] /\
-  source_meaning_defaults cx am (m::ms) =
-    case FST ((do
+  source_meaning_defaults cx am gobs [] = SOME ([],gobs) /\
+  source_meaning_defaults cx am gobs (m::ms) =
+    case (do
       result <- source_meaning_eval cx (\p. source_meaning_local (LAST p)) m;
       read_result cx result
-    od) (initial_state am [FEMPTY])) of
-      INL v => OPTION_MAP (CONS v) (source_meaning_defaults cx am ms)
+    od) (initial_state am [FEMPTY] with gas_obs := gobs) of
+      (INL v,st) =>
+        (case source_meaning_defaults cx am st.gas_obs ms of
+           SOME (vs,gobs') => SOME (v::vs,gobs')
+         | NONE => NONE)
     | _ => NONE
 End
 
@@ -124,21 +129,21 @@ End
    Both ordinary calls and constructors (including the synthetic empty one)
    use it. Return casts, errors, rollback and request traces are preserved. *)
 Definition source_meaning_invoke_def:
-  source_meaning_invoke orc am cx meanings nr mut all_mods args dms vals bms ret =
+  source_meaning_invoke orc gobs am cx meanings nr mut all_mods args dms vals bms ret =
   let all_tenv = type_env_all_modules all_mods in
   let n_missing = LENGTH args - LENGTH vals in
   if LENGTH vals > LENGTH args \/ n_missing > LENGTH dms then
     (INR $ Error (RuntimeError "call args length"),am,[])
-  else case source_meaning_defaults cx am (DROP (LENGTH dms - n_missing) dms) of
+  else case source_meaning_defaults cx am gobs (DROP (LENGTH dms - n_missing) dms) of
     NONE => (INR $ Error (RuntimeError "call evaluate_defaults"),am,[])
-  | SOME dflt_vs =>
+  | SOME (dflt_vs,gobs') =>
     case bind_arguments all_tenv args (vals ++ dflt_vs) of
       NONE => (INR $ Error (RuntimeError "call bind_arguments"),am,[])
     | SOME env =>
     case (if cx.in_deploy then source_meaning_install cx am meanings else SOME am) of
       NONE => (INR $ Error (RuntimeError "call constants_env"),am,[])
     | SOME am_c =>
-    let st = initial_state am_c [env] with <| outcomes := orc; requests := [] |> in
+    let st = initial_state am_c [env] with <| outcomes := orc; requests := []; gas_obs := gobs' |> in
     let is_view = (mut = View \/ mut = Pure) in
     let lock_action = if nr then
       case cx.nonreentrant_slot of

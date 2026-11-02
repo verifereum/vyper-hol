@@ -10,7 +10,8 @@ Definition source_pure_expr_remainder_def:
   source_pure_expr_remainder tops (Name ty name) = T /\
   source_pure_expr_remainder tops (Literal ty lit) = T /\
   source_pure_expr_remainder tops (TopLevelName ty id) =
-    supported_storage_value tops id ty /\
+    (supported_storage_value tops id ty \/
+     supported_immutable_type tops id = SOME ty) /\
   source_pure_expr_remainder tops (FlagMember ty id member) = F /\
   source_pure_expr_remainder tops (IfExp ty c a b) =
     (supported_value_type tops ty /\ ~supported_tuple_type ty /\

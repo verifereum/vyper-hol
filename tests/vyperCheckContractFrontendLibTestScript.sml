@@ -1052,10 +1052,10 @@ val () = app (fn constant =>
   else raise Fail "public artifact lost independent call/load semantics")
   [``source_meaning_call``,``source_meaning_load``,``source_meaning_module``];
 Theorem public_meaning_default_call:
-  FST (call_external NONE source_meaning_call_machine
+  FST (call_external NONE [] source_meaning_call_machine
     (empty_call_txn with function_name := "f")) = INL (IntV 6)
 Proof
-  ACCEPT_TAC source_meaning_call_runtime_return
+  irule source_meaning_call_runtime_return
 QED
 
 (* Public-wrapper integration: scalar normalization, selector/storage layout,

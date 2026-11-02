@@ -11,11 +11,14 @@ Libs
 open sourceMeaningLocationWitnessLib;
 val scopes = ``[[
   ("xs",["xs"]);("pair",["pair"]);("i",["i"]);("j",["j"]);("flag",["flag"]);
+  ("t",["t"]);("d",["d"]);("v",["v"]);("raw_call",["$builtin";"raw_call"]);
   ("text",["text"]);("abi_encode",["$builtin";"abi_encode"]);
   ("len",["$builtin";"len"]);("keccak256",["$builtin";"keccak256"])]]``;
 val table = ``[
   (["xs"],SR_Dynamic);(["pair"],SR_Dynamic);(["i"],SR_Dynamic);(["j"],SR_Dynamic);
   (["flag"],SR_Dynamic);(["text"],SR_Dynamic);
+  (["t"],SR_Dynamic);(["d"],SR_Dynamic);(["v"],SR_Dynamic);
+  (["$builtin";"raw_call"],SR_Function);
   (["$builtin";"abi_encode"],SR_Function);(["$builtin";"len"],SR_Builtin SCB_Len);
   (["$builtin";"keccak256"],SR_Builtin SCB_Keccak256)]``;
 val uint = ``BaseT (UintT 256)``;
@@ -25,7 +28,10 @@ val refs = ``[
   (["xs"],(^array,SMR_Local "xs"));(["pair"],(^pair,SMR_Local "pair"));
   (["i"],(^uint,SMR_Local "i"));(["j"],(^uint,SMR_Local "j"));
   (["flag"],(BaseT BoolT,SMR_Local "flag"));
-  (["text"],(BaseT (StringT 40),SMR_Local "text"))]``;
+  (["text"],(BaseT (StringT 40),SMR_Local "text"));
+  (["t"],(BaseT AddressT,SMR_Local "t"));
+  (["d"],(BaseT (BytesT (Dynamic 4)),SMR_Local "d"));
+  (["v"],(^uint,SMR_Local "v"))]``;
 val type_ids = ``[]: (string list # type) list``;
 val constants = ``[]:(string list # source_const_binding) list``;
 val tenv = ``FEMPTY:nsid |-> type_args``;
@@ -63,6 +69,25 @@ val () = check "abi_conditional_projection" ``BaseT (BytesT (Dynamic 36))``
     (AbiEncode F (SOME [222w;173w;190w;239w])) (TupleT [^uint])
     [Subscript ^uint (Name ^array "xs")
       (IfExp ^uint (Name (BaseT BoolT) "flag") (Name ^uint "i") (Name ^uint "j"))]``;
+
+(* Both keyword shapes are derived from original syntax before checking code.
+   Explicit zero remains explicit; an omitted value has no runtime operand. *)
+val raw_flags = ``<|rcf_max_outsize := 0; rcf_is_delegate := F;
+  rcf_is_static := F; rcf_revert_on_failure := T; rcf_kws := []|>``;
+val () = check "raw_call_omitted_value" ``NoneT``
+  ``SX_Call (SX_Name "raw_call") [SX_Name "t";SX_Name "d"] []``
+  ``Call NoneT (RawCallTarget ^raw_flags)
+    [Name (BaseT AddressT) "t";Name (BaseT (BytesT (Dynamic 4))) "d"] NONE``;
+val () = check "raw_call_explicit_value" ``NoneT``
+  ``SX_Call (SX_Name "raw_call") [SX_Name "t";SX_Name "d"] [("value",SX_Name "v")]``
+  ``Call NoneT (RawCallTarget (^raw_flags with rcf_kws := [EKValue]))
+    [Name (BaseT AddressT) "t";Name (BaseT (BytesT (Dynamic 4))) "d";Name ^uint "v"] NONE``;
+val () = check "raw_call_explicit_zero" ``NoneT``
+  ``SX_Call (SX_Name "raw_call") [SX_Name "t";SX_Name "d"]
+    [("value",SX_Literal (SCL_Int 0))]``
+  ``Call NoneT (RawCallTarget (^raw_flags with rcf_kws := [EKValue]))
+    [Name (BaseT AddressT) "t";Name (BaseT (BytesT (Dynamic 4))) "d";
+     Literal ^uint (IntL 0)] NONE``;
 
 (* Actual cell metadata, captures and delayed reads, not a value-only model. *)
 Definition source_location_capture_state_def:
@@ -129,6 +154,25 @@ Theorem source_location_failed_encode_releases_captures:
       [SML_Reference (ArrayT (BaseT BoolT) (Dynamic 2)) (SMR_Local "a");
        SML_Reference (ArrayT (BaseT BoolT) (Dynamic 2)) (SMR_Local "missing")])
     source_location_capture_state)).abi_memory = []
+Proof
+  EVAL_TAC
+QED
+
+(* Source gas reads consume frame observations in evaluation order. *)
+Theorem source_location_gas_observations:
+  source_location_evals empty_evaluation_context
+    [SML_Apply (BaseT (UintT 256)) (Env MsgGas) [];
+     SML_Apply (BaseT (UintT 256)) (Env MsgGas) []]
+    (empty_state with gas_obs := [51w;34w;17w]) =
+      (INL [IntV 51;IntV 34],empty_state with gas_obs := [17w])
+Proof
+  EVAL_TAC
+QED
+
+Theorem source_location_gas_observations_exhausted:
+  source_location_eval empty_evaluation_context
+    (SML_Apply (BaseT (UintT 256)) (Env MsgGas) []) empty_state =
+      (INR (Error (RuntimeError "msg.gas: no gas reading")),empty_state)
 Proof
   EVAL_TAC
 QED

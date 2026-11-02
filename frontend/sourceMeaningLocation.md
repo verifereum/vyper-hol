@@ -19,7 +19,9 @@ cross-cutting design and trust boundary.
   builtins (including location-sensitive `len`), ABI encode/decode, `raw_revert`
   and ordinary `raw_call`. Type operands, Boolean options and four-byte
   selectors resolve independently from original syntax and mathematical values.
-  Missing options differ from invalid present options. These rules mention
+  Missing options differ from invalid present options. Raw-call omission ties
+  the semantic value to literal zero and uses no `EKValue` or runtime value
+  operand; an explicit value (including zero) retains both. These rules mention
   neither elaboration nor an interpreter AST evaluator.
 * `sourceMeaningLocationCode` is a separate structural compilation relation.
   `source_location_code_evaluates` simultaneously equates ordinary expressions,
@@ -101,7 +103,8 @@ holbuild build sourceMeaningLocationDefsTheory sourceMeaningLocationCodeTheory \
 
 `sourceMeaningLocationTest` exercises original derivations and all-state
 ordinary/ABI transport for dynamic `len`/Keccak, tuple indexing, conditional
-array indexing and ABI projection. State regressions require runtime cell-type
+array indexing, ABI projection, and omitted/explicit raw-call values (including
+explicit zero). State regressions require runtime cell-type
 capture, delayed reads after mutation, capture release on error, and once-only
 index/condition evaluation while observing later writes to the selected cell.
 The witness root checks exact inventory and kernel closure: no open hypotheses,

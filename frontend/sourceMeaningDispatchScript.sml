@@ -1,8 +1,8 @@
 Theory sourceMeaningDispatch
 Ancestors
-  sourceMeaningDecl sourceMeaningCall sourceMeaningCallDefs sourceMeaningProgram
+  sourceMeaningDecl sourceMeaningCall sourceMeaningCallDefs
   sourceMeaningProgramDefs sourceMeaningStmt sourceMeaningStmtDefs
-  sourceModuleCompile sourceModuleElaborate sourceModuleDecl sourceModuleDefs
+  sourceModuleElaborate sourceModuleDecl sourceModuleDefs
   sourceSyntax vyperInterpreter vyperState vyperContext vyperAST alist list pair option
 
 Theorem source_meaning_collect_declarations:
@@ -32,7 +32,7 @@ QED
    rules. It includes normal functions, explicit constructors and empty default
    constructors. Runtime values at the API are already ABI-decoded. *)
 Definition source_meaning_call_def:
-  source_meaning_call orc am tx meanings =
+  source_meaning_call orc gobs am tx meanings =
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
     case ALOOKUP am.sources tx.target of
       NONE => (INR (Error (RuntimeError "call get sources")),am,[])
@@ -40,13 +40,13 @@ Definition source_meaning_call_def:
       case source_meaning_lookup tx.function_name External meanings of
         NONE => (INR (Error (RuntimeError "call lookup_function")),am,[])
       | SOME (mut,nr,args,dms,ret,bms) =>
-        case source_meaning_invoke orc am cx meanings nr mut mods args dms tx.args bms ret of
+        case source_meaning_invoke orc gobs am cx meanings nr mut mods args dms tx.args bms ret of
           (INL v,am',rqs) => (INL v,finalize_pending_deletions am',rqs)
         | failure => failure
 End
 
 Definition source_meaning_load_def:
-  source_meaning_load orc am tx mods exps meanings =
+  source_meaning_load orc gobs am tx mods exps meanings =
     let addr = tx.target in
     let am = am with <| immutables updated_by CONS (addr,empty_immutables);
                         exports updated_by CONS (addr,exps) |> in
@@ -55,7 +55,7 @@ Definition source_meaning_load_def:
     | SOME (mut,nr,args,dms,ret,bms) =>
       let cx = (initial_evaluation_context ((addr,mods)::am.sources) am.layouts tx NONE)
         with in_deploy := T in
-      case source_meaning_invoke orc am cx meanings nr mut mods args dms tx.args bms ret of
+      case source_meaning_invoke orc gobs am cx meanings nr mut mods args dms tx.args bms ret of
         (INR e,_,_) => INR e
       | (_,am',rqs) => INL (finalize_pending_deletions
           (am' with sources updated_by CONS (addr,mods)),rqs)
@@ -65,7 +65,7 @@ Theorem source_meaning_call_transport:
   ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
   ALOOKUP am.exports tx.target = NONE /\
   LIST_REL (source_meaning_decl_code (type_env_all_modules [(NONE,tops)])) meanings tops ==>
-  call_external orc am tx = source_meaning_call orc am tx meanings
+  call_external orc gobs am tx = source_meaning_call orc gobs am tx meanings
 Proof
   strip_tac >>
   qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx NONE` >>
@@ -113,8 +113,8 @@ QED
 
 Theorem source_meaning_load_transport:
   LIST_REL (source_meaning_decl_code (type_env_all_modules [(NONE,tops)])) meanings tops ==>
-  load_contract orc am tx [(NONE,tops)] exps =
-    source_meaning_load orc am tx [(NONE,tops)] exps meanings
+  load_contract orc gobs am tx [(NONE,tops)] exps =
+    source_meaning_load orc gobs am tx [(NONE,tops)] exps meanings
 Proof
   strip_tac >>
   drule source_meaning_initial_immutables >> strip_tac >>

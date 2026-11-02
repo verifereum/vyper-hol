@@ -176,9 +176,16 @@ Proof
        type_check_def, assert_def, lift_sum_def, set_scopes_def,
        return_def, raise_def, ignore_bind_def, check_def, pairTheory.UNCURRY,
        write_abi_memory_child_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
+  (* Give the bounded case-analysis batches separate tactic timeouts. *)
+  NTAC 4 (TRY (BasicProvers.FULL_CASE_TAC >>
        gvs[bind_def, ignore_bind_def, type_check_def, assert_def,
-           lift_sum_def, set_scopes_def, return_def, raise_def]) >>
+           lift_sum_def, set_scopes_def, return_def, raise_def])) >>
+  NTAC 4 (TRY (BasicProvers.FULL_CASE_TAC >>
+       gvs[bind_def, ignore_bind_def, type_check_def, assert_def,
+           lift_sum_def, set_scopes_def, return_def, raise_def])) >>
+  NTAC 4 (TRY (BasicProvers.FULL_CASE_TAC >>
+       gvs[bind_def, ignore_bind_def, type_check_def, assert_def,
+           lift_sum_def, set_scopes_def, return_def, raise_def])) >>
   rpt strip_tac >> Cases_on `tr` >>
   gvs[write_abi_memory_child_def, return_def, raise_def, AllCaseEqs(),
       get_storage_scopes, get_storage_def]

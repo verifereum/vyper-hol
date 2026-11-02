@@ -84,6 +84,35 @@ fun expected_functions name modules = if name = "address_bytes32" then
       [("b",BaseT (BytesT (Fixed 20)))] [] (BaseT (BytesT (Fixed 32)))
       [Return (SOME (TypeBuiltin (BaseT (BytesT (Fixed 32))) Convert
         (BaseT (BytesT (Fixed 32))) [Name (BaseT (BytesT (Fixed 20))) "b"]))]])``]
+  (* Pin keyword presence independently of both frontends. Omitted value= is
+     not a synthetic zero operand, particularly on the view/static call. *)
+  else if name = "raw_call_calldata" then
+  [``(NONE:num option,[
+    FunctionDecl External Payable F F "forward"
+      [("target",BaseT AddressT);("amount",BaseT (UintT 256))] [] NoneT
+      [Expr (Call NoneT (RawCallCalldataTarget
+        <|rcf_max_outsize := 0; rcf_is_delegate := F; rcf_is_static := F;
+          rcf_revert_on_failure := T; rcf_kws := [EKValue]|>)
+        [Name (BaseT AddressT) "target";Name (BaseT (UintT 256)) "amount"] NONE)];
+    FunctionDecl External View F F "static_result" [("target",BaseT AddressT)] []
+      (BaseT (BytesT (Dynamic 4)))
+      [Return (SOME (Call (BaseT (BytesT (Dynamic 4))) (RawCallCalldataTarget
+        <|rcf_max_outsize := 4; rcf_is_delegate := F; rcf_is_static := T;
+          rcf_revert_on_failure := T; rcf_kws := []|>)
+        [Name (BaseT AddressT) "target"] NONE))];
+    FunctionDecl External Nonpayable F F "status" [("target",BaseT AddressT)] []
+      (BaseT BoolT)
+      [Return (SOME (Call (BaseT BoolT) (RawCallCalldataTarget
+        <|rcf_max_outsize := 0; rcf_is_delegate := F; rcf_is_static := F;
+          rcf_revert_on_failure := F; rcf_kws := []|>)
+        [Name (BaseT AddressT) "target"] NONE))];
+    FunctionDecl External Nonpayable F F "output" [("target",BaseT AddressT)] []
+      (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic 4))])
+      [Return (SOME (Call (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic 4))])
+        (RawCallCalldataTarget
+          <|rcf_max_outsize := 4; rcf_is_delegate := F; rcf_is_static := F;
+            rcf_revert_on_failure := F; rcf_kws := []|>)
+        [Name (BaseT AddressT) "target"] NONE))]])``]
   else if name = "in_static_array" then let
   val values = [("zero_in_literal",``T``),("zero_not_in_literal",``F``),
     ("one_in_literal",``F``)]

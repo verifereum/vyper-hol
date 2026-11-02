@@ -401,17 +401,18 @@ Definition source_expr_build_def:
                  source_const_then
                    (source_expr_build fuel env scopes table constants bindings (BaseT AddressT) target) (\t.
                  source_const_then
-                   (case ALOOKUP keywords "value" of NONE =>
-                      SC_Value (Literal (BaseT (UintT 256)) (IntL 0))
-                    | SOME v => source_expr_build fuel env scopes table constants bindings (BaseT (UintT 256)) v) (\v.
+                   (case ALOOKUP keywords "value" of NONE => SC_Value []
+                    | SOME v => source_const_then
+                        (source_expr_build fuel env scopes table constants bindings (BaseT (UintT 256)) v)
+                        (\v. SC_Value [v])) (\vs.
                  if ty <> source_expr_raw_type flags then SC_Invalid SCErr_Type else
                  if source_expr_calldata scopes table data then
-                   source_expr_checked env ty (Call ty (RawCallCalldataTarget flags) [t;v] NONE)
+                   source_expr_checked env ty (Call ty (RawCallCalldataTarget flags) (t::vs) NONE)
                  else source_const_then
                    (case source_expr_infer fuel env scopes table constants bindings data of
                       NONE => SC_Unsupported (SCS_Syntax "raw-call-data-inference")
                     | SOME dty => source_expr_build fuel env scopes table constants bindings dty data)
-                   (\d. source_expr_checked env ty (Call ty (RawCallTarget flags) [t;d;v] NONE))))
+                   (\d. source_expr_checked env ty (Call ty (RawCallTarget flags) (t::d::vs) NONE))))
                | _ => SC_Invalid SCErr_Arity)
            | NONE => case source_expr_builtin_identity scopes table callee of
              SOME b =>

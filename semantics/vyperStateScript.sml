@@ -144,6 +144,7 @@ Datatype:
   (* Constructor immutable backing is frame-wide, not an ABI temporary.
      Immutable unwrap copies from this arena; pop only updates its length. *)
   ; abi_immutables: ((address # nsid) # storage) list
+  ; gas_obs: bytes32 list
   |>
 End
 
@@ -158,7 +159,8 @@ Definition empty_state_def:
     outcomes := NONE;
     requests := [];
     abi_memory := [];
-    abi_immutables := []
+    abi_immutables := [];
+    gas_obs := []
   |>
 End
 
