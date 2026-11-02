@@ -1,7 +1,7 @@
 # TASK: Simulate GAS against the running function frame
 
 ## Meta
-Status: planned
+Status: ready for proof
 Priority: P1
 Created: 2026-11-02
 Location: venom/codegen/proofs/gasFrameSimScript.sml
@@ -155,4 +155,6 @@ Venom GAS now pops vs_gas_readings, defaulting to zero at exhaustion. Assembly G
 
 The statement has an independent audit before the proof run. Its placeholder build may stop in inherited ancestors; if so the owner records that limitation and checks the final proof after those dependencies build.
 
-Current base: current main plus checked spill-planner proof repair and the oracle branch. The initial build on the old instruction-worker base stopped in `doSwapSim$spill_alloc_wf_after_spill` at the default step timeout before this statement parsed. That allocator proof was separately repaired without changing statements or definitions. The GAS statement remains byte-identical; only the missing, admitted general frame-view import was removed. Re-audit against the current planner definitions before starting Alan.
+Current base: current main plus checked spill-planner proof repair and the oracle branch. The initial build on the old instruction-worker base stopped in `doSwapSim$spill_alloc_wf_after_spill` at the default step timeout before this statement parsed. That allocator proof was separately repaired without changing statements or definitions. The GAS statement remains byte-identical; only the missing, admitted general frame-view import was removed.
+
+Independent re-audit against exact current definitions at `68fba0aaa` returned PROVABLE with no additional premise. Owner build13166, `holbuild -j2 build gasFrameSimTheory`, completed in5729.805s and saved the placeholder as `Saved CHEAT gas_inst_frame_sim`: statement parsing and prerequisites are checked; the proof remains the work of this task. Do not use admitted general simulation theorems.
