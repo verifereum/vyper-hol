@@ -118,6 +118,21 @@ Proof
   irule sue_boundary_operand_defined >> metis_tac[]
 QED
 
+Theorem sue_assign_observations:
+  a.inst_opcode = ASSIGN /\ sue_state_rel P s t ==>
+  mem_corr inst s a t /\ call_corr inst s a t
+Proof
+  strip_tac >>
+  `t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
+   t.vs_initial_fmp = s.vs_initial_fmp` by
+    (fs[sue_state_rel_def] >>
+     drule stateFrameTheory.execution_frame_projection >>
+     simp[stateFrameTheory.execution_frame_def]) >>
+  simp[mem_corr_def, call_corr_def, unitMemInvTheory.inst_mem_ranges_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       codegenRelTheory.source_memory_write_ranges_def]
+QED
+
 (* Runs of the expanded function correspond to runs of the original, in
    any context. *)
 Theorem sue_expand_function_supply_fn_bisim:
