@@ -136,3 +136,52 @@ Theorem bp_iterate_fuel_fixed:
 Proof
   Induct >> simp[bp_iterate_fuel_def]
 QED
+
+(* PARAM provenance is supplied by the caller's PG, not the local BP map. *)
+Theorem bp_param_passthrough:
+  inst.inst_opcode = PARAM ==> bp_handle_inst r inst = (F,r)
+Proof
+  strip_tac >> Cases_on `inst_output inst` >> simp[bp_handle_inst_def]
+QED
+
+(* Origin audit (interfaces, not a completeness theorem).
+   Runtime sources are ptrDisciplineTheory.out_prov, phi_prov and
+   frame_reachable rules call/ret; static sources are basePtrDefsTheory.
+
+   instruction  runtime origin                   local BP / consumer
+   ALLOCA       s'.vs_allocas[inst_id]            Allocation inst_id;
+                                                  find_base_allocas
+   DALLOCA      (output, new_fmp - output)        ignored; separate FMP region
+   PARAM        PG[index]                        ignored; caller argument lives
+   ASSIGN       first_prov G operands            copies source bases
+   PHI          selected edge, pre-entry G       union of all incoming bases
+   ADD/SUB      first_prov G operands            affine transfer of local bases
+   call return  restored caller G, outputs cut   ignored (not a pointer seed)
+
+   ptr_roots includes ALLOCA, DALLOCA and designated pointer PARAMs; it
+   classifies legal pointer uses, not BP seeds. A call saves caller G,
+   sets callee PG = MAP (op_prov G) args, and starts callee G at FEMPTY.
+   Thus callee local BP must NOT represent caller allocation identities.
+
+   concretizeMemLocDefsTheory.ml_liveat_inst adds both every operand's
+   bases and callee mems_used at INVOKE. ml_used_inst adds them to forward
+   demand too. ml_used_block merges live_pallocas at block entry, but
+   context_mem_livesets supplies []: incoming pointer retention must be
+   proved at the suspended caller's INVOKE, not by inventing callee seeds.
+   callee_mems_used reads fn_mems_used; imported_mems_used collects it at
+   calls; imported_liveset_info and compute_alloc_map_fuel_in_context keep
+   imported intervals at their fixed positions. These computations do not
+   themselves establish semantic completeness of the imported metadata.
+
+   Proposed runtime invariant to validate next (not assumed here): equip
+   each frame with an origin map from concrete (base,size) pairs to tagged
+   origins. For every G[v] = site, either (1) site is a local ALLOCA origin
+   a covered by bp_bases r v, (2) it is an incoming PG origin with a retained
+   suspended-caller witness, or (3) it is a DALLOCA origin in the FMP region.
+   Copy/PHI/affine steps propagate this disjunction. Call pushes the
+   retention witness; return restores it and drops output provenance.
+   Quantitative local BP coverage, caller retention throughout nested
+   calls, callee summary coverage for local/transitive static allocations,
+   and sufficient iteration fuel remain separate unproved obligations.
+   Absence of PARAM entries alone is not a stage counterexample.
+*)
