@@ -2,7 +2,7 @@ Theory cfgNormSupplySim
 Ancestors
   cfgNormSupplyProofs cfgTransformProps cfgNormDefs cfgTransform venomExecProps venomInst venomWf
   sccpCorrectnessProofs finite_map venomFnScheduleRunner unitShapeDefs stateFrame
-  analysisSimProofsBase analysisSimDefs cfgNormSim
+  analysisSimProofsBase analysisSimDefs cfgNormSim execEquivParamProps passSharedDefs
 
 Theorem find_and_split_supply_cases:
   !bbs fn s fn' changed s'.
@@ -2612,4 +2612,77 @@ Proof
   irule supply_eval_operand_replacement >> simp[] >>
   irule EQ_SYM >> irule supply_eval_operand_agree >> simp[] >>
   metis_tac[execEquivParamBaseTheory.resolve_phi_MEM]
+QED
+
+(* The exception set is exactly the complement of the old names. *)
+Theorem supply_state_agree_execution_equiv:
+  supply_state_agree fn st st' <=>
+  execution_equiv (COMPL (set (irSupply$fn_ir_vars fn))) st st'
+Proof
+  simp[supply_state_agree_def, stateEquivTheory.execution_equiv_def] >>
+  metis_tac[]
+QED
+
+Theorem supply_state_agree_state_equiv:
+  supply_state_agree fn st st' /\
+  st.vs_current_bb = st'.vs_current_bb /\
+  st.vs_inst_idx = st'.vs_inst_idx /\ st.vs_prev_bb = st'.vs_prev_bb ==>
+  state_equiv (COMPL (set (irSupply$fn_ir_vars fn))) st st'
+Proof
+  simp[stateEquivTheory.state_equiv_def,
+       GSYM supply_state_agree_execution_equiv]
+QED
+
+Theorem supply_step_inst:
+  supply_state_agree fn st st' /\
+  st.vs_current_bb = st'.vs_current_bb /\
+  st.vs_inst_idx = st'.vs_inst_idx /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  (!v. MEM (Var v) inst.inst_operands ==> MEM v (irSupply$fn_ir_vars fn)) ==>
+  lift_result (state_equiv (COMPL (set (irSupply$fn_ir_vars fn))))
+    (execution_equiv (COMPL (set (irSupply$fn_ir_vars fn))))
+    (execution_equiv (COMPL (set (irSupply$fn_ir_vars fn))))
+    (step_inst fuel ctx inst st) (step_inst fuel ctx inst st')
+Proof
+  strip_tac >> irule step_inst_preserves_R >>
+  simp[state_equiv_execution_equiv_valid_state_rel] >> conj_tac
+  >- metis_tac[supply_state_agree_lookup] >>
+  irule supply_state_agree_state_equiv >> simp[]
+QED
+
+Theorem supply_operand_in_fn:
+  MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+  MEM (Var v) inst.inst_operands ==> MEM v (irSupply$fn_ir_vars fn)
+Proof
+  simp[irSupplyTheory.fn_ir_vars_def, irSupplyTheory.block_ir_vars_def,
+       irSupplyTheory.inst_ir_vars_def, venomInstTheory.inst_uses_def,
+       listTheory.MEM_FLAT, listTheory.MEM_MAP, PULL_EXISTS,
+       passSharedDefsTheory.MEM_operand_vars_eq_Var] >> metis_tac[]
+QED
+
+Theorem supply_exec_block:
+  MEM bb fn.fn_blocks /\ supply_state_agree fn st st' /\
+  st.vs_current_bb = st'.vs_current_bb /\
+  st.vs_inst_idx = st'.vs_inst_idx /\ st.vs_prev_bb = st'.vs_prev_bb ==>
+  lift_result (state_equiv (COMPL (set (irSupply$fn_ir_vars fn))))
+    (execution_equiv (COMPL (set (irSupply$fn_ir_vars fn))))
+    (execution_equiv (COMPL (set (irSupply$fn_ir_vars fn))))
+    (exec_block fuel ctx bb st) (exec_block fuel ctx bb st')
+Proof
+  strip_tac >>
+  mp_tac (Q.SPEC `fn` (Q.SPECL
+    [`state_equiv (COMPL (set (irSupply$fn_ir_vars fn)))`,
+     `execution_equiv (COMPL (set (irSupply$fn_ir_vars fn)))`]
+    exec_block_preserves_R)) >>
+  impl_tac
+  >- (simp[state_equiv_execution_equiv_valid_state_rel] >>
+      rpt conj_tac
+      >- metis_tac[stateEquivPropsTheory.state_equiv_trans]
+      >- metis_tac[stateEquivPropsTheory.execution_equiv_trans] >>
+      rpt strip_tac >>
+      irule supply_state_agree_lookup >>
+      qexists_tac `fn` >>
+      gvs[GSYM supply_state_agree_execution_equiv, stateEquivTheory.state_equiv_def] >>
+      metis_tac[supply_operand_in_fn]) >>
+  strip_tac >> first_x_assum irule >> simp[] >>
+  irule supply_state_agree_state_equiv >> simp[]
 QED
