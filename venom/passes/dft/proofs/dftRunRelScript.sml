@@ -506,6 +506,86 @@ Proof
   qexistsl_tac [`[x]`,`[]`] >> simp[dft_head_bubbles_refl]
 QED
 
+Theorem dft_suffix_cons_rel:
+  (~is_terminator y.inst_opcode ==>
+    !t. step_inst fuel C y s = OK t ==>
+      dft_res_rel
+        (dft_exec_suffix fuel C xs (t with vs_inst_idx := SUC s.vs_inst_idx))
+        (dft_exec_suffix fuel C ys (t with vs_inst_idx := SUC s.vs_inst_idx))) ==>
+  dft_res_rel (dft_exec_suffix fuel C (y::xs) s)
+              (dft_exec_suffix fuel C (y::ys) s)
+Proof
+  strip_tac >> simp[dft_exec_suffix_def] >>
+  Cases_on `step_inst fuel C y s` >> simp[dft_res_rel_def] >>
+  Cases_on `is_terminator y.inst_opcode`
+  >- (Cases_on `v.vs_halted` >> simp[dft_res_rel_def]) >>
+  fs[dft_res_rel_def]
+QED
+
+Theorem dft_head_bubbles_exec:
+  (!x y. A x y ==>
+     dft_ok_swap_pair x y /\ inst_wf x /\
+     ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
+       write_effects x.inst_opcode = empty_effects)) /\
+  (!pre y post s. P (pre ++ y::post) s /\ EVERY (\x. A x y) pre ==>
+     inst_wf y /\
+     (!v. MEM (Var v) y.inst_operands ==> v IN FDOM s.vs_vars) /\
+     (y.inst_opcode <> INVOKE ==>
+       !l. MEM (Label l) y.inst_operands ==> l IN FDOM s.vs_labels)) /\
+  (!pre y post s t. P (pre ++ y::post) s /\ EVERY (\x. A x y) pre /\
+     ~is_terminator y.inst_opcode /\ step_inst fuel C y s = OK t ==>
+     P (pre ++ post) (t with vs_inst_idx := SUC s.vs_inst_idx)) ==>
+  !src dst. dft_head_bubbles A src dst ==>
+    !s. P src s ==>
+      dft_res_rel (dft_exec_suffix fuel C src s)
+                  (dft_exec_suffix fuel C dst s)
+Proof
+  strip_tac >> ho_match_mp_tac dft_head_bubbles_ind >> conj_tac
+  >- simp[dft_exec_suffix_def, dft_res_rel_def] >>
+  rpt strip_tac >>
+  qpat_assum `!pre y post s. _`
+    (qspecl_then [`pre`, `y`, `post`, `s`] mp_tac) >> simp[] >> strip_tac >>
+  irule dft_res_rel_trans >>
+  qexists_tac `dft_exec_suffix fuel C (y::(pre ++ post)) s` >> conj_tac
+  >- (irule dft_bubble_move_rel >> simp[] >>
+      fs[EVERY_MEM] >> metis_tac[]) >>
+  irule dft_suffix_cons_rel >> rpt strip_tac >>
+  first_x_assum irule >>
+  qpat_x_assum `!pre y post s t. _` irule >> qexists_tac `y` >> simp[]
+QED
+
+Theorem dft_head_bubbles_exec_moving:
+  (!x y. A x y ==>
+     dft_ok_swap_pair x y /\ inst_wf x /\
+     ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
+       write_effects x.inst_opcode = empty_effects)) /\
+  (!pre y post s. P (pre ++ y::post) s /\ EVERY (\x. A x y) pre /\ pre <> [] ==>
+     inst_wf y /\
+     (!v. MEM (Var v) y.inst_operands ==> v IN FDOM s.vs_vars) /\
+     (y.inst_opcode <> INVOKE ==>
+       !l. MEM (Label l) y.inst_operands ==> l IN FDOM s.vs_labels)) /\
+  (!pre y post s t. P (pre ++ y::post) s /\ EVERY (\x. A x y) pre /\
+     ~is_terminator y.inst_opcode /\ step_inst fuel C y s = OK t ==>
+     P (pre ++ post) (t with vs_inst_idx := SUC s.vs_inst_idx)) ==>
+  !src dst. dft_head_bubbles A src dst ==>
+    !s. P src s ==>
+      dft_res_rel (dft_exec_suffix fuel C src s)
+                  (dft_exec_suffix fuel C dst s)
+Proof
+  strip_tac >> ho_match_mp_tac dft_head_bubbles_ind >> conj_tac
+  >- simp[dft_exec_suffix_def, dft_res_rel_def] >> rpt strip_tac >>
+  `dft_res_rel (dft_exec_suffix fuel C (y::(pre ++ post)) s)
+               (dft_exec_suffix fuel C (y::dst) s)` by
+    (irule dft_suffix_cons_rel >> rpt strip_tac >> first_x_assum irule >>
+     qpat_x_assum `!pre y post s t. _` irule >> qexists_tac `y` >> simp[]) >>
+  Cases_on `pre = []` >- gvs[] >>
+  irule dft_res_rel_trans >>
+  qexists_tac `dft_exec_suffix fuel C (y::(pre ++ post)) s` >> simp[] >>
+  qpat_assum `!pre y post s. _`
+    (qspecl_then [`pre`, `y`, `post`, `s`] mp_tac) >> simp[] >> strip_tac >>
+  irule dft_bubble_move_rel >> simp[] >> fs[EVERY_MEM] >> metis_tac[]
+QED
+
 Theorem dft_id_before_cons[local]:
   id_before (h::xs) a b <=>
   (h = a /\ MEM b xs) \/ id_before xs a b
@@ -561,6 +641,25 @@ Proof
         metis_tac[wf_fn_block_inst_ids_distinct] >>
       metis_tac[id_before_asym]) >>
   metis_tac[]
+QED
+
+Theorem dft_remaining_producers_step:
+  (!d v. MEM d original /\ MEM v d.inst_outputs /\
+         ~MEM d (pre ++ y::post) ==> v IN FDOM s.vs_vars) /\
+  inst_wf y /\ ~is_pseudo y.inst_opcode /\ ~is_terminator y.inst_opcode /\
+  step_inst fuel C y s = OK t ==>
+  !d v. MEM d original /\ MEM v d.inst_outputs /\ ~MEM d (pre ++ post) ==>
+    v IN FDOM (t with vs_inst_idx := SUC s.vs_inst_idx).vs_vars
+Proof
+  strip_tac >>
+  `FOLDR (dft_exec_cons fuel C) OK [y] s =
+     OK (t with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[dft_exec_cons_def] >>
+  `EVERY (\i. inst_wf i /\ ~is_pseudo i.inst_opcode /\
+               ~is_terminator i.inst_opcode) [y]` by simp[] >>
+  drule_all dft_prefix_fdom >> simp[] >> rpt strip_tac >>
+  Cases_on `d = y` >- gvs[] >>
+  disj1_tac >> first_x_assum irule >> qexists_tac `d` >> simp[]
 QED
 
 Theorem dft_bubble_executed_ready:
