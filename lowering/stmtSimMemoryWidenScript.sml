@@ -217,6 +217,77 @@ Proof
   metis_tac[expr_val_at_def]
 QED
 
+Theorem nonbytestring_full_footprint[local]:
+  !tenv t tv v.
+    evaluate_type tenv t = SOME tv /\ ~is_bytestring_type t ==>
+    val_footprint tv v = type_memory_size tv
+Proof
+  rpt gen_tac >> Cases_on `t` >>
+  simp[is_bytestring_type_def, vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> Cases_on `v` >>
+  gvs[val_footprint_def, is_bytestring_type_def]
+QED
+
+(* Separation keeps both allocation and borrowed-local source ownership. *)
+Theorem typed_source_decl_alloca_separate[local]:
+  !cenv cx t sa sb es v op s tv func inst q dst dsz sw.
+    expr_val_at cenv cx t sa sb es v op s /\
+    evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
+    val_footprint tv v = type_memory_size tv /\
+    0 < type_memory_size tv /\ 0 < dsz /\
+    eval_operand op s = SOME sw /\
+    alloca_inv s /\ fn_inst_ids_distinct func /\
+    local_ptrs_rel func cenv es.scopes s /\
+    MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
+    not_local_ptr cenv es.scopes q /\
+    inst.inst_id < sa.cs_next_id /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (dst,dsz) ==>
+    w2n sw + type_memory_size tv <= dst \/
+    dst + dsz <= w2n sw
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >> gvs[]
+  >- (gvs[venomMemDefsTheory.alloca_inv_def,
+           venomMemDefsTheory.allocas_non_overlapping_def] >>
+      `aid <> inst.inst_id` by decide_tac >>
+      first_x_assum drule_all >> decide_tac) >>
+  `regions_disjoint dst dsz b sz` by
+    (irule localPtrsPropsTheory.local_ptrs_rel_alloca_disjoint >>
+     metis_tac[]) >>
+  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+QED
+
+Theorem typed_decl_post_separate[local]:
+  !ctx func cenv cx e es sa sb s0 es1 v op s stv inst p dw dsz.
+    expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
+    ~is_bytestring_type (lowered_value_type cenv e) /\
+    ~is_word_type (lowered_value_type cenv e) /\
+    evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
+    0 < type_memory_size stv /\ 0 < dsz /\
+    not_fresh_at sa p /\ lookup_var p s0 = SOME dw /\
+    FLOOKUP s0.vs_allocas inst.inst_id = SOME (w2n dw,dsz) /\
+    MEM inst (fn_insts func) /\ inst.inst_outputs = [p] /\
+    inst.inst_id < sa.cs_next_id /\
+    not_local_ptr cenv es1.scopes p /\ fn_inst_ids_distinct func ==>
+    lookup_var p s = SOME dw /\
+    ?sw. eval_operand op s = SOME sw /\
+         (w2n sw + type_memory_size stv <= w2n dw \/
+          w2n dw + dsz <= w2n sw)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all typed_memory_expr_source >> strip_tac >>
+  `val_footprint stv v = type_memory_size stv` by
+    metis_tac[nonbytestring_full_footprint] >>
+  gvs[expr_post_def] >>
+  `lookup_var p s = SOME dw /\
+   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n dw,dsz)` by metis_tac[] >>
+  `alloca_inv s /\ local_ptrs_rel func cenv es1.scopes s` by
+    gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def] >>
+  qpat_x_assum `expr_val_at _ _ (expr_type e) _ _ _ _ _ _` kall_tac >>
+  drule_all typed_source_decl_alloca_separate >> simp[]
+QED
+
 Theorem compile_annassign_memory_typed_stmt_frag:
   !ctx func cx lctx RetQ cenv env ret id dty e es res es' stv dtv.
     eval_stmt cx (AnnAssign id dty e) es = (res,es') /\
