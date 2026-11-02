@@ -208,3 +208,112 @@ Proof
   simp[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
   rpt strip_tac >> metis_tac[]
 QED
+
+Theorem current_tree_parent_not_in_child:
+  (!a b. MEM a labels /\ current_tree_edge dom a b ==>
+    MEM b labels /\ (r a : num) < r b) /\
+  MEM parent labels /\ current_tree_edge dom parent child ==>
+  ~MEM parent (dom_tree_postorder (current_dom_tree_aux dom n child))
+Proof
+  rpt strip_tac >>
+  `MEM child labels /\ r parent < r child` by metis_tac[] >>
+  `RTC (current_tree_edge dom) child parent` by
+    metis_tac[current_tree_postorder_path] >>
+  `r child <= r parent` by
+    (drule_all current_tree_path_rank >> simp[]) >> fs[]
+QED
+
+Theorem current_tree_postorder_distinct:
+  (!a. MEM a labels ==> ALL_DISTINCT (dominated_of dom a)) /\
+  (!a b. MEM a labels /\ current_tree_edge dom a b ==>
+    MEM b labels /\ (r a : num) < r b) /\
+  (!p q y. MEM p labels /\ MEM q labels /\
+    current_tree_edge dom p y /\ current_tree_edge dom q y ==> p = q) ==>
+  !n node. MEM node labels ==>
+    ALL_DISTINCT (dom_tree_postorder (current_dom_tree_aux dom n node))
+Proof
+  strip_tac >> Induct >- simp[] >> rpt strip_tac >>
+  simp[current_tree_postorder_suc, ALL_DISTINCT_APPEND] >> conj_tac
+  >- (irule distinct_flat_map_quantified >> conj_tac
+      >- (rpt strip_tac >> irule current_tree_sibling_disjoint >>
+          qexistsl [`dom`, `labels`, `n`, `n`, `r`, `node`, `c`] >>
+          gvs[current_tree_edge_def] >> metis_tac[]) >>
+      simp[] >> rpt strip_tac >> first_x_assum irule >>
+      metis_tac[current_tree_edge_def]) >>
+  simp[MEM_FLAT, MEM_MAP, PULL_EXISTS] >> rpt strip_tac >>
+  metis_tac[current_tree_parent_not_in_child, current_tree_edge_def]
+QED
+
+Theorem current_tree_postorder_perm:
+  ALL_DISTINCT labels /\ MEM root labels /\
+  (!a. MEM a labels ==> ALL_DISTINCT (dominated_of dom a)) /\
+  (!a b. MEM a labels /\ current_tree_edge dom a b ==>
+    MEM b labels /\ (r a : num) < r b) /\
+  (!p q y. MEM p labels /\ MEM q labels /\
+    current_tree_edge dom p y /\ current_tree_edge dom q y ==> p = q) /\
+  (!a. MEM a labels ==> r a < LENGTH labels) /\
+  (!z. MEM z labels /\ z <> root ==>
+    ?p. MEM p labels /\ current_tree_edge dom p z) ==>
+  PERM (dom_tree_postorder
+    (current_dom_tree_aux dom (LENGTH labels) root)) labels
+Proof
+  strip_tac >> irule PERM_ALL_DISTINCT >> simp[] >> conj_tac
+  >- (drule_all current_tree_postorder_coverage >> simp[]) >>
+  drule_all current_tree_postorder_distinct >> simp[]
+QED
+
+Theorem current_tree_zero_budget:
+  (!a. MEM a labels ==> (r a : num) < bound) /\
+  (!a b. MEM a labels /\ current_tree_edge dom a b ==>
+    MEM b labels /\ r a < r b) /\
+  MEM node labels /\ bound <= r node + 1 ==>
+  dominated_of dom node = []
+Proof
+  rpt strip_tac >> Cases_on `dominated_of dom node` >> simp[] >>
+  `current_tree_edge dom node h` by simp[current_tree_edge_def] >>
+  `MEM h labels /\ r node < r h` by metis_tac[] >>
+  `r h < bound` by metis_tac[] >> metis_tac[current_tree_rank_gap]
+QED
+
+Theorem current_tree_child_budget:
+  (!a b. MEM a labels /\ current_tree_edge dom a b ==>
+    MEM b labels /\ (r a : num) < r b) /\
+  MEM node labels /\ bound <= SUC n + r node + 1 /\
+  MEM child (dominated_of dom node) ==>
+  MEM child labels /\ bound <= n + r child + 1
+Proof
+  rpt strip_tac >>
+  `MEM child labels /\ r node < r child` by
+    metis_tac[current_tree_edge_def] >> simp[] >>
+  metis_tac[DECIDE ``a < b /\ c <= SUC n + a + 1 ==> c <= n + b + 1``]
+QED
+
+Theorem current_tree_fuel_stable:
+  (!a. MEM a labels ==> (r a : num) < bound) /\
+  (!a b. MEM a labels /\ current_tree_edge dom a b ==>
+    MEM b labels /\ r a < r b) ==>
+  !n node. MEM node labels /\ bound <= n + r node + 1 ==>
+  !extra. current_dom_tree_aux dom n node =
+    current_dom_tree_aux dom (n + extra) node
+Proof
+  strip_tac >> Induct >> rpt strip_tac
+  >- (`dominated_of dom node = []` by
+        (irule current_tree_zero_budget >>
+         qexistsl [`bound`, `labels`, `r`] >> simp[] >> metis_tac[]) >>
+      Cases_on `extra` >> simp[current_dom_tree_aux_def]) >>
+  simp[arithmeticTheory.ADD_CLAUSES, current_dom_tree_aux_def] >>
+  irule listTheory.MAP_CONG >> simp[] >>
+  rpt strip_tac >> once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  first_x_assum irule >> drule_all current_tree_child_budget >> simp[]
+QED
+
+Theorem current_tree_root_fuel_stable:
+  (!a. MEM a labels ==> (r a : num) < LENGTH labels) /\
+  (!a b. MEM a labels /\ current_tree_edge dom a b ==>
+    MEM b labels /\ r a < r b) /\ MEM root labels ==>
+  !extra. current_dom_tree_aux dom (LENGTH labels) root =
+    current_dom_tree_aux dom (LENGTH labels + extra) root
+Proof
+  rpt strip_tac >> irule current_tree_fuel_stable >>
+  qexistsl [`LENGTH labels`, `labels`, `r`] >> simp[] >> metis_tac[]
+QED
