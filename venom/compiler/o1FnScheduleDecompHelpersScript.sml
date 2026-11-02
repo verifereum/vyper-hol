@@ -1,3 +1,9 @@
+(*
+ * Helpers for o1FnScheduleDecomp: replacing one function in a context
+ * (the *_MAP_replace lemmas), what o1_fn_shape says about a function's
+ * labels and names, and why a step's label-map sources stay dead
+ * (dead_source_*, fresh_labels_*, contracted_fold_invariant).
+ *)
 Theory o1FnScheduleDecompHelpers
 Ancestors
   o1PassContract unitLabelMapIdentity venomFnScheduleRunner
@@ -17,8 +23,8 @@ Theorem MEM_MAP_replace_fn:
   MEM f (MAP (\f. if f.fn_name = name then g else f) fns) ==>
   f = g \/ (MEM f fns /\ f.fn_name <> name)
 Proof
-  simp[MEM_MAP] >> rpt strip_tac >> gvs[] >>
-  Cases_on `f'.fn_name = name` >> gvs[]
+  simp[MEM_MAP, PULL_EXISTS] >> qx_gen_tac `f0` >> rpt strip_tac >>
+  Cases_on `f0.fn_name = name` >> gvs[]
 QED
 
 Theorem ctx_fn_names_MAP_replace:
@@ -76,14 +82,39 @@ Proof
   drule replace_unique_function_MAP >> strip_tac >> gvs[]
 QED
 
+(* A supply that covers a unit and a function covers the unit with that
+   function put in. *)
+Theorem covers_unit_replace:
+  ir_supply_covers_unit s
+    (unit with cu_context := unit.cu_context with ctx_functions :=
+       MAP (\f. if f.fn_name = name then g else f) fns) /\
+  ir_supply_covers_fn s g' /\ g'.fn_name = name ==>
+  ir_supply_covers_unit s
+    (unit with cu_context := unit.cu_context with ctx_functions :=
+       MAP (\f. if f.fn_name = name then g' else f) fns)
+Proof
+  simp[ir_supply_covers_unit_def, ir_supply_covers_fn_def, list_subset_def,
+       EVERY_MEM, unit_ir_inst_ids_def, unit_ir_vars_def, unit_ir_labels_def,
+       MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+  rpt strip_tac >> gvs[COND_RAND, COND_EXPAND_OR] >> metis_tac[]
+QED
+
 Theorem run_configured_fn_pass_fold_cons_step:
   run_configured_fn_pass_fold execute_configured_fn_pass rpolicy
-    (pass::passes) unit s fn labels = SOME result ==>
+    (pass::passes) unit s fn labels = SOME result /\
+  ir_supply_covers_unit s
+    (unit with cu_context := unit.cu_context with ctx_functions :=
+       MAP (\f. if f.fn_name = fn.fn_name then fn else f)
+         unit.cu_context.ctx_functions) ==>
   ?observed out.
     fn_pass_step rpolicy pass observed s fn out /\
     observed = (unit with cu_context := unit.cu_context with ctx_functions :=
       MAP (\f. if f.fn_name = fn.fn_name then fn else f)
         unit.cu_context.ctx_functions) /\
+    ir_supply_covers_unit out.fpo_supply
+      (unit with cu_context := unit.cu_context with ctx_functions :=
+         MAP (\f. if f.fn_name = fn.fn_name then out.fpo_function else f)
+           unit.cu_context.ctx_functions) /\
     run_configured_fn_pass_fold execute_configured_fn_pass rpolicy passes
       unit out.fpo_supply out.fpo_function (labels ++ out.fpo_label_map) =
       SOME result
@@ -91,7 +122,9 @@ Proof
   simp[run_configured_fn_pass_fold_def, AllCaseEqs()] >> rpt strip_tac >>
   drule unit_with_current_fn_lookup >> strip_tac >>
   drule unit_with_current_fn_MAP >> strip_tac >>
-  qexists_tac `out` >> gvs[fn_pass_step_def]
+  qexists_tac `out` >> gvs[fn_pass_step_def] >>
+  irule covers_unit_replace >> simp[] >>
+  qexists_tac `fn` >> simp[]
 QED
 
 Theorem run_configured_fn_passes_success:
@@ -191,8 +224,9 @@ Theorem dead_source_not_function_name:
   (MEM l (fn_labels f) \/ ~MEM l s.irs_used_labels) ==>
   ~MEM l (ctx_fn_names unit.cu_context)
 Proof
-  strip_tac >> simp[ctx_fn_names_def, MEM_MAP] >> rpt strip_tac >> gvs[] >>
-  `o1_fn_shape unit.cu_context f'` by fs[o1_ctx_shape_def, EVERY_MEM] >>
+  strip_tac >> simp[ctx_fn_names_def, MEM_MAP] >> qx_gen_tac `g` >>
+  rpt strip_tac >> gvs[] >>
+  `o1_fn_shape unit.cu_context g` by fs[o1_ctx_shape_def, EVERY_MEM] >>
   drule o1_fn_shape_name_label >> strip_tac >>
   metis_tac[dead_source_other_function]
 QED
@@ -231,15 +265,6 @@ Proof
   metis_tac[o1_fn_shape_label_operand]
 QED
 
-Theorem label_freshness_trans:
-  list_subset used used' ==>
-  (!l. MEM l mid ==> MEM l before \/ ~MEM l used) ==>
-  (!l. MEM l after ==> MEM l mid \/ ~MEM l used') ==>
-  !l. MEM l after ==> MEM l before \/ ~MEM l used
-Proof
-  simp[list_subset_def, EVERY_MEM] >> metis_tac[]
-QED
-
 Theorem fresh_labels_exclude_used_dead:
   (!l. MEM l (fn_labels after) ==>
        MEM l (fn_labels before) \/ ~MEM l s.irs_used_labels) /\
@@ -255,10 +280,12 @@ Theorem observed_step_contract:
   observed = (unit with cu_context := unit.cu_context with ctx_functions :=
     MAP (\f. if f.fn_name = fn.fn_name then fn else f)
       unit.cu_context.ctx_functions) /\
-  o1_ctx_shape unit.cu_context /\ o1_fn_shape unit.cu_context fn ==>
+  o1_ctx_shape unit.cu_context /\ o1_fn_shape unit.cu_context fn /\
+  ir_supply_inst_ok s ==>
   o1_fn_shape unit.cu_context out.fpo_function /\
   fresh_names_ok s fn out.fpo_function /\
-  label_map_sources_ok fn out.fpo_function out.fpo_label_map
+  label_map_sources_ok fn out.fpo_function out.fpo_label_map /\
+  ir_supply_inst_ok out.fpo_supply
 Proof
   strip_tac >>
   `o1_ctx_shape observed.cu_context`
@@ -267,27 +294,40 @@ Proof
     by gvs[ctx_fn_names_MAP_replace] >>
   `o1_fn_shape observed.cu_context out.fpo_function /\
    fresh_names_ok s fn out.fpo_function /\
-   label_map_sources_ok fn out.fpo_function out.fpo_label_map`
+   label_map_sources_ok fn out.fpo_function out.fpo_label_map /\
+   ir_supply_inst_ok out.fpo_supply`
     by metis_tac[o1_step_contract_def] >>
   gvs[o1_fn_shape_def]
 QED
 
 Theorem contracted_fold_invariant:
-  !passes s fn labels fn' labels' s'.
+  !passes s fn labels fn' labels' s' name.
     EVERY (o1_step_contract rpolicy) passes /\
     run_configured_fn_pass_fold execute_configured_fn_pass rpolicy passes
       unit s fn labels = SOME (fn',labels',s') /\
-    o1_ctx_shape unit.cu_context /\ o1_fn_shape unit.cu_context fn ==>
+    o1_ctx_shape unit.cu_context /\ o1_fn_shape unit.cu_context fn /\
+    fn.fn_name = name /\
+    ir_supply_covers_unit s
+      (unit with cu_context := unit.cu_context with ctx_functions :=
+         MAP (\f. if f.fn_name = name then fn else f)
+           unit.cu_context.ctx_functions) /\
+    ir_supply_inst_ok s ==>
     fn'.fn_name = fn.fn_name /\ o1_fn_shape unit.cu_context fn' /\
+    ir_supply_inst_ok s' /\
     list_subset s.irs_used_labels s'.irs_used_labels /\
     (!l. MEM l (fn_labels fn') ==>
          MEM l (fn_labels fn) \/ ~MEM l s.irs_used_labels)
 Proof
   Induct
   >- simp[run_configured_fn_pass_fold_def, list_subset_def, EVERY_MEM] >>
-  rpt gen_tac >> pure_rewrite_tac[EVERY_DEF] >> strip_tac >>
-  drule run_configured_fn_pass_fold_cons_step >> strip_tac >>
+  rpt gen_tac >> pure_rewrite_tac[EVERY_DEF] >> strip_tac >> gvs[] >>
+  drule_all run_configured_fn_pass_fold_cons_step >> strip_tac >>
   drule_all observed_step_contract >> strip_tac >>
+  `out.fpo_function.fn_name = fn.fn_name` by fs[fn_pass_step_def] >>
+  `ir_supply_covers_unit out.fpo_supply
+     (unit with cu_context := unit.cu_context with ctx_functions :=
+        MAP (\f. if f.fn_name = out.fpo_function.fn_name then out.fpo_function
+                 else f) unit.cu_context.ctx_functions)` by simp[] >>
   first_x_assum drule_all >> strip_tac >>
   fs[fn_pass_step_def, ir_supply_extends_def, fresh_names_ok_def] >>
   conj_tac
@@ -297,12 +337,4 @@ Proof
   qpat_x_assum `list_subset s.irs_used_labels out.fpo_supply.irs_used_labels` mp_tac >>
   rpt (pop_assum kall_tac) >>
   simp[list_subset_def, EVERY_MEM] >> metis_tac[]
-QED
-
-Theorem dead_sources_fresh_persist:
-  EVERY (\e. ~MEM (FST e) before /\ MEM (FST e) used) entries /\
-  (!l. MEM l after ==> MEM l before \/ ~MEM l used) ==>
-  EVERY (\e. ~MEM (FST e) after) entries
-Proof
-  simp[EVERY_MEM] >> metis_tac[]
 QED

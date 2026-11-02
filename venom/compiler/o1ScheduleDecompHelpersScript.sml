@@ -1,3 +1,8 @@
+(*
+ * Helpers for o1ScheduleDecomp: lookups in a context with distinct
+ * function names, replace_fn, list_index and list_precedes, and what a
+ * fn_chain says about its last function.
+ *)
 Theory o1ScheduleDecompHelpers
 Ancestors
   o1FnScheduleDecomp o1PassContract venomFnScheduleRunnerProps
@@ -8,7 +13,7 @@ Theorem lookup_function_member_iff:
   (lookup_function name fns = SOME fn <=> MEM fn fns /\ fn.fn_name = name)
 Proof
   Induct_on `fns` >> simp[lookup_function_def, FIND_thm] >>
-  rpt strip_tac >> Cases_on `h.fn_name = name` >> gvs[] >>
+  qx_gen_tac `f0` >> rpt strip_tac >> Cases_on `f0.fn_name = name` >> gvs[] >>
   gvs[MEM_MAP, lookup_function_def] >> metis_tac[]
 QED
 
@@ -47,7 +52,7 @@ Theorem replace_fn_lookup_other:
   lookup_function other (replace_fn name g fns) = lookup_function other fns
 Proof
   Induct_on `fns` >> simp[replace_fn_def, lookup_function_def, FIND_thm] >>
-  rpt strip_tac >> Cases_on `h.fn_name = name` >>
+  qx_gen_tac `f0` >> rpt strip_tac >> Cases_on `f0.fn_name = name` >>
   gvs[replace_fn_def, lookup_function_def]
 QED
 
@@ -74,9 +79,9 @@ Theorem lookup_unique_function_member_iff:
   (lookup_unique_function name fns = SOME fn <=> MEM fn fns /\ fn.fn_name = name)
 Proof
   Induct_on `fns` >> simp[lookup_unique_function_def] >>
-  rpt strip_tac >> Cases_on `h.fn_name = name`
+  qx_gen_tac `f0` >> rpt strip_tac >> Cases_on `f0.fn_name = name`
   >- (gvs[MEM_MAP] >>
-      `FILTER (\f. f.fn_name = h.fn_name) fns = []` by
+      `FILTER (\f. f.fn_name = f0.fn_name) fns = []` by
         (simp[FILTER_EQ_NIL, EVERY_MEM] >> metis_tac[]) >>
       simp[] >> metis_tac[])
   >> gvs[lookup_unique_function_def] >> metis_tac[]
@@ -90,7 +95,8 @@ Proof
   Cases_on `x = h` >> simp[] >>
   qspecl_then [`t`, `1`] (fn th => rewrite_tac[th]) INDEX_FIND_add >>
   Cases_on `INDEX_FIND 0 ($= x) t` >> simp[] >>
-  PairCases_on `x'` >> simp[arithmeticTheory.ADD1]
+  rename1 `INDEX_FIND _ _ _ = SOME p` >> PairCases_on `p` >>
+  simp[arithmeticTheory.ADD1]
 QED
 
 Theorem list_precedes_cons:
@@ -113,14 +119,6 @@ Theorem list_precedes_prefix:
 Proof
   Induct_on `done` >> simp[list_precedes_cons] >> rpt strip_tac >>
   gvs[] >> metis_tac[]
-QED
-
-Theorem lookup_unique_function_index_iff:
-  ALL_DISTINCT (MAP (\f. f.fn_name) fns) ==>
-  (lookup_unique_function name fns = SOME fn <=>
-   ?i. i < LENGTH fns /\ EL i fns = fn /\ fn.fn_name = name)
-Proof
-  strip_tac >> simp[lookup_unique_function_member_iff, MEM_EL] >> metis_tac[]
 QED
 
 Theorem distinct_fn_name_index:

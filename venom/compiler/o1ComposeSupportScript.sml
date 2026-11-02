@@ -1,6 +1,14 @@
+(*
+ * Support lemmas for the O1 composition (o1PipelineCompose): the source
+ * unit's shape facts (source_*_shape, o1_source_ctx_shape), what pruning
+ * keeps (pruned_member_shape, postorder_pruned_names), and the pre-walk
+ * schedule as a stage pair (o1_mapped_pass_stage).
+ *)
 Theory o1ComposeSupport
 Ancestors
-  o1PassContract o1ScheduleDecomp ctxLookupAgree venomCompilerWf
+  o1PassContract o1ScheduleDecomp o1PartialSchedule o1ScheduleDecompHelpers
+  ctxLookupAgree
+  venomCompilerWf
   unitShapeDefs fcgPruning venomWf venomInst o1FnScheduleDecomp
   venomPipelineRunner venomPassDispatcher venomFnScheduleRunner
   fcgBridge fcgDefs fcgPostorder fcgAnalysisProps venomPipelineDriver
@@ -46,27 +54,36 @@ Proof
 QED
 
 Theorem source_member_shape:
-  unit_wf u /\ o1_source_unit_ok u /\
+  unit_wf u /\ o1_source_unit_ok u /\ unit_first_block_no_phi u /\
   MEM fn u.cu_context.ctx_functions ==>
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\
-  first_block_no_preds fn /\ fn_invoke_ok (ctx_fn_names u.cu_context) fn
+  first_block_no_preds fn /\ first_block_no_phi fn /\
+  fn_invoke_ok (ctx_fn_names u.cu_context) fn
 Proof
-  rw[unit_wf_def, venom_wf_def, o1_source_unit_ok_def,
+  rw[unit_wf_def, venom_wf_def, o1_source_unit_ok_def, unit_first_block_no_phi_def,
      unit_shape_ok_def, EVERY_MEM, fn_invoke_ok_def] >>
   gvs[wf_invoke_targets_def] >> metis_tac[]
 QED
 
 Theorem source_entry_shape:
-  unit_wf u /\ o1_source_unit_ok u /\
+  unit_wf u /\ o1_source_unit_ok u /\ unit_entry_no_params u /\
   MEM fn u.cu_context.ctx_functions /\
   u.cu_context.ctx_entry = SOME fn.fn_name ==>
-  entry_fn_no_ret fn /\
-  get_params (HD fn.fn_blocks).bb_instructions = []
+  entry_fn_no_return fn /\ entry_fn_no_params fn
 Proof
-  rw[o1_source_unit_ok_def, unit_shape_ok_def, entry_fn_first_def] >>
-  drule unit_wf_distinct_fn_names >>
-  simp[ctx_fn_names_def] >> strip_tac >>
-  gvs[MEM_MAP] >> metis_tac[]
+  strip_tac >>
+  `entry_fn_no_params fn` by metis_tac[unit_entry_no_params_def] >>
+  `entry_fn_no_ret fn /\
+   EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts fn)` by
+    (fs[o1_source_unit_ok_def, unit_shape_ok_def, entry_fn_first_def] >>
+     drule unit_wf_distinct_fn_names >>
+     simp[ctx_fn_names_def] >> strip_tac >>
+     gvs[MEM_MAP, EVERY_MEM] >> metis_tac[]) >>
+  simp[entry_fn_no_return_def] >>
+  fs[contextCodegenRelTheory.entry_fn_no_ret_def, EVERY_MEM, fn_insts_def,
+     fn_insts_blocks_MEM,
+     raw_opcode_ok_def] >>
+  metis_tac[]
 QED
 
 Theorem source_internal_shape:
@@ -85,6 +102,10 @@ Theorem entry_shape_from_members:
   get_params (HD (HD C.ctx_functions).fn_blocks).bb_instructions = []
 Proof
   rw[entry_fn_first_def] >> gvs[EVERY_DEF, o1_fn_shape_def]
+  >- metis_tac[entry_fn_no_return_no_ret] >>
+  irule entry_fn_no_params_get_params >> simp[] >>
+  gvs[fn_shape_ok_def, fn_entry_label_def, entry_block_def] >>
+  Cases_on `fn.fn_blocks` >> gvs[]
 QED
 
 Theorem chain_facts_zero:
@@ -106,8 +127,9 @@ Theorem o1_schedule_stages:
     SOME (u',s') /\
   o1_ctx_shape u.cu_context /\
   ALL_DISTINCT (unit_label_namespace u) /\ ALL_DISTINCT names /\
-  (!n. MEM n names <=> MEM n (ctx_fn_names u.cu_context)) ==>
-  unit_labels_wf u' /\
+  (!n. MEM n names <=> MEM n (ctx_fn_names u.cu_context)) /\
+  ir_supply_inst_ok s ==>
+  unit_labels_wf u' /\ ir_supply_inst_ok s' /\
   ?stage.
     stage 0 = u.cu_context /\ stage (LENGTH passes) = u'.cu_context /\
     (!k. k <= LENGTH passes ==>
@@ -126,6 +148,7 @@ Proof
     (drule o1_ctx_shape_wf >>
      gvs[ctx_wf_def, ctx_has_entry_def] >> metis_tac[MEM]) >>
   conj_tac >- metis_tac[] >>
+  conj_tac >- simp[] >>
   qexists_tac `stage_ctx u.cu_context chains` >>
   conj_tac >- (irule chain_facts_zero >> metis_tac[]) >>
   conj_tac >- simp[] >> conj_tac
@@ -138,8 +161,9 @@ QED
 Theorem mapped_pass_stage:
   o1_step_contract rp pass /\
   run_mapped_functions rp pass u s = SOME (u',s') /\
-  o1_ctx_shape u.cu_context /\ ALL_DISTINCT (unit_label_namespace u) ==>
-  unit_labels_wf u' /\ o1_ctx_shape u'.cu_context /\
+  o1_ctx_shape u.cu_context /\ ALL_DISTINCT (unit_label_namespace u) /\
+  ir_supply_inst_ok s ==>
+  unit_labels_wf u' /\ ir_supply_inst_ok s' /\ o1_ctx_shape u'.cu_context /\
   u'.cu_context.ctx_entry = u.cu_context.ctx_entry /\
   u'.cu_context.ctx_global_reserved = u.cu_context.ctx_global_reserved /\
   ctx_fn_names u'.cu_context = ctx_fn_names u.cu_context /\
@@ -154,24 +178,14 @@ Proof
   first_x_assum (qspec_then `1` mp_tac) >> simp[]
 QED
 
-Theorem lookup_member_distinct_names:
-  !fns fn. ALL_DISTINCT (MAP (\f. f.fn_name) fns) /\ MEM fn fns ==>
-  lookup_function fn.fn_name fns = SOME fn
-Proof
-  Induct >> simp[lookup_function_def, FIND_thm] >>
-  rpt strip_tac >> gvs[MEM_MAP] >>
-  `h.fn_name <> fn.fn_name` by metis_tac[] >>
-  simp[] >> metis_tac[lookup_function_def]
-QED
-
 Theorem member_invoke_direct_call:
   ctx_wf C /\ MEM fn C.ctx_functions /\ MEM callee (fn_invoke_targets fn) ==>
   fn_directly_calls C fn.fn_name callee
 Proof
   strip_tac >> simp[fn_directly_calls_scan] >> qexists_tac `fn` >>
   gvs[fn_invoke_targets_def] >>
-  irule lookup_member_distinct_names >>
-  gvs[ctx_wf_def, ctx_distinct_fn_names_def, ctx_fn_names_def]
+  gvs[ctx_wf_def, ctx_distinct_fn_names_def, ctx_fn_names_def] >>
+  simp[lookup_function_member_iff]
 QED
 
 Theorem pruned_member_shape:
