@@ -841,3 +841,13 @@ Proof
     disj2_tac >> qexists_tac `fuel` >> Cases_on `r` >> gvs[stmt_exit_def] >>
     disj1_tac >> metis_tac[expr_exit_INR_type])
 QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_CONTROL_KERNEL_AUDIT OK\n"
+     else raise Fail "body control inherited admission"
+  end) [compile_break_frag_mem, compile_continue_frag_mem,
+        compile_if_stmt_frag_mem, compile_raise_frag_mem,
+        compile_assert_frag_mem];
