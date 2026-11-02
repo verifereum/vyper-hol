@@ -411,6 +411,54 @@ Proof
        dft_block_rel_path, dft_block_rel_entry]
 QED
 
+Theorem dft_block_rel_available_end:
+  !fn bbs bb bb' v. wf_function fn /\
+    LIST_REL dft_block_rel fn.fn_blocks bbs /\
+    dft_block_rel bb bb' /\ def_available_at fn bb NONE v ==>
+    def_available_at (fn with fn_blocks := bbs) bb' NONE v
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `def_available_at _ _ _ _` mp_tac >>
+  simp[def_available_at_def] >> strip_tac >>
+  drule_all dft_blocks_member_left >> strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) def_bb.bb_instructions)` by
+    metis_tac[bb_inst_ids_distinct] >>
+  drule_all dft_block_rel_member >> strip_tac >>
+  simp[def_available_at_def] >>
+  qexistsl [`bb''`, `y`] >>
+  simp[] >>
+  metis_tac[dft_block_rel_label, dft_block_rel_dominates,
+            flip_operands_inst_outputs]
+QED
+
+Theorem dft_block_rel_available_use:
+  !fn bbs bb bb' u u' v. wf_function fn /\ fn_pseudos_prefix fn /\
+    LIST_REL dft_block_rel fn.fn_blocks bbs /\
+    MEM bb fn.fn_blocks /\ dft_block_rel bb bb' /\
+    MEM u bb.bb_instructions /\ MEM u' bb'.bb_instructions /\
+    u'.inst_id = u.inst_id /\ MEM (Var v) u.inst_operands /\
+    def_available_at fn bb (SOME u) v ==>
+    def_available_at (fn with fn_blocks := bbs) bb' (SOME u') v
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `def_available_at _ _ _ _` mp_tac >>
+  simp[def_available_at_def, GSYM id_before_def] >> strip_tac >>
+  drule_all dft_blocks_member_left >> strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) def_bb.bb_instructions)` by
+    metis_tac[bb_inst_ids_distinct] >>
+  drule_all dft_block_rel_member >> strip_tac >>
+  `y.inst_outputs = def_inst.inst_outputs` by
+    metis_tac[flip_operands_inst_outputs] >>
+  `fn_dominates (fn with fn_blocks := bbs) bb''.bb_label bb'.bb_label` by
+    metis_tac[dft_block_rel_label, dft_block_rel_dominates] >>
+  simp[def_available_at_def, GSYM id_before_def] >>
+  qexistsl [`bb''`, `y`] >> simp[] >> strip_tac >>
+  `def_bb = bb` by metis_tac[dft_blocks_source_unique] >>
+  gvs[fn_pseudos_prefix_def] >>
+  irule dft_block_rel_data_order >>
+  simp[] >> qexistsl [`bb`, `v`, `def_inst`, `u`] >> simp[]
+QED
+
 (* Why it holds (unchecked notes):
    - ssa_form: the same instructions up to flip_operands, which keeps
      outputs.
