@@ -716,6 +716,130 @@ Proof
   qexistsl [`prefix`, `suffix`] >> gvs[build_eda_scan]
 QED
 
+Theorem dft_block_suffix_eda:
+  bb_well_formed bb /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  non_pseudo_defs_before_uses bb.bb_instructions ==>
+  output_eda_before (build_eda bb.bb_instructions)
+    (FILTER (\i. ~is_pseudo i.inst_opcode) (dft_block order bb).bb_instructions)
+Proof
+  rpt strip_tac >>
+  qspecl_then [`order`, `bb`] mp_tac dft_block_suffix_decomposition >>
+  simp[Once dft_block_def, LET_THM] >> disch_then (SUBST1_TAC o SYM) >>
+  irule schedule_output_eda_before >>
+  simp[build_eda_wf, entry_instructions_mem] >>
+  conj_tac >- gvs[bb_well_formed_def] >>
+  conj_tac >- gvs[non_pseudo_defs_before_uses_def] >>
+  conj_tac >- gvs[bb_well_formed_def] >>
+  irule eda_topo_compatible_gen_weak_plain >>
+  gvs[bb_well_formed_def, non_pseudo_defs_before_uses_def]
+QED
+
+Theorem build_eda_key_member:
+  FLOOKUP (build_eda bi) k = SOME ds ==>
+  MEM k (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bi))
+Proof
+  simp[build_eda_scan] >> strip_tac >>
+  drule effect_scan_lookup_source >> simp[finite_mapTheory.FLOOKUP_EMPTY]
+QED
+
+Theorem output_eda_order_edge:
+  output_eda_before (build_eda bi) sched_out /\
+  PERM (MAP (\i. i.inst_id) sched_out)
+       (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bi)) /\
+  FLOOKUP (build_eda bi) k = SOME ds /\ MEM d ds ==>
+  id_before (MAP (\i. i.inst_id) sched_out) d.inst_id k
+Proof
+  rpt strip_tac >>
+  `MEM k (MAP (\i. i.inst_id) sched_out)` by
+    metis_tac[build_eda_key_member, sortingTheory.PERM_MEM_EQ] >>
+  `?j. j < LENGTH sched_out /\ (EL j sched_out).inst_id = k` by
+    (gvs[MEM_EL, EL_MAP] >> metis_tac[]) >>
+  `~is_pseudo d.inst_opcode` by
+    metis_tac[build_eda_wf, eda_wf_def] >>
+  gvs[output_eda_before_def] >>
+  first_x_assum (qspecl_then [`j`, `d`] mp_tac) >> simp[] >> strip_tac >>
+  simp[id_before_def] >> qexistsl [`m`, `j`] >> simp[EL_MAP]
+QED
+
+Theorem id_before_map_split:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\ MEM x bi /\ MEM y bi /\
+  id_before (MAP (\i. i.inst_id) bi) x.inst_id y.inst_id ==>
+  ?prefix suffix. bi = prefix ++ y::suffix /\ MEM x prefix
+Proof
+  rpt strip_tac >>
+  `!a b. MEM a bi /\ MEM b bi /\ a.inst_id = b.inst_id ==> a = b` by
+    metis_tac[all_distinct_map_mem_inj] >>
+  `?prefix suffix. bi = prefix ++ y::suffix` by metis_tac[MEM_SPLIT] >>
+  qpat_x_assum `bi = _` SUBST_ALL_TAC >>
+  qexistsl [`prefix`, `suffix`] >> simp[] >>
+  spose_not_then assume_tac >>
+  `~MEM x.inst_id (MAP (\i. i.inst_id) prefix)` by
+    (simp[MEM_MAP] >> rpt strip_tac >>
+     `x = i` by metis_tac[MEM_APPEND, MEM] >>
+     gvs[]) >>
+  `~MEM y.inst_id (MAP (\i. i.inst_id) prefix) /\
+   ~MEM y.inst_id (MAP (\i. i.inst_id) suffix)` by
+    (gvs[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+  gvs[id_before_append_suffix, id_before_cons] >>
+  metis_tac[id_before_mem]
+QED
+
+Theorem id_before_non_pseudo:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\ MEM x bi /\ MEM y bi /\
+  ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+  id_before (MAP (\i. i.inst_id) bi) x.inst_id y.inst_id ==>
+  id_before (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bi))
+    x.inst_id y.inst_id
+Proof
+  rpt strip_tac >>
+  `!i. MEM i bi /\ (i.inst_id = x.inst_id \/ i.inst_id = y.inst_id) ==>
+       ~is_pseudo i.inst_opcode` by
+    (rpt strip_tac >>
+     metis_tac[all_distinct_map_mem_inj]) >>
+  drule (SIMP_RULE (srw_ss()) []
+    (Q.ISPECL [`\i. i.inst_id`, `\i. ~is_pseudo i.inst_opcode`]
+      (Q.GENL [`f`, `P`] id_before_map_filter))) >> simp[]
+QED
+
+Theorem dft_block_suffix_effect_order:
+  bb_well_formed bb /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  non_pseudo_defs_before_uses bb.bb_instructions /\
+  MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+  ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+  id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+  ~effects_independent x.inst_opcode y.inst_opcode ==>
+  id_before
+    (MAP (\i. i.inst_id)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) (dft_block order bb).bb_instructions))
+    x.inst_id y.inst_id
+Proof
+  rpt strip_tac >>
+  drule_all dft_block_suffix_structure >>
+  disch_then (qspec_then `order` strip_assume_tac) >>
+  `output_eda_before (build_eda bb.bb_instructions)
+    (FILTER (\i. ~is_pseudo i.inst_opcode) (dft_block order bb).bb_instructions)` by
+    metis_tac[dft_block_suffix_eda] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id)
+    (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions))` by
+    metis_tac[all_distinct_map_filter] >>
+  `id_before (MAP (\i. i.inst_id)
+    (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions))
+    x.inst_id y.inst_id` by metis_tac[id_before_non_pseudo] >>
+  `?prefix suffix. FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions =
+    prefix ++ y::suffix /\ MEM x prefix` by
+    (irule id_before_map_split >> simp[MEM_FILTER]) >>
+  irule build_eda_conflict_order >> simp[] >>
+  conj_tac
+  >- (simp[relationTheory.transitive_def] >> rpt strip_tac >>
+      irule id_before_trans >> conj_tac
+      >- metis_tac[sortingTheory.ALL_DISTINCT_PERM, sortingTheory.PERM_SYM] >>
+      metis_tac[]) >>
+  qexistsl [`bb.bb_instructions`, `prefix`, `suffix`] >> simp[] >>
+  metis_tac[output_eda_order_edge]
+QED
+
 (* These probes deliberately have indirect conflicts: a cleared reader and
    a superseded writer must still precede the third instruction by transitivity.
    MCOPY also tests the same-effect read/write update. *)
