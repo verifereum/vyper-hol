@@ -620,3 +620,131 @@ Proof
   `phi_well_formed old_inst.inst_operands` by gvs[inst_wf_def] >>
   irule fix_phi_inst_phi_arity >> simp[]
 QED
+
+Theorem update_phi_bypass_shape:
+  (update_phi_bypass a_label b_label inst).inst_opcode = inst.inst_opcode /\
+  (update_phi_bypass a_label b_label inst).inst_id = inst.inst_id /\
+  (update_phi_bypass a_label b_label inst).inst_outputs = inst.inst_outputs
+Proof
+  Cases_on `inst.inst_opcode = PHI` >>
+  Cases_on `MEM (Label a_label) inst.inst_operands` >>
+  simp[update_phi_bypass_def]
+QED
+
+Theorem subst_label_inst_shape:
+  (subst_label_inst old_lbl new_lbl inst).inst_opcode = inst.inst_opcode /\
+  (subst_label_inst old_lbl new_lbl inst).inst_id = inst.inst_id /\
+  (subst_label_inst old_lbl new_lbl inst).inst_outputs = inst.inst_outputs
+Proof
+  simp[subst_label_inst_def]
+QED
+
+Theorem canon_jnz_inst_shape:
+  is_terminator (canon_jnz_inst inst).inst_opcode = is_terminator inst.inst_opcode /\
+  ((canon_jnz_inst inst).inst_opcode = PHI <=> inst.inst_opcode = PHI) /\
+  (canon_jnz_inst inst).inst_id = inst.inst_id /\
+  (canon_jnz_inst inst).inst_outputs = inst.inst_outputs
+Proof
+  simp[canon_jnz_inst_def] >>
+  rpt CASE_TAC >> gvs[is_terminator_def]
+QED
+
+Theorem bb_well_formed_map_classification:
+  bb_well_formed bb /\
+  (!inst. is_terminator (f inst).inst_opcode = is_terminator inst.inst_opcode /\
+          ((f inst).inst_opcode = PHI <=> inst.inst_opcode = PHI)) ==>
+  bb_well_formed (bb with bb_instructions := MAP f bb.bb_instructions)
+Proof
+  strip_tac >> qpat_x_assum `bb_well_formed bb` mp_tac >>
+  simp[bb_well_formed_def, LAST_MAP, EL_MAP] >>
+  strip_tac >> conj_tac >> rpt strip_tac >> gvs[listTheory.EL_MAP] >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Theorem bb_well_formed_update_phi_bypass:
+  bb_well_formed bb ==>
+  bb_well_formed (bb with bb_instructions :=
+    MAP (update_phi_bypass a_label b_label) bb.bb_instructions)
+Proof
+  strip_tac >> irule bb_well_formed_map_classification >>
+  simp[update_phi_bypass_shape]
+QED
+
+Theorem bb_well_formed_bypass_source:
+  bb_well_formed bb ==>
+  bb_well_formed (bb with bb_instructions :=
+    MAP (\inst. if ~is_terminator inst.inst_opcode then inst
+                else canon_jnz_inst (subst_label_inst old_lbl new_lbl inst))
+        bb.bb_instructions)
+Proof
+  strip_tac >> irule bb_well_formed_map_classification >> simp[] >>
+  gen_tac >> IF_CASES_TAC >> simp[canon_jnz_inst_shape, subst_label_inst_shape]
+QED
+
+Theorem bb_front_no_terminator:
+  bb_well_formed bb /\ i < LENGTH (FRONT bb.bb_instructions) ==>
+  ~is_terminator (EL i (FRONT bb.bb_instructions)).inst_opcode
+Proof
+  strip_tac >>
+  `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
+  `i < LENGTH bb.bb_instructions` by
+    (fs[LENGTH_FRONT, NULL_EQ] >> decide_tac) >>
+  `EL i (FRONT bb.bb_instructions) = EL i bb.bb_instructions` by
+    (irule EL_FRONT >> simp[NULL_EQ]) >>
+  fs[bb_well_formed_def] >> strip_tac >>
+  `i = PRE (LENGTH bb.bb_instructions)` by metis_tac[] >>
+  fs[LENGTH_FRONT, NULL_EQ]
+QED
+
+Theorem bb_front_phi_prefix:
+  bb_well_formed bb /\ i < j /\ j < LENGTH (FRONT bb.bb_instructions) /\
+  (EL j (FRONT bb.bb_instructions)).inst_opcode = PHI ==>
+  (EL i (FRONT bb.bb_instructions)).inst_opcode = PHI
+Proof
+  strip_tac >>
+  `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
+  `i < LENGTH (FRONT bb.bb_instructions)` by decide_tac >>
+  `j < LENGTH bb.bb_instructions` by
+    (fs[LENGTH_FRONT, NULL_EQ] >> decide_tac) >>
+  `EL i (FRONT bb.bb_instructions) = EL i bb.bb_instructions` by
+    (irule EL_FRONT >> simp[NULL_EQ]) >>
+  `EL j (FRONT bb.bb_instructions) = EL j bb.bb_instructions` by
+    (irule EL_FRONT >> simp[NULL_EQ]) >>
+  gvs[] >> fs[bb_well_formed_def] >> metis_tac[]
+QED
+
+Theorem bb_well_formed_merge_blocks:
+  bb_well_formed a /\ bb_well_formed b /\ no_phis b ==>
+  bb_well_formed (merge_blocks a b)
+Proof
+  strip_tac >>
+  `b.bb_instructions <> []` by fs[bb_well_formed_def] >>
+  `0 < LENGTH b.bb_instructions` by (Cases_on `b.bb_instructions` >> gvs[]) >>
+  `is_terminator (LAST b.bb_instructions).inst_opcode` by
+    fs[bb_well_formed_def] >>
+  simp[NoAsms, merge_blocks_def, bb_well_formed_def] >>
+  conj_tac >- simp[] >>
+  conj_tac >- (Cases_on `b.bb_instructions` >> gvs[LAST_APPEND_CONS]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      Cases_on `i < LENGTH (FRONT a.bb_instructions)`
+      >- (gvs[EL_APPEND_EQN] >> metis_tac[bb_front_no_terminator]) >>
+      gvs[EL_APPEND_EQN] >>
+      `i - LENGTH (FRONT a.bb_instructions) < LENGTH b.bb_instructions` by
+        decide_tac >>
+      qpat_x_assum `bb_well_formed b` mp_tac >>
+      simp[NoAsms, bb_well_formed_def] >> strip_tac >>
+      `i - LENGTH (FRONT a.bb_instructions) = PRE (LENGTH b.bb_instructions)` by
+        metis_tac[] >>
+      decide_tac) >>
+  rpt strip_tac >>
+  Cases_on `j < LENGTH (FRONT a.bb_instructions)`
+  >- (`i < LENGTH (FRONT a.bb_instructions)` by decide_tac >>
+      gvs[EL_APPEND_EQN] >> metis_tac[bb_front_phi_prefix]) >>
+  gvs[EL_APPEND_EQN] >>
+  `j - LENGTH (FRONT a.bb_instructions) < LENGTH b.bb_instructions` by
+    decide_tac >>
+  fs[no_phis_def, EVERY_EL] >>
+  qpat_x_assum `!n. _` (qspec_then `j - LENGTH (FRONT a.bb_instructions)` mp_tac) >>
+  simp[]
+QED
