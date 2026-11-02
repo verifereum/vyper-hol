@@ -272,13 +272,28 @@ Theorem word_builtin_bop:
   compile_builtin_dispatch_body f cenv vt ty (Bop bop) args sa = (vv,sb) ==>
   word_result_ok sb vv
 Proof
-  simp[compile_builtin_dispatch_body_def, LET_THM] >> strip_tac >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+  simp_tac (srw_ss()) [compile_builtin_dispatch_body_def, LET_THM] >>
+  IF_CASES_TAC
+  >- (strip_tac >> Cases_on `HD (TL args)` >> gvs[] >>
+      TRY (rename1 `Builtin _ bi _` >> Cases_on `bi` >> simp[]) >>
+      rpt (pairarg_tac >> gvs[]) >>
+      gvs[AllCaseEqs()] >>
+      irule as_stack_val_word_result_ok >> goal_assum (drule_at Any) >>
+      metis_tac[compile_list_membership_in_safe_operand,
+        compile_list_membership_notin_safe_operand,
+        compile_var_array_membership_safe_operand]) >>
+  IF_CASES_TAC
+  >- (strip_tac >>
+      Cases_on `bytestring_literal_hash (HD args)` >>
+      Cases_on `bytestring_literal_hash (HD (TL args))` >> gvs[] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      Cases_on `bop = Eq` >> gvs[] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      irule as_stack_val_word_result_ok >> goal_assum (drule_at Any) >>
+      metis_tac[emit_op_safe_operand]) >>
+  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
   irule as_stack_val_word_result_ok >> goal_assum (drule_at Any) >>
-  metis_tac[compile_binop_safe_operand, emit_op_safe_operand,
-    compile_list_membership_in_safe_operand, compile_list_membership_notin_safe_operand,
-    compile_var_array_membership_safe_operand]
+  metis_tac[compile_binop_safe_operand]
 QED
 
 Theorem word_builtin_acc:

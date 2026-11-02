@@ -433,6 +433,76 @@ val () = cv_auto_trans_rec
    \\ Cases_on`cv_bop` \\ gvs[]
    \\ rw[]);
 
+(* Membership needs the haystack type to recover omitted static defaults.
+   The flag rule remains the existing binop rule. *)
+Definition evaluate_membership_def:
+  evaluate_membership tv neg v1 v2 =
+    case v2 of
+      ArrayV av =>
+        INL (BoolV (if neg then ~evaluate_in_array tv v1 av
+                    else evaluate_in_array tv v1 av))
+    | FlagV n => evaluate_binop (Unsigned 0) (BaseTV BoolT)
+                   (if neg then NotIn else In) v1 v2
+    | _ => INR (TypeError "binop")
+End
+
+val () = cv_auto_trans evaluate_membership_def;
+
+Theorem evaluate_membership_array:
+  evaluate_membership tv neg v (ArrayV av) =
+    INL (BoolV (if neg then ~evaluate_in_array tv v av
+                else evaluate_in_array tv v av))
+Proof
+  simp[evaluate_membership_def]
+QED
+
+Theorem evaluate_membership_flag:
+  evaluate_membership tv neg v (FlagV n) =
+    evaluate_binop (Unsigned 0) (BaseTV BoolT)
+      (if neg then NotIn else In) v (FlagV n)
+Proof
+  simp[evaluate_membership_def]
+QED
+
+Theorem evaluate_membership_success_bool:
+  evaluate_membership tv neg v1 v2 = INL v ==> ?b. v = BoolV b
+Proof
+  Cases_on `v2` >> Cases_on `v1` >> Cases_on `neg` >>
+  simp[evaluate_membership_def, evaluate_binop_def, binop_negate_def] >>
+  metis_tac[]
+QED
+
+Theorem evaluate_membership_sparse_defaults:
+  evaluate_membership (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) F
+    (IntV 0) (ArrayV (make_array_value (BaseTV (UintT 256)) (Fixed 2)
+      [IntV 0; IntV 1])) = INL (BoolV T) /\
+  evaluate_membership (ArrayTV (BaseTV BoolT) (Fixed 3)) F
+    (BoolV F) (ArrayV (make_array_value (BaseTV BoolT) (Fixed 3)
+      [BoolV T; BoolV F; BoolV T])) = INL (BoolV T) /\
+  evaluate_membership (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) T
+    (IntV 0) (ArrayV (make_array_value (BaseTV (UintT 256)) (Fixed 2)
+      [IntV 0; IntV 1])) = INL (BoolV F) /\
+  evaluate_membership (ArrayTV (BaseTV BoolT) (Fixed 3)) T
+    (BoolV F) (ArrayV (make_array_value (BaseTV BoolT) (Fixed 3)
+      [BoolV T; BoolV F; BoolV T])) = INL (BoolV F)
+Proof
+  EVAL_TAC
+QED
+
+Theorem evaluate_membership_array_boundaries:
+  evaluate_membership (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) neg
+    (IntV 0) (ArrayV (SArrayV [(0, IntV 1); (1, IntV 2)])) =
+      INL (BoolV neg) /\
+  evaluate_membership (ArrayTV (BaseTV (UintT 256)) (Fixed 0)) neg
+    (IntV 0) (ArrayV (SArrayV [])) = INL (BoolV neg) /\
+  evaluate_membership tv neg v (ArrayV (DynArrayV vs)) =
+      INL (BoolV (if neg then ~MEM v vs else MEM v vs)) /\
+  evaluate_membership tv neg v (ArrayV (DynArrayV [])) = INL (BoolV neg)
+Proof
+  Cases_on `neg` >>
+  simp[evaluate_membership_array, evaluate_in_array_def]
+QED
+
 (* concat *)
 
 Definition init_concat_output_def:

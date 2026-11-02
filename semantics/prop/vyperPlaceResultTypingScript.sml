@@ -1411,9 +1411,11 @@ Proof
           >- (first_x_assum irule >> metis_tac[]) >>
           gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
       Cases_on `bt = Env MsgGas` >> simp[] >>
-      ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-      >- (first_x_assum irule >> metis_tac[]) >>
-      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >> simp[]
+      Cases_on `bt = Bop In \/ bt = Bop NotIn` >> simp[] >>
+      (ho_match_mp_tac scope_pop_effect_bind >> conj_tac
+       >- (first_x_assum irule >> metis_tac[]) >>
+       gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[] >>
+       ho_match_mp_tac scope_pop_effect_bind >> simp[])) >> simp[]
 QED
 
 Theorem eval_typebuiltin_scope_effect[local]:
@@ -1683,7 +1685,9 @@ Proof
   [`scope_pop_effect (eval_expr _ (Call _ (CreateTarget kind has_salt rof kw_order) _ _))`] >-
     suspend "Create" >~
   [`scope_pop_effect (eval_expr _ (Call _ (IntCall _) _ _))`] >-
-    suspend "IntCall" >>
+    suspend "IntCall" >~
+  [`scope_pop_effect (eval_expr _ (Builtin _ _ _))`] >-
+    suspend "Builtin" >>
   FIRST ((simp[] >> NO_TAC) :: map (fn th => FIRST
     [MATCH_ACCEPT_TAC (GEN_ALL th),
      match_mp_tac (GEN_ALL th) >> rpt conj_tac >> first_assum ACCEPT_TAC] >> NO_TAC)
@@ -1748,6 +1752,11 @@ Resume eval_mutual_scope_pop_effect_results[IntCall]:
   Cases_on `FST (SND tup)` >> gvs[return_def] >>
   Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
   drule acquire_nonreentrant_lock_scopes >> simp[]
+QED
+
+Resume eval_mutual_scope_pop_effect_results[Builtin]:
+  irule eval_builtin_scope_effect >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn` >> gvs[] >> metis_tac[]
 QED
 
 Finalise eval_mutual_scope_pop_effect_results

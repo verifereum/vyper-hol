@@ -290,6 +290,9 @@ Proof
          DROP_LENGTH_APPEND] >>
   gvs[] >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
+  simp[Once exprLoweringPropsTheory.run_inst_seq_def,
+       venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_read0_def, venomInstTheory.mk_inst_def] >>
   simp[exprLoweringPropsTheory.run_inst_seq_def,
        venomExecSemanticsTheory.step_inst_base_def,
        venomExecSemanticsTheory.exec_read0_def,
