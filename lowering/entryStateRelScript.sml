@@ -20,7 +20,7 @@ Theory entryStateRel
 Ancestors
   list rich_list finite_map alist
   placeTypingBuildProps e2eDefs vyperLoweringCorrect entryDecodePlanProps entryArgPtrs fragExec
-  compileEnv compileVyper moduleLowering supportedProgram supportedNames
+  compileEnv compileVyper moduleLowering supportedProgram supportedProgramProps supportedNames
   supportedDecls immutableLocationProps immutableSectionRel immutableRelation
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeContractContext
   vyperInterpreter vyperState vyperContext vyperAST vyperValue vyperTypeDefaults
@@ -626,6 +626,40 @@ Proof
   `var_location_memory_size (MemLoc off sz) = SOME sz` by
     simp[var_location_memory_size_def] >>
   drule_all compile_register_positional_args_ptrs >> metis_tac[]
+QED
+
+Theorem external_entry_target_param_type:
+  set_external_package_target target
+    (package_external_fn tops use_trans nkey_map
+      (mut,nr,rr,fname,fargs,dflts,ret,fbody)) =
+    (lbl,cenv0,pos_args,rest) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,st') /\
+  supported_function_body tops External fargs fbody /\ MEM (id,ty) fargs ==>
+  cenv.ce_var_type id = SOME ty
+Proof
+  strip_tac >>
+  `~MEM id (MAP FST (collect_locals fbody))` by
+    metis_tac[supported_function_arg_not_collect_locals] >>
+  `ALL_DISTINCT (MAP FST fargs)` by
+    (drule supported_function_body_binding_contract >>
+     simp[supported_function_bindings_def, ALL_DISTINCT_APPEND]) >>
+  `ALOOKUP (REVERSE fargs) id = SOME ty` by
+    (irule ALOOKUP_ALL_DISTINCT_MEM >>
+     simp[MAP_REVERSE, ALL_DISTINCT_REVERSE]) >>
+  drule compile_register_positional_args_cenv >> strip_tac >>
+  `cenv.ce_var_type = cenv0.ce_var_type` by
+    (qpat_x_assum `cenv = _` SUBST1_TAC >> simp[]) >>
+  qpat_x_assum `cenv.ce_var_type = _` (fn th => rewrite_tac[th]) >>
+  qpat_x_assum `compile_register_positional_args _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `cenv = _` kall_tac >>
+  `ALOOKUP (REVERSE (collect_locals fbody)) id = NONE` by
+    simp[ALOOKUP_NONE, MAP_REVERSE] >>
+  qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+  simp[package_external_fn_def, set_external_package_target_def,
+       update_cenv_nonreentrant_def, update_cenv_ret_abi_def] >>
+  Cases_on `ret = NoneT` >> simp[] >> strip_tac >>
+  gvs[build_compile_env_def] >> rpt (pairarg_tac >> gvs[]) >>
+  simp[REVERSE_APPEND, ALOOKUP_APPEND]
 QED
 
 (* Since #733, evaluate_type only accepts whole-byte integer widths. *)
