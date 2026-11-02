@@ -27,7 +27,7 @@
  *)
 Theory dftScheduleOrder
 Ancestors
-  dftCorrectness dftStructural dftDefs venomWf venomInst venomEffects list
+  dftCorrectness dftStructural dftDefs passSharedDefs venomWf venomInst venomEffects list
 
 (* a comes before b in the list l. *)
 Definition id_before_def:
@@ -76,6 +76,107 @@ Definition dft_fallible_order_kept_def:
                  x.inst_id y.inst_id)
       fn.fn_blocks fn'.fn_blocks
 End
+
+Theorem id_before_cons:
+  id_before (h::t) a b <=>
+  (h = a /\ MEM b t) \/ id_before t a b
+Proof
+  simp[id_before_def, MEM_EL] >> eq_tac
+  >- (rpt strip_tac >> Cases_on `i`
+      >- (gvs[] >> Cases_on `j` >> gvs[] >> metis_tac[])
+      >> Cases_on `j` >> gvs[] >> metis_tac[])
+  >> rpt strip_tac
+  >- (qexistsl [`0`, `SUC n`] >> simp[])
+  >> qexistsl [`SUC i`, `SUC j`] >> simp[]
+QED
+
+Theorem id_before_mem:
+  id_before l a b ==> MEM a l /\ MEM b l
+Proof
+  rw[id_before_def] >> metis_tac[MEM_EL, arithmeticTheory.LESS_TRANS]
+QED
+
+Theorem id_before_trans:
+  ALL_DISTINCT l /\ id_before l a b /\ id_before l b c ==>
+  id_before l a c
+Proof
+  rw[id_before_def] >>
+  `j = i'` by metis_tac[ALL_DISTINCT_EL_IMP, arithmeticTheory.LESS_TRANS] >>
+  qexistsl [`i`, `j'`] >> simp[]
+QED
+
+Theorem id_before_filter:
+  P a /\ P b ==>
+  (id_before (FILTER P l) a b <=> id_before l a b)
+Proof
+  Induct_on `l` >> simp[id_before_cons] >>
+  rpt strip_tac >> Cases_on `P h` >> gvs[id_before_cons, MEM_FILTER] >>
+  metis_tac[]
+QED
+
+Theorem id_before_append_suffix:
+  ~MEM a p /\ ~MEM b p ==>
+  (id_before (p ++ l) a b <=> id_before l a b)
+Proof
+  Induct_on `p` >> simp[id_before_cons] >> metis_tac[]
+QED
+
+Theorem id_before_map_filter:
+  (!x. MEM x l /\ (f x = a \/ f x = b) ==> P x) ==>
+  (id_before (MAP f (FILTER P l)) a b <=> id_before (MAP f l) a b)
+Proof
+  Induct_on `l` >- simp[id_before_def] >>
+  rpt strip_tac >>
+  `!x. MEM x l /\ (f x = a \/ f x = b) ==> P x` by metis_tac[MEM] >>
+  first_x_assum drule >> strip_tac >>
+  Cases_on `P h` >> simp[id_before_cons, MEM_MAP, MEM_FILTER] >>
+  gvs[MEM] >> metis_tac[]
+QED
+
+Theorem flip_operands_order_fields:
+  !i. set (inst_uses (flip_operands i)) = set (inst_uses i) /\
+      read_effects (flip_operands i).inst_opcode = read_effects i.inst_opcode /\
+      write_effects (flip_operands i).inst_opcode = write_effects i.inst_opcode /\
+      is_terminator (flip_operands i).inst_opcode = is_terminator i.inst_opcode
+Proof
+  gen_tac >> rw[flip_operands_def] >>
+  Cases_on `i.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >> Cases_on `t'` >> simp[] >>
+  IF_CASES_TAC >> simp[inst_uses_def, MEM_operand_vars_iff,
+                         pred_setTheory.EXTENSION] >>
+  gvs[is_comparator_def] >>
+  simp[flip_comparison_opcode_def, read_effects_def, write_effects_def,
+       is_terminator_def, inst_uses_def, MEM_operand_vars_iff,
+       pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+Theorem from_block_id_cases:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\ MEM x bi /\
+  from_block bi x' /\ x'.inst_id = x.inst_id ==>
+  x' = x \/ x' = flip_operands x
+Proof
+  rw[from_block_def] >>
+  `j = x` by
+    (gvs[] >>
+     qpat_x_assum `MEM j bi` (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+     qpat_x_assum `MEM x bi` (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+     `n = n'` by
+       (qspec_then `MAP (\i. i.inst_id) bi` mp_tac ALL_DISTINCT_EL_IMP >>
+        simp[EL_MAP] >> metis_tac[]) >>
+     gvs[]) >> simp[]
+QED
+
+Theorem from_block_must_order:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\ MEM x bi /\ MEM y bi /\
+  from_block bi x' /\ from_block bi y' /\
+  x'.inst_id = x.inst_id /\ y'.inst_id = y.inst_id ==>
+  (dft_must_order x' y' <=> dft_must_order x y)
+Proof
+  rpt strip_tac >>
+  `x' = x \/ x' = flip_operands x` by metis_tac[from_block_id_cases] >>
+  `y' = y \/ y' = flip_operands y` by metis_tac[from_block_id_cases] >>
+  gvs[dft_must_order_def, inst_defs_def, flip_operands_order_fields]
+QED
 
 (* Why it holds (unchecked notes):
    - Permutation, flips, labels and pseudo prefix: dft_fn_all_perm_of and
