@@ -434,3 +434,224 @@ Proof
   mp_tac collision_raw_rows_active >> simp[EVERY_MEM] >>
   disch_then drule >> gvs[collision_config_at_def]
 QED
+
+Theorem collision_enters_a:
+  enters_block collision_a s s1 <=>
+  s.vs_current_bb = "a" /\ s1 = (s with vs_inst_idx := 0)
+Proof
+  simp[enters_block_def, collision_a_def, mk_raw_function_def,
+    lookup_block_def, FIND_thm, eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
+  eq_tac >> rpt strip_tac >> gvs[]
+QED
+
+Theorem collision_enters_b:
+  enters_block collision_b s s1 <=>
+  s.vs_current_bb = "b" /\ s1 = (s with vs_inst_idx := 0)
+Proof
+  simp[enters_block_def, collision_b_def, mk_raw_function_def,
+    lookup_block_def, FIND_thm, eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
+  eq_tac >> rpt strip_tac >> gvs[]
+QED
+
+Theorem collision_enters_exit:
+  s.vs_current_bb = "exit" ==>
+  (enters_block collision_main s s1 <=> s1 = (s with vs_inst_idx := 0))
+Proof
+  simp[enters_block_def, collision_main_def, mk_raw_function_def,
+    lookup_block_def, FIND_thm, eval_phis_def, phi_prefix_length_def, mk_inst_def]
+QED
+
+Theorem collision_raw_call_lookups:
+  lookup_function "a" collision_ctx.ctx_functions = SOME collision_a /\
+  lookup_function "b" collision_ctx.ctx_functions = SOME collision_b
+Proof
+  EVAL_TAC
+QED
+
+Theorem collision_envelope_call:
+  collision_raw_envelope stk PG G tn caller callinst s /\ active_inst caller callinst s /\
+  callinst.inst_opcode = INVOKE /\ decode_invoke callinst = SOME (nm,ops) /\
+  lookup_function nm collision_ctx.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  enters_block callee cs s1 /\ active_inst callee inst s1 ==>
+  collision_raw_envelope
+    (<| cf_fn := caller; cf_inst := callinst; cf_state := s;
+        cf_params := PG; cf_prov := G; cf_tvar := tn.t_var |> :: stk)
+    (MAP (op_prov G) ops) FEMPTY (tn with t_var := FEMPTY) callee inst s1
+Proof
+  simp[collision_raw_envelope_def, collision_raw_configs_def] >> rpt strip_tac >>
+  gvs[collision_config_at_def, collision_rc_instructions, mk_inst_def, collision_main_def,
+        collision_main_bb_def, mk_raw_function_def] >>
+  gvs[decode_invoke_def,
+      collision_raw_call_lookups, venomStateTheory.eval_operands_def, collision_rc_states,
+      collision_raw_a_setup, collision_raw_b_setup,
+      collision_enters_a, collision_enters_b]
+  >- (qexists_tac `collision_rc3` >>
+      gvs[collision_active_a, collision_raw_a_bb_def] >>
+      simp[collision_rc3_def, collision_rc_call_def, collision_rc_instructions,
+        collision_rc_states, mk_inst_def] >> EVAL_TAC) >>
+  qexists_tac `collision_rc8` >>
+  gvs[collision_active_b, collision_raw_b_bb_def] >>
+  simp[collision_rc8_def, collision_rc_call_def, collision_rc_instructions,
+    collision_rc_states, mk_inst_def] >> EVAL_TAC
+QED
+
+Theorem collision_raw_terminal_steps:
+  !fuel.
+  step_inst fuel collision_ctx collision_rc6.cc_inst collision_rc6.cc_state =
+    IntRet <| iret_values := []; iret_adopt_fmp := NONE |>
+      (collision_raw_a_stored with vs_inst_idx := 3) /\
+  step_inst fuel collision_ctx collision_rc12.cc_inst collision_rc12.cc_state =
+    IntRet <| iret_values := []; iret_adopt_fmp := NONE |>
+      (collision_raw_b_stored with vs_inst_idx := 4) /\
+  step_inst fuel collision_ctx collision_rc14.cc_inst collision_rc14.cc_state =
+    OK collision_exit_entry /\
+  step_inst fuel collision_ctx collision_rc15.cc_inst collision_rc15.cc_state =
+    Halt (halt_state (collision_exit_entry with vs_returndata := []))
+Proof
+  gen_tac >> simp[collision_rc_states, collision_rc_instructions] >>
+  once_rewrite_tac[step_inst_def] >>
+  simp[mk_inst_def,
+    SRULE [mk_inst_def] collision_raw_a_steps,
+    SRULE [mk_inst_def] collision_raw_b_steps,
+    SRULE [mk_inst_def] collision_branch_steps] >>
+  simp[step_inst_base_def, venomStateTheory.jump_to_def, collision_exit_entry_def]
+QED
+
+Theorem collision_exit_continuation:
+  enters_block collision_main collision_exit_entry s1 /\ active_inst collision_main inst s1 <=>
+  s1 = collision_exit_entry /\ inst = mk_inst 9 STOP [] []
+Proof
+  `collision_exit_entry.vs_current_bb = "exit" /\
+   (collision_exit_entry with vs_inst_idx := 0) = collision_exit_entry /\
+   collision_exit_entry.vs_inst_idx = 0` by EVAL_TAC >>
+  simp[collision_enters_exit, collision_active_main] >>
+  eq_tac >> strip_tac >> gvs[]
+QED
+
+Theorem collision_envelope_block:
+  collision_raw_envelope stk PG G tn fn inst s /\ active_inst fn inst s /\
+  is_terminator inst.inst_opcode /\ step_inst fuel collision_ctx inst s = OK s' /\
+  ~s'.vs_halted /\ enters_block fn s' s1 /\ active_inst fn inst' s1 ==>
+  collision_raw_envelope stk PG (entry_prov fn s' G)
+    (entry_taint_vars fn s' tn) fn inst' s1
+Proof
+  simp[collision_raw_envelope_def, collision_raw_configs_def] >> rpt strip_tac >>
+  gvs[collision_config_at_def, collision_rc_instructions, mk_inst_def,
+      is_terminator_def] >>
+  gvs[collision_rc_states, collision_rc_functions,
+    SRULE [collision_rc_states, collision_rc_instructions, mk_inst_def, collision_main_def,
+        collision_main_bb_def, mk_raw_function_def]
+      collision_raw_terminal_steps] >>
+  drule_all (iffLR collision_exit_continuation) >> strip_tac >> gvs[] >>
+  qexists_tac `collision_rc15` >>
+  simp[collision_rc15_def, collision_rc_states, collision_rc_functions,
+    collision_rc_instructions, mk_inst_def, collision_main_def,
+        collision_main_bb_def, mk_raw_function_def]
+QED
+
+Theorem collision_raw_call_results:
+  !fuel.
+  step_inst fuel collision_ctx collision_rc2.cc_inst collision_rc2.cc_state =
+    (if fuel = 0 then Error "out of fuel"
+     else OK (collision_raw_call_b with vs_inst_idx := 2)) /\
+  step_inst fuel collision_ctx collision_rc7.cc_inst collision_rc7.cc_state =
+    (if fuel = 0 then Error "out of fuel"
+     else OK (collision_raw_load with vs_inst_idx := 3))
+Proof
+  Cases >> simp[collision_rc_instructions, collision_rc_states,
+    collision_raw_a_invoke, collision_raw_b_invoke] >>
+  once_rewrite_tac[step_inst_def] >>
+  simp[mk_inst_def, decode_invoke_def, collision_raw_call_lookups,
+    venomStateTheory.eval_operands_def, collision_raw_a_setup,
+    collision_raw_b_setup, Once run_blocks_def] >>
+  simp[Once run_blocks_def]
+QED
+
+Theorem collision_raw_return_sources:
+  MEM q collision_raw_configs /\
+  step_inst fuel collision_ctx q.cc_inst q.cc_state = IntRet ret send ==>
+  (q = collision_rc6 /\ ret = <| iret_values := []; iret_adopt_fmp := NONE |> /\
+   send = (collision_raw_a_stored with vs_inst_idx := 3)) \/
+  (q = collision_rc12 /\ ret = <| iret_values := []; iret_adopt_fmp := NONE |> /\
+   send = (collision_raw_b_stored with vs_inst_idx := 4))
+Proof
+  simp[collision_raw_configs_def] >> rpt strip_tac >> gvs[] >>
+  gvs[collision_raw_terminal_steps, collision_raw_call_results,
+    COND_RAND, COND_RATOR] >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[collision_rc_instructions, collision_rc_states] >>
+  once_rewrite_tac[step_inst_def] >>
+  simp[mk_inst_def,
+    SRULE [mk_inst_def] collision_initial_allocations,
+    SRULE [mk_inst_def] collision_initial_stores,
+    SRULE [mk_inst_def] collision_raw_a_steps,
+    SRULE [mk_inst_def] collision_raw_b_steps,
+    SRULE [mk_inst_def] collision_loads_diverge] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem collision_next_stack[local]:
+  (collision_rc_next q post inst).cc_stack = q.cc_stack
+Proof
+  simp[collision_rc_next_def]
+QED
+
+Theorem collision_return_stacks:
+  collision_rc6.cc_stack =
+    <| cf_fn := collision_rc2.cc_fn; cf_inst := collision_rc2.cc_inst;
+       cf_state := collision_rc2.cc_state; cf_params := collision_rc2.cc_params;
+       cf_prov := collision_rc2.cc_prov; cf_tvar := collision_rc2.cc_taint.t_var |>
+      :: collision_rc2.cc_stack /\
+  collision_rc12.cc_stack =
+    <| cf_fn := collision_rc7.cc_fn; cf_inst := collision_rc7.cc_inst;
+       cf_state := collision_rc7.cc_state; cf_params := collision_rc7.cc_params;
+       cf_prov := collision_rc7.cc_prov; cf_tvar := collision_rc7.cc_taint.t_var |>
+      :: collision_rc7.cc_stack
+Proof
+  once_rewrite_tac[collision_rc6_def, collision_rc12_def] >>
+  simp[collision_next_stack] >>
+  once_rewrite_tac[collision_rc5_def, collision_rc11_def] >>
+  simp[collision_next_stack] >>
+  once_rewrite_tac[collision_rc4_def, collision_rc10_def] >>
+  simp[collision_next_stack] >>
+  once_rewrite_tac[collision_rc9_def] >> simp[collision_next_stack] >>
+  simp[collision_rc3_def, collision_rc8_def, collision_rc_call_def]
+QED
+
+Theorem collision_envelope_ret:
+  collision_raw_envelope (f::stk) PG G tn fn rinst s /\ active_inst fn rinst s /\
+  step_inst fuel collision_ctx rinst s = IntRet ret send /\
+  bind_outputs f.cf_inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state f.cf_state send)) = SOME s' /\
+  active_inst f.cf_fn inst' (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx) ==>
+  collision_raw_envelope stk f.cf_params
+    (DRESTRICT f.cf_prov (COMPL (set f.cf_inst.inst_outputs)))
+    (tn with t_var := DRESTRICT f.cf_tvar (COMPL (set f.cf_inst.inst_outputs)))
+    f.cf_fn inst' (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx)
+Proof
+  rpt strip_tac >> fs[collision_raw_envelope_def] >>
+  gvs[collision_config_at_def] >>
+  drule_all collision_raw_return_sources >> strip_tac >> gvs[] >>
+  gvs[collision_return_stacks, collision_rc_states,
+    collision_rc_instructions, collision_rc_functions, mk_inst_def,
+    SRULE [] collision_raw_a_return_merge,
+    SRULE [] collision_raw_b_return_merge,
+    collision_main_indices, collision_main_updates]
+  >- (`collision_raw_call_b.vs_current_bb = "main"` by EVAL_TAC >>
+      gvs[collision_active_main, collision_main_indices, collision_main_bb_def,
+        collision_main_def, mk_inst_def] >>
+      qexists_tac `collision_rc7` >>
+      simp[collision_raw_configs_def, collision_rc7_def, collision_rc_ret_def,
+        collision_return_stacks, collision_rc_states, collision_rc_functions,
+        collision_rc_instructions, mk_inst_def, collision_main_def,
+        collision_main_bb_def, mk_raw_function_def]) >>
+  `collision_raw_load.vs_current_bb = "main"` by EVAL_TAC >>
+  gvs[collision_active_main, collision_main_indices, collision_main_bb_def,
+        collision_main_def, mk_inst_def] >>
+  qexists_tac `collision_rc13` >>
+  simp[collision_raw_configs_def, collision_rc13_def, collision_rc_ret_def,
+    collision_return_stacks, collision_rc_states, collision_rc_functions,
+    collision_rc_instructions, mk_inst_def, collision_main_def,
+        collision_main_bb_def, mk_raw_function_def]
+QED

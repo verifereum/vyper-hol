@@ -486,7 +486,7 @@ Definition collision_raw_call_b_def:
     <| vs_memory := REPLICATE 64 (0w:8 word); vs_inst_idx := 3 |>
 End
 
-Theorem collision_raw_a_return_merge[local]:
+Theorem collision_raw_a_return_merge:
   bind_outputs [] []
     (adopt_return_fmp <| iret_values := []; iret_adopt_fmp := NONE |>
       (merge_callee_state collision_raw_call_a
@@ -649,7 +649,7 @@ Definition collision_raw_load_def:
     <| vs_memory := REPLICATE 95 (0w:8 word) ++ [1w]; vs_inst_idx := 4 |>
 End
 
-Theorem collision_raw_b_return_merge[local]:
+Theorem collision_raw_b_return_merge:
   bind_outputs [] []
     (adopt_return_fmp <| iret_values := []; iret_adopt_fmp := NONE |>
       (merge_callee_state collision_raw_call_b
@@ -1081,7 +1081,7 @@ Proof
   EVAL_TAC
 QED
 
-Theorem collision_main_indices[local]:
+Theorem collision_main_indices:
   collision_start.vs_inst_idx = 0 /\
   collision_raw_allocated.vs_inst_idx = 0 /\
   collision_packed_allocated.vs_inst_idx = 0 /\
@@ -1128,7 +1128,7 @@ Proof
     collision_exit_entry_def, collision_bad_entry_def]
 QED
 
-Theorem collision_main_updates[local]:
+Theorem collision_main_updates:
   (collision_raw_call_a with vs_inst_idx := 2) = collision_raw_call_a /\
   (collision_packed_call_a with vs_inst_idx := 2) = collision_packed_call_a /\
   (collision_raw_call_b with vs_inst_idx := 3) = collision_raw_call_b /\
