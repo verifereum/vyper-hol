@@ -2,6 +2,7 @@ Theory cfgNormSupplySim
 Ancestors
   cfgNormSupplyProofs cfgTransformProps cfgNormDefs cfgTransform venomExecProps venomInst venomWf
   sccpCorrectnessProofs finite_map venomFnScheduleRunner unitShapeDefs stateFrame
+  analysisSimProofsBase analysisSimDefs
 
 Theorem find_and_split_supply_cases:
   !bbs fn s fn' changed s'.
@@ -2264,4 +2265,71 @@ Proof
   strip_tac >> conj_tac
   >- simp[venomExecSemanticsTheory.step_inst_base_def, venomStateTheory.eval_operand_def] >>
   irule supply_state_agree_update_fresh >> simp[]
+QED
+
+Theorem supply_forwarding_run:
+  !vars s repls insts s' st fuel ctx.
+    ir_supply_inst_ok s /\
+    build_forwarding_assigns_supply s vars = (repls,insts,s') /\
+    EVERY (\v. MEM v s.irs_used_vars /\ IS_SOME (lookup_var v st)) vars ==>
+    ?out. run_insts fuel ctx insts st = OK out /\
+      execution_frame out = execution_frame st /\
+      (!v. MEM v s.irs_used_vars ==> lookup_var v out = lookup_var v st) /\
+      (!src dst. MEM (src,dst) repls ==>
+        MEM src vars /\ lookup_var dst out = lookup_var src st)
+Proof
+  Induct_on `vars`
+  >- simp[build_forwarding_assigns_supply_def, run_insts_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `fresh_ir_var s` >> rename1 `fresh_ir_var s = (nv,s1)` >>
+  Cases_on `fresh_inst_id s1` >> rename1 `fresh_inst_id s1 = (id,s2)` >>
+  Cases_on `build_forwarding_assigns_supply s2 vars` >>
+  PairCases_on `r` >>
+  gvs[build_forwarding_assigns_supply_def, Excl "execution_frame_def"] >>
+  drule (cj 1 irSupplyTheory.fresh_ir_var_contract) >> strip_tac >>
+  drule (cj 2 irSupplyTheory.fresh_ir_var_contract) >> strip_tac >>
+  `ir_supply_inst_ok s1` by metis_tac[fresh_ir_var_cfg_supply_extends,
+    cfg_supply_extends_def] >>
+  drule_all irSupplyTheory.fresh_inst_id_contract >> strip_tac >>
+  `EVERY (\v. MEM v s2.irs_used_vars /\
+       IS_SOME (lookup_var v (update_var nv (THE (lookup_var h st)) st))) vars` by
+    (gvs[listTheory.EVERY_MEM, venomStateTheory.lookup_var_def,
+         venomStateTheory.update_var_def, FLOOKUP_UPDATE,
+         Excl "execution_frame_def"] >> metis_tac[]) >>
+  first_x_assum drule_all >>
+  disch_then (qspecl_then [`fuel`, `ctx`] strip_assume_tac) >>
+  qexists_tac `out` >>
+  conj_tac
+  >- (simp[run_insts_def, venomExecSemanticsTheory.step_inst_def,
+        venomExecSemanticsTheory.step_inst_base_def,
+        venomStateTheory.eval_operand_def, optionTheory.IS_SOME_EXISTS,
+        optionTheory.THE_DEF] >>
+      Cases_on `lookup_var h st` >> gvs[]) >>
+  conj_tac
+  >- gvs[venomStateTheory.update_var_def] >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum (qspec_then `v` mp_tac) >>
+      simp[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+           FLOOKUP_UPDATE] >> metis_tac[]) >>
+  rpt strip_tac >> gvs[] >>
+  gvs[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+      FLOOKUP_UPDATE, listTheory.EVERY_MEM] >>
+  Cases_on `FLOOKUP st.vs_vars h` >> gvs[] >> metis_tac[]
+QED
+
+Theorem supply_forwarding_run_agree:
+  ir_supply_inst_ok s /\ ir_supply_covers_fn s fn /\
+  build_forwarding_assigns_supply s vars = (repls,insts,s') /\
+  EVERY (\v. MEM v s.irs_used_vars /\ IS_SOME (lookup_var v st')) vars /\
+  supply_state_agree fn st st' ==>
+  ?out. run_insts fuel ctx insts st' = OK out /\
+    supply_state_agree fn st out /\
+    (!src dst. MEM (src,dst) repls ==>
+      MEM src vars /\ lookup_var dst out = lookup_var src st')
+Proof
+  strip_tac >> drule_all supply_forwarding_run >>
+  disch_then (qspecl_then [`fuel`, `ctx`] strip_assume_tac) >>
+  qexists_tac `out` >> simp[] >>
+  gvs[supply_state_agree_def, ir_supply_covers_fn_def,
+      list_subset_def, listTheory.EVERY_MEM] >> metis_tac[]
 QED
