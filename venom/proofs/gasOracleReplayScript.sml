@@ -465,6 +465,98 @@ Proof
   metis_tac[gas_extract_result_readings]
 QED
 
+Theorem gas_state_observers[simp]:
+  mload off (s with vs_gas_readings := gs) = mload off s /\
+  sload key (s with vs_gas_readings := gs) = sload key s /\
+  tload key (s with vs_gas_readings := gs) = tload key s
+Proof
+  simp[mload_def, sload_def, tload_def, contract_storage_def, contract_transient_def]
+QED
+
+Theorem gas_state_writes[simp]:
+  mstore off v (s with vs_gas_readings := gs) =
+    (mstore off v s with vs_gas_readings := gs) /\
+  mstore8 off v (s with vs_gas_readings := gs) =
+    (mstore8 off v s with vs_gas_readings := gs) /\
+  sstore key v (s with vs_gas_readings := gs) =
+    (sstore key v s with vs_gas_readings := gs) /\
+  tstore key v (s with vs_gas_readings := gs) =
+    (tstore key v s with vs_gas_readings := gs) /\
+  mcopy dst src sz (s with vs_gas_readings := gs) =
+    (mcopy dst src sz s with vs_gas_readings := gs) /\
+  istore off v (s with vs_gas_readings := gs) =
+    (istore off v s with vs_gas_readings := gs) /\
+  jump_to lbl (s with vs_gas_readings := gs) =
+    (jump_to lbl s with vs_gas_readings := gs) /\
+  halt_state (s with vs_gas_readings := gs) =
+    (halt_state s with vs_gas_readings := gs) /\
+  revert_state (s with vs_gas_readings := gs) =
+    (revert_state s with vs_gas_readings := gs) /\
+  set_returndata rd (s with vs_gas_readings := gs) =
+    (set_returndata rd s with vs_gas_readings := gs)
+Proof
+  simp[mstore_def, mstore8_def, sstore_def, tstore_def, mcopy_def,
+       istore_def, jump_to_def, halt_state_def, revert_state_def, set_returndata_def]
+QED
+
+Theorem gas_state_writes_readings[simp]:
+  (mstore off v s).vs_gas_readings = s.vs_gas_readings /\
+  (mstore8 off v s).vs_gas_readings = s.vs_gas_readings /\
+  (sstore key v s).vs_gas_readings = s.vs_gas_readings /\
+  (tstore key v s).vs_gas_readings = s.vs_gas_readings /\
+  (mcopy dst src sz s).vs_gas_readings = s.vs_gas_readings /\
+  (istore off v s).vs_gas_readings = s.vs_gas_readings /\
+  (write_memory_with_expansion off bytes s).vs_gas_readings = s.vs_gas_readings /\
+  (jump_to lbl s).vs_gas_readings = s.vs_gas_readings /\
+  (halt_state s).vs_gas_readings = s.vs_gas_readings /\
+  (revert_state s).vs_gas_readings = s.vs_gas_readings /\
+  (set_returndata rd s).vs_gas_readings = s.vs_gas_readings
+Proof
+  simp[mstore_def, mstore8_def, sstore_def, tstore_def, mcopy_def,
+       istore_def, write_memory_with_expansion_def, jump_to_def,
+       halt_state_def, revert_state_def, set_returndata_def]
+QED
+
+(* Select a single dispatch equation and abstract its state argument. *)
+val gas_opcode_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
+
+fun gas_opcode_rewrite eq = let
+  val (_, th) = valOf (List.find
+    (fn (key, _) => aconv key (rhs (concl eq))) gas_opcode_rewrites)
+in PURE_ONCE_REWRITE_TAC [MATCH_MP th eq] end;
+
+Theorem gas_pack_dret_transport:
+  !pairs cursor s ptrs final_cursor t gs.
+  pack_dret_dynamic cursor pairs s = (ptrs,final_cursor,t) ==>
+  pack_dret_dynamic cursor pairs (s with vs_gas_readings := gs) =
+    (ptrs,final_cursor,t with vs_gas_readings := gs)
+Proof
+  Induct_on `pairs` >- simp[pack_dret_dynamic_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[Once pack_dret_dynamic_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  simp[Once pack_dret_dynamic_def]
+QED
+
+Theorem gas_pack_dret_readings:
+  !pairs cursor s ptrs final_cursor t.
+  pack_dret_dynamic cursor pairs s = (ptrs,final_cursor,t) ==>
+  t.vs_gas_readings = s.vs_gas_readings
+Proof
+  Induct_on `pairs` >- simp[pack_dret_dynamic_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[Once pack_dret_dynamic_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> simp[]
+QED
+
 Theorem gas_oracle_replay:
   (!fuel ctx inst s.
      ?n. !tail.
