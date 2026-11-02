@@ -14,17 +14,21 @@
  * Premises: definite assignment (fn_defs_reach_uses) makes every PHI value
  * defined at its predecessor's end; all_reachable makes the dominator tree
  * cover every block, so every block is renamed; fn_phi_operands_single_def
- * keeps the liveness the pass uses exact for the variables PHIs read.
+ * keeps the liveness the pass uses exact for the variables PHIs read;
+ * fn_phis_cover_preds and first_block_no_phi make every PHI the input runs
+ * resolvable, so the cleanup's NOP/ASSIGN collapse cannot make the output run
+ * where the input fails.
  *)
 Theory o1ContractMakeSsa
 Ancestors
   o1PassLift makeSsaCurrentDefs makeSsaCurrentProps venomFnScheduleRunner
-  venomWf cfgWf venomInst irSupply unitShapeDefs
+  venomWf cfgWf venomInst irSupply unitShapeDefs o1PassContract
 
 Theorem make_ssa_current_fn_fn_bisim:
   fn_defs_reach_uses fn /\ fn_phi_operands_single_def fn /\
+  fn_phis_cover_preds fn /\
   all_reachable fn /\ fn_inst_wf fn /\ wf_function fn /\
-  first_block_no_preds fn /\
+  first_block_no_preds fn /\ first_block_no_phi fn /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
   make_ssa_current_fn s fn = (fn',s') ==>
   fn_bisim fn fn'
@@ -37,8 +41,9 @@ QED
 Theorem make_ssa_current_fn_frame_sim:
   ctx_bisim C C' /\
   fn_defs_reach_uses fn /\ fn_phi_operands_single_def fn /\
+  fn_phis_cover_preds fn /\
   all_reachable fn /\ fn_inst_wf fn /\ wf_function fn /\
-  first_block_no_preds fn /\
+  first_block_no_preds fn /\ first_block_no_phi fn /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
   make_ssa_current_fn s fn = (fn',s') ==>
   frame_sim L C C' fn fn'
