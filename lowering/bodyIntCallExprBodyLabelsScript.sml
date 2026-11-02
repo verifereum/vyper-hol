@@ -417,3 +417,176 @@ Proof
   Cases_on `rest` >- simp[compile_expr_body_ordinary_builtin_three] >>
   simp[compile_expr_body_builtin_long]
 QED
+
+Theorem compile_expr_body_mod_two[local]:
+  bi = AddMod \/ bi = MulMod ==>
+  compile_expr_body cfn bfn tfn ce ty (Builtin ann bi [a;b]) st =
+  bfn ce (expr_type (Builtin ann bi [a;b])) ty bi [a;b] st
+Proof
+  strip_tac >> gvs[] >> Cases_on `a` >> simp[compile_expr_body_def] >>
+  Cases_on `b` >> simp[]
+QED
+
+Theorem compile_expr_body_addmod_three[local]:
+  compile_expr_body cfn bfn tfn ce ty (Builtin ann AddMod [a;b;c]) st =
+  (case (a,b,c) of
+     (Name aty an, Name bty bn, Name cty cn) =>
+       compile_addmod_names ce (expr_type (Builtin ann AddMod [a;b;c]))
+         aty an bty bn cty cn st
+   | _ => bfn ce (expr_type (Builtin ann AddMod [a;b;c])) ty AddMod [a;b;c] st)
+Proof
+  Cases_on `a` >> simp[compile_expr_body_def] >>
+  Cases_on `b` >> simp[] >> Cases_on `c` >> simp[]
+QED
+
+Theorem compile_expr_body_mulmod_three[local]:
+  compile_expr_body cfn bfn tfn ce ty (Builtin ann MulMod [a;b;c]) st =
+  (case (a,b,c) of
+     (Name aty an, Name bty bn, Name cty cn) =>
+       compile_mulmod_names ce (expr_type (Builtin ann MulMod [a;b;c]))
+         aty an bty bn cty cn st
+   | _ => bfn ce (expr_type (Builtin ann MulMod [a;b;c])) ty MulMod [a;b;c] st)
+Proof
+  Cases_on `a` >> simp[compile_expr_body_def] >>
+  Cases_on `b` >> simp[] >> Cases_on `c` >> simp[]
+QED
+
+Theorem compile_expr_body_powmod_two[local]:
+  compile_expr_body cfn bfn tfn ce ty (Builtin ann PowMod256 [a;b]) st =
+  (case (a,b) of
+     (Name aty an, Name bty bn) =>
+       compile_powmod256_names ce (expr_type (Builtin ann PowMod256 [a;b]))
+         aty an bty bn st
+   | _ => bfn ce (expr_type (Builtin ann PowMod256 [a;b])) ty PowMod256 [a;b] st)
+Proof
+  Cases_on `a` >> simp[compile_expr_body_def] >> Cases_on `b` >> simp[]
+QED
+
+Theorem compile_expr_body_powmod_three[local]:
+  compile_expr_body cfn bfn tfn ce ty (Builtin ann PowMod256 [a;b;c]) st =
+  bfn ce (expr_type (Builtin ann PowMod256 [a;b;c])) ty PowMod256 [a;b;c] st
+Proof
+  Cases_on `a` >> simp[compile_expr_body_def] >>
+  Cases_on `b` >> simp[] >> Cases_on `c` >> simp[]
+QED
+
+Theorem compile_expr_body_addmod_action[local]:
+  compile_expr_body cfn bfn tfn ce ty (Builtin ann AddMod args) =
+  (case args of
+     [Name aty a; Name bty b; Name mty m] =>
+       compile_addmod_names ce (expr_type (Builtin ann AddMod args)) aty a bty b mty m
+   | _ => bfn ce (expr_type (Builtin ann AddMod args)) ty AddMod args)
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `args` >- simp[compile_expr_body_builtin_nil] >> rename1 `a::rest` >>
+  Cases_on `rest` >- (Cases_on `a` >> simp[compile_expr_body_builtin_single]) >>
+  rename1 `a::b::rest` >>
+  Cases_on `rest` >- (Cases_on `a` >> Cases_on `b` >> simp[compile_expr_body_mod_two]) >>
+  rename1 `a::b::c::rest` >> Cases_on `rest` >>
+  Cases_on `a` >> simp[compile_expr_body_addmod_three, compile_expr_body_builtin_long] >>
+  Cases_on `b` >> simp[] >> Cases_on `c` >> simp[]
+QED
+
+Theorem compile_expr_body_mulmod_action[local]:
+  compile_expr_body cfn bfn tfn ce ty (Builtin ann MulMod args) =
+  (case args of
+     [Name aty a; Name bty b; Name mty m] =>
+       compile_mulmod_names ce (expr_type (Builtin ann MulMod args)) aty a bty b mty m
+   | _ => bfn ce (expr_type (Builtin ann MulMod args)) ty MulMod args)
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `args` >- simp[compile_expr_body_builtin_nil] >> rename1 `a::rest` >>
+  Cases_on `rest` >- (Cases_on `a` >> simp[compile_expr_body_builtin_single]) >>
+  rename1 `a::b::rest` >>
+  Cases_on `rest` >- (Cases_on `a` >> Cases_on `b` >> simp[compile_expr_body_mod_two]) >>
+  rename1 `a::b::c::rest` >> Cases_on `rest` >>
+  Cases_on `a` >> simp[compile_expr_body_mulmod_three, compile_expr_body_builtin_long] >>
+  Cases_on `b` >> simp[] >> Cases_on `c` >> simp[]
+QED
+
+Theorem compile_expr_body_powmod_action[local]:
+  compile_expr_body cfn bfn tfn ce ty (Builtin ann PowMod256 args) =
+  (case args of
+     [Name aty a; Name bty b] =>
+       compile_powmod256_names ce (expr_type (Builtin ann PowMod256 args)) aty a bty b
+   | _ => bfn ce (expr_type (Builtin ann PowMod256 args)) ty PowMod256 args)
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `args` >- simp[compile_expr_body_builtin_nil] >> rename1 `a::rest` >>
+  Cases_on `rest` >- (Cases_on `a` >> simp[compile_expr_body_builtin_single]) >>
+  rename1 `a::b::rest` >> Cases_on `rest`
+  >- (Cases_on `a` >> simp[compile_expr_body_powmod_two] >> Cases_on `b` >> simp[]) >>
+  rename1 `a::b::c::rest` >> Cases_on `rest` >>
+  Cases_on `a` >> simp[compile_expr_body_powmod_three, compile_expr_body_builtin_long] >>
+  Cases_on `b` >> simp[]
+QED
+
+Theorem compile_expr_body_builtin_property[local]:
+  P (bfn ce (expr_type (Builtin ann bi args)) ty bi args) /\
+  (!rt aty a bty b mty m. P (compile_addmod_names ce rt aty a bty b mty m)) /\
+  (!rt aty a bty b mty m. P (compile_mulmod_names ce rt aty a bty b mty m)) /\
+  (!rt aty a bty b. P (compile_powmod256_names ce rt aty a bty b)) ==>
+  P (compile_expr_body cfn bfn tfn ce ty (Builtin ann bi args))
+Proof
+  strip_tac >>
+  Cases_on `bi = AddMod` >>
+  Cases_on `bi = MulMod` >>
+  Cases_on `bi = PowMod256` >>
+  gvs[compile_expr_body_ordinary_builtin] >>
+  rewrite_tac[compile_expr_body_addmod_action,
+    compile_expr_body_mulmod_action, compile_expr_body_powmod_action] >>
+  (Cases_on `args` >- gvs[] >> rename1 `a::rest` >>
+   Cases_on `rest` >- (Cases_on `a` >> gvs[]) >> rename1 `a::b::rest` >>
+   Cases_on `rest` >- (Cases_on `a` >> gvs[] >> Cases_on `b` >> gvs[]) >>
+   rename1 `a::b::c::rest` >> Cases_on `rest` >>
+   Cases_on `a` >> gvs[] >> Cases_on `b` >> gvs[] >> Cases_on `c` >> gvs[])
+QED
+
+Theorem compiler_block_tail_builtin_body:
+  compiler_block_tail (bfn ce (expr_type (Builtin ann bi args)) ty bi args) ==>
+  compiler_block_tail (compile_expr_body cfn bfn tfn ce ty (Builtin ann bi args))
+Proof
+  strip_tac >> irule compile_expr_body_builtin_property >>
+  simp[compiler_block_tail_modular_names]
+QED
+
+Theorem compiler_label_hoare_builtin_body:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (bfn ce (expr_type (Builtin ann bi args)) ty bi args)
+    (\r out. compiler_label_reservation origin pending out) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_expr_body cfn bfn tfn ce ty (Builtin ann bi args))
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >>
+  irule (BETA_RULE (Q.INST [`P` |-> `\action.
+    compiler_label_hoare (compiler_label_reservation origin pending) action
+      (\r out. compiler_label_reservation origin pending out)`]
+    compile_expr_body_builtin_property)) >>
+  simp[compiler_label_hoare_modular_names]
+QED
+
+Theorem compile_expr_body_type_builtin_action[local]:
+  compile_expr_body cfn bfn tfn ce ty (TypeBuiltin ann tb rt args) =
+  tfn ce (expr_type (TypeBuiltin ann tb rt args)) ty tb rt args
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >> simp[compile_expr_body_def]
+QED
+
+Theorem compiler_block_tail_type_builtin_body:
+  compiler_block_tail (tfn ce (expr_type (TypeBuiltin ann tb rt args)) ty tb rt args) ==>
+  compiler_block_tail (compile_expr_body cfn bfn tfn ce ty (TypeBuiltin ann tb rt args))
+Proof
+  simp[compile_expr_body_type_builtin_action]
+QED
+
+Theorem compiler_label_hoare_type_builtin_body:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (tfn ce (expr_type (TypeBuiltin ann tb rt args)) ty tb rt args)
+    (\r out. compiler_label_reservation origin pending out) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_expr_body cfn bfn tfn ce ty (TypeBuiltin ann tb rt args))
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  simp[compile_expr_body_type_builtin_action]
+QED
