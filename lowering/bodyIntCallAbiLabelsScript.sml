@@ -265,3 +265,94 @@ Proof
   `pending DELETE h DELETE b DELETE e = pending` by ASM_SET_TAC [] >>
   simp[compiler_label_hoare_typed_primitives]
 QED
+
+Theorem compiler_block_tail_abi_encode_static:
+  compiler_block_tail (compile_abi_encode_static dst src)
+Proof
+  simp[compile_abi_encode_static_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_abi_encode_static:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_abi_encode_static dst src)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  simp[compile_abi_encode_static_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives] >> gen_tac) >>
+  simp[compiler_label_hoare_typed_primitives]
+QED
+
+Theorem compiler_block_tail_abi_encode_static_info:
+  compiler_block_tail (compile_abi_encode_static_info dst src info)
+Proof
+  Cases_on `info` >>
+  simp[compile_abi_encode_static_info_def, compiler_block_tail_abi_encode_static,
+       comp_ignore_bind_def, compiler_block_tail_primitives] >>
+  ho_match_mp_tac compiler_block_tail_bind >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_abi_encode_static_info:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_abi_encode_static_info dst src info)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  Cases_on `info` >>
+  simp[compile_abi_encode_static_info_def, compiler_label_hoare_abi_encode_static,
+       comp_ignore_bind_def, compiler_label_hoare_context_primitives,
+       compiler_label_hoare_typed_primitives] >>
+  ho_match_mp_tac compiler_label_hoare_preserving_bind >>
+  simp[compiler_label_hoare_typed_primitives]
+QED
+
+Theorem compiler_block_tail_abi_encode_dyn_static_loop:
+  compiler_block_tail (compile_abi_encode_dyn_static_loop dst src info asz msz len)
+Proof
+  simp[compile_abi_encode_dyn_static_loop_def, comp_ignore_bind_def] >>
+  ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+  >- simp[compiler_block_tail_alloc_buffer] >> gen_tac >> simp[] >>
+  rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+       >- simp[compiler_block_tail_primitives,
+               compiler_block_tail_abi_encode_static_info] >> gen_tac) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_abi_encode_dyn_static_loop:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_abi_encode_dyn_static_loop dst src info asz msz len)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  simp[compile_abi_encode_dyn_static_loop_def, comp_ignore_bind_def] >>
+  ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+  >- simp[compiler_label_hoare_storage_primitives] >> gen_tac >> simp[] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- simp[compiler_label_hoare_typed_primitives] >> gen_tac >> BETA_TAC >>
+  ntac 3 (irule compiler_label_hoare_fresh_bind >>
+          gen_tac >> strip_tac >> BETA_TAC) >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives] >> gen_tac >> BETA_TAC) >>
+  irule compiler_label_hoare_new_block_bind >> simp[] >> BETA_TAC >> gvs[NoAsms] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives] >> gen_tac >> BETA_TAC) >>
+  irule compiler_label_hoare_new_block_bind >> simp[] >> BETA_TAC >> gvs[NoAsms] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives,
+               compiler_label_hoare_abi_encode_static_info] >> gen_tac >> BETA_TAC) >>
+  simp[DELETE_INSERT] >>
+  irule compiler_label_hoare_new_block_bind >> simp[] >> BETA_TAC >>
+  simp[DELETE_INSERT] >>
+  rename1 `compiler_label_reservation origin (pending DELETE h DELETE b DELETE e)` >>
+  `pending DELETE h DELETE b DELETE e = pending` by ASM_SET_TAC [] >> simp[] >>
+  rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives] >> gen_tac) >>
+  simp[compiler_label_hoare_context_primitives]
+QED
