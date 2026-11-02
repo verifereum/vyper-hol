@@ -397,6 +397,7 @@ Theorem typed_decl_staged_code_parts[local]:
     ?sx sm sn tmp.
       sx = sa with cs_next_var := sa.cs_next_var + 1 /\
       ~not_fresh_at sa tmp /\ not_fresh_at sn tmp /\
+      sa.cs_next_var <= sn.cs_next_var /\
       emit_inst ALLOCA [Lit (n2w (type_memory_bytes cenv sty))] [tmp]
         sx = ((),sm) /\
       emit_void MCOPY [Var tmp; src; Lit (n2w (type_memory_bytes cenv sty))]
@@ -432,8 +433,187 @@ Proof
     (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
      simp[emitHelperTheory.emit_void_def, emit_def, fresh_id_def, comp_bind_def, comp_return_def] >>
      strip_tac >> gvs[]) >>
+  `sm.cs_next_var = sx.cs_next_var` by
+    (qpat_x_assum `emit_inst _ _ _ _ = _` mp_tac >>
+     simp[emitHelperTheory.emit_inst_def, emit_def, fresh_id_def, comp_bind_def, comp_return_def] >>
+     strip_tac >> gvs[]) >>
   qexistsl [`sm`, `sn`, `tmp`] >> gvs[] >>
   irule freshWritesTheory.not_fresh_at_mono >> qexists `sm` >> simp[]
+QED
+
+Theorem typed_decl_stage_owned_run[local]:
+  !ctx func cenv cx es sb sf s op dty sty info bytes stv v sw p dw aid dsz.
+    compile_assign_value cenv (Var p) LocMemory op F (SOME LocMemory)
+      dty sty info bytes sb = ((),sf) /\
+    type_memory_bytes cenv sty = type_memory_size stv /\
+    0 < type_memory_size stv /\ type_memory_size stv < dimword (:256) /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sb /\
+    (!x. op = Var x ==> not_fresh_at sb x) /\ not_fresh_at sb p /\
+    eval_operand op s = SOME sw /\ lookup_var p s = SOME dw /\
+    FLOOKUP s.vs_allocas aid = SOME (w2n dw,dsz) /\
+    val_in_memory stv v (w2n sw) s.vs_memory /\ val_wf stv v /\
+    val_footprint stv v <= type_memory_size stv /\
+    fn_has_code sb sf func /\ ~s.vs_halted /\
+    s.vs_current_bb = sb.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+    ?sn tmp u uw taid.
+      taid = sb.cs_next_id /\
+      compile_store_memory cenv (Var tmp) (Var p) dty sty sn = ((),sf) /\
+      cs_extends sb sn /\ sb.cs_next_var <= sn.cs_next_var /\
+      fn_has_code sn sf func /\ not_fresh_at sn tmp /\
+      stmt_state_rel ctx func cenv cx es u /\
+      lookup_var tmp u = SOME uw /\ lookup_var p u = SOME dw /\
+      FLOOKUP u.vs_allocas taid = SOME (w2n uw,type_memory_size stv) /\
+      FLOOKUP u.vs_allocas aid = SOME (w2n dw,dsz) /\
+      val_in_memory stv v (w2n uw) u.vs_memory /\
+      (!x. not_fresh_at sb x ==> lookup_var x u = lookup_var x s) /\
+      (!a entry. FLOOKUP s.vs_allocas a = SOME entry ==>
+                 FLOOKUP u.vs_allocas a = SOME entry) /\
+      ~u.vs_halted /\ u.vs_current_bb = sn.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sn.cs_current_insts /\
+      (!fuel r. run_from fuel ctx func u = r /\ (!e. r <> Error e) ==>
+        ?fuel'. run_from fuel' ctx func s = r)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `0 < type_memory_bytes cenv sty` by simp[] >>
+  drule_all typed_decl_staged_code_parts >>
+  disch_then (qx_choosel_then [`sx`, `sm`, `sn`, `tmp`] strip_assume_tac) >>
+  `MEM (mk_inst sx.cs_next_id ALLOCA
+      [Lit (n2w (type_memory_bytes cenv sty))] [tmp]) (fn_insts func)` by
+    (irule loweringHaltTheory.emit_inst_fn_member >> qexists `sm` >> simp[]) >>
+  `not_local_ptr cenv es.scopes tmp` by
+    (gvs[compileEnvTheory.local_ptrs_reserved_def,
+         compileEnvTheory.not_local_ptr_def] >> metis_tac[]) >>
+  `op <> Var tmp /\ p <> tmp` by metis_tac[] >>
+  `s.vs_current_bb = sx.cs_current_bb /\
+   s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
+  `type_memory_bytes cenv sty < dimword (:256) /\
+   val_footprint stv v <= type_memory_bytes cenv sty` by metis_tac[] >>
+  drule_all alloc_copy_memory_owned_run >>
+  disch_then (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
+  `!x. not_fresh_at sb x ==> lookup_var x u = lookup_var x s` by
+    (rpt strip_tac >> `x <> tmp` by (strip_tac >> gvs[]) >> simp[]) >>
+  qexistsl [`sn`, `tmp`, `u`, `uw`, `sx.cs_next_id`] >>
+  simp[] >> conj_tac
+  >- metis_tac[cs_extends_trans] >>
+  metis_tac[]
+QED
+
+Theorem typed_owned_allocas_copy_run[local]:
+  !ctx func cenv cx env es s sa sf src p sw dw aid bid stv dtv v sty dty dsz.
+    stmt_state_rel ctx func cenv cx es s /\ expr_sim_inv cenv cx env es /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    FLOOKUP s.vs_allocas aid = SOME (w2n sw,type_memory_size stv) /\
+    FLOOKUP s.vs_allocas bid = SOME (w2n dw,dsz) /\ aid <> bid /\
+    0 < type_memory_size stv /\ 0 < type_memory_size dtv /\
+    type_memory_size dtv <= dsz /\
+    compile_store_memory_typed cenv (Var p) dty src sty sa = ((),sf) /\
+    type_widens_to (get_tenv cx) sty dty /\
+    evaluate_type (get_tenv cx) sty = SOME stv /\
+    evaluate_type (get_tenv cx) dty = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\
+    val_in_memory stv v (w2n sw) s.vs_memory /\
+    eval_operand src s = SOME sw /\ lookup_var p s = SOME dw /\
+    (!x. src = Var x ==> not_fresh_at sa x) /\ not_fresh_at sa p /\
+    fn_has_code sa sf func /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. val_in_memory dtv v (w2n dw) t.vs_memory /\
+      ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+      (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+                vs_prev_bb := s.vs_prev_bb; vs_current_bb := s.vs_current_bb;
+                vs_inst_idx := s.vs_inst_idx|>) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!a len. a + len <= w2n dw \/ w2n dw + type_memory_size dtv <= a ==>
+        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+      (!fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
+        ?fuel'. run_from fuel' ctx func s = r)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `w2n sw + type_memory_size stv < dimword (:256)` by
+    (irule typed_alloca_end_lt >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `w2n dw + type_memory_size dtv < dimword (:256)` by
+    (irule typed_alloca_end_lt >> metis_tac[]) >>
+  `w2n sw + type_memory_size stv <= w2n dw \/
+   w2n dw + type_memory_size dtv <= w2n sw` by
+    (gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
+         venomMemDefsTheory.alloca_inv_def,
+         venomMemDefsTheory.allocas_non_overlapping_def] >>
+     first_x_assum drule_all >> decide_tac) >>
+  `val_wf stv v /\ val_wf dtv v` by
+    metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  drule compile_store_memory_typed_run >>
+  disch_then (qspec_then `get_tenv cx` mp_tac) >>
+  simp[venomStateTheory.eval_operand_def] >>
+  disch_then irule >> gvs[expr_sim_inv_def] >>
+  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, metis_tac[]]
+QED
+
+Theorem typed_decl_staged_convert_run[local]:
+  !ctx func cenv cx env es sb sf s op dty sty info bytes stv dtv v sw p dw aid dsz.
+    compile_assign_value cenv (Var p) LocMemory op F (SOME LocMemory)
+      dty sty info bytes sb = ((),sf) /\
+    type_memory_bytes cenv sty = type_memory_size stv /\
+    0 < type_memory_size stv /\ type_memory_size stv < dimword (:256) /\
+    0 < type_memory_size dtv /\ type_memory_size dtv <= dsz /\
+    stmt_state_rel ctx func cenv cx es s /\ expr_sim_inv cenv cx env es /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sb /\
+    (!x. op = Var x ==> not_fresh_at sb x) /\ not_fresh_at sb p /\
+    eval_operand op s = SOME sw /\ lookup_var p s = SOME dw /\
+    FLOOKUP s.vs_allocas aid = SOME (w2n dw,dsz) /\ aid < sb.cs_next_id /\
+    val_in_memory stv v (w2n sw) s.vs_memory /\
+    val_footprint stv v <= type_memory_size stv /\
+    type_widens_to (get_tenv cx) sty dty /\
+    evaluate_type (get_tenv cx) sty = SOME stv /\
+    evaluate_type (get_tenv cx) dty = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\
+    ~is_word_type dty /\ ~is_bytestring_type dty /\ dty <> sty /\
+    fn_has_code sb sf func /\ ~s.vs_halted /\
+    s.vs_current_bb = sb.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+    ?sn u t.
+      cs_extends sb sn /\ stmt_state_rel ctx func cenv cx es u /\
+      lookup_var p u = SOME dw /\
+      (!x. not_fresh_at sb x ==> lookup_var x u = lookup_var x s) /\
+      (!a entry. FLOOKUP s.vs_allocas a = SOME entry ==>
+                 FLOOKUP u.vs_allocas a = SOME entry) /\
+      val_in_memory dtv v (w2n dw) t.vs_memory /\
+      ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+      (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
+                vs_prev_bb := u.vs_prev_bb; vs_current_bb := u.vs_current_bb;
+                vs_inst_idx := u.vs_inst_idx|>) = u /\
+      (!x. not_fresh_at sn x ==> lookup_var x t = lookup_var x u) /\
+      (!a len. a + len <= w2n dw \/ w2n dw + type_memory_size dtv <= a ==>
+        mem_bytes_at a len t.vs_memory = mem_bytes_at a len u.vs_memory) /\
+      LENGTH u.vs_memory <= LENGTH t.vs_memory /\
+      (!fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
+        ?fuel'. run_from fuel' ctx func s = r)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `val_wf stv v` by metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  drule_all typed_decl_stage_owned_run >>
+  disch_then (qx_choosel_then [`sn`, `tmp`, `u`, `uw`, `taid`] strip_assume_tac) >>
+  `compile_store_memory_typed cenv (Var p) dty (Var tmp) sty sn = ((),sf)` by
+    gvs[contextTheory.compile_store_memory_def] >>
+  `not_fresh_at sn p` by
+    (irule freshWritesTheory.not_fresh_at_mono >> qexists `sb` >> simp[]) >>
+  `eval_operand (Var tmp) u = SOME uw` by simp[venomStateTheory.eval_operand_def] >>
+  `taid <> aid` by decide_tac >>
+  `!x. Var tmp = Var x ==> not_fresh_at sn x` by simp[] >>
+  drule_all typed_owned_allocas_copy_run >>
+  disch_then (qx_choose_then `t` strip_assume_tac) >>
+  qexistsl [`sn`, `u`, `t`] >> simp[] >> conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  rpt strip_tac >>
+  qpat_x_assum `!fuel r. run_from fuel ctx func t = r /\ _ ==> _`
+    (qspec_then `fuel` mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `!fuel r. run_from fuel ctx func u = r /\ _ ==> _` drule >>
+  simp[]
 QED
 
 Theorem unstaged_overlap_value_types[local]:
