@@ -256,6 +256,84 @@ Proof
   Cases_on `outs` >> simp[lift_result_def]
 QED
 
+Theorem gas_exec_pure1:
+  gas_replay_at 0 (exec_pure1 f inst) s
+Proof
+  simp[gas_replay_at_def, exec_pure1_def] >> gen_tac >>
+  Cases_on `inst.inst_operands` >> simp[lift_result_def] >>
+  rename1 `inst.inst_operands = op1::ops` >>
+  Cases_on `ops` >> simp[lift_result_def] >>
+  Cases_on `eval_operand op1 s` >> simp[lift_result_def] >>
+  Cases_on `inst.inst_outputs` >> simp[lift_result_def] >>
+  rename1 `inst.inst_outputs = out::outs` >>
+  Cases_on `outs` >> simp[lift_result_def]
+QED
+
+Theorem gas_exec_pure2:
+  gas_replay_at 0 (exec_pure2 f inst) s
+Proof
+  simp[gas_replay_at_def, exec_pure2_def] >> gen_tac >>
+  namedCases_on `inst.inst_operands` ["", "op1 ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "op2 rest"] >> simp[lift_result_def] >>
+  Cases_on `rest` >> simp[lift_result_def] >>
+  Cases_on `eval_operand op1 s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand op2 s` >> simp[lift_result_def] >>
+  Cases_on `inst.inst_outputs` >> simp[lift_result_def] >>
+  rename1 `inst.inst_outputs = out::outs` >>
+  Cases_on `outs` >> simp[lift_result_def]
+QED
+
+Theorem gas_exec_pure3:
+  gas_replay_at 0 (exec_pure3 f inst) s
+Proof
+  simp[gas_replay_at_def, exec_pure3_def] >> gen_tac >>
+  namedCases_on `inst.inst_operands` ["", "op1 ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "op2 rest"] >> simp[lift_result_def] >>
+  namedCases_on `rest` ["", "op3 last"] >> simp[lift_result_def] >>
+  Cases_on `last` >> simp[lift_result_def] >>
+  Cases_on `eval_operand op1 s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand op2 s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand op3 s` >> simp[lift_result_def] >>
+  Cases_on `inst.inst_outputs` >> simp[lift_result_def] >>
+  rename1 `inst.inst_outputs = out::outs` >>
+  Cases_on `outs` >> simp[lift_result_def]
+QED
+
+Theorem gas_exec_read0:
+  (!u gs. f (u with vs_gas_readings := gs) = f u) ==>
+  gas_replay_at 0 (exec_read0 f inst) s
+Proof
+  strip_tac >> simp[gas_replay_at_def, exec_read0_def] >> gen_tac >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
+  Cases_on `outs` >> simp[lift_result_def]
+QED
+
+Theorem gas_exec_read1:
+  (!v u gs. f v (u with vs_gas_readings := gs) = f v u) ==>
+  gas_replay_at 0 (exec_read1 f inst) s
+Proof
+  strip_tac >> simp[gas_replay_at_def, exec_read1_def] >> gen_tac >>
+  namedCases_on `inst.inst_operands` ["", "op1 ops"] >> simp[lift_result_def] >>
+  Cases_on `ops` >> simp[lift_result_def] >>
+  Cases_on `eval_operand op1 s` >> simp[lift_result_def] >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
+  Cases_on `outs` >> simp[lift_result_def]
+QED
+
+Theorem gas_exec_write2:
+  (!v w u gs. f v w (u with vs_gas_readings := gs) =
+               (f v w u with vs_gas_readings := gs)) /\
+  (!v w u. (f v w u).vs_gas_readings = u.vs_gas_readings) ==>
+  gas_replay_at 0 (exec_write2 f inst) s
+Proof
+  strip_tac >> simp[gas_replay_at_def, exec_write2_def] >> gen_tac >>
+  namedCases_on `inst.inst_operands` ["", "op1 ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "op2 rest"] >> simp[lift_result_def] >>
+  Cases_on `rest` >> simp[lift_result_def] >>
+  Cases_on `eval_operand op1 s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand op2 s` >> simp[lift_result_def]
+QED
+
 Theorem gas_oracle_replay:
   (!fuel ctx inst s.
      ?n. !tail.
