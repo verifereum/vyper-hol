@@ -2271,7 +2271,8 @@ Proof
     (irule ecrecover_arg_typed_encoding >> gvs[]) >>
   Cases_on `vh` >> gvs[value_has_type_def] >>
   simp[evaluate_ecrecover_def, typed_val_to_w256_def, PAD_LEFT, PAD_RIGHT] >>
-  CASE_TAC >> simp[]
+  qmatch_goalsub_abbrev_tac `case recovered of NONE => _ | SOME _ => _` >>
+  Cases_on `recovered` >> simp[]
 QED
 
 Theorem ecrecover_typed_result[local]:
