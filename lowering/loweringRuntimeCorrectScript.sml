@@ -51,6 +51,8 @@ Ancestors
   entryStateRel supportedDecls vyperTypeContractFunction vyperTypeContractSoundness
   vyperTypeContractContext vyperTypeContract
   vyperTypeInitialState vyperTypeBindArguments vyperTypeInvariants
+  vyperTypeEvalStoragePreservation vyperTypeStoragePreservation exprSimHyps
+  vyperStorageLayoutSafety vyperStorageBackend vyperPlaceInvariants finite_map
   vyperInterpreter vyperState vyperContext
   venomState venomExecSemantics venomWf
 
@@ -174,6 +176,122 @@ Proof
   drule external_send_call_value_frame >>
   simp[evaluation_state_component_equality, initial_state_def] >>
   strip_tac >> gvs[state_well_typed_def, machine_well_typed_def]
+QED
+
+Theorem external_selected_env_consistent:
+  check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
+  checked_contract_runtime_ready art [(NONE,tops)] am tx /\
+  env_t.current_src = NONE /\
+  env_t.type_defs = get_tenv
+    (initial_evaluation_context am.sources am.layouts tx NONE) /\
+  env_t.fn_sigs = art.cta_fn_sigs /\
+  env_t.bare_globals = art.cta_bare_globals /\
+  env_t.bare_global_assignable = art.cta_bare_global_assignable /\
+  env_t.toplevel_vtypes = art.cta_toplevel_vtypes /\
+  env_t.flag_members = art.cta_flag_members /\
+  (!id ty. MEM (id,ty) args ==>
+    FLOOKUP env_t.var_types id = SOME ty /\
+    FLOOKUP env_t.var_assignable id = SOME T) /\
+  (!n ty. FLOOKUP env_t.var_types n = SOME ty ==> MEM (n,ty) args) /\
+  (!n b. FLOOKUP env_t.var_assignable n = SOME b ==>
+    ?ty. MEM (n,ty) args /\ b = T) /\
+  bind_arguments (type_env tops) args vals = SOME env /\
+  es0.scopes = [env] /\ es0.immutables = am.immutables ==>
+  env_consistent env_t
+    (initial_evaluation_context am.sources am.layouts tx NONE) es0
+Proof
+  strip_tac >> gvs[checked_contract_runtime_ready_def] >>
+  rw[env_consistent_def]
+  >- (irule env_context_consistent_same_static_maps >>
+      qexists `artifact_env art [(NONE,tops)] NONE` >>
+      rpt (conj_tac >-
+        simp[artifact_env_def, get_tenv_def, initial_evaluation_context_def]) >>
+      irule check_contract_env_context_consistent_initial_src >> simp[])
+  >- (`es0 with scopes := [env] = es0` by
+        gvs[evaluation_state_component_equality] >>
+      pop_assum (SUBST1_TAC o GSYM) >>
+      irule bind_arguments_env_scopes_consistent >>
+      qexistsl [`args`, `type_env tops`, `vals`] >>
+      simp[get_tenv_def, initial_evaluation_context_def,
+           type_env_all_modules_def, type_env_def] >> metis_tac[])
+  >- (gvs[env_immutables_consistent_def] >> rw[] >>
+      qpat_x_assum `immutables_ready _ _ _ _` mp_tac >>
+      simp[immutables_ready_def] >> strip_tac >>
+      first_x_assum drule_all >> simp[] >> strip_tac >>
+      first_x_assum (qspecl_then [`id_str`, `tv`, `v`] mp_tac) >> simp[])
+QED
+
+Theorem external_source_context_typed:
+  source_typing_ok tops am tx ==>
+  context_well_typed
+    (initial_evaluation_context am.sources am.layouts tx NONE) /\
+  functions_well_typed
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+Proof
+  rw[source_typing_ok_def]
+  >- gvs[call_tx_well_typed_def, context_well_typed_def,
+         initial_evaluation_context_def] >>
+  irule check_contract_functions_well_typed_initial >>
+  gvs[checked_contract_runtime_ready_def] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem external_bind_arguments_popped:
+  !args tenv vals env.
+    bind_arguments tenv args vals = SOME env ==>
+    popped_keys_indexed [env]
+Proof
+  Induct >> simp[Once bind_arguments_def]
+  >- (Cases_on `vals` >>
+      simp[bind_arguments_def, popped_keys_indexed_def]) >>
+  Cases_on `h` >> Cases_on `vals` >>
+  simp[Once bind_arguments_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >> first_x_assum drule >>
+  simp[popped_keys_indexed_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), popped_history_typed_def] >>
+  metis_tac[]
+QED
+
+Theorem external_body_prefix_storage:
+  source_storage_ok tops am tx /\ call_outcomes_ok tops am tx os /\
+  send_call_value mut
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with <|outcomes := SOME os; requests := []|>) =
+    (INL (),es0) ==>
+  contract_storage_well_formed
+    (initial_evaluation_context am.sources am.layouts tx NONE) es0 /\
+  storage_layout_safe
+    (initial_evaluation_context am.sources am.layouts tx NONE) /\
+  oracle_storage_ok
+    (initial_evaluation_context am.sources am.layouts tx NONE) es0 /\
+  outcomes_accounts_typed es0.outcomes /\ IS_SOME es0.outcomes
+Proof
+  strip_tac >>
+  `es0.outcomes = SOME os` by
+    (drule external_send_call_value_frame >>
+     simp[evaluation_state_component_equality, initial_state_def]) >>
+  `contract_storage_well_formed
+     (initial_evaluation_context am.sources am.layouts tx NONE)
+     (initial_state am [env] with <|outcomes := SOME os; requests := []|>)` by
+    (gvs[source_storage_ok_def] >>
+     irule contract_storage_well_formed_storage_frame >>
+     goal_assum (drule_at Any) >>
+     Cases >> simp[get_storage_def, initial_state_def]) >>
+  reverse conj_tac
+  >- (gvs[source_storage_ok_def, call_outcomes_ok_def,
+           oracle_storage_ok_def, outcomes_accounts_typed_def,
+           EVERY_MEM] >>
+      rpt strip_tac >> first_x_assum drule >> simp[] >> strip_tac >>
+      irule contract_storage_well_formed_storage_frame >>
+      goal_assum (drule_at Any) >>
+      Cases >> simp[get_storage_def, initial_state_def]) >>
+  qpat_x_assum `send_call_value _ _ _ = _` mp_tac >>
+  simp[send_call_value_def, vyperStateTheory.assert_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
+       vyperStateTheory.raise_def, vyperStateTheory.return_def] >>
+  rpt IF_CASES_TAC >> simp[] >> strip_tac >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.assert_def,
+      vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
+  drule_all transfer_value_preserves_contract_storage_well_formed >> simp[]
 QED
 
 (* ADMITTED (typing soundness): the body of a checked external function
