@@ -118,6 +118,25 @@ Proof
   irule sue_boundary_operand_defined >> metis_tac[]
 QED
 
+Theorem sue_terminating_result_frame:
+  terminates r /\ (!st. r <> OK st) /\ sue_result_rel P r r' ==>
+  frame_result_rel r r'
+Proof
+  Cases_on `r` >> Cases_on `r'` >>
+  simp[passSimulationDefsTheory.terminates_def, sue_result_rel_def,
+       stateEquivTheory.lift_result_def, frame_result_rel_def, sue_term_rel_def] >>
+  metis_tac[]
+QED
+
+Theorem sue_run_result_frame:
+  terminates (run_blocks fuel ctx fn s) /\
+  sue_result_rel P (run_blocks fuel ctx fn s) r' ==>
+  frame_result_rel (run_blocks fuel ctx fn s) r'
+Proof
+  strip_tac >> irule sue_terminating_result_frame >>
+  simp[sue_run_blocks_never_ok] >> qexists_tac `P` >> simp[]
+QED
+
 Theorem sue_assign_observations:
   a.inst_opcode = ASSIGN /\ sue_state_rel P s t ==>
   mem_corr inst s a t /\ call_corr inst s a t
@@ -131,6 +150,33 @@ Proof
   simp[mem_corr_def, call_corr_def, unitMemInvTheory.inst_mem_ranges_def,
        contextCodegenRelTheory.source_memory_read_ranges_def,
        codegenRelTheory.source_memory_write_ranges_def]
+QED
+
+Theorem sue_eval_operands_related[local]:
+  !xs ys. LIST_REL (\op newop. eval_operand newop t = eval_operand op s) xs ys ==>
+    eval_operands ys t = eval_operands xs s
+Proof
+  Induct >> Cases_on `ys` >>
+  simp[venomStateTheory.eval_operands_def] >>
+  rpt strip_tac >> res_tac >> simp[]
+QED
+
+Theorem sue_rewritten_call_observation:
+  inst_wf inst /\ execution_frame s = execution_frame t /\
+  LIST_REL (\op newop. eval_operand newop t = eval_operand op s)
+    inst.inst_operands ops /\
+  (!i. i < LENGTH inst.inst_operands ==>
+    !lbl. EL i inst.inst_operands = Label lbl ==> EL i ops = Label lbl) ==>
+  call_corr inst s (inst with inst_operands := ops) t
+Proof
+  strip_tac >>
+  `execution_frame t = execution_frame s` by metis_tac[] >>
+  simp[call_corr_def] >> strip_tac >>
+  gvs[inst_wf_def] >>
+  `newop = Label lbl` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  gvs[venomExecSemanticsTheory.decode_invoke_def] >>
+  irule sue_eval_operands_related >> simp[]
 QED
 
 (* Runs of the expanded function correspond to runs of the original, in
