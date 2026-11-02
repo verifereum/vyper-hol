@@ -307,6 +307,49 @@ Proof
   disch_then (qspec_then `sa` mp_tac) >> simp[]
 QED
 
+Theorem external_checks_occurrence[local]:
+  !packages lbl ce args min_cds pay nr key ut iv body rt sd sf.
+    MEM (lbl,ce,args,min_cds,pay,nr,key,ut,iv,body,rt) packages /\
+    compile_external_fn_bodies packages sd = ((),sf) ==>
+    ?pre post sa st st' sb.
+      packages = pre ++ (lbl,ce,args,min_cds,pay,nr,key,ut,iv,body,rt)::post /\
+      compile_external_fn_bodies pre sd = ((),sa) /\
+      new_block lbl sa = (sa.cs_current_bb,st) /\
+      compile_entry_checks min_cds pay st = ((),st') /\
+      compile_external_function_body ce args nr key ut iv body rt st' = ((),sb) /\
+      compile_external_fn_bodies post sb = ((),sf) /\
+      st.cs_current_bb = lbl /\ st.cs_current_insts = [] /\
+      sd.cs_next_var <= st.cs_next_var
+Proof
+  Induct >> simp[MEM] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_external_fn_bodies _ _ = _` mp_tac >>
+  simp_tac std_ss [compile_external_fn_bodies_def, comp_ignore_bind_def,
+                   comp_bind_def] >>
+  Cases_on `new_block h0 sd` >>
+  rename1 `new_block h0 sd = (old,s1)` >> simp[] >>
+  Cases_on `compile_entry_checks h3 h4 s1` >>
+  rename1 `compile_entry_checks h3 h4 s1 = (u,s2)` >>
+  Cases_on `u` >> simp[] >>
+  Cases_on `compile_external_function_body h1 h2 h5 h6 h7 h8 h9 h10 s2` >>
+  rename1 `compile_external_function_body _ _ _ _ _ _ _ _ _ = (u,s3)` >>
+  Cases_on `u` >> simp[] >> strip_tac
+  >- (gvs[] >>
+      qexistsl_tac [`[]`, `packages`, `sd`, `s1`, `s2`, `s3`] >>
+      gvs[compile_external_fn_bodies_def, comp_return_def, new_block_def,
+          LET_THM]) >>
+  first_x_assum drule >> disch_then drule >> strip_tac >>
+  `sd.cs_next_var = s1.cs_next_var` by gvs[new_block_def, LET_THM] >>
+  `s1.cs_next_var <= s2.cs_next_var` by
+    (rev_drule compile_entry_checks_next_var >> simp[]) >>
+  `s2.cs_next_var <= s3.cs_next_var` by
+    (rev_drule compile_external_function_body_next_var >> simp[]) >>
+  qexistsl_tac [`(h0,h1,h2,h3,h4,h5,h6,h7,h8,h9,h10)::pre`,
+                 `post`, `sa`, `st`, `st'`, `sb`] >>
+  simp[compile_external_fn_bodies_def, comp_ignore_bind_def, comp_bind_def] >>
+  decide_tac
+QED
+
 Theorem selected_external_package[local]:
   !tops target mut rr name args ret fbody.
   ?cenv pos_args min_cds is_payable nkey ut iv rt.
