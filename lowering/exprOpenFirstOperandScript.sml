@@ -10,7 +10,7 @@
 
 Theory exprOpenFirstOperand
 Ancestors
-  exprSimHyps vyperTypeSystem vyperTypeCallStackSoundness vyperInterpreter
+  exprSimHyps allocLimits vyperTypeSystem vyperTypeCallStackSoundness vyperInterpreter
   vyperAST vyperState vyperTypeCallGraph list
 
 Theorem expr_body_pre_builtin_head:
@@ -57,6 +57,7 @@ Proof
   >- (simp[bind_def] >> Cases_on `eval_expr cx arg es` >>
       rename1 `eval_expr cx arg es = (res,st)` >> Cases_on `res` >>
       simp[] >> metis_tac[]) >>
+  `bi <> Env MsgGas` by (strip_tac >> gvs[vyperContextTheory.builtin_args_length_ok_def]) >>
   simp[bind_def] >> Cases_on `eval_exprs cx (arg::args) es` >>
   rename1 `eval_exprs cx (arg::args) es = (res,st)` >> Cases_on `res` >>
   simp[] >> strip_tac >> drule eval_exprs_head_success >> simp[]

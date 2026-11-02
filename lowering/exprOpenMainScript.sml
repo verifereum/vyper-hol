@@ -5,6 +5,8 @@
  *   compile_expr_open_general — a supported expression that evaluates
  *     compiles, at any annotated type, without terminating its block:
  *     bodySimStmtCases's compile_expr_open
+ *   supported_immutable_bound — CHEAT: a supported immutable is bound
+ *     in ce_module_vars (#563)
  *)
 
 Theory exprOpenMain
@@ -13,6 +15,19 @@ Ancestors
   exprOpenPrimitives exprOpenCopies exprOpenTerminals exprOpenBuiltins
   bodySim exprSimHyps supportedExprs supportedExprForms supportedTypes
   exprLowering exprCallBounds compileEnv vyperAST vyperTypeSystem list
+
+(* A supported immutable is bound to an ImmutableLoc in ce_module_vars.
+   Cheated: nothing in body_inv or expr_sim_inv says so yet (#563), and
+   without it a supported immutable read compiles to INVALID.
+   exprSimLeaves' compile_toplevel_immutable_sim rests on the same gap. *)
+Theorem supported_immutable_bound:
+  !tops ctx cenv cx env es nsid ty.
+    body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+    supported_immutable_type tops nsid = SOME ty ==>
+    ?off. FLOOKUP cenv.ce_module_vars nsid = SOME (ImmutableLoc off)
+Proof
+  cheat
+QED
 
 Theorem compile_expr_open_general:
   !e tops ctx cenv cx env es tv es1 aty sa vv sb.
@@ -57,7 +72,14 @@ Proof
 QED
 
 Resume compile_expr_open_general[toplevel]:
-  rename1 `TopLevelName _ nsid` >> PairCases_on `nsid` >>
+  rename1 `TopLevelName ann nsid` >>
+  Cases_on `supported_immutable_type tops nsid = SOME ann`
+  >- (qpat_x_assum `!y. _` kall_tac >>
+      `?off. FLOOKUP cenv.ce_module_vars nsid = SOME (ImmutableLoc off)` by
+        (gvs[expr_body_pre_def] >> metis_tac[supported_immutable_bound]) >>
+      qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+      simp[compile_expr_def] >> strip_tac >> gvs[]) >>
+  PairCases_on `nsid` >>
   irule compile_expr_toplevel_open >>
   goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
   gvs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
