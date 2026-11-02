@@ -17,8 +17,8 @@
  *)
 Theory o1ContractLowerDload
 Ancestors
-  o1PassContract lowerDloadDefs venomPassDispatcher venomFnScheduleRunner
-  unitShapeDefs venomWf irSupply venomInst stackPlanTypes
+  o1PassContract lowerDloadDefs lowerDloadSupplyProofs venomPassDispatcher venomFnScheduleRunner
+  unitShapeDefs venomWf irSupply venomInst stackPlanTypes list
 
 (* Why these hold: the expansion of DLOAD/DLOADBYTES only inserts
    non-terminators (ALLOCA, ADD, CODECOPY, MLOAD) in place of a
@@ -108,6 +108,120 @@ Proof
   >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
       rpt strip_tac >> gvs[] >> metis_tac[]) >>
   rw[lower_dload_inst_supply_def] >> gvs[]
+QED
+
+Theorem lower_dload_inst_supply_vars:
+  lower_dload_inst_supply s i = (xs,t) /\
+  EVERY (\v. MEM v s.irs_used_vars) i.inst_outputs /\
+  ALL_DISTINCT i.inst_outputs ==>
+  ALL_DISTINCT (FLAT (MAP (\k. k.inst_outputs) xs)) /\
+  EVERY (\v. MEM v t.irs_used_vars) (FLAT (MAP (\k. k.inst_outputs) xs)) /\
+  (!v. MEM v s.irs_used_vars ==> MEM v t.irs_used_vars) /\
+  (!v. MEM v (FLAT (MAP (\k. k.inst_outputs) xs)) /\
+       MEM v s.irs_used_vars ==> MEM v i.inst_outputs)
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >> imp_res_tac fresh_ir_var_contract >> gvs[] >>
+      metis_tac[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >> imp_res_tac fresh_ir_var_contract >> gvs[] >>
+      metis_tac[]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[]
+QED
+
+Theorem lower_dload_insts_supply_vars:
+  !s xs t.
+  lower_dload_insts_supply s ins = (xs,t) /\
+  EVERY (\v. MEM v s.irs_used_vars) (FLAT (MAP (\k. k.inst_outputs) ins)) /\
+  ALL_DISTINCT (FLAT (MAP (\k. k.inst_outputs) ins)) ==>
+  ALL_DISTINCT (FLAT (MAP (\k. k.inst_outputs) xs)) /\
+  EVERY (\v. MEM v t.irs_used_vars) (FLAT (MAP (\k. k.inst_outputs) xs)) /\
+  (!v. MEM v s.irs_used_vars ==> MEM v t.irs_used_vars) /\
+  (!v. MEM v (FLAT (MAP (\k. k.inst_outputs) xs)) /\
+       MEM v s.irs_used_vars ==>
+       MEM v (FLAT (MAP (\k. k.inst_outputs) ins)))
+Proof
+  Induct_on `ins`
+  >- simp[lower_dload_insts_supply_def] >>
+  rpt gen_tac >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
+  strip_tac >>
+  gvs[ALL_DISTINCT_APPEND] >>
+  drule_all lower_dload_inst_supply_vars >> strip_tac >>
+  `EVERY (\v. MEM v s1.irs_used_vars)
+     (FLAT (MAP (\k. k.inst_outputs) ins))` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  first_x_assum drule_all >> strip_tac >>
+  simp[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND, EVERY_APPEND] >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem lower_dload_blocks_supply_vars:
+  !s bs t.
+  lower_dload_blocks_supply s bbs = (bs,t) /\
+  EVERY (\v. MEM v s.irs_used_vars)
+    (FLAT (MAP (\b. FLAT (MAP (\k. k.inst_outputs) b.bb_instructions)) bbs)) /\
+  ALL_DISTINCT
+    (FLAT (MAP (\b. FLAT (MAP (\k. k.inst_outputs) b.bb_instructions)) bbs)) ==>
+  ALL_DISTINCT (FLAT (MAP (\b. FLAT (MAP (\k. k.inst_outputs) b.bb_instructions)) bs)) /\
+  EVERY (\v. MEM v t.irs_used_vars)
+    (FLAT (MAP (\b. FLAT (MAP (\k. k.inst_outputs) b.bb_instructions)) bs)) /\
+  (!v. MEM v s.irs_used_vars ==> MEM v t.irs_used_vars) /\
+  (!v. MEM v (FLAT (MAP (\b. FLAT (MAP (\k. k.inst_outputs) b.bb_instructions)) bs)) /\
+       MEM v s.irs_used_vars ==>
+       MEM v (FLAT (MAP (\b. FLAT (MAP (\k. k.inst_outputs) b.bb_instructions)) bbs)))
+Proof
+  Induct_on `bbs`
+  >- simp[lower_dload_blocks_supply_def] >>
+  rpt gen_tac >>
+  simp[Once lower_dload_blocks_supply_def, lower_dload_block_supply_def,
+       AllCaseEqs()] >> strip_tac >>
+  gvs[ALL_DISTINCT_APPEND] >>
+  drule_all lower_dload_insts_supply_vars >> strip_tac >>
+  `EVERY (\v. MEM v s1.irs_used_vars)
+    (FLAT (MAP (\b. FLAT (MAP (\k. k.inst_outputs) b.bb_instructions)) bbs))` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  first_x_assum drule_all >> strip_tac >>
+  simp[ALL_DISTINCT_APPEND, EVERY_APPEND] >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem lower_dload_outputs_blocks[local]:
+  FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bs)) =
+  FLAT (MAP (\b. FLAT (MAP (\i. i.inst_outputs) b.bb_instructions)) bs)
+Proof
+  Induct_on `bs` >> simp[fn_insts_blocks_def, MAP_APPEND, FLAT_APPEND]
+QED
+
+Theorem lower_dload_function_supply_outputs:
+  lower_dload_function_supply s f = (g,t) /\ ir_supply_covers_fn s f /\
+  ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (fn_insts f))) ==>
+  ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (fn_insts g)))
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs(), fn_insts_def,
+       lower_dload_outputs_blocks] >> strip_tac >> gvs[] >>
+  irule (cj 1 lower_dload_blocks_supply_vars) >>
+  qexistsl [`f.fn_blocks`,`s`,`t`] >> simp[] >>
+  rw[EVERY_MEM, MEM_FLAT, MEM_MAP] >>
+  gvs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >>
+  first_x_assum irule >>
+  simp[fn_ir_vars_def, block_ir_vars_def, MEM_FLAT, MEM_MAP,
+       PULL_EXISTS, inst_ir_vars_def] >>
+  gvs[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_distinct_ids:
+  lower_dload_function_supply s f = (g,t) /\ ir_supply_inst_ok s /\
+  ir_supply_covers_fn s f /\ ALL_DISTINCT (fn_ir_inst_ids f) ==>
+  ALL_DISTINCT (fn_ir_inst_ids g)
+Proof
+  strip_tac >>
+  `EVERY (\id. MEM id s.irs_used_inst_ids) (fn_ir_inst_ids f)` by
+    gvs[ir_supply_covers_fn_def, list_subset_def] >>
+  drule_all lower_dload_function_supply_contract >>
+  simp[ld_ids_supply_ok_def]
 QED
 
 Theorem lower_dload_function_supply_wf_function:
