@@ -1784,3 +1784,99 @@ Resume sue_run_blocks_supply_sim[exit]:
 QED
 
 Finalise sue_run_blocks_supply_sim
+
+
+Definition sue_idx0_def:
+  sue_idx0 st = st with vs_inst_idx := 0
+End
+
+Theorem sue_idx0_update[simp]:
+  sue_idx0 (st with vs_inst_idx := k) = sue_idx0 st
+Proof
+  simp[sue_idx0_def]
+QED
+
+Theorem sue_assign_step_fuel:
+  a.inst_opcode = ASSIGN ==>
+  step_inst fuel ctx a t = step_inst 0 ctx a t
+Proof
+  strip_tac >> simp[Once step_inst_def] >>
+  simp[Once step_inst_def] >> simp[step_inst_base_def]
+QED
+
+Theorem sue_assign_step_normalized:
+  a.inst_opcode = ASSIGN /\ step_inst fuel ctx a t = OK v ==>
+  step_inst 0 ctx a (sue_idx0 t) = OK (sue_idx0 v)
+Proof
+  strip_tac >> simp[sue_idx0_def, sue_assign_step_idx] >>
+  drule sue_assign_step_fuel >> disch_then (qspecl_then [`t`, `fuel`, `ctx`] assume_tac) >>
+  gvs[exec_result_map_def]
+QED
+
+Theorem sue_assign_prefix_advance:
+  EVERY (\a. a.inst_opcode = ASSIGN) assigns /\ j < LENGTH assigns /\
+  b.vs_inst_idx = 0 /\
+  run_insts 0 ctx (TAKE j assigns) b = OK (sue_idx0 t) /\
+  step_inst fuel ctx (EL j assigns) t = OK v ==>
+  run_insts 0 ctx (TAKE (SUC j) assigns) b =
+    OK (sue_idx0 (v with vs_inst_idx := SUC t.vs_inst_idx))
+Proof
+  strip_tac >>
+  ` (EL j assigns).inst_opcode = ASSIGN` by
+    fs[listTheory.EVERY_EL] >>
+  drule_all sue_assign_step_normalized >> strip_tac >>
+  simp[rich_listTheory.TAKE_SUC_BY_TAKE, listTheory.SNOC_APPEND,
+       analysisSimProofsBaseTheory.run_insts_append,
+       analysisSimProofsBaseTheory.run_insts_singleton]
+QED
+
+Theorem sue_assign_prefix_empty:
+  b.vs_inst_idx = 0 ==>
+  run_insts 0 ctx (TAKE 0 assigns) b = OK (sue_idx0 b)
+Proof
+  simp[run_insts_def, sue_idx0_def, venom_state_component_equality]
+QED
+
+Theorem sue_assign_prefix_complete:
+  run_insts 0 ctx (TAKE (LENGTH assigns) assigns) b = OK (sue_idx0 t) <=>
+  run_insts 0 ctx assigns b = OK (sue_idx0 t)
+Proof
+  simp[]
+QED
+
+Theorem sue_state_rel_idx0[simp]:
+  sue_state_rel protected st (sue_idx0 tt) <=> sue_state_rel protected st tt
+Proof
+  simp[sue_idx0_def, sue_state_rel_def, execution_frame_def]
+QED
+
+Theorem sue_eval_operand_idx0[simp]:
+  eval_operand op (sue_idx0 t) = eval_operand op t
+Proof
+  Cases_on `op` >> simp[sue_idx0_def, eval_operand_def, lookup_var_def]
+QED
+
+Theorem sue_assign_prefix_normalized_rel:
+  EVERY (\a. a.inst_opcode = ASSIGN /\
+             EVERY (\v. ~(v IN protected)) a.inst_outputs) assigns /\
+  sue_state_rel protected st b /\
+  run_insts 0 ctx (TAKE j assigns) b = OK (sue_idx0 t) ==>
+  sue_state_rel protected st t
+Proof
+  strip_tac >>
+  `sue_state_rel protected st (sue_idx0 t)` suffices_by simp[] >>
+  irule sue_assign_prefix_rel >> goal_assum (drule_at Any) >>
+  simp[] >> irule rich_listTheory.EVERY_TAKE >> simp[]
+QED
+
+Theorem sue_expand_ops_supply_normalized_eval:
+  ir_supply_inst_ok s /\
+  sue_expand_ops_supply dfg inst s ops k = (assigns,new_ops,s') /\
+  protected SUBSET set s.irs_used_vars /\
+  (!v. MEM (Var v) ops ==> v IN protected) /\
+  sue_state_rel protected st b /\
+  run_insts 0 ctx assigns b = OK (sue_idx0 t) ==>
+  LIST_REL (\op newop. eval_operand newop t = eval_operand op st) ops new_ops
+Proof
+  strip_tac >> drule_all sue_expand_ops_supply_eval >> simp[]
+QED
