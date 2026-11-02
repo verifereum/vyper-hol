@@ -1065,6 +1065,28 @@ Proof
   EVAL_TAC
 QED
 
+Theorem expr_sim_inv_declare_memory[local]:
+  !cenv cx env es id dty sa c st.
+    expr_sim_inv cenv cx env es /\ lookup_scopes id es.scopes = NONE /\
+    declare_local cenv id dty sa = (c,st) /\ cenv.ce_alloca_locals ==>
+    expr_sim_inv c cx env es
+Proof
+  rpt gen_tac >> strip_tac >>
+  `FLOOKUP env.var_types id = NONE` by
+    (gvs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
+         vyperTypeInvariantsTheory.env_scopes_consistent_def] >>
+     Cases_on `FLOOKUP env.var_types id` >> gvs[] >>
+     qpat_x_assum `!id ty. _ ==> IS_SOME (lookup_scopes _ _)` drule >> simp[]) >>
+  qpat_x_assum `declare_local _ _ _ _ = _` mp_tac >>
+  simp[declare_local_def, fresh_var_def, comp_bind_def, comp_return_def, LET_THM] >>
+  strip_tac >> gvs[expr_sim_inv_def, FLOOKUP_UPDATE,
+                   placeTypingPropsTheory.place_map_tables_agree_on_defined_def] >>
+  rpt strip_tac >> simp[] >>
+  FIRST [(first_assum drule >> simp[] >> NO_TAC),
+         (`id <> id'` by (strip_tac >> gvs[]) >> simp[] >>
+          first_x_assum drule >> simp[combinTheory.APPLY_UPDATE_THM])]
+QED
+
 Theorem compile_annassign_memory_typed_stmt_frag:
   !ctx func cx lctx RetQ cenv env ret id dty e es res es' stv dtv.
     eval_stmt cx (AnnAssign id dty e) es = (res,es') /\
