@@ -30,6 +30,8 @@
  *                                  parameter prologue
  *   pseudos_open                 — the open block holds only pseudos, so a
  *                                  prologue PARAM may follow
+ *   label_sfx                    — the fresh_label suffix a label was made
+ *                                  with; different suffixes, different labels
  *   shape_state, shape_extends   — the state invariant and the append step
  *   shape_step                   — Hoare-style judgment on compile actions
  *   shape_stable                 — a state predicate kept by every append

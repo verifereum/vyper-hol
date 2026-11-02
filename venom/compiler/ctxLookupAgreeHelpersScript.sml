@@ -1,3 +1,9 @@
+(*
+ * Helpers for ctxLookupAgree: the step relations of the raw semantics
+ * depend on the context only through the INVOKE targets they look up
+ * (run_defs_predicate_cong and its instances), and no step writes
+ * vs_initial_fmp (the *_initial_fmp lemmas).
+ *)
 Theory ctxLookupAgreeHelpers
 Ancestors
   venomExecSemantics venomInst venomState contextRawReachable
@@ -10,7 +16,7 @@ Proof
   gvs[lookup_function_def]
 QED
 
-Theorem EVERY_fn_insts_blocks:
+Theorem fn_insts_EVERY_block:
   EVERY P (fn_insts_blocks bbs) <=>
   EVERY (\bb. EVERY P bb.bb_instructions) bbs
 Proof
@@ -21,7 +27,7 @@ Theorem EVERY_fn_block:
   EVERY P (fn_insts fn) /\ MEM bb fn.fn_blocks ==>
   EVERY P bb.bb_instructions
 Proof
-  rewrite_tac[fn_insts_def, EVERY_fn_insts_blocks] >>
+  rewrite_tac[fn_insts_def, fn_insts_EVERY_block] >>
   simp[EVERY_MEM] >> metis_tac[]
 QED
 
@@ -177,8 +183,8 @@ Theorem eval_phis_initial_fmp:
   !s t. eval_phis s insts = OK t ==> t.vs_initial_fmp = s.vs_initial_fmp
 Proof
   Induct_on `insts` >- simp[eval_phis_def] >>
-  rpt gen_tac >> simp[Once eval_phis_def] >>
-  Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  qx_gen_tac `inst` >> rpt gen_tac >> simp[Once eval_phis_def] >>
+  Cases_on `inst.inst_opcode = PHI` >> simp[] >>
   gvs[AllCaseEqs()] >> metis_tac[update_var_initial_fmp]
 QED
 

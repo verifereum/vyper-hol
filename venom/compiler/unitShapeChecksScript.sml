@@ -84,7 +84,16 @@ Theorem excluded_opcode_checks:
   EVERY (\op. inst_shape_ok (mk_inst 0 op [] []))
     [ASSERT_UNREACHABLE; DLOAD; DLOADBYTES; DALLOCA; DRET; GETFMP; SETFMP;
      RETFMP; INITIAL_FMP; BUMP; FMP_PARAM; MEMTOP; RET] /\
-  raw_opcode_ok RET
+  raw_opcode_ok RET /\
+  ~raw_opcode_ok PHI
+Proof
+  EVAL_TAC
+QED
+
+(* A PHI needs at least two incoming (label, value) pairs. *)
+Theorem phi_arity_checks:
+  ~inst_shape_ok (mk_inst 0 PHI [Label "p"; Var "x"] ["y"]) /\
+  inst_shape_ok (mk_inst 0 PHI [Label "p"; Var "x"; Label "q"; Var "z"] ["y"])
 Proof
   EVAL_TAC
 QED
@@ -95,6 +104,7 @@ Theorem label_position_checks:
   label_positions_ok (mk_inst 0 JMP [Label "target"] []) /\
   label_positions_ok (mk_inst 0 JNZ [Var "c"; Label "t"; Label "f"] []) /\
   ~label_positions_ok (mk_inst 0 JNZ [Label "c"; Label "t"; Label "f"] []) /\
+  ~label_positions_ok (mk_inst 0 JNZ [Var "c"; Label "t"; Label "t"] []) /\
   label_positions_ok (mk_inst 0 PHI [Label "p"; Var "x"] ["y"]) /\
   label_positions_ok (mk_inst 0 INVOKE [Label "callee"; Var "arg"] []) /\
   ~label_positions_ok (mk_inst 0 INVOKE [Label "callee"; Label "arg"] []) /\
