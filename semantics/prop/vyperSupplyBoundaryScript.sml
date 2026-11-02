@@ -76,11 +76,14 @@ Theorem accounts_supply_create_prelude:
   value <= (lookup_account sender accounts).balance ==>
   accounts_supply_bounded (create_prelude_accounts sender address value accounts)
 Proof
-  simp[create_prelude_accounts_def] >> strip_tac >>
+  simp[create_prelude_accounts_def, combinTheory.o_THM] >> strip_tac >>
   irule accounts_supply_transfer >> conj_tac
   >- (irule accounts_supply_increment_nonce >>
-      irule accounts_supply_increment_nonce >> simp[]) >>
-  gvs[vfmExecutionTheory.increment_nonce_def, lookup_account_def,
+      simp[vfmExecutionTheory.clear_storage_def] >>
+      irule accounts_supply_install_same_balance >>
+      simp[accounts_supply_increment_nonce]) >>
+  gvs[vfmExecutionTheory.increment_nonce_def, vfmExecutionTheory.clear_storage_def,
+      lookup_account_def,
       update_account_def, combinTheory.APPLY_UPDATE_THM] >>
   rpt (IF_CASES_TAC >> gvs[])
 QED

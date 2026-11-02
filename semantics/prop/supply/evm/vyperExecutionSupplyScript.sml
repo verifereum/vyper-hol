@@ -3,7 +3,7 @@
 Theory vyperExecutionSupply
 Ancestors
   vyperAccountSupply vyperSupplyBoundary vyperInterpreter vyperCreate
-  vfmExecution vfmContext vfmState pred_set arithmetic list
+  vfmExecution vfmExecutionProp vfmContext vfmState pred_set arithmetic list
 Libs
   proofAuditLib
 
@@ -83,18 +83,23 @@ Proof
   irule account_supply_bound_install >> simp[]
 QED
 
+Theorem account_supply_bound_clear_storage[local]:
+  account_supply_bound budget accounts ==>
+  account_supply_bound budget (vfmExecution$clear_storage address accounts)
+Proof
+  simp[account_supply_bound_def, clear_storage_nonce_code_balance]
+QED
+
 Theorem account_supply_bound_create_prelude:
   account_supply_bound budget accounts /\
   value <= (lookup_account sender accounts).balance ==>
   account_supply_bound budget (create_prelude_accounts sender address value accounts)
 Proof
-  simp[create_prelude_accounts_def] >> strip_tac >>
-  `account_supply_bound budget
-     (vfmExecution$increment_nonce address
-       (vfmExecution$increment_nonce sender accounts))` by
-    simp[account_supply_bound_nonce] >>
-  irule account_supply_bound_transfer >> simp[] >>
-  gvs[vfmExecutionTheory.increment_nonce_def, lookup_account_def,
+  simp[create_prelude_accounts_def, combinTheory.o_THM] >> strip_tac >>
+  irule account_supply_bound_transfer >> conj_tac
+  >- simp[account_supply_bound_nonce, account_supply_bound_clear_storage] >>
+  gvs[vfmExecutionTheory.increment_nonce_def, vfmExecutionTheory.clear_storage_def,
+      lookup_account_def,
       update_account_def, combinTheory.APPLY_UPDATE_THM] >>
   rpt (IF_CASES_TAC >> gvs[])
 QED
