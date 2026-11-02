@@ -228,13 +228,14 @@ Theorem pseudos_prefix_dropWhile:
          (dropWhile (\i. is_pseudo i.inst_opcode) bb.bb_instructions)
 Proof
   simp[venomWfTheory.pseudos_prefix_def] >> gen_tac >>
-  qspec_tac (`bb.bb_instructions`, `l`) >> Induct >> simp[] >>
-  rw[]
-  >- (eq_tac >> rpt strip_tac
-      >- (first_x_assum irule >> qexists_tac `SUC j` >> simp[])
-      >> Cases_on `i` >> simp[] >>
-      Cases_on `j` >> gvs[] >> first_x_assum irule >> metis_tac[]) >>
-  simp[EVERY_EL] >> eq_tac >> rpt strip_tac
-  >- (first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]) >>
-  Cases_on `j` >> gvs[] >> first_x_assum drule >> simp[]
+  qspec_tac (`bb.bb_instructions`, `l`) >> Induct >- simp[] >>
+  rpt strip_tac >> Cases_on `is_pseudo h.inst_opcode` >> simp[]
+  >- (first_x_assum (fn th => REWRITE_TAC [GSYM th]) >>
+      eq_tac >> rpt strip_tac
+      >- (first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]) >>
+      Cases_on `i` >> gvs[] >> Cases_on `j` >> gvs[] >> metis_tac[]) >>
+  eq_tac >> rpt strip_tac
+  >- (simp[EVERY_EL] >> rpt strip_tac >>
+      first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]) >>
+  Cases_on `j` >> gvs[EVERY_EL] >> metis_tac[]
 QED
