@@ -3,8 +3,8 @@ Theory stmtControlMemory
 Ancestors
   bodyMemoryDefs stmtSimIf stmtSim fragExecMem exprSim exprSimHyps
   exprLoweringProps stmtLowering compileEnv venomState venomExecSemantics
-  vyperInterpreter vyperTypeSystem list finite_map
-  fragExec memSafeRun venomInst emitHelperProps instMemFrontier
+  vyperInterpreter vyperTypeSystem vyperState list finite_map
+  fragExec memSafeRun venomInst emitHelperProps instMemFrontier venomExecProofs
 Libs
   monadsyntax
 
@@ -98,12 +98,50 @@ Proof
   irule below_frontier_no_ranges >> simp[mk_inst_def]
 QED
 
+Theorem step_revert_zero_mem[local]:
+  !id s.
+    ?s'. step_inst_base (mk_inst id REVERT [Lit 0w; Lit 0w] []) s =
+         Abort Revert_abort s'
+Proof
+  rpt gen_tac >> simp[mk_inst_def] >>
+  irule_at Any step_revert_behavior >> simp[eval_operand_def]
+QED
+
+Theorem step_invalid_mem[local]:
+  !id s.
+    ?s'. step_inst_base (mk_inst id INVALID [] []) s = Abort ExHalt_abort s'
+Proof
+  simp[mk_inst_def, step_inst_base_def]
+QED
+
 Theorem compile_break_frag_mem:
   !d ctx func cx RetQ cenv ty ex inc es.
     stmt_frag_mem d ctx func cx (InLoop ex inc) RetQ cenv
       (stmt_env cenv (InLoop ex inc) ty Break) es (INR BreakException) es
 Proof
-  cheat
+  rw[stmt_frag_mem_def, stmt_env_def, declare_stmt_local_def, comp_bind_def,
+     comp_return_def] >>
+  qpat_x_assum `_ sa = (cenv', sb)` mp_tac >>
+  simp[comp_ignore_bind_def, comp_bind_def, compile_stmt_def,
+       comp_return_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  rename1 `emit_inst _ _ _ sa = (_, sj)` >>
+  disj1_tac >> qexistsl_tac [`jump_to ex s0`, `cenv`] >>
+  imp_res_tac emit_inst_extends >>
+  `return_buf_frame d cenv sj (jump_to ex s0)` by
+    (simp[return_buf_frame_jump_to] >> irule return_buf_frame_frame >>
+     qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
+  `!fuel r. run_from fuel ctx func (jump_to ex s0) = r /\
+       (!e. r <> Error e) ==>
+       ?fuel'. run_from fuel' ctx func s0 = r /\
+         (mem_safe_run fuel ctx func (jump_to ex s0) ==>
+          mem_safe_run fuel' ctx func s0)` by
+    (match_mp_tac run_from_jump_end_mem >>
+     qexistsl_tac [`sa`, `sj`, `mk_inst sa.cs_next_id JMP [Label ex] []`] >>
+     simp[mk_inst_def, is_terminator_def, step_jmp_behavior] >>
+     irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  simp[stmt_lands_def, cenv_top_ext_refl, stmt_state_rel_jump_to] >>
+  simp[jump_to_def, lookup_var_def] >> metis_tac[]
 QED
 
 Theorem compile_continue_frag_mem:
@@ -112,7 +150,29 @@ Theorem compile_continue_frag_mem:
       (stmt_env cenv (InLoop ex inc) ty Continue) es (INR ContinueException)
       es
 Proof
-  cheat
+  rw[stmt_frag_mem_def, stmt_env_def, declare_stmt_local_def, comp_bind_def,
+     comp_return_def] >>
+  qpat_x_assum `_ sa = (cenv', sb)` mp_tac >>
+  simp[comp_ignore_bind_def, comp_bind_def, compile_stmt_def,
+       comp_return_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  rename1 `emit_inst _ _ _ sa = (_, sj)` >>
+  disj1_tac >> qexistsl_tac [`jump_to inc s0`, `cenv`] >>
+  imp_res_tac emit_inst_extends >>
+  `return_buf_frame d cenv sj (jump_to inc s0)` by
+    (simp[return_buf_frame_jump_to] >> irule return_buf_frame_frame >>
+     qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
+  `!fuel r. run_from fuel ctx func (jump_to inc s0) = r /\
+       (!e. r <> Error e) ==>
+       ?fuel'. run_from fuel' ctx func s0 = r /\
+         (mem_safe_run fuel ctx func (jump_to inc s0) ==>
+          mem_safe_run fuel' ctx func s0)` by
+    (match_mp_tac run_from_jump_end_mem >>
+     qexistsl_tac [`sa`, `sj`, `mk_inst sa.cs_next_id JMP [Label inc] []`] >>
+     simp[mk_inst_def, is_terminator_def, step_jmp_behavior] >>
+     irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  simp[stmt_lands_def, cenv_top_ext_refl, stmt_state_rel_jump_to] >>
+  simp[jump_to_def, lookup_var_def] >> metis_tac[]
 QED
 
 Theorem compile_if_stmt_frag_mem:
@@ -144,7 +204,23 @@ Theorem compile_raise_frag_mem:
     stmt_frag_mem d ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty (Raise rk))
       es res es'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> simp[stmt_frag_mem_def] >> rpt gen_tac >>
+  strip_tac >> disj2_tac >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  qmatch_goalsub_abbrev_tac `emit_inst opc ops [] sa` >>
+  Cases_on `emit_inst opc ops [] sa` >> rename1 `_ = (u, sm)` >>
+  Cases_on `u` >> simp[] >> strip_tac >> gvs[] >>
+  drule emit_abort_exit_mem >>
+  disch_then (qspecl_then [`ctx`, `func`, `s0`, `RetQ`, `es'`, `res`] mp_tac) >>
+  (impl_tac
+   >- (fs[markerTheory.Abbrev_def] >>
+       qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+       simp[Once evaluate_def, raise_def] >> strip_tac >>
+       gvs[expr_exit_def, control_abort_frontier] >>
+       metis_tac[step_revert_zero_mem, step_invalid_mem])) >>
+  metis_tac[]
 QED
 
 Theorem compile_assert_frag_mem:
