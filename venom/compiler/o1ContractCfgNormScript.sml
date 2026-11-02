@@ -17,6 +17,37 @@ Ancestors
   venomInst irSupply cfgNormSupplySim contextCodegenRel venomExecSemantics
   venomExecProofs venomStepProps
 
+Theorem supply_first_block_no_preds_iff:
+  fn.fn_blocks <> [] ==>
+  (first_block_no_preds fn <=>
+    ~?a. fn_cfg_edge fn a (HD fn.fn_blocks).bb_label)
+Proof
+  simp[unitShapeDefsTheory.first_block_no_preds_def, listTheory.EVERY_MEM, fn_cfg_edge_def] >>
+  metis_tac[]
+QED
+
+Theorem insert_split_supply_first_block_no_preds:
+  wf_function fn /\ first_block_no_preds fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\
+  fn_cfg_edge fn pred.bb_label target.bb_label /\
+  insert_split_supply s fn pred target = (fn',s') ==>
+  first_block_no_preds fn'
+Proof
+  rpt strip_tac >>
+  `wf_function fn'` by metis_tac[insert_split_supply_wf_function] >>
+  `fn.fn_blocks <> [] /\ fn'.fn_blocks <> []` by
+    gvs[wf_function_def, fn_has_entry_def] >>
+  `fn_entry_label fn' = fn_entry_label fn` by metis_tac[insert_split_supply_entry] >>
+  `(HD fn'.fn_blocks).bb_label = (HD fn.fn_blocks).bb_label` by
+    (Cases_on `fn.fn_blocks` >> Cases_on `fn'.fn_blocks` >>
+     gvs[fn_entry_label_def, entry_block_def]) >>
+  gvs[supply_first_block_no_preds_iff] >>
+  match_mp_tac (SIMP_RULE bool_ss [] insert_split_supply_no_incoming) >>
+  simp[] >>
+  Cases_on `fn.fn_blocks` >> gvs[fn_labels_def]
+QED
+
 Theorem supply_active_terminator_exec_block:
   st.vs_inst_idx < LENGTH bb.bb_instructions /\
   EL st.vs_inst_idx bb.bb_instructions = inst /\
