@@ -103,7 +103,7 @@ Proof
 QED
 
 Theorem external_call_result_rel_frame_halt:
-  call_external (SOME (MAP SND (call_trace es))) am tx =
+  call_external (SOME (MAP SND (call_trace es))) [] am tx =
     (INR HaltException, am', rqs) /\
   external_call_result_rel tops ret tx
     (INR HaltException, am', rqs) (Halt ss) /\
