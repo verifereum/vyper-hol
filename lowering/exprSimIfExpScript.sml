@@ -253,6 +253,7 @@ QED
    compile_expr makes of the variable. *)
 Theorem vv_post_of_expr_post:
   !func cenv cx e es sa sb s0 es' v rv s ctx.
+    ~dynarray_type (expr_type e) /\
     expr_post ctx func cenv cx e es sa sb s0 es' v (Var rv) s ==>
     vv_post ctx func cenv cx e es sa sb s0 es' (Value v)
       (if is_word_type (expr_type e) then StackValue (expr_type e) (Var rv)
@@ -314,6 +315,7 @@ QED
 Theorem ifexp_jnz_arm:
   !ctx func cenv cx t c a b e bv es es1 es' res sa sb s0 s1 s5 s6 x6 s7
    bs bm bn bo bx bp tl el xl bl lbl rv cond_op eop tt.
+    ~dynarray_type t /\
     frag_exec ctx bs bn (\s. s = jump_to bl tt)
       (\s. ?v u w. res = INL v /\
              expr_post ctx func cenv cx e es1 bs bm (jump_to bl tt) es' v eop u /\
@@ -418,6 +420,7 @@ QED
 Theorem ifexp_branch_sim:
   !ctx func cenv cx ty t c a b e bv es es1 es' res sa sb s0 s1 s5 s6 x6 s7
    bs bm bn bo bx bp tl el xl bl lbl rv cond_op eop.
+    ~dynarray_type t /\
     expr_type c = BaseT BoolT /\ expr_sim ctx func cenv cx (BaseT BoolT) c es /\
     expr_sim ctx func cenv cx ty e es1 /\
     (do result <- eval_expr cx c; read_result cx result od) es = (INL (BoolV bv), es1) /\
@@ -634,6 +637,7 @@ QED
 
 Theorem compile_ifexp_forced_frag[local]:
   !ctx func cenv cx ty t c a b es.
+    ~dynarray_type t /\
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
     (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
@@ -721,10 +725,10 @@ Theorem compile_ifexp_vv_sim:
         (expr_exit res)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  irule readable_eval_frag_transport >>
-  simp[] >> conj_tac
-  >- (drule_all compile_expr_ifexp_states >> strip_tac >> gvs[]) >>
-  rpt strip_tac >>
-  irule compile_ifexp_forced_frag >> simp[] >> qexists_tac `ty` >> simp[] >>
-  first_assum ACCEPT_TAC
+  `?rv. vv = StackValue t (Var rv)` by
+    (drule_all compile_expr_ifexp_states >> strip_tac >> gvs[]) >>
+  irule readable_eval_frag_transport >> simp[] >> rpt strip_tac >>
+  irule compile_ifexp_forced_frag >> simp[] >>
+  conj_tac >- metis_tac[is_word_type_not_dynarray] >>
+  qexists_tac `ty` >> simp[] >> first_assum ACCEPT_TAC
 QED
