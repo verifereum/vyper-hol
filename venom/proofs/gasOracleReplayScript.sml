@@ -2,7 +2,7 @@
    The consumed prefix includes zero readings after oracle exhaustion. *)
 Theory gasOracleReplay
 Ancestors
-  stateEquiv venomExecSemantics venomState list rich_list arithmetic
+  stateEquiv venomExecSemantics venomState venomCallOracleDefs list rich_list arithmetic
 
 Definition gas_prefix_def:
   gas_prefix n (gs : (256 word) list) = TAKE n (gs ++ REPLICATE n 0w)
@@ -332,6 +332,137 @@ Proof
   Cases_on `rest` >> simp[lift_result_def] >>
   Cases_on `eval_operand op1 s` >> simp[lift_result_def] >>
   Cases_on `eval_operand op2 s` >> simp[lift_result_def]
+QED
+
+Theorem gas_exec_alloca:
+  gas_replay_at 0 (\u. exec_alloca inst u sz) s
+Proof
+  simp[gas_replay_at_def, exec_alloca_def] >> gen_tac >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
+  Cases_on `outs` >> simp[lift_result_def] >>
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >> simp[lift_result_def] >>
+  Cases_on `x` >> simp[lift_result_def]
+QED
+
+Theorem gas_read_memory[simp]:
+  read_memory off sz (s with vs_gas_readings := gs) = read_memory off sz s
+Proof
+  simp[read_memory_def]
+QED
+
+Theorem gas_write_memory_expansion[simp]:
+  write_memory_with_expansion off bytes (s with vs_gas_readings := gs) =
+  (write_memory_with_expansion off bytes s with vs_gas_readings := gs)
+Proof
+  simp[write_memory_with_expansion_def, write_memory_def]
+QED
+
+Theorem gas_call_request[simp]:
+  venom_call_request (s with vs_gas_readings := gs) addr value off sz st =
+  venom_call_request s addr value off sz st
+Proof
+  simp[venom_call_request_def]
+QED
+
+Theorem gas_consume_outcome[simp]:
+  consume_call_outcome rq off sz (s with vs_gas_readings := gs) =
+  (FST (consume_call_outcome rq off sz s),
+   SND (consume_call_outcome rq off sz s) with vs_gas_readings := gs)
+Proof
+  simp[consume_call_outcome_eq]
+QED
+
+Theorem gas_consume_outcome_readings[simp]:
+  (SND (consume_call_outcome rq off sz s)).vs_gas_readings = s.vs_gas_readings
+Proof
+  simp[consume_call_outcome_eq]
+QED
+
+Theorem gas_exec_ext_call:
+  gas_replay_at 0
+    (\u. exec_ext_call inst u gas addr value ao az ro rz st) s
+Proof
+  simp[gas_replay_at_def, exec_ext_call_def, Excl "consume_call_outcome_eq"] >>
+  gen_tac >> pairarg_tac >> simp[Excl "consume_call_outcome_eq"] >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
+  Cases_on `outs` >> simp[lift_result_def] >>
+  metis_tac[gas_consume_outcome_readings, pairTheory.SND]
+QED
+
+Theorem gas_tx_params[simp]:
+  venom_to_tx_params (s with vs_gas_readings := gs) = venom_to_tx_params s
+Proof
+  simp[venom_to_tx_params_def]
+QED
+
+Theorem gas_make_delegatecall[simp]:
+  make_venom_delegatecall_state (s with vs_gas_readings := gs) a g d c st =
+  make_venom_delegatecall_state s a g d c st
+Proof
+  simp[make_venom_delegatecall_state_def]
+QED
+
+Theorem gas_make_create[simp]:
+  make_venom_create_state (s with vs_gas_readings := gs) a g v c =
+  make_venom_create_state s a g v c
+Proof
+  simp[make_venom_create_state_def]
+QED
+
+Theorem gas_extract_result:
+  extract_venom_result (s with vs_gas_readings := gs) v off sz res =
+  OPTION_MAP (\(w,t). (w,t with vs_gas_readings := gs))
+    (extract_venom_result s v off sz res)
+Proof
+  Cases_on `res` >> simp[extract_venom_result_def] >>
+  PairCases_on `x` >> simp[] >>
+  namedCases_on `x1.contexts` ["", "ct rest"] >> simp[] >>
+  Cases_on `rest` >> simp[] >>
+  PairCases_on `ct` >> simp[] >>
+  Cases_on `x0` >> simp[] >>
+  simp[venom_state_component_equality] >>
+  Cases_on `y` >> simp[venom_state_component_equality]
+QED
+
+Theorem gas_extract_result_readings:
+  extract_venom_result s v off sz res = SOME (w,t) ==>
+  t.vs_gas_readings = s.vs_gas_readings
+Proof
+  Cases_on `res` >> simp[extract_venom_result_def] >>
+  PairCases_on `x` >> simp[] >>
+  namedCases_on `x1.contexts` ["", "ct rest"] >> simp[] >>
+  Cases_on `rest` >> simp[] >>
+  PairCases_on `ct` >> simp[] >>
+  Cases_on `x0` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  Cases_on `y` >> simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem gas_exec_delegatecall:
+  gas_replay_at 0 (\u. exec_delegatecall inst u gas addr ao az ro rz) s
+Proof
+  simp[gas_replay_at_def, exec_delegatecall_def, gas_extract_result] >>
+  gen_tac >>
+  qmatch_goalsub_abbrev_tac `extract_venom_result s 1w (w2n ro) (w2n rz) res` >>
+  Cases_on `extract_venom_result s 1w (w2n ro) (w2n rz) res` >>
+  simp[lift_result_def] >>
+  PairCases_on `x` >> simp[] >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
+  Cases_on `outs` >> simp[lift_result_def] >>
+  metis_tac[gas_extract_result_readings]
+QED
+
+Theorem gas_exec_create:
+  gas_replay_at 0 (\u. exec_create inst u value off sz salt) s
+Proof
+  simp[gas_replay_at_def, exec_create_def, gas_extract_result] >>
+  gen_tac >>
+  qmatch_goalsub_abbrev_tac `extract_venom_result s v 0 0 res` >>
+  Cases_on `extract_venom_result s v 0 0 res` >> simp[lift_result_def] >>
+  PairCases_on `x` >> simp[] >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
+  Cases_on `outs` >> simp[lift_result_def] >>
+  metis_tac[gas_extract_result_readings]
 QED
 
 Theorem gas_oracle_replay:
