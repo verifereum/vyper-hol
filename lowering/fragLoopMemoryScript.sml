@@ -345,3 +345,11 @@ Proof
     simp[jump_to_def] >>
   drule_all mem_outcome_loop_header >> simp[SF ETA_ss]
 QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_COMPOSITION_KERNEL_AUDIT OK\n"
+     else raise Fail "body memory composition inherited admission"
+  end) [frag_exec_loop_mem];

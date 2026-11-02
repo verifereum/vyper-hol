@@ -160,3 +160,11 @@ Proof
   Cases_on `r1` >> gvs[] >> disj1_tac >>
   metis_tac[expr_exit_INR_type]
 QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_COMPOSITION_KERNEL_AUDIT OK\n"
+     else raise Fail "body memory composition inherited admission"
+  end) [compile_pass_frag_mem, stmt_frag_nil_mem, stmt_frag_cons_env_mem, compile_expr_stmt_frag_ok_mem];
