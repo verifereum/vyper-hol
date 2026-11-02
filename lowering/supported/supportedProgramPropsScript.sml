@@ -2,7 +2,7 @@
    fixture proofs. Plain EVAL on tops; source typing stays a separate premise. *)
 Theory supportedProgramProps
 Ancestors
-  supportedProgram supportedStmts supportedStmtTraverse supportedNames
+  moduleLowering supportedProgram supportedStmts supportedStmtTraverse supportedNames
   supportedExprTraverse supportedExprProps supportedExprFormProps vyperAST list integer
 Libs
   intLib
@@ -236,4 +236,26 @@ Theorem supported_syntax_not_typing:
     [AnnAssign "x" (BaseT (UintT 256)) (Literal (BaseT BoolT) (BoolL T))]]
 Proof
   EVAL_TAC
+QED
+
+Theorem collect_locals_supported_bindings_mem:
+  !ss n. MEM n (MAP FST (collect_locals ss)) <=>
+    MEM n (MAP FST (supported_stmts_bindings T ss)) \/
+    MEM n (MAP FST (supported_stmts_bindings F ss))
+Proof
+  recInduct collect_locals_ind >>
+  simp[collect_locals_def, supported_stmt_bindings_def] >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+Theorem supported_function_arg_not_collect_locals:
+  supported_function_body tops vis args ss /\ MEM (id,ty) args ==>
+  ~MEM id (MAP FST (collect_locals ss))
+Proof
+  strip_tac >> drule supported_function_body_binding_contract >>
+  simp[supported_function_bindings_def, ALL_DISTINCT_APPEND,
+       collect_locals_supported_bindings_mem] >>
+  strip_tac >>
+  `MEM id (MAP FST args)` by (simp[MEM_MAP] >> qexists `(id,ty)` >> simp[]) >>
+  metis_tac[]
 QED
