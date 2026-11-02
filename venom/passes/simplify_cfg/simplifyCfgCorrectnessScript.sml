@@ -9,13 +9,9 @@ Ancestors
   simplifyCfgProof cfgWf
 
 Theorem simplify_cfg_pass_correct:
-  !func s fuel ctx.
-    wf_function func ==>
-    let func' = simplify_cfg_fn func in
-    ?fuel'.
-      result_equiv {}
-        (run_blocks fuel ctx func s)
-        (run_blocks fuel' ctx func' s)
+  wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  simplify_cfg_fn_ok fn ==>
+  fn_bisim fn (simplify_cfg_fn fn)
 Proof
   ACCEPT_TAC simplify_cfg_fn_correct
 QED
