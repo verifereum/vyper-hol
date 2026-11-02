@@ -161,7 +161,7 @@ Proof
       >- metis_tac[APPEND_FRONT_LAST] >>
       irule copy_phi_var_seed >> metis_tac[]) >>
   first_x_assum drule >> simp[] >> strip_tac >>
-  first_x_assum drule >> simp[] >>
+  first_x_assum (qspec_then `Var x` mp_tac) >> simp[] >>
   metis_tac[copy_phi_closed_sound]
 QED
 
