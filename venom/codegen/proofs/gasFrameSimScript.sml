@@ -218,6 +218,198 @@ Proof
   once_rewrite_tac[arithmeticTheory.ONE] >> simp[asm_steps_def]
 QED
 
+Theorem gas_optimistic_cases[local]:
+  optimistic_swap_plan dfg inst live next_term ps = (ops,ps') ==>
+  (ops = [] /\ ps' = ps) \/
+  ?dist. stack_get_depth (Var (LAST live)) ps.ps_stack = SOME dist /\
+    do_swap dist ps = (ops,ps')
+Proof
+  simp[optimistic_swap_plan_def] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  Cases_on `stack_get_depth (Var (LAST live)) ps.ps_stack` >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem gas_swap_suffix_sim[local]:
+  generated_plan_state_wf spill_base ps /\
+  do_swap dist ps = (ops,ps') /\ dist < LENGTH ps.ps_stack /\
+  prefix_spill_wf initial_fmp lo (FRONT ops) spill_view /\
+  venom_asm_rel lo ps vs st /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?st'.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+    venom_asm_rel lo ps' vs st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (top_n (dist + 1) ps.ps_stack)` by
+    (simp[top_n_def] >> irule ALL_DISTINCT_TAKE >>
+     fs[generated_plan_state_wf_def, ALL_DISTINCT_REVERSE]) >>
+  `prefix_spill_wf initial_fmp lo ops ps` by
+    (irule doSwapSimTheory.do_swap_prefix_spill_wf_from_front_cross_view >>
+     fs[generated_plan_state_wf_def] >> metis_tac[]) >>
+  irule doSwapSimTheory.do_swap_venom_asm_rel_layout >>
+  goal_assum (drule_at Any) >> fs[generated_plan_state_wf_def] >>
+  metis_tac[]
+QED
+
+Theorem gas_optimistic_suffix_sim[local]:
+  generated_plan_state_wf spill_base ps /\
+  optimistic_swap_plan dfg inst live next_term ps = (ops,ps') /\
+  prefix_spill_wf initial_fmp lo (FRONT ops) spill_view /\
+  venom_asm_rel lo ps vs st /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?st'.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+    venom_asm_rel lo ps' vs st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  strip_tac >> drule gas_optimistic_cases >> strip_tac
+  >- (gvs[] >> qexists_tac `st` >> simp[execute_plan_def, asm_steps_def]) >>
+  `dist < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_bound] >>
+  irule gas_swap_suffix_sim >> metis_tac[]
+QED
+
+Theorem gas_push_generated_wf[local]:
+  generated_plan_state_wf spill_base ps /\
+  ~MEM (Var out) ps.ps_stack /\ ~(Var out IN FDOM ps.ps_spilled) ==>
+  generated_plan_state_wf spill_base
+    (ps with ps_stack := SNOC (Var out) ps.ps_stack)
+Proof
+  simp[generated_plan_state_wf_def, planSpillBoundsTheory.plan_slots_bounded_def,
+       ALL_DISTINCT_SNOC, LIST_TO_SET_SNOC, pred_setTheory.DISJOINT_INSERT] >>
+  metis_tac[]
+QED
+
+Theorem gas_front_spill_transport[local]:
+  prefix_spill_wf initial_fmp lo (FRONT (SOEmit "GAS" :: ops)) ps ==>
+  prefix_spill_wf initial_fmp lo (FRONT ops) ps
+Proof
+  Cases_on `ops` >> simp[prefix_spill_wf_def, spill_op_wf_def,
+                         apply_prefix_op_def, strongPrefixSimTheory.apply_simple_op_def]
+QED
+
+Theorem gas_live_suffix_sim[local]:
+  generated_plan_state_wf spill_base ps /\
+  ~MEM (Var out) ps.ps_stack /\ ~(Var out IN FDOM ps.ps_spilled) /\
+  optimistic_swap_plan dfg inst live next_term
+    (ps with ps_stack := SNOC (Var out) ps.ps_stack) = (ops,ps') /\
+  prefix_spill_wf initial_fmp lo (FRONT (SOEmit "GAS" :: ops)) ps /\
+  venom_asm_rel lo (ps with ps_stack := SNOC (Var out) ps.ps_stack) vs st /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?st'.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+    venom_asm_rel lo (release_dead_spills live ps') vs st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  strip_tac >>
+  drule_all gas_push_generated_wf >> strip_tac >>
+  drule gas_front_spill_transport >> strip_tac >>
+  drule_all gas_optimistic_suffix_sim >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexists_tac `st'` >> simp[] >>
+  irule venom_asm_rel_release_dead_spills >> simp[]
+QED
+
+Theorem gas_plan_local_sim[local]:
+  inst.inst_opcode = GAS /\ inst.inst_operands = [] /\ inst.inst_outputs = [out] /\
+  generated_plan_state_wf spill_base ps /\
+  EVERY (\op. case op of Var x => x <> out | _ => T) ps.ps_stack /\
+  (!op. op IN FDOM ps.ps_spilled ==>
+     case op of Var x => x <> out | _ => T) /\
+  generate_inst_plan liveness dfg cfg fn inst live is_halting next_term bb ps =
+    SOME (ops,ps') /\
+  prefix_spill_wf initial_fmp lo (FRONT ops) ps /\
+  venom_asm_rel lo ps vs st /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+    venom_asm_rel lo ps'
+      (update_var out (HD (vs.vs_gas_readings ++ [0w]))
+        (vs with vs_gas_readings := TL vs.vs_gas_readings)) st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  strip_tac >>
+  `~MEM (Var out) ps.ps_stack /\ ~(Var out IN FDOM ps.ps_spilled)` by
+    (fs[EVERY_MEM] >> conj_tac
+     >- (strip_tac >> qpat_x_assum `!op. MEM op _ ==> _`
+           (qspec_then `Var out` mp_tac) >> simp[]) >>
+     strip_tac >> qpat_x_assum `!op. op IN FDOM _ ==> _`
+       (qspec_then `Var out` mp_tac) >> simp[]) >>
+  drule_all gas_plan_shape >> disch_then assume_tac >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[] >>
+  Cases_on `MEM out live` >> simp[]
+  >- suspend "live" >>
+  Cases_on `is_halting` >> simp[]
+  >- suspend "retained" >>
+  suspend "pop"
+QED
+
+Resume gas_plan_local_sim[live]:
+  pairarg_tac >> strip_tac >> gvs[] >>
+  qpat_x_assum `!ps next_liveness next_is_term liveness is_halting fn dfg cfg bb_label. _` kall_tac >>
+  `!xs. execute_plan initial_fmp (SOEmit "GAS" :: xs) =
+       AsmOp "GAS" :: execute_plan initial_fmp xs` by
+    simp[execute_plan_def, exec_stack_op_def] >>
+  `asm_block_at prog st.as_pc [AsmOp "GAS"]` by
+    (fs[asm_block_at_cons] >> simp[asm_block_at_cons, asm_block_at_def]) >>
+  drule_all gas_emit_steps >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  `asm_block_at prog st'.as_pc (execute_plan initial_fmp tail)` by
+    fs[asm_block_at_cons] >>
+  drule_all gas_live_suffix_sim >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexists_tac `st''` >> simp[] >>
+  `SUC (LENGTH (execute_plan initial_fmp tail)) =
+    1 + LENGTH (execute_plan initial_fmp tail)` by simp[] >>
+  asm_rewrite_tac[] >> irule asm_steps_compose_ok >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+Resume gas_plan_local_sim[retained]:
+  strip_tac >> gvs[] >>
+  `execute_plan initial_fmp [SOEmit "GAS"] = [AsmOp "GAS"]` by
+    simp[execute_plan_def, exec_stack_op_def] >>
+  gvs[] >> drule_all gas_emit_steps >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexists_tac `st'` >> simp[] >>
+  irule venom_asm_rel_release_dead_spills >> simp[]
+QED
+Resume gas_plan_local_sim[pop]:
+  strip_tac >> gvs[] >>
+  `execute_plan initial_fmp [SOEmit "GAS"; SOPop 1] =
+    [AsmOp "GAS"; AsmOp "POP"]` by
+    (simp[execute_plan_def, exec_stack_op_def] >>
+     once_rewrite_tac[arithmeticTheory.ONE] >> simp[REPLICATE]) >>
+  gvs[] >>
+  `st.as_gas_readings = vs.vs_gas_readings` by fs[venom_asm_rel_def] >>
+  drule gas_readings_relation >>
+  disch_then (qspec_then `TL vs.vs_gas_readings` assume_tac) >>
+  drule_all venom_asm_rel_update_var >>
+  disch_then (qspec_then `HD (vs.vs_gas_readings ++ [0w])` assume_tac) >>
+  qexists_tac `st with <|as_pc := st.as_pc + 2;
+                        as_gas_readings := TL vs.vs_gas_readings|>` >>
+  simp[] >> conj_tac
+  >- (fs[asm_block_at_def] >>
+      `EL st.as_pc prog = AsmOp "GAS"` by
+        (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+      `EL (st.as_pc + 1) prog = AsmOp "POP"` by
+        (first_x_assum (qspec_then `1` mp_tac) >> simp[EL]) >>
+      `2 = SUC 1` by decide_tac >>
+      qpat_x_assum `2 = SUC 1` (fn th => once_rewrite_tac[th]) >>
+      simp[Once asm_steps_def] >>
+      simp[gas_asm_step, asm_gas_def, asm_push_val_def, asm_next_def] >>
+      Cases_on `vs.vs_gas_readings` >> simp[] >>
+      once_rewrite_tac[arithmeticTheory.ONE] >>
+      simp[Once asm_steps_def] >>
+      simp[asm_step_def, asm_step_op_def, asm_step_arith_def,
+           asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+           asm_pop_def, asm_next_def, asm_steps_def] >>
+      simp[asm_state_component_equality]) >>
+  irule venom_asm_rel_release_dead_spills >>
+  fs[venom_asm_rel_def, plan_stack_rel_def, plan_spill_rel_def]
+QED
+Finalise gas_plan_local_sim
+
 Theorem gas_inst_frame_sim:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0.
