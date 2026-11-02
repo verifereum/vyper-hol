@@ -127,22 +127,29 @@ End
    ========================================================================= *)
 
 Definition generate_phi_plan_def:
-  generate_phi_plan inst next_liveness ps =
+  generate_phi_plan inst next_liveness is_halting ps =
     let phi_vars = FILTER is_var_operand inst.inst_operands in
     case stack_get_phi_depth phi_vars ps.ps_stack of
       NONE => ([] : stack_op list, ps)
     | SOME dist =>
         let at_depth = stack_peek dist ps.ps_stack in
-        let ret = Var (HD inst.inst_outputs) in
-        if MEM (operand_to_string at_depth) next_liveness then
-          let (dup_ops, ps') = do_dup dist ps in
-          let ps'' = ps' with ps_stack :=
-            stack_poke 0 ret ps'.ps_stack in
-          (dup_ops ++ [SOPoke 0 ret], ps'')
-        else
-          let ps' = ps with ps_stack :=
-            stack_poke dist ret ps.ps_stack in
-          ([SOPoke dist ret], ps')
+        let out = HD inst.inst_outputs in
+        let ret = Var out in
+        let (ops, ps') =
+          if MEM (operand_to_string at_depth) next_liveness then
+            let (dup_ops, ps1) = do_dup dist ps in
+            (dup_ops ++ [SOPoke 0 ret],
+             ps1 with ps_stack := stack_poke 0 ret ps1.ps_stack)
+          else
+            ([SOPoke dist ret],
+             ps with ps_stack := stack_poke dist ret ps.ps_stack) in
+        (* A dead output is popped, as generate_regular_inst_plan pops its
+           dead outputs; left in place it would survive to the function's
+           RET. *)
+        if ~is_halting /\ ~MEM out next_liveness then
+          let (pop_ops, ps'') = popmany_plan [ret] ps' in
+          (ops ++ pop_ops, ps'')
+        else (ops, ps')
 End
 
 (* =========================================================================
@@ -381,7 +388,7 @@ Definition generate_inst_plan_def:
     if is_pre_codegen_opcode inst.inst_opcode then NONE
     else if inst.inst_opcode = INVOKE /\ ~invoke_operands_wf inst then NONE
     else if inst.inst_opcode = PHI then
-      SOME (generate_phi_plan inst next_liveness ps)
+      SOME (generate_phi_plan inst next_liveness is_halting ps)
     else if inst.inst_opcode = OFFSET then
       SOME (generate_offset_plan inst ps)
     else if is_param_opcode inst.inst_opcode then
@@ -792,8 +799,13 @@ val fn_plan_defn = Hol_defn "generate_fn_plan_aux" `
            [succ] visited ps_branch of
       NONE => NONE
     | SOME (s_ops, visited_after, ps_after) =>
+      (* The next successor starts from the parent's spill map, so it must
+         also start from the parent's free list: a slot the previous
+         successor freed may still hold one of the parent's spilled
+         variables.  The high-water mark is threaded. *)
       let ps_g' = ps_g with <|
-        ps_alloc := ps_after.ps_alloc;
+        ps_alloc := ps_after.ps_alloc with
+          sa_free_slots := ps_g.ps_alloc.sa_free_slots;
         ps_label_counter := ps_after.ps_label_counter |> in
       case generate_succs_plan liveness dfg cfg fn
              saved_stack saved_spilled rest visited_after ps_g' of
@@ -940,7 +952,8 @@ Proof
     (* Apply IH to INR rest call *)
     first_x_assum (qspec_then
         `INR (y0,y1,y2,y3,y4,y5,t,seen_first,
-              y8 with <| ps_alloc := plan_first.ps_alloc;
+              y8 with <| ps_alloc := plan_first.ps_alloc with
+                           sa_free_slots := y8.ps_alloc.sa_free_slots;
                          ps_label_counter := plan_first.ps_label_counter |>)` mp_tac) >>
     (impl_tac >- (
       simp[] >> simp[LEX_DEF] >>
@@ -1105,7 +1118,8 @@ Proof
      PairCases_on `sr` >>
      Cases_on `generate_succs_plan liveness dfg cfg fn saved_stack
                  saved_spilled succs sr1
-                 (ps with <| ps_alloc := sr2.ps_alloc;
+                 (ps with <| ps_alloc := sr2.ps_alloc with
+                               sa_free_slots := ps.ps_alloc.sa_free_slots;
                              ps_label_counter := sr2.ps_label_counter |>)`
      >- gvs[Once (cj 4 generate_fn_plan_aux_def)]
      >> rename1 `generate_succs_plan _ _ _ _ _ _ _ _ _ = SOME rr` >>
@@ -1166,7 +1180,8 @@ Definition generate_fn_plan_aux_fuel_def:
        NONE => NONE
      | SOME (s_ops, visited_after, ps_after) =>
          let ps_g' = ps_g with <|
-           ps_alloc := ps_after.ps_alloc;
+           ps_alloc := ps_after.ps_alloc with
+             sa_free_slots := ps_g.ps_alloc.sa_free_slots;
            ps_label_counter := ps_after.ps_label_counter |> in
          case generate_succs_plan_fuel fuel liveness dfg cfg fn
                 saved_stack saved_spilled rest visited_after ps_g' of
