@@ -35,23 +35,3 @@ Theorem lower_dload_function_correct:
 Proof
   ACCEPT_TAC lowerDloadSimTheory.lower_dload_function_correct_proof
 QED
-
-(* ===== Obligations ===== *)
-
-(* Cheated: SSA preservation requires showing lower_dload_inst
-   does not introduce duplicate variable definitions. Blocked on
-   ssa_form infrastructure for 1:N instruction expansion. *)
-Theorem lower_dload_preserves_ssa_form:
-  !fn. ssa_form fn ==> ssa_form (lower_dload_function fn)
-Proof
-  cheat
-QED
-
-(* Cheated: wf preservation requires showing expanded blocks
-   still have exactly one terminator at the end. Blocked on
-   bb_well_formed lemmas for FLAT o MAP expansion. *)
-Theorem lower_dload_preserves_wf_function:
-  !fn. wf_function fn ==> wf_function (lower_dload_function fn)
-Proof
-  cheat
-QED

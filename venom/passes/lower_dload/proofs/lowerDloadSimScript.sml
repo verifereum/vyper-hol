@@ -428,6 +428,15 @@ Proof
   metis_tac[step_inst_base_term_OK_idx_0]
 QED
 
+(* lower_dload_inst keeps an instruction or emits ALLOCA/ADD/CODECOPY/MLOAD *)
+Theorem lower_dload_inst_mem_opcode[local]:
+  !h i. MEM i (lower_dload_inst h) ==>
+        i = h \/ MEM i.inst_opcode [ALLOCA; ADD; CODECOPY; MLOAD]
+Proof
+  simp[lower_dload_inst_def] >> rpt strip_tac >>
+  every_case_tac >> gvs[]
+QED
+
 (* lower_dload_inst preserves non-terminator/non-INVOKE *)
 Theorem lower_dload_inst_every_non_term[local]:
   !insts.
@@ -435,18 +444,10 @@ Theorem lower_dload_inst_every_non_term[local]:
     EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
       (FLAT (MAP lower_dload_inst insts))
 Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  simp[EVERY_APPEND] >>
-  rename1 `lower_dload_inst h` >>
-  simp[lower_dload_inst_def] >>
-  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
-  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
-  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
-  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
-  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
-  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
-  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
-  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF]
+  simp[EVERY_MEM, MEM_FLAT, MEM_MAP, PULL_EXISTS] >> rpt gen_tac >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule >>
+  drule lower_dload_inst_mem_opcode >> rw[] >> gvs[is_terminator_def]
 QED
 
 (* Shared inductive prefix for exec_block prefix factoring lemmas.
