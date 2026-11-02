@@ -47,7 +47,7 @@ Ancestors
   list pair fragExec stmtSim bodySim bodySimMain loweringHalt stmtLoweringMono exprSim exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering
   e2eDefs supportedProgram vyperLoweringCorrect entryChecksProps moduleLoweringProps
-  entryDispatchProps supportedNames abiDecoderCounters
+  entryDispatchProps supportedNames abiDecoderCounters context
   supportedDecls supportedExprForms supportedStmts
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperInterpreter vyperState vyperContext
@@ -161,16 +161,31 @@ Theorem compile_decode_args_vars_mono[local]:
 Proof
   Induct >> simp[compile_decode_args_def, abi_decoder_vars_mono_return] >>
   gen_tac >> PairCases_on `h` >> rpt gen_tac >>
-  Cases_on `h1` >> Cases_on `h2` >>
-  simp[compile_decode_args_def, LET_THM] >>
-  rpt (FIRST [
-    CHANGED_TAC (simp[abi_decoder_vars_mono_prims,
-      abi_decoder_vars_mono_return, abi_decoder_vars_mono_abi_clamp,
-      abi_decoder_vars_mono_mutual]),
-    (ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac),
-    (ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac),
-    gen_tac,
-    (CASE_TAC >> simp[])])
+  Cases_on `h1`
+  >- (simp[compile_decode_args_def, LET_THM] >>
+      ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac
+      >- simp[abi_decoder_vars_mono_prims] >>
+      gen_tac >> ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac
+      >- simp[abi_decoder_vars_mono_prims] >>
+      gen_tac >> ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac
+      >- simp[abi_decoder_vars_mono_abi_clamp] >>
+      ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac
+      >- (Cases_on `FLOOKUP cenv.ce_vars h0` >>
+          simp[abi_decoder_vars_mono_return] >>
+          Cases_on `var_location_decode_operand x` >>
+          simp[abi_decoder_vars_mono_return, abi_decoder_vars_mono_prims]) >>
+      simp[]) >>
+  Cases_on `h2` >> simp[compile_decode_args_def] >>
+  Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[] >>
+  Cases_on `var_location_decode_operand x` >> simp[]
+  >- (ntac 3 (ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac
+              >- simp[abi_decoder_vars_mono_prims] >> gen_tac) >>
+      ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >>
+      simp[abi_decoder_vars_mono_mutual]) >>
+  ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac
+  >- simp[abi_decoder_vars_mono_prims] >>
+  gen_tac >> ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >>
+  simp[abi_decoder_vars_mono_mutual]
 QED
 
 Theorem compile_register_positional_args_vars_mono[local]:
@@ -198,6 +213,96 @@ Proof
   strip_tac >>
   mp_tac (Q.SPECL [`args`, `cenv`, `offset`]
     compile_register_positional_args_vars_mono) >>
+  simp[abi_decoder_vars_mono_def] >>
+  disch_then (qspec_then `sa` mp_tac) >> simp[]
+QED
+
+Theorem compile_stmts_vars_mono[local]:
+  abi_decoder_vars_mono (compile_stmts ce lc ty ss)
+Proof
+  mp_tac compile_stmt_cs_mono >>
+  simp[cs_mono_def, abi_decoder_vars_mono_def] >>
+  rpt strip_tac >>
+  Cases_on `compile_stmts ce lc ty ss st` >>
+  rename1 `_ = (u, sb)` >> Cases_on `u` >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem compile_entry_checks_vars_mono[local]:
+  abi_decoder_vars_mono (compile_entry_checks min_cds payable)
+Proof
+  Cases_on `payable` >> Cases_on `min_cds > 4` >>
+  simp[compile_entry_checks_def, abi_decoder_vars_mono_return] >>
+  rpt (FIRST [
+    CHANGED_TAC (simp[abi_decoder_vars_mono_prims,
+      abi_decoder_vars_mono_return]),
+    (ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac),
+    (ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac),
+    gen_tac])
+QED
+
+Theorem compile_nonreentrant_vars_mono[local]:
+  abi_decoder_vars_mono (compile_nonreentrant_lock key transient view) /\
+  abi_decoder_vars_mono (compile_nonreentrant_unlock key transient view)
+Proof
+  Cases_on `transient` >> Cases_on `view` >>
+  simp[compile_nonreentrant_lock_def, compile_nonreentrant_unlock_def,
+    abi_decoder_vars_mono_prims, abi_decoder_vars_mono_return] >>
+  rpt (FIRST [
+    CHANGED_TAC (simp[abi_decoder_vars_mono_prims,
+      abi_decoder_vars_mono_return]),
+    (ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac),
+    (ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac),
+    gen_tac])
+QED
+
+Theorem comp_get_vars_mono[local]:
+  abi_decoder_vars_mono comp_get
+Proof
+  simp[abi_decoder_vars_mono_def, comp_get_def]
+QED
+
+Theorem compile_guarded_body_vars_mono[local]:
+  abi_decoder_vars_mono (compile_guarded_body ce nr key transient view body rt)
+Proof
+  Cases_on `nr` >> Cases_on `rt` >>
+  simp[compile_guarded_body_def] >>
+  rpt (FIRST [
+    CHANGED_TAC (simp[abi_decoder_vars_mono_prims,
+      abi_decoder_vars_mono_return, compile_nonreentrant_vars_mono,
+      compile_stmts_vars_mono, comp_get_vars_mono]),
+    (ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac),
+    (ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac),
+    gen_tac,
+    (IF_CASES_TAC >> simp[])])
+QED
+
+Theorem compile_external_function_body_vars_mono[local]:
+  abi_decoder_vars_mono
+    (compile_external_function_body ce args nr key transient view body rt)
+Proof
+  rewrite_tac[compile_external_function_body_def] >>
+  ho_match_mp_tac abi_decoder_vars_mono_bind >>
+  simp[compile_register_positional_args_vars_mono,
+       compile_guarded_body_vars_mono]
+QED
+
+Theorem compile_entry_checks_next_var[local]:
+  compile_entry_checks min_cds payable sa = ((), sb) ==>
+  sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >>
+  mp_tac compile_entry_checks_vars_mono >>
+  simp[abi_decoder_vars_mono_def] >>
+  disch_then (qspec_then `sa` mp_tac) >> simp[]
+QED
+
+Theorem compile_external_function_body_next_var[local]:
+  compile_external_function_body ce args nr key transient view body rt sa =
+    ((), sb) ==> sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >>
+  mp_tac compile_external_function_body_vars_mono >>
   simp[abi_decoder_vars_mono_def] >>
   disch_then (qspec_then `sa` mp_tac) >> simp[]
 QED
