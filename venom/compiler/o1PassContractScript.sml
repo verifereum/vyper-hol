@@ -233,11 +233,14 @@ Definition o1_fn_shape_def:
        EVERY (\inst. ~MEM inst.inst_opcode [STOP; RETURN]) (fn_insts fn))
 End
 
-(* venom_wf without global instruction-id distinctness, which is the IR
-   supply's concern and not a pass's. *)
+(* Instruction ids are distinct across the context, as Python's global
+   counter makes them: ConcretizeMemLoc keys imported callee allocations
+   by ALLOCA id.  A pass keeps ids distinct within its function
+   (wf_function); across functions the IR supply keeps them apart. *)
 Definition o1_ctx_shape_def:
   o1_ctx_shape ctx <=>
-    ctx_wf ctx /\ EVERY (o1_fn_shape ctx) ctx.ctx_functions
+    ctx_wf ctx /\ ctx_inst_ids_distinct ctx /\
+    EVERY (o1_fn_shape ctx) ctx.ctx_functions
 End
 
 (* ===== Step contract: structural, per run ===== *)

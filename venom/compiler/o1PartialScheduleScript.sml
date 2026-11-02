@@ -61,6 +61,14 @@ Definition mixed_fns_def:
                  else EL i ctx.ctx_functions) (LENGTH ctx.ctx_functions)
 End
 
+(* Instruction-id distinctness (part of o1_ctx_shape) of the stage contexts
+   and observed units follows from the supply: every id of every function
+   in chain i is either an id of its original or not used by the supply
+   the chain started from (fresh_names_ok), and is used by the supply the
+   chain ended with (ir_supply_covers_fn, ir_supply_extends).  A chain's
+   start supply covers the unit it started on (ir_supply_covers_unit),
+   which holds the earlier chains' final functions and the later ones'
+   originals; and within a function ids are distinct (wf_function). *)
 Definition partial_schedule_def:
   partial_schedule rpolicy passes original order done chains current <=>
     LENGTH chains = LENGTH original.cu_context.ctx_functions /\
