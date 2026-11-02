@@ -117,10 +117,66 @@ QED
 
 (* ===== The entry (#639) ===== *)
 
-(* ADMITTED (#639): when the source cannot move the call value (a
-   nonpayable function called with value), the run from __entry aborts as
-   external_call_result_rel asks (entryChecksProps's
-   entry_checks_nonpayable_value, after the selector dispatch). *)
+(* ADMITTED (#639): the run from __entry reaches the start st of the entry
+   checks of the function the source selects: run_context starts the entry
+   function func at its first block, compile_selector_dispatch_linear_correct
+   brings it to "fn_" ++ tx.function_name (linear_dispatch_selects_function,
+   supported_program giving distinct selectors), and
+   compile_external_fn_bodies opens that label's block with the entry
+   checks.  Only variables and the position change
+   on the way, and every result from s0 is a result of run_context. *)
+Theorem external_entry_reaches_checks:
+  !tops rpolicy unit am tx ret vs mut args fbody.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) ==>
+    ?rr lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st st' func
+     s0.
+      set_external_package_target rpolicy.rpol_target
+        (package_external_fn tops F (assign_nkeys tops 0)
+           (mut, F, rr, tx.function_name, args, [], ret, fbody)) =
+        (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
+         rt) /\
+      compile_entry_checks min_cds is_payable st = ((), st') /\
+      fn_has_code st st' func /\
+      vars_pc_only vs s0 /\ fresh_vars_wrt st s0 /\ ~s0.vs_halted /\
+      s0.vs_current_bb = st.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH st.cs_current_insts /\
+      !fuel r. run_from fuel unit.cu_context func s0 = r /\
+               (!e. r <> Error e) ==>
+               ?fuel'. run_context fuel' unit.cu_context vs = r
+Proof
+  cheat
+QED
+
+(* The source fails to move the call value only for a nonpayable function
+   called with value: value_transfer_ok rules out a failed transfer. *)
+Theorem send_call_value_fails[local]:
+  !mut srcs layouts tx am env orc e es.
+    value_transfer_ok tx am.accounts /\
+    send_call_value mut (initial_evaluation_context srcs layouts tx NONE)
+      (initial_state am [env] with <| outcomes := orc; requests := [] |>) =
+      (INR e, es) ==>
+    mut <> Payable /\ tx.value <> 0
+Proof
+  rpt gen_tac >>
+  simp[send_call_value_def, transfer_value_def, value_transfer_ok_def,
+       initial_evaluation_context_def, initial_state_def] >>
+  rw[] >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+      vyperStateTheory.return_def, vyperStateTheory.assert_def,
+      vyperStateTheory.check_def, get_accounts_def, update_accounts_def,
+      AllCaseEqs()]
+QED
+
+(* A nonpayable function called with value: the entry checks of the
+   function the source selects revert (entry_checks_nonpayable_value), as
+   external_call_result_rel asks of the source's RuntimeError. *)
 Theorem external_entry_value_revert:
   !tops rpolicy unit am tx ret vs mut args fbody env e st.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -141,7 +197,35 @@ Theorem external_entry_value_revert:
       (INR e, st) ==>
     source_unit_execution_correct tops ret am tx unit vs
 Proof
-  cheat
+  rpt strip_tac >>
+  `value_transfer_ok tx am.accounts` by fs[initial_venom_state_rel_def] >>
+  drule_all send_call_value_fails >> strip_tac >>
+  drule_all external_entry_reaches_checks >> strip_tac >>
+  rename1 `compile_entry_checks _ _ sc = ((), sc')` >>
+  `call_tx_well_typed tx` by fs[source_typing_ok_def] >>
+  `s0.vs_call_ctx = vs.vs_call_ctx` by
+    (qpat_x_assum `vars_pc_only _ _` mp_tac >> simp[vars_pc_only_def] >>
+     disch_then (SUBST1_TAC o SYM) >> simp[]) >>
+  `call_ctx_rel tx s0.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx` by
+    fs[initial_venom_state_rel_def, venom_env_rel_def] >>
+  `?c. package_external_fn tops F (assign_nkeys tops 0)
+         (mut, F, rr, tx.function_name, args, [], ret, fbody) =
+       (lbl, c, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody, rt)` by
+    (qmatch_asmsub_abbrev_tac `set_external_package_target _ pkg = _` >>
+     PairCases_on `pkg` >>
+     gvs[set_external_package_target_def, markerTheory.Abbrev_def]) >>
+  qspecl_then [`tops`, `am`, `tx`, `SOME vs.vs_outcomes`, `ret`, `F`,
+               `assign_nkeys tops 0`, `mut`, `rr`, `args`, `[]`, `fbody`,
+               `lbl`, `c`, `pos_args`, `min_cds`, `is_payable`,
+               `(F, nkey, ut', iv, fbody, rt)`, `sc`, `sc'`,
+               `unit.cu_context`, `s0`, `vs.vs_tx_ctx`, `vs.vs_block_ctx`]
+    mp_tac (Q.INST [`gobs` |-> `[]`] entry_checks_nonpayable_value) >>
+  impl_tac >- simp[] >>
+  simp[frag_exec_def] >> disch_then (qspecl_then [`func`, `s0`] mp_tac) >>
+  simp[] >> strip_tac >>
+  simp[source_unit_execution_correct_def] >>
+  first_x_assum (qspecl_then [`fuel`, `Abort Revert_abort t`] mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `fuel'` >> simp[]
 QED
 
 (* ADMITTED (#639): the run from __entry reaches the start sa of the
@@ -351,18 +435,115 @@ QED
 
 (* ===== The return type of a body without a valued return ===== *)
 
-(* ADMITTED (lowering): compile_stmt reads the return type only to compile
-   a valued return and as the element type of an Append whose target root
-   has no array type.  A supported Append targets a storage dynamic array,
-   whose type body_inv's compile env gives (ce_module_var_type), and no
-   declaration changes that. *)
+Theorem supported_variable_decl_var_type[local]:
+  !tops name vis mut ty slot.
+    supported_variable_decl tops (NONE, name) = SOME (vis, mut, ty, slot) ==>
+    build_var_type_map tops (NONE, name) = SOME ty
+Proof
+  Induct >> simp[supported_variable_decl_def, build_var_type_map_def] >>
+  Cases >> rw[supported_variable_decl_def, build_var_type_map_def]
+QED
+
+Theorem body_inv_dynarrays_typed[local]:
+  !tops ctx cenv cx id.
+    body_inv tops ctx cenv cx /\ supported_storage_dynamic_array tops id ==>
+    ?t b. cenv.ce_module_var_type id = SOME (ArrayT t b)
+Proof
+  rw[body_inv_def] >> PairCases_on `id` >>
+  Cases_on `id0` >>
+  gvs[supported_storage_dynamic_array_def, AllCaseEqs()] >>
+  TRY (Cases_on `tops` >> gvs[supported_variable_decl_def] >> NO_TAC) >>
+  drule supported_variable_decl_var_type >> simp[]
+QED
+
+Theorem declare_local_module_var_type[local]:
+  !cenv id ty st c st'.
+    declare_local cenv id ty st = (c, st') ==>
+    c.ce_module_var_type = cenv.ce_module_var_type
+Proof
+  rw[declare_local_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem declare_stmt_local_module_var_type[local]:
+  !cenv s st c st'.
+    declare_stmt_local cenv s st = (c, st') ==>
+    c.ce_module_var_type = cenv.ce_module_var_type
+Proof
+  Cases_on `s` >> rw[declare_stmt_local_def, comp_return_def] >>
+  metis_tac[declare_local_module_var_type]
+QED
+
+val ret_ty_simple_tac =
+  rpt strip_tac >> ONCE_REWRITE_TAC [compile_stmt_def] >>
+  gvs[supported_stmt_def, stmt_valued_return_def];
+
+val ret_ty_loop_tac =
+  rpt strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  ONCE_REWRITE_TAC [compile_stmt_def] >>
+  gvs[supported_stmt_def, stmt_valued_return_def] >>
+  simp[comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[] >>
+       imp_res_tac declare_local_module_var_type >>
+       gvs[]);
+
+val ret_ty_cons_tac =
+  rpt strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  ONCE_REWRITE_TAC [compile_stmt_def] >>
+  gvs[supported_stmt_def, stmt_valued_return_def] >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_get_def] >>
+  IF_CASES_TAC >> simp[] >>
+  rpt (pairarg_tac >> gvs[] >>
+       imp_res_tac declare_stmt_local_module_var_type >>
+       gvs[]);
+
+(* compile_stmt reads the return type only to compile a valued return and
+   as the element type of an Append whose target root has no array type; a
+   supported Append targets a storage dynamic array, which
+   has an array type in the compile env, and no declaration changes module types. *)
+Theorem compile_stmt_ret_ty[local]:
+  (!cenv lctx ty s.
+     (!id. supported_storage_dynamic_array tops id ==>
+          ?t b. cenv.ce_module_var_type id = SOME (ArrayT t b)) /\
+     supported_stmt tops bindings s /\
+     ~stmt_valued_return s ==>
+     compile_stmt cenv lctx ty s = compile_stmt cenv lctx ty' s) /\
+  (!cenv lctx ty ss.
+     (!id. supported_storage_dynamic_array tops id ==>
+          ?t b. cenv.ce_module_var_type id = SOME (ArrayT t b)) /\
+     supported_stmts tops bindings ss /\
+     ~stmts_valued_return ss ==>
+     compile_stmts cenv lctx ty ss = compile_stmts cenv lctx ty' ss)
+Proof
+  ho_match_mp_tac compile_stmt_ind >> rpt conj_tac >> rpt gen_tac >>
+  goalStack.print_tac "PROBE" >> cheat
+QED
+
+(* A supported body without a valued return compiles the same at every
+   return type. *)
 Theorem stmts_env_ret_ty:
   !ss tops bindings ctx cenv cx lctx ty ty'.
     supported_stmts tops bindings ss /\ body_inv tops ctx cenv cx /\
     ~stmts_valued_return ss ==>
     stmts_env cenv lctx ty ss = stmts_env cenv lctx ty' ss
 Proof
-  cheat
+  rpt strip_tac >>
+  `!id. supported_storage_dynamic_array tops id ==>
+        ?t b. cenv.ce_module_var_type id = SOME (ArrayT t b)` by
+    metis_tac[body_inv_dynarrays_typed] >>
+  qpat_x_assum `body_inv _ _ _ _` kall_tac >>
+  pop_assum mp_tac >> pop_assum mp_tac >> pop_assum mp_tac >>
+  qid_spec_tac `cenv` >> Induct_on `ss` >> simp[stmts_env_def] >>
+  rpt strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  gvs[supported_stmt_def, stmt_valued_return_def] >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_get_def] >>
+  IF_CASES_TAC >> simp[] >>
+  pairarg_tac >> gvs[] >>
+  rename1 `declare_stmt_local cenv h _ = (c, _)` >>
+  imp_res_tac declare_stmt_local_module_var_type >>
+  `compile_stmt c lctx ty h = compile_stmt c lctx ty' h` by
+    (irule (cj 1 compile_stmt_ret_ty) >> simp[] >> metis_tac[]) >>
+  simp[] >> pairarg_tac >> gvs[]
 QED
 
 (* type_stmt rejects Return (SOME e) at NoneT. *)
