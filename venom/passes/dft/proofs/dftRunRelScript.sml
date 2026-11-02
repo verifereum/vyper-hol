@@ -451,6 +451,70 @@ Proof
   Induct >> simp[dft_id_before_cons] >> metis_tac[MEM_APPEND, MEM]
 QED
 
+Theorem dft_bubble_head_ready:
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  bb.bb_label = s.vs_current_bb /\ strict_dom_vars_defined fn s /\
+  MEM y bb.bb_instructions /\ ~is_pseudo y.inst_opcode /\
+  EVERY (\x. ~dft_must_order x y) pre /\
+  (!d v. MEM d bb.bb_instructions /\ MEM v d.inst_outputs /\
+         ~MEM d (pre ++ y::post) ==> v IN FDOM s.vs_vars) /\
+  (!d. MEM d post ==>
+       id_before (MAP (\i. i.inst_id) bb.bb_instructions) y.inst_id d.inst_id)
+  ==> !v. MEM (Var v) y.inst_operands ==> v IN FDOM s.vs_vars
+Proof
+  rpt strip_tac >> irule dft_ready_operand_defined >> simp[] >>
+  qexistsl_tac [`bb`, `fn`, `y`] >> simp[] >>
+  `y.inst_opcode <> PHI` by (strip_tac >> gvs[is_pseudo_def]) >>
+  simp[] >> rpt strip_tac >>
+  Cases_on `MEM d (pre ++ y::post)`
+  >- (gvs[MEM_APPEND, MEM]
+      >- (fs[EVERY_MEM] >>
+          `~dft_must_order d y` by metis_tac[] >>
+          gvs[dft_must_order_def, inst_defs_def, inst_uses_def,
+              pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION,
+              MEM_operand_vars_iff] >> metis_tac[])
+      >- (`ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+            metis_tac[wf_fn_block_inst_ids_distinct] >>
+          metis_tac[id_before_asym]) >>
+      `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+        metis_tac[wf_fn_block_inst_ids_distinct] >>
+      metis_tac[id_before_asym]) >>
+  metis_tac[]
+QED
+
+Theorem dft_bubble_executed_ready:
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  bb.bb_label = s.vs_current_bb /\ strict_dom_vars_defined fn s /\
+  MEM y bb.bb_instructions /\ ~is_pseudo y.inst_opcode /\
+  EVERY (\x. ~dft_must_order x y) pre /\
+  (!d. MEM d post ==>
+       id_before (MAP (\i. i.inst_id) bb.bb_instructions) y.inst_id d.inst_id) /\
+  PERM (done ++ (pre ++ y::post))
+       (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions) /\
+  (!d v. MEM d bb.bb_instructions /\ is_pseudo d.inst_opcode /\
+         MEM v d.inst_outputs ==> v IN FDOM s.vs_vars) /\
+  EVERY (\i. inst_wf i /\ ~is_pseudo i.inst_opcode /\
+             ~is_terminator i.inst_opcode) done /\
+  FOLDR (dft_exec_cons fuel C) OK done s = OK t ==>
+  !v. MEM (Var v) y.inst_operands ==> v IN FDOM t.vs_vars
+Proof
+  rpt strip_tac >>
+  `t.vs_current_bb = s.vs_current_bb` by
+    (irule (cj 1 dft_prefix_frame) >>
+     qexistsl_tac [`C`, `fuel`, `done`] >> simp[EVERY_MEM] >> fs[EVERY_MEM]) >>
+  `strict_dom_vars_defined fn t` by metis_tac[dft_prefix_dominators] >>
+  `!d v. MEM d bb.bb_instructions /\ MEM v d.inst_outputs /\
+         ~MEM d (pre ++ y::post) ==> v IN FDOM t.vs_vars` by
+    (drule dft_executed_producers >>
+     disch_then (qspecl_then [`t`, `s`, `fuel`, `C`] mp_tac) >>
+     simp[] >> disch_tac >> rpt strip_tac >> first_x_assum irule >>
+     conj_tac >- first_assum ACCEPT_TAC >> qexists_tac `d` >> simp[]) >>
+  irule dft_bubble_head_ready >>
+  qexistsl_tac [`bb`, `fn`, `post`, `pre`, `y`] >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >> simp[] >>
+  qexists_tac `d` >> simp[]
+QED
+
 Theorem dft_head_bubbles_complete:
   !dst src.
     PERM src dst /\ ALL_DISTINCT src /\

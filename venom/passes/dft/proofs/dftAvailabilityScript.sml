@@ -4,7 +4,7 @@ Theory dftAvailability
 Ancestors
   dftScheduleOrder dftCorrectness sccpCorrectnessProofs venomWf
   venomExecSemantics venomExecProofs venomState list finite_map
-  dftWf dftIdempotent dftTopoSort venomInst dftIndexedExec
+  dftWf dftIdempotent dftTopoSort venomInst dftIndexedExec sorting
 
 Theorem dft_ready_operand_defined:
   wf_ssa fn /\ wf_function fn /\
@@ -155,4 +155,74 @@ Proof
   drule_all step_inst_fdom >> strip_tac >>
   first_x_assum drule >> simp[] >> strip_tac >>
   gvs[] >> pred_setLib.SET_TAC[]
+QED
+
+Theorem dft_prefix_frame:
+  !pre s t.
+  EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+  FOLDR (dft_exec_cons fuel C) OK pre s = OK t ==>
+  t.vs_current_bb = s.vs_current_bb /\ t.vs_labels = s.vs_labels
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  gvs[dft_exec_cons_def, AllCaseEqs()] >>
+  drule_all venomInstPropsTheory.step_preserves_control_flow >> strip_tac >>
+  drule step_inst_preserves_labels_always >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem dft_prefix_dominators:
+  EVERY (\i. inst_wf i /\ ~is_pseudo i.inst_opcode /\
+             ~is_terminator i.inst_opcode) pre /\
+  FOLDR (dft_exec_cons fuel C) OK pre s = OK t /\
+  strict_dom_vars_defined fn s ==>
+  strict_dom_vars_defined fn t
+Proof
+  strip_tac >>
+  `t.vs_current_bb = s.vs_current_bb` by
+    (irule (cj 1 dft_prefix_frame) >>
+     qexistsl_tac [`C`, `fuel`, `pre`] >> simp[EVERY_MEM] >>
+     fs[EVERY_MEM]) >>
+  drule_all dft_prefix_fdom >> strip_tac >>
+  fs[strict_dom_vars_defined_def] >> rpt strip_tac >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem dft_executed_producers:
+  PERM (done ++ todo) (FILTER (\i. ~is_pseudo i.inst_opcode) original) /\
+  (!d v. MEM d original /\ is_pseudo d.inst_opcode /\
+         MEM v d.inst_outputs ==> v IN FDOM s.vs_vars) /\
+  EVERY (\i. inst_wf i /\ ~is_pseudo i.inst_opcode /\
+             ~is_terminator i.inst_opcode) done /\
+  FOLDR (dft_exec_cons fuel C) OK done s = OK t ==>
+  !d v. MEM d original /\ MEM v d.inst_outputs /\ ~MEM d todo ==>
+        v IN FDOM t.vs_vars
+Proof
+  strip_tac >> drule_all dft_prefix_fdom >> strip_tac >> rpt strip_tac >>
+  Cases_on `is_pseudo d.inst_opcode`
+  >- (simp[] >> metis_tac[]) >>
+  `MEM d (done ++ todo)` by
+    (dxrule PERM_MEM_EQ >> disch_then (qspec_then `d` mp_tac) >> simp[MEM_FILTER]) >>
+  `MEM d done` by gvs[] >>
+  simp[MEM_FLAT, MEM_MAP] >> disj2_tac >>
+  qexists_tac `d.inst_outputs` >> simp[] >>
+  qexists_tac `d` >> simp[]
+QED
+
+Theorem dft_prefix_ready_preserved:
+  EVERY (\i. inst_wf i /\ ~is_pseudo i.inst_opcode /\
+             ~is_terminator i.inst_opcode) pre /\
+  FOLDR (dft_exec_cons fuel C) OK pre s = OK t /\
+  (!v. MEM (Var v) y.inst_operands ==> v IN FDOM s.vs_vars) /\
+  (y.inst_opcode <> INVOKE ==>
+    !l. MEM (Label l) y.inst_operands ==> l IN FDOM s.vs_labels) ==>
+  (!v. MEM (Var v) y.inst_operands ==> v IN FDOM t.vs_vars) /\
+  (y.inst_opcode <> INVOKE ==>
+    !l. MEM (Label l) y.inst_operands ==> l IN FDOM t.vs_labels)
+Proof
+  strip_tac >>
+  `t.vs_labels = s.vs_labels` by
+    (irule (cj 2 dft_prefix_frame) >>
+     qexistsl_tac [`C`, `fuel`, `pre`] >> simp[EVERY_MEM] >> fs[EVERY_MEM]) >>
+  drule_all dft_prefix_fdom >> strip_tac >> simp[] >>
+  rpt strip_tac >> simp[] >> metis_tac[]
 QED
