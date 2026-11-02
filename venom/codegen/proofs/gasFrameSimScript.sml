@@ -138,7 +138,8 @@ Proof
        generate_emit_ops_def, venom_to_evm_name_def,
        stack_pop_def, stack_push_def] >>
   `!p. popmany_plan [] p = ([],p)` by simp[popmany_plan_def] >>
-  Cases_on `MEM out next_liveness` >> simp[gas_dead_popmany] >>
+  Cases_on `MEM out next_liveness` >> simp[gas_dead_popmany]
+  >- (pairarg_tac >> simp[]) >>
   Cases_on `is_halting` >> simp[gas_dead_popmany]
 QED
 
@@ -347,7 +348,10 @@ Proof
 QED
 
 Resume gas_plan_local_sim[live]:
-  pairarg_tac >> strip_tac >> gvs[] >>
+  Cases_on `optimistic_swap_plan dfg inst live next_term
+    (ps with ps_stack := SNOC (Var out) ps.ps_stack)` >>
+  rename1 `optimistic_swap_plan _ _ _ _ _ = (tail, ps9)` >>
+  simp[] >> strip_tac >> gvs[] >>
   qpat_x_assum `!ps next_liveness next_is_term liveness is_halting fn dfg cfg bb_label. _` kall_tac >>
   `!xs. execute_plan initial_fmp (SOEmit "GAS" :: xs) =
        AsmOp "GAS" :: execute_plan initial_fmp xs` by
