@@ -9,7 +9,9 @@ on:
     # ready_for_review starts CI when a draft is marked ready; converted_to_draft
     # cancels the run of a PR turned back into a draft. edited starts CI when a
     # PR is retargeted to main; any other edit (title, description) runs no jobs.
-    branches: [main]
+    # The compiler-proof integration branch also runs CI on PRs into it; drop
+    # it from this list before that branch merges into main.
+    branches: [main, bot/opus/seq-692-compiler-proof]
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited]
   merge_group:
   push:
