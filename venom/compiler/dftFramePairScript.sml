@@ -3,7 +3,7 @@ Theory dftFramePair
 Ancestors
   dftFramePrefix dftFrameSwap dftPermSim dftBlockSim venomEffects dftDefs
   unitShapeDefs venomInst venomExecSemantics venomWf venomState dftCommutation
-  venomCallOracleDefs extCallOracle pred_set list finite_map
+  venomCallOracleDefs extCallOracle pred_set list finite_map venomInstProofs
 
 Theorem dft_cross_effects:
   dft_cross a b ==> effects_independent a.inst_opcode b.inst_opcode
@@ -481,4 +481,64 @@ Proof
    FOLDL (\st (out,value). update_var out value st) u pairs` by
     (irule dft_updates_transfer >> metis_tac[]) >>
   simp[])
+QED
+
+Theorem dft_cross_pair:
+  dft_cross a b /\ inst_wf a /\ inst_wf b /\
+  inst_shape_ok a /\ inst_shape_ok b /\
+  a.inst_opcode <> ALLOCA /\ b.inst_opcode <> ALLOCA ==>
+  ((?sa. step_inst fa C a s = OK sa /\ step_inst fb C b sa = OK t) <=>
+   (?sb. step_inst fb C b s = OK sb /\ step_inst fa C a sb = OK t))
+Proof
+  strip_tac >> drule dft_cross_effects >> strip_tac >>
+  Cases_on `is_ext_call_op a.inst_opcode`
+  >- (drule_all dft_shape_external >> strip_tac >>
+      irule dft_external_pair >> gvs[dft_cross_def, DISJOINT_SYM]) >>
+  Cases_on `is_ext_call_op b.inst_opcode`
+  >- (drule_all dft_shape_external >> strip_tac >>
+      ONCE_REWRITE_TAC[EQ_SYM_EQ] >> irule dft_external_pair >>
+      gvs[dft_cross_def, effects_independent_def, DISJOINT_UNION, DISJOINT_SYM]) >>
+  drule_all dft_cross_ext_independent >> strip_tac >>
+  drule dft_cross_not_two_invokes >> strip_tac >>
+  eq_tac >> strip_tac >> irule dft_step_swap_two_fuels >>
+  metis_tac[ext_bi_independent_sym]
+QED
+
+Theorem dft_step_index_ok:
+  ~is_terminator i.inst_opcode ==>
+  (step_inst fuel C i (s with vs_inst_idx := n) = OK t <=>
+   ?u. step_inst fuel C i s = OK u /\ t = u with vs_inst_idx := n)
+Proof
+  strip_tac >> eq_tac
+  >- (strip_tac >> drule_all step_preserves_control_flow >> simp[] >> strip_tac >>
+      drule_all dft_step_index >> disch_then (qspec_then `s.vs_inst_idx` mp_tac) >>
+      simp[] >> strip_tac >>
+      qpat_x_assum `t.vs_inst_idx = n` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+  strip_tac >> gvs[] >> irule dft_step_index >> simp[] >> metis_tac[]
+QED
+
+Theorem dft_prefix_pair_steps:
+  ~is_terminator a.inst_opcode /\ ~is_terminator b.inst_opcode ==>
+  (dft_prefix C [a;b] s t <=>
+   ?fa fb sa u. step_inst fa C a s = OK sa /\
+     step_inst fb C b sa = OK u /\
+     t = u with vs_inst_idx := s.vs_inst_idx + 2)
+Proof
+  strip_tac >> simp[dft_prefix_cons, dft_step_index_ok] >>
+  `s.vs_inst_idx + 2 = SUC (SUC s.vs_inst_idx)` by decide_tac >>
+  simp[SF DNF_ss] >> metis_tac[]
+QED
+
+Theorem dft_cross_prefix_pair:
+  dft_cross a b /\ inst_wf a /\ inst_wf b /\
+  inst_shape_ok a /\ inst_shape_ok b /\
+  a.inst_opcode <> ALLOCA /\ b.inst_opcode <> ALLOCA ==>
+  (dft_prefix C [a;b] s t <=> dft_prefix C [b;a] s t)
+Proof
+  strip_tac >>
+  `~is_terminator a.inst_opcode /\ ~is_terminator b.inst_opcode` by
+    gvs[dft_cross_def] >>
+  simp[dft_prefix_pair_steps] >>
+  drule_all dft_cross_pair >>
+  metis_tac[]
 QED
