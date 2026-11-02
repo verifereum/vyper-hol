@@ -454,7 +454,9 @@ Proof
       metis_tac[sue_supply_extends_refl]) >>
   gvs[lookup_block_def, listTheory.FIND_thm] >>
   first_x_assum drule_all >> strip_tac >>
-  metis_tac[sue_supply_extends_trans]
+  qexistsl_tac [`bb''`, `si`, `sj`] >> simp[] >>
+  strip_tac >> irule sue_supply_extends_trans >>
+  qexists_tac `r` >> simp[]
 QED
 
 Theorem sue_expand_inst_supply_nonphi:
@@ -587,7 +589,9 @@ Proof
       metis_tac[sue_supply_extends_refl]) >>
   gvs[lookup_block_def, listTheory.FIND_thm] >>
   first_x_assum drule_all >> strip_tac >>
-  metis_tac[sue_supply_extends_trans]
+  qexistsl_tac [`bb`, `si`, `sj`] >> simp[] >>
+  strip_tac >> irule sue_supply_extends_trans >>
+  qexists_tac `r` >> simp[]
 QED
 
 Theorem sue_operand_label_get_label:
@@ -931,4 +935,110 @@ Proof
   strip_tac >> fs[listTheory.EVERY_DEF, analysisSimDefsTheory.run_insts_def] >>
   Cases_on `step_inst fuel ctx h st` >> gvs[] >>
   metis_tac[venomInstPropsTheory.step_preserves_non_output_vars]
+QED
+
+Theorem sue_assign_prefix_rel:
+  !assigns fuel ctx st tt uu protected.
+    EVERY (\a. a.inst_opcode = ASSIGN /\
+               EVERY (\v. ~(v IN protected)) a.inst_outputs) assigns /\
+    sue_state_rel protected st tt /\
+    run_insts fuel ctx assigns tt = OK uu ==>
+    sue_state_rel protected st uu
+Proof
+  Induct >> rpt gen_tac
+  >- (simp[analysisSimDefsTheory.run_insts_def] >> metis_tac[]) >>
+  strip_tac >> fs[listTheory.EVERY_DEF, analysisSimDefsTheory.run_insts_def] >>
+  Cases_on `step_inst fuel ctx h tt` >> gvs[] >>
+  gvs[Once step_inst_def, Once step_inst_base_def, AllCaseEqs(), update_var_def] >>
+  metis_tac[sue_state_rel_fresh_write]
+QED
+
+(* Shared branch tactics keep the operand induction direct, without sharing
+   suspension labels between distinct sequents. *)
+local
+val unchanged_operand_tac =
+  `sue_state_rel protected st uu` by
+    (irule sue_assign_prefix_rel >> goal_assum (drule_at Any) >>
+     simp[] >> drule_all sue_expand_ops_supply_prefix >>
+     strip_tac >> gvs[listTheory.EVERY_MEM] >>
+     fs[pred_setTheory.SUBSET_DEF, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+     metis_tac[]) >>
+  simp[] >> conj_tac
+  >- (irule sue_state_rel_eval_operand >> qexists_tac `protected` >> simp[] >> metis_tac[]) >>
+  `!v. MEM (Var v) ops ==> v IN protected` by metis_tac[] >>
+  qpat_x_assum `!dfg inst s k assigns new_ops s' protected st tt uu fuel ctx. _`
+    drule_all >> simp[];
+
+val copied_operand_tac =
+  drule_all sue_alloc_assign_supply_contract >> strip_tac >>
+  drule sue_alloc_assign_supply_shape >> strip_tac >>
+  gvs[analysisSimDefsTheory.run_insts_def, AllCaseEqs()] >> (
+  rename1 `assign_inst.inst_outputs = [dst]` >>
+  `~(dst IN protected)` by
+    (fs[sue_supply_extends_def, pred_setTheory.SUBSET_DEF] >> metis_tac[listTheory.MEM_APPEND]) >>
+  `EVERY (\a. ~MEM dst a.inst_outputs /\ ~is_terminator a.inst_opcode) tail_as` by
+    (drule_all sue_expand_ops_supply_prefix >> strip_tac >>
+     fs[listTheory.EVERY_MEM, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+     metis_tac[is_terminator_def]) >>
+  drule_all sue_run_insts_preserves_lookup >> strip_tac >>
+  gvs[Once step_inst_def, Once step_inst_base_def, AllCaseEqs(), update_var_def] >>
+  rename1 `run_insts fuel ctx tail_as (tt with vs_vars := tt.vs_vars |+ (dst,value)) = OK uu` >>
+  conj_tac
+  >- (fs[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+         sue_state_rel_def] >> metis_tac[]) >>
+  `sue_state_rel protected st (tt with vs_vars := tt.vs_vars |+ (dst,value))` by
+    (irule sue_state_rel_fresh_write >> simp[]) >>
+  `!v. MEM (Var v) ops ==> v IN protected` by metis_tac[] >>
+  qpat_x_assum `!dfg inst s k assigns new_ops s' protected st tt uu fuel ctx. _`
+    drule_all >> simp[]);
+in
+
+Theorem sue_expand_ops_supply_eval:
+  !ops dfg inst s k assigns new_ops s' protected st tt uu fuel ctx.
+    ir_supply_inst_ok s /\
+    sue_expand_ops_supply dfg inst s ops k = (assigns,new_ops,s') /\
+    protected SUBSET set s.irs_used_vars /\
+    (!v. MEM (Var v) ops ==> v IN protected) /\
+    sue_state_rel protected st tt /\
+    run_insts fuel ctx assigns tt = OK uu ==>
+    LIST_REL (\op newop. eval_operand newop uu = eval_operand op st) ops new_ops
+Proof
+  Induct >> rpt gen_tac
+  >- simp[sue_expand_ops_supply_def] >>
+  strip_tac >>
+  Cases_on `sue_expand_ops_supply dfg inst s ops (k + 1)` >>
+  PairCases_on `r` >>
+  rename1 `sue_expand_ops_supply dfg inst s ops (k + 1) = (tail_as,tail_ops,s1)` >>
+  `sue_supply_extends s s1` by metis_tac[sue_expand_ops_supply_extends] >>
+  `ir_supply_inst_ok s1` by gvs[sue_supply_extends_def] >>
+  `!v. MEM (Var v) ops ==> v IN protected` by metis_tac[listTheory.MEM] >>
+  `!v. h = Var v ==> v IN protected` by metis_tac[listTheory.MEM] >>
+  Cases_on `sue_needs_assign dfg inst k`
+  >- (Cases_on `h`
+      >- (gvs[Once sue_expand_ops_supply_def, AllCaseEqs()] >> copied_operand_tac)
+      >- (rename1 `Var v` >>
+          Cases_on `LENGTH (dfg_get_uses dfg v) = 1 /\ sue_count_remaining (Var v) ops = 0`
+          >- (gvs[Once sue_expand_ops_supply_def] >> unchanged_operand_tac) >>
+          gvs[Once sue_expand_ops_supply_def, AllCaseEqs()] >> copied_operand_tac) >>
+      gvs[Once sue_expand_ops_supply_def] >> unchanged_operand_tac) >>
+  gvs[Once sue_expand_ops_supply_def] >> unchanged_operand_tac
+QED
+
+end
+
+Theorem sue_expand_ops_supply_sim:
+  ir_supply_inst_ok s /\
+  sue_expand_ops_supply dfg inst s ops k = (assigns,new_ops,s') /\
+  protected SUBSET set s.irs_used_vars /\
+  (!v. MEM (Var v) ops ==> v IN protected) /\
+  (!a v. MEM a assigns /\ a.inst_operands = [Var v] ==>
+         v IN FDOM st.vs_vars) /\ sue_state_rel protected st tt ==>
+  ?uu. run_insts fuel ctx assigns tt = OK uu /\
+       sue_state_rel protected st uu /\ uu.vs_inst_idx = tt.vs_inst_idx /\
+       LIST_REL (\op newop. eval_operand newop uu = eval_operand op st) ops new_ops
+Proof
+  strip_tac >> drule_all sue_expand_ops_supply_prefix_success >>
+  disch_then (qspecl_then [`LENGTH assigns`, `fuel`, `ctx`] strip_assume_tac) >>
+  gvs[] >>
+  drule_all sue_expand_ops_supply_eval >> simp[]
 QED
