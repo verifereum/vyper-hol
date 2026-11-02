@@ -77,7 +77,8 @@ QED
 Theorem unwrap_value_materialise_sim:
   !ctx func cenv cx e es sa sm sb s0 es' tv v vv op R.
     unwrap_value cenv vv sm = (op,sb) /\
-    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+    local_ptrs_reserved cenv sm /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+    sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
     read_result cx tv es' = (INL v,es') /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
