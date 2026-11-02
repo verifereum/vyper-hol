@@ -260,7 +260,7 @@ Proof
 QED
 
 (* An SSTORE or TSTORE at a variable holding a slot, run. *)
-Theorem store_var_frag[local]:
+Theorem store_var_frag:
   !ctx func cenv cx es' s1 tr d a op w st st' R.
     emit_void (if tr then TSTORE else SSTORE) [Var d; op] st = ((), st') /\
     lookup_var d s1 = SOME a /\ eval_operand op s1 = SOME w /\
