@@ -949,3 +949,288 @@ Proof
      drule_all chain_merge_base_closed >> simp[]) >>
   fs[EVERY_MEM] >> metis_tac[]
 QED
+
+Theorem blocks_extract_perm:
+  !bbs. ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\ MEM a bbs ==>
+  PERM (a::remove_block a.bb_label bbs) bbs
+Proof
+  Induct >- simp[] >> gen_tac >> disch_tac >>
+  Cases_on `h = a`
+  >- (qpat_x_assum `_ ==> _` kall_tac >>
+      qpat_x_assum `h = a` SUBST_ALL_TAC >> fs[] >>
+      `FILTER (\bb. bb.bb_label <> a.bb_label) bbs = bbs` by
+        (simp[listTheory.FILTER_EQ_ID, EVERY_MEM] >> fs[MEM_MAP] >> metis_tac[]) >>
+      simp[remove_block_def]) >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\ MEM a bbs /\
+   ~MEM h.bb_label (MAP (\bb. bb.bb_label) bbs)` by fs[] >>
+  `h.bb_label <> a.bb_label` by (fs[MEM_MAP] >> metis_tac[]) >>
+  `PERM (a::remove_block a.bb_label bbs) bbs` by
+    (first_x_assum irule >> fs[]) >>
+  simp[remove_block_def] >>
+  irule PERM_TRANS >>
+  qexists `h::a::FILTER (\bb. bb.bb_label <> a.bb_label) bbs` >>
+  simp[PERM_SWAP_AT_FRONT] >> fs[remove_block_def]
+QED
+
+Theorem flat_projection_extract_block:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\ MEM a bbs ==>
+  PERM (project a ++ FLAT (MAP project (remove_block a.bb_label bbs)))
+       (FLAT (MAP project bbs))
+Proof
+  strip_tac >> drule_all blocks_extract_perm >> strip_tac >>
+  `PERM (FLAT (MAP project (a::remove_block a.bb_label bbs)))
+        (FLAT (MAP project bbs))` by
+    (irule PERM_FLAT >> irule PERM_MAP >> simp[]) >> fs[]
+QED
+
+Theorem blocks_extract_pair_perm:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\ MEM a bbs /\ MEM b bbs /\
+  a.bb_label <> b.bb_label ==>
+  PERM (a::b::remove_block b.bb_label (remove_block a.bb_label bbs)) bbs
+Proof
+  strip_tac >>
+  `PERM (a::remove_block a.bb_label bbs) bbs` by
+    (irule blocks_extract_perm >> simp[]) >>
+  `PERM (b::remove_block b.bb_label (remove_block a.bb_label bbs))
+        (remove_block a.bb_label bbs)` by
+    (irule blocks_extract_perm >> simp[cfgTransformPropsTheory.ALL_DISTINCT_remove_block] >>
+     simp[remove_block_def, MEM_FILTER]) >>
+  irule PERM_TRANS >> qexists `a::remove_block a.bb_label bbs` >> simp[]
+QED
+
+Theorem chain_merge_base_perm:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\ MEM a bbs /\ MEM b bbs /\
+  a.bb_label <> b.bb_label ==>
+  PERM (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label bbs))
+    (merge_blocks a b :: remove_block b.bb_label (remove_block a.bb_label bbs))
+Proof
+  strip_tac >> drule_all blocks_extract_pair_perm >> strip_tac >>
+  `PERM
+    (replace_block a.bb_label (merge_blocks a b)
+      (remove_block b.bb_label
+        (a::b::remove_block b.bb_label (remove_block a.bb_label bbs))))
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label bbs))` by
+    (pure_rewrite_tac[replace_block_def, remove_block_def] >>
+     irule PERM_MAP >> irule PERM_FILTER >> fs[remove_block_def]) >>
+  `!bb. MEM bb (remove_block b.bb_label (remove_block a.bb_label bbs)) ==>
+        bb.bb_label <> a.bb_label /\ bb.bb_label <> b.bb_label` by
+    simp[remove_block_def, MEM_FILTER] >>
+  `remove_block b.bb_label (remove_block b.bb_label (remove_block a.bb_label bbs)) =
+   remove_block b.bb_label (remove_block a.bb_label bbs)` by
+    (simp[remove_block_def, FILTER_FILTER, combinTheory.o_DEF, SF CONJ_ss]) >>
+  `replace_block a.bb_label (merge_blocks a b)
+     (remove_block b.bb_label (remove_block a.bb_label bbs)) =
+   remove_block b.bb_label (remove_block a.bb_label bbs)` by
+    (rewrite_tac[replace_block_def] >>
+     GEN_REWRITE_TAC RAND_CONV empty_rewrites [GSYM MAP_ID] >>
+     irule MAP_CONG >> simp[] >> metis_tac[]) >>
+  fs[remove_block_def, replace_block_def] >> gvs[] >> metis_tac[PERM_SYM]
+QED
+
+Theorem chain_merge_base_projection_distinct:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\ MEM a bbs /\ MEM b bbs /\
+  a.bb_label <> b.bb_label /\ ALL_DISTINCT (FLAT (MAP project bbs)) /\
+  sublist (project (merge_blocks a b)) (project a ++ project b) ==>
+  ALL_DISTINCT (FLAT (MAP project
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label bbs))))
+Proof
+  strip_tac >> drule_all blocks_extract_pair_perm >> strip_tac >>
+  drule_all chain_merge_base_perm >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `a::b::rest` >>
+  `PERM (FLAT (MAP project (a::b::rest))) (FLAT (MAP project bbs))` by
+    (irule PERM_FLAT >> irule PERM_MAP >> simp[]) >>
+  `ALL_DISTINCT (FLAT (MAP project (a::b::rest)))` by
+    metis_tac[ALL_DISTINCT_PERM] >>
+  `sublist (project (merge_blocks a b) ++ FLAT (MAP project rest))
+           (FLAT (MAP project (a::b::rest)))` by
+    (simp[] >> pure_rewrite_tac[APPEND_ASSOC] >>
+     irule sublist_append_pair >> simp[sublist_refl]) >>
+  `ALL_DISTINCT (FLAT (MAP project (merge_blocks a b::rest)))` by
+    (simp[] >> metis_tac[sublist_ALL_DISTINCT]) >>
+  `PERM
+    (FLAT (MAP project (replace_block a.bb_label (merge_blocks a b)
+      (remove_block b.bb_label bbs))))
+    (FLAT (MAP project (merge_blocks a b::rest)))` by
+    (irule PERM_FLAT >> irule PERM_MAP >> simp[Abbr `rest`]) >>
+  metis_tac[ALL_DISTINCT_PERM]
+QED
+
+Theorem flat_map_front_sublist:
+  !xs. sublist (FLAT (MAP project (FRONT xs))) (FLAT (MAP project xs))
+Proof
+  Induct >- simp[sublist_refl] >> gen_tac >> Cases_on `xs` >>
+  fs[FRONT_DEF, sublist_refl, sublist_nil] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  irule sublist_append_pair >> fs[sublist_refl]
+QED
+
+Theorem chain_merge_base_ssa:
+  wf_function fn /\ ssa_form fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  can_merge_blocks fn a b ==>
+  ssa_form (fn with fn_blocks :=
+    replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+Proof
+  strip_tac >>
+  fs[ssa_form_def, fn_insts_def, fn_insts_projection_blocks] >>
+  irule chain_merge_base_projection_distinct >>
+  simp[merge_blocks_def, MAP_APPEND, FLAT_APPEND] >>
+  conj_tac >- fs[wf_function_def, fn_labels_def] >>
+  conj_tac >- fs[can_merge_blocks_def] >>
+  irule sublist_append_pair >> simp[sublist_refl, flat_map_front_sublist]
+QED
+
+Theorem map_front_sublist:
+  sublist (MAP f (FRONT xs)) (MAP f xs)
+Proof
+  `!ys. FLAT (MAP (\x. [f x]) ys) = MAP f ys` by (Induct >> simp[]) >>
+  `sublist (FLAT (MAP (\x. [f x]) (FRONT xs)))
+           (FLAT (MAP (\x. [f x]) xs))` suffices_by simp[] >>
+  irule flat_map_front_sublist
+QED
+
+Theorem chain_merge_base_ids:
+  wf_function fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  can_merge_blocks fn a b ==>
+  fn_inst_ids_distinct (fn with fn_blocks :=
+    replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+   ALL_DISTINCT (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) fn.fn_blocks)) /\
+   a.bb_label <> b.bb_label` by
+    fs[wf_function_def, fn_labels_def, fn_inst_ids_distinct_def, can_merge_blocks_def] >>
+  simp[fn_inst_ids_distinct_def] >>
+  irule chain_merge_base_projection_distinct >>
+  simp[merge_blocks_def, MAP_APPEND] >>
+  irule sublist_append_pair >> simp[sublist_refl, map_front_sublist]
+QED
+
+Theorem replace_block_projection:
+  !bbs. ALL_DISTINCT (MAP (\b. b.bb_label) bbs) /\
+  lookup_block lbl bbs = SOME bb /\ project new_bb = project bb ==>
+  MAP project (replace_block lbl new_bb bbs) = MAP project bbs
+Proof
+  Induct >- simp[lookup_block_def, FIND_thm] >> gen_tac >>
+  pure_rewrite_tac[MAP, ALL_DISTINCT, lookup_block_def, FIND_thm] >>
+  Cases_on `h.bb_label = lbl` >> simp[] >> strip_tac
+  >- (gvs[] >> simp[replace_block_def, MAP_MAP_o, combinTheory.o_DEF] >>
+      irule MAP_CONG >> simp[] >> fs[MEM_MAP] >> metis_tac[]) >>
+  simp[replace_block_def] >>
+  fs[lookup_block_def, replace_block_def]
+QED
+
+Theorem update_succ_phi_labels_projection:
+  !succs bbs. ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
+  (!inst. project (subst_label_inst old_lbl new_lbl inst) = project inst) ==>
+  MAP (\bb. MAP project bb.bb_instructions)
+    (update_succ_phi_labels old_lbl new_lbl bbs succs) =
+  MAP (\bb. MAP project bb.bb_instructions) bbs
+Proof
+  Induct_on `succs` >> fs[update_succ_phi_labels_def] >>
+  rpt strip_tac >> Cases_on `lookup_block h bbs` >> simp[] >>
+  rename1 `lookup_block h bbs = SOME bb` >>
+  `MAP (\b. MAP project b.bb_instructions)
+    (replace_block h (bb with bb_instructions :=
+      MAP (\inst. if inst.inst_opcode <> PHI then inst
+                  else subst_label_inst old_lbl new_lbl inst)
+        bb.bb_instructions) bbs) =
+   MAP (\b. MAP project b.bb_instructions) bbs` by
+    (irule replace_block_projection >> simp[MAP_MAP_o, combinTheory.o_DEF] >>
+     irule MAP_CONG >> simp[] >> gen_tac >> strip_tac >>
+     IF_CASES_TAC >> simp[]) >>
+  `bb.bb_label = h` by metis_tac[lookup_block_member_label] >>
+  qmatch_goalsub_abbrev_tac `FOLDL stepfn bs succs` >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) bs)` by
+    simp[Abbr `bs`, cfgTransformPropsTheory.fn_labels_replace_block] >>
+  qpat_x_assum `!bbs. _` (qspec_then `bs` mp_tac) >>
+  simp[Abbr `stepfn`, Abbr `bs`]
+QED
+
+Theorem update_succ_phi_labels_ids:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
+  fn_inst_ids_distinct (fn with fn_blocks := bbs) ==>
+  fn_inst_ids_distinct (fn with fn_blocks :=
+    update_succ_phi_labels old_lbl new_lbl bbs succs)
+Proof
+  simp[fn_inst_ids_distinct_def] >> strip_tac >>
+  `MAP (\bb. MAP (\inst. inst.inst_id) bb.bb_instructions)
+      (update_succ_phi_labels old_lbl new_lbl bbs succs) =
+   MAP (\bb. MAP (\inst. inst.inst_id) bb.bb_instructions) bbs` by
+    (irule update_succ_phi_labels_projection >> simp[subst_label_inst_shape]) >>
+  simp[]
+QED
+
+Theorem update_succ_phi_labels_ssa:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\ ssa_form (fn with fn_blocks := bbs) ==>
+  ssa_form (fn with fn_blocks :=
+    update_succ_phi_labels old_lbl new_lbl bbs succs)
+Proof
+  strip_tac >>
+  `MAP (\bb. MAP (\inst. inst.inst_outputs) bb.bb_instructions)
+      (update_succ_phi_labels old_lbl new_lbl bbs succs) =
+   MAP (\bb. MAP (\inst. inst.inst_outputs) bb.bb_instructions) bbs` by
+    (irule update_succ_phi_labels_projection >> simp[subst_label_inst_shape]) >>
+  `MAP FLAT (MAP (\bb. MAP (\inst. inst.inst_outputs) bb.bb_instructions)
+      (update_succ_phi_labels old_lbl new_lbl bbs succs)) =
+   MAP FLAT (MAP (\bb. MAP (\inst. inst.inst_outputs) bb.bb_instructions) bbs)` by simp[] >>
+  fs[ssa_form_def, fn_insts_def, fn_insts_projection_blocks,
+     MAP_MAP_o, combinTheory.o_DEF]
+QED
+
+Theorem chain_merge_base_labels:
+  ALL_DISTINCT (fn_labels fn) ==>
+  ALL_DISTINCT (MAP (\bb. bb.bb_label)
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks)))
+Proof
+  simp[cfgTransformPropsTheory.fn_labels_replace_block,
+       cfgTransformPropsTheory.fn_labels_remove_block, merge_blocks_def] >>
+  strip_tac >> irule FILTER_ALL_DISTINCT >> fs[fn_labels_def]
+QED
+
+Theorem chain_merge_ids:
+  wf_function fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  can_merge_blocks fn a b ==>
+  fn_inst_ids_distinct (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label fn.fn_blocks)) (bb_succs (merge_blocks a b)))
+Proof
+  strip_tac >> irule update_succ_phi_labels_ids >> conj_tac
+  >- (irule chain_merge_base_labels >> fs[wf_function_def]) >>
+  irule chain_merge_base_ids >> simp[]
+QED
+
+Theorem chain_merge_ssa:
+  wf_function fn /\ ssa_form fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  can_merge_blocks fn a b ==>
+  ssa_form (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label fn.fn_blocks)) (bb_succs (merge_blocks a b)))
+Proof
+  strip_tac >> irule update_succ_phi_labels_ssa >> conj_tac
+  >- (irule chain_merge_base_labels >> fs[wf_function_def]) >>
+  irule chain_merge_base_ssa >> simp[]
+QED
+
+Theorem chain_merge_wf:
+  wf_function fn /\ lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_merge_blocks fn a b ==>
+  wf_function (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label fn.fn_blocks)) (bb_succs (merge_blocks a b)))
+Proof
+  strip_tac >>
+  `MEM a fn.fn_blocks /\ MEM b fn.fn_blocks` by
+    metis_tac[lookup_block_member_label] >>
+  qmatch_goalsub_abbrev_tac `wf_function result_fn` >>
+  `ALL_DISTINCT (fn_labels result_fn) /\ fn_has_entry result_fn` by
+    (irule chain_merge_labels_entry >> qexistsl [`a`, `b`, `fn`] >>
+     simp[Abbr `result_fn`] >> fs[wf_function_def]) >>
+  simp[wf_function_def] >> rpt conj_tac
+  >- (simp[Abbr `result_fn`] >>
+      drule_all chain_merge_bb_wf >> simp[EVERY_MEM])
+  >- (simp[Abbr `result_fn`] >> irule chain_merge_succs_closed >> simp[]) >>
+  simp[Abbr `result_fn`] >> irule chain_merge_ids >> simp[]
+QED
