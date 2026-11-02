@@ -1,0 +1,132 @@
+Theory makeSsaCurrentDefined
+Ancestors
+  makeSsaCurrentDemand venomExecProofs venomWf venomInst list relation
+
+Theorem current_filter_single[local]:
+  !xs x y. LENGTH (FILTER P xs) <= 1 /\ MEM x xs /\ MEM y xs /\
+    P x /\ P y ==> x = y
+Proof
+  rpt strip_tac >>
+  `MEM x (FILTER P xs) /\ MEM y (FILTER P xs)` by simp[MEM_FILTER] >>
+  Cases_on `FILTER P xs` >> gvs[] >>
+  Cases_on `t` >> gvs[]
+QED
+
+Theorem current_single_def_block[local]:
+  !bbs a b i j.
+    LENGTH (FILTER (\i. MEM v i.inst_outputs)
+      (FLAT (MAP (\bb. bb.bb_instructions) bbs))) <= 1 /\
+    MEM a bbs /\ MEM b bbs /\ MEM i a.bb_instructions /\
+    MEM j b.bb_instructions /\ MEM v i.inst_outputs /\
+    MEM v j.inst_outputs ==> a = b
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  simp[FILTER_APPEND_DISTRIB] >> rpt strip_tac >> gvs[]
+  >- (`MEM i (FILTER (\i. MEM v i.inst_outputs) a.bb_instructions)` by simp[MEM_FILTER] >>
+      `MEM j (FILTER (\i. MEM v i.inst_outputs)
+        (FLAT (MAP (\bb. bb.bb_instructions) bbs)))` by
+        (simp[MEM_FILTER, MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+      Cases_on `FILTER (\i. MEM v i.inst_outputs) a.bb_instructions` >>
+      Cases_on `FILTER (\i. MEM v i.inst_outputs)
+        (FLAT (MAP (\bb. bb.bb_instructions) bbs))` >> gvs[]) 
+  >- (`MEM j (FILTER (\i. MEM v i.inst_outputs) b.bb_instructions)` by simp[MEM_FILTER] >>
+      `MEM i (FILTER (\i. MEM v i.inst_outputs)
+        (FLAT (MAP (\bb. bb.bb_instructions) bbs)))` by
+        (simp[MEM_FILTER, MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+      Cases_on `FILTER (\i. MEM v i.inst_outputs) b.bb_instructions` >>
+      Cases_on `FILTER (\i. MEM v i.inst_outputs)
+        (FLAT (MAP (\bb. bb.bb_instructions) bbs))` >> gvs[]) >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Theorem current_path_first_target[local]:
+  !path. is_fn_path fn path /\ path <> [] /\ LAST path = target ==>
+    ?pre. is_fn_path fn (pre ++ [target]) /\
+      HD (pre ++ [target]) = HD path /\ ~MEM target pre
+Proof
+  Induct >> simp[] >> gen_tac >> strip_tac >>
+  Cases_on `h = target`
+  >- (qexists_tac `[]` >> simp[is_fn_path_def]) >>
+  Cases_on `path` >> gvs[is_fn_path_def] >>
+  qexists_tac `h::pre` >> simp[] >>
+  Cases_on `pre` >> gvs[is_fn_path_def]
+QED
+
+Theorem current_insts_flat[local]:
+  !bbs. fn_insts_blocks bbs = FLAT (MAP (\bb. bb.bb_instructions) bbs)
+Proof
+  Induct >> simp[fn_insts_blocks_def]
+QED
+
+Theorem current_single_def_occurrence:
+  LENGTH (FILTER (\i. MEM v i.inst_outputs) (fn_insts fn)) <= 1 /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  MEM i a.bb_instructions /\ MEM j b.bb_instructions /\
+  MEM v i.inst_outputs /\ MEM v j.inst_outputs ==> a = b /\ i = j
+Proof
+  simp[fn_insts_def, current_insts_flat] >> rpt strip_tac
+  >- (irule current_single_def_block >> metis_tac[]) >>
+  irule current_filter_single >>
+  qexists_tac `\i. MEM v i.inst_outputs` >>
+  qexists_tac `FLAT (MAP (\bb. bb.bb_instructions) fn.fn_blocks)` >>
+  simp[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem current_single_def_dominates[local]:
+  MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+  def_on_all_paths fn bb point v /\
+  LENGTH (FILTER (\i. MEM v i.inst_outputs) (fn_insts fn)) <= 1 /\
+  MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\ MEM v di.inst_outputs ==>
+  fn_dominates fn db.bb_label bb.bb_label
+Proof
+  rpt strip_tac >> simp[fn_dominates_def] >> rpt strip_tac >>
+  qpat_x_assum `def_on_all_paths _ _ _ _` mp_tac >>
+  simp[def_on_all_paths_def] >> disch_then (qspec_then `path` mp_tac) >>
+  simp[] >> strip_tac
+  >- (`db = def_bb` by metis_tac[current_single_def_occurrence] >>
+      gvs[] >> irule EL_MEM >> decide_tac) >>
+  `MEM (EL i bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
+  `db = bb` by metis_tac[current_single_def_occurrence] >>
+  gvs[] >> Cases_on `path` using SNOC_CASES >> gvs[]
+QED
+
+Theorem current_unique_def_available:
+  wf_function fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+  def_on_all_paths fn bb point v /\
+  LENGTH (FILTER (\i. MEM v i.inst_outputs) (fn_insts fn)) <= 1 ==>
+  def_available_at fn bb point v
+Proof
+  rpt strip_tac >>
+  `?entry. fn_entry_label fn = SOME entry /\
+    RTC (fn_cfg_edge fn) entry bb.bb_label` by gvs[fn_reachable_def] >>
+  drule rtc_to_fn_path >> strip_tac >>
+  drule_all current_path_first_target >> strip_tac >>
+  qpat_assum `def_on_all_paths _ _ _ _` mp_tac >>
+  pure_rewrite_tac[def_on_all_paths_def] >>
+  disch_then (qspec_then `pre ++ [bb.bb_label]` mp_tac) >>
+  simp[] >> strip_tac
+  >- (`fn_dominates fn def_bb.bb_label bb.bb_label` by
+        (irule current_single_def_dominates >> metis_tac[]) >>
+      `def_bb <> bb` by
+        (strip_tac >> gvs[] >>
+         `k < LENGTH pre` by decide_tac >>
+         `EL k (pre ++ [bb.bb_label]) = EL k pre` by simp[EL_APPEND_EQN] >>
+         `MEM bb.bb_label pre` by metis_tac[EL_MEM] >> gvs[]) >>
+      simp[def_available_at_def] >>
+      qexistsl_tac [`def_bb`, `def_inst`] >> simp[]) >>
+  `MEM (EL i bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
+  `fn_dominates fn bb.bb_label bb.bb_label` by
+    (irule current_single_def_dominates >> metis_tac[]) >>
+  simp[def_available_at_def] >>
+  qexistsl_tac [`bb`, `EL i bb.bb_instructions`] >> simp[] >>
+  Cases_on `point` >> gvs[] >> metis_tac[]
+QED
+
+Theorem current_phi_operand_available:
+  wf_function fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+  def_on_all_paths fn bb point v /\
+  fn_phi_operands_single_def fn /\ current_phi_operand fn v ==>
+  def_available_at fn bb point v
+Proof
+  metis_tac[current_unique_def_available, current_phi_operand_single_def]
+QED
