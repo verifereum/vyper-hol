@@ -189,3 +189,119 @@ Proof
   simp[exec_ext_call_def, consume_call_outcome_eq] >> strip_tac >>
   gvs[AllCaseEqs(), update_var_def, adopt_outcome_def, venom_call_request_def]
 QED
+
+Theorem dft_static_step_read_fields:
+  e.inst_opcode = STATICCALL /\ step_inst fuel C e s = OK u ==>
+  s.vs_accounts = u.vs_accounts /\ s.vs_transient = u.vs_transient /\
+  s.vs_call_ctx = u.vs_call_ctx /\ s.vs_fmp = u.vs_fmp /\
+  s.vs_initial_fmp = u.vs_initial_fmp
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst fuel C e s = OK u` mp_tac >>
+  asm_rewrite_tac[step_inst_def] >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  asm_rewrite_tac[opcode_case_def] >> strip_tac >>
+  gvs[AllCaseEqs()] >> drule dft_static_call_read_fields >> simp[]
+QED
+
+
+Theorem dft_pure1_replay:
+  (!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op u) /\
+  exec_pure1 f i s = OK t ==>
+  ?out value. i.inst_outputs = [out] /\ t = update_var out value s /\
+    exec_pure1 f i u = OK (update_var out value u)
+Proof
+  simp[exec_pure1_def] >> rpt strip_tac >> gvs[AllCaseEqs()] >>
+  rpt (qpat_x_assum `SOME _ = eval_operand _ _` (assume_tac o SYM)) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem dft_pure2_replay:
+  (!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op u) /\
+  exec_pure2 f i s = OK t ==>
+  ?out value. i.inst_outputs = [out] /\ t = update_var out value s /\
+    exec_pure2 f i u = OK (update_var out value u)
+Proof
+  simp[exec_pure2_def] >> rpt strip_tac >> gvs[AllCaseEqs()] >>
+  rpt (qpat_x_assum `SOME _ = eval_operand _ _` (assume_tac o SYM)) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem dft_pure3_replay:
+  (!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op u) /\
+  exec_pure3 f i s = OK t ==>
+  ?out value. i.inst_outputs = [out] /\ t = update_var out value s /\
+    exec_pure3 f i u = OK (update_var out value u)
+Proof
+  simp[exec_pure3_def] >> rpt strip_tac >> gvs[AllCaseEqs()] >>
+  rpt (qpat_x_assum `SOME _ = eval_operand _ _` (assume_tac o SYM)) >>
+  simp[] >> metis_tac[]
+QED
+
+val dft_opcode_eqs = CONJUNCTS step_inst_base_opcode_eqs;
+
+Theorem dft_empty_read_replay:
+  inst_wf p /\ inst_shape_ok p /\
+  ~is_terminator p.inst_opcode /\ p.inst_opcode <> ALLOCA /\
+  p.inst_opcode <> INVOKE /\ ~is_ext_call_op p.inst_opcode /\
+  write_effects p.inst_opcode = {} /\ read_effects p.inst_opcode = {} /\
+  (!op. MEM op p.inst_operands ==> eval_operand op s = eval_operand op u) /\
+  s.vs_prev_bb = u.vs_prev_bb /\ s.vs_params = u.vs_params /\
+  s.vs_return_pc_token = u.vs_return_pc_token /\
+  s.vs_call_ctx = u.vs_call_ctx /\ s.vs_tx_ctx = u.vs_tx_ctx /\
+  s.vs_block_ctx = u.vs_block_ctx /\ s.vs_data_section = u.vs_data_section /\
+  s.vs_code = u.vs_code /\ s.vs_labels = u.vs_labels /\
+  s.vs_prev_hashes = u.vs_prev_hashes /\
+  step_inst_base p s = OK t ==>
+  ?pairs. MAP FST pairs = p.inst_outputs /\
+    t = FOLDL (\st (out,value). update_var out value st) s pairs /\
+    step_inst_base p u =
+      OK (FOLDL (\st (out,value). update_var out value st) u pairs)
+Proof
+  strip_tac >> Cases_on `p.inst_opcode` >>
+  fs[write_effects_def, read_effects_def, empty_effects_def] >>
+  fs[is_terminator_def, is_ext_call_op_def, inst_shape_ok_def] >>
+  qpat_x_assum `step_inst_base p s = OK t` mp_tac >>
+  asm_simp_tac bool_ss dft_opcode_eqs >> strip_tac
+  >>~- ([`exec_pure1 _ p s = OK t`],
+    drule_all dft_pure1_replay >> strip_tac >>
+    qexists_tac `[(out,value)]` >> simp[])
+  >>~- ([`exec_pure2 _ p s = OK t`],
+    drule_all dft_pure2_replay >> strip_tac >>
+    qexists_tac `[(out,value)]` >> simp[])
+  >>~- ([`exec_pure3 _ p s = OK t`],
+    drule_all dft_pure3_replay >> strip_tac >>
+    qexists_tac `[(out,value)]` >> simp[])
+  >>~- ([`exec_read0 _ p s = OK t`],
+    drule_at (Pat `exec_read0 _ _ _ = OK _`) dft_read0_replay >>
+    disch_then (qspec_then `u` mp_tac) >> simp[] >> strip_tac >> qexists_tac `[(out,value)]` >> simp[])
+  >>~- ([`exec_read1 _ p s = OK t`],
+    drule_at (Pat `exec_read1 _ _ _ = OK _`) dft_read1_replay >>
+    disch_then (qspec_then `u` mp_tac) >> simp[] >> strip_tac >>
+    qexists_tac `[(out,value)]` >> simp[]) >>
+  gvs[AllCaseEqs()] >> fs[inst_wf_def] >>
+  rpt (qpat_x_assum `SOME _ = eval_operand _ _` (assume_tac o SYM)) >>
+  simp[] >> FIRST [
+    qexists_tac `[]` >> simp[] >> NO_TAC,
+    qmatch_goalsub_abbrev_tac `update_var out value s` >>
+      qexists_tac `[(out,value)]` >> simp[] >> NO_TAC,
+    qmatch_goalsub_abbrev_tac `update_var out2 value2 (update_var out1 value1 s)` >>
+      qexists_tac `[(out1,value1); (out2,value2)]` >> simp[] >> NO_TAC]
+QED
+
+Theorem dft_external_step_metadata:
+  (e.inst_opcode = CALL \/ e.inst_opcode = STATICCALL) /\
+  step_inst fuel C e s = OK u ==>
+  s.vs_prev_bb = u.vs_prev_bb /\ s.vs_params = u.vs_params /\
+  s.vs_return_pc_token = u.vs_return_pc_token /\
+  s.vs_call_ctx = u.vs_call_ctx /\ s.vs_tx_ctx = u.vs_tx_ctx /\
+  s.vs_block_ctx = u.vs_block_ctx /\ s.vs_data_section = u.vs_data_section /\
+  s.vs_code = u.vs_code /\ s.vs_labels = u.vs_labels /\
+  s.vs_prev_hashes = u.vs_prev_hashes
+Proof
+  strip_tac >> qpat_x_assum `step_inst fuel C e s = OK u` mp_tac >>
+  asm_rewrite_tac[step_inst_def] >>
+  asm_simp_tac bool_ss dft_opcode_eqs >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  gvs[exec_ext_call_def, consume_call_outcome_eq, AllCaseEqs(), update_var_def]
+QED
