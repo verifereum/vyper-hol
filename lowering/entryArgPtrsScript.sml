@@ -479,7 +479,8 @@ Theorem entry_decode_arg_frame:
     frag_exec ctx st st' (\s. s = s0)
       (\t. dec_frame st (w2n p) (type_memory_size tv) s0 t /\
            fresh_vars_wrt st' t /\
-           val_in_memory tv (EL i vals) (w2n p) t.vs_memory) (\r. F)
+           val_in_memory tv (EL i vals) (w2n p) t.vs_memory /\
+           memory_value_rel tv (EL i vals) (w2n p) t.vs_memory) (\r. F)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `value_has_type tv (EL i vals)` by
@@ -497,8 +498,9 @@ Proof
       drule_all compile_decode_word_arg_calldata >>
       disch_then (qspec_then `ctx` mp_tac) >> strip_tac >>
       drule frag_exec_weaken >> disch_then irule >>
-      simp[] >> rpt strip_tac >> simp[] >>
-      irule dec_frame_mstore >> metis_tac[]) >>
+      simp[] >> rpt strip_tac >> simp[] >> conj_tac
+      >- (irule dec_frame_mstore >> metis_tac[]) >>
+      irule word_val_in_memory_complete >> metis_tac[]) >>
   qpat_x_assum `is_word_type _ \/ _` mp_tac >> simp[] >> strip_tac >>
   drule_all compile_decode_static_arg_calldata >>
   disch_then (qspec_then `ctx` ACCEPT_TAC)
@@ -530,6 +532,7 @@ Theorem entry_decode_arg_run:
         dec_frame st (w2n p) (type_memory_size tv) s0 t /\
         fresh_vars_wrt st' t /\
         val_in_memory tv (EL i vals) (w2n p) t.vs_memory /\
+        memory_value_rel tv (EL i vals) (w2n p) t.vs_memory /\
         ~t.vs_halted /\ t.vs_current_bb = s0.vs_current_bb /\
         t.vs_prev_bb = s0.vs_prev_bb
 Proof
@@ -578,6 +581,7 @@ Theorem entry_decode_arg_frame_pc:
       (\t. dec_frame st (w2n p) (type_memory_size tv) s0 t /\
            fresh_vars_wrt st' t /\
            val_in_memory tv (EL i vals) (w2n p) t.vs_memory /\
+           memory_value_rel tv (EL i vals) (w2n p) t.vs_memory /\
            t.vs_prev_bb = s0.vs_prev_bb /\ t.vs_current_bb = s0.vs_current_bb)
       (\r. F)
 Proof
@@ -618,7 +622,7 @@ Theorem entry_decode_bind_ptr:
     local_backed func p s (w2n w) sz /\
     w2n w + sz <= s.vs_alloca_next /\
     type_memory_size entry.type <= sz /\ val_wf entry.type entry.value /\
-    val_in_memory entry.type entry.value (w2n w) t.vs_memory /\
+    memory_value_rel entry.type entry.value (w2n w) t.vs_memory /\
     (!n b sz'. local_region cenv scopes s n b sz' ==>
                regions_disjoint (w2n w) sz b sz') ==>
     local_ptrs_rel func
@@ -747,6 +751,7 @@ Theorem entry_register_arg_runtime:
        frag_exec ctx sa sb (\u. u = a)
          (\t. dec_frame sa s.vs_alloca_next n a t /\ fresh_vars_wrt sb t /\
               val_in_memory entry.type entry.value s.vs_alloca_next t.vs_memory /\
+              memory_value_rel entry.type entry.value s.vs_alloca_next t.vs_memory /\
               t.vs_prev_bb = a.vs_prev_bb /\ t.vs_current_bb = a.vs_current_bb)
          (\r. F)) ==>
     ?t. local_ptrs_rel func
@@ -929,6 +934,7 @@ Proof
      frag_exec ctx sa sb (\u. u = a)
        (\t. dec_frame sa s.vs_alloca_next n a t /\ fresh_vars_wrt sb t /\
             val_in_memory tv (EL i vals) s.vs_alloca_next t.vs_memory /\
+            memory_value_rel tv (EL i vals) s.vs_alloca_next t.vs_memory /\
             t.vs_prev_bb = a.vs_prev_bb /\ t.vs_current_bb = a.vs_current_bb)
        (\r. F)` by
     (rpt gen_tac >> strip_tac >>

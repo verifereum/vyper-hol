@@ -95,7 +95,7 @@ Theorem for_body_entry_alloca[local]:
     not_local_ptr bc (FEMPTY :: esk.scopes) p /\ dv <> p /\ dv <> cv /\
     MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
     ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
-    32 <= sz /\ type_memory_size tyv = 32 ==>
+    32 <= sz /\ type_memory_size tyv = 32 /\ word_memory_type tyv ==>
     ?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
          ~s2.vs_halted /\
          stmt_state_rel ctx func bc cx
@@ -263,7 +263,8 @@ val for_incr_tac =
    ALLOCA ainst and its pointer p in bc, which is cenv with id bound; the
    counter cv, end ev, condition dv and next counter nv, distinct from p
    and from each other as the loop needs, and cv, dv and nv no local's
-   pointers. *)
+   pointers.  The loop variable has a scalar word layout, not merely a
+   32-byte footprint (which could also describe an aggregate). *)
 Definition for_code_def:
   for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
     cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj <=>
@@ -302,7 +303,7 @@ Definition for_code_def:
     dv <> p /\ dv <> cv /\ dv <> ev /\ nv <> cv /\ nv <> ev /\ nv <> p /\
     cv <> ev /\ cv <> p /\ ev <> p /\
     not_fresh_at sb0 cv /\ not_fresh_at sb0 ev /\ not_fresh_at sb0 p /\
-    32 <= sz /\ type_memory_size tyv = 32
+    32 <= sz /\ type_memory_size tyv = 32 /\ word_memory_type tyv
 End
 
 (* One iteration of a range loop, from the condition block with the counter

@@ -130,7 +130,7 @@ Theorem supported_event_fields_contract:
     (EventDecl "E" [(("bytes", BaseT (BytesT (Fixed 16))), T);
                     (("string", BaseT (StringT 16)), F);
                     (("data", BaseT (BytesT (Dynamic 16))), F)]) /\
-  EVERY (\top. ~supported_declaration_header [] top)
+  EVERY (supported_declaration_header [])
     [EventDecl "E" [(("address_like", BaseT (BytesT (Fixed 20))), T)];
      EventDecl "E" [(("pair", TupleT [BaseT BoolT]), T)];
      EventDecl "E" [(("array", ArrayT (BaseT (UintT 256)) (Fixed 1)), F)]]

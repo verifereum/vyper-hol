@@ -41,7 +41,7 @@ Ancestors
   vyperABI vyperABIRoundtrip vyperTyping vyperTypeDefaults vyperTypeABI
   vyperValue vfmTypes
   compileEnv exprLowering moduleLowering selectorDispatch
-  emitHelperProps fragExec venomState
+  emitHelperProps fragExec venomState memoryValueDefs
 Libs
   wordsLib
 
@@ -104,7 +104,8 @@ QED
 (* ===== What a plan decodes ===== *)
 
 (* The facts abi_dec_plan_value gives for a value v of type tv with ABI
-   value av, decoded by info. *)
+   value av, decoded by info.  Keep the legacy value predicate as well as
+   the complete typed layout required by local_ptrs_rel. *)
 Definition dec_value_def:
   dec_value env ty tv v av info <=>
     ~is_dynamic (vyper_to_abi_type env ty) /\
@@ -114,7 +115,8 @@ Definition dec_value_def:
               enc (vyper_to_abi_type env ty) av ==> dec_ok info cd off) /\
     (!off mem. mem_bytes_at off (type_memory_size tv) mem =
                enc (vyper_to_abi_type env ty) av ==>
-               val_in_memory tv v off mem)
+               val_in_memory tv v off mem /\
+               memory_value_rel tv v off mem)
 End
 
 Definition decs_value_def:
@@ -129,7 +131,8 @@ Definition decs_value_def:
               decs_ok elems cd off) /\
     (!off mem. mem_bytes_at off (SUM (MAP type_memory_size tvs)) mem =
                FLAT (MAP2 enc (vyper_to_abi_types env ts) avs) ==>
-               tuple_in_memory vs tvs off mem)
+               tuple_in_memory vs tvs off mem /\
+               memory_tuple_rel tvs vs off mem)
 End
 
 Theorem word_type_memory_size:
@@ -165,6 +168,21 @@ Proof
   metis_tac[APPEND_11_LENGTH]
 QED
 
+(* Scalar layouts coincide; this implication is deliberately restricted to
+   evaluated word types, not arbitrary (possibly sparse) aggregates. *)
+Theorem word_val_in_memory_complete:
+  !env ty tv v off mem.
+    is_word_type ty /\ evaluate_type env ty = SOME tv /\
+    val_in_memory tv v off mem ==>
+    memory_value_rel tv v off mem
+Proof
+  rpt gen_tac >> Cases_on `ty` >> simp[is_word_type_def]
+  >- (rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def] >>
+      TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_word_type_def]) >>
+      simp[evaluate_type_def, memory_value_rel_def]) >>
+  simp[evaluate_type_def, AllCaseEqs(), memory_value_rel_def]
+QED
+
 Theorem word_dec_value:
   !env ty tv v av c.
     is_word_type ty /\ evaluate_type env ty = SOME tv /\
@@ -176,7 +194,7 @@ Proof
   drule_all word_type_memory_size >> strip_tac >>
   simp[dec_value_def, dec_ok_def, static_dec_prim, mem_bytes_at_word_eq,
        venomMemPropsTheory.dimindex_256] >>
-  metis_tac[val_in_memory_word]
+  metis_tac[val_in_memory_word, word_val_in_memory_complete]
 QED
 
 (* ===== Plans of word aggregates ===== *)
@@ -278,7 +296,8 @@ QED
 Theorem decs_value_nil:
   !env. decs_value env [] [] [] [] []
 Proof
-  simp[decs_value_def, static_dec_nil, dec_ok_def, val_in_memory_def]
+  simp[decs_value_def, static_dec_nil, dec_ok_def, val_in_memory_def,
+       memory_value_rel_def]
 QED
 
 Theorem decs_value_cons:
@@ -301,7 +320,7 @@ Proof
      mem_bytes_at (off + type_memory_size tv) (SUM (MAP type_memory_size tvs))
        mem = FLAT (MAP2 enc (vyper_to_abi_types env ts) avs)` by
     (rpt gen_tac >> strip_tac >> irule mem_bytes_at_split_eq >> simp[]) >>
-  fs[dec_ok_def, val_in_memory_def] >> metis_tac[]
+  fs[dec_ok_def, val_in_memory_def, memory_value_rel_def] >> metis_tac[]
 QED
 
 Theorem decs_value_tuple:
@@ -312,22 +331,40 @@ Theorem decs_value_tuple:
 Proof
   rw[decs_value_def, dec_value_def, any_dynamic_every_static,
      type_memory_size_def, type_memory_size_list_sum, dec_ok_def,
-     val_in_memory_def] >>
+     val_in_memory_def, memory_value_rel_def] >>
   `LENGTH (vyper_to_abi_types env ts) = LENGTH avs` by
     simp[vyper_to_abi_types_length] >>
   gvs[enc_tuple_static_acc, static_dec_complex]
 QED
 
+(* Unlike projection to a tuple, reconstruction of field layout needs the
+   field names to agree.  Source struct typing supplies this at the caller. *)
+Theorem memory_fields_rel_tuple_eq:
+  !fields fts off mem.
+    MAP FST fields = MAP FST fts ==>
+    (memory_fields_rel fts fields off mem <=>
+     memory_tuple_rel (MAP SND fts) (MAP SND fields) off mem)
+Proof
+  Induct
+  >- (Cases_on `fts` >> simp[memory_value_rel_def]) >>
+  rpt gen_tac >> Cases_on `fts` >- simp[memory_value_rel_def] >>
+  rename1 `memory_fields_rel (ft::fts) (field::fields) off mem` >>
+  PairCases_on `field` >> PairCases_on `ft` >>
+  simp[memory_value_rel_def]
+QED
+
 Theorem decs_value_struct:
   !env nsid args tvs fields avs elems.
     FLOOKUP env nsid = SOME (StructArgs args) /\ LENGTH tvs = LENGTH args /\
+    MAP FST fields = MAP FST args /\
     decs_value (env \\ nsid) (MAP SND args) tvs (MAP SND fields) avs elems ==>
     dec_value env (StructT nsid) (StructTV (ZIP (MAP FST args, tvs)))
       (StructV fields) (ListV avs) (DecComplex F elems)
 Proof
   rw[decs_value_def, dec_value_def, any_dynamic_every_static,
      type_memory_size_def, type_memory_size_fields_sum, dec_ok_def,
-     val_in_memory_def, fields_in_memory_tuple] >>
+     val_in_memory_def, fields_in_memory_tuple, memory_value_rel_def,
+     memory_fields_rel_tuple_eq, MAP_ZIP] >>
   `LENGTH (vyper_to_abi_types (env \\ nsid) (MAP SND args)) = LENGTH avs` by
     simp[vyper_to_abi_types_length] >>
   `MAP (type_memory_size o SND) (ZIP (MAP FST args, tvs)) =
@@ -396,6 +433,17 @@ Proof
   first_x_assum drule_all >> simp[MULT_CLAUSES]
 QED
 
+Theorem memory_tuple_rel_replicate:
+  !vs tv off mem i.
+    memory_tuple_rel (REPLICATE (LENGTH vs) tv) vs off mem /\
+    i < LENGTH vs ==>
+    memory_value_rel tv (EL i vs) (off + i * type_memory_size tv) mem
+Proof
+  Induct >> simp[memory_value_rel_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `i` >> gvs[] >>
+  first_x_assum drule_all >> simp[MULT_CLAUSES]
+QED
+
 Theorem vyper_to_abi_types_REPLICATE:
   !n env t.
     vyper_to_abi_types env (REPLICATE n t) =
@@ -419,6 +467,41 @@ Proof
   first_x_assum (qspec_then `SUC i` mp_tac) >> simp[]
 QED
 
+(* The dense ABI tuple covers every sparse-array index, including holes.
+   A hole's value may itself be an aggregate, so its complete layout is
+   obtained from the tuple, not inferred from val_in_memory. *)
+Theorem sparse_tuple_memory:
+  !tv sparse n off mem.
+    SORTED $< (MAP FST sparse) /\ sparse_has_type tv n sparse /\
+    tuple_in_memory (GENLIST (sparse_val tv sparse) n) (REPLICATE n tv) off mem /\
+    memory_tuple_rel (REPLICATE n tv) (GENLIST (sparse_val tv sparse) n) off mem ==>
+    val_in_memory (ArrayTV tv (Fixed n)) (ArrayV (SArrayV sparse)) off mem /\
+    memory_value_rel (ArrayTV tv (Fixed n)) (ArrayV (SArrayV sparse)) off mem
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!i. i < n ==> val_in_memory tv (sparse_val tv sparse i)
+      (off + i * type_memory_size tv) mem` by
+    (rpt strip_tac >>
+     qspecl_then [`GENLIST (sparse_val tv sparse) n`, `tv`, `off`, `mem`, `i`]
+       mp_tac tuple_in_memory_replicate >> simp[]) >>
+  `!i. i < n ==> memory_value_rel tv (sparse_val tv sparse i)
+      (off + i * type_memory_size tv) mem` by
+    (rpt strip_tac >>
+     qspecl_then [`GENLIST (sparse_val tv sparse) n`, `tv`, `off`, `mem`, `i`]
+       mp_tac memory_tuple_rel_replicate >> simp[]) >>
+  simp[val_in_memory_def, memory_value_rel_def] >> rpt conj_tac
+  >- (irule kvs_in_memory_intro >> rpt strip_tac >>
+      drule sparse_has_type_all_less >>
+      simp[EVERY_MEM, pairTheory.FORALL_PROD] >> disch_then drule >> strip_tac >>
+      `ALOOKUP sparse k = SOME v` by metis_tac[sorted_alookup_mem] >>
+      qpat_x_assum `!i. i < n ==> val_in_memory _ _ _ _`
+        (qspec_then `k` mp_tac) >> simp[sparse_val_def])
+  >- (rpt strip_tac >>
+      qpat_x_assum `!i. i < n ==> val_in_memory _ _ _ _`
+        (qspec_then `i` mp_tac) >> simp[sparse_val_def]) >>
+  simp[GSYM sparse_val_def]
+QED
+
 Theorem decs_value_sarray:
   !env t tv n sparse avs ei.
     (!i. i < n ==> dec_value env t tv (sparse_val tv sparse i) (EL i avs) ei) /\
@@ -439,20 +522,7 @@ Proof
      map_replicate, SUM_REPLICATE, type_memory_size_def, dec_ok_def,
      static_dec_complex] >>
   gvs[enc_tuple_static_acc, EVERY_REPLICATE] >>
-  `!i. i < LENGTH avs ==>
-       val_in_memory tv (sparse_val tv sparse i)
-         (off + i * type_memory_size tv) mem` by
-    (rpt strip_tac >>
-     qspecl_then [`GENLIST (sparse_val tv sparse) (LENGTH avs)`, `tv`, `off`,
-                  `mem`, `i`] mp_tac tuple_in_memory_replicate >>
-     simp[]) >>
-  simp[val_in_memory_def] >> conj_tac
-  >- (irule kvs_in_memory_intro >> rpt strip_tac >>
-      drule sparse_has_type_all_less >>
-      simp[EVERY_MEM, pairTheory.FORALL_PROD] >> disch_then drule >> strip_tac >>
-      `ALOOKUP sparse k = SOME v` by metis_tac[sorted_alookup_mem] >>
-      first_x_assum drule >> simp[sparse_val_def]) >>
-  rpt strip_tac >> first_x_assum drule >> simp[sparse_val_def]
+  drule_all sparse_tuple_memory >> simp[]
 QED
 
 (* ===== Plans decode values ===== *)
@@ -517,6 +587,7 @@ Resume abi_dec_plan_value[struct]:
   gvs[evaluate_type_def, vyper_to_abi_def, AllCaseEqs()] >>
   gvs[evaluate_types_OPT_MMAP, value_has_type_def] >>
   drule struct_has_type_values_have_types >> strip_tac >>
+  drule struct_has_type_map_fst >> strip_tac >>
   drule OPT_MMAP_LENGTH >> strip_tac >>
   irule decs_value_struct >> gvs[MAP_ZIP] >>
   first_x_assum irule >> gvs[MAP_ZIP]
@@ -549,7 +620,8 @@ Theorem compile_abi_decode_static_buf_correct:
       enc (vyper_to_abi_type env ty) av ==>
     frag_exec ctx st st' (\s. s = s0)
       (\t. dec_frame st (w2n p) (type_memory_size tv) s0 t /\
-           fresh_vars_wrt st' t /\ val_in_memory tv v (w2n p) t.vs_memory)
+           fresh_vars_wrt st' t /\ val_in_memory tv v (w2n p) t.vs_memory /\
+           memory_value_rel tv v (w2n p) t.vs_memory)
       (\r. F)
 Proof
   rpt strip_tac >>
@@ -654,7 +726,8 @@ Theorem compile_decode_static_arg_correct:
       enc (vyper_to_abi_type tenv ty) av ==>
     frag_exec ctx st st' (\s. s = s0)
       (\t. dec_frame st (w2n p) (type_memory_size tv) s0 t /\
-           fresh_vars_wrt st' t /\ val_in_memory tv v (w2n p) t.vs_memory)
+           fresh_vars_wrt st' t /\ val_in_memory tv v (w2n p) t.vs_memory /\
+           memory_value_rel tv v (w2n p) t.vs_memory)
       (\r. F)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -682,7 +755,8 @@ Proof
     (irule dec_frame_trans >>
      qexistsl [`0`, `type_memory_size tv`, `w2n p`, `w2n p`, `st1`, `t1`] >>
      fs[dec_straight_def] >> irule dec_frame_of_vars >> simp[]) >>
-  `val_in_memory tv v (w2n p) t.vs_memory` by metis_tac[] >>
+  `val_in_memory tv v (w2n p) t.vs_memory /\
+   memory_value_rel tv v (w2n p) t.vs_memory` by metis_tac[] >>
   irule frag_exec_run_inst_seq >>
   fs[dec_straight_def, inst_extends_def, IS_PREFIX_APPEND] >>
   simp[dec_frame_inst_idx] >> fs[fresh_vars_wrt_def]

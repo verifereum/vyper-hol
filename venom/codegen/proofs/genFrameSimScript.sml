@@ -22,7 +22,7 @@
 
 Theory genFrameSim
 Ancestors
-  frameRel asmFrame genBlockSim reorderSim mixedPrefixSim prefixSim
+  frameRel asmFrame genBlockSim spillPlanSim reorderSim mixedPrefixSim prefixSim
   stackOpAsmSim stackOpSim instSimHelpers blockSimHelpers planWf
   codegenRel contextCodegenRel planExec asmSem stackPlanGen stackPlanTypes
   stackPlanOps stackModel venomExecSemantics venomState venomInst

@@ -62,7 +62,6 @@ End
 Definition supported_declaration_names_def:
   supported_declaration_names tops <=>
     ALL_DISTINCT (supported_function_names tops) /\
-    ALL_DISTINCT (supported_event_names tops) /\
     EVERY (supported_function_header_names tops) tops /\
     supported_selectors_distinct tops
 End
@@ -87,7 +86,6 @@ QED
 Theorem supported_declaration_names_unique:
   supported_declaration_names tops ==>
     ALL_DISTINCT (supported_function_names tops) /\
-    ALL_DISTINCT (supported_event_names tops) /\
     supported_selectors_distinct tops
 Proof
   simp[supported_declaration_names_def]

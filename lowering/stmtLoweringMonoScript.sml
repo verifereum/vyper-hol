@@ -175,8 +175,8 @@ QED
 Theorem ci_mono_list_helpers:
   (!cenv es sa. ci_mono sa (SND (compile_log_eval_all cenv es sa))) /\
   (!xs sa. ci_mono sa (SND (compile_log_topic_ops xs sa))) /\
-  (!cenv xs b off sa.
-     ci_mono sa (SND (compile_log_store_data cenv xs b off sa))) /\
+  (!cenv xs tys b off sa.
+     ci_mono sa (SND (compile_log_store_data cenv xs tys b off sa))) /\
   (!cenv s tys off sa.
      ci_mono sa (SND (compile_tuple_load_all cenv s tys off sa))) /\
   (!cenv tys ts vs sa.
@@ -185,11 +185,12 @@ Theorem ci_mono_list_helpers:
      ci_mono sa (SND (compile_load_tuple_elements cenv b tys off sa)))
 Proof
   rpt conj_tac
-  >- (gen_tac >> Induct >> simp[compile_log_eval_all_def] >>
-      ci_mono_chain_tac ci_mono_stmt_rws)
+  >- (gen_tac >> Induct >>
+      simp[compile_log_eval_all_def, compile_log_save_arg_def] >>
+      ci_mono_chain_tac (ci_mono_compile_materialize_vv :: ci_mono_stmt_rws))
   >- (Induct >> simp[compile_log_topic_ops_def] >>
       ci_mono_chain_tac ci_mono_stmt_rws)
-  >- (gen_tac >> Induct >> simp[compile_log_store_data_def] >>
+  >- (gen_tac >> Induct >> Cases_on `tys` >> simp[compile_log_store_data_def] >>
       ci_mono_chain_tac ci_mono_stmt_rws)
   >- (gen_tac >> gen_tac >> Induct >> simp[compile_tuple_load_all_def] >>
       ci_mono_chain_tac (ci_mono_context_helpers :: ci_mono_stmt_rws))

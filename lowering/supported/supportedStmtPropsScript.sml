@@ -299,7 +299,7 @@ End
 Theorem supported_log_statement_row:
   supported_stmt stmt_test_events []
     (Log (NONE,"Event") [expr_test_uint; Name (BaseT (StringT 16)) "text"]) /\
-  EVERY (\s. ~supported_stmt stmt_test_events [] s)
+  EVERY (supported_stmt stmt_test_events [])
     [Log (NONE,"missing") []; Log (SOME 0,"Event") [];
      Log (NONE,"Event") [expr_test_uint];
      Log (NONE,"Event") [expr_test_uint; expr_test_uint];
