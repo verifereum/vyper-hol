@@ -96,6 +96,9 @@ Proof
   metis_tac[opaque_use_ok_def]
 QED
 
+(* Label operands sit only where the codegen expects them: jump targets,
+   PHI sources, the INVOKE target, and the second operand of LowerDload's
+   ADD [ptr; Label "code_end"] (Python's lower_dload.py emits the same). *)
 Definition label_positions_ok_def:
   label_positions_ok inst <=>
     case (inst.inst_opcode, inst.inst_operands) of
@@ -103,8 +106,18 @@ Definition label_positions_ok_def:
     | (JNZ, [c; Label t; Label f]) => ~is_label_operand c /\ t <> f
     | (PHI, ops) => T
     | (INVOKE, Label l :: args) => EVERY (\op. ~is_label_operand op) args
+    | (ADD, [op; Label l]) => l = "code_end" /\ ~is_label_operand op
     | (_, ops) => EVERY (\op. ~is_label_operand op) ops
 End
+
+(* The ADD case for an operand that is not a label, as it is left after
+   unfolding label_positions_ok on a generic operand. *)
+Theorem operand_case_not_label:
+  ~is_label_operand op ==>
+  ((case op of Lit v => T | Var v => T | Label l => P l) <=> T)
+Proof
+  Cases_on `op` >> simp[stackPlanTypesTheory.is_label_operand_def]
+QED
 
 Definition reserved_label_def:
   reserved_label l <=>
