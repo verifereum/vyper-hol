@@ -56,7 +56,7 @@ Theorem concretize_stage_sim:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_initial_state_ok vs /\
-  mem_inv raw_mem_ok C vs /\ ptr_discipline C vs /\
+  mem_inv raw_mem_ok C vs /\ ptr_discipline 0 C vs /\
   EVERY ssa_form C.ctx_functions ==>
   ctx_sim C C' vs vs
 Proof
@@ -67,7 +67,7 @@ Theorem concretize_stage_static_mem:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_initial_state_ok vs /\
-  mem_inv raw_mem_ok C vs /\ ptr_discipline C vs /\
+  mem_inv raw_mem_ok C vs /\ ptr_discipline 0 C vs /\
   EVERY ssa_form C.ctx_functions /\ ctx_eom_bounded eom C C' ==>
   mem_inv (static_mem_ok eom) C' vs
 Proof

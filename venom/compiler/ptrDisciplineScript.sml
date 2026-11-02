@@ -18,7 +18,7 @@
  *   W    the bytes written since the site containing them was allocated,
  *        including a callee's writes into its callers' buffers.
  *
- * ptr_discipline ctx vs: for some choice of pointer parameters P (the
+ * ptr_discipline lo ctx vs: for some choice of pointer parameters P (the
  * argument positions of each function that carry pointers), every
  * function's pointers flow only into memory addresses, pointer arithmetic
  * with a non-pointer, ASSIGN/PHI, and INVOKE arguments at P's positions
@@ -26,8 +26,11 @@
  * lies inside the site its address operand points into and reads only
  * written bytes (access_ok).
  *
- * Only ALLOCA pointers are covered.  FmpLowering's dynamic pointers
- * (DALLOCA/GETFMP) join this predicate when a source emits them.
+ * ALLOCA and DALLOCA pointers are covered; GETFMP, SETFMP and RETFMP are
+ * excluded, as no source emits them.  After ConcretizeMemLoc, static
+ * accesses go through plain constants with no provenance: accesses ending
+ * at or below the bound lo are exempt (lo = 0 before ConcretizeMemLoc, the
+ * static layout's end after it).
  *
  * TOP-LEVEL:
  *   ptr_roots, fn_pv, ptr_use_ok, fn_ptr_ok  - the syntactic part
@@ -44,11 +47,13 @@ Ancestors
 
 (* ===== The syntactic part ===== *)
 
-(* Pointer roots: ALLOCA outputs, and PARAMs at the function's pointer
-   parameter positions P fn.fn_name. *)
+(* Pointer roots: ALLOCA and DALLOCA outputs, and PARAMs at the function's
+   pointer parameter positions P fn.fn_name. *)
 Definition ptr_roots_def:
   ptr_roots (P:string -> num set) fn =
     alloca_roots fn UNION
+    {out | ?inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = DALLOCA /\
+                  inst_output inst = SOME out} UNION
     {out | ?inst idx. MEM inst (fn_insts fn) /\ inst.inst_opcode = PARAM /\
                       inst.inst_operands = [Lit idx] /\
                       w2n idx IN P fn.fn_name /\ inst_output inst = SOME out}
@@ -76,7 +81,8 @@ Definition ptr_use_ok_def:
               ops.iao_ofst = Var v
 End
 
-(* MEMTOP observes the memory size, which the static layout changes.
+(* MEMTOP observes the memory size, which the static layout changes, and
+   GETFMP/SETFMP/RETFMP the free memory pointer, which FmpLowering changes.
    Forced alloca positions are taken as given by the layout, so two forced
    allocas that are live together can overlap; the lowering never forces
    any. *)
@@ -85,6 +91,8 @@ Definition fn_ptr_ok_def:
     fn.fn_forced_alloc_positions = FEMPTY /\
     (!inst. MEM inst (fn_insts fn) ==>
             inst.inst_opcode <> MEMTOP /\ inst.inst_opcode <> DRET /\
+            inst.inst_opcode <> GETFMP /\ inst.inst_opcode <> SETFMP /\
+            inst.inst_opcode <> RETFMP /\
             ptr_use_ok P (fn_pv P fn) inst) /\
     affine_pointer_ops fn (ptr_roots P fn)
 End
@@ -117,6 +125,13 @@ End
 Definition out_prov_def:
   out_prov PG G inst s' =
     if inst.inst_opcode = ALLOCA then FLOOKUP s'.vs_allocas inst.inst_id
+    else if inst.inst_opcode = DALLOCA then
+      (case inst.inst_outputs of
+         [out] =>
+           (case lookup_var out s' of
+              SOME b => SOME (w2n b, w2n s'.vs_fmp - w2n b)
+            | NONE => NONE)
+       | _ => NONE)
     else if inst.inst_opcode = PARAM then
       (case inst.inst_operands of
          [Lit idx] => if w2n idx < LENGTH PG then EL (w2n idx) PG else NONE
@@ -183,12 +198,14 @@ Definition step_writes_def:
     else source_memory_write_ranges inst s
 End
 
-(* The bytes of the sites a step allocates. *)
+(* The bytes of the sites a step allocates: a new ALLOCA site, or the
+   region a DALLOCA moves the free memory pointer past. *)
 Definition new_site_bytes_def:
   new_site_bytes s s' =
     {i | ?aid b sz. aid NOTIN FDOM s.vs_allocas /\
                     FLOOKUP s'.vs_allocas aid = SOME (b,sz) /\
-                    b <= i /\ i < b + sz}
+                    b <= i /\ i < b + sz} UNION
+    {i | w2n s.vs_fmp <= i /\ i < w2n s'.vs_fmp}
 End
 
 Definition step_written_def:
@@ -256,17 +273,19 @@ End
 
 (* ===== The per-state part and the stage fact ===== *)
 
-(* Each nonempty access lies inside the site its address operand points
-   into, and reads only written bytes. *)
+(* Each nonempty access ending above lo lies inside the site its address
+   operand points into, and reads only written bytes. *)
 Definition access_ok_def:
-  access_ok G W inst s <=>
+  access_ok lo G W inst s <=>
     (!off len.
-       MEM (off,len) (source_memory_write_ranges inst s) /\ len <> 0 ==>
+       MEM (off,len) (source_memory_write_ranges inst s) /\ len <> 0 /\
+       lo < off + len ==>
        ?ops v b sz. mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
                     FLOOKUP G v = SOME (b,sz) /\
                     b <= off /\ off + len <= b + sz) /\
     (!off len.
-       MEM (off,len) (source_memory_read_ranges inst s) /\ len <> 0 ==>
+       MEM (off,len) (source_memory_read_ranges inst s) /\ len <> 0 /\
+       lo < off + len ==>
        (?ops v b sz. mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
                      FLOOKUP G v = SOME (b,sz) /\
                      b <= off /\ off + len <= b + sz) /\
@@ -274,9 +293,9 @@ Definition access_ok_def:
 End
 
 Definition ptr_discipline_def:
-  ptr_discipline ctx vs <=>
+  ptr_discipline (lo:num) ctx vs <=>
     ?P. EVERY (fn_ptr_ok P) ctx.ctx_functions /\
         !stk PG G W fn inst s.
           frame_reachable vs ctx stk PG G W fn inst s ==>
-          access_ok G W inst s
+          access_ok lo G W inst s
 End
