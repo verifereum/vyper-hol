@@ -696,6 +696,9 @@ Proof
     gvs[int_convert_pair_def, word_value_type_def, is_word_type_def,
         is_numeric_type_def, is_bool_type_def, is_int_type_def] >>
   irule expr_vv_sim_stack >> rpt conj_tac
+  >~ [`dynarray_type`]
+  >- (simp[vyperASTTheory.expr_type_def] >>
+      metis_tac[is_word_type_not_dynarray])
   >- simp[compile_convert_stack]
   >- metis_tac[eval_expr_type_builtin_value] >>
   irule compile_convert_frag_sim >> rpt conj_tac

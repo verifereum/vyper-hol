@@ -177,6 +177,13 @@ Definition dynarray_type_def:
   dynarray_type t <=> ?et n. t = ArrayT et (Dynamic n)
 End
 
+(* A dynamic array has no word type. *)
+Theorem is_word_type_not_dynarray:
+  !t. is_word_type t ==> ~dynarray_type t
+Proof
+  Cases >> simp[is_word_type_def, dynarray_type_def]
+QED
+
 (* The local n is a dynamic array, by the compile environment's type of it,
    which expr_sim_inv makes the local's type. *)
 Definition dynarray_local_def:

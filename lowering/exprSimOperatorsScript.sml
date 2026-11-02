@@ -534,7 +534,8 @@ Proof
      >- (irule compile_bop_bytes_eq_case >> simp[] >> rpt strip_tac >>
          metis_tac[]) >>
      irule compile_bop_rest_case >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  simp[] >> irule expr_vv_case_stack >> simp[compile_bop_stack] >>
+  simp[] >> irule expr_vv_case_stack >> simp[compile_bop_stack] >> rpt conj_tac
+  >~ [`dynarray_type`] >- (rpt strip_tac >> drule expr_body_pre_builtin_not_dynarray >> simp[]) >>
   metis_tac[eval_expr_builtin_value]
 QED
 
@@ -604,6 +605,7 @@ Theorem compile_not_case:
     expr_vv_case nocalls ctx func cenv cx (Builtin ann Not args)
 Proof
   rpt strip_tac >> irule expr_vv_case_stack >> rpt conj_tac
+  >~ [`dynarray_type`] >- (rpt strip_tac >> drule expr_body_pre_builtin_not_dynarray >> simp[])
   >- metis_tac[eval_expr_builtin_value]
   >- simp[compile_not_abs_stack] >>
   rw[expr_sim_case_def] >>
@@ -664,6 +666,7 @@ Theorem compile_abs_case:
     expr_vv_case nocalls ctx func cenv cx (Builtin ann Abs args)
 Proof
   rpt strip_tac >> irule expr_vv_case_stack >> rpt conj_tac
+  >~ [`dynarray_type`] >- (rpt strip_tac >> drule expr_body_pre_builtin_not_dynarray >> simp[])
   >- metis_tac[eval_expr_builtin_value]
   >- simp[compile_not_abs_stack] >>
   rw[expr_sim_case_def] >>

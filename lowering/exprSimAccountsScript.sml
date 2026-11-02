@@ -311,6 +311,7 @@ Theorem compile_acc_read_case:
     expr_vv_case nocalls ctx func cenv cx (Builtin ann (Acc item) args)
 Proof
   rpt strip_tac >> irule expr_vv_case_stack >> rpt conj_tac
+  >~ [`dynarray_type`] >- (rpt strip_tac >> drule expr_body_pre_builtin_not_dynarray >> simp[])
   >- metis_tac[eval_expr_builtin_value]
   >- simp[compile_acc_stack] >>
   rw[expr_sim_case_def] >>

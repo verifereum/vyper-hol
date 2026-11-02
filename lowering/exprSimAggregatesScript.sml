@@ -472,6 +472,9 @@ Theorem compile_empty_word_case_sim:
     is_word_type t ==> expr_ok cenv (TypeBuiltin ann Empty t args)
 Proof
   rpt strip_tac >> irule expr_ok_stack >> rpt conj_tac
+  >~ [`dynarray_type`]
+  >- (rw[expr_sim_pre_def, well_typed_expr_def, vyperASTTheory.expr_type_def, dynarray_type_def] >>
+      gvs[type_builtin_result_ok_def, is_word_type_def])
   >~ [`eval_expr`] >- metis_tac[eval_expr_type_builtin_value]
   >~ [`expr_sim_ok`] >- simp[compile_empty_word_sim] >>
   rpt gen_tac >>
@@ -620,6 +623,10 @@ Theorem compile_bound_builtin_case_sim:
     expr_ok cenv (TypeBuiltin ann tb t args)
 Proof
   rpt strip_tac >> irule expr_ok_stack >> rpt conj_tac
+  >~ [`dynarray_type`]
+  >- (rw[expr_sim_pre_def, well_typed_expr_def, vyperASTTheory.expr_type_def, dynarray_type_def] >>
+      Cases_on `tb` >>
+      gvs[type_builtin_result_ok_def, well_typed_type_builtin_args_def])
   >~ [`eval_expr`] >- metis_tac[eval_expr_type_builtin_value]
   >~ [`expr_sim_ok`]
   >- (irule compile_bound_builtin_word_sim >> first_assum ACCEPT_TAC) >>

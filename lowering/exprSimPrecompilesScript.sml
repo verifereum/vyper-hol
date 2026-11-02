@@ -2398,7 +2398,8 @@ Theorem compile_ecrecover_call_case:
 Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[expr_vv_case_def] >>
   rpt strip_tac >> drule ecrecover_pre_types >> strip_tac >>
-  irule expr_vv_sim_stack >> simp[] >> conj_tac
+  irule expr_vv_sim_stack >>
+  simp[vyperASTTheory.expr_type_def, dynarray_type_def] >> conj_tac
   >- (gen_tac >> Cases_on `compile_expr cenv ty (Builtin ann ECRecover args) sa` >>
       drule_all compile_ecrecover_stack >> simp[] >> metis_tac[]) >>
   conj_tac

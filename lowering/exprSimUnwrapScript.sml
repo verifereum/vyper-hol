@@ -172,18 +172,12 @@ Theorem vv_post_read_result_value:
     vv_post ctx func cenv cx e es sa sb s0 es' (Value v) vv s
 Proof
   rpt strip_tac >> Cases_on `vv`
-  >- gvs[vv_post_def, vv_holds_def, vv_at_def, read_result_def, return_def] >>
+  >- (gvs[vv_post_def, vv_holds_def, vv_at_def, read_result_def,
+          return_def] >> metis_tac[]) >>
   rename1 `LocatedValue t p` >> Cases_on `p.ptr_location = LocMemory`
   >- (gvs[vv_post_def, vv_holds_def, vv_at_def, read_result_def,
           return_def] >> metis_tac[]) >>
   metis_tac[vv_post_read_result]
-QED
-
-(* A dynamic array has no word type. *)
-Theorem is_word_type_not_dynarray:
-  !t. is_word_type t ==> ~dynarray_type t
-Proof
-  Cases >> simp[is_word_type_def, dynarray_type_def]
 QED
 
 (* ===== unwrap_value's code ===== *)

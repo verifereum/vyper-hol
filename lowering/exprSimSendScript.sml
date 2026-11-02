@@ -496,6 +496,8 @@ Proof
   rewrite_tac[expr_vv_case_def] >> rpt strip_tac >>
   drule send_pre_types >> strip_tac >>
   irule expr_vv_sim_stack >> rpt conj_tac
+  >~ [`dynarray_type`]
+  >- simp[vyperASTTheory.expr_type_def, dynarray_type_def]
   >- (gen_tac >>
       Cases_on `compile_expr cenv ty (Call ann (Send has_gas) args dflt) sa` >>
       drule compile_expr_send_stack >> simp[])

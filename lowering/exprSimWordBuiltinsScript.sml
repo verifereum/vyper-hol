@@ -984,7 +984,8 @@ Proof
   rename1 `expr_type e = BaseT DecimalT` >>
   `expr_sim ctx func cenv cx ty (Builtin (BaseT (IntT 256)) Ceil [e]) es` by
     (irule compile_ceil_typed_sim >> metis_tac[]) >>
-  irule expr_vv_sim_stack >> simp[] >> conj_tac
+  irule expr_vv_sim_stack >>
+  simp[vyperASTTheory.expr_type_def, dynarray_type_def] >> conj_tac
   >- (gen_tac >> Cases_on `compile_expr cenv ty (Builtin (BaseT (IntT 256)) Ceil [e]) sa` >>
       drule compile_ceil_stack >> metis_tac[]) >>
   metis_tac[eval_expr_builtin_value]
@@ -1064,12 +1065,14 @@ QED
 Theorem word_builtin_sim_stack:
   !ctx func cenv cx ty ann bt args es.
     expr_sim ctx func cenv cx ty (Builtin ann bt args) es /\
+    ~dynarray_type ann /\
     (((bt = Floor \/ (?d. bt = AsWeiValue d)) /\ LENGTH args = 1) \/
      ((bt = AddMod \/ bt = MulMod) /\ LENGTH args = 3) \/
      (bt = PowMod256 /\ LENGTH args = 2)) ==>
     expr_vv_sim ctx func cenv cx ty (Builtin ann bt args) es
 Proof
-  rpt gen_tac >> strip_tac >> (irule expr_vv_sim_stack >> simp[] >> conj_tac
+  rpt gen_tac >> strip_tac >>
+  (irule expr_vv_sim_stack >> simp[vyperASTTheory.expr_type_def] >> conj_tac
   >- (gen_tac >> Cases_on `compile_expr cenv ty (Builtin ann bt args) sa` >>
       drule_at Any compile_word_builtin_stack >> simp[] >> metis_tac[]) >>
   metis_tac[eval_expr_builtin_value])
@@ -1089,7 +1092,7 @@ Proof
     gvs[expr_body_pre_def, well_typed_expr_def] >>
   gvs[well_typed_builtin_app_def] >>
   gvs[MAP_EQ_CONS, LENGTH_EQ_NUM_compute] >>
-  irule word_builtin_sim_stack >> simp[] >>
+  irule word_builtin_sim_stack >> simp[dynarray_type_def] >>
   metis_tac[compile_floor_typed_sim, compile_as_wei_value_typed_sim,
             compile_modular_typed_sim, compile_pow_mod256_typed_sim])
 QED

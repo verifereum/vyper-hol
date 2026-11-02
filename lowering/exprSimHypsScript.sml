@@ -1118,6 +1118,40 @@ QED
 
 (* A form lowered to a StackValue, with only values as results: expr_ok
    from expr_sim_ok (exprSim's expr_vv_sim_stack). *)
+(* Only an array literal makes a dynamic array among the builtins. *)
+Theorem well_typed_builtin_app_not_dynarray:
+  !ty bt ts.
+    well_typed_builtin_app ty bt ts /\ (!et bd. bt <> MakeArray et bd) ==>
+    ~dynarray_type ty
+Proof
+  simp[dynarray_type_def] >> rpt strip_tac >> gvs[] >>
+  Cases_on `bt` >> gvs[well_typed_builtin_app_def]
+  >~ [`well_typed_binop _ bop`] >- (Cases_on `bop` >> gvs[well_typed_binop_def])
+  >~ [`env_item_type item`] >- (Cases_on `item` >> gvs[env_item_type_def]) >>
+  rename1 `account_item_type item` >> Cases_on `item` >>
+  gvs[account_item_type_def]
+QED
+
+Theorem expr_body_pre_builtin_not_dynarray:
+  !cenv cx env ann bt args es.
+    expr_body_pre cenv cx env (Builtin ann bt args) es /\
+    (!et bd. bt <> MakeArray et bd) ==>
+    ~dynarray_type (expr_type (Builtin ann bt args))
+Proof
+  rw[expr_body_pre_def, well_typed_expr_def, vyperASTTheory.expr_type_def] >>
+  metis_tac[well_typed_builtin_app_not_dynarray]
+QED
+
+Theorem expr_sim_pre_builtin_not_dynarray:
+  !cenv cx env ann bt args es.
+    expr_sim_pre cenv cx env (Builtin ann bt args) es /\
+    (!et bd. bt <> MakeArray et bd) ==>
+    ~dynarray_type (expr_type (Builtin ann bt args))
+Proof
+  rw[expr_sim_pre_def, well_typed_expr_def, vyperASTTheory.expr_type_def] >>
+  metis_tac[well_typed_builtin_app_not_dynarray]
+QED
+
 Theorem expr_ok_stack:
   !cenv e.
     expr_sim_ok cenv e /\

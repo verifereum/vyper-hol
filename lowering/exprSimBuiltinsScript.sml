@@ -347,6 +347,7 @@ Theorem compile_blobhash_case:
     expr_vv_case nocalls ctx func cenv cx (Builtin ann BlobHash args)
 Proof
   rpt strip_tac >> irule expr_vv_case_stack >> rpt conj_tac
+  >~ [`dynarray_type`] >- (rpt strip_tac >> drule expr_body_pre_builtin_not_dynarray >> simp[])
   >- metis_tac[eval_expr_builtin_value]
   >- simp[compile_blobhash_stack] >>
   rw[expr_sim_case_def] >>
@@ -439,6 +440,8 @@ Theorem compile_method_id_literal_word_case_sim:
       (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l])
 Proof
   rpt strip_tac >> irule expr_ok_stack >> rpt conj_tac
+  >~ [`dynarray_type`]
+  >- simp[vyperASTTheory.expr_type_def, dynarray_type_def]
   >~ [`eval_expr`] >- metis_tac[eval_expr_builtin_value]
   >~ [`expr_sim_ok`] >- simp[compile_method_id_literal_word_sim] >>
   gvs[optionTheory.IS_SOME_EXISTS] >> rpt gen_tac >>

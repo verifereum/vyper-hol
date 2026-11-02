@@ -329,6 +329,9 @@ Proof
   >- (simp[expr_ok_def, compile_literal_sim] >>
       irule compile_literal_other_vv_sim >> simp[]) >>
   irule expr_ok_stack >> simp[compile_literal_sim] >> rpt conj_tac
+  >~ [`dynarray_type`]
+  >- (rw[expr_sim_pre_def, well_typed_expr_def, vyperASTTheory.expr_type_def, dynarray_type_def] >>
+      Cases_on `l` >> gvs[well_typed_literal_def])
   >~ [`eval_expr`]
   >- (rpt strip_tac >> drule eval_expr_literal_value >> simp[]) >>
   Cases_on `l` >> gvs[]
@@ -401,6 +404,7 @@ Theorem compile_env_case_ok:
 Proof
   rpt gen_tac >> irule expr_ok_stack >> simp[compile_env_case_sim] >>
   rpt conj_tac
+  >~ [`dynarray_type`] >- (rpt strip_tac >> drule expr_sim_pre_builtin_not_dynarray >> simp[])
   >~ [`eval_expr`]
   >- (rpt strip_tac >> drule eval_expr_builtin_value >> simp[]) >>
   rpt gen_tac >>
@@ -654,7 +658,8 @@ Theorem compile_flag_member_case_sim:
   !cenv ann nsid mid. expr_ok cenv (FlagMember ann nsid mid)
 Proof
   rpt gen_tac >> irule expr_ok_stack >>
-  simp[compile_flag_member_word_sim, compile_expr_def] >>
+  simp[compile_flag_member_word_sim, compile_expr_def] >> rpt conj_tac
+  >~ [`dynarray_type`] >- rw[expr_sim_pre_def, well_typed_expr_def, vyperASTTheory.expr_type_def, dynarray_type_def] >>
   PairCases_on `nsid` >> rpt gen_tac >>
   simp[Once evaluate_def, lookup_flag_mem_def] >>
   rpt (BasicProvers.TOP_CASE_TAC >> simp[raise_def, return_def]) >> rw[]

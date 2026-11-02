@@ -85,6 +85,7 @@ Proof
   `expr_ok cenv (Builtin ann CalldataLen args)` suffices_by
     simp[expr_ok_def] >>
   irule expr_ok_stack >> rpt conj_tac
+  >~ [`dynarray_type`] >- (rpt strip_tac >> drule expr_sim_pre_builtin_not_dynarray >> simp[])
   >- metis_tac[eval_expr_builtin_value]
   >- simp[compile_calldata_len_stack] >>
   rw[expr_sim_ok_def] >>
