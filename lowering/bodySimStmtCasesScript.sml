@@ -60,7 +60,7 @@ Ancestors
   stmtSimAssignStorage supportedDecls vyperTypeContractStaticMaps
   vyperTypeContract compileVyper supportedTypes stmtSimAssignAttr
   stmtSimAugAssignAttr stmtSimAssignAttrStorage stmtSimAugAssignStorage
-  stmtSimAssignMem memoryLocalRhsProps
+  stmtSimAugAssignAttrStorage stmtSimAssignMem memoryLocalRhsProps
 Libs
   monadsyntax
 
@@ -1775,10 +1775,94 @@ Proof
   qexists_tac `F` >> simp[]
 QED
 
+(* self.x.f op= e on a word field of a storage or transient struct:
+   stmtSimAugAssignAttrStorage's compile_augassign_attr_storage_case.  The
+   supported subset puts the struct in tops with a slot and the typing finds
+   its declaration, as for body_assign_attr_storage; x.f's slot is read
+   wherever expr_sim_inv holds, which gives e's judgment. *)
+Theorem body_augassign_attr_storage[local]:
+  !cx ty src id fld bop e tops ctx func cenv env env' ret_ty lctx RetQ es
+   res es'.
+    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
+       eval_target_place cx
+         (AttributeTarget (TopLevelNameTarget (src, id)) fld) s'' =
+         (INL p,t') /\
+       read_place cx p s'3' = (INL cur,t'') /\
+       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_ok cx e) /\
+    body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    expr_sim_inv cenv cx env es /\
+    supported_storage_field_write tops (src, id) fld /\
+    type_stmt env ret_ty
+      (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop e)
+      = SOME env' /\
+    stmt_exprs_ok cenv
+      (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop
+         e) /\
+    call_evaluation_safe cx
+      (int_calls_stmt
+         (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld)
+            bop e)) /\
+    eval_stmt cx
+      (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop e)
+      es = (res, es') ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty
+         (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld)
+            bop e)) es res es'
+Proof
+  rpt strip_tac >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  drule supported_storage_field_write_decl >> strip_tac >> gvs[] >>
+  `get_module_code cx NONE = SOME tops /\ supported_program tops /\
+   ALL_DISTINCT
+     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
+   cenv.ce_hashmap_info = build_hashmap_info tops /\
+   cenv.ce_module_var_type (NONE, id) =
+     build_var_type_map tops (NONE, id)` by
+    fs[body_inv_def] >>
+  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  `expr_body_pre cenv cx env e es` by
+    (irule stmt_expr_body_pre >>
+     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         supported_expr_exists_def, int_calls_stmt_def,
+         int_calls_expr_def] >>
+     qexists_tac `[]` >> simp[]) >>
+  `?tgt_ty. type_place_target env (TopLevelNameTarget (NONE, id)) =
+              SOME (Type tgt_ty) /\
+            attribute_type env.type_defs tgt_ty fld = SOME ty /\
+            well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\
+            bop <> NotIn` by
+    gvs[type_stmt_def, well_typed_target_def,
+        vyperTypeEnvTheory.type_place_target_AttributeTarget, AllCaseEqs()] >>
+  gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
+  >- (drule_all env_assignable_find_NONE >> strip_tac >> gvs[]) >>
+  drule_all vyperTypeEnvTheory.env_consistent_toplevel_storage_static >>
+  strip_tac >> drule find_var_decl_storage_mem >> strip_tac >> gvs[] >>
+  `tgt_ty = StructT sid` by
+    metis_tac[build_maps_variable, optionTheory.SOME_11] >>
+  gvs[] >> drule_all build_maps_variable >> strip_tac >>
+  `?fsz. ALOOKUP (get_struct_fields cenv.ce_struct_fields
+                    (nsid_to_string sid)) fld = SOME (ty, fsz)` by
+    metis_tac[attribute_type_struct_field] >>
+  qpat_x_assum `IS_SOME (lookup_var_slot_from_layout _ _ _ _)`
+    (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
+  rename1 `lookup_var_slot_from_layout _ _ _ _ = SOME lslot` >>
+  `body_expr_ok cx e` by
+    (drule_all augassign_attr_storage_place >> strip_tac >>
+     first_x_assum irule >> metis_tac[]) >>
+  `expr_sim ctx func cenv cx ty e es` by metis_tac[body_expr_ok_def] >>
+  irule compile_augassign_attr_storage_case >> simp[] >> metis_tac[]
+QED
+
 (* RESIDUAL (#637 augmented assignment): the targets other than a local, a
-   field of a local struct, or a word storage or transient variable
-   (supported_scalar_target).
-   - A field of a storage or transient struct: no statement lemma.
+   field of a local struct, a word storage or transient variable
+   (supported_scalar_target), or a word field of a storage or transient
+   struct (supported_storage_field_write).
+   - A field of a storage or transient struct the supported subset does
+     not admit: no statement lemma.
    - An immutable (supported_target's supported_immutable_type): no
      statement lemma.
    - A field of a field or of a subscript: no statement lemma (the
@@ -1803,7 +1887,9 @@ Theorem body_augassign_other:
     ~(?id. t = NameTarget id) /\
     ~(?nsid. t = TopLevelNameTarget nsid /\
              supported_scalar_target tops nsid) /\
-    ~(?id fld. t = AttributeTarget (NameTarget id) fld) ==>
+    ~(?id fld. t = AttributeTarget (NameTarget id) fld) /\
+    ~(?nsid fld. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
+                 supported_storage_field_write tops nsid fld) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
 Proof
@@ -1829,6 +1915,10 @@ Proof
       irule body_augassign_toplevel_word >> metis_tac[]) >>
   Cases_on `?id fld. t = AttributeTarget (NameTarget id) fld`
   >- (gvs[] >> irule body_augassign_attr_local >> metis_tac[]) >>
+  Cases_on `?nsid fld. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
+                       supported_storage_field_write tops nsid fld`
+  >- (gvs[] >> rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
+      irule body_augassign_attr_storage >> metis_tac[]) >>
   irule body_augassign_other >> metis_tac[]
 QED
 
