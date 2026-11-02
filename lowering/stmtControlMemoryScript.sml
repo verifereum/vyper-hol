@@ -6,6 +6,7 @@ Ancestors
   vyperInterpreter vyperTypeSystem vyperState list finite_map
   fragExec memSafeRun venomInst emitHelperProps instMemFrontier venomExecProofs
   loweringSlice exprLowering emitHelper vyperExprNoControl
+  rich_list valueEncoding vyperValue
   vyperEvalPreservesScopes vyperStatePreservation
 Libs
   monadsyntax
@@ -346,6 +347,77 @@ Theorem step_invalid_mem[local]:
     ?s'. step_inst_base (mk_inst id INVALID [] []) s = Abort ExHalt_abort s'
 Proof
   simp[mk_inst_def, step_inst_base_def]
+QED
+
+Theorem cond_jump_frag_mem[local]:
+  !ctx func cx cenv e es r1 es1 sa op s1 s3 s4 lt lf s0.
+    expr_sim_mem ctx func cenv cx (BaseT BoolT) e es /\
+    expr_type e = BaseT BoolT /\
+    lower_value compile_expr cenv (BaseT BoolT) e sa = (op, s1) /\
+    (do result <- eval_expr cx e; read_result cx result od) es = (r1, es1) /\
+    expr_res_ok r1 /\ (!v. r1 = INL v ==> ?b. v = BoolV b) /\
+    s3.cs_current_bb = s1.cs_current_bb /\
+    s3.cs_current_insts = s1.cs_current_insts /\
+    emit_inst JNZ [op; Label lt; Label lf] [] s3 = ((), s4) /\
+    lookup_block s4.cs_current_bb func.fn_blocks =
+      SOME <| bb_label := s4.cs_current_bb;
+              bb_instructions := s4.cs_current_insts |> /\
+    fn_has_code sa s1 func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    (?b s. r1 = INL (BoolV b) /\
+           stmt_state_rel ctx func cenv cx es1 s /\ ~s.vs_halted /\
+           (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+                  lookup_var x s = SOME w) /\
+           (!aid bnd. FLOOKUP s0.vs_allocas aid = SOME bnd ==>
+                      FLOOKUP s.vs_allocas aid = SOME bnd) /\
+           s0.vs_alloca_next <= s.vs_alloca_next /\
+           !fuel r. run_from fuel ctx func (jump_to (if b then lt else lf) s) = r /\
+                    (!e. r <> Error e) ==>
+                    ?fuel'. run_from fuel' ctx func s0 = r /\
+                      (mem_safe_run fuel ctx func (jump_to (if b then lt else lf) s) ==>
+                       mem_safe_run fuel' ctx func s0)) \/
+    (?fuel r. run_from fuel ctx func s0 = r /\ exit_result r /\
+              expr_exit r1 r /\ mem_safe_run fuel ctx func s0)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
+  disch_then (qspecl_then [`sa`, `s1`, `op`, `r1`, `es1`, `s0`] mp_tac) >>
+  (impl_tac >- fs[]) >> simp[frag_exec_mem_def] >>
+  disch_then (qspec_then `func` mp_tac) >> (impl_tac >- fs[]) >> strip_tac
+  >- (disj1_tac >> gvs[expr_post_def] >>
+      rename1 `stmt_state_rel ctx func cenv cx es1 sv` >>
+      qexists_tac `sv` >> simp[] >> rpt strip_tac >>
+      drule emit_inst_extends >> strip_tac >>
+      qabbrev_tac `jnz = mk_inst s3.cs_next_id JNZ [op; Label lt; Label lf] []` >>
+      `get_instruction <| bb_label := s4.cs_current_bb;
+                          bb_instructions := s4.cs_current_insts |>
+         sv.vs_inst_idx = SOME jnz` by
+        gvs[get_instruction_def, EL_LENGTH_APPEND] >>
+      `eval_operand op sv = SOME (if b then 1w else 0w)` by
+        gvs[expr_val_rel_def, evaluate_type_def, is_word_type_def,
+            typed_val_to_w256_def, val_to_w256_def] >>
+      `step_inst_base jnz sv = OK (jump_to (if b then lt else lf) sv)` by
+        (qunabbrev_tac `jnz` >> simp[mk_inst_def] >>
+         drule step_jnz_behavior >> disch_then (fn th => simp[th]) >>
+         Cases_on `b` >> simp[]) >>
+      `is_terminator jnz.inst_opcode /\ jnz.inst_opcode <> INVOKE` by
+        simp[Abbr `jnz`, mk_inst_def, is_terminator_def] >>
+      `inst_mem_below_frontier jnz sv` by
+        (irule below_frontier_no_ranges >> simp[Abbr `jnz`, mk_inst_def]) >>
+      `?fj. run_from fj ctx func sv =
+              run_from fuel ctx func (jump_to (if b then lt else lf) sv) /\
+            (mem_safe_run fuel ctx func (jump_to (if b then lt else lf) sv) ==>
+             mem_safe_run fj ctx func sv)` by
+        (irule run_from_jump_result_mem >> gvs[] >> metis_tac[]) >>
+      qpat_x_assum `!fuel. (!e. run_from fuel ctx func sv <> Error e) ==> _`
+        (qspec_then `fj` mp_tac) >>
+      (impl_tac >- metis_tac[]) >> strip_tac >>
+      qexists_tac `fuel'` >> fs[]) >>
+  disj2_tac >> qexists_tac `fuel` >> fs[]
 QED
 
 Theorem compile_break_frag_mem:
