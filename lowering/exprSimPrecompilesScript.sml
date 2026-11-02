@@ -2250,6 +2250,20 @@ Proof
   gvs[LENGTH_EQ_NUM_compute] >> gvs[is_word_type_def]
 QED
 
+Theorem evaluate_ecrecover_encoded[local]:
+  LENGTH bs = 32 /\
+  ecrecover_arg_to_num va = SOME v /\
+  ecrecover_arg_to_num ra = SOME r /\
+  ecrecover_arg_to_num sa = SOME s ==>
+  evaluate_ecrecover [BytesV bs;va;ra;sa] =
+    INL (AddressV (case vfmExecution$ecrecover
+      (word_of_bytes_be bs) v r s of NONE => 0w | SOME addr => addr))
+Proof
+  strip_tac >>
+  Cases_on `vfmExecution$ecrecover (word_of_bytes_be bs) v r s` >>
+  simp[evaluate_ecrecover_def]
+QED
+
 Theorem evaluate_ecrecover_typed[local]:
   value_has_type (BaseTV (BytesT (Fixed 32))) vh /\
   EVERY (\tv. (?k. tv = BaseTV (UintT k) /\ k <= 256) \/
@@ -2269,9 +2283,10 @@ Proof
     (irule ecrecover_arg_typed_encoding >> gvs[]) >>
   `ecrecover_arg_to_num sa = SOME (w2n (typed_val_to_w256 ts sa))` by
     (irule ecrecover_arg_typed_encoding >> gvs[]) >>
-  Cases_on `vh` >> gvs[value_has_type_def] >>
-  simp[evaluate_ecrecover_def, typed_val_to_w256_def, PAD_LEFT, PAD_RIGHT] >>
-  CASE_TAC >> simp[]
+  qpat_x_assum `value_has_type (BaseTV (BytesT (Fixed 32))) vh` mp_tac >>
+  Cases_on `vh` >> simp[value_has_type_def] >> strip_tac >>
+  simp[typed_val_to_w256_def, PAD_LEFT, PAD_RIGHT] >>
+  irule evaluate_ecrecover_encoded >> simp[]
 QED
 
 Theorem ecrecover_typed_result[local]:
