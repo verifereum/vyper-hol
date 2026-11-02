@@ -5,7 +5,8 @@
  *)
 Theory e2eComposition
 Ancestors
-  e2eDefs vyperLoweringCorrect unitTransformDefs codegenCorrectness
+  e2eDefs vyperLoweringCorrect unitTransformDefs o1PassContract compileEnv
+  accountsRelProps codegenCorrectness
   passSimulationDefs stateEquiv venomExecSemantics venomState
   vyperInterpreter vyperValue vfmDecreasesGas vfmExecution frameOutcome callTrace
   list pair
@@ -31,6 +32,138 @@ Proof
 QED
 
 (* ===== Raw termination and pipeline transport ===== *)
+
+(* The dead bytes of a source call's result: those storage_dead gives in
+   the running contract's storage and transient storage, by the layout the
+   success case of external_call_result_rel compares with.  The pipeline
+   may change them (o1PassContract's dead_result_rel); the source relation
+   already ignores them. *)
+Definition external_call_dead_def:
+  external_call_dead tx (res, am', rqs) =
+    let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
+    <| d_stor := (\a st. if a = tx.target
+                         then {(k,b) | storage_dead cx F st (w2n k) b}
+                         else {});
+       d_trans := (\a st. if a = tx.target
+                          then {(k,b) | storage_dead cx T st (w2n k) b}
+                          else {});
+       d_imm := K {}; d_ret := K {} |>
+End
+
+Theorem initial_evaluation_context_txn[local,simp]:
+  (initial_evaluation_context srcs layouts tx src_id_opt).txn = tx
+Proof
+  simp[initial_evaluation_context_def]
+QED
+
+Theorem storage_agree_except_storage_dead[local]:
+  storage_agree_except {(k,b) | storage_dead cx tr st (w2n k) b} st st' <=>
+  storage_agree (storage_dead cx tr st) st st'
+Proof
+  simp[storage_agree_except_def, word_agree_except_def, key_taint_def,
+       storage_agree_def, lookup_storage_def] >>
+  metis_tac[]
+QED
+
+Theorem storage_agree_except_empty[local]:
+  storage_agree_except {} st st' <=> st' = st
+Proof
+  simp[storage_agree_except_def, word_agree_except_def, key_taint_def,
+       FUN_EQ_THM] >>
+  metis_tac[word_to_bytes_EL_eq]
+QED
+
+Theorem external_call_dead_wf:
+  dead_wf (external_call_dead tx src)
+Proof
+  PairCases_on `src` >>
+  rw[dead_wf_def, external_call_dead_def, storage_agree_except_storage_dead] >>
+  drule storage_agree_storage_dead >> simp[]
+QED
+
+Theorem storage_agree_dead_trans[local]:
+  storage_agree (storage_dead cx tr st0) st0 st1 /\
+  storage_agree (storage_dead cx tr st1) st1 st2 ==>
+  storage_agree (storage_dead cx tr st0) st0 st2
+Proof
+  strip_tac >> drule storage_agree_storage_dead >> strip_tac >>
+  gvs[storage_agree_def]
+QED
+
+Theorem accounts_agree_dead_trans[local]:
+  cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
+  accounts_agree cx a0 a1 /\
+  accounts_agree_except (external_call_dead tx (res, am', rqs)) a1 a2 ==>
+  accounts_agree cx a0 a2
+Proof
+  strip_tac >>
+  qpat_x_assum `accounts_agree_except _ _ _` mp_tac >>
+  simp[accounts_agree_except_def, external_call_dead_def] >>
+  strip_tac >> pop_assum mp_tac >> qpat_x_assum `cx = _` (SUBST_ALL_TAC o SYM) >>
+  strip_tac >>
+  gvs[accounts_agree_def] >> rpt strip_tac
+  >- (first_x_assum (qspec_then `addr` mp_tac) >>
+      simp[storage_agree_except_empty] >> strip_tac >>
+      gvs[vfmStateTheory.account_state_component_equality])
+  >- (first_x_assum (qspec_then `tx.target` mp_tac) >>
+      gvs[vfmStateTheory.account_state_component_equality]) >>
+  first_x_assum (qspec_then `tx.target` mp_tac) >>
+  simp[storage_agree_except_storage_dead] >>
+  metis_tac[storage_agree_dead_trans]
+QED
+
+Theorem transient_agree_dead_trans[local]:
+  cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
+  transient_agree cx t0 t1 /\
+  transient_agree_except (external_call_dead tx (res, am', rqs)) t1 t2 ==>
+  transient_agree cx t0 t2
+Proof
+  strip_tac >>
+  qpat_x_assum `transient_agree_except _ _ _` mp_tac >>
+  simp[transient_agree_except_def, external_call_dead_def] >>
+  qpat_x_assum `cx = _` (SUBST_ALL_TAC o SYM) >>
+  strip_tac >> gvs[transient_agree_def] >> rpt strip_tac
+  >- (first_x_assum (qspec_then `addr` mp_tac) >>
+      simp[storage_agree_except_empty]) >>
+  first_x_assum (qspec_then `tx.target` mp_tac) >>
+  simp[storage_agree_except_storage_dead] >>
+  metis_tac[storage_agree_dead_trans]
+QED
+
+Theorem request_agree_dead_trans[local]:
+  cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
+  request_agree cx r0 r1 /\
+  request_agree_except (external_call_dead tx (res, am', rqs)) r1 r2 ==>
+  request_agree cx r0 r2
+Proof
+  rw[request_agree_def, request_agree_except_def]
+  >- gvs[extCallOracleTheory.call_request_component_equality]
+  >- metis_tac[accounts_agree_dead_trans]
+  >> metis_tac[transient_agree_dead_trans]
+QED
+
+(* The source relation holds of every run that matches one it holds of up
+   to the source's dead bytes. *)
+Theorem external_call_result_rel_dead_transport:
+  external_call_result_rel tops ret tx src res /\
+  dead_result_rel (external_call_dead tx src) res res' ==>
+  external_call_result_rel tops ret tx src res'
+Proof
+  PairCases_on `src` >> Cases_on `res` >> Cases_on `res'` >>
+  simp[dead_result_rel_def] >> rpt strip_tac >>
+  gvs[external_call_result_rel_def, AllCaseEqs()] >>
+  TRY (rpt CASE_TAC >> gvs[] >> NO_TAC) >>
+  qmatch_goalsub_abbrev_tac `accounts_agree cx` >>
+  `v'.vs_returndata = v.vs_returndata` by
+    (irule LIST_EQ >> gvs[external_call_dead_def]) >>
+  rpt conj_tac
+  >- gvs[]
+  >- (irule accounts_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[])
+  >- (irule transient_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[])
+  >- gvs[] >>
+  gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+  irule request_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]
+QED
 
 Theorem external_call_result_rel_terminal:
   external_call_result_rel tops ret tx src res ==>

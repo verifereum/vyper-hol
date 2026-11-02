@@ -204,7 +204,9 @@ End
 
 (* The stages are explicit premises, not appeals to admitted S1-S7.
    Source exemption is handled before the conditional stages are opened.
-   Totality supplies an actual EVM run even when neither stage applies. *)
+   Totality supplies an actual EVM run even when neither stage applies.
+   The middle stage matches runs up to the source result's dead bytes
+   (external_call_dead), which the source relation ignores. *)
 Theorem e2e_vyper_to_evm:
   !tops ret am tx ctx ctx' vs es.
     vs.vs_outcomes = MAP SND (call_trace es) /\
@@ -212,7 +214,9 @@ Theorem e2e_vyper_to_evm:
               (call_external (SOME vs.vs_outcomes) [] am tx)
               (run_context fuel ctx vs)) /\
     (~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) ==>
-       ctx_transform_correct ctx ctx' vs /\
+       ctx_sim (external_call_dead tx
+                  (call_external (SOME vs.vs_outcomes) [] am tx))
+         ctx ctx' vs vs /\
        !fuel. ?r es'.
          run_call es = SOME (r, es') /\
          (frame_resource_starved es r es' \/ precompile_call_starved es \/
@@ -230,12 +234,15 @@ Proof
       irule source_exempt_call_result_rel >> gvs[]) >>
   gvs[] >>
   drule_all external_call_result_rel_terminates >> strip_tac >>
-  drule_all ctx_transform_correct_forward >> strip_tac >>
+  qpat_x_assum `ctx_sim _ _ _ _ _` mp_tac >>
+  simp[ctx_sim_def] >> disch_then drule >> strip_tac >>
+  `terminates (run_context fuel' ctx' vs)` by
+    metis_tac[dead_result_rel_terminates] >>
   (* gvs identifies every stage-3 witness with the actual run by uniqueness. *)
   qpat_x_assum `!fuel. frame_resource_starved es r es' \/ _`
     (qspec_then `fuel'` strip_assume_tac) >>
   gvs[] >>
-  drule_all external_call_result_rel_unit_transport >> strip_tac >>
+  drule_all external_call_result_rel_dead_transport >> strip_tac >>
   drule_all external_call_result_rel_frame >> simp[]
 QED
 
@@ -775,11 +782,12 @@ Proof
   drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
   `o1_run_state_ok vs` by
     (fs[o1_run_state_ok_def] >> simp[Abbr`vs`, entry_venom_state_def]) >>
+  qspecl_then [`tx`, `call_external (SOME vs.vs_outcomes) [] am tx`]
+    assume_tac external_call_dead_wf >>
   drule_all run_venom_pipeline_correct >> strip_tac >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
-  conj_tac
-  >- gvs[checked_unit_transform_correct_def] >>
+  conj_tac >- simp[] >>
   gen_tac >> irule codegen_correct >> simp[] >>
   qexistsl_tac [`Inv`, `prog`, `rpolicy`] >> simp[]
 QED
