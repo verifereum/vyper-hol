@@ -379,11 +379,15 @@ QED
      live regions, and intCallResult's store_multi_results_frag for
      stack results.
    Left (the push transfer): the callee body's premises at its entry:
-   body_inv and expr_sim_inv for the callee's compile env and env at
-   cxf, and frame_ret_ok for the internal return; and that the callee
+   body_inv (whose target conjunct needs the callee's compile env at the
+   unit's policy target, as set_*_package_target installs it) and
+   expr_sim_inv for the callee's compile env and env at cxf, and
+   frame_ret_ok for the internal return; and that the callee
    body's code in ctx is stmts_env's in that compile env.
    ce_locals_declared there is bodySimEntry's internal_entry_declared and
-   ce_locals_declared_params, for an env that has the parameters. *)
+   ce_locals_declared_params, for an env that has the parameters; the
+   body's locals_alloc_ok and stmt_exprs_ok's alloc_limits_stmt come from
+   fn_allocs_ok_body. *)
 Theorem body_intcall_case:
   !cx v16 src_id_opt fn es v17.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2

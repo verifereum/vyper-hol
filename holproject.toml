@@ -1,5 +1,5 @@
 [holbuild]
-minimum_version = "0.12.1"
+minimum_version = "0.12.0"
 
 [project]
 name = "vyper-hol"
@@ -25,6 +25,7 @@ roots = ["vyperHolScript.sml",
          "lowering/supported/supportedStmtTraversePropsScript.sml",
          "lowering/supported/supportedProgramPropsScript.sml",
          "venom/codegen/proofs/contextReachabilityChecksScript.sml",
+         "venom/codegen/proofs/genFrameSimScript.sml",
          "tests/vyperPlaceProbesTestScript.sml",
          "tests/vyperPlaceSanityTestScript.sml"]
 
