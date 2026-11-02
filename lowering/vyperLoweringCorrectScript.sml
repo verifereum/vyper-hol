@@ -26,13 +26,13 @@
  *   external_fallthrough_result_rel -- S1 halt bridge (#640) for the
  *     return sequences loweringHalt covers, and their _unlock versions,
  *     whose return may release a transient nonreentrant lock
- *   lower_vyper_runtime_unit_correct -- S1 (planned admission, Milestone 6)
+ *   (S1, lower_vyper_runtime_unit_correct, is in loweringRuntimeCorrect)
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
  *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5)
  *
  * TASK056: obsolete NONE-mode relation retained as inactive source provenance.
- * STATUS: S2 is proved; S1 and S3 are statements, NOT proved correctness
- *   certificates.
+ * STATUS: S2 is proved; S3 is a statement, NOT a proved correctness
+ *   certificate.
  * Before major proof repair, check lowering definitions against the chosen
  * upstream compiler target; see docs/compiler-definition-parity.md.
  *)
@@ -869,25 +869,6 @@ Proof
 QED
 
 (* ===== Planned lowering stages (NOT certificates) ===== *)
-
-(* S1: planned admission, Milestone 6. Proof idea: supported syntax induction,
-   selector/argument decoding, body simulation with the threaded oracle and
-   requests; canonical wrapped returns and runtime-check aborts. *)
-Theorem lower_vyper_runtime_unit_correct:
-  !tops rpolicy unit am tx ret vs.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes
-    ==>
-    source_unit_execution_correct tops ret am tx unit vs
-Proof
-  cheat
-QED
 
 (* S2, Milestone 5: proved in loweringShapeProps as
    lower_vyper_runtime_unit_source_unit_ok_names. Raw O1 shape excludes
