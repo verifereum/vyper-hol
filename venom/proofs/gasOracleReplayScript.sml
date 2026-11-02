@@ -904,6 +904,64 @@ Resume gas_base_control_dispatch[assert_unreachable]:
 QED
 Finalise gas_base_control_dispatch
 
+Theorem gas_base_non_gas:
+  inst.inst_opcode <> GAS ==> gas_replay_at 0 (step_inst_base inst) s
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode` >> gvs[] >>
+  all_tac
+  >~ [`inst.inst_opcode = MCOPY`] >- (irule gas_base_data_dispatch >> simp[])
+  >~ [`inst.inst_opcode = ISTORE`] >- (irule gas_base_data_dispatch >> simp[])
+  >~ [`inst.inst_opcode = CALLDATACOPY`] >- (irule gas_base_data_dispatch >> simp[])
+  >~ [`inst.inst_opcode = RETURNDATACOPY`] >- (irule gas_base_data_dispatch >> simp[])
+  >~ [`inst.inst_opcode = SHA3`] >- (irule gas_base_data_dispatch >> simp[])
+  >~ [`inst.inst_opcode = DLOADBYTES`] >- (irule gas_base_data_dispatch >> simp[])
+  >~ [`inst.inst_opcode = CODECOPY`] >- (irule gas_base_data_dispatch >> simp[])
+  >~ [`inst.inst_opcode = EXTCODECOPY`] >- (irule gas_base_data_dispatch >> simp[])
+  >~ [`inst.inst_opcode = LOG`] >- (irule gas_base_data_dispatch >> simp[])
+  >~ [`inst.inst_opcode = SELFDESTRUCT`] >- (irule gas_base_data_dispatch >> simp[])
+  >~ [`inst.inst_opcode = CALL`] >- (irule gas_base_data_dispatch >> simp[])
+  >~ [`inst.inst_opcode = STATICCALL`] >- (irule gas_base_data_dispatch >> simp[])
+  >~ [`inst.inst_opcode = DELEGATECALL`] >- (irule gas_base_data_dispatch >> simp[])
+  >~ [`inst.inst_opcode = CREATE`] >- (irule gas_base_data_dispatch >> simp[])
+  >~ [`inst.inst_opcode = CREATE2`] >- (irule gas_base_data_dispatch >> simp[])
+  >~ [`inst.inst_opcode = ALLOCA`] >- (irule gas_base_data_dispatch >> simp[])
+  >~ [`inst.inst_opcode = JMP`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = JNZ`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = DJMP`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = GETFMP`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = SETFMP`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = DALLOCA`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = INITIAL_FMP`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = BUMP`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = FMP_PARAM`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = RETPC_PARAM`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = PARAM`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = RET`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = RETFMP`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = DRET`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = STOP`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = RETURN`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = REVERT`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = SINK`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = ASSERT`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = ASSERT_UNREACHABLE`] >- (irule gas_base_control_dispatch >> simp[])
+  >~ [`inst.inst_opcode = INVALID`] >- (irule gas_base_control_dispatch >> simp[]) >>
+  rewrite_tac[gas_replay_at_def] >>
+  qpat_assum `inst.inst_opcode = _` gas_opcode_rewrite >>
+  rewrite_tac[GSYM gas_replay_at_def] >>
+  simp[gas_exec_pure1, gas_exec_pure2, gas_exec_pure3] >>
+  all_tac
+  >>~- ([`gas_replay_at 0 (exec_read0 _ _) _`], irule gas_exec_read0 >> simp[])
+  >>~- ([`gas_replay_at 0 (exec_read1 _ _) _`], irule gas_exec_read1 >> simp[])
+  >>~- ([`gas_replay_at 0 (exec_write2 _ _) _`], irule gas_exec_write2 >> simp[]) >>
+  simp[gas_replay_at_def, lift_result_def] >> gen_tac >>
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
+  Cases_on `outs` >> simp[lift_result_def] >>
+  Cases_on `ops` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def]
+QED
+
 Theorem gas_oracle_replay:
   (!fuel ctx inst s.
      ?n. !tail.
