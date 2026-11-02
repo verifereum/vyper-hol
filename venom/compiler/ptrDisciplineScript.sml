@@ -76,9 +76,11 @@ Definition fn_pv_def:
 End
 
 (* A pointer variable is used only as an INVOKE argument at a pointer
-   position of the callee, by a pointer-preserving op, or as the address
-   operand of a memory access, once.  At INVOKE, the pointer positions are
-   exactly the arguments that are pointer variables. *)
+   position of the callee, by a pointer-preserving op, compared with
+   another pointer variable (LT, GT, EQ; access_ok asks them to point into
+   the same site), or as the address operand of a memory access, once.
+   At INVOKE, the pointer positions are exactly the arguments that are
+   pointer variables. *)
 Definition ptr_use_ok_def:
   ptr_use_ok P pv inst <=>
     (inst.inst_opcode = INVOKE ==>
@@ -87,7 +89,10 @@ Definition ptr_use_ok_def:
                    (k IN P nm <=> ?v. EL k args = Var v /\ v IN pv)) /\
     !v. MEM (Var v) inst.inst_operands /\ v IN pv /\
         inst.inst_opcode <> INVOKE /\
-        ~is_pointer_preserving_op inst.inst_opcode ==>
+        ~is_pointer_preserving_op inst.inst_opcode /\
+        ~((inst.inst_opcode = LT \/ inst.inst_opcode = GT \/
+           inst.inst_opcode = EQ) /\
+          ?u w. inst.inst_operands = [Var u; Var w] /\ u IN pv /\ w IN pv) ==>
         FILTER ($= (Var v)) inst.inst_operands = [Var v] /\
         ?ops. (mem_write_ops inst = SOME ops \/ mem_read_ops inst = SOME ops) /\
               ops.iao_ofst = Var v
@@ -224,10 +229,6 @@ Definition op_taint_def:
     | _ => {}
 End
 
-Definition mem_word_taint_def:
-  mem_word_taint M (off:num) = {k | k < 32 /\ off + k IN M}
-End
-
 Definition key_taint_def:
   key_taint X key = {k:num | k < 32 /\ (key,k) IN X}
 End
@@ -258,11 +259,21 @@ Definition new_site_bytes_def:
     {i | w2n s.vs_fmp <= i /\ i < w2n s'.vs_fmp}
 End
 
+(* A byte read through address operand a is untainted when it isn't in M
+   and, if a is a pointer, lies inside a's site.  A read through a pointer
+   past its site sees another site's bytes after relocation.  A read
+   through a non-pointer address lies below the static bound (access_ok). *)
+Definition site_untainted_def:
+  site_untainted G M a (i:num) <=>
+    i NOTIN M /\
+    !v b sz. a = Var v /\ FLOOKUP G v = SOME (b,sz) ==> b <= i /\ i < b + sz
+End
+
 (* The memory bytes a step writes with tainted data: a stored word's
    tainted bytes, or a copy's tainted sources.  Every other write is
    untainted. *)
 Definition written_taint_def:
-  written_taint tn inst s =
+  written_taint G tn inst s =
     case inst.inst_operands of
       [a; v] =>
         if inst.inst_opcode = MSTORE \/ inst.inst_opcode = ISTORE then
@@ -274,7 +285,8 @@ Definition written_taint_def:
         if inst.inst_opcode = MCOPY then
           (case (eval_operand d s, eval_operand src s, eval_operand sz s) of
              (SOME dst, SOME sr, SOME n) =>
-               {w2n dst + i | i < w2n n /\ w2n sr + i IN tn.t_mem}
+               {w2n dst + i | i < w2n n /\
+                              ~site_untainted G tn.t_mem src (w2n sr + i)}
            | _ => {})
         else {}
     | _ => {}
@@ -282,20 +294,20 @@ End
 
 (* Fresh allocations start tainted; a write sets its bytes' taint. *)
 Definition mem_taint_def:
-  mem_taint tn inst s s' =
+  mem_taint G tn inst s s' =
     ((tn.t_mem UNION new_site_bytes s s') DIFF range_bytes (step_writes inst s s'))
-    UNION written_taint tn inst s
+    UNION written_taint G tn inst s
 End
 
 (* The tainted bytes of a non-PHI instruction's output. *)
 Definition out_taint_def:
-  out_taint tn inst s =
+  out_taint G tn inst s =
     case inst.inst_operands of
       [a] =>
         (case eval_operand a s of
            SOME w =>
              if inst.inst_opcode = MLOAD \/ inst.inst_opcode = ILOAD then
-               mem_word_taint tn.t_mem (w2n w)
+               {k | k < 32 /\ ~site_untainted G tn.t_mem a (w2n w + k)}
              else if inst.inst_opcode = SLOAD then key_taint tn.t_stor w
              else if inst.inst_opcode = TLOAD then key_taint tn.t_trans w
              else if inst.inst_opcode = ASSIGN then op_taint tn a
@@ -352,9 +364,9 @@ Definition adopt_reset_def:
 End
 
 Definition step_taint_def:
-  step_taint inst s s' tn =
-    <| t_mem := mem_taint tn inst s s';
-       t_var := set_var_taint tn.t_var inst.inst_outputs (out_taint tn inst s);
+  step_taint G inst s s' tn =
+    <| t_mem := mem_taint G tn inst s s';
+       t_var := set_var_taint tn.t_var inst.inst_outputs (out_taint G tn inst s);
        t_stor := adopt_reset inst (s'.vs_accounts <> s.vs_accounts)
                    (store_taint SSTORE tn inst s tn.t_stor);
        t_trans := adopt_reset inst (s'.vs_transient <> s.vs_transient)
@@ -413,7 +425,7 @@ Inductive frame_reachable:
      step_inst fuel ctx inst s = OK s' /\
      active_inst fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) ==>
      frame_reachable vs0 ctx stk PG (step_prov PG G inst s')
-       (step_taint inst s s' tn) fn inst'
+       (step_taint G inst s s' tn) fn inst'
        (s' with vs_inst_idx := SUC s.vs_inst_idx))
 [~block:]
   (!vs0 ctx stk PG G tn fn inst inst' s s' s1 fuel.
@@ -452,10 +464,29 @@ End
 
 (* ===== The per-state part and the stage fact ===== *)
 
-(* Each nonempty access ending above lo lies inside the site its address
-   operand points into. *)
+(* A REVERT, or a RETURNDATACOPY right before one: both runs revert, with
+   payloads dead_result_rel doesn't compare. *)
+Definition about_to_revert_def:
+  about_to_revert fn inst s <=>
+    inst.inst_opcode = REVERT \/
+    (inst.inst_opcode = RETURNDATACOPY /\
+     ?rinst. active_inst fn rinst (s with vs_inst_idx := SUC s.vs_inst_idx) /\
+             rinst.inst_opcode = REVERT)
+End
+
+(* A pointer's value lies at most half the word range above its site's
+   base, so adding the relocation never wraps it differently. *)
+Definition no_wrap_def:
+  no_wrap (b:num) (x:num) <=> b <= x /\ x - b < dimword (:256) DIV 2
+End
+
+(* Each nonempty write ending above lo lies inside the site its address
+   operand points into; a read ending above lo goes through a pointer and
+   starts in its site, and the bytes past the site are tainted
+   (site_untainted).  Two compared pointers point into the same site. *)
 Definition access_ok_def:
-  access_ok lo G inst s <=>
+  access_ok lo G fn inst s <=>
+    about_to_revert fn inst s \/
     (!off len.
        MEM (off,len) (source_memory_write_ranges inst s) /\ len <> 0 /\
        lo < off + len ==>
@@ -467,7 +498,16 @@ Definition access_ok_def:
        lo < off + len ==>
        ?ops v b sz. mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
                     FLOOKUP G v = SOME (b,sz) /\
-                    b <= off /\ off + len <= b + sz)
+                    no_wrap b off /\ no_wrap b (off + len)) /\
+    (!u w.
+       (inst.inst_opcode = LT \/ inst.inst_opcode = GT \/
+        inst.inst_opcode = EQ) /\
+       inst.inst_operands = [Var u; Var w] /\
+       (u IN FDOM G \/ w IN FDOM G) ==>
+       ?b sz x y. FLOOKUP G u = SOME (b,sz) /\ FLOOKUP G w = SOME (b,sz) /\
+                  eval_operand (Var u) s = SOME x /\
+                  eval_operand (Var w) s = SOME y /\
+                  no_wrap b (w2n x) /\ no_wrap b (w2n y))
 End
 
 (* Tainted data is only copied around and stored: a tainted variable is
@@ -476,7 +516,8 @@ End
    that runs on this contract's storage (DELEGATECALL, CREATE) sees none
    tainted. *)
 Definition taint_ok_def:
-  taint_ok tn inst s <=>
+  taint_ok G fn tn inst s <=>
+    about_to_revert fn inst s \/
     (!op. MEM op inst.inst_operands /\ op_taint tn op <> {} ==>
           inst.inst_opcode = ASSIGN \/
           ((inst.inst_opcode = MSTORE \/ inst.inst_opcode = SSTORE \/
@@ -484,7 +525,10 @@ Definition taint_ok_def:
            ?a. inst.inst_operands = [a; op] /\ op_taint tn a = {})) /\
     (!off len i.
        MEM (off,len) (source_memory_read_ranges inst s) /\
-       off <= i /\ i < off + len /\ i IN tn.t_mem ==>
+       off <= i /\ i < off + len /\
+       (i IN tn.t_mem \/
+        ?ops. mem_read_ops inst = SOME ops /\
+              ~site_untainted G tn.t_mem ops.iao_ofst i) ==>
        inst.inst_opcode = MLOAD \/ inst.inst_opcode = ILOAD \/
        inst.inst_opcode = MCOPY \/ inst.inst_opcode = RETURN) /\
     ((inst.inst_opcode = DELEGATECALL \/ inst.inst_opcode = CREATE \/
@@ -508,12 +552,29 @@ Definition allocas_below_fmp_def:
                b + sz <= w2n s.vs_fmp
 End
 
+(* ALLOCA sites lie at or above lo: below it is the fixed region, which
+   both runs address with the same constants. *)
+Definition allocas_from_def:
+  allocas_from lo s <=>
+    !aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==> lo <= b
+End
+
+(* The bytes below lo are reserved in ctx, so the static layout places
+   no site there. *)
+Definition fixed_region_reserved_def:
+  fixed_region_reserved lo ctx <=>
+    !i. i < lo ==>
+        ?pos sz. MEM (pos,sz) ctx.ctx_global_reserved /\ pos <= i /\
+                 i < pos + sz
+End
+
 Definition ptr_discipline_def:
   ptr_discipline (lo:num) ctx vs <=>
     ?P. EVERY (fn_ptr_ok P) ctx.ctx_functions /\
         !stk PG G tn fn inst s.
           frame_reachable vs ctx stk PG G tn fn inst s ==>
-          access_ok lo G inst s /\ taint_ok tn inst s /\
+          access_ok lo G fn inst s /\ taint_ok G fn tn inst s /\
+          allocas_from lo s /\
           (ctx_has_dalloca ctx ==> allocas_below_fmp s)
 End
 
@@ -521,12 +582,13 @@ End
 
 (* The tainted bytes of the return data a halting step leaves. *)
 Definition ret_taint_def:
-  ret_taint tn inst s =
+  ret_taint G tn inst s =
     if inst.inst_opcode = RETURN then
       case inst.inst_operands of
         [a; n] =>
           (case (eval_operand a s, eval_operand n s) of
-             (SOME off, SOME sz) => {i | i < w2n sz /\ w2n off + i IN tn.t_mem}
+             (SOME off, SOME sz) =>
+               {i | i < w2n sz /\ ~site_untainted G tn.t_mem a (w2n off + i)}
            | _ => {})
       | _ => {}
     else {}
@@ -540,7 +602,7 @@ Definition final_taint_def:
     ?stk PG G T0 fn inst s fuel.
       frame_reachable vs ctx stk PG G T0 fn inst s /\ active_inst fn inst s /\
       inst.inst_opcode <> INVOKE /\ step_inst fuel ctx inst s = Halt s_h /\
-      tn = step_taint inst s s_h T0 /\ R = ret_taint T0 inst s
+      tn = step_taint G inst s s_h T0 /\ R = ret_taint G T0 inst s
 End
 
 (* The bytes nothing reads, as functions of where they are: the running
