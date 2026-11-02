@@ -1,7 +1,7 @@
 Theory simplifyCfgStruct
 Ancestors
   simplifyCfgLabelProps simplifyCfgCompute simplifyCfgDefs cfgWf venomWf venomInst
-  cfgTransform list rich_list sorting
+  cfgTransform list rich_list sorting unitShapeDefs
 
 (* Boundary probes: wf_function intentionally does not require inst_wf. *)
 Definition struct_cycle_def:
@@ -1233,4 +1233,142 @@ Proof
       drule_all chain_merge_bb_wf >> simp[EVERY_MEM])
   >- (simp[Abbr `result_fn`] >> irule chain_merge_succs_closed >> simp[]) >>
   simp[Abbr `result_fn`] >> irule chain_merge_ids >> simp[]
+QED
+
+Theorem update_succ_phi_labels_every_inst:
+  !succs bbs. EVERY (\bb. EVERY P bb.bb_instructions) bbs /\
+  (!inst. P inst /\ inst.inst_opcode = PHI ==>
+    P (subst_label_inst old_lbl new_lbl inst)) ==>
+  EVERY (\bb. EVERY P bb.bb_instructions)
+    (update_succ_phi_labels old_lbl new_lbl bbs succs)
+Proof
+  Induct_on `succs` >> fs[update_succ_phi_labels_def] >>
+  rpt strip_tac >> Cases_on `lookup_block h bbs` >> simp[] >>
+  first_x_assum irule >> simp[] >> irule EVERY_replace_block >> simp[] >>
+  drule lookup_block_member_label >> strip_tac >>
+  fs[EVERY_MEM, MEM_MAP] >> rpt strip_tac >> gvs[] >>
+  IF_CASES_TAC >> simp[] >> metis_tac[]
+QED
+
+Theorem chain_merge_base_every_inst:
+  EVERY (\bb. EVERY P bb.bb_instructions) fn.fn_blocks /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks ==>
+  EVERY (\bb. EVERY P bb.bb_instructions)
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+Proof
+  strip_tac >> irule EVERY_replace_block >> conj_tac
+  >- (`EVERY P a.bb_instructions /\ EVERY P b.bb_instructions` by
+        (fs[EVERY_MEM] >> metis_tac[]) >>
+      simp[merge_blocks_def] >>
+      Cases_on `a.bb_instructions` >> fs[EVERY_MEM] >> metis_tac[MEM_FRONT]) >>
+  fs[EVERY_MEM, remove_block_def, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem chain_merge_every_inst:
+  EVERY (\bb. EVERY P bb.bb_instructions) fn.fn_blocks /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  (!inst. P inst /\ inst.inst_opcode = PHI ==>
+    P (subst_label_inst b.bb_label a.bb_label inst)) ==>
+  EVERY (\bb. EVERY P bb.bb_instructions)
+    (update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label fn.fn_blocks)) (bb_succs (merge_blocks a b)))
+Proof
+  strip_tac >> irule update_succ_phi_labels_every_inst >> simp[] >>
+  irule chain_merge_base_every_inst >> simp[]
+QED
+
+Theorem phi_well_formed_subst_label_ops:
+  !ops. phi_well_formed ops ==>
+    phi_well_formed (MAP (subst_label_op old_lbl new_lbl) ops)
+Proof
+  recInduct phi_well_formed_ind >>
+  simp[phi_well_formed_def, subst_label_op_def] >>
+  rpt strip_tac >> IF_CASES_TAC >> simp[phi_well_formed_def]
+QED
+
+Theorem chain_merge_phi_operands:
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands) /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks ==>
+  !inst. MEM inst (fn_insts (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label fn.fn_blocks)) (bb_succs (merge_blocks a b)))) /\
+    inst.inst_opcode = PHI ==> phi_well_formed inst.inst_operands
+Proof
+  strip_tac >>
+  `EVERY (\bb. EVERY (\inst. inst.inst_opcode = PHI ==>
+      phi_well_formed inst.inst_operands) bb.bb_instructions)
+    (update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label fn.fn_blocks)) (bb_succs (merge_blocks a b)))` by
+    (ho_match_mp_tac chain_merge_every_inst >> simp[] >> conj_tac
+     >- (simp[EVERY_MEM] >> rpt strip_tac >> first_x_assum irule >>
+         simp[fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]) >>
+     simp[subst_label_inst_def, phi_well_formed_subst_label_ops]) >>
+  fs[EVERY_MEM, fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]
+QED
+
+Theorem chain_merge_jnz_distinct:
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = JNZ ==>
+    ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f) /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks ==>
+  !inst. MEM inst (fn_insts (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label fn.fn_blocks)) (bb_succs (merge_blocks a b)))) /\
+    inst.inst_opcode = JNZ ==>
+    ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f
+Proof
+  strip_tac >>
+  `EVERY (\bb. EVERY (\inst. inst.inst_opcode = JNZ ==>
+      ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f) bb.bb_instructions)
+    (update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label fn.fn_blocks)) (bb_succs (merge_blocks a b)))` by
+    (ho_match_mp_tac chain_merge_every_inst >> simp[] >>
+     simp[subst_label_inst_shape, EVERY_MEM] >> rpt strip_tac >>
+     first_x_assum irule >> simp[fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]) >>
+  fs[EVERY_MEM, fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]
+QED
+
+Theorem chain_merge_entry_label:
+  wf_function fn /\ first_block_no_preds fn /\ MEM a fn.fn_blocks /\
+  can_merge_blocks fn a b ==>
+  (HD (update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label fn.fn_blocks)) (bb_succs (merge_blocks a b)))).bb_label =
+  (HD fn.fn_blocks).bb_label
+Proof
+  strip_tac >>
+  `fn.fn_blocks <> []` by fs[wf_function_def, fn_has_entry_def] >>
+  `(HD fn.fn_blocks).bb_label <> b.bb_label` by
+    (fs[first_block_no_preds_def, EVERY_MEM, can_merge_blocks_def] >>
+     qpat_x_assum `!bb. _` (qspec_then `a` mp_tac) >> simp[]) >>
+  qmatch_goalsub_abbrev_tac `HD result_blocks` >>
+  `MAP (\bb. bb.bb_label) result_blocks =
+   FILTER (\lbl. lbl <> b.bb_label) (fn_labels fn)` by
+    (mp_tac chain_merge_fn_labels >>
+     simp[fn_labels_def, Abbr `result_blocks`]) >>
+  Cases_on `fn.fn_blocks` >> Cases_on `result_blocks` >>
+  gvs[fn_labels_def]
+QED
+
+Theorem chain_merge_first_block_no_preds:
+  wf_function fn /\ first_block_no_preds fn /\ MEM a fn.fn_blocks /\
+  MEM b fn.fn_blocks /\ can_merge_blocks fn a b ==>
+  first_block_no_preds (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label fn.fn_blocks)) (bb_succs (merge_blocks a b)))
+Proof
+  strip_tac >> simp[first_block_no_preds_def, chain_merge_entry_label] >>
+  ho_match_mp_tac update_succ_phi_labels_cfg_property >> conj_tac
+  >- (irule chain_merge_base_bb_wf >> simp[]) >>
+  irule EVERY_replace_block >> conj_tac
+  >- (`b.bb_instructions <> []` by fs[wf_function_def, bb_well_formed_def] >>
+      simp[merge_blocks_def, bb_succs_merge_blocks] >>
+      fs[first_block_no_preds_def, EVERY_MEM] >> metis_tac[]) >>
+  fs[first_block_no_preds_def, remove_block_def, EVERY_MEM, MEM_FILTER] >> metis_tac[]
 QED
