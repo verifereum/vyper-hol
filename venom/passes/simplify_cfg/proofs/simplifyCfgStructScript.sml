@@ -1608,7 +1608,6 @@ Proof
   fs[] >> metis_tac[bb_bypass_source_successor]
 QED
 
-(* Pending C1.3.3.2: retained assembly experiment, not yet proved.
 Theorem do_merge_jump_closed:
   wf_function fn /\ lookup_block a.bb_label fn.fn_blocks = SOME a /\
   lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
@@ -1634,14 +1633,102 @@ Proof
     MEM succ (FILTER (\lbl. lbl <> b.bb_label) (fn_labels fn))) out_blocks`
     suffices_by (simp[EVERY_MEM] >> metis_tac[]) >>
   unabbrev_all_tac >> irule EVERY_replace_block_except >> conj_tac
-  >- (IF_CASES_TAC >> simp[merge_blocks_def] >> rpt strip_tac >>
-      gvs[bb_succs_update_phi_bypass, bb_well_formed_bypass_source] >>
+  >- (IF_CASES_TAC >> gvs[] >> rpt strip_tac
+      >- (drule_all bb_bypass_source_phi_successor >> strip_tac >>
+          simp[MEM_FILTER] >> metis_tac[fn_labels_def, MEM_MAP]) >>
       drule_all bb_bypass_source_successor >> strip_tac >>
-      simp[MEM_FILTER] >> metis_tac[MEM_MAP]) >>
+      simp[MEM_FILTER] >> metis_tac[fn_labels_def, MEM_MAP]) >>
   irule EVERY_replace_block_except >> conj_tac
   >- (simp[bb_succs_update_phi_bypass] >> rpt strip_tac >>
       simp[MEM_FILTER] >> metis_tac[can_bypass_jump_unique_pred]) >>
   simp[remove_block_def, EVERY_MEM, MEM_FILTER] >> rpt strip_tac >>
   simp[MEM_FILTER] >> metis_tac[can_bypass_jump_unique_pred]
 QED
-*)
+
+Theorem do_merge_jump_wf:
+  wf_function fn /\ lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn', lm') ==>
+  wf_function fn'
+Proof
+  strip_tac >>
+  `MEM a fn.fn_blocks` by metis_tac[lookup_block_member_label] >>
+  `ALL_DISTINCT (fn_labels fn') /\ fn_has_entry fn'` by
+    (irule do_merge_jump_labels_entry >> metis_tac[]) >>
+  `EVERY bb_well_formed fn'.fn_blocks` by
+    (irule do_merge_jump_bb_wf >> metis_tac[]) >>
+  `fn_succs_closed fn'` by (irule do_merge_jump_closed >> metis_tac[]) >>
+  `fn_inst_ids_distinct fn'` by (irule do_merge_jump_ids >> metis_tac[]) >>
+  fs[wf_function_def, EVERY_MEM]
+QED
+
+Theorem do_merge_jump_first_block_no_preds:
+  wf_function fn /\ first_block_no_preds fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn', lm') ==>
+  first_block_no_preds fn'
+Proof
+  strip_tac >>
+  `MEM a fn.fn_blocks /\ MEM b fn.fn_blocks` by
+    metis_tac[lookup_block_member_label] >>
+  `(HD fn'.fn_blocks).bb_label = (HD fn.fn_blocks).bb_label` by
+    (irule do_merge_jump_entry_label >> metis_tac[]) >>
+  `ALL_DISTINCT (fn_labels fn) /\ bb_well_formed a` by fs[wf_function_def] >>
+  `EVERY (\bb. ~MEM (HD fn.fn_blocks).bb_label (bb_succs bb)) fn.fn_blocks` by
+    fs[first_block_no_preds_def] >>
+  fs[do_merge_jump_def, AllCaseEqs()] >>
+  drule lookup_block_member_label >> strip_tac >>
+  `bb_well_formed target` by fs[wf_function_def] >>
+  `b.bb_label <> target_lbl` by metis_tac[can_bypass_jump_target_distinct] >>
+  `target_lbl <> (HD fn.fn_blocks).bb_label` by
+    (fs[EVERY_MEM] >> qpat_x_assum `!bb. _` (qspec_then `b` mp_tac) >> simp[]) >>
+  gvs[] >> simp[first_block_no_preds_def] >>
+  irule EVERY_replace_block >> conj_tac
+  >- (IF_CASES_TAC >> gvs[]
+      >- (strip_tac >> drule_all bb_bypass_source_phi_successor >>
+          strip_tac >> fs[EVERY_MEM] >> metis_tac[]) >>
+      strip_tac >> drule_all bb_bypass_source_successor >>
+      strip_tac >> fs[EVERY_MEM] >> metis_tac[]) >>
+  irule EVERY_replace_block >> simp[bb_succs_update_phi_bypass] >>
+  conj_tac >- fs[EVERY_MEM] >>
+  simp[remove_block_def, EVERY_FILTER] >> fs[EVERY_MEM]
+QED
+
+Theorem try_bypass_property:
+  !succs fn' lm' changed.
+  P fn /\
+  (!b out out_lm. lookup_block b.bb_label fn.fn_blocks = SOME b /\
+    can_bypass_jump fn a b /\ do_merge_jump fn a b lm = SOME (out, out_lm) ==> P out) /\
+  try_bypass fn lm a succs = (fn', lm', changed) ==> P fn'
+Proof
+  Induct_on `succs` >- simp[try_bypass_def] >>
+  rpt strip_tac >> gvs[Once try_bypass_def, AllCaseEqs()] >>
+  metis_tac[lookup_block_member_label]
+QED
+
+Theorem try_bypass_wf:
+  wf_function fn /\ lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  try_bypass fn lm a succs = (fn', lm', changed) ==> wf_function fn'
+Proof
+  strip_tac >> irule try_bypass_property >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[do_merge_jump_wf]
+QED
+
+Theorem try_bypass_ssa:
+  wf_function fn /\ ssa_form fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  try_bypass fn lm a succs = (fn', lm', changed) ==> ssa_form fn'
+Proof
+  strip_tac >> irule try_bypass_property >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[do_merge_jump_ssa]
+QED
+
+Theorem try_bypass_first_block_no_preds:
+  wf_function fn /\ first_block_no_preds fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  try_bypass fn lm a succs = (fn', lm', changed) ==> first_block_no_preds fn'
+Proof
+  strip_tac >> irule try_bypass_property >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[do_merge_jump_first_block_no_preds]
+QED
