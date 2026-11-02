@@ -143,16 +143,47 @@ Proof
   metis_tac[compile_ensure_in_memory_extends]
 QED
 
-(* Captured results with the same read have the same compiled-value relation. *)
+(* Captured results with the same read have the same compiled-value
+   relation, but for a pointer into memory, where a local's place also fixes
+   the pointer (local_place_at) and a dynamic array's place, unlike a value,
+   may sit at its local's length word (vv_at). *)
 Theorem vv_post_read_result:
   !func cenv cx e es sa sb s0 es' tv v vv s ctx.
-    read_result cx tv es' = (INL v, es') ==>
+    read_result cx tv es' = (INL v, es') /\
+    (!t p. vv = LocatedValue t p ==> p.ptr_location <> LocMemory) ==>
     (vv_post ctx func cenv cx e es sa sb s0 es' tv vv s <=>
      vv_post ctx func cenv cx e es sa sb s0 es' (Value v) vv s)
 Proof
-  rpt strip_tac >> Cases_on `vv` >>
+  rpt strip_tac >> Cases_on `vv`
+  >- simp[vv_post_def, vv_holds_def, vv_at_def, read_result_def, return_def] >>
+  rename1 `LocatedValue t p` >> Cases_on `p.ptr_location` >> gvs[] >>
   simp[vv_post_def, vv_holds_def, vv_at_def, storage_holds_def,
        immutable_holds_def, read_result_def, return_def]
+QED
+
+(* From a captured result to the value it reads, for a pointer into memory
+   too where the type is not a dynamic array's. *)
+Theorem vv_post_read_result_value:
+  !func cenv cx e es sa sb s0 es' tv v vv s ctx.
+    read_result cx tv es' = (INL v, es') /\
+    (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
+           ~dynarray_type t) /\
+    vv_post ctx func cenv cx e es sa sb s0 es' tv vv s ==>
+    vv_post ctx func cenv cx e es sa sb s0 es' (Value v) vv s
+Proof
+  rpt strip_tac >> Cases_on `vv`
+  >- gvs[vv_post_def, vv_holds_def, vv_at_def, read_result_def, return_def] >>
+  rename1 `LocatedValue t p` >> Cases_on `p.ptr_location = LocMemory`
+  >- (gvs[vv_post_def, vv_holds_def, vv_at_def, read_result_def,
+          return_def] >> metis_tac[]) >>
+  metis_tac[vv_post_read_result]
+QED
+
+(* A dynamic array has no word type. *)
+Theorem is_word_type_not_dynarray:
+  !t. is_word_type t ==> ~dynarray_type t
+Proof
+  Cases >> simp[is_word_type_def, dynarray_type_def]
 QED
 
 (* ===== unwrap_value's code ===== *)
@@ -170,7 +201,20 @@ Proof
      read_result_def, return_def]
 QED
 
-(* An aggregate in memory: the pointer is the operand, no code. *)
+(* An aggregate in memory: the pointer is the operand, no code.  For the
+   captured result itself, a dynamic array's place at its local's length
+   word included. *)
+Theorem expr_post_of_vv_post_memory_read:
+  !func cenv cx e es sa sb s0 es' tv v t p s ctx.
+    vv_post ctx func cenv cx e es sa sb s0 es' tv (LocatedValue t p) s /\
+    read_result cx tv es' = (INL v, es') /\
+    p.ptr_location = LocMemory /\ ~is_word_type t ==>
+    expr_post ctx func cenv cx e es sa sb s0 es' v p.ptr_operand s
+Proof
+  rw[vv_post_def, expr_post_def, vv_holds_def, vv_at_def] >>
+  gvs[expr_val_rel_def, expr_val_at_def] >> metis_tac[]
+QED
+
 Theorem expr_post_of_vv_post_memory:
   !func cenv cx e es sa sb s0 es' v t p s ctx.
     vv_post ctx func cenv cx e es sa sb s0 es' (Value v) (LocatedValue t p) s /\
@@ -591,13 +635,18 @@ Theorem unwrap_memory_read_result_sim:
 Proof
   rpt strip_tac >> Cases_on `res`
   >- (rename1 `read_result cx raw es' = (INL v, es')` >>
-      drule vv_post_read_result >> strip_tac >>
+      reverse (Cases_on `is_word_type t`)
+      >- (gvs[unwrap_value_def, comp_return_def] >> irule frag_exec_refl >>
+          rw[] >> metis_tac[expr_post_of_vv_post_memory_read]) >>
       irule frag_exec_conseq >>
       qexistsl_tac
         [`\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s`,
          `\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s`,
          `\r. F`] >>
-      simp[] >> irule unwrap_memory_sim >> simp[]) >>
+      simp[] >> conj_tac
+      >- (rpt strip_tac >> irule vv_post_read_result_value >> simp[] >>
+          metis_tac[is_word_type_not_dynarray]) >>
+      irule unwrap_memory_sim >> simp[]) >>
   rename1 `read_result cx raw es' = (INR exc, es')` >>
   irule frag_exec_conseq >> qexistsl_tac [`\s. F`, `\s. F`, `\r. F`] >>
   simp[fragExecTheory.frag_exec_false_pre] >> metis_tac[vv_post_failed_read]
@@ -633,9 +682,14 @@ Theorem unwrap_read_result_sim[local]:
       (\s. ?v. res = INL v /\ expr_post ctx func cenv cx e es sa sb s0 es' v op s)
       (expr_exit res)
 Proof
-  rpt strip_tac >> Cases_on `res`
+  rpt strip_tac >>
+  Cases_on `?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory`
+  >- (gvs[] >> irule unwrap_memory_read_result_sim >> simp[]) >>
+  Cases_on `res`
   >- (rename1 `read_result cx raw es' = (INL v, es')` >>
-      drule vv_post_read_result >> strip_tac >>
+      drule vv_post_read_result >>
+      disch_then (qspec_then `vv` mp_tac) >> impl_tac >- metis_tac[] >>
+      strip_tac >>
       irule frag_exec_conseq >>
       qexistsl_tac
         [`\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s`,

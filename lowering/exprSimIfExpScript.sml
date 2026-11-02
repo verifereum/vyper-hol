@@ -603,6 +603,7 @@ QED
 
 Theorem readable_eval_frag_transport[local]:
   eval_expr cx e es = (raw,es') /\ expr_read_res_ok cx es' raw /\
+  (!t p. vv = LocatedValue t p ==> p.ptr_location <> LocMemory) /\
   (!res. (do result <- eval_expr cx e; read_result cx result od) es = (res,es') /\
          expr_res_ok res ==>
          frag_exec ctx sa sb P
@@ -617,7 +618,9 @@ Proof
   strip_tac >> fs[expr_read_res_ok_def] >> gvs[]
   >- (qpat_x_assum `!res. _` (qspec_then `INL v` mp_tac) >>
       simp[bind_def, expr_res_ok_def] >>
-      drule vv_post_read_result >> strip_tac >>
+      drule vv_post_read_result >>
+      disch_then (qspec_then `vv` mp_tac) >> impl_tac >- metis_tac[] >>
+      strip_tac >>
       `expr_exit (INL v) = (\r. F)` by simp[FUN_EQ_THM] >>
       `expr_exit (INL r) = (\r. F)` by simp[FUN_EQ_THM] >>
       simp[]) >>
@@ -694,6 +697,7 @@ QED
 
 Theorem compile_ifexp_vv_sim:
   !ctx func cenv cx ty t c a b es.
+    is_word_type t /\
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
     (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
@@ -718,7 +722,9 @@ Theorem compile_ifexp_vv_sim:
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   irule readable_eval_frag_transport >>
-  simp[] >> rpt strip_tac >>
+  simp[] >> conj_tac
+  >- (drule_all compile_expr_ifexp_states >> strip_tac >> gvs[]) >>
+  rpt strip_tac >>
   irule compile_ifexp_forced_frag >> simp[] >> qexists_tac `ty` >> simp[] >>
   first_assum ACCEPT_TAC
 QED

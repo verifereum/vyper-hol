@@ -80,13 +80,15 @@
 
 Theory exprSim
 Ancestors
-  list rich_list finite_map pred_set
+  list rich_list finite_map pred_set pair
   fragExec varsExt loweringSlice localPtrsProps venomMemDefs
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
   vyperInterpreter vyperState vyperValueOperation vyperContext
   valueEncoding valueEncodingProofs vyperTypeSystem
   venomExecSemantics venomInst venomState
   vyperLookupStorage vyperStorageBackend
+Libs
+  pairLib
 
 (* ===== The judgment ===== *)
 
@@ -527,10 +529,139 @@ Definition immutable_holds_def:
       read_result cx tv es = (INL v, es)
 End
 
+(* ===== Offsets in memory ===== *)
+
+(* The byte offset of a field in a struct's memory layout, and its type:
+   the preceding fields' sizes, as struct_field_slot sums slots. *)
+Definition mem_field_offset_def:
+  mem_field_offset [] id = NONE /\
+  mem_field_offset ((name,tv)::fields) id =
+    if name = id then SOME (0n,tv)
+    else OPTION_MAP (\(off,ftv). (type_memory_size tv + off,ftv))
+           (mem_field_offset fields id)
+End
+
+(* One step of a path: a field, or an element of an array (past the length
+   word of a DynArray) or a tuple, where subscript_type has it. *)
+Definition mem_step_offset_def:
+  mem_step_offset (StructTV fields) (AttrSubscript id) =
+    mem_field_offset fields id /\
+  mem_step_offset (ArrayTV etv (Fixed n)) (ValueSubscript (IntV i)) =
+    (if 0 <= i /\ Num i < n then SOME (Num i * type_memory_size etv, etv)
+     else NONE) /\
+  mem_step_offset (ArrayTV etv (Dynamic n)) (ValueSubscript (IntV i)) =
+    (if 0 <= i /\ Num i < n then SOME (32 + Num i * type_memory_size etv, etv)
+     else NONE) /\
+  mem_step_offset (TupleTV tvs) (ValueSubscript (IntV i)) =
+    (if 0 <= i /\ Num i < LENGTH tvs then
+       SOME (type_memory_size_list (TAKE (Num i) tvs), EL (Num i) tvs)
+     else NONE) /\
+  mem_step_offset _ _ = NONE
+End
+
+Definition mem_path_offset_def:
+  mem_path_offset tv [] = SOME (0n,tv) /\
+  mem_path_offset tv (sb::path) =
+    case mem_step_offset tv sb of
+    | NONE => NONE
+    | SOME (k,etv) =>
+        OPTION_MAP (\(k',ptv). (k + k',ptv)) (mem_path_offset etv path)
+End
+
+Theorem mem_path_offset_snoc:
+  !path tv k ptv sb k2 etv.
+    mem_path_offset tv path = SOME (k,ptv) /\
+    mem_step_offset ptv sb = SOME (k2,etv) ==>
+    mem_path_offset tv (path ++ [sb]) = SOME (k + k2,etv)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[mem_path_offset_def] >>
+  gvs[mem_path_offset_def, AllCaseEqs(), EXISTS_PROD, PULL_EXISTS] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem mem_field_offset_sound[local]:
+  !fs fld k ftv.
+    mem_field_offset fs fld = SOME (k,ftv) ==>
+    ALOOKUP fs fld = SOME ftv /\
+    k + type_memory_size ftv <= type_memory_size_fields fs
+Proof
+  Induct >> simp[mem_field_offset_def] >> PairCases >>
+  simp[mem_field_offset_def, type_memory_size_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> simp[PULL_EXISTS, FORALL_PROD] >>
+  rpt strip_tac >> res_tac >> simp[]
+QED
+
+Theorem type_memory_size_list_take_el[local]:
+  !tvs n. n < LENGTH tvs ==>
+    type_memory_size_list (TAKE n tvs) + type_memory_size (EL n tvs) <=
+    type_memory_size_list tvs
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `n` >>
+  simp[type_memory_size_def] >> strip_tac >> res_tac >> simp[]
+QED
+
+Theorem mul_succ_le[local]:
+  !i n. i < n ==> !s. i * s + s <= n * s
+Proof
+  rpt strip_tac >> REWRITE_TAC [GSYM arithmeticTheory.MULT] >>
+  irule arithmeticTheory.LESS_MONO_MULT >> simp[]
+QED
+
+Theorem mem_step_offset_sound[local]:
+  !tv sb k etv.
+    mem_step_offset tv sb = SOME (k,etv) ==>
+    subscript_type tv sb = SOME etv /\
+    k + type_memory_size etv <= type_memory_size tv
+Proof
+  rpt gen_tac >> Cases_on `tv` >> Cases_on `sb` >>
+  TRY (rename1 `ValueSubscript x` >> Cases_on `x`) >>
+  TRY (rename1 `ArrayTV _ bd` >> Cases_on `bd`) >>
+  simp[mem_step_offset_def, subscript_type_def, type_memory_size_def] >>
+  rw[] >> gvs[] >>
+  TRY (drule mem_field_offset_sound >> simp[] >> NO_TAC) >>
+  TRY (drule type_memory_size_list_take_el >> simp[] >> NO_TAC) >>
+  qpat_x_assum `Num _ < _` (mp_tac o MATCH_MP mul_succ_le) >>
+  disch_then (qspec_then `type_memory_size etv` mp_tac) >> simp[]
+QED
+
+(* A path's offset is where the source's subscripts_type puts the path, and
+   the place's bytes lie inside the type's. *)
+Theorem mem_path_offset_sound:
+  !path tv k ptv.
+    mem_path_offset tv path = SOME (k,ptv) ==>
+    subscripts_type tv path = SOME ptv /\
+    k + type_memory_size ptv <= type_memory_size tv
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[mem_path_offset_def, subscripts_type_def] >>
+  gvs[mem_path_offset_def, AllCaseEqs(), EXISTS_PROD, PULL_EXISTS] >>
+  drule mem_step_offset_sound >> strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[subscripts_type_def]
+QED
+
+(* w points into the region of the local id at the place of path in it:
+   the local's pointer plus the path's offset in the local's declared type.
+   compile_expr's pointer for a local's place, which the place reads from,
+   and not a copy of its bytes elsewhere. *)
+Definition local_place_at_def:
+  local_place_at cenv cx s id path (w:bytes32) <=>
+    ?p sz b t0 tv0 k tv.
+      FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+      lookup_var p s = SOME b /\
+      cenv.ce_var_type id = SOME t0 /\
+      evaluate_type (get_tenv cx) t0 = SOME tv0 /\
+      mem_path_offset tv0 path = SOME (k,tv) /\
+      w = b + n2w k
+End
+
 (* A compiled value holds the value read from the captured source result
    at es.  Located values retain their expression type and location;
-   memory words also retain their typed encoding.  No current compiler
-   case returns a calldata pointer. *)
+   memory words also retain their typed encoding.  A pointer for a local's
+   place is the place's own address in the local's region
+   (local_place_at), so code run after it that changes the local (a pop in
+   a subscript's index) changes what the pointer reads as it changes the
+   place.  No current compiler case returns a calldata pointer. *)
 Definition vv_holds_def:
   (vv_holds cenv cx t tv (StackValue t' op) es s <=>
      ?v. read_result cx tv es = (INL v, es) /\ expr_val_rel cx t v op s) /\
@@ -539,12 +670,14 @@ Definition vv_holds_def:
      ?w. eval_operand p.ptr_operand s = SOME w /\
          case p.ptr_location of
            LocMemory =>
-             ?v. read_result cx tv es = (INL v, es) /\
-                 !tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
-                       val_in_memory tvt v (w2n w) s.vs_memory /\
-                       (is_word_type t ==>
-                        mem_word_at (w2n w) s.vs_memory =
-                          typed_val_to_w256 tvt v)
+             (?v. read_result cx tv es = (INL v, es) /\
+                  !tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
+                        val_in_memory tvt v (w2n w) s.vs_memory /\
+                        (is_word_type t ==>
+                         mem_word_at (w2n w) s.vs_memory =
+                           typed_val_to_w256 tvt v)) /\
+             (!id path. tv = PlaceR (MemoryPlace id path) ==>
+                        local_place_at cenv cx s id path w)
          | LocStorage => storage_holds cx F t tv w es
          | LocTransient => storage_holds cx T t tv w es
          | LocCode => immutable_holds cenv cx t tv w es
@@ -552,11 +685,16 @@ Definition vv_holds_def:
 End
 
 (* Where a value in memory sits, as expr_val_at says for expr_post: for a
-   StackValue, expr_val_at itself; for a pointer into memory, the value's
-   bytes inside one of the expression's own allocations or a live local's
-   region, word types included, unless it occupies none. *)
+   StackValue, expr_val_at itself, and never a dynamic array; for a pointer
+   into memory, the value's bytes inside one of the expression's own
+   allocations or a live local's region, word types included, unless it
+   occupies none.  Only a place of a dynamic array local n may sit at n's
+   length word: code run after it may pop n, which changes that word, and
+   then changes the place as well (x[x.pop()]), but would leave a value
+   read earlier as it was. *)
 Definition vv_at_def:
   (vv_at cenv cx t sa sb es tv (StackValue t' op) s <=>
+     ~dynarray_type t /\
      !v. read_result cx tv es = (INL v, es) ==> expr_val_at cenv cx t sa sb es v op s) /\
   (vv_at cenv cx t sa sb es tv (LocatedValue t' p) s <=>
      p.ptr_location = LocMemory ==>
@@ -571,7 +709,9 @@ Definition vv_at_def:
                                     b + sz <= lb \/ lb + lsz <= b)) \/
             (?n b sz. local_region cenv es.scopes s n b sz /\
                       b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
-                      (dynarray_local cenv n /\ ~dynarray_type t ==>
+                      (dynarray_local cenv n /\
+                       (~dynarray_type t \/
+                        !path. tv <> PlaceR (MemoryPlace n path)) ==>
                        b + 32 <= w2n w)) \/
             val_footprint tvt v = 0))
 End
@@ -629,10 +769,11 @@ Definition expr_vv_sim_def:
 End
 
 (* Where compile_expr hands out a StackValue, unwrap_value emits no code, so
-   expr_sim is expr_vv_sim on the results that are values. *)
+   expr_sim is expr_vv_sim on the results that are values, of a type other
+   than a dynamic array's. *)
 Theorem expr_vv_sim_stack:
   !ctx func cenv cx ty e es.
-    expr_sim ctx func cenv cx ty e es /\
+    expr_sim ctx func cenv cx ty e es /\ ~dynarray_type (expr_type e) /\
     (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op, sb)) /\
     (!tv es'. eval_expr cx e es = (INL tv, es') ==> ?v. tv = Value v) ==>
     expr_vv_sim ctx func cenv cx ty e es

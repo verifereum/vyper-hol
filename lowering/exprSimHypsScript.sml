@@ -243,6 +243,7 @@ Ancestors
   supportedExprTraverse exprStoragePreservation
   vyperLookup vyperPlaceResultTyping supportedProgram bodyStoragePreservation
   vyperPlaceInvariants placeTypingProps allocLimits
+  vyperStoragePlaceProvenance
 Libs
   pairLib
 
@@ -463,6 +464,91 @@ Definition expr_vv_case_def:
       expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) ==>
       expr_vv_sim ctx func cenv cx ty e es
 End
+
+(* ===== The judgment of an expression naming a mapping ===== *)
+
+(* The location of a storage or transient place. *)
+Definition slot_loc_def:
+  slot_loc tr = if tr then LocTransient else LocStorage
+End
+
+(* The results the mapping judgment speaks of: any result, and the errors
+   expr_res_ok allows. *)
+Definition expr_map_res_ok_def:
+  expr_map_res_ok (res : eval_result + exception) <=>
+    (?tv. res = INL tv) \/ (?m. res = INR (Error (RuntimeError m))) \/
+    (?d. res = INR (Error (RevertData d))) \/
+    (?str. res = INR (AssertException str))
+End
+
+(* expr_vv_sim for an expression naming a mapping (a mapping variable, or
+   a mapping inside one), whose source result is a HashMapRef, which no
+   value_vv relation describes: compile_expr's fragment ends with the
+   pointer's operand holding the mapping's slot, at its location, the
+   slot that of a declared mapping (storage_mapping_region), and with
+   vv_post's frame. *)
+Definition expr_map_sim_def:
+  expr_map_sim ctx func cenv cx ty e es <=>
+    !sa sb vv res es' s0.
+      compile_expr cenv ty e sa = (vv, sb) /\
+      eval_expr cx e es = (res, es') /\ expr_map_res_ok res /\
+      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+      local_ptrs_reserved cenv sa ==>
+      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+        (\s. ?tr slot kt vt t p.
+               res = INL (HashMapRef tr slot kt vt) /\
+               storage_mapping_region cx tr slot (HashMapT kt vt) /\
+               vv = LocatedValue t p /\ p.ptr_location = slot_loc tr /\
+               eval_operand p.ptr_operand s = SOME slot /\
+               stmt_state_rel ctx func cenv cx es' s /\
+               (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+                      lookup_var x s = SOME w) /\
+               (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                        FLOOKUP s.vs_allocas aid = SOME b) /\
+               (!aid off sz.
+                  FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\
+                  aid < sa.cs_next_id /\
+                  (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+                             off + sz <= b \/ b + sz' <= off) ==>
+                  mem_bytes_at off sz s.vs_memory =
+                    mem_bytes_at off sz s0.vs_memory) /\
+               locals_kept cenv es s0 s)
+        (expr_exit res)
+End
+
+(* expr_body_pre for an expression naming a mapping, which
+   well_typed_expr does not type: type_place_expr gives it a mapping's
+   type. *)
+Definition expr_map_pre_def:
+  expr_map_pre cenv cx env e es <=>
+    expr_sim_inv cenv cx env es /\
+    (?kt vt. type_place_expr env e = SOME (HashMapT kt vt)) /\
+    byte_widths_expr e /\ alloc_limits_expr cenv e /\
+    call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
+    EVERY (\c. FST c = NONE /\
+               ?tops. supported_program tops /\
+                      get_module_code cx NONE = SOME tops)
+          (int_calls_expr e)
+End
+
+(* expr_vv_case for an expression naming a mapping. *)
+Definition expr_map_case_def:
+  expr_map_case nocalls ctx func cenv cx e <=>
+    !env ty es.
+      expr_map_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) ==>
+      expr_map_sim ctx func cenv cx ty e es
+End
+
+(* No form but a top-level name and a subscript names a mapping. *)
+Theorem expr_map_case_other:
+  !nocalls ctx func cenv cx e.
+    (!ty id. e <> TopLevelName ty id) /\
+    (!ty e1 e2. e <> Subscript ty e1 e2) ==>
+    expr_map_case nocalls ctx func cenv cx e
+Proof
+  rw[expr_map_case_def, expr_map_pre_def] >>
+  Cases_on `e` >> gvs[well_typed_expr_def]
+QED
 
 (* The operands of an expression, evaluated and read in order, as
    evaluate_ind gives their judgments: each one's if the ones before it can
@@ -1036,7 +1122,8 @@ Theorem expr_ok_stack:
   !cenv e.
     expr_sim_ok cenv e /\
     (!ty sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op, sb)) /\
-    (!cx es tv es'. eval_expr cx e es = (INL tv, es') ==> ?v. tv = Value v) ==>
+    (!cx es tv es'. eval_expr cx e es = (INL tv, es') ==> ?v. tv = Value v) /\
+    (!cx env es. expr_sim_pre cenv cx env e es ==> ~dynarray_type (expr_type e)) ==>
     expr_ok cenv e
 Proof
   rw[expr_ok_def, expr_vv_ok_def] >> irule expr_vv_sim_stack >>
@@ -1105,7 +1192,8 @@ Theorem expr_vv_case_stack:
   !nocalls ctx func cenv cx e.
     expr_sim_case nocalls ctx func cenv cx e /\
     (!ty sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op, sb)) /\
-    (!es tv es'. eval_expr cx e es = (INL tv, es') ==> ?v. tv = Value v) ==>
+    (!es tv es'. eval_expr cx e es = (INL tv, es') ==> ?v. tv = Value v) /\
+    (!env es. expr_body_pre cenv cx env e es ==> ~dynarray_type (expr_type e)) ==>
     expr_vv_case nocalls ctx func cenv cx e
 Proof
   rw[expr_sim_case_def, expr_vv_case_def] >> irule expr_vv_sim_stack >>

@@ -58,26 +58,79 @@ Ancestors
    internal function, uses them with nocalls = F, as compile_subscript_sim
    does with T. *)
 
-(* A subscript of a mapping (place_type MapPT).  Cheated: the base
-   evaluates to a HashMapRef, which expr_vv_res_ok, and so the base's
-   judgment, leaves out, and which well_typed_expr does not type
-   (type_place_expr does), so for a nested mapping the hypotheses say
-   nothing of the inner keys.  The proof needs expr_vv_case to describe a
-   HashMapRef result, the operand holding the mapping's slot (see the
-   header), and the slot computation:
-   compile_mapping_subscript's SHA3 over the slot and key words stored in a
-   64-byte buffer against hashmap_slot slot (encode_hashmap_key kt kv), with
+(* ===== Mappings ===== *)
+
+(* A mapping variable: compile_expr's pointer is the mapping's slot, at its
+   storage location (compile_toplevel_name_sim in exprSimLeaves is the
+   other variables').  Cheated. *)
+Theorem compile_toplevel_map_case:
+  !nocalls ctx func cenv cx ty id.
+    expr_map_case nocalls ctx func cenv cx (TopLevelName ty id)
+Proof
+  cheat
+QED
+
+(* A mapping that is a value of a mapping (m[a] for m : HashMap[K,
+   HashMap[...]]): the base's slot, the key lowered after it, and
+   compile_mapping_subscript's SHA3 over the two against hashmap_slot slot
+   (encode_hashmap_key kt kv), with compile_keccak256_key for a bytes or
+   string key.  Cheated. *)
+Theorem compile_subscript_map_map_case:
+  !nocalls ctx func cenv cx ann obj idx.
+    expr_map_case nocalls ctx func cenv cx obj /\
+    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
+              expr_sim_case nocalls ctx func cenv cx idx) ==>
+    expr_map_case nocalls ctx func cenv cx (Subscript ann obj idx)
+Proof
+  cheat
+QED
+
+Theorem expr_sim_below_mono[local]:
+  !cenv m n. expr_sim_below cenv n /\ m <= n ==> expr_sim_below cenv m
+Proof
+  rw[expr_sim_below_def]
+QED
+
+(* With every smaller expression simulating, an expression naming a
+   mapping simulates: its keys are smaller. *)
+Theorem expr_map_case_below:
+  !obj cenv ctx func cx.
+    expr_sim_below cenv (expr_size obj) ==>
+    expr_map_case T ctx func cenv cx obj
+Proof
+  measureInduct_on `expr_size obj` >> rpt strip_tac >>
+  Cases_on `obj`
+  >~ [`TopLevelName`] >- simp[compile_toplevel_map_case]
+  >~ [`Subscript ann base idx`]
+  >- (irule compile_subscript_map_map_case >> conj_tac
+      >- (rpt strip_tac >>
+          `expr_ok cenv idx` by
+            (fs[expr_sim_below_def] >> first_x_assum irule >>
+             simp[expr_size_def]) >>
+          gvs[expr_ok_case]) >>
+      first_x_assum irule >> simp[expr_size_def] >>
+      irule expr_sim_below_mono >>
+      qexists_tac `expr_size (Subscript ann base idx)` >>
+      simp[expr_size_def]) >>
+  irule expr_map_case_other >> simp[]
+QED
+
+(* A subscript of a mapping (place_type MapPT) whose values are not
+   mappings: the leaf's storage place.  Cheated: the base's slot comes from
+   its expr_map_case, the key's word is lowered after it, and
+   compile_mapping_subscript's SHA3 over the two stored in a 64-byte buffer
+   computes hashmap_slot slot (encode_hashmap_key kt kv), with
    compile_keccak256_key for a bytes or string key.  expr_sim_inv's map
    table clauses make MapPT mean a declared mapping.  For a storage or
    transient subscript, here and in compile_subscript_array_case,
    storage_holds also asks that the element's or hashmap leaf's slots are in
-   range (slots_in_range); the proof gets that from static_/dyn_slots_in_range
-   and the hashmap regions of contract_storage_well_formed, as
-   toplevel_storage_slots_in_range and storage_field_slots_in_range do for
-   names and struct fields. *)
+   range (slots_in_range); the proof gets that from the base's
+   storage_mapping_region and the hashmap regions of
+   contract_storage_well_formed, as toplevel_storage_slots_in_range and
+   storage_field_slots_in_range do for names and struct fields. *)
 Theorem compile_subscript_map_case:
   !nocalls ctx func cenv cx ann obj idx kt vt.
-    expr_vv_case nocalls ctx func cenv cx obj /\
+    expr_map_case nocalls ctx func cenv cx obj /\
     (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
               expr_sim_case nocalls ctx func cenv cx idx) /\
     place_type cenv obj = MapPT kt vt ==>
@@ -156,6 +209,7 @@ QED
 Theorem compile_subscript_case:
   !nocalls ctx func cenv cx ann obj idx.
     expr_vv_case nocalls ctx func cenv cx obj /\
+    expr_map_case nocalls ctx func cenv cx obj /\
     (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
               expr_sim_case nocalls ctx func cenv cx idx) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
@@ -188,8 +242,11 @@ Proof
   `expr_ok cenv obj /\ expr_ok cenv idx` by
     (fs[expr_sim_below_def] >> rpt strip_tac >> first_x_assum irule >>
      simp[expr_size_def]) >>
+  `expr_sim_below cenv (expr_size obj)` by
+    (irule expr_sim_below_mono >>
+     qexists_tac `expr_size (Subscript ann obj idx)` >> simp[expr_size_def]) >>
   gvs[expr_ok_case, expr_vv_ok_case] >> rpt gen_tac >>
-  irule compile_subscript_case >> simp[]
+  irule compile_subscript_case >> simp[expr_map_case_below]
 QED
 
 (* ===== Attributes ===== *)

@@ -153,12 +153,17 @@ End
 (* ===== The predicates of the induction ===== *)
 
 (* An expression of a frame of the lowered program, internal calls
-   allowed, simulates as a value and as compile_expr's value_vv. *)
+   allowed, simulates as a value and as compile_expr's value_vv, and, where
+   it names a mapping, as expr_map_sim says. *)
 Definition body_expr_ok_def:
   body_expr_ok cx e <=>
-    !tops ctx func cenv env ty es.
-      body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
-      expr_sim ctx func cenv cx ty e es /\ expr_vv_sim ctx func cenv cx ty e es
+    (!tops ctx func cenv env ty es.
+       body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
+       expr_sim ctx func cenv cx ty e es /\
+       expr_vv_sim ctx func cenv cx ty e es) /\
+    (!tops ctx func cenv env ty es.
+       body_inv tops ctx cenv cx /\ expr_map_pre cenv cx env e es ==>
+       expr_map_sim ctx func cenv cx ty e es)
 End
 
 (* A well-typed, supported statement of the frame, with its declaration,
