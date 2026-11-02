@@ -11,7 +11,7 @@ Ancestors
   e2eDefs supportedStmtTraverse vyperTypeEntryReadiness
   vyperTypeContractSoundness vyperTypeInitialState vyperStorageLayoutSafety
   vyperInterpreter vyperABI vfmExecution vfmExecutionProp frameOutcome
-  list
+  list immutableSectionRel
 
 (* ===== Canonical constructor ABI and syntactic Call exclusion ===== *)
 
@@ -114,9 +114,10 @@ Definition deploy_result_rel_def:
   deploy_result_rel tops runtime_bc tx es r es' src <=>
     case src of
       INL (am', rqs) =>
-        ?lgs.
-          frame_outcome es r es' NONE runtime_bc lgs /\
-          (lookup_account tx.target es'.rollback.accounts).code = runtime_bc /\
+        ?section lgs.
+          immutables_section_rel tops (account_immutables am' tx.target) section /\
+          frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
+          (lookup_account tx.target es'.rollback.accounts).code = runtime_bc ++ section /\
           (!a. a <> tx.target ==>
                lookup_account a es'.rollback.accounts =
                lookup_account a am'.accounts) /\

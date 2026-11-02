@@ -17,9 +17,14 @@ Ancestors
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
   stmtSimDeclMem stmtSimDeclEmpty exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
   stmtSimAssign stmtSimAssignMem stmtSimAssignTuple stmtSimAssignTupleMem
-  stmtSimAssignStorage
+  stmtSimAssignStorage stmtSimStoreCopy stmtSimAssignAttr
+  stmtSimAssignAttrStorage stmtSimAugAssignAttr
   valueEncodingProofs
   localPtrsProps
+  immutableStagingBridge
+  immutableCodeLayout
+  immutableLocationProps
+  loweringShapeDefs
   loweringShapeProps
   intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
   structFieldsProps
@@ -28,6 +33,7 @@ Ancestors
   allocaBudgetChecks
   vyperLoweringCorrect
   configuredE2ECorrectness
+  evalCompilerInternalImmutables
   evalAssignmentOrder
   (* focused internal-frame allocation, cleanup and whitelist regressions *)
   calleeMemoryWitness

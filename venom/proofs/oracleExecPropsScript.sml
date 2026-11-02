@@ -1,4 +1,4 @@
-(* Only non-CALL/non-STATICCALL/non-CREATE/non-CREATE2 primitives preserve the oracle lists.
+(* Non-call primitives preserve the oracle lists and pending deletions.
  * Activated-call counterexamples live in venomCallActivationRegression.
  * INVOKE transport remains the calleeTransport boundary. *)
 Theory oracleExecProps
@@ -26,9 +26,10 @@ val step_inst_base_opcode_tac =
 Theorem step_inst_base_oracle:
   inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
   inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2 /\
+  inst.inst_opcode <> DELEGATECALL /\
   step_inst_base inst s = OK s' ==>
   s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests /\
-  s'.vs_toDelete = s.vs_toDelete
+  s'.vs_pending_deletions = s.vs_pending_deletions
 Proof
   strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[] >>
@@ -50,9 +51,10 @@ QED
 Theorem step_inst_noninvoke_oracle:
   inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> CALL /\
   inst.inst_opcode <> STATICCALL /\ inst.inst_opcode <> CREATE /\
-  inst.inst_opcode <> CREATE2 /\ step_inst fuel ctx inst s = OK s' ==>
+  inst.inst_opcode <> CREATE2 /\ inst.inst_opcode <> DELEGATECALL /\
+  step_inst fuel ctx inst s = OK s' ==>
   s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests /\
-  s'.vs_toDelete = s.vs_toDelete
+  s'.vs_pending_deletions = s.vs_pending_deletions
 Proof
   simp[Once step_inst_def] >> strip_tac >> gvs[] >>
   drule step_inst_base_oracle >> simp[]

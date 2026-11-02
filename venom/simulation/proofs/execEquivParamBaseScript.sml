@@ -558,6 +558,9 @@ Theorem vsr_exec_delegatecall:
       (exec_delegatecall inst s2 gas addr ao as_ ro rs)
 Proof
   rw[LET_THM, exec_delegatecall_def] >>
+  drule_all vsr_R_ok_frame >> strip_tac >>
+  `s1.vs_pending_deletions = s2.vs_pending_deletions` by
+    fs[vsr_frame_def, venom_state_component_equality] >>
   imp_res_tac vsr_R_ok_fields >> gvs[] >>
   simp[read_memory_def, make_venom_call_state_def,
        make_venom_delegatecall_state_def, make_venom_create_state_def,

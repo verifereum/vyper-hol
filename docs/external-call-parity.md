@@ -17,7 +17,7 @@ The stock HOL contract checker accepted every source in both deployment and
 runtime modes. The multi-module probes were accepted both on the full module
 list and on the main module alone.
 
-The oracle is Vyper `0.5.0a4+cd74ce4f+commit.cd74ce4f`, pinned by `VYPER_PIN`.
+The oracle is Vyper `0.5.0a4+9362e36b+commit.9362e36b`, pinned by `VYPER_PIN`.
 It was built with experimental codegen, no optimization, the Prague EVM version,
 and bytecode metadata disabled. The 29 retained JSON/bytecode fixtures in
 `lowering/defs/bytecode/external-calls/oracle` and their dependency provenance

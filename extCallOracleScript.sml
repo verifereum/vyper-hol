@@ -1,7 +1,8 @@
 (* Shared, gas-free external-call oracle. No evaluator is activated here.
  * TOP-LEVEL: call_request, call_outcome; precompile_result,
  * computed_precompile, failed_outcome, take_outcome, record_request,
- * adopt_outcome. CV translations export representations for later stages.
+ * adopt_outcome, adopt_outcome_deletions. CV translations export
+ * representations for later stages.
  *)
 Theory extCallOracle
 Ancestors
@@ -32,12 +33,12 @@ End
 
 Datatype:
   call_outcome = <| co_created : address;
-                    co_toDelete : address list;
                     co_success : bool;
                     co_returnData : byte list;
                     co_accounts : evm_accounts;
                     co_tStorage : transient_storage;
-                    co_logs : event list |>
+                    co_logs : event list;
+                    co_toDelete : address list |>
 End
 
 (* ===== Computed precompiles ===== *)
@@ -131,11 +132,15 @@ End
 
 val () = cv_auto_trans adopt_outcome_def;
 
-(* Outcomes carry a full pending-deletion snapshot, not a delta. *)
+(* co_toDelete is what the callee added. The EVM only conses onto the
+ * pending-deletion list, and a revert restores the caller's. *)
 Definition adopt_outcome_deletions_def:
   adopt_outcome_deletions rq outcome pending =
-    if outcome.co_success /\ ~rq.cr_static then outcome.co_toDelete else pending
+    if outcome.co_success /\ ~rq.cr_static
+    then outcome.co_toDelete ++ pending
+    else pending
 End
+
 val () = cv_auto_trans adopt_outcome_deletions_def;
 
 (* Export the remaining outcome selector too, for source/Venom consumers. *)
@@ -266,7 +271,8 @@ Theorem failed_outcome_fields[simp]:
   (failed_outcome rq).co_returnData = [] /\
   (failed_outcome rq).co_accounts = rq.cr_accounts /\
   (failed_outcome rq).co_tStorage = rq.cr_tStorage /\
-  (failed_outcome rq).co_logs = []
+  (failed_outcome rq).co_logs = [] /\
+  (failed_outcome rq).co_toDelete = []
 Proof
   simp[failed_outcome_def]
 QED
@@ -369,7 +375,8 @@ Theorem computed_precompile_state:
   computed_precompile rq ==>
   (FST (take_outcome rq os)).co_accounts = rq.cr_accounts /\
   (FST (take_outcome rq os)).co_tStorage = rq.cr_tStorage /\
-  (FST (take_outcome rq os)).co_logs = []
+  (FST (take_outcome rq os)).co_logs = [] /\
+  (FST (take_outcome rq os)).co_toDelete = []
 Proof
   rw[take_outcome_def] >>
   Cases_on `precompile_result rq.cr_target rq.cr_data` >> simp[] >>
@@ -420,9 +427,8 @@ Proof
   simp[adopt_outcome_def, adopt_outcome_deletions_def]
 QED
 
-Theorem adopt_outcome_deletions_success:
-  outcome.co_success /\ ~rq.cr_static ==>
-  adopt_outcome_deletions rq outcome pending = outcome.co_toDelete
+Theorem adopt_outcome_deletions_failed[simp]:
+  ~outcome.co_success ==> adopt_outcome_deletions rq outcome pending = pending
 Proof
   simp[adopt_outcome_deletions_def]
 QED
@@ -439,4 +445,25 @@ Theorem failed_outcome_create_fields[simp]:
   (failed_outcome rq).co_toDelete = []
 Proof
   simp[failed_outcome_def]
+QED
+
+Theorem adopt_outcome_deletions_static[simp]:
+  rq.cr_static ==> adopt_outcome_deletions rq outcome pending = pending
+Proof
+  simp[adopt_outcome_deletions_def]
+QED
+
+Theorem adopt_outcome_deletions_success:
+  outcome.co_success /\ ~rq.cr_static ==>
+  adopt_outcome_deletions rq outcome pending = outcome.co_toDelete ++ pending
+Proof
+  simp[adopt_outcome_deletions_def]
+QED
+
+Theorem adopt_outcome_deletions_computed:
+  computed_precompile rq ==>
+  adopt_outcome_deletions rq (FST (take_outcome rq os)) pending = pending
+Proof
+  strip_tac >> drule computed_precompile_state >>
+  simp[adopt_outcome_deletions_def]
 QED

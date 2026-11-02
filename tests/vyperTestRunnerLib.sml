@@ -22,6 +22,19 @@ fun is_trace_constant tm =
 
 val all_traces = List.filter is_trace_constant o constants
 
+val evaluations_run = ref 0
+
+(* Checkpoint-free CI has not compacted the loaded trace theories. Share
+   their repeated terms once, then collect temporary CV interpreters between
+   evaluations rather than relying on host-sized automatic heap limits. *)
+fun prepare_eval () = let
+  val () = if !evaluations_run = 0
+           then PolyML.shareCommonData PolyML.rootFunction else ()
+  val () = PolyML.fullGC ()
+in
+  evaluations_run := !evaluations_run + 1
+end
+
 fun test_name traces_const = let
   val {Thy, Name, ...} = dest_thy_const traces_const
   val suffix = String.extract(Name, String.size traces_prefix, NONE)
@@ -39,6 +52,7 @@ fun report_failure (traces_const, result) = TextIO.print (String.concat [
    prepared once rather than once per test. *)
 fun eval_tests [] = []
   | eval_tests traces = let
+  val () = prepare_eval ()
   val n = List.length traces
   val rtm = mk_comb(run_tests_tm, mk_list(traces, traces_ty))
   val rth = Timeout.apply (time_limit n) cv_eval rtm
