@@ -100,7 +100,7 @@ Definition label_positions_ok_def:
   label_positions_ok inst <=>
     case (inst.inst_opcode, inst.inst_operands) of
       (JMP, [Label l]) => T
-    | (JNZ, [c; Label t; Label f]) => ~is_label_operand c
+    | (JNZ, [c; Label t; Label f]) => ~is_label_operand c /\ t <> f
     | (PHI, ops) => T
     | (INVOKE, Label l :: args) => EVERY (\op. ~is_label_operand op) args
     | (_, ops) => EVERY (\op. ~is_label_operand op) ops
@@ -133,6 +133,7 @@ Definition inst_shape_ok_def:
     ~MEM inst.inst_opcode
       [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT; DJMP; OFFSET] /\
     (is_read0_opcode inst.inst_opcode ==> inst.inst_operands = []) /\
+    (inst.inst_opcode = PHI ==> 2 <= LENGTH (phi_pairs inst.inst_operands)) /\
     label_positions_ok inst
 End
 
@@ -155,7 +156,7 @@ End
 
 Definition raw_opcode_ok_def:
   raw_opcode_ok op <=>
-    ~MEM op [ASSERT_UNREACHABLE; DLOAD; DLOADBYTES; DALLOCA; DRET;
+    ~MEM op [PHI; ASSERT_UNREACHABLE; DLOAD; DLOADBYTES; DALLOCA; DRET;
              GETFMP; SETFMP; RETFMP; INITIAL_FMP; BUMP; FMP_PARAM; MEMTOP]
 End
 

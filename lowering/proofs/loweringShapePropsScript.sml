@@ -290,6 +290,17 @@ Proof
   rw[shape_step_def] >> metis_tac[]
 QED
 
+(* Two fresh labels with different suffixes differ; puts l1 <> l2 in the
+   assumptions, for the JNZ that branches to both. *)
+fun labels_differ_tac l1 s1 l2 s2 =
+  let val v1 = mk_var (l1, stringSyntax.string_ty)
+      val v2 = mk_var (l2, stringSyntax.string_ty)
+  in
+    SUBGOAL_THEN (mk_neg (mk_eq (v1, v2))) ASSUME_TAC >-
+      (irule label_sfx_distinct >>
+       MAP_EVERY EXISTS_TAC (map stringSyntax.fromMLstring [s1, s2]) >> fs[])
+  end;
+
 Theorem compile_word_copy_loop_shape:
   !src dst nwords loc is_ctor internal.
     (loc = LocStorage \/ loc = LocTransient) ==>
@@ -306,19 +317,24 @@ Proof
   >- (qx_gen_tac `cond_lbl` >> BETA_TAC >>
       once_rewrite_tac[CONJ_COMM] >> ho_match_mp_tac shape_step_pure_pre >> strip_tac >>
       irule shape_step_bind >>
-      qexists_tac `\l st. (plain_operand st src /\ plain_operand st dst) /\ compiler_label l` >>
+      qexists_tac `\l st. (plain_operand st src /\ plain_operand st dst) /\
+                   compiler_label l /\ label_sfx "wcopy_body" l` >>
       conj_tac
       >- (qx_gen_tac `body_lbl` >> BETA_TAC >>
           once_rewrite_tac[CONJ_COMM] >> ho_match_mp_tac shape_step_pure_pre >> strip_tac >>
           irule shape_step_bind >>
-          qexists_tac `\l st. (plain_operand st src /\ plain_operand st dst) /\ compiler_label l` >>
+          qexists_tac `\l st. (plain_operand st src /\ plain_operand st dst) /\
+                       compiler_label l /\ label_sfx "wcopy_exit" l` >>
           conj_tac
           >- (qx_gen_tac `exit_lbl` >> BETA_TAC >>
               once_rewrite_tac[CONJ_COMM] >> ho_match_mp_tac shape_step_pure_pre >> strip_tac >>
+              `exit_lbl <> body_lbl`
+                by (irule label_sfx_distinct >>
+                    qexistsl [`"wcopy_exit"`, `"wcopy_body"`] >> fs[]) >>
               suspend "initialization") >>
-          ho_match_mp_tac shape_step_fresh_label >>
+          ho_match_mp_tac shape_step_fresh_label_sfx >>
           simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
-      ho_match_mp_tac shape_step_fresh_label >>
+      ho_match_mp_tac shape_step_fresh_label_sfx >>
       simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   ho_match_mp_tac shape_step_fresh_label >>
   simp[shape_stable_def] >> metis_tac[plain_operand_mono]
@@ -1726,7 +1742,8 @@ QED
 Theorem stmt_shape_jnz[local]:
   !internal P test yes no.
     shape_stable P /\
-    (!st. P st ==> plain_operand st test /\ compiler_label yes /\ compiler_label no) ==>
+    (!st. P st ==> plain_operand st test /\ compiler_label yes /\
+                   compiler_label no /\ yes <> no) ==>
     shape_step internal compiler_label P
       (emit_inst JNZ [test; Label yes; Label no] []) (\u st. P st)
 Proof
@@ -1758,21 +1775,26 @@ Proof
   >- (qx_gen_tac `cond_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label cond_lbl`)
       >- simp[shape_step_def] >> simp[] >>
       irule shape_step_bind >>
-      qexists_tac `\l st. (plain_operand st src /\ plain_operand st dst) /\ compiler_label l` >>
+      qexists_tac `\l st. (plain_operand st src /\ plain_operand st dst) /\
+                   compiler_label l /\ label_sfx "wcopy_body" l` >>
       conj_tac
-      >- (qx_gen_tac `body_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label body_lbl`)
+      >- (qx_gen_tac `body_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label body_lbl /\ label_sfx "wcopy_body" body_lbl`)
           >- simp[shape_step_def] >> simp[] >>
           irule shape_step_bind >>
-          qexists_tac `\l st. (plain_operand st src /\ plain_operand st dst) /\ compiler_label l` >>
+          qexists_tac `\l st. (plain_operand st src /\ plain_operand st dst) /\
+                       compiler_label l /\ label_sfx "wcopy_exit" l` >>
           conj_tac
-          >- (qx_gen_tac `exit_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label exit_lbl`)
+          >- (qx_gen_tac `exit_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label exit_lbl /\ label_sfx "wcopy_exit" exit_lbl`)
               >- simp[shape_step_def] >> simp[] >>
+              `exit_lbl <> body_lbl`
+                by (irule label_sfx_distinct >>
+                    qexistsl [`"wcopy_exit"`, `"wcopy_body"`] >> fs[]) >>
               irule shape_step_bind >>
               qexists_tac `\ctr st. (plain_operand st src /\ plain_operand st dst) /\ plain_operand st (Var ctr)` >>
               conj_tac >- suspend "loop" >>
               ho_match_mp_tac shape_step_fresh_var >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
-          ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
-      ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+          ho_match_mp_tac shape_step_fresh_label_sfx >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+      ho_match_mp_tac shape_step_fresh_label_sfx >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
   ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]
 QED
 Resume compile_word_copy_loop_noncode_shape[loop]:
@@ -1791,7 +1813,7 @@ Resume compile_word_copy_loop_noncode_shape[loop]:
   >- (qx_gen_tac `done_op` >> BETA_TAC >>
       stmt_sequence `\u st. wcopy_live st`
         (stmt_drop (ho_match_mp_tac stmt_shape_jnz >>
-         simp[Abbr `wcopy_live`, shape_stable_conj, stmt_shape_stable_plain])) >>
+         simp[Abbr `wcopy_live`, shape_stable_conj, stmt_shape_stable_plain] >> fs[])) >>
       stmt_sequence `\u st. wcopy_live st`
         (ho_match_mp_tac stmt_shape_new_block >>
          simp[Abbr `wcopy_live`, shape_stable_conj, stmt_shape_stable_plain]) >>
@@ -1881,6 +1903,7 @@ QED
 Theorem stmt_typed_copy_loop_shape:
   !internal action dst src bound dst_sz src_sz cond_lbl body_lbl exit_lbl.
     compiler_label cond_lbl /\ compiler_label body_lbl /\ compiler_label exit_lbl /\
+    exit_lbl <> body_lbl /\
     (!dp sp. shape_step internal compiler_label
       (\st. plain_operand st dp /\ plain_operand st sp) (action dp sp) (\u:unit st. T)) ==>
     shape_step internal compiler_label
@@ -2084,21 +2107,23 @@ Resume compile_typed_copy_shape[sarray]:
   >- (qx_gen_tac `cl` >> BETA_TAC >> reverse (Cases_on `compiler_label cl`)
       >- simp[shape_step_def] >> simp[] >>
       irule shape_step_bind >>
-      qexists_tac `\l st. (plain_operand st dst /\ plain_operand st src) /\ compiler_label l` >> conj_tac
-      >- (qx_gen_tac `bl` >> BETA_TAC >> reverse (Cases_on `compiler_label bl`)
+      qexists_tac `\l st. (plain_operand st dst /\ plain_operand st src) /\ compiler_label l /\ label_sfx "typed_sa_body" l` >> conj_tac
+      >- (qx_gen_tac `bl` >> BETA_TAC >> reverse (Cases_on `compiler_label bl /\ label_sfx "typed_sa_body" bl`)
           >- simp[shape_step_def] >> simp[] >>
           irule shape_step_bind >>
-          qexists_tac `\l st. (plain_operand st dst /\ plain_operand st src) /\ compiler_label l` >> conj_tac
-          >- (qx_gen_tac `el` >> BETA_TAC >> reverse (Cases_on `compiler_label el`)
+          qexists_tac `\l st. (plain_operand st dst /\ plain_operand st src) /\ compiler_label l /\ label_sfx "typed_sa_exit" l` >> conj_tac
+          >- (qx_gen_tac `el` >> BETA_TAC >> reverse (Cases_on `compiler_label el /\ label_sfx "typed_sa_exit" el`)
               >- simp[shape_step_def] >> simp[] >>
+              `el <> bl` by (irule label_sfx_distinct >>
+                qexistsl [`"typed_sa_exit"`, `"typed_sa_body"`] >> fs[]) >>
               irule shape_step_conseq >>
               qexistsl_tac [`compiler_label`,
                 `\st. plain_operand st dst /\ plain_operand st src /\ plain_operand st (Lit (n2w ncopy))`, `\u st. T`] >>
               simp[] >> conj_tac
               >- simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
               ho_match_mp_tac stmt_typed_copy_loop_shape >> simp[]) >>
-          ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
-      ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+          ho_match_mp_tac shape_step_fresh_label_sfx >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+      ho_match_mp_tac shape_step_fresh_label_sfx >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
   ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]
 QED
 Resume compile_typed_copy_shape[dynarray]:
@@ -2153,16 +2178,18 @@ Resume compile_typed_copy_shape[dyn_labels]:
   >- (qx_gen_tac `cl` >> BETA_TAC >> reverse (Cases_on `compiler_label cl`)
       >- simp[shape_step_def] >> simp[] >>
       irule shape_step_bind >>
-      qexists_tac `\l st. (plain_operand st dp /\ plain_operand st sp /\ plain_operand st len) /\ compiler_label l` >> conj_tac
-      >- (qx_gen_tac `bl` >> BETA_TAC >> reverse (Cases_on `compiler_label bl`)
+      qexists_tac `\l st. (plain_operand st dp /\ plain_operand st sp /\ plain_operand st len) /\ compiler_label l /\ label_sfx "typed_dyn_body" l` >> conj_tac
+      >- (qx_gen_tac `bl` >> BETA_TAC >> reverse (Cases_on `compiler_label bl /\ label_sfx "typed_dyn_body" bl`)
           >- simp[shape_step_def] >> simp[] >>
           irule shape_step_bind >>
-          qexists_tac `\l st. (plain_operand st dp /\ plain_operand st sp /\ plain_operand st len) /\ compiler_label l` >> conj_tac
-          >- (qx_gen_tac `el` >> BETA_TAC >> reverse (Cases_on `compiler_label el`)
+          qexists_tac `\l st. (plain_operand st dp /\ plain_operand st sp /\ plain_operand st len) /\ compiler_label l /\ label_sfx "typed_dyn_exit" l` >> conj_tac
+          >- (qx_gen_tac `el` >> BETA_TAC >> reverse (Cases_on `compiler_label el /\ label_sfx "typed_dyn_exit" el`)
               >- simp[shape_step_def] >> simp[] >>
+              `el <> bl` by (irule label_sfx_distinct >>
+                qexistsl [`"typed_dyn_exit"`, `"typed_dyn_body"`] >> fs[]) >>
               ho_match_mp_tac stmt_typed_copy_loop_shape >> simp[]) >>
-          ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
-      ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+          ho_match_mp_tac shape_step_fresh_label_sfx >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+      ho_match_mp_tac shape_step_fresh_label_sfx >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
   ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]
 QED
 Finalise compile_typed_copy_shape[local]
@@ -2236,15 +2263,17 @@ Resume compile_abi_encode_dyn_static_loop_shape[allocated]:
   irule shape_step_bind >> qexists_tac `\l st. enc_live st /\ compiler_label l` >> conj_tac
   >- (qx_gen_tac `hdr` >> BETA_TAC >> reverse (Cases_on `compiler_label hdr`)
       >- simp[shape_step_def] >> simp[] >>
-      irule shape_step_bind >> qexists_tac `\l st. enc_live st /\ compiler_label l` >> conj_tac
-      >- (qx_gen_tac `body_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label body_lbl`)
+      irule shape_step_bind >> qexists_tac `\l st. enc_live st /\ compiler_label l /\ label_sfx "enc_dyn_body" l` >> conj_tac
+      >- (qx_gen_tac `body_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label body_lbl /\ label_sfx "enc_dyn_body" body_lbl`)
           >- simp[shape_step_def] >> simp[] >>
-          irule shape_step_bind >> qexists_tac `\l st. enc_live st /\ compiler_label l` >> conj_tac
-          >- (qx_gen_tac `exit` >> BETA_TAC >> reverse (Cases_on `compiler_label exit`)
-              >- simp[shape_step_def] >> simp[] >> suspend "header") >>
-          ho_match_mp_tac shape_step_fresh_label >>
+          irule shape_step_bind >> qexists_tac `\l st. enc_live st /\ compiler_label l /\ label_sfx "enc_dyn_exit" l` >> conj_tac
+          >- (qx_gen_tac `exit` >> BETA_TAC >> reverse (Cases_on `compiler_label exit /\ label_sfx "enc_dyn_exit" exit`)
+              >- simp[shape_step_def] >> simp[] >>
+              `exit <> body_lbl` by (irule label_sfx_distinct >>
+                qexistsl [`"enc_dyn_exit"`, `"enc_dyn_body"`] >> fs[]) >> suspend "header") >>
+          ho_match_mp_tac shape_step_fresh_label_sfx >>
           simp[Abbr `enc_live`, shape_stable_conj, stmt_shape_stable_plain]) >>
-      ho_match_mp_tac shape_step_fresh_label >>
+      ho_match_mp_tac shape_step_fresh_label_sfx >>
       simp[Abbr `enc_live`, shape_stable_conj, stmt_shape_stable_plain]) >>
   ho_match_mp_tac shape_step_fresh_label >>
   simp[Abbr `enc_live`, shape_stable_conj, stmt_shape_stable_plain]
@@ -2554,15 +2583,17 @@ Resume compile_abi_encode_shape[dyn_labels]:
   irule shape_step_bind >> qexists_tac `\l st. dyn_live st /\ compiler_label l` >> conj_tac
   >- (qx_gen_tac `hdr` >> BETA_TAC >> reverse (Cases_on `compiler_label hdr`)
       >- simp[shape_step_def] >> simp[] >>
-      irule shape_step_bind >> qexists_tac `\l st. dyn_live st /\ compiler_label l` >> conj_tac
-      >- (qx_gen_tac `body_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label body_lbl`)
+      irule shape_step_bind >> qexists_tac `\l st. dyn_live st /\ compiler_label l /\ label_sfx "enc_dyn_body" l` >> conj_tac
+      >- (qx_gen_tac `body_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label body_lbl /\ label_sfx "enc_dyn_body" body_lbl`)
           >- simp[shape_step_def] >> simp[] >>
-          irule shape_step_bind >> qexists_tac `\l st. dyn_live st /\ compiler_label l` >> conj_tac
-          >- (qx_gen_tac `exit` >> BETA_TAC >> reverse (Cases_on `compiler_label exit`)
-              >- simp[shape_step_def] >> simp[] >> suspend "dyn_header") >>
-          ho_match_mp_tac shape_step_fresh_label >>
+          irule shape_step_bind >> qexists_tac `\l st. dyn_live st /\ compiler_label l /\ label_sfx "enc_dyn_exit" l` >> conj_tac
+          >- (qx_gen_tac `exit` >> BETA_TAC >> reverse (Cases_on `compiler_label exit /\ label_sfx "enc_dyn_exit" exit`)
+              >- simp[shape_step_def] >> simp[] >>
+              `exit <> body_lbl` by (irule label_sfx_distinct >>
+                qexistsl [`"enc_dyn_exit"`, `"enc_dyn_body"`] >> fs[]) >> suspend "dyn_header") >>
+          ho_match_mp_tac shape_step_fresh_label_sfx >>
           simp[Abbr `dyn_live`, shape_stable_conj, stmt_shape_stable_plain]) >>
-      ho_match_mp_tac shape_step_fresh_label >>
+      ho_match_mp_tac shape_step_fresh_label_sfx >>
       simp[Abbr `dyn_live`, shape_stable_conj, stmt_shape_stable_plain]) >>
   ho_match_mp_tac shape_step_fresh_label >>
   simp[Abbr `dyn_live`, shape_stable_conj, stmt_shape_stable_plain]
@@ -4287,15 +4318,17 @@ Resume compile_abi_decode_shape_mload[dynamic]:
   qx_gen_tac `hdr_lbl` >> simp[] >>
   ho_match_mp_tac shape_step_pure_pre >> strip_tac >>
   match_mp_tac shape_step_bind >>
-  qexists_tac `\l st. compiler_label l /\ C st` >> conj_tac
-  >- (shape_under_tac shape_step_fresh_label `C` >> qexists_tac `compiler_label` >> simp[]) >>
+  qexists_tac `\l st. (compiler_label l /\ label_sfx "dec_dyn_body" l) /\ C st` >> conj_tac
+  >- (shape_under_tac shape_step_fresh_label_sfx `C` >> qexists_tac `compiler_label` >> simp[]) >>
   qx_gen_tac `body_lbl` >> simp[] >>
   ho_match_mp_tac shape_step_pure_pre >> strip_tac >>
   match_mp_tac shape_step_bind >>
-  qexists_tac `\l st. compiler_label l /\ C st` >> conj_tac
-  >- (shape_under_tac shape_step_fresh_label `C` >> qexists_tac `compiler_label` >> simp[]) >>
+  qexists_tac `\l st. (compiler_label l /\ label_sfx "dec_dyn_exit" l) /\ C st` >> conj_tac
+  >- (shape_under_tac shape_step_fresh_label_sfx `C` >> qexists_tac `compiler_label` >> simp[]) >>
   qx_gen_tac `exit_lbl` >> simp[] >>
   ho_match_mp_tac shape_step_pure_pre >> strip_tac >>
+  `exit_lbl <> body_lbl` by (irule label_sfx_distinct >>
+    qexistsl [`"dec_dyn_exit"`, `"dec_dyn_body"`] >> fs[]) >>
   suspend "decode_header"
 QED
 Resume compile_abi_decode_shape_mload[decode_header]:
@@ -5082,13 +5115,20 @@ Proof
   `shape_stable C` by
     (simp[Abbr `C`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
      mp_tac (Q.SPEC `[Var result_var]` shape_stable_plain_operands) >> simp[]) >>
-  map_every (fn lbl =>
+  map_every (fn (lbl, sfx) =>
     match_mp_tac shape_step_bind >>
-    qexists_tac `\l st. compiler_label l /\ C st` >> conj_tac
-    >- (shape_under_tac shape_step_fresh_label `C` >> qexists_tac `compiler_label` >> simp[]) >>
+    qexists_tac `\l st. (compiler_label l /\
+                         label_sfx ^(stringSyntax.fromMLstring sfx) l) /\ C st` >>
+    conj_tac
+    >- (shape_under_tac shape_step_fresh_label_sfx `C` >> qexists_tac `compiler_label` >> simp[]) >>
     qx_gen_tac lbl >> simp[] >>
     ho_match_mp_tac shape_step_pure_pre >> strip_tac)
-    [`entry_lbl`, `cond_lbl`, `body_lbl`, `found_lbl`, `incr_lbl`, `exit_lbl`] >>
+    [(`entry_lbl`, "in_entry"), (`cond_lbl`, "in_cond"), (`body_lbl`, "in_body"),
+     (`found_lbl`, "in_found"), (`incr_lbl`, "in_incr"), (`exit_lbl`, "in_exit")] >>
+  `exit_lbl <> body_lbl` by (irule label_sfx_distinct >>
+    qexistsl [`"in_exit"`, `"in_body"`] >> fs[]) >>
+  `found_lbl <> incr_lbl` by (irule label_sfx_distinct >>
+    qexistsl [`"in_found"`, `"in_incr"`] >> fs[]) >>
   suspend "header"
 QED
 Resume compile_array_membership_loop_shape[header]:
@@ -6038,10 +6078,12 @@ Proof
   simp[Abbr `P`] >> shape_opcode_tac
 QED
 
-fun shape_call_label_tac frame name =
+fun shape_call_label_tac frame name sfx =
   match_mp_tac shape_step_bind >>
-  qexists_tac ([QUOTE "\\l st. compiler_label l /\\ ("] @ frame @ [QUOTE ") st"]) >> conj_tac
-  >- (shape_under_tac shape_step_fresh_label frame >> qexists_tac `compiler_label` >> simp[]) >>
+  qexists_tac ([QUOTE "\\l st. (compiler_label l /\\ label_sfx ",
+                ANTIQUOTE (stringSyntax.fromMLstring sfx), QUOTE " l) /\\ ("] @
+               frame @ [QUOTE ") st"]) >> conj_tac
+  >- (shape_under_tac shape_step_fresh_label_sfx frame >> qexists_tac `compiler_label` >> simp[]) >>
   qx_gen_tac name >> simp[] >> ho_match_mp_tac shape_step_pure_pre >> strip_tac;
 
 fun shape_call_effect_tac frame effect =
@@ -6114,12 +6156,14 @@ Resume compile_uint2str_shape[setup]:
   shape_call_effect_tac `ResultFrame`
     (shape_under_tac shape_step_emit_inst_guarded_framed `ResultFrame` >>
      simp[Abbr `ResultFrame`, Abbr `IndexFrame`, Abbr `V`, Abbr `B`] >> shape_opcode_tac) >>
-  shape_call_label_tac `ResultFrame` `check_lbl` >>
-  shape_call_label_tac `ResultFrame` `cond_lbl` >>
-  shape_call_label_tac `ResultFrame` `body_lbl` >>
-  shape_call_label_tac `ResultFrame` `zero_lbl` >>
-  shape_call_label_tac `ResultFrame` `final_lbl` >>
-  shape_call_label_tac `ResultFrame` `exit_lbl` >>
+  shape_call_label_tac `ResultFrame` `check_lbl` "u2s_check" >>
+  shape_call_label_tac `ResultFrame` `cond_lbl` "u2s_cond" >>
+  shape_call_label_tac `ResultFrame` `body_lbl` "u2s_body" >>
+  shape_call_label_tac `ResultFrame` `zero_lbl` "u2s_zero" >>
+  shape_call_label_tac `ResultFrame` `final_lbl` "u2s_final" >>
+  shape_call_label_tac `ResultFrame` `exit_lbl` "u2s_exit" >>
+  labels_differ_tac "zero_lbl" "u2s_zero" "cond_lbl" "u2s_cond" >>
+  labels_differ_tac "final_lbl" "u2s_final" "body_lbl" "u2s_body" >>
   shape_call_jump_tac `ResultFrame` >> shape_call_block_tac `ResultFrame` >>
   suspend "blocks"
 QED
@@ -6240,9 +6284,10 @@ Proof
   `shape_stable Z` by
     (simp[Abbr `Z`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
      mp_tac (Q.SPEC `[is_zero]` shape_stable_plain_operands) >> simp[]) >>
-  shape_call_label_tac `Z` `default_lbl` >>
-  shape_call_label_tac `Z` `decode_lbl` >>
-  shape_call_label_tac `Z` `exit_lbl` >>
+  shape_call_label_tac `Z` `default_lbl` "extcall_default" >>
+  shape_call_label_tac `Z` `decode_lbl` "extcall_decode" >>
+  shape_call_label_tac `Z` `exit_lbl` "extcall_exit" >>
+  labels_differ_tac "default_lbl" "extcall_default" "decode_lbl" "extcall_decode" >>
   match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. P st` >> conj_tac
   >- (shape_under_tac shape_step_emit_inst_guarded_framed `Z` >> shape_opcode_tac >>
       rpt strip_tac >> gvs[Abbr `Z`, jump_label_ok_def, stackPlanTypesTheory.is_label_operand_def] >>
@@ -6345,7 +6390,8 @@ Resume compile_external_call_kwargs_shape[call]:
   `shape_stable SuccessFrame` by
     (simp[Abbr `SuccessFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
      mp_tac (Q.SPEC `[success]` shape_stable_plain_operands) >> simp[]) >>
-  shape_call_label_tac `SuccessFrame` `fail_lbl` >> shape_call_label_tac `SuccessFrame` `cont_lbl` >>
+  shape_call_label_tac `SuccessFrame` `fail_lbl` "extcall_fail" >> shape_call_label_tac `SuccessFrame` `cont_lbl` "extcall_cont" >>
+  labels_differ_tac "cont_lbl" "extcall_cont" "fail_lbl" "extcall_fail" >>
   shape_call_effect_tac `B`
     (shape_under_tac shape_step_emit_inst_guarded_framed `SuccessFrame` >> shape_opcode_tac >>
      rpt strip_tac >> gvs[Abbr `SuccessFrame`, jump_label_ok_def, plain_operand_def,
@@ -6690,10 +6736,12 @@ fun shape_raw_effect_tac frame effect =
   qexists_tac ([QUOTE "\\u st. ("] @ frame @ [QUOTE ") st"]) >> reverse conj_tac
   >- effect >> gen_tac >> simp[];
 
-fun shape_raw_label_tac frame name =
+fun shape_raw_label_tac frame name sfx =
   irule shape_step_uncurry >>
-  qexists_tac ([QUOTE "\\l st. compiler_label l /\\ ("] @ frame @ [QUOTE ") st"]) >> reverse conj_tac
-  >- (shape_under_tac shape_step_fresh_label frame >> qexists_tac `compiler_label` >> simp[]) >>
+  qexists_tac ([QUOTE "\\l st. (compiler_label l /\\ label_sfx ",
+                ANTIQUOTE (stringSyntax.fromMLstring sfx), QUOTE " l) /\\ ("] @
+               frame @ [QUOTE ") st"]) >> reverse conj_tac
+  >- (shape_under_tac shape_step_fresh_label_sfx frame >> qexists_tac `compiler_label` >> simp[]) >>
   qx_gen_tac name >> simp[] >> ho_match_mp_tac shape_step_pure_pre >> strip_tac;
 
 Theorem compile_ifexp_shape:
@@ -6726,9 +6774,10 @@ Proof
   `shape_stable ResultFrame` by
     (simp[Abbr `ResultFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
      mp_tac (Q.SPEC `[Var result_var]` shape_stable_plain_operands) >> simp[]) >>
-  shape_raw_label_tac `ResultFrame` `then_lbl` >>
-  shape_raw_label_tac `ResultFrame` `else_lbl` >>
-  shape_raw_label_tac `ResultFrame` `exit_lbl` >>
+  shape_raw_label_tac `ResultFrame` `then_lbl` "then" >>
+  shape_raw_label_tac `ResultFrame` `else_lbl` "else" >>
+  shape_raw_label_tac `ResultFrame` `exit_lbl` "exit" >>
+  labels_differ_tac "then_lbl" "then" "else_lbl" "else" >>
   irule shape_step_uncurry >> qexists_tac `\u st. ResultFrame st` >> reverse conj_tac
   >- (shape_under_tac shape_step_emit_inst_guarded_framed `ResultFrame` >>
       simp[Abbr `ResultFrame`, Abbr `CondFrame`] >> shape_opcode_tac >>
@@ -8396,12 +8445,15 @@ Theorem stmt_assert_blocks_shape[local]:
           new_block fail_lbl; failure; new_block ok_lbl; return () od) (\u st. T)
 Proof
   rpt strip_tac >>
-  stmt_bind `\l st. (plain_operand st cond_op /\ cenv_shape_ok st cenv) /\ compiler_label l` `ok_lbl`
-    (ho_match_mp_tac shape_step_fresh_label >> simp[stmt_shape_stable_plain, cenv_shape_ok_stable, shape_stable_conj]) >>
-  reverse (Cases_on `compiler_label ok_lbl`) >- simp[shape_step_def] >> simp[] >>
-  stmt_bind `\l st. (plain_operand st cond_op /\ cenv_shape_ok st cenv) /\ compiler_label l` `fail_lbl`
-    (ho_match_mp_tac shape_step_fresh_label >> simp[stmt_shape_stable_plain, cenv_shape_ok_stable, shape_stable_conj]) >>
-  reverse (Cases_on `compiler_label fail_lbl`) >- simp[shape_step_def] >> simp[] >>
+  stmt_bind `\l st. (plain_operand st cond_op /\ cenv_shape_ok st cenv) /\
+               compiler_label l /\ label_sfx "assert_ok" l` `ok_lbl`
+    (ho_match_mp_tac shape_step_fresh_label_sfx >> simp[stmt_shape_stable_plain, cenv_shape_ok_stable, shape_stable_conj]) >>
+  reverse (Cases_on `compiler_label ok_lbl /\ label_sfx "assert_ok" ok_lbl`) >- simp[shape_step_def] >> simp[] >>
+  stmt_bind `\l st. (plain_operand st cond_op /\ cenv_shape_ok st cenv) /\
+               compiler_label l /\ label_sfx "assert_fail" l` `fail_lbl`
+    (ho_match_mp_tac shape_step_fresh_label_sfx >> simp[stmt_shape_stable_plain, cenv_shape_ok_stable, shape_stable_conj]) >>
+  reverse (Cases_on `compiler_label fail_lbl /\ label_sfx "assert_fail" fail_lbl`) >- simp[shape_step_def] >> simp[] >>
+  labels_differ_tac "ok_lbl" "assert_ok" "fail_lbl" "assert_fail" >>
   stmt_sequence `\u st. cenv_shape_ok st cenv`
     (stmt_drop (ho_match_mp_tac stmt_shape_jnz >>
      simp[stmt_shape_stable_plain, cenv_shape_ok_stable, shape_stable_conj])) >>
@@ -8557,19 +8609,20 @@ Proof
      simp[shape_stable_conj, stmt_shape_stable_plain]) >>
   reverse (Cases_on `compiler_label cond_lbl`) >- simp[shape_step_def] >> simp[] >>
   stmt_bind `\l st. (plain_operand st len /\
-    (plain_operand st src /\ plain_operand st dst)) /\ compiler_label l` `body_lbl`
-    (ho_match_mp_tac shape_step_fresh_label >>
+    (plain_operand st src /\ plain_operand st dst)) /\ compiler_label l /\ label_sfx "dyn_body" l` `body_lbl`
+    (ho_match_mp_tac shape_step_fresh_label_sfx >>
      simp[shape_stable_conj, stmt_shape_stable_plain]) >>
-  reverse (Cases_on `compiler_label body_lbl`) >- simp[shape_step_def] >> simp[] >>
+  reverse (Cases_on `compiler_label body_lbl /\ label_sfx "dyn_body" body_lbl`) >- simp[shape_step_def] >> simp[] >>
   stmt_bind `\l st. (plain_operand st len /\
-    (plain_operand st src /\ plain_operand st dst)) /\ compiler_label l` `exit_lbl`
-    (ho_match_mp_tac shape_step_fresh_label >>
+    (plain_operand st src /\ plain_operand st dst)) /\ compiler_label l /\ label_sfx "dyn_exit" l` `exit_lbl`
+    (ho_match_mp_tac shape_step_fresh_label_sfx >>
      simp[shape_stable_conj, stmt_shape_stable_plain]) >>
-  reverse (Cases_on `compiler_label exit_lbl`) >- simp[shape_step_def] >> simp[] >>
+  reverse (Cases_on `compiler_label exit_lbl /\ label_sfx "dyn_exit" exit_lbl`) >- simp[shape_step_def] >> simp[] >>
   stmt_bind `\ctr st. (plain_operand st len /\
     (plain_operand st src /\ plain_operand st dst)) /\ plain_operand st (Var ctr)` `ctr`
     (ho_match_mp_tac shape_step_fresh_var >>
      simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+  labels_differ_tac "exit_lbl" "dyn_exit" "body_lbl" "dyn_body" >>
   suspend "loop"
 QED
 
@@ -9450,23 +9503,25 @@ Proof
      simp[Abbr `env_live`, cenv_shape_ok_stable, stmt_shape_stable_const, shape_stable_conj] >>
      irule lower_value_shape >> simp[]) >>
   irule shape_step_bind >>
-  qexists_tac `\l st. (plain_operand st cond_op /\ env_live st) /\ compiler_label l` >>
+  qexists_tac `\l st. (plain_operand st cond_op /\ env_live st) /\ compiler_label l /\ label_sfx "then" l` >>
   conj_tac
-  >- (qx_gen_tac `then_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label then_lbl`)
+  >- (qx_gen_tac `then_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label then_lbl /\ label_sfx "then" then_lbl`)
       >- simp[shape_step_def] >> simp[] >>
       irule shape_step_bind >>
-      qexists_tac `\l st. (plain_operand st cond_op /\ env_live st) /\ compiler_label l` >>
+      qexists_tac `\l st. (plain_operand st cond_op /\ env_live st) /\ compiler_label l /\ label_sfx "else" l` >>
       conj_tac
-      >- (qx_gen_tac `else_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label else_lbl`)
+      >- (qx_gen_tac `else_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label else_lbl /\ label_sfx "else" else_lbl`)
           >- simp[shape_step_def] >> simp[] >>
+              `then_lbl <> else_lbl` by (irule label_sfx_distinct >>
+                qexistsl [`"then"`, `"else"`] >> fs[]) >>
           irule shape_step_bind >>
           qexists_tac `\l st. (plain_operand st cond_op /\ env_live st) /\ compiler_label l` >>
           conj_tac
           >- (qx_gen_tac `exit_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label exit_lbl`)
               >- simp[shape_step_def] >> simp[] >> suspend "branches") >>
           ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
-      ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
-  ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]
+      ho_match_mp_tac shape_step_fresh_label_sfx >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+  ho_match_mp_tac shape_step_fresh_label_sfx >> simp[shape_stable_conj, stmt_shape_stable_plain]
 QED
 Resume compile_if_shape[branches]:
   stmt_sequence `\u st. plain_operand st cond_op /\ env_live st`
@@ -9516,10 +9571,14 @@ Resume compile_if_shape[else_body]:
 QED
 Finalise compile_if_shape[local]
 
-fun stmt_label post name =
-  stmt_bind post name
-    (ho_match_mp_tac shape_step_fresh_label >> simp[SF ETA_ss]) >>
-  (reverse (Cases_on (`compiler_label ` @ name)) >- simp[shape_step_def]) >> simp[];
+(* A fresh label with suffix sfx, bound to name, on top of the frame live. *)
+fun stmt_label (name, sfx) =
+  let val sfx_tm = stringSyntax.fromMLstring sfx in
+    stmt_bind `\l st. live st /\ compiler_label l /\ label_sfx ^sfx_tm l` name
+      (ho_match_mp_tac shape_step_fresh_label_sfx >> simp[SF ETA_ss]) >>
+    (reverse (Cases_on (`compiler_label ` @ name @ ` /\ label_sfx ^sfx_tm ` @ name))
+     >- simp[shape_step_def]) >> simp[]
+  end;
 
 Theorem compile_for_range_shape:
   !cenv lctx ty id fty start_e end_e bound body.
@@ -9561,8 +9620,10 @@ Resume compile_for_range_shape[labels]:
        `\u st. (plain_operand st end_op /\ plain_operand st start_op) /\ cenv_shape_ok st body_cenv`] >>
      simp[Abbr `live`] >> ho_match_mp_tac shape_step_frame >>
      simp[stmt_shape_stable_plain, shape_stable_conj, emit_local_alloca_shape]) >>
-  map_every (stmt_label `\l st. live st /\ compiler_label l`)
-    [`entry_lbl`, `cond_lbl`, `body_lbl`, `incr_lbl`, `exit_lbl`] >>
+  map_every stmt_label
+    [(`entry_lbl`, "for_entry"), (`cond_lbl`, "for_cond"), (`body_lbl`, "for_body"),
+     (`incr_lbl`, "for_incr"), (`exit_lbl`, "for_exit")] >>
+  labels_differ_tac "exit_lbl" "for_exit" "body_lbl" "for_body" >>
   stmt_sequence `\u st. live st`
     (ho_match_mp_tac stmt_shape_jmp >> simp[SF ETA_ss]) >>
   stmt_sequence `\u st. live st`
@@ -9741,8 +9802,10 @@ Resume compile_for_array_shape[labels]:
      rpt conj_tac >> TRY (simp[Abbr `live`] >> NO_TAC) >>
      ho_match_mp_tac shape_step_frame >> simp[emit_local_alloca_shape]) >>
   stmt_sequence `\u st. live st` (suspend "check") >>
-  map_every (stmt_label `\l st. live st /\ compiler_label l`)
-    [`entry_lbl`, `cond_lbl`, `body_lbl`, `incr_lbl`, `exit_lbl`] >>
+  map_every stmt_label
+    [(`entry_lbl`, "iter_entry"), (`cond_lbl`, "iter_cond"), (`body_lbl`, "iter_body"),
+     (`incr_lbl`, "iter_incr"), (`exit_lbl`, "iter_exit")] >>
+  labels_differ_tac "exit_lbl" "iter_exit" "body_lbl" "iter_body" >>
   stmt_sequence `\u st. live st`
     (ho_match_mp_tac stmt_shape_jmp >> simp[SF ETA_ss]) >>
   stmt_sequence `\u st. live st`
@@ -10045,25 +10108,32 @@ Proof
            stackPlanTypesTheory.is_label_operand_def]) >>
   gen_tac >> BETA_TAC >>
   irule shape_step_bind >>
-  qexists_tac `\l st. (plain_operand st method_id /\ plain_operand st x) /\ compiler_label l` >>
+  qexists_tac `\l st. (plain_operand st method_id /\ plain_operand st x) /\
+                   compiler_label l /\ label_sfx "match" l` >>
   reverse conj_tac
-  >- (ho_match_mp_tac shape_step_fresh_label >>
+  >- (ho_match_mp_tac shape_step_fresh_label_sfx >>
       rw[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   qx_gen_tac `ml` >> BETA_TAC >>
   irule shape_step_bind >>
-  qexists_tac `\l st. ((plain_operand st method_id /\ plain_operand st x) /\ compiler_label ml) /\ compiler_label l` >>
+  qexists_tac `\l st. ((plain_operand st method_id /\ plain_operand st x) /\
+                     compiler_label ml /\ label_sfx "match" ml) /\
+                   compiler_label l /\ label_sfx "next" l` >>
   reverse conj_tac
-  >- (ho_match_mp_tac shape_step_fresh_label >>
+  >- (ho_match_mp_tac shape_step_fresh_label_sfx >>
       rw[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   qx_gen_tac `nl` >> BETA_TAC >> suspend "branches"
 QED
 
 Resume compile_selector_checks_shape[branches]:
   irule shape_step_pre_fact >>
-  qexists_tac `~is_label_operand x /\ compiler_label ml /\ compiler_label nl` >>
+  qexists_tac `~is_label_operand x /\ compiler_label ml /\ compiler_label nl /\
+               label_sfx "match" ml /\ label_sfx "next" nl` >>
   conj_tac >- simp[plain_operand_def] >> strip_tac >>
+  labels_differ_tac "ml" "match" "nl" "next" >>
   irule shape_step_ignore_bind >>
-  qexists_tac `\u st. ((plain_operand st method_id /\ plain_operand st x) /\ compiler_label ml) /\ compiler_label nl` >>
+  qexists_tac `\u st. ((plain_operand st method_id /\ plain_operand st x) /\
+                       compiler_label ml /\ label_sfx "match" ml) /\
+                     compiler_label nl /\ label_sfx "next" nl` >>
   reverse conj_tac
   >- (ho_match_mp_tac shape_step_emit_inst_under >>
       conj_tac >- (rw[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
@@ -10111,7 +10181,7 @@ Finalise compile_selector_checks_shape
 Theorem compile_selector_dispatch_linear_shape:
   !selectors fallback_lbl.
     EVERY (\(sel, lbl). jump_label_ok lbl) selectors /\
-    jump_label_ok fallback_lbl ==>
+    jump_label_ok fallback_lbl /\ ~label_sfx "dispatch" fallback_lbl ==>
     shape_step F jump_label_ok (\st. T)
       (compile_selector_dispatch_linear selectors fallback_lbl) (\x st. T)
 Proof
@@ -10161,19 +10231,22 @@ Resume compile_selector_dispatch_linear_shape[iszero]:
   qexistsl_tac [`jump_label_ok`, `\st. plain_operand st cond`, `\u st. T`] >>
   simp[] >>
   irule shape_step_bind >>
-  qexists_tac `\l st. plain_operand st cond /\ compiler_label l` >>
+  qexists_tac `\l st. plain_operand st cond /\ compiler_label l /\ label_sfx "dispatch" l` >>
   reverse conj_tac
-  >- (ho_match_mp_tac shape_step_fresh_label >>
+  >- (ho_match_mp_tac shape_step_fresh_label_sfx >>
       qspec_then `[cond]` mp_tac shape_stable_plain_operands >> simp[]) >>
   qx_gen_tac `dispatch` >> BETA_TAC >> suspend "jump"
 QED
 
 Resume compile_selector_dispatch_linear_shape[jump]:
   irule shape_step_pre_fact >>
-  qexists_tac `~is_label_operand cond /\ compiler_label dispatch` >>
+  qexists_tac `~is_label_operand cond /\ compiler_label dispatch /\
+               label_sfx "dispatch" dispatch` >>
   conj_tac >- simp[plain_operand_def] >> strip_tac >>
+  `dispatch <> fallback_lbl` by metis_tac[] >>
   irule shape_step_ignore_bind >>
-  qexists_tac `\u st. plain_operand st cond /\ compiler_label dispatch` >>
+  qexists_tac `\u st. plain_operand st cond /\ compiler_label dispatch /\
+                     label_sfx "dispatch" dispatch` >>
   reverse conj_tac
   >- (ho_match_mp_tac shape_step_emit_inst_under >>
       conj_tac >- (rw[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
@@ -10185,7 +10258,8 @@ Resume compile_selector_dispatch_linear_shape[jump]:
       metis_tac[stackPlanTypesTheory.is_label_operand_def]) >>
   gen_tac >> BETA_TAC >>
   irule shape_step_ignore_bind >>
-  qexists_tac `\u st. plain_operand st cond /\ compiler_label dispatch` >>
+  qexists_tac `\u st. plain_operand st cond /\ compiler_label dispatch /\
+                     label_sfx "dispatch" dispatch` >>
   reverse conj_tac
   >- (ho_match_mp_tac shape_step_new_block >>
       simp[jump_label_ok_def] >> rw[shape_stable_def] >>
@@ -10489,7 +10563,7 @@ fun extbodies_block_bind post cont =
 fun extbodies_label_bind pre name cont =
   irule shape_step_bind >> qexists_tac pre >> conj_tac
   >- (qx_gen_tac name >> BETA_TAC >> ho_match_mp_tac extbodies_assume >> strip_tac >> cont) >>
-  ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_plain_operands];
+  ho_match_mp_tac shape_step_fresh_label_sfx >> simp[shape_stable_plain_operands];
 
 Theorem compile_abi_decode_shape:
   (!dst src opc hi info. opc = CALLDATALOAD ==>
@@ -10708,12 +10782,13 @@ Resume compile_abi_decode_shape[loop]:
   pure_rewrite_tac[Once compile_abi_decode_to_buf_def, LET_THM,
     extbodies_emit_inst_void] >> BETA_TAC >>
   extbodies_label_bind
-    `\l st. EVERY (plain_operand st) [dst; src; hi; ip; cnt] /\ compiler_label l` `hdr`
+    `\l st. EVERY (plain_operand st) [dst; src; hi; ip; cnt] /\ compiler_label l /\ label_sfx "dec_dyn_hdr" l` `hdr`
    (extbodies_label_bind
-     `\l st. EVERY (plain_operand st) [dst; src; hi; ip; cnt] /\ compiler_label l` `bodylbl`
+     `\l st. EVERY (plain_operand st) [dst; src; hi; ip; cnt] /\ compiler_label l /\ label_sfx "dec_dyn_body" l` `bodylbl`
     (extbodies_label_bind
-      `\l st. EVERY (plain_operand st) [dst; src; hi; ip; cnt] /\ compiler_label l` `exit`
-     (suspend "loop_jump")))
+      `\l st. EVERY (plain_operand st) [dst; src; hi; ip; cnt] /\ compiler_label l /\ label_sfx "dec_dyn_exit" l` `exit`
+     (labels_differ_tac "exit" "dec_dyn_exit" "bodylbl" "dec_dyn_body" >>
+      suspend "loop_jump")))
 QED
 Resume compile_abi_decode_shape[loop_jump]:
   extbodies_void_bind `\u st. EVERY (plain_operand st) [dst; src; hi; ip; cnt]`
@@ -11830,12 +11905,17 @@ Theorem runtime_entry_prefix_shape[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   irule shape_step_bind >>
-  qexists_tac `\l st. T /\ compiler_label l` >>
+  qexists_tac `\l st. T /\ compiler_label l /\ label_sfx "fallback" l` >>
   reverse conj_tac
-  >- (ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_def]) >>
+  >- (ho_match_mp_tac shape_step_fresh_label_sfx >> simp[shape_stable_def]) >>
   gen_tac >> BETA_TAC >>
-  Cases_on `compiler_label x`
-  >- (irule shape_step_conseq >>
+  Cases_on `compiler_label x /\ label_sfx "fallback" x`
+  >- (fs[] >>
+      `~label_sfx "dispatch" x`
+        by (strip_tac >> `x <> x` suffices_by simp[] >>
+            irule label_sfx_distinct >>
+            qexistsl_tac [`"fallback"`, `"dispatch"`] >> simp[]) >>
+      irule shape_step_conseq >>
       qexistsl_tac [`jump_label_ok`, `\st. T`, `\x st. T`] >>
       simp[] >>
       irule shape_step_ignore_bind >> qexists_tac `\x st. T` >>

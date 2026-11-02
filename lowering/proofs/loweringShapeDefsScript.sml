@@ -103,6 +103,12 @@ Definition compiler_label_def:
   compiler_label l <=> l IN compiler_labels_future 0
 End
 
+(* Labels made by fresh_label with suffix sfx; two different suffixes never
+   give the same label, which is how a JNZ's two targets differ. *)
+Definition label_sfx_def:
+  label_sfx sfx l <=> ?k. l = fresh_label_output sfx k
+End
+
 (* Compiler-generated labels and external entry labels ("fn_" ++ name). *)
 Definition jump_label_ok_def:
   jump_label_ok l <=> compiler_label l \/ isPREFIX "fn_" l
