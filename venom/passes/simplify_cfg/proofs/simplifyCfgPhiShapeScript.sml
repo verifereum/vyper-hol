@@ -2,7 +2,7 @@
 Theory simplifyCfgPhiShape
 Ancestors
   simplifyCfgShape simplifyCfgGraphShape simplifyCfgDefs cfgTransform
-  venomWf venomInst list rich_list
+  venomWf venomInst cfgTransformProps list rich_list
 
 Theorem filter_phi_ops_label:
   !ops ps l. phi_well_formed ops ==>
@@ -107,4 +107,73 @@ Proof
     (drule_all ctxLookupAgreeHelpersTheory.EVERY_fn_block >>
      simp[EVERY_MEM] >> disch_then drule >> simp[]) >>
   drule_all fix_phi_inst_phi_label >> simp[fix_phis_in_block_def]
+QED
+
+Theorem pred_labels_mem:
+  MEM l (pred_labels f x) <=>
+  ?bb. MEM bb f.fn_blocks /\ bb.bb_label = l /\ MEM x (bb_succs bb)
+Proof
+  simp[pred_labels_def, block_preds_def, MEM_MAP, MEM_FILTER] >>
+  metis_tac[]
+QED
+
+Theorem chain_merge_pred_labels:
+  ALL_DISTINCT (fn_labels f) /\
+  EVERY (\bb. bb_well_formed bb) f.fn_blocks /\
+  EVERY inst_wf (fn_insts f) /\
+  lookup_block a.bb_label f.fn_blocks = SOME a /\
+  lookup_block b.bb_label f.fn_blocks = SOME b /\
+  can_merge_blocks f a b /\
+  g = f with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b)
+        (remove_block b.bb_label f.fn_blocks))
+      (bb_succs (merge_blocks a b)) /\
+  MEM x (fn_labels g) /\ MEM l (pred_labels f x) ==>
+  MEM (if l = b.bb_label then a.bb_label else l) (pred_labels g x)
+Proof
+  strip_tac >>
+  `MEM a f.fn_blocks /\ MEM b f.fn_blocks` by
+    metis_tac[lookup_block_member_label] >>
+  `b.bb_instructions <> []` by
+    gvs[EVERY_MEM, bb_well_formed_def] >>
+  `a.bb_label <> b.bb_label` by gvs[can_merge_blocks_def] >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label)
+    (replace_block a.bb_label (merge_blocks a b)
+      (remove_block b.bb_label f.fn_blocks)))` by
+    (simp[fn_labels_replace_block, merge_blocks_def] >>
+     irule ALL_DISTINCT_remove_block >> gvs[fn_labels_def]) >>
+  `!lbl. pred_labels g lbl = pred_labels
+    (f with fn_blocks := replace_block a.bb_label (merge_blocks a b)
+      (remove_block b.bb_label f.fn_blocks)) lbl` by
+    (gen_tac >> irule block_graph_pred_labels >>
+     simp[update_succ_phi_labels_graph]) >>
+  `x <> b.bb_label` by
+    (gvs[fn_labels_def, update_succ_phi_labels_labels,
+         fn_labels_replace_block, merge_blocks_def,
+         fn_labels_remove_block, MEM_FILTER]) >>
+  qpat_x_assum `MEM l (pred_labels f x)`
+    (strip_assume_tac o REWRITE_RULE [pred_labels_mem]) >>
+  rename1 `MEM src f.fn_blocks` >>
+  `src.bb_label = a.bb_label ==> src = a` by
+    (strip_tac >> `lookup_block src.bb_label f.fn_blocks = SOME src` by
+      (irule venomExecPropsTheory.MEM_lookup_block >> gvs[fn_labels_def]) >>
+     gvs[]) >>
+  `src.bb_label = b.bb_label ==> src = b` by
+    (strip_tac >> `lookup_block src.bb_label f.fn_blocks = SOME src` by
+      (irule venomExecPropsTheory.MEM_lookup_block >> gvs[fn_labels_def]) >>
+     gvs[]) >>
+  qpat_x_assum `!lbl. pred_labels g lbl = _`
+    (fn th => pure_rewrite_tac[th]) >>
+  qpat_x_assum `g = _` kall_tac >>
+  simp[pred_labels_mem, replace_block_def, remove_block_def,
+       MEM_MAP, MEM_FILTER] >>
+  Cases_on `src.bb_label = b.bb_label`
+  >- (gvs[] >> qexists_tac `merge_blocks a b` >>
+      simp[merge_blocks_succs, merge_blocks_def, MEM_MAP, MEM_FILTER] >>
+      metis_tac[]) >>
+  Cases_on `src.bb_label = a.bb_label`
+  >- gvs[can_merge_blocks_def] >>
+  qexists_tac `src` >> simp[] >> conj_tac
+  >- (qexists_tac `src` >> simp[]) >> metis_tac[]
 QED
