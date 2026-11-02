@@ -1,7 +1,7 @@
 (* Exact successful DFT swaps, including external-call instructions. *)
 Theory dftSuccessSwap
 Ancestors
-  dftGuards dftPermSim dftIndexedExec venomCallOracleDefs
+  dftGuards dftPermSim dftIndexedExec dftExternalFrame venomCallOracleDefs
   venomExecSemantics venomEffects venomInst venomState list
 Libs
   stepInstBaseLib
@@ -316,4 +316,78 @@ Theorem dft_external_replay_backward:
        step_inst fuel C x s = OK (FOLDL (\u p. update_var (FST p) (SND p) u) s us)
 Proof
   strip_tac >> drule_all dft_external_replay_both >> metis_tac[]
+QED
+
+Theorem dft_swap_updates_disjoint[local]:
+  dft_ok_swap_pair x y /\
+  EVERY (\p. MEM (FST p) x.inst_outputs) us ==>
+  EVERY (\p. ~MEM (Var (FST p)) y.inst_operands /\
+              ~MEM (FST p) y.inst_outputs) us
+Proof
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  fs[dft_ok_swap_pair_def, inst_defs_def, inst_uses_def,
+     pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+  metis_tac[dftBlockSimTheory.mem_var_operand_vars]
+QED
+
+Theorem dft_step_swap_ok_external_first:
+  dft_ok_swap_pair a b /\ inst_wf a /\ inst_wf b /\
+  is_ext_call_op a.inst_opcode /\
+  step_inst fuel C a s = OK sa /\ step_inst fuel C b sa = OK sab ==>
+  ?sb. step_inst fuel C b s = OK sb /\ step_inst fuel C a sb = OK sab
+Proof
+  strip_tac >>
+  `dft_ok_swap_pair b a` by metis_tac[dft_ok_swap_pair_sym] >>
+  drule_all dft_external_replay_backward >> strip_tac >>
+  qexists_tac `FOLDL (\u p. update_var (FST p) (SND p) u) s us` >>
+  simp[] >>
+  `EVERY (\p. ~MEM (Var (FST p)) a.inst_operands /\
+              ~MEM (FST p) a.inst_outputs) us` by
+    metis_tac[dft_swap_updates_disjoint] >>
+  simp[dft_external_ok_fold_iff] >> metis_tac[]
+QED
+
+Theorem dft_step_swap_ok_external_second:
+  dft_ok_swap_pair a b /\ inst_wf a /\ inst_wf b /\
+  is_ext_call_op b.inst_opcode /\
+  step_inst fuel C a s = OK sa /\ step_inst fuel C b sa = OK sab ==>
+  ?sb. step_inst fuel C b s = OK sb /\ step_inst fuel C a sb = OK sab
+Proof
+  strip_tac >>
+  `write_effects a.inst_opcode = empty_effects` by
+    metis_tac[dft_external_partner_empty_write] >>
+  `?us. EVERY (\p. MEM (FST p) a.inst_outputs) us /\
+        sa = FOLDL (\u p. update_var (FST p) (SND p) u) s us` by
+    (irule dft_empty_write_ok_updates >>
+     gvs[dft_ok_swap_pair_def] >>
+     metis_tac[is_alloca_op_def]) >>
+  `EVERY (\p. ~MEM (Var (FST p)) b.inst_operands /\
+              ~MEM (FST p) b.inst_outputs) us` by
+    metis_tac[dft_swap_updates_disjoint] >>
+  `?sb. step_inst fuel C b s = OK sb /\
+        sab = FOLDL (\u p. update_var (FST p) (SND p) u) sb us` by
+    metis_tac[dft_external_ok_fold_iff] >>
+  qexists_tac `sb` >> simp[] >>
+  drule_all dft_external_replay_forward >> strip_tac >>
+  `EVERY (\p. ~MEM (Var (FST p)) b.inst_operands /\
+              ~MEM (FST p) b.inst_outputs) us'` by
+    metis_tac[dft_swap_updates_disjoint] >>
+  `step_inst fuel C b sa =
+     OK (FOLDL (\u p. update_var (FST p) (SND p) u) sb us')` by
+    metis_tac[dft_external_ok_fold_iff] >>
+  gvs[]
+QED
+
+Theorem dft_step_swap_ok:
+  dft_ok_swap_pair a b /\ inst_wf a /\ inst_wf b /\
+  step_inst fuel C a s = OK sa /\ step_inst fuel C b sa = OK sab ==>
+  ?sb. step_inst fuel C b s = OK sb /\ step_inst fuel C a sb = OK sab
+Proof
+  strip_tac >>
+  Cases_on `is_ext_call_op a.inst_opcode`
+  >- (drule_all dft_step_swap_ok_external_first >> simp[]) >>
+  Cases_on `is_ext_call_op b.inst_opcode`
+  >- (drule_all dft_step_swap_ok_external_second >> simp[]) >>
+  `ext_bi_independent a b` by metis_tac[dft_ok_swap_pair_nonexternal] >>
+  drule_all step_swap_ok_ext >> simp[]
 QED
