@@ -7,7 +7,7 @@ Ancestors
   stmtLowering exprLowering compileEnv valueEncoding vyperTypeSystem
   vyperInterpreter vyperState
 Libs
-  monadsyntax
+  monadsyntax wordsLib intLib
 
 Theorem compile_assign_memory_typed_extends[local]:
   !cenv dst src loc dty sty info sz sa sb.
@@ -286,6 +286,87 @@ Proof
     gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def] >>
   qpat_x_assum `expr_val_at _ _ (expr_type e) _ _ _ _ _ _` kall_tac >>
   drule_all typed_source_decl_alloca_separate >> simp[]
+QED
+
+Theorem unstaged_overlap_value_types[local]:
+  let u = BaseT (UintT 256);
+      sty = TupleT [TupleT [BaseT (BytesT (Dynamic 1));u];u];
+      dty = TupleT [TupleT [BaseT (BytesT (Dynamic 33));u];u];
+      v = ArrayV (TupleV [ArrayV (TupleV [BytesV [];IntV 7]);IntV 9])
+  in type_widens_to FEMPTY sty dty /\
+     value_has_type
+       (TupleTV [TupleTV [BaseTV (BytesT (Dynamic 1));BaseTV (UintT 256)];
+                 BaseTV (UintT 256)]) v /\
+     value_has_type
+       (TupleTV [TupleTV [BaseTV (BytesT (Dynamic 33));BaseTV (UintT 256)];
+                 BaseTV (UintT 256)]) v
+Proof
+  EVAL_TAC
+QED
+
+Theorem unstaged_overlap_input_memory[local]:
+  !s0.
+  let s = mstore 96 9w (mstore 64 7w (s0 with vs_memory := []));
+      tv = TupleTV [TupleTV [BaseTV (BytesT (Dynamic 1));BaseTV (UintT 256)];
+                    BaseTV (UintT 256)];
+      v = ArrayV (TupleV [ArrayV (TupleV [BytesV [];IntV 7]);IntV 9])
+  in val_in_memory tv v 0 s.vs_memory /\ mload 96 s = 9w
+Proof
+  gen_tac >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``val_in_memory``, ``mload``]) >>
+  EVAL_TAC
+QED
+
+(* A probe of an adapter, not a counterexample to expression simulation. *)
+Theorem unstaged_overlap_probe[local]:
+  let u = BaseT (UintT 256);
+      sty = TupleT [TupleT [BaseT (BytesT (Dynamic 1));u];u];
+      dty = TupleT [TupleT [BaseT (BytesT (Dynamic 33));u];u];
+      ce = (ARB:compile_env) with ce_struct_fields := FEMPTY;
+      st = initial_compile_state "entry";
+      out = SND (compile_assign_value ce (Lit 0w) LocMemory (Lit 0w)
+                    F NONE dty sty NONE 160 st);
+      bb = <|bb_label := "entry";
+             bb_instructions := out.cs_current_insts ++
+               [mk_inst 999 STOP [] []]|>;
+      s = mstore 96 9w (mstore 64 7w
+            ((ARB:venom_state) with <|vs_vars := FEMPTY; vs_memory := [];
+              vs_inst_idx := 0; vs_halted := F|>))
+  in case run_block 100 ARB bb s of
+       Halt s' => mload 128 s' = 7w
+     | _ => F
+Proof
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_block``, ``mload``]) >>
+  rewrite_tac[venomExecSemanticsTheory.run_block_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``mload``]) >>
+  once_rewrite_tac[venomExecSemanticsTheory.run_defs] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``]) >>
+  once_rewrite_tac[venomExecSemanticsTheory.run_defs] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``]) >>
+  once_rewrite_tac[venomExecSemanticsTheory.run_defs] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``]) >>
+  once_rewrite_tac[venomExecSemanticsTheory.run_defs] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``]) >>
+  once_rewrite_tac[venomExecSemanticsTheory.run_defs] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``]) >>
+  once_rewrite_tac[venomExecSemanticsTheory.run_defs] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``]) >>
+  once_rewrite_tac[venomExecSemanticsTheory.run_defs] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``]) >>
+  once_rewrite_tac[venomExecSemanticsTheory.run_defs] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``]) >>
+  once_rewrite_tac[venomExecSemanticsTheory.run_defs] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``]) >>
+  once_rewrite_tac[venomExecSemanticsTheory.run_defs] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``]) >>
+  once_rewrite_tac[venomExecSemanticsTheory.run_defs] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``]) >>
+  once_rewrite_tac[venomExecSemanticsTheory.run_defs] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``]) >>
+  once_rewrite_tac[venomExecSemanticsTheory.run_defs] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``]) >>
+  once_rewrite_tac[venomExecSemanticsTheory.run_defs] >>
+  EVAL_TAC
 QED
 
 Theorem compile_annassign_memory_typed_stmt_frag:
