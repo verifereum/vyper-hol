@@ -69,7 +69,7 @@ Theorem concretize_stage_ptr:
   o1_ctx_shape C /\ o1_initial_state_ok vs /\
   mem_inv raw_mem_ok C vs /\ ptr_discipline 0 C vs /\
   dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
-  ctx_eom_bounded eom C C' ==>
+  ctx_eom_bounded eom C' ==>
   ptr_discipline eom C' vs /\ taint_within D C' vs
 Proof
   cheat
@@ -80,7 +80,7 @@ Theorem concretize_stage_static_mem:
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_initial_state_ok vs /\
   mem_inv raw_mem_ok C vs /\ ptr_discipline 0 C vs /\
-  EVERY ssa_form C.ctx_functions /\ ctx_eom_bounded eom C C' ==>
+  EVERY ssa_form C.ctx_functions /\ ctx_eom_bounded eom C' ==>
   mem_inv (static_mem_ok eom) C' vs
 Proof
   cheat
