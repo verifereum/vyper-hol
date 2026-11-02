@@ -179,7 +179,7 @@ Proof
   disch_then (qspecl_then [`sa`, `sm`, `vv`, `raw`, `es1`, `s0`] mp_tac) >>
   simp[] >> strip_tac >>
   `!tv s. raw = INL tv /\
-          vv_post func cenv cx r es sa sm s0 es1 tv vv s ==>
+          vv_post ctx func cenv cx r es sa sm s0 es1 tv vv s ==>
           ?v. res1 = INL v` by
     (rpt strip_tac >> gvs[vv_post_def] >>
      Cases_on `vv` >> gvs[reason_vv_def, vv_holds_def] >>
