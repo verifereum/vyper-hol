@@ -1,7 +1,7 @@
 (* Parametric preservation separates DFS control from instruction properties. *)
 Theory simplifyCfgInvariant
 Ancestors
-  simplifyCfgDefs cfgTransform venomInst list
+  simplifyCfgDefs cfgTransform venomInst ctxLookupAgreeHelpers list rich_list
 
 Theorem try_bypass_preserves_predicate:
   (!f lm a b g lm'.
@@ -96,4 +96,131 @@ Theorem collapse_dfs_succs_preserves_predicate:
   !f lm vis succs. Q f ==> Q (FST (collapse_dfs_succs f lm vis succs))
 Proof
   strip_tac >> drule collapse_dfs_preserves_predicate_joint >> simp[]
+QED
+
+Theorem remove_block_every:
+  EVERY P bbs ==> EVERY P (remove_block lbl bbs)
+Proof
+  simp[remove_block_def, EVERY_MEM, MEM_FILTER]
+QED
+
+Theorem replace_block_every:
+  EVERY P bbs /\ P bb ==> EVERY P (replace_block lbl bb bbs)
+Proof
+  simp[replace_block_def, EVERY_MEM, MEM_MAP] >> rpt strip_tac >>
+  gvs[] >> Cases_on `bb'.bb_label = lbl` >> gvs[]
+QED
+
+Theorem remove_unreachable_blocks_every:
+  EVERY P (fn_insts f) ==> EVERY P (fn_insts (remove_unreachable_blocks f))
+Proof
+  Cases_on `fn_entry_label f` >>
+  simp[remove_unreachable_blocks_def] >>
+  rewrite_tac[fn_insts_def, fn_insts_EVERY_block] >>
+  simp[EVERY_MEM, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem fix_phis_in_block_every:
+  (!ps i. P i ==> P (fix_phi_inst ps i)) /\
+  EVERY P bb.bb_instructions ==>
+  EVERY P (fix_phis_in_block ps bb).bb_instructions
+Proof
+  simp[fix_phis_in_block_def, EVERY_APPEND, EVERY_MEM, MEM_FILTER, MEM_MAP] >>
+  metis_tac[]
+QED
+
+Theorem fix_all_phis_every:
+  (!ps i. P i ==> P (fix_phi_inst ps i)) /\ EVERY P (fn_insts f) ==>
+  EVERY P (fn_insts (fix_all_phis f))
+Proof
+  simp[fix_all_phis_def] >>
+  rewrite_tac[fn_insts_def, fn_insts_EVERY_block] >>
+  simp[EVERY_MEM, MEM_MAP] >> rpt strip_tac >> gvs[] >>
+  metis_tac[fix_phis_in_block_every, EVERY_MEM]
+QED
+
+Theorem merge_blocks_every:
+  EVERY P a.bb_instructions /\ EVERY P b.bb_instructions ==>
+  EVERY P (merge_blocks a b).bb_instructions
+Proof
+  strip_tac >> simp[merge_blocks_def, EVERY_APPEND] >>
+  qpat_x_assum `EVERY P a.bb_instructions` mp_tac >>
+  Q.SPEC_TAC (`a.bb_instructions`, `xs`) >>
+  Induct >> simp[] >> Cases_on `xs` >> gvs[]
+QED
+
+Theorem subst_block_labels_fn_every:
+  (!lm i. P i ==> P (subst_block_labels_inst lm i)) /\
+  EVERY P (fn_insts f) ==>
+  EVERY P (fn_insts (subst_block_labels_fn lm f))
+Proof
+  simp[subst_block_labels_fn_def] >>
+  rewrite_tac[fn_insts_def, fn_insts_EVERY_block] >>
+  simp[subst_block_labels_block_def, EVERY_MEM, MEM_MAP] >>
+  rpt strip_tac >> gvs[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem update_succ_phi_labels_every:
+  (!old new i. P i ==> P (subst_label_inst old new i)) ==>
+  !succs bbs. EVERY (\bb. EVERY P bb.bb_instructions) bbs ==>
+  EVERY (\bb. EVERY P bb.bb_instructions)
+    (update_succ_phi_labels old new bbs succs)
+Proof
+  strip_tac >> Induct_on `succs` >>
+  gvs[update_succ_phi_labels_def] >> rpt strip_tac >>
+  first_x_assum irule >>
+  Cases_on `lookup_block h bbs` >> simp[] >>
+  rename1 `lookup_block h bbs = SOME bb` >>
+  irule replace_block_every >> simp[] >>
+  `EVERY P bb.bb_instructions` by
+    (drule lookup_block_member_label >> strip_tac >>
+     qpat_x_assum `EVERY _ bbs` mp_tac >> simp[EVERY_MEM] >>
+     disch_then (qspec_then `bb` mp_tac) >> simp[]) >>
+  simp[EVERY_MEM, MEM_MAP] >> rpt strip_tac >> gvs[] >>
+  Cases_on `inst.inst_opcode = PHI` >> gvs[EVERY_MEM]
+QED
+
+Theorem chain_merge_every:
+  (!old new i. P i ==> P (subst_label_inst old new i)) /\
+  EVERY P (fn_insts f) /\
+  lookup_block lbl f.fn_blocks = SOME a /\
+  lookup_block next f.fn_blocks = SOME b ==>
+  EVERY P (fn_insts (f with fn_blocks :=
+    update_succ_phi_labels next lbl
+      (replace_block lbl (merge_blocks a b) (remove_block next f.fn_blocks))
+      (bb_succs (merge_blocks a b))))
+Proof
+  strip_tac >> rewrite_tac[fn_insts_def, fn_insts_EVERY_block] >> simp[] >>
+  irule update_succ_phi_labels_every >> simp[] >>
+  irule replace_block_every >> reverse conj_tac
+  >- (irule remove_block_every >>
+      gvs[fn_insts_def, fn_insts_EVERY_block]) >>
+  simp[] >> irule merge_blocks_every >>
+  metis_tac[EVERY_fn_lookup_block]
+QED
+
+Theorem do_merge_jump_every:
+  (!old new i. P i ==> P (subst_label_inst old new i)) /\
+  (!i. P i ==> P (canon_jnz_inst i)) /\
+  (!al bl i. P i ==> P (update_phi_bypass al bl i)) /\
+  EVERY P (fn_insts f) /\
+  lookup_block a.bb_label f.fn_blocks = SOME a /\
+  do_merge_jump f a b lm = SOME (g,lm') ==>
+  EVERY P (fn_insts g)
+Proof
+  strip_tac >>
+  qpat_x_assum `do_merge_jump _ _ _ _ = _` mp_tac >>
+  simp[do_merge_jump_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  rewrite_tac[fn_insts_def, fn_insts_EVERY_block] >> simp[] >>
+  irule replace_block_every >> reverse conj_tac
+  >- (irule replace_block_every >> reverse conj_tac
+      >- (irule remove_block_every >>
+          gvs[fn_insts_def, fn_insts_EVERY_block]) >>
+      simp[EVERY_MEM, MEM_MAP] >> rpt strip_tac >> gvs[] >>
+      metis_tac[EVERY_fn_lookup_block, EVERY_MEM]) >>
+  `EVERY P a.bb_instructions` by metis_tac[EVERY_fn_lookup_block] >>
+  simp[] >> Cases_on `target_lbl = a.bb_label` >>
+  simp[EVERY_MEM, MEM_MAP] >> rpt strip_tac >> gvs[] >>
+  Cases_on `is_terminator inst.inst_opcode` >>
+  gvs[EVERY_MEM]
 QED
