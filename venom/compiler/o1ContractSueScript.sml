@@ -16,6 +16,22 @@ Ancestors
   o1PassLift singleUseExpansionDefs singleUseExpansionSupplyProofs
   venomFnScheduleRunner venomWf venomInst irSupply singleUseExpansionSupplySim
 
+Theorem sue_run_blocks_supply_entry:
+  wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\
+  EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn) /\
+  ir_supply_covers_fn supply fn /\ ir_supply_inst_ok supply /\
+  sue_expand_function_supply supply fn = (fn',supply') /\
+  fn_entry_state fn st ==>
+  sue_result_rel (set (fn_ir_vars fn)) (run_blocks fuel ctx fn st)
+    (run_blocks fuel ctx fn' st)
+Proof
+  strip_tac >> irule sue_run_blocks_supply_sim >> simp[] >>
+  fs[fn_entry_state_def] >>
+  `strict_dom_vars_defined fn st` by
+    metis_tac[sccpCorrectnessProofsTheory.strict_dom_vars_defined_entry] >>
+  simp[fn_reachable_def] >> metis_tac[]
+QED
+
 (* Original-frame definedness, independent of any transformed program. *)
 Definition sue_frame_defined_def:
   sue_frame_defined fn st <=>

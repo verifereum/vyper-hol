@@ -1695,3 +1695,92 @@ Proof
     `v' with vs_inst_idx := sue_segment_offset segs (SUC i)`] mp_tac) >>
   simp[]
 QED
+
+Theorem sue_run_blocks_supply_sim:
+  !fuel st tt.
+  wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\
+  EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn) /\
+  ir_supply_covers_fn supply fn /\ ir_supply_inst_ok supply /\
+  sue_expand_function_supply supply fn = (fn',supply') /\
+  fn_reachable fn st.vs_current_bb /\ strict_dom_vars_defined fn st /\
+  sue_state_rel (set (fn_ir_vars fn)) st tt ==>
+  sue_result_rel (set (fn_ir_vars fn)) (run_blocks fuel ctx fn st)
+    (run_blocks fuel ctx fn' tt)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (pure_once_rewrite_tac[run_blocks_def] >>
+      simp[sue_result_rel_def, lift_result_def]) >>
+  `tt.vs_current_bb = st.vs_current_bb` by fs[sue_state_rel_def] >>
+  Cases_on `lookup_block st.vs_current_bb fn.fn_blocks`
+  >- suspend "missing" >>
+  rename1 `lookup_block st.vs_current_bb fn.fn_blocks = SOME bb` >>
+  drule_all sue_function_lookup_ready >> strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = st.vs_current_bb` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `EVERY (\inst. inst.inst_opcode = PHI ==>
+      !v. MEM (Var v) inst.inst_operands ==> v IN set (fn_ir_vars fn)) bb.bb_instructions` by
+    (simp[listTheory.EVERY_MEM] >> metis_tac[sue_original_operand_covered]) >>
+  `sue_result_rel (set (fn_ir_vars fn))
+     (eval_phis st bb.bb_instructions) (eval_phis tt (FLAT segs))` by
+    (irule sue_expanded_phi_entry >> simp[] >> metis_tac[]) >>
+  suspend "phis"
+QED
+
+Resume sue_run_blocks_supply_sim[missing]:
+  `lookup_block st.vs_current_bb fn'.fn_blocks = NONE` by
+    (Cases_on `sue_expand_blocks_supply (dfg_build_function fn) supply fn.fn_blocks` >>
+     gvs[sue_expand_function_supply_def] >>
+     Cases_on `lookup_block st.vs_current_bb q` >> simp[] >>
+     drule_all sue_expand_blocks_supply_lookup_back >> simp[]) >>
+  pure_once_rewrite_tac[run_blocks_def] >>
+  simp[sue_result_rel_def, lift_result_def]
+QED
+
+Resume sue_run_blocks_supply_sim[phis]:
+  `phi_prefix_length (FLAT segs) = phi_prefix_length bb.bb_instructions` by
+    (drule sue_segments_supply_flat >> strip_tac >>
+     drule_all sue_expand_insts_supply_phis >> simp[]) >>
+  `sue_segment_offset segs (phi_prefix_length bb.bb_instructions) =
+    phi_prefix_length bb.bb_instructions` by metis_tac[sue_segments_phi_offset] >>
+  pure_once_rewrite_tac[run_blocks_def] >> simp[] >>
+  qspecl_then [`bb.bb_instructions`, `st`] strip_assume_tac sue_eval_phis_shape >>
+  Cases_on `eval_phis tt (FLAT segs)` >>
+  gvs[sue_result_rel_def, lift_result_def] >>
+  suspend "block"
+
+QED
+
+Resume sue_run_blocks_supply_sim[block]:
+  `sue_boundary_defined fn bb (phi_prefix_length bb.bb_instructions)
+    (u with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
+    metis_tac[sue_boundary_defined_phis] >>
+  `u.vs_current_bb = st.vs_current_bb` by
+    metis_tac[eval_phis_preserves_current_bb] >>
+  `sue_result_rel (set (fn_ir_vars fn))
+    (exec_block fuel ctx bb (u with vs_inst_idx := phi_prefix_length bb.bb_instructions))
+    (exec_block fuel ctx (bb with bb_instructions := FLAT segs)
+      (v with vs_inst_idx := phi_prefix_length bb.bb_instructions))` by
+    (irule sue_exec_block_supply_sim >> simp[phi_prefix_length_le] >> metis_tac[]) >>
+  Cases_on `exec_block fuel ctx bb
+    (u with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >>
+  Cases_on `exec_block fuel ctx (bb with bb_instructions := FLAT segs)
+    (v with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >>
+  gvs[sue_result_rel_def, lift_result_def] >>
+  suspend "exit"
+QED
+
+Resume sue_run_blocks_supply_sim[exit]:
+  `v'.vs_halted = v''.vs_halted` by
+    (fs[sue_state_rel_def] >>
+     qpat_x_assum `execution_frame v' = _` mp_tac >>
+     simp[execution_frame_def, venom_state_component_equality]) >>
+  Cases_on `v'.vs_halted`
+  >- fs[lift_result_def, sue_term_rel_def, sue_state_rel_def] >>
+  fs[] >> first_x_assum irule >> simp[] >>
+  irule sue_exec_block_defined_exit >> simp[] >>
+  qexistsl [`bb`, `ctx`, `fuel`,
+    `u with vs_inst_idx := phi_prefix_length bb.bb_instructions`] >>
+  simp[phi_prefix_length_le]
+QED
+
+Finalise sue_run_blocks_supply_sim
