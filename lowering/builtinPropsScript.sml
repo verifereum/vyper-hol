@@ -1949,7 +1949,7 @@ Proof
 QED
 
 (* ceil: rounds toward positive infinity.
-   ceil(x, d) = sdiv(if x > 0 then x + (d-1) else x, d) *)
+   ceil(x, d) = sdiv(if x < 0 then x else x + (d-1), d) *)
 Theorem compile_ceil_correct:
   ∀ val_op divisor x ss st op st'.
     compile_ceil val_op divisor st = (op, st') ∧
@@ -1960,7 +1960,7 @@ Theorem compile_ceil_correct:
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       eval_operand op ss' =
         SOME (safe_sdiv
-                (if word_gt x 0w then x + n2w (divisor - 1) else x)
+                (if word_lt x 0w then x else x + n2w (divisor - 1))
                 (n2w divisor))
 Proof
   rpt strip_tac >>
@@ -1968,18 +1968,18 @@ Proof
   rpt (pairarg_tac >> gvs[]) >>
   imp_res_tac emit_op_extends >>
   imp_res_tac compile_select_extends >>
-  rename1 `emit_op SGT [val_op; Lit 0w] st = (is_pos_op, cs1)` >>
+  rename1 `emit_op SLT [val_op; Lit 0w] st = (is_neg_op, cs1)` >>
   rename1 `emit_op ADD [val_op; Lit (n2w (divisor - 1))] cs1 = (adj_op, cs2)` >>
-  rename1 `compile_select is_pos_op adj_op val_op cs2 = (input_op, cs3)` >>
+  rename1 `compile_select is_neg_op val_op adj_op cs2 = (input_op, cs3)` >>
   rename1 `emit_op SDIV [input_op; Lit (n2w divisor)] cs3 = (op, st')` >>
-  (* Step 1: SGT *)
+  (* Step 1: SLT *)
   `eval_operand (Lit 0w) ss = SOME 0w` by simp[eval_operand_lit] >>
-  `step_inst_base (mk_inst st.cs_next_id SGT [val_op; Lit 0w]
+  `step_inst_base (mk_inst st.cs_next_id SLT [val_op; Lit 0w]
      [STRING #"%" (toString st.cs_next_var)]) ss =
    OK (update_var (STRING #"%" (toString st.cs_next_var))
-       (bool_to_word (word_gt x 0w)) ss)`
-    by (irule step_SGT >> simp[eval_operand_lit]) >>
-  apply_emit_op2_f_tac `\a b. bool_to_word (word_gt a b)` >>
+       (bool_to_word (word_lt x 0w)) ss)`
+    by (irule step_SLT >> simp[eval_operand_lit]) >>
+  apply_emit_op2_f_tac `\a b. bool_to_word (word_lt a b)` >>
   (* Step 2: ADD *)
   `eval_operand val_op ss' = SOME x` by preserve_tac >>
   `eval_operand (Lit (n2w (divisor - 1))) ss' = SOME (n2w (divisor - 1))`
@@ -1992,15 +1992,15 @@ Proof
     by (irule step_ADD >> simp[eval_operand_lit]) >>
   apply_emit_op2_tac >>
   (* Step 3: compile_select *)
-  `eval_operand is_pos_op ss'' = SOME (bool_to_word (word_gt x 0w))`
+  `eval_operand is_neg_op ss'' = SOME (bool_to_word (word_lt x 0w))`
     by preserve_tac >>
   `eval_operand adj_op ss'' = SOME (x + n2w (divisor - 1))`
     by preserve_tac >>
   `eval_operand val_op ss'' = SOME x` by preserve_tac >>
-  qspecl_then [`is_pos_op`, `adj_op`, `val_op`,
-    `bool_to_word (word_gt x 0w)`,
-    `x + n2w (divisor - 1)`, `x`,
-    `word_gt x 0w`, `ss''`, `cs2`, `input_op`, `cs3`]
+  qspecl_then [`is_neg_op`, `val_op`, `adj_op`,
+    `bool_to_word (word_lt x 0w)`,
+    `x`, `x + n2w (divisor - 1)`,
+    `word_lt x 0w`, `ss''`, `cs2`, `input_op`, `cs3`]
     mp_tac compile_select_correct >>
   (impl_tac >- asm_rewrite_tac[]) >>
   disch_then (qx_choose_then `ss3` strip_assume_tac) >>
@@ -2011,7 +2011,7 @@ Proof
      [input_op; Lit (n2w divisor)]
      [STRING #"%" (toString cs3.cs_next_var)]) ss3 =
    OK (update_var (STRING #"%" (toString cs3.cs_next_var))
-       (safe_sdiv (if word_gt x 0w then x + n2w (divisor - 1) else x)
+       (safe_sdiv (if word_lt x 0w then x else x + n2w (divisor - 1))
                   (n2w divisor)) ss3)`
     by (irule step_SDIV >> simp[eval_operand_lit]) >>
   apply_emit_op2_tac >>
@@ -2102,61 +2102,98 @@ QED
 
 (* ===== Bytes Builtins ===== *)
 
-(* extract32: bounds-checked 32-byte load from bytestring *)
-(* extract32: reads 32 bytes from src_ptr + 32 + start.
-   OK path: start + 32 ≤ length at src_ptr → result = mload at data + start.
-   Revert path: start + 32 > length → ASSERT fails. *)
+(* extract32: bounds-checked 32-byte load from a bytestring's data.
+   OK path: start + 32 ≤ length (with no overflow of start + 32)
+     → result = mload at data + start.
+   Revert path: start + 32 overflows or exceeds the length → ASSERT fails. *)
+(* Each pure step keeps memory: rebuild ssN.vs_memory = ss.vs_memory from the
+   previous step's equation and the step's EL/LENGTH facts. *)
+(* Apply a step lemma to the emit fact matching pat, then discharge its
+   remaining premises from the assumptions. *)
+fun extract32_step_tac pat lemma =
+  qpat_assum pat (fn th =>
+    drule_all (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO] lemma) th));
+
+val extract32_mem_tac =
+  irule listTheory.LIST_EQ >> conj_tac >- fs[] >> rpt strip_tac >> fs[];
+
+Theorem extract32_bool_to_word_ok[local]:
+  bool_to_word (bool_to_word a ‖ bool_to_word b = 0w) ≠ 0w ⇔ ¬a ∧ ¬b
+Proof
+  Cases_on `a` >> Cases_on `b` >>
+  simp[bool_to_word_def, wordsTheory.WORD_OR_CLAUSES]
+QED
+
+Theorem extract32_bool_to_word_bad[local]:
+  bool_to_word (bool_to_word a ‖ bool_to_word b = 0w) = 0w ⇔ ¬(¬a ∧ ¬b)
+Proof
+  Cases_on `a` >> Cases_on `b` >>
+  simp[bool_to_word_def, wordsTheory.WORD_OR_CLAUSES]
+QED
+
+(* The bounds check end < start ∨ end > len, end = start + 32 (mod 2^256),
+   passes exactly when start + 32 ≤ len over the naturals. *)
+Theorem extract32_bounds_ok[local]:
+  ∀ (sv:bytes32) (len:bytes32).
+    ¬(w2n (sv + 32w) < w2n sv) ∧ ¬(w2n (sv + 32w) > w2n len) ⇔
+    w2n sv + 32 ≤ w2n len
+Proof
+  Cases >> Cases >> fs[wordsTheory.word_add_n2w, arithmeticTheory.LESS_MOD] >>
+  Cases_on `n + 32 < dimword (:256)` >- fs[arithmeticTheory.LESS_MOD] >>
+  `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  `(n + 32) MOD dimword (:256) = n + 32 - dimword (:256)` by
+    (qspecl_then [`n + 32`, `dimword (:256)`] mp_tac arithmeticTheory.SUB_MOD >>
+     impl_tac >- fs[] >>
+     disch_then (SUBST1_TAC o SYM) >>
+     irule arithmeticTheory.LESS_MOD >> fs[]) >>
+  fs[]
+QED
+
 Theorem compile_extract32_correct:
-  ∀ src_ptr start_op ss st op st' pv sv.
-    compile_extract32 src_ptr start_op st = (op, st') ∧
-    eval_operand src_ptr ss = SOME pv ∧
+  ∀ src_len src_data start_op ss st op st' len dp sv.
+    compile_extract32_load src_len src_data start_op st = (op, st') ∧
+    eval_operand src_len ss = SOME len ∧
+    eval_operand src_data ss = SOME dp ∧
     eval_operand start_op ss = SOME sv ∧
     fresh_vars_wrt st ss ⇒
     ∃ ss'.
-      (run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-       eval_operand op ss' =
-         SOME (mload (w2n (pv + 32w + sv)) ss)) ∨
-      (* Out of bounds → revert *)
-      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
+      if w2n sv + 32 ≤ w2n len then
+        run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+        eval_operand op ss' = SOME (mload (w2n (dp + sv)) ss)
+      else
+        run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
   rpt strip_tac >>
-  gvs[compile_extract32_def, comp_bind_def, comp_ignore_bind_def] >>
+  gvs[compile_extract32_load_def,
+      compile_assert_slice_bounds_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  rename1 `emit_op MLOAD [src_ptr] st = (src_len, cs1)` >>
-  rename1 `emit_op ADD [src_ptr; Lit 32w] cs1 = (src_data, cs2)` >>
-  rename1 `emit_op ADD [start_op; Lit 32w] cs2 = (end_op, cs3)` >>
-  rename1 `emit_op GT [end_op; src_len] cs3 = (oob, cs4)` >>
-  rename1 `emit_op ISZERO [oob] cs4 = (ok_op, cs5)` >>
+  rename1 `emit_op ADD [start_op; Lit 32w] st = (end_op, cs1)` >>
+  rename1 `emit_op LT [end_op; start_op] cs1 = (ovf_op, cs2)` >>
+  rename1 `emit_op GT [end_op; src_len] cs2 = (oob_op, cs3)` >>
+  rename1 `emit_op OR [ovf_op; oob_op] cs3 = (bad_op, cs4)` >>
+  rename1 `emit_op ISZERO [bad_op] cs4 = (ok_op, cs5)` >>
   rename1 `emit_void ASSERT [ok_op] cs5 = (_, cs6)` >>
   rename1 `emit_op ADD [src_data; start_op] cs6 = (load_ptr, cs7)` >>
   rename1 `emit_op MLOAD [load_ptr] cs7 = (op, st')` >>
   imp_res_tac emit_op_extends >>
   imp_res_tac emit_void_extends >>
-  (* Step 1: MLOAD[src_ptr] → src_len = mload(w2n pv) ss *)
-  drule_all emit_op_MLOAD_correct >>
+  `eval_operand (Lit 32w) ss = SOME 32w` by simp[eval_operand_lit] >>
+  extract32_step_tac `emit_op ADD [start_op; Lit 32w] st = _` emit_op_ADD_correct >>
   disch_then (qx_choose_then `ss1` strip_assume_tac) >>
-  (* Step 2: ADD[src_ptr; 32] → src_data = pv + 32w *)
-  `eval_operand src_ptr ss1 = SOME pv` by preserve_tac >>
-  `eval_operand (Lit 32w) ss1 = SOME 32w` by simp[eval_operand_lit] >>
-  drule_all emit_op_ADD_correct >>
+  `eval_operand start_op ss1 = SOME sv` by preserve_tac >>
+  extract32_step_tac `emit_op LT _ cs1 = _` emit_op_LT_correct_mem >>
   disch_then (qx_choose_then `ss2` strip_assume_tac) >>
-  (* Step 3: ADD[start_op; 32] → end_op = sv + 32w *)
-  `eval_operand start_op ss2 = SOME sv` by preserve_tac >>
-  `eval_operand (Lit 32w) ss2 = SOME 32w` by simp[eval_operand_lit] >>
-  drule_all emit_op_ADD_correct >>
+  `eval_operand end_op ss2 = SOME (sv + 32w)` by preserve_tac >>
+  `eval_operand src_len ss2 = SOME len` by preserve_tac >>
+  extract32_step_tac `emit_op GT _ cs2 = _` emit_op_GT_correct >>
   disch_then (qx_choose_then `ss3` strip_assume_tac) >>
-  (* Step 4: GT[end_op; src_len] → oob *)
-  `eval_operand end_op ss3 = SOME (sv + 32w)` by preserve_tac >>
-  `eval_operand src_len ss3 = SOME (mload (w2n pv) ss)` by preserve_tac >>
-  drule_all emit_op_GT_correct >>
-  disch_then (qx_choose_then `ss4` strip_assume_tac) >>
-  (* Step 5: ISZERO[oob] → ok *)
-  `eval_operand oob ss4 =
-     SOME (bool_to_word (w2n (sv + 32w) > w2n (mload (w2n pv) ss)))` by
+  `eval_operand ovf_op ss3 = SOME (bool_to_word (w2n (sv + 32w) < w2n sv))` by
     preserve_tac >>
-  drule_all emit_op_ISZERO_correct_mem >>
+  extract32_step_tac `emit_op OR _ cs3 = _` emit_op_OR_correct >>
+  disch_then (qx_choose_then `ss4` strip_assume_tac) >>
+  extract32_step_tac `emit_op ISZERO _ cs4 = _` emit_op_ISZERO_correct_mem >>
   disch_then (qx_choose_then `ss5` strip_assume_tac) >>
-  (* Compose steps 1-5: st→cs5 *)
   `run_inst_seq (emitted_insts st cs2) ss = OK ss2 /\
    cs2.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs2`
     by compose_ok_tac (`ss1`, `cs1`) >>
@@ -2166,131 +2203,68 @@ Proof
   `run_inst_seq (emitted_insts st cs4) ss = OK ss4 /\
    cs4.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs4`
     by compose_ok_tac (`ss3`, `cs3`) >>
-  `run_inst_seq (emitted_insts st cs5) ss = OK ss5`
-    by (irule run_emitted_compose2 >>
-        qexistsl [`ss4`, `cs4`] >> asm_rewrite_tac[]) >>
-  (* Step 6: ASSERT[ok] — case split *)
-  `eval_operand ok_op ss5 =
-     SOME (bool_to_word (bool_to_word (w2n (sv + 32w) > w2n (mload (w2n pv) ss)) = 0w))` by
-    preserve_tac >>
-  qabbrev_tac `oob_val = (w2n (sv + 32w) > w2n (mload (w2n pv) ss))` >>
-  drule_all emit_void_ASSERT_ok_or_revert >> strip_tac >>
-  gvs[]
-  >- suspend "ok_case"
-  >> suspend "revert_case"
+  `run_inst_seq (emitted_insts st cs5) ss = OK ss5 /\
+   cs5.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs5`
+    by compose_ok_tac (`ss4`, `cs4`) >>
+  qpat_x_assum `eval_operand ok_op ss5 = _` assume_tac >>
+  extract32_step_tac `emit_void ASSERT _ cs5 = _` emit_void_ASSERT_ok_or_revert >>
+  strip_tac
+  >- suspend "ok_case" >>
+  suspend "revert_case"
 QED
 
 Resume compile_extract32_correct[ok_case]:
-  (* Re-derive SHORT ext facts from emit_op/emit_void facts *)
-  imp_res_tac emit_op_extends >>
-  imp_res_tac emit_void_extends >>
-  (* Step 7: ADD[src_data; start_op] → load_ptr = pv + 32w + sv *)
-  `eval_operand src_data ss5 = SOME (pv + 32w)` by metis_tac[] >>
-  `eval_operand start_op ss5 = SOME sv` by metis_tac[] >>
-  drule_all emit_op_ADD_correct >>
+  `w2n sv + 32 ≤ w2n len` by
+    (qpat_x_assum `bool_to_word _ ≠ 0w` mp_tac >>
+     rewrite_tac[extract32_bool_to_word_ok, extract32_bounds_ok]) >>
+  `eval_operand src_data ss2 = SOME dp` by preserve_tac >>
+  `eval_operand src_data ss5 = SOME dp` by preserve_tac >>
+  `eval_operand start_op ss3 = SOME sv` by preserve_tac >>
+  `eval_operand start_op ss5 = SOME sv` by preserve_tac >>
+  extract32_step_tac `emit_op ADD _ cs6 = _` emit_op_ADD_correct >>
   disch_then (qx_choose_then `ss6` strip_assume_tac) >>
-  (* Step 8: MLOAD[load_ptr] → result *)
-  `eval_operand load_ptr ss6 = SOME (pv + 32w + sv)` by preserve_tac >>
-  qpat_x_assum `emit_op MLOAD [load_ptr] cs7 = (op, st')` mp_tac >>
-  disch_then (fn mload8 =>
-    qpat_x_assum `fresh_vars_wrt cs7 ss6` (fn fv =>
-      qpat_x_assum `eval_operand load_ptr ss6 = _` (fn ev =>
-        assume_tac ev >> assume_tac fv >>
-        mp_tac (MATCH_MP (MATCH_MP (MATCH_MP
-          (REWRITE_RULE [GSYM AND_IMP_INTRO] emit_op_MLOAD_correct)
-          mload8) ev) fv)))) >>
+  extract32_step_tac `emit_op MLOAD _ cs7 = _` emit_op_MLOAD_correct >>
   disch_then (qx_choose_then `ss7` strip_assume_tac) >>
-  (* Memory preserved: ss5.vs_memory = ss.vs_memory, then chain through ss6 *)
-  `ss5.vs_memory = ss.vs_memory` by
-    (irule listTheory.LIST_EQ >>
-     conj_tac >- fs[] >>
-     rpt strip_tac >> fs[]) >>
-  `ss6.vs_memory = ss5.vs_memory` by
-    (irule listTheory.LIST_EQ >>
-     conj_tac >- fs[] >>
-     rpt strip_tac >> gvs[]) >>
-  `ss6.vs_memory = ss.vs_memory` by asm_rewrite_tac[] >>
-  (* Witness *)
-  qexists `ss7` >> disj1_tac >>
-  conj_tac
-  >- (
-    (* Derive short ext: cs4→cs5 and cs5 from st *)
-    `cs5.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs5` by
-      (irule emit_extends_trans >>
-       qexists `cs4` >>
-       conj_tac >- (
-         irule emit_extends_trans >>
-         qexists `cs3` >>
-         conj_tac >- (
-           irule emit_extends_trans >>
-           qexists `cs2` >>
-           conj_tac >- (
-             irule emit_extends_trans >>
-             qexists `cs1` >>
-             asm_rewrite_tac[]) >>
-           asm_rewrite_tac[]) >>
-         asm_rewrite_tac[]) >>
-       asm_rewrite_tac[]) >>
-    (* Compose st→cs5 with cs5→cs6 using run_emitted_compose2 *)
-    `run_inst_seq (emitted_insts st cs6) ss = OK ss5` by
-      (irule run_emitted_compose2 >>
-       qexistsl [`ss5`, `cs5`] >> asm_rewrite_tac[]) >>
-    `cs6.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs6` by
-      (irule emit_extends_trans >> qexists `cs5` >> asm_rewrite_tac[]) >>
-    (* Compose st→cs6 with cs6→cs7 *)
-    `cs7.cs_current_insts = cs6.cs_current_insts ++ emitted_insts cs6 cs7` by
-      asm_rewrite_tac[] >>
-    `run_inst_seq (emitted_insts st cs7) ss = OK ss6` by
-      (irule run_emitted_compose2 >>
-       qexistsl [`ss5`, `cs6`] >> asm_rewrite_tac[]) >>
-    `cs7.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs7` by
-      (irule emit_extends_trans >> qexists `cs6` >> asm_rewrite_tac[]) >>
-    (* Compose st→cs7 with cs7→st' *)
-    irule run_emitted_compose2 >>
-    qexistsl [`ss6`, `cs7`] >> asm_rewrite_tac[])
-  >> (* eval_operand op ss7 = SOME (mload ...) *)
-    gvs[mload_def]
+  `ss1.vs_memory = ss.vs_memory` by extract32_mem_tac >>
+  `ss2.vs_memory = ss.vs_memory` by extract32_mem_tac >>
+  `ss3.vs_memory = ss.vs_memory` by extract32_mem_tac >>
+  `ss4.vs_memory = ss.vs_memory` by extract32_mem_tac >>
+  `ss5.vs_memory = ss.vs_memory` by extract32_mem_tac >>
+  `ss6.vs_memory = ss.vs_memory` by extract32_mem_tac >>
+  `run_inst_seq (emitted_insts st cs6) ss = OK ss5 /\
+   cs6.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs6`
+    by compose_ok_tac (`ss5`, `cs5`) >>
+  `run_inst_seq (emitted_insts st cs7) ss = OK ss6 /\
+   cs7.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs7`
+    by compose_ok_tac (`ss5`, `cs6`) >>
+  `run_inst_seq (emitted_insts st st') ss = OK ss7 /\
+   st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st'`
+    by compose_ok_tac (`ss6`, `cs7`) >>
+  qexists `ss7` >>
+  qpat_x_assum `w2n sv + 32 ≤ w2n len` (fn th => simp[th]) >>
+  gvs[mload_def]
 QED
 
 Resume compile_extract32_correct[revert_case]:
-  (* ok_op evaluates to 0w → ASSERT reverts *)
-  drule_all emit_void_ASSERT_revert_full >> strip_tac >>
-  (* Re-derive SHORT ext facts *)
-  imp_res_tac emit_op_extends >>
-  imp_res_tac emit_void_extends >>
-  (* Derive cs5 ext from st *)
-  `cs5.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs5` by
-    (irule emit_extends_trans >> qexists `cs4` >>
-     conj_tac >- (
-       irule emit_extends_trans >> qexists `cs3` >>
-       conj_tac >- (
-         irule emit_extends_trans >> qexists `cs2` >>
-         conj_tac >- (
-           irule emit_extends_trans >> qexists `cs1` >>
-           asm_rewrite_tac[]) >>
-         asm_rewrite_tac[]) >>
-       asm_rewrite_tac[]) >>
-     asm_rewrite_tac[]) >>
-  `cs6.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs6` by
-    (irule emit_extends_trans >> qexists `cs5` >> asm_rewrite_tac[]) >>
-  `cs7.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs7` by
-    (irule emit_extends_trans >> qexists `cs6` >> asm_rewrite_tac[]) >>
-  `st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st'` by
-    (irule emit_extends_trans >> qexists `cs7` >> asm_rewrite_tac[]) >>
-  (* Compose: OK prefix st→cs5 + abort cs5→cs6 → abort st→cs6 *)
+  `¬(w2n sv + 32 ≤ w2n len)` by
+    (qpat_x_assum `bool_to_word _ = 0w` mp_tac >>
+     rewrite_tac[extract32_bool_to_word_bad, extract32_bounds_ok]) >>
   qspecl_then [`st`, `cs5`, `cs6`, `ss`, `ss5`, `Revert_abort`,
     `revert_state (set_returndata [] ss5)`]
     mp_tac run_emitted_compose2_abort >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   strip_tac >>
-  (* Extend abort st→cs6 through cs7 *)
+  `cs6.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs6` by
+    (irule emit_extends_trans >> qexists `cs5` >> asm_rewrite_tac[]) >>
   qspecl_then [`st`, `cs6`, `cs7`, `ss`, `Revert_abort`,
     `revert_state (set_returndata [] ss5)`]
     mp_tac run_emitted_abort_extend >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   strip_tac >>
-  (* Extend abort st→cs7 through st' *)
-  qexists `revert_state (set_returndata [] ss5)` >> disj2_tac >>
+  `cs7.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs7` by
+    (irule emit_extends_trans >> qexists `cs6` >> asm_rewrite_tac[]) >>
+  qexists `revert_state (set_returndata [] ss5)` >>
+  qpat_x_assum `¬(w2n sv + 32 ≤ w2n len)` (fn th => simp[th]) >>
   qspecl_then [`st`, `cs7`, `st'`, `ss`, `Revert_abort`,
     `revert_state (set_returndata [] ss5)`]
     mp_tac run_emitted_abort_extend >>
