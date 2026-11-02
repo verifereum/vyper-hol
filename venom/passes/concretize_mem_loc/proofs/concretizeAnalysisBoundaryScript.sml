@@ -98,3 +98,41 @@ Proof
   simp[bp_normalize_base_set, bp_bases_def, MAP_APPEND, MAP_FLAT,
        MAP_MAP_o, o_DEF, LIST_TO_SET_APPEND, LIST_TO_SET_FLAT]
 QED
+
+(* A false flag preserves lookups, not necessarily the finite map's domain.
+   Instruction and block versions are bp_handle_inst_stable_ptrs and
+   bp_process_block_unchanged in basePtrProofsTheory. *)
+Theorem bp_one_pass_aux_stable_ptrs:
+  !order fn bp.
+    FST (bp_one_pass_aux fn bp order) = F ==>
+    !v. bp_get_ptrs (SND (bp_one_pass_aux fn bp order)) v = bp_get_ptrs bp v
+Proof
+  Induct >> simp[bp_one_pass_aux_def] >> rpt gen_tac >>
+  Cases_on `FIND (\bb. bb.bb_label = h) fn.fn_blocks`
+  >- (simp[] >> metis_tac[]) >>
+  rename1 `_ = SOME bb` >>
+  Cases_on `bp_process_block bp bb.bb_instructions` >>
+  rename1 `_ = (c1,r1)` >>
+  Cases_on `bp_one_pass_aux fn r1 order` >>
+  rename1 `_ = (c2,r2)` >>
+  simp[] >> strip_tac >>
+  `FST (bp_process_block bp bb.bb_instructions) = F` by simp[] >>
+  drule bp_process_block_unchanged >>
+  simp[] >> strip_tac >>
+  first_x_assum (qspecl_then [`fn`,`r1`] mp_tac) >> simp[]
+QED
+
+Theorem bp_one_pass_stable_ptrs:
+  FST (bp_one_pass fn order bp) = F ==>
+  !v. bp_get_ptrs (SND (bp_one_pass fn order bp)) v = bp_get_ptrs bp v
+Proof
+  simp[bp_one_pass_def, bp_one_pass_aux_stable_ptrs]
+QED
+
+Theorem bp_iterate_fuel_fixed:
+  !n fn order bp.
+    bp_one_pass fn order bp = (F,bp) ==>
+    bp_iterate_fuel n fn order bp = bp
+Proof
+  Induct >> simp[bp_iterate_fuel_def]
+QED
