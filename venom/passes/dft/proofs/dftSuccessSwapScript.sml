@@ -391,3 +391,30 @@ Proof
   `ext_bi_independent a b` by metis_tac[dft_ok_swap_pair_nonexternal] >>
   drule_all step_swap_ok_ext >> simp[]
 QED
+
+Theorem dft_indexed_step_swap_ok:
+  dft_ok_swap_pair a b /\ inst_wf a /\ inst_wf b /\
+  step_inst fuel C a s = OK sa /\
+  step_inst fuel C b (sa with vs_inst_idx := SUC s.vs_inst_idx) = OK sab ==>
+  ?sb sba.
+    step_inst fuel C b s = OK sb /\
+    step_inst fuel C a (sb with vs_inst_idx := SUC s.vs_inst_idx) = OK sba /\
+    (sab with vs_inst_idx := SUC (SUC s.vs_inst_idx)) =
+    (sba with vs_inst_idx := SUC (SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `~is_terminator a.inst_opcode /\ ~is_terminator b.inst_opcode` by
+    gvs[dft_ok_swap_pair_def] >>
+  `step_inst fuel C b sa = OK (sab with vs_inst_idx := sa.vs_inst_idx)` by
+    (drule_all dft_step_ok_idx >>
+     disch_then (qspec_then `sa.vs_inst_idx` mp_tac) >> simp[]) >>
+  drule_all dft_step_swap_ok >> strip_tac >>
+  qexistsl_tac [`sb`, `sab with vs_inst_idx := SUC s.vs_inst_idx`] >>
+  simp[] >>
+  qpat_x_assum `step_inst _ _ a s = _` kall_tac >>
+  qpat_x_assum `step_inst _ _ b s = _` kall_tac >>
+  qpat_x_assum `step_inst _ _ b sa = _` kall_tac >>
+  qpat_x_assum `step_inst _ _ b (_ with vs_inst_idx := _) = _` kall_tac >>
+  drule_all dft_step_ok_idx >>
+  disch_then (qspec_then `SUC s.vs_inst_idx` mp_tac) >> simp[]
+QED
