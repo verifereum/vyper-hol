@@ -37,6 +37,7 @@ Ancestors
   supportedProgram supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeCallGraph vyperTypeCallStackSoundness
+  typedCopyProducer
 
 (* ===== The frame ===== *)
 
@@ -48,10 +49,11 @@ Ancestors
    allocas, as build_compile_env makes every body's, and the source finds
    its functions in tops.  tops's module variables have distinct names, as
    the type checker gives (source_typing_ok_vtype_keys_distinct), and cenv
-   has build_compile_env's hashmaps, module variable types and module
-   DynArray capacities, which no declaration changes.  cenv's target is the unit's policy target, as
-   set_*_package_target installs it, which run_lowering requires to have
-   MCOPY (lowering_policy_ok). *)
+   has build_compile_env's hashmaps, module variable types, struct metadata
+   and module DynArray capacities, which no declaration changes. The checked
+   main module gives the struct namespace for layout-converting copies.
+   cenv's target is the unit's policy target, as set_*_package_target installs
+   it, which run_lowering requires to have MCOPY (lowering_policy_ok). *)
 Definition body_inv_def:
   body_inv tops ctx cenv cx <=>
     supported_program tops /\
@@ -62,6 +64,9 @@ Definition body_inv_def:
     cenv.ce_func_ids = build_func_ids 0 tops /\
     cenv.ce_func_param_types = build_func_param_types tops /\
     cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
+    cenv.ce_struct_fields = make_struct_fields_map tops /\
+    (?layouts : (address # (storage_layout # storage_layout)) list. ?addr art.
+       check_contract F layouts addr [(NONE,tops)] = SOME art) /\
     ~cenv.ce_is_ctor /\ cenv.ce_alloca_locals /\
     ALL_DISTINCT
       (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
@@ -71,6 +76,14 @@ Definition body_inv_def:
     (!id. cenv.ce_module_var_type (NONE, id) =
           build_var_type_map tops (NONE, id))
 End
+
+Theorem body_inv_struct_metadata_acyclic:
+  body_inv tops ctx cenv cx ==>
+  acyclic_struct_metadata cenv.ce_struct_fields
+Proof
+  rw[body_inv_def] >>
+  drule_all supported_checked_struct_metadata_acyclic >> simp[]
+QED
 
 (* The compile env binds no local the typing does not know: every name
    ce_vars binds is a local of the type environment.  build_compile_env

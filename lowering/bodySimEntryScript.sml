@@ -26,6 +26,62 @@ Ancestors
 Libs
   monadsyntax
 
+(* Rebuilding an internal callee's environment uses the same checked
+   module metadata as its caller. *)
+Theorem body_inv_build_internal_env:
+  body_inv tops ctx caller cx ==>
+  body_inv tops ctx
+    ((build_compile_env tops Internal mut fname args ret stmts use_trans)
+       with ce_target := caller.ce_target) cx
+Proof
+  rw[body_inv_def, build_compile_env_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem compile_register_positional_args_body_inv:
+  !args cenv off st cenv' st'.
+    body_inv tops ctx cenv cx /\
+    compile_register_positional_args cenv args off st = (cenv',st') ==>
+    body_inv tops ctx cenv' cx
+Proof
+  Induct >- simp[compile_register_positional_args_def, comp_return_def] >>
+  PairCases >> rpt gen_tac >> simp[Once compile_register_positional_args_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  first_x_assum irule >> simp[body_inv_def] >> metis_tac[]
+QED
+
+Theorem materialize_internal_params_body_inv[local]:
+  !caps cenv st cenv' st'.
+    body_inv tops ctx cenv cx /\
+    materialize_internal_params cenv caps st = (cenv',st') ==>
+    body_inv tops ctx cenv' cx
+Proof
+  Induct >- simp[materialize_internal_params_def, comp_return_def] >>
+  PairCases >> rpt gen_tac >> simp[Once materialize_internal_params_def] >>
+  Cases_on `h1` >> simp[LET_THM] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  first_x_assum irule >> simp[body_inv_def] >> metis_tac[]
+QED
+
+Theorem compile_internal_prologue_body_inv:
+  !cenv params has_rb ret_type st cenv' rpc st'.
+    body_inv tops ctx cenv cx /\
+    compile_internal_prologue cenv params has_rb ret_type st =
+      ((cenv',rpc),st') ==>
+    body_inv tops ctx cenv' cx
+Proof
+  rpt gen_tac >>
+  simp[compile_internal_prologue_def, comp_bind_def, comp_return_def,
+       comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  irule materialize_internal_params_body_inv >>
+  asm_rewrite_tac[] >> simp[body_inv_def] >> metis_tac[]
+QED
+
 (* A compile env that binds only parameters, with a type environment that
    has the parameters. *)
 Theorem ce_locals_declared_params:
