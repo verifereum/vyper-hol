@@ -312,7 +312,8 @@ QED
 
 Definition collision_output_ctx_def:
   collision_output_ctx = collision_finished_ctx with ctx_functions :=
-    [collision_scheduled collision_a; collision_scheduled collision_b;
+    [collision_transform collision_ctx collision_a;
+     collision_transform collision_ctx collision_b;
      collision_transform collision_finished_ctx collision_main]
 End
 
@@ -688,24 +689,18 @@ Definition collision_packed_a_rpc_def:
     vs_vars := FEMPTY |+ ("a_rpc",(0w:256 word))
 End
 
-Definition collision_packed_a_zero_def:
-  collision_packed_a_zero = collision_packed_a_rpc with
-    <| vs_vars := FEMPTY |+ ("a_rpc",(0w:256 word)) |+ ("formal_var_0",0w);
+Definition collision_packed_a_assigned_def:
+  collision_packed_a_assigned = collision_packed_a_rpc with
+    <| vs_vars := FEMPTY |+ ("a_rpc",(0w:256 word)) |+ ("a_p",0w);
        vs_inst_idx := 1 |>
 End
 
-Definition collision_packed_a_assigned_def:
-  collision_packed_a_assigned = collision_packed_a_zero with
-    <| vs_vars := FEMPTY |+ ("a_rpc",(0w:256 word)) |+ ("formal_var_0",0w)
-                        |+ ("a_p",0w); vs_inst_idx := 2 |>
-End
-
 Definition collision_packed_a_stored_def:
-  collision_packed_a_stored = collision_packed_a_assigned with vs_inst_idx := 3
+  collision_packed_a_stored = collision_packed_a_assigned with vs_inst_idx := 2
 End
 
 Theorem collision_packed_a_setup:
-  setup_callee (collision_scheduled collision_a) [] collision_packed_call_a =
+  setup_callee (collision_transform collision_ctx collision_a) [] collision_packed_call_a =
     SOME collision_packed_a_entry
 Proof
   EVAL_TAC
@@ -714,16 +709,14 @@ QED
 Theorem collision_packed_a_steps:
   step_inst_base (mk_inst 106 RETPC_PARAM [Lit (0w:256 word)] ["a_rpc"])
     collision_packed_a_entry = OK collision_packed_a_rpc /\
-  step_inst_base (mk_inst 108 ASSIGN [Lit (0w:256 word)] ["formal_var_0"])
-    (collision_packed_a_rpc with vs_inst_idx := 1) = OK collision_packed_a_zero /\
   step_inst_base (mk_inst 100 ASSIGN [Lit (0w:256 word)] ["a_p"])
-    (collision_packed_a_zero with vs_inst_idx := 2) = OK collision_packed_a_assigned /\
-  step_inst_base (mk_inst 101 MSTORE [Var "a_p"; Var "formal_var_0"] [])
-    (collision_packed_a_assigned with vs_inst_idx := 3) = OK collision_packed_a_stored /\
+    (collision_packed_a_rpc with vs_inst_idx := 1) = OK collision_packed_a_assigned /\
+  step_inst_base (mk_inst 101 MSTORE [Var "a_p"; Lit (0w:256 word)] [])
+    (collision_packed_a_assigned with vs_inst_idx := 2) = OK collision_packed_a_stored /\
   step_inst_base (mk_inst 102 RET [Var "a_rpc"] [])
-    (collision_packed_a_stored with vs_inst_idx := 4) =
+    (collision_packed_a_stored with vs_inst_idx := 3) =
       IntRet <| iret_values := []; iret_adopt_fmp := NONE |>
-        (collision_packed_a_stored with vs_inst_idx := 4)
+        (collision_packed_a_stored with vs_inst_idx := 3)
 Proof
   EVAL_TAC
 QED
@@ -731,22 +724,16 @@ QED
 Definition collision_packed_a_bb_def:
   collision_packed_a_bb = <| bb_label := "a"; bb_instructions :=
     [mk_inst 106 RETPC_PARAM [Lit (0w:256 word)] ["a_rpc"];
-     mk_inst 108 ASSIGN [Lit 0w] ["formal_var_0"];
      mk_inst 100 ASSIGN [Lit 0w] ["a_p"];
-     mk_inst 101 MSTORE [Var "a_p"; Var "formal_var_0"] [];
+     mk_inst 101 MSTORE [Var "a_p"; Lit 0w] [];
      mk_inst 102 RET [Var "a_rpc"] []] |>
 End
 
 Theorem collision_packed_a_indices[local]:
   collision_packed_a_entry.vs_inst_idx = 0 /\
   collision_packed_a_rpc.vs_inst_idx = 0 /\
-  collision_packed_a_zero.vs_inst_idx = 1 /\
-  collision_packed_a_assigned.vs_inst_idx = 2 /\
-  collision_packed_a_stored.vs_inst_idx = 3 /\
-  ~collision_packed_a_rpc.vs_halted /\
-  ~collision_packed_a_zero.vs_halted /\
-  ~collision_packed_a_assigned.vs_halted /\
-  ~collision_packed_a_stored.vs_halted
+  collision_packed_a_assigned.vs_inst_idx = 1 /\
+  collision_packed_a_stored.vs_inst_idx = 2
 Proof
   EVAL_TAC
 QED
@@ -755,16 +742,14 @@ Theorem collision_packed_a_step_lift[local]:
   !fuel ctx.
   step_inst fuel ctx (mk_inst 106 RETPC_PARAM [Lit (0w:256 word)] ["a_rpc"])
     collision_packed_a_entry = OK collision_packed_a_rpc /\
-  step_inst fuel ctx (mk_inst 108 ASSIGN [Lit (0w:256 word)] ["formal_var_0"])
-    (collision_packed_a_rpc with vs_inst_idx := 1) = OK collision_packed_a_zero /\
   step_inst fuel ctx (mk_inst 100 ASSIGN [Lit (0w:256 word)] ["a_p"])
-    (collision_packed_a_zero with vs_inst_idx := 2) = OK collision_packed_a_assigned /\
-  step_inst fuel ctx (mk_inst 101 MSTORE [Var "a_p"; Var "formal_var_0"] [])
-    (collision_packed_a_assigned with vs_inst_idx := 3) = OK collision_packed_a_stored /\
+    (collision_packed_a_rpc with vs_inst_idx := 1) = OK collision_packed_a_assigned /\
+  step_inst fuel ctx (mk_inst 101 MSTORE [Var "a_p"; Lit (0w:256 word)] [])
+    (collision_packed_a_assigned with vs_inst_idx := 2) = OK collision_packed_a_stored /\
   step_inst fuel ctx (mk_inst 102 RET [Var "a_rpc"] [])
-    (collision_packed_a_stored with vs_inst_idx := 4) =
+    (collision_packed_a_stored with vs_inst_idx := 3) =
       IntRet <| iret_values := []; iret_adopt_fmp := NONE |>
-        (collision_packed_a_stored with vs_inst_idx := 4)
+        (collision_packed_a_stored with vs_inst_idx := 3)
 Proof
   rpt gen_tac >> once_rewrite_tac[step_inst_def] >>
   simp[venomInstTheory.mk_inst_def,
@@ -775,10 +760,10 @@ Theorem collision_packed_a_block:
   !fuel ctx.
   exec_block fuel ctx collision_packed_a_bb collision_packed_a_entry =
     IntRet <| iret_values := []; iret_adopt_fmp := NONE |>
-      (collision_packed_a_stored with vs_inst_idx := 4)
+      (collision_packed_a_stored with vs_inst_idx := 3)
 Proof
   rpt gen_tac >>
-  ntac 5 (simp[Once exec_block_def, collision_packed_a_bb_def,
+  ntac 4 (simp[Once exec_block_def, collision_packed_a_bb_def,
     venomInstTheory.get_instruction_def, collision_packed_a_indices,
     SRULE [venomInstTheory.mk_inst_def] collision_packed_a_step_lift,
     venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def])
@@ -786,7 +771,7 @@ QED
 
 Theorem collision_packed_a_entry_facts[local]:
   lookup_block collision_packed_a_entry.vs_current_bb
-    (collision_scheduled collision_a).fn_blocks = SOME collision_packed_a_bb /\
+    (collision_transform collision_ctx collision_a).fn_blocks = SOME collision_packed_a_bb /\
   eval_phis collision_packed_a_entry collision_packed_a_bb.bb_instructions =
     OK collision_packed_a_entry /\
   phi_prefix_length collision_packed_a_bb.bb_instructions = 0 /\
@@ -797,9 +782,9 @@ QED
 
 Theorem collision_packed_a_run:
   !fuel ctx.
-  run_blocks (SUC fuel) ctx (collision_scheduled collision_a) collision_packed_a_entry =
+  run_blocks (SUC fuel) ctx (collision_transform collision_ctx collision_a) collision_packed_a_entry =
     IntRet <| iret_values := []; iret_adopt_fmp := NONE |>
-      (collision_packed_a_stored with vs_inst_idx := 4)
+      (collision_packed_a_stored with vs_inst_idx := 3)
 Proof
   rpt gen_tac >> once_rewrite_tac[run_blocks_def] >>
   simp[collision_packed_a_entry_facts, collision_packed_a_block]
@@ -813,7 +798,7 @@ Theorem collision_packed_a_return_merge[local]:
   bind_outputs [] []
     (adopt_return_fmp <| iret_values := []; iret_adopt_fmp := NONE |>
       (merge_callee_state collision_packed_call_a
-        (collision_packed_a_stored with vs_inst_idx := 4))) =
+        (collision_packed_a_stored with vs_inst_idx := 3))) =
     SOME (collision_packed_call_b with vs_inst_idx := 2)
 Proof
   EVAL_TAC
@@ -822,7 +807,7 @@ QED
 Theorem collision_packed_a_call_facts[local]:
   decode_invoke (mk_inst 3 INVOKE [Label "a"] []) = SOME ("a",[]) /\
   lookup_function "a" collision_output_ctx.ctx_functions =
-    SOME (collision_scheduled collision_a) /\
+    SOME (collision_transform collision_ctx collision_a) /\
   eval_operands [] collision_packed_call_a = SOME []
 Proof
   EVAL_TAC
@@ -851,38 +836,25 @@ Definition collision_packed_b_rpc_def:
     vs_vars := FEMPTY |+ ("b_rpc",(0w:256 word))
 End
 
-Definition collision_packed_b_one_def:
-  collision_packed_b_one = collision_packed_b_rpc with
-    <| vs_vars := FEMPTY |+ ("b_rpc",(0w:256 word)) |+ ("formal_var_1",1w);
-       vs_inst_idx := 1 |>
-End
-
-Definition collision_packed_b_offset_def:
-  collision_packed_b_offset = collision_packed_b_one with
-    <| vs_vars := FEMPTY |+ ("b_rpc",(0w:256 word)) |+ ("formal_var_1",1w)
-                        |+ ("formal_var_0",32w); vs_inst_idx := 2 |>
-End
-
 Definition collision_packed_b_assigned_def:
-  collision_packed_b_assigned = collision_packed_b_offset with
-    <| vs_vars := FEMPTY |+ ("b_rpc",(0w:256 word)) |+ ("formal_var_1",1w)
-                        |+ ("formal_var_0",32w) |+ ("b_p",0w); vs_inst_idx := 3 |>
+  collision_packed_b_assigned = collision_packed_b_rpc with
+    <| vs_vars := FEMPTY |+ ("b_rpc",(0w:256 word)) |+ ("b_p",0w);
+       vs_inst_idx := 1 |>
 End
 
 Definition collision_packed_b_added_def:
   collision_packed_b_added = collision_packed_b_assigned with
-    <| vs_vars := FEMPTY |+ ("b_rpc",(0w:256 word)) |+ ("formal_var_1",1w)
-                        |+ ("formal_var_0",32w) |+ ("b_p",0w) |+ ("b_q",32w);
-       vs_inst_idx := 4 |>
+    <| vs_vars := FEMPTY |+ ("b_rpc",(0w:256 word)) |+ ("b_p",0w) |+ ("b_q",32w);
+       vs_inst_idx := 2 |>
 End
 
 Definition collision_packed_b_stored_def:
   collision_packed_b_stored = collision_packed_b_added with
-    <| vs_memory := REPLICATE 63 (0w:8 word) ++ [1w]; vs_inst_idx := 5 |>
+    <| vs_memory := REPLICATE 63 (0w:8 word) ++ [1w]; vs_inst_idx := 3 |>
 End
 
 Theorem collision_packed_b_setup:
-  setup_callee (collision_scheduled collision_b) [] collision_packed_call_b =
+  setup_callee (collision_transform collision_ctx collision_b) [] collision_packed_call_b =
     SOME collision_packed_b_entry
 Proof
   EVAL_TAC
@@ -891,20 +863,16 @@ QED
 Theorem collision_packed_b_steps:
   step_inst_base (mk_inst 107 RETPC_PARAM [Lit (0w:256 word)] ["b_rpc"])
     collision_packed_b_entry = OK collision_packed_b_rpc /\
-  step_inst_base (mk_inst 109 ASSIGN [Lit (1w:256 word)] ["formal_var_1"])
-    (collision_packed_b_rpc with vs_inst_idx := 1) = OK collision_packed_b_one /\
-  step_inst_base (mk_inst 108 ASSIGN [Lit (32w:256 word)] ["formal_var_0"])
-    (collision_packed_b_one with vs_inst_idx := 2) = OK collision_packed_b_offset /\
   step_inst_base (mk_inst 100 ASSIGN [Lit (0w:256 word)] ["b_p"])
-    (collision_packed_b_offset with vs_inst_idx := 3) = OK collision_packed_b_assigned /\
-  step_inst_base (mk_inst 103 ADD [Var "b_p"; Var "formal_var_0"] ["b_q"])
-    (collision_packed_b_assigned with vs_inst_idx := 4) = OK collision_packed_b_added /\
-  step_inst_base (mk_inst 104 MSTORE [Var "b_q"; Var "formal_var_1"] [])
-    (collision_packed_b_added with vs_inst_idx := 5) = OK collision_packed_b_stored /\
+    (collision_packed_b_rpc with vs_inst_idx := 1) = OK collision_packed_b_assigned /\
+  step_inst_base (mk_inst 103 ADD [Var "b_p"; Lit (32w:256 word)] ["b_q"])
+    (collision_packed_b_assigned with vs_inst_idx := 2) = OK collision_packed_b_added /\
+  step_inst_base (mk_inst 104 MSTORE [Var "b_q"; Lit (1w:256 word)] [])
+    (collision_packed_b_added with vs_inst_idx := 3) = OK collision_packed_b_stored /\
   step_inst_base (mk_inst 105 RET [Var "b_rpc"] [])
-    (collision_packed_b_stored with vs_inst_idx := 6) =
+    (collision_packed_b_stored with vs_inst_idx := 4) =
       IntRet <| iret_values := []; iret_adopt_fmp := NONE |>
-        (collision_packed_b_stored with vs_inst_idx := 6)
+        (collision_packed_b_stored with vs_inst_idx := 4)
 Proof
   EVAL_TAC
 QED
@@ -912,28 +880,18 @@ QED
 Definition collision_packed_b_bb_def:
   collision_packed_b_bb = <| bb_label := "b"; bb_instructions :=
     [mk_inst 107 RETPC_PARAM [Lit (0w:256 word)] ["b_rpc"];
-     mk_inst 109 ASSIGN [Lit 1w] ["formal_var_1"];
-     mk_inst 108 ASSIGN [Lit 32w] ["formal_var_0"];
      mk_inst 100 ASSIGN [Lit 0w] ["b_p"];
-     mk_inst 103 ADD [Var "b_p"; Var "formal_var_0"] ["b_q"];
-     mk_inst 104 MSTORE [Var "b_q"; Var "formal_var_1"] [];
+     mk_inst 103 ADD [Var "b_p"; Lit 32w] ["b_q"];
+     mk_inst 104 MSTORE [Var "b_q"; Lit 1w] [];
      mk_inst 105 RET [Var "b_rpc"] []] |>
 End
 
 Theorem collision_packed_b_indices[local]:
   collision_packed_b_entry.vs_inst_idx = 0 /\
   collision_packed_b_rpc.vs_inst_idx = 0 /\
-  collision_packed_b_one.vs_inst_idx = 1 /\
-  collision_packed_b_offset.vs_inst_idx = 2 /\
-  collision_packed_b_assigned.vs_inst_idx = 3 /\
-  collision_packed_b_added.vs_inst_idx = 4 /\
-  collision_packed_b_stored.vs_inst_idx = 5 /\
-  ~collision_packed_b_rpc.vs_halted /\
-  ~collision_packed_b_one.vs_halted /\
-  ~collision_packed_b_offset.vs_halted /\
-  ~collision_packed_b_assigned.vs_halted /\
-  ~collision_packed_b_added.vs_halted /\
-  ~collision_packed_b_stored.vs_halted
+  collision_packed_b_assigned.vs_inst_idx = 1 /\
+  collision_packed_b_added.vs_inst_idx = 2 /\
+  collision_packed_b_stored.vs_inst_idx = 3
 Proof
   EVAL_TAC
 QED
@@ -942,20 +900,16 @@ Theorem collision_packed_b_step_lift[local]:
   !fuel ctx.
   step_inst fuel ctx (mk_inst 107 RETPC_PARAM [Lit (0w:256 word)] ["b_rpc"])
     collision_packed_b_entry = OK collision_packed_b_rpc /\
-  step_inst fuel ctx (mk_inst 109 ASSIGN [Lit (1w:256 word)] ["formal_var_1"])
-    (collision_packed_b_rpc with vs_inst_idx := 1) = OK collision_packed_b_one /\
-  step_inst fuel ctx (mk_inst 108 ASSIGN [Lit (32w:256 word)] ["formal_var_0"])
-    (collision_packed_b_one with vs_inst_idx := 2) = OK collision_packed_b_offset /\
   step_inst fuel ctx (mk_inst 100 ASSIGN [Lit (0w:256 word)] ["b_p"])
-    (collision_packed_b_offset with vs_inst_idx := 3) = OK collision_packed_b_assigned /\
-  step_inst fuel ctx (mk_inst 103 ADD [Var "b_p"; Var "formal_var_0"] ["b_q"])
-    (collision_packed_b_assigned with vs_inst_idx := 4) = OK collision_packed_b_added /\
-  step_inst fuel ctx (mk_inst 104 MSTORE [Var "b_q"; Var "formal_var_1"] [])
-    (collision_packed_b_added with vs_inst_idx := 5) = OK collision_packed_b_stored /\
+    (collision_packed_b_rpc with vs_inst_idx := 1) = OK collision_packed_b_assigned /\
+  step_inst fuel ctx (mk_inst 103 ADD [Var "b_p"; Lit (32w:256 word)] ["b_q"])
+    (collision_packed_b_assigned with vs_inst_idx := 2) = OK collision_packed_b_added /\
+  step_inst fuel ctx (mk_inst 104 MSTORE [Var "b_q"; Lit (1w:256 word)] [])
+    (collision_packed_b_added with vs_inst_idx := 3) = OK collision_packed_b_stored /\
   step_inst fuel ctx (mk_inst 105 RET [Var "b_rpc"] [])
-    (collision_packed_b_stored with vs_inst_idx := 6) =
+    (collision_packed_b_stored with vs_inst_idx := 4) =
       IntRet <| iret_values := []; iret_adopt_fmp := NONE |>
-        (collision_packed_b_stored with vs_inst_idx := 6)
+        (collision_packed_b_stored with vs_inst_idx := 4)
 Proof
   rpt gen_tac >> once_rewrite_tac[step_inst_def] >>
   simp[venomInstTheory.mk_inst_def,
@@ -966,10 +920,10 @@ Theorem collision_packed_b_block:
   !fuel ctx.
   exec_block fuel ctx collision_packed_b_bb collision_packed_b_entry =
     IntRet <| iret_values := []; iret_adopt_fmp := NONE |>
-      (collision_packed_b_stored with vs_inst_idx := 6)
+      (collision_packed_b_stored with vs_inst_idx := 4)
 Proof
   rpt gen_tac >>
-  ntac 7 (simp[Once exec_block_def, collision_packed_b_bb_def,
+  ntac 5 (simp[Once exec_block_def, collision_packed_b_bb_def,
     venomInstTheory.get_instruction_def, collision_packed_b_indices,
     SRULE [venomInstTheory.mk_inst_def] collision_packed_b_step_lift,
     venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def])
@@ -977,7 +931,7 @@ QED
 
 Theorem collision_packed_b_entry_facts[local]:
   lookup_block collision_packed_b_entry.vs_current_bb
-    (collision_scheduled collision_b).fn_blocks = SOME collision_packed_b_bb /\
+    (collision_transform collision_ctx collision_b).fn_blocks = SOME collision_packed_b_bb /\
   eval_phis collision_packed_b_entry collision_packed_b_bb.bb_instructions =
     OK collision_packed_b_entry /\
   phi_prefix_length collision_packed_b_bb.bb_instructions = 0 /\
@@ -988,9 +942,9 @@ QED
 
 Theorem collision_packed_b_run:
   !fuel ctx.
-  run_blocks (SUC fuel) ctx (collision_scheduled collision_b) collision_packed_b_entry =
+  run_blocks (SUC fuel) ctx (collision_transform collision_ctx collision_b) collision_packed_b_entry =
     IntRet <| iret_values := []; iret_adopt_fmp := NONE |>
-      (collision_packed_b_stored with vs_inst_idx := 6)
+      (collision_packed_b_stored with vs_inst_idx := 4)
 Proof
   rpt gen_tac >> once_rewrite_tac[run_blocks_def] >>
   simp[collision_packed_b_entry_facts, collision_packed_b_block]
@@ -1005,7 +959,7 @@ Theorem collision_packed_b_return_merge[local]:
   bind_outputs [] []
     (adopt_return_fmp <| iret_values := []; iret_adopt_fmp := NONE |>
       (merge_callee_state collision_packed_call_b
-        (collision_packed_b_stored with vs_inst_idx := 6))) =
+        (collision_packed_b_stored with vs_inst_idx := 4))) =
     SOME (collision_packed_load with vs_inst_idx := 3)
 Proof
   EVAL_TAC
@@ -1014,7 +968,7 @@ QED
 Theorem collision_packed_b_call_facts[local]:
   decode_invoke (mk_inst 4 INVOKE [Label "b"] []) = SOME ("b",[]) /\
   lookup_function "b" collision_output_ctx.ctx_functions =
-    SOME (collision_scheduled collision_b) /\
+    SOME (collision_transform collision_ctx collision_b) /\
   eval_operands [] collision_packed_call_b = SOME []
 Proof
   EVAL_TAC
@@ -1290,4 +1244,11 @@ Theorem collision_raw_main_run:
     Halt (collision_exit_entry with vs_halted := T)
 Proof
   simp[collision_main_continuations, collision_raw_exit]
+QED
+
+Theorem collision_stage_leaf_mismatch:
+  collision_transform collision_ctx collision_a <> collision_scheduled collision_a /\
+  collision_transform collision_ctx collision_b <> collision_scheduled collision_b
+Proof
+  EVAL_TAC
 QED
