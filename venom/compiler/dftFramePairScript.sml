@@ -3,7 +3,7 @@ Theory dftFramePair
 Ancestors
   dftFramePrefix dftFrameSwap dftPermSim venomEffects dftDefs
   unitShapeDefs venomInst venomExecSemantics venomWf venomState dftCommutation
-  pred_set list
+  venomCallOracleDefs extCallOracle pred_set list
 
 Theorem dft_cross_effects:
   dft_cross a b ==> effects_independent a.inst_opcode b.inst_opcode
@@ -115,4 +115,77 @@ Proof
   disch_then (qspecl_then [`fuel`, `C`, `s`] mp_tac) >>
   Cases_on `step_inst fuel C i s` >> simp[map_result_state_def] >>
   metis_tac[]
+QED
+
+(* Semantic reader families expose the same output update on two input states. *)
+Theorem dft_read0_replay:
+  f s = f u /\ exec_read0 f i s = OK t ==>
+  ?out value. i.inst_outputs = [out] /\
+    t = update_var out value s /\
+    exec_read0 f i u = OK (update_var out value u)
+Proof
+  simp[exec_read0_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem dft_read1_replay:
+  (!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op u) /\
+  (!v. f v s = f v u) /\ exec_read1 f i s = OK t ==>
+  ?out value. i.inst_outputs = [out] /\
+    t = update_var out value s /\
+    exec_read1 f i u = OK (update_var out value u)
+Proof
+  simp[exec_read1_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem dft_static_read_observer:
+  write_effects p.inst_opcode = {} /\
+  DISJOINT (read_effects p.inst_opcode) {Eff_MEMORY; Eff_RETURNDATA} /\
+  read_effects p.inst_opcode <> {} /\ ~is_terminator p.inst_opcode ==>
+  p.inst_opcode = SLOAD \/ p.inst_opcode = TLOAD \/
+  p.inst_opcode = BALANCE \/ p.inst_opcode = SELFBALANCE \/
+  p.inst_opcode = EXTCODESIZE \/ p.inst_opcode = EXTCODEHASH \/
+  p.inst_opcode = GETFMP \/ p.inst_opcode = INITIAL_FMP
+Proof
+  Cases_on `p.inst_opcode` >>
+  simp[write_effects_def, read_effects_def, empty_effects_def,
+       is_terminator_def, all_effects_def]
+QED
+
+Theorem dft_static_read_replay:
+  (p.inst_opcode = SLOAD \/ p.inst_opcode = TLOAD \/
+   p.inst_opcode = BALANCE \/ p.inst_opcode = SELFBALANCE \/
+   p.inst_opcode = EXTCODESIZE \/ p.inst_opcode = EXTCODEHASH \/
+   p.inst_opcode = GETFMP \/ p.inst_opcode = INITIAL_FMP) /\
+  s.vs_accounts = u.vs_accounts /\ s.vs_transient = u.vs_transient /\
+  s.vs_call_ctx = u.vs_call_ctx /\ s.vs_fmp = u.vs_fmp /\
+  s.vs_initial_fmp = u.vs_initial_fmp /\
+  (!op. MEM op p.inst_operands ==> eval_operand op s = eval_operand op u) /\
+  step_inst_base p s = OK t ==>
+  ?out value. p.inst_outputs = [out] /\
+    t = update_var out value s /\
+    step_inst_base p u = OK (update_var out value u)
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst_base p s = OK t` mp_tac >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  asm_rewrite_tac[opcode_case_def] >> strip_tac >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  asm_rewrite_tac[opcode_case_def] >>
+  fs[sload_def, tload_def, contract_storage_def, contract_transient_def] >>
+  gvs[exec_read0_def, exec_read1_def, AllCaseEqs()] >>
+  rpt (qpat_x_assum `SOME _ = eval_operand _ _` (assume_tac o SYM)) >>
+  simp[] >> qmatch_goalsub_abbrev_tac `update_var out value s` >>
+  qexists_tac `value` >> simp[]
+QED
+
+Theorem dft_static_call_read_fields:
+  exec_ext_call e s gas addr value ao az ro rz T = OK u ==>
+  s.vs_accounts = u.vs_accounts /\ s.vs_transient = u.vs_transient /\
+  s.vs_call_ctx = u.vs_call_ctx /\ s.vs_fmp = u.vs_fmp /\
+  s.vs_initial_fmp = u.vs_initial_fmp
+Proof
+  simp[exec_ext_call_def, consume_call_outcome_eq] >> strip_tac >>
+  gvs[AllCaseEqs(), update_var_def, adopt_outcome_def, venom_call_request_def]
 QED
