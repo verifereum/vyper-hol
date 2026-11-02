@@ -28,13 +28,15 @@
  * part is semantic: a forward simulation of terminating runs between
  * consecutive stage contexts from one initial state, under
  * unit_result_rel, with the shared memory invariant (unitMemInv)
- * transported.  GAS reads a compile-time oracle list, so a pass that
- * reorders or drops GAS reads (DFT) relates every output run to some
- * input run that differs only in that list: o1_stage_contract_gas, the
- * forall-out exists-in form; gas_variant is the hook that SEQ-243's oracle
- * instantiates, equality until then.
+ * transported.  GAS reads the call context's gas, which the planned gas
+ * oracle will supply, so a pass that reorders or drops GAS reads (DFT)
+ * gets the forall-out exists-in form o1_stage_contract_gas: every initial
+ * state of the output has a gas variant from which the input's terminating
+ * runs are matched; gas_variant is the hook the oracle instantiates,
+ * equality until then.
  *
- * Every contract theorem here is a planned admission for its pass task.
+ * The nine contract theorems, one planned admission per pass tag, are in
+ * o1ContractTheorems.
  *)
 Theory o1PassContract
 Ancestors
@@ -67,8 +69,9 @@ End
 (* ===== One pass run ===== *)
 
 (* What run_configured_fn_pass_fold does for one pass on one function:
-   the pass sees the observed unit with the function current, and the
-   result passes the runner's checks. *)
+   the pass sees the observed unit with the function current, from a
+   supply that covers it (so its fresh names are fresh), and the result
+   passes the runner's checks. *)
 Definition fn_pass_step_def:
   fn_pass_step rpolicy pass observed s fn out <=>
     lookup_unique_function fn.fn_name observed.cu_context.ctx_functions =
@@ -77,6 +80,7 @@ Definition fn_pass_step_def:
     out.fpo_function.fn_name = fn.fn_name /\
     fn_pass_effects_hold (fn_pass_tag pass) fn out /\
     introduces_no_invoke_edges fn out.fpo_function /\
+    ir_supply_covers_unit s observed /\
     ir_supply_extends s out.fpo_supply /\
     ir_supply_covers_fn out.fpo_supply out.fpo_function /\
     ir_supply_covers_unit out.fpo_supply observed
@@ -124,6 +128,52 @@ End
 
 (* ===== Shape facts carried through every stage ===== *)
 
+(* The entry function ends the unit's run itself: no return of any kind
+   (RET, or the RETFMP and DRET the later passes and the desugaring use),
+   which run_context would report as IntRet; and no parameter
+   instruction anywhere, so that no pass can move one into its first
+   block. *)
+Definition entry_fn_no_return_def:
+  entry_fn_no_return fn <=>
+    EVERY (\inst. ~MEM inst.inst_opcode [RET; RETFMP; DRET]) (fn_insts fn)
+End
+
+Definition entry_fn_no_params_def:
+  entry_fn_no_params fn <=>
+    EVERY (\inst. ~is_param_opcode inst.inst_opcode) (fn_insts fn)
+End
+
+Theorem fn_insts_blocks_MEM:
+  !bbs. MEM inst (fn_insts_blocks bbs) <=>
+        ?bb. MEM bb bbs /\ MEM inst bb.bb_instructions
+Proof
+  Induct >> simp[fn_insts_blocks_def] >> metis_tac[]
+QED
+
+Theorem entry_fn_no_return_no_ret:
+  entry_fn_no_return fn ==> entry_fn_no_ret fn
+Proof
+  simp[entry_fn_no_return_def, entry_fn_no_ret_def, EVERY_MEM, fn_insts_def,
+       fn_insts_blocks_MEM] >>
+  metis_tac[]
+QED
+
+Theorem get_params_no_param:
+  EVERY (\inst. ~is_param_opcode inst.inst_opcode) insts ==>
+  get_params insts = []
+Proof
+  Cases_on `insts` >> simp[get_params_def]
+QED
+
+Theorem entry_fn_no_params_get_params:
+  entry_fn_no_params fn /\ fn.fn_blocks <> [] ==>
+  get_params (HD fn.fn_blocks).bb_instructions = []
+Proof
+  Cases_on `fn.fn_blocks` >>
+  gvs[entry_fn_no_params_def, fn_insts_def, fn_insts_blocks_def,
+      get_params_no_param]
+QED
+
 (* Every INVOKE names a function of the context in its first operand. *)
 Definition fn_invoke_ok_def:
   fn_invoke_ok names fn <=>
@@ -146,17 +196,39 @@ Definition unit_label_refs_ok_def:
     EVERY fn_label_refs_ok unit.cu_context.ctx_functions
 End
 
-(* The per-function shape facts of o1_source_unit_ok that every pass keeps
-   (the raw-opcode restriction is a source-only fact and is not kept),
-   with the well-formedness every pass keeps. *)
+(* The unit's entry function has no parameter instruction (the lowering's
+   entry function reads calldata, never PARAMs). *)
+(* No PHI in the first block: it has no predecessors (first_block_no_preds),
+   so a PHI there is dead, and a pass that inserts a prologue there
+   (FmpLowering's INITIAL_FMP, DretDesugar after the PARAMs) would put it
+   before a PHI, which bb_well_formed forbids. *)
+Definition first_block_no_phi_def:
+  first_block_no_phi fn <=>
+    EVERY (\inst. inst.inst_opcode <> PHI) (HD fn.fn_blocks).bb_instructions
+End
+
+Definition unit_first_block_no_phi_def:
+  unit_first_block_no_phi unit <=>
+    EVERY first_block_no_phi unit.cu_context.ctx_functions
+End
+
+Definition unit_entry_no_params_def:
+  unit_entry_no_params unit <=>
+    !fn. MEM fn unit.cu_context.ctx_functions /\
+         unit.cu_context.ctx_entry = SOME fn.fn_name ==>
+         entry_fn_no_params fn
+End
+
+(* The per-function shape facts of o1_source_unit_ok that every pass keeps,
+   with the well-formedness every pass keeps.  The raw-opcode restriction
+   is not among them: the passes introduce the opcodes it excludes. *)
 Definition o1_fn_shape_def:
   o1_fn_shape ctx fn <=>
     wf_function fn /\ fn_inst_wf fn /\
-    fn_shape_ok fn /\ first_block_no_preds fn /\
+    fn_shape_ok fn /\ first_block_no_preds fn /\ first_block_no_phi fn /\
     fn_invoke_ok (ctx_fn_names ctx) fn /\ fn_label_refs_ok fn /\
     (ctx.ctx_entry = SOME fn.fn_name ==>
-       entry_fn_no_ret fn /\
-       get_params (HD fn.fn_blocks).bb_instructions = []) /\
+       entry_fn_no_return fn /\ entry_fn_no_params fn) /\
     (ctx.ctx_entry <> SOME fn.fn_name ==>
        EVERY (\inst. ~MEM inst.inst_opcode [STOP; RETURN]) (fn_insts fn))
 End
@@ -167,13 +239,6 @@ Definition o1_ctx_shape_def:
   o1_ctx_shape ctx <=>
     ctx_wf ctx /\ EVERY (o1_fn_shape ctx) ctx.ctx_functions
 End
-
-Theorem o1_ctx_shape_wf_invoke_targets:
-  o1_ctx_shape ctx ==> wf_invoke_targets ctx
-Proof
-  rw[o1_ctx_shape_def, wf_invoke_targets_def, EVERY_MEM] >>
-  res_tac >> fs[o1_fn_shape_def, fn_invoke_ok_def] >> metis_tac[]
-QED
 
 (* ===== Step contract: structural, per run ===== *)
 
@@ -195,26 +260,42 @@ Definition label_map_sources_ok_def:
                ~MEM (FST e) (fn_labels fn')) label_map
 End
 
+(* The supply's used instruction ids are below its next one
+   (ir_supply_inst_ok): true of the initial supply, and what makes a fresh
+   id fresh; every run keeps it. *)
 Definition o1_step_contract_def:
   o1_step_contract rpolicy pass <=>
     !observed s fn out.
       fn_pass_step rpolicy pass observed s fn out /\
-      o1_ctx_shape observed.cu_context ==>
+      o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s ==>
       o1_fn_shape observed.cu_context out.fpo_function /\
       fresh_names_ok s fn out.fpo_function /\
-      label_map_sources_ok fn out.fpo_function out.fpo_label_map
+      label_map_sources_ok fn out.fpo_function out.fpo_label_map /\
+      ir_supply_inst_ok out.fpo_supply
 End
 
 (* ===== Stage contract: semantic, between stage contexts ===== *)
 
+(* The initial state of a stage run: the pipeline's initial state, with
+   the dynamic-memory pointer at the run's initial free-memory pointer,
+   as the entry state has it (FmpLowering seeds its pointer variable from
+   vs_initial_fmp). *)
+Definition o1_run_state_ok_def:
+  o1_run_state_ok vs <=>
+    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp
+End
+
 (* The memory facts of unitMemInv depend on a state only through the
-   instruction's access ranges and the alloca frame. *)
+   alloca frame and, range by range, the instruction's access ranges; so a
+   pass that splits or copies an access, or adds one without ranges,
+   keeps them. *)
 Definition rangewise_mem_fact_def:
   rangewise_mem_fact M <=>
-    ?P. !ctx fn inst s.
+    ?Q R. !ctx fn inst s.
       M ctx fn inst s <=>
-      P (inst_mem_ranges inst s) s.vs_alloca_next s.vs_allocas
-        s.vs_initial_fmp
+      Q s.vs_alloca_next s.vs_allocas s.vs_initial_fmp /\
+      EVERY (\r. R r s.vs_alloca_next s.vs_allocas s.vs_initial_fmp)
+        (inst_mem_ranges inst s)
 End
 
 (* The lowered-phase fact with the frame pointer read off the state: the
@@ -225,22 +306,27 @@ Definition lowered_mem_fact_def:
     lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s
 End
 
+(* The stage contract of one pass run, between consecutive stage contexts
+   C and C' and one initial state: every terminating run of C is matched
+   by a run of C', and the stage invariant I of C becomes I' of C'.  pre
+   relates the input to the output (an ordering the pass keeps, say); a
+   fact about the input alone belongs in I. *)
 Definition o1_stage_contract_def:
-  o1_stage_contract rpolicy pass view pre M M' <=>
+  o1_stage_contract rpolicy pass view pre I I' <=>
     !C C' vs.
       ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\
-      o1_ctx_shape C /\ o1_initial_state_ok vs /\ mem_inv M C vs ==>
-      ctx_sim C C' vs vs /\ mem_inv M' C' vs
+      o1_ctx_shape C /\ o1_run_state_ok vs /\ I C vs ==>
+      ctx_sim C C' vs vs /\ I' C' vs
 End
 
-(* For every output run from vs' there is an input run from a gas variant
-   vs of it. *)
+(* Every initial state vs' of the output has a gas variant vs from which
+   the input's terminating runs are matched by the output's runs from vs'. *)
 Definition o1_stage_contract_gas_def:
-  o1_stage_contract_gas rpolicy pass view pre M M' <=>
+  o1_stage_contract_gas rpolicy pass view pre I I' <=>
     !C C' vs'.
       ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\
-      o1_ctx_shape C /\ o1_initial_state_ok vs' /\ mem_inv M C vs' ==>
-      ?vs. gas_variant vs vs' /\ ctx_sim C C' vs vs' /\ mem_inv M' C' vs'
+      o1_ctx_shape C /\ o1_run_state_ok vs' /\ I C vs' ==>
+      ?vs. gas_variant vs vs' /\ ctx_sim C C' vs vs' /\ I' C' vs'
 End
 
 Definition any_view_def:
@@ -252,25 +338,52 @@ Definition no_pre_def:
   no_pre (C : venom_context) (C' : venom_context) <=> T
 End
 
+(* ===== The stage invariants ===== *)
+
 (* Every function's static layout end is at most eom. *)
 Definition ctx_eom_bounded_def:
-  ctx_eom_bounded eom (C : venom_context) C' <=>
-    !fn e. MEM fn C'.ctx_functions /\ fn.fn_eom = SOME e ==> e <= eom
+  ctx_eom_bounded eom C <=>
+    !fn e. MEM fn C.ctx_functions /\ fn.fn_eom = SOME e ==> e <= eom
+End
+
+(* Before ConcretizeMemLoc: the raw phase of the shared memory invariant,
+   S3's conclusion. *)
+Definition o1_src_inv_def:
+  o1_src_inv C vs <=> mem_inv raw_mem_ok C vs
+End
+
+(* After ConcretizeMemLoc: every access below a bound on every function's
+   static layout. *)
+Definition o1_static_inv_def:
+  o1_static_inv C vs <=>
+    ?eom. ctx_eom_bounded eom C /\ mem_inv (static_mem_ok eom) C vs
+End
+
+(* After FmpLowering: static, or dynamic at or above the initial fmp. *)
+Definition o1_lowered_inv_def:
+  o1_lowered_inv C vs <=>
+    ?eom. ctx_eom_bounded eom C /\ mem_inv (lowered_mem_fact eom) C vs
+End
+
+(* The invariant of the k-th stage context of the walk (k = 0 its input,
+   k = 9 its output).  A pass run's contract takes row k to row k+1; a
+   fact a run needs of its input is a conjunct of its row, put there by
+   the run that establishes it, and a conjunct of row 0 is a premise of
+   S4 that the lowering stage owes. *)
+Definition o1_inv_def:
+  o1_inv (k : num) =
+    if k <= 2 then o1_src_inv
+    else if k = 3 then o1_static_inv
+    else o1_lowered_inv
+End
+
+(* The input-to-output relation the k-th run's contract may assume; none
+   today. *)
+Definition o1_pre_def:
+  o1_pre (k : num) (C : venom_context) (C' : venom_context) <=> T
 End
 
 (* ===== The schedule ===== *)
-
-Definition o1_pre_walk_passes_def:
-  o1_pre_walk_passes =
-    [CFP_Simple VP_SimplifyCFG; CFP_Simple VP_DretDesugar]
-End
-
-Theorem o1_pipeline_spec_pre_walk:
-  o1_pipeline_spec.ps_pre_walk_stages =
-    MAP PS_MapFunctions o1_pre_walk_passes ++ [PS_DiscardAnalyses]
-Proof
-  simp[o1_pipeline_spec_def, o1_pre_walk_passes_def]
-QED
 
 (* The view of the k-th walk pass: callees are observed after the passes
    that follow it. *)
@@ -278,93 +391,15 @@ Definition o1_walk_view_def:
   o1_walk_view rpolicy k = walk_view rpolicy (DROP (SUC k) o1_fn_passes)
 End
 
-(* ===== The contract theorems: one planned admission per pass tag ===== *)
+(* The stage contract of the k-th run of the walk. *)
+Definition o1_run_contract_def:
+  o1_run_contract rpolicy k <=>
+    o1_stage_contract rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+      (o1_pre k) (o1_inv k) (o1_inv (SUC k))
+End
 
-(* Memory-neutral passes keep any range-wise memory fact.  The pre-walk
-   runs of SimplifyCFG and DretDesugar and the walk runs of every tag but
-   ConcretizeMemLoc and FmpLowering are instances. *)
-
-Theorem o1_contract_simplify_cfg:
-  o1_step_contract rpolicy (CFP_Simple VP_SimplifyCFG) /\
-  (!view M. rangewise_mem_fact M ==>
-     o1_stage_contract rpolicy (CFP_Simple VP_SimplifyCFG) view no_pre M M)
-Proof
-  cheat
-QED
-
-Theorem o1_contract_dret_desugar:
-  o1_step_contract rpolicy (CFP_Simple VP_DretDesugar) /\
-  (!view M. rangewise_mem_fact M ==>
-     o1_stage_contract rpolicy (CFP_Simple VP_DretDesugar) view no_pre M M)
-Proof
-  cheat
-QED
-
-Theorem o1_contract_make_ssa:
-  o1_step_contract rpolicy (CFP_Simple VP_MakeSSA) /\
-  (!view M. rangewise_mem_fact M ==>
-     o1_stage_contract rpolicy (CFP_Simple VP_MakeSSA) view no_pre M M)
-Proof
-  cheat
-QED
-
-Theorem o1_contract_lower_dload:
-  o1_step_contract rpolicy (CFP_Simple VP_LowerDload) /\
-  (!view M. rangewise_mem_fact M ==>
-     o1_stage_contract rpolicy (CFP_Simple VP_LowerDload) view no_pre M M)
-Proof
-  cheat
-QED
-
-(* ConcretizeMemLoc reads callee layouts: its view is the walk's.  It takes
-   the site-wise raw invariant to the static one below any eom bounding
-   every function's layout end. *)
-Theorem o1_contract_concretize_mem_loc:
-  o1_step_contract rpolicy (CFP_Simple VP_ConcretizeMemLoc) /\
-  (!eom.
-     o1_stage_contract rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-       (o1_walk_view rpolicy 2) (ctx_eom_bounded eom)
-       site_mem_ok (static_mem_ok eom))
-Proof
-  cheat
-QED
-
-(* FmpLowering reads callee signatures: its view is the walk's.  Dynamic
-   memory starts at the run's initial free-memory pointer. *)
-Theorem o1_contract_fmp_lowering:
-  o1_step_contract rpolicy (CFP_Simple VP_FmpLowering) /\
-  (!eom.
-     o1_stage_contract rpolicy (CFP_Simple VP_FmpLowering)
-       (o1_walk_view rpolicy 3) no_pre
-       (static_mem_ok eom)
-       (lowered_mem_fact eom))
-Proof
-  cheat
-QED
-
-Theorem o1_contract_sue:
-  o1_step_contract rpolicy (CFP_Simple VP_SingleUseExpansion) /\
-  (!view M. rangewise_mem_fact M ==>
-     o1_stage_contract rpolicy (CFP_Simple VP_SingleUseExpansion)
-       view no_pre M M)
-Proof
-  cheat
-QED
-
-(* DFT reorders GAS reads: forall-out exists-in over the oracle. *)
-Theorem o1_contract_dft:
-  o1_step_contract rpolicy (CFP_Simple VP_DFT) /\
-  (!view M. rangewise_mem_fact M ==>
-     o1_stage_contract_gas rpolicy (CFP_Simple VP_DFT) view no_pre M M)
-Proof
-  cheat
-QED
-
-Theorem o1_contract_cfg_normalization:
-  o1_step_contract rpolicy (CFP_Simple VP_CFGNormalization) /\
-  (!view M. rangewise_mem_fact M ==>
-     o1_stage_contract rpolicy (CFP_Simple VP_CFGNormalization)
-       view no_pre M M)
-Proof
-  cheat
-QED
+Definition o1_run_contract_gas_def:
+  o1_run_contract_gas rpolicy k <=>
+    o1_stage_contract_gas rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+      (o1_pre k) (o1_inv k) (o1_inv (SUC k))
+End

@@ -28,14 +28,6 @@ Proof
   metis_tac[resolve_label_entries_sources]
 QED
 
-Theorem subst_label_map_op_id:
-  ~MEM l (MAP FST label_map) ==>
-  subst_label_map_op label_map (Label l) = Label l
-Proof
-  strip_tac >> `ALOOKUP label_map l = NONE` by simp[ALOOKUP_NONE] >>
-  simp[subst_label_map_op_def]
-QED
-
 Theorem MAP_eq_self:
   !l. (!x. MEM x l ==> f x = x) ==> MAP f l = l
 Proof
@@ -53,18 +45,18 @@ Proof
   `ALOOKUP label_map l = NONE` by simp[ALOOKUP_NONE] >> simp[]
 QED
 
-Theorem MEM_fn_insts_blocks:
+Theorem fn_insts_MEM_block:
   !bbs. MEM inst (fn_insts_blocks bbs) <=>
         ?bb. MEM bb bbs /\ MEM inst bb.bb_instructions
 Proof
   Induct >> simp[fn_insts_blocks_def] >> metis_tac[]
 QED
 
-Theorem MEM_fn_insts:
+Theorem fn_insts_MEM:
   MEM inst (fn_insts fn) <=>
   ?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions
 Proof
-  simp[fn_insts_def, MEM_fn_insts_blocks]
+  simp[fn_insts_def, fn_insts_MEM_block]
 QED
 
 Theorem subst_label_map_fn_id:
@@ -79,7 +71,7 @@ Proof
        venomInstTheory.basic_block_component_equality] >>
   irule MAP_eq_self >> rpt strip_tac >>
   irule subst_label_map_inst_id >> rpt strip_tac >>
-  fs[MEM_fn_insts] >> metis_tac[]
+  fs[fn_insts_MEM] >> metis_tac[]
 QED
 
 Theorem apply_unit_label_map_context:
