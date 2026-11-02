@@ -2,7 +2,7 @@
 Theory dftIndexedExec
 Ancestors
   venomExecSemantics venomInst venomState list rich_list arithmetic
-  analysisSimProofsBase instIdxIndep
+  analysisSimProofsBase instIdxIndep venomExecProofs
 
 (* Unlike run_insts, this evaluator accounts for the index after each
    successful non-terminator, and for early termination. *)
@@ -206,4 +206,48 @@ Proof
   strip_tac >> Cases_on `inst.inst_opcode = INVOKE`
   >- simp[invoke_step_inst_idx_OK_only] >>
   simp[step_inst_idx_indep, exec_result_map_def]
+QED
+
+Theorem dft_phi_prefix_append:
+  !pre rest. EVERY (\i. i.inst_opcode <> PHI) rest ==>
+    phi_prefix_length (pre ++ rest) = phi_prefix_length pre
+Proof
+  Induct >> simp[phi_prefix_length_def] >> rpt strip_tac
+  >- (Cases_on `rest` >> gvs[phi_prefix_length_def]) >>
+  Cases_on `h.inst_opcode = PHI` >> simp[phi_prefix_length_def]
+QED
+
+Theorem dft_eval_phis_append:
+  !pre rest s. EVERY (\i. i.inst_opcode <> PHI) rest ==>
+    eval_phis s (pre ++ rest) = eval_phis s pre
+Proof
+  Induct >> simp[eval_phis_def] >> rpt strip_tac
+  >- (Cases_on `rest` >> gvs[eval_phis_def]) >>
+  Cases_on `h.inst_opcode = PHI` >> simp[eval_phis_def]
+QED
+
+Theorem dft_run_block_prefix:
+  !bb pre rest fuel C s.
+  bb.bb_instructions = pre ++ rest /\
+  EVERY (\i. ~is_pseudo i.inst_opcode) rest ==>
+  run_block fuel C bb s =
+    case eval_phis s pre of
+      OK u => FOLDR (dft_exec_cons fuel C) (dft_exec_suffix fuel C rest)
+        (DROP (phi_prefix_length pre) pre)
+        (u with vs_inst_idx := phi_prefix_length pre)
+    | Error e => Error e
+Proof
+  rpt gen_tac >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> PHI) rest` by
+    (fs[EVERY_MEM] >> metis_tac[is_pseudo_def]) >>
+  simp[run_block_def, dft_phi_prefix_append, dft_eval_phis_append] >>
+  qspecl_then [`s`, `pre`] strip_assume_tac eval_phis_ok_or_error_defs >> simp[] >>
+  `exec_block fuel C bb (s' with vs_inst_idx := phi_prefix_length pre) =
+   dft_exec_suffix fuel C
+     (DROP (phi_prefix_length pre) (pre ++ rest))
+     (s' with vs_inst_idx := phi_prefix_length pre)` by
+    (irule dft_exec_suffix_boundary >> simp[]) >>
+  `phi_prefix_length pre - LENGTH pre = 0` by
+    (mp_tac (Q.SPEC `pre` phi_prefix_length_le) >> decide_tac) >>
+  simp[DROP_APPEND, dft_exec_suffix_append]
 QED
