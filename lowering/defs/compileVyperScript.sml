@@ -1457,7 +1457,10 @@ Theorem lower_vyper_runtime_unit_no_external_defaults:
        package_internal_fn tops use_trans nkey_map F 0) int_fns in
     let fallback_fn = set_fallback_package_target rpolicy.rpol_target
       (package_fallback_fn tops use_trans nkey_map fb_fn) in
-    if EVERY external_return_buffer_ok external_fns then
+    if EVERY external_return_buffer_ok external_fns ∧
+       EVERY (fn_allocs_ok tops)
+         (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f]))
+    then
       run_lowering selectors external_fns runtime_int_fns fallback_fn rpolicy
         0 0 ([]:dense_bucket list) (build_dense_entry_info selectors external_fns)
         "__entry"
