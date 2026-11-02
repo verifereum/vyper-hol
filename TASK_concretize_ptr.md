@@ -18,7 +18,8 @@ Theorem concretize_stage_ptr:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ctx_eom_bounded eom C' ==>
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_eom_bounded eom C' ==>
   ptr_discipline eom C' vs
 
 Theorem concretize_stage_static_mem:
@@ -33,7 +34,7 @@ Theorem concretize_stage_static_mem:
   mem_inv (static_mem_ok eom) C' vs
 ```
 
-Supporting definitions: as in TASK_concretize_stage_sim.md (read its
+Supporting definitions: as in TASK_concretize_sim.md (read its
 Theorem section and Background), plus `static_mem_ok` and `mem_inv` in
 `venom/compiler/unitMemInvScript.sml` and `ctx_eom_bounded` in
 `venom/compiler/o1PassContractScript.sml`.
@@ -112,3 +113,12 @@ layout end or dynamic (`static_mem_ok eom`).
   it is about to be relaxed so a deploy unit's raw allocator starts at the
   end of its reserved region. Take ALLOCA sites' position from
   `allocas_from lo s` (part of `ptr_discipline`) instead.
+- `concretize_stage_ptr` takes `~ctx_has_dalloca C`. Without it the statement
+  is false: an uncalled function `a = ALLOCA 32; d = DALLOCA 32;
+  q = EQ [a; d]` meets `fn_ptr_ok` in C (both roots, so the compare is
+  exempt) but not in C' (`a` is a literal assign, `d` still a root). Don't
+  re-derive that counterexample. With the premise, C' has neither ALLOCA nor
+  DALLOCA, so `P' = K {}` gives an empty `fn_pv`, and along
+  `frame_reachable` in C' the provenance map is `FEMPTY` and
+  `vs_allocas = FEMPTY`; `access_ok eom FEMPTY` then reduces to the
+  `off + len <= eom` bound that `concretize_stage_static_mem` also needs.

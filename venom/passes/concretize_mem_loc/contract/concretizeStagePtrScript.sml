@@ -30,7 +30,8 @@ Theorem concretize_stage_ptr:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ctx_eom_bounded eom C' ==>
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_eom_bounded eom C' ==>
   ptr_discipline eom C' vs
 Proof
   cheat
