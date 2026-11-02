@@ -16,10 +16,8 @@
  *                              frame
  *   alloca_room_callee       — a callee, entered at the caller's frontier,
  *                              has room
- *   compile_expr_correct     — main expression lowering correctness
  *   compile_literal_vv_correct  — word literal case
  *   compile_name_correct     — variable lookup case
- *   compile_binop_correct    — binary operation case
  *   compile_expr_grows, compile_binop_grows — compile_expr, lower_value
  *                              and compile_binop only append (cs_extends)
  *                              and grow the counters
@@ -168,19 +166,8 @@ Definition same_blocks_def:
     st'.cs_current_bb = st.cs_current_bb
 End
 
-(* ===== Main Correctness Theorem ===== *)
-
-(* For a "simple" (single-block) expression:
-   - The emitted instructions run successfully on the Venom state
-   - The returned operand evaluates to the encoded Vyper value
-   - State relation is preserved
-
-   NOTE: This covers Literal, Name, BinOp, Compare, UnaryOp, Env vars.
-   IfExp (multi-block) needs a separate theorem using run_block. *)
 (* Supported expressions: single-block compilation forms.
-   Handles: Literal, Name, Env vars, Not, Neg, BinOp.
-   IfExp is multi-block (separate theorem needed).
-   Other forms are not yet implemented in compile_expr. *)
+   Handles: Literal, Name, Env vars, Not, Neg, BinOp. *)
 Definition supported_expr_def:
   supported_expr (Literal _ _) = T ∧
   supported_expr (Name _ _) = T ∧
@@ -190,31 +177,6 @@ Definition supported_expr_def:
   supported_expr (Builtin _ (Bop _) (e1::e2::_)) =
     (supported_expr e1 ∧ supported_expr e2) ∧
   supported_expr _ = F
-End
-
-(* well_annotated: annotation types in the AST agree with operand types
-   where the evaluator uses them for bounds checking.
-   - BoolV Not: evaluator ignores annotation, compiler dispatches on expr_type
-   - IntV Not: evaluator uses type_to_int_bound ann for bounds
-   - Neg: evaluator uses type_to_int_bound ann for bounds
-   - BinOp: evaluator uses type_to_int_bound ann for arithmetic bounds;
-     for comparisons type_to_int_bound ann = NONE (vacuously true). *)
-Definition well_annotated_def:
-  well_annotated (Literal ann l) = T ∧
-  well_annotated (Name ann id) = T ∧
-  well_annotated (Builtin ann (Env item) args) = T ∧
-  well_annotated (Builtin ann Not (e::rest)) =
-    ((expr_type e ≠ BaseT BoolT ⇒
-      type_to_int_bound ann = type_to_int_bound (expr_type e)) ∧
-     well_annotated e) ∧
-  well_annotated (Builtin ann Neg (e::rest)) =
-    (type_to_int_bound ann = type_to_int_bound (expr_type e) ∧
-     well_annotated e) ∧
-  well_annotated (Builtin ann (Bop bop) (e1::e2::rest)) =
-    ((∀u. type_to_int_bound ann = SOME u ⇒
-          type_to_int_bound (expr_type e1) = SOME u) ∧
-     well_annotated e1 ∧ well_annotated e2) ∧
-  well_annotated _ = T
 End
 
 (* The size an ALLOCA asks for: its literal operand.  An ALLOCA with any
@@ -507,40 +469,6 @@ Proof
   `frame * SUC (CARD below) <= frame * CARD above`
     by simp[arithmeticTheory.LE_MULT_LCANCEL] >>
   full_simp_tac bool_ss [arithmeticTheory.MULT_CLAUSES] >> decide_tac
-QED
-
-(* The expression lemmas relate states with stmt_state_rel func, where func
-   is the function the code runs in, under the code premises of the
-   statement lemmas (stmtLoweringProps), with fn_has_code, which is defined
-   above this theory, replaced by its single-block consequence: the emitted
-   instructions are func's.  An ALLOCA of the expression (a buffer) then
-   misses every live local, and a Name reads a pointer local, not a MemLoc
-   variable, which state_rel does not relate. *)
-Theorem compile_expr_correct:
-  ∀ func cenv cx ty e es ss st op st' v es' ctx.
-    stmt_state_rel ctx func cenv cx es ss ∧
-    supported_expr e ∧
-    well_annotated e ∧
-    (do result <- eval_expr cx e; read_result cx result od) es =
-      (INL v, es') ∧
-    lower_value compile_expr cenv ty e st = (op, st') ∧
-    (∀i. MEM i (emitted_insts st st') ⇒ MEM i (fn_insts func)) ∧
-    fn_inst_ids_distinct func ∧ local_ptrs_reserved cenv st
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand op ss' = SOME (val_to_w256 v) ∧
-      stmt_state_rel ctx func cenv cx es' ss' ∧
-      same_blocks st st' ∧
-      st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
-      ¬ss'.vs_halted ∧
-      EVERY (λi. ¬is_terminator i.inst_opcode ∧ i.inst_opcode ≠ INVOKE)
-        (emitted_insts st st') ∧
-      (∀x w. not_fresh_at st x ∧ lookup_var x ss = SOME w ⇒
-             lookup_var x ss' = SOME w) ∧
-      (∀x. op = Var x ⇒ not_fresh_at st' x)
-Proof
-  cheat
 QED
 
 (* ===== Infrastructure Lemmas ===== *)
@@ -1084,35 +1012,6 @@ Proof
   simp[] >> irule word_val_in_memory_mem_word_at >> simp[]
 QED
 
-(* --- BinOp (safe arithmetic) --- *)
-(* For compile_binop: the emitted instructions compute the correct
-   result and any overflow checks correctly abort on invalid inputs *)
-(* NOTE: original statement was FALSE when annotation type has different
-   bounds than expr_type e1. Evaluator uses type_to_int_bound ann for
-   bounds checking, compiler uses type_bounds(expr_type e1).
-   Fix: added type consistency + fresh_vars_wrt + named annotation.
-   fresh_vars_wrt is now dropped (see stmt_state_rel): local_ptrs_reserved
-   keeps the temporaries off the locals' pointers. *)
-Theorem compile_binop_correct:
-  ∀ func cenv cx ty ann bop e1 e2 es ss st op st' v es' ctx.
-    stmt_state_rel ctx func cenv cx es ss ∧
-    (∀u. type_to_int_bound ann = SOME u ⇒
-         type_to_int_bound (expr_type e1) = SOME u) ∧
-    (do result <- eval_expr cx (Builtin ann (Bop bop) [e1; e2]);
-        read_result cx result od) es =
-      (INL v, es') ∧
-    lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1; e2]) st = (op, st') ∧
-    (∀i. MEM i (emitted_insts st st') ⇒ MEM i (fn_insts func)) ∧
-    fn_inst_ids_distinct func ∧ local_ptrs_reserved cenv st
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand op ss' = SOME (val_to_w256 v) ∧
-      stmt_state_rel ctx func cenv cx es' ss'
-Proof
-  cheat
-QED
-
 (* --- Not (boolean negation) --- *)
 (* The ISZERO instruction correctly computes boolean NOT.
    Sub-expression correctness is handled by the main induction. *)
@@ -1162,32 +1061,6 @@ Theorem emit_void_assert_inst:
 Proof
   simp[emit_void_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
        emit_def, venomInstTheory.mk_inst_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
-QED
-
-(* NOTE: original statement was FALSE when annotation type has different
-   bounds than expr_type e. Compiler uses type_bounds(expr_type e) but
-   evaluator uses type_to_int_bound(annotation type). Additionally, Neg
-   is only defined for signed integers — unsigned annotation (e.g.
-   UintT 256 with IntV 0) gave a spurious counterexample.
-   Fix: named annotation, added type_to_int_bound constraint, and
-   restricted ann to signed IntT. *)
-Theorem compile_neg_correct:
-  ∀ func cenv cx ty ann e es ss st op st' v es' n ctx.
-    stmt_state_rel ctx func cenv cx es ss ∧
-    (do result <- eval_expr cx (Builtin ann Neg [e]); read_result cx result od) es =
-      (INL v, es') ∧
-    ann = BaseT (IntT n) ∧
-    type_to_int_bound ann = type_to_int_bound (expr_type e) ∧
-    lower_value compile_expr cenv ty (Builtin ann Neg [e]) st = (op, st') ∧
-    (∀i. MEM i (emitted_insts st st') ⇒ MEM i (fn_insts func)) ∧
-    fn_inst_ids_distinct func ∧ local_ptrs_reserved cenv st
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand op ss' = SOME (val_to_w256 v) ∧
-      stmt_state_rel ctx func cenv cx es' ss'
-Proof
-  cheat
 QED
 
 (* --- Environment variables (CALLER, TIMESTAMP, etc.) --- *)
@@ -1886,14 +1759,11 @@ Theorem ci_mono_compile_concat_cfn:
     ci_mono sa (SND (compile_concat cfn cenv es data_ptr infos offset_op sa))
 Proof
   recInduct compile_concat_ind >> rpt strip_tac >> gvs[compile_concat_def, ci_mono_comp_return] >>
-Cases_on `is_bs` >> gvs[] >>
-irule ci_mono_bind >> rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void] >>
-TRY (irule ci_mono_bind >> rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
-TRY (irule ci_mono_bind >> rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
-TRY (irule ci_mono_bind >> rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
-TRY (irule ci_mono_ignore_bind >> rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
-TRY (irule ci_mono_bind >> rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
-TRY (irule ci_mono_lower_value_cfn >> simp[])
+  Cases_on `is_bs` >> gvs[] >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_lower_value_cfn]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[]
 QED
 
 Theorem ci_mono_compile_make_array_elems_cfn[local]:
@@ -2025,6 +1895,35 @@ Proof
          ci_mono_compile_alloc_buffer, ci_mono_refl] >>
     TRY (IF_CASES_TAC >>
          simp[ci_mono_emit_op, ci_mono_comp_return, LET_THM])))
+QED
+
+Theorem ci_mono_compile_get_target_ptr_cfn:
+  ∀ cfn bt cenv sa.
+    (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_get_target_ptr cfn cenv bt sa))
+Proof
+  gen_tac >> measureInduct_on `base_assignment_target_size bt` >>
+  Cases_on `bt` >> rpt gen_tac >> strip_tac >>
+  drule ci_mono_lower_value_cfn >> strip_tac >>
+  simp[Once compile_get_target_ptr_def]
+  >- (every_case_tac >> simp[ci_mono_comp_return])
+  >- (every_case_tac >> simp[ci_mono_comp_return])
+  >- (irule ci_mono_bind >> conj_tac >> rpt gen_tac
+      >~ [`compile_get_target_ptr cfn cenv b sa`]
+      >- (first_x_assum irule >> gvs[]) >>
+      simp[LET_THM] >> every_case_tac >>
+      rpt (CHANGED_TAC (rpt gen_tac >>
+        TRY (irule ci_mono_bind >> conj_tac) >> BETA_TAC >>
+        TRY IF_CASES_TAC >>
+        asm_simp_tac (srw_ss())
+          [ci_mono_comp_return, ci_mono_compile_keccak256_key,
+           ci_mono_compile_mapping_subscript, ci_mono_compile_array_subscript,
+           ci_mono_compile_ptr_load]))) >>
+  irule ci_mono_bind >> conj_tac >> rpt gen_tac
+  >~ [`compile_get_target_ptr cfn cenv b sa`]
+  >- (first_x_assum irule >> gvs[]) >>
+  simp[LET_THM] >>
+  irule ci_mono_bind >> simp[ci_mono_comp_return, ci_mono_emit_op]
 QED
 
 Theorem ci_mono_compile_subscript_cfn[local]:
@@ -2622,7 +2521,7 @@ Proof
   simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]
 QED
 
-Theorem ci_mono_compile_slice_out_buf[local]:
+Theorem ci_mono_compile_slice_out_buf:
   ∀ out_size sa. ci_mono sa (SND (compile_slice_out_buf out_size sa))
 Proof
   rpt gen_tac >>
@@ -2666,18 +2565,6 @@ Proof
        (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]) ORELSE
        gen_tac ORELSE strip_tac ORELSE CASE_TAC) >>
   simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]
-QED
-
-Theorem ci_mono_compile_slice_memory[local]:
-  ∀ src_ptr start_op len_op out_size sa. ci_mono sa (SND (compile_slice_memory src_ptr start_op len_op out_size sa))
-Proof
-  rpt gen_tac >>
-  rewrite_tac[builtinBytesTheory.compile_slice_memory_def] >> BETA_TAC >>
-  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds, ci_mono_compile_bytestring_src, ci_mono_compile_slice_data]) ORELSE
-       gen_tac ORELSE strip_tac ORELSE CASE_TAC ORELSE
-       (Cases_on `av` >> rewrite_tac[pairTheory.UNCURRY_DEF] >> BETA_TAC)) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds, ci_mono_compile_bytestring_src, ci_mono_compile_slice_data]
 QED
 
 Theorem ci_mono_compile_uint2str[local]:
@@ -2749,22 +2636,23 @@ Proof
   rpt (ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt gen_tac >> rpt strip_tac) >> TRY (ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac) >> simp[ci_mono_comp_return, ci_mono_emit_void]
 QED
 
-Theorem ci_mono_compile_extract32[local]:
-  ∀ src_ptr start_op sa. ci_mono sa (SND (compile_extract32 src_ptr start_op sa))
+Theorem ci_mono_compile_extract32_load[local]:
+  ∀ src_len src_data start_op sa.
+    ci_mono sa (SND (compile_extract32_load src_len src_data start_op sa))
 Proof
   rpt gen_tac >>
-  rewrite_tac[builtinBytesTheory.compile_extract32_def] >> BETA_TAC >>
+  rewrite_tac[builtinBytesTheory.compile_extract32_load_def] >> BETA_TAC >>
   rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_compile_assert_slice_bounds]) ORELSE
        gen_tac ORELSE strip_tac) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+  simp[ci_mono_emit_op]
 QED
 
-Theorem ci_mono_compile_clamp_extract32[local]:
-  ∀ val_op clamp sa. ci_mono sa (SND (compile_clamp_extract32 val_op clamp sa))
+Theorem ci_mono_compile_clamp_basetype[local]:
+  ∀ val_op ty sa. ci_mono sa (SND (compile_clamp_basetype val_op ty sa))
 Proof
-  rpt gen_tac >> Cases_on `clamp` >>
-  rewrite_tac[builtinBytesTheory.compile_clamp_extract32_def, LET_THM] >> BETA_TAC >>
+  ho_match_mp_tac compile_clamp_basetype_ind >>
+  rw[compile_clamp_basetype_def, ci_mono_comp_return, ci_mono_clamp_and_return] >>
   rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
        (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) ORELSE
        gen_tac ORELSE strip_tac) >>
@@ -3584,13 +3472,25 @@ Proof
   simp[ci_mono_emit_void, ci_mono_comp_return]
 QED
 
-Theorem ci_mono_compile_raw_call[local]:
-  ∀addr dp dl gas value call_ty max_outsize rof sa.
+Theorem ci_mono_compile_raw_call_outbuf:
+  ∀max_outsize sa. ci_mono sa (SND (compile_raw_call_outbuf max_outsize sa))
+Proof
+  rpt gen_tac >> simp[compile_raw_call_outbuf_def] >> IF_CASES_TAC >>
+  simp[LET_THM] >> ho_match_mp_tac ci_mono_bind >>
+  simp[ci_mono_compile_alloc_buffer, ci_mono_comp_return] >>
+  rpt strip_tac >> ho_match_mp_tac ci_mono_bind >>
+  simp[ci_mono_comp_return] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_raw_call_finish:
+  ∀addr dp dl gas value call_ty max_outsize rof out_val out_ptr sa.
     ci_mono sa
-      (SND (compile_raw_call addr dp dl gas value call_ty max_outsize rof sa))
+      (SND (compile_raw_call_finish addr dp dl gas value call_ty max_outsize
+              rof out_val out_ptr sa))
 Proof
   rpt gen_tac >> Cases_on `call_ty` >>
-  simp[compile_raw_call_def, LET_THM] >>
+  simp[compile_raw_call_finish_def, LET_THM] >>
   rpt (FIRST [
     CHANGED_TAC (simp[LET_THM, pairTheory.FORALL_PROD,
       pairTheory.UNCURRY_DEF, ci_mono_emit_op, ci_mono_emit_void,
@@ -3603,6 +3503,30 @@ Proof
     IF_CASES_TAC])
 QED
 
+Theorem ci_mono_compile_raw_call_target[local]:
+  ∀cfn cenv ret_ty ty rcf args default_ret sa.
+    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_call cfn cenv ret_ty ty
+      (RawCallTarget rcf) args default_ret sa))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `args` >- simp[compile_call_def, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  rename1 `addr_e :: rest` >>
+  Cases_on `rest` >- simp[compile_call_def, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  Cases_on `rcf.rcf_max_outsize = 0` >>
+  simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_raw_call_finish >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_raw_call_outbuf >>
+  CASE_TAC >> simp[] >>
+  TRY (irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op) >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_ext_call_kwargs >>
+  simp[] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >>
+  simp[] >> irule ci_mono_lower_value_cfn >> simp[]
+QED
+
 Theorem ci_mono_compile_raw_call_calldata[local]:
   ∀cfn cenv ret_ty ty rcf args default_ret sa.
     (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
@@ -3613,12 +3537,13 @@ Proof
   Cases_on `args` >- simp[compile_call_def, pairTheory.UNCURRY, ci_mono_emit_inst] >>
   Cases_on `rcf.rcf_max_outsize = 0` >>
   simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
-  irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_raw_call >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_raw_call_finish >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_msg_data_to_memory >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_raw_call_outbuf >>
   CASE_TAC >> simp[] >>
   TRY (irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op) >>
   irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_ext_call_kwargs >>
   simp[] >>
-  irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_msg_data_to_memory >>
   irule ci_mono_lower_value_cfn >> simp[]
 QED
 
@@ -3628,7 +3553,7 @@ val ci_mono_invalid_call_tac =
   let
     val invalid_calls = map
       (SIMP_RULE pure_ss [LET_THM, pairTheory.UNCURRY, pairTheory.SND])
-      (map (fn n => cj n compile_call_def) [4, 6, 7, 8, 9])
+      (map (fn n => cj n compile_call_def) [6, 7, 8, 9])
   in
     CONV_TAC
       (RAND_CONV (RAND_CONV (FIRST_CONV (map REWR_CONV invalid_calls)))) >>
@@ -3642,6 +3567,7 @@ Theorem ci_mono_compile_call[local]:
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `target` >>
   TRY (ci_mono_invalid_call_tac >> NO_TAC) >>
+  TRY (irule ci_mono_compile_raw_call_target >> simp[] >> NO_TAC) >>
   TRY (irule ci_mono_compile_raw_call_calldata >> simp[] >> NO_TAC)
   >- ( (* IntCall *)
     simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
@@ -3836,11 +3762,14 @@ Proof
 QED
 
 Theorem ci_mono_compile_expr_pop[local]:
+  (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
   ci_mono st (SND (compile_expr_body f g h cenv ty (Pop ann target) st))
 Proof
-  simp[compile_expr_body_def, LET_THM] >>
-  Cases_on `target` >> simp[] >>
-  irule ci_mono_uncurry >>
+  strip_tac >> simp[compile_expr_body_def, LET_THM] >>
+  irule ci_mono_uncurry >> conj_tac >> rpt gen_tac
+  >~ [`compile_get_target_ptr`]
+  >- (irule ci_mono_compile_get_target_ptr_cfn >> first_assum ACCEPT_TAC) >>
+  PairCases_on `a` >> simp[] >> irule ci_mono_uncurry >>
   simp[ci_mono_compile_dynarray_pop, ci_mono_refl]
 QED
 
@@ -4115,7 +4044,7 @@ Proof
        >> rpt gen_tac >> BETA_TAC) >>
   simp[ci_mono_as_ptr_val, ci_mono_compile_slice_calldata,
        ci_mono_compile_slice_code, ci_mono_compile_slice_extcode,
-       ci_mono_compile_slice_data, ci_mono_compile_slice_memory] >>
+       ci_mono_compile_slice_data] >>
   pairarg_tac >> gvs[] >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_lower_value_cfn]
@@ -4152,9 +4081,10 @@ Theorem ci_mono_type_builtin_extract32[local]:
 Proof
   strip_tac >> simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
-       >- simp[ci_mono_lower_value_cfn, ci_mono_compile_extract32]
-       >> rpt gen_tac >> BETA_TAC) >>
-  simp[ci_mono_as_stack_val, ci_mono_compile_clamp_extract32]
+       >- simp[ci_mono_lower_value_cfn, ci_mono_compile_bytestring_src,
+               ci_mono_compile_extract32_load]
+       >> simp[pairTheory.FORALL_PROD] >> rpt gen_tac) >>
+  simp[ci_mono_as_stack_val, ci_mono_compile_clamp_basetype]
 QED
 
 Theorem ci_mono_type_builtin_abi_encode[local]:
@@ -4553,8 +4483,7 @@ val () = List.app (fn th =>
 val () = List.app
   (fn (name,th) =>
     if List.exists (fn allowed => name = allowed)
-      ["compile_expr_correct", "compile_binop_correct", "compile_neg_correct",
-       "compile_expr_ci_mono", "compile_expr_extends_insts"] then ()
+      ["compile_expr_ci_mono", "compile_expr_extends_insts"] then ()
     else let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
       if null (Thm.hyp th) andalso null axioms andalso
          List.all (fn oracle => oracle = "DISK_THM") oracles then ()

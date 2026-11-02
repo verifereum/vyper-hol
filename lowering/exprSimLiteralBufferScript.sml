@@ -15,6 +15,7 @@
 
 Theory exprSimLiteralBuffer
 Ancestors
+  allocLimits
   list finite_map exprSimWordArgs loweringHalt exprLoweringProps
   exprSim exprSimOps exprSimHyps exprLowering compileEnv loweringSlice
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph

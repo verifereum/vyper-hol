@@ -170,7 +170,7 @@ Theorem compile_get_target_ptr_toplevel:
     FLOOKUP cenv.ce_module_vars nsid =
       SOME (if tr then TransientLoc slot else StorageLoc slot) /\
     cenv.ce_hashmap_info nsid = NONE ==>
-    compile_get_target_ptr cenv (TopLevelNameTarget nsid) st =
+    compile_get_target_ptr compile_expr cenv (TopLevelNameTarget nsid) st =
       ((Lit slot, SOME (if tr then LocTransient else LocStorage),
         OPTION_MAP ValPT (cenv.ce_module_var_type nsid)), st)
 Proof

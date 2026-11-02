@@ -12,13 +12,14 @@
  *                           expr_vv_case and expr_sim_case, for
  *                           compile_expr_sim and the body simulation;
  *                           compile_attribute_vv_sim follows
+ *   attr_add_frag, attr_extends, stmt_state_rel_region_lt,
+ *   immutable_holds_read, field_ptr_w2n — the offset's fragment and the
+ *                           pointer facts, which exprSimTuple shares
  *
  * Helpers: vv_loc, attr_offset, compile_expr_attribute,
- *   eval_expr_attribute, attr_pre_base, attr_add_post, attr_add_frag,
- *   attr_extends, stmt_state_rel_region_lt, struct_value_shape,
- *   immutable_holds_read, base_vv_holds_struct, base_vv_at_struct,
- *   field_ptr_w2n, attr_vv_at_field, sub_layout_field,
- *   immutable_holds_field, attr_vv_post
+ *   eval_expr_attribute, attr_pre_base, attr_add_post, struct_value_shape,
+ *   base_vv_holds_struct, base_vv_at_struct, attr_vv_at_field,
+ *   sub_layout_field, immutable_holds_field, attr_vv_post
  *
  * Where the base is a local's place memory no longer holds (a popped
  * element), the source reads the field from the popped history, which
@@ -33,6 +34,7 @@
 
 Theory exprSimAttribute
 Ancestors
+  allocLimits
   list rich_list finite_map pair
   fragExec exprSim exprSimHyps exprSimUnwrap exprSimLen exprSimLeaves
   exprSimBuffer exprSimAggregateChildren exprSimAttributeFields
@@ -138,7 +140,7 @@ Proof
   simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem attr_add_frag[local]:
+Theorem attr_add_frag:
   !ctx cenv ty e sa vv sm off dst sn func cx es s0 es' tv R.
     compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
     sa.cs_next_var <= sm.cs_next_var /\
@@ -162,7 +164,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem attr_extends[local]:
+Theorem attr_extends:
   !ops sa p sb. emit_op ADD ops sa = (p, sb) ==> cs_extends sa sb
 Proof
   rpt strip_tac >>
@@ -173,7 +175,7 @@ QED
 
 (* ===== The value_vv of the field ===== *)
 
-Theorem stmt_state_rel_region_lt[local]:
+Theorem stmt_state_rel_region_lt:
   !func cenv cx es s ctx.
     stmt_state_rel ctx func cenv cx es s ==>
     (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
@@ -200,7 +202,7 @@ Proof
   rename1 `ArrayV av` >> Cases_on `av` >> simp[value_has_type_def]
 QED
 
-Theorem immutable_holds_read[local]:
+Theorem immutable_holds_read:
   !cenv cx t tv w es.
     immutable_holds cenv cx t tv w es ==> ?v. read_result cx tv es = (INL v, es)
 Proof
@@ -263,7 +265,7 @@ QED
 
 (* A field's pointer does not wrap: the struct's bytes end below 2 ** 256,
    or it has none and the field is at offset 0. *)
-Theorem field_ptr_w2n[local]:
+Theorem field_ptr_w2n:
   !(w:bytes32) off fsz tsz.
     off + fsz <= tsz /\ (tsz = 0 \/ w2n w + tsz < dimword (:256)) ==>
     w2n (w + n2w off) = w2n w + off
