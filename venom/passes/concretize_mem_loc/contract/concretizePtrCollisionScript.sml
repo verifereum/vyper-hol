@@ -1427,3 +1427,174 @@ Proof
   disch_then (qspec_then `init_ir_supply (collision_stage_unit fn)` assume_tac) >>
   gvs[fn_pass_step_def, venomPassScheduleTheory.fn_pass_tag_def, collision_stage_out_def]
 QED
+
+Theorem collision_fmp_step:
+  !fn. MEM fn [collision_a; collision_b] ==>
+    fn_pass_step ARB (CFP_Simple VP_FmpLowering)
+      collision_unit (init_ir_supply collision_unit)
+      (collision_transform collision_ctx fn)
+      <| fpo_function := collision_sealed fn;
+         fpo_label_map := []; fpo_supply := init_ir_supply collision_unit |>
+Proof
+  pure_rewrite_tac[listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  simp[fn_pass_step_def, collision_fmp_exact,
+    venomPassScheduleTheory.fn_pass_tag_def] >>
+  rewrite_tac[collision_unit_def, collision_observed_def, collision_sealed_def,
+    collision_a_exact, collision_b_exact] >>
+  rpt conj_tac >> EVAL_TAC
+QED
+
+Theorem collision_sealed_steps:
+  !fn pass. MEM fn [collision_a; collision_b] /\
+    MEM pass [CFP_Simple VP_MakeSSA; CFP_Simple VP_SimplifyCFG] ==>
+    fn_pass_step ARB pass (collision_current_unit (collision_sealed fn))
+      (init_ir_supply collision_unit) (collision_sealed fn)
+      <| fpo_function := collision_sealed fn;
+         fpo_label_map := []; fpo_supply := init_ir_supply collision_unit |>
+Proof
+  rpt gen_tac >> pure_rewrite_tac[listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  simp[fn_pass_step_def, collision_ssa_exact, collision_simplify_exact,
+    venomPassScheduleTheory.fn_pass_tag_def] >>
+  rewrite_tac[collision_current_unit_def, collision_unit_def,
+    collision_observed_def, collision_sealed_def, collision_a_exact,
+    collision_b_exact] >>
+  rpt conj_tac >> EVAL_TAC
+QED
+
+Theorem collision_layout_steps:
+  !fn. MEM fn [collision_a; collision_b] ==>
+    fn_pass_step ARB (CFP_Simple VP_SingleUseExpansion)
+      (collision_current_unit (collision_sealed fn))
+      (init_ir_supply collision_unit) (collision_sealed fn)
+      <| fpo_function := collision_expanded fn; fpo_label_map := [];
+         fpo_supply := collision_expanded_supply fn |> /\
+    fn_pass_step ARB (CFP_Simple VP_DFT)
+      (collision_current_unit (collision_expanded fn))
+      (collision_expanded_supply fn) (collision_expanded fn)
+      <| fpo_function := collision_scheduled fn; fpo_label_map := [];
+         fpo_supply := collision_expanded_supply fn |> /\
+    fn_pass_step ARB (CFP_Simple VP_CFGNormalization)
+      (collision_current_unit (collision_scheduled fn))
+      (collision_expanded_supply fn) (collision_scheduled fn)
+      <| fpo_function := collision_scheduled fn; fpo_label_map := [];
+         fpo_supply := collision_expanded_supply fn |>
+Proof
+  pure_rewrite_tac[listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  simp[fn_pass_step_def, collision_expansion_exact, collision_dft_exact,
+    collision_normalization_exact, venomPassScheduleTheory.fn_pass_tag_def] >>
+  rewrite_tac[collision_expanded_supply_def, collision_scheduled_def,
+    collision_expanded_def, collision_current_unit_def, collision_unit_def,
+    collision_observed_def, collision_sealed_def, collision_a_exact,
+    collision_b_exact] >>
+  rpt conj_tac >> EVAL_TAC
+QED
+
+Theorem collision_leaf_later:
+  !fn. MEM fn [collision_a; collision_b] ==>
+    fn_steps ARB (DROP 3 venomPassSchedule$o1_fn_passes)
+      (collision_transform collision_ctx fn) (collision_scheduled fn)
+Proof
+  rpt strip_tac >>
+  drule collision_fmp_step >> strip_tac >>
+  drule collision_sealed_steps >> strip_tac >>
+  drule collision_layout_steps >> strip_tac >>
+  simp[venomPassScheduleTheory.o1_fn_passes_def] >>
+  ntac 6 (simp[Once fn_steps_def] >> first_assum (irule_at Any) >> simp[]) >>
+  simp[fn_steps_def]
+QED
+
+Theorem collision_calls:
+  fn_invoke_targets collision_a = [] /\
+  fn_invoke_targets collision_b = [] /\
+  fn_invoke_targets collision_main = ["a"; "b"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem collision_leaf_names:
+  (collision_transform collision_ctx collision_a).fn_name = "a" /\
+  (collision_transform collision_ctx collision_b).fn_name = "b" /\
+  (collision_scheduled collision_a).fn_name = "a" /\
+  (collision_scheduled collision_b).fn_name = "b"
+Proof
+  simp[collision_scheduled_def, collision_expanded_def, collision_sealed_def,
+    collision_a_exact, collision_b_exact, collision_a_def, collision_b_def,
+    venomInstTheory.mk_raw_function_def]
+QED
+
+Theorem collision_callee_lookups:
+  lookup_function "a" collision_output_ctx.ctx_functions =
+    SOME (collision_transform collision_ctx collision_a) /\
+  lookup_function "b" collision_output_ctx.ctx_functions =
+    SOME (collision_transform collision_ctx collision_b) /\
+  lookup_function "a" collision_finished_ctx.ctx_functions =
+    SOME (collision_scheduled collision_a) /\
+  lookup_function "b" collision_finished_ctx.ctx_functions =
+    SOME (collision_scheduled collision_b)
+Proof
+  simp[collision_output_ctx_def, collision_finished_ctx_def,
+    venomInstTheory.mk_venom_context_def, venomInstTheory.lookup_function_def,
+    listTheory.FIND_thm, collision_leaf_names]
+QED
+
+Theorem collision_walk_views:
+  !fn. MEM fn [collision_a; collision_b; collision_main] ==>
+    o1_walk_view ARB 2 collision_output_ctx fn (collision_stage_unit fn)
+Proof
+  pure_rewrite_tac[listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  simp[o1_walk_view_def, walk_view_def, collision_stage_units,
+    collision_calls, collision_callee_lookups] >>
+  rpt strip_tac >> gvs[collision_callee_lookups] >>
+  simp[collision_leaf_later]
+QED
+
+Theorem collision_stage_headers:
+  !fn. MEM fn [collision_a; collision_b; collision_main] ==>
+    (collision_stage_unit fn).cu_context.ctx_entry = collision_ctx.ctx_entry /\
+    (collision_stage_unit fn).cu_context.ctx_global_reserved =
+      collision_ctx.ctx_global_reserved /\
+    ctx_fn_names (collision_stage_unit fn).cu_context = ctx_fn_names collision_ctx
+Proof
+  pure_rewrite_tac[listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  simp[collision_stage_units, collision_ctx_def, collision_finished_ctx_def,
+    venomInstTheory.mk_venom_context_def, venomInstTheory.ctx_fn_names_def,
+    collision_leaf_names] >> EVAL_TAC
+QED
+
+Theorem collision_stage_list:
+  !fn. MEM fn [collision_a; collision_b; collision_main] ==>
+    ?observed s out.
+      fn_pass_step ARB (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
+      out.fpo_function = (collision_stage_out fn).fpo_function /\
+      observed.cu_context.ctx_entry = collision_ctx.ctx_entry /\
+      observed.cu_context.ctx_global_reserved = collision_ctx.ctx_global_reserved /\
+      ctx_fn_names observed.cu_context = ctx_fn_names collision_ctx /\
+      o1_walk_view ARB 2 collision_output_ctx fn observed
+Proof
+  rpt strip_tac >>
+  qexistsl_tac [`collision_stage_unit fn`, `init_ir_supply (collision_stage_unit fn)`,
+    `collision_stage_out fn`] >>
+  simp[collision_stage_steps, collision_stage_headers, collision_walk_views]
+QED
+
+Theorem collision_stage_context_fields:
+  collision_output_ctx.ctx_entry = collision_ctx.ctx_entry /\
+  collision_output_ctx.ctx_global_reserved = collision_ctx.ctx_global_reserved /\
+  collision_ctx.ctx_functions = [collision_a; collision_b; collision_main] /\
+  collision_output_ctx.ctx_functions =
+    [(collision_stage_out collision_a).fpo_function;
+     (collision_stage_out collision_b).fpo_function;
+     (collision_stage_out collision_main).fpo_function]
+Proof
+  simp[collision_output_ctx_def, collision_finished_ctx_def, collision_ctx_def,
+    venomInstTheory.mk_venom_context_def, collision_stage_out_def,
+    collision_stage_units]
+QED
+
+Theorem collision_actual_stage:
+  ctx_pass_stage ARB (CFP_Simple VP_ConcretizeMemLoc) (o1_walk_view ARB 2)
+    collision_ctx collision_output_ctx
+Proof
+  simp[ctx_pass_stage_def, collision_stage_context_fields] >>
+  rpt conj_tac >> irule collision_stage_list >> simp[]
+QED
