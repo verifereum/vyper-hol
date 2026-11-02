@@ -2304,8 +2304,11 @@ Proof
   (* Chain: bb ← orig → trans → bb'.
      All three are non-OK, so case-split on result constructors *)
   >> Cases_on `run_insts fuel ctx non_terms s`
+  >> fs[lift_result_def]
   >> Cases_on `exec_block fuel ctx bb s`
+  >> fs[lift_result_def]
   >> Cases_on `run_insts fuel ctx (FLAT (MAP f non_terms)) s`
+  >> fs[lift_result_def]
   >> Cases_on `exec_block fuel ctx bb' s`
   >> fs[lift_result_def]
   >> metis_tac[execution_equiv_sym, execution_equiv_trans]
