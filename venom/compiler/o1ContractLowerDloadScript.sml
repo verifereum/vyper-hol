@@ -18,7 +18,7 @@
 Theory o1ContractLowerDload
 Ancestors
   o1PassContract lowerDloadDefs venomPassDispatcher venomFnScheduleRunner
-  unitShapeDefs venomWf irSupply
+  unitShapeDefs venomWf irSupply venomInst stackPlanTypes
 
 (* Why these hold: the expansion of DLOAD/DLOADBYTES only inserts
    non-terminators (ALLOCA, ADD, CODECOPY, MLOAD) in place of a
@@ -29,6 +29,86 @@ Ancestors
    fresh_ir_var, which avoids irs_used_vars.  The only label operand added
    is "code_end" as ADD's second operand, which label_positions_ok admits
    and which is reserved. *)
+
+Theorem lower_dload_inst_supply_nonempty:
+  lower_dload_inst_supply s i = (xs,t) ==> xs <> []
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      strip_tac >> gvs[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      strip_tac >> gvs[]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[]
+QED
+
+Theorem lower_dload_inst_supply_special:
+  ~MEM i.inst_opcode [DLOAD; DLOADBYTES] ==>
+  lower_dload_inst_supply s i = ([i],s)
+Proof
+  simp[lower_dload_inst_supply_def]
+QED
+
+Theorem lower_dload_inst_supply_control:
+  lower_dload_inst_supply s i = (xs,t) /\ MEM j xs /\
+  (is_terminator j.inst_opcode \/ j.inst_opcode = PHI \/
+   MEM j.inst_opcode [GAS; RETPC_PARAM; ASSIGN; PARAM; INVOKE; RET; STOP; RETURN]) ==>
+  j = i
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[is_terminator_def]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[is_terminator_def]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[]
+QED
+
+Theorem lower_dload_inst_supply_wf:
+  lower_dload_inst_supply s i = (xs,t) /\ inst_wf i ==>
+  EVERY inst_wf xs
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[inst_wf_def]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[inst_wf_def]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[]
+QED
+
+Theorem lower_dload_inst_supply_shape:
+  lower_dload_inst_supply s i = (xs,t) /\ inst_shape_ok i ==>
+  EVERY inst_shape_ok xs
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >>
+      gvs[inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+          is_label_operand_def]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >>
+      gvs[inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+          is_label_operand_def]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[]
+QED
+
+Theorem lower_dload_inst_supply_operand_provenance:
+  lower_dload_inst_supply s i = (xs,t) /\ MEM j xs /\
+  MEM op j.inst_operands ==>
+  MEM op i.inst_operands \/
+  (?v. op = Var v /\ MEM v (FLAT (MAP (\k. k.inst_outputs) xs))) \/
+  op = Label "code_end" \/ op = Lit 32w
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[]
+QED
 
 Theorem lower_dload_function_supply_wf_function:
   !s fn fn' s'.
