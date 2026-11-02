@@ -15,21 +15,37 @@
  *)
 Theory o1ContractSimplifyCfg
 Ancestors
-  o1PassContract o1PassLift simplifyCfgCorrectness simplifyCfgProof
+  o1ContractSimplifyCfgStep o1PassContract o1PassLift simplifyCfgCorrectness simplifyCfgProof
   simplifyCfgDefs unitMemInv venomPassSchedule venomCompilerTypes
   venomWf cfgWf
+
+(* The pre-walk run: lowering output (no PHI, definite assignment) to
+   MakeSSA's input (every block reachable, definite assignment kept). *)
+Theorem simplify_cfg_stage_pre_walk:
+  !view. o1_stage_contract rpolicy (CFP_Simple VP_SimplifyCFG) view no_pre
+           o1_pre_walk_inv o1_walk_src_inv
+Proof
+  cheat
+QED
+
+(* The walk run, stage 5: wf_ssa in, wf_ssa out. *)
+Theorem simplify_cfg_stage_walk:
+  o1_run_contract rpolicy 5
+Proof
+  cheat
+QED
 
 Theorem o1_contract_simplify_cfg_pre_walk:
   o1_step_contract rpolicy (CFP_Simple VP_SimplifyCFG) /\
   (!view. o1_stage_contract rpolicy (CFP_Simple VP_SimplifyCFG) view no_pre
             o1_pre_walk_inv o1_walk_src_inv)
 Proof
-  cheat
+  simp[simplify_cfg_step_contract, simplify_cfg_stage_pre_walk]
 QED
 
 Theorem o1_contract_simplify_cfg:
   o1_step_contract rpolicy (CFP_Simple VP_SimplifyCFG) /\
   o1_run_contract rpolicy 5
 Proof
-  cheat
+  simp[simplify_cfg_step_contract, simplify_cfg_stage_walk]
 QED
