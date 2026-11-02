@@ -666,7 +666,15 @@ Theorem lower_dload_function_supply_wf_function:
     lower_dload_function_supply s fn = (fn',s') ==>
     wf_function fn'
 Proof
-  cheat
+  rpt strip_tac >>
+  drule lower_dload_function_supply_labels >> strip_tac >>
+  gvs[wf_function_def] >> rpt conj_tac
+  >- metis_tac[SRULE [EVERY_MEM] lower_dload_function_supply_blocks_wf]
+  >- metis_tac[lower_dload_function_supply_succs_closed] >>
+  gvs[fn_inst_ids_distinct_def] >>
+  irule (SRULE [fn_ir_inst_ids_def, lambdify block_ir_inst_ids_def]
+               lower_dload_function_supply_distinct_ids) >>
+  metis_tac[]
 QED
 
 Theorem lower_dload_function_supply_ssa_form:
@@ -675,7 +683,8 @@ Theorem lower_dload_function_supply_ssa_form:
     lower_dload_function_supply s fn = (fn',s') ==>
     ssa_form fn'
 Proof
-  cheat
+  simp[ssa_form_def] >> rpt strip_tac >>
+  irule lower_dload_function_supply_outputs >> metis_tac[]
 QED
 
 Theorem lower_dload_step_shape:
