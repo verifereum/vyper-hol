@@ -18,6 +18,7 @@ Ancestors
   o1ContractSimplifyCfgStep o1PassContract o1PassLift simplifyCfgCorrectness simplifyCfgProof
   simplifyCfgDefs unitMemInv venomPassSchedule venomCompilerTypes
   venomWf cfgWf simplifyCfgLabelProps venomPassDispatcher
+  opcodeClass ctxLookupAgreeHelpers venomExecSemantics
 
 Theorem simplify_cfg_pass_step_function:
   fn_pass_step rpolicy (CFP_Simple VP_SimplifyCFG) observed s fn out ==>
@@ -52,6 +53,92 @@ Proof
   simp[venomInstTheory.fn_static_layout_eq_def] >> strip_tac >>
   gvs[ctx_eom_bounded_def] >> first_x_assum irule >>
   qexists_tac `y` >> simp[]
+QED
+
+Theorem step_inst_intret_opcodes:
+  step_inst fuel C inst s = IntRet vals t ==>
+  MEM inst.inst_opcode [RET; RETFMP; DRET]
+Proof
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (simp[Once step_inst_def] >>
+      gvs[AllCaseEqs(), bind_outputs_def]) >>
+  simp[step_inst_non_invoke] >> strip_tac >>
+  drule step_inst_base_intret_opcodes >> simp[] >> metis_tac[]
+QED
+
+Theorem exec_block_no_return:
+  EVERY (\inst. ~MEM inst.inst_opcode [RET; RETFMP; DRET])
+    bb.bb_instructions ==>
+  exec_block fuel C bb s <> IntRet vals t
+Proof
+  qid_spec_tac `s` >>
+  measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  simp[Once exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >- simp[] >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  `~MEM inst.inst_opcode [RET; RETFMP; DRET]` by
+    (drule_all EVERY_get_instruction >> simp[]) >>
+  `!v t. step_inst fuel C inst s <> IntRet v t` by
+    metis_tac[step_inst_intret_opcodes] >>
+  Cases_on `step_inst fuel C inst s` >> simp[] >>
+  rpt IF_CASES_TAC >> simp[] >> strip_tac >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    gvs[venomInstTheory.get_instruction_def, AllCaseEqs()] >>
+  first_x_assum (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >>
+  qexists_tac `v' with vs_inst_idx := SUC s.vs_inst_idx` >>
+  simp[]
+QED
+
+Theorem run_block_no_return:
+  EVERY (\inst. ~MEM inst.inst_opcode [RET; RETFMP; DRET])
+    bb.bb_instructions ==>
+  run_block fuel C bb s <> IntRet vals t
+Proof
+  strip_tac >> simp[run_block_def] >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs >>
+  simp[] >> irule exec_block_no_return >> simp[]
+QED
+
+Theorem run_blocks_no_return:
+  entry_fn_no_return fn ==>
+  !fuel C s vals t. run_blocks fuel C fn s <> IntRet vals t
+Proof
+  strip_tac >> Induct >> rpt gen_tac
+  >- simp[Once run_blocks_def] >>
+  simp[run_blocks_unfold] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >- simp[] >>
+  rename1 `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` >>
+  `EVERY (\inst. ~MEM inst.inst_opcode [RET; RETFMP; DRET])
+     bb.bb_instructions` by
+    (gvs[entry_fn_no_return_def] >>
+     drule_all EVERY_fn_lookup_block >> simp[]) >>
+  `!v t. run_block fuel C bb s <> IntRet v t` by
+    (rpt gen_tac >> irule run_block_no_return >> simp[]) >>
+  Cases_on `run_block fuel C bb s` >> simp[] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem o1_ctx_shape_no_intret:
+  o1_ctx_shape C ==>
+  !fuel vs vals t. run_context fuel C vs <> IntRet vals t
+Proof
+  strip_tac >> rpt gen_tac >> simp[run_context_def] >>
+  Cases_on `C.ctx_entry` >- simp[] >>
+  Cases_on `lookup_function x C.ctx_functions` >- simp[] >>
+  rename1 `lookup_function name C.ctx_functions = SOME fn` >>
+  `MEM fn C.ctx_functions` by
+    metis_tac[venomInstTheory.lookup_function_MEM] >>
+  `fn.fn_name = name` by
+    metis_tac[lookup_function_selected_name] >>
+  `entry_fn_no_return fn` by
+    (gvs[o1_ctx_shape_def, listTheory.EVERY_MEM] >>
+     first_x_assum drule >> simp[o1_fn_shape_def]) >>
+  simp[run_function_def] >> Cases_on `fn_entry_label fn` >> simp[] >>
+  irule run_blocks_no_return >> simp[]
 QED
 
 (* The pre-walk run: lowering output (no PHI, definite assignment) to
