@@ -93,10 +93,12 @@ QED
 
 (* ===== Initial allocation frontier and raw-run memory ===== *)
 
+(* The allocation frontier is free: a deploy unit's raw run starts it at
+ * the end of its reserved immutables region, a runtime unit's at 0. *)
 Definition o1_initial_state_ok_def:
   o1_initial_state_ok vs <=>
     vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
-    vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0
+    vs.vs_allocas = FEMPTY
 End
 
 Definition inst_mem_below_frontier_def:
