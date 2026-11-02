@@ -28,7 +28,8 @@ Theorem concretize_stage_static_mem:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ctx_eom_bounded eom C' ==>
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_eom_bounded eom C' ==>
   mem_inv (static_mem_ok eom) C' vs
 ```
 

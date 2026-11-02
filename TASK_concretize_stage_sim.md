@@ -105,9 +105,8 @@ context, and the output only touches memory below the layout end.
 only into addresses, affine arithmetic, ASSIGN/PHI, pointer arguments and
 compares of two pointers into the same site; every write above the fixed
 region `lo` lies inside the allocation its address operand points into
-(ghost provenance `G` of `frame_reachable`); reads through a pointer may
-run past its site, and every byte read that is fresh (never written since
-its allocation) or outside the pointer's site is tainted (ghost `tn`).
+(ghost provenance `G` of `frame_reachable`), and every byte that is fresh
+(never written since its allocation) is tainted (ghost `tn`).
 Tainted data only moves (ASSIGN, stores of the value, MLOAD/MCOPY/RETURN),
 never decides anything, and `taint_within D` says it only ever reaches
 storage/transient/immutables/return-data bytes in `D`, which the result
@@ -159,8 +158,8 @@ excludes INVOKE; reuse what helps, don't build on its statement.
   Layout facts both need (positions avoid `ctx_global_reserved`, sites
   that are live together don't overlap) go in a helper theory of your own;
   name it `concretizeLayout*` and say so in your report.
-- The REVERT exemption (`about_to_revert`): a RETURNDATACOPY right before a
-  REVERT, and the REVERT, may access anything; both runs then revert, and
+- The REVERT exemption (`about_to_revert`): a REVERT, and a RETURNDATACOPY
+  right before one, may read tainted memory; both runs then revert, and
   `dead_result_rel` doesn't compare revert payloads.
 
 - The intuition and the known obligations (analysis fuel, fn_mems_used of

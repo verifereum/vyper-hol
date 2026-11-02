@@ -20,9 +20,8 @@ Ancestors
    the static layout, whose end is fn_eom <= eom; so C' has no ALLOCA
    sites, its static accesses are at those literal positions plus the
    in-site offsets ptr_discipline lo C allows, and its DALLOCA, PARAM and
-   pointer-compare uses are the input's.  Overreads past a site in C read
-   tainted bytes; in C' the same bytes are below eom, which access_ok eom
-   leaves unconstrained. *)
+   pointer-compare uses are the input's.  Without DALLOCA, every access of
+   C' is below eom. *)
 
 Theorem concretize_stage_ptr:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -44,7 +43,8 @@ Theorem concretize_stage_static_mem:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ctx_eom_bounded eom C' ==>
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_eom_bounded eom C' ==>
   mem_inv (static_mem_ok eom) C' vs
 Proof
   cheat
