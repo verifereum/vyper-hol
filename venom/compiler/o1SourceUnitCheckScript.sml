@@ -184,7 +184,7 @@ Theorem fn_shape_check_sound:
 Proof
   rw[fn_shape_check_def, fn_shape_ok_def, opaque_use_check_sound,
      retpc_shape_check_sound, venomWfTheory.fn_pseudos_prefix_def, pseudos_prefix_dropWhile] >>
-  gvs[EVERY_MEM]
+  gvs[EVERY_MEM] >> metis_tac[]
 QED
 
 (* Checking every non-head function is stronger than internal_termination_ok
