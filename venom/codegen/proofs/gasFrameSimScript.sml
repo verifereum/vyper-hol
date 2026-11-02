@@ -616,5 +616,38 @@ Theorem gas_inst_frame_sim:
         fn_frame_inv ctx cp lo fn ra rest mem0 ps' vs' as' /\
         as'.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp ops)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  rename1 `MEM r cplan.cp_regions` >>
+  drule_all gas_source_shape >> strip_tac >>
+  drule_all gas_step_frame_view >> strip_tac >>
+  drule_all gas_step_result >> strip_tac >>
+  `vs'.vs_halted = vs.vs_halted /\
+   vs'.vs_initial_fmp = vs.vs_initial_fmp /\
+   vs'.vs_memory = vs.vs_memory` by simp[update_var_def] >>
+  qexists_tac `LENGTH (execute_plan cplan.cp_initial_fmp ops)` >>
+  irule gas_frame_lift >>
+  reverse conj_tac
+  >- (conj_tac >- (qexists_tac `r` >> simp[]) >>
+      qexistsl_tac [`ps`, `vs`] >> simp[]) >>
+  qx_gen_tac `top` >> strip_tac >>
+  `context_venom_asm_rel cplan lo ps (frame_view fn ra vs)
+     (as with as_stack := top)` by
+    (fs[fn_frame_inv_def] >> gvs[]) >>
+  drule gas_context_local >> strip_tac >>
+  `~retpc_var fn out` by
+    (irule gas_output_non_retpc >> simp[] >> metis_tac[MEM]) >>
+  `frame_view fn ra vs' with vs_memory := as.as_memory =
+    update_var out (HD ((frame_view fn ra vs with vs_memory := as.as_memory).vs_gas_readings ++ [0w]))
+      ((frame_view fn ra vs with vs_memory := as.as_memory)
+        with vs_gas_readings := TL (frame_view fn ra vs with vs_memory := as.as_memory).vs_gas_readings)` by
+    (simp[gas_frame_view_update, gas_frame_view_readings] >>
+     simp[frame_view_def, update_var_def]) >>
+  `EVERY (\op. case op of Var x => x <> out | _ => T) ps.ps_stack /\
+   (!op. op IN FDOM ps.ps_spilled ==>
+      case op of Var x => x <> out | _ => T)` by fs[] >>
+  `asm_block_at prog (as with as_stack := top).as_pc
+     (execute_plan cplan.cp_initial_fmp ops)` by simp[] >>
+  drule_all gas_plan_local_sim >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexists_tac `st'` >> gvs[]
 QED
