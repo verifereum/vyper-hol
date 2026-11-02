@@ -19,6 +19,9 @@ Theorem concretize_stage_ptr:
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
   EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
   ctx_eom_bounded eom C' ==>
   ptr_discipline eom C' vs
 
@@ -30,12 +33,18 @@ Theorem concretize_stage_static_mem:
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
   EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
   ctx_eom_bounded eom C' ==>
   mem_inv (static_mem_ok eom) C' vs
 ```
 
 Supporting definitions: as in TASK_concretize_sim.md (read its
-Theorem section and Background), plus `static_mem_ok` and `mem_inv` in
+Theorem section and Background), `ctx_inst_ids_distinct` and
+`fn_defs_reach_uses` in `venom/defs/venomWfScript.sml`, `all_reachable` in
+`venom/defs/cfgWfScript.sml`, `callee_first` in
+`venom/compiler/o1ScheduleDecompScript.sml`, plus `static_mem_ok` and `mem_inv` in
 `venom/compiler/unitMemInvScript.sml` and `ctx_eom_bounded` in
 `venom/compiler/o1PassContractScript.sml`.
 
@@ -105,6 +114,19 @@ layout end or dynamic (`static_mem_ok eom`).
 | Composition | venom/compiler/o1PipelineComposeScript.sml | how the contract is consumed |
 
 ## Notes
+- Statement amended after three counterexamples (all checked, approved):
+  (1) `collision_static_counterexample` (concretizePtrCollisionReachScript.sml):
+  two callees share ALLOCA inst id 100 with different sizes, so the
+  pass's by-id dedup reserves only the first; now excluded by
+  `ctx_inst_ids_distinct C`. (2) a dead block's ALLOCA with a short
+  liveset packed below a live one pushes it onto a DALLOCA at
+  vs_initial_fmp; now excluded by `~ctx_has_dalloca C` on all four
+  lemmas. (3) `v = PHI [p; a1]` with `p` a PARAM gets a singleton
+  points-to set, so a store through `v` must-kills `a1` and a live `a2`
+  is packed onto it; now excluded by the two `phi_pv_all_var` clauses
+  added to `fn_ptr_ok`. `callee_first` (call-DAG induction),
+  `all_reachable` and `fn_defs_reach_uses` were added as premises
+  because the rows carry them; use them freely.
 
 - The stage simulation (`concretize_stage_sim`) is a separate alan task in
   `concretizeStageSimScript.sml`, run in parallel; don't touch that file.

@@ -14,7 +14,7 @@
 Theory concretizeStageSim
 Ancestors
   o1PassContract ptrDiscipline unitMemInv concretizeMemLocDefs
-  venomPassDispatcher
+  venomPassDispatcher cfgWf o1ScheduleDecomp
 
 (* Why it holds (intuition, not a prescribed proof).
 
@@ -61,7 +61,11 @@ Theorem concretize_stage_sim:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions ==>
+  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
+  ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions ==>
   ctx_sim_dead D C C' vs
 Proof
   cheat
@@ -74,7 +78,11 @@ Theorem concretize_stage_taint:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions ==>
+  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
+  ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions ==>
   taint_within D C' vs
 Proof
   cheat

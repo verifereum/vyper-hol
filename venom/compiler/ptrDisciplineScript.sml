@@ -105,7 +105,11 @@ End
    fixed region.
    Forced alloca positions are taken as given by the layout, so two forced
    allocas that are live together can overlap; the lowering never forces
-   any. *)
+   any.
+   A PHI never merges an ALLOCA-derived value with any other: the pass's
+   points-to analysis ignores PARAM and non-pointer operands, so such a PHI
+   would get a singleton points-to set and a store through it would count
+   as a must-kill of the ALLOCA.  MakeSSA's output never mixes them. *)
 Definition fn_ptr_ok_def:
   fn_ptr_ok P fn <=>
     fn.fn_forced_alloc_positions = FEMPTY /\
@@ -116,7 +120,9 @@ Definition fn_ptr_ok_def:
             ((inst.inst_opcode = ISTORE \/ inst.inst_opcode = ILOAD) ==>
              !v. MEM (Var v) inst.inst_operands ==> v NOTIN fn_pv P fn) /\
             ptr_use_ok P (fn_pv P fn) inst) /\
-    affine_pointer_ops fn (ptr_roots P fn)
+    affine_pointer_ops fn (ptr_roots P fn) /\
+    phi_pv_all_var fn (alloca_roots fn) /\
+    phi_pv_all_var fn (ptr_roots P fn DIFF alloca_roots fn)
 End
 
 

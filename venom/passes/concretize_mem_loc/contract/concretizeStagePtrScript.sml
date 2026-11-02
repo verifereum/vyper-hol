@@ -12,7 +12,7 @@
 Theory concretizeStagePtr
 Ancestors
   o1PassContract ptrDiscipline unitMemInv concretizeMemLocDefs
-  venomPassDispatcher
+  venomPassDispatcher cfgWf o1ScheduleDecomp
 
 (* Why it holds (intuition, not a prescribed proof).
 
@@ -31,6 +31,9 @@ Theorem concretize_stage_ptr:
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
   EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
   ctx_eom_bounded eom C' ==>
   ptr_discipline eom C' vs
 Proof
@@ -45,6 +48,9 @@ Theorem concretize_stage_static_mem:
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
   EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
   ctx_eom_bounded eom C' ==>
   mem_inv (static_mem_ok eom) C' vs
 Proof

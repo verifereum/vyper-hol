@@ -18,7 +18,11 @@ Theorem concretize_stage_sim:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions ==>
+  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
+  ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions ==>
   ctx_sim_dead D C C' vs
 
 Theorem concretize_stage_taint:
@@ -28,7 +32,11 @@ Theorem concretize_stage_taint:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions ==>
+  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
+  ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions ==>
   taint_within D C' vs
 ```
 
@@ -42,7 +50,11 @@ Supporting definitions: `ptr_discipline`, `frame_reachable`, `access_ok`,
 `venom/passes/concretize_mem_loc/defs/concretizeMemLocDefsScript.sml`
 (`concretize_function_fuel_in_context`, reached through
 `execute_configured_fn_pass_concretize` in
-`venom/defs/venomPassDispatcherScript.sml`).
+`venom/defs/venomPassDispatcherScript.sml`); `ctx_has_dalloca` in
+`ptrDisciplineScript.sml`; `ctx_inst_ids_distinct` and `fn_defs_reach_uses`
+in `venom/defs/venomWfScript.sml`, `all_reachable` in
+`venom/defs/cfgWfScript.sml`, `callee_first` in
+`venom/compiler/o1ScheduleDecompScript.sml`.
 
 **Do not modify this statement.** Prove it as-is, or produce a counterexample.
 
@@ -148,13 +160,26 @@ excludes INVOKE; reuse what helps, don't build on its statement.
 | Composition | venom/compiler/o1PipelineComposeScript.sml | how the contract is consumed |
 
 ## Notes
+- Statement amended after three counterexamples (all checked, approved):
+  (1) `collision_static_counterexample` (concretizePtrCollisionReachScript.sml):
+  two callees share ALLOCA inst id 100 with different sizes, so the
+  pass's by-id dedup reserves only the first; now excluded by
+  `ctx_inst_ids_distinct C`. (2) a dead block's ALLOCA with a short
+  liveset packed below a live one pushes it onto a DALLOCA at
+  vs_initial_fmp; now excluded by `~ctx_has_dalloca C` on all four
+  lemmas. (3) `v = PHI [p; a1]` with `p` a PARAM gets a singleton
+  points-to set, so a store through `v` must-kills `a1` and a live `a2`
+  is packed onto it; now excluded by the two `phi_pv_all_var` clauses
+  added to `fn_ptr_ok`. `callee_first` (call-DAG induction),
+  `all_reachable` and `fn_defs_reach_uses` were added as premises
+  because the rows carry them; use them freely.
 
 - `concretize_stage_taint` follows the same simulation: the output's taint at
   matching steps is at most the input's, and `dead_wf D` moves `D` across the
   states that agree outside it.
 - The output invariants (`concretize_stage_ptr`, `concretize_stage_static_mem`)
   are a separate task in `concretizeStagePtrScript.sml`
-  (TASK_concretize_stage_ptr.md), run in parallel; don't touch that file.
+  (TASK_concretize_ptr.md), run in parallel; don't touch that file.
   Layout facts both need (positions avoid `ctx_global_reserved`, sites
   that are live together don't overlap) go in a helper theory of your own;
   name it `concretizeLayout*` and say so in your report.
