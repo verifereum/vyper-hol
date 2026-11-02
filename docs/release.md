@@ -31,7 +31,7 @@ commit and uploads those exact files to the GitHub Release.
 ## Manual archive build
 
 The CI artefact is the preferred release source. To build the same archive
-locally or from another CI system, use holbuild v0.12.1 or newer:
+locally or from another CI system, use holbuild v0.12.0 or newer:
 
 ```bash
 holbuild buildhol
@@ -62,3 +62,7 @@ sha256sum -c vyper-hol.hbx.sha256
 holbuild import vyper-hol.hbx
 holbuild build
 ```
+
+Importing into a cache that already holds vyper-hol theories built with
+different proof-timeout settings needs holbuild v0.12.1 or newer; v0.12.0
+rejects such entries as an action conflict.
