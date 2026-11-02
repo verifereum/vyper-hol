@@ -49,7 +49,7 @@ Ancestors
   e2eDefs supportedProgram vyperLoweringCorrect
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperTypeStmtSoundness vyperTypeEvalSoundness vyperTypeExprSoundness
-  entryStateRel bodySimEntry supportedDecls vyperTypeContractFunction vyperTypeContractSoundness
+  allocLimitsProps entryDecodePlanProps structFieldsProps entryStateRel bodySimEntry supportedDecls vyperTypeContractFunction vyperTypeContractSoundness
   vyperTypeContractContext vyperTypeContract
   vyperTypeInitialState vyperTypeBindArguments vyperTypeInvariants
   vyperTypeEvalStoragePreservation vyperTypeStoragePreservation exprSimHyps
@@ -466,6 +466,93 @@ Proof
   gvs[source_deployment_rel_def, get_module_code_def,
       initial_evaluation_context_def] >>
   metis_tac[]
+QED
+
+Theorem external_package_dec_metadata:
+  source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\
+  set_external_package_target target
+    (package_external_fn tops F (assign_nkeys tops 0)
+      (mut,F,F,tx.function_name,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
+  dec_cenv_agrees cenv
+    (get_tenv (initial_evaluation_context am.sources am.layouts tx NONE))
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))`
+    by metis_tac[source_typing_ok_type_def_keys_distinct] >>
+  drule compile_register_positional_args_cenv >> strip_tac >>
+  qpat_x_assum `cenv = _` SUBST1_TAC >>
+  Cases_on `package_external_fn tops F (assign_nkeys tops 0)
+    (mut,F,F,tx.function_name,args,[],ret,fbody)` >>
+  PairCases_on `r` >> gvs[set_external_package_target_def] >>
+  drule_all package_external_fn_dec_cenv_agrees >> strip_tac >>
+  gvs[dec_cenv_agrees_def, source_deployment_rel_def,
+      get_tenv_def, initial_evaluation_context_def, get_module_code_def,
+      type_env_all_modules_def, type_env_def] >>
+  rpt strip_tac >>
+  irule EQ_TRANS >> irule_at Any type_memory_bytes_struct_fields >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem supported_lookup_flag_none:
+  !ts fid members.
+  EVERY (supported_declaration_header tops) ts ==>
+  lookup_flag fid ts <> SOME members
+Proof
+  Induct >> simp[lookup_flag_def] >>
+  Cases >> simp[lookup_flag_def, supported_flags_rejected] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem external_source_no_flags:
+  supported_program tops /\ source_deployment_rel tops am tx /\
+  get_module_code
+    (initial_evaluation_context am.sources am.layouts tx NONE) src = SOME ts ==>
+  lookup_flag fid ts <> SOME members
+Proof
+  strip_tac >>
+  gvs[source_deployment_rel_def, get_module_code_def,
+      initial_evaluation_context_def, AllCaseEqs()] >>
+  irule supported_lookup_flag_none >>
+  gvs[supported_program_def, supported_declaration_headers_def] >>
+  qexists `tops` >> simp[]
+QED
+
+Theorem external_package_struct_fields:
+  source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\
+  set_external_package_target target
+    (package_external_fn tops F (assign_nkeys tops 0)
+      (mut,F,F,tx.function_name,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+  FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+  ALL_DISTINCT (MAP FST fields) /\
+  EVERY (\(fname,fty,sz). !tv.
+    evaluate_type
+      (get_tenv (initial_evaluation_context am.sources am.layouts tx NONE))
+      fty = SOME tv ==> sz = type_memory_size tv) fields
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))`
+    by metis_tac[source_typing_ok_type_def_keys_distinct] >>
+  `!name args. MEM (StructDecl name args) tops ==>
+     ALL_DISTINCT (MAP FST args)` by
+    (rpt strip_tac >> gvs[source_typing_ok_def] >>
+     drule check_contract_struct_fields_distinct >>
+     simp[] >> disch_then drule >> simp[]) >>
+  drule compile_register_positional_args_cenv >> strip_tac >>
+  qpat_x_assum `cenv = _` SUBST_ALL_TAC >>
+  gvs[set_external_package_target_def, package_external_fn_def] >>
+  Cases_on `ret = NoneT` >>
+  gvs[update_cenv_nonreentrant_def, update_cenv_ret_abi_def,
+      build_compile_env_ce_struct_fields] >>
+  gvs[source_deployment_rel_def, get_tenv_def,
+      initial_evaluation_context_def, get_module_code_def,
+      type_env_all_modules_def, GSYM type_env_def] >>
+  irule make_struct_fields_map_fields >> metis_tac[]
 QED
 
 (* ADMITTED (#637): at the start of the selected function's body, the

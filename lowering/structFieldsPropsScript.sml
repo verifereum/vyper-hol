@@ -161,3 +161,27 @@ Proof
   simp[build_compile_env_ce_struct_fields] >>
   metis_tac[distinct_type_keys_struct_args_unique]
 QED
+
+Theorem make_struct_fields_map_fields:
+  ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
+  (!name args. MEM (StructDecl name args) tops ==>
+     ALL_DISTINCT (MAP FST args)) /\
+  FLOOKUP (make_struct_fields_map tops) name = SOME fields ==>
+  ALL_DISTINCT (MAP FST fields) /\
+  EVERY (\(fname,fty,sz). !tv.
+    evaluate_type (type_env tops) fty = SOME tv ==>
+    sz = type_memory_size tv) fields
+Proof
+  strip_tac >>
+  `struct_args_unique tops` by
+    metis_tac[distinct_type_keys_struct_args_unique] >>
+  fs[make_struct_fields_map_def] >>
+  drule built_struct_fields_origin >> simp[] >> strip_tac >>
+  `fields = build_struct_fields_one (type_env tops) args` by
+    (drule_all build_struct_fields_map_lookup >>
+     disch_then (qspecl_then [`type_env tops`, `FEMPTY`] mp_tac) >> gvs[]) >>
+  conj_tac >- metis_tac[built_struct_fields_names] >>
+  simp[EVERY_MEM, build_struct_fields_one_def, MEM_MAP, FORALL_PROD,
+       PULL_EXISTS, field_mem_bytes_def] >>
+  rpt strip_tac >> gvs[]
+QED
