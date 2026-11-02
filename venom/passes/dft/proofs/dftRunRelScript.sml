@@ -1012,6 +1012,28 @@ Proof
   qexistsl_tac [`C`, `fuel`, `y`] >> simp[]
 QED
 
+Theorem dft_remaining_inv_initial:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  bb.bb_label = s.vs_current_bb /\ strict_dom_vars_defined fn s /\
+  (!d v. MEM d bb.bb_instructions /\ is_pseudo d.inst_opcode /\
+     MEM v d.inst_outputs ==> v IN FDOM s.vs_vars) /\
+  (!i l. MEM i bb.bb_instructions /\ ~is_pseudo i.inst_opcode /\
+     ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+     MEM (Label l) i.inst_operands ==> l IN FDOM s.vs_labels) ==>
+  dft_remaining_inv fn bb
+    (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions) s
+Proof
+  strip_tac >> simp[dft_remaining_inv_def, EVERY_MEM, MEM_FILTER] >>
+  rpt conj_tac
+  >- (`ALL_DISTINCT (MAP (\i. i.inst_id)
+         (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions))` by
+        (irule all_distinct_map_filter >> simp[]) >>
+      metis_tac[ALL_DISTINCT_MAP])
+  >- (rpt strip_tac >> ho_match_mp_tac dft_id_before_map >>
+      irule dft_id_before_filter >> qexists_tac `\i. ~is_pseudo i.inst_opcode` >> simp[]) >>
+  metis_tac[]
+QED
+
 (* Why it holds (unchecked notes):
    - Same fuel works: fuel is per block and per call depth, and the
      schedule visits the same blocks and makes the same calls.
