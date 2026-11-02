@@ -14,7 +14,33 @@
 Theory o1ContractSue
 Ancestors
   o1PassLift singleUseExpansionDefs singleUseExpansionSupplyProofs
-  venomFnScheduleRunner venomWf venomInst irSupply
+  venomFnScheduleRunner venomWf venomInst irSupply singleUseExpansionSupplySim
+
+(* Original-frame definedness, independent of any transformed program. *)
+Definition sue_frame_defined_def:
+  sue_frame_defined fn st <=>
+    fn_reachable fn st.vs_current_bb /\
+    (!bb. MEM bb fn.fn_blocks /\ bb.bb_label = st.vs_current_bb ==>
+      sue_boundary_defined fn bb st.vs_inst_idx st /\
+      phi_prefix_length bb.bb_instructions <= st.vs_inst_idx)
+End
+
+Theorem sue_frame_defined_enter:
+  wf_function fn /\ fn_reachable fn st.vs_current_bb /\
+  strict_dom_vars_defined fn st /\ enters_block fn st st1 ==>
+  sue_frame_defined fn st1
+Proof
+  rw[contextCodegenRelTheory.enters_block_def] >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = st.vs_current_bb` by
+    metis_tac[venomExecProofsTheory.lookup_block_MEM,
+              venomExecProofsTheory.lookup_block_label] >>
+  `s_phi.vs_current_bb = st.vs_current_bb` by
+    metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb] >>
+  simp[sue_frame_defined_def] >> rpt strip_tac >>
+  rename1 `MEM bb' fn.fn_blocks` >>
+  `bb' = bb` by metis_tac[venomExecProofsTheory.same_label_same_block] >>
+  gvs[] >> metis_tac[sue_boundary_defined_phis]
+QED
 
 (* Runs of the expanded function correspond to runs of the original, in
    any context. *)

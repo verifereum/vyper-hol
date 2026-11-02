@@ -3,7 +3,7 @@ Theory singleUseExpansionSupplySim
 Ancestors
   singleUseExpansionSupplyProofs singleUseExpansionDefs irSupply
   stateFrame stateEquiv venomExecProps venomExecProofs
-  venomExecSemantics venomWf venomInst venomState
+  venomExecSemantics venomWf venomInst venomState sccpCorrectnessProofs
 
 (* Control indices are related separately by segment alignment. *)
 Definition sue_state_rel_def:
@@ -648,4 +648,148 @@ Proof
     (irule sue_segment_last_index >> simp[]) >>
   drule sue_expand_inst_supply_successors >>
   gvs[listTheory.LAST_EL, arithmeticTheory.PRE_SUB1]
+QED
+
+(* The execution invariant at a source instruction boundary.  PHIs have
+   already executed; idx is independent of the state's control index so
+   this same interface applies to partial exec_block calls. *)
+Definition sue_boundary_defined_def:
+  sue_boundary_defined f bb idx st <=>
+    strict_dom_vars_defined f st /\
+    (!j v. j < idx /\ MEM v (EL j bb.bb_instructions).inst_outputs ==>
+           v IN FDOM st.vs_vars)
+End
+
+Theorem sue_boundary_operand_defined:
+  wf_ssa f /\ wf_function f /\ fn_inst_wf f /\
+  MEM bb f.fn_blocks /\ bb.bb_label = st.vs_current_bb /\
+  idx < LENGTH bb.bb_instructions /\
+  (EL idx bb.bb_instructions).inst_opcode <> PHI /\
+  sue_boundary_defined f bb idx st /\
+  MEM (Var v) (EL idx bb.bb_instructions).inst_operands ==>
+  v IN FDOM st.vs_vars
+Proof
+  simp[sue_boundary_defined_def] >> metis_tac[operand_vars_in_fdom]
+QED
+
+Theorem sue_boundary_defined_phis:
+  strict_dom_vars_defined f st /\
+  eval_phis st bb.bb_instructions = OK st_phi ==>
+  sue_boundary_defined f bb (phi_prefix_length bb.bb_instructions)
+    (st_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+Proof
+  strip_tac >> simp[sue_boundary_defined_def] >> conj_tac
+  >- (drule eval_phis_preserves_current_bb >> strip_tac >>
+      drule eval_phis_vars_grow >> strip_tac >>
+      gvs[strict_dom_vars_defined_def] >> metis_tac[pred_setTheory.SUBSET_DEF]) >>
+  metis_tac[eval_phis_outputs_in_fdom_idx]
+QED
+
+Theorem sue_boundary_defined_step:
+  sue_boundary_defined f bb idx st /\
+  idx < LENGTH bb.bb_instructions /\
+  inst = EL idx bb.bb_instructions /\ inst_wf inst /\
+  inst.inst_opcode <> PHI /\ ~is_terminator inst.inst_opcode /\
+  step_inst fuel ctx inst st = OK st' ==>
+  sue_boundary_defined f bb (SUC idx)
+    (st' with vs_inst_idx := SUC idx)
+Proof
+  strip_tac >>
+  `FDOM st'.vs_vars = FDOM st.vs_vars UNION set inst.inst_outputs` by
+    metis_tac[step_inst_fdom] >>
+  `st'.vs_current_bb = st.vs_current_bb` by
+    metis_tac[venomInstPropsTheory.step_preserves_control_flow] >>
+  gvs[sue_boundary_defined_def, strict_dom_vars_defined_def] >>
+  conj_tac
+  >- metis_tac[pred_setTheory.IN_UNION] >>
+  rpt strip_tac >> Cases_on `j = idx` >> gvs[] >>
+  `j < idx` by decide_tac >> metis_tac[pred_setTheory.IN_UNION]
+QED
+
+Theorem sue_boundary_defined_exit:
+  wf_function f /\ MEM bb f.fn_blocks /\ bb_well_formed bb /\
+  EVERY inst_wf bb.bb_instructions /\
+  bb.bb_label = st.vs_current_bb /\ idx < LENGTH bb.bb_instructions /\
+  is_terminator (EL idx bb.bb_instructions).inst_opcode /\
+  sue_boundary_defined f bb idx st /\
+  fn_reachable f st.vs_current_bb /\
+  fn_cfg_edge f st.vs_current_bb st'.vs_current_bb /\
+  FDOM st.vs_vars SUBSET FDOM st'.vs_vars ==>
+  strict_dom_vars_defined f st'
+Proof
+  strip_tac >>
+  `idx = PRE (LENGTH bb.bb_instructions)` by
+    metis_tac[bb_well_formed_def] >>
+  fs[sue_boundary_defined_def] >>
+  rw[strict_dom_vars_defined_def] >>
+  Cases_on `d_bb.bb_label = bb.bb_label`
+  >- (`d_bb = bb` by metis_tac[same_label_same_block] >> gvs[] >>
+      `?j. j < LENGTH bb.bb_instructions /\
+           EL j bb.bb_instructions = d_inst` by metis_tac[listTheory.MEM_EL] >>
+      `inst_wf d_inst` by metis_tac[listTheory.EVERY_MEM] >>
+      `~is_terminator d_inst.inst_opcode` by
+        metis_tac[terminator_no_outputs, listTheory.MEM] >>
+      `j < PRE (LENGTH bb.bb_instructions)` by
+        (Cases_on `j = PRE (LENGTH bb.bb_instructions)` >> gvs[] >> decide_tac) >>
+      `v IN FDOM st.vs_vars` by metis_tac[] >>
+      metis_tac[pred_setTheory.SUBSET_DEF]) >>
+  `fn_dominates f d_bb.bb_label st.vs_current_bb` by
+    metis_tac[fn_dominates_predecessor] >>
+  fs[strict_dom_vars_defined_def] >>
+  `v IN FDOM st.vs_vars` by metis_tac[] >>
+  metis_tac[pred_setTheory.SUBSET_DEF]
+QED
+
+Theorem sue_phi_prefix_boundary_nonphi:
+  !insts. phi_prefix_length insts < LENGTH insts ==>
+    (EL (phi_prefix_length insts) insts).inst_opcode <> PHI
+Proof
+  Induct >- simp[phi_prefix_length_def] >>
+  gen_tac >> Cases_on `h.inst_opcode = PHI` >>
+  simp[phi_prefix_length_def]
+QED
+
+Theorem sue_phi_suffix_nonphi:
+  bb_well_formed bb /\ phi_prefix_length bb.bb_instructions <= idx /\
+  idx < LENGTH bb.bb_instructions ==>
+  (EL idx bb.bb_instructions).inst_opcode <> PHI
+Proof
+  strip_tac >>
+  `phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions` by
+    decide_tac >>
+  drule sue_phi_prefix_boundary_nonphi >> strip_tac >>
+  spose_not_then assume_tac >>
+  drule_all phi_before_non_phi >> decide_tac
+QED
+
+Theorem sue_terminator_cfg_edge:
+  MEM bb f.fn_blocks /\ bb.bb_label = st.vs_current_bb /\
+  bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions /\
+  idx < LENGTH bb.bb_instructions /\ inst = EL idx bb.bb_instructions /\
+  is_terminator inst.inst_opcode /\
+  step_inst fuel ctx inst st = OK st' /\ ~st'.vs_halted ==>
+  fn_cfg_edge f st.vs_current_bb st'.vs_current_bb
+Proof
+  strip_tac >>
+  `inst.inst_opcode <> INVOKE` by (strip_tac >> gvs[is_terminator_def]) >>
+  `step_inst_base inst st = OK st'` by
+    gvs[Once step_inst_def] >>
+  `inst_wf inst` by metis_tac[listTheory.EVERY_EL] >>
+  `MEM st'.vs_current_bb (get_successors inst)` by
+    metis_tac[step_inst_base_term_succs] >>
+  `idx = PRE (LENGTH bb.bb_instructions)` by
+    metis_tac[bb_well_formed_def] >>
+  `LAST bb.bb_instructions = inst` by
+    (gvs[bb_well_formed_def] >> simp[listTheory.LAST_EL]) >>
+  simp[fn_cfg_edge_def] >> qexists_tac `bb` >>
+  Cases_on `bb.bb_instructions` >>
+  gvs[venomInstTheory.bb_succs_def, listTheory.MEM_nub]
+QED
+
+Theorem sue_terminator_domain_mono:
+  step_inst fuel ctx inst st = OK st' /\ is_terminator inst.inst_opcode ==>
+  FDOM st.vs_vars SUBSET FDOM st'.vs_vars
+Proof
+  strip_tac >> simp[pred_setTheory.SUBSET_DEF] >>
+  metis_tac[lookup_var_fdom, step_terminator_preserves_vars]
 QED
