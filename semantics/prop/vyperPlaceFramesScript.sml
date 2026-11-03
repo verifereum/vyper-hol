@@ -156,9 +156,11 @@ Proof
   >- simp[extend_place_def, raise_def]
   >- (Cases_on `p` >>
       simp[extend_place_def, bind_def, ignore_bind_def, return_def, raise_def] >>
-      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-      metis_tac[extend_storage_place_state, place_type_value_state,
-                read_place_state, lift_sum_state, return_state]) >>
+      simp[AllCaseEqs()] >> rpt strip_tac >>
+      imp_res_tac extend_storage_place_state >>
+      imp_res_tac place_type_value_state >>
+      imp_res_tac read_place_state >>
+      imp_res_tac lift_sum_state >> gvs[return_def]) >>
   Cases_on `sb` >>
   simp[extend_place_def, bind_def, lift_option_type_def, return_def, raise_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def])

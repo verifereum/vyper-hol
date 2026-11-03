@@ -717,7 +717,13 @@ Resume eval_outcomes_suffix_with_results[c41]:
   OUTCOMES_CONSTRUCTOR_TAC
 QED
 Resume eval_outcomes_suffix_with_results[c42]:
-  OUTCOMES_CONSTRUCTOR_TAC
+  rpt strip_tac >>
+  simp_tac bool_ss (Once evaluate_def :: lock_helper_defs) >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE lock_helper_defs) >>
+  OUTCOMES_SUFFIX_TAC >>
+  first_x_assum irule >>
+  rpt (first_assum (irule_at Any)) >>
+  simp[ignore_bind_def]
 QED
 Resume eval_outcomes_suffix_with_results[c43]:
   OUTCOMES_CONSTRUCTOR_TAC

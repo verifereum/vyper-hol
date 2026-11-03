@@ -365,7 +365,65 @@ Theorem well_typed_binop_no_type_error:
   !msg. evaluate_binop u tv bop v1 v2 <> INR (TypeError msg)
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `bop` >>
+  Cases_on `bop = NotIn \/ bop = NotEq` >- suspend "negated" >>
+  Cases_on `MEM bop [Add; Sub; Mul; Div; Mod]` >- suspend "arithmetic" >>
+  Cases_on `MEM bop [And; Or; XOr]` >- suspend "bitwise" >>
+  Cases_on `MEM bop [Eq; Lt; LtE; Gt; GtE]` >- suspend "comparison" >>
+  suspend "remaining"
+QED
+
+Resume well_typed_binop_no_type_error[negated]:
+  Cases_on `bop` >> gvs[] >>
+  gvs[well_typed_binop_def,
+      Excl "is_int_type_def", Excl "is_numeric_type_def", Excl "is_bool_type_def",
+      Excl "is_flag_type_def", Excl "is_comparable_type_def",
+      is_int_type_inv, is_numeric_type_inv, is_bool_type_inv,
+      is_flag_type_inv, is_comparable_type_inv] >>
+  gvs[evaluate_type_def, type_to_int_bound_def, AllCaseEqs()] >>
+  gen_tac >> simp[Once evaluate_binop_def, binop_negate_def] >>
+  gvs[evaluate_binop_def, AllCaseEqs(), value_has_type_def] >>
+  rpt (Cases_on `v2` >> gvs[value_has_type_def]) >>
+  rpt (COND_CASES_TAC >> simp[])
+QED
+
+Resume well_typed_binop_no_type_error[arithmetic]:
+  Cases_on `bop` >> gvs[] >>
+  gvs[well_typed_binop_def,
+      Excl "is_int_type_def", Excl "is_numeric_type_def",
+      is_int_type_inv, is_numeric_type_inv] >>
+  gvs[evaluate_type_def, type_to_int_bound_def, AllCaseEqs()] >>
+  gen_tac >>
+  gvs[evaluate_binop_def, AllCaseEqs(), value_has_type_def] >>
+  rpt (Cases_on `v2` >> gvs[value_has_type_def]) >>
+  rpt (COND_CASES_TAC >> simp[])
+QED
+
+Resume well_typed_binop_no_type_error[bitwise]:
+  Cases_on `bop` >> gvs[] >>
+  gvs[well_typed_binop_def,
+      Excl "is_int_type_def", Excl "is_bool_type_def", Excl "is_flag_type_def",
+      is_int_type_inv, is_bool_type_inv, is_flag_type_inv] >>
+  gvs[evaluate_type_def, type_to_int_bound_def, AllCaseEqs()] >>
+  gen_tac >>
+  gvs[evaluate_binop_def, AllCaseEqs(), value_has_type_def] >>
+  rpt (Cases_on `v2` >> gvs[value_has_type_def]) >>
+  rpt (COND_CASES_TAC >> simp[])
+QED
+
+Resume well_typed_binop_no_type_error[comparison]:
+  Cases_on `bop` >> gvs[] >>
+  gvs[well_typed_binop_def,
+      Excl "is_int_type_def", Excl "is_numeric_type_def", Excl "is_comparable_type_def",
+      is_int_type_inv, is_numeric_type_inv, is_comparable_type_inv] >>
+  gvs[evaluate_type_def, type_to_int_bound_def, AllCaseEqs()] >>
+  gen_tac >>
+  gvs[evaluate_binop_def, AllCaseEqs(), value_has_type_def] >>
+  rpt (Cases_on `v2` >> gvs[value_has_type_def]) >>
+  rpt (COND_CASES_TAC >> simp[])
+QED
+
+Resume well_typed_binop_no_type_error[remaining]:
+  Cases_on `bop` >> gvs[] >>
   gvs[well_typed_binop_def,
       Excl "is_int_type_def", Excl "is_numeric_type_def", Excl "is_bool_type_def",
       Excl "is_flag_type_def", Excl "is_comparable_type_def",
@@ -373,14 +431,12 @@ Proof
       is_flag_type_inv, is_comparable_type_inv] >>
   gvs[evaluate_type_def, type_to_int_bound_def, AllCaseEqs()] >>
   gen_tac >>
-  TRY (
-    (* NotIn/NotEq: unfold once to binop_negate, then simp with binop_negate lemmas *)
-    simp[Once evaluate_binop_def, binop_negate_def] >>
-    NO_TAC) >>
   gvs[evaluate_binop_def, AllCaseEqs(), value_has_type_def] >>
   rpt (Cases_on `v2` >> gvs[value_has_type_def]) >>
   rpt (COND_CASES_TAC >> simp[])
 QED
+
+Finalise well_typed_binop_no_type_error
 
 Theorem well_typed_builtin_bop_no_type_error[local]:
   well_typed_binop ty bop h h' ∧
