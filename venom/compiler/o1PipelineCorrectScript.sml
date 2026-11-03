@@ -35,51 +35,60 @@ End
  * The runs match up to any well-formed set D of dead bytes (dead_wf):
  * ConcretizeMemLoc moves buffers, so bytes nothing reads may differ. *)
 Theorem run_venom_pipeline_correct:
-  !D rpolicy unit out vs.
+  !D rpolicy unit out vs_out.
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
     unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
-    o1_run_state_ok vs /\
+    o1_run_state_ok vs_out /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
-    raw_unit_memory_ok unit.cu_context vs /\ dead_wf D
+    dead_wf D
     ==>
-    ctx_sim D unit.cu_context out.po_unit.cu_context vs vs
+    ?vs_in. gas_variant vs_in vs_out /\
+      (raw_unit_memory_ok unit.cu_context vs_in ==>
+       ctx_sim D unit.cu_context out.po_unit.cu_context vs_in vs_out /\
+       o1_lowered_inv out.po_unit.cu_context vs_out)
 Proof
   rpt strip_tac >>
   fs[o1_pipeline_def] >>
-  `o1_src_inv unit.cu_context vs` by
+  `!vi. raw_unit_memory_ok unit.cu_context vi ==>
+        o1_src_inv unit.cu_context vi` by
     fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv] >>
   drule_all o1_pipeline_stage_facts >> strip_tac >> metis_tac[]
+QED
+
+Theorem o1_lowered_inv_fixed_pointer[local]:
+  o1_lowered_inv C vs ==>
+  ?eom. max_live_eom C = SOME eom /\
+        mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp)) C vs
+Proof
+  strip_tac >> fs[o1_lowered_inv_def] >>
+  qexists_tac `eom` >> fs[mem_inv_raw_reachable] >>
+  rpt strip_tac >> first_x_assum drule >>
+  drule raw_reachable_initial_fmp >> simp[lowered_mem_fact_def]
 QED
 
 (* The output's memory invariant: every access is static (below some
  * layout end) or dynamic (at or above the initial frame pointer). *)
 Theorem run_venom_pipeline_mem_inv:
-  !rpolicy unit out vs.
+  !rpolicy unit out vs_out.
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
     unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
-    o1_run_state_ok vs /\
-    reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
-    raw_unit_memory_ok unit.cu_context vs
+    o1_run_state_ok vs_out /\
+    reserved_intervals_wf unit.cu_context.ctx_global_reserved
     ==>
-    ?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
-          mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp))
-            out.po_unit.cu_context vs
+    ?vs_in. gas_variant vs_in vs_out /\
+      (raw_unit_memory_ok unit.cu_context vs_in ==>
+       ?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+             mem_inv (lowered_mem_ok eom (w2n vs_out.vs_initial_fmp))
+               out.po_unit.cu_context vs_out)
 Proof
   rpt strip_tac >>
-  fs[o1_pipeline_def] >>
-  `o1_src_inv unit.cu_context vs` by
-    fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv] >>
-  drule_all o1_pipeline_stage_facts >> strip_tac >>
-  (* Any well-formed dead-byte set will do; take none. *)
-  first_x_assum (qspecl_then [`<| d_stor := K (K {}); d_trans := K (K {});
-                                  d_imm := K {}; d_ret := K {} |>`, `vs`]
-                   mp_tac) >>
-  simp[dead_wf_def] >> strip_tac >>
-  fs[o1_lowered_inv_def, mem_inv_raw_reachable] >>
-  rpt strip_tac >> first_x_assum drule >>
-  drule raw_reachable_initial_fmp >> simp[lowered_mem_fact_def]
+  `dead_wf <| d_stor := K (K {}); d_trans := K (K {});
+              d_imm := K {}; d_ret := K {} |>` by simp[dead_wf_def] >>
+  drule_all run_venom_pipeline_correct >> strip_tac >>
+  qexists_tac `vs_in` >> simp[] >> strip_tac >>
+  irule o1_lowered_inv_fixed_pointer >> metis_tac[]
 QED
 
 (* ===== S5: output codegen memory obligations ===== *)
