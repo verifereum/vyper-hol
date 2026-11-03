@@ -187,3 +187,83 @@ Proof
   gvs[DROP_LENGTH_APPEND, abi_decode_source_opcode_def,
       is_terminator_def, is_alloca_op_def, mk_inst_def]
 QED
+
+Theorem abi_decode_dynarray_position_prefix_sequence:
+  abi_decode_dynarray_position_prefix src opc base_op hi maxn abi_sz st = (addr,st') /\
+  abi_decode_source_opcode opc /\ eval_operand src s = SOME (n2w p) /\
+  eval_operand base_op s = SOME (n2w b) /\
+  abi_decode_load opc (n2w (b+p) : bytes32) s = n2w n /\
+  n <= maxn /\ maxn < dimword (:256) /\
+  (hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
+                     p + 32 + n * abi_sz <= h /\ h < dimword (:256)) /\
+  fresh_vars_wrt st s ==>
+  ?t. run_inst_seq (emitted_insts st st') s = OK t /\
+    eval_operand addr t = SOME (n2w (b+p)) /\ fresh_vars_wrt st' t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_data_section = s.vs_data_section /\ inst_extends st st'
+Proof
+  Cases_on `hi = Lit 0w`
+  >- suspend "unbounded"
+  >> suspend "bounded"
+QED
+
+Resume abi_decode_dynarray_position_prefix_sequence[unbounded]:
+  gvs[abi_decode_dynarray_position_prefix_unbounded, comp_bind_def,
+      comp_return_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `compile_abi_dec_addr base_op src st = (addr,c1)` >>
+  drule_all compile_abi_dec_addr_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
+  `abi_decode_load opc (n2w (b+p) : bytes32) s1 = n2w n` by
+    gvs[abi_decode_load_def, abi_decode_source_def, mload_def] >>
+  drule_all abi_decode_count_guard_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts c1 st') s1 = OK t` >>
+  `inst_extends st c1` by
+    (Cases_on `base_op = Lit 0w` >>
+     gvs[compile_abi_dec_addr_def, comp_return_def, inst_extends_refl] >>
+     metis_tac[inst_extends_emit_op]) >>
+  drule abi_decode_count_guard_shape >> strip_tac >>
+  drule_all abi_decode_sequence_chain >> strip_tac >>
+  qexists_tac `t` >> simp[] >> metis_tac[]
+QED
+
+Resume abi_decode_dynarray_position_prefix_sequence[bounded]:
+  strip_tac >> gvs[] >>
+  qpat_x_assum `abi_decode_dynarray_position_prefix _ _ _ _ _ _ _ = _` mp_tac >>
+  rewrite_tac[abi_decode_dynarray_position_prefix_trace] >> strip_tac >>
+  `p + 32 <= h` by decide_tac >>
+  drule_all abi_decode_bytes_head_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st head_st) s = OK s1` >>
+  `eval_operand base_op s1 = SOME (n2w b) /\
+   eval_operand src s1 = SOME (n2w p)` by metis_tac[] >>
+  drule_all compile_abi_dec_addr_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts head_st addr_st) s1 = OK s2` >>
+  `abi_decode_load opc (n2w (b+p) : bytes32) s2 = n2w n` by
+    gvs[abi_decode_load_def, abi_decode_source_def, mload_def] >>
+  drule_all abi_decode_count_guard_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts addr_st count_st) s2 = OK s3` >>
+  `eval_operand head s3 = SOME (n2w (p+32)) /\
+   eval_operand hi s3 = SOME (n2w h)` by metis_tac[] >>
+  mp_tac (Q.INST [`st` |-> `count_st`, `s` |-> `s3`]
+    abi_decode_dynarray_payload_guard_sequence) >>
+  (impl_tac >- (simp[] >> qexistsl_tac [`p+32`, `n`, `h`] >> simp[])) >>
+  strip_tac >>
+  rename1 `run_inst_seq (emitted_insts count_st st') s3 = OK t` >>
+  `inst_extends head_st addr_st` by
+    (Cases_on `base_op = Lit 0w` >>
+     gvs[compile_abi_dec_addr_def, comp_return_def, inst_extends_refl] >>
+     metis_tac[inst_extends_emit_op]) >>
+  drule abi_decode_count_guard_shape >> strip_tac >>
+  `run_inst_seq (emitted_insts st addr_st) s = OK s2 /\
+   inst_extends st addr_st` by
+    (irule abi_decode_sequence_chain >> qexistsl_tac [`s1`, `head_st`] >> simp[]) >>
+  `run_inst_seq (emitted_insts st count_st) s = OK s3 /\
+   inst_extends st count_st` by
+    (irule abi_decode_sequence_chain >> qexistsl_tac [`s2`, `addr_st`] >> simp[]) >>
+  `run_inst_seq (emitted_insts st st') s = OK t /\ inst_extends st st'` by
+    (irule abi_decode_sequence_chain >> qexistsl_tac [`s3`, `count_st`] >> simp[]) >>
+  qexists_tac `t` >> simp[] >> metis_tac[]
+QED
+
+Finalise abi_decode_dynarray_position_prefix_sequence
