@@ -2930,24 +2930,6 @@ Proof
   simp[exec_result_map_prev_bb_def, venom_state_fupdcanon]
 QED
 
-val nonjump_term_prev_bb_tac =
-  simp[step_inst_base_def, eval_operand_prev_bb,
-       eval_operands_prev_bb, halt_state_def, revert_state_def,
-       set_returndata_def, exec_result_map_prev_bb_def,
-       read_memory_def] >>
-  BasicProvers.EVERY_CASE_TAC >>
-  simp[exec_result_map_prev_bb_def,
-       venomStateTheory.venom_state_component_equality];
-
-
-val dret_prev_bb_tac =
-  simp[step_inst_base_def, eval_operand_prev_bb,
-       eval_operands_prev_bb, halt_state_def, revert_state_def,
-       set_returndata_def, exec_result_map_prev_bb_def,
-       read_memory_def] >>
-  BasicProvers.EVERY_CASE_TAC >>
-  gvs[pack_dret_dynamic_prev_bb_eq, exec_result_map_prev_bb_def,
-      venomStateTheory.venom_state_component_equality];
 Triviality step_inst_base_non_jump_terminator_prev_bb:
   !inst (s:venom_state) p.
     is_terminator inst.inst_opcode /\
@@ -2959,16 +2941,11 @@ Triviality step_inst_base_non_jump_terminator_prev_bb:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
-  TRY (rename1 `inst.inst_opcode = DRET` >> dret_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = RET` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = RETFMP` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = RETURN` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = REVERT` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = STOP` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = SINK` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = SELFDESTRUCT` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = INVALID` >> nonjump_term_prev_bb_tac) >>
-  dret_prev_bb_tac
+  simp[step_inst_base_ret_prev_bb, step_inst_base_retfmp_prev_bb,
+    step_inst_base_return_prev_bb, step_inst_base_revert_prev_bb,
+    step_inst_base_stop_prev_bb, step_inst_base_sink_prev_bb,
+    step_inst_base_selfdestruct_prev_bb, step_inst_base_invalid_prev_bb,
+    step_inst_base_dret_prev_bb]
 QED
 
 (* For non-PHI, non-JMP/JNZ/DJMP opcodes, step_inst_base commutes with
