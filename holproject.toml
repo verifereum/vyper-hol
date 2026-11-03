@@ -7,8 +7,10 @@ version = "0.2.3"
 
 [build]
 roots = ["vyperHolScript.sml",
+         "tests/vyperRawSystemTypingTestScript.sml",
          "tests/selfdestructReturnDataTestScript.sml",
          "tests/vyperPopTypingTestScript.sml",
+         "tests/vyperArgWriteTypingTestScript.sml",
          "venom/proofs/allocaHistoryScript.sml",
          "lowering/allocaHistoryFragmentScript.sml",
          "lowering/nonreentrantEntryScript.sml",
@@ -40,6 +42,7 @@ roots = ["vyperHolScript.sml",
          "lowering/supported/supportedProgramPropsScript.sml",
          "venom/codegen/proofs/contextReachabilityChecksScript.sml",
          "venom/codegen/proofs/genFrameSimScript.sml",
+         "venom/compiler/o1PassLiftScript.sml",
          "tests/vyperPlaceProbesTestScript.sml",
          "tests/vyperPlaceSanityTestScript.sml"]
 

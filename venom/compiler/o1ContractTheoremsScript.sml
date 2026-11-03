@@ -21,8 +21,8 @@
  *)
 Theory o1ContractTheorems
 Ancestors
-  o1PassContract unitMemInv venomPassSchedule venomCompilerTypes
-  o1ContractSimplifyCfg
+  o1PassContract o1DretDesugarContract unitMemInv venomPassSchedule
+  venomCompilerTypes o1ContractSimplifyCfg
 
 (* ===== The pre-walk runs ===== *)
 
@@ -31,14 +31,10 @@ Ancestors
 Theorem o1_contract_simplify_cfg_pre_walk =
   o1ContractSimplifyCfgTheory.o1_contract_simplify_cfg_pre_walk
 
-(* On these units DretDesugar is the identity, so it keeps any invariant. *)
-Theorem o1_contract_dret_desugar_pre_walk:
-  o1_step_contract rpolicy (CFP_Simple VP_DretDesugar) /\
-  (!view I. o1_stage_contract rpolicy D (CFP_Simple VP_DretDesugar) view no_pre
-              I I)
-Proof
-  cheat
-QED
+(* DretDesugar's run keeps every invariant I: it is the identity on
+   DRET-free stage contexts. *)
+Theorem o1_contract_dret_desugar_pre_walk =
+  o1DretDesugarContractTheory.o1_contract_dret_desugar_pre_walk
 
 (* ===== The walk runs, by stage ===== *)
 

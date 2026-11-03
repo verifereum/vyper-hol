@@ -227,6 +227,37 @@ val () = List.app (fn in_deploy =>
    List.app (fn bd => assert_none (check_address_bytes bd in_deploy))
      [``Fixed 19``, ``Dynamic 20``, ``Dynamic 32``])) [false, true]
 
+(* An immutable is assignable only in the constructor (Vyper's
+   "Immutable value cannot be written to", local.py): the runtime check
+   rejects a write to it from a nonpayable external function, as an
+   assignment or an augmented assignment, and accepts the constructor's
+   write with a runtime read.  (A view function would be rejected for its
+   mutability whatever the immutable's assignability.) *)
+fun immutable_write_modules writes =
+  ``[(NONE,
+      [VariableDecl Private Immutable "imm" (BaseT (UintT 256)) NONE;
+       FunctionDecl Deploy Nonpayable F F "__init__" [] [] NoneT
+         [Assign (BaseTarget (TopLevelNameTarget (NONE, "imm")))
+            (Literal (BaseT (UintT 256)) (IntL 1))];
+       FunctionDecl External Nonpayable F F "f" [] [] (BaseT (UintT 256))
+         (^writes ++
+          [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE, "imm")))])])]
+    : (num option # toplevel list) list``
+
+fun immutable_write_check in_deploy writes =
+  vyperCheckContractLib.check_contract_conv
+    ``check_contract ^(if in_deploy then T else F) ^empty_layouts
+        ^zero_address ^(immutable_write_modules writes)``
+
+val () = assert_some (immutable_write_check false ``[] : stmt list``)
+val () = assert_some (immutable_write_check true ``[] : stmt list``)
+val () = assert_none (immutable_write_check false
+  ``[Assign (BaseTarget (TopLevelNameTarget (NONE, "imm")))
+       (Literal (BaseT (UintT 256)) (IntL 2))]``)
+val () = assert_none (immutable_write_check false
+  ``[AugAssign (BaseT (UintT 256)) (TopLevelNameTarget (NONE, "imm")) Add
+       (Literal (BaseT (UintT 256)) (IntL 3))]``)
+
 (* Basic API and ML-Boolean construction. *)
 val empty_check = vyperCheckContractLib.check_contract
   {in_deploy = false, layouts = empty_layouts,
@@ -748,6 +779,100 @@ val () = List.app (assert_some o check_constants)
     tdecl ``BaseT BoolT`` "E"
       ``Builtin (BaseT BoolT) (Bop Eq) [^(tname b32 "K"); ^(tname b32 "K")]``]]
 
+(* Event declaration regressions: indexed aggregates and duplicate event names
+   are rejected; field-name duplication and four indexed fields remain legal. *)
+Theorem event_declaration_regressions:
+  check_contract F [] 0w
+    [(NONE,[EventDecl "E" [(("a",ArrayT (BaseT (UintT 256)) (Fixed 2)),T)]])] = NONE /\
+  check_contract F [] 0w
+    [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F)];
+            EventDecl "E" [(("b",BaseT (UintT 256)),T)]])] = NONE /\
+  IS_SOME (check_contract F [] 0w
+    [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),T);
+                          (("b",BaseT (UintT 256)),T);
+                          (("c",BaseT (UintT 256)),T);
+                          (("d",BaseT (UintT 256)),T)]])]) /\
+  IS_SOME (check_contract F [] 0w
+    [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F);
+                          (("a",BaseT BoolT),F)]])]) /\
+  IS_SOME (check_contract F [] 0w
+    [(NONE,[FlagDecl "F" ["A";"B"];
+            EventDecl "E" [(("a",FlagT (NONE,"F")),T);
+                          (("b",BaseT AddressT),T)]])])
+Proof
+  EVAL_TAC >> simp[finite_mapTheory.FLOOKUP_FUNION, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+val event_decl_rejections =
+  [``([(NONE,[EventDecl "E" [(("a",ArrayT (BaseT (UintT 256)) (Fixed 2)),T)]])]
+      : (num option # toplevel list) list)``,
+   ``([(NONE,[EventDecl "E" []; EventDecl "E" []])]
+      : (num option # toplevel list) list)``];
+val () = List.app (fn mods =>
+  let val th = vyperCheckContractLib.check_contract_conv
+        ``check_contract F ^empty_layouts ^zero_address ^mods``
+  in if aconv (rhs (concl th)) ``NONE : contract_type_artifact option`` then ()
+     else raise Fail "event declaration should be rejected"
+  end) event_decl_rejections;
+
+Theorem event_arg_recursive_widening_eval:
+  event_arg_compatible (BaseT (StringT 10)) (BaseT (StringT 5)) /\
+  event_arg_compatible (ArrayT (BaseT (UintT 256)) (Dynamic 5))
+    (ArrayT (BaseT (UintT 256)) (Dynamic 3)) /\
+  event_arg_compatible (ArrayT (BaseT (StringT 5)) (Dynamic 2))
+    (ArrayT (BaseT (StringT 3)) (Dynamic 2)) /\
+  event_arg_compatible (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 5))])
+    (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 3))]) /\
+  event_arg_compatible (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 5)) (Fixed 2))
+    (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 3)) (Fixed 2)) /\
+  ~event_arg_compatible (BaseT (UintT 256)) (BaseT (UintT 8)) /\
+  ~event_arg_compatible (BaseT (UintT 256)) (BaseT (BytesT (Dynamic 40))) /\
+  ~event_arg_compatible (BaseT (StringT 3)) (BaseT (StringT 5))
+Proof
+  EVAL_TAC
+QED
+
+Theorem log_missing_event_eval:
+  type_stmt (env with event_fields := FEMPTY) ret (Log (NONE,"missing") es) = NONE
+Proof
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def]
+QED
+
+Theorem log_arity_rejected_eval:
+  type_stmt (env with event_fields := FEMPTY |+ ((NONE,"E"),
+    [(("a",BaseT (UintT 256)),F)])) ret (Log (NONE,"E") []) = NONE
+Proof
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def]
+QED
+
+Theorem log_type_mismatch_rejected_eval:
+  type_stmt (env with event_fields := FEMPTY |+ ((NONE,"E"),
+    [(("a",BaseT (UintT 256)),T)])) ret
+    (Log (NONE,"E") [Literal (BaseT (UintT 8)) (IntL 1)]) = NONE
+Proof
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, event_arg_compatible_def]
+QED
+
+Theorem log_literal_accepted_eval:
+  type_stmt (env with event_fields := FEMPTY |+ ((NONE,"E"),
+    [(("a",BaseT (UintT 256)),T)])) ret
+    (Log (NONE,"E") [Literal (BaseT (UintT 256)) (IntL 1)]) =
+  SOME (env with event_fields := FEMPTY |+ ((NONE,"E"),
+    [(("a",BaseT (UintT 256)),T)]))
+Proof
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, event_arg_compatible_def,
+       well_typed_expr_def, well_typed_literal_def] >> EVAL_TAC
+QED
+
+Theorem log_variable_compatibility_probe:
+  FLOOKUP env.event_fields id = SOME [(("a",fty),idx)] /\
+  FLOOKUP env.var_types "x" = SOME aty ==>
+  (type_stmt env ret (Log id [Name aty "x"]) = SOME env <=>
+   event_arg_compatible fty aty)
+Proof
+  simp[type_stmt_def, well_typed_expr_def, vyperASTTheory.expr_type_def]
+QED
+
 (* The sealed evaluator must resolve and type-check custom errors, not just
    evaluate contracts that never mention them. Keywords must follow
    declaration order, as in Vyper; the argument types deliberately differ. *)
@@ -1097,7 +1222,8 @@ val () = body_case "transient write" ``NoneT``
   ``[Assign (BaseTarget (TopLevelNameTarget (NONE, "t"))) ^(uint 1)]``
   [``Nonpayable``] [``View``]
 val () = body_case "write inside a tuple target" ``NoneT``
-  ``[Assign (TupleTarget [BaseTarget (NameTarget "a");
+  ``[AnnAssign "y" (BaseT AddressT) ^arg_a;
+     Assign (TupleTarget [BaseTarget (NameTarget "y");
                           BaseTarget (TopLevelNameTarget (NONE, "x"))])
        (Builtin (TupleT [BaseT AddressT; BaseT (UintT 256)])
           (MakeArray NONE (Fixed 2)) [^arg_a; ^(uint 1)])]``
@@ -1135,6 +1261,17 @@ val () = return_case "staticcall" u256
   ``Call (BaseT (UintT 256)) (ExtCall T F ("price", [], BaseT (UintT 256)) [])
       [^arg_a] NONE``
   [``Pure``, ``View``] []
+val () = return_case "staticcall with default_return_value" u256
+  ``Call (BaseT (UintT 256))
+      (ExtCall T F ("price", [], BaseT (UintT 256)) [EKDefault])
+      [^arg_a; ^(uint 1)] NONE``
+  [``Pure``, ``View``] []
+(* Vyper rejects default_return_value on a call that returns nothing, at
+   every mutability. *)
+val () = expr_case "void extcall with default_return_value"
+  ``Call NoneT (ExtCall F F ("poke", [], NoneT) [EKDefault])
+      [^arg_a; Call NoneT SelfDestructTarget [^arg_a] NONE] NONE``
+  [] [``Payable``, ``Nonpayable``]
 val () = expr_case "raw_call"
   ``Call NoneT (RawCallTarget ^raw_call_flags)
       [^arg_a; ^empty_bytes; ^(uint 0)] NONE``
@@ -1191,6 +1328,20 @@ val () = mutability_case ("constructor", ``Deploy``, ``F``, no_dflts, ``NoneT``,
   ``[Pass]``, [``Nonpayable``, ``Payable``], [``View``, ``Pure``])
 val () = mutability_case ("nonreentrant", ``External``, ``T``, no_dflts,
   ``NoneT``, ``[Pass]``, [``View``], [``Pure``])
+
+(* Arguments of external functions are calldata: no write to one
+   type-checks.  Internal-function arguments are writable.  These checks run
+   in runtime mode, which skips the constructor body; vyperArgWriteTypingTest
+   covers constructor arguments. *)
+val arg_n_write = ``[Assign (BaseTarget (NameTarget "n")) ^(uint 1)]``
+val () = mutability_case ("external argument write", ``External``, ``F``,
+  no_dflts, ``NoneT``, arg_n_write, [], [``Nonpayable``, ``Payable``])
+val () = mutability_case ("external argument augmented assignment",
+  ``External``, ``F``, no_dflts, ``NoneT``,
+  ``[AugAssign (BaseT (UintT 256)) (NameTarget "n") Add ^(uint 1)]``,
+  [], [``Nonpayable``])
+val () = mutability_case ("internal argument write", ``Internal``, ``F``,
+  no_dflts, ``NoneT``, arg_n_write, [``Pure``, ``Nonpayable``], [])
 
 (* A module that nothing initializes has no storage in the layout.  Its
    functions that no live function calls are not checked, so get_x and the

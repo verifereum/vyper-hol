@@ -49,7 +49,7 @@ Ancestors
   venomPassSchedule venomFnScheduleRunner venomPassDispatcher venomWf
   venomExecSemantics venomInst irSupply contextCodegenRel stackPlanGen
   staticLayoutDefs venomState stateEquiv passSimulationDefs vfmState extCallOracle
-  finite_map cfgWf list
+  finite_map cfgWf dretDesugarDefs list
 
 (* ===== Equivalence up to dead bytes ===== *)
 
@@ -418,13 +418,16 @@ Definition unit_entry_no_params_def:
 End
 
 (* The per-function shape facts of o1_source_unit_ok that every pass keeps,
-   with the well-formedness every pass keeps.  The raw-opcode restriction
-   is not among them: the passes introduce the opcodes it excludes. *)
+   with the well-formedness every pass keeps.  Of the raw-opcode
+   restriction only no DRET is kept, which no pass introduces (the source
+   never has one, so DretDesugar is the identity); the passes introduce
+   the other opcodes it excludes. *)
 Definition o1_fn_shape_def:
   o1_fn_shape ctx fn <=>
     wf_function fn /\ fn_inst_wf fn /\
     fn_shape_ok fn /\ first_block_no_preds fn /\ first_block_no_phi fn /\
     fn_invoke_ok (ctx_fn_names ctx) fn /\ fn_label_refs_ok fn /\
+    no_dret fn /\
     (ctx.ctx_entry = SOME fn.fn_name ==>
        entry_fn_no_return fn /\ entry_fn_no_params fn) /\
     (ctx.ctx_entry <> SOME fn.fn_name ==>

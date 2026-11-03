@@ -34,7 +34,7 @@ Theorem run_from_stop_view:
 Proof
   strip_tac >> rewrite_tac[stop_view_def] >> irule run_from_halt >>
   qexistsl_tac [`bb`, `mk_inst id STOP [] []`] >>
-  simp[Once step_inst_base_def, mk_inst_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def]
 QED
 
 Theorem abi_decode_sim_stop_run:
@@ -188,7 +188,7 @@ Proof
       `run_from fuel ctx fn s = Halt (stop_view s)` by
         (rewrite_tac[stop_view_def] >> irule run_from_halt >>
          qexistsl_tac [`bb`, `mk_inst id STOP [] []`] >>
-         simp[Once step_inst_base_def, mk_inst_def]) >> gvs[]) >>
+         simp[step_inst_base_opcode_eqs, mk_inst_def]) >> gvs[]) >>
   Cases_on `get_instruction bb s.vs_inst_idx`
   >- (qpat_x_assum `run_from fuel ctx fn s = _` mp_tac >>
       simp[Once run_from_def, Once exec_block_def]) >>
@@ -270,7 +270,7 @@ Proof
   qexists_tac `s with <|vs_fmp := 7w; vs_inst_idx := 1|>` >> conj_tac
   >- (simp[abi_observer_step_def, lookup_block_def, get_instruction_def, listTheory.FIND_thm] >>
       qexists_tac `s with vs_fmp := 7w` >>
-      simp[step_inst_non_invoke, Once step_inst_base_def, mk_inst_def,
+      simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
            eval_operand_def, is_terminator_def]) >>
   irule (cj 1 local_prefix_rules) >> simp[]
 QED
@@ -294,7 +294,7 @@ Proof
            listTheory.FIND_thm] >>
       conj_tac >- simp[update_var_def, jump_to_def] >>
       qexists_tac `jump_to "exit" s` >>
-      simp[step_inst_non_invoke, Once step_inst_base_def, mk_inst_def,
+      simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
            is_terminator_def, jump_to_def, update_var_def,
            listTheory.FIND_thm, eval_phis_def, eval_one_phi_def,
            resolve_phi_def, eval_operand_def, phi_prefix_length_def]) >>
@@ -382,7 +382,7 @@ Theorem observer_same_block_region_closed:
 Proof
   rw[observer_region_closed_def, abi_observer_step_def] >>
   gvs[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
-  gvs[step_inst_non_invoke, Once step_inst_base_def, mk_inst_def,
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
       is_terminator_def, eval_operand_def]
 QED
 
@@ -501,7 +501,7 @@ Theorem observer_setfmp_halted_probe:
   step_inst_base (mk_inst 0 SETFMP [Lit 7w] []) (s with vs_halted := T) =
   OK (s with <|vs_halted := T; vs_fmp := 7w|>)
 Proof
-  simp[Once step_inst_base_def, mk_inst_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]
 QED
 
 Theorem observer_same_block_not_closed:
@@ -516,7 +516,7 @@ Proof
     (qspecl_then [`"entry"`, `0`] mp_tac) >>
   simp[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
   disj2_tac >> qexists_tac `ARB with vs_halted := T` >>
-  simp[Once step_inst_base_def, mk_inst_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]
 QED
 
 Theorem observer_same_block_region_safe:
@@ -528,8 +528,8 @@ Theorem observer_same_block_region_safe:
 Proof
   rw[observer_region_safe_def] >>
   gvs[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, eval_operand_def] >>
-  rpt strip_tac >> gvs[Once step_inst_base_def, mk_inst_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >>
+  rpt strip_tac >> gvs[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]
 QED
 
 Theorem observer_jump_phi_region_safe:
@@ -544,8 +544,8 @@ Theorem observer_jump_phi_region_safe:
 Proof
   rw[observer_region_safe_def] >>
   gvs[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, jump_to_def] >>
-  rpt strip_tac >> gvs[Once step_inst_base_def, mk_inst_def, jump_to_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, jump_to_def] >>
+  rpt strip_tac >> gvs[step_inst_base_opcode_eqs, mk_inst_def, jump_to_def]
 QED
 
 Theorem observer_old_prefix_region_safe:
@@ -557,8 +557,8 @@ Theorem observer_old_prefix_region_safe:
 Proof
   rw[observer_region_safe_def] >>
   gvs[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, eval_operand_def] >>
-  rpt strip_tac >> gvs[Once step_inst_base_def, mk_inst_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >>
+  rpt strip_tac >> gvs[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]
 QED
 
 Theorem observer_old_prefix_region_closed:
@@ -570,7 +570,7 @@ Theorem observer_old_prefix_region_closed:
 Proof
   rw[observer_region_closed_def, abi_observer_step_def] >>
   gvs[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
-  gvs[step_inst_non_invoke, Once step_inst_base_def, mk_inst_def,
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
       is_terminator_def, eval_operand_def]
 QED
 
@@ -587,7 +587,7 @@ Proof
     (qspecl_then [`"entry"`, `0`] mp_tac) >>
   simp[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
   gvs[mk_inst_def] >>
-  simp[Once step_inst_base_def]
+  simp[step_inst_base_opcode_eqs]
 QED
 
 Theorem observer_old_stop_prefix_probe:
@@ -646,7 +646,7 @@ Proof
       `run_from fuel ctx fn s = Halt (stop_view s)` by
         (rewrite_tac[stop_view_def] >> irule run_from_halt >>
          qexistsl_tac [`bb`, `mk_inst id STOP [] []`] >>
-         simp[Once step_inst_base_def, mk_inst_def]) >> gvs[]) >>
+         simp[step_inst_base_opcode_eqs, mk_inst_def]) >> gvs[]) >>
   Cases_on `get_instruction bb s.vs_inst_idx`
   >- (qpat_x_assum `run_from fuel ctx fn s = _` mp_tac >>
       simp[Once run_from_def, Once exec_block_def]) >>

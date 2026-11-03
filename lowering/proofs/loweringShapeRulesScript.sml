@@ -971,6 +971,24 @@ Proof
   metis_tac[shape_stable_def]
 QED
 
+Theorem shape_base_step_fresh_label_sfx:
+  !internal LP R sfx.
+    shape_stable R ==>
+    shape_base_step internal LP R (fresh_label sfx)
+      (\l st'. R st' /\ compiler_label l /\ label_sfx sfx l)
+Proof
+  simp[shape_base_step_def, PULL_FORALL, AND_IMP_INTRO] >>
+  rpt gen_tac >> strip_tac >> gvs[fresh_label_def] >>
+  qmatch_goalsub_abbrev_tac `shape_extends _ _ st st1` >>
+  `shape_extends internal LP st st1`
+    by (irule shape_extends_same_code >> simp[Abbr `st1`]) >>
+  `shape_base_state st1`
+    by (irule shape_base_state_same_code >> qexists_tac `st` >>
+        simp[Abbr `st1`]) >>
+  simp[compiler_label_def, fresh_label_output_in_future, label_sfx_def] >>
+  metis_tac[shape_stable_def]
+QED
+
 Theorem shape_base_step_alloc_buffer_zero:
   !internal LP R.
     shape_stable R ==>
@@ -1168,13 +1186,15 @@ Proof
   `shape_stable (\st. R st /\ plain_operand st success)` by
     (rw[shape_stable_def] >> metis_tac[shape_stable_def, plain_operand_mono]) >>
   irule shape_base_step_bind >>
-  qexists_tac `\fail st. (R st /\ plain_operand st success) /\ compiler_label fail` >>
-  reverse conj_tac >- (ho_match_mp_tac shape_base_step_fresh_label >> simp[]) >>
+  qexists_tac `\fail st. (R st /\ plain_operand st success) /\ compiler_label fail /\
+                          label_sfx "extcall_fail" fail` >>
+  reverse conj_tac >- (ho_match_mp_tac shape_base_step_fresh_label_sfx >> simp[]) >>
   qx_gen_tac `fail_lbl` >> BETA_TAC >>
   irule shape_base_step_bind >>
   qexists_tac `\cont st. ((R st /\ plain_operand st success) /\
-                          compiler_label fail_lbl) /\ compiler_label cont` >>
-  reverse conj_tac >- (ho_match_mp_tac shape_base_step_fresh_label >>
+                          compiler_label fail_lbl /\ label_sfx "extcall_fail" fail_lbl) /\
+                         compiler_label cont /\ label_sfx "extcall_cont" cont` >>
+  reverse conj_tac >- (ho_match_mp_tac shape_base_step_fresh_label_sfx >>
     ho_match_mp_tac shape_stable_conj >> conj_tac >- simp[] >>
     simp[shape_stable_def]) >>
   qx_gen_tac `cont` >> BETA_TAC >> suspend "tail"
@@ -1184,11 +1204,14 @@ Resume shape_base_step_checked_extcall[tail]:
   qpat_x_assum `MEM opc _` kall_tac >>
   qpat_x_assum `!id outs. lowered_inst_ok _ _` kall_tac >>
   irule shape_base_step_conseq >>
-  qexistsl [`LP`, `\st. (compiler_label fail_lbl /\ compiler_label cont) /\
+  qexistsl [`LP`, `\st. (compiler_label fail_lbl /\ compiler_label cont /\
+                          label_sfx "extcall_fail" fail_lbl /\ label_sfx "extcall_cont" cont) /\
                          (R st /\ plain_operand st success)`,
             `\x st. R st /\ plain_operand st x`] >>
   conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
   ho_match_mp_tac shape_base_step_pure_pre >> strip_tac >>
+  `cont <> fail_lbl` by
+    (`"extcall_cont" <> "extcall_fail"` by EVAL_TAC >> metis_tac[label_sfx_distinct]) >>
   irule shape_base_step_ignore_bind >>
   qexists_tac `\u st. R st /\ plain_operand st success` >>
   reverse conj_tac >- (ho_match_mp_tac shape_base_step_emit_inst_guarded >>

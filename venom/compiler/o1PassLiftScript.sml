@@ -21,7 +21,19 @@
  *     none (an inserted instruction that touches no memory).  Every
  *     function pair related by frame_sim transports the shared memory
  *     invariant for any memory fact closed under that correspondence
- *     (frame_sim_mem_inv), which every phase fact is.
+ *     (frame_sim_mem_inv): static_mem_ok and lowered_mem_fact are.
+ *
+ *   - frame_sim_rf L C C' fn fn': as frame_sim, but only for states of fn'
+ *     that touch memory and sit outside a revert-forward pair, matched
+ *     with a state of fn also outside one.  raw_mem_ok exempts states in a
+ *     revert-forward pair, so it is not closed under mem_corr alone; it is
+ *     closed under the weaker mem_corr_closed_rf, and frame_sim plus
+ *     frame_sim_rf transport any such fact (frame_sim_rf_mem_inv).
+ *
+ * TOP-LEVEL: ctx_bisim_ctx_sim, fn_bisim_ctx_bisim, frame_sim_mem_inv,
+ *   frame_sim_rf_mem_inv, mem_corr_closed_rf_raw_mem_ok,
+ *   mem_corr_closed_rf_intro, mem_corr_closed_static_mem_ok,
+ *   mem_corr_closed_lowered_mem_fact.
  *)
 Theory o1PassLift
 Ancestors
@@ -585,7 +597,7 @@ Theorem ctx_bisim_ctx_sim:
   ctx_bisim C C' /\ C'.ctx_entry = C.ctx_entry /\
   (!fuel v t. run_context fuel C vs <> IntRet v t) /\
   vs.vs_vars = FEMPTY /\ ~vs.vs_halted ==>
-  ctx_sim C C' vs vs
+  ctx_sim D C C' vs vs
 Proof
   strip_tac >> rw[ctx_sim_def] >>
   Cases_on `C.ctx_entry` >>
@@ -603,6 +615,7 @@ Proof
   first_x_assum drule >> strip_tac >>
   first_x_assum drule >> strip_tac >>
   qexists_tac `fuel'` >>
+  irule unit_result_rel_dead_result_rel >>
   irule frame_result_rel_unit >> simp[]
 QED
 
@@ -737,7 +750,9 @@ Definition frame_origin_def:
       frame_sim vs.vs_labels C C' fn fn' /\
       frame_reach C' fn' s0 inst' s' /\
       (!i t. enters_block fn s0 t /\ active_inst fn i t ==>
-             raw_reachable vs C fn i t)
+             raw_reachable vs C fn i t) /\
+      ?nm. lookup_function nm C.ctx_functions = SOME fn /\
+           lookup_function nm C'.ctx_functions = SOME fn'
 End
 
 Theorem frame_origin_correspondence:
@@ -773,7 +788,8 @@ Proof
       >- metis_tac[context_fn_entry_state]
       >> conj_tac
       >- metis_tac[frame_reach_rules]
-      >> metis_tac[raw_reachable_rules])
+      >> conj_tac >- metis_tac[raw_reachable_rules]
+      >> metis_tac[])
   >- (rpt strip_tac >> first_x_assum drule >> simp[] >>
       rw[frame_origin_def] >> qexistsl_tac [`fn`, `s0`] >>
       simp[] >> metis_tac[cj 2 frame_reach_rules])
@@ -798,7 +814,8 @@ Proof
   rw[frame_origin_def] >> qexistsl_tac [`x`, `cs`] >> simp[] >>
   conj_tac >- metis_tac[setup_callee_fn_entry_state] >>
   conj_tac >- metis_tac[frame_reach_rules] >>
-  metis_tac[cj 4 raw_reachable_rules]
+  conj_tac >- metis_tac[cj 4 raw_reachable_rules] >>
+  metis_tac[]
 QED
 
 Theorem frame_sim_raw_correspondence:
@@ -833,16 +850,126 @@ Proof
   fs[mem_corr_closed_def] >> metis_tac[]
 QED
 
-Theorem mem_corr_closed_raw_mem_ok:
-  mem_corr_closed raw_mem_ok
+(* A frame state at a revert-forward copy of its function: the copy and
+   the REVERT of the same range that follows it, which the raw memory fact
+   exempts (inst_mem_ok_in_fn). *)
+Definition in_revert_forward_def:
+  in_revert_forward fn s <=>
+    ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+         revert_forward_at bb s.vs_inst_idx
+End
+
+(* The revert-forward half of a pass's frame simulation: a frame state of
+   fn' that touches memory away from a revert-forward copy corresponds to
+   one of fn that is not at a revert-forward copy either.  States with no
+   memory ranges need nothing beyond frame_sim. *)
+Definition frame_sim_rf_def:
+  frame_sim_rf L C C' fn fn' <=>
+    !s0 inst' s'.
+      fn_entry_state fn s0 /\ s0.vs_labels = L /\
+      frame_reach C' fn' s0 inst' s' /\
+      inst_mem_ranges inst' s' <> [] /\ ~in_revert_forward fn' s' ==>
+      ?inst s. frame_reach C fn s0 inst s /\ ~in_revert_forward fn s /\
+               mem_corr inst s inst' s'
+End
+
+(* A memory fact that sees a state through mem_corr, except at
+   revert-forward copies: it transfers from a source state that is not at
+   one, and to a target state with no ranges or at one. *)
+Definition mem_corr_closed_rf_def:
+  mem_corr_closed_rf M <=>
+    (!ctx fn inst s ctx' fn' inst' s'.
+       M ctx fn inst s /\ mem_corr inst s inst' s' /\
+       ~in_revert_forward fn s ==> M ctx' fn' inst' s') /\
+    (!ctx fn inst s ctx' fn' inst' s'.
+       M ctx fn inst s /\ mem_corr inst s inst' s' /\
+       (inst_mem_ranges inst' s' = [] \/ in_revert_forward fn' s') ==>
+       M ctx' fn' inst' s')
+End
+
+Theorem mem_corr_closed_rf_intro:
+  mem_corr_closed M ==> mem_corr_closed_rf M
+Proof
+  rw[mem_corr_closed_def, mem_corr_closed_rf_def] >> metis_tac[]
+QED
+
+Theorem mem_corr_closed_rf_transfer:
+  mem_corr_closed_rf M /\ M ctx fn inst s /\ mem_corr inst s inst' s' /\
+  (inst_mem_ranges inst' s' = [] \/ in_revert_forward fn' s' \/
+   ~in_revert_forward fn s) ==>
+  M ctx' fn' inst' s'
+Proof
+  rw[mem_corr_closed_rf_def] >> metis_tac[]
+QED
+
+Theorem frame_origin_rf_correspondence:
+  frame_origin vs C C' fn' inst' s' /\
+  (!nm fn fn'. lookup_function nm C.ctx_functions = SOME fn /\
+               lookup_function nm C'.ctx_functions = SOME fn' ==>
+               frame_sim_rf vs.vs_labels C C' fn fn') /\
+  inst_mem_ranges inst' s' <> [] /\ ~in_revert_forward fn' s' ==>
+  ?fn inst s. raw_reachable vs C fn inst s /\ ~in_revert_forward fn s /\
+              mem_corr inst s inst' s'
+Proof
+  rw[frame_origin_def] >>
+  `frame_sim_rf vs.vs_labels C C' fn fn'` by metis_tac[] >>
+  fs[frame_sim_rf_def] >>
+  first_x_assum (qspecl_then [`s0`, `inst'`, `s'`] mp_tac) >>
+  simp[] >> strip_tac >>
+  metis_tac[frame_reach_raw_reachable]
+QED
+
+Theorem frame_sim_rf_mem_inv:
+  LIST_REL (\fn fn'. fn'.fn_name = fn.fn_name /\
+                     fn_entry_label fn' = fn_entry_label fn /\
+                     frame_sim vs.vs_labels C C' fn fn' /\
+                     frame_sim_rf vs.vs_labels C C' fn fn')
+           C.ctx_functions C'.ctx_functions /\
+  C'.ctx_entry = C.ctx_entry /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  mem_corr_closed_rf M /\ mem_inv M C vs ==>
+  mem_inv M C' vs
+Proof
+  strip_tac >>
+  `!nm fn fn'. lookup_function nm C.ctx_functions = SOME fn /\
+               lookup_function nm C'.ctx_functions = SOME fn' ==>
+               frame_sim_rf vs.vs_labels C C' fn fn'` by
+    (rpt strip_tac >> drule list_rel_lookup_function >> simp[] >>
+     disch_then (qspec_then `nm` mp_tac) >> simp[]) >>
+  `LIST_REL (\fn fn'. fn'.fn_name = fn.fn_name /\
+                      fn_entry_label fn' = fn_entry_label fn /\
+                      frame_sim vs.vs_labels C C' fn fn')
+            C.ctx_functions C'.ctx_functions` by
+    (irule LIST_REL_mono >> goal_assum (first_assum o mp_then Any mp_tac) >>
+     simp[]) >>
+  fs[mem_inv_raw_reachable] >> conj_tac
+  >- (drule list_rel_lookup_function >> simp[] >>
+      disch_then (qspec_then `name` mp_tac) >>
+      Cases_on `lookup_function name C'.ctx_functions` >> simp[] >>
+      strip_tac >> metis_tac[]) >>
+  rpt strip_tac >>
+  drule_all frame_sim_raw_origins >> strip_tac >>
+  Cases_on `inst_mem_ranges inst s = [] \/ in_revert_forward fn' s`
+  >- (drule frame_origin_correspondence >> strip_tac >>
+      irule mem_corr_closed_rf_transfer >>
+      first_assum (irule_at Any) >> simp[] >>
+      first_assum (irule_at Any) >> simp[] >> metis_tac[]) >>
+  fs[] >> drule_all frame_origin_rf_correspondence >> strip_tac >>
+  irule mem_corr_closed_rf_transfer >>
+  first_assum (irule_at Any) >> simp[] >>
+  first_assum (irule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem mem_corr_closed_rf_raw_mem_ok:
+  mem_corr_closed_rf raw_mem_ok
 Proof
   `!inst s. inst_mem_below_frontier inst s <=>
             EVERY (\(off,len). len = 0 \/ off + len <= s.vs_alloca_next)
               (inst_mem_ranges inst s)`
     by simp_tac std_ss [inst_mem_below_frontier_def, inst_mem_ranges_def] >>
-  pop_assum (fn th => rw[mem_corr_closed_def, mem_corr_def, raw_mem_ok_def,
-                         th]) >>
-  fs[]
+  pop_assum (fn th =>
+    rw[mem_corr_closed_rf_def, mem_corr_def, raw_mem_ok_def,
+       inst_mem_ok_in_fn_def, in_revert_forward_def, th]) >>
+  fs[] >> metis_tac[]
 QED
 
 Theorem mem_corr_closed_static_mem_ok:
