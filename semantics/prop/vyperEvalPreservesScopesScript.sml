@@ -1997,7 +1997,7 @@ Proof
     gvs[get_scopes_def, return_def, bind_apply, ignore_bind_apply,
         finally_def, set_scopes_def, return_def] >>
     Cases_on `eval_exprs cxd needed_dflts (r' with scopes := [FEMPTY])` >>
-    Cases_on `q` >> gvs[return_def, raise_def] >>
+    Cases_on `q` >> full_simp_tac std_ss [return_def, raise_def] >>
     first_x_assum drule_all >> strip_tac >>
     (* Derive preserves_tv cx from preserves_tv cxd via txn_eq *)
     drule preserves_tv_restore_scopes >>
