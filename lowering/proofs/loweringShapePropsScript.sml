@@ -12856,3 +12856,73 @@ Proof
      internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP, EVERY_MEM] >>
   fs[MEM_MAP, PULL_EXISTS]
 QED
+
+(* Label-only immutable access boundaries do not constrain instructions. *)
+Theorem compile_ptr_load_labels:
+  !is_ctor imm loc op s P.
+    cs_extends s (SND (compile_ptr_load is_ctor imm loc op s)) /\
+    EVERY P (added_labels s (SND (compile_ptr_load is_ctor imm loc op s)))
+Proof
+  rpt gen_tac >> Cases_on `loc` >> Cases_on `imm` >> Cases_on `is_ctor` >>
+  simp[contextTheory.compile_ptr_load_def, contextTheory.compile_imm_load_word_def,
+       emit_op_labels, comp_return_labels] >>
+  irule comp_bind_labels >> simp[emit_op_labels, comp_return_labels]
+QED
+
+Theorem compile_ptr_store_labels:
+  !is_ctor imm loc op v s P.
+    cs_extends s (SND (compile_ptr_store is_ctor imm loc op v s)) /\
+    EVERY P (added_labels s (SND (compile_ptr_store is_ctor imm loc op v s)))
+Proof
+  rpt gen_tac >> Cases_on `loc` >> Cases_on `imm` >> Cases_on `is_ctor` >>
+  simp[contextTheory.compile_ptr_store_def, contextTheory.compile_imm_store_word_def,
+       emit_void_labels] >>
+  irule comp_bind_labels >> simp[emit_op_labels, emit_void_labels]
+QED
+
+Theorem compile_lit_byte_offset_labels:
+  !op off s P.
+    cs_extends s (SND (compile_lit_byte_offset op off s)) /\
+    EVERY P (added_labels s (SND (compile_lit_byte_offset op off s)))
+Proof
+  rpt gen_tac >> simp[contextTheory.compile_lit_byte_offset_def] >>
+  IF_CASES_TAC >> simp[comp_return_labels] >>
+  Cases_on `op` >> simp[comp_return_labels, emit_op_labels]
+QED
+
+Theorem compile_imm_copy_to_memory_labels:
+  !n is_ctor imm src dst off s P.
+    cs_extends s (SND (compile_imm_copy_to_memory is_ctor imm src dst n off s)) /\
+    EVERY P (added_labels s
+      (SND (compile_imm_copy_to_memory is_ctor imm src dst n off s)))
+Proof
+  Induct >> rpt gen_tac >>
+  simp[contextTheory.compile_imm_copy_to_memory_def, comp_return_labels] >>
+  irule comp_bind_labels >> simp[compile_lit_byte_offset_labels] >>
+  rpt gen_tac >> irule comp_bind_labels >>
+  simp[GSYM contextTheory.compile_ptr_load_def, compile_ptr_load_labels] >>
+  rpt gen_tac >> irule comp_bind_labels >> simp[compile_lit_byte_offset_labels] >>
+  rpt gen_tac >> irule comp_ignore_bind_labels >> simp[emit_void_labels]
+QED
+
+Theorem compile_imm_store_word_labels:
+  !imm off v s P.
+    cs_extends s (SND (compile_imm_store_word imm off v s)) /\
+    EVERY P (added_labels s (SND (compile_imm_store_word imm off v s)))
+Proof
+  Cases >> simp[contextTheory.compile_imm_store_word_def, emit_void_labels] >>
+  rpt gen_tac >> irule comp_bind_labels >> simp[emit_op_labels, emit_void_labels]
+QED
+
+Theorem compile_imm_store_words_labels:
+  !n imm src dst off s P.
+    cs_extends s (SND (compile_imm_store_words imm src dst n off s)) /\
+    EVERY P (added_labels s (SND (compile_imm_store_words imm src dst n off s)))
+Proof
+  Induct >> rpt gen_tac >>
+  simp[contextTheory.compile_imm_store_words_def, comp_return_labels] >>
+  irule comp_bind_labels >> simp[compile_lit_byte_offset_labels] >>
+  rpt gen_tac >> irule comp_bind_labels >> simp[emit_op_labels] >>
+  rpt gen_tac >> irule comp_bind_labels >> simp[compile_lit_byte_offset_labels] >>
+  rpt gen_tac >> irule comp_ignore_bind_labels >> simp[compile_imm_store_word_labels]
+QED

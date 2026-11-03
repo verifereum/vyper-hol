@@ -1080,3 +1080,34 @@ Proof
   rpt strip_tac >> gvs[compileEnvTheory.fresh_label_def,
     fresh_label_output_def]
 QED
+
+Theorem emit_op_labels:
+  !opc ops s P. cs_extends s (SND (emit_op opc ops s)) /\
+    EVERY P (added_labels s (SND (emit_op opc ops s)))
+Proof
+  rpt gen_tac >>
+  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >> conj_tac
+  >- (irule cs_extends_same_block >> simp[]) >>
+  simp[added_labels_def, all_blocks_def, MAP_APPEND, DROP_LENGTH_TOO_LONG]
+QED
+
+Theorem emit_void_labels:
+  !opc ops s P. cs_extends s (SND (emit_void opc ops s)) /\
+    EVERY P (added_labels s (SND (emit_void opc ops s)))
+Proof
+  rpt gen_tac >>
+  simp[emit_void_def, comp_bind_def, fresh_id_def, emit_def] >> conj_tac
+  >- (irule cs_extends_same_block >> simp[]) >>
+  simp[added_labels_def, all_blocks_def, MAP_APPEND, DROP_LENGTH_TOO_LONG]
+QED
+
+Theorem emit_inst_labels:
+  !opc ops outs s P. cs_extends s (SND (emit_inst opc ops outs s)) /\
+    EVERY P (added_labels s (SND (emit_inst opc ops outs s)))
+Proof
+  rpt gen_tac >>
+  simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >> conj_tac
+  >- (irule cs_extends_same_block >> simp[]) >>
+  simp[added_labels_def, all_blocks_def, MAP_APPEND, DROP_LENGTH_TOO_LONG]
+QED
