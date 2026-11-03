@@ -3016,12 +3016,37 @@ fun fstep th pat =
   drule_all th >> strip_tac >>
   qpat_x_assum pat (strip_assume_tac o MATCH_MP emit_op_extends);
 
+(* Keep assertion arithmetic independent of the emitter execution context. *)
+Theorem mul_check_plain_zero[local]:
+  !(a:bytes32) (b:bytes32) (q:bytes32).
+    b <> 0w /\ q <> a ==>
+    (bool_to_word (q = a) || bool_to_word (b = 0w)) = 0w
+Proof
+  rpt strip_tac >> simp[]
+QED
+
+Theorem mul_check_special_zero[local]:
+  !(a:bytes32) (b:bytes32) (q:bytes32).
+    b <> 0w /\
+    (q <> a \/ (a = n2w (2 ** 255) /\ b = n2w (2 ** 256 - 1))) ==>
+    ((bool_to_word (q = a) || bool_to_word (b = 0w)) &&
+     bool_to_word ((bool_to_word (a = n2w (2 ** 255)) &&
+                    bool_to_word (~b = 0w) : bytes32) = 0w) : bytes32) = 0w
+Proof
+  rpt gen_tac >> strip_tac
+  >- simp[] >>
+  gvs[EVAL ``~(n2w (2 ** 256 - 1) : bytes32)``]
+QED
+
 val mul_check_close =
   forward_all_evals >>
   imp_res_tac emit_void_extends >>
-  drule_all_then strip_assume_tac assert_chain >>
-  TRY (gvs[] >> NO_TAC) >>
-  first_assum (irule_at Any);
+  drule_all assert_chain >>
+  disch_then (DISJ_CASES_THEN2 strip_assume_tac ACCEPT_TAC) >>
+  (qsuff_tac `F` >- simp[]) >>
+  qpat_x_assum `(_ || _) <> 0w` mp_tac >>
+  pure_rewrite_tac [IMP_CLAUSES, NOT_CLAUSES] >>
+  irule mul_check_plain_zero >> simp[];
 
 fun mul_check_plain_tac opth pat = gvs[comp_return_def] >>
   fstep opth pat >>
@@ -3064,10 +3089,13 @@ Proof
       ostep emit_op_AND_correct `emit_op AND [ok; not_special] _ = _` >>
       forward_all_evals >>
       imp_res_tac emit_void_extends >>
-      drule_all_then strip_assume_tac assert_chain
-      >>~- ([`(_ && _) <> 0w`],
-        qpat_x_assum `(_ && _) <> 0w` mp_tac >> simp[]) >>
-      first_assum (irule_at Any)) >>
+      drule_all assert_chain >>
+      disch_then (DISJ_CASES_THEN2 strip_assume_tac ACCEPT_TAC) >>
+      (qsuff_tac `F` >- simp[]) >>
+      qpat_x_assum `(_ && _) <> 0w` mp_tac >>
+      pure_rewrite_tac [IMP_CLAUSES, NOT_CLAUSES] >>
+      irule (PURE_REWRITE_RULE [EVAL ``n2w (2 ** 255) : bytes32``]
+        mul_check_special_zero) >> simp[]) >>
   Cases_on `is_signed` >> gvs[]
   >- mul_check_plain_tac emit_op_SDIV_correct `emit_op SDIV _ _ = _` >>
   mul_check_plain_tac emit_op_Div_correct `emit_op Div _ _ = _`
@@ -3235,19 +3263,32 @@ Proof
     simp[]
 QED
 
-val mul_sdiv_mismatch_tac =
-  strip_tac >>
+val w2i_pow_255 = EVAL ``w2i (n2w (2 ** 255) : bytes32)``;
+val pow_255 = EVAL ``2 ** 255 : num``;
+
+Theorem mul_sdiv_mismatch[local]:
+  ∀(a:bytes32) b ty.
+    b ≠ 0w ∧
+    ¬(INT_MIN (:256) ≤ w2i a * w2i b ∧ w2i a * w2i b ≤ INT_MAX (:256)) ∧
+    is_signed_type ty ∧ in_type_range ty (math_val ty a) ∧ type_bits ty ≤ 256 ∧
+    safe_sdiv (a * b) b = a ⇒
+    type_bits ty = 256 ∧ a = n2w (2 ** 255) ∧ b = n2w (2 ** 256 − 1)
+Proof
+  rpt gen_tac >> strip_tac >>
   reverse (Cases_on `a = n2w (2 ** 255) ∧ b = n2w (2 ** 256 − 1)`)
-  >- (`safe_sdiv (a * b) b ≠ a` suffices_by simp[] >>
-      irule safe_sdiv_mul_overflow >>
-      rpt conj_tac >- first_assum ACCEPT_TAC >- (simp[int_min_256, int_max_256] >> fs[]) >>
-      first_assum ACCEPT_TAC) >>
+  >- metis_tac[safe_sdiv_mul_overflow] >>
   `type_bits ty = 256` suffices_by simp[] >>
   CCONTR_TAC >> `type_bits ty < 256` by decide_tac >>
   `2 ** (type_bits ty − 1) < 2 ** 255` by simp[] >>
+  qpat_x_assum `¬(INT_MIN _ ≤ _ ∧ _)` kall_tac >>
+  qpat_x_assum `safe_sdiv _ _ = _` kall_tac >>
   qpat_x_assum `in_type_range ty (math_val ty a)` mp_tac >>
   qpat_x_assum `a = _ ∧ _` (fn th => rewrite_tac [CONJUNCT1 th]) >>
-  simp[math_val_def, in_type_range_def, w2i_int_min_w_256] >> intLib.ARITH_TAC;
+  rewrite_tac [math_val_def, w2i_pow_255] >>
+  asm_simp_tac std_ss [in_type_range_def, LET_THM] >>
+  qpat_x_assum `2 ** _ < _` mp_tac >>
+  rewrite_tac [pow_255] >> intLib.ARITH_TAC
+QED
 
 (* An integer multiplication whose product is out of the type's range
    reverts: by the clamp up to 128 bits, by the division check when the
@@ -3325,7 +3366,10 @@ Proof
            ≠ a ∨
          (is_signed_type ty ∧ type_bits ty = 256 ∧ a = n2w (2 ** 255) ∧
           b = n2w (2 ** 256 − 1))` by
-          (Cases_on `is_signed_type ty` >> fs[] >- mul_sdiv_mismatch_tac >- mul_sdiv_mismatch_tac >>
+          (Cases_on `is_signed_type ty` >> fs[] >- (strip_tac >> qspecl_then [`a`, `b`, `ty`] mp_tac mul_sdiv_mismatch >>
+               simp[int_min_256, int_max_256])
+           >- (strip_tac >> qspecl_then [`a`, `b`, `ty`] mp_tac mul_sdiv_mismatch >>
+               simp[int_min_256, int_max_256]) >>
            irule safe_div_mul_overflow >> fs[]) >>
         qspecl_then [`x`, `y`, `res`, `is_signed_type ty`, `type_bits ty`, `cs'`,
                      `cs''`, `ss'`, `a`, `b`] mp_tac mul_overflow_check_reverts >>

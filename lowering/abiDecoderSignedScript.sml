@@ -24,12 +24,28 @@ Theorem abi_decoder_sign_extend_cast_bit:
 Proof
   strip_tac >>
   `8 * n + 7 = dimindex (:'a) - 1 /\ dimindex (:'a) <= 256` by decide_tac >>
-  Cases_on `word_msb w` >>
-  rw_tac (std_ss ++ fcpLib.FCP_ss ++ numSimps.ARITH_ss)
-    [word_and_def, word_lsr_def, sw2sw, word_msb_def, word_index, word_0,
+  Cases_on `word_msb w` >> simp_tac bool_ss [] >>
+  simp_tac (std_ss ++ fcpLib.FCP_ss)
+    [word_and_def, word_lsr_def, word_index, word_0,
      dimindex_256, abi_signed_bit_one] >>
-  Cases_on `i = 0` >> gvs[sw2sw, word_msb_def] >>
-  `8 * (n + 1) - 1 = dimindex (:'a) - 1` by decide_tac >> asm_rewrite_tac[]
+  rpt strip_tac >> Cases_on `i = 0` >>
+  gvs[sw2sw, word_msb_def, word_index, abi_signed_bit_one]
+QED
+
+Theorem abi_signed_mask_bit[local]:
+  n <= 256 /\ i < 256 ==>
+  (((1w << n) - 1w : bytes32) ' i <=> i < n)
+Proof
+  strip_tac >> irule SHIFT_1_SUB_1 >> simp[dimindex_256]
+QED
+
+Theorem abi_signed_cast_high_bit[local]:
+  dimindex (:'a) <= i /\ i < 256 ==>
+  ((sw2sw (w:'a word) : bytes32) ' i <=> word_msb w)
+Proof
+  strip_tac >>
+  `~(i < dimindex (:'a)) /\ ~(256 < dimindex (:'a))` by decide_tac >>
+  simp[sw2sw, dimindex_256]
 QED
 
 Theorem abi_decoder_sign_extend_cast_mask:
@@ -39,11 +55,15 @@ Theorem abi_decoder_sign_extend_cast_mask:
    else (sw2sw w : bytes32) && (1w << dimindex (:'a) - 1w)) = sw2sw w
 Proof
   strip_tac >> Cases_on `word_msb w` >>
-  simp_tac bool_ss [] >>
-  rw_tac (std_ss ++ fcpLib.FCP_ss ++ numSimps.ARITH_ss)
-    [word_and_def, word_or_def, word_1comp_def, sw2sw, SHIFT_1_SUB_1,
-     dimindex_256] >>
-  Cases_on `i < dimindex (:'a)` >> gvs[]
+  asm_simp_tac bool_ss [] >>
+  simp_tac (std_ss ++ fcpLib.FCP_ss)
+    [word_and_def, word_or_def, word_1comp_def, dimindex_256] >>
+  rpt strip_tac >>
+  (`((1w << dimindex (:'a) - 1w : bytes32) ' i <=>
+     i < dimindex (:'a))` by (irule abi_signed_mask_bit >> simp[]) >>
+   Cases_on `i < dimindex (:'a)` >- simp[] >>
+   `dimindex (:'a) <= i` by decide_tac >>
+   drule_all abi_signed_cast_high_bit >> simp[])
 QED
 
 Theorem abi_decoder_sign_extend_cast:

@@ -645,12 +645,49 @@ Proof
   simp[]
 QED
 
+Theorem expr_body_pre_neg:
+  !cenv cx env ann args es.
+    expr_body_pre cenv cx env (Builtin ann Neg args) es ==>
+    ?e1. args = [e1] /\ ann = expr_type e1 /\
+      is_numeric_type (expr_type e1) /\ ~is_uint_type (expr_type e1) /\
+      expr_body_pre cenv cx env e1 es
+Proof
+  rpt strip_tac >>
+  `?e1. args = [e1] /\ ann = expr_type e1 /\
+        is_numeric_type (expr_type e1) /\ ~is_uint_type (expr_type e1)` by
+    (gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+     Cases_on `args` >> gvs[] >> rename1 `h::t` >> Cases_on `t` >> gvs[]) >>
+  gvs[] >>
+  drule expr_body_pre_builtin_arg >> disch_then irule >>
+  gvs[expr_body_pre_def]
+QED
+
 Theorem compile_neg_case:
   !nocalls ctx func cenv cx ann args.
     exprs_case nocalls ctx func cenv cx args ==>
     expr_vv_case nocalls ctx func cenv cx (Builtin ann Neg args)
 Proof
-  cheat
+  rpt strip_tac >> irule expr_vv_case_stack >> rpt conj_tac
+  >- metis_tac[eval_expr_builtin_value]
+  >- simp[compile_neg_stack] >>
+  rw[expr_sim_case_def] >>
+  drule expr_body_pre_neg >> strip_tac >> gvs[] >> (
+  `is_word_type (expr_type e1)` by
+    (Cases_on `expr_type e1` >>
+     gvs[is_numeric_type_def, is_int_type_def, is_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_word_type_def]) >>
+  irule compile_unop_sim >> simp[builtin_args_length_ok_def, is_word_type_def] >>
+  qexistsl [`\x. compile_neg x (expr_type e1)`, `expr_type e1`] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> drule lower_value_neg >> simp[])
+  >- (rpt gen_tac >> strip_tac >>
+      drule expr_body_pre_lower_value_word_shape >> disch_then drule >> simp[])
+  >- (rpt gen_tac >> strip_tac >> drule_at Any straight_fresh_cs_extends >>
+      simp[CONV_RULE (DEPTH_CONV ETA_CONV) straight_fresh_neg])
+  >- (rpt strip_tac >> drule_all expr_body_pre_word_value >> strip_tac >> gvs[] >>
+      irule_at Any compile_neg_frag >>
+      gvs[is_numeric_type_def, is_uint_type_def]) >>
+  metis_tac[unop_operand_sim])
 QED
 
 (* abs: compile_builtin_abs on the operand (exprSimUnop's
@@ -745,8 +782,14 @@ Proof
   Cases_on `keep` >> gvs[bind_def, return_def, AllCaseEqs()] >>
   gvs[eval_result_typed_def, runtime_place_typed_def] >>
   imp_res_tac vyperStateTheory.place_type_value_state >> gvs[] >>
-  Cases_on `t` >>
-  gvs[is_word_type_def, vyperValueTheory.evaluate_type_def, AllCaseEqs()]
+  (Cases_on `t` >> gvs[is_word_type_def])
+  >>~- ([`is_word_type (BaseT bt)`],
+         (Cases_on `bt` >> gvs[is_word_type_def])
+         >>~- ([`is_word_type (BaseT (BytesT bd))`],
+                Cases_on `bd` >> gvs[is_word_type_def] >>
+                gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
+         gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()]
 QED
 
 Theorem expr_body_pre_ifexp_word_readable:
