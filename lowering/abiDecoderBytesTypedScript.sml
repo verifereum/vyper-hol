@@ -48,9 +48,9 @@ Proof
   gvs[value_has_type_def, vyper_to_abi_type_def, vyper_base_to_abi_type_def,
       val_wf_def, type_memory_size_def, type_memory_bytes_def,
       abi_decode_bytes_copy_size_def, word_size_def] >>
-  rpt strip_tac >> TRY (decide_tac) >>
-  disj2_tac >> rename1 `eval_operand hi s = SOME (n2w hb)` >>
-  qexists_tac `hb` >> simp[] >> decide_tac
+  disj2_tac >> qexists_tac `h` >> simp[] >>
+  qpat_x_assum `sb + _ <= h` mp_tac >>
+  rpt (pop_assum kall_tac) >> decide_tac
 QED
 
 Theorem abi_decoder_typed_bytes_sequence:
