@@ -136,3 +136,34 @@ Proof
   pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
   simp[rich_listTheory.DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def]
 QED
+
+(* Position guards precede this address formation; word addition itself is
+   valid independently of the nonwrapping interval facts used by consumers. *)
+Theorem compile_abi_dec_addr_zero:
+  compile_abi_dec_addr (Lit 0w) pos st = (pos,st)
+Proof
+  simp[compile_abi_dec_addr_def, comp_return_def]
+QED
+
+Theorem compile_abi_dec_addr_sequence:
+  compile_abi_dec_addr base_op pos st = (out,st') /\
+  fresh_vars_wrt st s /\ eval_operand base_op s = SOME (n2w B) /\
+  eval_operand pos s = SOME (n2w q) ==>
+  ?t. run_inst_seq (emitted_insts st st') s = OK t /\
+    eval_operand out t = SOME (n2w (B+q)) /\ fresh_vars_wrt st' t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_data_section = s.vs_data_section
+Proof
+  Cases_on `base_op = Lit 0w`
+  >- (strip_tac >> gvs[compile_abi_dec_addr_zero] >>
+      `n2w B = (0w:bytes32)` by metis_tac[eval_operand_def, optionTheory.SOME_11] >>
+      qexists_tac `s` >>
+      rewrite_tac[GSYM word_add_n2w] >>
+      asm_simp_tac (srw_ss()) [WORD_ADD_0, emitted_insts_def, run_inst_seq_def]) >>
+  simp[compile_abi_dec_addr_def] >> strip_tac >>
+  drule_all emit_op_ADD_correct >> strip_tac >>
+  drule_all (SIMP_RULE (srw_ss()) []
+    (Q.INST [`opc` |-> `ADD`] abi_decode_pure_emit_frame)) >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[word_add_n2w]
+QED
