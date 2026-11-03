@@ -3444,33 +3444,6 @@ val div256_tac =
     strip_tac >> qpat_x_assum `res = op` (SUBST_ALL_TAC o SYM) >>
     first_assum (irule_at Any) >> fs[];
 
-val sdiv_ok_tac =
-  drule_all zero_check_passes >> strip_tac >>
-    rename1 `run_inst_seq (emitted_insts st _) ss = OK m1` >>
-    gvs monad_unfold >> pairarg_tac >> gvs[] >>
-    rename1 `emit_op SDIV _ _ = (res, s_div)` >>
-    `eval_operand x m1 = SOME a ∧ eval_operand y m1 = SOME b` by metis_tac[] >>
-    drule_all emit_op_SDIV_correct >> strip_tac >>
-    rename1 `eval_operand res m2 = SOME (safe_sdiv a b)` >>
-    qpat_x_assum `emit_op SDIV _ _ = _`
-      (strip_assume_tac o MATCH_MP emit_op_extends) >>
-    drule_all run_inst_seq_chain >> strip_tac >>
-    qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` mp_tac >>
-    asm_rewrite_tac[] >> strip_tac >>
-    `w2i b ≠ 0` by fs[integer_wordTheory.w2i_eq_0] >>
-    `w2i (safe_sdiv a b) = w2i a quot w2i b` by
-      (simp[safe_sdiv_def, integer_wordTheory.word_quot] >>
-       irule integer_wordTheory.w2i_i2w >>
-       qspecl_then [`ty`, `w2i a quot w2i b`] mp_tac in_type_range_signed_256 >>
-       impl_tac >- (simp[] >> irule sdiv_in_type_range >> simp[]) >> simp[]) >>
-    Cases_on `type_bits ty = 256` >> fs[]
-    >- div256_tac >>
-    `type_bits ty < 256` by decide_tac >> fs[] >>
-    `in_type_range ty (math_val ty (safe_sdiv a b))` by
-       (simp[math_val_def] >> irule sdiv_in_type_range >> simp[]) >>
-    qspecl_then [`res`, `ty`, `s_div`, `op`, `st'`, `st`, `ss`, `m2`,
-                 `safe_sdiv a b`] mp_tac clamp_and_return_ok >>
-    simp[];
 
 (* compile_safe_div_ok: a division by a non-zero word, but for the signed
    minimum by -1, runs through and gives the word quotient.  The success
@@ -3494,7 +3467,32 @@ Proof
     gvs (compile_safe_div_def :: monad_unfold) >>
     pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
     Cases_on `is_signed_type ty` >> gvs[]
-    >- sdiv_ok_tac >>
+    >- (drule_all zero_check_passes >> strip_tac >>
+        rename1 `run_inst_seq (emitted_insts st _) ss = OK m1` >>
+        gvs monad_unfold >> pairarg_tac >> gvs[] >>
+        rename1 `emit_op SDIV _ _ = (res, s_div)` >>
+        `eval_operand x m1 = SOME a ∧ eval_operand y m1 = SOME b` by metis_tac[] >>
+        drule_all emit_op_SDIV_correct >> strip_tac >>
+        rename1 `eval_operand res m2 = SOME (safe_sdiv a b)` >>
+        qpat_x_assum `emit_op SDIV _ _ = _`
+          (strip_assume_tac o MATCH_MP emit_op_extends) >>
+        drule_all run_inst_seq_chain >> strip_tac >>
+        qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` mp_tac >>
+        asm_rewrite_tac[] >> strip_tac >>
+        `w2i b ≠ 0` by fs[integer_wordTheory.w2i_eq_0] >>
+        `w2i (safe_sdiv a b) = w2i a quot w2i b` by
+          (simp[safe_sdiv_def, integer_wordTheory.word_quot] >>
+           irule integer_wordTheory.w2i_i2w >>
+           qspecl_then [`ty`, `w2i a quot w2i b`] mp_tac in_type_range_signed_256 >>
+           impl_tac >- (simp[] >> irule sdiv_in_type_range >> simp[]) >> simp[]) >>
+        Cases_on `type_bits ty = 256` >> fs[]
+        >- div256_tac >>
+        `type_bits ty < 256` by decide_tac >> fs[] >>
+        `in_type_range ty (math_val ty (safe_sdiv a b))` by
+           (simp[math_val_def] >> irule sdiv_in_type_range >> simp[]) >>
+        qspecl_then [`res`, `ty`, `s_div`, `op`, `st'`, `st`, `ss`, `m2`,
+                     `safe_sdiv a b`] mp_tac clamp_and_return_ok >>
+        simp[]) >>
     drule_all zero_check_passes >> strip_tac >>
     chain_last emit_op_Div_correct
 QED
