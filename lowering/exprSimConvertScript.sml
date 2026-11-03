@@ -8,20 +8,21 @@
  * argument's value to the source's evaluate_convert result.
  *
  * TOP-LEVEL:
- *   compile_convert_word_sim   — expr_vv_ok of a conversion between
+ *   compile_convert_word_case  — expr_vv_case of a conversion between
  *                                integer types, from bool to an integer
  *                                or from an integer to bool
  *   compile_convert_frag_sim   — the composition
- *   compile_convert_int_frag   — convert_frag between integer types, and
- *                                from bool (ConvIntToInt)
+ *   compile_convert_int_frag   — convert_frag between integer types
+ *                                (ConvIntToInt)
  *   compile_convert_bool_frag  — convert_frag from an integer to bool
  *   convert_int_run            — compile_type_convert between integer
  *                                types, both outcomes
  *
  * Covered are the conversions between integers and from bool to an
  * integer, and from an integer to bool, where the lowering and the source
- * agree.  The rest wait on #548: there the checker, the lowering and the
- * semantics disagree.  compile_convert_word_sim takes the argument's
+ * agree.  Boolean to integer conversion is an identity on its encoded word.
+ * The rest wait on #548: there the checker, the lowering and the
+ * semantics disagree.  compile_convert_word_case takes the argument's
  * compile-state shape from exprSimOperators' lower_value_word_shape.
  *
  * Helpers: eval_expr_convert_cases, expr_post_convert,
@@ -31,6 +32,7 @@
 
 Theory exprSimConvert
 Ancestors
+  allocLimits
   arithmetic list integer words integer_word
   fragExec varsExt exprSim freshWrites exprSimOps exprSimArith
   exprBopLowering loweringSlice
@@ -123,10 +125,10 @@ Definition convert_frag_def:
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
       frag_exec ctx sa sb
-        (\s. s = s0 /\ stmt_state_rel func cenv cx es0 s /\
+        (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s /\
              eval_operand x s = SOME (val_to_w256 v1))
         (\s. ?v. convert_result cx src t v1 = INL v /\ word_value v /\
-                 stmt_state_rel func cenv cx es0 s /\
+                 stmt_state_rel ctx func cenv cx es0 s /\
                  eval_operand op s = SOME (val_to_w256 v) /\
                  (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                         lookup_var z s = SOME w) /\
@@ -137,9 +139,9 @@ Definition convert_frag_def:
 End
 
 Theorem expr_post_convert:
-  !func cenv cx ann t e1 es es' sa s1 sb s0 t0 ss x op v1 v.
-    expr_post func cenv cx e1 es sa s1 s0 es' v1 x t0 /\
-    stmt_state_rel func cenv cx es' ss /\
+  !func cenv cx ann t e1 es es' sa s1 sb s0 t0 ss x op v1 v ctx.
+    expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0 /\
+    stmt_state_rel ctx func cenv cx es' ss /\
     eval_operand op ss = SOME (val_to_w256 v) /\ word_value v /\
     (!z w. not_fresh_at s1 z /\ lookup_var z t0 = SOME w ==>
            lookup_var z ss = SOME w) /\
@@ -147,10 +149,12 @@ Theorem expr_post_convert:
              FLOOKUP ss.vs_allocas aid = SOME b) /\
     ss.vs_memory = t0.vs_memory /\
     is_word_type ann /\ sa.cs_next_var <= s1.cs_next_var ==>
-    expr_post func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0 es'
+    expr_post ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0 es'
       v op ss
 Proof
   rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
+  `locals_kept cenv es s0 ss` by
+    (irule locals_kept_mem_tail >> qexists_tac `t0` >> asm_rewrite_tac[]) >>
   simp[expr_val_rel_def, expr_val_at_def, vyperASTTheory.expr_type_def,
        typed_val_to_w256_word_value] >>
   conj_tac
@@ -186,7 +190,7 @@ Theorem compile_convert_frag_sim:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[expr_sim_def] >> rpt gen_tac >> strip_tac >>
-  reverse (Cases_on `stmt_state_rel func cenv cx es s0`)
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
   >- (`frag_exec ctx sa sb (\s. F) (\s. F) (\r. F)` by
         simp[frag_exec_false_pre] >>
       pop_assum (fn th => irule (MATCH_MP frag_exec_weaken th)) >>
@@ -209,7 +213,7 @@ Proof
                     mp_tac) >>
       (impl_tac >- gvs[]) >>
       disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
-      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
+      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
                                `\s. F`, `expr_exit res`] mp_tac) >>
       (impl_tac >- gvs[]) >> strip_tac >>
       irule frag_exec_exit_prefix >> qexists_tac `s1` >> simp[]) >>
@@ -221,13 +225,13 @@ Proof
                 mp_tac) >>
   (impl_tac >- simp[expr_res_ok_def]) >>
   disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
-  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
+  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
                            `expr_exit res`] mp_tac) >>
   (impl_tac >- simp[]) >>
   disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
   asm_rewrite_tac[] >> rpt strip_tac >> fs[] >>
-  rename1 `expr_post func cenv cx e1 es sa s1 s0 es' v1 x t0` >>
-  `stmt_state_rel func cenv cx es' t0 /\
+  rename1 `expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0` >>
+  `stmt_state_rel ctx func cenv cx es' t0 /\
    eval_operand x t0 = SOME (val_to_w256 v1)` by
     (fs[expr_post_def] >> irule expr_val_rel_word >> asm_rewrite_tac[] >>
      first_assum (irule_at Any) >> asm_rewrite_tac[]) >>
@@ -255,7 +259,7 @@ Theorem straight_fresh_convert:
     straight_fresh (compile_type_convert x (ConvIntToInt in_s in_b out_s out_b)) /\
     straight_fresh (compile_type_convert x ConvToBool)
 Proof
-  rw[compile_type_convert_def] >> rpt sf_step
+  rw[compile_type_convert_def, compile_int_clamp_def] >> rpt sf_step
 QED
 
 (* convert_frag from the run facts of the conversion's straight-line code. *)
@@ -343,7 +347,8 @@ Theorem convert_int_clamp:
     clamp_and_return v (BaseT (if s then IntT out_b else UintT out_b))
 Proof
   gen_tac >> Cases >>
-  rw[FUN_EQ_THM, compile_type_convert_def, clamp_and_return_def,
+  rw[FUN_EQ_THM, compile_type_convert_def, compile_int_clamp_def,
+     clamp_and_return_def,
      compile_clamp_def, type_bounds_def, is_signed_type_def, type_bits_def] >>
   simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[])
@@ -561,8 +566,19 @@ QED
 
 (* ===== The case lemma ===== *)
 
-(* The conversions covered: between integer types and from bool to an
-   integer type (ConvIntToInt), and from an integer type to bool
+(* An identity conversion preserves the encoded word without emitting code. *)
+Theorem compile_convert_identity_frag:
+  convert_result cx src t v1 = INL v /\ word_value v /\
+  val_to_w256 v1 = val_to_w256 v ==>
+  convert_frag ctx func cenv cx src ConvIdentity t v1 es0
+Proof
+  rpt strip_tac >> irule convert_frag_straight >>
+  simp[compile_type_convert_def, straight_fresh_return, comp_return_def,
+       emitted_insts_refl, run_inst_seq_nil]
+QED
+
+(* The conversions covered: between integer types (ConvIntToInt), from bool
+   to an integer type (ConvIdentity), and from an integer type to bool
    (ConvToBool). *)
 Definition int_convert_pair_def:
   int_convert_pair src dst <=>
@@ -582,11 +598,12 @@ val int_tac =
 
 val bool_tac =
   Cases_on `v1` >> gvs[vyperTypingTheory.value_has_type_def] >>
-  irule compile_convert_int_frag >> simp[] >>
-  rename1 `BoolV b` >> qexists_tac `if b then 1 else 0` >>
+  irule compile_convert_identity_frag >>
+  rename1 `BoolV b` >>
+  qexists_tac `IntV (if b then 1 else 0)` >>
   Cases_on `b` >>
   simp[val_to_w256_def, convert_result_def, evaluate_convert_from_def, evaluate_convert_def,
-       within_int_bound_def, integer_wordTheory.i2w_def];
+       word_value_def, integer_wordTheory.i2w_def];
 
 (* sg: whether the source is signed *)
 fun tobool_tac sg =
@@ -624,18 +641,22 @@ Proof
   irule cs_extends_same_block >> simp[rich_listTheory.IS_PREFIX_APPEND3]
 QED
 
-Theorem expr_sim_pre_convert:
+Theorem expr_body_pre_convert:
   !cenv cx env ann t args es.
-    expr_sim_pre cenv cx env (TypeBuiltin ann Convert t args) es ==>
+    expr_body_pre cenv cx env (TypeBuiltin ann Convert t args) es ==>
     ?e1. args = [e1] /\ ann = t /\ valid_conversion (expr_type e1) t /\
-         expr_sim_pre cenv cx env e1 es
+         expr_body_pre cenv cx env e1 es
 Proof
-  rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
+  rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
+     supportedExprTraverseTheory.expr_has_evm_run_thm,
      byte_widths_expr_def, alloc_limits_expr_def, type_builtin_result_ok_def,
      well_typed_type_builtin_args_def] >>
   Cases_on `args` >> gvs[] >> rename1 `h::tl` >> Cases_on `tl` >>
-  gvs[well_typed_expr_def, int_calls_expr_def, byte_widths_expr_def,
-      alloc_limits_expr_def]
+  gvs[well_typed_expr_def, int_calls_expr_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm, byte_widths_expr_def,
+      alloc_limits_expr_def] >>
+  metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
+            listTheory.APPEND_ASSOC]
 QED
 
 Theorem eval_expr_type_builtin_value:
@@ -666,22 +687,24 @@ Theorem straight_fresh_convert_pair:
     straight_fresh (compile_type_convert x (mk_convert_op src t))
 Proof
   rw[int_convert_pair_def] >>
-  simp[mk_convert_op_def, is_bytestring_type_def, straight_fresh_convert]
+  simp[mk_convert_op_def, is_bytestring_type_def, straight_fresh_convert] >>
+  simp[compile_type_convert_def, straight_fresh_return]
 QED
 
 (* A covered conversion: compile_convert_frag_sim, with the argument's
    shape from lower_value_word_shape. *)
-Theorem compile_convert_word_sim:
-  !cenv ann t e1.
-    expr_sim_below cenv (list_size expr_size [e1]) /\
+Theorem compile_convert_word_case:
+  !nocalls ctx func cenv cx ann t e1.
+    exprs_case nocalls ctx func cenv cx [e1] /\
     int_convert_pair (expr_type e1) t ==>
-    expr_vv_ok cenv (TypeBuiltin ann Convert t [e1])
+    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t [e1])
 Proof
-  rw[expr_vv_ok_def] >> drule expr_sim_pre_convert >> strip_tac >>
-  gvs[] >>
-  `expr_ok cenv e1` by
-    (fs[expr_sim_below_def] >> first_x_assum irule >> simp[]) >>
-  fs[expr_ok_def] >>
+  rw[expr_vv_case_def] >> drule expr_body_pre_convert >> strip_tac >>
+  gvs[exprs_case_def] >>
+  `expr_sim ctx func cenv cx (expr_type e1) e1 es` by
+    (irule expr_sim_case_apply >> conj_tac >- (qexists `env` >> simp[]) >>
+     qexists `nocalls` >> simp[] >>
+     metis_tac[int_calls_type_builtin_arg, listTheory.MEM]) >>
   `word_value_type (expr_type e1) /\ is_word_type (expr_type e1) /\
    ~(expr_type e1 = BaseT AddressT /\ ?m. ann = BaseT (BytesT (Fixed m))) /\
    is_word_type ann /\ !n. ann <> FlagT n` by
@@ -692,20 +715,20 @@ Proof
   >- metis_tac[eval_expr_type_builtin_value] >>
   irule compile_convert_frag_sim >> rpt conj_tac
   >- (rpt gen_tac >> strip_tac >>
-      drule expr_sim_pre_lower_value_word_shape >> disch_then drule >> simp[])
+      drule expr_body_pre_lower_value_word_shape >> disch_then drule >> simp[])
   >- (rpt gen_tac >> strip_tac >>
       qspecl_then [`compile_type_convert x (mk_convert_op (expr_type e1) ann)`,
                    `sa`, `op`, `sb`] mp_tac straight_fresh_extends >>
       simp[straight_fresh_convert_pair])
   >- first_assum ACCEPT_TAC
-  >- (rpt gen_tac >> strip_tac >> drule_all expr_sim_pre_word_result >>
+  >- (rpt gen_tac >> strip_tac >> drule_all expr_body_pre_word_result >>
       strip_tac >> gvs[] >>
       irule convert_frag_word >> simp[] >>
       qspecl_then [`cenv`, `cx`, `env`, `TypeBuiltin ann Convert ann [e1]`,
-                   `es`] mp_tac well_typed_expr_type_evaluates >>
+                   `es`] mp_tac expr_body_pre_type_evaluates >>
       simp[vyperASTTheory.expr_type_def])
-  >- (irule well_typed_expr_type_evaluates >> metis_tac[])
+  >- (irule expr_body_pre_type_evaluates >> metis_tac[])
   >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC >>
-  metis_tac[expr_sim_ok_def]
+  first_assum ACCEPT_TAC
 QED

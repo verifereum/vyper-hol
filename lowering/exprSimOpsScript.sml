@@ -33,7 +33,8 @@
  *
  * Helpers: eval_expr_bop_cases, eval_operand_frame, expr_val_rel_word,
  *   expr_val_rel_typed,
- *   local_region_frame, expr_post_bop, bop_result_bitwise, flag_and_zero,
+ *   local_region_frame, local_region_frame_fwd, local_regions_memory_tail,
+ *   locals_kept_trans, expr_post_bop, bop_result_bitwise, flag_and_zero,
  *   compile_flag_in_correct, bop_result_flag_in, straight_fresh_flag_in,
  *   bop_result_shift
  *)
@@ -82,11 +83,11 @@ Definition binop_frag_words_def:
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
       frag_exec ctx sa sb
-        (\s. s = s0 /\ stmt_state_rel func cenv cx es0 s /\
+        (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s /\
              eval_operand x s = SOME w1 /\ eval_operand y s = SOME w2)
         (\s. ?v. bop_result cx ann bop tys v1 v2 es0 = INL v /\
                  word_value v /\
-                 stmt_state_rel func cenv cx es0 s /\
+                 stmt_state_rel ctx func cenv cx es0 s /\
                  eval_operand op s = SOME (val_to_w256 v) /\
                  (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                         lookup_var z s = SOME w) /\
@@ -251,36 +252,86 @@ Proof
   rw[expr_val_rel_def] >> first_x_assum drule >> simp[]
 QED
 
-(* A live local's region after an expression evaluated from es, which keeps
-   the scopes' names, is one at es before it, whose pointer variable the
-   expression's fragment keeps. *)
+(* Pointer variables and scope domains determine live local regions. *)
 Theorem local_region_frame:
-  !func cenv cx es s0 sa scopes t n b sz.
-    stmt_state_rel func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
-    MAP FDOM es.scopes = MAP FDOM scopes /\
+  !func cenv scopes0 s0 sa scopes t n b sz.
+    local_ptrs_rel func cenv scopes0 s0 /\ local_ptrs_reserved cenv sa /\
+    MAP FDOM scopes0 = MAP FDOM scopes /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x t = SOME w) /\
     local_region cenv scopes t n b sz ==>
-    local_region cenv es.scopes s0 n b sz
+    local_region cenv scopes0 s0 n b sz
 Proof
   rw[local_region_def] >>
-  `lookup_scopes n es.scopes <> NONE` by
+  `lookup_scopes n scopes0 <> NONE` by
     metis_tac[lookup_scopes_none_map_fdom, optionTheory.NOT_SOME_NONE] >>
-  Cases_on `lookup_scopes n es.scopes` >> fs[] >>
-  rename1 `lookup_scopes n es.scopes = SOME e0` >>
+  Cases_on `lookup_scopes n scopes0` >> fs[] >>
+  rename1 `lookup_scopes n scopes0 = SOME e0` >>
   `?w0. lookup_var p s0 = SOME w0` by
-    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+    (fs[local_ptrs_rel_def] >>
      qpat_x_assum `!name entry p sz. _` drule_all >> metis_tac[]) >>
   `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   `lookup_var p t = SOME w0` by metis_tac[] >> gvs[]
 QED
 
+(* The converse needs only preservation of pointers already present. *)
+Theorem local_region_frame_fwd:
+  !cenv scopes0 sa scopes s0 t n b sz.
+    local_ptrs_reserved cenv sa /\ MAP FDOM scopes0 = MAP FDOM scopes /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x t = SOME w) /\
+    local_region cenv scopes0 s0 n b sz ==>
+    local_region cenv scopes t n b sz
+Proof
+  rw[local_region_def] >>
+  `lookup_scopes n scopes <> NONE` by
+    metis_tac[lookup_scopes_none_map_fdom, optionTheory.NOT_SOME_NONE] >>
+  `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  Cases_on `lookup_scopes n scopes` >> gvs[]
+QED
+
+(* Whole regions kept by a pointer-preserving fragment compose with a suffix. *)
+Theorem local_regions_memory_tail:
+  !cenv sa scopes scopes' sm s t.
+  local_ptrs_reserved cenv sa /\
+  MAP FDOM scopes = MAP FDOM scopes' /\
+  (!x. not_fresh_at sa x ==> lookup_var x sm = lookup_var x s) /\
+  (!n b sz. local_region cenv scopes s n b sz ==>
+    mem_bytes_at b sz sm.vs_memory = mem_bytes_at b sz s.vs_memory) /\
+  (!n b sz. local_region cenv scopes' sm n b sz ==>
+    mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz sm.vs_memory) ==>
+  (!n b sz. local_region cenv scopes s n b sz ==>
+    mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory)
+Proof
+  rpt strip_tac >>
+  `local_region cenv scopes' sm n b sz` by
+    (irule local_region_frame_fwd >>
+     qexistsl [`s`, `sa`, `scopes`] >> simp[]) >>
+  metis_tac[]
+QED
+
+(* Two fragments in turn keep the locals' memory, the second from where the
+   first ended, at the source state es1 after the first. *)
+Theorem locals_kept_trans:
+  !cenv es es1 sa s0 t u.
+    local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x t = SOME w) /\
+    locals_kept cenv es s0 t /\ locals_kept cenv es1 t u ==>
+    locals_kept cenv es s0 u
+Proof
+  rw[locals_kept_def] >>
+  `local_region cenv es1.scopes t n b sz` by
+    metis_tac[local_region_frame_fwd] >>
+  metis_tac[]
+QED
+
 (* The end of an operator's fragment from the ends of its operands'. *)
 Theorem expr_post_bop:
-  !func cenv cx ann bop e1 e2 es es1 es' sa s1 s2 sb s0 t u ss x y op v1 v2 v.
-    expr_post func cenv cx e1 es sa s1 s0 es1 v1 x t /\
-    expr_post func cenv cx e2 es1 s1 s2 t es' v2 y u /\
-    stmt_state_rel func cenv cx es' ss /\
+  !func cenv cx ann bop e1 e2 es es1 es' sa s1 s2 sb s0 t u ss x y op v1 v2 v ctx.
+    expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
+    expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
+    stmt_state_rel ctx func cenv cx es' ss /\
     eval_operand op ss = SOME (val_to_w256 v) /\ word_value v /\
     (!z w. not_fresh_at s2 z /\ lookup_var z u = SOME w ==>
            lookup_var z ss = SOME w) /\
@@ -288,11 +339,11 @@ Theorem expr_post_bop:
              FLOOKUP ss.vs_allocas aid = SOME b) /\
     ss.vs_memory = u.vs_memory /\
     is_word_type ann /\ local_ptrs_reserved cenv sa /\
-    stmt_state_rel func cenv cx es s0 /\
+    stmt_state_rel ctx func cenv cx es s0 /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
     sa.cs_next_id <= s1.cs_next_id ==>
-    expr_post func cenv cx (Builtin ann (Bop bop) [e1; e2]) es sa sb s0 es'
+    expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1; e2]) es sa sb s0 es'
       v op ss
 Proof
   rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
@@ -311,25 +362,31 @@ Proof
         irule >> asm_rewrite_tac[] >>
       qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = _ ==> _`
         irule >> asm_rewrite_tac[]) >>
-  (* the memory of the allocations before sa: kept by e1, then by e2 *)
-  rpt strip_tac >>
-  qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _`
-    (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then (fn th => rewrite_tac [GSYM th]) >>
-  qpat_x_assum `!aid off sz. FLOOKUP t.vs_allocas aid = _ /\ _ ==> _`
-    (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
-  disch_then irule >> rpt conj_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `!n b sz'. local_region _ es.scopes s0 _ _ _ ==> _` irule >>
-      qexists_tac `n` >>
-      irule local_region_frame >>
-      conj_tac >- (qexistsl_tac [`cx`, `func`] >> first_assum ACCEPT_TAC) >>
-      qexistsl_tac [`sa`, `es1.scopes`, `t`] >> asm_rewrite_tac[])
-  >- (irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
-      qexists_tac `sa.cs_next_id` >> asm_rewrite_tac[]) >>
-  qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = _ ==> _` irule >>
-  first_assum ACCEPT_TAC
+  conj_tac
+  >- ((* the memory of the allocations before sa: kept by e1, then by e2 *)
+      rpt strip_tac >>
+      qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _`
+        (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then (fn th => rewrite_tac [GSYM th]) >>
+      qpat_x_assum `!aid off sz. FLOOKUP t.vs_allocas aid = _ /\ _ ==> _`
+        (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+      disch_then irule >> rpt conj_tac
+      >- (rpt strip_tac >>
+          qpat_x_assum `!n b sz'. local_region _ es.scopes s0 _ _ _ ==> _` irule >>
+          qexists_tac `n` >>
+          irule local_region_frame >>
+          conj_tac >- (qexists_tac `func` >>
+            gvs[stmt_state_rel_def, state_rel_def]) >>
+          qexistsl_tac [`sa`, `es1.scopes`, `t`] >> asm_rewrite_tac[])
+      >- (irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+          qexists_tac `sa.cs_next_id` >> asm_rewrite_tac[]) >>
+      qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = _ ==> _` irule >>
+      first_assum ACCEPT_TAC) >>
+  (* the locals' memory: kept by e1, then by e2 *)
+  irule locals_kept_mem_tail >> qexists_tac `u` >> simp[] >>
+  irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `t`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem compile_bop_typed_sim:
@@ -369,7 +426,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[expr_sim_def] >> rpt gen_tac >> strip_tac >>
   (* only a start state related at es is of interest *)
-  reverse (Cases_on `stmt_state_rel func cenv cx es s0`)
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
   >- (`frag_exec ctx sa sb (\s. F) (\s. F) (\r. F)` by
         simp[frag_exec_false_pre] >>
       pop_assum (fn th => irule (MATCH_MP frag_exec_weaken th)) >>
@@ -394,7 +451,7 @@ Proof
                     mp_tac) >>
       (impl_tac >- gvs[]) >>
       disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
-      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
+      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
                                `\s. F`, `expr_exit res`] mp_tac) >>
       (impl_tac >- gvs[]) >> strip_tac >>
       irule frag_exec_exit_prefix >> qexists_tac `s1` >> simp[])
@@ -407,7 +464,7 @@ Proof
                                `s0`] mp_tac) >>
       (impl_tac >- simp[expr_res_ok_def]) >>
       disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
-      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
+      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
                                `expr_exit res`] mp_tac) >>
       (impl_tac >- simp[]) >>
       disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
@@ -437,13 +494,13 @@ Proof
                 mp_tac) >>
   (impl_tac >- simp[expr_res_ok_def]) >>
   disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
-  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
+  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
                            `expr_exit res`] mp_tac) >>
   (impl_tac >- simp[]) >>
   disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
   asm_rewrite_tac[] >> rpt strip_tac >> fs[] >>
-  rename1 `expr_post func cenv cx e1 es sa s1 s0 es1 v1 x t` >>
-  `stmt_state_rel func cenv cx es1 t /\
+  rename1 `expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t` >>
+  `stmt_state_rel ctx func cenv cx es1 t /\
    eval_operand x t = SOME (typed_val_to_w256 tv1 v1)` by
     (fs[expr_post_def] >> irule expr_val_rel_typed >> metis_tac[]) >>
   (* the right operand, from t *)
@@ -459,8 +516,8 @@ Proof
   (impl_tac >- simp[]) >>
   disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
   asm_rewrite_tac[] >> rpt strip_tac >> fs[] >>
-  rename1 `expr_post func cenv cx e2 es1 s1 s2 t es' v2 y u` >>
-  `stmt_state_rel func cenv cx es' u /\
+  rename1 `expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u` >>
+  `stmt_state_rel ctx func cenv cx es' u /\
    eval_operand y u = SOME (typed_val_to_w256 tv2 v2) /\
    eval_operand x u = SOME (typed_val_to_w256 tv1 v1)` by
     (fs[expr_post_def] >> conj_tac

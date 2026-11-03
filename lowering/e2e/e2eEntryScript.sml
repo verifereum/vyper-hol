@@ -8,6 +8,7 @@ Ancestors
   e2eDefs vyperLoweringCorrect codegenCorrectness
   venomState unitTransformDefs unitShapeDefs contextPlanLayoutProps
   contextCodegenRel compileEnv symbolResolve finite_map words vyperArith
+  immutableSectionRel
 
 Definition entry_venom_state_def:
   entry_venom_state prog cp es =
@@ -35,13 +36,15 @@ Definition entry_venom_state_def:
                                     idx < LENGTH tp.prevHashes
                                  then EL idx tp.prevHashes else 0w) |>;
         vs_prev_hashes := tp.prevHashes;
-        vs_code := assemble prog;
+        vs_code := mp.code;
+        vs_data_section := DROP (LENGTH (assemble prog)) mp.code;
         vs_labels := n2w o_f SND (compute_label_offsets prog);
         vs_fmp := n2w cp.cp_initial_fmp;
         vs_call_entry_fmp := n2w cp.cp_initial_fmp;
         vs_initial_fmp := n2w cp.cp_initial_fmp;
         vs_outcomes := MAP SND (call_trace es);
-        vs_requests := [] |>
+        vs_requests := [];
+        vs_pending_deletions := es.rollback.toDelete |>
 End
 
 (* Fresh fields inherited from init_venom_state; FMP fields are permanent. *)
@@ -56,8 +59,7 @@ Theorem entry_venom_state_fresh:
   initial_codegen_state_rel cp (entry_venom_state prog cp es) /\
   (entry_venom_state prog cp es).vs_logs = [] /\
   (entry_venom_state prog cp es).vs_returndata = [] /\
-  (entry_venom_state prog cp es).vs_inst_idx = 0 /\
-  (entry_venom_state prog cp es).vs_data_section = []
+  (entry_venom_state prog cp es).vs_inst_idx = 0
 Proof
   simp[entry_venom_state_def, init_venom_state_def,
        o1_initial_state_ok_def, initial_codegen_state_rel_def]
@@ -68,14 +70,31 @@ Theorem entry_venom_state_frame_fields:
   !prog cp es.
   (entry_venom_state prog cp es).vs_accounts = es.rollback.accounts /\
   (entry_venom_state prog cp es).vs_transient = es.rollback.tStorage /\
-  (entry_venom_state prog cp es).vs_code = assemble prog /\
+  (entry_venom_state prog cp es).vs_code =
+    (FST (HD es.contexts)).msgParams.code /\
+  (entry_venom_state prog cp es).vs_data_section =
+    DROP (LENGTH (assemble prog)) (FST (HD es.contexts)).msgParams.code /\
   (entry_venom_state prog cp es).vs_outcomes = MAP SND (call_trace es) /\
   (entry_venom_state prog cp es).vs_requests = [] /\
+  (entry_venom_state prog cp es).vs_pending_deletions = es.rollback.toDelete /\
   (!l. FLOOKUP (entry_venom_state prog cp es).vs_labels l =
        OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l))
 Proof
   simp[entry_venom_state_def, FLOOKUP_o_f] >> rpt gen_tac >>
   Cases_on `FLOOKUP (SND (compute_label_offsets prog)) l` >> simp[]
+QED
+
+(* Keep the actual installed padding; values are related by decoding it. *)
+Theorem entry_venom_state_installed_section:
+  !tops prog am tx es cp.
+  call_state_rel tops (assemble prog) am tx es ==>
+  immutables_section_rel tops (account_immutables am tx.target)
+    (entry_venom_state prog cp es).vs_data_section /\
+  (entry_venom_state prog cp es).vs_code = assemble prog ++
+    (entry_venom_state prog cp es).vs_data_section
+Proof
+  rw[call_state_rel_def, entry_venom_state_def] >>
+  drule installed_code_rel_section >> simp[]
 QED
 
 Theorem entry_venom_state_evm_environment:

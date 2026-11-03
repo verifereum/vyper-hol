@@ -34,13 +34,10 @@ Definition supported_event_names_def:
 End
 
 (* Lists, not sets: repeated names in different branches/loops must fail.
-   Concatenating catches cross-class collisions as well as duplicates.
-   No binding contains "." (no Vyper identifier does), so none is a
-   module_var_key ("self." ++ name) and none shadows a module variable. *)
+   Concatenating catches cross-class collisions as well as duplicates. *)
 Definition supported_function_bindings_def:
   supported_function_bindings tops (args : argument list) locals loops <=>
-    ALL_DISTINCT (MAP FST args ++ locals ++ loops) /\
-    EVERY (\n. ~MEM #"." n) (MAP FST args ++ locals ++ loops)
+    ALL_DISTINCT (MAP FST args ++ locals ++ loops)
 End
 
 Definition supported_function_header_names_def:

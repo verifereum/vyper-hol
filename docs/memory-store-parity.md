@@ -21,7 +21,7 @@ the existing finite-map compset and `fmap_to_alist_FEMPTY`, `i2w_pos` and
 substitution. The diagnostic per-source bound
 was 900 seconds; the proof-step timeout was unchanged.
 
-The oracle is Vyper `0.5.0a4+cd74ce4f+commit.cd74ce4f`, pinned by `VYPER_PIN`,
+The oracle is Vyper `0.5.0a4+9362e36b+commit.9362e36b`, pinned by `VYPER_PIN`,
 with experimental codegen, no optimization, Prague and bytecode metadata disabled.
 The retained 29 JSON/bytecode fixtures and dependency provenance reproduced
 byte for byte with `prepare --check`. Diagnostic probes used holbuild 0.11.4;
@@ -31,9 +31,12 @@ py-evm 0.12.1b1 (PragueVM) and eth-abi 6.0.0.
 Since this comparison, `p16_return_tuple_bytes_widen` from #542 and 11
 memory-construction fixtures from #560 have been added, bringing the retained
 parity suite to 41 fixtures; `method_id_lit` and `st_forward_ref_lit` (a struct
-field naming a later struct) make 43. The `p16` bytecode matches the oracle. The
+field naming a later struct) make 43, and `p20_nested_pop` (pops from
+arrays nested in memory, storage and hashmap places) makes 44. The `p16` bytecode matches the oracle. The
 `set_byte_bit_field_insert` rule is no longer needed: `word_of_bytes_T_0w_256` in
 `vyperMiscScript.sml` lets EVAL compute 256-bit words built from bytes.
+With the `raw_call` lowering of #554, `rc07_rof_false_tuple` matches the oracle
+(369 B); it is checked as a parity fixture of the `raw-calls` corpus.
 
 `MATCH` means both deployment and runtime bytes are identical. Difference cells
 show HOL/Vyper runtime lengths and the first differing byte (zero-based).
@@ -83,7 +86,7 @@ control whether a witness is compiled.
 | `r08_assert_ctrl_literal` | T → T | MATCH (337 B) | MATCH (337 B) |  |
 | `r10_raise_uint2str_reason` | F → F | 389/396 B, rt@54 | 389/396 B, rt@54 | [#561](https://github.com/verifereum/vyper-hol/issues/561) |
 | `r11_assert_long_literal_reason` | T → T | MATCH (376 B) | MATCH (376 B) |  |
-| `rc07_rof_false_tuple` | F → F | NONE | NONE | [#554](https://github.com/verifereum/vyper-hol/issues/554) |
+| `rc07_rof_false_tuple` | F → F | NONE | NONE | MATCH since #554 (see above) |
 | `rc16_msgdata_tuple` | F → F | 248/370 B, rt@1 | 419/370 B, rt@57 | [#552](https://github.com/verifereum/vyper-hol/issues/552), [#554](https://github.com/verifereum/vyper-hol/issues/554) |
 | `storage_one_word_array` | F → F | 142/104 B, rt@54 | MATCH (104 B) |  |
 | `t01_tuple_assign_intcall` | F → F | 182/184 B, rt@54 | MATCH (184 B) |  |

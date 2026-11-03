@@ -171,18 +171,6 @@ Proof
 QED
 
 (* msg.data has no expression callback; only the address and value are children. *)
-Theorem compile_raw_call_calldata_callback_contract:
-  expr_callbacks_agree f g cenv args ⇒
-  compile_call f cenv ret_ty ty (RawCallCalldataTarget rcf) args default_ret st =
-  compile_call g cenv ret_ty ty (RawCallCalldataTarget rcf) args default_ret st
-Proof
-  Cases_on `args` >- simp[compile_call_def] >>
-  rename1 `addr_e::rest` >> Cases_on `rest` >- simp[compile_call_def] >>
-  rename1 `addr_e::value_e::tail` >> Cases_on `tail` >>
-  simp[compile_call_def] >> strip_tac >> fs[] >>
-  simp[lower_value_def, comp_bind_def]
-QED
-
 Theorem compile_ext_call_kwargs_callback_contract:
   ∀ks es. expr_callbacks_agree f g cenv es ⇒
     compile_ext_call_kwargs f cenv return_type ks es =
@@ -193,6 +181,29 @@ Proof
   rpt strip_tac >> first_x_assum drule >>
   gvs[expr_callbacks_agree_def, FUN_EQ_THM, COND_RATOR, comp_bind_def,
       lower_value_def]
+QED
+
+Theorem compile_raw_call_callback_contract:
+  expr_callbacks_agree f g cenv args ⇒
+  compile_call f cenv ret_ty ty (RawCallTarget rcf) args default_ret st =
+  compile_call g cenv ret_ty ty (RawCallTarget rcf) args default_ret st
+Proof
+  Cases_on `args` >- simp[compile_call_def] >>
+  rename1 `addr_e::rest` >> Cases_on `rest` >- simp[compile_call_def] >>
+  simp[compile_call_def] >> strip_tac >> fs[] >>
+  drule compile_ext_call_kwargs_callback_contract >> strip_tac >>
+  simp[lower_value_def, comp_bind_def]
+QED
+
+Theorem compile_raw_call_calldata_callback_contract:
+  expr_callbacks_agree f g cenv args ⇒
+  compile_call f cenv ret_ty ty (RawCallCalldataTarget rcf) args default_ret st =
+  compile_call g cenv ret_ty ty (RawCallCalldataTarget rcf) args default_ret st
+Proof
+  Cases_on `args` >- simp[compile_call_def] >>
+  simp[compile_call_def] >> strip_tac >> fs[] >>
+  drule compile_ext_call_kwargs_callback_contract >> strip_tac >>
+  simp[lower_value_def, comp_bind_def]
 QED
 
 Theorem expr_callbacks_agree_take_drop:
@@ -236,6 +247,8 @@ Proof
   FIRST [irule compile_intcall_callback_contract >>
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
          irule compile_send_callback_contract >>
+           fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
+         irule compile_raw_call_callback_contract >>
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
          irule compile_raw_call_calldata_callback_contract >>
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
@@ -372,7 +385,7 @@ Proof
 QED
 
 Theorem is_extcode_characterization:
-  ∀src_e. is_extcode src_e ⇔ ∃ann addr. src_e = Attribute ann addr "code"
+  ∀src_e. is_extcode src_e ⇔ ∃ann addr. src_e = Builtin ann (Acc Code) [addr]
 Proof
   ho_match_mp_tac is_extcode_ind >> simp[is_extcode_def] >>
   rw[] >> gvs[AllCaseEqs()] >> BasicProvers.every_case_tac >> gvs[]

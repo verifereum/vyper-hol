@@ -35,7 +35,9 @@ Definition supported_target_def:
         (case ALOOKUP bindings name of
            SOME ty => supported_value_type tops ty
          | NONE => F)
-    | TopLevelNameTarget id => supported_scalar_target tops id
+    | TopLevelNameTarget id =>
+        supported_scalar_target tops id \/
+        IS_SOME (supported_immutable_type tops id)
     | SubscriptTarget (TopLevelNameTarget id) key =>
         supported_subscript_base tops id /\ supported_expr tops key
     | AttributeTarget (TopLevelNameTarget id) fname =>

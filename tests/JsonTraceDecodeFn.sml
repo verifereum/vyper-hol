@@ -18,6 +18,7 @@ functor JsonTraceDecodeFn (
     (string * JSON.value * 'a) list -> string list ->
     (string * JSON.value * 'a) list
   val decode_cases : JSON.value -> (string * B.term list) list
+  val source_codes_json : JSON.value -> string list
 end = struct
 
 open B JSONDecode
@@ -417,9 +418,33 @@ val raw_deployment : term decoder =
                 | NONE => mk_none bytes_ty) $
                nullable string)))
 
+fun source_codes_json j =
+  let
+    fun gather (JSON.OBJECT kvs) =
+          let
+            val here =
+              case List.find (fn (k, _) => k = "source_code") kvs of
+                SOME (_, JSON.STRING s) => [s]
+              | _ => []
+            val nested = List.concat (List.map (fn (_, v) => gather v) kvs)
+          in
+            here @ nested
+          end
+      | gather (JSON.ARRAY xs) = List.concat (List.map gather xs)
+      | gather _ = []
+  in
+    gather j
+  end
+
+(* Sources reading msg.gas get GAS readings from an EVM run of each call. *)
+fun reads_gas_source_json j =
+  List.exists (fn src => String.isSubstring "msg.gas" src orelse
+                         String.isSubstring "msg.mana" src)
+    (source_codes_json j)
+
 val deployment : term decoder =
   check_trace_type "deployment" $
-  JSONDecode.map (fn (((((srcs_exps_imap,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl),bp) =>
+  JSONDecode.map (fn ((((((srcs_exps_imap,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl),bp),rg) =>
              (* translate_annotated_ast returns (sources, exports, import_map) *)
              let val (srcs, exps_import_map) = dest_pair srcs_exps_imap
                  val (exps, import_map) = dest_pair exps_import_map in
@@ -442,9 +467,10 @@ val deployment : term decoder =
                ("callData", d),
                ("runtimeBytecode", bc),
                ("storageLayout", sl),
-               ("isBlueprint", bp)
+               ("isBlueprint", bp),
+               ("readsGas", rg)
              ]) end)
-          (tuple2 (tuple2 (tuple2 (tuple2 (tuple4 (toplevels_via_jsonast,
+          (tuple2 (tuple2 (tuple2 (tuple2 (tuple2 (tuple4 (toplevels_via_jsonast,
                            tuple3 (
                              field "contract_abi" (array abiEntry),
                              field "env" $ field "block" $
@@ -465,7 +491,9 @@ val deployment : term decoder =
                   field "runtime_bytecode" bytes),
                  field "storage_layout" AST.storage_layout),
                 JSONDecode.map (fn s => mk_bool (s = "blueprint"))
-                  (field "deployment_type" string)))
+                  (field "deployment_type" string)),
+               JSONDecode.map (fn kvs => mk_bool (reads_gas_source_json (JSON.OBJECT kvs)))
+                 rawObject))
 
 val trace : term decoder =
   andThen (field "trace_type" string) (fn kind =>

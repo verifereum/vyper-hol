@@ -7,11 +7,12 @@ Ancestors
   stmtLoweringProps exprLoweringProps emitHelperProps
   stateFrame list
 
-(* The strengthened relation requires oracle mode and exact request prefixes.
+(* The strengthened relation requires oracle mode and agreeing requests.
    Reuse existing frame-preserving update proofs; no per-field API matrix. *)
 Theorem statement_oracle_boundary:
   state_rel func cenv cx es ss /\ not_local_ptr cenv es.scopes name ==>
-  es.outcomes = SOME ss.vs_outcomes /\ es.requests = ss.vs_requests /\
+  es.outcomes = SOME ss.vs_outcomes /\
+  LIST_REL (request_agree cx) es.requests ss.vs_requests /\
   state_rel func cenv cx es (update_var name w ss)
 Proof
   rpt gen_tac >> strip_tac >> conj_tac >- fs[state_rel_def] >>
@@ -112,13 +113,13 @@ Theorem lowering_runtime_boundary:
   external_call_result_rel tops ret tx (INR (Error (RuntimeError msg)), am, rqs)
     (Abort kind ss) /\
   (external_call_result_rel tops ret tx (INR (Error (RuntimeError msg)), am, rqs)
-    (Halt ss) <=> decode_strictness_exempt tops (RuntimeError msg)) /\
+    (Halt ss) <=> unspecified_behaviour_exempt tops (RuntimeError msg)) /\
   ~external_call_result_rel tops ret tx (INR (Error (TypeError msg)), am, rqs)
     (Abort kind ss) /\
   ~external_call_result_rel tops ret tx (INR (Error (TypeError msg)), am, rqs)
     (Halt ss)
 Proof
-  Cases_on `kind` >> simp[external_call_result_rel_def, decode_strictness_exempt_def]
+  Cases_on `kind` >> simp[external_call_result_rel_def, unspecified_behaviour_exempt_def]
 QED
 
 (* A failed external call re-raises the callee's revert data: it may only
@@ -131,16 +132,17 @@ Theorem lowering_revert_data_boundary:
   ~external_call_result_rel tops ret tx (INR (Error (RevertData bs)), am, rqs)
     (Halt ss)
 Proof
-  simp[external_call_result_rel_def, decode_strictness_exempt_def]
+  simp[external_call_result_rel_def, unspecified_behaviour_exempt_def]
 QED
 
 Theorem lowering_decode_exemption_narrow:
-  decode_strictness_exempt tops e ==>
-  e = RuntimeError "abi_decode invalid" /\
-  ?ty. occurs_abi_decode_target ty tops /\
-       is_dynamic (vyper_to_abi_type (type_env tops) ty)
+  unspecified_behaviour_exempt tops e ==>
+  (e = RuntimeError "abi_decode invalid" /\
+   ?ty. occurs_abi_decode_target ty tops /\
+        is_dynamic (vyper_to_abi_type (type_env tops) ty)) \/
+  e = RuntimeError "convert empty bytes to signed"
 Proof
-  simp[decode_strictness_exempt_def]
+  simp[unspecified_behaviour_exempt_def]
 QED
 
 Theorem lowering_static_decode_not_exempt:
@@ -149,15 +151,21 @@ Theorem lowering_static_decode_not_exempt:
   ~external_call_result_rel tops ret tx
     (INR (Error (RuntimeError "abi_decode invalid")), am, rqs) (Halt ss)
 Proof
-  simp[external_call_result_rel_def, decode_strictness_exempt_def] >> metis_tac[]
+  simp[external_call_result_rel_def, unspecified_behaviour_exempt_def] >> metis_tac[]
 QED
 
 Theorem lowering_success_boundary:
   external_call_result_rel tops ret tx (INL v, am, rqs) (Halt ss) <=>
   return_bytes tops ret v ss.vs_returndata /\
-  ss.vs_accounts = am.accounts /\ ss.vs_transient = am.tStorage /\
+  accounts_agree (initial_evaluation_context am.sources am.layouts tx NONE)
+    am.accounts ss.vs_accounts /\
+  transient_agree (initial_evaluation_context am.sources am.layouts tx NONE)
+    am.tStorage ss.vs_transient /\
   logs_correspond (compiled_event_info tops) (type_env tops)
-    tx.target am.logs ss.vs_logs /\ ss.vs_requests = rqs
+    tx.target am.logs ss.vs_logs /\
+  LIST_REL
+    (request_agree (initial_evaluation_context am.sources am.layouts tx NONE))
+    rqs ss.vs_requests
 Proof
   simp[external_call_result_rel_def]
 QED
@@ -168,27 +176,35 @@ Theorem lowering_wrapped_return:
    (?abi_v. vyper_to_abi (type_env tops) ret v = SOME abi_v /\
      ss.vs_returndata =
        enc (Tuple [vyper_to_abi_type (type_env tops) ret]) (ListV [abi_v])) /\
-   ss.vs_accounts = am.accounts /\ ss.vs_transient = am.tStorage /\
+   accounts_agree (initial_evaluation_context am.sources am.layouts tx NONE)
+     am.accounts ss.vs_accounts /\
+   transient_agree (initial_evaluation_context am.sources am.layouts tx NONE)
+     am.tStorage ss.vs_transient /\
    logs_correspond (compiled_event_info tops) (type_env tops)
-     tx.target am.logs ss.vs_logs /\ ss.vs_requests = rqs)
+     tx.target am.logs ss.vs_logs /\
+   LIST_REL
+     (request_agree (initial_evaluation_context am.sources am.layouts tx NONE))
+     rqs ss.vs_requests)
 Proof
   simp[lowering_success_boundary, return_bytes_def]
 QED
 
-(* A concrete successful terminal witness with requests, and a distinct
-   request list rejected. Leftover outcomes are intentionally unconstrained. *)
+(* A concrete successful terminal witness with requests, and a request
+   list that does not agree rejected. Leftover outcomes are intentionally unconstrained. *)
 Theorem lowering_none_return_witness:
   external_call_result_rel tops NoneT tx (INL v, am, rqs)
     (Halt (ss with <| vs_accounts := am.accounts; vs_transient := am.tStorage;
        vs_logs := am.logs; vs_returndata := []; vs_requests := rqs |>))
 Proof
   simp[lowering_success_boundary, return_bytes_def, logs_correspond_def] >>
-  irule LIST_REL_refl >> simp[log_entry_corresponds_def]
+  rpt conj_tac >> irule LIST_REL_refl >> simp[log_entry_corresponds_def]
 QED
 
 Theorem lowering_success_requests_exact:
   external_call_result_rel tops ret tx (INL v, am, rqs) (Halt ss) /\
-  rqs' <> rqs ==>
+  ~LIST_REL
+     (request_agree (initial_evaluation_context am.sources am.layouts tx NONE))
+     rqs rqs' ==>
   ~external_call_result_rel tops ret tx (INL v, am, rqs)
     (Halt (ss with vs_requests := rqs'))
 Proof
@@ -234,8 +250,8 @@ QED
 (* Environment/initial entry stay independent of Venom's ordinary GAS value,
    arbitrary outcome list and the raw unit's unobserved source fields. *)
 Theorem lowering_initial_gas_oracle_free:
-  initial_venom_state_rel am tx vs ==>
-  initial_venom_state_rel am tx
+  initial_venom_state_rel tops am tx vs ==>
+  initial_venom_state_rel tops am tx
     (vs with <| vs_outcomes := os;
       vs_call_ctx := vs.vs_call_ctx with cc_gas := gas |>)
 Proof
@@ -243,7 +259,15 @@ Proof
 QED
 
 Theorem lowering_initial_requests_empty:
-  initial_venom_state_rel am tx vs ==> vs.vs_requests = []
+  initial_venom_state_rel tops am tx vs ==> vs.vs_requests = []
 Proof
   simp[initial_venom_state_rel_def]
 QED
+
+(* Check the exact exemption boundary independently of admitted lowering proofs. *)
+val _ = List.app (fn (name, th) =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn tag => tag = "DISK_THM") oracles then ()
+    else raise Fail ("non-clean lowering boundary check: " ^ name)
+  end) (DB.thms "loweringBoundaryChecks");

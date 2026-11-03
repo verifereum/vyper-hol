@@ -10,8 +10,13 @@ roots = ["vyperHolScript.sml",
          "tests/vyperTestsHolScript.sml",
          "lowering/e2eBoundaryTestScript.sml",
          "lowering/evalCompilerWitnessesScript.sml",
+         "tests/conversionProofAuditScript.sml",
          "lowering/targetPlaceTestScript.sml",
+         "lowering/targetPlaceSimCasesScript.sml",
          "venom/passes/dft/tests/dftEffectOrderTestScript.sml",
+         "lowering/defs/bytecode/eval/evalCompilerAbiTupleStringScript.sml",
+         "lowering/defs/bytecode/eval/evalCompilerAbiCodegenScript.sml",
+         "lowering/abiProofsScript.sml",
          "lowering/supported/supportedTypePropsScript.sml",
          "lowering/supported/supportedNamePropsScript.sml",
          "lowering/supported/supportedDeclPropsScript.sml",
@@ -21,12 +26,21 @@ roots = ["vyperHolScript.sml",
          "lowering/supported/supportedStmtTraversePropsScript.sml",
          "lowering/supported/supportedProgramPropsScript.sml",
          "venom/codegen/proofs/contextReachabilityChecksScript.sml",
+         "venom/codegen/proofs/genFrameSimScript.sml",
          "tests/vyperPlaceProbesTestScript.sml",
          "tests/vyperPlaceSanityTestScript.sml"]
 
+[[executable]]
+name = "bytecode_parity_native"
+output = "lowering/defs/bytecode/native/bytecode_parity_native.exe"
+objects = ["compilerNativeParity"]
+
+[actions.compilerNativeParity]
+deps = ["compilerNativeEmitTheory"]
+
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
-rev = "6991326b80f0b603fc79d2681f19aa1205c2015c"
+rev = "47a9174eb5214df0837b3cf3ca42f12c68b39abb"
 
 # Functor parameter signatures are not inferred by HOL's module scanner.
 [actions.JsonASTDecodeFn]

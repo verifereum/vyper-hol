@@ -2761,7 +2761,8 @@ Proof
    s1.vs_fmp = s2.vs_fmp /\
    s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
    s1.vs_initial_fmp = s2.vs_initial_fmp /\
-   s1.vs_return_pc_token = s2.vs_return_pc_token` by
+   s1.vs_return_pc_token = s2.vs_return_pc_token /\
+   s1.vs_pending_deletions = s2.vs_pending_deletions` by
     fs[concretize_rel_def, LET_THM] >>
   `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests` by
     fs[concretize_rel_def, LET_THM] >>
