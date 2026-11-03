@@ -48,7 +48,8 @@ Ancestors
      allocation, which vv_post's frame asks for those below sa.cs_next_id.
    - The value is BytesV bs at BaseTV (BytesT (Dynamic n)) or StringV str
      at BaseTV (StringT n) (well_typed_literal: LENGTH <= n), whose
-     val_footprint is exactly the buffer's size; val_wf holds since
+     val_footprint, 32 + LENGTH, fits in the buffer of
+     32 + 32 * word_size LENGTH bytes; val_wf holds since
      type_memory_size is 32 + 32 * word_size n.
    - es' = es: a literal's evaluation leaves the state alone. *)
 Theorem literal_padded_chunk_length[local]:
@@ -843,6 +844,7 @@ Resume compile_literal_other_vv_sim[bytes]:
        vyperValueTheory.evaluate_type_def] >>
   simp[val_footprint_def, valueEncodingTheory.val_wf_def,
        valueEncodingTheory.val_in_memory_def, valueEncodingTheory.type_memory_size_def] >>
+  assume_tac (Q.SPEC `LENGTH (bs:word8 list)` le_word_size_mul) >>
   gvs[vyperValueTheory.compatible_bound_def, vfmConstantsTheory.word_size_def] >>
   qspec_then `32` mp_tac arithmeticTheory.DIVISION >> simp[] >>
   disch_then (qspec_then `n + 31` strip_assume_tac) >>
@@ -878,6 +880,7 @@ Resume compile_literal_other_vv_sim[string]:
        vyperValueTheory.evaluate_type_def] >>
   simp[val_footprint_def, valueEncodingTheory.val_wf_def,
        valueEncodingTheory.val_in_memory_def, valueEncodingTheory.type_memory_size_def] >>
+  assume_tac (Q.SPEC `LENGTH (str:string)` le_word_size_mul) >>
   gvs[well_formed_type_def, vyperValueTheory.evaluate_type_def,
       vfmConstantsTheory.word_size_def] >>
   qspec_then `32` mp_tac arithmeticTheory.DIVISION >> simp[] >>

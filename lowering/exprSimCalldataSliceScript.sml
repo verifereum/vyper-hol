@@ -804,6 +804,7 @@ Theorem slice_calldata_vv_post[local]:
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >>
   `LENGTH (TAKE n (DROP a cx.txn.calldata)) = n` by simp[LENGTH_TAKE_EQ] >>
+  `n <= 32 * word_size n` by simp[word_size_capacity] >>
   `eval_operand p.ptr_operand (t with vs_inst_idx := k) = SOME w` by
     (Cases_on `p.ptr_operand` >> gvs[eval_operand_def, lookup_var_def]) >>
   simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
