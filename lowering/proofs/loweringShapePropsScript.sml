@@ -3440,14 +3440,13 @@ Proof
   >~ [`compile_type_convert v ConvToAddress`]
   >- (simp[compile_type_convert_def] >> shape_convert_upper_tac)
   >~ [`compile_type_convert v (ConvToFlag n_members)`]
-  >- (simp[compile_type_convert_def] >>
-      shape_scalar_emit_bind_tac `P` `inv_op` all_tac >>
-      shape_scalar_emit_bind_tac `P` `extra_op` (simp[Abbr `P`]) >>
-      shape_scalar_emit_bind_tac `P` `ok_op` all_tac >>
-      shape_scalar_assert_tac `P` >> shape_convert_return_tac)
-  >~ [`compile_type_convert v (ConvBytestringCast max_len)`]
-  >- (simp[compile_type_convert_def] >>
-      shape_scalar_emit_bind_tac `P` `len_op` (simp[Abbr `P`]) >> shape_convert_upper_tac)
+  >- (Cases_on `n_members < 256` >>
+      simp[compile_type_convert_def, compile_int_clamp_def]
+      >- shape_convert_upper_tac >> shape_convert_return_tac)
+  >~ [`compile_type_convert v (ConvBytestringCast max_len in_n)`]
+  >- (Cases_on `max_len < in_n` >> simp[compile_type_convert_def]
+      >- (shape_scalar_emit_bind_tac `P` `len_op` (simp[Abbr `P`]) >>
+          shape_convert_upper_tac) >> shape_convert_return_tac)
   >~ [`compile_type_convert v (ConvIntToInt in_s in_b out_s out_b)`]
   >- suspend "int_int"
   >~ [`compile_type_convert v (ConvBytesToInt m out_s out_b)`]
@@ -3467,11 +3466,9 @@ Proof
       >- shape_convert_upper_tac >> shape_convert_return_tac)
   >~ [`compile_type_convert v ConvBytestringToBool`]
   >- suspend "bs_bool"
-  >~ [`compile_type_convert v (ConvBytestringToInt is_signed out_b)`]
+  >~ [`compile_type_convert v (ConvBytestringToInt is_signed out_b in_n)`]
   >- suspend "bs_int"
-  >~ [`compile_type_convert v ConvBytestringToAddress`]
-  >- suspend "bs_address"
-  >~ [`compile_type_convert v (ConvBytestringToDecimal divisor out_lo out_hi)`]
+  >~ [`compile_type_convert v (ConvBytestringToDecimal divisor out_lo out_hi in_n)`]
   >- suspend "bs_decimal"
   >~ [`compile_type_convert v (ConvBytestringToBytesM out_m)`]
   >- suspend "bs_bytes" >>
@@ -3479,7 +3476,8 @@ Proof
 QED
 
 Resume compile_type_convert_shape[int_int]:
-  Cases_on `in_s` >> Cases_on `out_s` >> simp[compile_type_convert_def]
+  Cases_on `in_s` >> Cases_on `out_s` >>
+  simp[compile_type_convert_def, compile_int_clamp_def]
   >- (Cases_on `out_b < in_b` >> simp[]
       >- shape_convert_two_bounds_tac >> shape_convert_return_tac)
   >- (Cases_on `out_b < in_b` >> simp[]
@@ -3503,7 +3501,7 @@ fun shape_convert_shift_clamp_tac clamp_tac =
   IF_CASES_TAC >> simp[] >- clamp_tac >> shape_convert_return_tac;
 
 Resume compile_type_convert_shape[bytes_int]:
-  Cases_on `out_s` >> simp[compile_type_convert_def]
+  Cases_on `out_s` >> simp[compile_type_convert_def, compile_int_clamp_def]
   >- shape_convert_shift_clamp_tac shape_convert_two_bounds_tac >>
   shape_convert_shift_clamp_tac shape_convert_upper_tac
 QED
@@ -3561,27 +3559,24 @@ Resume compile_type_convert_shape[bs_bool]:
 QED
 
 Resume compile_type_convert_shape[bs_int]:
-  Cases_on `is_signed` >> simp[compile_type_convert_def] >>
+  Cases_on `is_signed` >> simp[compile_type_convert_def, compile_int_clamp_def] >>
   shape_convert_load_word_tac >>
-  Cases_on `256 <= out_b` >> simp[]
+  Cases_on `in_n * 8 > out_b` >> simp[]
+  >- shape_convert_two_bounds_tac
   >- shape_convert_return_tac
   >- shape_convert_upper_tac
-  >- shape_convert_return_tac >>
-  shape_convert_upper_tac
-QED
-
-Resume compile_type_convert_shape[bs_address]:
-  simp[compile_type_convert_def] >> shape_convert_load_word_tac >> shape_convert_upper_tac
+  >> shape_convert_return_tac
 QED
 
 Resume compile_type_convert_shape[bs_decimal]:
-  simp[compile_type_convert_def] >> shape_convert_load_word_tac >> shape_convert_two_bounds_tac
+  simp[compile_type_convert_def] >> shape_convert_load_word_tac >>
+  Cases_on `in_n * 8 <= 168` >> simp[]
+  >- shape_convert_return_tac >> shape_convert_two_bounds_tac
 QED
 
 Resume compile_type_convert_shape[bs_bytes]:
   simp[compile_type_convert_def] >> shape_convert_load_word_tac >>
-  shape_scalar_emit_bind_tac `R` `shifted_l` (simp[Abbr `P`]) >>
-  shape_convert_reframe_tac `[shifted_l]:operand list` >> shape_convert_upper_tac
+  shape_under_tac shape_step_emit_op_plain `R` >> simp[Abbr `P`] >> shape_opcode_tac
 QED
 
 Resume compile_type_convert_shape[fixed_bs]:
@@ -5437,7 +5432,8 @@ Proof
   >- (shape_under_tac compile_assert_slice_bounds_shape `B` >> simp[Abbr `B`, Abbr `P`]) >>
   gen_tac >> simp[] >>
   match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. B st` >> conj_tac
-  >- (shape_under_tac shape_step_emit_void_plain `B` >> simp[Abbr `B`, Abbr `P`] >> shape_opcode_tac) >>
+  >- (shape_under_tac shape_step_emit_void_plain `B` >> simp[Abbr `B`, Abbr `P`] >>
+      Cases_on `start_op` >> shape_opcode_tac) >>
   gen_tac >> simp[] >>
   match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. B st` >> conj_tac
   >- (shape_under_tac shape_step_emit_void_plain `B` >> simp[Abbr `B`, Abbr `P`] >> shape_opcode_tac) >>

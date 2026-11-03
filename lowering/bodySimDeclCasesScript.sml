@@ -86,7 +86,9 @@ Proof
   `c.ce_flag_member_id = cenv.ce_flag_member_id /\
    c.ce_flag_n_members = cenv.ce_flag_n_members /\
    c.ce_struct_fields = cenv.ce_struct_fields /\
-   c.ce_hashmap_info = cenv.ce_hashmap_info` by
+   c.ce_hashmap_info = cenv.ce_hashmap_info /\
+   c.ce_module = cenv.ce_module /\
+   c.ce_module_vars = cenv.ce_module_vars` by
     (qpat_x_assum `_ with <| ce_vars := _; ce_var_type := _;
                              ce_dynarray_capacity := _ |> = cenv`
        (SUBST1_TAC o SYM) >> simp[]) >>
@@ -268,7 +270,7 @@ Proof
      gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
      res_tac >> gvs[FLOOKUP_DEF]) >>
   `type_memory_bytes cenv typ = type_memory_size tyv` by
-    metis_tac[exprSimAggregateLayoutTheory.expr_sim_inv_memory_size] >>
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
   `type_memory_bytes cenv typ < 2 ** 64` by
     gvs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
   `type_memory_size tyv + 64 < dimword (:256)` by

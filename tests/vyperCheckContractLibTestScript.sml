@@ -1323,3 +1323,78 @@ Theorem exports_ok_uninitialized_module:
 Proof
   CONV_TAC vyperCheckContractLib.check_contract_conv
 QED
+
+(* Operator forms Vyper rejects, where the compiled code would not compute
+   what the semantics does: ** with neither a literal base nor a non-negative
+   literal exponent, unary minus on an unsigned type, << on a type narrower
+   than 256 bits, a shift amount that can be negative, and ExpMod, which no
+   frontend produces. The neighbouring forms that stay accepted follow; those
+   Vyper itself accepts are in tests/fixtures/check_contract/operator_forms.vy. *)
+val u8 = ``BaseT (UintT 8)``
+val i8 = ``BaseT (IntT 8)``
+val i128 = ``BaseT (IntT 128)``
+val i256 = ``BaseT (IntT 256)``
+val bool_ty = ``BaseT BoolT``
+fun op_lit ty n =
+  ``Literal ^ty (IntL ^(intSyntax.term_of_int (Arbint.fromInt n)))``
+fun op_name ty id = ``Name ^ty ^(stringSyntax.fromMLstring id)``
+fun check_operator_function params ret_ty body =
+  vyperCheckContractLib.check_contract_conv
+    ``check_contract F ^empty_layouts ^zero_address
+        [(NONE, [FunctionDecl External Pure F F "f" ^params [] ^ret_ty
+                   ^body])]``
+(* f(x, y) returns `x bop rhs`. *)
+fun binop_function tx ty bop rhs =
+  check_operator_function ``[("x", ^tx); ("y", ^ty)]`` tx
+    ``[Return (SOME (Builtin ^tx (Bop ^bop) [^(op_name tx "x"); ^rhs]))]``
+(* f(x, y) copies x to z, applies `z bop= rhs` and returns z. *)
+fun aug_function tx ty bop rhs =
+  check_operator_function ``[("x", ^tx); ("y", ^ty)]`` tx
+    ``[AnnAssign "z" ^tx ^(op_name tx "x");
+       AugAssign ^tx (NameTarget "z") ^bop ^rhs;
+       Return (SOME ^(op_name tx "z"))]``
+fun neg_function ty =
+  check_operator_function ``[("x", ^ty)]`` ty
+    ``[Return (SOME (Builtin ^ty vyperAST$Neg [^(op_name ty "x")]))]``
+
+val () = List.app assert_none
+  [binop_function u256 u256 ``vyperAST$Exp`` (op_name u256 "y"),
+   binop_function u8 u8 ``vyperAST$Exp`` (op_name u8 "y"),
+   binop_function i256 i256 ``vyperAST$Exp`` (op_lit i256 ~2),
+   aug_function u256 u256 ``vyperAST$Exp`` (op_name u256 "y"),
+   aug_function i256 i256 ``vyperAST$Exp`` (op_lit i256 ~2),
+   neg_function u256,
+   neg_function u8,
+   binop_function u8 u8 ``vyperAST$ShL`` (op_name u8 "y"),
+   binop_function i128 i128 ``vyperAST$ShL`` (op_name i128 "y"),
+   aug_function u8 u8 ``vyperAST$ShL`` (op_name u8 "y"),
+   binop_function u256 i8 ``vyperAST$ShL`` (op_name i8 "y"),
+   binop_function u256 i8 ``vyperAST$ShR`` (op_name i8 "y"),
+   binop_function u256 i8 ``vyperAST$ShR`` (op_lit i8 ~1),
+   aug_function i256 i256 ``vyperAST$ShL`` (op_name i256 "y"),
+   aug_function i256 i256 ``vyperAST$ShR`` (op_name i256 "y"),
+   binop_function u256 u256 ``vyperAST$ExpMod`` (op_name u256 "y")]
+
+(* f(x, y) returns `2 ** y`. *)
+val pow_literal_base_function =
+  check_operator_function ``[("x", ^u256); ("y", ^u256)]`` u256
+    ``[Return (SOME (Builtin ^u256 (Bop vyperAST$Exp)
+                       [^(op_lit u256 2); ^(op_name u256 "y")]))]``
+
+(* An over-large literal exponent stays accepted: compile_safe_pow checks the
+   base against it. >> of a narrow unsigned value and the bitwise augmented
+   assignments on bool compute what the semantics does. *)
+val () = List.app assert_some
+  [binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 300),
+   binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 0),
+   pow_literal_base_function,
+   aug_function u256 u256 ``vyperAST$Exp`` (op_lit u256 2),
+   neg_function i256,
+   binop_function u8 u8 ``vyperAST$ShR`` (op_name u8 "y"),
+   aug_function u8 u8 ``vyperAST$ShR`` (op_lit u8 1),
+   binop_function u256 i8 ``vyperAST$ShL`` (op_lit i8 4),
+   binop_function i256 u256 ``vyperAST$ShL`` (op_name u256 "y"),
+   binop_function i256 u8 ``vyperAST$ShR`` (op_name u8 "y"),
+   aug_function bool_ty bool_ty ``vyperAST$And`` (op_name bool_ty "y"),
+   aug_function bool_ty bool_ty ``vyperAST$Or`` (op_name bool_ty "y"),
+   aug_function bool_ty bool_ty ``vyperAST$XOr`` (op_name bool_ty "y")]

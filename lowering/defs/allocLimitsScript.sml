@@ -27,27 +27,41 @@ Definition literal_alloc_ok_def:
   literal_alloc_ok _ = T
 End
 
+(* A value of type t that is not a word fits below Python's allocation
+   limit, 2 ** 64 bytes, in memory.  unwrap_value copies an aggregate held
+   in storage, transient storage or code into a buffer of this size. *)
+Definition type_alloc_ok_def:
+  type_alloc_ok cenv t <=>
+    (~is_word_type t ==> type_memory_bytes cenv t < 2 ** 64)
+End
+
 (* Every static buffer the lowering allocates for a node of the expression
    is below Python's allocation limit, 2 ** 64 bytes: the buffers of bytes
    and string literals, struct and array literals, empty(T) of a type that
-   is not a word, and the output of a calldata slice.  The same recursion
-   as byte_widths_expr. *)
+   is not a word, the output of a calldata slice, and the copy unwrap_value
+   makes of the node's value when it is not in memory, which every node's
+   type_alloc_ok bounds.  The same recursion as byte_widths_expr. *)
 Definition alloc_limits_expr_def:
-  alloc_limits_expr cenv (Name t _) = T /\
-  alloc_limits_expr cenv (TopLevelName t _) = T /\
-  alloc_limits_expr cenv (FlagMember t _ _) = T /\
+  alloc_limits_expr cenv (Name t _) = type_alloc_ok cenv t /\
+  alloc_limits_expr cenv (TopLevelName t _) = type_alloc_ok cenv t /\
+  alloc_limits_expr cenv (FlagMember t _ _) = type_alloc_ok cenv t /\
   alloc_limits_expr cenv (IfExp t c x y) =
-    (alloc_limits_expr cenv c /\ alloc_limits_expr cenv x /\
-     alloc_limits_expr cenv y) /\
-  alloc_limits_expr cenv (Literal t l) = literal_alloc_ok l /\
+    (type_alloc_ok cenv t /\ alloc_limits_expr cenv c /\
+     alloc_limits_expr cenv x /\ alloc_limits_expr cenv y) /\
+  alloc_limits_expr cenv (Literal t l) =
+    (type_alloc_ok cenv t /\ literal_alloc_ok l) /\
   alloc_limits_expr cenv (StructLit t nsid kes) =
-    (type_memory_bytes cenv (StructT nsid) < 2 ** 64 /\
+    (type_alloc_ok cenv t /\
+     type_memory_bytes cenv (StructT nsid) < 2 ** 64 /\
      alloc_limits_named_exprs cenv kes) /\
   alloc_limits_expr cenv (Subscript t x y) =
-    (alloc_limits_expr cenv x /\ alloc_limits_expr cenv y) /\
-  alloc_limits_expr cenv (Attribute t x _) = alloc_limits_expr cenv x /\
+    (type_alloc_ok cenv t /\ alloc_limits_expr cenv x /\
+     alloc_limits_expr cenv y) /\
+  alloc_limits_expr cenv (Attribute t x _) =
+    (type_alloc_ok cenv t /\ alloc_limits_expr cenv x) /\
   alloc_limits_expr cenv (Builtin t bi es) =
-    ((case bi of
+    (type_alloc_ok cenv t /\
+     (case bi of
         MakeArray NONE _ =>
           SUM (MAP (type_memory_bytes cenv o expr_type) es) < 2 ** 64
       | MakeArray (SOME _) _ => type_memory_bytes cenv t < 2 ** 64
@@ -55,11 +69,14 @@ Definition alloc_limits_expr_def:
       | _ => T) /\
      alloc_limits_exprs cenv es) /\
   alloc_limits_expr cenv (TypeBuiltin t tb ty es) =
-    ((tb = Empty /\ ~is_word_type ty ==> type_memory_bytes cenv ty < 2 ** 64) /\
+    (type_alloc_ok cenv t /\
+     (tb = Empty /\ ~is_word_type ty ==> type_memory_bytes cenv ty < 2 ** 64) /\
      alloc_limits_exprs cenv es) /\
-  alloc_limits_expr cenv (Pop t tgt) = alloc_limits_target cenv tgt /\
+  alloc_limits_expr cenv (Pop t tgt) =
+    (type_alloc_ok cenv t /\ alloc_limits_target cenv tgt) /\
   alloc_limits_expr cenv (Call t _ es dflt) =
-    (alloc_limits_exprs cenv es /\ alloc_limits_opt cenv dflt) /\
+    (type_alloc_ok cenv t /\ alloc_limits_exprs cenv es /\
+     alloc_limits_opt cenv dflt) /\
 
   alloc_limits_target cenv (NameTarget _) = T /\
   alloc_limits_target cenv (TopLevelNameTarget _) = T /\

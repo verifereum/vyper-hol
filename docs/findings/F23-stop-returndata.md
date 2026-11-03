@@ -57,10 +57,12 @@ example is historical; current pointer checks must be inspected rather than
 blindly copied as still live.
 
 Current [source exemption](../../lowering/e2eDefsScript.sml),
-`decode_strictness_exempt` / `source_exempt`, requires **exactly** that error
-message and a syntactically occurring dynamic ABI decode target. It is
-program-wide; static-only invalid decoding and `"abi_decode conversion"` are
-not exempt. An exempt run lacks result/effect correspondence, although the
+`unspecified_behaviour_exempt` / `source_exempt`, exempts decoding only for
+**exactly** that error message and a syntactically occurring dynamic ABI decode
+target. This decoding exemption is program-wide; static-only invalid decoding
+and `"abi_decode conversion"` are not exempt. Separately, the exact runtime error
+`"convert empty bytes to signed"` is exempt because stale memory determines the
+compiled signed-conversion result for empty bytes. An exempt run lacks result/effect correspondence, although the
 top still supplies an actual EVM run. See
 [source strict decoder](../../semantics/vyperABIScript.sml),
 [lowered decoder](../../lowering/defs/abiEncoderScript.sml),

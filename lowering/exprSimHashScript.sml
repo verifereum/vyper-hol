@@ -25,6 +25,7 @@
  *)
 Theory exprSimHash
 Ancestors
+  exprSimAlloc
   allocLimits
   list rich_list byte words fragExec ASCIInumbers
   venomExecSemantics venomInst venomState emitHelper emitHelperProps
@@ -289,19 +290,6 @@ Proof
   simp[eval_operand_def, lookup_var_update_var, update_var_def] >>
   rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def,
                        finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
-QED
-
-Theorem hash_alloc_buffer_labels[local]:
-  compile_alloc_buffer sz sa = (buf,sm) /\
-  run_inst_seq (emitted_insts sa sm) s = OK t ==>
-  t.vs_labels = s.vs_labels
-Proof
-  simp[contextTheory.compile_alloc_buffer_def, emit_op_def, comp_bind_def,
-       comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
-       emit_def] >> strip_tac >> gvs[emitted_insts_def,
-       rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def,
-       step_inst_base_def, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
-  gvs[update_var_def]
 QED
 
 (* Allocate and stage one word, protecting every earlier allocation. *)
@@ -1130,7 +1118,7 @@ Proof
   simp[emitted_insts_def] >>
   CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
-  simp[run_inst_seq_def, step_SHR, step_SHL, mk_inst_def,
+  simp[run_inst_seq_def, step_SHR, step_SHL,
        eval_operand_def, lookup_var_update_var, bind_outputs_def] >>
   simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
        bind_outputs_def, lookup_var_update_var] >>
@@ -1540,6 +1528,7 @@ Proof
     (gvs[expr_sim_pre_def] >>
      simp[well_typed_expr_def, well_typed_literal_def,
        well_formed_type_def, byte_widths_expr_def, alloc_limits_expr_def,
+       type_alloc_ok_def, type_memory_bytes_def,
        literal_alloc_ok_def, vyperTypeCallGraphTheory.int_calls_expr_def,
        supportedExprTraverseTheory.expr_has_evm_run_thm, type_bits_def,
        vfmConstantsTheory.word_size_def, vyperValueTheory.evaluate_type_def,

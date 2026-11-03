@@ -110,12 +110,17 @@ Definition well_typed_binop_def:
   well_typed_binop ty Div t1 t2 = (t1 = ty /\ t2 = ty /\ is_numeric_type ty) /\
   well_typed_binop ty Mod t1 t2 = (t1 = ty /\ t2 = ty /\ is_numeric_type ty) /\
   well_typed_binop ty Exp t1 t2 = (t1 = ty /\ t2 = ty /\ is_int_type ty) /\
-  well_typed_binop ty ExpMod t1 t2 = (t1 = ty /\ t2 = ty /\ ty = BaseT (UintT 256)) /\
+  (* No frontend produces ExpMod, and compile_binop has no case for it. *)
+  well_typed_binop ty ExpMod t1 t2 = F /\
   well_typed_binop ty UnsafeAdd t1 t2 = (t1 = ty ∧ t2 = ty ∧ is_int_type ty) ∧
   well_typed_binop ty UnsafeSub t1 t2 = (t1 = ty ∧ t2 = ty ∧ is_int_type ty) ∧
   well_typed_binop ty UnsafeMul t1 t2 = (t1 = ty ∧ t2 = ty ∧ is_int_type ty) ∧
   well_typed_binop ty UnsafeDiv t1 t2 = (t1 = ty ∧ t2 = ty ∧ is_int_type ty) ∧
-  well_typed_binop ty ShL t1 t2 = (t1 = ty /\ is_int_type ty /\ is_int_type t2) /\
+  (* Vyper shifts only int256 and uint256 values; >> stays admitted on narrower
+     types, where SHR/SAR of an in-range value stays in range. *)
+  well_typed_binop ty ShL t1 t2 =
+    (t1 = ty /\ is_int_type ty /\ is_int_type t2 /\
+     (ty = BaseT (UintT 256) \/ ty = BaseT (IntT 256))) /\
   well_typed_binop ty ShR t1 t2 = (t1 = ty /\ is_int_type ty /\ is_int_type t2) /\
   well_typed_binop ty And t1 t2 =
     (t1 = ty /\ t2 = ty /\ (is_int_type ty \/ is_bool_type ty \/ is_flag_type ty)) /\
@@ -152,6 +157,37 @@ Proof
   Cases_on `bop` >> simp[well_typed_binop_def] >>
   rpt strip_tac >> gvs[]
 QED
+
+(* The integer of an integer literal, read as the lowering's expr_int_literal
+   reads the operands of ** for compile_safe_pow. *)
+Definition int_literal_value_def:
+  int_literal_value (Literal _ (IntL n)) = SOME n /\
+  int_literal_value _ = NONE
+End
+
+Definition nonneg_int_literal_def:
+  nonneg_int_literal e <=>
+    case int_literal_value e of SOME n => 0 <= n | NONE => F
+End
+
+(* A shift amount that cannot be negative: of an unsigned type, or a
+   non-negative literal, which the annotated AST may give a signed type (the
+   4 in x << 4 is an int8).  Vyper requires an unsigned amount for << and >>,
+   but not for <<= and >>= (see type_stmt's AugAssign). *)
+Definition shift_amount_ok_def:
+  shift_amount_ok e <=> is_uint_type (expr_type e) \/ nonneg_int_literal e
+End
+
+(* The operand forms Vyper requires beyond their types: ** needs a literal
+   base or a non-negative literal exponent (the overflow check of
+   compile_safe_pow is derived from that literal), and a shift amount must
+   not be negative. *)
+Definition builtin_operands_ok_def:
+  builtin_operands_ok blt es <=>
+    (blt = Bop Exp ==>
+       IS_SOME (int_literal_value (EL 0 es)) \/ nonneg_int_literal (EL 1 es)) /\
+    (blt = Bop ShL \/ blt = Bop ShR ==> shift_amount_ok (EL 1 es))
+End
 
 Definition env_item_type_def:
   env_item_type Sender = BaseT AddressT /\
@@ -193,7 +229,8 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty Not ts =
     (LENGTH ts = 1 ∧ HD ts = ty ∧
      (is_bool_type ty ∨ is_uint256_type ty ∨ is_bytes32_type ty ∨ is_flag_type ty)) ∧
-  well_typed_builtin_app ty Neg ts = (ts = [ty] /\ is_numeric_type ty) /\
+  well_typed_builtin_app ty Neg ts =
+    (ts = [ty] /\ is_numeric_type ty /\ ~is_uint_type ty) /\
   well_typed_builtin_app ty Keccak256 ts =
     (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 32)) /\ is_bytes_or_string_type (HD ts)) /\
   well_typed_builtin_app ty Sha256 ts =
@@ -412,16 +449,24 @@ End
 (* ===== Type builtin/conversion checks ===== *)
 
 Definition valid_conversion_def:
-  valid_conversion (BaseT (BytesT _)) (BaseT BoolT) = T /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT BoolT) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT BoolT) = (n <= 32) /\
   valid_conversion (BaseT (UintT _)) (BaseT BoolT) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT BoolT) = T /\
   valid_conversion (BaseT BoolT) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT BoolT) (BaseT (UintT _)) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT (BytesT _)) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT (UintT _)) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT (IntT _)) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT AddressT) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT DecimalT) = T /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Fixed k))) = T /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Dynamic n))) = (m <= n) /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Fixed m))) = (n <= m) /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic k))) = T /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (UintT _)) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (UintT _)) = (n <= 32) /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (IntT _)) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (IntT _)) = (n <= 32) /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT AddressT) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT AddressT) = (n <= 32) /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT DecimalT) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT DecimalT) = (n <= 32) /\
   valid_conversion (BaseT (UintT _)) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT (UintT _)) = T /\
@@ -437,11 +482,15 @@ Definition valid_conversion_def:
   valid_conversion (FlagT _) (BaseT (BytesT bd)) = (bd = Fixed 32) /\
   valid_conversion (BaseT (UintT _)) (FlagT _) = T /\
   valid_conversion (BaseT (IntT _)) (FlagT _) = T /\
-  valid_conversion (BaseT (UintT _)) (BaseT (BytesT _)) = T /\
-  valid_conversion (BaseT (IntT _)) (BaseT (BytesT _)) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT (StringT _)) = T /\
+  valid_conversion (BaseT (UintT n)) (BaseT (BytesT (Fixed m))) = (n <= 8 * m) /\
+  valid_conversion (BaseT (UintT _)) (BaseT (BytesT (Dynamic n))) = (32 <= n) /\
+  valid_conversion (BaseT (IntT n)) (BaseT (BytesT (Fixed m))) = (n <= 8 * m) /\
+  valid_conversion (BaseT (IntT _)) (BaseT (BytesT (Dynamic n))) = (32 <= n) /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (StringT n)) = (m <= n) /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (StringT _)) = T /\
   valid_conversion (BaseT (StringT _)) (BaseT (StringT _)) = T /\
-  valid_conversion (BaseT (StringT _)) (BaseT (BytesT _)) = T /\
+  valid_conversion (BaseT (StringT n)) (BaseT (BytesT (Fixed m))) = (n <= m) /\
+  valid_conversion (BaseT (StringT _)) (BaseT (BytesT (Dynamic n))) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT DecimalT) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT DecimalT) = T /\
   valid_conversion (BaseT DecimalT) (BaseT (IntT _)) = T /\
@@ -638,7 +687,7 @@ Definition well_typed_expr_def:
      well_formed_type env.type_defs ty) /\
   well_typed_expr env (Builtin ty blt es) =
     (well_typed_exprs env es /\ well_typed_builtin_app ty blt (MAP expr_type es) /\
-     well_formed_type env.type_defs ty) /\
+     builtin_operands_ok blt es /\ well_formed_type env.type_defs ty) /\
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\ well_formed_type env.type_defs ty /\
      type_builtin_result_ok env.type_defs tb ty target_ty (MAP expr_type es) /\
@@ -858,7 +907,13 @@ Definition type_stmt_def:
     (if well_typed_target env bt ty /\ well_typed_expr env e /\
         assignable_type env.type_defs ty /\
         assignable_type env.type_defs (expr_type e) /\
-        well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn
+        well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+        (* the target is never a literal, so ** needs a literal exponent *)
+        (bop = Exp ==> nonneg_int_literal e) /\
+        (* Stricter than Vyper, which accepts <<= and >>= by a signed
+           amount: its code shifts by the amount's word where the semantics
+           raises on a negative amount. *)
+        (bop = ShL \/ bop = ShR ==> shift_amount_ok e)
      then SOME env else NONE) /\
   type_stmt env ret_ty (If e ss1 ss2) =
     (if well_typed_expr env e /\ expr_type e = BaseT BoolT /\
