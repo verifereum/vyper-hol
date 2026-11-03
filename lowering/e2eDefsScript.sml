@@ -3,7 +3,8 @@
  * source_storage_ok, call_outcomes_ok, tx_env_ok, tx_block_fields_rel,
  * value_transfer_ok, accounts_after_transfer, call_state_rel,
  * call_external_transaction_pending_deletions,
- * load_contract_pending_deletions, valid_vyper_call, compiled_event_info, return_bytes,
+ * load_contract_pending_deletions, valid_vyper_call, compiled_event_info,
+ * return_bytes, tx_return_bytes,
  * unspecified_behaviour_exempt, source_exempt, call_result_rel, logs_correspond.
  * TASK056: all compiler/call consumers use this exact boundary; the obsolete
  * compatibility owner is deleted. No old/new equivalence is claimed.
@@ -195,6 +196,14 @@ Definition return_bytes_def:
                  else enc (vyper_to_abi_type (type_env tops) ret) abi_v
 End
 
+(* Observe the selected function's decorator at the transaction boundary. *)
+Definition tx_return_bytes_def:
+  tx_return_bytes tops ret tx v out <=>
+    if lookup_raw_return_or_F (NONE : num option) tx.function_name External tops
+    then raw_return_bytes v = SOME out
+    else return_bytes tops ret v out
+End
+
 Definition unspecified_behaviour_exempt_def:
   unspecified_behaviour_exempt tops e <=>
     (e = RuntimeError "abi_decode invalid" /\
@@ -383,7 +392,7 @@ Definition call_result_rel_def:
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
         ?out lgs.
           frame_outcome es r es' NONE out lgs /\
-          return_bytes tops ret v out /\
+          tx_return_bytes tops ret tx v out /\
           accounts_agree cx am'.accounts es'.rollback.accounts /\
           transient_agree cx am'.tStorage es'.rollback.tStorage /\
           logs_correspond (compiled_event_info tops) (type_env tops)
