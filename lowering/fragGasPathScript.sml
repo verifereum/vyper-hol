@@ -40,6 +40,22 @@ Inductive gas_path:
      gas_path ctx fn s n r)
 End
 
+Theorem gas_path_edge_suffix:
+  gas_path_edge ctx fn s n r ==> gas_count_suffix n s r
+Proof
+  rw[gas_path_edge_def] >>
+  qspecl_then [`fuel`, `ctx`, `inst`, `s`] mp_tac (cj 1 gas_count_suffix) >>
+  gvs[gas_count_suffix_def, fragExecTheory.exit_result_def] >>
+  metis_tac[gas_count_phis_ok]
+QED
+
+Theorem gas_path_edge_normal:
+  gas_path_edge ctx fn s n (OK t) ==> ~t.vs_halted
+Proof
+  rw[gas_path_edge_def] >> gvs[fragExecTheory.exit_result_def] >>
+  Cases_on `step_inst fuel ctx inst s` >> gvs[fragExecTheory.exit_result_def]
+QED
+
 Theorem gas_path_suffix:
   gas_path ctx fn s n r ==> gas_count_suffix n s r
 Proof
