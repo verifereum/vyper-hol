@@ -10,7 +10,7 @@ Ancestors
   abiDecoderCanonicalBound abiDecoderNestedArrayLoop
   abiDecoderReadabilityBoundary abiDecoderSingletonBulk
   abiDecoderStatic abiDecoderUnwrapExecute abiScratchDecoderIndex
-  ctorAbiActual
+  ctorAbiActual ctorArgDecode
   (* Builtins, empty values and caller inputs. *)
   abiBuiltinFlatChecks abiBuiltinHeaderReach abiBuiltinValidCaller
   abiEmptyDispatch abiScratchBuiltinProducer abiScratchDecodeHistoryCaller
