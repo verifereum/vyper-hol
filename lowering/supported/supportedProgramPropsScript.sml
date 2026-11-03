@@ -194,10 +194,12 @@ Proof
   EVAL_TAC
 QED
 
-(* Entry/header validity is checked by check_contract, not the whitelist. *)
+(* Entry/header validity is checked by check_contract, not the whitelist,
+   except that only external functions may have defaults (Vyper rejects
+   constructor defaults). *)
 Theorem supported_entry_header_context:
   supported_program [FunctionDecl Deploy Nonpayable T F "__init__" [] [] NoneT []] /\
-  supported_program [FunctionDecl Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT []] /\
+  ~supported_program [FunctionDecl Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT []] /\
   ~function_header_ok Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT
 Proof
   EVAL_TAC
