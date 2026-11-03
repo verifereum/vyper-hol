@@ -121,7 +121,9 @@ structure JsonImportCV = struct
   (* Match Arbnum.fromHexString's scanner and full-consumption check; byte
      strings below deliberately retain keccak's separate permissive rules. *)
   fun hex_number text =
-    case IntInf.scan StringCvt.HEX Substring.getc (Substring.full text) of
+    if CharVector.exists (fn c => c = #"+" orelse c = #"-" orelse c = #"~") text
+    then raise Fail "invalid hexadecimal word"
+    else case IntInf.scan StringCvt.HEX Substring.getc (Substring.full text) of
       SOME (n,rest) =>
         if Substring.isEmpty rest then n
         else raise Fail "invalid hexadecimal word"

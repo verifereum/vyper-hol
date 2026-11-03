@@ -19,7 +19,7 @@ def main():
     if args.smoke:
         targets.append("vyperTestEmitSmokeTheory")
     subprocess.run(
-        ["holbuild", "build", "--tactic-timeout", "30", *targets], cwd=root, check=True,
+        ["holbuild", "build", *targets], cwd=root, check=True,
     )
     binary = root / "tests/.emit/run-test"
     subprocess.run(

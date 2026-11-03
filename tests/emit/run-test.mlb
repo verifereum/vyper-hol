@@ -1,5 +1,6 @@
 $(SML_LIB)/basis/basis.mlb
 ../.emit/json-libs.mlb
+../../frontend/jsonDocumentLib.sml
 numRuntime.sml
 ../.emit/RunTestML.sig
 ../.emit/RunTestML.sml

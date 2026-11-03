@@ -9,18 +9,21 @@ structure RunTestMain = struct
       (RunTestML.translate_annotated_ast (JsonImportCV.encode ast))
   )
 
-  fun quote s = let
+  fun quote_string escape_bytes s = let
     fun escape #"\"" = "\\\""
       | escape #"\\" = "\\\\"
       | escape #"\n" = "\\n"
       | escape #"\r" = "\\r"
       | escape #"\t" = "\\t"
       | escape c =
-          if Char.ord c < 32 then let
+          if Char.ord c < 32 orelse (escape_bytes andalso Char.ord c >= 128) then let
             val hex = Int.fmt StringCvt.HEX (Char.ord c)
           in "\\u00" ^ (if size hex=1 then "0" else "") ^ hex end
           else String.str c
   in "\"" ^ String.translate escape s ^ "\"" end
+
+  val quote = quote_string false
+  val quote_bytes = quote_string true
 
   fun cv_string cv = let
     fun go (Num n) chars =
@@ -49,39 +52,12 @@ structure RunTestMain = struct
       | _ => raise Fail "invalid emitted result summary"
     val fields = ["\"name\":" ^ quote name,
       "\"status\":" ^ quote (if passed then "passed" else "failed")] @
-      (if passed then [] else ["\"error\":" ^ quote message]) @
+      (if passed then [] else ["\"error\":" ^ quote_bytes message]) @
       (if dump then ["\"input\":" ^ quote (encoding input),
                      "\"result\":" ^ quote (encoding result)] else [])
     val () = TextIO.output (TextIO.stdOut,"{" ^ String.concatWith "," fields ^ "}\n")
     val () = TextIO.flushOut TextIO.stdOut
   in passed end
-
-  (* JSONParser.parse consumes one value, not the whole document. Inspect its
-     remaining stream directly, accepting only JSON whitespace before EOF. *)
-  fun require_eof (source : JSONParser.source) =
-    case !source of
-      NONE => raise Fail "closed JSON source"
-    | SOME (stream,line) =>
-        (case TextIO.StreamIO.input1 stream of
-           NONE => ()
-         | SOME (c,rest) =>
-             if c = #" " orelse c = #"\t" orelse
-                c = #"\r" orelse c = #"\n" then
-               (source := SOME (rest,if c = #"\n" then line+1 else line);
-                require_eof source)
-             else raise Fail "unexpected content after JSON document")
-
-  fun parse_document source = let
-    val json = JSONParser.parse source
-    val () = require_eof source
-  in json end
-
-  fun parse_file file = let
-    val source = JSONParser.openFile file
-    val json = parse_document source
-      handle ex => (JSONParser.close source; raise ex)
-    val () = JSONParser.close source
-  in json end
 
   fun main () = let
     val (dump,path) =
@@ -92,8 +68,8 @@ structure RunTestMain = struct
       | [] => (false,NONE)
       | _ => raise Fail "usage: run-test [--dump-input] [case.json]"
     val json = case path of
-        SOME file => parse_file file
-      | NONE => parse_document (JSONParser.openStream TextIO.stdIn)
+        SOME file => jsonDocumentLib.parse_file file
+      | NONE => jsonDocumentLib.parse_document (JSONParser.openStream TextIO.stdIn)
     val cases = Decode.decode_cases json
     val () = if null cases then raise Fail "input contains no test cases" else ()
     val passed = List.foldl (fn (item,all) => execute dump item andalso all) true cases

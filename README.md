@@ -138,7 +138,7 @@ The EmitML runner executes the existing CV-translated Vyper semantics on
 exported JSON deployment/call traces. Native execution is a trusted regression
 check, not a kernel proof; `vyperJsonReplayLib` provides kernel-checked replay.
 
-With `holbuild` v0.11.5 or newer, MLton, and Python 3 on `PATH`, run:
+With `holbuild` v0.12.0 or newer, MLton, and Python 3 on `PATH`, run:
 
 ```bash
 ./tools/demo_run_test.sh
@@ -169,9 +169,18 @@ proof; `vyperJsonReplayLib.replay_file` provides kernel-checked replay.
 The CV frontend retains defined-input preconditions; the native executable does
 not discharge them for each input.
 
+CI builds the CV frontend, emitter and kernel replay smoke theories through the
+project roots, at holbuild's default proof-step timeout. MLton compilation remains
+an explicit local step.
+
 The smoke check compares exact encoded inputs and results for all five bundled
 cases, not just pass/fail status. Import errors are reported on stderr; `{}` is
 rejected because it contains no tests, while `[]` runs the empty trace successfully.
+HOL replay uses the same complete-document parser. Hexadecimal words reject
+leading signs, and JSON result messages escape non-ASCII bytes as `\u00XX` so
+arbitrary assertion reasons still produce valid UTF-8 JSON.
+Test names retain their original UTF-8 text; byte escaping applies only to error
+messages, whose contents need not be valid UTF-8.
 
 The build first emits HOL-derived SML, then invokes MLton. Native compilation can
 take substantially longer than emission. The emitter normalizes word dimensions

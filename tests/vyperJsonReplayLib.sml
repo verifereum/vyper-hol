@@ -1,6 +1,3 @@
-val () = load "jsonImportTerm";
-val () = load "jsonASTLib";
-val () = load "JsonTraceDecodeFn";
 structure vyperJsonReplayLib :> vyperJsonReplayLib = struct
 
 open HolKernel boolLib bossLib cv_transLib cv_repLib cv_miscLib cv_computeLib
@@ -20,7 +17,7 @@ val run_test_tm = prim_mk_const {Thy="vyperTestRunner", Name="run_test"}
 val trace_ty = mk_thy_type {Thy="vyperTestRunner", Tyop="trace", Args=[]}
 
 fun prepare_file path = let
-  val cases = Decode.decode_cases (JSONDecode.decodeFile JSONDecode.raw path)
+  val cases = Decode.decode_cases (jsonDocumentLib.parse_file path)
   fun prepare (name,traces) =
     (name, rhs (concl (EVAL (listSyntax.mk_list (traces,trace_ty)))))
 in List.map prepare cases end
