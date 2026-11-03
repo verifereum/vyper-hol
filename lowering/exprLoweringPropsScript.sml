@@ -3653,7 +3653,7 @@ Theorem ci_mono_compile_create_snapshot:
   ∀cenv vv ty sa. ci_mono sa (SND (compile_create_snapshot cenv vv ty sa))
 Proof
   rpt gen_tac >> simp[compile_create_snapshot_def, compile_slot_to_memory_def] >>
-  ci_mono_create_tac []
+  ci_mono_create_tac [ci_mono_compile_imm_copy_to_memory]
 QED
 
 Theorem ci_mono_compile_raw_create[local]:
