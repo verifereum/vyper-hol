@@ -3436,8 +3436,14 @@ Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[is_immutable_op_def] >>
   qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-  simp[step_inst_base_opcode_eqs, exec_read1_def] >>
-  rpt (CASE_TAC >> simp[]) >> strip_tac >> gvs[update_var_def]
+  simp[step_inst_base_opcode_eqs] >>
+  Cases_on `inst.inst_operands` >- simp[exec_read1_def] >>
+  rename1 `inst.inst_operands = op::ops` >>
+  Cases_on `ops` >> simp[exec_read1_def] >>
+  Cases_on `eval_operand op s` >> simp[] >>
+  Cases_on `inst.inst_outputs` >- simp[] >>
+  rename1 `inst.inst_outputs = out::outs` >>
+  Cases_on `outs` >> simp[update_var_def] >> strip_tac >> gvs[]
 QED
 
 Theorem exec_read1_preserves_immutables[local]:
