@@ -1409,18 +1409,39 @@ Proof
   rw[finite_mapTheory.FLOOKUP_UPDATE] >> gvs[]
 QED
 
+Theorem append_place_fallback_preserves_tv[local]:
+  (do tv <- place_type_value cx p;
+      old <- read_place cx p;
+      updated <- lift_sum (append_element tv old v);
+      write_place cx p updated
+   od) st = (res,st') ==> preserves_tv cx st st'
+Proof
+  simp[bind_def] >>
+  Cases_on `place_type_value cx p st` >>
+  drule place_type_value_state >> strip_tac >> gvs[] >>
+  rename1 `place_type_value _ _ _ = (tv_result,_)` >>
+  Cases_on `tv_result`
+  >- (gvs[] >> rename1 `place_type_value cx p s = (INL tv,s)` >>
+      Cases_on `read_place cx p s` >>
+      drule read_place_state >> strip_tac >> gvs[] >>
+      rename1 `read_place _ _ _ = (place_read_sum,_)` >>
+      Cases_on `place_read_sum`
+      >- (gvs[] >> rename1 `read_place cx p s = (INL old,s)` >>
+          Cases_on `append_element tv old v` >>
+          simp[lift_sum_def, return_def, raise_def, preserves_tv_refl] >>
+          metis_tac[write_place_preserves_tv]) >>
+      simp[raise_def, preserves_tv_refl]) >>
+  simp[raise_def, preserves_tv_refl]
+QED
+
 Theorem append_place_preserves_tv:
   append_place cx p v st = (res,st') ==> preserves_tv cx st st'
 Proof
   Cases_on `p`
   >- (strip_tac >> irule preserves_tv_eq >>
       metis_tac[append_storage_place_scopes_immutables]) >>
-  simp[append_place_def, bind_def, lift_sum_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, ignore_bind_def, lift_sum_def, return_def, raise_def]) >>
-  rpt strip_tac >>
-  imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
-  gvs[] >> metis_tac[write_place_preserves_tv]
+  rewrite_tac[append_place_def] >>
+  MATCH_ACCEPT_TAC append_place_fallback_preserves_tv
 QED
 
 Theorem pop_place_preserves_tv:
