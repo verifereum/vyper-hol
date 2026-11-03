@@ -100,3 +100,4 @@ literal operand must not be replaced by a variable).
 ## Notes
 
 - See the SML comments next to the statements.
+- Useful pieces found in a read-only check (not built): `ctx_pass_stage_max_live_eom` (o1ComposeSupport) with SUE's `FSLE_Preserve` and `sue_expand_function_supply_structural` for `max_live_eom`; `frame_sim_mem_inv` + `mem_corr_closed_lowered_mem_fact` + `fn_bisim_ctx_bisim` for `mem_inv`, as in `simplify_cfg_stage_mem_inv`. `o1_ctx_shape_no_intret` lives in `o1ContractSimplifyCfgScript.sml`; adding that theory to `Ancestors` is fine. `sue_preserves_wf_function` in the legacy correctness theory is cheated and about the non-supply variant, so the step's `wf_function`/`fn_shape_ok` facts need their own proofs; `opaque_use_ok` is the subtle `o1_fn_shape` conjunct.
