@@ -421,6 +421,115 @@ Proof
   metis_tac[assignable_type_well_formed, well_formed_type_byte_bits]
 QED
 
+Theorem typed_byte_widths_mutual:
+  let W = (\env.
+    (!n ty. FLOOKUP env.var_types n = SOME ty ==> well_formed_type env.type_defs ty) /\
+    (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==> well_formed_vtype env.type_defs vt)) in
+  (!env e. well_typed_expr env e ==> W env ==> byte_widths_expr e) /\
+  (!env e. !vt. type_place_expr env e = SOME vt ==> W env ==>
+    byte_widths_expr e /\ well_formed_vtype env.type_defs vt) /\
+  (!env tgt. !vt. type_place_target env tgt = SOME vt ==> W env ==> byte_widths_target tgt) /\
+  (!env es. well_typed_exprs env es ==> W env ==> byte_widths_exprs es) /\
+  (!env opt. well_typed_opt env opt ==> W env ==> byte_widths_opt opt) /\
+  (!env kes. well_typed_named_exprs env kes ==> W env ==> byte_widths_named_exprs kes)
+Proof
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  ho_match_mp_tac well_typed_expr_ind >> conj_tac
+  >- (simp[well_typed_expr_def, byte_widths_expr_def] >>
+      metis_tac[well_formed_type_byte_bits]) >> conj_tac
+  >- (simp[well_typed_expr_def, byte_widths_expr_def] >>
+      metis_tac[well_formed_type_byte_bits]) >> conj_tac
+  >- (simp[well_typed_expr_def, byte_widths_expr_def] >>
+      metis_tac[well_formed_type_byte_bits]) >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      simp[well_typed_expr_def, byte_widths_expr_def] >>
+      metis_tac[well_formed_type_byte_bits]) >> conj_tac
+  >- (simp[well_typed_expr_def, byte_widths_expr_def] >>
+      metis_tac[well_formed_type_byte_bits]) >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      simp[well_typed_expr_def, byte_widths_expr_def] >>
+      metis_tac[well_formed_type_byte_bits]) >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      simp[well_typed_expr_def, byte_widths_expr_def] >>
+      metis_tac[well_formed_type_byte_bits]) >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      simp[well_typed_expr_def, byte_widths_expr_def] >>
+      metis_tac[well_formed_type_byte_bits]) >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      simp[well_typed_expr_def, byte_widths_expr_def] >>
+      metis_tac[well_formed_type_byte_bits]) >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      simp[well_typed_expr_def, byte_widths_expr_def] >>
+      metis_tac[well_formed_type_byte_bits]) >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      simp[well_typed_expr_def, byte_widths_expr_def] >>
+      metis_tac[assignable_array_element_byte_bits]) >>
+  suspend "calls_places"
+QED
+
+Resume typed_byte_widths_mutual[calls_places]:
+  rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      simp[well_typed_expr_def, byte_widths_expr_def] >>
+      metis_tac[well_formed_type_byte_bits])
+  >- (rpt gen_tac >> strip_tac >>
+      simp[well_typed_expr_def, byte_widths_expr_def] >>
+      metis_tac[well_formed_type_byte_bits])
+  >- (rpt gen_tac >> strip_tac >>
+      simp[well_typed_expr_def, byte_widths_expr_def, type_bits_def] >>
+      metis_tac[])
+  >- (rpt gen_tac >> strip_tac >>
+      simp[well_typed_expr_def, byte_widths_expr_def, raw_call_return_type_def,
+           type_bits_def] >>
+      Cases_on `flags.rcf_revert_on_failure` >>
+      Cases_on `flags.rcf_max_outsize = 0` >>
+      simp[type_bits_def] >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >>
+      simp[well_typed_expr_def, byte_widths_expr_def, raw_call_return_type_def,
+           type_bits_def] >>
+      Cases_on `flags.rcf_revert_on_failure` >>
+      Cases_on `flags.rcf_max_outsize = 0` >>
+      simp[type_bits_def] >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >>
+      simp[well_typed_expr_def, byte_widths_expr_def, type_bits_def] >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >>
+      simp[well_typed_expr_def, byte_widths_expr_def, type_bits_def] >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >>
+      simp[well_typed_expr_def, byte_widths_expr_def, type_bits_def] >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >>
+      simp[well_typed_expr_def, byte_widths_expr_def, type_bits_def] >> metis_tac[])
+  >- (simp[well_typed_expr_def, byte_widths_expr_def] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >>
+      metis_tac[vtype_annotation_byte_bits])
+  >- (rpt gen_tac >> strip_tac >>
+      simp[well_typed_expr_def, byte_widths_expr_def] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >>
+      metis_tac[subscript_vtype_well_formed, vtype_annotation_byte_bits]) >>
+  (* Impossible place expressions and empty containers simplify immediately. *)
+  simp[well_typed_expr_def, byte_widths_expr_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Finalise typed_byte_widths_mutual
+
+Theorem well_typed_expr_byte_widths:
+  well_typed_expr env e /\
+  (!n ty. FLOOKUP env.var_types n = SOME ty ==> well_formed_type env.type_defs ty) /\
+  (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+    well_formed_vtype env.type_defs vt) ==> byte_widths_expr e
+Proof
+  mp_tac typed_byte_widths_mutual >> simp[LET_THM] >> metis_tac[]
+QED
+
+Theorem type_place_target_byte_widths:
+  type_place_target env tgt = SOME vt /\
+  (!n ty. FLOOKUP env.var_types n = SOME ty ==> well_formed_type env.type_defs ty) /\
+  (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+    well_formed_vtype env.type_defs vt) ==> byte_widths_target tgt
+Proof
+  mp_tac typed_byte_widths_mutual >> simp[LET_THM] >> metis_tac[]
+QED
+
 Definition expr_sim_pre_def:
   expr_sim_pre cenv cx env e es <=>
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
