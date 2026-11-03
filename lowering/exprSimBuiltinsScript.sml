@@ -40,8 +40,8 @@
  * Unprovable as the definitions stand, to be fixed in the lowering or in
  * state_rel before their PRs:
  *   - compile_len_ctor_code_case, len of an immutable in the constructor:
- *     immutables_rel relates the immutable's first word to its whole
- *     value, not to its length.
+ *     nothing says the immutables buffer's base variable is 0, as
+ *     unwrap_ctor_immutable_word_sim (exprSimUnwrap).
  *   - compile_blockhash_case: the source raises a RuntimeError where
  *     BLOCKHASH returns 0 (#671), and call_ctx_rel does not relate the block
  *     hashes.
@@ -80,10 +80,13 @@ Ancestors
 (* ===== Lengths and calldata ===== *)
 
 (* len of an operand in code, an immutable, in the constructor: the
-   lowering loads the immutable's first word with ILOAD, but immutables_rel
-   relates that word to typed_val_to_w256 of the whole value, not to its
-   length, so this does not hold as the definitions stand.  (At runtime it
-   is exprSimLen's compile_len_vv_case.) *)
+   lowering loads the immutable's length word with an MLOAD at the
+   immutables buffer's base variable plus the offset.  The constructor's
+   prologue sets that variable to 0, but stmt_state_rel says nothing of it
+   (immutable_base_zero is not one of its conjuncts), so this does not hold
+   as the definitions stand; unwrap_ctor_immutable_word_sim (exprSimUnwrap)
+   is cheated for the same reason.  (At runtime it is exprSimLen's
+   compile_len_vv_case.) *)
 Theorem compile_len_ctor_code_case:
   !nocalls ctx func cenv cx ann args.
     exprs_case nocalls ctx func cenv cx args /\ cenv.ce_is_ctor /\

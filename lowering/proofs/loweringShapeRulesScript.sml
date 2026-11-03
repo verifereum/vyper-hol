@@ -786,3 +786,45 @@ Proof
     (qspecl_then [`inst`, `x`] mp_tac o REWRITE_RULE [opaque_insts_ok_def]) >>
   simp[retpc_use_ok_def] >> metis_tac[]
 QED
+
+(* Runtime data labels are legal only in CODECOPY's source position. *)
+Theorem shape_step_emit_runtime_codecopy:
+  !internal LP R dst sz.
+    shape_stable R ==>
+    shape_step internal LP
+      (\st. R st /\ EVERY (plain_operand st) [dst; sz])
+      (emit_void CODECOPY [dst; Label "runtime_begin"; sz])
+      (\u st. R st /\ EVERY (plain_operand st) [dst; sz])
+Proof
+  rpt strip_tac >> simp[shape_step_def] >> rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPECL [`internal`, `LP`,
+    `\st. R st /\ EVERY (plain_operand st) [dst; sz]`,
+    `CODECOPY`, `[dst; Label "runtime_begin"; sz]`] shape_step_emit_void) >>
+  (impl_tac >-
+    (conj_tac >- simp[shape_stable_conj, shape_stable_plain_operands] >>
+     simp[lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def,
+       inst_shape_ok_def, is_read0_opcode_def, label_positions_ok_def,
+       inst_jump_labels_ok_def, is_terminator_def, is_param_opcode_def] >>
+     gvs[plain_operand_def] >> Cases_on `dst` >> Cases_on `sz` >>
+     gvs[stackPlanTypesTheory.is_label_operand_def])) >>
+  simp[shape_step_def] >>
+  disch_then (qspecl_then [`st`, `st'`] mp_tac) >>
+  simp[label_or_plain_def, stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem shape_step_emit_entry_return:
+  !LP dst sz.
+    shape_step F LP (\st. EVERY (plain_operand st) [dst; sz])
+      (emit_inst RETURN [dst; sz] []) (\u st. T)
+Proof
+  rpt gen_tac >> simp[shape_step_def] >> rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPECL [`F`, `LP`, `\st. T`, `RETURN`, `[dst; sz]`, `[]`]
+    shape_step_emit_inst) >>
+  (impl_tac >-
+    (simp[shape_stable_def, lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def,
+       inst_shape_ok_def, is_read0_opcode_def, label_positions_ok_def,
+       inst_jump_labels_ok_def, is_terminator_def, is_param_opcode_def] >>
+     gvs[plain_operand_def] >> Cases_on `dst` >> Cases_on `sz` >>
+     gvs[stackPlanTypesTheory.is_label_operand_def])) >>
+  simp[shape_step_def, label_or_plain_def] >> metis_tac[]
+QED
