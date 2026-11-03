@@ -367,3 +367,129 @@ QED
    an artificial STOP does not yet exclude every run_from Abort outcome
    of the whole statement in the required runtime context.
 *)
+
+Theorem aug_place_compute_key_lookup:
+  lookup_callable_function aug_place_compute_cx.in_deploy "key"
+    aug_place_compute_tops =
+    SOME (Nonpayable,F,[],[],BaseT (UintT 256),aug_place_compute_body) /\
+  bind_arguments (get_tenv aug_place_compute_cx) [] [] = SOME FEMPTY /\
+  evaluate_type (get_tenv aug_place_compute_cx) (BaseT (UintT 256)) =
+    SOME (BaseTV (UintT 256))
+Proof
+  EVAL_TAC
+QED
+
+Theorem aug_place_compute_key_push:
+  push_function (NONE,"key") FEMPTY aug_place_compute_cx st =
+    (INL (aug_place_compute_cx with stk updated_by CONS (NONE,"key")),
+     st with scopes := [FEMPTY])
+Proof
+  simp[push_function_def, return_def]
+QED
+
+(* INDEPENDENT KEY SIMULATION DEPENDENCY AUDIT (C1.2.6.6).
+   Use the abbreviations C, K, U and P from the earlier ledger. Let
+     CF = C with stk updated_by CONS (NONE,"key").
+   Checked key_lookup/key_push above fix the callee to Nonpayable,
+   nr=F, args=[], defaults=[], ret=U, body=aug_place_compute_body;
+   bind_arguments yields FEMPTY; push_function preserves all context
+   fields except stk and installs [FEMPTY] as scopes for ANY st.
+   No-argument/default obligations in body_intcall_case specialize to
+   body_results_ok C [] and body_exprs_ok CF [], both definitionally T.
+   The remaining body IH in that admitted template is exactly
+     body_stmts_ok CF aug_place_compute_body,
+   not a property of just aug_place_compute_initial.
+
+   The actual desired independent key theorem has the exact interface
+     !tops ctx func cenv env ty es.
+       body_inv tops ctx cenv C /\ expr_body_pre cenv C env K es ==>
+       expr_sim ctx func cenv C ty K es /\
+       expr_vv_sim ctx func cenv C ty K es.
+   Expanding only the judgments (exprSimScript.sml:533,691), its two
+   residual goals quantify sa,sb,op (or vv),res,es',s0. Given lowering,
+   source evaluation, acceptable source result, fn_has_code, distinct
+   ids, local_ptrs_reserved, they must conclude respectively:
+     frag_exec ctx sa sb
+       (\s. s = s0 /\ stmt_state_rel ctx func cenv C es s)
+       (\s. ?v. res = INL v /\
+         expr_post ctx func cenv C K es sa sb s0 es' v op s)
+       (expr_exit res)
+   and the same with success tv and vv_post, source eval_expr rather
+   than eval_expr/read_result, and compile_expr rather than lower_value.
+   All cenv, env, ty, es, func and related backend states remain arbitrary.
+
+   Candidate call boundaries, inspected at SOURCE (not certified here as
+   transitively admission-free theory exports):
+   * intCallStep:250 compile_call_intcall_shape has an ordinary proof,
+     no body theorem dependency. With args=[] it still splits on
+       cenv.ce_func_info "key" = (ret_count,rbs,pvs):
+     positive ret_count allocates a result buffer, emits multi-INVOKE
+     and store_multi_results; zero count/positive rbs uses an explicit
+     buffer operand; count=rbs=0 emits no-result INVOKE and StackValue 0.
+     This shape theorem's own tag audit at :309 rejects admissions.
+   * intCallLookup:214 lower_vyper_runtime_unit_internal_lookup has an
+     ordinary proof from runtime lowering and membership in tops. It
+     supplies lookup_function at internal_fn_label (build_func_ids 0 P
+     "key") "key" [] F and a nonempty mk_internal_function. It supplies
+     code identity, NOT a simulation of the body or a return run.
+   * intCallCallee:2311 compile_internal_prologue_entry has an ordinary
+     proof, no body IH. Its exact input boundary includes compiled
+     prologue and code identity/distinct ids, empty initial instruction
+     list and head block, setup_callee, state_rel with scopes [],
+     internal_immutable_regions, internal_args_rel, stack-size bound and
+     alloca_room. Its output is stmt_state_rel at the body entry with
+     [env], fresh vars, saved return PC, optional return buffer, and
+     run_from continuation. For this call env=FEMPTY, params=[]; the
+     memory/allocator/code and typing transfer premises do not vanish.
+   * intCallStep:223 frag_exec_invoke_intret has an ordinary proof and
+     REQUIRES for every entry satisfying P a decode_invoke, lookup,
+     eval_operands, setup_callee, and run_blocks fuel ctx callee cs =
+     IntRet ret cs', with output length and Q on the merged state.
+     It does not produce that IntRet execution from a source body.
+   * intCallReturn:44 eval_expr_intcall_return has an ordinary proof;
+     with empty args it still requires source eval_stmts CF body
+     (es with scopes := [FEMPTY]) = (INR(ReturnException v),es2) and
+     value_has_type, yielding source value v and restored scopes.
+   * intCallReturn:221 invoke_intret_state_rel has an ordinary proof;
+     input includes the actual IntRet run, intret_q callee cenv' CF,
+     state_rel, immutable_alloca_sep, output freshness, context/module
+     agreements, and callee_writes_above with disjoint exclusions.
+     Output is caller stmt_state_rel with restored scopes and matched
+     return values. Neither this nor the previous theorem builds the
+     semantic callee-body judgment required to obtain the IntRet run.
+
+   Admission/circularity barriers:
+   * bodySimExprCases:395-465 body_intcall_case ends in cheat. It is NOT
+     an independent call-composition theorem even with no arguments.
+     Its own :362-394 comment explicitly identifies unproved transfer
+     of body_inv, expr_sim_inv, frame_ret_ok and body-code equality.
+   * bodySimStmtCases:1473 body_assign_toplevel_copy is proved but
+     expressly excludes EVERY ArrayT elem (Dynamic n). Our first callee
+     statement assigns exactly such a type, so it cannot be used.
+     body_assign_case reaches body_assign_other for this top-level
+     dynamic-array assignment; body_assign_other :1610-1654 is cheat.
+     Therefore generic body_stmt_ok/body_stmts_ok derivation through
+     those case lemmas would inherit an admission, even though this
+     concrete body contains no AugAssign and is not syntactically
+     circular in body_augassign_place. Its independent mutation proof
+     would need a new dynamic-array-storage-copy statement boundary.
+   * More immediately, body_inv_def and expr_body_pre/expr_sim_inv_def
+     do not constrain ce_func_info at all (source inspection), whereas
+     compile_call_intcall_shape branches on it. In particular the
+     no-result branch cannot simply be replaced by the expected
+     single-word return branch in a proof for ALL cenv. A producer for
+     the correct descriptor (and any constraints on arbitrary compile
+     type ty) is not present in this audited semantic interface. This
+     is a concrete interface obstruction, not checked exclusion.
+
+   Decision: the inspected proved fragments do NOT by themselves give
+   a small independent proof of body_expr_ok C K. The earliest missing
+   bridge is universal caller-to-callee code/descriptor and invariant
+   transfer; an independent semantic dynamic-storage-copy statement
+   boundary is additionally needed for the callee body. Proving either
+   universal key correctness or its negation is NOT accomplished by
+   finite raw execution, which fixes CE and one state instead of the
+   quantified interface above. Do not undertake general call simulation,
+   infer the fixture excluded, or resume the captured-load producer
+   based on this report. Request a gate-level strategy decision.
+*)
