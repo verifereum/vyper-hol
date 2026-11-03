@@ -33,6 +33,13 @@ Proof
   gvs[AllCaseEqs(), update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
+Theorem abi_decoder_alloca32_step[local]:
+  step_inst_base (mk_inst id ALLOCA [Lit 32w] [out]) s =
+  exec_alloca (mk_inst id ALLOCA [Lit 32w] [out]) s 32w
+Proof
+  simp[Once step_inst_base_def, mk_inst_def]
+QED
+
 Theorem abi_decoder_alloc_buffer_reentry:
   compile_alloc_buffer 32 st = (buf,st') /\
   abi_decoder_budget first last b cap s /\
@@ -65,9 +72,10 @@ Proof
   `st.cs_next_var < limit_st.cs_next_var` by decide_tac >>
   drule_all abi_decoder_register_update >> strip_tac >>
   `run_inst_seq (emitted_insts st allocation_st) s = OK t` by
-    (simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def] >>
+    (simp[run_inst_seq_def, abi_decoder_alloca32_step] >>
      qpat_x_assum `exec_alloca alloc_inst s 32w = OK t` mp_tac >>
-     simp[Abbr`alloc_inst`, mk_inst_def]) >>
+     simp_tac bool_ss [Abbr`alloc_inst`, mk_inst_def] >>
+     strip_tac >> asm_rewrite_tac []) >>
   qexistsl_tac [`t`, `p`] >>
   gvs[Abbr`alloc_inst`, mk_inst_def, eval_operand_def]
 QED
