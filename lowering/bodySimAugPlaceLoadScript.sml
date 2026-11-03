@@ -4,7 +4,8 @@ Ancestors
   targetPlaceSim valueEncoding valueEncodingProps
   vyperState vyperValue vyperMisc list pair finite_map words
   vyperTypeInvariants exprSimHyps vyperTyping vyperPlaceFrames
-  vyperInterpreter vyperScopePreservation
+  vyperInterpreter vyperScopePreservation vyperValueOperation
+  vyperPlaceStatePreservation vyperAssignPreservesType
 
 Theorem aug_place_projection_needs_shape:
   mem_path_offset (StructTV [("a",BaseTV BoolT);("b",BaseTV BoolT)])
@@ -108,4 +109,155 @@ Proof
   rpt strip_tac >>
   `s'.scopes = st.scopes` by metis_tac[aug_place_supported_expr_scopes] >>
   gvs[] >> metis_tac[aug_place_target_entry_typed]
+QED
+
+Theorem aug_place_fields_project:
+  !fts fs id off ptv base mem v.
+    struct_has_type fts fs /\ fields_in_memory fs fts base mem /\
+    mem_field_offset fts id = SOME (off,ptv) /\ ALOOKUP fs id = SOME v ==>
+    value_has_type ptv v /\ val_in_memory ptv v (base + off) mem
+Proof
+  Induct >> gen_tac >> Cases_on `fs` >>
+  simp[value_has_type_def, mem_field_offset_def] >>
+  rename1 `struct_has_type (ft::fts) (fv::rest)` >>
+  PairCases_on `ft` >> PairCases_on `fv` >>
+  simp[value_has_type_def, val_in_memory_def] >> rpt gen_tac >>
+  strip_tac >> gvs[] >> Cases_on `ft0 = id` >>
+  gvs[mem_field_offset_def, AllCaseEqs()] >>
+  PairCases_on `z` >> gvs[] >> first_x_assum drule_all >>
+  simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
+Theorem aug_place_elems_project:
+  !vs i base tv mem.
+    elems_in_memory vs base tv mem /\ i < LENGTH vs ==>
+    val_in_memory tv (EL i vs) (base + i * type_memory_size tv) mem
+Proof
+  Induct >> simp[val_in_memory_def] >> rpt gen_tac >>
+  Cases_on `i` >> simp[val_in_memory_def] >> strip_tac >>
+  first_x_assum drule_all >>
+  simp_tac bool_ss [arithmeticTheory.MULT_CLAUSES,
+    AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
+Theorem aug_place_sparse_project:
+  !kvs i base tv mem v.
+    kvs_in_memory kvs base tv mem /\ ALOOKUP kvs i = SOME v ==>
+    val_in_memory tv v (base + i * type_memory_size tv) mem
+Proof
+  Induct >> simp[val_in_memory_def] >> PairCases >>
+  simp[val_in_memory_def] >> rpt gen_tac >>
+  Cases_on `h0 = i` >> simp[] >> metis_tac[]
+QED
+
+Theorem aug_place_tuple_project:
+  !tvs vs i base mem.
+    values_have_types tvs vs /\ tuple_in_memory vs tvs base mem /\
+    i < LENGTH tvs ==>
+    val_in_memory (EL i tvs) (EL i vs)
+      (base + type_memory_size_list (TAKE i tvs)) mem
+Proof
+  Induct >> gen_tac >> Cases_on `vs` >>
+  simp[value_has_type_def, val_in_memory_def] >> rpt gen_tac >>
+  Cases_on `i` >> simp[value_has_type_def, val_in_memory_def, type_memory_size_def] >>
+  strip_tac >> first_x_assum drule_all >>
+  simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
+Theorem aug_place_array_project:
+  !tv bd av i off etv base mem v.
+    value_has_type (ArrayTV tv bd) (ArrayV av) /\
+    val_in_memory (ArrayTV tv bd) (ArrayV av) base mem /\
+    mem_step_offset (ArrayTV tv bd) (ValueSubscript (IntV i)) = SOME (off,etv) /\
+    array_index (ArrayTV tv bd) av i = SOME v ==>
+    val_in_memory etv v (base + off) mem
+Proof
+  rpt gen_tac >> Cases_on `bd` >> Cases_on `av` >>
+  simp[value_has_type_def, val_in_memory_def, mem_step_offset_def,
+       array_index_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+  >- (Cases_on `ALOOKUP l (Num i)` >> gvs[] >>
+      metis_tac[aug_place_sparse_project])
+  >> gvs[oEL_THM] >> drule_all aug_place_elems_project >>
+  simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
+Theorem aug_place_step_project:
+  !tv a sb off etv v base mem.
+    value_has_type tv a /\ well_formed_type_value tv /\
+    val_in_memory tv a base mem /\ mem_step_offset tv sb = SOME (off,etv) /\
+    evaluate_subscripts tv a [sb] = INL v ==>
+    val_in_memory etv v (base + off) mem
+Proof
+  Cases >> rpt gen_tac >> Cases_on `sb` >>
+  TRY (rename1 `ValueSubscript sv` >> Cases_on `sv`) >>
+  simp[mem_step_offset_def] >> rpt strip_tac
+  >~ [`value_has_type (ArrayTV _ _) _`] >- suspend "array"
+  >~ [`value_has_type (TupleTV _) _`] >- suspend "tuple"
+  >> suspend "struct"
+QED
+Resume aug_place_step_project[array]:
+  Cases_on `a` >> gvs[value_has_type_def] >>
+  irule aug_place_array_project >> goal_assum (drule_at Any) >>
+  gvs[evaluate_subscripts_def, AllCaseEqs()] >> metis_tac[]
+QED
+Resume aug_place_step_project[tuple]:
+  Cases_on `a` >> gvs[value_has_type_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >> gvs[value_has_type_def] >>
+  gvs[evaluate_subscripts_def, array_index_def, oEL_THM,
+      subscript_type_def, val_in_memory_def, AllCaseEqs()] >>
+  irule aug_place_tuple_project >> goal_assum (drule_at Any) >> simp[]
+QED
+Resume aug_place_step_project[struct]:
+  Cases_on `a` >> gvs[value_has_type_def, val_in_memory_def] >>
+  gvs[evaluate_subscripts_def, AllCaseEqs()] >>
+  drule_all aug_place_fields_project >> simp[]
+QED
+Finalise aug_place_step_project
+
+Theorem aug_place_field_type:
+  !fts id off etv.
+    mem_field_offset fts id = SOME (off,etv) ==> ALOOKUP fts id = SOME etv
+Proof
+  Induct >> simp[mem_field_offset_def] >> PairCases >>
+  simp[mem_field_offset_def] >> rpt gen_tac >>
+  Cases_on `h0 = id` >> simp[AllCaseEqs()] >> rpt strip_tac >>
+  PairCases_on `z` >> gvs[] >> metis_tac[]
+QED
+
+Theorem aug_place_step_type:
+  !tv sb off etv.
+    mem_step_offset tv sb = SOME (off,etv) ==>
+    subscript_type tv sb = SOME etv
+Proof
+  Cases >> Cases >> simp[mem_step_offset_def, subscript_type_def] >>
+  TRY (rename1 `ValueSubscript sv` >> Cases_on `sv` >>
+       simp[mem_step_offset_def, subscript_type_def]) >>
+  rpt gen_tac
+  >- (Cases_on `b` >> simp[mem_step_offset_def, subscript_type_def,
+                          vyperASTTheory.bound_length_def] >> metis_tac[])
+  >> metis_tac[aug_place_field_type]
+QED
+
+Theorem aug_place_path_project:
+  !path tv a base mem off ptv v.
+    value_has_type tv a /\ well_formed_type_value tv /\
+    val_in_memory tv a base mem /\ mem_path_offset tv path = SOME (off,ptv) /\
+    evaluate_subscripts tv a path = INL v ==>
+    val_in_memory ptv v (base + off) mem
+Proof
+  Induct >> simp[mem_path_offset_def, evaluate_subscripts_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[AllCaseEqs()] >> PairCases_on `z` >> gvs[] >>
+  `subscript_type tv h = SOME etv` by metis_tac[aug_place_step_type] >>
+  drule evaluate_subscripts_cons_typed >>
+  disch_then (qspecl_then [`path`,`a`] mp_tac) >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  `well_formed_type_value etv` by metis_tac[subscript_type_well_formed] >>
+  `subscripts_type tv [h] = SOME etv` by simp[subscripts_type_def] >>
+  `value_has_type etv v'` by metis_tac[evaluate_subscripts_type] >>
+  `val_in_memory etv v' (base' + k) mem` by
+    metis_tac[aug_place_step_project] >>
+  `evaluate_subscripts etv v' path = INL v` by metis_tac[] >>
+  first_x_assum drule_all >>
+  simp_tac bool_ss [arithmeticTheory.ADD_ASSOC]
 QED
