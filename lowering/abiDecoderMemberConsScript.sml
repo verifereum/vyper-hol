@@ -28,8 +28,8 @@ Proof
 QED
 
 Theorem abi_decoder_member_exit_phi:
-  compile_abi_decode_to_buf childdst childsrc opc hi di middle = ((),end_st) /\
-  abi_decode_member_setup dst src opc hi dyn ao vo end_st = (ops,next_st) /\
+  compile_abi_decode_to_buf childdst childsrc opc base_op hi di middle = ((),end_st) /\
+  abi_decode_member_setup dst src opc base_op hi dyn ao vo end_st = (ops,next_st) /\
   cs_extends next_st final /\ fn_has_code next_st final func /\
   abi_decode_source_opcode opc ==>
   middle.cs_blocks = end_st.cs_blocks \/
@@ -51,7 +51,7 @@ QED
    TOP-LEVEL: abi_decoder_member_cons_trace, abi_decoder_member_cons_code.
    Helper: arbitrary member-list compilation extends code and SSA counters. *)
 Theorem abi_decoder_members_extends:
-  compile_abi_decode_complex_elems dst src opc hi elems ao vo st = ((),final) ==>
+  compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo st = ((),final) ==>
   cs_extends st final /\ st.cs_next_var <= final.cs_next_var
 Proof
   strip_tac >> conj_tac
@@ -60,14 +60,14 @@ Proof
 QED
 
 Theorem abi_decoder_member_cons_trace:
-  compile_abi_decode_complex_elems dst src opc hi (abi_decoder_member_infos sf ce (ty::tys))
+  compile_abi_decode_complex_elems dst src opc base_op hi (abi_decoder_member_infos sf ce (ty::tys))
     ao vo st = ((),final) ==>
   ?ops middle end_st.
-    abi_decode_member_setup dst src opc hi (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
+    abi_decode_member_setup dst src opc base_op hi (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
       ao vo st = (ops,middle) /\
-    compile_abi_decode_to_buf (SND ops) (FST ops) opc hi
+    compile_abi_decode_to_buf (SND ops) (FST ops) opc base_op hi
       (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
-    compile_abi_decode_complex_elems dst src opc hi (abi_decoder_member_infos sf ce tys)
+    compile_abi_decode_complex_elems dst src opc base_op hi (abi_decoder_member_infos sf ce tys)
       (ao + abi_embedded_static_size ce.ce_struct_fields ty)
       (vo + type_memory_bytes ce ty) end_st = ((),final)
 Proof
@@ -75,15 +75,15 @@ Proof
   rewrite_tac [abi_decode_complex_member_phases] >>
   simp_tac bool_ss [comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
-  rename1 `abi_decode_member_setup dst src opc hi _ ao vo st = (ops,middle)` >>
-  rename1 `compile_abi_decode_to_buf _ _ opc hi _ middle = ((),end_st)` >>
+  rename1 `abi_decode_member_setup dst src opc base_op hi _ ao vo st = (ops,middle)` >>
+  rename1 `compile_abi_decode_to_buf _ _ opc base_op hi _ middle = ((),end_st)` >>
   qexistsl_tac [`ops`, `middle`, `end_st`] >> simp[]
 QED
 
 Theorem abi_decoder_member_cons_code:
-  abi_decode_member_setup dst src opc hi dyn ao vo st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) opc hi di middle = ((),end_st) /\
-  compile_abi_decode_complex_elems dst src opc hi elems next_ao next_vo end_st = ((),final) /\
+  abi_decode_member_setup dst src opc base_op hi dyn ao vo st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND ops) (FST ops) opc base_op hi di middle = ((),end_st) /\
+  compile_abi_decode_complex_elems dst src opc base_op hi elems next_ao next_vo end_st = ((),final) /\
   abi_decode_source_opcode opc /\ fn_has_code st final func ==>
   cs_extends st middle /\ cs_extends middle end_st /\ cs_extends end_st final /\
   cs_extends st end_st /\ cs_extends middle final /\
@@ -115,10 +115,10 @@ Proof
 QED
 
 Theorem abi_decoder_members_entry_code:
-  compile_abi_decode_complex_elems dst src opc hi (abi_decoder_member_infos sf ce (ty::tys))
+  compile_abi_decode_complex_elems dst src opc base_op hi (abi_decoder_member_infos sf ce (ty::tys))
     ao vo st = ((),final) /\ abi_decode_source_opcode opc /\ fn_has_code st final func ==>
   ?ops middle.
-    abi_decode_member_setup dst src opc hi (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
+    abi_decode_member_setup dst src opc base_op hi (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
       ao vo st = (ops,middle) /\
     cs_extends middle final /\ fn_has_code middle final func
 Proof
@@ -140,8 +140,8 @@ Proof
 QED
 
 Theorem abi_decoder_members_child_phi:
-  compile_abi_decode_to_buf childdst childsrc opc hi di middle = ((),end_st) /\
-  compile_abi_decode_complex_elems dst src opc hi (abi_decoder_member_infos sf ce tys)
+  compile_abi_decode_to_buf childdst childsrc opc base_op hi di middle = ((),end_st) /\
+  compile_abi_decode_complex_elems dst src opc base_op hi (abi_decoder_member_infos sf ce tys)
     ao vo end_st = ((),final) /\
   middle.cs_blocks = st.cs_blocks /\ abi_decode_source_opcode opc /\
   fn_has_code end_st final func /\
@@ -176,8 +176,8 @@ Proof
   mp_tac (Q.INST [`ao` |-> `SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys))`,
     `vo` |-> `SUM (MAP (type_memory_bytes ce) pretys)`] abi_decoder_member_cons_trace) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  rename1 `abi_decode_member_setup dst src opc hi _ _ _ st = (ops,middle)` >>
-  rename1 `compile_abi_decode_to_buf _ _ opc hi _ middle = ((),end_st)` >>
+  rename1 `abi_decode_member_setup dst src opc base_op hi _ _ _ st = (ops,middle)` >>
+  rename1 `compile_abi_decode_to_buf _ _ opc base_op hi _ middle = ((),end_st)` >>
   drule_all abi_decoder_member_cons_code >> strip_tac >>
   drule_all abi_decode_member_setup_shape >> strip_tac >>
   drule_all abi_decoder_members_child_phi >> disch_then assume_tac >>
