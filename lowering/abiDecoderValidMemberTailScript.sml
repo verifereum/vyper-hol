@@ -11,10 +11,11 @@ val member_cursor_rewrites = [MAP_APPEND, MAP, SUM_APPEND, SUM,
 
 Theorem abi_decoder_valid_member_tail_execute:
   abi_decoder_valid_members_correct ce env sf tys tvs /\
-  compile_abi_decode_complex_elems dst src opc hi (abi_decoder_member_infos sf ce tys)
+  compile_abi_decode_complex_elems dst src opc base_op hi (abi_decoder_member_infos sf ce tys)
     (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)) +
       abi_embedded_static_size ce.ce_struct_fields ty)
     (SUM (MAP (type_memory_bytes ce) pretys) + type_memory_bytes ce ty) st = ((),final) /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
   fn_has_code st final func /\
   (st.cs_blocks = final.cs_blocks \/
     !bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -23,14 +24,14 @@ Theorem abi_decoder_valid_member_tail_execute:
     (abi_decode_members (MAP (vyper_to_abi_type env) (ty::tys)) bs
       (DROP (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys))) bs)) (v::vs) /\
   vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys)) bs bs /\
-  abi_decoder_ranges opc hi src dst sb
+  abi_decoder_ranges opc base_op hi src dst B sb
     (LENGTH bs)
     d (SUM (MAP (type_memory_bytes ce) (pretys ++ ty::tys))) b cap initial /\
-  mem_bytes_at sb (LENGTH bs) (abi_decode_source opc initial) =
+  mem_bytes_at (B+sb) (LENGTH bs) (abi_decode_source opc initial) =
     bs /\
   val_in_memory tv v (d + SUM (MAP (type_memory_bytes ce) pretys)) initial.vs_memory /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
-  abi_decoder_operand_live st.cs_next_var hi /\
+  abi_decoder_operand_live st.cs_next_var hi /\ abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ final.cs_next_id <= last /\
   final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
@@ -53,7 +54,7 @@ Proof
   SUBGOAL_THEN ``d + SUM (MAP (type_memory_bytes ce) pretys) + type_memory_size tv +
       SUM (MAP (type_memory_bytes ce) tys) <= b \/
    b + cap <= d + SUM (MAP (type_memory_bytes ce) pretys)`` assume_tac
-  >- (qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  >- (qhdtm_assum `abi_decoder_ranges`
       (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
      gvs[MAP_APPEND, SUM_APPEND, Excl "enc_def"] >> decide_tac) >>
   mp_tac (Q.INST [`cell` |-> `d + SUM (MAP (type_memory_bytes ce) pretys)`,
