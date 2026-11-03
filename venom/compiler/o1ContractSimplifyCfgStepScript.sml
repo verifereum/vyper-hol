@@ -14,6 +14,7 @@ Ancestors
   o1PassContract simplifyCfgCorrectness simplifyCfgLabelProps
   simplifyCfgDefs simplifyCfgInvariant simplifyCfgCollapseShape
   simplifyCfgOpaque unitShapeDefs cfgTransform venomPassDispatcher venomWf
+  venomInst list
 
 Theorem simplify_cfg_entry_no_return:
   entry_fn_no_return f ==>
@@ -75,7 +76,6 @@ Proof
       rpt strip_tac >> simp[]) >> simp[]
 QED
 
-(* Assembly draft retained for C1.7.4.2.
 Theorem simplify_cfg_structural_shape:
   o1_fn_shape ctx f ==>
   EVERY inst_wf (fn_insts (FST (simplify_cfg_fn_with_labels f))) /\
@@ -87,14 +87,59 @@ Theorem simplify_cfg_structural_shape:
   (HD (FST (simplify_cfg_fn_with_labels f)).fn_blocks).bb_label =
     (HD f.fn_blocks).bb_label
 Proof
-  strip_tac >> irule (BETA_RULE simplify_cfg_fn_structural_shape) >>
-  gvs[o1_fn_shape_def, wf_function_def, fn_has_entry_def,
-    fn_inst_wf_def, fn_shape_ok_def, inst_shape_ok_def,
-    first_block_no_phi_def, EVERY_MEM, fn_insts_def,
-    fn_insts_blocks_MEM]
+  strip_tac >>
+  mp_tac (Q.INST [`e` |-> `(HD f.fn_blocks).bb_label`]
+    (BETA_RULE simplify_cfg_fn_structural_shape)) >>
+  (impl_tac
+   >- (gvs[o1_fn_shape_def, wf_function_def, fn_has_entry_def,
+         fn_inst_wf_def, fn_shape_ok_def, inst_shape_ok_def,
+         first_block_no_phi_def, EVERY_MEM, fn_insts_def,
+         fn_insts_blocks_MEM] >> metis_tac[])) >>
+  simp[first_block_no_phi_def]
 QED
 
-*)
+Theorem simplify_cfg_inst_shape:
+  o1_fn_shape ctx f ==>
+  EVERY inst_shape_ok (fn_insts (FST (simplify_cfg_fn_with_labels f)))
+Proof
+  strip_tac >>
+  `EVERY (\i. ~MEM i.inst_opcode
+      [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT; DJMP; OFFSET])
+    (fn_insts (FST (simplify_cfg_fn_with_labels f)))` by
+    (ho_match_mp_tac simplify_cfg_fn_with_labels_opcodes >>
+     gvs[o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM, inst_shape_ok_def]) >>
+  `EVERY (\i. is_read0_opcode i.inst_opcode ==> i.inst_operands = [])
+    (fn_insts (FST (simplify_cfg_fn_with_labels f)))` by
+    (irule simplify_cfg_read0_operands >>
+     gvs[o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM, inst_shape_ok_def]) >>
+  drule simplify_cfg_structural_shape >> strip_tac >>
+  `wf_function f /\ fn_inst_wf f` by gvs[o1_fn_shape_def] >>
+  mp_tac (Q.INST [`fn` |-> `f`] simplify_cfg_phi_two_pairs) >>
+  simp[simplify_cfg_fn_def] >> strip_tac >>
+  gvs[EVERY_MEM, inst_shape_ok_def] >> metis_tac[]
+QED
+
+Theorem simplify_cfg_fn_shape:
+  o1_fn_shape ctx f ==> fn_shape_ok (FST (simplify_cfg_fn_with_labels f))
+Proof
+  strip_tac >> drule simplify_cfg_structural_shape >> strip_tac >>
+  drule simplify_cfg_inst_shape >> strip_tac >>
+  `opaque_use_ok f` by gvs[o1_fn_shape_def, fn_shape_ok_def] >>
+  drule simplify_cfg_opaque_use_ok >> strip_tac >>
+  `ALL_DISTINCT (fn_labels f)` by gvs[o1_fn_shape_def, wf_function_def] >>
+  drule simplify_cfg_fn_with_labels_transition >> strip_tac >>
+  `fn_identity_metadata_eq (FST (simplify_cfg_fn_with_labels f)) f` by
+    (irule (cj 1 simplify_cfg_fn_with_labels_metadata) >>
+     qexists_tac `SND (simplify_cfg_fn_with_labels f)` >> simp[]) >>
+  gvs[fn_shape_ok_def] >> conj_tac
+  >- (gvs[o1_fn_shape_def, fn_shape_ok_def, fn_entry_label_def,
+          entry_block_def, fn_identity_metadata_eq_def, NULL_EQ] >>
+      Cases_on `f.fn_blocks` >> gvs[]) >>
+  `EVERY (\bb. ~reserved_label bb.bb_label) f.fn_blocks` by
+    gvs[o1_fn_shape_def, fn_shape_ok_def] >>
+  gvs[label_map_transition_def, EVERY_MEM, fn_labels_def, MEM_MAP] >>
+  metis_tac[]
+QED
 
 Theorem simplify_cfg_step_contract:
   o1_step_contract rpolicy (CFP_Simple VP_SimplifyCFG)
