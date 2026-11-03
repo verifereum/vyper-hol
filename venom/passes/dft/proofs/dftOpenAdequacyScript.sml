@@ -783,3 +783,164 @@ Proof
   simp[dft_open_next_def, dft_open_return_def,
        dft_open_inst_boundary_def, dft_open_run_boundary_def]
 QED
+
+(* Structural first-exit predicates for the recursion-aligned certificates.
+   Classified endpoints, not these predicates, justify stack clearing. *)
+Definition dft_open_fatal_def:
+  dft_open_fatal r <=>
+    (?e. r = Error e) \/ (?s. r = Halt s) \/ (?z s. r = Abort z s)
+End
+
+Definition dft_open_classified_exit_def:
+  dft_open_classified_exit stack rr d m <=>
+    ?st. d = DftOpen (DftDone rr) st m /\
+      (st = stack \/ (st = [] /\ dft_open_fatal rr))
+End
+
+Definition dft_open_block_exit_def:
+  dft_open_block_exit fn budget stack c <=>
+    dft_open_stack_exit stack c \/
+    (?t m. c = DftOpen (DftEnter fn budget t) stack m)
+End
+
+Definition dft_open_inst_exit_def:
+  dft_open_inst_exit fn budget bb stack i c <=>
+    dft_open_block_exit fn budget stack c \/
+    (?t m. c = DftOpen (DftAt fn budget bb t) stack m /\ t.vs_inst_idx = SUC i)
+End
+
+Definition dft_open_step_segment_def:
+  dft_open_step_segment a xs ctx fn budget bb inst s stack n r <=>
+    ?rr m k d. n <= m /\ 0 < k /\
+      dft_open_result_eq (dft_open_materialize_result xs m rr) r /\
+      dft_first_hit (dft_open_next a ctx)
+        (dft_open_inst_exit fn budget bb stack s.vs_inst_idx)
+        (DftOpen (DftAt fn budget bb s) stack n) k d /\
+      (case rr of
+         OK t => d = dft_open_deliver fn budget bb inst s stack m rr
+       | _ => dft_open_classified_exit stack rr d m)
+End
+
+Definition dft_open_block_segment_def:
+  dft_open_block_segment a xs ctx fn budget bb s stack n r <=>
+    ?rr m k d. n <= m /\ 0 < k /\
+      dft_open_result_eq (dft_open_materialize_result xs m rr) r /\
+      dft_first_hit (dft_open_next a ctx)
+        (dft_open_block_exit fn budget stack)
+        (DftOpen (DftAt fn budget bb s) stack n) k d /\
+      (case rr of
+         OK t => ~t.vs_halted /\ d = DftOpen (DftEnter fn budget t) stack m
+       | _ => dft_open_classified_exit stack rr d m)
+End
+
+Definition dft_open_run_segment_def:
+  dft_open_run_segment a xs ctx fn fuel s stack n r <=>
+    ?rr m k d. n <= m /\ 0 < k /\
+      dft_open_result_eq (dft_open_materialize_result xs m rr) r /\
+      (!t. rr <> OK t) /\
+      dft_first_hit (dft_open_next a ctx) (dft_open_stack_exit stack)
+        (DftOpen (DftEnter fn fuel s) stack n) k d /\
+      dft_open_classified_exit stack rr d m
+End
+
+Theorem dft_open_inst_exit_initial:
+  ~dft_open_inst_exit fn budget bb stack s.vs_inst_idx
+    (DftOpen (DftAt fn budget bb s) stack n)
+Proof
+  simp[dft_open_inst_exit_def, dft_open_block_exit_def, dft_open_stack_exit_def]
+QED
+
+Theorem dft_open_boundary_is_exit:
+  dft_open_inst_boundary fn budget bb stack i c ==>
+  dft_open_inst_exit fn budget bb stack i c
+Proof
+  simp[dft_open_inst_boundary_def, dft_open_run_boundary_def,
+       dft_open_inst_exit_def, dft_open_block_exit_def, dft_open_stack_exit_def] >>
+  metis_tac[]
+QED
+
+Theorem dft_open_deliver_classified[local]:
+  case rr of
+    OK t => T
+  | _ => dft_open_classified_exit stack rr
+      (dft_open_deliver fn budget bb inst s stack m rr) m
+Proof
+  Cases_on `rr` >> simp[dft_open_classified_exit_def, dft_open_deliver_def]
+QED
+
+Theorem dft_open_non_invoke_forward:
+  dft_sparse_oracle a xs /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode <> INVOKE /\
+  step_inst budget ctx inst (dft_open_materialize xs n s) = r ==>
+  dft_open_step_segment a xs ctx fn budget bb inst s stack n r
+Proof
+  strip_tac >> drule_all dft_open_non_invoke_segment >>
+  disch_then (qspecl_then [`stack`, `fn`] strip_assume_tac) >>
+  `dft_first_hit (dft_open_next a ctx)
+    (dft_open_inst_exit fn budget bb stack s.vs_inst_idx)
+    (DftOpen (DftAt fn budget bb s) stack n) 1 d` by
+    (gvs[dft_first_hit_def] >>
+     metis_tac[dft_open_boundary_is_exit, dft_open_inst_exit_initial]) >>
+  simp[dft_open_step_segment_def] >> qexistsl_tac [`rr`, `m`, `1`, `d`] >>
+  simp[] >> Cases_on `rr` >>
+  gvs[dft_open_deliver_def, dft_open_classified_exit_def, dft_open_fatal_def]
+QED
+
+Definition dft_open_step_forward_def:
+  dft_open_step_forward a xs budget ctx inst u <=>
+    !s n fn bb stack.
+      u = dft_open_materialize xs n s /\
+      get_instruction bb s.vs_inst_idx = SOME inst ==>
+      dft_open_step_segment a xs ctx fn budget bb inst s stack n
+        (step_inst budget ctx inst u)
+End
+
+Definition dft_open_block_forward_def:
+  dft_open_block_forward a xs budget ctx bb u <=>
+    !s n fn stack.
+      u = dft_open_materialize xs n s ==>
+      dft_open_block_segment a xs ctx fn budget bb s stack n
+        (exec_block budget ctx bb u)
+End
+
+Definition dft_open_run_forward_def:
+  dft_open_run_forward a xs fuel ctx fn u <=>
+    !s n stack.
+      u = dft_open_materialize xs n s ==>
+      dft_open_run_segment a xs ctx fn fuel s stack n
+        (run_blocks fuel ctx fn u)
+End
+
+Theorem dft_open_step_forward_non_invoke:
+  dft_sparse_oracle a xs /\ inst.inst_opcode <> INVOKE ==>
+  dft_open_step_forward a xs budget ctx inst u
+Proof
+  simp[dft_open_step_forward_def] >> rpt strip_tac >>
+  irule dft_open_non_invoke_forward >> simp[]
+QED
+
+Theorem dft_open_stack_inst_exit_separation:
+  dft_open_stack_extends (frame::stack) c /\
+  ~dft_open_stack_exit (frame::stack) c ==>
+  ~dft_open_inst_exit fn budget bb stack i c
+Proof
+  Cases_on `c` >> rename1 `DftOpen control st n` >>
+  simp[dft_open_stack_extends_def] >> strip_tac >>
+  `LENGTH stack < LENGTH (prefix ++ frame::stack)` by simp[] >>
+  gvs[dft_open_inst_exit_def, dft_open_block_exit_def, dft_open_stack_exit_def] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem dft_open_callee_inst_exit_avoidance:
+  dft_open_stack_extends (frame::stack) c /\
+  (!j. j < k ==> ~dft_open_stack_exit (frame::stack)
+    (FUNPOW (dft_open_next a ctx) j c)) ==>
+  !j. j < k ==> ~dft_open_inst_exit fn budget bb stack i
+    (FUNPOW (dft_open_next a ctx) j c)
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >> disch_tac >>
+  irule dft_open_stack_inst_exit_separation >>
+  `j <= k` by decide_tac >>
+  drule_all dft_open_stack_confinement >> metis_tac[]
+QED
