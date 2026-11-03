@@ -1105,7 +1105,7 @@ Theorem body_assign_local_rhs_pre[local]:
   !cx id e tops bindings ctx cenv env env' ret_ty es ty.
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\
     type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (NameTarget id)) e)) /\
@@ -1156,7 +1156,7 @@ Theorem body_assign_local_memory:
    ty.
     body_expr_ok cx e /\ body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
-    expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\ locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
     call_evaluation_safe cx
@@ -1212,7 +1212,7 @@ Theorem body_assign_attr_local[local]:
   !cx id fld e tops ctx func cenv env env' ret_ty lctx RetQ es res es' sid
    fty.
     body_expr_ok cx e /\ body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\
     type_stmt env ret_ty
       (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e) =
       SOME env' /\
@@ -1284,7 +1284,7 @@ Theorem body_assign_attr_storage[local]:
   !cx src id fld e tops ctx func cenv env env' ret_ty lctx RetQ es res es'
    fty.
     body_expr_ok cx e /\ body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\
     supported_storage_field_write tops (src, id) fld /\
     type_place_target env
       (AttributeTarget (TopLevelNameTarget (src, id)) fld) =
@@ -1656,7 +1656,7 @@ Theorem body_augassign_attr_local[local]:
        place_type_value cx p s'4' = (INL ptv,t'3') ==>
        body_expr_ok cx e) /\
     body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\
     type_stmt env ret_ty
       (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) =
       SOME env' /\
@@ -1717,7 +1717,7 @@ Theorem body_augassign_toplevel_word[local]:
        place_type_value cx p s'4' = (INL ptv,t'3') ==>
        body_expr_ok cx e) /\
     body_inv tops ctx cenv cx /\ supported_scalar_target tops (src, id) /\
-    supported_expr tops e /\ expr_sim_inv cenv cx env es /\
+    supported_expr tops e /\ expr_sim_inv cenv cx env es /\ source_supply es /\
     type_stmt env ret_ty (AugAssign ty (TopLevelNameTarget (src, id)) bop e) =
       SOME env' /\
     stmt_exprs_ok cenv (AugAssign ty (TopLevelNameTarget (src, id)) bop e) /\

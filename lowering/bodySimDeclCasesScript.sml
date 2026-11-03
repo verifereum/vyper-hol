@@ -177,7 +177,7 @@ QED
 Theorem body_annassign_rhs_pre[local]:
   !cenv cx env e es tops id typ ctx.
     body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\ well_typed_expr env e /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) ==>
     expr_body_pre cenv cx env e es
@@ -193,7 +193,7 @@ QED
 Theorem body_annassign_declared_rhs[local]:
   !cenv cx env e es tops id typ st c st1 ctx func.
     body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\ well_typed_expr env e /\
     id NOTIN FDOM env.var_types /\ FLOOKUP cenv.ce_vars id = NONE /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
@@ -230,7 +230,7 @@ Theorem body_annassign_memory:
        body_expr_ok cx e) /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\ ce_locals_declared cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
