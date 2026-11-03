@@ -27,7 +27,7 @@ Ancestors
   venomExecSemantics venomInst venomState vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeSystem vyperTypeBuiltins vyperValue vyperTyping vyperStorage
   builtinProps vyperTypeInvariants context freshWrites loweringSlice emitHelperProps
-  exprSimUnwrap vyperTypeExprResult vyperTypeExprSoundness vyperExprNoControl
+  exprSimUnwrap exprSimCopy vyperTypeExprResult vyperTypeExprSoundness vyperExprNoControl
 
 Theorem len_pre_args[local]:
   !cenv cx env ann args es.
@@ -292,24 +292,6 @@ Proof
   drule_all sized_decode_header >>
   disch_then (qspecl_then [`cx`, `es`] strip_assume_tac) >>
   gvs[read_slot_def]
-QED
-
-(* At runtime the value at an immutable's code pointer is in the data
-   section, laid out as in memory. *)
-Theorem immutable_holds_data[local]:
-  !func cenv cx es s t tv w ctx.
-    stmt_state_rel ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
-    immutable_holds cenv cx t tv w es ==>
-    ?tvt v. evaluate_type (get_tenv cx) t = SOME tvt /\
-            read_result cx tv es = (INL v, es) /\
-            val_in_memory tvt v (w2n w) s.vs_data_section
-Proof
-  rw[immutable_holds_def, stmt_state_rel_def, state_rel_def,
-     immutables_rel_def] >>
-  gvs[] >> first_x_assum drule_all >> strip_tac >>
-  gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
-  `off + k < dimword (:256)` by DECIDE_TAC >>
-  gvs[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem vv_holds_len_header:

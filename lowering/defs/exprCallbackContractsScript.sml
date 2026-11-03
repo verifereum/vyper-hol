@@ -183,6 +183,18 @@ Proof
       lower_value_def]
 QED
 
+Theorem compile_raw_call_callback_contract:
+  expr_callbacks_agree f g cenv args ⇒
+  compile_call f cenv ret_ty ty (RawCallTarget rcf) args default_ret st =
+  compile_call g cenv ret_ty ty (RawCallTarget rcf) args default_ret st
+Proof
+  Cases_on `args` >- simp[compile_call_def] >>
+  rename1 `addr_e::rest` >> Cases_on `rest` >- simp[compile_call_def] >>
+  simp[compile_call_def] >> strip_tac >> fs[] >>
+  drule compile_ext_call_kwargs_callback_contract >> strip_tac >>
+  simp[lower_value_def, comp_bind_def]
+QED
+
 Theorem compile_raw_call_calldata_callback_contract:
   expr_callbacks_agree f g cenv args ⇒
   compile_call f cenv ret_ty ty (RawCallCalldataTarget rcf) args default_ret st =
@@ -310,6 +322,8 @@ Proof
   FIRST [irule compile_intcall_callback_contract >>
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
          irule compile_send_callback_contract >>
+           fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
+         irule compile_raw_call_callback_contract >>
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
          irule compile_raw_call_calldata_callback_contract >>
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],

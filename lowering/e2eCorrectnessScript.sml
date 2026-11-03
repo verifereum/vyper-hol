@@ -14,7 +14,7 @@ Theory e2eCorrectness
 Ancestors
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect contextCodegenRel
-  vyperLoweringCorrect loweringShapeProps vfmExecution
+  vyperLoweringCorrect loweringRuntimeCorrect loweringShapeProps vfmExecution
   venomPipelineCorrect
   passSimulationDefs
   codegenCorrectness
@@ -887,7 +887,7 @@ Theorem e2e_deploy_correctness:
            ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                          (exc = Reverted \/ s = "UNREACHABLE")
        | INR (Error e) =>
-           decode_strictness_exempt tops e \/
+           unspecified_behaviour_exempt tops e \/
            ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
        | INR BreakException => F
        | INR ContinueException => F

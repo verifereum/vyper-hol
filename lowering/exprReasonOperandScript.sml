@@ -362,15 +362,14 @@ Proof
   Cases_on `conv`
   >~ [`compile_type_convert v ConvBytestringToBool`] >-
     (metis_tac[compile_type_convert_bytestring_safe, listTheory.MEM, safe_operand_def])
-  >~ [`compile_type_convert v (ConvBytestringToInt s n)`] >-
+  >~ [`compile_type_convert v (ConvBytestringToInt s n in_n)`] >-
     (metis_tac[compile_type_convert_bytestring_safe, listTheory.MEM, safe_operand_def])
-  >~ [`compile_type_convert v ConvBytestringToAddress`] >-
-    (metis_tac[compile_type_convert_bytestring_safe, listTheory.MEM, safe_operand_def])
-  >~ [`compile_type_convert v (ConvBytestringToDecimal d lo hi)`] >-
+  >~ [`compile_type_convert v (ConvBytestringToDecimal d lo hi in_n)`] >-
     (metis_tac[compile_type_convert_bytestring_safe, listTheory.MEM, safe_operand_def])
   >~ [`compile_type_convert v (ConvBytestringToBytesM m)`] >-
     (metis_tac[compile_type_convert_bytestring_safe, listTheory.MEM, safe_operand_def]) >>
-  simp[compile_type_convert_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_type_convert_def, compile_int_clamp_def,
+       comp_bind_def, comp_ignore_bind_def,
        comp_return_def, LET_THM] >>
   rpt (IF_CASES_TAC >> simp[comp_bind_def, comp_ignore_bind_def,
                            comp_return_def, LET_THM]) >>
@@ -688,12 +687,25 @@ Proof
   metis_tac[reason_default_return_operand, reason_alloc_operand]
 QED
 
-Theorem reason_raw_call_operand[local]:
-  compile_raw_call addr data len gas value ct mx rof sa = (op,sb) ==>
+Theorem reason_raw_call_outbuf_operand[local]:
+  compile_raw_call_outbuf mx sa = ((out_val,out_ptr),sb) ==>
+  !l. out_val <> Label l
+Proof
+  simp[builtinSystemTheory.compile_raw_call_outbuf_def, LET_THM, comp_bind_def,
+       comp_return_def] >>
+  IF_CASES_TAC >> simp[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[reason_alloc_operand]
+QED
+
+Theorem reason_raw_call_finish_operand[local]:
+  (!l. out_val <> Label l) /\
+  compile_raw_call_finish addr data len gas value ct mx rof out_val out_ptr sa =
+    (op,sb) ==>
   !l. op <> Label l
 Proof
   Cases_on `ct` >> Cases_on `rof` >> Cases_on `mx > 0` >>
-  simp[builtinSystemTheory.compile_raw_call_def, LET_THM, comp_bind_def,
+  simp[builtinSystemTheory.compile_raw_call_finish_def, LET_THM, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
@@ -701,17 +713,30 @@ Proof
   metis_tac[reason_alloc_operand, emit_op_safe_operand, safe_operand_def]
 QED
 
+(* Both raw_call forms: splitting off a second argument is needed for the
+   byte-string form and harmless for the msg.data one. *)
+val reason_raw_call_tac =
+  Cases_on `args` >-
+    (simp[compile_call_def, LET_THM] >> strip_tac >>
+     rpt (pairarg_tac >> gvs[]) >> gvs[reason_result_shape_def]) >>
+  Cases_on `t` >> simp[compile_call_def, LET_THM] >> strip_tac >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[AllCaseEqs(), reason_result_shape_def, mk_ptr_def] >>
+  metis_tac[reason_raw_call_finish_operand, reason_raw_call_outbuf_operand]
+
 Theorem reason_compile_call[local]:
   compile_call f cenv rt ty target args default_ret sa = (vv,sb) ==>
   reason_result_shape rt LocMemory vv
 Proof
-  Cases_on `target` >> simp[compile_call_def, LET_THM] >>
+  Cases_on `target`
+  >~ [`RawCallTarget`] >- reason_raw_call_tac
+  >~ [`RawCallCalldataTarget`] >- reason_raw_call_tac >>
+  simp[compile_call_def, LET_THM] >>
   strip_tac >> rpt (pairarg_tac >> gvs[]) >>
   gvs[reason_result_shape_def]
   >~ [`cenv.ce_func_info name = info`] >- suspend "internal"
   >~ [`compile_call f cenv rt ty (ExtCall b b0 p l) args default_ret sa = _`]
     >- suspend "external"
-  >~ [`r.rcf_max_outsize`] >- suspend "raw"
   >~ [`as_stack_val rt (compile_create_call f cenv ck salted rof args sa)`]
     >- suspend "create"
   >> suspend "send"
@@ -730,13 +755,6 @@ Resume reason_compile_call[external]:
   rpt (pairarg_tac >> gvs[]) >>
   gvs[AllCaseEqs(), reason_result_shape_def, mk_ptr_def] >>
   metis_tac[reason_external_call_operand]
-QED
-
-Resume reason_compile_call[raw]:
-  Cases_on `args` >> gvs[reason_result_shape_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  gvs[AllCaseEqs(), reason_result_shape_def, mk_ptr_def] >>
-  metis_tac[reason_raw_call_operand]
 QED
 
 Resume reason_compile_call[create]:

@@ -178,6 +178,40 @@ Proof
   first_x_assum (qspecl_then [`ix`, `il`] mp_tac) >> simp[]
 QED
 
+Theorem front_last_pairwise_num[local]:
+  !(h:num) t x.
+    ALL_DISTINCT (h::t) /\
+    MEM x (FRONT (h::t)) /\
+    (!i j. i < LENGTH (h::t) /\ j < LENGTH (h::t) /\ i <> j ==>
+       EL i (h::t) + 32 <= EL j (h::t) \/ EL j (h::t) + 32 <= EL i (h::t)) ==>
+    LAST (h::t) + 32 <= x \/ x + 32 <= LAST (h::t)
+Proof
+  rpt strip_tac >>
+  `MEM x (h::t)` by metis_tac[MEM_FRONT] >>
+  `MEM (LAST (h::t)) (h::t)` by simp[MEM_LAST] >>
+  `~MEM (LAST (h::t)) (FRONT (h::t))` by
+    (irule MEM_FRONT_NOT_LAST >> simp[]) >>
+  `?ix. ix < LENGTH (h::t) /\ x = EL ix (h::t)` by metis_tac[MEM_EL] >>
+  `?il. il < LENGTH (h::t) /\ LAST (h::t) = EL il (h::t)` by metis_tac[MEM_EL] >>
+  `ix <> il` by (strip_tac >> gvs[]) >>
+  first_x_assum (qspecl_then [`ix`, `il`] mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem spill_slots_front_separated[local]:
+  !(h:num) t.
+    (!i j. i < LENGTH (h::t) /\ j < LENGTH (h::t) /\ i <> j ==>
+       EL i (h::t) + 32 <= EL j (h::t) \/
+       EL j (h::t) + 32 <= EL i (h::t)) ==>
+    !i j. i < LENGTH (FRONT (h::t)) /\
+          j < LENGTH (FRONT (h::t)) /\ i <> j ==>
+       EL i (FRONT (h::t)) + 32 <= EL j (FRONT (h::t)) \/
+       EL j (FRONT (h::t)) + 32 <= EL i (FRONT (h::t))
+Proof
+  rpt strip_tac >>
+  fs[LENGTH_FRONT, EL_FRONT] >>
+  first_x_assum irule >> simp[]
+QED
+
 (* =========================================================================
    alloc_spill_slot preserves wf and produces valid offset
    ========================================================================= *)
@@ -227,6 +261,62 @@ Proof
       first_x_assum (qspecl_then [`ix`, `il`] mp_tac) >> fs[])
 QED
 
+Theorem spill_alloc_layout_preservation_core[local]:
+  !al spilled off al' op.
+    spill_alloc_layout_wf al spilled /\
+    alloc_spill_slot al = (off, al') ==>
+    spill_alloc_layout_wf al' (spilled |+ (op, off))
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[spill_alloc_layout_wf_def, alloc_spill_slot_def] >>
+  Cases_on `al.sa_free_slots` >> gvs[]
+  >- (simp[spill_alloc_layout_wf_def, FLOOKUP_UPDATE] >>
+      conj_tac
+      >- (rpt gen_tac >> IF_CASES_TAC >> simp[] >> strip_tac >> gvs[] >>
+          qpat_x_assum `!op off'. FLOOKUP _ _ = _ ==> _ /\ _` drule >> strip_tac >> decide_tac) >>
+      rpt gen_tac >>
+      Cases_on `op1 = op` >> Cases_on `op2 = op` >> simp[] >>
+      rpt strip_tac >> gvs[]
+      >- (qpat_x_assum `!op off. FLOOKUP _ _ = _ ==> _ /\ _` drule >> simp[])
+      >- (qpat_x_assum `!op off. FLOOKUP _ _ = _ ==> _ /\ _` drule >> simp[]) >>
+      qpat_x_assum `!op1 off1 op2 off2. _` irule >>
+      metis_tac[]) >>
+  rename1 `h::t` >>
+  `MEM (LAST (h::t)) (h::t)` by simp[MEM_LAST] >>
+  `al.sa_spill_base <= LAST (h::t) /\
+   LAST (h::t) + 32 <= al.sa_next_offset` by
+    (qpat_x_assum `!off'. _ ==> _ /\ _` irule >> fs[]) >>
+  `!k v. FLOOKUP spilled k = SOME v ==>
+      v + 32 <= LAST (h::t) \/ LAST (h::t) + 32 <= v` by
+    (rpt strip_tac >>
+     qpat_x_assum `!op off1 off2. _` irule >> metis_tac[MEM]) >>
+  qpat_x_assum `MEM (LAST _) _` kall_tac >>
+  conj_tac
+  >- (rpt gen_tac >> simp[FLOOKUP_UPDATE] >> IF_CASES_TAC >>
+      simp[] >> strip_tac >> gvs[] >>
+      qpat_x_assum `!op off. FLOOKUP _ _ = _ ==> _ /\ _` drule >> simp[]) >>
+  conj_tac
+  >- (gen_tac >> strip_tac >>
+      `MEM off (h::t)` by metis_tac[MEM_FRONT] >>
+      qpat_x_assum `!off'. _ ==> _ /\ _` irule >> fs[]) >>
+  conj_tac
+  >- (rpt gen_tac >> simp[FLOOKUP_UPDATE] >>
+      Cases_on `op = op1` >> Cases_on `op = op2` >> simp[] >>
+      rpt strip_tac >> gvs[]
+      >- metis_tac[]
+      >- metis_tac[] >>
+      qpat_x_assum `!op1 off1 op2 off2. _` irule >> metis_tac[]) >>
+  conj_tac >- (irule ALL_DISTINCT_FRONT >> simp[]) >>
+  conj_tac
+  >- (mp_tac (Q.SPECL [`h`, `t`] spill_slots_front_separated) >> simp[]) >>
+  rpt gen_tac >> simp[FLOOKUP_UPDATE] >> IF_CASES_TAC >> simp[] >>
+  rpt strip_tac >> gvs[]
+  >- (`ALL_DISTINCT (h::t)` by simp[] >>
+      irule front_last_pairwise_num >> simp[]) >>
+  `MEM off2 (h::t)` by metis_tac[MEM_FRONT] >>
+  qpat_x_assum `!op off1 off2. _` irule >> metis_tac[MEM]
+QED
+
 (* spill_alloc_wf preserved after one allocation + FUPDATE *)
 Theorem spill_alloc_wf_after_spill:
   !al spilled off al' op.
@@ -236,32 +326,8 @@ Theorem spill_alloc_wf_after_spill:
     spill_alloc_wf al' (spilled |+ (op, off))
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all alloc_spill_slot_wf >> strip_tac >>
-  fs[spill_alloc_wf_def] >>
-  fs[alloc_spill_slot_def] >>
-  Cases_on `al.sa_free_slots` >> gvs[]
-  (* Empty free_slots: off = next_offset, al' bumps by 32 *)
-  >- (fs[FLOOKUP_UPDATE] >> rpt conj_tac >> rpt gen_tac >>
-      every_case_tac >> rpt strip_tac >> gvs[] >>
-      res_tac >> decide_tac)
-  (* Non-empty free_slots: off = LAST, al' uses FRONT *)
-  >> rename1 `h::t'` >>
-  simp[FLOOKUP_UPDATE] >> rpt conj_tac >> rpt gen_tac >>
-  every_case_tac >> rpt strip_tac >> gvs[MEM_FRONT, ALL_DISTINCT_FRONT] >>
-  TRY (res_tac >> decide_tac) >>
-  TRY decide_tac >>
-  (* remaining: FRONT membership → full list membership *)
-  TRY (imp_res_tac MEM_FRONT >> gvs[] >> res_tac >> decide_tac) >>
-  (* EL FRONT pairwise *)
-  TRY (fs[EL_FRONT, LENGTH_FRONT] >>
-       qpat_x_assum `!i j. i < SUC _ /\ _ ==> _`
-         (qspecl_then [`i`, `j`] mp_tac) >>
-       simp[]) >>
-  (* spilled vs FRONT: need MEM_FRONT then use spilled-vs-free hyp *)
-  imp_res_tac MEM_FRONT >> fs[] >>
-  qpat_x_assum `!op off1 off2. FLOOKUP _ _ = SOME _ /\ _ ==> _`
-    (qspecl_then [`op'`, `off1`, `off2`] mp_tac) >>
-  simp[]
+  gvs[spill_alloc_wf_iff_layout_ready] >>
+  irule spill_alloc_layout_preservation_core >> metis_tac[]
 QED
 
 
@@ -274,31 +340,8 @@ Theorem spill_alloc_layout_wf_after_spill:
     alloc_spill_slot al = (off, al') ==>
     spill_alloc_layout_wf al' (spilled |+ (op, off))
 Proof
-  rpt gen_tac >> strip_tac >>
-  `spill_alloc_wf al spilled` by
-    simp[spill_alloc_wf_iff_layout_ready] >>
-  drule_all alloc_spill_slot_wf >> strip_tac >>
-  fs[spill_alloc_layout_wf_def, alloc_spill_slot_def] >>
-  Cases_on `al.sa_free_slots` >> gvs[]
-  >- (fs[FLOOKUP_UPDATE, spill_alloc_layout_wf_def] >>
-      rpt conj_tac >> rpt gen_tac >>
-      every_case_tac >> rpt strip_tac >> gvs[] >>
-      res_tac >> decide_tac)
-  >> rename1 `h::t'` >>
-  simp[FLOOKUP_UPDATE, spill_alloc_layout_wf_def] >>
-  rpt conj_tac >> rpt gen_tac >>
-  every_case_tac >> rpt strip_tac >> gvs[MEM_FRONT, ALL_DISTINCT_FRONT] >>
-  TRY (res_tac >> decide_tac) >>
-  TRY decide_tac >>
-  TRY (imp_res_tac MEM_FRONT >> gvs[] >> res_tac >> decide_tac) >>
-  TRY (fs[EL_FRONT, LENGTH_FRONT] >>
-       qpat_x_assum `!i j. i < SUC _ /\ _ ==> _`
-         (qspecl_then [`i`, `j`] mp_tac) >>
-       simp[]) >>
-  imp_res_tac MEM_FRONT >> fs[] >>
-  qpat_x_assum `!op off1 off2. FLOOKUP _ _ = SOME _ /\ _ ==> _`
-    (qspecl_then [`op'`, `off1`, `off2`] mp_tac) >>
-  simp[]
+  rpt strip_tac >> irule spill_alloc_layout_preservation_core >>
+  metis_tac[]
 QED
 
 
@@ -309,59 +352,8 @@ Theorem spill_alloc_layout_wf_after_alloc:
     alloc_spill_slot al = (off, al') ==>
     spill_alloc_layout_wf al' (spilled |+ (op, off))
 Proof
-  rpt gen_tac >> strip_tac >>
-  fs[spill_alloc_layout_wf_def, alloc_spill_slot_def] >>
-  Cases_on `al.sa_free_slots` >> gvs[]
-  >- (simp[FLOOKUP_UPDATE, spill_alloc_layout_wf_def] >>
-      rpt conj_tac >> rpt gen_tac >>
-      every_case_tac >> rpt strip_tac >> gvs[] >>
-      res_tac >> decide_tac)
-  >> rename1 `h::tail` >>
-  `al.sa_spill_base <= LAST (h::tail) /\
-   LAST (h::tail) + 32 <= al.sa_next_offset` by (
-    qpat_x_assum `!off'. off' = h \/ MEM off' tail ==> _`
-      (qspec_then `LAST (h::tail)` mp_tac) >>
-    (impl_tac >-
-      (`MEM (LAST (h::tail)) (h::tail)` by simp[MEM_LAST] >> fs[])) >>
-    simp[]) >>
-  `!op0 off0. FLOOKUP spilled op0 = SOME off0 ==>
-      off0 + 32 <= LAST (h::tail) \/ LAST (h::tail) + 32 <= off0` by (
-    rpt gen_tac >> strip_tac >>
-    qpat_x_assum `!op off1 off2. FLOOKUP spilled op = SOME off1 /\ _ ==> _`
-      (qspecl_then [`op0`, `off0`, `LAST (h::tail)`] mp_tac) >>
-    (impl_tac >- (`MEM (LAST (h::tail)) (h::tail)` by simp[MEM_LAST] >> fs[])) >>
-    simp[]) >>
-  `!x. MEM x (FRONT (h::tail)) ==>
-      x + 32 <= LAST (h::tail) \/ LAST (h::tail) + 32 <= x` by (
-    rpt strip_tac >>
-    `MEM x (h::tail)` by metis_tac[MEM_FRONT] >>
-    `MEM (LAST (h::tail)) (h::tail)` by simp[MEM_LAST] >>
-    `ALL_DISTINCT (h::tail)` by simp[] >>
-    `~MEM (LAST (h::tail)) (FRONT (h::tail))` by
-      (irule MEM_FRONT_NOT_LAST >> simp[]) >>
-    `x <> LAST (h::tail)` by metis_tac[] >>
-    `?ix. ix < LENGTH (h::tail) /\ x = EL ix (h::tail)` by
-      metis_tac[MEM_EL] >>
-    `?il. il < LENGTH (h::tail) /\ LAST (h::tail) = EL il (h::tail)` by
-      metis_tac[MEM_EL] >>
-    `ix <> il` by metis_tac[] >>
-    qpat_x_assum `!i j. i < SUC _ /\ j < SUC _ /\ i <> j ==> _`
-      (qspecl_then [`ix`, `il`] mp_tac) >>
-    (impl_tac >- gvs[]) >> simp[]) >>
-  simp[FLOOKUP_UPDATE, spill_alloc_layout_wf_def] >>
-  rpt conj_tac >> rpt gen_tac >>
-  every_case_tac >> rpt strip_tac >> gvs[MEM_FRONT, ALL_DISTINCT_FRONT] >>
-  TRY (res_tac >> decide_tac) >>
-  TRY decide_tac >>
-  TRY (imp_res_tac MEM_FRONT >> gvs[] >> res_tac >> decide_tac) >>
-  TRY (fs[EL_FRONT, LENGTH_FRONT] >>
-       qpat_x_assum `!i j. i < SUC _ /\ _ ==> _`
-         (qspecl_then [`i`, `j`] mp_tac) >>
-       simp[]) >>
-  imp_res_tac MEM_FRONT >> fs[] >>
-  qpat_x_assum `!op off1 off2. FLOOKUP _ _ = SOME _ /\ _ ==> _`
-    (qspecl_then [`op'`, `off1`, `off2`] mp_tac) >>
-  simp[]
+  rpt strip_tac >> irule spill_alloc_layout_preservation_core >>
+  metis_tac[]
 QED
 
 

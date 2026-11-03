@@ -1,5 +1,5 @@
 [holbuild]
-minimum_version = "0.12.1"
+minimum_version = "0.12.0"
 
 [project]
 name = "vyper-hol"
@@ -7,6 +7,7 @@ version = "0.2.3"
 
 [build]
 roots = ["vyperHolScript.sml",
+         "lowering/concatMemoryScript.sml",
          "tests/vyperTestsHolScript.sml",
          "lowering/e2eBoundaryTestScript.sml",
          "lowering/evalCompilerWitnessesScript.sml",
@@ -17,7 +18,10 @@ roots = ["vyperHolScript.sml",
          "tests/createSemanticAuditScript.sml",
          "tests/createLoweringAuditScript.sml",
          "tests/vyperOracleInitialStateTestScript.sml",
+         "tests/conversionProofAuditScript.sml",
          "lowering/targetPlaceTestScript.sml",
+         "lowering/targetPlaceSimCasesScript.sml",
+         "lowering/builtinBytesMemoryScript.sml",
          "venom/passes/dft/tests/dftEffectOrderTestScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerAbiTupleStringScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerAbiCodegenScript.sml",

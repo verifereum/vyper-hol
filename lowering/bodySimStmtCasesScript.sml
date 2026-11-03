@@ -41,10 +41,12 @@
  *   stmt_exprs_ok_same_frame, stmts_exprs_ok_EVERY — the frame facts
  *                        at a later compile env of the same body
  *   expr_sim_inv_push_scope — expr_sim_inv in a new scope
+ *   body_inv_mcopy     — the frame's target has MCOPY
  *)
 
 Theory bodySimStmtCases
 Ancestors
+  vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps exprSim exprSimHyps exprLoweringProps stmtSim
   stmtSimIf stmtLoweringMono stmtLowering compileEnv fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
@@ -59,8 +61,10 @@ Ancestors
   vyperCallOutcomeStorage vyperTypeStoragePreservation
   stmtSimAssignStorage supportedDecls vyperTypeContractStaticMaps
   vyperTypeContract compileVyper supportedTypes stmtSimAssignAttr
+  stmtSimAssignStorageCopy
   stmtSimAugAssignAttr stmtSimAssignAttrStorage stmtSimAugAssignStorage
-  stmtSimAssignMem memoryLocalRhsProps
+  stmtSimAugAssignAttrStorage stmtSimAssignMem stmtSimAssignTupleMem
+  memoryLocalRhsProps
 Libs
   monadsyntax
 
@@ -295,13 +299,17 @@ QED
    with no popped history, assign one (which clears it), or push and pop
    whole scopes; the rest are its expressions' pops (record_pop).  There
    is no scope-effect lemma for statements yet (eval_mutual_scope_pop_effect
-   covers expressions only). *)
+   covers expressions only).  It needs the state well typed, as the
+   expression lemma does: popped_keys_indexed asks each key's front to have
+   a dynamic array type, and pop_place checks only the entry's value. *)
 Theorem eval_stmts_popped_keys_indexed:
   (!cx s es res es'.
-     eval_stmt cx s es = (res, es') /\ popped_keys_indexed es.scopes ==>
+     eval_stmt cx s es = (res, es') /\ state_well_typed es /\
+     popped_keys_indexed es.scopes ==>
      popped_keys_indexed es'.scopes) /\
   (!cx ss es res es'.
-     eval_stmts cx ss es = (res, es') /\ popped_keys_indexed es.scopes ==>
+     eval_stmts cx ss es = (res, es') /\ state_well_typed es /\
+     popped_keys_indexed es.scopes ==>
      popped_keys_indexed es'.scopes)
 Proof
   cheat
@@ -436,6 +444,11 @@ Proof
                    ce_dynarray_capacity := _ |> = cenv`
         (strip_assume_tac o
          SIMP_RULE (srw_ss()) [compile_env_component_equality]) >>
+      `(place_map_tables_agree_on_defined c (extend_local env id typ T) <=>
+        place_map_tables_agree_on_defined cenv env) /\
+       (extend_local env id typ T).bare_globals = env.bare_globals` by
+        (conj_tac >- (irule placeTypingPropsTheory.place_map_tables_agree_on_defined_cong >> fs[extend_local_def]) >>
+         simp[extend_local_def]) >>
       qpat_x_assum `expr_sim_inv _ _ _ es`
         (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
       ASM_REWRITE_TAC [expr_sim_inv_def]) >>
@@ -1178,7 +1191,7 @@ Proof
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   `evaluate_type (get_tenv cx) ty = SOME entry.type` by metis_tac[] >>
   `type_memory_bytes cenv ty = type_memory_size entry.type` by
-    metis_tac[exprSimAggregateLayoutTheory.expr_sim_inv_memory_size] >>
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
   `type_memory_bytes cenv ty < 2 ** 64` by
     metis_tac[locals_alloc_ok_def] >>
   Cases_on `has_length_word (expr_type e) /\ is_empty_value_expr e`
@@ -1349,6 +1362,152 @@ Proof
   irule compile_assign_attr_storage_case >> simp[] >> metis_tac[]
 QED
 
+Theorem body_assign_copy_rhs_pre[local]:
+  !tops ctx cenv cx e env es ret_ty nsid env'.
+    body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) =
+      SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
+    call_evaluation_safe cx
+      (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) ==>
+    expr_body_pre cenv cx env e es
+Proof
+  rpt strip_tac >>
+  `well_typed_expr env e` by
+    gvs[type_stmt_def, atarget_accepts_def, AllCaseEqs()] >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    gvs[body_inv_def] >>
+  irule stmt_expr_body_pre >>
+  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, int_calls_stmt_def,
+      int_calls_atarget_def, int_calls_expr_def] >>
+  qexists_tac `[]` >> simp[]
+QED
+
+Theorem body_assign_copy_region[local]:
+  !cx mid id tr off tvt.
+    storage_layout_safe cx /\
+    storage_var_info cx mid id = SOME (tr,off,tvt) /\
+    0 < type_slot_size tvt ==>
+    off + type_slot_size tvt <= dimword (:256) /\
+    (!mid' n' subs' k' tv'.
+      declared_storage_region cx mid' n' subs' = SOME (tr,k',tv') /\
+      (k',tv') <> (n2w off,tvt) ==>
+      ranges_disjoint off (type_slot_size tvt) (w2n k') (type_slot_size tv'))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `off + type_slot_size tvt <= dimword (:256)` by
+    (drule storage_layout_safe_layout >>
+     simp[well_formed_layout_def] >> metis_tac[]) >>
+  `off < dimword (:256)` by decide_tac >>
+  `w2n (n2w off : 256 word) = off` by simp[] >>
+  drule declared_storage_region_ordinary >> strip_tac >>
+  simp[] >> rpt strip_tac >>
+  `(mid,id,[]) <> (mid',n',subs')` by
+    (strip_tac >> gvs[]) >>
+  drule_all storage_layout_safe_region_separation >> simp[]
+QED
+
+Theorem body_assign_copy_target[local]:
+  !tops ctx cenv cx src id mut ty ast_slot env es ret_ty e env'.
+    body_inv tops ctx cenv cx /\
+    supported_variable_decl tops (src,id) = SOME (Private,mut,ty,SOME ast_slot) /\
+    (mut = Storage \/ mut = Transient) /\ expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget (src,id))) e) =
+      SOME env' ==>
+    src = NONE /\ get_module_code cx NONE = SOME tops /\
+    cenv.ce_hashmap_info (NONE,id) = NONE /\
+    cenv.ce_module_var_type (NONE,id) = SOME ty /\
+    ?tr id_str off tvt.
+      find_var_decl_by_name id tops = SOME (StorageVarDecl tr ty,id_str) /\
+      lookup_var_slot_from_layout cx tr NONE id_str = SOME off /\
+      evaluate_type (get_tenv cx) ty = SOME tvt
+Proof
+  rpt gen_tac >> strip_tac >> (
+  drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
+  `get_module_code cx NONE = SOME tops /\
+   ALL_DISTINCT
+     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
+   cenv.ce_hashmap_info = build_hashmap_info tops /\
+   cenv.ce_module_var_type (NONE,id) = build_var_type_map tops (NONE,id)` by
+    fs[body_inv_def] >>
+  drule_all build_maps_variable >> strip_tac >>
+  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  `find_var_decl_by_name id tops <> NONE` by
+    metis_tac[find_var_decl_storage_some] >>
+  Cases_on `type_place_target env (TopLevelNameTarget (NONE,id))` >>
+  gvs[type_stmt_def, atarget_accepts_def] >>
+  rename1 `type_place_target _ _ = SOME vt` >> Cases_on `vt` >> gvs[] >>
+  gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
+  >- (drule_all env_assignable_find_NONE >> strip_tac >> gvs[]) >>
+  drule_all vyperTypeEnvTheory.env_consistent_toplevel_storage_static >>
+  strip_tac >> drule find_var_decl_storage_mem >> strip_tac >> gvs[] >>
+  `t = ty` by metis_tac[build_maps_variable, optionTheory.SOME_11] >>
+  gvs[] >>
+  qpat_x_assum `IS_SOME (lookup_var_slot_from_layout _ _ _ _)`
+    (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
+  qpat_x_assum `IS_SOME (evaluate_type _ _)`
+    (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
+  metis_tac[])
+QED
+
+(* An assignment to a private storage or transient variable of a type that
+   is not a word, not a DynArray and not empty, from a value of exactly that
+   type: stmtSimAssignStorageCopy's compile_assign_storage_copy_stmt_frag.
+   The region separation it asks for comes from storage_layout_safe in
+   expr_sim_inv. *)
+Theorem body_assign_toplevel_copy[local]:
+  !cx nsid e tops ctx func cenv env env' ret_ty lctx RetQ es res es' mut ty
+   slot.
+    body_expr_ok cx e /\ body_inv tops ctx cenv cx /\
+    supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
+    (mut = Storage \/ mut = Transient) /\
+    ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+    0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
+    supported_expr tops e /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) =
+      SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
+    call_evaluation_safe cx
+      (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) /\
+    eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e) es =
+      (res, es') ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty
+         (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) es res es'
+Proof
+  rpt gen_tac >> Cases_on `nsid` >>
+  rename1 `supported_variable_decl tops (src,id)` >> strip_tac >> (
+  drule_at (Pos (el 2)) body_assign_copy_target >>
+  disch_then drule >> simp[] >> disch_then drule >>
+  disch_then drule >> strip_tac >> gvs[] >>
+  drule_all body_assign_copy_rhs_pre >> strip_tac >>
+  drule_all exprSimHypsTheory.expr_sim_inv_memory_size >> strip_tac >>
+  `0 < type_slot_size tvt` by
+    gvs[storageDecodeMemoryTheory.type_memory_size_slots] >>
+  `storage_layout_safe cx /\ env_consistent env cx es` by
+    fs[expr_sim_inv_def] >>
+  `storage_var_info cx NONE id = SOME (tr,off,tvt)` by
+    simp[storage_var_info_def] >>
+  drule_all body_assign_copy_region >> strip_tac >>
+  `expr_sim ctx func cenv cx (expr_type e) e es` by
+    metis_tac[body_expr_ok_def] >>
+  `!ann t args. e = TypeBuiltin ann Empty t args ==> t = expr_type e` by
+    (rpt strip_tac >> gvs[type_stmt_def, atarget_accepts_def,
+       well_typed_expr_def, type_builtin_result_ok_def, expr_type_def,
+       AllCaseEqs()]) >>
+  irule compile_assign_storage_copy_stmt_frag >> asm_rewrite_tac[] >>
+  qexistsl_tac [`id_str`, `off`, `tr`, `tops`, `tvt`, `expr_type e`] >>
+  asm_rewrite_tac[] >>
+  rpt strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  gvs[value_runtime_typed_def])
+QED
+
 (* RESIDUAL (#637 assignments): the other base targets.
    - A local in memory that body_assign_local_memory leaves: a value
      that widens to a type other than a bytestring (type_widens_to: a
@@ -1358,8 +1517,12 @@ QED
      Python rejects a static array bound of 0 (get_index_value's
      "Subscript must be greater than 0"), where evaluate_type accepts
      it, so that case closes by rejecting it in the source typing.
-   - A storage or transient variable that is not a word
-     (supported_target_info's copies): no statement lemma.
+   - A storage or transient variable that is not a word, other than
+     body_assign_toplevel_copy's: a DynArray (compile_dynarray_to_storage),
+     a value of a narrower type (a widened bytestring), or a type of size
+     0: no statement lemma.
+   - An immutable (supported_target's supported_immutable_type): no
+     statement lemma.
    - An attribute target other than a word field of a local struct or of
      a storage or transient struct:
      - a field of a local, storage or transient struct that is not a
@@ -1386,6 +1549,12 @@ Theorem body_assign_other:
               (expr_type e = ty \/ is_bytestring_type ty \/
                has_length_word (expr_type e) /\ is_empty_value_expr e)) /\
     ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
+    ~(?nsid mut ty slot.
+        t = TopLevelNameTarget nsid /\
+        supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
+        (mut = Storage \/ mut = Transient) /\
+        ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+        0 < type_memory_bytes cenv ty /\ expr_type e = ty) /\
     ~(?id fld sid fty.
         t = AttributeTarget (NameTarget id) fld /\
         FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -1422,6 +1591,14 @@ Proof
                    supported_scalar_target tops nsid`
   >- (gvs[] >> rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
       irule body_assign_toplevel_word >> metis_tac[]) >>
+  Cases_on `?nsid mut ty slot.
+              t = TopLevelNameTarget nsid /\
+              supported_variable_decl tops nsid =
+                SOME (Private, mut, ty, SOME slot) /\
+              (mut = Storage \/ mut = Transient) /\
+              ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+              0 < type_memory_bytes cenv ty /\ expr_type e = ty`
+  >- (gvs[] >> irule body_assign_toplevel_copy >> metis_tac[]) >>
   Cases_on `?id fld sid fty.
               t = AttributeTarget (NameTarget id) fld /\
               FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -1438,35 +1615,100 @@ Proof
   qexistsl_tac [`bindings`, `env`, `env'`, `tops`] >> fs[]
 QED
 
-(* The i-th local of a tuple of word locals takes the i-th value as
-   stored. *)
-Theorem tuple_local_lays_out[local]:
-  !cenv cx env es1 ids tys tvs vs i entry.
-    expr_sim_inv cenv cx env es1 /\
-    (!j. j < LENGTH ids ==>
-         FLOOKUP env.var_types (EL j ids) = SOME (EL j tys)) /\
-    LENGTH tys = LENGTH ids /\ EVERY is_word_type tys /\
-    LIST_REL (\ty tv. evaluate_type (get_tenv cx) ty = SOME tv) tys tvs /\
-    LIST_REL value_has_type tvs vs /\
-    i < LENGTH ids /\ lookup_scopes (EL i ids) es1.scopes = SOME entry ==>
-    store_lays_out (EL i tvs) entry.type (EL i vs)
+(* The frame's target has MCOPY: the unit's policy target, which
+   run_lowering requires to have it (lowering_policy_ok). *)
+Theorem body_inv_mcopy[local]:
+  !tops ctx cenv cx. body_inv tops ctx cenv cx ==> cenv.ce_target CapMcopy
 Proof
-  rpt strip_tac >>
-  `evaluate_type (get_tenv cx) (EL i tys) = SOME (EL i tvs) /\
-   value_has_type (EL i tvs) (EL i vs) /\ is_word_type (EL i tys)` by
-    gvs[LIST_REL_EL_EQN, EVERY_EL] >>
-  `FLOOKUP env.var_types (EL i ids) = SOME (EL i tys)` by simp[] >>
-  drule_all expr_sim_inv_local >> strip_tac >>
-  first_x_assum drule >> strip_tac >> gvs[] >>
-  metis_tac[store_lays_out_typed]
+  rw[body_inv_def] >>
+  gvs[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[vyperCompilerTheory.run_lowering_def, AllCaseEqs(),
+      vyperCompilerTheory.lowering_policy_ok_def]
 QED
 
-(* A tuple of word locals: stmtSimAssignTuple's
-   compile_assign_tuple_locals_stmt_frag. *)
+(* A local of a tuple target, of a type with a size that is not 0: held
+   through a pointer at its own type, and if in memory, with a size below
+   2 ** 64 (locals_alloc_ok), so a bytestring copy's 64 bytes of rounding
+   fit below 2 ** 256. *)
+Theorem tuple_target_local_ptr[local]:
+  !cenv cx env es id ty tv.
+    expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
+    FLOOKUP env.var_types id = SOME ty /\ 0 < type_memory_bytes cenv ty /\
+    evaluate_type (get_tenv cx) ty = SOME tv ==>
+    ?p sz vt.
+      FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+      cenv.ce_var_type id = SOME vt /\
+      if is_word_type ty then is_word_type vt
+      else
+        (vt = ty \/ is_bytestring_type vt /\ is_bytestring_type ty) /\
+        type_memory_bytes cenv ty = type_memory_size tv /\
+        ?vtv. evaluate_type (get_tenv cx) vt = SOME vtv /\
+              type_memory_bytes cenv vt = type_memory_size vtv /\
+              0 < type_memory_size vtv /\
+              type_memory_size vtv + 64 < dimword (:256)
+Proof
+  rpt strip_tac >>
+  `?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
+    metis_tac[expr_sim_inv_local] >>
+  `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
+  qexistsl_tac [`p`, `sz`, `ty`] >> simp[] >>
+  Cases_on `is_word_type ty` >> simp[] >>
+  `type_memory_bytes cenv ty = type_memory_size tv` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  `type_memory_bytes cenv ty < 2 ** 64` by metis_tac[locals_alloc_ok_def] >>
+  metis_tac[allocation_limit_word_room]
+QED
+
+(* After the source is read, a local of a tuple target holds a value of its
+   own type: a word as stored, otherwise at the type its pointer has. *)
+Theorem tuple_target_local_lays_out[local]:
+  !cenv cx env es1 id ty tv v entry.
+    expr_sim_inv cenv cx env es1 /\ FLOOKUP env.var_types id = SOME ty /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
+    lookup_scopes id es1.scopes = SOME entry ==>
+    if is_word_type ty then store_lays_out tv entry.type v
+    else
+      ?vt. cenv.ce_var_type id = SOME vt /\
+           evaluate_type (get_tenv cx) vt = SOME entry.type /\
+           value_has_type entry.type v
+Proof
+  rpt strip_tac >>
+  `evaluate_type (get_tenv cx) ty = SOME entry.type` by
+    metis_tac[expr_sim_inv_local] >>
+  `entry.type = tv` by metis_tac[optionTheory.SOME_11] >>
+  `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
+  IF_CASES_TAC >> simp[] >> metis_tac[store_lays_out_typed]
+QED
+
+(* The buffer a tuple assignment stages a memory view's value in fits
+   below 2 ** 256: alloc_limits_stmt bounds it by 2 ** 64. *)
+Theorem tuple_staging_bound[local]:
+  !cenv cx env es g e tys tvs.
+    expr_sim_inv cenv cx env es /\
+    stmt_exprs_ok cenv (Assign (TupleTarget g) e) /\
+    expr_type e = TupleT tys /\
+    evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
+    is_memory_view e ==>
+    type_memory_size (TupleTV tvs) < dimword (:256)
+Proof
+  rpt strip_tac >>
+  `type_memory_bytes cenv (TupleT tys) < 2 ** 64` by
+    gvs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  `type_memory_bytes cenv (TupleT tys) = type_memory_size (TupleTV tvs)` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  `type_memory_size (TupleTV tvs) + 64 < dimword (:256)` by
+    metis_tac[allocation_limit_word_room] >>
+  decide_tac
+QED
+
+(* A tuple of locals of types with sizes that are not 0 (a word's is 32):
+   stmtSimAssignTupleMem's compile_assign_tuple_locals_memory_stmt_frag.
+   The target has MCOPY (body_inv_mcopy). *)
 Theorem body_assign_tuple_locals[local]:
   !cx ids e tops ctx func cenv env env' ret_ty lctx RetQ es res es'.
     body_expr_ok cx e /\ body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
     type_stmt env ret_ty
       (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) =
       SOME env' /\
@@ -1478,22 +1720,14 @@ Theorem body_assign_tuple_locals[local]:
     eval_stmt cx (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e)
       es = (res, es') /\
     ids <> [] /\
-    EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\ is_word_type ty)
-      ids ==>
+    EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
+                     0 < type_memory_bytes cenv ty) ids ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty
          (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e))
       es res es'
 Proof
   rpt strip_tac >>
-  `EVERY (\id. ?p sz vt. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-                         cenv.ce_var_type id = SOME vt /\ is_word_type vt)
-     ids` by
-    (gvs[EVERY_MEM] >> rw[] >> rename1 `MEM x ids` >>
-     qpat_x_assum `!x. MEM x ids ==> _` drule >> strip_tac >>
-     rename1 `FLOOKUP env.var_types x = SOME ty` >>
-     drule_all expr_sim_inv_local >> strip_tac >>
-     `cenv.ce_var_type x = SOME ty` by fs[expr_sim_inv_def] >> simp[]) >>
   `env.type_defs = get_tenv cx` by
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   `?tys. expr_type e = TupleT tys /\ well_typed_expr env e /\
@@ -1504,8 +1738,6 @@ Proof
     gvs[type_stmt_def, atarget_accepts_def, well_typed_atarget_def,
         LIST_REL_EL_EQN, EL_MAP, well_typed_target_def,
         well_typed_expr_def, AllCaseEqs()] >>
-  `EVERY is_word_type tys` by
-    (rw[EVERY_EL] >> gvs[EVERY_EL] >> metis_tac[optionTheory.SOME_11]) >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
@@ -1515,40 +1747,40 @@ Proof
          int_calls_stmt_def] >>
      qexists_tac `[]` >> simp[] >>
      metis_tac[call_evaluation_safe_append_right]) >>
-  `expr_sim ctx func cenv cx (TupleT tys) e es` by
-    metis_tac[body_expr_ok_def] >>
   `?tup_tv. evaluate_type (get_tenv cx) (TupleT tys) = SOME tup_tv` by
     fs[assignable_type_def, well_formed_type_def,
        optionTheory.IS_SOME_EXISTS] >>
   drule evaluate_type_TupleT_cases >> strip_tac >> gvs[] >>
-  `!v es1. (do result <- eval_expr cx e; read_result cx result od) es =
-           (INL v, es1) ==> value_has_type (TupleTV tvs) v` by
-    (rpt strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
-     gvs[value_runtime_typed_def]) >>
-  `!vs es1 i entry.
-     (do result <- eval_expr cx e; read_result cx result od) es =
-       (INL (ArrayV (TupleV vs)), es1) /\
-     i < LENGTH ids /\ lookup_scopes (EL i ids) es1.scopes = SOME entry ==>
-     store_lays_out (EL i tvs) entry.type (EL i vs)` by
-    (rpt strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
-     gvs[value_runtime_typed_def, value_has_type_def,
-         values_have_types_LIST_REL] >>
-     drule_all tuple_local_lays_out >> simp[]) >>
-  irule compile_assign_tuple_locals_stmt_frag >> simp[] >>
-  qexistsl_tac [`tys`, `TupleTV tvs`] >> simp[]
+  irule compile_assign_tuple_locals_memory_stmt_frag >>
+  rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`tvs`, `tys`] >> rpt conj_tac
+  >~ [`expr_sim _ _ _ _ _ _ _`] >- metis_tac[body_expr_ok_def]
+  >~ [`cenv.ce_target CapMcopy`] >- metis_tac[body_inv_mcopy]
+  >~ [`type_memory_size (TupleTV _) < _`]
+  >- (strip_tac >> irule tuple_staging_bound >> metis_tac[])
+  >~ [`FLOOKUP cenv.ce_vars _`]
+  >- (rpt strip_tac >>
+      `FLOOKUP env.var_types (EL i ids) = SOME (EL i tys)` by simp[] >>
+      `0 < type_memory_bytes cenv (EL i tys)` by
+        (qpat_x_assum `EVERY _ ids` mp_tac >> simp[EVERY_EL] >>
+         disch_then drule >> strip_tac >> gvs[]) >>
+      irule tuple_target_local_ptr >> fs[LIST_REL_EL_EQN] >> metis_tac[])
+  >~ [`store_lays_out _ _ _`]
+  >- (rpt strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
+      `value_has_type (EL i tvs) (EL i vs)` by
+        gvs[value_runtime_typed_def, value_has_type_def,
+            values_have_types_LIST_REL, LIST_REL_EL_EQN] >>
+      irule tuple_target_local_lays_out >> fs[LIST_REL_EL_EQN] >> metis_tac[])
+  >~ [`value_has_type (TupleTV _) _`]
+  >- (rpt strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
+      gvs[value_runtime_typed_def]) >>
+  first_assum ACCEPT_TAC
 QED
 
 (* RESIDUAL (#637 tuple assignments): the other tuple targets.
-   - Locals in memory: stmtSimAssignTupleMem's
-     compile_assign_tuple_locals_memory_stmt_frag asks
-     type_memory_size (TupleTV tvs) < dimword (:256) for the staging
-     buffer, which the allocation check does not bound; Python allocates
-     it with new_temporary_value, under allocate_buffer's 2 ** 64 limit,
-     so the check can bound it too.  Its other
-     premises are available except cenv.ce_target CapMcopy (body_inv
-     does not fix the target; run_lowering's lowering_policy_ok requires
-     the unit's policy target to have MCOPY) and 0 < type_memory_size vtv
-     for a local of size 0, as for Assign.
+   - A local in memory of size 0 (an empty struct or tuple type), which
+     compile_assign_tuple_locals_memory_stmt_frag's
+     0 < type_memory_size vtv excludes, as for Assign.
    - Storage, subscript and attribute elements: no statement lemma for
      compile_tuple_store_all.
    An empty tuple target is supported but has no lemma either.  A nested
@@ -1568,7 +1800,7 @@ Theorem body_assign_tuple_other:
     eval_stmt cx (Assign (TupleTarget gs) e) es = (res, es') /\
     ~(?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
             EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
-                             is_word_type ty) ids) ==>
+                             0 < type_memory_bytes cenv ty) ids) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e)) es res es'
 Proof
@@ -1587,7 +1819,7 @@ Proof
     gvs[supported_stmt_def, supported_assignment_def] >>
   Cases_on `?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
                   EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
-                                   is_word_type ty) ids`
+                                   0 < type_memory_bytes cenv ty) ids`
   >- (gvs[] >> irule body_assign_tuple_locals >> metis_tac[]) >>
   irule body_assign_tuple_other >> metis_tac[]
 QED
@@ -1625,9 +1857,11 @@ Proof
          int_calls_expr_def] >>
      qexists_tac `[]` >> simp[]) >>
   `FLOOKUP env.var_types id = SOME ty /\
-   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn` by
+   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+   (bop = Exp ==> nonneg_int_literal e) /\
+   (bop = ShL ==> shift_amount_ok e) /\ (bop = ShR ==> shift_amount_ok e)` by
     (gvs[type_stmt_def, well_typed_target_def, well_typed_expr_def,
-         AllCaseEqs()] >>
+         DISJ_IMP_THM, AllCaseEqs()] >>
      Cases_on `FLOOKUP env.var_types id` >>
      Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
      rename1 `FLOOKUP env.var_assignable id = SOME asg` >>
@@ -1636,7 +1870,7 @@ Proof
   `body_expr_ok cx e` by
     (first_x_assum irule >> metis_tac[eval_target_place_local]) >>
   `expr_sim_case F ctx func cenv cx e` by metis_tac[body_expr_ok_case] >>
-  irule compile_augassign_local_case >> simp[] >>
+  irule compile_augassign_local_case >> simp[DISJ_IMP_THM] >>
   conj_tac >- (qexists_tac `env` >> simp[]) >>
   qexists_tac `F` >> simp[]
 QED
@@ -1744,8 +1978,10 @@ Proof
   `env_consistent env cx es` by fs[expr_sim_inv_def] >>
   `type_place_target env (TopLevelNameTarget (NONE, id)) = SOME (Type ty) /\
    well_typed_expr env e /\ assignable_type env.type_defs ty /\
-   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn` by
-    gvs[type_stmt_def, well_typed_target_def, AllCaseEqs()] >>
+   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+   (bop = Exp ==> nonneg_int_literal e) /\
+   (bop = ShL ==> shift_amount_ok e) /\ (bop = ShR ==> shift_amount_ok e)` by
+    gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
   gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
   >- (drule_all env_assignable_find_NONE >> strip_tac >> gvs[]) >>
   drule_all vyperTypeEnvTheory.env_consistent_toplevel_storage_static >>
@@ -1768,17 +2004,101 @@ Proof
   `body_expr_ok cx e` by
     (first_x_assum irule >> simp[read_place_def] >> metis_tac[]) >>
   `expr_sim_case F ctx func cenv cx e` by metis_tac[body_expr_ok_case] >>
-  irule compile_augassign_toplevel_case >> simp[] >>
+  irule compile_augassign_toplevel_case >> simp[DISJ_IMP_THM] >>
   conj_tac
   >- (qexists_tac `env` >> simp[] >>
       metis_tac[assignable_type_well_formed]) >>
   qexists_tac `F` >> simp[]
 QED
 
+(* self.x.f op= e on a word field of a storage or transient struct:
+   stmtSimAugAssignAttrStorage's compile_augassign_attr_storage_case.  The
+   supported subset puts the struct in tops with a slot and the typing finds
+   its declaration, as for body_assign_attr_storage; x.f's slot is read
+   wherever expr_sim_inv holds, which gives e's judgment. *)
+Theorem body_augassign_attr_storage[local]:
+  !cx ty src id fld bop e tops ctx func cenv env env' ret_ty lctx RetQ es
+   res es'.
+    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
+       eval_target_place cx
+         (AttributeTarget (TopLevelNameTarget (src, id)) fld) s'' =
+         (INL p,t') /\
+       read_place cx p s'3' = (INL cur,t'') /\
+       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_ok cx e) /\
+    body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    expr_sim_inv cenv cx env es /\
+    supported_storage_field_write tops (src, id) fld /\
+    type_stmt env ret_ty
+      (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop e)
+      = SOME env' /\
+    stmt_exprs_ok cenv
+      (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop
+         e) /\
+    call_evaluation_safe cx
+      (int_calls_stmt
+         (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld)
+            bop e)) /\
+    eval_stmt cx
+      (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop e)
+      es = (res, es') ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty
+         (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld)
+            bop e)) es res es'
+Proof
+  rpt strip_tac >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  drule supported_storage_field_write_decl >> strip_tac >> gvs[] >>
+  `get_module_code cx NONE = SOME tops /\ supported_program tops /\
+   ALL_DISTINCT
+     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
+   cenv.ce_hashmap_info = build_hashmap_info tops /\
+   cenv.ce_module_var_type (NONE, id) =
+     build_var_type_map tops (NONE, id)` by
+    fs[body_inv_def] >>
+  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  `expr_body_pre cenv cx env e es` by
+    (irule stmt_expr_body_pre >>
+     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         supported_expr_exists_def, int_calls_stmt_def,
+         int_calls_expr_def] >>
+     qexists_tac `[]` >> simp[]) >>
+  `?tgt_ty. type_place_target env (TopLevelNameTarget (NONE, id)) =
+              SOME (Type tgt_ty) /\
+            attribute_type env.type_defs tgt_ty fld = SOME ty /\
+            well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\
+            bop <> NotIn` by
+    gvs[type_stmt_def, well_typed_target_def,
+        vyperTypeEnvTheory.type_place_target_AttributeTarget, AllCaseEqs()] >>
+  gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
+  >- (drule_all env_assignable_find_NONE >> strip_tac >> gvs[]) >>
+  drule_all vyperTypeEnvTheory.env_consistent_toplevel_storage_static >>
+  strip_tac >> drule find_var_decl_storage_mem >> strip_tac >> gvs[] >>
+  `tgt_ty = StructT sid` by
+    metis_tac[build_maps_variable, optionTheory.SOME_11] >>
+  gvs[] >> drule_all build_maps_variable >> strip_tac >>
+  `?fsz. ALOOKUP (get_struct_fields cenv.ce_struct_fields
+                    (nsid_to_string sid)) fld = SOME (ty, fsz)` by
+    metis_tac[attribute_type_struct_field] >>
+  qpat_x_assum `IS_SOME (lookup_var_slot_from_layout _ _ _ _)`
+    (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
+  rename1 `lookup_var_slot_from_layout _ _ _ _ = SOME lslot` >>
+  `body_expr_ok cx e` by
+    (drule_all augassign_attr_storage_place >> strip_tac >>
+     first_x_assum irule >> metis_tac[]) >>
+  `expr_sim ctx func cenv cx ty e es` by metis_tac[body_expr_ok_def] >>
+  irule compile_augassign_attr_storage_case >> simp[] >> metis_tac[]
+QED
+
 (* RESIDUAL (#637 augmented assignment): the targets other than a local, a
-   field of a local struct, or a word storage or transient variable
-   (supported_scalar_target).
-   - A field of a storage or transient struct: no statement lemma.
+   field of a local struct, a word storage or transient variable
+   (supported_scalar_target), or a word field of a storage or transient
+   struct (supported_storage_field_write).
+   - A field of a storage or transient struct the supported subset does
+     not admit: no statement lemma.
    - An immutable (supported_target's supported_immutable_type): no
      statement lemma.
    - A field of a field or of a subscript: no statement lemma (the
@@ -1803,7 +2123,9 @@ Theorem body_augassign_other:
     ~(?id. t = NameTarget id) /\
     ~(?nsid. t = TopLevelNameTarget nsid /\
              supported_scalar_target tops nsid) /\
-    ~(?id fld. t = AttributeTarget (NameTarget id) fld) ==>
+    ~(?id fld. t = AttributeTarget (NameTarget id) fld) /\
+    ~(?nsid fld. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
+                 supported_storage_field_write tops nsid fld) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
 Proof
@@ -1829,6 +2151,10 @@ Proof
       irule body_augassign_toplevel_word >> metis_tac[]) >>
   Cases_on `?id fld. t = AttributeTarget (NameTarget id) fld`
   >- (gvs[] >> irule body_augassign_attr_local >> metis_tac[]) >>
+  Cases_on `?nsid fld. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
+                       supported_storage_field_write tops nsid fld`
+  >- (gvs[] >> rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
+      irule body_augassign_attr_storage >> metis_tac[]) >>
   irule body_augassign_other >> metis_tac[]
 QED
 
