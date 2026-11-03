@@ -1,4 +1,4 @@
-(* PHI-free preservation boundaries for SimplifyCFG. *)
+(* PHI-free and ALLOCA-free preservation boundaries for SimplifyCFG. *)
 Theory simplifyCfgPhiProps
 Ancestors
   simplifyCfgDefs simplifyCfgLabelProps cfgTransform venomInst list rich_list
@@ -315,4 +315,327 @@ Proof
     (Induct >> simp[fn_insts_blocks_def, no_phis_def]) >>
   simp[fn_insts_def, simplify_cfg_fn_def, simplify_cfg_fn_with_labels_def] >>
   metis_tac[simplify_cfg_iter_no_phi]
+QED
+
+(* ===== The same for ALLOCA: SimplifyCFG never adds one ===== *)
+
+(* The ALLOCA analogue of cfgTransform's no_phis. *)
+Definition no_allocas_def:
+  no_allocas bb <=>
+    EVERY (\inst. inst.inst_opcode <> ALLOCA) bb.bb_instructions
+End
+
+Theorem fix_phi_inst_no_alloca:
+  inst.inst_opcode <> ALLOCA ==>
+  (fix_phi_inst actual_preds inst).inst_opcode <> ALLOCA
+Proof
+  rw[fix_phi_inst_def] >> rpt CASE_TAC >> simp[]
+QED
+
+Theorem update_phi_bypass_no_alloca:
+  inst.inst_opcode <> ALLOCA ==>
+  (update_phi_bypass a b inst).inst_opcode <> ALLOCA
+Proof
+  rw[update_phi_bypass_def]
+QED
+
+Theorem canon_jnz_inst_no_alloca:
+  inst.inst_opcode <> ALLOCA ==>
+  (canon_jnz_inst inst).inst_opcode <> ALLOCA
+Proof
+  simp[canon_jnz_inst_def] >> rpt CASE_TAC >> simp[]
+QED
+
+Theorem subst_label_inst_no_alloca:
+  inst.inst_opcode <> ALLOCA ==>
+  (subst_label_inst a b inst).inst_opcode <> ALLOCA
+Proof
+  simp[subst_label_inst_def]
+QED
+
+Theorem subst_block_labels_inst_no_alloca:
+  inst.inst_opcode <> ALLOCA ==>
+  (subst_block_labels_inst lm inst).inst_opcode <> ALLOCA
+Proof
+  Cases_on `inst.inst_opcode` >>
+  simp[subst_block_labels_inst_def, subst_label_map_inst_def,
+       is_block_label_opcode_def, is_terminator_def]
+QED
+
+Theorem fix_phis_in_block_no_alloca:
+  no_allocas bb ==> no_allocas (fix_phis_in_block actual_preds bb)
+Proof
+  simp[no_allocas_def, fix_phis_in_block_def, EVERY_APPEND,
+       EVERY_FILTER, EVERY_MAP, EVERY_MEM, MEM_FILTER, MEM_MAP] >>
+  metis_tac[fix_phi_inst_no_alloca]
+QED
+
+Theorem fix_all_phis_no_alloca:
+  EVERY no_allocas fn.fn_blocks ==> EVERY no_allocas (fix_all_phis fn).fn_blocks
+Proof
+  simp[fix_all_phis_def, EVERY_MAP, EVERY_MEM, MEM_MAP] >>
+  metis_tac[fix_phis_in_block_no_alloca]
+QED
+
+Theorem subst_block_labels_block_no_alloca:
+  no_allocas bb ==> no_allocas (subst_block_labels_block lm bb)
+Proof
+  simp[no_allocas_def, subst_block_labels_block_def, EVERY_MAP, EVERY_MEM, MEM_MAP] >>
+  metis_tac[subst_block_labels_inst_no_alloca]
+QED
+
+Theorem subst_block_labels_fn_no_alloca:
+  EVERY no_allocas fn.fn_blocks ==>
+  EVERY no_allocas (subst_block_labels_fn lm fn).fn_blocks
+Proof
+  simp[subst_block_labels_fn_def, EVERY_MAP, EVERY_MEM, MEM_MAP] >>
+  metis_tac[subst_block_labels_block_no_alloca]
+QED
+
+Theorem remove_block_no_alloca:
+  EVERY no_allocas bbs ==> EVERY no_allocas (remove_block lbl bbs)
+Proof
+  simp[remove_block_def, EVERY_MEM, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem replace_block_no_alloca:
+  EVERY no_allocas bbs /\ no_allocas bb ==>
+  EVERY no_allocas (replace_block lbl bb bbs)
+Proof
+  simp[replace_block_def, EVERY_MAP, EVERY_MEM, MEM_MAP] >>
+  rpt strip_tac >> gvs[] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem no_alloca_front[local]:
+  !xs. EVERY P xs ==> EVERY P (FRONT xs)
+Proof
+  Induct >> simp[] >> Cases_on `xs` >> simp[]
+QED
+
+Theorem merge_blocks_no_alloca:
+  no_allocas a /\ no_allocas b ==> no_allocas (merge_blocks a b)
+Proof
+  simp[no_allocas_def, merge_blocks_def, EVERY_APPEND] >>
+  metis_tac[no_alloca_front]
+QED
+
+Theorem update_succ_phi_labels_no_alloca:
+  !succs bbs. EVERY no_allocas bbs ==>
+    EVERY no_allocas (update_succ_phi_labels old new bbs succs)
+Proof
+  simp[update_succ_phi_labels_def] >>
+  Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >>
+  Cases_on `lookup_block h bbs` >- simp[] >>
+  rename1 `lookup_block h bbs = SOME bb` >> simp[] >>
+  irule replace_block_no_alloca >> simp[] >>
+  drule lookup_block_member_label >> strip_tac >>
+  `no_allocas bb` by metis_tac[EVERY_MEM] >>
+  gvs[no_allocas_def, EVERY_MAP, EVERY_MEM, MEM_MAP] >> rw[] >>
+  metis_tac[subst_label_inst_no_alloca]
+QED
+
+Theorem bypass_source_inst_no_alloca[local]:
+  inst.inst_opcode <> ALLOCA ==>
+  (if ~is_terminator inst.inst_opcode then inst
+   else canon_jnz_inst (subst_label_inst old new inst)).inst_opcode <> ALLOCA
+Proof
+  strip_tac >> IF_CASES_TAC >> simp[] >>
+  irule canon_jnz_inst_no_alloca >> simp[subst_label_inst_no_alloca]
+QED
+
+Theorem do_merge_jump_no_alloca:
+  EVERY no_allocas fn.fn_blocks /\ no_allocas a /\
+  do_merge_jump fn a b lm = SOME (fn',lm') ==>
+  EVERY no_allocas fn'.fn_blocks
+Proof
+  simp[do_merge_jump_def] >>
+  Cases_on `bb_succs b` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `lookup_block h fn.fn_blocks` >> simp[] >>
+  rename1 `lookup_block h fn.fn_blocks = SOME target` >>
+  rpt strip_tac >> gvs[] >>
+  `no_allocas target` by
+    (drule lookup_block_member_label >> strip_tac >>
+     gvs[EVERY_MEM]) >>
+  irule replace_block_no_alloca >> reverse conj_tac
+  >- (irule replace_block_no_alloca >>
+      simp[remove_block_no_alloca] >>
+      gvs[no_allocas_def, EVERY_MAP, EVERY_MEM, MEM_MAP] >>
+      metis_tac[update_phi_bypass_no_alloca]) >>
+  Cases_on `h = a.bb_label` >>
+  gvs[no_allocas_def, EVERY_MEM, MEM_MAP] >>
+  metis_tac[update_phi_bypass_no_alloca, bypass_source_inst_no_alloca]
+QED
+
+Theorem lookup_block_no_alloca[local]:
+  EVERY no_allocas bbs /\ lookup_block lbl bbs = SOME bb ==> no_allocas bb
+Proof
+  metis_tac[lookup_block_member_label, EVERY_MEM]
+QED
+
+Theorem try_bypass_no_alloca[local]:
+  !succs fn lm bb fn' lm' success.
+    EVERY no_allocas fn.fn_blocks /\ no_allocas bb /\
+    try_bypass fn lm bb succs = (fn',lm',success) ==>
+    EVERY no_allocas fn'.fn_blocks
+Proof
+  Induct >- simp[try_bypass_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `try_bypass _ _ _ _ = _` mp_tac >>
+  simp[Once try_bypass_def] >>
+  Cases_on `lookup_block h fn.fn_blocks` >> simp[]
+  >- (strip_tac >> first_x_assum drule_all >> simp[]) >>
+  rename1 `lookup_block h fn.fn_blocks = SOME next` >>
+  Cases_on `can_bypass_jump fn bb next` >> simp[]
+  >- (Cases_on `lookup_block (HD (bb_succs next)) fn.fn_blocks` >> simp[]
+      >- (strip_tac >> first_x_assum drule_all >> simp[]) >>
+      rename1 `lookup_block _ _ = SOME target` >>
+      Cases_on `phi_values_agree bb.bb_label next.bb_label target.bb_instructions` >> simp[]
+      >- (Cases_on `do_merge_jump fn bb next lm` >> simp[]
+          >- (strip_tac >> first_x_assum drule_all >> simp[]) >>
+          rename1 `do_merge_jump _ _ _ _ = SOME result` >>
+          PairCases_on `result` >> simp[] >> strip_tac >> gvs[] >>
+          drule_all do_merge_jump_no_alloca >> simp[]) >>
+      strip_tac >> first_x_assum drule_all >> simp[]) >>
+  strip_tac >> first_x_assum drule_all >> simp[]
+QED
+
+Theorem chain_merge_no_alloca[local]:
+  EVERY no_allocas fn.fn_blocks /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lookup_block next_lbl fn.fn_blocks = SOME next ==>
+  EVERY no_allocas
+    (update_succ_phi_labels next_lbl lbl
+      (replace_block lbl (merge_blocks bb next)
+        (remove_block next_lbl fn.fn_blocks))
+      (bb_succs (merge_blocks bb next)))
+Proof
+  strip_tac >> irule update_succ_phi_labels_no_alloca >>
+  irule replace_block_no_alloca >>
+  simp[remove_block_no_alloca] >> irule merge_blocks_no_alloca >>
+  metis_tac[lookup_block_no_alloca]
+QED
+
+Theorem collapse_no_alloca_joint[local]:
+  (!fn lm vis lbl.
+    collapse_dfs_result
+      (\result. EVERY no_allocas fn.fn_blocks ==>
+                EVERY no_allocas (FST result).fn_blocks) fn lm vis lbl) /\
+  (!fn lm vis succs.
+    collapse_dfs_succs_result
+      (\result. EVERY no_allocas fn.fn_blocks ==>
+                EVERY no_allocas (FST result).fn_blocks) fn lm vis succs)
+Proof
+  ho_match_mp_tac collapse_dfs_ind >> rpt conj_tac
+  >- suspend "dfs"
+  >- suspend "nil"
+  >> suspend "succs"
+QED
+
+Resume collapse_no_alloca_joint[nil]:
+  simp[collapse_dfs_succs_result_def, collapse_dfs_def]
+QED
+
+Resume collapse_no_alloca_joint[succs]:
+  rpt strip_tac >>
+  simp[collapse_dfs_succs_result_def, Once collapse_dfs_def] >>
+  Cases_on `collapse_dfs fn lm vis lbl` >> PairCases_on `r` >>
+  gvs[collapse_dfs_result_def, collapse_dfs_succs_result_def]
+QED
+
+Resume collapse_no_alloca_joint[dfs]:
+  rpt strip_tac >>
+  simp[NoAsms, collapse_dfs_result_def, Once collapse_dfs_def] >>
+  Cases_on `lookup_block lbl fn.fn_blocks` >- simp[] >>
+  rename1 `lookup_block lbl fn.fn_blocks = SOME bb` >>
+  Cases_on `bb_succs bb`
+  >- (Cases_on `MEM lbl vis` >>
+      gvs[try_bypass_def, collapse_dfs_succs_result_def]) >>
+  Cases_on `t`
+  >- suspend "single"
+  >> suspend "multiple"
+QED
+
+Resume collapse_no_alloca_joint[single]:
+  gvs[] >>
+  Cases_on `lookup_block h fn.fn_blocks` >- (Cases_on `MEM lbl vis` >> simp[]) >>
+  rename1 `lookup_block h fn.fn_blocks = SOME next` >>
+  Cases_on `can_merge_blocks fn bb next` >>
+  gvs[collapse_dfs_result_def]
+  >- (strip_tac >> first_x_assum irule >>
+      irule chain_merge_no_alloca >> metis_tac[]) >>
+  Cases_on `MEM lbl vis` >> simp[]
+QED
+Resume collapse_no_alloca_joint[multiple]:
+  gvs[] >>
+  Cases_on `try_bypass fn lm bb (h::h'::t')` >>
+  PairCases_on `r` >> gvs[] >>
+  strip_tac >>
+  `EVERY no_allocas q.fn_blocks` by
+    (irule try_bypass_no_alloca >> metis_tac[lookup_block_no_alloca]) >>
+  Cases_on `r1` >> Cases_on `MEM lbl vis` >>
+  gvs[collapse_dfs_result_def, collapse_dfs_succs_result_def]
+QED
+
+Finalise collapse_no_alloca_joint
+
+Theorem collapse_dfs_no_alloca[local]:
+  EVERY no_allocas fn.fn_blocks ==>
+  EVERY no_allocas (FST (collapse_dfs fn lm vis lbl)).fn_blocks
+Proof
+  mp_tac (CONJUNCT1 collapse_no_alloca_joint) >>
+  simp[collapse_dfs_result_def]
+QED
+
+Theorem remove_unreachable_blocks_no_alloca[local]:
+  EVERY no_allocas fn.fn_blocks ==>
+  EVERY no_allocas (remove_unreachable_blocks fn).fn_blocks
+Proof
+  Cases_on `fn_entry_label fn` >>
+  simp[remove_unreachable_blocks_def, EVERY_MEM, MEM_FILTER]
+QED
+
+Theorem simplify_cfg_round_no_alloca[local]:
+  EVERY no_allocas fn.fn_blocks ==>
+  EVERY no_allocas (FST (simplify_cfg_round_with_labels fn)).fn_blocks
+Proof
+  strip_tac >> Cases_on `fn_entry_label fn`
+  >- simp[simplify_cfg_round_with_labels_def] >>
+  rename1 `fn_entry_label fn = SOME entry` >>
+  `EVERY no_allocas (fix_all_phis (remove_unreachable_blocks fn)).fn_blocks` by
+    simp[fix_all_phis_no_alloca, remove_unreachable_blocks_no_alloca] >>
+  drule collapse_dfs_no_alloca >>
+  disch_then (qspecl_then [`[]`, `[]`, `entry`] mp_tac) >>
+  Cases_on `collapse_dfs (fix_all_phis (remove_unreachable_blocks fn)) [] [] entry` >>
+  PairCases_on `r` >> simp[] >> strip_tac >>
+  simp[simplify_cfg_round_with_labels_def] >>
+  irule fix_all_phis_no_alloca >> irule remove_unreachable_blocks_no_alloca >>
+  IF_CASES_TAC >> simp[subst_block_labels_fn_no_alloca]
+QED
+
+Theorem simplify_cfg_iter_no_alloca[local]:
+  !n fn. EVERY no_allocas fn.fn_blocks ==>
+    EVERY no_allocas (FST (simplify_cfg_iter_with_labels n fn)).fn_blocks
+Proof
+  Induct >- simp[simplify_cfg_iter_with_labels_def] >>
+  rpt strip_tac >>
+  Cases_on `simplify_cfg_round_with_labels fn` >>
+  rename1 `simplify_cfg_round_with_labels fn = (next,lm)` >>
+  `EVERY no_allocas next.fn_blocks` by
+    (drule simplify_cfg_round_no_alloca >> simp[]) >>
+  simp[Once simplify_cfg_iter_with_labels_def] >>
+  IF_CASES_TAC >- simp[] >>
+  first_x_assum drule >>
+  Cases_on `simplify_cfg_iter_with_labels n next` >> simp[]
+QED
+
+Theorem simplify_cfg_fn_no_alloca:
+  EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn) ==>
+  EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts (simplify_cfg_fn fn))
+Proof
+  `!bbs. EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts_blocks bbs) =
+          EVERY no_allocas bbs` by
+    (Induct >> simp[fn_insts_blocks_def, no_allocas_def]) >>
+  simp[fn_insts_def, simplify_cfg_fn_def, simplify_cfg_fn_with_labels_def] >>
+  metis_tac[simplify_cfg_iter_no_alloca]
 QED

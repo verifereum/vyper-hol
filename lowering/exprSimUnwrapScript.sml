@@ -19,6 +19,7 @@
  *                        and unwrap_memory_word_sim's MLOAD),
  *                        unwrap_runtime_immutable_word_sim (DLOAD),
  *                        unwrap_storage_word_sim (SLOAD/TLOAD),
+ *                        unwrap_copy_sim (exprSimCopy's copies),
  *                        vv_post_calldata (no calldata pointers)
  *   vv_post_failed_read — vv_post holds of a result only where it reads
  *
@@ -29,7 +30,7 @@
  *
  * Cheated, each with its reason at the lemma:
  *   unwrap_ctor_immutable_word_sim — constructor immutable word-load proof
- *   unwrap_copy_sim    — the copy of an aggregate out of storage or code
+ *   (exprSimCopy's unwrap_ctor_code_copy_sim is cheated for the same reason)
  *)
 
 Theory exprSimUnwrap
@@ -38,6 +39,7 @@ Ancestors
   exprSim exprLowering compileEnv immutableEncoding vyperAST vyperInterpreter
   vyperState
   loweringSlice fragExec freshWrites venomInst venomExecSemantics venomState
+  exprSimCopy exprOperandVar vyperEvalExprPreservesScopesDom
   valueEncoding valueEncodingProofs vyperTypeValues vyperStorage vyperValue
   vyperLookupStorage
 Libs
@@ -410,7 +412,7 @@ QED
 
 (* At runtime the word a storage or transient load returns is the value's:
    the read is live, so storage_rel and transient_rel make the slot agree. *)
-Theorem storage_holds_load[local]:
+Theorem storage_holds_load:
   !func cenv cx es s t v w tr ctx.
     stmt_state_rel ctx func cenv cx es s /\ is_word_type t /\
     storage_holds cx tr t (Value v) w es ==>
@@ -486,9 +488,12 @@ Proof
   gvs[])
 QED
 
-(* A word immutable in the constructor: a load from the immutable buffer.
-   Issue #563 supplies the buffer-relative lowering and memory relation;
-   the corresponding fragment-execution proof remains admitted here. *)
+(* A word immutable in the constructor: an MLOAD from the immutables
+   buffer at its base variable plus the offset.  Cheated: the
+   constructor's prologue sets the base variable to 0
+   (compile_fixed_region_with_id), but stmt_state_rel says nothing of the
+   base (immutable_base_zero is not one of its conjuncts), so vv_post's
+   offset can't be related to the memory the MLOAD reads. *)
 Theorem unwrap_ctor_immutable_word_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
@@ -503,24 +508,39 @@ Proof
 QED
 
 (* An aggregate in storage, transient storage or code: a copy into a buffer
-   of the expression's own, allocated at instruction id sm.cs_next_id.
-   Cheated: the copy-loop simulation remains to be proved for each source
-   location.  Issue #563 supplies full-layout immutable relations and
-   buffer-relative constructor copies; those are no longer lowering or
-   relation blockers. *)
+   of the expression's own, allocated at instruction id sm.cs_next_id
+   (exprSimCopy).  The buffer is type_memory_bytes of the value_vv's type,
+   which vv_post makes the expression's; the last premise says that is the
+   value's memory size and fits Python's allocation limit. *)
 Theorem unwrap_copy_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
     (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient \/
      p.ptr_location = LocCode) /\ ~is_word_type t /\
-    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-    sa.cs_next_id <= sm.cs_next_id ==>
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+           ~is_word_type (expr_type e) ==>
+           type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) ==>
     frag_exec ctx sm sb
       (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
              (LocatedValue t p) s)
       (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
 Proof
-  cheat
+  rpt strip_tac >>
+  (reverse (Cases_on `t = expr_type e`)
+   >- (irule frag_exec_conseq >> qexistsl_tac [`\s. F`, `\s. F`, `R`] >>
+       gvs[fragExecTheory.frag_exec_false_pre, vv_post_def, vv_holds_def])) >>
+  gvs[]
+  >~ [`p.ptr_location = LocCode`]
+  >- (Cases_on `cenv.ce_is_ctor`
+      >- (irule exprSimCopyTheory.unwrap_ctor_code_copy_sim >> gvs[]) >>
+      irule exprSimCopyTheory.unwrap_runtime_code_copy_sim >> gvs[]) >>
+  irule exprSimCopyTheory.unwrap_storage_copy_sim >> gvs[]
 QED
 
 (* No value_vv points into calldata. *)
@@ -535,16 +555,27 @@ QED
 Theorem unwrap_value_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v vv op R.
     unwrap_value cenv vv sm = (op, sb) /\
-    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-    sa.cs_next_id <= sm.cs_next_id ==>
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+           ~is_word_type (expr_type e) ==>
+           type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) ==>
     frag_exec ctx sm sb
       (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s)
       (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
 Proof
-  rpt strip_tac >> Cases_on `vv`
+  rpt strip_tac >>
+  `local_ptrs_reserved cenv sm` by
+    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+  Cases_on `vv`
   >- (gvs[unwrap_value_def, comp_return_def] >> irule frag_exec_refl >>
       rw[] >> metis_tac[expr_post_of_vv_post_stack]) >>
   rename1 `LocatedValue t p` >>
+  RULE_ASSUM_TAC (REWRITE_RULE [contextTheory.vv_operand_def]) >>
   Cases_on `p.ptr_location = LocCalldata`
   >- (irule frag_exec_conseq >>
       qexistsl_tac [`\s. F`, `\s. F`, `R`] >>
@@ -555,7 +586,7 @@ Proof
       irule unwrap_copy_sim >> gvs[] >>
       qpat_x_assum `_ \/ _` strip_assume_tac >> simp[]) >>
   Cases_on `p.ptr_location = LocCode`
-  >- (Cases_on `is_word_type t` >~ [`~is_word_type t`]
+  >- (reverse (Cases_on `is_word_type t`)
       >- (irule unwrap_copy_sim >> gvs[]) >>
       Cases_on `cenv.ce_is_ctor`
       >- (irule unwrap_ctor_immutable_word_sim >> gvs[]) >>
@@ -626,8 +657,15 @@ Theorem unwrap_read_result_sim[local]:
   !ctx func cenv cx e es sa sm sb s0 es' raw res vv op.
     read_result cx raw es' = (res, es') /\
     unwrap_value cenv vv sm = (op, sb) /\
-    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-    sa.cs_next_id <= sm.cs_next_id ==>
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+           ~is_word_type (expr_type e) ==>
+           type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) ==>
     frag_exec ctx sm sb
       (\s. vv_post ctx func cenv cx e es sa sm s0 es' raw vv s)
       (\s. ?v. res = INL v /\ expr_post ctx func cenv cx e es sa sb s0 es' v op s)
@@ -652,7 +690,12 @@ QED
    expr_post. *)
 Theorem expr_sim_of_vv_sim:
   !ctx func cenv cx ty e es.
-    expr_vv_sim ctx func cenv cx ty e es ==> expr_sim ctx func cenv cx ty e es
+    expr_vv_sim ctx func cenv cx ty e es /\
+    (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+           ~is_word_type (expr_type e) ==>
+           type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) ==>
+    expr_sim ctx func cenv cx ty e es
 Proof
   rw[expr_sim_def] >>
   qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
@@ -661,9 +704,12 @@ Proof
   simp[] >> strip_tac >>
   drule compile_expr_extends >> strip_tac >>
   drule unwrap_value_extends >> strip_tac >>
-  `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fn_has_code_split] >>
   `local_ptrs_reserved cenv sm` by
     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
+    (drule (cj 1 exprOperandVarTheory.compiler_compile_var) >> simp[]) >>
   Cases_on `eval_expr cx e es` >> rename1 `_ = (raw, est)` >>
   qpat_x_assum `(do result <- _; _ od) _ = _` mp_tac >>
   simp[bind_def] >>
@@ -682,6 +728,9 @@ Proof
       simp[] >> conj_tac
       >- (irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
           simp[FUN_EQ_THM]) >>
+      `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
+        (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
+         simp[]) >>
       irule unwrap_read_result_sim >> simp[]) >>
   rename1 `eval_expr cx e es = (INR exc, est)` >>
   strip_tac >> gvs[] >>

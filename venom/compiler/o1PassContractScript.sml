@@ -35,7 +35,7 @@
  * runs are matched; gas_variant is the hook the oracle instantiates,
  * equality until then.
  *
- * The nine contract theorems, one planned admission per pass tag, are in
+ * The eleven contract theorems, one planned admission per pass run, are in
  * o1ContractTheorems.
  *)
 Theory o1PassContract
@@ -196,8 +196,6 @@ Definition unit_label_refs_ok_def:
     EVERY fn_label_refs_ok unit.cu_context.ctx_functions
 End
 
-(* The unit's entry function has no parameter instruction (the lowering's
-   entry function reads calldata, never PARAMs). *)
 (* No PHI in the first block: it has no predecessors (first_block_no_preds),
    so a PHI there is dead, and a pass that inserts a prologue there
    (FmpLowering's INITIAL_FMP, DretDesugar after the PARAMs) would put it
@@ -220,6 +218,8 @@ Definition unit_defs_reach_uses_def:
     EVERY fn_defs_reach_uses unit.cu_context.ctx_functions
 End
 
+(* The unit's entry function has no parameter instruction (the lowering's
+   entry function reads calldata, never PARAMs). *)
 Definition unit_entry_no_params_def:
   unit_entry_no_params unit <=>
     !fn. MEM fn unit.cu_context.ctx_functions /\
@@ -281,6 +281,63 @@ Definition o1_step_contract_def:
       label_map_sources_ok fn out.fpo_function out.fpo_label_map /\
       ir_supply_inst_ok out.fpo_supply
 End
+
+(* The per-function stage rows: what a run may assume of the function it
+   is given and must establish of the one it returns, where the stage
+   table o1_inv below cannot reach, since the walk runs each pass on one
+   function at a time in a mixed context.  Row k holds of a function that
+   has been through the first k walk passes; from row 3 on (after
+   ConcretizeMemLoc) the function has no ALLOCA, which SingleUseExpansion
+   needs, since it would expand the literal operand of one. *)
+Definition o1_fn_row_def:
+  o1_fn_row (k : num) fn <=>
+    3 <= k ==> EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn)
+End
+
+(* The step contract of the k-th walk run: the step contract, with row k
+   of the function rows assumed of the input and row k+1 owed of the
+   output. *)
+Definition o1_step_contract_at_def:
+  o1_step_contract_at k rpolicy pass <=>
+    !observed s fn out.
+      fn_pass_step rpolicy pass observed s fn out /\
+      o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
+      o1_fn_row k fn ==>
+      o1_fn_shape observed.cu_context out.fpo_function /\
+      fresh_names_ok s fn out.fpo_function /\
+      label_map_sources_ok fn out.fpo_function out.fpo_label_map /\
+      ir_supply_inst_ok out.fpo_supply /\
+      o1_fn_row (SUC k) out.fpo_function
+End
+
+(* The step contracts of a pass list whose first pass is the k-th run. *)
+Definition o1_step_contracts_from_def:
+  (o1_step_contracts_from rpolicy k [] <=> T) /\
+  (o1_step_contracts_from rpolicy k (pass::passes) <=>
+     o1_step_contract_at k rpolicy pass /\
+     o1_step_contracts_from rpolicy (SUC k) passes)
+End
+
+(* Before row 3 the rows say nothing, so the step contract is the plain
+   one. *)
+Theorem o1_step_contract_at_plain:
+  k < 2 ==>
+  (o1_step_contract_at k rpolicy pass <=> o1_step_contract rpolicy pass)
+Proof
+  simp[o1_step_contract_at_def, o1_step_contract_def, o1_fn_row_def]
+QED
+
+(* A pass with the plain step contract that takes row k to row k+1 has
+   the k-th step contract. *)
+Theorem o1_step_contract_at_preserve:
+  o1_step_contract rpolicy pass /\
+  (!observed s fn out.
+     fn_pass_step rpolicy pass observed s fn out /\ o1_fn_row k fn ==>
+     o1_fn_row (SUC k) out.fpo_function) ==>
+  o1_step_contract_at k rpolicy pass
+Proof
+  simp[o1_step_contract_at_def, o1_step_contract_def] >> metis_tac[]
+QED
 
 (* ===== Stage contract: semantic, between stage contexts ===== *)
 
@@ -348,12 +405,6 @@ End
 
 (* ===== The stage invariants ===== *)
 
-(* Every function's static layout end is at most eom. *)
-Definition ctx_eom_bounded_def:
-  ctx_eom_bounded eom C <=>
-    !fn e. MEM fn C.ctx_functions /\ fn.fn_eom = SOME e ==> e <= eom
-End
-
 (* Before ConcretizeMemLoc: the raw phase of the shared memory invariant,
    S3's conclusion. *)
 Definition o1_src_inv_def:
@@ -383,17 +434,20 @@ Definition o1_walk_src_inv_def:
       C.ctx_functions
 End
 
-(* After ConcretizeMemLoc: every access below a bound on every function's
-   static layout. *)
+(* After ConcretizeMemLoc: every access below the context's layout end,
+   max_live_eom (the largest function layout end and global reserved end),
+   where codegen's spill regions start.  The bound is the context's, not
+   existential over any upper bound, so it is not satisfiable by a large
+   eom. *)
 Definition o1_static_inv_def:
   o1_static_inv C vs <=>
-    ?eom. ctx_eom_bounded eom C /\ mem_inv (static_mem_ok eom) C vs
+    ?eom. max_live_eom C = SOME eom /\ mem_inv (static_mem_ok eom) C vs
 End
 
 (* After FmpLowering: static, or dynamic at or above the initial fmp. *)
 Definition o1_lowered_inv_def:
   o1_lowered_inv C vs <=>
-    ?eom. ctx_eom_bounded eom C /\ mem_inv (lowered_mem_fact eom) C vs
+    ?eom. max_live_eom C = SOME eom /\ mem_inv (lowered_mem_fact eom) C vs
 End
 
 (* Rows 5 and 6 (SimplifyCFG's input, SUE's input) add wf_ssa: MakeSSA's
@@ -416,10 +470,14 @@ Definition o1_inv_def:
     else o1_lowered_inv
 End
 
-(* The input-to-output relation the k-th run's contract may assume; none
-   today. *)
+(* What the k-th run's contract may assume of its stage contexts besides
+   the rows of o1_inv: the function rows, row k of the input's functions
+   and row k+1 of the output's, which the step contracts establish along
+   the walk. *)
 Definition o1_pre_def:
-  o1_pre (k : num) (C : venom_context) (C' : venom_context) <=> T
+  o1_pre k (C : venom_context) (C' : venom_context) <=>
+    EVERY (o1_fn_row k) C.ctx_functions /\
+    EVERY (o1_fn_row (SUC k)) C'.ctx_functions
 End
 
 (* ===== The schedule ===== *)

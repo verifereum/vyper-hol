@@ -666,8 +666,8 @@ Proof
   simp[Once resolves_to_def] >> strip_tac >> gvs[] >|
   [(* d1: lift_result r2 r3 *)
    simp[Once resolves_to_def] >> disj1_tac >>
-   Cases_on `r1` >> Cases_on `r2` >> Cases_on `r3` >>
-   gvs[lift_result_def] >> metis_tac[],
+   Cases_on `r1` >> Cases_on `r2` >> gvs[lift_result_def] >>
+   Cases_on `r3` >> gvs[lift_result_def] >> metis_tac[],
    (* d2: left continues from r1 ~ OK v *)
    Cases_on `r1` >> gvs[lift_result_def] >>
    rename1 `R_ok v' v` >>

@@ -15,7 +15,7 @@
  *)
 Theory o1ContractSimplifyCfg
 Ancestors
-  o1ContractSimplifyCfgStep o1PassContract o1PassLift simplifyCfgCorrectness simplifyCfgProof
+  o1ContractSimplifyCfgStep o1PassContract o1ComposeSupport o1PassLift simplifyCfgCorrectness simplifyCfgProof
   simplifyCfgDefs unitMemInv venomPassSchedule venomCompilerTypes
   venomWf cfgWf simplifyCfgLabelProps venomPassDispatcher
   opcodeClass ctxLookupAgreeHelpers venomExecSemantics venomExecProofs list rich_list arithmetic simplifyCfgPhiProps allocaRemapSSA venomInst
@@ -43,16 +43,13 @@ Proof
   drule simplify_cfg_pass_step_function >> simp[]
 QED
 
-Theorem simplify_cfg_stage_eom_bounded:
-  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
-  ctx_eom_bounded eom C ==> ctx_eom_bounded eom C'
+Theorem simplify_cfg_stage_max_live_eom:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' ==>
+  max_live_eom C' = max_live_eom C
 Proof
-  strip_tac >> drule simplify_cfg_stage_functions >>
-  simp[ctx_eom_bounded_def, listTheory.MEM_MAP] >> rpt strip_tac >>
-  qspec_then `y` mp_tac (GEN_ALL simplify_cfg_fn_metadata) >>
-  simp[venomInstTheory.fn_static_layout_eq_def] >> strip_tac >>
-  gvs[ctx_eom_bounded_def] >> first_x_assum irule >>
-  qexists_tac `y` >> simp[]
+  strip_tac >> drule ctx_pass_stage_max_live_eom >>
+  simp[venomPassDispatcherTheory.fn_pass_static_layout_effect_def,
+       venomPassScheduleTheory.fn_pass_tag_def]
 QED
 
 Theorem step_inst_intret_opcodes:
@@ -345,7 +342,7 @@ Proof
   simp[o1_ssa_inv_def] >> conj_tac
   >- (gvs[o1_ssa_inv_def, o1_lowered_inv_def] >>
       qexists_tac `eom` >> conj_tac
-      >- metis_tac[simplify_cfg_stage_eom_bounded] >>
+      >- metis_tac[simplify_cfg_stage_max_live_eom] >>
       irule simplify_cfg_stage_mem_inv >>
       metis_tac[mem_corr_closed_lowered_mem_fact]) >>
   drule simplify_cfg_stage_functions >> strip_tac >>
@@ -365,8 +362,12 @@ Proof
 QED
 
 Theorem o1_contract_simplify_cfg:
-  o1_step_contract rpolicy (CFP_Simple VP_SimplifyCFG) /\
+  o1_step_contract_at 5 rpolicy (CFP_Simple VP_SimplifyCFG) /\
   o1_run_contract rpolicy 5
 Proof
-  simp[simplify_cfg_step_contract, simplify_cfg_stage_walk]
+  simp[simplify_cfg_stage_walk] >>
+  irule o1_step_contract_at_preserve >>
+  simp[simplify_cfg_step_contract, o1_fn_row_def] >> rpt strip_tac >>
+  drule simplify_cfg_pass_step_function >> strip_tac >>
+  gvs[simplify_cfg_fn_no_alloca]
 QED

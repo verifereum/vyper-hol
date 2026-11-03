@@ -32,12 +32,14 @@ End
 (* What the schedule establishes for the i-th function's chain, with the
    names in the order the schedule took them: the units its passes
    observed have the unit's entry, reservations and names, and show every
-   function scheduled earlier in its final form. *)
+   function scheduled earlier in its final form; the j-th function of the
+   chain satisfies stage j's row (o1_fn_row). *)
 Definition chain_facts_def:
   chain_facts rpolicy passes unit order chains i <=>
     (?s0. fn_chain rpolicy passes s0 (FST (EL i chains)) (SND (EL i chains))) /\
     HD (FST (EL i chains)) = EL i unit.cu_context.ctx_functions /\
     EVERY (o1_fn_shape unit.cu_context) (FST (EL i chains)) /\
+    (!j. j < LENGTH (FST (EL i chains)) ==> o1_fn_row j (EL j (FST (EL i chains)))) /\
     !k. k < LENGTH passes ==>
       (EL k (SND (EL i chains))).cu_context.ctx_entry =
         unit.cu_context.ctx_entry /\
@@ -300,6 +302,7 @@ Theorem partial_schedule_new_chain:
   i < LENGTH chains /\ (EL i original.cu_context.ctx_functions).fn_name = n /\
   fn_chain rpolicy passes s fs obs /\ HD fs = EL i original.cu_context.ctx_functions /\
   EVERY (o1_fn_shape current.cu_context) fs /\
+  (!j. j < LENGTH fs ==> o1_fn_row j (EL j fs)) /\
   (!k. k < LENGTH obs ==> EL k obs =
     unit_with_fns current (replace_fn n (EL k fs) current.cu_context.ctx_functions)) ==>
   chain_facts rpolicy passes original (done ++ n::todo) (LUPDATE (fs,obs) i chains) i
@@ -318,6 +321,7 @@ Theorem partial_schedule_extend:
   i < LENGTH chains /\ (EL i original.cu_context.ctx_functions).fn_name = n /\
   fn_chain rpolicy passes s fs obs /\ HD fs = EL i original.cu_context.ctx_functions /\
   EVERY (o1_fn_shape current.cu_context) fs /\
+  (!j. j < LENGTH fs ==> o1_fn_row j (EL j fs)) /\
   (!k. k < LENGTH obs ==> EL k obs =
     unit_with_fns current (replace_fn n (EL k fs) current.cu_context.ctx_functions)) /\
   next.cu_context = current.cu_context with ctx_functions :=
@@ -353,7 +357,7 @@ Proof
   gvs[partial_schedule_def]
 QED
 Theorem partial_schedule_step:
-  EVERY (o1_step_contract rpolicy) passes /\
+  o1_step_contracts_from rpolicy 0 passes /\
   partial_schedule rpolicy passes original (done ++ n::todo) done chains current /\
   ALL_DISTINCT (done ++ n::todo) /\
   (!name. MEM name (done ++ n::todo) <=>
@@ -392,7 +396,7 @@ QED
 
 Theorem partial_schedule_suffix:
   !todo done chains current s final sf order.
-  EVERY (o1_step_contract rpolicy) passes /\
+  o1_step_contracts_from rpolicy 0 passes /\
   order = done ++ todo /\
   partial_schedule rpolicy passes original order done chains current /\
   ALL_DISTINCT order /\

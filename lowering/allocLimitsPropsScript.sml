@@ -46,7 +46,7 @@ Theorem alloc_limits_struct_fields:
 Proof
   ho_match_mp_tac alloc_limits_expr_ind >> rpt conj_tac >> rpt gen_tac >>
   rpt strip_tac >> drule type_memory_bytes_frame >> strip_tac >>
-  simp[alloc_limits_expr_def]
+  simp[alloc_limits_expr_def, type_alloc_ok_def]
 QED
 
 Theorem alloc_limits_expr_exists:

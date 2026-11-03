@@ -50,13 +50,11 @@
  *                              array literal, from its elements'
  *                              simulation
  *   compile_neg_case (#572)  — row 7; not and abs are proved
- *   compile_ifexp_aggregate_case — row 9 for aggregate ternaries (#561,
- *                              #674); word ternaries are proved
- *                              (compile_ifexp_word_case), and so are row
- *                              8's and/or chains (#556), which the
- *                              frontend desugars to nested IfExps of type
- *                              bool (translate_boolop).  Bop And/Or are
- *                              the bitwise & and |.
+ *
+ * Row 9, ternaries, is proved: word ternaries by compile_ifexp_word_case,
+ * aggregate ones by compile_ifexp_aggregate_case, and with them row 8's
+ * and/or chains (#556), which the frontend desugars to nested IfExps of
+ * type bool (translate_boolop).  Bop And/Or are the bitwise & and |.
  *
  * Compile-side facts:
  *   lower_value_word_shape   — lowering a well-typed word expression only
@@ -772,6 +770,76 @@ Proof
   simp[expr_vv_res_ok_def, expr_read_res_ok_def, expr_res_ok_def]
 QED
 
+(* A conditional keeps a place only for a memory place. *)
+Theorem conditional_result_place_memory[local]:
+  !cx src st p st'.
+    conditional_result cx src st = (INL (PlaceR p), st') ==>
+    ?id path. p = MemoryPlace id path
+Proof
+  rpt gen_tac >> Cases_on `src` >>
+  simp[conditional_result_def, bind_def, return_def, raise_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> rename1 `place_type_value cx q` >>
+  Cases_on `q` >> gvs[bind_def, return_def, AllCaseEqs()] >>
+  qpat_x_assum `_ = (INL (PlaceR p),_)` mp_tac >>
+  IF_CASES_TAC >> simp[return_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* A live memory place of its type reads, leaving the state alone. *)
+Theorem live_memory_place_read[local]:
+  !cx st id path tv.
+    state_well_typed st /\ runtime_place_typed cx st (MemoryPlace id path) tv /\
+    live_memory_result st (PlaceR (MemoryPlace id path)) ==>
+    ?v. read_result cx (PlaceR (MemoryPlace id path)) st = (INL v, st)
+Proof
+  rw[vyperTypeEvalSoundnessTheory.live_memory_result_def,
+     vyperPlaceTypingTheory.runtime_place_typed_memory] >> gvs[] >>
+  `value_has_type entry.type entry.value /\
+   well_formed_type_value entry.type` by
+    metis_tac[state_well_typed_def,
+              vyperTypeStatePreservationTheory.lookup_scopes_well_typed_value_has_type,
+              vyperPlaceTypingTheory.lookup_scopes_well_typed_type] >>
+  `?w. read_memory_path entry path = INL w /\ value_has_type tv w` by
+    metis_tac[vyperPlaceResultTypingTheory.covered_memory_read, MEM] >>
+  gvs[read_result_def, read_place_def, bind_def, get_scopes_def,
+      lift_option_type_def, lift_sum_def, return_def]
+QED
+
+(* A conditional's result reads: a value, or a live memory place. *)
+Theorem expr_body_pre_ifexp_readable[local]:
+  !cenv cx env t c a b es res es'.
+    expr_body_pre cenv cx env (IfExp t c a b) es /\
+    eval_expr cx (IfExp t c a b) es = (res,es') ==>
+    expr_read_res_ok cx es' res
+Proof
+  rpt strip_tac >> drule_all expr_body_pre_eval_result >> strip_tac >>
+  reverse (Cases_on `res`)
+  >- (drule_all expr_body_pre_vv_res_ok >>
+      simp[expr_vv_res_ok_def, expr_read_res_ok_def, expr_res_ok_def]) >>
+  rename1 `eval_expr _ _ _ = (INL r,_)` >>
+  Cases_on `r`
+  >- simp[expr_read_res_ok_def, read_result_def, return_def]
+  >- (rename1 `PlaceR p` >>
+      `?id path. p = MemoryPlace id path` by
+        (qpat_x_assum `eval_expr _ (IfExp _ _ _ _) _ = _` mp_tac >>
+         simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >>
+         strip_tac >> drule conditional_result_place_memory >> simp[]) >>
+      gvs[] >>
+      `live_memory_result es' (PlaceR (MemoryPlace id path))` by
+        (drule_at (Pat `eval_expr _ _ _ = _`)
+           vyperTypeEvalStoragePreservationTheory.eval_expr_success_storage_facts >>
+         disch_then (qspec_then `env` mp_tac) >>
+         impl_tac
+         >- gvs[expr_body_pre_def, expr_sim_inv_def,
+                vyperTypeExprSoundnessTheory.runtime_consistent_def] >>
+         simp[]) >>
+      gvs[vyperTypeInvariantsTheory.eval_result_typed_def, expr_sim_inv_def] >>
+      drule_all live_memory_place_read >> strip_tac >>
+      simp[expr_read_res_ok_def]) >>
+  gvs[vyperTypeInvariantsTheory.eval_result_typed_def]
+QED
+
 (* The operands' internal calls: none if the conditional has none. *)
 Theorem int_calls_ifexp_operands[local]:
   !nocalls t c a b.
@@ -825,11 +893,12 @@ Proof
 QED
 
 (* A ternary of an aggregate type, which supported_pure_expr admits for
-   memory arrays, structs and strings (#561).  Cheated: compile_ifexp_vv_sim
-   needs the compile-state shape of the branches' lower_value, which for a
-   non-word type is #674's compile_expr_shape, and that gives neither
-   cs_next_id's growth nor the shape under expr_sim_inv yet.  A ternary over storage or transient arrays copies its value to memory;
-   retained memory aggregate places are related through read_result. *)
+   memory arrays, structs and strings (#561): compile_ifexp_vv_sim
+   (exprSimIfExp), as for word types, with the branches' shape from
+   compile_expr_grows, and the result readable by
+   expr_body_pre_ifexp_readable (a memory aggregate is kept as its live
+   place, anything else is read).  A ternary over storage or transient
+   arrays copies its value to memory. *)
 Theorem compile_ifexp_aggregate_case:
   !nocalls ctx func cenv cx t c a b.
     ~is_word_type t /\
@@ -842,7 +911,28 @@ Theorem compile_ifexp_aggregate_case:
      expr_vv_case nocalls ctx func cenv cx b) ==>
     expr_vv_case nocalls ctx func cenv cx (IfExp t c a b)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> simp[expr_vv_case_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule expr_body_pre_ifexp >> strip_tac >>
+  drule int_calls_ifexp_operands >> strip_tac >>
+  simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
+  `expr_read_res_ok cx es' res` by
+    metis_tac[expr_body_pre_ifexp_readable] >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ty`, `t`, `c`, `a`, `b`, `es`]
+    mp_tac compile_ifexp_vv_sim >>
+  impl_tac
+  >- (simp[] >> rpt conj_tac
+      >- metis_tac[cj 2 exprLoweringPropsTheory.compile_expr_grows]
+      >- metis_tac[cj 2 exprLoweringPropsTheory.compile_expr_grows]
+      >- (irule expr_sim_case_apply >> metis_tac[]) >>
+      rpt gen_tac >> strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
+      drule eval_expr_read_INL >> strip_tac >>
+      `expr_sim_case nocalls ctx func cenv cx a /\
+       expr_sim_case nocalls ctx func cenv cx b` by
+        (qpat_x_assum `(?s tv s'. _) ==> _` mp_tac >>
+         impl_tac >- metis_tac[] >> simp[]) >>
+      conj_tac >> irule expr_sim_case_apply >> metis_tac[]) >>
+  disch_then irule >> simp[]
 QED
 
 (* x if c else y, from its operands' judgments, the branches' where the

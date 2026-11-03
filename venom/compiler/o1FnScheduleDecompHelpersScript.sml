@@ -300,9 +300,36 @@ Proof
   gvs[o1_fn_shape_def]
 QED
 
+Theorem observed_step_contract_at:
+  o1_step_contract_at k rpolicy pass /\
+  fn_pass_step rpolicy pass observed s fn out /\
+  observed = (unit with cu_context := unit.cu_context with ctx_functions :=
+    MAP (\f. if f.fn_name = fn.fn_name then fn else f)
+      unit.cu_context.ctx_functions) /\
+  o1_ctx_shape unit.cu_context /\ o1_fn_shape unit.cu_context fn /\
+  ir_supply_inst_ok s /\ o1_fn_row k fn ==>
+  o1_fn_shape unit.cu_context out.fpo_function /\
+  fresh_names_ok s fn out.fpo_function /\
+  label_map_sources_ok fn out.fpo_function out.fpo_label_map /\
+  ir_supply_inst_ok out.fpo_supply /\
+  o1_fn_row (SUC k) out.fpo_function
+Proof
+  strip_tac >>
+  `o1_ctx_shape observed.cu_context`
+    by (gvs[] >> irule o1_ctx_shape_MAP_replace >> simp[]) >>
+  `ctx_fn_names observed.cu_context = ctx_fn_names unit.cu_context`
+    by gvs[ctx_fn_names_MAP_replace] >>
+  `o1_fn_shape observed.cu_context out.fpo_function /\
+   fresh_names_ok s fn out.fpo_function /\
+   label_map_sources_ok fn out.fpo_function out.fpo_label_map /\
+   ir_supply_inst_ok out.fpo_supply /\ o1_fn_row (SUC k) out.fpo_function`
+    by metis_tac[o1_step_contract_at_def] >>
+  gvs[o1_fn_shape_def]
+QED
+
 Theorem contracted_fold_invariant:
-  !passes s fn labels fn' labels' s' name.
-    EVERY (o1_step_contract rpolicy) passes /\
+  !passes k s fn labels fn' labels' s' name.
+    o1_step_contracts_from rpolicy k passes /\ o1_fn_row k fn /\
     run_configured_fn_pass_fold execute_configured_fn_pass rpolicy passes
       unit s fn labels = SOME (fn',labels',s') /\
     o1_ctx_shape unit.cu_context /\ o1_fn_shape unit.cu_context fn /\
@@ -313,16 +340,17 @@ Theorem contracted_fold_invariant:
            unit.cu_context.ctx_functions) /\
     ir_supply_inst_ok s ==>
     fn'.fn_name = fn.fn_name /\ o1_fn_shape unit.cu_context fn' /\
-    ir_supply_inst_ok s' /\
+    ir_supply_inst_ok s' /\ o1_fn_row (k + LENGTH passes) fn' /\
     list_subset s.irs_used_labels s'.irs_used_labels /\
     (!l. MEM l (fn_labels fn') ==>
          MEM l (fn_labels fn) \/ ~MEM l s.irs_used_labels)
 Proof
   Induct
   >- simp[run_configured_fn_pass_fold_def, list_subset_def, EVERY_MEM] >>
-  rpt gen_tac >> pure_rewrite_tac[EVERY_DEF] >> strip_tac >> gvs[] >>
+  rpt gen_tac >> pure_rewrite_tac[o1_step_contracts_from_def] >>
+  strip_tac >> gvs[] >>
   drule_all run_configured_fn_pass_fold_cons_step >> strip_tac >>
-  drule_all observed_step_contract >> strip_tac >>
+  drule_all observed_step_contract_at >> strip_tac >>
   `out.fpo_function.fn_name = fn.fn_name` by fs[fn_pass_step_def] >>
   `ir_supply_covers_unit out.fpo_supply
      (unit with cu_context := unit.cu_context with ctx_functions :=
@@ -330,6 +358,8 @@ Proof
                  else f) unit.cu_context.ctx_functions)` by simp[] >>
   first_x_assum drule_all >> strip_tac >>
   fs[fn_pass_step_def, ir_supply_extends_def, fresh_names_ok_def] >>
+  conj_tac >- (`k + SUC (LENGTH passes) = LENGTH passes + SUC k` by simp[] >>
+               asm_rewrite_tac[]) >>
   conj_tac
   >- (irule list_subset_trans >> goal_assum (drule_at Any) >> simp[]) >>
   qpat_x_assum `!l. MEM l (fn_labels out.fpo_function) ==> _` mp_tac >>

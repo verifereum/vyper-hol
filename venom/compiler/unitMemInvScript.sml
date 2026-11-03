@@ -10,9 +10,6 @@
  *
  *   raw_mem_ok              below the alloca frontier; S3's output
  *                           (raw_unit_memory_ok is mem_inv raw_mem_ok)
- *   site_mem_ok             raw_mem_ok, and every access inside one
- *                           registered alloca site of the current frame;
- *                           what ConcretizeMemLoc's relocation consumes
  *   static_mem_ok eom       below a static layout end; after ConcretizeMemLoc
  *   lowered_mem_ok eom fmp  static, or at or above the initial free-memory
  *                           pointer; after FmpLowering, what codegen consumes
@@ -24,11 +21,11 @@
  * (mem_inv_codegen_obligations).
  *
  * TOP-LEVEL:
- *   inst_mem_ranges, mem_inv, raw_mem_ok, site_mem_ok, static_mem_ok,
- *   lowered_mem_ok, step_write_footprint   - definitions
+ *   inst_mem_ranges, mem_inv, raw_mem_ok, static_mem_ok, lowered_mem_ok,
+ *   step_write_footprint                   - definitions
  *   raw_unit_memory_ok_mem_inv              - S3's statement is the raw phase
  *   mem_inv_raw_reachable                   - the witness is raw_reachable
- *   mem_inv_mono, site_mem_ok_raw, static_mem_ok_lowered
+ *   mem_inv_mono, static_mem_ok_lowered
  *   mem_inv_transport                       - transport along a simulation
  *   mem_inv_codegen_obligations             - what codegen consumes
  *)
@@ -58,17 +55,6 @@ End
 Definition raw_mem_ok_def:
   raw_mem_ok (ctx:venom_context) (fn:ir_function) inst s <=>
     s.vs_alloca_next < dimword (:256) /\ inst_mem_below_frontier inst s
-End
-
-(* Raw phase with provenance: the frame's sites are disjoint and below the
-   frontier, and every access lies inside one of them. *)
-Definition site_mem_ok_def:
-  site_mem_ok ctx fn inst s <=>
-    raw_mem_ok ctx fn inst s /\ alloca_inv s /\
-    EVERY (\(off,len). len = 0 \/
-             ?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
-                        b <= off /\ off + len <= b + sz)
-      (inst_mem_ranges inst s)
 End
 
 (* Static phase: every access is below the static layout end. *)
@@ -127,12 +113,6 @@ Theorem mem_inv_mono:
   mem_inv M' ctx vs
 Proof
   rw[mem_inv_def] >> metis_tac[]
-QED
-
-Theorem site_mem_ok_raw:
-  site_mem_ok ctx fn inst s ==> raw_mem_ok ctx fn inst s
-Proof
-  simp[site_mem_ok_def]
 QED
 
 Theorem static_mem_ok_lowered:

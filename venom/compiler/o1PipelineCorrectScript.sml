@@ -2,7 +2,7 @@
  * The three planned O1 producers, PLAN §5.8 S4-S6.
  * S4 and S6 follow from the per-pass contracts (o1ContractTheorems) by the
  * composition in o1PipelineCompose; the only admissions on their path are
- * the nine contract theorems, one per pass tag.  S5 stays an authorized
+ * the eleven contract theorems, one per pass run.  S5 stays an authorized
  * planned admission.
  * No compiler hook or final-unit check is changed to obtain output shape.
  * run_venom_pipeline_mem_inv is the output's memory invariant in lowered
@@ -59,7 +59,8 @@ Theorem run_venom_pipeline_mem_inv:
     unit_defs_reach_uses unit /\ o1_run_state_ok vs /\
     raw_unit_memory_ok unit.cu_context vs
     ==>
-    ?eom. mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp))
+    ?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+          mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp))
             out.po_unit.cu_context vs
 Proof
   rpt strip_tac >>
@@ -67,8 +68,7 @@ Proof
   drule_all o1_source_pre_walk_inv >> strip_tac >>
   drule_all o1_pipeline_stage_facts >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
-  fs[o1_lowered_inv_def] >>
-  qexists_tac `eom` >> fs[mem_inv_raw_reachable] >>
+  fs[o1_lowered_inv_def, mem_inv_raw_reachable] >>
   rpt strip_tac >> first_x_assum drule >>
   drule raw_reachable_initial_fmp >> simp[lowered_mem_fact_def]
 QED

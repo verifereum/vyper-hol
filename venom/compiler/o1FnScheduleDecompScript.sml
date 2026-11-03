@@ -177,8 +177,8 @@ Proof
 QED
 
 Theorem run_configured_fn_pass_fold_chain:
-  !passes s fn label_map fn' label_map' s' s0 fn0.
-    EVERY (o1_step_contract rpolicy) passes /\
+  !passes k s fn label_map fn' label_map' s' s0 fn0.
+    o1_step_contracts_from rpolicy k passes /\ o1_fn_row k fn /\
     run_configured_fn_pass_fold execute_configured_fn_pass rpolicy passes
       unit s fn label_map = SOME (fn', label_map', s') /\
     o1_ctx_shape unit.cu_context /\
@@ -199,6 +199,7 @@ Theorem run_configured_fn_pass_fold_chain:
            unit_with_fns unit
              (replace_fn fn.fn_name (EL k fs) unit.cu_context.ctx_functions)) /\
       EVERY (o1_fn_shape unit.cu_context) fs /\
+      (!j. j < LENGTH fs ==> o1_fn_row (k + j) (EL j fs)) /\
       label_map_dead s0 fn0 fn' new /\
       (!l. MEM l (fn_labels fn') ==>
            MEM l (fn_labels fn0) \/ ~MEM l s0.irs_used_labels) /\
@@ -207,12 +208,12 @@ Proof
   Induct
   >- (rpt gen_tac >> simp[run_configured_fn_pass_fold_def] >>
       strip_tac >> gvs[] >> qexistsl_tac [`[fn]`,`[]`] >>
-      simp[fn_chain_def, label_map_dead_def]) >>
-  rpt gen_tac >> pure_rewrite_tac[EVERY_DEF] >> strip_tac >>
+      simp[fn_chain_def, label_map_dead_def] >> Cases >> simp[]) >>
+  rpt gen_tac >> pure_rewrite_tac[o1_step_contracts_from_def] >> strip_tac >>
   drule run_configured_fn_pass_fold_cons_step >>
   impl_tac >- gvs[unit_with_fns_def, replace_fn_def] >>
   strip_tac >>
-  drule_all observed_step_contract >> strip_tac >>
+  drule_all observed_step_contract_at >> strip_tac >>
   `out.fpo_function.fn_name = fn.fn_name /\
    list_subset s.irs_used_labels out.fpo_supply.irs_used_labels`
     by fs[fn_pass_step_def, ir_supply_extends_def] >>
@@ -234,7 +235,7 @@ Proof
   first_x_assum drule_all >> strip_tac >>
   drule_at (Pat `run_configured_fn_pass_fold _ _ _ _ _ _ _ = _`)
     contracted_fold_invariant >>
-  disch_then (qspec_then `fn0.fn_name` mp_tac) >>
+  disch_then (qspecl_then [`SUC k`, `fn0.fn_name`] mp_tac) >>
   impl_tac >- gvs[unit_with_fns_def, replace_fn_def] >> strip_tac >>
   `label_map_dead s0 fn0 fn' out.fpo_label_map`
     by (drule_all step_map_dead_after_fold >> simp[]) >>
@@ -242,6 +243,11 @@ Proof
   Cases_on `fs` >- fs[] >>
   rename1 `fn_chain rpolicy passes out.fpo_supply (next::rest) obs` >>
   gvs[] >>
+  `!j. j < SUC (SUC (LENGTH rest)) ==>
+       o1_fn_row (j + k) (EL j (fn::out.fpo_function::rest))` by
+    (Cases >> simp[] >>
+     qpat_x_assum `!j. j < SUC (LENGTH rest) ==> _` (qspec_then `n` mp_tac) >>
+     simp[arithmeticTheory.ADD_CLAUSES]) >>
   qexistsl_tac [`fn::out.fpo_function::rest`,
     `(unit_with_fns unit (replace_fn fn0.fn_name fn unit.cu_context.ctx_functions))::obs`] >>
   simp[LAST_DEF, APPEND_ASSOC, label_map_dead_def, unit_with_fns_def, replace_fn_def] >>
@@ -269,7 +275,7 @@ Proof
 QED
 
 Theorem run_configured_fn_passes_decomp:
-  EVERY (o1_step_contract rpolicy) passes /\
+  o1_step_contracts_from rpolicy 0 passes /\
   run_configured_fn_passes execute_configured_fn_pass rpolicy passes name
     unit s = SOME (unit', s') /\
   o1_ctx_shape unit.cu_context /\
@@ -282,6 +288,7 @@ Theorem run_configured_fn_passes_decomp:
          unit_with_fns unit
            (replace_fn name (EL k fs) unit.cu_context.ctx_functions)) /\
     EVERY (o1_fn_shape unit.cu_context) fs /\
+    (!j. j < LENGTH fs ==> o1_fn_row j (EL j fs)) /\
     unit'.cu_context =
       unit.cu_context with ctx_functions :=
         replace_fn name (LAST fs) unit.cu_context.ctx_functions /\
@@ -292,10 +299,12 @@ Proof
   `o1_fn_shape unit.cu_context fn` by fs[o1_ctx_shape_def, EVERY_MEM] >>
   `MEM fn.fn_name (ctx_fn_names unit.cu_context)`
     by (simp[ctx_fn_names_def, MEM_MAP] >> metis_tac[]) >>
+  `o1_fn_row 0 fn` by simp[o1_fn_row_def] >>
   drule_at (Pat `run_configured_fn_pass_fold _ _ _ _ _ _ _ = _`)
     run_configured_fn_pass_fold_chain >>
-  disch_then (qspecl_then [`s`,`fn`] mp_tac) >>
-  simp[list_subset_def, EVERY_MEM, replace_fn_unique_id] >> strip_tac >>
+  disch_then (qspecl_then [`0`,`s`,`fn`] mp_tac) >>
+  simp[list_subset_def, EVERY_MEM, replace_fn_unique_id] >>
+  strip_tac >>
   drule replace_unique_function_MAP >> strip_tac >>
   `o1_fn_shape unit.cu_context fn'`
     by (drule fn_chain_length >> strip_tac >>

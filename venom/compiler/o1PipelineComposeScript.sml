@@ -78,12 +78,13 @@ Proof
 QED
 
 Theorem o1_fn_passes_steps:
-  EVERY (o1_step_contract rp) o1_fn_passes
+  o1_step_contracts_from rp 0 o1_fn_passes
 Proof
-  simp[o1_fn_passes_def, o1_contract_make_ssa_1, o1_contract_lower_dload,
+  simp[o1_fn_passes_def, o1_step_contracts_from_def,
+       o1_contract_make_ssa_1, o1_contract_lower_dload,
        o1_contract_concretize_mem_loc, o1_contract_fmp_lowering,
-       o1_contract_simplify_cfg, o1_contract_sue, o1_contract_dft,
-       o1_contract_cfg_normalization]
+       o1_contract_make_ssa_2, o1_contract_simplify_cfg, o1_contract_sue,
+       o1_contract_dft, o1_contract_cfg_normalization]
 QED
 
 Theorem o1_run_contracts:
@@ -270,6 +271,7 @@ Theorem o1_walk_stages_sim:
        ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
          (stage k) (stage (SUC k))) /\
   (!k. k <= LENGTH o1_fn_passes ==> o1_ctx_shape (stage k)) /\
+  (!k. k <= LENGTH o1_fn_passes ==> EVERY (o1_fn_row k) (stage k).ctx_functions) /\
   o1_run_state_ok vs /\ o1_inv 0 (stage 0) vs ==>
   ctx_sim (stage 0) (stage (LENGTH o1_fn_passes)) vs vs /\
   o1_inv (LENGTH o1_fn_passes) (stage (LENGTH o1_fn_passes)) vs
@@ -281,7 +283,9 @@ Proof
     (rpt gen_tac >> strip_tac >>
      `o1_run_contract rpolicy k` by simp[o1_run_contracts] >>
      gvs[o1_run_contract_def, o1_stage_contract_def, o1_pre_def] >>
-     `k <= LENGTH o1_fn_passes` by simp[] >>
+     `k <= LENGTH o1_fn_passes /\ SUC k <= LENGTH o1_fn_passes` by simp[] >>
+     `EVERY (o1_fn_row k) (stage k).ctx_functions /\
+      EVERY (o1_fn_row (SUC k)) (stage (SUC k)).ctx_functions` by simp[] >>
      first_x_assum (qspecl_then [`stage k`, `stage (SUC k)`, `vs`] mp_tac) >>
      simp[]) >>
   `LENGTH o1_fn_passes = 9` by simp[o1_fn_passes_def] >>
