@@ -740,6 +740,9 @@ Definition well_typed_expr_def:
   well_typed_expr env (Call ty (ExtCall is_static _ (_, arg_types, ret_ty) opts) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ well_formed_type env.type_defs ty /\
      ty = ret_ty /\ ext_call_opts_ok is_static opts /\
+     (* Vyper rejects default_return_value on a call that returns nothing
+        (semantics/types/function.py). *)
+     (ret_ty = NoneT ==> ~MEM EKDefault opts) /\
      LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
      expr_type (HD args) = BaseT AddressT /\
      (* positional arguments may be narrower than the declared types *)
