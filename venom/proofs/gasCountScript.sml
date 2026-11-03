@@ -81,6 +81,48 @@ Definition gas_count_suffix_def:
     | Error e => T
 End
 
+Theorem gas_replay_at_suffix:
+  gas_replay_at n f s ==> gas_count_suffix n s (f s)
+Proof
+  simp[gas_replay_at_def] >>
+  disch_then (qspec_then `[]` mp_tac) >>
+  Cases_on `f s` >>
+  Cases_on `f (s with vs_gas_readings := gas_prefix n s.vs_gas_readings ++ [])` >>
+  simp[stateEquivTheory.lift_result_def, gas_count_suffix_def] >>
+  metis_tac[]
+QED
+
+Theorem gas_count_suffix_compose:
+  gas_count_suffix n s (OK t) /\ gas_count_suffix m t r ==>
+  gas_count_suffix (n + m) s r
+Proof
+  Cases_on `r` >> simp[gas_count_suffix_def, rich_listTheory.DROP_DROP_T]
+QED
+
+Theorem gas_count_phis:
+  gas_count_suffix 0 s (eval_phis s insts)
+Proof
+  mp_tac gas_eval_phis >>
+  disch_then (qspecl_then [`insts`, `s`] mp_tac) >>
+  disch_then (mp_tac o MATCH_MP gas_replay_at_suffix) >> simp[]
+QED
+
+Theorem gas_count_phis_ok:
+  eval_phis s insts = OK t ==> t.vs_gas_readings = s.vs_gas_readings
+Proof
+  strip_tac >> mp_tac gas_count_phis >> simp[gas_count_suffix_def]
+QED
+
+Theorem gas_count_base:
+  gas_count_suffix (if inst.inst_opcode = GAS then 1 else 0) s
+    (step_inst_base inst s)
+Proof
+  Cases_on `inst.inst_opcode = GAS`
+  >- (simp[venomExecSemanticsTheory.step_inst_base_def] >>
+      irule gas_replay_at_suffix >> simp[gas_exec_gas]) >>
+  simp[] >> irule gas_replay_at_suffix >> simp[gas_base_non_gas]
+QED
+
 Theorem gas_count_suffix:
   (!fuel ctx inst s.
      gas_count_suffix (gas_count_step fuel ctx inst s) s
