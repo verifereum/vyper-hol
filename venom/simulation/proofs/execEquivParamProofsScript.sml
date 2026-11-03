@@ -433,14 +433,15 @@ Theorem valid_state_rel_mixed_proof:
   !vars vars'. vars SUBSET vars' ==>
     valid_state_rel (state_equiv vars) (execution_equiv vars')
 Proof
-  rw[valid_state_rel_def] >>
-  fs[state_equiv_def, execution_equiv_def,
-     vsr_frame_def, vsr_term_frame_def, venom_state_component_equality,
-     stateFrameTheory.execution_frame_def,
-     update_var_def, lookup_var_def, SUBSET_DEF] >>
   rpt strip_tac >>
-  simp[FLOOKUP_UPDATE, eval_operand_def, lookup_var_def] >>
-  TRY (Cases_on `op` >> fs[eval_operand_def, lookup_var_def] >> NO_TAC) >>
-  TRY (rw[] >> first_x_assum irule >> simp[] >> NO_TAC) >>
-  metis_tac[]
+  qspec_then `vars` mp_tac
+    state_equiv_execution_equiv_valid_state_rel_proof >>
+  qspec_then `vars'` mp_tac
+    state_equiv_execution_equiv_valid_state_rel_proof >>
+  pure_rewrite_tac[valid_state_rel_def] >>
+  disch_then strip_assume_tac >>
+  disch_then strip_assume_tac >>
+  rpt conj_tac >>
+  asm_simp_tac bool_ss [] >>
+  metis_tac[execution_equiv_subset]
 QED
