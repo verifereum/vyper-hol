@@ -941,10 +941,15 @@ Theorem int_type_Num_bound:
 Proof
   rpt strip_tac >>
   qmatch_goalsub_abbrev_tac `_ < bound` >>
-  qpat_x_assum `value_has_type _ _` mp_tac >>
-  simp[value_has_type_inv] >> strip_tac >> gvs[well_formed_type_value_def]
+  qpat_x_assum `value_has_type _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [value_has_type_inv]) >>
+  qpat_x_assum `tyv = _` SUBST_ALL_TAC >>
+  qpat_x_assum `well_formed_type_value _`
+    (strip_assume_tac o PURE_REWRITE_RULE [well_formed_type_value_def])
   >- (irule LESS_LESS_EQ_TRANS >> qexists_tac `2 ** n` >>
-      unabbrev_all_tac >> simp[] >>
+      qpat_x_assum `Abbrev (bound = _)`
+        (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
       irule (iffRL EXP_BASE_LE_MONO) >> simp[]) >>
   Cases_on `n = 0` >- (unabbrev_all_tac >> gvs[within_int_bound_def]) >>
   gvs[within_int_bound_def, LET_THM, Num_neg] >>
