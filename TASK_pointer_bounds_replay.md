@@ -89,13 +89,21 @@ Theorem remap_preserved_mem_ops[local]:
          LENGTH (FILTER ($= (Var u)) inst.inst_operands) <= 1) ==>
     ?v2. step_inst_base inst s2 = OK v2 /\
          alloca_remap_rel fn roots remap v1 v2
+
+Theorem step_inst_base_error_transfer[local]:
+  !fn roots remap inst s1 s2 err.
+    alloca_remap_rel fn roots remap s1 s2 /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_ext_call_op inst.inst_opcode /\
+    step_inst_base inst s1 = Error err ==>
+    ?err'. step_inst_base inst s2 = Error err'
 ```
 
 Do not modify these statements. Prove it as-is, or produce a counterexample.
 
 ## Completion Criteria
 
-- Repair actual default-limit proof failures within the four frozen roots and their resumes without changing any statement.
+- Repair actual default-limit proof failures within the five frozen roots and their resumes without changing any statement.
 - Build allocaRemapProofsTheory with the default tactic limit and no new admissions.
 - Preserve all definitions, other statements, shared tactics, unrelated proof bodies and previously completed remap/GAS repairs.
 
@@ -109,11 +117,11 @@ Fresh remaining preserving-target validation rebuilt this dependency and stopped
 
 ## Domain Constraints
 
-- Edit only the four named proofs and their resumes, plus necessary local helpers in venom/passes/shared/proofs/allocaRemapProofsScript.sml. Repair actual encountered proof-budget failures; no speculative cleanup.
+- Edit only the five named proofs and their resumes, plus necessary local helpers in venom/passes/shared/proofs/allocaRemapProofsScript.sml. Repair actual encountered proof-budget failures; no speculative cleanup.
 - All existing definitions, theorem statements and shared tactics are frozen. Preserve all unrelated proofs, including completed remap repair roots except the specifically reauthorized remap_preserved_no_pointer_ops and remap_preserved_mem_ops.
 - No new definition, axiom, admission, assumption, opcode exclusion or source/executable semantics change.
 - Default2.5-second tactic limit; no override or TRY/ORELSE/FIRST around search.
-- A newly failing root outside these four named theorems must be reported before expanding scope.
+- A newly failing root outside these five named theorems must be reported before expanding scope.
 - Commit substantive source only, leave generated task records untracked. End commit messages with Bot: sol (OpenAI GPT-6.1 Sol).
 
 ## Available Resources
@@ -138,3 +146,8 @@ The first run stopped without a source diff before reaching the pointer-bound ro
 ## Existing audited memory-root replay extension
 
 The resumed replay passed the bounded MEMTOP change and unchanged remap_rel_update_pv, then hit the existing remap_preserved_mem_ops[sha3] dispatcher expansion at line2979. This complete memory root was independently audited across ALL opcode/resume producers in TASK_allocas_replay.md, and subsequently passed forced default/CI replay; its complete frozen statement above is whitespace-identical to that audited statement and executable definitions have not changed. This amendment authorizes actual encountered budget repairs within this already audited root and its resumes, plus necessary local helpers, while preserving all completed nonfailing resumes. It does not authorize unrelated roots or shared tactics. Keep the committed MEMTOP repair. The original pointer-bounds root remains required; no full-theory pass is yet claimed.
+
+
+## Existing audited error-transfer root extension
+
+Replay after source-only SHA3 boundary repair a0ea21045 completed the memory root, then encountered the existing step_inst_base_error_transfer[LOG] error_inline_tac default timeout. This exact complete error-transfer root was independently audited against ALL admitted opcode/error producers in TASK_allocas_replay.md and subsequently forced-checked. Its current statement is verified whitespace-identical to that frozen audit, with executable definitions unchanged. The statement is included frozen above; repair actual encountered budget failures within this root and its resumes only, preserving completed nonfailing SHA3/EXTCODECOPY/pure3 and other repairs. Shared error tactics remain frozen. Preserve the committed MEMTOP and SHA3 boundary helpers. No new root, definition, premise or timeout change is authorized. The previous strategist returned model returned no structured output twice; this task extension resolves the scope blocker, but no blind proof retries are authorized.
