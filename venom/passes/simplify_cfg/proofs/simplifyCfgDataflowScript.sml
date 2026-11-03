@@ -370,3 +370,149 @@ Theorem chain_prefix_earlier_pair:
 Proof
   simp[chain_prefix_mem] >> metis_tac[]
 QED
+
+Theorem do_merge_jump_edge_input:
+  wf_function fn /\ lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn', lm') ==>
+  !src dst. fn_cfg_edge fn' src dst ==>
+    fn_cfg_edge fn src dst \/
+    (src = a.bb_label /\ fn_cfg_edge fn b.bb_label dst)
+Proof
+  strip_tac >>
+  `MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ bb_well_formed a` by
+    metis_tac[lookup_block_member_label, wf_function_bb_well_formed] >>
+  fs[do_merge_jump_def, AllCaseEqs()] >>
+  drule lookup_block_member_label >> strip_tac >>
+  `bb_well_formed target` by metis_tac[wf_function_bb_well_formed] >>
+  `b.bb_label <> target_lbl` by
+    (irule can_bypass_jump_target_distinct >> simp[] >> qexistsl [`a`, `fn`] >>
+     fs[wf_function_def]) >>
+  gvs[] >>
+  qmatch_goalsub_abbrev_tac `replace_block a.bb_label newa rest` >>
+  `EVERY (\bb. !dst. MEM dst (bb_succs bb) ==>
+    fn_cfg_edge fn bb.bb_label dst \/
+    (bb.bb_label = a.bb_label /\ fn_cfg_edge fn b.bb_label dst))
+    (replace_block a.bb_label newa rest)`
+    suffices_by (simp[fn_cfg_edge_def, EVERY_MEM] >> metis_tac[]) >>
+  unabbrev_all_tac >> irule EVERY_replace_block_except >> conj_tac
+  >- (IF_CASES_TAC >> gvs[] >> rpt strip_tac
+      >- (drule_all bb_bypass_source_phi_successor >> strip_tac >>
+          Cases_on `MEM dst (bb_succs a)`
+          >- (disj1_tac >> simp[fn_cfg_edge_def] >> qexists `a` >> simp[]) >>
+          disj2_tac >> simp[fn_cfg_edge_def] >> qexists `b` >> gvs[])
+      >> drule_all bb_bypass_source_successor >> strip_tac >>
+      Cases_on `MEM dst (bb_succs a)`
+          >- (disj1_tac >> simp[fn_cfg_edge_def] >> qexists `a` >> simp[]) >>
+          disj2_tac >> simp[fn_cfg_edge_def] >> qexists `b` >> gvs[]) >>
+  irule EVERY_replace_block_except >> conj_tac
+  >- (simp[bb_succs_update_phi_bypass] >> rpt strip_tac >>
+      simp[fn_cfg_edge_def] >> qexists `target` >> simp[]) >>
+  simp[remove_block_def, EVERY_MEM, MEM_FILTER] >> rpt strip_tac >>
+  simp[fn_cfg_edge_def] >> metis_tac[]
+QED
+
+Theorem is_fn_path_prepend:
+  q <> [] ==>
+  (is_fn_path fn (x::q) <=> fn_cfg_edge fn x (HD q) /\ is_fn_path fn q)
+Proof
+  Cases_on `q` >> simp[is_fn_path_def]
+QED
+
+Theorem bypass_path_lift:
+  fn_cfg_edge fn a b /\
+  (!x y. fn_cfg_edge fn' x y ==>
+    fn_cfg_edge fn x y \/ (x = a /\ fn_cfg_edge fn b y)) ==>
+  !p. p <> [] /\ is_fn_path fn' p /\ ~MEM b p ==>
+  ?q. is_fn_path fn q /\ q <> [] /\ HD q = HD p /\ LAST q = LAST p /\
+      FILTER (\x. x <> b) q = p /\
+      (!d. d <> b ==> (MEM d (FRONT q) <=> MEM d (FRONT p)))
+Proof
+  strip_tac >> Induct >> simp[] >> qx_gen_tac `x` >>
+  Cases_on `p` >> simp[is_fn_path_def]
+  >- (strip_tac >> qexists `[x]` >> simp[is_fn_path_def]) >>
+  rpt strip_tac >>
+  rename1 `fn_cfg_edge fn' x y` >>
+  qpat_x_assum `_ ==> ?q. _` mp_tac >>
+  simp[] >> disch_then (qx_choose_then `q` strip_assume_tac) >>
+  Cases_on `fn_cfg_edge fn x y`
+  >- (qexists `x::q` >>
+      simp[is_fn_path_prepend] >>
+      Cases_on `q` >> gvs[FRONT_DEF]) >>
+  `x = a /\ fn_cfg_edge fn b y` by metis_tac[] >>
+  qexists `x::b::q` >>
+  simp[is_fn_path_prepend] >>
+  Cases_on `q` >> gvs[FRONT_DEF] >> metis_tac[]
+QED
+
+Theorem can_bypass_jump_edge:
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\ can_bypass_jump fn a b ==>
+  fn_cfg_edge fn a.bb_label b.bb_label
+Proof
+  strip_tac >> drule lookup_block_member_label >> strip_tac >>
+  simp[fn_cfg_edge_def] >> qexists `a` >> fs[can_bypass_jump_def]
+QED
+
+Theorem can_bypass_jump_labels_distinct:
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b ==>
+  a.bb_label <> b.bb_label
+Proof
+  rpt strip_tac >> `a = b` by metis_tac[optionTheory.SOME_11] >>
+  gvs[can_bypass_jump_def]
+QED
+
+Theorem do_merge_jump_path_input:
+  wf_function fn /\ lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn', lm') /\
+  p <> [] /\ is_fn_path fn' p /\ MEM (LAST p) (fn_labels fn') ==>
+  ?q. is_fn_path fn q /\ q <> [] /\ HD q = HD p /\ LAST q = LAST p /\
+      FILTER (\x. x <> b.bb_label) q = p /\
+      (!d. d <> b.bb_label ==> (MEM d (FRONT q) <=> MEM d (FRONT p)))
+Proof
+  strip_tac >>
+  `EVERY (\x. MEM x (fn_labels fn')) p` by
+    metis_tac[is_fn_path_member_labels] >>
+  `fn_labels fn' = FILTER (\lbl. lbl <> b.bb_label) (fn_labels fn)` by
+    metis_tac[do_merge_jump_fn_labels] >>
+  `~MEM b.bb_label p` by
+    (qpat_x_assum `EVERY _ p` mp_tac >>
+     simp[EVERY_MEM, MEM_FILTER] >> metis_tac[]) >>
+  irule bypass_path_lift >> simp[] >> qexistsl [`a.bb_label`, `fn'`] >>
+  conj_tac >- (rpt strip_tac >> drule_all do_merge_jump_edge_input >> metis_tac[]) >>
+  simp[] >> irule can_bypass_jump_edge >> simp[]
+QED
+
+Theorem do_merge_jump_path_input_last_b:
+  wf_function fn /\ lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn', lm') /\
+  p <> [] /\ is_fn_path fn' p /\ MEM (LAST p) (fn_labels fn') /\
+  LAST p = a.bb_label ==>
+  ?q. is_fn_path fn q /\ q <> [] /\ HD q = HD p /\ LAST q = b.bb_label /\
+      (!d. d <> b.bb_label ==>
+        (MEM d (FRONT q) <=> MEM d (FRONT p) \/ d = a.bb_label))
+Proof
+  strip_tac >> drule_all do_merge_jump_path_input >>
+  disch_then (qx_choose_then `q` strip_assume_tac) >>
+  `fn_cfg_edge fn a.bb_label b.bb_label` by
+    (irule can_bypass_jump_edge >> simp[]) >>
+  `is_fn_path fn (q ++ [b.bb_label])` by
+    (drule is_fn_path_snoc >> simp[]) >>
+  qexists `q ++ [b.bb_label]` >> simp[FRONT_APPEND] >>
+  conj_tac >- (Cases_on `q` >> gvs[]) >>
+  qx_gen_tac `d` >> strip_tac >>
+  `MEM d q <=> MEM d (FRONT q) \/ d = LAST q` by
+    ( `FRONT q ++ [LAST q] = q` by simp[APPEND_FRONT_LAST] >>
+      metis_tac[MEM_APPEND, MEM]) >>
+  metis_tac[]
+QED
+
+Theorem bypass_path_surviving_member:
+  FILTER (\x. x <> b) q = p /\ d <> b ==>
+  (MEM d q <=> MEM d p)
+Proof
+  strip_tac >> qpat_x_assum `FILTER _ q = p` (SUBST1_TAC o SYM) >>
+  simp[MEM_FILTER]
+QED
