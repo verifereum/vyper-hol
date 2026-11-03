@@ -3016,12 +3016,37 @@ fun fstep th pat =
   drule_all th >> strip_tac >>
   qpat_x_assum pat (strip_assume_tac o MATCH_MP emit_op_extends);
 
+(* Keep assertion arithmetic independent of the emitter execution context. *)
+Theorem mul_check_plain_zero[local]:
+  !(a:bytes32) (b:bytes32) (q:bytes32).
+    b <> 0w /\ q <> a ==>
+    (bool_to_word (q = a) || bool_to_word (b = 0w)) = 0w
+Proof
+  rpt strip_tac >> simp[]
+QED
+
+Theorem mul_check_special_zero[local]:
+  !(a:bytes32) (b:bytes32) (q:bytes32).
+    b <> 0w /\
+    (q <> a \/ (a = n2w (2 ** 255) /\ b = n2w (2 ** 256 - 1))) ==>
+    ((bool_to_word (q = a) || bool_to_word (b = 0w)) &&
+     bool_to_word ((bool_to_word (a = n2w (2 ** 255)) &&
+                    bool_to_word (~b = 0w) : bytes32) = 0w) : bytes32) = 0w
+Proof
+  rpt gen_tac >> strip_tac
+  >- simp[] >>
+  gvs[EVAL ``~(n2w (2 ** 256 - 1) : bytes32)``]
+QED
+
 val mul_check_close =
   forward_all_evals >>
   imp_res_tac emit_void_extends >>
-  drule_all_then strip_assume_tac assert_chain >>
-  TRY (gvs[] >> NO_TAC) >>
-  first_assum (irule_at Any);
+  drule_all assert_chain >>
+  disch_then (DISJ_CASES_THEN2 strip_assume_tac ACCEPT_TAC) >>
+  (qsuff_tac `F` >- simp[]) >>
+  qpat_x_assum `(_ || _) <> 0w` mp_tac >>
+  pure_rewrite_tac [IMP_CLAUSES, NOT_CLAUSES] >>
+  irule mul_check_plain_zero >> simp[];
 
 fun mul_check_plain_tac opth pat = gvs[comp_return_def] >>
   fstep opth pat >>
@@ -3064,10 +3089,13 @@ Proof
       ostep emit_op_AND_correct `emit_op AND [ok; not_special] _ = _` >>
       forward_all_evals >>
       imp_res_tac emit_void_extends >>
-      drule_all_then strip_assume_tac assert_chain
-      >>~- ([`(_ && _) <> 0w`],
-        qpat_x_assum `(_ && _) <> 0w` mp_tac >> simp[]) >>
-      first_assum (irule_at Any)) >>
+      drule_all assert_chain >>
+      disch_then (DISJ_CASES_THEN2 strip_assume_tac ACCEPT_TAC) >>
+      (qsuff_tac `F` >- simp[]) >>
+      qpat_x_assum `(_ && _) <> 0w` mp_tac >>
+      pure_rewrite_tac [IMP_CLAUSES, NOT_CLAUSES] >>
+      irule (PURE_REWRITE_RULE [EVAL ``n2w (2 ** 255) : bytes32``]
+        mul_check_special_zero) >> simp[]) >>
   Cases_on `is_signed` >> gvs[]
   >- mul_check_plain_tac emit_op_SDIV_correct `emit_op SDIV _ _ = _` >>
   mul_check_plain_tac emit_op_Div_correct `emit_op Div _ _ = _`
