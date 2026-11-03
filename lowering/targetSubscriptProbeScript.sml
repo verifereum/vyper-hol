@@ -3,6 +3,91 @@ Theory targetSubscriptProbe
 Ancestors
   compileEnv vyperStoragePlaceRegion vyperStorageLayoutSafety vfmState
   words finite_map combin vyperValue targetSubscriptSim
+  emitHelperProps emitHelper exprLoweringProps venomExecSemantics venomState venomInst
+
+Theorem probe_RET_literals:
+  !id ss.
+    step_inst_base (mk_inst id RET [Lit 0w; Lit 0w] []) ss =
+    IntRet <| iret_values := [0w]; iret_adopt_fmp := NONE |> ss
+Proof
+  simp[step_inst_base_def, mk_inst_def, eval_operands_def, eval_operand_def]
+QED
+
+Theorem probe_clear_tail:
+  !ss.
+    run_inst_seq
+      [mk_inst 0 SSTORE [Lit 0w; Lit 0w] [];
+       mk_inst 1 SSTORE [Lit 1w; Lit 0w] [];
+       mk_inst 2 RET [Lit 0w; Lit 0w] []] ss =
+    IntRet <| iret_values := [0w]; iret_adopt_fmp := NONE |>
+      (sstore 1w 0w (sstore 0w 0w ss))
+Proof
+  simp[run_inst_seq_def, step_SSTORE_literals, probe_RET_literals]
+QED
+
+Definition probe_clear_block_def:
+  probe_clear_block = <| bb_label := "entry";
+    bb_instructions :=
+      [mk_inst 0 SSTORE [Lit 0w; Lit 0w] [];
+       mk_inst 1 SSTORE [Lit 1w; Lit 0w] [];
+       mk_inst 2 RET [Lit 0w; Lit 0w] []] |>
+End
+
+Definition probe_clear_function_def:
+  probe_clear_function = mk_raw_function "shrink" [probe_clear_block]
+End
+
+Theorem probe_clear_exec_block:
+  !fuel ctx ss.
+    ss.vs_inst_idx = 0 ==>
+    exec_block fuel ctx probe_clear_block ss =
+    IntRet <| iret_values := [0w]; iret_adopt_fmp := NONE |>
+      ((sstore 1w 0w (sstore 0w 0w ss)) with vs_inst_idx := 2)
+Proof
+  rpt strip_tac >>
+  simp[Once exec_block_def, probe_clear_block_def, get_instruction_def,
+       Once step_inst_def, step_SSTORE_literals, is_terminator_def] >>
+  simp[Once exec_block_def, get_instruction_def, Once step_inst_def,
+       step_SSTORE_literals, is_terminator_def, sstore_def] >>
+  simp[Once exec_block_def, get_instruction_def, Once step_inst_def,
+       probe_RET_literals, sstore_def]
+QED
+
+Theorem probe_clear_run_blocks:
+  !fuel ctx ss.
+    ss.vs_current_bb = "entry" ==>
+    run_blocks (SUC fuel) ctx probe_clear_function ss =
+    IntRet <| iret_values := [0w]; iret_adopt_fmp := NONE |>
+      ((sstore 1w 0w (sstore 0w 0w (ss with vs_inst_idx := 0)))
+        with vs_inst_idx := 2)
+Proof
+  rpt strip_tac >>
+  simp[Once run_blocks_def, probe_clear_function_def, mk_raw_function_def,
+       lookup_block_def] >>
+  simp[probe_clear_block_def, listTheory.FIND_thm,
+       eval_phis_def, phi_prefix_length_def] >>
+  rewrite_tac[GSYM probe_clear_block_def] >>
+  simp[probe_clear_exec_block]
+QED
+
+Theorem probe_clear_invoke:
+  !fuel ctx ss id out cs.
+    lookup_function "shrink" ctx.ctx_functions = SOME probe_clear_function /\
+    setup_callee probe_clear_function [] ss = SOME cs ==>
+    step_inst (SUC fuel) ctx
+      (mk_inst id INVOKE [Label "shrink"] [out]) ss =
+    OK (update_var out 0w
+      (merge_callee_state ss
+        ((sstore 1w 0w (sstore 0w 0w (cs with vs_inst_idx := 0)))
+          with vs_inst_idx := 2)))
+Proof
+  rpt strip_tac >>
+  `cs.vs_current_bb = "entry"` by
+    gvs[setup_callee_def, probe_clear_function_def, mk_raw_function_def,
+        probe_clear_block_def] >>
+  simp[Once step_inst_def, decode_invoke_def, eval_operands_def,
+       probe_clear_run_blocks, bind_outputs_def, adopt_return_fmp_def]
+QED
 
 Theorem nested_capacity_probe:
   storage_subregion
@@ -108,3 +193,60 @@ Theorem internal_index_syntactically_nopop_probe:
 Proof
   EVAL_TAC
 QED
+
+(* Executable-interface audit for C0.2.1 (not universal simulation):
+   probe_clear_invoke now checks an actual INVOKE, with lookup_function and
+   setup_callee premises exposed. probe_clear_run_blocks checks the body; no
+   arbitrary post-state is substituted for a callee execution.
+
+   Exact remaining universal interface for e from the ledger above:
+   expr_sim_case F ctx func cenv cx e expands to
+     !env ty es. expr_body_pre cenv cx env e es ==>
+       !sa sb op res es' s0.
+         lower_value compile_expr cenv ty e sa = (op,sb) /\
+         (do result <- eval_expr cx e; read_result cx result od) es =
+           (res,es') /\ expr_res_ok res /\ fn_has_code sa sb func /\
+         fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+         frag_exec ctx sa sb
+           (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+           (\s. ?v. res = INL v /\
+             expr_post ctx func cenv cx e es sa sb s0 es' v op s)
+           (expr_exit res).
+   expr_vv_case has the same env/ty/es universality, then quantifies
+   sa,sb,vv,res,es',s0; compile_expr replaces lower_value, eval_expr replaces
+   eval_expr/read_result, expr_vv_res_ok replaces expr_res_ok, and vv_post
+   replaces expr_post. Neither universal obligation is proved here.
+
+   expr_body_pre includes expr_sim_inv, well_typed_expr, byte widths,
+   allocation limits, call_evaluation_safe, no EVMRun, and supported module
+   code for every internal call. All environments and admissible states,
+   not just the selected initial storage, must be handled. In particular:
+   - capacity one is NOT a proof of positive length. At length one the
+     proposed source pop can shrink to zero; at length zero an unguarded
+     pop errors, while the checked machine body always returns normally.
+     No zero-length source execution or expr_exit proof has been supplied.
+     A guard or rejecting machine branch would change the candidate;
+     neither may be assumed as part of this checked body.
+   - at length one, the extra slot-1 clear is harmless to the final storage
+     relation only after proving the declared-region/dead-byte premises.
+     Larger lengths would make this unconditional clear unsound; the
+     capacity-one typing argument itself remains to be proved universally.
+   - the actual label is internal_fn_label of cenv's function id, parameter
+     types and constructor flag, not necessarily the literal "shrink".
+     probe_clear_invoke deliberately exposes this unresolved linkage.
+   - compile_call's returns_count > 0 branch allocates a return buffer,
+     emits INVOKE with that many outputs, then stores the outputs in the
+     buffer. With one output our RET [0,0] provides one user word; the last
+     operand is a return-PC token discarded by RET. FMP is not adopted.
+     Buffer allocation, store_multi_results, lower_value's unwrap and all
+     fn_has_code slices are still separate obligations. A zero-output
+     INVOKE cannot consume this one-output return (arity mismatch).
+   - expr_post additionally requires stmt_state_rel, expr_val_rel,
+     expr_val_at, preservation of old SOME variables and allocas, disjoint
+     memory regions and locals_kept. vv_post additionally requires vv_holds
+     and vv_at for the compiler's actual value_vv. Returning the integer
+     zero is not by itself either postcondition.
+   - eventual target refutation still needs target_case bt, a concrete
+     target_pre witness, the full compiled target fragment and proof that
+     no successful frag_exec/allowed exit exists. All remain open.
+*)

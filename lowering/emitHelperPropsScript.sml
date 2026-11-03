@@ -1449,6 +1449,14 @@ Proof
   rw[step_inst_base_def, exec_write2_def]
 QED
 
+Theorem step_SSTORE_literals:
+  !id ss a v.
+    step_inst_base (mk_inst id SSTORE [Lit a; Lit v] []) ss =
+    OK (sstore a v ss)
+Proof
+  rpt gen_tac >> irule step_SSTORE >> simp[eval_operand_def]
+QED
+
 Theorem step_ASSERT_ok:
   ∀ op1 v id ss.
     eval_operand op1 ss = SOME v ∧ v ≠ 0w ⇒
