@@ -13169,3 +13169,20 @@ Proof
   >- (gen_tac >> IF_CASES_TAC >> simp[comp_return_labels, emit_op_labels]) >>
   rpt gen_tac >> BETA_TAC >> irule comp_ignore_bind_labels >> simp[emit_void_labels]
 QED
+
+Theorem compile_store_byte_chunks_labels:
+  !data_ptr bs offset s P.
+    cs_extends s (SND (compile_store_byte_chunks data_ptr bs offset s)) /\
+    EVERY P (added_labels s (SND (compile_store_byte_chunks data_ptr bs offset s)))
+Proof
+  ho_match_mp_tac compile_store_byte_chunks_ind >> conj_tac
+  >- simp[compile_store_byte_chunks_def, comp_return_labels] >>
+  rpt gen_tac >> disch_tac >> rpt gen_tac >>
+  simp[compile_store_byte_chunks_def, LET_THM] >>
+  irule comp_bind_labels >> simp[emit_op_labels] >>
+  rpt gen_tac >> irule comp_ignore_bind_labels >> simp[emit_void_labels] >>
+  first_x_assum (qspecl_then
+    [`TAKE 32 (v4::v5 ++ REPLICATE 31 0w)`,
+     `word_of_bytes T 0w (TAKE 32 (v4::v5 ++ REPLICATE 31 0w))`] mp_tac) >>
+  simp[]
+QED
