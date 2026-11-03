@@ -1268,8 +1268,7 @@ Theorem mem_ops_ofst_is_operand[local]:
     (mem_write_ops inst = SOME ops \/ mem_read_ops inst = SOME ops) ==>
     MEM ops.iao_ofst inst.inst_operands
 Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  pop_assum mp_tac >>
+  rpt gen_tac >> Cases_on `inst.inst_opcode` >>
   simp[mem_write_ops_def, mem_read_ops_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   metis_tac[MEM_REVERSE, MEM]
@@ -4240,7 +4239,21 @@ Resume step_inst_base_error_transfer[ASSIGN]:
   error_inline_tac
 QED
 Resume step_inst_base_error_transfer[BUMP]:
-  error_inline_tac
+  Cases_on `inst.inst_operands` >- gvs[] >>
+  rename1 `inst.inst_operands = base_op::ops` >>
+  Cases_on `ops` >- gvs[] >>
+  rename1 `inst.inst_operands = base_op::size_op::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  Cases_on `inst.inst_outputs` >- gvs[] >>
+  rename1 `inst.inst_outputs = ptr_out::outs` >>
+  Cases_on `outs` >- gvs[] >>
+  rename1 `inst.inst_outputs = ptr_out::next_out::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  Cases_on `eval_operand base_op s1` >>
+  Cases_on `eval_operand size_op s1` >> gvs[] >>
+  first_x_assum drule >> simp[] >>
+  Cases_on `eval_operand base_op s2` >>
+  Cases_on `eval_operand size_op s2` >> simp[]
 QED
 Resume step_inst_base_error_transfer[CALLDATACOPY]:
   error_inline_tac
