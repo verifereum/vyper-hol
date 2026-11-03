@@ -61,8 +61,8 @@ Existing proofs remain in place. Internal compiler equations and helper interfac
 are weakly frozen only for the actual new base/position parameter and emitted code;
 retain coverage and semantic guarantees. Surface a genuinely false semantic claim
 before changing it. These statements have not been parsed on this new emitter:
-ancestors still use the old arity. An independent owner preflight is required
-before this task launches.
+ancestors still use the old arity. Independent structural preflight returned PROVABLE for both endpoints with the
+new emitter; no build was claimed. Its concrete internal-interface caveat is below.
 
 ## Completion Criteria
 
@@ -136,3 +136,24 @@ This is a source-success proof migration, not the arbitrary-input rejection case
 All final statements and their semantic hypotheses stay frozen. The two existing
 runtime regressions are retained; exact abort instruction indices may change with
 the new generated code, but rejection must still precede the invalid load.
+
+### Independent preflight findings
+
+The unchanged resource assumptions cover payload/output/scratch separation,
+address/size bounds and runtime-copy/padding writes, including empty and aligned
+bytes. Output may overlap the original outer Bytes length word; it is read and
+saved during setup before output writes. Preserve that supported overlap.
+
+Removing the absolute-hi ADD reduces setup instruction and variable counts by1.
+The migrated ready state's next_id is output_site+1, while unchanged resources
+allow first=output_site+2. Consequently the old INTERNAL
+abi_builtin_valid_pre_ready conclusion first<=ready.cs_next_id is false. Do not
+strengthen endpoint resources to repair this. The internal lemma may be reformulated
+with the correct allocation-site budget; every decoder begins with a nonallocating
+instruction and its scratch allocations occur later. Report that internal statement
+change and its consumers for the PR. Full source/unwrap statements stay frozen.
+
+Internal ranges/valid-pre and child invariants must distinguish absolute source
+address from scalar position and payload bound. Parameterize/generalize them as
+needed, preserving all semantic disjointness and frame obligations and retaining
+old calldata/code coverage. Exact old absolute-hi helper formulas are not frozen.
