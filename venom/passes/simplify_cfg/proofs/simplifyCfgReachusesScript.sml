@@ -1269,3 +1269,46 @@ Proof
     (irule subst_block_labels_fn_inactive >>
      fs[scfg_collapse_inv_def, scfg_reachuses_inv_def]) >> simp[]
 QED
+
+Theorem repair_reachable_collapse_inv:
+  scfg_reachuses_inv fn ==>
+  scfg_collapse_inv (fix_all_phis (remove_unreachable_blocks fn))
+Proof
+  simp[scfg_reachuses_inv_def, scfg_collapse_inv_def] >> strip_tac >>
+  drule_all repair_reachable_invariants >> strip_tac >>
+  simp[remove_unreachable_blocks_jnz_condition_ok, fix_all_phis_jnz_condition_ok]
+QED
+
+Theorem simplify_cfg_round_reachuses_inv:
+  scfg_reachuses_inv fn ==>
+  scfg_reachuses_inv (FST (simplify_cfg_round_with_labels fn))
+Proof
+  strip_tac >> Cases_on `fn_entry_label fn`
+  >- simp[simplify_cfg_round_with_labels_def] >>
+  `scfg_collapse_inv (fix_all_phis (remove_unreachable_blocks fn))` by
+    simp[repair_reachable_collapse_inv] >>
+  Cases_on `collapse_dfs (fix_all_phis (remove_unreachable_blocks fn)) [] [] x` >>
+  PairCases_on `r` >>
+  `scfg_collapse_inv q` by metis_tac[cj 1 collapse_reachuses_inv_joint, pairTheory.FST] >>
+  `scfg_collapse_inv (subst_block_labels_fn r0 q)` by
+    metis_tac[collapse_subst_collapse_inv] >>
+  `scfg_reachuses_inv (if r0 = [] then q else subst_block_labels_fn r0 q)` by
+    (Cases_on `r0 = []` >> fs[scfg_collapse_inv_def]) >>
+  drule repair_reachable_collapse_inv >>
+  simp[scfg_collapse_inv_def, simplify_cfg_round_with_labels_def]
+QED
+
+Theorem simplify_cfg_iter_reachuses_inv:
+  !n fn. scfg_reachuses_inv fn ==>
+    scfg_reachuses_inv (FST (simplify_cfg_iter_with_labels n fn))
+Proof
+  Induct >- simp[simplify_cfg_iter_with_labels_def] >>
+  rpt strip_tac >>
+  `scfg_reachuses_inv (FST (simplify_cfg_round_with_labels fn))` by
+    simp[simplify_cfg_round_reachuses_inv] >>
+  Cases_on `simplify_cfg_round_with_labels fn` >> gvs[] >>
+  simp[Once simplify_cfg_iter_with_labels_def] >>
+  Cases_on `q.fn_blocks = fn.fn_blocks` >> simp[] >>
+  Cases_on `simplify_cfg_iter_with_labels n q` >> gvs[] >>
+  metis_tac[pairTheory.FST]
+QED
