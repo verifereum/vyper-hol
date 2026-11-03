@@ -22,6 +22,83 @@ Definition gas_pair_def:
     (op1 = INVOKE /\ op2 = GAS)
 End
 
+Theorem step_inst_ok_gas_replay:
+  step_inst fuel ctx inst s = OK t ==>
+  ?n. t.vs_gas_readings = DROP n s.vs_gas_readings /\
+      !tail. step_inst fuel ctx inst
+        (s with vs_gas_readings := gas_prefix n s.vs_gas_readings ++ tail) =
+        OK (t with vs_gas_readings := tail)
+Proof
+  strip_tac >>
+  qspecl_then [`fuel`, `ctx`, `inst`, `s`] mp_tac (cj 1 gas_oracle_replay) >>
+  simp[GSYM gas_prefix_def] >> strip_tac >> qexists `n` >>
+  conj_tac
+  >- (first_x_assum (qspec_then `[]` mp_tac) >>
+      Cases_on `step_inst fuel ctx inst
+        (s with vs_gas_readings := gas_prefix n s.vs_gas_readings ++ [])` >>
+      simp[lift_result_def]) >>
+  gen_tac >> first_x_assum (qspec_then `tail` mp_tac) >>
+  Cases_on `step_inst fuel ctx inst
+    (s with vs_gas_readings := gas_prefix n s.vs_gas_readings ++ tail)` >>
+  simp[lift_result_def]
+QED
+
+Theorem step_inst_ok_non_gas_oracle:
+  inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
+  step_inst fuel ctx inst s = OK t ==>
+  t.vs_gas_readings = s.vs_gas_readings /\
+  !gs. step_inst fuel ctx inst (s with vs_gas_readings := gs) =
+       OK (t with vs_gas_readings := gs)
+Proof
+  strip_tac >> drule gas_base_non_gas >>
+  disch_then (qspec_then `s` mp_tac) >>
+  simp[gas_replay_at_def] >>
+  gvs[step_inst_non_invoke] >> strip_tac >>
+  conj_tac
+  >- (first_x_assum (qspec_then `[]` mp_tac) >>
+      Cases_on `step_inst_base inst (s with vs_gas_readings := [])` >>
+      simp[lift_result_def]) >>
+  gen_tac >> first_x_assum (qspec_then `gs` mp_tac) >>
+  Cases_on `step_inst_base inst (s with vs_gas_readings := gs)` >>
+  simp[lift_result_def]
+QED
+
+Theorem step_inst_ok_frame_reverse:
+  (!y. MEM (Var y) inst.inst_operands ==> x <> y) /\
+  ~MEM x inst.inst_outputs /\
+  step_inst fuel ctx inst (update_var x v s) = OK t ==>
+  ?u. step_inst fuel ctx inst s = OK u /\ t = update_var x v u
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = INVOKE`
+  >- (drule_all step_inst_invoke_frame >>
+      disch_then (qspecl_then [`fuel`, `ctx`, `s`, `v`] mp_tac) >>
+      Cases_on `step_inst fuel ctx inst s` >> gvs[]) >>
+  drule_all step_inst_frame >>
+  disch_then (qspecl_then [`fuel`, `ctx`, `s`, `v`] mp_tac) >>
+  Cases_on `step_inst fuel ctx inst s` >> gvs[map_result_state_def]
+QED
+
+Theorem step_inst_gas_single:
+  inst.inst_opcode = GAS /\ inst.inst_outputs = [x] ==>
+  step_inst fuel ctx inst s =
+  OK (update_var x (case s.vs_gas_readings of [] => 0w | h::tl => h)
+        (s with vs_gas_readings := DROP 1 s.vs_gas_readings))
+Proof
+  strip_tac >> simp[step_inst_non_invoke, step_inst_base_def, exec_gas_def] >>
+  Cases_on `s.vs_gas_readings` >> simp[update_var_def, venom_state_component_equality]
+QED
+
+Theorem step_inst_ok_gas:
+  inst.inst_opcode = GAS /\ step_inst fuel ctx inst s = OK t ==>
+  ?x. inst.inst_outputs = [x] /\
+      t = update_var x (case s.vs_gas_readings of [] => 0w | h::tl => h)
+            (s with vs_gas_readings := DROP 1 s.vs_gas_readings)
+Proof
+  strip_tac >>
+  gvs[step_inst_non_invoke, step_inst_base_def, exec_gas_def, AllCaseEqs()] >>
+  Cases_on `s.vs_gas_readings` >> gvs[update_var_def, venom_state_component_equality]
+QED
+
 (* ================================================================
    1. step_inst preserves vs_allocas and vs_alloca_next for
       non-terminator, non-alloca, non-ext_call instructions
