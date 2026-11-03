@@ -13103,3 +13103,14 @@ Proof
   rpt (irule comp_bind_labels >> simp[emit_op_labels] >> rpt gen_tac >> BETA_TAC) >>
   irule comp_ignore_bind_labels >> simp[emit_void_labels, compile_select_labels]
 QED
+
+Theorem compile_compare_labels:
+  !op x y ty s P. cs_extends s (SND (compile_compare op x y ty s)) /\
+    EVERY P (added_labels s (SND (compile_compare op x y ty s)))
+Proof
+  rpt gen_tac >> Cases_on `op` >>
+  simp[compile_compare_def, LET_THM, emit_op_labels] >>
+  Cases_on `is_uint256 ty` >> simp[emit_op_labels] >>
+  FIRST [irule comp_ignore_bind_labels >> simp[emit_inst_labels, comp_return_labels],
+         irule comp_bind_labels >> simp[emit_op_labels]]
+QED
