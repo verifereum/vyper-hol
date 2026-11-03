@@ -14,6 +14,10 @@
  * statement, and the admission here becomes an alias of that proof
  * (Theorem o1_contract_<run> = <passTheory>.o1_contract_<run>), so
  * nothing downstream changes.
+ *
+ * Each holds for every dead-byte set D (free in the statements).  A pass
+ * that keeps every byte proves the exact simulation and lifts it with
+ * unit_result_rel_dead_result_rel.
  *)
 Theory o1ContractTheorems
 Ancestors
@@ -30,7 +34,7 @@ Theorem o1_contract_simplify_cfg_pre_walk =
 (* On these units DretDesugar is the identity, so it keeps any invariant. *)
 Theorem o1_contract_dret_desugar_pre_walk:
   o1_step_contract rpolicy (CFP_Simple VP_DretDesugar) /\
-  (!view I. o1_stage_contract rpolicy (CFP_Simple VP_DretDesugar) view no_pre
+  (!view I. o1_stage_contract rpolicy D (CFP_Simple VP_DretDesugar) view no_pre
               I I)
 Proof
   cheat
@@ -40,14 +44,14 @@ QED
 
 Theorem o1_contract_make_ssa_1:
   o1_step_contract_at 0 rpolicy (CFP_Simple VP_MakeSSA) /\
-  o1_run_contract rpolicy 0
+  o1_run_contract rpolicy D 0
 Proof
   cheat
 QED
 
 Theorem o1_contract_lower_dload:
   o1_step_contract_at 1 rpolicy (CFP_Simple VP_LowerDload) /\
-  o1_run_contract rpolicy 1
+  o1_run_contract rpolicy D 1
 Proof
   cheat
 QED
@@ -56,7 +60,7 @@ QED
    invariant becomes the static one. *)
 Theorem o1_contract_concretize_mem_loc:
   o1_step_contract_at 2 rpolicy (CFP_Simple VP_ConcretizeMemLoc) /\
-  o1_run_contract rpolicy 2
+  o1_run_contract rpolicy D 2
 Proof
   cheat
 QED
@@ -65,14 +69,14 @@ QED
    invariant becomes the lowered one. *)
 Theorem o1_contract_fmp_lowering:
   o1_step_contract_at 3 rpolicy (CFP_Simple VP_FmpLowering) /\
-  o1_run_contract rpolicy 3
+  o1_run_contract rpolicy D 3
 Proof
   cheat
 QED
 
 Theorem o1_contract_make_ssa_2:
   o1_step_contract_at 4 rpolicy (CFP_Simple VP_MakeSSA) /\
-  o1_run_contract rpolicy 4
+  o1_run_contract rpolicy D 4
 Proof
   cheat
 QED
@@ -82,7 +86,7 @@ Theorem o1_contract_simplify_cfg =
 
 Theorem o1_contract_sue:
   o1_step_contract_at 6 rpolicy (CFP_Simple VP_SingleUseExpansion) /\
-  o1_run_contract rpolicy 6
+  o1_run_contract rpolicy D 6
 Proof
   cheat
 QED
@@ -90,14 +94,14 @@ QED
 (* DFT reorders GAS reads: forall-out exists-in over the oracle. *)
 Theorem o1_contract_dft:
   o1_step_contract_at 7 rpolicy (CFP_Simple VP_DFT) /\
-  o1_run_contract_gas rpolicy 7
+  o1_run_contract_gas rpolicy D 7
 Proof
   cheat
 QED
 
 Theorem o1_contract_cfg_normalization:
   o1_step_contract_at 8 rpolicy (CFP_Simple VP_CFGNormalization) /\
-  o1_run_contract rpolicy 8
+  o1_run_contract rpolicy D 8
 Proof
   cheat
 QED

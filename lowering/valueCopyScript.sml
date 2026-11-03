@@ -177,9 +177,7 @@ Theorem bytestring_copy_len_word[local]:
       w2n (((n2w L + 31w) && i2w (-32)) + 32w : bytes32) =
       32 + 32 * word_size L
 Proof
-  rpt strip_tac >>
-  `(i2w (-32) : bytes32) = -32w` by simp[integer_wordTheory.i2w_def] >>
-  `!w:bytes32. w && -32w = (w >>> 5) << 5` by blastLib.BBLAST_TAC >>
+  rpt strip_tac >> rewrite_tac[buffer_round_mask] >>
   `(L + 31) DIV 32 * 32 <= L + 31` by
     (qspec_then `32` mp_tac DIVISION >> simp[] >>
      disch_then (qspec_then `L + 31` mp_tac) >> decide_tac) >>
@@ -241,7 +239,7 @@ Theorem step_MCOPY_some[local]:
 Proof
   rpt strip_tac >> Cases_on `eval_operand d s` >>
   Cases_on `eval_operand a s` >> Cases_on `eval_operand n s` >> gvs[] >>
-  simp[step_inst_base_def]
+  simp[stepInstBaseLib.simp_opcode_clause ``MCOPY``, venomInstTheory.mk_inst_def]
 QED
 
 Theorem store_bytestring_run[local]:
@@ -325,7 +323,8 @@ Proof
        venomInstTheory.is_terminator_def, run_inst_seq_def] >>
   gvs[emit_void_def, comp_bind_def, fresh_id_def, emit_def,
       comp_ignore_bind_def, comp_return_def] >>
-  simp[step_inst_base_def, venomInstTheory.mk_inst_def, eval_operand_def]
+  simp[stepInstBaseLib.simp_opcode_clause ``MCOPY``, venomInstTheory.mk_inst_def,
+       eval_operand_def]
 QED
 
 (* compile_store_memory at one type ty: a word type's value, held by src
@@ -376,23 +375,25 @@ QED
 
 Resume compile_store_memory_run_size_bound_capacity[bytestring]:
   `?L. mem_word_at (w2n sw) s.vs_memory = n2w L /\
-       val_footprint tv v = 32 + 32 * word_size L` by
+       val_store_size tv v = 32 + 32 * word_size L` by
     (Cases_on `ty` >> gvs[is_bytestring_type_def] >>
      rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_bytestring_type_def]
      >~ [`BytesT bd`]
      >- (rename1 `BytesT bd` >> Cases_on `bd` >>
          gvs[is_bytestring_type_def, evaluate_type_def] >> Cases_on `v` >>
-         gvs[value_has_type_def, val_in_memory_def, val_footprint_def] >>
+         gvs[value_has_type_def, val_in_memory_def, val_store_size_def] >>
          qmatch_asmsub_abbrev_tac `mem_word_at _ _ = n2w LL` >>
          `LL < dimword (:256)` by (fs[Abbr `LL`] >> decide_tac) >>
          qexists_tac `LL` >> fs[LESS_MOD]) >>
      gvs[evaluate_type_def] >> Cases_on `v` >>
-     gvs[value_has_type_def, val_in_memory_def, val_footprint_def] >>
+     gvs[value_has_type_def, val_in_memory_def, val_store_size_def] >>
      qmatch_asmsub_abbrev_tac `mem_word_at _ _ = n2w LL` >>
      `LL < dimword (:256)` by (fs[Abbr `LL`] >> decide_tac) >>
      qexists_tac `LL` >> fs[LESS_MOD]) >>
-  `val_footprint tv v <= type_memory_size tv` by
-    metis_tac[val_footprint_le] >>
+  `val_store_size tv v <= type_memory_size tv` by
+    metis_tac[val_store_size_le] >>
+  `val_footprint tv v <= val_store_size tv v` by
+    simp[val_footprint_le_store_size] >>
   qspecl_then [`src`, `dst`, `sa`, `sb`, `s`, `sw`, `dw`, `L`] mp_tac
     store_bytestring_run >>
   `L <= 32 * word_size L` by
@@ -472,7 +473,7 @@ Theorem compile_store_memory_run_frame_with_capacity:
     (if is_word_type ty then sw = typed_val_to_w256 tv v
      else val_in_memory tv v (w2n sw) s.vs_memory) /\
     type_memory_size tv + 64 < dimword (:256) /\
-    (if is_bytestring_type ty then val_footprint tv v <= bound
+    (if is_bytestring_type ty then val_store_size tv v <= bound
      else type_memory_size tv <= bound) ==>
     sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
     same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
@@ -506,23 +507,25 @@ QED
 
 Resume compile_store_memory_run_frame_with_capacity[bytestring]:
   `?L. mem_word_at (w2n sw) s.vs_memory = n2w L /\
-       val_footprint tv v = 32 + 32 * word_size L` by
+       val_store_size tv v = 32 + 32 * word_size L` by
     (Cases_on `ty` >> gvs[is_bytestring_type_def] >>
      rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_bytestring_type_def]
      >~ [`BytesT bd`]
      >- (rename1 `BytesT bd` >> Cases_on `bd` >>
          gvs[is_bytestring_type_def, evaluate_type_def] >> Cases_on `v` >>
-         gvs[value_has_type_def, val_in_memory_def, val_footprint_def] >>
+         gvs[value_has_type_def, val_in_memory_def, val_store_size_def] >>
          qmatch_asmsub_abbrev_tac `mem_word_at _ _ = n2w LL` >>
          `LL < dimword (:256)` by (fs[Abbr `LL`] >> decide_tac) >>
          qexists_tac `LL` >> fs[LESS_MOD]) >>
      gvs[evaluate_type_def] >> Cases_on `v` >>
-     gvs[value_has_type_def, val_in_memory_def, val_footprint_def] >>
+     gvs[value_has_type_def, val_in_memory_def, val_store_size_def] >>
      qmatch_asmsub_abbrev_tac `mem_word_at _ _ = n2w LL` >>
      `LL < dimword (:256)` by (fs[Abbr `LL`] >> decide_tac) >>
      qexists_tac `LL` >> fs[LESS_MOD]) >>
-  `val_footprint tv v <= type_memory_size tv` by
-    metis_tac[val_footprint_le] >>
+  `val_store_size tv v <= type_memory_size tv` by
+    metis_tac[val_store_size_le] >>
+  `val_footprint tv v <= val_store_size tv v` by
+    simp[val_footprint_le_store_size] >>
   qspecl_then [`src`, `dst`, `sa`, `sb`, `s`, `sw`, `dw`, `L`] mp_tac
     store_bytestring_run >>
   `L <= 32 * word_size L` by
@@ -575,7 +578,7 @@ Theorem compile_store_memory_run_frame:
     (if is_word_type ty then sw = typed_val_to_w256 tv v
      else val_in_memory tv v (w2n sw) s.vs_memory) /\
     type_memory_size tv + 64 < dimword (:256) /\
-    (if is_bytestring_type ty then val_footprint tv v <= bound
+    (if is_bytestring_type ty then val_store_size tv v <= bound
      else type_memory_size tv <= bound) ==>
     sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
     same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
@@ -621,7 +624,7 @@ Proof
   irule compile_store_memory_run_frame >>
   simp[] >>
   qexistsl_tac [`cenv`, `dst`, `src`, `sw`, `tenv`, `ty`] >>
-  simp[] >> metis_tac[val_footprint_le]
+  simp[] >> metis_tac[val_store_size_le]
 QED
 
 Theorem compile_store_memory_run_capacity:

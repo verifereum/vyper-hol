@@ -1008,9 +1008,18 @@ val () = check_accepts "constant chain through two imports" false
 val mutability_layouts =
   ``([((0w : address),
        ([((NONE, "x"), 0); ((NONE, "arr"), 1)] : storage_layout,
-        [((NONE, "t"), 0); ((NONE, "$.nonreentrant_key"), 1)]
+        [((NONE, "$.nonreentrant_key"), 0); ((NONE, "t"), 1)]
           : storage_layout))]
       : (address # (storage_layout # storage_layout)) list)``
+
+Theorem nonreentrant_rejects_noncanonical_lock_slot:
+  check_contract F
+    [(0w : address, ([], [((NONE,"$.nonreentrant_key"),7)]))]
+    0w [(NONE,
+      [FunctionDecl External View T F "f" [] [] NoneT [Pass]])] = NONE
+Proof
+  CONV_TAC (LAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
+QED
 
 val u256 = ``BaseT (UintT 256)``
 fun uint n = ``Literal (BaseT (UintT 256)) (IntL ^(intSyntax.term_of_int (Arbint.fromInt n)))``
@@ -1398,3 +1407,31 @@ val () = List.app assert_some
    aug_function bool_ty bool_ty ``vyperAST$And`` (op_name bool_ty "y"),
    aug_function bool_ty bool_ty ``vyperAST$Or`` (op_name bool_ty "y"),
    aug_function bool_ty bool_ty ``vyperAST$XOr`` (op_name bool_ty "y")]
+
+(* Like Vyper (ImmutableViolation "Cannot modify loop variable"), a loop
+   body may not write the array it iterates over: the evaluator iterates
+   over a copy, the compiled loop reads the array in place.
+     xs: uint256[2] = [0, 1]
+     out: uint256 = 0
+     for i: uint256 in xs:
+         xs[1] = 2      # rejected; accepted without this line
+         out = i
+     return out *)
+fun iterated_write_function writes = let
+  val arr = ``ArrayT (BaseT (UintT 256)) (Fixed 2)``
+in
+  one_fn ``[] : (string # type) list`` u256
+    ``[AnnAssign "xs" ^arr
+         (Builtin ^arr (MakeArray (SOME ^u256) (Fixed 2))
+            [^(op_lit u256 0); ^(op_lit u256 1)]);
+       AnnAssign "out" ^u256 ^(op_lit u256 0);
+       For "i" ^u256 (Array (Name ^arr "xs")) 2
+         (^writes ++
+          [Assign (BaseTarget (NameTarget "out")) (Name ^u256 "i")]);
+       Return (SOME (Name ^u256 "out"))]``
+end
+val () = check_rejects empty_layouts (iterated_write_function
+  ``[Assign (BaseTarget (SubscriptTarget (NameTarget "xs") ^(op_lit u256 1)))
+       ^(op_lit u256 2)]``)
+val () = check_accepts "loop without iterated array write" false empty_layouts
+  (iterated_write_function ``[] : stmt list``)

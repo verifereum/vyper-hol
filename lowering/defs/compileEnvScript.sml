@@ -460,11 +460,13 @@ Datatype:
        stack returns. Kept out of ce_vars so user names cannot collide with it.
        Mirrors Python: FunctionContext.return_buffer *)
     ce_return_buf : var_location option;
-    (* Where the return PC is; NONE for external functions. `Return` decides
-       "internal or external?" from this field.
+    (* Where the return PC is; NONE for external functions and constructors.
        Mirrors Python: FunctionContext.return_pc, tested by lower_Return as
        `ctx.return_pc is not None` *)
     ce_return_pc : var_location option;
+    (* Constructors return through one shared runtime-copy epilogue.
+       Internal functions called during deployment still use ce_return_pc. *)
+    ce_ctor_exit_label : string option;
     (* External function: T for external functions, F for internal *)
     ce_is_external : bool;
     (* ABI encoding info for external return type.

@@ -3917,6 +3917,18 @@ Proof
        ci_mono_compile_sha256_bytesm, ci_mono_compile_sha256_word]
 QED
 
+Theorem ci_mono_membership_var_array[local]:
+  (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
+  ∀cenv needle rhs_ty is_in ret_ty e st.
+    ci_mono st (SND
+      ((λ(vv,st'). as_stack_val ret_ty
+          (compile_var_array_membership cenv needle vv rhs_ty is_in st'))
+       (f cenv rhs_ty e st)))
+Proof
+  rpt strip_tac >> irule ci_mono_uncurry >>
+  gs[ci_mono_as_stack_val, ci_mono_compile_var_array_membership]
+QED
+
 Theorem ci_mono_builtin_membership[local]:
   (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
   ci_mono st (SND
@@ -3930,19 +3942,12 @@ Theorem ci_mono_builtin_membership[local]:
           as_stack_val ret_ty
             (compile_var_array_membership cenv needle vv rhs_ty is_in st'))))
 Proof
-  strip_tac >>
-  `!x. ci_mono st (SND ((\(vv,st').
-          as_stack_val ret_ty
-            (compile_var_array_membership cenv needle vv rhs_ty is_in st'))
-          (f cenv rhs_ty x st)))` by
-    (gen_tac >> irule ci_mono_uncurry >> reverse conj_tac >- simp[] >>
-     rpt gen_tac >> BETA_TAC >>
-     simp[ci_mono_as_stack_val, ci_mono_compile_var_array_membership]) >>
-  Cases_on `e` >> simp[LET_THM] >>
-  Cases_on `b` >> simp[] >>
+  strip_tac >> drule ci_mono_membership_var_array >> strip_tac >>
+  Cases_on `e` >> gs[LET_THM] >>
+  rename1 `Builtin _ bt _` >> Cases_on `bt` >> gs[] >>
   irule ci_mono_uncurry >> reverse conj_tac
   >- simp[ci_mono_compile_multi_exprs] >>
-  rpt gen_tac >> BETA_TAC >> IF_CASES_TAC >>
+  rpt gen_tac >> BETA_TAC >> rpt IF_CASES_TAC >>
   simp[ci_mono_as_stack_val, ci_mono_compile_list_membership_in,
        ci_mono_compile_list_membership_notin]
 QED

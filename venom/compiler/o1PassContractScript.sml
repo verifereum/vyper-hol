@@ -26,9 +26,14 @@
  * the supply, and (SimplifyCFG) maps only its own merged labels; these
  * make the walk's label-map applications the identity on code.  The stage
  * part is semantic: a forward simulation of terminating runs between
- * consecutive stage contexts from one initial state, under
- * unit_result_rel, with the shared memory invariant (unitMemInv)
- * transported.  GAS reads the call context's gas, which the planned gas
+ * consecutive stage contexts from one initial state, equal up to a set D
+ * of dead bytes (dead_result_rel D), with the shared memory invariant
+ * (unitMemInv) transported.  D is the bytes nothing reads, such as the
+ * unwritten capacity of a buffer the lowering stores whole: ConcretizeMemLoc
+ * moves buffers, so those bytes differ after it.  Every contract holds for
+ * any D; a pass that keeps every byte proves the exact unit_result_rel and
+ * lifts it (unit_result_rel_dead_result_rel), and the stages compose when
+ * D is well formed (dead_wf, dead_result_rel_trans).  GAS reads the call context's gas, which the planned gas
  * oracle will supply, so a pass that reorders or drops GAS reads (DFT)
  * gets the forall-out exists-in form o1_stage_contract_gas: every initial
  * state of the output has a gas variant from which the input's terminating
@@ -43,21 +48,206 @@ Ancestors
   unitTransformDefs unitShapeDefs unitMemInv venomPipelineDriver
   venomPassSchedule venomFnScheduleRunner venomPassDispatcher venomWf
   venomExecSemantics venomInst irSupply contextCodegenRel stackPlanGen
-  venomState cfgWf list
+  staticLayoutDefs venomState stateEquiv passSimulationDefs vfmState extCallOracle
+  finite_map cfgWf list
+
+(* ===== Equivalence up to dead bytes ===== *)
+
+(* The bytes nothing reads, as functions of where they are: each
+   account's storage and transient storage, the immutables, and the
+   return data.  A stage may change them (ConcretizeMemLoc: the unwritten
+   capacity of a stored buffer).  The end-to-end theorem takes them from
+   the source program's layout (storage_dead), at the running contract
+   only. *)
+Datatype:
+  dead = <| d_stor : address -> storage -> (bytes32 # num) set;
+            d_trans : address -> storage -> (bytes32 # num) set;
+            d_imm : (num |-> bytes32) -> (num # num) set;
+            d_ret : word8 list -> num set |>
+End
+
+(* The bytes of a storage word at key in a set of (key, byte) pairs.
+   Bytes are numbered as word_to_bytes w T numbers them: byte 0 is the most
+   significant. *)
+Definition key_taint_def:
+  key_taint X key = {k:num | k < 32 /\ (key,k) IN X}
+End
+
+Definition word_agree_except_def:
+  word_agree_except m (w1:bytes32) w2 <=>
+    !b. b < 32 /\ b NOTIN m ==>
+        EL b (word_to_bytes w1 T) = EL b (word_to_bytes w2 T)
+End
+
+Definition storage_agree_except_def:
+  storage_agree_except X (st1:storage) st2 <=>
+    !k. word_agree_except (key_taint X k) (st1 k) (st2 k)
+End
+
+(* Accounts equal but for their storage, which agrees outside the dead
+   bytes of the first. *)
+Definition accounts_agree_except_def:
+  accounts_agree_except D (a1:evm_accounts) a2 <=>
+    !a. (a1 a with storage := (a2 a).storage) = a2 a /\
+        storage_agree_except (D.d_stor a (a1 a).storage)
+          (a1 a).storage (a2 a).storage
+End
+
+Definition transient_agree_except_def:
+  transient_agree_except D (t1:transient_storage) t2 <=>
+    !a. storage_agree_except (D.d_trans a (t1 a)) (t1 a) (t2 a)
+End
+
+Definition imms_agree_except_def:
+  imms_agree_except D (i1:num |-> bytes32) i2 <=>
+    FDOM i1 = FDOM i2 /\
+    !k. k IN FDOM i1 ==>
+        word_agree_except {b | (k,b) IN D.d_imm i1} (i1 ' k) (i2 ' k)
+End
+
+Definition request_agree_except_def:
+  request_agree_except D (r1:call_request) r2 <=>
+    r1 with <| cr_accounts := r2.cr_accounts;
+               cr_tStorage := r2.cr_tStorage |> = r2 /\
+    accounts_agree_except D r1.cr_accounts r2.cr_accounts /\
+    transient_agree_except D r1.cr_tStorage r2.cr_tStorage
+End
+
+(* unit_result_rel, but at a halt the runs may differ at the dead bytes of
+   the first run's state: in storage and transient storage (at the end and
+   in each request's snapshot), the immutables and the return data. *)
+Definition dead_result_rel_def:
+  dead_result_rel D res res' <=>
+    case (res, res') of
+      (Halt s, Halt s') =>
+        accounts_agree_except D s.vs_accounts s'.vs_accounts /\
+        transient_agree_except D s.vs_transient s'.vs_transient /\
+        imms_agree_except D s.vs_immutables s'.vs_immutables /\
+        LENGTH s.vs_returndata = LENGTH s'.vs_returndata /\
+        (!i. i < LENGTH s.vs_returndata /\ i NOTIN D.d_ret s.vs_returndata ==>
+             EL i s.vs_returndata = EL i s'.vs_returndata) /\
+        s.vs_halted = s'.vs_halted /\ s.vs_logs = s'.vs_logs /\
+        s.vs_pending_deletions = s'.vs_pending_deletions /\
+        LIST_REL (request_agree_except D) s.vs_requests s'.vs_requests
+    | (Abort a s, Abort a' s') => (a = Revert_abort ==> a' = Revert_abort)
+    | _ => F
+End
+
+(* The dead bytes are fixed by the bytes that aren't: two states that agree
+   outside the first's dead bytes have the same dead bytes.  It makes
+   dead_result_rel transitive (dead_result_rel_trans). *)
+Definition dead_wf_def:
+  dead_wf D <=>
+    (!a st1 st2. storage_agree_except (D.d_stor a st1) st1 st2 ==>
+                 D.d_stor a st2 = D.d_stor a st1) /\
+    (!a st1 st2. storage_agree_except (D.d_trans a st1) st1 st2 ==>
+                 D.d_trans a st2 = D.d_trans a st1) /\
+    (!i1 i2. imms_agree_except D i1 i2 ==> D.d_imm i2 = D.d_imm i1) /\
+    (!r1 r2. LENGTH r1 = LENGTH r2 /\
+             (!i. i < LENGTH r1 /\ i NOTIN D.d_ret r1 ==> EL i r1 = EL i r2) ==>
+             D.d_ret r2 = D.d_ret r1)
+End
+
+(* An exact match is a match up to any dead bytes. *)
+Theorem unit_result_rel_dead_result_rel:
+  unit_result_rel r r' ==> dead_result_rel D r r'
+Proof
+  Cases_on `r` >> Cases_on `r'` >>
+  simp[unit_result_rel_def, dead_result_rel_def, observable_equiv_def] >>
+  rw[accounts_agree_except_def, transient_agree_except_def,
+     imms_agree_except_def, storage_agree_except_def,
+     word_agree_except_def, vfmStateTheory.account_state_component_equality] >>
+  irule EVERY2_refl >>
+  simp[request_agree_except_def, accounts_agree_except_def,
+       transient_agree_except_def, storage_agree_except_def,
+       word_agree_except_def, vfmStateTheory.account_state_component_equality,
+       extCallOracleTheory.call_request_component_equality]
+QED
+
+Theorem dead_result_rel_terminates:
+  dead_result_rel D res res' ==> terminates res /\ terminates res'
+Proof
+  Cases_on `res` >> Cases_on `res'` >>
+  simp[dead_result_rel_def, terminates_def]
+QED
+
+Theorem storage_agree_except_trans:
+  storage_agree_except X st1 st2 /\ storage_agree_except X st2 st3 ==>
+  storage_agree_except X st1 st3
+Proof
+  rw[storage_agree_except_def, word_agree_except_def] >> metis_tac[]
+QED
+
+Theorem accounts_agree_except_trans:
+  dead_wf D /\ accounts_agree_except D a1 a2 /\
+  accounts_agree_except D a2 a3 ==>
+  accounts_agree_except D a1 a3
+Proof
+  rw[accounts_agree_except_def, dead_wf_def] >>
+  first_x_assum (qspec_then `a` strip_assume_tac) >>
+  first_x_assum (qspec_then `a` strip_assume_tac) >>
+  gvs[vfmStateTheory.account_state_component_equality] >>
+  metis_tac[storage_agree_except_trans]
+QED
+
+Theorem transient_agree_except_trans:
+  dead_wf D /\ transient_agree_except D t1 t2 /\
+  transient_agree_except D t2 t3 ==>
+  transient_agree_except D t1 t3
+Proof
+  rw[transient_agree_except_def, dead_wf_def] >>
+  metis_tac[storage_agree_except_trans]
+QED
+
+Theorem imms_agree_except_trans:
+  dead_wf D /\ imms_agree_except D i1 i2 /\ imms_agree_except D i2 i3 ==>
+  imms_agree_except D i1 i3
+Proof
+  rw[dead_wf_def] >>
+  `D.d_imm i2 = D.d_imm i1` by metis_tac[] >>
+  gvs[imms_agree_except_def, word_agree_except_def] >> metis_tac[]
+QED
+
+Theorem request_agree_except_trans:
+  dead_wf D /\ request_agree_except D r1 r2 /\
+  request_agree_except D r2 r3 ==>
+  request_agree_except D r1 r3
+Proof
+  rw[request_agree_except_def]
+  >- gvs[extCallOracleTheory.call_request_component_equality]
+  >- metis_tac[accounts_agree_except_trans]
+  >> metis_tac[transient_agree_except_trans]
+QED
+
+Theorem dead_result_rel_trans:
+  dead_wf D /\ dead_result_rel D r1 r2 /\ dead_result_rel D r2 r3 ==>
+  dead_result_rel D r1 r3
+Proof
+  Cases_on `r1` >> Cases_on `r2` >> Cases_on `r3` >>
+  simp[dead_result_rel_def] >> rpt strip_tac >> gvs[]
+  >- metis_tac[accounts_agree_except_trans]
+  >- metis_tac[transient_agree_except_trans]
+  >- metis_tac[imms_agree_except_trans]
+  >- (`D.d_ret v'.vs_returndata = D.d_ret v.vs_returndata` by
+        metis_tac[dead_wf_def] >> metis_tac[])
+  >> irule LIST_REL_trans >> qexists_tac `v'.vs_requests` >>
+     metis_tac[request_agree_except_trans]
+QED
 
 (* ===== Simulation between two initial states ===== *)
 
 Definition ctx_sim_def:
-  ctx_sim ctx ctx' s s' <=>
+  ctx_sim D ctx ctx' s s' <=>
     !fuel. terminates (run_context fuel ctx s) ==>
-      ?fuel'. unit_result_rel (run_context fuel ctx s)
-                              (run_context fuel' ctx' s')
+      ?fuel'. dead_result_rel D (run_context fuel ctx s)
+                                (run_context fuel' ctx' s')
 End
 
 Theorem ctx_transform_correct_ctx_sim:
-  ctx_transform_correct ctx ctx' s <=> ctx_sim ctx ctx' s s
+  ctx_transform_correct ctx ctx' s ==> ctx_sim D ctx ctx' s s
 Proof
-  simp[ctx_transform_correct_def, ctx_sim_def]
+  rw[ctx_transform_correct_def, ctx_sim_def] >>
+  metis_tac[unit_result_rel_dead_result_rel]
 QED
 
 (* The gas-oracle hook: two initial states that may differ only in the
@@ -332,7 +522,9 @@ QED
 Theorem o1_step_contract_at_preserve:
   o1_step_contract rpolicy pass /\
   (!observed s fn out.
-     fn_pass_step rpolicy pass observed s fn out /\ o1_fn_row k fn ==>
+     fn_pass_step rpolicy pass observed s fn out /\
+     o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
+     o1_fn_row k fn ==>
      o1_fn_row (SUC k) out.fpo_function) ==>
   o1_step_contract_at k rpolicy pass
 Proof
@@ -373,25 +565,26 @@ End
 
 (* The stage contract of one pass run, between consecutive stage contexts
    C and C' and one initial state: every terminating run of C is matched
-   by a run of C', and the stage invariant I of C becomes I' of C'.  pre
+   by a run of C' up to the dead bytes D, and the stage invariant I of C
+   becomes I' of C'.  pre
    relates the input to the output (an ordering the pass keeps, say); a
    fact about the input alone belongs in I. *)
 Definition o1_stage_contract_def:
-  o1_stage_contract rpolicy pass view pre I I' <=>
+  o1_stage_contract rpolicy D pass view pre I I' <=>
     !C C' vs.
       ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\
       o1_ctx_shape C /\ o1_run_state_ok vs /\ I C vs ==>
-      ctx_sim C C' vs vs /\ I' C' vs
+      ctx_sim D C C' vs vs /\ I' C' vs
 End
 
 (* Every initial state vs' of the output has a gas variant vs from which
    the input's terminating runs are matched by the output's runs from vs'. *)
 Definition o1_stage_contract_gas_def:
-  o1_stage_contract_gas rpolicy pass view pre I I' <=>
+  o1_stage_contract_gas rpolicy D pass view pre I I' <=>
     !C C' vs'.
       ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\
       o1_ctx_shape C /\ o1_run_state_ok vs' /\ I C vs' ==>
-      ?vs. gas_variant vs vs' /\ ctx_sim C C' vs vs' /\ I' C' vs'
+      ?vs. gas_variant vs vs' /\ ctx_sim D C C' vs vs' /\ I' C' vs'
 End
 
 Definition any_view_def:
@@ -406,9 +599,13 @@ End
 (* ===== The stage invariants ===== *)
 
 (* Before ConcretizeMemLoc: the raw phase of the shared memory invariant,
-   S3's conclusion. *)
+   S3's conclusion, and well-formed global reservations, which
+   max_live_eom (row 3 on) requires and the walk never changes; the
+   lowering reserves nothing in the runtime unit and one interval in the
+   deploy unit. *)
 Definition o1_src_inv_def:
-  o1_src_inv C vs <=> mem_inv raw_mem_ok C vs
+  o1_src_inv C vs <=>
+    reserved_intervals_wf C.ctx_global_reserved /\ mem_inv raw_mem_ok C vs
 End
 
 (* The pre-walk's input, the lowering's output: no PHI, and every variable
@@ -460,9 +657,10 @@ End
    k = 9 its output).  A pass run's contract takes row k to row k+1; a
    fact a run needs of its input is a conjunct of its row, put there by
    the run that establishes it, and a conjunct of row 0 is a premise of
-   S4 that the lowering stage owes. *)
+   S4 that the lowering stage owes.  A row may speak of the dead bytes D
+   the runs are matched up to. *)
 Definition o1_inv_def:
-  o1_inv (k : num) =
+  o1_inv (D : dead) (k : num) =
     if k = 0 then o1_walk_src_inv
     else if k <= 2 then o1_src_inv
     else if k = 3 then o1_static_inv
@@ -490,13 +688,13 @@ End
 
 (* The stage contract of the k-th run of the walk. *)
 Definition o1_run_contract_def:
-  o1_run_contract rpolicy k <=>
-    o1_stage_contract rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
-      (o1_pre k) (o1_inv k) (o1_inv (SUC k))
+  o1_run_contract rpolicy D k <=>
+    o1_stage_contract rpolicy D (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+      (o1_pre k) (o1_inv D k) (o1_inv D (SUC k))
 End
 
 Definition o1_run_contract_gas_def:
-  o1_run_contract_gas rpolicy k <=>
-    o1_stage_contract_gas rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
-      (o1_pre k) (o1_inv k) (o1_inv (SUC k))
+  o1_run_contract_gas rpolicy D k <=>
+    o1_stage_contract_gas rpolicy D (EL k o1_fn_passes)
+      (o1_walk_view rpolicy k) (o1_pre k) (o1_inv D k) (o1_inv D (SUC k))
 End

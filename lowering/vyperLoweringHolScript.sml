@@ -25,6 +25,7 @@ Ancestors
   immutableStagingBridge
   immutableCodeLayout
   e2eDeployFrame
+  deployFrameReplay asmDataSuffixProps
   immutableLocationProps
   loweringShapeDefs
   loweringShapeProps
@@ -35,6 +36,7 @@ Ancestors
   vyperCompiler
   allocaBudgetChecks
   vyperLoweringCorrect
+  loweringMemCorrect
   configuredE2ECorrectness
   evalCompilerInternalImmutables
   evalAssignmentOrder

@@ -188,6 +188,29 @@ QED
    exec_pure decomposition lemmas (extract update_var from exec_pureN)
    ========================================================================= *)
 
+Theorem emit_output_venom_asm_rel:
+  venom_asm_rel lo ps vb ab /\
+  n <= LENGTH ps.ps_stack /\
+  EVERY (\op. case op of Var x => x <> out | _ => T) ps.ps_stack /\
+  (!op. op IN FDOM ps.ps_spilled ==>
+    case op of Var x => x <> out | _ => T) ==>
+  venom_asm_rel lo
+    (ps with ps_stack := stack_push (Var out) (stack_pop n ps.ps_stack))
+    (update_var out result vb)
+    (asm_next (ab with as_stack := result :: DROP n ab.as_stack))
+Proof
+  strip_tac >> simp[asm_next_def] >>
+  qpat_x_assum `venom_asm_rel _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE[venom_asm_rel_def]) >>
+  simp[venom_asm_rel_def, update_var_def] >>
+  conj_tac
+  >- (simp[stack_push_def, stack_pop_def, GSYM update_var_def] >>
+      irule plan_stack_rel_emit_step >> simp[] >>
+      irule EVERY_TAKE >> simp[]) >>
+  simp[GSYM update_var_def] >>
+  irule plan_spill_rel_update_var >> simp[]
+QED
+
 Theorem exec_pure2_update_var:
   !f inst vs vs' op1 op2 out.
     exec_pure2 f inst vs = OK vs' /\
@@ -304,6 +327,51 @@ QED
    When plan stack ends with [opN; ...; op1], asm stack starts with
    v1 :: ... :: vN :: rest where vi = operand_val vs lo opi.
    ========================================================================= *)
+
+Theorem asm_stack_inputs_from_plan:
+  !lo vs base operands values stk.
+    plan_stack_rel lo vs (base ++ REVERSE operands) stk /\
+    EVERY (\op. op <> dead_stack_marker) operands /\
+    LIST_REL (\op value. operand_val vs lo op = SOME value) operands values ==>
+    stk = values ++ DROP (LENGTH operands) stk
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[plan_stack_rel_def, LIST_REL_EL_EQN, EVERY_EL] >>
+  `TAKE (LENGTH operands) stk = values` by
+    (simp[LIST_EQ_REWRITE, LENGTH_TAKE_EQ] >>
+     rpt strip_tac >> simp[EL_TAKE] >>
+     qpat_x_assum `!i. _ ==> EL i (REVERSE _) = _ \/ _`
+       (qspec_then `x` mp_tac) >>
+     simp[REVERSE_APPEND, EL_APPEND1] >>
+     metis_tac[]) >>
+  metis_tac[TAKE_DROP]
+QED
+
+Theorem eval_operands_operand_val_rel:
+  !operands values.
+    eval_operands operands vs = SOME values /\
+    (!op. MEM op operands ==> eval_operand op vs = operand_val vs lo op) ==>
+    LIST_REL (\op value. operand_val vs lo op = SOME value) operands values
+Proof
+  Induct_on `operands` >>
+  simp[eval_operands_def, AllCaseEqs()] >> rpt strip_tac >>
+  simp[LIST_REL_def] >> metis_tac[]
+QED
+
+Theorem arranged_eval_operands_stack:
+  venom_asm_rel lo ps vs st /\
+  ps.ps_stack = residual ++ REVERSE operands /\
+  EVERY (\op. op <> dead_stack_marker) operands /\
+  (!op. MEM op operands ==> eval_operand op vs = operand_val vs lo op) /\
+  eval_operands operands vs = SOME values ==>
+  st.as_stack = values ++ DROP (LENGTH operands) st.as_stack
+Proof
+  rpt strip_tac >>
+  `LIST_REL (\op value. operand_val vs lo op = SOME value) operands values` by
+    (irule eval_operands_operand_val_rel >> simp[]) >>
+  irule asm_stack_inputs_from_plan >> simp[] >>
+  qexistsl_tac [`residual`, `lo`, `vs`] >> fs[venom_asm_rel_def]
+QED
 
 Theorem asm_stack_top1_from_plan:
   !lo vs ps_stack as_stack op1 base.

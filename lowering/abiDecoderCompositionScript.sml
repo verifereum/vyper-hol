@@ -28,7 +28,8 @@ Theorem abi_decode_copy_step:
 Proof
   strip_tac >> gvs[abi_decode_source_opcode_def] >>
   simp[abi_decode_copy_opcode_def, abi_decode_copy_bytes_def,
-       abi_decode_source_def, Once step_inst_base_def, mk_inst_def, mcopy_def]
+       abi_decode_source_def, mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, mcopy_def]
 QED
 
 Theorem abi_decode_copy_sequence:

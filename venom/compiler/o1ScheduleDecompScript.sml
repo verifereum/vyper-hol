@@ -115,8 +115,8 @@ Theorem stage_ctx_rows:
   EVERY (o1_fn_row k) (stage_ctx unit.cu_context chains k).ctx_functions
 Proof
   strip_tac >> simp[stage_ctx_def, stage_fns_def, EVERY_MAP, EVERY_EL] >>
-  rpt strip_tac >> `n < LENGTH chains` by simp[] >> simp[EL_MAP] >>
-  irule chain_facts_row >> metis_tac[]
+  qx_gen_tac `i` >> strip_tac >> `i < LENGTH chains` by simp[] >>
+  simp[EL_MAP] >> irule chain_facts_row >> metis_tac[]
 QED
 
 Theorem stage_lookup_index:

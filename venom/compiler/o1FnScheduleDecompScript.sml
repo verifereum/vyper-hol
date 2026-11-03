@@ -245,8 +245,8 @@ Proof
   gvs[] >>
   `!j. j < SUC (SUC (LENGTH rest)) ==>
        o1_fn_row (j + k) (EL j (fn::out.fpo_function::rest))` by
-    (Cases >> simp[] >>
-     qpat_x_assum `!j. j < SUC (LENGTH rest) ==> _` (qspec_then `n` mp_tac) >>
+    (Cases >- simp[] >> rename1 `SUC m < _` >> simp[] >>
+     qpat_x_assum `!j. j < SUC (LENGTH rest) ==> _` (qspec_then `m` mp_tac) >>
      simp[arithmeticTheory.ADD_CLAUSES]) >>
   qexistsl_tac [`fn::out.fpo_function::rest`,
     `(unit_with_fns unit (replace_fn fn0.fn_name fn unit.cu_context.ctx_functions))::obs`] >>
