@@ -116,6 +116,41 @@ Theorem inst_ids_fresh_after_step[local]:
          (EL i bb.bb_instructions).inst_id NOTIN FDOM s1.vs_allocas) ==>
     !i. SUC s1.vs_inst_idx <= i /\ i < LENGTH bb.bb_instructions ==>
         (EL i bb.bb_instructions).inst_id NOTIN FDOM v.vs_allocas
+Theorem exec_alloca_preserves_remap:
+  !fn roots remap inst s1 s2 alloc_size out.
+    alloca_remap_rel fn roots remap s1 s2 /\
+    FINITE roots /\
+    wf_function fn /\
+    alloca_inv s1 /\ alloca_inv s2 /\
+    LENGTH s1.vs_memory <= s1.vs_alloca_next /\
+    LENGTH s2.vs_memory <= s2.vs_alloca_next /\
+    inst.inst_id NOTIN FDOM s1.vs_allocas /\
+    fn_alloca_id_of_var fn out = SOME inst.inst_id /\
+    inst.inst_opcode = ALLOCA /\
+    inst.inst_outputs = [out] /\
+    out IN roots /\
+    alloca_safe_access fn roots s1 /\
+    alloca_safe_access fn roots s2 /\
+    FLOOKUP s1.vs_allocas inst.inst_id = NONE /\
+    FLOOKUP s2.vs_allocas inst.inst_id = NONE /\
+    s1.vs_alloca_next + w2n alloc_size < dimword (:256) /\
+    s2.vs_alloca_next + w2n alloc_size < dimword (:256) /\
+    0 < w2n alloc_size ==>
+    let base1 = s1.vs_alloca_next in
+    let base2 = s2.vs_alloca_next in
+    let sz = w2n alloc_size in
+    let s1' = update_var out (n2w base1)
+                (s1 with <| vs_allocas :=
+                   s1.vs_allocas |+ (inst.inst_id, (base1, sz));
+                   vs_alloca_next := base1 + sz |>) in
+    let s2' = update_var out (n2w base2)
+                (s2 with <| vs_allocas :=
+                   s2.vs_allocas |+ (inst.inst_id, (base2, sz));
+                   vs_alloca_next := base2 + sz |>) in
+      exec_alloca inst s1 alloc_size = OK s1' /\
+      exec_alloca inst s2 alloc_size = OK s2' /\
+      alloca_remap_rel fn roots
+        (remap |+ (inst.inst_id, base2)) s1' s2'
 ```
 
 Do not modify this statement. Prove it as-is, or produce a counterexample.
@@ -128,6 +163,7 @@ Do not modify this statement. Prove it as-is, or produce a counterexample.
 - Repair the existing immutable_op_scalar_preserved and immutable_op_preserves_remap proof bodies without changing either statement.
 - Repair the encountered pp_single_output proof body without changing its statement.
 - Repair the encountered inst_ids_fresh_after_step proof without changing its statement.
+- Repair the encountered exec_alloca_preserves_remap[sizes] and remap_preserved_mem_ops[mstore8] proof resumes without changing their statements or other resumes.
 - Build allocaRemapProofsTheory at the default tactic limit.
 - Preserve all other existing proofs, definitions and statements.
 
@@ -141,7 +177,7 @@ A forced default replay at eaf96a2fa timed out at the classification gvs after o
 
 ## Domain Constraints
 
-- The six previously authorized repairs now pass incrementally at 3bc084c97. Preserve all these completed repairs and helpers. Edit only inst_ids_fresh_after_step and necessary local helper theorems in venom/passes/shared/proofs/allocaRemapProofsScript.sml. A needed declarative Ancestors entry is allowed if it introduces no dependency cycle. Preserve the completed allocation-map proof repair.
+- The six previously authorized repairs now pass incrementally at 3bc084c97. Preserve all these completed repairs and helpers. Edit only inst_ids_fresh_after_step, exec_alloca_preserves_remap[sizes], remap_preserved_mem_ops[mstore8], and necessary local helper theorems in venom/passes/shared/proofs/allocaRemapProofsScript.sml. A needed declarative Ancestors entry is allowed if it introduces no dependency cycle. Preserve the completed allocation-map proof repair.
 - All existing definitions and statements, including local declarations, are frozen. No new definitions, axioms, admissions, strengthened premises, opcode exclusions or supported-subset changes.
 - Preserve all completed gas, CFG and DRET proofs.
 - Default 2.5-second tactic limit; no timeout override and no TRY/ORELSE/FIRST around search.
@@ -179,3 +215,5 @@ Independent read-only audit at a6abad420 finds both exact immutable-operation st
 Default replay at420c9d0a8 passes the two immutable repairs and stops at pp_single_output while unfolding the full dispatcher in its ADD branch. An independent read-only audit found this exact full statement PROVABLE: existing classification reduces it to ADD/SUB/ASSIGN and successful execution forces one output. No well-formedness, gas, SSA or stage premise is needed or authorized. Only this proof and necessary local helpers are newly in scope; preserve all other proofs/statements/definitions.
 
 The next actual default-replay failure is the ALLOCA branch of inst_ids_fresh_after_step, at the broad FULL_CASE_TAC loop. Independent read-only audit of its full exact statement and producers found PROVABLE: wf_function provides instruction-ID distinctness; current-index freshness excludes a preexisting current allocation site; successful ALLOCA can add only the current ID; the existing allocation-map preservation theorem covers all other allowed opcodes, including GAS. No missing assumption or definition amendment is authorized. Only this proof and necessary local helpers are newly in scope; preserve the prior six repairs and all existing schemas.
+
+Default replay now encounters two earlier actual prerequisite timeouts before reaching the authorized freshness proof: exec_alloca_preserves_remap[sizes] at its broad fs[] (one unchanged replay passed), and remap_preserved_mem_ops[mstore8] at full dispatcher expansion. Independent read-only audit of both complete exact theorem statements and these real obligations found PROVABLE from existing allocation-map correspondence, fresh-site/no-wrap/zero-region facts, pointer confinement, one-byte bounds and residual-frame transport. The scope now permits only these two resumes plus the already authorized freshness proof/local helpers; all completed repairs, other resumes, statements and definitions remain frozen. No new premise, invariant, opcode exclusion or supported-subset restriction is authorized.
