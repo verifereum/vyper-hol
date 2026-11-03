@@ -227,6 +227,37 @@ val () = List.app (fn in_deploy =>
    List.app (fn bd => assert_none (check_address_bytes bd in_deploy))
      [``Fixed 19``, ``Dynamic 20``, ``Dynamic 32``])) [false, true]
 
+(* An immutable is assignable only in the constructor (Vyper's
+   "Immutable value cannot be written to", local.py): the runtime check
+   rejects a write to it from a nonpayable external function, as an
+   assignment or an augmented assignment, and accepts the constructor's
+   write with a runtime read.  (A view function would be rejected for its
+   mutability whatever the immutable's assignability.) *)
+fun immutable_write_modules writes =
+  ``[(NONE,
+      [VariableDecl Private Immutable "imm" (BaseT (UintT 256)) NONE;
+       FunctionDecl Deploy Nonpayable F F "__init__" [] [] NoneT
+         [Assign (BaseTarget (TopLevelNameTarget (NONE, "imm")))
+            (Literal (BaseT (UintT 256)) (IntL 1))];
+       FunctionDecl External Nonpayable F F "f" [] [] (BaseT (UintT 256))
+         (^writes ++
+          [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE, "imm")))])])]
+    : (num option # toplevel list) list``
+
+fun immutable_write_check in_deploy writes =
+  vyperCheckContractLib.check_contract_conv
+    ``check_contract ^(if in_deploy then T else F) ^empty_layouts
+        ^zero_address ^(immutable_write_modules writes)``
+
+val () = assert_some (immutable_write_check false ``[] : stmt list``)
+val () = assert_some (immutable_write_check true ``[] : stmt list``)
+val () = assert_none (immutable_write_check false
+  ``[Assign (BaseTarget (TopLevelNameTarget (NONE, "imm")))
+       (Literal (BaseT (UintT 256)) (IntL 2))]``)
+val () = assert_none (immutable_write_check false
+  ``[AugAssign (BaseT (UintT 256)) (TopLevelNameTarget (NONE, "imm")) Add
+       (Literal (BaseT (UintT 256)) (IntL 3))]``)
+
 (* Basic API and ML-Boolean construction. *)
 val empty_check = vyperCheckContractLib.check_contract
   {in_deploy = false, layouts = empty_layouts,
