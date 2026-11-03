@@ -2370,6 +2370,8 @@ Proof
   drule_all eval_expr_builtin_cases >> strip_tac
   >- (gvs[] >>
       `(\s. expr_sim_inv cenv cx env s /\ source_supply s) es` by simp[] >>
+      qpat_assum `!arg_ty. typed_args_ready _ _ _ _ arg_ty _ _`
+        (qspec_then `\e. ty` assume_tac) >>
       drule_all lower_typed_args_sim >>
       disch_then (qspec_then `s0` mp_tac) >> simp[wb_args_exit_def] >> strip_tac >>
       irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[]) >>
@@ -2382,6 +2384,8 @@ Proof
   drule_all ecrecover_typed_result >>
   disch_then (qspec_then `es'.accounts` strip_assume_tac) >>
   `(\s. expr_sim_inv cenv cx env s /\ source_supply s) es` by simp[] >>
+  qpat_assum `!arg_ty. typed_args_ready _ _ _ _ arg_ty _ _`
+    (qspec_then `\e. ty` assume_tac) >>
   drule_all lower_typed_args_sim >> disch_then (qspec_then `s0` mp_tac) >>
   simp[wb_args_exit_def] >> disch_then (mp_then Any irule wb_frag_then) >> simp[] >>
   qx_gen_tac `t` >> strip_tac >> gvs[] >>
