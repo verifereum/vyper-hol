@@ -3,6 +3,7 @@ Theory stmtSimMemoryWiden
 Ancestors
   list rich_list abiEncoderObserver venomInst venomExecSemantics finite_map exprSim exprSimHyps stmtSim stmtSimDeclMem
   stmtSimAssignMem stmtSimAssignTupleMem typedMemoryCopy
+  memoryLocalRhsProps valueCopyBytes
   stmtSimAssignStore fragExec stmtSimDeclStore stmtSimDecl localPtrsProps
   exprLoweringProps venomState venomMemDefs
   stmtLowering exprLowering compileEnv valueEncoding vyperTypeSystem
@@ -1543,6 +1544,35 @@ Proof
 
 QED
 
+Theorem typed_bytestring_expr_source[local]:
+  !ctx func cenv cx e es sa sb s0 es1 v op s env dty dtv.
+    expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
+    well_typed_expr env e /\ expr_sim_inv cenv cx env es /\
+    is_bytestring_type (lowered_value_type cenv e) /\
+    is_bytestring_type dty /\
+    evaluate_type (get_tenv cx) dty = SOME dtv /\
+    value_has_type dtv v ==>
+    ?sw. eval_operand op s = SOME sw /\
+         val_in_memory dtv v (w2n sw) s.vs_memory
+Proof
+  rpt gen_tac >> strip_tac >>
+  `is_bytestring_type (expr_type e)` by
+    metis_tac[lowered_value_type_shape] >>
+  `~is_word_type (expr_type e)` by
+    metis_tac[is_bytestring_word_type] >>
+  `?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv` by
+    (`env.type_defs = get_tenv cx` by
+       gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+     `!id t. FLOOKUP env.var_types id = SOME t ==>
+             well_formed_type env.type_defs t` by
+       (gvs[expr_sim_inv_def, well_formed_type_def] >>
+        metis_tac[env_consistent_var_type_evaluates]) >>
+     drule_all exprSafeOperandTheory.well_typed_expr_type_well_formed >>
+     simp[well_formed_type_def, IS_SOME_EXISTS]) >>
+  gvs[expr_post_def, expr_val_rel_def] >>
+  metis_tac[bytestring_val_in_memory_transfer]
+QED
+
 Theorem typed_memory_expr_source:
   !ctx func cenv cx e es sa sb s0 es1 v op s stv.
     expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
@@ -2572,6 +2602,13 @@ Theorem compile_assign_local_memory_typed_stmt_frag:
        (do raw <- eval_expr cx e; read_result cx raw od) es = (INL v,es1) /\
        lookup_scopes id es1.scopes = SOME entry ==>
        entry.type = dtv /\ value_has_type stv v /\ value_has_type dtv v) /\
+    (~is_bytestring_type (expr_type e) ==>
+       !sa vv sb. compile_expr cenv (expr_type e) e sa = (vv,sb) ==>
+         (?ptr. vv = LocatedValue (expr_type e) ptr /\
+                ptr.ptr_location <> LocCalldata) \/
+         (?op. vv = StackValue (expr_type e) op /\
+               emit_inst INVALID [] [] sa = ((),sb))) /\
+    expr_vv_sim ctx func cenv cx (expr_type e) e es /\
     expr_sim ctx func cenv cx (expr_type e) e es ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret (Assign (BaseTarget (NameTarget id)) e)) es res es'
