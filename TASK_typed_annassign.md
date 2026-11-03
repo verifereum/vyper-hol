@@ -71,4 +71,4 @@ No executable-definition changes, source restrictions, new stage assumptions, th
 
 ## Notes
 
-The typing premise is newly added to an unproved internal fragment. The corrected statement has not yet been parse-built in this run; the prior statement and preserved partial proof were built before the correction. Owner validation, CI-mode replay and final admission audit follow this task. The old memory_widen_consumers task and its frozen statement remain as historical evidence; do not edit or resume its verified-falsehood state.
+The typing premise is newly added to an unproved internal fragment. The corrected statement parsed in the owner build on 2026-11-03; its preserved partial proof reached the explicit FAIL_TAC "bytestring branch" in its existing Resume clause. Owner validation, CI-mode replay and final admission audit follow this task. The old memory_widen_consumers task and its frozen statement remain as historical evidence; do not edit or resume its verified-falsehood state.
