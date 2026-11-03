@@ -1194,25 +1194,12 @@ Theorem raw_log_tail_result_sound_simp:
      | INL tv => expr_result_typed env (Call NoneT RawLog es NONE) tv
      | INR _ => T)
 Proof
-  rpt strip_tac >>
-  qpat_x_assum `(case type_check _ _ _ of _ => _) = _` mp_tac >>
-  drule_all raw_log_args_runtime_typed_dest >> strip_tac >> gvs[] >>
-  Cases_on `topics` >>
-  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
-     raise_def, return_def,
-     lift_option_type_def, push_log_def, no_type_error_result_def,
-     expr_result_typed_def, expr_runtime_typed_def,
-     expr_type_def, value_result_typed_def, value_has_type_def,
-     evaluate_type_def, is_HashMapRef_def] >>
-  fs[type_check_def, bind_def, ignore_bind_def, assert_def, return_def,
-     push_log_def] >>
-  TRY (irule runtime_consistent_logs_append >> simp[]) >>
-  TRY (irule state_well_typed_logs_append >> simp[]) >>
-  TRY (irule env_consistent_logs_append >> simp[]) >>
-  gvs[runtime_consistent_def] >>
-  qpat_x_assum `(case check _ _ _ of _ => _) = _` mp_tac >>
-  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
-     lift_option_type_def, push_log_def]
+  rpt gen_tac >> strip_tac >>
+  irule raw_log_tail_result_sound >>
+  simp[] >>
+  qexistsl [`st`, `vs`] >>
+  asm_rewrite_tac[] >>
+  gvs[bind_def, ignore_bind_def, lift_option_type_def]
 QED
 
 
