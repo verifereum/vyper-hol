@@ -149,14 +149,31 @@ Theorem gas_path_normal:
     run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
     ?fuel'. run_from fuel' ctx fn s = r
 Proof
-  cheat
+  `!ctx fn s n res. gas_path ctx fn s n res ==>
+     !t. res = OK t ==>
+       ~t.vs_halted /\
+       !fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
+         ?fuel'. run_from fuel' ctx fn s = r`
+    suffices_by metis_tac[] >>
+  ho_match_mp_tac gas_path_ind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[] >> metis_tac[])
+  >- (rpt strip_tac >> gvs[] >> metis_tac[gas_path_edge_continue])
+  >> rpt strip_tac >> gvs[exit_result_def]
 QED
 
 Theorem gas_path_exit:
   gas_path ctx fn s n r /\ exit_result r ==>
   ?fuel. run_from fuel ctx fn s = r
 Proof
-  cheat
+  `!ctx fn s n r. gas_path ctx fn s n r ==>
+     exit_result r ==> ?fuel. run_from fuel ctx fn s = r`
+    suffices_by metis_tac[] >>
+  ho_match_mp_tac gas_path_ind >> rpt conj_tac
+  >- simp[exit_result_def]
+  >- (rpt strip_tac >>
+      first_x_assum drule >> strip_tac >>
+      metis_tac[gas_path_edge_continue, exit_result_not_error])
+  >> metis_tac[gas_path_edge_exit]
 QED
 
 Theorem gas_path_then:
