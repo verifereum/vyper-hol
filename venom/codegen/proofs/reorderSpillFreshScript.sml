@@ -11,23 +11,23 @@ Theorem alloc_spill_slot_keep_layout[local]:
     (!key old. FLOOKUP fm key = SOME old ==>
        old + 32 <= off \/ off + 32 <= old)
 Proof
-  rpt gen_tac >> strip_tac >>
-  fs[alloc_spill_slot_def] >> Cases_on `al.sa_free_slots` >>
-  gvs[spill_alloc_layout_wf_def] >>
-  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
-  gvs[MEM_FRONT] >>
-  TRY (qpat_assum `!op off. FLOOKUP fm op = SOME off ==> _ /\ _`
-         (drule_then strip_assume_tac) >> decide_tac >> NO_TAC) >>
-  TRY (metis_tac[] >> NO_TAC) >>
-  imp_res_tac MEM_FRONT >>
-  TRY (simp[ALL_DISTINCT_FRONT] >> NO_TAC) >>
-  TRY (metis_tac[MEM_LAST] >> NO_TAC) >>
-  fs[EL_FRONT, LENGTH_FRONT] >>
-  TRY (metis_tac[] >> NO_TAC) >>
-  qpat_x_assum `!i j. i < SUC _ /\ _ ==> _`
-    (qspecl_then [`i`, `j`] mp_tac) >> simp[] >> strip_tac >>
-  `MEM (LAST (h::t)) (h::t)` by simp[MEM_LAST] >>
-  fs[] >> metis_tac[]
+  rpt gen_tac >> strip_tac >> Cases_on `al.sa_free_slots`
+  >- (gvs[alloc_spill_slot_def, spill_alloc_layout_wf_def] >>
+      conj_tac >- (rpt strip_tac >> res_tac >> decide_tac) >>
+      rpt strip_tac >> res_tac >> decide_tac) >>
+  gvs[alloc_spill_slot_def, spill_alloc_layout_wf_def] >>
+  conj_tac
+  >- (conj_tac >- metis_tac[] >>
+      conj_tac >- (rpt strip_tac >> drule MEM_FRONT >> simp[] >> metis_tac[]) >>
+      conj_tac >- metis_tac[] >>
+      conj_tac >- simp[ALL_DISTINCT_FRONT] >>
+      conj_tac
+      >- (rpt strip_tac >> simp[EL_FRONT] >>
+          qpat_x_assum `!i j. i < SUC _ /\ _ ==> _`
+            (qspecl_then [`i`, `j`] mp_tac) >> simp[]) >>
+      rpt strip_tac >> drule MEM_FRONT >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `MEM (LAST (h::t)) (h::t)` by simp[MEM_LAST] >> fs[] >> metis_tac[]
 QED
 
 Theorem spill_alloc_n_fresh_for_map[local]:
