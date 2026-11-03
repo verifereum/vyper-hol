@@ -265,7 +265,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   gvs[subscripts_type_def, AllCaseEqs()] >>
   rename1 `subscript_type root_tv (AttrSubscript fld) = SOME etv` >>
-  Cases_on `root_tv` >> gvs[subscript_type_def] >>
+  Cases_on `root_tv` >>
+  qpat_x_assum `subscript_type _ (AttrSubscript _) = SOME _` mp_tac >>
+  simp[subscript_type_def] >> strip_tac >>
   Cases_on `a` >>
   gvs[value_has_type_def, Once assign_subscripts_def, AllCaseEqs()] >>
   rename1 `assign_subscripts _ fv path (Replace v) = INL new_fv` >>
