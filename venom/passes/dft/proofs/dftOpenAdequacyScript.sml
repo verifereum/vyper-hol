@@ -659,3 +659,127 @@ Proof
   `j <= k` by decide_tac >>
   drule_all dft_open_stack_confinement >> metis_tac[]
 QED
+
+Theorem dft_open_invoke_bad_decode:
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = NONE ==>
+  dft_open_next a ctx (DftOpen (DftAt fn budget bb s) stack n) =
+    DftOpen (DftDone (Error "invoke: bad operand format")) [] n
+Proof
+  simp[dft_open_next_def, dft_open_invoke_def]
+QED
+
+Theorem dft_open_invoke_no_callee:
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm, ops) /\
+  lookup_function nm ctx.ctx_functions = NONE ==>
+  dft_open_next a ctx (DftOpen (DftAt fn budget bb s) stack n) =
+    DftOpen (DftDone (Error "invoke: function not found")) [] n
+Proof
+  simp[dft_open_next_def, dft_open_invoke_def]
+QED
+
+Theorem dft_open_invoke_bad_args:
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm, ops) /\
+  lookup_function nm ctx.ctx_functions = SOME callee /\
+  eval_operands ops s = NONE ==>
+  dft_open_next a ctx (DftOpen (DftAt fn budget bb s) stack n) =
+    DftOpen (DftDone (Error "invoke: undefined argument")) [] n
+Proof
+  simp[dft_open_next_def, dft_open_invoke_def]
+QED
+
+Theorem dft_open_invoke_bad_setup:
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm, ops) /\
+  lookup_function nm ctx.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = NONE ==>
+  dft_open_next a ctx (DftOpen (DftAt fn budget bb s) stack n) =
+    DftOpen (DftDone (Error "invoke: empty function")) [] n
+Proof
+  simp[dft_open_next_def, dft_open_invoke_def]
+QED
+
+Theorem dft_open_error_boundary:
+  dft_open_inst_boundary fn budget bb stack i
+    (DftOpen (DftDone (Error e)) [] n)
+Proof
+  simp[dft_open_inst_boundary_def, dft_open_run_boundary_def]
+QED
+
+Theorem dft_open_error_segment:
+  dft_open_next a ctx (DftOpen (DftAt fn budget bb s) stack n) =
+    DftOpen (DftDone (Error e)) [] n ==>
+  dft_first_hit (dft_open_next a ctx)
+    (dft_open_inst_boundary fn budget bb stack s.vs_inst_idx)
+    (DftOpen (DftAt fn budget bb s) stack n) 1
+    (DftOpen (DftDone (Error e)) [] n)
+Proof
+  simp[dft_first_hit_def, dft_open_inst_boundary_initial, dft_open_error_boundary]
+QED
+
+Theorem dft_open_invoke_push_not_boundary:
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm, ops) /\
+  lookup_function nm ctx.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs ==>
+  ~dft_open_inst_boundary fn budget bb stack s.vs_inst_idx
+    (dft_open_next a ctx (DftOpen (DftAt fn budget bb s) stack n))
+Proof
+  strip_tac >> drule_all dft_open_invoke_push >>
+  simp[dft_open_inst_boundary_pushed_entry]
+QED
+
+Theorem dft_open_return_bad_arity:
+  bind_outputs inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state caller cs)) = NONE ==>
+  dft_open_next a ctx
+    (DftOpen (DftDone (IntRet ret cs))
+      (DftCaller fn budget bb inst caller::rest) n) =
+    DftOpen (DftDone (Error "invoke: return arity mismatch")) [] n
+Proof
+  simp[dft_open_next_def, dft_open_return_def]
+QED
+
+Theorem dft_open_return_deliver:
+  bind_outputs inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state caller cs)) = SOME after ==>
+  dft_open_next a ctx
+    (DftOpen (DftDone (IntRet ret cs))
+      (DftCaller fn budget bb inst caller::rest) n) =
+    dft_open_deliver fn budget bb inst caller rest n (OK after)
+Proof
+  simp[dft_open_next_def, dft_open_return_def]
+QED
+
+Theorem dft_open_return_boundary:
+  dft_open_inst_boundary fn budget bb rest caller.vs_inst_idx
+    (dft_open_next a ctx
+      (DftOpen (DftDone (IntRet ret cs))
+        (DftCaller fn budget bb inst caller::rest) n))
+Proof
+  Cases_on `bind_outputs inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state caller cs))` >>
+  simp[dft_open_next_def, dft_open_return_def,
+       dft_open_error_boundary, dft_open_deliver_boundary]
+QED
+
+Theorem dft_open_return_pre_pop_not_boundary:
+  ~dft_open_inst_boundary fn budget bb rest i
+    (DftOpen (DftDone (IntRet ret cs)) (frame::rest) n)
+Proof
+  simp[dft_open_inst_boundary_def, dft_open_run_boundary_def] >>
+  strip_tac >> `LENGTH (frame::rest) = LENGTH rest` by simp[] >> gvs[]
+QED
+
+Theorem dft_open_propagate_endpoint:
+  ((?e. r = Error e) \/ (?s. r = Halt s) \/ (?z s. r = Abort z s)) ==>
+  dft_open_next a ctx (DftOpen (DftDone r) (frame::rest) n) =
+    DftOpen (DftDone r) [] n /\
+  dft_open_inst_boundary fn budget bb rest i (DftOpen (DftDone r) [] n)
+Proof
+  strip_tac >>
+  simp[dft_open_next_def, dft_open_return_def,
+       dft_open_inst_boundary_def, dft_open_run_boundary_def]
+QED
