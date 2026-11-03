@@ -7,6 +7,13 @@ version = "0.2.3"
 
 [build]
 roots = ["vyperHolScript.sml",
+         "tests/vyperPopTypingTestScript.sml",
+         "venom/proofs/allocaHistoryScript.sml",
+         "lowering/allocaHistoryFragmentScript.sml",
+         "lowering/nonreentrantEntryScript.sml",
+         "lowering/nonreentrantSourceScript.sml",
+         "lowering/nonreentrantExitScript.sml",
+         "lowering/concatMemoryScript.sml",
          "tests/vyperTestsHolScript.sml",
          "lowering/e2eBoundaryTestScript.sml",
          "lowering/evalCompilerWitnessesScript.sml",

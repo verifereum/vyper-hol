@@ -460,7 +460,7 @@ Theorem storage_copy_live_footprint[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `val_footprint tv v = type_memory_size tv`
-  >- (gvs[exprSimAttributeFieldsTheory.type_memory_size_slots] >> decide_tac) >>
+  >- (gvs[storageDecodeMemoryTheory.type_memory_size_slots] >> decide_tac) >>
   Cases_on `v` >> fs[val_footprint_def] >>
   Cases_on `tv` >> fs[] >>
   rename1 `BaseTV bt` >> Cases_on `bt` >> fs[]
@@ -522,7 +522,7 @@ Theorem storage_copy_count_bound[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `val_footprint tv v = type_memory_size tv`
-  >- (gvs[exprSimAttributeFieldsTheory.type_memory_size_slots] >> decide_tac) >>
+  >- (gvs[storageDecodeMemoryTheory.type_memory_size_slots] >> decide_tac) >>
   Cases_on `v` >> fs[val_footprint_def] >>
   Cases_on `tv` >> fs[] >>
   rename1 `BaseTV bt` >> Cases_on `bt` >> fs[]
@@ -826,7 +826,7 @@ Proof
           ((if tr then tstore else sstore) k (mload (w2n b) s) s))` by
        (irule stmt_state_rel_update_var >> simp[]) >>
      Cases_on `tr` >>
-     simp[run_inst_seq_def, step_inst_base_def, exec_write2_def,
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, exec_write2_def,
           mk_inst_def, eval_operand_def, lookup_var_def, update_var_def,
           FLOOKUP_UPDATE, stmt_state_rel_inst_idx] >>
      qpat_x_assum `stmt_state_rel _ _ _ _ _ (update_var _ _ _)` mp_tac >>
@@ -969,7 +969,7 @@ Proof
   (impl_tac >- simp[]) >> simp[] >> strip_tac >>
   rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
   drule_all storage_copy_post_region >> strip_tac >>
-  RULE_ASSUM_TAC (REWRITE_RULE [exprSimAttributeFieldsTheory.type_memory_size_slots]) >>
+  RULE_ASSUM_TAC (REWRITE_RULE [storageDecodeMemoryTheory.type_memory_size_slots]) >>
   drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)
     storage_copy_suffix_run >>
   disch_then (qspecl_then [`ctx`, `func`, `cx`, `es'`, `s1`, `w`] mp_tac) >>

@@ -1375,18 +1375,54 @@ val () = List.app assert_none
    aug_function i256 i256 ``vyperAST$ShR`` (op_name i256 "y"),
    binop_function u256 u256 ``vyperAST$ExpMod`` (op_name u256 "y")]
 
+(* f(x, y) returns `2 ** y`. *)
+val pow_literal_base_function =
+  check_operator_function ``[("x", ^u256); ("y", ^u256)]`` u256
+    ``[Return (SOME (Builtin ^u256 (Bop vyperAST$Exp)
+                       [^(op_lit u256 2); ^(op_name u256 "y")]))]``
+
 (* An over-large literal exponent stays accepted: compile_safe_pow checks the
    base against it. >> of a narrow unsigned value and the bitwise augmented
    assignments on bool compute what the semantics does. *)
 val () = List.app assert_some
   [binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 300),
    binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 0),
+   pow_literal_base_function,
    aug_function u256 u256 ``vyperAST$Exp`` (op_lit u256 2),
    neg_function i256,
    binop_function u8 u8 ``vyperAST$ShR`` (op_name u8 "y"),
    aug_function u8 u8 ``vyperAST$ShR`` (op_lit u8 1),
    binop_function u256 i8 ``vyperAST$ShL`` (op_lit i8 4),
+   binop_function i256 u256 ``vyperAST$ShL`` (op_name u256 "y"),
    binop_function i256 u8 ``vyperAST$ShR`` (op_name u8 "y"),
    aug_function bool_ty bool_ty ``vyperAST$And`` (op_name bool_ty "y"),
    aug_function bool_ty bool_ty ``vyperAST$Or`` (op_name bool_ty "y"),
    aug_function bool_ty bool_ty ``vyperAST$XOr`` (op_name bool_ty "y")]
+
+(* Like Vyper (ImmutableViolation "Cannot modify loop variable"), a loop
+   body may not write the array it iterates over: the evaluator iterates
+   over a copy, the compiled loop reads the array in place.
+     xs: uint256[2] = [0, 1]
+     out: uint256 = 0
+     for i: uint256 in xs:
+         xs[1] = 2      # rejected; accepted without this line
+         out = i
+     return out *)
+fun iterated_write_function writes = let
+  val arr = ``ArrayT (BaseT (UintT 256)) (Fixed 2)``
+in
+  one_fn ``[] : (string # type) list`` u256
+    ``[AnnAssign "xs" ^arr
+         (Builtin ^arr (MakeArray (SOME ^u256) (Fixed 2))
+            [^(op_lit u256 0); ^(op_lit u256 1)]);
+       AnnAssign "out" ^u256 ^(op_lit u256 0);
+       For "i" ^u256 (Array (Name ^arr "xs")) 2
+         (^writes ++
+          [Assign (BaseTarget (NameTarget "out")) (Name ^u256 "i")]);
+       Return (SOME (Name ^u256 "out"))]``
+end
+val () = check_rejects empty_layouts (iterated_write_function
+  ``[Assign (BaseTarget (SubscriptTarget (NameTarget "xs") ^(op_lit u256 1)))
+       ^(op_lit u256 2)]``)
+val () = check_accepts "loop without iterated array write" false empty_layouts
+  (iterated_write_function ``[] : stmt list``)

@@ -24,6 +24,8 @@ Ancestors
   localPtrsProps
   immutableStagingBridge
   immutableCodeLayout
+  e2eDeployFrame
+  deployFrameReplay asmDataSuffixProps
   immutableLocationProps
   loweringShapeDefs
   loweringShapeProps

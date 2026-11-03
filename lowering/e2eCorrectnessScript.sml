@@ -13,8 +13,9 @@
 Theory e2eCorrectness
 Ancestors
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
-  e2eProducers e2eEntry o1PipelineCorrect contextCodegenRel
-  vyperLoweringCorrect loweringRuntimeCorrect loweringShapeProps vfmExecution
+  e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
+  vyperLoweringCorrect loweringRuntimeCorrect loweringShapeProps
+  loweringShapeSource vfmExecution
   venomPipelineCorrect
   passSimulationDefs
   codegenCorrectness
@@ -746,7 +747,11 @@ Proof
   drule compile_vyper_runtime_phases >> strip_tac >>
   rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
   qpat_x_assum `runtime_bc = assemble _` SUBST_ALL_TAC >>
+  drule supported_program_raw_shape_free_program >> strip_tac >>
+  `?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art` by
+    metis_tac[source_typing_ok_def] >>
   drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   drule_all entry_venom_state_initial_venom_state_rel >>
   disch_then (qspec_then `cplan` assume_tac) >>
@@ -772,6 +777,11 @@ Proof
       qexists_tac `fuel` >> gvs[]) >> strip_tac >>
   `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by simp[] >>
   drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
+  `o1_run_state_ok vs` by
+    (fs[o1_run_state_ok_def] >> simp[Abbr`vs`, entry_venom_state_def]) >>
+  `reserved_intervals_wf unit.cu_context.ctx_global_reserved` by
+    (drule lower_vyper_runtime_unit_global_reserved >>
+     simp[staticLayoutDefsTheory.reserved_intervals_wf_def]) >>
   drule_all run_venom_pipeline_correct >> strip_tac >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>

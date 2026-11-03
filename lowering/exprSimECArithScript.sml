@@ -594,7 +594,7 @@ Proof
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def] >> strip_tac >> gvs[] >>
   simp[emitted_insts_def, rich_listTheory.DROP_APPEND1] >>
-  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def,
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        exec_pure2_def, bind_outputs_def, eval_operand_def] >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_read1_def,
        bind_outputs_def, eval_operand_def,
@@ -1573,7 +1573,13 @@ Resume ec_points_run[allocation]:
   (impl_tac >- (
     simp[] >> rpt strip_tac >>
     `eval_operand p1 s1 = SOME point /\ eval_operand p2 s1 = SOME second_word` by
-      (conj_tac >> Cases_on `p1` >> Cases_on `p2` >>
+      (qpat_x_assum `eval_operand p1 s = SOME point` mp_tac >>
+       qpat_x_assum `eval_operand p2 s = SOME second_word` mp_tac >>
+       qpat_x_assum `!x. MEM (Var x) [p1;p2] ==> _` mp_tac >>
+       qpat_x_assum `!x. not_fresh_at sf x ==> lookup_var x s1 = lookup_var x s` mp_tac >>
+       qpat_x_assum `s1.vs_labels = s.vs_labels` mp_tac >>
+       POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+       Cases_on `p1` >> Cases_on `p2` >>
        gvs[eval_operand_def] >> metis_tac[]) >>
     `!x. MEM (Var x) [p1;p2;ib.buf_operand] ==> not_fresh_at sa x` by
       (qpat_x_assum `!x. MEM (Var x) [p1;p2] ==> _` mp_tac >>

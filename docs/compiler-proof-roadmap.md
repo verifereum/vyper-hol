@@ -51,7 +51,7 @@ Their exact premises are in the linked owners and
 | Stage | Actual export / owner | Contract to prove later | Owner milestone |
 |---|---|---|---|
 | S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/loweringRuntimeCorrectScript.sml)) | Raw lowering + supported syntax + typing/storage/deployment/valid call/initial state/outcome guards -> terminating `source_unit_execution_correct` | 6 |
-| S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` (same owner) | Lowering + supported syntax -> `o1_source_unit_ok` | 5 |
+| S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` (same owner) | Lowering + `check_contract` + `raw_shape_free_program` + `immutable_free_program` -> `o1_source_unit_ok` | 5 |
 | S3 | `vyperLoweringCorrect.lower_vyper_runtime_unit_memory_ok` (same owner) | S1 boundary + **non-exemption** -> `raw_unit_memory_ok` | 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` ([source](../venom/compiler/o1PipelineCorrectScript.sml)) | Actual O1 success + raw shape/entry/memory -> forward `checked_unit_transform_correct` | 3 |
 | S5 | `o1PipelineCorrect.o1_pipeline_memory_obligations` (same owner) | O1 + generated plan + raw shape/entry/memory + initial FMP -> **one existential `Inv`** with output memory/reachability | 5 |
@@ -519,7 +519,7 @@ not establish S3's raw-unit contract.
 
 | Handoff | Exact current input/contract | Concrete deferred proof |
 |---|---|---|
-| H5-S2 | Lowering success + `supported_program` -> `o1_source_unit_ok` | Inspect raw emission: only ALLOCA among allocation/FMP forms, no DLOAD/ASSERT_UNREACHABLE; RET only internal, STOP/RETURN only entry; fresh legal labels, read0 empty operands, first block no predecessor, opaque GAS/RETPC uses. This supplies S4/S6 raw shape, not a compile-success theorem. |
+| H5-S2 | Lowering success + `check_contract` + `raw_shape_free_program` + `immutable_free_program` -> `o1_source_unit_ok` | Inspect raw emission: only ALLOCA among allocation/FMP forms, no DLOAD/ASSERT_UNREACHABLE; RET only internal, STOP/RETURN only entry; fresh legal labels, read0 empty operands, first block no predecessor, opaque GAS/RETPC uses. This supplies S4/S6 raw shape, not a compile-success theorem. |
 | H5-S3 | S1 boundary + `~source_exempt` -> `raw_unit_memory_ok` | Alloca-aware buffer/layout induction, checked `unit_alloca_budget`, memory accesses below frontier and frontier <2**256. Fresh empty memory alone proves nothing about later accesses. Exemption exclusion is essential: dynamic decoding may read unchecked wrapping offsets. |
 | H5-S5 | Actual O1/output plan, S2/raw entry/S3 and matching initial FMP -> exists `Inv` with output memory + reachability | Transport frontier/allocation safety through dispatched passes, including early SimplifyCFG/DretDesugar/MakeSSA/LowerDload and ConcretizeMemLoc; prove generated spill-region non-overlap, safe reads/writes and successful-step spill preservation, including aggregate INVOKE returns. Deliver **one shared invariant witness** to L5/S7. |
 

@@ -32,11 +32,14 @@
  *     admission, Milestone 5)
  *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5), from the run
  *     through mem_safe_raw_unit_memory_ok
+ *   lower_vyper_runtime_unit_o1_shape_extras -- S2b (planned admission,
+ *     Milestone 5): the non-INVOKE label operands are local, the entry
+ *     function has no PARAM, no first block has a PHI
  *
  * TASK056: obsolete NONE-mode relation retained as inactive source provenance.
- * STATUS: S2 is proved; S3 is proved from the admitted memory-safe run
- *   lower_vyper_runtime_unit_run_mem_safe, so it is NOT yet a proved
- *   correctness certificate.
+ * STATUS: S2 is proved; S2b is a statement; S3 is proved from the admitted
+ *   memory-safe run lower_vyper_runtime_unit_run_mem_safe, so it is NOT yet
+ *   a proved correctness certificate.
  * Before major proof repair, check lowering definitions against the chosen
  * upstream compiler target; see docs/compiler-definition-parity.md.
  *)
@@ -58,8 +61,8 @@ Ancestors
   venomExecSemantics
   venomState
   compileEnv e2eDefs supportedProgram compileVyper immutableSectionRel
-  unitTransformDefs unitShapeDefs
-  fragExec loweringHalt loweringShapeProps retAbiPlanProps
+  unitTransformDefs unitShapeDefs o1PassContract
+  fragExec loweringHalt loweringShapeProps loweringShapeSource retAbiPlanProps
   venomInst venomWf contextCodegenRel memSafeRun allocaFrontierBound
 
 (* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
@@ -310,6 +313,7 @@ Theorem external_return_none_unlock_result_rel:
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
     cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr /\ ~iv ==> ut) /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') ==>
@@ -429,6 +433,7 @@ Theorem external_return_none_result_rel:
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
     cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr ==> iv) ==>
     frag_exec ctx st st'
       (\s. state_rel func cenv cx es s)
@@ -875,17 +880,47 @@ QED
 
 (* ===== Planned lowering stages (NOT certificates) ===== *)
 
-(* S2, Milestone 5: proved in loweringShapeProps as
-   lower_vyper_runtime_unit_source_unit_ok_names. Raw O1 shape excludes
-   DLOAD; the immutable-free hypothesis restricts this theorem's source
-   domain, not the runtime immutable compiler. *)
+(* S2, Milestone 5: proved in loweringShapeSource as
+   lower_vyper_runtime_unit_source_unit_ok_checked. The type checker supplies
+   builtin arities and distinct internal names; raw_shape_free_program
+   excludes msg.gas values and raw_call (wider than the unit shape needs:
+   a plain raw_call passes it, but the body-shape proof lacks that case).
+   Raw O1 shape excludes DLOAD; the immutable-free hypothesis restricts this
+   theorem's source domain, not the runtime immutable compiler. *)
 Theorem lower_vyper_runtime_unit_source_unit_ok:
+  !tops rpolicy unit layouts addr art.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    check_contract F layouts addr [(NONE, tops)] = SOME art /\
+    raw_shape_free_program tops /\ immutable_free_program tops
+    ==> o1_source_unit_ok unit
+Proof
+  ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_checked
+QED
+
+(* S2b: planned admission, Milestone 5. The lowering's PHI-free code
+   refers to labels only in jumps to blocks of the same function, in
+   reserved labels, and in INVOKE targets; its entry function reads
+   calldata, never a PARAM; and, having no PHI at all, no first block has
+   one. *)
+Theorem lower_vyper_runtime_unit_o1_shape_extras:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
     immutable_free_program tops
-    ==> o1_source_unit_ok unit
+    ==> unit_label_refs_ok unit /\ unit_entry_no_params unit /\
+        unit_first_block_no_phi unit
 Proof
-  ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_names
+  cheat
+QED
+
+(* The runtime unit reserves no global memory. *)
+Theorem lower_vyper_runtime_unit_global_reserved:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit
+    ==> unit.cu_context.ctx_global_reserved = []
+Proof
+  rpt gen_tac >> simp[lower_vyper_runtime_unit_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> strip_tac >>
+  irule vyperCompilerTheory.run_lowering_global_reserved >> metis_tac[]
 QED
 
 (* ===== S3: memory safety ===== *)

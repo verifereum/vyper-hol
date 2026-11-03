@@ -36,8 +36,8 @@ Definition loop_probe_env_def:
     fn_sigs := FEMPTY; flag_members := FEMPTY |>
 End
 
-Theorem loop_probe_typed:
-  type_stmt loop_probe_env NoneT loop_probe_stmt = SOME loop_probe_env
+Theorem loop_probe_typing_rejected:
+  type_stmt loop_probe_env NoneT loop_probe_stmt = NONE
 Proof
   simp[loop_probe_stmt_def, type_stmt_def, well_typed_iterator_def] >> EVAL_TAC >> simp[] >> EVAL_TAC
 QED
@@ -126,7 +126,7 @@ val () = List.app (fn th =>
         List.all (fn name => name = "DISK_THM") oracles
      then print "BODY_LOOP_PROBE_KERNEL_AUDIT OK\n"
      else raise Fail "body loop probe inherited admission"
-  end) [loop_probe_supported, loop_probe_typed, loop_probe_source_result,
+  end) [loop_probe_supported, loop_probe_typing_rejected, loop_probe_source_result,
         loop_probe_compiled_result];
 
 (* The first execution probe uses immediate memory locations; the actual

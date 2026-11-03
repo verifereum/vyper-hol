@@ -1,4 +1,4 @@
-(* Frontier checks for the fixed-bytes arm of compile_concat. *)
+(* Frontier checks for the fixed and dynamic byte arms of compile_concat. *)
 Theory concatMemory
 Ancestors
   fragExecMem instMemFrontier allocaFootprint exprLoweringProps
