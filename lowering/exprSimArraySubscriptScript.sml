@@ -909,3 +909,73 @@ Proof
   simp[] >> drule_all valueEncodingProofsTheory.kvs_in_memory_lookup >>
   SIMP_TAC bool_ss [arithmeticTheory.ADD_ASSOC]
 QED
+
+Theorem immutable_holds_sarray_elem:
+  immutable_holds cenv cx (ArrayT et (Fixed bound)) tv w es /\
+  read_result cx tv es = (INL (ArrayV (SArrayV kvs)),es) /\
+  evaluate_type (get_tenv cx) et = SOME evt /\
+  j < bound /\
+  read_result cx tv' es =
+    (INL (case ALOOKUP kvs j of NONE => default_value evt | SOME v => v),es) ==>
+  immutable_holds cenv cx et tv'
+    (w + n2w (j * type_memory_size evt)) es
+Proof
+  rw[immutable_holds_def] >>
+  gvs[vyperValueTheory.evaluate_type_def, vyperTypingTheory.value_has_type_def] >>
+  `value_has_type evt
+    (case ALOOKUP kvs j of NONE => default_value evt | SOME v => v)` by
+    (Cases_on `ALOOKUP kvs j` >> simp[]
+     >- metis_tac[vyperTypeDefaultsTheory.default_value_has_type] >>
+     drule_all valueEncodingProofsTheory.sparse_has_type_lookup >> simp[]) >>
+  qexistsl_tac [`name`, `off`, `itv`, `iv`,
+                `k + j * type_memory_size evt`] >>
+  ASM_SIMP_TAC bool_ss [wordsTheory.word_add_n2w,
+    AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  drule_all sub_layout_sarray_elem >> simp[]
+QED
+
+Theorem local_place_at_array_elem:
+  local_place_at cenv cx s id path (ArrayT et bd) w /\
+  evaluate_type (get_tenv cx) et = SOME evt /\
+  j < bound_length bd ==>
+  local_place_at cenv cx s id (path ++ [ValueSubscript (IntV (&j))]) et
+    (w + n2w ((case bd of Fixed n => 0 | Dynamic n => 32) +
+               j * type_memory_size evt))
+Proof
+  rw[local_place_at_def] >>
+  gvs[vyperValueTheory.evaluate_type_def] >>
+  drule_then (qspecl_then [`ValueSubscript (IntV (&j))`,
+    `(case bd of Fixed n => 0 | Dynamic n => 32) + j * type_memory_size evt`,
+    `evt`] mp_tac) mem_path_offset_snoc >>
+  Cases_on `bd` >> gvs[vyperASTTheory.bound_length_def] >>
+  simp[mem_step_offset_def] >> strip_tac >>
+  simp[GSYM wordsTheory.WORD_ADD_ASSOC, wordsTheory.word_add_n2w]
+QED
+
+Theorem array_elem_slots_in_range:
+  slots_in_range storage (w2n (w:bytes32)) (ArrayTV evt bd) /\
+  j < (case bd of Fixed n => n
+       | Dynamic n => w2n (read_slot storage (w2n w))) ==>
+  slots_in_range storage
+    (w2n (w + n2w ((case bd of Fixed n => 0 | Dynamic n => 1) +
+                    j * type_slot_size evt))) evt
+Proof
+  strip_tac >>
+  `slots_in_range storage
+    (w2n w + ((case bd of Fixed n => 0 | Dynamic n => 1) +
+               j * type_slot_size evt)) evt` by
+    (Cases_on `bd` >>
+     gvs[Once vyperLookupStorageTheory.slots_in_range_def,
+         vyperLookupStorageTheory.array_slots_in_range_indexed] >>
+     first_x_assum drule >>
+     simp[arithmeticTheory.ADD_ASSOC]) >>
+  `slots_in_range storage
+     (w2n w + ((case bd of Fixed n => 0 | Dynamic n => 1) +
+                j * type_slot_size evt)) evt =
+   slots_in_range storage
+     (w2n (w + n2w ((case bd of Fixed n => 0 | Dynamic n => 1) +
+                    j * type_slot_size evt))) evt` by
+    (irule (cj 1 vyperLookupStorageTheory.slots_in_range_offset_cong) >>
+     Cases_on `w` >> simp[wordsTheory.word_add_n2w, wordsTheory.w2n_n2w]) >>
+  gvs[]
+QED
