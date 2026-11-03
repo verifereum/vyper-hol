@@ -2981,9 +2981,32 @@ Proof
   simp[] >> rpt strip_tac >> gvs[]
 QED
 
+(* LOG dispatch is reduced separately from the simulation context. *)
+Theorem step_inst_base_log[local]:
+  inst.inst_opcode = LOG ==>
+  step_inst_base inst s =
+    (case inst.inst_operands of
+       Lit tc :: rest =>
+         if LENGTH rest <> w2n tc + 2 then Error "log: wrong operand count"
+         else
+           (case (eval_operand (EL 0 (REVERSE rest)) s,
+                  eval_operand (EL 1 (REVERSE rest)) s,
+                  eval_operands (DROP 2 (REVERSE rest)) s) of
+              (SOME off, SOME sz, SOME topics) =>
+                OK (s with vs_logs := s.vs_logs ++
+                  [<| logger := w2w s.vs_call_ctx.cc_address;
+                      topics := topics;
+                      data := TAKE (w2n sz) (DROP (w2n off) s.vs_memory ++
+                                             REPLICATE (w2n sz) 0w) |>])
+            | _ => Error "log: undefined operand")
+     | _ => Error "log requires Lit topic_count as first operand")
+Proof
+  strip_tac >> simp[Once step_inst_base_def]
+QED
+
 (* --- LOG: read from memory, append to logs, no memory write --- *)
 Resume remap_preserved_mem_ops[log]:
-  fs[step_inst_base_def, AllCaseEqs()] >>
+  fs[step_inst_base_log, AllCaseEqs()] >>
   Cases_on `REVERSE rest` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
   rename1 `REVERSE rest = Var v::sz::topic_ops` >>
