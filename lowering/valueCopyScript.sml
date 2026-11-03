@@ -30,7 +30,7 @@ Ancestors
   valueEncoding valueEncodingProps valueEncodingProofs exprSim valueCopyBytes
   compileEnv context exprLoweringProps emitHelper emitHelperProps
   entryDecodeProps vyperValue vyperTyping vfmConstants immutableMemoryFrame
-  venomInst venomState venomExecSemantics venomMemProps
+  venomInst venomState venomExecSemantics venomMemProps alignment
 Libs
   blastLib
 
@@ -429,7 +429,7 @@ Resume compile_store_memory_run_size_bound_capacity[copy]:
   >- (rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >> decide_tac)
   >~ [`LENGTH _ <= LENGTH _`]
   >- simp[mcopy_def, immutable_write_memory_capacity, MAX_DEF] >>
-  simp[mcopy_def, write_memory_with_expansion_def, LET_THM,
+  simp_tac (srw_ss()) [mcopy_def, write_memory_with_expansion_def, LET_THM,
        venom_state_component_equality]
 QED
 

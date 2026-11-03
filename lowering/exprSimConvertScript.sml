@@ -445,9 +445,8 @@ Proof
           `?n. i = &n` by (irule NUM_POSINT_EXISTS >> intLib.ARITH_TAC) >>
           gvs[integer_wordTheory.i2w_pos, w2n_n2w] >>
           `2 ** (in_b - 1) <= 2 ** 255` by simp[] >>
-          `n < dimword (:256)` by
-            (simp[dimword_def] >> irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
-             qexists_tac `2 ** (in_b - 1)` >> simp[]) >>
+          `2 ** 255 <= dimword (:256)` by simp[dimword_def] >>
+          `n < dimword (:256)` by decide_tac >>
           asm_simp_tac (srw_ss()) [arithmeticTheory.LESS_MOD] >>
           CCONTR_TAC >> fs[arithmeticTheory.NOT_LESS]
           >- (`2 ** (in_b - 1) <= 2 ** out_b` by simp[] >> decide_tac) >>
