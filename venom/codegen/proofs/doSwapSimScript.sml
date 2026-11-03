@@ -357,29 +357,6 @@ Proof
 QED
 
 
-(* Compatibility interfaces derive from the saturation-safe layout theorem;
-   readiness is needed only when the conclusion explicitly asks for it. *)
-Theorem spill_alloc_wf_after_spill:
-  !al spilled off al' op.
-    spill_alloc_wf al spilled /\
-    alloc_spill_slot al = (off, al') /\
-    al'.sa_next_offset < dimword(:256) ==>
-    spill_alloc_wf al' (spilled |+ (op, off))
-Proof
-  simp[spill_alloc_wf_iff_layout_ready] >>
-  metis_tac[spill_alloc_layout_wf_after_alloc]
-QED
-
-Theorem spill_alloc_layout_wf_after_spill:
-  !al spilled off al' op.
-    spill_alloc_layout_wf al spilled /\
-    al.sa_next_offset < dimword(:256) /\
-    alloc_spill_slot al = (off, al') ==>
-    spill_alloc_layout_wf al' (spilled |+ (op, off))
-Proof
-  metis_tac[spill_alloc_layout_wf_after_alloc]
-QED
-
 Theorem separated_slots_snoc[local]:
   !slots off.
     (!i j. i < LENGTH slots /\ j < LENGTH slots /\ i <> j ==>
