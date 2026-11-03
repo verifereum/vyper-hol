@@ -696,7 +696,15 @@ Triviality step_term_return:
     (!e. step_inst_base inst1 s1 <> Error e) ==>
     ssa_result_equiv (step_inst_base inst1 s1) (step_inst_base inst2 s2)
 Proof
-  term_setup_tac >> gvs step_base_reduces >> term_resolve_tac
+  term_setup_tac >> gvs step_base_reduces >>
+  namedCases_on `inst1.inst_operands` ["", "off_op ops"] >> gvs[] >>
+  namedCases_on `ops` ["", "sz_op tail_ops"] >> gvs[] >>
+  Cases_on `tail_ops` >> gvs[] >>
+  Cases_on `eval_operand off_op s1` >> gvs[] >>
+  Cases_on `eval_operand sz_op s1` >> gvs[] >>
+  imp_res_tac eval_operand_renamed >>
+  gvs[ssa_result_equiv_def, execution_equiv_UNIV,
+      halt_state_def, set_returndata_def, ssa_sim_def]
 QED
 
 Triviality step_term_revert:
@@ -883,11 +891,12 @@ Proof
   gvs[inst_renamed_def, is_terminator_def] >>
   imp_res_tac ssa_sim_fields >>
   gvs step_base_reduces >>
-  gvs[exec_write2_def, AllCaseEqs(), LET_THM, renamed_operand_def] >>
-  TRY (imp_res_tac eval_operand_renamed >> gvs[]) >>
-  TRY (imp_res_tac eval_operands_renamed >> gvs[]) >>
-  irule ssa_sim_implies_exec_equiv_UNIV >>
-  gvs[ssa_sim_def, halt_state_def, revert_state_def, set_returndata_def,
-      lookup_var_def] >>
-  metis_tac[]
+  gvs[exec_write2_def, AllCaseEqs(), LET_THM, exec_create_abort_iff] >>
+  imp_res_tac eval_operand_renamed >>
+  imp_res_tac eval_operands_renamed >>
+  gvs[exec_create_abort_iff, AllCaseEqs()] >>
+  gvs[execution_equiv_UNIV, halt_state_def, revert_state_def,
+      set_returndata_def, ssa_sim_def] >>
+  Cases_on `inst2.inst_outputs` >> gvs[] >>
+  Cases_on `t` >> gvs[]
 QED
