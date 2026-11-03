@@ -1,6 +1,7 @@
 (* Mapping read-side simulation: key representation and hash steps. *)
 Theory exprSimMap
 Ancestors
+  emitHelper list rich_list venomInst
   exprSimHyps exprSimHash exprSimLeaves valueEncodingProofs
   vyperTypeEnv vyperStoragePlaceProvenance exprLowering exprLoweringProps
   fragExec compileEnv venomState context vyperInterpreter vyperState
@@ -126,4 +127,87 @@ Proof
   irule frag_exec_refl >> rpt strip_tac >> gvs[] >>
   simp[slot_loc_def, contextTheory.mk_ptr_def, eval_operand_def,
        exprSimTheory.locals_kept_def]
+QED
+
+(* Pure compiler boundaries; runtime consumers need not unfold emissions. *)
+Theorem compile_keccak256_key_parts:
+  compile_keccak256_key key F sa = (op,sb) ==>
+  ?data sm len sn.
+    emit_op ADD [key; Lit 32w] sa = (data,sm) /\
+    emit_op MLOAD [key] sm = (len,sn) /\
+    emit_op SHA3 [data; len] sn = (op,sb)
+Proof
+  Cases_on `emit_op ADD [key; Lit 32w] sa` >>
+  rename1 `_ = (data,sm)` >>
+  Cases_on `emit_op MLOAD [key] sm` >>
+  gvs[compile_keccak256_key_def, comp_bind_def]
+QED
+
+Theorem compile_mapping_subscript_parts:
+  compile_mapping_subscript base_op key sa = (op,sb) ==>
+  ?buf sm sn ptr sp sq.
+    compile_alloc_buffer 64 sa = (buf,sm) /\
+    emit_void MSTORE [buf.buf_operand; base_op] sm = ((),sn) /\
+    emit_op ADD [buf.buf_operand; Lit 32w] sn = (ptr,sp) /\
+    emit_void MSTORE [ptr; key] sp = ((),sq) /\
+    emit_op SHA3 [buf.buf_operand; Lit 64w] sq = (op,sb)
+Proof
+  Cases_on `compile_alloc_buffer 64 sa` >> rename1 `_ = (buf,sm)` >>
+  Cases_on `emit_void MSTORE [buf.buf_operand; base_op] sm` >>
+  rename1 `_ = (u,sn)` >> Cases_on `u` >>
+  Cases_on `emit_op ADD [buf.buf_operand; Lit 32w] sn` >>
+  rename1 `emit_op ADD _ _ = (keyptr,sp)` >>
+  Cases_on `emit_void MSTORE [keyptr; key] sp` >>
+  rename1 `_ = (u,sq)` >> Cases_on `u` >>
+  gvs[compile_mapping_subscript_def, comp_bind_def, comp_ignore_bind_def]
+QED
+
+Theorem mapping_suffix_shape:
+  (compile_keccak256_key key F sa = (op,sb) \/
+   compile_mapping_subscript base_op key sa = (op,sb)) ==>
+  same_blocks sa sb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  sb.cs_next_var = sa.cs_next_var + 3 /\
+  (?v. op = Var v /\ not_fresh_at sb v)
+Proof
+  strip_tac >>
+  gvs[compile_keccak256_key_def, compile_mapping_subscript_def,
+      contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
+      fresh_var_def, emit_def, same_blocks_def, emitted_insts_def,
+      not_fresh_at_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  simp[is_terminator_def, mk_inst_def] >>
+  qexists `sa.cs_next_var + 2` >> simp[]
+QED
+
+Theorem mapping_suffix_next_id:
+  (compile_keccak256_key key F sa = (op,sb) ==>
+   sb.cs_next_id = sa.cs_next_id + 3) /\
+  (compile_mapping_subscript base_op key sa = (op,sb) ==>
+   sb.cs_next_id = sa.cs_next_id + 5)
+Proof
+  conj_tac >> strip_tac >>
+  gvs[compile_keccak256_key_def, compile_mapping_subscript_def,
+      contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
+      fresh_var_def, emit_def]
+QED
+
+Theorem mapping_alloca_code:
+  compile_mapping_subscript base_op key sa = (op,sb) /\
+  fn_has_code sa sb func ==>
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)
+Proof
+  strip_tac >> qpat_x_assum `compile_mapping_subscript _ _ _ = _` mp_tac >>
+  simp[compile_mapping_subscript_def,
+    contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    fresh_id_def, fresh_var_def, emit_def] >> strip_tac >> gvs[] >>
+  irule hash_emitted_inst_mem >> goal_assum (drule_at Any) >>
+  simp[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp[]
 QED
