@@ -110,12 +110,17 @@ Definition well_typed_binop_def:
   well_typed_binop ty Div t1 t2 = (t1 = ty /\ t2 = ty /\ is_numeric_type ty) /\
   well_typed_binop ty Mod t1 t2 = (t1 = ty /\ t2 = ty /\ is_numeric_type ty) /\
   well_typed_binop ty Exp t1 t2 = (t1 = ty /\ t2 = ty /\ is_int_type ty) /\
-  well_typed_binop ty ExpMod t1 t2 = (t1 = ty /\ t2 = ty /\ ty = BaseT (UintT 256)) /\
+  (* No frontend produces ExpMod, and compile_binop has no case for it. *)
+  well_typed_binop ty ExpMod t1 t2 = F /\
   well_typed_binop ty UnsafeAdd t1 t2 = (t1 = ty ∧ t2 = ty ∧ is_int_type ty) ∧
   well_typed_binop ty UnsafeSub t1 t2 = (t1 = ty ∧ t2 = ty ∧ is_int_type ty) ∧
   well_typed_binop ty UnsafeMul t1 t2 = (t1 = ty ∧ t2 = ty ∧ is_int_type ty) ∧
   well_typed_binop ty UnsafeDiv t1 t2 = (t1 = ty ∧ t2 = ty ∧ is_int_type ty) ∧
-  well_typed_binop ty ShL t1 t2 = (t1 = ty /\ is_int_type ty /\ is_int_type t2) /\
+  (* Vyper shifts only int256 and uint256 values; >> stays admitted on narrower
+     types, where SHR/SAR of an in-range value stays in range. *)
+  well_typed_binop ty ShL t1 t2 =
+    (t1 = ty /\ is_int_type ty /\ is_int_type t2 /\
+     (ty = BaseT (UintT 256) \/ ty = BaseT (IntT 256))) /\
   well_typed_binop ty ShR t1 t2 = (t1 = ty /\ is_int_type ty /\ is_int_type t2) /\
   well_typed_binop ty And t1 t2 =
     (t1 = ty /\ t2 = ty /\ (is_int_type ty \/ is_bool_type ty \/ is_flag_type ty)) /\
@@ -152,6 +157,37 @@ Proof
   Cases_on `bop` >> simp[well_typed_binop_def] >>
   rpt strip_tac >> gvs[]
 QED
+
+(* The integer of an integer literal, read as the lowering's expr_int_literal
+   reads the operands of ** for compile_safe_pow. *)
+Definition int_literal_value_def:
+  int_literal_value (Literal _ (IntL n)) = SOME n /\
+  int_literal_value _ = NONE
+End
+
+Definition nonneg_int_literal_def:
+  nonneg_int_literal e <=>
+    case int_literal_value e of SOME n => 0 <= n | NONE => F
+End
+
+(* A shift amount that cannot be negative: of an unsigned type, or a
+   non-negative literal, which the annotated AST may give a signed type (the
+   4 in x << 4 is an int8).  Vyper requires an unsigned amount for << and >>,
+   but not for <<= and >>= (see type_stmt's AugAssign). *)
+Definition shift_amount_ok_def:
+  shift_amount_ok e <=> is_uint_type (expr_type e) \/ nonneg_int_literal e
+End
+
+(* The operand forms Vyper requires beyond their types: ** needs a literal
+   base or a non-negative literal exponent (the overflow check of
+   compile_safe_pow is derived from that literal), and a shift amount must
+   not be negative. *)
+Definition builtin_operands_ok_def:
+  builtin_operands_ok blt es <=>
+    (blt = Bop Exp ==>
+       IS_SOME (int_literal_value (EL 0 es)) \/ nonneg_int_literal (EL 1 es)) /\
+    (blt = Bop ShL \/ blt = Bop ShR ==> shift_amount_ok (EL 1 es))
+End
 
 Definition env_item_type_def:
   env_item_type Sender = BaseT AddressT /\
@@ -193,7 +229,8 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty Not ts =
     (LENGTH ts = 1 ∧ HD ts = ty ∧
      (is_bool_type ty ∨ is_uint256_type ty ∨ is_bytes32_type ty ∨ is_flag_type ty)) ∧
-  well_typed_builtin_app ty Neg ts = (ts = [ty] /\ is_numeric_type ty) /\
+  well_typed_builtin_app ty Neg ts =
+    (ts = [ty] /\ is_numeric_type ty /\ ~is_uint_type ty) /\
   well_typed_builtin_app ty Keccak256 ts =
     (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 32)) /\ is_bytes_or_string_type (HD ts)) /\
   well_typed_builtin_app ty Sha256 ts =
@@ -225,7 +262,7 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty BlockHash ts = (ts = [BaseT (UintT 256)] /\ ty = BaseT (BytesT (Fixed 32))) /\
   well_typed_builtin_app ty BlobHash ts = (ts = [BaseT (UintT 256)] /\ ty = BaseT (BytesT (Fixed 32))) /\
   well_typed_builtin_app ty (Env item) ts =
-    (ts = [] /\ ty = env_item_type item /\ item <> MsgGas) /\
+    (ts = [] /\ ty = env_item_type item) /\
   well_typed_builtin_app ty (Acc item) ts =
     (LENGTH ts = 1 /\ HD ts = BaseT AddressT /\ ty = account_item_type item) /\
   well_typed_builtin_app ty MethodId ts =
@@ -260,13 +297,14 @@ End
 Definition assignable_type_def:
   assignable_type tenv (BaseT bt) = well_formed_type tenv (BaseT bt) /\
   assignable_type tenv (TupleT tys) =
-    (well_formed_type tenv (TupleT tys) /\ EVERY (assignable_type tenv) tys) /\
+    (tys <> [] /\ well_formed_type tenv (TupleT tys) /\
+     EVERY (assignable_type tenv) tys) /\
   assignable_type tenv (ArrayT elem bd) =
     (well_formed_type tenv (ArrayT elem bd) /\ assignable_type tenv elem) /\
   assignable_type tenv (StructT nsid) =
     (case FLOOKUP tenv nsid of
      | SOME (StructArgs args) =>
-         well_formed_type tenv (StructT nsid) /\
+         args <> [] /\ well_formed_type tenv (StructT nsid) /\
          EVERY (assignable_type (tenv \\ nsid) o SND) args
      | _ => F) /\
   assignable_type tenv (FlagT nsid) = well_formed_type tenv (FlagT nsid) /\
@@ -304,6 +342,36 @@ Proof
       Cases_on `x` >> gvs[] >>
       Cases_on `evaluate_types (tenv \\ p) (MAP SND l) []` >> gvs[])
   >- (Cases_on `FLOOKUP tenv p` >> gvs[] >> Cases_on `x` >> gvs[])
+QED
+
+(* A variable's type takes at least one storage slot: assignable_type
+   rejects None, the empty tuple and the empty struct. *)
+Theorem assignable_type_slot_size_pos:
+  !tenv ty tv. assignable_type tenv ty /\ evaluate_type tenv ty = SOME tv ==>
+               0 < type_slot_size tv
+Proof
+  recInduct assignable_type_ind >> rpt strip_tac
+  >~ [`assignable_type _ (BaseT bt)`]
+  >- (gvs[evaluate_type_def] >> Cases_on `bt` >> gvs[type_slot_size_def] >>
+      Cases_on `b` >> gvs[type_slot_size_def])
+  >~ [`assignable_type _ (TupleT tys)`]
+  >- (gvs[assignable_type_def, evaluate_type_def, evaluate_types_OPT_MMAP,
+          AllCaseEqs()] >>
+      Cases_on `tys` >> gvs[OPT_MMAP_def, type_slot_size_def] >>
+      first_x_assum (qspec_then `h` mp_tac) >> simp[])
+  >~ [`assignable_type _ (ArrayT elem bd)`]
+  >- (gvs[evaluate_type_def, AllCaseEqs()] >>
+      Cases_on `bd` >>
+      gvs[type_slot_size_def, arithmeticTheory.ZERO_LESS_MULT])
+  >~ [`assignable_type _ (StructT nsid)`]
+  >- (gvs[assignable_type_def, evaluate_type_def, evaluate_types_OPT_MMAP,
+          AllCaseEqs()] >>
+      Cases_on `args` >> gvs[] >> PairCases_on `h` >>
+      gvs[OPT_MMAP_def, type_slot_size_def] >>
+      first_x_assum (qspec_then `(h0,h1)` mp_tac) >> simp[])
+  >~ [`assignable_type _ (FlagT nsid)`]
+  >- gvs[evaluate_type_def, AllCaseEqs(), type_slot_size_def]
+  >> gvs[assignable_type_def]
 QED
 
 Theorem assignable_type_evaluate_not_NoneTV:
@@ -412,16 +480,24 @@ End
 (* ===== Type builtin/conversion checks ===== *)
 
 Definition valid_conversion_def:
-  valid_conversion (BaseT (BytesT _)) (BaseT BoolT) = T /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT BoolT) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT BoolT) = (n <= 32) /\
   valid_conversion (BaseT (UintT _)) (BaseT BoolT) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT BoolT) = T /\
   valid_conversion (BaseT BoolT) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT BoolT) (BaseT (UintT _)) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT (BytesT _)) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT (UintT _)) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT (IntT _)) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT AddressT) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT DecimalT) = T /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Fixed k))) = T /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Dynamic n))) = (m <= n) /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Fixed m))) = (n <= m) /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic k))) = T /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (UintT _)) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (UintT _)) = (n <= 32) /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (IntT _)) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (IntT _)) = (n <= 32) /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT AddressT) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT AddressT) = (n <= 32) /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT DecimalT) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT DecimalT) = (n <= 32) /\
   valid_conversion (BaseT (UintT _)) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT (UintT _)) = T /\
@@ -437,11 +513,15 @@ Definition valid_conversion_def:
   valid_conversion (FlagT _) (BaseT (BytesT bd)) = (bd = Fixed 32) /\
   valid_conversion (BaseT (UintT _)) (FlagT _) = T /\
   valid_conversion (BaseT (IntT _)) (FlagT _) = T /\
-  valid_conversion (BaseT (UintT _)) (BaseT (BytesT _)) = T /\
-  valid_conversion (BaseT (IntT _)) (BaseT (BytesT _)) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT (StringT _)) = T /\
+  valid_conversion (BaseT (UintT n)) (BaseT (BytesT (Fixed m))) = (n <= 8 * m) /\
+  valid_conversion (BaseT (UintT _)) (BaseT (BytesT (Dynamic n))) = (32 <= n) /\
+  valid_conversion (BaseT (IntT n)) (BaseT (BytesT (Fixed m))) = (n <= 8 * m) /\
+  valid_conversion (BaseT (IntT _)) (BaseT (BytesT (Dynamic n))) = (32 <= n) /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (StringT n)) = (m <= n) /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (StringT _)) = T /\
   valid_conversion (BaseT (StringT _)) (BaseT (StringT _)) = T /\
-  valid_conversion (BaseT (StringT _)) (BaseT (BytesT _)) = T /\
+  valid_conversion (BaseT (StringT n)) (BaseT (BytesT (Fixed m))) = (n <= m) /\
+  valid_conversion (BaseT (StringT _)) (BaseT (BytesT (Dynamic n))) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT DecimalT) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT DecimalT) = T /\
   valid_conversion (BaseT DecimalT) (BaseT (IntT _)) = T /\
@@ -523,6 +603,16 @@ Definition ext_call_kw_type_def:
   ext_call_kw_type ret_ty EKDefault = ret_ty /\
   ext_call_kw_type ret_ty EKValue = BaseT (UintT 256) /\
   ext_call_kw_type ret_ty EKGas = BaseT (UintT 256)
+End
+
+(* The value=/gas= operands of a raw_call: each at most once and a uint256.
+   Vyper rejects value= on a static or delegate call, even value=0. *)
+Definition raw_call_kws_ok_def:
+  raw_call_kws_ok flags kw_args <=>
+    ALL_DISTINCT flags.rcf_kws /\ ~MEM EKDefault flags.rcf_kws /\
+    MAP expr_type kw_args = MAP (ext_call_kw_type NoneT) flags.rcf_kws /\
+    ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==>
+     ~MEM EKValue flags.rcf_kws)
 End
 
 (* An external-call argument of type t fits a parameter declared as u, as in
@@ -628,14 +718,18 @@ Definition well_typed_expr_def:
      well_formed_type env.type_defs ty) /\
   well_typed_expr env (Builtin ty blt es) =
     (well_typed_exprs env es /\ well_typed_builtin_app ty blt (MAP expr_type es) /\
-     well_formed_type env.type_defs ty) /\
+     builtin_operands_ok blt es /\ well_formed_type env.type_defs ty) /\
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\ well_formed_type env.type_defs ty /\
      type_builtin_result_ok env.type_defs tb ty target_ty (MAP expr_type es) /\
      well_typed_type_builtin_args tb target_ty (MAP expr_type es)) /\
   well_typed_expr env (Pop ty tgt) =
     (?n. type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n))) /\
-         assignable_type env.type_defs (ArrayT ty (Dynamic n))) /\
+         assignable_type env.type_defs (ArrayT ty (Dynamic n)) /\
+         (case tgt of
+          | TopLevelNameTarget nsid =>
+              IS_NONE (FLOOKUP env.bare_global_assignable nsid)
+          | _ => T)) /\
   well_typed_expr env (Call ty (IntCall (src_id_opt, fn_name)) args drv) =
     (well_typed_exprs env args /\ well_typed_opt env drv /\ well_formed_type env.type_defs ty /\
      ?sig. FLOOKUP env.fn_sigs (src_id_opt, fn_name) = SOME sig /\
@@ -661,19 +755,18 @@ Definition well_typed_expr_def:
   well_typed_expr env (Call ty (RawCallTarget flags) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = raw_call_return_type flags /\
      flags.rcf_max_outsize < dimword(:256) /\
-     ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\ LENGTH args = 3 /\
-     ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==>
-       EL 2 args = Literal (BaseT (UintT 256)) (IntL 0)) /\
+     ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
+     LENGTH args = 2 + LENGTH flags.rcf_kws /\
+     raw_call_kws_ok flags (DROP 2 args) /\
      EL 0 (MAP expr_type args) = BaseT AddressT /\
-     (?bd. EL 1 (MAP expr_type args) = BaseT (BytesT bd)) /\
-     EL 2 (MAP expr_type args) = BaseT (UintT 256)) /\
+     (?bd. EL 1 (MAP expr_type args) = BaseT (BytesT bd))) /\
   well_typed_expr env (Call ty (RawCallCalldataTarget flags) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = raw_call_return_type flags /\
      flags.rcf_max_outsize < dimword(:256) /\
      ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
-     ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==>
-       EL 1 args = Literal (BaseT (UintT 256)) (IntL 0)) /\
-     MAP expr_type args = [BaseT AddressT; BaseT (UintT 256)]) /\
+     LENGTH args = 1 + LENGTH flags.rcf_kws /\
+     raw_call_kws_ok flags (DROP 1 args) /\
+     EL 0 (MAP expr_type args) = BaseT AddressT) /\
   well_typed_expr env (Call ty RawLog args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 2 /\
      (?bd. EL 0 (MAP expr_type args) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
@@ -849,7 +942,13 @@ Definition type_stmt_def:
     (if well_typed_target env bt ty /\ well_typed_expr env e /\
         assignable_type env.type_defs ty /\
         assignable_type env.type_defs (expr_type e) /\
-        well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn
+        well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+        (* the target is never a literal, so ** needs a literal exponent *)
+        (bop = Exp ==> nonneg_int_literal e) /\
+        (* Stricter than Vyper, which accepts <<= and >>= by a signed
+           amount: its code shifts by the amount's word where the semantics
+           raises on a negative amount. *)
+        (bop = ShL \/ bop = ShR ==> shift_amount_ok e)
      then SOME env else NONE) /\
   type_stmt env ret_ty (If e ss1 ss2) =
     (if well_typed_expr env e /\ expr_type e = BaseT BoolT /\

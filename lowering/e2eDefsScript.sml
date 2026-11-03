@@ -4,7 +4,7 @@
  * value_transfer_ok, accounts_after_transfer, call_state_rel,
  * call_external_transaction_pending_deletions,
  * load_contract_pending_deletions, valid_vyper_call, compiled_event_info, return_bytes,
- * decode_strictness_exempt, source_exempt, call_result_rel, logs_correspond.
+ * unspecified_behaviour_exempt, source_exempt, call_result_rel, logs_correspond.
  * TASK056: all compiler/call consumers use this exact boundary; the obsolete
  * compatibility owner is deleted. No old/new equivalence is claimed.
  * DAG: source/typing/storage + supported syntax + frame/trace -> e2eDefs;
@@ -143,12 +143,12 @@ End
    and a failed call returns the machine it was given. *)
 Theorem call_external_transaction_pending_deletions:
   !orc am tx r am' rqs.
-    call_external_transaction orc am tx = (r, am', rqs) /\
+    call_external_transaction orc gobs am tx = (r, am', rqs) /\
     am.pending_deletions = [] ==>
     am'.pending_deletions = []
 Proof
   rw[call_external_transaction_def] >> Cases_on `r`
-  >- (qpat_x_assum `call_external _ _ _ = _` mp_tac >>
+  >- (qpat_x_assum `call_external _ _ _ _ = _` mp_tac >>
       simp[call_external_def] >> rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
       rw[] >> simp[])
   >> drule call_external_error_rollback >> simp[clear_machine_logs_def]
@@ -156,7 +156,7 @@ QED
 
 Theorem load_contract_pending_deletions:
   !orc am tx mods exps am' rqs.
-    load_contract orc am tx mods exps = INL (am', rqs) ==>
+    load_contract orc gobs am tx mods exps = INL (am', rqs) ==>
     am'.pending_deletions = []
 Proof
   rw[load_contract_def] >> gvs[AllCaseEqs()]
@@ -195,16 +195,17 @@ Definition return_bytes_def:
                  else enc (vyper_to_abi_type (type_env tops) ret) abi_v
 End
 
-Definition decode_strictness_exempt_def:
-  decode_strictness_exempt tops e <=>
-    e = RuntimeError "abi_decode invalid" /\
-    ?ty. occurs_abi_decode_target ty tops /\
-         is_dynamic (vyper_to_abi_type (type_env tops) ty)
+Definition unspecified_behaviour_exempt_def:
+  unspecified_behaviour_exempt tops e <=>
+    (e = RuntimeError "abi_decode invalid" /\
+     ?ty. occurs_abi_decode_target ty tops /\
+          is_dynamic (vyper_to_abi_type (type_env tops) ty)) \/
+    e = RuntimeError "convert empty bytes to signed"
 End
 
 Definition source_exempt_def:
   source_exempt tops (src : (value + exception) # abstract_machine # call_request list) <=>
-    case FST src of INR (Error e) => decode_strictness_exempt tops e | _ => F
+    case FST src of INR (Error e) => unspecified_behaviour_exempt tops e | _ => F
 End
 
 (* ===== Log Correspondence ===== *)
@@ -385,7 +386,7 @@ End
 Definition call_result_rel_def:
   call_result_rel tops ret am tx es r es' <=>
     let trace = call_trace es in
-    case call_external (SOME (MAP SND trace)) am tx of
+    case call_external (SOME (MAP SND trace)) [] am tx of
       (INL v, am', rqs) =>
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
         ?out lgs.
@@ -400,7 +401,7 @@ Definition call_result_rel_def:
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                       (exc = Reverted \/ s = "UNREACHABLE")
     | (INR (Error e), _, _) =>
-        decode_strictness_exempt tops e \/
+        unspecified_behaviour_exempt tops e \/
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
     | (INR BreakException, _, _) => F
     | (INR ContinueException, _, _) => F

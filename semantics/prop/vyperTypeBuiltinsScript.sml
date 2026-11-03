@@ -726,12 +726,6 @@ Proof
   imp_res_tac Num_int_lt >> simp[]
 QED
 
-Theorem w2n_word_exp_lt_256[local]:
-  !i i'. w2n (i2w i ** i2w i' : 256 word) < dimword (:256)
-Proof
-  irule wordsTheory.w2n_lt
-QED
-
 Theorem within_int_bound_min[local]:
   !n i i'. within_int_bound (Signed n) i ∧ within_int_bound (Signed n) i' ==>
     ∃i''. (i < i' ∧ i = i'' ∨ ¬(i < i') ∧ i' = i'') ∧ within_int_bound (Signed n) i''
@@ -880,9 +874,6 @@ Proof
     gvs[within_int_bound_def] >> NO_TAC) >>
   (* Decimal Mul: the checked signed quotient is the returned value. *)
   TRY (gvs[within_int_bound_def] >> NO_TAC) >>
-  (* ExpMod: word_exp result bounded by 2^256 *)
-  TRY (
-    mp_tac w2n_word_exp_lt_256 >> simp[] >> NO_TAC) >>
   (* Flag bitwise: unfold to int_bitwise, apply nat bound (just the < part) *)
   PURE_REWRITE_TAC[int_bitwiseTheory.int_and_def, int_bitwiseTheory.int_or_def,
                    int_bitwiseTheory.int_xor_def] >>
@@ -1668,7 +1659,7 @@ QED
 (* Boundary lemma: extract_ec_point succeeds on any typed uint256[2] value.
    Proof avoids gvs on the ≠ NONE goal; uses fs only on value_has_type assumptions
    and simp to expand extract_ec_point/array_index definitions. *)
-Theorem extract_ec_point_uint256_2_not_none[local]:
+Theorem extract_ec_point_uint256_2_not_none:
   !v. value_has_type (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) v ⇒
       extract_ec_point v ≠ NONE
 Proof
@@ -1899,7 +1890,7 @@ Proof
   rewrite_tac[bn254p_lt_2_256] >> simp[]
 QED
 
-Theorem addAffine_bounded[local]:
+Theorem addAffine_bounded:
   !a b. FST (bn254$addAffine a b) < 2 ** 256 /\
         SND (bn254$addAffine a b) < 2 ** 256
 Proof
@@ -1913,7 +1904,7 @@ Proof
   conj_tac >> irule lt_bn254p_lt_2_256 >> simp[]
 QED
 
-Theorem mulAffine_bounded[local]:
+Theorem mulAffine_bounded:
   !a n. FST a < bn254$bn254p /\ SND a < bn254$bn254p ==>
         FST (bn254$mulAffine a n) < 2 ** 256 /\
         SND (bn254$mulAffine a n) < 2 ** 256

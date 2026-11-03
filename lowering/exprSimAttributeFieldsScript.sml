@@ -16,12 +16,14 @@
  *   popped_at_field, select_attr_read — the source's selection
  *   popped_keys_indexed_not_at_field — popped_at_field never holds where
  *                                  expr_sim_inv does
- *
- * Helpers: type_memory_size_slots, slot_count_of_memory_size,
- *   fields_layout_zip, read_slots_n2w, decode_value_n2w, decode_struct_field,
+ *   slot_count_of_memory_size    — a type's slots are its memory size
+ *                                  rounded up to words
+ *   decode_value_n2w, decode_struct_field,
  *   evaluate_subscripts_snoc_attr, evaluate_subscripts_append_err,
- *   read_popped_snoc_attr, read_memory_path_snoc_attr,
- *   select_attr_read_immutable
+ *   read_popped_snoc_attr, read_memory_path_snoc_attr — steps of the
+ *                                  field reads, exported for reuse
+ *
+ * Helpers: fields_layout_zip, read_slots_n2w, select_attr_read_immutable
  *
  * select_attr_read leaves out a local's place that memory no longer holds
  * and whose popped history has a snapshot at the field itself
@@ -31,6 +33,7 @@
 
 Theory exprSimAttributeFields
 Ancestors
+  storageDecodeMemory
   list rich_list finite_map pair
   exprSimHyps compileEnv valueEncoding
   vyperAST vyperInterpreter vyperState vyperStorage vyperValue
@@ -40,17 +43,8 @@ Libs
 
 (* ===== Struct layout ===== *)
 
-Theorem type_memory_size_slots:
-  (!tv. type_memory_size tv = 32 * type_slot_size tv) /\
-  (!tvs. type_memory_size_list tvs = 32 * type_slot_size_list tvs) /\
-  (!fields. type_memory_size_fields fields = 32 * type_slot_size_fields fields)
-Proof
-  ho_match_mp_tac type_memory_size_ind >>
-  simp[type_memory_size_def, type_slot_size_def,
-       arithmeticTheory.LEFT_ADD_DISTRIB]
-QED
 
-Theorem slot_count_of_memory_size[local]:
+Theorem slot_count_of_memory_size:
   !tv. (type_memory_size tv + 31) DIV 32 = type_slot_size tv
 Proof
   rw[type_memory_size_slots] >>
@@ -353,9 +347,10 @@ Proof
   drule vyperLookupTheory.lookup_scopes_find_containing_scope >> strip_tac >>
   drule vyperLookupTheory.find_containing_scope_structure >> strip_tac >>
   gvs[popped_keys_indexed_def] >>
-  qpat_x_assum `!id entry. FLOOKUP env id = _ ==> _` drule >>
-  simp[EXISTS_MEM, MEM_MAP, PULL_EXISTS] >> goal_assum drule >>
-  simp[GSYM SNOC_APPEND, SNOC_11]
+  qpat_x_assum `!id entry. FLOOKUP env id = _ ==> _` drule >> strip_tac >>
+  qpat_x_assum `EVERY _ (MAP FST _)`
+    (mp_tac o SIMP_RULE (srw_ss()) [EVERY_MEM, MEM_MAP, PULL_EXISTS]) >>
+  disch_then drule >> simp[GSYM SNOC_APPEND, SNOC_11]
 QED
 
 (* select_attr_read for an immutable's place. *)

@@ -6,7 +6,13 @@
  * compile_subscript, compile_name_vv and compile_literal_vv hand out at a
  * word type.
  *
- * TOP-LEVEL: one *_safe_operand or *_word_result_ok lemma per helper.
+ * TOP-LEVEL: one *_safe_operand or *_word_result_ok lemma per word helper;
+ *   *_not_label boundaries for allocated and forwarded non-word results.
+ *
+ * Helpers: subscript_pop_not_label and ec_arith_result_not_label share the
+ *   result-origin proofs across their respective lowering operations;
+ *   compile_default_return_result exposes the return pointer retained by
+ *   an external call's default path.
  *)
 
 Theory exprSafeOperandBuiltins
@@ -16,7 +22,82 @@ Ancestors
   exprLowering exprCallBounds vyperTypeSystem vyperValue vyperAST vyperTypeBuiltins
   builtinSimple builtinMath builtinHashing builtinMisc builtinBytes builtinSystem
 
-(* ===== Builtins ===== *)
+(* Non-label result origins, also for non-word types. *)
+
+Theorem subscript_pop_not_label:
+  (compile_mapping_subscript bop kop sa = (op,sb) ==> !l. op <> Label l) /\
+  (compile_array_subscript bop idx dyn cnt ws sz signed load sa = (op,sb) ==>
+     !l. op <> Label l) /\
+  (compile_dynarray_pop bop ws sz lopc sopc sa = (op,sb) ==>
+     !l. op <> Label l)
+Proof
+  rpt conj_tac >>
+  simp[compile_mapping_subscript_def, compile_array_subscript_def,
+       compile_dynarray_pop_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  drule emit_op_safe_operand >> simp[safe_operand_def]
+QED
+
+Theorem ec_arith_result_not_label:
+  (compile_ecadd_points p1 p2 sa = (op,sb) ==> !l. op <> Label l) /\
+  (compile_ecmul_point p scalar sa = (op,sb) ==> !l. op <> Label l)
+Proof
+  conj_tac >>
+  simp[compile_ecadd_points_def, compile_ecmul_point_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  metis_tac[alloc_buffer_not_label]
+QED
+
+Theorem compile_attribute_safe_operand:
+  compile_attribute cfn cenv ret_ty ty base_e fname sa = (vv,sb) ==>
+  safe_operand sb (vv_operand vv)
+Proof
+  simp[compile_attribute_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  simp[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
+  metis_tac[emit_op_safe_operand]
+QED
+
+Theorem compile_subscript_not_label:
+  compile_subscript cfn cenv rt ty base_e idx_e sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  simp[compile_subscript_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >>
+  Cases_on `place_type cenv base_e` >> simp[]
+  >- (simp[comp_bind_def, comp_return_def] >>
+      rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+      simp[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
+      metis_tac[cj 1 subscript_pop_not_label]) >>
+  rename1 `ValPT bty` >> Cases_on `bty` >>
+  simp[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  simp[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
+  metis_tac[cj 2 subscript_pop_not_label, emit_op_safe_operand,
+            compile_tuple_subscript_def, safe_operand_def]
+QED
+
+Theorem lower_abi_decode_not_label:
+  lower_abi_decode data_op info amin amax bytes sa = (op,sb) ==> !l. op <> Label l
+Proof
+  simp[builtinAbiTheory.lower_abi_decode_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  metis_tac[alloc_buffer_not_label]
+QED
+
+Theorem compile_empty_not_label:
+  compile_builtin_empty_complex bytes bs sa = (buf,sb) ==>
+  !l. buf.buf_operand <> Label l
+Proof
+  Cases_on `bs` >>
+  simp[builtinSimpleTheory.compile_builtin_empty_complex_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  metis_tac[alloc_buffer_not_label]
+QED
+
 
 Theorem compile_builtin_abs_safe_operand:
   compile_builtin_abs v sa = (r,sb) ==> safe_operand sb r
@@ -145,23 +226,29 @@ Proof
   gvs[safe_operand_def, not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
-Theorem compile_extract32_safe_operand:
-  compile_extract32 p v sa = (r,sb) ==> safe_operand sb r
+Theorem compile_extract32_load_safe_operand:
+  compile_extract32_load l d v sa = (r,sb) ==> safe_operand sb r
 Proof
-  simp[compile_extract32_def, comp_bind_def, comp_ignore_bind_def] >>
+  simp[compile_extract32_load_def, comp_bind_def, comp_ignore_bind_def] >>
   strip_tac >> rpt (pairarg_tac >> gvs[]) >> metis_tac[emit_op_safe_operand]
 QED
 
-Theorem compile_clamp_extract32_safe_operand:
-  safe_operand sa v /\ compile_clamp_extract32 v clamp sa = (r,sb) ==>
+Theorem compile_clamp_basetype_returns:
+  !v ty sa r sb. compile_clamp_basetype v ty sa = (r,sb) ==>
+    r = v /\ sa.cs_next_var <= sb.cs_next_var
+Proof
+  ho_match_mp_tac compile_clamp_basetype_ind >>
+  rw[compile_clamp_basetype_def, clamp_and_return_def, emit_op_def,
+     emit_void_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+     fresh_id_def, fresh_var_def, emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> imp_res_tac compile_clamp_next_var >> gvs[]
+QED
+
+Theorem compile_clamp_basetype_safe_operand:
+  safe_operand sa v /\ compile_clamp_basetype v ty sa = (r,sb) ==>
   safe_operand sb r
 Proof
-  Cases_on `clamp` >>
-  simp[compile_clamp_extract32_def, LET_THM, emit_op_def, emit_void_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, fresh_var_def, emit_def] >>
-  strip_tac >> gvs[] >>
-  gvs[safe_operand_def, not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  metis_tac[compile_clamp_basetype_returns, safe_operand_mono]
 QED
 
 Theorem compile_method_id_word_safe_operand:
@@ -234,14 +321,15 @@ Proof
   strip_tac >> gvs[word_result_ok_def]
 QED
 
-Theorem compile_raw_call_zero_safe_operand:
-  compile_raw_call addr p len gas value ct 0 rof sa = (r,sb) ==>
+Theorem compile_raw_call_finish_zero_safe_operand:
+  compile_raw_call_finish addr p len gas value ct 0 rof ov optr sa = (r,sb) ==>
   safe_operand sb r
 Proof
   Cases_on `ct` >> Cases_on `rof` >>
-  simp[compile_raw_call_def, emit_op_def, emit_void_def, emit_inst_def,
+  simp[compile_raw_call_finish_def, emit_op_def, emit_void_def, emit_inst_def,
        fresh_label_def, new_block_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+       comp_return_def, fresh_id_def, fresh_var_def, emit_def,
+       compile_alloc_buffer_def] >>
   strip_tac >> gvs[] >>
   simp[safe_operand_def, not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
@@ -256,18 +344,30 @@ Proof
   strip_tac >> rpt (pairarg_tac >> gvs[])
 QED
 
+(* Both raw_call forms: splitting off a second argument is needed for the
+   byte-string form and harmless for the msg.data one. *)
+val word_raw_call_tac =
+  Cases_on `args` >-
+    (simp[compile_call_def, LET_THM] >> strip_tac >>
+     rpt (pairarg_tac >> gvs[]) >> gvs[word_result_ok_def]) >>
+  Cases_on `t` >> simp[compile_call_def, LET_THM] >> strip_tac >>
+  rpt (pairarg_tac >> gvs[]) >>
+  Cases_on `r.rcf_max_outsize = 0` >> gvs[word_result_ok_def] >>
+  metis_tac[compile_raw_call_finish_zero_safe_operand]
+
 Theorem compile_call_word_result_ok:
   is_word_type rt /\ compile_call cfn cenv rt ty target args default_ret sa = (vv,sb) ==>
   word_result_ok sb vv
 Proof
-  Cases_on `target` >>
+  Cases_on `target`
+  >~ [`RawCallTarget`] >- word_raw_call_tac
+  >~ [`RawCallCalldataTarget`] >- word_raw_call_tac >>
   simp[compile_call_def, LET_THM] >>
   strip_tac >> rpt (pairarg_tac >> gvs[]) >>
   gvs[word_result_ok_def]
   >~ [`cenv.ce_func_info name = info`] >- suspend "internal"
   >~ [`compile_call cfn cenv rt ty (ExtCall b b0 p l) args default_ret sa = _`]
     >- suspend "external"
-  >~ [`r.rcf_max_outsize`] >- suspend "raw"
   >> suspend "send"
 QED
 
@@ -284,15 +384,6 @@ Resume compile_call_word_result_ok[external]:
   qpat_x_assum `(if _ then _ else _) = (vv,sb)` mp_tac >>
   IF_CASES_TAC >> simp[] >> strip_tac >> gvs[word_result_ok_def] >>
   metis_tac[compile_external_call_zero_safe_operand]
-QED
-
-Resume compile_call_word_result_ok[raw]:
-  Cases_on `args` >> gvs[word_result_ok_def] >> rename1 `list_CASE args1 _ _` >>
-  Cases_on `args1` >> gvs[word_result_ok_def] >> rename1 `list_CASE args2 _ _` >>
-  Cases_on `args2` >> gvs[word_result_ok_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `r.rcf_max_outsize = 0` >> gvs[word_result_ok_def] >>
-  metis_tac[compile_raw_call_zero_safe_operand]
 QED
 
 Resume compile_call_word_result_ok[send]:
@@ -372,3 +463,44 @@ Proof
   gvs[word_result_ok_def, comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[word_result_ok_def])
 QED
+
+(* Calls return an allocated buffer or an instruction result. *)
+Theorem compile_default_return_result:
+  compile_default_return_path cenv rt dt buf res dop addr skip mn mx info sa =
+    (op,sb) ==> op = res
+Proof
+  simp[compile_default_return_path_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[]
+QED
+
+Theorem compile_external_call_not_label:
+  compile_external_call_kwargs cenv addr vals tys msz asz mid rsz mn rms
+    stat value gas skip hasdef dop rt dt einfo dinfo sa = (op,sb) ==>
+  !l. op <> Label l
+Proof
+  simp[compile_external_call_kwargs_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  Cases_on `rsz = 0` >> simp[comp_return_def] >>
+  Cases_on `hasdef` >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  metis_tac[compile_default_return_result, alloc_buffer_not_label]
+QED
+
+Theorem compile_internal_call_not_label:
+  compile_call cfn cenv rt ty (IntCall fid) args drv sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  simp[compile_call_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  IF_CASES_TAC >> gvs[] >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[contextTheory.vv_operand_def, contextTheory.base_ptr_def] >>
+  gvs[AllCaseEqs()] >>
+  imp_res_tac alloc_buffer_not_label >>
+  gvs[contextTheory.vv_operand_def, contextTheory.base_ptr_def]
+QED
+

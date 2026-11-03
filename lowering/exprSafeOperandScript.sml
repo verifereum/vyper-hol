@@ -17,6 +17,9 @@
  *   well_typed_expr_type_well_formed — a well-typed expression's type is
  *                              well formed, given the local types are
  *   compile_binop_safe_operand
+ *   alloc_buffer_not_label, ensure_memory_not_label,
+ *   unwrap_value_not_label — pointer-valued result safety without
+ *                              freshness premises
  *
  * Helpers: one *_safe_operand lemma per lowering helper.
  *)
@@ -85,14 +88,48 @@ Proof
   metis_tac[compile_ptr_load_safe_operand]
 QED
 
-(* ===== Conversions ===== *)
+(* Pointer-valued results need only exclude labels, independently of
+   variable freshness or whether their type fits in a word. *)
+Theorem alloc_buffer_not_label:
+  compile_alloc_buffer bytes sa = (buf,sb) ==>
+  !l. buf.buf_operand <> Label l
+Proof
+  simp[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+  drule emit_op_safe_operand >> simp[safe_operand_def]
+QED
+
+Theorem ensure_memory_not_label:
+  compile_ensure_in_memory p loc bytes wc ctor imm sa = (op,sb) /\
+  (!l. p <> Label l) ==> !l. op <> Label l
+Proof
+  Cases_on `loc` >> simp[contextTheory.compile_ensure_in_memory_def, comp_return_def]
+  >- metis_tac[] >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  metis_tac[alloc_buffer_not_label]
+QED
+
+Theorem unwrap_value_not_label:
+  unwrap_value cenv vv sa = (op,sb) /\
+  (!l. vv_operand vv <> Label l) ==> !l. op <> Label l
+Proof
+  Cases_on `vv` >> simp[unwrap_value_def, contextTheory.vv_operand_def, comp_return_def]
+  >- metis_tac[] >>
+  rename1 `is_word_type ty` >> Cases_on `is_word_type ty` >> simp[]
+  >- metis_tac[compile_ptr_load_safe_operand, safe_operand_def] >>
+  Cases_on `p.ptr_location` >> simp[comp_return_def] >>
+  metis_tac[ensure_memory_not_label]
+QED
+
 
 Theorem compile_type_convert_safe_input:
   safe_operand sa v /\ compile_type_convert v conv sa = (r,sb) ==>
   safe_operand sb r
 Proof
   Cases_on `conv` >>
-  simp[compile_type_convert_def, load_bytestring_as_word_def,
+  simp[compile_type_convert_def, compile_int_clamp_def,
+       load_bytestring_as_word_def,
        compile_alloc_buffer_def, emit_op_def, emit_void_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def, LET_THM] >>
@@ -107,14 +144,15 @@ Proof
 QED
 
 Theorem compile_type_convert_bytestring_safe:
-  MEM conv [ConvBytestringToBool; ConvBytestringToInt s n;
-            ConvBytestringToAddress; ConvBytestringToDecimal d lo hi;
+  MEM conv [ConvBytestringToBool; ConvBytestringToInt s n in_n;
+            ConvBytestringToDecimal d lo hi in_n;
             ConvBytestringToBytesM m] /\
   compile_type_convert v conv sa = (r,sb) ==> safe_operand sb r
 Proof
   simp[] >> strip_tac >>
   qpat_x_assum `_ = (r,sb)` mp_tac >> gvs[] >>
-  simp[compile_type_convert_def, load_bytestring_as_word_def,
+  simp[compile_type_convert_def, compile_int_clamp_def,
+       load_bytestring_as_word_def,
        emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, fresh_id_def, fresh_var_def, emit_def, LET_THM] >>
   rpt (IF_CASES_TAC >>
@@ -128,21 +166,22 @@ Theorem valid_conversion_nonword_source:
   well_formed_type tenv src /\ valid_conversion src dst /\
   ~is_word_type src ==> is_bytestring_type src
 Proof
-  Cases_on `src` >> simp[valid_conversion_def, is_word_type_def,
-                         is_bytestring_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[valid_conversion_def, is_word_type_def, is_bytestring_type_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  simp[is_word_type_def, is_bytestring_type_def, well_formed_type_def,
-       evaluate_type_def] >> rpt strip_tac >> gvs[]
+  Cases_on `src` >> simp[is_word_type_def, is_bytestring_type_def]
+  >~ [`BaseT bt`]
+  >- (Cases_on `bt` >> simp[is_word_type_def, is_bytestring_type_def]
+      >~ [`BytesT bd`]
+      >- (Cases_on `bd` >>
+          simp[is_word_type_def, is_bytestring_type_def,
+               well_formed_type_def, evaluate_type_def])) >>
+  Cases_on `dst` >> simp[valid_conversion_def]
 QED
 
 Theorem mk_convert_op_bytestring_word:
   is_bytestring_type src /\ valid_conversion src dst /\ is_word_type dst ==>
-  ?s n d lo hi m.
+  ?s n in_n d lo hi m.
     MEM (mk_convert_op src dst)
-      [ConvBytestringToBool; ConvBytestringToInt s n;
-       ConvBytestringToAddress; ConvBytestringToDecimal d lo hi;
+      [ConvBytestringToBool; ConvBytestringToInt s n in_n;
+       ConvBytestringToDecimal d lo hi in_n;
        ConvBytestringToBytesM m]
 Proof
   Cases_on `src` >> simp[is_bytestring_type_def] >>

@@ -23,6 +23,7 @@
 
 Theory stmtSimAugAssign
 Ancestors
+  allocLimits
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim exprSimHyps exprSimOps exprSimBinopFrag
   exprSimOperators exprSimLeaves loweringSlice stmtSim stmtSimDecl
@@ -245,39 +246,64 @@ Proof
   rw[type_bits_def, well_formed_type_def, vyperValueTheory.evaluate_type_def]
 QED
 
+(* The target of an augmented assignment has a word type, so nothing of
+   its size is asked for alloc_limits_expr. *)
+Theorem well_typed_binop_augassign_alloc_ok[local]:
+  !cenv ty bop t2. well_typed_binop ty bop ty t2 ==> type_alloc_ok cenv ty
+Proof
+  rpt strip_tac >>
+  Cases_on `bop = In`
+  >- gvs[well_typed_binop_def, type_alloc_ok_def, is_word_type_def] >>
+  Cases_on `bop = NotIn`
+  >- gvs[well_typed_binop_def, type_alloc_ok_def, is_word_type_def] >>
+  drule_all well_typed_binop_augassign_word >> strip_tac >>
+  imp_res_tac exprSimOperatorsTheory.word_value_type_word >>
+  simp[type_alloc_ok_def]
+QED
+
 (* The typing side: x op e meets expr_sim_pre where e does, x is a local
    of type ty and the type checker accepts x op= e. *)
 Theorem expr_sim_pre_augassign:
   !cenv cx env ty id bop e es.
     expr_sim_pre cenv cx env e es /\ FLOOKUP env.var_types id = SOME ty /\
-    well_typed_binop ty bop ty (expr_type e) ==>
+    well_typed_binop ty bop ty (expr_type e) /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) ==>
     expr_sim_pre cenv cx env (Builtin ty (Bop bop) [Name ty id; e]) es
 Proof
   rpt strip_tac >>
   drule expr_sim_pre_var_types_well_formed >>
   disch_then drule >> strip_tac >>
   drule well_formed_type_bits >> strip_tac >>
+  drule well_typed_binop_augassign_alloc_ok >> strip_tac >>
   gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
+      builtin_operands_ok_def, int_literal_value_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm,
-      vyperASTTheory.expr_type_def]
+      vyperASTTheory.expr_type_def] >>
+  metis_tac[]
 QED
 
 (* expr_sim_pre_augassign under expr_body_pre: e may make internal calls. *)
 Theorem expr_body_pre_augassign:
   !cenv cx env ty id bop e es.
     expr_body_pre cenv cx env e es /\ FLOOKUP env.var_types id = SOME ty /\
-    well_typed_binop ty bop ty (expr_type e) ==>
+    well_typed_binop ty bop ty (expr_type e) /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) ==>
     expr_body_pre cenv cx env (Builtin ty (Bop bop) [Name ty id; e]) es
 Proof
   rpt strip_tac >>
   drule expr_body_pre_var_types_well_formed >>
   disch_then drule >> strip_tac >>
   drule well_formed_type_bits >> strip_tac >>
+  drule well_typed_binop_augassign_alloc_ok >> strip_tac >>
   gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
+      builtin_operands_ok_def, int_literal_value_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm,
-      vyperASTTheory.expr_type_def]
+      vyperASTTheory.expr_type_def] >>
+  metis_tac[]
 QED
 
 Theorem name_sim_case[local]:
@@ -307,12 +333,15 @@ Theorem augassign_bop_sim:
   !ctx func cenv cx env ty id bop e es.
     expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
     FLOOKUP env.var_types id = SOME ty /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     expr_sim ctx func cenv cx ty (Builtin ty (Bop bop) [Name ty id; e]) es
 Proof
   rpt strip_tac >> irule expr_sim_ok_apply >>
   reverse conj_tac
-  >- (qexists_tac `env` >> irule expr_sim_pre_augassign >> simp[]) >>
+  >- (qexists_tac `env` >> irule expr_sim_pre_augassign >> simp[] >>
+      metis_tac[]) >>
   drule_all well_typed_binop_augassign_word >> strip_tac >>
   irule compile_bop_word_sim >>
   simp[compile_name_sim, vyperASTTheory.expr_type_def]
@@ -355,6 +384,8 @@ Theorem compile_augassign_local_case:
     expr_sim_case nocalls ctx func cenv cx e /\
     expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
     FLOOKUP env.var_types id = SOME ty /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e)) es res es'
@@ -371,7 +402,7 @@ Proof
   drule_all eval_augassign_local_bop >>
   disch_then (qx_choosel_then [`r`, `es1`] strip_assume_tac) >>
   `expr_body_pre cenv cx env (Builtin ty (Bop bop) [Name ty id; e]) es` by
-    (irule expr_body_pre_augassign >> simp[]) >>
+    (irule expr_body_pre_augassign >> simp[] >> metis_tac[]) >>
   `expr_sim_case nocalls ctx func cenv cx
      (Builtin ty (Bop bop) [Name ty id; e])` by
     (irule augassign_bop_case >> simp[]) >>
@@ -411,8 +442,8 @@ Proof
   impl_tac >- simp[expr_res_ok_def] >>
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
-  rename1 `expr_post func cenv cx _ es sa s3 s0 es1 v res_op u` >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  rename1 `expr_post ctx func cenv cx _ es sa s3 s0 es1 v res_op u` >>
+  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def, expr_val_rel_def, vyperASTTheory.expr_type_def] >>
   strip_tac >>
   `eval_operand res_op u = SOME (typed_val_to_w256 entry1.type v)` by
@@ -421,7 +452,7 @@ Proof
     (irule store_lays_out_word_value >>
      metis_tac[word_value_type_memory_size]) >>
   drule_all assign_local_store_run >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  strip_tac >>
   disj1_tac >> qexists_tac `t` >>
   simp[stmt_lands_def, cenv_top_ext_refl] >>
   conj_tac
@@ -446,12 +477,14 @@ Theorem compile_augassign_local_stmt_frag:
     eval_stmt cx (AugAssign ty (NameTarget id) bop e) es = (res, es') /\
     expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
     FLOOKUP env.var_types id = SOME ty /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e)) es res es'
 Proof
   rpt strip_tac >> irule compile_augassign_local_case >>
-  fs[expr_sim_pre_body, expr_sim_ok_case] >>
+  fs[expr_sim_pre_body, expr_sim_ok_case, DISJ_IMP_THM] >>
   conj_tac >- (qexists_tac `env` >> simp[]) >>
   qexists_tac `T` >> simp[]
 QED

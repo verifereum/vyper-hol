@@ -4,19 +4,19 @@
  * An expression whose value is built in a buffer starts with an ALLOCA and
  * addresses into it with ADD ptr off.  The ADD does not wrap inside the
  * buffer, the ALLOCA is in the function, and a value stored in the buffer
- * is the expression's vv_post.  The allocation and store code is
- * exprSimLiteralBuffer's; its lemmas also cover reused ALLOCA entries.
+ * is the expression's vv_post.  The allocation lemmas (buffer_alloc_code
+ * among them) are exprSimAlloc's; they also cover reused ALLOCA entries.
  *
  * TOP-LEVEL:
  *   buffer_offset_no_wrap — w + off does not wrap inside a buffer that ends
  *     below 2 ** 256
  *   buffer_emit_add_run — emit_op ADD [ptr; Lit off] runs
- *   buffer_alloc_code — compile_alloc_buffer's ALLOCA is in fn_insts
  *   buffer_memory_vv_post, buffer_memory_vv_post_general — a value in the
  *     buffer, with older allocations and variables kept, is vv_post
  *)
 Theory exprSimBuffer
 Ancestors
+  exprSimAlloc
   exprSimLiteralBuffer emitHelperProps exprLoweringProps compileEnv
   context venomInst venomState words fragExec rich_list list
   exprSimWordArgs exprSimOps exprSim
@@ -54,29 +54,12 @@ Proof
   simp[run_inst_seq_def]
 QED
 
-Theorem buffer_alloc_code:
-  !size sa sb buf func.
-    compile_alloc_buffer size sa = (buf, sb) /\
-    fn_has_code sa sb func ==>
-    MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w size)]
-         [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)
-Proof
-  rpt strip_tac >>
-  gvs[compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
-      comp_bind_def, comp_return_def] >>
-  gvs[fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
-      comp_ignore_bind_def, comp_return_def] >>
-  gvs[fn_has_code_def, IS_PREFIX_APPEND] >>
-  irule lookup_block_fn_insts >> goal_assum (drule_at Any) >>
-  simp[MEM_APPEND]
-QED
-
 Theorem buffer_memory_vv_post_general:
-  !func cenv cx e es sa sb s0 es' t v tvt p w sz.
+  !func cenv cx e es sa sb s0 es' t v tvt p w sz ctx.
     ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
-    stmt_state_rel func cenv cx es' t /\
+    stmt_state_rel ctx func cenv cx es' t /\
     eval_operand p.ptr_operand t = SOME w /\ p.ptr_location = LocMemory /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tvt v <= sz /\
@@ -92,7 +75,7 @@ Theorem buffer_memory_vv_post_general:
         off+len <= b \/ b+k <= off) ==>
       mem_bytes_at off len t.vs_memory = mem_bytes_at off len s0.vs_memory) /\
     locals_kept cenv es s0 t ==>
-    vv_post func cenv cx e es sa sb s0 es' (Value v)
+    vv_post ctx func cenv cx e es sa sb s0 es' (Value v)
       (LocatedValue (expr_type e) p) t
 Proof
   rpt gen_tac >> strip_tac >>
@@ -107,11 +90,11 @@ Proof
 QED
 
 Theorem buffer_memory_vv_post:
-  !func cenv cx e es sa sb s0 t v tvt p w sz.
+  !func cenv cx e es sa sb s0 t v tvt p w sz ctx.
     ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
-    stmt_state_rel func cenv cx es t /\
+    stmt_state_rel ctx func cenv cx es t /\
     eval_operand p.ptr_operand t = SOME w /\ p.ptr_location = LocMemory /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tvt v <= sz /\
@@ -125,7 +108,7 @@ Theorem buffer_memory_vv_post:
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
     (!name b len. local_region cenv es.scopes s0 name b len ==>
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) ==>
-    vv_post func cenv cx e es sa sb s0 es (Value v)
+    vv_post ctx func cenv cx e es sa sb s0 es (Value v)
       (LocatedValue (expr_type e) p) t
 Proof
   rpt gen_tac >> strip_tac >>

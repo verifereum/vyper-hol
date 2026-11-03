@@ -133,7 +133,8 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_encoder_member_tail_transport >> strip_tac >>
   `ready.vs_accounts = initial.vs_accounts /\ ready.vs_transient = initial.vs_transient /\
-   ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests` by
+   ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests /\
+   ready.vs_pending_deletions = initial.vs_pending_deletions` by
     (irule abi_encoder_member_phase_globals >> goal_assum (drule_at Any) >>
      drule abi_encoder_array_spine_tail_opcodes >> simp[]) >>
   gvs[abi_decoder_address_frame_def, abi_encoder_registered_effect_def,

@@ -5,8 +5,8 @@
  * simulation (bodySimExprCases) for the builtins that are neither operators
  * nor aggregates.  Each is stated over exprSimHyps' shared judgments: from
  * exprs_case of the operands, expr_vv_case of the builtin.  Row 3's word
- * builtins but ceil (exprSimWordBuiltins' word_builtin_case), rows 2 and 7
- * on exprSimHash's machinery, row 5 (here), row 6's account reads but
+ * builtins (exprSimWordBuiltins' word_builtin_case and compile_ceil_case),
+ * rows 2 and 7 on exprSimHash's machinery, row 5 (here), row 6's account reads but
  * .code (in exprSimAccounts) and ecrecover are proved; the rest are
  * cheated, for the later #636 PRs.  Each #636 Builtins row is:
  *   1 len, len(msg.data), msg.data slices: compile_len_case (by
@@ -33,14 +33,15 @@
  *     output_type=bytes4 by compile_method_id_literal_word_sim (the folded
  *     selector, a word literal), the rest in compile_method_id_other_case
  *   8 ecrecover, ecadd, ecmul: exprSimPrecompiles'
- *     compile_ecrecover_call_case; compile_ecadd_sim and compile_ecmul_sim,
+ *     compile_ecrecover_call_case; compile_ecadd_sim and compile_ecmul_sim
+ *     (by exprSimECArith's compile_ecadd_call_case, compile_ecmul_call_case),
  *     still stated over expr_sim_below, so for compile_expr_sim only
  *
  * Unprovable as the definitions stand, to be fixed in the lowering or in
  * state_rel before their PRs:
  *   - compile_len_ctor_code_case, len of an immutable in the constructor:
- *     immutables_rel relates the immutable's first word to its whole
- *     value, not to its length.
+ *     nothing says the immutables buffer's base variable is 0, as
+ *     unwrap_ctor_immutable_word_sim (exprSimUnwrap).
  *   - compile_blockhash_case: the source raises a RuntimeError where
  *     BLOCKHASH returns 0 (#671), and call_ctx_rel does not relate the block
  *     hashes.
@@ -73,16 +74,19 @@ Ancestors
   valueEncoding fragExec vyperInterpreter vyperState vyperContext
   vyperValueOperation venomState exprSimAccounts exprSimUnop
   exprSimOperators exprBopLowering builtinMisc venomExecSemantics venomInst
-  exprSimCalldata exprSimCalldataSlice exprSimLen exprSimPrecompiles
+  exprSimCalldata exprSimCalldataSlice exprSimLen exprSimPrecompiles exprSimECArith
   vyperValue exprLoweringProps vyperTyping
 
 (* ===== Lengths and calldata ===== *)
 
 (* len of an operand in code, an immutable, in the constructor: the
-   lowering loads the immutable's first word with ILOAD, but immutables_rel
-   relates that word to typed_val_to_w256 of the whole value, not to its
-   length, so this does not hold as the definitions stand.  (At runtime it
-   is exprSimLen's compile_len_vv_case.) *)
+   lowering loads the immutable's length word with an MLOAD at the
+   immutables buffer's base variable plus the offset.  The constructor's
+   prologue sets that variable to 0, but stmt_state_rel says nothing of it
+   (immutable_base_zero is not one of its conjuncts), so this does not hold
+   as the definitions stand; unwrap_ctor_immutable_word_sim (exprSimUnwrap)
+   is cheated for the same reason.  (At runtime it is exprSimLen's
+   compile_len_vv_case.) *)
 Theorem compile_len_ctor_code_case:
   !nocalls ctx func cenv cx ann args.
     exprs_case nocalls ctx func cenv cx args /\ cenv.ce_is_ctor /\
@@ -202,7 +206,14 @@ Theorem compile_ceil_case:
     exprs_case nocalls ctx func cenv cx args ==>
     expr_vv_case nocalls ctx func cenv cx (Builtin ann Ceil args)
 Proof
-  cheat
+  rpt gen_tac >> disch_tac >>
+  rewrite_tac[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
+  irule ceil_ready_vv_sim >> qexists_tac `env` >> simp[] >>
+  gen_tac >> irule wb_args_ready_of_case >> qexists_tac `nocalls` >> simp[] >>
+  rpt gen_tac >> strip_tac >> rpt conj_tac
+  >- metis_tac[expr_body_pre_builtin_arg]
+  >- metis_tac[int_calls_builtin_arg] >>
+  drule ceil_operand_types >> simp[EVERY_MEM]
 QED
 
 Theorem compile_addmod_names_sim:
@@ -493,7 +504,8 @@ Theorem compile_ecadd_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann ECAdd args)
 Proof
-  cheat
+  simp[expr_vv_ok_case] >>
+  metis_tac[compile_ecadd_call_case, exprs_case_below]
 QED
 
 Theorem compile_ecmul_sim:
@@ -501,5 +513,6 @@ Theorem compile_ecmul_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann ECMul args)
 Proof
-  cheat
+  simp[expr_vv_ok_case] >>
+  metis_tac[compile_ecmul_call_case, exprs_case_below]
 QED
