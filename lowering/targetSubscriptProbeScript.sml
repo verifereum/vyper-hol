@@ -1804,3 +1804,57 @@ Proof
   drule_all probe_word_run_load_cond >>
   simp[Abbr `v`, Abbr `u`, Abbr `t`, probe_word_loaded_state_def]
 QED
+
+Definition probe_word_load_exit_state_def:
+  probe_word_load_exit_state s bufaddr =
+    update_var "%11" 0w (update_var "%10" (mload (w2n bufaddr) s) s)
+End
+
+Theorem probe_word_load_exit_sequence:
+  !s bufaddr.
+    lookup_var "%2" s = SOME bufaddr ==>
+    run_inst_seq
+      (TAKE 2 (EL 5 probe_word_compiled.cs_blocks).bb_instructions) s =
+    OK (probe_word_load_exit_state s bufaddr)
+Proof
+  rpt strip_tac >> simp[probe_word_compiled_load_exit] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_read1_def,
+       mk_inst_def, eval_operands_def, eval_operand_def] >>
+  simp[run_inst_seq_def, Once step_inst_base_def, eval_operand_def,
+       probe_word_load_exit_state_def]
+QED
+
+Theorem probe_word_load_exit_block:
+  !s bufaddr fuel ctx.
+    lookup_var "%2" s = SOME bufaddr /\ ~s.vs_halted ==>
+    exec_block fuel ctx (EL 5 probe_word_compiled.cs_blocks)
+      (s with vs_inst_idx := 0) =
+    OK (jump_to "@dyn_cond_3" (probe_word_load_exit_state s bufaddr))
+Proof
+  rpt strip_tac >> irule exec_block_inst_seq_jmp >>
+  conj_tac >- simp[probe_word_load_exit_state_def] >>
+  qexists_tac `TAKE 2 (EL 5 probe_word_compiled.cs_blocks).bb_instructions` >>
+  simp[probe_word_load_exit_sequence, probe_word_compiled_load_exit,
+       mk_inst_def, is_terminator_def, get_instruction_def] >>
+  rpt strip_tac >> `k = 0 \/ k = 1` by decide_tac >> gvs[]
+QED
+
+Theorem probe_word_run_load_exit:
+  !s bufaddr fuel ctx.
+    lookup_var "%2" s = SOME bufaddr /\ ~s.vs_halted /\
+    s.vs_current_bb = "@wcopy_exit_2" ==>
+    run_blocks (SUC fuel) ctx probe_word_function s =
+    run_blocks fuel ctx probe_word_function
+      (jump_to "@dyn_cond_3" (probe_word_load_exit_state s bufaddr))
+Proof
+  rpt strip_tac >>
+  simp[Once run_blocks_unfold, probe_word_function_blocks,
+       lookup_block_def, probe_word_compiled_entry,
+       probe_word_compiled_load_cond, probe_word_compiled_load_body,
+       probe_word_compiled_load_exit, listTheory.FIND_thm] >>
+  simp[run_block_def, eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
+  rewrite_tac[GSYM (SRULE [mk_inst_def] probe_word_compiled_load_exit)] >>
+  drule_all probe_word_load_exit_block >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[jump_to_def, probe_word_load_exit_state_def]
+QED
