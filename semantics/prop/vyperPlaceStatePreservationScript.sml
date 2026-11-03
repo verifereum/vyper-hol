@@ -113,7 +113,8 @@ Proof
   Cases_on `tv` >> gvs[subscript_type_def] >>
   Cases_on `a` >>
   simp[evaluate_subscripts_def, subscript_type_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[])
+  BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  BasicProvers.TOP_CASE_TAC >> gvs[]
 QED
 
 
