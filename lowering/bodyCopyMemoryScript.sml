@@ -1,7 +1,7 @@
 (* Actual typed copy producers: memory prefix and landing boundaries. *)
 Theory bodyCopyMemory
 Ancestors
-  bodyAllocMemory exprSim exprSimBufferStore exprSimLiteralBuffer fragExec fragExecMem instMemFrontier
+  bodyAllocMemory exprSim exprSimBufferStore exprSimLiteralBuffer exprSimAlloc fragExec fragExecMem instMemFrontier
   stmtLowering
   allocaHistoryFragment exprLoweringProps exprLowering emitHelperProps emitHelper
   compileEnv context venomInst venomState venomExecSemantics venomMemDefs

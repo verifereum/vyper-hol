@@ -2,7 +2,7 @@
 Theory bodyAllocMemory
 Ancestors
   builtinBytesMemory allocaFootprint abiBuiltinAllocation exprLoweringProps exprLowering
-  exprSimAggregateChildren exprSimLiteralBuffer exprSimOps instMemFrontier
+  exprSimAggregateChildren exprSimLiteralBuffer exprSimAlloc exprSimOps instMemFrontier
   fragExec fragExecMem allocaHistoryFragment rich_list
   bodyMemoryDefs loweringSlice exprSim exprSimOperators exprSimHyps stmtSimAugAssign vyperTypeEnv vyperTypeSystem vyperTypeInvariants
   emitHelperProps emitHelper compileEnv context venomInst venomState

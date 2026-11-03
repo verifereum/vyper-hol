@@ -8,7 +8,7 @@ Ancestors
   loweringSlice exprLowering exprSimBufferStore valueEncodingProofs
   words venomExecSemantics stmtLowering context fragExec fragExecMem
   allocaHistoryFragment list rich_list emitHelper emitHelperProps venomInst
-  exprSimLiteralBuffer exprSimBuffer finite_map
+  exprSimLiteralBuffer exprSimAlloc exprSimBuffer finite_map
 
 Theorem body_stmt_state_rel_declare_store_frame:
   !func cenv cx es s t sa id p sz w inst v tyv sc rest a ctx.
