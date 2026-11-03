@@ -83,5 +83,11 @@ Theorem gas_summary_next_read:
   Q (INL (IntV (&w2n w))) (es with gas_obs := []) t ==>
   gas_summary (ctx, func) next_gas_reading (es, s0) Q R
 Proof
-  cheat
+  strip_tac >>
+  `gas_explicit [T] s0.vs_gas_readings = [w]` by
+    simp[gas_explicit_def] >>
+  rewrite_tac[gas_summary_def] >>
+  qexistsl_tac [`[T]`, `INL (IntV (&w2n w))`, `es`] >>
+  simp[next_gas_reading_def, return_def] >>
+  qexists_tac `OK t` >> simp[]
 QED
