@@ -721,6 +721,27 @@ QED
 
 (* ===== Layer 1: Connecting run_inst_seq to exec_block ===== *)
 
+Theorem exec_block_prefix_step[local]:
+  !i ss mid idx fuel ctx bb.
+    ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+    step_inst_base i ss = OK mid /\
+    get_instruction bb idx = SOME i ==>
+    exec_block fuel ctx bb (ss with vs_inst_idx := idx) =
+    exec_block fuel ctx bb (mid with vs_inst_idx := SUC idx)
+Proof
+  rpt strip_tac >>
+  `step_inst_base i (ss with vs_inst_idx := idx) =
+     OK (mid with vs_inst_idx := idx)` by
+    (asm_simp_tac bool_ss [step_inst_inst_idx_indep, exec_result_map_def,
+                           combinTheory.K_THM]) >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+  asm_simp_tac bool_ss
+    [venom_state_accfupds, step_inst_def, exec_result_case_def,
+     optionTheory.option_case_def, venom_state_fupdfupds,
+     combinTheory.K_THM] >>
+  simp_tac bool_ss [combinTheory.o_DEF, combinTheory.K_DEF]
+QED
+
 (* Running non-terminator, non-INVOKE instructions within a block:
    If instructions at indices [idx .. idx + LENGTH insts) match `insts`,
    and run_inst_seq succeeds, then exec_block from idx reaches
