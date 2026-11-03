@@ -2,7 +2,7 @@
 Theory bodyAllocMemory
 Ancestors
   builtinBytesMemory allocaFootprint abiBuiltinAllocation exprLoweringProps
-  fragExec emitHelperProps emitHelper compileEnv venomInst venomState
+  fragExec fragExecMem rich_list emitHelperProps emitHelper compileEnv venomInst venomState
   venomExecSemantics venomMemDefs list finite_map words arithmetic
 
 Theorem compile_alloc_buffer_body_inst[local]:
@@ -92,7 +92,37 @@ Proof
   gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
       comp_return_def, fresh_id_def, fresh_var_def, emit_def,
       emitted_insts_def, fn_has_code_def, IS_PREFIX_APPEND] >>
-  FAIL_TAC "slice"
+  simp[DROP_APPEND, DROP_LENGTH_TOO_LONG, mk_inst_def, is_terminator_def]
+QED
+
+Theorem compile_alloc_buffer_body_header_run_mem:
+  !ctx func cenv cx es s n sa buf sm value sb.
+    compile_alloc_buffer n sa = (buf,sm) /\
+    emit_void MSTORE [buf.buf_operand; value] sm = ((),sb) /\
+    fn_has_code sa sb func /\ ~block_is_terminated sa /\
+    stmt_state_rel ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
+    32 <= n /\ n < dimword (:256) /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    (!t fuel. run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = OK t /\
+      mem_safe_run fuel ctx func (t with vs_inst_idx := LENGTH sb.cs_current_insts) ==>
+      mem_safe_run fuel ctx func s) /\
+    (!a t fuel. run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = Abort a t ==>
+      mem_safe_run fuel ctx func s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `cs_extends sa sm /\ cs_extends sm sb` by
+    (drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+     gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def, fresh_id_def, fresh_var_def, emit_def,
+         cs_extends_def, IS_PREFIX_APPEND] >> metis_tac[]) >>
+  drule_all fn_has_code_split >> strip_tac >>
+  drule_all compile_alloc_buffer_body_header_mem_ok >> strip_tac >>
+  drule_all compile_alloc_buffer_body_header_slice >> strip_tac >>
+  `isPREFIX (emitted_insts sa sm ++ emitted_insts sm sb)
+     (DROP s.vs_inst_idx bb.bb_instructions)` by simp[IS_PREFIX_APPEND] >>
+  conj_tac >> rpt gen_tac >> strip_tac >>
+  drule_all mem_safe_run_inst_seq >> simp[]
 QED
 
 val () = List.app (fn th =>
@@ -103,4 +133,6 @@ val () = List.app (fn th =>
      else raise Fail "body allocation inherited admission"
   end) [compile_alloc_buffer_body_site,
         compile_alloc_buffer_body_header_mem_ok,
-        compile_alloc_buffer_body_frontier];
+        compile_alloc_buffer_body_frontier,
+        compile_alloc_buffer_body_header_slice,
+        compile_alloc_buffer_body_header_run_mem];
