@@ -2,8 +2,8 @@
  * The three planned O1 producers, PLAN §5.8 S4-S6.
  * S4 and S6 follow from the per-pass contracts (o1ContractTheorems) by the
  * composition in o1PipelineCompose; the only admissions on their path are
- * the eleven contract theorems, one per pass run.  S5 stays an authorized
- * planned admission.
+ * the eleven contract theorems, one per pass run.  S5 follows from the
+ * output's memory invariant and the generated plan's spill layout.
  * No compiler hook or final-unit check is changed to obtain output shape.
  * run_venom_pipeline_mem_inv is the output's memory invariant in lowered
  * form, which codegen consumes.
@@ -12,7 +12,7 @@ Theory o1PipelineCorrect
 Ancestors
   unitTransformDefs unitShapeDefs unitMemInv venomPipelineDriver
   venomPassSchedule o1PassContract o1PipelineCompose ctxLookupAgree
-  ptrDiscipline
+  ptrDiscipline contextPlanLayoutProps stepWriteFootprint
   contextCodegenRel stackPlanGen venomCompilerTypes venomState words
 
 (* This is the compiler's existing O1 hook, with all three checks K T.
@@ -112,15 +112,13 @@ QED
 
 (* ===== S5: output codegen memory obligations ===== *)
 
-(* PLANNED ADMISSION S5 -- Milestone 5.
- * Proof idea: transport below-frontier raw memory safety through O1 allocation
- * and concretization, then use the generated context-plan spill intervals.
- * Construct an invariant at actual post-PHI instruction sites, including
- * incremented ordinary continuations, terminator entries, INVOKE callee
- * entries and aggregate returns; prove reads/writes avoid every live spill
- * region and each successful step preserves its bytes.  It takes the
- * premises of run_venom_pipeline_mem_inv, through which the transport
- * goes. *)
+(* S5 -- Milestone 5.  The output's memory invariant
+ * (run_venom_pipeline_mem_inv, so it takes that theorem's premises), the
+ * plan's spill regions inside [max_live_eom, cp_initial_fmp)
+ * (generate_context_plan_spill_gap) and the step write footprint, which
+ * holds for every context (step_write_footprint_holds), give codegen its
+ * memory obligations with raw_reachable vs as the invariant
+ * (mem_inv_codegen_obligations). *)
 Theorem o1_pipeline_memory_obligations:
   !lo rpolicy unit out cp vs.
     o1_pipeline rpolicy unit = SOME out /\
@@ -138,7 +136,12 @@ Theorem o1_pipeline_memory_obligations:
     ?Inv. codegen_memory_obligations Inv out.po_unit.cu_context cp /\
           codegen_reachability_package Inv out.po_unit.cu_context vs
 Proof
-  cheat
+  rpt strip_tac >>
+  drule generate_context_plan_spill_gap >> strip_tac >>
+  drule_all run_venom_pipeline_mem_inv >> strip_tac >>
+  gvs[w2n_n2w, arithmeticTheory.LESS_MOD] >>
+  qexists_tac `raw_reachable vs` >>
+  metis_tac[mem_inv_codegen_obligations, step_write_footprint_holds]
 QED
 
 (* ===== S6: output shape without new compiler checks ===== *)
