@@ -3,7 +3,7 @@
 Theory allocaHistory
 Ancestors
   venomInst venomWf venomState venomExecSemantics venomExecProps
-  venomMemDefs venomMemProofs venomInstProps venomInstProofs1 finite_map list arithmetic
+  venomMemDefs venomMemProofs venomInstProps venomInstProofs1 opcodeClass finite_map list arithmetic
 
 Definition alloca_block_order_def:
   alloca_block_order bb (sites : (num, num # num) fmap) <=>
@@ -271,6 +271,38 @@ Proof
   simp[] >> metis_tac[history_base_control_flow]
 QED
 
+
+Theorem history_base_intret_fields[local]:
+  !inst s ret t. step_inst_base inst s = IntRet ret t ==>
+    t.vs_allocas = s.vs_allocas /\ t.vs_current_bb = s.vs_current_bb /\
+    t.vs_inst_idx = s.vs_inst_idx
+Proof
+  rpt strip_tac >> drule step_inst_base_intret_opcodes >> strip_tac >>
+  qpat_x_assum `step_inst_base inst s = IntRet ret t` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> asm_rewrite_tac[] >>
+  simp_tac (srw_ss()) [] >> strip_tac >> gvs[AllCaseEqs()] >>
+  pairarg_tac >> gvs[] >>
+  drule pack_dret_dynamic_preserves_non_memory >> simp[]
+QED
+
+Theorem history_intret_fields:
+  !fuel ctx inst s ret t. step_inst fuel ctx inst s = IntRet ret t ==>
+    t.vs_allocas = s.vs_allocas /\ t.vs_current_bb = s.vs_current_bb /\
+    t.vs_inst_idx = s.vs_inst_idx
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `inst.inst_opcode = INVOKE`
+  >- gvs[Once step_inst_def, AllCaseEqs()] >>
+  gvs[step_inst_non_invoke] >> drule history_base_intret_fields >> simp[]
+QED
+
+Theorem history_base_alloca_inv:
+  !inst s t. step_inst_base inst s = OK t /\ alloca_inv s ==> alloca_inv t
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by metis_tac[step_inst_base_OK_not_INVOKE] >>
+  `step_inst 0 ARB inst s = OK t` by simp[step_inst_non_invoke] >>
+  metis_tac[alloca_inv_step_inst_proof]
+QED
 
 Theorem alloca_history_step:
   !func s bb inst fuel ctx t.
