@@ -802,7 +802,11 @@ Theorem sue_expand_function_supply_used_inst_ids:
   FST (sue_expand_function_supply (s with irs_used_inst_ids := ids) fn) =
   FST (sue_expand_function_supply s fn)
 Proof
-  cheat
+  simp[sue_expand_function_supply_def] >>
+  Cases_on `sue_expand_blocks_supply (dfg_build_function fn) s fn.fn_blocks` >>
+  drule sue_expand_blocks_supply_used_inst_ids >>
+  disch_then (qspec_then `ids` strip_assume_tac) >>
+  simp[]
 QED
 
 (* Row 6 (o1_ssa_inv: wf_ssa, no ALLOCA) to row 7. *)

@@ -337,7 +337,8 @@ Theorem simplify_cfg_fn_no_alloca:
   EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn) ==>
   EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts (simplify_cfg_fn fn))
 Proof
-  cheat
+  rewrite_tac[simplify_cfg_fn_def] >>
+  MATCH_ACCEPT_TAC simplifyCfgLabelPropsTheory.simplify_cfg_fn_with_labels_no_alloca
 QED
 
 (* The walk run, stage 5: wf_ssa in, wf_ssa out. *)

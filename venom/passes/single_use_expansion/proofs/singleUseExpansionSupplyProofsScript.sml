@@ -1414,3 +1414,131 @@ Proof
   gvs[sue_expand_function_supply_def, no_raw_fmp_ops_def,
       fn_insts_def, GSYM sue_blocks_no_raw_iff]
 QED
+
+(* ===== The traversal ignores irs_used_inst_ids =====
+   Fresh instruction ids come from irs_next_inst alone, so running from a
+   supply with a different used-id list gives the same output and a final
+   supply that differs only in that list. *)
+
+Theorem sue_alloc_assign_supply_used_inst_ids:
+  sue_alloc_assign_supply s op = (a,newop,s') ==>
+  sue_alloc_assign_supply (s with irs_used_inst_ids := ids) op =
+    (a,newop,s' with irs_used_inst_ids := s.irs_next_inst :: ids)
+Proof
+  simp[sue_alloc_assign_supply_def, fresh_ir_var_def, fresh_inst_id_def] >>
+  Cases_on `seek_fresh_name "formal_var_" s.irs_used_vars s.irs_next_var
+              (LENGTH s.irs_used_vars)` >>
+  simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem sue_expand_ops_supply_used_inst_ids:
+  !ops op_idx s ids assigns new_ops s'.
+    sue_expand_ops_supply dfg inst s ops op_idx = (assigns,new_ops,s') ==>
+    ?ids'.
+      sue_expand_ops_supply dfg inst (s with irs_used_inst_ids := ids) ops
+        op_idx = (assigns,new_ops,s' with irs_used_inst_ids := ids')
+Proof
+  Induct >> rpt gen_tac
+  >- (simp[sue_expand_ops_supply_def] >> strip_tac >> gvs[] >>
+      qexists_tac `ids` >> simp[]) >>
+  simp[sue_expand_ops_supply_def] >>
+  Cases_on `sue_expand_ops_supply dfg inst s ops (op_idx + 1)` >>
+  PairCases_on `r` >>
+  rename1 `_ = (more_assigns,more_ops,s1)` >>
+  first_x_assum (drule_then (qspec_then `ids` strip_assume_tac)) >>
+  simp[] >>
+  Cases_on `sue_needs_assign dfg inst op_idx` >> simp[]
+  >- (Cases_on `h` >> simp[]
+      >- (rename1 `Lit w` >>
+          Cases_on `sue_alloc_assign_supply s1 (Lit w)` >>
+          PairCases_on `r` >>
+          drule sue_alloc_assign_supply_used_inst_ids >>
+          disch_then (qspec_then `ids'` assume_tac) >>
+          simp[] >> strip_tac >> gvs[] >>
+          qexists_tac `s1.irs_next_inst :: ids'` >> simp[])
+      >- (rename1 `Var vn` >> IF_CASES_TAC >> simp[]
+          >- (strip_tac >> gvs[] >> qexists_tac `ids'` >> simp[]) >>
+          Cases_on `sue_alloc_assign_supply s1 (Var vn)` >>
+          PairCases_on `r` >>
+          drule sue_alloc_assign_supply_used_inst_ids >>
+          disch_then (qspec_then `ids'` assume_tac) >>
+          simp[] >> strip_tac >> gvs[] >>
+          qexists_tac `s1.irs_next_inst :: ids'` >> simp[]) >>
+      strip_tac >> gvs[] >> qexists_tac `ids'` >> simp[]) >>
+  strip_tac >> gvs[] >> qexists_tac `ids'` >> simp[]
+QED
+
+Theorem sue_expand_inst_supply_used_inst_ids:
+  sue_expand_inst_supply dfg s inst = (out,s') ==>
+  ?ids'.
+    sue_expand_inst_supply dfg (s with irs_used_inst_ids := ids) inst =
+      (out,s' with irs_used_inst_ids := ids')
+Proof
+  Cases_on `sue_should_skip inst.inst_opcode` >>
+  simp[sue_expand_inst_supply_def]
+  >- (strip_tac >> gvs[] >> qexists_tac `ids` >> simp[]) >>
+  Cases_on `sue_expand_ops_supply dfg inst s inst.inst_operands 0` >>
+  PairCases_on `r` >>
+  drule sue_expand_ops_supply_used_inst_ids >>
+  disch_then (qspec_then `ids` strip_assume_tac) >>
+  simp[] >> strip_tac >> gvs[] >>
+  qexists_tac `ids'` >> simp[]
+QED
+
+Theorem sue_expand_insts_supply_used_inst_ids:
+  !insts s ids out s'.
+    sue_expand_insts_supply dfg s insts = (out,s') ==>
+    ?ids'.
+      sue_expand_insts_supply dfg (s with irs_used_inst_ids := ids) insts =
+        (out,s' with irs_used_inst_ids := ids')
+Proof
+  Induct >> rpt gen_tac
+  >- (simp[sue_expand_insts_supply_def] >> strip_tac >> gvs[] >>
+      qexists_tac `ids` >> simp[]) >>
+  simp[sue_expand_insts_supply_def] >>
+  Cases_on `sue_expand_inst_supply dfg s h` >>
+  rename1 `sue_expand_inst_supply dfg s h = (out1,s1)` >>
+  Cases_on `sue_expand_insts_supply dfg s1 insts` >>
+  rename1 `sue_expand_insts_supply dfg s1 insts = (outs,s2)` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule sue_expand_inst_supply_used_inst_ids >>
+  disch_then (qspec_then `ids` strip_assume_tac) >>
+  first_x_assum (drule_then (qspec_then `ids'` strip_assume_tac)) >>
+  simp[] >> qexists_tac `ids''` >> simp[]
+QED
+
+Theorem sue_expand_block_supply_used_inst_ids:
+  sue_expand_block_supply dfg s bb = (bb',s') ==>
+  ?ids'.
+    sue_expand_block_supply dfg (s with irs_used_inst_ids := ids) bb =
+      (bb',s' with irs_used_inst_ids := ids')
+Proof
+  simp[sue_expand_block_supply_def] >>
+  Cases_on `sue_expand_insts_supply dfg s bb.bb_instructions` >>
+  drule sue_expand_insts_supply_used_inst_ids >>
+  disch_then (qspec_then `ids` strip_assume_tac) >>
+  simp[] >> strip_tac >> gvs[] >>
+  qexists_tac `ids'` >> simp[]
+QED
+
+Theorem sue_expand_blocks_supply_used_inst_ids:
+  !bbs s ids bbs' s'.
+    sue_expand_blocks_supply dfg s bbs = (bbs',s') ==>
+    ?ids'.
+      sue_expand_blocks_supply dfg (s with irs_used_inst_ids := ids) bbs =
+        (bbs',s' with irs_used_inst_ids := ids')
+Proof
+  Induct >> rpt gen_tac
+  >- (simp[sue_expand_blocks_supply_def] >> strip_tac >> gvs[] >>
+      qexists_tac `ids` >> simp[]) >>
+  simp[sue_expand_blocks_supply_def] >>
+  Cases_on `sue_expand_block_supply dfg s h` >>
+  rename1 `sue_expand_block_supply dfg s h = (bb1,s1)` >>
+  Cases_on `sue_expand_blocks_supply dfg s1 bbs` >>
+  rename1 `sue_expand_blocks_supply dfg s1 bbs = (bbs1,s2)` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule sue_expand_block_supply_used_inst_ids >>
+  disch_then (qspec_then `ids` strip_assume_tac) >>
+  first_x_assum (drule_then (qspec_then `ids'` strip_assume_tac)) >>
+  simp[] >> qexists_tac `ids''` >> simp[]
+QED
