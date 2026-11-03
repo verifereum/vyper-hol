@@ -63,13 +63,39 @@ Theorem remap_rel_update_pv[local]:
     alloca_remap_rel fn roots remap
       (update_var out val1 s1)
       (update_var out val2 s2)
+
+Theorem remap_preserved_mem_ops[local]:
+  !fn roots remap inst s1 s2 v1 bb.
+    alloca_remap_rel fn roots remap s1 s2 /\
+    allocas_in_memory s1 /\ allocas_in_memory s2 /\
+    FINITE roots /\
+    roots SUBSET alloca_roots fn /\
+    wf_function fn /\
+    ssa_form fn /\
+    pointer_confined fn roots /\
+    all_mem_via_pointer fn roots /\
+    alloca_safe_access fn roots s1 /\
+    alloca_safe_access fn roots s2 /\
+
+    step_inst_base inst s1 = OK v1 /\
+    ~is_alloca_op inst.inst_opcode /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_ext_call_op inst.inst_opcode /\
+    inst.inst_opcode <> ISTORE /\
+    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+    (?ops. (mem_write_ops inst = SOME ops \/ mem_read_ops inst = SOME ops) /\
+           ?v. ops.iao_ofst = Var v /\ v IN pointer_derived_vars fn roots) /\
+    (!u. u IN pointer_derived_vars fn roots ==>
+         LENGTH (FILTER ($= (Var u)) inst.inst_operands) <= 1) ==>
+    ?v2. step_inst_base inst s2 = OK v2 /\
+         alloca_remap_rel fn roots remap v1 v2
 ```
 
 Do not modify these statements. Prove it as-is, or produce a counterexample.
 
 ## Completion Criteria
 
-- Repair actual default-limit proof failures within the three frozen roots and their resumes without changing any statement.
+- Repair actual default-limit proof failures within the four frozen roots and their resumes without changing any statement.
 - Build allocaRemapProofsTheory with the default tactic limit and no new admissions.
 - Preserve all definitions, other statements, shared tactics, unrelated proof bodies and previously completed remap/GAS repairs.
 
@@ -83,11 +109,11 @@ Fresh remaining preserving-target validation rebuilt this dependency and stopped
 
 ## Domain Constraints
 
-- Edit only the three named proofs and their resumes, plus necessary local helpers in venom/passes/shared/proofs/allocaRemapProofsScript.sml. Repair actual encountered proof-budget failures; no speculative cleanup.
-- All existing definitions, theorem statements and shared tactics are frozen. Preserve all unrelated proofs, including completed remap repair roots except the specifically reauthorized remap_preserved_no_pointer_ops.
+- Edit only the four named proofs and their resumes, plus necessary local helpers in venom/passes/shared/proofs/allocaRemapProofsScript.sml. Repair actual encountered proof-budget failures; no speculative cleanup.
+- All existing definitions, theorem statements and shared tactics are frozen. Preserve all unrelated proofs, including completed remap repair roots except the specifically reauthorized remap_preserved_no_pointer_ops and remap_preserved_mem_ops.
 - No new definition, axiom, admission, assumption, opcode exclusion or source/executable semantics change.
 - Default2.5-second tactic limit; no override or TRY/ORELSE/FIRST around search.
-- A newly failing root outside these three named theorems must be reported before expanding scope.
+- A newly failing root outside these four named theorems must be reported before expanding scope.
 - Commit substantive source only, leave generated task records untracked. End commit messages with Bot: sol (OpenAI GPT-6.1 Sol).
 
 ## Available Resources
@@ -107,3 +133,8 @@ The exact statement has parsed in current forced validation. Actual failure: non
 ## Audited prefix extension
 
 The first run stopped without a source diff before reaching the pointer-bound root: remap_preserved_no_pointer_ops[MEMTOP] exceeded the default limit in broad instruction-dispatch simplification, then one unchanged replay stopped in remap_rel_update_pv at fs[] after 58 goals. A fresh independent whole-statement audit of both exact roots and all current producers returned PROVABLE. MEMTOP uses equal memory lengths; GAS readings are retained by the residual frame; all other scalar and pointer cases satisfy the existing assumptions. Pointer-variable update needs only its supplied displacement/allocation/bounds witnesses and out-not-root condition; no new finiteness or other premise is needed. This amendment authorizes only those additional existing proof bodies and necessary local helpers. Preserve all definitions and statements, shared tactics, other proof bodies and completed repairs. No blind unchanged retries or speculative cleanup. Owner handles forced default/CI builds and public dependency checks after return.
+
+
+## Existing audited memory-root replay extension
+
+The resumed replay passed the bounded MEMTOP change and unchanged remap_rel_update_pv, then hit the existing remap_preserved_mem_ops[sha3] dispatcher expansion at line2979. This complete memory root was independently audited across ALL opcode/resume producers in TASK_allocas_replay.md, and subsequently passed forced default/CI replay; its complete frozen statement above is whitespace-identical to that audited statement and executable definitions have not changed. This amendment authorizes actual encountered budget repairs within this already audited root and its resumes, plus necessary local helpers, while preserving all completed nonfailing resumes. It does not authorize unrelated roots or shared tactics. Keep the committed MEMTOP repair. The original pointer-bounds root remains required; no full-theory pass is yet claimed.
