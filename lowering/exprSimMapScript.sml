@@ -211,3 +211,42 @@ Proof
   simp[emitted_insts_def] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp[]
 QED
+
+Theorem compile_keccak256_key_run:
+  compile_keccak256_key key F sa = (op,sb) /\
+  (!x. key = Var x ==> not_fresh_at sa x) /\
+  eval_operand key s = SOME (n2w b) /\
+  mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
+  mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
+  b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME
+      (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule compile_keccak256_key_parts >> strip_tac >>
+  drule_at (Pat `emit_op SHA3 _ _ = _`) emit_length_prefixed_hash_run >>
+  disch_then irule >> simp[] >>
+  qexistsl [`b`, `key`, `sm`] >> gvs[wordsTheory.dimword_def]
+QED
+
+Theorem compile_hashmap_dynamic_key_frame:
+  expr_post ctx func cenv cx e es sa sm s0 es' kv key s /\
+  expr_type e = kt /\ is_bytestring_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
+  compile_keccak256_key key F sm = (op,sb) /\
+  (!x. key = Var x ==> not_fresh_at sm x) /\
+  local_ptrs_reserved cenv sm ==>
+  ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
+    eval_operand op t = SOME (encode_hashmap_key kt kv) /\
+    stmt_state_rel ctx func cenv cx es' t /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule_all expr_post_hashmap_bytestring >> strip_tac >>
+  drule_all compile_keccak256_key_run >> strip_tac >>
+  qexists `t` >> simp[byteTheory.word_of_bytes_be_def] >>
+  irule hash_readonly_state_rel >> goal_assum (drule_at Any) >>
+  gvs[exprSimTheory.expr_post_def]
+QED
