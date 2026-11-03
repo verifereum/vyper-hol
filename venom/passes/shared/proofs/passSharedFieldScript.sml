@@ -187,7 +187,13 @@ Proof
   Cases_on `inst.inst_opcode = SETFMP`
   >- (gvs[step_inst_base_def, AllCaseEqs()] >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = DALLOCA`
-  >- (gvs[step_inst_base_def, AllCaseEqs()] >> simp[update_var_def]) >>
+  >- (qpat_x_assum `inst.inst_opcode = DALLOCA` (fn th =>
+        RULE_ASSUM_TAC (REWRITE_RULE [step_inst_base_def, th])) >>
+      Cases_on `inst.inst_operands` >> gvs[] >>
+      Cases_on `t` >> gvs[] >>
+      Cases_on `inst.inst_outputs` >> gvs[] >>
+      Cases_on `t` >> gvs[] >>
+      gvs[AllCaseEqs(), update_var_def]) >>
   imp_res_tac venomInstProofs1Theory.step_inst_base_preserves_fmp_ordinary >>
   metis_tac[]
 QED
