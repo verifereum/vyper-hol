@@ -344,6 +344,19 @@ Proof
   rpt strip_tac >> drule_all body_local_region_frontier >> decide_tac
 QED
 
+Theorem body_local_ptr_MLOAD_frontier:
+  stmt_state_rel ctx func ce cx es s /\
+  local_region ce es.scopes s name b sz /\ 32 <= sz /\
+  lookup_var p s = SOME (n2w b) ==>
+  inst_mem_below_frontier (mk_inst iid MLOAD [Var p] outs) s
+Proof
+  rpt strip_tac >>
+  drule_all body_local_region_frontier >> strip_tac >>
+  `b < dimword (:256)` by
+    (fs[local_region_def] >> metis_tac[w2n_lt]) >>
+  simp[below_frontier_MLOAD, eval_operand_def] >> decide_tac
+QED
+
 val () = List.app (fn th =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
   in if null axioms andalso null (Thm.hyp th) andalso
@@ -362,4 +375,5 @@ val () = List.app (fn th =>
         compile_alloc_buffer_body_frag_mem,
         compile_mapping_subscript_body_mem_ok,
         body_local_region_frontier,
-        body_local_region_subrange];
+        body_local_region_subrange,
+        body_local_ptr_MLOAD_frontier];
