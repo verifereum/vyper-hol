@@ -13255,3 +13255,47 @@ Proof
   rpt gen_tac >> BETA_TAC >>
   irule comp_bind_labels >> simp[emit_op_labels]
 QED
+
+Theorem compile_floor_labels:
+  !v d s P. cs_extends s (SND (compile_floor v d s)) /\
+    EVERY P (added_labels s (SND (compile_floor v d s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinMiscTheory.compile_floor_def] >>
+  irule comp_bind_labels >> reverse conj_tac >- simp[emit_op_labels] >>
+  rpt gen_tac >> BETA_TAC >>
+  irule comp_bind_labels >> reverse conj_tac >- simp[emit_op_labels] >>
+  rpt gen_tac >> BETA_TAC >>
+  irule comp_bind_labels >> simp[compile_select_labels, emit_op_labels]
+QED
+
+Theorem compile_ceil_labels:
+  !v d s P. cs_extends s (SND (compile_ceil v d s)) /\
+    EVERY P (added_labels s (SND (compile_ceil v d s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinMiscTheory.compile_ceil_def] >>
+  irule comp_bind_labels >> reverse conj_tac >- simp[emit_op_labels] >>
+  rpt gen_tac >> BETA_TAC >>
+  irule comp_bind_labels >> reverse conj_tac >- simp[emit_op_labels] >>
+  rpt gen_tac >> BETA_TAC >>
+  irule comp_bind_labels >> simp[compile_select_labels, emit_op_labels]
+QED
+
+Theorem compile_blockhash_labels:
+  !n s P. cs_extends s (SND (compile_blockhash n s)) /\
+    EVERY P (added_labels s (SND (compile_blockhash n s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinMiscTheory.compile_blockhash_def] >>
+  irule comp_bind_labels >> reverse conj_tac >- simp[emit_op_labels] >>
+  rpt gen_tac >> BETA_TAC >>
+  irule comp_bind_labels >> reverse conj_tac >- simp[emit_op_labels] >>
+  rpt gen_tac >> BETA_TAC >>
+  irule comp_bind_labels >> reverse conj_tac >- simp[emit_op_labels] >>
+  rpt gen_tac >> BETA_TAC >>
+  irule comp_bind_labels >> reverse conj_tac >- simp[emit_op_labels] >>
+  rpt gen_tac >> BETA_TAC >>
+  irule comp_ignore_bind_labels >> conj_tac >- simp[emit_void_labels] >>
+  rpt gen_tac >> BETA_TAC >>
+  irule comp_bind_labels >> reverse conj_tac >- simp[emit_op_labels] >>
+  rpt gen_tac >> BETA_TAC >>
+  irule comp_ignore_bind_labels >> simp[emit_void_labels, emit_op_labels]
+QED
