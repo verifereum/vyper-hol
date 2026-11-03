@@ -13148,3 +13148,13 @@ Proof
             comp_return_labels, wrap_truncate_labels, compile_select_labels,
             compile_safe_decimal_div_labels, compile_safe_div_labels])
 QED
+
+Theorem store_multi_results_labels:
+  !buf results offset s P.
+    cs_extends s (SND (store_multi_results buf results offset s)) /\
+    EVERY P (added_labels s (SND (store_multi_results buf results offset s)))
+Proof
+  Induct_on `results` >> simp[store_multi_results_def, comp_return_labels] >>
+  rpt gen_tac >> irule comp_bind_labels >> simp[emit_op_labels] >>
+  rpt gen_tac >> irule comp_ignore_bind_labels >> simp[emit_void_labels]
+QED
