@@ -8,6 +8,7 @@ version = "0.2.3"
 [build]
 roots = ["vyperHolScript.sml",
          "tests/vyperPopTypingTestScript.sml",
+         "tests/vyperArgWriteTypingTestScript.sml",
          "venom/proofs/allocaHistoryScript.sml",
          "lowering/allocaHistoryFragmentScript.sml",
          "lowering/nonreentrantEntryScript.sml",

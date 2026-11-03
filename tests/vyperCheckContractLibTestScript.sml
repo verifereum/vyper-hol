@@ -1088,7 +1088,8 @@ val () = body_case "transient write" ``NoneT``
   ``[Assign (BaseTarget (TopLevelNameTarget (NONE, "t"))) ^(uint 1)]``
   [``Nonpayable``] [``View``]
 val () = body_case "write inside a tuple target" ``NoneT``
-  ``[Assign (TupleTarget [BaseTarget (NameTarget "a");
+  ``[AnnAssign "y" (BaseT AddressT) ^arg_a;
+     Assign (TupleTarget [BaseTarget (NameTarget "y");
                           BaseTarget (TopLevelNameTarget (NONE, "x"))])
        (Builtin (TupleT [BaseT AddressT; BaseT (UintT 256)])
           (MakeArray NONE (Fixed 2)) [^arg_a; ^(uint 1)])]``
@@ -1182,6 +1183,20 @@ val () = mutability_case ("constructor", ``Deploy``, ``F``, no_dflts, ``NoneT``,
   ``[Pass]``, [``Nonpayable``, ``Payable``], [``View``, ``Pure``])
 val () = mutability_case ("nonreentrant", ``External``, ``T``, no_dflts,
   ``NoneT``, ``[Pass]``, [``View``], [``Pure``])
+
+(* Arguments of external functions are calldata: no write to one
+   type-checks.  Internal-function arguments are writable.  These checks run
+   in runtime mode, which skips the constructor body; vyperArgWriteTypingTest
+   covers constructor arguments. *)
+val arg_n_write = ``[Assign (BaseTarget (NameTarget "n")) ^(uint 1)]``
+val () = mutability_case ("external argument write", ``External``, ``F``,
+  no_dflts, ``NoneT``, arg_n_write, [], [``Nonpayable``, ``Payable``])
+val () = mutability_case ("external argument augmented assignment",
+  ``External``, ``F``, no_dflts, ``NoneT``,
+  ``[AugAssign (BaseT (UintT 256)) (NameTarget "n") Add ^(uint 1)]``,
+  [], [``Nonpayable``])
+val () = mutability_case ("internal argument write", ``Internal``, ``F``,
+  no_dflts, ``NoneT``, arg_n_write, [``Pure``, ``Nonpayable``], [])
 
 (* A module that nothing initializes has no storage in the layout.  Its
    functions that no live function calls are not checked, so get_x and the

@@ -1488,9 +1488,9 @@ Proof
   `scope_well_typed scope` by
     metis_tac[bind_arguments_scope_well_typed_from_success] >>
   `ALL_DISTINCT (MAP FST args)` by
-    (`check_function_body am.layouts tx.target mods art src mut nr args dflts ret body` by
+    (`check_function_body am.layouts tx.target mods art src External mut nr args dflts ret body` by
        (irule check_contract_runtime_function_body_MEM >> simp[] >>
-        qexistsl [`tx.function_name`, `raw`, `External`] >> simp[]) >>
+        qexistsl [`tx.function_name`, `raw`] >> simp[]) >>
      gvs[check_function_body_def, params_ok_def]) >>
   `context_well_typed (initial_evaluation_context am.sources am.layouts tx src)` by
     metis_tac[call_tx_well_typed_initial_context] >>
@@ -1537,7 +1537,7 @@ Proof
   `nr ==> (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot <> NONE` by (
     strip_tac >>
     `External <> Deploy` by simp[] >>
-    `check_function_body am.layouts tx.target mods art src mut nr args dflts ret body` by
+    `check_function_body am.layouts tx.target mods art src External mut nr args dflts ret body` by
       metis_tac[check_contract_runtime_function_body_MEM] >>
     gvs[check_function_body_def, initial_evaluation_context_def,
         optionTheory.IS_SOME_EXISTS]) >>
@@ -1655,7 +1655,7 @@ Proof
     metis_tac[bind_arguments_scope_well_typed_from_success] >>
   `External <> Deploy` by simp[] >>
   `?ret_tv. evaluate_type (type_env_all_modules mods) ret = SOME ret_tv` by (
-    `check_function_body am.layouts tx.target mods art src mut nr args dflts ret body` by
+    `check_function_body am.layouts tx.target mods art src External mut nr args dflts ret body` by
       metis_tac[check_contract_runtime_function_body_MEM] >>
     gvs[check_function_body_def, optionTheory.IS_SOME_EXISTS]) >>
   `no_type_error_eval
@@ -2891,14 +2891,14 @@ Theorem checked_public_getter_post_prefix_body_setup_selected:
   state_well_typed st /\ accounts_well_typed st.accounts ==>
   ?exp env_after.
     body = [Return (SOME exp)] /\
-    type_stmts (function_entry_env art mods src args) ret body = SOME env_after /\
+    type_stmts (function_entry_env art mods src External args) ret body = SOME env_after /\
     context_well_typed
       (initial_evaluation_context am.sources am.layouts
         (empty_call_txn with target := tx.target) src) /\
     functions_well_typed
       (initial_evaluation_context am.sources am.layouts
         (empty_call_txn with target := tx.target) src) /\
-    env_consistent (function_entry_env art mods src args)
+    env_consistent (function_entry_env art mods src External args)
       (initial_evaluation_context am.sources am.layouts
         (empty_call_txn with target := tx.target) src) st /\
     state_well_typed st /\ accounts_well_typed st.accounts /\
@@ -2919,7 +2919,7 @@ Proof
   `immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
      (initial_evaluation_context am.sources am.layouts tx src) am.immutables` by
     metis_tac[immutables_ready_initial_evaluation_context_source] >>
-  `env_consistent (function_entry_env art mods src args)
+  `env_consistent (function_entry_env art mods src External args)
      (initial_evaluation_context am.sources am.layouts tx src) st` by
     (rw[env_consistent_def]
      >- (irule env_context_consistent_same_static_maps >>
@@ -2970,7 +2970,7 @@ Proof
      (initial_evaluation_context am.sources am.layouts
        (empty_call_txn with target := tx.target) src)` by
     (irule check_contract_functions_well_typed_initial >> simp[]) >>
-  `env_consistent (function_entry_env art mods src args)
+  `env_consistent (function_entry_env art mods src External args)
      (initial_evaluation_context am.sources am.layouts
        (empty_call_txn with target := tx.target) src) st` by
     (drule initial_env_consistent_empty_tx >> simp[]) >>
@@ -3033,7 +3033,7 @@ Proof
           (empty_call_txn with target := tx.target) src) body st =
         (INR (ReturnException rv),rst)` by metis_tac[] >>
      `state_well_typed rst /\
-      stmt_error_ok (function_entry_env art mods src args) ret
+      stmt_error_ok (function_entry_env art mods src External args) ret
         (INR (ReturnException rv))` by
        (irule eval_stmts_type_preservation_exception >>
         qexistsl
@@ -3094,7 +3094,7 @@ Proof
   qexistsl
     [`initial_evaluation_context am.sources am.layouts
         (empty_call_txn with target := tx.target) src`,
-     `function_entry_env art mods src args`, `env_after`, `res`, `ret`,
+     `function_entry_env art mods src External args`, `env_after`, `res`, `ret`,
      `body`, `st`] >>
   simp[]
 QED
@@ -3213,9 +3213,9 @@ Theorem checked_explicit_external_body_no_control_escape_selected:
   stmts_no_control_escape body
 Proof
   rpt strip_tac >>
-  `check_function_body am.layouts tx.target mods art src mut nr args dflts ret body` by
+  `check_function_body am.layouts tx.target mods art src External mut nr args dflts ret body` by
     (irule check_contract_runtime_function_body_MEM >> simp[] >>
-     qexistsl [`tx.function_name`, `raw`, `External`] >> simp[]) >>
+     qexistsl [`tx.function_name`, `raw`] >> simp[]) >>
   gvs[check_function_body_def]
 QED
 

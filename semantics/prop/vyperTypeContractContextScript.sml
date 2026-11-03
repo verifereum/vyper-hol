@@ -272,7 +272,7 @@ Theorem check_contract_function_body_MEM:
   MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts /\
   function_live layouts addr mods (live_functions layouts addr mods) (src,fn) /\
   check_function_body_in_mode in_deploy vis ==>
-  check_function_body layouts addr mods art src mut nr args dflts ret body
+  check_function_body layouts addr mods art src vis mut nr args dflts ret body
 Proof
   rw[] >>
   drule_all check_contract_toplevel_body_MEM >>
@@ -287,7 +287,7 @@ Theorem check_contract_runtime_function_body_MEM:
   module_allocated layouts addr src ts /\
   MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts /\
   vis <> Deploy ==>
-  check_function_body layouts addr mods art src mut nr args dflts ret body
+  check_function_body layouts addr mods art src vis mut nr args dflts ret body
 Proof
   metis_tac[check_contract_function_body_MEM, module_allocated_function_live,
             check_function_body_in_mode_def]
@@ -298,7 +298,7 @@ Theorem check_contract_live_deploy_function_body_MEM:
   ALOOKUP mods src = SOME ts /\
   MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts /\
   function_live layouts addr mods (live_functions layouts addr mods) (src,fn) ==>
-  check_function_body layouts addr mods art src mut nr args dflts ret body
+  check_function_body layouts addr mods art src vis mut nr args dflts ret body
 Proof
   metis_tac[check_contract_function_body_MEM, check_function_body_in_mode_def]
 QED
@@ -307,7 +307,7 @@ Theorem check_contract_deploy_function_body_MEM:
   check_contract T layouts addr mods = SOME art /\
   ALOOKUP mods NONE = SOME ts /\
   MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts ==>
-  check_function_body layouts addr mods art NONE mut nr args dflts ret body
+  check_function_body layouts addr mods art NONE vis mut nr args dflts ret body
 Proof
   metis_tac[check_contract_function_body_MEM, module_allocated_function_live,
             check_contract_main_module_allocated, check_function_body_in_mode_def]
@@ -316,14 +316,14 @@ QED
 Theorem FOLDL_extend_local_args_not_mem[local]:
   !args (base : typing_env) n.
     ~MEM n (MAP FST args) ==>
-    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).var_types n =
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty asg) base args).var_types n =
       FLOOKUP base.var_types n /\
-    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).var_assignable n =
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty asg) base args).var_assignable n =
       FLOOKUP base.var_assignable n
 Proof
   Induct >- rw[] >>
   gen_tac >> PairCases_on `h` >> rw[extend_local_def] >>
-  qpat_x_assum `!base n. _` (qspecl_then [`extend_local base' (h0) h1 T`,`n`] mp_tac) >>
+  qpat_x_assum `!base n. _` (qspecl_then [`extend_local base' (h0) h1 asg`,`n`] mp_tac) >>
   simp[extend_local_def, FLOOKUP_UPDATE]
 QED
 
@@ -331,30 +331,30 @@ Theorem FOLDL_extend_local_args_formal_lookup:
   !args (base : typing_env) id typ.
     ALL_DISTINCT (MAP FST args) /\
     MEM (id,typ) args ==>
-    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).var_types
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty asg) base args).var_types
       (id) = SOME typ /\
-    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).var_assignable
-      (id) = SOME T
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty asg) base args).var_assignable
+      (id) = SOME asg
 Proof
   Induct >- rw[] >>
   gen_tac >> PairCases_on `h` >> rw[] >> gvs[extend_local_def, FLOOKUP_UPDATE] >-
-    (qspecl_then [`args`,`extend_local base' (h0) h1 T`,`h0`]
+    (qspecl_then [`args`,`extend_local base' (h0) h1 asg`,`h0`]
        mp_tac FOLDL_extend_local_args_not_mem >>
      simp[extend_local_def, FLOOKUP_UPDATE] >>
      strip_tac >> gvs[]) >-
-    (qspecl_then [`args`,`extend_local base' (h0) h1 T`,`h0`]
+    (qspecl_then [`args`,`extend_local base' (h0) h1 asg`,`h0`]
        mp_tac FOLDL_extend_local_args_not_mem >>
      simp[extend_local_def, FLOOKUP_UPDATE] >>
      strip_tac >> gvs[]) >>
   qpat_x_assum `!base id typ. _`
-    (qspecl_then [`extend_local base' (h0) h1 T`,`id`,`typ`] mp_tac) >>
+    (qspecl_then [`extend_local base' (h0) h1 asg`,`id`,`typ`] mp_tac) >>
   simp[extend_local_def]
 QED
 
 Theorem FOLDL_extend_local_args_var_types_range:
   !args (base : typing_env) n ty.
     ALL_DISTINCT (MAP FST args) /\
-    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).var_types n = SOME ty ==>
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty asg) base args).var_types n = SOME ty ==>
     FLOOKUP base.var_types n = SOME ty \/
     ?id. MEM (id,ty) args /\ n = id
 Proof
@@ -370,9 +370,9 @@ QED
 Theorem FOLDL_extend_local_args_var_assignable_range:
   !args (base : typing_env) n b.
     ALL_DISTINCT (MAP FST args) /\
-    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).var_assignable n = SOME b ==>
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty asg) base args).var_assignable n = SOME b ==>
     FLOOKUP base.var_assignable n = SOME b \/
-    ?id typ. MEM (id,typ) args /\ n = id /\ b = T
+    ?id typ. MEM (id,typ) args /\ n = id /\ b = asg
 Proof
   Induct >- rw[] >>
   gen_tac >> PairCases_on `h` >> rw[] >> gvs[extend_local_def] >>
@@ -385,13 +385,13 @@ QED
 
 Theorem FOLDL_extend_local_args_static:
   !args (base : typing_env).
-    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).current_src = base.current_src /\
-    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).bare_globals = base.bare_globals /\
-    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).bare_global_assignable = base.bare_global_assignable /\
-    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).toplevel_vtypes = base.toplevel_vtypes /\
-    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).type_defs = base.type_defs /\
-    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).fn_sigs = base.fn_sigs /\
-    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).flag_members = base.flag_members
+    (FOLDL (\env (id,ty). extend_local env (id) ty asg) base args).current_src = base.current_src /\
+    (FOLDL (\env (id,ty). extend_local env (id) ty asg) base args).bare_globals = base.bare_globals /\
+    (FOLDL (\env (id,ty). extend_local env (id) ty asg) base args).bare_global_assignable = base.bare_global_assignable /\
+    (FOLDL (\env (id,ty). extend_local env (id) ty asg) base args).toplevel_vtypes = base.toplevel_vtypes /\
+    (FOLDL (\env (id,ty). extend_local env (id) ty asg) base args).type_defs = base.type_defs /\
+    (FOLDL (\env (id,ty). extend_local env (id) ty asg) base args).fn_sigs = base.fn_sigs /\
+    (FOLDL (\env (id,ty). extend_local env (id) ty asg) base args).flag_members = base.flag_members
 Proof
   Induct >> simp[] >>
   gen_tac >> PairCases_on `h` >>
@@ -404,7 +404,7 @@ Theorem artifact_fn_sigs_lookup_transfer_initial:
   tx.target = addr /\
   fn_sigs_declared_complete fn_sigs
     (initial_evaluation_context sources layouts tx src) /\
-  FLOOKUP (function_entry_env art mods entry_src args).fn_sigs k = SOME sig ==>
+  FLOOKUP (function_entry_env art mods entry_src vis args).fn_sigs k = SOME sig ==>
   FLOOKUP fn_sigs k = SOME sig
 Proof
   PairCases_on `k` >> strip_tac >>
@@ -428,7 +428,7 @@ Theorem artifact_fn_sigs_lookup_transfer_mode:
   tx.target = addr /\
   fn_sigs_declared_complete fn_sigs
     (initial_evaluation_context sources layouts tx src with in_deploy := in_deploy) /\
-  FLOOKUP (function_entry_env art mods entry_src args).fn_sigs k = SOME sig ==>
+  FLOOKUP (function_entry_env art mods entry_src vis args).fn_sigs k = SOME sig ==>
   FLOOKUP fn_sigs k = SOME sig
 Proof
   PairCases_on `k` >> strip_tac >>
@@ -455,7 +455,7 @@ Theorem artifact_bare_globals_lookup_transfer_initial:
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
   bare_globals_complete bare_globals (initial_evaluation_context sources layouts tx src) /\
-  FLOOKUP (function_entry_env art mods entry_src args).bare_globals k = SOME ty ==>
+  FLOOKUP (function_entry_env art mods entry_src vis args).bare_globals k = SOME ty ==>
   FLOOKUP bare_globals k = SOME ty
 Proof
   PairCases_on `k` >>
@@ -470,7 +470,7 @@ Theorem artifact_bare_global_assignable_lookup_transfer_initial:
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
   bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
-  FLOOKUP (function_entry_env art mods entry_src args).bare_global_assignable k = SOME ty ==>
+  FLOOKUP (function_entry_env art mods entry_src vis args).bare_global_assignable k = SOME ty ==>
   FLOOKUP bare_global_assignable k = SOME ty
 Proof
   PairCases_on `k` >>
@@ -485,7 +485,7 @@ Theorem artifact_toplevel_vtypes_lookup_transfer_initial:
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
   toplevel_vtypes_complete toplevel_vtypes (initial_evaluation_context sources layouts tx src) /\
-  FLOOKUP (function_entry_env art mods entry_src args).toplevel_vtypes k = SOME vt ==>
+  FLOOKUP (function_entry_env art mods entry_src vis args).toplevel_vtypes k = SOME vt ==>
   FLOOKUP toplevel_vtypes k = SOME vt
 Proof
   PairCases_on `k` >>
@@ -611,8 +611,8 @@ Theorem artifact_bare_global_assignable_NONE_transfer_initial:
     (initial_evaluation_context sources layouts tx cx_src) /\
   (!src' id ty ts. FLOOKUP bare_global_assignable (src',id) = SOME ty /\
      ALOOKUP mods src' = SOME ts ==> is_immutable_decl id ts) /\
-  FLOOKUP (function_entry_env art mods entry_src args).toplevel_vtypes (src,id) = SOME vt /\
-  FLOOKUP (function_entry_env art mods entry_src args).bare_global_assignable (src,id) = NONE ==>
+  FLOOKUP (function_entry_env art mods entry_src vis args).toplevel_vtypes (src,id) = SOME vt /\
+  FLOOKUP (function_entry_env art mods entry_src vis args).bare_global_assignable (src,id) = NONE ==>
   FLOOKUP bare_global_assignable (src,id) = NONE
 Proof
   rw[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static] >>
@@ -633,7 +633,7 @@ Theorem artifact_flag_members_lookup_transfer_initial:
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
   flag_members_complete flag_members (initial_evaluation_context sources layouts tx src) /\
-  FLOOKUP (function_entry_env art mods entry_src args).flag_members k = SOME members ==>
+  FLOOKUP (function_entry_env art mods entry_src vis args).flag_members k = SOME members ==>
   FLOOKUP flag_members k = SOME members
 Proof
   PairCases_on `k` >>
@@ -651,8 +651,8 @@ Theorem artifact_toplevel_non_bare_globals_NONE_transfer_initial:
           FLOOKUP toplevel_vtypes (src',id) = SOME (Type ty) /\
           is_bare_global_decl id ts /\
           find_var_decl_by_name id ts = NONE /\ ty <> NoneT) /\
-  FLOOKUP (function_entry_env art mods entry_src args).toplevel_vtypes (src,id) = SOME vt /\
-  FLOOKUP (function_entry_env art mods entry_src args).bare_globals (src,id) = NONE ==>
+  FLOOKUP (function_entry_env art mods entry_src vis args).toplevel_vtypes (src,id) = SOME vt /\
+  FLOOKUP (function_entry_env art mods entry_src vis args).bare_globals (src,id) = NONE ==>
   FLOOKUP bare_globals (src,id) = NONE
 Proof
   rw[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static] >>

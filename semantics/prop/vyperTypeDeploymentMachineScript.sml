@@ -73,20 +73,20 @@ Theorem checked_constructor_body_typing_package:
     type_stmts env_body ret body = SOME env_after /\
     (!id typ. MEM (id,typ) args ==>
        FLOOKUP env_body.var_types id = SOME typ /\
-       FLOOKUP env_body.var_assignable id = SOME T) /\
+       IS_SOME (FLOOKUP env_body.var_assignable id)) /\
     (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
        ?id. MEM (id,ty) args /\ n = id) /\
     (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
-       ?id typ. MEM (id,typ) args /\ n = id /\ b = T)
+       ?id typ. MEM (id,typ) args /\ n = id)
 Proof
   strip_tac >>
   drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[]
   >- (qexistsl [`artifact_env art mods NONE`, `artifact_env art mods NONE`] >>
       simp[artifact_env_def, Once type_stmt_def]) >>
-  `check_function_body layouts addr mods art NONE mut nr args dflts ret body` by
+  `check_function_body layouts addr mods art NONE Deploy mut nr args dflts ret body` by
     (irule check_contract_deploy_function_body_MEM >> metis_tac[]) >>
   gvs[check_function_body_def, optionTheory.IS_SOME_EXISTS] >>
-  qexistsl [`function_entry_env art mods NONE args`, `x'`] >>
+  qexistsl [`function_entry_env art mods NONE Deploy args`, `x'`] >>
   gvs[function_entry_env_def, artifact_env_def,
       FOLDL_extend_local_args_static, params_ok_def] >>
   rpt conj_tac >>
@@ -96,7 +96,8 @@ Proof
      rpt strip_tac >>
        drule_all FOLDL_extend_local_args_var_types_range >> rw[] >> gvs[],
      rpt strip_tac >>
-       drule_all FOLDL_extend_local_args_var_assignable_range >> rw[] >> gvs[]]
+       drule_all FOLDL_extend_local_args_var_assignable_range >> rw[] >> gvs[] >>
+       first_assum (irule_at Any)]
 QED
 
 Theorem checked_constructor_body_setup:
@@ -432,10 +433,10 @@ Proof
      simp[initial_state_def]) >>
   `ALL_DISTINCT (MAP FST args)` by
     (drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[] >>
-     `check_function_body layouts tx.target mods deploy_art NONE mut nr
+     `check_function_body layouts tx.target mods deploy_art NONE Deploy mut nr
         args dflts ret body` by
        (irule check_contract_deploy_function_body_MEM >> simp[] >>
-        qexistsl [`tx.function_name`,`raw`,`Deploy`] >> simp[]) >>
+        qexistsl [`tx.function_name`,`raw`] >> simp[]) >>
      gvs[check_function_body_def, params_ok_def]) >>
   irule checked_constructor_run_from_states_preserves_machine_well_typed >>
   qexistsl [`args`,`body`,`body_st`,`body_st'`,`cx`,`deploy_art`,`dflts`,`layouts`,

@@ -382,11 +382,11 @@ Definition functions_well_typed_def:
           well_typed_exprs (defaults_env env_body) dflts /\
           (!id typ. MEM (id,typ) args ==>
              FLOOKUP env_body.var_types id = SOME typ /\
-             FLOOKUP env_body.var_assignable id = SOME T) /\
+             IS_SOME (FLOOKUP env_body.var_assignable id)) /\
           (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
              ?id. MEM (id,ty) args /\ n = id) /\
           (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
-             ?id typ. MEM (id,typ) args /\ n = id /\ b = T) /\
+             ?id typ. MEM (id,typ) args /\ n = id) /\
           MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 End
 
