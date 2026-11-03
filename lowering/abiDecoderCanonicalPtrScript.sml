@@ -31,7 +31,7 @@ Proof
 QED
 
 Theorem abi_decode_canonical_dynamic_member_pointer_sentinel:
-  compile_getelemptr_abi src T (SUM (MAP abi_member_head_size pre)) opc (Lit 0w)
+  compile_getelemptr_abi src T (SUM (MAP abi_member_head_size pre)) opc (Lit 0w) (Lit 0w)
     st = (member_op,st') /\
   has_types (pre ++ ty::post) (pvs ++ v::rest) /\
   LENGTH pre = LENGTH pvs /\ is_dynamic ty /\
@@ -54,7 +54,8 @@ Theorem abi_decode_canonical_dynamic_member_pointer_sentinel:
     t.vs_data_section = s.vs_data_section /\ inst_extends st st'
 Proof
   strip_tac >> drule_all canonical_member_offset_load >> strip_tac >>
-  drule_all abi_decode_dynamic_member_pointer_sentinel >> strip_tac >>
+  drule_all (SRULE [eval_operand_def]
+    (Q.INST [`src_base` |-> `0`, `base_op` |-> `Lit 0w`] abi_decode_dynamic_member_pointer_sentinel)) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st st') s = OK t` >>
   `mem_bytes_at (sb + head_lengths (pre ++ ty::post) 0 +
      SUM (MAP2 abi_member_tail_size pre pvs)) (LENGTH (enc ty v))

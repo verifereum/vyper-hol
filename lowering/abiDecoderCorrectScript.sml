@@ -10,6 +10,7 @@ Definition abi_decoder_correct_def:
   abi_decoder_correct ce env sf ty tv <=>
     !dst src opc base_op hi start end_st func ctx first last b cap limit_st initial av v src_base sb d.
     compile_abi_decode_to_buf dst src opc base_op hi (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
+    (base_op = Lit 0w \/ opc = MLOAD) /\
     fn_has_code start end_st func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -31,6 +32,7 @@ End
 Theorem abi_decoder_correct_run:
   abi_decoder_correct ce env sf ty tv /\
   compile_abi_decode_to_buf dst src opc base_op hi (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
   fn_has_code start end_st func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -57,6 +59,7 @@ QED
 Theorem abi_decoder_correct_run_simple:
   abi_decoder_correct ce env sf ty tv /\
   compile_abi_decode_to_buf dst src opc base_op hi (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
   fn_has_code start end_st func /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\
