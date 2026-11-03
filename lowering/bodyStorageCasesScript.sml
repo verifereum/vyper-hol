@@ -1657,43 +1657,6 @@ Proof
   gvs[oracle_storage_ok_payload]
 QED
 
-Theorem body_intcall_halt_probe[local]:
-  let ss = [Expr (Call NoneT SelfDestructTarget
-              [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w))] NONE)];
-      tops = [FunctionDecl Internal Nonpayable T F "halt" [] [] NoneT ss];
-      cx = empty_evaluation_context with
-        <| sources := [(0w,[(NONE,tops)])]; nonreentrant_slot := SOME 0 |> in
-  source_supply empty_state /\
-  ~MEM (NONE,"halt") cx.stk /\
-  get_module_code cx NONE = SOME tops /\
-  lookup_callable_function cx.in_deploy "halt" tops =
-    SOME (Nonpayable,T,[],[],NoneT,ss) /\
-  LENGTH ([]:expr list) = LENGTH ([]:argument list) /\
-  (SND (eval_expr cx (Call NoneT (IntCall (NONE,"halt")) [] NONE) empty_state)).tStorage <>
-  (SND ((do results <- eval_expr_results cx [];
-      prev <- get_scopes;
-      vs <- read_results cx results;
-      call_env <- lift_option_type (bind_arguments (get_tenv cx) [] vs)
-        "IntCall bind_arguments";
-      rtv <- lift_option_type (evaluate_type (get_tenv cx) NoneT) "IntCall eval ret";
-      lock_if_nr cx T (is_view_mut Nonpayable);
-      cxf <- push_function (NONE,"halt") call_env cx;
-      rv <- finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
-        (do pop_function prev; unlock_if_nr cx T (is_view_mut Nonpayable) od);
-      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
-      return (Value crv) od) empty_state)).tStorage
-Proof
-  pure_rewrite_tac [LET_THM] >> BETA_TAC >> conj_tac
-  >- simp[source_supply_def, empty_state_def, vyperAccountSupplyTheory.accounts_supply_empty] >>
-  EVAL_TAC >>
-  simp[update_transient_def, return_def, wordsTheory.WORD_EQ,
-       get_transient_storage_def, release_nonreentrant_lock_def,
-       bind_def, ignore_bind_def] >>
-  EVAL_TAC >>
-  simp[FUN_EQ_THM] >> qexists_tac `0w` >>
-  simp[FUN_EQ_THM] >> qexists_tac `0w` >> simp[]
-QED
-
 Theorem body_eval_intcall_empty_defaults:
   ~MEM (NONE,fn) cx.stk /\ get_module_code cx NONE = SOME tops /\
   lookup_callable_function cx.in_deploy fn tops = SOME (mut,nr,args,[],ret,ss) /\
@@ -1707,8 +1670,10 @@ Theorem body_eval_intcall_empty_defaults:
       rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
       lock_if_nr cx nr (is_view_mut mut);
       cxf <- push_function (NONE,fn) call_env cx;
-      rv <- finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
-        (do pop_function prev; unlock_if_nr cx nr (is_view_mut mut) od);
+      rv <- finally_unless_halt
+        (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+          (pop_function prev))
+        (unlock_if_nr cx nr (is_view_mut mut));
       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
       return (Value crv) od)
 Proof
