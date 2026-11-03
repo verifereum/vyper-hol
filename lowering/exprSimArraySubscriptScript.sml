@@ -1312,3 +1312,93 @@ Proof
   EVAL_TAC >> simp[wordsTheory.dimword_def] >> rpt strip_tac >> gvs[]
 QED
 
+
+Theorem array_vv_holds_elem:
+  stmt_state_rel ctx func cenv cx es q /\
+  vv_holds cenv cx (ArrayT et bd) tv bvv es q /\
+  vv_at cenv cx (ArrayT et bd) sa sn es tv bvv q /\
+  read_result cx tv es = (INL arr,es) /\
+  read_result cx tv' es = (INL v,es) /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV evt bd) /\
+  value_has_type evt v /\
+  evaluate_subscripts (ArrayTV evt bd) arr [ValueSubscript (IntV (&j))] = INL v /\
+  j < bound_length bd /\
+  eval_operand (vv_operand bvv) q = SOME w /\
+  eval_operand dst q = SOME (w + n2w
+    (if is_slot_addressed (vv_loc bvv) then
+       (case bd of Fixed cap => 0 | Dynamic cap => 1) + j * type_slot_size evt
+     else (case bd of Fixed cap => 0 | Dynamic cap => 32) + j * type_memory_size evt)) /\
+  (!id path. tv' = PlaceR (MemoryPlace id path) ==>
+     ?p0. tv = PlaceR (MemoryPlace id p0) /\
+       path = p0 ++ [ValueSubscript (IntV (&j))]) ==>
+  vv_holds cenv cx et tv'
+    (LocatedValue et (mk_ptr dst (vv_loc bvv))) es q
+Proof
+  strip_tac >>
+  `evaluate_type (get_tenv cx) et = SOME evt` by
+    gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `vv_loc bvv = LocMemory`
+  >- (gvs[compileEnvTheory.is_slot_addressed_def] >>
+      drule_all array_elem_ptr_w2n >> strip_tac >>
+      `~is_word_type (ArrayT et bd)` by simp[is_word_type_def] >>
+      drule_all vv_at_memory_region >> disch_then (assume_tac o CONJUNCT1) >>
+      Cases_on `bvv` >>
+      gvs[vv_holds_def, expr_val_rel_def, is_word_type_def,
+          exprSimAttributeTheory.vv_loc_def, contextTheory.vv_operand_def,
+          contextTheory.vv_location_def] >>
+      `val_in_memory evt v (w2n w +
+        ((case bd of Fixed cap => 0 | Dynamic cap => 32) + j * type_memory_size evt))
+        q.vs_memory` by
+        (irule val_in_memory_array_elem >> goal_assum (drule_at Any) >> simp[]) >>
+      gvs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+      simp[contextTheory.mk_ptr_def, vv_holds_def] >>
+      rpt conj_tac >> rpt strip_tac >>
+      all_tac
+      >>~- ([`mem_word_at _ _ = _`], drule_all val_in_memory_word_type >> simp[]) >>
+      rpt strip_tac >>
+      qpat_x_assum `!id path. tv' = _ ==> _` drule >> strip_tac >> gvs[] >>
+      drule_all local_place_at_array_elem >> simp[]) >>
+  Cases_on `bvv` >>
+  gvs[exprSimAttributeTheory.vv_loc_def, contextTheory.vv_location_def,
+      contextTheory.vv_operand_def] >>
+  Cases_on `p.ptr_location` >>
+  gvs[vv_holds_def, contextTheory.mk_ptr_def,
+      compileEnvTheory.is_slot_addressed_def] >>
+  all_tac
+  >~ [`immutable_holds cenv cx et tv' _ es`]
+  >- (`value_has_type (ArrayTV evt bd) arr` by gvs[immutable_holds_def] >>
+      Cases_on `arr` >>
+      gvs[evaluate_subscripts_def] >>
+      rename1 `ArrayV av` >> Cases_on `av` >> Cases_on `bd` >>
+      gvs[evaluate_subscripts_def, vyperValueOperationTheory.array_index_def,
+          vyperTypingTheory.value_has_type_def,
+          listTheory.oEL_THM, AllCaseEqs()]
+      >- (drule_all immutable_holds_dynarray_elem >> simp[]) >>
+      rename1 `read_result cx tv es = (INL (ArrayV (SArrayV kvs)),es)` >>
+      rename1 `immutable_holds cenv cx (ArrayT et (Fixed cap)) tv w es` >>
+      irule immutable_holds_sarray_elem >> simp[] >> qexistsl [`cap`, `kvs`, `tv`] >> simp[]) >>
+  gvs[storage_holds_def] >>
+  drule_all read_storage_slot_array_elem >> strip_tac >>
+  simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  qmatch_goalsub_abbrev_tac `slots_in_range stor` >>
+  `j < (case bd of Fixed cap => cap
+        | Dynamic cap => MIN cap (w2n (lookup_storage w stor)))` by
+    (Cases_on `bd` >- gvs[vyperASTTheory.bound_length_def] >>
+     qpat_x_assum `read_storage_slot _ _ w _ _ = _` mp_tac >>
+     simp[vyperStorageBackendTheory.read_storage_slot_eq, Abbr `stor`] >>
+     simp[Once vyperStorageTheory.decode_value_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[] >>
+     qpat_x_assum `decode_value _ _ (ArrayTV _ _) = _` mp_tac >>
+     simp[Once vyperStorageTheory.decode_value_def, AllCaseEqs()] >>
+     strip_tac >> gvs[] >>
+     drule vyperTypeStatePreservationTheory.decode_dyn_array_length >> strip_tac >>
+     gvs[evaluate_subscripts_def, vyperValueOperationTheory.array_index_def,
+         listTheory.oEL_THM, AllCaseEqs(), vyperStorageTheory.read_slot_def] >>
+     simp[Abbr `stor`]) >>
+  gvs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  (conj_tac
+  >- (once_rewrite_tac[arithmeticTheory.ADD_COMM] >> irule array_elem_slots_in_range >> simp[vyperStorageTheory.read_slot_def] >>
+      Cases_on `bd` >> gvs[] >> decide_tac) >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  irule storage_read_live_array_elem >> simp[])
+QED
