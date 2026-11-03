@@ -2,7 +2,8 @@
 Theory bodyAllocMemory
 Ancestors
   builtinBytesMemory allocaFootprint abiBuiltinAllocation exprLoweringProps
-  fragExec fragExecMem rich_list emitHelperProps emitHelper compileEnv venomInst venomState
+  fragExec fragExecMem allocaHistoryFragment rich_list
+  emitHelperProps emitHelper compileEnv venomInst venomState
   venomExecSemantics venomMemDefs list finite_map words arithmetic
 
 Theorem compile_alloc_buffer_body_inst[local]:
@@ -125,6 +126,27 @@ Proof
   drule_all mem_safe_run_inst_seq >> simp[]
 QED
 
+Theorem compile_alloc_buffer_body_header_history:
+  !ctx func cenv cx es s n sa buf sm value sb t.
+    compile_alloc_buffer n sa = (buf,sm) /\
+    emit_void MSTORE [buf.buf_operand; value] sm = ((),sb) /\
+    fn_has_code sa sb func /\ ~block_is_terminated sa /\
+    stmt_state_rel ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
+    32 <= n /\ n < dimword (:256) /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    fn_inst_ids_distinct func /\ alloca_history func s /\
+    run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = OK t ==>
+    alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_alloc_buffer_body_header_slice >> strip_tac >>
+  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode)
+     (emitted_insts sa sm ++ emitted_insts sm sb)` by fs[EVERY_MEM] >>
+  drule_all alloca_history_run_inst_seq >> simp[]
+QED
+
 val () = List.app (fn th =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
   in if null axioms andalso null (Thm.hyp th) andalso
@@ -135,4 +157,5 @@ val () = List.app (fn th =>
         compile_alloc_buffer_body_header_mem_ok,
         compile_alloc_buffer_body_frontier,
         compile_alloc_buffer_body_header_slice,
-        compile_alloc_buffer_body_header_run_mem];
+        compile_alloc_buffer_body_header_run_mem,
+        compile_alloc_buffer_body_header_history];
