@@ -42,8 +42,8 @@ QED
    PHI's label b by b's sole predecessor a (or drops it when a is already
    there, with the same value), and a dominates b. *)
 Theorem simplify_cfg_preserves_wf_ssa:
-  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
-  EVERY (\inst. inst.inst_opcode <> PHI) (HD fn.fn_blocks).bb_instructions ==>
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\
+  first_block_no_preds fn /\ simplify_cfg_fn_ok fn ==>
   wf_ssa (simplify_cfg_fn fn)
 Proof
   cheat
