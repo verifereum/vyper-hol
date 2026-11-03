@@ -601,7 +601,9 @@ Theorem step_STATICCALL_sha256:
          (word_to_bytes (SHA_256_bytes bs) T) s) with
          vs_returndata := word_to_bytes (SHA_256_bytes bs) T))
 Proof
-  strip_tac >> simp[Once step_inst_base_def, mk_inst_def, eval_operand_def] >>
+  strip_tac >>
+  pure_rewrite_tac [Once step_inst_base_def] >>
+  simp[mk_inst_def, eval_operand_def] >>
   irule (SRULE [mk_inst_def] sha256_exec_ext_call) >> simp[]
 QED
 
@@ -1164,7 +1166,10 @@ Proof
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[run_inst_seq_def, step_SHR, step_SHL,
        eval_operand_def, lookup_var_update_var, bind_outputs_def] >>
-  simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
+  simp[stepInstBaseLib.simp_opcode_clause ``SHR``, mk_inst_def,
+       exec_pure2_def, eval_operand_def, bind_outputs_def] >>
+  simp[stepInstBaseLib.simp_opcode_clause ``SHL``, mk_inst_def,
+       exec_pure2_def, eval_operand_def,
        bind_outputs_def, lookup_var_update_var] >>
   simp[dimword_def, update_var_def] >> rpt strip_tac >>
   gvs[not_fresh_at_def] >>
@@ -1210,14 +1215,14 @@ Proof
   simp[emitted_insts_def] >>
   CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
-  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def,
-       eval_operand_def] >>
+  simp[Once run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``MSTORE``,
+       mk_inst_def, eval_operand_def] >>
   `b < dimword (:256)` by decide_tac >>
   simp[exec_write2_def, eval_operand_def, w2n_n2w] >>
   `eval_operand ptr_op (mstore b (n2w n) s) = SOME (n2w b)` by
     (Cases_on `ptr_op` >> gvs[eval_operand_def, mstore_def, lookup_var_def]) >>
-  simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
-       eval_operand_def, bind_outputs_def] >>
+  simp[Once run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``ADD``,
+       exec_pure2_def, eval_operand_def, bind_outputs_def] >>
   `eval_operand val_op
      (update_var (STRING #"%" (toString sa.cs_next_var)) (n2w b + 32w)
        (mstore b (n2w n) s)) = SOME v` by
@@ -1225,8 +1230,8 @@ Proof
      gvs[eval_operand_def, lookup_var_update_var, not_fresh_at_def,
          mstore_def, lookup_var_def]) >>
   fs[word_add_n2w] >>
-  simp[run_inst_seq_def, step_inst_base_def, exec_write2_def,
-       eval_operand_def, lookup_var_update_var, w2n_n2w] >>
+  simp[run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``MSTORE``,
+       exec_write2_def, eval_operand_def, lookup_var_update_var, w2n_n2w] >>
   simp_tac (srw_ss()) [mstore_def, update_var_def, LET_THM] >>
   rpt strip_tac >>
   gvs[not_fresh_at_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
@@ -1475,9 +1480,10 @@ Proof
      simp[contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
           comp_bind_def, comp_ignore_bind_def, comp_return_def,
           fresh_id_def, fresh_var_def, emit_def] >> rpt strip_tac >>
-     gvs[emitted_insts_def, not_fresh_at_def, toString_inj,
-         rich_listTheory.DROP_LENGTH_APPEND, rich_listTheory.DROP_APPEND1,
-         rich_listTheory.DROP_APPEND2, APPEND_ASSOC]) >>
+     gvs[] >>
+     simp[emitted_insts_def, not_fresh_at_def, toString_inj,
+          rich_listTheory.DROP_LENGTH_APPEND, rich_listTheory.DROP_APPEND1,
+          rich_listTheory.DROP_APPEND2, APPEND_ASSOC]) >>
   `local_ptrs_reserved cenv sn` by
     (gvs[local_ptrs_reserved_def, not_fresh_at_def] >>
      metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_ADD]) >>
@@ -1665,8 +1671,6 @@ Proof
   disch_then (strip_assume_tac o SRULE [val_in_memory_def, LET_THM]) >>
   drule_all hash_post_footprint_bound >>
   simp[val_footprint_def] >> strip_tac >>
-  `w2n p + 32 + LENGTH bs < dimword (:256)` by
-    (irule (cj 1 literal_buffer_range) >> simp[] >> decide_tac) >>
   qexists_tac `w2n p` >> simp[] >> decide_tac
 QED
 
@@ -1688,8 +1692,6 @@ Proof
   disch_then (strip_assume_tac o SRULE [val_in_memory_def, LET_THM]) >>
   drule_all hash_post_footprint_bound >>
   simp[val_footprint_def] >> strip_tac >>
-  `w2n p + 32 + LENGTH str < dimword (:256)` by
-    (irule (cj 1 literal_buffer_range) >> simp[] >> decide_tac) >>
   qexists_tac `w2n p` >> simp[] >> decide_tac
 QED
 

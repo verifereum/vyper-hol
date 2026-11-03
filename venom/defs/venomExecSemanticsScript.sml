@@ -1059,7 +1059,7 @@ Definition step_inst_base_def:
                                   else if a = beneficiary then
                                     ben_acct with balance := ben_acct.balance + bal
                                   else accts a) in
-                Halt (halt_state (s with vs_accounts := accts'))
+                Halt (halt_state (set_returndata [] (s with vs_accounts := accts')))
             | NONE => Error "selfdestruct: undefined operand")
         | _ => Error "selfdestruct requires 1 operand")
 

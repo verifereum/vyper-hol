@@ -70,22 +70,14 @@ Proof
   simp[ctx_sim_def] >> metis_tac[]
 QED
 
-(* ===== The memory facts are range-wise ===== *)
+(* ===== The raw memory fact ignores the context ===== *)
 
-Theorem rangewise_raw_mem_ok:
-  rangewise_mem_fact raw_mem_ok
+(* raw_mem_ok is not range-wise (its revert-forward exemption reads the
+   current block), but it does not read the context. *)
+Theorem raw_mem_ok_ctx_free:
+  raw_mem_ok ctx fn inst s ==> raw_mem_ok ctx' fn inst s
 Proof
-  simp[rangewise_mem_fact_def] >>
-  qexistsl_tac [`\next allocas fmp. next < dimword (:256)`,
-    `\r next allocas fmp. SND r = 0 \/ FST r + SND r <= next`] >>
-  simp[raw_mem_ok_def, inst_mem_below_frontier_def, inst_mem_ranges_def,
-       pairTheory.ELIM_UNCURRY]
-QED
-
-Theorem rangewise_mem_fact_ctx:
-  rangewise_mem_fact M ==> (M ctx fn inst s <=> M ctx' fn' inst s)
-Proof
-  rw[rangewise_mem_fact_def] >> simp[]
+  simp[raw_mem_ok_def]
 QED
 
 Theorem o1_fn_passes_steps:
@@ -225,7 +217,8 @@ QED
 
 Theorem o1_prune_sim:
   fcg = fcg_analyze unit.cu_context /\ o1_ctx_shape unit.cu_context /\
-  unit.cu_context.ctx_entry = SOME entry /\ rangewise_mem_fact M ==>
+  unit.cu_context.ctx_entry = SOME entry /\
+  (!ctx ctx' fn inst s. M ctx fn inst s ==> M ctx' fn inst s) ==>
   (!fuel vs. run_context fuel unit.cu_context vs =
              run_context fuel (prune_unit_fcg_unreachable unit fcg).cu_context vs) /\
   !vs. mem_inv M unit.cu_context vs ==>
@@ -244,7 +237,7 @@ Proof
   simp[prune_unit_fcg_unreachable_fields] >>
   qexists_tac `fcg_is_reachable fcg` >>
   qexists_tac `unit.cu_context` >>
-  gvs[] >> metis_tac[rangewise_mem_fact_ctx]
+  gvs[] >> metis_tac[]
 QED
 
 (* ===== The walk ===== *)
@@ -403,7 +396,7 @@ Proof
    !vs. mem_inv raw_mem_ok pre.cu_context vs ==>
      mem_inv raw_mem_ok (prune_unit_fcg_unreachable pre
        (fcg_analyze pre.cu_context)).cu_context vs` by
-    (irule o1_prune_sim >> metis_tac[rangewise_raw_mem_ok]) >>
+    (irule o1_prune_sim >> metis_tac[raw_mem_ok_ctx_free]) >>
   `o1_src_inv (prune_unit_fcg_unreachable pre
                  (fcg_analyze pre.cu_context)).cu_context vs` by
     fs[o1_src_inv_def, prune_unit_fcg_unreachable_fields] >>

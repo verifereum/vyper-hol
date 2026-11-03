@@ -22,6 +22,7 @@
  *   frag_exec_mem_step        — one straight-line instruction
  *   frag_exec_mem_step_abort, frag_exec_mem_assert_fail, stop_frag_mem
  *                             — abort and halt lifting
+ *   revert_forward_frag_mem   — the exempt RETURNDATACOPY/REVERT pair
  *   mstore_alloca_frag_mem    — an MSTORE into an ALLOCA'd buffer
  *   run_inst_seq_mem_ok       — every instruction of a straight-line
  *                               sequence is below the frontier where it runs
@@ -93,6 +94,44 @@ Proof
   >- metis_tac[mem_safe_fuel_mono_up] >>
   Cases_on `exec_block n ctx bb s` >> gvs[] >> rw[] >> gvs[] >>
   metis_tac[mem_safe_fuel_mono_up]
+QED
+
+(* A safe terminating continuation covers every smaller prefix and every
+   larger fuel budget.  A fragment's conditional transfer needs such a
+   continuation; it does not establish one by itself. *)
+Theorem mem_safe_run_all_fuel:
+  !fuel ctx fn s.
+    mem_safe_run fuel ctx fn s /\ (!e. run_from fuel ctx fn s <> Error e) ==>
+    !m. mem_safe_run m ctx fn s
+Proof
+  rpt strip_tac >> Cases_on `m <= fuel`
+  >- metis_tac[mem_safe_run_fuel_mono_down] >>
+  irule mem_safe_run_fuel_mono_up >> qexists_tac `fuel` >> simp[]
+QED
+
+(* Entry/halt composition supplies a safe terminal continuation at every
+   normal body landing.  Exits already carry their own terminal witness. *)
+Theorem frag_exec_mem_complete:
+  !ctx sa sb P Q R fn s0.
+    frag_exec_mem ctx sa sb P Q R /\ fn_has_code sa sb fn /\
+    P s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    (!s. Q s /\ ~s.vs_halted /\
+         s.vs_current_bb = sb.cs_current_bb /\
+         s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+         ?fuel r. run_from fuel ctx fn s = r /\ (!e. r <> Error e) /\
+                  mem_safe_run fuel ctx fn s) ==>
+    !fuel. mem_safe_run fuel ctx fn s0
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `frag_exec_mem _ _ _ _ _ _`
+    (mp_tac o SIMP_RULE std_ss [frag_exec_mem_def]) >>
+  disch_then (qspecl_then [`fn`, `s0`] mp_tac) >> simp[] >> strip_tac
+  >- (qpat_x_assum `!s. Q s /\ _ ==> _`
+        (qspec_then `s'` mp_tac) >> simp[] >> strip_tac >>
+      metis_tac[mem_safe_run_all_fuel]) >>
+  metis_tac[exit_result_not_error, mem_safe_run_all_fuel]
 QED
 
 (* ===== Judgment rules ===== *)
@@ -335,6 +374,85 @@ Proof
   qexists_tac `0` >> simp[exit_result_def]
 QED
 
+(* ===== Revert forwarding ===== *)
+
+(* A step that ends the run at a revert-forwarding instruction: the run is
+   memory-safe whatever the instruction touches. *)
+Theorem run_from_step_exit_forward[local]:
+  !fuel ctx fn s bb inst r.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    step_inst fuel ctx inst s = r /\ (!s'. r <> OK s') /\
+    revert_forward_at bb s.vs_inst_idx ==>
+    run_from fuel ctx fn s = r /\ mem_safe_run fuel ctx fn s
+Proof
+  rpt gen_tac >> strip_tac >>
+  `exec_block fuel ctx bb s = r` by
+    (simp[Once exec_block_def] >> Cases_on `r` >> gvs[]) >>
+  simp[run_from_def, mem_safe_run_def, Once mem_safe_block_def] >>
+  Cases_on `r` >> gvs[]
+QED
+
+(* RETURNDATACOPY [p; 0; rds] then REVERT [p; rds], the lowering's revert
+   forwarding after a failed call.  raw_unit_memory_ok exempts the pair
+   (revert_forward), so it is memory-safe wherever p points; the run exits
+   at the copy's abort or at the REVERT. *)
+Theorem revert_forward_frag_mem:
+  !ctx st st' id1 id2 p rds P Q R.
+    st'.cs_current_bb = st.cs_current_bb /\
+    st'.cs_current_insts = st.cs_current_insts ++
+      [mk_inst id1 RETURNDATACOPY [p; Lit 0w; rds] [];
+       mk_inst id2 REVERT [p; rds] []] /\
+    (!s. P s ==>
+       (?a s1.
+          step_inst_base (mk_inst id1 RETURNDATACOPY [p; Lit 0w; rds] []) s =
+            Abort a s1 /\ R (Abort a s1)) \/
+       (?s1 a s2.
+          step_inst_base (mk_inst id1 RETURNDATACOPY [p; Lit 0w; rds] []) s =
+            OK s1 /\
+          step_inst_base (mk_inst id2 REVERT [p; rds] [])
+            (s1 with vs_inst_idx := SUC s.vs_inst_idx) = Abort a s2 /\
+          R (Abort a s2))) ==>
+    frag_exec_mem ctx st st' P Q R
+Proof
+  rw[frag_exec_mem_def] >> disj2_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  qabbrev_tac `i1 = mk_inst id1 RETURNDATACOPY [p; Lit 0w; rds] []` >>
+  qabbrev_tac `i2 = mk_inst id2 REVERT [p; rds] []` >>
+  `get_instruction bb s.vs_inst_idx = SOME i1 /\
+   get_instruction bb (SUC s.vs_inst_idx) = SOME i2` by
+    (qpat_x_assum `!i. _` (fn th =>
+       qspec_then `0` mp_tac th >> qspec_then `1` mp_tac th) >>
+     simp[arithmeticTheory.ADD1]) >>
+  `revert_forward bb s.vs_inst_idx` by
+    (simp[revert_forward_def] >> unabbrev_all_tac >> simp[mk_inst_def]) >>
+  `i1.inst_opcode = RETURNDATACOPY /\ i2.inst_opcode = REVERT` by
+    (unabbrev_all_tac >> simp[mk_inst_def]) >>
+  first_x_assum drule >> strip_tac
+  >- (`step_inst 0 ctx i1 s = Abort a s1` by simp[step_inst_non_invoke] >>
+      qspecl_then [`0`, `ctx`, `fn`, `s`, `bb`, `i1`, `Abort a s1`] mp_tac
+        run_from_step_exit_forward >>
+      gvs[revert_forward_at_def] >> strip_tac >>
+      qexists_tac `0` >> simp[exit_result_def]) >>
+  `step_inst 0 ctx i1 s = OK s1` by simp[step_inst_non_invoke] >>
+  `s1.vs_current_bb = s.vs_current_bb` by
+    metis_tac[step_preserves_control_flow, is_terminator_def] >>
+  qabbrev_tac `t = s1 with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `step_inst 0 ctx i2 t = Abort a s2` by simp[step_inst_non_invoke] >>
+  `run_from 0 ctx fn s = run_from 0 ctx fn t` by
+    (unabbrev_all_tac >> irule run_from_step >> gvs[is_terminator_def]) >>
+  `mem_safe_run 0 ctx fn s <=>
+   (revert_forward_at bb s.vs_inst_idx \/ mem_safe_step 0 ctx i1 s) /\
+   mem_safe_run 0 ctx fn t` by
+    (unabbrev_all_tac >> irule mem_safe_run_step >> gvs[is_terminator_def]) >>
+  qspecl_then [`0`, `ctx`, `fn`, `t`, `bb`, `i2`, `Abort a s2`] mp_tac
+    run_from_step_exit_forward >>
+  `t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = SUC s.vs_inst_idx` by
+    simp[Abbr `t`] >>
+  gvs[revert_forward_at_def] >> strip_tac >>
+  qexists_tac `0` >> simp[exit_result_def]
+QED
+
 (* ===== Leaf template ===== *)
 
 (* An MSTORE whose 32 bytes end no later than an ALLOCA'd region does (a
@@ -388,6 +506,14 @@ Proof
   Induct >> rw[run_inst_seq_mem_ok_def] >>
   simp[step_inst_inst_idx_indep] >>
   Cases_on `step_inst_base h s` >> gvs[exec_result_map_def]
+QED
+
+Theorem run_inst_seq_mem_ok_every:
+  !code s. EVERY (\i. !t. inst_mem_below_frontier i t) code ==>
+    run_inst_seq_mem_ok code s
+Proof
+  Induct >> simp[run_inst_seq_mem_ok_def] >>
+  rpt strip_tac >> Cases_on `step_inst_base h s` >> simp[]
 QED
 
 Theorem run_inst_seq_mem_ok_last:

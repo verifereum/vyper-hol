@@ -278,7 +278,7 @@ Proof
   Induct >- simp[evaluate_subscripts_def] >>
   Cases >> TRY (rename1 `ValueSubscript x` >> Cases_on `x`) >>
   rpt gen_tac >>
-  TRY (rename1 `AttrSubscript fname :: _` >> Cases_on `a`) >>
+  Cases_on `a` >>
   simp[evaluate_subscripts_def] >> strip_tac >>
   gvs[AllCaseEqs()] >> res_tac >> simp[]
 QED

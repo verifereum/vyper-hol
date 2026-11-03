@@ -1594,8 +1594,9 @@ Proof
      simp[step_inst_base_def, eval_operand_def] >> first_assum ACCEPT_TAC) >>
   `step_inst_base (mk_inst (sm.cs_next_id+2) ASSERT
      [Var (STRING #"%" (toString (sm.cs_next_var+1)))] []) sc = OK sc` by
-    simp[Abbr `sc`, step_inst_base_def, mk_inst_def, eval_operand_def,
-         lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def] >>
+     simp[Abbr `sc`, eval_operand_def, lookup_var_def, update_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE]) >>
   simp[Once run_inst_seq_def] >>
   simp[Once run_inst_seq_def] >>
   gvs[mk_inst_def] >>
