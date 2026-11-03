@@ -1,7 +1,8 @@
 Theory dftOpenRawAdequacy
 Ancestors
   dftOpenErase dftOpenAdequacy dftOpenMachine dftOpenFuel
-  venomExecSemantics venomExecProofs venomInst dftSparseOracle arithmetic
+  venomExecSemantics venomExecProofs venomInst dftSparseOracle arithmetic list
+  contextRawReachable contextCodegenRel venomInstProps
 
 (* Reflect the endpoint against the actual native result, not against an
    arbitrary label on a segment: delivery overwrites instruction indices. *)
@@ -184,4 +185,175 @@ Proof
   gvs[GSYM ADD1] >>
   pure_rewrite_tac[FUNPOW_2] >>
   simp[dft_open_next_def, dft_open_invoke_def]
+QED
+
+(* The lookup clause keeps the active block aligned with the native state. *)
+Definition dft_raw_budget_observation_def:
+  dft_raw_budget_observation a vs0 ctx entry lbl fn inst observed <=>
+    ?fuel j b bb ghost stack n.
+      FUNPOW (dft_open_next a ctx) j
+        (DftOpen (DftEnter entry fuel
+          (vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl;
+                      vs_inst_idx := 0|>)) [] 0) =
+        DftOpen (DftAt fn b bb ghost) stack n /\
+      lookup_block observed.vs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb ghost.vs_inst_idx = SOME inst /\
+      observed = dft_open_materialize vs0.vs_gas_readings n ghost
+End
+
+Theorem dft_raw_active_lookup[local]:
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  active_inst fn inst s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb ==>
+  get_instruction bb s.vs_inst_idx = SOME inst
+Proof
+  rw[active_inst_def] >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb'`
+    by (irule MEM_lookup_block >> simp[]) >>
+  gvs[get_instruction_def]
+QED
+
+Theorem dft_raw_budget_adequacy:
+  !vs0 ctx fn inst observed.
+    raw_reachable vs0 ctx fn inst observed ==>
+    !a name entry lbl.
+      ctx.ctx_entry = SOME name /\
+      lookup_function name ctx.ctx_functions = SOME entry /\
+      fn_entry_label entry = SOME lbl /\
+      EVERY (\f. ALL_DISTINCT (MAP (\b. b.bb_label) f.fn_blocks)) ctx.ctx_functions /\
+      dft_sparse_oracle a vs0.vs_gas_readings ==>
+      MEM fn ctx.ctx_functions /\
+      dft_raw_budget_observation a vs0 ctx entry lbl fn inst observed
+Proof
+  ho_match_mp_tac raw_reachable_ind >> rpt conj_tac >> rpt gen_tac
+  >- suspend "entry"
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "callee"
+QED
+
+Resume dft_raw_budget_adequacy[entry]:
+  strip_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
+      `MEM entry ctx.ctx_functions` by metis_tac[lookup_function_MEM] >>
+      conj_tac >- simp[] >>
+      gvs[enters_block_def] >>
+      qmatch_asmsub_abbrev_tac `eval_phis initial _ = OK sp` >>
+      `dft_open_materialize vs0.vs_gas_readings 0 initial = initial`
+        by simp[dft_open_materialize_def, Abbr `initial`] >>
+      `?t. dft_open_next a ctx (DftOpen (DftEnter entry (SUC 0) initial) [] 0) =
+          DftOpen (DftAt entry 0 bb t) [] 0 /\
+          dft_open_materialize vs0.vs_gas_readings 0 t =
+            sp with vs_inst_idx := phi_prefix_length bb.bb_instructions`
+        by (irule dft_open_materialized_entry >> simp[Abbr `initial`]) >>
+      `sp.vs_current_bb = initial.vs_current_bb`
+        by metis_tac[eval_phis_preserves_current_bb] >>
+      `lookup_block (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions).vs_current_bb
+          entry.fn_blocks = SOME bb` by (gvs[Abbr `initial`]) >>
+      `ALL_DISTINCT (MAP (\b. b.bb_label) entry.fn_blocks)`
+        by (qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM] >>
+            disch_then (qspec_then `entry` mp_tac) >> simp[]) >>
+      drule_all dft_raw_active_lookup >> strip_tac >>
+      gvs[Abbr `initial`] >>
+      simp[dft_raw_budget_observation_def] >>
+      qexistsl_tac [`1`, `1`, `0`, `t`, `[]`, `0`] >>
+      gvs[FUNPOW_1, dft_open_materialize_def] >>
+      qpat_x_assum `t with vs_gas_readings := _ = _` (mp_tac o Q.AP_TERM `\v. v.vs_inst_idx`) >>
+      simp[] >> metis_tac[]
+QED
+
+Resume dft_raw_budget_adequacy[next]:
+  strip_tac >> rpt gen_tac >> strip_tac >>
+      first_x_assum drule_all >> strip_tac >>
+      conj_tac >- simp[] >>
+      gvs[dft_raw_budget_observation_def] >>
+      drule_all dft_open_extend_nonterminator >> strip_tac >>
+      `s'.vs_current_bb = ghost.vs_current_bb`
+        by (drule_all step_preserves_control_flow >>
+            simp[dft_open_materialize_def]) >>
+      `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)`
+        by (qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM] >>
+            disch_then (qspec_then `fn` mp_tac) >> simp[]) >>
+      `lookup_block (s' with vs_inst_idx := SUC ghost.vs_inst_idx).vs_current_bb
+        fn.fn_blocks = SOME bb` by simp[] >>
+      drule_all dft_raw_active_lookup >> simp[] >> strip_tac >>
+      `t.vs_inst_idx = SUC ghost.vs_inst_idx`
+        by (qpat_x_assum `dft_open_materialize _ _ _ = _`
+              (mp_tac o Q.AP_TERM `\v. v.vs_inst_idx`) >>
+            simp[dft_open_materialize_def]) >>
+      qexistsl_tac [`fuel'+fuel`, `h`, `b+fuel`, `t`,
+        `MAP (dft_shift_frame fuel) stack`, `m`] >>
+      gvs[dft_shift_config_def, dft_shift_control_def]
+QED
+
+Resume dft_raw_budget_adequacy[block]:
+  strip_tac >> rpt gen_tac >> strip_tac >>
+      first_x_assum drule_all >> strip_tac >>
+      conj_tac >- simp[] >>
+      gvs[dft_raw_budget_observation_def, enters_block_def] >>
+      drule_all dft_open_extend_block >> strip_tac >>
+      `s_phi.vs_current_bb = s'.vs_current_bb`
+        by metis_tac[eval_phis_preserves_current_bb] >>
+      `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)`
+        by (qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM] >>
+            disch_then (qspec_then `fn` mp_tac) >> simp[]) >>
+      `lookup_block (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions).vs_current_bb
+        fn.fn_blocks = SOME bb` by simp[] >>
+      drule_all dft_raw_active_lookup >> simp[] >> strip_tac >>
+      `t.vs_inst_idx = phi_prefix_length bb.bb_instructions`
+        by (qpat_x_assum `dft_open_materialize _ _ _ = _`
+              (mp_tac o Q.AP_TERM `\v. v.vs_inst_idx`) >>
+            simp[dft_open_materialize_def]) >>
+      qexistsl_tac [`fuel'+SUC fuel`, `h`, `b+fuel`, `t`,
+        `MAP (dft_shift_frame (SUC fuel)) stack`, `m`] >>
+      gvs[dft_shift_config_def, dft_shift_control_def]
+QED
+
+Resume dft_raw_budget_adequacy[callee]:
+  strip_tac >> rpt gen_tac >> strip_tac >>
+      first_x_assum drule_all >> strip_tac >>
+      `MEM fn' ctx.ctx_functions` by metis_tac[lookup_function_MEM] >>
+      conj_tac >- simp[] >>
+      gvs[dft_raw_budget_observation_def, enters_block_def] >>
+      drule_all dft_open_extend_callee >> strip_tac >>
+      `s_phi.vs_current_bb = cs.vs_current_bb`
+        by metis_tac[eval_phis_preserves_current_bb] >>
+      `ALL_DISTINCT (MAP (\b. b.bb_label) fn'.fn_blocks)`
+        by (qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM] >>
+            disch_then (qspec_then `fn'` mp_tac) >> simp[]) >>
+      `lookup_block (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions).vs_current_bb
+        fn'.fn_blocks = SOME bb` by simp[] >>
+      drule_all dft_raw_active_lookup >> simp[] >> strip_tac >>
+      `t.vs_inst_idx = phi_prefix_length bb.bb_instructions`
+        by (qpat_x_assum `dft_open_materialize _ _ _ = _`
+              (mp_tac o Q.AP_TERM `\v. v.vs_inst_idx`) >>
+            simp[dft_open_materialize_def]) >>
+      qexistsl_tac [`fuel+1`, `2+j`, `b`, `t`,
+        `DftCaller fn (b+1) bb' inst ghost :: MAP (dft_shift_frame 1) stack`, `n`] >>
+      gvs[dft_shift_config_def, dft_shift_control_def]
+QED
+
+Finalise dft_raw_budget_adequacy
+
+
+Theorem dft_raw_inf_adequacy:
+  ctx.ctx_entry = SOME name /\
+  lookup_function name ctx.ctx_functions = SOME entry /\
+  fn_entry_label entry = SOME lbl /\
+  EVERY (\f. ALL_DISTINCT (MAP (\b. b.bb_label) f.fn_blocks)) ctx.ctx_functions /\
+  dft_sparse_oracle a vs0.vs_gas_readings /\
+  raw_reachable vs0 ctx fn inst observed ==>
+  ?j bb ghost stack n.
+    FUNPOW (dft_next_inf a ctx) j
+      (dft_erase (DftOpen (DftEnter entry 0
+        (vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl;
+                    vs_inst_idx := 0|>)) [] 0)) =
+      dft_erase (DftOpen (DftAt fn 0 bb ghost) stack n) /\
+    get_instruction bb ghost.vs_inst_idx = SOME inst /\
+    observed = dft_open_materialize vs0.vs_gas_readings n ghost
+Proof
+  strip_tac >> drule_all dft_raw_budget_adequacy >> strip_tac >>
+  gvs[dft_raw_budget_observation_def] >>
+  drule dft_erase_active >> strip_tac >>
+  qexistsl_tac [`j`, `bb`, `ghost`, `stack`, `n`] >>
+  gvs[dft_erase_def, dft_fill_def, dft_fill_control_def]
 QED
