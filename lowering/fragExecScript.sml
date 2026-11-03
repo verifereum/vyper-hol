@@ -982,8 +982,11 @@ Theorem frag_outcome_jmp[local]:
   frag_outcome ctx fn s sb Q R
 Proof
   rpt strip_tac >> irule frag_outcome_jump >>
-  goal_assum (drule_at Any) >>
-  simp[mk_inst_def, is_terminator_def, step_inst_base_def] >> metis_tac[]
+  conj_tac >- simp[] >>
+  qexistsl_tac [`bb`, `mk_inst id JMP [Label lbl] []`, `lbl`] >>
+  simp[is_terminator_def] >>
+  simp_tac bool_ss [step_inst_base_def, mk_inst_def, opcode_case_def] >>
+  simp[is_terminator_def]
 QED
 
 Theorem frag_outcome_jnz[local]:
@@ -998,9 +1001,14 @@ Theorem frag_outcome_jnz[local]:
   frag_outcome ctx fn s sb Q R
 Proof
   rpt strip_tac >> irule frag_outcome_jump >>
-  goal_assum (drule_at Any) >>
-  simp[mk_inst_def, is_terminator_def, step_inst_base_def] >>
-  Cases_on `w = 0w` >> gvs[] >> metis_tac[]
+  conj_tac >- simp[] >>
+  rename1 `mk_inst id JNZ [cnd; Label exit; Label body_lbl] []` >>
+  qexistsl_tac [`bb`, `mk_inst id JNZ [cnd; Label exit; Label body_lbl] []`,
+                `if w = 0w then body_lbl else exit`] >>
+  simp[] >>
+  simp_tac bool_ss [step_inst_base_def, mk_inst_def, opcode_case_def] >>
+  simp[is_terminator_def] >>
+  Cases_on `w = 0w` >> gvs[]
 QED
 
 Theorem frag_outcome_loop_cond[local]:
