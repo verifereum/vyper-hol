@@ -1,7 +1,7 @@
 (* Actual typed copy producers: memory prefix and landing boundaries. *)
 Theory bodyCopyMemory
 Ancestors
-  bodyAllocMemory exprSimBufferStore exprSimLiteralBuffer fragExec fragExecMem instMemFrontier
+  bodyAllocMemory exprSim exprSimBufferStore exprSimLiteralBuffer fragExec fragExecMem instMemFrontier
   allocaHistoryFragment exprLoweringProps exprLowering emitHelperProps emitHelper
   compileEnv context venomInst venomState venomExecSemantics venomMemDefs
   valueEncoding valueEncodingProofs list rich_list finite_map words arithmetic
@@ -303,3 +303,40 @@ val () = List.app (fn th =>
   end) [copy_len_arithmetic_mem_ok, compile_bytestring_copy_len_body_mem_ok,
         compile_store_bytestring_body_mem_ok, store_bytestring_body_code,
         store_bytestring_body_history, compile_store_bytestring_body_frag_mem];
+
+Theorem body_name_store_memory_mem_ok:
+  expr_sim_pre ce cx env (Name ann id) es /\ stmt_state_rel ctx func ce cx es s /\
+  lookup_scopes id es.scopes = SOME entry /\
+  FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  ~is_word_type ann /\
+  compile_store_memory ce (Var p) dst ann ann sa = ((),sb) /\
+  type_memory_bytes ce ann = type_memory_size entry.type /\
+  type_memory_size entry.type < dimword (:256) /\
+  eval_operand dst s = SOME d /\
+  w2n d + type_memory_size entry.type <= s.vs_alloca_next /\
+  (!x. Var p = Var x \/ dst = Var x ==> not_fresh_at sa x) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  rpt strip_tac >> drule_all body_name_source_region >> strip_tac >> gvs[] >>
+  `eval_operand (Var p) s = SOME w` by simp[eval_operand_def] >>
+  drule val_footprint_le >> strip_tac >>
+  Cases_on `is_bytestring_type ann`
+  >- (gvs[compile_store_memory_def] >>
+      drule_all buffer_typed_bytestring_header >> strip_tac >>
+      irule compile_store_bytestring_body_mem_ok >>
+      qexistsl_tac [`d`, `dst`, `len`, `Var p`, `w`] >>
+      simp[] >> metis_tac[]) >>
+  gvs[compile_store_memory_def] >>
+  irule compile_copy_memory_body_mem_ok >>
+  qexistsl_tac [`d`, `dst`, `type_memory_size entry.type`, `Var p`, `w`] >>
+  simp[] >> decide_tac
+QED
+
+val () =
+  let val th = body_name_store_memory_mem_ok
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_NAME_STORE_MEMORY_AUDIT OK\n"
+     else raise Fail "body name store inherited admission"
+  end;
