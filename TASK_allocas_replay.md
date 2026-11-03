@@ -172,6 +172,18 @@ Theorem immutable_op_immutables_agree[local]:
     (!op. MEM op inst.inst_operands ==>
           eval_operand op s1 = eval_operand op s2) ==>
     v1.vs_immutables = v2.vs_immutables
+Theorem immutable_op_output_vars_agree[local]:
+  !inst s1 s2 v1 v2.
+    is_immutable_op inst.inst_opcode /\
+    s1.vs_memory = s2.vs_memory /\
+    step_inst_base inst s1 = OK v1 /\
+    step_inst_base inst s2 = OK v2 /\
+    s1.vs_immutables = s2.vs_immutables /\
+    (!op. MEM op inst.inst_operands ==>
+          eval_operand op s1 = eval_operand op s2) /\
+    (!nm. MEM nm inst.inst_outputs ==>
+          lookup_var nm s1 = lookup_var nm s2) ==>
+    !v. MEM v inst.inst_outputs ==> lookup_var v v1 = lookup_var v v2
 Theorem step_inst_base_mem_length_mono[local]:
   !inst s v.
     step_inst_base inst s = OK v /\
@@ -198,6 +210,7 @@ Do not modify this statement. Prove it as-is, or produce a counterexample.
 - Repair encountered default-limit tactic failures in step_inst_base_error_transfer resumes (currently EXTCODECOPY), keeping its full statement and completed SHA3 repair unchanged.
 - Repair the encountered step_inst_base_mem_length_mono proof without changing its statement.
 - Repair the encountered immutable_op_immutables_agree proof without changing its statement.
+- Repair the encountered immutable_op_output_vars_agree proof without changing its statement.
 - Build allocaRemapProofsTheory at the default tactic limit.
 - Preserve all other existing proofs, definitions and statements.
 
@@ -211,7 +224,7 @@ A forced default replay at eaf96a2fa timed out at the classification gvs after o
 
 ## Domain Constraints
 
-- All previously completed repairs at 562c9aa1d and the incremental MSTORE inversion repair remain frozen. Edit only step_inst_base_mem_length_mono, immutable_op_immutables_agree, and necessary local helpers. Preserve completed opcode repairs and shared tactics. A needed declarative Ancestors entry is allowed only without a dependency cycle.
+- All previously completed repairs, including MSTORE and immutable_op_immutables_agree with its new local boundaries, remain frozen. Edit only step_inst_base_mem_length_mono, immutable_op_output_vars_agree, and necessary local helpers. Preserve completed opcode repairs and shared tactics. A needed declarative Ancestors entry is allowed only without a dependency cycle.
 - All existing definitions and statements, including local declarations, are frozen. No new definitions, axioms, admissions, strengthened premises, opcode exclusions or supported-subset changes.
 - Preserve all completed gas, CFG and DRET proofs.
 - Default 2.5-second tactic limit; no timeout override and no TRY/ORELSE/FIRST around search.
@@ -267,3 +280,5 @@ Forced default owner replay at 562c9aa1d encounters a new unchanged root, step_i
 Validation now stops earlier at the unchanged remap_preserved_mem_ops[mstore] inversion, fs[step_inst_base_def, exec_write2_def, AllCaseEqs()], at the default 2.5-second limit. The independent complete memory-root audit already covered MSTORE and its real pointer, safe-access and residual-frame producers. This amendment expressly restores permission to repair actual encountered failing steps in that same audited root while preserving every completed repair, all schemas, definitions and shared tactics. No further authorization is needed for a new failing location within this root; report a different unaudited root before expanding scope. The pending memory-length proof remains unvalidated until a successful build reaches it.
 
 The MSTORE inversion now passes incrementally. Replay next stops at the unchanged immutable_op_immutables_agree proof's rpt (CASE_TAC >> simp[]) step. A fresh independent audit of this exact complete statement and both admitted immutable producers found PROVABLE: ILOAD changes no immutable field, and successful ISTORE writes identical offset/value pairs to equal initial immutable maps by operand agreement. No memory equality, well-formedness, GAS or output-arity premise is needed or authorized. This extension permits only that proof and necessary local helpers alongside the pending memory-length proof. All completed repairs, existing statements, definitions and shared tactics remain frozen.
+
+The immutable-map agreement repair now passes incremental replay. The next actual timeout is the paired ILOAD case split in immutable_op_output_vars_agree. Independent audit of the exact complete statement found PROVABLE: successful ILOAD reads equal words from equal memories at equal evaluated offsets, while ISTORE preserves variables and the existing initial output-lookup agreement suffices even for arbitrary output lists. Malformed operands or ILOAD outputs contradict success. This extension authorizes only its proof and necessary local helpers alongside pending memory-length work; no new assumption, definition, statement change, timeout override or alteration of a completed repair is permitted.
