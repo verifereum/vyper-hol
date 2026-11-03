@@ -813,3 +813,98 @@ Proof
        vyperTypeInvariantsTheory.env_scopes_consistent_def,
        probe_guarded_inhabited_empty_scopes]
 QED
+
+Definition probe_guarded_ready_state_def:
+  probe_guarded_ready_state =
+    probe_guarded_inhabited_state with scopes := [FEMPTY]
+End
+
+Theorem probe_guarded_ready_env:
+  env_consistent probe_guarded_env probe_guarded_context
+    probe_guarded_ready_state
+Proof
+  simp[vyperTypeInvariantsTheory.env_consistent_def,
+       probe_guarded_env_context] >> EVAL_TAC >> simp[] >> EVAL_TAC >> simp[]
+QED
+
+Theorem probe_guarded_ready_storage:
+  get_storage probe_guarded_context probe_guarded_ready_state F =
+    get_storage probe_guarded_context probe_guarded_inhabited_state F
+Proof
+  simp[probe_guarded_ready_state_def, get_storage_scopes]
+QED
+
+Theorem probe_guarded_ready_oracle:
+  IS_SOME probe_guarded_ready_state.outcomes /\
+  outcomes_accounts_typed probe_guarded_ready_state.outcomes /\
+  oracle_storage_ok probe_guarded_context probe_guarded_ready_state
+Proof
+  simp[probe_guarded_ready_state_def, probe_guarded_inhabited_state_def,
+       outcomes_accounts_typed_def,
+       vyperTypeStoragePreservationTheory.oracle_storage_ok_def]
+QED
+
+Theorem probe_guarded_ready_storage_typed:
+  contract_storage_well_formed probe_guarded_context probe_guarded_ready_state
+Proof
+  irule contract_storage_well_formed_storage_frame >>
+  qexists_tac `probe_guarded_inhabited_state` >>
+  simp[probe_guarded_inhabited_storage_typed,
+       probe_guarded_ready_state_def, get_storage_scopes]
+QED
+
+Theorem probe_guarded_ready_inv:
+  !ce. expr_sim_inv (probe_guarded_cenv ce) probe_guarded_context
+    probe_guarded_env probe_guarded_ready_state
+Proof
+  gen_tac >>
+  simp[expr_sim_inv_def, probe_guarded_ready_env,
+       probe_guarded_context_typed, probe_guarded_functions_typed,
+       probe_guarded_ready_storage_typed, probe_guarded_layout_safe,
+       probe_guarded_ready_oracle, probe_guarded_cenv_def,
+       probe_guarded_env_def, probe_guarded_module_code] >>
+  EVAL_TAC >> simp[] >> gen_tac >> Cases_on `addr = 0w` >> simp[]
+QED
+
+Theorem probe_guarded_ready_call:
+  eval_expr probe_guarded_context
+    (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
+    probe_guarded_ready_state =
+  (INL (Value (IntV 0)),
+   set_storage probe_guarded_context probe_guarded_ready_state F
+     (update_storage 0w 0w
+       (get_storage probe_guarded_context probe_guarded_ready_state F)))
+Proof
+  qspec_then `probe_guarded_ready_state` mp_tac probe_guarded_symbolic_call >>
+  disch_then (qspec_then `1` mp_tac) >>
+  simp[probe_guarded_ready_storage, probe_guarded_inhabited_storage]
+QED
+
+Theorem probe_guarded_ready_captured_base:
+  eval_base_place probe_guarded_context
+    (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+      (Literal (BaseT (UintT 256)) (IntL 0)))
+    probe_guarded_ready_state =
+  (INL (PlaceR (StoragePlace F 1w (ArrayTV (BaseTV BoolT) (Dynamic 1)))),
+   probe_guarded_ready_state)
+Proof
+  EVAL_TAC >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  EVAL_TAC >> simp[] >> EVAL_TAC >> simp[]
+QED
+
+Theorem probe_guarded_supported_probe:
+  ~supported_program probe_guarded_code
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem probe_guarded_no_call_body_pre:
+  !ce env es.
+    ~expr_body_pre ce probe_guarded_context env
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es
+Proof
+  simp[expr_body_pre_def, vyperTypeCallGraphTheory.int_calls_expr_def,
+       probe_guarded_module_code, probe_guarded_supported_probe]
+QED
