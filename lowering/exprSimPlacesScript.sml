@@ -9,8 +9,8 @@
  * disagrees with the base's type and subscripts of any base but an array, a
  * tuple or a mapping, which do not type.  Cheated, for the later #636 PRs:
  * array and mapping subscripts and pop on any other target, by kind
- * (compile_pop_storage_sim, compile_pop_immutable_sim,
- * compile_pop_nested_sim).
+ * (compile_pop_storage_sim, compile_pop_nested_sim). Root immutable pop is
+ * rejected by the source checker, as in Python.
  *
  * TOP-LEVEL:
  *   compile_subscript_case — static and dynamic arrays with the
@@ -242,10 +242,9 @@ Proof
   cheat
 QED
 
-(* pop on an immutable, in the constructor.  Cheated: the lowering pops at
-   LocCode with MLOAD and MSTORE at the immutable's data offset, which is
-   not where immutables_rel keeps it, and that offset can hold a live
-   local's allocation (locals_kept). *)
+(* Python requires an immutable's constructor assignment and rejects a second
+   modification, including root pop. The checker therefore excludes bare
+   globals here; a typed module target must have a storage declaration. *)
 Theorem compile_pop_immutable_sim:
   !cenv ann src id ctx func cx env ty es.
     expr_sim_below cenv (expr_size (Pop ann (TopLevelNameTarget (src,id)))) /\
@@ -254,7 +253,20 @@ Theorem compile_pop_immutable_sim:
     expr_sim_pre cenv cx env (Pop ann (TopLevelNameTarget (src,id))) es ==>
     expr_vv_sim ctx func cenv cx ty (Pop ann (TopLevelNameTarget (src,id))) es
 Proof
-  cheat
+  rpt strip_tac >>
+  fs[expr_sim_pre_def, expr_sim_inv_def,
+     vyperTypeInvariantsTheory.env_consistent_def,
+     vyperTypeInvariantsTheory.env_context_consistent_def,
+     Once well_typed_expr_def,
+     vyperTypeEnvTheory.type_place_target_TopLevelNameTarget] >>
+  Cases_on `FLOOKUP env.bare_global_assignable (src,id)` >> gvs[] >>
+  qpat_x_assum
+    `!src id ty. FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
+                 FLOOKUP env.bare_globals (src,id) = NONE ==> _`
+    (qspecl_then [`src`, `id`, `ArrayT ann (Dynamic n)`] mp_tac) >>
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `!ts. get_module_code cx src = SOME ts ==> _`
+    (qspec_then `ts` mp_tac) >> simp[]
 QED
 
 (* pop on a nested target (x.a.pop(), x[i].pop(), self.s.a.pop()).
