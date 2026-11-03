@@ -276,3 +276,63 @@ Proof
   imp_res_tac lift_sum_scopes >>
   imp_res_tac set_immutable_scopes >> gvs[]
 QED
+
+Theorem aug_place_lock_scopes[local]:
+  lock_if_nr cx nr is_view s = (r,s') ==> s'.scopes = s.scopes
+Proof
+  Cases_on `nr` >> simp[lock_if_nr_def, return_def] >>
+  Cases_on `cx.nonreentrant_slot` >> simp[raise_def] >>
+  metis_tac[acquire_nonreentrant_lock_scopes]
+QED
+
+Theorem aug_place_unlock_scopes[local]:
+  unlock_if_nr cx nr is_view s = (r,s') ==> s'.scopes = s.scopes
+Proof
+  Cases_on `nr /\ ~is_view` >> simp[unlock_if_nr_def, return_def] >>
+  Cases_on `cx.nonreentrant_slot` >> simp[return_def] >>
+  metis_tac[release_nonreentrant_lock_scopes]
+QED
+
+Theorem aug_place_finally_call_scopes[local]:
+  finally f (do pop_function prev;
+    if nr /\ mut <> View /\ mut <> Pure then
+      (case cx.nonreentrant_slot of NONE => return ()
+       | SOME slot => release_nonreentrant_lock cx.txn.target slot)
+    else return () od) s = (r,s') ==> s'.scopes = prev
+Proof
+  simp[finally_def, pop_function_def, bind_def, ignore_bind_def,
+       set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> Cases_on `nr /\ mut <> View /\ mut <> Pure` >> gvs[return_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
+  imp_res_tac release_nonreentrant_lock_scopes >> gvs[]
+QED
+
+Theorem aug_place_intcall_scopes:
+  (!s0 r0 s1. eval_expr_results cx es s0 = (r0,s1) ==>
+    s1.scopes = s0.scopes) /\
+  eval_expr cx (Call ty (IntCall id) es kw) s = (r,s') ==>
+  s'.scopes = s.scopes
+Proof
+  PairCases_on `id` >> strip_tac >>
+  Cases_on `MEM (id0,id1) cx.stk`
+  >- gvs[Once evaluate_def, type_check_def, assert_def, ignore_bind_def,
+         bind_def, raise_def] >>
+  Cases_on `get_module_code cx id0`
+  >- gvs[Once evaluate_def, type_check_def, assert_def, ignore_bind_def,
+         bind_def, lift_option_type_def, return_def, raise_def] >>
+  Cases_on `lookup_callable_function cx.in_deploy id1 x`
+  >- gvs[Once evaluate_def, type_check_def, assert_def, ignore_bind_def,
+         bind_def, lift_option_type_def, return_def, raise_def] >>
+  PairCases_on `x'` >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def,
+      type_check_def, assert_def, lift_option_type_def,
+      return_def, raise_def, get_scopes_def, AllCaseEqs()] >>
+  rule_assum_tac (PURE_REWRITE_RULE
+    [GSYM (SRULE [] unlock_if_nr_def), GSYM lock_if_nr_def]) >>
+  imp_res_tac finally_set_scopes >>
+  imp_res_tac (REWRITE_RULE [ignore_bind_def] aug_place_finally_call_scopes) >>
+  imp_res_tac read_results_state >>
+  imp_res_tac aug_place_lock_scopes >>
+  gvs[option_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
+  first_x_assum drule >> strip_tac >> gvs[push_function_def, return_def]
+QED
