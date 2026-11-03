@@ -491,6 +491,9 @@ Datatype:
        func_name → arg types. Spells the INVOKE target (internal_fn_label).
        Mirrors Python: func_t.arguments in expr.py lower_Call *)
     ce_func_param_types : string -> type list;
+    (* Declared internal-call mutability for delayed operand snapshots.
+       Mirrors Python: ContractFunctionT.is_modifying. *)
+    ce_func_mutability : string -> function_mutability;
     (* Internal function ids: func_name → id. Spells the INVOKE target
        (internal_fn_label).
        Mirrors Python: func_t._function_id in expr.py lower_Call *)

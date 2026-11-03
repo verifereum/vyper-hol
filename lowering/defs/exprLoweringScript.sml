@@ -2422,6 +2422,94 @@ Definition compile_materialize_vv_def:
     od
 End
 
+(* Match eval_order.py's mutation test for delayed ABI operands. *)
+Definition call_can_mutate_def:
+  call_can_mutate cenv (IntCall id) =
+    (cenv.ce_func_mutability (nsid_to_string id) = Nonpayable ∨
+     cenv.ce_func_mutability (nsid_to_string id) = Payable) ∧
+  call_can_mutate cenv (ExtCall is_static _ _ _) = ~is_static ∧
+  call_can_mutate cenv (RawCallTarget flags) = ~flags.rcf_is_static ∧
+  call_can_mutate cenv (RawCallCalldataTarget flags) = ~flags.rcf_is_static ∧
+  call_can_mutate cenv (CreateTarget _ _ _) = T ∧
+  call_can_mutate cenv (Send _) = T ∧
+  call_can_mutate cenv SelfDestructTarget = T ∧
+  call_can_mutate cenv _ = F
+End
+
+Definition expr_can_mutate_def:
+  expr_can_mutate cenv (Name _ _) = F ∧
+  expr_can_mutate cenv (TopLevelName _ _) = F ∧
+  expr_can_mutate cenv (FlagMember _ _ _) = F ∧
+  expr_can_mutate cenv (IfExp _ c x y) =
+    (expr_can_mutate cenv c ∨ expr_can_mutate cenv x ∨ expr_can_mutate cenv y) ∧
+  expr_can_mutate cenv (Literal _ _) = F ∧
+  expr_can_mutate cenv (StructLit _ _ kes) = named_exprs_can_mutate cenv kes ∧
+  expr_can_mutate cenv (Subscript _ x y) =
+    (expr_can_mutate cenv x ∨ expr_can_mutate cenv y) ∧
+  expr_can_mutate cenv (Attribute _ x _) = expr_can_mutate cenv x ∧
+  expr_can_mutate cenv (Builtin _ _ es) = exprs_can_mutate cenv es ∧
+  expr_can_mutate cenv (TypeBuiltin _ _ _ es) = exprs_can_mutate cenv es ∧
+  expr_can_mutate cenv (Pop _ _) = T ∧
+  expr_can_mutate cenv (Call _ ct es dflt) =
+    (call_can_mutate cenv ct ∨ exprs_can_mutate cenv es ∨
+     opt_expr_can_mutate cenv dflt) ∧
+  exprs_can_mutate cenv [] = F ∧
+  exprs_can_mutate cenv (e::es) =
+    (expr_can_mutate cenv e ∨ exprs_can_mutate cenv es) ∧
+  opt_expr_can_mutate cenv NONE = F ∧
+  opt_expr_can_mutate cenv (SOME e) = expr_can_mutate cenv e ∧
+  named_exprs_can_mutate cenv [] = F ∧
+  named_exprs_can_mutate cenv ((_,e)::kes) =
+    (expr_can_mutate cenv e ∨ named_exprs_can_mutate cenv kes)
+Termination
+  qexists_tac `measure (λ(x : compile_env # expr + compile_env # expr list +
+      compile_env # expr option + compile_env # (identifier # expr) list).
+    case x of
+      INL (_,e) => expr_size e
+    | INR (INL (_,es)) => list_size expr_size es
+    | INR (INR (INL (_,opt))) => option_size expr_size opt
+    | INR (INR (INR (_,kes))) =>
+        list_size (pair_size (list_size char_size) expr_size) kes)` >>
+  conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
+  PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def] >>
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
+       bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
+       listTheory.list_size_map, SF ETA_ss]
+End
+
+(* Capture composites before a later argument can mutate their source.
+   Keep the pinned compiler's tuple staging; this backports the operand
+   preservation fix from Vyper #5127 without changing the encoder API. *)
+Definition compile_abi_encode_args_def:
+  compile_abi_encode_args cfn cenv [] = return ([] : operand list) ∧
+  compile_abi_encode_args cfn cenv (e::es) =
+    do vv <- cfn cenv (expr_type e) e;
+       op <- (if ~is_word_type (expr_type e) ∧ exprs_can_mutate cenv es then
+                compile_materialize_vv cenv (expr_type e) vv
+              else unwrap_value cenv vv);
+       ops <- compile_abi_encode_args cfn cenv es;
+       return (op::ops)
+    od
+End
+
+Theorem compile_abi_encode_args_callback_cong:
+  ∀es. (∀e. MEM e es ⇒ f cenv (expr_type e) e = g cenv (expr_type e) e) ⇒
+    compile_abi_encode_args f cenv es = compile_abi_encode_args g cenv es
+Proof
+  Induct >> simp[compile_abi_encode_args_def] >> rpt strip_tac >> fs[]
+QED
+
+Theorem compile_abi_encode_args_cong[defncong]:
+  cenv = cenv' ∧ es = es' ∧ st = st' ∧
+  (∀a b e s. a = cenv' ∧ b = expr_type e ∧ MEM e es' ⇒
+     f a b e s = g a b e s) ⇒
+  compile_abi_encode_args f cenv es st = compile_abi_encode_args g cenv' es' st'
+Proof
+  rpt strip_tac >> gvs[] >> AP_THM_TAC >>
+  irule compile_abi_encode_args_callback_cong >> simp[FUN_EQ_THM]
+QED
+
 (* Lower one keyword operand of extcall/staticcall: value= and gas= are
    uint256 words; default_return_value= is a word of the return type, or,
    for any other type, a value Python materializes where it is lowered
@@ -3202,7 +3290,7 @@ Definition compile_type_builtin_dispatch_body_def:
           let enc_ty = TupleT arg_tys in
           let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
           let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in
-          let (vs, st1) = compile_multi_exprs compile_expr cenv args st in
+          let (vs, st1) = compile_abi_encode_args compile_expr cenv args st in
           let (tup_alloc, st2) =
                 compile_alloc_buffer (type_memory_bytes cenv enc_ty) st1 in
           let tup = tup_alloc.buf_operand in
