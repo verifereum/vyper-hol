@@ -394,16 +394,47 @@ End
 
 (* ===== Recursive ABI Decode Dispatcher ===== *)
 
-(* Get ABI element pointer, following offset indirection for dynamic types.
-   Mirrors Python: abi/abi_decoder.py _getelemptr_abi *)
+(* ===== Decode positions and bounds ===== *)
+
+(* The decoder reads its source at positions.  For calldata and code
+   (base_op = Lit 0w) a position is the address.  For a memory source a
+   position is an offset from base_op, the buffer holding the encoding, and
+   is read at ADD [base_op; pos].  hi_op bounds the positions (Lit 0w: no
+   bound); for a memory source it is the payload size.  Pinned Vyper
+   computes and bounds-checks memory pointers instead.  Checking positions
+   gives each check the same outcome wherever the buffer lies, and no
+   pointer into the buffer is compared or read before its check. *)
+Definition compile_abi_dec_addr_def:
+  compile_abi_dec_addr base_op pos_op =
+    if base_op = Lit 0w then return pos_op
+    else emit_op ADD [base_op; pos_op]
+End
+
+(* Reject wrapped or out-of-bounds ranges before bounded decoder reads. *)
+Definition compile_abi_decode_range_check_def:
+  compile_abi_decode_range_check start_op end_op hi_op =
+    do wrapped <- emit_op LT [end_op; start_op];
+       no_wrap <- emit_op ISZERO [wrapped];
+       oob <- emit_op GT [end_op; hi_op];
+       in_bounds <- emit_op ISZERO [oob];
+       ok <- emit_op AND [no_wrap; in_bounds];
+       emit_void ASSERT [ok]
+    od
+End
+
+(* ===== Recursive ABI Decode Dispatcher ===== *)
+
+(* Get ABI element position, following offset indirection for dynamic
+   types.  Mirrors Python: abi/abi_decoder.py _getelemptr_abi *)
 Definition compile_getelemptr_abi_def:
-  compile_getelemptr_abi src_op is_dyn abi_offset load_opc hi_op =
+  compile_getelemptr_abi src_op is_dyn abi_offset load_opc base_op hi_op =
     do (* Pinned Vyper emits the pointer ADD even for offset zero. *)
        head_ptr <- emit_op ADD [src_op; Lit (n2w abi_offset)];
        if ¬is_dyn then
          return head_ptr
        else
-         do offset_val <- emit_op load_opc [head_ptr];
+         do head_addr <- compile_abi_dec_addr base_op head_ptr;
+            offset_val <- emit_op load_opc [head_addr];
             actual_ptr <- emit_op ADD [src_op; offset_val];
             (if hi_op = Lit 0w then return ()
              else
@@ -418,8 +449,10 @@ End
 
 (* Offset indirection + bounds check for dynamic elements in decode loop. *)
 Definition compile_abi_decode_dyn_elem_ptr_def:
-  compile_abi_decode_dyn_elem_ptr load_opc elem_src src_data hi_op elem_abi_sz =
-    do off_val <- emit_op load_opc [elem_src];
+  compile_abi_decode_dyn_elem_ptr load_opc base_op elem_src src_data hi_op
+                                  elem_abi_sz =
+    do elem_addr <- compile_abi_dec_addr base_op elem_src;
+       off_val <- emit_op load_opc [elem_addr];
        ptr <- emit_op ADD [src_data; off_val];
        (if hi_op = Lit 0w then return ()
         else
@@ -427,9 +460,7 @@ Definition compile_abi_decode_dyn_elem_ptr_def:
              ok <- emit_op ISZERO [bad];
              emit_void ASSERT [ok];
              eend <- emit_op ADD [ptr; Lit (n2w elem_abi_sz)];
-             oob <- emit_op GT [eend; hi_op];
-             ok2 <- emit_op ISZERO [oob];
-             emit_void ASSERT [ok2]
+             compile_abi_decode_range_check ptr eend hi_op
           od);
        return ptr
     od
@@ -439,42 +470,71 @@ End
    Mirrors Python: abi/abi_decoder.py *)
 Definition compile_abi_decode_to_buf_def:
   compile_abi_decode_to_buf (dst:operand) (src_op:operand) (load_opc:opcode)
-                            (hi_op:operand) (DecPrimWord clamp_info) =
-    (compile_abi_decode_static src_op dst load_opc
-       (λval_op. compile_abi_clamp_basetype val_op clamp_info)) ∧
+                            (base_op:operand) (hi_op:operand)
+                            (DecPrimWord clamp_info) =
+    (do src_addr <- compile_abi_dec_addr base_op src_op;
+        compile_abi_decode_static src_addr dst load_opc
+          (λval_op. compile_abi_clamp_basetype val_op clamp_info)
+     od) ∧
 
-  compile_abi_decode_to_buf dst src_op load_opc hi_op
+  compile_abi_decode_to_buf dst src_op load_opc base_op hi_op
                             (DecBytestring max_len) =
-    (do len_op <- emit_op load_opc [src_op];
+    (do (* A bounded decode checks the head word is in bounds before
+           reading it (extends the vyper#5127 INF guards). *)
+        data_start <-
+          (if hi_op = Lit 0w then return (Lit 0w)
+           else do head_end <- emit_op ADD [src_op; Lit 32w];
+                   compile_abi_decode_range_check src_op head_end hi_op;
+                   return head_end
+                od);
+        src_addr <- compile_abi_dec_addr base_op src_op;
+        len_op <- emit_op load_opc [src_addr];
         too_long <- emit_op GT [len_op; Lit (n2w max_len)];
         ok <- emit_op ISZERO [too_long];
         emit_void ASSERT [ok];
-        (* Pinned Vyper uses NONE for immutable calldata/code bounds.  For a
-           bounded memory source it additionally checks the runtime end. *)
+        (* Extend the upstream INF checks to bounded memory: gas-free Venom
+           cannot rely on EVM memory-expansion failure to reject wrapping. *)
         (if hi_op = Lit 0w then return ()
          else
-           do data_start <- emit_op ADD [src_op; Lit 32w];
-              data_end <- emit_op ADD [data_start; len_op];
-              oob <- emit_op GT [data_end; hi_op];
-              ok2 <- emit_op ISZERO [oob];
-              emit_void ASSERT [ok2]
+           do data_end <- emit_op ADD [data_start; len_op];
+              compile_abi_decode_range_check data_start data_end hi_op
            od);
-        (* ABI and Vyper bytestring layouts coincide.  Python copies the
-           complete fixed-size memory buffer, including the length word and
-           padded payload, rather than copying only the runtime length. *)
-        let copy_size = 32 + 32 * ((max_len + 31) DIV 32) in
-        (case load_opc of
-           CALLDATALOAD =>
-             emit_void CALLDATACOPY [dst; src_op; Lit (n2w copy_size)]
-         | DLOAD =>
-             emit_void DLOADBYTES [dst; src_op; Lit (n2w copy_size)]
-         | _ =>
-             emit_void MCOPY [dst; src_op; Lit (n2w copy_size)])
+        if base_op = Lit 0w then
+          (* ABI and Vyper bytestring layouts coincide.  From calldata or
+             code, Python copies the complete fixed-size memory buffer,
+             including the length word and padded payload. *)
+          let copy_size = 32 + 32 * ((max_len + 31) DIV 32) in
+          (case load_opc of
+             CALLDATALOAD =>
+               emit_void CALLDATACOPY [dst; src_op; Lit (n2w copy_size)]
+           | DLOAD =>
+               emit_void DLOADBYTES [dst; src_op; Lit (n2w copy_size)]
+           | _ =>
+               emit_void MCOPY [dst; src_op; Lit (n2w copy_size)])
+        else
+          (* From memory, copy only the payload after zeroing the last data
+             word, as vyper#5333 does: the payload can end near the end of
+             the source buffer. *)
+          do len_up <- emit_op ADD [len_op; Lit 31w];
+             mask <- emit_op NOT [Lit 31w];
+             data_sz <- emit_op AND [len_up; mask];
+             last_word <- emit_op ADD [dst; data_sz];
+             emit_void MSTORE [last_word; Lit 0w];
+             copy_sz <- emit_op ADD [Lit 32w; len_op];
+             emit_void MCOPY [dst; src_addr; copy_sz]
+          od
      od) ∧
 
-  compile_abi_decode_to_buf dst src_op load_opc hi_op
+  compile_abi_decode_to_buf dst src_op load_opc base_op hi_op
     (DecDynArray elem_info elem_abi_sz elem_mem_sz elem_is_dyn max_count) =
-    (do clamp_cnt <- emit_op load_opc [src_op];
+    (do data_start <-
+          (if hi_op = Lit 0w then return (Lit 0w)
+           else do head_end <- emit_op ADD [src_op; Lit 32w];
+                   compile_abi_decode_range_check src_op head_end hi_op;
+                   return head_end
+                od);
+        src_addr <- compile_abi_dec_addr base_op src_op;
+        clamp_cnt <- emit_op load_opc [src_addr];
         too_many <- emit_op GT [clamp_cnt; Lit (n2w max_count)];
         ok <- emit_op ISZERO [too_many];
         emit_void ASSERT [ok];
@@ -483,85 +543,84 @@ Definition compile_abi_decode_to_buf_def:
         (if hi_op = Lit 0w then return ()
          else
            do payload_sz <- emit_op MUL [clamp_cnt; Lit (n2w elem_abi_sz)];
-              payload_plus_hdr <- emit_op ADD [payload_sz; Lit 32w];
-              payload_end <- emit_op ADD [src_op; payload_plus_hdr];
-              oob <- emit_op GT [payload_end; hi_op];
-              ok2 <- emit_op ISZERO [oob];
-              emit_void ASSERT [ok2]
+              payload_end <- emit_op ADD [data_start; payload_sz];
+              compile_abi_decode_range_check data_start payload_end hi_op
            od);
         (* Python reloads the count after clamping. *)
-        cnt <- emit_op load_opc [src_op];
+        cnt <- emit_op load_opc [src_addr];
         emit_void MSTORE [dst; cnt];
         let can_bulk_copy =
           (¬elem_is_dyn ∧ ¬dec_info_needs_clamp elem_info) in
         if can_bulk_copy then
           do copy_sz <- emit_op MUL [cnt; Lit (n2w elem_mem_sz)];
              src_data <- emit_op ADD [src_op; Lit 32w];
+             src_data_addr <- compile_abi_dec_addr base_op src_data;
              dst_data <- emit_op ADD [dst; Lit 32w];
              (case load_opc of
                 CALLDATALOAD =>
-                  emit_void CALLDATACOPY [dst_data; src_data; copy_sz]
+                  emit_void CALLDATACOPY [dst_data; src_data_addr; copy_sz]
               | DLOAD =>
-                  emit_void DLOADBYTES [dst_data; src_data; copy_sz]
+                  emit_void DLOADBYTES [dst_data; src_data_addr; copy_sz]
               | _ =>
-                  emit_void MCOPY [dst_data; src_data; copy_sz])
+                  emit_void MCOPY [dst_data; src_data_addr; copy_sz])
           od
         else
           do i_ptr_alloc <- compile_alloc_buffer 32;
              let i_ptr = i_ptr_alloc.buf_operand in
              do emit_void MSTORE [i_ptr; Lit 0w];
-                compile_abi_decode_dyn_loop dst src_op load_opc hi_op
+                compile_abi_decode_dyn_loop dst src_op load_opc base_op hi_op
                   elem_info elem_abi_sz elem_mem_sz
                   i_ptr cnt
              od
           od
      od) ∧
 
-  compile_abi_decode_to_buf dst src_op load_opc hi_op
+  compile_abi_decode_to_buf dst src_op load_opc base_op hi_op
                             (DecComplex is_dyn_complex elems) =
     (let static_sz = FOLDR (λ(_, abi_sz:num, _:num) acc. abi_sz + acc) 0 elems in
      (* Lit 0w represents Python's NONE bound.  External calldata has already
         been size-checked by the dispatcher, so pinned Vyper omits this guard. *)
      if hi_op = Lit 0w then
-       compile_abi_decode_complex_elems dst src_op load_opc hi_op elems 0 0
+       compile_abi_decode_complex_elems dst src_op load_opc base_op hi_op
+         elems 0 0
      else
        do item_end <- emit_op ADD [src_op; Lit (n2w static_sz)];
-          oob <- emit_op GT [item_end; hi_op];
-          ok <- emit_op ISZERO [oob];
-          emit_void ASSERT [ok];
-          compile_abi_decode_complex_elems dst src_op load_opc hi_op
+          compile_abi_decode_range_check src_op item_end hi_op;
+          compile_abi_decode_complex_elems dst src_op load_opc base_op hi_op
             elems 0 0
        od) ∧
 
   compile_abi_decode_complex_elems (dst:operand) (src_op:operand)
-    (load_opc:opcode) (hi_op:operand)
+    (load_opc:opcode) (base_op:operand) (hi_op:operand)
     ([] : (abi_dec_info # num # num) list) (_ : num) (_ : num) =
     (return () : unit compiler) ∧
-  compile_abi_decode_complex_elems dst src_op load_opc hi_op
+  compile_abi_decode_complex_elems dst src_op load_opc base_op hi_op
     ((ei, abi_sz, mem_sz)::rest) abi_offset vyper_offset =
     (let is_dyn = dec_info_needs_offset ei in
      do elem_src <-
-          compile_getelemptr_abi src_op is_dyn abi_offset load_opc hi_op;
+          compile_getelemptr_abi src_op is_dyn abi_offset load_opc base_op
+            hi_op;
         elem_dst <- emit_op ADD [dst; Lit (n2w vyper_offset)];
         compile_abi_decode_to_buf elem_dst elem_src
-                       load_opc hi_op ei;
-        compile_abi_decode_complex_elems dst src_op load_opc hi_op
+                       load_opc base_op hi_op ei;
+        compile_abi_decode_complex_elems dst src_op load_opc base_op hi_op
           rest (abi_offset + abi_sz) (vyper_offset + mem_sz)
      od) ∧
 
   compile_abi_decode_dyn_loop (dst:operand) (src_op:operand)
-    (load_opc:opcode) (hi_op:operand)
+    (load_opc:opcode) (base_op:operand) (hi_op:operand)
     (elem_info:abi_dec_info) (elem_abi_sz:num) (elem_mem_sz:num)
     (i_ptr:operand) (cnt:operand) =
     (let is_dyn_elem = dec_info_needs_offset elem_info in
      do hdr_lbl <- fresh_label "dec_dyn_hdr";
         body_lbl <- fresh_label "dec_dyn_body";
         exit_lbl <- fresh_label "dec_dyn_exit";
-        emit_inst JMP [Label hdr_lbl] [];
+    emit_inst JMP [Label hdr_lbl] [];
         new_block hdr_lbl;
         i_op <- emit_op MLOAD [i_ptr];
         (* Reload across the loop header exactly as pinned Python does. *)
-        cnt_hdr <- emit_op load_opc [src_op];
+        src_addr <- compile_abi_dec_addr base_op src_op;
+        cnt_hdr <- emit_op load_opc [src_addr];
         cmp <- emit_op LT [i_op; cnt_hdr];
         done_op <- emit_op ISZERO [cmp];
         emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] [];
@@ -572,14 +631,14 @@ Definition compile_abi_decode_to_buf_def:
         elem_src <- emit_op ADD [src_data; src_off];
         actual_src <-
           (if is_dyn_elem then
-             compile_abi_decode_dyn_elem_ptr load_opc elem_src src_data
-               hi_op elem_abi_sz
+             compile_abi_decode_dyn_elem_ptr load_opc base_op elem_src
+               src_data hi_op elem_abi_sz
            else return elem_src);
         dst_data <- emit_op ADD [dst; Lit 32w];
         dst_off <- emit_op MUL [i_op2; Lit (n2w elem_mem_sz)];
         elem_dst <- emit_op ADD [dst_data; dst_off];
         compile_abi_decode_to_buf elem_dst actual_src
-                     load_opc hi_op elem_info;
+                     load_opc base_op hi_op elem_info;
         new_i <- emit_op ADD [i_op2; Lit 1w];
         emit_void MSTORE [i_ptr; new_i];
         emit_inst JMP [Label hdr_lbl] [];
@@ -589,10 +648,10 @@ Definition compile_abi_decode_to_buf_def:
 Termination
   WF_REL_TAC `inv_image ($< LEX $<)
     (λx. case x of
-       INL (dst,src,lopc,hi,info) => (abi_dec_info_size info, 1)
-     | INR (INL (dst,src,lopc,hi,elems,ao,vo)) =>
+       INL (dst,src,lopc,bop,hi,info) => (abi_dec_info_size info, 1)
+     | INR (INL (dst,src,lopc,bop,hi,elems,ao,vo)) =>
          (list_size (pair_size abi_dec_info_size
            (pair_size (λx. x) (λ(x:num). x))) elems, 0)
-     | INR (INR (dst,src,lopc,hi,ei,asz,msz,ip,cnt)) =>
+     | INR (INR (dst,src,lopc,bop,hi,ei,asz,msz,ip,cnt)) =>
          (abi_dec_info_size ei, 2))`
 End

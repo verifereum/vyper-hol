@@ -330,7 +330,7 @@ Definition compile_decode_args_def:
                      [Lit (n2w base_adj); Lit (n2w (offset - base_adj))];
                    offset_val <- emit_op load_opc [static_src];
                    actual_src <- emit_op ADD [Lit (n2w base_adj); offset_val];
-                   compile_abi_decode_to_buf dst actual_src load_opc
+                   compile_abi_decode_to_buf dst actual_src load_opc (Lit 0w)
                      (if load_opc = CALLDATALOAD then Lit 0w else hi_op)
                      dec_info;
                    compile_decode_args cenv rest (offset + abi_size)
@@ -351,7 +351,7 @@ Definition compile_decode_args_def:
                 do src <- emit_op ADD
                           [Lit (n2w base_adj);
                            Lit (n2w (offset - base_adj))];
-                   compile_abi_decode_to_buf dst src load_opc
+                   compile_abi_decode_to_buf dst src load_opc (Lit 0w)
                      (if load_opc = CALLDATALOAD then Lit 0w else hi_op)
                      dec_info;
                    compile_decode_args cenv rest (offset + abi_size)
@@ -490,7 +490,7 @@ Definition compile_init_kwargs_def:
         do offset_val <- emit_op CALLDATALOAD [Lit (n2w calldata_offset)];
            actual_src <- emit_op ADD [Lit 4w; offset_val];
            compile_abi_decode_to_buf alloca_ptr actual_src
-             CALLDATALOAD hi_op dec_info;
+             CALLDATALOAD (Lit 0w) hi_op dec_info;
            compile_init_kwargs cenv rest (calldata_offset + abi_sz)
                                (kwargs_from_calldata - 1) hi_op
         od
@@ -499,7 +499,7 @@ Definition compile_init_kwargs_def:
         let src = Lit (n2w (4 + calldata_offset)) in
         let abi_sz = abi_embedded_static_size cenv.ce_struct_fields kwarg_type in
         do compile_abi_decode_to_buf alloca_ptr src
-             CALLDATALOAD hi_op dec_info;
+             CALLDATALOAD (Lit 0w) hi_op dec_info;
            compile_init_kwargs cenv rest (calldata_offset + abi_sz)
                                (kwargs_from_calldata - 1) hi_op
         od
