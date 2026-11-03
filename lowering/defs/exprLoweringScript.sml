@@ -2523,6 +2523,11 @@ Definition compile_create_snapshot_def:
             do compile_slot_to_memory (vv_operand vv) tmp.buf_operand
                  ((mem_size + 31) DIV 32) LocTransient;
                return () od
+        | SOME LocCode =>
+            do compile_imm_copy_to_memory cenv.ce_is_ctor cenv.ce_imm_alloca
+                 (vv_operand vv) tmp.buf_operand
+                 ((type_memory_bytes cenv (vv_type vv) + 31) DIV 32) 0;
+               return () od
         | _ =>
             do len <- emit_op MLOAD [vv_operand vv];
                size <- emit_op ADD [len; Lit 32w];
