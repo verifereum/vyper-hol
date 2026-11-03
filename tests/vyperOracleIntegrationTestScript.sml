@@ -145,7 +145,7 @@ Definition integration_defaults_constants_observe_def:
       integration_machine (integration_tx "__init__") mods [] in
     r = INL NoneV /\
     integration_request_fields rqs =
-      [(20w,0,[],F,3,2w,4w); (10w,7,[],F,17,9w,8w)] /\
+      [(0x99w,0,[],F,3,2w,4w); (10w,7,[],F,17,9w,8w)] /\
     integration_machine_snapshot 23 9w 8w
       (cpscv_adopted_logs ++ [<|logger := 11w; topics := [1w]; data := [8w]|>]) am /\
     (case loaded of INR _ => F | INL (am,rqs) =>
