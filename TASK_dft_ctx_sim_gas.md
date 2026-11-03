@@ -84,12 +84,21 @@ holbuild -j4 build o1ContractDftTheory
   dftPermSimScript.sml / dftBlockSimScript.sml / dftIndexedExecScript.sml are the existing DFT
   execution infrastructure.
 
-- The same-state version of the block lift for the old (constant) GAS
-  semantics is being proved on git branch `bot/opus/seq-515-dft-contract`
-  (`dft_run_block_same_context` in dftRunRelScript.sml, with helper theories
-  dftAvailability, dftSuccessSwap, dftStoppingSwap). Read it with
-  `git show bot/opus/seq-515-dft-contract:<path>` and reuse its structure;
-  it is not in this checkout.
+- The same-state block lift, proved for the old semantics where GAS read a
+  constant, is merged into this checkout: `dft_run_block_same_context` and
+  `dft_run_blocks_rel` in dftRunRelScript.sml, with helper theories
+  dftGuards, dftAvailability, dftSuccessSwap, dftStoppingSwap,
+  dftExternalFrame and additions to dftIndexedExec. Nothing outside those
+  theories consumes them. Under the current semantics GAS pops
+  `vs_gas_readings`, so parts of that proof no longer hold as stated: the
+  first build failure is `dft_empty_write_ok_updates` (dftGuardsScript.sml),
+  whose GAS case needs `t = s`, and the same-state block and run theorems are
+  false whenever DFT reorders two GAS reads or a GAS read and an INVOKE.
+  Port what you need: restate or delete their internal lemmas (exclude GAS
+  where a lemma is about state-neutral instructions, or move to a gas
+  variant), and replace the same-state statements with the gas form. Their
+  statements are not frozen; every theory you leave in the build must build
+  with no cheat.
 - DFT's old `full_dep`-based execution proof was dropped from
   dftCorrectnessScript.sml: its premise `dft_schedule_safe` is false
   (`dft_schedule_safe_false`), so `dft_pass_correct` is closed vacuously.
