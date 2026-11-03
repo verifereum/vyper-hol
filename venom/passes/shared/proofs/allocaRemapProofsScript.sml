@@ -1152,8 +1152,14 @@ Resume exec_alloca_preserves_remap[non_overlap_s2]:
 QED
 
 Resume exec_alloca_preserves_remap[sizes]:
+  qpat_x_assum `alloca_remap_frame _ = alloca_remap_frame _` mp_tac >>
+  simp_tac (bool_ss ++ rewrites
+    [venom_state_component_equality, venom_state_accfupds,
+     combinTheory.K_THM]) [alloca_remap_frame_def] >>
+  strip_tac >> simp[] >>
   rpt strip_tac >>
-  Cases_on `inst.inst_id = aid` >> fs[]
+  Cases_on `inst.inst_id = aid` >> full_simp_tac std_ss [] >>
+  first_x_assum irule >> simp[]
 QED
 
 Finalise exec_alloca_preserves_remap
