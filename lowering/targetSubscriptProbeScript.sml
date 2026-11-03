@@ -1,7 +1,7 @@
 (* Relation-level probes only: not a counterexample to target_case. *)
 Theory targetSubscriptProbe
 Ancestors
-  moduleLowering moduleLoweringProps venomStepProps vyperCompiler compileEnv vyperStoragePlaceRegion vyperStorageLayoutSafety vfmState
+  venomMemProps moduleLowering moduleLoweringProps venomStepProps vyperCompiler compileEnv vyperStoragePlaceRegion vyperStorageLayoutSafety vfmState
   words finite_map combin vyperValue targetSubscriptSim
   emitHelperProps emitHelper exprLoweringProps venomExecSemantics venomState venomInst
   fragExec vyperInterpreter vyperContext vyperState vyperStorageBackend exprSimHyps
@@ -1857,4 +1857,120 @@ Proof
   drule_all probe_word_load_exit_block >>
   disch_then (fn th => rewrite_tac[th]) >>
   simp[jump_to_def, probe_word_load_exit_state_def]
+QED
+
+Theorem probe_word_load_storage_frame:
+  !s i bufaddr.
+    contract_storage (probe_word_load_round s i bufaddr) = contract_storage s
+Proof
+  rewrite_tac[probe_word_load_round_def, probe_word_load_state_def,
+       probe_word_load_cond_state_def, LET_THM, contract_storage_def,
+       jump_to_def, update_var_def, mstore_def] >> simp[]
+QED
+
+Theorem probe_word_load_round_memory:
+  !s i bufaddr.
+    (probe_word_load_round s i bufaddr).vs_memory =
+      (mstore (w2n (bufaddr + i * 32w)) (sload (3w + i) s) s).vs_memory
+Proof
+  simp[probe_word_load_round_def, probe_word_load_state_def,
+       probe_word_load_cond_state_def, sload_def, contract_storage_def,
+       jump_to_def, update_var_def, mstore_def]
+QED
+
+Theorem probe_word_load_cond_storage_frame:
+  !s i lbl.
+    contract_storage (jump_to lbl (probe_word_load_cond_state s i)) =
+      contract_storage s
+Proof
+  simp[contract_storage_def, jump_to_def,
+       probe_word_load_cond_state_def, update_var_def]
+QED
+
+Theorem probe_word_loaded_storage_frame:
+  !s bufaddr.
+    contract_storage (probe_word_loaded_state s bufaddr) = contract_storage s
+Proof
+  simp[probe_word_loaded_state_def, probe_word_load_cond_storage_frame,
+       probe_word_load_storage_frame]
+QED
+
+Theorem probe_word_load_round_mload:
+  !s i bufaddr p.
+    mload p (probe_word_load_round s i bufaddr) =
+      mload p (mstore (w2n (bufaddr + i * 32w)) (sload (3w + i) s) s)
+Proof
+  rewrite_tac[mload_def, probe_word_load_round_memory]
+QED
+
+Theorem probe_word_load_cond_mload:
+  !s i lbl p.
+    mload p (jump_to lbl (probe_word_load_cond_state s i)) = mload p s
+Proof
+  simp[mload_def, jump_to_def, probe_word_load_cond_state_def, update_var_def]
+QED
+
+Theorem probe_word_loaded_header:
+  !s bufaddr.
+    regions_disjoint (w2n (bufaddr + 64w), 32) (w2n bufaddr, 32) /\
+    regions_disjoint (w2n (bufaddr + 32w), 32) (w2n bufaddr, 32) ==>
+    mload (w2n bufaddr) (probe_word_loaded_state s bufaddr) = sload 3w s
+Proof
+  rpt strip_tac >>
+  simp[probe_word_loaded_state_def, probe_word_load_cond_mload] >>
+  simp[Once probe_word_load_round_mload] >>
+  simp[word_mul_n2w, word_add_n2w, mload_mstore_disjoint] >>
+  simp[Once probe_word_load_round_mload] >>
+  simp[word_mul_n2w, word_add_n2w, mload_mstore_disjoint] >>
+  simp[probe_word_load_round_mload, word_mul_n2w, word_add_n2w,
+       WORD_ADD_0, mload_mstore_same]
+QED
+
+Theorem probe_word_entry_observations:
+  !s.
+    lookup_var "%0" (probe_word_entry_state s) = SOME s.vs_return_pc_token /\
+    lookup_var "%2" (probe_word_entry_state s) = SOME (n2w (s.vs_alloca_next + 32)) /\
+    lookup_var "%3" (probe_word_entry_state s) = SOME 0w /\
+    (probe_word_entry_state s).vs_halted = s.vs_halted /\
+    (probe_word_entry_state s).vs_memory = s.vs_memory /\
+    contract_storage (probe_word_entry_state s) = contract_storage s /\
+    (probe_word_entry_state s).vs_alloca_next = s.vs_alloca_next + 128 /\
+    (probe_word_entry_state s).vs_allocas = s.vs_allocas |+
+      (1, (s.vs_alloca_next, 32)) |+ (2, (s.vs_alloca_next + 32, 96))
+Proof
+  simp[probe_word_entry_state_def, lookup_var_update_var,
+       update_var_def, lookup_var_def, FLOOKUP_UPDATE, contract_storage_def]
+QED
+
+Theorem probe_word_loaded_observations:
+  !s bufaddr.
+    lookup_var "%2" (probe_word_loaded_state s bufaddr) = lookup_var "%2" s /\
+    lookup_var "%0" (probe_word_loaded_state s bufaddr) = lookup_var "%0" s /\
+    (probe_word_loaded_state s bufaddr).vs_halted = s.vs_halted /\
+    (probe_word_loaded_state s bufaddr).vs_current_bb = "@wcopy_exit_2"
+Proof
+  simp[probe_word_loaded_state_def, control_moves_keep_vars,
+       probe_word_load_cond_state_vars, probe_word_load_cond_state_halted,
+       probe_word_load_round_def, probe_word_load_state_vars,
+       probe_word_load_state_halted] >> simp[Once jump_to_def]
+QED
+
+Theorem probe_word_load_round_allocation_frame:
+  !s i bufaddr.
+    (probe_word_load_round s i bufaddr).vs_alloca_next = s.vs_alloca_next /\
+    (probe_word_load_round s i bufaddr).vs_allocas = s.vs_allocas /\
+    (probe_word_load_round s i bufaddr).vs_return_pc_token = s.vs_return_pc_token
+Proof
+  simp[probe_word_load_round_def, probe_word_load_state_def,
+       probe_word_load_cond_state_def, jump_to_def, update_var_def, mstore_def]
+QED
+
+Theorem probe_word_loaded_allocation_frame:
+  !s bufaddr.
+    (probe_word_loaded_state s bufaddr).vs_alloca_next = s.vs_alloca_next /\
+    (probe_word_loaded_state s bufaddr).vs_allocas = s.vs_allocas /\
+    (probe_word_loaded_state s bufaddr).vs_return_pc_token = s.vs_return_pc_token
+Proof
+  simp[probe_word_loaded_state_def, probe_word_load_cond_state_def,
+       jump_to_def, update_var_def, probe_word_load_round_allocation_frame]
 QED
