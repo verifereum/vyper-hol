@@ -3,7 +3,7 @@ Theory targetSubscriptSim
 Ancestors
   targetPlaceSim exprNoPopScopes exprLowering emitHelper compileEnv
   vyperAST pair exprSimOps exprSim exprLoweringProps loweringShapeDefs fragExec
-  vyperState vyperStorageBackend exprSimHyps vyperTypeSystem
+  vyperState vyperInterpreter vyperStorageBackend exprSimHyps vyperTypeSystem
   vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants
 Libs
   pairLib
@@ -229,4 +229,91 @@ Proof
   gvs[return_def, raise_def] >>
   drule_all vyperPlaceResultTypingTheory.evaluate_subscripts_append >>
   disch_then (qspec_then `[sb]` mp_tac) >> simp[]
+QED
+
+Theorem extend_place_memory_input[local]:
+  !cx pv sb es es' id path.
+    extend_place cx pv sb es = (INL (PlaceR (MemoryPlace id path)),es') ==>
+    ?prefix. pv = PlaceR (MemoryPlace id prefix)
+Proof
+  rpt gen_tac >> Cases_on `pv` >>
+  simp[oneline extend_place_def, bind_def, ignore_bind_def, return_def,
+       raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  all_tac >~ [`?prefix. p = MemoryPlace id prefix`]
+  >- (Cases_on `p` >>
+      gvs[bind_def, ignore_bind_def, return_def, extend_memory_place_def,
+          AllCaseEqs()] >>
+      rename1 `extend_storage_place cx tr slot tv sb _ = _` >>
+      Cases_on `sb`
+      >- (rename1 `ValueSubscript key` >> Cases_on `key` >> Cases_on `tv` >>
+          gvs[extend_storage_place_def, raise_def, bind_def, ignore_bind_def,
+              return_def, lift_option_type_def, AllCaseEqs()] >>
+          rpt (pairarg_tac >> gvs[return_def]) >>
+          gvs[return_def, AllCaseEqs()]) >>
+      Cases_on `tv` >>
+      gvs[extend_storage_place_def, raise_def, bind_def, ignore_bind_def,
+          return_def, lift_option_type_def, AllCaseEqs()] >>
+      rpt (pairarg_tac >> gvs[return_def]) >>
+          gvs[return_def, AllCaseEqs()]) >>
+  Cases_on `sb` >> gvs[raise_def] >>
+  pop_assum mp_tac >>
+  simp[value_type_CASE_rator, bind_def, lift_option_type_def,
+       return_def, raise_def, AllCaseEqs()]
+QED
+
+Theorem eval_base_place_memory_live:
+  !bt cx es es1 id path.
+    ~target_has_pop bt /\
+    eval_base_place cx bt es = (INL (PlaceR (MemoryPlace id path)),es1) ==>
+    ?entry v. lookup_scopes id es1.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value path = INL v
+Proof
+  gen_tac >> measureInduct_on `base_assignment_target_size bt` >>
+  Cases_on `bt` >> rpt gen_tac
+  >- (simp[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
+           type_check_def, assert_def, check_def, return_def, raise_def,
+           AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+      gvs[optionTheory.IS_SOME_EXISTS] >>
+      simp[evaluate_subscripts_def])
+  >- (rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
+      simp[Once evaluate_def, lookup_global_def, bind_def,
+           lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+      rpt strip_tac >>
+      gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
+          var_decl_info_CASE_rator, bind_def, lift_option_type_def,
+          return_def, raise_def, AllCaseEqs()])
+  >- (rename1 `SubscriptTarget bt idx` >>
+      simp[target_has_pop_def, Once evaluate_def, bind_def, AllCaseEqs()] >>
+      strip_tac >> gvs[] >>
+      drule extend_place_memory_input >> strip_tac >> gvs[] >>
+      `~target_has_pop bt /\ ~expr_has_pop idx` by
+        gvs[target_has_pop_def, expr_has_pop_def,
+            supportedExprTraverseTheory.supported_expr_exists_def] >>
+      drule_all eval_expr_nopop_scopes >> strip_tac >>
+      drule read_result_state >> strip_tac >> gvs[] >>
+      first_x_assum (qspec_then `bt` mp_tac) >>
+      simp[expr_size_def] >>
+      disch_then drule_all >> strip_tac >>
+      drule_at (Pat `extend_place _ _ _ _ = _`) extend_place_memory_live >>
+      simp[] >> disch_then drule_all >> strip_tac >> gvs[] >> metis_tac[]) >>
+  rename1 `AttributeTarget bt fld` >>
+  simp[target_has_pop_def, Once evaluate_def, bind_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  drule extend_place_memory_input >> strip_tac >> gvs[] >>
+  `~target_has_pop bt` by
+    gvs[target_has_pop_def, supportedExprTraverseTheory.supported_expr_exists_def] >>
+  first_x_assum (qspec_then `bt` mp_tac) >> simp[expr_size_def] >>
+  disch_then drule_all >> strip_tac >>
+  drule_all extend_place_memory_live >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem eval_base_place_memory_live_scopes_frame:
+  !bt cx es es1 es2 id path.
+    ~target_has_pop bt /\
+    eval_base_place cx bt es = (INL (PlaceR (MemoryPlace id path)),es1) /\
+    es2.scopes = es1.scopes ==>
+    ?entry v. lookup_scopes id es2.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value path = INL v
+Proof
+  rpt strip_tac >> drule_all eval_base_place_memory_live >> simp[]
 QED
