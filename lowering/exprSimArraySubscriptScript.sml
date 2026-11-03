@@ -1184,3 +1184,39 @@ Proof
   strip_tac >>
   first_x_assum drule_all >> simp[]
 QED
+
+Theorem array_select_size_bound:
+  val_wf (ArrayTV evt bd) arr /\
+  evaluate_subscripts (ArrayTV evt bd) arr
+    [ValueSubscript (IntV (&j))] = INL v ==>
+  (case bd of Fixed n => 0 | Dynamic n => 32) +
+    j * type_memory_size evt + type_memory_size evt <=
+    val_footprint (ArrayTV evt bd) arr
+Proof
+  Cases_on `arr` >> simp[valueEncodingTheory.val_wf_def, evaluate_subscripts_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >> Cases_on `bd` >>
+  simp[valueEncodingTheory.val_wf_def, evaluate_subscripts_def,
+       vyperValueOperationTheory.array_index_def, AllCaseEqs(),
+       listTheory.oEL_THM, val_footprint_def,
+       valueEncodingTheory.type_memory_size_def] >>
+  rpt strip_tac >> gvs[] >>
+  `SUC j <= n` by decide_tac >>
+  `SUC j * type_memory_size evt <= n * type_memory_size evt` by
+    (irule arithmeticTheory.LESS_MONO_MULT >> simp[]) >>
+  qpat_x_assum `SUC j * _ <= _` mp_tac >>
+  simp_tac bool_ss [arithmeticTheory.MULT_CLAUSES] >> decide_tac
+QED
+
+Theorem array_select_footprint_bound:
+  val_wf (ArrayTV evt bd) arr /\
+  evaluate_subscripts (ArrayTV evt bd) arr
+    [ValueSubscript (IntV (&j))] = INL v ==>
+  (case bd of Fixed n => 0 | Dynamic n => 32) +
+    j * type_memory_size evt + val_footprint evt v <=
+    val_footprint (ArrayTV evt bd) arr
+Proof
+  strip_tac >>
+  `val_wf evt v` by (drule_all array_select_val_wf >> simp[]) >>
+  drule_all array_select_size_bound >>
+  drule_all val_footprint_le >> decide_tac
+QED
