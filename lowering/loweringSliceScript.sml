@@ -242,26 +242,61 @@ Theorem immutable_admissible_val_wf:
      kvs_val_wf kvs tv n) /\
   (!vs tvs. immutable_tuple_admissible tvs vs ==> tuple_val_wf vs tvs)
 Proof
-  ho_match_mp_tac val_wf_ind >> rpt conj_tac >> rpt gen_tac >>
-  TRY (qmatch_goalsub_rename_tac
-         `immutable_value_admissible tv _ ==> val_wf tv _` >> Cases_on `tv`) >>
-  TRY (qmatch_goalsub_rename_tac `BaseTV bt` >> Cases_on `bt`) >>
-  TRY (qmatch_goalsub_rename_tac `BytesT bound` >> Cases_on `bound`) >>
-  TRY (qmatch_goalsub_rename_tac `ArrayTV _ bound` >> Cases_on `bound`) >>
-  TRY (qmatch_goalsub_rename_tac `immutable_fields_admissible tvs _` >>
-       Cases_on `tvs` >>
-       TRY (qmatch_goalsub_rename_tac
-              `immutable_fields_admissible (field::_) _` >>
-            PairCases_on `field`)) >>
-  TRY (qmatch_goalsub_rename_tac `immutable_tuple_admissible tvs _` >>
-       Cases_on `tvs`) >>
-  simp[immutable_value_admissible_def, val_wf_def, type_memory_size_def,
-       AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-  TRY (first_x_assum irule >> simp[] >> NO_TAC) >>
-  FIRST [BasicProvers.TOP_CASE_TAC >> gvs[immutable_value_admissible_def],
-         fs[ETA_THM] >> NO_TAC,
-         metis_tac[immutableEncodingProofsTheory.immutable_capacity_roundup,
-                   arithmeticTheory.LESS_EQ_TRANS]]
+  ho_match_mp_tac val_wf_ind >> rpt conj_tac
+  >- (rpt gen_tac >> Cases_on `tv` >>
+      simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
+      rename1 `BaseTV bt` >> Cases_on `bt` >>
+      simp[immutable_value_admissible_def, type_memory_size_def])
+  >- (rpt gen_tac >> Cases_on `tv` >>
+      simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
+      rename1 `BaseTV bt` >> Cases_on `bt` >>
+      simp[immutable_value_admissible_def, type_memory_size_def])
+  >- (rpt gen_tac >> Cases_on `tv` >>
+      simp[immutable_value_admissible_def, val_wf_def, type_memory_size_def,
+           AllCaseEqs()])
+  >- (rpt gen_tac >> Cases_on `tv` >>
+      simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
+      rename1 `BaseTV bt` >> Cases_on `bt` >>
+      simp[immutable_value_admissible_def, type_memory_size_def])
+  >- (rpt gen_tac >> Cases_on `tv` >>
+      simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
+      rename1 `BaseTV bt` >> Cases_on `bt` >> simp[] >>
+      rename1 `BytesT bound` >> Cases_on `bound` >>
+      simp[type_memory_size_def] >> rpt strip_tac >>
+      metis_tac[immutableEncodingProofsTheory.immutable_capacity_roundup,
+                arithmeticTheory.LESS_EQ_TRANS])
+  >- (rpt gen_tac >> Cases_on `tv` >>
+      simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
+      rename1 `BaseTV bt` >> Cases_on `bt` >>
+      simp[type_memory_size_def] >> rpt strip_tac >>
+      metis_tac[immutableEncodingProofsTheory.immutable_capacity_roundup,
+                arithmeticTheory.LESS_EQ_TRANS])
+  >- simp[val_wf_def]
+  >- (rpt gen_tac >> Cases_on `tv` >>
+      simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()])
+  >- (rpt gen_tac >> Cases_on `tv` >>
+      simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
+      BasicProvers.TOP_CASE_TAC >> simp[ETA_THM] >>
+      rpt strip_tac >> first_x_assum irule >> fs[EVERY_MEM])
+  >- (rpt gen_tac >> Cases_on `tv` >>
+      simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
+      BasicProvers.TOP_CASE_TAC >> simp[ETA_THM] >>
+      rpt strip_tac >> first_x_assum irule >> fs[EVERY_MEM])
+  >- (rpt gen_tac >> Cases_on `tv` >>
+      simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
+      BasicProvers.TOP_CASE_TAC >> simp[])
+  >- simp[val_wf_def]
+  >- (rpt gen_tac >> Cases_on `tvs` >>
+      simp[immutable_value_admissible_def, val_wf_def] >>
+      BasicProvers.TOP_CASE_TAC >>
+      simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()])
+  >- simp[val_wf_def]
+  >- simp[val_wf_def]
+  >- simp[val_wf_def]
+  >- simp[val_wf_def]
+  >- simp[val_wf_def]
+  >> rpt gen_tac >> Cases_on `tvs` >>
+     simp[immutable_value_admissible_def, val_wf_def]
 QED
 
 (* Transport the semantic immutable relation by capacity-sized memory
