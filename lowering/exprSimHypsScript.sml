@@ -156,8 +156,10 @@
  *     n < 2 ** 256.  return_buffer_ok is the same limit for an external
  *     function's return buffer.  lower_vyper_runtime_unit checks both
  *     (compileVyper's fn_allocs_ok).
- *   - The outcomes clause (outcomes_accounts_typed): every successful call
- *     outcome still to consume adopts runtime well-typed accounts.
+ *   - The outcomes clause (outcomes_accounts_typed): every call outcome
+ *     still to consume has fewer than 2**256 bytes of return data, which
+ *     RETURNDATASIZE reads as a word (raw_call stores the length it reads),
+ *     and every successful one adopts runtime well-typed accounts.
  *     take_call_outcome raises "call outcome accounts" on a successful
  *     nonstatic outcome whose accounts are not, while Venom's CALL adopts
  *     it and goes on, so without the clause send and extcall do not
@@ -253,15 +255,18 @@ Libs
 
 (* ===== The hypotheses ===== *)
 
-(* Every successful outcome still to consume adopts accounts that are
-   runtime well typed, as e2eDefs's call_outcomes_ok asks of the initial
-   ones.  The evaluator only drops outcomes from the front
-   (vyperEvalOutcomeSuffix), so this carries from one operand to the next. *)
+(* Every outcome still to consume has fewer than 2**256 bytes of return
+   data, which Venom's RETURNDATASIZE reads as a word, and every successful
+   one adopts accounts that are runtime well typed, as e2eDefs's
+   call_outcomes_ok asks of the initial ones.  The evaluator only drops
+   outcomes from the front (vyperEvalOutcomeSuffix), so this carries from
+   one operand to the next. *)
 Definition outcomes_accounts_typed_def:
   outcomes_accounts_typed (oos : call_outcome list option) <=>
     !os. oos = SOME os ==>
-         EVERY (\oc. oc.co_success ==>
-                     accounts_runtime_well_typed oc.co_accounts) os
+         EVERY (\oc. LENGTH oc.co_returnData < dimword(:256) /\
+                     (oc.co_success ==>
+                      accounts_runtime_well_typed oc.co_accounts)) os
 End
 
 (* A local's popped history is typed at its paths, and every key is an index
