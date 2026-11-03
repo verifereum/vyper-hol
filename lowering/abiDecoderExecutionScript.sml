@@ -704,3 +704,27 @@ Proof
        simp[jump_to_def, abi_decode_position_header_state_def, update_var_def]) >>
    Cases_on `j < ncount` >> simp[])
 QED
+
+Theorem abi_decode_emitted_position_header:
+  emit_op MLOAD [ip] st0 = (iop,st1) /\
+  compile_abi_dec_addr base_op src st1 = (addr,st2) /\
+  emit_op opc [addr] st2 = (cop,st3) /\
+  emit_op LT [iop;cop] st3 = (test,st4) /\
+  emit_op ISZERO [test] st4 = (done_op,st5) /\
+  emit_inst JNZ [done_op;Label exit_lbl;Label body_lbl] [] st5 = ((),st6) ==>
+  iop = Var (STRING #"%" (toString st0.cs_next_var)) /\
+  st6.cs_current_insts = st0.cs_current_insts ++
+    abi_decode_position_header_insts st0.cs_next_id ip src opc base_op st0.cs_next_var
+      body_lbl exit_lbl /\
+  st6.cs_next_var = st0.cs_next_var + 4 + abi_decode_position_header_delta base_op /\
+  st6.cs_next_id = st0.cs_next_id + 5 + abi_decode_position_header_delta base_op /\
+  st6.cs_blocks = st0.cs_blocks /\ st6.cs_current_bb = st0.cs_current_bb
+Proof
+  Cases_on `base_op = Lit 0w` >>
+  simp[abiEncoderTheory.compile_abi_dec_addr_def, emit_op_def, emit_inst_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
+       fresh_var_def, emit_def] >>
+  rpt strip_tac >>
+  gvs[abi_decode_position_header_insts_def, abi_decode_position_header_delta_def,
+      listTheory.APPEND_ASSOC]
+QED
