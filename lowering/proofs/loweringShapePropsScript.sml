@@ -20,8 +20,13 @@
  *   compile_generate_runtime_shape — the whole runtime block stream
  *   package_internal_blocks_segments
  *   run_lowering_source_unit_ok
- *   supported_function_body_shape, package_*_shape_ok — supported_program
- *                                gives the generator side conditions
+ *   runtime_bodies_shape_ok    — no expr_shape_root in runtime bodies
+ *   supported_function_body_shape — supported_program gives it
+ *   package_*_shape_ok         — runtime_bodies_shape_ok gives the generator
+ *                                side conditions
+ *   internal_descriptors_ok    — distinct names give distinct, legal
+ *                                internal labels
+ *   lower_vyper_runtime_unit_source_unit_ok_shape — S2 from the two facts
  *)
 Theory loweringShapeProps
 Ancestors

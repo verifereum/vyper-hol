@@ -1,6 +1,7 @@
 (* S2 from the type checker: a checked contract lowers to an O1 source unit
-   once it avoids the expressions the checker allows but the unit shape
-   rejects (msg.gas as a value, raw_call).
+   once it avoids msg.gas as a value and raw_call.  The checker allows both;
+   the unit shape rejects msg.gas values and delegate or calldata raw_call,
+   and the body-shape proof has no case for plain raw_call yet.
    TOP-LEVEL: lower_vyper_runtime_unit_source_unit_ok_checked,
    supported_program_raw_shape_free_program. *)
 Theory loweringShapeSource
