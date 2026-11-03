@@ -523,3 +523,174 @@ Proof
   >- (fs[no_phis_def, EVERY_MEM] >> metis_tac[]) >>
   qexistsl [`bb''`, `inst`] >> simp[]
 QED
+
+Theorem chain_phi_no_old_a:
+  wf_ssa fn /\ wf_function fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  can_merge_blocks fn a b /\ MEM bb fn.fn_blocks /\ bb.bb_label <> b.bb_label /\
+  MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI ==>
+  ~MEM a.bb_label (MAP FST (phi_pairs inst.inst_operands))
+Proof
+  strip_tac >>
+  `phi_edge_uses_wf fn bb inst` by
+    (fs[wf_ssa_def, def_dominates_uses_def] >> metis_tac[]) >>
+  `!pred. fn_cfg_edge fn pred bb.bb_label <=>
+    ?p. MEM p (phi_pairs inst.inst_operands) /\ FST p = pred` by
+    fs[phi_edge_uses_wf_def] >>
+  strip_tac >> `fn_cfg_edge fn a.bb_label bb.bb_label` by
+    (fs[MEM_MAP] >> metis_tac[]) >>
+  `bb_succs a = [b.bb_label]` by fs[can_merge_blocks_def] >>
+  fs[fn_cfg_edge_def] >>
+  `bb' = a` by metis_tac[same_label_same_block] >> gvs[]
+QED
+
+Theorem phi_subst_label_distinct:
+  phi_well_formed inst.inst_operands /\
+  ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands)) /\
+  ~MEM new (MAP FST (phi_pairs inst.inst_operands)) ==>
+  ALL_DISTINCT (MAP FST (phi_pairs (subst_label_inst old new inst).inst_operands))
+Proof
+  strip_tac >> simp[subst_label_inst_def, phi_pairs_subst_label_ops,
+    MAP_MAP_o, combinTheory.o_DEF] >>
+  `MAP (\p. if FST p = old then new else FST p) (phi_pairs inst.inst_operands) =
+   MAP (\p. if p = old then new else p) (MAP FST (phi_pairs inst.inst_operands))` by
+    simp[MAP_MAP_o, combinTheory.o_DEF] >>
+  asm_rewrite_tac[] >> irule ALL_DISTINCT_MAP_INJ >> simp[] >>
+  rpt gen_tac >> strip_tac >> Cases_on `x = old` >> Cases_on `y = old` >> gvs[]
+QED
+
+Theorem chain_merge_phi_distinct:
+  wf_ssa fn /\ wf_function fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  can_merge_blocks fn a b /\
+  MEM bb' (update_succ_phi_labels b.bb_label a.bb_label
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+    (bb_succs (merge_blocks a b))) /\
+  MEM inst' bb'.bb_instructions /\ inst'.inst_opcode = PHI ==>
+  ALL_DISTINCT (MAP FST (phi_pairs inst'.inst_operands))
+Proof
+  strip_tac >>
+  `bb'.bb_label <> b.bb_label` by
+    (qmatch_asmsub_abbrev_tac `MEM bb' bs` >>
+     `MEM bb'.bb_label (fn_labels (fn with fn_blocks := bs))` by
+       (simp[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+     fs[Abbr `bs`, chain_merge_fn_labels, MEM_FILTER]) >>
+  drule_all chain_merge_phi_source_exact >> strip_tac >>
+  `phi_edge_uses_wf fn bb inst` by
+    (fs[wf_ssa_def, def_dominates_uses_def] >> metis_tac[]) >>
+  `~MEM a.bb_label (MAP FST (phi_pairs inst.inst_operands))` by
+    (irule chain_phi_no_old_a >> metis_tac[]) >>
+  `phi_well_formed inst.inst_operands /\
+   ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands))` by
+    fs[phi_edge_uses_wf_def] >>
+  drule_all phi_subst_label_distinct >>
+  disch_then (qspec_then `b.bb_label` assume_tac) >>
+  Cases_on `MEM bb'.bb_label (bb_succs (merge_blocks a b))` >> gvs[]
+QED
+
+Theorem chain_merge_edge_sources:
+  wf_function fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  can_merge_blocks fn a b /\ dst <> b.bb_label /\
+  fn' = (fn with fn_blocks := update_succ_phi_labels b.bb_label a.bb_label
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+    (bb_succs (merge_blocks a b))) ==>
+  (fn_cfg_edge fn' pred dst <=>
+   ?q. fn_cfg_edge fn q dst /\ pred = (if q = b.bb_label then a.bb_label else q))
+Proof
+  strip_tac >>
+  `a.bb_label <> b.bb_label /\ bb_succs a = [b.bb_label]` by
+    fs[can_merge_blocks_def] >>
+  `~fn_cfg_edge fn a.bb_label dst` by
+    (strip_tac >> fs[fn_cfg_edge_def] >>
+     `bb = a` by metis_tac[same_label_same_block] >> gvs[]) >>
+  `~fn_cfg_edge fn' b.bb_label dst` by
+    (strip_tac >>
+     `MEM b.bb_label (fn_labels fn')` by
+       (gvs[fn_cfg_edge_def, fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+     gvs[chain_merge_fn_labels, MEM_FILTER]) >>
+  Cases_on `pred = b.bb_label` >- (gvs[] >> metis_tac[]) >>
+  `fn_cfg_edge fn' pred dst <=>
+    if pred = a.bb_label then fn_cfg_edge fn b.bb_label dst
+    else fn_cfg_edge fn pred dst` by
+    (gvs[] >> irule chain_merge_edge >> simp[]) >>
+  asm_rewrite_tac[] >> Cases_on `pred = a.bb_label` >> gvs[] >> metis_tac[]
+QED
+
+Theorem phi_subst_label_pred:
+  phi_well_formed inst.inst_operands ==>
+  ((?p. MEM p (phi_pairs (subst_label_inst old new inst).inst_operands) /\
+        FST p = pred) <=>
+   ?q. (?p. MEM p (phi_pairs inst.inst_operands) /\ FST p = q) /\
+       pred = (if q = old then new else q))
+Proof
+  strip_tac >> simp[subst_label_inst_def, phi_pairs_subst_label_ops, MEM_MAP] >>
+  eq_tac >> rpt strip_tac >> gvs[]
+  >- (rename1 `MEM pair (phi_pairs inst.inst_operands)` >>
+      qexists `FST pair` >> metis_tac[]) >>
+  rename1 `MEM pair (phi_pairs inst.inst_operands)` >>
+  qexists `(if FST pair = old then new else FST pair, SND pair)` >>
+  simp[] >> qexists `pair` >> simp[]
+QED
+
+Theorem chain_merge_phi_coverage:
+  wf_ssa fn /\ wf_function fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks := update_succ_phi_labels b.bb_label a.bb_label
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+    (bb_succs (merge_blocks a b))) /\
+  MEM bb' fn'.fn_blocks /\ MEM inst' bb'.bb_instructions /\ inst'.inst_opcode = PHI ==>
+  (fn_cfg_edge fn' pred bb'.bb_label <=>
+   ?p. MEM p (phi_pairs inst'.inst_operands) /\ FST p = pred)
+Proof
+  strip_tac >>
+  `bb'.bb_label <> b.bb_label` by
+    (`MEM bb'.bb_label (fn_labels fn')` by
+       (simp[NoAsms, fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+     gvs[chain_merge_fn_labels, MEM_FILTER]) >>
+  `?bb inst. MEM bb fn.fn_blocks /\ bb'.bb_label = bb.bb_label /\
+    MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
+    inst' = (if MEM bb'.bb_label (bb_succs (merge_blocks a b))
+             then subst_label_inst b.bb_label a.bb_label inst else inst)` by
+    (irule chain_merge_phi_source_exact >> gvs[]) >>
+  `phi_edge_uses_wf fn bb inst` by
+    (fs[wf_ssa_def, def_dominates_uses_def] >> metis_tac[]) >>
+  `phi_well_formed inst.inst_operands /\
+    (!p. fn_cfg_edge fn p bb'.bb_label <=>
+      ?pair. MEM pair (phi_pairs inst.inst_operands) /\ FST pair = p)` by
+    gvs[phi_edge_uses_wf_def] >>
+  `fn_cfg_edge fn' pred bb'.bb_label <=>
+    ?q. fn_cfg_edge fn q bb'.bb_label /\
+        pred = (if q = b.bb_label then a.bb_label else q)` by
+    (irule chain_merge_edge_sources >> simp[]) >>
+  asm_rewrite_tac[] >>
+  Cases_on `MEM bb'.bb_label (bb_succs (merge_blocks a b))`
+  >- (gvs[] >> simp[phi_subst_label_pred] >> metis_tac[]) >>
+  `b.bb_instructions <> []` by
+    metis_tac[wf_function_bb_well_formed, bb_well_formed_def] >>
+  `~fn_cfg_edge fn b.bb_label bb'.bb_label` by
+    (strip_tac >> fs[fn_cfg_edge_def] >>
+     `bb'' = b` by metis_tac[same_label_same_block] >>
+     gvs[bb_succs_merge_blocks]) >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem chain_merge_phi_shape:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks := update_succ_phi_labels b.bb_label a.bb_label
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+    (bb_succs (merge_blocks a b))) ==>
+  !bb inst. MEM bb fn'.fn_blocks /\ MEM inst bb.bb_instructions /\
+    inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands /\
+    ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands)) /\
+    (!pred. fn_cfg_edge fn' pred bb.bb_label <=>
+      ?p. MEM p (phi_pairs inst.inst_operands) /\ FST p = pred)
+Proof
+  strip_tac >>
+  `fn_inst_wf fn'` by
+    (gvs[] >> irule chain_merge_fn_inst_wf >> simp[]) >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (`inst_wf inst` by metis_tac[fn_inst_wf_def] >> gvs[inst_wf_def]) >>
+  conj_tac
+  >- (gvs[] >> drule_all chain_merge_phi_distinct >> simp[]) >>
+  gen_tac >> irule chain_merge_phi_coverage >> metis_tac[]
+QED
