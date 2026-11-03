@@ -732,7 +732,8 @@ QED
 
 (* ===== PLAN §2.1 call theorem: seven stage leaves, raw O1 source domain ===== *)
 (* Runtime immutable compilation remains available, but the raw O1 shape
-   theorem excludes DLOAD and therefore requires immutable_free_program. *)
+   theorem covers only static variable locations and therefore requires
+   immutable_free_program. *)
 
 Theorem vyper_call_correct:
   !policy tops deploy_bc runtime_bc am tx ret es.

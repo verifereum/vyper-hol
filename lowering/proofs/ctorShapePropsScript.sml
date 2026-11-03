@@ -1,7 +1,7 @@
 (* Constructor exit code satisfies the shared O1 source-shape interface. *)
 Theory ctorShapeProps
 Ancestors
-  loweringShapeProps loweringShapeDefs loweringShapeRules moduleLowering
+  ctorDecoderShape ctorRegisterShape loweringShapeProps loweringShapeDefs loweringShapeRules moduleLowering
   unitShapeDefs compileEnv emitHelper venomInst
 
 Theorem compile_constructor_epilogue_shape:

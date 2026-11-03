@@ -170,7 +170,7 @@ End
 
 Definition raw_opcode_ok_def:
   raw_opcode_ok op <=>
-    ~MEM op [ASSERT_UNREACHABLE; DLOAD; DLOADBYTES; DALLOCA; DRET;
+    ~MEM op [ASSERT_UNREACHABLE; DALLOCA; DRET;
              GETFMP; SETFMP; RETFMP; INITIAL_FMP; BUMP; FMP_PARAM; MEMTOP]
 End
 

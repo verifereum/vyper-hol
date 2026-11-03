@@ -880,8 +880,9 @@ QED
    builtin arities and distinct internal names; raw_shape_free_program
    excludes msg.gas values and raw_call (wider than the unit shape needs:
    a plain raw_call passes it, but the body-shape proof lacks that case).
-   Raw O1 shape excludes DLOAD; the immutable-free hypothesis restricts this
-   theorem's source domain, not the runtime immutable compiler. *)
+   The body-shape proof covers only static variable locations, so the
+   immutable-free hypothesis restricts this theorem's source domain, not the
+   runtime immutable compiler. *)
 Theorem lower_vyper_runtime_unit_source_unit_ok:
   !tops rpolicy unit layouts addr art.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
