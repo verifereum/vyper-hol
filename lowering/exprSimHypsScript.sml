@@ -431,16 +431,25 @@ Proof
 QED
 
 Theorem typed_byte_widths_mutual:
-  let W = (\env.
-    (!n ty. FLOOKUP env.var_types n = SOME ty ==> well_formed_type env.type_defs ty) /\
-    (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==> well_formed_vtype env.type_defs vt)) in
-  (!env e. well_typed_expr env e ==> W env ==> byte_widths_expr e) /\
-  (!env e. !vt. type_place_expr env e = SOME vt ==> W env ==>
+  (!env e. well_typed_expr env e ==> ((!n ty. FLOOKUP env.var_types n = SOME ty ==>
+      well_formed_type env.type_defs ty) /     (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+      well_formed_vtype env.type_defs vt)) ==> byte_widths_expr e) /\
+  (!env e. !vt. type_place_expr env e = SOME vt ==> ((!n ty. FLOOKUP env.var_types n = SOME ty ==>
+      well_formed_type env.type_defs ty) /     (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+      well_formed_vtype env.type_defs vt)) ==>
     byte_widths_expr e /\ well_formed_vtype env.type_defs vt) /\
-  (!env tgt. !vt. type_place_target env tgt = SOME vt ==> W env ==> byte_widths_target tgt) /\
-  (!env es. well_typed_exprs env es ==> W env ==> byte_widths_exprs es) /\
-  (!env opt. well_typed_opt env opt ==> W env ==> byte_widths_opt opt) /\
-  (!env kes. well_typed_named_exprs env kes ==> W env ==> byte_widths_named_exprs kes)
+  (!env tgt. !vt. type_place_target env tgt = SOME vt ==> ((!n ty. FLOOKUP env.var_types n = SOME ty ==>
+      well_formed_type env.type_defs ty) /     (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+      well_formed_vtype env.type_defs vt)) ==> byte_widths_target tgt) /\
+  (!env es. well_typed_exprs env es ==> ((!n ty. FLOOKUP env.var_types n = SOME ty ==>
+      well_formed_type env.type_defs ty) /     (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+      well_formed_vtype env.type_defs vt)) ==> byte_widths_exprs es) /\
+  (!env opt. well_typed_opt env opt ==> ((!n ty. FLOOKUP env.var_types n = SOME ty ==>
+      well_formed_type env.type_defs ty) /     (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+      well_formed_vtype env.type_defs vt)) ==> byte_widths_opt opt) /\
+  (!env kes. well_typed_named_exprs env kes ==> ((!n ty. FLOOKUP env.var_types n = SOME ty ==>
+      well_formed_type env.type_defs ty) /     (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+      well_formed_vtype env.type_defs vt)) ==> byte_widths_named_exprs kes)
 Proof
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   ho_match_mp_tac well_typed_expr_ind >> conj_tac
@@ -602,15 +611,18 @@ Proof
 QED
 
 Theorem type_stmts_byte_widths_mutual:
-  let W = \env.
-    (!n ty. FLOOKUP env.var_types n = SOME ty ==> well_formed_type env.type_defs ty) /\
-    (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
-      well_formed_vtype env.type_defs vt)
-  in
-    (!env ret s env'. W env /\ type_stmt env ret s = SOME env' ==>
-      W env' /\ ~supported_stmt_expr_exists (\e. ~byte_widths_expr e) s) /\
-    (!env ret ss env'. W env /\ type_stmts env ret ss = SOME env' ==>
-      W env' /\ ~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss)
+    (!env ret s env'. ((!n ty. FLOOKUP env.var_types n = SOME ty ==>
+      well_formed_type env.type_defs ty) /     (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+      well_formed_vtype env.type_defs vt)) /\ type_stmt env ret s = SOME env' ==>
+      ((!n ty. FLOOKUP env'.var_types n = SOME ty ==>
+      well_formed_type env'.type_defs ty) /     (!src id vt. FLOOKUP env'.toplevel_vtypes (src,id) = SOME vt ==>
+      well_formed_vtype env'.type_defs vt)) /\ ~supported_stmt_expr_exists (\e. ~byte_widths_expr e) s) /\
+    (!env ret ss env'. ((!n ty. FLOOKUP env.var_types n = SOME ty ==>
+      well_formed_type env.type_defs ty) /     (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+      well_formed_vtype env.type_defs vt)) /\ type_stmts env ret ss = SOME env' ==>
+      ((!n ty. FLOOKUP env'.var_types n = SOME ty ==>
+      well_formed_type env'.type_defs ty) /     (!src id vt. FLOOKUP env'.toplevel_vtypes (src,id) = SOME vt ==>
+      well_formed_vtype env'.type_defs vt)) /\ ~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss)
 Proof
   simp_tac bool_ss [LET_THM] >>
   ho_match_mp_tac type_stmt_ind >> conj_tac
