@@ -3,6 +3,7 @@ Ancestors
   cfgNormSupplyProofs cfgTransformProps cfgNormDefs cfgTransform venomExecProps venomInst venomWf
   sccpCorrectnessProofs finite_map venomFnScheduleRunner unitShapeDefs stateFrame
   analysisSimProofsBase analysisSimDefs cfgNormSim execEquivParamProps passSharedDefs
+  prevBbIndep
 
 Theorem find_and_split_supply_cases:
   !bbs fn s fn' changed s'.
@@ -2685,4 +2686,50 @@ Proof
       metis_tac[supply_operand_in_fn]) >>
   strip_tac >> first_x_assum irule >> simp[] >>
   irule supply_state_agree_state_equiv >> simp[]
+QED
+
+(* Previous-label normalization is needed only after parallel PHI entry. *)
+Theorem supply_step_nonterm_prev_bb:
+  inst.inst_opcode <> PHI /\ inst.inst_opcode <> INVOKE /\
+  ~is_terminator inst.inst_opcode ==>
+  step_inst fuel ctx inst (st with vs_prev_bb := p) =
+  exec_result_map_prev_bb (\s. s with vs_prev_bb := p)
+    (step_inst fuel ctx inst st)
+Proof
+  strip_tac >> simp[venomExecSemanticsTheory.step_inst_def] >>
+  irule step_inst_base_prev_bb_indep >> simp[]
+QED
+
+Theorem supply_state_agree_prev_bb:
+  supply_state_agree fn st (st' with vs_prev_bb := p) <=>
+  supply_state_agree fn st st'
+Proof
+  simp[supply_state_agree_def, stateFrameTheory.execution_frame_def,
+       venomStateTheory.lookup_var_def]
+QED
+
+Theorem supply_step_nonterm:
+  supply_state_agree fn st st' /\
+  st.vs_current_bb = st'.vs_current_bb /\
+  st.vs_inst_idx = st'.vs_inst_idx /\
+  inst.inst_opcode <> PHI /\ inst.inst_opcode <> INVOKE /\
+  ~is_terminator inst.inst_opcode /\
+  (!v. MEM (Var v) inst.inst_operands ==> MEM v (irSupply$fn_ir_vars fn)) ==>
+  lift_result
+    (\s t. supply_state_agree fn s t /\
+           s.vs_current_bb = t.vs_current_bb /\ s.vs_inst_idx = t.vs_inst_idx)
+    (supply_state_agree fn) (supply_state_agree fn)
+    (step_inst fuel ctx inst st) (step_inst fuel ctx inst st')
+Proof
+  strip_tac >>
+  `supply_state_agree fn st (st' with vs_prev_bb := st.vs_prev_bb)` by
+    simp[supply_state_agree_prev_bb] >>
+  drule supply_step_inst >>
+  disch_then (qspecl_then [`inst`,`fuel`,`ctx`] mp_tac) >>
+  simp[supply_step_nonterm_prev_bb] >>
+  Cases_on `step_inst fuel ctx inst st` >>
+  Cases_on `step_inst fuel ctx inst st'` >>
+  simp[exec_result_map_prev_bb_def, lift_result_def,
+       stateEquivTheory.state_equiv_def,
+       GSYM supply_state_agree_execution_equiv, supply_state_agree_prev_bb]
 QED
