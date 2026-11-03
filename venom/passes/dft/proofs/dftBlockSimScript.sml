@@ -1400,7 +1400,11 @@ Theorem gas_pair_commute:
              step_inst fuel ctx inst1 ss1 = OK v1 /\
              step_inst fuel ctx inst2 v1 = OK s21
 Proof
-  cheat
+  rpt strip_tac >>
+  gvs[gas_pair_def]
+  >- (irule gas_first_reorder >> metis_tac[])
+  >- (irule gas_first_reorder >> metis_tac[])
+  >- (irule gas_second_reorder >> metis_tac[])
 QED
 
 (* ================================================================
