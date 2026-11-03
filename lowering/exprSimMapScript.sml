@@ -392,3 +392,20 @@ Proof
   Cases_on `tr` >>
   gvs[exprSimTheory.vv_holds_def, slot_loc_def]
 QED
+
+Theorem mapping_subscript_index_pre:
+  (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
+   expr_map_pre cenv cx env (Subscript ann obj idx) es) /\
+  place_type cenv obj = MapPT kt vt /\
+  eval_expr cx obj es = (INL bres, em) ==>
+  expr_map_pre cenv cx env obj es /\
+  expr_sim_inv cenv cx env em /\
+  expr_body_pre cenv cx env idx em
+Proof
+  strip_tac >>
+  `expr_map_pre cenv cx env obj es` by
+    metis_tac[expr_body_pre_map_subscript_base, expr_map_pre_subscript_base] >>
+  drule_all expr_map_pre_eval_result >> strip_tac >>
+  simp[] >> irule expr_subscript_pre_index >>
+  simp[] >> qexistsl [`ann`, `es`, `obj`] >> simp[]
+QED
