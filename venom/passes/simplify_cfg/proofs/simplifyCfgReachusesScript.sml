@@ -291,3 +291,30 @@ Resume chain_merge_phi_pair_not_removed[untargeted]:
 QED
 
 Finalise chain_merge_phi_pair_not_removed
+
+Theorem chain_merge_phi_preds:
+  wf_function fn /\ fn_inst_wf fn /\ scfg_phi_preds fn /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+      (bb_succs (merge_blocks a b))) ==> scfg_phi_preds fn'
+Proof
+  strip_tac >> pure_rewrite_tac[scfg_phi_preds_def] >> rpt strip_tac >>
+  `p <> b.bb_label` by metis_tac[chain_merge_phi_pair_not_removed] >>
+  drule_all chain_merge_phi_pair_source >> strip_tac >>
+  `fn_cfg_edge fn q bb.bb_label` by metis_tac[scfg_phi_preds_edge] >>
+  `bb.bb_label <> b.bb_label` by
+    ( `MEM bb.bb_label (fn_labels fn')` by
+        (pure_rewrite_tac[fn_labels_def, MEM_MAP] >> qexists `bb` >> simp[]) >>
+      gvs[chain_merge_fn_labels, MEM_FILTER]) >>
+  Cases_on `q = b.bb_label`
+  >- (gvs[] >> simp[chain_merge_edge]) >>
+  `q <> a.bb_label` by
+    (strip_tac >> gvs[fn_cfg_edge_def] >>
+     `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+       fs[wf_function_def, fn_labels_def] >>
+     `bb'' = a` by metis_tac[same_label_same_block] >>
+     gvs[can_merge_blocks_def]) >>
+  gvs[] >> drule_all chain_merge_edge >> simp[]
+QED
