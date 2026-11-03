@@ -896,7 +896,9 @@ Proof
   gvs[AllCaseEqs(), evaluation_state_accfupds,
       accounts_runtime_well_typed_accounts_well_typed] >>
   gvs[vyperCallOutcomeTheory.adopt_call_outcome_equation,
-      vyperCallOutcomeTheory.create_outcome_request_def]
+      vyperCallOutcomeTheory.create_outcome_request_def] >>
+  Cases_on `outcome.co_success` >> Cases_on `outcome.co_created = 0w` >>
+  gvs[evaluation_state_accfupds]
 QED
 
 Theorem eval_create_accounts_well_typed:
