@@ -3,7 +3,7 @@ Ancestors
   cfgNormSupplyProofs cfgTransformProps cfgNormDefs cfgTransform venomExecProps venomInst venomWf
   sccpCorrectnessProofs finite_map venomFnScheduleRunner unitShapeDefs stateFrame
   analysisSimProofsBase analysisSimDefs cfgNormSim execEquivParamProps passSharedDefs
-  prevBbIndep
+  prevBbIndep o1PassLift
 
 Theorem find_and_split_supply_cases:
   !bbs fn s fn' changed s'.
@@ -2813,4 +2813,103 @@ Proof
   Cases_on `step_inst fuel ctx inst st'` >>
   simp[stateEquivTheory.lift_result_def, stateEquivTheory.state_equiv_def,
        GSYM supply_state_agree_execution_equiv, supply_state_agree_prev_bb]
+QED
+
+(* A data Label in the branch condition is allowed by inst_wf. *)
+Theorem supply_redirect_label_condition_probe:
+  inst_wf <| inst_id := 0; inst_opcode := JNZ;
+             inst_operands := [Label "t"; Label "t"; Label "exit"];
+             inst_outputs := [] |> /\
+  (step_inst_base
+    <| inst_id := 0; inst_opcode := JNZ;
+       inst_operands := [Label "t"; Label "t"; Label "exit"];
+       inst_outputs := [] |>
+    ((init_venom_state "p") with vs_labels := FEMPTY |+ ("t",0w) |+ ("q",1w)) =
+   OK (jump_to "exit"
+    ((init_venom_state "p") with vs_labels := FEMPTY |+ ("t",0w) |+ ("q",1w)))) /\
+  (step_inst_base
+    (subst_label_inst "t" "q"
+      <| inst_id := 0; inst_opcode := JNZ;
+         inst_operands := [Label "t"; Label "t"; Label "exit"];
+         inst_outputs := [] |>)
+    ((init_venom_state "p") with vs_labels := FEMPTY |+ ("t",0w) |+ ("q",1w)) =
+   OK (jump_to "q"
+    ((init_venom_state "p") with vs_labels := FEMPTY |+ ("t",0w) |+ ("q",1w))))
+Proof
+  EVAL_TAC >> simp[wordsTheory.WORD_EQ]
+QED
+
+Definition supply_probe_fn_def:
+  supply_probe_fn = mk_raw_function "probe"
+    [<| bb_label := "p"; bb_instructions :=
+         [<| inst_id := 0; inst_opcode := JNZ;
+             inst_operands := [Label "t"; Label "t"; Label "exit"];
+             inst_outputs := [] |>] |>;
+     <| bb_label := "exit"; bb_instructions :=
+         [<| inst_id := 1; inst_opcode := STOP;
+             inst_operands := []; inst_outputs := [] |>] |>;
+     <| bb_label := "other"; bb_instructions :=
+         [<| inst_id := 2; inst_opcode := JMP;
+             inst_operands := [Label "t"]; inst_outputs := [] |>] |>;
+     <| bb_label := "t"; bb_instructions :=
+         [<| inst_id := 3; inst_opcode := REVERT;
+             inst_operands := [Lit 0w; Lit 0w]; inst_outputs := [] |>] |>]
+End
+
+Definition supply_probe_supply_def:
+  supply_probe_supply =
+    <| irs_next_inst := 4; irs_next_var := 0; irs_next_label := 0;
+       irs_used_inst_ids := [0;1;2;3]; irs_used_vars := [];
+       irs_used_labels := ["probe";"p";"exit";"other";"t"] |>
+End
+
+Theorem supply_probe_premises:
+  wf_ssa supply_probe_fn /\ fn_inst_wf supply_probe_fn /\
+  wf_function supply_probe_fn /\ first_block_no_preds supply_probe_fn /\
+  ir_supply_covers_fn supply_probe_supply supply_probe_fn /\
+  ir_supply_inst_ok supply_probe_supply
+Proof
+  EVAL_TAC >> rpt strip_tac >> gvs[] >> EVAL_TAC
+QED
+
+Definition supply_probe_fn'_def:
+  supply_probe_fn' = supply_probe_fn with fn_blocks :=
+    [<| bb_label := "p"; bb_instructions :=
+         [<| inst_id := 0; inst_opcode := JNZ;
+             inst_operands := [Label "formal_label_0"; Label "formal_label_0"; Label "exit"];
+             inst_outputs := [] |>] |>;
+     EL 1 supply_probe_fn.fn_blocks;
+     EL 2 supply_probe_fn.fn_blocks;
+     EL 3 supply_probe_fn.fn_blocks;
+     <| bb_label := "formal_label_0"; bb_instructions :=
+         [<| inst_id := 4; inst_opcode := JMP;
+             inst_operands := [Label "t"]; inst_outputs := [] |>] |>]
+End
+
+Theorem supply_probe_transform:
+  cfg_norm_function_supply supply_probe_supply supply_probe_fn =
+  (supply_probe_fn', supply_probe_supply with
+    <| irs_next_inst := 5; irs_next_label := 1;
+       irs_used_inst_ids := [4;0;1;2;3];
+       irs_used_labels := "formal_label_0" :: supply_probe_supply.irs_used_labels |>)
+Proof
+  EVAL_TAC
+QED
+
+Definition supply_probe_state_def:
+  supply_probe_state = (init_venom_state "p") with
+    vs_labels := FEMPTY |+ ("t",0w) |+ ("formal_label_0",1w)
+End
+
+(* Counterexample certificates for the unconstrained entry label table. *)
+Theorem supply_probe_entry:
+  fn_entry_state supply_probe_fn supply_probe_state
+Proof
+  EVAL_TAC
+QED
+
+Theorem supply_probe_original_terminates:
+  terminates (run_blocks 3 ctx supply_probe_fn supply_probe_state)
+Proof
+  EVAL_TAC
 QED
