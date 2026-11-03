@@ -2070,7 +2070,7 @@ Theorem typed_args_ready_of_ok[local]:
 Proof
   Induct >> simp[typed_args_ready_def] >> rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
-  `expr_sim_pre cenv cx env h es` by metis_tac[] >>
+  `expr_sim_pre cenv cx env h s` by metis_tac[] >>
   rpt conj_tac
   >~ [`expr_sim _ _ _ _ _ _ _`] >- metis_tac[expr_sim_ok_def]
   >~ [`IS_SOME _`] >- metis_tac[well_typed_expr_type_evaluates]
@@ -2091,7 +2091,7 @@ Proof
   Induct >> simp[typed_args_ready_def, exprs_case_def] >> rpt gen_tac >>
   strip_tac >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
-      `expr_body_pre cenv cx env h es /\ (nocalls ==> int_calls_expr h = []) /\
+      `expr_body_pre cenv cx env h s /\ (nocalls ==> int_calls_expr h = []) /\
        is_word_type (expr_type h)` by metis_tac[] >>
       rpt conj_tac
       >- metis_tac[expr_sim_case_def]
