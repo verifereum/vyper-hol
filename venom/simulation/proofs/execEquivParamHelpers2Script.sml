@@ -209,7 +209,16 @@ Theorem vsr_step_inst_fmp_opcode:
 Proof
   rpt strip_tac >> gvs[]
   >- (vsr_eval_rewrite_tac () >>
-      rpt (CASE_TAC >> gvs[lift_result_def]) >>
+      Cases_on `inst.inst_operands` >- simp[lift_result_def] >>
+      rename1 `inst.inst_operands = size_op::ops` >>
+      Cases_on `inst.inst_outputs` >- simp[lift_result_def] >>
+      rename1 `inst.inst_outputs = out::outs` >>
+      reverse (Cases_on `outs`) >- simp[lift_result_def] >>
+      reverse (Cases_on `ops`) >- simp[lift_result_def] >>
+      `eval_operand size_op s1 = eval_operand size_op s2` by
+        (first_x_assum irule >> simp[]) >>
+      simp[] >> Cases_on `eval_operand size_op s2` >>
+      simp[lift_result_def] >>
       metis_tac[vsr_fmp_R_ok, vsr_update_var_R_ok])
   >- (vsr_eval_rewrite_tac () >>
       rpt (CASE_TAC >> gvs[lift_result_def]) >>
