@@ -6,7 +6,7 @@
 
 Theory simplifyCfgCorrectness
 Ancestors
-  simplifyCfgProof cfgWf unitShapeDefs venomInst
+  simplifyCfgProof simplifyCfgSsaform simplifyCfgDefs cfgWf unitShapeDefs venomInst
 
 Theorem simplify_cfg_pass_correct:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
@@ -27,7 +27,8 @@ QED
 Theorem simplify_cfg_preserves_ssa_form:
   ∀func. ssa_form func ∧ wf_function func ⇒ ssa_form (simplify_cfg_fn func)
 Proof
-  cheat
+  simp[simplify_cfg_fn_def, simplify_cfg_fn_with_labels_def,
+       simplify_cfg_iter_with_labels_ssa]
 QED
 
 Theorem simplify_cfg_preserves_wf_function:
