@@ -670,7 +670,7 @@ QED
    The free variable s is scaffolding: mstore only reads s.vs_memory
    (overridden to mem), so the result is independent of other fields. *)
 (* Helper: kvs_val_wf implies val_wf for each MEM element *)
-Theorem kvs_val_wf_mem[local]:
+Theorem kvs_val_wf_mem:
   ∀ kvs tv bound k v.
     kvs_val_wf kvs tv bound ∧ MEM (k,v) kvs ⇒ val_wf tv v
 Proof
