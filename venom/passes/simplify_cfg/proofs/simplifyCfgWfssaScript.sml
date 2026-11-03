@@ -860,3 +860,152 @@ Proof
   `EVERY label_positions_ok (fn_insts fn')` by
     (irule chain_merge_label_positions_ok >> metis_tac[]) >> simp[]
 QED
+
+Theorem canon_jnz_inst_successors_exact:
+  label_positions_ok inst ==>
+  (MEM lbl (get_successors (canon_jnz_inst inst)) <=>
+   MEM lbl (get_successors inst))
+Proof
+  simp[canon_jnz_inst_def] >> rpt CASE_TAC >> gvs[] >>
+  gvs[label_positions_ok_def, get_successors_mem_label, is_terminator_def] >>
+  rpt CASE_TAC >>
+  Cases_on `h` >> gvs[stackPlanTypesTheory.is_label_operand_def]
+QED
+
+
+Theorem subst_label_op_is_label:
+  is_label_operand (subst_label_op old new op) = is_label_operand op
+Proof
+  Cases_on `op` >> simp[subst_label_op_def,
+    stackPlanTypesTheory.is_label_operand_def] >> IF_CASES_TAC >>
+  simp[stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem subst_label_inst_label_positions_ok:
+  label_positions_ok inst ==>
+  label_positions_ok (subst_label_inst old new inst)
+Proof
+  Cases_on `inst.inst_opcode = JMP`
+  >- (Cases_on `inst.inst_operands` >>
+      simp[subst_label_inst_def, label_positions_ok_def] >>
+      Cases_on `h` >> Cases_on `t` >>
+      simp[subst_label_inst_def, label_positions_ok_def, subst_label_op_def,
+        stackPlanTypesTheory.is_label_operand_def, EVERY_MAP,
+        subst_label_op_is_label] >> IF_CASES_TAC >>
+      simp[stackPlanTypesTheory.is_label_operand_def]) >>
+  Cases_on `inst.inst_opcode = JNZ`
+  >- (Cases_on `inst.inst_operands` >>
+      simp[subst_label_inst_def, label_positions_ok_def] >>
+      Cases_on `t` >> simp[subst_label_inst_def, label_positions_ok_def,
+        subst_label_op_is_label] >>
+      Cases_on `h'` >> simp[subst_label_inst_def, label_positions_ok_def,
+        subst_label_op_def, subst_label_op_is_label, EVERY_MAP,
+        stackPlanTypesTheory.is_label_operand_def] >>
+      Cases_on `t'` >> simp[subst_label_inst_def, label_positions_ok_def,
+        subst_label_op_def, subst_label_op_is_label,
+        stackPlanTypesTheory.is_label_operand_def] >>
+      Cases_on `h'` >> Cases_on `t` >>
+      simp[subst_label_inst_def, label_positions_ok_def, subst_label_op_def,
+        subst_label_op_is_label, EVERY_MAP,
+        stackPlanTypesTheory.is_label_operand_def] >>
+      rpt IF_CASES_TAC >> simp[stackPlanTypesTheory.is_label_operand_def]) >>
+  Cases_on `inst.inst_opcode = PHI`
+  >- gvs[subst_label_inst_def, label_positions_ok_def] >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (Cases_on `inst.inst_operands` >>
+      simp[subst_label_inst_def, label_positions_ok_def] >>
+      Cases_on `h` >>
+      simp[subst_label_inst_def, label_positions_ok_def, subst_label_op_def,
+        stackPlanTypesTheory.is_label_operand_def, EVERY_MAP,
+        subst_label_op_is_label] >> IF_CASES_TAC >> simp[]) >>
+  simp[subst_label_inst_def, label_positions_ok_def, EVERY_MAP,
+       subst_label_op_is_label] >> Cases_on `inst.inst_opcode` >> fs[]
+QED
+
+Theorem bypass_source_successors_exact:
+  label_positions_ok inst ==>
+  (MEM lbl (get_successors
+    (if ~is_terminator inst.inst_opcode then inst
+     else canon_jnz_inst (subst_label_inst old new inst))) <=>
+   ?src. MEM src (get_successors inst) /\
+         lbl = (if src = old then new else src))
+Proof
+  strip_tac >> IF_CASES_TAC
+  >- simp[get_successors_mem_label] >>
+  `label_positions_ok (subst_label_inst old new inst)` by
+    metis_tac[subst_label_inst_label_positions_ok] >>
+  simp[canon_jnz_inst_successors_exact, get_successors_mem_label,
+       subst_label_inst_def, MEM_MAP] >>
+  eq_tac >> rpt strip_tac >> gvs[]
+  >- (rename1 `MEM op inst.inst_operands` >> Cases_on `op` >>
+      gvs[subst_label_op_def] >> qexists `s` >>
+      Cases_on `s = old` >> gvs[]) >>
+  qexists `Label src` >> simp[subst_label_op_def] >>
+  Cases_on `src = old` >> gvs[]
+QED
+
+Theorem bb_bypass_source_successors_exact:
+  bb_well_formed bb /\ EVERY label_positions_ok bb.bb_instructions ==>
+  (MEM lbl (bb_succs (bb with bb_instructions :=
+    MAP (\inst. if ~is_terminator inst.inst_opcode then inst
+                else canon_jnz_inst (subst_label_inst old new inst))
+        bb.bb_instructions)) <=>
+   ?src. MEM src (bb_succs bb) /\ lbl = (if src = old then new else src))
+Proof
+  strip_tac >> `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
+  `label_positions_ok (LAST bb.bb_instructions)` by
+    (fs[EVERY_MEM] >> first_x_assum irule >> simp[LAST_MEM]) >>
+  Cases_on `bb.bb_instructions` >> gvs[bb_succs_def] >>
+  Cases_on `t` >> simp[LAST_MAP, LAST_DEF, bypass_source_successors_exact] >>
+  irule bypass_source_successors_exact >> fs[LAST_DEF]
+QED
+
+Theorem do_merge_jump_surviving_block:
+  do_merge_jump fn a b lm = SOME (fn',lm') /\ MEM bb fn.fn_blocks /\
+  bb.bb_label <> b.bb_label ==>
+  ?bb'. MEM bb' fn'.fn_blocks /\ bb'.bb_label = bb.bb_label
+Proof
+  strip_tac >> drule do_merge_jump_fn_labels >>
+  rewrite_tac[fn_labels_def] >>
+  disch_then (mp_tac o Q.AP_TERM `\ls. MEM bb.bb_label ls`) >>
+  simp[MEM_MAP, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem do_merge_jump_successors_exact:
+  wf_function fn /\ EVERY label_positions_ok (fn_insts fn) /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  do_merge_jump fn a b lm = SOME (fn',lm') /\
+  MEM bb fn.fn_blocks /\ MEM bb' fn'.fn_blocks /\
+  bb'.bb_label = bb.bb_label /\ bb_succs b = [target] ==>
+  (MEM lbl (bb_succs bb') <=>
+   if bb.bb_label = a.bb_label then
+     ?src. MEM src (bb_succs bb) /\
+           lbl = (if src = b.bb_label then target else src)
+   else MEM lbl (bb_succs bb))
+Proof
+  strip_tac >> drule_all do_merge_jump_block_map >> strip_tac >>
+  rename1 `MEM srcbb fn.fn_blocks` >>
+  `srcbb = bb` by metis_tac[same_label_same_block] >> gvs[] >>
+  `bb_well_formed bb /\ EVERY label_positions_ok bb.bb_instructions` by
+    (fs[wf_function_def, fn_insts_def, EVERY_MEM, fn_insts_blocks_mem] >>
+     metis_tac[]) >>
+  `bb' = bb with bb_instructions := bb'.bb_instructions` by
+    simp[venomInstTheory.basic_block_component_equality] >>
+  qpat_x_assum `bb' = bb with bb_instructions := _` SUBST1_TAC >>
+  Cases_on `bb.bb_label = a.bb_label`
+  >- (Cases_on `target = a.bb_label` >>
+      simp[]
+      >- (`MAP (\inst. update_phi_bypass a.bb_label b.bb_label
+                   (if ~is_terminator inst.inst_opcode then inst
+                    else canon_jnz_inst (subst_label_inst b.bb_label a.bb_label inst)))
+                  bb.bb_instructions =
+           MAP (update_phi_bypass a.bb_label b.bb_label)
+             (MAP (\inst. if ~is_terminator inst.inst_opcode then inst
+                   else canon_jnz_inst (subst_label_inst b.bb_label a.bb_label inst))
+                  bb.bb_instructions)` by simp[MAP_MAP_o, combinTheory.o_DEF] >>
+          asm_rewrite_tac[] >>
+          simp[bb_succs_bypass_source_phi, bb_bypass_source_successors_exact]) >>
+      simp[bb_bypass_source_successors_exact]) >>
+  Cases_on `bb.bb_label = target` >>
+  simp[SF ETA_ss, bb_succs_update_phi_bypass]
+QED
