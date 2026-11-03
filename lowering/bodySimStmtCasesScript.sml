@@ -1924,7 +1924,7 @@ Proof
         expr_vv_sim ctx func cenv cx ty e es` by
     (gen_tac >>
      qpat_x_assum `body_expr_ok _ _` (mp_tac o REWRITE_RULE [body_expr_ok_def]) >>
-     disch_then irule >> conj_tac
+     disch_then (irule o CONJUNCT1) >> conj_tac
      >- (qexists_tac `tops` >> simp[]) >>
      qexists_tac `env` >> simp[]) >>
   irule compile_if_stmt_frag >> simp[stmts_env_cs_mono] >>
@@ -1964,7 +1964,7 @@ Proof
     (irule stmt_expr_body_pre >> simp[] >> qexists_tac `[]` >> simp[]) >>
   `expr_sim ctx func cenv cx (expr_type e) e es /\
    expr_vv_sim ctx func cenv cx (expr_type e) e es` by
-    (qpat_x_assum `body_expr_ok _ _` (mp_tac o REWRITE_RULE [body_expr_ok_def]) >>
+    (qpat_x_assum `body_expr_ok _ _` (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_ok_def]) >>
      disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`,
                               `expr_type e`, `es`] mp_tac) >>
      simp[]) >>
