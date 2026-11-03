@@ -1221,6 +1221,28 @@ Proof
   drule_all val_footprint_le >> decide_tac
 QED
 
+Theorem array_elem_ptr_w2n:
+  stmt_state_rel ctx func cenv cx es q /\
+  vv_at cenv cx (ArrayT et bd) sa sn es tv bvv q /\
+  read_result cx tv es = (INL arr,es) /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV evt bd) /\
+  evaluate_subscripts (ArrayTV evt bd) arr [ValueSubscript (IntV (&j))] = INL v /\
+  vv_loc bvv = LocMemory /\ eval_operand (vv_operand bvv) q = SOME w ==>
+  w2n (w + n2w ((case bd of Fixed cap => 0 | Dynamic cap => 32) +
+      j * type_memory_size evt)) = w2n w +
+      ((case bd of Fixed cap => 0 | Dynamic cap => 32) + j * type_memory_size evt)
+Proof
+  strip_tac >>
+  `~is_word_type (ArrayT et bd)` by simp[is_word_type_def] >>
+  drule exprSimAttributeTheory.stmt_state_rel_region_lt >> strip_tac >>
+  drule_all vv_at_memory_region >> strip_tac >>
+  drule_all array_select_footprint_bound >> strip_tac >>
+  irule exprSimAttributeTheory.field_ptr_w2n >>
+  qexistsl [`val_footprint evt v`, `val_footprint (ArrayTV evt bd) arr`] >>
+  conj_tac >- decide_tac >>
+  metis_tac[arithmeticTheory.LESS_EQ_LESS_TRANS]
+QED
+
 Theorem array_vv_at_elem:
   stmt_state_rel ctx func cenv cx es q /\
   vv_at cenv cx (ArrayT et bd) sa sn es tv bvv q /\
@@ -1239,17 +1261,11 @@ Proof
     gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
   simp[vv_at_def, contextTheory.mk_ptr_def] >> strip_tac >>
   `~is_word_type (ArrayT et bd)` by simp[is_word_type_def] >>
-  drule exprSimAttributeTheory.stmt_state_rel_region_lt >> strip_tac >>
+  drule_all array_elem_ptr_w2n >>
+  simp_tac bool_ss [Once arithmeticTheory.ADD_COMM] >> strip_tac >>
   drule_all vv_at_memory_region >> strip_tac >>
   `val_wf evt v` by (drule_all array_select_val_wf >> simp[]) >>
   drule_all array_select_footprint_bound >> strip_tac >>
-  `w2n (w + n2w (j * type_memory_size evt +
-      (case bd of Fixed cap => 0 | Dynamic cap => 32))) = w2n w +
-      (j * type_memory_size evt + (case bd of Fixed cap => 0 | Dynamic cap => 32))` by
-    (irule exprSimAttributeTheory.field_ptr_w2n >>
-     qexistsl [`val_footprint evt v`, `val_footprint (ArrayTV evt bd) arr`] >>
-     conj_tac >- decide_tac >>
-     metis_tac[arithmeticTheory.LESS_EQ_LESS_TRANS]) >>
   simp[] >>
   all_tac
   >~ [`FLOOKUP q.vs_allocas aid = SOME (b,sz)`]
