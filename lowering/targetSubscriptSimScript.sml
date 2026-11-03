@@ -3,7 +3,8 @@ Theory targetSubscriptSim
 Ancestors
   targetPlaceSim exprNoPopScopes exprLowering emitHelper compileEnv
   vyperAST pair exprSimOps exprSim exprLoweringProps loweringShapeDefs fragExec
-  vyperState vyperStorageBackend
+  vyperState vyperStorageBackend exprSimHyps vyperTypeSystem
+  vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants
 Libs
   pairLib
 
@@ -189,4 +190,20 @@ Proof
        check_def, assert_def, bind_def, ignore_bind_def, return_def,
        raise_def, get_storage_backend_eq, LET_THM] >>
   rpt IF_CASES_TAC >> gvs[return_def, raise_def, bind_def, ignore_bind_def]
+QED
+
+(* Diagnostic: the unchanged index consumer supplies constructor typing. *)
+Theorem target_mapping_index_typing_probe[local]:
+  !cenv cx env bt e es es' kv kt vt outvt.
+    expr_body_pre cenv cx env e es /\
+    type_place_target env bt = SOME (HashMapT kt vt) /\
+    type_place_target env (SubscriptTarget bt e) = SOME outvt /\
+    (do raw <- eval_expr cx e; read_result cx raw od) es = (INL kv,es') ==>
+    expr_type e = kt /\ hashmap_key_type kt /\
+    ?tv. evaluate_type env.type_defs kt = SOME tv /\ value_has_type tv kv
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all expr_body_pre_eval >> strip_tac >>
+  gvs[Once well_typed_expr_def, subscript_vtype_def, AllCaseEqs()] >>
+  gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def]
 QED

@@ -291,3 +291,71 @@ QED
 
 
 Finalise compile_mapping_subscript_run
+
+Theorem compile_keccak256_key_run:
+  compile_keccak256_key ptr_op F sa = (op, sb) /\
+  (!x. ptr_op = Var x ==> not_fresh_at sa x) /\
+  eval_operand ptr_op s = SOME (n2w b) /\
+  mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
+  mem_bytes_at (b + 32) (LENGTH bs) s.vs_memory = bs /\
+  b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME
+      (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  simp[compile_keccak256_key_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >>
+  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def,
+       bind_outputs_def] >>
+  `eval_operand ptr_op
+     (update_var (STRING #"%" (toString sa.cs_next_var)) (n2w b + 32w) s) =
+     SOME (n2w b)` by
+    (Cases_on `ptr_op` >> gvs[eval_operand_def, lookup_var_update_var] >>
+     gvs[not_fresh_at_def]) >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, exec_read1_def] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, eval_operand_def, lookup_var_update_var,
+       toString_inj] >>
+  `b < dimword (:256)` by decide_tac >>
+  `mload b s = n2w (LENGTH bs)` by gvs[mload_def, mem_word_at_def] >>
+  simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+       toString_inj, word_add_n2w, GSYM mem_bytes_at_def, run_inst_seq_def] >>
+  rpt strip_tac >> gvs[not_fresh_at_def, mload_def, mem_word_at_def]
+QED
+
+Theorem compile_keccak256_key_frame:
+  compile_keccak256_key ptr_op F sa = (op, sb) /\
+  (!x. ptr_op = Var x ==> not_fresh_at sa x) /\
+  eval_operand ptr_op s = SOME (n2w b) /\
+  mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
+  mem_bytes_at (b + 32) (LENGTH bs) s.vs_memory = bs /\
+  b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME
+      (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
+    stmt_state_rel ctx func cenv cx es t /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule_all compile_keccak256_key_run >> strip_tac >>
+  qexists_tac `t` >> simp[] >> irule hash_readonly_state_rel >>
+  goal_assum drule >> simp[]
+QED
+
+Theorem scalar_key_val_wf_not_typing_probe[local]:
+  ~vyperTyping$value_has_type (BaseTV (UintT 256)) (DecimalV 1) /\
+  val_wf (BaseTV (UintT 256)) (DecimalV 1) /\
+  typed_val_to_w256 (BaseTV (UintT 256)) (DecimalV 1) <>
+    encode_hashmap_key (BaseT (UintT 256)) (DecimalV 1)
+Proof
+  EVAL_TAC >> simp[]
+QED
