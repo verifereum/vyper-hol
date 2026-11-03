@@ -72,3 +72,27 @@ Proof
   pairarg_tac >> fs[frame_view_def] >> gvs[] >>
   simp[write_memory_with_expansion_def]
 QED
+
+Theorem exec_ext_call_frame_view:
+  ~retpc_var fn out /\ inst.inst_outputs = [out] /\
+  read_memory (w2n argsOff) (w2n argsSize) (s with vs_memory := m) =
+    read_memory (w2n argsOff) (w2n argsSize) s ==>
+  exec_ext_call inst (frame_view fn ra s with vs_memory := m)
+    gas addr value argsOff argsSize retOff retSize is_static =
+  OK (frame_view fn ra
+    (update_var out
+      (FST (consume_call_outcome
+        (venom_call_request s addr value argsOff argsSize is_static)
+        (w2n retOff) (w2n retSize) s))
+      (SND (consume_call_outcome
+        (venom_call_request s addr value argsOff argsSize is_static)
+        (w2n retOff) (w2n retSize) s))) with
+    vs_memory := (SND (consume_call_outcome
+      (venom_call_request s addr value argsOff argsSize is_static)
+      (w2n retOff) (w2n retSize) (s with vs_memory := m))).vs_memory)
+Proof
+  strip_tac >>
+  drule venom_call_request_frame_view >> strip_tac >>
+  simp[exec_ext_call_def, consume_call_outcome_frame_view,
+       frame_view_update_var, update_var_def]
+QED
