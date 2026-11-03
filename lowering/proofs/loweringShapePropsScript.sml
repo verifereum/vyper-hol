@@ -13321,3 +13321,17 @@ Proof
   irule comp_bind_labels >>
   simp[comp_return_labels, compile_bytelike_literal_labels]
 QED
+
+Theorem compile_name_vv_labels:
+  !cenv ty id s P. cs_extends s (SND (compile_name_vv cenv ty id s)) /\
+    EVERY P (added_labels s (SND (compile_name_vv cenv ty id s)))
+Proof
+  rpt gen_tac >> Cases_on `FLOOKUP cenv.ce_vars id` >>
+  simp[compile_name_vv_def, comp_return_labels]
+  >- (irule comp_ignore_bind_labels >>
+      simp[emit_inst_labels, comp_return_labels])
+  >> rename1 `SOME loc` >> Cases_on `loc` >>
+  simp[comp_return_labels] >>
+  irule comp_ignore_bind_labels >>
+  simp[emit_inst_labels, comp_return_labels]
+QED
