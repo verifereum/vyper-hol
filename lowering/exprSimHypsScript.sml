@@ -530,6 +530,22 @@ Proof
   mp_tac typed_byte_widths_mutual >> simp[LET_THM] >> metis_tac[]
 QED
 
+Theorem byte_widths_exclude_bad_widths:
+  (!e. byte_widths_expr e ==>
+    ~supported_expr_exists (\e. ~byte_widths_expr e) e) /\
+  (!tgt. byte_widths_target tgt ==>
+    ~supported_target_exists (\e. ~byte_widths_expr e) tgt) /\
+  (!es. byte_widths_exprs es ==>
+    ~supported_exprs_exists (\e. ~byte_widths_expr e) es) /\
+  (!opt. byte_widths_opt opt ==>
+    ~supported_opt_exists (\e. ~byte_widths_expr e) opt) /\
+  (!kes. byte_widths_named_exprs kes ==>
+    ~supported_fields_exists (\e. ~byte_widths_expr e) kes)
+Proof
+  ho_match_mp_tac byte_widths_expr_ind >>
+  simp[byte_widths_expr_def, supported_expr_exists_def]
+QED
+
 Definition expr_sim_pre_def:
   expr_sim_pre cenv cx env e es <=>
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
