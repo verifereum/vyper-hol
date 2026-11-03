@@ -1568,7 +1568,8 @@ Proof
        (gvs[expr_sim_inv_def, well_formed_type_def] >>
         metis_tac[env_consistent_var_type_evaluates]) >>
      drule_all exprSafeOperandTheory.well_typed_expr_type_well_formed >>
-     simp[well_formed_type_def, IS_SOME_EXISTS]) >>
+     simp[well_formed_type_def] >>
+     Cases_on `evaluate_type (get_tenv cx) (expr_type e)` >> simp[]) >>
   gvs[expr_post_def, expr_val_rel_def] >>
   metis_tac[bytestring_val_in_memory_transfer]
 QED
