@@ -908,3 +908,65 @@ Proof
   simp[expr_body_pre_def, vyperTypeCallGraphTheory.int_calls_expr_def,
        probe_guarded_module_code, probe_guarded_supported_probe]
 QED
+
+(* Admission-first replacement candidate; no simulation claim. *)
+Definition probe_copy_code_def:
+  probe_copy_code =
+    [VariableDecl Private Storage "outer" probe_outer_type (SOME 0);
+     VariableDecl Private Storage "donor" probe_outer_type (SOME 3);
+     FunctionDecl Internal Nonpayable F F "shrink" [] [] (BaseT (UintT 256))
+       [Assign (BaseTarget (TopLevelNameTarget (NONE,"outer")))
+          (TopLevelName probe_outer_type (NONE,"donor"));
+        Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))]]
+End
+
+Theorem probe_copy_not_supported:
+  ~supported_program probe_copy_code
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem probe_copy_call_supported:
+  supported_expr probe_copy_code
+    (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem probe_copy_call_nopop:
+  ~expr_has_pop
+    (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_copy_assignment_admission_probe:
+  ~supported_assignment probe_copy_code []
+    (BaseTarget (TopLevelNameTarget (NONE,"outer")))
+    (TopLevelName probe_outer_type (NONE,"donor"))
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem probe_copy_rhs_admission_probe:
+  ~supported_expr probe_copy_code
+    (TopLevelName probe_outer_type (NONE,"donor"))
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem probe_copy_target_admission_probe:
+  supported_target_info probe_copy_code []
+    (TopLevelNameTarget (NONE,"outer")) = NONE
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+(* The Bool leaf is not a full storage word; nesting does not remove this
+   admission guard. Equal copy layouts alone do not admit the assignment. *)
+Theorem probe_copy_storage_type_rejected:
+  ~supported_full_word_type (BaseT BoolT) /\
+  ~supported_storage_type probe_copy_code probe_outer_type
+Proof
+  EVAL_TAC >> simp[]
+QED
