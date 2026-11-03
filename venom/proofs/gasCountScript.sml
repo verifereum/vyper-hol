@@ -217,5 +217,91 @@ Theorem gas_count_fuel_mono:
      run_blocks n ctx fn s = r /\ (!e. r <> Error e) /\ n <= m ==>
      gas_count_blocks n ctx fn s = gas_count_blocks m ctx fn s)
 Proof
-  cheat
+  `(!fuel ctx inst s. !m r.
+      step_inst fuel ctx inst s = r /\ (!e. r <> Error e) /\ fuel <= m ==>
+      gas_count_step fuel ctx inst s = gas_count_step m ctx inst s) /\
+   (!fuel ctx bb s. !m r.
+      exec_block fuel ctx bb s = r /\ (!e. r <> Error e) /\ fuel <= m ==>
+      gas_count_block fuel ctx bb s = gas_count_block m ctx bb s) /\
+   (!fuel ctx fn s. !m r.
+      run_blocks fuel ctx fn s = r /\ (!e. r <> Error e) /\ fuel <= m ==>
+      gas_count_blocks fuel ctx fn s = gas_count_blocks m ctx fn s)`
+    suffices_by metis_tac[] >>
+  ho_match_mp_tac gas_count_defs_ind >> rpt conj_tac
+  >- suspend "step"
+  >- suspend "block"
+  >> suspend "blocks"
 QED
+Resume gas_count_fuel_mono[step]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode = GAS`
+  >- simp[Once gas_count_step_def, Once gas_count_step_def] >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+      simp[step_inst_def] >>
+      Cases_on `decode_invoke inst`
+      >- (simp[] >> metis_tac[]) >>
+      PairCases_on `x` >> simp[] >>
+      Cases_on `lookup_function x0 ctx.ctx_functions`
+      >- (simp[] >> metis_tac[]) >>
+      rename1 `lookup_function x0 ctx.ctx_functions = SOME fn` >>
+      Cases_on `eval_operands x1 s`
+      >- (simp[] >> metis_tac[]) >>
+      rename1 `eval_operands x1 s = SOME args` >>
+      Cases_on `setup_callee fn args s`
+      >- (simp[] >> metis_tac[]) >>
+      rename1 `setup_callee fn args s = SOME cs` >>
+      Cases_on `run_blocks fuel ctx fn cs` >> simp[] >>
+      strip_tac >> gvs[] >>
+      pure_once_rewrite_tac[gas_count_step_def] >> simp[] >>
+      metis_tac[]) >>
+  simp[Once gas_count_step_def, Once gas_count_step_def]
+QED
+Resume gas_count_fuel_mono[block]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  pure_once_rewrite_tac[exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx`
+  >- (simp[] >> metis_tac[]) >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  strip_tac >> gvs[] >>
+  `step_inst m ctx inst s = step_inst fuel ctx inst s` by
+    (irule (cj 1 fuel_mono) >> simp[] >> metis_tac[]) >>
+  pure_once_rewrite_tac[gas_count_block_def] >> simp[] >>
+  Cases_on `is_terminator inst.inst_opcode` >> gvs[] >>
+  rpt (first_x_assum (qspec_then `m` mp_tac)) >> simp[] >>
+  Cases_on `step_inst fuel ctx inst s` >> gvs[]
+QED
+Resume gas_count_fuel_mono[blocks]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `run_blocks _ _ _ _ = _` mp_tac >>
+  pure_once_rewrite_tac[run_blocks_def] >>
+  Cases_on `fuel`
+  >- (simp[] >> metis_tac[]) >>
+  rename1 `SUC k <= m` >>
+  Cases_on `m`
+  >- gvs[] >>
+  rename1 `SUC k <= SUC l` >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+  >- (simp[] >> metis_tac[]) >>
+  rename1 `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs >> simp[] >>
+  strip_tac >> gvs[] >>
+  rename1 `eval_phis s bb.bb_instructions = OK sp` >>
+  qmatch_asmsub_abbrev_tac `exec_block k ctx bb entry` >>
+  `!e. exec_block k ctx bb entry <> Error e` by
+    (Cases_on `exec_block k ctx bb entry` >> gvs[]) >>
+  `exec_block l ctx bb entry = exec_block k ctx bb entry` by
+    (irule (cj 2 fuel_mono) >> simp[] >> qexists_tac `k` >> simp[]) >>
+  `gas_count_block k ctx bb entry = gas_count_block l ctx bb entry` by
+    metis_tac[] >>
+  pure_once_rewrite_tac[gas_count_blocks_def] >>
+  unabbrev_all_tac >> simp[] >>
+  Cases_on `exec_block k ctx bb
+    (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >> gvs[] >>
+  Cases_on `v.vs_halted` >> gvs[] >>
+  rpt (first_x_assum (qspec_then `l` mp_tac)) >> simp[]
+QED
+Finalise gas_count_fuel_mono
