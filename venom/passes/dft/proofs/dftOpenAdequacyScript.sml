@@ -247,3 +247,143 @@ QED
    a general adequacy theorem is rated low-risk.  Uniform schedule matching
    remains entirely separate from this diagnostic.
 *)
+
+(* C3.2.7 MATCHING DESIGN CHECKPOINT -- specifications, NOT theorems.
+
+   This report distinguishes a candidate declarative invariant from an
+   executable prefix-extension construction.  The latter is still missing.
+   No field below is an assumed global simulation or a theorem dependency.
+
+   Dynamic names and records:
+     activation p is a list of (block-visit-number, invoke-inst-id) edges,
+       starting with []; recursively invoking the same function extends p.
+     block occurrence b = (p, visit-number, block-label); visit-number counts
+       ALL entries in that activation, not just entries of this static block.
+     instruction occurrence u = (b, inst-id).
+   Pair corresponding activations/visits, rather than requiring equality of
+   their static function records. Calls must pair by u, not by stack depth
+   alone. The two static instructions at u satisfy from_block, allowing the
+   operand flip in the target instruction.
+
+   A candidate per-frame record contains:
+     source/target function, block and entry snapshots;
+     executed sets Es,Et of u, and pending sets Ps,Pt;
+     receipt tables Rs,Rt: u -> option (operand-values, result-values);
+     environments Hs,Ht recording lookup_var for each captured operand;
+     current effect frontier and saved caller continuation;
+     a debt table for pure computations executed on only one side.
+   A receipt can only be installed when eval_operands actually returns its
+   recorded values; a pending instruction whose producer is also pending has
+   no receipt yet. Do NOT freeze all operands at block entry. PARAM/PHI entry
+   is paired before body scheduling; retain entry snapshots for PHI operands.
+   Completed u never re-enters P in that visit. Ps and Es partition the source
+   body occurrences, and similarly for target. The domain of each R is E.
+
+   Candidate relation I(A,hs,ht):
+     (1) stacks and block occurrences have the paired names above;
+     (2) the executed/pending partitions and receipts are well formed;
+     (3) shared completed producers have equal result-values (accounting for
+         operand flips); captured operands of any completed consumer equal
+         the corresponding producer receipt or its entry-environment value;
+     (4) memory, other externally observable effect fields, and operands at
+         paired effectful frontiers agree. Different variable maps are
+         allowed only for defs of outstanding pure debts. Any instruction
+         crossed by a debt has no conflicting defs/uses/effects;
+     (5) h maps each successful GAS occurrence u to its chronological counter
+         on that side, injectively. Every paired, completed GAS has equal
+         values. A : num -> num option is persistent and injective on SOME;
+         when both GAS receipts are present, A(hs(u)) = SOME(ht(u));
+     (6) a source-only receipt carries either an unresolved obligation named
+         by target u, or a FINAL erased mark with value 0w. Erasure requires
+         a proof that this counterpart will never be reached in the
+         unbounded target computation; finite out-of-fuel is NOT that proof.
+   Clause (6) is intentionally an unresolved obligation, not a usable
+   invariant field. Replacing it with a chosen value and assuming future
+   compatibility would simply assume the hard matching result.
+
+   Proposed contracts (notations: step* is a finite open-machine prefix;
+   a_s n = case A n of NONE => 0w | SOME m => a_t m):
+     Init: related contexts and related block entry environments imply
+       I(empty, entry_s, entry_t), with empty receipt/debt tables and counters
+       0. Here empty is a finite allocation fragment, NOT the final A.
+     Ordinary: I(A,c,d) and a ready non-GAS/non-INVOKE step on one side
+       imply finite opposite-side catch-up to I(A,c',d'), or a pure debt
+       carrying its actual captured operands. No effectful step may be
+       hidden as debt. Aborts need compatible stopping, not OK commutation.
+     GAS: installing a paired GAS receipt extends A at hs(u) with ht(u),
+       preserves old SOME entries and preserves injectivity. When only the
+       source reaches u, a stream value is not yet available from this rule.
+     Push: catch up to the same dynamic INVOKE occurrence with equal args;
+       setup_callee creates paired child entries; save each caller's local
+       partitions, receipts, environments and budget. Pure debts may stay
+       with the suspended caller. Shared chronological GAS counters do NOT
+       reset on push. Calls themselves must keep order.
+     Return: at corresponding IntRet, merge equal callee effect fields and
+       bind equal return values; restore saved partitions and environments;
+       discharge newly enabled debts, without resetting GAS counters or A.
+     Extract: from an unbounded coherent receipt history, obtain ONE total
+       partial injection A extending all its allocation fragments. Show
+       source terminations match target terminations modulo dead_result_rel
+       and every target pre-memory observation has a source observation with
+       equal memory and operand values. The source stream must be a_s for
+       this SAME A for every fuel. dftSparseOracle supplies a finite source
+       list only AFTER this contract, not its semantic proof.
+
+   Supporting facts actually present, and limits:
+     dft_block_rel_def: permutation of IDs, from_block, and must-order;
+       it does not supply dynamic receipts or a coinductive matching path.
+     dft_target_head_extract: finite head extraction by static ID.
+     dft_ssa_inversion_pair, dft_inversion_compatible: independence and abort
+       compatibility of inversions, under their SSA/wf/no-ALLOCA hypotheses.
+     dft_must_order_invokes: two INVOKEs cannot be an inversion.
+     eval_operand_step_pres, output_var_agree_across_independent: preservation
+       of operand/output values for successful independent steps.
+     independent_commute_eq: finite successful same-context non-gas swaps.
+     gas_pair_commute: two SUCCESSFUL steps in reverse order supply a new
+       list start state. It neither covers an open nonreturning INVOKE nor
+       preserves allocations already fixed in other finite observations.
+     dft_open_invoke_push, dft_open_return_resume and
+       dft_open_return_materialize: single-machine call boundaries only.
+   Missing semantic leaves: debt/environment preservation including operand
+   flips; open-call effect-frontier alignment under distinct contexts;
+   abort-compatible finite stopping; prefix-compatible GAS reservation;
+   and fuel-independent extraction with raw observations. None follows by
+   applying the finite successful swap lemmas to a divergent callee.
+
+   Adversarial trace checks (symbolic traces, NOT checked counterexamples):
+   A. Source G(u); CALL(v); ... and target CALL(v); G(u); ... . If v never
+      returns, source u can be erased with value 0w, while callee occurrences
+      pair by their own dynamic names. Independence forbids call arguments
+      from depending on u. If v DOES return after k GAS reads, target u has
+      index k (assuming no earlier reads); source u needs a_t(k). At source
+      u, no finite open prefix reveals k, nor whether v returns at all.
+      For each finite fuel cutoff v can fail before returning, even when it
+      eventually returns at larger fuel. Assigning NONE/zero at that cutoff
+      is not persistent: choose a_t(k) nonzero. This refutes that GREEDY
+      construction, not the frozen theorem or declarative existence of A.
+   B. Terminating v with callee reads t0,...,t(k-1): source indices are
+      u=0 and callee j=j+1; target callee j=j and u=k. Correct allocation is
+      A(0)=SOME k and A(j+1)=SOME j. Saved caller operands independent of u
+      may be captured before suspension; all later consumers of u must wait
+      for its receipt. gas_pair_commute supports the completed finite swap,
+      but its existential alone gives no stable prefix reservation.
+   C. Source G(x);G(y), target G(y);G(x): A(0)=SOME 1, A(1)=SOME 0. There
+      are no GAS operands to capture; disjoint outputs give equal receipts
+      after the two steps, even if values coincide or the stream is zero.
+      Counters must not be identified from values. An append-only matching
+      strategy by chronological index would already fail this case.
+   D. Repeated block visits: source G(x);G(y) in every visit, target reversed.
+      The nth visit pairs (p,n,label,x) and (p,n,label,y), not the previous
+      visit's x/y. With two reads per visit A(2n)=SOME(2n+1),
+      A(2n+1)=SOME(2n). Calls/branches add dynamic path edges and may add a
+      variable number of intervening reads; static-ID allocation is invalid.
+
+   Checkpoint conclusion: a literal prefix machine with concrete source
+   states has no justified deterministic GAS extension in case A. A design
+   must either reserve symbolic values/occurrence names until an unbounded
+   target trace resolves them, with a separate realization theorem, or prove
+   a non-greedy unbounded matching construction. Do not add future agreement
+   as a premise. The single-machine adequacy work remains independent, but
+   completing it would NOT resolve this allocation design gap. Request a
+   strategist redesign/probe at this boundary before any global proof.
+*)
