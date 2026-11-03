@@ -429,6 +429,36 @@ Proof
   drule_then assume_tac elem_count_take_el_lt >> decide_tac
 QED
 
+Theorem pending_inventory_fixed_next_available:
+  !pending fixed ps.
+    pending_inventory_wf pending ps /\
+    LENGTH pending <= LENGTH ps.ps_stack /\ fixed < LENGTH pending /\
+    (!i. i < fixed ==>
+      stack_peek (LENGTH pending - 1 - i) ps.ps_stack = EL i pending) ==>
+      (?d. stack_get_unfixed_depth (EL fixed pending)
+             (LENGTH pending - 1 - fixed) (LENGTH pending)
+             ps.ps_stack = SOME d) \/
+      (stack_get_unfixed_depth (EL fixed pending)
+         (LENGTH pending - 1 - fixed) (LENGTH pending)
+         ps.ps_stack = NONE /\
+       IS_SOME (FLOOKUP ps.ps_spilled (EL fixed pending)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `stack_get_unfixed_depth (EL fixed pending)
+    (LENGTH pending - 1 - fixed) (LENGTH pending) ps.ps_stack` >>
+  simp[FLOOKUP_DEF] >>
+  Cases_on `EL fixed pending IN FDOM ps.ps_spilled` >> simp[] >>
+  fs[pending_inventory_wf_def] >>
+  qpat_assum `!op. LIST_ELEM_COUNT op pending <= _`
+    (qspec_then `EL fixed pending` assume_tac) >>
+  `LIST_ELEM_COUNT (EL fixed pending) ps.ps_stack <=
+     LIST_ELEM_COUNT (EL fixed pending) (TAKE fixed pending)` by
+    (irule fixed_window_count_bound >> simp[]) >>
+  qpat_assum `EL fixed pending NOTIN FDOM ps.ps_spilled`
+    (fn th => fs[th]) >>
+  drule_then assume_tac elem_count_take_el_lt >> decide_tac
+QED
+
 Theorem residual_budget_wf_extend_pending[local]:
   !base pending op ps.
     residual_budget_wf base pending ps ==>

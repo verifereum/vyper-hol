@@ -402,3 +402,32 @@ Theorem probe_repeated_spilled_create_inventory:
 Proof
   EVAL_TAC >> simp[]
 QED
+
+(* Lower inventory plus an exact current window does not preserve that
+   window when the next operand must be restored. *)
+Definition probe_window_ps_def:
+  probe_window_ps = probe_ps with <|
+    ps_stack := [Lit 1w; Lit 0w; Lit 3w];
+    ps_spilled := FEMPTY |+ (Var "x", 1024) |>
+End
+
+Theorem probe_restore_fixed_window_obstruction:
+  let pending = [Lit 1w; Var "x"; Lit 3w] in
+  let ps = probe_window_ps in
+  pending_inventory_wf pending ps /\
+  LENGTH pending <= LENGTH ps.ps_stack /\ 1 < LENGTH pending /\
+  (!i. i < 1 ==> stack_peek (LENGTH pending - 1 - i) ps.ps_stack = EL i pending) /\
+  stack_get_unfixed_depth (EL 1 pending) 1 3 ps.ps_stack = NONE /\
+  (SND (reorder_one dfg_empty pending 1 (EL 1 pending) ps)).ps_stack =
+    [Lit 1w; Lit 0w; Var "x"; Lit 3w] /\
+  ~(!i. i < 2 ==> stack_peek (LENGTH pending - 1 - i)
+       (SND (reorder_one dfg_empty pending 1 (EL 1 pending) ps)).ps_stack = EL i pending)
+Proof
+  EVAL_TAC >> conj_tac
+  >- (gen_tac >> Cases_on `op = Lit 1w` >>
+      Cases_on `op = Lit 0w` >> Cases_on `op = Lit 3w` >>
+      Cases_on `op = Var "x"` >> gvs[]) >>
+  conj_tac
+  >- (gen_tac >> strip_tac >> `i = 0` by decide_tac >> gvs[]) >>
+  simp[NOT_FORALL_THM] >> qexists_tac `0` >> EVAL_TAC
+QED
