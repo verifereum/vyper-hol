@@ -1323,6 +1323,122 @@ Proof
   >> Cases_on `opc = INVOKE` >> simp[]
 QED
 
+Theorem emit_input_plan_preserves_not_spilled[local]:
+  !operands opc nl ps iops ps1 x.
+    emit_input_plan opc operands nl ps = (iops,ps1) /\
+    x NOTIN FDOM ps.ps_spilled ==> x NOTIN FDOM ps1.ps_spilled
+Proof
+  Induct >> simp[emit_input_plan_def] >> rpt gen_tac >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >>
+  gvs[] >> first_x_assum (qspecl_then [`opc`, `nl`, `ps1'`] mp_tac) >>
+  simp[] >> disch_then irule >>
+  qspecl_then [`opc`, `operand_vars operands ++ nl`, `h`, `ps`, `x`]
+    mp_tac emit_one_input_preserves_not_spilled >> simp[]
+QED
+
+Theorem emit_input_plan_vars_not_spilled:
+  !operands opc nl ps iops ps1.
+    emit_input_plan opc operands nl ps = (iops,ps1) ==>
+    !x. MEM x operands /\ is_var_operand x ==> x NOTIN FDOM ps1.ps_spilled
+Proof
+  Induct >> simp[emit_input_plan_def] >> rpt gen_tac >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >>
+  rpt gen_tac >> strip_tac >> gvs[]
+  >- (`h NOTIN FDOM ps1'.ps_spilled` by
+        (qspecl_then [`opc`, `operand_vars operands ++ nl`, `h`, `ps`]
+          mp_tac emit_one_input_var_not_spilled >> simp[]) >>
+      metis_tac[emit_input_plan_preserves_not_spilled]) >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem input_mem_operand_vars[local]:
+  !ops v. MEM v (dfgDefs$operand_vars ops) <=> MEM (Var v) ops
+Proof
+  Induct >> simp[dfgDefsTheory.operand_vars_def] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def]
+QED
+
+Theorem emit_input_plan_inventory_accumulation:
+  !operands ps opc nl iops ps1 x.
+    emit_input_plan opc operands nl ps = (iops,ps1) /\
+    (is_var_operand x /\ MEM x operands ==>
+      1 <= LIST_ELEM_COUNT x ps.ps_stack +
+        (if x IN FDOM ps.ps_spilled then 1 else 0)) ==>
+    LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0) +
+      LIST_ELEM_COUNT x operands <=
+    LIST_ELEM_COUNT x ps1.ps_stack +
+      (if x IN FDOM ps1.ps_spilled then 1 else 0) +
+      (if is_var_operand x /\ MEM x operands then 1 else 0)
+Proof
+  Induct >> simp[emit_input_plan_def, LIST_ELEM_COUNT_THM] >>
+  rpt gen_tac >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+  `LIST_ELEM_COUNT x ps.ps_stack +
+     (if x IN FDOM ps.ps_spilled then 1 else 0) <=
+   LIST_ELEM_COUNT x ps1'.ps_stack +
+     (if x IN FDOM ps1'.ps_spilled then 1 else 0)` by
+    (qspecl_then [`opc`, `operand_vars operands ++ nl`, `h`, `ps`, `x`]
+       mp_tac emit_one_input_inventory_mono_aux >> simp[]) >>
+  `LIST_ELEM_COUNT x ps1'.ps_stack +
+     (if x IN FDOM ps1'.ps_spilled then 1 else 0) +
+     LIST_ELEM_COUNT x operands <=
+   LIST_ELEM_COUNT x ps1.ps_stack +
+     (if x IN FDOM ps1.ps_spilled then 1 else 0) +
+     (if is_var_operand x /\ MEM x operands then 1 else 0)` by
+    (first_x_assum (qspecl_then [`ps1'`, `opc`, `nl`, `rest_ops`, `ps1`, `x`] mp_tac) >>
+     simp[] >> impl_tac
+     >- (strip_tac >>
+         `1 <= LIST_ELEM_COUNT x ps.ps_stack +
+           (if x IN FDOM ps.ps_spilled then 1 else 0)` by simp[] >>
+         Cases_on `x IN FDOM ps.ps_spilled` >>
+         Cases_on `x IN FDOM ps1'.ps_spilled` >> gvs[] >> decide_tac) >>
+     decide_tac) >>
+  `(x = h /\ (~is_var_operand x \/ MEM x operands)) ==>
+   LIST_ELEM_COUNT x ps.ps_stack +
+     (if x IN FDOM ps.ps_spilled then 1 else 0) + 1 <=
+   LIST_ELEM_COUNT x ps1'.ps_stack +
+     (if x IN FDOM ps1'.ps_spilled then 1 else 0)` by
+    (strip_tac >> gvs[] >>
+     qspecl_then [`opc`, `operand_vars operands ++ nl`, `h`, `ps`]
+       mp_tac emit_one_input_inventory_inc >> simp[] >>
+     disch_then irule >> Cases_on `h` >>
+     gvs[is_var_operand_def, venomInstTheory.operand_vars_def,
+         venomInstTheory.operand_var_def, input_mem_operand_vars] >>
+     Cases_on `Var s IN FDOM ps.ps_spilled` >> gvs[] >>
+     rewrite_tac[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
+  Cases_on `x IN FDOM ps.ps_spilled` >>
+  Cases_on `x IN FDOM ps1'.ps_spilled` >>
+  Cases_on `x IN FDOM ps1.ps_spilled` >>
+  Cases_on `x = h` >> Cases_on `is_var_operand x` >>
+  Cases_on `MEM x operands` >> gvs[LIST_ELEM_COUNT_THM] >> decide_tac
+QED
+
+Theorem emit_input_plan_stack_counts:
+  !opc operands nl ps iops ps1.
+    (!x. MEM x operands /\ is_var_operand x ==>
+      MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled) /\
+    emit_input_plan opc operands nl ps = (iops,ps1) ==>
+    !x. LIST_ELEM_COUNT x operands <= LIST_ELEM_COUNT x ps1.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  `is_var_operand x /\ MEM x operands ==>
+    1 <= LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0)` by
+    (strip_tac >> irule covered_operand_inventory >> metis_tac[]) >>
+  drule emit_input_plan_inventory_accumulation >>
+  disch_then (qspec_then `x` mp_tac) >> simp[] >> strip_tac >>
+  Cases_on `is_var_operand x /\ MEM x operands`
+  >- (`x NOTIN FDOM ps1.ps_spilled` by
+        (drule emit_input_plan_vars_not_spilled >> simp[]) >>
+      gvs[] >> Cases_on `x IN FDOM ps.ps_spilled` >> gvs[] >> decide_tac) >>
+  `x NOTIN FDOM ps.ps_spilled ==> x NOTIN FDOM ps1.ps_spilled` by
+    metis_tac[emit_input_plan_preserves_not_spilled] >>
+  Cases_on `x IN FDOM ps.ps_spilled` >>
+  Cases_on `x IN FDOM ps1.ps_spilled` >> gvs[] >> decide_tac
+QED
+
 Theorem emit_one_input_nonvar_spilled_unchanged[local]:
   !opc nl op ps.
     ~is_var_operand op ==>

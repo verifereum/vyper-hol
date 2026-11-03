@@ -282,40 +282,6 @@ Definition probe_inventory_def:
     (if x IN FDOM ps.ps_spilled then 1 else 0)
 End
 
-Theorem probe_inventory_mono[local]:
-  probe_inventory x ps <=
-  probe_inventory x (SND (emit_one_input opc nl op ps))
-Proof
-  simp[probe_inventory_def, emit_one_input_inventory_mono_aux]
-QED
-
-Theorem probe_inventory_covered[local]:
-  1 <= probe_inventory x ps ==>
-  MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled
-Proof
-  Cases_on `x IN FDOM ps.ps_spilled` >> simp[probe_inventory_def] >>
-  rewrite_tac[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac
-QED
-
-Theorem probe_inventory_increment[local]:
-  (~is_var_operand x \/
-   (?v. x = Var v /\ MEM v nl /\ 1 <= probe_inventory x ps)) ==>
-  probe_inventory x ps + 1 <=
-  probe_inventory x (SND (emit_one_input opc nl x ps))
-Proof
-  strip_tac >> rewrite_tac[probe_inventory_def] >>
-  irule emit_one_input_inventory_inc >>
-  metis_tac[probe_inventory_covered]
-QED
-
-Theorem probe_mem_operand_vars[local]:
-  !ops v. MEM v (dfgDefs$operand_vars ops) <=> MEM (Var v) ops
-Proof
-  Induct >> simp[dfgDefsTheory.operand_vars_def] >>
-  rpt gen_tac >> Cases_on `h` >>
-  simp[dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def]
-QED
-
 Theorem probe_input_inventory_accumulation[local]:
   !operands ps opc nl iops ps1 x.
     emit_input_plan opc operands nl ps = (iops, ps1) /\
@@ -324,31 +290,8 @@ Theorem probe_input_inventory_accumulation[local]:
     probe_inventory x ps1 +
       (if is_var_operand x /\ MEM x operands then 1 else 0)
 Proof
-  Induct >> simp[emit_input_plan_def, LIST_ELEM_COUNT_THM] >>
-  rpt gen_tac >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >>
-  gvs[] >>
-  `probe_inventory x ps <= probe_inventory x ps1'` by
-    (qspec_then `x` mp_tac (GEN_ALL probe_inventory_mono) >>
-     disch_then (qspecl_then [`ps`, `opc`, `h`, `operand_vars operands ++ nl`] mp_tac) >>
-     simp[]) >>
-  `LIST_ELEM_COUNT x operands + probe_inventory x ps1' <=
-   probe_inventory x ps1 +
-     (if is_var_operand x /\ MEM x operands then 1 else 0)` by
-    (first_x_assum irule >> conj_tac >- metis_tac[] >>
-     strip_tac >> `1 <= probe_inventory x ps` by simp[] >> decide_tac) >>
-  `(x = h /\ (~is_var_operand x \/ MEM x operands)) ==>
-   probe_inventory x ps + 1 <= probe_inventory x ps1'` by
-    (strip_tac >> gvs[] >>
-     qspecl_then [`h`, `ps`, `opc`, `operand_vars operands ++ nl`] mp_tac
-       (GEN_ALL probe_inventory_increment) >>
-     simp[] >> disch_then irule >>
-     Cases_on `h` >>
-     gvs[stackPlanTypesTheory.is_var_operand_def,
-         venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
-         probe_mem_operand_vars]) >>
-  Cases_on `x = h` >> Cases_on `is_var_operand x` >>
-  Cases_on `MEM x operands` >> gvs[LIST_ELEM_COUNT_THM] >> decide_tac
+  rewrite_tac[probe_inventory_def] >>
+  metis_tac[emit_input_plan_inventory_accumulation]
 QED
 
 Theorem probe_inventory_accessible[local]:
