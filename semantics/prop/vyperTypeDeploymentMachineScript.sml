@@ -571,30 +571,56 @@ Theorem checked_constructor_call_halt_preserves_machine_well_typed:
   machine_well_typed am_out
 Proof
   strip_tac >>
+  `dflts = []` by (drule_all check_contract_constructor_no_defaults >> simp[]) >>
+  qpat_x_assum `dflts = []` SUBST_ALL_TAC >>
   `cx.in_deploy /\ cx.txn.target = target` by
     simp[initial_evaluation_context_def] >>
-  drule call_external_function_halt_cases >> strip_tac >> fs[] >>
+  drule call_external_function_halt_cases >> strip_tac >>
   `evaluate_all_constants cx installed_am target mods = SOME am_c` by gvs[] >>
-  `?lock_st body_st.
-     (if nr then
-        case cx.nonreentrant_slot of
-          NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                         (mut = View \/ mut = Pure)
-      else return ())
-       (initial_state am_c [env] with <|outcomes := orc; requests := []; gas_obs := gobs'|>) =
-         (INL (),lock_st) /\
-     send_call_value mut cx lock_st = (INL (),body_st) /\
-     eval_stmts cx body body_st = (INR HaltException,st_body)` by
-    (irule call_prefix_terminal_body_result_cases >>
-     simp[] >>
-     rpt strip_tac >> irule call_lock_action_error >>
-     qexistsl [`initial_evaluation_context sources layouts tx NONE`,
-       `mut = View \/ mut = Pure`, `nr`,
-       `initial_state am_c [env] with <|outcomes := orc; requests := []; gas_obs := gobs'|>`,
-       `st'`] >> gvs[initial_evaluation_context_def]) >>
-  drule_all checked_constructor_prefix_body_components >> strip_tac >>
-  gvs[] >> irule abstract_machine_from_state_well_typed >>
+  `machine_well_typed am_c` by
+    (gvs[checked_deployment_constants_ready_def] >>
+     drule_all evaluate_all_constants_preserves_accounts >>
+     gvs[machine_well_typed_def, deployment_constants_output_typed_def]) >>
+  qabbrev_tac `st0 = initial_state am_c [FEMPTY] with
+                 <|outcomes := orc; requests := []; gas_obs := gobs|>` >>
+  `state_well_typed st0 /\ accounts_well_typed st0.accounts` by
+    gvs[Abbr `st0`, machine_well_typed_def, state_well_typed_def,
+        initial_state_def, scope_well_typed_def] >>
+  qpat_x_assum `_ st0 = (INR HaltException,st_body)` mp_tac >>
+  simp_tac (srw_ss()) [bind_def, ignore_bind_def] >>
+  Cases_on `send_call_value mut cx st0` >> rename1 `_ = (send_res,send_st)` >>
+  `state_well_typed send_st /\ accounts_well_typed send_st.accounts /\
+   send_st.immutables = st0.immutables` by
+    (drule_all send_call_value_state_sound_c53 >> simp[]) >>
+  Cases_on `send_res` >> simp_tac (srw_ss()) []
+  >- (rename1 `_ = (INL su,send_st)` >> Cases_on `su` >>
+      Cases_on `bind_arguments (type_env_all_modules mods) args vals` >>
+      simp_tac (srw_ss()) [raise_def, set_scopes_def, bind_def, ignore_bind_def,
+                           return_def] >>
+      rename1 `bind_arguments _ _ _ = SOME scope` >>
+      Cases_on `(if nr then
+                   case cx.nonreentrant_slot of
+                     NONE => raise (Error (TypeError "nonreentrant slot missing"))
+                   | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                                    (mut = View \/ mut = Pure)
+                 else return ()) (send_st with scopes := [scope])` >>
+      rename1 `_ = (lock_res,lock_st)` >>
+      `lock_st.accounts = send_st.accounts /\ lock_st.immutables = send_st.immutables /\
+       state_well_typed lock_st` by
+        (drule call_lock_action_frame_c53 >> strip_tac >>
+         `scope_well_typed scope` by
+           metis_tac[bind_arguments_scope_well_typed_from_success] >>
+         gvs[state_well_typed_def]) >>
+      Cases_on `lock_res` >> simp_tac (srw_ss()) []
+      >- (rename1 `_ = (INL lu,lock_st)` >> Cases_on `lu` >> strip_tac >>
+          `state_well_typed st_body /\ accounts_well_typed st_body.accounts` by
+            (unabbrev_all_tac >>
+             drule_all checked_constructor_prefix_body_components >> simp[]) >>
+          gvs[] >> irule abstract_machine_from_state_well_typed >>
+          gvs[state_well_typed_def]) >>
+      strip_tac >> gvs[] >> irule abstract_machine_from_state_well_typed >>
+      gvs[state_well_typed_def]) >>
+  strip_tac >> gvs[] >> irule abstract_machine_from_state_well_typed >>
   gvs[state_well_typed_def]
 QED
 
