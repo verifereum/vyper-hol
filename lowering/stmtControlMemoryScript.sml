@@ -356,6 +356,8 @@ Theorem cond_jump_frag_mem[local]:
     lower_value compile_expr cenv (BaseT BoolT) e sa = (op, s1) /\
     (do result <- eval_expr cx e; read_result cx result od) es = (r1, es1) /\
     expr_res_ok r1 /\ (!v. r1 = INL v ==> ?b. v = BoolV b) /\
+    r1 <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
+    alloca_history func s0 /\
     s3.cs_current_bb = s1.cs_current_bb /\
     s3.cs_current_insts = s1.cs_current_insts /\
     emit_inst JNZ [op; Label lt; Label lf] [] s3 = ((), s4) /\
@@ -368,7 +370,8 @@ Theorem cond_jump_frag_mem[local]:
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     (?b s. r1 = INL (BoolV b) /\
-           stmt_state_rel ctx func cenv cx es1 s /\ ~s.vs_halted /\
+           stmt_state_rel ctx func cenv cx es1 s /\ alloca_history func s /\
+           ~s.vs_halted /\
            (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                   lookup_var x s = SOME w) /\
            (!aid bnd. FLOOKUP s0.vs_allocas aid = SOME bnd ==>
@@ -430,6 +433,8 @@ Theorem if_branch_frag_mem[local]:
     local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
     return_buf_frame d cenv sa s0 /\ sa.cs_next_var <= st'.cs_next_var /\
     sa.cs_current_insts = [] /\ stmt_res_ok lctx res /\
+    res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
+    alloca_history func s0 /\
     stmt_state_rel ctx func cenv cx esA s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = 0 /\
     es2.scopes = sc :: rest /\
@@ -441,6 +446,7 @@ Theorem if_branch_frag_mem[local]:
     (?s. stmt_lands lctx st' res s /\ ~s.vs_halted /\
          (res = INL () ==> ~block_is_terminated sb) /\
          stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s /\
+         alloca_history func s /\
          (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                 lookup_var x s = SOME w) /\
          (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -487,6 +493,7 @@ Proof
           simp[stmt_lands_def, stmt_state_rel_jump_to, return_buf_frame_jump_to] >>
           conj_tac >- simp[jump_to_def] >>
           conj_tac >- simp[jump_to_def] >>
+          conj_tac >- gvs[allocaHistoryTheory.alloca_history_def, jump_to_def] >>
           conj_tac
           >- (simp[jump_to_def, lookup_var_def] >> metis_tac[lookup_var_def]) >>
           conj_tac >- simp[jump_to_def] >>
@@ -512,6 +519,8 @@ Theorem if_branch_frag_mem_join[local]:
     local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
     return_buf_frame d cenv sa s0 /\ sa.cs_next_var <= st'.cs_next_var /\
     sa.cs_current_insts = [] /\ stmt_res_ok lctx res /\
+    res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
+    alloca_history func s0 /\
     stmt_state_rel ctx func cenv cx esA s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = 0 /\
     es2.scopes = sc :: rest /\
@@ -522,6 +531,7 @@ Theorem if_branch_frag_mem_join[local]:
     (?s. stmt_lands lctx st' res s /\ ~s.vs_halted /\
          (res = INL () ==> ~block_is_terminated sb) /\
          stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s /\
+         alloca_history func s /\
          (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                 lookup_var x s = SOME w) /\
          (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -566,7 +576,8 @@ Proof
      simp[mk_inst_def, is_terminator_def, step_jmp_behavior] >>
      irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
   simp[stmt_lands_def, cenv_top_ext_refl, stmt_state_rel_jump_to] >>
-  simp[jump_to_def, lookup_var_def] >> metis_tac[]
+  simp[jump_to_def, lookup_var_def] >>
+  gvs[allocaHistoryTheory.alloca_history_def]
 QED
 
 Theorem compile_continue_frag_mem:
@@ -597,7 +608,8 @@ Proof
      simp[mk_inst_def, is_terminator_def, step_jmp_behavior] >>
      irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
   simp[stmt_lands_def, cenv_top_ext_refl, stmt_state_rel_jump_to] >>
-  simp[jump_to_def, lookup_var_def] >> metis_tac[]
+  simp[jump_to_def, lookup_var_def] >>
+  gvs[allocaHistoryTheory.alloca_history_def]
 QED
 
 Theorem compile_if_stmt_frag_mem:
@@ -641,6 +653,7 @@ Proof
          gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
       gvs[] >>
       `!v. INR ex = INL v ==> ?b. v = BoolV b` by simp[] >>
+      `INR ex <> (INR (Error (RuntimeError "convert empty bytes to signed")) : value + exception)` by simp[] >>
       drule_all cond_jump_frag_mem >> strip_tac >> fs[] >>
       disj2_tac >> qexists_tac `fuel` >> gvs[stmt_exit_def] >> disj1_tac >>
       metis_tac[expr_exit_INR_type])
@@ -649,6 +662,7 @@ Proof
   `expr_res_ok (INL (BoolV b)) /\
    (!v. (INL (BoolV b) : value + exception) = INL v ==> ?b. v = BoolV b)` by
     simp[expr_res_ok_def] >>
+  `INL (BoolV b) <> (INR (Error (RuntimeError "convert empty bytes to signed")) : value + exception)` by simp[] >>
   drule_all cond_jump_frag_mem >> strip_tac >> fs[] >>
   gvs[] >> rename1 `stmt_state_rel ctx func cenv cx es1 sv` >>
   `!st l. sa.cs_next_var <= st.cs_next_var ==>
@@ -671,6 +685,7 @@ Proof
   `(?s. stmt_lands lctx sb res s /\ ~s.vs_halted /\
          (res = INL () ==> ~block_is_terminated (if b then s7 else s10)) /\
          stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s /\
+         alloca_history func s /\
          (!x w. not_fresh_at si x /\ lookup_var x se = SOME w ==>
                 lookup_var x s = SOME w) /\
          (!aid bnd. FLOOKUP se.vs_allocas aid = SOME bnd ==>
@@ -692,6 +707,7 @@ Proof
      >- (strip_tac >>
          `?x11. new_block le s11 = (x11, sb)` by metis_tac[] >>
          imp_res_tac new_block_props >> fs[] >> metis_tac[]) >>
+     conj_tac >- gvs[allocaHistoryTheory.alloca_history_def, jump_to_def] >>
      conj_tac
      >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[]) >>
      qexists_tac `es1 with scopes := FEMPTY :: es1.scopes` >>
@@ -809,6 +825,8 @@ Proof
      s3.cs_current_insts = s1.cs_current_insts` by metis_tac[] >>
     `emit_inst JNZ [op; Label ok; Label fl] [] s3 = ((), s4)` by
       fs[Abbr `ops`] >>
+    `r <> INR (Error (RuntimeError "convert empty bytes to signed"))` by
+      (strip_tac >> gvs[]) >>
     drule_all cond_jump_frag_mem >> strip_tac
     >- (qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _` kall_tac >>
         qpat_x_assum `!sa' op' sb'. _` kall_tac >>
@@ -822,7 +840,8 @@ Proof
             qexists_tac `jump_to s7.cs_current_bb sv` >>
             simp[stmt_lands_def, stmt_state_rel_jump_to, cenv_top_ext_refl,
                  block_is_terminated_def, return_buf_frame_jump_to] >>
-            simp[jump_to_def, lookup_var_def] >> fs[lookup_var_def, jump_to_def]) >>
+            simp[jump_to_def, lookup_var_def] >>
+            fs[lookup_var_def, jump_to_def, allocaHistoryTheory.alloca_history_def]) >>
         rename1 `stmt_state_rel ctx func cenv cx es' sv` >>
         qmatch_goalsub_abbrev_tac `stmt_exit RetQ es' rres _` >>
         `?fuel r. run_from fuel ctx func (jump_to s5.cs_current_bb sv) = r /\
