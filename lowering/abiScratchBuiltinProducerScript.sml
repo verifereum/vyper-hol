@@ -12,12 +12,14 @@ Ancestors
   finite_map pred_set words list arithmetic
 
 Theorem abi_scratch_builtin_producer_bounds:
-  p+(maxlen+32+(case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4)) < dimword (:256) /\
+  p+(32+32*word_size (maxlen+(case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4))) < dimword (:256) /\
   payload_size <= maxlen ==>
   p < dimword (:256) /\ maxlen+LENGTH (abi_builtin_encode_prefix method_id_opt) < dimword (:256) /\
   LENGTH (abi_builtin_encode_prefix method_id_opt)+payload_size <=
     maxlen+LENGTH (abi_builtin_encode_prefix method_id_opt)
 Proof
+  mp_tac (Q.SPEC `maxlen+LENGTH (abi_builtin_encode_prefix method_id_opt)`
+    abi_builtin_word_size_capacity) >>
   Cases_on `method_id_opt` >> simp[abi_scratch_builtin_prefix_length] >> decide_tac
 QED
 
@@ -58,7 +60,7 @@ Proof
 QED
 
 Theorem lower_abi_encode_scratch_produced_tuple_input:
-  let outsz = maxlen+32+(case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4) in
+  let outsz = 32+32*word_size (maxlen+(case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4)) in
   let allocated = abi_builtin_allocate_state start.cs_next_id outsz initial in
   let cap = allocated.vs_alloca_next+32*CARD (abi_decoder_missing first last allocated) in
   let n = maxlen+LENGTH (abi_builtin_encode_prefix method_id_opt) in
@@ -128,7 +130,10 @@ Proof
   >- (gen_tac >> irule abi_scratch_builtin_producer_input >> asm_rewrite_tac[] >>
       qexists_tac `p` >> asm_rewrite_tac[] >>
       qpat_assum `p+_ <= actual.vs_alloca_next` mp_tac >>
-      POP_ASSUM_LIST (K ALL_TAC) >> simp[AC ADD_COMM ADD_ASSOC]) >>
+      POP_ASSUM_LIST (K ALL_TAC) >>
+      mp_tac (Q.SPEC `maxlen+LENGTH (abi_builtin_encode_prefix method_id_opt)`
+        abi_builtin_word_size_capacity) >>
+      decide_tac) >>
   map_every qx_gen_tac [`outer_id`, `q`, `outer_size`] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_builtin_allocate_separate >>
@@ -138,9 +143,15 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_builtin_effect_def]) >>
   `FLOOKUP actual.vs_allocas outer_id = SOME (q,outer_size)` by
     (qpat_x_assum `!id. id < start.cs_next_id \/ final.cs_next_id <= id ==> _`
-       (qspec_then `outer_id` mp_tac) >> asm_simp_tac bool_ss []) >>
+       (qspec_then `outer_id` mp_tac) >>
+     qpat_assum `outer_id < start.cs_next_id \/ final.cs_next_id <= outer_id` mp_tac >>
+     qpat_assum `FLOOKUP initial.vs_allocas outer_id = SOME (q,outer_size)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
   asm_rewrite_tac[] >> irule abi_scratch_builtin_producer_input >> asm_rewrite_tac[] >>
   qexists_tac `p` >> asm_rewrite_tac[] >>
   qpat_assum `p+_ <= q \/ _` mp_tac >>
-  POP_ASSUM_LIST (K ALL_TAC) >> simp[AC ADD_COMM ADD_ASSOC]
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  mp_tac (Q.SPEC `maxlen+LENGTH (abi_builtin_encode_prefix method_id_opt)`
+    abi_builtin_word_size_capacity) >>
+  decide_tac
 QED

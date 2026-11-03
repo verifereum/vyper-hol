@@ -978,7 +978,7 @@ Resume compile_for_range_checked_frag[ends]:
     (qpat_x_assum `expr_post ctx _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def, expr_val_rel_def] >> rpt strip_tac >>
      TRY (first_x_assum (qspec_then `tyv` mp_tac)) >>
-     gvs[typed_val_to_w256_word_value, word_value_def, val_to_w256_def]) >>
+     simp[typed_val_to_w256_word_value, word_value_def, val_to_w256_def]) >>
   `stmt_state_rel ctx func cenv cx es1 t1` by fs[expr_post_def] >>
   qpat_x_assum `expr_sim _ _ _ _ _ e2 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
@@ -1011,7 +1011,7 @@ Resume compile_for_range_checked_frag[alloca]:
     (qpat_x_assum `expr_post ctx _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def, expr_val_rel_def] >> rpt strip_tac >>
      TRY (first_x_assum (qspec_then `tyv` mp_tac)) >>
-     gvs[typed_val_to_w256_word_value, word_value_def, val_to_w256_def]) >>
+     simp[typed_val_to_w256_word_value, word_value_def, val_to_w256_def]) >>
   `!x w. not_fresh_at s1 x /\ lookup_var x t1 = SOME w ==>
          lookup_var x t2 = SOME w` by fs[expr_post_def] >>
   `eval_operand op1 t2 = SOME (i2w n1)` by

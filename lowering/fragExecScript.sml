@@ -1005,7 +1005,8 @@ Proof
   qexistsl_tac [`bb`, `mk_inst id JNZ [cnd; Label exit; Label body_lbl] []`,
                  `if w = 0w then body_lbl else exit`] >>
   Cases_on `w = 0w` >>
-  simp[mk_inst_def, is_terminator_def, Once step_inst_base_def]
+  simp[mk_inst_def, is_terminator_def] >>
+  simp[step_inst_base_opcode_eqs]
 QED
 
 Theorem frag_outcome_loop_cond[local]:
