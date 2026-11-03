@@ -13186,3 +13186,53 @@ Proof
      `word_of_bytes T 0w (TAKE 32 (v4::v5 ++ REPLICATE 31 0w))`] mp_tac) >>
   simp[]
 QED
+
+Theorem compile_bytelike_literal_labels:
+  !bs max_len s P.
+    cs_extends s (SND (compile_bytelike_literal bs max_len s)) /\
+    EVERY P (added_labels s (SND (compile_bytelike_literal bs max_len s)))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_bytelike_literal_def, LET_THM] >>
+  BETA_TAC >> irule comp_bind_labels >> simp[compile_alloc_buffer_labels] >>
+  rpt gen_tac >> BETA_TAC >> irule comp_ignore_bind_labels >>
+  conj_tac >- simp[emit_void_labels] >>
+  rpt gen_tac >> BETA_TAC >> irule comp_ignore_bind_labels >>
+  simp[compile_store_byte_chunks_labels, comp_return_labels]
+QED
+
+Theorem compile_blobhash_labels:
+  !n s P. cs_extends s (SND (compile_blobhash n s)) /\
+    EVERY P (added_labels s (SND (compile_blobhash n s)))
+Proof
+  simp[builtinMiscTheory.compile_blobhash_def, emit_op_labels]
+QED
+
+Theorem compile_addmod_labels:
+  !a b c s P. cs_extends s (SND (compile_addmod a b c s)) /\
+    EVERY P (added_labels s (SND (compile_addmod a b c s)))
+Proof
+  rpt gen_tac >> simp[builtinMathTheory.compile_addmod_def] >>
+  irule comp_ignore_bind_labels >> simp[emit_void_labels, emit_op_labels]
+QED
+
+Theorem compile_mulmod_labels:
+  !a b c s P. cs_extends s (SND (compile_mulmod a b c s)) /\
+    EVERY P (added_labels s (SND (compile_mulmod a b c s)))
+Proof
+  rpt gen_tac >> simp[builtinMathTheory.compile_mulmod_def] >>
+  irule comp_ignore_bind_labels >> simp[emit_void_labels, emit_op_labels]
+QED
+
+Theorem compile_pow_mod256_labels:
+  !x y s P. cs_extends s (SND (compile_pow_mod256 x y s)) /\
+    EVERY P (added_labels s (SND (compile_pow_mod256 x y s)))
+Proof
+  simp[builtinMathTheory.compile_pow_mod256_def, emit_op_labels]
+QED
+
+Theorem compile_builtin_calldatasize_labels:
+  !s P. cs_extends s (SND (compile_builtin_calldatasize s)) /\
+    EVERY P (added_labels s (SND (compile_builtin_calldatasize s)))
+Proof
+  simp[builtinSimpleTheory.compile_builtin_calldatasize_def, emit_op_labels]
+QED
