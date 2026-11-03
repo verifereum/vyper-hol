@@ -7255,7 +7255,8 @@ Theorem raw_log_well_typed_args:
         bound_at_most bd 4) /\
   (?bd'. EL 1 (MAP expr_type es) = BaseT (BytesT bd'))
 Proof
-  rewrite_tac[Once well_typed_expr_def] >> metis_tac[]
+  rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+  gvs[bound_at_most_def]
 QED
 
 Resume eval_scc_type_sound_results_mutual[Expr_Call_RawLog]:
@@ -8251,9 +8252,10 @@ Resume eval_scc_type_sound_results_mutual[Trace_IntCall_Operands]:
        return_def, raise_def, get_scopes_def, AllCaseEqs()] >>
   strip_tac >> imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
   simp[NoAsms, typed_scope_transition_refl] >>
-  pop_last_assum mp_tac >>
-  simp[NoAsms, type_check_def, assert_def, return_def, raise_def,
-       lift_option_type_INL_eq] >>
+  qpat_x_assum `!s0 x t s1 ts t1 s2 tup t2 mut stup nr stup2 args sstup dflts sstup2 ret body s3 x1 t3. _`
+    mp_tac >>
+  simp_tac std_ss [type_check_def, assert_def, return_def, raise_def,
+    lift_option_type_INL_eq] >>
   imp_res_tac lift_option_type_INL_eq >>
   disch_then drule_all >> strip_tac >>
   `call_evaluation_safe cx (int_calls_exprs es)` by

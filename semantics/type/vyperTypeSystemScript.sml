@@ -789,8 +789,8 @@ Definition well_typed_expr_def:
      EL 0 (MAP expr_type args) = BaseT AddressT) /\
   well_typed_expr env (Call ty RawLog args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 2 /\
-     (?bd. EL 0 (MAP expr_type args) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
-           bound_at_most bd 4) /\
+     (?n. EL 0 (MAP expr_type args) =
+            ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n) /\ n <= 4) /\
      (case EL 0 args of
         Builtin _ (MakeArray _ _) topics => LENGTH topics <= 4
       | _ => F) /\
