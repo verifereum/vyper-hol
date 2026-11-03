@@ -3,7 +3,7 @@ Theory exprSimArraySubscript
 Ancestors
   exprSimNoPop exprSimArrayIndex vyperPlaceResultTyping vyperState
   vyperTypeEnv exprSimHyps supportedExprTraverse exprSimAttribute
-  vyperPlaceFrames vyperStatePreservation vyperInterpreter
+  vyperPlaceFrames vyperStatePreservation vyperInterpreter vyperArray
 
 (* A current-value path takes priority over every historical snapshot. *)
 Theorem read_memory_path_current_append:
@@ -290,3 +290,143 @@ Resume eval_expr_nopop_current_memory_path[Create]:
 QED
 
 Finalise eval_expr_nopop_current_memory_path
+
+(* Immediate selections interpret sparse defaults using the syntax's type. *)
+Theorem select_result_value:
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  evaluate_subscripts tv v [sb] = INL w ==>
+  select_result cx ty (Value v) sb s = (INL (Value w), s)
+Proof
+  simp[select_result_def, bind_def, lift_option_type_def, lift_sum_def,
+       return_def]
+QED
+
+Theorem select_result_value_error:
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  evaluate_subscripts tv v [sb] = INR err ==>
+  select_result cx ty (Value v) sb s = (INR (Error err), s)
+Proof
+  simp[select_result_def, bind_def, lift_option_type_def, lift_sum_def,
+       return_def, raise_def]
+QED
+
+(* For a current local path the extension is read from the current entry,
+   even when arbitrary historical snapshots were present initially. *)
+Theorem select_result_current_memory:
+  lookup_scopes id s.scopes = SOME entry /\
+  subscripts_type entry.type path = SOME tv /\
+  evaluate_subscripts entry.type entry.value path = INL v /\
+  evaluate_subscripts tv v [sb] = INL w ==>
+  select_result cx ty (PlaceR (MemoryPlace id path)) sb s =
+    (INL (PlaceR (MemoryPlace id (path ++ [sb]))), s) /\
+  read_place cx (MemoryPlace id (path ++ [sb])) s = (INL w, s)
+Proof
+  rpt strip_tac >>
+  `evaluate_subscripts entry.type entry.value (path ++ [sb]) = INL w` by
+    (drule_all evaluate_subscripts_append >> simp[]) >>
+  simp[select_result_def, extend_place_def, place_type_value_def,
+       read_place_def, get_scopes_def, bind_def, ignore_bind_def,
+       lift_option_type_def, lift_sum_def, return_def,
+       read_memory_path_def, extend_memory_place_def]
+QED
+
+Theorem select_result_current_memory_error:
+  lookup_scopes id s.scopes = SOME entry /\
+  subscripts_type entry.type path = SOME tv /\
+  evaluate_subscripts entry.type entry.value path = INL v /\
+  evaluate_subscripts tv v [sb] = INR err ==>
+  select_result cx ty (PlaceR (MemoryPlace id path)) sb s = (INR (Error err), s)
+Proof
+  simp[select_result_def, extend_place_def, place_type_value_def,
+       read_place_def, get_scopes_def, bind_def, ignore_bind_def,
+       lift_option_type_def, lift_sum_def, return_def, raise_def,
+       read_memory_path_def]
+QED
+
+Theorem select_result_immutable:
+  get_immutables cx src s = (INL imms, s) /\
+  FLOOKUP imms id = SOME (itv, iv) /\
+  subscripts_type itv path = SOME tv /\
+  evaluate_subscripts itv iv path = INL v /\
+  evaluate_subscripts tv v [sb] = INL w ==>
+  select_result cx ty (PlaceR (ImmutablePlace src id path)) sb s =
+    (INL (PlaceR (ImmutablePlace src id (path ++ [sb]))), s) /\
+  read_place cx (ImmutablePlace src id (path ++ [sb])) s = (INL w, s)
+Proof
+  rpt strip_tac >>
+  `evaluate_subscripts itv iv (path ++ [sb]) = INL w` by
+    (drule_all evaluate_subscripts_append >> simp[]) >>
+  simp[select_result_def, extend_place_def, place_type_value_def,
+       read_place_def, bind_def, ignore_bind_def,
+       lift_option_type_def, lift_sum_def, return_def, extend_memory_place_def]
+QED
+
+Theorem select_result_immutable_error:
+  get_immutables cx src s = (INL imms, s) /\
+  FLOOKUP imms id = SOME (itv, iv) /\
+  subscripts_type itv path = SOME tv /\
+  evaluate_subscripts itv iv path = INL v /\
+  evaluate_subscripts tv v [sb] = INR err ==>
+  select_result cx ty (PlaceR (ImmutablePlace src id path)) sb s =
+    (INR (Error err), s)
+Proof
+  simp[select_result_def, extend_place_def, place_type_value_def,
+       read_place_def, bind_def, ignore_bind_def,
+       lift_option_type_def, lift_sum_def, return_def, raise_def]
+QED
+
+(* Storage selection exposes the resolver's slot and leaf type. Reads and
+   region/liveness follow the existing storage resolver boundaries. *)
+Theorem select_result_storage_array:
+  resolve_array_element cx tr slot (ArrayTV etv bd)
+    [ValueSubscript (IntV i)] s = (INL (slot', tv, rest), s') ==>
+  select_result cx ty (PlaceR (StoragePlace tr slot (ArrayTV etv bd)))
+    (ValueSubscript (IntV i)) s =
+      (INL (PlaceR (StoragePlace tr slot' tv)), s') /\ s' = s
+Proof
+  strip_tac >> drule resolve_array_element_state >> strip_tac >>
+  simp[select_result_def, extend_place_def, extend_storage_place_def,
+       bind_def, return_def]
+QED
+
+Theorem select_result_storage_array_error:
+  resolve_array_element cx tr slot (ArrayTV etv bd)
+    [ValueSubscript (IntV i)] s = (INR err, s') ==>
+  select_result cx ty (PlaceR (StoragePlace tr slot (ArrayTV etv bd)))
+    (ValueSubscript (IntV i)) s = (INR err, s') /\ s' = s
+Proof
+  strip_tac >> drule resolve_array_element_state >> strip_tac >>
+  simp[select_result_def, extend_place_def, extend_storage_place_def,
+       bind_def, return_def]
+QED
+
+(* The syntax-derived current-path witnesses survive intervening pop-free
+   evaluation, including an internal call that restores the caller scopes. *)
+Theorem eval_expr_nopop_current_memory_path_after:
+  EVERY scope_well_typed s.scopes /\ ~expr_has_pop obj /\
+  eval_expr cx obj s = (INL (PlaceR (MemoryPlace id path)), mid) /\
+  ~expr_has_pop idx /\ eval_expr cx idx mid = (res, t) ==>
+  ?entry tv v.
+    lookup_scopes id t.scopes = SOME entry /\
+    subscripts_type entry.type path = SOME tv /\
+    well_formed_type_value tv /\ value_has_type tv v /\
+    evaluate_subscripts entry.type entry.value path = INL v /\
+    read_memory_path entry path = INL v
+Proof
+  rpt strip_tac >>
+  drule_all eval_expr_nopop_current_memory_path >> strip_tac >>
+  drule_all eval_expr_nopop_scopes >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem evaluate_subscripts_array_oob:
+  ~valid_index (ArrayTV etv bd) av i /\
+  (!al. av = SArrayV al ==> ?n. bd = Fixed n) ==>
+  evaluate_subscripts (ArrayTV etv bd) (ArrayV av) [ValueSubscript (IntV i)] =
+    INR (RuntimeError "evaluate_subscripts array_index")
+Proof
+  rpt strip_tac >>
+  Cases_on `array_index (ArrayTV etv bd) av i` >-
+    simp[evaluate_subscripts_def] >>
+  drule array_index_bounds >> simp[]
+QED
