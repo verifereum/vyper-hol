@@ -32,6 +32,7 @@ Ancestors
   vyperInStaticArrayTest
   vyperInvertTest
   vyperLoadTimingTest
+  vyperMembershipSemanticsTest
   vyperOracleEntryTest
   vyperOracleIntegrationTest
   vyperOracleStateTest
