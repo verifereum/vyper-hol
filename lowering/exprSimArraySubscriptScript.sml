@@ -3,7 +3,7 @@ Theory exprSimArraySubscript
 Ancestors
   compileEnv exprSim exprSimNoPop exprSimArrayIndex vyperPlaceResultTyping vyperState
   vyperTypeEnv vyperTypeInvariants exprSimHyps supportedExprTraverse exprSimAttribute
-  vyperPlaceFrames vyperStatePreservation vyperInterpreter vyperArray exprSimLen
+  vyperPlaceFrames vyperStatePreservation vyperInterpreter vyperArray exprSimLen exprSimPop
 
 (* A current-value path takes priority over every historical snapshot. *)
 Theorem read_memory_path_current_append:
@@ -1061,4 +1061,24 @@ Proof
   SIMP_TAC bool_ss [Abbr `off`, wordsTheory.n2w_w2n,
     AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
   disch_then irule >> simp[]
+QED
+
+
+Theorem array_select_val_wf:
+  val_wf (ArrayTV evt bd) arr /\
+  evaluate_subscripts (ArrayTV evt bd) arr
+    [ValueSubscript (IntV (&j))] = INL v ==> val_wf evt v
+Proof
+  Cases_on `arr` >> simp[valueEncodingTheory.val_wf_def, evaluate_subscripts_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >> Cases_on `bd` >>
+  simp[valueEncodingTheory.val_wf_def, evaluate_subscripts_def,
+       vyperValueOperationTheory.array_index_def, AllCaseEqs(),
+       listTheory.oEL_THM] >> rpt strip_tac >> gvs[]
+  >- (drule_all exprSimPopTheory.elems_val_wf_EL >> simp[]) >>
+  rename1 `kvs_val_wf kvs evt n` >>
+  Cases_on `ALOOKUP kvs j` >> gvs[]
+  >- simp[valueEncodingProofsTheory.val_wf_default_value_proof] >>
+  irule valueEncodingProofsTheory.kvs_val_wf_mem >>
+  goal_assum (drule_at Any) >> drule alistTheory.ALOOKUP_MEM >>
+  strip_tac >> qexists_tac `j` >> simp[]
 QED
