@@ -1101,3 +1101,22 @@ Proof
   rw[immutables_ready_def, get_tenv_def, get_module_code_def,
      initial_evaluation_context_def] >> metis_tac[]
 QED
+
+Theorem checked_function_body_typing_maps_well_formed:
+  check_function_body layouts addr mods art src mut nr args dflts ret body /\
+  env_t.type_defs = type_env_all_modules mods /\
+  env_context_consistent env_t cx /\
+  (!n ty. FLOOKUP env_t.var_types n = SOME ty ==> MEM (n,ty) args) ==>
+  (!n ty. FLOOKUP env_t.var_types n = SOME ty ==>
+    well_formed_type env_t.type_defs ty) /\
+  (!src id vt. FLOOKUP env_t.toplevel_vtypes (src,id) = SOME vt ==>
+    well_formed_vtype env_t.type_defs vt) /\
+  (!src id ty. FLOOKUP env_t.bare_global_assignable (src,id) = SOME ty ==>
+    well_formed_type env_t.type_defs ty)
+Proof
+  strip_tac >> irule typing_maps_well_formed_params >>
+  conj_tac
+  >- (qexists `args` >> simp[] >>
+      gvs[check_function_body_def, params_ok_def])
+  >> qexists `cx` >> simp[]
+QED

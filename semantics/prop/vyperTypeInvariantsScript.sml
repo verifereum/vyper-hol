@@ -442,3 +442,70 @@ Definition eval_result_typed_def:
     | HashMapT kt value_ty =>
         ?tr slot. res = HashMapRef tr slot kt value_ty
 End
+
+(* Static typing-map facts used by recursive byte-width reasoning. *)
+Theorem typing_maps_well_formed_extend_local:
+  (!n ty. FLOOKUP env.var_types n = SOME ty ==>
+    well_formed_type env.type_defs ty) /\
+  (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+    well_formed_vtype env.type_defs vt) /\
+  (!src id ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==>
+    well_formed_type env.type_defs ty) /\
+  well_formed_type env.type_defs typ ==>
+  (!n ty. FLOOKUP (extend_local env name typ assignable).var_types n = SOME ty ==>
+    well_formed_type (extend_local env name typ assignable).type_defs ty) /\
+  (!src id vt. FLOOKUP (extend_local env name typ assignable).toplevel_vtypes (src,id) = SOME vt ==>
+    well_formed_vtype (extend_local env name typ assignable).type_defs vt) /\
+  (!src id ty. FLOOKUP (extend_local env name typ assignable).bare_global_assignable (src,id) = SOME ty ==>
+    well_formed_type (extend_local env name typ assignable).type_defs ty)
+Proof
+  simp[extend_local_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem typing_maps_well_formed_params:
+  env_context_consistent env cx /\
+  (!n ty. FLOOKUP env.var_types n = SOME ty ==> MEM (n,ty) args) /\
+  EVERY (\(n,ty). assignable_type env.type_defs ty) args ==>
+  (!n ty. FLOOKUP env.var_types n = SOME ty ==>
+    well_formed_type env.type_defs ty) /\
+  (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+    well_formed_vtype env.type_defs vt) /\
+  (!src id ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==>
+    well_formed_type env.type_defs ty)
+Proof
+  strip_tac >> conj_tac
+  >- (rpt strip_tac >> irule assignable_type_well_formed >>
+      qpat_x_assum `EVERY _ args` mp_tac >> simp[EVERY_MEM] >>
+      disch_then (qspec_then `(n,ty)` mp_tac) >> simp[])
+  >> conj_tac
+  >- (gvs[env_context_consistent_def] >> metis_tac[])
+  >> rpt strip_tac >>
+  qpat_x_assum `env_context_consistent _ _` mp_tac >>
+  simp[env_context_consistent_def] >> strip_tac >>
+  qpat_x_assum `!src id ty. FLOOKUP env.bare_global_assignable _ = _ ==> _`
+    (drule_then strip_assume_tac) >>
+  qpat_x_assum `!src id vt. FLOOKUP env.toplevel_vtypes _ = _ ==> _`
+    (drule_then mp_tac) >> simp[well_formed_vtype_def]
+QED
+
+Theorem typing_maps_well_formed_same_maps:
+  env'.type_defs = env.type_defs /\
+  env'.var_types = env.var_types /\
+  env'.toplevel_vtypes = env.toplevel_vtypes /\
+  env'.bare_global_assignable = env.bare_global_assignable /\
+  (!n ty. FLOOKUP env.var_types n = SOME ty ==>
+    well_formed_type env.type_defs ty) /\
+  (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+    well_formed_vtype env.type_defs vt) /\
+  (!src id ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==>
+    well_formed_type env.type_defs ty) ==>
+  (!n ty. FLOOKUP env'.var_types n = SOME ty ==>
+    well_formed_type env'.type_defs ty) /\
+  (!src id vt. FLOOKUP env'.toplevel_vtypes (src,id) = SOME vt ==>
+    well_formed_vtype env'.type_defs vt) /\
+  (!src id ty. FLOOKUP env'.bare_global_assignable (src,id) = SOME ty ==>
+    well_formed_type env'.type_defs ty)
+Proof
+  strip_tac >> asm_rewrite_tac[]
+QED
