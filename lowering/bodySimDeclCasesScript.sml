@@ -316,13 +316,26 @@ QED
 
 Finalise body_annassign_memory
 
+(* A declared type takes memory: it is assignable, so it takes a storage slot
+   (assignable_type_slot_size_pos). *)
+Theorem annassign_memory_bytes_pos[local]:
+  !cenv cx env es ret_ty id typ e env'.
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (AnnAssign id typ e) = SOME env' ==>
+    0 < type_memory_bytes cenv typ
+Proof
+  rpt strip_tac >>
+  `assignable_type env.type_defs typ` by gvs[type_stmt_def, AllCaseEqs()] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  irule exprSimAggregateLayoutTheory.expr_sim_inv_memory_bytes_pos >>
+  metis_tac[]
+QED
+
 (* RESIDUAL (#637 declarations): a declaration of a type that is not a
    word, which body_annassign_memory leaves: a value that widens to a type
    other than a bytestring (type_widens_to: a DynArray of a smaller bound,
-   elementwise) has no statement lemma, and a type of size 0 (a static
-   array of no elements) fails the lemmas' 0 < type_memory_size tyv, a
-   type Python rejects (a static array bound must be greater than 0) and
-   evaluate_type accepts. *)
+   elementwise) has no statement lemma. *)
 Theorem body_annassign_other:
   !cx id typ e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res
    es'.
@@ -340,9 +353,8 @@ Theorem body_annassign_other:
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
     eval_stmt cx (AnnAssign id typ e) es = (res, es') /\
     ~is_word_type typ /\
-    ~(0 < type_memory_bytes cenv typ /\
-      (expr_type e = typ \/ is_bytestring_type typ \/
-       has_length_word typ /\ is_empty_value_expr e)) ==>
+    ~(expr_type e = typ \/ is_bytestring_type typ \/
+      has_length_word typ /\ is_empty_value_expr e) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AnnAssign id typ e)) es res es'
 Proof
@@ -362,9 +374,10 @@ Proof
   `supported_expr tops e` by gvs[supported_stmt_def] >>
   Cases_on `is_word_type typ`
   >- (irule body_annassign_word >> metis_tac[]) >>
-  Cases_on `0 < type_memory_bytes cenv typ /\
-            (expr_type e = typ \/ is_bytestring_type typ \/
-             has_length_word typ /\ is_empty_value_expr e)`
+  `0 < type_memory_bytes cenv typ` by
+    metis_tac[annassign_memory_bytes_pos] >>
+  Cases_on `expr_type e = typ \/ is_bytestring_type typ \/
+            has_length_word typ /\ is_empty_value_expr e`
   >- (irule body_annassign_memory >> metis_tac[]) >>
   irule body_annassign_other >> metis_tac[]
 QED

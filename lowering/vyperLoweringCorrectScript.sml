@@ -28,10 +28,13 @@
  *     whose return may release a transient nonreentrant lock
  *   (S1, lower_vyper_runtime_unit_correct, is in loweringRuntimeCorrect)
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
+ *   lower_vyper_runtime_unit_o1_shape_extras -- S2b (planned admission,
+ *     Milestone 5): the non-INVOKE label operands are local, the entry
+ *     function has no PARAM, no first block has a PHI
  *   (S3, lower_vyper_runtime_unit_memory_ok, is in loweringMemCorrect)
  *
  * TASK056: obsolete NONE-mode relation retained as inactive source provenance.
- * STATUS: S2 is proved.
+ * STATUS: S2 is proved; S2b is a statement.
  * Before major proof repair, check lowering definitions against the chosen
  * upstream compiler target; see docs/compiler-definition-parity.md.
  *)
@@ -53,7 +56,7 @@ Ancestors
   venomExecSemantics
   venomState
   compileEnv e2eDefs supportedProgram compileVyper immutableSectionRel
-  unitTransformDefs unitShapeDefs
+  unitTransformDefs unitShapeDefs o1PassContract
   fragExec loweringHalt loweringShapeProps retAbiPlanProps
   venomInst venomWf contextCodegenRel memSafeRun allocaFrontierBound
 
@@ -881,6 +884,32 @@ Theorem lower_vyper_runtime_unit_source_unit_ok:
     ==> o1_source_unit_ok unit
 Proof
   ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_names
+QED
+
+(* S2b: planned admission, Milestone 5. The lowering's PHI-free code
+   refers to labels only in jumps to blocks of the same function, in
+   reserved labels, and in INVOKE targets; its entry function reads
+   calldata, never a PARAM; and, having no PHI at all, no first block has
+   one. *)
+Theorem lower_vyper_runtime_unit_o1_shape_extras:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+    immutable_free_program tops
+    ==> unit_label_refs_ok unit /\ unit_entry_no_params unit /\
+        unit_first_block_no_phi unit
+Proof
+  cheat
+QED
+
+(* The runtime unit reserves no global memory. *)
+Theorem lower_vyper_runtime_unit_global_reserved:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit
+    ==> unit.cu_context.ctx_global_reserved = []
+Proof
+  rpt gen_tac >> simp[lower_vyper_runtime_unit_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> strip_tac >>
+  irule vyperCompilerTheory.run_lowering_global_reserved >> metis_tac[]
 QED
 
 (* ===== S3: memory safety ===== *)
