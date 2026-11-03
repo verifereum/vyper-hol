@@ -916,7 +916,11 @@ Proof
     qpat_x_assum `¬is_signed_type _` mp_tac >>
     qpat_x_assum `type_bits _ ≤ 256` mp_tac >>
     rpt (pop_assum kall_tac) >> rpt strip_tac >>
-    gvs[type_bounds_def, in_type_range_def, math_val_def, LET_THM] >>
+    qpat_x_assum `¬in_type_range _ _` mp_tac >>
+    simp[math_val_def] >>
+    simp[in_type_range_def] >> strip_tac >>
+    qpat_x_assum `type_bounds _ = _` mp_tac >>
+    simp[type_bounds_def, LET_THM] >> strip_tac >> gvs[] >>
     `0 < 2 ** type_bits ty ∧ 2 ** type_bits ty ≤ 2 ** 256` by simp[] >>
     `2 ** type_bits ty − 1 < 2 ** 256` by decide_tac >>
     simp[wordsTheory.w2n_n2w, wordsTheory.dimword_def]) >>
