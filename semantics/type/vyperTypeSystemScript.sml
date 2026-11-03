@@ -297,13 +297,14 @@ End
 Definition assignable_type_def:
   assignable_type tenv (BaseT bt) = well_formed_type tenv (BaseT bt) /\
   assignable_type tenv (TupleT tys) =
-    (well_formed_type tenv (TupleT tys) /\ EVERY (assignable_type tenv) tys) /\
+    (tys <> [] /\ well_formed_type tenv (TupleT tys) /\
+     EVERY (assignable_type tenv) tys) /\
   assignable_type tenv (ArrayT elem bd) =
     (well_formed_type tenv (ArrayT elem bd) /\ assignable_type tenv elem) /\
   assignable_type tenv (StructT nsid) =
     (case FLOOKUP tenv nsid of
      | SOME (StructArgs args) =>
-         well_formed_type tenv (StructT nsid) /\
+         args <> [] /\ well_formed_type tenv (StructT nsid) /\
          EVERY (assignable_type (tenv \\ nsid) o SND) args
      | _ => F) /\
   assignable_type tenv (FlagT nsid) = well_formed_type tenv (FlagT nsid) /\
@@ -341,6 +342,36 @@ Proof
       Cases_on `x` >> gvs[] >>
       Cases_on `evaluate_types (tenv \\ p) (MAP SND l) []` >> gvs[])
   >- (Cases_on `FLOOKUP tenv p` >> gvs[] >> Cases_on `x` >> gvs[])
+QED
+
+(* A variable's type takes at least one storage slot: assignable_type
+   rejects None, the empty tuple and the empty struct. *)
+Theorem assignable_type_slot_size_pos:
+  !tenv ty tv. assignable_type tenv ty /\ evaluate_type tenv ty = SOME tv ==>
+               0 < type_slot_size tv
+Proof
+  recInduct assignable_type_ind >> rpt strip_tac
+  >~ [`assignable_type _ (BaseT bt)`]
+  >- (gvs[evaluate_type_def] >> Cases_on `bt` >> gvs[type_slot_size_def] >>
+      Cases_on `b` >> gvs[type_slot_size_def])
+  >~ [`assignable_type _ (TupleT tys)`]
+  >- (gvs[assignable_type_def, evaluate_type_def, evaluate_types_OPT_MMAP,
+          AllCaseEqs()] >>
+      Cases_on `tys` >> gvs[OPT_MMAP_def, type_slot_size_def] >>
+      first_x_assum (qspec_then `h` mp_tac) >> simp[])
+  >~ [`assignable_type _ (ArrayT elem bd)`]
+  >- (gvs[evaluate_type_def, AllCaseEqs()] >>
+      Cases_on `bd` >>
+      gvs[type_slot_size_def, arithmeticTheory.ZERO_LESS_MULT])
+  >~ [`assignable_type _ (StructT nsid)`]
+  >- (gvs[assignable_type_def, evaluate_type_def, evaluate_types_OPT_MMAP,
+          AllCaseEqs()] >>
+      Cases_on `args` >> gvs[] >> PairCases_on `h` >>
+      gvs[OPT_MMAP_def, type_slot_size_def] >>
+      first_x_assum (qspec_then `(h0,h1)` mp_tac) >> simp[])
+  >~ [`assignable_type _ (FlagT nsid)`]
+  >- gvs[evaluate_type_def, AllCaseEqs(), type_slot_size_def]
+  >> gvs[assignable_type_def]
 QED
 
 Theorem assignable_type_evaluate_not_NoneTV:
@@ -694,7 +725,11 @@ Definition well_typed_expr_def:
      well_typed_type_builtin_args tb target_ty (MAP expr_type es)) /\
   well_typed_expr env (Pop ty tgt) =
     (?n. type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n))) /\
-         assignable_type env.type_defs (ArrayT ty (Dynamic n))) /\
+         assignable_type env.type_defs (ArrayT ty (Dynamic n)) /\
+         (case tgt of
+          | TopLevelNameTarget nsid =>
+              IS_NONE (FLOOKUP env.bare_global_assignable nsid)
+          | _ => T)) /\
   well_typed_expr env (Call ty (IntCall (src_id_opt, fn_name)) args drv) =
     (well_typed_exprs env args /\ well_typed_opt env drv /\ well_formed_type env.type_defs ty /\
      ?sig. FLOOKUP env.fn_sigs (src_id_opt, fn_name) = SOME sig /\
