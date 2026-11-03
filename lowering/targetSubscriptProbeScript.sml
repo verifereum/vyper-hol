@@ -536,3 +536,28 @@ Proof
     mp_tac probe_guarded_symbolic_projections >>
   simp[]
 QED
+
+Theorem probe_guarded_empty_parent_dead:
+  !st b. lookup_storage 0w st = 0w /\ b < 32 ==>
+    storage_dead probe_guarded_context F st 1 b
+Proof
+  rpt strip_tac >>
+  simp[storage_dead_def, probe_guarded_declared_region] >>
+  simp[Once dead_bytes_def, type_slot_size_def, dimword_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  qexists_tac `0` >> simp[]
+QED
+
+Theorem probe_guarded_pre_call_dead:
+  !cenv env es res es' b.
+    expr_body_pre cenv probe_guarded_context env
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es /\
+    eval_expr probe_guarded_context
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es =
+      (res,es') /\ b < 32 ==>
+    storage_dead probe_guarded_context F
+      (get_storage probe_guarded_context es' F) 1 b
+Proof
+  rpt strip_tac >> drule_all probe_guarded_pre_projections >> strip_tac >>
+  irule probe_guarded_empty_parent_dead >> simp[]
+QED
