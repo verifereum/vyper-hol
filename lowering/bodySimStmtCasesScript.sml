@@ -1552,7 +1552,19 @@ QED
    whether the target's type is a word.  GAP: cheated, for alan. *)
 Theorem body_assign_place_word:
   !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es' ty.
-    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /    body_expr_ok cx e /    body_inv tops ctx cenv cx /    supported_stmt tops bindings (Assign (BaseTarget t) e) /    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /    locals_alloc_ok cenv env /    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /    frame_ret_ok ctx func cx RetQ cenv ret_ty /    eval_stmt cx (Assign (BaseTarget t) e) es = (res, es') /    ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) /    type_place_target env t = SOME (Type ty) /\ is_word_type ty ==>
+    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
+    body_expr_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    eval_stmt cx (Assign (BaseTarget t) e) es = (res, es') /\
+    ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) /\
+    type_place_target env t = SOME (Type ty) /\ is_word_type ty ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e)) es res es'
 Proof
@@ -1561,7 +1573,19 @@ QED
 
 Theorem body_assign_place_copy:
   !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es' ty.
-    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /    body_expr_ok cx e /    body_inv tops ctx cenv cx /    supported_stmt tops bindings (Assign (BaseTarget t) e) /    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /    locals_alloc_ok cenv env /    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /    frame_ret_ok ctx func cx RetQ cenv ret_ty /    eval_stmt cx (Assign (BaseTarget t) e) es = (res, es') /    ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) /    type_place_target env t = SOME (Type ty) /\ ~is_word_type ty /\
+    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
+    body_expr_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    eval_stmt cx (Assign (BaseTarget t) e) es = (res, es') /\
+    ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) /\
+    type_place_target env t = SOME (Type ty) /\ ~is_word_type ty /\
     (expr_type e = ty \/ is_bytestring_type ty \/
      has_length_word (expr_type e) /\ is_empty_value_expr e) ==>
     stmt_frag ctx func cx lctx RetQ cenv
@@ -1680,9 +1704,12 @@ Proof
                  (is_word_type ty \/
                   expr_type e = ty \/ is_bytestring_type ty \/
                   has_length_word (expr_type e) /\ is_empty_value_expr e)`
-  >- (gvs[] >> Cases_on `is_word_type ty`
-      >- (irule body_assign_place_word >> metis_tac[])
-      >- (irule body_assign_place_copy >> metis_tac[])) >>
+  >- (qpat_x_assum `(_ \/ _) /\ ?ty. _`
+        (CONJUNCTS_THEN2 assume_tac
+           (qx_choose_then `ty` (CONJUNCTS_THEN assume_tac))) >>
+      Cases_on `is_word_type ty`
+      >- (irule body_assign_place_word >> metis_tac[]) >>
+      irule body_assign_place_copy >> metis_tac[]) >>
   irule body_assign_other >> simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`bindings`, `env`, `env'`, `tops`] >> fs[]
 QED
@@ -2206,8 +2233,20 @@ Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
-       eval_target_place cx t s'' = (INL p,t') /       read_place cx p s'3' = (INL cur,t'') /       place_type_value cx p s'4' = (INL ptv,t'3') ==>
-       body_expr_ok cx e) /\ body_base_target_ok cx t /    body_inv tops ctx cenv cx /    supported_stmt tops bindings (AugAssign ty t bop e) /    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /    locals_alloc_ok cenv env /    type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /    stmt_exprs_ok cenv (AugAssign ty t bop e) /    call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /    frame_ret_ok ctx func cx RetQ cenv ret_ty /    eval_stmt cx (AugAssign ty t bop e) es = (res, es') /    ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) ==>
+       eval_target_place cx t s'' = (INL p,t') /\
+       read_place cx p s'3' = (INL cur,t'') /\
+       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_ok cx e) /\ body_base_target_ok cx t /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (AugAssign ty t bop e) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+    stmt_exprs_ok cenv (AugAssign ty t bop e) /\
+    call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    eval_stmt cx (AugAssign ty t bop e) es = (res, es') /\
+    ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
 Proof
