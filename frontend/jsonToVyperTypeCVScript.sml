@@ -29,29 +29,6 @@ val translate_type_compute_ind = save_thm ("translate_type_compute_ind",
      | INR (ctx,tys) => list_size json_type_size tys)` >> simp[]));
 val () = cv_auto_trans translate_type_compute;
 
-Definition translate_annotations_cv_def:
-  translate_annotations_cv ctx anns = MAP (λann. translate_annotation ctx ann) anns
-End
-
-Theorem translate_annotations_cv_compute:
-  (translate_annotations_cv ctx [] = []) /\
-  (translate_annotations_cv ctx (ann::anns) =
-    translate_annotation ctx ann :: translate_annotations_cv ctx anns)
-Proof
-  simp[translate_annotations_cv_def]
-QED
-
-val translate_annotation_compute = save_thm ("translate_annotation_compute",
-  CONJ (PURE_REWRITE_RULE [GSYM translate_annotations_cv_def] translate_annotation_def)
-       translate_annotations_cv_compute);
-val translate_annotation_compute_ind = save_thm ("translate_annotation_compute_ind",
-  jsonToVyperCVLib.register_first_order_induction "translate_annotation_first_order"
-    translate_annotation_compute
-    (WF_REL_TAC `measure (λx. case x of
-       INL (ctx,ann) => json_type_annotation_size ann
-     | INR (ctx,anns) => list_size json_type_annotation_size anns)` >> simp[]));
-val () = cv_auto_trans translate_annotation_compute;
-
 Definition annotations_resolved_cv_def:
   annotations_resolved_cv nominal_index all_import_maps ctx anns =
     EVERY (λann. annotation_resolved nominal_index all_import_maps ctx ann) anns
