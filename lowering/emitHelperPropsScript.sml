@@ -760,24 +760,27 @@ Theorem exec_block_inst_seq_prefix:
     exec_block fuel ctx bb (ss with vs_inst_idx := idx) =
       exec_block fuel ctx bb (ss' with vs_inst_idx := idx + LENGTH insts)
 Proof
-  Induct_on `insts` >>
-  rw[run_inst_seq_def] >>
-  Cases_on `step_inst_base h ss` >> gvs[] >>
-  simp[Once exec_block_def] >>
-  CASE_TAC >- (first_x_assum(qspec_then`0`mp_tac) >> rw[]) >>
-  first_assum(qspec_then`0`mp_tac) >>
-  impl_tac >- rw[] >> simp_tac(srw_ss())[] >> strip_tac >> gvs[] >>
-  simp[Once step_inst_def] >>
-  drule step_inst_inst_idx_indep >>
-  simp[] >> disch_then kall_tac >>
-  simp[exec_result_map_def] >>
-  first_x_assum drule >>
+  Induct_on `insts`
+  >- simp[run_inst_seq_def] >>
+  rpt gen_tac >>
+  simp_tac bool_ss [run_inst_seq_def, EVERY_DEF, LENGTH] >>
+  strip_tac >>
+  Cases_on `step_inst_base h ss` >>
+  gvs[exec_result_case_def, exec_result_distinct, exec_result_11] >>
+  `get_instruction bb idx = SOME h` by
+    (qpat_x_assum `!k. k < SUC _ ==> _` (qspec_then `0` mp_tac) >>
+     simp[]) >>
+  `!k. k < LENGTH insts ==>
+       get_instruction bb (SUC idx + k) = SOME (EL k insts)` by
+    (rpt strip_tac >>
+     qpat_x_assum `!k. k < SUC _ ==> _` (qspec_then `SUC k` mp_tac) >>
+     simp[ADD_CLAUSES]) >>
+  drule_all exec_block_prefix_step >>
+  disch_then (qspecl_then [`fuel`, `ctx`] SUBST1_TAC) >>
   `idx + SUC (LENGTH insts) = SUC idx + LENGTH insts` by simp[] >>
-  pop_assum SUBST_ALL_TAC >>
-  disch_then irule >>
-  rw[] >>
-  first_x_assum(qspec_then`SUC k`mp_tac) >>
-  rw[] >> gvs[arithmeticTheory.ADD1]
+  pop_assum SUBST1_TAC >>
+  first_x_assum irule >>
+  simp[]
 QED
 
 (* Full single-block execution ending with JMP:
