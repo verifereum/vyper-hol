@@ -372,6 +372,29 @@ Proof
   simp[elem_count_append] >> decide_tac
 QED
 
+Theorem materialised_pending_next_on_stack_window:
+  !pending fixed ps.
+    (!op. LIST_ELEM_COUNT op pending <= LIST_ELEM_COUNT op ps.ps_stack) /\
+    LENGTH pending <= LENGTH ps.ps_stack /\
+    (!i. i < fixed ==>
+      stack_peek (LENGTH pending - 1 - i) ps.ps_stack = EL i pending) /\
+    fixed < LENGTH pending ==>
+    ?d. stack_get_unfixed_depth (EL fixed pending)
+      (LENGTH pending - 1 - fixed) (LENGTH pending) ps.ps_stack = SOME d
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `stack_get_unfixed_depth (EL fixed pending)
+    (LENGTH pending - 1 - fixed) (LENGTH pending) ps.ps_stack`
+  >- (`LIST_ELEM_COUNT (EL fixed pending) ps.ps_stack <=
+         LIST_ELEM_COUNT (EL fixed pending) (TAKE fixed pending)` by
+        (irule fixed_window_count_bound >> simp[]) >>
+      qpat_x_assum `!op. LIST_ELEM_COUNT op pending <= _`
+        (qspec_then `EL fixed pending` assume_tac) >>
+      drule_then assume_tac elem_count_take_el_lt >>
+      qsuff_tac `F` >- simp[] >> decide_tac)
+  >> simp[]
+QED
+
 Theorem materialised_pending_next_on_stack:
   !base pending fixed ps.
     (!op. LIST_ELEM_COUNT op pending <=
@@ -4001,9 +4024,8 @@ Proof
   simp[]
 QED
 
-Theorem reorder_one_materialised_counts:
-  !dfg pending idx op ps ops ps' base d.
-    residual_budget_wf base pending ps /\
+Theorem reorder_one_materialised_counts_unconditional:
+  !dfg pending idx op ps ops ps' d.
     idx < LENGTH pending /\ LENGTH pending <= LENGTH ps.ps_stack /\
     LENGTH pending <= 16 /\ MEM op pending /\
     stack_get_unfixed_depth op (LENGTH pending - 1 - idx)
@@ -4024,10 +4046,6 @@ Proof
       rename1 `reduce_depth_plan (LENGTH ps.ps_stack) pending op
         (LENGTH pending - (idx + 1)) (LENGTH pending) ps =
         (reduce_ops,ps2)` >>
-      `residual_budget_wf base' pending ps2` by
-        (qspecl_then [`LENGTH ps.ps_stack`, `base'`, `pending`, `op`,
-           `LENGTH pending - (idx + 1)`, `ps`, `reduce_ops`, `ps2`]
-           mp_tac reduce_depth_plan_residual_budget_wf >> simp[]) >>
       `LENGTH pending <= LENGTH ps2.ps_stack` by
         (qspecl_then [`LENGTH ps.ps_stack`, `pending`, `op`,
            `LENGTH pending - (idx + 1)`, `LENGTH pending`, `ps`,
@@ -4049,11 +4067,7 @@ Proof
       CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >> strip_tac >> gvs[] >>
       strip_tac >> gvs[] >> gen_tac >> strip_tac >>
       `LIST_ELEM_COUNT x ps2.ps_stack = LIST_ELEM_COUNT x ps.ps_stack` by
-        (qspecl_then [`LENGTH ps.ps_stack`, `pending`,
-           `stack_peek d ps.ps_stack`,
-           `LENGTH pending - (idx + 1)`, `ps`, `reduce_ops`, `ps2`,
-           `base'`, `x`] mp_tac reduce_depth_plan_pending_stack_count >>
-         simp[]) >>
+        metis_tac[reduce_depth_plan_pending_stack_count_unconditional] >>
       qspecl_then [`dfg`, `stack_peek d ps.ps_stack`, `dist'`,
         `LENGTH pending - (idx + 1)`, `ps2`, `x`]
         mp_tac reorder_place_phase_multiplicity >> simp[] >> strip_tac >>
@@ -4067,6 +4081,47 @@ Proof
        `LENGTH pending - (idx + 1)`, `ps`, `x`]
        mp_tac reorder_place_phase_multiplicity >> simp[] >>
      decide_tac
+QED
+
+Theorem reorder_one_materialised_counts:
+  !dfg pending idx op ps ops ps' base d.
+    residual_budget_wf base pending ps /\
+    idx < LENGTH pending /\ LENGTH pending <= LENGTH ps.ps_stack /\
+    LENGTH pending <= 16 /\ MEM op pending /\
+    stack_get_unfixed_depth op (LENGTH pending - 1 - idx)
+      (LENGTH pending) ps.ps_stack = SOME d /\
+    reorder_one dfg pending idx op ps = (ops,ps') ==>
+    !x. MEM x pending ==>
+      LIST_ELEM_COUNT x ps'.ps_stack = LIST_ELEM_COUNT x ps.ps_stack
+Proof
+  metis_tac[reorder_one_materialised_counts_unconditional]
+QED
+
+Theorem reorder_one_advances_fixed_window:
+  !dfg pending idx ps ops ps'.
+    idx < LENGTH pending /\ LENGTH pending <= 16 /\
+    LENGTH pending <= LENGTH ps.ps_stack /\
+    (!x. MEM x pending ==>
+      LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
+    (!i. i < idx ==>
+      stack_peek (LENGTH pending - 1 - i) ps.ps_stack = EL i pending) /\
+    reorder_one dfg pending idx (EL idx pending) ps = (ops,ps') ==>
+    !i. i < SUC idx ==>
+      stack_peek (LENGTH pending - 1 - i) ps'.ps_stack = EL i pending
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!x. LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack` by
+    (gen_tac >> Cases_on `MEM x pending`
+     >- simp[] >> gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
+  `?d. stack_get_unfixed_depth (EL idx pending)
+    (LENGTH pending - 1 - idx) (LENGTH pending) ps.ps_stack = SOME d` by
+    metis_tac[materialised_pending_next_on_stack_window] >>
+  `MEM (EL idx pending) pending` by simp[EL_MEM] >>
+  gen_tac >> strip_tac >> Cases_on `i = idx`
+  >- (qpat_x_assum `i = idx` SUBST_ALL_TAC >>
+      irule reorder_one_places >> metis_tac[]) >>
+  `i < idx` by decide_tac >>
+  metis_tac[reorder_one_preserves_fixed]
 QED
 
 Theorem do_restore_preserves_not_spilled[local]:
