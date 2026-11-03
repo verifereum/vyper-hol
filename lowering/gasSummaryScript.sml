@@ -118,3 +118,14 @@ Proof
   simp[gas_summary_at_def, gas_marked_exec_def, gas_summary_def] >>
   metis_tac[gas_path_mem_exec]
 QED
+
+(* Generated target reads carry false marks when the source reads no gas. *)
+Theorem gas_marked_exec_no_source_read:
+  (!tail. source (es with gas_obs := tail) =
+            (res, es_end with gas_obs := tail)) /\
+  gas_path_mem ctx func s0 n r ==>
+  gas_marked_exec (ctx, func) source (es, s0)
+    (REPLICATE n F) res es_end r
+Proof
+  simp[gas_marked_exec_def]
+QED
