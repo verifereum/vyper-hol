@@ -93,8 +93,13 @@ Proof
         drule (cj 3 exec_pure_ok_update) >> strip_tac >>
         gvs[update_var_def, FLOOKUP_UPDATE, venom_state_component_equality]) >>
   (* the assertions *)
-  pop_assum mp_tac >> rpt (CASE_TAC >> simp[]) >> rw[update_var_def] >>
-  simp[FLOOKUP_UPDATE, venom_state_component_equality]
+  all_tac
+  >~ [`inst.inst_opcode = ASSERT`]
+  >- (gvs[AllCaseEqs()] >>
+      simp[venom_state_component_equality])
+  >~ [`inst.inst_opcode = ASSERT_UNREACHABLE`]
+  >- (gvs[AllCaseEqs()] >>
+      simp[venom_state_component_equality])
 QED
 
 (* ===== The run ===== *)
