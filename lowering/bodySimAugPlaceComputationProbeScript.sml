@@ -3,7 +3,7 @@ Ancestors
   vyperTypeSystem vyperTyping vyperInterpreter vyperState vyperStorage vyperValue vyperAST
   finite_map words compileEnv vyperCompiler stmtLowering venomExecSemantics venomState vfmState
 Libs
-  wordsLib
+  wordsLib intLib
 
 Definition aug_place_compute_inner_ty_def:
   aug_place_compute_inner_ty = ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 1)) (Dynamic 1)
@@ -267,4 +267,103 @@ QED
    premise satisfiability or negation of stmt_frag established. The next
    arithmetic probe may test an observable discrepancy, but must retain
    these semantic/universal/runtime-unit residuals explicitly.
+*)
+
+(* Bounded arithmetic observation, not a full simulation counterexample. *)
+Theorem aug_place_compute_add_overflows:
+  evaluate_binop (Unsigned 256) (BaseTV (UintT 256)) Add
+    (IntV 7) (IntV (&(2 ** 256) - 1)) =
+    INR (RuntimeError "bounded_int_op bound") /\
+  evaluate_binop (Unsigned 256) (BaseTV (UintT 256)) Add
+    (IntV 0) (IntV (&(2 ** 256) - 1)) =
+    INL (IntV (&(2 ** 256) - 1))
+Proof
+  EVAL_TAC
+QED
+
+Definition aug_place_compute_max_rhs_def:
+  aug_place_compute_max_rhs =
+    Literal (BaseT (UintT 256)) (IntL (&(2 ** 256) - 1))
+End
+
+Theorem aug_place_compute_source_aug_overflow:
+  FST (eval_stmt aug_place_compute_cx
+    (AugAssign (BaseT (UintT 256)) aug_place_compute_target Add
+      aug_place_compute_max_rhs) aug_place_compute_initial) =
+    INR (Error (RuntimeError "bounded_int_op bound"))
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def, type_slot_size_def] >>
+  EVAL_TAC >> simp[] >> EVAL_TAC >> simp[] >> EVAL_TAC >>
+  simp[wordsTheory.dimword_def, wordsTheory.WORD_ADD_0, return_def] >>
+  EVAL_TAC >> simp[wordsTheory.dimword_def, return_def] >> EVAL_TAC >>
+  simp[wordsTheory.dimword_def] >> EVAL_TAC >>
+  simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def]
+QED
+
+Definition aug_place_compute_suffix_lowered_def:
+  aug_place_compute_suffix_lowered = SND
+    (compile_stmt aug_place_compute_cenv NoLoop (BaseT (UintT 256))
+      (AugAssign (BaseT (UintT 256))
+        (TopLevelNameTarget (NONE,"outer")) Add aug_place_compute_max_rhs)
+      (initial_compile_state "entry"))
+End
+
+(* This isolates the SAME emitted load/add/store sequence at storage slot
+   zero; the captured-place prefix is deliberately not claimed here. *)
+Definition aug_place_compute_suffix_fn_def:
+  aug_place_compute_suffix_fn = mk_raw_function "suffix"
+    (<|bb_label := aug_place_compute_suffix_lowered.cs_current_bb;
+       bb_instructions := aug_place_compute_suffix_lowered.cs_current_insts ++
+         [<|inst_id := 100; inst_opcode := STOP; inst_operands := []; inst_outputs := []|>] |>
+     :: aug_place_compute_suffix_lowered.cs_blocks)
+End
+
+Theorem aug_place_compute_suffix_zero:
+  case run_blocks 5 ARB aug_place_compute_suffix_fn
+    (aug_place_compute_backend with vs_accounts :=
+      (0w =+ empty_account_state) empty_accounts) of
+    Halt s => sload 0w s = n2w (2 ** 256 - 1)
+  | _ => F
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def] >> EVAL_TAC >> simp[]
+QED
+
+Theorem aug_place_compute_suffix_seven:
+  case run_blocks 5 ARB aug_place_compute_suffix_fn
+    (aug_place_compute_backend with vs_accounts :=
+      (0w =+ (empty_account_state with storage :=
+        (0w =+ 7w) (K 0w))) empty_accounts) of
+    Abort a s => a = Revert_abort
+  | _ => F
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def] >> EVAL_TAC >> simp[]
+QED
+
+Theorem aug_place_compute_suffix_opcodes:
+  MAP (\i. i.inst_opcode) aug_place_compute_suffix_lowered.cs_current_insts =
+    [SLOAD; ADD; LT; ISZERO; ASSERT; SSTORE] /\
+  aug_place_compute_suffix_lowered.cs_blocks = []
+Proof
+  EVAL_TAC
+QED
+
+(* Observation boundary: source_aug_overflow checks the entire SOURCE
+   AugAssign, including its effectful target evaluation. suffix_zero and
+   suffix_seven check emitted backend load/add/store at a supplied slot;
+   the raw function's final STOP witnesses continuation after the store.
+   The root's declared array type is not a claim of source well-typedness
+   for this suffix-only harness. stmtLowering uses the AugAssign U annotation
+   for arithmetic and the root only for its pointer/location here.
+
+   The source result is RuntimeError, for which stmt_lands is false and
+   stmt_exit accepts any Abort. The zero-word suffix Halts instead of
+   Aborting; the seven-word suffix Aborts with Revert_abort as expected.
+   This is an observable diagnostic stronger than dead-word inequality,
+   but NOT a counterexample to the frozen theorem: there is no checked
+   whole compiled effectful target prefix linked to this suffix, no actual
+   body_inv runtime-unit/context, no complete entry stmt_state_rel, and
+   no discharge of the universal key body_expr_ok, frame_ret_ok or other
+   ledger residuals above. In particular finite run_blocks followed by
+   an artificial STOP does not yet exclude every run_from Abort outcome
+   of the whole statement in the required runtime context.
 *)
