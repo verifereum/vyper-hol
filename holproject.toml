@@ -7,6 +7,7 @@ version = "0.2.3"
 
 [build]
 roots = ["vyperHolScript.sml",
+         "tests/selfdestructReturnDataTestScript.sml",
          "tests/vyperPopTypingTestScript.sml",
          "tests/vyperCreateTypingTestScript.sml",
          "venom/proofs/allocaHistoryScript.sml",
@@ -31,6 +32,9 @@ roots = ["vyperHolScript.sml",
          "tests/conversionProofAuditScript.sml",
          "lowering/targetPlaceTestScript.sml",
          "lowering/targetPlaceSimCasesScript.sml",
+         "lowering/bodyMemoryDefsScript.sml",
+         "lowering/entryHaltMemScript.sml",
+         "lowering/loweringMemCorrectScript.sml",
          "lowering/builtinBytesMemoryScript.sml",
          "venom/passes/dft/tests/dftEffectOrderTestScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerAbiTupleStringScript.sml",

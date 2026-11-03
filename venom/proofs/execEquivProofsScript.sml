@@ -784,7 +784,7 @@ Proof
    s1.vs_call_ctx = s2.vs_call_ctx` by
     fs[state_equiv_def, execution_equiv_def] >>
   rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def, halt_state_def,
-    execution_equiv_def, lookup_var_def] >>
+    set_returndata_def, execution_equiv_def, lookup_var_def] >>
   fs[state_equiv_def, execution_equiv_def, lookup_var_def]
 QED
 

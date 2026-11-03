@@ -459,8 +459,8 @@ Proof
          (update_var sv (b + n2w i * 32w) s1) =
        OK (update_var vv (mload (w2n (b + n2w i * 32w)) sbase)
              (update_var sv (b + n2w i * 32w) s1))` by
-        simp[step_inst_base_def, mk_inst_def, exec_read1_def,
-             eval_operand_update_var] >>
+        simp[stepInstBaseLib.simp_opcode_clause ``MLOAD``, mk_inst_def,
+             exec_read1_def, eval_operand_update_var] >>
       simp[run_inst_seq_def]) >>
   conj_tac
   >- (irule store_copy_frame_update >> gvs[] >> metis_tac[]) >>
@@ -499,8 +499,10 @@ Proof
         (simp[Abbr `s1`] >> irule step_ADD >> simp[]) >>
       simp[run_inst_seq_def] >>
       fs[ALL_DISTINCT, eval_operand_def] >> Cases_on `loc = LocStorage` >>
-      simp[step_inst_base_def, mk_inst_def, exec_write2_def,
-           eval_operand_def, lookup_var_update_var, Abbr `s1`]) >>
+      simp[stepInstBaseLib.simp_opcode_clause ``SSTORE``,
+           stepInstBaseLib.simp_opcode_clause ``TSTORE``, mk_inst_def,
+           exec_write2_def, eval_operand_def, lookup_var_update_var,
+           Abbr `s1`]) >>
   conj_tac >- (irule store_copy_frame_store >> simp[]) >>
   Cases_on `loc = LocStorage` >>
   gvs[sstore_def, tstore_def, eval_operand_def, lookup_var_def,
@@ -527,8 +529,8 @@ Proof
   qexists_tac `update_var cv (n2w i + 1w) s1` >> conj_tac
   >- (`step_inst_base (mk_inst id ADD [Var cv; Lit 1w] [nv]) s = OK s1` by
         (simp[Abbr `s1`] >> irule step_ADD >> simp[eval_operand_lit]) >>
-      simp[run_inst_seq_def, step_inst_base_def, mk_inst_def,
-           eval_operand_update_var, Abbr `s1`]) >>
+      simp[run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``ASSIGN``,
+           mk_inst_def, eval_operand_update_var, Abbr `s1`]) >>
   conj_tac >- (irule store_copy_frame_update >> metis_tac[]) >>
   simp[eval_operand_update_var, update_var_def, Abbr `s1`,
        arithmeticTheory.ADD1, wordsTheory.word_add_n2w]
@@ -623,7 +625,8 @@ Proof
   fs[same_blocks_def] >> simp[mk_inst_def, is_terminator_def] >>
   rpt strip_tac >> gvs[] >> disj1_tac >>
   qexists_tac `update_var cv 0w sbase` >> conj_tac
-  >- simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, eval_operand_lit] >>
+  >- simp[run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``ASSIGN``,
+          mk_inst_def, eval_operand_lit] >>
   conj_tac >- (irule store_copy_frame_update >> simp[] >> metis_tac[]) >>
   simp[eval_operand_def, lookup_var_update_var, lookup_var_def, update_var_def,
        FLOOKUP_UPDATE]
