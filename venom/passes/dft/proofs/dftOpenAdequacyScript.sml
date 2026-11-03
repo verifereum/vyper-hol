@@ -475,3 +475,61 @@ Theorem dft_open_inst_boundary_initial:
 Proof
   simp[dft_open_inst_boundary_def, dft_open_run_boundary_def]
 QED
+
+Theorem dft_open_deliver_boundary[local]:
+  dft_open_inst_boundary fn budget bb stack s.vs_inst_idx
+    (dft_open_deliver fn budget bb inst s stack m rr)
+Proof
+  Cases_on `rr` >>
+  simp[dft_open_deliver_def, dft_open_continue_def,
+       dft_open_inst_boundary_def, dft_open_run_boundary_def] >>
+  Cases_on `is_terminator inst.inst_opcode` >> simp[] >>
+  Cases_on `v.vs_halted` >> simp[]
+QED
+
+Theorem dft_open_non_invoke_segment:
+  dft_sparse_oracle a xs /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode <> INVOKE /\
+  step_inst budget ctx inst (dft_open_materialize xs n s) = r ==>
+  ?rr m d. n <= m /\
+    dft_open_result_eq (dft_open_materialize_result xs m rr) r /\
+    dft_first_hit (dft_open_next a ctx)
+      (dft_open_inst_boundary fn budget bb stack s.vs_inst_idx)
+      (DftOpen (DftAt fn budget bb s) stack n) 1 d /\
+    (d = dft_open_deliver fn budget bb inst s stack m rr \/
+     (?e. rr = Error e /\ d = DftOpen (DftDone rr) [] m))
+Proof
+  strip_tac >> gvs[step_inst_non_invoke] >>
+  Cases_on `inst.inst_opcode = GAS`
+  >- (Cases_on `?out. inst.inst_outputs = [out]`
+      >- (pop_assum strip_assume_tac >>
+          drule_all dft_open_gas_materialize >> strip_tac >> gvs[] >>
+          qexistsl_tac [`OK (update_var out (a n) s)`, `SUC n`,
+            `dft_open_deliver fn budget bb inst s stack (SUC n)
+              (OK (update_var out (a n) s))`] >>
+          simp[dft_open_materialize_result_def] >>
+          simp[dft_first_hit_def, dft_open_inst_boundary_initial, dft_open_next_def,
+               dft_open_deliver_boundary]) >>
+      `step_inst_base inst (dft_open_materialize xs n s) =
+        Error "read0 requires single output"` by
+        (irule dft_open_bad_gas_materialize >> metis_tac[]) >>
+      gvs[] >> qexistsl_tac [`Error "read0 requires single output"`, `n`,
+        `DftOpen (DftDone (Error "read0 requires single output")) [] n`] >>
+      simp[dft_open_materialize_result_def] >>
+      simp[dft_first_hit_def, dft_open_inst_boundary_initial, dft_open_next_def,
+           dft_open_inst_boundary_def, dft_open_run_boundary_def] >>
+      Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[]) >>
+  qexistsl_tac [`step_inst_base inst s`, `n`,
+    `dft_open_deliver fn budget bb inst s stack n (step_inst_base inst s)`] >>
+  conj_tac >- simp[] >> conj_tac
+  >- (drule dft_open_base_materialize >>
+      disch_then (qspecl_then [`xs`, `s`, `n`] mp_tac) >>
+      Cases_on `step_inst_base inst s` >>
+      Cases_on `step_inst_base inst (dft_open_materialize xs n s)` >>
+      simp[dft_open_result_eq_def, lift_result_def,
+           dft_open_materialize_result_def]) >>
+  simp[] >>
+  simp[dft_first_hit_def, dft_open_inst_boundary_initial, dft_open_next_def,
+       dft_open_deliver_boundary]
+QED
