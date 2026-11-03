@@ -72,7 +72,9 @@ Theorem gas_summary_no_source_read:
    (exit_result r /\ R res (es_end with gas_obs := []) r)) ==>
   gas_summary (ctx, func) source (es, s0) Q R
 Proof
-  cheat
+  strip_tac >> rewrite_tac[gas_summary_def] >>
+  qexistsl_tac [`REPLICATE n F`, `res`, `es_end`] >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem gas_summary_next_read:
