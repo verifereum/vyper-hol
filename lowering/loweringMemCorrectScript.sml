@@ -22,6 +22,8 @@
  *     S1's entry bridge with memory (#639, #867)
  *   external_frame_ret_ok_mem -- the frame's returns with memory (#640),
  *     from entryHaltMem's return leaves
+ *   lower_vyper_runtime_unit_dload_offset_ok -- S3's no-wrap bound on
+ *     DLOAD/DLOADBYTES offsets, which LowerDload's expansion needs
  *)
 Theory loweringMemCorrect
 Ancestors
@@ -32,7 +34,7 @@ Ancestors
   contextCodegenRel memSafeRun allocaFrontierBound
   vyperLoweringCorrect loweringRuntimeCorrect fragExecMem bodyMemoryDefs
   entryHaltMem stmtSim bodySim bodySimMain moduleLowering stmtLowering
-  vyperTypeSystem vyperState
+  vyperTypeSystem vyperState lowerDloadDefs
 
 val _ = Parse.hide "body";
 
@@ -391,3 +393,23 @@ Proof
   simp[]
 QED
 
+(* ADMITTED, S3's twin for LowerDload: every reachable DLOAD/DLOADBYTES
+   offset, added to the length of the code before the data section, stays
+   below 2^256, so LowerDload's code_end-relative CODECOPY offset does not
+   wrap.  Proof idea: runtime immutable offsets lie inside the immutable
+   section, and the runtime code is far shorter than 2^255. *)
+Theorem lower_vyper_runtime_unit_dload_offset_ok:
+  !tops rpolicy unit am tx ret vs.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
+    ==> mem_inv dload_offset_ok unit.cu_context vs
+Proof
+  cheat
+QED

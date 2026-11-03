@@ -18,7 +18,7 @@ Ancestors
   loweringShapeProps loweringShapeSource vfmExecution
   venomPipelineCorrect
   passSimulationDefs
-  codegenCorrectness
+  codegenCorrectness immutableCodeLayout
   stateEquiv stateEquivProps
   venomExecSemantics
   vyperABI
@@ -766,6 +766,8 @@ Proof
   disch_then (qspec_then `cplan` assume_tac) >>
   qspecl_then [`prog`, `cplan`, `es`] assume_tac
     entry_venom_state_o1_initial_state_ok >>
+  drule_all generated_entry_code_layout_shape >>
+  disch_then (qspec_then `cplan` assume_tac) >>
   qabbrev_tac `vs = entry_venom_state prog cplan es` >>
   `vs.vs_outcomes = MAP SND (call_trace es) /\
    vs.vs_initial_fmp = n2w cplan.cp_initial_fmp /\
@@ -784,6 +786,7 @@ Proof
       qexists_tac `fuel` >> gvs[]) >> strip_tac >>
   `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by simp[] >>
   drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_dload_offset_ok >> strip_tac >>
   `o1_run_state_ok vs` by
     (fs[o1_run_state_ok_def] >> simp[Abbr`vs`, entry_venom_state_def]) >>
   `reserved_intervals_wf unit.cu_context.ctx_global_reserved` by
