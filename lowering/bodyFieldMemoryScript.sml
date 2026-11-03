@@ -492,3 +492,124 @@ val () = List.app (fn th =>
   end) [body_attribute_name_compile, body_attribute_name_eval,
         body_attribute_name_pre, body_base_memory_post_read_struct,
         compile_attribute_name_body_vv_sim_mem];
+
+Theorem body_word_load_prefix_mem_ok:
+  emit_op MLOAD [operand] sm = (op,sb) /\
+  eval_operand operand s = SOME w /\ w2n w + 32 <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (emitted_insts sm sb) s
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  simp[run_inst_seq_mem_ok_last] >>
+  simp[below_frontier_MLOAD]
+QED
+
+Theorem body_word_load_history[local]:
+  emit_op MLOAD [operand] sm = (op,sb) /\ fn_has_code sm sb func /\
+  fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
+  s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  run_inst_seq (emitted_insts sm sb) s = OK q ==>
+  alloca_history func (q with vs_inst_idx := LENGTH sb.cs_current_insts)
+Proof
+  rpt strip_tac >>
+  `(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+      DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sm sb ++ rest) /\
+    s.vs_inst_idx + LENGTH (emitted_insts sm sb) = LENGTH sb.cs_current_insts /\
+    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb)` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def, fresh_id_def, fresh_var_def, emit_def,
+         emitted_insts_def, fn_has_code_def, IS_PREFIX_APPEND] >>
+     simp[DROP_APPEND, DROP_LENGTH_TOO_LONG, mk_inst_def, is_terminator_def]) >>
+  drule_all alloca_history_run_inst_seq >> simp[]
+QED
+
+Theorem body_word_load_run_post[local]:
+  emit_op MLOAD [p.ptr_operand] sm = (op,sb) /\
+  p.ptr_location = LocMemory /\ is_word_type t /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s ==>
+  ?q. run_inst_seq (emitted_insts sm sb) s = OK q /\
+      expr_post ctx func cenv cx e es sa sb s0 es' v op q /\
+      q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt strip_tac >>
+  `t = expr_type e /\
+   ?w. eval_operand p.ptr_operand s = SOME w /\
+       !tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
+             mem_word_at (w2n w) s.vs_memory = typed_val_to_w256 tvt v` by
+    (gvs[vv_post_def, vv_holds_def, read_result_def, return_def] >> metis_tac[]) >>
+  gvs[] >> drule emitted_insts_emit_op >> strip_tac >>
+  qabbrev_tac `out = STRING #"%" (toString sm.cs_next_var)` >>
+  `not_local_ptr cenv es'.scopes out` by
+    (simp[Abbr `out`] >> irule local_ptrs_reserved_fresh >>
+     qexists_tac `sm` >> simp[]) >>
+  `!x. not_fresh_at sm x ==> x <> out` by
+    (simp[not_fresh_at_def, Abbr `out`] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  drule step_MLOAD >>
+  disch_then (qspecl_then [`sm.cs_next_id`, `out`] assume_tac) >>
+  qexists_tac `update_var out (mload (w2n w) s) s` >>
+  simp[run_inst_seq_def, Abbr `out`] >>
+  `stmt_state_rel ctx func cenv cx es' s` by fs[vv_post_def] >>
+  irule expr_post_of_vv_post_load >>
+  conj_tac >- simp[] >>
+  conj_tac
+  >- (qexists_tac `mload (w2n w) s` >>
+      simp[eval_operand_def, lookup_var_update_var, GSYM valueEncodingPropsTheory.mem_word_at_eq_mload]) >>
+  conj_tac
+  >- (irule stmt_state_rel_update_var >> simp[]) >>
+  qexistsl [`p`, `s`, `sm`, `expr_type e`] >>
+  simp[lookup_var_update_var, update_var_def] >> metis_tac[]
+QED
+
+Theorem unwrap_memory_word_sim_mem:
+  emit_op MLOAD [p.ptr_operand] sm = (op,sb) /\
+  p.ptr_location = LocMemory /\ is_word_type t /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func ==>
+  frag_exec_mem ctx sm sb
+    (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+            (LocatedValue t p) s /\
+         (?w. eval_operand p.ptr_operand s = SOME w /\
+              w2n w + 32 <= s.vs_alloca_next) /\
+         s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s)
+    (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+         s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s) R
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  qabbrev_tac `P = \s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+      (LocatedValue t p) s /\
+    (?w. eval_operand p.ptr_operand s = SOME w /\ w2n w + 32 <= s.vs_alloca_next) /\
+    s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s /\
+    ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts` >>
+  `frag_exec_mem ctx sm sb P
+    (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+         s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s) R`
+    suffices_by (simp[frag_exec_mem_def, Abbr `P`] >> metis_tac[]) >>
+  irule frag_exec_mem_run_inst_seq >> fs[same_blocks_def] >>
+  simp[IS_PREFIX_APPEND3, mk_inst_def, is_terminator_def] >>
+  gen_tac >> strip_tac >> gvs[Abbr `P`] >>
+  conj_tac >- (drule_all body_word_load_prefix_mem_ok >> simp[mk_inst_def]) >>
+  disj1_tac >> drule_all body_word_load_run_post >> strip_tac >>
+  `alloca_inv s` by gvs[vv_post_def, stmt_state_rel_def] >>
+  drule_all body_word_load_history >> strip_tac >>
+  qexists_tac `q` >> simp[] >>
+  qpat_x_assum `run_inst_seq _ _ = OK q` mp_tac >>
+  qpat_x_assum `alloca_history func (q with vs_inst_idx := _)` mp_tac >>
+  simp[mk_inst_def] >> rpt strip_tac >>
+  `is_word_type (expr_type e)` by gvs[vv_post_def, vv_holds_def] >>
+  fs[expr_post_def, expr_val_rel_def, expr_val_at_def,
+     stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def,
+     local_region_def, locals_kept_def] >>
+  conj_tac >> first_x_assum MATCH_ACCEPT_TAC
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_WORD_LOAD_MEMORY_AUDIT OK\n"
+     else raise Fail "word load memory inherited admission"
+  end) [body_word_load_prefix_mem_ok, body_word_load_history,
+        body_word_load_run_post, unwrap_memory_word_sim_mem];
