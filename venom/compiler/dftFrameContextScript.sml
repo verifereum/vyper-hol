@@ -56,7 +56,7 @@ Proof
   rw[enters_block_def] >> drule eval_phis_preserves_labels >> simp[]
 QED
 
-Theorem dft_frame_reach_labels[local]:
+Theorem dft_frame_reach_labels:
   !C fn s0 i s. frame_reach C fn s0 i s ==> s.vs_labels = s0.vs_labels
 Proof
   ho_match_mp_tac frame_reach_ind >> rpt strip_tac >>
