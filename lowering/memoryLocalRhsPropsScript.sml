@@ -258,7 +258,7 @@ QED
 
 Theorem type_builtin_read_annotation_typed:
   !cenv cx env es es' ty ty' tb target args v.
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\
     well_typed_expr env (TypeBuiltin ty' tb target args) /\
     call_evaluation_safe cx (int_calls_expr (TypeBuiltin ty tb target args)) /\
     (do r <- eval_expr cx (TypeBuiltin ty tb target args);

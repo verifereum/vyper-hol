@@ -442,14 +442,15 @@ Proof
   >- (irule stmt_state_rel_update_var >> conj_tac
       >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[]) >>
       `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by
-        (drule eval_send_preserves_non_accounts >> simp[]) >>
+        (drule eval_send_read >> strip_tac >>
+         drule eval_send_preserves_non_accounts >> simp[]) >>
       `immutable_alloca_sep func cenv cx es' s'` by
-        (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es1`] >>
+        (irule immutable_alloca_sep_fields >> qexistsl_tac [`t`, `es1`] >>
          gvs[stmt_state_rel_def] >>
          rpt strip_tac >> qexists_tac `id` >>
          gvs[local_region_def, lookup_var_def]) >>
       irule stmt_state_rel_allocas_frame >> simp[] >>
-      qexistsl_tac [`es1`, `s`] >> simp[]) >>
+      qexistsl_tac [`es1`, `t`] >> simp[]) >>
   irule wb_frame_readonly_tail >>
   qexists_tac `sm` >>
   qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>

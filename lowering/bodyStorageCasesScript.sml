@@ -18,7 +18,9 @@ Ancestors
   vyperStatePreservation vyperTypeAssignContext vyperStoragePlaceProvenance
   vyperPlaceStoragePreservation vyperValue vyperMachineFrame
   vyperTypeContractStaticMaps supportedDecls supportedStmts supportedExprs
-  supportedTargets supportedStmtTraverse list
+  supportedTargets supportedStmtTraverse list vyperSourceSupplyDefs
+Libs
+  vyperSourceSupplyLib
 
 Theorem supported_callable_body_contract:
   supported_program tops /\
@@ -313,14 +315,14 @@ QED
 (* List sequencing is independent of the syntactic source of the recursive
    preservation premises.  Consumers discharge these premises using their IH. *)
 Theorem body_eval_expr_results_cons_storage:
-  (!s r s'. runtime_storage_consistent env cx s /\
+  (!s r s'. runtime_storage_consistent env cx s /\ source_supply s /\
     IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
     eval_expr cx e s = (r,s') ==> contract_storage_well_formed cx s') /\
   (!tv s r s'. eval_expr cx e st = (INL tv,s) /\
-    runtime_storage_consistent env cx s /\
+    runtime_storage_consistent env cx s /\ source_supply s /\
     IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
     eval_expr_results cx es s = (r,s') ==> contract_storage_well_formed cx s') /\
-  well_typed_expr env e /\ runtime_storage_consistent env cx st /\
+  well_typed_expr env e /\ runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
   eval_expr_results cx (e::es) st = (res,st') ==>
@@ -331,6 +333,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def] >>
   Cases_on `eval_expr cx e st` >>
   rename1 `eval_expr cx e st = (head_res,head_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx head_st` by metis_tac[] >>
   `runtime_consistent env cx head_st` by
     metis_tac[eval_expr_preserves_runtime_consistent,
@@ -345,14 +348,15 @@ Proof
   Cases_on `tail_res` >> gvs[bind_def] >> rpt strip_tac >> gvs[]
 QED
 Theorem body_eval_exprs_cons_storage:
-  (!s r s'. runtime_storage_consistent env cx s /\
+  (!s r s'. runtime_storage_consistent env cx s /\ source_supply s /\
     IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
     eval_expr cx e s = (r,s') ==> contract_storage_well_formed cx s') /\
   (!tv v s r s'. eval_expr cx e st = (INL tv,s) /\
     read_result cx tv s = (INL v,s) /\ runtime_storage_consistent env cx s /\
+    source_supply s /\
     IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
     eval_exprs cx es s = (r,s') ==> contract_storage_well_formed cx s') /\
-  well_typed_expr env e /\ runtime_storage_consistent env cx st /\
+  well_typed_expr env e /\ runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
   eval_exprs cx (e::es) st = (res,st') ==>
@@ -363,6 +367,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def] >>
   Cases_on `eval_expr cx e st` >>
   rename1 `eval_expr cx e st = (head_res,head_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx head_st` by metis_tac[] >>
   `runtime_consistent env cx head_st` by
     metis_tac[eval_expr_preserves_runtime_consistent,
@@ -413,11 +418,11 @@ Theorem body_eval_subscript_target_storage:
   (!r s'. eval_base_place cx tgt st = (r,s') ==>
           contract_storage_well_formed cx s') /\
   (!pv s r s'. eval_base_place cx tgt st = (INL pv,s) /\
-    runtime_storage_consistent env cx s /\
+    runtime_storage_consistent env cx s /\ source_supply s /\
     IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
     eval_expr cx e s = (r,s') ==> contract_storage_well_formed cx s') /\
   type_place_target env tgt = SOME vt /\
-  runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+  runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_target tgt) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
   eval_base_place cx (SubscriptTarget tgt e) st = (res,st') ==>
@@ -428,6 +433,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, bind_def] >>
   Cases_on `eval_base_place cx tgt st` >>
   rename1 `eval_base_place cx tgt st = (base_res,base_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx base_st` by metis_tac[] >>
   `runtime_consistent env cx base_st` by
     metis_tac[eval_base_place_preserves_runtime_consistent,
@@ -512,11 +518,11 @@ Theorem body_eval_subscript_storage:
   (!r s'. eval_expr cx e1 st = (r,s') ==>
           contract_storage_well_formed cx s') /\
   (!tv s r s'. eval_expr cx e1 st = (INL tv,s) /\
-    runtime_storage_consistent env cx s /\
+    runtime_storage_consistent env cx s /\ source_supply s /\
     IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
     eval_expr cx idx s = (r,s') ==> contract_storage_well_formed cx s') /\
   (well_typed_expr env e1 \/ ?vt. type_place_expr env e1 = SOME vt) /\
-  runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+  runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e1) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
   eval_expr cx (Subscript ty e1 idx) st = (res,st') ==>
@@ -527,6 +533,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, bind_def] >>
   Cases_on `eval_expr cx e1 st` >>
   rename1 `eval_expr cx e1 st = (base_res,base_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx base_st` by metis_tac[] >>
   `runtime_consistent env cx base_st` by
     metis_tac[eval_expr_preserves_runtime_consistent,
@@ -656,7 +663,10 @@ Proof
   Cases_on `args_res` >>
   gvs[bind_def, ignore_bind_def, type_check_def, assert_def, return_def, raise_def]
   >- (rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
-      Cases_on `LENGTH vs = 1` >> gvs[] >> rpt strip_tac >> gvs[]) >>
+      Cases_on `LENGTH vs = 1` >>
+      Cases_on `dest_BytesV (HD vs)` >>
+      gvs[lift_option_type_def, lift_option_def, return_def, raise_def,
+          AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -701,13 +711,19 @@ Proof
       >- (Cases_on `dest_AddressV (HD vs)` >> gvs[return_def, raise_def]
           >- (rpt strip_tac >> gvs[]) >>
           rename1 `dest_AddressV (HD vs) = SOME addr` >>
-          Cases_on `transfer_value cx.txn.target addr
-            (lookup_account cx.txn.target args_st.accounts).balance args_st` >>
-          rename1 `transfer_value _ _ _ args_st = (transfer_res,transfer_st)` >>
-          drule_all transfer_value_preserves_contract_storage_well_formed >>
-          Cases_on `transfer_res` >>
-          gvs[bind_apply, ignore_bind_apply, return_def, raise_def] >>
-          rpt strip_tac >> gvs[]) >>
+          Cases_on `cx.txn.created_in_tx` >>
+          gvs[bind_def, ignore_bind_def, update_accounts_def,
+              update_pending_deletions_def, return_def, raise_def] >>
+          rpt strip_tac >> gvs[] >>
+          irule contract_storage_well_formed_storage_frame >>
+          qexists_tac `args_st` >> simp[] >>
+          gen_tac >> Cases_on `b` >>
+          simp[vyperStorageBackendTheory.get_storage_def,
+               vfmExecutionTheory.transfer_value_def,
+               vfmStateTheory.update_account_def,
+               vfmStateTheory.lookup_account_def,
+               combinTheory.APPLY_UPDATE_THM, AllCaseEqs()] >>
+          rpt IF_CASES_TAC >> gvs[combinTheory.APPLY_UPDATE_THM]) >>
       rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
 QED
@@ -739,15 +755,15 @@ Theorem body_eval_if_storage:
   (!r s. eval_expr cx cond st = (r,s) ==> contract_storage_well_formed cx s) /\
   (!tv s r s'. eval_expr cx cond st = (INL tv,s) /\
     read_result cx tv s = (INL (BoolV T),s) /\
-    runtime_storage_consistent env cx s /\ IS_SOME s.outcomes /\
+    runtime_storage_consistent env cx s /\ source_supply s /\ IS_SOME s.outcomes /\
     oracle_storage_ok cx s /\ eval_expr cx left s = (r,s') ==>
     contract_storage_well_formed cx s') /\
   (!tv s r s'. eval_expr cx cond st = (INL tv,s) /\
     read_result cx tv s = (INL (BoolV F),s) /\
-    runtime_storage_consistent env cx s /\ IS_SOME s.outcomes /\
+    runtime_storage_consistent env cx s /\ source_supply s /\ IS_SOME s.outcomes /\
     oracle_storage_ok cx s /\ eval_expr cx right s = (r,s') ==>
     contract_storage_well_formed cx s') /\
-  well_typed_expr env cond /\ runtime_storage_consistent env cx st /\
+  well_typed_expr env cond /\ runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr cond) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
   eval_expr cx (IfExp ty cond left right) st = (res,st') ==>
@@ -758,6 +774,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, bind_def] >>
   Cases_on `eval_expr cx cond st` >>
   rename1 `eval_expr cx cond st = (cond_res,cond_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx cond_st` by metis_tac[] >>
   `runtime_consistent env cx cond_st` by
     metis_tac[eval_expr_preserves_runtime_consistent,
@@ -782,6 +799,7 @@ Theorem body_eval_pop_storage:
   (!r s. eval_target_place cx bt st = (r,s) ==>
          contract_storage_well_formed cx s) /\
   well_typed_expr env (Pop ty bt) /\ runtime_storage_consistent env cx st /\
+  source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_expr cx (Pop ty bt) st = (res,st') ==>
   contract_storage_well_formed cx st'
@@ -796,6 +814,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, bind_def] >>
   Cases_on `eval_target_place cx bt st` >>
   rename1 `eval_target_place cx bt st = (target_res,target_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx target_st` by metis_tac[] >>
   Cases_on `target_res` >> gvs[bind_def] >> strip_tac >> gvs[] >>
   drule_all eval_target_place_success_storage_type >> strip_tac >>
@@ -838,10 +857,10 @@ Theorem body_ext_call_capture_storage:
   (!r s. eval_expr_results cx es st = (r,s) ==>
     contract_storage_well_formed cx s) /\
   (!rs s r s'. eval_expr_results cx es st = (INL rs,s) /\
-    runtime_storage_consistent env cx s /\ IS_SOME s.outcomes /\
+    runtime_storage_consistent env cx s /\ source_supply s /\ IS_SOME s.outcomes /\
     oracle_storage_ok cx s /\ eval_exprs cx kws s = (r,s') ==>
     contract_storage_well_formed cx s') /\
-  well_typed_exprs env es /\ runtime_storage_consistent env cx st /\
+  well_typed_exprs env es /\ runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_exprs es) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
   bind (eval_expr_results cx es) (\results.
@@ -855,6 +874,7 @@ Proof
   simp_tac (srw_ss()) [Once bind_apply] >>
   Cases_on `eval_expr_results cx es st` >>
   rename1 `eval_expr_results cx es st = (cap_res,cap_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx cap_st` by metis_tac[] >>
   `runtime_consistent env cx cap_st` by
     (`runtime_consistent env cx st` by
@@ -877,17 +897,17 @@ Theorem body_eval_ext_call_storage:
   (!r s. eval_exprs cx (TAKE 1 es) st = (r,s) ==>
     contract_storage_well_formed cx s) /\
   (!target s r s'. eval_exprs cx (TAKE 1 es) st = (INL target,s) /\
-    runtime_storage_consistent env cx s /\ IS_SOME s.outcomes /\
+    runtime_storage_consistent env cx s /\ source_supply s /\ IS_SOME s.outcomes /\
     oracle_storage_ok cx s /\
     eval_expr_results cx (TAKE (LENGTH argtys) (DROP 1 es)) s = (r,s') ==>
     contract_storage_well_formed cx s') /\
   (!target s rs s1 r s'. eval_exprs cx (TAKE 1 es) st = (INL target,s) /\
     eval_expr_results cx (TAKE (LENGTH argtys) (DROP 1 es)) s = (INL rs,s1) /\
-    runtime_storage_consistent env cx s1 /\ IS_SOME s1.outcomes /\
+    runtime_storage_consistent env cx s1 /\ source_supply s1 /\ IS_SOME s1.outcomes /\
     oracle_storage_ok cx s1 /\
     eval_exprs cx (DROP (1 + LENGTH argtys) es) s1 = (r,s') ==>
     contract_storage_well_formed cx s') /\
-  well_typed_exprs env es /\ runtime_storage_consistent env cx st /\
+  well_typed_exprs env es /\ runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_exprs es) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
   eval_expr cx (Call ty (ExtCall static skip_check (nm,argtys,retty) opts) es extra)
@@ -906,6 +926,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, Once bind_apply] >>
   Cases_on `eval_exprs cx (TAKE 1 es) st` >>
   rename1 `eval_exprs cx (TAKE 1 es) st = (tgt_res,tgt_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx tgt_st` by metis_tac[] >>
   `runtime_consistent env cx tgt_st` by
     metis_tac[eval_exprs_preserves_runtime_consistent,
@@ -924,7 +945,7 @@ QED
 Theorem body_oracle_pop_case:
   (!tops env ty st res st'.
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
-    well_typed_target env bt ty /\ runtime_storage_consistent env cx st /\
+    well_typed_target env bt ty /\ runtime_storage_consistent env cx st /\ source_supply st /\
     functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
     EVERY (\c. FST c = NONE) (int_calls_target bt) /\
     ~supported_target_exists expr_evm_run_root bt /\
@@ -932,7 +953,7 @@ Theorem body_oracle_pop_case:
     eval_target_place cx bt st = (res,st') ==> contract_storage_well_formed cx st') ==>
   !tops env st res st'.
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr (Pop ty bt)) /\
     EVERY (\c. FST c = NONE) (int_calls_expr (Pop ty bt)) /\
     ~supported_expr_exists expr_evm_run_root (Pop ty bt) /\
@@ -960,10 +981,10 @@ QED
 Theorem body_eval_stmts_cons_storage:
   (!r s. eval_stmt cx stmt st = (r,s) ==> contract_storage_well_formed cx s) /\
   (!u s r s'. eval_stmt cx stmt st = (INL u,s) /\
-    runtime_storage_consistent env1 cx s /\ IS_SOME s.outcomes /\
+    runtime_storage_consistent env1 cx s /\ source_supply s /\ IS_SOME s.outcomes /\
     oracle_storage_ok cx s /\ eval_stmts cx ss s = (r,s') ==>
     contract_storage_well_formed cx s') /\
-  type_stmt env ret_ty stmt = SOME env1 /\ runtime_storage_consistent env cx st /\
+  type_stmt env ret_ty stmt = SOME env1 /\ runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_stmt stmt) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
   eval_stmts cx (stmt::ss) st = (res,st') ==>
@@ -974,6 +995,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, ignore_bind_apply] >>
   Cases_on `eval_stmt cx stmt st` >>
   rename1 `eval_stmt cx stmt st = (head_res,head_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx head_st` by metis_tac[] >>
   Cases_on `head_res` >> gvs[]
   >- (`runtime_consistent env1 cx head_st` by
@@ -1127,9 +1149,9 @@ Theorem body_eval_range_iterator_storage:
   (!r s. eval_expr cx e1 st = (r,s) ==> contract_storage_well_formed cx s) /\
   (!tv v s r s'. eval_expr cx e1 st = (INL tv,s) /\
     read_result cx tv s = (INL v,s) /\ runtime_storage_consistent env cx s /\
-    IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
+    source_supply s /\ IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
     eval_expr cx e2 s = (r,s') ==> contract_storage_well_formed cx s') /\
-  well_typed_expr env e1 /\ runtime_storage_consistent env cx st /\
+  well_typed_expr env e1 /\ runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e1) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
   eval_iterator cx (Range e1 e2) st = (res,st') ==>
@@ -1139,6 +1161,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def] >>
   Cases_on `eval_expr cx e1 st` >>
   rename1 `eval_expr cx e1 st = (first_res,first_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx first_st` by metis_tac[] >>
   `runtime_consistent env cx first_st` by
     metis_tac[eval_expr_preserves_runtime_consistent,
@@ -1267,12 +1290,12 @@ QED
 Theorem body_eval_if_stmt_storage:
   (!r s. eval_expr cx e st = (r,s) ==> contract_storage_well_formed cx s) /\
   (!tv s r s'. eval_expr cx e st = (INL tv,s) /\
-    runtime_storage_consistent env cx s /\ IS_SOME s.outcomes /\
+    runtime_storage_consistent env cx s /\ source_supply s /\ IS_SOME s.outcomes /\
     oracle_storage_ok cx s /\
     switch_BoolV cx tv (eval_stmts cx ss1) (eval_stmts cx ss2)
       (s with scopes updated_by CONS FEMPTY) = (r,s') ==>
     contract_storage_well_formed cx s') /\
-  well_typed_expr env e /\ runtime_storage_consistent env cx st /\
+  well_typed_expr env e /\ runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
   eval_stmt cx (If e ss1 ss2) st = (res,st') ==>
@@ -1282,6 +1305,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, bind_def, push_scope_def, return_def] >>
   Cases_on `eval_expr cx e st` >>
   rename1 `eval_expr cx e st = (cond_res,cond_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx cond_st` by metis_tac[] >>
   `runtime_consistent env cx cond_st` by
     metis_tac[eval_expr_preserves_runtime_consistent,
@@ -1300,10 +1324,10 @@ Theorem body_eval_assert_reason_storage:
   (!r s. eval_expr cx e st = (r,s) ==> contract_storage_well_formed cx s) /\
   (!tv s r s'. eval_expr cx e st = (INL tv,s) /\
     read_result cx tv s = (INL (BoolV F),s) /\
-    runtime_storage_consistent env cx s /\ IS_SOME s.outcomes /\
+    runtime_storage_consistent env cx s /\ source_supply s /\ IS_SOME s.outcomes /\
     oracle_storage_ok cx s /\ eval_expr cx se s = (r,s') ==>
     contract_storage_well_formed cx s') /\
-  well_typed_expr env e /\ runtime_storage_consistent env cx st /\
+  well_typed_expr env e /\ runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
   eval_stmt cx (Assert e (AssertReason se)) st = (res,st') ==>
@@ -1313,6 +1337,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, bind_def] >>
   Cases_on `eval_expr cx e st` >>
   rename1 `eval_expr cx e st = (expr_res,expr_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx expr_st` by metis_tac[] >>
   `runtime_consistent env cx expr_st` by
     metis_tac[eval_expr_preserves_runtime_consistent,
@@ -1346,7 +1371,7 @@ Proof
 QED
 
 Theorem body_assign_base_write_storage:
-  well_typed_target env bt tty /\ runtime_storage_consistent env cx st /\
+  well_typed_target env bt tty /\ runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_result_typed (env,cx,st) pv (Type ty) /\ live_memory_result st pv /\
   type_widens_to env.type_defs ty tty /\
@@ -1398,12 +1423,12 @@ QED
 Theorem body_eval_assign_base_storage:
   (!r s. eval_expr cx e st = (r,s) ==> contract_storage_well_formed cx s) /\
   (!pv s r s'. eval_expr cx e st = (INL pv,s) /\
-    runtime_storage_consistent env cx s /\ IS_SOME s.outcomes /\
+    runtime_storage_consistent env cx s /\ source_supply s /\ IS_SOME s.outcomes /\
     oracle_storage_ok cx s /\ eval_target_place cx bt s = (r,s') ==>
     contract_storage_well_formed cx s') /\
   well_typed_expr env e /\ well_typed_target env bt tty /\
   type_widens_to env.type_defs (expr_type e) tty /\
-  runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+  runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
   call_evaluation_safe cx (int_calls_target bt) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -1414,6 +1439,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, bind_def] >>
   Cases_on `eval_expr cx e st` >>
   rename1 `eval_expr cx e st = (rhs_res,rhs_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx rhs_st` by metis_tac[] >>
   `runtime_consistent env cx st` by
     metis_tac[runtime_storage_consistent_runtime] >>
@@ -1440,11 +1466,11 @@ Theorem body_eval_assign_tuple_storage:
   (!r s. eval_expr cx e st = (r,s) ==> contract_storage_well_formed cx s) /\
   (!tv v s r s'. eval_expr cx e st = (INL tv,s) /\
     read_result cx tv s = (INL v,s) /\
-    runtime_storage_consistent env cx s /\ IS_SOME s.outcomes /\
+    runtime_storage_consistent env cx s /\ source_supply s /\ IS_SOME s.outcomes /\
     oracle_storage_ok cx s /\ value_runtime_typed env (expr_type e) v /\
     assign_tuple_targets cx (TupleTarget gs) v s = (r,s') ==>
     contract_storage_well_formed cx s') /\
-  well_typed_expr env e /\ runtime_storage_consistent env cx st /\
+  well_typed_expr env e /\ runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
   eval_stmt cx (Assign (TupleTarget gs) e) st = (res,st') ==>
@@ -1454,6 +1480,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, bind_def] >>
   Cases_on `eval_expr cx e st` >>
   rename1 `eval_expr cx e st = (rhs_res,rhs_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx rhs_st` by metis_tac[] >>
   `runtime_consistent env cx st` by
     metis_tac[runtime_storage_consistent_runtime] >>
@@ -1483,7 +1510,7 @@ Theorem body_assign_tuple_base_storage:
   (!r s. eval_target_place cx bt st = (r,s) ==>
     contract_storage_well_formed cx s) /\
   well_typed_target env bt ty /\ value_runtime_typed env ty v /\
-  runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+  runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_target bt) /\
   assign_tuple_targets cx (BaseTarget bt) v st = (res,st') ==>
   contract_storage_well_formed cx st'
@@ -1492,6 +1519,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, bind_def] >>
   Cases_on `eval_target_place cx bt st` >>
   rename1 `eval_target_place cx bt st = (target_res,target_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx target_st` by metis_tac[] >>
   Cases_on `target_res` >> gvs[]
   >- (`runtime_consistent env cx st` by
@@ -1509,11 +1537,11 @@ Theorem body_assign_tuple_cons_storage:
   (!r s. assign_tuple_targets cx g v st = (r,s) ==>
     contract_storage_well_formed cx s) /\
   (!s r s'. assign_tuple_targets cx g v st = (INL (),s) /\
-    runtime_storage_consistent env cx s /\ IS_SOME s.outcomes /\
+    runtime_storage_consistent env cx s /\ source_supply s /\ IS_SOME s.outcomes /\
     oracle_storage_ok cx s /\ assign_tuple_target_list cx gs vs s = (r,s') ==>
     contract_storage_well_formed cx s') /\
   well_typed_atarget env g ty /\ value_runtime_typed env ty v /\
-  runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+  runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_atarget g) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
   assign_tuple_target_list cx (g::gs) (v::vs) st = (res,st') ==>
@@ -1523,6 +1551,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, ignore_bind_apply] >>
   Cases_on `assign_tuple_targets cx g v st` >>
   rename1 `assign_tuple_targets cx g v st = (head_res,head_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx head_st` by metis_tac[] >>
   `runtime_consistent env cx head_st` by
     (fs[runtime_consistent_def, runtime_storage_consistent_def] >>
@@ -1619,6 +1648,61 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+Theorem body_intcall_actual_finally_storage[local]:
+  (!r s. eval_stmts cxf ss st = (r,s) ==> contract_storage_well_formed cx s) /\
+  storage_layout_safe cx /\
+  finally_unless_halt
+    (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+      (pop_function prev)) (unlock_if_nr cx nr is_view) st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  strip_tac >>
+  Cases_on `try (do eval_stmts cxf ss; return NoneV od) handle_function st` >>
+  rename1 `try _ _ st = (body_res,body_st)` >>
+  `contract_storage_well_formed cx body_st` by
+    (drule body_try_handle_function_predicate >> disch_then irule >> simp[]) >>
+  `contract_storage_well_formed cx (body_st with scopes := prev)` by
+    (irule contract_storage_well_formed_backends_frame >>
+     qexists_tac `body_st` >> simp[]) >>
+  `!r s. unlock_if_nr cx nr is_view (body_st with scopes := prev) = (r,s) ==>
+       contract_storage_well_formed cx s` by
+    (rpt strip_tac >> irule body_intcall_cleanup_storage >>
+     simp[] >> qexistsl_tac [`is_view`, `nr`, `prev`, `r`, `body_st`] >>
+     gvs[pop_function_def, set_scopes_def, ignore_bind_apply, return_def,
+         unlock_if_nr_def]) >>
+  qpat_x_assum `finally_unless_halt _ _ _ = _` mp_tac >>
+  Cases_on `body_res`
+  >- (gvs[finally_def, pop_function_def, set_scopes_def, return_def,
+          ignore_bind_apply, finally_unless_halt_def, AllCaseEqs()] >> metis_tac[]) >>
+  Cases_on `y` >>
+  gvs[finally_def, pop_function_def, set_scopes_def, finally_unless_halt_def,
+      ignore_bind_apply, return_def, raise_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem body_intcall_actual_return_storage:
+  (!r s. eval_stmts cxf ss st = (r,s) ==> contract_storage_well_formed cx s) /\
+  storage_layout_safe cx /\
+  (do rv <- finally_unless_halt
+        (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+          (pop_function prev)) (unlock_if_nr cx nr is_view);
+      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+      return (Value crv) od) st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  strip_tac >> qpat_x_assum `do _ od _ = _` mp_tac >>
+  simp_tac (srw_ss()) [bind_def] >>
+  Cases_on `finally_unless_halt
+    (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+      (pop_function prev)) (unlock_if_nr cx nr is_view) st` >>
+  rename1 `finally_unless_halt _ _ st = (call_res,call_st)` >>
+  `contract_storage_well_formed cx call_st` by
+    (drule_all body_intcall_actual_finally_storage >> simp[]) >>
+  Cases_on `call_res` >> gvs[]
+  >- (rpt strip_tac >> gvs[AllCaseEqs(), return_def] >>
+      imp_res_tac lift_option_type_state >> gvs[]) >>
+  rpt strip_tac >> gvs[]
+QED
+
 Theorem body_intcall_lock_storage:
   contract_storage_well_formed cx st /\ storage_layout_safe cx /\
   lock_if_nr cx nr is_view st = (res,st') ==>
@@ -1662,8 +1746,10 @@ Theorem body_eval_intcall_empty_defaults:
       rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
       lock_if_nr cx nr (is_view_mut mut);
       cxf <- push_function (NONE,fn) call_env cx;
-      rv <- finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
-        (do pop_function prev; unlock_if_nr cx nr (is_view_mut mut) od);
+      rv <- finally_unless_halt
+        (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+          (pop_function prev))
+        (unlock_if_nr cx nr (is_view_mut mut));
       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
       return (Value crv) od)
 Proof
@@ -1679,7 +1765,7 @@ Theorem body_assign_base_consumer:
       get_module_code cx NONE = SOME tops /\
       ~supported_target_exists expr_evm_run_root bt /\
       EVERY (\c. FST c = NONE) (int_calls_target bt) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_target bt) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_target_place cx bt st = (res,st') ==>
@@ -1687,7 +1773,7 @@ Theorem body_assign_base_consumer:
   (!tops env st res st'.
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr e) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_expr cx e st = (res,st') ==>
@@ -1698,7 +1784,7 @@ Theorem body_assign_base_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (Assign (BaseTarget bt) e) /\
     EVERY (\c. FST c = NONE) (int_calls_stmt (Assign (BaseTarget bt) e)) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget bt) e)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_stmt cx (Assign (BaseTarget bt) e) st = (res,st') ==>
@@ -1734,7 +1820,7 @@ Theorem body_if_consumer:
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_stmts_expr_exists expr_evm_run_root ss1 /\
       EVERY (\c. FST c = NONE) (int_calls_stmts ss1) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_stmts ss1) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_stmts cx ss1 st = (res,st') ==> contract_storage_well_formed cx st') /\
@@ -1745,14 +1831,14 @@ Theorem body_if_consumer:
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_stmts_expr_exists expr_evm_run_root ss2 /\
       EVERY (\c. FST c = NONE) (int_calls_stmts ss2) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_stmts ss2) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_stmts cx ss2 st = (res,st') ==> contract_storage_well_formed cx st') /\
   (!tops env st res st'.
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr e) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_expr cx e st = (res,st') ==>
@@ -1763,7 +1849,7 @@ Theorem body_if_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (If e ss1 ss2) /\
     EVERY (\c. FST c = NONE) (int_calls_stmt (If e ss1 ss2)) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (If e ss1 ss2)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_stmt cx (If e ss1 ss2) st = (res,st') ==>
@@ -1797,11 +1883,13 @@ Proof
   simp[push_scope_def, return_def] >> strip_tac >>
   conj_tac >> rpt strip_tac >>
   `IS_SOME (s with scopes updated_by CONS FEMPTY).outcomes` by simp[] >>
+  `source_supply (s with scopes updated_by CONS FEMPTY)` by
+    simp[vyperSourceSupplyFieldsTheory.source_supply_fields] >>
   first_x_assum drule_all >> simp[]
 QED
 
 Theorem body_append_write_storage:
-  well_typed_expr env e /\ runtime_storage_consistent env cx st /\
+  well_typed_expr env e /\ runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
   eval_result_typed (env,cx,st) (PlaceR p) (Type (ArrayT elem_ty (Dynamic n))) /\
   storage_place_region cx p /\ type_widens_to env.type_defs (expr_type e) elem_ty /\
@@ -1848,12 +1936,12 @@ QED
 Theorem body_eval_append_storage:
   (!r s. eval_target_place cx bt st = (r,s) ==> contract_storage_well_formed cx s) /\
   (!p s r s'. eval_target_place cx bt st = (INL p,s) /\
-    runtime_storage_consistent env cx s /\ IS_SOME s.outcomes /\
+    runtime_storage_consistent env cx s /\ source_supply s /\ IS_SOME s.outcomes /\
     oracle_storage_ok cx s /\ eval_expr cx e s = (r,s') ==>
     contract_storage_well_formed cx s') /\
   well_typed_target env bt (ArrayT elem_ty (Dynamic n)) /\ well_typed_expr env e /\
   type_widens_to env.type_defs (expr_type e) elem_ty /\
-  runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+  runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
   call_evaluation_safe cx (int_calls_target bt) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -1864,6 +1952,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, bind_def] >>
   Cases_on `eval_target_place cx bt st` >>
   rename1 `eval_target_place cx bt st = (target_res,target_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx target_st` by metis_tac[] >>
   `runtime_consistent env cx st` by metis_tac[runtime_storage_consistent_runtime] >>
   `runtime_consistent env cx target_st` by
@@ -1895,7 +1984,7 @@ Theorem body_append_consumer:
     !tops env st res st'.
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr e) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_expr cx e st = (res,st') ==>
@@ -1906,7 +1995,7 @@ Theorem body_append_consumer:
       get_module_code cx NONE = SOME tops /\
       ~supported_target_exists expr_evm_run_root bt /\
       EVERY (\c. FST c = NONE) (int_calls_target bt) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_target bt) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_target_place cx bt st = (res,st') ==>
@@ -1916,7 +2005,7 @@ Theorem body_append_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (Append bt e) /\
     EVERY (\c. FST c = NONE) (int_calls_stmt (Append bt e)) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (Append bt e)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_stmt cx (Append bt e) st = (res,st') ==>
@@ -1985,7 +2074,7 @@ Proof
 QED
 
 Theorem body_augassign_rhs_storage:
-  well_typed_expr env e /\ runtime_storage_consistent env cx st /\
+  well_typed_expr env e /\ runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
   runtime_place_typed cx st p ptv /\ storage_place_region cx p /\
   evaluate_type env.type_defs ty = SOME ptv /\ value_has_type ptv cur /\
@@ -2019,12 +2108,12 @@ Theorem body_eval_augassign_storage:
   (!r s. eval_target_place cx bt st = (r,s) ==> contract_storage_well_formed cx s) /\
   (!p s cur ptv r s'. eval_target_place cx bt st = (INL p,s) /\
     read_place cx p s = (INL cur,s) /\ place_type_value cx p s = (INL ptv,s) /\
-    runtime_storage_consistent env cx s /\ IS_SOME s.outcomes /\
+    runtime_storage_consistent env cx s /\ source_supply s /\ IS_SOME s.outcomes /\
     oracle_storage_ok cx s /\ eval_expr cx e s = (r,s') ==>
     contract_storage_well_formed cx s') /\
   well_typed_target env bt ty /\ well_typed_expr env e /\
   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
-  runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+  runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
   call_evaluation_safe cx (int_calls_target bt) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2035,6 +2124,7 @@ Proof
   simp_tac (srw_ss()) [Once evaluate_def, bind_def] >>
   Cases_on `eval_target_place cx bt st` >>
   rename1 `eval_target_place cx bt st = (target_res,target_st)` >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx target_st` by metis_tac[] >>
   `runtime_consistent env cx st` by metis_tac[runtime_storage_consistent_runtime] >>
   `runtime_consistent env cx target_st` by
@@ -2087,7 +2177,7 @@ Theorem body_augassign_consumer:
     !tops env st res st'.
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr e) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_expr cx e st = (res,st') ==>
@@ -2098,7 +2188,7 @@ Theorem body_augassign_consumer:
       get_module_code cx NONE = SOME tops /\
       ~supported_target_exists expr_evm_run_root bt /\
       EVERY (\c. FST c = NONE) (int_calls_target bt) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_target bt) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_target_place cx bt st = (res,st') ==>
@@ -2108,7 +2198,7 @@ Theorem body_augassign_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (AugAssign ty bt bop e) /\
     EVERY (\c. FST c = NONE) (int_calls_stmt (AugAssign ty bt bop e)) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (AugAssign ty bt bop e)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_stmt cx (AugAssign ty bt bop e) st = (res,st') ==>
@@ -2192,7 +2282,7 @@ Theorem body_raise_custom_consumer:
       get_module_code cx NONE = SOME tops /\
       ~supported_exprs_exists expr_evm_run_root es /\
       EVERY (\c. FST c = NONE) (int_calls_exprs es) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_exprs es) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_exprs cx es st = (res,st') ==> contract_storage_well_formed cx st') ==>
@@ -2201,7 +2291,7 @@ Theorem body_raise_custom_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (Raise (RaiseCustomError err)) /\
     EVERY (\c. FST c = NONE) (int_calls_stmt (Raise (RaiseCustomError err))) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (Raise (RaiseCustomError err))) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_stmt cx (Raise (RaiseCustomError err)) st = (res,st') ==>
@@ -2275,14 +2365,14 @@ Theorem body_assert_custom_consumer:
       get_module_code cx NONE = SOME tops /\
       ~supported_exprs_exists expr_evm_run_root es /\
       EVERY (\c. FST c = NONE) (int_calls_exprs es) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_exprs es) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_exprs cx es st = (res,st') ==> contract_storage_well_formed cx st') /\
   (!tops env st res st'.
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr e) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_expr cx e st = (res,st') ==>
@@ -2293,7 +2383,7 @@ Theorem body_assert_custom_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (Assert e (AssertCustomError err)) /\
     EVERY (\c. FST c = NONE) (int_calls_stmt (Assert e (AssertCustomError err))) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (Assert e (AssertCustomError err))) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_stmt cx (Assert e (AssertCustomError err)) st = (res,st') ==>
@@ -2310,6 +2400,7 @@ Proof
   disch_then irule >> reverse conj_tac
   >- (rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
   rpt gen_tac >> strip_tac >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx s` by
     (first_x_assum drule_all >> simp[]) >>
   `runtime_consistent env cx s` by
@@ -2363,7 +2454,7 @@ Proof
 QED
 
 Theorem body_iterator_success_entry:
-  well_typed_iterator env ty it /\ runtime_storage_consistent env cx st /\
+  well_typed_iterator env ty it /\ runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_iterator it) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
   contract_storage_well_formed cx st' /\
@@ -2397,7 +2488,7 @@ Theorem body_for_entry_consumer:
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_stmts_expr_exists expr_evm_run_root body_stmts /\
       EVERY (\c. FST c = NONE) (int_calls_stmts body_stmts) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_stmts body_stmts) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_for cx tyv id body_stmts vs st = (res,st') ==>
@@ -2409,7 +2500,7 @@ Theorem body_for_entry_consumer:
       get_module_code cx NONE = SOME tops /\
       ~supported_iterator_exists expr_evm_run_root it /\
       EVERY (\c. FST c = NONE) (int_calls_iterator it) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_iterator it) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_iterator cx it st = (res,st') ==> contract_storage_well_formed cx st') ==>
@@ -2418,7 +2509,7 @@ Theorem body_for_entry_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (For id ty it n body_stmts) /\
     EVERY (\c. FST c = NONE) (int_calls_stmt (For id ty it n body_stmts)) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (For id ty it n body_stmts)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_stmt cx (For id ty it n body_stmts) st = (res,st') ==>
@@ -2441,6 +2532,7 @@ Proof
   reverse conj_tac
   >- metis_tac[runtime_storage_consistent_storage] >>
   rpt gen_tac >> strip_tac >>
+  vyperSourceSupplyLib.forward >>
   `contract_storage_well_formed cx s` by
     (first_x_assum drule_all >> simp[]) >>
   drule_all body_iterator_success_entry >> strip_tac >>
@@ -2520,7 +2612,7 @@ Theorem body_for_restored_entry:
   evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs /\
   id NOTIN FDOM env.var_types /\
   type_stmts (extend_local env id ty F) ret_ty body_stmts = SOME env_after /\
-  runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+  runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_stmts body_stmts) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
   contract_storage_well_formed cx st' /\
@@ -2549,7 +2641,7 @@ Theorem body_for_cons_consumer:
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_stmts_expr_exists expr_evm_run_root body_stmts /\
       EVERY (\c. FST c = NONE) (int_calls_stmts body_stmts) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_stmts body_stmts) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_for cx tyv id body_stmts vs st = (res,st') ==> contract_storage_well_formed cx st') /\
@@ -2559,7 +2651,7 @@ Theorem body_for_cons_consumer:
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_stmts_expr_exists expr_evm_run_root body_stmts /\
       EVERY (\c. FST c = NONE) (int_calls_stmts body_stmts) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_stmts body_stmts) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_stmts cx body_stmts st = (res,st') ==> contract_storage_well_formed cx st') ==>
@@ -2570,7 +2662,7 @@ Theorem body_for_cons_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmts_expr_exists expr_evm_run_root body_stmts /\
     EVERY (\c. FST c = NONE) (int_calls_stmts body_stmts) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmts body_stmts) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_for cx tyv id body_stmts (v::vs) st = (res,st') ==>
@@ -2586,6 +2678,7 @@ Proof
   `push_scope_with_var id tyv v st = (INL (),stp)` by
     simp[push_scope_with_var_def, return_def, Abbr `stp`] >>
   drule_all body_push_loop_var_entry >> strip_tac >>
+  vyperSourceSupplyLib.forward >>
   `!r s. eval_stmts cx body_stmts stp = (r,s) ==> contract_storage_well_formed cx s` by
     (rpt strip_tac >>
      qpat_x_assum `!s0 t. push_scope_with_var _ _ _ _ = _ ==> _` drule >>
@@ -2594,6 +2687,7 @@ Proof
   drule_all (SRULE [ignore_bind_def] body_loop_iteration_storage) >> strip_tac >>
   `EVERY (value_has_type tyv) [v]` by simp[] >>
   drule_all body_for_restored_entry >> strip_tac >>
+  vyperSourceSupplyLib.forward >>
   Cases_on `loop_res` >> gvs[bind_def, return_def] >>
   rename1 `finally _ _ stp = (INL broke,sa)` >> Cases_on `broke` >> gvs[return_def] >>
   qpat_x_assum `!s0 t s1 t1. push_scope_with_var _ _ _ _ = _ /\ _ ==> _` drule >>
@@ -2607,7 +2701,7 @@ Theorem body_stmts_cons_consumer:
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_stmts_expr_exists expr_evm_run_root ss /\
       EVERY (\c. FST c = NONE) (int_calls_stmts ss) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_stmts ss) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_stmts cx ss st = (res,st') ==> contract_storage_well_formed cx st') /\
@@ -2616,7 +2710,7 @@ Theorem body_stmts_cons_consumer:
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_stmt_expr_exists expr_evm_run_root stmt /\
       EVERY (\c. FST c = NONE) (int_calls_stmt stmt) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_stmt stmt) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_stmt cx stmt st = (res,st') ==> contract_storage_well_formed cx st') ==>
@@ -2625,7 +2719,7 @@ Theorem body_stmts_cons_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmts_expr_exists expr_evm_run_root (stmt::ss) /\
     EVERY (\c. FST c = NONE) (int_calls_stmts (stmt::ss)) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmts (stmt::ss)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_stmts cx (stmt::ss) st = (res,st') ==> contract_storage_well_formed cx st'
@@ -2649,7 +2743,7 @@ Theorem body_single_expr_stmt_consumer:
   (!tops env st res st'.
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr e) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_expr cx e st = (res,st') ==>
@@ -2662,7 +2756,7 @@ Theorem body_single_expr_stmt_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root s /\
     EVERY (\c. FST c = NONE) (int_calls_stmt s) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt s) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_stmt cx s st = (res,st') ==> contract_storage_well_formed cx st'
@@ -2684,7 +2778,7 @@ Theorem body_annassign_consumer:
     !tops env st res st'.
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr e) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_expr cx e st = (res,st') ==>
@@ -2695,7 +2789,7 @@ Theorem body_annassign_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (AnnAssign id typ e) /\
     EVERY (\c. FST c = NONE) (int_calls_stmt (AnnAssign id typ e)) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_stmt cx (AnnAssign id typ e) st = (res,st') ==> contract_storage_well_formed cx st'
@@ -2716,7 +2810,7 @@ Theorem body_log_consumer:
     well_typed_exprs env es /\ supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_exprs_exists expr_evm_run_root es /\
     EVERY (\c. FST c = NONE) (int_calls_exprs es) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_exprs es) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_exprs cx es st = (res,st') ==> contract_storage_well_formed cx st') ==>
@@ -2725,7 +2819,7 @@ Theorem body_log_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (Log id es) /\
     EVERY (\c. FST c = NONE) (int_calls_stmt (Log id es)) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (Log id es)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_stmt cx (Log id es) st = (res,st') ==> contract_storage_well_formed cx st'
@@ -2758,7 +2852,7 @@ Theorem body_array_iterator_consumer:
   (!tops env st res st'.
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr e) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_expr cx e st = (res,st') ==>
@@ -2769,7 +2863,7 @@ Theorem body_array_iterator_consumer:
     get_module_code cx NONE = SOME tops /\
     ~supported_iterator_exists expr_evm_run_root (Array e) /\
     EVERY (\c. FST c = NONE) (int_calls_iterator (Array e)) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_iterator (Array e)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_iterator cx (Array e) st = (res,st') ==> contract_storage_well_formed cx st'
@@ -2789,7 +2883,7 @@ Theorem body_range_iterator_consumer:
     !tops env st res st'.
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~expr_has_evm_run e2 /\ EVERY (\c. FST c = NONE) (int_calls_expr e2) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr e2) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_expr cx e2 st = (res,st') ==>
@@ -2798,7 +2892,7 @@ Theorem body_range_iterator_consumer:
   (!tops env st res st'.
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~expr_has_evm_run e1 /\ EVERY (\c. FST c = NONE) (int_calls_expr e1) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr e1) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_expr cx e1 st = (res,st') ==>
@@ -2809,7 +2903,7 @@ Theorem body_range_iterator_consumer:
     get_module_code cx NONE = SOME tops /\
     ~supported_iterator_exists expr_evm_run_root (Range e1 e2) /\
     EVERY (\c. FST c = NONE) (int_calls_iterator (Range e1 e2)) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_iterator (Range e1 e2)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_iterator cx (Range e1 e2) st = (res,st') ==> contract_storage_well_formed cx st'
@@ -2832,7 +2926,7 @@ Theorem body_assert_reason_consumer:
     !tops env st res st'.
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~expr_has_evm_run se /\ EVERY (\c. FST c = NONE) (int_calls_expr se) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr se) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_expr cx se st = (res,st') ==>
@@ -2841,7 +2935,7 @@ Theorem body_assert_reason_consumer:
   (!tops env st res st'.
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr e) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_expr cx e st = (res,st') ==>
@@ -2852,7 +2946,7 @@ Theorem body_assert_reason_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (Assert e (AssertReason se)) /\
     EVERY (\c. FST c = NONE) (int_calls_stmt (Assert e (AssertReason se))) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (Assert e (AssertReason se))) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_stmt cx (Assert e (AssertReason se)) st = (res,st') ==>
@@ -2878,7 +2972,7 @@ Theorem body_tuple_base_consumer:
     get_module_code cx NONE = SOME tops /\
     ~supported_target_exists expr_evm_run_root bt /\
     EVERY (\c. FST c = NONE) (int_calls_target bt) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_target bt) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_target_place cx bt st = (res,st') ==> contract_storage_well_formed cx st') ==>
@@ -2887,7 +2981,7 @@ Theorem body_tuple_base_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_assignment_exists expr_evm_run_root (BaseTarget bt) /\
     EVERY (\c. FST c = NONE) (int_calls_atarget (BaseTarget bt)) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atarget (BaseTarget bt)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     assign_tuple_targets cx (BaseTarget bt) v st = (res,st') ==>
@@ -2909,7 +3003,7 @@ Theorem body_tuple_nested_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_assignments_exists expr_evm_run_root gs /\
     EVERY (\c. FST c = NONE) (int_calls_atargets gs) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atargets gs) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     assign_tuple_target_list cx gs vs st = (res,st') ==> contract_storage_well_formed cx st') ==>
@@ -2918,7 +3012,7 @@ Theorem body_tuple_nested_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_assignment_exists expr_evm_run_root (TupleTarget gs) /\
     EVERY (\c. FST c = NONE) (int_calls_atarget (TupleTarget gs)) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atarget (TupleTarget gs)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     assign_tuple_targets cx (TupleTarget gs) v st = (res,st') ==>
@@ -2939,7 +3033,7 @@ Theorem body_tuple_list_cons_consumer:
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_assignments_exists expr_evm_run_root gs /\
       EVERY (\c. FST c = NONE) (int_calls_atargets gs) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_atargets gs) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       assign_tuple_target_list cx gs vs st = (res,st') ==> contract_storage_well_formed cx st') /\
@@ -2948,7 +3042,7 @@ Theorem body_tuple_list_cons_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_assignment_exists expr_evm_run_root g /\
     EVERY (\c. FST c = NONE) (int_calls_atarget g) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atarget g) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     assign_tuple_targets cx g v st = (res,st') ==> contract_storage_well_formed cx st') ==>
@@ -2958,7 +3052,7 @@ Theorem body_tuple_list_cons_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_assignments_exists expr_evm_run_root (g::gs) /\
     EVERY (\c. FST c = NONE) (int_calls_atargets (g::gs)) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atargets (g::gs)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     assign_tuple_target_list cx (g::gs) (v::vs) st = (res,st') ==>
@@ -2986,7 +3080,7 @@ Theorem body_assign_tuple_consumer:
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_assignment_exists expr_evm_run_root (TupleTarget gs) /\
       EVERY (\c. FST c = NONE) (int_calls_atarget (TupleTarget gs)) /\
-      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_atarget (TupleTarget gs)) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       assign_tuple_targets cx (TupleTarget gs) v st = (res,st') ==>
@@ -2994,7 +3088,7 @@ Theorem body_assign_tuple_consumer:
   (!tops env st res st'.
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr e) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_expr cx e st = (res,st') ==>
@@ -3005,7 +3099,7 @@ Theorem body_assign_tuple_consumer:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (Assign (TupleTarget gs) e) /\
     EVERY (\c. FST c = NONE) (int_calls_stmt (Assign (TupleTarget gs) e)) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_stmt cx (Assign (TupleTarget gs) e) st = (res,st') ==>
@@ -3028,7 +3122,7 @@ QED
 
 
 Theorem body_intcall_runtime_frame:
-  runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+  runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
   env_body.type_defs = get_tenv cx /\
   env_body.fn_sigs = env.fn_sigs /\
   env_body.bare_globals = env.bare_globals /\
@@ -3092,7 +3186,7 @@ Theorem body_intcall_guard_apply:
     push_function (NONE,fn) call_env cx s6 = (INL cxf,t6) ==> (!tops env ret_ty env' st res st'.
       type_stmts env ret_ty ss = SOME env' /\
       supported_program tops /\ get_module_code cxf NONE = SOME tops /\
-      runtime_storage_consistent env cxf st /\ functions_well_typed cxf /\
+      runtime_storage_consistent env cxf st /\ source_supply st /\ functions_well_typed cxf /\
       call_evaluation_safe cxf (int_calls_stmts ss) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cxf st /\
       eval_stmts cxf ss st = (res,st') ==> contract_storage_well_formed cxf st')) /\
@@ -3104,7 +3198,7 @@ Theorem body_intcall_guard_apply:
   push_function (NONE,fn) call_env cx lock_st = (INL cxf,body_st) ==> (!tops env ret_ty env' st res st'.
       type_stmts env ret_ty ss = SOME env' /\
       supported_program tops /\ get_module_code cxf NONE = SOME tops /\
-      runtime_storage_consistent env cxf st /\ functions_well_typed cxf /\
+      runtime_storage_consistent env cxf st /\ source_supply st /\ functions_well_typed cxf /\
       call_evaluation_safe cxf (int_calls_stmts ss) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cxf st /\
       eval_stmts cxf ss st = (res,st') ==> contract_storage_well_formed cxf st')

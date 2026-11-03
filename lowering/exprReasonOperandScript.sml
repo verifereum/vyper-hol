@@ -739,6 +739,15 @@ Proof
     >- suspend "external"
   >~ [`as_stack_val rt (compile_create_call f cenv ck salted rof args sa)`]
     >- suspend "create"
+  >~ [`raw_log_topic_exprs _`] >-
+    (BasicProvers.every_case_tac >> gvs[reason_result_shape_def] >>
+     rpt (pairarg_tac >> gvs[reason_result_shape_def]))
+  >~ [`compile_raw_revert _ _`] >-
+    (BasicProvers.every_case_tac >> gvs[reason_result_shape_def] >>
+     rpt (pairarg_tac >> gvs[reason_result_shape_def]))
+  >~ [`compile_selfdestruct _ _`] >-
+    (BasicProvers.every_case_tac >> gvs[reason_result_shape_def] >>
+     rpt (pairarg_tac >> gvs[reason_result_shape_def]))
   >> suspend "send"
 QED
 

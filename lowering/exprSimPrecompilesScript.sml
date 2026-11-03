@@ -2071,7 +2071,7 @@ Theorem typed_args_ready_of_ok[local]:
 Proof
   Induct >> simp[typed_args_ready_def] >> rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
-  `expr_sim_pre cenv cx env h es` by metis_tac[] >>
+  `expr_sim_pre cenv cx env h s` by metis_tac[] >>
   rpt conj_tac
   >~ [`expr_sim _ _ _ _ _ _ _`] >- metis_tac[expr_sim_ok_def]
   >~ [`IS_SOME _`] >- metis_tac[well_typed_expr_type_evaluates]
@@ -2092,7 +2092,7 @@ Proof
   Induct >> simp[typed_args_ready_def, exprs_case_def] >> rpt gen_tac >>
   strip_tac >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
-      `expr_body_pre cenv cx env h es /\ (nocalls ==> int_calls_expr h = []) /\
+      `expr_body_pre cenv cx env h s /\ (nocalls ==> int_calls_expr h = []) /\
        is_word_type (expr_type h)` by metis_tac[] >>
       rpt conj_tac
       >- metis_tac[expr_sim_case_def]
@@ -2387,6 +2387,8 @@ Proof
   drule_all eval_expr_builtin_cases >> strip_tac
   >- (gvs[] >>
       `(\s. expr_sim_inv cenv cx env s /\ source_supply s) es` by simp[] >>
+      qpat_assum `!arg_ty. typed_args_ready _ _ _ _ arg_ty _ _`
+        (qspec_then `\e. ty` assume_tac) >>
       drule_all lower_typed_args_sim >>
       disch_then (qspec_then `s0` mp_tac) >> simp[wb_args_exit_def] >> strip_tac >>
       irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[]) >>
@@ -2399,6 +2401,8 @@ Proof
   drule_all ecrecover_typed_result >>
   disch_then (qspec_then `es'.accounts` strip_assume_tac) >>
   `(\s. expr_sim_inv cenv cx env s /\ source_supply s) es` by simp[] >>
+  qpat_assum `!arg_ty. typed_args_ready _ _ _ _ arg_ty _ _`
+    (qspec_then `\e. ty` assume_tac) >>
   drule_all lower_typed_args_sim >> disch_then (qspec_then `s0` mp_tac) >>
   simp[wb_args_exit_def] >> disch_then (mp_then Any irule wb_frag_then) >> simp[] >>
   qx_gen_tac `t` >> strip_tac >> gvs[] >>
