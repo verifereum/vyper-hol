@@ -4,6 +4,7 @@ Ancestors
   builtinBytesMemory allocaFootprint abiBuiltinAllocation exprLoweringProps exprLowering
   exprSimAggregateChildren exprSimLiteralBuffer exprSimOps instMemFrontier
   fragExec fragExecMem allocaHistoryFragment rich_list
+  exprSimHyps stmtSimAugAssign vyperTypeEnv vyperTypeSystem vyperTypeInvariants
   emitHelperProps emitHelper compileEnv context venomInst venomState
   venomExecSemantics venomMemDefs list finite_map words arithmetic
 
@@ -357,6 +358,44 @@ Proof
   simp[below_frontier_MLOAD, eval_operand_def] >> decide_tac
 QED
 
+Theorem body_word_name_region:
+  expr_sim_pre ce cx env (Name ann id) es /\ word_value_type ann /\
+  stmt_state_rel ctx func ce cx es s ==>
+  ?entry p sz w.
+    lookup_scopes id es.scopes = SOME entry /\
+    FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    word_value entry.value /\ lookup_var p s = SOME w /\
+    local_region ce es.scopes s id (w2n w) sz /\ 32 <= sz
+Proof
+  rpt strip_tac >>
+  `?entry. lookup_scopes id es.scopes = SOME entry /\
+           evaluate_type (get_tenv cx) ann = SOME entry.type /\
+           value_has_type entry.type entry.value` by
+    (gvs[expr_sim_pre_def, expr_sim_inv_def] >>
+     drule_all well_typed_Name_lookup >> strip_tac >>
+     gvs[env_consistent_def, env_context_consistent_def]) >>
+  `?p sz. FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz)` by
+    gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
+  `?w. lookup_var p s = SOME w /\ type_memory_size entry.type <= sz` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+     first_x_assum drule_all >> metis_tac[]) >>
+  drule_all word_value_type_memory_size >> strip_tac >>
+  drule_all word_value_type_typed >> strip_tac >>
+  qexistsl_tac [`entry`, `p`, `sz`, `w`] >>
+  simp[local_region_def] >> metis_tac[]
+QED
+
+Theorem body_word_name_MLOAD_frontier:
+  expr_sim_pre ce cx env (Name ann id) es /\ word_value_type ann /\
+  stmt_state_rel ctx func ce cx es s /\
+  FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) ==>
+  inst_mem_below_frontier (mk_inst iid MLOAD [Var p] outs) s
+Proof
+  rpt strip_tac >> drule_all body_word_name_region >> strip_tac >>
+  gvs[] >> irule body_local_ptr_MLOAD_frontier >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[n2w_w2n]
+QED
+
 val () = List.app (fn th =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
   in if null axioms andalso null (Thm.hyp th) andalso
@@ -376,4 +415,6 @@ val () = List.app (fn th =>
         compile_mapping_subscript_body_mem_ok,
         body_local_region_frontier,
         body_local_region_subrange,
-        body_local_ptr_MLOAD_frontier];
+        body_local_ptr_MLOAD_frontier,
+        body_word_name_region,
+        body_word_name_MLOAD_frontier];
