@@ -322,6 +322,28 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
+Theorem body_local_region_frontier:
+  stmt_state_rel ctx func ce cx es s /\
+  local_region ce es.scopes s name b sz ==>
+  b + sz <= s.vs_alloca_next
+Proof
+  pure_rewrite_tac [stmt_state_rel_def, state_rel_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `local_ptrs_rel _ _ _ _` mp_tac >>
+  gvs[local_region_def, local_ptrs_rel_def] >>
+  strip_tac >>
+  qpat_x_assum `!name entry p sz. _` drule >>
+  simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem body_local_region_subrange:
+  stmt_state_rel ctx func ce cx es s /\
+  local_region ce es.scopes s name b sz /\ off + n <= sz ==>
+  b + off + n <= s.vs_alloca_next
+Proof
+  rpt strip_tac >> drule_all body_local_region_frontier >> decide_tac
+QED
+
 val () = List.app (fn th =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
   in if null axioms andalso null (Thm.hyp th) andalso
@@ -338,4 +360,6 @@ val () = List.app (fn th =>
         frag_exec_mem_run_inst_seq_at_cursor,
         compile_alloc_buffer_body_history,
         compile_alloc_buffer_body_frag_mem,
-        compile_mapping_subscript_body_mem_ok];
+        compile_mapping_subscript_body_mem_ok,
+        body_local_region_frontier,
+        body_local_region_subrange];
