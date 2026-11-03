@@ -454,28 +454,3 @@ Theorem reachable_preserves_alloca_safe_access:
 Proof
   metis_tac[reachable_preserves_safety]
 QED
-
-(* ===== TOP-LEVEL THEOREM (stub) ===== *)
-
-Theorem lowering_memory_safe:
-  ∀selectors ext_fns int_fns fb_fn (dispatch:dispatch_strategy)
-    bucket_count fn_meta_bytes dense_buckets entry_info entry_label
-    fn cenv s0 s.
-    MEM fn (FST (run_lowering_pair_compat selectors ext_fns int_fns fb_fn
-                   dispatch bucket_count fn_meta_bytes
-                   dense_buckets entry_info entry_label)).ctx_functions ∧
-    cenv_matches_fn cenv fn ∧
-    alloca_inv s0 ∧
-    state_matches_fn fn s0 ∧
-    well_typed_lowering cenv ∧
-    (∀aid off asz.
-       FLOOKUP s0.vs_allocas aid = SOME (off,asz) ⇒
-       off + asz ≤ LENGTH s0.vs_memory ∧ off + asz < dimword (:256)) ∧
-    reachable_by_execution fn s0 s
-    ⇒ ptrs_in_alloca_bounds fn (alloca_roots fn) s ∧
-      alloca_safe_access fn (alloca_roots fn) s
-Proof
-  (* TEMPORARILY CHEATED - progress theorem; requires lowering type-soundness
-     integration and a real execution-safety model. *)
-  cheat
-QED
