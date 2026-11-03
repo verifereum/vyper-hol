@@ -857,10 +857,28 @@ Proof
   >- gvs[Once evaluate_def, return_def, constant_value_def] >>
   qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def] >> strip_tac >>
-  gvs[sum_CASE_rator, AllCaseEqs()] >>
+  Cases_on `eval_expr cx h st` >>
+  rename1 `eval_expr cx h st = (headres,headstate)` >>
+  Cases_on `headres` >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [pairTheory.pair_case_thm, sumTheory.sum_case_def]) >>
+  fs[Excl "eval_expr_def"] >>
+  rename1 `read_result cx pv headstate` >>
+  Cases_on `read_result cx pv headstate` >>
+  rename1 `read_result cx pv headstate = (readres,readstate)` >>
+  Cases_on `readres` >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [pairTheory.pair_case_thm, sumTheory.sum_case_def]) >>
+  fs[] >>
+  Cases_on `eval_exprs cx es readstate` >>
+  rename1 `eval_exprs cx es readstate = (tailres,tailstate)` >>
+  Cases_on `tailres` >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [pairTheory.pair_case_thm, sumTheory.sum_case_def, return_def]) >>
+  fs[] >>
   drule read_result_state >>
   disch_then SUBST_ALL_TAC >>
-  `constant_value mods imms h = SOME v''` by metis_tac[] >>
+  `headstate = st` by metis_tac[] >>
+  qpat_x_assum `headstate = st` SUBST_ALL_TAC >>
+  rename1 `read_result cx pv st = (INL headval,st)` >>
+  `constant_value mods imms h = SOME headval` by metis_tac[] >>
   rename1 `eval_exprs cx es st = (INL tailvals,tailstate)` >>
   `tailstate = st /\ constant_values mods imms es = SOME tailvals` by metis_tac[] >>
   qpat_x_assum `!e pv next. _` kall_tac >>
