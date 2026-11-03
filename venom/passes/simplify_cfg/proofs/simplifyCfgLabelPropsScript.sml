@@ -680,6 +680,19 @@ Proof
   metis_tac[]
 QED
 
+Theorem collapse_dfs_empty_log_sources_absent:
+  ALL_DISTINCT (fn_labels func) /\
+  collapse_dfs func [] visited lbl = (func',lm,visited') ==>
+  EVERY (\entry. ~MEM (FST entry) (fn_labels func')) lm
+Proof
+  strip_tac >>
+  qspecl_then [`func`, `[]`, `visited`, `lbl`] mp_tac
+    (CONJUNCT1 collapse_events_joint) >>
+  simp[collapse_dfs_result_def, collapse_result_events_def,
+       fn_result_events_def] >> strip_tac >> gvs[] >>
+  drule label_event_trace_sources_absent >> simp[EVERY_MEM, MEM_REVERSE]
+QED
+
 Theorem label_event_trace_transition[local]:
   ALL_DISTINCT initial /\ label_event_trace initial events final ==>
   label_map_transition initial events final
