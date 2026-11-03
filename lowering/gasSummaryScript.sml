@@ -50,7 +50,9 @@ Theorem gas_explicit_append:
   gas_explicit (left ++ right) gs =
     gas_explicit left gs ++ gas_explicit right (DROP (LENGTH left) gs)
 Proof
-  cheat
+  qid_spec_tac `gs` >> Induct_on `left` >- simp[] >>
+  rpt gen_tac >> Cases_on `gs` >> Cases_on `h` >>
+  simp[gas_explicit_cons]
 QED
 
 Theorem gas_summary_conseq:
