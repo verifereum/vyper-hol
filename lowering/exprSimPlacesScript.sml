@@ -47,7 +47,7 @@
 Theory exprSimPlaces
 Ancestors
   list exprSim exprSimHyps exprSimPop exprSimAttribute exprSimTuple
-  exprSimArrayIndex
+  exprSimArrayIndex exprSimMap
   exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
 
 (* ===== Subscripts ===== *)
@@ -62,12 +62,13 @@ Ancestors
 
 (* A mapping variable: compile_expr's pointer is the mapping's slot, at its
    storage location (compile_toplevel_name_sim in exprSimLeaves is the
-   other variables').  Cheated. *)
+   other variables'). *)
 Theorem compile_toplevel_map_case:
   !nocalls ctx func cenv cx ty id.
     expr_map_case nocalls ctx func cenv cx (TopLevelName ty id)
 Proof
-  cheat
+  rw[expr_map_case_def] >> PairCases_on `id` >>
+  irule compile_toplevel_map_sim >> goal_assum (drule_at Any)
 QED
 
 (* A mapping that is a value of a mapping (m[a] for m : HashMap[K,

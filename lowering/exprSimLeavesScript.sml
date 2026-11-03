@@ -441,17 +441,18 @@ QED
 (* The compile environment holds a storage or transient variable at the
    layout's slot (storage_vars_rel, transient_vars_rel). *)
 Theorem toplevel_storage_ce_vars:
-  !cenv cx src id ts tr typ id_str slot.
+  !cenv cx src id ts decl id_str slot.
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     get_module_code cx src = SOME ts /\
-    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
-    lookup_var_slot_from_layout cx tr src id_str = SOME slot ==>
+    find_var_decl_by_name id ts = SOME (decl, id_str) /\
+    lookup_var_slot_from_layout cx (var_decl_transient decl) src id_str = SOME slot ==>
     FLOOKUP cenv.ce_module_vars (src, id) =
-      SOME (if tr then TransientLoc (n2w slot) else StorageLoc (n2w slot))
+      SOME (if var_decl_transient decl then TransientLoc (n2w slot)
+            else StorageLoc (n2w slot))
 Proof
-  rpt strip_tac >> Cases_on `tr` >>
+  rpt strip_tac >> Cases_on `var_decl_transient decl` >>
   gvs[storage_vars_rel_def, transient_vars_rel_def] >>
-  first_x_assum irule >> simp[var_decl_transient_def]
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
 QED
 
 (* A storage or transient variable's slots are in range, as the declared
@@ -498,7 +499,10 @@ Proof
       qexistsl_tac [`\s. F`, `\s. F`, `expr_exit (INL tv)`] >>
       simp[fragExecTheory.frag_exec_false_pre] >>
       gvs[stmt_state_rel_def, state_rel_def]) >>
-  fs[] >> drule_all toplevel_storage_ce_vars >> strip_tac >>
+  fs[] >>
+  drule_at (Pat `find_var_decl_by_name _ _ = _`) toplevel_storage_ce_vars >>
+  simp[var_decl_transient_def] >>
+  disch_then drule_all >> strip_tac >>
   `!st. storage_read_live cx tr st (n2w slot) tvt` by
     (gen_tac >> irule declared_storage_region_read_live >>
      qexistsl [`src`, `id`, `[]`] >>
