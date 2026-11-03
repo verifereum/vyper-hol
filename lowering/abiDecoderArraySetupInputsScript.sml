@@ -211,7 +211,8 @@ Proof
   drule_all abi_decoder_canonical_dynamic_setup_inputs >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_decode_dynamic_element_setup_reentry >> strip_tac >>
-  qexists_tac `t` >> gvs[abi_array_child_offset_append, Excl "enc_def"]
+  qexists_tac `t` >>
+  simp[abi_array_child_offset_append, Excl "enc_def"]
 QED
 
 Theorem abi_decoder_address_frame_source:
