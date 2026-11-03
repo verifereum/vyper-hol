@@ -486,3 +486,23 @@ Proof
   irule compiler_label_hoare_preserving_bind >>
   simp[compiler_label_hoare_bytelike_literal, compiler_label_hoare_typed_primitives]
 QED
+
+Theorem compiler_block_tail_store_at_loc:
+  compiler_block_tail (compile_store_at_loc imm dst value loc)
+Proof
+  Cases_on `loc` >> simp[compile_store_at_loc_def, compiler_block_tail_primitives] >>
+  rename1 `SOME location` >> Cases_on `location` >>
+  simp[compile_store_at_loc_def, compiler_block_tail_primitives,
+    compiler_block_tail_immutable_primitives]
+QED
+
+Theorem compiler_label_hoare_store_at_loc:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_store_at_loc imm dst value loc)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  Cases_on `loc` >> simp[compile_store_at_loc_def, compiler_label_hoare_typed_primitives] >>
+  rename1 `SOME location` >> Cases_on `location` >>
+  simp[compile_store_at_loc_def, compiler_label_hoare_typed_primitives,
+    compiler_label_hoare_immutable_primitives]
+QED
