@@ -141,6 +141,8 @@ Proof
         gvs[expr_vv_res_ok_def, expr_res_ok_def]) >>
     imp_res_tac (cj 1 eval_expr_no_control) >>
     gvs[no_control_exc_def, expr_vv_res_ok_def, expr_res_ok_def]) >>
+  `r1 <> INR (Error (RuntimeError "convert empty bytes to signed"))` by
+    (strip_tac >> gvs[]) >>
   qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_mem_def]) >>
   disch_then (qspecl_then [`sa`, `sb`, `vv`, `r1`, `es1`, `s0`] mp_tac) >>
