@@ -286,3 +286,95 @@ val () =
      then print "BODY_IFEXP_POINT_BRANCH_MEMORY_AUDIT OK\n"
      else raise Fail "ifexp point branch memory inherited admission"
   end;
+
+Theorem ifexp_jnz_arm_mem:
+  !ctx func cenv cx t c a b e bv es es1 es' res sa sb s0 s1 s5 s6 x6 s7
+   bs bm bn bo bx bp tl el xl bl lbl rv cond_op eop tt.
+    frag_exec_mem ctx bs bn (\s. s = jump_to bl tt)
+      (\s. (?v u w. res = INL v /\
+             expr_post ctx func cenv cx e es1 bs bm (jump_to bl tt) es' v eop u /\
+             eval_operand eop u = SOME w /\
+             s = (update_var rv w u) with
+                   vs_inst_idx := LENGTH bn.cs_current_insts) /\
+           alloca_history func s /\ tt.vs_alloca_next <= s.vs_alloca_next)
+      (expr_exit res) /\
+    expr_post ctx func cenv cx c es sa s1 s0 es1 (BoolV bv) cond_op tt /\
+    eval_operand cond_op tt = SOME (val_to_w256 (BoolV bv)) /\
+    emit_inst JNZ [cond_op; Label tl; Label el] [] s5 = ((), s6) /\
+    new_block tl s6 = (x6, s7) /\
+    emit_inst JMP [Label xl] [] bn = ((), bo) /\
+    new_block lbl bo = (bx, bp) /\
+    (if bv then tl else el) = bl /\ bs.cs_current_bb = bl /\
+    bs.cs_current_insts = [] /\
+    s5.cs_current_bb = s1.cs_current_bb /\
+    s5.cs_current_insts = s1.cs_current_insts /\
+    sb.cs_current_bb = xl /\ sb.cs_current_insts = [] /\
+    cs_extends s1 s6 /\ cs_extends s6 s7 /\ cs_extends s7 sb /\
+    cs_extends s1 bs /\ cs_extends bs bn /\ cs_extends bs bp /\
+    cs_extends bp sb /\
+    sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= bs.cs_next_var /\
+    sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= bs.cs_next_id /\
+    bm.cs_next_id <= sb.cs_next_id /\
+    expr_type e = t /\ (!x. not_fresh_at sa x ==> x <> rv) /\
+    local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+    MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    s0.vs_alloca_next <= tt.vs_alloca_next ==>
+    frag_exec_mem ctx s1 sb (\s. s = tt)
+      (\s. (?v. res = INL v /\
+                vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 es' (Value v)
+                  (if is_word_type t then StackValue t (Var rv)
+                   else LocatedValue t (mk_ptr (Var rv) LocMemory)) s) /\
+            s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s)
+      (expr_exit res)
+Proof
+  rpt strip_tac >> imp_res_tac emit_inst_extends >>
+  PURE_REWRITE_TAC[frag_exec_mem_def] >> BETA_TAC >> rpt strip_tac >>
+  qpat_x_assum `_ = tt` SUBST_ALL_TAC >>
+  `step_inst_base (mk_inst s5.cs_next_id JNZ [cond_op; Label tl; Label el] [])
+     tt = OK (jump_to bl tt)` by
+    (qpat_x_assum `(if _ then _ else _) = bl` (SUBST_ALL_TAC o SYM) >>
+     simp[mk_inst_def] >> drule step_jnz_behavior >>
+     disch_then (fn th => simp[th]) >> Cases_on `bv` >> simp[valueEncodingTheory.val_to_w256_def]) >>
+  qabbrev_tac `jnz = mk_inst s5.cs_next_id JNZ [cond_op; Label tl; Label el] []` >>
+  qabbrev_tac `jbb = <| bb_label := s6.cs_current_bb;
+                        bb_instructions := s6.cs_current_insts |>` >>
+  `fn_has_code s6 s7 fn /\ fn_has_code bs bp fn` by
+    metis_tac[fn_has_code_mid, cs_extends_trans, cs_extends_refl] >>
+  `lookup_block tt.vs_current_bb fn.fn_blocks = SOME jbb` by
+    (`tt.vs_current_bb = s6.cs_current_bb` by fs[] >>
+     simp[Abbr `jbb`] >> metis_tac[fn_has_code_new_block]) >>
+  `get_instruction jbb tt.vs_inst_idx = SOME jnz` by
+    fs[Abbr `jbb`, get_instruction_def, EL_LENGTH_APPEND] >>
+  `is_terminator jnz.inst_opcode /\ jnz.inst_opcode <> INVOKE /\
+   inst_mem_below_frontier jnz tt` by
+    (simp[Abbr `jnz`, mk_inst_def, is_terminator_def] >>
+     irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  `step_inst_base jnz tt = OK (jump_to bs.cs_current_bb tt)` by simp[] >>
+  qpat_x_assum `bs.cs_current_bb = bl` (SUBST_ALL_TAC o SYM) >>
+  drule_all ifexp_point_branch_to_exit_mem >>
+  BETA_TAC >> strip_tac
+  >- (disj1_tac >> qexists_tac `jump_to xl s'` >> rpt conj_tac
+      >- (qexists_tac `v` >> simp[] >>
+          qspecl_then [`func`, `cenv`, `cx`, `IfExp t c a b`] mp_tac
+            vv_post_of_expr_post >>
+          simp[expr_type_def] >> disch_then irule >>
+          irule expr_post_ifexp >>
+          first_assum (irule_at Any) >> first_assum (irule_at Any) >>
+          qexistsl_tac [`BoolV bv`, `s1`, `cond_op`] >> simp[] >> metis_tac[])
+      >- (gvs[jump_to_def, update_var_def] >> decide_tac)
+      >- (irule ifexp_history_jump >> simp[])
+      >- (gvs[jump_to_def, update_var_def])
+      >- simp[jump_to_def]
+      >- simp[jump_to_def] >>
+      simp[]) >>
+  disj2_tac >> metis_tac[]
+QED
+
+val () =
+  let val th = ifexp_jnz_arm_mem
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_IFEXP_JNZ_ARM_MEMORY_AUDIT OK\n"
+     else raise Fail "ifexp jnz arm memory inherited admission"
+  end;
