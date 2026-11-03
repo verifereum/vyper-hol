@@ -151,6 +151,11 @@ Theorem exec_alloca_preserves_remap:
       exec_alloca inst s2 alloc_size = OK s2' /\
       alloca_remap_rel fn roots
         (remap |+ (inst.inst_id, base2)) s1' s2'
+Theorem exec_pure3_error_transfer[local]:
+  !f inst s1 s2 err.
+    (!op. eval_operand op s1 = NONE ==> eval_operand op s2 = NONE) /\
+    exec_pure3 f inst s1 = Error err ==>
+    ?err'. exec_pure3 f inst s2 = Error err'
 ```
 
 Do not modify this statement. Prove it as-is, or produce a counterexample.
@@ -164,6 +169,7 @@ Do not modify this statement. Prove it as-is, or produce a counterexample.
 - Repair the encountered pp_single_output proof body without changing its statement.
 - Repair the encountered inst_ids_fresh_after_step proof without changing its statement.
 - Repair the encountered exec_alloca_preserves_remap[sizes] and remap_preserved_mem_ops[mstore8] proof resumes without changing their statements or other resumes.
+- Repair the encountered exec_pure3_error_transfer proof without changing its statement.
 - Build allocaRemapProofsTheory at the default tactic limit.
 - Preserve all other existing proofs, definitions and statements.
 
@@ -177,7 +183,7 @@ A forced default replay at eaf96a2fa timed out at the classification gvs after o
 
 ## Domain Constraints
 
-- The six previously authorized repairs now pass incrementally at 3bc084c97. Preserve all these completed repairs and helpers. Edit only inst_ids_fresh_after_step, exec_alloca_preserves_remap[sizes], remap_preserved_mem_ops[mstore8], and necessary local helper theorems in venom/passes/shared/proofs/allocaRemapProofsScript.sml. A needed declarative Ancestors entry is allowed if it introduces no dependency cycle. Preserve the completed allocation-map proof repair.
+- The prior six repairs and the allocation-size resume now pass incrementally at 5613bd390. Preserve all these completed repairs and helpers. Edit only inst_ids_fresh_after_step, remap_preserved_mem_ops[mstore8], exec_pure3_error_transfer, and necessary local helper theorems in venom/passes/shared/proofs/allocaRemapProofsScript.sml. Preserve the shared exec_err_tac and all other error-transfer proofs. A needed declarative Ancestors entry is allowed if it introduces no dependency cycle.
 - All existing definitions and statements, including local declarations, are frozen. No new definitions, axioms, admissions, strengthened premises, opcode exclusions or supported-subset changes.
 - Preserve all completed gas, CFG and DRET proofs.
 - Default 2.5-second tactic limit; no timeout override and no TRY/ORELSE/FIRST around search.
@@ -217,3 +223,5 @@ Default replay at420c9d0a8 passes the two immutable repairs and stops at pp_sing
 The next actual default-replay failure is the ALLOCA branch of inst_ids_fresh_after_step, at the broad FULL_CASE_TAC loop. Independent read-only audit of its full exact statement and producers found PROVABLE: wf_function provides instruction-ID distinctness; current-index freshness excludes a preexisting current allocation site; successful ALLOCA can add only the current ID; the existing allocation-map preservation theorem covers all other allowed opcodes, including GAS. No missing assumption or definition amendment is authorized. Only this proof and necessary local helpers are newly in scope; preserve the prior six repairs and all existing schemas.
 
 Default replay now encounters two earlier actual prerequisite timeouts before reaching the authorized freshness proof: exec_alloca_preserves_remap[sizes] at its broad fs[] (one unchanged replay passed), and remap_preserved_mem_ops[mstore8] at full dispatcher expansion. Independent read-only audit of both complete exact theorem statements and these real obligations found PROVABLE from existing allocation-map correspondence, fresh-site/no-wrap/zero-region facts, pointer confinement, one-byte bounds and residual-frame transport. The scope now permits only these two resumes plus the already authorized freshness proof/local helpers; all completed repairs, other resumes, statements and definitions remain frozen. No new premise, invariant, opcode exclusion or supported-subset restriction is authorized.
+
+Incremental replay at 5613bd390 bounded the allocation-size resume but stopped earlier than the pending MSTORE8/freshness obligations in exec_pure3_error_transfer: the shared exec_err_tac expansion exceeds the default tactic limit. A fresh independent audit of the exact complete statement and exec_pure3/eval_operand definitions found PROVABLE: only arity errors or failed operand evaluation can produce Error; the existing NONE-transfer premise suffices. No GAS reading or state-changing error branch is involved. This amendment permits only that additional proof and necessary local helpers. Keep the existing generic tactic and other error-transfer proofs frozen. No statement, definition or premise change is authorized.
