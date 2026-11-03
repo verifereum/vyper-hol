@@ -1444,6 +1444,55 @@ Proof
   gvs[] >> TRY (res_tac >> gvs[lookup_var_def] >> NO_TAC)
 QED
 
+Theorem remap_gas_readings_agree[local]:
+  alloca_remap_rel fn roots remap s1 s2 ==>
+  s1.vs_gas_readings = s2.vs_gas_readings
+Proof
+  strip_tac >>
+  irule alloca_remap_frame_projection >>
+  conj_tac
+  >- simp[alloca_remap_frame_def] >>
+  fs[alloca_remap_rel_def, LET_DEF]
+QED
+
+Theorem remap_step_pending_deletions[local]:
+  alloca_remap_rel fn roots remap s1 s2 /\
+  inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+  step_inst_base inst s1 = OK v1 /\ step_inst_base inst s2 = OK v2 ==>
+  v1.vs_pending_deletions = v2.vs_pending_deletions
+Proof
+  strip_tac >>
+  `s1.vs_pending_deletions = s2.vs_pending_deletions` by
+    (irule alloca_remap_frame_projection >> conj_tac
+     >- simp[alloca_remap_frame_def] >>
+     fs[alloca_remap_rel_def, LET_DEF]) >>
+  drule_all step_inst_base_oracle >> strip_tac >>
+  drule_all step_inst_base_oracle >> strip_tac >>
+  metis_tac[step_inst_base_oracle]
+QED
+
+Theorem remap_rel_from_preserved_pointers[local]:
+  alloca_remap_rel fn roots remap s1 s2 /\ FINITE roots /\
+  v1.vs_allocas = s1.vs_allocas /\ v2.vs_allocas = s2.vs_allocas /\
+  v1.vs_memory = s1.vs_memory /\ v2.vs_memory = s2.vs_memory /\
+  (!v. v NOTIN pointer_derived_vars fn roots ==>
+       lookup_var v v1 = lookup_var v v2) /\
+  (!v. v IN pointer_derived_vars fn roots ==>
+       lookup_var v v1 = lookup_var v s1 /\ lookup_var v v2 = lookup_var v s2) /\
+  alloca_remap_frame v1 = alloca_remap_frame v2 ==>
+  alloca_remap_rel fn roots remap v1 v2
+Proof
+  strip_tac >> irule remap_rel_from_equiv >>
+  simp[Excl "pass_residual_mask_equality"] >>
+  qexistsl_tac [`s1`, `s2`] >>
+  simp[Excl "pass_residual_mask_equality"] >> conj_tac
+  >- (rpt strip_tac >>
+      `v IN pointer_derived_vars fn roots` by
+        metis_tac[roots_in_pointer_derived_vars] >>
+      fs[alloca_remap_rel_def, LET_DEF] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 Theorem remap_preserved_no_pointer_ops[local]:
   !fn roots remap inst s1 s2 v1 bb.
     alloca_remap_rel fn roots remap s1 s2 /\
@@ -1473,6 +1522,8 @@ Proof
         fs[alloca_remap_rel_def, LET_DEF] >>
       gvs[step_inst_base_def, exec_read0_def, exec_gas_def, AllCaseEqs()] >>
       irule remap_update_nonpointer >> simp[]) >>
+  `s1.vs_gas_readings = s2.vs_gas_readings` by
+    (drule remap_gas_readings_agree >> simp[]) >>
   (* Step 1: Extract scalar fields from alloca_remap_rel *)
   `s1.vs_prev_bb = s2.vs_prev_bb /\ s1.vs_params = s2.vs_params /\
    s1.vs_returndata = s2.vs_returndata /\
