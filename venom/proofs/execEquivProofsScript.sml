@@ -774,13 +774,8 @@ Proof
       >- (disch_then irule >> rw[] >> first_x_assum irule >>
           metis_tac[MEM_DROP_IMP, MEM_REVERSE])
       >> Induct >> rw[eval_operands_def]) >>
-  gvs[listTheory.EL] >>
-  Cases_on `eval_operand (HD (REVERSE rest)) s2` >>
-  gvs[result_equiv_def] >>
-  Cases_on `eval_operand (EL 1 (REVERSE rest)) s2` >>
-  gvs[result_equiv_def] >>
-  Cases_on `eval_operands (DROP 2 (REVERSE rest)) s2` >>
-  gvs[result_equiv_def, revert_equiv_def, state_equiv_def,
+  simp[] >>
+  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def, state_equiv_def,
     execution_equiv_def, lookup_var_def]
 QED
 
