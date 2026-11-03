@@ -1,8 +1,9 @@
 Theory bodySimAugPlaceStorageProbe
 Ancestors
-  bodySimAugPlaceLoad supportedExprs supportedTargets
+  bodySimAugPlaceLoad supportedExprs supportedTargets supportedProgram
   vyperStorageBackend vyperLookupStorage compileEnv
   vyperInterpreter vyperState vyperStorage vyperValue vyperAST finite_map words
+  compileVyper moduleLowering stmtLowering venomExecSemantics venomState vfmState
 
 (* A fixed child address is still extendable after the enclosing dynamic
    array's length has become zero. These are primitive semantic witnesses,
@@ -95,4 +96,162 @@ Proof
   strip_tac >>
   simp[evaluate_def, bind_def, read_result_def, return_def,
        extend_place_def, aug_place_captured_child_extend, get_place_def]
+QED
+
+Definition aug_place_probe_ty_def:
+  aug_place_probe_ty = ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 1)) (Dynamic 1)
+End
+
+Definition aug_place_probe_body_def:
+  aug_place_probe_body =
+    [Assign (BaseTarget (TopLevelNameTarget (NONE,"outer")))
+       (Builtin aug_place_probe_ty
+          (MakeArray (SOME (ArrayT (BaseT (UintT 256)) (Fixed 1))) (Dynamic 1)) []);
+     Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))]
+End
+
+Definition aug_place_probe_tops_def:
+  aug_place_probe_tops =
+    [VariableDecl Private Storage "outer" aug_place_probe_ty (SOME 0);
+     FunctionDecl Internal Nonpayable F F "key" [] [] (BaseT (UintT 256))
+       aug_place_probe_body]
+End
+
+Theorem aug_place_probe_supported:
+  supported_program aug_place_probe_tops
+Proof
+  EVAL_TAC
+QED
+
+Definition aug_place_probe_cx_def:
+  aug_place_probe_cx = empty_evaluation_context with
+    <| stk := [(NONE,"caller")];
+       sources := [(0w,[(NONE,aug_place_probe_tops)])];
+       layouts := [(0w,([((NONE,"outer"),0)],[]))] |>
+End
+
+Definition aug_place_probe_initial_def:
+  aug_place_probe_initial = empty_state with accounts :=
+    (0w =+ (empty_account_state with storage :=
+       (0w =+ 1w) ((1w =+ 7w) (K 0w)))) empty_accounts
+End
+
+Definition aug_place_probe_key_def:
+  aug_place_probe_key = Call (BaseT (UintT 256)) (IntCall (NONE,"key")) [] NONE
+End
+
+Theorem aug_place_probe_key_source:
+  let (r,s) = eval_expr aug_place_probe_cx aug_place_probe_key aug_place_probe_initial in
+    r = INL (Value (IntV 0)) /\
+    get_storage aug_place_probe_cx s F 0w = 0w /\
+    get_storage aug_place_probe_cx s F 1w = 7w
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def, type_slot_size_def] >>
+  EVAL_TAC >> simp[] >> EVAL_TAC >> simp[]
+QED
+
+Definition aug_place_probe_target_def:
+  aug_place_probe_target = SubscriptTarget
+    (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+      (Literal (BaseT (UintT 256)) (IntL 0))) aug_place_probe_key
+End
+
+Theorem aug_place_probe_target_source:
+  let (r,s) = eval_target_place aug_place_probe_cx aug_place_probe_target
+                aug_place_probe_initial in
+    r = INL (StoragePlace F 1w (BaseTV (UintT 256))) /\
+    get_storage aug_place_probe_cx s F 0w = 0w /\
+    read_place aug_place_probe_cx (StoragePlace F 1w (BaseTV (UintT 256))) s =
+      (INL (IntV 7),s)
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def, type_slot_size_def] >>
+  EVAL_TAC >> simp[] >> EVAL_TAC >> simp[] >> EVAL_TAC >>
+  simp[wordsTheory.dimword_def, wordsTheory.WORD_ADD_0]
+QED
+
+Definition aug_place_probe_cenv_def:
+  aug_place_probe_cenv = build_compile_env aug_place_probe_tops
+    Internal Nonpayable "key" [] (BaseT (UintT 256)) aug_place_probe_body F
+End
+
+Definition aug_place_probe_lowered_def:
+  aug_place_probe_lowered = SND (compile_stmt aug_place_probe_cenv NoLoop
+    (BaseT (UintT 256)) (HD aug_place_probe_body) (initial_compile_state "entry"))
+End
+
+Theorem aug_place_probe_lowered_shape:
+  MAP (\i. (i.inst_opcode,i.inst_operands,i.inst_outputs))
+    aug_place_probe_lowered.cs_current_insts = [(SSTORE,[Lit 0w; Lit 0w],[])]
+Proof
+  EVAL_TAC
+QED
+
+Theorem aug_place_probe_lowered_step:
+  step_inst_base (HD aug_place_probe_lowered.cs_current_insts) s =
+    OK (sstore 0w 0w s)
+Proof
+  EVAL_TAC
+QED
+
+Theorem aug_place_probe_lowered_words:
+  contract_storage s = (0w =+ 1w) ((1w =+ 7w) (K 0w)) ==>
+  sload 0w (sstore 0w 0w s) = 0w /\
+  sload 1w (sstore 0w 0w s) = 7w
+Proof
+  strip_tac >>
+  simp[sload_def, sstore_def, contract_storage_def,
+       lookup_account_def, update_storage_def, lookup_storage_def] >>
+  EVAL_TAC >> gvs[contract_storage_def, lookup_account_def] >> EVAL_TAC >> simp[]
+QED
+
+Definition aug_place_probe_env_def:
+  aug_place_probe_env = <|
+    current_src := NONE; var_types := FEMPTY; var_assignable := FEMPTY;
+    bare_globals := FEMPTY; bare_global_assignable := FEMPTY;
+    toplevel_vtypes := FEMPTY |+ ((NONE,"outer"),Type aug_place_probe_ty);
+    type_defs := type_env aug_place_probe_tops;
+    fn_sigs := FEMPTY |+ ((NONE,"key"),
+      <|param_types := []; num_defaults := 0; ret_ty := BaseT (UintT 256)|>);
+    flag_members := FEMPTY |>
+End
+
+Theorem aug_place_probe_body_typed:
+  IS_SOME (type_stmts aug_place_probe_env (BaseT (UintT 256)) aug_place_probe_body)
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def, type_slot_size_def]
+QED
+
+Theorem aug_place_probe_target_admitted:
+  supported_target_info aug_place_probe_tops [] aug_place_probe_target =
+    SOME (ValPT (BaseT (UintT 256))) /\
+  type_place_target aug_place_probe_env aug_place_probe_target =
+    SOME (Type (BaseT (UintT 256)))
+Proof
+  EVAL_TAC >> simp[] >> EVAL_TAC
+QED
+
+Theorem aug_place_probe_augassign_admitted:
+  supported_stmt aug_place_probe_tops []
+    (AugAssign (BaseT (UintT 256)) aug_place_probe_target Add
+      (Literal (BaseT (UintT 256)) (IntL 1))) /\
+  IS_SOME (type_stmt aug_place_probe_env (BaseT (UintT 256))
+    (AugAssign (BaseT (UintT 256)) aug_place_probe_target Add
+      (Literal (BaseT (UintT 256)) (IntL 1))))
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def, type_slot_size_def] >> EVAL_TAC >> simp[]
+QED
+
+Definition aug_place_probe_function_def:
+  aug_place_probe_function = SND (compile_internal_function aug_place_probe_cenv
+    [] F F 0 F F F 0 aug_place_probe_body (SOME (BaseT (UintT 256)))
+    (initial_compile_state "entry"))
+End
+
+Theorem aug_place_probe_function_shape:
+  MAP (\i. (i.inst_opcode,i.inst_operands,i.inst_outputs))
+    aug_place_probe_function.cs_current_insts =
+      [(RETPC_PARAM,[Lit 0w],["%0"]); (ALLOCA,[Lit 32w],["%1"]);
+       (SSTORE,[Lit 0w; Lit 0w],[]); (RET,[Lit 0w; Var "%0"],[])]
+Proof
+  EVAL_TAC >> simp[]
 QED
