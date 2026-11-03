@@ -25,8 +25,6 @@ val unsupported_code = [
 ]
 
 val unsupported_patterns = unsupported_code @ [
-  "msg.mana", "msg.gas",
-  "gas=",
 ]
 
 fun has_unsupported_patterns src =
@@ -35,23 +33,7 @@ fun has_unsupported_patterns src =
 fun is_blank s =
   List.all Char.isSpace (String.explode s)
 
-fun source_codes_json j =
-  let
-    fun gather (JSON.OBJECT kvs) =
-          let
-            val here =
-              case List.find (fn (k, _) => k = "source_code") kvs of
-                SOME (_, JSON.STRING s) => [s]
-              | _ => []
-            val nested = List.concat (List.map (fn (_, v) => gather v) kvs)
-          in
-            here @ nested
-          end
-      | gather (JSON.ARRAY xs) = List.concat (List.map gather xs)
-      | gather _ = []
-  in
-    gather j
-  end
+val source_codes_json = TraceDecode.source_codes_json
 
 fun first_some [] = NONE
   | first_some (NONE::xs) = first_some xs
@@ -133,6 +115,7 @@ val excluded_test_names = [
   (* Tests using shift() builtin which is not yet translated.
      TODO: add shift builtin support *)
   "test_uint256_mulmod_complex",
+  "test_shift_builtin_negative_literal*",
   (* Out-of-gas test - we don't model gas *)
   "test_ecrecover_oog_handling"
 ]

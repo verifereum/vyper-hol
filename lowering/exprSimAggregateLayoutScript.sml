@@ -1,7 +1,7 @@
 (*
  * Layout of struct, tuple and array literals (#636)
  *
- * Under expr_sim_pre, StructLit and MakeArray compile to an ALLOCA of the
+ * Under expr_body_pre, StructLit and MakeArray compile to an ALLOCA of the
  * literal's size followed by compile_struct_lit, compile_make_tuple or
  * compile_make_array, and the evaluated types and field sizes add up to
  * that size (expr_sim_inv's struct fields clause gives the sizes).  For
@@ -25,7 +25,7 @@
  *)
 Theory exprSimAggregateLayout
 Ancestors
-  structFieldsProps vyperTypeSystem valueEncoding compileEnv
+  structFieldsProps vyperTypeSystem valueEncoding valueEncodingProps compileEnv
   exprSimHyps exprSimBufferEmpty vyperValue list pair finite_map vfmConstants
   exprCallbackContracts exprLowering exprSimWordBuiltins
 
@@ -113,6 +113,23 @@ Proof
   metis_tac[]
 QED
 
+(* A variable's type takes memory: it takes a storage slot
+   (assignable_type_slot_size_pos), so it takes memory. *)
+Theorem expr_sim_inv_memory_bytes_pos:
+  !cenv ty cx env es.
+    expr_sim_inv cenv cx env es /\
+    assignable_type (get_tenv cx) ty ==>
+    0 < type_memory_bytes cenv ty
+Proof
+  rpt strip_tac >>
+  `?tv. evaluate_type (get_tenv cx) ty = SOME tv` by
+    metis_tac[assignable_type_well_formed, well_formed_type_def,
+              optionTheory.IS_SOME_EXISTS] >>
+  drule_all expr_sim_inv_memory_size >> strip_tac >>
+  simp[] >> irule (CONJUNCT1 type_memory_size_pos) >>
+  metis_tac[assignable_type_slot_size_pos]
+QED
+
 
 Theorem type_memory_size_aligned:
   (!tv. type_memory_size tv MOD 32 = 0) /\
@@ -171,18 +188,18 @@ Proof
 QED
 
 Theorem struct_literal_lookup_types:
-  expr_sim_pre ce cx env (StructLit ann nsid kes) es ==>
+  expr_body_pre ce cx env (StructLit ann nsid kes) es ==>
   EVERY (\(name,e).
     ALOOKUP (get_struct_fields ce.ce_struct_fields (nsid_to_string nsid)) name =
       SOME (expr_type e,type_memory_bytes ce (expr_type e))) kes
 Proof
   strip_tac >>
-  drule expr_sim_pre_var_types_well_formed >> strip_tac >>
+  drule expr_body_pre_var_types_well_formed >> strip_tac >>
   `expr_sim_inv ce cx env es /\
    well_typed_expr env (StructLit ann nsid kes)` by
-    fs[expr_sim_pre_def] >>
+    fs[expr_body_pre_def] >>
   `env.type_defs = get_tenv cx` by
-    gvs[expr_sim_pre_def, expr_sim_inv_def,
+    gvs[expr_body_pre_def, expr_sim_inv_def,
         vyperTypeInvariantsTheory.env_consistent_def,
         vyperTypeInvariantsTheory.env_context_consistent_def] >>
   `sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by
@@ -325,7 +342,7 @@ Proof
 QED
 
 Theorem struct_literal_evaluated_layout:
-  expr_sim_pre ce cx env (StructLit ann nsid fields) es ==>
+  expr_body_pre ce cx env (StructLit ann nsid fields) es ==>
   ?tvs.
     OPT_MMAP (evaluate_type (get_tenv cx))
       (MAP expr_type (MAP SND fields)) = SOME tvs /\
@@ -336,7 +353,7 @@ Theorem struct_literal_evaluated_layout:
 Proof
   strip_tac >>
   `well_typed_expr env (StructLit ann nsid fields) /\
-   expr_sim_inv ce cx env es` by gvs[expr_sim_pre_def] >>
+   expr_sim_inv ce cx env es` by gvs[expr_body_pre_def] >>
   drule struct_literal_decl_types >> strip_tac >>
   `env.type_defs = get_tenv cx` by
     gvs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
@@ -355,7 +372,7 @@ Proof
 QED
 
 Theorem make_tuple_evaluated_layout:
-  expr_sim_pre ce cx env (Builtin ann (MakeArray NONE bnd) args) es ==>
+  expr_body_pre ce cx env (Builtin ann (MakeArray NONE bnd) args) es ==>
   ?tvs. ann = TupleT (MAP expr_type args) /\
     OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
     evaluate_type (get_tenv cx) ann = SOME (TupleTV tvs) /\
@@ -364,7 +381,7 @@ Proof
   strip_tac >>
   `expr_sim_inv ce cx env es /\
    well_typed_expr env (Builtin ann (MakeArray NONE bnd) args)` by
-    gvs[expr_sim_pre_def] >>
+    gvs[expr_body_pre_def] >>
   `env.type_defs = get_tenv cx` by
     gvs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
         vyperTypeInvariantsTheory.env_context_consistent_def] >>
@@ -379,7 +396,7 @@ Proof
 QED
 
 Theorem make_array_evaluated_layout:
-  expr_sim_pre ce cx env (Builtin ann (MakeArray (SOME et) bnd) args) es ==>
+  expr_body_pre ce cx env (Builtin ann (MakeArray (SOME et) bnd) args) es ==>
   ?tv. ann = ArrayT et bnd /\
     evaluate_type (get_tenv cx) et = SOME tv /\
     evaluate_type (get_tenv cx) ann = SOME (ArrayTV tv bnd) /\
@@ -391,7 +408,7 @@ Proof
   strip_tac >>
   `expr_sim_inv ce cx env es /\
    well_typed_expr env (Builtin ann (MakeArray (SOME et) bnd) args)` by
-    gvs[expr_sim_pre_def] >>
+    gvs[expr_body_pre_def] >>
   `env.type_defs = get_tenv cx` by
     gvs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
         vyperTypeInvariantsTheory.env_context_consistent_def] >>

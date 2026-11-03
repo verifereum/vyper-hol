@@ -21,7 +21,7 @@ WORKERS = 4
 
 BUILT = re.compile(r"^\S+Z (vyperTest(?:Defs)?_\S+)Theory built in ([\d.]+)s$")
 ANCESTOR = re.compile(r"^Ancestors (vyperTestDefs_\S+)$", re.MULTILINE)
-CHUNK = re.compile(r"^(.*)_chunk\d+$")
+CHUNK = re.compile(r"^(.*)_part\d+$")
 
 
 @dataclass(frozen=True)
@@ -60,17 +60,27 @@ class BuildTimes:
         """Give chunks no log built yet an equal share of their unsplit test's time.
 
         A test split into trace chunks has CI times only for the unsplit
-        test until the chunks have run.
+        test until the chunks have run. The first chunk keeps the unsplit
+        name. Treat that timing as unsplit only while no suffixed chunk has
+        a measurement; otherwise preserve all measured chunk timings.
         """
-        chunks: dict[str, list[str]] = {}
+        chunks: dict[str, set[str]] = {}
         for test in tests:
-            match = CHUNK.match(test.name)
-            if match:
-                chunks.setdefault(match[1], []).append(test.name)
+            for name in (test.name, test.defs):
+                match = CHUNK.match(name)
+                if match:
+                    chunks.setdefault(match[1], set()).add(name)
+        current = {name for test in tests for name in (test.name, test.defs)}
         for whole, names in chunks.items():
             if whole in self.seconds:
+                unsplit = not any(name in self.seconds for name in names)
+                if whole in current:
+                    names.add(whole)
+                estimate = self.seconds[whole] / len(names)
+                if unsplit and whole in names:
+                    self.seconds[whole] = estimate
                 for name in names:
-                    self.seconds.setdefault(name, self.seconds[whole] / len(names))
+                    self.seconds.setdefault(name, estimate)
 
     def missing(self, tests: Iterable[Test]) -> list[str]:
         """Theories of `tests` that no log built."""
@@ -144,7 +154,8 @@ class CiLogs:
         """Logs of the run's successful test-group jobs."""
         jobs = self.gh("api", f"repos/{self.repo}/actions/runs/{run}/jobs", "--paginate", "-q",
                        '.jobs[]|select((.name|startswith("vyper-tests")) and .conclusion=="success")|.id')
-        return [self.gh("api", f"repos/{self.repo}/actions/jobs/{job}/logs") for job in jobs.split()]
+        return [self.gh("api", "--allow-escape-sequences", f"repos/{self.repo}/actions/jobs/{job}/logs")
+                for job in jobs.split()]
 
     def gh(self, *args: str) -> str:
         """Run `gh` and return its output."""

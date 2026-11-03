@@ -7,16 +7,24 @@ Ancestors
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
   entryChecksProps
-  entryStateRel
+  entryStateRel entryLocals
   loweringSlice
+  memSafeRun instMemFrontier fragExecMem allocaFootprint
   varsExt exprSim
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
-  exprSimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
+  exprSimMain bodySimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
-  stmtSimDeclMem exprSimStorageCopy
+  stmtSimDeclMem stmtSimDeclEmpty exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
+  stmtSimAssign stmtSimAssignMem stmtSimAssignTuple stmtSimAssignTupleMem
+  stmtSimAssignStorage stmtSimStoreCopy stmtSimAssignAttr
+  stmtSimAssignAttrStorage stmtSimAugAssignAttr
   valueEncodingProofs
   localPtrsProps
+  immutableStagingBridge
+  immutableCodeLayout
+  immutableLocationProps
+  loweringShapeDefs
   loweringShapeProps
   intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
   structFieldsProps
@@ -25,6 +33,8 @@ Ancestors
   allocaBudgetChecks
   vyperLoweringCorrect
   configuredE2ECorrectness
+  evalCompilerInternalImmutables
+  evalAssignmentOrder
   (* focused internal-frame allocation, cleanup and whitelist regressions *)
   calleeMemoryWitness
   cleanupPromiseWitness

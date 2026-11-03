@@ -4,9 +4,17 @@
 Theory vyperBytesAddressConvertTest
 Ancestors
   vyperValue vyperValueOperation vyperContext vyperTypeConversions vyperTypeSystem
-  vyperTypeContract evalCompilerSubsetScalars
+  vyperTypeContract
 Libs
   cv_transLib vyperCheckContractLib
+
+Definition scalar_convert_bytes32_to_address_program_def:
+  scalar_convert_bytes32_to_address_program =
+    [FunctionDecl External Pure F F "bytes32_to_address"
+       [("x", BaseT (BytesT (Fixed 32)))] ([] : expr list) (BaseT AddressT)
+       [Return (SOME (TypeBuiltin (BaseT AddressT) Convert (BaseT AddressT)
+         [Name (BaseT (BytesT (Fixed 32))) "x"]))]]
+End
 
 Theorem bytes_address_conversion_boundary:
   evaluate_convert tenv (BytesV bs) (BaseT AddressT) =
@@ -18,6 +26,7 @@ Proof
 QED
 
 Theorem bytes_address_conversion_valid:
+  (!k. bd = Dynamic k ==> k <= 32) ==>
   valid_conversion (BaseT (BytesT bd)) (BaseT AddressT)
 Proof
   Cases_on `bd` >> simp[valid_conversion_def]
@@ -112,11 +121,21 @@ Proof
        dividesTheory.compute_divides] >> EVAL_TAC
 QED
 
+(* Like Vyper, extract32 needs 32 bytes from start, whatever the output type. *)
+Theorem extract32_short_tail_eval:
+  evaluate_extract32 (REPLICATE 10 1w) 0 (UintT 256) =
+    INR (RuntimeError "evaluate_extract32 start") ∧
+  evaluate_extract32 (REPLICATE 4 1w ++ REPLICATE 28 0w) 1 (BytesT (Fixed 3)) =
+    INR (RuntimeError "evaluate_extract32 start")
+Proof
+  EVAL_TAC
+QED
+
 (* Exercise the repository's success-only checker against the ACTUAL unchanged
    formerly rejected fixture, in runtime and deployment modes. Unfolding only
-   its two fixture definitions keeps the core checker's compset sealed. *)
+   its fixture definition keeps the core checker's compset sealed. *)
 val fixture_modules = rhs (concl (SIMP_CONV (srw_ss())
-  [scalar_convert_bytes32_to_address_program_def, scalar_convert_fn_def]
+  [scalar_convert_bytes32_to_address_program_def]
   ``([(NONE, scalar_convert_bytes32_to_address_program)]
       : (num option # toplevel list) list)``));
 val fixture_layouts =
@@ -133,7 +152,7 @@ Theorem bytes_address_fixture_runtime_checked:
   IS_SOME (check_contract F [] (0w : address)
     [(NONE, scalar_convert_bytes32_to_address_program)])
 Proof
-  simp[scalar_convert_bytes32_to_address_program_def, scalar_convert_fn_def] >>
+  simp[scalar_convert_bytes32_to_address_program_def] >>
   CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
 QED
 
@@ -141,6 +160,6 @@ Theorem bytes_address_fixture_deployment_checked:
   IS_SOME (check_contract T [] (0w : address)
     [(NONE, scalar_convert_bytes32_to_address_program)])
 Proof
-  simp[scalar_convert_bytes32_to_address_program_def, scalar_convert_fn_def] >>
+  simp[scalar_convert_bytes32_to_address_program_def] >>
   CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
 QED

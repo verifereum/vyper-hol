@@ -307,7 +307,12 @@ Theorem step_MSTORE:
     step_inst_base (mk_inst id MSTORE [op1; op2] []) ss =
       OK (mstore (w2n v1) v2 ss)
 Proof
-  rw[step_inst_base_def, exec_write2_def]
+  rpt strip_tac >>
+  `(mk_inst id MSTORE [op1; op2] []).inst_opcode = MSTORE`
+    by simp[venomInstTheory.mk_inst_def] >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  pop_assum (fn th => pure_rewrite_tac[th]) >>
+  simp[venomInstTheory.mk_inst_def, exec_write2_def]
 QED
 
 (* ===== ASSERT ===== *)
@@ -2146,11 +2151,7 @@ Proof
   conj_tac >- (
     gvs[fresh_vars_wrt_def, write_memory_with_expansion_def, LET_THM,
         emit_void_def, comp_bind_def, fresh_id_def, emit_def]) >>
-  conj_tac
-  >- (rw[] >> Cases_on `op` >>
-      gvs[eval_operand_def, write_memory_with_expansion_def,
-          lookup_var_def, LET_THM]) >>
-  rw[write_memory_with_expansion_def, LET_THM]
+  simp[write_memory_with_expansion_def, LET_THM]
 QED
 
 (* ===== ALLOCA ===== *)

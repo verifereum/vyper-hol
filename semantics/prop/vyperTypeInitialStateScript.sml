@@ -51,28 +51,12 @@ Proof
   simp[machine_well_typed_def]
 QED
 
-Theorem machine_well_typed_immutables:
-  machine_well_typed am ==>
-  EVERY (\(addr, imms). imms_well_typed imms) am.immutables
-Proof
-  simp[machine_well_typed_def]
-QED
-
 Theorem abstract_machine_from_state_well_typed:
   state_well_typed st /\ accounts_well_typed st.accounts ==>
   machine_well_typed (abstract_machine_from_state srcs exps layouts st)
 Proof
   simp[machine_well_typed_def, state_well_typed_def,
        abstract_machine_from_state_def]
-QED
-
-Theorem machine_well_typed_metadata_update:
-  machine_well_typed am ==>
-  machine_well_typed
-    (am with <| sources updated_by sf; exports updated_by ef;
-                layouts updated_by lf |>)
-Proof
-  simp[machine_well_typed_def]
 QED
 
 Theorem machine_well_typed_cons_immutables:
@@ -190,24 +174,6 @@ Theorem update_immutable_preserves_other_source:
   get_source_immutables src imms
 Proof
   simp[update_immutable_def, get_source_immutables_set_other]
-QED
-
-Theorem update_immutable_preserves_lookup:
-  (src' = src ==> key <> id) /\
-  FLOOKUP (get_source_immutables src imms) id = SOME x ==>
-  FLOOKUP (get_source_immutables src (update_immutable src' key tv v imms)) id = SOME x
-Proof
-  rw[update_immutable_def] >>
-  Cases_on `src' = src` >>
-  gvs[get_source_immutables_set_same, get_source_immutables_set_other,
-      finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
-Theorem FLOOKUP_FUNION_left_none:
-  FLOOKUP f k = NONE /\ FLOOKUP g k = SOME x ==>
-  FLOOKUP (FUNION f g) k = SOME x
-Proof
-  simp[FLOOKUP_FUNION]
 QED
 
 Theorem initial_target_immutables_lookup:
@@ -549,20 +515,6 @@ Proof
   gvs[]
 QED
 
-Theorem constants_env_no_bare_global_lookup:
-  constants_do_not_clobber_bare_globals mods bare_globals /\
-  ALOOKUP mods src = SOME ts /\
-  constants_env cx am addr src ts FEMPTY = SOME cenv /\
-  FLOOKUP bare_globals (src,id) = SOME ty ==>
-  FLOOKUP cenv id = NONE
-Proof
-  rw[] >>
-  irule constants_env_no_bare_global_lookup_MEM >>
-  simp[] >>
-  metis_tac[alistTheory.ALOOKUP_MEM]
-QED
-
-
 Theorem is_bare_global_decl_cases[local]:
   is_bare_global_decl id ts ==>
   is_immutable_decl id ts \/
@@ -597,6 +549,8 @@ Proof
   strip_tac >>
   gvs[]
 QED
+
+
 Theorem merge_constants_preserves_lookup:
   (src = src_c ==> FLOOKUP cenv id = NONE) /\
   FLOOKUP
@@ -697,27 +651,6 @@ Proof
   goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >>
   simp[]
-QED
-
-Theorem evaluate_all_constants_preserves_bare_global_type:
-  constants_do_not_clobber_bare_globals mods env_base.bare_globals /\
-  env_context_consistent env_base cx /\
-  ALOOKUP cx.sources cx.txn.target = SOME mods /\
-  ALOOKUP mods src = SOME ts /\
-  FLOOKUP env_base.bare_globals (src,id) = SOME ty /\
-  evaluate_all_constants cx am cx.txn.target mods = SOME am_c /\
-  FLOOKUP
-    (get_source_immutables src
-      (case ALOOKUP am.immutables cx.txn.target of SOME m => m | NONE => []))
-    id = SOME (tv,v) /\
-  evaluate_type (get_tenv cx) ty = SOME tv ==>
-  FLOOKUP
-    (get_source_immutables src
-      (case ALOOKUP am_c.immutables cx.txn.target of SOME m => m | NONE => []))
-    id = SOME (tv,v)
-Proof
-  rw[] >>
-  metis_tac[evaluate_all_constants_preserves_bare_global_lookup_type]
 QED
 
 Theorem deployment_setup_immutables_ready:
@@ -822,7 +755,7 @@ QED
 Theorem initial_state_accounts_well_typed:
   machine_well_typed am ==>
   accounts_well_typed
-    (initial_state am scs with <|outcomes := orc; requests := rqs|>).accounts
+    (initial_state am scs with <|outcomes := orc; requests := rqs; gas_obs := gobs|>).accounts
 Proof
   simp[machine_well_typed_def, initial_state_def]
 QED
@@ -830,7 +763,7 @@ QED
 Theorem initial_state_single_scope_well_typed:
   machine_well_typed am /\ scope_well_typed scope ==>
   state_well_typed
-    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>)
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)
 Proof
   simp[machine_well_typed_def, initial_state_def, state_well_typed_def]
 QED
@@ -850,34 +783,6 @@ Theorem initial_state_single_scope_well_typed_simple:
 Proof
   mp_tac (Q.INST [`orc` |-> `NONE`, `rqs` |-> `[]`]
     initial_state_single_scope_well_typed) >> simp[]
-QED
-
-Theorem env_context_consistent_empty_static_maps:
-  env.current_src = current_module cx /\
-  env.type_defs = get_tenv cx /\
-  env.fn_sigs = fn_sigs /\
-  env.bare_globals = FEMPTY /\
-  env.bare_global_assignable = FEMPTY /\
-  env.toplevel_vtypes = FEMPTY /\
-  env.flag_members = FEMPTY /\
-  fn_sigs_consistent fn_sigs cx /\
-  fn_sigs_declared_complete fn_sigs cx /\
-  toplevel_vtypes_complete FEMPTY cx /\
-  bare_globals_complete FEMPTY cx /\
-  bare_global_assignable_complete FEMPTY cx /\
-  flag_members_complete FEMPTY cx ==>
-  env_context_consistent env cx
-Proof
-  simp[env_context_consistent_def]
-QED
-
-Theorem env_immutables_consistent_empty_static_maps:
-  env.bare_globals = FEMPTY /\
-  env.bare_global_assignable = FEMPTY /\
-  env.toplevel_vtypes = FEMPTY ==>
-  env_immutables_consistent env cx st
-Proof
-  simp[env_immutables_consistent_def]
 QED
 
 Theorem env_context_consistent_static_maps_function_side_condition:
@@ -940,7 +845,8 @@ Theorem functions_well_typed_callable_body_env_base:
   env_context_consistent env_base cx /\
   get_module_code cx src = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts =
-    SOME (fm,nr,args,dflts,ret,body) ==>
+    SOME (fm,nr,args,dflts,ret,body) /\
+  context_function_live cx (src,fn) ==>
   ?env_body env_after.
     env_body.current_src = src /\
     env_body.type_defs = env_base.type_defs /\
@@ -1002,7 +908,7 @@ Theorem immutables_ready_env_immutables_consistent:
   env.toplevel_vtypes = env_base.toplevel_vtypes /\
   immutables_ready env_base.bare_globals env_base.toplevel_vtypes cx am.immutables ==>
   env_immutables_consistent env cx
-    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>)
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)
 Proof
   rw[immutables_ready_def, env_immutables_consistent_def, initial_state_def] >> metis_tac[]
 QED
@@ -1026,10 +932,11 @@ Theorem callable_entry_establishes_type_soundness_preconditions:
   get_module_code cx src = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts =
     SOME (fm,nr,args,dflts,ret,body) /\
+  context_function_live cx (src,fn) /\
   bind_arguments (get_tenv cx) args vals = SOME scope /\
   args_values_typed (get_tenv cx) args vals ==>
   ?env_body env_after st.
-    st = (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) /\
+    st = (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) /\
     env_body.current_src = src /\
     env_body.type_defs = env_base.type_defs /\
     env_body.fn_sigs = env_base.fn_sigs /\
@@ -1076,10 +983,11 @@ Theorem callable_entry_no_type_error:
   get_module_code cx src = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts =
     SOME (fm,nr,args,dflts,ret,body) /\
+  context_function_live cx (src,fn) /\
   bind_arguments (get_tenv cx) args vals = SOME scope /\
   args_values_typed (get_tenv cx) args vals ==>
   no_type_error_eval (eval_stmts cx body
-    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>))
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>))
 Proof
   metis_tac[
     callable_entry_establishes_type_soundness_preconditions,
@@ -1127,7 +1035,7 @@ Proof
        bare_global_assignable_complete_def, flag_members_complete_def,
        env_scopes_consistent_def, env_immutables_consistent_def,
        fn_sigs_consistent_def, fn_sigs_declared_complete_def,
-       state_well_typed_def,
+       fn_sigs_live_def, state_well_typed_def,
        scope_well_typed_def, vyperStateTheory.lookup_scopes_def,
        accounts_well_typed_def, account_well_typed_def, machine_well_typed_def,
        vfmStateTheory.lookup_account_def, vfmStateTheory.empty_accounts_def,

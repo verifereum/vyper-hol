@@ -61,7 +61,7 @@ or placeholder. A header theorem is not a program/body acceptance theorem.
   collect only the corresponding top-level names.
 - **`supported_function_bindings tops args locals loops`**: ALL_DISTINCT
   on `MAP FST args ++ locals ++ loops`. Locals may shadow module variables
-  (`compile_env` keys those as `"self." ++ name`) and may use the names
+  (`compile_env` keeps those in `ce_module_vars`) and may use the names
   `__return_buf__`/`__return_pc__` (dedicated `ce_return_*` fields). TASK_021 must supply
   **all** AnnAssign and For names across all branches/nesting, as lists rather
   than deduplicated sets. This rejects duplicates within and across each class.
@@ -110,12 +110,11 @@ cheat delta is zero.
   is the exact operator table. Comparison restrictions use the **operand** type,
   not their bool result. TASK_021 can reuse it for AugAssign with literal_base=F.
 - `supported_unsigned_type`, `supported_signed_type`,
-  `supported_fixed_bytes_type`, `supported_numeric_type`,
-  `supported_short_bytes_type`, `supported_integer_literal`,
-  `supported_nonnegative_literal`; widths/bytes20 reuse the foundation limits.
-- `supported_conversion src dst` is the directed conversion whitelist, not the
-  source type system's broader conversion relation. Signed decimal inputs must
-  have N <= 134 (thus the largest supported byte-aligned width is 128).
+  `supported_numeric_type`, `supported_integer_literal`,
+  `supported_nonnegative_literal`; widths reuse the foundation limits.
+- Conversion forms use the source type system's width-aware
+  `valid_conversion src dst` relation directly; there is no separate conversion
+  whitelist.
 - `supported_builtin_form tops ty builtin args` and
   `supported_type_builtin_form ty builtin target args` encode exact forms and
   arities, including the ABI flags/method-id/single-argument restrictions.
@@ -145,6 +144,10 @@ cheat delta is zero.
   positional arguments in source order, each kind at most once, and no
   `value=` on a staticcall. They are pure like every other operand, and both
   the lowering and the semantics evaluate them before the call.
+  The interpreter captures internal argument results before reading them after
+  defaults; external positional arguments are read after keyword evaluation.
+  This deferred-read behavior does not remove the whitelist's pure-operand
+  restriction. Builtin and log arguments remain eager.
 - `supported_expr tops e`: P or E, for later statement expression positions.
   No statement or whole-program placeholder is provided.
 - Symbolic contracts: pure Call/Pop rejection, external-call inversion,
@@ -183,7 +186,7 @@ Proof paths: `lowering/supported/supportedExprFormPropsScript.sml` (F below)
 | Not, Neg, Abs, AsWeiValue, AddMod, MulMod, PowMod256 | F `supported_unary_modular_builtin_coverage` |
 | Every Env/Acc item; BlockHash, BlobHash, ECRecover, ECAdd, ECMul | F `supported_environment_crypto_builtin_coverage` |
 | Empty, MaxValue, MinValue, Epsilon, Extract32 exclusion | F `supported_type_builtin_coverage` |
-| Every admitted conversion family; out-of-list, width, bytes20, N>=135 exclusions | F `supported_conversion_whitelist_coverage`, `supported_conversion_exclusion_coverage` |
+| Checker conversion domain and accepted/rejected width boundaries | F `supported_convert_checker_domain`, `conversion_width_boundary_acceptance`, `conversion_width_boundary_rejection` |
 | ABI encode/decode exact flags, method-id size, tuple depth/length, arity | F `supported_abi_forms_coverage` |
 | Uint2Str (unsigned argument), CalldataSlice; Len, hashes, Concat, Slice, typed/dynamic MakeArray, Ceil, Floor, MethodId and wrong arities excluded | F `supported_builtin_exclusion_coverage` |
 | IntCall, Send, storage dynamic Pop; namespace/visibility/base exclusions | X `supported_internal_send_pop_rows` |
@@ -226,13 +229,21 @@ all `.agent-files` inputs are untouched. Source/proof cheat delta: **zero**.
   global main-module requirement even in Name/Subscript annotations and loop
   types; it does not invoke or reproduce source typing.
 - `supportedStmtsTheory`: `supported_stmt tops bindings`, `supported_stmts`
-  enumerate every constructor. The only E positions are Expr, Return,
-  AnnAssign, and a word-typed local Assign. Storage writes and indices,
-  augmentation, append arguments, conditions and event arguments must be P.
-  Tuple assignment and all other target shapes are rejected.
-- `supported_assignment`, `supported_aug_target`, `supported_append_target`
-  reuse TASK_020's storage-base lookups. Writes may use **any declared field**
-  of a full-word storage struct; the first-field restriction remains read-only.
+  enumerate every constructor. E is admitted at Expr, Return, AnnAssign,
+  Assign/AugAssign RHSs and supported subscript-target indices. Nested effects
+  inside P expressions remain excluded; append values, conditions and event
+  arguments must be P.
+- `supported_assignment`, `supported_target`, `supported_append_target`
+  reuse TASK_020's storage-base lookups. Assignment targets include locals of
+  supported value types, slotted scalar storage/transient variables, one-level
+  storage/map subscripts, and **any declared field** of a full-word storage
+  struct. Flat tuple assignment uses these same targets, including repeats;
+  nested tuple targets remain rejected. The first-field restriction remains
+  read-only. RHS/target type compatibility is a separate typing obligation.
+  Single-target assignment captures the RHS, resolves the target, then reads
+  and stores the RHS; augmentation reads the target before its RHS. These are
+  implemented evaluation orders, not an assignment simulation theorem:
+  [stmtSim](../stmtSimScript.sml) still lists Assign/AugAssign as unproved.
 - `supported_iterator tops ty iter bound`: two IntL endpoints require integer
   loop type, start <= end, and exact `Num(end-start)` (including zero); other
   ranges require two P expressions and a positive bound; arrays require the
@@ -261,7 +272,7 @@ Permanent plain-EVAL checks:
 
 | Boundary | Theory and checks |
 |---|---|
-| Every statement row, E root positions, targets, pure storage ordering, augmentation, append, reasons, exact logs | `supportedStmtProps`: `supported_simple_statement_rows`, `supported_all_effect_root_positions`, `supported_storage_statement_rows`, `supported_target_exclusions`, `supported_storage_effects_rejected`, `supported_augmented_statement_row`, `supported_control_reason_rows`, `supported_log_statement_row` |
+| Every statement row, E root positions, flat tuple/repeated targets, storage effects, augmentation, append, reasons, exact logs | `supportedStmtProps`: `supported_simple_statement_rows`, `supported_all_effect_root_positions`, `supported_storage_statement_rows`, `supported_tuple_assignment_rows`, `supported_target_exclusions`, `supported_storage_effect_statement_rows`, `supported_storage_effects_rejected`, `supported_augmented_statement_row`, `supported_control_reason_rows`, `supported_log_statement_row` |
 | Literal/checked ranges, fixed-array shape/type/bound | `supportedStmtProps`: `supported_literal_range_statement_row`, `supported_checked_range_statement_row`, `supported_fixed_array_iteration_row` |
 | Whole-program acceptance, Internal/loop restrictions, name/type environments, all header/name exclusions, fallback, annotations; typing separate | `supportedProgramProps`: all theorems |
 | Every statement/target occurrence position, exact/dynamic decode API, duplicate-preserving recursive binding collection | `supportedStmtTraverseProps`: all theorems |

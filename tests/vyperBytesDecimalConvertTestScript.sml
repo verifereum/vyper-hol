@@ -4,20 +4,30 @@
 Theory vyperBytesDecimalConvertTest
 Ancestors
   vyperValue vyperValueOperation vyperContext vyperTypeConversions vyperTypeSystem
-  vyperTypeContract evalCompilerSubsetScalars
+  vyperTypeContract
 Libs
   cv_transLib vyperCheckContractLib
 
+Definition scalar_convert_bytes32_to_decimal_program_def:
+  scalar_convert_bytes32_to_decimal_program =
+    [FunctionDecl External Pure F F "bytes32_to_decimal"
+       [("x", BaseT (BytesT (Fixed 32)))] ([] : expr list) (BaseT DecimalT)
+       [Return (SOME (TypeBuiltin (BaseT DecimalT) Convert (BaseT DecimalT)
+         [Name (BaseT (BytesT (Fixed 32))) "x"]))]]
+End
+
 Theorem bytes_decimal_conversion_boundary:
   evaluate_convert tenv (BytesV bs) (BaseT DecimalT) =
-    bounded_decimal_op (w2i
+    (if bs = [] then INR (RuntimeError "convert empty bytes to signed")
+     else bounded_decimal_op (w2i
       ((word_of_bytes_be (PAD_RIGHT 0w 32 bs) : bytes32) >>
-       (8 * (32 - LENGTH bs))))
+       (8 * (32 - LENGTH bs)))))
 Proof
   simp[evaluate_convert_def]
 QED
 
 Theorem bytes_decimal_conversion_valid:
+  (!k. bd = Dynamic k ==> k <= 32) ==>
   valid_conversion (BaseT (BytesT bd)) (BaseT DecimalT)
 Proof
   Cases_on `bd` >> simp[valid_conversion_def]
@@ -27,7 +37,7 @@ QED
    the input type or byte length is needed for successful-result typing. *)
 Theorem bytes_decimal_success_iff:
   evaluate_convert tenv (BytesV bs) (BaseT DecimalT) = INL (DecimalV i) <=>
-  i = w2i ((word_of_bytes_be (PAD_RIGHT 0w 32 bs) : bytes32) >>
+  bs <> [] /\ i = w2i ((word_of_bytes_be (PAD_RIGHT 0w 32 bs) : bytes32) >>
            (8 * (32 - LENGTH bs))) /\ within_int_bound (Signed 168) i
 Proof
   rw[evaluate_convert_def, bounded_decimal_op_def] >>
@@ -36,7 +46,7 @@ QED
 
 Definition bytes_decimal_cases_def:
   bytes_decimal_cases =
-  [(([] : word8 list), INL (DecimalV 0));
+  [(([] : word8 list), INR (RuntimeError "convert empty bytes to signed"));
    ([0w], INL (DecimalV 0));
    ([1w], INL (DecimalV 1));
    ([127w], INL (DecimalV 127));
@@ -133,7 +143,7 @@ QED
 (* The actual formerly rejected fixture, through the sealed success-only
    checker in both runtime and deployment modes. Its AST is unchanged. *)
 val fixture_modules = rhs (concl (SIMP_CONV (srw_ss())
-  [scalar_convert_bytes32_to_decimal_program_def, scalar_convert_fn_def]
+  [scalar_convert_bytes32_to_decimal_program_def]
   ``([(NONE, scalar_convert_bytes32_to_decimal_program)]
       : (num option # toplevel list) list)``));
 val fixture_layouts =
@@ -150,7 +160,7 @@ Theorem bytes_decimal_fixture_runtime_checked:
   IS_SOME (check_contract F [] (0w : address)
     [(NONE, scalar_convert_bytes32_to_decimal_program)])
 Proof
-  simp[scalar_convert_bytes32_to_decimal_program_def, scalar_convert_fn_def] >>
+  simp[scalar_convert_bytes32_to_decimal_program_def] >>
   CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
 QED
 
@@ -158,6 +168,6 @@ Theorem bytes_decimal_fixture_deployment_checked:
   IS_SOME (check_contract T [] (0w : address)
     [(NONE, scalar_convert_bytes32_to_decimal_program)])
 Proof
-  simp[scalar_convert_bytes32_to_decimal_program_def, scalar_convert_fn_def] >>
+  simp[scalar_convert_bytes32_to_decimal_program_def] >>
   CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
 QED

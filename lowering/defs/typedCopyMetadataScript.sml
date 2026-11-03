@@ -90,8 +90,8 @@ QED
 (* Every lookup in the actual metadata builder has a source declaration,
    or is inherited from its input map. Field sizes need not be guessed. *)
 Theorem built_struct_fields_origin:
-  !tops sf name fields.
-  FLOOKUP (build_struct_fields_map tenv tops sf) name = SOME fields ==>
+  !tops env sf name fields.
+  FLOOKUP (build_struct_fields_map env tops sf) name = SOME fields ==>
   FLOOKUP sf name = SOME fields \/
   ?args. MEM (StructDecl name args) tops /\
          MAP (FST o SND) fields = MAP SND args
@@ -175,12 +175,12 @@ Theorem built_struct_fields_every:
   FEVERY (λ(name,fields). EVERY (P o FST o SND) fields) sf /\
   (!name args. MEM (StructDecl name args) tops ==> EVERY (P o SND) args) ==>
   FEVERY (λ(name,fields). EVERY (P o FST o SND) fields)
-    (build_struct_fields_map tenv tops sf)
+    (build_struct_fields_map env tops sf)
 Proof
   simp[FEVERY_DEF] >> rpt strip_tac >>
-  rename1 `name IN FDOM (build_struct_fields_map tenv tops sf)` >>
-  `FLOOKUP (build_struct_fields_map tenv tops sf) name =
-   SOME ((build_struct_fields_map tenv tops sf) ' name)` by simp[FLOOKUP_DEF] >>
+  rename1 `name IN FDOM (build_struct_fields_map env tops sf)` >>
+  `FLOOKUP (build_struct_fields_map env tops sf) name =
+   SOME ((build_struct_fields_map env tops sf) ' name)` by simp[FLOOKUP_DEF] >>
   drule built_struct_fields_origin >> strip_tac
   >- (fs[FLOOKUP_DEF] >>
       qpat_x_assum `sf ' name = _` (SUBST1_TAC o SYM) >>

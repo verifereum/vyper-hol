@@ -14,7 +14,8 @@ the old element slot retains37 on target and becomes0 on old source. This is an
 observable final-storage mismatch even though the element is outside logical length.
 
 The permanent focused regression uses an even simpler explicit slot map:
-array header4=2, element slots5=11 and6=37. Pop returns `IntV 37`, header4=1,
+array header4=2, element slots5=11 and6=37. Reading pop's captured result
+yields `IntV 37`, header4=1,
 slot6=37, slot5=11; **only the header changes**. Old source instead wrote slot6=0.
 Both storage and transient backends now use the one-header-write behavior;
 empty pop still errors without changing state. `slots_in_range` examines only
@@ -22,8 +23,8 @@ indices below the new length, not a promise that discarded storage is zero.
 
 ## Current owners and reference evidence
 
-- [Source](../../semantics/vyperStateScript.sml): `assign_target`, storage/transient
-  `PopOp` tail (read old value, nonempty check, decrement, one write).
+- [Source](../../semantics/vyperStateScript.sml): `pop_place`, storage/transient
+  tail (nonempty check, decrement, one header write, retained element location).
 - [Exact witnesses](../../tests/vyperStoragePopTestScript.sml):
   `storage_pop_nonzero_slot_retained`, `transient_pop_nonzero_slot_retained`,
   `storage_pop_cv_slots`, `transient_pop_cv_slots`, empty-pop equations.

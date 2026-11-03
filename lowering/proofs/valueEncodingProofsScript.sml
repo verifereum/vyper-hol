@@ -7,7 +7,7 @@
 Theory valueEncodingProofs
 Ancestors
   list rich_list venomMemProofs
-  valueEncoding vyperStorage vyperValue venomState
+  valueEncoding vyperStorage vyperValue venomState venomExecSemantics
   vyperABI vyperABIRoundtrip vyperTyping vyperTypeABI contractABI
 Libs
   blastLib intLib
@@ -895,7 +895,7 @@ Proof
        val_in_memory_def] >>
   simp[mem_bytes_at_word] >>
   gvs[typed_val_to_w256_def, val_to_w256_def, enc_def, enc_number_def]
-  >- (`~(i < 0)` by intLib.COOPER_TAC >> simp[integer_wordTheory.i2w_def]) 
+  >- (`~(i < 0)` by intLib.COOPER_TAC >> simp[integer_wordTheory.i2w_def])
   >- (Cases_on `b` >> simp[])
   >- (Cases_on `b` >>
       gvs[vyper_base_to_abi_type_def, GSYM is_dynamic_def, AllCaseEqs(),
@@ -1317,4 +1317,211 @@ Theorem val_in_memory_address_proof:
      typed_val_to_w256 (BaseTV AddressT) (BytesV bs))
 Proof
   simp[val_in_memory_def]
+QED
+
+(* Snapshot writes expose content and preserve disjoint padded windows. *)
+Theorem write_memory_mem_bytes_at_same:
+  !dst bs s.
+    mem_bytes_at dst (LENGTH bs)
+      (write_memory_with_expansion dst bs s).vs_memory = bs
+Proof
+  rpt gen_tac >>
+  simp[write_memory_with_expansion_def, LET_THM] >>
+  Cases_on `0 < dst + LENGTH bs - LENGTH s.vs_memory` >> simp[] >>
+  simp[mem_bytes_at_def, DROP_APPEND, LENGTH_TAKE_EQ,
+       TAKE_APPEND1, TAKE_LENGTH_ID_rwt, DROP_EQ_NIL, DROP_TAKE]
+QED
+
+Theorem write_memory_mem_bytes_at_disjoint:
+  !p k dst bs s.
+    (p + k <= dst \/ dst + LENGTH bs <= p) ==>
+    mem_bytes_at p k (write_memory_with_expansion dst bs s).vs_memory =
+    mem_bytes_at p k s.vs_memory
+Proof
+  rpt gen_tac >> disch_tac >>
+  simp[write_memory_with_expansion_def, LET_THM] >>
+  Cases_on `0 < dst + LENGTH bs - LENGTH s.vs_memory` >> simp[]
+  >- (qmatch_goalsub_abbrev_tac `TAKE dst exp` >>
+      `dst + LENGTH bs <= LENGTH exp` by simp[Abbr `exp`] >>
+      `mem_bytes_at p k (TAKE dst exp ++ bs ++
+        DROP (dst + LENGTH bs) exp) = mem_bytes_at p k exp` by
+        (simp[mem_bytes_at_def] >> irule take_drop_splice_disjoint >> simp[]) >>
+      simp[Abbr `exp`, mem_bytes_at_append_zero]) >>
+  `dst + LENGTH bs <= LENGTH s.vs_memory` by simp[] >>
+  simp[mem_bytes_at_def] >> irule take_drop_splice_disjoint >> simp[]
+QED
+
+Theorem mcopy_mem_bytes_at_same:
+  !dst src n s.
+    mem_bytes_at dst n (mcopy dst src n s).vs_memory =
+    mem_bytes_at src n s.vs_memory
+Proof
+  rpt gen_tac >>
+  simp[mcopy_def, GSYM mem_bytes_at_def] >>
+  metis_tac[write_memory_mem_bytes_at_same, LENGTH_mem_bytes_at_proof]
+QED
+
+Theorem mcopy_mem_bytes_at_disjoint:
+  !p k dst src n s.
+    (p + k <= dst \/ dst + n <= p) ==>
+    mem_bytes_at p k (mcopy dst src n s).vs_memory =
+    mem_bytes_at p k s.vs_memory
+Proof
+  rpt strip_tac >> simp[mcopy_def] >>
+  irule write_memory_mem_bytes_at_disjoint >> simp[LENGTH_TAKE_EQ]
+QED
+
+Theorem mem_bytes_at_translated_window:
+  !a b n m m' i k.
+    mem_bytes_at a n m = mem_bytes_at b n m' /\ i + k <= n ==>
+    mem_bytes_at (a+i) k m = mem_bytes_at (b+i) k m'
+Proof
+  rpt strip_tac >> irule LIST_EQ >>
+  simp[LENGTH_mem_bytes_at_proof] >> rpt strip_tac >>
+  rename1 `j < k` >>
+  `i+j < n` by decide_tac >>
+  qpat_x_assum `mem_bytes_at _ _ _ = _`
+    (mp_tac o AP_TERM ``EL (i+j) : word8 list -> word8``) >>
+  asm_simp_tac (srw_ss()) [EL_mem_bytes_at, GSYM arithmeticTheory.ADD_ASSOC]
+QED
+
+(* Interface probes: zero-size expansion, padded input, overlapping snapshot. *)
+Theorem mcopy_window_edge_probes[local]:
+  mem_bytes_at 7 0 (mcopy 7 19 0 (s with vs_memory := [])).vs_memory = [] /\
+  mem_bytes_at 5 3 (mcopy 5 19 3 (s with vs_memory := [])).vs_memory =
+    [0w; 0w; 0w] /\
+  mem_bytes_at 1 3
+    (mcopy 1 0 3 (s with vs_memory := [1w; 2w; 3w; 4w])).vs_memory =
+    [1w; 2w; 3w]
+Proof
+  simp[mcopy_mem_bytes_at_same, mem_bytes_at_def] >> EVAL_TAC
+QED
+
+(* Relocation observes relative byte windows, rather than absolute addresses. *)
+Theorem mem_bytes_at_translate_parts[local]:
+  !a b n m m'.
+    mem_bytes_at a n m = mem_bytes_at b n m' ==>
+    (!i k. i+k <= n ==>
+      mem_bytes_at (a+i) k m = mem_bytes_at (b+i) k m') /\
+    (!i. i+32 <= n ==>
+      mem_word_at (a+i) m = mem_word_at (b+i) m')
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- metis_tac[mem_bytes_at_translated_window] >>
+  rpt strip_tac >>
+  `mem_bytes_at (a+i) 32 m = mem_bytes_at (b+i) 32 m'` by
+    metis_tac[mem_bytes_at_translated_window] >>
+  gvs[mem_bytes_at_def, mem_word_at_def]
+QED
+
+Theorem mem_bytes_at_translate_slot[local]:
+  !a b n t k mem mem'.
+    k < n /\ mem_bytes_at a (n*t) mem = mem_bytes_at b (n*t) mem' ==>
+    mem_bytes_at (a+k*t) t mem = mem_bytes_at (b+k*t) t mem'
+Proof
+  rpt strip_tac >> irule mem_bytes_at_translated_window >>
+  qexists_tac `n*t` >> simp[] >>
+  `SUC k <= n` by simp[] >>
+  drule arithmeticTheory.LESS_MONO_MULT >>
+  disch_then (qspec_then `t` mp_tac) >>
+  REWRITE_TAC[arithmeticTheory.MULT] >> DECIDE_TAC
+QED
+
+Theorem val_in_memory_relocate_proof:
+  (!ty v a mem b mem'.
+    val_in_memory ty v a mem /\ val_wf ty v /\
+    mem_bytes_at a (type_memory_size ty) mem =
+    mem_bytes_at b (type_memory_size ty) mem' ==>
+    val_in_memory ty v b mem') /\
+  (!fields field_tvs a mem b mem'.
+    fields_in_memory fields field_tvs a mem /\
+    fields_val_wf fields field_tvs /\
+    mem_bytes_at a (type_memory_size_fields field_tvs) mem =
+    mem_bytes_at b (type_memory_size_fields field_tvs) mem' ==>
+    fields_in_memory fields field_tvs b mem') /\
+  (!vs a tv mem b mem'.
+    elems_in_memory vs a tv mem /\ elems_val_wf vs tv /\
+    mem_bytes_at a (LENGTH vs * type_memory_size tv) mem =
+    mem_bytes_at b (LENGTH vs * type_memory_size tv) mem' ==>
+    elems_in_memory vs b tv mem') /\
+  (!(kvs : (num # value) list) a tv mem b mem'.
+    kvs_in_memory kvs a tv mem /\
+    (!k v. MEM (k,v) kvs ==>
+      val_wf tv v /\
+      mem_bytes_at (a+k*type_memory_size tv) (type_memory_size tv) mem =
+      mem_bytes_at (b+k*type_memory_size tv) (type_memory_size tv) mem') ==>
+    kvs_in_memory kvs b tv mem') /\
+  (!vs tvs a mem b mem'.
+    tuple_in_memory vs tvs a mem /\ tuple_val_wf vs tvs /\
+    mem_bytes_at a (type_memory_size_list tvs) mem =
+    mem_bytes_at b (type_memory_size_list tvs) mem' ==>
+    tuple_in_memory vs tvs b mem')
+Proof
+  ho_match_mp_tac val_in_memory_ind >> rpt conj_tac >>
+  rpt strip_tac >>
+  TRY (fs[val_in_memory_def] >> NO_TAC) >>
+  TRY (first_assum (strip_assume_tac o MATCH_MP mem_bytes_at_translate_parts)) >>
+  TRY (gvs[val_in_memory_def, val_wf_def] >>
+       qpat_x_assum `!i. _ ==> mem_word_at _ _ = _`
+         (qspec_then `0` mp_tac) >> simp[] >>
+       disch_then (assume_tac o SYM) >> simp[] >> NO_TAC)
+  >~ [`BytesV`]
+  >- (Cases_on `ty` >>
+      gvs[val_in_memory_def, val_wf_def, type_memory_size_def] >>
+      TRY (rename1 `BaseTV bt` >> Cases_on `bt` >>
+           gvs[val_in_memory_def, val_wf_def, type_memory_size_def] >>
+           TRY (rename1 `BytesT bnd` >> Cases_on `bnd` >>
+                gvs[val_in_memory_def, val_wf_def, type_memory_size_def])) >>
+      qpat_x_assum `!i. _ ==> mem_word_at _ _ = _`
+        (qspec_then `0` mp_tac) >>
+      qpat_x_assum `!i k. _ ==> mem_bytes_at _ _ _ = _`
+        (qspecl_then [`32`, `LENGTH bs`] mp_tac) >> simp[] >> metis_tac[])
+  >~ [`StructV`]
+  >- (Cases_on `ty` >> gvs[val_in_memory_def, val_wf_def] >>
+      first_x_assum irule >> gvs[type_memory_size_def])
+  >~ [`DynArrayV`]
+  >- (Cases_on `ty` >> gvs[val_in_memory_def, val_wf_def] >>
+      Cases_on `b'` >> gvs[val_in_memory_def, val_wf_def, type_memory_size_def] >>
+      qpat_x_assum `!i. _ ==> mem_word_at _ _ = _`
+        (qspec_then `0` mp_tac) >> simp[] >> metis_tac[])
+  >~ [`SArrayV`]
+  >- (Cases_on `ty` >> gvs[val_in_memory_def, val_wf_def] >>
+      rename1 `ArrayTV elem_tv bd` >>
+      Cases_on `bd` >> gvs[val_wf_def, type_memory_size_def] >>
+      rename1 `kvs_val_wf kvs elem_tv bound` >>
+      (* Relocate both stored keys and the defaults at absent indices. *)
+      conj_tac
+      >- (first_x_assum irule >> rpt gen_tac >> strip_tac >>
+          drule_all kvs_val_wf_mem >> drule_all kvs_val_wf_bound >>
+          rpt strip_tac >> simp[] >>
+          irule mem_bytes_at_translate_slot >>
+          qexists_tac `bound` >> simp[]) >>
+      rpt strip_tac >>
+      qpat_x_assum `!i. _ ==> !x y. _` (qspec_then `i` mp_tac) >>
+      simp[] >> disch_then irule >>
+      simp[val_wf_default_value_proof] >>
+      irule mem_bytes_at_translate_slot >> qexists_tac `bound` >> simp[])
+  >~ [`TupleV`]
+  >- (Cases_on `ty` >> gvs[val_in_memory_def, val_wf_def] >>
+      first_x_assum irule >> gvs[type_memory_size_def])
+  >~ [`fields_in_memory ((_,_)::_)`]
+  >- (Cases_on `field_tvs` >> TRY (Cases_on `h`) >>
+      gvs[val_in_memory_def, val_wf_def, LET_THM, type_memory_size_def] >>
+      first_x_assum irule >>
+      qpat_x_assum `!i k. _ ==> mem_bytes_at _ _ _ = _`
+        (qspec_then `0` mp_tac) >> simp[])
+  >~ [`elems_in_memory (_::_)`]
+  >- (gvs[val_in_memory_def, val_wf_def, arithmeticTheory.MULT_CLAUSES] >>
+      first_x_assum irule >>
+      qpat_x_assum `!i k. _ ==> mem_bytes_at _ _ _ = _`
+        (qspec_then `0` mp_tac) >> simp[])
+  >~ [`kvs_in_memory ((_,_)::_)`]
+  >- (fs[val_in_memory_def] >> rpt conj_tac >>
+      first_x_assum irule >> metis_tac[])
+  >~ [`tuple_in_memory (_::_)`]
+  >- (Cases_on `tvs` >>
+      gvs[val_in_memory_def, val_wf_def, LET_THM, type_memory_size_def] >>
+      first_x_assum irule >>
+      qpat_x_assum `!i k. _ ==> mem_bytes_at _ _ _ = _`
+        (qspec_then `0` mp_tac) >> simp[])
 QED

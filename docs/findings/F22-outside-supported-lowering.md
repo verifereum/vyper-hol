@@ -6,6 +6,11 @@ general fixes DEFERRED.** One report covers the official catalogue; no claim
 that introducing a whitelist repairs arbitrary programs.
 [Evidence, history and current audit](README.md).
 
+The call/assignment ordering rows below now describe repaired evaluation
+orders. Their whitelist admission remains syntactic: the general
+Assign/AugAssign simulation cases are still unproved in
+[stmtSim](../../lowering/stmtSimScript.sml).
+
 ## Minimal concrete definition-level counterexamples
 
 - **Narrow left shift:** uint8 x=128, unsigned shift=1. Source
@@ -47,11 +52,11 @@ regressions. No named original fixture exercises these excluded mismatches.
 
 ## Entire official catalogue and current boundary
 
-| PLAN F22 category | Source versus lowering reason | Current whitelist owner |
+| PLAN F22 category | Current behavior or remaining difference | Current whitelist owner |
 |---|---|---|
-| Internal argument evaluation | source captures values as evaluated; lowering stages located operands after all expressions (later effects can change earlier data) | `supported_pure_expr` on all call args |
-| `x += e` | source evaluates RHS then reads target; lowering reads target first; e that writes x changes result | `supported_aug_target`, pure RHS |
-| `a[i] = e` check order | source evaluates e before assigning/checking index; lowering checks index before e; failing index can suppress e's effects | `supported_assignment`, pure key/RHS |
+| Call argument reads | interpreter captures internal argument locations before defaults and reads them afterward; external positional reads follow keyword evaluation, matching the staged lowering phases | `supported_pure_expr` still required for all call operands |
+| `x += e` | source and lowering resolve and read the target before evaluating the RHS, then compute and write | `supported_target`, `supported_expr` RHS; root effects admitted |
+| `a[i] = e` check order | source and lowering capture the RHS before resolving/checking the target, then read the RHS and store; flat tuple writes resolve/store targets in order | `supported_assignment`, `supported_expr` key/RHS; flat tuple targets admitted, nested tuples excluded |
 | Storage struct non-first read | concrete22/11 example above | `supported_storage_field_read` |
 | Byte hashmap write keys | source hashes byte keys; lowering read hashes but write uses raw key | `supported_hashmap_key_type`: integer/bool/address only |
 | Nested/transient hashmaps | lowering loses type/location on nested/write paths | `supported_declaration_header`, nonnested/nontransient maps |
@@ -61,7 +66,7 @@ regressions. No named original fixture exercises these excluded mismatches.
 | Widths not multiple8 | source type/evaluator permits widths; target uses byte-based width/8 clamps | `supported_int_width` |
 | Memory-type `empty` | source constructs empty/default aggregate; lowering supplies pointer0 without constructing it | Empty only W |
 | Storage Bytes/String | source storage codec versus lowering word/copy representation differs | storage restricted to full-word scalars/arrays/structs |
-| Other conversions | no general source/target agreement claimed | exact `supported_conversion` list |
+| Conversions | checker width restrictions apply | width-aware `valid_conversion` relation |
 | Several ABI encode args / other flags | concrete example; lower encodes first arg; current dispatcher DOES honor ensure via enc_ty | exact single tuple/false ensure/SOME4-byte ID form |
 | ABI decode unwrap flag | source wrapper-sensitive decoding; lowering ignores flag | false flag, identical tuple target/result,≥2 members |
 | Indexed aggregate / bytes20 events | incompatible aggregate topics;20-byte values conflated with address encoding | scalar fields; bytes20 excluded |
@@ -85,20 +90,27 @@ Current producer boundaries are
 [supportedTypes](../../lowering/supported/supportedTypesScript.sml),
 [supportedDecls](../../lowering/supported/supportedDeclsScript.sml).
 
-Actual current regressions prove **exclusion/support**, not these programs'
+The whitelist theorems prove **exclusion/support**, not these programs'
 semantic correctness: [expression form properties](../../lowering/supported/supportedExprFormPropsScript.sml)
-`supported_power_shift_counterexamples`, `supported_conversion_exclusion_coverage`,
+`supported_power_shift_counterexamples`, `conversion_width_boundary_rejection`,
 `supported_abi_forms_coverage`; [expression properties](../../lowering/supported/supportedExprPropsScript.sml)
 `supported_storage_base_exclusions`, `supported_effect_nesting_counterexamples`;
 [statement properties](../../lowering/supported/supportedStmtPropsScript.sml)
 `supported_storage_effects_rejected`, `supported_target_exclusions`, `supported_log_statement_row`.
 
+Executable ordering witnesses are in
+[evalAssignmentOrder](../../lowering/defs/bytecode/eval/evalAssignmentOrderScript.sml)
+(source evaluation and selected exact-bytecode fixtures) and
+[vyperLoadTimingTest](../../tests/vyperLoadTimingTestScript.sml)
+(storage/memory call arguments and eager builtins). These concrete checks do
+not establish the missing general assignment simulation cases.
+
 Pinned reference mappings read: `vyper/builtins/_convert.py:142–154`,
 `_int_to_fixed` (toward zero); **`vyper/codegen_venom/builtins/convert.py`,
 `_to_decimal`** (floor pre_lo); `vyper/codegen/stmt.py`, `parse_AugAssign`
 (cached target, LOAD then arithmetic, restrictions on writes);
-`vyper/codegen_venom/expr.py`, `_lower_internal_call` (evaluate all args before
-staging; not evidence effectful arguments agree with the source evaluator);
+`vyper/codegen_venom/expr.py`, `_lower_internal_call` (capture argument
+locations before unwrapping; the interpreter now defers these reads too);
 `vyper/builtins/functions.py`, `ABIEncode.fetch_call_return`/`build_IR` handles
 all args; `vyper/codegen_venom/builtins/abi.py`, `lower_abi_encode`, chooses
 single input versus tuple based on ensure. There is no reference run or claim

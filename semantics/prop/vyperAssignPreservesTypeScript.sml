@@ -294,7 +294,6 @@ QED
    - well_formed_type_value tv (for default_value typing in SArrayV)
    - The leaf operation preserves typing (at the leaf type, not tv)
    For Replace: caller ensures new value has the leaf type.
-   For Update: caller ensures binop result has the leaf type.
    For AppendOp: new element must have element type of the leaf array.
    For PopOp: no extra condition needed. *)
 Theorem assign_subscripts_ValueSubscript_IntV_ArrayV[local]:
@@ -302,13 +301,9 @@ Theorem assign_subscripts_ValueSubscript_IntV_ArrayV[local]:
   assign_subscripts tv (ArrayV av) (ValueSubscript (IntV idx)::rest) ao =
     (let
        elem_tv =
-         case tv of
-           ArrayTV t v9 => t
-         | BaseTV v6 => NoneTV
-         | TupleTV v7 => NoneTV
-         | StructTV v10 => NoneTV
-         | FlagTV v11 => NoneTV
-         | NoneTV => NoneTV
+         case tv of ArrayTV t _ => t | _ =>
+           (case subscript_type tv (ValueSubscript (IntV idx)) of
+              SOME t => t | NONE => NoneTV)
      in
        case array_index tv av idx of
          NONE => INR (RuntimeError "assign_subscripts array_index")
@@ -371,10 +366,6 @@ Theorem assign_subscripts_preserves_type:
     well_formed_type_value tv /\
     (* Base conditions at the leaf type *)
     (!nv. ao = Replace nv ==> value_has_type (leaf_type tv subs) nv) /\
-    (!ty bop nv. ao = Update ty bop nv ==>
-       !la lv. value_has_type (leaf_type tv subs) la /\
-               assign_subscripts (leaf_type tv subs) la [] (Update ty bop nv) = INL lv ==>
-               value_has_type (leaf_type tv subs) lv) /\
     (!nv. ao = AppendOp nv ==>
        ?elem_tv n. leaf_type tv subs = ArrayTV elem_tv (Dynamic n) /\
                    value_has_type elem_tv nv) ==>
@@ -382,11 +373,6 @@ Theorem assign_subscripts_preserves_type:
 Proof
   ho_match_mp_tac assign_subscripts_ind >>
   conj_tac >- simp[Once assign_subscripts_def, leaf_type_def] (* Replace *)
-  (* Update *)
-  >> conj_tac >- (rpt gen_tac >> simp[leaf_type_def] >>
-      rpt strip_tac >>
-      first_x_assum irule >>
-      qexists_tac `a` >> gvs[])
   (* AppendOp *)
   >> conj_tac >- (rpt gen_tac >> simp[leaf_type_def] >>
       rpt strip_tac >> gvs[Once assign_subscripts_def] >>

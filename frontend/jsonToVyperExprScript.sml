@@ -257,7 +257,8 @@ Definition raw_call_flags_of_kwargs_def:
     <| rcf_max_outsize := kwarg_num "max_outsize" kwargs 0;
        rcf_is_delegate := kwarg_bool "is_delegate_call" kwargs F;
        rcf_is_static := kwarg_bool "is_static_call" kwargs F;
-       rcf_revert_on_failure := kwarg_bool "revert_on_failure" kwargs T |>
+       rcf_revert_on_failure := kwarg_bool "revert_on_failure" kwargs T;
+       rcf_kws := MAP FST (ext_call_kwargs kwargs) |>
 End
 
 Definition make_builtin_call_def:
@@ -304,11 +305,11 @@ Definition make_builtin_call_def:
     (* ===== Chain interaction builtins ===== *)
     (* raw_call(to, data, max_outsize=0, gas=gas, value=0,
                 is_delegate_call=F, is_static_call=F, revert_on_failure=T)
-       Convention: args in Call = [to_addr; data_bytes; value] *)
+       Convention: args in Call = [to_addr; data_bytes] ++ the value=/gas=
+       operands in source order *)
     else if name = "raw_call" then
-      let flags = raw_call_flags_of_kwargs kwargs in
-      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
-      Call ty (RawCallTarget flags) (args ++ [value_e]) NONE
+      Call ty (RawCallTarget (raw_call_flags_of_kwargs kwargs))
+        (args ++ MAP SND (ext_call_kwargs kwargs)) NONE
     else if name = "raw_log" then Call ty RawLog args NONE
     else if name = "raw_revert" then Call ty RawRevert args NONE
     else if name = "selfdestruct" then Call ty SelfDestructTarget args NONE
@@ -619,17 +620,6 @@ Definition find_keyword_def:
     else find_keyword name rest
 End
 
-
-(* Lemma: if find_keyword returns SOME v, then v is in the keyword list *)
-Theorem find_keyword_MEM:
-  ∀name kws v. find_keyword name kws = SOME v ⇒ ∃k. MEM (JKeyword k v) kws
-Proof
-  Induct_on `kws` >> rw[find_keyword_def] >>
-  Cases_on `h` >> gvs[find_keyword_def] >>
-  Cases_on `s = name` >> gvs[] >>
-  metis_tac[]
-QED
-
 (* Size lemma for termination: keyword value is smaller than keyword list *)
 Theorem find_keyword_size:
   ∀name kws v.
@@ -654,6 +644,8 @@ Definition translate_attribute_def:
       make_flag_member (expr_current_nsid ctx, obj) attr
     else if obj = "msg" /\ attr = "sender" then Builtin (BaseT AddressT) (Env Sender) []
     else if obj = "msg" /\ attr = "value" then Builtin (BaseT (UintT 256)) (Env ValueSent) []
+    else if obj = "msg" /\ (attr = "gas" \/ attr = "mana") then
+      Builtin (BaseT (UintT 256)) (Env MsgGas) []
     else if obj = "block" /\ attr = "timestamp" then Builtin (BaseT (UintT 256)) (Env TimeStamp) []
     else if obj = "block" /\ attr = "number" then Builtin (BaseT (UintT 256)) (Env BlockNumber) []
     else if obj = "block" /\ attr = "prevhash" then Builtin (BaseT (BytesT (Fixed 32))) (Env PrevHash) []
@@ -986,11 +978,9 @@ Definition translate_expr_def:
        | NONE => Builtin (BaseT (BytesT (Dynamic 0))) (CalldataSlice 0) [])
     else if is_raw_call_calldata_call func args then
       let kwargs' = translate_kwargs ctx kwargs in
-      let value_e = kwarg_expr "value" kwargs'
-        (Literal (BaseT (UintT 256)) (IntL 0)) in
       Call (translate_type (expr_type_ctx ctx) ret_ty)
         (RawCallCalldataTarget (raw_call_flags_of_kwargs kwargs'))
-        [translate_expr ctx (HD args); value_e] NONE
+        (translate_expr ctx (HD args) :: MAP SND (ext_call_kwargs kwargs')) NONE
     else let args' = translate_expr_list ctx args in
     let kwargs' = translate_kwargs ctx kwargs in
     let translated_pop_target =
@@ -1281,4 +1271,3 @@ End
 
 
 (* ===== Top-level Translation ===== *)
-

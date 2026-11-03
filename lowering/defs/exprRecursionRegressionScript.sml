@@ -105,18 +105,24 @@ QED
 (* Calldata is copied directly, without lowering a fictitious bytes operand. *)
 Theorem raw_call_calldata_dispatch:
   compile_call cfn cenv ret_ty ty (RawCallCalldataTarget rcf)
-    [addr_e; value_e] default_ret st =
+    (addr_e :: kw_es) default_ret st =
     (let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
-     let ((data_ptr, data_len), st2) = compile_msg_data_to_memory st1 in
-     let (value_op, st3) = lower_value cfn cenv (BaseT (UintT 256)) value_e st2 in
-     let (gas_op, st4) = emit_op GAS [] st3 in
+     let ((value_opt, gas_opt, _), st2) =
+       compile_ext_call_kwargs cfn cenv NoneT rcf.rcf_kws kw_es st1 in
+     let value_op = (case value_opt of SOME v => v | NONE => Lit 0w) in
+     let (gas_op, st3) =
+       (case gas_opt of SOME g => (g, st2) | NONE => emit_op GAS [] st2) in
      let call_ty = if rcf.rcf_is_delegate then DelegateCall
                    else if rcf.rcf_is_static then StaticCall
                    else RegularCall in
-     let (result_op, st5) = compile_raw_call addr_op data_ptr data_len gas_op
-       value_op call_ty rcf.rcf_max_outsize rcf.rcf_revert_on_failure st4 in
-     if rcf.rcf_max_outsize = 0 then (StackValue ret_ty result_op, st5)
-     else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st5))
+     let ((out_val, out_ptr), st4) =
+       compile_raw_call_outbuf rcf.rcf_max_outsize st3 in
+     let ((data_ptr, data_len), st5) = compile_msg_data_to_memory st4 in
+     let (result_op, st6) = compile_raw_call_finish addr_op data_ptr data_len
+       gas_op value_op call_ty rcf.rcf_max_outsize rcf.rcf_revert_on_failure
+       out_val out_ptr st5 in
+     if rcf.rcf_max_outsize = 0 then (StackValue ret_ty result_op, st6)
+     else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st6))
 Proof
   simp[compile_call_def]
 QED

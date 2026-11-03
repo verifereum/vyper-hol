@@ -61,7 +61,7 @@ End
 
 Definition place_type_def:
   place_type cenv (TopLevelName ty nsid) =
-    (case cenv.ce_hashmap_info (module_var_key nsid) of
+    (case cenv.ce_hashmap_info nsid of
        SOME (tr, kt, vt) => MapPT kt vt
      | NONE => ValPT ty) ∧
   place_type cenv (Subscript ty base_e idx) =
@@ -78,7 +78,7 @@ Proof
 QED
 
 Theorem place_type_module_map:
-  cenv.ce_hashmap_info (module_var_key nsid) = SOME (tr, kt, vt) ⇒
+  cenv.ce_hashmap_info nsid = SOME (tr, kt, vt) ⇒
   place_type cenv (TopLevelName ty nsid) = MapPT kt vt
 Proof
   simp[place_type_def]
@@ -99,7 +99,7 @@ Proof
 QED
 
 Theorem place_type_nested_map:
-  cenv.ce_hashmap_info (module_var_key nsid) =
+  cenv.ce_hashmap_info nsid =
     SOME (tr, kt, HashMapT kt' (Type vt)) ⇒
   place_type cenv
     (Subscript vt (Subscript NoneT (TopLevelName NoneT nsid) k1) k2) =
@@ -109,7 +109,7 @@ Proof
 QED
 
 Theorem place_type_map_array:
-  cenv.ce_hashmap_info (module_var_key nsid) =
+  cenv.ce_hashmap_info nsid =
     SOME (tr, kt, Type (ArrayT et bound)) ⇒
   place_type cenv (Subscript NoneT (TopLevelName NoneT nsid) k) =
     ValPT (ArrayT et bound)
@@ -118,7 +118,7 @@ Proof
 QED
 
 Theorem place_type_map_struct:
-  cenv.ce_hashmap_info (module_var_key nsid) =
+  cenv.ce_hashmap_info nsid =
     SOME (tr, kt, Type (StructT sid)) ⇒
   place_type cenv (Subscript NoneT (TopLevelName NoneT nsid) k) =
     ValPT (StructT sid)
@@ -148,7 +148,7 @@ Proof
 QED
 
 Theorem place_type_module_value:
-  cenv.ce_hashmap_info (module_var_key nsid) = NONE ==>
+  cenv.ce_hashmap_info nsid = NONE ==>
   place_type cenv (TopLevelName ty nsid) = ValPT ty
 Proof
   simp[place_type_def]
@@ -193,7 +193,7 @@ End
 
 (* ===== Array Location Inference ===== *)
 (* Infer array data location from expression AST + compile_env.
-   TopLevelName → look up the module_var_key in ce_vars → StorageLoc/TransientLoc/ImmutableLoc.
+   TopLevelName → look up the nsid in ce_module_vars → StorageLoc/TransientLoc/ImmutableLoc.
    Name var → look up the plain name in ce_vars.
    Otherwise → LocMemory (default).
    Mirrors Python: array_vv.location or node.iter._expr_info.location
@@ -207,7 +207,7 @@ Definition infer_array_location_def:
      | SOME (ImmutableLoc _) => LocCode
      | _ => LocMemory) ∧
   infer_array_location cenv (TopLevelName _ nsid) =
-    (case FLOOKUP cenv.ce_vars (module_var_key nsid) of
+    (case FLOOKUP cenv.ce_module_vars nsid of
        SOME (StorageLoc _) => LocStorage
      | SOME (TransientLoc _) => LocTransient
      | SOME (ImmutableLoc _) => LocCode
@@ -223,7 +223,7 @@ Definition infer_array_is_dynamic_def:
        SOME (ArrayT _ (Dynamic _)) => T
      | _ => F) ∧
   infer_array_is_dynamic cenv (TopLevelName _ nsid) =
-    (case cenv.ce_var_type (module_var_key nsid) of
+    (case cenv.ce_module_var_type nsid of
        SOME (ArrayT _ (Dynamic _)) => T
      | _ => F) ∧
   infer_array_is_dynamic cenv _ = T  (* default: assume dynamic for safety *)
@@ -270,6 +270,34 @@ Definition clamp_and_return_def:
     do compile_clamp res ty;
        return res
     od
+End
+
+(* Range check of an extract32 result, returning the value.  Mirrors Python's
+   arithmetic.py clamp_basetype for extract32's output types (bytesM, address,
+   intN, uintN); other types are returned unchecked.  The address bound is
+   spelled out because type_bounds gives addresses the 256-bit range. *)
+Definition compile_clamp_basetype_def:
+  compile_clamp_basetype val_op (BaseT (BytesT (Fixed m))) =
+    (if m < 32 then
+       do shifted <- emit_op SHL [Lit (n2w (m * 8)); val_op];
+          ok <- emit_op ISZERO [shifted];
+          emit_void ASSERT [ok];
+          return val_op
+       od
+     else return val_op) ∧
+  compile_clamp_basetype val_op (BaseT AddressT) =
+    do gt_hi <- emit_op GT [val_op; Lit (n2w (2 ** 160 - 1))];
+       ok <- emit_op ISZERO [gt_hi];
+       emit_void ASSERT [ok];
+       return val_op
+    od ∧
+  compile_clamp_basetype val_op (BaseT (UintT n)) =
+    (if n < 256 then clamp_and_return val_op (BaseT (UintT n))
+     else return val_op) ∧
+  compile_clamp_basetype val_op (BaseT (IntT n)) =
+    (if n < 256 then clamp_and_return val_op (BaseT (IntT n))
+     else return val_op) ∧
+  compile_clamp_basetype val_op _ = return val_op
 End
 
 (* Safe add: ADD + overflow check *)
@@ -719,7 +747,7 @@ End
    Mirrors Python: expr.py _lower_array_membership *)
 Definition compile_array_membership_loop_def:
   compile_array_membership_loop needle arr_op len_op
-      elem_size offset_base load_opc is_in =
+      elem_size offset_base loader is_in =
     do (* Pre-allocate result variable *)
        result_var <- fresh_var;
        (* Create blocks *)
@@ -744,7 +772,7 @@ Definition compile_array_membership_loop_def:
        (* Body: load elem, compare.
           Uses elem_size (not word_scale) for element stride.
           Uses offset_base for DynArray length-word skip.
-          Uses load_opc for location-aware load (MLOAD/SLOAD/TLOAD).
+          Uses loader for location-aware loads, including constructor immutables.
           Mirrors Python: expr.py _lower_array_membership body block *)
        new_block body_lbl;
        idx_offset <- emit_op MUL [Var idx_var; Lit (n2w elem_size)];
@@ -752,7 +780,7 @@ Definition compile_array_membership_loop_def:
                           emit_op ADD [Lit (n2w offset_base); idx_offset]
                         else return idx_offset);
        elem_addr <- emit_op ADD [arr_op; total_offset];
-       elem_val <- emit_op load_opc [elem_addr];
+       elem_val <- loader elem_addr;
        match_op <- emit_op EQ [elem_val; needle];
        emit_inst JNZ [match_op; Label found_lbl; Label incr_lbl] [];
        (* Found: result = 1, jump to exit *)
@@ -784,11 +812,10 @@ Definition compile_var_array_membership_def:
     let elem_ty = (case rhs_ty of ArrayT t _ => t
                    | _ => BaseT (UintT 256)) in
     let elem_sz = elem_size_in_location cenv loc elem_ty in
-    let load_opc = (case loc of
-        LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD) in
+    let loader = compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc in
     let offset_base = if is_dyn then ws else 0 in
     do len_op <- (if is_dyn then
-                    emit_op load_opc [arr_op]
+                    loader arr_op
                   else
                     (case rhs_ty of
                        ArrayT _ (Fixed n) => return (Lit (n2w n))
@@ -804,7 +831,7 @@ Definition compile_var_array_membership_def:
           | _ => return ()
         else return ());
        compile_array_membership_loop needle arr_op len_op
-         elem_sz offset_base load_opc is_in
+         elem_sz offset_base loader is_in
     od
 End
 
@@ -949,7 +976,7 @@ Definition unwrap_value_def:
   unwrap_value cenv (StackValue ty op) = return op ∧
   unwrap_value cenv (LocatedValue ty p) =
     if is_word_type ty then
-      compile_ptr_load cenv.ce_is_ctor p.ptr_location p.ptr_operand
+      compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca p.ptr_location p.ptr_operand
     else
       (case p.ptr_location of
          LocMemory => return p.ptr_operand
@@ -957,7 +984,7 @@ Definition unwrap_value_def:
            let mem_bytes = type_memory_bytes cenv ty in
            let word_count = (mem_bytes + 31) DIV 32 in
            compile_ensure_in_memory p.ptr_operand p.ptr_location
-             mem_bytes word_count cenv.ce_is_ctor)
+             mem_bytes word_count cenv.ce_is_ctor cenv.ce_imm_alloca)
 End
 
 Definition compile_multi_vvs_def:
@@ -1259,7 +1286,8 @@ Definition type_to_abi_dec_info_def:
                     type_memory_bytes cenv fty))
                 fields)) ∧
   type_to_abi_dec_info sfields cenv (FlagT nsid) =
-    DecPrimWord (IntClamp (cenv.ce_flag_n_members (nsid_to_string nsid)) F) ∧
+    (let n = cenv.ce_flag_n_members (nsid_to_string nsid) in
+     DecPrimWord (if n = 256 then NoClamp else IntClamp n F)) ∧
   type_to_abi_dec_info sfields cenv ty = DecPrimWord (type_to_abi_clamp ty)
 Termination
   WF_REL_TAC `inv_image ($< LEX $<) (λ(sfields, cenv, ty).
@@ -1340,9 +1368,9 @@ End
 Definition compile_array_subscript_def:
   compile_array_subscript base_op idx_op is_dynamic static_count
                                word_scale elem_size is_signed_idx
-                               (load_opc : opcode) =
-    do (* Get length: load from base using location-appropriate opcode *)
-       len_op <- (if is_dynamic then emit_op load_opc [base_op]
+                               loader =
+    do (* Get length through the location-aware word loader. *)
+       len_op <- (if is_dynamic then loader base_op
                   else return (Lit (n2w static_count)));
        (* Bounds check: assert not (idx < 0) and not (idx >= length).
           For signed index types, check SLT(idx, 0) for negative indices.
@@ -1534,8 +1562,7 @@ Definition compile_target_base_def:
      | SOME (PtrVar ptr_op _) => ptr_op
      | _ => Lit 0w) ∧
   compile_target_base cenv (TopLevelNameTarget nsid) =
-    (let name = module_var_key nsid in
-     case FLOOKUP cenv.ce_vars name of
+    (case FLOOKUP cenv.ce_module_vars nsid of
        SOME (StorageLoc slot) => Lit slot
      | SOME (TransientLoc slot) => Lit slot
      | SOME (ImmutableLoc offset) => Lit (n2w offset)
@@ -1580,11 +1607,10 @@ Datatype:
   (* Bytestring conversions: src is a memory pointer to [length][data].
      Load data, shift to align, then clamp/convert. *)
   | ConvBytestringToBool
-  | ConvBytestringToInt bool num     (* is_signed_out, out_bits *)
-  | ConvBytestringToAddress
-  | ConvBytestringToDecimal num int int  (* divisor, out_lo, out_hi *)
+  | ConvBytestringToInt bool num num (* is_signed_out, out_bits, in_maxlen *)
+  | ConvBytestringToDecimal num int int num (* divisor, out_lo, out_hi, in_maxlen *)
   | ConvBytestringToBytesM num       (* out_m *)
-  | ConvBytestringCast num           (* max_len: downcast length check *)
+  | ConvBytestringCast num num       (* out_maxlen, in_maxlen *)
   | ConvFixedToBytestring num       (* m: bytesM → Bytes[N] allocation *)
   | ConvIdentity
 End
@@ -1603,6 +1629,29 @@ Definition load_bytestring_as_word_def:
        shifted <- emit_op shift_opc [num_zero_bits; data];
        return (shifted, num_zero_bits)
     od
+End
+
+(* Shared integer bound assertion, matching convert.py _int_clamp. *)
+Definition compile_int_clamp_def:
+  compile_int_clamp is_signed out_b v =
+    if is_signed then
+      let lo = i2w (- &(2 ** (out_b - 1))) : bytes32 in
+      let hi = i2w (&(2 ** (out_b - 1) - 1)) : bytes32 in
+      do ts <- emit_op SLT [v; Lit lo];
+         ok1 <- emit_op ISZERO [ts];
+         tb <- emit_op SGT [v; Lit hi];
+         ok2 <- emit_op ISZERO [tb];
+         ok <- emit_op AND [ok1; ok2];
+         emit_void ASSERT [ok];
+         return v
+      od
+    else
+      let hi = n2w (2 ** out_b - 1) : bytes32 in
+      do tb <- emit_op GT [v; Lit hi];
+         ok <- emit_op ISZERO [tb];
+         emit_void ASSERT [ok];
+         return v
+      od
 End
 
 (* Execute a type conversion operation.
@@ -1642,24 +1691,7 @@ Definition compile_type_convert_def:
           return v
        od
      else if out_b < in_b then
-       if out_s then
-         let lo = i2w (- &(2 ** (out_b - 1))) : bytes32 in
-         let hi = i2w (&(2 ** (out_b - 1) - 1)) : bytes32 in
-         do too_small <- emit_op SLT [v; Lit lo];
-            ok1 <- emit_op ISZERO [too_small];
-            too_big <- emit_op SGT [v; Lit hi];
-            ok2 <- emit_op ISZERO [too_big];
-            ok <- emit_op AND [ok1; ok2];
-            emit_void ASSERT [ok];
-            return v
-         od
-       else
-         let hi = n2w (2 ** out_b - 1) : bytes32 in
-         do too_big <- emit_op GT [v; Lit hi];
-            ok <- emit_op ISZERO [too_big];
-            emit_void ASSERT [ok];
-            return v
-         od
+       compile_int_clamp out_s out_b v
      else return v) ∧
   (* BytesM→integer: right-shift + optional clamp *)
   compile_type_convert v (ConvBytesToInt m out_s out_b) =
@@ -1667,24 +1699,7 @@ Definition compile_type_convert_def:
     do shifted <- (if out_s then emit_op SAR [Lit (n2w shift); v]
                    else emit_op SHR [Lit (n2w shift); v]);
        if m * 8 > out_b then
-         if out_s then
-           let lo = i2w (- &(2 ** (out_b - 1))) : bytes32 in
-           let hi = i2w (&(2 ** (out_b - 1) - 1)) : bytes32 in
-           do ts <- emit_op SLT [shifted; Lit lo];
-              ok1 <- emit_op ISZERO [ts];
-              tb <- emit_op SGT [shifted; Lit hi];
-              ok2 <- emit_op ISZERO [tb];
-              ok <- emit_op AND [ok1; ok2];
-              emit_void ASSERT [ok];
-              return shifted
-           od
-         else
-           let hi = n2w (2 ** out_b - 1) : bytes32 in
-           do tb <- emit_op GT [shifted; Lit hi];
-              ok <- emit_op ISZERO [tb];
-              emit_void ASSERT [ok];
-              return shifted
-           od
+         compile_int_clamp out_s out_b shifted
        else return shifted
     od) ∧
   (* Integer→bytesM: clamp + left-shift *)
@@ -1773,13 +1788,8 @@ Definition compile_type_convert_def:
     od) ∧
   (* Integer→flag: assert only valid bits set *)
   compile_type_convert v (ConvToFlag n_members) =
-    (let mask = n2w (2 ** n_members - 1) : bytes32 in
-    do inv <- emit_op NOT [Lit mask];
-       extra <- emit_op AND [v; inv];
-       ok <- emit_op ISZERO [extra];
-       emit_void ASSERT [ok];
-       return v
-    od) ∧
+    (if n_members < 256 then compile_int_clamp F n_members v
+     else return v) ∧
   (* BytesM→Decimal: right-shift by (32-m)*8 bits, then optional clamp.
      BytesM raw bits after right-alignment ARE the fixed-point representation.
      No multiplication needed — Python: convert.py _to_decimal for BytesM_T source
@@ -1819,72 +1829,39 @@ Definition compile_type_convert_def:
        z <- emit_op ISZERO [shifted];
        emit_op ISZERO [z]
     od ∧
-  (* Bytestring→Int/Uint: load data, shift (SAR for signed, SHR for unsigned), clamp.
-     Mirrors Python: convert.py _to_int bytestring path *)
-  compile_type_convert v (ConvBytestringToInt is_signed out_b) =
+  (* Bytestring conversion clamps depend on the static source maxlen. *)
+  compile_type_convert v (ConvBytestringToInt is_signed out_b in_n) =
     (let shift_opc = if is_signed then SAR else SHR in
-    do (shifted, num_zero_bits) <- load_bytestring_as_word v shift_opc;
-       (* Clamp to output type bounds *)
-       if out_b >= 256 then return shifted
-       else if is_signed then
-         do ext <- emit_op SIGNEXTEND [Lit (n2w (out_b DIV 8 - 1)); shifted];
-            ok <- emit_op EQ [ext; shifted];
-            emit_void ASSERT [ok];
-            return shifted
-         od
-       else
-         do hi_bits <- emit_op SHR [Lit (n2w out_b); shifted];
-            ok <- emit_op ISZERO [hi_bits];
-            emit_void ASSERT [ok];
-            return shifted
-         od
-    od) ∧
-  (* Bytestring→Address: load data, shift (unsigned), clamp uint160.
-     Mirrors Python: convert.py _to_address bytestring path *)
-  compile_type_convert v ConvBytestringToAddress =
-    do (shifted, num_zero_bits) <- load_bytestring_as_word v SHR;
-       (* Clamp to uint160 *)
-       hi_bits <- emit_op SHR [Lit 160w; shifted];
-       ok <- emit_op ISZERO [hi_bits];
-       emit_void ASSERT [ok];
-       return shifted
-    od ∧
-  (* Bytestring→Decimal: load data, SAR (signed), clamp 168-bit signed.
-     Mirrors Python: convert.py _to_decimal bytestring path *)
-  compile_type_convert v (ConvBytestringToDecimal divisor out_lo out_hi) =
+     do (shifted, num_zero_bits) <- load_bytestring_as_word v shift_opc;
+        if in_n * 8 > out_b then compile_int_clamp is_signed out_b shifted
+        else return shifted
+     od) ∧
+  compile_type_convert v (ConvBytestringToDecimal divisor out_lo out_hi in_n) =
     do (shifted, num_zero_bits) <- load_bytestring_as_word v SAR;
-       (* Clamp to decimal bounds *)
-       too_small <- emit_op SLT [shifted; Lit (i2w out_lo)];
-       ok1 <- emit_op ISZERO [too_small];
-       too_big <- emit_op SGT [shifted; Lit (i2w out_hi)];
-       ok2 <- emit_op ISZERO [too_big];
-       ok <- emit_op AND [ok1; ok2];
-       emit_void ASSERT [ok];
-       return shifted
-    od ∧
-  (* Bytestring→BytesM: load data, SHR to clean extra bits, SHL to restore.
-     Mirrors Python: convert.py _to_bytes_m bytestring path *)
-  compile_type_convert v (ConvBytestringToBytesM out_m) =
-    do (* SHR to get raw value right-aligned, then SHL to left-align for bytesM *)
-       (shifted_r, num_zero_bits) <- load_bytestring_as_word v SHR;
-       shifted_l <- emit_op SHL [num_zero_bits; shifted_r];
-       (* Verify no truncation: only low (32-out_m)*8 bits can be nonzero *)
-       let check_bits = (32 - out_m) * 8 in
-       do truncated <- emit_op SHL [Lit (n2w (out_m * 8)); shifted_l];
-          ok <- emit_op ISZERO [truncated];
+       if in_n * 8 ≤ 168 then return shifted else
+       do too_small <- emit_op SLT [shifted; Lit (i2w out_lo)];
+          ok1 <- emit_op ISZERO [too_small];
+          too_big <- emit_op SGT [shifted; Lit (i2w out_hi)];
+          ok2 <- emit_op ISZERO [too_big];
+          ok <- emit_op AND [ok1; ok2];
           emit_void ASSERT [ok];
-          return shifted_l
+          return shifted
        od
     od ∧
-  (* Bytestring downcast: check length <= max_len.
-     Mirrors Python: convert.py _check_bytes *)
-  compile_type_convert v (ConvBytestringCast max_len) =
-    do length <- emit_op MLOAD [v];
-       too_long <- emit_op GT [length; Lit (n2w max_len)];
-       ok <- emit_op ISZERO [too_long];
-       emit_void ASSERT [ok];
-       return v
+  (* Checker ensures source maxlen <= out_m; no truncation assert. *)
+  compile_type_convert v (ConvBytestringToBytesM out_m) =
+    do (shifted_r, num_zero_bits) <- load_bytestring_as_word v SHR;
+       emit_op SHL [num_zero_bits; shifted_r]
     od ∧
+  compile_type_convert v (ConvBytestringCast max_len in_n) =
+    (if max_len < in_n then
+       do length <- emit_op MLOAD [v];
+          too_long <- emit_op GT [length; Lit (n2w max_len)];
+          ok <- emit_op ISZERO [too_long];
+          emit_void ASSERT [ok];
+          return v
+       od
+     else return v) ∧
   (* Fixed bytes to bytestring: allocate length-prefixed buffer.
      bytesM (word value) → Bytes[N] (memory pointer to [length][data]).
      Mirrors Python: convert.py _to_Bytes for BytesM source *)
@@ -1930,20 +1907,24 @@ Definition mk_convert_op_def:
   mk_convert_op src_ty dst_ty =
     let ddiv = 10000000000:num in
     let is_bs = is_bytestring_type src_ty in
+    let in_n = (case src_ty of BaseT (BytesT (Dynamic n)) => n
+                             | BaseT (StringT n) => n | _ => 0) in
     case dst_ty of
       BaseT BoolT =>
         if is_bs then ConvBytestringToBool else ConvToBool
     | BaseT AddressT =>
-        (if is_bs then ConvBytestringToAddress
+        (if is_bs then ConvBytestringToInt F 160 in_n
          else case src_ty of
            BaseT (BytesT (Fixed m)) => ConvBytesToAddress m
+         | BaseT (UintT in_b) => ConvIntToInt F in_b F 160
+         | BaseT BoolT => ConvIdentity
          | _ => ConvToAddress)
     | BaseT (IntT out_b) =>
-        (if is_bs then ConvBytestringToInt T out_b
+        (if is_bs then ConvBytestringToInt T out_b in_n
          else case src_ty of
            BaseT (IntT in_b) => ConvIntToInt T in_b T out_b
          | BaseT (UintT in_b) => ConvIntToInt F in_b T out_b
-         | BaseT BoolT => ConvIntToInt F 8 T out_b
+         | BaseT BoolT => ConvIdentity
          | BaseT AddressT => ConvIntToInt F 160 T out_b
          | BaseT DecimalT =>
              let (in_lo, in_hi) = type_bounds (BaseT DecimalT) in
@@ -1954,11 +1935,11 @@ Definition mk_convert_op_def:
          | FlagT _ => ConvIntToInt F 256 T out_b
          | _ => ConvIdentity)
     | BaseT (UintT out_b) =>
-        (if is_bs then ConvBytestringToInt F out_b
+        (if is_bs then ConvBytestringToInt F out_b in_n
          else case src_ty of
            BaseT (IntT in_b) => ConvIntToInt T in_b F out_b
          | BaseT (UintT in_b) => ConvIntToInt F in_b F out_b
-         | BaseT BoolT => ConvIntToInt F 8 F out_b
+         | BaseT BoolT => ConvIdentity
          | BaseT AddressT => ConvIntToInt F 160 F out_b
          | BaseT DecimalT =>
              let (in_lo, in_hi) = type_bounds (BaseT DecimalT) in
@@ -1978,7 +1959,7 @@ Definition mk_convert_op_def:
          | _ => ConvIdentity)
     | BaseT DecimalT =>
         (let (out_lo, out_hi) = type_bounds (BaseT DecimalT) in
-         if is_bs then ConvBytestringToDecimal ddiv (w2i out_lo) (w2i out_hi)
+         if is_bs then ConvBytestringToDecimal ddiv (w2i out_lo) (w2i out_hi) in_n
          else case src_ty of
            BaseT (IntT in_b) =>
              ConvIntToDecimal T in_b ddiv (w2i out_lo) (w2i out_hi)
@@ -1999,16 +1980,17 @@ Definition mk_convert_op_def:
          | BaseT DecimalT => ConvIntToBytesM T 168 m
          (* BytesM→BytesM: downcast check *)
          | BaseT (BytesT (Fixed in_m)) => ConvBytesMToBytesM in_m m
+         | FlagT _ => ConvIntToBytesM F 256 m
          | _ => ConvIdentity)
     (* Bytestring/BytesM → Bytes[N]/String[N]:
        - Bytestring source (is_bs=T): downcast length check only.
        - BytesM source (is_bs=F): allocate length-prefixed buffer.
        Mirrors Python: convert.py _to_Bytes, _to_String *)
     | BaseT (BytesT (Dynamic out_n)) =>
-        (if is_bs then ConvBytestringCast out_n
+        (if is_bs then ConvBytestringCast out_n in_n
          else ConvFixedToBytestring (fixed_bytes_size src_ty))
     | BaseT (StringT out_n) =>
-        (if is_bs then ConvBytestringCast out_n
+        (if is_bs then ConvBytestringCast out_n in_n
          else ConvFixedToBytestring (fixed_bytes_size src_ty))
     | _ => ConvIdentity
 End
@@ -2039,6 +2021,96 @@ Theorem lower_value_cong[defncong]:
 Proof
   rpt strip_tac >> gvs[lower_value_def, comp_bind_def]
 QED
+
+(* ===== Get Target Ptr ===== *)
+(* Full target pointer dispatch for assignments.
+   Mirrors Python: vyper/codegen_venom/stmt.py:_get_target_ptr
+   Returns (operand, data_location option, place_ty option).
+   cfn compiles the index expressions (compile_expr; compile_expr_body
+   passes its structurally bounded callback, as for compile_subscript).
+   The descriptor tracks the current place, consuming one map/array layer
+   per subscript rather than inspecting the root target name. *)
+Definition compile_get_target_ptr_def:
+  compile_get_target_ptr cfn cenv (NameTarget id) =
+    (case FLOOKUP cenv.ce_vars id of
+       SOME (MemLoc offset _) =>
+         return (Lit (n2w offset), SOME LocMemory, OPTION_MAP ValPT (cenv.ce_var_type id))
+     | SOME (PtrVar ptr_op _) =>
+         return (ptr_op, SOME LocMemory, OPTION_MAP ValPT (cenv.ce_var_type id))
+     | SOME (ImmutableLoc offset) =>
+         return (Lit (n2w offset), SOME LocCode, OPTION_MAP ValPT (cenv.ce_var_type id))
+     | _ => return (Lit 0w, NONE, NONE)) ∧
+  compile_get_target_ptr cfn cenv (TopLevelNameTarget nsid) =
+    (let pt = (case cenv.ce_hashmap_info nsid of
+                  SOME (_, kt, vt) => SOME (MapPT kt vt)
+                | NONE => OPTION_MAP ValPT (cenv.ce_module_var_type nsid)) in
+     case FLOOKUP cenv.ce_module_vars nsid of
+       SOME (StorageLoc slot) => return (Lit slot, SOME LocStorage, pt)
+     | SOME (TransientLoc slot) => return (Lit slot, SOME LocTransient, pt)
+     | SOME (ImmutableLoc offset) =>
+         return (Lit (n2w offset), SOME LocCode,
+                 OPTION_MAP ValPT (cenv.ce_module_var_type nsid))
+     | _ => return (Lit 0w, NONE, NONE)) ∧
+  compile_get_target_ptr cfn cenv (SubscriptTarget bt idx_e) =
+    do result <- compile_get_target_ptr cfn cenv bt;
+       let base_op = FST result in
+       let loc_opt = FST (SND result) in
+       let base_type_opt = SND (SND result) in
+       case base_type_opt of
+         SOME (MapPT kt vt) =>
+           do key_op <- lower_value cfn cenv (expr_type idx_e) idx_e;
+              hashed_key <- (if is_bytestring_type kt then
+                               compile_keccak256_key key_op F
+                             else return key_op);
+              slot_op <- compile_mapping_subscript base_op hashed_key;
+              return (slot_op, loc_opt, SOME (value_type_place vt))
+           od
+       | _ =>
+           do idx_op <- lower_value cfn cenv (expr_type idx_e) idx_e;
+              let loc = (case loc_opt of SOME l => l | NONE => LocMemory) in
+              let is_dynamic = (case base_type_opt of
+                                  SOME (ValPT (ArrayT _ (Dynamic _))) => T
+                                | _ => F) in
+              let elem_ty = (case base_type_opt of
+                               SOME (ValPT (ArrayT t _)) => t
+                             | _ => BaseT (UintT 256)) in
+              let ws = word_scale loc in
+              let elem_sz = elem_size_in_location cenv loc elem_ty in
+              let static_count = (case base_type_opt of
+                                    SOME (ValPT (ArrayT _ (Fixed n))) => n
+                                  | _ => 0) in
+              let is_signed_idx = is_signed_type (expr_type idx_e) in
+              let loader = compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc in
+              do elem_ptr <-
+                   compile_array_subscript base_op idx_op is_dynamic static_count
+                                           ws elem_sz is_signed_idx loader;
+                 return (elem_ptr, loc_opt, SOME (ValPT elem_ty))
+              od
+           od
+    od ∧
+  compile_get_target_ptr cfn cenv (AttributeTarget bt field) =
+    do result <- compile_get_target_ptr cfn cenv bt;
+       let base_op = FST result in
+       let loc_opt = FST (SND result) in
+       let base_type_opt = SND (SND result) in
+       let struct_name = (case base_type_opt of
+                            SOME (ValPT (StructT sn)) => nsid_to_string sn
+                          | _ => "") in
+       let fields = get_struct_fields cenv.ce_struct_fields struct_name in
+       let is_storage = (case loc_opt of
+                           SOME LocStorage => T
+                         | SOME LocTransient => T
+                         | _ => F) in
+       let field_offset =
+         (if is_storage then struct_field_offset_slots fields field
+          else struct_field_offset fields field) in
+       let field_type = (case ALOOKUP fields field of
+                           SOME (fty, _) => SOME (ValPT fty) | NONE => NONE) in
+       do ptr <- emit_op ADD [base_op; Lit (n2w field_offset)];
+          return (ptr, loc_opt, field_type)
+       od
+    od
+End
 
 (* Like lower_value but also returns the source data_location option.
    SOME loc for LocatedValues (ptr_location), NONE for StackValues.
@@ -2075,32 +2147,37 @@ End
 
 (* ===== Expression compilation helpers (parameterized on cfn) ===== *)
 
-(* Concat args into output buffer at data_ptr + offset_op.
+(* Concat args into output buffer at data_ptr + the offset word at off_ptr.
    Each arg_info = (is_bytestring, fixed_m).
    Bytestring args: ensure in memory, copy dynamic length data.
    BytesM args: MSTORE value (left-aligned, full 32 bytes), advance by m.
-   Mirrors Python: bytes.py lower_concat per-arg loop. *)
+   Mirrors Python: bytes.py lower_concat per-arg loop, which keeps the running
+   offset in memory (offset_local) and reloads it after lowering each arg. *)
 Definition compile_concat_def:
-  compile_concat cfn cenv [] data_ptr arg_infos offset_op =
-    return offset_op ∧
-  compile_concat cfn cenv (e::es) data_ptr ((is_bs, fixed_m)::infos) offset_op =
+  compile_concat cfn cenv [] data_ptr arg_infos (off_ptr:operand) =
+    return () ∧
+  compile_concat cfn cenv (e::es) data_ptr ((is_bs, fixed_m)::infos) off_ptr =
     (if is_bs then
        do mem_ptr <- lower_value cfn cenv (expr_type e) e;
           arg_len <- emit_op MLOAD [mem_ptr];
           arg_data <- emit_op ADD [mem_ptr; Lit 32w];
+          offset_op <- emit_op MLOAD [off_ptr];
           dst <- emit_op ADD [data_ptr; offset_op];
           emit_void MCOPY [dst; arg_data; arg_len];
           new_offset <- emit_op ADD [offset_op; arg_len];
-          compile_concat cfn cenv es data_ptr infos new_offset
+          emit_void MSTORE [off_ptr; new_offset];
+          compile_concat cfn cenv es data_ptr infos off_ptr
        od
      else
        do v <- lower_value cfn cenv (expr_type e) e;
+          offset_op <- emit_op MLOAD [off_ptr];
           dst <- emit_op ADD [data_ptr; offset_op];
           emit_void MSTORE [dst; v];
           new_offset <- emit_op ADD [offset_op; Lit (n2w fixed_m)];
-          compile_concat cfn cenv es data_ptr infos new_offset
+          emit_void MSTORE [off_ptr; new_offset];
+          compile_concat cfn cenv es data_ptr infos off_ptr
        od) ∧
-  compile_concat cfn cenv _ data_ptr _ offset_op = return offset_op
+  compile_concat cfn cenv _ data_ptr _ off_ptr = return ()
 Termination
   WF_REL_TAC `measure (λ(cfn,cenv,es,dp,infos,off). LENGTH es)` >> simp[]
 End
@@ -2169,6 +2246,18 @@ Termination
   WF_REL_TAC `measure (LENGTH o (FST o SND o SND))`
 End
 
+(* Stage evaluated arguments in the contiguous ABI tuple memory layout.
+   Keep ADD even at offset zero, matching Vyper's tuple construction. *)
+Definition compile_store_abi_tuple_def:
+  compile_store_abi_tuple cenv buf off [] = return () ∧
+  compile_store_abi_tuple cenv buf off ((v,ty)::rest) =
+    do dst <- emit_op ADD [buf; Lit (n2w off)];
+       (if is_word_type ty then emit_void MSTORE [dst; v]
+        else compile_copy_memory dst v (type_memory_bytes cenv ty));
+       compile_store_abi_tuple cenv buf (off + type_memory_bytes cenv ty) rest
+    od
+End
+
 (* Helper: the list callback only compiles members of its input list. *)
 Theorem compile_multi_exprs_callback_cong:
   ∀es. (∀e. MEM e es ⇒ f cenv (expr_type e) e = g cenv (expr_type e) e) ⇒
@@ -2230,16 +2319,12 @@ Definition compile_subscript_def:
                                  ArrayT _ (Fixed n) => n | _ => 0) in
            let ws = word_scale loc in
            let elem_size = elem_size_in_location cenv loc elem_ty in
-           let load_opc = (case loc of
-                             LocStorage => SLOAD
-                           | LocTransient => TLOAD
-                           | LocCalldata => CALLDATALOAD
-                           | _ => MLOAD) in
+           let loader = compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc in
            let is_signed_idx = is_signed_type (expr_type idx_e) in
            do idx_op <- lower_value cfn cenv ty idx_e;
               elem_ptr <-
                 compile_array_subscript base_op idx_op is_dynamic static_count
-                                         ws elem_size is_signed_idx load_opc;
+                                         ws elem_size is_signed_idx loader;
               return (LocatedValue ret_ty (mk_ptr elem_ptr loc))
            od
     od
@@ -2442,11 +2527,9 @@ Definition compile_call_def:
        let args_mem_size = SUM (MAP (type_memory_bytes cenv) call_arg_types) in
        let args_abi_size = abi_size_bound cenv.ce_struct_fields (TupleT call_arg_types) in
        let args_enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT call_arg_types) in
-       let wrapped_return = (case return_type of
-                               TupleT ts =>
-                                 if LENGTH ts > 1 then return_type
-                                 else TupleT [return_type]
-                             | _ => TupleT [return_type]) in
+       let wrapped_return =
+         (if needs_external_call_wrap return_type then TupleT [return_type]
+          else return_type) in
        let return_abi_size = abi_size_bound cenv.ce_struct_fields wrapped_return in
        let min_return_size = abi_static_size cenv.ce_struct_fields wrapped_return in
        let ret_mem_bytes = type_memory_bytes cenv return_type in
@@ -2489,22 +2572,55 @@ Definition compile_call_def:
      | _ => let (_, st') = emit_inst INVALID [] [] st in
             (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty (RawCallTarget rcf) args default_ret st =
-    (let (_, st') = emit_inst INVALID [] [] st in
-     (StackValue ret_ty (Lit 0w), st')) ∧
-  compile_call cfn cenv ret_ty ty (RawCallCalldataTarget rcf) args default_ret st =
     (case args of
-       [addr_e; value_e] =>
+       (addr_e :: data_e :: kw_es) =>
+         (* Python (lower_raw_call): to; data, unwrapped to memory; value= and
+            gas= in source order; GAS when there is no gas=; the output
+            buffer; the call *)
          let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
-         let ((data_ptr, data_len), st2) = compile_msg_data_to_memory st1 in
-         let (value_op, st3) = lower_value cfn cenv (BaseT (UintT 256)) value_e st2 in
-         let (gas_op, st4) = emit_op GAS [] st3 in
+         let (data, st2) = lower_value cfn cenv (expr_type data_e) data_e st1 in
+         let (data_len, st3) = emit_op MLOAD [data] st2 in
+         let (data_ptr, st4) = emit_op ADD [data; Lit 32w] st3 in
+         let ((value_opt, gas_opt, _), st5) =
+           compile_ext_call_kwargs cfn cenv NoneT rcf.rcf_kws kw_es st4 in
+         let value_op = (case value_opt of SOME v => v | NONE => Lit 0w) in
+         let (gas_op, st6) =
+           (case gas_opt of SOME g => (g, st5) | NONE => emit_op GAS [] st5) in
          let call_ty = if rcf.rcf_is_delegate then DelegateCall
                        else if rcf.rcf_is_static then StaticCall
                        else RegularCall in
-         let (result_op, st5) = compile_raw_call addr_op data_ptr data_len gas_op
-           value_op call_ty rcf.rcf_max_outsize rcf.rcf_revert_on_failure st4 in
-         if rcf.rcf_max_outsize = 0 then (StackValue ret_ty result_op, st5)
-         else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st5)
+         let ((out_val, out_ptr), st7) =
+           compile_raw_call_outbuf rcf.rcf_max_outsize st6 in
+         let (result_op, st8) = compile_raw_call_finish addr_op data_ptr data_len
+           gas_op value_op call_ty rcf.rcf_max_outsize rcf.rcf_revert_on_failure
+           out_val out_ptr st7 in
+         if rcf.rcf_max_outsize = 0 then (StackValue ret_ty result_op, st8)
+         else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st8)
+     | _ => let (_, st') = emit_inst INVALID [] [] st in
+            (StackValue ret_ty (Lit 0w), st')) ∧
+  compile_call cfn cenv ret_ty ty (RawCallCalldataTarget rcf) args default_ret st =
+    (case args of
+       (addr_e :: kw_es) =>
+         (* Python (lower_raw_call): to; value= and gas= in source order; GAS
+            when there is no gas=; the output buffer; then msg.data is copied
+            to memory; the call *)
+         let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
+         let ((value_opt, gas_opt, _), st2) =
+           compile_ext_call_kwargs cfn cenv NoneT rcf.rcf_kws kw_es st1 in
+         let value_op = (case value_opt of SOME v => v | NONE => Lit 0w) in
+         let (gas_op, st3) =
+           (case gas_opt of SOME g => (g, st2) | NONE => emit_op GAS [] st2) in
+         let call_ty = if rcf.rcf_is_delegate then DelegateCall
+                       else if rcf.rcf_is_static then StaticCall
+                       else RegularCall in
+         let ((out_val, out_ptr), st4) =
+           compile_raw_call_outbuf rcf.rcf_max_outsize st3 in
+         let ((data_ptr, data_len), st5) = compile_msg_data_to_memory st4 in
+         let (result_op, st6) = compile_raw_call_finish addr_op data_ptr data_len
+           gas_op value_op call_ty rcf.rcf_max_outsize rcf.rcf_revert_on_failure
+           out_val out_ptr st5 in
+         if rcf.rcf_max_outsize = 0 then (StackValue ret_ty result_op, st6)
+         else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st6)
      | _ => let (_, st') = emit_inst INVALID [] [] st in
             (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty RawLog args default_ret st =
@@ -2538,18 +2654,19 @@ Definition method_id_literal_def:
   method_id_literal _ = NONE
 End
 
+(* self.code and <addr>.code, as the frontend translates them. *)
 Definition is_self_code_def:
-  is_self_code (Attribute _ (Name _ "self") "code") = T ∧
+  is_self_code (Builtin _ (Acc Code) [Builtin _ (Env SelfAddr) []]) = T ∧
   is_self_code _ = F
 End
 
 Definition is_extcode_def:
-  is_extcode (Attribute _ _ "code") = T ∧
+  is_extcode (Builtin _ (Acc Code) [_]) = T ∧
   is_extcode _ = F
 End
 
 Definition extcode_addr_expr_def:
-  extcode_addr_expr (Attribute _ addr_e "code") = addr_e ∧
+  extcode_addr_expr (Builtin _ (Acc Code) [addr_e]) = addr_e ∧
   extcode_addr_expr _ = Literal ARB (IntL 0)
 End
 
@@ -2714,8 +2831,7 @@ Definition compile_expr_body_def:
         let flag_id = cenv.ce_flag_member_id flag_name mem_name in
         (StackValue ret_ty (Lit (n2w (2 ** flag_id))), st))
    | TopLevelName _ nsid =>
-       (let name = module_var_key nsid in
-        case FLOOKUP cenv.ce_vars name of
+       (case FLOOKUP cenv.ce_module_vars nsid of
           SOME (StorageLoc slot) =>
             (LocatedValue ret_ty (mk_ptr (Lit slot) LocStorage), st)
         | SOME (TransientLoc slot) =>
@@ -2727,26 +2843,26 @@ Definition compile_expr_body_def:
    | Call _ target args default_ret =>
        compile_call compile_expr cenv ret_ty ty target args default_ret st
    | Pop _ target =>
-       (* Returns LocatedValue with element location. unwrap_value handles loading. *)
-       (let target_op = compile_target_base cenv target in
-        let (loc, arr_name) = (case target of
-            NameTarget id => (infer_array_location cenv (Name ARB id), id)
-          | TopLevelNameTarget nsid =>
-              (infer_array_location cenv (TopLevelName ARB nsid), module_var_key nsid)
-          | _ => (LocMemory, "")) in
+       (* The array is the target's place: its pointer, location and type,
+          for any target, as for an assignment.  Returns LocatedValue with
+          the element's location; unwrap_value handles loading.
+          Mirrors Python: expr.py _lower_dynarray_pop (darray_vv, its
+          location, darray_typ.value_type) *)
+       (let ((target_op, loc_opt, pt_opt), st1) =
+          compile_get_target_ptr compile_expr cenv target st in
+        let loc = (case loc_opt of SOME l => l | NONE => LocMemory) in
         let ws = word_scale loc in
-        let fty_opt = cenv.ce_var_type arr_name in
-        let elem_ty = (case fty_opt of
-            SOME (ArrayT t _) => t
+        let elem_ty = (case pt_opt of
+            SOME (ValPT (ArrayT t _)) => t
           | _ => BaseT (IntT 256)) in
         let elem_size = elem_size_in_location cenv loc elem_ty in
         let load_opc = (case loc of
            LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD) in
         let store_opc = (case loc of
            LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE) in
-        let (elem_ptr, st1) =
-          compile_dynarray_pop target_op ws elem_size load_opc store_opc st in
-        (LocatedValue ret_ty (mk_ptr elem_ptr loc), st1)))
+        let (elem_ptr, st2) =
+          compile_dynarray_pop target_op ws elem_size load_opc store_opc st1 in
+        (LocatedValue ret_ty (mk_ptr elem_ptr loc), st2)))
 End
 
 Definition compile_builtin_dispatch_body_def:
@@ -2853,12 +2969,13 @@ Definition compile_builtin_dispatch_body_def:
             (compile_slice_calldata start_op (Lit (n2w n))
                (type_memory_bytes cenv ret_ty) st1))
      | Len =>
-         (* Len needs the raw ptr to read length word *)
-         (let (vv, st1) = compile_expr cenv ty (HD args) st in
-          let v = vv_operand vv in
-          let loc = (case vv_location vv of
-                       SOME l => l | NONE => LocMemory) in
-          as_stack_val ret_ty (compile_builtin_len cenv.ce_is_ctor v loc st1))
+         (let e1 = HD args in
+          (* Len needs the raw ptr to read length word *)
+            let (vv, st1) = compile_expr cenv ty e1 st in
+            let v = vv_operand vv in
+            let loc = (case vv_location vv of
+                         SOME l => l | NONE => LocMemory) in
+            as_stack_val ret_ty (compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca v loc st1))
      | BlockHash =>
          (let e1 = HD args in
           let (v, st1) = lower_value compile_expr cenv ty e1 st in
@@ -2926,8 +3043,12 @@ Definition compile_builtin_dispatch_body_def:
                     let (buf_op_alloc, st2) = compile_alloc_buffer alloc_size st in
                     let buf_op = buf_op_alloc.buf_operand in
           let (data_ptr, st3) = emit_op ADD [buf_op; Lit 32w] st2 in
-          let (final_offset, st4) = compile_concat compile_expr cenv args
-                                      data_ptr arg_infos (Lit 0w) st3 in
+          let (off_alloc, st3a) = compile_alloc_buffer 64 st3 in
+          let off_ptr = off_alloc.buf_operand in
+          let (_, st3b) = emit_void MSTORE [off_ptr; Lit 0w] st3a in
+          let (_, st4a) = compile_concat compile_expr cenv args
+                                      data_ptr arg_infos off_ptr st3b in
+          let (final_offset, st4) = emit_op MLOAD [off_ptr] st4a in
           let (_, st5) = emit_void MSTORE [buf_op; final_offset] st4 in
           (LocatedValue ret_ty (base_ptr buf_op_alloc), st5))
      | Slice max_len =>
@@ -2942,11 +3063,11 @@ Definition compile_builtin_dispatch_body_def:
              let (len_op, st2) = lower_value compile_expr cenv ty len_e st1 in
              as_ptr_val ret_ty LocMemory (compile_slice_code start_op len_op out_size st2))
           else if is_extcode src_e then
-            (let addr_e = extcode_addr_expr src_e in
-             let (addr_op, st1) = lower_value compile_expr cenv ty addr_e st in
-             let (start_op, st2) = lower_value compile_expr cenv ty start_e st1 in
-             let (len_op, st3) = lower_value compile_expr cenv ty len_e st2 in
-             let ((out_buf, out_data), st4) = compile_slice_out_buf out_size st3 in
+            (let (start_op, st1) = lower_value compile_expr cenv ty start_e st in
+             let (len_op, st2) = lower_value compile_expr cenv ty len_e st1 in
+             let ((out_buf, out_data), st3) = compile_slice_out_buf out_size st2 in
+             let addr_e = extcode_addr_expr src_e in
+             let (addr_op, st4) = lower_value compile_expr cenv ty addr_e st3 in
              as_ptr_val ret_ty LocMemory
                (compile_slice_extcode addr_op start_op len_op out_buf out_data st4))
           else
@@ -2960,15 +3081,15 @@ Definition compile_builtin_dispatch_body_def:
                as_ptr_val ret_ty LocMemory
                  (compile_slice_data src_len src_data start_op len_op out_size st4)
              else
-               let (start_op, st2) = lower_value compile_expr cenv ty start_e st1 in
-               let (len_op, st3) = lower_value compile_expr cenv ty len_e st2 in
-               let m = fixed_bytes_size src_ty in
-                              let (tmp_buf_alloc, st5) = compile_alloc_buffer 64 st3 in
-                              let tmp_buf = tmp_buf_alloc.buf_operand in
-               let (_, st6) = emit_void MSTORE [tmp_buf; Lit (n2w m)] st5 in
-               let (data_ptr, st7) = emit_op ADD [tmp_buf; Lit 32w] st6 in
-               let (_, st8) = emit_void MSTORE [data_ptr; src_op] st7 in
-               as_ptr_val ret_ty LocMemory (compile_slice_memory tmp_buf start_op len_op out_size st8)))
+               (* bytesM: a 32-byte scratch copy and the literal length m *)
+               let (tmp_alloc, st2) = compile_alloc_buffer 32 st1 in
+               let tmp = tmp_alloc.buf_operand in
+               let (_, st3) = emit_void MSTORE [tmp; src_op] st2 in
+               let (start_op, st4) = lower_value compile_expr cenv ty start_e st3 in
+               let (len_op, st5) = lower_value compile_expr cenv ty len_e st4 in
+               as_ptr_val ret_ty LocMemory
+                 (compile_slice_data (Lit (n2w (fixed_bytes_size src_ty))) tmp
+                    start_op len_op out_size st5)))
      | Uint2Str max_len =>
          (let e1 = HD args in
           let (v, st1) = lower_value compile_expr cenv ty e1 st in
@@ -3035,13 +3156,13 @@ Definition compile_type_builtin_dispatch_body_def:
           | _ => as_stack_val vv_ty (compile_type_convert v
                    (mk_convert_op src_ty ret_ty) st1))
      | Empty =>
-         if is_word_type ret_ty then (StackValue vv_ty (Lit 0w), st)
-         else
-           (let is_bs = (is_bytestring_type ret_ty ∨
-                         (case ret_ty of ArrayT _ (Dynamic _) => T | _ => F)) in
-            let (buf, st1) = compile_builtin_empty_complex
-                               (type_memory_bytes cenv ret_ty) is_bs st in
-            (LocatedValue ret_ty (mk_ptr buf LocMemory), st1))
+         (if is_word_type ret_ty then (StackValue vv_ty (Lit 0w), st)
+          else
+            let zero_length_only = (is_bytestring_type ret_ty ∨
+                  (case ret_ty of ArrayT _ (Dynamic _) => T | _ => F)) in
+            let (buf,st') = compile_builtin_empty_complex
+                  (type_memory_bytes cenv ret_ty) zero_length_only st in
+            (LocatedValue vv_ty (base_ptr buf), st'))
      | MaxValue =>
          (let (_, hi) = type_bounds ret_ty in (StackValue vv_ty (Lit hi), st))
      | MinValue =>
@@ -3051,17 +3172,18 @@ Definition compile_type_builtin_dispatch_body_def:
          (let src_e = HD args in let offset_e = EL 1 args in
           let (src_mem, st1) = lower_value compile_expr cenv
                                  (expr_type src_e) src_e st in
-          let (off_op, st2) = lower_value compile_expr cenv ty offset_e st1 in
-          let (raw, st3) = compile_extract32 src_mem off_op st2 in
-          let clamp = mk_extract32_clamp ret_ty in
-          as_stack_val vv_ty (compile_clamp_extract32 raw clamp st3))
+          let ((src_len, src_data), st2) = compile_bytestring_src src_mem st1 in
+          let (off_op, st3) = lower_value compile_expr cenv ty offset_e st2 in
+          let (raw, st4) = compile_extract32_load src_len src_data off_op st3 in
+          as_stack_val vv_ty (compile_clamp_basetype raw ret_ty st4))
      | AbiEncode ensure method_id =>
-         (let e1 = HD args in
+         (let method_id_word = OPTION_MAP bytes_method_id_word method_id in
+          if LENGTH args = 1 ∧ ¬ensure then
+          let e1 = HD args in
           let src_ty = expr_type e1 in
-          let enc_ty = if ensure then TupleT [src_ty] else src_ty in
+          let enc_ty = src_ty in
           let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
           let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in
-          let method_id_word = OPTION_MAP bytes_method_id_word method_id in
           if is_word_type src_ty then
             (* Prim word: stage to temp memory for encoder *)
             let (v, st1) = lower_value compile_expr cenv src_ty e1 st in
@@ -3074,15 +3196,29 @@ Definition compile_type_builtin_dispatch_body_def:
             let (src_vv, st1) = compile_expr cenv src_ty e1 st in
             let (src_op, st2) = unwrap_value cenv src_vv st1 in
             as_ptr_val vv_ty LocMemory
-              (lower_abi_encode ensure method_id_word src_op enc_info maxlen st2))
-     | AbiDecode _ =>
+              (lower_abi_encode ensure method_id_word src_op enc_info maxlen st2)
+          else
+          let arg_tys = MAP expr_type args in
+          let enc_ty = TupleT arg_tys in
+          let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
+          let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in
+          let (vs, st1) = compile_multi_exprs compile_expr cenv args st in
+          let (tup_alloc, st2) =
+                compile_alloc_buffer (type_memory_bytes cenv enc_ty) st1 in
+          let tup = tup_alloc.buf_operand in
+          let (_, st3) = compile_store_abi_tuple cenv tup 0 (ZIP (vs, arg_tys)) st2 in
+          as_ptr_val vv_ty LocMemory
+            (lower_abi_encode ensure method_id_word tup enc_info maxlen st3))
+     | AbiDecode unwrap =>
          (let e1 = HD args in
           let (data_vv, st1) = compile_expr cenv (expr_type e1) e1 st in
           let (data_op, st2) = unwrap_value cenv data_vv st1 in
-          let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv ret_ty in
-          let abi_min = abi_static_size cenv.ce_struct_fields ret_ty in
-          let abi_max = abi_size_bound cenv.ce_struct_fields ret_ty in
-          let out_size = type_memory_bytes cenv ret_ty in
+          let wty = if unwrap /\ needs_external_call_wrap ret_ty then
+                      TupleT [ret_ty] else ret_ty in
+          let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv wty in
+          let abi_min = abi_static_size cenv.ce_struct_fields wty in
+          let abi_max = abi_size_bound cenv.ce_struct_fields wty in
+          let out_size = type_memory_bytes cenv wty in
           as_ptr_val vv_ty LocMemory (lower_abi_decode data_op dec_info abi_min abi_max out_size st2)))
 End
 
@@ -3154,7 +3290,7 @@ Theorem compile_empty_memory_dispatch:
       (type_memory_bytes cenv ret_ty)
       (is_bytestring_type ret_ty \/
        (case ret_ty of ArrayT _ (Dynamic _) => T | _ => F)) st in
-    (LocatedValue ret_ty (mk_ptr buf LocMemory), st1)
+    (LocatedValue vv_ty (base_ptr buf), st1)
 Proof
   simp[compile_type_builtin_dispatch_body_def]
 QED

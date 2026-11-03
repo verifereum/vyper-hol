@@ -20,7 +20,7 @@ Definition place_expr_result_typed_def:
   place_expr_result_typed env tv vt <=>
     case vt of
     | Type ty => ?tyv. evaluate_type env.type_defs ty = SOME tyv /\
-                         toplevel_value_typed tv tyv /\ ~is_HashMapRef tv
+                         value_result_typed tv tyv /\ ~is_HashMapRef tv
     | HashMapT kt vt' => ?is_t slot. tv = HashMapRef is_t slot kt vt'
 End
 

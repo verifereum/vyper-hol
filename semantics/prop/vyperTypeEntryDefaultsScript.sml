@@ -5,10 +5,8 @@
  *
  * Vyper accepts any RUNTIME_CONSTANT default (e.g. `msg.value - 1`), which can
  * revert at call time, so success is not a theorem.  The failing default is
- * characterised by its own `eval_expr` result: a runtime error that is not a
- * TypeError.  The checker requires defaults to be runtime-constant
- * (`runtime_constant_expr`), so a default never reads storage and never
- * yields a storage reference.
+ * characterised by evaluating and reading the default: a runtime error that
+ * is not a TypeError. Successful resolved locations are read explicitly.
  *
  * The entry is the tuple selected by `lookup_exported_function` from the
  * initial call context, as in `call_external`.
@@ -41,28 +39,35 @@ val _ = Parse.hide "body";
 
 (* ===== Evaluating a list of well-typed defaults ===== *)
 
-(* evaluate_defaults stops at the first default whose own evaluation is not a
- * value; every default before it evaluated to one. *)
+(* evaluate_defaults stops at the first default whose own evaluation, with
+ * the gas readings g left at that point, is not a value; every default before
+ * it evaluated to one. *)
 Theorem evaluate_defaults_NONE_stop:
-  !es.
-    evaluate_defaults cx am es = NONE ==>
-    ?pre e post.
+  !es gobs.
+    evaluate_defaults cx am gobs es = NONE ==>
+    ?pre e post g.
       es = pre ++ e::post /\
-      EVERY (\e'. ?v. FST (eval_expr cx e' (initial_state am [FEMPTY])) =
-                        INL (Value v)) pre /\
-      !v. FST (eval_expr cx e (initial_state am [FEMPTY])) <> INL (Value v)
+      EVERY (\e'. ?g' v. FST ((do result <- eval_expr cx e'; read_result cx result od)
+                          (initial_state am [FEMPTY] with gas_obs := g')) =
+                        INL v) pre /\
+      !v. FST ((do result <- eval_expr cx e; read_result cx result od)
+                (initial_state am [FEMPTY] with gas_obs := g)) <> INL v
 Proof
   Induct >- simp[evaluate_defaults_def] >>
   rpt strip_tac >>
-  Cases_on `?v. FST (eval_expr cx h (initial_state am [FEMPTY])) = INL (Value v)`
+  Cases_on `(do result <- eval_expr cx h; read_result cx result od)
+              (initial_state am [FEMPTY] with gas_obs := gobs)` >>
+  rename1 `_ = (res1,st1)` >>
+  Cases_on `?v. res1 = INL v`
   >- (gvs[evaluate_defaults_def, AllCaseEqs()] >>
-      qexistsl [`h::pre`, `e`, `post`] >> simp[]) >>
-  qexistsl [`[]`, `h`, `es`] >> gvs[]
+      first_x_assum drule >> strip_tac >>
+      qexistsl [`h::pre`, `e`, `post`, `g`] >> simp[] >>
+      qexistsl [`gobs`, `v`] >> simp[]) >>
+  qexistsl [`[]`, `h`, `es`, `gobs`] >> gvs[]
 QED
 
-(* A well-typed default whose evaluation is not a value either raised a
- * non-TypeError exception or yielded a storage array reference; HashMap
- * references are excluded by its type. *)
+(* A well-typed default that cannot be read as a value raises a
+ * non-TypeError exception. *)
 Theorem default_eval_not_value_cases[local]:
   well_typed_expr env e /\
   (!tyv. evaluate_type env.type_defs (expr_type e) = SOME tyv ==> tyv <> NoneTV) /\
@@ -72,23 +77,23 @@ Theorem default_eval_not_value_cases[local]:
   accounts_well_typed am.accounts /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
-  (!v. FST (eval_expr cx e (initial_state am [FEMPTY])) <> INL (Value v)) ==>
-  (?err. FST (eval_expr cx e (initial_state am [FEMPTY])) = INR err /\
-         no_type_error_result (INR err : toplevel_value + exception)) \/
-  (?is_transient slot elem_tv bd.
-     FST (eval_expr cx e (initial_state am [FEMPTY])) =
-       INL (ArrayRef is_transient slot elem_tv bd))
+  (!v. FST ((do result <- eval_expr cx e; read_result cx result od)
+                (initial_state am [FEMPTY] with gas_obs := g)) <> INL v) ==>
+  ?err. FST ((do result <- eval_expr cx e; read_result cx result od)
+               (initial_state am [FEMPTY] with gas_obs := g)) = INR err /\
+        no_type_error_result (INR err : value + exception)
 Proof
   strip_tac >>
-  `accounts_well_typed (initial_state am [FEMPTY]).accounts` by
+  `accounts_well_typed (initial_state am [FEMPTY] with gas_obs := g).accounts` by
     simp[initial_state_def] >>
-  Cases_on `eval_expr cx e (initial_state am [FEMPTY])` >>
-  rename1 `eval_expr cx e _ = (res1,st1)` >>
-  drule_all (cj 8 eval_all_type_sound_mutual) >> strip_tac >>
-  Cases_on `res1` >> gvs[] >>
-  rename1 `expr_result_typed env e tv` >>
-  Cases_on `tv` >>
-  gvs[expr_result_typed_def, expr_runtime_typed_def, toplevel_value_typed_def]
+  `env_consistent env cx (initial_state am [FEMPTY] with gas_obs := g) /\
+   state_well_typed (initial_state am [FEMPTY] with gas_obs := g)` by
+    simp[] >>
+  Cases_on `(do result <- eval_expr cx e; read_result cx result od)
+              (initial_state am [FEMPTY] with gas_obs := g)` >>
+  rename1 `_ = (res1,st1)` >>
+  drule_all eval_expr_read_type_sound >> strip_tac >>
+  Cases_on `res1` >> gvs[]
 QED
 
 Theorem well_typed_exprs_MEM[local]:
@@ -99,8 +104,8 @@ QED
 
 (* Defaults dichotomy for a list of well-typed defaults evaluated from the
  * same entry state: they all evaluate to values of their types, or
- * evaluation stops at a default whose own evaluation raised a non-TypeError
- * exception or yielded a storage array reference. *)
+ * evaluation stops at a default whose evaluation and read raised a
+ * non-TypeError exception. *)
 Theorem evaluate_defaults_typed_cases:
   well_typed_exprs env es /\
   (!e tyv. MEM e es /\ evaluate_type env.type_defs (expr_type e) = SOME tyv ==>
@@ -111,32 +116,32 @@ Theorem evaluate_defaults_typed_cases:
   accounts_well_typed am.accounts /\
   functions_well_typed cx /\
   (!e. MEM e es ==> call_evaluation_safe cx (int_calls_expr e)) ==>
-  (?vs.
-     evaluate_defaults cx am es = SOME vs /\
+  (?vs gobs'.
+     evaluate_defaults cx am gobs es = SOME (vs, gobs') /\
      LIST_REL
        (\v e. ?tv. evaluate_type env.type_defs (expr_type e) = SOME tv /\
                    value_has_type tv v)
        vs es) \/
-  (evaluate_defaults cx am es = NONE /\
-   ?pre e post.
+  (evaluate_defaults cx am gobs es = NONE /\
+   ?pre e post g.
      es = pre ++ e::post /\
-     EVERY (\e'. ?v. FST (eval_expr cx e' (initial_state am [FEMPTY])) =
-                       INL (Value v)) pre /\
-     ((?err. FST (eval_expr cx e (initial_state am [FEMPTY])) = INR err /\
-             no_type_error_result (INR err : toplevel_value + exception)) \/
-      (?is_transient slot elem_tv bd.
-         FST (eval_expr cx e (initial_state am [FEMPTY])) =
-           INL (ArrayRef is_transient slot elem_tv bd))))
+     EVERY (\e'. ?g' v. FST ((do result <- eval_expr cx e'; read_result cx result od)
+                          (initial_state am [FEMPTY] with gas_obs := g')) =
+                       INL v) pre /\
+     (?err. FST ((do result <- eval_expr cx e; read_result cx result od)
+                   (initial_state am [FEMPTY] with gas_obs := g)) = INR err /\
+             no_type_error_result (INR err : value + exception)))
 Proof
   strip_tac >>
-  Cases_on `evaluate_defaults cx am es`
+  Cases_on `evaluate_defaults cx am gobs es`
   >- (disj2_tac >> simp[] >>
       drule evaluate_defaults_NONE_stop >> strip_tac >>
-      qexistsl [`pre`, `e`, `post`] >> simp[] >>
+      qexistsl [`pre`, `e`, `post`, `g`] >> simp[] >>
       `MEM e es` by simp[] >>
       irule default_eval_not_value_cases >> simp[] >>
       qexists_tac `env` >> simp[] >>
       metis_tac[well_typed_exprs_MEM]) >>
+  rename1 `SOME res` >> PairCases_on `res` >>
   disj1_tac >> simp[] >>
   drule_all evaluate_defaults_success_values_typed >> simp[]
 QED
@@ -241,6 +246,7 @@ Theorem checked_explicit_external_defaults_call_evaluation_safe[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   MEM e dflts ==>
   call_evaluation_safe
@@ -271,6 +277,7 @@ Theorem checked_explicit_external_defaults_typed[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts ==>
   well_typed_exprs (artifact_env art mods src) dflts /\
   EVERY (runtime_constant_expr mods) dflts /\
@@ -329,7 +336,7 @@ Theorem checked_public_getter_args_well_formed:
   !arg. MEM arg args ==> well_formed_type (type_env_all_modules mods) (SND arg)
 Proof
   strip_tac >>
-  `check_toplevel_decl layouts addr mods art src decl` by
+  `check_toplevel_decl mods art src decl` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
   Cases_on `decl` >> gvs[external_getter_tuple_def]
   >~ [`VariableDecl vis vmut id typ init`]
@@ -392,6 +399,8 @@ Proof
   drule_all lookup_exported_function_initial_module_code >> strip_tac >>
   `ALOOKUP mods src = SOME ts` by
     gvs[get_module_code_def, initial_evaluation_context_def] >>
+  `module_allocated am.layouts tx.target src ts` by
+    metis_tac[checked_contract_runtime_ready_module_allocated] >>
   drule_all lookup_exported_function_checked_cases_current >> strip_tac
   >- (drule_all checked_explicit_external_defaults_typed >> strip_tac >>
       simp[] >> rpt strip_tac
@@ -407,89 +416,12 @@ Proof
   metis_tac[well_formed_type_def, optionTheory.IS_SOME_EXISTS]
 QED
 
-(* ===== Runtime-constant defaults evaluate to values ===== *)
-
-(* A runtime-constant expression never evaluates to a storage or HashMap
- * reference: its top-level names are constants and immutables, which
- * lookup_global reads from the immutables map. *)
-Theorem runtime_constant_expr_eval_value[local]:
-  !mods e. runtime_constant_expr mods e ==>
-    !env cx st tv st'.
-      env_context_consistent env cx /\
-      (!src id. declared_constant mods src id \/ declared_immutable mods src id ==>
-         ?ty. FLOOKUP env.bare_globals (src,id) = SOME ty) /\
-      eval_expr cx e st = (INL tv, st') ==>
-      ?v. tv = Value v
-Proof
-  ho_match_mp_tac runtime_constant_expr_ind >>
-  rw[runtime_constant_expr_def]
-  >~ [`TopLevelName`]
-  >- (`?ty. FLOOKUP env.bare_globals (src,id) = SOME ty` by metis_tac[] >>
-      drule_all env_context_consistent_bare_global_find_NONE >> strip_tac >>
-      gvs[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
-          get_immutables_def, get_address_immutables_def, return_def,
-          raise_def, vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator, AllCaseEqs()])
-  >~ [`TopLevelName`]
-  >- (`?ty. FLOOKUP env.bare_globals (src,id) = SOME ty` by metis_tac[] >>
-      drule_all env_context_consistent_bare_global_find_NONE >> strip_tac >>
-      gvs[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
-          get_immutables_def, get_address_immutables_def, return_def,
-          raise_def, vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator, AllCaseEqs()])
-  >~ [`Subscript`]
-  >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
-          lift_sum_def, lift_option_type_def, AllCaseEqs()] >>
-      rename1 `eval_expr cx e1 st = (INL tv1, s1)` >>
-      `?v1. tv1 = Value v1` by metis_tac[] >>
-      gvs[] >> Cases_on `v1` >> Cases_on `v2` >>
-      gvs[evaluate_subscript_def, return_def, raise_def, bind_def,
-          vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator,
-          AllCaseEqs()])
-  >~ [`StructLit`]
-  >- (rename1 `StructLit _ nsid kes` >> Cases_on `nsid` >>
-      gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
-          AllCaseEqs()])
-  >~ [`IfExp`]
-  >- (gvs[Once evaluate_def, bind_def, switch_BoolV_def, return_def,
-          raise_def, COND_RATOR, AllCaseEqs()] >> metis_tac[])
-  >~ [`IfExp`]
-  >- (gvs[Once evaluate_def, bind_def, switch_BoolV_def, return_def,
-          raise_def, COND_RATOR, AllCaseEqs()] >> metis_tac[]) >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
-       lift_sum_def, type_check_def, assert_def] >>
-  rpt (CASE_TAC >> gvs[return_def, raise_def, runtime_constant_builtin_def]) >>
-  rw[] >> gvs[return_def, raise_def]
-QED
-
-(* Constants and immutables of a checked contract are bare globals of every
- * module's artifact environment. *)
-Theorem checked_declared_globals_bare[local]:
-  check_contract F am.layouts tx.target mods = SOME art /\
-  ALOOKUP am.sources tx.target = SOME mods ==>
-  !src id. declared_constant mods src id \/ declared_immutable mods src id ==>
-    ?ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty
-Proof
-  rpt strip_tac >>
-  `contract_namespaces_ok F mods` by
-    (qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
-     simp[check_contract_def] >> metis_tac[]) >>
-  `bare_globals_complete art.cta_bare_globals
-     (initial_evaluation_context am.sources am.layouts tx src)` by
-    (irule check_contract_bare_globals_complete_initial >> metis_tac[]) >>
-  gvs[declared_constant_def, declared_immutable_def, bare_globals_complete_def,
-      get_module_code_def, initial_evaluation_context_def] >>
-  `ALOOKUP mods src = SOME tls` by
-    (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
-     gvs[contract_namespaces_ok_def]) >>
-  metis_tac[]
-QED
 
 (* Defaults dichotomy: under a checked contract, the needed default suffix of
  * the selected entry either evaluates to values of the remaining parameters'
  * types, or `evaluate_defaults` stops at a default `e`: every default before
- * it evaluated to a value, and `e`'s own evaluation fails with a runtime error
- * that is not a TypeError.  A checked default is runtime-constant, so it
- * cannot evaluate to a storage reference. *)
+ * it evaluated and read successfully, and evaluating and reading `e` fails
+ * with a runtime error that is not a TypeError. *)
 Theorem checked_selected_entry_defaults_cases:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
@@ -501,20 +433,23 @@ Theorem checked_selected_entry_defaults_cases:
     SOME (mut,nr,args,dflts,ret,body) /\
   LENGTH tx.args <= LENGTH args /\
   LENGTH args - LENGTH tx.args <= LENGTH dflts ==>
-  (?vs.
-     evaluate_defaults cx am
-       (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) = SOME vs /\
+  (?vs gobs'.
+     evaluate_defaults cx am gobs
+       (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) =
+       SOME (vs, gobs') /\
      args_values_typed (type_env_all_modules mods)
        (DROP (LENGTH tx.args) args) vs) \/
-  (evaluate_defaults cx am
+  (evaluate_defaults cx am gobs
      (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) = NONE /\
-   ?pre e post.
+   ?pre e post g.
      DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts =
        pre ++ e::post /\
-     EVERY (\e'. ?v. FST (eval_expr cx e' (initial_state am [FEMPTY])) =
-                       INL (Value v)) pre /\
-     ?err. FST (eval_expr cx e (initial_state am [FEMPTY])) = INR err /\
-           no_type_error_result (INR err : toplevel_value + exception))
+     EVERY (\e'. ?g' v. FST ((do result <- eval_expr cx e'; read_result cx result od)
+                          (initial_state am [FEMPTY] with gas_obs := g')) =
+                       INL v) pre /\
+     ?err. FST ((do result <- eval_expr cx e; read_result cx result od)
+                (initial_state am [FEMPTY] with gas_obs := g)) = INR err /\
+           no_type_error_result (INR err : value + exception))
 Proof
   strip_tac >>
   drule_all checked_selected_entry_defaults_setup >> strip_tac >>
@@ -529,26 +464,11 @@ Proof
       simp[artifact_env_def] >>
       metis_tac[rich_listTheory.MEM_DROP_IMP]) >>
   strip_tac
-  >- (disj1_tac >> qexists_tac `vs` >> simp[] >>
+  >- (disj1_tac >> qexistsl [`vs`, `gobs'`] >> simp[] >>
       irule defaults_values_typed_args >>
       qexists_tac `needed` >> gvs[artifact_env_def]) >>
   disj2_tac >> simp[] >>
-  qexistsl [`pre`, `e`, `post`] >> simp[] >>
-  (* The remaining case, a default yielding a storage reference, is
-     impossible for a runtime-constant default. *)
-  `MEM e needed` by (qpat_x_assum `_ = _ ++ _ :: _` SUBST1_TAC >> simp[]) >>
-  `MEM e dflts` by
-    (fs[markerTheory.Abbrev_def] >> metis_tac[rich_listTheory.MEM_DROP_IMP]) >>
-  `runtime_constant_expr mods e` by metis_tac[listTheory.EVERY_MEM] >>
-  `env_context_consistent (artifact_env art mods src) cx` by
-    gvs[env_consistent_def] >>
-  `ALOOKUP am.sources tx.target = SOME mods` by
-    gvs[checked_contract_runtime_ready_def] >>
-  `!s i. declared_constant mods s i \/ declared_immutable mods s i ==>
-          ?ty. FLOOKUP (artifact_env art mods src).bare_globals (s,i) = SOME ty` by
-    (drule checked_declared_globals_bare >> simp[artifact_env_def]) >>
-  Cases_on `eval_expr cx e (initial_state am [FEMPTY])` >> gvs[] >>
-  drule_all runtime_constant_expr_eval_value >> strip_tac >> gvs[]
+  qexistsl [`pre`, `e`, `post`, `g`] >> gvs[]
 QED
 
 (* Binding corollary: when the needed defaults evaluate, the provided and
@@ -565,8 +485,9 @@ Theorem checked_selected_entry_bind_arguments:
   LENGTH tx.args <= LENGTH args /\
   LENGTH args - LENGTH tx.args <= LENGTH dflts /\
   provided_args_typed (type_env_all_modules mods) args tx.args /\
-  evaluate_defaults cx am
-    (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) = SOME dflt_vs ==>
+  evaluate_defaults cx am gobs
+    (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) =
+    SOME (dflt_vs, gobs') ==>
   ?scope.
     bind_arguments (type_env_all_modules mods) args (tx.args ++ dflt_vs) =
       SOME scope /\
@@ -575,7 +496,8 @@ Proof
   strip_tac >>
   drule_all checked_selected_entry_defaults_setup >> strip_tac >>
   drule_all checked_entry_defaults_env_consistent >> strip_tac >>
-  `checked_call_inputs_ready (type_env_all_modules mods) cx am args dflts tx.args` by
+  `checked_call_inputs_ready (type_env_all_modules mods) cx am gobs args dflts
+     tx.args` by
     simp[checked_call_inputs_ready_def, checked_defaults_ready_def] >>
   mp_tac (Q.INST [`tenv` |-> `type_env_all_modules mods`,
                   `params` |-> `args`, `vals` |-> `tx.args`,

@@ -227,11 +227,6 @@ Definition blueprint_size_ok_def:
   blueprint_size_ok n = (0i < w2i (n2w n : bytes32))
 End
 
-Definition blueprint_code_ok_def:
-  blueprint_code_ok code_offset code =
-    blueprint_size_ok (blueprint_copy_size code_offset code)
-End
-
 Definition blueprint_prefix_size_def:
   blueprint_prefix_size has_salt vs accounts =
     case dest_create_args (CreateFromBlueprint F) has_salt vs of
@@ -280,7 +275,6 @@ val () = cv_auto_trans blueprint_copy_size_def;
 val () = cv_auto_trans blueprint_initcode_def;
 val () = cv_auto_trans raw_create_initcode_def;
 val () = cv_auto_trans blueprint_size_ok_def;
-val () = cv_auto_trans blueprint_code_ok_def;
 val () = cv_auto_trans blueprint_prefix_size_def;
 val () = check_create_blueprint_def
   |> SRULE [FUN_EQ_THM, bind_def, get_accounts_def, return_def,
@@ -402,8 +396,8 @@ val () = create_soft_failure_def
    Like the external-call boundary (run_ext_call in vyperInterpreter), the
    creation boundary defers execution to Verifereum's EVM semantics.  The
    Vyper adapter mirrors Verifereum's step_create / proceed_create: bump the
-   sender nonce, transfer the endowment to the fresh address, bump that
-   account's nonce, then push a Code-destination context over the initcode and
+   sender nonce, clear the target storage, bump its nonce, transfer the
+   endowment, then push a Code-destination context over the initcode and
    run it, letting Verifereum own constructor execution, code deposit
    (handle_create), failure, and rollback.
 
@@ -413,15 +407,15 @@ val () = create_soft_failure_def
    accounts, transient storage, emitted logs, and queued deletions; on REVERT
    it also returns the constructor's revert bytes.  Other EVM exceptions return NONE. *)
 
-(* Verifereum's proceed_create account prelude: bump the sender nonce, transfer
-   the endowment, bump the (fresh) target nonce.  The live target account is not
-   reset: only the original-account snapshot used for SSTORE gas and
-   SELFDESTRUCT is emptied, preserving any pre-existing balance plus endowment. *)
+(* Verifereum's proceed_create account prelude: bump the sender nonce, clear
+   the target storage, bump its nonce, and transfer the endowment. Clearing
+   storage preserves the target's pre-existing balance. *)
 Definition create_prelude_accounts_def:
   create_prelude_accounts sender address value accounts =
     let accounts0 = vfmExecution$increment_nonce sender accounts in
       (vfmExecution$transfer_value sender address value o
-       vfmExecution$increment_nonce address) accounts0
+       vfmExecution$increment_nonce address o
+       vfmExecution$clear_storage address) accounts0
 End
 
 val () = cv_auto_trans create_prelude_accounts_def;

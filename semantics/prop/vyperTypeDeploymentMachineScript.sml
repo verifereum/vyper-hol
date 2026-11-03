@@ -23,20 +23,6 @@ val _ = Parse.hide "body";
 
 (* ===== Deployment machine setup ===== *)
 
-Theorem env_context_consistent_enter_deploy[local]:
-  env_context_consistent env cx /\
-  fn_sigs_consistent env.fn_sigs (cx with in_deploy := T) /\
-  fn_sigs_declared_complete env.fn_sigs (cx with in_deploy := T) ==>
-  env_context_consistent env (cx with in_deploy := T)
-Proof
-  rw[env_context_consistent_def] >>
-  gvs[fn_sigs_consistent_def, toplevel_vtypes_complete_def,
-      bare_globals_complete_def, bare_global_assignable_complete_def,
-      flag_members_complete_def, get_module_code_def, get_tenv_def,
-      current_module_def, lookup_var_slot_from_layout_def] >>
-  metis_tac[]
-QED
-
 Theorem checked_deployment_env_context_consistent:
   check_contract T layouts addr mods = SOME deploy_art /\
   check_contract F layouts addr mods = SOME runtime_art /\
@@ -54,6 +40,9 @@ Proof
   `fn_sigs_declared_complete deploy_art.cta_fn_sigs
      (initial_evaluation_context sources layouts tx NONE with in_deploy := T)` by
     (irule check_contract_fn_sigs_declared_complete_deploy >> simp[]) >>
+  `fn_sigs_live deploy_art.cta_fn_sigs
+     (initial_evaluation_context sources layouts tx NONE)` by
+    (irule check_contract_fn_sigs_live_initial >> metis_tac[]) >>
   `deploy_art.cta_bare_globals = runtime_art.cta_bare_globals /\
    deploy_art.cta_bare_global_assignable = runtime_art.cta_bare_global_assignable /\
    deploy_art.cta_toplevel_vtypes = runtime_art.cta_toplevel_vtypes /\
@@ -354,7 +343,7 @@ Theorem checked_deployment_constants_establish_initial_env_immutables_consistent
   evaluate_all_constants cx
     (am with immutables updated_by CONS (target,imms)) target mods = SOME am_c ==>
   env_immutables_consistent (artifact_env deploy_art mods NONE) cx
-    (initial_state am_c [scope] with <|outcomes := orc; requests := rqs|>)
+    (initial_state am_c [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)
 Proof
   strip_tac >>
   `deploy_art.cta_bare_globals = runtime_art.cta_bare_globals /\
@@ -411,7 +400,7 @@ Theorem checked_constructor_prefix_run_preserves_machine_well_typed:
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
      | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
                       (mut = View \/ mut = Pure)
-   else return ()) (initial_state am_c [scope] with <|outcomes := orc; requests := rqs|>) = (INL (),lock_st) /\
+   else return ()) (initial_state am_c [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) = (INL (),lock_st) /\
   send_call_value mut cx lock_st = (INL (),body_st) /\
   eval_stmts cx body body_st = (res,body_st') /\
   (if nr /\ ~(mut = View \/ mut = Pure) then
@@ -432,14 +421,14 @@ Proof
   `body_st.scopes = [scope] /\ body_st.immutables = am_c.immutables /\
    state_well_typed body_st /\ accounts_well_typed body_st.accounts` by
     (irule call_lock_send_success_components >> simp[] >>
-     qexistsl [`cx`,`lock_st`,`mut`,`nr`,`orc`,`rqs`] >> simp[]) >>
+     qexistsl [`cx`,`gobs`,`lock_st`,`mut`,`nr`,`orc`,`rqs`] >> simp[]) >>
   `env_immutables_consistent (artifact_env deploy_art mods NONE) cx
-     (initial_state am_c [scope] with <|outcomes := orc; requests := rqs|>)` by
+     (initial_state am_c [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)` by
     (irule checked_deployment_constants_establish_initial_env_immutables_consistent >>
      qexistsl [`am`,`imms`,`layouts`,`runtime_art`,`sources`,`target`,`tx`] >> gvs[]) >>
   `env_immutables_consistent (artifact_env deploy_art mods NONE) cx body_st` by
     (irule (iffLR env_immutables_consistent_immutables_cong) >>
-     qexists `initial_state am_c [scope] with <|outcomes := orc; requests := rqs|>` >>
+     qexists `initial_state am_c [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>` >>
      simp[initial_state_def]) >>
   `ALL_DISTINCT (MAP FST args)` by
     (drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[] >>
@@ -466,7 +455,7 @@ Theorem checked_constructor_call_success_preserves_machine_well_typed:
   installed_am = (am with immutables updated_by CONS (target,imms)) /\
   machine_well_typed installed_am /\ context_well_typed cx /\
   checked_deployment_constants_ready cx installed_am target mods /\
-  call_external_function orc installed_am cx nr mut ts mods args dflts vals body ret =
+  call_external_function orc gobs installed_am cx nr mut ts mods args dflts vals body ret =
     (INL v,am_out,rqs) ==>
   machine_well_typed am_out
 Proof
@@ -485,7 +474,7 @@ Proof
          | SOME slot => acquire_nonreentrant_lock
              (initial_evaluation_context sources layouts tx NONE).txn.target slot
              (mut = View \/ mut = Pure)
-       else return ()) (initial_state am_c [env] with <|outcomes := orc; requests := []|>) = (INL (),lock_st) /\
+       else return ()) (initial_state am_c [env] with <|outcomes := orc; requests := []; gas_obs := gobs'|>) = (INL (),lock_st) /\
       send_call_value mut
         (initial_evaluation_context sources layouts tx NONE with in_deploy := T)
         lock_st = (INL (),body_st) /\
@@ -498,12 +487,12 @@ Proof
          qexistsl
            [`initial_evaluation_context sources layouts tx NONE`,
             `mut = View \/ mut = Pure`,`nr`,
-           `initial_state am_c [env] with <|outcomes := orc; requests := []|>`,`st'`] >> first_assum ACCEPT_TAC) >>
+           `initial_state am_c [env] with <|outcomes := orc; requests := []; gas_obs := gobs'|>`,`st'`] >> first_assum ACCEPT_TAC) >>
      metis_tac[]) >>
   irule checked_constructor_prefix_run_preserves_machine_well_typed >>
   qexistsl [`am`,`args`,`body`,`body_st`,`st_body`,
     `initial_evaluation_context sources layouts tx NONE with in_deploy := T`,
-    `deploy_art`,`dflts`,`imms`,
+    `deploy_art`,`dflts`,`gobs'`,`imms`,
     `am with immutables updated_by CONS (tx.target,imms)`,
     `layouts`,`lock_st`,`mods`,`mut`,`nr`,`orc`,`res`,`ret`,`[]`,`runtime_art`,`env`,`sources`,
     `tx.target`,`ts`,`tx`,`vals ++ dflt_vs`] >>
@@ -576,7 +565,7 @@ Theorem load_contract_establishes_machine_well_typed:
   context_well_typed
     (initial_evaluation_context ((tx.target,mods)::am.sources)
        am.layouts tx NONE with in_deploy := T) /\
-  load_contract orc am tx mods exps = INL (am_deployed,rqs) ==>
+  load_contract orc gobs am tx mods exps = INL (am_deployed,rqs) ==>
   machine_well_typed am_deployed
 Proof
   strip_tac >>
@@ -602,7 +591,7 @@ Proof
        [`am with exports updated_by CONS (tx.target,exps)`,`args`,`body`,
         `initial_evaluation_context ((tx.target,mods)::am.sources)
            am.layouts tx NONE with in_deploy := T`,
-        `deploy_art`,`dflts`,`imms`,
+        `deploy_art`,`dflts`,`gobs`,`imms`,
         `am with <|immutables updated_by CONS (tx.target,imms);
                    exports updated_by CONS (tx.target,exps)|>`,
         `am.layouts`,`mods`,`mut`,`nr`,`orc`,`ret`,`rqs`,`runtime_art`,

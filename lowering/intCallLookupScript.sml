@@ -294,3 +294,12 @@ Proof
                `dflts`, `ret`, `stmts`] mp_tac build_func_param_types_distinct >>
   simp[]
 QED
+
+val () =
+  let val th = compile_call_intcall_label
+      val (ors, axs) = Tag.dest_tag (Thm.tag th)
+  in if null axs andalso null (Thm.hyp th) andalso
+        List.all (fn s => s = "DISK_THM") ors
+     then print "INTCALL_LABEL_AUDIT OK\n"
+     else raise Fail "internal label inherited admission"
+  end;

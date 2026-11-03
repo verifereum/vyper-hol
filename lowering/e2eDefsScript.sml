@@ -4,7 +4,7 @@
  * value_transfer_ok, accounts_after_transfer, call_state_rel,
  * call_external_transaction_pending_deletions,
  * load_contract_pending_deletions, valid_vyper_call, compiled_event_info, return_bytes,
- * decode_strictness_exempt, source_exempt, call_result_rel, logs_correspond.
+ * unspecified_behaviour_exempt, source_exempt, call_result_rel, logs_correspond.
  * TASK056: all compiler/call consumers use this exact boundary; the obsolete
  * compatibility owner is deleted. No old/new equivalence is claimed.
  * DAG: source/typing/storage + supported syntax + frame/trace -> e2eDefs;
@@ -17,7 +17,7 @@ Ancestors
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
   vyperStorageLayoutSafety vyperRuntimeAccounts
-  supportedProgram compileEnv selectorDispatch
+  supportedProgram compileEnv selectorDispatch immutableSectionRel
 
 (* ===== Source deployment, typing and storage ===== *)
 
@@ -106,6 +106,13 @@ End
 
 (* ===== Fresh nonstatic frame: LIVE post-transfer accounts ===== *)
 
+Definition account_immutables_def:
+  account_immutables (am:abstract_machine) addr =
+    case ALOOKUP am.immutables addr of
+      NONE => empty_immutables
+    | SOME imms => imms
+End
+
 Definition call_state_rel_def:
   call_state_rel tops runtime_bc am tx es <=>
     ?ctxt rb rest.
@@ -113,9 +120,10 @@ Definition call_state_rel_def:
       wf_state es /\ (?d. es.msdomain = Collect d) /\
       ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\
       (?mr. ctxt.msgParams.outputTo = Memory mr) /\
-      ctxt.msgParams.code = runtime_bc /\
-      ctxt.msgParams.parsed = parse_code 0 FEMPTY runtime_bc /\
-      LENGTH runtime_bc <= 24576 /\
+      installed_code_rel tops runtime_bc (account_immutables am tx.target)
+        ctxt.msgParams.code /\
+      ctxt.msgParams.parsed = parse_code 0 FEMPTY ctxt.msgParams.code /\
+      LENGTH ctxt.msgParams.code <= 24576 /\
       ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
       ctxt.returnData = [] /\ buffer_to_list ctxt.memory = [] /\
       value_transfer_ok tx am.accounts /\
@@ -135,12 +143,12 @@ End
    and a failed call returns the machine it was given. *)
 Theorem call_external_transaction_pending_deletions:
   !orc am tx r am' rqs.
-    call_external_transaction orc am tx = (r, am', rqs) /\
+    call_external_transaction orc gobs am tx = (r, am', rqs) /\
     am.pending_deletions = [] ==>
     am'.pending_deletions = []
 Proof
   rw[call_external_transaction_def] >> Cases_on `r`
-  >- (qpat_x_assum `call_external _ _ _ = _` mp_tac >>
+  >- (qpat_x_assum `call_external _ _ _ _ = _` mp_tac >>
       simp[call_external_def] >> rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
       rw[] >> simp[])
   >> drule call_external_error_rollback >> simp[clear_machine_logs_def]
@@ -148,7 +156,7 @@ QED
 
 Theorem load_contract_pending_deletions:
   !orc am tx mods exps am' rqs.
-    load_contract orc am tx mods exps = INL (am', rqs) ==>
+    load_contract orc gobs am tx mods exps = INL (am', rqs) ==>
     am'.pending_deletions = []
 Proof
   rw[load_contract_def] >> gvs[AllCaseEqs()]
@@ -187,16 +195,17 @@ Definition return_bytes_def:
                  else enc (vyper_to_abi_type (type_env tops) ret) abi_v
 End
 
-Definition decode_strictness_exempt_def:
-  decode_strictness_exempt tops e <=>
-    e = RuntimeError "abi_decode invalid" /\
-    ?ty. occurs_abi_decode_target ty tops /\
-         is_dynamic (vyper_to_abi_type (type_env tops) ty)
+Definition unspecified_behaviour_exempt_def:
+  unspecified_behaviour_exempt tops e <=>
+    (e = RuntimeError "abi_decode invalid" /\
+     ?ty. occurs_abi_decode_target ty tops /\
+          is_dynamic (vyper_to_abi_type (type_env tops) ty)) \/
+    e = RuntimeError "convert empty bytes to signed"
 End
 
 Definition source_exempt_def:
   source_exempt tops (src : (value + exception) # abstract_machine # call_request list) <=>
-    case FST src of INR (Error e) => decode_strictness_exempt tops e | _ => F
+    case FST src of INR (Error e) => unspecified_behaviour_exempt tops e | _ => F
 End
 
 (* ===== Log Correspondence ===== *)
@@ -370,24 +379,29 @@ End
 
 (* ===== Frame-aware result: outcomes in, requests compared ONLY on success ===== *)
 
+(* On success, the EVM's final accounts, transient storage and requests
+   agree with the source's: equal except at storage bytes the source
+   leaves dead (accounts_agree, compileEnv). *)
+
 Definition call_result_rel_def:
   call_result_rel tops ret am tx es r es' <=>
     let trace = call_trace es in
-    case call_external (SOME (MAP SND trace)) am tx of
+    case call_external (SOME (MAP SND trace)) [] am tx of
       (INL v, am', rqs) =>
+        let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
         ?out lgs.
           frame_outcome es r es' NONE out lgs /\
           return_bytes tops ret v out /\
-          es'.rollback.accounts = am'.accounts /\
-          es'.rollback.tStorage = am'.tStorage /\
+          accounts_agree cx am'.accounts es'.rollback.accounts /\
+          transient_agree cx am'.tStorage es'.rollback.tStorage /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs lgs /\
-          rqs = MAP FST trace
+          LIST_REL (request_agree cx) rqs (MAP FST trace)
     | (INR (AssertException s), _, _) =>
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                       (exc = Reverted \/ s = "UNREACHABLE")
     | (INR (Error e), _, _) =>
-        decode_strictness_exempt tops e \/
+        unspecified_behaviour_exempt tops e \/
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
     | (INR BreakException, _, _) => F
     | (INR ContinueException, _, _) => F

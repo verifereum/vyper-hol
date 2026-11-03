@@ -14,13 +14,15 @@
  *     materialises
  *   aggregate_materialised_child_typed, aggregate_materialised_child_wf,
  *   aggregate_child_res_ok — the materialised value is typed and val_wf
- *   expr_sim_pre_struct_field, expr_sim_below_struct_fields,
- *   expr_sim_below_args — the children's preconditions and expr_ok
+ *   expr_sim_pre_struct_field, expr_body_pre_struct_field,
+ *   expr_sim_below_struct_fields, expr_sim_below_args — the children's
+ *   preconditions and expr_ok
  *
- * Helpers: typed_value_wf, aggregate_named_child_syntax.
+ * Helpers: typed_value_wf, aggregate_named_child_body_syntax.
  *)
 Theory exprSimAggregateSource
 Ancestors
+  allocLimits
   exprSim exprSimAggregateChildren exprSimHyps
   vyperInterpreter vyperValueOperation vyperState vyperTyping
   valueEncoding valueEncodingProofs vyperStatePreservation
@@ -28,10 +30,10 @@ Ancestors
   vyperTypeEvalSoundness vyperTypeInvariants vyperExprNoControl
   vyperTypeExprSoundness vyperTypeExprResult
 
-(* An ArrayRef that storage_holds accepts materialises to a value. *)
+(* A captured storage place accepted by storage_holds reads to a value. *)
 Theorem storage_holds_materialised:
   storage_holds cx trans t tv w es ==>
-  ?v. materialise cx tv es = (INL v, es)
+  ?v. read_result cx tv es = (INL v, es)
 Proof
   simp[storage_holds_def] >> metis_tac[]
 QED
@@ -40,18 +42,18 @@ Theorem aggregate_eval_exprs_cons:
   eval_exprs cx (e::args) es = (res,es') ==>
   (?exc. eval_expr cx e es = (INR exc,es') /\ res = INR exc) \/
   (?tv es1 exc. eval_expr cx e es = (INL tv,es1) /\
-    materialise cx tv es1 = (INR exc,es') /\ res = INR exc) \/
+    read_result cx tv es1 = (INR exc,es') /\ res = INR exc) \/
   (?tv es1 v rr. eval_expr cx e es = (INL tv,es1) /\
-    materialise cx tv es1 = (INL v,es1) /\
+    read_result cx tv es1 = (INL v,es1) /\
     eval_exprs cx args es1 = (rr,es') /\
     res = (case rr of INL vs => INL (v::vs) | INR exc => INR exc))
 Proof
   simp[Once evaluate_def, bind_def, return_def] >>
   Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (rr,es1)` >>
-  Cases_on `rr` >> simp[] >> rename1 `materialise cx tv es1` >>
-  Cases_on `materialise cx tv es1` >>
-  rename1 `materialise cx tv es1 = (mr,es2)` >>
-  `es2 = es1` by metis_tac[materialise_state] >> gvs[] >>
+  Cases_on `rr` >> simp[] >> rename1 `read_result cx tv es1` >>
+  Cases_on `read_result cx tv es1` >>
+  rename1 `read_result cx tv es1 = (mr,es2)` >>
+  `es2 = es1` by metis_tac[read_result_state] >> gvs[] >>
   Cases_on `mr` >> simp[] >>
   Cases_on `eval_exprs cx args es1` >>
   rename1 `eval_exprs cx args es1 = (rr,es3)` >>
@@ -59,43 +61,37 @@ Proof
 QED
 
 Theorem vv_post_materialises:
-  vv_post func ce cx e es sa sb s0 es' tv vv r ==>
-  ?v. materialise cx tv es' = (INL v,es')
+  vv_post ctx func ce cx e es sa sb s0 es' tv vv r ==>
+  ?v. read_result cx tv es' = (INL v,es')
 Proof
   simp[vv_post_def] >> strip_tac >> Cases_on `vv` >>
-  gvs[vv_holds_def] >- simp[materialise_def, return_def] >>
+  gvs[vv_holds_def] >>
   rename1 `LocatedValue ty p` >> Cases_on `p.ptr_location` >>
-  gvs[vv_holds_def, immutable_holds_def] >>
-  metis_tac[storage_holds_materialised, materialise_def, return_def]
+  gvs[vv_holds_def, immutable_holds_def, storage_holds_def] >>
+  metis_tac[]
 QED
 
 Theorem aggregate_materialised_child_typed:
-  expr_sim_pre ce cx env e es /\ eval_expr cx e es = (INL tv,es') /\
+  expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL tv,es') /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
-  materialise cx tv es' = (INL v,es') ==>
+  read_result cx tv es' = (INL v,es') ==>
   value_has_type tyv v
 Proof
-  strip_tac >> drule_all expr_sim_pre_eval >> strip_tac >>
-  `env.type_defs = get_tenv cx /\ state_well_typed es'` by
+  strip_tac >>
+  `(do r <- eval_expr cx e; read_result cx r od) es = (INL v,es')` by
+    simp[bind_def] >>
+  drule_all expr_body_pre_eval >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
-  `expr_result_typed env e tv` by simp[] >>
-  `evaluate_type env.type_defs (expr_type e) = SOME tyv` by simp[] >>
-  drule_all expr_result_typed_materialise_preserves_value_type >> simp[]
+  gvs[expr_result_typed_def, expr_runtime_typed_def,
+      value_result_typed_def, value_runtime_typed_def]
 QED
 
 Theorem aggregate_child_res_ok:
-  expr_sim_pre ce cx env e es /\ eval_expr cx e es = (res,es') ==>
+  expr_body_pre ce cx env e es /\ eval_expr cx e es = (res,es') ==>
   expr_vv_res_ok res
 Proof
-  strip_tac >> drule_all expr_sim_pre_eval >> strip_tac >>
-  Cases_on `res` >> simp[expr_vv_res_ok_def, expr_res_ok_def]
-  >- (rename1 `INL tv` >> Cases_on `tv` >> simp[] >>
-      gvs[expr_result_typed_def, expr_sim_pre_def] >>
-      metis_tac[well_typed_expr_not_hashmap_place]) >>
-  drule (cj 1 eval_expr_no_control) >>
-  rename1 `INR exc` >> Cases_on `exc` >>
-  gvs[no_control_exc_def, no_type_error_result_def] >>
-  rename1 `Error err` >> Cases_on `err` >> gvs[]
+  metis_tac[expr_body_pre_vv_res_ok]
 QED
 
 Theorem typed_value_wf:
@@ -112,9 +108,9 @@ Proof
 QED
 
 Theorem aggregate_materialised_child_wf:
-  expr_sim_pre ce cx env e es /\ eval_expr cx e es = (INL tv,es') /\
+  expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL tv,es') /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
-  materialise cx tv es' = (INL v,es') ==>
+  read_result cx tv es' = (INL v,es') ==>
   val_wf tyv v
 Proof
   strip_tac >> drule_all aggregate_materialised_child_typed >>
@@ -133,13 +129,12 @@ Proof
   strip_tac >> simp[] >> Cases_on `res` >> simp[return_def]
 QED
 
-Theorem aggregate_named_child_syntax:
+Theorem aggregate_named_child_body_syntax:
   !fields env ce e.
     well_typed_named_exprs env fields /\ byte_widths_named_exprs fields /\
-    alloc_limits_named_exprs ce fields /\ int_calls_named_exprs fields = [] /\
-    MEM e (MAP SND fields) ==>
-    well_typed_expr env e /\ byte_widths_expr e /\
-    alloc_limits_expr ce e /\ int_calls_expr e = []
+    alloc_limits_named_exprs ce fields /\ MEM e (MAP SND fields) ==>
+    well_typed_expr env e /\ byte_widths_expr e /\ alloc_limits_expr ce e /\
+    !c. MEM c (int_calls_expr e) ==> MEM c (int_calls_named_exprs fields)
 Proof
   Induct_on `fields`
   >- simp[] >>
@@ -149,15 +144,38 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
+(* A field meets expr_body_pre wherever expr_sim_inv holds, and has no
+   internal call where the literal has none. *)
+Theorem expr_body_pre_struct_field:
+  !ce cx env ann nsid fields e es es'.
+    expr_body_pre ce cx env (StructLit ann nsid fields) es /\
+    MEM e (MAP SND fields) /\ expr_sim_inv ce cx env es' ==>
+    expr_body_pre ce cx env e es' /\
+    (int_calls_expr (StructLit ann nsid fields) = [] ==>
+     int_calls_expr e = [])
+Proof
+  rpt gen_tac >>
+  simp[expr_body_pre_def, well_typed_expr_def, byte_widths_expr_def,
+       alloc_limits_expr_def, int_calls_expr_def,
+       supportedExprTraverseTheory.expr_has_evm_run_thm] >>
+  strip_tac >> drule_all aggregate_named_child_body_syntax >> strip_tac >>
+  `~expr_has_evm_run e` by
+    (gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP] >> res_tac >> gvs[]) >>
+  simp[] >> rpt conj_tac
+  >- (irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono >>
+      metis_tac[])
+  >- (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  strip_tac >> gvs[] >> Cases_on `int_calls_expr e` >> gvs[] >>
+  metis_tac[MEM]
+QED
+
 Theorem expr_sim_pre_struct_field:
   !ce cx env ann nsid fields e es es'.
     expr_sim_pre ce cx env (StructLit ann nsid fields) es /\
     MEM e (MAP SND fields) /\ expr_sim_inv ce cx env es' ==>
     expr_sim_pre ce cx env e es'
 Proof
-  rw[expr_sim_pre_def, well_typed_expr_def, byte_widths_expr_def,
-     alloc_limits_expr_def, int_calls_expr_def] >>
-  drule_all aggregate_named_child_syntax >> strip_tac >> gvs[]
+  rw[expr_sim_pre_body] >> metis_tac[expr_body_pre_struct_field]
 QED
 
 Theorem expr_sim_below_struct_fields:
