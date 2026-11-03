@@ -315,3 +315,16 @@ block/run, callee-entry and normalized raw-sequence history facts are available
 as checked dependencies. Preserve their proofs and kernel guards unchanged.
 Report genuine blocking producer defects with an exercised witness rather than
 adding premises, exclusions or definition workarounds.
+
+The mutating-array loop diagnostic was independently audited: it is not a
+complete refutation of the frozen body theorem because full source/frame/entry
+hypotheses and both fragment branches were not certified. Actual pinned Python
+9362e36b rejects the shown xs[1] assignment inside iteration over xs with
+ImmutableViolation. Argon approved matching that active-iterator write policy
+in type_stmt's For guard, keeping supported/body/stage hypotheses unchanged.
+A separate worker owns that checker repair and checker_defs registration;
+these executable sources remain read-only here. The owner will supply its
+checked dependency. Continue independent body proof work without a new premise;
+do not spend this task completing a refutation using a Python-rejected input.
+The local diagnostic's positive typing test will require its expected result
+to change once the authorized checker dependency is integrated.

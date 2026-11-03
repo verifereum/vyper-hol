@@ -2,7 +2,7 @@
 Theory bodyLoopContractProbe
 Ancestors
   supportedStmts supportedTargets vyperTypeSystem vyperInterpreter
-  stmtLowering finite_map venomExecSemantics fragExec exprSimHyps
+  stmtLowering compileEnv finite_map venomExecSemantics fragExec exprSimHyps
 
 Definition loop_probe_body_def:
   loop_probe_body =
@@ -222,3 +222,26 @@ val () = List.app (fn th =>
      then print "BODY_LOOP_POINTER_KERNEL_AUDIT OK\n"
      else raise Fail "body loop pointer probe inherited admission"
   end) [loop_probe_ptr_compiled_result, loop_probe_ptr_locals_interface];
+
+Theorem loop_probe_none_return_typing:
+  IS_SOME (type_stmt env NoneT (Return eo)) <=> eo = NONE
+Proof
+  Cases_on `eo` >> simp[type_stmt_def]
+QED
+
+Theorem loop_probe_none_return_stop:
+  cenv.ce_return_pc = NONE /\
+  cenv.ce_nonreentrant = (F, nkey, use_transient, is_view) ==>
+  compile_stmt cenv lctx NoneT (Return NONE) = emit_inst STOP [] []
+Proof
+  strip_tac >> simp[Once compile_stmt_def, FUN_EQ_THM,
+                   comp_return_def, comp_bind_def, comp_ignore_bind_def]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_LOOP_RETURN_KERNEL_AUDIT OK\n"
+     else raise Fail "body loop return probe inherited admission"
+  end) [loop_probe_none_return_typing, loop_probe_none_return_stop];
