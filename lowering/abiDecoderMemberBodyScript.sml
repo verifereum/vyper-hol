@@ -335,7 +335,7 @@ Theorem abi_decoder_member_body_helper:
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var hi /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor st /\
   end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
@@ -350,7 +350,8 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `abi_decode_source_opcode opc` by fs[abi_decoder_ranges_def, Excl "enc_def"] >>
   drule_all abi_decoder_member_body_code >> strip_tac >>
-  `first <= middle.cs_next_id /\ middle.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
+  `first <= middle.cs_next_id /\ middle.cs_next_var <= limit_st.cs_next_var` by
+    (fs[abi_decoder_entry_floor_def, Excl "enc_def"] >> decide_tac) >>
   `abi_decoder_reservation middle.cs_next_id last b cap initial` by
     (drule_all abi_decoder_budget_child_reservation >> simp[]) >>
   mp_tac abi_decoder_member_prepare >> impl_tac >- asm_simp_tac bool_ss [] >>
@@ -463,7 +464,7 @@ Theorem abi_decoder_member_body:
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var hi /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor st /\
   end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\

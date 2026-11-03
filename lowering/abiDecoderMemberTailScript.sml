@@ -104,7 +104,7 @@ Proof
   mp_tac (PURE_REWRITE_RULE member_cursor_rewrites
     (Q.INST [`pretys` |-> `pretys ++ [ty]`, `pretvs` |-> `pretvs ++ [tv]`,
       `preavs` |-> `preavs ++ [av]`, `prevs` |-> `prevs ++ [v]`] abi_decoder_members_correct_run)) >>
-  impl_tac >- asm_simp_tac bool_ss [] >>
+  impl_tac >- (asm_simp_tac bool_ss [] >> simp[abi_decoder_entry_floor_def]) >>
   strip_tac >> rename1 `abi_decode_sim ctx func initial t` >>
   SUBGOAL_THEN ``d + SUM (MAP (type_memory_bytes ce) pretys) + type_memory_size tv +
       SUM (MAP (type_memory_bytes ce) tys) <= b \/

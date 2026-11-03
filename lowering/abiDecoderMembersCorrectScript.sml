@@ -31,7 +31,7 @@ Definition abi_decoder_members_correct_def:
       enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ tys))) (ListV (preavs ++ avs)) /\
     abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
     abi_decoder_operand_live st.cs_next_var hi /\ abi_decoder_operand_live st.cs_next_var base_op /\
-    abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ final.cs_next_id <= last /\
+    abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor st /\ final.cs_next_id <= last /\
     final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
     ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
     initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -64,7 +64,7 @@ Theorem abi_decoder_members_correct_run:
     enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ tys))) (ListV (preavs ++ avs)) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var hi /\ abi_decoder_operand_live st.cs_next_var base_op /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ final.cs_next_id <= last /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor st /\ final.cs_next_id <= last /\
   final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>

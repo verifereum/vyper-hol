@@ -185,7 +185,7 @@ Proof
   disch_then assume_tac >>
   `end_st.cs_next_id <= last /\ first <= end_st.cs_next_id /\
    end_st.cs_next_var <= limit_st.cs_next_var /\ st.cs_next_var <= end_st.cs_next_var`
-    by decide_tac >>
+    by (fs[abi_decoder_entry_floor_def, Excl "enc_def"] >> decide_tac) >>
   mp_tac abi_decoder_member_body >> impl_tac >- asm_simp_tac bool_ss [] >>
   strip_tac >> rename1 `abi_decode_sim ctx func initial after_head` >>
   mp_tac (Q.INST [`hi_op` |-> `hi:operand`] abi_decoder_member_after_head) >>
