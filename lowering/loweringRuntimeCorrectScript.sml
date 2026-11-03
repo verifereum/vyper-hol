@@ -642,7 +642,62 @@ Theorem external_body_frame:
         (initial_evaluation_context am.sources am.layouts tx NONE)
         (int_calls_stmts fbody)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all external_package_body_inv >> strip_tac >> simp[] >>
+  drule_all external_selected_body_typing >> strip_tac >>
+  `machine_well_typed am` by gvs[source_typing_ok_def] >>
+  drule_all external_body_prefix_state >> strip_tac >>
+  drule_all external_selected_env_consistent >> strip_tac >>
+  drule_all external_body_prefix_storage >> strip_tac >>
+  drule external_source_context_typed >> strip_tac >>
+  drule_all external_package_dec_metadata >> strip_tac >>
+  drule_all external_package_global_maps >> strip_tac >>
+  `?raw. MEM (FunctionDecl External mut F raw tx.function_name args [] ret fbody) tops` by
+    (irule lookup_function_external_decl >> simp[] >> qexists `tops` >>
+     gvs[supported_program_def, supported_declaration_headers_def]) >>
+  `supported_function_body tops External args fbody` by
+    (drule_all supported_program_function >> simp[]) >>
+  `ALL_DISTINCT (MAP FST args)` by
+    (drule_all external_selected_args_distinct >> simp[]) >>
+  `EVERY (\(n,ty). assignable_type env_t.type_defs ty) args` by
+    (`module_allocated am.layouts tx.target NONE tops` by
+       (drule check_contract_main_module_allocated >> simp[]) >>
+     `check_function_body am.layouts tx.target [(NONE,tops)] art NONE
+        mut F args [] ret fbody` by
+       (irule check_contract_runtime_function_body_MEM >> simp[] >>
+        qexistsl [`tx.function_name`, `raw`, `External`] >> simp[]) >>
+     gvs[check_function_body_def, params_ok_def, get_tenv_def,
+         checked_contract_runtime_ready_def,
+         initial_evaluation_context_def, type_env_all_modules_def]) >>
+  `cenv.ce_struct_fields = make_struct_fields_map tops` by
+    (drule compile_register_positional_args_cenv >> strip_tac >>
+     qpat_x_assum `cenv = _` SUBST1_TAC >>
+     qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+     simp[set_external_package_target_def, package_external_fn_def] >>
+     Cases_on `ret = NoneT` >>
+     simp[update_cenv_ret_abi_def, update_cenv_nonreentrant_def] >>
+     strip_tac >> gvs[build_compile_env_ce_struct_fields]) >>
+  `env_context_consistent env_t
+     (initial_evaluation_context am.sources am.layouts tx NONE)` by
+    gvs[env_consistent_def] >>
+  drule_all external_body_support_bounds >> strip_tac >>
+  qexistsl [`bindings`, `env_t`, `env'`] >> simp[] >>
+  reverse conj_tac
+  >- (irule external_entry_target_locals_declared >>
+      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
+  simp[expr_sim_inv_def] >> rpt conj_tac
+  >- (rpt strip_tac >> irule external_entry_target_param_pointer >>
+      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[])
+  >- (rpt strip_tac >> irule external_entry_target_param_type >>
+      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[])
+  >- (rpt strip_tac >> drule_all external_source_no_flags >>
+      disch_then (qspecl_then [`ls`, `fid`] mp_tac) >> simp[])
+  >- gvs[dec_cenv_agrees_def]
+  >- gvs[dec_cenv_agrees_def]
+  >- (rpt strip_tac >>
+      `FLOOKUP cenv.ce_struct_fields name = SOME fields` by simp[] >>
+      drule_all external_package_struct_fields >> simp[])
+  >- (simp[] >> irule external_bind_arguments_popped >> goal_assum (drule_at Any))
 QED
 
 (* ===== The frame's returns (#640) ===== *)
