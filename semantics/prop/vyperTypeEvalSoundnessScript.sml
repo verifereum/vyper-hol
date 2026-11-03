@@ -32,8 +32,9 @@ Libs
 Theorem lift_option_type_INL_eq[local]:
   lift_option_type opt msg st = (INL v,st') <=> opt = SOME v /\ st' = st
 Proof
-  Cases_on `opt` >> simp[lift_option_type_def, return_def, raise_def] >>
-  metis_tac[]
+  Cases_on `opt`
+  >- simp[lift_option_type_def, return_def, raise_def] >>
+  simp[lift_option_type_def, return_def, raise_def] >> metis_tac[]
 
 QED
 Theorem well_typed_exprs_EVERY[local]:
@@ -3356,7 +3357,7 @@ Resume eval_scc_type_sound_results_mutual[If]:
   qpat_x_assum `st1 with scopes := FEMPTY::st1.scopes = st2` kall_tac >>
   conj_tac >- (
     rpt strip_tac >> qunabbrev_tac`P` >> BETA_TAC >>
-    simp[Abbr`st2`] >>
+    simp_tac (srw_ss()) [Abbr`st2`] >> ASM_REWRITE_TAC[] >>
     conj_tac >- (
       irule push_scope_preserves_state_well_typed >>
       qexistsl_tac [`st1`,`()`] >>
@@ -7514,7 +7515,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_CreateTarget]:
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
                          type_check_def, assert_def, return_def, raise_def,
                          lift_option_type_def, get_accounts_def, update_accounts_def] >>
-    simp[] >>
+    simp_tac (srw_ss()) [] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
@@ -7679,7 +7680,7 @@ Resume eval_scc_type_sound_results_mutual[Trace_Results_cons]:
   qpat_x_assum `well_typed_exprs env (e::es)` mp_tac >>
   rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
   qpat_x_assum `eval_expr_results _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
     (drule_at (Pat `eval_expr _ _ _ = _`)) >>
@@ -9054,7 +9055,9 @@ Resume eval_scc_type_sound_results_mutual[TraceCreateBlueprint]:
   strip_tac >>
   qpat_x_assum `!env st res st'. well_typed_exprs _ _ /\ _ ==> _` drule_all >>
   strip_tac >>
-  Cases_on `prefix_res` >> gvs[]
+  (* Keep the suffix IHs available, but do not simplify their quantified bodies. *)
+  Cases_on `prefix_res` >>
+  simp_tac (srw_ss()) []
   >- (rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
         (INL prefix,prefix_st)` >>
       Cases_on `check_create_blueprint has_salt prefix prefix_st` >>
@@ -9840,5 +9843,7 @@ val _ = List.app (fn (name,th) =>
       print (name ^ " is closed\n")
     else raise Fail (name ^ " is not closed")
   end)
-  [("eval_scc_type_sound_mutual",eval_scc_type_sound_mutual),
+  [("stmt_no_control_escape_eval_no_loop_control",stmt_no_control_escape_eval_no_loop_control),
+   ("eval_scc_type_sound_results_mutual",eval_scc_type_sound_results_mutual),
+   ("eval_scc_type_sound_mutual",eval_scc_type_sound_mutual),
    ("eval_expr_read_type_sound",eval_expr_read_type_sound)];

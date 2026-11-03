@@ -317,3 +317,27 @@ Theorem concrete_result_deletion_delta:
 Proof
   strip_tac >> simp[extract_asm_result_def]
 QED
+
+(* Both creation opcodes consume the same queued completion as Venom,
+   including the returned address and failure-side account rollback. *)
+Theorem creation_consumes_recorded_outcome:
+  s.as_outcomes = outcome::rest ==>
+  (case salt of
+     NONE => asm_exec_create (s with as_stack := [value; 0w; 0w])
+   | SOME n => asm_exec_create2 (s with as_stack := [value; 0w; 0w; n])) =
+  AsmOK (asm_next (s with <|
+    as_stack := [if outcome.co_success then w2w outcome.co_created else 0w];
+    as_outcomes := rest;
+    as_requests := s.as_requests ++ [asm_create_request s value 0 0 salt];
+    as_accounts := outcome.co_accounts; as_transient := outcome.co_tStorage;
+    as_logs := if outcome.co_success then s.as_logs ++ outcome.co_logs else s.as_logs;
+    as_pending_deletions := if outcome.co_success
+      then outcome.co_toDelete ++ s.as_pending_deletions else s.as_pending_deletions;
+    as_returndata := outcome.co_returnData |>))
+Proof
+  strip_tac >> Cases_on `salt` >>
+  simp[asm_exec_create_def, asm_exec_create2_def, asm_create_request_def, asm_call_memory_def,
+       asm_consume_create_outcome_def, take_outcome_def, record_request_def,
+       computed_precompile_def, adopt_outcome_def, adopt_outcome_deletions_def,
+       asm_next_def, asm_state_component_equality]
+QED
