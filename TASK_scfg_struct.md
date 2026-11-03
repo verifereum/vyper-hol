@@ -9,36 +9,10 @@ Location: venom/passes/simplify_cfg/simplifyCfgCorrectnessScript.sml
 ## Theorem Statement (FROZEN)
 
 ```sml
-Theorem simplify_cfg_establishes_all_reachable:
-  ∀func. wf_function func ⇒ all_reachable (simplify_cfg_fn func)
-
-Theorem simplify_cfg_preserves_ssa_form:
-  ∀func. ssa_form func ∧ wf_function func ⇒ ssa_form (simplify_cfg_fn func)
-
-Theorem simplify_cfg_preserves_wf_function:
-  ∀func. wf_function func ⇒ wf_function (simplify_cfg_fn func)
-
-Theorem simplify_cfg_preserves_wf_ssa:
-  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
-  EVERY (\inst. inst.inst_opcode <> PHI) (HD fn.fn_blocks).bb_instructions ==>
-  wf_ssa (simplify_cfg_fn fn)
-
 Theorem simplify_cfg_preserves_defs_reach_uses:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
   simplify_cfg_fn_ok fn ==>
   fn_defs_reach_uses (simplify_cfg_fn fn)
-
-Theorem simplify_cfg_phi_two_pairs:
-  wf_function fn /\ fn_inst_wf fn ==>
-  !inst. MEM inst (fn_insts (simplify_cfg_fn fn)) /\ inst.inst_opcode = PHI ==>
-         2 <= LENGTH (phi_pairs inst.inst_operands)
-
-Theorem simplify_cfg_jnz_targets_distinct:
-  wf_function fn /\ fn_shape_ok fn /\
-  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = JNZ ==>
-          ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f) ==>
-  !inst. MEM inst (fn_insts (simplify_cfg_fn fn)) /\ inst.inst_opcode = JNZ ==>
-         ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f
 ```
 
 Supporting definitions (do not change them): the pass in
@@ -48,11 +22,13 @@ Supporting definitions (do not change them): the pass in
 `canon_jnz_inst` in the pass's defs; `all_reachable` (rg
 `all_reachable_def`).
 
-**Do not modify these statements.** Prove them as-is, or produce a counterexample.
+**Do not modify this statement.** Prove it as-is, or produce a counterexample.
+
+Scope change (2026-11-03): this run now covers only `simplify_cfg_preserves_defs_reach_uses`. The other six theorems in simplifyCfgCorrectnessScript.sml are proved by separate runs; leave their cheats alone. `simplify_cfg_preserves_wf_ssa` is false as stated (this run's counterexample, simplifyCfgStalePhiProbe) and is being restated elsewhere; do not prove or edit it, and do not rely on it.
 
 ## Completion Criteria
 
-1. The seven theorems build with no cheat; put helper lemmas in a new
+1. `simplify_cfg_preserves_defs_reach_uses` builds with no cheat; put helper lemmas in a new
    theory under venom/passes/simplify_cfg/proofs/ and import it.
 2. Leave `simplify_cfg_pass_correct` and venom/passes/simplify_cfg/proofs/simplifyCfgProofScript.sml
    alone (another run proves them). Do not edit `venom/compiler/` or any
