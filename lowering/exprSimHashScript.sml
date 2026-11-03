@@ -291,7 +291,7 @@ Proof
                        finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
-Theorem hash_alloc_buffer_labels[local]:
+Theorem hash_alloc_buffer_labels:
   compile_alloc_buffer sz sa = (buf,sm) /\
   run_inst_seq (emitted_insts sa sm) s = OK t ==>
   t.vs_labels = s.vs_labels
