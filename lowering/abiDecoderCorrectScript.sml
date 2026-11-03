@@ -8,16 +8,16 @@ Ancestors
 
 Definition abi_decoder_correct_def:
   abi_decoder_correct ce env sf ty tv <=>
-    !dst src opc hi start end_st func ctx first last b cap limit_st initial av v sb d.
-    compile_abi_decode_to_buf dst src opc hi (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
+    !dst src opc base_op hi start end_st func ctx first last b cap limit_st initial av v src_base sb d.
+    compile_abi_decode_to_buf dst src opc base_op hi (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_decoder_recursive_pre ce env sf ty tv (type_to_abi_dec_info sf ce ty) av v
-      start last src dst opc hi sb d b cap (abi_decoder_prune_vars start.cs_next_var initial) /\
+      start last src dst opc base_op hi src_base sb d b cap (abi_decoder_prune_vars start.cs_next_var initial) /\
     abi_decoder_budget first last b cap initial /\
-    first <= start.cs_next_id /\ end_st.cs_next_id <= last /\
+    first <= abi_decoder_entry_floor start /\ end_st.cs_next_id <= last /\
     end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
     ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
     initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
@@ -30,14 +30,14 @@ End
 
 Theorem abi_decoder_correct_run:
   abi_decoder_correct ce env sf ty tv /\
-  compile_abi_decode_to_buf dst src opc hi (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
+  compile_abi_decode_to_buf dst src opc base_op hi (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
   fn_has_code start end_st func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_decoder_recursive_pre ce env sf ty tv (type_to_abi_dec_info sf ce ty) av v
-    start last src dst opc hi sb d b cap (abi_decoder_prune_vars start.cs_next_var initial) /\
-  abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\ end_st.cs_next_id <= last /\
+    start last src dst opc base_op hi src_base sb d b cap (abi_decoder_prune_vars start.cs_next_var initial) /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor start /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
   initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
@@ -49,21 +49,20 @@ Theorem abi_decoder_correct_run:
 Proof
   strip_tac >> qpat_x_assum `abi_decoder_correct _ _ _ _ _`
     (mp_tac o PURE_REWRITE_RULE [abi_decoder_correct_def]) >>
-  disch_then (qspecl_then [`dst`, `src`, `opc`, `hi`, `start`, `end_st`, `func`, `ctx`,
-    `first`, `last`, `b`, `cap`, `limit_st`, `initial`, `av`, `v`, `sb`, `d`] mp_tac) >>
-  asm_simp_tac bool_ss []
+  disch_then drule >> asm_simp_tac bool_ss [] >>
+  disch_then (drule_at Any) >> asm_simp_tac bool_ss [] >> metis_tac[]
 QED
 
 (* Helper: an unconditional PHI-free endpoint suffices for every decoder. *)
 Theorem abi_decoder_correct_run_simple:
   abi_decoder_correct ce env sf ty tv /\
-  compile_abi_decode_to_buf dst src opc hi (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
+  compile_abi_decode_to_buf dst src opc base_op hi (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
   fn_has_code start end_st func /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\
   abi_decoder_recursive_pre ce env sf ty tv (type_to_abi_dec_info sf ce ty) av v
-    start last src dst opc hi sb d b cap (abi_decoder_prune_vars start.cs_next_var initial) /\
-  abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\ end_st.cs_next_id <= last /\
+    start last src dst opc base_op hi src_base sb d b cap (abi_decoder_prune_vars start.cs_next_var initial) /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor start /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
   initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
