@@ -1047,7 +1047,8 @@ Theorem assert_false_correct:
 Proof
   rpt strip_tac >>
   simp[venomInstTheory.mk_inst_def] >>
-  simp[Once step_inst_base_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp_tac (srw_ss()) [] >>
   simp[comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
