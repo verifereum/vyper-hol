@@ -394,7 +394,27 @@ Theorem alloca_history_run_blocks:
     fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
     run_blocks fuel ctx func s = IntRet ret t ==> alloca_history func t
 Proof
-  cheat
+  Induct_on `fuel` >- simp[Once run_blocks_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `run_blocks _ _ _ _ = _` mp_tac >>
+  simp[Once run_blocks_def] >> strip_tac >> gvs[AllCaseEqs()] >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac eval_phis_ok_or_error_defs >>
+  gvs[] >> rename1 `eval_phis s bb.bb_instructions = OK s_phi` >>
+  `alloca_history func (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)`
+    by metis_tac[history_phi_entry] >>
+  `alloca_inv (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)`
+    by metis_tac[history_phi_entry_inv] >>
+  `s_phi.vs_current_bb = s.vs_current_bb`
+    by metis_tac[eval_phis_preserves_current_bb] >>
+  `lookup_block (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions).vs_current_bb
+     func.fn_blocks = SOME bb` by simp[]
+  >- (`alloca_history func s''` by
+        (irule alloca_history_exec_block >> goal_assum (drule_at Any) >> simp[] >>
+         metis_tac[]) >>
+      `alloca_inv s''` by metis_tac[alloca_inv_exec_block_proof] >>
+      first_x_assum irule >> metis_tac[]) >>
+  irule alloca_history_exec_block >> goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[]
 QED
 
 Theorem alloca_history_callee_entry:
