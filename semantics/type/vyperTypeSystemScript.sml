@@ -771,10 +771,14 @@ Definition well_typed_expr_def:
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 2 /\
      (?bd. EL 0 (MAP expr_type args) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
            bound_at_most bd 4) /\
-     (?bd'. EL 1 (MAP expr_type args) = BaseT (BytesT bd'))) /\
+     (case EL 0 args of
+        Builtin _ (MakeArray _ _) topics => LENGTH topics <= 4
+      | _ => F) /\
+     (EL 1 (MAP expr_type args) = BaseT (BytesT (Fixed 32)) \/
+      ?n. EL 1 (MAP expr_type args) = BaseT (BytesT (Dynamic n)))) /\
   well_typed_expr env (Call ty RawRevert args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 1 /\
-     (?bd. HD (MAP expr_type args) = BaseT (BytesT bd))) /\
+     (?n. HD (MAP expr_type args) = BaseT (BytesT (Dynamic n)))) /\
   well_typed_expr env (Call ty SelfDestructTarget args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 1 /\
      HD (MAP expr_type args) = BaseT AddressT) /\
