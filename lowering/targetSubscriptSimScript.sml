@@ -7,7 +7,8 @@ Ancestors
   vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants
   exprSimAggregateEncoding tupleMemoryLayout exprSimAttributeFields
   vyperTyping valueEncoding arithmetic vyperValueOperation valueEncodingProofs list
-  vyperPlaceStatePreservation
+  vyperPlaceStatePreservation vyperPlaceTyping vyperTypeStatePreservation
+  words finite_map option exprSimArrayIndex valueEncodingProps
 Libs
   pairLib
 
@@ -97,6 +98,61 @@ Proof
   `well_formed_type_value etv` by metis_tac[subscript_type_well_formed] >>
   drule_all mem_step_offset_current_value >> strip_tac >>
   first_x_assum drule_all >> simp[NoAsms, AC ADD_ASSOC ADD_COMM]
+QED
+
+Theorem place_ptr_rel_memory_current:
+  !ctx func cenv cx env es s id path entry v w loc ty tv.
+    expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
+    place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w loc (Type ty) /\
+    lookup_scopes id es.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL v /\
+    evaluate_type (get_tenv cx) ty = SOME tv ==>
+    val_in_memory tv v (w2n w) s.vs_memory
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?ety. FLOOKUP env.var_types id = SOME ety` by
+    (fs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     metis_tac[IS_SOME_EXISTS]) >>
+  `cenv.ce_var_type id = SOME ety /\
+   evaluate_type (get_tenv cx) ety = SOME entry.type` by
+    (fs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     metis_tac[]) >>
+  `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by
+    (fs[expr_sim_inv_def, state_well_typed_def] >>
+     metis_tac[lookup_scopes_well_typed_value_has_type, lookup_scopes_well_typed_type]) >>
+  `local_ptrs_rel func cenv es.scopes s /\ alloca_room ctx func s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  qpat_x_assum `place_ptr_rel _ _ _ _ _ _ _` mp_tac >>
+  simp[place_ptr_rel_def] >> strip_tac >> gvs[] >>
+  qpat_x_assum `local_ptrs_rel _ _ _ _` mp_tac >>
+  simp[local_ptrs_rel_def] >> strip_tac >>
+  qpat_x_assum `!name entry p sz. _ ==> _` drule_all >> strip_tac >> gvs[] >>
+  drule_all mem_path_offset_current_value >> strip_tac >>
+  drule mem_path_offset_sound >> strip_tac >>
+  drule alloca_room_next_lt >> strip_tac >>
+  `w2n b + k < dimword (:256)` by decide_tac >>
+  `k < dimword (:256)` by decide_tac >>
+  simp[w2n_add_2, w2n_n2w, LESS_MOD] >> fs[ADD_COMM]
+QED
+
+Theorem array_len_ok_memory_current:
+  !ctx func cenv cx env es s id path entry vs w loc ty etv cap ptr cnt.
+    expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
+    place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w loc (Type ty) /\
+    lookup_scopes id es.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL (ArrayV (DynArrayV vs)) /\
+    evaluate_type (get_tenv cx) ty = SOME (ArrayTV etv (Dynamic cap)) /\
+    eval_operand ptr s = SOME w ==>
+    array_len_ok T cnt
+      (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory)
+      ptr s (n2w (LENGTH vs))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all place_ptr_rel_memory_current >>
+  simp[val_in_memory_def] >> strip_tac >>
+  drule array_len_ok_MLOAD >>
+  disch_then (qspecl_then [`cenv.ce_is_ctor`, `cenv.ce_imm_alloca`, `cnt`] mp_tac) >>
+  simp[GSYM mem_word_at_eq_mload]
 QED
 
 Theorem compile_get_target_ptr_subscript:
