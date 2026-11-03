@@ -1324,3 +1324,54 @@ Proof
   drule scfg_phi_safe_entry >> disch_then assume_tac >>
   fs[EVERY_MEM] >> metis_tac[]
 QED
+
+Theorem do_merge_jump_ssa_invariant:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  scfg_phi_safe fn /\ fn_defs_reach_uses fn /\
+  EVERY label_positions_ok (fn_insts fn) /\ all_reachable fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') ==>
+  wf_ssa fn' /\ wf_function fn' /\ fn_inst_wf fn' /\ first_block_no_preds fn' /\
+  scfg_phi_safe fn' /\ fn_defs_reach_uses fn' /\
+  EVERY label_positions_ok (fn_insts fn') /\ all_reachable fn'
+Proof
+  strip_tac >>
+  `MEM a fn.fn_blocks` by metis_tac[lookup_block_member_label] >>
+  `wf_function fn'` by (irule do_merge_jump_wf >> metis_tac[]) >>
+  `fn_inst_wf fn'` by (irule do_merge_jump_fn_inst_wf >> metis_tac[]) >>
+  `first_block_no_preds fn'` by
+    (irule do_merge_jump_first_block_no_preds >> metis_tac[]) >>
+  `all_reachable fn'` by (irule do_merge_jump_all_reachable >> metis_tac[]) >>
+  `ssa_form fn'` by (irule do_merge_jump_ssa >> metis_tac[wf_ssa_def]) >>
+  `scfg_phi_preds fn` by metis_tac[wf_ssa_phi_preds] >>
+  `fn_defs_reach_uses fn'` by (irule do_merge_jump_defs_reach_uses >> metis_tac[]) >>
+  `wf_ssa fn'` by
+    (irule reachable_defs_reach_uses_wf_ssa >> simp[] >>
+     rpt gen_tac >> strip_tac >> irule do_merge_jump_phi_shape >>
+     metis_tac[]) >>
+  `scfg_phi_safe fn'` by
+    (irule wf_ssa_phi_safe >> conj_tac >- asm_rewrite_tac[] >>
+     irule do_merge_jump_entry_no_phis >> metis_tac[]) >>
+  `EVERY label_positions_ok (fn_insts fn')` by
+    (drule_all do_merge_jump_label_positions_ok >> simp[]) >> simp[]
+QED
+
+Theorem try_bypass_ssa_invariant:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  scfg_phi_safe fn /\ fn_defs_reach_uses fn /\
+  EVERY label_positions_ok (fn_insts fn) /\ all_reachable fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  try_bypass fn lm a succs = (fn',lm',changed) ==>
+  wf_ssa fn' /\ wf_function fn' /\ fn_inst_wf fn' /\ first_block_no_preds fn' /\
+  scfg_phi_safe fn' /\ fn_defs_reach_uses fn' /\
+  EVERY label_positions_ok (fn_insts fn') /\ all_reachable fn'
+Proof
+  qid_spec_tac `changed` >> qid_spec_tac `lm'` >> qid_spec_tac `fn'` >>
+  Induct_on `succs` >- simp[try_bypass_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[Once try_bypass_def, AllCaseEqs()] >>
+  TRY (first_x_assum irule >> simp[] >> NO_TAC) >>
+  irule do_merge_jump_ssa_invariant >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[lookup_block_member_label]
+QED
