@@ -46,12 +46,22 @@ Libs
 
 (* ===== Lowering of convert ===== *)
 
-(* A conversion to a type other than a flag: the argument's fragment, then
-   compile_type_convert with mk_convert_op. *)
+Theorem is_word_type_not_bytestring:
+  !t. is_word_type t ==> ~is_bytestring_type t
+Proof
+  Cases >> simp[is_word_type_def, is_bytestring_type_def] >>
+  rename1 `BaseT b` >> Cases_on `b` >>
+  simp[is_word_type_def, is_bytestring_type_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[is_word_type_def, is_bytestring_type_def]
+QED
+
+(* A conversion of a non-bytestring to a type other than a flag: the
+   argument's fragment, then compile_type_convert with mk_convert_op. *)
 Theorem lower_value_convert:
   !cenv ty ann t e1 sa op sb.
     lower_value compile_expr cenv ty (TypeBuiltin ann Convert t [e1]) sa =
-      (op, sb) /\ (!n. t <> FlagT n) ==>
+      (op, sb) /\ (!n. t <> FlagT n) /\ ~is_bytestring_type (expr_type e1) ==>
     ?x s1.
       lower_value compile_expr cenv (expr_type e1) e1 sa = (x, s1) /\
       compile_type_convert x (mk_convert_op (expr_type e1) t) s1 = (op, sb)
@@ -195,6 +205,8 @@ Proof
         simp[frag_exec_false_pre] >>
       pop_assum (fn th => irule (MATCH_MP frag_exec_weaken th)) >>
       simp[]) >>
+  `~is_bytestring_type (expr_type e1)` by
+    (irule is_word_type_not_bytestring >> asm_rewrite_tac[]) >>
   drule_all lower_value_convert >> strip_tac >>
   qpat_x_assum `!sa sb op. lower_value _ _ _ e1 _ = _ ==> _`
     (drule_then strip_assume_tac) >>
@@ -679,7 +691,7 @@ Proof
   simp[Once (CONJUNCT2 (CONJUNCT2 compile_expr_raw_def)),
        compile_type_builtin_dispatch_body_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `t` >> simp[as_stack_val_pair]
+  Cases_on `t` >> simp[as_stack_val_pair] >> rw[]
 QED
 
 Theorem straight_fresh_convert_pair:

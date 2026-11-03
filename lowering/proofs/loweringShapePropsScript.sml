@@ -7146,6 +7146,11 @@ QED
 
 Resume compile_type_builtin_dispatch_body_shape[convert]:
   shape_dispatch_unary_start_tac type_builtin_arity_def compile_type_builtin_dispatch_body_def >>
+  Cases_on `is_bytestring_type (expr_type (HD args)) /\ is_word_type ret_ty /\
+            (lowered_value_type cenv (HD args) = BaseT (BytesT (Dynamic 0)) \/
+             lowered_value_type cenv (HD args) = BaseT (StringT 0))` >>
+  pop_assum (fn th => REWRITE_TAC [th])
+  >- (simp[shape_step_def, shape_extends_refl, value_shape_ok_def] >> shape_opcode_tac) >>
   Cases_on `ret_ty` >> simp[] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
   irule shape_step_as_stack_val >>
   shape_under_tac compile_type_convert_shape `\st. T` >> simp[shape_stable_def]
