@@ -273,7 +273,8 @@ Theorem reason_code_expr_revert_frag[local]:
     eval_expr cx r es = (res1, es1) /\ expr_vv_res_ok res1 /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    (!rr. expr_exit res1 rr ==> R rr) /\ (!t. R (Abort Revert_abort t)) ==>
+    (!rr. expr_exit res1 rr ==> R rr) /\
+    (!tv t. res1 = INL tv ==> R (Abort Revert_abort t)) ==>
     frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
       (\s. F) R
 Proof
@@ -290,6 +291,18 @@ Proof
      gvs[vv_operand_def]) >>
   `?t p. vv = LocatedValue t p` by metis_tac[reason_code_vv_def] >>
   gvs[] >>
+  reverse (Cases_on `res1`)
+  >- (drule compile_expr_extends >> strip_tac >>
+      `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
+      qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
+        (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
+      disch_then (qspecl_then [`sa`, `sm`, `LocatedValue t p`,
+                              `INR y`, `es1`, `s0`] mp_tac) >>
+      simp[] >> strip_tac >>
+      irule frag_exec_exit_prefix >> qexists `sm` >> simp[] >>
+      irule frag_exec_conseq >>
+      qpat_x_assum `frag_exec ctx sa sm _ _ _` (irule_at Any) >>
+      simp[]) >>
   irule reason_expr_revert_frag_general >> simp[] >>
   goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
@@ -312,7 +325,8 @@ Theorem reason_code_expr_revert_forced_frag[local]:
     expr_res_ok res1 /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    (!rr. expr_exit res1 rr ==> R rr) /\ (!t. R (Abort Revert_abort t)) ==>
+    (!rr. expr_exit res1 rr ==> R rr) /\
+    (!tv t. res1 = INL tv ==> R (Abort Revert_abort t)) ==>
     frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
       (\s. F) R
 Proof
@@ -333,6 +347,28 @@ Proof
      qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
      simp[bind_def] >> strip_tac >> gvs[] >>
      metis_tac[expr_exit_exception_transport]) >>
+  reverse (Cases_on `?v. res1 = INL v`)
+  >- (`cs_extends sm sb` by
+        (drule compile_revert_reason_split_certificate >> strip_tac >>
+         drule unwrap_value_extends >> strip_tac >>
+         metis_tac[cs_extends_trans]) >>
+      drule compile_expr_extends >> strip_tac >>
+      `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
+      qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
+        (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
+      disch_then (qspecl_then [`sa`, `sm`, `vv`, `raw`, `es1`, `s0`] mp_tac) >>
+      simp[] >> strip_tac >>
+      `!tv s. raw = INL tv /\
+         vv_post ctx func cenv cx r es sa sm s0 es1 tv vv s ==> F` by
+        (rpt strip_tac >> gvs[vv_post_def] >>
+         Cases_on `vv` >> gvs[reason_code_vv_def, vv_holds_def,
+                              immutable_holds_def] >>
+         qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+         simp[bind_def] >> metis_tac[]) >>
+      irule frag_exec_exit_prefix >> qexists `sm` >> simp[] >>
+      irule frag_exec_conseq >>
+      qpat_x_assum `frag_exec ctx sa sm _ _ _` (irule_at Any) >>
+      simp[] >> metis_tac[]) >>
   irule reason_code_expr_revert_frag >> simp[] >>
   goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >> simp[] >>
