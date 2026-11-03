@@ -1446,3 +1446,72 @@ Proof
   >- simp[fn_reachable_def]
   >- metis_tac[sccpCorrectnessProofsTheory.strict_dom_vars_defined_entry]
 QED
+
+(* Completion audit: the exported contract must not depend on proof oracles. *)
+val _ =
+  if List.all (fn name => name = "DISK_THM")
+       (#1 (Tag.dest_tag (Thm.tag dft_run_blocks_rel)))
+  then print "dft_run_blocks_rel: oracle audit passed\n"
+  else raise Fail "dft_run_blocks_rel: unexpected proof oracle";
+
+(* The TASK supplied the stronger all-fallible ordering premise. The
+   owner's imported definition orders only abort-incompatible pairs.
+   These independent predicates record the original contract verbatim;
+   implication, not equivalence, transfers the proof to that contract. *)
+Definition dft_task_fallible_order_kept_def:
+  dft_task_fallible_order_kept fn fn' <=>
+    LIST_REL
+      (\bb bb'.
+         !x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+               is_fallible x /\ is_fallible y /\
+               id_before (MAP (\i. i.inst_id) bb.bb_instructions)
+                 x.inst_id y.inst_id ==>
+               id_before (MAP (\i. i.inst_id) bb'.bb_instructions)
+                 x.inst_id y.inst_id)
+      fn.fn_blocks fn'.fn_blocks
+End
+
+Definition dft_task_fn_rel_def:
+  dft_task_fn_rel fn fn' <=>
+    fn'.fn_name = fn.fn_name /\
+    wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ fn_pseudos_prefix fn /\
+    EVERY (\i. i.inst_opcode <> ALLOCA) (fn_insts fn) /\
+    LIST_REL dft_block_rel fn.fn_blocks fn'.fn_blocks /\
+    dft_task_fallible_order_kept fn fn'
+End
+
+Theorem dft_task_order_implies_current:
+  dft_task_fallible_order_kept fn fn' ==> dft_fallible_order_kept fn fn'
+Proof
+  simp[dft_task_fallible_order_kept_def, dft_fallible_order_kept_def] >>
+  match_mp_tac LIST_REL_mono >>
+  simp[abort_compatible_def, is_fallible_def] >> metis_tac[]
+QED
+
+Theorem dft_task_fn_rel_implies_current:
+  dft_task_fn_rel fn fn' ==> dft_fn_rel fn fn'
+Proof
+  simp[dft_task_fn_rel_def, dft_fn_rel_def] >>
+  metis_tac[dft_task_order_implies_current]
+QED
+
+Theorem dft_task_context_rel_implies_current:
+  LIST_REL dft_task_fn_rel fs gs ==> LIST_REL dft_fn_rel fs gs
+Proof
+  match_mp_tac LIST_REL_mono >> metis_tac[dft_task_fn_rel_implies_current]
+QED
+
+Theorem dft_run_blocks_rel_original_contract:
+  !C C'.
+    LIST_REL dft_task_fn_rel C.ctx_functions C'.ctx_functions ==>
+    !fuel name fn fn' s.
+      lookup_function name C.ctx_functions = SOME fn /\
+      lookup_function name C'.ctx_functions = SOME fn' /\
+      fn_entry_label fn = SOME s.vs_current_bb /\
+      ctx_labels_bound C s.vs_labels ==>
+      dft_res_rel (run_blocks fuel C fn s) (run_blocks fuel C' fn' s)
+Proof
+  rpt strip_tac >> drule dft_task_context_rel_implies_current >>
+  disch_then (mp_tac o MATCH_MP dft_run_blocks_rel) >>
+  disch_then irule >> metis_tac[]
+QED
