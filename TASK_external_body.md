@@ -87,7 +87,7 @@ These two obligations connect selected source entry and the generated external f
 
 ## Domain Constraints
 - Work only in this branch. Never push or open PRs.
-- Scope edits to these two proofs, needed imports, and consumed proof helpers. Preserve other admissions and proof scripts.
+- Scope edits to these two proofs, needed imports, and consumed proof helpers. Preserve other admissions. Minimal proof-only repairs of inherited prerequisites that fail the required build are authorized, including compile_safe_mul_overflow / mul_sdiv_mismatch_tac in arithmeticPropsScript.sml. Preserve their theorem statements, executable definitions and the default tactic budget; do not expand this into unrelated cleanup.
 - Shared compiler/environment lemmas belong in their natural existing theories.
 - Do not create evaluators or duplicate arbitrary-calldata entry execution.
 - This base has source transfer_value's recipient-overflow check, and no HaltException constructor. Pending source-semantics changes are outside this task.
