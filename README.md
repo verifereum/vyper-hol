@@ -169,6 +169,10 @@ proof; `vyperJsonReplayLib.replay_file` provides kernel-checked replay.
 The CV frontend retains defined-input preconditions; the native executable does
 not discharge them for each input.
 
+CI builds the CV frontend, emitter and kernel replay smoke theories through the
+project roots, at holbuild's default proof-step timeout. MLton compilation remains
+an explicit local step.
+
 The smoke check compares exact encoded inputs and results for all five bundled
 cases, not just pass/fail status. Import errors are reported on stderr; `{}` is
 rejected because it contains no tests, while `[]` runs the empty trace successfully.
