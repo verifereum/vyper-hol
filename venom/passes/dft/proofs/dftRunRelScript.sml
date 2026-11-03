@@ -1515,3 +1515,9 @@ Proof
   disch_then (mp_tac o MATCH_MP dft_run_blocks_rel) >>
   disch_then irule >> metis_tac[]
 QED
+
+val _ =
+  if List.all (fn name => name = "DISK_THM")
+       (#1 (Tag.dest_tag (Thm.tag dft_run_blocks_rel_original_contract)))
+  then print "dft_run_blocks_rel_original_contract: oracle audit passed\n"
+  else raise Fail "original contract: unexpected proof oracle";
