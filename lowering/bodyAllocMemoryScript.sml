@@ -72,6 +72,29 @@ Proof
   Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id = NONE` >> simp[]
 QED
 
+Theorem compile_alloc_buffer_body_header_slice:
+  !n sa buf sm value sb func s.
+    compile_alloc_buffer n sa = (buf,sm) /\
+    emit_void MSTORE [buf.buf_operand; value] sm = ((),sb) /\
+    fn_has_code sa sb func /\ ~block_is_terminated sa /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    (?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+       DROP s.vs_inst_idx bb.bb_instructions =
+         (emitted_insts sa sm ++ emitted_insts sm sb) ++ rest) /\
+    s.vs_inst_idx + LENGTH (emitted_insts sa sm ++ emitted_insts sm sb) =
+      LENGTH sb.cs_current_insts /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sm ++ emitted_insts sm sb)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+  gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_id_def, fresh_var_def, emit_def,
+      emitted_insts_def, fn_has_code_def, IS_PREFIX_APPEND] >>
+  FAIL_TAC "slice"
+QED
+
 val () = List.app (fn th =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
   in if null axioms andalso null (Thm.hyp th) andalso
