@@ -300,7 +300,18 @@ level. Guard placement is correct for normal values/control outcomes and
 excludes only the exact exempt RuntimeError. No validated full-premise body
 counterexample was found; producer ranges and frame/call transport remain owed.
 
-Parser status: bodyMemoryDefs guard parse is running. The new body theorem is
-not yet parsed; upstream generic memory proofs require the same migration.
+Parser status: bodyMemoryDefs with the approved guard parsed successfully.
+The new body theorem has not yet been reached: the actual body-target build
+stops in compile_expr_stmt_frag_ok_mem on propagation of the new result guard.
+This is local migration work, not an external precondition. Preserve all
+existing generic proofs and repair them.
+
+The committed allocation-history checkpoint4720852ee has four completed base
+exports (empty/frame/jump/pair), independently checked against the frozen
+definitions/statements. Owner replay/tag checks are pending at task preparation.
+The four pending generic producer exports plus raw-sequence adapter remain
+separately owned. Do not use those five admitted statements in a downstream
+proof; report a dependency block only when progress actually needs them.
+An owner will provide the checked producer dependency when its run completes.
 Report genuine blocking producer defects with an exercised witness rather than
 adding premises, exclusions or definition workarounds.
