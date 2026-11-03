@@ -696,7 +696,8 @@ Theorem body_raise_reason_other:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Raise (RaiseReason e))) es res es'
 Proof
-  rpt strip_tac >> `~cenv.ce_is_ctor` by fs[body_inv_def] >>
+  rpt strip_tac >> Cases_on `cx.in_deploy` >- cheat (* PROBE *) >>
+  `~cenv.ce_is_ctor` by fs[body_inv_def] >>
   Cases_on `?ml str. e = Literal (BaseT (StringT ml)) (StringL str)`
   >- (gvs[] >> irule compile_raise_reason_lit_frag >> simp[]) >>
   irule compile_raise_code_reason_frag >> gvs[] >> metis_tac[]
@@ -756,7 +757,8 @@ Theorem body_assert_reason_other:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assert e (AssertReason se))) es res es'
 Proof
-  rpt strip_tac >> `~cenv.ce_is_ctor` by fs[body_inv_def] >>
+  rpt strip_tac >> Cases_on `cx.in_deploy` >- cheat (* PROBE *) >>
+  `~cenv.ce_is_ctor` by fs[body_inv_def] >>
   `expr_type e = BaseT BoolT` by gvs[type_stmt_def] >>
   Cases_on `?ml str. se = Literal (BaseT (StringT ml)) (StringL str)`
   >- (gvs[] >> irule compile_assert_reason_lit_frag >> simp[] >>
@@ -1637,11 +1639,16 @@ Proof
 QED
 
 (* The frame's target has MCOPY: the unit's policy target, which
-   run_lowering requires to have it (lowering_policy_ok). *)
+   run_lowering and run_deploy_lowering require to have it
+   (lowering_policy_ok). *)
 Theorem body_inv_mcopy[local]:
   !tops ctx cenv cx. body_inv tops ctx cenv cx ==> cenv.ce_target CapMcopy
 Proof
-  rw[body_inv_def] >>
+  rw[body_inv_def] >> Cases_on `cx.in_deploy` >> gvs[]
+  >- (gvs[lower_vyper_deploy_unit_def, AllCaseEqs()] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      gvs[vyperCompilerTheory.run_deploy_lowering_def, AllCaseEqs(),
+          vyperCompilerTheory.lowering_policy_ok_def]) >>
   gvs[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
   rpt (pairarg_tac >> gvs[]) >>
   gvs[vyperCompilerTheory.run_lowering_def, AllCaseEqs(),

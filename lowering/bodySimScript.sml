@@ -41,8 +41,11 @@ Ancestors
 (* ===== The frame ===== *)
 
 (* A frame of the lowered program: ctx is the context of tops's runtime
-   unit, cenv is a runtime function's compile env with the program's
-   function ids and parameter types (so compile_call gives an internal
+   unit, or of its deploy unit while the source deploys (cx.in_deploy:
+   the constructor and the internal functions it calls, which the deploy
+   unit packages with is_ctor_context, so ce_is_ctor), cenv is a compile
+   env with the program's function ids and parameter types (so
+   compile_call gives an internal
    call the label package_internal_fn gave the callee:
    compile_call_intcall_label), the program's events, and its locals in
    allocas, as build_compile_env makes every body's, and the source finds
@@ -55,14 +58,16 @@ Ancestors
 Definition body_inv_def:
   body_inv tops ctx cenv cx <=>
     supported_program tops /\
-    (?rpolicy unit. lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-                    ctx = unit.cu_context /\
-                    cenv.ce_target = rpolicy.rpol_target) /\
+    (?rpolicy unit.
+       (if cx.in_deploy then
+          ?rbc. lower_vyper_deploy_unit tops rpolicy rbc = SOME unit
+        else lower_vyper_runtime_unit tops rpolicy = SOME unit) /\
+       ctx = unit.cu_context /\ cenv.ce_target = rpolicy.rpol_target) /\
     get_module_code cx NONE = SOME tops /\
     cenv.ce_func_ids = build_func_ids 0 tops /\
     cenv.ce_func_param_types = build_func_param_types tops /\
     cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
-    ~cenv.ce_is_ctor /\ cenv.ce_alloca_locals /\
+    (cenv.ce_is_ctor <=> cx.in_deploy) /\ cenv.ce_alloca_locals /\
     ALL_DISTINCT
       (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
     cenv.ce_hashmap_info = build_hashmap_info tops /\
