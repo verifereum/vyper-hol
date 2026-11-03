@@ -29,6 +29,8 @@ Ancestors
   vyperPlaceStoragePreservation vyperValue vyperMachineFrame
   vyperTypeContractStaticMaps supportedDecls supportedStmts supportedExprs
   supportedTargets supportedStmtTraverse bodyStorageCases list
+Libs
+  vyperSourceSupplyLib
 
 (* Proved by one mutual induction over evaluate_ind; each clause is
    discharged by its case lemma from bodyStorageCases. *)
@@ -788,7 +790,13 @@ Resume body_oracle_storage_mutual[intcall_lock_success]:
    qpat_x_assum `!s0 results t0 prev s1 dflt_vs t1 s2 vs t2 s3 ce t3 s4 rtv t4 s5 t5 s6 cxf t6. _`
       (assume_tac o SIMP_RULE bool_ss [GSYM is_view_mut_def, GSYM lock_if_nr_def]) >>
    drule body_intcall_guard_apply >> disch_then assume_tac >>
+   vyperSourceSupplyLib.forward >>
    drule_all body_intcall_runtime_frame >> strip_tac >>
+   `source_supply (lock_st with scopes := [call_env])` by
+     (qpat_x_assum `lock_if_nr _ _ _ _ = _`
+        (assume_tac o REWRITE_RULE [lock_if_nr_def]) >>
+      vyperSourceSupplyLib.forward >>
+      asm_simp_tac bool_ss [vyperSourceSupplyFieldsTheory.source_supply_fields]) >>
    `call_evaluation_safe (cx with stk updated_by CONS (NONE,fn)) (int_calls_stmts ss)` by
      (drule call_evaluation_safe_push_body >> simp[] >>
       disch_then drule >> disch_then drule >> simp[]) >>
@@ -829,7 +837,7 @@ Resume body_oracle_storage_mutual[intcall_return]:
         vyperStorageBackendTheory.get_storage_def]) >>
    simp_tac (srw_ss()) [Once push_function_def, return_def,
      Excl "unlock_if_nr_def", Excl "lock_if_nr_def", Excl "lift_option_type_def"] >> strip_tac >>
-   irule (SIMP_RULE bool_ss [bind_def, return_def] body_intcall_return_storage) >>
+   irule (SIMP_RULE bool_ss [bind_def, return_def] body_intcall_actual_return_storage) >>
    goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
    simp_tac bool_ss [GSYM ignore_bind_def] >>
    qpat_x_assum `(case _ of _ => _ | _ => _) = (res,st')`
