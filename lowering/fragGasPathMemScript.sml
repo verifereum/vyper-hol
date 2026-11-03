@@ -43,6 +43,14 @@ Inductive gas_path_mem:
      gas_path_mem ctx fn s n r)
 End
 
+Theorem edge_check_mono[local]:
+  (revert_forward_at bb s.vs_inst_idx \/ mem_safe_step a ctx inst s) /\
+  (!e. step_inst a ctx inst s <> Error e) /\ a <= b ==>
+  (revert_forward_at bb s.vs_inst_idx \/ mem_safe_step b ctx inst s)
+Proof
+  metis_tac[cj 1 mem_safe_fuel_mono_up]
+QED
+
 (* A normal landing transfers the existing conditional continuation check;
    a terminal path supplies its own safe run. *)
 Theorem gas_path_mem_exec:
