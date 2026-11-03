@@ -572,3 +572,47 @@ Proof
     (irule same_label_same_block >> fs[wf_function_def, fn_labels_def] >> metis_tac[]) >>
   gvs[scfg_phi_safe_def, EVERY_MEM] >> metis_tac[]
 QED
+
+Theorem chain_merge_phi_output_unique:
+  wf_function fn /\ first_block_no_preds fn /\ scfg_phi_safe fn /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+      (bb_succs (merge_blocks a b))) /\
+  MEM bb fn'.fn_blocks /\ fn_reachable fn' bb.bb_label /\
+  MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\ MEM v inst.inst_outputs /\
+  MEM bb' fn'.fn_blocks /\ fn_reachable fn' bb'.bb_label /\
+  MEM inst' bb'.bb_instructions /\ MEM v inst'.inst_outputs ==> inst' = inst
+Proof
+  strip_tac >> drule_all chain_merge_reachable_inst_origin >>
+  disch_then (qx_choose_then `src` (qx_choose_then `orig` strip_assume_tac)) >>
+  qpat_x_assum `MEM inst' bb'.bb_instructions` kall_tac >>
+  drule_all chain_merge_reachable_inst_origin >>
+  disch_then (qx_choose_then `src2` (qx_choose_then `orig2` strip_assume_tac)) >>
+  `orig = orig2` by metis_tac[scfg_phi_safe_unique_output] >>
+  `src = src2` by metis_tac[wf_function_instruction_block] >>
+  gvs[]
+QED
+
+Theorem do_merge_jump_phi_output_unique:
+  wf_function fn /\ first_block_no_preds fn /\ scfg_phi_safe fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') /\
+  MEM bb fn'.fn_blocks /\ fn_reachable fn' bb.bb_label /\
+  MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\ MEM v inst.inst_outputs /\
+  MEM bb' fn'.fn_blocks /\ fn_reachable fn' bb'.bb_label /\
+  MEM inst' bb'.bb_instructions /\ MEM v inst'.inst_outputs ==> inst' = inst
+Proof
+  strip_tac >> drule_all do_merge_jump_reachable_inst_origin >>
+  disch_then (qx_choose_then `src` (qx_choose_then `orig`
+    (qx_choose_then `target` strip_assume_tac))) >>
+  qpat_x_assum `MEM inst' bb'.bb_instructions` kall_tac >>
+  drule_all do_merge_jump_reachable_inst_origin >>
+  disch_then (qx_choose_then `src2` (qx_choose_then `orig2`
+    (qx_choose_then `target2` strip_assume_tac))) >>
+  `orig = orig2` by metis_tac[scfg_phi_safe_unique_output] >>
+  `src = src2` by metis_tac[wf_function_instruction_block] >>
+  gvs[]
+QED
