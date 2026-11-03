@@ -1120,6 +1120,29 @@ Proof
   fs[lookup_block_def, replace_block_def]
 QED
 
+Theorem update_succ_phi_labels_block_projection:
+  !succs bbs. ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
+  (!inst. project (subst_label_inst old_lbl new_lbl inst) = project inst) ==>
+  MAP (\bb. (bb.bb_label, MAP project bb.bb_instructions))
+    (update_succ_phi_labels old_lbl new_lbl bbs succs) =
+  MAP (\bb. (bb.bb_label, MAP project bb.bb_instructions)) bbs
+Proof
+  Induct_on `succs` >> fs[update_succ_phi_labels_def] >>
+  rpt strip_tac >> Cases_on `lookup_block h bbs` >> simp[] >>
+  rename1 `lookup_block h bbs = SOME bb` >>
+  `bb.bb_label = h` by metis_tac[lookup_block_member_label] >>
+  qmatch_goalsub_abbrev_tac `FOLDL stepfn bs succs` >>
+  `MAP (\b. (b.bb_label, MAP project b.bb_instructions)) bs =
+   MAP (\b. (b.bb_label, MAP project b.bb_instructions)) bbs` by
+    (simp[Abbr `bs`] >> irule replace_block_projection >>
+     simp[MAP_MAP_o, combinTheory.o_DEF] >>
+     irule MAP_CONG >> simp[] >> rpt strip_tac >> IF_CASES_TAC >> simp[]) >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) bs)` by
+    simp[Abbr `bs`, cfgTransformPropsTheory.fn_labels_replace_block] >>
+  first_x_assum (qspec_then `bs` mp_tac) >>
+  simp[Abbr `stepfn`]
+QED
+
 Theorem update_succ_phi_labels_projection:
   !succs bbs. ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
   (!inst. project (subst_label_inst old_lbl new_lbl inst) = project inst) ==>
@@ -1127,24 +1150,11 @@ Theorem update_succ_phi_labels_projection:
     (update_succ_phi_labels old_lbl new_lbl bbs succs) =
   MAP (\bb. MAP project bb.bb_instructions) bbs
 Proof
-  Induct_on `succs` >> fs[update_succ_phi_labels_def] >>
-  rpt strip_tac >> Cases_on `lookup_block h bbs` >> simp[] >>
-  rename1 `lookup_block h bbs = SOME bb` >>
-  `MAP (\b. MAP project b.bb_instructions)
-    (replace_block h (bb with bb_instructions :=
-      MAP (\inst. if inst.inst_opcode <> PHI then inst
-                  else subst_label_inst old_lbl new_lbl inst)
-        bb.bb_instructions) bbs) =
-   MAP (\b. MAP project b.bb_instructions) bbs` by
-    (irule replace_block_projection >> simp[MAP_MAP_o, combinTheory.o_DEF] >>
-     irule MAP_CONG >> simp[] >> gen_tac >> strip_tac >>
-     IF_CASES_TAC >> simp[]) >>
-  `bb.bb_label = h` by metis_tac[lookup_block_member_label] >>
-  qmatch_goalsub_abbrev_tac `FOLDL stepfn bs succs` >>
-  `ALL_DISTINCT (MAP (\b. b.bb_label) bs)` by
-    simp[Abbr `bs`, cfgTransformPropsTheory.fn_labels_replace_block] >>
-  qpat_x_assum `!bbs. _` (qspec_then `bs` mp_tac) >>
-  simp[Abbr `stepfn`, Abbr `bs`]
+  rpt strip_tac >>
+  drule_all update_succ_phi_labels_block_projection >>
+  disch_then (qspec_then `succs` mp_tac) >>
+  disch_then (mp_tac o Q.AP_TERM `MAP SND`) >>
+  simp[MAP_MAP_o, combinTheory.o_DEF]
 QED
 
 Theorem update_succ_phi_labels_ids:
