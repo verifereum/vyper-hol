@@ -43,12 +43,17 @@ Proof
   `fn_sigs_live deploy_art.cta_fn_sigs
      (initial_evaluation_context sources layouts tx NONE)` by
     (irule check_contract_fn_sigs_live_initial >> metis_tac[]) >>
+  `bare_global_assignable_complete deploy_art.cta_bare_global_assignable
+     (initial_evaluation_context sources layouts tx NONE with in_deploy := T)` by
+    metis_tac[check_contract_bare_global_assignable_complete_deploy] >>
   `deploy_art.cta_bare_globals = runtime_art.cta_bare_globals /\
-   deploy_art.cta_bare_global_assignable = runtime_art.cta_bare_global_assignable /\
    deploy_art.cta_toplevel_vtypes = runtime_art.cta_toplevel_vtypes /\
    deploy_art.cta_flag_members = runtime_art.cta_flag_members` by
     (gvs[check_contract_def] >>
      metis_tac[build_contract_type_artifact_nonsig_mode_irrelevant]) >>
+  drule check_contract_bare_global_assignable_consistent_deploy >>
+  disch_then (qspecl_then [`tx`, `sources`] mp_tac) >>
+  simp[] >> strip_tac >>
   gvs[env_context_consistent_def, artifact_env_def,
       get_module_code_def, get_tenv_def, current_module_def,
       initial_evaluation_context_def, lookup_var_slot_from_layout_def,
@@ -348,12 +353,11 @@ Theorem checked_deployment_constants_establish_initial_env_immutables_consistent
 Proof
   strip_tac >>
   `deploy_art.cta_bare_globals = runtime_art.cta_bare_globals /\
-   deploy_art.cta_bare_global_assignable = runtime_art.cta_bare_global_assignable /\
    deploy_art.cta_toplevel_vtypes = runtime_art.cta_toplevel_vtypes` by
     (gvs[check_contract_def] >>
      metis_tac[build_contract_type_artifact_nonsig_mode_irrelevant]) >>
   irule immutables_ready_env_immutables_consistent >>
-  qexists `artifact_env runtime_art mods NONE` >>
+  qexists `artifact_env deploy_art mods NONE` >>
   gvs[artifact_env_def] >>
   irule checked_deployment_constants_establish_immutables_ready >>
   qexistsl [`am`,`imms`,`layouts`,`mods`,`sources`,`tx.target`,`tx`] >> simp[]

@@ -3235,19 +3235,42 @@ Proof
     simp[]
 QED
 
-val mul_sdiv_mismatch_tac =
-  strip_tac >>
+Theorem mul_min_input_width[local]:
+  ∀ty. is_signed_type ty ∧
+    in_type_range ty (math_val ty (n2w (2 ** 255) : bytes32)) ∧
+    type_bits ty ≤ 256 ⇒ type_bits ty = 256
+Proof
+  `w2i (n2w (2 ** 255) : bytes32) = -&(2 ** 255)` by EVAL_TAC >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `in_type_range _ _` mp_tac >>
+  asm_simp_tac bool_ss [math_val_def, in_type_range_def, LET_THM] >>
+  disch_then (assume_tac o CONJUNCT1) >>
+  `2 ** 255 ≤ 2 ** (type_bits ty - 1)` by
+    (qpat_x_assum `-_ ≤ -_` mp_tac >>
+     simp[integerTheory.INT_LE_NEG, integerTheory.INT_LE]) >>
+  CCONTR_TAC >>
+  `type_bits ty - 1 < 255` by decide_tac >>
+  `2 ** (type_bits ty - 1) < 2 ** 255` by simp[] >>
+  decide_tac
+QED
+
+Theorem mul_sdiv_mismatch[local]:
+  ∀(a:bytes32) b ty.
+    b ≠ 0w ∧
+    ¬(INT_MIN (:256) ≤ w2i a * w2i b ∧ w2i a * w2i b ≤ INT_MAX (:256)) ∧
+    is_signed_type ty ∧ in_type_range ty (math_val ty a) ∧ type_bits ty ≤ 256 ∧
+    safe_sdiv (a * b) b = a ⇒
+    type_bits ty = 256 ∧ a = n2w (2 ** 255) ∧ b = n2w (2 ** 256 − 1)
+Proof
+  rpt gen_tac >> strip_tac >>
   reverse (Cases_on `a = n2w (2 ** 255) ∧ b = n2w (2 ** 256 − 1)`)
-  >- (`safe_sdiv (a * b) b ≠ a` suffices_by simp[] >>
-      irule safe_sdiv_mul_overflow >>
-      rpt conj_tac >- first_assum ACCEPT_TAC >- (simp[int_min_256, int_max_256] >> fs[]) >>
-      first_assum ACCEPT_TAC) >>
+  >- metis_tac[safe_sdiv_mul_overflow] >>
   `type_bits ty = 256` suffices_by simp[] >>
-  CCONTR_TAC >> `type_bits ty < 256` by decide_tac >>
-  `2 ** (type_bits ty − 1) < 2 ** 255` by simp[] >>
-  qpat_x_assum `in_type_range ty (math_val ty a)` mp_tac >>
-  qpat_x_assum `a = _ ∧ _` (fn th => rewrite_tac [CONJUNCT1 th]) >>
-  simp[math_val_def, in_type_range_def, w2i_int_min_w_256] >> intLib.ARITH_TAC;
+  irule mul_min_input_width >>
+  qpat_x_assum `a = _ ∧ _` (assume_tac o CONJUNCT1) >>
+  qpat_x_assum `in_type_range _ _` mp_tac >>
+  asm_rewrite_tac[] >> simp[]
+QED
 
 (* An integer multiplication whose product is out of the type's range
    reverts: by the clamp up to 128 bits, by the division check when the
@@ -3325,7 +3348,10 @@ Proof
            ≠ a ∨
          (is_signed_type ty ∧ type_bits ty = 256 ∧ a = n2w (2 ** 255) ∧
           b = n2w (2 ** 256 − 1))` by
-          (Cases_on `is_signed_type ty` >> fs[] >- mul_sdiv_mismatch_tac >- mul_sdiv_mismatch_tac >>
+          (Cases_on `is_signed_type ty` >> fs[] >- (strip_tac >> qspecl_then [`a`, `b`, `ty`] mp_tac mul_sdiv_mismatch >>
+               simp[int_min_256, int_max_256])
+           >- (strip_tac >> qspecl_then [`a`, `b`, `ty`] mp_tac mul_sdiv_mismatch >>
+               simp[int_min_256, int_max_256]) >>
            irule safe_div_mul_overflow >> fs[]) >>
         qspecl_then [`x`, `y`, `res`, `is_signed_type ty`, `type_bits ty`, `cs'`,
                      `cs''`, `ss'`, `a`, `b`] mp_tac mul_overflow_check_reverts >>
