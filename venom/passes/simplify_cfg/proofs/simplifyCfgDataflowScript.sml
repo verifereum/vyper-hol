@@ -516,3 +516,94 @@ Proof
   strip_tac >> qpat_x_assum `FILTER _ q = p` (SUBST1_TAC o SYM) >>
   simp[MEM_FILTER]
 QED
+
+Theorem remove_unreachable_blocks_def_on_all_paths:
+  wf_function fn /\ def_on_all_paths fn bb point v ==>
+  def_on_all_paths (remove_unreachable_blocks fn) bb point v
+Proof
+  strip_tac >> simp[def_on_all_paths_def] >> rpt strip_tac >>
+  `is_fn_path fn path` by metis_tac[remove_unreachable_blocks_path_input] >>
+  `fn_entry_label fn = SOME (HD path)` by
+    metis_tac[remove_unreachable_blocks_entry] >>
+  qpat_x_assum `def_on_all_paths fn bb point v` mp_tac >>
+  simp[def_on_all_paths_def] >>
+  disch_then (qspec_then `path` mp_tac) >> simp[] >> strip_tac
+  >- (disj1_tac >> qexistsl [`k`, `def_bb`, `def_inst`] >> simp[] >>
+      irule (iffRL remove_unreachable_blocks_member) >> simp[] >>
+      irule entry_path_member_reachable >>
+      qexistsl [`HD path`, `path`] >> simp[] >>
+      simp[MEM_EL] >> qexists `k` >> simp[]) >>
+  disj2_tac >> metis_tac[]
+QED
+
+Theorem remove_unreachable_blocks_defs_reach_uses:
+  wf_function fn /\ fn_defs_reach_uses fn ==>
+  fn_defs_reach_uses (remove_unreachable_blocks fn)
+Proof
+  strip_tac >> simp[fn_defs_reach_uses_def] >> rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[remove_unreachable_blocks_member] >>
+  Cases_on `inst.inst_opcode = PHI` >> simp[] >> rpt strip_tac
+  >- (irule remove_unreachable_blocks_def_on_all_paths >> simp[] >>
+      `MEM pred_bb fn.fn_blocks` by metis_tac[remove_unreachable_blocks_member] >>
+      `fn_cfg_edge fn pred_bb.bb_label bb.bb_label` by
+        metis_tac[remove_unreachable_blocks_edge_input] >>
+      fs[fn_defs_reach_uses_def] >> metis_tac[]) >>
+  irule remove_unreachable_blocks_def_on_all_paths >> simp[] >>
+  fs[fn_defs_reach_uses_def] >> metis_tac[]
+QED
+
+Theorem remove_unreachable_blocks_def_available_at:
+  wf_function fn /\ MEM bb (remove_unreachable_blocks fn).fn_blocks /\
+  def_available_at fn bb point v ==>
+  def_available_at (remove_unreachable_blocks fn) bb point v
+Proof
+  simp[def_available_at_def] >> rpt strip_tac >>
+  qexistsl [`def_bb`, `def_inst`] >> simp[] >> conj_tac
+  >- (simp[remove_unreachable_blocks_member] >>
+      metis_tac[fn_dominates_dom_reachable]) >>
+  irule remove_unreachable_blocks_dominates >> simp[]
+QED
+
+Theorem remove_unreachable_blocks_phi_edge_uses_wf:
+  wf_function fn /\ MEM bb (remove_unreachable_blocks fn).fn_blocks /\
+  phi_edge_uses_wf fn bb inst ==>
+  phi_edge_uses_wf (remove_unreachable_blocks fn) bb inst
+Proof
+  strip_tac >>
+  qpat_x_assum `phi_edge_uses_wf fn bb inst` mp_tac >>
+  pure_rewrite_tac[phi_edge_uses_wf_def] >> strip_tac >>
+  simp[phi_edge_uses_wf_def] >> conj_tac
+  >- (qx_gen_tac `pred` >> eq_tac
+      >- metis_tac[remove_unreachable_blocks_edge_input] >>
+      strip_tac >>
+      `?v. MEM (pred,v) (phi_pairs inst.inst_operands)` by
+        (Cases_on `p` >> gvs[] >> metis_tac[]) >>
+      qpat_x_assum `!pred v. _` drule >> strip_tac >>
+      irule remove_unreachable_blocks_edge >> fs[wf_function_def] >>
+      fs[def_available_at_def] >> metis_tac[fn_dominates_def]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!pred v. _` drule >> strip_tac >>
+  qexists `pred_bb` >> simp[] >>
+  `MEM pred_bb (remove_unreachable_blocks fn).fn_blocks` by
+    (simp[remove_unreachable_blocks_member] >>
+     fs[def_available_at_def] >>
+     metis_tac[fn_dominates_def]) >>
+  simp[] >> conj_tac
+  >- (irule remove_unreachable_blocks_edge >>
+      gvs[wf_function_def, def_available_at_def, fn_dominates_def] >>
+      metis_tac[]) >>
+  irule remove_unreachable_blocks_def_available_at >> simp[]
+QED
+
+Theorem remove_unreachable_blocks_def_dominates_uses:
+  wf_function fn /\ def_dominates_uses fn ==>
+  def_dominates_uses (remove_unreachable_blocks fn)
+Proof
+  strip_tac >> simp[def_dominates_uses_def] >> rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[remove_unreachable_blocks_member] >>
+  Cases_on `inst.inst_opcode = PHI` >> simp[]
+  >- (irule remove_unreachable_blocks_phi_edge_uses_wf >> simp[] >>
+      fs[def_dominates_uses_def] >> metis_tac[]) >>
+  rpt strip_tac >> irule remove_unreachable_blocks_def_available_at >> simp[] >>
+  fs[def_dominates_uses_def] >> metis_tac[]
+QED
