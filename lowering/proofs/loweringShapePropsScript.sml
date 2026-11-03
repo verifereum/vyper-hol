@@ -13299,3 +13299,25 @@ Proof
   rpt gen_tac >> BETA_TAC >>
   irule comp_ignore_bind_labels >> simp[emit_void_labels, emit_op_labels]
 QED
+
+Theorem compile_literal_vv_labels:
+  !ty l s P. cs_extends s (SND (compile_literal_vv ty l s)) /\
+    EVERY P (added_labels s (SND (compile_literal_vv ty l s)))
+Proof
+  rpt gen_tac >> Cases_on `l`
+  >~ [`BoolL b`] >- (Cases_on `b` >>
+      simp[compile_literal_vv_def, comp_return_labels])
+  >~ [`IntL n`] >- simp[compile_literal_vv_def, comp_return_labels]
+  >~ [`DecimalL n`] >- simp[compile_literal_vv_def, comp_return_labels]
+  >~ [`StringL str`] >- (simp[compile_literal_vv_def] >>
+      irule comp_bind_labels >>
+      simp[comp_return_labels, compile_bytelike_literal_labels])
+  >> Cases_on `ty` >>
+  simp[compile_literal_vv_def, comp_return_labels] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[comp_return_labels] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[comp_return_labels] >>
+  irule comp_bind_labels >>
+  simp[comp_return_labels, compile_bytelike_literal_labels]
+QED
