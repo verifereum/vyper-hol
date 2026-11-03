@@ -665,6 +665,27 @@ Proof
   pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
 
+Theorem run_grouped_lowering_entry:
+  run_grouped_lowering groups internal_fns fallback_fn rpolicy entry_label =
+    SOME unit ==>
+  unit.cu_context.ctx_entry = SOME entry_label /\
+  ?fn. lookup_function entry_label unit.cu_context.ctx_functions = SOME fn
+Proof
+  simp[run_grouped_lowering_def] >> rpt strip_tac >>
+  pairarg_tac >>
+  gvs[AllCaseEqs(), extract_context_with_internals_def, mk_venom_context_def,
+      lookup_function_def, mk_raw_function_def, listTheory.FIND_thm]
+QED
+
+Theorem run_grouped_lowering_global_reserved:
+  run_grouped_lowering groups internal_fns fallback_fn rpolicy entry = SOME u ==>
+  u.cu_context.ctx_global_reserved = []
+Proof
+  simp[run_grouped_lowering_def, extract_context_with_internals_def,
+       mk_venom_context_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
 Theorem run_deploy_lowering_static_integrity:
   run_deploy_lowering has_constructor rpolicy runtime_bytecode immutables_len
     constructor_args data_size ctor_internal_fns cenv (ctor_stmts : stmt list) is_payable

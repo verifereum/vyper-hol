@@ -1644,7 +1644,8 @@ Proof
   rw[body_inv_def] >>
   gvs[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
   rpt (pairarg_tac >> gvs[]) >>
-  gvs[vyperCompilerTheory.run_lowering_def, AllCaseEqs(),
+  gvs[vyperCompilerTheory.run_lowering_def,
+      vyperCompilerTheory.run_grouped_lowering_def, AllCaseEqs(),
       vyperCompilerTheory.lowering_policy_ok_def]
 QED
 

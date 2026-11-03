@@ -926,23 +926,27 @@ Theorem lower_vyper_runtime_unit_global_reserved:
 Proof
   rpt gen_tac >> simp[lower_vyper_runtime_unit_def] >>
   pairarg_tac >> gvs[AllCaseEqs()] >> strip_tac >>
-  irule vyperCompilerTheory.run_lowering_global_reserved >> metis_tac[]
+  metis_tac[vyperCompilerTheory.run_lowering_global_reserved,
+            vyperCompilerTheory.run_grouped_lowering_global_reserved]
 QED
 
 (* ===== S3: memory safety ===== *)
 
 (* A unit that lowers comes from run_lowering with the entry label
    "__entry". *)
-Theorem lower_vyper_runtime_unit_run_lowering:
+Theorem lower_vyper_runtime_unit_context_entry:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
-    ?selectors external_fns internal_fns fallback_fn entry_info.
-      run_lowering selectors external_fns internal_fns fallback_fn rpolicy
-        0 0 [] entry_info "__entry" = SOME unit
+    lowering_context_ok unit.cu_context /\
+    unit.cu_context.ctx_entry = SOME "__entry" /\
+    ?fn. lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn
 Proof
-  rpt gen_tac >> simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
-  Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
-  strip_tac >> metis_tac[]
+  rpt gen_tac >> simp[lower_vyper_runtime_unit_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> strip_tac >>
+  metis_tac[vyperCompilerTheory.run_lowering_context_ok,
+            vyperCompilerTheory.run_lowering_entry,
+            vyperCompilerTheory.run_grouped_lowering_context,
+            vyperCompilerTheory.run_grouped_lowering_entry]
 QED
 
 (* The run from the unit's entry is memory-safe: every instruction it
@@ -994,9 +998,7 @@ Theorem lower_vyper_runtime_unit_memory_ok:
     ==> raw_unit_memory_ok unit.cu_context vs
 Proof
   rpt strip_tac >>
-  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  drule run_lowering_context_ok >> strip_tac >>
-  drule run_lowering_entry >> strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   drule lowering_context_ok_bridge >> strip_tac >>
   drule lowering_context_ok_integrity >> strip_tac >>
   drule lowering_context_ok_static_integrity >> strip_tac >>
