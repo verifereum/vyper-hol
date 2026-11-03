@@ -190,7 +190,26 @@ Theorem compile_guarded_body_end_mem_safe:
     s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
     !fuel. mem_safe_run fuel ctx fn s /\ (!e. run_from fuel ctx fn s <> Error e)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  Cases_on `rt` >>
+  gvs[compile_guarded_body_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, comp_get_def, emitHelperTheory.emit_inst_def,
+      fresh_id_def, emit_def] >>
+  qmatch_asmsub_abbrev_tac `sb.cs_current_insts ++ [inst]` >>
+  drule fn_has_code_same_block >> simp[] >>
+  strip_tac >>
+  `get_instruction bb s.vs_inst_idx = SOME inst` by simp[] >>
+  gen_tac >>
+  `mem_safe_step fuel ctx inst s` by
+    simp[Abbr `inst`, mem_safe_step_non_invoke,
+         inst_mem_below_frontier_def, source_memory_read_ranges_def,
+         codegenRelTheory.source_memory_write_ranges_def, mk_inst_def] >>
+  `?r. step_inst fuel ctx inst s = r /\
+       (!s'. r <> OK s') /\ (!e. r <> Error e)` by
+    (simp[Abbr `inst`, step_inst_non_invoke] >>
+     pure_once_rewrite_tac[step_inst_base_def] >> simp[mk_inst_def]) >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
+  drule_all run_from_step_exit >> simp[]
 QED
 
 (* ===== S3 ===== *)
