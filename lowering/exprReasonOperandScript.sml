@@ -476,6 +476,9 @@ Theorem reason_uint2str[local]:
 Proof
   simp[builtinStringsTheory.compile_uint2str_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  ntac 10 (pairarg_tac >> gvs[]) >>
+  ntac 10 (pairarg_tac >> gvs[]) >>
+  ntac 10 (pairarg_tac >> gvs[]) >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[]
 QED
 

@@ -3356,7 +3356,7 @@ Resume eval_scc_type_sound_results_mutual[If]:
   qpat_x_assum `st1 with scopes := FEMPTY::st1.scopes = st2` kall_tac >>
   conj_tac >- (
     rpt strip_tac >> qunabbrev_tac`P` >> BETA_TAC >>
-    simp[Abbr`st2`] >>
+    simp_tac (srw_ss()) [Abbr`st2`] >> ASM_REWRITE_TAC[] >>
     conj_tac >- (
       irule push_scope_preserves_state_well_typed >>
       qexistsl_tac [`st1`,`()`] >>
@@ -7512,7 +7512,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_CreateTarget]:
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
                          type_check_def, assert_def, return_def, raise_def,
                          lift_option_type_def, get_accounts_def, update_accounts_def] >>
-    simp[] >>
+    simp_tac (srw_ss()) [] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
@@ -7676,7 +7676,7 @@ Resume eval_scc_type_sound_results_mutual[Trace_Results_cons]:
   qpat_x_assum `well_typed_exprs env (e::es)` mp_tac >>
   rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
   qpat_x_assum `eval_expr_results _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
     (drule_at (Pat `eval_expr _ _ _ = _`)) >>

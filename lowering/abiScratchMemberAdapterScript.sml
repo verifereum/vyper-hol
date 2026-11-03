@@ -143,7 +143,9 @@ Theorem abi_scratch_dynamic_finish_raw_transport:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_decoder_budget_site_bounds >> strip_tac >>
-  `b+cap < dimword (:256)` by fs[abi_decoder_budget_def] >>
+  `b+cap < dimword (:256)` by
+    (qpat_assum `abi_decoder_budget _ _ _ _ initial`
+       (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_decoder_budget_def]) >> simp[]) >>
   `h < dimword (:256) /\ slot < dimword (:256) /\ h+32 <= d+output_size` by decide_tac >>
   `MEM (slot,32) (abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial)` by
     (irule abi_scratch_registered_member >> asm_simp_tac (srw_ss()) [] >>

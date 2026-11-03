@@ -179,7 +179,15 @@ Theorem bytestring_copy_len_word[local]:
 Proof
   rpt strip_tac >>
   `(i2w (-32) : bytes32) = -32w` by simp[integer_wordTheory.i2w_def] >>
-  `!w:bytes32. w && -32w = (w >>> 5) << 5` by blastLib.BBLAST_TAC >>
+  `!w:bytes32. w && -32w = (w >>> 5) << 5` by
+    (`(-32w:bytes32) = (~0w) << 5` by
+       simp[wordsTheory.word_1comp_n2w, wordsTheory.word_lsl_n2w] >>
+     pop_assum SUBST1_TAC >>
+     rw_tac (arith_ss++fcpLib.FCP_ss)
+       [wordsTheory.word_and_def, wordsTheory.word_lsr_def,
+        wordsTheory.word_lsl_def, wordsTheory.word_1comp_def,
+        wordsTheory.word_0] >>
+     Cases_on `5 <= i` >> gvs[]) >>
   `(L + 31) DIV 32 * 32 <= L + 31` by
     (qspec_then `32` mp_tac DIVISION >> simp[] >>
      disch_then (qspec_then `L + 31` mp_tac) >> decide_tac) >>
