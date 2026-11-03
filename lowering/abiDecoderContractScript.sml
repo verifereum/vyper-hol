@@ -96,15 +96,15 @@ QED
 (* Empty tuples emit no instructions when the sentinel bound is used.
    P is unrestricted: no success assumption is needed. *)
 Theorem abi_decode_empty_fragment:
-  compile_abi_decode_to_buf dst src opc (Lit 0w) (DecComplex F []) st = ((),st') ==>
+  compile_abi_decode_to_buf dst src opc base_op (Lit 0w) (DecComplex F []) st = ((),st') ==>
   frag_exec ctx st st' P P (K F)
 Proof
   simp[compile_abi_decode_to_buf_def, comp_return_def] >>
   strip_tac >> gvs[] >> irule frag_exec_refl >> simp[]
 QED
 
-Theorem abi_decode_word_sequence:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord NoClamp) st = ((),st') /\
+Theorem abi_decode_static_word_sequence[local]:
+  compile_abi_decode_static src dst opc (\v. compile_abi_clamp_basetype v NoClamp) st = ((),st') /\
   abi_decode_source_opcode opc /\ eval_operand src s = SOME p /\
   eval_operand dst s = SOME (n2w d) /\ d < dimword (:256) /\
   fresh_vars_wrt st s ==>
@@ -150,18 +150,73 @@ Proof
   gvs[abi_decode_source_opcode_def, is_terminator_def]
 QED
 
+Theorem abi_decode_addr_shape[local]:
+  compile_abi_dec_addr base_op src st = (addr,st') ==>
+  same_blocks st st' /\ inst_extends st st' /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st st')
+Proof
+  Cases_on `base_op = Lit 0w` >>
+  simp[compile_abi_dec_addr_def, comp_return_def] >> strip_tac >>
+  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_var_def, fresh_id_def, emit_def, inst_extends_def,
+      same_blocks_def, emitted_insts_def,
+      rich_listTheory.DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def,
+      rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Theorem abi_decode_word_sequence:
+  compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord NoClamp) st = ((),st') /\
+  abi_decode_source_opcode opc /\ eval_operand src s = SOME p /\
+  eval_operand base_op s = SOME base_word /\
+  eval_operand dst s = SOME (n2w d) /\ d < dimword (:256) /\
+  fresh_vars_wrt st s ==>
+  ?s'. run_inst_seq (emitted_insts st st') s = OK s' /\
+    val_in_memory (BaseTV (UintT 256))
+      (IntV (&w2n (abi_decode_load opc (base_word + p) s))) d s'.vs_memory /\
+    abi_decode_frame d 32 s s' /\ fresh_vars_wrt st' s' /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op s' = SOME w) /\
+    same_blocks st st' /\
+    st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts st st')
+Proof
+  simp[Once compile_abi_decode_to_buf_def, comp_bind_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  `eval_operand base_op s = SOME (n2w (w2n base_word)) /\
+   eval_operand src s = SOME (n2w (w2n p))` by simp[] >>
+  drule_all compile_abi_dec_addr_sequence >> strip_tac >>
+  `eval_operand dst t = SOME (n2w d)` by metis_tac[] >>
+  drule_all abi_decode_static_word_sequence >> strip_tac >>
+  drule abi_decode_addr_shape >> strip_tac >>
+  `cs'.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs'` by
+    (fs[inst_extends_def]) >>
+  `emitted_insts st st' = emitted_insts st cs' ++ emitted_insts cs' st'` by
+    (irule emitted_insts_append >> simp[]) >>
+  `run_inst_seq (emitted_insts st st') s = OK s'` by
+    metis_tac[run_inst_seq_append] >>
+  `w2n (base_word + p) = (w2n base_word + w2n p) MOD dimword (:256)` by
+    (metis_tac[word_add_n2w, n2w_w2n, w2n_n2w]) >>
+  qexists_tac `s'` >>
+  gvs[GSYM word_add_n2w, mload_def, abi_decode_load_def, abi_decode_source_def,
+      abi_decode_frame_def, same_blocks_def, listTheory.EVERY_APPEND,
+      listTheory.APPEND_ASSOC] >>
+  metis_tac[]
+QED
+
 Definition abi_decode_word_pre_def:
-  abi_decode_word_pre st src dst opc p d w s <=>
+  abi_decode_word_pre st src dst opc base_op base_word p d w s <=>
     abi_decode_source_opcode opc /\ fresh_vars_wrt st s /\
     eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
-    d + 32 <= dimword (:256) /\ abi_decode_load opc p s = w
+    eval_operand base_op s = SOME base_word /\
+    d + 32 <= dimword (:256) /\ abi_decode_load opc (base_word + p) s = w
 End
 
 Theorem abi_decode_word_fragment:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord NoClamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord NoClamp) st = ((),st') /\
   abi_decode_source_opcode opc ==>
   frag_exec ctx st st'
-    (\s. s = s0 /\ abi_decode_word_pre st src dst opc p d w s)
+    (\s. s = s0 /\ abi_decode_word_pre st src dst opc base_op base_word p d w s)
     (\s'. val_in_memory (BaseTV (UintT 256)) (IntV (&w2n w)) d s'.vs_memory /\
           abi_decode_frame d 32 s0 s')
     (K F)
@@ -173,7 +228,8 @@ Proof
       `d < dimword (:256)` by decide_tac >>
       drule_all abi_decode_word_sequence >> strip_tac >>
       gvs[abi_decode_frame_def] >> metis_tac[]) >>
-  gvs[compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  Cases_on `base_op = Lit 0w` >>
+  gvs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_static_def,
       compile_abi_clamp_basetype_def, comp_bind_def, comp_ignore_bind_def,
       comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
       fresh_id_def, emit_def, emitted_insts_def,
@@ -211,7 +267,7 @@ Proof
 QED
 
 Theorem abi_decode_empty_bounded_sequence:
-  compile_abi_decode_to_buf dst src opc hi (DecComplex F []) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecComplex F []) st = ((),st') /\
   hi <> Lit 0w /\ fresh_vars_wrt st s /\
   eval_operand src s = SOME p /\ eval_operand hi s = SOME h /\
   w2n p <= w2n h ==>
@@ -239,7 +295,7 @@ Proof
 QED
 
 Theorem abi_decode_empty_bounded_fragment:
-  compile_abi_decode_to_buf dst src opc hi (DecComplex F []) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecComplex F []) st = ((),st') /\
   hi <> Lit 0w ==>
   frag_exec ctx st st'
     (\s. s = s0 /\ fresh_vars_wrt st s /\
