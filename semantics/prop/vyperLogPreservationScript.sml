@@ -2633,15 +2633,32 @@ Theorem external_entry_log_extends[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `_ st = (res,st')` mp_tac >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-       vyperStateTheory.raise_def, vyperStateTheory.return_def,
-       vyperStateTheory.set_scopes_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac send_call_value_logs >>
-  imp_res_tac eval_external_defaults_log_extends >>
-  imp_res_tac eval_stmts_log_extends >>
-  res_tac >> gvs[log_extends_def] >>
-  metis_tac[rich_listTheory.IS_PREFIX_TRANS, rich_listTheory.IS_PREFIX_REFL]
+  simp_tac std_ss [vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def] >>
+  Cases_on `send_call_value mut cx st` >>
+  `r.logs = st.logs` by (drule send_call_value_logs >> simp[]) >>
+  Cases_on `q` >> simp_tac (srw_ss()) []
+  >- (Cases_on `eval_external_defaults cx es r` >>
+      rename1 `eval_external_defaults cx es r = (dr,s2)` >>
+      `log_extends r s2` by (drule eval_external_defaults_log_extends >> simp[]) >>
+      Cases_on `dr` >> simp_tac (srw_ss()) []
+      >- (rename1 `eval_external_defaults cx es r = (INL dvs,s2)` >>
+          Cases_on `bind_arguments tenv args (vals ++ dvs)` >>
+          simp_tac (srw_ss()) [vyperStateTheory.raise_def,
+            vyperStateTheory.set_scopes_def, vyperStateTheory.return_def,
+            vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def]
+          >- (strip_tac >> gvs[log_extends_def]) >>
+          rename1 `bind_arguments _ _ _ = SOME env` >>
+          Cases_on `lock_action (s2 with scopes := [env])` >>
+          rename1 `lock_action _ = (lr,s3)` >>
+          `s3.logs = s2.logs` by
+            (res_tac >> fs[]) >>
+          Cases_on `lr` >> simp_tac (srw_ss()) []
+          >- (strip_tac >> drule eval_stmts_log_extends >>
+              gvs[log_extends_def] >>
+              metis_tac[rich_listTheory.IS_PREFIX_TRANS]) >>
+          strip_tac >> gvs[log_extends_def]) >>
+      strip_tac >> gvs[log_extends_def]) >>
+  strip_tac >> gvs[log_extends_def]
 QED
 
 Theorem call_external_function_halt_log_extends:
@@ -2653,12 +2670,21 @@ Proof
   qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[Once vyperInterpreterTheory.call_external_function_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[machine_log_extends_refl] >>
+  qpat_x_assum `(\(res,am_out,rqs). _) _ = _` (fn th =>
+    let val (_,scrut,_) = TypeBase.dest_case (rand (lhs (concl th)))
+    in mp_tac th >> Cases_on `^scrut` end) >>
+  Cases_on `q` >> simp[] >>
+  TRY (rpt (CASE_TAC >> simp[]) >> rpt strip_tac >>
+       gvs[machine_log_extends_refl] >> NO_TAC) >>
+  qpat_assum `_ = (INR _, _)` (fn th =>
+    Cases_on `^(rand (rand (rator (rhs (concl th)))))`) >> gvs[] >>
+  TRY (rpt (CASE_TAC >> simp[]) >> rpt strip_tac >>
+       gvs[machine_log_extends_refl] >> NO_TAC) >>
+  rpt strip_tac >> gvs[] >>
   drule external_entry_log_extends >>
   (impl_tac >- (rpt strip_tac >> imp_res_tac entry_lock_action_logs)) >>
   strip_tac >>
-  `am_c.logs = am.logs` by
-    (Cases_on `cx.in_deploy` >> gvs[] >>
-     imp_res_tac evaluate_all_constants_logs >> gvs[]) >>
+  imp_res_tac evaluate_all_constants_logs >>
   gvs[machine_log_extends_def, log_extends_def,
       vyperInterpreterTheory.initial_state_def,
       vyperInterpreterTheory.abstract_machine_from_state_def]
