@@ -1,7 +1,7 @@
 (* Relation-level probes only: not a counterexample to target_case. *)
 Theory targetSubscriptProbe
 Ancestors
-  moduleLowering vyperCompiler compileEnv vyperStoragePlaceRegion vyperStorageLayoutSafety vfmState
+  moduleLowering moduleLoweringProps venomStepProps vyperCompiler compileEnv vyperStoragePlaceRegion vyperStorageLayoutSafety vfmState
   words finite_map combin vyperValue targetSubscriptSim
   emitHelperProps emitHelper exprLoweringProps venomExecSemantics venomState venomInst
   fragExec vyperInterpreter vyperContext vyperState vyperStorageBackend exprSimHyps
@@ -1689,3 +1689,118 @@ Proof
   simp[jump_to_def, probe_word_load_state_def, update_var_def, mstore_def]
 QED
 
+
+Theorem probe_word_load_state_vars:
+  !s i bufaddr v.
+    lookup_var v (probe_word_load_state s i bufaddr) =
+      if v = "%3" \/ v = "%9" then SOME (i + 1w)
+      else if v = "%8" then SOME (bufaddr + i * 32w)
+      else if v = "%7" then SOME (i * 32w)
+      else if v = "%6" then SOME (sload (3w + i) s)
+      else if v = "%5" then SOME (3w + i)
+      else lookup_var v s
+Proof
+  simp[probe_word_load_state_def, lookup_var_update_var] >>
+  rpt gen_tac >> Cases_on `v = "%3"` >> simp[] >>
+  Cases_on `v = "%9"` >> simp[]
+QED
+
+Theorem probe_word_load_state_halted:
+  !s i bufaddr. (probe_word_load_state s i bufaddr).vs_halted = s.vs_halted
+Proof
+  simp[probe_word_load_state_def]
+QED
+
+Theorem probe_word_load_cond_state_vars:
+  !s i v.
+    lookup_var v (probe_word_load_cond_state s i) =
+      if v = "%4" then SOME (bool_to_word (i = 3w)) else lookup_var v s
+Proof
+  simp[probe_word_load_cond_state_def, lookup_var_update_var]
+QED
+
+Theorem probe_word_load_cond_state_halted:
+  !s i. (probe_word_load_cond_state s i).vs_halted = s.vs_halted
+Proof
+  simp[probe_word_load_cond_state_def]
+QED
+
+Definition probe_word_load_round_def:
+  probe_word_load_round s i bufaddr =
+    jump_to "@wcopy_cond_0"
+      (probe_word_load_state
+        (jump_to "@wcopy_body_1" (probe_word_load_cond_state s i)) i bufaddr)
+End
+
+Theorem probe_word_load_round_observations:
+  !s i bufaddr.
+    lookup_var "%2" (probe_word_load_round s i bufaddr) = lookup_var "%2" s /\
+    lookup_var "%3" (probe_word_load_round s i bufaddr) = SOME (i + 1w) /\
+    (probe_word_load_round s i bufaddr).vs_halted = s.vs_halted /\
+    (probe_word_load_round s i bufaddr).vs_current_bb = "@wcopy_cond_0"
+Proof
+  simp[probe_word_load_round_def, control_moves_keep_vars,
+       probe_word_load_state_vars, probe_word_load_state_halted,
+       probe_word_load_cond_state_vars, probe_word_load_cond_state_halted] >>
+  simp[jump_to_def]
+QED
+
+Theorem probe_word_run_load_round:
+  !s i bufaddr fuel ctx.
+    lookup_var "%3" s = SOME i /\ lookup_var "%2" s = SOME bufaddr /\
+    ~s.vs_halted /\ s.vs_current_bb = "@wcopy_cond_0" /\ i <> 3w ==>
+    run_blocks (SUC (SUC fuel)) ctx probe_word_function s =
+    run_blocks fuel ctx probe_word_function (probe_word_load_round s i bufaddr)
+Proof
+  rpt strip_tac >>
+  drule_all probe_word_run_load_cond >>
+  disch_then (fn th => rewrite_tac[th]) >> simp[] >>
+  qmatch_goalsub_abbrev_tac `run_blocks (SUC fuel) ctx probe_word_function t` >>
+  `lookup_var "%3" t = SOME i /\ lookup_var "%2" t = SOME bufaddr /\
+   ~t.vs_halted /\ t.vs_current_bb = "@wcopy_body_1"` by
+    (simp[Abbr `t`, control_moves_keep_vars, probe_word_load_cond_state_vars,
+          probe_word_load_cond_state_halted] >> simp[jump_to_def]) >>
+  drule_all probe_word_run_load_body >>
+  simp[Abbr `t`, probe_word_load_round_def]
+QED
+
+Definition probe_word_loaded_state_def:
+  probe_word_loaded_state s bufaddr =
+    let t = probe_word_load_round
+      (probe_word_load_round (probe_word_load_round s 0w bufaddr) 1w bufaddr)
+      2w bufaddr in
+    jump_to "@wcopy_exit_2" (probe_word_load_cond_state t (3w:bytes32))
+End
+
+Theorem probe_word_run_load_loop:
+  !s bufaddr fuel ctx.
+    lookup_var "%3" s = SOME 0w /\ lookup_var "%2" s = SOME bufaddr /\
+    ~s.vs_halted /\ s.vs_current_bb = "@wcopy_cond_0" ==>
+    run_blocks (SUC (SUC (SUC (SUC (SUC (SUC (SUC fuel)))))))
+      ctx probe_word_function s =
+    run_blocks fuel ctx probe_word_function (probe_word_loaded_state s bufaddr)
+Proof
+  rpt strip_tac >>
+  `(0w:bytes32) <> 3w /\ (1w:bytes32) <> 3w /\ (2w:bytes32) <> 3w` by
+    simp[wordsTheory.n2w_11, dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  drule_all probe_word_run_load_round >> simp[] >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `run_blocks _ ctx probe_word_function t` >>
+  `lookup_var "%3" t = SOME 1w /\ lookup_var "%2" t = SOME bufaddr /\
+   ~t.vs_halted /\ t.vs_current_bb = "@wcopy_cond_0"` by
+    simp[Abbr `t`, probe_word_load_round_observations] >>
+  drule_all probe_word_run_load_round >> simp[] >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `run_blocks _ ctx probe_word_function u` >>
+  `lookup_var "%3" u = SOME 2w /\ lookup_var "%2" u = SOME bufaddr /\
+   ~u.vs_halted /\ u.vs_current_bb = "@wcopy_cond_0"` by
+    simp[Abbr `u`, probe_word_load_round_observations, word_add_n2w] >>
+  drule_all probe_word_run_load_round >> simp[] >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `run_blocks _ ctx probe_word_function v` >>
+  `lookup_var "%3" v = SOME 3w /\ ~v.vs_halted /\
+   v.vs_current_bb = "@wcopy_cond_0"` by
+    simp[Abbr `v`, probe_word_load_round_observations, word_add_n2w] >>
+  drule_all probe_word_run_load_cond >>
+  simp[Abbr `v`, Abbr `u`, Abbr `t`, probe_word_loaded_state_def]
+QED
