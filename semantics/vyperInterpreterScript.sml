@@ -1757,7 +1757,7 @@ Termination
   \\ conj_tac >- simp[prim_recTheory.WF_measure]
   \\ rpt conj_tac
   \\ TRY (MATCH_ACCEPT_TAC custom_error_exprs_size)
-  \\ simp[prim_recTheory.measure_def, relationTheory.inv_image_def]
+  \\ pure_rewrite_tac [prim_recTheory.measure_def, relationTheory.inv_image_def]
   \\ rw[bound_def, MAX_DEF, MULT, IS_SOME_EXISTS] \\ gvs[custom_error_exprs_size]
   \\ rpt (FIRST [
     (* Custom-error keyword operands are a declaration-order permutation. *)
