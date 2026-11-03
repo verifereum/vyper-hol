@@ -2847,6 +2847,24 @@ Resume remap_preserved_mem_ops[codecopy]:
   simp[LENGTH_TAKE_EQ]
 QED
 
+Theorem dloadbytes_success_iff[local]:
+  !inst s t d a n.
+    inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [d; a; n] ==>
+    (step_inst_base inst s = OK t <=>
+     ?dst src sz. eval_operand d s = SOME dst /\
+                  eval_operand a s = SOME src /\
+                  eval_operand n s = SOME sz /\
+       t = write_memory_with_expansion (w2n dst)
+             (TAKE (w2n sz)
+               (DROP (w2n src) s.vs_data_section ++ REPLICATE (w2n sz) 0w)) s)
+Proof
+  rpt strip_tac >> simp[step_inst_base_opcode_eqs] >>
+  Cases_on `eval_operand d s` >> simp[] >>
+  Cases_on `eval_operand a s` >> simp[] >>
+  Cases_on `eval_operand n s` >> simp[] >>
+  metis_tac[]
+QED
+
 (* --- DLOADBYTES: 3-op write, src = vs_data_section --- *)
 Resume remap_preserved_mem_ops[dloadbytes]:
   fs[step_inst_base_def, AllCaseEqs()] >>
