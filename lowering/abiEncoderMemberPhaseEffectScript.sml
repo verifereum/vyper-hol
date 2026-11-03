@@ -44,8 +44,12 @@ Theorem abi_encoder_member_step_globals:
   (s.vs_accounts,s.vs_transient,s.vs_logs,s.vs_requests,s.vs_pending_deletions)
 Proof
   strip_tac >>
-  gvs[step_inst_base_def, exec_pure2_def, exec_read1_def, exec_write2_def,
-      AllCaseEqs(), update_var_def, mstore_def, write_memory_with_expansion_def]
+  qpat_x_assum `step_inst_base i s = OK t` mp_tac >>
+  pure_once_rewrite_tac [step_inst_base_def] >>
+  pure_asm_rewrite_tac [opcode_case_def] >>
+  simp[exec_pure2_def, exec_read1_def, exec_write2_def] >>
+  simp[AllCaseEqs()] >> strip_tac >>
+  gvs[update_var_def, mstore_def, write_memory_with_expansion_def]
 QED
 
 Theorem abi_encoder_member_phase_globals:
