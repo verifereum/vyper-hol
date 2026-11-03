@@ -106,6 +106,129 @@ Proof
   simp[Once exec_block_def]
 QED
 
+Theorem gas_path_mem_edge_continue[local]:
+  gas_path_mem_edge ctx fn s n (OK t) /\
+  run_from fuel ctx fn t = out /\ (!e. out <> Error e) ==>
+  ?fuel'. run_from fuel' ctx fn s = out /\
+    (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn s)
+Proof
+  rw[gas_path_mem_edge_def] >> gvs[fragExecTheory.exit_result_def]
+  >- suspend "within"
+  >- suspend "enter"
+  >- (Cases_on `step_inst fuel' ctx inst s` >>
+      gvs[fragExecTheory.exit_result_def])
+  >- suspend "within_check"
+  >- suspend "enter_check"
+  >> (Cases_on `step_inst fuel' ctx inst s` >>
+      gvs[fragExecTheory.exit_result_def])
+QED
+Resume gas_path_mem_edge_continue[within]:
+  all_tac >> (
+  `step_inst (fuel' + fuel) ctx inst s = OK t'` by
+    (irule (cj 1 fuel_mono) >> simp[] >> qexists_tac `fuel'` >> simp[]) >>
+  `t'.vs_current_bb = s.vs_current_bb` by
+    metis_tac[step_preserves_control_flow] >>
+  `run_from (fuel' + fuel) ctx fn
+     (t' with vs_inst_idx := SUC s.vs_inst_idx) =
+   run_from fuel ctx fn (t' with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule gas_run_from_fuel_mono >> simp[] >> qexists_tac `fuel` >> simp[]) >>
+  `run_from (fuel' + fuel) ctx fn s =
+   run_from (fuel' + fuel) ctx fn
+     (t' with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (simp_tac (srw_ss()) [run_from_def] >>
+     CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+     asm_simp_tac (srw_ss()) []) >>
+  qexists_tac `fuel' + fuel` >> conj_tac >- metis_tac[] >>
+  `revert_forward_at bb s.vs_inst_idx \/
+   mem_safe_step (fuel' + fuel) ctx inst s` by
+    (irule edge_check_mono >> qexists_tac `fuel'` >> simp[]) >>
+  drule_all mem_safe_run_step >> strip_tac >>
+  strip_tac >>
+  `mem_safe_run (fuel' + fuel) ctx fn
+     (t' with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule mem_safe_run_fuel_mono_up >> simp[] >>
+     qexists_tac `fuel` >> simp[]) >>
+  metis_tac[])
+QED
+Resume gas_path_mem_edge_continue[enter]:
+  all_tac >> (
+  `step_inst (SUC (fuel' + fuel)) ctx inst s = OK t'` by
+    (irule (cj 1 fuel_mono) >> simp[] >> qexists_tac `fuel'` >> simp[]) >>
+
+  `run_from (fuel' + fuel) ctx fn
+     (entered with vs_inst_idx := phi_prefix_length target.bb_instructions) =
+   run_from fuel ctx fn
+     (entered with vs_inst_idx := phi_prefix_length target.bb_instructions)` by
+    (irule gas_run_from_fuel_mono >> simp[] >> qexists_tac `fuel` >> simp[]) >>
+  `run_from (SUC (fuel' + fuel)) ctx fn s =
+     run_from (fuel' + fuel) ctx fn
+       (entered with vs_inst_idx := phi_prefix_length target.bb_instructions) /\
+   (mem_safe_run (fuel' + fuel) ctx fn
+       (entered with vs_inst_idx := phi_prefix_length target.bb_instructions) ==>
+    mem_safe_run (SUC (fuel' + fuel)) ctx fn s)` by
+    (irule mem_jump_boundary >> simp[] >> metis_tac[ADD_COMM]) >>
+  qexists_tac `SUC (fuel' + fuel)` >> conj_tac >- metis_tac[] >>
+  strip_tac >>
+  `mem_safe_run (fuel' + fuel) ctx fn
+     (entered with vs_inst_idx := phi_prefix_length target.bb_instructions)` by
+    (irule mem_safe_run_fuel_mono_up >> simp[] >>
+     qexists_tac `fuel` >> simp[]) >>
+  metis_tac[])
+QED
+Resume gas_path_mem_edge_continue[within_check]:
+  `step_inst (fuel' + fuel) ctx inst s = OK t'` by
+    (irule (cj 1 fuel_mono) >> simp[] >> qexists_tac `fuel'` >> simp[]) >>
+  `t'.vs_current_bb = s.vs_current_bb` by
+    metis_tac[step_preserves_control_flow] >>
+  `run_from (fuel' + fuel) ctx fn
+     (t' with vs_inst_idx := SUC s.vs_inst_idx) =
+   run_from fuel ctx fn (t' with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule gas_run_from_fuel_mono >> simp[] >> qexists_tac `fuel` >> simp[]) >>
+  `run_from (fuel' + fuel) ctx fn s =
+   run_from (fuel' + fuel) ctx fn
+     (t' with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (simp_tac (srw_ss()) [run_from_def] >>
+     CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+     asm_simp_tac (srw_ss()) []) >>
+  qexists_tac `fuel' + fuel` >> conj_tac >- metis_tac[] >>
+  `revert_forward_at bb s.vs_inst_idx \/
+   mem_safe_step (fuel' + fuel) ctx inst s` by
+    (irule edge_check_mono >> qexists_tac `fuel'` >> simp[]) >>
+  drule_all mem_safe_run_step >> strip_tac >> strip_tac >>
+  `mem_safe_run (fuel' + fuel) ctx fn
+     (t' with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule mem_safe_run_fuel_mono_up >> simp[] >>
+     qexists_tac `fuel` >> simp[]) >>
+  metis_tac[]
+QED
+Resume gas_path_mem_edge_continue[enter_check]:
+  `mem_safe_step (SUC (fuel' + fuel)) ctx inst s` by
+    (irule (cj 1 mem_safe_fuel_mono_up) >> simp[] >>
+     qexists_tac `fuel'` >> simp[]) >>
+  `step_inst (SUC (fuel' + fuel)) ctx inst s = OK t'` by
+    (irule (cj 1 fuel_mono) >> simp[] >> qexists_tac `fuel'` >> simp[]) >>
+
+  `run_from (fuel' + fuel) ctx fn
+     (entered with vs_inst_idx := phi_prefix_length target.bb_instructions) =
+   run_from fuel ctx fn
+     (entered with vs_inst_idx := phi_prefix_length target.bb_instructions)` by
+    (irule gas_run_from_fuel_mono >> simp[] >> qexists_tac `fuel` >> simp[]) >>
+  `run_from (SUC (fuel' + fuel)) ctx fn s =
+     run_from (fuel' + fuel) ctx fn
+       (entered with vs_inst_idx := phi_prefix_length target.bb_instructions) /\
+   (mem_safe_run (fuel' + fuel) ctx fn
+       (entered with vs_inst_idx := phi_prefix_length target.bb_instructions) ==>
+    mem_safe_run (SUC (fuel' + fuel)) ctx fn s)` by
+    (irule mem_jump_boundary >> simp[] >> metis_tac[ADD_COMM]) >>
+  qexists_tac `SUC (fuel' + fuel)` >> conj_tac >- metis_tac[] >> strip_tac >>
+  `mem_safe_run (fuel' + fuel) ctx fn
+     (entered with vs_inst_idx := phi_prefix_length target.bb_instructions)` by
+    (irule mem_safe_run_fuel_mono_up >> simp[] >>
+     qexists_tac `fuel` >> simp[]) >>
+  metis_tac[]
+QED
+Finalise gas_path_mem_edge_continue
+
 (* A normal landing transfers the existing conditional continuation check;
    a terminal path supplies its own safe run. *)
 Theorem gas_path_mem_exec:
