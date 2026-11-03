@@ -651,3 +651,53 @@ val () = List.app (fn th =>
      then print "BODY_DECL_SETUP_MEMORY_AUDIT OK\n"
      else raise Fail "body declaration setup inherited admission"
   end) [annassign_setup_shape, body_decl_alloca_run, annassign_setup_body_frag_mem];
+
+Theorem annassign_name_rhs_body_frag_mem:
+  !ctx func cenv cx env source_id es s id p sz w inst v tyv sc rest a src ty sa sm sb d R info bytes.
+    lower_value compile_expr cenv ty (Name ty source_id) sa = (src,sm) /\
+    expr_sim_pre cenv cx env (Name ty source_id) es /\
+    (do result <- eval_expr cx (Name ty source_id); read_result cx result od) es = (INL v,es) /\
+    compile_assign_value cenv (Var p) LocMemory src F (SOME LocMemory)
+      ty ty info bytes sm = ((), sb) /\
+    not_fresh_at sa p /\ lookup_var p s = SOME w /\
+    ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tyv /\
+    type_memory_bytes cenv ty = type_memory_size tyv /\
+    type_memory_size tyv <= sz /\ type_memory_size tyv + 64 < dimword (:256) /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    not_local_ptr cenv es.scopes p /\ MEM inst (fn_insts func) /\
+    inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
+    local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
+    w2n w + type_memory_size tyv <= s.vs_alloca_next /\
+    alloca_history func s /\ return_buf_frame d cenv sa s ==>
+    frag_exec_mem ctx sa sb (\u. u = s)
+      (\t. stmt_state_rel ctx func cenv cx
+          (es with scopes :=
+            (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
+        alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+        return_buf_frame d cenv sb t /\
+        (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+        (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all bodyAllocMemoryTheory.body_name_source_region >> strip_tac >>
+  drule_then (qspecl_then [`cx`, `ty`] assume_tac) eval_name_word >> gvs[] >>
+  gvs[lower_value_def, compile_expr_def, compile_name_vv_def,
+      comp_bind_def, comp_return_def, unwrap_value_def,
+      contextTheory.mk_ptr_def, vyperASTTheory.expr_type_def] >>
+  irule annassign_memory_assign_body_frag_mem >> simp[] >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  simp[eval_operand_def] >>
+  qexists_tac `inst` >> simp[] >>
+  fs[local_ptrs_reserved_def] >> metis_tac[]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_DECL_NAME_RHS_MEMORY_AUDIT OK\n"
+     else raise Fail "body declaration Name RHS inherited admission"
+  end) [annassign_name_rhs_body_frag_mem];
