@@ -7048,3 +7048,52 @@ Proof
     gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
   metis_tac[reorder_plan_eq_plan_steps]
 QED
+
+Definition input_spill_values_def:
+  input_spill_values lo vs ps qs <=>
+    !x off y. FLOOKUP ps.ps_spilled x = SOME off /\
+              FLOOKUP qs.ps_spilled y = SOME off ==>
+              operand_val vs lo x = operand_val vs lo y
+End
+
+Theorem input_spill_values_initial:
+  (!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
+              FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
+              a + 32 <= b \/ b + 32 <= a) ==>
+  input_spill_values lo vs ps ps
+Proof
+  rw[input_spill_values_def] >>
+  `x = y` by (spose_not_then assume_tac >>
+    first_x_assum drule_all >> simp[]) >> simp[]
+QED
+
+(* Narrow candidate-invariant obstruction: equal spill values alone do not
+   transport the directional dead-marker clause through a restore. *)
+Theorem input_spill_values_marker_restore_probe:
+  !base.
+    let ps = base with <| ps_stack := [];
+                         ps_spilled := FEMPTY |+ (Var "probe", 0) |>;
+        qs = base with <| ps_stack := [];
+                         ps_spilled := FEMPTY |+ (dead_stack_marker, 0) |>;
+        vs = ARB with vs_vars := FEMPTY;
+        lo = (FEMPTY : string |-> num) in
+    plan_stack_sem_eq lo vs qs.ps_stack ps.ps_stack /\
+    input_spill_values lo vs ps qs /\
+    (!x a y b. FLOOKUP qs.ps_spilled x = SOME a /\
+                FLOOKUP qs.ps_spilled y = SOME b /\ x <> y ==>
+                a + 32 <= b \/ b + 32 <= a) /\
+    prefix_spill_wf initial_fmp lo [SORestore 0] qs /\
+    FST (emit_input_plan CREATE [Var "probe"] [] ps) = [SORestore 0] /\
+    ~plan_stack_sem_eq lo vs
+      (apply_prefix_ops initial_fmp lo [SORestore 0] qs).ps_stack
+      (SND (emit_input_plan CREATE [Var "probe"] [] ps)).ps_stack
+Proof
+  gen_tac >>
+  simp[LET_THM, input_spill_values_def, plan_stack_sem_eq_def,
+       FLOOKUP_UPDATE, dead_stack_marker_def, operand_val_def,
+       prefix_spill_wf_def, spill_op_wf_def,
+       emit_input_plan_def, emit_one_input_def, is_var_operand_def,
+       do_restore_def, apply_prefix_ops_def, apply_prefix_op_def,
+       stack_push_def, spill_lookup_def] >>
+  EVAL_TAC
+QED
