@@ -104,6 +104,18 @@ Theorem pp_single_output[local]:
     inst.inst_opcode <> PHI /\
     step_inst_base inst s = OK v ==>
     ?out. inst.inst_outputs = [out]
+Theorem inst_ids_fresh_after_step[local]:
+  !fn bb inst s1 v.
+    wf_function fn /\
+    MEM bb fn.fn_blocks /\
+    get_instruction bb s1.vs_inst_idx = SOME inst /\
+    step_inst_base inst s1 = OK v /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_ext_call_op inst.inst_opcode /\
+    (!i. s1.vs_inst_idx <= i /\ i < LENGTH bb.bb_instructions ==>
+         (EL i bb.bb_instructions).inst_id NOTIN FDOM s1.vs_allocas) ==>
+    !i. SUC s1.vs_inst_idx <= i /\ i < LENGTH bb.bb_instructions ==>
+        (EL i bb.bb_instructions).inst_id NOTIN FDOM v.vs_allocas
 ```
 
 Do not modify this statement. Prove it as-is, or produce a counterexample.
@@ -115,6 +127,7 @@ Do not modify this statement. Prove it as-is, or produce a counterexample.
 - Repair the encountered remap_preserved_mem_ops[log] proof while preserving the full theorem statement and other opcode resumes.
 - Repair the existing immutable_op_scalar_preserved and immutable_op_preserves_remap proof bodies without changing either statement.
 - Repair the encountered pp_single_output proof body without changing its statement.
+- Repair the encountered inst_ids_fresh_after_step proof without changing its statement.
 - Build allocaRemapProofsTheory at the default tactic limit.
 - Preserve all other existing proofs, definitions and statements.
 
@@ -128,7 +141,7 @@ A forced default replay at eaf96a2fa timed out at the classification gvs after o
 
 ## Domain Constraints
 
-- The five previously authorized repairs now pass incrementally at 420c9d0a8. Preserve all these completed repairs and helpers. Edit only pp_single_output and necessary local helper theorems in venom/passes/shared/proofs/allocaRemapProofsScript.sml. A needed declarative Ancestors entry is allowed if it introduces no dependency cycle. Preserve the completed allocation-map proof repair.
+- The six previously authorized repairs now pass incrementally at 3bc084c97. Preserve all these completed repairs and helpers. Edit only inst_ids_fresh_after_step and necessary local helper theorems in venom/passes/shared/proofs/allocaRemapProofsScript.sml. A needed declarative Ancestors entry is allowed if it introduces no dependency cycle. Preserve the completed allocation-map proof repair.
 - All existing definitions and statements, including local declarations, are frozen. No new definitions, axioms, admissions, strengthened premises, opcode exclusions or supported-subset changes.
 - Preserve all completed gas, CFG and DRET proofs.
 - Default 2.5-second tactic limit; no timeout override and no TRY/ORELSE/FIRST around search.
@@ -164,3 +177,5 @@ The incremental default-limit replay at ffd26407e passes both previously authori
 Independent read-only audit at a6abad420 finds both exact immutable-operation statements PROVABLE against their real producers and residual frame. Existing is_immutable_op contains only ILOAD/ISTORE; neither statement admits GAS. The first proof timed out at its ILOAD case dispatch. The second has the existing ISTORE exclusion and memory equality and failed at a stale reconstruction tactic with pending-deletion agreement still open. No new hypotheses or definitions are needed or authorized. This amendment permits only those two proof bodies and necessary local helpers; all completed earlier proofs and all existing schemas remain frozen.
 
 Default replay at420c9d0a8 passes the two immutable repairs and stops at pp_single_output while unfolding the full dispatcher in its ADD branch. An independent read-only audit found this exact full statement PROVABLE: existing classification reduces it to ADD/SUB/ASSIGN and successful execution forces one output. No well-formedness, gas, SSA or stage premise is needed or authorized. Only this proof and necessary local helpers are newly in scope; preserve all other proofs/statements/definitions.
+
+The next actual default-replay failure is the ALLOCA branch of inst_ids_fresh_after_step, at the broad FULL_CASE_TAC loop. Independent read-only audit of its full exact statement and producers found PROVABLE: wf_function provides instruction-ID distinctness; current-index freshness excludes a preexisting current allocation site; successful ALLOCA can add only the current ID; the existing allocation-map preservation theorem covers all other allowed opcodes, including GAS. No missing assumption or definition amendment is authorized. Only this proof and necessary local helpers are newly in scope; preserve the prior six repairs and all existing schemas.
