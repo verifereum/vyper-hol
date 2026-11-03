@@ -62,7 +62,7 @@ Theorem o1_lowered_inv_fixed_pointer[local]:
         mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp)) C vs
 Proof
   strip_tac >> fs[o1_lowered_inv_def] >>
-  qexists_tac `eom` >> fs[mem_inv_raw_reachable] >>
+  fs[mem_inv_raw_reachable] >>
   rpt strip_tac >> first_x_assum drule >>
   drule raw_reachable_initial_fmp >> simp[lowered_mem_fact_def]
 QED
