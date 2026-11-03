@@ -457,12 +457,8 @@ Proof
     fs[] >>
     `expr_res_ok r1` by
       (gvs[] >>
-       qpat_x_assum `(do result <- _; _ od) _ = _` mp_tac >>
-       simp[bind_def] >> Cases_on `eval_expr cx c es` >>
-       rename1 `_ = (raw, est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
-       imp_res_tac read_result_no_control >>
-       imp_res_tac (cj 1 eval_expr_no_control) >>
-       gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
+       drule if_forced_no_control >> strip_tac >>
+       drule_all if_exception_expr_ok >> simp[]) >>
     qspecl_then [`ctx`, `func`, `cx`, `cenv`, `c`, `es`, `r1`, `es1`, `sa`,
                  `cond_op`, `s1`, `s4`, `s5`, `then_lbl`, `else_lbl`, `s0`]
       mp_tac cond_jump_frag >>
