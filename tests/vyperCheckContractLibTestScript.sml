@@ -1135,6 +1135,17 @@ val () = return_case "staticcall" u256
   ``Call (BaseT (UintT 256)) (ExtCall T F ("price", [], BaseT (UintT 256)) [])
       [^arg_a] NONE``
   [``Pure``, ``View``] []
+val () = return_case "staticcall with default_return_value" u256
+  ``Call (BaseT (UintT 256))
+      (ExtCall T F ("price", [], BaseT (UintT 256)) [EKDefault])
+      [^arg_a; ^(uint 1)] NONE``
+  [``Pure``, ``View``] []
+(* Vyper rejects default_return_value on a call that returns nothing, at
+   every mutability. *)
+val () = expr_case "void extcall with default_return_value"
+  ``Call NoneT (ExtCall F F ("poke", [], NoneT) [EKDefault])
+      [^arg_a; Call NoneT SelfDestructTarget [^arg_a] NONE] NONE``
+  [] [``Payable``, ``Nonpayable``]
 val () = expr_case "raw_call"
   ``Call NoneT (RawCallTarget ^raw_call_flags)
       [^arg_a; ^empty_bytes; ^(uint 0)] NONE``
