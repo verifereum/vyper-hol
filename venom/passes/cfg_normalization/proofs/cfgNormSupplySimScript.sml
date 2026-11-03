@@ -2409,10 +2409,11 @@ Proof
   disch_then (qspecl_then [`bb`, `0`] mp_tac) >>
   simp[listTheory.EL_APPEND_EQN] >> disch_then SUBST1_TAC >>
   once_rewrite_tac[venomExecSemanticsTheory.exec_block_def] >>
-  simp[venomInstTheory.get_instruction_def, listTheory.EL_APPEND_EQN,
-       venomExecSemanticsTheory.step_inst_def,
-       venomExecSemanticsTheory.step_inst_base_def,
-       venomInstTheory.is_terminator_def, venomStateTheory.jump_to_def]
+  simp[venomInstTheory.get_instruction_def, listTheory.EL_APPEND_EQN] >>
+  simp[venomExecSemanticsTheory.step_inst_def] >>
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomInstTheory.is_terminator_def] >>
+  simp[venomStateTheory.jump_to_def]
 QED
 
 Theorem supply_split_exec:
@@ -2739,4 +2740,53 @@ Proof
   simp[exec_result_map_prev_bb_def, stateEquivTheory.lift_result_def,
        stateEquivTheory.state_equiv_def,
        GSYM supply_state_agree_execution_equiv, supply_state_agree_prev_bb]
+QED
+
+Theorem supply_bind_outputs_prev_bb:
+  bind_outputs outs vals (st with vs_prev_bb := p) =
+  OPTION_MAP (\s. s with vs_prev_bb := p) (bind_outputs outs vals st)
+Proof
+  simp[venomExecSemanticsTheory.bind_outputs_def] >>
+  Cases_on `LENGTH outs = LENGTH vals` >> simp[] >>
+  qspec_tac (`ZIP (outs,vals)`, `kvs`) >> qid_spec_tac `st` >>
+  Induct_on `kvs` >> simp[] >> rpt gen_tac >> PairCases_on `h` >>
+  simp[] >> first_x_assum (qspec_then `update_var h0 h1 st` mp_tac) >>
+  simp[venomStateTheory.update_var_def]
+QED
+
+Theorem supply_step_invoke_prev_bb:
+  inst.inst_opcode = INVOKE ==>
+  step_inst fuel ctx inst (st with vs_prev_bb := p) =
+  case step_inst fuel ctx inst st of
+    OK r => OK (r with vs_prev_bb := p)
+  | Halt r => Halt r
+  | Abort a r => Abort a r
+  | IntRet ir r => IntRet ir r
+  | Error e => Error e
+Proof
+  strip_tac >>
+  `!ops. eval_operands ops (st with vs_prev_bb := p) = eval_operands ops st` by
+    (Induct >> simp[venomStateTheory.eval_operands_def] >>
+     Cases_on `h` >>
+     simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def]) >>
+  simp[venomExecSemanticsTheory.step_inst_def] >>
+  Cases_on `decode_invoke inst` >> simp[] >> PairCases_on `x` >> simp[] >>
+  Cases_on `lookup_function x0 ctx.ctx_functions` >> simp[] >>
+  Cases_on `eval_operands x1 st` >> simp[] >>
+  `setup_callee x x' (st with vs_prev_bb := p) = setup_callee x x' st` by
+    simp[venomExecSemanticsTheory.setup_callee_def] >>
+  simp[] >> Cases_on `setup_callee x x' st` >> simp[] >>
+  rename1 `setup_callee _ _ st = SOME cs` >>
+  Cases_on `run_blocks fuel ctx x cs` >> simp[] >>
+  `merge_callee_state (st with vs_prev_bb := p) v =
+   merge_callee_state st v with vs_prev_bb := p` by
+    simp[venomExecSemanticsTheory.merge_callee_state_def] >>
+  simp[] >>
+  `adopt_return_fmp i (merge_callee_state st v with vs_prev_bb := p) =
+   adopt_return_fmp i (merge_callee_state st v) with vs_prev_bb := p` by
+    (simp[venomExecSemanticsTheory.adopt_return_fmp_def] >>
+     Cases_on `i.iret_adopt_fmp` >> simp[]) >>
+  simp[supply_bind_outputs_prev_bb] >>
+  Cases_on `bind_outputs inst.inst_outputs i.iret_values
+    (adopt_return_fmp i (merge_callee_state st v))` >> simp[]
 QED
