@@ -2660,3 +2660,51 @@ Proof
       qpat_x_assum `u = _` SUBST_ALL_TAC >> simp[]) >>
   gvs[] >> metis_tac[dft_res_rel_trans]
 QED
+
+Theorem dft_head_bubbles_variant:
+  !todo scheduled.
+  dft_head_bubbles
+    (\x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+      ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+      id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+      ~dft_must_order x y /\ abort_compatible x.inst_opcode y.inst_opcode)
+    todo scheduled ==>
+  !s'. wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+    EVERY inst_wf bb.bb_instructions /\
+    EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+    dft_remaining_inv fn bb todo s' ==>
+    ?s. s' = (s with vs_gas_readings := s'.vs_gas_readings) /\
+      dft_res_rel (dft_exec_suffix fuel C todo s)
+                  (dft_exec_suffix fuel C scheduled s')
+Proof
+  ho_match_mp_tac dft_head_bubbles_ind >> conj_tac
+  >- (rpt strip_tac >> qexists_tac `s'` >> simp[]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rename1 `dft_exec_suffix fuel C (y::rest) s'` >>
+  Cases_on `is_terminator y.inst_opcode`
+  >- (`pre = []` by
+        (Cases_on `pre` >> fs[dft_must_order_def]) >> gvs[] >>
+      `post = []` by metis_tac[dft_remaining_inv_terminal] >> gvs[] >>
+      qexists_tac `s'` >>
+      simp[dft_exec_suffix_cons, dft_exec_cons_def]) >>
+  `?u. s' = (u with vs_gas_readings := s'.vs_gas_readings) /\
+    dft_res_rel (dft_exec_suffix fuel C ([y] ++ (pre ++ post)) u)
+                (dft_exec_suffix fuel C ([y] ++ rest) s')` by
+    (irule dft_suffix_prefix_variant >> simp[] >> rpt gen_tac >>
+     simp[dft_exec_cons_def] >> strip_tac >> gvs[AllCaseEqs()] >>
+     rename1 `step_inst fuel C y s' = OK t` >>
+     `dft_remaining_inv fn bb (pre ++ post)
+       (t with vs_inst_idx := SUC s'.vs_inst_idx)` by
+       (drule_at (Pat `step_inst _ _ _ _ = OK _`) dft_remaining_inv_step >>
+        disch_then (qspecl_then [`pre`, `post`] mp_tac) >> simp[]) >>
+     qpat_x_assum `!s. _ ==> ?u. _`
+       (qspec_then `t with vs_inst_idx := SUC s'.vs_inst_idx` mp_tac) >> simp[]) >>
+  `dft_remaining_inv fn bb (pre ++ y::post) u` by
+    metis_tac[dft_remaining_inv_gas_variant] >>
+  drule_all dft_extract_head_variant >>
+  disch_then (qspecl_then [`fuel`, `C`] strip_assume_tac) >>
+  qexists_tac `s` >> conj_tac
+  >- (qpat_x_assum `s' = _` SUBST_ALL_TAC >>
+      qpat_x_assum `u = _` SUBST_ALL_TAC >> simp[]) >>
+  gvs[] >> metis_tac[dft_res_rel_trans]
+QED
