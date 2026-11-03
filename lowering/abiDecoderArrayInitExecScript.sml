@@ -1,6 +1,6 @@
 Theory abiDecoderArrayInitExec
 Ancestors
-  abiDecoderRange abiDecoderArrayLoopInit abiDecoderDynarrayPrefix abiDecoderArrayHeader abiDecoderReservation
+  abiDecoderTypedContract abiDecoderRange abiDecoderArrayLoopInit abiDecoderDynarrayPrefix abiDecoderArrayHeader abiDecoderReservation
   abiDecoderReentryPointer abiDecoderGuards abiDecoderContract exprLoweringProps emitHelperProps
   compileEnv venomState words list arithmetic abiDecoderIndexInit abiDecoderAllocation
   abiDecoderReentry abiDecoderFrameCompose abiDecoderFrame abiDecoderPrimitiveLoopFrames
@@ -101,6 +101,19 @@ Proof
   irule abi_decoder_frame_in_footprint >> qexistsl_tac [`p`, `32`] >> simp[]
 QED
 
+Theorem abi_decode_array_loop_init_allocation_floor:
+  abi_decode_array_loop_init dst src opc base_op hi maxn abi_sz st = (setup,loop_st) /\
+  abi_decode_source_opcode opc ==>
+  abi_decoder_entry_floor st <= loop_st.cs_next_id - 2
+Proof
+  strip_tac >>
+  drule abi_decode_array_loop_init_trace >> strip_tac >>
+  drule_all abi_decode_dynarray_position_prefix_shape >> strip_tac >>
+  drule_all abi_decode_array_header_shape >> strip_tac >>
+  drule abi_decode_index_init_shape >> strip_tac >>
+  simp[abi_decoder_entry_floor_def] >> decide_tac
+QED
+
 Theorem abi_decode_array_loop_init_sequence:
   abi_decode_array_loop_init dst src opc base_op hi maxn abi_sz st = (setup,loop_st) /\
   abi_decode_source_opcode opc /\ eval_operand src s = SOME (n2w sb) /\
@@ -109,7 +122,7 @@ Theorem abi_decode_array_loop_init_sequence:
   abi_decode_load opc (n2w (B + sb):bytes32) s = n2w n /\ n <= maxn /\ maxn < dimword (:256) /\
   (hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
     sb + 32 + n * abi_sz <= h /\ h < dimword (:256)) /\
-  abi_decoder_budget first last b cap s /\ first <= st.cs_next_id /\ loop_st.cs_next_id <= last /\
+  abi_decoder_budget first last b cap s /\ first <= loop_st.cs_next_id - 2 /\ loop_st.cs_next_id <= last /\
   (d + 32 <= b \/ b + cap <= d) /\ fresh_vars_wrt st s ==>
   ?t p. run_inst_seq (emitted_insts st loop_st) s = OK t /\
     eval_operand (FST setup) t = SOME (n2w p) /\ eval_operand (SND setup) t = SOME (n2w n) /\

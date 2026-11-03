@@ -107,6 +107,9 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_decoder_primitive_dynarray_pre_facts >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_decode_array_loop_init_allocation_floor >> strip_tac >>
+  `st.cs_next_id <= loop_st.cs_next_id - 2` by
+    (fs[abi_decoder_entry_floor_def] >> decide_tac) >>
   drule_all (SIMP_RULE (srw_ss()) []
     (Q.INST [`first` |-> `st.cs_next_id`] abi_decode_array_loop_init_from_state)) >>
   disch_then (qspec_then `ctx` assume_tac) >>
@@ -173,7 +176,7 @@ Theorem abi_decoder_primitive_array_reentry_initialize:
   abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (DecDynArray (DecPrimWord clamp) 32 32 F maxn) (ListV avs) (ArrayV (DynArrayV vs))
     st last src dst opc base_op hi B sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ loop_st.cs_next_id <= last /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor st /\ loop_st.cs_next_id <= last /\
   loop_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var base_op /\
@@ -201,6 +204,8 @@ Proof
   drule_all abi_decoder_primitive_array_reentry_pre_facts >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_decode_array_loop_init_shape >> strip_tac >>
+  drule_all abi_decode_array_loop_init_allocation_floor >> strip_tac >>
+  `first <= loop_st.cs_next_id - 2` by decide_tac >>
   drule_all abi_decode_array_loop_init_reentry_from_state >>
   disch_then (qspec_then `ctx` assume_tac) >>
   drule abi_decode_sim_from_fragment >> disch_then drule >> simp[] >> strip_tac >>
@@ -317,7 +322,7 @@ Theorem abi_decoder_clamped_array_reentry:
   abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (DecDynArray (DecPrimWord clamp) 32 32 F maxn) (ListV avs) (ArrayV (DynArrayV vs))
     st last src dst opc base_op hi B sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ end_st.cs_next_id <= last /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor st /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var base_op /\
@@ -328,7 +333,8 @@ Theorem abi_decoder_clamped_array_reentry:
     fresh_vars_wrt limit_st t /\ abi_decoder_budget first last b cap t /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op initial = SOME w ==>
       eval_operand op t = SOME w) /\
-    b <= slot /\ slot + 32 <= b + cap /\ st.cs_next_id <= site /\ site < end_st.cs_next_id /\
+    b <= slot /\ slot + 32 <= b + cap /\ st.cs_next_id <= site /\
+    abi_decoder_entry_floor st <= site /\ site < end_st.cs_next_id /\
     FLOOKUP t.vs_allocas site = SOME (slot,32) /\
     (!id. id <> site ==> FLOOKUP t.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
     abi_decode_footprint_frame [(d,type_memory_bytes ce (ArrayT ty (Dynamic maxn)));(slot,32)] initial t /\
@@ -342,6 +348,7 @@ Proof
   drule_all abi_decoder_primitive_array_code >> strip_tac >>
   drule_all abi_decode_array_loop_init_shape >> strip_tac >>
   drule_all abi_decode_array_loop_init_site_bounds >> strip_tac >>
+  drule_all abi_decode_array_loop_init_allocation_floor >> strip_tac >>
   `loop_st.cs_next_id <= last /\ loop_st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
   drule_all abi_decoder_primitive_array_reentry_initialize >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
@@ -376,7 +383,7 @@ Theorem abi_decoder_clamped_array_reentry_protected:
   abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (DecDynArray (DecPrimWord clamp) 32 32 F maxn) (ListV avs) (ArrayV (DynArrayV vs))
     st last src dst opc base_op hi B sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ end_st.cs_next_id <= last /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor st /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var base_op /\
@@ -402,14 +409,16 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_pre_def]) >>
   drule abi_decoder_pre_output_separated >> disch_then assume_tac >>
   mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `t:venom_state`,
-    `child_first` |-> `st.cs_next_id`, `child_last` |-> `end_st.cs_next_id`,
+    `child_first` |-> `abi_decoder_entry_floor st`, `child_last` |-> `end_st.cs_next_id`,
     `outsz` |-> `type_memory_bytes ce (ArrayT ty (Dynamic maxn))`]
     abi_decoder_child_scratch_preservation) >>
   impl_tac >- asm_simp_tac bool_ss [] >> disch_then assume_tac >>
   `!id. id < st.cs_next_id \/ end_st.cs_next_id <= id ==>
     FLOOKUP t.vs_allocas id = FLOOKUP initial.vs_allocas id` by
     (rpt strip_tac >> `id <> site` by decide_tac >> metis_tac[]) >>
-  qexists_tac `t` >> asm_simp_tac bool_ss [] >> metis_tac[]
+  `st.cs_next_id <= abi_decoder_entry_floor st` by
+    simp[abi_decoder_entry_floor_def] >>
+  qexists_tac `t` >> asm_simp_tac bool_ss [] >> metis_tac[LESS_LESS_EQ_TRANS]
 QED
 
 Theorem abi_decoder_primitive_array_reentry:
@@ -422,7 +431,7 @@ Theorem abi_decoder_primitive_array_reentry:
   abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (DecDynArray (DecPrimWord clamp) 32 32 F maxn) (ListV avs) (ArrayV (DynArrayV vs))
     st last src dst opc base_op hi B sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ end_st.cs_next_id <= last /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor st /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>

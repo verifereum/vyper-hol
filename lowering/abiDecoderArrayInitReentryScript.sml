@@ -135,7 +135,7 @@ Theorem abi_decode_array_loop_init_reentry:
   abi_decode_load opc (n2w (B+sb):bytes32) initial = n2w n /\ n <= maxn /\ maxn < dimword (:256) /\
   (hi = Lit 0w \/ ?h. eval_operand hi initial = SOME (n2w h) /\
     sb + 32 + n * abi_sz <= h /\ h < dimword (:256)) /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ loop_st.cs_next_id <= last /\
+  abi_decoder_budget first last b cap initial /\ first <= loop_st.cs_next_id - 2 /\ loop_st.cs_next_id <= last /\
   (d + 32 <= b \/ b + cap <= d) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var hi /\
@@ -192,7 +192,7 @@ Theorem abi_decode_array_loop_init_reentry_from_state:
   abi_decode_load opc (n2w (B+sb):bytes32) initial = n2w n /\ n <= maxn /\ maxn < dimword (:256) /\
   (hi = Lit 0w \/ ?h. eval_operand hi initial = SOME (n2w h) /\
     sb + 32 + n * abi_sz <= h /\ h < dimword (:256)) /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ loop_st.cs_next_id <= last /\
+  abi_decoder_budget first last b cap initial /\ first <= loop_st.cs_next_id - 2 /\ loop_st.cs_next_id <= last /\
   (d + 32 <= b \/ b + cap <= d) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var hi /\

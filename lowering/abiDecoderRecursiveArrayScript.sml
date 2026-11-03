@@ -289,6 +289,7 @@ Proof
   drule_all abi_decode_array_loop_init_shape >> strip_tac >>
   drule_all abi_decode_array_loop_init_site_bounds >> strip_tac >>
   `loop_st.cs_next_id <= last` by decide_tac >>
+  `first <= loop_st.cs_next_id - 2` by decide_tac >>
   drule_all abi_decode_array_loop_init_reentry_from_state >>
   disch_then (qspec_then `ctx` assume_tac) >>
   drule abi_decode_sim_from_fragment >> disch_then drule >> simp[] >> strip_tac >>
