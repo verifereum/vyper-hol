@@ -3,6 +3,7 @@ Ancestors
   exprSimIfExp fragExec fragExecMem instMemFrontier allocaHistoryFragment
   emitHelper emitHelperProps compileEnv venomState venomInst
   list rich_list loweringSlice venomExecSemantics venomExecProofs exprLoweringProps
+  bodyMemoryDefs exprSim vyperAST vyperInterpreter
 
 Theorem frag_exec_assign_mem:
   !ctx st st' src out P Q R.
@@ -83,3 +84,56 @@ val () = List.app (fn th =>
      then print "BODY_IFEXP_ASSIGN_MEMORY_AUDIT OK\n"
      else raise Fail "ifexp assignment memory inherited admission"
   end) [frag_exec_assign_mem, assign_history, frag_exec_assign_mem_at];
+
+Theorem ifexp_arm_frag_mem:
+  !ctx func cenv cx ty e es1 res es' bs bm bn eop rv tt lbl.
+    expr_sim_mem ctx func cenv cx ty e es1 /\
+    lower_value compile_expr cenv ty e bs = (eop, bm) /\
+    emit_inst ASSIGN [eop] [rv] bm = ((), bn) /\
+    (do result <- eval_expr cx e; read_result cx result od) es1 = (res, es') /\
+    expr_res_ok res /\ fn_has_code bs bn func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv bs /\ stmt_state_rel ctx func cenv cx es1 tt /\
+    cs_extends bs bm /\ alloca_history func (jump_to lbl tt) /\
+    res <> INR (Error (RuntimeError "convert empty bytes to signed")) ==>
+    frag_exec_mem ctx bs bn (\s. s = jump_to lbl tt)
+      (\s. (?v u w. res = INL v /\
+             expr_post ctx func cenv cx e es1 bs bm (jump_to lbl tt) es' v eop u /\
+             eval_operand eop u = SOME w /\
+             s = (update_var rv w u) with
+                   vs_inst_idx := LENGTH bn.cs_current_insts) /\
+           alloca_history func s /\
+           (jump_to lbl tt).vs_alloca_next <= s.vs_alloca_next)
+      (expr_exit res)
+Proof
+  rpt strip_tac >>
+  `cs_extends bm bn` by metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  `fn_has_code bs bm func /\ fn_has_code bm bn func` by
+    metis_tac[fn_has_code_mid, cs_extends_refl] >>
+  qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
+  disch_then (qspecl_then [`bs`, `bm`, `eop`, `res`, `es'`, `jump_to lbl tt`]
+                mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (mp_tac o MATCH_MP frag_exec_mem_pre_exit_c) >>
+  disch_then (qspecl_then [`\s. s = jump_to lbl tt`, `expr_exit res`] mp_tac) >>
+  (impl_tac >- simp[stmt_state_rel_jump_to]) >>
+  disch_then (fn th => irule (MATCH_MP frag_exec_mem_then th)) >>
+  simp[] >> rpt strip_tac >>
+  `?w. eval_operand eop t = SOME w` by
+    (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  `alloca_inv t` by gvs[expr_post_def, stmt_state_rel_def] >>
+  drule_all frag_exec_assign_mem_at >>
+  disch_then (qspecl_then [`ctx`, `expr_exit res`] mp_tac) >>
+  disch_then (mp_tac o MATCH_MP frag_exec_mem_weaken) >>
+  disch_then irule >> simp[] >>
+  strip_tac >> qexistsl_tac [`t`, `w`] >> simp[]
+QED
+
+val () =
+  let val th = ifexp_arm_frag_mem
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_IFEXP_ARM_MEMORY_AUDIT OK\n"
+     else raise Fail "ifexp arm memory inherited admission"
+  end;
