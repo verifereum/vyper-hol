@@ -4108,7 +4108,23 @@ Resume step_inst_base_error_transfer[SETFMP]:
   error_inline_tac
 QED
 Resume step_inst_base_error_transfer[SHA3]:
-  error_inline_tac
+  Cases_on `inst.inst_operands` >- gvs[] >>
+  rename1 `inst.inst_operands = offset_op::ops` >>
+  Cases_on `ops` >- gvs[] >>
+  rename1 `inst.inst_operands = offset_op::size_op::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  Cases_on `eval_operand offset_op s1`
+  >- (first_x_assum drule >> simp[]) >>
+  Cases_on `eval_operand size_op s1`
+  >- (first_x_assum drule >>
+      Cases_on `eval_operand offset_op s2` >> simp[]) >>
+  Cases_on `inst.inst_outputs`
+  >- (Cases_on `eval_operand offset_op s2` >>
+      Cases_on `eval_operand size_op s2` >> gvs[]) >>
+  rename1 `inst.inst_outputs = out::outs` >>
+  Cases_on `outs` >> gvs[] >>
+  Cases_on `eval_operand offset_op s2` >>
+  Cases_on `eval_operand size_op s2` >> gvs[]
 QED
 Finalise step_inst_base_error_transfer
 
