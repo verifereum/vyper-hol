@@ -17,7 +17,8 @@ Theorem immutable_word_assign_zero:
   run_inst_seq [mk_inst id ASSIGN [Lit 0w] [out]] s =
     OK (update_var out 0w s)
 Proof
-  simp[run_inst_seq_def, mk_inst_def, step_inst_base_def,
+  simp[mk_inst_def] >>
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs,
        eval_operand_def]
 QED
 
@@ -26,7 +27,8 @@ Theorem immutable_word_add_zero:
   step_inst_base (mk_inst id ADD [off; region] [tmp]) s =
     OK (update_var tmp a s)
 Proof
-  simp[mk_inst_def, step_inst_base_def, exec_pure2_def, wordsTheory.WORD_ADD_0]
+  simp[mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, exec_pure2_def, wordsTheory.WORD_ADD_0]
 QED
 
 Theorem immutable_word_ctor_load:
@@ -36,13 +38,10 @@ Theorem immutable_word_ctor_load:
      mk_inst (id + 1) ILOAD [Var tmp] [out]] s =
     OK (update_var out (mload (w2n a) s) (update_var tmp a s))
 Proof
-  strip_tac >>
-  `step_inst_base (mk_inst id ADD [off; region] [tmp]) s =
-     OK (update_var tmp a s)` by
-    (irule immutable_word_add_zero >> simp[]) >>
-  simp[run_inst_seq_def] >>
-  simp[mk_inst_def, step_inst_base_def, exec_read1_def] >>
-  simp[eval_operand_def, lookup_var_def, update_var_def,
+  strip_tac >> simp[run_inst_seq_def, immutable_word_add_zero] >>
+  simp[mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, exec_read1_def, exec_pure2_def, wordsTheory.WORD_ADD_0,
+       eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE, mload_def]
 QED
 
@@ -54,14 +53,9 @@ Theorem immutable_word_ctor_store:
      mk_inst (id + 1) ISTORE [Var tmp; value] []] s =
     OK (istore (w2n a) v (update_var tmp a s))
 Proof
-  strip_tac >>
-  `step_inst_base (mk_inst id ADD [region; off] [tmp]) s =
-     OK (update_var tmp a s)` by
-    simp[mk_inst_def, step_inst_base_def, exec_pure2_def,
-         wordsTheory.WORD_ADD_0] >>
-  simp[run_inst_seq_def] >>
-  simp[mk_inst_def, step_inst_base_def] >>
-  simp[eval_operand_def, lookup_var_def, update_var_def,
+  simp[mk_inst_def] >>
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs,
+       exec_pure2_def, wordsTheory.WORD_ADD_0, eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
@@ -72,7 +66,8 @@ Theorem immutable_word_runtime_load:
       (word_of_bytes T (0w:bytes32)
         (TAKE 32 (DROP (w2n a) s.vs_data_section ++ REPLICATE 32 0w))) s)
 Proof
-  simp[run_inst_seq_def, mk_inst_def, step_inst_base_def,
+  simp[mk_inst_def] >>
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs,
        exec_read1_def]
 QED
 
