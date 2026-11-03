@@ -158,6 +158,7 @@ QED
 
 Theorem cfg_norm_function_supply_fn_bisim:
   wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\ first_block_no_preds fn /\
+  EVERY label_positions_ok (fn_insts fn) /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
   cfg_norm_function_supply s fn = (fn',s') ==>
   fn_bisim fn fn'
@@ -170,6 +171,7 @@ QED
 Theorem cfg_norm_function_supply_frame_sim:
   ctx_bisim C C' /\
   wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\ first_block_no_preds fn /\
+  EVERY label_positions_ok (fn_insts fn) /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
   cfg_norm_function_supply s fn = (fn',s') ==>
   frame_sim C C' fn fn'

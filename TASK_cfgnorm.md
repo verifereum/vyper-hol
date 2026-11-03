@@ -13,6 +13,7 @@ The two cheated theorems in `venom/compiler/o1ContractCfgNormScript.sml`:
 ```sml
 Theorem cfg_norm_function_supply_fn_bisim:
   wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\ first_block_no_preds fn /\
+  EVERY label_positions_ok (fn_insts fn) /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
   cfg_norm_function_supply s fn = (fn',s') ==>
   fn_bisim fn fn'
@@ -20,6 +21,7 @@ Theorem cfg_norm_function_supply_fn_bisim:
 Theorem cfg_norm_function_supply_frame_sim:
   ctx_bisim C C' /\
   wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\ first_block_no_preds fn /\
+  EVERY label_positions_ok (fn_insts fn) /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
   cfg_norm_function_supply s fn = (fn',s') ==>
   frame_sim C C' fn fn'
@@ -79,3 +81,6 @@ An older variant (`cfg_norm_function`/`insert_split`, `cfgNormProof`, `cfgNormSi
 ## Notes
 
 - See the SML comments in `o1ContractCfgNormScript.sml`.
+
+## Restatement (2026-11-03)
+The previous run proved the earlier form of `cfg_norm_function_supply_fn_bisim` false (`supply_probe_frozen_contract_counterexample`, cfgNormSupplySimScript.sml): a JNZ whose *condition* operand is a `Label` gets its condition rewritten by `subst_label_terminator`. Both frozen statements now carry the extra premise `EVERY label_positions_ok (fn_insts fn)` (`label_positions_ok_def` in `venom/compiler/unitShapeDefsScript.sml`: a JNZ condition is never a label, JMP/JNZ destinations are labels, and other terminators carry no label operands). The O1 contract supplies it from `fn_shape_ok`. Keep the counterexample theorems: they show the premise is needed. `cfgNormDefsScript.sml` stays unchanged.
