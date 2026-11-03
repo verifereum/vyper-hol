@@ -1007,8 +1007,8 @@ Definition compile_stmt_def:
         compile_revert_with_reason cenv msg_op reason_ty msg_mem_size
      od) ∧
 
-  (* Return NONE: emit STOP for external (with unlock), RET for internal.
-     Mirrors Python: vyper/codegen_venom/stmt.py:lower_Return → _lower_external_return (unlocks first) *)
+  (* Internal returns use RET; constructor returns jump to their epilogue;
+     external returns unlock and STOP, as in Python's lower_Return. *)
   compile_stmt cenv lctx ty (Return NONE) =
     (case cenv.ce_return_pc of
        SOME (MemLoc rpc_off _) =>
@@ -1018,6 +1018,9 @@ Definition compile_stmt_def:
          od
      | SOME (PtrVar rpc _) => emit_inst RET [rpc] []
      | _ =>
+       (case cenv.ce_ctor_exit_label of
+          SOME exit_lbl => emit_inst JMP [Label exit_lbl] []
+        | NONE =>
          (* External: nonreentrant unlock + STOP *)
          let (is_nonreentrant, nkey, use_transient, is_view) =
            cenv.ce_nonreentrant in
@@ -1025,7 +1028,7 @@ Definition compile_stmt_def:
                compile_nonreentrant_unlock nkey use_transient is_view
              else return ());
             emit_inst STOP [] []
-         od) ∧
+         od)) ∧
 
   (* Return (SOME e): compile value, dispatch internal vs external.
      Mirrors Python: vyper/codegen_venom/stmt.py:lower_Return.

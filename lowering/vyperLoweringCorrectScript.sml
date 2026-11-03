@@ -28,11 +28,18 @@
  *     whose return may release a transient nonreentrant lock
  *   (S1, lower_vyper_runtime_unit_correct, is in loweringRuntimeCorrect)
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
- *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5)
+ *   lower_vyper_runtime_unit_run_mem_safe -- S3's memory-safe run (planned
+ *     admission, Milestone 5)
+ *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5), from the run
+ *     through mem_safe_raw_unit_memory_ok
+ *   lower_vyper_runtime_unit_o1_shape_extras -- S2b (planned admission,
+ *     Milestone 5): the non-INVOKE label operands are local, the entry
+ *     function has no PARAM, no first block has a PHI
  *
  * TASK056: obsolete NONE-mode relation retained as inactive source provenance.
- * STATUS: S2 is proved; S3 is a statement, NOT a proved correctness
- *   certificate.
+ * STATUS: S2 is proved; S2b is a statement; S3 is proved from the admitted
+ *   memory-safe run lower_vyper_runtime_unit_run_mem_safe, so it is NOT yet
+ *   a proved correctness certificate.
  * Before major proof repair, check lowering definitions against the chosen
  * upstream compiler target; see docs/compiler-definition-parity.md.
  *)
@@ -54,8 +61,9 @@ Ancestors
   venomExecSemantics
   venomState
   compileEnv e2eDefs supportedProgram compileVyper immutableSectionRel
-  unitTransformDefs unitShapeDefs
-  fragExec loweringHalt loweringShapeProps retAbiPlanProps
+  unitTransformDefs unitShapeDefs o1PassContract
+  fragExec loweringHalt loweringShapeProps loweringShapeSource retAbiPlanProps
+  venomInst venomWf contextCodegenRel memSafeRun allocaFrontierBound
 
 (* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
    exact oracle-mode boundary below. Original text retained without bridges.
@@ -188,7 +196,7 @@ Definition external_call_result_rel_def:
     | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
     | (INR (Error (RevertData _)), Abort Revert_abort _) => T
     | (INR (Error (RuntimeError m)), Abort _ _) => T
-    | (INR (Error e), Halt _) => decode_strictness_exempt tops e
+    | (INR (Error e), Halt _) => unspecified_behaviour_exempt tops e
     | _ => F
 End
 
@@ -305,6 +313,7 @@ Theorem external_return_none_unlock_result_rel:
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
     cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr /\ ~iv ==> ut) /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') ==>
@@ -424,6 +433,7 @@ Theorem external_return_none_result_rel:
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
     cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr ==> iv) ==>
     frag_exec ctx st st'
       (\s. state_rel func cenv cx es s)
@@ -870,22 +880,100 @@ QED
 
 (* ===== Planned lowering stages (NOT certificates) ===== *)
 
-(* S2, Milestone 5: proved in loweringShapeProps as
-   lower_vyper_runtime_unit_source_unit_ok_names. Raw O1 shape excludes
-   DLOAD; the immutable-free hypothesis restricts this theorem's source
-   domain, not the runtime immutable compiler. *)
+(* S2, Milestone 5: proved in loweringShapeSource as
+   lower_vyper_runtime_unit_source_unit_ok_checked. The type checker supplies
+   builtin arities and distinct internal names; raw_shape_free_program
+   excludes msg.gas values and raw_call (wider than the unit shape needs:
+   a plain raw_call passes it, but the body-shape proof lacks that case).
+   Raw O1 shape excludes DLOAD; the immutable-free hypothesis restricts this
+   theorem's source domain, not the runtime immutable compiler. *)
 Theorem lower_vyper_runtime_unit_source_unit_ok:
+  !tops rpolicy unit layouts addr art.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    check_contract F layouts addr [(NONE, tops)] = SOME art /\
+    raw_shape_free_program tops /\ immutable_free_program tops
+    ==> o1_source_unit_ok unit
+Proof
+  ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_checked
+QED
+
+(* S2b: planned admission, Milestone 5. The lowering's PHI-free code
+   refers to labels only in jumps to blocks of the same function, in
+   reserved labels, and in INVOKE targets; its entry function reads
+   calldata, never a PARAM; and, having no PHI at all, no first block has
+   one. *)
+Theorem lower_vyper_runtime_unit_o1_shape_extras:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
     immutable_free_program tops
-    ==> o1_source_unit_ok unit
+    ==> unit_label_refs_ok unit /\ unit_entry_no_params unit /\
+        unit_first_block_no_phi unit
 Proof
-  ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_names
+  cheat
 QED
 
-(* S3: planned admission, Milestone 5. Proof idea: allocation-budget and
-   buffer-layout induction bound each reachable raw memory access. Excluding
-   source_exempt is essential: dynamic decoding can read unchecked offsets. *)
+(* The runtime unit reserves no global memory. *)
+Theorem lower_vyper_runtime_unit_global_reserved:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit
+    ==> unit.cu_context.ctx_global_reserved = []
+Proof
+  rpt gen_tac >> simp[lower_vyper_runtime_unit_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> strip_tac >>
+  irule vyperCompilerTheory.run_lowering_global_reserved >> metis_tac[]
+QED
+
+(* ===== S3: memory safety ===== *)
+
+(* A unit that lowers comes from run_lowering with the entry label
+   "__entry". *)
+Theorem lower_vyper_runtime_unit_run_lowering:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
+    ?selectors external_fns internal_fns fallback_fn entry_info.
+      run_lowering selectors external_fns internal_fns fallback_fn rpolicy
+        0 0 [] entry_info "__entry" = SOME unit
+Proof
+  rpt gen_tac >> simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
+  strip_tac >> metis_tac[]
+QED
+
+(* The run from the unit's entry is memory-safe: every instruction it
+   executes, callee frames included, reads and writes memory below the
+   allocation frontier.  Planned admission, Milestone 5: the memory-safe
+   form of S1's entry, body and halt simulation, whose leaves are the
+   footprint lemmas (fragExecMem, allocaFootprint) and whose composition
+   over compile_guarded_body is S1's run transfer.  Excluding
+   source_exempt is essential: dynamic decoding can read unchecked
+   offsets. *)
+Theorem lower_vyper_runtime_unit_run_mem_safe:
+  !tops rpolicy unit am tx ret vs fn lbl.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl
+    ==>
+    !fuel. mem_safe_blocks fuel unit.cu_context fn
+             (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                         vs_inst_idx := 0 |>)
+Proof
+  cheat
+QED
+
+(* S3, Milestone 5: the memory-safe run (above) through the bridge
+   mem_safe_raw_unit_memory_ok, with alloca_frontier_inv as the frontier
+   bound.  The bridge's structural premises (an entry function with an entry
+   block, distinct labels, an acyclic reachable call graph, the allocation
+   budget below the word size) are lowering_context_ok, which run_lowering
+   checks. *)
 Theorem lower_vyper_runtime_unit_memory_ok:
   !tops rpolicy unit am tx ret vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -899,7 +987,36 @@ Theorem lower_vyper_runtime_unit_memory_ok:
     ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
     ==> raw_unit_memory_ok unit.cu_context vs
 Proof
-  cheat
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
+  drule run_lowering_context_ok >> strip_tac >>
+  drule run_lowering_entry >> strip_tac >>
+  drule lowering_context_ok_bridge >> strip_tac >>
+  drule lowering_context_ok_integrity >> strip_tac >>
+  drule lowering_context_ok_static_integrity >> strip_tac >>
+  drule lowering_context_ok_alloca_budget >> strip_tac >>
+  `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
+    metis_tac[lookup_function_MEM, lookup_function_result_name] >>
+  `ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
+  `?lbl. fn_entry_label fn = SOME lbl` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[fn_has_entry_def, fn_entry_label_def, entry_block_def]) >>
+  qspecl_then [`unit.cu_context`, `vs`, `"__entry"`, `fn`, `lbl`,
+               `alloca_frontier_inv`] mp_tac mem_safe_raw_unit_memory_ok >>
+  impl_tac
+  >- (rpt conj_tac
+      >- simp[]
+      >- simp[]
+      >- simp[]
+      >- fs[listTheory.EVERY_MEM]
+      >- (irule alloca_frontier_inv_closed >> simp[])
+      >- (irule alloca_frontier_inv_entry >>
+          simp[ctx_wf_def, ctx_has_entry_def, ctx_fn_names_def, listTheory.MEM_MAP,
+               reachable_call_graph_acyclic_def] >>
+          fs[initial_venom_state_rel_def] >> metis_tac[])
+      >- metis_tac[alloca_frontier_inv_bound]
+      >> drule_all lower_vyper_runtime_unit_run_mem_safe >> simp[]) >>
+  simp[]
 QED
 
 (* ===== Superseded admission provenance ===== *)

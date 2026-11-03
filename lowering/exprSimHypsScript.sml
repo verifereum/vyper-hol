@@ -242,6 +242,7 @@ Ancestors
   vyperTypeEvalStoragePreservation vyperCallOutcomeStorage
   supportedExprTraverse supportedStmtTraverse exprStoragePreservation
   vyperLookup vyperPlaceResultTyping supportedProgram bodyStoragePreservation
+  structFieldsProps vyperTypeABI vyperValue vfmConstants valueEncoding pair
   vyperPlaceInvariants placeTypingProps allocLimits
 Libs
   pairLib
@@ -281,7 +282,10 @@ End
    range and apart (storage_layout_safe), and every successful outcome
    still to consume leaves the regions decoding (oracle_storage_ok), as
    e2eDefs's source_storage_ok and call_outcomes_ok ask of the entry state
-   and the outcomes. *)
+   and the outcomes.  Every immutable or constant the source can read by
+   name (env.bare_globals) is an immutable of the module being lowered, at
+   an ImmutableLoc whose bytes end below 2 ** 256, as build_compile_env
+   places a supported program's immutables (immutableLocationProps). *)
 Definition expr_sim_inv_def:
   expr_sim_inv cenv cx env (es:evaluation_state) <=>
     env_consistent env cx es /\ state_well_typed es /\
@@ -310,7 +314,12 @@ Definition expr_sim_inv_def:
     popped_keys_indexed es.scopes /\
     place_map_tables_agree_on_defined cenv env /\
     (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
-               cenv.ce_hashmap_info nsid = NONE)
+               cenv.ce_hashmap_info nsid = NONE) /\
+    (!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==>
+       src = cenv.ce_module /\
+       ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+             !tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+                  off + type_memory_size tv < dimword (:256))
 End
 
 (* The types whose values are word_values (loweringSlice): integers,
@@ -1064,7 +1073,7 @@ Proof
   rw[FLOOKUP_UPDATE] >> gvs[] >> metis_tac[]
 QED
 
-Theorem scope_pop_trace_keys_indexed[local]:
+Theorem scope_pop_trace_keys_indexed:
   !events sc sc'.
     scope_pop_trace sc events sc' /\ EVERY scope_well_typed sc /\
     popped_keys_indexed sc ==>
@@ -1395,12 +1404,103 @@ Proof
   metis_tac[expr_body_pre_type_evaluates, expr_sim_pre_body_pre]
 QED
 
+(* Under expr_sim_inv the compile environment's memory size of a type is
+   the source's (the struct fields clause sizes each field). *)
+Theorem struct_layout_size_list:
+  !fields tvs.
+    OPT_MMAP (evaluate_type tenv) (MAP (FST o SND) fields) = SOME tvs /\
+    EVERY (\(name, ty, sz). !tv. evaluate_type tenv ty = SOME tv ==>
+                                  sz = type_memory_size tv) fields ==>
+    SUM (MAP (SND o SND) fields) = type_memory_size_list tvs
+Proof
+  Induct >> simp[type_memory_size_def] >>
+  Cases >> rename1 `(name, info)` >> Cases_on `info` >>
+  simp[type_memory_size_def] >> rpt strip_tac >> gvs[type_memory_size_def]
+QED
+
+Theorem struct_layout_size_zip:
+  !names tvs. LENGTH names = LENGTH tvs ==>
+    type_memory_size_fields (ZIP (names, tvs)) = type_memory_size_list tvs
+Proof
+  Induct >> Cases_on `tvs` >> simp[type_memory_size_def]
+QED
+
+Theorem expr_sim_inv_memory_size:
+  !cenv ty cx env es tv.
+    expr_sim_inv cenv cx env es /\
+    evaluate_type (get_tenv cx) ty = SOME tv ==>
+    type_memory_bytes cenv ty = type_memory_size tv
+Proof
+  ho_match_mp_tac type_memory_bytes_ind >> rpt conj_tac >> rpt gen_tac
+  >~ [`StructT nsid`]
+  >- (rpt strip_tac >>
+      gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
+          type_memory_bytes_def, type_memory_size_def] >>
+      `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+        gvs[expr_sim_inv_def] >>
+      `!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+        EVERY (\(fname, fty, sz). !tv.
+          evaluate_type (get_tenv cx) fty = SOME tv ==>
+          sz = type_memory_size tv) fields` by
+        (fs[expr_sim_inv_def] >> metis_tac[]) >>
+      qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
+      simp[sfields_tenv_consistent_def] >> strip_tac >>
+      qpat_x_assum `!nsid args. _` drule >> strip_tac >>
+      gvs[get_struct_fields_def, evaluate_types_OPT_MMAP] >>
+      `LENGTH tvs = LENGTH (MAP FST args)` by
+        (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+      simp[struct_layout_size_zip] >>
+      irule struct_layout_size_list >>
+      qexists_tac `get_tenv cx \\ nsid` >> conj_tac >- gvs[] >>
+      qpat_x_assum `!name fields. _ ==> EVERY _ _` drule >>
+      simp[EVERY_MEM, FORALL_PROD] >> rpt strip_tac >>
+      drule (cj 1 vyperTypeExprSoundnessTheory.evaluate_type_mono) >>
+      metis_tac[])
+  >~ [`TupleT tys`]
+  >- (rpt strip_tac >>
+      gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
+          type_memory_bytes_def, type_memory_size_def, evaluate_types_OPT_MMAP] >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> irule tuple_memory_bytes_size >>
+      qexists_tac `get_tenv cx` >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
+      type_memory_bytes_def, type_memory_size_def, word_size_def] >>
+  metis_tac[]
+QED
+
+
+(* alloc_limits_expr bounds the expression's own value. *)
+Theorem alloc_limits_expr_type_alloc_ok:
+  !cenv e. alloc_limits_expr cenv e ==> type_alloc_ok cenv (expr_type e)
+Proof
+  Cases_on `e` >> simp[alloc_limits_expr_def, vyperASTTheory.expr_type_def]
+QED
+
+(* What unwrap_value's copy of the expression's value out of storage,
+   transient storage or code asks of its type (expr_sim_of_vv_sim). *)
+Theorem expr_body_pre_copy_ok:
+  !cenv cx env e es tvt.
+    expr_body_pre cenv cx env e es /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+    ~is_word_type (expr_type e) ==>
+    type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
+    type_memory_size tvt < 2 ** 64
+Proof
+  rpt gen_tac >> strip_tac >>
+  `type_memory_bytes cenv (expr_type e) = type_memory_size tvt` by
+    (irule expr_sim_inv_memory_size >> fs[expr_body_pre_def] >> metis_tac[]) >>
+  `alloc_limits_expr cenv e` by fs[expr_body_pre_def] >>
+  drule alloc_limits_expr_type_alloc_ok >> simp[type_alloc_ok_def]
+QED
+
 (* A case lemma that proves expr_vv_ok proves expr_ok. *)
 Theorem expr_ok_of_vv:
   !cenv e. expr_vv_ok cenv e ==> expr_ok cenv e
 Proof
-  rw[expr_ok_def, expr_sim_ok_def] >>
-  metis_tac[expr_sim_of_vv_sim, expr_vv_ok_def]
+  rw[expr_ok_def, expr_sim_ok_def] >> irule expr_sim_of_vv_sim >>
+  rpt strip_tac
+  >~ [`expr_vv_sim`] >- (fs[expr_vv_ok_def] >> metis_tac[]) >>
+  metis_tac[expr_body_pre_copy_ok, expr_sim_pre_body_pre]
 QED
 
 (* A form lowered to a StackValue, with only values as results: expr_ok
@@ -1470,6 +1570,7 @@ Theorem expr_sim_case_of_vv:
     expr_sim_case nocalls ctx func cenv cx e
 Proof
   rw[expr_sim_case_def, expr_vv_case_def] >> irule expr_sim_of_vv_sim >>
+  conj_tac >- (rpt strip_tac >> drule_all expr_body_pre_copy_ok >> simp[]) >>
   metis_tac[]
 QED
 

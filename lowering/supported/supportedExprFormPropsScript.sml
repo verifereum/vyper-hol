@@ -73,56 +73,45 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_conversion_whitelist_coverage:
-  EVERY (\(src,dst). supported_conversion src dst)
-    [(BaseT (UintT 8), BaseT (IntT 256));
-     (BaseT (IntT 8), BaseT (UintT 256));
-     (BaseT (UintT 8), BaseT (UintT 256));
-     (BaseT (IntT 256), BaseT (IntT 8));
-     (BaseT BoolT, BaseT (IntT 8));
-     (BaseT BoolT, BaseT (UintT 8));
-     (BaseT (IntT 8), BaseT BoolT);
-     (BaseT (UintT 8), BaseT BoolT);
-     (BaseT (BytesT (Fixed 1)), BaseT BoolT);
-     (BaseT (BytesT (Dynamic 32)), BaseT BoolT);
-     (BaseT (BytesT (Dynamic 32)), BaseT (UintT 8));
-     (BaseT AddressT, BaseT (UintT 256));
-     (BaseT (IntT 8), BaseT AddressT);
-     (BaseT (UintT 8), BaseT AddressT);
-     (BaseT (BytesT (Fixed 1)), BaseT (UintT 8));
-     (BaseT (BytesT (Fixed 32)), BaseT (IntT 8));
-     (BaseT (BytesT (Fixed 1)), BaseT AddressT);
-     (BaseT (BytesT (Fixed 1)), BaseT DecimalT);
-     (BaseT (BytesT (Fixed 1)), BaseT (BytesT (Fixed 32)));
-     (BaseT (IntT 8), BaseT (BytesT (Fixed 32)));
-     (BaseT (UintT 8), BaseT (BytesT (Fixed 32)));
-     (BaseT (UintT 256), BaseT DecimalT);
-     (BaseT (IntT 128), BaseT DecimalT);
-     (BaseT DecimalT, BaseT (IntT 8));
-     (BaseT DecimalT, BaseT (UintT 8))]
+(* Conversion support follows the checker, including formerly excluded pairs. *)
+Theorem supported_convert_checker_domain:
+  supported_type_builtin_form tops ty Convert target [a] <=>
+    ty = target /\ valid_conversion (expr_type a) ty
+Proof
+  simp[supported_type_builtin_form_def]
+QED
+
+Theorem conversion_width_boundary_acceptance:
+  EVERY (\(src,dst). valid_conversion src dst)
+    [(BaseT (UintT 8), BaseT (BytesT (Fixed 1)));
+     (BaseT (IntT 128), BaseT (BytesT (Fixed 16)));
+     (BaseT (BytesT (Dynamic 32)), BaseT (IntT 8));
+     (BaseT (BytesT (Fixed 1)), BaseT (IntT 256));
+     (BaseT (StringT 4), BaseT (BytesT (Fixed 4)));
+     (BaseT (BytesT (Dynamic 4)), BaseT (BytesT (Fixed 4)));
+     (BaseT (UintT 256), BaseT (BytesT (Dynamic 32)));
+     (BaseT (BytesT (Fixed 4)), BaseT (BytesT (Dynamic 4)));
+     (BaseT (BytesT (Fixed 4)), BaseT (StringT 4));
+     (BaseT (StringT 32), BaseT (BytesT (Dynamic 32)));
+     (BaseT (BytesT (Fixed 20)), BaseT BoolT)]
 Proof
   EVAL_TAC
 QED
 
-Theorem supported_conversion_exclusion_coverage:
-  EVERY (\(src,dst). ~supported_conversion src dst)
-    [(BaseT (BytesT (Dynamic 33)), BaseT BoolT);
+Theorem conversion_width_boundary_rejection:
+  EVERY (\(src,dst). ~valid_conversion src dst)
+    [(BaseT (UintT 256), BaseT (BytesT (Fixed 4)));
+     (BaseT (IntT 16), BaseT (BytesT (Fixed 1)));
+     (BaseT (BytesT (Dynamic 33)), BaseT BoolT);
      (BaseT (BytesT (Dynamic 33)), BaseT (UintT 256));
-     (BaseT (BytesT (Dynamic 32)), BaseT (IntT 256));
-     (BaseT (BytesT (Fixed 31)), BaseT (IntT 256));
-     (BaseT (UintT 256), BaseT (BytesT (Fixed 31)));
-     (BaseT (IntT 136), BaseT DecimalT);
-     (BaseT (IntT 134), BaseT DecimalT);
-     (BaseT (IntT 256), BaseT DecimalT);
-     (BaseT (StringT 32), BaseT (BytesT (Dynamic 32)));
-     (BaseT (BytesT (Dynamic 32)), BaseT (StringT 32));
-     (BaseT AddressT, BaseT (IntT 256));
-     (BaseT BoolT, BaseT DecimalT);
-     (BaseT DecimalT, BaseT AddressT);
-     (BaseT (BytesT (Fixed 20)), BaseT BoolT);
-     (BaseT (BytesT (Fixed 1)), BaseT (BytesT (Fixed 20)));
-     (BaseT (UintT 7), BaseT (UintT 8));
-     (FlagT (NONE,"flag"), BaseT (UintT 256))]
+     (BaseT (BytesT (Dynamic 33)), BaseT (IntT 256));
+     (BaseT (BytesT (Dynamic 33)), BaseT AddressT);
+     (BaseT (BytesT (Dynamic 33)), BaseT DecimalT);
+     (BaseT (BytesT (Dynamic 8)), BaseT (BytesT (Fixed 4)));
+     (BaseT (StringT 8), BaseT (BytesT (Fixed 4)));
+     (BaseT (UintT 256), BaseT (BytesT (Dynamic 31)));
+     (BaseT (BytesT (Fixed 4)), BaseT (BytesT (Dynamic 3)));
+     (BaseT (BytesT (Fixed 4)), BaseT (StringT 3))]
 Proof
   EVAL_TAC
 QED

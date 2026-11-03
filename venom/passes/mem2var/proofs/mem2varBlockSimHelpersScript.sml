@@ -4291,8 +4291,11 @@ Proof
       with_step_inst_base_opcode ASM_REWRITE_TAC >> simp[] >>
       every_case_tac >> gvs[lift_result_def] >>
       metis_tac[m2v_inv_noix_update_accounts, m2v_inv_noix_halt_state,
+                m2v_inv_noix_set_returndata,
                 m2v_non32_ok_update_accounts, m2v_non32_ok_halt_state,
+                m2v_non32_ok_set_returndata,
                 m2v_ao_undef_sync_update_accounts,
+                m2v_ao_undef_sync_set_returndata,
                 m2v_ao_undef_sync_halt_state]) >>
   with_step_inst_base_opcode ASM_REWRITE_TAC >> simp[lift_result_def] >>
   metis_tac[m2v_inv_noix_set_returndata, m2v_inv_noix_halt_state,

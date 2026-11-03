@@ -594,15 +594,15 @@ Proof
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def] >> strip_tac >> gvs[] >>
   simp[emitted_insts_def, rich_listTheory.DROP_APPEND1] >>
-  simp[Once run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``ADD``, mk_inst_def,
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        exec_pure2_def, bind_outputs_def, eval_operand_def] >>
-  simp[Once run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``MLOAD``, exec_read1_def,
+  simp[Once run_inst_seq_def, step_inst_base_def, exec_read1_def,
        bind_outputs_def, eval_operand_def,
        emitHelperPropsTheory.lookup_var_update_var,
        valueEncodingPropsTheory.mem_word_at_eq_mload] >>
-  simp[Once run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``ADD``, exec_pure2_def,
+  simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
        bind_outputs_def, eval_operand_def] >>
-  simp[Once run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``MSTORE``, exec_write2_def,
+  simp[Once run_inst_seq_def, step_inst_base_def, exec_write2_def,
        eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >>
   simp[run_inst_seq_def] >>
   qpat_x_assum `!q k z t. _` kall_tac >>
@@ -1573,11 +1573,11 @@ Resume ec_points_run[allocation]:
   (impl_tac >- (
     simp[] >> rpt strip_tac >>
     `eval_operand p1 s1 = SOME point /\ eval_operand p2 s1 = SOME second_word` by
-      (qpat_x_assum `s1.vs_labels = s.vs_labels` mp_tac >>
-       qpat_x_assum `!x. not_fresh_at sf x ==> lookup_var x s1 = lookup_var x s` mp_tac >>
-       qpat_x_assum `!z. MEM (Var z) [p1;p2] ==> _` mp_tac >>
-       qpat_x_assum `eval_operand p1 s = SOME point` mp_tac >>
+      (qpat_x_assum `eval_operand p1 s = SOME point` mp_tac >>
        qpat_x_assum `eval_operand p2 s = SOME second_word` mp_tac >>
+       qpat_x_assum `!x. MEM (Var x) [p1;p2] ==> _` mp_tac >>
+       qpat_x_assum `!x. not_fresh_at sf x ==> lookup_var x s1 = lookup_var x s` mp_tac >>
+       qpat_x_assum `s1.vs_labels = s.vs_labels` mp_tac >>
        POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
        Cases_on `p1` >> Cases_on `p2` >>
        gvs[eval_operand_def] >> metis_tac[]) >>

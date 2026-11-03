@@ -46,7 +46,9 @@ Definition supported_declaration_header_def:
     | StructDecl name fields =>
         EVERY (supported_place_type tops o SND) fields
     | EventDecl name fields =>
-        EVERY (supported_scalar_type o SND o FST) fields
+        (* Python rejects more than three indexed fields (EventT) *)
+        EVERY (supported_scalar_type o SND o FST) fields /\
+        LENGTH (FILTER I (MAP SND fields)) <= 3
     | InterfaceDecl name methods =>
         EVERY (supported_interface_signature tops) methods
     | _ => F

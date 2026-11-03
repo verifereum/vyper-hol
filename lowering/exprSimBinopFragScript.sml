@@ -201,9 +201,10 @@ Proof
     (gvs[vyperValueTheory.within_int_bound_def] >> Cases_on `0 < n` >>
      gvs[] >> irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
      qexists_tac `2 ** (n - 1)` >> simp[arithmeticTheory.EXP_BASE_LE_MONO]) >>
-  simp[vyperValueTheory.within_int_bound_def] >>
-  irule arithmeticTheory.LESS_LESS_EQ_TRANS >> qexists_tac `2 ** n` >>
-  simp[arithmeticTheory.EXP_BASE_LE_MONO]
+  `2 ** n <= 2 ** 256` by
+    (irule arithmeticTheory.EXP_BASE_LEQ_MONO_IMP >> simp[]) >>
+  `k < 2 ** 256` by decide_tac >>
+  pop_assum mp_tac >> simp[vyperValueTheory.within_int_bound_def]
 QED
 
 (* << and >> on a 256-bit integer by a non-negative amount. *)
@@ -244,8 +245,9 @@ QED
 
 (* Also #572: << of an integer narrower than 256 bits, which the lowering
    does not truncate, and a shift by a negative amount, where the source
-   raises and the lowering shifts.  Vyper rejects shifts of types other than
-   int256 and uint256; well_typed_binop admits every integer type. *)
+   raises and the lowering shifts.  The checker now rejects both
+   (well_typed_binop's ShL case and shift_amount_ok), but the amount's sign
+   is a fact about the operand expression, which binop_frag does not see. *)
 Theorem binop_frag_shift_572:
   !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
     (bop = ShL \/ bop = ShR) /\

@@ -310,6 +310,25 @@ Proof
   rw[compile_binop_def, compile_select_def] >> straight_fresh_tac
 QED
 
+(* Keep source selection separate from the typed word comparison bridge. *)
+Theorem bop_result_minmax_select[local]:
+  (mm = Min \/ mm = Max) /\
+  expr_res_ok (bop_result cx ann mm tys v1 v2 es) /\ word_value v1 ==>
+  ?b. bop_result cx ann (if mm = Min then Lt else Gt) tys v1 v2 es =
+        INL (BoolV b) /\
+      bop_result cx ann mm tys v1 v2 es = INL (if b then v1 else v2) /\
+      word_value (if b then v1 else v2)
+Proof
+  strip_tac >> gvs[] >>
+  fs[word_value_def] >> gvs[] >>
+  gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
+      expr_res_ok_def] >>
+  Cases_on `v2` >>
+  gvs[evaluate_binop_def, expr_res_ok_def] >>
+  rpt IF_CASES_TAC >> gvs[word_value_def] >>
+  `n = i` by ARITH_TAC >> simp[]
+QED
+
 (* The source result of Min or Max is the operand eval_compare picks. *)
 Theorem bop_result_minmax:
   !cx ann mm ty tv v1 v2 es.
@@ -326,14 +345,12 @@ Theorem bop_result_minmax:
           then val_to_w256 v1 else val_to_w256 v2
 Proof
   rpt gen_tac >> strip_tac >>
+  drule_at (Pos (el 2)) bop_result_minmax_select >>
+  (impl_tac >- simp[]) >> strip_tac >>
   qspecl_then [`cx`, `ann`, `if mm = Min then Lt else Gt`, `ty`, `tv`, `v1`,
                `v2`, `es`] mp_tac bop_result_compare >>
-  fs[word_value_def] >> gvs[value_has_type_inv] >> Cases_on `v2` >>
-  gvs[value_has_type_inv, value_has_type_def] >>
-  gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-      expr_res_ok_def] >>
-  disch_then (fn th => rewrite_tac [GSYM th]) >> rw[word_value_def] >>
-  `n = i` by ARITH_TAC >> simp[]
+  (impl_tac >- (asm_rewrite_tac[] >> simp[expr_res_ok_def])) >>
+  strip_tac >> gvs[] >> IF_CASES_TAC >> simp[]
 QED
 
 (* The run of the lowered Min or Max from a state with the fresh variables

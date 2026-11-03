@@ -174,7 +174,7 @@ Proof
   drule_all abi_decoder_budget_site_bounds >> strip_tac >>
   `b+cap < dimword (:256)` by
     (qpat_assum `abi_decoder_budget first last b cap initial`
-      (ACCEPT_TAC o CONJUNCT1 o PURE_REWRITE_RULE [abi_decoder_budget_def])) >>
+      (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [abi_decoder_budget_def])) >>
   `h < dimword (:256) /\ slot < dimword (:256) /\ h+32 <= d+output_size` by decide_tac >>
   `MEM (slot,32) (abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial)` by
     (irule abi_scratch_registered_member >> asm_simp_tac (srw_ss()) [] >>

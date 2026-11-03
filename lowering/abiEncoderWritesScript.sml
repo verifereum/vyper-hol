@@ -190,23 +190,9 @@ Theorem encoder_dynamic_iteration_stores:
   step_inst_base (mk_inst isite MSTORE [idx_op;next_idx_op] []) v =
     OK (mstore idx_p (n2w (i+1)) v)
 Proof
-  strip_tac >>
-  `d+32+i*h < dimword (:256) /\
-   dyn_p < dimword (:256) /\ idx_p < dimword (:256)` by decide_tac >>
-  conj_tac
-  >- (qpat_assum `eval_operand head_op t = _`
-        (mp_then (Pos hd) mp_tac step_MSTORE) >>
-      disch_then (qspecl_then [`offset_op`, `n2w off`, `hsite`] mp_tac) >>
-      simp[w2n_n2w]) >>
-  conj_tac
-  >- (qpat_assum `eval_operand dyn_op u = _`
-        (mp_then (Pos hd) mp_tac step_MSTORE) >>
-      disch_then (qspecl_then [`next_dyn_op`, `n2w (off+child_len)`, `dsite`] mp_tac) >>
-      simp[w2n_n2w]) >>
-  qpat_assum `eval_operand idx_op v = _`
-    (mp_then (Pos hd) mp_tac step_MSTORE) >>
-  disch_then (qspecl_then [`next_idx_op`, `n2w (i+1)`, `isite`] mp_tac) >>
-  simp[w2n_n2w]
+  strip_tac >> simp[mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs] >>
+  simp[exec_write2_def] >> gvs[]
 QED
 
 Theorem encoder_registered_cell_initialization_and_repeat:
