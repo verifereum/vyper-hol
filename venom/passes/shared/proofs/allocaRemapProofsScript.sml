@@ -2669,7 +2669,9 @@ Proof
   qpat_x_assum `MEM inst.inst_opcode _`
     (strip_assume_tac o REWRITE_RULE[MEM]) >>
   fs[is_alloca_op_def, is_terminator_def, is_ext_call_op_def,
-     is_immutable_op_def, mem_write_ops_def, mem_read_ops_def] >>
+     is_immutable_op_def] >>
+  qpat_x_assum `_ = SOME ops` mp_tac >>
+  simp[mem_write_ops_def, mem_read_ops_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()]
   (* Use >~ pattern matching to bind labels to correct opcodes *)
   >~ [`MLOAD`] >- suspend "mload"
@@ -4090,7 +4092,14 @@ Proof
 QED
 
 Resume step_inst_base_error_transfer[ALLOCA]:
-  error_inline_tac
+  Cases_on `inst.inst_operands` >- gvs[] >>
+  rename1 `inst.inst_operands = op::ops` >>
+  Cases_on `ops` >> gvs[] >>
+  Cases_on `op` >> gvs[] >>
+  Cases_on `inst.inst_outputs` >- gvs[] >>
+  rename1 `inst.inst_outputs = out::outs` >>
+  Cases_on `outs` >> gvs[] >>
+  Cases_on `FLOOKUP s1.vs_allocas inst.inst_id` >> gvs[AllCaseEqs()]
 QED
 Resume step_inst_base_error_transfer[ASSERT]:
   error_inline_tac
@@ -4168,7 +4177,23 @@ Resume step_inst_base_error_transfer[RETPC_PARAM]:
   error_inline_tac
 QED
 Resume step_inst_base_error_transfer[RETURNDATACOPY]:
-  error_inline_tac
+  Cases_on `inst.inst_operands` >- gvs[] >>
+  rename1 `inst.inst_operands = dst_op::ops` >>
+  Cases_on `ops` >- gvs[] >>
+  rename1 `inst.inst_operands = dst_op::src_op::ops2` >>
+  Cases_on `ops2` >- gvs[] >>
+  rename1 `inst.inst_operands = dst_op::src_op::size_op::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  Cases_on `eval_operand dst_op s1`
+  >- (first_x_assum drule >> simp[]) >>
+  Cases_on `eval_operand src_op s1`
+  >- (first_x_assum drule >>
+      Cases_on `eval_operand dst_op s2` >> simp[]) >>
+  Cases_on `eval_operand size_op s1`
+  >- (first_x_assum drule >>
+      Cases_on `eval_operand dst_op s2` >>
+      Cases_on `eval_operand src_op s2` >> simp[]) >>
+  gvs[AllCaseEqs()]
 QED
 Resume step_inst_base_error_transfer[SETFMP]:
   error_inline_tac
@@ -5230,6 +5255,27 @@ Proof
       REWRITE_RULE[allocas_in_memory_def]) >> simp[] >> decide_tac
 QED
 
+Theorem alloca_step_domain_support[local]:
+  !inst s t.
+    inst.inst_opcode = ALLOCA /\ step_inst_base inst s = OK t ==>
+    FDOM t.vs_allocas SUBSET (inst.inst_id INSERT FDOM s.vs_allocas)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[step_inst_base_opcode_eqs] >>
+  Cases_on `inst.inst_operands` >- simp[] >>
+  rename1 `inst.inst_operands = op::ops` >>
+  Cases_on `ops` >> simp[] >>
+  Cases_on `op` >> simp[] >>
+  simp[exec_alloca_def] >>
+  Cases_on `inst.inst_outputs` >- simp[] >>
+  rename1 `inst.inst_outputs = out::outs` >>
+  Cases_on `outs` >> simp[] >>
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >>
+  simp[AllCaseEqs(), update_var_def] >>
+  rpt strip_tac >> gvs[FDOM_FUPDATE] >> SET_TAC[]
+QED
+
 (* After a step, future inst_ids remain fresh w.r.t. the updated allocas *)
 Theorem inst_ids_fresh_after_step[local]:
   !fn bb inst s1 v.
@@ -5268,13 +5314,12 @@ Proof
       `i <> s1.vs_inst_idx` by simp[] >>
       fs[EL_ALL_DISTINCT_EL_EQ, EL_MAP] >>
       metis_tac[]) >>
-    (* Now show NOTIN FDOM v.vs_allocas *)
-    qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-    simp[step_inst_base_def] >>
-    Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def] >>
-    simp[exec_alloca_def] >>
-    rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
-    strip_tac >> gvs[update_var_def, FDOM_FUPDATE])
+    (* Successful ALLOCA can add only this instruction's ID. *)
+    `inst.inst_opcode = ALLOCA` by
+      (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
+    drule_all alloca_step_domain_support >>
+    simp[SUBSET_DEF] >>
+    qexists_tac `(EL i bb.bb_instructions).inst_id` >> simp[])
   >- (
     (* Non-ALLOCA: v.vs_allocas = s1.vs_allocas *)
     `v.vs_allocas = s1.vs_allocas` by metis_tac[step_inst_base_allocas] >>
