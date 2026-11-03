@@ -51,10 +51,11 @@ Definition mem_inv_def:
           !fn inst s. Inv ctx fn inst s ==> M ctx fn inst s
 End
 
-(* Raw phase: the frontier fits a word and every access is below it. *)
+(* Raw phase: the frontier fits a word and every access is below it, or
+   part of a revert forwarding (inst_mem_ok_in_fn). *)
 Definition raw_mem_ok_def:
   raw_mem_ok (ctx:venom_context) (fn:ir_function) inst s <=>
-    s.vs_alloca_next < dimword (:256) /\ inst_mem_below_frontier inst s
+    s.vs_alloca_next < dimword (:256) /\ inst_mem_ok_in_fn fn inst s
 End
 
 (* Static phase: every access is below the static layout end. *)
