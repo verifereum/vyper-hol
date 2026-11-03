@@ -32,7 +32,12 @@ Supporting definitions (do not change them): the pass in
 2. Leave the other theorems in simplifyCfgCorrectnessScript.sml (other runs prove
    them), `simplify_cfg_pass_correct`, simplifyCfgProofScript.sml,
    `venom/compiler/` and every definition alone. Don't edit existing proof theories
-   other than to drop `[local]` from a lemma you need.
+   other than to drop `[local]` from a lemma you need, with one exception
+   (amended 2026-11-03 by the task owner): you may move `inst_wf_subst_label_inst`
+   and the private helpers it strictly needs out of cfgNormProofScript.sml into a
+   lightweight proof theory that doesn't depend on execEquivProofs (next to the
+   definitions it is about), and update its existing consumers to use it there.
+   Move, don't copy: no duplicate. Leave execEquivProofs alone.
 3. No duplicate or near-duplicate lemmas: reuse what's already proved.
 
 **If the theorem is false as stated:** produce a HOL4 counterexample
