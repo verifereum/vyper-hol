@@ -1186,3 +1186,75 @@ Proof
   >- (irule do_merge_jump_phi_distinct >> metis_tac[]) >>
   gen_tac >> irule do_merge_jump_phi_coverage >> metis_tac[]
 QED
+
+Theorem do_merge_jump_edge_simulation:
+  wf_function fn /\ EVERY label_positions_ok (fn_insts fn) /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') /\ bb_succs b = [target] /\
+  fn_cfg_edge fn src dst ==>
+  (if src = b.bb_label then a.bb_label else src) =
+    (if dst = b.bb_label then a.bb_label else dst) \/
+  fn_cfg_edge fn' (if src = b.bb_label then a.bb_label else src)
+    (if dst = b.bb_label then a.bb_label else dst)
+Proof
+  strip_tac >>
+  `MEM a fn.fn_blocks /\ MEM b fn.fn_blocks` by
+    metis_tac[lookup_block_member_label] >>
+  `a.bb_label <> b.bb_label` by metis_tac[can_bypass_jump_labels_distinct] >>
+  `b.bb_label <> target` by
+    (irule can_bypass_jump_target_distinct >> metis_tac[wf_function_def]) >>
+  Cases_on `dst = b.bb_label`
+  >- (`src = a.bb_label` by
+        (fs[fn_cfg_edge_def] >>
+         `bb = a` by metis_tac[can_bypass_jump_unique_pred] >> gvs[]) >> simp[]) >>
+  disj2_tac >> simp[] >>
+  Cases_on `src = b.bb_label`
+  >- (`dst = target` by
+        (fs[fn_cfg_edge_def] >>
+         `bb = b` by metis_tac[same_label_same_block] >> gvs[]) >>
+      simp[] >> irule (iffRL do_merge_jump_surviving_edge) >> metis_tac[]) >>
+  simp[] >> irule (iffRL do_merge_jump_surviving_edge) >> metis_tac[]
+QED
+
+Theorem do_merge_jump_all_reachable:
+  wf_function fn /\ first_block_no_preds fn /\ all_reachable fn /\
+  EVERY label_positions_ok (fn_insts fn) /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') ==> all_reachable fn'
+Proof
+  strip_tac >>
+  `MEM a fn.fn_blocks` by metis_tac[lookup_block_member_label] >>
+  `?target. bb_succs b = [target]` by
+    (fs[can_bypass_jump_def, num_succs_def] >>
+     Cases_on `bb_succs b` >> gvs[] >> Cases_on `t` >> gvs[]) >>
+  `ALL_DISTINCT (fn_labels fn') /\ fn_has_entry fn'` by
+    (irule do_merge_jump_labels_entry >> metis_tac[]) >>
+  `fn.fn_blocks <> [] /\ fn'.fn_blocks <> []` by
+    fs[wf_function_def, fn_has_entry_def] >>
+  `(HD fn'.fn_blocks).bb_label = (HD fn.fn_blocks).bb_label` by
+    (irule do_merge_jump_entry_label >> metis_tac[]) >>
+  `(HD fn.fn_blocks).bb_label <> b.bb_label` by
+    (fs[first_block_no_preds_def, EVERY_MEM, can_bypass_jump_def] >>
+     qpat_x_assum `!bb. _` (qspec_then `a` mp_tac) >> simp[] >> metis_tac[]) >>
+  `!x y. RTC (fn_cfg_edge fn) x y ==>
+    RTC (fn_cfg_edge fn') (if x = b.bb_label then a.bb_label else x)
+      (if y = b.bb_label then a.bb_label else y)` by
+    (ho_match_mp_tac rtc_map_simulation >> rpt strip_tac >>
+     irule do_merge_jump_edge_simulation >> metis_tac[]) >>
+  simp[all_reachable_def] >> qx_gen_tac `bb` >> strip_tac >>
+  `MEM bb.bb_label (fn_labels fn')` by
+    (simp[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `MEM bb.bb_label (fn_labels fn) /\ bb.bb_label <> b.bb_label` by
+    (drule do_merge_jump_fn_labels >> strip_tac >> fs[MEM_FILTER]) >>
+  `fn_reachable fn bb.bb_label` by
+    (fs[all_reachable_def, fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `fn_entry_label fn' = fn_entry_label fn` by
+    (Cases_on `fn.fn_blocks` >> Cases_on `fn'.fn_blocks` >>
+     gvs[fn_entry_label_def, entry_block_def]) >>
+  gvs[fn_reachable_def] >>
+  `entry = (HD fn.fn_blocks).bb_label` by
+    (Cases_on `fn.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def]) >>
+  first_x_assum (qspecl_then [`entry`, `bb.bb_label`] mp_tac) >> simp[]
+QED
