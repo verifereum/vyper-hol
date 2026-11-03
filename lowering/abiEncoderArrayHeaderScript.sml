@@ -83,8 +83,9 @@ Proof
     mp_tac exec_block_run_inst_seq >>
   simp[abi_encode_array_header_insts_def, mk_inst_def, is_terminator_def] >> strip_tac >> simp[] >>
   simp[Once exec_block_def, get_instruction_def, abi_encode_array_header_insts_def] >>
-  simp[step_inst_def, Once step_inst_base_def, mk_inst_def,
-    abi_encode_array_header_state_def, eval_operand_def, lookup_var_update_var] >>
+  simp_tac bool_ss [step_inst_def] >>
+  simp_tac bool_ss [Once step_inst_base_def, mk_inst_def] >>
+  simp[abi_encode_array_header_state_def, eval_operand_def, lookup_var_update_var] >>
   Cases_on `i<n` >> simp[bool_to_word_def, lookup_var_def, update_var_def,
     finite_mapTheory.FLOOKUP_UPDATE, jump_to_def, is_terminator_def]
 QED
