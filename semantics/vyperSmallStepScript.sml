@@ -1576,7 +1576,7 @@ Proof
       CASE_TAC >> simp[] >>
       CASE_TAC >> simp[] >>
       CASE_TAC >> simp[return_def, raise_def] >>
-      CASE_TAC >> simp[] >>
+      Cases_on `q` >> simp[] >>
       CASE_TAC >> simp[] >>
       CASE_TAC >> simp[] >>
       CASE_TAC >> simp[] >>
