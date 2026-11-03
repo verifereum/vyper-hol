@@ -2485,3 +2485,80 @@ Proof
   pop_assum SUBST1_TAC >> Cases_on `dft_exec_suffix fuel C (y::x::tail) s` >>
   simp[dft_res_rel_def] >> metis_tac[]
 QED
+
+Theorem dft_gas_suffix_swap:
+  dft_gas_swap_pair x y /\ gas_pair x.inst_opcode y.inst_opcode /\
+  inst_wf x /\ inst_wf y ==>
+  ?s. s' = (s with vs_gas_readings := s'.vs_gas_readings) /\
+    dft_res_rel (dft_exec_suffix fuel C (x::y::tail) s)
+                (dft_exec_suffix fuel C (y::x::tail) s')
+Proof
+  strip_tac >>
+  `~is_terminator x.inst_opcode /\ ~is_terminator y.inst_opcode /\
+   DISJOINT (set (inst_defs x)) (set (inst_uses y)) /\
+   DISJOINT (set (inst_defs y)) (set (inst_uses x)) /\
+   DISJOINT (set (inst_defs x)) (set (inst_defs y))` by
+    gvs[dft_gas_swap_pair_def] >>
+  Cases_on `?sy syx. step_inst fuel C y s' = OK sy /\
+    step_inst fuel C x (sy with vs_inst_idx := SUC s'.vs_inst_idx) = OK syx`
+  >- (qpat_x_assum `?sy syx. _` strip_assume_tac >>
+      drule_all dft_suffix_gas_pair_ok >>
+      disch_then (qspec_then `tail` strip_assume_tac) >>
+      qexists_tac `s` >> simp[]) >>
+  `!r. (!t. r <> OK t) ==> dft_res_rel r r` by simp[] >>
+  Cases_on `y.inst_opcode = GAS`
+  >- (`?sy. step_inst fuel C y s' = OK sy` by metis_tac[dft_gas_ok_shape] >>
+      `x.inst_opcode = INVOKE` by
+        (gvs[dftBlockSimTheory.gas_pair_def] >>
+         metis_tac[dft_gas_ok_shape]) >>
+      `dft_gas_swap_pair y x` by metis_tac[dft_gas_swap_pair_sym] >>
+      `!t. step_inst fuel C x (sy with vs_inst_idx := SUC s'.vs_inst_idx) <> OK t` by
+        metis_tac[] >>
+      qmatch_asmsub_abbrev_tac `!t. r <> OK t` >>
+      `step_inst fuel C x (sy with vs_inst_idx := SUC s'.vs_inst_idx) = r` by
+        simp[Abbr `r`] >>
+      drule_all dft_gas_invoke_stopping_second >>
+      disch_then (qspec_then `tail` strip_assume_tac) >>
+      qexists_tac `s` >> simp[]) >>
+  `x.inst_opcode = GAS /\ y.inst_opcode = INVOKE` by
+    gvs[dftBlockSimTheory.gas_pair_def] >>
+  `!t. step_inst fuel C y s' <> OK t` by metis_tac[dft_gas_ok_shape] >>
+  qmatch_asmsub_abbrev_tac `!t. r <> OK t` >>
+  `step_inst fuel C y s' = r` by simp[Abbr `r`] >>
+  drule_all dft_gas_invoke_stopping_first >>
+  disch_then (qspec_then `tail` strip_assume_tac) >>
+  qexists_tac `s` >> simp[]
+QED
+
+Theorem dft_suffix_swap_variant:
+  dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y /\
+  (!v. MEM (Var v) y.inst_operands ==> v IN FDOM s'.vs_vars) /\
+  (y.inst_opcode <> INVOKE ==>
+    !l. MEM (Label l) y.inst_operands ==> l IN FDOM s'.vs_labels) /\
+  ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
+    write_effects x.inst_opcode = empty_effects) ==>
+  ?s. s' = (s with vs_gas_readings := s'.vs_gas_readings) /\
+    dft_res_rel (dft_exec_suffix fuel C (x::y::tail) s)
+                (dft_exec_suffix fuel C (y::x::tail) s')
+Proof
+  strip_tac >> Cases_on `gas_pair x.inst_opcode y.inst_opcode`
+  >- (irule dft_gas_suffix_swap >> simp[]) >>
+  qexists_tac `s'` >> simp[] >> irule dft_nongas_suffix_swap >> metis_tac[]
+QED
+
+Theorem dft_prefix_swap_variant:
+  EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+  dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y /\
+  ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
+    write_effects x.inst_opcode = empty_effects) /\
+  (!t. FOLDR (dft_exec_cons fuel C) OK pre s' = OK t ==>
+    (!v. MEM (Var v) y.inst_operands ==> v IN FDOM t.vs_vars) /\
+    (y.inst_opcode <> INVOKE ==>
+      !l. MEM (Label l) y.inst_operands ==> l IN FDOM t.vs_labels)) ==>
+  ?s. s' = (s with vs_gas_readings := s'.vs_gas_readings) /\
+    dft_res_rel (dft_exec_suffix fuel C (pre ++ x::y::tail) s)
+                (dft_exec_suffix fuel C (pre ++ y::x::tail) s')
+Proof
+  strip_tac >> irule dft_suffix_prefix_variant >> simp[] >>
+  rpt strip_tac >> irule dft_suffix_swap_variant >> metis_tac[]
+QED
