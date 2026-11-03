@@ -240,7 +240,7 @@ Ancestors
   vyperEvalOutcomeSuffix vyperRuntimeAccounts
   vyperStorageLayoutSafety vyperTypeStoragePreservation
   vyperTypeEvalStoragePreservation vyperCallOutcomeStorage
-  supportedExprTraverse exprStoragePreservation
+  supportedExprTraverse supportedStmtTraverse exprStoragePreservation
   vyperLookup vyperPlaceResultTyping supportedProgram bodyStoragePreservation
   vyperPlaceInvariants placeTypingProps allocLimits
 Libs
@@ -544,6 +544,214 @@ Theorem byte_widths_exclude_bad_widths:
 Proof
   ho_match_mp_tac byte_widths_expr_ind >>
   simp[byte_widths_expr_def, supported_expr_exists_def]
+QED
+
+Theorem supported_assignments_exists_mem[local]:
+  !ts. supported_assignments_exists p ts <=>
+    ?t. MEM t ts /\ supported_assignment_exists p t
+Proof
+  Induct >> simp[supported_assignment_exists_def] >> metis_tac[]
+QED
+
+Theorem well_typed_atarget_excludes_bad_widths:
+  !env tgt ty.
+    well_typed_atarget env tgt ty /\
+    (!n ty. FLOOKUP env.var_types n = SOME ty ==> well_formed_type env.type_defs ty) /\
+    (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+      well_formed_vtype env.type_defs vt) ==>
+    ~supported_assignment_exists (\e. ~byte_widths_expr e) tgt
+Proof
+  recInduct well_typed_atarget_ind >> conj_tac
+  >- (simp[well_typed_atarget_def, well_typed_target_def,
+           supported_assignment_exists_def] >> rpt strip_tac >>
+      metis_tac[type_place_target_byte_widths, byte_widths_exclude_bad_widths]) >>
+  simp[well_typed_atarget_def, supported_assignment_exists_def,
+       supported_assignments_exists_mem] >> rpt strip_tac >>
+  gvs[LIST_REL_EL_EQN, MEM_EL] >> metis_tac[]
+QED
+
+Theorem typed_expr_excludes_bad_widths:
+  well_typed_expr env e /\
+  (!n ty. FLOOKUP env.var_types n = SOME ty ==> well_formed_type env.type_defs ty) /\
+  (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+    well_formed_vtype env.type_defs vt) ==>
+  ~supported_expr_exists (\e. ~byte_widths_expr e) e
+Proof
+  metis_tac[well_typed_expr_byte_widths, cj 1 byte_widths_exclude_bad_widths]
+QED
+
+Theorem typed_exprs_exclude_bad_widths:
+  well_typed_exprs env es /\
+  (!n ty. FLOOKUP env.var_types n = SOME ty ==> well_formed_type env.type_defs ty) /\
+  (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+    well_formed_vtype env.type_defs vt) ==>
+  ~supported_exprs_exists (\e. ~byte_widths_expr e) es
+Proof
+  qid_spec_tac `es` >> Induct >>
+  simp[well_typed_expr_def, supported_expr_exists_def] >>
+  metis_tac[typed_expr_excludes_bad_widths]
+QED
+
+Theorem type_stmts_byte_widths_mutual:
+  let W = \env.
+    (!n ty. FLOOKUP env.var_types n = SOME ty ==> well_formed_type env.type_defs ty) /\
+    (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+      well_formed_vtype env.type_defs vt)
+  in
+    (!env ret s env'. W env /\ type_stmt env ret s = SOME env' ==>
+      W env' /\ ~supported_stmt_expr_exists (\e. ~byte_widths_expr e) s) /\
+    (!env ret ss env'. W env /\ type_stmts env ret ss = SOME env' ==>
+      W env' /\ ~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss)
+Proof
+  simp_tac bool_ss [LET_THM] >>
+  ho_match_mp_tac type_stmt_ind >> conj_tac
+  >- (simp[type_stmt_def, supported_stmt_expr_exists_def]) >> conj_tac
+  >- (simp[type_stmt_def, supported_stmt_expr_exists_def]) >> conj_tac
+  >- (simp[type_stmt_def, supported_stmt_expr_exists_def]) >> conj_tac
+  >- (simp[type_stmt_def, supported_stmt_expr_exists_def] >> rpt strip_tac >>
+      gvs[AllCaseEqs()] >> metis_tac[typed_expr_excludes_bad_widths]) >> conj_tac
+  >- (simp[type_stmt_def, supported_stmt_expr_exists_def, supported_expr_exists_def] >>
+      rpt strip_tac >> gvs[AllCaseEqs()]) >> conj_tac
+  >- (simp[type_stmt_def, supported_stmt_expr_exists_def, supported_expr_exists_def] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[typed_expr_excludes_bad_widths]) >>
+  suspend "remaining_statements"
+QED
+
+Resume type_stmts_byte_widths_mutual[remaining_statements]:
+  conj_tac
+  >- simp[type_stmt_def, supported_stmt_expr_exists_def, supported_raise_exists_def] >> conj_tac
+  >- simp[type_stmt_def, supported_stmt_expr_exists_def, supported_raise_exists_def] >> conj_tac
+  >- (simp[type_stmt_def, supported_stmt_expr_exists_def, supported_raise_exists_def] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[typed_expr_excludes_bad_widths]) >> conj_tac
+  >- (simp[type_stmt_def, supported_stmt_expr_exists_def, supported_raise_exists_def,
+           well_typed_custom_error_def, GSYM supported_exprs_exists_every] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[typed_exprs_exclude_bad_widths]) >> conj_tac
+  >- (simp[type_stmt_def, supported_stmt_expr_exists_def, supported_assert_exists_def] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[typed_expr_excludes_bad_widths]) >> conj_tac
+  >- (simp[type_stmt_def, supported_stmt_expr_exists_def, supported_assert_exists_def] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[typed_expr_excludes_bad_widths]) >> conj_tac
+  >- (simp[type_stmt_def, supported_stmt_expr_exists_def, supported_assert_exists_def] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[typed_expr_excludes_bad_widths]) >> conj_tac
+  >- (simp[type_stmt_def, supported_stmt_expr_exists_def, supported_assert_exists_def,
+           well_typed_custom_error_def, GSYM supported_exprs_exists_every] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >>
+      metis_tac[typed_expr_excludes_bad_widths, typed_exprs_exclude_bad_widths]) >> conj_tac
+  >- (simp[type_stmt_def, supported_stmt_expr_exists_def] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[typed_exprs_exclude_bad_widths]) >>
+  suspend "assignments_and_control"
+QED
+
+Resume type_stmts_byte_widths_mutual[assignments_and_control]:
+  conj_tac
+  >- (simp[type_stmt_def, supported_stmt_expr_exists_def] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >>
+      `well_formed_type env.type_defs typ` by metis_tac[assignable_type_well_formed] >>
+      simp[extend_local_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
+      gvs[extend_local_def, FLOOKUP_UPDATE, AllCaseEqs()] >>
+      metis_tac[typed_expr_excludes_bad_widths]) >> conj_tac
+  >- (simp[type_stmt_def, supported_stmt_expr_exists_def] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >>
+      metis_tac[typed_expr_excludes_bad_widths, type_place_target_byte_widths,
+                cj 2 byte_widths_exclude_bad_widths]) >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[type_stmt_def, supported_stmt_expr_exists_def, AllCaseEqs()] >>
+      `~supported_expr_exists (\e. ~byte_widths_expr e) e` by
+        metis_tac[typed_expr_excludes_bad_widths] >> simp[] >>
+      Cases_on `tgt`
+      >- (rename1 `atarget_accepts env (BaseTarget bt) _` >>
+          gvs[atarget_accepts_def, supported_assignment_exists_def] >>
+          Cases_on `type_place_target env bt` >> gvs[] >>
+          rename1 `SOME vt` >> Cases_on `vt` >> gvs[] >>
+          metis_tac[type_place_target_byte_widths, cj 2 byte_widths_exclude_bad_widths]) >>
+      gvs[atarget_accepts_def] >>
+      metis_tac[well_typed_atarget_excludes_bad_widths]) >> conj_tac
+  >- (simp[type_stmt_def, supported_stmt_expr_exists_def, well_typed_target_def] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >>
+      metis_tac[typed_expr_excludes_bad_widths, type_place_target_byte_widths,
+                cj 2 byte_widths_exclude_bad_widths]) >>
+  suspend "control_and_lists"
+QED
+
+Resume type_stmts_byte_widths_mutual[control_and_lists]:
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
+      pure_once_rewrite_tac[type_stmt_def] >>
+      simp_tac std_ss [AllCaseEqs()] >> strip_tac >> gvs[] >>
+      simp[supported_stmt_expr_exists_def] >>
+      metis_tac[typed_expr_excludes_bad_widths, optionTheory.IS_SOME_EXISTS]) >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      gvs[type_stmt_def, supported_stmt_expr_exists_def, AllCaseEqs()] >>
+      `well_formed_type env.type_defs typ` by metis_tac[assignable_type_well_formed] >>
+      `!n ty. FLOOKUP (extend_local env id typ F).var_types n = SOME ty ==>
+        well_formed_type (extend_local env id typ F).type_defs ty` by
+        (simp[extend_local_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
+         gvs[AllCaseEqs()] >> metis_tac[]) >>
+      `!src nm vt. FLOOKUP (extend_local env id typ F).toplevel_vtypes (src,nm) = SOME vt ==>
+        well_formed_vtype (extend_local env id typ F).type_defs vt` by
+        (simp[extend_local_def] >> metis_tac[]) >>
+      `~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss` by
+        metis_tac[optionTheory.IS_SOME_EXISTS] >>
+      simp[] >> Cases_on `it` >>
+      gvs[well_typed_iterator_def, supported_iterator_exists_def] >>
+      metis_tac[typed_expr_excludes_bad_widths]) >> conj_tac
+  >- simp[type_stmt_def, supported_stmt_expr_exists_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[type_stmt_def, supported_stmt_expr_exists_def, AllCaseEqs()] >>
+  qpat_x_assum `_ ==> _ /\ ~supported_stmt_expr_exists _ s` mp_tac >>
+  (impl_tac >- (rpt strip_tac >> metis_tac[])) >> strip_tac >>
+  qpat_x_assum `_ ==> _ /\ ~supported_stmts_expr_exists _ ss` mp_tac >>
+  (impl_tac >- (rpt strip_tac >> metis_tac[])) >> strip_tac >>
+  simp[] >> rpt strip_tac >> metis_tac[]
+QED
+
+Finalise type_stmts_byte_widths_mutual
+
+Theorem type_stmts_preserves_well_formed_maps:
+  (!n ty. FLOOKUP env.var_types n = SOME ty ==> well_formed_type env.type_defs ty) /\
+  (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+    well_formed_vtype env.type_defs vt) /\
+  type_stmts env ret ss = SOME env' ==>
+  (!n ty. FLOOKUP env'.var_types n = SOME ty ==> well_formed_type env'.type_defs ty) /\
+  (!src id vt. FLOOKUP env'.toplevel_vtypes (src,id) = SOME vt ==>
+    well_formed_vtype env'.type_defs vt)
+Proof
+  strip_tac >>
+  drule_all (cj 2 (SRULE [LET_THM] type_stmts_byte_widths_mutual)) >>
+  strip_tac >> rpt strip_tac >> metis_tac[]
+QED
+
+Theorem type_stmts_excludes_bad_widths:
+  (!n ty. FLOOKUP env.var_types n = SOME ty ==> well_formed_type env.type_defs ty) /\
+  (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+    well_formed_vtype env.type_defs vt) /\
+  type_stmts env ret ss = SOME env' ==>
+  ~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss
+Proof
+  strip_tac >>
+  drule_all (cj 2 (SRULE [LET_THM] type_stmts_byte_widths_mutual)) >> simp[]
+QED
+
+Theorem type_stmt_excludes_bad_widths:
+  (!n ty. FLOOKUP env.var_types n = SOME ty ==> well_formed_type env.type_defs ty) /\
+  (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+    well_formed_vtype env.type_defs vt) /\
+  type_stmt env ret s = SOME env' ==>
+  ~supported_stmt_expr_exists (\e. ~byte_widths_expr e) s
+Proof
+  strip_tac >>
+  drule_all (cj 1 (SRULE [LET_THM] type_stmts_byte_widths_mutual)) >> simp[]
+QED
+
+Theorem typed_parameter_body_excludes_bad_widths:
+  env_context_consistent env cx /\
+  (!n ty. FLOOKUP env.var_types n = SOME ty ==> MEM (n,ty) args) /\
+  EVERY (\(n,ty). assignable_type env.type_defs ty) args /\
+  type_stmts env ret ss = SOME env' ==>
+  ~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss
+Proof
+  strip_tac >> drule_all typing_maps_well_formed_params >> strip_tac >>
+  drule_all type_stmts_excludes_bad_widths >> simp[]
 QED
 
 Definition expr_sim_pre_def:
