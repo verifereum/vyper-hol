@@ -16,7 +16,7 @@ Ancestors
   mixedPrefixSim
   codegenRel stackOpSim blockSimHelpers
   stackPlanOps stackPlanTypes stackModel
-  asmSem planExec
+  asmSem planExec stackOpAsmSim
   finite_map alist pred_set
   list rich_list arithmetic sorting
 Libs BasicProvers
@@ -3932,6 +3932,47 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
+Theorem do_swap_generated_spills_prefix_wf_bounds:
+  !dist ps lo.
+    16 < dist /\ dist < LENGTH ps.ps_stack /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    ALL_DISTINCT (top_n (dist + 1) ps.ps_stack) /\
+    EVERY (\off. off < dimword(:256))
+      (FST (spill_alloc_n [] ps.ps_alloc
+        (top_n (dist + 1) ps.ps_stack))) ==>
+    prefix_spill_wf initial_fmp lo
+      (MAP SOSpill (FST (spill_alloc_n [] ps.ps_alloc
+        (top_n (dist + 1) ps.ps_stack)))) ps
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `items = top_n (dist + 1) ps.ps_stack` >>
+  qabbrev_tac `offsets = FST (spill_alloc_n [] ps.ps_alloc items)` >>
+  `LENGTH items = dist + 1` by
+    simp[Abbr `items`, top_n_def, LENGTH_TAKE] >>
+  `LENGTH offsets = LENGTH items` by
+    simp[Abbr `offsets`, spill_alloc_n_offsets_length] >>
+  `!k. k < LENGTH offsets ==>
+       EL k offsets < dimword(:256) /\
+       ps.ps_alloc.sa_spill_base <= EL k offsets /\
+       (!op off. FLOOKUP ps.ps_spilled op = SOME off ==>
+          off + 32 <= EL k offsets \/ EL k offsets + 32 <= off) /\
+       (!j. j < k ==>
+          EL j offsets + 32 <= EL k offsets \/
+          EL k offsets + 32 <= EL j offsets)` by
+    (qspecl_then [`dist`, `items`, `ps.ps_alloc`, `ps.ps_spilled`]
+       mp_tac deep_swap_occurrence_offsets >>
+     simp[LET_THM, Abbr `offsets`] >> metis_tac[]) >>
+  qspecl_then [`ZIP (REVERSE items,offsets)`, `lo`, `ps`]
+    mp_tac prefix_spill_wf_map_spill_pairs >>
+  simp[MAP_ZIP, LENGTH_ZIP, ALL_DISTINCT_REVERSE] >>
+  disch_then irule >> conj_tac
+  >- (simp[Abbr `items`, top_n_def] >> gen_tac >> strip_tac >>
+      `k < LENGTH offsets` by decide_tac >>
+      first_x_assum (qspec_then `k` mp_tac) >>
+      simp[EL_ZIP] >> strip_tac >> first_assum ACCEPT_TAC) >>
+  simp[Abbr `items`, top_n_def]
+QED
+
 Theorem do_swap_generated_spills_prefix_wf_cross_view:
   !dist producer consumer ops producer' lo.
     16 < dist /\ dist < LENGTH producer.ps_stack /\
@@ -3955,35 +3996,9 @@ Proof
      simp[prefix_spill_wf_append] >> metis_tac[]) >>
   `EVERY (\off. off < dimword(:256)) offsets` by
     metis_tac[prefix_spill_wf_map_spill_bounds] >>
-  `LENGTH items = dist + 1` by
-    simp[Abbr `items`, top_n_def, LENGTH_TAKE] >>
-  `LENGTH offsets = LENGTH items` by
-    simp[Abbr `offsets`, spill_alloc_n_offsets_length] >>
-  `!k. k < LENGTH offsets ==>
-       EL k offsets < dimword(:256) /\
-       producer.ps_alloc.sa_spill_base <= EL k offsets /\
-       (!op off. FLOOKUP producer.ps_spilled op = SOME off ==>
-          off + 32 <= EL k offsets \/ EL k offsets + 32 <= off) /\
-       (!j. j < k ==>
-          EL j offsets + 32 <= EL k offsets \/
-          EL k offsets + 32 <= EL j offsets)` by
-    (qspecl_then [`dist`, `items`, `producer.ps_alloc`,
-                  `producer.ps_spilled`] mp_tac deep_swap_occurrence_offsets >>
-     simp[LET_THM, Abbr `offsets`] >> metis_tac[]) >>
-  `prefix_spill_wf initial_fmp lo (MAP SOSpill offsets) producer` by
-    (qspecl_then [`ZIP (REVERSE items,offsets)`, `lo`, `producer`]
-       mp_tac prefix_spill_wf_map_spill_pairs >>
-     simp[MAP_ZIP, LENGTH_ZIP, ALL_DISTINCT_REVERSE] >>
-     disch_then irule >>
-     conj_tac
-     >- (simp[Abbr `items`, top_n_def] >>
-         gen_tac >> strip_tac >>
-         `k < LENGTH offsets` by decide_tac >>
-         first_x_assum (qspec_then `k` mp_tac) >>
-         simp[EL_ZIP] >> strip_tac >> first_assum ACCEPT_TAC) >>
-     simp[Abbr `items`, top_n_def]) >>
   simp[Abbr `offsets`, Abbr `items`] >>
-  first_assum ACCEPT_TAC
+  irule do_swap_generated_spills_prefix_wf_bounds >>
+  simp[] >> gvs[Abbr `offsets`, Abbr `items`]
 QED
 Theorem do_swap_generated_spills_prefix_wf_from_front_cross_view:
   !dist producer consumer ops producer' lo.
@@ -4007,35 +4022,9 @@ Proof
      simp[FRONT_APPEND_NOT_NIL, prefix_spill_wf_append]) >>
   `EVERY (\off. off < dimword(:256)) offsets` by
     metis_tac[prefix_spill_wf_map_spill_bounds] >>
-  `LENGTH items = dist + 1` by
-    simp[Abbr `items`, top_n_def, LENGTH_TAKE] >>
-  `LENGTH offsets = LENGTH items` by
-    simp[Abbr `offsets`, spill_alloc_n_offsets_length] >>
-  `!k. k < LENGTH offsets ==>
-       EL k offsets < dimword(:256) /\
-       producer.ps_alloc.sa_spill_base <= EL k offsets /\
-       (!op off. FLOOKUP producer.ps_spilled op = SOME off ==>
-          off + 32 <= EL k offsets \/ EL k offsets + 32 <= off) /\
-       (!j. j < k ==>
-          EL j offsets + 32 <= EL k offsets \/
-          EL k offsets + 32 <= EL j offsets)` by
-    (qspecl_then [`dist`, `items`, `producer.ps_alloc`,
-                  `producer.ps_spilled`] mp_tac deep_swap_occurrence_offsets >>
-     simp[LET_THM, Abbr `offsets`] >> metis_tac[]) >>
-  `prefix_spill_wf initial_fmp lo (MAP SOSpill offsets) producer` by
-    (qspecl_then [`ZIP (REVERSE items,offsets)`, `lo`, `producer`]
-       mp_tac prefix_spill_wf_map_spill_pairs >>
-     simp[MAP_ZIP, LENGTH_ZIP, ALL_DISTINCT_REVERSE] >>
-     disch_then irule >>
-     conj_tac
-     >- (simp[Abbr `items`, top_n_def] >>
-         gen_tac >> strip_tac >>
-         `k < LENGTH offsets` by decide_tac >>
-         first_x_assum (qspec_then `k` mp_tac) >>
-         simp[EL_ZIP] >> strip_tac >> first_assum ACCEPT_TAC) >>
-     simp[Abbr `items`, top_n_def]) >>
   simp[Abbr `offsets`, Abbr `items`] >>
-  first_assum ACCEPT_TAC
+  irule do_swap_generated_spills_prefix_wf_bounds >>
+  simp[] >> gvs[Abbr `offsets`, Abbr `items`]
 QED
 
 
@@ -4523,8 +4512,6 @@ Proof
   (impl_tac >- simp[]) >>
   simp[]
 QED
-
-
 
 (* ---------------------------------------------------------------
    do_swap_venom_asm_rel_big: dist > 16 case
@@ -6225,3 +6212,5 @@ Proof
   simp[spill_lookup_def, FLOOKUP_UPDATE, wordsTheory.dimword_def,
        fcpLib.INDEX_CONV ``dimindex(:256)``]
 QED
+
+
