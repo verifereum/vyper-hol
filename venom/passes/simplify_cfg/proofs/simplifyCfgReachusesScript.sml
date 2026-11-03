@@ -1,9 +1,9 @@
 Theory simplifyCfgReachuses
 Ancestors
-  simplifyCfgDefs simplifyCfgStruct simplifyCfgPhiRepair
+  simplifyCfgDefs simplifyCfgStruct simplifyCfgPhiRepair simplifyCfgLabelProps
   simplifyCfgDataflow simplifyCfgRepairDataflow simplifyCfgPhiPreds
   simplifyCfgChainDataflow simplifyCfgBypassDataflow
-  venomInst venomWf venomExecProofs cfgTransform cfgTransformInstWf list rich_list
+  unitShapeDefs stackPlanTypes venomInst venomWf venomExecSemantics venomExecProofs cfgTransform cfgTransformProps cfgTransformInstWf list rich_list
 
 Theorem fix_phi_inst_inst_wf:
   inst_wf inst ==> inst_wf (fix_phi_inst actual_preds inst)
@@ -615,4 +615,269 @@ Proof
   `orig = orig2` by metis_tac[scfg_phi_safe_unique_output] >>
   `src = src2` by metis_tac[wf_function_instruction_block] >>
   gvs[]
+QED
+
+Theorem resolve_phi_subst_exists:
+  !ops. phi_well_formed ops /\ resolve_phi p ops = SOME value ==>
+  ?op. resolve_phi (if p = old then new else p)
+    (MAP (subst_label_op old new) ops) = SOME op
+Proof
+  recInduct phi_well_formed_ind >>
+  simp[phi_well_formed_def, resolve_phi_def, subst_label_op_def] >>
+  rpt strip_tac >>
+  Cases_on `lbl = p` >> Cases_on `lbl = old` >> Cases_on `p = old` >>
+  gvs[resolve_phi_def] >> metis_tac[]
+QED
+
+Theorem chain_merge_phi_coverage:
+  wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\ scfg_phi_safe fn /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+      (bb_succs (merge_blocks a b))) /\
+  MEM bb fn'.fn_blocks /\ fn_reachable fn' bb.bb_label /\
+  MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
+  MEM pred fn'.fn_blocks /\ fn_reachable fn' pred.bb_label /\
+  MEM bb.bb_label (bb_succs pred) ==>
+  ?op. resolve_phi pred.bb_label inst.inst_operands = SOME op
+Proof
+  strip_tac >> drule_all chain_merge_reachable_inst_origin >>
+  disch_then (qx_choose_then `src` (qx_choose_then `orig` strip_assume_tac)) >>
+  `orig.inst_opcode = PHI` by metis_tac[] >>
+  `src.bb_label <> b.bb_label` by
+    (strip_tac >>
+     `src = b` by
+       (irule same_label_same_block >> fs[wf_function_def, fn_labels_def] >> metis_tac[]) >>
+     gvs[can_merge_blocks_def, no_phis_def, EVERY_MEM]) >>
+  `bb.bb_label = src.bb_label` by metis_tac[] >>
+  `pred.bb_label <> b.bb_label` by
+    (`MEM pred.bb_label (fn_labels fn')` by
+       (pure_rewrite_tac[fn_labels_def, MEM_MAP] >> qexists `pred` >> simp[]) >>
+     gvs[chain_merge_fn_labels, MEM_FILTER]) >>
+  `fn_cfg_edge fn' pred.bb_label bb.bb_label` by
+    (pure_rewrite_tac[fn_cfg_edge_def] >> qexists `pred` >> simp[]) >>
+  `if pred.bb_label = a.bb_label then fn_cfg_edge fn b.bb_label src.bb_label
+   else fn_cfg_edge fn pred.bb_label src.bb_label` by
+    metis_tac[chain_merge_edge] >>
+  `inst_wf orig` by metis_tac[fn_inst_wf_def] >>
+  `phi_well_formed orig.inst_operands` by
+    (qpat_x_assum `inst_wf orig` mp_tac >> simp[inst_wf_def]) >>
+  Cases_on `pred.bb_label = a.bb_label`
+  >- suspend "merged_predecessor"
+  >> suspend "retained_predecessor"
+QED
+
+Resume chain_merge_phi_coverage[merged_predecessor]:
+  `b.bb_instructions <> []` by metis_tac[wf_function_def, bb_well_formed_def] >>
+  `fn_reachable fn b.bb_label` by
+    (irule chain_merge_reachable_input >> goal_assum (drule_at Any) >>
+     simp[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `MEM src.bb_label (bb_succs b)` by
+    (qpat_x_assum `fn_cfg_edge fn' _ _` kall_tac >>
+     gvs[fn_cfg_edge_def] >>
+     `bb' = b` by
+       (irule same_label_same_block >> fs[wf_function_def, fn_labels_def] >> metis_tac[]) >>
+     gvs[]) >>
+  `?op. resolve_phi b.bb_label orig.inst_operands = SOME op` by
+    metis_tac[scfg_phi_safe_coverage] >>
+  drule_all resolve_phi_subst_exists >>
+  disch_then (qspecl_then [`b.bb_label`, `a.bb_label`] mp_tac) >>
+  gvs[bb_succs_merge_blocks, subst_label_inst_def]
+QED
+
+Resume chain_merge_phi_coverage[retained_predecessor]:
+  `fn_cfg_edge fn pred.bb_label src.bb_label` by metis_tac[] >>
+  qpat_x_assum `fn_cfg_edge fn _ _` mp_tac >>
+  pure_rewrite_tac[fn_cfg_edge_def] >>
+  disch_then (qx_choose_then `psrc` strip_assume_tac) >>
+  `fn_reachable fn psrc.bb_label` by
+    (irule chain_merge_reachable_input >> goal_assum (drule_at Any) >>
+     simp[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `?op. resolve_phi pred.bb_label orig.inst_operands = SOME op` by
+    metis_tac[scfg_phi_safe_coverage] >>
+  Cases_on `MEM bb.bb_label (bb_succs (merge_blocks a b))`
+  >- (drule_all resolve_phi_subst_exists >>
+      disch_then (qspecl_then [`b.bb_label`, `a.bb_label`] mp_tac) >>
+      gvs[subst_label_inst_def]) >>
+  gvs[]
+QED
+
+Finalise chain_merge_phi_coverage
+
+Theorem resolve_phi_remove_present:
+  !ops. phi_well_formed ops /\ MEM (Label a) ops /\ a <> b ==>
+  ?op. resolve_phi a (remove_phi_label b ops) = SOME op
+Proof
+  recInduct phi_well_formed_ind >>
+  simp[phi_well_formed_def, remove_phi_label_def, resolve_phi_def] >>
+  rpt strip_tac >> Cases_on `lbl = b` >> Cases_on `lbl = a` >>
+  fs[] >> simp[Once resolve_phi_def] >> metis_tac[]
+QED
+
+Theorem resolve_phi_update_bypass_exists:
+  inst.inst_opcode = PHI /\ phi_well_formed inst.inst_operands /\ a <> b /\ p <> b /\
+  resolve_phi q inst.inst_operands = SOME value /\
+  p = (if q = b then a else q) ==>
+  ?op. resolve_phi p (update_phi_bypass a b inst).inst_operands = SOME op
+Proof
+  strip_tac >> Cases_on `MEM (Label a) inst.inst_operands` >>
+  simp[update_phi_bypass_def]
+  >- (Cases_on `p = a`
+      >- metis_tac[resolve_phi_remove_present] >>
+      `q = p` by (Cases_on `q = b` >> gvs[]) >>
+      metis_tac[resolve_phi_remove_other]) >>
+  `MAP (\op. case op of Label l => if l = b then Label a else Label l | _ => op)
+      inst.inst_operands = MAP (subst_label_op b a) inst.inst_operands` by
+    (irule MAP_CONG >> simp[] >> rpt strip_tac >> rename1 `MEM operand inst.inst_operands` >>
+     Cases_on `operand` >> simp[subst_label_op_def]) >>
+  asm_rewrite_tac[] >> metis_tac[resolve_phi_subst_exists]
+QED
+
+Theorem do_merge_jump_phi_coverage:
+  wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\ scfg_phi_safe fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') /\
+  MEM bb fn'.fn_blocks /\ fn_reachable fn' bb.bb_label /\
+  MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
+  MEM pred fn'.fn_blocks /\ fn_reachable fn' pred.bb_label /\
+  MEM bb.bb_label (bb_succs pred) ==>
+  ?op. resolve_phi pred.bb_label inst.inst_operands = SOME op
+Proof
+  strip_tac >> drule_all do_merge_jump_reachable_inst_origin >>
+  disch_then (qx_choose_then `src` (qx_choose_then `orig`
+    (qx_choose_then `target` strip_assume_tac))) >>
+  `orig.inst_opcode = PHI` by metis_tac[] >>
+  `inst = (if src.bb_label = target then update_phi_bypass a.bb_label b.bb_label orig
+           else orig)` by
+    (Cases_on `src.bb_label = a.bb_label` >> Cases_on `target = a.bb_label` >>
+     Cases_on `src.bb_label = target` >> gvs[is_terminator_def]) >>
+  `inst_wf orig` by metis_tac[fn_inst_wf_def] >>
+  `phi_well_formed orig.inst_operands` by
+    (qpat_x_assum `inst_wf orig` mp_tac >> simp[inst_wf_def]) >>
+  qpat_x_assum `MEM bb fn'.fn_blocks` kall_tac >>
+  drule_all do_merge_jump_reachable_block_map >>
+  disch_then (qx_choose_then `psrc` (qx_choose_then `target2` strip_assume_tac)) >>
+  `target2 = target` by metis_tac[listTheory.CONS_11] >>
+  `fn_cfg_edge fn' pred.bb_label bb.bb_label` by
+    (pure_rewrite_tac[fn_cfg_edge_def] >> qexists `pred` >> simp[]) >>
+  drule_all do_merge_jump_edge_input >> strip_tac
+  >- suspend "old_edge"
+  >> suspend "contracted_edge"
+QED
+
+Resume do_merge_jump_phi_coverage[old_edge]:
+  `MEM src.bb_label (bb_succs psrc)` by
+    (qpat_x_assum `fn_cfg_edge fn _ _` mp_tac >>
+     pure_rewrite_tac[fn_cfg_edge_def] >> strip_tac >>
+     `bb' = psrc` by
+       (irule same_label_same_block >> fs[wf_function_def, fn_labels_def] >> metis_tac[]) >>
+     gvs[]) >>
+  `?op. resolve_phi pred.bb_label orig.inst_operands = SOME op` by
+    metis_tac[scfg_phi_safe_coverage] >>
+  Cases_on `src.bb_label = target`
+  >- (`a.bb_label <> b.bb_label` by metis_tac[can_bypass_jump_labels_distinct] >>
+      `?op. resolve_phi pred.bb_label
+         (update_phi_bypass a.bb_label b.bb_label orig).inst_operands = SOME op` by
+        (irule resolve_phi_update_bypass_exists >> simp[] >>
+         qexistsl [`pred.bb_label`, `op`] >> simp[]) >>
+      gvs[]) >>
+  gvs[]
+QED
+
+Resume do_merge_jump_phi_coverage[contracted_edge]:
+  `MEM a fn.fn_blocks /\ MEM b fn.fn_blocks` by metis_tac[lookup_block_member_label] >>
+  `fn_reachable fn b.bb_label` by
+    metis_tac[fn_reachable_step, can_bypass_jump_edge] >>
+  `src.bb_label = target /\ MEM src.bb_label (bb_succs b)` by
+    (qpat_x_assum `fn_cfg_edge fn _ _` mp_tac >>
+     pure_rewrite_tac[fn_cfg_edge_def] >> strip_tac >>
+     `bb' = b` by
+       (irule same_label_same_block >> fs[wf_function_def, fn_labels_def] >> metis_tac[]) >>
+     gvs[]) >>
+  `?op. resolve_phi b.bb_label orig.inst_operands = SOME op` by
+    metis_tac[scfg_phi_safe_coverage] >>
+  `a.bb_label <> b.bb_label` by metis_tac[can_bypass_jump_labels_distinct] >>
+  `?op. resolve_phi a.bb_label
+     (update_phi_bypass a.bb_label b.bb_label orig).inst_operands = SOME op` by
+    (irule resolve_phi_update_bypass_exists >> simp[] >>
+         qexistsl [`b.bb_label`, `op`] >> simp[]) >>
+  gvs[]
+QED
+
+Finalise do_merge_jump_phi_coverage
+
+Definition scfg_jnz_inst_ok_def:
+  scfg_jnz_inst_ok inst <=>
+    !c ops. inst.inst_opcode = JNZ /\ inst.inst_operands = c::ops ==>
+      ~is_label_operand c
+End
+
+Definition scfg_jnz_condition_ok_def:
+  scfg_jnz_condition_ok fn <=>
+    !bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
+      scfg_jnz_inst_ok inst
+End
+
+Theorem fn_shape_ok_jnz_condition_ok:
+  fn_shape_ok fn ==> scfg_jnz_condition_ok fn
+Proof
+  simp[fn_shape_ok_def, scfg_jnz_condition_ok_def, EVERY_MEM] >>
+  rpt strip_tac >>
+  `inst_shape_ok inst` by
+    (fs[fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]) >>
+  fs[inst_shape_ok_def, scfg_jnz_inst_ok_def] >> rpt strip_tac >>
+  qpat_x_assum `label_positions_ok inst` mp_tac >>
+  simp[label_positions_ok_def, AllCaseEqs()] >>
+  gvs[is_label_operand_def] >>
+  Cases_on `ops` >> simp[] >> Cases_on `h` >> simp[] >>
+  Cases_on `t` >> simp[] >> Cases_on `h` >> simp[] >>
+  Cases_on `t'` >> simp[]
+QED
+
+Theorem canon_jnz_inst_successors_mem:
+  scfg_jnz_inst_ok inst ==>
+  (MEM l (get_successors (canon_jnz_inst inst)) <=>
+   MEM l (get_successors inst))
+Proof
+  simp[canon_jnz_inst_def] >> rpt CASE_TAC >>
+  gvs[get_successors_mem_label, is_terminator_def, scfg_jnz_inst_ok_def] >>
+  Cases_on `h` >> gvs[is_label_operand_def]
+QED
+
+Theorem scfg_jnz_inst_ok_subst_label:
+  scfg_jnz_inst_ok inst ==> scfg_jnz_inst_ok (subst_label_inst old new inst)
+Proof
+  simp[scfg_jnz_inst_ok_def, subst_label_inst_def] >> rpt strip_tac >>
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  rename1 `is_label_operand (subst_label_op old new head)` >>
+  Cases_on `head` >> gvs[subst_label_op_def, is_label_operand_def]
+QED
+
+Theorem scfg_jnz_inst_ok_canon:
+  scfg_jnz_inst_ok inst ==> scfg_jnz_inst_ok (canon_jnz_inst inst)
+Proof
+  simp[canon_jnz_inst_def] >> rpt CASE_TAC >>
+  gvs[scfg_jnz_inst_ok_def]
+QED
+
+Theorem scfg_jnz_inst_ok_update_phi_bypass:
+  scfg_jnz_inst_ok inst ==> scfg_jnz_inst_ok (update_phi_bypass a b inst)
+Proof
+  Cases_on `inst.inst_opcode = PHI`
+  >- simp[scfg_jnz_inst_ok_def, update_phi_bypass_shape] >>
+  simp[update_phi_bypass_def]
+QED
+
+Theorem scfg_jnz_inst_ok_fix_phi_inst:
+  scfg_jnz_inst_ok inst ==> scfg_jnz_inst_ok (fix_phi_inst actual_preds inst)
+Proof
+  Cases_on `inst.inst_opcode = PHI`
+  >- (simp[fix_phi_inst_def] >>
+      qabbrev_tac `filtered = filter_phi_ops actual_preds inst.inst_operands` >>
+      Cases_on `filtered` >> simp[scfg_jnz_inst_ok_def] >>
+      Cases_on `t` >> simp[scfg_jnz_inst_ok_def] >>
+      Cases_on `t'` >> simp[scfg_jnz_inst_ok_def]) >>
+  simp[fix_phi_inst_def]
 QED
