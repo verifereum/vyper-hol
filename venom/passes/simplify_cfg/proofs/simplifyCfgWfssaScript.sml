@@ -314,3 +314,77 @@ Proof
   >- (rpt strip_tac >> irule chain_merge_phi_defs_reach_uses >> metis_tac[]) >>
   rpt strip_tac >> irule chain_merge_ordinary_defs_reach_uses >> metis_tac[]
 QED
+
+Theorem do_merge_jump_fn_inst_wf:
+  fn_inst_wf fn /\ MEM a fn.fn_blocks /\
+  do_merge_jump fn a b lm = SOME (fn',lm') ==> fn_inst_wf fn'
+Proof
+  strip_tac >>
+  `EVERY (\bb. EVERY inst_wf bb.bb_instructions) fn.fn_blocks` by
+    (fs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\bb. EVERY inst_wf bb.bb_instructions) fn'.fn_blocks` by
+    (irule do_merge_jump_every_inst >> qexistsl [`a`, `b`, `fn`, `lm`, `lm'`] >>
+     simp[inst_wf_update_phi_bypass] >> rpt strip_tac >>
+     IF_CASES_TAC >> simp[] >> irule inst_wf_canon_jnz_inst >>
+     qpat_x_assum `EVERY _ _` kall_tac >>
+     qpat_x_assum `fn_inst_wf _` kall_tac >>
+     qpat_x_assum `do_merge_jump _ _ _ _ = _` kall_tac >>
+     Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
+     gvs[subst_label_inst_def, inst_wf_def, EVERY_MAP, subst_label_op_def]
+     >- (rpt IF_CASES_TAC >> simp[])
+     >- (rpt IF_CASES_TAC >> simp[])
+     >- (fs[EVERY_MEM] >> rpt strip_tac >>
+         first_x_assum drule >> Cases_on `x` >>
+         simp[venomStateTheory.get_label_def, subst_label_op_def] >>
+         rpt IF_CASES_TAC >> simp[venomStateTheory.get_label_def]) >>
+     Cases_on `inst.inst_operands` >>
+     gvs[dretShapeDefsTheory.parse_dret_shape_def] >>
+     rename1 `inst.inst_operands = op::ops` >> Cases_on `op` >>
+     gvs[dretShapeDefsTheory.parse_dret_shape_def, subst_label_op_def]) >>
+  fs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem update_phi_bypass_pairs:
+  phi_well_formed inst.inst_operands /\ inst.inst_opcode = PHI ==>
+  phi_pairs (update_phi_bypass a b inst).inst_operands =
+    if MEM (Label a) inst.inst_operands then
+      FILTER (\p. FST p <> b) (phi_pairs inst.inst_operands)
+    else MAP (\p. (if FST p = b then a else FST p, SND p))
+           (phi_pairs inst.inst_operands)
+Proof
+  strip_tac >> Cases_on `MEM (Label a) inst.inst_operands`
+  >- simp[update_phi_bypass_def, phi_pairs_remove_phi_label] >>
+  ` (\op. case op of Label l => if l = b then Label a else Label l | _ => op) =
+     subst_label_op b a` by
+    (simp[FUN_EQ_THM] >> Cases >> simp[subst_label_op_def]) >>
+  simp[update_phi_bypass_def, phi_pairs_subst_label_ops]
+QED
+
+Theorem phi_pair_label_mem:
+  !ops. phi_well_formed ops ==>
+    (MEM (Label lbl) ops <=> MEM lbl (MAP FST (phi_pairs ops)))
+Proof
+  recInduct phi_well_formed_ind >>
+  simp[phi_well_formed_def, phi_pairs_def] >> metis_tac[]
+QED
+
+Theorem update_phi_bypass_distinct:
+  phi_well_formed inst.inst_operands /\ inst.inst_opcode = PHI /\
+  ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands)) ==>
+  ALL_DISTINCT (MAP FST (phi_pairs (update_phi_bypass a b inst).inst_operands))
+Proof
+  strip_tac >> simp[update_phi_bypass_pairs] >>
+  Cases_on `MEM (Label a) inst.inst_operands` >> simp[]
+  >- (`!ps:(string # string) list. MAP FST (FILTER (\p. FST p <> b) ps) =
+             FILTER (\p. p <> b) (MAP FST ps)` by
+        (Induct >> simp[] >> gen_tac >> IF_CASES_TAC >> simp[]) >>
+      asm_rewrite_tac[] >> irule FILTER_ALL_DISTINCT >> simp[]) >>
+  `~MEM a (MAP FST (phi_pairs inst.inst_operands))` by
+    metis_tac[phi_pair_label_mem] >>
+  `MAP FST (MAP (\p. (if FST p = b then a else FST p, SND p))
+      (phi_pairs inst.inst_operands)) =
+   MAP (\p. if p = b then a else p) (MAP FST (phi_pairs inst.inst_operands))` by
+    simp[MAP_MAP_o, combinTheory.o_DEF] >>
+  asm_rewrite_tac[] >> irule ALL_DISTINCT_MAP_INJ >> simp[] >>
+  rpt gen_tac >> strip_tac >> Cases_on `x = b` >> Cases_on `y = b` >> gvs[]
+QED
