@@ -261,6 +261,8 @@ Proof
   irule unwrap_value_extends >> goal_assum (drule_at Any)
 QED
 
+(* Only a value reaches the reason encoder; the expression's own Halt
+   remains an expression exit. *)
 Theorem reason_code_expr_revert_frag[local]:
   !ctx func cenv cx r es res1 es1 sa vv sm rty msz sb s0 R.
     ~cenv.ce_is_ctor /\
