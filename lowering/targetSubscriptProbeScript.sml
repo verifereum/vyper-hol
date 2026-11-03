@@ -479,3 +479,60 @@ Proof
        fcpLib.INDEX_CONV ``dimindex (:256)``] >>
   metis_tac[]
 QED
+
+Theorem probe_guarded_pre_capacity:
+  !cenv env e es.
+    expr_body_pre cenv probe_guarded_context env e es ==>
+    w2n (lookup_storage 0w (get_storage probe_guarded_context es F)) <= 1
+Proof
+  rpt strip_tac >>
+  `contract_storage_well_formed probe_guarded_context es` by
+    metis_tac[expr_body_pre_def, expr_sim_inv_def] >>
+  `slots_in_range (get_storage probe_guarded_context es F) (w2n (0w:bytes32))
+     (ArrayTV (ArrayTV (BaseTV BoolT) (Dynamic 1)) (Dynamic 1))` by
+    (qpat_assum `contract_storage_well_formed _ _` mp_tac >>
+     simp[NoAsms, contract_storage_well_formed_def, get_storage_backend_eq,
+          probe_guarded_declared_region]) >>
+  qpat_x_assum `slots_in_range _ _ _` mp_tac >>
+  simp[Once vyperLookupStorageTheory.slots_in_range_def,
+       vyperStorageTheory.read_slot_def]
+QED
+
+Theorem probe_guarded_pre_call:
+  !cenv env es.
+    expr_body_pre cenv probe_guarded_context env
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es ==>
+    eval_expr probe_guarded_context
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es =
+    (INL (Value (IntV 0)),
+     if lookup_storage 0w (get_storage probe_guarded_context es F) = 0w
+     then es else set_storage probe_guarded_context es F
+       (update_storage 0w 0w (get_storage probe_guarded_context es F)))
+Proof
+  rpt strip_tac >> drule probe_guarded_pre_capacity >> strip_tac >>
+  qspec_then `es` mp_tac probe_guarded_symbolic_call >>
+  disch_then (qspec_then
+    `w2n (lookup_storage 0w (get_storage probe_guarded_context es F))` mp_tac) >>
+  simp[]
+QED
+
+Theorem probe_guarded_pre_projections:
+  !cenv env es res es'.
+    expr_body_pre cenv probe_guarded_context env
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es /\
+    eval_expr probe_guarded_context
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es =
+      (res,es') ==>
+    res = INL (Value (IntV 0)) /\ es'.scopes = es.scopes /\
+    lookup_storage 0w (get_storage probe_guarded_context es' F) = 0w /\
+    (!k. k <> 0w ==>
+      lookup_storage k (get_storage probe_guarded_context es' F) =
+      lookup_storage k (get_storage probe_guarded_context es F))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule probe_guarded_pre_capacity >> strip_tac >>
+  qspecl_then [`es`,
+    `w2n (lookup_storage 0w (get_storage probe_guarded_context es F))`]
+    mp_tac probe_guarded_symbolic_projections >>
+  simp[]
+QED
