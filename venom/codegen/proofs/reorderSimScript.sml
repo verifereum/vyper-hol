@@ -6691,3 +6691,67 @@ Proof
   ASM_REWRITE_TAC[execute_plan_append, LENGTH_APPEND, asm_steps_add] >>
   simp[]
 QED
+
+Theorem plan_stack_sem_eq_swap:
+  !lo vs s1 s2 d.
+    plan_stack_sem_eq lo vs s1 s2 /\ d < LENGTH s1 ==>
+    plan_stack_sem_eq lo vs (stack_swap d s1) (stack_swap d s2)
+Proof
+  rpt gen_tac >> simp[plan_stack_sem_eq_def, stack_swap_def, LET_THM,
+    LENGTH_LUPDATE] >> strip_tac >> rpt strip_tac >>
+  `LENGTH s1 - 1 < LENGTH s1 /\ LENGTH s1 - 1 - d < LENGTH s1` by decide_tac >>
+  simp[EL_LUPDATE] >>
+  Cases_on `i = LENGTH s1 - 1` >>
+  Cases_on `i = LENGTH s1 - 1 - d` >>
+  gvs[EL_LUPDATE] >> metis_tac[]
+QED
+
+Theorem plan_stack_sem_eq_dup:
+  !lo vs s1 s2 d.
+    plan_stack_sem_eq lo vs s1 s2 /\ d < LENGTH s1 ==>
+    plan_stack_sem_eq lo vs (stack_dup d s1) (stack_dup d s2)
+Proof
+  rpt gen_tac >> simp[plan_stack_sem_eq_def, stack_dup_def, stack_peek_def, SNOC_APPEND] >>
+  strip_tac >> rpt strip_tac >>
+  `LENGTH s1 - 1 - d < LENGTH s1` by decide_tac >>
+  (Cases_on `i < LENGTH s1`
+   >- (fs[EL_APPEND_EQN] >> metis_tac[]) >>
+   `i = LENGTH s1` by decide_tac >>
+   gvs[EL_APPEND_EQN] >> metis_tac[])
+QED
+
+Theorem do_swap_safe_stack_value_replay:
+  !d ps qs lo vs.
+    d < LENGTH ps.ps_stack /\
+    plan_stack_sem_eq lo vs qs.ps_stack ps.ps_stack /\
+    (!x a y b. FLOOKUP qs.ps_spilled x = SOME a /\
+                FLOOKUP qs.ps_spilled y = SOME b /\ x <> y ==>
+                a + 32 <= b \/ b + 32 <= a) /\
+    prefix_spill_wf initial_fmp lo (FST (do_swap d ps)) qs ==>
+    plan_stack_sem_eq lo vs
+      (apply_prefix_ops initial_fmp lo (FST (do_swap d ps)) qs).ps_stack
+      (SND (do_swap d ps)).ps_stack
+Proof
+  rpt strip_tac >>
+  `LENGTH qs.ps_stack = LENGTH ps.ps_stack` by gvs[plan_stack_sem_eq_def] >>
+  drule_all do_swap_two_state_safe_stack_replay >> strip_tac >>
+  simp[do_swap_stack_result] >> irule plan_stack_sem_eq_swap >> simp[]
+QED
+
+Theorem do_dup_safe_stack_value_replay:
+  !d ps qs lo vs.
+    d < LENGTH ps.ps_stack /\
+    plan_stack_sem_eq lo vs qs.ps_stack ps.ps_stack /\
+    (!x a y b. FLOOKUP qs.ps_spilled x = SOME a /\
+                FLOOKUP qs.ps_spilled y = SOME b /\ x <> y ==>
+                a + 32 <= b \/ b + 32 <= a) /\
+    prefix_spill_wf initial_fmp lo (FST (do_dup d ps)) qs ==>
+    plan_stack_sem_eq lo vs
+      (apply_prefix_ops initial_fmp lo (FST (do_dup d ps)) qs).ps_stack
+      (SND (do_dup d ps)).ps_stack
+Proof
+  rpt strip_tac >>
+  `LENGTH qs.ps_stack = LENGTH ps.ps_stack` by gvs[plan_stack_sem_eq_def] >>
+  drule_all do_dup_two_state_safe_stack_replay >> strip_tac >>
+  simp[do_dup_stack_result] >> irule plan_stack_sem_eq_dup >> simp[]
+QED

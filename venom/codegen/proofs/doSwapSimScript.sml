@@ -5680,22 +5680,40 @@ Proof
   metis_tac[]
 QED
 
-Theorem do_swap_safe_stack_replay:
-  !d ps lo.
+Theorem swap_chunk_split[local]:
+  !items:operand list. !d.
+    LENGTH items = d + 1 /\ 0 < d ==>
+    items = [HD items] ++ MAP (\i. EL i items) (GENLIST (\i. i + 1) (d - 1)) ++ [EL d items]
+Proof
+  rpt strip_tac >> irule LIST_EQ >> simp[] >>
+  rpt strip_tac >> simp[EL_APPEND_EQN, EL_MAP, EL_GENLIST] >>
+  Cases_on `x` >- (Cases_on `items` >> gvs[]) >>
+  simp[EL] >> Cases_on `n < d - 1`
+  >- (simp[EL_APPEND_EQN, EL_MAP, EL_GENLIST, GSYM ADD1, EL]) >>
+  `n = d - 1 /\ SUC n = d` by decide_tac >> simp[EL_APPEND_EQN, GSYM EL]
+QED
+
+Theorem swap_replay_independent_allocator[local]:
+  !d ps lo al.
     d < LENGTH ps.ps_stack /\
     (!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
                 FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
                 a + 32 <= b \/ b + 32 <= a) /\
-    prefix_spill_wf initial_fmp lo (FST (do_swap d ps)) ps ==>
-    (apply_prefix_ops initial_fmp lo (FST (do_swap d ps)) ps).ps_stack =
-      (SND (do_swap d ps)).ps_stack
+    prefix_spill_wf initial_fmp lo (FST (do_swap d (ps with ps_alloc := al))) ps ==>
+    (apply_prefix_ops initial_fmp lo (FST (do_swap d (ps with ps_alloc := al))) ps).ps_stack =
+      stack_swap d ps.ps_stack
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `d <= 16`
-  >- metis_tac[native_swap_safe_replay] >>
+  >- (Cases_on `d = 0`
+      >- (simp[do_swap_def, apply_prefix_ops_def, stack_swap_def] >>
+          simp[LUPDATE_SAME]) >>
+      simp[do_swap_def, apply_prefix_ops_def, apply_prefix_op_def,
+           apply_simple_op_def]) >>
   `d > 16` by decide_tac >>
-  drule_all do_swap_big_decompose >> simp[LET_THM] >> strip_tac >>
+  qspecl_then [`d`, `ps with ps_alloc := al`] mp_tac do_swap_big_decompose >>
+  simp[LET_THM] >> strip_tac >>
   qabbrev_tac `items = top_n (d + 1) ps.ps_stack` >>
-  qabbrev_tac `offsets = FST (spill_alloc_n [] ps.ps_alloc items)` >>
+  qabbrev_tac `offsets = FST (spill_alloc_n [] al items)` >>
   qabbrev_tac `desired = [d] ++ GENLIST (\i. i + 1) (d - 1) ++ [0]` >>
   qabbrev_tac `bs = TAKE (LENGTH ps.ps_stack - (d + 1)) ps.ps_stack` >>
   `LENGTH items = d + 1` by simp[Abbr `items`, top_n_def, LENGTH_TAKE] >>
@@ -5720,7 +5738,14 @@ Proof
      simp[LENGTH_REVERSE] >> conj_tac
      >- (qpat_x_assum `PERM _ _` mp_tac >> simp[]) >>
      metis_tac[]) >>
-  gvs[Abbr `desired`, MAP_APPEND, APPEND_ASSOC, Once (GSYM EL_def)]
+  gvs[Abbr `desired`, MAP_APPEND, APPEND_ASSOC, Once (GSYM EL_def)] >>
+  `items = [HD items] ++ MAP (\i. EL i items) (GENLIST (\i. i + 1) (d - 1)) ++ [EL d items]` by
+    (irule swap_chunk_split >> simp[]) >>
+  pop_assum (fn th => CONV_TAC (RHS_CONV (RAND_CONV (RAND_CONV (REWR_CONV th))))) >>
+  `d = LENGTH (MAP (\i. EL i items) (GENLIST (\i. i + 1) (d - 1))) + 1` by
+    (simp[] >> decide_tac) >>
+  pop_assum (fn th => CONV_TAC (RHS_CONV (RATOR_CONV (RAND_CONV (REWR_CONV th))))) >>
+  simp[stack_swap_append_ends, APPEND_ASSOC]
 QED
 
 Theorem restore_safety_map_cong[local]:
@@ -5860,22 +5885,23 @@ Proof
   simp[MAP_MAP_o, combinTheory.o_DEF]
 QED
 
-Theorem do_dup_safe_stack_replay:
-  !d ps lo.
+Theorem dup_replay_independent_allocator[local]:
+  !d ps lo al.
     d < LENGTH ps.ps_stack /\
     (!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
                 FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
                 a + 32 <= b \/ b + 32 <= a) /\
-    prefix_spill_wf initial_fmp lo (FST (do_dup d ps)) ps ==>
-    (apply_prefix_ops initial_fmp lo (FST (do_dup d ps)) ps).ps_stack =
-      (SND (do_dup d ps)).ps_stack
+    prefix_spill_wf initial_fmp lo (FST (do_dup d (ps with ps_alloc := al))) ps ==>
+    (apply_prefix_ops initial_fmp lo (FST (do_dup d (ps with ps_alloc := al))) ps).ps_stack =
+      stack_dup d ps.ps_stack
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `d <= 15`
-  >- metis_tac[native_dup_safe_replay] >>
+  >- simp[do_dup_def, apply_prefix_ops_def, apply_prefix_op_def,
+          apply_simple_op_def, stack_dup_def, stack_peek_def] >>
   `d > 15` by decide_tac >>
   qabbrev_tac `k = d - 15` >>
   qabbrev_tac `items = top_n k ps.ps_stack` >>
-  qabbrev_tac `offsets = FST (spill_alloc_n [] ps.ps_alloc (REVERSE items))` >>
+  qabbrev_tac `offsets = FST (spill_alloc_n [] al (REVERSE items))` >>
   qabbrev_tac `idxs = if k <= 16 then
     GENLIST (\i. k - 2 - i) (k - 1) ++ [k - 1]
     else GENLIST (\i. k - 1 - i) k` >>
@@ -5883,9 +5909,8 @@ Proof
   qabbrev_tac `ops = FLAT (MAP (\idx. SORestore (EL idx offsets) ::
     (if k <= 16 then [] else [SOSwap 1])) idxs) ++
     (if k <= 16 then [SOSwap k] else [])` >>
-  `FST (do_dup d ps) = MAP SOSpill offsets ++ [SODup 16] ++ ops /\
-   (SND (do_dup d ps)).ps_stack = stack_dup d ps.ps_stack` by
-    (drule_all do_dup_big_decompose >>
+  `FST (do_dup d (ps with ps_alloc := al)) = MAP SOSpill offsets ++ [SODup 16] ++ ops` by
+    (qspecl_then [`d`, `ps with ps_alloc := al`] mp_tac do_dup_big_decompose >>
      simp[LET_THM, Abbr `k`, Abbr `items`, Abbr `offsets`, Abbr `idxs`, Abbr `ops`, APPEND_ASSOC]) >>
   qabbrev_tac `stem = TAKE (LENGTH ps.ps_stack - k) ps.ps_stack` >>
   `LENGTH items = k /\ 0 < k /\ k < LENGTH ps.ps_stack` by
@@ -5938,4 +5963,144 @@ Proof
      simp[LET_THM, Abbr `ops`, Abbr `idxs`]) >>
   simp[apply_prefix_ops_append, apply_prefix_ops_def] >>
   gvs[stack_dup_def, stack_push_def, SNOC_APPEND]
+QED
+
+Theorem swap_trace_length_allocator_cong[local]:
+  !d ps qs.
+    d < LENGTH ps.ps_stack /\ LENGTH qs.ps_stack = LENGTH ps.ps_stack /\
+    qs.ps_alloc = ps.ps_alloc ==>
+    FST (do_swap d qs) = FST (do_swap d ps)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `d <= 16`
+  >- (Cases_on `d = 0` >> simp[do_swap_def]) >>
+  qspecl_then [`d`, `ps`] mp_tac do_swap_big_decompose >>
+  qspecl_then [`d`, `qs`] mp_tac do_swap_big_decompose >>
+  simp[LET_THM] >> rpt strip_tac >> simp[] >>
+  `spill_alloc_n [] ps.ps_alloc (top_n (d + 1) qs.ps_stack) =
+   spill_alloc_n [] ps.ps_alloc (top_n (d + 1) ps.ps_stack)` by
+    (irule spill_alloc_n_length_cong >> simp[top_n_def, LENGTH_TAKE]) >>
+  simp[]
+QED
+
+Theorem dup_trace_length_allocator_cong[local]:
+  !d ps qs.
+    d < LENGTH ps.ps_stack /\ LENGTH qs.ps_stack = LENGTH ps.ps_stack /\
+    qs.ps_alloc = ps.ps_alloc ==>
+    FST (do_dup d qs) = FST (do_dup d ps)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `d <= 15`
+  >- simp[do_dup_def] >>
+  qspecl_then [`d`, `ps`] mp_tac do_dup_big_decompose >>
+  qspecl_then [`d`, `qs`] mp_tac do_dup_big_decompose >>
+  simp[LET_THM] >> rpt strip_tac >> simp[] >>
+  `spill_alloc_n [] ps.ps_alloc (REVERSE (top_n (d - 15) qs.ps_stack)) =
+   spill_alloc_n [] ps.ps_alloc (REVERSE (top_n (d - 15) ps.ps_stack))` by
+    (irule spill_alloc_n_length_cong >> simp[top_n_def, LENGTH_TAKE]) >>
+  simp[]
+QED
+
+Theorem do_swap_two_state_safe_stack_replay:
+  !d ps qs lo.
+    d < LENGTH ps.ps_stack /\ LENGTH qs.ps_stack = LENGTH ps.ps_stack /\
+    (!x a y b. FLOOKUP qs.ps_spilled x = SOME a /\
+                FLOOKUP qs.ps_spilled y = SOME b /\ x <> y ==>
+                a + 32 <= b \/ b + 32 <= a) /\
+    prefix_spill_wf initial_fmp lo (FST (do_swap d ps)) qs ==>
+    (apply_prefix_ops initial_fmp lo (FST (do_swap d ps)) qs).ps_stack =
+      stack_swap d qs.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  `FST (do_swap d (qs with ps_alloc := ps.ps_alloc)) = FST (do_swap d ps)` by
+    (irule swap_trace_length_allocator_cong >> simp[]) >>
+  qspecl_then [`d`, `qs`, `lo`, `ps.ps_alloc`] mp_tac swap_replay_independent_allocator >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem do_dup_two_state_safe_stack_replay:
+  !d ps qs lo.
+    d < LENGTH ps.ps_stack /\ LENGTH qs.ps_stack = LENGTH ps.ps_stack /\
+    (!x a y b. FLOOKUP qs.ps_spilled x = SOME a /\
+                FLOOKUP qs.ps_spilled y = SOME b /\ x <> y ==>
+                a + 32 <= b \/ b + 32 <= a) /\
+    prefix_spill_wf initial_fmp lo (FST (do_dup d ps)) qs ==>
+    (apply_prefix_ops initial_fmp lo (FST (do_dup d ps)) qs).ps_stack =
+      stack_dup d qs.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  `FST (do_dup d (qs with ps_alloc := ps.ps_alloc)) = FST (do_dup d ps)` by
+    (irule dup_trace_length_allocator_cong >> simp[]) >>
+  qspecl_then [`d`, `qs`, `lo`, `ps.ps_alloc`] mp_tac dup_replay_independent_allocator >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem stack_swap_chunk[local]:
+  !items:operand list. !bs d.
+    LENGTH items = d + 1 /\ 0 < d ==>
+    stack_swap d (bs ++ items) =
+      bs ++ [EL d items] ++ MAP (\i. EL i items) (GENLIST (\i. i + 1) (d - 1)) ++ [HD items]
+Proof
+  rpt strip_tac >>
+  `items = [HD items] ++ MAP (\i. EL i items) (GENLIST (\i. i + 1) (d - 1)) ++ [EL d items]` by
+    (irule swap_chunk_split >> simp[]) >>
+  pop_assum (fn th => CONV_TAC (LHS_CONV (RAND_CONV (RAND_CONV (REWR_CONV th))))) >>
+  `d = LENGTH (MAP (\i. EL i items) (GENLIST (\i. i + 1) (d - 1))) + 1` by
+    (simp[] >> decide_tac) >>
+  pop_assum (fn th => CONV_TAC (LHS_CONV (RATOR_CONV (RAND_CONV (REWR_CONV th))))) >>
+  simp[stack_swap_append_ends, APPEND_ASSOC]
+QED
+
+Theorem do_swap_stack_result:
+  !d ps. d < LENGTH ps.ps_stack ==>
+    (SND (do_swap d ps)).ps_stack = stack_swap d ps.ps_stack
+Proof
+  rpt strip_tac >> Cases_on `d <= 16`
+  >- (Cases_on `d = 0` >> simp[do_swap_def, stack_swap_def, LUPDATE_SAME]) >>
+  qspecl_then [`d`, `ps`] mp_tac do_swap_big_decompose >>
+  simp[LET_THM] >> strip_tac >> simp[] >>
+  qabbrev_tac `items = top_n (d + 1) ps.ps_stack` >>
+  qabbrev_tac `bs = TAKE (LENGTH ps.ps_stack - (d + 1)) ps.ps_stack` >>
+  `LENGTH items = d + 1` by simp[Abbr `items`, top_n_def, LENGTH_TAKE] >>
+  `ps.ps_stack = bs ++ items` by
+    (simp[Abbr `bs`, Abbr `items`] >> sym_tac >> irule top_n_suffix >> simp[]) >>
+  `stack_swap d (bs ++ items) = bs ++ [EL d items] ++
+    MAP (\i. EL i items) (GENLIST (\i. i + 1) (d - 1)) ++ [HD items]` by
+    (irule stack_swap_chunk >> simp[]) >>
+  simp[MAP_APPEND, APPEND_ASSOC, Once (GSYM EL_def)]
+QED
+
+Theorem do_dup_stack_result:
+  !d ps. d < LENGTH ps.ps_stack ==>
+    (SND (do_dup d ps)).ps_stack = stack_dup d ps.ps_stack
+Proof
+  rpt strip_tac >> Cases_on `d <= 15`
+  >- simp[do_dup_def, stack_dup_def, stack_peek_def] >>
+  `d > 15` by decide_tac >> drule_all do_dup_big_decompose >> simp[LET_THM]
+QED
+
+Theorem do_swap_safe_stack_replay:
+  !d ps lo.
+    d < LENGTH ps.ps_stack /\
+    (!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
+                FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
+                a + 32 <= b \/ b + 32 <= a) /\
+    prefix_spill_wf initial_fmp lo (FST (do_swap d ps)) ps ==>
+    (apply_prefix_ops initial_fmp lo (FST (do_swap d ps)) ps).ps_stack =
+      (SND (do_swap d ps)).ps_stack
+Proof
+  rpt strip_tac >> simp[do_swap_stack_result] >>
+  irule do_swap_two_state_safe_stack_replay >> simp[] >> metis_tac[]
+QED
+
+Theorem do_dup_safe_stack_replay:
+  !d ps lo.
+    d < LENGTH ps.ps_stack /\
+    (!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
+                FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
+                a + 32 <= b \/ b + 32 <= a) /\
+    prefix_spill_wf initial_fmp lo (FST (do_dup d ps)) ps ==>
+    (apply_prefix_ops initial_fmp lo (FST (do_dup d ps)) ps).ps_stack =
+      (SND (do_dup d ps)).ps_stack
+Proof
+  rpt strip_tac >> simp[do_dup_stack_result] >>
+  irule do_dup_two_state_safe_stack_replay >> simp[] >> metis_tac[]
 QED
