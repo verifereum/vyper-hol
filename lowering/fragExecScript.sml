@@ -998,10 +998,12 @@ Theorem frag_outcome_jnz[local]:
   frag_outcome ctx fn (jump_to (if w = 0w then body else exit) s) sb Q R ==>
   frag_outcome ctx fn s sb Q R
 Proof
-  rpt strip_tac >> irule frag_outcome_jump >>
-  goal_assum (drule_at Any) >>
-  qexistsl_tac [`bb`, `mk_inst id JNZ [cnd; Label exit; Label body] []`,
-                `if w = 0w then body else exit`] >>
+  rpt strip_tac >>
+  rename1 `get_instruction bb _ =
+    SOME (mk_inst id JNZ [cnd; Label exit; Label body_lbl] [])` >>
+  irule frag_outcome_jump >> goal_assum (drule_at Any) >>
+  qexistsl_tac [`bb`, `mk_inst id JNZ [cnd; Label exit; Label body_lbl] []`,
+                `if w = 0w then body_lbl else exit`] >>
   simp[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs] >>
   Cases_on `w = 0w` >> gvs[]
 QED
