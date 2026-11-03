@@ -351,7 +351,10 @@ Proof
     (rpt strip_tac >> irule eval_operand_update_other_op >> metis_tac[]) >>
   `!s. (s = s1 \/ s = s2 \/ s = s3 \/ s = s4 \/ s = s5 \/ s = s6) ==>
        eval_operand op1 s = SOME a /\ eval_operand op2 s = SOME b` by
-    (rpt strip_tac >> gvs[markerTheory.Abbrev_def]) >>
+    (rpt strip_tac >>
+     qpat_x_assum `s = _` SUBST1_TAC >>
+     simp[Abbr `s6`, Abbr `s5`, Abbr `s4`, Abbr `s3`,
+          Abbr `s2`, Abbr `s1`]) >>
   `eval_operand (Var rv) s2 = SOME (b - a) /\
    eval_operand (Var rv) s6 = SOME (b - a) /\
    eval_operand (Var g1) s3 = SOME (bool_to_word bad1) /\
@@ -980,8 +983,7 @@ Resume compile_for_range_checked_frag[ends]:
   `eval_operand op1 t1 = SOME (i2w n1)` by
     (qpat_x_assum `expr_post ctx _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def, expr_val_rel_def] >> rpt strip_tac >>
-     TRY (first_x_assum (qspec_then `tyv` mp_tac)) >>
-     gvs[typed_val_to_w256_word_value, word_value_def, val_to_w256_def]) >>
+     simp[typed_val_to_w256_word_value, word_value_def, val_to_w256_def]) >>
   `stmt_state_rel ctx func cenv cx es1 t1` by fs[expr_post_def] >>
   qpat_x_assum `expr_sim _ _ _ _ _ e2 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
@@ -1013,8 +1015,7 @@ Resume compile_for_range_checked_frag[alloca]:
   `eval_operand op2 t2 = SOME (i2w n2)` by
     (qpat_x_assum `expr_post ctx _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def, expr_val_rel_def] >> rpt strip_tac >>
-     TRY (first_x_assum (qspec_then `tyv` mp_tac)) >>
-     gvs[typed_val_to_w256_word_value, word_value_def, val_to_w256_def]) >>
+     simp[typed_val_to_w256_word_value, word_value_def, val_to_w256_def]) >>
   `!x w. not_fresh_at s1 x /\ lookup_var x t1 = SOME w ==>
          lookup_var x t2 = SOME w` by fs[expr_post_def] >>
   `eval_operand op1 t2 = SOME (i2w n1)` by
@@ -1030,7 +1031,8 @@ Resume compile_for_range_checked_frag[alloca]:
      `!e si r sf.
         (do raw <- eval_expr cx e; read_result cx raw od) si = (r, sf) ==>
         MAP FDOM si.scopes = MAP FDOM sf.scopes` by
-       (rpt gen_tac >> simp[bind_def, AllCaseEqs()] >> strip_tac >>
+       (POP_ASSUM_LIST (K ALL_TAC) >>
+        rpt gen_tac >> simp[bind_def, AllCaseEqs()] >> strip_tac >>
         imp_res_tac read_result_state >> gvs[] >>
         metis_tac[eval_expr_preserves_scopes_dom]) >>
      metis_tac[]) >>
