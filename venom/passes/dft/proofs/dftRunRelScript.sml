@@ -2609,3 +2609,54 @@ Proof
   gvs[dft_must_order_def, dft_gas_swap_pair_def,
       effects_independent_def, EVERY_MEM] >> metis_tac[pred_setTheory.DISJOINT_SYM]
 QED
+
+Theorem dft_extract_head_variant:
+  !pre s'.
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+  dft_remaining_inv fn bb (pre ++ y::post) s' /\
+  EVERY (\x. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+    ~dft_must_order x y /\ abort_compatible x.inst_opcode y.inst_opcode) pre ==>
+  ?s. s' = (s with vs_gas_readings := s'.vs_gas_readings) /\
+    dft_res_rel (dft_exec_suffix fuel C (pre ++ y::post) s)
+                (dft_exec_suffix fuel C (y::(pre ++ post)) s')
+Proof
+  Induct >- (rpt strip_tac >> qexists_tac `s'` >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `dft_gas_swap_pair h y /\ inst_wf h /\ inst_wf y /\
+   ~(h.inst_outputs = [] /\ read_effects h.inst_opcode = empty_effects /\
+     write_effects h.inst_opcode = empty_effects)` by
+    (irule dft_crossing_swap_pair >> fs[] >> metis_tac[]) >>
+  `(!v. MEM (Var v) y.inst_operands ==> v IN FDOM s'.vs_vars) /\
+   (y.inst_opcode <> INVOKE ==>
+    !l. MEM (Label l) y.inst_operands ==> l IN FDOM s'.vs_labels)` by
+    (irule dft_remaining_inv_ready >> qexistsl_tac [`bb`, `fn`, `post`, `h::pre`] >>
+     simp[] >> fs[EVERY_MEM] >> metis_tac[]) >>
+  drule_all dft_suffix_swap_variant >>
+  disch_then (qspecl_then [`pre ++ post`, `fuel`, `C`] strip_assume_tac) >>
+  rename1 `s' = u with vs_gas_readings := s'.vs_gas_readings` >>
+  `dft_remaining_inv fn bb ((h::pre) ++ y::post) u` by
+    metis_tac[dft_remaining_inv_gas_variant] >>
+  `?s. u = (s with vs_gas_readings := u.vs_gas_readings) /\
+    dft_res_rel (dft_exec_suffix fuel C ([h] ++ (pre ++ y::post)) s)
+                (dft_exec_suffix fuel C ([h] ++ (y::(pre ++ post))) u)` by
+    (irule dft_suffix_prefix_variant >>
+     `~is_terminator h.inst_opcode` by gvs[dft_gas_swap_pair_def] >>
+     simp[] >> rpt gen_tac >>
+     simp[dft_exec_cons_def] >> strip_tac >>
+     gvs[AllCaseEqs()] >>
+     rename1 `step_inst fuel C h u = OK t` >>
+     `dft_remaining_inv fn bb (pre ++ y::post)
+       (t with vs_inst_idx := SUC u.vs_inst_idx)` by
+       (drule_at (Pat `step_inst _ _ _ _ = OK _`) dft_remaining_inv_step >>
+        disch_then (qspecl_then [`[]`, `pre ++ y::post`] mp_tac) >> simp[]) >>
+     qpat_x_assum `!s. dft_remaining_inv _ _ _ s ==> _`
+       (qspec_then `t with vs_inst_idx := SUC u.vs_inst_idx` mp_tac) >> simp[]) >>
+  qexists_tac `s` >> conj_tac
+  >- (qpat_x_assum `s' = _` SUBST_ALL_TAC >>
+      qpat_x_assum `u = _` SUBST_ALL_TAC >> simp[]) >>
+  gvs[] >> metis_tac[dft_res_rel_trans]
+QED
