@@ -953,7 +953,7 @@ QED
 Theorem compile_ceil_typed_sim:
   !ctx func cenv cx env ty ann e es.
     expr_body_pre cenv cx env (Builtin ann Ceil [e]) es /\
-    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) [e]) ==>
+    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (\s. expr_sim_inv cenv cx env s /\ source_supply s) [e]) ==>
     expr_sim ctx func cenv cx ty (Builtin ann Ceil [e]) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -975,7 +975,7 @@ QED
 Theorem ceil_ready_vv_sim:
   !ctx func cenv cx env ty ann args es.
     expr_body_pre cenv cx env (Builtin ann Ceil args) es /\
-    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args) ==>
+    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (\s. expr_sim_inv cenv cx env s /\ source_supply s) args) ==>
     expr_vv_sim ctx func cenv cx ty (Builtin ann Ceil args) es
 Proof
   rpt gen_tac >> strip_tac >>
