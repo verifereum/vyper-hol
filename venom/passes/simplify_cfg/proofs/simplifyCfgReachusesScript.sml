@@ -335,3 +335,240 @@ Proof
   Cases_on `is_terminator orig.inst_opcode` >>
   gvs[inst_wf_update_phi_bypass, inst_wf_canon_jnz_inst, inst_wf_subst_label_inst]
 QED
+
+Theorem chain_merge_reachable_input:
+  wf_function fn /\ first_block_no_preds fn /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+      (bb_succs (merge_blocks a b))) /\
+  MEM z (fn_labels fn) /\
+  fn_reachable fn' (if z = b.bb_label then a.bb_label else z) ==>
+  fn_reachable fn z
+Proof
+  strip_tac >>
+  `fn_entry_label fn' = fn_entry_label fn` by metis_tac[chain_merge_entry] >>
+  qpat_x_assum `fn_reachable fn' _` mp_tac >>
+  pure_rewrite_tac[fn_reachable_def] >> strip_tac >>
+  drule rtc_to_fn_path >> strip_tac >>
+  `MEM (LAST path) (fn_labels fn')` by
+    (gvs[chain_merge_fn_labels, MEM_FILTER] >>
+     Cases_on `z = b.bb_label` >> gvs[fn_labels_def, MEM_MAP, can_merge_blocks_def] >>
+     metis_tac[]) >>
+  drule_all chain_merge_endpoint_path_input >> strip_tac >>
+  qexists `entry` >> simp[] >>
+  qpat_x_assum `is_fn_path fn' _` kall_tac >>
+  `chain_prefix a.bb_label b.bb_label path ++
+     (if z = b.bb_label then [a.bb_label;b.bb_label] else [z]) <> []` by
+    (Cases_on `z = b.bb_label` >> simp[]) >>
+  drule_all is_fn_path_rtc >>
+  Cases_on `z = b.bb_label` >> gvs[]
+QED
+
+Theorem do_merge_jump_reachable_input:
+  wf_function fn /\ first_block_no_preds fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') /\
+  MEM z (fn_labels fn') /\ fn_reachable fn' z ==> fn_reachable fn z
+Proof
+  strip_tac >>
+  `fn_entry_label fn' = fn_entry_label fn` by metis_tac[do_merge_jump_entry] >>
+  qpat_x_assum `fn_reachable fn' _` mp_tac >>
+  pure_rewrite_tac[fn_reachable_def] >> strip_tac >>
+  drule rtc_to_fn_path >> strip_tac >>
+  `MEM (LAST path) (fn_labels fn')` by simp[] >>
+  drule_all do_merge_jump_path_input >> strip_tac >>
+  qexists `entry` >> simp[] >>
+  qpat_x_assum `is_fn_path fn' _` kall_tac >>
+  drule_all is_fn_path_rtc >> gvs[]
+QED
+
+Theorem do_merge_jump_reachable_block_map:
+  wf_function fn /\ first_block_no_preds fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') /\
+  MEM bb' fn'.fn_blocks /\ fn_reachable fn' bb'.bb_label ==>
+  ?bb target. MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    bb.bb_label <> b.bb_label /\ bb_succs b = [target] /\
+    bb'.bb_label = bb.bb_label /\
+    bb'.bb_instructions = MAP (\inst.
+      if bb.bb_label = a.bb_label then
+        (if target = a.bb_label then update_phi_bypass a.bb_label b.bb_label else I)
+          (if ~is_terminator inst.inst_opcode then inst
+           else canon_jnz_inst (subst_label_inst b.bb_label target inst))
+      else if bb.bb_label = target then update_phi_bypass a.bb_label b.bb_label inst
+      else inst) bb.bb_instructions
+Proof
+  strip_tac >>
+  `fn_reachable fn bb'.bb_label` by
+    (irule do_merge_jump_reachable_input >>
+     goal_assum (drule_at Any) >> simp[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  drule_all do_merge_jump_block_map >> strip_tac >>
+  qexistsl [`bb`, `target`] >> gvs[]
+QED
+
+Theorem do_merge_jump_reachable_inst_origin:
+  wf_function fn /\ first_block_no_preds fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') /\
+  MEM bb' fn'.fn_blocks /\ fn_reachable fn' bb'.bb_label /\
+  MEM inst' bb'.bb_instructions ==>
+  ?bb inst target. MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    bb.bb_label <> b.bb_label /\ bb_succs b = [target] /\
+    bb'.bb_label = bb.bb_label /\ MEM inst bb.bb_instructions /\
+    inst'.inst_outputs = inst.inst_outputs /\
+    (inst'.inst_opcode = PHI <=> inst.inst_opcode = PHI) /\
+    inst' = (if bb.bb_label = a.bb_label then
+        (if target = a.bb_label then update_phi_bypass a.bb_label b.bb_label else I)
+          (if ~is_terminator inst.inst_opcode then inst
+           else canon_jnz_inst (subst_label_inst b.bb_label target inst))
+      else if bb.bb_label = target then update_phi_bypass a.bb_label b.bb_label inst
+      else inst)
+Proof
+  strip_tac >> drule_all do_merge_jump_reachable_block_map >>
+  disch_then (qx_choose_then `bb` (qx_choose_then `target` strip_assume_tac)) >>
+  qpat_x_assum `MEM inst' _` mp_tac >> asm_rewrite_tac[] >>
+  simp[MEM_MAP] >> disch_then (qx_choose_then `inst` strip_assume_tac) >>
+  qexistsl [`bb`, `inst`] >> simp[] >>
+  Cases_on `bb.bb_label = a.bb_label` >>
+  Cases_on `target = a.bb_label` >> Cases_on `bb.bb_label = target` >>
+  Cases_on `is_terminator inst.inst_opcode` >>
+  gvs[update_phi_bypass_shape, canon_jnz_inst_shape, subst_label_inst_shape,
+      combinTheory.I_DEF, is_terminator_def]
+QED
+
+Theorem chain_merge_base_inst_origin:
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  MEM bb' (replace_block a.bb_label (merge_blocks a b)
+    (remove_block b.bb_label fn.fn_blocks)) /\ MEM inst bb'.bb_instructions ==>
+  ?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+    bb'.bb_label = (if bb.bb_label = b.bb_label then a.bb_label else bb.bb_label)
+Proof
+  strip_tac >>
+  fs[replace_block_def, remove_block_def, MEM_MAP, MEM_FILTER] >>
+  Cases_on `bb.bb_label = a.bb_label` >> gvs[merge_blocks_def, MEM_APPEND]
+  >- (qexists `a` >> simp[can_merge_blocks_def] >>
+      Cases_on `a.bb_instructions` >> fs[] >> drule MEM_FRONT >> simp[])
+  >- (qexists `b` >> simp[] >> fs[can_merge_blocks_def]) >>
+  qexists `bb` >> simp[]
+QED
+
+Theorem chain_merge_reachable_inst_origin:
+  wf_function fn /\ first_block_no_preds fn /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+      (bb_succs (merge_blocks a b))) /\
+  MEM bb' fn'.fn_blocks /\ fn_reachable fn' bb'.bb_label /\
+  MEM inst' bb'.bb_instructions ==>
+  ?bb inst. MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    MEM inst bb.bb_instructions /\
+    bb'.bb_label = (if bb.bb_label = b.bb_label then a.bb_label else bb.bb_label) /\
+    inst'.inst_outputs = inst.inst_outputs /\ inst'.inst_opcode = inst.inst_opcode /\
+    inst' = (if MEM bb'.bb_label (bb_succs (merge_blocks a b)) /\ inst.inst_opcode = PHI
+             then subst_label_inst b.bb_label a.bb_label inst else inst)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label)
+    (replace_block a.bb_label (merge_blocks a b)
+      (remove_block b.bb_label fn.fn_blocks)))` by
+    (irule chain_merge_base_labels >> fs[wf_function_def]) >>
+  qpat_x_assum `MEM bb' fn'.fn_blocks` mp_tac >>
+  asm_rewrite_tac[] >> simp[update_succ_phi_labels_exact, MEM_MAP] >>
+  disch_then (qx_choose_then `src` strip_assume_tac) >>
+  Cases_on `MEM src.bb_label (bb_succs (merge_blocks a b))` >> gvs[]
+  >- suspend "updated"
+  >> suspend "unchanged"
+QED
+
+Resume chain_merge_reachable_inst_origin[updated]:
+  qpat_x_assum `MEM inst' _` mp_tac >> simp[MEM_MAP] >>
+  disch_then (qx_choose_then `inst` strip_assume_tac) >>
+  drule_all chain_merge_base_inst_origin >> strip_tac >>
+  `fn_reachable fn bb.bb_label` by
+    (irule chain_merge_reachable_input >> goal_assum (drule_at Any) >>
+     simp[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  qexistsl [`bb`, `inst`] >> simp[] >>
+  Cases_on `inst.inst_opcode = PHI` >> gvs[subst_label_inst_shape]
+QED
+
+Resume chain_merge_reachable_inst_origin[unchanged]:
+  drule_all chain_merge_base_inst_origin >> strip_tac >>
+  `fn_reachable fn bb.bb_label` by
+    (irule chain_merge_reachable_input >> goal_assum (drule_at Any) >>
+     simp[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  qexists `bb` >> simp[]
+QED
+
+Finalise chain_merge_reachable_inst_origin
+
+Theorem do_merge_jump_entry_no_phi:
+  wf_function fn /\ first_block_no_preds fn /\ scfg_phi_safe fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') ==>
+  EVERY (\inst. inst.inst_opcode <> PHI) (HD fn'.fn_blocks).bb_instructions
+Proof
+  strip_tac >>
+  `wf_function fn'` by metis_tac[do_merge_jump_wf] >>
+  `fn_entry_label fn' = fn_entry_label fn` by metis_tac[do_merge_jump_entry] >>
+  `fn.fn_blocks <> [] /\ fn'.fn_blocks <> []` by
+    fs[wf_function_def, fn_has_entry_def] >>
+  `MEM (HD fn'.fn_blocks) fn'.fn_blocks /\
+   fn_reachable fn' (HD fn'.fn_blocks).bb_label` by
+    (Cases_on `fn'.fn_blocks` >>
+     gvs[fn_reachable_def, fn_entry_label_def, entry_block_def]) >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  drule_all do_merge_jump_reachable_inst_origin >> strip_tac >>
+  `bb.bb_label = (HD fn.fn_blocks).bb_label` by
+    (Cases_on `fn.fn_blocks` >> Cases_on `fn'.fn_blocks` >>
+     gvs[fn_entry_label_def, entry_block_def]) >>
+  `MEM (HD fn.fn_blocks) fn.fn_blocks` by
+    (Cases_on `fn.fn_blocks` >> gvs[]) >>
+  `bb = HD fn.fn_blocks` by
+    (irule same_label_same_block >> fs[wf_function_def, fn_labels_def] >> metis_tac[]) >>
+  gvs[scfg_phi_safe_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem chain_merge_entry_no_phi:
+  wf_function fn /\ first_block_no_preds fn /\ scfg_phi_safe fn /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+      (bb_succs (merge_blocks a b))) ==>
+  EVERY (\inst. inst.inst_opcode <> PHI) (HD fn'.fn_blocks).bb_instructions
+Proof
+  strip_tac >>
+  `lookup_block a.bb_label fn.fn_blocks = SOME a /\
+   lookup_block b.bb_label fn.fn_blocks = SOME b` by
+    (fs[wf_function_def, fn_labels_def] >> metis_tac[MEM_lookup_block]) >>
+  `wf_function fn'` by metis_tac[chain_merge_wf] >>
+  `fn_entry_label fn' = fn_entry_label fn` by metis_tac[chain_merge_entry] >>
+  `fn.fn_blocks <> [] /\ fn'.fn_blocks <> []` by
+    fs[wf_function_def, fn_has_entry_def] >>
+  `MEM (HD fn'.fn_blocks) fn'.fn_blocks /\
+   fn_reachable fn' (HD fn'.fn_blocks).bb_label` by
+    (Cases_on `fn'.fn_blocks` >>
+     gvs[fn_reachable_def, fn_entry_label_def, entry_block_def]) >>
+  pure_rewrite_tac[EVERY_MEM] >> BETA_TAC >> rpt strip_tac >>
+  drule_all chain_merge_reachable_inst_origin >> strip_tac >>
+  `bb.bb_label <> b.bb_label` by
+    (strip_tac >>
+     `bb = b` by
+       (irule same_label_same_block >> fs[wf_function_def, fn_labels_def] >> metis_tac[]) >>
+     gvs[can_merge_blocks_def, no_phis_def, EVERY_MEM]) >>
+  `bb.bb_label = (HD fn.fn_blocks).bb_label` by
+    (Cases_on `fn.fn_blocks` >> Cases_on `fn'.fn_blocks` >>
+     gvs[fn_entry_label_def, entry_block_def]) >>
+  `MEM (HD fn.fn_blocks) fn.fn_blocks` by
+    (Cases_on `fn.fn_blocks` >> gvs[]) >>
+  `bb = HD fn.fn_blocks` by
+    (irule same_label_same_block >> fs[wf_function_def, fn_labels_def] >> metis_tac[]) >>
+  gvs[scfg_phi_safe_def, EVERY_MEM] >> metis_tac[]
+QED
