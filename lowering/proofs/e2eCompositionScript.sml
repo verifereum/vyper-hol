@@ -5,7 +5,7 @@
  *)
 Theory e2eComposition
 Ancestors
-  e2eDefs vyperLoweringCorrect unitTransformDefs o1PassContract compileEnv
+  e2eDefs vyperLoweringCorrect unitTransformDefs o1PassContract ptrDiscipline compileEnv
   accountsRelProps codegenCorrectness
   passSimulationDefs stateEquiv venomExecSemantics venomState
   vyperInterpreter vyperValue vfmDecreasesGas vfmExecution frameOutcome callTrace
