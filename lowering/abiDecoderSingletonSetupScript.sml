@@ -81,11 +81,14 @@ Theorem abi_decode_singleton_setup_shape:
 Proof
   strip_tac >> gvs[abi_decode_source_opcode_def] >> Cases_on `hi = Lit 0w` >>
   Cases_on `base_op = Lit 0w` >>
-  gvs[abi_decode_singleton_setup_def, abi_decode_complex_head_guard_def,
-      compile_abi_decode_range_check_def, compile_getelemptr_abi_def, compile_abi_dec_addr_def,
-      comp_bind_def, comp_ignore_bind_def, comp_return_def,
-      emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
-      emit_def, emitted_insts_def, IS_PREFIX_APPEND] >>
+  qpat_x_assum `abi_decode_singleton_setup _ _ _ _ _ _ = _` mp_tac >>
+  asm_rewrite_tac [abi_decode_singleton_setup_def, abi_decode_complex_head_guard_def,
+      compile_abi_decode_range_check_def, compile_getelemptr_abi_def,
+      compile_abi_dec_addr_def] >>
+  asm_rewrite_tac [emit_op_def, emit_void_def] >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_var_def, fresh_id_def, emit_def, LET_THM] >>
+  strip_tac >> gvs[emitted_insts_def, IS_PREFIX_APPEND] >>
   pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
   gvs[DROP_LENGTH_APPEND, is_terminator_def, is_alloca_op_def, mk_inst_def]
 QED
