@@ -970,3 +970,60 @@ Theorem probe_copy_storage_type_rejected:
 Proof
   EVAL_TAC >> simp[]
 QED
+
+(* Full-word-leaf admission probe, distinct from both rejected candidates. *)
+Definition probe_word_outer_type_def:
+  probe_word_outer_type =
+    ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 1)) (Dynamic 1)
+End
+
+Definition probe_word_copy_code_def:
+  probe_word_copy_code =
+    [VariableDecl Private Storage "outer" probe_word_outer_type (SOME 0);
+     VariableDecl Private Storage "donor" probe_word_outer_type (SOME 3);
+     FunctionDecl Internal Nonpayable F F "shrink" [] [] (BaseT (UintT 256))
+       [Assign (BaseTarget (TopLevelNameTarget (NONE,"outer")))
+          (TopLevelName probe_word_outer_type (NONE,"donor"));
+        Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))]]
+End
+
+Theorem probe_word_copy_supported:
+  supported_program probe_word_copy_code
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem probe_word_copy_storage_supported:
+  supported_storage_type probe_word_copy_code probe_word_outer_type
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem probe_word_copy_assignment_supported:
+  supported_assignment probe_word_copy_code []
+    (BaseTarget (TopLevelNameTarget (NONE,"outer")))
+    (TopLevelName probe_word_outer_type (NONE,"donor"))
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem probe_word_copy_rhs_supported:
+  supported_expr probe_word_copy_code
+    (TopLevelName probe_word_outer_type (NONE,"donor"))
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem probe_word_copy_target_info:
+  supported_target_info probe_word_copy_code []
+    (TopLevelNameTarget (NONE,"outer")) = SOME (ValPT probe_word_outer_type)
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem probe_word_copy_call_supported:
+  supported_expr probe_word_copy_code
+    (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
+Proof
+  EVAL_TAC >> simp[]
+QED
