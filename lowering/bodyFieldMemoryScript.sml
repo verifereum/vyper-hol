@@ -6,7 +6,9 @@ Ancestors
   exprSimAttribute exprSimHash exprSimLiteralBuffer exprOperandVar
   exprSimBuffer exprSimAggregateChildren exprSim context
   exprLowering exprLoweringProps emitHelper emitHelperProps fragExec fragExecMem instMemFrontier
-  allocaHistoryFragment venomInst vyperAST vyperTyping
+  allocaHistoryFragment venomInst vyperAST vyperTyping vyperInterpreter
+  exprSimHyps vyperTypeSystem vyperTypeInvariants allocLimits
+  bodyMemoryDefs exprSimUnwrap vyperState exprSimLen vyperTypeExprSoundness
 
 Theorem body_field_region_frontier:
   fields_layout fields fs /\ ALOOKUP fs id = SOME ftv /\
@@ -346,3 +348,147 @@ val () = List.app (fn th =>
      else raise Fail "attribute memory post inherited admission"
   end) [body_base_memory_holds_struct, body_base_memory_at_struct,
         body_attr_memory_at_field, body_attr_memory_vv_post];
+
+Theorem body_attribute_name_compile[local]:
+  !cenv ty ann sid id fld st vv st'.
+    compile_expr cenv ty (Attribute ann (Name (StructT sid) id) fld) st =
+      (vv, st') ==>
+    ?bvv st1 p.
+      compile_expr cenv ty (Name (StructT sid) id) st = (bvv, st1) /\
+      emit_op ADD [vv_operand bvv;
+                   Lit (n2w (attr_offset cenv (StructT sid) (vv_loc bvv)
+                               fld))] st1 = (p, st') /\
+      vv = LocatedValue ann (mk_ptr p (vv_loc bvv))
+Proof
+  rpt gen_tac >>
+  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+       compile_attribute_def, comp_bind_def, comp_return_def,
+       expr_size_def, expr_type_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  gvs[comp_return_def, vv_loc_def, attr_offset_def]
+QED
+
+Theorem body_attribute_name_eval[local]:
+  !cx ann sid id fld es.
+    eval_expr cx (Attribute ann (Name (StructT sid) id) fld) es =
+    (do r <- eval_expr cx (Name (StructT sid) id);
+        select_result cx (StructT sid) r (AttrSubscript fld) od) es
+Proof
+  simp[Once evaluate_def, expr_type_def]
+QED
+
+Theorem body_attribute_name_pre[local]:
+  !cenv cx env ann sid id fld es.
+    expr_body_pre cenv cx env (Attribute ann (Name (StructT sid) id) fld) es ==>
+    expr_body_pre cenv cx env (Name (StructT sid) id) es /\
+    attribute_type (get_tenv cx) (StructT sid) fld = SOME ann
+Proof
+  rpt gen_tac >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+       env_context_consistent_def] >>
+  gvs[expr_body_pre_def, well_typed_expr_def, attribute_type_ok_def,
+      vyperTypeCallGraphTheory.int_calls_expr_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm, byte_widths_expr_def,
+      alloc_limits_expr_def, expr_type_def]
+QED
+
+Theorem body_base_memory_post_read_struct[local]:
+  !ctx func cenv cx obj es sa sn s0 es1 tv bvv q w sid fs.
+    vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
+    expr_type obj = StructT sid /\ vv_loc bvv = LocMemory /\
+    evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
+    eval_operand (vv_operand bvv) q = SOME w ==>
+    ?v. read_result cx tv es1 = (INL v, es1)
+Proof
+  rpt strip_tac >> fs[vv_post_def] >>
+  drule_all body_base_memory_holds_struct >> metis_tac[]
+QED
+
+Theorem compile_attribute_name_body_vv_sim_mem:
+  !ctx func cenv cx env ty ann sid id fld es.
+    expr_body_pre cenv cx env (Attribute ann (Name (StructT sid) id) fld) es ==>
+    expr_vv_sim_mem ctx func cenv cx ty
+      (Attribute ann (Name (StructT sid) id) fld) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule body_attribute_name_pre >> strip_tac >>
+  `expr_sim_pre cenv cx env (Name (StructT sid) id) es` by
+    simp[expr_sim_pre_body, vyperTypeCallGraphTheory.int_calls_expr_def] >>
+  drule compile_name_body_vv_sim_mem >>
+  disch_then (qspecl_then [`ctx`, `func`, `ty`] assume_tac) >>
+  simp[expr_vv_sim_mem_def] >> rpt gen_tac >> strip_tac >>
+  drule body_attribute_name_compile >> strip_tac >> gvs[] >>
+  rename1 `compile_expr cenv ty (Name (StructT sid) id) sa = (bvv, sm)` >>
+  drule attr_extends >> strip_tac >>
+  drule compile_expr_extends >> strip_tac >>
+  drule_all fn_has_code_split >> strip_tac >>
+  gvs[body_attribute_name_eval, bind_def] >>
+  Cases_on `eval_expr cx (Name (StructT sid) id) es` >>
+  rename1 `_ = (er, es1)` >>
+  `expr_vv_res_ok er` by
+    (drule_all expr_body_pre_vv_res_ok >> simp[]) >>
+  `er <> INR (Error (RuntimeError "convert empty bytes to signed"))` by
+    (Cases_on `er` >> gvs[]) >>
+  qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ (Name _ _) _` mp_tac >>
+  simp[expr_vv_sim_mem_def] >>
+  disch_then drule_all >> disch_then (qspec_then `s0` assume_tac) >>
+  Cases_on `er` >> gvs[]
+  >- (rename1 `eval_expr cx (Name (StructT sid) id) es = (INL btv, es1)` >>
+      drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[expr_type_def] >>
+      `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+      drule_all struct_fields_layout >> strip_tac >> gvs[] >>
+      drule_all attribute_type_evaluates >> strip_tac >>
+      `~popped_at_field btv fld es1` by
+        (irule popped_keys_indexed_not_at_field >>
+         drule_all expr_body_pre_eval_result >> simp[expr_sim_inv_def]) >>
+      `!m. res <> INR (Error (TypeError m))` by
+        (rpt strip_tac >> gvs[expr_vv_res_ok_def]) >>
+      `vv_loc bvv = LocMemory` by
+        (`?ptr sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var ptr) sz)` by
+           gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
+         gvs[compile_expr_def, compile_name_vv_def, comp_return_def,
+             vv_loc_def, vv_location_def, mk_ptr_def]) >>
+      irule frag_exec_mem_seq_pointwise >>
+      qexistsl [`\s. vv_post ctx func cenv cx (Name (StructT sid) id)
+                   es sa sm s0 es1 btv bvv s /\
+                   s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s`,
+                `sm`] >> simp[] >> reverse conj_tac
+      >- (irule frag_exec_mem_conseq >> goal_assum (drule_at Any) >>
+          simp[expr_exit_def]) >>
+      gen_tac >> strip_tac >>
+      qmatch_asmsub_abbrev_tac `emit_op ADD [_; Lit (n2w off)] sm = _` >>
+      drule_all attr_add_frag_mem_at >>
+      disch_then (qspecl_then [`btv`, `s0`, `es1`, `es`] mp_tac) >>
+      disch_then (qspecl_then [`t`, `cx`, `ctx`, `expr_exit res`] assume_tac) >>
+      qpat_x_assum `frag_exec_mem ctx sa sm _ _ _` kall_tac >>
+      qpat_x_assum `compile_expr _ _ (Attribute _ _ _) _ = _` kall_tac >>
+      irule frag_exec_mem_conseq >> goal_assum (drule_at Any) >> simp[] >>
+      rpt strip_tac >>
+      qpat_x_assum `frag_exec_mem _ _ _ _ _ _` kall_tac >>
+      `?v. read_result cx btv es1 = (INL v, es1)` by
+        (drule body_base_memory_post_read_struct >> simp[expr_type_def] >>
+         disch_then drule_all >> simp[]) >>
+      `value_has_type (StructTV fs) v` by metis_tac[] >>
+      `?vals. v = StructV vals /\ struct_has_type fs vals` by
+        (Cases_on `v` >> gvs[value_has_type_def] >>
+         rename1 `ArrayV av` >> Cases_on `av` >> gvs[value_has_type_def]) >>
+      gvs[] >>
+      drule_all select_attr_read >> strip_tac >> gvs[] >>
+      qpat_assum `vv_loc bvv = LocMemory`
+        (fn th => pure_once_rewrite_tac[GSYM th]) >>
+      irule body_attr_memory_vv_post >> simp[expr_type_def, Abbr `off`] >>
+      goal_assum (drule_at Any) >> simp[] >>
+      rpt strip_tac >> gvs[]) >>
+  irule frag_exec_mem_exit_prefix >> goal_assum (drule_at Any) >> simp[]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_ATTRIBUTE_NAME_MEMORY_AUDIT OK\n"
+     else raise Fail "attribute Name memory inherited admission"
+  end) [body_attribute_name_compile, body_attribute_name_eval,
+        body_attribute_name_pre, body_base_memory_post_read_struct,
+        compile_attribute_name_body_vv_sim_mem];
