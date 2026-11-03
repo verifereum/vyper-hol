@@ -2974,9 +2974,30 @@ Resume remap_preserved_mem_ops[returndatacopy]:
   simp[LENGTH_TAKE_EQ]
 QED
 
+Theorem step_inst_base_sha3[local]:
+  inst.inst_opcode = SHA3 ==>
+  step_inst_base inst s =
+    (case inst.inst_operands of
+       [op_offset; op_size] =>
+         (case (eval_operand op_offset s, eval_operand op_size s) of
+            (SOME offset, SOME size_val) =>
+              (case inst.inst_outputs of
+                 [out] => OK (update_var out
+                   (word_of_bytes T (0w:bytes32)
+                     (Keccak_256_w64
+                       (TAKE (w2n size_val)
+                         (DROP (w2n offset) s.vs_memory ++
+                          REPLICATE (w2n size_val) 0w)))) s)
+               | _ => Error "sha3 requires single output")
+          | _ => Error "undefined operand")
+     | _ => Error "sha3 requires 2 operands")
+Proof
+  strip_tac >> simp[step_inst_base_def]
+QED
+
 (* --- SHA3: read from memory, hash, update non-pv output --- *)
 Resume remap_preserved_mem_ops[sha3]:
-  fs[step_inst_base_def, AllCaseEqs()] >>
+  fs[step_inst_base_sha3, AllCaseEqs()] >>
   fs[eval_operand_def, lookup_var_def] >>
   mem_op_preamble >>
   (* Size operand agrees *)
