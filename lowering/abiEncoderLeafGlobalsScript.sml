@@ -13,8 +13,11 @@ Theorem abi_encoder_leaf_step_globals:
   t.vs_pending_deletions = s.vs_pending_deletions
 Proof
   simp_tac (srw_ss()) [IN_INSERT, NOT_IN_EMPTY] >> strip_tac >>
-  gvs[Once step_inst_base_def] >>
-  gvs[exec_pure2_def, exec_read1_def, exec_write2_def, AllCaseEqs()] >>
+  qpat_x_assum `step_inst_base inst s = OK t` mp_tac >>
+  pure_once_rewrite_tac [step_inst_base_def] >>
+  pure_asm_rewrite_tac [opcode_case_def] >>
+  simp[exec_pure2_def, exec_read1_def, exec_write2_def] >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
   simp[update_var_def, mstore_def, mcopy_def, write_memory_with_expansion_def]
 QED
 
