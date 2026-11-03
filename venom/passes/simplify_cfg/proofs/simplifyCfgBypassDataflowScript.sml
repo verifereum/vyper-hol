@@ -270,6 +270,23 @@ Proof
   metis_tac[bypass_path_surviving_member]
 QED
 
+Theorem do_merge_jump_entry:
+  wf_function fn /\ first_block_no_preds fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') ==>
+  fn_entry_label fn' = fn_entry_label fn
+Proof
+  strip_tac >>
+  `MEM a fn.fn_blocks` by metis_tac[lookup_block_member_label] >>
+  `wf_function fn'` by metis_tac[do_merge_jump_wf] >>
+  drule_all do_merge_jump_entry_label >>
+  simp[fn_entry_label_def, entry_block_def] >>
+  Cases_on `fn.fn_blocks` >> Cases_on `fn'.fn_blocks` >>
+  gvs[wf_function_def, fn_has_entry_def] >>
+  metis_tac[lookup_block_member_label]
+QED
+
 Theorem do_merge_jump_def_on_all_paths_endpoint:
   wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
   lookup_block a.bb_label fn.fn_blocks = SOME a /\
@@ -282,13 +299,7 @@ Theorem do_merge_jump_def_on_all_paths_endpoint:
 Proof
   strip_tac >>
   `wf_function fn'` by metis_tac[do_merge_jump_wf] >>
-  `MEM a fn.fn_blocks` by metis_tac[lookup_block_member_label] >>
-  `fn_entry_label fn' = fn_entry_label fn` by
-    (drule_all do_merge_jump_entry_label >>
-     simp[fn_entry_label_def, entry_block_def] >>
-     Cases_on `fn.fn_blocks` >> Cases_on `fn'.fn_blocks` >>
-     gvs[wf_function_def, fn_has_entry_def] >>
-     metis_tac[lookup_block_member_label]) >>
+  `fn_entry_label fn' = fn_entry_label fn` by metis_tac[do_merge_jump_entry] >>
   drule_all def_on_all_paths_endpoint_witnesses >> strip_tac >>
   `!p. is_fn_path fn' p /\ p <> [] /\
     (?entry. fn_entry_label fn' = SOME entry /\ HD p = entry) /\
@@ -310,4 +321,137 @@ Proof
      disch_then (qspec_then `q` mp_tac) >> simp[] >> metis_tac[]) >>
   drule_all do_merge_jump_output_witness >> strip_tac >>
   qexistsl [`bb''`, `inst'`] >> simp[]
+QED
+
+Theorem do_merge_jump_local_point_witness:
+  LENGTH bb'.bb_instructions = LENGTH bb.bb_instructions /\
+  (!i. i < LENGTH bb.bb_instructions ==>
+    (EL i bb'.bb_instructions).inst_outputs = (EL i bb.bb_instructions).inst_outputs) /\
+  j < LENGTH bb.bb_instructions /\
+  (?i k. i < k /\ k < LENGTH bb.bb_instructions /\
+    MEM v (EL i bb.bb_instructions).inst_outputs /\
+    EL k bb.bb_instructions = EL j bb.bb_instructions) /\
+  fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks ==>
+  ?i. i < j /\ MEM v (EL i bb'.bb_instructions).inst_outputs
+Proof
+  rpt strip_tac >>
+  `k = j` by
+    metis_tac[inst_ids_el_eq] >>
+  qexists `i` >> gvs[]
+QED
+
+Theorem do_merge_jump_def_on_all_paths_point:
+  wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') /\
+  MEM bb fn.fn_blocks /\ MEM bb' fn'.fn_blocks /\ bb'.bb_label = bb.bb_label /\
+  LENGTH bb'.bb_instructions = LENGTH bb.bb_instructions /\
+  (!i. i < LENGTH bb.bb_instructions ==>
+    (EL i bb'.bb_instructions).inst_outputs = (EL i bb.bb_instructions).inst_outputs) /\
+  j < LENGTH bb.bb_instructions /\
+  def_on_all_paths fn bb (SOME (EL j bb.bb_instructions)) v ==>
+  def_on_all_paths fn' bb' (SOME (EL j bb'.bb_instructions)) v
+Proof
+  strip_tac >>
+  `fn_entry_label fn' = fn_entry_label fn` by metis_tac[do_merge_jump_entry] >>
+  simp[def_on_all_paths_def] >> rpt strip_tac >>
+  `MEM (LAST path) (fn_labels fn')` by
+    (simp[fn_labels_def, MEM_MAP] >> qexists `bb'` >> simp[]) >>
+  drule_all do_merge_jump_path_input >>
+  disch_then (qx_choose_then `q` strip_assume_tac) >>
+  qpat_x_assum `def_on_all_paths fn bb _ v` mp_tac >>
+  simp[def_on_all_paths_def] >>
+  disch_then (qspec_then `q` mp_tac) >> simp[] >> strip_tac
+  >- (drule_all do_merge_jump_output_witness >> strip_tac >>
+      disj1_tac >>
+      `MEM def_bb.bb_label (FRONT q)` by
+        (qpat_x_assum `!d. _` kall_tac >>
+         simp[mem_front_index] >> qexists `k` >> simp[]) >>
+      `MEM bb''.bb_label (FRONT path)` by metis_tac[] >>
+      qpat_x_assum `MEM bb''.bb_label (FRONT path)` mp_tac >>
+      simp[mem_front_index] >> disch_then (qx_choose_then `idx` strip_assume_tac) >>
+      qexistsl [`idx`, `bb''`, `inst'`] >> simp[]) >>
+  disj2_tac >>
+  `?i. i < j /\ MEM v (EL i bb'.bb_instructions).inst_outputs` by
+    (irule do_merge_jump_local_point_witness >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[wf_function_def]) >>
+  qexists `i'` >> simp[] >> qexists `j` >> simp[]
+QED
+
+Theorem do_merge_jump_ordinary_defs_reach_uses:
+  wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  fn_defs_reach_uses fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') /\
+  MEM bb' fn'.fn_blocks /\ MEM use bb'.bb_instructions /\
+  use.inst_opcode <> PHI /\ MEM (Var v) use.inst_operands ==>
+  def_on_all_paths fn' bb' (SOME use) v
+Proof
+  strip_tac >> drule_all do_merge_jump_index_source >>
+  disch_then (qx_choose_then `bb` strip_assume_tac) >>
+  qpat_x_assum `MEM use bb'.bb_instructions`
+    (qx_choose_then `j` strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  `j < LENGTH bb.bb_instructions` by metis_tac[] >>
+  `(EL j bb.bb_instructions).inst_opcode <> PHI /\
+   MEM (Var v) (EL j bb.bb_instructions).inst_operands` by metis_tac[] >>
+  `def_on_all_paths fn bb (SOME (EL j bb.bb_instructions)) v` by
+    (`MEM (EL j bb.bb_instructions) bb.bb_instructions` by
+       (simp[MEM_EL] >> qexists `j` >> simp[]) >>
+     qpat_x_assum `fn_defs_reach_uses fn` mp_tac >>
+     simp[fn_defs_reach_uses_def] >>
+     disch_then (qspecl_then [`bb`, `EL j bb.bb_instructions`] mp_tac) >> simp[]) >>
+  qpat_x_assum `use = _` SUBST_ALL_TAC >>
+  irule do_merge_jump_def_on_all_paths_point >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem do_merge_jump_phi_defs_reach_uses:
+  wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  fn_defs_reach_uses fn /\ scfg_phi_preds fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') /\
+  MEM bb' fn'.fn_blocks /\ MEM phi bb'.bb_instructions /\ phi.inst_opcode = PHI /\
+  MEM (p,v) (phi_pairs phi.inst_operands) /\
+  MEM pred' fn'.fn_blocks /\ pred'.bb_label = p ==>
+  def_on_all_paths fn' pred' NONE v
+Proof
+  strip_tac >> drule_all do_merge_jump_phi_pair_source >>
+  disch_then (qx_choose_then `bb` (qx_choose_then `inst`
+    (qx_choose_then `q` (qx_choose_then `target` strip_assume_tac)))) >>
+  `fn_cfg_edge fn q bb.bb_label` by metis_tac[scfg_phi_preds_edge] >>
+  `?pred. MEM pred fn.fn_blocks /\ pred.bb_label = q` by
+    (fs[fn_cfg_edge_def] >> metis_tac[]) >>
+  `def_on_all_paths fn pred NONE v` by
+    (qpat_x_assum `fn_defs_reach_uses fn` mp_tac >>
+     simp[fn_defs_reach_uses_def] >>
+     disch_then (qspecl_then [`bb`, `inst`] mp_tac) >> simp[] >>
+     disch_then (qspec_then `pred` mp_tac) >> simp[]) >>
+  `pred'.bb_label = (if pred.bb_label = b.bb_label then a.bb_label else pred.bb_label)` by
+    (Cases_on `q = b.bb_label` >> simp[] >>
+     `bb.bb_label = target` by
+       (qpat_x_assum `fn_cfg_edge fn q bb.bb_label` mp_tac >>
+        simp[fn_cfg_edge_def] >> rpt strip_tac >>
+        `bb'' = b` by metis_tac[same_label_same_block, lookup_block_member_label] >>
+        gvs[]) >> simp[]) >>
+  irule do_merge_jump_def_on_all_paths_endpoint >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem do_merge_jump_defs_reach_uses:
+  wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  fn_defs_reach_uses fn /\ scfg_phi_preds fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') ==>
+  fn_defs_reach_uses fn'
+Proof
+  strip_tac >> simp[fn_defs_reach_uses_def] >> rpt gen_tac >> strip_tac >>
+  IF_CASES_TAC >> rpt strip_tac
+  >- (irule do_merge_jump_phi_defs_reach_uses >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  irule do_merge_jump_ordinary_defs_reach_uses >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
