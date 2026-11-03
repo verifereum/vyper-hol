@@ -151,17 +151,35 @@ Proof
   rw[type_widens_to_def] >> metis_tac[arg_type_fits_assignable_type]
 QED
 
-Theorem atarget_accepts_well_typed_atarget:
-  atarget_accepts env tgt t /\ assignable_type env.type_defs t ==>
-  ?ty. well_typed_atarget env tgt ty /\ type_widens_to env.type_defs t ty /\
-       assignable_type env.type_defs ty
+(* Reconstruction is valid only at base leaves. Recursive acceptance does
+   not imply that the destinations form an evaluable synthetic tuple. *)
+Theorem atarget_accepts_well_typed_target:
+  atarget_accepts env (BaseTarget bt) src /\
+  assignable_type env.type_defs src ==>
+  ?dst. well_typed_target env bt dst /\
+        type_widens_to env.type_defs src dst /\
+        assignable_type env.type_defs dst
 Proof
-  Cases_on `tgt` >> rw[atarget_accepts_def]
-  >- (Cases_on `type_place_target env b` >> gvs[] >>
-      rename1 `type_place_target env b = SOME pt` >> Cases_on `pt` >> gvs[] >>
-      rename1 `type_place_target env b = SOME (Type tty)` >>
-      qexists_tac `tty` >>
-      simp[well_typed_atarget_def, well_typed_target_def] >>
-      metis_tac[type_widens_to_assignable_type]) >>
-  qexists_tac `t` >> simp[]
+  rw[atarget_accepts_def] >>
+  Cases_on `type_place_target env bt` >> gvs[] >>
+  rename1 `type_place_target env bt = SOME pt` >> Cases_on `pt` >> gvs[] >>
+  rename1 `type_place_target env bt = SOME (Type tty)` >>
+  qexists_tac `tty` >> simp[well_typed_target_def] >>
+  metis_tac[type_widens_to_assignable_type]
+QED
+
+Theorem well_typed_atarget_accepts:
+  !tgt ty. well_typed_atarget env tgt ty ==> atarget_accepts env tgt ty
+Proof
+  Induct >> rw[well_typed_atarget_def, atarget_accepts_def]
+  >- gvs[well_typed_target_def]
+  >> gvs[LIST_REL_EL_EQN, EVERY_MEM, MEM_EL] >>
+  metis_tac[]
+QED
+
+Theorem well_typed_atargets_accepts:
+  LIST_REL (well_typed_atarget env) tgts tys ==>
+  LIST_REL (atarget_accepts env) tgts tys
+Proof
+  simp[LIST_REL_EL_EQN] >> metis_tac[well_typed_atarget_accepts]
 QED

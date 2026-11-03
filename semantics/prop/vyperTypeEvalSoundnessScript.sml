@@ -425,6 +425,26 @@ Proof
 QED
 
 
+Theorem value_runtime_typed_widens:
+  type_widens_to env.type_defs src dst /\ value_runtime_typed env src v ==>
+  value_runtime_typed env dst v
+Proof
+  rw[value_runtime_typed_def] >> metis_tac[type_widens_to_value_has_type]
+QED
+
+Theorem atarget_accepts_base_runtime_typed:
+  atarget_accepts env (BaseTarget bt) src /\ value_runtime_typed env src v ==>
+  ?dst. well_typed_target env bt dst /\
+        type_widens_to env.type_defs src dst /\ value_runtime_typed env dst v
+Proof
+  rw[atarget_accepts_def] >>
+  Cases_on `type_place_target env bt` >> gvs[] >>
+  rename1 `type_place_target env bt = SOME pt` >> Cases_on `pt` >> gvs[] >>
+  rename1 `type_place_target env bt = SOME (Type dst)` >>
+  qexists_tac `dst` >> simp[well_typed_target_def] >>
+  metis_tac[value_runtime_typed_widens]
+QED
+
 Theorem value_runtime_typed_env_static:
   env'.type_defs = env.type_defs /\ value_runtime_typed env' ty v ==>
   value_runtime_typed env ty v
@@ -2583,7 +2603,7 @@ fun suspend_live_root g =
       val _ = live_root_inventory := !live_root_inventory @ [(label,tm)]
   in suspend label g end;
 
-Theorem eval_scc_type_sound_results_mutual:
+Theorem eval_scc_acceptance_type_sound_results_mutual:
   (!cx s. !env ret_ty env' st res st'.
     type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
@@ -2710,14 +2730,14 @@ Theorem eval_scc_type_sound_results_mutual:
     call_evaluation_safe cx (int_calls_target bt) /\ eval_target_place cx bt st = (res,st') ==>
     case res of INL p => writable_place_result cx st' (PlaceR p) | INR _ => T)) /\
   (!cx g v. !env ty st res st'.
-    well_typed_atarget env g ty /\ value_runtime_typed env ty v /\
+    atarget_accepts env g ty /\ value_runtime_typed env ty v /\
     env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atarget g) /\ assign_tuple_targets cx g v st = (res,st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
     no_type_error_result res) /\
   (!cx gs vs. !env tys st res st'.
-    LIST_REL (\g ty. well_typed_atarget env g ty) gs tys /\
+    LIST_REL (\g ty. atarget_accepts env g ty) gs tys /\
     LIST_REL (value_runtime_typed env) tys vs /\
     env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
@@ -2817,27 +2837,27 @@ Proof
     end)
 QED
 
-Resume eval_scc_type_sound_results_mutual[Pass]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Pass]:
   gvs[evaluate_def, return_def, no_type_error_result_def, type_stmt_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Continue]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Continue]:
   gvs[evaluate_def, raise_def, no_type_error_result_def, type_stmt_def,
       return_exception_typed_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Break]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Break]:
   gvs[evaluate_def, raise_def, no_type_error_result_def, type_stmt_def,
       return_exception_typed_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Return_NONE]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Return_NONE]:
   gvs[evaluate_def, raise_def, no_type_error_result_def, type_stmt_def,
       return_exception_typed_def, value_runtime_typed_def, value_has_type_def,
       evaluate_type_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Return_SOME]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Return_SOME]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
@@ -2874,17 +2894,17 @@ Resume eval_scc_type_sound_results_mutual[Return_SOME]:
   drule_all eval_expr_exception_return_typed >> simp[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[RaiseBare]:
+Resume eval_scc_acceptance_type_sound_results_mutual[RaiseBare]:
   gvs[evaluate_def, raise_def, no_type_error_result_def, type_stmt_def,
       return_exception_typed_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[RaiseUnreachable]:
+Resume eval_scc_acceptance_type_sound_results_mutual[RaiseUnreachable]:
   gvs[evaluate_def, raise_def, no_type_error_result_def, type_stmt_def,
       return_exception_typed_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[RaiseReason]:
+Resume eval_scc_acceptance_type_sound_results_mutual[RaiseReason]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Raise (RaiseReason e)))` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def, int_calls_raise_reason_def] >> strip_tac >>
@@ -2916,7 +2936,7 @@ Resume eval_scc_type_sound_results_mutual[RaiseReason]:
   Cases_on `e'` >> gvs[no_control_exc_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[AssertBare]:
+Resume eval_scc_acceptance_type_sound_results_mutual[AssertBare]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Assert e AssertBare))` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def, int_calls_assert_reason_def, APPEND_NIL] >> strip_tac >>
@@ -2953,7 +2973,7 @@ Resume eval_scc_type_sound_results_mutual[AssertBare]:
   drule_all eval_expr_exception_return_typed >> simp[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[AssertUnreachable]:
+Resume eval_scc_acceptance_type_sound_results_mutual[AssertUnreachable]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Assert e AssertUnreachable))` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def, int_calls_assert_reason_def, APPEND_NIL] >> strip_tac >>
@@ -2990,7 +3010,7 @@ Resume eval_scc_type_sound_results_mutual[AssertUnreachable]:
   drule_all eval_expr_exception_return_typed >> simp[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[AssertReason]:
+Resume eval_scc_acceptance_type_sound_results_mutual[AssertReason]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Assert e (AssertReason e')))` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def, int_calls_assert_reason_def] >> strip_tac >>
@@ -3066,7 +3086,7 @@ Resume eval_scc_type_sound_results_mutual[AssertReason]:
   drule_all eval_expr_exception_return_typed >> simp[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Log]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Log]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Log id es))` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
@@ -3090,7 +3110,7 @@ Resume eval_scc_type_sound_results_mutual[Log]:
   drule eval_exprs_exception_return_typed >> simp[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[AnnAssign]:
+Resume eval_scc_acceptance_type_sound_results_mutual[AnnAssign]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e))` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
@@ -3125,7 +3145,7 @@ Resume eval_scc_type_sound_results_mutual[AnnAssign]:
   rpt conj_tac >> asm_rewrite_tac[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Append]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Append]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Append bt e))` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
@@ -3217,7 +3237,7 @@ Resume eval_scc_type_sound_results_mutual[Append]:
   drule append_place_no_control >> simp[no_control_exc_return_exception_typed]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Assign_Tuple]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Assign_Tuple]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
   simp_tac (srw_ss()) [Once type_stmt_def, atarget_accepts_def] >>
@@ -3254,23 +3274,24 @@ Resume eval_scc_type_sound_results_mutual[Assign_Tuple]:
   simp_tac(srw_ss()) [] >>
   strip_tac >> gvs[] >>
   asm_x "tuple_ih" strip_assume_tac >>
+  `atarget_accepts env (TupleTarget gs) (TupleT tys)` by simp[atarget_accepts_def] >>
   qpat_x_assum `!s tv t s' v t'. _` (drule_all_then strip_assume_tac) >>
   gvs[] >> Cases_on `res` >> gvs[no_type_error_result_def] >>
   drule assign_tuple_targets_no_control >> simp[no_control_exc_return_exception_typed]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Assign_Base]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Assign_Base]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
   simp_tac (srw_ss()) [Once type_stmt_def] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
   suspend "Assign_Base_sequence"
 QED
 
-Resume eval_scc_type_sound_results_mutual[AugAssign]:
+Resume eval_scc_acceptance_type_sound_results_mutual[AugAssign]:
   suspend "AugAssign_place"
 QED
 
-Resume eval_scc_type_sound_results_mutual[If]:
+Resume eval_scc_acceptance_type_sound_results_mutual[If]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (If e ss ss'))` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
@@ -3591,7 +3612,7 @@ Resume eval_scc_type_sound_results_mutual[If]:
   metis_tac[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Expr e))` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
@@ -3611,13 +3632,13 @@ Resume eval_scc_type_sound_results_mutual[Expr]:
   drule_all eval_expr_exception_return_typed >> simp[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Stmts_nil]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Stmts_nil]:
   rpt gen_tac >> strip_tac >>
   gvs[Once type_stmt_def, Once evaluate_def,
       return_def, no_type_error_result_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Stmts_cons]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Stmts_cons]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_stmts (s::ss))` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
@@ -3653,7 +3674,7 @@ Resume eval_scc_type_sound_results_mutual[Stmts_cons]:
   qexists_tac `env` >> simp[env_extends_refl]
 QED
 
-Resume eval_scc_type_sound_results_mutual[For]:
+Resume eval_scc_acceptance_type_sound_results_mutual[For]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (For id typ it n body'))` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
@@ -3740,7 +3761,7 @@ Resume eval_scc_type_sound_results_mutual[For]:
   drule eval_iterator_no_control >> simp[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[For_nil]:
+Resume eval_scc_acceptance_type_sound_results_mutual[For_nil]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_for _ _ _ _ [] _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, return_def] >>
@@ -3748,7 +3769,7 @@ Resume eval_scc_type_sound_results_mutual[For_nil]:
 QED
 
 
-Resume eval_scc_type_sound_results_mutual[For_cons]:
+Resume eval_scc_acceptance_type_sound_results_mutual[For_cons]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_for _ _ _ _ (_::_) _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
@@ -3921,7 +3942,7 @@ Resume eval_scc_type_sound_results_mutual[For_cons]:
   qexists_tac `env_exn` >> simp[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Iterator_Array]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Iterator_Array]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_iterator (Array e))` mp_tac >>
   pure_rewrite_tac[int_calls_iterator_def] >> strip_tac >>
@@ -3972,7 +3993,7 @@ Resume eval_scc_type_sound_results_mutual[Iterator_Array]:
   strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Iterator_Range]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Iterator_Range]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_iterator (Range e e'))` mp_tac >>
   pure_rewrite_tac[int_calls_iterator_def] >> strip_tac >>
@@ -4071,7 +4092,7 @@ QED
 (* Legacy wrappers have their own, disconnected structural induction. *)
 
 
-Resume eval_scc_type_sound_results_mutual[BasePlaceRoot_NameTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[BasePlaceRoot_NameTarget]:
   rpt gen_tac >> strip_tac >>
   `?ty. vt = Type ty` by
     gvs[type_place_target_NameTarget, AllCaseEqs()] >>
@@ -4099,7 +4120,7 @@ Proof
   metis_tac[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[BasePlaceRoot_TopLevelNameTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[BasePlaceRoot_TopLevelNameTarget]:
   rpt gen_tac >> strip_tac >>
   drule eval_base_place_TopLevelNameTarget_preserves_state >> strip_tac >> gvs[] >>
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
@@ -4109,7 +4130,7 @@ Resume eval_scc_type_sound_results_mutual[BasePlaceRoot_TopLevelNameTarget]:
   drule_all lookup_global_target_success_typed >> simp[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[BasePlaceRoot_SubscriptTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[BasePlaceRoot_SubscriptTarget]:
   rpt gen_tac >> strip_tac >>
   rename1 `eval_base_place cx (SubscriptTarget t e) st = (res,st')` >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_target (SubscriptTarget t e))` mp_tac >>
@@ -4184,7 +4205,7 @@ Resume eval_scc_type_sound_results_mutual[BasePlaceRoot_SubscriptTarget]:
   gvs[no_type_error_result_def] >> strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[BasePlaceRoot_AttributeTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[BasePlaceRoot_AttributeTarget]:
   rpt gen_tac >> strip_tac >>
   rename1 `eval_base_place cx (AttributeTarget bt id) st = (res,st')` >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_target (AttributeTarget bt id))` mp_tac >>
@@ -4214,7 +4235,7 @@ Resume eval_scc_type_sound_results_mutual[BasePlaceRoot_AttributeTarget]:
   strip_tac >> gvs[no_type_error_result_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_Name]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_Name]:
   rpt gen_tac >> strip_tac >> conj_tac
   >- (strip_tac >>
       drule_all well_typed_Name_lookup >> strip_tac >>
@@ -4230,7 +4251,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Name]:
   rpt strip_tac >> gvs[well_typed_expr_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_TopLevelName]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_TopLevelName]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def] >> strip_tac >>
@@ -4241,7 +4262,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_TopLevelName]:
   rpt strip_tac >> metis_tac[lookup_global_TopLevelName_place_sound]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_FlagMember]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_FlagMember]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def] >> strip_tac >> gvs[] >> conj_tac
@@ -4278,7 +4299,7 @@ Proof
   simp[Once well_typed_expr_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_IfExp]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_IfExp]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_expr (IfExp ty e e' e''))` mp_tac >>
   pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
@@ -4369,7 +4390,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_IfExp]:
   Cases_on `res` >> gvs[expr_type_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_Literal]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_Literal]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, return_def] >>
@@ -4459,7 +4480,7 @@ Proof
   simp[Once well_typed_expr_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_StructLit]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_StructLit]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_expr (StructLit ty callee kes))` mp_tac >>
   pure_rewrite_tac[int_calls_expr_def, GSYM int_calls_exprs_MAP_SND] >> strip_tac >>
@@ -4645,7 +4666,7 @@ Proof
   gvs[Once evaluate_def, evaluate_literal_def, return_def, read_result_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_Subscript]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_Subscript]:
   rpt gen_tac >> strip_tac >>
   `call_evaluation_safe cx (int_calls_expr e)` by (
     qpat_assum `call_evaluation_safe cx (int_calls_expr (Subscript v9 e e'))` mp_tac >>
@@ -4728,7 +4749,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Subscript]:
   strip_tac >> suspend "Expr_Subscript_projection"
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_Subscript_projection]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_Subscript_projection]:
   RESUME_TAC >> (
   qmatch_asmsub_rename_tac `type_place_expr env e = SOME bvt` >>
   `well_formed_vtype env.type_defs bvt` by
@@ -4837,7 +4858,7 @@ Proof
   gvs[eval_result_typed_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_Attribute]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_Attribute]:
   rpt gen_tac >> strip_tac >>
   `call_evaluation_safe cx (int_calls_expr e)` by (
     qpat_assum `call_evaluation_safe cx (int_calls_expr (Attribute ty e id))` mp_tac >>
@@ -5018,7 +5039,7 @@ Proof
   simp_tac(srw_ss())[] >> strip_tac >> gvs[no_type_error_result_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_Builtin]:
   rpt gen_tac >> strip_tac >>
   `call_evaluation_safe cx (int_calls_exprs es)` by (
     qpat_assum `call_evaluation_safe cx (int_calls_expr (Builtin ty bt es))` mp_tac >>
@@ -5148,7 +5169,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
   strip_tac >> gvs[eval_exprs_failure_builtin_case, no_type_error_result_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_TypeBuiltin]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_TypeBuiltin]:
   rpt gen_tac >> strip_tac >>
   `call_evaluation_safe cx (int_calls_exprs es)` by (
     qpat_assum `call_evaluation_safe cx
@@ -5200,7 +5221,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_TypeBuiltin]:
 QED
 
 
-Resume eval_scc_type_sound_results_mutual[Expr_Pop]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_Pop]:
   rpt gen_tac >> strip_tac >>
   rename1 `eval_expr cx (Pop v11 bt) st = (res,st')` >>
   `call_evaluation_safe cx (int_calls_target bt)` by
@@ -6825,7 +6846,7 @@ Proof
   simp[Once well_typed_expr_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_Call_IntCall]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_Call_IntCall]:
   rpt gen_tac >> strip_tac >>
   reverse conj_tac >- (
     rpt gen_tac >> strip_tac >>
@@ -7016,7 +7037,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_IntCall]:
   gvs[no_type_error_result_def] >> strip_tac >> gvs[no_type_error_result_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[IntCall_semantic_tail]:
+Resume eval_scc_acceptance_type_sound_results_mutual[IntCall_semantic_tail]:
   strip_tac >>
   qsuff_tac `state_well_typed st' /\ env_consistent env cx st' /\
     accounts_well_typed st'.accounts /\ no_type_error_result res /\
@@ -7042,7 +7063,7 @@ QED
 
 (* ===== External and special call Resume blocks ===== *)
 
-Resume eval_scc_type_sound_results_mutual[Expr_Call_ExtCall_result]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_Call_ExtCall_result]:
   rpt gen_tac >> strip_tac >>
   drule extcall_call_evaluation_safe_args >> strip_tac >>
   rename1 `Call _ (ExtCall _ _ fsig _) _ _` >> PairCases_on `fsig` >>
@@ -7124,7 +7145,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_ExtCall_result]:
   gvs[no_type_error_result_def] >> strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_Call_Send]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_Call_Send]:
   rpt gen_tac >> strip_tac >>
   conj_tac
   >- (
@@ -7163,7 +7184,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_Send]:
   simp[Once well_typed_expr_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_Call_RawCallTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_Call_RawCallTarget]:
   rpt gen_tac >> strip_tac >>
   conj_tac
   >- (
@@ -7206,7 +7227,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_RawCallTarget]:
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_Call_RawCallCalldataTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_Call_RawCallCalldataTarget]:
   rpt gen_tac >> strip_tac >> conj_tac
   >- (
     strip_tac >>
@@ -7247,7 +7268,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_RawCallCalldataTarget]:
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_Call_RawLog]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_Call_RawLog]:
   rpt gen_tac >> strip_tac >>
   conj_tac
   >- (
@@ -7287,7 +7308,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_RawLog]:
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_Call_RawRevert]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_Call_RawRevert]:
   rpt gen_tac >> strip_tac >>
   conj_tac
   >- (
@@ -7319,7 +7340,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_RawRevert]:
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_Call_SelfDestructTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_Call_SelfDestructTarget]:
   rpt gen_tac >> strip_tac >>
   conj_tac
   >- (
@@ -7351,7 +7372,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_SelfDestructTarget]:
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Expr_Call_CreateTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Expr_Call_CreateTarget]:
   rpt gen_tac >> strip_tac >>
   conj_tac
   >- (
@@ -7512,7 +7533,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_CreateTarget]:
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
                          type_check_def, assert_def, return_def, raise_def,
                          lift_option_type_def, get_accounts_def, update_accounts_def] >>
-    simp[] >>
+    simp_tac (srw_ss()) [] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
@@ -7533,14 +7554,14 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_CreateTarget]:
   simp[Once well_typed_expr_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Results_nil]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Results_nil]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr_results _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, return_def, no_type_error_result_def,
        expr_results_typed_def] >> strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Results_cons]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Results_cons]:
   rpt gen_tac >> strip_tac >>
   drule exprs_cons_call_evaluation_safe_head >> strip_tac >>
   drule exprs_cons_call_evaluation_safe_tail >> strip_tac >>
@@ -7582,7 +7603,7 @@ Resume eval_scc_type_sound_results_mutual[Results_cons]:
   gvs[expr_results_typed_def, no_type_error_result_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Exprs_nil]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Exprs_nil]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, return_def] >>
@@ -7590,7 +7611,7 @@ Resume eval_scc_type_sound_results_mutual[Exprs_nil]:
   gvs[no_type_error_result_def, exprs_runtime_typed_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Exprs_cons]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Exprs_cons]:
   rpt gen_tac >> strip_tac >>
   drule exprs_cons_call_evaluation_safe_head >> strip_tac >>
   drule exprs_cons_call_evaluation_safe_tail >> strip_tac >>
@@ -7648,7 +7669,7 @@ val trace_root_labels = [
   "Trace_Expr_Literal", "Trace_Expr_IfExp", "Trace_Expr_FlagMember",
   "Trace_Expr_TopLevelName", "Trace_Expr_Name"];
 val _ = let
-  val SOME (_,parent) = markerLib.lookup_suspension "eval_scc_type_sound_results_mutual"
+  val SOME (_,parent) = markerLib.lookup_suspension "eval_scc_acceptance_type_sound_results_mutual"
   fun check label =
     let val roots = markerLib.extract_suspended_goal [parent] label
         val _ = if length roots = 1 then () else raise Fail ("non-singleton " ^ label)
@@ -7662,14 +7683,14 @@ val _ = let
           then () else raise Fail "Transition inventory mismatch"
 in List.app check trace_root_labels end;
 
-Resume eval_scc_type_sound_results_mutual[Trace_Results_nil]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Results_nil]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr_results _ [] _ = _` mp_tac >>
   simp[Once evaluate_def, return_def] >> strip_tac >> gvs[] >>
   irule typed_scope_transition_refl
 QED
 
-Resume eval_scc_type_sound_results_mutual[Trace_Results_cons]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Results_cons]:
   rpt gen_tac >> strip_tac >>
   drule exprs_cons_call_evaluation_safe_head >> strip_tac >>
   drule exprs_cons_call_evaluation_safe_tail >> strip_tac >>
@@ -8097,65 +8118,65 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
 )
   | _ => raise Fail ("Unknown Trace route: " ^ label)) g end;
 
-Resume eval_scc_type_sound_results_mutual[Trace_Target]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Target]:
   RESUME_TAC >> trace_result_tac "Trace_Target"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Base_SubscriptTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Base_SubscriptTarget]:
   RESUME_TAC >> trace_result_tac "Trace_Base_SubscriptTarget"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Base_AttributeTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Base_AttributeTarget]:
   RESUME_TAC >> trace_result_tac "Trace_Base_AttributeTarget"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Base_TopLevelNameTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Base_TopLevelNameTarget]:
   RESUME_TAC >> trace_result_tac "Trace_Base_TopLevelNameTarget"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Base_NameTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Base_NameTarget]:
   RESUME_TAC >> trace_result_tac "Trace_Base_NameTarget"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Exprs_cons]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Exprs_cons]:
   RESUME_TAC >> trace_result_tac "Trace_Exprs_cons"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Exprs_nil]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Exprs_nil]:
   RESUME_TAC >> trace_result_tac "Trace_Exprs_nil"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_Call_CreateTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_Call_CreateTarget]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Call_CreateTarget"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_Call_SelfDestructTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_Call_SelfDestructTarget]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Call_SelfDestructTarget"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_Call_RawRevert]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_Call_RawRevert]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Call_RawRevert"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_Call_RawLog]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_Call_RawLog]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Call_RawLog"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_Call_RawCallCalldataTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_Call_RawCallCalldataTarget]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Call_RawCallCalldataTarget"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_Call_RawCallTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_Call_RawCallTarget]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Call_RawCallTarget"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_Call_IntCall]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_Call_IntCall]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Call_IntCall"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_Call_ExtCall]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_Call_ExtCall]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Call_ExtCall"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_Call_Send]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_Call_Send]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Call_Send"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_TypeBuiltin]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_TypeBuiltin]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_TypeBuiltin"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_Pop]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_Pop]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Pop"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_Builtin]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_Builtin]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Builtin"
 QED
 
-Resume eval_scc_type_sound_results_mutual[Trace_Builtin_Body]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Builtin_Body]:
   qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
   pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
   qpat_x_assum `well_typed_expr _ _` mp_tac >>
@@ -8196,22 +8217,22 @@ Resume eval_scc_type_sound_results_mutual[Trace_Builtin_Body]:
   simp[NoAsms, get_accounts_def, return_def] >> strip_tac >>
   rpt BasicProvers.VAR_EQ_TAC >> first_assum ACCEPT_TAC
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_Attribute]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_Attribute]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Attribute"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_Subscript]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_Subscript]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Subscript"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_StructLit]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_StructLit]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_StructLit"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_Literal]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_Literal]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Literal"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_IfExp]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_IfExp]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_IfExp"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_FlagMember]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_FlagMember]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[NoAsms, Once evaluate_def, lift_option_type_def,
@@ -8219,14 +8240,14 @@ Resume eval_scc_type_sound_results_mutual[Trace_Expr_FlagMember]:
   drule lookup_flag_mem_state >> strip_tac >> gvs[] >>
   irule typed_scope_transition_refl
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_TopLevelName]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_TopLevelName]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_TopLevelName"
 QED
-Resume eval_scc_type_sound_results_mutual[Trace_Expr_Name]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Expr_Name]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Name"
 QED
 
-Resume eval_scc_type_sound_results_mutual[Trace_IntCall_Operands]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_IntCall_Operands]:
   RESUME_TAC >>
   ntac 2 (pop_last_assum kall_tac) >>
   qpat_x_assum `well_typed_expr _ _` mp_tac >>
@@ -8266,7 +8287,7 @@ Resume eval_scc_type_sound_results_mutual[Trace_IntCall_Operands]:
 QED
 
 (* External calls evaluate every operand before the shared call helper. *)
-Resume eval_scc_type_sound_results_mutual[Trace_ExtCall_Operands]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_ExtCall_Operands]:
   RESUME_TAC >>
   drule extcall_call_evaluation_safe_args >> strip_tac >>
   PairCases_on `sig` >>
@@ -8329,7 +8350,7 @@ Resume eval_scc_type_sound_results_mutual[Trace_ExtCall_Operands]:
   gvs[] >> strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Trace_Create_Operands]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Create_Operands]:
   RESUME_TAC >>
   drule create_call_evaluation_safe_args >> strip_tac >>
   qpat_x_assum `well_typed_expr _ _` mp_tac >>
@@ -8352,7 +8373,7 @@ Resume eval_scc_type_sound_results_mutual[Trace_Create_Operands]:
   metis_tac[typed_scope_transition_trans, typed_scope_transition_scopes]
 QED
 
-Resume eval_scc_type_sound_results_mutual[TraceRawCreate]:
+Resume eval_scc_acceptance_type_sound_results_mutual[TraceRawCreate]:
   RESUME_TAC >>
   `well_typed_exprs env (TAKE 2 es) /\
    well_typed_exprs env (TAKE (LENGTH (DROP 2 es) - (if has_salt then 1 else 0)) (DROP 2 es)) /\
@@ -8426,7 +8447,7 @@ val live_root_labels = [
   "LiveRootBase_NameTarget", "LiveRootBase_TopLevelNameTarget",
   "LiveRootBase_AttributeTarget", "LiveRootBase_SubscriptTarget", "LiveRootTarget"];
 val _ = let
-  val SOME (_,parent) = markerLib.lookup_suspension "eval_scc_type_sound_results_mutual"
+  val SOME (_,parent) = markerLib.lookup_suspension "eval_scc_acceptance_type_sound_results_mutual"
   val actual = map #1 (!live_root_inventory)
   fun check label =
     if length (markerLib.extract_suspended_goal [parent] label) = 1
@@ -8437,7 +8458,7 @@ val _ = let
           then () else raise Fail "Live-result inventory mismatch"
  in List.app check live_root_labels end;
 
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_Name]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_Name]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[NoAsms, Once evaluate_def, bind_def, get_scopes_def, type_check_def,
@@ -8446,12 +8467,12 @@ Resume eval_scc_type_sound_results_mutual[LiveRootExpr_Name]:
   irule live_memory_result_fresh >> goal_assum (drule_at Any) >>
   simp[memory_eval_path_def, subscripts_type_def, evaluate_subscripts_def]
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_TopLevelName]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_TopLevelName]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   pure_once_rewrite_tac[evaluate_def] >> metis_tac[lookup_global_live]
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_FlagMember]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_FlagMember]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >> PairCases_on `nsid` >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[NoAsms, Once evaluate_def, lookup_flag_mem_def, lift_option_type_def,
@@ -8461,72 +8482,72 @@ Resume eval_scc_type_sound_results_mutual[LiveRootExpr_FlagMember]:
   Cases_on `INDEX_OF mid x'` >>
   gvs[return_def, raise_def, live_memory_result_def]
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_IfExp]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_IfExp]:
   RESUME_TAC >> trace_value_start_tac >>
   qpat_x_assum `well_typed_expr _ _` mp_tac >>
   simp[NoAsms, Once well_typed_expr_def] >> strip_tac >>
   suspend "Live_IfExp_Selected_Conversion"
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_Literal]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_Literal]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[NoAsms, Once evaluate_def, return_def] >> strip_tac >>
   gvs[live_memory_result_def]
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_StructLit]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_StructLit]:
   RESUME_TAC >> trace_value_start_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
   strip_tac >> gvs[live_memory_result_def]
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_Subscript]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_Subscript]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >>
   suspend "Live_Subscript_Capture_Index_Selection"
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_Attribute]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_Attribute]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >>
   suspend "Live_Attribute_Capture_Selection"
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_Builtin]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_Builtin]:
   RESUME_TAC >> trace_value_start_tac >>
   suspend "Live_Builtin_Returned_Result"
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_TypeBuiltin]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_TypeBuiltin]:
   RESUME_TAC >> trace_value_start_tac >>
   suspend "Live_TypeBuiltin_Returned_Result"
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_Pop]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_Pop]:
   RESUME_TAC >> trace_value_start_tac >>
   suspend "Live_Pop_Retained_Owner"
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_Call_IntCall]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_Call_IntCall]:
   RESUME_TAC >> trace_value_start_tac >> suspend "Live_IntCall_Returned_Result"
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_Call_ExtCall]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_Call_ExtCall]:
   RESUME_TAC >> trace_value_start_tac >> suspend "Live_ExtCall_Returned_Result"
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_Call_Send]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_Call_Send]:
   RESUME_TAC >> trace_value_start_tac >> suspend "Live_Send_Returned_Result"
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_Call_RawCallTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_Call_RawCallTarget]:
   RESUME_TAC >> trace_value_start_tac >> suspend "Live_RawCall_Returned_Result"
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_Call_RawCallCalldataTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_Call_RawCallCalldataTarget]:
   RESUME_TAC >> trace_value_start_tac >> suspend "Live_RawCallCalldata_Returned_Result"
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_Call_RawLog]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_Call_RawLog]:
   RESUME_TAC >> trace_value_start_tac >> suspend "Live_RawLog_Returned_Result"
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_Call_RawRevert]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_Call_RawRevert]:
   RESUME_TAC >> trace_value_start_tac >> suspend "Live_RawRevert_Returned_Result"
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_Call_SelfDestructTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_Call_SelfDestructTarget]:
   RESUME_TAC >> trace_value_start_tac >> suspend "Live_SelfDestruct_Returned_Result"
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootExpr_Call_CreateTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootExpr_Call_CreateTarget]:
   RESUME_TAC >> trace_value_start_tac >> suspend "Live_Create_Returned_Result"
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootBase_NameTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootBase_NameTarget]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
   simp[NoAsms, Once evaluate_def, bind_def, get_scopes_def, lift_option_type_def,
@@ -8536,24 +8557,24 @@ Resume eval_scc_type_sound_results_mutual[LiveRootBase_NameTarget]:
   goal_assum (drule_at Any) >>
   simp[evaluate_subscripts_def, memory_eval_path_def, subscripts_type_def, subscript_type_def]
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootBase_TopLevelNameTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootBase_TopLevelNameTarget]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
   pure_once_rewrite_tac[evaluate_def] >> metis_tac[lookup_global_live]
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootBase_AttributeTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootBase_AttributeTarget]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `type_place_target _ (AttributeTarget _ _) = SOME _` mp_tac >>
   rewrite_tac[type_place_target_AttributeTarget] >> strip_tac >>
   suspend "Live_Base_Attribute_Selection"
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootBase_SubscriptTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootBase_SubscriptTarget]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `type_place_target _ (SubscriptTarget _ _) = SOME _` mp_tac >>
   rewrite_tac[type_place_target_SubscriptTarget] >> strip_tac >>
   suspend "Live_Base_Subscript_Capture_Index_Selection"
 QED
-Resume eval_scc_type_sound_results_mutual[LiveRootTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[LiveRootTarget]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
   simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
@@ -8565,7 +8586,7 @@ Resume eval_scc_type_sound_results_mutual[LiveRootTarget]:
   Cases_on `pv` >> gvs[get_place_def, return_def, raise_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[TargetPlace]:
+Resume eval_scc_acceptance_type_sound_results_mutual[TargetPlace]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >>
   gvs[well_typed_target_def] >>
   qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
@@ -8621,14 +8642,12 @@ Proof
   drule_all write_place_sound >> simp[runtime_consistent_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Assign_Base_sequence]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Assign_Base_sequence]:
   RESUME_TAC >> rpt gen_tac >> rpt (disch_then strip_assume_tac) >>
-  `?tty. well_typed_atarget env (BaseTarget bt) tty /\
+  `?tty. well_typed_target env bt tty /\
          type_widens_to env.type_defs (expr_type e) tty /\
          assignable_type env.type_defs tty` by
-    metis_tac[atarget_accepts_well_typed_atarget] >>
-  qpat_x_assum `well_typed_atarget env (BaseTarget bt) tty`
-    (assume_tac o REWRITE_RULE [well_typed_atarget_def]) >>
+    metis_tac[atarget_accepts_well_typed_target] >>
   qpat_x_assum `call_evaluation_safe _ (int_calls_stmt _)` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def, int_calls_atarget_def] >> strip_tac >>
   drule call_evaluation_safe_append_left >> strip_tac >>
@@ -8666,7 +8685,7 @@ Resume eval_scc_type_sound_results_mutual[Assign_Base_sequence]:
 QED
 
 (* The resolved target preserves the delayed RHS place until its read. *)
-Resume eval_scc_type_sound_results_mutual[Assign_Base_write]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Assign_Base_write]:
   RESUME_TAC >>
   POP_ASSUM_LIST (map_every assume_tac o List.filter (not o is_forall o concl)) >>
   RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >>
@@ -8698,7 +8717,7 @@ Resume eval_scc_type_sound_results_mutual[Assign_Base_write]:
   drule read_result_no_control >> simp[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[AugAssign_place]:
+Resume eval_scc_acceptance_type_sound_results_mutual[AugAssign_place]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
   simp_tac (srw_ss()) [Once type_stmt_def] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
@@ -8740,7 +8759,7 @@ Resume eval_scc_type_sound_results_mutual[AugAssign_place]:
     simp_tac (srw_ss()) [] >> suspend "AugAssign_rhs"])
 QED
 
-Resume eval_scc_type_sound_results_mutual[AugAssign_rhs]:
+Resume eval_scc_acceptance_type_sound_results_mutual[AugAssign_rhs]:
   RESUME_TAC >>
   qmatch_assum_rename_tac `read_place cx p target_st = (INL cur,target_st)` >>
   qpat_x_assum `!s'' p t' s3 cur t2 s4 ptv t3. _`
@@ -8761,7 +8780,7 @@ Resume eval_scc_type_sound_results_mutual[AugAssign_rhs]:
     simp_tac (srw_ss()) [] >> suspend "AugAssign_write"])
 QED
 
-Resume eval_scc_type_sound_results_mutual[AugAssign_write]:
+Resume eval_scc_acceptance_type_sound_results_mutual[AugAssign_write]:
   RESUME_TAC >>
   POP_ASSUM_LIST (map_every assume_tac o List.filter (not o is_forall o concl)) >>
   RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >>
@@ -8783,7 +8802,7 @@ Resume eval_scc_type_sound_results_mutual[AugAssign_write]:
   simp[] >> strip_tac >> suspend "AugAssign_value_write"
 QED
 
-Resume eval_scc_type_sound_results_mutual[AugAssign_value_write]:
+Resume eval_scc_acceptance_type_sound_results_mutual[AugAssign_value_write]:
   RESUME_TAC >>
   qmatch_assum_rename_tac `read_result cx rhs rhs_st = (INL right,rhs_st)` >>
   fs[value_runtime_typed_def] >>
@@ -8820,10 +8839,11 @@ Proof
   fs[values_have_types_LIST_REL_stmt, LIST_REL_EL_EQN] >> metis_tac[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[TupleStore_BaseTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[TupleStore_BaseTarget]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `well_typed_atarget _ _ _` mp_tac >>
-  simp_tac (srw_ss()) [well_typed_atarget_def] >> strip_tac >>
+  drule_all atarget_accepts_base_runtime_typed >> strip_tac >>
+  qpat_x_assum `value_runtime_typed env ty v` kall_tac >>
+  rename1 `well_typed_target env bt dst` >>
   qpat_x_assum `call_evaluation_safe _ (int_calls_atarget _)` mp_tac >>
   pure_rewrite_tac[int_calls_atarget_def] >> strip_tac >>
   qpat_x_assum `assign_tuple_targets _ _ _ _ = _` mp_tac >>
@@ -8839,34 +8859,34 @@ Resume eval_scc_type_sound_results_mutual[TupleStore_BaseTarget]:
   >- (simp_tac (srw_ss()) [] >> strip_tac >> gvs[no_type_error_result_def]) >>
   simp_tac (srw_ss()) [] >> strip_tac >> gvs[] >>
   qmatch_assum_rename_tac `eval_target_place cx bt st = (INL p,middle)` >>
-  `eval_result_typed (env,cx,middle) (PlaceR p) (Type ty)` by
+  `eval_result_typed (env,cx,middle) (PlaceR p) (Type dst)` by
     simp[eval_result_typed_def] >>
   drule_all typed_target_place_write_sound >> simp[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[TupleStore_TupleTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[TupleStore_TupleTarget]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >>
-  gvs[well_typed_atarget_def, int_calls_atarget_def] >>
+  gvs[atarget_accepts_def, int_calls_atarget_def] >>
   drule value_runtime_typed_tuple_components >> strip_tac >> gvs[] >>
   qpat_x_assum `assign_tuple_targets _ _ _ _ = _` mp_tac >>
   simp[Once evaluate_def] >> strip_tac >>
   first_x_assum drule_all >> simp[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[TupleStores_nil_nil]:
+Resume eval_scc_acceptance_type_sound_results_mutual[TupleStores_nil_nil]:
   RESUME_TAC >> rpt strip_tac >>
   gvs[Once evaluate_def, return_def, no_type_error_result_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[TupleStores_nil_cons]:
+Resume eval_scc_acceptance_type_sound_results_mutual[TupleStores_nil_cons]:
   RESUME_TAC >> rpt strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[TupleStores_cons_nil]:
+Resume eval_scc_acceptance_type_sound_results_mutual[TupleStores_cons_nil]:
   RESUME_TAC >> rpt strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[TupleStores_cons_cons]:
+Resume eval_scc_acceptance_type_sound_results_mutual[TupleStores_cons_cons]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >>
   rename1 `assign_tuple_target_list cx (g::gs) (v::vs) st = (res,st')` >>
   Cases_on `tys`
@@ -8914,7 +8934,7 @@ Proof
       value_runtime_typed_def, evaluate_type_def, value_has_type_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[WritableRootBase_NameTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[WritableRootBase_NameTarget]:
   RESUME_TAC >> rpt strip_tac >>
   `?ty. vt = Type ty` by gvs[well_typed_expr_def, AllCaseEqs()] >>
   gvs[] >> drule_all NameTarget_sound >> strip_tac >>
@@ -8925,13 +8945,13 @@ Resume eval_scc_type_sound_results_mutual[WritableRootBase_NameTarget]:
        mutable_place_path_def] >> metis_tac[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[WritableRootBase_TopLevelNameTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[WritableRootBase_TopLevelNameTarget]:
   RESUME_TAC >> rpt strip_tac >>
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
   rewrite_tac[Once evaluate_def] >> metis_tac[lookup_global_writable]
 QED
 
-Resume eval_scc_type_sound_results_mutual[WritableRootBase_AttributeTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[WritableRootBase_AttributeTarget]:
   RESUME_TAC >> rpt gen_tac >>
   rewrite_tac[type_place_target_AttributeTarget] >> strip_tac >>
   gvs[int_calls_expr_def] >>
@@ -8951,7 +8971,7 @@ Resume eval_scc_type_sound_results_mutual[WritableRootBase_AttributeTarget]:
   gvs[target_path_step_type_def, attribute_type_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[WritableRootBase_SubscriptTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[WritableRootBase_SubscriptTarget]:
   RESUME_TAC >> rpt gen_tac >>
   rewrite_tac[type_place_target_SubscriptTarget] >> strip_tac >>
   qmatch_assum_rename_tac `type_place_target env bt = SOME base_vt` >>
@@ -8994,7 +9014,7 @@ Resume eval_scc_type_sound_results_mutual[WritableRootBase_SubscriptTarget]:
   drule_all extend_place_writable >> simp[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[WritableRootTarget]:
+Resume eval_scc_acceptance_type_sound_results_mutual[WritableRootTarget]:
   RESUME_TAC >> rpt gen_tac >> strip_tac >>
   gvs[well_typed_target_def] >> Cases_on `res` >> simp[] >>
   qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
@@ -9010,7 +9030,7 @@ QED
 (* Exhaustive coverage audit, including descendant labels. This is diagnostic:
    Finalise below remains the only assembly operation. *)
 val _ = let
-  val SOME (thy,parent) = markerLib.lookup_suspension "eval_scc_type_sound_results_mutual"
+  val SOME (thy,parent) = markerLib.lookup_suspension "eval_scc_acceptance_type_sound_results_mutual"
   val seen = ref ([] : string list)
   fun label tm =
     let val (h,args) = strip_comb tm
@@ -9021,7 +9041,7 @@ val _ = let
   and visit name = if List.exists (fn x => x = name) (!seen) then () else
     let val _ = seen := name :: !seen
         val candidates = markerLib.lookup_resumption
-          {parent_thy=thy,parent_name="eval_scc_type_sound_results_mutual",label=name}
+          {parent_thy=thy,parent_name="eval_scc_acceptance_type_sound_results_mutual",label=name}
         val proofs = List.filter (fn th => label (concl th) = SOME name) candidates
         val _ = print ("SCC coverage " ^ name ^ ": " ^
           Int.toString (length proofs) ^ " registered bodies\n")
@@ -9033,7 +9053,7 @@ val _ = let
     in List.app walk proofs end
 in walk parent end;
 
-Resume eval_scc_type_sound_results_mutual[TraceCreateBlueprint]:
+Resume eval_scc_acceptance_type_sound_results_mutual[TraceCreateBlueprint]:
   RESUME_TAC >>
   `well_typed_exprs env (TAKE (if has_salt then 4 else 3) es)` by
     metis_tac[well_typed_exprs_TAKE] >>
@@ -9063,7 +9083,7 @@ Resume eval_scc_type_sound_results_mutual[TraceCreateBlueprint]:
   strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[TraceBlueprintSuffix]:
+Resume eval_scc_acceptance_type_sound_results_mutual[TraceBlueprintSuffix]:
   RESUME_TAC >>
   rename1 `check_create_blueprint has_salt prefix prefix_st = (INL code_size,prefix_st)` >>
   qpat_x_assum `!a b c d e f. _ ==> _` drule_all >> strip_tac >>
@@ -9085,7 +9105,7 @@ Resume eval_scc_type_sound_results_mutual[TraceBlueprintSuffix]:
   strip_tac >> gvs[] >> metis_tac[typed_scope_transition_trans]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Live_Base_Attribute_Selection]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Live_Base_Attribute_Selection]:
   RESUME_TAC >>
   qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
   simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
@@ -9098,7 +9118,7 @@ Resume eval_scc_type_sound_results_mutual[Live_Base_Attribute_Selection]:
   drule_all extend_typed_result_live >> simp[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Live_IntCall_Returned_Result]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Live_IntCall_Returned_Result]:
   RESUME_TAC >> Cases_on `res` >> simp[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
@@ -9107,7 +9127,7 @@ Resume eval_scc_type_sound_results_mutual[Live_IntCall_Returned_Result]:
   strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Trace_Base_Attribute_Selection]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Base_Attribute_Selection]:
   RESUME_TAC >>
   qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
   simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
@@ -9145,7 +9165,7 @@ Proof
       update_pending_deletions_def, append_logs_def, return_def, raise_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Live_Create_Returned_Result]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Live_Create_Returned_Result]:
   RESUME_TAC >> Cases_on `res` >> simp[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
@@ -9178,7 +9198,7 @@ Proof
   gvs[bind_apply, return_def, raise_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Live_ExtCall_Returned_Result]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Live_ExtCall_Returned_Result]:
   RESUME_TAC >> Cases_on `res` >> simp[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
@@ -9188,7 +9208,7 @@ Resume eval_scc_type_sound_results_mutual[Live_ExtCall_Returned_Result]:
   drule eval_ext_call_success_value >> strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Live_RawLog_Returned_Result]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Live_RawLog_Returned_Result]:
   RESUME_TAC >> Cases_on `res` >> simp[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
@@ -9197,7 +9217,7 @@ Resume eval_scc_type_sound_results_mutual[Live_RawLog_Returned_Result]:
   strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Live_RawRevert_Returned_Result]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Live_RawRevert_Returned_Result]:
   RESUME_TAC >> Cases_on `res` >> simp[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
@@ -9206,7 +9226,7 @@ Resume eval_scc_type_sound_results_mutual[Live_RawRevert_Returned_Result]:
   strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Live_SelfDestruct_Returned_Result]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Live_SelfDestruct_Returned_Result]:
   RESUME_TAC >> Cases_on `res` >> simp[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
@@ -9234,7 +9254,7 @@ Proof
                        return_def, raise_def, AllCaseEqs()]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Live_Send_Returned_Result]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Live_Send_Returned_Result]:
   RESUME_TAC >> Cases_on `res` >> simp[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
@@ -9260,7 +9280,7 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Live_RawCall_Returned_Result]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Live_RawCall_Returned_Result]:
   RESUME_TAC >> Cases_on `res` >> simp[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
@@ -9270,7 +9290,7 @@ Resume eval_scc_type_sound_results_mutual[Live_RawCall_Returned_Result]:
   drule eval_raw_call_success_value >> strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Live_RawCallCalldata_Returned_Result]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Live_RawCallCalldata_Returned_Result]:
   RESUME_TAC >> Cases_on `res` >> simp[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
@@ -9280,7 +9300,7 @@ Resume eval_scc_type_sound_results_mutual[Live_RawCallCalldata_Returned_Result]:
   drule eval_raw_call_success_value >> strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Live_Builtin_Returned_Result]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Live_Builtin_Returned_Result]:
   RESUME_TAC >> Cases_on `res` >> simp[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
@@ -9289,7 +9309,7 @@ Resume eval_scc_type_sound_results_mutual[Live_Builtin_Returned_Result]:
   strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Live_TypeBuiltin_Returned_Result]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Live_TypeBuiltin_Returned_Result]:
   RESUME_TAC >> Cases_on `res` >> simp[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
@@ -9298,7 +9318,7 @@ Resume eval_scc_type_sound_results_mutual[Live_TypeBuiltin_Returned_Result]:
   strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Trace_Attribute_Selection]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Attribute_Selection]:
   RESUME_TAC >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_expr (Attribute _ _ _))`
     (assume_tac o REWRITE_RULE [int_calls_expr_def]) >>
@@ -9321,7 +9341,7 @@ Resume eval_scc_type_sound_results_mutual[Trace_Attribute_Selection]:
   imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Live_Attribute_Capture_Selection]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Live_Attribute_Capture_Selection]:
   RESUME_TAC >>
   FIRST [
     qpat_x_assum `well_typed_expr env (Attribute _ _ _)`
@@ -9352,7 +9372,7 @@ Resume eval_scc_type_sound_results_mutual[Live_Attribute_Capture_Selection]:
   simp[typed_scope_transition_refl, vyperImmutableMetadataFrameTheory.immutable_metadata_frame_refl]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Live_Pop_Retained_Owner]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Live_Pop_Retained_Owner]:
   RESUME_TAC >>
   rename1 `eval_expr cx (Pop ty bt) st = (res,st')` >>
   drule well_typed_expr_Pop_dynamic_target_assignable >> strip_tac >>
@@ -9384,7 +9404,7 @@ Resume eval_scc_type_sound_results_mutual[Live_Pop_Retained_Owner]:
   simp[live_memory_result_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Trace_Pop_Target]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Pop_Target]:
   RESUME_TAC >>
   rename1 `eval_expr cx (Pop ty bt) st = (res,st')` >>
   FIRST [drule well_typed_expr_Pop_dynamic_target_assignable >> strip_tac,
@@ -9417,7 +9437,7 @@ Resume eval_scc_type_sound_results_mutual[Trace_Pop_Target]:
   qexistsl_tac [`env`,`tv`,`n`] >> simp[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Live_Subscript_Capture_Index_Selection]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Live_Subscript_Capture_Index_Selection]:
   RESUME_TAC >>
   IF (qpat_assum `well_typed_expr _ (Subscript _ _ _)` (K all_tac))
     (qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac)
@@ -9476,7 +9496,7 @@ Resume eval_scc_type_sound_results_mutual[Live_Subscript_Capture_Index_Selection
   drule eval_expr_immutable_metadata_frame >> simp[])
 QED
 
-Resume eval_scc_type_sound_results_mutual[Trace_Base_Subscript_Selection]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Trace_Base_Subscript_Selection]:
   RESUME_TAC >>
   qpat_x_assum `type_place_target env (SubscriptTarget _ _) = SOME _` mp_tac >>
   simp[NoAsms, Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
@@ -9511,7 +9531,7 @@ Resume eval_scc_type_sound_results_mutual[Trace_Base_Subscript_Selection]:
   gvs[] >> metis_tac[typed_scope_transition_trans])
 QED
 
-Resume eval_scc_type_sound_results_mutual[Live_Base_Subscript_Capture_Index_Selection]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Live_Base_Subscript_Capture_Index_Selection]:
   RESUME_TAC >>
   qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
   simp[NoAsms, int_calls_expr_def] >> strip_tac >>
@@ -9560,7 +9580,7 @@ Resume eval_scc_type_sound_results_mutual[Live_Base_Subscript_Capture_Index_Sele
   goal_assum (drule_at Any) >> simp[] >> goal_assum drule)
 QED
 
-Resume eval_scc_type_sound_results_mutual[Live_IfExp_Selected_Conversion]:
+Resume eval_scc_acceptance_type_sound_results_mutual[Live_IfExp_Selected_Conversion]:
   RESUME_TAC >>
   qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
   simp[NoAsms, int_calls_expr_def] >> strip_tac >>
@@ -9602,7 +9622,7 @@ Resume eval_scc_type_sound_results_mutual[Live_IfExp_Selected_Conversion]:
   Cases_on `res` >> gvs[]
 QED
 
-Resume eval_scc_type_sound_results_mutual[RaiseCustomError]:
+Resume eval_scc_acceptance_type_sound_results_mutual[RaiseCustomError]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum
     `call_evaluation_safe cx
@@ -9673,7 +9693,7 @@ Resume eval_scc_type_sound_results_mutual[RaiseCustomError]:
 QED
 
 
-Resume eval_scc_type_sound_results_mutual[AssertCustomError]:
+Resume eval_scc_acceptance_type_sound_results_mutual[AssertCustomError]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum
     `call_evaluation_safe cx
@@ -9786,7 +9806,45 @@ Resume eval_scc_type_sound_results_mutual[AssertCustomError]:
 QED
 
 
-Finalise eval_scc_type_sound_results_mutual
+Finalise eval_scc_acceptance_type_sound_results_mutual
+
+(* Public exact-target operation contracts remain compatibility wrappers. *)
+Theorem assign_tuple_targets_exact_type_sound:
+  !cx g v env ty st res st'.
+    well_typed_atarget env g ty /\ value_runtime_typed env ty v /\
+    env_consistent env cx st /\ state_well_typed st /\
+    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_atarget g) /\
+    assign_tuple_targets cx g v st = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    no_type_error_result res
+Proof
+  rpt strip_tac >> drule well_typed_atarget_accepts >> strip_tac >>
+  drule_all (cj 9 eval_scc_acceptance_type_sound_results_mutual) >> simp[]
+QED
+
+Theorem assign_tuple_target_list_exact_type_sound:
+  !cx gs vs env tys st res st'.
+    LIST_REL (\g ty. well_typed_atarget env g ty) gs tys /\
+    LIST_REL (value_runtime_typed env) tys vs /\
+    env_consistent env cx st /\ state_well_typed st /\
+    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_atargets gs) /\
+    assign_tuple_target_list cx gs vs st = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    no_type_error_result res
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LIST_REL (\g ty. atarget_accepts env g ty) gs tys` by
+    (gvs[LIST_REL_EL_EQN] >> metis_tac[well_typed_atarget_accepts]) >>
+  drule_all (cj 10 eval_scc_acceptance_type_sound_results_mutual) >> simp[]
+QED
+
+Theorem eval_scc_type_sound_results_mutual =
+  LIST_CONJ
+    (List.take (CONJUNCTS eval_scc_acceptance_type_sound_results_mutual, 8) @
+     [assign_tuple_targets_exact_type_sound, assign_tuple_target_list_exact_type_sound] @
+     List.drop (CONJUNCTS eval_scc_acceptance_type_sound_results_mutual, 10));
 
 Theorem eval_scc_type_sound_mutual =
   LIST_CONJ (List.take (CONJUNCTS eval_scc_type_sound_results_mutual, 10));

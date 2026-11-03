@@ -207,14 +207,16 @@ Theorem atarget_accepts_static_maps_transfer_env[local]:
     static_maps_transfer_env env1 env2 /\ atarget_accepts env1 tgt ty ==>
     atarget_accepts env2 tgt ty
 Proof
-  Cases_on `tgt` >> simp[atarget_accepts_def] >> rpt strip_tac
+  rpt gen_tac >> map_every qid_spec_tac [`ty`, `env2`, `env1`, `tgt`] >>
+  Induct >> rw[atarget_accepts_def]
   >- (
     Cases_on `type_place_target env1 b` >> gvs[] >>
     rename1 `type_place_target env1 b = SOME pt` >>
     Cases_on `pt` >> gvs[] >>
     drule_all type_place_target_static_maps_transfer_env >>
     gvs[static_maps_transfer_env_def]) >>
-  metis_tac[well_typed_atarget_static_maps_transfer_env]
+  gvs[LIST_REL_EL_EQN] >> rw[] >>
+  first_x_assum irule >> simp[MEM_EL] >> metis_tac[]
 QED
 
 Theorem type_stmt_static_maps_transfer_mutual[local]:

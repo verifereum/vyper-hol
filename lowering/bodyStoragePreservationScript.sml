@@ -32,7 +32,7 @@ Ancestors
 
 (* Proved by one mutual induction over evaluate_ind; each clause is
    discharged by its case lemma from bodyStorageCases. *)
-Theorem body_oracle_storage_mutual:
+Theorem body_oracle_storage_acceptance_mutual:
   (!cx s. !tops env ret_ty env' st res st'.
     type_stmt env ret_ty s = SOME env' /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
@@ -108,7 +108,7 @@ Theorem body_oracle_storage_mutual:
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_target_place cx tgt st = (res,st') ==> contract_storage_well_formed cx st') /\
   (!cx tgt v. !tops env ty st res st'.
-    well_typed_atarget env tgt ty /\ value_runtime_typed env ty v /\
+    atarget_accepts env tgt ty /\ value_runtime_typed env ty v /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_assignment_exists expr_evm_run_root tgt /\
     EVERY (\c. FST c = NONE) (int_calls_atarget tgt) /\
@@ -117,7 +117,7 @@ Theorem body_oracle_storage_mutual:
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     assign_tuple_targets cx tgt v st = (res,st') ==> contract_storage_well_formed cx st') /\
   (!cx tgts vs. !tops env tys st res st'.
-    LIST_REL (\t ty. well_typed_atarget env t ty) tgts tys /\
+    LIST_REL (\t ty. atarget_accepts env t ty) tgts tys /\
     LIST_REL (value_runtime_typed env) tys vs /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_assignments_exists expr_evm_run_root tgts /\
@@ -176,12 +176,12 @@ Proof
     (rpt strip_tac >> metis_tac[body_eval_for_nil_storage, runtime_storage_consistent_storage])
   >~ [`eval_for _ _ _ _ (_::_)`] >- suspend "for_cons"
   >~ [`assign_tuple_target_list _ (_::_) (_::_)`] >-
-    (strip_tac >> match_mp_tac (SRULE [] body_tuple_list_cons_consumer) >>
+    (strip_tac >> match_mp_tac (SRULE [] body_tuple_list_cons_consumer_accepts) >>
      conj_tac >> first_assum ACCEPT_TAC)
   >~ [`assign_tuple_targets _ (BaseTarget _) _`] >-
-    (strip_tac >> match_mp_tac body_tuple_base_consumer >> first_assum ACCEPT_TAC)
+    (strip_tac >> match_mp_tac body_tuple_base_consumer_accepts >> first_assum ACCEPT_TAC)
   >~ [`assign_tuple_targets _ (TupleTarget _) _`] >-
-    (strip_tac >> match_mp_tac body_tuple_nested_consumer >> first_assum ACCEPT_TAC)
+    (strip_tac >> match_mp_tac body_tuple_nested_consumer_accepts >> first_assum ACCEPT_TAC)
   >>~- ([`assign_tuple_target_list _ _ _`],
     rpt strip_tac >> gvs[Once evaluate_def, return_def, raise_def] >>
     metis_tac[runtime_storage_consistent_storage]) >>
@@ -223,7 +223,7 @@ Proof
   suspend "ext_call"
 QED
 
-Resume body_oracle_storage_mutual[ext_call]:
+Resume body_oracle_storage_acceptance_mutual[ext_call]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[expr_has_evm_run_def, supported_expr_exists_def, int_calls_expr_def] >>
   reverse conj_tac
@@ -262,7 +262,7 @@ Resume body_oracle_storage_mutual[ext_call]:
   qexists_tac `env` >> simp[] >> rpt strip_tac >> metis_tac[]
 QED
 
-Resume body_oracle_storage_mutual[send_expr]:
+Resume body_oracle_storage_acceptance_mutual[send_expr]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[expr_has_evm_run_def, supported_expr_exists_def, int_calls_expr_def] >>
   reverse conj_tac
@@ -278,7 +278,7 @@ Resume body_oracle_storage_mutual[send_expr]:
   simp[type_check_def, assert_def, return_def] >> metis_tac[]
 QED
 
-Resume body_oracle_storage_mutual[builtin_expr]:
+Resume body_oracle_storage_acceptance_mutual[builtin_expr]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[expr_has_evm_run_def, supported_expr_exists_def, int_calls_expr_def] >>
   reverse conj_tac
@@ -294,7 +294,7 @@ Resume body_oracle_storage_mutual[builtin_expr]:
   suspend "builtin_args"
 QED
 
-Resume body_oracle_storage_mutual[builtin_gas]:
+Resume body_oracle_storage_acceptance_mutual[builtin_gas]:
   gvs[] >>
   qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, type_check_def, assert_def, bind_def,
@@ -307,7 +307,7 @@ Resume body_oracle_storage_mutual[builtin_gas]:
   qexists_tac `st` >> simp[] >> metis_tac[runtime_storage_consistent_storage]
 QED
 
-Resume body_oracle_storage_mutual[builtin_args]:
+Resume body_oracle_storage_acceptance_mutual[builtin_args]:
   reverse conj_tac
   >- (conj_tac
       >- (rpt strip_tac >>
@@ -329,7 +329,7 @@ Resume body_oracle_storage_mutual[builtin_args]:
   simp[type_check_def, assert_def, return_def] >> metis_tac[]
 QED
 
-Resume body_oracle_storage_mutual[subscript_expr]:
+Resume body_oracle_storage_acceptance_mutual[subscript_expr]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[expr_has_evm_run_def, supported_expr_exists_def, int_calls_expr_def] >>
   drule call_evaluation_safe_append_left >> strip_tac >>
@@ -348,7 +348,7 @@ Resume body_oracle_storage_mutual[subscript_expr]:
   simp[] >> qexists_tac `env` >> simp[] >> rpt strip_tac >> metis_tac[]))
 QED
 
-Resume body_oracle_storage_mutual[raw_revert]:
+Resume body_oracle_storage_acceptance_mutual[raw_revert]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[expr_has_evm_run_def, supported_expr_exists_def, int_calls_expr_def] >>
   reverse conj_tac
@@ -360,7 +360,7 @@ Resume body_oracle_storage_mutual[raw_revert]:
   rpt strip_tac >> metis_tac[]
 QED
 
-Resume body_oracle_storage_mutual[raw_log]:
+Resume body_oracle_storage_acceptance_mutual[raw_log]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[expr_has_evm_run_def, supported_expr_exists_def, int_calls_expr_def] >>
   reverse conj_tac
@@ -372,7 +372,7 @@ Resume body_oracle_storage_mutual[raw_log]:
   rpt strip_tac >> metis_tac[]
 QED
 
-Resume body_oracle_storage_mutual[selfdestruct]:
+Resume body_oracle_storage_acceptance_mutual[selfdestruct]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[expr_has_evm_run_def, supported_expr_exists_def, int_calls_expr_def] >>
   reverse conj_tac
@@ -384,7 +384,7 @@ Resume body_oracle_storage_mutual[selfdestruct]:
   rpt strip_tac >> metis_tac[]
 QED
 
-Resume body_oracle_storage_mutual[type_builtin]:
+Resume body_oracle_storage_acceptance_mutual[type_builtin]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[expr_has_evm_run_def, supported_expr_exists_def, int_calls_expr_def] >>
   reverse conj_tac
@@ -400,7 +400,7 @@ Resume body_oracle_storage_mutual[type_builtin]:
   simp[type_check_def, assert_def, return_def] >> metis_tac[]
 QED
 
-Resume body_oracle_storage_mutual[subscript_target]:
+Resume body_oracle_storage_acceptance_mutual[subscript_target]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[supported_expr_exists_def, int_calls_expr_def] >>
   qpat_assum `type_place_target env (SubscriptTarget _ _) = _`
@@ -412,7 +412,7 @@ Resume body_oracle_storage_mutual[subscript_target]:
   rpt strip_tac >> metis_tac[expr_has_evm_run_def]
 QED
 
-Resume body_oracle_storage_mutual[results_cons]:
+Resume body_oracle_storage_acceptance_mutual[results_cons]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[supported_expr_exists_def, int_calls_expr_def, Once well_typed_expr_def] >>
   drule call_evaluation_safe_append_left >> strip_tac >>
@@ -422,7 +422,7 @@ Resume body_oracle_storage_mutual[results_cons]:
   rpt strip_tac >> metis_tac[expr_has_evm_run_def]
 QED
 
-Resume body_oracle_storage_mutual[exprs_cons]:
+Resume body_oracle_storage_acceptance_mutual[exprs_cons]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[supported_expr_exists_def, int_calls_expr_def, Once well_typed_expr_def] >>
   drule call_evaluation_safe_append_left >> strip_tac >>
@@ -432,7 +432,7 @@ Resume body_oracle_storage_mutual[exprs_cons]:
   rpt strip_tac >> metis_tac[expr_has_evm_run_def]
 QED
 
-Resume body_oracle_storage_mutual[target_place]:
+Resume body_oracle_storage_acceptance_mutual[target_place]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[well_typed_target_def] >>
   qpat_assum `eval_target_place _ _ _ = _`
@@ -440,7 +440,7 @@ Resume body_oracle_storage_mutual[target_place]:
   disch_then irule >> rpt strip_tac >> metis_tac[]
 QED
 
-Resume body_oracle_storage_mutual[attribute_target]:
+Resume body_oracle_storage_acceptance_mutual[attribute_target]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[supported_expr_exists_def, int_calls_expr_def] >>
   qpat_assum `type_place_target env (AttributeTarget _ _) = _`
@@ -450,14 +450,14 @@ Resume body_oracle_storage_mutual[attribute_target]:
   disch_then irule >> rpt strip_tac >> metis_tac[]
 QED
 
-Resume body_oracle_storage_mutual[pop_expr]:
+Resume body_oracle_storage_acceptance_mutual[pop_expr]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[expr_has_evm_run_def] >>
   irule body_oracle_pop_case >> rpt (goal_assum (drule_at Any)) >>
   simp[] >> rpt strip_tac >> metis_tac[]
 QED
 
-Resume body_oracle_storage_mutual[struct_expr]:
+Resume body_oracle_storage_acceptance_mutual[struct_expr]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[expr_has_evm_run_def, supported_expr_exists_def, int_calls_expr_def] >>
   reverse conj_tac
@@ -479,7 +479,7 @@ Resume body_oracle_storage_mutual[struct_expr]:
   first_x_assum (qspecl_then [`env`,`st`,`r`,`s`] mp_tac) >> simp[]
 QED
 
-Resume body_oracle_storage_mutual[attribute_expr]:
+Resume body_oracle_storage_acceptance_mutual[attribute_expr]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[expr_has_evm_run_def, supported_expr_exists_def, int_calls_expr_def] >>
   qpat_assum `eval_expr _ (Attribute _ _ _) _ = _`
@@ -490,7 +490,7 @@ Resume body_oracle_storage_mutual[attribute_expr]:
     gvs[Once well_typed_expr_def, AllCaseEqs()])) >> simp[]
 QED
 
-Resume body_oracle_storage_mutual[name_target]:
+Resume body_oracle_storage_acceptance_mutual[name_target]:
   rpt strip_tac >>
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, get_scopes_def, type_check_def,
@@ -498,14 +498,14 @@ Resume body_oracle_storage_mutual[name_target]:
   rpt strip_tac >> gvs[runtime_storage_consistent_def]
 QED
 
-Resume body_oracle_storage_mutual[global_target]:
+Resume body_oracle_storage_acceptance_mutual[global_target]:
   rpt strip_tac >>
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
   pure_once_rewrite_tac [evaluate_def] >> strip_tac >>
   imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def]
 QED
 
-Resume body_oracle_storage_mutual[if_expr]:
+Resume body_oracle_storage_acceptance_mutual[if_expr]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[expr_has_evm_run_def, supported_expr_exists_def, int_calls_expr_def,
       EVERY_APPEND] >>
@@ -531,7 +531,7 @@ Resume body_oracle_storage_mutual[if_expr]:
     disch_then (qspecl_then [`s`,`r`,`s'`] mp_tac) >> simp[] >> NO_TAC)
 QED
 
-Resume body_oracle_storage_mutual[name_expr]:
+Resume body_oracle_storage_acceptance_mutual[name_expr]:
   rpt strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, get_scopes_def, type_check_def, assert_def, ignore_bind_def,
@@ -539,14 +539,14 @@ Resume body_oracle_storage_mutual[name_expr]:
   rpt strip_tac >> gvs[runtime_storage_consistent_def]
 QED
 
-Resume body_oracle_storage_mutual[global_expr]:
+Resume body_oracle_storage_acceptance_mutual[global_expr]:
   rpt strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def] >> strip_tac >>
   imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def]
 QED
 
-Resume body_oracle_storage_mutual[flag_expr]:
+Resume body_oracle_storage_acceptance_mutual[flag_expr]:
   rpt strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def] >> strip_tac >>
@@ -554,14 +554,14 @@ Resume body_oracle_storage_mutual[flag_expr]:
   gvs[runtime_storage_consistent_def] >> rpt strip_tac >> gvs[]
 QED
 
-Resume body_oracle_storage_mutual[literal_expr]:
+Resume body_oracle_storage_acceptance_mutual[literal_expr]:
   rpt strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, return_def] >>
   strip_tac >> gvs[runtime_storage_consistent_def]
 QED
 
-Resume body_oracle_storage_mutual[for_cons]:
+Resume body_oracle_storage_acceptance_mutual[for_cons]:
   strip_tac >> match_mp_tac (SRULE [] body_for_cons_consumer) >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
@@ -572,12 +572,12 @@ Resume body_oracle_storage_mutual[for_cons]:
   first_assum drule >> simp[]
 QED
 
-Resume body_oracle_storage_mutual[assign_base]:
+Resume body_oracle_storage_acceptance_mutual[assign_base]:
   strip_tac >> match_mp_tac body_assign_base_consumer >>
   conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Resume body_oracle_storage_mutual[if_stmt]:
+Resume body_oracle_storage_acceptance_mutual[if_stmt]:
   strip_tac >> match_mp_tac body_if_consumer >>
   conj_tac
   >- (rpt gen_tac >> rename1 `push_scope s = (INL x,t)` >>
@@ -588,75 +588,75 @@ Resume body_oracle_storage_mutual[if_stmt]:
   first_assum ACCEPT_TAC
 QED
 
-Resume body_oracle_storage_mutual[annassign]:
+Resume body_oracle_storage_acceptance_mutual[annassign]:
   strip_tac >> match_mp_tac body_annassign_consumer >>
   rpt gen_tac >> strip_tac >> gvs[] >> first_assum drule >> simp[]
 QED
 
-Resume body_oracle_storage_mutual[log_stmt]:
+Resume body_oracle_storage_acceptance_mutual[log_stmt]:
   strip_tac >> match_mp_tac body_log_consumer >> first_assum ACCEPT_TAC
 QED
 
-Resume body_oracle_storage_mutual[append_stmt]:
+Resume body_oracle_storage_acceptance_mutual[append_stmt]:
   strip_tac >> match_mp_tac body_append_consumer >>
   conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Resume body_oracle_storage_mutual[augassign]:
+Resume body_oracle_storage_acceptance_mutual[augassign]:
   strip_tac >> match_mp_tac body_augassign_consumer >>
   conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Resume body_oracle_storage_mutual[assign_tuple]:
-  strip_tac >> match_mp_tac body_assign_tuple_consumer >>
+Resume body_oracle_storage_acceptance_mutual[assign_tuple]:
+  strip_tac >> match_mp_tac body_assign_tuple_consumer_accepts >>
   conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Resume body_oracle_storage_mutual[expr_stmt]:
+Resume body_oracle_storage_acceptance_mutual[expr_stmt]:
   rename1 `eval_stmt cx (Expr e)` >>
   strip_tac >> drule body_single_expr_stmt_consumer >>
   disch_then (qspec_then `Expr e` mp_tac) >> simp[]
 QED
 
-Resume body_oracle_storage_mutual[return_stmt]:
+Resume body_oracle_storage_acceptance_mutual[return_stmt]:
   rename1 `eval_stmt cx (Return (SOME e))` >>
   strip_tac >> drule body_single_expr_stmt_consumer >>
   disch_then (qspec_then `Return (SOME e)` mp_tac) >> simp[]
 QED
 
-Resume body_oracle_storage_mutual[raise_reason]:
+Resume body_oracle_storage_acceptance_mutual[raise_reason]:
   rename1 `eval_stmt cx (Raise (RaiseReason e))` >>
   strip_tac >> drule body_single_expr_stmt_consumer >>
   disch_then (qspec_then `Raise (RaiseReason e)` mp_tac) >> simp[]
 QED
 
-Resume body_oracle_storage_mutual[assert_bare]:
+Resume body_oracle_storage_acceptance_mutual[assert_bare]:
   rename1 `eval_stmt cx (Assert e AssertBare)` >>
   strip_tac >> drule body_single_expr_stmt_consumer >>
   disch_then (qspec_then `Assert e AssertBare` mp_tac) >> simp[]
 QED
 
-Resume body_oracle_storage_mutual[assert_unreachable]:
+Resume body_oracle_storage_acceptance_mutual[assert_unreachable]:
   rename1 `eval_stmt cx (Assert e AssertUnreachable)` >>
   strip_tac >> drule body_single_expr_stmt_consumer >>
   disch_then (qspec_then `Assert e AssertUnreachable` mp_tac) >> simp[]
 QED
 
-Resume body_oracle_storage_mutual[raise_custom]:
+Resume body_oracle_storage_acceptance_mutual[raise_custom]:
   strip_tac >> match_mp_tac body_raise_custom_consumer >> first_assum ACCEPT_TAC
 QED
 
-Resume body_oracle_storage_mutual[assert_custom]:
+Resume body_oracle_storage_acceptance_mutual[assert_custom]:
   strip_tac >> match_mp_tac body_assert_custom_consumer >>
   conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Resume body_oracle_storage_mutual[assert_reason]:
+Resume body_oracle_storage_acceptance_mutual[assert_reason]:
   strip_tac >> match_mp_tac body_assert_reason_consumer >>
   conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Resume body_oracle_storage_mutual[for_entry]:
+Resume body_oracle_storage_acceptance_mutual[for_entry]:
   strip_tac >> match_mp_tac body_for_entry_consumer >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
@@ -667,7 +667,7 @@ Resume body_oracle_storage_mutual[for_entry]:
   rpt (goal_assum (drule_at Any))
 QED
 
-Resume body_oracle_storage_mutual[intcall_start]:
+Resume body_oracle_storage_acceptance_mutual[intcall_start]:
   strip_tac >>
   qpat_x_assum `!a b c d e f g h i j k l m n p q r s. _ ==> _` kall_tac >>
   qpat_x_assum `!a. _` (mk_asm "intcall_ih1") >>
@@ -699,7 +699,7 @@ Resume body_oracle_storage_mutual[intcall_start]:
   strip_tac >> gvs[] >> metis_tac[runtime_storage_consistent_storage]
 QED
 
-Resume body_oracle_storage_mutual[intcall_live]:
+Resume body_oracle_storage_acceptance_mutual[intcall_live]:
   asm_x "intcall_ih1" mp_tac >> simp[] >> disch_then assume_tac >>
   asm_x "intcall_ih2" mp_tac >> simp[] >> disch_then assume_tac >>
   rule_assum_tac (SRULE [type_check_def, assert_def, return_def,
@@ -723,7 +723,7 @@ Resume body_oracle_storage_mutual[intcall_live]:
   rpt strip_tac >> gvs[]
 QED
 
-Resume body_oracle_storage_mutual[intcall_args_success]:
+Resume body_oracle_storage_acceptance_mutual[intcall_args_success]:
   rename1 `eval_expr_results cx es st = (INL actual_results,args_st)` >>
   `runtime_consistent env cx st` by
     metis_tac[runtime_storage_consistent_runtime] >>
@@ -751,7 +751,7 @@ Resume body_oracle_storage_mutual[intcall_args_success]:
   rpt strip_tac >> gvs[]
 QED
 
-Resume body_oracle_storage_mutual[intcall_read_success]:
+Resume body_oracle_storage_acceptance_mutual[intcall_read_success]:
   rename1 `read_results cx actual_results args_st = (INL vs,args_st)` >>
   Cases_on `bind_arguments (get_tenv cx) args vs`
   >- (simp[lift_option_type_def, raise_def] >> rpt strip_tac >> gvs[]) >>
@@ -780,7 +780,7 @@ Resume body_oracle_storage_mutual[intcall_read_success]:
   rpt strip_tac >> gvs[])
 QED
 
-Resume body_oracle_storage_mutual[intcall_lock_success]:
+Resume body_oracle_storage_acceptance_mutual[intcall_lock_success]:
   markerLib.RESUME_TAC >> Cases_on `x` >>
   (`push_function (NONE,fn) call_env cx lock_st =
       (INL (cx with stk updated_by CONS (NONE,fn)), lock_st with scopes := [call_env])` by
@@ -814,7 +814,7 @@ Resume body_oracle_storage_mutual[intcall_lock_success]:
    suspend "intcall_return")
 QED
 
-Resume body_oracle_storage_mutual[intcall_return]:
+Resume body_oracle_storage_acceptance_mutual[intcall_return]:
   markerLib.RESUME_TAC >>
   `!r s. eval_stmts (cx with stk updated_by CONS (NONE,fn)) ss
        (lock_st with scopes := [call_env]) = (r,s) ==>
@@ -837,7 +837,95 @@ Resume body_oracle_storage_mutual[intcall_return]:
    goal_assum (drule_at Any)
 QED
 
-Finalise body_oracle_storage_mutual
+Finalise body_oracle_storage_acceptance_mutual
+
+(* Recover the public exact-target operation interface without changing any
+   of the non-operation clauses of the stronger induction. *)
+Theorem body_tuple_targets_exact_storage[local]:
+  !cx tgt v tops env ty st res st'.
+    well_typed_atarget env tgt ty /\ value_runtime_typed env ty v /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    ~supported_assignment_exists expr_evm_run_root tgt /\
+    EVERY (\c. FST c = NONE) (int_calls_atarget tgt) /\
+    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_atarget tgt) /\
+    IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+    assign_tuple_targets cx tgt v st = (res,st') ==> contract_storage_well_formed cx st'
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule vyperTypeArgFitsTheory.well_typed_atarget_accepts >> strip_tac >>
+  drule_all (cj 9 body_oracle_storage_acceptance_mutual) >> simp[]
+QED
+
+Theorem body_tuple_target_list_exact_storage[local]:
+  !cx tgts vs tops env tys st res st'.
+    LIST_REL (\t ty. well_typed_atarget env t ty) tgts tys /\
+    LIST_REL (value_runtime_typed env) tys vs /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    ~supported_assignments_exists expr_evm_run_root tgts /\
+    EVERY (\c. FST c = NONE) (int_calls_atargets tgts) /\
+    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_atargets tgts) /\
+    IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+    assign_tuple_target_list cx tgts vs st = (res,st') ==> contract_storage_well_formed cx st'
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LIST_REL (\t ty. atarget_accepts env t ty) tgts tys` by
+    (gvs[LIST_REL_EL_EQN] >> metis_tac[vyperTypeArgFitsTheory.well_typed_atarget_accepts]) >>
+  drule_all (cj 10 body_oracle_storage_acceptance_mutual) >> simp[]
+QED
+
+Theorem body_oracle_storage_mutual =
+  LIST_CONJ [cj 1 body_oracle_storage_acceptance_mutual,
+    cj 2 body_oracle_storage_acceptance_mutual,
+    cj 3 body_oracle_storage_acceptance_mutual,
+    cj 4 body_oracle_storage_acceptance_mutual,
+    cj 5 body_oracle_storage_acceptance_mutual,
+    cj 6 body_oracle_storage_acceptance_mutual,
+    cj 7 body_oracle_storage_acceptance_mutual,
+    cj 8 body_oracle_storage_acceptance_mutual,
+    body_tuple_targets_exact_storage, body_tuple_target_list_exact_storage,
+    cj 11 body_oracle_storage_acceptance_mutual];
+
+(* The exact-target consumer follows from statement storage preservation.
+   Keeping it after the mutual induction avoids an ancestor cycle. *)
+
+Theorem body_assign_tuple_consumer:
+  (!s0 tv s1 sread v s2.
+    eval_expr cx e s0 = (INL tv,s1) /\ read_result cx tv sread = (INL v,s2) ==>
+    !tops env ty st res st'.
+      well_typed_atarget env (TupleTarget gs) ty /\ value_runtime_typed env ty v /\
+      supported_program tops /\ get_module_code cx NONE = SOME tops /\
+      ~supported_assignment_exists expr_evm_run_root (TupleTarget gs) /\
+      EVERY (\c. FST c = NONE) (int_calls_atarget (TupleTarget gs)) /\
+      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      call_evaluation_safe cx (int_calls_atarget (TupleTarget gs)) /\
+      IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+      assign_tuple_targets cx (TupleTarget gs) v st = (res,st') ==>
+      contract_storage_well_formed cx st') /\
+  (!tops env st res st'.
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_expr e) /\
+    IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+    eval_expr cx e st = (res,st') ==>
+    (well_typed_expr env e ==> contract_storage_well_formed cx st') /\
+    (!vt. type_place_expr env e = SOME vt ==> contract_storage_well_formed cx st')) ==>
+  !tops env ret_ty env' st res st'.
+    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    ~supported_stmt_expr_exists expr_evm_run_root (Assign (TupleTarget gs) e) /\
+    EVERY (\c. FST c = NONE) (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+    eval_stmt cx (Assign (TupleTarget gs) e) st = (res,st') ==>
+    contract_storage_well_formed cx st'
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all (cj 1 body_oracle_storage_mutual) >> simp[]
+QED
 
 Theorem eval_expr_body_oracle_storage:
   !tops cx e env st res st'.
@@ -851,7 +939,7 @@ Theorem eval_expr_body_oracle_storage:
     eval_expr cx e st = (res, st') ==>
     contract_storage_well_formed cx st'
 Proof
-  rpt strip_tac >> drule_all (cj 5 body_oracle_storage_mutual) >> simp[]
+  rpt strip_tac >> drule_all (cj 5 body_oracle_storage_acceptance_mutual) >> simp[]
 QED
 
 Theorem eval_stmts_body_oracle_storage:
@@ -876,7 +964,22 @@ Theorem eval_stmts_body_oracle_storage:
 Proof
   conj_tac >> rpt strip_tac
   >- (drule (cj 1 supported_stmts_storage_syntax) >> strip_tac >>
-      drule_all (cj 1 body_oracle_storage_mutual) >> simp[]) >>
+      drule_all (cj 1 body_oracle_storage_acceptance_mutual) >> simp[]) >>
   drule (cj 2 supported_stmts_storage_syntax) >> strip_tac >>
-  drule_all (cj 2 body_oracle_storage_mutual) >> simp[]
+  drule_all (cj 2 body_oracle_storage_acceptance_mutual) >> simp[]
 QED
+
+(* Audit the strengthened induction and recovered public interfaces for
+   unfinished suspensions, axioms, and admitted proof dependencies. *)
+val _ = List.app (fn (name,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print (name ^ " is closed\n")
+    else raise Fail (name ^ " retains hypotheses or admitted dependencies")
+  end)
+  [("body_oracle_storage_acceptance_mutual",body_oracle_storage_acceptance_mutual),
+   ("body_oracle_storage_mutual",body_oracle_storage_mutual),
+   ("body_assign_tuple_consumer",body_assign_tuple_consumer),
+   ("eval_expr_body_oracle_storage",eval_expr_body_oracle_storage),
+   ("eval_stmts_body_oracle_storage",eval_stmts_body_oracle_storage)];

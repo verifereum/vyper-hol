@@ -118,11 +118,11 @@ Proof
         Cases_on `is_uint256 ty` >> fs[eval_compare_def, val_to_w256_def] >>
         word_cmp_tac)
   >>~- ([`value_has_type _ (DecimalV _)`],
-        Cases_on `v2` >>
-        gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-            expr_res_ok_def, binop_negate_def] >>
         Cases_on `tv` >> gvs[value_has_type_def] >>
         rename1 `BaseTV bt` >> Cases_on `bt` >> gvs[value_has_type_def] >>
+        Cases_on `v2` >> gvs[value_has_type_def] >>
+        gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
+            expr_res_ok_def, binop_negate_def] >>
         `w2i (i2w n : bytes32) = n /\ w2i (i2w i : bytes32) = i` by
           (rw[] >> irule w2i_i2w_within_signed >> qexists_tac `168` >>
            simp[]) >>

@@ -832,16 +832,18 @@ Termination
   WF_REL_TAC `measure (\(_,t,_). assignment_target_size t)`
 End
 
-(* A value of type t may be assigned to the target: a base target's declared
-   type is t or a wider one (type_widens_to); a tuple target takes exactly
-   its type. *)
+(* A value may widen to a base target's declared type, or elementwise to
+   the declared types of a tuple target. *)
 Definition atarget_accepts_def:
   atarget_accepts env (BaseTarget bt) t =
     (case type_place_target env bt of
      | SOME (Type ty) => type_widens_to env.type_defs t ty
      | _ => F) /\
   atarget_accepts env (TupleTarget tgts) t =
-    well_typed_atarget env (TupleTarget tgts) t
+    (?tys. LIST_REL (\tgt ty. atarget_accepts env tgt ty) tgts tys /\
+           t = TupleT tys)
+Termination
+  WF_REL_TAC `measure (\(_,t,_). assignment_target_size t)`
 End
 
 Definition well_typed_iterator_def:

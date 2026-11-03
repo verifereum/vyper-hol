@@ -48,9 +48,9 @@ Proof
     (drule_all abi_decode_read_step >> simp[abi_decode_load_update]) >>
   `i < dimword(:256)` by decide_tac >>
   simp[abi_decode_header_insts_def, run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
        eval_operand_def, lookup_var_update_var, w2n_n2w] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure1_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def,
        eval_operand_def, lookup_var_update_var, abi_decode_header_state_def] >>
   Cases_on `i < ncount` >> simp[bool_to_word_def]
 QED
@@ -123,6 +123,12 @@ Proof
        eval_operand_update_var, eval_operand_lit]
 QED
 
+Theorem abi_decode_jump_step[local]:
+  step_inst fuel ctx (mk_inst id JMP [Label hdr] []) s = OK (jump_to hdr s)
+Proof
+  simp[step_inst_def, Once step_inst_base_def, mk_inst_def]
+QED
+
 Theorem abi_decode_backedge_control:
   bb.bb_instructions = prefix ++ abi_decode_backedge_insts id iv nv ip hdr /\
   s.vs_inst_idx = LENGTH prefix /\ ~s.vs_halted /\
@@ -140,8 +146,8 @@ Proof
   strip_tac >> simp[] >>
   simp[Once exec_block_def, get_instruction_def, abi_decode_backedge_insts_def,
        listTheory.EL_APPEND_EQN] >>
-  simp[step_inst_def, Once step_inst_base_def, mk_inst_def, is_terminator_def,
-       jump_to_def, mstore_def, update_var_def]
+  rewrite_tac[abi_decode_jump_step, is_terminator_def] >>
+  simp[jump_to_def, mstore_def, update_var_def]
 QED
 
 Theorem abi_decode_header_observations:

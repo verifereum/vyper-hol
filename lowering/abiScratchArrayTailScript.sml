@@ -106,6 +106,13 @@ QED
    TOP-LEVEL: abi_scratch_array_tail_code derives child limits, cursor bounds
    and the real child-exit phi condition from generated code and its budget. *)
 
+Theorem abi_scratch_array_tail_budget_bound[local]:
+  abi_decoder_budget first last b cap s ==> b + cap < dimword (:256)
+Proof
+  pure_rewrite_tac [abi_decoder_budget_def] >> strip_tac >>
+  first_assum ACCEPT_TAC
+QED
+
 Theorem abi_scratch_array_tail_code:
   abi_encode_array_tail data_op dyn_ptr st = (ops,prepared) /\
   compile_abi_encode_to_buf (SND ops) src ei prepared = (child_len,child_end) /\
@@ -136,7 +143,7 @@ Proof
   `site IN abi_decoder_ids first last /\ site IN abi_decoder_ids lo end_st.cs_next_id` by
     (simp[abi_decoder_ids_def] >> decide_tac) >>
   drule_all abi_decoder_budget_site_bounds >> strip_tac >>
-  `b+cap < dimword (:256)` by fs[abi_decoder_budget_def] >>
+  `b+cap < dimword (:256)` by (drule abi_scratch_array_tail_budget_bound >> simp[]) >>
   `slot < dimword (:256)` by decide_tac >>
   `abi_decoder_operand_live prepared.cs_next_var head /\
    abi_decoder_operand_live child_end.cs_next_var dyn_ptr` by

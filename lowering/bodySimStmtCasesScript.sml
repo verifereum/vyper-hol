@@ -1712,6 +1712,8 @@ Theorem body_assign_tuple_locals[local]:
     type_stmt env ret_ty
       (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) =
       SOME env' /\
+    well_typed_atarget env (TupleTarget (MAP (BaseTarget o NameTarget) ids))
+      (expr_type e) /\
     stmt_exprs_ok cenv
       (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) /\
     call_evaluation_safe cx
@@ -1781,6 +1783,8 @@ QED
    - A local in memory of size 0 (an empty struct or tuple type), which
      compile_assign_tuple_locals_memory_stmt_frag's
      0 < type_memory_size vtv excludes, as for Assign.
+   - Widened tuple leaves: the memory statement lemma still requires equal
+     aggregate layouts or root bytestring widening.
    - Storage, subscript and attribute elements: no statement lemma for
      compile_tuple_store_all.
    An empty tuple target is supported but has no lemma either.  A nested
@@ -1799,6 +1803,7 @@ Theorem body_assign_tuple_other:
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
     eval_stmt cx (Assign (TupleTarget gs) e) es = (res, es') /\
     ~(?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
+            well_typed_atarget env (TupleTarget gs) (expr_type e) /\
             EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
                              0 < type_memory_bytes cenv ty) ids) ==>
     stmt_frag ctx func cx lctx RetQ cenv
@@ -1818,6 +1823,7 @@ Proof
   `supported_expr tops e` by
     gvs[supported_stmt_def, supported_assignment_def] >>
   Cases_on `?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
+                  well_typed_atarget env (TupleTarget gs) (expr_type e) /\
                   EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
                                    0 < type_memory_bytes cenv ty) ids`
   >- (gvs[] >> irule body_assign_tuple_locals >> metis_tac[]) >>
