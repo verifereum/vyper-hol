@@ -10,6 +10,8 @@ Ancestors
   venomInst venomState venomEffects venomExecProps list finite_map sorting rich_list dftCorrectness
   dftAvailability dftWf dftIndexedExec
   unitLabelMapIdentity sccpCorrectnessProofs gasOracleReplay stateEquiv
+Libs
+  stepInstBaseLib
 
 Definition dft_res_rel_def:
   dft_res_rel r r' <=>
@@ -1449,4 +1451,361 @@ Proof
   Induct >> simp[] >> rpt strip_tac >>
   first_x_assum (qspec_then `update_var (FST h) (SND h) s` mp_tac) >>
   simp[dft_noninvoke_ok_update_iff] >> metis_tac[]
+QED
+
+(* GAS-free external success replay boundaries. *)
+Theorem dft_gas_extract_result_fmp[local]:
+  extract_venom_result s value off sz result = SOME (v,t) ==>
+  t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp
+Proof
+  simp[extract_venom_result_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  qmatch_asmsub_rename_tac `case res of INL _ => _ | INR NONE => _ | INR (SOME _) => _` >>
+  Cases_on `res` >> gvs[AllCaseEqs()] >>
+  qmatch_asmsub_rename_tac `case opt of NONE => _ | SOME _ => _` >>
+  Cases_on `opt` >> gvs[]
+QED
+
+Theorem dft_gas_external_ok_fmp_fields[local]:
+  is_ext_call_op i.inst_opcode /\ step_inst fuel C i s = OK t ==>
+  t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp
+Proof
+  strip_tac >> Cases_on `i.inst_opcode` >>
+  fs[is_ext_call_op_def] >> fs[Once step_inst_non_invoke] >>
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  with_opcode_clause simp >>
+  simp[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
+       AllCaseEqs(), update_var_def] >>
+  rpt strip_tac >> gvs[] >>
+  drule dft_gas_extract_result_fmp >> simp[update_var_def]
+QED
+
+Theorem dft_gas_all_read_empty_write[local]:
+  read_effects y.inst_opcode = all_effects /\
+  effects_independent x.inst_opcode y.inst_opcode ==>
+  write_effects x.inst_opcode = empty_effects
+Proof
+  strip_tac >> gvs[effects_independent_def] >>
+  Cases_on `x.inst_opcode` >>
+  gvs[write_effects_def, all_effects_def, empty_effects_def]
+QED
+
+Theorem dft_gas_external_partner_empty_write[local]:
+  dft_gas_swap_pair x y /\ is_ext_call_op y.inst_opcode ==>
+  write_effects x.inst_opcode = empty_effects
+Proof
+  strip_tac >> irule dft_gas_all_read_empty_write >>
+  qexists_tac `y` >> gvs[dft_gas_swap_pair_def] >>
+  Cases_on `y.inst_opcode` >> gvs[is_ext_call_op_def, read_effects_def]
+QED
+
+Theorem dft_gas_external_partner_operand[local]:
+  dft_gas_swap_pair x y /\ step_inst fuel C y s = OK t /\
+  MEM op x.inst_operands ==> eval_operand op t = eval_operand op s
+Proof
+  strip_tac >> irule dftBlockSimTheory.eval_operand_step_pres >>
+  qexistsl_tac [`C`, `fuel`, `y`] >>
+  gvs[dft_gas_swap_pair_def, inst_defs_def, inst_uses_def] >>
+  rpt strip_tac >> gvs[] >>
+  drule dftBlockSimTheory.mem_var_operand_vars >> strip_tac >>
+  fs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+Theorem dft_gas_external_read_memory[local]:
+  dft_gas_swap_pair x y /\ step_inst fuel C y s = OK t /\
+  Eff_MEMORY IN read_effects x.inst_opcode ==> t.vs_memory = s.vs_memory
+Proof
+  strip_tac >> irule venomInstProofsTheory.write_effects_sound_memory >>
+  qexistsl_tac [`C`, `fuel`, `y`] >>
+  gvs[dft_gas_swap_pair_def, effects_independent_def,
+      pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+Theorem dft_gas_external_read_storage[local]:
+  dft_gas_swap_pair x y /\ step_inst fuel C y s = OK t /\
+  Eff_STORAGE IN read_effects x.inst_opcode ==>
+  contract_storage t = contract_storage s
+Proof
+  strip_tac >> irule venomInstProofsTheory.write_effects_sound_storage >>
+  qexistsl_tac [`C`, `fuel`, `y`] >>
+  gvs[dft_gas_swap_pair_def, effects_independent_def,
+      pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+Theorem dft_gas_external_read_transient[local]:
+  dft_gas_swap_pair x y /\ step_inst fuel C y s = OK t /\
+  Eff_TRANSIENT IN read_effects x.inst_opcode ==> t.vs_transient = s.vs_transient
+Proof
+  strip_tac >> irule venomInstProofsTheory.write_effects_sound_transient >>
+  qexistsl_tac [`C`, `fuel`, `y`] >>
+  gvs[dft_gas_swap_pair_def, effects_independent_def,
+      pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+Theorem dft_gas_external_read_accounts[local]:
+  dft_gas_swap_pair x y /\ is_ext_call_op y.inst_opcode /\
+  step_inst fuel C y s = OK t /\
+  (Eff_BALANCE IN read_effects x.inst_opcode \/
+   Eff_EXTCODE IN read_effects x.inst_opcode) ==>
+  t.vs_accounts = s.vs_accounts
+Proof
+  strip_tac >>
+  `y.inst_opcode = STATICCALL` by
+    (Cases_on `y.inst_opcode` >>
+     gvs[dft_gas_swap_pair_def, is_ext_call_op_def, effects_independent_def,
+         write_effects_def, all_effects_def, empty_effects_def,
+         pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  irule venomInstProofsTheory.write_effects_sound_accounts >>
+  qexistsl_tac [`C`, `fuel`, `y`] >>
+  gvs[is_alloca_op_def, is_terminator_def, write_effects_def]
+QED
+
+Theorem dft_gas_pure1_replay[local]:
+  (!op. MEM op x.inst_operands ==> eval_operand op t = eval_operand op s) /\
+  exec_pure1 f x s = OK r ==>
+  ?us. EVERY (\p. MEM (FST p) x.inst_outputs) us /\
+       r = FOLDL (\u p. update_var (FST p) (SND p) u) s us /\
+       exec_pure1 f x t = OK (FOLDL (\u p. update_var (FST p) (SND p) u) t us)
+Proof
+  simp[exec_pure1_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `update_var out value s` >>
+  qexists_tac `[(out,value)]` >> simp[] >> metis_tac[]
+QED
+
+Theorem dft_gas_pure2_replay[local]:
+  (!op. MEM op x.inst_operands ==> eval_operand op t = eval_operand op s) /\
+  exec_pure2 f x s = OK r ==>
+  ?us. EVERY (\p. MEM (FST p) x.inst_outputs) us /\
+       r = FOLDL (\u p. update_var (FST p) (SND p) u) s us /\
+       exec_pure2 f x t = OK (FOLDL (\u p. update_var (FST p) (SND p) u) t us)
+Proof
+  simp[exec_pure2_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `update_var out value s` >>
+  qexists_tac `[(out,value)]` >> simp[] >> metis_tac[]
+QED
+
+Theorem dft_gas_pure3_replay[local]:
+  (!op. MEM op x.inst_operands ==> eval_operand op t = eval_operand op s) /\
+  exec_pure3 f x s = OK r ==>
+  ?us. EVERY (\p. MEM (FST p) x.inst_outputs) us /\
+       r = FOLDL (\u p. update_var (FST p) (SND p) u) s us /\
+       exec_pure3 f x t = OK (FOLDL (\u p. update_var (FST p) (SND p) u) t us)
+Proof
+  simp[exec_pure3_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `update_var out value s` >>
+  qexists_tac `[(out,value)]` >> simp[] >> metis_tac[]
+QED
+
+Theorem dft_gas_read0_replay[local]:
+  f t = f s /\ exec_read0 f x s = OK r ==>
+  ?us. EVERY (\p. MEM (FST p) x.inst_outputs) us /\
+       r = FOLDL (\u p. update_var (FST p) (SND p) u) s us /\
+       exec_read0 f x t = OK (FOLDL (\u p. update_var (FST p) (SND p) u) t us)
+Proof
+  simp[exec_read0_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  qexists_tac `[(out,f s)]` >> simp[]
+QED
+
+Theorem dft_gas_read1_replay[local]:
+  (!op. MEM op x.inst_operands ==> eval_operand op t = eval_operand op s) /\
+  (!op v. MEM op x.inst_operands /\ eval_operand op s = SOME v ==>
+           f v t = f v s) /\
+  exec_read1 f x s = OK r ==>
+  ?us. EVERY (\p. MEM (FST p) x.inst_outputs) us /\
+       r = FOLDL (\u p. update_var (FST p) (SND p) u) s us /\
+       exec_read1 f x t = OK (FOLDL (\u p. update_var (FST p) (SND p) u) t us)
+Proof
+  simp[exec_read1_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `update_var out value s` >>
+  qexists_tac `[(out,value)]` >> simp[] >> metis_tac[]
+QED
+
+Theorem dft_gas_free_empty_write_replay[local]:
+  ~is_pseudo x.inst_opcode /\ ~is_terminator x.inst_opcode /\
+  x.inst_opcode <> ALLOCA /\ x.inst_opcode <> GAS /\
+  write_effects x.inst_opcode = empty_effects /\
+  (!op. MEM op x.inst_operands ==> eval_operand op t = eval_operand op s) /\
+  t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+  t.vs_block_ctx = s.vs_block_ctx /\ t.vs_code = s.vs_code /\
+  t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp /\
+  (Eff_MEMORY IN read_effects x.inst_opcode ==> t.vs_memory = s.vs_memory) /\
+  (Eff_STORAGE IN read_effects x.inst_opcode ==>
+     contract_storage t = contract_storage s) /\
+  (Eff_TRANSIENT IN read_effects x.inst_opcode ==> t.vs_transient = s.vs_transient) /\
+  ((Eff_BALANCE IN read_effects x.inst_opcode \/
+    Eff_EXTCODE IN read_effects x.inst_opcode) ==> t.vs_accounts = s.vs_accounts) /\
+  Eff_RETURNDATA NOTIN read_effects x.inst_opcode /\
+  step_inst_base x s = OK r ==>
+  ?us. EVERY (\p. MEM (FST p) x.inst_outputs) us /\
+       r = FOLDL (\u p. update_var (FST p) (SND p) u) s us /\
+       step_inst_base x t =
+         OK (FOLDL (\u p. update_var (FST p) (SND p) u) t us)
+Proof
+  strip_tac >> Cases_on `x.inst_opcode` >>
+  qpat_x_assum `write_effects _ = empty_effects` mp_tac >>
+  simp[NoAsms, write_effects_def, empty_effects_def, all_effects_def] >>
+  fs[is_pseudo_def, is_terminator_def, read_effects_def] >>
+  with_opcode_clause (fn cs => gvs cs) >>
+  all_tac
+  >>~- ([`exec_pure1 f x t`], irule dft_gas_pure1_replay >> simp[])
+  >>~- ([`exec_pure2 f x t`], irule dft_gas_pure2_replay >> simp[])
+  >>~- ([`exec_pure3 f x t`], irule dft_gas_pure3_replay >> simp[])
+  >>~- ([`exec_read0 _ _ _`], irule dft_gas_read0_replay >> simp[empty_effects_def])
+  >>~- ([`exec_read1 _ _ _`], irule dft_gas_read1_replay >> simp[empty_effects_def, mload_def, sload_def, tload_def, contract_transient_def])
+  >> gvs[AllCaseEqs(), empty_effects_def]
+  >>~- ([`EVERY (\p. FST p = out) _`],
+    qmatch_goalsub_abbrev_tac `update_var out value s` >>
+    qexists_tac `[(out,value)]` >> simp[])
+  >>~- ([`x.inst_opcode = BUMP`],
+    qexists_tac `[(ptr_out,base_val); (next_out,base_val + sz)]` >> simp[])
+  >> qexists_tac `[]` >> simp[]
+QED
+
+Theorem dft_gas_free_empty_write_ok_updates[local]:
+  ~is_pseudo inst.inst_opcode /\ ~is_terminator inst.inst_opcode /\
+  inst.inst_opcode <> ALLOCA /\ inst.inst_opcode <> GAS /\
+  write_effects inst.inst_opcode = empty_effects /\
+  step_inst fuel C inst s = OK t ==>
+  ?updates. EVERY (\p. MEM (FST p) inst.inst_outputs) updates /\
+    t = FOLDL (\u p. update_var (FST p) (SND p) u) s updates
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode` >>
+  fs[is_pseudo_def, is_terminator_def, write_effects_def,
+     empty_effects_def, all_effects_def] >>
+  fs[Once step_inst_non_invoke] >>
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  with_opcode_clause simp >>
+  gvs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+      exec_read0_def, exec_read1_def, AllCaseEqs()] >>
+  strip_tac >> gvs[]
+  >>~- ([`EVERY (\p. FST p = out) _`],
+    qmatch_goalsub_abbrev_tac `update_var out value s` >>
+    qexists_tac `[(out,value)]` >> simp[])
+  >>~- ([`inst.inst_opcode = BUMP`],
+    qexists_tac `[(ptr_out,base_val); (next_out,base_val + sz)]` >> simp[])
+  >> qexists_tac `[]` >> simp[]
+QED
+
+Theorem dft_gas_free_external_replay_both[local]:
+  dft_gas_swap_pair x y /\ x.inst_opcode <> GAS /\
+  is_ext_call_op y.inst_opcode /\ step_inst fuel C y s = OK t ==>
+  (!r. step_inst fuel C x s = OK r ==>
+    ?us. EVERY (\p. MEM (FST p) x.inst_outputs) us /\
+         r = FOLDL (\u p. update_var (FST p) (SND p) u) s us /\
+         step_inst fuel C x t = OK (FOLDL (\u p. update_var (FST p) (SND p) u) t us)) /\
+  (!r. step_inst fuel C x t = OK r ==>
+    ?us. EVERY (\p. MEM (FST p) x.inst_outputs) us /\
+         r = FOLDL (\u p. update_var (FST p) (SND p) u) t us /\
+         step_inst fuel C x s = OK (FOLDL (\u p. update_var (FST p) (SND p) u) s us))
+Proof
+  strip_tac >>
+  `write_effects x.inst_opcode = empty_effects` by
+    metis_tac[dft_gas_external_partner_empty_write] >>
+  `x.inst_opcode <> INVOKE` by
+    (Cases_on `x.inst_opcode` >> gvs[write_effects_def, all_effects_def, empty_effects_def]) >>
+  `Eff_RETURNDATA NOTIN read_effects x.inst_opcode` by
+    (Cases_on `y.inst_opcode` >>
+     gvs[dft_gas_swap_pair_def, effects_independent_def, is_ext_call_op_def,
+         write_effects_def, all_effects_def, empty_effects_def,
+         pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  drule_all venomInstProofsTheory.step_ext_call_preserves >> strip_tac >>
+  drule_all dft_gas_external_ok_fmp_fields >> strip_tac >>
+  `!op. MEM op x.inst_operands ==> eval_operand op t = eval_operand op s` by
+    metis_tac[dft_gas_external_partner_operand] >>
+  `Eff_MEMORY IN read_effects x.inst_opcode ==> t.vs_memory = s.vs_memory` by
+    metis_tac[dft_gas_external_read_memory] >>
+  `Eff_STORAGE IN read_effects x.inst_opcode ==> contract_storage t = contract_storage s` by
+    metis_tac[dft_gas_external_read_storage] >>
+  `Eff_TRANSIENT IN read_effects x.inst_opcode ==> t.vs_transient = s.vs_transient` by
+    metis_tac[dft_gas_external_read_transient] >>
+  `(Eff_BALANCE IN read_effects x.inst_opcode \/ Eff_EXTCODE IN read_effects x.inst_opcode) ==>
+    t.vs_accounts = s.vs_accounts` by metis_tac[dft_gas_external_read_accounts] >>
+  fs[dft_gas_swap_pair_def, is_alloca_op_def] >>
+  conj_tac >> rpt strip_tac >> fs[step_inst_non_invoke] >>
+  irule dft_gas_free_empty_write_replay >> simp[] >>
+  metis_tac[step_inst_non_invoke, is_alloca_op_def]
+QED
+
+Theorem dft_gas_swap_updates_disjoint[local]:
+  dft_gas_swap_pair x y /\
+  EVERY (\p. MEM (FST p) x.inst_outputs) us ==>
+  EVERY (\p. ~MEM (Var (FST p)) y.inst_operands /\
+              ~MEM (FST p) y.inst_outputs) us
+Proof
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  fs[dft_gas_swap_pair_def, inst_defs_def, inst_uses_def,
+     pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+  metis_tac[dftBlockSimTheory.mem_var_operand_vars]
+QED
+
+Theorem dft_gas_free_external_success_first[local]:
+  dft_gas_swap_pair a b /\ b.inst_opcode <> GAS /\
+  is_ext_call_op a.inst_opcode /\
+  step_inst fuel C a s = OK sa /\ step_inst fuel C b sa = OK sab ==>
+  ?sb. step_inst fuel C b s = OK sb /\ step_inst fuel C a sb = OK sab
+Proof
+  strip_tac >>
+  `dft_gas_swap_pair b a` by metis_tac[dft_gas_swap_pair_sym] >>
+  drule_all dft_gas_free_external_replay_both >> strip_tac >>
+  first_x_assum (drule_at Any) >> strip_tac >>
+  qexists_tac `FOLDL (\u p. update_var (FST p) (SND p) u) s us` >>
+  simp[] >>
+  `EVERY (\p. ~MEM (Var (FST p)) a.inst_operands /\
+              ~MEM (FST p) a.inst_outputs) us` by
+    metis_tac[dft_gas_swap_updates_disjoint] >>
+  `a.inst_opcode <> INVOKE` by
+    (Cases_on `a.inst_opcode` >> gvs[is_ext_call_op_def]) >>
+  simp[dft_noninvoke_ok_fold_iff] >> metis_tac[]
+QED
+
+Theorem dft_gas_free_external_success_second[local]:
+  dft_gas_swap_pair a b /\ a.inst_opcode <> GAS /\
+  is_ext_call_op b.inst_opcode /\
+  step_inst fuel C a s = OK sa /\ step_inst fuel C b sa = OK sab ==>
+  ?sb. step_inst fuel C b s = OK sb /\ step_inst fuel C a sb = OK sab
+Proof
+  strip_tac >>
+  `write_effects a.inst_opcode = empty_effects` by
+    metis_tac[dft_gas_external_partner_empty_write] >>
+  `?us. EVERY (\p. MEM (FST p) a.inst_outputs) us /\
+        sa = FOLDL (\u p. update_var (FST p) (SND p) u) s us` by
+    (irule dft_gas_free_empty_write_ok_updates >>
+     gvs[dft_gas_swap_pair_def] >> metis_tac[is_alloca_op_def]) >>
+  `EVERY (\p. ~MEM (Var (FST p)) b.inst_operands /\
+              ~MEM (FST p) b.inst_outputs) us` by
+    metis_tac[dft_gas_swap_updates_disjoint] >>
+  `b.inst_opcode <> INVOKE` by
+    (Cases_on `b.inst_opcode` >> gvs[is_ext_call_op_def]) >>
+  `?sb. step_inst fuel C b s = OK sb /\
+        sab = FOLDL (\u p. update_var (FST p) (SND p) u) sb us` by
+    metis_tac[dft_noninvoke_ok_fold_iff] >>
+  qexists_tac `sb` >> simp[] >>
+  drule_all dft_gas_free_external_replay_both >> strip_tac >>
+  qpat_x_assum `!r. step_inst fuel C a s = OK r ==> _` drule >> strip_tac >>
+  `EVERY (\p. ~MEM (Var (FST p)) b.inst_operands /\
+              ~MEM (FST p) b.inst_outputs) us'` by
+    metis_tac[dft_gas_swap_updates_disjoint] >>
+  `step_inst fuel C b sa =
+     OK (FOLDL (\u p. update_var (FST p) (SND p) u) sb us')` by
+    metis_tac[dft_noninvoke_ok_fold_iff] >> gvs[]
+QED
+
+Theorem dft_gas_external_success:
+  dft_gas_swap_pair a b /\ inst_wf a /\ inst_wf b /\
+  (is_ext_call_op a.inst_opcode \/ is_ext_call_op b.inst_opcode) /\
+  step_inst fuel C a s = OK sa /\ step_inst fuel C b sa = OK sab ==>
+  ?sb. step_inst fuel C b s = OK sb /\ step_inst fuel C a sb = OK sab
+Proof
+  strip_tac >> (
+  `dft_gas_swap_pair b a` by metis_tac[dft_gas_swap_pair_sym] >>
+  Cases_on `a.inst_opcode = GAS`
+  >- (`b.inst_opcode <> GAS /\ b.inst_opcode <> INVOKE` by
+        (Cases_on `b.inst_opcode` >> gvs[is_ext_call_op_def]) >>
+      metis_tac[dft_gas_noninvoke_success_first]) >>
+  Cases_on `b.inst_opcode = GAS`
+  >- (`a.inst_opcode <> INVOKE` by
+        (Cases_on `a.inst_opcode` >> gvs[is_ext_call_op_def]) >>
+      metis_tac[dft_gas_noninvoke_success_second]) >>
+  metis_tac[dft_gas_free_external_success_first,
+            dft_gas_free_external_success_second])
 QED
