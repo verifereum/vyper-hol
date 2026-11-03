@@ -18,7 +18,7 @@
  *     other than NoneT and an empty struct is assignable, as the two above
  *     assume
  * Helpers:
- *   vyper_to_abi_type_submap -- evaluation and ABI type in a larger env
+ *   vyper_to_abi_type_submap (abiTypeBoundProps) -- evaluation and ABI type in a larger env
  *   sfields_tenv_consistent_domsub -- struct map and env drop a struct
  *   abi_props_vyper -- compile-side ABI sizes and flags are the source's
  *   abi_elem_props -- the same for a type in a smaller env than the map's
@@ -33,45 +33,12 @@
 
 Theory retAbiPlanProps
 Ancestors
-  compileVyper compileEnv exprLowering abiEncoderProps structFieldsProps
+  abiTypeBoundProps compileVyper compileEnv exprLowering abiEncoderProps structFieldsProps
   typedCopyProducer supportedTypes
   vyperTypeSystem vyperContext vyperValue vyperABI contractABI
   valueEncoding finite_map list rich_list option pair combin
 
 (* ===== Source side ===== *)
-
-(* Evaluation and the ABI type are stable under a larger type env: a type
-   that evaluates names only structs its env has. *)
-Theorem vyper_to_abi_type_submap:
-  (!env ty tv.
-     evaluate_type env ty = SOME tv ==>
-     !tenv. env SUBMAP tenv ==>
-            evaluate_type tenv ty = SOME tv /\
-            vyper_to_abi_type env ty = vyper_to_abi_type tenv ty) /\
-  (!env ts acc tvs.
-     evaluate_types env ts acc = SOME tvs ==>
-     !tenv. env SUBMAP tenv ==>
-            evaluate_types tenv ts acc = SOME tvs /\
-            vyper_to_abi_types env ts = vyper_to_abi_types tenv ts)
-Proof
-  ho_match_mp_tac evaluate_type_ind >> rpt conj_tac >> rpt gen_tac
-  >~ [`StructT nsid`]
-  >- (rpt strip_tac >>
-      gvs[evaluate_type_def, AllCaseEqs()] >>
-      `FLOOKUP tenv nsid = SOME (StructArgs args)`
-        by fs[SUBMAP_FLOOKUP_EQN] >>
-      `env \\ nsid SUBMAP tenv \\ nsid`
-        by fs[SUBMAP_FLOOKUP_EQN, DOMSUB_FLOOKUP_THM] >>
-      first_x_assum drule >> simp[])
-  >~ [`FlagT nsid`]
-  >- (rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs()] >>
-      fs[SUBMAP_FLOOKUP_EQN])
-  >~ [`ArrayT t bd`]
-  >- (rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs()] >>
-      first_x_assum drule >> Cases_on `bd` >> simp[])
-  >> rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs()] >>
-  first_x_assum drule >> simp[]
-QED
 
 (* vyperTypeABI has these two as local lemmas. *)
 Theorem vyper_to_abi_type_dynamic[local]:
