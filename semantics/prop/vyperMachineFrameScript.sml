@@ -280,14 +280,16 @@ QED
 Theorem machine_frame_pop_memory_place:
   state_rel_frame machine_frame (pop_place cx (MemoryPlace id path))
 Proof
-  simp[pop_place_def, state_rel_frame_def, get_scopes_def, bind_def,
-       ignore_bind_def, lift_option_type_def, lift_sum_def,
-       type_check_def, check_def, assert_def, set_scopes_def, return_def] >>
-  gen_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  PairCases_on `x` >>
-  gvs[bind_def, ignore_bind_def, assert_def, set_scopes_def,
-      lift_sum_def, return_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  gvs[bind_def, ignore_bind_def, set_scopes_def, return_def]
+  simp[pop_place_def, ignore_bind_def] >>
+  match_mp_tac machine_frame_bind >> conj_tac
+  >- simp[machine_frame_primitives] >>
+  gen_tac >> simp[] >> match_mp_tac machine_frame_bind >> conj_tac
+  >- simp[machine_frame_primitives] >>
+  gen_tac >> PairCases_on `v` >> simp[] >>
+  rpt (simp[] >> match_mp_tac machine_frame_bind >> conj_tac
+       >- simp[machine_frame_primitives] >> gen_tac) >>
+  pairarg_tac >> simp[] >>
+  match_mp_tac machine_frame_bind >> conj_tac
+  >- simp[machine_frame_primitives] >>
+  gen_tac >> simp[] >> simp[state_rel_frame_def, return_def]
 QED
