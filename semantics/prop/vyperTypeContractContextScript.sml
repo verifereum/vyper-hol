@@ -697,6 +697,24 @@ Proof
     metis_tac[find_var_decl_by_name_SOME_hashmap] >>
   gvs[]
 QED
+
+Theorem static_maps_pop_guard_transfer[local]:
+  type_place_target env1 tgt = SOME vt /\
+  (!k v. FLOOKUP env1.toplevel_vtypes k = SOME v /\
+           FLOOKUP env1.bare_global_assignable k = NONE ==>
+           FLOOKUP env2.bare_global_assignable k = NONE) /\
+  (case tgt of TopLevelNameTarget nsid =>
+     IS_NONE (FLOOKUP env1.bare_global_assignable nsid) | _ => T) ==>
+  (case tgt of TopLevelNameTarget nsid =>
+     IS_NONE (FLOOKUP env2.bare_global_assignable nsid) | _ => T)
+Proof
+  Cases_on `tgt` >> simp[] >>
+  rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
+  rw[IS_NONE_EQ_NONE] >>
+  gvs[well_typed_expr_def, AllCaseEqs()] >>
+  metis_tac[]
+QED
+
 Theorem well_typed_static_maps_transfer:
   (!env1 e. well_typed_expr env1 e ==> !env2.
     env2.current_src = env1.current_src /\
@@ -778,13 +796,17 @@ Theorem well_typed_static_maps_transfer:
     well_typed_named_exprs env2 kes)
 Proof
   ho_match_mp_tac well_typed_expr_ind >>
+  rpt strip_tac
+  >~ [`well_typed_expr env2 (Pop ty tgt)`]
+  >- (fs[well_typed_expr_def] >>
+      qexists_tac `n` >>
+      conj_tac >- (first_x_assum irule >> simp[]) >>
+      simp[] >>
+      irule (SRULE [IS_NONE_EQ_NONE] static_maps_pop_guard_transfer) >>
+      qexistsl_tac [`env1`, `Type (ArrayT ty (Dynamic n))`] >>
+      simp[]) >>
+  rpt (pop_assum mp_tac) >>
   rw[well_typed_expr_def, AllCaseEqs()] >>
   gvs[] >>
-  TRY (qexists_tac `ls` >>
-       qpat_x_assum `!k members. FLOOKUP env1.flag_members k = SOME members ==> _` drule >>
-       simp[] >> NO_TAC) >>
-  TRY (qexists_tac `sig` >>
-       qpat_x_assum `!k sig. FLOOKUP env1.fn_sigs k = SOME sig ==> _` drule >>
-       simp[] >> NO_TAC) >>
   metis_tac[]
 QED

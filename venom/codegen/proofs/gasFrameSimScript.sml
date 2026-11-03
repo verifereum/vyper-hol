@@ -4,7 +4,7 @@
 Theory gasFrameSim
 Ancestors
   genFrameSim
-  frameRel asmFrame genBlockSim reorderSim mixedPrefixSim prefixSim
+  frameRel asmFrame genBlockSim regularPostfixSim reorderSim mixedPrefixSim prefixSim
   stackOpAsmSim stackOpSim instSimHelpers blockSimHelpers planWf
   codegenRel contextCodegenRel planExec asmSem stackPlanGen stackPlanTypes
   stackPlanOps stackModel venomExecSemantics venomState venomInst
