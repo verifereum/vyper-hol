@@ -6,7 +6,8 @@
 
 Theory simplifyCfgCorrectness
 Ancestors
-  simplifyCfgProof simplifyCfgPhi2 simplifyCfgSsaform simplifyCfgWffn simplifyCfgJnzdist simplifyCfgDefs cfgWf unitShapeDefs venomInst
+  simplifyCfgProof simplifyCfgPhi2 simplifyCfgSsaform simplifyCfgWffn simplifyCfgJnzdist
+  simplifyCfgReach simplifyCfgDefs cfgWf unitShapeDefs venomInst
 
 Theorem simplify_cfg_pass_correct:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
@@ -21,7 +22,10 @@ QED
 Theorem simplify_cfg_establishes_all_reachable:
   ∀func. wf_function func ⇒ all_reachable (simplify_cfg_fn func)
 Proof
-  cheat
+  rpt strip_tac >>
+  simp[simplify_cfg_fn_def, simplify_cfg_fn_with_labels_def] >>
+  irule simplify_cfg_iter_with_labels_reachable >>
+  simp[] >> strip_tac >> gvs[all_reachable_def]
 QED
 
 Theorem simplify_cfg_preserves_ssa_form:
