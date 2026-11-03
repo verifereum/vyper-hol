@@ -87,12 +87,18 @@ Proof
   rpt gen_tac >> Cases_on `p`
   >- (strip_tac >> irule immutable_metadata_frame_eq >>
       metis_tac[vyperScopePreservationTheory.append_storage_place_scopes_immutables]) >>
-  simp[append_place_def, bind_def, lift_sum_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, ignore_bind_def, lift_sum_def, return_def, raise_def]) >>
-  rpt strip_tac >>
-  imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
-  gvs[] >> metis_tac[write_place_metadata_frame, immutable_metadata_frame_refl]
+  qmatch_goalsub_abbrev_tac `append_place cx place v st` >>
+  Cases_on `place_type_value cx place st` >>
+  drule place_type_value_state >> strip_tac >> gvs[] >>
+  Cases_on `q` >>
+  gvs[Abbr `place`, append_place_def, bind_def, return_def, raise_def] >>
+  qmatch_goalsub_abbrev_tac `read_place cx place state` >>
+  Cases_on `read_place cx place state` >>
+  drule read_place_state >> strip_tac >> gvs[] >>
+  Cases_on `q` >> simp[bind_def, return_def, raise_def] >>
+  Cases_on `append_element x x' v` >>
+  simp[lift_sum_def, bind_def, return_def, raise_def] >>
+  metis_tac[write_place_metadata_frame]
 QED
 
 Theorem pop_place_metadata_frame:
