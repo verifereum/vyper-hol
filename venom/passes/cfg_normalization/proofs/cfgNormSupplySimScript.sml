@@ -2935,3 +2935,28 @@ Proof
   once_rewrite_tac[venomExecSemanticsTheory.run_blocks_def] >>
   CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_blocks``]) >> simp[]
 QED
+
+Theorem supply_probe_not_fn_bisim:
+  ~fn_bisim supply_probe_fn supply_probe_fn'
+Proof
+  simp[fn_bisim_def] >>
+  metis_tac[supply_probe_entry, supply_probe_original_terminates,
+            supply_probe_no_match]
+QED
+
+(* A counterexample to the first frozen contract, without using that contract. *)
+Theorem supply_probe_frozen_contract_counterexample:
+  wf_ssa supply_probe_fn /\ fn_inst_wf supply_probe_fn /\
+  wf_function supply_probe_fn /\ first_block_no_preds supply_probe_fn /\
+  ir_supply_covers_fn supply_probe_supply supply_probe_fn /\
+  ir_supply_inst_ok supply_probe_supply /\
+  cfg_norm_function_supply supply_probe_supply supply_probe_fn =
+    (supply_probe_fn', supply_probe_supply with
+      <| irs_next_inst := 5; irs_next_label := 1;
+         irs_used_inst_ids := [4;0;1;2;3];
+         irs_used_labels := "formal_label_0" :: supply_probe_supply.irs_used_labels |>) /\
+  ~fn_bisim supply_probe_fn supply_probe_fn'
+Proof
+  metis_tac[supply_probe_premises, supply_probe_transform,
+            supply_probe_not_fn_bisim]
+QED
