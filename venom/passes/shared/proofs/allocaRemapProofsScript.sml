@@ -3913,7 +3913,24 @@ Theorem exec_pure3_error_transfer[local]:
     exec_pure3 f inst s1 = Error err ==>
     ?err'. exec_pure3 f inst s2 = Error err'
 Proof
-  exec_err_tac exec_pure3_def
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_operands` >- gvs[exec_pure3_def] >>
+  rename1 `inst.inst_operands = a::ops` >>
+  Cases_on `ops` >- gvs[exec_pure3_def] >>
+  rename1 `inst.inst_operands = a::b::ops` >>
+  Cases_on `ops` >- gvs[exec_pure3_def] >>
+  rename1 `inst.inst_operands = a::b::c::ops` >>
+  Cases_on `ops` >> simp[exec_pure3_def] >>
+  Cases_on `eval_operand a s1` >>
+  Cases_on `eval_operand b s1` >>
+  Cases_on `eval_operand c s1` >>
+  gvs[exec_pure3_def] >>
+  Cases_on `eval_operand a s2` >>
+  Cases_on `eval_operand b s2` >>
+  Cases_on `eval_operand c s2` >> gvs[] >>
+  Cases_on `inst.inst_outputs` >- simp[] >>
+  rename1 `inst.inst_outputs = out::outs` >>
+  Cases_on `outs` >> gvs[]
 QED
 
 Theorem exec_read0_error_transfer[local]:
