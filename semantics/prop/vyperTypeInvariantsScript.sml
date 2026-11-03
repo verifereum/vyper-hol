@@ -177,10 +177,12 @@ End
 
 Definition bare_global_assignable_complete_def:
   bare_global_assignable_complete bare_global_assignable cx <=>
-    !src ts vis id ty init.
-      get_module_code cx src = SOME ts /\
-      MEM (VariableDecl vis Immutable id ty init) ts ==>
-      FLOOKUP bare_global_assignable (src,id) = SOME ty
+    (cx.in_deploy ==>
+     !src ts vis id ty init.
+       get_module_code cx src = SOME ts /\
+       MEM (VariableDecl vis Immutable id ty init) ts ==>
+       FLOOKUP bare_global_assignable (src,id) = SOME ty) /\
+    (~cx.in_deploy ==> bare_global_assignable = FEMPTY)
 End
 
 Definition flag_members_complete_def:
