@@ -3733,8 +3733,11 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
     gvs[] >>
     Cases_on
       `bind_arguments (get_tenv cx) x''2 (actual_vs ++ dflt_vs)` >>
-    gvs[Excl "evaluate_type_def", lift_option_type_def, bind_apply,
-        return_def, raise_def] >>
+    qpat_x_assum `_ = (res,st')` mp_tac >>
+    simp_tac (srw_ss() -* ["evaluate_type_def"])
+      [lift_option_type_def, bind_apply, return_def, raise_def] >>
+    strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+    simp[] >>
     `LENGTH x''2 - LENGTH es <= LENGTH x''3 /\ LENGTH es <= LENGTH x''2` by (
       qpat_x_assum `type_check _ "IntCall args length" r = _` mp_tac >>
       simp[type_check_def, assert_def] >>
@@ -3845,8 +3848,11 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
       `push_function (env_body.current_src,fn) call_env cx lock_st` >>
     rename1 `_ lock_st = (push_res,push_st)` >>
     Cases_on `push_res` >>
-    gvs[ignore_bind_apply, bind_apply, push_function_def,
-        return_def, raise_def] >>
+    qpat_x_assum `push_function _ _ _ _ = _` mp_tac >>
+    simp_tac (srw_ss()) [push_function_def, return_def, raise_def] >>
+    strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+    qpat_x_assum `_ = (res,st')` mp_tac >>
+    simp_tac (srw_ss()) [ignore_bind_apply, bind_apply] >> strip_tac >>
     `runtime_storage_consistent env_body
        (cx with stk updated_by CONS (env_body.current_src,fn))
        (lock_st with scopes := [call_env])` by
@@ -3867,9 +3873,13 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
       asm_x "body_ih" irule >>
       asm_x "actual_ih" kall_tac >> asm_x "default_ih" kall_tac >>
       asm "bind_call_env" assume_tac >>
-      gvs[type_check_def, assert_def, get_scopes_def, set_scopes_def,
-          lift_option_type_def, push_function_def, return_def,
-          protected_storage_creates_preserve_stk, AllCaseEqs()] >>
+      `~MEM (env_body.current_src,fn) cx.stk` by
+        (qpat_assum `type_check _ "recursion" _ = _` mp_tac >>
+         simp_tac (srw_ss()) [type_check_def, assert_def, AllCaseEqs()]) >>
+      simp[Excl "evaluate_type_def", type_check_def, assert_def,
+           get_scopes_def, set_scopes_def, lift_option_type_def,
+           push_function_def, return_def,
+           protected_storage_creates_preserve_stk, AllCaseEqs()] >>
       rpt (goal_assum (drule_at Any)) >>
       simp[return_def] >> metis_tac[]) >>
     (qpat_assum `_ = (res,st')` (mk_asm "suffix_eq") >>
