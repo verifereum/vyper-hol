@@ -153,15 +153,139 @@ val monadic_defs =
    vyperStateTheory.get_accounts_def, vyperStateTheory.type_check_def,
    vyperStateTheory.assert_def, vyperStateTheory.raise_def];
 
+Theorem eval_exprs_materialized_assemble[local]:
+  !es vs cx st.
+    EVERY2 (\e v. ?r. eval_expr cx e st = (INL r, st) /\
+                       read_result cx r st = (INL v, st)) es vs ==>
+    eval_exprs cx es st = (INL vs, st)
+Proof
+  Induct_on `es` >> Cases_on `vs` >>
+  simp[Once vyperInterpreterTheory.evaluate_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp (vyperInterpreterTheory.evaluate_def :: monadic_defs) >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem eval_exprs_materialized_invert[local]:
+  !es cx st vs st'.
+    EVERY pure_expr es /\ eval_exprs cx es st = (INL vs, st') ==>
+    st' = st /\
+    EVERY2 (\e v. ?r. eval_expr cx e st = (INL r, st) /\
+                       read_result cx r st = (INL v, st)) es vs
+Proof
+  Induct_on `es` >> rpt gen_tac >>
+  simp[Once vyperInterpreterTheory.evaluate_def] >>
+  simp monadic_defs >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  imp_res_tac eval_expr_preserves_state >>
+  imp_res_tac read_result_state >> gvs[] >>
+  first_x_assum drule_all >> strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem eval_exprs_prefix_code_assemble[local]:
+  !cx st c start len cv sv lv.
+    EVERY2 (\e v. ?r. eval_expr cx e st = (INL r, st) /\
+                       read_result cx r st = (INL v, st))
+      [c; start; len] [cv; sv; lv] ==>
+    (do tail_vs <- eval_exprs cx [start; len];
+        code_vs <- eval_exprs cx [c];
+        return (code_vs ++ tail_vs) od) st = (INL [cv; sv; lv], st)
+Proof
+  rpt strip_tac >>
+  `eval_exprs cx [start; len] st = (INL [sv; lv], st)` by
+    (irule eval_exprs_materialized_assemble >> gvs[]) >>
+  `eval_exprs cx [c] st = (INL [cv], st)` by
+    (irule eval_exprs_materialized_assemble >> gvs[]) >>
+  simp monadic_defs
+QED
+
+Theorem eval_exprs_builtin_dispatch_assemble[local]:
+  !cx st bt es vs.
+    EVERY2 (\e v. ?r. eval_expr cx e st = (INL r, st) /\
+                       read_result cx r st = (INL v, st)) es vs ==>
+    (case (bt, es) of
+       (Slice n, [Builtin ct (Acc Code) [a]; start; len]) =>
+         do tail_vs <- eval_exprs cx [start; len];
+            code_vs <- eval_exprs cx [Builtin ct (Acc Code) [a]];
+            return (code_vs ++ tail_vs) od
+     | _ => eval_exprs cx es) st = (INL vs, st)
+Proof
+  rpt strip_tac >>
+  drule eval_exprs_materialized_assemble >> strip_tac >>
+  Cases_on `bt` >> simp[] >>
+  Cases_on `es` >> simp[] >>
+  rename1 `eval_exprs cx (c::rest) st = (INL vs,st)` >>
+  Cases_on `c` >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  gvs[eval_exprs_prefix_code_assemble]
+QED
+
+Theorem eval_exprs_prefix_code_success[local]:
+  !cx st c start len vs st'.
+    EVERY pure_expr [c; start; len] ==>
+    (eval_exprs cx [c; start; len] st = (INL vs, st') <=>
+     (do tail_vs <- eval_exprs cx [start; len];
+         code_vs <- eval_exprs cx [c];
+         return (code_vs ++ tail_vs) od) st = (INL vs, st'))
+Proof
+  rpt gen_tac >> strip_tac >> eq_tac
+  >- (strip_tac >> drule_all eval_exprs_materialized_invert >>
+      strip_tac >> gvs[] >>
+      rename1 `eval_exprs cx [c; start; len] st = (INL [cv; sv; lv], st)` >>
+      `eval_exprs cx [start; len] st = (INL [sv; lv], st)` by
+        (irule eval_exprs_materialized_assemble >> gvs[]) >>
+      `eval_exprs cx [c] st = (INL [cv], st)` by
+        (irule eval_exprs_materialized_assemble >> gvs[]) >>
+      simp monadic_defs >> gvs[]) >>
+  simp monadic_defs >> strip_tac >> gvs[AllCaseEqs()] >>
+  imp_res_tac eval_exprs_materialized_invert >> gvs[] >>
+  irule eval_exprs_materialized_assemble >> gvs[]
+QED
+
+Theorem eval_exprs_builtin_dispatch_success[local]:
+  !cx st bt es vs st'.
+    EVERY pure_expr es ==>
+    ((case (bt, es) of
+        (Slice n, [Builtin ct (Acc Code) [a]; start; len]) =>
+          do tail_vs <- eval_exprs cx [start; len];
+             code_vs <- eval_exprs cx [Builtin ct (Acc Code) [a]];
+             return (code_vs ++ tail_vs) od
+      | _ => eval_exprs cx es) st = (INL vs, st') <=>
+     eval_exprs cx es st = (INL vs, st'))
+Proof
+  rpt strip_tac >>
+  Cases_on `bt` >> simp[] >>
+  Cases_on `es` >> simp[] >>
+  rename1 `EVERY pure_expr (c::rest)` >>
+  Cases_on `c` >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  gvs[GSYM eval_exprs_prefix_code_success]
+QED
+
 (* ===== Forward direction: eval_pure_expr/exprs SOME ⇒ eval_expr/exprs INL ===== *)
 
-Theorem eval_pure_to_eval_mutual:
+Theorem eval_pure_to_materialized_mutual[local]:
   (∀cx st e v.
     eval_pure_expr cx st e = SOME v ⇒
     eval_expr cx e st = (INL v, st)) ∧
   (∀cx st es vs.
     eval_pure_exprs cx st es = SOME vs ⇒
-    eval_exprs cx es st = (INL vs, st))
+    eval_exprs cx es st = (INL vs, st) /\
+    EVERY2 (\e v. ?r. eval_expr cx e st = (INL r, st) /\
+                       read_result cx r st = (INL v, st)) es vs)
 Proof
   ho_match_mp_tac eval_pure_expr_ind >>
   rpt conj_tac >> rpt gen_tac >> strip_tac
@@ -222,13 +346,16 @@ Proof
       `bt <> Env MsgGas` by
         (strip_tac >>
          gvs[AllCaseEqs(), vyperStatePreservationTheory.evaluate_builtin_MsgGas]) >>
-      simp[Once vyperInterpreterTheory.evaluate_def] >>
+      simp[Once vyperInterpreterTheory.evaluate_def,
+           eval_exprs_builtin_dispatch_assemble] >>
       simp monadic_defs >>
       simp[vyperStateTheory.type_check_def, vyperStateTheory.assert_def] >>
       gvs[AllCaseEqs()] >>
-      simp monadic_defs >>
       imp_res_tac result_array_length_state >>
+      simp monadic_defs >>
       simp[vyperContextTheory.builtin_args_length_ok_def] >>
+      drule eval_exprs_builtin_dispatch_assemble >>
+      disch_then (qspec_then `bt` assume_tac) >> gvs[] >>
       simp[vyperStateTheory.get_accounts_def] >>
       simp monadic_defs)
   (* TypeBuiltin *)
@@ -253,6 +380,17 @@ Proof
       simp[Once vyperInterpreterTheory.evaluate_def] >>
       simp monadic_defs >>
       drule read_result_state >> simp[])
+QED
+
+Theorem eval_pure_to_eval_mutual:
+  (∀cx st e v.
+    eval_pure_expr cx st e = SOME v ⇒
+    eval_expr cx e st = (INL v, st)) ∧
+  (∀cx st es vs.
+    eval_pure_exprs cx st es = SOME vs ⇒
+    eval_exprs cx es st = (INL vs, st))
+Proof
+  metis_tac[eval_pure_to_materialized_mutual]
 QED
 
 Theorem eval_pure_expr_to_eval_expr_some:
@@ -388,7 +526,11 @@ Proof
          (`EVERY pure_expr es` by gvs[listTheory.EVERY_EL] >>
           fs[vyperStateTheory.bind_def] >>
           gvs[AllCaseEqs()] >>
-          rename1 `eval_exprs cx es st = (INL vs, s1)` >>
+          drule eval_exprs_builtin_dispatch_success >>
+          disch_then (qspecl_then [`cx`, `st`, `bt`] assume_tac) >> gvs[] >>
+          rename1 `!vs' st'. vs = vs' /\ s1 = st' <=> eval_exprs cx es st = (INL vs',st')` >>
+          `eval_exprs cx es st = (INL vs,s1)` by metis_tac[] >>
+          qpat_x_assum `!vs' st'. _ <=> _` kall_tac >>
           `eval_pure_exprs cx st es = SOME vs` by metis_tac[] >>
           simp[] >>
           `s1 = st` by metis_tac[eval_exprs_preserves_state] >>

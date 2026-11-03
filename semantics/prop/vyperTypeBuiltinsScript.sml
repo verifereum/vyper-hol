@@ -2454,7 +2454,17 @@ Proof
       is_flag_type_inv, is_comparable_type_inv,
       is_uint256_type_inv, is_bytes32_type_inv,
       is_bytes_or_string_type_inv] >>
-  gen_tac >>
+  gen_tac
+  >~ [`EVERY (\t. ?bd. t = BaseT (BytesT bd)) ts`,
+      `evaluate_builtin _ _ _ (Concat _) _ _ <> _`] >-
+    (qspecl_then [`ts`, `cx`, `SUM (MAP bytelike_type_bound ts)`,
+                  `tvs`, `tv`, `vs`, `acc`, `msg`] mp_tac
+       concat_bytes_dispatch_no_type_error >> simp[])
+  >~ [`EVERY (\t. ?m. t = BaseT (StringT m)) ts`,
+      `evaluate_builtin _ _ _ (Concat _) _ _ <> _`] >-
+    (qspecl_then [`ts`, `cx`, `SUM (MAP bytelike_type_bound ts)`,
+                  `tvs`, `tv`, `vs`, `acc`, `msg`] mp_tac
+       concat_string_dispatch_no_type_error >> simp[]) >>
 
   (* Bop: delegate to well_typed_binop_no_type_error *)
   TRY (metis_tac[well_typed_builtin_bop_no_type_error] >> NO_TAC) >>
@@ -2481,17 +2491,6 @@ Proof
        simp[evaluate_builtin_def, evaluate_as_wei_value_def, LET_THM] >>
        Cases_on `d` >> simp[within_int_bound_def] >> intLib.ARITH_TAC >> NO_TAC) >>
   TRY (irule as_wei_value_no_type_error >> gvs[] >> NO_TAC) >>
-  (* Concat: bytes or string — try both *)
-  TRY (unabbrev_all_tac >>
-       qspecl_then [`ts`, `cx`, `n`, `tvs`, `tv`, `vs`, `acc`, `msg`] mp_tac
-         concat_bytes_dispatch_no_type_error >>
-       simp[] >> NO_TAC) >>
-  TRY (unabbrev_all_tac >>
-       qspecl_then [`ts`, `cx`, `n`, `tvs`, `tv`, `vs`, `acc`, `msg`] mp_tac
-         concat_string_dispatch_no_type_error >>
-       simp[] >> NO_TAC) >>
-  TRY (irule concat_bytes_no_type_error >> gvs[] >> NO_TAC) >>
-  TRY (irule concat_string_builtin_no_type_error >> gvs[] >> NO_TAC) >>
   (* Slice: bytes or string — try both *)
   TRY (qspecl_then [`cx`, `n`, `bd`, `tvs`, `tv`, `vs`, `acc`, `msg`] mp_tac
          slice_bytes_dispatch_no_type_error >>
@@ -2874,7 +2873,8 @@ Resume well_typed_type_builtin_no_type_error[extract32]:
   gvs[LENGTH_EQ_NUM_compute] >>
   Cases_on `tvs` >> gvs[] >>
   drule_all typed_bytes_value_is_BytesV >> strip_tac >> gvs[] >>
-  drule_all typed_int_value_is_IntV >> strip_tac >> gvs[] >>
+  rename1 `evaluate_type _ (BaseT (UintT width)) = SOME _` >>
+  `is_int_type (BaseT (UintT width))` by simp[] >>
   drule_all evaluate_extract32_supported_no_type_error >>
   fs[evaluate_type_builtin_def] >>
   simp[AllCaseEqs(), LET_THM]
@@ -3001,6 +3001,8 @@ Proof
   >- (gvs[LENGTH_EQ_NUM_compute] >>
       Cases_on `tvs` >> gvs[] >>
       drule_all typed_bytes_value_is_BytesV >> strip_tac >> gvs[] >>
+      rename1 `evaluate_type _ (BaseT (UintT width)) = SOME _` >>
+      `is_int_type (BaseT (UintT width))` by simp[] >>
       drule_all typed_int_value_is_IntV >> strip_tac >> gvs[] >>
       gvs[evaluate_type_builtin_def, AllCaseEqs()] >>
       drule_all evaluate_extract32_well_typed >> simp[])
