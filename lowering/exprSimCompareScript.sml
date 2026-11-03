@@ -90,6 +90,15 @@ Proof
   irule w2i_i2w_within_signed >> qexists_tac `w` >> simp[]
 QED
 
+Theorem compare_int_value_compatible[local]:
+  value_has_type tv (IntV n) /\ value_has_type tv v ==>
+  ?k. v = IntV k
+Proof
+  Cases_on `tv` >> simp[value_has_type_def] >>
+  rename1 `BaseTV bt` >> Cases_on `bt` >>
+  Cases_on `v` >> simp[value_has_type_def]
+QED
+
 (* The source result of a comparison of two word values of one type is
    eval_compare on their words. *)
 Theorem bop_result_compare:
@@ -108,21 +117,23 @@ Proof
   (* one kind of v1 at a time, so that each unfolding of evaluate_binop
      covers a quarter of the value pairs *)
   >>~- ([`value_has_type _ (IntV _)`],
-        Cases_on `v2` >>
+        drule_all compare_int_value_compatible >>
+        disch_then (qx_choose_then `k` SUBST_ALL_TAC) >>
         gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
             expr_res_ok_def, binop_negate_def] >>
         qspecl_then [`ty`, `tv`, `n`] mp_tac int_word_cmp >>
         (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-        qspecl_then [`ty`, `tv`, `i`] mp_tac int_word_cmp >>
+        qspecl_then [`ty`, `tv`, `k`] mp_tac int_word_cmp >>
         (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
         Cases_on `is_uint256 ty` >> fs[eval_compare_def, val_to_w256_def] >>
         word_cmp_tac)
   >>~- ([`value_has_type _ (DecimalV _)`],
-        Cases_on `v2` >>
-        gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-            expr_res_ok_def, binop_negate_def] >>
         Cases_on `tv` >> gvs[value_has_type_def] >>
         rename1 `BaseTV bt` >> Cases_on `bt` >> gvs[value_has_type_def] >>
+        Cases_on `v2` >> gvs[value_has_type_def] >>
+        rename1 `bop_result cx ann _ tys (DecimalV n) (DecimalV i) es` >>
+        gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
+            expr_res_ok_def, binop_negate_def] >>
         `w2i (i2w n : bytes32) = n /\ w2i (i2w i : bytes32) = i` by
           (rw[] >> irule w2i_i2w_within_signed >> qexists_tac `168` >>
            simp[]) >>
