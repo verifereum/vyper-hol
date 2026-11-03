@@ -1402,3 +1402,37 @@ Proof
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   irule storage_read_live_array_elem >> simp[])
 QED
+
+Theorem array_vv_post:
+  vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
+  expr_type obj = ArrayT et bd /\
+  read_result cx tv es1 = (INL arr,es1) /\
+  read_result cx tv' es1 = (INL v,es1) /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV evt bd) /\
+  value_has_type evt v /\
+  evaluate_subscripts (ArrayTV evt bd) arr [ValueSubscript (IntV (&j))] = INL v /\
+  j < bound_length bd /\
+  eval_operand (vv_operand bvv) q = SOME w /\
+  eval_operand dst q = SOME (w + n2w
+    (if is_slot_addressed (vv_loc bvv) then
+       (case bd of Fixed cap => 0 | Dynamic cap => 1) + j * type_slot_size evt
+     else (case bd of Fixed cap => 0 | Dynamic cap => 32) + j * type_memory_size evt)) /\
+  (!id path. tv' = PlaceR (MemoryPlace id path) ==>
+     ?p0. tv = PlaceR (MemoryPlace id p0) /\
+       path = p0 ++ [ValueSubscript (IntV (&j))]) ==>
+  vv_post ctx func cenv cx (Subscript et obj idx) es sa sn s0 es1 tv'
+    (LocatedValue et (mk_ptr dst (vv_loc bvv))) q
+Proof
+  strip_tac >>
+  gvs[vv_post_def, vyperASTTheory.expr_type_def] >>
+  conj_tac
+  >- (drule_all (SRULE[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+                    array_vv_holds_elem) >> simp[]) >>
+  conj_tac
+  >- (Cases_on `vv_loc bvv = LocMemory`
+      >- (gvs[compileEnvTheory.is_slot_addressed_def] >>
+          drule_all (SRULE[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+                       array_vv_at_elem) >> simp[]) >>
+      simp[vv_at_def, contextTheory.mk_ptr_def]) >>
+  first_assum ACCEPT_TAC
+QED
