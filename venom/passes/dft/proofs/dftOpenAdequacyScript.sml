@@ -114,3 +114,136 @@ Proof
        gas_bind_outputs] >>
   AP_THM_TAC >> AP_TERM_TAC >> simp[FUN_EQ_THM, dft_open_materialize_def]
 QED
+
+(* C3.2.6 DESIGN REPORT (specifications only, not new theorem claims).
+
+   Use the following meta-abbreviations in the proposed contracts:
+     M n s = dft_open_materialize xs n s
+     MR n r = dft_open_materialize_result xs n r
+     Q r r' = dft_open_result_eq r r'
+     Next = dft_open_next a ctx
+   All contracts have premise dft_sparse_oracle a xs.
+
+   A segment should STOP at a relative stack boundary, before resuming the
+   saved stack K.  A candidate boundary predicate for run_blocks is:
+     B K c <=> ?r st m. c = DftOpen (DftDone r) st m /\
+       (st = K \/ (st = [] /\
+         ((?e. r = Error e) \/ (?s. r = Halt s) \/ (?z s. r = Abort z s))))
+   A first-hit path to a boundary E has the exact proposed definition
+     Hit E c d <=> ?k. FUNPOW Next k c = d /\ E d /\
+                         !j. j < k ==> ~E (FUNPOW Next j c).
+   This must not be replaced by arbitrary RTC reachability: DftDone IntRet
+   at stack K is the endpoint even when K is nonempty.  The next transition
+   would consume a caller continuation, and is OUTSIDE the segment.
+
+   Forward run_blocks contract, with arbitrary counter n and saved stack K:
+     run_blocks fuel ctx fn (M n s) = r ==>
+     ?rr m st.
+       Hit (B K) (DftOpen (DftEnter fn fuel s) K n)
+                 (DftOpen (DftDone rr) st m) /\ Q (MR m rr) r
+   Fatal outcomes may clear K; IntRet must preserve K at this endpoint.
+   Add m >= n to every segment theorem.  run_blocks cannot return OK;
+   this needs an explicit lemma, not an omitted case.
+
+   exec_block and step_inst cannot share that boundary: their OK results
+   already become a branch entry or the next instruction in this machine.
+   Candidate exec boundary is B K, additionally allowing
+     DftOpen (DftEnter fn budget t) K m.
+   Candidate step boundary additionally allows the next DftAt at stack K,
+   and branch entry at stack K.  The endpoint predicates must be first-hit
+   independent of the EXPECTED result; otherwise a path could run through
+   the caller until it happens to encounter that result.
+
+   Exact forward exec_block contract:
+     exec_block budget ctx bb (M n s) = r ==>
+     ?rr m d. Q (MR m rr) r /\
+       Hit Eblock (DftOpen (DftAt fn budget bb s) K n) d /\
+       (case rr of OK t => d = DftOpen (DftEnter fn budget t) K m
+        | _ => ?st. d = DftOpen (DftDone rr) st m /\ B K d)
+   Here Eblock c <=> B K c \/
+     (?t m. c = DftOpen (DftEnter fn budget t) K m).
+   An OK result here must have ~t.vs_halted: exec_block converts a halted
+   terminator to Halt, and only terminators return OK.  Prove this fact.
+
+   Exact forward step_inst contract, given get_instruction bb s.vs_inst_idx
+   = SOME inst:
+     step_inst budget ctx inst (M n s) = r ==>
+     ?rr m d. Q (MR m rr) r /\
+       Hit Estep (DftOpen (DftAt fn budget bb s) K n) d /\
+       (case rr of OK t =>
+          d = DftOpen (dft_open_continue fn budget bb inst s t) K m
+        | _ => ?st. d = DftOpen (DftDone rr) st m /\ B K d)
+   Estep c <=> B K c \/ (?t m.
+     c = DftOpen (DftEnter fn budget t) K m) \/ (?t m.
+     c = DftOpen (DftAt fn budget bb t) K m /\
+     t.vs_inst_idx = SUC s.vs_inst_idx).
+   This is a FORWARD contract, not an iff: dft_open_continue overwrites the
+   instruction index and converts OK halted terminators to Halt.  An exact
+   reverse step-result theorem cannot be inferred from that endpoint.
+   Reverse whole-run adequacy needs a separate machine-path soundness proof
+   with a stack interpretation; constructor determinism alone is not enough.
+
+   run_defs_ind was inspected (tool evidence in E0006 successor episode):
+   P0 has just the guarded recursive callee run_blocks IH; P1 has both the
+   instruction IH and the recursive nonterminator exec_block IH; P2 has
+   block-execution IH and recursive next-block IH at fuel'.  Its next-block
+   guard prints run_block_non_phis, not exec_block; check the wrapper equation.
+   Mapping: P0/INVOKE uses push + P2 callee segment + one return-pop, binding
+   through dft_open_return_materialize.  Callee Halt/Abort/Error propagates;
+   callee OK requires the no-OK lemma.  P1 joins the P0 segment to the tail
+   P1 segment iff OK and nonterminator; otherwise stop at Eblock (converting
+   halted terminator OK to Halt).  P2 performs block lookup/phi entry and P1;
+   OK nonhalt joins the next P2 segment.  Phi/fuel/lookup errors terminate
+   immediately, possibly with [].  Error strings are irrelevant to Q only;
+   non-Error states remain EXACT.  First-hit segment concatenation and stack
+   restoration are separate proof obligations before this mutual induction.
+
+   Raw interfaces, independently of fixed-fuel terminal adequacy:
+   retain the exact state equivalence proposed in dftOpenMachine's comment.
+   Prove its two implications separately with resolvable context entry,
+   unique block labels in EVERY context function, and the fixed sparse a.
+   Completeness strengthens to: for every q there is B such that for every
+   root fuel F >= B there are steps,budget,bb,ghost,K,n with budget >= q,
+   FUNPOW Next steps (DftOpen (DftEnter entry F initial) [] 0) =
+     DftOpen (DftAt fn budget bb ghost) K n,
+   get_instruction bb ghost.vs_inst_idx = SOME inst and observed = M n ghost.
+   Soundness states that any such finite prefix implies raw_reachable for
+   observed; it needs an invariant covering saved callers, not just the
+   currently active fn.  No same-fuel raw equivalence is proposed.
+
+   Concrete sufficient-root-bound recurrence for a finite raw derivation:
+     entry:             B(q) = q + 1
+     next with fuel f:  B(q) = Bpred(MAX q f)
+     block with fuel f: B(q) = Bpred(MAX (q + 1) f)
+     callee entry:      B(q) = Bpred(q + 1).
+   The predecessor's universal F>=B contract is essential.  At next/block,
+   fuel_mono raises successful step_inst f = OK s' to the available active
+   budget; that theorem explicitly excludes ALL Error results.  Returning
+   INVOKE restores the same caller budget; block/callee entry costs one.
+   First prove forward step segments and monotone budget decoration of their
+   endpoint counters/ghost states; do not infer counter equality from equality
+   of list results (exhausted zero reads erase that information).
+
+   Dispatch interface needed for both directions:
+     ALL_DISTINCT (fn_labels fn) /\ active_inst fn inst s ==>
+     ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+          get_instruction bb s.vs_inst_idx = SOME inst.
+   Block-entry dispatch contract:
+     ALL_DISTINCT (fn_labels fn) /\ enters_block fn s t /\
+     active_inst fn inst t ==>
+     ?bb sp. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+       eval_phis s bb.bb_instructions = OK sp /\
+       t = sp with vs_inst_idx := phi_prefix_length bb.bb_instructions /\
+       get_instruction bb t.vs_inst_idx = SOME inst.
+   This additionally needs eval_phis to preserve current_bb.  wf_function
+   supplies uniqueness.  Prove dispatch separately before raw induction.
+
+   Proposed proof leaves for strategist review (NOT executor-created PLAN):
+   no-OK/exec-OK classification; unique-label dispatch; first-hit composition
+   and stack propagation; forward mutual segments; stack/path soundness;
+   raw completeness with the explicit bound recurrence; raw soundness.
+   They depend on the already checked primitive/phi/call boundaries.  The
+   proposed Hit/end predicates still require constructor validation before
+   a general adequacy theorem is rated low-risk.  Uniform schedule matching
+   remains entirely separate from this diagnostic.
+*)
