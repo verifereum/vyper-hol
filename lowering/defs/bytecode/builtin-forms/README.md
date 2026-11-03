@@ -45,3 +45,11 @@ that relaxation.
 `oracle/` holds the annotated AST/layout JSON and deployment/runtime bytecode
 from the pinned Python Vyper (`VYPER_PIN`), produced as in
 `../name-collisions/README.md`.
+
+The concat oracles were also checked with the buffer-overrun fix from
+[vyperlang/vyper#5295](https://github.com/vyperlang/vyper/pull/5295)
+(`95fe091b2d654184a6427bfe8732ac223a885e6f`) applied to the pinned compiler's
+`lower_concat`. The `Bytes[10]` followed by `bytes4` now requests a 74-byte
+allocation because its last full-word store can reach beyond the 64-byte
+logical value buffer. The deployment/runtime bytecode, annotated AST and
+compilation settings are unchanged.
