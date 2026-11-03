@@ -28,6 +28,8 @@ proof.
 - `compilerNativeJson.sml`, `bytecode_parity_json.mlb`,
   `compilerNativeJsonMLtonMain.sml`: the runner for programs given as
   annotated-AST JSON (below).
+- `check_programs.sml`: runs `check_contract` on such programs, for
+  `tools/bytecode_fuzz.py`.
 
 ## Use
 
@@ -84,7 +86,8 @@ compiled fixture are written to `<dir>/<name>.hex`.
 
 `compilerNativeJson.sml` does natively what the witness theories do by
 `EVAL` in `vyperCheckContractFrontendLib.prepare_check_input` and
-`memoryStoreWitnessLib.program`. It doesn't run `check_contract`. The steps:
+`memoryStoreWitnessLib.program`. It doesn't run `check_contract`;
+`check_programs.sml` does that, by `EVAL`, under `holbuild run`. The steps:
 
 - decode the JSON with `JsonASTDecodeFn (JsonImportCV)`;
 - translate it with the cv-translated `translate_annotated_ast` that
@@ -106,8 +109,9 @@ the hidden `tests/.emit/` directory, which holbuild doesn't scan.
 
 `tools/bytecode_fuzz.py` uses this runner. It generates random programs,
 exports each one with the pinned compiler as the witness suites do, and
-compares the result. With `--minimize`, it also reduces each divergence to
-`<name>.min.vy`.
+compares the result. Programs that `check_programs.sml` rejects are counted
+as `checker-gap`, not as divergences. With `--minimize`, it also reduces
+each divergence to `<name>.min.vy`.
 
 ## What the generator exports
 

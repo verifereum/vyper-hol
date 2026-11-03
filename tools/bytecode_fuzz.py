@@ -9,15 +9,19 @@ JSON with the native runner (tools/build_native_json_parity.py) and compares.
 
 Run it with the canonical oracle venv's `vyper` first on PATH (see
 lowering/defs/bytecode/README.md). Programs Python Vyper rejects are
-discarded; programs the HOL frontend or compiler rejects are coverage gaps,
-counted separately from divergences. Every program that is not a PASS is kept
-in the output directory with its JSON, oracle, native bytes and runner verdict.
+discarded; programs the HOL frontend, check_contract or the compiler rejects
+are coverage gaps, counted separately from divergences. check_contract runs
+through `holbuild run` on lowering/defs/bytecode/native/check_programs.sml,
+so build vyperCheckContractFrontendLib's theories first. Every program that
+is not a PASS is kept in the output directory with its JSON, oracle, native
+bytes and verdict.
 
 Vyper's bytecode at the pin depends on PYTHONHASHSEED for some programs, so
 the oracle uses seed 0, and a mismatch counts as a divergence only if seeds
 1-7 do not produce the native bytes either ("seed-dependent" otherwise).
 With --minimize, each divergence is also reduced, by deleting statements and
-unwrapping blocks, to <name>.min.vy.
+unwrapping blocks, to <name>.min.vy; the reduced program is not rechecked
+with check_contract.
 """
 
 import argparse
@@ -35,6 +39,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "lowering/defs/bytecode/native/bytecode_parity_json.exe"
 SANITIZER = ROOT / "tests/sanitize_check_contract_json.py"
+CHECKER = ROOT / "lowering/defs/bytecode/native/check_programs.sml"
 ORACLE_FLAGS = ["--experimental-codegen", "--evm-version", "prague", "-O", "none",
                 "--disable-bytecode-metadata", "-f", "bytecode,bytecode_runtime"]
 # The hash seeds tried before a mismatch counts as a divergence.
@@ -263,10 +268,28 @@ def run(args, seed=0, env=()):
 
 
 def run_native(work: Path):
-    """Runner output lines for the exports in work; native bytes go to work/native."""
+    """Runner output lines for the exports in work, and its exit status; native
+    bytes go to work/native."""
     (work / "native").mkdir(exist_ok=True)
     result = run([str(RUNNER), str(work)], env={"NATIVE_PARITY_DUMP": str(work / "native")})
-    return [l for l in result.stdout.splitlines() if l.split(" ", 1)[0] in ("PASS", "FAIL", "REJECT")]
+    lines = [l for l in result.stdout.splitlines() if l.split(" ", 1)[0] in ("PASS", "FAIL", "REJECT")]
+    return lines, result.returncode
+
+
+def checker_rejects(paths):
+    """{stem: reason} for the JSON files check_contract rejects, in runtime or
+    deploy mode."""
+    listing = paths[0].parent / f"check-{paths[0].stem}.txt"
+    listing.write_text("".join(f"{p}\n" for p in paths))
+    result = subprocess.run(["holbuild", "run", str(CHECKER)], cwd=ROOT, capture_output=True,
+                            text=True, env={**os.environ, "CHECK_LIST": str(listing)})
+    listing.unlink()
+    lines = [l.split(" ", 1) for l in result.stdout.splitlines() if l.startswith("CHECK")]
+    if len(lines) != len(paths):
+        raise SystemExit(f"checker gave {len(lines)} results for {len(paths)} programs:\n"
+                         + result.stderr[-2000:])
+    return {Path(rest.split(": ", 1)[0]).stem: rest.partition(": ")[2]
+            for tag, rest in lines if tag == "CHECKER-REJECT"}
 
 
 def checked_verdict(line, work: Path):
@@ -348,7 +371,7 @@ def verdict(source: Path, work: Path):
     copy.write_text(source.read_text())
     if export(copy) is not None:
         return None
-    lines = run_native(work)
+    lines, _ = run_native(work)
     return checked_verdict(lines[0], work)[1:] if lines else None
 
 
@@ -400,6 +423,10 @@ def main():
     args = parser.parse_args()
     if not RUNNER.exists():
         raise SystemExit(f"missing {RUNNER}; run tools/build_native_json_parity.py")
+    pin = (ROOT / "VYPER_PIN").read_text().strip()
+    compiler = run(["vyper", "--version"]).stdout.strip()
+    if not compiler.endswith("commit." + pin[:8]):
+        raise SystemExit(f"vyper on PATH is {compiler!r}, not VYPER_PIN {pin}")
     work = args.out / "work"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
@@ -417,12 +444,22 @@ def main():
             counts["vyper-reject"] += 1
             vyper_errors[error[0][:100]] += 1
             source.unlink()
+    exported = sorted(work.glob("*.hex"))
+    chunks = [[p.with_suffix(".json") for p in exported[i::args.jobs]] for i in range(args.jobs)]
     with ThreadPoolExecutor(args.jobs) as pool:
-        checked = list(pool.map(lambda l: checked_verdict(l, work), run_native(work)))
-    verdicts = {}
-    for name, category, detail in checked:
-        verdicts[name] = (category, detail)
-        counts[category] += 1
+        unchecked = {}
+        for rejects in pool.map(checker_rejects, [c for c in chunks if c]):
+            unchecked.update(rejects)
+    lines, status = run_native(work)
+    with ThreadPoolExecutor(args.jobs) as pool:
+        checked = list(pool.map(lambda l: checked_verdict(l, work), lines))
+    verdicts = {name: (category, detail) for name, category, detail in checked}
+    for source in exported:  # programs after a runner crash
+        verdicts.setdefault(source.stem, ("runner-error", f"no runner verdict (runner exit {status})"))
+    for name, reason in unchecked.items():
+        if verdicts[name][0] != "frontend-gap":
+            verdicts[name] = ("checker-gap", f"{reason[:200]} (runner: {verdicts[name][1] or 'pass'})")
+    counts.update(category for category, _ in verdicts.values())
     for name, (category, detail) in verdicts.items():
         if category != "pass":
             keep = args.out / category
@@ -440,7 +477,7 @@ def main():
     print(json.dumps({"seed": args.seed, "generated": args.count, **counts}, indent=2))
     for error, n in vyper_errors.most_common(5):
         print(f"vyper-reject x{n}: {error}")
-    for category in ("divergence", "runner-error", "compiler-gap", "frontend-gap"):
+    for category in ("divergence", "runner-error", "compiler-gap", "frontend-gap", "checker-gap"):
         details = Counter(d.split(" (")[0] for c, d in verdicts.values() if c == category)
         for detail, n in details.most_common(5):
             print(f"{category} x{n}: {detail[:160]}")

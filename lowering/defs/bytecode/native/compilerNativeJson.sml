@@ -158,6 +158,10 @@ structure compilerNativeJson = struct
         dir :: names => (dir, if null names then fixture_names dir else names)
       | [] => (print "usage: bytecode_parity_json.exe DIR [NAME ...]\n";
                OS.Process.exit OS.Process.failure)
+    val () = if null names then
+               (print ("no <name>.json/<name>.hex pairs in " ^ dir ^ "\n");
+                OS.Process.exit OS.Process.failure)
+             else ()
     val results = map (run_one dir) names
     fun count tag = length (List.filter (fn t => t = tag) results)
   in
