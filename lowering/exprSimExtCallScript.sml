@@ -32,6 +32,41 @@ Theory exprSimExtCall
 Ancestors
   list rich_list exprSim exprSimHyps vyperAST vyperInterpreter
 
+(* Source boundary: positional locations are read only after kwargs. *)
+Theorem eval_extcall_stages:
+  eval_expr cx (Call ann (ExtCall static skip sig opts) args dflt) =
+    do target <- eval_exprs cx (TAKE 1 args);
+       results <- eval_expr_results cx
+         (TAKE (LENGTH (FST (SND sig))) (DROP 1 args));
+       kwargs <- eval_exprs cx (DROP (1 + LENGTH (FST (SND sig))) args);
+       vs <- read_results cx results;
+       eval_ext_call cx static skip sig opts (target ++ vs ++ kwargs)
+    od
+Proof
+  simp[Once evaluate_def]
+QED
+
+(* Interface probes for empty and word-sized raw returndata. *)
+Theorem extcall_void_decode_probe[local]:
+  evaluate_abi_decode_return FEMPTY NoneT [] = INL NoneV
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def]
+QED
+
+Theorem extcall_word_decode_probe[local]:
+  evaluate_abi_decode_return FEMPTY (BaseT (UintT 256))
+    (REPLICATE 32 (0w:word8)) = INL (IntV 0)
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def]
+QED
+
+Theorem extcall_short_word_decode_probe[local]:
+  evaluate_abi_decode_return FEMPTY (BaseT (UintT 256)) [] =
+    INR "abi_decode invalid"
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def]
+QED
+
 Theorem compile_extcall_case:
   !nocalls ctx func cenv cx ann is_static skip sig opts args dflt.
     exprs_case nocalls ctx func cenv cx (TAKE 1 args) /\
