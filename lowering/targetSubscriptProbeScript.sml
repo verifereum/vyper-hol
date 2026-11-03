@@ -461,3 +461,21 @@ Proof
   gvs[get_storage_after_set, lookup_storage_def, update_storage_def,
       APPLY_UPDATE_THM]
 QED
+
+Theorem probe_guarded_declared_region:
+  !mid name subs tr slot tv.
+    declared_storage_region probe_guarded_context mid name subs =
+      SOME (tr,slot,tv) <=>
+    mid = NONE /\ name = "outer" /\ subs = [] /\ tr = F /\ slot = 0w /\
+    tv = ArrayTV (ArrayTV (BaseTV BoolT) (Dynamic 1)) (Dynamic 1)
+Proof
+  rpt gen_tac >> Cases_on `mid` >>
+  simp[declared_storage_region_def] >>
+  EVAL_TAC >>
+  Cases_on `name = "outer"` >> gvs[] >>
+  Cases_on `subs = []` >> gvs[] >>
+  EVAL_TAC >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  metis_tac[]
+QED
