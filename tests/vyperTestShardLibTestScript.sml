@@ -39,8 +39,7 @@ fun exercise_generator () = let
     "\"traces\":[{\"trace_type\":\"not_decodable\"}]}"]
   val fixture = "\"fixture\":{\"item_type\":\"fixture\",\"traces\":[],\"source_code\":\"pass\"}"
   val excluded = ",\"test_ecrecover_oog_handling\":{\"item_type\":\"test\"}"
-  val unsupported = ",\"gas\":{\"item_type\":\"test\",\"deps\":[],\"source_code\":\"msg.gas\"}"
-  fun export total = put json (String.concat ["{", fixture, excluded, unsupported,
+  fun export total = put json (String.concat ["{", fixture, excluded,
     if total = 0 then "" else ",",
     String.concatWith "," (List.tabulate (total, item)), "}"])
   fun path thy = "generated/" ^ thy ^ "Script.sml"
