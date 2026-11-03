@@ -332,3 +332,38 @@ Theorem first_block_predecessor_checks:
 Proof
   EVAL_TAC
 QED
+
+(* ===== Call success checks ===== *)
+
+(* An entry block holding insts, beside a block "fail" that reverts. *)
+Definition call_probe_fn_def:
+  call_probe_fn insts = mk_raw_function "entry"
+    [<| bb_label := "entry"; bb_instructions := insts |>;
+     <| bb_label := "fail";
+        bb_instructions := [mk_inst 9 REVERT [Lit 0w; Lit 0w] []] |>]
+End
+
+Definition probe_call_def:
+  probe_call = mk_inst 0 CALL (REPLICATE 7 (Lit 0w)) ["s"]
+End
+
+Theorem call_check_checks:
+  call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 ASSERT [Var "s"] []; mk_inst 2 STOP [] []]) /\
+  call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 ASSIGN [Var "s"] ["t"];
+     mk_inst 2 ASSERT [Var "t"] []; mk_inst 3 STOP [] []]) /\
+  call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 JNZ [Var "s"; Label "ok"; Label "fail"] []]) /\
+  ~call_checks_ok (call_probe_fn [probe_call; mk_inst 1 STOP [] []]) /\
+  ~call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 MSTORE [Lit 0w; Lit 0w] [];
+     mk_inst 2 ASSERT [Var "s"] []; mk_inst 3 STOP [] []]) /\
+  ~call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 INVOKE [Label "f"] [];
+     mk_inst 2 ASSERT [Var "s"] []; mk_inst 3 STOP [] []]) /\
+  ~call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 JNZ [Var "s"; Label "fail"; Label "ok"] []])
+Proof
+  EVAL_TAC
+QED

@@ -458,7 +458,7 @@ Definition asm_selfdestruct_def:
                               ben_acct.balance + bal
                           else s.as_accounts a) in
         AsmHalt (s with <|
-          as_stack := stk; as_accounts := accts' |>)
+          as_stack := stk; as_accounts := accts'; as_returndata := [] |>)
     | _ => AsmError "selfdestruct: stack underflow"
 End
 

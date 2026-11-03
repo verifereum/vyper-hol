@@ -2730,6 +2730,7 @@ Proof
 QED
 
 Theorem bare_global_assignable_complete_context_cong[local]:
+  cx1.in_deploy = cx2.in_deploy /\
   (!src. get_module_code cx1 src = get_module_code cx2 src) ==>
   (bare_global_assignable_complete globals cx1 <=>
    bare_global_assignable_complete globals cx2)

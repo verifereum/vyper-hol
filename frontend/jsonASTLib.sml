@@ -797,6 +797,18 @@ fun d_json_expr () : term decoder = achoose "expr" [
     JSONDecode.map (fn ((func, args, kwargs), (ty, src_id_opt)) => mk_JE_Call(func, args, kwargs, ty, src_id_opt)) $
     tuple2 (tuple3 (field "func" (delay d_json_expr),
                     achoose "call arguments" [
+                      (* raw_log checks its reduced topic list, including
+                         constant subscripts whose original node is not List. *)
+                      check (field "func" $ check_ast_type "Name" $ field "id" string)
+                        (fn s => s = "raw_log") "not raw_log" $
+                      field "args" $
+                        JSONDecode.map (fn (args, folded) =>
+                          case args of
+                            topics::rest => mk_JE_Folded (topics, folded)::rest
+                          | _ => args) $
+                        tuple2 (array (delay d_json_expr),
+                          sub 0 $ field "folded_value" $ check_ast_type "List" $
+                            delay d_json_expr),
                       (* Preserve folded integer lengths for the ad-hoc calldata
                          slice. In particular, BinOp.folded_value is not a runtime
                          expression; start remains decoded normally. *)

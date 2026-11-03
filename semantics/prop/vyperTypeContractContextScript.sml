@@ -391,7 +391,8 @@ Theorem FOLDL_extend_local_args_static:
     (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).toplevel_vtypes = base.toplevel_vtypes /\
     (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).type_defs = base.type_defs /\
     (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).fn_sigs = base.fn_sigs /\
-    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).flag_members = base.flag_members
+    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).flag_members = base.flag_members /\
+    (FOLDL (\env (id,ty). extend_local env id ty T) base args).event_fields = base.event_fields
 Proof
   Induct >> simp[] >>
   gen_tac >> PairCases_on `h` >>
@@ -469,15 +470,59 @@ Theorem artifact_bare_global_assignable_lookup_transfer_initial:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
-  bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
   FLOOKUP (function_entry_env art mods entry_src args).bare_global_assignable k = SOME ty ==>
   FLOOKUP bare_global_assignable k = SOME ty
 Proof
-  PairCases_on `k` >>
-  rw[function_entry_env_def, artifact_env_def, check_contract_def, FOLDL_extend_local_args_static] >> gvs[] >>
-  drule_all build_contract_type_artifact_bare_global_assignable_sound >> rw[] >>
-  gvs[bare_global_assignable_complete_def, get_module_code_def, initial_evaluation_context_def] >>
+  rw[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static] >>
+  drule check_contract_runtime_assignable >> strip_tac >> gvs[]
+QED
+
+Theorem artifact_bare_global_assignable_lookup_transfer_deploy:
+  check_contract T layouts addr mods = SOME art /\
+  ALOOKUP sources addr = SOME mods /\ tx.target = addr /\
+  bare_global_assignable_complete m
+    (initial_evaluation_context sources layouts tx src with in_deploy := T) /\
+  FLOOKUP art.cta_bare_global_assignable k = SOME ty ==>
+  FLOOKUP m k = SOME ty
+Proof
+  PairCases_on `k` >> strip_tac >>
+  drule check_contract_artifact_fields >> strip_tac >>
+  gvs[] >>
+  drule_all build_contract_type_artifact_bare_global_assignable_sound >>
+  strip_tac >>
+  gvs[bare_global_assignable_complete_def, get_module_code_def,
+      initial_evaluation_context_def] >>
   metis_tac[]
+QED
+
+Theorem is_immutable_decl_MEM_Immutable_exists[local]:
+  !n ts. is_immutable_decl n ts ==>
+  ?vis ty init. MEM (VariableDecl vis Immutable n ty init) ts
+Proof
+  Induct_on `ts` >> rw[is_immutable_decl_def] >>
+  Cases_on `h` >> gvs[is_immutable_decl_def] >>
+  Cases_on `v0` >> gvs[is_immutable_decl_def] >>
+  metis_tac[]
+QED
+
+Theorem artifact_bare_global_assignable_NONE_transfer_deploy:
+  check_contract T layouts addr mods = SOME art /\
+  ALOOKUP sources addr = SOME mods /\ tx.target = addr /\
+  (!s id ty. FLOOKUP m (s,id) = SOME ty ==>
+    ?ts. get_module_code
+      (initial_evaluation_context sources layouts tx src with in_deploy := T) s = SOME ts /\
+      is_immutable_decl id ts) /\
+  FLOOKUP art.cta_bare_global_assignable k = NONE ==>
+  FLOOKUP m k = NONE
+Proof
+  PairCases_on `k` >> strip_tac >>
+  drule_all check_contract_bare_global_assignable_complete_deploy >>
+  disch_then (qspec_then `src` assume_tac) >>
+  Cases_on `FLOOKUP m (k0,k1)` >- simp[] >>
+  first_x_assum drule >> strip_tac >>
+  drule is_immutable_decl_MEM_Immutable_exists >> strip_tac >>
+  gvs[bare_global_assignable_complete_def] >>
+  metis_tac[optionTheory.NOT_SOME_NONE]
 QED
 
 Theorem artifact_toplevel_vtypes_lookup_transfer_initial:
@@ -594,38 +639,13 @@ Proof
   disch_then drule >> disch_then drule >> simp[]
 QED
 
-Theorem is_immutable_decl_MEM_Immutable_exists[local]:
-  !n ts. is_immutable_decl n ts ==>
-  ?vis ty init. MEM (VariableDecl vis Immutable n ty init) ts
-Proof
-  Induct_on `ts` >> rw[is_immutable_decl_def] >>
-  Cases_on `h` >> gvs[is_immutable_decl_def] >>
-  Cases_on `v0` >> gvs[is_immutable_decl_def] >>
-  metis_tac[]
-QED
-
+(* Outside deployment no global is assignable. *)
 Theorem artifact_bare_global_assignable_NONE_transfer_initial:
-  check_contract F layouts addr mods = SOME art /\
-  ALOOKUP sources addr = SOME mods /\ tx.target = addr /\
-  bare_global_assignable_complete art.cta_bare_global_assignable
-    (initial_evaluation_context sources layouts tx cx_src) /\
-  (!src' id ty ts. FLOOKUP bare_global_assignable (src',id) = SOME ty /\
-     ALOOKUP mods src' = SOME ts ==> is_immutable_decl id ts) /\
-  FLOOKUP (function_entry_env art mods entry_src args).toplevel_vtypes (src,id) = SOME vt /\
-  FLOOKUP (function_entry_env art mods entry_src args).bare_global_assignable (src,id) = NONE ==>
+  bare_global_assignable_complete bare_global_assignable
+    (initial_evaluation_context sources layouts tx cx_src) ==>
   FLOOKUP bare_global_assignable (src,id) = NONE
 Proof
-  rw[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static] >>
-  Cases_on `FLOOKUP bare_global_assignable (src,id)` >> simp[] >>
-  `?ts. ALOOKUP mods src = SOME ts` by (
-    gvs[check_contract_def, FLOOKUP_DRESTRICT_SOME] >>
-    drule_all build_contract_type_artifact_toplevel_vtypes_sound >> rw[] >>
-    metis_tac[]) >>
-  qpat_x_assum `!src' id ty ts. _` drule_all >> strip_tac >>
-  drule_all is_immutable_decl_MEM_Immutable_exists >> strip_tac >> gvs[] >>
-  gvs[bare_global_assignable_complete_def, get_module_code_def,
-      initial_evaluation_context_def] >>
-  first_x_assum drule_all >> gvs[]
+  simp[bare_global_assignable_complete_def, initial_evaluation_context_def]
 QED
 
 Theorem artifact_flag_members_lookup_transfer_initial:

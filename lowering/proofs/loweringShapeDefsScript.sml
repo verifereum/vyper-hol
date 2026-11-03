@@ -127,16 +127,230 @@ Definition lowered_inst_ok_def:
                    ~is_param_opcode inst.inst_opcode)
 End
 
+(* ===== Positional certificates for checked calls ===== *)
+
+(* A branch witness must already be closed: besides its predecessor and
+   itself there is a later (possibly open) block.  Labels need not be unique. *)
+Definition raw_checked_blocks_def:
+  raw_checked_blocks (bbs : basic_block list) <=>
+    !i k. i < LENGTH bbs /\
+      k < LENGTH (EL i bbs).bb_instructions /\
+      MEM (EL k (EL i bbs).bb_instructions).inst_opcode [CALL; STATICCALL] ==>
+      ?v guard.
+        (EL k (EL i bbs).bb_instructions).inst_outputs = [v] /\
+        k + 1 < LENGTH (EL i bbs).bb_instructions /\
+        guard = EL (k + 1) (EL i bbs).bb_instructions /\
+        ((guard.inst_opcode = ASSERT /\ guard.inst_operands = [Var v]) \/
+         (guard.inst_opcode = JNZ /\
+          ?ok fail_lbl. guard.inst_operands = [Var v; Label ok; Label fail_lbl] /\
+            i + 2 < LENGTH bbs /\
+            (EL (i + 1) bbs).bb_label = fail_lbl /\ compiler_label fail_lbl /\
+            (EL (i + 1) bbs).bb_instructions <> [] /\
+            EVERY (\j. j.inst_opcode <> INVOKE)
+              (EL (i + 1) bbs).bb_instructions /\
+            (LAST (EL (i + 1) bbs).bb_instructions).inst_opcode = REVERT))
+End
+
+Definition raw_checked_state_def:
+  raw_checked_state st <=> raw_checked_blocks (all_blocks st)
+End
+
+Theorem raw_checked_blocks_no_calls:
+  EVERY (\bb. EVERY (\j. ~MEM j.inst_opcode [CALL; STATICCALL])
+                       bb.bb_instructions) bbs ==>
+  raw_checked_blocks bbs
+Proof
+  simp[raw_checked_blocks_def, EVERY_EL] >> metis_tac[]
+QED
+
+Theorem raw_checked_blocks_unchecked:
+  MEM call.inst_opcode [CALL; STATICCALL] ==>
+  ~raw_checked_blocks [<| bb_label := l; bb_instructions := [call] |>]
+Proof
+  rw[raw_checked_blocks_def] >>
+  qexistsl [`0`, `0`] >> simp[]
+QED
+
+Theorem raw_checked_blocks_assert:
+  call.inst_outputs = [v] /\
+  guard.inst_opcode = ASSERT /\ guard.inst_operands = [Var v] ==>
+  raw_checked_blocks
+    [<| bb_label := l; bb_instructions := [call; guard] |>]
+Proof
+  rw[raw_checked_blocks_def] >>
+  `k = 0 \/ k = 1` by decide_tac >> gvs[] >>
+  qexists_tac `v` >> simp[]
+QED
+
+Theorem raw_checked_blocks_branch:
+  call.inst_outputs = [v] /\
+  guard.inst_opcode = JNZ /\
+  guard.inst_operands = [Var v; Label ok; Label fail_lbl] /\
+  compiler_label fail_lbl /\
+  rbb.bb_label = fail_lbl /\ rbb.bb_instructions <> [] /\
+  EVERY (\j. j.inst_opcode <> INVOKE) rbb.bb_instructions /\
+  (LAST rbb.bb_instructions).inst_opcode = REVERT /\
+  EVERY (\j. ~MEM j.inst_opcode [CALL; STATICCALL]) rbb.bb_instructions /\
+  EVERY (\j. ~MEM j.inst_opcode [CALL; STATICCALL]) cont.bb_instructions ==>
+  raw_checked_blocks
+    [<| bb_label := l; bb_instructions := [call; guard] |>; rbb; cont]
+Proof
+  rw[raw_checked_blocks_def] >>
+  (Cases_on `i = 0`
+   >- (gvs[] >> `k = 0 \/ k = 1` by decide_tac >> gvs[] >>
+       qexists_tac `v` >> simp[]) >>
+   `i = 1 \/ i = 2` by decide_tac >> gvs[EVERY_EL] >> metis_tac[])
+QED
+
+Theorem raw_checked_blocks_open_fail:
+  MEM call.inst_opcode [CALL; STATICCALL] /\
+  guard.inst_opcode = JNZ ==>
+  ~raw_checked_blocks
+    [<| bb_label := l; bb_instructions := [call; guard] |>; rbb]
+Proof
+  rw[raw_checked_blocks_def] >>
+  qexistsl [`0`, `0`] >> simp[]
+QED
+
+Theorem raw_checked_blocks_append_no_calls:
+  raw_checked_blocks bbs /\
+  EVERY (\bb. EVERY (\j. ~MEM j.inst_opcode [CALL; STATICCALL])
+                       bb.bb_instructions) extra ==>
+  raw_checked_blocks (bbs ++ extra)
+Proof
+  pure_rewrite_tac[raw_checked_blocks_def] >> rpt strip_tac >>
+  Cases_on `i < LENGTH bbs`
+  >- (gvs[EL_APPEND1] >>
+      first_x_assum (qspecl_then [`i`, `k`] mp_tac) >>
+      simp[] >> strip_tac >> qexists_tac `v` >> simp[] >>
+      `i + 1 < LENGTH bbs` by decide_tac >> simp[EL_APPEND1]) >>
+  gvs[EL_APPEND2, EVERY_EL, LENGTH_APPEND] >>
+  `i - LENGTH bbs < LENGTH extra` by decide_tac >> metis_tac[]
+QED
+
+Theorem raw_checked_blocks_extend_open:
+  raw_checked_blocks (front ++ [bb]) /\
+  EVERY (\j. ~MEM j.inst_opcode [CALL; STATICCALL]) insts ==>
+  raw_checked_blocks
+    (front ++ [bb with bb_instructions := bb.bb_instructions ++ insts])
+Proof
+  pure_rewrite_tac[raw_checked_blocks_def] >> rpt strip_tac >>
+  Cases_on `i < LENGTH front`
+  >- (gvs[EL_APPEND1] >>
+      first_x_assum (qspecl_then [`i`, `k`] mp_tac) >>
+      simp[EL_APPEND1] >> strip_tac >> qexists_tac `v` >> simp[] >>
+      `i + 1 < LENGTH front` by (gvs[LENGTH_APPEND] >> decide_tac) >>
+      gvs[EL_APPEND1]) >>
+  `i = LENGTH front` by (gvs[LENGTH_APPEND] >> decide_tac) >>
+  gvs[EL_APPEND2] >>
+  (Cases_on `k < LENGTH bb.bb_instructions`
+   >- (gvs[EL_APPEND1] >>
+       first_x_assum (qspecl_then [`LENGTH front`, `k`] mp_tac) >>
+       simp[EL_APPEND2] >> strip_tac >>
+       qexists_tac `v` >> simp[EL_APPEND1]) >>
+   gvs[EL_APPEND2, EVERY_EL, LENGTH_APPEND] >>
+   `k - LENGTH bb.bb_instructions < LENGTH insts` by decide_tac >> metis_tac[])
+QED
+
+Theorem raw_checked_blocks_splice:
+  raw_checked_blocks (front ++ [bb]) /\
+  raw_checked_blocks (head :: tail) ==>
+  raw_checked_blocks
+    (front ++ ((bb with bb_instructions :=
+      bb.bb_instructions ++ head.bb_instructions) :: tail))
+Proof
+  pure_rewrite_tac[raw_checked_blocks_def] >> rpt strip_tac >>
+  Cases_on `i < LENGTH front`
+  >- (gvs[EL_APPEND1] >>
+      qpat_x_assum `!i k. i < LENGTH front + 1 /\ _ ==> _`
+        (qspecl_then [`i`, `k`] mp_tac) >>
+      simp[EL_APPEND1] >> strip_tac >> qexists_tac `v` >> simp[] >>
+      `i + 1 < LENGTH front` by (gvs[LENGTH_APPEND] >> decide_tac) >>
+      gvs[EL_APPEND1]) >>
+  Cases_on `i = LENGTH front`
+  >- (gvs[EL_APPEND2] >>
+      (Cases_on `k < LENGTH bb.bb_instructions`
+      >- (gvs[EL_APPEND1] >>
+          qpat_x_assum `!i k. i < LENGTH front + 1 /\ _ ==> _`
+            (qspecl_then [`LENGTH front`, `k`] mp_tac) >>
+          simp[EL_APPEND2] >> strip_tac >>
+          qexists_tac `v` >> simp[EL_APPEND1]) >>
+      suspend "new_head")) >>
+  suspend "new_tail"
+QED
+
+Resume raw_checked_blocks_splice[new_head]:
+  markerLib.RESUME_TAC >>
+  qpat_x_assum `!i k. i < LENGTH front + 1 /\ _ ==> _` kall_tac >>
+  gvs[EL_APPEND_EQN] >>
+  first_x_assum (qspecl_then [`0`, `k - LENGTH bb.bb_instructions`] mp_tac) >>
+  simp[]
+QED
+
+Resume raw_checked_blocks_splice[new_tail]:
+  qpat_x_assum `!i k. i < LENGTH (front ++ [bb]) /\ _ ==> _` kall_tac >>
+  `LENGTH front < i` by decide_tac >>
+  gvs[EL_APPEND_EQN] >>
+  first_x_assum (qspecl_then [`i - LENGTH front`, `k`] mp_tac) >>
+  `i - LENGTH front = SUC (i - (LENGTH front + 1))` by decide_tac >>
+  `i + 1 - LENGTH front = SUC (i - LENGTH front)` by decide_tac >>
+  gvs[arithmeticTheory.ADD_CLAUSES] >>
+  `i + 1 - LENGTH front = SUC (SUC (i - (LENGTH front + 1)))` by decide_tac >>
+  `i + 2 < SUC (LENGTH front + LENGTH tail) <=>
+   i + 1 < LENGTH front + LENGTH tail` by decide_tac >>
+  simp[arithmeticTheory.ADD_CLAUSES]
+QED
+
+Finalise raw_checked_blocks_splice
+
+Theorem raw_checked_blocks_splice_assert:
+  raw_checked_blocks (front ++ [bb]) /\
+  call.inst_outputs = [v] /\
+  guard.inst_opcode = ASSERT /\ guard.inst_operands = [Var v] ==>
+  raw_checked_blocks
+    (front ++ [bb with bb_instructions := bb.bb_instructions ++ [call; guard]])
+Proof
+  strip_tac >> drule raw_checked_blocks_splice >>
+  disch_then (qspecl_then
+    [`[]`, `<| bb_label := bb.bb_label; bb_instructions := [call; guard] |>`] mp_tac) >>
+  simp[] >> disch_then irule >> irule raw_checked_blocks_assert >> simp[]
+QED
+
+Theorem raw_checked_blocks_splice_branch:
+  raw_checked_blocks (front ++ [bb]) /\
+  call.inst_outputs = [v] /\
+  guard.inst_opcode = JNZ /\
+  guard.inst_operands = [Var v; Label ok; Label fail_lbl] /\
+  compiler_label fail_lbl /\
+  rbb.bb_label = fail_lbl /\ rbb.bb_instructions <> [] /\
+  EVERY (\j. j.inst_opcode <> INVOKE) rbb.bb_instructions /\
+  (LAST rbb.bb_instructions).inst_opcode = REVERT /\
+  EVERY (\j. ~MEM j.inst_opcode [CALL; STATICCALL]) rbb.bb_instructions /\
+  EVERY (\j. ~MEM j.inst_opcode [CALL; STATICCALL]) cont.bb_instructions ==>
+  raw_checked_blocks
+    (front ++ [bb with bb_instructions := bb.bb_instructions ++ [call; guard];
+               rbb; cont])
+Proof
+  strip_tac >> drule raw_checked_blocks_splice >>
+  disch_then (qspecl_then
+    [`[rbb; cont]`, `<| bb_label := bb.bb_label; bb_instructions := [call; guard] |>`] mp_tac) >>
+  simp[] >> disch_then irule >> irule raw_checked_blocks_branch >> simp[] >> metis_tac[]
+QED
+
 (* ===== State invariant and the append step ===== *)
 
-Definition shape_state_def:
-  shape_state (st : compile_state) <=>
+Definition shape_base_state_def:
+  shape_base_state (st : compile_state) <=>
     opaque_insts_ok (state_insts st) /\
     (!inst x. MEM inst (state_insts st) /\ MEM (Var x) inst.inst_operands ==>
               not_fresh_at st x) /\
     (!inst x. MEM inst (state_insts st) /\
               MEM inst.inst_opcode [GAS; RETPC_PARAM] /\
               MEM x inst.inst_outputs ==> not_fresh_at st x)
+End
+
+Definition shape_state_def:
+  shape_state st <=> shape_base_state st /\ raw_checked_state st
 End
 
 (* LP constrains the labels of the blocks started on the way. *)
@@ -148,6 +362,15 @@ Definition shape_extends_def:
     !inst x. MEM inst (added_insts st st') /\
              MEM inst.inst_opcode [GAS; RETPC_PARAM] /\
              MEM x inst.inst_outputs ==> ~not_fresh_at st x
+End
+
+(* The unchecked interval of an atomic call template uses only the base
+   invariant.  Full shape_step is restored at the checked endpoint. *)
+Definition shape_base_step_def:
+  shape_base_step internal LP (P : compile_state -> bool) (m : 'a compiler)
+                  (Q : 'a -> compile_state -> bool) <=>
+    !st x st'. m st = (x, st') /\ P st /\ shape_base_state st ==>
+      shape_extends internal LP st st' /\ shape_base_state st' /\ Q x st'
 End
 
 Definition shape_step_def:
@@ -192,6 +415,53 @@ Proof
   `new = FRONT new ++ [LAST new]` by simp[APPEND_FRONT_LAST] >>
   pop_assum SUBST1_TAC >>
   simp[REVERSE_APPEND, FLAT_APPEND, MAP_APPEND] >> metis_tac[APPEND_ASSOC]
+QED
+
+Theorem cs_extends_block_stream:
+  cs_extends st st' ==>
+  ?insts tail.
+    all_blocks st' = REVERSE st.cs_blocks ++
+      [<| bb_label := st.cs_current_bb;
+          bb_instructions := st.cs_current_insts ++ insts |>] ++ tail /\
+    added_insts st st' = insts ++ FLAT (MAP (\bb. bb.bb_instructions) tail)
+Proof
+  strip_tac >>
+  `?insts tail. all_blocks st' = REVERSE st.cs_blocks ++
+      [<| bb_label := st.cs_current_bb;
+          bb_instructions := st.cs_current_insts ++ insts |>] ++ tail`
+    suffices_by
+      (strip_tac >> qexistsl [`insts`, `tail`] >> simp[] >>
+       drule state_insts_cs_extends >>
+       simp[state_insts_def] >>
+       simp[all_blocks_def, MAP_APPEND, FLAT_APPEND] >>
+       pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND_11] >> simp[]) >>
+  gvs[cs_extends_def] >> Cases_on `new = []`
+  >- (gvs[IS_PREFIX_APPEND, all_blocks_def] >>
+      qexistsl [`l`, `[]`] >> simp[]) >>
+  `new = FRONT new ++ [LAST new]` by simp[APPEND_FRONT_LAST] >>
+  pop_assum SUBST_ALL_TAC >> gvs[IS_PREFIX_APPEND] >>
+  `LAST new = <| bb_label := st.cs_current_bb;
+                 bb_instructions := st.cs_current_insts ++ l |>`
+    by simp[basic_block_component_equality] >>
+  qexistsl [`l`, `REVERSE (FRONT new) ++
+     [<| bb_label := st'.cs_current_bb;
+         bb_instructions := st'.cs_current_insts |>]`] >>
+  simp[all_blocks_def, REVERSE_APPEND, APPEND_ASSOC]
+QED
+
+Theorem raw_checked_state_cs_extends:
+  cs_extends st st' /\ raw_checked_state st /\
+  EVERY (\j. ~MEM j.inst_opcode [CALL; STATICCALL]) (added_insts st st') ==>
+  raw_checked_state st'
+Proof
+  strip_tac >> drule cs_extends_block_stream >> strip_tac >>
+  gvs[raw_checked_state_def, EVERY_APPEND, EVERY_FLAT, EVERY_MAP] >>
+  qpat_x_assum `raw_checked_blocks (all_blocks st)` mp_tac >>
+  simp[all_blocks_def] >> strip_tac >>
+  drule raw_checked_blocks_extend_open >>
+  disch_then (qspec_then `insts` mp_tac) >> simp[] >> strip_tac >>
+  drule raw_checked_blocks_append_no_calls >>
+  disch_then (qspec_then `tail` mp_tac) >> simp[]
 QED
 
 Theorem block_labels_cs_extends:
@@ -283,4 +553,87 @@ Proof
   rw[retpc_operand_def, shape_extends_def] >>
   imp_res_tac state_insts_cs_extends >> gvs[] >>
   gvs[opaque_out_def] >> metis_tac[not_fresh_at_mono]
+QED
+
+(* The consumer of an immediate-check certificate. *)
+Theorem calls_flagged_immediate:
+  !insts.
+    (!k. k < LENGTH insts /\
+         MEM (EL k insts).inst_opcode [CALL; STATICCALL] ==>
+         ?v. (EL k insts).inst_outputs = [v] /\
+             k + 1 < LENGTH insts /\
+             (EL (k + 1) insts).inst_opcode <> INVOKE /\
+             flag_fails bbs [v] (EL (k + 1) insts)) ==>
+    calls_flagged bbs insts
+Proof
+  Induct >> simp[calls_flagged_def] >> rpt strip_tac
+  >- (first_x_assum (qspec_then `0` mp_tac) >> simp[] >>
+      strip_tac >> Cases_on `insts` >> gvs[flag_path_def])
+  >- (first_x_assum (qspec_then `0` mp_tac) >> simp[] >>
+      strip_tac >> Cases_on `insts` >> gvs[flag_path_def]) >>
+  first_x_assum irule >> rpt strip_tac >>
+  first_x_assum (qspec_then `SUC k` mp_tac) >>
+  simp[arithmeticTheory.ADD_CLAUSES] >> gvs[]
+QED
+
+Theorem revert_path_direct_block:
+  MEM bb bbs /\ bb.bb_instructions <> [] /\
+  EVERY (\j. j.inst_opcode <> INVOKE) bb.bb_instructions /\
+  (LAST bb.bb_instructions).inst_opcode = REVERT ==>
+  revert_path bbs (LENGTH bbs) bb.bb_label
+Proof
+  Cases_on `bbs` >> simp[] >> strip_tac >>
+  simp[Once revert_path_def, EXISTS_MEM] >> metis_tac[]
+QED
+
+Theorem raw_checked_blocks_segment:
+  raw_checked_blocks (pre ++ seg ++ post) /\
+  (post = [] \/ ~compiler_label (HD post).bb_label) ==>
+  EVERY (\bb. calls_flagged seg bb.bb_instructions) seg
+Proof
+  simp[EVERY_EL] >> strip_tac >> rpt strip_tac >>
+  irule calls_flagged_immediate >> rpt strip_tac >> gvs[] >>
+  qpat_x_assum `raw_checked_blocks _` mp_tac >>
+  simp[raw_checked_blocks_def] >>
+  disch_then (qspecl_then [`LENGTH pre + n`, `k`] mp_tac) >>
+  simp[EL_APPEND1, EL_APPEND2] >> strip_tac >>
+  qexists_tac `v` >> simp[flag_fails_def] >>
+  (Cases_on `n + 1 < LENGTH seg`
+   >- (gvs[EL_APPEND_EQN] >>
+       irule revert_path_direct_block >> simp[] >>
+       irule EL_MEM >> simp[]) >>
+   `n + 1 = LENGTH seg` by decide_tac >>
+   `n + (LENGTH pre + 1) = LENGTH pre + LENGTH seg` by decide_tac >>
+   gvs[EL_APPEND2])
+QED
+
+Theorem flat_noncompiler_head:
+  EVERY (\seg. seg <> [] /\ ~compiler_label (HD seg).bb_label) segs ==>
+  FLAT segs = [] \/ ~compiler_label (HD (FLAT segs)).bb_label
+Proof
+  Cases_on `segs` >> simp[] >> strip_tac >>
+  Cases_on `h` >> gvs[]
+QED
+
+Theorem raw_checked_blocks_segments:
+  !segs pre.
+    raw_checked_blocks (pre ++ FLAT segs) /\
+    EVERY (\seg. seg <> [] /\ ~compiler_label (HD seg).bb_label) segs ==>
+    EVERY (\seg. EVERY (\bb. calls_flagged seg bb.bb_instructions) seg) segs
+Proof
+  Induct >> simp[] >> rpt strip_tac
+  >- (irule raw_checked_blocks_segment >> qexistsl [`FLAT segs`, `pre`] >>
+      simp[] >> drule flat_noncompiler_head >> simp[]) >>
+  first_x_assum irule >> simp[] >>
+  qexists_tac `pre ++ h` >> simp[APPEND_ASSOC]
+QED
+
+Theorem raw_checked_blocks_entry:
+  raw_checked_blocks (entry ++ FLAT segs) /\
+  EVERY (\seg. seg <> [] /\ ~compiler_label (HD seg).bb_label) segs ==>
+  EVERY (\bb. calls_flagged entry bb.bb_instructions) entry
+Proof
+  strip_tac >> irule raw_checked_blocks_segment >>
+  qexistsl [`FLAT segs`, `[]`] >> simp[] >>
+  drule flat_noncompiler_head >> simp[]
 QED
