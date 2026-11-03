@@ -66,7 +66,7 @@ Proof
   strip_tac >> gvs[abi_decode_source_opcode_def] >>
   simp[abi_decode_load_def, abi_decode_source_def, step_MLOAD,
        step_CALLDATALOAD] >>
-  simp[Once step_inst_base_def, exec_read1_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def]
 QED
 
 Theorem abi_decode_read:
@@ -193,7 +193,7 @@ Theorem abi_guard_emit_frame[local]:
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   gvs[run_inst_seq_def] >>
-  gvs[Once step_inst_base_def, mk_inst_def] >>
+  gvs[step_inst_base_opcode_eqs, mk_inst_def] >>
   gvs[exec_pure2_def, exec_pure1_def, AllCaseEqs(), update_var_def]
 QED
 
