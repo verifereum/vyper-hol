@@ -129,9 +129,12 @@ Theorem abi_decoder_array_setup_head:
     mk_inst st.cs_next_id MLOAD [ip] [STRING #"%" (toString st.cs_next_var)] :: rest
 Proof
   Cases_on `dec_info_needs_offset di` >> Cases_on `hi = Lit 0w` >>
-  simp[abi_decode_array_element_setup_def, abi_decode_indexed_address_def,
-    compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_ignore_bind_def,
-    comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  asm_simp_tac (srw_ss() ++ boolSimps.LET_ss)
+    [abi_decode_array_element_setup_def, abi_decode_indexed_address_def,
+     compile_abi_decode_dyn_elem_ptr_def] >>
+  simp_tac (srw_ss() ++ boolSimps.LET_ss)
+    [comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
+     emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[] >> pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >> simp[]
 QED
 
