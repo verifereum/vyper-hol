@@ -5492,7 +5492,7 @@ Proof
   gvs[FLOOKUP_UPDATE, DOMSUB_FLOOKUP_THM, AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem safe_prefix_spilled_separated[local]:
+Theorem safe_prefix_spilled_separated:
   !ops ps initial_fmp lo.
     (!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
                 FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
