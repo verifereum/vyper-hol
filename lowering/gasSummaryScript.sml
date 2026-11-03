@@ -2,7 +2,7 @@
    The unused source suffix cannot affect the result or its other fields. *)
 Theory gasSummary
 Ancestors
-  fragGasPath gasCount gasOracleReplay fragExec venomState
+  fragGasPath fragGasPathMem gasCount gasOracleReplay fragExec venomState
   vyperInterpreter vyperState vyperValue list rich_list pair arithmetic
 
 Definition gas_explicit_def:
@@ -12,6 +12,25 @@ End
 
 (* Concrete entry relations belong outside this existential summary.
    Every witness carries an actual target path and its outcome post. *)
+(* Each producer fixes its marks and concrete target segment before an
+   enclosing consumer inspects the source result. *)
+Definition gas_marked_exec_def:
+  gas_marked_exec (ctx, func) source (es, s0) marks res es_end r <=>
+    (!tail.
+       source (es with gas_obs :=
+                 gas_explicit marks s0.vs_gas_readings ++ tail) =
+         (res, es_end with gas_obs := tail)) /\
+    gas_path_mem ctx func s0 (LENGTH marks) r
+End
+
+Definition gas_summary_at_def:
+  gas_summary_at (ctx, func) marks source (es, s0) Q R <=>
+    ?res es_end r.
+      gas_marked_exec (ctx, func) source (es, s0) marks res es_end r /\
+      ((?t. r = OK t /\ Q res (es_end with gas_obs := []) t) \/
+       (exit_result r /\ R res (es_end with gas_obs := []) r))
+End
+
 Definition gas_summary_def:
   gas_summary (ctx, func) source (es, s0) Q R <=>
     ?marks res es_end.
@@ -90,4 +109,12 @@ Proof
   qexistsl_tac [`[T]`, `INL (IntV (&w2n w))`, `es`] >>
   simp[next_gas_reading_def, return_def] >>
   qexists_tac `OK t` >> simp[]
+QED
+
+Theorem gas_summary_at_summary:
+  gas_summary_at (ctx, func) marks source (es, s0) Q R ==>
+  gas_summary (ctx, func) source (es, s0) Q R
+Proof
+  simp[gas_summary_at_def, gas_marked_exec_def, gas_summary_def] >>
+  metis_tac[gas_path_mem_exec]
 QED
