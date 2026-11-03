@@ -12,8 +12,10 @@ Theorem abi_decode_copy_vars:
 Proof
   strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
   gvs[abi_decode_source_opcode_def, abi_decode_copy_opcode_def] >>
-  gvs[run_inst_seq_def, Once step_inst_base_def, mk_inst_def, mcopy_def,
-      write_memory_with_expansion_def, AllCaseEqs()]
+  qpat_x_assum `run_inst_seq _ _ = OK t` mp_tac >>
+  simp_tac (srw_ss()) [run_inst_seq_def, Once step_inst_base_def, mk_inst_def] >>
+  simp[mcopy_def, write_memory_with_expansion_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem abi_decode_copy_fresh:

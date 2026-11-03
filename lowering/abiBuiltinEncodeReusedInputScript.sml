@@ -47,6 +47,8 @@ Theorem abi_builtin_encode_output_bounds:
 Proof
   simp_tac bool_ss [abi_builtin_encode_resources_def, LET_THM] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qspec_then `maxlen+(case method_id of NONE => 0 | SOME _ => 4)`
+    assume_tac abi_builtin_word_size_capacity >>
   Cases_on `method_id` >>
   fs[abi_builtin_encode_prefix_def,
      abiBuiltinEncodeMethodTheory.abi_builtin_encode_method_bytes_length] >> decide_tac
@@ -61,6 +63,8 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_builtin_allocate_frontier >> strip_tac >>
   drule abi_decoder_budget_frontier >> strip_tac >>
+  qspec_then `maxlen+(case method_id of NONE => 0 | SOME _ => 4)`
+    assume_tac abi_builtin_word_size_capacity >>
   Cases_on `method_id` >>
   fs[abi_builtin_encode_prefix_def,
      abiBuiltinEncodeMethodTheory.abi_builtin_encode_method_bytes_length] >> decide_tac
@@ -99,9 +103,9 @@ Theorem lower_abi_encode_produced_tuple_input:
     mload p actual = n2w (LENGTH bytes) /\
     mem_bytes_at (p+32) (LENGTH bytes) actual.vs_memory = bytes /\
     FLOOKUP actual.vs_allocas st.cs_next_id =
-      SOME (p,maxlen+32+LENGTH (abi_builtin_encode_prefix method_id)) /\
-    abi_builtin_encode_effect first last st final limit_st p (maxlen+32+LENGTH
-      (abi_builtin_encode_prefix method_id)) (case method_id of NONE => 0 | SOME _ => 32)
+      SOME (p,32+32*word_size (maxlen+LENGTH (abi_builtin_encode_prefix method_id))) /\
+    abi_builtin_encode_effect first last st final limit_st p (32+32*word_size (maxlen+LENGTH
+      (abi_builtin_encode_prefix method_id))) (case method_id of NONE => 0 | SOME _ => 32)
       b cap initial actual /\
     (!hi. abi_tuple_encode_input consumer_sf ce (BaseT (BytesT (Dynamic n)))
       (vyper_to_abi_type env (BaseT (BytesT (Dynamic n)))) (contractABI$BytesV bytes)
@@ -164,9 +168,9 @@ Theorem lower_abi_encode_tuple_source:
     val_in_memory (BaseTV (BytesT (Dynamic (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))))
       (BytesV bytes) p actual.vs_memory /\
     FLOOKUP actual.vs_allocas (st.cs_next_id+1+abi_tuple_encode_inst_count ce tys) =
-      SOME (p,maxlen+32+LENGTH (abi_encode_method_id_bytes method_id)) /\
+      SOME (p,32+32*word_size (maxlen+LENGTH (abi_encode_method_id_bytes method_id))) /\
     abi_builtin_encode_staged_effect first last st final limit_st sb (abi_tuple_bytes ce xs) p
-      (maxlen+32+LENGTH (abi_encode_method_id_bytes method_id))
+      (32+32*word_size (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))
       (case method_id of NONE => 0 | SOME _ => 32) b cap initial actual /\
     actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -188,7 +192,7 @@ Proof
   impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, asm_simp_tac bool_ss []]) >>
   strip_tac >> rename1 `abi_decode_sim ctx func staged_state actual` >>
   `abi_builtin_encode_staged_effect first last st final limit_st sb (abi_tuple_bytes ce xs) p
-    (maxlen+32+LENGTH (abi_encode_method_id_bytes method_id))
+    (32+32*word_size (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))
     (case method_id of NONE => 0 | SOME _ => 32) b cap initial actual` by
     (irule abi_builtin_encode_producer_compose >> qexistsl_tac [`staged_state`, `staged`] >>
      asm_simp_tac bool_ss [] >> decide_tac) >>
@@ -237,9 +241,9 @@ Theorem compile_abi_encode_tuple_source:
     val_in_memory (BaseTV (BytesT (Dynamic (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))))
       (BytesV bytes) p actual.vs_memory /\
     FLOOKUP actual.vs_allocas (arg_st.cs_next_id+1+abi_tuple_encode_inst_count ce tys) =
-      SOME (p,maxlen+32+LENGTH (abi_encode_method_id_bytes method_id)) /\
+      SOME (p,32+32*word_size (maxlen+LENGTH (abi_encode_method_id_bytes method_id))) /\
     abi_builtin_encode_staged_effect first last arg_st final limit_st sb source_size p
-      (maxlen+32+LENGTH (abi_encode_method_id_bytes method_id))
+      (32+32*word_size (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))
       (case method_id of NONE => 0 | SOME _ => 32) b cap prepared actual /\
     actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -326,9 +330,9 @@ Theorem compile_abi_encode_tuple_producer:
     mload p actual = n2w (LENGTH bytes) /\ mem_bytes_at (p+32) (LENGTH bytes) actual.vs_memory = bytes /\
     val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV bytes) p actual.vs_memory /\
     FLOOKUP actual.vs_allocas (arg_st.cs_next_id+1+abi_tuple_encode_inst_count ce tys) =
-      SOME (p,maxlen+32+LENGTH (abi_encode_method_id_bytes method_id)) /\
+      SOME (p,32+32*word_size (maxlen+LENGTH (abi_encode_method_id_bytes method_id))) /\
     abi_builtin_encode_staged_effect first last arg_st final limit_st sb source_size p
-      (maxlen+32+LENGTH (abi_encode_method_id_bytes method_id))
+      (32+32*word_size (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))
       (case method_id of NONE => 0 | SOME _ => 32) b cap prepared actual /\
     (!hi. abi_tuple_encode_input consumer_sf ce (BaseT (BytesT (Dynamic n)))
       (vyper_to_abi_type env (BaseT (BytesT (Dynamic n)))) (contractABI$BytesV bytes)
@@ -390,7 +394,7 @@ Theorem lower_abi_encode_reused_tuple_input:
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?actual. eval_operand out actual = SOME (n2w p) /\
-    FLOOKUP actual.vs_allocas st.cs_next_id = SOME (p,maxlen+32+LENGTH (abi_builtin_encode_prefix method_id)) /\
+    FLOOKUP actual.vs_allocas st.cs_next_id = SOME (p,32+32*word_size (maxlen+LENGTH (abi_builtin_encode_prefix method_id))) /\
     FLOOKUP actual.vs_allocas outer_id = SOME (q,outer_size) /\
     abi_tuple_encode_input consumer_sf ce (BaseT (BytesT (Dynamic n)))
       (vyper_to_abi_type env (BaseT (BytesT (Dynamic n)))) (contractABI$BytesV bytes)
@@ -409,12 +413,15 @@ Proof
   drule_all abi_builtin_encode_output_bounds >> strip_tac >>
   SUBGOAL_THEN ``((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
     FLOOKUP initial.vs_allocas st.cs_next_id =
-      SOME (p,maxlen+32+LENGTH (abi_builtin_encode_prefix method_id)))`` assume_tac
+      SOME (p,32+32*word_size (maxlen+LENGTH (abi_builtin_encode_prefix method_id))))`` assume_tac
   >-
-    (Cases_on `method_id` >>
-     fs[abi_builtin_encode_resources_def, LET_THM, abi_builtin_encode_prefix_def,
+    (qpat_x_assum `abi_builtin_encode_resources _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `method_id` >>
+     simp_tac bool_ss [abi_builtin_encode_resources_def, LET_THM, abi_builtin_encode_prefix_def,
         abiBuiltinEncodeMethodTheory.abi_builtin_encode_method_bytes_length,
-        AC ADD_COMM ADD_ASSOC]) >>
+        listTheory.LENGTH, optionTheory.option_CLAUSES, ADD_CLAUSES] >>
+     disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> first_assum ACCEPT_TAC) >>
   drule_all abi_builtin_allocate_separate >> disch_then assume_tac >>
   qpat_assum `abi_builtin_encode_effect _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_builtin_encode_effect_def]) >>
@@ -423,5 +430,7 @@ Proof
        (qspec_then `outer_id` mp_tac) >> asm_simp_tac bool_ss []) >>
   qexists_tac `actual` >> asm_rewrite_tac[] >>
   irule abi_tuple_encode_owned_bytes_source_input >> asm_rewrite_tac[] >>
+  qspec_then `maxlen+LENGTH (abi_builtin_encode_prefix method_id)`
+    assume_tac abi_builtin_word_size_capacity >>
   qexists_tac `n2w p:bytes32` >> gvs[w2n_n2w, LENGTH_APPEND] >> decide_tac
 QED
