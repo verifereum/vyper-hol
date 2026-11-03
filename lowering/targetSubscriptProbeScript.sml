@@ -734,3 +734,82 @@ Proof
   CONV_TAC (computeLib.RESTR_EVAL_CONV [``FLOOKUP``]) >>
   simp[]
 QED
+
+Theorem probe_guarded_captured_base:
+  eval_base_place probe_guarded_context
+    (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+      (Literal (BaseT (UintT 256)) (IntL 0)))
+    probe_guarded_inhabited_state =
+  (INL (PlaceR (StoragePlace F 1w (ArrayTV (BaseTV BoolT) (Dynamic 1)))),
+   probe_guarded_inhabited_state)
+Proof
+  EVAL_TAC >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  EVAL_TAC >> simp[] >> EVAL_TAC >> simp[]
+QED
+
+Theorem probe_guarded_storage_var_info:
+  !mid name b off tv.
+    storage_var_info probe_guarded_context mid name = SOME (b,off,tv) <=>
+    mid = NONE /\ name = "outer" /\ b = F /\ off = 0 /\
+    tv = ArrayTV (ArrayTV (BaseTV BoolT) (Dynamic 1)) (Dynamic 1)
+Proof
+  rpt gen_tac >> Cases_on `mid` >>
+  simp[vyperLookupStorageTheory.storage_var_info_def, probe_guarded_module_code] >>
+  Cases_on `name = "outer"` >> gvs[] >> EVAL_TAC >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >> EVAL_TAC >> simp[]
+QED
+
+Theorem probe_guarded_layout_safe:
+  storage_layout_safe probe_guarded_context
+Proof
+  simp[storage_layout_safe_def, probe_guarded_declared_region,
+       vyperLookupStorageTheory.well_formed_layout_def,
+       probe_guarded_storage_var_info] >>
+  EVAL_TAC >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
+
+Theorem probe_guarded_inhabited_storage_typed:
+  contract_storage_well_formed probe_guarded_context
+    probe_guarded_inhabited_state
+Proof
+  simp[contract_storage_well_formed_def, probe_guarded_declared_region,
+       vyperLookupStorageTheory.well_formed_storage_def,
+       vyperLookupStorageTheory.storage_var_in_range_def,
+       probe_guarded_storage_var_info, get_storage_backend_eq] >>
+  EVAL_TAC >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >> EVAL_TAC >> simp[] >>
+  CONV_TAC (RAND_CONV numLib.num_CONV) >>
+  pure_once_rewrite_tac[vyperLookupStorageTheory.slots_in_range_def] >>
+  EVAL_TAC >> simp[dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
+
+Definition probe_guarded_cenv_def:
+  probe_guarded_cenv ce = ce with <|
+    ce_vars := FEMPTY; ce_var_type := (\id. NONE);
+    ce_struct_fields := FEMPTY; ce_hashmap_info := (\nsid. NONE);
+    ce_module_vars := FEMPTY |+ ((NONE,"outer"), StorageLoc 0w);
+    ce_module_var_type := (\nsid. if nsid = (NONE,"outer")
+                                  then SOME probe_outer_type else NONE) |>
+End
+
+Theorem probe_guarded_inhabited_empty_scopes:
+  probe_guarded_inhabited_state.scopes = []
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_guarded_inhabited_not_env_consistent:
+  !env. ~env_consistent env probe_guarded_context
+    probe_guarded_inhabited_state
+Proof
+  simp[vyperTypeInvariantsTheory.env_consistent_def,
+       vyperTypeInvariantsTheory.env_scopes_consistent_def,
+       probe_guarded_inhabited_empty_scopes]
+QED
