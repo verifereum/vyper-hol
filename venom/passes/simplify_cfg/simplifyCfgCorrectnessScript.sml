@@ -6,7 +6,7 @@
 
 Theory simplifyCfgCorrectness
 Ancestors
-  simplifyCfgProof cfgWf unitShapeDefs venomInst
+  simplifyCfgProof simplifyCfgWffn cfgWf unitShapeDefs venomInst
 
 Theorem simplify_cfg_pass_correct:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
@@ -33,7 +33,9 @@ QED
 Theorem simplify_cfg_preserves_wf_function:
   ∀func. wf_function func ⇒ wf_function (simplify_cfg_fn func)
 Proof
-  cheat
+  simp[simplifyCfgDefsTheory.simplify_cfg_fn_def,
+       simplifyCfgDefsTheory.simplify_cfg_fn_with_labels_def,
+       simplify_cfg_iter_with_labels_wf]
 QED
 
 (* Run 5 of the O1 walk runs after MakeSSA and before passes that need
