@@ -933,35 +933,6 @@ Proof
      pred_setTheory.SUBSET_DEF, MEM_FILTER] >> metis_tac[]
 QED
 
-(* One block, same context on both sides: DFT's block bb' simulates bb up to
-   a reordering of the gas readings.  The original block runs from a state
-   that differs from s' only in vs_gas_readings (gas_variant, o1PassContract,
-   unfolded here).  Premises: variables the block reads are defined
-   (strict_dom_vars_defined), value labels are bound, no ALLOCA, and pairs
-   that are not abort_compatible keep their order (dft_fallible_order_kept).
-   Without them an instruction hoisted above an aborting one can fail with
-   an undefined operand where the original aborted. *)
-Theorem dft_run_block_gas:
-  !fn bb bb' s' fuel C.
-  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
-  EVERY inst_wf bb.bb_instructions /\
-  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
-  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
-  dft_block_rel bb bb' /\ pseudos_prefix bb /\
-  bb.bb_label = s'.vs_current_bb /\ strict_dom_vars_defined fn s' /\
-  (!i l. MEM i bb.bb_instructions /\ ~is_pseudo i.inst_opcode /\
-     ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
-     MEM (Label l) i.inst_operands ==> l IN FDOM s'.vs_labels) /\
-  (!x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
-    ~abort_compatible x.inst_opcode y.inst_opcode /\
-    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id ==>
-    id_before (MAP (\i. i.inst_id) bb'.bb_instructions) x.inst_id y.inst_id) ==>
-  ?s. s' = (s with vs_gas_readings := s'.vs_gas_readings) /\
-      dft_res_rel (run_block fuel C bb s) (run_block fuel C bb' s')
-Proof
-  cheat
-QED
-
 Theorem dft_fn_rel_setup_callee:
   dft_fn_rel fn fn' ==> setup_callee fn' args s = setup_callee fn args s
 Proof
@@ -2707,4 +2678,132 @@ Proof
   >- (qpat_x_assum `s' = _` SUBST_ALL_TAC >>
       qpat_x_assum `u = _` SUBST_ALL_TAC >> simp[]) >>
   gvs[] >> metis_tac[dft_res_rel_trans]
+QED
+
+Theorem dft_eval_phis_gas_OK[local]:
+  eval_phis s pre = OK u ==>
+  u.vs_gas_readings = s.vs_gas_readings /\
+  !gs. eval_phis (s with vs_gas_readings := gs) pre =
+       OK (u with vs_gas_readings := gs)
+Proof
+  strip_tac >> qspecl_then [`pre`, `s`] mp_tac gas_eval_phis >>
+  simp[gas_replay_at_def, lift_result_def] >> strip_tac >>
+  conj_tac
+  >- (first_x_assum (qspec_then `[]` mp_tac) >>
+      Cases_on `eval_phis (s with vs_gas_readings := []) pre` >> simp[lift_result_def]) >>
+  gen_tac >> first_x_assum (qspec_then `gs` mp_tac) >>
+  Cases_on `eval_phis (s with vs_gas_readings := gs) pre` >> simp[lift_result_def]
+QED
+
+Theorem dft_pseudo_partition[local]:
+  !xs. (!i j. i < j /\ j < LENGTH xs /\ is_pseudo (EL j xs).inst_opcode ==>
+    is_pseudo (EL i xs).inst_opcode) ==>
+  xs = FILTER (\i. is_pseudo i.inst_opcode) xs ++
+       FILTER (\i. ~is_pseudo i.inst_opcode) xs
+Proof
+  Induct >- simp[] >> rpt strip_tac >>
+  Cases_on `is_pseudo h.inst_opcode` >> simp[]
+  >- (first_x_assum irule >> rpt strip_tac >>
+      first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]) >>
+  `EVERY (\i. ~is_pseudo i.inst_opcode) xs` by
+    (simp[EVERY_EL] >> rpt strip_tac >>
+     first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]) >>
+  `FILTER (\i. is_pseudo i.inst_opcode) xs = []` by
+    simp[FILTER_EQ_NIL] >>
+  `FILTER (\i. ~is_pseudo i.inst_opcode) xs = xs` by
+    simp[FILTER_EQ_ID] >> simp[]
+QED
+
+Theorem dft_run_block_gas:
+  !fn bb bb' s' fuel C.
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  dft_block_rel bb bb' /\ pseudos_prefix bb /\
+  bb.bb_label = s'.vs_current_bb /\ strict_dom_vars_defined fn s' /\
+  (!i l. MEM i bb.bb_instructions /\ ~is_pseudo i.inst_opcode /\
+     ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+     MEM (Label l) i.inst_operands ==> l IN FDOM s'.vs_labels) /\
+  (!x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~abort_compatible x.inst_opcode y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id ==>
+    id_before (MAP (\i. i.inst_id) bb'.bb_instructions) x.inst_id y.inst_id) ==>
+  ?s. s' = (s with vs_gas_readings := s'.vs_gas_readings) /\
+      dft_res_rel (run_block fuel C bb s) (run_block fuel C bb' s')
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all dft_block_head_bubbles >> strip_tac >>
+  rename1 `bb'.bb_instructions = FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions ++ scheduled_body` >>
+  `bb.bb_instructions =
+    FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions ++
+    FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions` by
+    (irule dft_pseudo_partition >> metis_tac[pseudos_prefix_def]) >>
+  qmatch_asmsub_abbrev_tac `bb'.bb_instructions = pre ++ scheduled_body` >>
+  qabbrev_tac `xs = FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions` >>
+  `EVERY (from_block bb.bb_instructions) scheduled_body` by
+    fs[dft_block_rel_def] >>
+  `EVERY (\i. ~is_pseudo i.inst_opcode) scheduled_body` by
+    (fs[EVERY_MEM, from_block_def] >> metis_tac[flip_operands_is_pseudo]) >>
+  `EVERY (\i. ~is_pseudo i.inst_opcode) xs` by
+    simp[Abbr `xs`, EVERY_MEM, MEM_FILTER] >>
+  `EVERY (\i. MEM i bb.bb_instructions) norm` by
+    (qpat_x_assum `PERM _ norm` (mp_tac o MATCH_MP PERM_MEM_EQ) >>
+     simp[EVERY_MEM, MEM_FILTER] >> metis_tac[]) >>
+  `!t. dft_exec_suffix fuel C norm t = dft_exec_suffix fuel C scheduled_body t` by
+    (gen_tac >> irule dft_normalized_suffix_eq >> metis_tac[]) >>
+  `!s. run_block fuel C bb s =
+    case eval_phis s pre of
+      OK u => dft_exec_suffix fuel C
+        (DROP (phi_prefix_length pre) pre ++ xs)
+        (u with vs_inst_idx := phi_prefix_length pre)
+    | Error e => Error e` by
+    (gen_tac >> drule_all dft_run_block_prefix >>
+     disch_then (qspecl_then [`fuel`, `C`, `s`] mp_tac) >>
+     simp[dft_exec_suffix_append]) >>
+  `run_block fuel C bb' s' =
+    case eval_phis s' pre of
+      OK u => dft_exec_suffix fuel C
+        (DROP (phi_prefix_length pre) pre ++ scheduled_body)
+        (u with vs_inst_idx := phi_prefix_length pre)
+    | Error e => Error e` by
+    (simp[dft_exec_suffix_append] >> irule dft_run_block_prefix >> simp[]) >>
+  qspecl_then [`s'`, `pre`] strip_assume_tac eval_phis_ok_or_error_defs
+  >- (rename1 `eval_phis s' pre = OK u` >>
+      drule dft_eval_phis_gas_OK >> strip_tac >>
+      `?v. (u with vs_inst_idx := phi_prefix_length pre) =
+             (v with vs_gas_readings :=
+               (u with vs_inst_idx := phi_prefix_length pre).vs_gas_readings) /\
+        dft_res_rel
+          (dft_exec_suffix fuel C (DROP (phi_prefix_length pre) pre ++ xs) v)
+          (dft_exec_suffix fuel C (DROP (phi_prefix_length pre) pre ++ norm)
+            (u with vs_inst_idx := phi_prefix_length pre))` by
+        (irule dft_suffix_prefix_variant >> reverse conj_tac
+         >- (irule EVERY_DROP >> simp[Abbr `pre`, EVERY_MEM, MEM_FILTER] >>
+             rpt strip_tac >> Cases_on `i.inst_opcode` >>
+             gvs[is_pseudo_def, is_terminator_def]) >>
+         rpt strip_tac >>
+         `dft_remaining_inv fn bb xs t` by
+           (simp[Abbr `xs`] >> irule dft_remaining_inv_initialized >>
+            conj_tac >- simp[] >> conj_tac >- simp[] >>
+            qexistsl_tac [`C`, `fuel`, `s'`, `u`] >>
+            fs[Abbr `pre`] >> first_assum MATCH_ACCEPT_TAC) >>
+         drule dft_head_bubbles_variant >>
+         disch_then (qspecl_then [`fuel`, `fn`, `C`, `t`] mp_tac) >> simp[]) >>
+      `((u with vs_inst_idx := phi_prefix_length pre) with
+         vs_gas_readings := v.vs_gas_readings) = v` by
+        (qpat_assum `(u with vs_inst_idx := _) = _`
+           (pure_once_rewrite_tac o single) >> simp[]) >>
+      `u with <|vs_inst_idx := phi_prefix_length pre;
+                  vs_gas_readings := v.vs_gas_readings|> = v` by
+        (qpat_x_assum `_ = v` (SUBST1_TAC o SYM) >>
+         simp[venom_state_component_equality]) >>
+      `dft_exec_suffix fuel C norm = dft_exec_suffix fuel C scheduled_body` by
+        simp[FUN_EQ_THM] >>
+      qexists_tac `s' with vs_gas_readings := v.vs_gas_readings` >>
+      simp[] >>
+      qpat_x_assum `dft_res_rel _ _` mp_tac >>
+      simp[dft_exec_suffix_append]) >>
+  qexists_tac `s'` >> simp[]
+
 QED
