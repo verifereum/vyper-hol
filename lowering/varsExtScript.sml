@@ -216,7 +216,10 @@ Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >>
   fs[is_terminator_def, is_ext_call_op_def] >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs]
+  qpat_assum `inst.inst_opcode = _` (fn eq =>
+    PURE_ONCE_REWRITE_TAC
+      [tryfind (fn th => MATCH_MP th eq)
+         (CONJUNCTS step_inst_base_opcode_eqs)])
   >>~- ([`vars_ext_result (exec_pure1 _ _ _) _`],
         irule exec_pure1_vars_ext >> simp[])
   >>~- ([`vars_ext_result (exec_pure2 _ _ _) _`],
