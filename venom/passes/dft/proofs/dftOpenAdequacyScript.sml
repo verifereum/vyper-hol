@@ -1514,3 +1514,65 @@ Proof
   drule (cj 3 dft_open_forward_segments) >>
   simp[dft_open_run_forward_def] >> metis_tac[]
 QED
+
+Theorem dft_open_result_eq_sym[local]:
+  dft_open_result_eq x y <=> dft_open_result_eq y x
+Proof
+  Cases_on `x` >> Cases_on `y` >>
+  simp[dft_open_result_eq_def, lift_result_def, EQ_SYM_EQ]
+QED
+
+Theorem dft_open_result_eq_trans[local]:
+  dft_open_result_eq x y /\ dft_open_result_eq y z ==>
+  dft_open_result_eq x z
+Proof
+  Cases_on `x` >> Cases_on `y` >> Cases_on `z` >>
+  simp[dft_open_result_eq_def, lift_result_def]
+QED
+
+Theorem dft_open_run_segment_unique[local]:
+  dft_open_run_segment a xs ctx fn fuel s stack n r /\
+  dft_open_run_segment a xs ctx fn fuel s stack n r' ==>
+  dft_open_result_eq r r'
+Proof
+  pure_rewrite_tac[dft_open_run_segment_def] >> rpt strip_tac >>
+  `d = d'` by metis_tac[dft_first_hit_unique] >>
+  gvs[dft_open_classified_exit_def] >>
+  metis_tac[dft_open_result_eq_sym, dft_open_result_eq_trans]
+QED
+
+Theorem dft_open_run_segment_cong[local]:
+  dft_open_run_segment a xs ctx fn fuel s stack n r /\
+  dft_open_result_eq r r' ==>
+  dft_open_run_segment a xs ctx fn fuel s stack n r'
+Proof
+  pure_rewrite_tac[dft_open_run_segment_def] >> rpt strip_tac >>
+  qexistsl_tac [`rr`, `m`, `k`, `d`] >>
+  simp[] >> metis_tac[dft_open_result_eq_trans]
+QED
+
+Theorem dft_open_run_segment_reflect:
+  dft_sparse_oracle a xs /\
+  dft_open_run_segment a xs ctx fn fuel s stack n r ==>
+  dft_open_result_eq
+    (run_blocks fuel ctx fn (dft_open_materialize xs n s)) r
+Proof
+  strip_tac >>
+  `dft_open_run_segment a xs ctx fn fuel s stack n
+     (run_blocks fuel ctx fn (dft_open_materialize xs n s))`
+    by (irule dft_open_run_forward_segment >> simp[]) >>
+  metis_tac[dft_open_run_segment_unique]
+QED
+
+Theorem dft_open_run_segment_iff:
+  dft_sparse_oracle a xs ==>
+  (dft_open_run_segment a xs ctx fn fuel s stack n r <=>
+   dft_open_result_eq
+     (run_blocks fuel ctx fn (dft_open_materialize xs n s)) r)
+Proof
+  strip_tac >> eq_tac
+  >- (metis_tac[dft_open_run_segment_reflect]) >>
+  strip_tac >> irule dft_open_run_segment_cong >>
+  qexists_tac `run_blocks fuel ctx fn (dft_open_materialize xs n s)` >>
+  simp[] >> irule dft_open_run_forward_segment >> simp[]
+QED
