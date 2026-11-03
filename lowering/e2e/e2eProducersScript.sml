@@ -1,5 +1,5 @@
 (* Structural producers for PLAN 8.3.
- * TOP-LEVEL: compile_vyper_runtime_phases (L1),
+ * TOP-LEVEL: compile_vyper_runtime_phases (L1), compile_vyper_runtime_nonempty,
  * type_env_all_modules_single (L12), o1_pipeline_codegen_obligations (L5),
  * entry_venom_state_initial_venom_state_rel (L6),
  * entry_venom_state_o1_initial_state_ok (L7),
@@ -61,6 +61,27 @@ Proof
   qpat_x_assum `codegen_assembly rpolicy out.po_unit = SOME _`
     (strip_assume_tac o MATCH_MP codegen_assembly_success_shape) >>
   goal_assum $ drule_at Any >> gvs[]
+QED
+
+Theorem codegen_assembly_bytecode_nonempty[local]:
+  codegen_assembly rpolicy unit = SOME prog ==> assemble prog <> []
+Proof
+  strip_tac >> drule codegen_assembly_success_shape >> strip_tac >>
+  simp[symbolResolveTheory.assemble_def] >> pairarg_tac >>
+  gvs[stackPlanGenTheory.context_plan_ops_def,
+      planExecTheory.execute_plan_def, stackPlanGenTheory.revert_postamble_def,
+      planExecTheory.exec_stack_op_def, symbolResolveTheory.encode_inst_def,
+      listTheory.MAP_APPEND, listTheory.FLAT_APPEND]
+QED
+
+(* The returned immutable suffix cannot become the first code byte: the
+   actual identity-finalized runtime always contains the revert postamble. *)
+Theorem compile_vyper_runtime_nonempty:
+  compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) ==>
+  runtime_bc <> []
+Proof
+  strip_tac >> drule compile_vyper_runtime_phases >> strip_tac >>
+  drule codegen_assembly_bytecode_nonempty >> gvs[]
 QED
 
 (* L5: successful syntax/structural checks supply only structural facts.

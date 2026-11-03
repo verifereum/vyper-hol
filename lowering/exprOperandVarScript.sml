@@ -517,7 +517,12 @@ Proof
      gvs[contextTheory.vv_operand_def, contextTheory.base_ptr_def] >>
      metis_tac[compiler_empty_complex_var])
   >~ [`compile_type_convert _ _ _`] >-
-    (Cases_on `rt` >> simp[] >>
+    (Cases_on `is_bytestring_type (expr_type (HD args)) /\ is_word_type rt /\
+               (lowered_value_type cenv (HD args) = BaseT (BytesT (Dynamic 0)) \/
+                lowered_value_type cenv (HD args) = BaseT (StringT 0))` >>
+     pop_assum (fn th => REWRITE_TAC [th])
+     >- (rpt strip_tac >> gvs[contextTheory.vv_operand_def]) >>
+     Cases_on `rt` >> simp[] >>
      qmatch_goalsub_abbrev_tac `as_stack_val vt result` >>
      Cases_on `result` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
      rpt strip_tac >>
@@ -1964,7 +1969,10 @@ Proof
   >~ [`Concat _`] >- suspend "concat" >>
   simp[compile_builtin_dispatch_body_def, LET_THM]
   >~ [`compile_acc _ _ _ _ _`] >-
-    (AP_TERM_TAC >> irule compiler_acc_reserved_cong >> simp[]) >>
+    (AP_TERM_TAC >> irule compiler_acc_reserved_cong >> simp[])
+  >~ [`compile_addmod`] >- rpt compiler_reserved_pair_tac
+  >~ [`compile_mulmod`] >- rpt compiler_reserved_pair_tac
+  >~ [`compile_ecrecover`] >- rpt compiler_reserved_pair_tac >>
   rpt compiler_reserved_pair_tac
 QED
 

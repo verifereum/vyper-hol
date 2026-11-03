@@ -179,9 +179,11 @@ Proof
 QED
 
 Theorem supported_declaration_exclusions_assembled:
+  supported_program
+    [FunctionDecl External Pure F T "raw" [] []
+       (BaseT (BytesT (Dynamic 8))) []] /\
   EVERY (\top. ~supported_program [top])
     [FunctionDecl Deploy Nonpayable T F "__init__" [] [] NoneT [];
-     FunctionDecl Deploy Nonpayable F T "__init__" [] [] NoneT [];
      FunctionDecl Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT [];
      VariableDecl Private Immutable "x" (BaseT (UintT 256)) (SOME 0);
      VariableDecl Private (Constant expr_test_uint) "x" (BaseT (UintT 256)) NONE;

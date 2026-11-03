@@ -3292,6 +3292,14 @@ Definition compile_type_builtin_dispatch_body_def:
          (let e1 = HD args in
           let src_ty = expr_type e1 in
           let (v, st1) = lower_value compile_expr cenv src_ty e1 st in
+          (* A zero-capacity bytestring's buffer is its length word alone, so
+             loading its data word would read past it; its value is empty
+             and converts to 0. *)
+          if is_bytestring_type src_ty ∧ is_word_type ret_ty ∧
+             (lowered_value_type cenv e1 = BaseT (BytesT (Dynamic 0)) ∨
+              lowered_value_type cenv e1 = BaseT (StringT 0))
+          then (StackValue vv_ty (Lit 0w), st1)
+          else
           case ret_ty of
             FlagT flag_nsid =>
               as_stack_val vv_ty (compile_type_convert v

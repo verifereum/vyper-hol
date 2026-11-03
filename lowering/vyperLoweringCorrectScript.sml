@@ -182,7 +182,7 @@ Definition external_call_result_rel_def:
     let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
     case (res, vres) of
       (INL v, Halt ss) =>
-        return_bytes tops ret v ss.vs_returndata /\
+        tx_return_bytes tops ret tx v ss.vs_returndata /\
         accounts_agree cx am'.accounts
           (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
         transient_agree cx am'.tStorage ss.vs_transient /\
@@ -240,6 +240,7 @@ QED
 Theorem external_return_prim_unlock_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es es' tenv ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
       (x, st') /\
@@ -269,13 +270,14 @@ Proof
                `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
     external_halt_success_unlock >>
   impl_tac >- gvs[] >>
-  strip_tac >> gvs[external_call_result_rel_def]
+  strip_tac >> gvs[external_call_result_rel_def, tx_return_bytes_def]
 QED
 
 (* Its case for the values word_value covers, whose word is val_to_w256. *)
 Theorem external_return_word_unlock_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es es' tenv ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
       (x, st') /\
@@ -307,6 +309,7 @@ QED
 Theorem external_return_none_unlock_result_rel:
   !ctx cenv lctx ty st x st' nr nkey ut iv func cx es es' tops tx srcs exps
      layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
     cenv.ce_return_pc = NONE /\
@@ -330,7 +333,7 @@ Proof
                `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
     external_halt_success_unlock >>
   impl_tac >- gvs[] >>
-  strip_tac >> gvs[external_call_result_rel_def, return_bytes_def]
+  strip_tac >> gvs[external_call_result_rel_def, tx_return_bytes_def, return_bytes_def]
 QED
 
 (* Falling off the end of a function without a return type: from the end
@@ -338,6 +341,7 @@ QED
 Theorem external_fallthrough_unlock_result_rel:
   !ctx cenv nr nkey ut iv stmts st x st' sa sb func cx es es' tops tx srcs
      exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_guarded_body cenv nr nkey ut iv stmts NONE st = (x, st') /\
     (nr /\ ~iv ==> ut) /\
@@ -364,13 +368,14 @@ Proof
                `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
     external_halt_success_unlock >>
   impl_tac >- gvs[] >>
-  strip_tac >> gvs[external_call_result_rel_def, return_bytes_def]
+  strip_tac >> gvs[external_call_result_rel_def, tx_return_bytes_def, return_bytes_def]
 QED
 
 (* The same four with no release (nr ==> iv). *)
 Theorem external_return_prim_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es tenv ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
       (x, st') /\
@@ -399,6 +404,7 @@ QED
 Theorem external_return_word_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es tenv ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
       (x, st') /\
@@ -427,6 +433,7 @@ QED
 Theorem external_return_none_result_rel:
   !ctx cenv lctx ty st x st' nr nkey ut iv func cx es tops tx srcs exps
      layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
     cenv.ce_return_pc = NONE /\
@@ -453,6 +460,7 @@ QED
 Theorem external_fallthrough_result_rel:
   !ctx cenv nr nkey ut iv stmts st x st' sa sb func cx es tops tx srcs exps
      layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_guarded_body cenv nr nkey ut iv stmts NONE st = (x, st') /\
     (nr ==> iv) /\
@@ -487,6 +495,7 @@ QED
 Theorem external_return_static_unlock_result_rel:
   !ctx op m msz nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) F F (AbiCopy m) msz nr nkey ut iv st =
       (x, st') /\
@@ -518,13 +527,14 @@ Proof
                `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
     external_halt_success_unlock >>
   impl_tac >- gvs[] >>
-  strip_tac >> gvs[external_call_result_rel_def]
+  strip_tac >> gvs[external_call_result_rel_def, tx_return_bytes_def]
 QED
 
 (* Its case with no release (nr ==> iv). *)
 Theorem external_return_static_result_rel:
   !ctx op m msz nr nkey ut iv st x st' func cenv cx es ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) F F (AbiCopy m) msz nr nkey ut iv st =
       (x, st') /\
@@ -560,6 +570,7 @@ QED
 Theorem external_return_static_cenv_unlock_result_rel:
   !ctx op m nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) F F cenv.ce_ret_enc_info
       cenv.ce_max_return_size nr nkey ut iv st = (x, st') /\
@@ -599,6 +610,7 @@ QED
 Theorem external_return_static_cenv_result_rel:
   !ctx op m nr nkey ut iv st x st' func cenv cx es ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) F F cenv.ce_ret_enc_info
       cenv.ce_max_return_size nr nkey ut iv st = (x, st') /\
@@ -723,6 +735,7 @@ QED
 Theorem external_return_abi_unlock_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
       (x, st') /\
@@ -775,7 +788,7 @@ Proof
                    `nkey`, `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`]
         mp_tac external_halt_success_unlock >>
       impl_tac >- simp[] >>
-      simp[external_call_result_rel_def] >> metis_tac[]) >>
+      simp[external_call_result_rel_def, tx_return_bytes_def] >> metis_tac[]) >>
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
@@ -783,6 +796,7 @@ QED
 Theorem external_return_abi_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
       (x, st') /\
@@ -827,6 +841,7 @@ QED
 Theorem external_return_abi_cenv_result_rel:
   !ctx op nr nkey ut iv st x st' func cenv cenv0 cx es ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) F F cenv.ce_ret_enc_info
       cenv.ce_max_return_size nr nkey ut iv st = (x, st') /\

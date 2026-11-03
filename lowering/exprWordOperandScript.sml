@@ -183,7 +183,9 @@ Proof
   qpat_x_assum `compile_type_builtin_dispatch_body _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
   strip_tac >> rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `rt` >> gvs[is_word_type_def]
+  qpat_x_assum `COND _ _ _ = _` mp_tac >> IF_CASES_TAC
+  >- (strip_tac >> gvs[word_result_ok_def]) >>
+  pop_assum kall_tac >> strip_tac >> Cases_on `rt` >> gvs[is_word_type_def]
   >~ [`FlagT flag_nsid`] >-
     (`is_word_type (expr_type arg)` by
        (Cases_on `expr_type arg` >> gvs[valid_conversion_def, is_word_type_def] >>

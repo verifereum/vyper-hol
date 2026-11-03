@@ -43,7 +43,7 @@ Theory compileEnv
 Ancestors
   immutableValue immutableEncoding vyperStorageLayoutSafety
   venomExecSemantics venomInst venomPolicyTypes
-  vyperState vyperContext vyperValue vyperABI contractABI
+  vyperState vyperContext vyperValue vyperABI vyperEvent contractABI
   byte keccak finite_map pred_set list rich_list
 Libs
   monadsyntax
@@ -1259,7 +1259,7 @@ Definition indexed_values_def:
 End
 
 Definition indexed_topic_flags_def:
-  indexed_topic_flags [] [] = ([] : bool list) ∧
+  indexed_topic_flags [] [] = ([] : type list) ∧
   indexed_topic_flags (T :: flags) (b :: bs) =
     b :: indexed_topic_flags flags bs ∧
   indexed_topic_flags (F :: flags) (_ :: bs) =
@@ -1277,8 +1277,9 @@ Definition log_bytestring_topic_def:
 End
 
 Definition log_topic_equiv_def:
-  log_topic_equiv T v topic = (log_bytestring_topic v = SOME topic) ∧
-  log_topic_equiv F v topic = (topic = val_to_w256 v)
+  log_topic_equiv ty v topic =
+    (if is_event_bytestring_type ty then log_bytestring_topic v = SOME topic
+     else topic = event_topic_word ty v)
 End
 
 Definition log_indexed_topics_equiv_def:

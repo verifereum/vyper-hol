@@ -3072,7 +3072,7 @@ Resume eval_scc_type_sound_results_mutual[Log]:
   qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Log id es))` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
   qhdtm_x_assum `type_stmt` mp_tac >>
-  simp_tac(srw_ss())[type_stmt_def] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
+  simp_tac(srw_ss())[type_stmt_def, AllCaseEqs()] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
   qhdtm_x_assum `eval_stmt` mp_tac >>
   simp_tac(srw_ss())[evaluate_def, bind_def, return_def, push_log_def,
        no_type_error_result_def, AllCaseEqs()] >>
@@ -7248,14 +7248,23 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_RawCallCalldataTarget]:
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
+Theorem raw_log_well_typed_args:
+  well_typed_expr env (Call ann RawLog es dflt) ==>
+  well_typed_exprs env es /\ dflt = NONE /\ ann = NoneT /\ LENGTH es = 2 /\
+  (?bd. EL 0 (MAP expr_type es) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
+        bound_at_most bd 4) /\
+  (?bd'. EL 1 (MAP expr_type es) = BaseT (BytesT bd'))
+Proof
+  rewrite_tac[Once well_typed_expr_def] >> metis_tac[]
+QED
+
 Resume eval_scc_type_sound_results_mutual[Expr_Call_RawLog]:
   rpt gen_tac >> strip_tac >>
   conj_tac
   >- (
     strip_tac >>
     drule rawlog_call_evaluation_safe_args >> strip_tac >>
-    qpat_x_assum `well_typed_expr env (Call _ RawLog _ _)` mp_tac >>
-    rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+    drule raw_log_well_typed_args >> strip_tac >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
                          type_check_def, assert_def, return_def, raise_def,
@@ -7841,8 +7850,7 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
 )
   | "TraceRawLog" => (
   drule rawlog_call_evaluation_safe_args >> strip_tac >>
-  qpat_x_assum `well_typed_expr _ _` mp_tac >>
-  rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+  drule raw_log_well_typed_args >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[NoAsms, Once evaluate_def, bind_def, ignore_bind_def, return_def,
        AllCaseEqs()] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
