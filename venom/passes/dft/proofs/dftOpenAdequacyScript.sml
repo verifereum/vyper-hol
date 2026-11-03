@@ -387,3 +387,36 @@ QED
    completing it would NOT resolve this allocation design gap. Request a
    strategist redesign/probe at this boundary before any global proof.
 *)
+
+Theorem dft_exec_block_ok_not_halted:
+  !fuel ctx bb s t. exec_block fuel ctx bb s = OK t ==> ~t.vs_halted
+Proof
+  rpt gen_tac >>
+  completeInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `exec_block fuel ctx bb s = OK t` mp_tac >>
+  simp[Once exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+  rename1 `SOME inst` >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  rename1 `OK after` >>
+  Cases_on `is_terminator inst.inst_opcode` >> simp[]
+  >- (Cases_on `after.vs_halted` >> simp[] >> strip_tac >> gvs[]) >>
+  strip_tac >> first_x_assum irule >>
+  gvs[get_instruction_def] >> metis_tac[]
+QED
+
+Theorem dft_run_blocks_not_ok:
+  !fuel ctx fn s t. run_blocks fuel ctx fn s <> OK t
+Proof
+  Induct >> rpt gen_tac >> simp[Once run_blocks_def] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> simp[] >>
+  rename1 `SOME bb` >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs >> simp[] >>
+  rename1 `eval_phis s bb.bb_instructions = OK sp` >>
+  Cases_on `exec_block fuel ctx bb
+    (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >> simp[] >>
+  qmatch_goalsub_rename_tac `if after.vs_halted then _ else _` >>
+  Cases_on `after.vs_halted` >> simp[]
+QED
