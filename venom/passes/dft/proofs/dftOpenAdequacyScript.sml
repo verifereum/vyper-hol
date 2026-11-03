@@ -1,7 +1,7 @@
 Theory dftOpenAdequacy
 Ancestors
   dftOpenMachine gasOracleReplay venomExecSemantics venomInst stateEquiv
-  dftSparseOracle list rich_list
+  dftSparseOracle list rich_list arithmetic
 
 Definition dft_open_result_eq_def:
   dft_open_result_eq r r' <=> lift_result (=) (=) (=) r r'
@@ -419,4 +419,59 @@ Proof
     (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >> simp[] >>
   qmatch_goalsub_rename_tac `if after.vs_halted then _ else _` >>
   Cases_on `after.vs_halted` >> simp[]
+QED
+
+Definition dft_first_hit_def:
+  dft_first_hit N E c k d <=>
+    FUNPOW N k c = d /\ E d /\
+    (!j. j < k ==> ~E (FUNPOW N j c))
+End
+
+Theorem dft_first_hit_one:
+  ~E c /\ E (N c) ==> dft_first_hit N E c 1 (N c)
+Proof
+  simp[dft_first_hit_def, FUNPOW]
+QED
+
+Theorem dft_first_hit_unique:
+  dft_first_hit N E c k d /\ dft_first_hit N E c l e ==>
+  k = l /\ d = e
+Proof
+  rw[dft_first_hit_def] >>
+  `k = l` by (spose_not_then assume_tac >>
+              `k < l \/ l < k` by decide_tac >> metis_tac[]) >>
+  gvs[]
+QED
+
+Theorem dft_first_hit_prefix:
+  FUNPOW N k c = b /\ (!j. j < k ==> ~E (FUNPOW N j c)) /\
+  dft_first_hit N E b l d ==>
+  dft_first_hit N E c (k + l) d
+Proof
+  rw[dft_first_hit_def]
+  >- metis_tac[FUNPOW_ADD, ADD_COMM] >>
+  Cases_on `j < k` >- metis_tac[] >>
+  `j = (j - k) + k /\ j - k < l` by decide_tac >>
+  metis_tac[FUNPOW_ADD]
+QED
+
+Definition dft_open_run_boundary_def:
+  dft_open_run_boundary stack c <=>
+    ?r st m. c = DftOpen (DftDone r) st m /\
+      (st = stack \/ (st = [] /\
+        ((?e. r = Error e) \/ (?s. r = Halt s) \/ (?z s. r = Abort z s))))
+End
+
+Definition dft_open_inst_boundary_def:
+  dft_open_inst_boundary fn budget bb stack i c <=>
+    dft_open_run_boundary stack c \/
+    (?t m. c = DftOpen (DftEnter fn budget t) stack m) \/
+    (?t m. c = DftOpen (DftAt fn budget bb t) stack m /\ t.vs_inst_idx = SUC i)
+End
+
+Theorem dft_open_inst_boundary_initial:
+  ~dft_open_inst_boundary fn budget bb stack s.vs_inst_idx
+    (DftOpen (DftAt fn budget bb s) stack n)
+Proof
+  simp[dft_open_inst_boundary_def, dft_open_run_boundary_def]
 QED
