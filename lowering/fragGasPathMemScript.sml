@@ -85,12 +85,6 @@ Proof
   simp[gas_path_mem_edge_def, gas_path_edge_def] >> metis_tac[]
 QED
 
-Theorem mem_edge_normal[local]:
-  gas_path_mem_edge ctx fn s n (OK t) ==> ~t.vs_halted
-Proof
-  metis_tac[mem_edge_erase, gas_path_edge_normal]
-QED
-
 Theorem mem_edge_exit[local]:
   gas_path_mem_edge ctx fn s n r /\ exit_result r ==>
   ?fuel. run_from fuel ctx fn s = r /\ mem_safe_run fuel ctx fn s
@@ -227,7 +221,7 @@ Resume gas_path_mem_edge_continue[enter_check]:
      qexists_tac `fuel` >> simp[]) >>
   metis_tac[]
 QED
-Finalise gas_path_mem_edge_continue
+Finalise gas_path_mem_edge_continue[local]
 
 (* A normal landing transfers the existing conditional continuation check;
    a terminal path supplies its own safe run. *)
@@ -244,5 +238,20 @@ Theorem gas_path_mem_exec:
      (exit_result r /\
       ?fuel. run_from fuel ctx fn s = r /\ mem_safe_run fuel ctx fn s))
 Proof
-  cheat
+  ho_match_mp_tac gas_path_mem_ind >> rpt conj_tac
+  >- (rpt gen_tac >> disch_tac >> conj_tac
+      >- metis_tac[gas_path_rules] >>
+      disj1_tac >> qexists_tac `s` >> simp[] >>
+      metis_tac[])
+  >- suspend "compose"
+  >> rpt gen_tac >> strip_tac >> conj_tac
+  >- metis_tac[mem_edge_erase, gas_path_rules]
+  >> metis_tac[mem_edge_exit]
 QED
+
+Resume gas_path_mem_exec[compose]:
+  rpt gen_tac >> strip_tac >> (
+  conj_tac >- metis_tac[mem_edge_erase, gas_path_rules] >>
+  metis_tac[gas_path_mem_edge_continue, exit_result_not_error])
+QED
+Finalise gas_path_mem_exec
