@@ -176,7 +176,8 @@ an explicit local step.
 The smoke check compares exact encoded inputs and results for all five bundled
 cases, not just pass/fail status. Import errors are reported on stderr; `{}` is
 rejected because it contains no tests, while `[]` runs the empty trace successfully.
-HOL replay uses the same complete-document parser.
+HOL replay uses the same complete-document parser. Hexadecimal words reject
+leading signs.
 
 The build first emits HOL-derived SML, then invokes MLton. Native compilation can
 take substantially longer than emission. The emitter normalizes word dimensions

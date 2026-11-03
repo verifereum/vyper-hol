@@ -89,7 +89,9 @@ class NativeInputTests(unittest.TestCase):
             for address in ("0x01", "0X01", "1"):
                 with self.subTest(source=source, address=address):
                     self.assertEqual(self.passed_input(self.balance(address), source), expected)
-            for address in ("", "0x", "0X", "0x01junk", "01 "):
+            for address in ("", "0x", "0X", "0x01junk", "01 ",
+                            "-1", "+1", "~1", "-0x01", "+0X01",
+                            " -1", "\t+1", "\n~1"):
                 with self.subTest(source=source, address=address):
                     self.rejected(json.dumps(self.balance(address)), source)
 
@@ -108,7 +110,9 @@ class NativeInputTests(unittest.TestCase):
                 for word in ("0x01", "0X01", "1"):
                     with self.subTest(source=source, field=field, word=word):
                         self.assertEqual(self.passed_input([trace(word)], source), expected)
-                for word in ("0x", "0X", "01junk", "01 "):
+                for word in ("0x", "0X", "01junk", "01 ",
+                             "-1", "+1", "~1", "-0x01", "+0X01",
+                             " -1", "\t+1", "\n~1"):
                     with self.subTest(source=source, field=field, word=word):
                         self.rejected(json.dumps([trace(word)]), source)
                 # The trace schema explicitly normalizes empty hashes to zero.
