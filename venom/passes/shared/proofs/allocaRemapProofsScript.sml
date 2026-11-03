@@ -2936,10 +2936,36 @@ Resume remap_preserved_mem_ops[dloadbytes]:
   simp[LENGTH_TAKE_EQ]
 QED
 
+Theorem extcodecopy_success_iff[local]:
+  !inst s t a d src_op n.
+    inst.inst_opcode = EXTCODECOPY /\ inst.inst_operands = [a; d; src_op; n] ==>
+    (step_inst_base inst s = OK t <=>
+     ?addr dst src sz. eval_operand a s = SOME addr /\
+                       eval_operand d s = SOME dst /\
+                       eval_operand src_op s = SOME src /\
+                       eval_operand n s = SOME sz /\
+       t = write_memory_with_expansion (w2n dst)
+             (TAKE (w2n sz)
+               (DROP (w2n src) (lookup_account (w2w addr) s.vs_accounts).code ++
+                REPLICATE (w2n sz) 0w)) s)
+Proof
+  rpt strip_tac >> simp[step_inst_base_opcode_eqs] >>
+  Cases_on `eval_operand a s` >> simp[] >>
+  Cases_on `eval_operand d s` >> simp[] >>
+  Cases_on `eval_operand src_op s` >> simp[] >>
+  Cases_on `eval_operand n s` >> simp[] >>
+  metis_tac[]
+QED
+
 (* --- EXTCODECOPY: 4-op write, dst is 2nd operand --- *)
 (* inst.inst_operands = [v2; Var v; v10; sz] — pv addr is 2nd *)
 Resume remap_preserved_mem_ops[extcodecopy]:
-  fs[step_inst_base_def, AllCaseEqs()] >>
+  drule_all extcodecopy_success_iff >>
+  disch_then (fn th => fs[th]) >>
+  rename1 `eval_operand v2 s1 = SOME addr` >>
+  rename1 `eval_operand (Var v) s1 = SOME dst` >>
+  rename1 `eval_operand v10 s1 = SOME src` >>
+  rename1 `eval_operand sz s1 = SOME size_val` >>
   fs[eval_operand_def, lookup_var_def] >>
   mem_op_preamble >>
   `v2 <> Var v` by pv_uniqueness_contra >>
