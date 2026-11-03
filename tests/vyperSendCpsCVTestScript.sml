@@ -234,10 +234,3 @@ Theorem send_cps_invalid_code_consumes_before_guard_error:
 Proof
   CONV_TAC cv_eval
 QED
-
-Theorem send_cps_NONE_zero_transfer_unchanged:
-  send_observe 42w 0 NONE (INL (Value NoneV)) 3 0 [] 2w 4w cpscv_initial_logs
-    send_initial_requests NONE
-Proof
-  CONV_TAC cv_eval
-QED

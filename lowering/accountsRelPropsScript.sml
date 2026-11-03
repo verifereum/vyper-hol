@@ -817,17 +817,3 @@ Proof
   rpt IF_CASES_TAC >> gvs[]
 QED
 
-Theorem accounts_agree_process_deletions:
-  !cx ds accounts1 accounts2.
-    accounts_agree cx accounts1 accounts2 ==>
-    accounts_agree cx
-      (process_deletions ds accounts1) (process_deletions ds accounts2)
-Proof
-  rpt gen_tac >> strip_tac >> rw[accounts_agree_def]
-  >- (simp[process_deletions_apply] >>
-      Cases_on `MEM addr ds` >> simp[] >> fs[accounts_agree_def])
-  >- (Cases_on `MEM cx.txn.target ds` >>
-      fs[process_deletions_apply, accounts_agree_def]) >>
-  Cases_on `MEM cx.txn.target ds` >>
-  fs[process_deletions_apply, accounts_agree_def, storage_agree_def]
-QED
