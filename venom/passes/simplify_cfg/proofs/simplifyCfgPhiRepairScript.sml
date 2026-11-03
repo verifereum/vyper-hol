@@ -269,3 +269,168 @@ Proof
      FILTER (\z. z.inst_opcode <> PHI) A`] >>
   simp[FILTER_APPEND, APPEND_ASSOC]
 QED
+
+Theorem fix_phi_inst_nonempty_outputs:
+  filter_phi_ops actual_preds inst.inst_operands <> [] ==>
+  (fix_phi_inst actual_preds inst).inst_outputs = inst.inst_outputs
+Proof
+  Cases_on `inst.inst_opcode = PHI` >> simp[fix_phi_inst_def] >> strip_tac >>
+  Cases_on `filter_phi_ops actual_preds inst.inst_operands` >> gvs[] >>
+  rename1 `h::t` >> Cases_on `t` >> simp[] >>
+  rename1 `h'::t'` >> Cases_on `t'` >> simp[]
+QED
+
+Theorem filter_phi_ops_resolve_nonempty:
+  phi_well_formed ops /\ MEM p actual_preds /\
+  resolve_phi p ops = SOME v ==>
+  filter_phi_ops actual_preds ops <> []
+Proof
+  qid_spec_tac `v` >> qid_spec_tac `p` >> qid_spec_tac `actual_preds` >>
+  qid_spec_tac `ops` >> recInduct phi_well_formed_ind >>
+  simp[phi_well_formed_def, resolve_phi_def, filter_phi_ops_def] >>
+  rpt strip_tac >> gvs[] >>
+  gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem fn_reachable_nonentry_predecessor:
+  fn_reachable fn b /\ fn_entry_label fn <> SOME b ==>
+  ?pb. MEM pb fn.fn_blocks /\ fn_reachable fn pb.bb_label /\
+       MEM b (bb_succs pb)
+Proof
+  simp[fn_reachable_def] >> rpt strip_tac >>
+  drule (iffLR RTC_CASES2) >> strip_tac >> gvs[] >>
+  fs[fn_cfg_edge_def] >> metis_tac[]
+QED
+
+Theorem fix_phi_inst_reachable_outputs:
+  wf_function fn /\ fn_inst_wf fn /\ all_reachable fn /\ scfg_phi_safe fn /\
+  MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
+  (fix_phi_inst (pred_labels fn bb.bb_label) inst).inst_outputs = inst.inst_outputs
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = PHI`
+  >- (irule fix_phi_inst_nonempty_outputs >>
+      `fn_reachable fn bb.bb_label` by fs[cfgWfTheory.all_reachable_def] >>
+      `fn_entry_label fn <> SOME bb.bb_label` by
+        (spose_not_then assume_tac >>
+         `bb = HD fn.fn_blocks` by
+           (irule same_label_same_block >> conj_tac
+            >- (Cases_on `fn.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def]) >>
+            qexists `fn` >> Cases_on `fn.fn_blocks` >> gvs[]) >>
+         fs[scfg_phi_safe_def, EVERY_MEM] >> metis_tac[]) >>
+      drule_all fn_reachable_nonentry_predecessor >> strip_tac >>
+      drule_all scfg_phi_safe_coverage >> strip_tac >>
+      irule filter_phi_ops_resolve_nonempty >> conj_tac
+      >- (`inst_wf inst` by (fs[fn_inst_wf_def] >> metis_tac[]) >>
+          gvs[inst_wf_def]) >>
+      qexistsl [`pb.bb_label`, `op`] >>
+      simp[pred_labels_def, block_preds_def, MEM_MAP, MEM_FILTER] >>
+      metis_tac[]) >>
+  simp[fix_phi_inst_non_phi]
+QED
+
+Theorem filter_phi_ops_pairs:
+  !ops. phi_well_formed ops ==>
+  phi_pairs (filter_phi_ops actual_preds ops) =
+  FILTER (\p. MEM (FST p) actual_preds) (phi_pairs ops)
+Proof
+  recInduct phi_well_formed_ind >>
+  simp[phi_well_formed_def, filter_phi_ops_def, phi_pairs_def] >>
+  rpt strip_tac >> IF_CASES_TAC >> simp[phi_pairs_def]
+QED
+
+Theorem fix_phi_inst_surviving_pairs:
+  phi_well_formed inst.inst_operands /\
+  (fix_phi_inst actual_preds inst).inst_opcode = PHI ==>
+  phi_pairs (fix_phi_inst actual_preds inst).inst_operands =
+  FILTER (\p. MEM (FST p) actual_preds) (phi_pairs inst.inst_operands)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_opcode = PHI` >> gvs[fix_phi_inst_def] >>
+  Cases_on `filter_phi_ops actual_preds inst.inst_operands` >> gvs[] >>
+  rename1 `h::t` >> Cases_on `t` >> gvs[] >>
+  rename1 `h'::t'` >> Cases_on `t'` >> gvs[] >>
+  metis_tac[filter_phi_ops_pairs]
+QED
+
+Theorem fix_phi_inst_ordinary_use:
+  (inst.inst_opcode = PHI ==> phi_well_formed inst.inst_operands) /\
+  (fix_phi_inst actual_preds inst).inst_opcode <> PHI /\
+  MEM (Var v) (fix_phi_inst actual_preds inst).inst_operands ==>
+  (inst.inst_opcode <> PHI /\ MEM (Var v) inst.inst_operands) \/
+  (inst.inst_opcode = PHI /\ ?p.
+    filter_phi_ops actual_preds inst.inst_operands = [Label p; Var v])
+Proof
+  Cases_on `inst.inst_opcode = PHI`
+  >- (strip_tac >> gvs[] >>
+      `phi_well_formed (filter_phi_ops actual_preds inst.inst_operands)` by
+        simp[filter_phi_ops_well_formed] >>
+      gvs[fix_phi_inst_def] >>
+      Cases_on `filter_phi_ops actual_preds inst.inst_operands` >> gvs[] >>
+      rename1 `h::t` >> Cases_on `t` >> gvs[phi_well_formed_def] >>
+      rename1 `h'::t'` >> Cases_on `t'` >> gvs[] >>
+      Cases_on `h` >> gvs[phi_well_formed_def]) >>
+  simp[fix_phi_inst_non_phi]
+QED
+
+Theorem fix_phis_in_block_member:
+  MEM repaired (fix_phis_in_block actual_preds bb).bb_instructions <=>
+  ?inst. MEM inst bb.bb_instructions /\ repaired = fix_phi_inst actual_preds inst
+Proof
+  simp[fix_phis_in_block_def, MEM_FILTER, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem fix_phis_in_block_ordinary_use:
+  fn_inst_wf fn /\ MEM bb fn.fn_blocks /\
+  MEM repaired (fix_phis_in_block (pred_labels fn bb.bb_label) bb).bb_instructions /\
+  repaired.inst_opcode <> PHI /\ MEM (Var v) repaired.inst_operands ==>
+  ?inst. MEM inst bb.bb_instructions /\
+    repaired = fix_phi_inst (pred_labels fn bb.bb_label) inst /\
+    ((inst.inst_opcode <> PHI /\ MEM (Var v) inst.inst_operands) \/
+     (inst.inst_opcode = PHI /\ ?p.
+       filter_phi_ops (pred_labels fn bb.bb_label) inst.inst_operands = [Label p; Var v]))
+Proof
+  strip_tac >> fs[fix_phis_in_block_member] >>
+  qexists `inst` >> simp[] >> irule fix_phi_inst_ordinary_use >>
+  simp[] >>
+  `inst_wf inst` by (fs[fn_inst_wf_def] >> metis_tac[]) >>
+  rpt strip_tac >> gvs[inst_wf_def]
+QED
+
+Theorem fix_phi_inst_single_pair:
+  inst.inst_opcode = PHI /\
+  filter_phi_ops actual_preds inst.inst_operands = [Label p; Var v] ==>
+  fix_phi_inst actual_preds inst =
+    inst with <| inst_opcode := ASSIGN; inst_operands := [Var v] |>
+Proof
+  simp[fix_phi_inst_def]
+QED
+
+Theorem fix_phis_in_block_phi_pair:
+  fn_inst_wf fn /\ MEM bb fn.fn_blocks /\
+  MEM repaired (fix_phis_in_block (pred_labels fn bb.bb_label) bb).bb_instructions /\
+  repaired.inst_opcode = PHI /\ MEM (p,v) (phi_pairs repaired.inst_operands) ==>
+  ?inst. MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
+    repaired = fix_phi_inst (pred_labels fn bb.bb_label) inst /\
+    MEM (p,v) (phi_pairs inst.inst_operands) /\ fn_cfg_edge fn p bb.bb_label
+Proof
+  strip_tac >> fs[fix_phis_in_block_member] >>
+  `inst.inst_opcode = PHI` by
+    (spose_not_then assume_tac >> gvs[fix_phi_inst_non_phi]) >>
+  `inst_wf inst` by (fs[fn_inst_wf_def] >> metis_tac[]) >>
+  `phi_well_formed inst.inst_operands` by gvs[inst_wf_def] >>
+  gvs[] >> drule_all fix_phi_inst_surviving_pairs >> strip_tac >>
+  qexists `inst` >> simp[] >>
+  gvs[MEM_FILTER, pred_labels_edge]
+QED
+
+Theorem filter_phi_ops_single_pair_source:
+  phi_well_formed ops /\
+  filter_phi_ops actual_preds ops = [Label p; Var v] ==>
+  MEM (p,v) (phi_pairs ops) /\ MEM p actual_preds
+Proof
+  strip_tac >> drule filter_phi_ops_pairs >>
+  disch_then (qspec_then `actual_preds` mp_tac) >>
+  simp[phi_pairs_def] >>
+  disch_then (mp_tac o Q.AP_TERM `MEM (p,v)`) >>
+  simp[MEM_FILTER]
+QED
