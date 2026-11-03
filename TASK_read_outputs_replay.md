@@ -60,7 +60,7 @@ is authorized. The existing proof is retained for replacement.
 ## Available Resources
 
 - `venom/codegen/proofs/regularReadEmitSimScript.sml`: root and consumers.
-- `venom/codegen/defs/opcodeClassScript.sml`: ef_read0 and ef_read1.
+- `venom/codegen/proofs/opcodeClassScript.sml`: ef_read0 and ef_read1.
 - `venom/defs/venomWfScript.sml`: inst_wf.
 - `venom/defs/venomInstScript.sml`: opcodes and instruction record.
 - `venom/codegen/proofs/instSimHelpersScript.sml`: existing shape helpers.
