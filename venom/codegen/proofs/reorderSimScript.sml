@@ -856,9 +856,9 @@ Proof
   decide_tac
 QED
 
-Theorem reduce_depth_plan_pending_stack_count[local]:
-  !fuel pending target_op f ps ops ps' base x.
-    residual_budget_wf base pending ps /\ MEM x pending /\
+Theorem reduce_depth_plan_pending_stack_count_unconditional:
+  !fuel pending target_op f ps ops ps' x.
+    MEM x pending /\
     reduce_depth_plan fuel pending target_op f (LENGTH pending) ps =
       (ops,ps') ==>
     LIST_ELEM_COUNT x ps'.ps_stack = LIST_ELEM_COUNT x ps.ps_stack
@@ -879,25 +879,21 @@ Proof
     metis_tac[select_spill_candidate_bound] >>
   `~MEM (stack_peek cand ps.ps_stack) pending` by
     metis_tac[select_spill_candidate_not_pending] >>
-  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
-    fs[residual_budget_wf_def] >>
-  `residual_budget_wf base' pending ps1` by
-    metis_tac[residual_budget_wf_do_spill_at] >>
   `LIST_ELEM_COUNT x ps1.ps_stack = LIST_ELEM_COUNT x ps.ps_stack` by
-    (qspecl_then [`cand`, `ps`, `spill_ops`, `ps1`] mp_tac
-       do_spill_at_multiplicity_layout >> ASM_REWRITE_TAC[] >> strip_tac >>
-     `x <> stack_peek cand ps.ps_stack` by metis_tac[] >>
-     `LIST_ELEM_COUNT x [stack_peek cand ps.ps_stack] = 0` by
-       simp[LIST_ELEM_COUNT_THM] >>
-     qpat_assum `!y. LIST_ELEM_COUNT y ps1.ps_stack + _ = _`
-       (qspec_then `x` assume_tac) >>
-     decide_tac) >>
+    metis_tac[do_spill_at_other_stack_count] >>
   Cases_on `reduce_depth_plan fuel pending target_op f
               (LENGTH pending) ps1` >> gvs[] >>
-  first_x_assum
-    (qspecl_then [`pending`, `target_op`, `f`, `ps1`, `q`, `ps'`,
-                  `base'`, `x`] mp_tac) >>
-  simp[]
+  metis_tac[]
+QED
+
+Theorem reduce_depth_plan_pending_stack_count[local]:
+  !fuel pending target_op f ps ops ps' base x.
+    residual_budget_wf base pending ps /\ MEM x pending /\
+    reduce_depth_plan fuel pending target_op f (LENGTH pending) ps =
+      (ops,ps') ==>
+    LIST_ELEM_COUNT x ps'.ps_stack = LIST_ELEM_COUNT x ps.ps_stack
+Proof
+  metis_tac[reduce_depth_plan_pending_stack_count_unconditional]
 QED
 
 
