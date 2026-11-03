@@ -588,6 +588,104 @@ Proof
   simp[GSYM execute_plan_def]
 QED
 
+Theorem create_plan_actual_prefix_split[local]:
+  !liveness dfg cfg fn inst nl halting next_term bb ps ops ps' lo.
+    generate_inst_plan liveness dfg cfg fn inst nl halting next_term bb ps =
+      SOME (ops,ps') /\
+    inst_wf inst /\
+    (inst.inst_opcode = CREATE \/ inst.inst_opcode = CREATE2) /\
+    LENGTH (compute_operands inst) <= 16 /\
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) nl ps)).ps_stack /\
+    (!l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)) ==>
+    ?pre name tail.
+      pre = FST (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps) ++
+        FST (reorder_plan dfg (compute_operands inst)
+          (SND (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps))) /\
+      name = (if inst.inst_opcode = CREATE then "CREATE" else "CREATE2") /\
+      ops = pre ++ SOEmit name :: tail /\
+      prefix_wf lo (LENGTH ps.ps_stack) pre /\ EVERY is_prefix_op pre
+Proof
+  rpt gen_tac >> strip_tac >>
+  `inst.inst_opcode <> JMP /\ ~is_commutative inst.inst_opcode /\
+   (!n psx. generate_emit_ops inst n psx =
+      ([SOEmit (if inst.inst_opcode = CREATE then "CREATE" else "CREATE2")],psx)) /\
+   generate_regular_inst_plan liveness dfg cfg fn inst nl halting next_term bb ps =
+     (ops,ps')` by
+    (qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     Cases_on `inst.inst_opcode = CREATE` >>
+     gvs[generate_inst_plan_def, generate_emit_ops_def, venom_to_evm_name_def,
+         is_param_opcode_def, is_pre_codegen_opcode_def,
+         is_unlowered_fmp_opcode_def, is_raw_fmp_opcode_def,
+         is_unlowered_internal_call_opcode_def, is_commutative_def]) >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, LET_THM] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  `prefix_wf lo (LENGTH ps.ps_stack) (input_ops ++ reorder_ops)` by
+    (qspecl_then [`compute_operands inst`, `inst.inst_opcode`, `nl`, `ps`, `lo`]
+       mp_tac emit_input_plan_wf_len >>
+     (impl_tac >- gvs[]) >> (impl_tac >- gvs[]) >> strip_tac >>
+     qspecl_then [`dfg`, `compute_operands inst`, `ps1`, `lo`]
+       mp_tac (REWRITE_RULE [LET_THM] reorder_plan_wf_len) >>
+     (impl_tac >- gvs[]) >>
+     disch_then (strip_assume_tac o REWRITE_RULE [pairTheory.PAIR]) >> gvs[] >>
+     irule prefix_wf_append >> gvs[]) >>
+  `EVERY is_prefix_op (input_ops ++ reorder_ops)` by
+    metis_tac[prefix_wf_every_prefix_op] >>
+  Cases_on `inst.inst_outputs = []` >> gvs[] >>
+  metis_tac[APPEND_NIL]
+QED
+
+Theorem create_plan_actual_prefix_setup[local]:
+  !liveness dfg cfg fn inst nl halting next_term bb ps ops ps' lo o2pc prog vs st.
+    generate_inst_plan liveness dfg cfg fn inst nl halting next_term bb ps =
+      SOME (ops,ps') /\
+    inst_wf inst /\
+    (inst.inst_opcode = CREATE \/ inst.inst_opcode = CREATE2) /\
+    LENGTH (compute_operands inst) <= 16 /\
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) nl ps)).ps_stack /\
+    (!l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)) /\
+    prefix_spill_wf initial_fmp lo (FRONT ops) ps /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?pre name tail mid.
+      pre = FST (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps) ++
+        FST (reorder_plan dfg (compute_operands inst)
+          (SND (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps))) /\
+      name = (if inst.inst_opcode = CREATE then "CREATE" else "CREATE2") /\
+      ops = pre ++ SOEmit name :: tail /\
+      asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp pre)) st = AsmOK mid /\
+      venom_asm_rel lo (apply_prefix_ops initial_fmp lo pre ps) vs mid /\
+      asm_block_at prog mid.as_pc (execute_plan initial_fmp (SOEmit name :: tail)) /\
+      mid.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp pre)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?pre name tail.
+    pre = FST (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps) ++
+      FST (reorder_plan dfg (compute_operands inst)
+        (SND (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps))) /\
+    name = (if inst.inst_opcode = CREATE then "CREATE" else "CREATE2") /\
+    ops = pre ++ SOEmit name :: tail /\
+    prefix_wf lo (LENGTH ps.ps_stack) pre /\ EVERY is_prefix_op pre` by
+    metis_tac[create_plan_actual_prefix_split] >>
+  qexistsl_tac [`pre`, `name`, `tail`] >>
+  `?mid.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp pre)) st = AsmOK mid /\
+    venom_asm_rel lo (apply_prefix_ops initial_fmp lo pre ps) vs mid /\
+    asm_block_at prog mid.as_pc (execute_plan initial_fmp (SOEmit name :: tail)) /\
+    mid.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp pre)` by
+    (qpat_x_assum `pre = _` kall_tac >>
+     qpat_x_assum `name = _` kall_tac >>
+     qpat_x_assum `ops = _` SUBST_ALL_TAC >>
+     qspecl_then [`lo`, `o2pc`, `prog`, `ps`, `vs`, `st`, `pre`,
+       `SOEmit name :: tail`] mp_tac prefix_sim >>
+     (impl_tac >- simp[]) >> metis_tac[]) >>
+  qexists_tac `mid` >> simp[]
+QED
+
 (* ===== Memory read_byte helpers ===== *)
 
 (* read_byte of zero-padded memory = read_byte of original *)
