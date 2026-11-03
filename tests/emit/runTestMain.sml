@@ -16,7 +16,7 @@ structure RunTestMain = struct
       | escape #"\r" = "\\r"
       | escape #"\t" = "\\t"
       | escape c =
-          if Char.ord c < 32 then let
+          if Char.ord c < 32 orelse Char.ord c >= 128 then let
             val hex = Int.fmt StringCvt.HEX (Char.ord c)
           in "\\u00" ^ (if size hex=1 then "0" else "") ^ hex end
           else String.str c

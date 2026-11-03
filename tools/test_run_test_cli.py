@@ -120,6 +120,46 @@ class NativeInputTests(unittest.TestCase):
                     self.assertEqual(self.passed_input([trace("")], source),
                                      self.passed_input([trace("0")], source))
 
+    def test_non_utf8_assertion_reason_is_valid_json(self) -> None:
+        fixture = RUNNER.parents[1] / "fixtures/run_test_json/basic.json"
+        exported = json.loads(fixture.read_text())
+        deployment = exported["setup"]["traces"][0]
+        function = deployment["annotated_ast"]["ast"]["body"][0]
+        string_type = {"name": "String", "length": 32}
+        function["args"]["args"][0]["annotation"] = {
+            "ast_type": "Subscript",
+            "value": {"ast_type": "Name", "id": "String"},
+            "slice": {"ast_type": "Int", "value": 32},
+        }
+        function["func_type"]["argument_types"] = [string_type]
+        function["func_type"]["return_type"] = None
+        function["returns"] = None
+        function["body"] = [{
+            "ast_type": "Raise",
+            "exc": {"ast_type": "Name", "id": "x", "type": string_type},
+        }]
+        deployment["source_code"] = "@external\ndef foo(x: String[32]):\n    raise x\n"
+        abi = deployment["contract_abi"][0]
+        abi["inputs"][0]["type"] = "string"
+        abi["outputs"] = []
+        call = exported["test_basic_code"]["traces"][0]
+        # foo(string), followed by an ABI string containing invalid UTF-8.
+        reason = b'\xff\x80"\\\n'
+        call["call_args"]["calldata"] = (
+            "f31a6969" + f"{32:064x}" + f"{len(reason):064x}"
+            + reason.hex() + "00" * (32 - len(reason))
+        )
+        call["output"] = ""
+        document = json.dumps([deployment, call])
+        for source in ("stdin", "file"):
+            with self.subTest(source=source):
+                result = self.run_document(document, source)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                record = json.loads(result.stdout)
+                self.assertEqual(record["status"], "failed")
+                self.assertEqual(record["error"],
+                                 "AssertException: " + reason.decode("latin-1"))
+
     def test_byte_strings_keep_permissive_semantics(self) -> None:
         # Byte strings strip only lowercase 0x, permit empty/odd inputs, and
         # map invalid nibbles to zero. Word parsing must not replace this path.
