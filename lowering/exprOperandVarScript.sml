@@ -634,7 +634,7 @@ Proof
   simp[compile_external_call_kwargs_def, LET_THM, comp_ignore_bind_def] >>
   map_every qid_spec_tac [`sb`, `op`, `sa`] >>
   rpt (ho_match_mp_tac compiler_var_prefix >> gen_tac >> simp[LET_THM]) >>
-  Cases_on `retsz = 0` >-
+  Cases_on `rt = NoneT` >-
     simp[comp_return_def] >>
   Cases_on `hasdef` >> simp[comp_bind_def, comp_return_def] >>
   rpt gen_tac >> rpt (pairarg_tac >> gvs[]) >> rpt strip_tac

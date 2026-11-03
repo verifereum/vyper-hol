@@ -129,6 +129,10 @@
  *     the theorem then says nothing about that contract.  Restricting the
  *     clause to the main module would not help: ~ on an imported flag
  *     would then lower to an XOR with 0, not Vyper's mask.
+ *   - The method ids clause: the compile environment's method id of an
+ *     external function is the selector of its signature, the four bytes
+ *     the source sends first (build_ext_calldata).  build_compile_env
+ *     fills ce_method_id with exactly that, over its type environment.
  *   - byte_widths_expr e: every integer type in the expression is
  *     int8..int256 or uint8..uint256 in steps of 8, as Vyper's are
  *     (IntegerT.signeds and IntegerT.unsigneds, bits = 8 * i for i in
@@ -232,7 +236,7 @@
 Theory exprSimHyps
 Ancestors
   list finite_map
-  exprSim exprCallBounds exprBopLowering exprLowering compileEnv
+  exprSim exprCallBounds selectorDispatch exprBopLowering exprLowering compileEnv
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
@@ -301,6 +305,10 @@ Definition expr_sim_inv_def:
        cenv.ce_flag_member_id (nsid_to_string (src, fid)) mid = i) /\
     (!nsid m. FLOOKUP (get_tenv cx) nsid = SOME (FlagArgs m) ==>
               cenv.ce_flag_n_members (nsid_to_string nsid) = m) /\
+    (!fname tys.
+       cenv.ce_method_id fname tys =
+       w2n (calldata_method_id
+              (function_selector fname (vyper_to_abi_types (get_tenv cx) tys)))) /\
     sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
     (!name fields.
        FLOOKUP cenv.ce_struct_fields name = SOME fields ==>

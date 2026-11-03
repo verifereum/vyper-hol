@@ -13,10 +13,19 @@
  *     its operands' judgments, for compile_expr_sim and the body
  *     simulation; compile_extcall_case_sim, expr_vv_ok of extcall, follows
  *
- * compile_extcall_case is cheated: as defined it is false for dynamic
- * arguments, whose calldata the lowering sends at the argument tuple's ABI
- * size bound (as Python at VYPER_PIN does) while the source sends the exact
- * encoding (build_ext_calldata).
+ * Why it holds: the call request agrees with the source's.  The selector is
+ * cenv.ce_method_id, which expr_sim_inv pins to function_selector of the
+ * declared ABI types; the calldata is the selector followed by the arguments
+ * encoded at their own lowered types, at the encoded length (vyper#5127),
+ * as build_ext_calldata sends (bounds don't change ABI bytes); a storage,
+ * transient or immutable argument is read at its own declared type
+ * (vyper#5239).  The extcodesize check and the void result are keyed on
+ * return_type = NoneT on both sides, and typing rules out
+ * default_return_value on a void call.  The call itself is an oracle step
+ * (extCallOracleStep: venom_call_request_source, exec_ext_call_oracle_step),
+ * as for send (exprSimSend).  A revert copies the returndata and REVERTs;
+ * empty returndata with a default takes the default after the code recheck;
+ * otherwise the returndata is decoded with the bounded memory decoder.
  *)
 
 Theory exprSimExtCall

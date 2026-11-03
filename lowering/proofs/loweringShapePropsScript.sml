@@ -6305,13 +6305,13 @@ Proof
      mp_tac (Q.SPEC `[buf.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
   shape_call_effect_tac `B`
     (shape_under_tac shape_step_emit_void_plain `B` >> simp[Abbr `B`] >> shape_opcode_tac) >>
-  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. B st` >> conj_tac
+  match_mp_tac shape_step_bind >> qexists_tac `\v st. B st /\ plain_operand st v` >> conj_tac
   >- suspend "store_args" >>
-  gen_tac >> simp[] >> suspend "call"
+  qx_gen_tac `call_len` >> simp[] >> suspend "call"
 QED
 Resume compile_external_call_kwargs_shape[store_args]:
   IF_CASES_TAC >> simp[]
-  >- (irule shape_step_return >> simp[]) >>
+  >- (irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
   match_mp_tac shape_step_bind >> qexists_tac `\b st. B st /\ plain_operand st b.buf_operand` >> conj_tac
   >- (shape_under_tac compile_alloc_buffer_shape_framed `B`) >> qx_gen_tac `args_buf` >> simp[] >>
   qabbrev_tac `A = \st. B st /\ plain_operand st args_buf.buf_operand` >>
@@ -6325,24 +6325,29 @@ Resume compile_external_call_kwargs_shape[store_args]:
        (Induct >> Cases_on `ys` >> simp[ZIP_def]) >>
      rpt strip_tac >> first_x_assum irule >> gvs[Abbr `B`, Abbr `P`, Abbr `V`]) >>
   gen_tac >> simp[] >> shape_scalar_emit_bind_tac `A` `args_dst` (simp[Abbr `A`, Abbr `B`]) >>
-  shape_call_effect_tac `B`
-    (shape_under_tac (cj 2 compile_abi_encode_shape_framed) `A` >> simp[Abbr `A`]) >>
-  irule shape_step_return >> simp[]
+  match_mp_tac shape_step_bind >> qexists_tac `\v st. B st /\ plain_operand st v` >> conj_tac
+  >- (shape_under_tac (cj 2 compile_abi_encode_shape_framed) `B` >> simp[Abbr `A`]) >>
+  qx_gen_tac `args_len` >> simp[] >>
+  shape_under_tac shape_step_emit_op_plain `B` >> shape_opcode_tac
 QED
 Resume compile_external_call_kwargs_shape[call]:
-  shape_scalar_emit_bind_tac `B` `call_offset` (simp[Abbr `B`]) >>
-  qabbrev_tac `C = \st. B st /\ plain_operand st call_offset` >>
+  qabbrev_tac `B1 = \st. B st /\ plain_operand st call_len` >>
+  `shape_stable B1` by
+    (simp[Abbr `B1`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[call_len]` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `B1` `call_offset` (simp[Abbr `B1`, Abbr `B`]) >>
+  qabbrev_tac `C = \st. B1 st /\ plain_operand st call_offset` >>
   `shape_stable C` by
     (simp[Abbr `C`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
      mp_tac (Q.SPEC `[call_offset]` shape_stable_plain_operands) >> simp[]) >>
   shape_call_effect_tac `C`
     (IF_CASES_TAC >> simp[]
-     >- (shape_under_tac compile_extcodesize_check_shape `C` >> simp[Abbr `C`, Abbr `B`, Abbr `P`]) >>
+     >- (shape_under_tac compile_extcodesize_check_shape `C` >> simp[Abbr `C`, Abbr `B1`, Abbr `B`, Abbr `P`]) >>
      irule shape_step_return >> simp[]) >>
   match_mp_tac shape_step_bind >> qexists_tac `\v st. B st /\ plain_operand st v` >> conj_tac
   >- (IF_CASES_TAC >> simp[] >>
       shape_under_tac shape_step_emit_op_call_guarded `B` >>
-      simp[Abbr `C`, Abbr `B`, Abbr `P`, Abbr `G`] >>
+      simp[Abbr `C`, Abbr `B1`, Abbr `B`, Abbr `P`, Abbr `G`] >>
       shape_opcode_tac >> rpt strip_tac >> gvs[gas_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
   qx_gen_tac `success` >> simp[] >>
   qabbrev_tac `SuccessFrame = \st. B st /\ plain_operand st success` >>
@@ -6402,15 +6407,10 @@ Finalise compile_external_call_kwargs_shape[local]
 val shape_external_result_tac =
   irule shape_step_uncurry >> qexists_tac `\v st. plain_operand st v` >> reverse conj_tac
   >- (shape_under_tac compile_external_call_kwargs_shape `\st. T` >> simp[shape_stable_def] >>
-      `!ts vs st. EVERY (value_shape_ok st) vs ==>
-         EVERY (value_shape_ok st) (MAP2 ext_call_arg_value ts vs)` by
-        (Induct >> namedCases_on `vs` ["", "vv tail"] >> simp[MAP2_DEF] >> rpt gen_tac >> strip_tac >>
-         Cases_on `vv` >> gvs[ext_call_arg_value_def, value_shape_ok_def]) >>
       Cases_on `options0` >>
       simp[Abbr `KwFrame`, Abbr `ValuesFrame`, Abbr `AddrFrame`,
-           plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
-      rpt strip_tac >> first_x_assum irule >> simp[]) >>
-  gen_tac >> Cases_on `abi_size_bound cenv.ce_struct_fields wrapped_return = 0` >>
+           plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  gen_tac >> Cases_on `return_type = NoneT` >>
   simp[shape_step_def, shape_extends_refl, value_shape_ok_def,
        mk_ptr_def, loc_shape_ok_def];
 
@@ -6455,8 +6455,7 @@ Proof
   >- (irule shape_step_conseq >> irule_at Any lower_value_callback_shape >>
       qexists_tac `\st. cenv_shape_ok st cenv` >> simp[cenv_shape_ok_stable]) >>
   qx_gen_tac `addr_op` >> simp[] >>
-  qmatch_goalsub_abbrev_tac `ext_call_arg_types cenv arg_types pos_args` >>
-  qmatch_goalsub_abbrev_tac `MAP2 ext_call_arg_value call_types` >>
+  qmatch_goalsub_abbrev_tac `MAP (lowered_value_type cenv) pos_args` >>
   qmatch_goalsub_abbrev_tac `abi_size_bound cenv.ce_struct_fields wrapped_return` >>
   qabbrev_tac `AddrFrame = \st. cenv_shape_ok st cenv /\ plain_operand st addr_op` >>
   `shape_stable AddrFrame` by

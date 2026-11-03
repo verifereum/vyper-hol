@@ -32,6 +32,25 @@ Proof
   rw[FUN_EQ_THM] >> irule type_memory_bytes_struct_fields >> simp[]
 QED
 
+Theorem lowered_value_type_struct_fields:
+  !c e c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+           lowered_value_type c' e = lowered_value_type c e
+Proof
+  ho_match_mp_tac exprLoweringTheory.lowered_value_type_ind >> rpt strip_tac >>
+  gvs[exprLoweringTheory.lowered_value_type_def]
+QED
+
+Theorem ext_call_alloc_ok_struct_fields:
+  !c ct es c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+               ext_call_alloc_ok c' ct es = ext_call_alloc_ok c ct es
+Proof
+  ho_match_mp_tac ext_call_alloc_ok_ind >> rpt strip_tac >>
+  drule type_memory_bytes_frame >> strip_tac >>
+  `lowered_value_type c' = lowered_value_type c` by
+    (simp[FUN_EQ_THM] >> metis_tac[lowered_value_type_struct_fields]) >>
+  gvs[ext_call_alloc_ok_def]
+QED
+
 Theorem alloc_limits_struct_fields:
   (!c e c'. c'.ce_struct_fields = c.ce_struct_fields ==>
             alloc_limits_expr c' e = alloc_limits_expr c e) /\
@@ -46,6 +65,7 @@ Theorem alloc_limits_struct_fields:
 Proof
   ho_match_mp_tac alloc_limits_expr_ind >> rpt conj_tac >> rpt gen_tac >>
   rpt strip_tac >> drule type_memory_bytes_frame >> strip_tac >>
+  drule ext_call_alloc_ok_struct_fields >> strip_tac >>
   simp[alloc_limits_expr_def, type_alloc_ok_def]
 QED
 

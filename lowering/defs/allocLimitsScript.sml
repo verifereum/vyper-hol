@@ -35,10 +35,26 @@ Definition type_alloc_ok_def:
     (~is_word_type t ==> type_memory_bytes cenv t < 2 ** 64)
 End
 
+(* The buffers _lower_external_call allocates for an external call: the
+   argument tuple in memory (new_temporary_value) and the call buffer, the
+   larger of the argument and return ABI size bounds plus the method id word
+   (allocate_buffer).  Their sizes are sums over the arguments, which no
+   node's type_alloc_ok bounds. *)
+Definition ext_call_alloc_ok_def:
+  ext_call_alloc_ok cenv (ExtCall _ _ (_, arg_tys, ret) _) es =
+    (let tys = MAP (lowered_value_type cenv) (TAKE (LENGTH arg_tys) (DROP 1 es));
+         wrapped = if needs_external_call_wrap ret then TupleT [ret] else ret in
+       SUM (MAP (type_memory_bytes cenv) tys) < 2 ** 64 /\
+       MAX (abi_size_bound cenv.ce_struct_fields (TupleT tys))
+           (abi_size_bound cenv.ce_struct_fields wrapped) + 32 < 2 ** 64) /\
+  ext_call_alloc_ok cenv _ _ = T
+End
+
 (* Every static buffer the lowering allocates for a node of the expression
    is below Python's allocation limit, 2 ** 64 bytes: the buffers of bytes
    and string literals, struct and array literals, empty(T) of a type that
-   is not a word, the output of a calldata slice, and the copy unwrap_value
+   is not a word, the output of a calldata slice, an external call's
+   argument and call buffers, and the copy unwrap_value
    makes of the node's value when it is not in memory, which every node's
    type_alloc_ok bounds.  The same recursion as byte_widths_expr. *)
 Definition alloc_limits_expr_def:
@@ -74,9 +90,9 @@ Definition alloc_limits_expr_def:
      alloc_limits_exprs cenv es) /\
   alloc_limits_expr cenv (Pop t tgt) =
     (type_alloc_ok cenv t /\ alloc_limits_target cenv tgt) /\
-  alloc_limits_expr cenv (Call t _ es dflt) =
-    (type_alloc_ok cenv t /\ alloc_limits_exprs cenv es /\
-     alloc_limits_opt cenv dflt) /\
+  alloc_limits_expr cenv (Call t ct es dflt) =
+    (type_alloc_ok cenv t /\ ext_call_alloc_ok cenv ct es /\
+     alloc_limits_exprs cenv es /\ alloc_limits_opt cenv dflt) /\
 
   alloc_limits_target cenv (NameTarget _) = T /\
   alloc_limits_target cenv (TopLevelNameTarget _) = T /\

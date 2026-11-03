@@ -170,27 +170,6 @@ Definition lowered_value_type_def:
   lowered_value_type cenv e = expr_type e
 End
 
-(* The type Python's lowering gives an external-call argument (v.typ in
-   _lower_external_call). A storage, transient or immutable variable is read
-   at its annotated type, which for a call argument is the declared parameter
-   type (lower_Attribute, lower_Name); any other argument has its own lowered
-   type. *)
-Definition ext_call_arg_types_def:
-  ext_call_arg_types cenv (decl_ty::decl_tys) (e::es) =
-    (case e of
-     | TopLevelName _ _ => decl_ty
-     | _ => lowered_value_type cenv e) ::
-    ext_call_arg_types cenv decl_tys es ∧
-  ext_call_arg_types cenv _ _ = []
-End
-
-(* An argument value read from storage, transient storage or code is copied
-   to memory at its call-site type (VyperValue.from_ptr with v.typ). *)
-Definition ext_call_arg_value_def:
-  ext_call_arg_value ty (LocatedValue _ p) = LocatedValue ty p ∧
-  ext_call_arg_value ty vv = vv
-End
-
 (* ===== Array Location Inference ===== *)
 (* Infer array data location from expression AST + compile_env.
    TopLevelName → look up the nsid in ce_module_vars → StorageLoc/TransientLoc/ImmutableLoc.
@@ -1021,7 +1000,6 @@ Definition compile_external_call_kwargs_def:
                                return_type default_ty args_enc_info ret_dec_info =
     let buf_size = (if args_abi_size > return_abi_size
                     then args_abi_size else return_abi_size) + 32 in
-    let call_len = Lit (n2w (4 + args_abi_size)) in
     let ret_len = Lit (n2w return_abi_size) in
     do (* Python allocates the shared call/return buffer before the temporary
           memory-layout argument tuple. *)
@@ -1029,21 +1007,28 @@ Definition compile_external_call_kwargs_def:
        let buf_op = buf_op_alloc.buf_operand in
        do (* Store method ID *)
           emit_void MSTORE [buf_op; Lit (n2w method_id_val)];
-          (* Python omits the temporary tuple entirely for zero arguments. *)
-          (if arg_vals = [] then comp_return ()
-           else
-             do args_alloc <- compile_alloc_buffer args_mem_size;
-                let args_op = args_alloc.buf_operand in
-                do compile_extcall_store_values cenv (ZIP (arg_vals,arg_types))
-                     args_op 0;
-                   args_dst <- emit_op ADD [buf_op; Lit 32w];
-                   compile_abi_encode_to_buf args_dst args_op args_enc_info;
-                   comp_return ()
-                od
-             od);
+          (* Python omits the temporary tuple entirely for zero arguments.
+             The calldata is the selector and the encoded arguments, at their
+             encoded length rather than the tuple's ABI size bound
+             (vyper#5127). *)
+          call_len <-
+            (if arg_vals = [] then return (Lit 4w)
+             else
+               do args_alloc <- compile_alloc_buffer args_mem_size;
+                  let args_op = args_alloc.buf_operand in
+                  do compile_extcall_store_values cenv (ZIP (arg_vals,arg_types))
+                       args_op 0;
+                     args_dst <- emit_op ADD [buf_op; Lit 32w];
+                     args_len <- compile_abi_encode_to_buf args_dst args_op
+                                   args_enc_info;
+                     emit_op ADD [args_len; Lit 4w]
+                  od
+               od);
           call_offset <- emit_op ADD [buf_op; Lit 28w];
-          (* Extcodesize check for void calls without skip_contract_check *)
-          (if return_abi_size = 0 ∧ ¬skip_check then
+          (* Extcodesize check for void calls without skip_contract_check.
+             Python keys void calls on the return type being None, not on
+             a zero ABI size. *)
+          (if return_type = NoneT ∧ ¬skip_check then
              compile_extcodesize_check addr_op
            else return ());
           (* Dispatch CALL or STATICCALL with explicit gas *)
@@ -1071,7 +1056,7 @@ Definition compile_external_call_kwargs_def:
           (* Return value handling *)
           (* Python's new_temporary_value(wrapped_return_t) allocates the
              memory size of the return type, not its ABI size bound. *)
-          if return_abi_size = 0 then
+          if return_type = NoneT then
             comp_return (Lit 0w)
           else if has_default then
             do (* Allocate result, use default_return_path *)
@@ -2521,9 +2506,11 @@ Definition compile_call_def:
        let value_op = (case value_opt of SOME v => v | NONE => Lit 0w) in
        (* Python lays the argument buffer out with the types of the lowered
           argument values (_lower_external_call: TupleT(v.typ for v in
-          arg_vals)), not the declared parameter types. The selector is the
-          same under both, since bounds don't appear in it. *)
-       let call_arg_types = ext_call_arg_types cenv arg_types func_args in
+          arg_vals)), not the declared parameter types. A storage, transient
+          or immutable argument is read at its own declared type, as after
+          vyper#5239. The selector is the same under both, since bounds don't
+          appear in it. *)
+       let call_arg_types = MAP (lowered_value_type cenv) func_args in
        let args_mem_size = SUM (MAP (type_memory_bytes cenv) call_arg_types) in
        let args_abi_size = abi_size_bound cenv.ce_struct_fields (TupleT call_arg_types) in
        let args_enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT call_arg_types) in
@@ -2543,14 +2530,14 @@ Definition compile_call_def:
        let ret_dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv wrapped_return in
        let (result_op, st6) =
          compile_external_call_kwargs cenv addr_op
-                                    (MAP2 ext_call_arg_value call_arg_types arg_vals)
+                                    arg_vals
                                     call_arg_types
                                     args_mem_size args_abi_size method_id_val
                                     return_abi_size min_return_size ret_mem_bytes
                                     is_static value_op gas_op skip_contract_check
                                     has_default default_op return_type default_ty
                                     args_enc_info ret_dec_info st5 in
-       if return_abi_size = 0 then (StackValue ret_ty result_op, st6)
+       if return_type = NoneT then (StackValue ret_ty result_op, st6)
        else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st6)) ∧
   compile_call cfn cenv ret_ty ty (Send has_gas) args default_ret st =
     (case args of

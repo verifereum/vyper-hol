@@ -3419,7 +3419,7 @@ Theorem ci_mono_compile_external_call_kwargs[local]:
 Proof
   rpt gen_tac >> simp[compile_external_call_kwargs_def, LET_THM] >> BETA_TAC >> irule ci_mono_bind >> reverse conj_tac >- simp[ci_mono_compile_alloc_buffer] >> rpt strip_tac >> BETA_TAC >>
   ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
-  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  ho_match_mp_tac ci_mono_bind >> conj_tac
   >- (IF_CASES_TAC >- simp[ci_mono_comp_return] >>
       rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
       >- simp[ci_mono_compile_alloc_buffer] >>
@@ -3429,9 +3429,9 @@ Proof
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
       rpt strip_tac >>
-      ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+      ho_match_mp_tac ci_mono_bind >> conj_tac
       >- simp[cj 2 ci_mono_compile_abi_encode] >>
-      simp[ci_mono_comp_return]) >>
+      simp[ci_mono_emit_op]) >>
   rpt strip_tac >> irule ci_mono_bind >> simp[ci_mono_emit_op] >> rpt strip_tac >> irule ci_mono_ignore_bind >> conj_tac >- (IF_CASES_TAC >> simp[ci_mono_compile_extcodesize_check, ci_mono_comp_return]) >>
   gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (gen_tac >> IF_CASES_TAC >> simp[ci_mono_emit_op]) >>
   rpt gen_tac >> ho_match_mp_tac ci_mono_bind >>

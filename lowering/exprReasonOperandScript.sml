@@ -679,7 +679,7 @@ Proof
   simp[compile_external_call_kwargs_def, LET_THM, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `retsz = 0`
+  Cases_on `rt = NoneT`
   >- simp[comp_return_def] >>
   simp[] >> Cases_on `hasdef` >>
   simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
