@@ -17,7 +17,7 @@
 Theory bodySimEntry
 Ancestors
   list finite_map bodySim compileEnv compileVyper moduleLowering
-  intCallCallee
+  intCallCallee allocLimitsProps supportedProgramProps supportedProgram exprSimHyps
 Libs
   monadsyntax
 
@@ -200,4 +200,35 @@ Proof
   rpt BasicProvers.VAR_EQ_TAC >>
   drule_all materialize_internal_params_bound >> strip_tac >> gvs[] >>
   gvs[Abbr `ce`] >> drule build_compile_env_bound >> simp[]
+QED
+
+(* Checked selected-body typing and the runtime allocation check together
+   establish the support/size premises at an external parameter frame. *)
+Theorem external_body_support_bounds:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\
+  MEM (FunctionDecl External mut nr rr name args defaults ret ss) tops /\
+  cenv.ce_struct_fields = make_struct_fields_map tops /\
+  env_context_consistent env cx /\
+  (!n ty. FLOOKUP env.var_types n = SOME ty ==> MEM (n,ty) args) /\
+  EVERY (\(n,ty). assignable_type env.type_defs ty) args /\
+  type_stmts env ret ss = SOME env' ==>
+  locals_alloc_ok cenv env /\ EVERY (stmt_exprs_ok cenv) ss /\
+  ?bindings. supported_stmts tops bindings ss
+Proof
+  strip_tac >>
+  drule_all supported_external_allocs_ok >> strip_tac >>
+  drule_all fn_allocs_ok_body >> strip_tac >>
+  `~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss` by
+    (drule_all typed_parameter_body_excludes_bad_widths >> simp[]) >>
+  `EVERY (stmt_exprs_ok cenv) ss` by
+    (irule stmt_exprs_ok_from_traversal_bounds >> simp[]) >>
+  conj_tac
+  >- (simp[locals_alloc_ok_def] >> rpt strip_tac >>
+      `MEM (id,ty) args` by metis_tac[] >>
+      qpat_x_assum `EVERY (\(_,ty). type_memory_bytes cenv ty < _) args` mp_tac >>
+      simp[EVERY_MEM] >>
+      disch_then (qspec_then `(id,ty)` mp_tac) >> simp[]) >>
+  simp[] >> drule_all supported_program_function >>
+  simp[supported_function_body_def] >> metis_tac[]
 QED
