@@ -103,12 +103,14 @@ Definition label_positions_ok_def:
     | (JNZ, [c; Label t; Label f]) => ~is_label_operand c
     | (PHI, ops) => T
     | (INVOKE, Label l :: args) => EVERY (\op. ~is_label_operand op) args
+    | (CODECOPY, [dst; Label "runtime_begin"; sz]) =>
+        ~is_label_operand dst /\ ~is_label_operand sz
     | (_, ops) => EVERY (\op. ~is_label_operand op) ops
 End
 
 Definition reserved_label_def:
   reserved_label l <=>
-    l = "revert" \/ l = "code_end" \/
+    l = "revert" \/ l = "code_end" \/ l = "runtime_begin" \/
     isPREFIX "return_label_" l \/ isPREFIX "reachable_" l
 End
 
