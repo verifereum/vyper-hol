@@ -1436,7 +1436,8 @@ Theorem step_CALLDATALOAD:
         (let data = ss.vs_call_ctx.cc_calldata in
          word_of_bytes T (0w:bytes32) (TAKE 32 (DROP (w2n v1) data ++ REPLICATE 32 0w))) ss)
 Proof
-  rpt strip_tac >> simp[step_inst_base_def, exec_read1_def, mk_inst_def]
+  rpt strip_tac >> simp[mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, exec_read1_def]
 QED
 
 Theorem step_SSTORE:
