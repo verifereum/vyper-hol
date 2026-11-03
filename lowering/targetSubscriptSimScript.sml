@@ -3,6 +3,7 @@ Theory targetSubscriptSim
 Ancestors
   targetPlaceSim exprNoPopScopes exprLowering emitHelper compileEnv
   vyperAST pair exprSimOps exprSim exprLoweringProps loweringShapeDefs fragExec
+  vyperState vyperStorageBackend
 Libs
   pairLib
 
@@ -162,4 +163,30 @@ Proof
   disch_then (qspecl_then [`sm`, `sn`, `t`, `INR exc`, `es2`, `s0`] mp_tac) >>
   simp[] >> strip_tac >>
   irule frag_exec_conseq >> first_assum (irule_at Any) >> simp[]
+QED
+
+(* Exact source bounds classification; the dynamic length is read now. *)
+Theorem extend_place_storage_array_index:
+  !cx tr slot et bd i es.
+    extend_place cx (PlaceR (StoragePlace tr slot (ArrayTV et bd)))
+      (ValueSubscript (IntV i)) es =
+    (case bd of
+       Fixed n =>
+         if 0 <= i /\ Num i < n then
+           (INL (PlaceR (StoragePlace tr
+             (slot + n2w (Num i * type_slot_size et)) et)), es)
+         else (INR (Error (RuntimeError "array fixed oob")), es)
+     | Dynamic n =>
+         if ~(0 <= i /\ Num i < n) then
+           (INR (Error (RuntimeError "array dynamic capacity oob")), es)
+         else if Num i < w2n (lookup_storage slot (get_storage cx es tr)) then
+           (INL (PlaceR (StoragePlace tr
+             (slot + n2w (1 + Num i * type_slot_size et)) et)), es)
+         else (INR (Error (RuntimeError "array dynamic length oob")), es))
+Proof
+  rpt gen_tac >> Cases_on `et` >> Cases_on `bd` >>
+  simp[extend_place_def, extend_storage_place_def, resolve_array_element_def,
+       check_def, assert_def, bind_def, ignore_bind_def, return_def,
+       raise_def, get_storage_backend_eq, LET_THM] >>
+  rpt IF_CASES_TAC >> gvs[return_def, raise_def, bind_def, ignore_bind_def]
 QED
