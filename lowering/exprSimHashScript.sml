@@ -174,6 +174,56 @@ Proof
   drule_all step_SHA3_bytes >> simp[exprLoweringPropsTheory.run_inst_seq_def]
 QED
 
+Theorem emit_ADD_frame:
+  emit_op ADD [a;b] sa = (op,sb) /\
+  eval_operand a s = SOME u /\ eval_operand b s = SOME v ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (u + v) /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  qexists `update_var (STRING #"%" (toString sa.cs_next_var)) (u + v) s` >>
+  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+       bind_outputs_def, eval_operand_def, lookup_var_update_var,
+       update_var_def] >>
+  rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def,
+                       finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem emit_MLOAD_frame:
+  emit_op MLOAD [p] sa = (op,sb) /\ eval_operand p s = SOME a ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (mload (w2n a) s) /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  qexists `update_var (STRING #"%" (toString sa.cs_next_var)) (mload (w2n a) s) s` >>
+  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read1_def,
+       eval_operand_def, lookup_var_update_var, update_var_def] >>
+  rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def,
+                       finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem emit_SHA3_bytes_frame:
+  emit_op SHA3 [ptr_op; len] sa = (op, sb) /\
+  eval_operand ptr_op s = SOME p /\ eval_operand len s = SOME n /\
+  mem_bytes_at (w2n p) (w2n n) s.vs_memory = bs ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME
+      (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule_all emit_SHA3_bytes_run >> strip_tac >>
+  qexists_tac `update_var out
+      (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) s` >>
+  simp[eval_operand_def, lookup_var_update_var, update_var_def] >>
+  rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def,
+                       finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
 Theorem compile_keccak256_bytes_run:
   compile_keccak256_bytes ptr_op sa = (op, sb) /\
   (!x. ptr_op = Var x ==> not_fresh_at sa x) /\
@@ -187,37 +237,61 @@ Theorem compile_keccak256_bytes_run:
     (t with vs_vars := s.vs_vars) = s /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
 Proof
-  simp[compile_keccak256_bytes_def, emit_op_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
-  strip_tac >> gvs[] >>
-  simp[emitted_insts_def] >>
-  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
-  simp[rich_listTheory.DROP_LENGTH_APPEND] >>
-  simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_read1_def] >>
-  `eval_operand ptr_op
-     (update_var (STRING #"%" (toString sa.cs_next_var)) (mload b s) s) =
-     SOME (n2w b)` by
-    (Cases_on `ptr_op` >> gvs[eval_operand_def, lookup_var_update_var] >>
-     gvs[not_fresh_at_def]) >>
-  simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, exec_pure2_def, eval_operand_def,
-       bind_outputs_def] >>
-  simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, eval_operand_def, lookup_var_update_var,
-       toString_inj] >>
-  `b < dimword (:256)` by
-    gvs[dimword_def, fcpTheory.index_bit0, fcpTheory.finite_bit0,
-        fcpTheory.index_one, fcpTheory.finite_one] >>
-  `mload b s = n2w (LENGTH bs)` by
-    gvs[mload_def, mem_word_at_def] >>
-  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
-       toString_inj, word_add_n2w,
-       GSYM mem_bytes_at_def, run_inst_seq_def] >>
-  rpt strip_tac >> gvs[not_fresh_at_def] >>
-  first_assum (qspec_then `sa.cs_next_var + 2` assume_tac) >>
-  first_assum (qspec_then `sa.cs_next_var + 1` assume_tac) >>
-  first_assum (qspec_then `sa.cs_next_var` assume_tac) >> gvs[]
+  strip_tac >>
+  Cases_on `emit_op MLOAD [ptr_op] sa` >>
+  rename1 `emit_op MLOAD _ _ = (len,sm)` >>
+  Cases_on `emit_op ADD [ptr_op; Lit 32w] sm` >>
+  rename1 `emit_op ADD _ _ = (data,sn)` >>
+  `emit_op SHA3 [data; len] sn = (op,sb)` by
+    gvs[compile_keccak256_bytes_def, comp_bind_def] >>
+  drule_at (Pat `emit_op MLOAD _ _ = _`) emit_MLOAD_frame >>
+  disch_then drule >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK s1` >>
+  `eval_operand ptr_op s1 = SOME (n2w b)` by
+    (`s1.vs_labels = s.vs_labels` by
+       (qpat_x_assum `s1 with vs_vars := _ = _`
+          (mp_tac o Q.AP_TERM `\z. z.vs_labels`) >> simp[]) >>
+     Cases_on `ptr_op` >> gvs[eval_operand_def] >> res_tac >> gvs[]) >>
+  drule_at (Pat `emit_op ADD _ _ = _`) emit_ADD_frame >>
+  disch_then (qspecl_then [`32w`, `n2w b`, `s1`] mp_tac) >>
+  simp[eval_operand_def] >>
+  strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sm sn) s1 = OK s2` >>
+  `b < dimword (:256)` by decide_tac >>
+  `s2.vs_memory = s.vs_memory` by
+    (qpat_x_assum `s2 with vs_vars := _ = _`
+       (mp_tac o Q.AP_TERM `\z. z.vs_memory`) >>
+     qpat_x_assum `s1 with vs_vars := _ = _`
+       (mp_tac o Q.AP_TERM `\z. z.vs_memory`) >> simp[]) >>
+  qpat_assum `emit_op MLOAD _ _ = _` (mp_then Any mp_tac emitted_insts_emit_op) >> strip_tac >>
+  qpat_assum `emit_op ADD _ _ = _` (mp_then Any mp_tac emitted_insts_emit_op) >> strip_tac >>
+  `eval_operand len s2 = SOME (n2w (LENGTH bs))` by
+    (gvs[eval_operand_def, not_fresh_at_def, mload_def, mem_word_at_def]) >>
+  drule_at (Pat `emit_op SHA3 _ _ = _`) emit_SHA3_bytes_frame >>
+  disch_then (qspecl_then [`s2`, `n2w (b+32)`, `n2w (LENGTH bs)`, `bs`] mp_tac) >>
+  simp[word_add_n2w, GSYM mem_bytes_at_def] >>
+  strip_tac >>
+  qpat_assum `emit_op SHA3 _ _ = _` (mp_then Any mp_tac emitted_insts_emit_op) >>
+  strip_tac >>
+  `run_inst_seq (emitted_insts sa sn) s = OK s2 /\
+   sn.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sn` by
+    (qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK s1`
+       (mp_then (Pat `run_inst_seq _ _ = OK _`) mp_tac run_inst_seq_chain) >>
+     disch_then (qspec_then `sn` mp_tac) >> simp[]) >>
+  `run_inst_seq (emitted_insts sa sb) s = OK t` by
+    (qpat_assum `run_inst_seq (emitted_insts sa sn) s = OK s2`
+       (mp_then (Pat `run_inst_seq _ _ = OK _`) mp_tac run_inst_seq_chain) >>
+     disch_then (qspec_then `sb` mp_tac) >> simp[]) >>
+  qexists `t` >> simp[] >> conj_tac
+  >- (qpat_x_assum `t with vs_vars := _ = _`
+        (mp_tac o Q.AP_TERM `\z. z with vs_vars := s.vs_vars`) >>
+      simp[] >>
+      qpat_x_assum `s2 with vs_vars := _ = _`
+        (mp_tac o Q.AP_TERM `\z. z with vs_vars := s.vs_vars`) >> simp[]) >>
+  rpt strip_tac >>
+  `not_fresh_at sm x /\ not_fresh_at sn x` by gvs[not_fresh_at_def] >>
+  simp[]
+
 QED
 
 (* Read-only suffixes need only preserve the reserved pointer variables. *)
@@ -271,24 +345,6 @@ Proof
   simp[EL_mem_bytes_at] >>
   qpat_x_assum `TAKE _ _ = _` (mp_tac o Q.AP_TERM `\xs. EL x xs`) >>
   simp[EL_TAKE, word_to_bytes_be_def]
-QED
-
-Theorem emit_SHA3_bytes_frame:
-  emit_op SHA3 [ptr_op; len] sa = (op, sb) /\
-  eval_operand ptr_op s = SOME p /\ eval_operand len s = SOME n /\
-  mem_bytes_at (w2n p) (w2n n) s.vs_memory = bs ==>
-  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    eval_operand op t = SOME
-      (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
-    (t with vs_vars := s.vs_vars) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
-Proof
-  strip_tac >> drule_all emit_SHA3_bytes_run >> strip_tac >>
-  qexists_tac `update_var out
-      (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) s` >>
-  simp[eval_operand_def, lookup_var_update_var, update_var_def] >>
-  rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def,
-                       finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
 Theorem hash_alloc_buffer_labels[local]:
