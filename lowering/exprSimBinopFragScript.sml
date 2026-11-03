@@ -204,7 +204,10 @@ Proof
   `2 ** n <= 2 ** 256` by simp[arithmeticTheory.EXP_BASE_LE_MONO] >>
   simp[vyperValueTheory.within_int_bound_def] >>
   irule arithmeticTheory.LESS_LESS_EQ_TRANS >> qexists_tac `2 ** n` >>
-  fs[]
+  conj_tac >- asm_rewrite_tac [] >>
+  qpat_x_assum `2 ** n <= 2 ** 256` mp_tac >>
+  CONV_TAC (LAND_CONV (RAND_CONV reduceLib.REDUCE_CONV)) >>
+  asm_simp_tac bool_ss []
 QED
 
 (* << and >> on a 256-bit integer by a non-negative amount. *)
