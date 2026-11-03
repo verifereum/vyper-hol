@@ -8,7 +8,7 @@
  * pointer.  The typing declares only a name not in env.var_types, and
  * ce_locals_declared (bodySim) binds no other local, so the name is
  * unbound (declared_name_unbound).  The loop's scope pop also rests on
- * bodySimStmtCases' GAP eval_stmts_popped_keys_indexed.
+ * bodySimStmtCases' eval_stmts_popped_keys_indexed.
  *
  * TOP-LEVEL:
  *   declared_name_unbound        — a declared name is unbound
@@ -524,8 +524,17 @@ Proof
      drule_then irule outcome_suffix_EVERY >>
      gvs[outcomes_accounts_typed_def]) >>
   `popped_keys_indexed es2.scopes` by
-    (drule (cj 2 eval_stmts_popped_keys_indexed) >> disch_then irule >>
-     simp[for_pushed_popped_keys]) >>
+    (`runtime_consistent (extend_local env id fty F) cx
+        (es with scopes updated_by
+          CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
+                                 popped := []|>)))` by
+       simp[runtime_consistent_def] >>
+     `popped_keys_indexed
+        (es with scopes updated_by
+          CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
+                                 popped := []|>))).scopes` by
+       simp[for_pushed_popped_keys] >>
+     drule_all (cj 2 eval_stmts_popped_keys_indexed) >> simp[]) >>
   `popped_keys_indexed rest` by gvs[popped_keys_indexed_def] >>
   `contract_storage_well_formed cx
      (es with scopes updated_by

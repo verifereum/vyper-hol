@@ -725,7 +725,7 @@ Proof
   rw[FLOOKUP_UPDATE] >> gvs[] >> metis_tac[]
 QED
 
-Theorem scope_pop_trace_keys_indexed[local]:
+Theorem scope_pop_trace_keys_indexed:
   !events sc sc'.
     scope_pop_trace sc events sc' /\ EVERY scope_well_typed sc /\
     popped_keys_indexed sc ==>
