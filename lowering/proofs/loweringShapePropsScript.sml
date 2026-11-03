@@ -11133,6 +11133,61 @@ Resume compile_external_fn_bodies_shape[checks]:
 QED
 Finalise compile_external_fn_bodies_shape
 
+Theorem compile_external_fn_bodies_label_shape:
+  !fns.
+    EVERY external_fn_shape_ok fns ==>
+    shape_step F (\l. compiler_label l \/ MEM l (MAP FST fns))
+      (\st. T) (compile_external_fn_bodies fns) (\x st. T)
+Proof
+  Induct >> simp_tac std_ss [listTheory.EVERY_DEF]
+  >- (pure_rewrite_tac[compile_external_fn_bodies_def] >>
+      irule shape_step_return >> simp[]) >>
+  qx_gen_tac `h` >> PairCases_on `h` >>
+  pure_rewrite_tac[external_fn_shape_ok_def] >> strip_tac >>
+  pure_rewrite_tac[compile_external_fn_bodies_def] >>
+  irule shape_step_ignore_bind >> qexists_tac `\u st. T` >> conj_tac
+  >- (gen_tac >> BETA_TAC >>
+      irule shape_step_ignore_bind >> qexists_tac `\u st. T` >> conj_tac
+      >- (gen_tac >> BETA_TAC >>
+          irule shape_step_ignore_bind >> qexists_tac `\u st. T` >> conj_tac
+          >- (gen_tac >> BETA_TAC >>
+              irule shape_step_conseq >>
+              qexistsl_tac [`\l. compiler_label l \/ MEM l (MAP FST fns)`,
+                           `\st. T`, `\u st. T`] >>
+              simp[] >> metis_tac[]) >>
+          irule shape_step_conseq >>
+          qexistsl_tac [`compiler_label`, `\st. T`, `\u st. T`] >>
+          simp[] >> irule compile_external_function_body_shape >> simp[]) >>
+      irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`, `\st. T`, `\u st. T`] >>
+      simp[] >> irule compile_entry_checks_shape) >>
+  ho_match_mp_tac shape_step_new_block >> simp[shape_stable_def]
+QED
+
+Theorem compile_external_fn_bodies_label_absent:
+  !fns sd sa lbl.
+    EVERY external_fn_shape_ok fns /\ shape_state sd /\
+    compile_external_fn_bodies fns sd = ((), sa) /\
+    ~MEM lbl (MAP FST fns) /\ ~compiler_label lbl /\
+    ~MEM lbl (MAP (\bb. bb.bb_label) (all_blocks sd)) ==>
+    shape_state sa /\
+    EVERY (\l. compiler_label l \/ MEM l (MAP FST fns)) (added_labels sd sa) /\
+    ~MEM lbl (MAP (\bb. bb.bb_label) (all_blocks sa))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule compile_external_fn_bodies_label_shape >>
+  rewrite_tac[shape_step_def] >>
+  disch_then drule >> simp[] >> strip_tac >>
+  fs[shape_extends_def] >>
+  drule cs_extends_block_stream >> strip_tac >>
+  `lbl <> sd.cs_current_bb` by
+    (qpat_x_assum `~MEM lbl (MAP _ (all_blocks sd))` mp_tac >>
+     simp[all_blocks_def]) >>
+  `~MEM lbl (MAP (\b. b.bb_label) tail)` by
+    (simp[] >> fs[EVERY_MEM] >> metis_tac[]) >>
+  gvs[all_blocks_def, MAP_APPEND, MEM_MAP] >> metis_tac[]
+QED
+
 Theorem compile_guarded_body_shape:
   !cenv is_nr nkey use_trans is_view body ret_type.
     cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
@@ -12079,18 +12134,23 @@ Theorem supported_iterator_shape[local]:
   supported_iterator tops ty iter n ==>
   ~supported_iterator_exists expr_shape_root iter
 Proof
-  Cases_on `iter` >>
-  simp[supportedStmtsTheory.supported_iterator_def, supported_iterator_exists_def]
-  >- (Cases_on `e` >> simp[supported_expr_exists_def, expr_shape_root_def]) >>
-  qmatch_goalsub_rename_tac `supported_expr_exists expr_shape_root start_expr` >>
-  Cases_on `start_expr` >> simp[]
-  >~ [`Literal lit_ty lit`]
-  >- (simp[supported_expr_exists_def, expr_shape_root_def] >>
-      qmatch_goalsub_rename_tac `supported_expr_exists expr_shape_root finish_expr` >>
-      Cases_on `finish_expr` >>
-      simp[supported_expr_exists_def, expr_shape_root_def] >>
-      metis_tac[supported_pure_shape, supported_expr_exists_def, expr_shape_root_def]) >>
-  metis_tac[supported_pure_shape]
+  reverse (Cases_on `iter`)
+  >- (rename1 `Range a b` >>
+      Cases_on `supported_pure_expr tops a /\ supported_pure_expr tops b`
+      >- (fs[] >>
+          `~supported_expr_exists expr_shape_root a /\
+           ~supported_expr_exists expr_shape_root b` by
+            metis_tac[supported_pure_shape] >>
+          simp[supported_iterator_exists_def]) >>
+      Cases_on `a` >> Cases_on `b` >>
+      gvs[supportedStmtsTheory.supported_iterator_def] >>
+      rename1 `Literal _ la` >> Cases_on `la` >>
+      gvs[supportedStmtsTheory.supported_iterator_def] >>
+      rename1 `Literal _ lb` >> Cases_on `lb` >>
+      gvs[supportedStmtsTheory.supported_iterator_def,
+          supported_iterator_exists_def, supported_expr_exists_def, expr_shape_root_def]) >>
+  simp[supportedStmtsTheory.supported_iterator_def, supported_iterator_exists_def] >>
+  Cases_on `e` >> simp[supported_expr_exists_def, expr_shape_root_def]
 QED
 
 Theorem supported_stmts_shape[local]:
@@ -12133,9 +12193,18 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[Once add_module_var_locations_def] >>
   first_x_assum match_mp_tac >>
-  Cases_on `h` >> simp[] >>
-  rpt (CASE_TAC >> simp[]) >>
-  rpt strip_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs(), static_loc_def] >>
+  Cases_on `h` >> simp[] >> rpt strip_tac
+  >- metis_tac[]
+  >- (Cases_on `o'`
+      >- (gvs[] >> metis_tac[]) >>
+      Cases_on `v0` >>
+      gvs[finite_mapTheory.FLOOKUP_UPDATE, static_loc_def, AllCaseEqs()] >>
+      metis_tac[])
+  >- (Cases_on `o'`
+      >- (gvs[] >> metis_tac[]) >>
+      Cases_on `b` >>
+      gvs[finite_mapTheory.FLOOKUP_UPDATE, static_loc_def, AllCaseEqs()] >>
+      metis_tac[]) >>
   metis_tac[]
 QED
 
