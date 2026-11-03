@@ -122,5 +122,16 @@ Theorem compile_msg_gas_summary:
            t.vs_gas_readings = DROP 1 s0.vs_gas_readings)
     (\res es_end r. F)
 Proof
-  cheat
+  strip_tac >> drule_all compile_msg_gas_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `gas_explicit [T] s0.vs_gas_readings = [w]`
+    by simp[gas_explicit_def] >>
+  rewrite_tac[gas_summary_def] >>
+  qexistsl_tac [`[T]`, `INL (IntV (&w2n w))`, `es`] >>
+  conj_tac >- simp[msg_gas_source] >>
+  qexists_tac `OK (update_var out w
+    (s0 with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
+               vs_inst_idx := LENGTH sb.cs_current_insts|>))` >>
+  gvs[eval_operand_def, update_var_def, lookup_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE]
 QED
