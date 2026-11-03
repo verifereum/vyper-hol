@@ -66,7 +66,6 @@ The base's `place_ptr_rel` survives the index's fragment (`place_ptr_rel_vars_fr
 |----------|----------|-------------|
 | Statement | lowering/targetPlaceSimCasesScript.sml | the cheat, its comment, target_attr_case, place_ptr_rel_vars_frame (~294) |
 | Target judgment | lowering/targetPlaceSimScript.sml | target_case, target_post, place_ptr_rel, place_readable |
-| Notes | ~/notes/repos/vyper-hol/target-place-frame.md | how the target judgment's frame works |
 | Case judgments | lowering/exprSimHypsScript.sml | expr_vv_case, expr_sim_case, expr_body_pre_eval_result (~810) |
 | Frames | lowering/exprSimOpsScript.sml, semantics/prop/vyperEvalExprPreservesScopesDomScript.sml | locals_kept_trans (~315), eval_base_place_preserves_scopes_dom |
 | Bounds check | lowering/exprSimArrayIndexScript.sml | compile_array_subscript_ok / _oob (~412/450), array_len_ok_MLOAD/SLOAD/TLOAD (~141–161) |
