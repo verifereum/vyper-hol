@@ -3281,7 +3281,9 @@ Proof
   qpat_x_assum `safe_sdiv _ _ = _` kall_tac >>
   qpat_x_assum `in_type_range ty (math_val ty a)` mp_tac >>
   qpat_x_assum `a = _ ∧ _` (fn th => rewrite_tac [CONJUNCT1 th]) >>
-  simp[math_val_def, in_type_range_def, w2i_int_min_w_256] >> intLib.ARITH_TAC
+  asm_simp_tac std_ss
+    [math_val_def, in_type_range_def, LET_THM, w2i_int_min_w_256] >>
+  intLib.ARITH_TAC
 QED
 
 (* An integer multiplication whose product is out of the type's range
