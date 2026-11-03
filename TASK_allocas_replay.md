@@ -98,6 +98,12 @@ Theorem immutable_op_preserves_remap[local]:
             v NOTIN pointer_derived_vars fn roots) ==>
     ?v2. step_inst_base inst s2 = OK v2 /\
          alloca_remap_rel fn roots remap v1 v2
+Theorem pp_single_output[local]:
+  !inst s v.
+    is_pointer_preserving_op inst.inst_opcode /\
+    inst.inst_opcode <> PHI /\
+    step_inst_base inst s = OK v ==>
+    ?out. inst.inst_outputs = [out]
 ```
 
 Do not modify this statement. Prove it as-is, or produce a counterexample.
@@ -108,6 +114,7 @@ Do not modify this statement. Prove it as-is, or produce a counterexample.
 - Repair the existing remap_preserved_no_pointer_ops proof so full replay continues.
 - Repair the encountered remap_preserved_mem_ops[log] proof while preserving the full theorem statement and other opcode resumes.
 - Repair the existing immutable_op_scalar_preserved and immutable_op_preserves_remap proof bodies without changing either statement.
+- Repair the encountered pp_single_output proof body without changing its statement.
 - Build allocaRemapProofsTheory at the default tactic limit.
 - Preserve all other existing proofs, definitions and statements.
 
@@ -121,7 +128,7 @@ A forced default replay at eaf96a2fa timed out at the classification gvs after o
 
 ## Domain Constraints
 
-- The first two frozen roots and LOG resume now pass incrementally at a6abad420. Preserve these completed repairs and helpers. Edit only immutable_op_scalar_preserved, immutable_op_preserves_remap and necessary local helper theorems in venom/passes/shared/proofs/allocaRemapProofsScript.sml. A needed declarative Ancestors entry is allowed if it introduces no dependency cycle. Preserve the completed allocation-map proof repair.
+- The five previously authorized repairs now pass incrementally at 420c9d0a8. Preserve all these completed repairs and helpers. Edit only pp_single_output and necessary local helper theorems in venom/passes/shared/proofs/allocaRemapProofsScript.sml. A needed declarative Ancestors entry is allowed if it introduces no dependency cycle. Preserve the completed allocation-map proof repair.
 - All existing definitions and statements, including local declarations, are frozen. No new definitions, axioms, admissions, strengthened premises, opcode exclusions or supported-subset changes.
 - Preserve all completed gas, CFG and DRET proofs.
 - Default 2.5-second tactic limit; no timeout override and no TRY/ORELSE/FIRST around search.
@@ -155,3 +162,5 @@ The first root now passes incrementally as 24293f5fd, but full replay stopped in
 The incremental default-limit replay at ffd26407e passes both previously authorized roots, then stops in the distinct LOG resume at its initial full-dispatch simplification (2.5s). An independent read-only audit of the exact full remap_preserved_mem_ops statement and LOG producer/semantics found PROVABLE: existing pointer/read bounds and residual-frame equality suffice, including all gas fields. This scope extension permits only the LOG resume and necessary local helpers; no statements, definitions or completed proof bodies may change. Report any further prerequisite before expansion.
 
 Independent read-only audit at a6abad420 finds both exact immutable-operation statements PROVABLE against their real producers and residual frame. Existing is_immutable_op contains only ILOAD/ISTORE; neither statement admits GAS. The first proof timed out at its ILOAD case dispatch. The second has the existing ISTORE exclusion and memory equality and failed at a stale reconstruction tactic with pending-deletion agreement still open. No new hypotheses or definitions are needed or authorized. This amendment permits only those two proof bodies and necessary local helpers; all completed earlier proofs and all existing schemas remain frozen.
+
+Default replay at420c9d0a8 passes the two immutable repairs and stops at pp_single_output while unfolding the full dispatcher in its ADD branch. An independent read-only audit found this exact full statement PROVABLE: existing classification reduces it to ADD/SUB/ASSIGN and successful execution forces one output. No well-formedness, gas, SSA or stage premise is needed or authorized. Only this proof and necessary local helpers are newly in scope; preserve all other proofs/statements/definitions.
