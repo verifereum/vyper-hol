@@ -1,26 +1,14 @@
-(*
- * Runs of a context and of its DFT schedule, with the same fuel.
- *
- * C' is C with every function rescheduled as dftScheduleOrder describes
- * (dft_fn_rel).  A run of a function of C and the run of its schedule in
- * C', from the function's entry block and with the same fuel, end alike
- * (dft_res_rel): the same continuing, returning or halting state, an
- * abort for an abort, and a revert for a revert.  When the run of C
- * errors, the run of C' does not continue or return either.
- *
- * Why the abort state may differ: the schedule can run instructions with
- * independent effects in another order before an instruction that stops
- * the run (an INVOKE whose callee aborts, a failing ASSERT).  It keeps the
- * incompatible abort classes in order. Independent compatible aborts may
- * stop at different instructions, but preserve the required abort kind.
- * Successful and halting results remain exact. ctx_labels_bound keeps an
- * instruction with a label operand (OFFSET) from erroring there.
+(* Structural and readiness interfaces for a function and its DFT schedule.
+ * Finite block simulation uses a gas-variant input (dft_run_block_gas).
+ * The old same-state permutation/run lift is not valid for consuming GAS;
+ * conditional context transport below does not assert that lift.
+ * Successful dft_res_rel results are exact, whereas abort states may differ.
  *)
 Theory dftRunRel
 Ancestors
   dftScheduleOrder dftStructural dftPermSim dftDefs passSharedDefs venomExecSemantics venomWf
   venomInst venomState venomEffects venomExecProps list finite_map sorting rich_list dftCorrectness
-  dftAvailability dftSuccessSwap dftWf dftStoppingSwap dftIndexedExec
+  dftAvailability dftWf dftIndexedExec
   unitLabelMapIdentity sccpCorrectnessProofs
 
 Definition dft_res_rel_def:
@@ -88,53 +76,7 @@ Proof
   irule dft_exec_prefix_rel >> simp[]
 QED
 
-Theorem dft_suffix_swap_rel:
-  dft_ok_swap_pair x y /\ inst_wf x /\ inst_wf y /\
-  (!v. MEM (Var v) y.inst_operands ==> v IN FDOM s.vs_vars) /\
-  (y.inst_opcode <> INVOKE ==>
-    !l. MEM (Label l) y.inst_operands ==> l IN FDOM s.vs_labels) /\
-  ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
-    write_effects x.inst_opcode = empty_effects) ==>
-  dft_res_rel (dft_exec_suffix fuel C (x::y::tail) s)
-              (dft_exec_suffix fuel C (y::x::tail) s)
-Proof
-  simp[dft_res_rel_def] >> strip_tac >>
-  irule dft_exec_suffix_swap >> simp[]
-QED
-
-Theorem dft_bubble_move_rel:
-  !pre s.
-  EVERY (\x. dft_ok_swap_pair x y /\ inst_wf x /\
-     ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
-       write_effects x.inst_opcode = empty_effects)) pre /\
-  inst_wf y /\
-  (!v. MEM (Var v) y.inst_operands ==> v IN FDOM s.vs_vars) /\
-  (y.inst_opcode <> INVOKE ==>
-    !l. MEM (Label l) y.inst_operands ==> l IN FDOM s.vs_labels) ==>
-  dft_res_rel (dft_exec_suffix fuel C (pre ++ y::post) s)
-              (dft_exec_suffix fuel C (y::(pre ++ post)) s)
-Proof
-  Induct >- (simp[dft_res_rel_def] >> Cases_on `dft_exec_suffix fuel C (y::post) s` >>
-             simp[]) >> rpt strip_tac >> fs[] >>
-  `~is_terminator h.inst_opcode /\ ~is_pseudo h.inst_opcode` by
-    gvs[dft_ok_swap_pair_def] >>
-  irule dft_res_rel_trans >>
-  qexists_tac `dft_exec_suffix fuel C (h::y::(pre ++ post)) s` >>
-  conj_tac
-  >- (`dft_res_rel
-         (dft_exec_suffix fuel C ([h] ++ (pre ++ y::post)) s)
-         (dft_exec_suffix fuel C ([h] ++ (y::(pre ++ post))) s)` suffices_by simp[] >>
-      irule dft_suffix_prefix_rel >> simp[] >> rpt strip_tac >>
-      `EVERY (\i. inst_wf i /\ ~is_pseudo i.inst_opcode /\
-                   ~is_terminator i.inst_opcode) [h]` by simp[] >>
-      `FOLDR (dft_exec_cons fuel C) OK [h] s = OK t` by simp[] >>
-      drule_all dft_prefix_ready_preserved >> strip_tac >>
-      first_x_assum irule >> simp[]) >>
-  irule dft_suffix_swap_rel >> simp[]
-QED
-
-(* Every label an instruction reads as a value is bound in the label map L
-   (a state's vs_labels, which no step changes).  Jumps, INVOKE and PHIs
+(* Only value label operands need to be bound; calls and terminators
    use their labels as targets, not values. *)
 Definition ctx_labels_bound_def:
   ctx_labels_bound C L <=>
@@ -396,28 +338,6 @@ Proof
   metis_tac[id_before_asym]
 QED
 
-Theorem dft_ssa_inversion_pair:
-  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
-  MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
-  ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
-  ~is_terminator x.inst_opcode /\
-  ~is_alloca_op x.inst_opcode /\ ~is_alloca_op y.inst_opcode /\
-  abort_compatible x.inst_opcode y.inst_opcode /\
-  id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
-  ~dft_must_order x y ==>
-  dft_ok_swap_pair x y
-Proof
-  strip_tac >>
-  `x <> y` by metis_tac[id_before_asym, wf_fn_block_inst_ids_distinct] >>
-  `DISJOINT (set (inst_defs x)) (set (inst_defs y))` by
-    metis_tac[ssa_disjoint_defs, wf_ssa_def] >>
-  `DISJOINT (set (inst_defs y)) (set (inst_uses x))` by
-    metis_tac[dft_reverse_dependency_disjoint] >>
-  gvs[dft_ok_swap_pair_def, dft_must_order_def, effects_independent_def,
-      pred_setTheory.DISJOINT_UNION] >>
-  metis_tac[pred_setTheory.DISJOINT_SYM]
-QED
-
 Theorem dft_inversion_compatible:
   ALL_DISTINCT (MAP (\i. i.inst_id) bb'.bb_instructions) /\
   (!x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
@@ -484,7 +404,6 @@ Proof
   metis_tac[id_before_asym]
 QED
 
-
 Inductive dft_head_bubbles:
   dft_head_bubbles A [] [] /\
   (!pre y post rest.
@@ -521,70 +440,6 @@ Proof
   Cases_on `is_terminator y.inst_opcode`
   >- (Cases_on `v.vs_halted` >> simp[dft_res_rel_def]) >>
   fs[dft_res_rel_def]
-QED
-
-Theorem dft_head_bubbles_exec:
-  (!x y. A x y ==>
-     dft_ok_swap_pair x y /\ inst_wf x /\
-     ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
-       write_effects x.inst_opcode = empty_effects)) /\
-  (!pre y post s. P (pre ++ y::post) s /\ EVERY (\x. A x y) pre ==>
-     inst_wf y /\
-     (!v. MEM (Var v) y.inst_operands ==> v IN FDOM s.vs_vars) /\
-     (y.inst_opcode <> INVOKE ==>
-       !l. MEM (Label l) y.inst_operands ==> l IN FDOM s.vs_labels)) /\
-  (!pre y post s t. P (pre ++ y::post) s /\ EVERY (\x. A x y) pre /\
-     ~is_terminator y.inst_opcode /\ step_inst fuel C y s = OK t ==>
-     P (pre ++ post) (t with vs_inst_idx := SUC s.vs_inst_idx)) ==>
-  !src dst. dft_head_bubbles A src dst ==>
-    !s. P src s ==>
-      dft_res_rel (dft_exec_suffix fuel C src s)
-                  (dft_exec_suffix fuel C dst s)
-Proof
-  strip_tac >> ho_match_mp_tac dft_head_bubbles_ind >> conj_tac
-  >- simp[dft_exec_suffix_def, dft_res_rel_def] >>
-  rpt strip_tac >>
-  qpat_assum `!pre y post s. _`
-    (qspecl_then [`pre`, `y`, `post`, `s`] mp_tac) >> simp[] >> strip_tac >>
-  irule dft_res_rel_trans >>
-  qexists_tac `dft_exec_suffix fuel C (y::(pre ++ post)) s` >> conj_tac
-  >- (irule dft_bubble_move_rel >> simp[] >>
-      fs[EVERY_MEM] >> metis_tac[]) >>
-  irule dft_suffix_cons_rel >> rpt strip_tac >>
-  first_x_assum irule >>
-  qpat_x_assum `!pre y post s t. _` irule >> qexists_tac `y` >> simp[]
-QED
-
-Theorem dft_head_bubbles_exec_moving:
-  (!x y. A x y ==>
-     dft_ok_swap_pair x y /\ inst_wf x /\
-     ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
-       write_effects x.inst_opcode = empty_effects)) /\
-  (!pre y post s. P (pre ++ y::post) s /\ EVERY (\x. A x y) pre /\ pre <> [] ==>
-     inst_wf y /\
-     (!v. MEM (Var v) y.inst_operands ==> v IN FDOM s.vs_vars) /\
-     (y.inst_opcode <> INVOKE ==>
-       !l. MEM (Label l) y.inst_operands ==> l IN FDOM s.vs_labels)) /\
-  (!pre y post s t. P (pre ++ y::post) s /\ EVERY (\x. A x y) pre /\
-     ~is_terminator y.inst_opcode /\ step_inst fuel C y s = OK t ==>
-     P (pre ++ post) (t with vs_inst_idx := SUC s.vs_inst_idx)) ==>
-  !src dst. dft_head_bubbles A src dst ==>
-    !s. P src s ==>
-      dft_res_rel (dft_exec_suffix fuel C src s)
-                  (dft_exec_suffix fuel C dst s)
-Proof
-  strip_tac >> ho_match_mp_tac dft_head_bubbles_ind >> conj_tac
-  >- simp[dft_exec_suffix_def, dft_res_rel_def] >> rpt strip_tac >>
-  `dft_res_rel (dft_exec_suffix fuel C (y::(pre ++ post)) s)
-               (dft_exec_suffix fuel C (y::dst) s)` by
-    (irule dft_suffix_cons_rel >> rpt strip_tac >> first_x_assum irule >>
-     qpat_x_assum `!pre y post s t. _` irule >> qexists_tac `y` >> simp[]) >>
-  Cases_on `pre = []` >- gvs[] >>
-  irule dft_res_rel_trans >>
-  qexists_tac `dft_exec_suffix fuel C (y::(pre ++ post)) s` >> simp[] >>
-  qpat_assum `!pre y post s. _`
-    (qspecl_then [`pre`, `y`, `post`, `s`] mp_tac) >> simp[] >> strip_tac >>
-  irule dft_bubble_move_rel >> simp[] >> fs[EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem dft_id_before_cons[local]:
@@ -978,41 +833,6 @@ Proof
   irule dft_inversion_compatible >> simp[] >> metis_tac[]
 QED
 
-Theorem dft_remaining_suffix_rel:
-  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
-  EVERY inst_wf bb.bb_instructions /\
-  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions ==>
-  !src dst.
-    dft_head_bubbles
-      (\x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
-        ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
-        id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
-        ~dft_must_order x y /\ abort_compatible x.inst_opcode y.inst_opcode)
-      src dst ==>
-    !s. dft_remaining_inv fn bb src s ==>
-      dft_res_rel (dft_exec_suffix fuel C src s)
-                  (dft_exec_suffix fuel C dst s)
-Proof
-  strip_tac >> ho_match_mp_tac dft_head_bubbles_exec_moving >>
-  conj_tac
-  >- (rpt strip_tac >>
-      `~is_terminator x.inst_opcode` by metis_tac[dft_wf_order_nonterminator] >>
-      `dft_ok_swap_pair x y` by
-        (irule dft_ssa_inversion_pair >> fs[EVERY_MEM] >>
-         qexistsl_tac [`bb`, `fn`] >> simp[]) >>
-      fs[EVERY_MEM, dft_must_order_def]) >>
-  conj_tac
-  >- (rpt gen_tac >> strip_tac >>
-      `MEM y bb.bb_instructions /\ ~is_pseudo y.inst_opcode` by
-        metis_tac[dft_remaining_inv_head_order] >>
-      `inst_wf y` by fs[EVERY_MEM] >> simp[] >>
-      `EVERY (\x. ~dft_must_order x y) pre` by
-        (fs[EVERY_MEM] >> metis_tac[]) >>
-      drule_all dft_remaining_inv_ready >> simp[]) >>
-  rpt strip_tac >> irule dft_remaining_inv_step >> simp[] >>
-  qexistsl_tac [`C`, `fuel`, `y`] >> simp[]
-QED
-
 Theorem dft_remaining_inv_initial:
   ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
   bb.bb_label = s.vs_current_bb /\ strict_dom_vars_defined fn s /\
@@ -1082,35 +902,6 @@ Proof
   fs[] >> irule dft_from_block_terminator >> simp[] >> qexists_tac `bi` >> simp[]
 QED
 
-Theorem dft_scheduled_body_rel:
-  !fn bb bb' scheduled s fuel C.
-  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
-  EVERY inst_wf bb.bb_instructions /\
-  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
-  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
-  dft_block_rel bb bb' /\
-  bb'.bb_instructions = FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions ++ scheduled /\
-  (!x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
-    ~abort_compatible x.inst_opcode y.inst_opcode /\
-    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id ==>
-    id_before (MAP (\i. i.inst_id) bb'.bb_instructions) x.inst_id y.inst_id) /\
-  dft_remaining_inv fn bb (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions) s ==>
-  dft_res_rel
-    (dft_exec_suffix fuel C (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions) s)
-    (dft_exec_suffix fuel C scheduled s)
-Proof
-  rpt gen_tac >> strip_tac >> drule_all dft_block_head_bubbles >> strip_tac >>
-  gvs[] >> rename1 `LIST_REL _ norm actual` >>
-  `EVERY (\j. MEM j bb.bb_instructions) norm` by
-    (fs[EVERY_MEM] >> metis_tac[PERM_MEM_EQ, MEM_FILTER]) >>
-  `EVERY (from_block bb.bb_instructions) actual` by
-    (fs[dft_block_rel_def] >> gvs[]) >>
-  `dft_exec_suffix fuel C norm s = dft_exec_suffix fuel C actual s` by
-    (irule dft_normalized_suffix_eq >> simp[] >> qexists_tac `bb.bb_instructions` >> simp[]) >>
-  drule_all dft_remaining_suffix_rel >>
-  disch_then (qspecl_then [`fuel`, `C`] mp_tac) >> simp[]
-QED
-
 Theorem dft_remaining_inv_initialized:
   !fn bb s u t fuel C.
   ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
@@ -1138,67 +929,6 @@ Proof
   irule dft_remaining_inv_initial >> simp[] >>
   fs[sccpCorrectnessProofsTheory.strict_dom_vars_defined_def,
      pred_setTheory.SUBSET_DEF, MEM_FILTER] >> metis_tac[]
-QED
-
-Theorem dft_run_block_same_context:
-  !fn bb bb' s fuel C.
-  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
-  EVERY inst_wf bb.bb_instructions /\
-  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
-  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
-  dft_block_rel bb bb' /\ pseudos_prefix bb /\
-  bb.bb_label = s.vs_current_bb /\ strict_dom_vars_defined fn s /\
-  (!i l. MEM i bb.bb_instructions /\ ~is_pseudo i.inst_opcode /\
-     ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
-     MEM (Label l) i.inst_operands ==> l IN FDOM s.vs_labels) /\
-  (!x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
-    ~abort_compatible x.inst_opcode y.inst_opcode /\
-    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id ==>
-    id_before (MAP (\i. i.inst_id) bb'.bb_instructions) x.inst_id y.inst_id) ==>
-  dft_res_rel (run_block fuel C bb s) (run_block fuel C bb' s)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `bb.bb_instructions =
-     FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions ++
-     FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions` by
-    (qspecl_then [`bb.bb_instructions`, `\i. is_pseudo i.inst_opcode`]
-       mp_tac dftCorrectnessTheory.sorted_pred_split >>
-     simp[combinTheory.o_DEF] >>
-     (impl_tac >- fs[pseudos_prefix_def]) >> simp[]) >>
-  qpat_assum `dft_block_rel bb bb'`
-    (strip_assume_tac o REWRITE_RULE[dft_block_rel_def]) >>
-  rename1 `bb'.bb_instructions = _ ++ scheduled` >>
-  `EVERY (\i. ~is_pseudo i.inst_opcode) scheduled` by
-    (fs[EVERY_MEM, from_block_def] >>
-     metis_tac[flip_operands_is_pseudo]) >>
-  qmatch_asmsub_abbrev_tac `bb'.bb_instructions = pre ++ scheduled` >>
-  qmatch_asmsub_abbrev_tac `bb.bb_instructions = pre ++ original` >>
-  `EVERY (\i. ~is_pseudo i.inst_opcode) original` by
-    simp[Abbr `original`, EVERY_FILTER] >>
-  qspecl_then [`bb`, `pre`, `original`] mp_tac dft_run_block_prefix >>
-  (impl_tac >- simp[]) >>
-  disch_then (qspecl_then [`fuel`, `C`, `s`] assume_tac) >>
-  qspecl_then [`bb'`, `pre`, `scheduled`] mp_tac dft_run_block_prefix >>
-  (impl_tac >- simp[]) >>
-  disch_then (qspecl_then [`fuel`, `C`, `s`] assume_tac) >>
-  simp[] >>
-  qspecl_then [`s`, `pre`] strip_assume_tac eval_phis_ok_or_error_defs >> simp[]
-  >- (`EVERY (\i. ~is_terminator i.inst_opcode) pre` by
-        (simp[Abbr `pre`, EVERY_FILTER, EVERY_MEM] >>
-         rpt strip_tac >> Cases_on `i.inst_opcode` >>
-         gvs[is_pseudo_def, is_terminator_def]) >>
-      `EVERY (\i. ~is_terminator i.inst_opcode)
-         (DROP (phi_prefix_length pre) pre)` by
-        (qspecl_then [`phi_prefix_length pre`, `pre`] mp_tac TAKE_DROP >>
-         disch_then (fn th => qpat_x_assum `EVERY _ pre` mp_tac >>
-           once_rewrite_tac[GSYM th]) >> simp[EVERY_APPEND]) >>
-      irule dft_exec_prefix_rel >> simp[] >> rpt strip_tac >>
-      fs[Abbr `original`, Abbr `pre`] >>
-      drule_all dft_remaining_inv_initialized >> strip_tac >>
-      drule_at (Pat `dft_remaining_inv _ _ _ _`) dft_scheduled_body_rel >>
-      disch_then (qspecl_then [`bb'`, `scheduled`, `fuel`, `C`] mp_tac) >>
-      simp[]) >>
-  simp[dft_res_rel_def]
 QED
 
 (* One block, same context on both sides: DFT's block bb' simulates bb up to
@@ -1354,134 +1084,9 @@ Proof
   simp[] >> metis_tac[venomExecPropsTheory.eval_phis_preserves_labels]
 QED
 
-Theorem dft_fn_block_same_context:
-  dft_fn_rel fn fn' /\ MEM fn C.ctx_functions /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  lookup_block s.vs_current_bb fn'.fn_blocks = SOME bb' /\
-  strict_dom_vars_defined fn s /\ ctx_labels_bound C s.vs_labels ==>
-  dft_res_rel (run_block fuel C bb s) (run_block fuel C bb' s)
-Proof
-  strip_tac >> drule_all dft_fn_rel_lookup_order >> strip_tac >>
-  `MEM bb fn.fn_blocks` by
-    (fs[lookup_block_def] >> metis_tac[venomExecPropsTheory.FIND_MEM]) >>
-  `bb.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
-  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
-    metis_tac[bb_inst_ids_distinct, dft_fn_rel_def] >>
-  irule dft_run_block_same_context >>
-  fs[dft_fn_rel_def, fn_inst_wf_def, fn_pseudos_prefix_def] >>
-  rpt conj_tac
-  >- (rpt strip_tac >> fs[ctx_labels_bound_def] >>
-      first_x_assum irule >> metis_tac[MEM_fn_insts])
-  >- (simp[EVERY_MEM] >> metis_tac[])
-  >- (fs[EVERY_MEM] >> rpt strip_tac >>
-      `i.inst_opcode <> ALLOCA` by metis_tac[MEM_fn_insts] >>
-      Cases_on `i.inst_opcode` >> fs[is_alloca_op_def]) >>
-  qexists_tac `fn` >> simp[]
-QED
-
-Theorem dft_run_blocks_reachable_rel:
-  !fuel C C' fn fn' s.
-    LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
-    dft_fn_rel fn fn' /\ MEM fn C.ctx_functions /\
-    fn_reachable fn s.vs_current_bb /\ strict_dom_vars_defined fn s /\
-    ctx_labels_bound C s.vs_labels ==>
-    dft_res_rel (run_blocks fuel C fn s) (run_blocks fuel C' fn' s)
-Proof
-  Induct >- (simp[Once run_blocks_def, dft_res_rel_def] >>
-             simp[run_blocks_def]) >>
-  rpt gen_tac >> strip_tac >>
-  `!name f f' t.
-    lookup_function name C.ctx_functions = SOME f /\
-    lookup_function name C'.ctx_functions = SOME f' /\
-    fn_entry_label f = SOME t.vs_current_bb /\ ctx_labels_bound C t.vs_labels ==>
-    dft_res_rel (run_blocks fuel C f t) (run_blocks fuel C' f' t)` by
-    (rpt strip_tac >> first_x_assum irule >> simp[] >>
-     rpt conj_tac
-     >- (fs[lookup_function_def] >> metis_tac[venomExecPropsTheory.FIND_MEM])
-     >- (drule dft_fn_rel_lookup_function >>
-         disch_then (qspec_then `name` mp_tac) >> simp[])
-     >- simp[fn_reachable_def]
-     >- metis_tac[sccpCorrectnessProofsTheory.strict_dom_vars_defined_entry]) >>
-  `OPTREL dft_block_rel (lookup_block s.vs_current_bb fn.fn_blocks)
-      (lookup_block s.vs_current_bb fn'.fn_blocks)` by
-    (irule dft_block_rel_lookup_block >> fs[dft_fn_rel_def]) >>
-  simp[run_blocks_unfold] >>
-  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
-  Cases_on `lookup_block s.vs_current_bb fn'.fn_blocks` >>
-  gvs[] >>
-  rename1 `lookup_block _ fn.fn_blocks = SOME bb` >>
-  rename1 `lookup_block _ fn'.fn_blocks = SOME bb'` >>
-  `dft_res_rel (run_block fuel C bb s) (run_block fuel C' bb' s)` by
-    (irule dft_res_rel_trans >> qexists_tac `run_block fuel C bb' s` >>
-     conj_tac >- (irule dft_fn_block_same_context >> metis_tac[]) >>
-     irule dft_run_block_context_rel >> metis_tac[]) >>
-  Cases_on `run_block fuel C bb s` >> Cases_on `run_block fuel C' bb' s` >>
-  qpat_x_assum `dft_res_rel _ _` mp_tac >>
-  simp[dft_res_rel_def] >> rpt strip_tac >> gvs[] >>
-  Cases_on `v.vs_halted` >> simp[dft_res_rel_refl] >>
-  simp[GSYM dft_res_rel_def] >>
-  qpat_x_assum `!C C' fn fn' s. _` irule >> simp[] >>
-  `MEM bb fn.fn_blocks` by
-    (fs[lookup_block_def] >> metis_tac[venomExecPropsTheory.FIND_MEM]) >>
-  `bb.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
-  `EVERY inst_wf bb.bb_instructions` by
-    (fs[dft_fn_rel_def, fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
-  `fn_reachable fn v.vs_current_bb /\ strict_dom_vars_defined fn v` by
-    (irule dft_successor_available >>
-     fs[dft_fn_rel_def, wf_ssa_def] >>
-     qexistsl_tac [`bb`, `C`, `fuel`, `s`] >> simp[]) >>
-  simp[] >> metis_tac[ctx_labels_bound_run_block]
-QED
-
-(* Proof outline:
-   - Fuel induction in dft_run_blocks_reachable_rel supplies both callee
-     entry contracts and successor-block contracts at the smaller fuel.
-   - Same-context scheduling preserves the directional result relation;
-     incompatible abort classes keep their order, while compatible aborts
-     may stop at different instructions. Context replacement then uses
-     the callee contract.
-   - A non-fallible instruction with no effects (pure ops, ASSIGN, BUMP,
-     OFFSET, environment reads such as GAS) changes only vs_vars and
-     vs_inst_idx, and returns OK when inst_wf holds, its variables are
-     defined and its labels are bound (ctx_labels_bound; nothing writes
-     vs_labels).
-   - Definedness at the earlier position: def_dominates_uses plus a
-     strict-dominator invariant on the original run, like
-     strict_dom_vars_defined (sccpCorrectnessProofs); vacuous at the entry.
-   - Instructions with no must-order relation commute: the declared effects
-     cover every state field each opcode reads or writes (STATICCALL changes
-     no accounts, CREATE's memory write is empty, SSTORE only storage).
-   - INVOKE: setup_callee resets vs_vars and vs_inst_idx, so hoisted
-     effect-free instructions don't change the callee's run;
-     merge_callee_state keeps the caller's variables and SSA keeps
-     bind_outputs' names distinct from theirs.
-   - Halt states are equal: a terminator runs last, after the whole block,
-     and an INVOKE's halt is the callee's state. *)
-Theorem dft_run_blocks_rel:
-  !C C'.
-    LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions ==>
-    !fuel name fn fn' s.
-      lookup_function name C.ctx_functions = SOME fn /\
-      lookup_function name C'.ctx_functions = SOME fn' /\
-      fn_entry_label fn = SOME s.vs_current_bb /\
-      ctx_labels_bound C s.vs_labels ==>
-      dft_res_rel (run_blocks fuel C fn s) (run_blocks fuel C' fn' s)
-Proof
-  rpt strip_tac >> irule dft_run_blocks_reachable_rel >> simp[] >>
-  rpt conj_tac
-  >- (fs[lookup_function_def] >> metis_tac[venomExecPropsTheory.FIND_MEM])
-  >- (drule dft_fn_rel_lookup_function >>
-      disch_then (qspec_then `name` mp_tac) >> simp[])
-  >- simp[fn_reachable_def]
-  >- metis_tac[sccpCorrectnessProofsTheory.strict_dom_vars_defined_entry]
-QED
-
-(* Completion audit: the exported contract must not depend on proof oracles. *)
-val _ =
-  if List.all (fn name => name = "DISK_THM")
-       (#1 (Tag.dest_tag (Thm.tag dft_run_blocks_rel)))
-  then print "dft_run_blocks_rel: oracle audit passed\n"
-  else raise Fail "dft_run_blocks_rel: unexpected proof oracle";
+(* The obsolete same-state block/run lift is retired: GAS consumes an
+   oracle entry. The replacement finite block obligation is dft_run_block_gas;
+   cross-context uniform simulation requires a separate occurrence witness. *)
 
 (* The TASK supplied the stronger all-fallible ordering premise. The
    owner's imported definition orders only abort-incompatible pairs.
@@ -1530,23 +1135,3 @@ Proof
   match_mp_tac LIST_REL_mono >> metis_tac[dft_task_fn_rel_implies_current]
 QED
 
-Theorem dft_run_blocks_rel_original_contract:
-  !C C'.
-    LIST_REL dft_task_fn_rel C.ctx_functions C'.ctx_functions ==>
-    !fuel name fn fn' s.
-      lookup_function name C.ctx_functions = SOME fn /\
-      lookup_function name C'.ctx_functions = SOME fn' /\
-      fn_entry_label fn = SOME s.vs_current_bb /\
-      ctx_labels_bound C s.vs_labels ==>
-      dft_res_rel (run_blocks fuel C fn s) (run_blocks fuel C' fn' s)
-Proof
-  rpt strip_tac >> drule dft_task_context_rel_implies_current >>
-  disch_then (mp_tac o MATCH_MP dft_run_blocks_rel) >>
-  disch_then irule >> metis_tac[]
-QED
-
-val _ =
-  if List.all (fn name => name = "DISK_THM")
-       (#1 (Tag.dest_tag (Thm.tag dft_run_blocks_rel_original_contract)))
-  then print "dft_run_blocks_rel_original_contract: oracle audit passed\n"
-  else raise Fail "original contract: unexpected proof oracle";
