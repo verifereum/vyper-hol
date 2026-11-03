@@ -3587,14 +3587,19 @@ Theorem immutable_op_immutables_agree[local]:
     v1.vs_immutables = v2.vs_immutables
 Proof
   rpt strip_tac >>
-  gvs[is_immutable_op_def] >>
+  Cases_on `inst.inst_opcode` >> gvs[is_immutable_op_def] >>
   gvs[step_inst_base_opcode_eqs]
   >- metis_tac[exec_read1_preserves_immutables] >>
-  imp_res_tac exec_write2_success >>
-  gvs[] >>
-  qpat_x_assum `!op. _` mp_tac >>
-  simp[] >> strip_tac >>
-  gvs[istore_def]
+  Cases_on `inst.inst_operands` >- gvs[] >>
+  rename1 `inst.inst_operands = off_op::ops` >>
+  Cases_on `ops` >- gvs[] >>
+  rename1 `inst.inst_operands = off_op::val_op::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  `eval_operand off_op s1 = eval_operand off_op s2 /\
+   eval_operand val_op s1 = eval_operand val_op s2` by simp[] >>
+  Cases_on `eval_operand off_op s1` >> gvs[] >>
+  Cases_on `eval_operand val_op s1` >> gvs[istore_def] >>
+  Cases_on `eval_operand off_op s2` >> gvs[]
 QED
 
 Theorem exec_read1_success[local]:
