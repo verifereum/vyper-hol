@@ -725,7 +725,11 @@ Definition well_typed_expr_def:
      well_typed_type_builtin_args tb target_ty (MAP expr_type es)) /\
   well_typed_expr env (Pop ty tgt) =
     (?n. type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n))) /\
-         assignable_type env.type_defs (ArrayT ty (Dynamic n))) /\
+         assignable_type env.type_defs (ArrayT ty (Dynamic n)) /\
+         (case tgt of
+          | TopLevelNameTarget nsid =>
+              IS_NONE (FLOOKUP env.bare_global_assignable nsid)
+          | _ => T)) /\
   well_typed_expr env (Call ty (IntCall (src_id_opt, fn_name)) args drv) =
     (well_typed_exprs env args /\ well_typed_opt env drv /\ well_formed_type env.type_defs ty /\
      ?sig. FLOOKUP env.fn_sigs (src_id_opt, fn_name) = SOME sig /\
