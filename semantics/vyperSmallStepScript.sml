@@ -1576,8 +1576,12 @@ Proof
       CASE_TAC >> simp[] >>
       CASE_TAC >> simp[] >>
       CASE_TAC >> simp[return_def, raise_def] >>
-      Cases_on `q` >> simp[] >>
-      CASE_TAC >> simp[] >>
+      qmatch_goalsub_rename_tac `sum_CASE call_result` >>
+      Cases_on `call_result` >> simp[] >>
+      FIRST [
+        qmatch_goalsub_abbrev_tac `lift_option_type cast_result cast_message cast_state` >>
+        Cases_on `lift_option_type cast_result cast_message cast_state`,
+        CASE_TAC] >> simp[] >>
       CASE_TAC >> simp[] >>
       CASE_TAC >> simp[] >>
       CASE_TAC >> simp[] >>
