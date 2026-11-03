@@ -659,13 +659,6 @@ Proof
                     locals_alloc_ok_extend]) >>
       metis_tac[frame_ret_ok_same_frame]) >>
   rpt strip_tac >>
-  `value_has_type tyv (IntV (n1 + &j))` by
-    (irule range_value_has_type >> simp[] >> qexists_tac `n2` >> simp[]) >>
-  conj_tac
-  >- (irule expr_sim_inv_for_pop >> conj_tac >- metis_tac[] >>
-      qexistsl_tac [`bindings`, `stmts`, `env_b`, `ei`, `typ`, `id`, `r2`,
-                    `ret_ty`, `tops`, `tyv`, `IntV (n1 + &j)`] >>
-      simp[] >> fs[body_inv_def]) >>
   `source_supply
      (ei with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tyv;
@@ -679,7 +672,13 @@ Proof
                               value := IntV (n1 + &j); popped := []|>)) :: ei.scopes`]
        mp_tac (REWRITE_RULE [source_supply_action_def]
                  (cj 2 eval_source_supply_mutual)) >> simp[]) >>
-  gvs[source_supply_def]
+  fs[source_supply_def] >>
+  `value_has_type tyv (IntV (n1 + &j))` by
+    (irule range_value_has_type >> simp[] >> qexists_tac `n2` >> simp[]) >>
+  (irule expr_sim_inv_for_pop >> conj_tac >- metis_tac[] >>
+   qexistsl_tac [`bindings`, `stmts`, `env_b`, `ei`, `typ`, `id`, `r2`,
+                 `ret_ty`, `tops`, `tyv`, `IntV (n1 + &j)`] >>
+   simp[] >> fs[body_inv_def, source_supply_def])
 QED
 
 (* RESIDUAL (#637 for): a loop over a range whose ends are not both
