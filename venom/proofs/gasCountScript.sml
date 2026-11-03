@@ -134,8 +134,77 @@ Theorem gas_count_suffix:
      gas_count_suffix (gas_count_blocks fuel ctx fn s) s
        (run_blocks fuel ctx fn s))
 Proof
-  cheat
+  ho_match_mp_tac gas_count_defs_ind >> rpt conj_tac
+  >- suspend "step"
+  >- suspend "block"
+  >> suspend "blocks"
 QED
+Resume gas_count_suffix[step]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode = GAS`
+  >- (simp[Once gas_count_step_def, step_inst_def] >>
+      mp_tac gas_count_base >> simp[]) >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (pure_once_rewrite_tac[gas_count_step_def, step_inst_def] >>
+      Cases_on `decode_invoke inst`
+      >- simp[gas_count_suffix_def] >>
+      PairCases_on `x` >> gvs[] >>
+      Cases_on `lookup_function x0 ctx.ctx_functions`
+      >- simp[gas_count_suffix_def] >>
+      rename1 `lookup_function x0 ctx.ctx_functions = SOME fn` >>
+      Cases_on `eval_operands x1 s`
+      >- simp[gas_count_suffix_def] >>
+      rename1 `eval_operands x1 s = SOME args` >>
+      Cases_on `setup_callee fn args s`
+      >- simp[gas_count_suffix_def] >>
+      rename1 `setup_callee fn args s = SOME cs` >>
+      `cs.vs_gas_readings = s.vs_gas_readings` by
+        metis_tac[gas_setup_callee_readings] >>
+      first_x_assum (qspecl_then [`fn`, `args`, `cs`] mp_tac) >>
+      simp[] >> Cases_on `run_blocks fuel ctx fn cs` >>
+      simp[gas_count_suffix_def] >>
+      strip_tac >>
+      Cases_on `bind_outputs inst.inst_outputs i.iret_values
+        (adopt_return_fmp i (merge_callee_state s v))` >> simp[] >>
+      metis_tac[gas_bind_outputs_readings, gas_adopt_return_readings,
+                gas_merge_callee_readings]) >>
+  simp[Once gas_count_step_def, step_inst_def] >>
+  mp_tac gas_count_base >> simp[]
+QED
+Resume gas_count_suffix[block]:
+  rpt gen_tac >> strip_tac >>
+  pure_once_rewrite_tac[gas_count_block_def, exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx`
+  >- simp[gas_count_suffix_def] >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  gvs[] >> Cases_on `step_inst fuel ctx inst s` >>
+  gvs[gas_count_suffix_def] >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (simp[] >> Cases_on `v.vs_halted` >> simp[gas_count_suffix_def]) >>
+  gvs[rich_listTheory.DROP_DROP_T]
+QED
+Resume gas_count_suffix[blocks]:
+  rpt gen_tac >> strip_tac >>
+  pure_once_rewrite_tac[gas_count_blocks_def, run_blocks_def] >>
+  Cases_on `fuel`
+  >- simp[gas_count_suffix_def] >>
+  rename1 `SUC k` >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+  >- simp[gas_count_suffix_def] >>
+  rename1 `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs >>
+  gvs[gas_count_suffix_def] >>
+  rename1 `eval_phis s bb.bb_instructions = OK sp` >>
+  `sp.vs_gas_readings = s.vs_gas_readings` by
+    metis_tac[gas_count_phis_ok] >>
+  Cases_on `exec_block k ctx bb
+    (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >>
+  gvs[gas_count_suffix_def] >>
+  Cases_on `v.vs_halted` >>
+  gvs[gas_count_suffix_def, rich_listTheory.DROP_DROP_T]
+QED
+Finalise gas_count_suffix
 
 Theorem gas_count_fuel_mono:
   (!n m ctx inst s r.
