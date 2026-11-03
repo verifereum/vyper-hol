@@ -12926,3 +12926,38 @@ Proof
   rpt gen_tac >> irule comp_bind_labels >> simp[compile_lit_byte_offset_labels] >>
   rpt gen_tac >> irule comp_ignore_bind_labels >> simp[compile_imm_store_word_labels]
 QED
+
+Theorem compile_alloc_buffer_labels:
+  !size s P. cs_extends s (SND (compile_alloc_buffer size s)) /\
+    EVERY P (added_labels s (SND (compile_alloc_buffer size s)))
+Proof
+  rpt gen_tac >> simp[contextTheory.compile_alloc_buffer_def] >>
+  irule comp_bind_labels >> simp[emit_op_labels, comp_return_labels]
+QED
+
+Theorem compile_zero_words_labels:
+  !base n s P. cs_extends s (SND (compile_zero_words base n s)) /\
+    EVERY P (added_labels s (SND (compile_zero_words base n s)))
+Proof
+  Induct_on `n` >> simp[builtinSimpleTheory.compile_zero_words_def,
+                         comp_return_labels] >> rpt gen_tac >>
+  irule comp_ignore_bind_labels >> simp[] >>
+  gen_tac >> irule comp_bind_labels >> simp[emit_op_labels, emit_void_labels]
+QED
+
+Theorem compile_select_labels:
+  !cmp a b s P. cs_extends s (SND (compile_select cmp a b s)) /\
+    EVERY P (added_labels s (SND (compile_select cmp a b s)))
+Proof
+  rpt gen_tac >> simp[builtinSimpleTheory.compile_select_def, LET_THM,
+                     pairTheory.UNCURRY_DEF] >>
+  irule comp_bind_labels >> simp[emit_op_labels] >>
+  rpt gen_tac >> irule comp_bind_labels >> simp[emit_op_labels]
+QED
+
+Theorem compile_invert_labels:
+  !v ty cenv s P. cs_extends s (SND (compile_invert v ty cenv s)) /\
+    EVERY P (added_labels s (SND (compile_invert v ty cenv s)))
+Proof
+  rpt gen_tac >> Cases_on `ty` >> simp[compile_invert_def, emit_op_labels]
+QED
