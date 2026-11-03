@@ -1161,3 +1161,26 @@ Proof
      simp_tac bool_ss [AC wordsTheory.WORD_ADD_ASSOC wordsTheory.WORD_ADD_COMM]) >>
   simp[return_def]
 QED
+
+Theorem vv_at_memory_region:
+  vv_at cenv cx t sa sb es tv vv s /\ ~is_word_type t /\
+  read_result cx tv es = (INL v,es) /\
+  evaluate_type (get_tenv cx) t = SOME tvt /\
+  vv_loc vv = LocMemory /\ eval_operand (vv_operand vv) s = SOME w ==>
+  val_wf tvt v /\
+  ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
+       sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+       b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
+       (!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
+         b + sz <= lb \/ lb + lsz <= b)) \/
+   (?n b sz. local_region cenv es.scopes s n b sz /\
+       b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
+       (dynarray_local cenv n /\ ~dynarray_type t ==> b + 32 <= w2n w)) \/
+   val_footprint tvt v = 0)
+Proof
+  Cases_on `vv` >>
+  simp[vv_at_def, exprSimAttributeTheory.vv_loc_def, contextTheory.vv_location_def,
+       contextTheory.vv_operand_def, expr_val_at_def] >>
+  strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
