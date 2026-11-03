@@ -293,10 +293,13 @@ Theorem compile_array_membership_loop_safe_operand:
   safe_operand sb r
 Proof
   Cases_on `isin` >> Cases_on `off > 0` >>
-  simp[compile_array_membership_loop_def, emit_op_def, emit_inst_def,
+  simp_tac (srw_ss()) [compile_array_membership_loop_def] >>
+  simp_tac (srw_ss() ++ boolSimps.LET_ss) [emit_op_def, emit_inst_def,
        fresh_label_def, new_block_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
   strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_id_def, fresh_var_def, emit_def] >>
   qpat_x_assum `!p s v t. _` drule_all >>
   simp[safe_operand_def, not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
