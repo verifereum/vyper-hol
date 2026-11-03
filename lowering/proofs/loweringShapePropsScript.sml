@@ -11847,7 +11847,7 @@ Proof
   simp[EVERY_FLAT, EVERY_MAP]
 QED
 
-Theorem runtime_fallback_shape[local]:
+Theorem runtime_fallback_shape:
   !fallback_fn. fallback_shape_ok fallback_fn ==>
     shape_step F jump_label_ok (\st. T)
       (case fallback_fn of
@@ -11876,6 +11876,24 @@ Proof
   irule shape_step_conseq >>
   qexistsl_tac [`compiler_label`, `\st. T`, `\x st. T`] >>
   simp[jump_label_ok_def]
+QED
+
+Theorem runtime_fallback_suffix_shape:
+  !fallback_fn fb.
+    fallback_shape_ok fallback_fn /\ jump_label_ok fb ==>
+    shape_step F jump_label_ok (\st. T)
+      (do new_block fb;
+          (case fallback_fn of
+             NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+           | SOME (fb_ce,fb_pay,fb_nr,fb_key,fb_ut,fb_iv,fb_body,fb_rt) =>
+               compile_fallback_body fb_ce fb_pay fb_nr fb_key fb_ut fb_iv fb_body fb_rt)
+       od) (\x st. T)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule shape_step_ignore_bind >> qexists_tac `\x st. T` >>
+  conj_tac
+  >- (gen_tac >> BETA_TAC >> irule runtime_fallback_shape >> simp[]) >>
+  ho_match_mp_tac shape_step_new_block >> simp[shape_stable_def]
 QED
 
 Theorem runtime_entry_prefix_shape[local]:
