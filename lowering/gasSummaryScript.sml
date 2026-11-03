@@ -24,6 +24,28 @@ Definition gas_summary_def:
          (exit_result r /\ R res (es_end with gas_obs := []) r))
 End
 
+Theorem gas_explicit_nil[simp]:
+  gas_explicit [] gs = []
+Proof
+  simp[gas_explicit_def]
+QED
+
+Theorem gas_explicit_cons:
+  (gas_explicit (b::bs) [] =
+     if b then 0w :: gas_explicit bs [] else gas_explicit bs []) /\
+  (gas_explicit (b::bs) (g::gs) =
+     if b then g :: gas_explicit bs gs else gas_explicit bs gs)
+Proof
+  Cases_on `b` >> simp[gas_explicit_def, gas_prefix_suc]
+QED
+
+Theorem gas_explicit_replicate_false[simp]:
+  !n gs. gas_explicit (REPLICATE n F) gs = []
+Proof
+  Induct_on `n` >- simp[] >>
+  gen_tac >> Cases_on `gs` >> simp[REPLICATE, gas_explicit_cons]
+QED
+
 Theorem gas_explicit_append:
   gas_explicit (left ++ right) gs =
     gas_explicit left gs ++ gas_explicit right (DROP (LENGTH left) gs)
