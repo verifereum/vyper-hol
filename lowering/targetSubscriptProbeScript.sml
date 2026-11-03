@@ -561,3 +561,44 @@ Proof
   rpt strip_tac >> drule_all probe_guarded_pre_projections >> strip_tac >>
   irule probe_guarded_empty_parent_dead >> simp[]
 QED
+
+(* Empty external oracle for the future invariant witness.  This interface
+   alone does not establish the typing or simulation invariant. *)
+Definition probe_guarded_inhabited_state_def:
+  probe_guarded_inhabited_state =
+    probe_guarded_state 1 with outcomes := SOME []
+End
+
+Theorem probe_guarded_inhabited_oracle:
+  IS_SOME probe_guarded_inhabited_state.outcomes /\
+  outcomes_accounts_typed probe_guarded_inhabited_state.outcomes /\
+  oracle_storage_ok probe_guarded_context probe_guarded_inhabited_state
+Proof
+  simp[probe_guarded_inhabited_state_def, outcomes_accounts_typed_def,
+       vyperTypeStoragePreservationTheory.oracle_storage_ok_def]
+QED
+
+Theorem probe_guarded_inhabited_storage:
+  lookup_storage 0w
+    (get_storage probe_guarded_context probe_guarded_inhabited_state F) = 1w /\
+  lookup_storage 1w
+    (get_storage probe_guarded_context probe_guarded_inhabited_state F) = 1w /\
+  probe_guarded_inhabited_state.scopes = (probe_guarded_state 1).scopes
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_guarded_inhabited_call:
+  eval_expr probe_guarded_context
+    (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
+    probe_guarded_inhabited_state =
+  (INL (Value (IntV 0)),
+   set_storage probe_guarded_context probe_guarded_inhabited_state F
+     (update_storage 0w 0w
+       (get_storage probe_guarded_context probe_guarded_inhabited_state F)))
+Proof
+  qspec_then `probe_guarded_inhabited_state` mp_tac
+    probe_guarded_symbolic_call >>
+  disch_then (qspec_then `1` mp_tac) >>
+  simp[probe_guarded_inhabited_storage]
+QED
