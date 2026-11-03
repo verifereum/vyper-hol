@@ -7,7 +7,7 @@
  * what is left.  A case whose covered forms are proved dispatches the rest
  * to a cheated lemma marked RESIDUAL, whose comment names the premises
  * missing for the remaining forms.  The declarations, AnnAssign and For,
- * are in bodySimDeclCases.
+ * are in bodySimDeclCases, and Log in bodySimLog.
  *
  * TOP-LEVEL:
  *   body_*_case       — one case of the induction each
@@ -272,6 +272,8 @@ Proof
     (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
   `alloc_limits_expr c = alloc_limits_expr cenv` by
     (rw[FUN_EQ_THM] >> irule (cj 1 alloc_limits_struct_fields) >> simp[]) >>
+  `c.ce_event_info = cenv.ce_event_info` by
+    (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
   `alloc_limits_stmt c = alloc_limits_stmt cenv` by
     (rw[FUN_EQ_THM] >> irule (cj 1 alloc_limits_stmt_struct_fields) >>
      simp[]) >>
@@ -845,24 +847,30 @@ Proof
   rpt gen_tac >> strip_tac >> irule supported_reason_code >> simp[] >> metis_tac[]
 QED
 
-(* GAP (#637 log): no statement lemma for Log yet.  body_inv ties
-   ce_event_info to the program's events, and supported_log the
-   arguments' types to the event's fields. *)
-Theorem body_log_case:
-  !cx id es. body_exprs_ok cx es ==> body_stmt_ok cx (Log id es)
+(* RESIDUAL (#637 append): an append to a storage or transient DynArray,
+   the only target supported_append_target admits.  It waits on the
+   storage statement of #713, which relates the array's slots. *)
+Theorem body_append_storage_other:
+  !cx nid e.
+    (!s'' p t'. eval_target_place cx (TopLevelNameTarget nid) s'' = (INL p,t') ==>
+                body_expr_ok cx e) ==>
+    body_stmt_ok cx (Append (TopLevelNameTarget nid) e)
 Proof
   cheat
 QED
 
-(* GAP (#637 append): no statement lemma for Append yet; the target's
-   pointer comes from compile_get_target_ptr. *)
+(* supported_append_target admits no local, subscript or attribute target
+   (#549, #559), so the storage root is the only form. *)
 Theorem body_append_case:
   !cx t e.
     (!s'' p t'. eval_target_place cx t s'' = (INL p,t') ==> body_expr_ok cx e) /\
     body_base_target_ok cx t ==>
     body_stmt_ok cx (Append t e)
 Proof
-  cheat
+  rpt strip_tac >> Cases_on `?nid. t = TopLevelNameTarget nid`
+  >- (gvs[] >> irule body_append_storage_other >> first_assum ACCEPT_TAC) >>
+  Cases_on `t` >> gvs[] >>
+  rw[body_stmt_ok_def, supported_stmt_def, supported_append_target_def]
 QED
 
 (* ===== Assignments ===== *)
