@@ -1542,6 +1542,34 @@ Proof
   metis_tac[]
 QED
 
+(* Assignments to a field or an element (an AttributeTarget or a
+   SubscriptTarget, of any base), through the target/place judgment
+   (targetPlaceSimCases' target_case_all and target_place_sim): the
+   target's fragment leaves the place's pointer, location and type, and the
+   value is stored there as compile_assign_value does by the target's
+   location.  The supported subset gives such a target a local, storage or
+   transient root (never an immutable: supported_place_root).  Split by
+   whether the target's type is a word.  GAP: cheated, for alan. *)
+Theorem body_assign_place_word:
+  !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es' ty.
+    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /    body_expr_ok cx e /    body_inv tops ctx cenv cx /    supported_stmt tops bindings (Assign (BaseTarget t) e) /    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /    locals_alloc_ok cenv env /    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /    frame_ret_ok ctx func cx RetQ cenv ret_ty /    eval_stmt cx (Assign (BaseTarget t) e) es = (res, es') /    ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) /    type_place_target env t = SOME (Type ty) /\ is_word_type ty ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e)) es res es'
+Proof
+  cheat
+QED
+
+Theorem body_assign_place_copy:
+  !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es' ty.
+    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /    body_expr_ok cx e /    body_inv tops ctx cenv cx /    supported_stmt tops bindings (Assign (BaseTarget t) e) /    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /    locals_alloc_ok cenv env /    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /    frame_ret_ok ctx func cx RetQ cenv ret_ty /    eval_stmt cx (Assign (BaseTarget t) e) es = (res, es') /    ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) /    type_place_target env t = SOME (Type ty) /\ ~is_word_type ty /\
+    (expr_type e = ty \/ is_bytestring_type ty \/
+     has_length_word (expr_type e) /\ is_empty_value_expr e) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e)) es res es'
+Proof
+  cheat
+QED
+
 (* RESIDUAL (#637 assignments): the other base targets.
    - A local in memory that body_assign_local_memory leaves: a value
      that widens to a type other than a bytestring (type_widens_to: a
@@ -1552,13 +1580,9 @@ QED
      0: no statement lemma.
    - An immutable (supported_target's supported_immutable_type): no
      statement lemma.
-   - An attribute target other than a word field of a local struct or of
-     a storage or transient struct:
-     - a field of a local, storage or transient struct that is not a
-       word: no statement lemma (the copy of an aggregate into the field);
-     - a field of a field or of a subscript: no statement lemma (the
-       simulation of compile_get_target_ptr on eval_target_place).
-   - Subscript targets: no statement lemma (#851). *)
+   - A field or element target (body_assign_place_word/_copy take the
+     rest) of an aggregate type the value widens to other than a
+     bytestring: no statement lemma, as for a local. *)
 Theorem body_assign_other:
   !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
     (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
@@ -1592,7 +1616,13 @@ Theorem body_assign_other:
     ~(?nsid fld fty.
         t = AttributeTarget (TopLevelNameTarget nsid) fld /\
         supported_storage_field_write tops nsid fld /\
-        type_place_target env t = SOME (Type fty) /\ is_word_type fty) ==>
+        type_place_target env t = SOME (Type fty) /\ is_word_type fty) /\
+    ~(((?bt fld. t = AttributeTarget bt fld) \/
+       (?bt k. t = SubscriptTarget bt k)) /\
+      ?ty. type_place_target env t = SOME (Type ty) /\
+           (is_word_type ty \/
+            expr_type e = ty \/ is_bytestring_type ty \/
+            has_length_word (expr_type e) /\ is_empty_value_expr e)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e)) es res es'
 Proof
@@ -1644,6 +1674,15 @@ Proof
               type_place_target env t = SOME (Type fty) /\ is_word_type fty`
   >- (gvs[] >> rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
       irule body_assign_attr_storage >> metis_tac[]) >>
+  Cases_on `((?bt fld. t = AttributeTarget bt fld) \/
+             (?bt k. t = SubscriptTarget bt k)) /\
+            ?ty. type_place_target env t = SOME (Type ty) /\
+                 (is_word_type ty \/
+                  expr_type e = ty \/ is_bytestring_type ty \/
+                  has_length_word (expr_type e) /\ is_empty_value_expr e)`
+  >- (gvs[] >> Cases_on `is_word_type ty`
+      >- (irule body_assign_place_word >> metis_tac[])
+      >- (irule body_assign_place_copy >> metis_tac[])) >>
   irule body_assign_other >> simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`bindings`, `env`, `env'`, `tops`] >> fs[]
 QED
@@ -2159,17 +2198,26 @@ Proof
   irule compile_augassign_attr_storage_case >> simp[] >> metis_tac[]
 QED
 
-(* RESIDUAL (#637 augmented assignment): the targets other than a local, a
-   field of a local struct, a word storage or transient variable
-   (supported_scalar_target), or a word field of a storage or transient
-   struct (supported_storage_field_write).
-   - A field of a storage or transient struct the supported subset does
-     not admit: no statement lemma.
-   - An immutable (supported_target's supported_immutable_type): no
-     statement lemma.
-   - A field of a field or of a subscript: no statement lemma (the
-     simulation of compile_get_target_ptr on eval_target_place).
-   - Subscript targets: no statement lemma (#851). *)
+(* An augmented assignment to a field or an element, through the
+   target/place judgment, as body_assign_place_word: the current word is
+   loaded at the place's pointer (MLOAD, SLOAD or TLOAD by its location)
+   and the result stored back there.  GAP: cheated, for alan. *)
+Theorem body_augassign_place:
+  !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
+   res es'.
+    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
+       eval_target_place cx t s'' = (INL p,t') /       read_place cx p s'3' = (INL cur,t'') /       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_ok cx e) /\ body_base_target_ok cx t /    body_inv tops ctx cenv cx /    supported_stmt tops bindings (AugAssign ty t bop e) /    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /    locals_alloc_ok cenv env /    type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /    stmt_exprs_ok cenv (AugAssign ty t bop e) /    call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /    frame_ret_ok ctx func cx RetQ cenv ret_ty /    eval_stmt cx (AugAssign ty t bop e) es = (res, es') /    ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
+Proof
+  cheat
+QED
+
+(* RESIDUAL (#637 augmented assignment): a top-level target other than a
+   word storage or transient variable (supported_scalar_target), that is
+   an immutable (supported_target's supported_immutable_type): no
+   statement lemma.  Locals, fields and elements have theirs above. *)
 Theorem body_augassign_other:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
@@ -2191,7 +2239,9 @@ Theorem body_augassign_other:
              supported_scalar_target tops nsid) /\
     ~(?id fld. t = AttributeTarget (NameTarget id) fld) /\
     ~(?nsid fld. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
-                 supported_storage_field_write tops nsid fld) ==>
+                 supported_storage_field_write tops nsid fld) /\
+    ~(?bt fld. t = AttributeTarget bt fld) /\
+    ~(?bt k. t = SubscriptTarget bt k) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
 Proof
@@ -2221,6 +2271,9 @@ Proof
                        supported_storage_field_write tops nsid fld`
   >- (gvs[] >> rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
       irule body_augassign_attr_storage >> metis_tac[]) >>
+  Cases_on `(?bt fld. t = AttributeTarget bt fld) \/
+            (?bt k. t = SubscriptTarget bt k)`
+  >- (irule body_augassign_place >> metis_tac[]) >>
   irule body_augassign_other >> metis_tac[]
 QED
 
