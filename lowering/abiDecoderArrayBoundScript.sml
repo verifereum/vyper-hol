@@ -58,8 +58,8 @@ QED
 
 Theorem abi_decode_bounded_array_pointer_phases:
   hi <> Lit 0w ==>
-  compile_abi_decode_dyn_elem_ptr opc elem_src src_data hi abi_sz =
-    do child_op <- compile_abi_decode_dyn_elem_ptr opc elem_src src_data (Lit 0w) abi_sz;
+  compile_abi_decode_dyn_elem_ptr opc base_op elem_src src_data hi abi_sz =
+    do child_op <- compile_abi_decode_dyn_elem_ptr opc base_op elem_src src_data (Lit 0w) abi_sz;
        abi_decode_array_pointer_guard child_op src_data hi abi_sz;
        return child_op
     od
@@ -71,10 +71,11 @@ Proof
 QED
 
 Theorem abi_decode_bounded_array_pointer:
-  compile_abi_decode_dyn_elem_ptr opc elem_src src_data hi abi_sz st = (child_op,st') /\
+  compile_abi_decode_dyn_elem_ptr opc base_op elem_src src_data hi abi_sz st = (child_op,st') /\
   hi <> Lit 0w /\ abi_decode_source_opcode opc /\
-  eval_operand elem_src s = SOME p /\ eval_operand src_data s = SOME (n2w data_base) /\
-  abi_decode_load opc (p:bytes32) s = n2w child_off /\
+  eval_operand base_op s = SOME (n2w B) /\
+  eval_operand elem_src s = SOME (n2w pos) /\ eval_operand src_data s = SOME (n2w data_base) /\
+  abi_decode_load opc (n2w (B + pos):bytes32) s = n2w child_off /\
   eval_operand hi s = SOME (n2w hb) /\
   data_base + child_off + abi_sz <= hb /\ hb < dimword (:256) /\
   fresh_vars_wrt st s ==>
@@ -86,11 +87,11 @@ Theorem abi_decode_bounded_array_pointer:
     t.vs_data_section = s.vs_data_section /\ inst_extends st st'
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `compile_abi_decode_dyn_elem_ptr _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_dyn_elem_ptr _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_bounded_array_pointer_phases, comp_bind_def,
     comp_ignore_bind_def, comp_return_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  rename1 `compile_abi_decode_dyn_elem_ptr opc elem_src src_data (Lit 0w) abi_sz st =
+  rename1 `compile_abi_decode_dyn_elem_ptr opc base_op elem_src src_data (Lit 0w) abi_sz st =
     (child_op,c1)` >>
   rename1 `abi_decode_array_pointer_guard child_op src_data hi abi_sz c1 =
     (guard_result,st')` >> Cases_on `guard_result` >> gvs[] >>

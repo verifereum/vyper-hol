@@ -3,26 +3,10 @@
 Theory abiDecoderBytestring
 Ancestors
   abiDecoderString abiDecoderPointed abiDecoderSingletonFragment
-  abiDecoderCoherence abiDecoderTypedContract abiDecoderBytesTyped abiDecoderBytes
+  abiDecoderBytestringCases abiDecoderCoherence abiDecoderTypedContract abiDecoderBytesTyped abiDecoderBytes
   abiDecoderTypedCompose abiDecoderDynamic abiEncoder exprLowering compileEnv
   vyperABI vyperTyping contractABI valueEncoding fragExec combin
 
-Theorem abi_decoder_bytestring_cases:
-  !ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==>
-  !n. type_to_abi_dec_info sf ce ty = DecBytestring n ==>
-  (ty = BaseT (BytesT (Dynamic n)) /\ tv = BaseTV (BytesT (Dynamic n))) \/
-  (ty = BaseT (StringT n) /\ tv = BaseTV (StringT n))
-Proof
-  ho_match_mp_tac abi_decoder_coherent_ind >> rpt conj_tac
-  >- (rpt gen_tac >> strip_tac >> gen_tac >> Cases_on `bt` >>
-      FIRST [(rename1 `BytesT bd` >> Cases_on `bd`), all_tac] >>
-      simp[Once type_to_abi_dec_info_def])
-  >- simp[Once type_to_abi_dec_info_def]
-  >- (rpt gen_tac >> strip_tac >> Cases_on `bound` >>
-      simp[Once type_to_abi_dec_info_def])
-  >- (rpt gen_tac >> strip_tac >> simp[Once type_to_abi_dec_info_def]) >>
-  rpt gen_tac >> strip_tac >> simp[Once type_to_abi_dec_info_def]
-QED
 
 Theorem abi_decoder_typed_bytestring_from_state:
   compile_abi_decode_to_buf dst src opc hi (DecBytestring n) st = ((),st') /\
