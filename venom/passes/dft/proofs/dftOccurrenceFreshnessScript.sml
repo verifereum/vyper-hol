@@ -474,3 +474,79 @@ Resume dft_occ_event_retired[ordinary]:
 QED
 
 Finalise dft_occ_event_retired
+
+Theorem dft_occ_valid_iter:
+  !j c. dft_ctx_ids ctx /\ dft_occ_valid c ==>
+    dft_occ_valid (FUNPOW (dft_occ_next a ctx) j c)
+Proof
+  Induct >> simp[FUNPOW_SUC] >> metis_tac[dft_occ_valid_next]
+QED
+
+Theorem dft_occ_future_iter:
+  !j c. dft_ctx_ids ctx /\ dft_occ_valid c /\
+    dft_occ_future (FUNPOW (dft_occ_next a ctx) j c) x ==>
+    dft_occ_future c x
+Proof
+  Induct >> simp[FUNPOW_SUC] >> rpt strip_tac >>
+  metis_tac[dft_occ_valid_iter, dft_occ_future_next]
+QED
+
+Theorem dft_occ_event_later:
+  dft_ctx_ids ctx /\ dft_occ_valid c /\ dft_occ_event inst addr c ==>
+  ~dft_occ_event inst' addr (FUNPOW (dft_occ_next a ctx) (SUC j) c)
+Proof
+  rpt strip_tac >>
+  `~dft_occ_future (dft_occ_next a ctx c) addr` by
+    metis_tac[dft_occ_event_retired] >>
+  `dft_occ_valid (dft_occ_next a ctx c)` by metis_tac[dft_occ_valid_next] >>
+  `dft_occ_valid (FUNPOW (dft_occ_next a ctx) j (dft_occ_next a ctx c))` by
+    metis_tac[dft_occ_valid_iter] >>
+  gvs[FUNPOW] >>
+  metis_tac[dft_occ_event_future, dft_occ_future_iter]
+QED
+
+Theorem dft_occ_event_unique:
+  dft_ctx_ids ctx /\ dft_occ_valid c /\
+  dft_occ_event inst addr (FUNPOW (dft_occ_next a ctx) j c) /\
+  dft_occ_event inst' addr (FUNPOW (dft_occ_next a ctx) k c) ==> j = k
+Proof
+  wlog_tac `j <= k` [`j`, `k`, `inst`, `inst'`] >- metis_tac[LESS_EQ_CASES] >>
+  rpt strip_tac >> Cases_on `j = k` >- simp[] >>
+  `?d. k = SUC d + j` by (qexists_tac `k - j - 1` >> decide_tac) >>
+  qpat_x_assum `k = _` SUBST_ALL_TAC >>
+  qpat_x_assum `dft_occ_event inst' _ _` mp_tac >>
+  pure_rewrite_tac [FUNPOW_ADD] >> strip_tac >>
+  `dft_occ_valid (FUNPOW (dft_occ_next a ctx) j c)` by
+    metis_tac[dft_occ_valid_iter] >>
+  metis_tac[dft_occ_event_later]
+QED
+
+Theorem dft_occ_gas_event_unique:
+  dft_ctx_ids ctx /\ dft_occ_valid c /\
+  dft_occ_gas_event inst addr (FUNPOW (dft_occ_next a ctx) j c) /\
+  dft_occ_gas_event inst' addr (FUNPOW (dft_occ_next a ctx) k c) ==> j = k
+Proof
+  simp[dft_occ_gas_event_def] >> metis_tac[dft_occ_event_unique]
+QED
+
+Theorem dft_occ_init_event_unique:
+  dft_ctx_ids ctx /\ dft_fn_ids fn /\
+  dft_occ_event inst addr
+    (FUNPOW (dft_occ_next a ctx) j (dft_occ_init (DftOpen (DftEnter fn 0 s) [] n))) /\
+  dft_occ_event inst' addr
+    (FUNPOW (dft_occ_next a ctx) k (dft_occ_init (DftOpen (DftEnter fn 0 s) [] n))) ==>
+  j = k
+Proof
+  metis_tac[dft_occ_valid_init, dft_occ_event_unique]
+QED
+
+Theorem dft_occ_init_gas_event_unique:
+  dft_ctx_ids ctx /\ dft_fn_ids fn /\
+  dft_occ_gas_event inst addr
+    (FUNPOW (dft_occ_next a ctx) j (dft_occ_init (DftOpen (DftEnter fn 0 s) [] n))) /\
+  dft_occ_gas_event inst' addr
+    (FUNPOW (dft_occ_next a ctx) k (dft_occ_init (DftOpen (DftEnter fn 0 s) [] n))) ==>
+  j = k
+Proof
+  metis_tac[dft_occ_valid_init, dft_occ_gas_event_unique]
+QED
