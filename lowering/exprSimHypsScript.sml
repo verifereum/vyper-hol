@@ -390,6 +390,37 @@ Proof
   metis_tac[]
 QED
 
+Theorem subscript_vtype_well_formed:
+  well_formed_vtype tenv vt /\ subscript_vtype vt idx = SOME vt' ==>
+  well_formed_vtype tenv vt'
+Proof
+  Cases_on `vt`
+  >- (rename1 `Type ty` >> Cases_on `ty` >>
+      simp[subscript_vtype_def, well_formed_vtype_def] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >>
+      gvs[well_formed_vtype_def, well_formed_type_def,
+          vyperValueTheory.evaluate_type_def] >>
+      Cases_on `evaluate_type tenv t` >> gvs[]) >>
+  simp[subscript_vtype_def, well_formed_vtype_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+
+Theorem vtype_annotation_byte_bits:
+  well_formed_vtype tenv vt /\ vtype_annotation_ok vt ty ==>
+  type_bits ty MOD 8 = 0
+Proof
+  Cases_on `vt` >>
+  simp[well_formed_vtype_def, vtype_annotation_ok_def, type_bits_def] >>
+  metis_tac[well_formed_type_byte_bits]
+QED
+
+Theorem assignable_array_element_byte_bits:
+  assignable_type tenv (ArrayT ty bd) ==> type_bits ty MOD 8 = 0
+Proof
+  simp[assignable_type_def] >>
+  metis_tac[assignable_type_well_formed, well_formed_type_byte_bits]
+QED
+
 Definition expr_sim_pre_def:
   expr_sim_pre cenv cx env e es <=>
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
