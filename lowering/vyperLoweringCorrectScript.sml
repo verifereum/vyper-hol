@@ -56,7 +56,7 @@ Ancestors
   venomExecSemantics
   venomState
   compileEnv e2eDefs supportedProgram compileVyper immutableSectionRel
-  unitTransformDefs unitShapeDefs o1PassContract
+  unitTransformDefs unitShapeDefs o1PassContract ptrDiscipline
   fragExec loweringHalt loweringShapeProps retAbiPlanProps
 
 (* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
@@ -919,9 +919,35 @@ Proof
   cheat
 QED
 
+(* The dead bytes of a source call's result: those storage_dead gives in
+   the running contract's storage and transient storage, by the layout the
+   success case of external_call_result_rel compares with.  The pipeline
+   may change them (o1PassContract's dead_result_rel), and the source
+   relation already ignores them.  S3 bounds by them what a call request
+   or the result may read from moved memory (taint_within). *)
+Definition external_call_dead_def:
+  external_call_dead tx ((res : value + exception), am',
+                      (rqs : call_request list)) =
+    let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
+    <| d_stor := (\a st. if a = tx.target
+                         then {(k,b) | storage_dead cx F st (w2n k) b}
+                         else {});
+       d_trans := (\a st. if a = tx.target
+                          then {(k,b) | storage_dead cx T st (w2n k) b}
+                          else {});
+       d_imm := K {}; d_ret := K {} |>
+End
+
 (* S3: planned admission, Milestone 5. Proof idea: allocation-budget and
    buffer-layout induction bound each reachable raw memory access. Excluding
-   source_exempt is essential: dynamic decoding can read unchecked offsets. *)
+   source_exempt is essential: dynamic decoding can read unchecked offsets.
+   The other conjuncts are the rest of o1PassContract's source invariant
+   (o1_src_inv), which the O1 pipeline's simulation (S4) takes: no eom and
+   no DALLOCA, the pointer discipline above a reserved fixed region, and
+   the taint bound by the call's dead bytes, and the no-wrap bound on
+   DLOAD/DLOADBYTES offsets: added to the start of the code's data section,
+   each stays below 2^256 (immutable offsets are compile-time constants
+   inside the immutable section). *)
 Theorem lower_vyper_runtime_unit_memory_ok:
   !tops rpolicy unit am tx ret vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -933,28 +959,15 @@ Theorem lower_vyper_runtime_unit_memory_ok:
     initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok tops am tx vs.vs_outcomes /\
     ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
-    ==> raw_unit_memory_ok unit.cu_context vs
-Proof
-  cheat
-QED
-
-(* S3': planned admission, Milestone 5. Every reachable DLOAD/DLOADBYTES
-   offset, added to the start of the code's data section, stays below
-   2^256, so LowerDload's code_end-relative CODECOPY offset does not wrap.
-   Proof idea: immutable offsets are compile-time constants inside the
-   immutable section, and the runtime code is far shorter than 2^255. *)
-Theorem lower_vyper_runtime_unit_dload_offset_ok:
-  !tops rpolicy unit am tx ret vs.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
-    ==> mem_inv dload_offset_ok unit.cu_context vs
+    ==> raw_unit_memory_ok unit.cu_context vs /\
+        EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+        ~ctx_has_dalloca unit.cu_context /\
+        (?lo. fixed_region_reserved lo unit.cu_context /\
+              ptr_discipline lo unit.cu_context vs) /\
+        taint_within
+          (external_call_dead tx (call_external (SOME vs.vs_outcomes) [] am tx))
+          unit.cu_context vs /\
+        mem_inv dload_offset_ok unit.cu_context vs
 Proof
   cheat
 QED

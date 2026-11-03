@@ -12,6 +12,7 @@ Theory o1PipelineCorrect
 Ancestors
   unitTransformDefs unitShapeDefs unitMemInv venomPipelineDriver
   venomPassSchedule o1PassContract o1PipelineCompose ctxLookupAgree
+  ptrDiscipline
   contextCodegenRel stackPlanGen venomCompilerTypes venomState words
 
 (* This is the compiler's existing O1 hook, with all three checks K T.
@@ -29,24 +30,34 @@ End
  * PHI; its entry function has no PARAM (unit_entry_no_params); no
  * function has a PHI in its first block (unit_first_block_no_phi); and
  * the initial state's dynamic-memory pointer is its initial free-memory
- * pointer (o1_run_state_ok), as the entry state has it; and every DLOAD
- * offset stays below 2^256 once added to the data section's start
+ * pointer (o1_run_state_ok), as the entry state has it.
+ * The runs match up to any well-formed set D of dead bytes (dead_wf):
+ * ConcretizeMemLoc moves buffers, so bytes nothing reads may differ.
+ * The source's other invariant rows (o1_src_inv) are premises too: no
+ * function has an eom or a DALLOCA, its pointers follow the discipline
+ * above a reserved fixed region, and what it writes out or returns
+ * reads only bytes in D (taint_within); and every DLOAD offset stays
+ * below 2^256 once added to the data section's start
  * (mem_inv dload_offset_ok, which S3 provides alongside raw memory). *)
 Theorem run_venom_pipeline_correct:
-  !rpolicy unit out vs.
+  !D lo rpolicy unit out vs.
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
     unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
     o1_run_state_ok vs /\
     raw_unit_memory_ok unit.cu_context vs /\
+    EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+    ~ctx_has_dalloca unit.cu_context /\
+    fixed_region_reserved lo unit.cu_context /\
+    ptr_discipline lo unit.cu_context vs /\
+    taint_within D unit.cu_context vs /\ dead_wf D /\
     mem_inv dload_offset_ok unit.cu_context vs
     ==>
-    checked_unit_transform_correct o1_pipeline rpolicy unit vs
+    ctx_sim D unit.cu_context out.po_unit.cu_context vs vs
 Proof
   rpt strip_tac >>
-  simp[checked_unit_transform_correct_def, ctx_transform_correct_ctx_sim] >>
-  `o1_src_inv unit.cu_context vs` by
-    fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv] >>
+  `o1_src_inv D unit.cu_context vs` by
+    (fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv] >> metis_tac[]) >>
   fs[o1_pipeline_def] >>
   drule_all o1_pipeline_stage_facts >> strip_tac >> metis_tac[]
 QED
@@ -54,23 +65,33 @@ QED
 (* The output's memory invariant: every access is static (below some
  * layout end) or dynamic (at or above the initial frame pointer). *)
 Theorem run_venom_pipeline_mem_inv:
-  !rpolicy unit out vs.
+  !lo rpolicy unit out vs.
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
     unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
     o1_run_state_ok vs /\
     raw_unit_memory_ok unit.cu_context vs /\
+    EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+    ~ctx_has_dalloca unit.cu_context /\
+    fixed_region_reserved lo unit.cu_context /\
+    ptr_discipline lo unit.cu_context vs /\
     mem_inv dload_offset_ok unit.cu_context vs
     ==>
     ?eom. mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp))
             out.po_unit.cu_context vs
 Proof
   rpt strip_tac >>
-  `o1_src_inv unit.cu_context vs` by
-    fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv] >>
+  (* Any well-formed dead-byte set will do; take every byte, which bounds
+     any taint. *)
+  qabbrev_tac `D = <| d_stor := K (K UNIV); d_trans := K (K UNIV);
+                      d_imm := K UNIV; d_ret := K UNIV |>` >>
+  `dead_wf D /\ taint_within D unit.cu_context vs` by
+    simp[Abbr `D`, dead_wf_def, taint_within_def] >>
+  `o1_src_inv D unit.cu_context vs` by
+    (fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv] >> metis_tac[]) >>
   fs[o1_pipeline_def] >>
   drule_all o1_pipeline_stage_facts >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
+  first_x_assum (qspecl_then [`D`, `vs`] mp_tac) >> simp[] >> strip_tac >>
   fs[o1_lowered_inv_def] >>
   qexists_tac `eom` >> fs[mem_inv_raw_reachable] >>
   rpt strip_tac >> first_x_assum drule >>
