@@ -2871,7 +2871,11 @@ QED
 
 (* --- DLOADBYTES: 3-op write, src = vs_data_section --- *)
 Resume remap_preserved_mem_ops[dloadbytes]:
-  fs[step_inst_base_def, AllCaseEqs()] >>
+  drule_all dloadbytes_success_iff >>
+  disch_then (fn th => fs[th]) >>
+  rename1 `eval_operand (Var v) s1 = SOME dst` >>
+  rename1 `eval_operand v6 s1 = SOME src` >>
+  rename1 `eval_operand sz s1 = SOME size_val` >>
   fs[eval_operand_def, lookup_var_def] >>
   mem_op_preamble >>
   `v6 <> Var v` by pv_uniqueness_contra >>
