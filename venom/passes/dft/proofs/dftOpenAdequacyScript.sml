@@ -542,3 +542,120 @@ Proof
   strip_tac >>
   `LENGTH (frame::stack) = LENGTH stack` by simp[] >> gvs[]
 QED
+
+Definition dft_open_stack_exit_def:
+  dft_open_stack_exit bst c <=>
+    (?r n. c = DftOpen (DftDone r) bst n) \/
+    (?r n. c = DftOpen (DftDone r) [] n)
+End
+
+Definition dft_open_stack_extends_def:
+  dft_open_stack_extends bst (DftOpen control stack n) <=>
+    ?prefix. stack = prefix ++ bst
+End
+
+Theorem dft_open_deliver_stack[local]:
+  dft_open_stack_extends bst (DftOpen control stack n) ==>
+  dft_open_stack_extends bst
+    (dft_open_deliver fn budget bb inst before stack m result)
+Proof
+  Cases_on `result` >>
+  simp[dft_open_deliver_def, dft_open_stack_extends_def]
+QED
+
+Theorem dft_open_stack_step:
+  dft_open_stack_extends bst c /\ ~dft_open_stack_exit bst c ==>
+  dft_open_stack_extends bst (dft_open_next a ctx c) \/
+  dft_open_stack_exit bst (dft_open_next a ctx c)
+Proof
+  Cases_on `c` >> rename1 `DftOpen control stack n` >>
+  simp[dft_open_stack_extends_def] >> strip_tac >>
+  Cases_on `control`
+  >- (rename1 `DftEnter fn fuel s` >>
+      Cases_on `fuel` >> simp[dft_open_next_def, dft_open_stack_exit_def] >>
+      Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
+      simp[dft_open_stack_exit_def] >>
+      rename1 `SOME bb` >> Cases_on `eval_phis s bb.bb_instructions` >>
+      simp[dft_open_stack_extends_def, dft_open_stack_exit_def])
+  >- (rename1 `DftAt fn budget bb s` >>
+      simp[dft_open_next_def] >> Cases_on `get_instruction bb s.vs_inst_idx`
+      >- simp[dft_open_stack_exit_def] >>
+      rename1 `SOME inst` >> Cases_on `inst.inst_opcode = INVOKE`
+      >- (simp[dft_open_invoke_def] >>
+          Cases_on `decode_invoke inst` >> simp[dft_open_stack_exit_def] >>
+          rename1 `SOME p` >> PairCases_on `p` >> simp[] >>
+          Cases_on `lookup_function p0 ctx.ctx_functions` >>
+          simp[dft_open_stack_exit_def] >> rename1 `SOME callee` >>
+          Cases_on `eval_operands p1 s` >> simp[dft_open_stack_exit_def] >>
+          rename1 `SOME args` >> Cases_on `setup_callee callee args s` >>
+          simp[dft_open_stack_extends_def, dft_open_stack_exit_def] >>
+          qexists_tac `DftCaller fn budget bb inst s :: prefix` >> simp[]) >>
+      Cases_on `inst.inst_opcode = GAS` >> simp[]
+      >- (Cases_on `inst.inst_outputs` >> simp[dft_open_stack_exit_def] >>
+          Cases_on `t` >> simp[dft_open_stack_exit_def] >>
+          disj1_tac >> irule dft_open_deliver_stack >>
+          simp[dft_open_stack_extends_def]) >>
+      disj1_tac >> irule dft_open_deliver_stack >>
+      simp[dft_open_stack_extends_def]) >>
+  gvs[dft_open_next_def] >> Cases_on `prefix`
+  >- gvs[dft_open_stack_exit_def] >>
+  Cases_on `h` >> Cases_on `e` >>
+  simp[dft_open_return_def, dft_open_stack_exit_def] >>
+  Cases_on `bind_outputs i0.inst_outputs i'.iret_values
+    (adopt_return_fmp i' (merge_callee_state v v'))` >> simp[] >>
+  disj1_tac >> irule dft_open_deliver_stack >>
+  simp[dft_open_stack_extends_def]
+QED
+
+Theorem dft_open_stack_iterate:
+  !k c. dft_open_stack_extends bst c /\
+    (!j. j < k ==> ~dft_open_stack_exit bst (FUNPOW (dft_open_next a ctx) j c)) ==>
+    dft_open_stack_extends bst (FUNPOW (dft_open_next a ctx) k c) \/
+    dft_open_stack_exit bst (FUNPOW (dft_open_next a ctx) k c)
+Proof
+  Induct_on `k` >- simp[] >> rpt strip_tac >>
+  `dft_open_stack_extends bst (FUNPOW (dft_open_next a ctx) k c)` by
+    (first_x_assum (qspec_then `c` mp_tac) >>
+     impl_tac >- (conj_tac >- simp[] >> rpt strip_tac >>
+                   `j < SUC k` by decide_tac >> metis_tac[]) >>
+     `k < SUC k` by decide_tac >> metis_tac[]) >>
+  simp[FUNPOW_SUC] >> irule dft_open_stack_step >>
+  `k < SUC k` by decide_tac >> metis_tac[]
+QED
+
+Theorem dft_open_stack_confinement:
+  dft_open_stack_extends bst c /\
+  (!j. j < k ==> ~dft_open_stack_exit bst (FUNPOW (dft_open_next a ctx) j c)) ==>
+  !j. j <= k ==>
+    dft_open_stack_extends bst (FUNPOW (dft_open_next a ctx) j c) \/
+    dft_open_stack_exit bst (FUNPOW (dft_open_next a ctx) j c)
+Proof
+  rpt strip_tac >> irule dft_open_stack_iterate >>
+  conj_tac >- simp[] >> rpt strip_tac >> first_x_assum irule >> decide_tac
+QED
+
+Theorem dft_open_stack_boundary_separation:
+  dft_open_stack_extends (frame::stack) c /\
+  ~dft_open_stack_exit (frame::stack) c ==>
+  ~dft_open_inst_boundary fn budget bb stack i c
+Proof
+  Cases_on `c` >> rename1 `DftOpen control st n` >>
+  simp[dft_open_stack_extends_def] >> strip_tac >>
+  `LENGTH stack < LENGTH (prefix ++ frame::stack)` by simp[] >>
+  gvs[dft_open_inst_boundary_def, dft_open_run_boundary_def,
+      dft_open_stack_exit_def] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem dft_open_callee_boundary_avoidance:
+  dft_open_stack_extends (frame::stack) c /\
+  (!j. j < k ==> ~dft_open_stack_exit (frame::stack)
+    (FUNPOW (dft_open_next a ctx) j c)) ==>
+  !j. j < k ==> ~dft_open_inst_boundary fn budget bb stack i
+    (FUNPOW (dft_open_next a ctx) j c)
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >> disch_tac >>
+  irule dft_open_stack_boundary_separation >>
+  `j <= k` by decide_tac >>
+  drule_all dft_open_stack_confinement >> metis_tac[]
+QED
