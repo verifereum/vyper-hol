@@ -2,7 +2,8 @@
  * SimplifyCFG's two runs against the O1 pass contract.
  *
  * The pass keeps every function's runs (simplify_cfg_fn_correct) and the
- * states its frames reach (simplify_cfg_frame_sim), given
+ * states its frames reach (simplify_cfg_frame_sim, and away from
+ * revert-forward pairs simplify_cfg_frame_sim_rf), given
  * simplify_cfg_fn_ok: no PHI in the first block, PHI outputs written once
  * and covering every reachable predecessor, and definite assignment.
  * o1PassLift lifts both to the stage contract.
@@ -272,7 +273,7 @@ QED
 Theorem simplify_cfg_stage_sim:
   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
   o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
-  o1_run_state_ok vs ==> ctx_sim C C' vs vs
+  o1_run_state_ok vs ==> ctx_sim D C C' vs vs
 Proof
   strip_tac >>
   `ctx_bisim C C'` by metis_tac[simplify_cfg_stage_bisim] >>
@@ -306,9 +307,37 @@ Proof
   irule simplify_cfg_frame_sim >> gvs[o1_fn_shape_def]
 QED
 
+(* The raw memory fact exempts revert-forward pairs, so it transfers through
+   frame_sim and frame_sim_rf together. *)
+Theorem simplify_cfg_stage_mem_inv_rf:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
+  o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
+  o1_run_state_ok vs /\ mem_corr_closed_rf M /\ mem_inv M C vs ==>
+  mem_inv M C' vs
+Proof
+  strip_tac >>
+  `ctx_bisim C C'` by metis_tac[simplify_cfg_stage_bisim] >>
+  irule frame_sim_rf_mem_inv >>
+  gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  `C'.ctx_entry = C.ctx_entry` by gvs[ctx_pass_stage_def] >> simp[] >>
+  drule simplify_cfg_stage_functions >> strip_tac >>
+  qexists_tac `C` >> simp[LIST_REL_MAP2, LIST_REL_EL_EQN] >>
+  rpt gen_tac >> strip_tac >> simp[EL_MAP] >>
+  `MEM (EL n C.ctx_functions) C.ctx_functions` by metis_tac[MEM_EL] >>
+  `o1_fn_shape C (EL n C.ctx_functions) /\
+   simplify_cfg_fn_ok (EL n C.ctx_functions)` by
+    gvs[o1_ctx_shape_def, EVERY_MEM] >>
+  `fn_bisim (EL n C.ctx_functions) (simplify_cfg_fn (EL n C.ctx_functions))` by
+    (irule simplify_cfg_fn_correct >> gvs[o1_fn_shape_def]) >>
+  conj_tac >- gvs[fn_bisim_def] >>
+  conj_tac >- gvs[fn_bisim_def] >>
+  conj_tac >- (irule simplify_cfg_frame_sim >> gvs[o1_fn_shape_def]) >>
+  irule simplify_cfg_frame_sim_rf >> gvs[o1_fn_shape_def]
+QED
+
 (* Pre-walk output: every block reachable, definite assignment kept. *)
 Theorem simplify_cfg_stage_pre_walk:
-  !view. o1_stage_contract rpolicy (CFP_Simple VP_SimplifyCFG) view no_pre
+  !view. o1_stage_contract rpolicy D (CFP_Simple VP_SimplifyCFG) view no_pre
            o1_pre_walk_inv o1_walk_src_inv
 Proof
   simp[o1_stage_contract_def, no_pre_def] >> rpt gen_tac >> strip_tac >>
@@ -319,8 +348,10 @@ Proof
   conj_tac >- metis_tac[simplify_cfg_stage_sim] >>
   simp[o1_walk_src_inv_def] >> conj_tac
   >- (gvs[o1_pre_walk_inv_def, o1_src_inv_def] >>
-      irule simplify_cfg_stage_mem_inv >>
-      metis_tac[mem_corr_closed_raw_mem_ok]) >>
+      `C'.ctx_global_reserved = C.ctx_global_reserved` by
+        gvs[ctx_pass_stage_def] >> simp[] >>
+      irule simplify_cfg_stage_mem_inv_rf >>
+      metis_tac[mem_corr_closed_rf_raw_mem_ok]) >>
   drule simplify_cfg_stage_functions >> strip_tac >>
   simp[EVERY_MEM, MEM_MAP] >> rpt gen_tac >> strip_tac >> gvs[] >>
   irule simplify_cfg_pre_walk_structure >>
@@ -330,7 +361,7 @@ QED
 
 (* The walk run, stage 5: wf_ssa in, wf_ssa out. *)
 Theorem simplify_cfg_stage_walk:
-  o1_run_contract rpolicy 5
+  o1_run_contract rpolicy D 5
 Proof
   simp[o1_run_contract_def, o1_fn_passes_def, o1_inv_def,
        o1_stage_contract_def, o1_pre_def] >> rpt gen_tac >> strip_tac >>
@@ -356,7 +387,7 @@ QED
 
 Theorem o1_contract_simplify_cfg_pre_walk:
   o1_step_contract rpolicy (CFP_Simple VP_SimplifyCFG) /\
-  (!view. o1_stage_contract rpolicy (CFP_Simple VP_SimplifyCFG) view no_pre
+  (!view. o1_stage_contract rpolicy D (CFP_Simple VP_SimplifyCFG) view no_pre
             o1_pre_walk_inv o1_walk_src_inv)
 Proof
   simp[simplify_cfg_step_contract, simplify_cfg_stage_pre_walk]
@@ -364,7 +395,7 @@ QED
 
 Theorem o1_contract_simplify_cfg:
   o1_step_contract_at 5 rpolicy (CFP_Simple VP_SimplifyCFG) /\
-  o1_run_contract rpolicy 5
+  o1_run_contract rpolicy D 5
 Proof
   simp[simplify_cfg_stage_walk] >>
   irule o1_step_contract_at_preserve >>

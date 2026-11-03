@@ -3,7 +3,8 @@
  *
  * Block merging, trivial jump bypass, unreachable block removal and PHI
  * fixup preserve a function's runs from its entry, and every state the
- * output reaches corresponds to one the input reaches.
+ * output reaches corresponds to one the input reaches, away from
+ * revert-forward pairs too.
  *)
 
 Theory simplifyCfgProof
@@ -30,6 +31,21 @@ Theorem simplify_cfg_frame_sim:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
   simplify_cfg_fn_ok fn ==>
   frame_sim L C C' fn (simplify_cfg_fn fn)
+Proof
+  cheat
+QED
+
+(* A target state that touches memory outside a revert-forward pair
+   (RETURNDATACOPY [p; 0; rds] then REVERT [p; rds]) corresponds to a source
+   state outside one too.  The pass never separates the two instructions of
+   a pair: both sit in one block, REVERT ends it, and merging only puts a
+   predecessor's non-terminators in front.  Merging can create a pair,
+   which the statement allows. *)
+Theorem simplify_cfg_frame_sim_rf:
+  ctx_bisim C C' /\
+  wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
+  simplify_cfg_fn_ok fn ==>
+  frame_sim_rf L C C' fn (simplify_cfg_fn fn)
 Proof
   cheat
 QED

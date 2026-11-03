@@ -156,6 +156,10 @@ Proof
   `fn_inst_wf (FST (simplify_cfg_fn_with_labels f))` by
     (gvs[fn_inst_wf_def, EVERY_MEM, fn_insts_def, fn_insts_blocks_MEM] >>
      metis_tac[]) >>
+  `no_dret (FST (simplify_cfg_fn_with_labels f))` by
+    (qspecl_then [`\op. op <> DRET`, `f`] mp_tac
+       simplify_cfg_fn_with_labels_opcodes >>
+     gvs[o1_fn_shape_def, dretDesugarDefsTheory.no_dret_def, EVERY_MEM]) >>
   simp[o1_fn_shape_def] >> rpt conj_tac
   >- (rewrite_tac[fn_invoke_ok_def] >> rpt strip_tac >>
       `inst_wf inst` by gvs[EVERY_MEM] >>
