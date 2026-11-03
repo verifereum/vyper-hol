@@ -591,24 +591,59 @@ QED
 
 (* ===== Bitwise operators ===== *)
 
-(* proves bop_result_bitwise for one of the operations *)
-fun bop_bitwise_tac g =
-  (fs[bop_result_def, evaluate_builtin_def] >>
-   Cases_on `v1` >> Cases_on `v2` >>
-   gvs[evaluate_binop_def, expr_res_ok_def, bounded_int_op_def,
-       val_to_w256_def, i2w_int_and, i2w_int_or, i2w_int_xor,
-       word_value_def] >>
-   FIRST [
-     (* flags *)
-     qmatch_goalsub_abbrev_tac `n2w (Num z)` >>
-     `~(z < 0)` by
-       simp[Abbr `z`, int_and_def, int_or_def, int_xor_def, int_bitwise_neg] >>
-     `(n2w (Num z) : bytes32) = i2w z` by simp[i2w_def] >>
-     pop_assum SUBST1_TAC >>
-     simp[Abbr `z`, i2w_int_and, i2w_int_or, i2w_int_xor, i2w_pos],
-     (* booleans *)
-     rpt (IF_CASES_TAC >> gvs[]) >>
-     simp[WORD_AND_CLAUSES, WORD_OR_CLAUSES, WORD_XOR_CLAUSES]]) g;
+Theorem evaluate_builtin_bop_pair[local]:
+  evaluate_builtin cx acc ann (Bop bop) tys [v1;v2] =
+    evaluate_binop
+      (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0)
+      (case tys of
+       | [_;t2] => (case evaluate_type (get_tenv cx) t2 of
+                    SOME tv => tv | NONE => NoneTV)
+       | _ => NoneTV) bop v1 v2
+Proof
+  simp[Once evaluate_builtin_def]
+QED
+
+Theorem evaluate_binop_and[local]:
+  evaluate_binop u tv And v1 v2 =
+    (case v1 of
+       IntV i1 => (case v2 of IntV i2 =>
+         bounded_int_op u (int_and i1 i2) | _ => INR (TypeError "binop"))
+     | BoolV b1 => (case v2 of BoolV b2 =>
+         INL (BoolV (b1 /\ b2)) | _ => INR (TypeError "binop"))
+     | FlagV n1 => (case v2 of FlagV n2 =>
+         INL (FlagV (Num (int_and (&n1) (&n2)))) | _ => INR (TypeError "binop"))
+     | _ => INR (TypeError "binop"))
+Proof
+  simp[Once evaluate_binop_def]
+QED
+
+Theorem evaluate_binop_or[local]:
+  evaluate_binop u tv Or v1 v2 =
+    (case v1 of
+       IntV i1 => (case v2 of IntV i2 =>
+         bounded_int_op u (int_or i1 i2) | _ => INR (TypeError "binop"))
+     | BoolV b1 => (case v2 of BoolV b2 =>
+         INL (BoolV (b1 \/ b2)) | _ => INR (TypeError "binop"))
+     | FlagV n1 => (case v2 of FlagV n2 =>
+         INL (FlagV (Num (int_or (&n1) (&n2)))) | _ => INR (TypeError "binop"))
+     | _ => INR (TypeError "binop"))
+Proof
+  simp[Once evaluate_binop_def]
+QED
+
+Theorem evaluate_binop_xor[local]:
+  evaluate_binop u tv XOr v1 v2 =
+    (case v1 of
+       IntV i1 => (case v2 of IntV i2 =>
+         bounded_int_op u (int_xor i1 i2) | _ => INR (TypeError "binop"))
+     | BoolV b1 => (case v2 of BoolV b2 =>
+         INL (BoolV (b1 <> b2)) | _ => INR (TypeError "binop"))
+     | FlagV n1 => (case v2 of FlagV n2 =>
+         INL (FlagV (Num (int_xor (&n1) (&n2)))) | _ => INR (TypeError "binop"))
+     | _ => INR (TypeError "binop"))
+Proof
+  simp[Once evaluate_binop_def]
+QED
 
 (* And, Or and XOr on two values give the word operation on their words.
    On integers the source checks the result against the type's bound;
@@ -635,11 +670,23 @@ Proof
      within_int_bound u (int_and i1 i2) /\ within_int_bound u (int_or i1 i2) /\
      within_int_bound u (int_xor i1 i2)` by
     simp[int_and_def, int_or_def, int_xor_def, within_int_bound_int_bitwise] >>
-  (* one operation at a time, each unfolding a third of the value pairs *)
-  gvs[]
-  >>~- ([`bop_result _ _ And tys _ _ _`], bop_bitwise_tac)
-  >>~- ([`bop_result _ _ Or tys _ _ _`], bop_bitwise_tac) >>
-  bop_bitwise_tac
+  gvs[] >>
+  fs[bop_result_def, evaluate_builtin_bop_pair,
+     evaluate_binop_and, evaluate_binop_or, evaluate_binop_xor] >>
+  Cases_on `v1` >> fs[expr_res_ok_def] >>
+  Cases_on `v2` >> fs[expr_res_ok_def] >>
+  gvs[expr_res_ok_def, bounded_int_op_def,
+      val_to_w256_def, i2w_int_and, i2w_int_or, i2w_int_xor,
+      word_value_def] >>
+  FIRST [
+    qmatch_goalsub_abbrev_tac `n2w (Num z)` >>
+    `~(z < 0)` by
+      simp[Abbr `z`, int_and_def, int_or_def, int_xor_def, int_bitwise_neg] >>
+    `(n2w (Num z) : bytes32) = i2w z` by simp[i2w_def] >>
+    pop_assum SUBST1_TAC >>
+    simp[Abbr `z`, i2w_int_and, i2w_int_or, i2w_int_xor, i2w_pos],
+    rpt (IF_CASES_TAC >> gvs[]) >>
+    simp[WORD_AND_CLAUSES, WORD_OR_CLAUSES, WORD_XOR_CLAUSES]]
 QED
 
 (* The lowering emits the word operation, one instruction. *)
