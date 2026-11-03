@@ -1372,6 +1372,17 @@ QED
 (* MEMTOP reads memory but mem_read_ops doesn't cover it.
    Exclude MEMTOP from the bridge.
    TODO: add MEMTOP to mem_read_ops? *)
+Theorem no_mem_ops_reader_opcode[local]:
+  !opc. Eff_MEMORY IN read_effects opc /\ opc <> MEMTOP /\
+    opc <> INVOKE /\ ~is_alloca_op opc /\ ~is_terminator opc /\
+    ~is_ext_call_op opc ==>
+    (opc = MLOAD \/ opc = ILOAD \/ opc = MCOPY \/ opc = SHA3 \/ opc = LOG)
+Proof
+  Cases >>
+  simp[read_effects_def, all_effects_def, empty_effects_def,
+       is_alloca_op_def, is_terminator_def, is_ext_call_op_def]
+QED
+
 Theorem no_mem_read_effect_from_no_mem_read_ops[local]:
   !inst s v.
     step_inst_base inst s = OK v /\

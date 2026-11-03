@@ -35,6 +35,16 @@ Theorem step_inst_base_error_transfer[local]:
     ~is_ext_call_op inst.inst_opcode /\
     step_inst_base inst s1 = Error err ==>
     ?err'. step_inst_base inst s2 = Error err'
+
+Theorem immutable_op_immutables_agree[local]:
+  !inst s1 s2 v1 v2.
+    is_immutable_op inst.inst_opcode /\
+    step_inst_base inst s1 = OK v1 /\
+    step_inst_base inst s2 = OK v2 /\
+    s1.vs_immutables = s2.vs_immutables /\
+    (!op. MEM op inst.inst_operands ==>
+          eval_operand op s1 = eval_operand op s2) ==>
+    v1.vs_immutables = v2.vs_immutables
 ```
 
 Do not modify these statements. Prove them as-is, or produce a counterexample.
@@ -51,6 +61,8 @@ Do not modify these statements. Prove them as-is, or produce a counterexample.
 
 ## Background
 
+Second owner amendment: replay28072 repaired CALLDATACOPY error transfer and then failed immutable_op_immutables_agree at rpt(CASE_TAC >> simp[]) on ILOAD,2.5seconds. Its complete exact schema and both admitted producers were independently audited PROVABLE at frozen e31296aea; owner verified the whole schema and venom/defs are unchanged since that audit. This amendment adds that fourth exact frozen root and only its observed proof failure/local helpers. No new memory, well-formedness or output-arity premise is allowed. Preserve all pending reader-classification/descriptor obligations; the source-only reader classifier candidate is retained unverified. Obtain updated strategist plan; preceding run is stopped, not complete.
+
 Owner amendment: replay27899 made no source edits and reached step_inst_base_error_transfer[CALLDATACOPY], line4334, error_inline_tac over2.5seconds. The complete exact Error-transfer schema, including all opcodes and malformed envelope/error cases, was already independently audited PROVABLE at the descriptor/BUMP task; its schema and executable definitions remain unchanged. This amendment adds that complete frozen root and only actually demonstrated failing resumes to the authorized repair scope. No extra premise or semantic change. Obtain an updated strategist plan before editing; the prior run is stopped, not complete.
 
 Prior task27613's scoped memory-preservation repair passed replay, but the complete theory then failed its frozen neighbor no_mem_read_effect_from_no_mem_read_ops, gvs classification over101opcode goals,2.5seconds. That task is stopped. Its two local writer helpers and bounded root repair are retained explicitly as partial source without a full-theory certificate.
@@ -59,7 +71,7 @@ Both complete exact schemas have now independently been audited PROVABLE against
 
 ## Domain Constraints
 
-- Source edits only within the three frozen roots and necessary local helper theorems in venom/passes/shared/proofs/allocaRemapProofsScript.sml, and only after an actual demonstrated failure. The observed outside-root CALLDATACOPY Error-transfer failure is now explicitly in scope. Repair that actual failing resume, preserving the shared error_inline_tac and unfailed resumes. Do not alter the retained writer helpers/root or read bridge unless actual replay demonstrates a failure.
+- Source edits only within the four frozen roots and necessary local helper theorems in venom/passes/shared/proofs/allocaRemapProofsScript.sml, and only after an actual demonstrated failure. The observed outside-root CALLDATACOPY Error-transfer failure is now explicitly in scope. Repair that actual failing resume, preserving the shared error_inline_tac and unfailed resumes. Do not alter the retained writer helpers/root or read bridge unless actual replay demonstrates a failure.
 - All statements, definitions, shared tactics, other proof bodies and completed remap repairs are frozen.
 - No new definition, axiom, admission, premise, opcode exclusion, semantic change, timeout override or TRY/ORELSE/FIRST around proof search.
 - Report any new outside-root failure before editing. No blind unchanged retries or speculative cleanup. Do not amend generated records from the prior task.
