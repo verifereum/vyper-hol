@@ -7097,3 +7097,192 @@ Proof
        stack_push_def, spill_lookup_def] >>
   EVAL_TAC
 QED
+
+Definition input_spill_provenance_def:
+  input_spill_provenance lo vs ps qs <=>
+    !x off y. FLOOKUP ps.ps_spilled x = SOME off /\
+              FLOOKUP qs.ps_spilled y = SOME off ==>
+      operand_val vs lo x = operand_val vs lo y /\
+      (y = dead_stack_marker ==> x = dead_stack_marker)
+End
+
+Theorem input_spill_provenance_initial:
+  (!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
+              FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
+              a + 32 <= b \/ b + 32 <= a) ==>
+  input_spill_provenance lo vs ps ps
+Proof
+  strip_tac >> pure_rewrite_tac[input_spill_provenance_def] >>
+  rpt gen_tac >> strip_tac >>
+  `x = y` by (spose_not_then assume_tac >>
+    first_x_assum drule_all >> simp[]) >> simp[]
+QED
+
+Theorem plan_stack_sem_eq_push:
+  plan_stack_sem_eq lo vs xs ys /\
+  operand_val vs lo x = operand_val vs lo y /\
+  (x = dead_stack_marker ==> y = dead_stack_marker) ==>
+  plan_stack_sem_eq lo vs (stack_push x xs) (stack_push y ys)
+Proof
+  simp[plan_stack_sem_eq_def, stack_push_def] >> strip_tac >>
+  gen_tac >> strip_tac >> Cases_on `i < LENGTH xs`
+  >- (simp[EL_SNOC] >> metis_tac[]) >>
+  `i = LENGTH xs` by decide_tac >> gvs[] >>
+  metis_tac[EL_LENGTH_SNOC]
+QED
+
+Theorem do_restore_stack_value_provenance:
+  FLOOKUP ps.ps_spilled x = SOME off /\
+  plan_stack_sem_eq lo vs qs.ps_stack ps.ps_stack /\
+  input_spill_provenance lo vs ps qs /\
+  prefix_spill_wf initial_fmp lo [SORestore off] qs ==>
+  plan_stack_sem_eq lo vs
+    (apply_prefix_ops initial_fmp lo [SORestore off] qs).ps_stack
+    (SND (do_restore x ps)).ps_stack /\
+  input_spill_provenance lo vs (SND (do_restore x ps))
+    (apply_prefix_ops initial_fmp lo [SORestore off] qs)
+Proof
+  strip_tac >>
+  `FLOOKUP qs.ps_spilled (spill_lookup off qs.ps_spilled) = SOME off` by
+    (fs[prefix_spill_wf_def, spill_op_wf_def] >>
+     simp[spill_lookup_def] >> metis_tac[SELECT_AX]) >>
+  simp[do_restore_def, apply_prefix_ops_def, apply_prefix_op_def, LET_THM] >>
+  conj_tac
+  >- (irule plan_stack_sem_eq_push >>
+      fs[input_spill_provenance_def] >> metis_tac[]) >>
+  fs[input_spill_provenance_def, DOMSUB_FLOOKUP_THM] >> metis_tac[]
+QED
+
+Theorem do_dup_safe_spill_provenance:
+  d < LENGTH ps.ps_stack /\
+  input_spill_provenance lo vs ps qs /\
+  (!x a y b. FLOOKUP qs.ps_spilled x = SOME a /\
+              FLOOKUP qs.ps_spilled y = SOME b /\ x <> y ==>
+              a + 32 <= b \/ b + 32 <= a) /\
+  prefix_spill_wf initial_fmp lo (FST (do_dup d ps)) qs ==>
+  input_spill_provenance lo vs (SND (do_dup d ps))
+    (apply_prefix_ops initial_fmp lo (FST (do_dup d ps)) qs)
+Proof
+  strip_tac >> simp[input_spill_provenance_def, do_dup_spilled_unchanged] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all do_dup_two_state_safe_spilled_submap >> strip_tac >>
+  fs[input_spill_provenance_def] >> metis_tac[]
+QED
+
+Theorem emit_one_input_safe_value_provenance:
+  !op opc nl ps qs lo vs.
+  opc <> INVOKE /\
+  plan_stack_sem_eq lo vs qs.ps_stack ps.ps_stack /\
+  input_spill_provenance lo vs ps qs /\
+  (!x a y b. FLOOKUP qs.ps_spilled x = SOME a /\
+              FLOOKUP qs.ps_spilled y = SOME b /\ x <> y ==>
+              a + 32 <= b \/ b + 32 <= a) /\
+  prefix_spill_wf initial_fmp lo (FST (emit_one_input opc nl op ps)) qs ==>
+  plan_stack_sem_eq lo vs
+    (apply_prefix_ops initial_fmp lo (FST (emit_one_input opc nl op ps)) qs).ps_stack
+    (SND (emit_one_input opc nl op ps)).ps_stack /\
+  input_spill_provenance lo vs (SND (emit_one_input opc nl op ps))
+    (apply_prefix_ops initial_fmp lo (FST (emit_one_input opc nl op ps)) qs)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `op`
+  >- (gvs[emit_one_input_def, is_var_operand_def, LET_THM,
+          apply_prefix_ops_def, apply_prefix_op_def, apply_simple_op_def] >>
+      conj_tac >- (rewrite_tac[GSYM stack_push_def] >> irule plan_stack_sem_eq_push >> simp[]) >>
+      gvs[input_spill_provenance_def])
+  >- (rename1 `Var v` >> Cases_on `FLOOKUP ps.ps_spilled (Var v)`
+      >- (gvs[emit_one_input_def, is_var_operand_def, LET_THM] >>
+          Cases_on `MEM v nl`
+          >- (gvs[] >> Cases_on `stack_get_depth (Var v) ps.ps_stack`
+              >- gvs[apply_prefix_ops_def] >>
+              gvs[] >> drule stack_get_depth_bound >> strip_tac >>
+              ` (\(a:stack_op list,b:plan_state). (a,b)) = I` by
+                (simp[FUN_EQ_THM] >> Cases >> simp[]) >> fs[] >>
+              conj_tac
+              >- (irule do_dup_safe_stack_value_replay >> simp[] >> metis_tac[]) >>
+              irule do_dup_safe_spill_provenance >> simp[] >> metis_tac[]) >>
+          gvs[apply_prefix_ops_def]) >>
+      rename1 `FLOOKUP ps.ps_spilled (Var v) = SOME off` >>
+      `FST (do_restore (Var v) ps) = [SORestore off]` by simp[do_restore_def] >>
+      `stack_get_depth (Var v) (SND (do_restore (Var v) ps)).ps_stack = SOME 0` by
+        simp[do_restore_def, stack_get_depth_push_inventory] >>
+      `prefix_spill_wf initial_fmp lo [SORestore off] qs` by
+        (qpat_x_assum `prefix_spill_wf _ _ _ _` mp_tac >>
+         Cases_on `MEM v nl` >>
+         simp[emit_one_input_def, is_var_operand_def, LET_THM, do_restore_def,
+              stack_get_depth_push_inventory, do_dup_def, prefix_spill_wf_def]) >>
+      drule_all do_restore_stack_value_provenance >> strip_tac >>
+      Cases_on `MEM v nl`
+      >- (gvs[emit_one_input_def, is_var_operand_def, LET_THM, do_restore_def,
+              stack_get_depth_push_inventory, do_dup_def,
+              apply_prefix_ops_def, apply_prefix_op_def, apply_simple_op_def] >>
+          conj_tac
+          >- (`plan_stack_sem_eq lo vs
+                 (stack_dup 0 (stack_push (spill_lookup off qs.ps_spilled) qs.ps_stack))
+                 (stack_dup 0 (stack_push (Var v) ps.ps_stack))` by
+                (irule plan_stack_sem_eq_dup >> simp[stack_push_def] >>
+                 metis_tac[stack_push_def]) >>
+              fs[stack_dup_def, stack_peek_def, stack_push_def]) >>
+          gvs[input_spill_provenance_def]) >>
+      gvs[emit_one_input_def, is_var_operand_def, LET_THM, do_restore_def])
+  >> gvs[emit_one_input_def, is_var_operand_def, LET_THM,
+         apply_prefix_ops_def, apply_prefix_op_def, apply_simple_op_def] >>
+     conj_tac >- (rewrite_tac[GSYM stack_push_def] >> irule plan_stack_sem_eq_push >> simp[]) >>
+     gvs[input_spill_provenance_def]
+QED
+
+Theorem emit_input_plan_safe_value_provenance:
+  !inputs opc nl ps qs lo vs.
+  opc <> INVOKE /\
+  plan_stack_sem_eq lo vs qs.ps_stack ps.ps_stack /\
+  input_spill_provenance lo vs ps qs /\
+  (!x a y b. FLOOKUP qs.ps_spilled x = SOME a /\
+              FLOOKUP qs.ps_spilled y = SOME b /\ x <> y ==>
+              a + 32 <= b \/ b + 32 <= a) /\
+  prefix_spill_wf initial_fmp lo (FST (emit_input_plan opc inputs nl ps)) qs ==>
+  plan_stack_sem_eq lo vs
+    (apply_prefix_ops initial_fmp lo (FST (emit_input_plan opc inputs nl ps)) qs).ps_stack
+    (SND (emit_input_plan opc inputs nl ps)).ps_stack /\
+  input_spill_provenance lo vs (SND (emit_input_plan opc inputs nl ps))
+    (apply_prefix_ops initial_fmp lo (FST (emit_input_plan opc inputs nl ps)) qs)
+Proof
+  Induct >> simp[emit_input_plan_def, apply_prefix_ops_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `emit_one_input opc (operand_vars inputs ++ nl) h ps` >>
+  rename1 `emit_one_input _ _ _ _ = (ops, ps1)` >>
+  Cases_on `emit_input_plan opc inputs nl ps1` >>
+  rename1 `emit_input_plan _ _ _ _ = (rest, ps2)` >>
+  gvs[prefix_spill_wf_append_reorder, apply_prefix_ops_append] >>
+  `plan_stack_sem_eq lo vs (apply_prefix_ops initial_fmp lo ops qs).ps_stack ps1.ps_stack /\
+   input_spill_provenance lo vs ps1 (apply_prefix_ops initial_fmp lo ops qs)` by
+    (drule (Q.SPECL [`h`, `opc`, `operand_vars inputs ++ nl`]
+                  emit_one_input_safe_value_provenance) >>
+     disch_then drule >> simp[] >>
+     disch_then (qspecl_then [`nl`, `inputs`, `initial_fmp`, `h`] mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  `!x a y b.
+    FLOOKUP (apply_prefix_ops initial_fmp lo ops qs).ps_spilled x = SOME a /\
+    FLOOKUP (apply_prefix_ops initial_fmp lo ops qs).ps_spilled y = SOME b /\ x <> y ==>
+    a + 32 <= b \/ b + 32 <= a` by
+    (match_mp_tac safe_prefix_spilled_separated >> metis_tac[]) >>
+  first_x_assum (qspecl_then [`opc`, `nl`, `ps1`,
+    `apply_prefix_ops initial_fmp lo ops qs`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem emit_input_plan_same_initial_stack_value_replay:
+  opc <> INVOKE /\
+  (!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
+              FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
+              a + 32 <= b \/ b + 32 <= a) /\
+  prefix_spill_wf initial_fmp lo (FST (emit_input_plan opc inputs nl ps)) ps ==>
+  plan_stack_sem_eq lo vs
+    (apply_prefix_ops initial_fmp lo (FST (emit_input_plan opc inputs nl ps)) ps).ps_stack
+    (SND (emit_input_plan opc inputs nl ps)).ps_stack
+Proof
+  strip_tac >>
+  `input_spill_provenance lo vs ps ps` by
+    (irule input_spill_provenance_initial >> metis_tac[]) >>
+  qspecl_then [`inputs`, `opc`, `nl`, `ps`] mp_tac
+    emit_input_plan_safe_value_provenance >>
+  disch_then (qspec_then `ps` mp_tac) >> simp[] >> metis_tac[]
+QED

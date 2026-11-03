@@ -6104,3 +6104,111 @@ Proof
   rpt strip_tac >> simp[do_dup_stack_result] >>
   irule do_dup_two_state_safe_stack_replay >> simp[] >> metis_tac[]
 QED
+
+(* A read-only stack trace cannot create a spill binding; a restored offset
+   cannot survive in the separated map. *)
+Theorem safe_readonly_prefix_lookup_origin:
+  !ops ps initial_fmp lo x off.
+    EVERY (\op. (?n. op = SODup n) \/ (?n. op = SOSwap n) \/
+                 (?n. op = SORestore n)) ops /\
+    (!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
+                FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
+                a + 32 <= b \/ b + 32 <= a) /\
+    prefix_spill_wf initial_fmp lo ops ps /\
+    FLOOKUP (apply_prefix_ops initial_fmp lo ops ps).ps_spilled x = SOME off ==>
+    FLOOKUP ps.ps_spilled x = SOME off /\ ~MEM (SORestore off) ops
+Proof
+  Induct >- simp[apply_prefix_ops_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `prefix_spill_wf _ _ (h::ops) _` mp_tac >>
+  pure_once_rewrite_tac[prefix_spill_wf_def] >> strip_tac >>
+  `!x a y b.
+     FLOOKUP (apply_prefix_op initial_fmp lo h ps).ps_spilled x = SOME a /\
+     FLOOKUP (apply_prefix_op initial_fmp lo h ps).ps_spilled y = SOME b /\
+     x <> y ==> a + 32 <= b \/ b + 32 <= a` by
+    (match_mp_tac safe_prefix_op_spilled_separated >>
+     simp[] >> metis_tac[]) >>
+  first_x_assum (qspec_then `apply_prefix_op initial_fmp lo h ps` mp_tac) >>
+  disch_then (qspecl_then [`initial_fmp`, `lo`, `x`, `off`] mp_tac) >>
+  simp[] >> impl_tac >- (fs[apply_prefix_ops_def] >> metis_tac[]) >>
+  strip_tac >>
+  qpat_x_assum `EVERY _ (h::ops)` mp_tac >> simp[] >> strip_tac >>
+  gvs[apply_prefix_op_def, apply_simple_op_def, LET_THM, DOMSUB_FLOOKUP_THM]
+  >> `FLOOKUP ps.ps_spilled (spill_lookup n ps.ps_spilled) = SOME n` by
+       (fs[spill_op_wf_def] >> metis_tac[do_swap_spill_lookup_flookup]) >>
+  spose_not_then assume_tac >> gvs[] >>
+  qpat_x_assum `!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\ _ ==> _`
+    (qspecl_then [`spill_lookup n ps.ps_spilled`, `n`, `x`, `n`] mp_tac) >>
+  simp[]
+QED
+
+Theorem safe_spill_readonly_prefix_submap:
+  !offsets tail ps initial_fmp lo x off.
+    EVERY (\op. (?n. op = SODup n) \/ (?n. op = SOSwap n) \/
+                 (?n. op = SORestore n)) tail /\
+    (!n. MEM n offsets ==> MEM (SORestore n) tail) /\
+    (!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
+                FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
+                a + 32 <= b \/ b + 32 <= a) /\
+    prefix_spill_wf initial_fmp lo (MAP SOSpill offsets ++ tail) ps /\
+    FLOOKUP (apply_prefix_ops initial_fmp lo (MAP SOSpill offsets ++ tail) ps).ps_spilled x = SOME off ==>
+    FLOOKUP ps.ps_spilled x = SOME off
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[prefix_spill_wf_append, apply_prefix_ops_append] >>
+  `!x a y b.
+     FLOOKUP (apply_prefix_ops initial_fmp lo (MAP SOSpill offsets) ps).ps_spilled x = SOME a /\
+     FLOOKUP (apply_prefix_ops initial_fmp lo (MAP SOSpill offsets) ps).ps_spilled y = SOME b /\
+     x <> y ==> a + 32 <= b \/ b + 32 <= a` by
+    (match_mp_tac safe_prefix_spilled_separated >> simp[] >> metis_tac[]) >>
+  drule_all safe_readonly_prefix_lookup_origin >> strip_tac >>
+  metis_tac[spill_trace_lookup_origin]
+QED
+
+Theorem do_dup_two_state_safe_spilled_submap:
+  !d ps qs lo x off.
+    d < LENGTH ps.ps_stack /\
+    (!x a y b. FLOOKUP qs.ps_spilled x = SOME a /\
+                FLOOKUP qs.ps_spilled y = SOME b /\ x <> y ==>
+                a + 32 <= b \/ b + 32 <= a) /\
+    prefix_spill_wf initial_fmp lo (FST (do_dup d ps)) qs /\
+    FLOOKUP (apply_prefix_ops initial_fmp lo (FST (do_dup d ps)) qs).ps_spilled x = SOME off ==>
+    FLOOKUP qs.ps_spilled x = SOME off
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `d <= 15`
+  >- gvs[do_dup_def, apply_prefix_ops_def, apply_prefix_op_def, apply_simple_op_def] >>
+  `d > 15` by decide_tac >>
+  qabbrev_tac `k = d - 15` >>
+  qabbrev_tac `offsets = FST (spill_alloc_n [] ps.ps_alloc
+    (REVERSE (top_n k ps.ps_stack)))` >>
+  qabbrev_tac `idxs = if k <= 16 then
+    GENLIST (\i. k - 2 - i) (k - 1) ++ [k - 1]
+    else GENLIST (\i. k - 1 - i) k` >>
+  qabbrev_tac `ros = MAP (\i. EL i offsets) idxs` >>
+  qabbrev_tac `tail = [SODup 16] ++
+    FLAT (MAP (\idx. SORestore (EL idx offsets) ::
+      (if k <= 16 then [] else [SOSwap 1])) idxs) ++
+    (if k <= 16 then [SOSwap k] else [])` >>
+  `FST (do_dup d ps) = MAP SOSpill offsets ++ tail` by
+    (qspecl_then [`d`, `ps`] mp_tac do_dup_big_decompose >>
+     simp[LET_THM, Abbr `k`, Abbr `offsets`, Abbr `idxs`, Abbr `tail`, APPEND_ASSOC]) >>
+  `LENGTH offsets = k` by
+    (simp[Abbr `offsets`, spill_alloc_n_offsets_length, top_n_def, LENGTH_TAKE, Abbr `k`] >>
+     decide_tac) >>
+  `0 < k` by (simp[Abbr `k`] >> decide_tac) >>
+  `GENLIST (\i. EL i offsets) k = offsets` by metis_tac[GENLIST_ID] >>
+  `PERM ros offsets` by
+    (qspec_then `k` mp_tac dup_restore_indices_perm >> simp[] >>
+     disch_then (mp_tac o Q.ISPEC `\i. EL i (offsets:num list)` o MATCH_MP PERM_MAP) >>
+     simp[Abbr `ros`, Abbr `idxs`, MAP_GENLIST, combinTheory.o_DEF, GENLIST_ID]) >>
+  irule safe_spill_readonly_prefix_submap >>
+  conj_tac >- metis_tac[] >>
+  qexistsl [`initial_fmp`, `lo`, `offsets`, `tail`] >>
+  simp[] >> conj_tac
+  >- (gen_tac >> strip_tac >>
+      `MEM n ros` by metis_tac[PERM_MEM_EQ] >>
+      gvs[Abbr `ros`, MEM_MAP] >>
+      simp[Abbr `tail`, MEM_FLAT, MEM_MAP] >> metis_tac[MEM]) >>
+  simp[Abbr `tail`, EVERY_APPEND, EVERY_FLAT, EVERY_MAP] >>
+  Cases_on `k <= 16` >> fs[APPEND_ASSOC]
+QED
