@@ -5432,7 +5432,8 @@ Proof
   >- (shape_under_tac compile_assert_slice_bounds_shape `B` >> simp[Abbr `B`, Abbr `P`]) >>
   gen_tac >> simp[] >>
   match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. B st` >> conj_tac
-  >- (shape_under_tac shape_step_emit_void_plain `B` >> simp[Abbr `B`, Abbr `P`] >> shape_opcode_tac) >>
+  >- (shape_under_tac shape_step_emit_void_plain `B` >> simp[Abbr `B`, Abbr `P`] >>
+      Cases_on `start_op` >> shape_opcode_tac) >>
   gen_tac >> simp[] >>
   match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. B st` >> conj_tac
   >- (shape_under_tac shape_step_emit_void_plain `B` >> simp[Abbr `B`, Abbr `P`] >> shape_opcode_tac) >>
