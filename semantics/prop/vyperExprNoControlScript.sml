@@ -574,9 +574,61 @@ Theorem eval_ext_call_no_control:
   no_control_exc exc
 Proof
   PairCases_on `sig` >> Cases_on `vs` >>
-  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >> strip_tac >>
-  rpt CALL_NO_CONTROL_STEP
+  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >> strip_tac
+  >- gvs[raise_def, no_control_exc_def]
+  >> ibind_step_tac
+  >- (drule type_check_no_control >> simp[])
+  >> bind_step_tac
+  >- (drule lift_option_type_no_control >> simp[])
+  >> bind_step_tac
+  >- (Cases_on `static` >> gvs[return_def] >>
+      Cases_on `ext_call_kwarg EKValue opts (DROP (LENGTH sig1) t)` >>
+      gvs[return_def] >> bind_step_tac >>
+      drule lift_option_type_no_control >> simp[])
+  >> bind_step_tac
+  >- (drule lift_option_type_no_control >> simp[])
+  >> gvs[get_accounts_def, bind_def, return_def]
+  >> ibind_step_tac
+  >- (drule check_no_control >> simp[])
+  >> bind_step_tac
+  >- suspend "call_effect"
+  >> suspend "decode"
 QED
+
+Resume eval_ext_call_no_control[call_effect]:
+  gvs[bind_def, return_def] >>
+  qmatch_asmsub_rename_tac `case se.outcomes of NONE => _ | SOME _ => _` >>
+  Cases_on `se.outcomes`
+  >- (gvs[get_transient_storage_def, Once bind_def, return_def] >>
+      bind_step_tac
+      >- (drule lift_option_no_control >> simp[]) >>
+      ibind_step_tac
+      >- (gvs[AllCaseEqs(), return_def, raise_def, no_control_exc_def] >>
+          qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+          IF_CASES_TAC >> simp[return_def, raise_def, no_control_exc_def] >>
+          strip_tac >> gvs[]) >>
+      gvs[ignore_bind_def, bind_def, return_def,
+          update_accounts_def, update_transient_def, AllCaseEqs()] >>
+      drule append_logs_no_control >> simp[])
+  >> gvs[] >> bind_step_tac
+  >- (drule take_call_outcome_error >> simp[no_control_exc_def] >>
+      strip_tac >> gvs[no_control_exc_def])
+  >> pairarg_tac >> gvs[] >> Cases_on `outcome.co_success` >>
+  gvs[ignore_bind_def, bind_def, return_def, raise_def,
+      no_control_exc_def, adopt_call_outcome_equation, AllCaseEqs()]
+QED
+
+Resume eval_ext_call_no_control[decode]:
+  qpat_x_assum `bind _ _ _ = (INL _, _)` kall_tac >>
+  qmatch_asmsub_rename_tac `evaluate_abi_decode_return (get_tenv cx) sig2 rd` >>
+  Cases_on `if rd = [] then ext_call_kwarg EKDefault opts (DROP (LENGTH sig1) t) else NONE` >> gvs[]
+  >- (bind_step_tac >> drule lift_sum_runtime_no_control >> simp[]) >>
+  gvs[get_accounts_def, bind_def, return_def, ignore_bind_def, AllCaseEqs()] >>
+  drule check_no_control >> simp[]
+QED
+
+Finalise eval_ext_call_no_control
+
 
 Theorem eval_send_no_control:
   eval_send cx has_gas vs st = (INR exc, st') ==> no_control_exc exc
