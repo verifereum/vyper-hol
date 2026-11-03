@@ -1098,3 +1098,88 @@ Resume do_merge_jump_phi_preds[retained]:
 QED
 
 Finalise do_merge_jump_phi_preds
+
+Theorem chain_merge_phi_safe:
+  wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\ scfg_phi_safe fn /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+      (bb_succs (merge_blocks a b))) ==> scfg_phi_safe fn'
+Proof
+  strip_tac >> pure_rewrite_tac[scfg_phi_safe_def] >> conj_tac
+  >- metis_tac[chain_merge_entry_no_phi] >> conj_tac
+  >- metis_tac[chain_merge_phi_output_unique] >>
+  metis_tac[chain_merge_phi_coverage]
+QED
+
+Theorem do_merge_jump_phi_safe:
+  wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\ scfg_phi_safe fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') ==> scfg_phi_safe fn'
+Proof
+  strip_tac >> pure_rewrite_tac[scfg_phi_safe_def] >> conj_tac
+  >- metis_tac[do_merge_jump_entry_no_phi] >> conj_tac
+  >- metis_tac[do_merge_jump_phi_output_unique] >>
+  metis_tac[do_merge_jump_phi_coverage]
+QED
+
+Definition scfg_reachuses_inv_def:
+  scfg_reachuses_inv fn <=>
+    wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+    scfg_phi_safe fn /\ fn_defs_reach_uses fn /\ scfg_jnz_condition_ok fn
+End
+
+Definition scfg_collapse_inv_def:
+  scfg_collapse_inv fn <=> scfg_reachuses_inv fn /\ scfg_phi_preds fn
+End
+
+Theorem chain_merge_collapse_inv:
+  scfg_collapse_inv fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+      (bb_succs (merge_blocks a b))) ==> scfg_collapse_inv fn'
+Proof
+  simp[scfg_collapse_inv_def, scfg_reachuses_inv_def] >> strip_tac >>
+  `lookup_block a.bb_label fn.fn_blocks = SOME a /\
+   lookup_block b.bb_label fn.fn_blocks = SOME b` by
+    (fs[wf_function_def, fn_labels_def] >> metis_tac[MEM_lookup_block]) >>
+  rpt conj_tac
+  >- metis_tac[chain_merge_wf]
+  >- metis_tac[chain_merge_fn_inst_wf]
+  >- metis_tac[chain_merge_first_block_no_preds]
+  >- metis_tac[chain_merge_phi_safe]
+  >- metis_tac[chain_merge_defs_reach_uses]
+  >- metis_tac[chain_merge_jnz_condition_ok] >>
+  metis_tac[chain_merge_phi_preds]
+QED
+
+Theorem do_merge_jump_collapse_inv:
+  scfg_collapse_inv fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') ==> scfg_collapse_inv fn'
+Proof
+  simp[scfg_collapse_inv_def, scfg_reachuses_inv_def] >> strip_tac >>
+  rpt conj_tac
+  >- metis_tac[do_merge_jump_wf]
+  >- metis_tac[do_merge_jump_fn_inst_wf]
+  >- metis_tac[do_merge_jump_first_block_no_preds]
+  >- metis_tac[do_merge_jump_phi_safe]
+  >- metis_tac[do_merge_jump_defs_reach_uses]
+  >- metis_tac[do_merge_jump_jnz_condition_ok] >>
+  metis_tac[do_merge_jump_phi_preds]
+QED
+
+Theorem try_bypass_collapse_inv:
+  scfg_collapse_inv fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  try_bypass fn lm a succs = (fn',lm',T) ==> scfg_collapse_inv fn'
+Proof
+  qid_spec_tac `succs` >> Induct >- simp[try_bypass_def] >>
+  rpt strip_tac >> gvs[Once try_bypass_def, AllCaseEqs()] >>
+  metis_tac[do_merge_jump_collapse_inv, lookup_block_member_label]
+QED
