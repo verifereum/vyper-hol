@@ -306,13 +306,14 @@ QED
 
 (* Allocate and stage one word, protecting every earlier allocation. *)
 Theorem hash_alloc_mstore_frame:
-  compile_alloc_buffer 32 sa = (buf, sm) /\
+  32 <= cap /\ cap < dimword (:256) /\
+  compile_alloc_buffer cap sa = (buf, sm) /\
   emit_void MSTORE [buf.buf_operand; val_op] sm = ((), sh) /\
   (!x. val_op = Var x ==> not_fresh_at sa x) /\
   eval_operand val_op s = SOME w /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
-  MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w cap)]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
   ?t addr. run_inst_seq (emitted_insts sa sh) s = OK t /\
     stmt_state_rel ctx func cenv cx es t /\
@@ -333,7 +334,6 @@ Theorem hash_alloc_mstore_frame:
       mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory)
 Proof
   strip_tac >>
-  `32 < dimword (:256)` by simp[dimword_def] >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
   rename1 `eval_operand buf.buf_operand allocated = SOME addr` >>
   `allocated.vs_labels = s.vs_labels` by
@@ -347,8 +347,8 @@ Proof
   `stmt_state_rel ctx func cenv cx es (mstore (w2n addr) w allocated)` by
     (irule literal_mstore_state_rel >> simp[] >>
      qexistsl_tac [`w2n addr`,
-       `mk_inst sa.cs_next_id ALLOCA [Lit 32w]
-          [STRING #"%" (toString sa.cs_next_var)]`, `32`] >>
+       `mk_inst sa.cs_next_id ALLOCA [Lit (n2w cap)]
+          [STRING #"%" (toString sa.cs_next_var)]`, `cap`] >>
      simp[mk_inst_def] >> rpt strip_tac >>
      first_x_assum drule >> simp[regions_disjoint_def]) >>
   suspend "compose"
@@ -385,7 +385,7 @@ Resume hash_alloc_mstore_frame[compose]:
     (rpt strip_tac >>
      `mem_bytes_at b len (mstore (w2n addr) w allocated).vs_memory =
       mem_bytes_at b len allocated.vs_memory` by
-       (irule mstore_region_frame >> qexistsl_tac [`w2n addr`, `32`] >>
+       (irule mstore_region_frame >> qexistsl_tac [`w2n addr`, `cap`] >>
         simp[] >> qpat_x_assum `!aid b len. aid < sa.cs_next_id /\ _ ==> _` irule >>
         qexists_tac `aid` >> simp[]) >> simp[]) >>
   `!n b sz. local_region cenv es.scopes s n b sz ==>
@@ -397,7 +397,7 @@ Resume hash_alloc_mstore_frame[compose]:
      qpat_x_assum `allocated.vs_memory = s.vs_memory`
        (fn th => pure_rewrite_tac[GSYM th]) >>
      irule mstore_region_frame >>
-     qexistsl [`w2n addr`, `32`] >> simp[] >>
+     qexistsl [`w2n addr`, `cap`] >> simp[] >>
      qpat_x_assum `!name b len. local_region _ _ allocated _ _ _ ==> _` drule >> simp[]) >>
   qexistsl_tac [`mstore (w2n addr) w allocated`, `addr`] >>
   simp[] >> gvs[mstore_def, lookup_var_def] >>
@@ -439,7 +439,7 @@ Proof
   rename1 `compile_alloc_buffer 32 sa = (buf,sm)` >>
   rename1 `emit_void MSTORE [buf.buf_operand; val_op] sm = (u,sh)` >>
   Cases_on `u` >>
-  drule_all hash_alloc_mstore_frame >> strip_tac >>
+  drule_all (SRULE [dimword_def] (Q.INST [`cap` |-> `32`] hash_alloc_mstore_frame)) >> strip_tac >>
   `LENGTH bs < dimword (:256)` by (simp[dimword_def] >> decide_tac) >>
   rename1 `run_inst_seq (emitted_insts sa sh) s = OK staged` >>
   `eval_operand (Lit (n2w (LENGTH bs))) staged = SOME (n2w (LENGTH bs))` by
@@ -1047,7 +1047,7 @@ Proof
   rename1 `emit_op STATICCALL _ sg = (success_op,sc)` >>
   rename1 `emit_void ASSERT [success_op] sc = (v,sh)` >>
   Cases_on `v` >>
-  drule_all hash_alloc_mstore_frame >> strip_tac >>
+  drule_all (SRULE [dimword_def] (Q.INST [`cap` |-> `32`] hash_alloc_mstore_frame)) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sd) s = OK staged` >>
   `LENGTH bs < dimword (:256)` by (simp[dimword_def] >> decide_tac) >>
   `eval_operand (Lit (n2w (LENGTH bs))) staged = SOME (n2w (LENGTH bs))` by
