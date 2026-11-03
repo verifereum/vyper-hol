@@ -860,10 +860,15 @@ Proof
   conj_tac >>
   simp[builtinMiscTheory.compile_ecadd_points_def,
        builtinMiscTheory.compile_ecmul_point_def,
-       contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, fresh_var_def, emit_def] >>
-  rpt strip_tac >> gvs[] >>
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt strip_tac >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+  gvs[emit_void_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_id_def, emit_def] >>
+  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_id_def, fresh_var_def, emit_def] >>
+  gvs[] >>
   gvs[compileEnvTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
@@ -1171,9 +1176,18 @@ Resume compiler_builtin_var[keccak]:
   >- (builtin_stack_var_tac >>
       metis_tac[exprSafeOperandBuiltinsTheory.compile_keccak256_bytes_safe_operand,
                 exprSafeOperandTheory.safe_operand_def]) >>
-  rpt CASE_TAC >> simp[] >> builtin_stack_var_tac >>
-  metis_tac[exprSafeOperandBuiltinsTheory.compile_keccak256_bytesm_safe_operand,
-            exprSafeOperandBuiltinsTheory.compile_keccak256_word_safe_operand,
+  Cases_on `expr_type (HD args)` >> simp[]
+  >- (rename1 `BaseT bt` >> Cases_on `bt` >> simp[]
+      >~ [`expr_type (HD args) = BaseT (BytesT sz)`]
+      >- (Cases_on `sz` >> simp[] >> builtin_stack_var_tac >>
+         metis_tac[exprSafeOperandBuiltinsTheory.compile_keccak256_bytesm_safe_operand,
+                   exprSafeOperandBuiltinsTheory.compile_keccak256_word_safe_operand,
+                   exprSafeOperandTheory.safe_operand_def]) >>
+      builtin_stack_var_tac >>
+      metis_tac[exprSafeOperandBuiltinsTheory.compile_keccak256_word_safe_operand,
+                exprSafeOperandTheory.safe_operand_def]) >>
+  builtin_stack_var_tac >>
+  metis_tac[exprSafeOperandBuiltinsTheory.compile_keccak256_word_safe_operand,
             exprSafeOperandTheory.safe_operand_def]
 QED
 Resume compiler_builtin_var[sha]:
@@ -1304,6 +1318,35 @@ Proof
   `local_ptrs_reserved ce r` by
     (irule compiler_ci_mono_reserved >> qexists `sa` >>
      metis_tac[ci_mono_lower_value_cfn, pairTheory.SND]) >>
+  simp[]
+QED
+
+Theorem compiler_abi_encode_args_reserved_cong:
+  (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
+  (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
+  local_ptrs_reserved ce sa ==>
+  compile_abi_encode_args f ce args sa =
+  compile_abi_encode_args g ce args sa
+Proof
+  qid_spec_tac `sa` >> Induct_on `args` >>
+  simp[compile_abi_encode_args_def, comp_return_def] >> rpt strip_tac >>
+  `f ce (expr_type h) h sa = g ce (expr_type h) h sa` by simp[] >>
+  simp[comp_bind_def] >> asm_rewrite_tac[] >>
+  Cases_on `g ce (expr_type h) h sa` >> simp[] >>
+  rename1 `g ce (expr_type h) h sa = (vv,sb)` >>
+  `local_ptrs_reserved ce sb` by
+    (irule compiler_ci_mono_reserved >> qexists `sa` >>
+     metis_tac[pairTheory.SND]) >>
+  Cases_on `~is_word_type (expr_type h) /\ exprs_can_mutate ce args` >> simp[]
+  >- (Cases_on `compile_materialize_vv ce (expr_type h) vv sb` >> simp[] >>
+      `local_ptrs_reserved ce r` by
+        (irule compiler_ci_mono_reserved >> qexists `sb` >>
+         metis_tac[ci_mono_compile_materialize_vv, pairTheory.SND]) >>
+      simp[]) >>
+  Cases_on `unwrap_value ce vv sb` >> simp[] >>
+  `local_ptrs_reserved ce r` by
+    (irule compiler_ci_mono_reserved >> qexists `sb` >>
+     metis_tac[ci_mono_unwrap_value, pairTheory.SND]) >>
   simp[]
 QED
 
@@ -1687,6 +1730,8 @@ Proof
     (rpt gen_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
   `!es. compile_multi_exprs f ce es sa = compile_multi_exprs g ce es sa` by
     (gen_tac >> irule compiler_multi_exprs_reserved_cong >> simp[]) >>
+  `!es. compile_abi_encode_args f ce es sa = compile_abi_encode_args g ce es sa` by
+    (gen_tac >> irule compiler_abi_encode_args_reserved_cong >> simp[]) >>
   Cases_on `tb` >>
   simp[compile_type_builtin_dispatch_body_def, LET_THM]
   >- (Cases_on `lower_value g ce (expr_type (HD args)) (HD args) sa` >>
@@ -1761,7 +1806,11 @@ Resume compiler_builtin_reserved_cong[bop]:
       Cases_on `HD (TL args)` >> simp[] >>
       rename1 `Builtin _ b _` >> Cases_on `b` >> simp[] >>
       AP_TERM_TAC >> irule compiler_multi_exprs_reserved_cong >> simp[]) >>
-  IF_CASES_TAC >> simp[] >> rpt compiler_reserved_pair_tac
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `lower_value g ce (expr_type (HD args)) (HD args) sa` >>
+  rename1 `lower_value g ce _ _ sa = (v,s1)` >>
+  `local_ptrs_reserved ce s1` by metis_tac[] >>
+  simp[]
 QED
 
 Resume compiler_builtin_reserved_cong[concat]:

@@ -2812,7 +2812,7 @@ QED
 
 (* Reuse ci_mono_typed_memory_family and ci_mono_compile_store_memory above
    for both aggregate construction and external-call default materialization. *)
-Theorem ci_mono_compile_materialize_vv[local]:
+Theorem ci_mono_compile_materialize_vv:
   ∀cenv ty vv sa. ci_mono sa (SND (compile_materialize_vv cenv ty vv sa))
 Proof
   rpt gen_tac >> rewrite_tac[compile_materialize_vv_def] >>
