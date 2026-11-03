@@ -229,10 +229,31 @@ Theorem step_inst_abort_opcodes:
     inst.inst_opcode = CREATE2 \/
     inst.inst_opcode = RETURNDATACOPY \/
     inst.inst_opcode = INVOKE
+
+Definition opcode_fail_class_def:
+  opcode_fail_class ASSERT = CanRevert /\
+  opcode_fail_class ASSERT_UNREACHABLE = CanExHalt /\
+  opcode_fail_class RETURNDATACOPY = CanExHalt /\
+  opcode_fail_class CREATE = CanExHalt /\
+  opcode_fail_class CREATE2 = CanExHalt /\
+  opcode_fail_class INVALID = CanExHalt /\
+  opcode_fail_class INVOKE = AnyFail /\
+  opcode_fail_class _ = NoFail
+End
+
+Theorem step_inst_base_abort_opcode:
+  !inst s a s'.
+    step_inst_base inst s = Abort a s' /\
+    ~is_terminator inst.inst_opcode ==>
+    inst.inst_opcode = ASSERT \/
+    inst.inst_opcode = ASSERT_UNREACHABLE \/
+    inst.inst_opcode = CREATE \/
+    inst.inst_opcode = CREATE2 \/
+    inst.inst_opcode = RETURNDATACOPY
 ```
 
 Do not modify this statement. Prove it as-is, or produce a counterexample.
-All existing public theorem statements outside the eight explicitly corrected contracts above are also frozen. The six test statements in `tests/createSizeBoundaryTestScript.sml` are frozen.
+All existing public theorem statements outside the nine explicitly corrected contracts above are also frozen. The six test statements in `tests/createSizeBoundaryTestScript.sml` and all existing witness statements in `tests/createSizeClassificationCounterexampleScript.sml` are frozen. The local lowerDloadClassify abort classification is also corrected to include CREATE/CREATE2.
 
 ## Completion Criteria
 
@@ -244,14 +265,14 @@ All existing public theorem statements outside the eight explicitly corrected co
 ## Build
 
 ```sh
-holbuild -j2 build createSizeBoundaryTestTheory createOracleExecutionTheory createDispatchExecutionTheory opcodeClassTheory venomMemProofsTheory passSharedFrameTheory passSharedVarFrameTheory removeUnusedProofsTheory lowerDloadClassifyTheory mem2varBlockSimHelpersTheory concretizeMemLocProofsTheory ssaRenamedSimTheory genBlockSimTheory vyperCreateFrameTheory
+holbuild -j2 build createSizeClassificationCounterexampleTheory createSizeBoundaryTestTheory createOracleExecutionTheory createDispatchExecutionTheory opcodeClassTheory venomMemProofsTheory passSharedFrameTheory passSharedVarFrameTheory removeUnusedProofsTheory lowerDloadClassifyTheory mem2varBlockSimHelpersTheory concretizeMemLocProofsTheory ssaRenamedSimTheory genBlockSimTheory vyperCreateFrameTheory
 ```
 
 ## Background
 
 The EVM rejects CREATE/CREATE2 initcode exceeding 49,152 bytes in the parent frame, before a constructor is entered. The old Venom oracle helper and assembly constructor bridge omitted that opcode guard. Source RawCreate also omitted its complete initcode size check. Those three executable repairs are already made and independently checked against the pinned EVM; their definition theories built at the default budget. New tests check the encountered 49,153-byte failure and the 49,152-byte inclusive boundary.
 
-The eight old exported contracts above were false after the repair. Their replacements retain identical hypotheses, make CREATE results conditional on the size guard, and classify CREATE/CREATE2 among aborting opcodes. Existing proof bodies remain. The owner independently audited these exact replacements. Statements have not all been reached by a build yet; consumers still contain obsolete unconditional no-Abort assertions about CREATE.
+The nine old exported contracts above were false after the repair. Their replacements retain identical hypotheses, make CREATE results conditional on the size guard, and classify CREATE/CREATE2 among aborting opcodes. Existing proof bodies remain. The owner independently audited these exact replacements. Statements have not all been reached by a build yet; consumers still contain obsolete unconditional no-Abort assertions about CREATE.
 
 ## Domain Constraints
 
@@ -286,3 +307,5 @@ The eight old exported contracts above were false after the repair. Their replac
 ## Notes
 
 Independent audit found the old unconditional CREATE-not-Abort assertions false. Malformed instruction outputs retain their old Error precedence. A successful `OK` CREATE result retains its old frame. This task establishes the missing parent-frame boundary and repairs its consumers; it must not assert complete constructor/oracle/assembly correctness beyond the existing contracts.
+
+Owner amendment after the first run: argon approved CREATE/CREATE2 CanExHalt metadata and the additional same-hypothesis abort classification. The old singular classification is kernel-refuted by the retained witness; that exact old formula is no longer a requested result. The corrected metadata removes a false NoFail classification and preserves all commutation theorem statements. No stage assumption is added. New metadata definition and corrected ninth public contract are frozen above. Resume remaining proof consumers; retain checked earlier components.

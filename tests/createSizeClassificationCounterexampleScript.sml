@@ -1,6 +1,6 @@
 Theory createSizeClassificationCounterexample
 Ancestors
-  venomExecSemantics venomState venomInst vfmConstants
+  venomExecSemantics venomState venomInst venomEffects vfmConstants
 Libs
   wordsLib
 
@@ -35,4 +35,15 @@ Proof
   first_x_assum (qspec_then
     `mk_inst 0 CREATE [Lit 0w; Lit 0w; Lit 49153w] ["out"]` mp_tac) >>
   simp[oversized_create_dispatch, mk_inst_def, is_terminator_def]
+QED
+
+Theorem create_failure_metadata:
+  opcode_fail_class CREATE = CanExHalt /\
+  opcode_fail_class CREATE2 = CanExHalt /\
+  ~abort_compatible CREATE ASSERT /\
+  ~abort_compatible CREATE2 ASSERT /\
+  ~abort_compatible INVOKE CREATE /\
+  ~abort_compatible CREATE2 INVOKE
+Proof
+  EVAL_TAC
 QED

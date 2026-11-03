@@ -471,6 +471,8 @@ Theorem step_inst_base_abort_opcode:
     ~is_terminator inst.inst_opcode ==>
     inst.inst_opcode = ASSERT \/
     inst.inst_opcode = ASSERT_UNREACHABLE \/
+    inst.inst_opcode = CREATE \/
+    inst.inst_opcode = CREATE2 \/
     inst.inst_opcode = RETURNDATACOPY
 Proof
   rpt strip_tac >>
