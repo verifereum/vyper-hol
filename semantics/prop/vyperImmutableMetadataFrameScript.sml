@@ -409,12 +409,14 @@ Proof
   simp[state_rel_frame_result]
 QED
 
+(* METADATA_FRAME_STEP normalises only the exposed head via
+   metadata_head_conv.  Do not beta-normalise entire continuation trees here:
+   structural frame rules expose their bodies as separate, smaller goals. *)
 val METADATA_EVAL_STEP = FIRST [
   MATCH_ACCEPT_TAC metadata_frame_create,
   FIRST (map MATCH_ACCEPT_TAC (CONJUNCTS metadata_frame_call_helpers)),
   MATCH_ACCEPT_TAC metadata_frame_raw_call,
   CONV_TAC (RAND_CONV (REWR_CONV switch_BoolV_def)),
-  CHANGED_TAC (CONV_TAC (RAND_CONV (DEPTH_CONV BETA_CONV))),
   METADATA_FRAME_STEP];
 
 Theorem eval_metadata_frame_with_results:
