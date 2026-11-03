@@ -1,10 +1,10 @@
 (* Actual body allocation sites: membership and reused-site size. *)
 Theory bodyAllocMemory
 Ancestors
-  builtinBytesMemory allocaFootprint abiBuiltinAllocation exprLoweringProps
+  builtinBytesMemory allocaFootprint abiBuiltinAllocation exprLoweringProps exprLowering
   exprSimAggregateChildren exprSimLiteralBuffer exprSimOps instMemFrontier
   fragExec fragExecMem allocaHistoryFragment rich_list
-  emitHelperProps emitHelper compileEnv venomInst venomState
+  emitHelperProps emitHelper compileEnv context venomInst venomState
   venomExecSemantics venomMemDefs list finite_map words arithmetic
 
 Theorem compile_alloc_buffer_body_inst[local]:
@@ -282,6 +282,46 @@ Proof
   qexists_tac `name` >> simp[]
 QED
 
+Theorem compile_mapping_subscript_body_mem_ok:
+  compile_mapping_subscript base_slot key_op sa = (op,sb) /\
+  fn_has_code sa sb func /\ ~block_is_terminated sa /\
+  stmt_state_rel ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
+  eval_operand base_slot s = SOME b /\ eval_operand key_op s = SOME k ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  rpt strip_tac >>
+  `?buf sm. compile_alloc_buffer 64 sa = (buf,sm) /\
+     fn_has_code sa sm func` by
+    (qpat_x_assum `compile_mapping_subscript _ _ _ = _` mp_tac >>
+     simp[compile_mapping_subscript_def, comp_bind_def,
+          comp_ignore_bind_def, comp_return_def] >>
+     rpt (pairarg_tac >> gvs[]) >>
+     strip_tac >>
+     rename1 `compile_alloc_buffer 64 sa = (buf,sm)` >>
+     `cs_extends sa sm /\ cs_extends sm sb` by
+       (gvs[compile_alloc_buffer_def, emit_op_def, emit_void_def,
+            comp_bind_def, comp_ignore_bind_def, comp_return_def,
+            fresh_id_def, fresh_var_def, emit_def, cs_extends_def,
+            IS_PREFIX_APPEND] >> metis_tac[]) >>
+     drule_all fn_has_code_split >> simp[]) >>
+  `64 < dimword (:256)` by simp[dimword_def] >>
+  drule_all compile_alloc_buffer_body_site >> strip_tac >>
+  drule_all compile_alloc_buffer_body_inst >> strip_tac >>
+  `alloca_next_valid s /\ alloca_room ctx func s` by
+    fs[stmt_state_rel_def, alloca_inv_def] >>
+  `p + 64 < dimword (:256)` by
+    (fs[alloca_site_cases] >-
+       (`sa.cs_next_id NOTIN FDOM s.vs_allocas` by
+          fs[FLOOKUP_DEF] >>
+        drule alloca_room_fresh >> disch_then drule >>
+        simp[mk_inst_def, dimword_def]) >>
+     drule_all alloca_room_next_lt >>
+     fs[alloca_next_valid_def] >>
+     first_x_assum drule >> decide_tac) >>
+  irule compile_mapping_subscript_mem_ok >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
 val () = List.app (fn th =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
   in if null axioms andalso null (Thm.hyp th) andalso
@@ -297,4 +337,5 @@ val () = List.app (fn th =>
         compile_alloc_buffer_body_header_history,
         frag_exec_mem_run_inst_seq_at_cursor,
         compile_alloc_buffer_body_history,
-        compile_alloc_buffer_body_frag_mem];
+        compile_alloc_buffer_body_frag_mem,
+        compile_mapping_subscript_body_mem_ok];
