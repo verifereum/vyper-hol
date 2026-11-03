@@ -1,6 +1,6 @@
 Theory abiDecoderGuard
 Ancestors
-  abiDecoderGuards emitHelperProps exprLoweringProps compileEnv emitHelper venomExecSemantics
+  abiDecoderContract abiDecoderGuards emitHelperProps exprLoweringProps compileEnv emitHelper venomExecSemantics
   venomState words
 
 (* ===== Lower Bound ===== *)
@@ -45,9 +45,9 @@ Proof
   gvs[bool_to_word_def] >> `(1w:bytes32) <> 0w` by simp[] >>
   drule_all emit_void_ASSERT_ok_full >> simp[] >> strip_tac >> gvs[] >>
   drule_all (SIMP_RULE (srw_ss()) []
-    (Q.INST [`opc` |-> `LT`] abi_decode_pure_emit_frame)) >> strip_tac >>
+    (Q.INST [`opc` |-> `LT`] abiDecoderContractTheory.abi_decode_pure_emit_frame)) >> strip_tac >>
   drule_all (SIMP_RULE (srw_ss()) []
-    (Q.INST [`opc` |-> `ISZERO`] abi_decode_pure_emit_frame)) >> strip_tac >>
+    (Q.INST [`opc` |-> `ISZERO`] abiDecoderContractTheory.abi_decode_pure_emit_frame)) >> strip_tac >>
   imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
   drule_all abi_decode_sequence_chain >> strip_tac >>
   drule_all abi_decode_sequence_chain >> strip_tac >>
@@ -96,9 +96,9 @@ Proof
   gvs[bool_to_word_def] >> `(1w:bytes32) <> 0w` by simp[] >>
   drule_all emit_void_ASSERT_ok_full >> simp[] >> strip_tac >> gvs[] >>
   drule_all (SIMP_RULE (srw_ss()) []
-    (Q.INST [`opc` |-> `GT`] abi_decode_pure_emit_frame)) >> strip_tac >>
+    (Q.INST [`opc` |-> `GT`] abiDecoderContractTheory.abi_decode_pure_emit_frame)) >> strip_tac >>
   drule_all (SIMP_RULE (srw_ss()) []
-    (Q.INST [`opc` |-> `ISZERO`] abi_decode_pure_emit_frame)) >> strip_tac >>
+    (Q.INST [`opc` |-> `ISZERO`] abiDecoderContractTheory.abi_decode_pure_emit_frame)) >> strip_tac >>
   imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
   drule_all abi_decode_sequence_chain >> strip_tac >>
   drule_all abi_decode_sequence_chain >> strip_tac >>

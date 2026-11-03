@@ -140,8 +140,9 @@ Proof
   strip_tac >> simp[] >>
   simp[Once exec_block_def, get_instruction_def, abi_decode_backedge_insts_def,
        listTheory.EL_APPEND_EQN] >>
-  simp[step_inst_def, Once step_inst_base_def, mk_inst_def, is_terminator_def,
-       jump_to_def, mstore_def, update_var_def]
+  simp[mk_inst_def, step_inst_non_invoke, is_terminator_def] >>
+  simp[step_inst_base_opcode_eqs] >>
+  simp[jump_to_def, mstore_def, update_var_def]
 QED
 
 Theorem abi_decode_header_observations:
