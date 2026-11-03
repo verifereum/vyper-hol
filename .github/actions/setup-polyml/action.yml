@@ -11,11 +11,6 @@ inputs:
     required: false
     default: 'v5.9.2-seq1'
 
-outputs:
-  polyml-rev:
-    description: 'Resolved Poly/ML git revision'
-    value: ${{ steps.version.outputs.polyml-rev }}
-
 runs:
   using: 'composite'
   steps:
@@ -28,7 +23,6 @@ runs:
           echo "Could not resolve Poly/ML tag ${{ inputs.polyml-tag }} to a commit: $rev" >&2
           exit 1
         fi
-        echo "polyml-rev=$rev" >> "$GITHUB_OUTPUT"
         # A Poly/ML built on a newer image needs that image's glibc, and
         # ubuntu-latest hands out more than one image, so each gets its own.
         echo "cache-key=polyml-${{ runner.os }}-${{ runner.arch }}-${ImageOS:-unknown-image}-$rev" >> "$GITHUB_OUTPUT"

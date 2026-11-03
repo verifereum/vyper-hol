@@ -10,11 +10,6 @@ inputs:
     required: true
     description: 'holbuild git revision or tag to use'
 
-outputs:
-  holbuild-rev:
-    description: 'Resolved holbuild revision'
-    value: ${{ steps.version.outputs.holbuild-rev }}
-
 runs:
   using: 'composite'
   steps:
@@ -46,13 +41,6 @@ runs:
         cd "$HOME/holbuild"
         git fetch origin "${{ inputs.holbuild-ref }}"
         git checkout --detach "${{ inputs.holbuild-ref }}"
-
-    - name: Resolve holbuild revision
-      id: version
-      shell: bash
-      run: |
-        cd "$HOME/holbuild"
-        echo "holbuild-rev=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
     - name: Build holbuild
       shell: bash
