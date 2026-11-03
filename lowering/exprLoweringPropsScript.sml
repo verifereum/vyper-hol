@@ -3919,7 +3919,8 @@ Theorem ci_mono_builtin_membership[local]:
           as_stack_val ret_ty
             (compile_var_array_membership cenv needle vv rhs_ty is_in st'))))
 Proof
-  strip_tac >> Cases_on `e` >> simp[LET_THM] >> rpt TOP_CASE_TAC >>
+  strip_tac >> Cases_on `e` >> simp[LET_THM] >>
+  TRY (rename1 `Builtin ann tag elems` >> Cases_on `tag` >> simp[LET_THM]) >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_compile_multi_exprs]
        >> rpt gen_tac >> BETA_TAC) >>
