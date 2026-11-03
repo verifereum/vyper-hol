@@ -269,8 +269,9 @@ Proof
                         [Lit slot; op] []) s =
         OK (if tr then tstore slot w s else sstore slot w s)` by
        (Cases_on `tr` >>
-        simp[step_inst_base_def, exec_write2_def, mk_inst_def,
-             eval_operand_def]) >>
+        simp[stepInstBaseLib.simp_opcode_clause ``TSTORE``,
+             stepInstBaseLib.simp_opcode_clause ``SSTORE``,
+             exec_write2_def, mk_inst_def, eval_operand_def]) >>
      Cases_on `tr` >> gvs[] >>
      simp[run_inst_seq_def, stmt_state_rel_inst_idx] >>
      gvs[lookup_var_def, sstore_def, tstore_def, LET_THM]) >>
