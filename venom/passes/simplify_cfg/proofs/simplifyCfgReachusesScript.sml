@@ -949,3 +949,152 @@ Proof
        subst_block_labels_block_def, MEM_MAP, PULL_EXISTS] >>
   metis_tac[scfg_jnz_inst_ok_subst_block_labels]
 QED
+
+Theorem bypass_source_successor_forward:
+  scfg_jnz_inst_ok inst /\ MEM l (get_successors inst) ==>
+  MEM (if l = old then new else l) (get_successors
+    (if ~is_terminator inst.inst_opcode then inst
+     else canon_jnz_inst (subst_label_inst old new inst)))
+Proof
+  strip_tac >>
+  `is_terminator inst.inst_opcode` by fs[get_successors_mem_label] >>
+  `scfg_jnz_inst_ok (subst_label_inst old new inst)` by
+    simp[scfg_jnz_inst_ok_subst_label] >>
+  asm_rewrite_tac[] >>
+  ASM_SIMP_TAC std_ss [canon_jnz_inst_successors_mem] >>
+  simp[get_successors_mem_label, subst_label_inst_def, MEM_MAP] >>
+  qexists `Label l` >>
+  fs[get_successors_mem_label, subst_label_op_def] >>
+  Cases_on `l = old` >> simp[]
+QED
+
+Theorem bb_bypass_source_successor_forward:
+  bb_well_formed bb /\ EVERY scfg_jnz_inst_ok bb.bb_instructions /\
+  MEM l (bb_succs bb) ==>
+  MEM (if l = old then new else l) (bb_succs (bb with bb_instructions :=
+    MAP (\inst. if ~is_terminator inst.inst_opcode then inst
+                else canon_jnz_inst (subst_label_inst old new inst)) bb.bb_instructions))
+Proof
+  strip_tac >> `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
+  Cases_on `bb.bb_instructions` >> gvs[bb_succs_def] >>
+  Cases_on `t` >> fs[LAST_MAP, LAST_DEF] >>
+  irule bypass_source_successor_forward >> simp[] >>
+  fs[EVERY_MEM] >> IF_CASES_TAC >> simp[] >> metis_tac[LAST_MEM]
+QED
+
+Theorem do_merge_jump_edge_forward:
+  wf_function fn /\ scfg_jnz_condition_ok fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  do_merge_jump fn a b lm = SOME (fn',lm') /\ bb_succs b = [target] /\
+  MEM pred fn.fn_blocks /\ pred.bb_label <> b.bb_label /\ MEM l (bb_succs pred) ==>
+  fn_cfg_edge fn' pred.bb_label
+    (if pred.bb_label = a.bb_label /\ l = b.bb_label then target else l)
+Proof
+  strip_tac >> drule_all do_merge_jump_output_block >>
+  disch_then (qx_choose_then `out` strip_assume_tac) >>
+  drule_all do_merge_jump_block_map >>
+  disch_then (qx_choose_then `src` (qx_choose_then `target2` strip_assume_tac)) >>
+  `src = pred` by
+    (irule same_label_same_block >> fs[wf_function_def, fn_labels_def] >> metis_tac[]) >>
+  `target2 = target` by metis_tac[listTheory.CONS_11] >>
+  `bb_well_formed pred` by metis_tac[wf_function_def] >>
+  `EVERY scfg_jnz_inst_ok pred.bb_instructions` by
+    (fs[EVERY_MEM, scfg_jnz_condition_ok_def] >> metis_tac[]) >>
+  pure_rewrite_tac[fn_cfg_edge_def] >> qexists `out` >> simp[] >>
+  `out = pred with bb_instructions := out.bb_instructions` by
+    simp[basic_block_component_equality] >>
+  pop_assum SUBST1_TAC >>
+  Cases_on `pred.bb_label = a.bb_label` >>
+  Cases_on `target = a.bb_label` >> Cases_on `pred.bb_label = target` >>
+  gvs[combinTheory.I_DEF, MAP_MAP_o, combinTheory.o_DEF] >>
+  simp[GSYM combinTheory.o_DEF, GSYM MAP_MAP_o,
+       bb_succs_update_phi_bypass, bb_succs_bypass_source_phi] >>
+  metis_tac[bb_bypass_source_successor_forward]
+QED
+
+Theorem update_phi_bypass_pair_not_removed:
+  phi_well_formed inst.inst_operands /\ inst.inst_opcode = PHI /\ a <> b /\
+  MEM (p,v) (phi_pairs (update_phi_bypass a b inst).inst_operands) ==> p <> b
+Proof
+  strip_tac >> Cases_on `MEM (Label a) inst.inst_operands`
+  >- gvs[update_phi_bypass_def, phi_pairs_remove_phi_label, MEM_FILTER] >>
+  drule_all update_phi_bypass_pair_origin >> strip_tac >>
+  Cases_on `q = b` >> gvs[]
+QED
+
+Theorem do_merge_jump_phi_pair_not_removed:
+  wf_function fn /\ fn_inst_wf fn /\ scfg_phi_preds fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') /\ MEM bb fn'.fn_blocks /\
+  MEM phi bb.bb_instructions /\ phi.inst_opcode = PHI /\
+  MEM (p,v) (phi_pairs phi.inst_operands) ==> p <> b.bb_label
+Proof
+  strip_tac >> drule_all do_merge_jump_block_map >>
+  disch_then (qx_choose_then `src` (qx_choose_then `target` strip_assume_tac)) >>
+  qpat_x_assum `MEM phi _` mp_tac >> asm_rewrite_tac[] >> simp[MEM_MAP] >>
+  disch_then (qx_choose_then `orig` strip_assume_tac) >>
+  `orig.inst_opcode = PHI` by
+    (Cases_on `src.bb_label = a.bb_label` >> Cases_on `target = a.bb_label` >>
+     Cases_on `src.bb_label = target` >> Cases_on `is_terminator orig.inst_opcode` >>
+     gvs[update_phi_bypass_shape, canon_jnz_inst_shape, subst_label_inst_shape,
+         combinTheory.I_DEF, is_terminator_def]) >>
+  `phi = (if src.bb_label = target then update_phi_bypass a.bb_label b.bb_label orig
+          else orig)` by
+    (Cases_on `src.bb_label = a.bb_label` >> Cases_on `target = a.bb_label` >>
+     Cases_on `src.bb_label = target` >> gvs[is_terminator_def]) >>
+  Cases_on `src.bb_label = target`
+  >- (`inst_wf orig` by metis_tac[fn_inst_wf_def] >>
+      `phi_well_formed orig.inst_operands` by
+        (qpat_x_assum `inst_wf orig` mp_tac >> simp[inst_wf_def]) >>
+      `a.bb_label <> b.bb_label` by metis_tac[can_bypass_jump_labels_distinct] >>
+      metis_tac[update_phi_bypass_pair_not_removed]) >>
+  gvs[] >> strip_tac >>
+  `fn_cfg_edge fn b.bb_label src.bb_label` by metis_tac[scfg_phi_preds_edge] >>
+  `MEM b fn.fn_blocks` by metis_tac[lookup_block_member_label] >>
+  qpat_x_assum `fn_cfg_edge fn _ _` mp_tac >>
+  pure_rewrite_tac[fn_cfg_edge_def] >>
+  disch_then (qx_choose_then `edge_src` strip_assume_tac) >>
+  `edge_src = b` by
+    (irule same_label_same_block >> fs[wf_function_def, fn_labels_def] >> metis_tac[]) >>
+  gvs[]
+QED
+
+Theorem do_merge_jump_phi_preds:
+  wf_function fn /\ fn_inst_wf fn /\ scfg_jnz_condition_ok fn /\ scfg_phi_preds fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\ can_bypass_jump fn a b /\
+  do_merge_jump fn a b lm = SOME (fn',lm') ==> scfg_phi_preds fn'
+Proof
+  strip_tac >> pure_rewrite_tac[scfg_phi_preds_def] >> rpt strip_tac >>
+  `p <> b.bb_label` by metis_tac[do_merge_jump_phi_pair_not_removed] >>
+  drule_all do_merge_jump_phi_pair_source >>
+  disch_then (qx_choose_then `src` (qx_choose_then `orig`
+    (qx_choose_then `q` (qx_choose_then `target` strip_assume_tac)))) >>
+  `fn_cfg_edge fn q src.bb_label` by metis_tac[scfg_phi_preds_edge] >>
+  `MEM a fn.fn_blocks /\ MEM b fn.fn_blocks` by metis_tac[lookup_block_member_label] >>
+  qpat_x_assum `fn_cfg_edge fn _ _` mp_tac >>
+  pure_rewrite_tac[fn_cfg_edge_def] >>
+  disch_then (qx_choose_then `pred` strip_assume_tac) >>
+  Cases_on `q = b.bb_label`
+  >- suspend "contracted"
+  >> suspend "retained"
+QED
+
+Resume do_merge_jump_phi_preds[contracted]:
+  `pred = b` by
+    (irule same_label_same_block >> fs[wf_function_def, fn_labels_def] >> metis_tac[]) >>
+  `src.bb_label = target` by gvs[] >>
+  `MEM b.bb_label (bb_succs a)` by fs[can_bypass_jump_def] >>
+  `a.bb_label <> b.bb_label` by metis_tac[can_bypass_jump_labels_distinct] >>
+  drule_all do_merge_jump_edge_forward >> gvs[fn_cfg_edge_def]
+QED
+
+Resume do_merge_jump_phi_preds[retained]:
+  `pred.bb_label <> b.bb_label` by metis_tac[] >>
+  `p = pred.bb_label` by gvs[] >>
+  drule_all do_merge_jump_edge_forward >>
+  Cases_on `pred.bb_label = a.bb_label` >> gvs[fn_cfg_edge_def]
+QED
+
+Finalise do_merge_jump_phi_preds
