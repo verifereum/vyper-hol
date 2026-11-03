@@ -1,7 +1,7 @@
 (* Source selection boundaries for array read simulation. *)
 Theory exprSimArraySubscript
 Ancestors
-  exprSimNoPop exprSimArrayIndex vyperPlaceResultTyping vyperState
+  compileEnv exprSim exprSimNoPop exprSimArrayIndex vyperPlaceResultTyping vyperState
   vyperTypeEnv exprSimHyps supportedExprTraverse exprSimAttribute
   vyperPlaceFrames vyperStatePreservation vyperInterpreter vyperArray
 
@@ -429,4 +429,58 @@ Proof
   Cases_on `array_index (ArrayTV etv bd) av i` >-
     simp[evaluate_subscripts_def] >>
   drule array_index_bounds >> simp[]
+QED
+
+(* Restore the dynamic length word excluded by locals_kept, then frame the
+   complete region rather than requiring a source-result/local-path link. *)
+Theorem locals_kept_complete_regions:
+  locals_kept cenv es s0 s1 /\
+  (!n b sz. local_region cenv es.scopes s0 n b sz /\ dynarray_local cenv n ==>
+    32 <= sz /\ mem_word_at b s1.vs_memory = mem_word_at b s0.vs_memory) ==>
+  !n b sz. local_region cenv es.scopes s0 n b sz ==>
+    mem_bytes_at b sz s1.vs_memory = mem_bytes_at b sz s0.vs_memory
+Proof
+  rpt strip_tac >>
+  Cases_on `dynarray_local cenv n` >-
+    (first_x_assum drule_all >> strip_tac >>
+     `mem_bytes_at (b + 32) (sz - 32) s1.vs_memory =
+      mem_bytes_at (b + 32) (sz - 32) s0.vs_memory` by
+       (gvs[locals_kept_def] >> first_x_assum irule >>
+        goal_assum (drule_at Any) >> simp[]) >>
+     `sz = 32 + (sz - 32)` by decide_tac >>
+     once_asm_rewrite_tac[] >>
+     simp[valueEncodingProofsTheory.mem_bytes_at_split_padded,
+          valueEncodingProofsTheory.mem_bytes_at_word]) >>
+  gvs[locals_kept_def] >> first_x_assum irule >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem local_ptrs_rel_unchanged_scopes_headers:
+  EVERY scope_well_typed es.scopes /\
+  es'.scopes = es.scopes /\
+  local_ptrs_rel func cenv es.scopes s0 /\
+  local_ptrs_rel func cenv es'.scopes s1 /\
+  (!n q sz w. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) sz) /\
+              lookup_var q s0 = SOME w ==> lookup_var q s1 = SOME w) /\
+  (!n entry. lookup_scopes n es.scopes = SOME entry /\ dynarray_local cenv n ==>
+    ?et bd. entry.type = ArrayTV et (Dynamic bd)) ==>
+  !n b sz. local_region cenv es.scopes s0 n b sz /\ dynarray_local cenv n ==>
+    32 <= sz /\ mem_word_at b s1.vs_memory = mem_word_at b s0.vs_memory
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[local_region_def] >>
+  rename1 `lookup_scopes n es.scopes = SOME entry` >>
+  `?et bd. entry.type = ArrayTV et (Dynamic bd)` by
+    (first_x_assum irule >> goal_assum (drule_at Any) >> simp[]) >>
+  `lookup_var p s1 = SOME w` by
+    (first_x_assum (drule_at (Pat `FLOOKUP _ _ = _`)) >> simp[]) >>
+  fs[local_ptrs_rel_def] >>
+  rpt (first_x_assum (drule_at (Pat `lookup_scopes _ _ = _`)) >> simp[]) >>
+  rpt strip_tac >>
+  drule_all scope_well_typed_lookup_scopes >> strip_tac >>
+  Cases_on `entry.value` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >>
+  gvs[vyperTypingTheory.value_has_type_def,
+      valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def,
+      valueEncodingPropsTheory.val_in_memory_dynarray]
 QED
