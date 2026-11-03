@@ -918,7 +918,7 @@ Proof
   qpat_x_assum `step_inst_base inst s = _` mp_tac >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
   ASM_REWRITE_TAC[] >>
-  simp[] >>
+  PURE_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
   strip_tac >>
   alloca_field_solve_tac
 QED
