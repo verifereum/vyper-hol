@@ -462,9 +462,16 @@ Proof
          metis_tac[dfg_tracked_opcode_def, listTheory.MEM]) >>
       qpat_x_assum `dfg_compare_sound dfg env` mp_tac >>
       PURE_ONCE_REWRITE_TAC[dfg_compare_sound_def] >> strip_tac >>
-      first_x_assum drule_all >> strip_tac >>
-      rpt conj_tac >> rpt strip_tac >>
-      metis_tac[listTheory.MEM])
+
+      `FLOOKUP env' u = FLOOKUP env u` by
+        (qpat_x_assum `!u. MEM (Var u) [lhs; rhs] ==> _`
+           (qspec_then `u` mp_tac) >>
+         simp[listTheory.MEM]) >>
+      `FLOOKUP env u = SOME wu` by metis_tac[] >>
+      qpat_x_assum `!v inst lhs rhs. _`
+        (qspecl_then [`v`, `inst`, `lhs`, `rhs`] mp_tac) >>
+      simp[] >> disch_then (qspec_then `w` mp_tac) >>
+      simp[] >> disch_then (qspec_then `wu` mp_tac) >> simp[])
 QED
 (* Every instruction in a well-formed function's flat instruction list
    satisfies inst_wf. *)
