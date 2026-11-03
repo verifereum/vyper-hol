@@ -308,7 +308,10 @@ existing generic proofs and repair them.
 
 The committed allocation-history checkpoint4720852ee has four completed base
 exports (empty/frame/jump/pair), independently checked against the frozen
-definitions/statements. Owner replay/tag checks are pending at task preparation.
+definitions/statements. Owner forced replay passed59.730s: the four exports were freshly saved and
+exported, and all four kernel guards passed. The same core theory still has
+four unfinished producer scaffolds, plus the separate adapter scaffold; those
+are not completed results or permitted downstream memory dependencies.
 The four pending generic producer exports plus raw-sequence adapter remain
 separately owned. Do not use those five admitted statements in a downstream
 proof; report a dependency block only when progress actually needs them.
