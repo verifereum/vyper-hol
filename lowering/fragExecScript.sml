@@ -983,7 +983,10 @@ Theorem frag_outcome_jmp[local]:
 Proof
   rpt strip_tac >> irule frag_outcome_jump >>
   goal_assum (drule_at Any) >>
-  simp[mk_inst_def, is_terminator_def, step_inst_base_def] >> metis_tac[]
+  qexistsl [`bb`, `mk_inst id JMP [Label lbl] []`, `lbl`] >>
+  simp[is_terminator_def, mk_inst_def] >>
+  pure_rewrite_tac[Once step_inst_base_def] >>
+  simp[]
 QED
 
 Theorem frag_outcome_jnz[local]:
@@ -999,8 +1002,13 @@ Theorem frag_outcome_jnz[local]:
 Proof
   rpt strip_tac >> irule frag_outcome_jump >>
   goal_assum (drule_at Any) >>
-  simp[mk_inst_def, is_terminator_def, step_inst_base_def] >>
-  Cases_on `w = 0w` >> gvs[] >> metis_tac[]
+  rename1 `get_instruction bb _ =
+    SOME (mk_inst id JNZ [cnd; Label exit; Label dest] [])` >>
+  qexistsl [`bb`, `mk_inst id JNZ [cnd; Label exit; Label dest] []`,
+            `if w = 0w then dest else exit`] >>
+  simp[is_terminator_def, mk_inst_def] >>
+  pure_rewrite_tac[Once step_inst_base_def] >>
+  simp[] >> Cases_on `w = 0w` >> simp[]
 QED
 
 Theorem frag_outcome_loop_cond[local]:
