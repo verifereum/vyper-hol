@@ -694,3 +694,75 @@ Proof
   >- (gvs[] >> drule_all chain_merge_phi_distinct >> simp[]) >>
   gen_tac >> irule chain_merge_phi_coverage >> metis_tac[]
 QED
+
+Theorem chain_merge_edge_simulation:
+  wf_function fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks := update_succ_phi_labels b.bb_label a.bb_label
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+    (bb_succs (merge_blocks a b))) /\ fn_cfg_edge fn src dst ==>
+  (if src = b.bb_label then a.bb_label else src) =
+    (if dst = b.bb_label then a.bb_label else dst) \/
+  fn_cfg_edge fn' (if src = b.bb_label then a.bb_label else src)
+    (if dst = b.bb_label then a.bb_label else dst)
+Proof
+  strip_tac >> Cases_on `dst = b.bb_label`
+  >- (`src = a.bb_label` by
+        (fs[fn_cfg_edge_def] >>
+         `bb = a` by metis_tac[can_merge_blocks_unique_pred] >> gvs[]) >>
+      fs[can_merge_blocks_def]) >>
+  disj2_tac >> simp[] >>
+  drule_all chain_merge_edge_sources >>
+  disch_then (qspec_then `if src = b.bb_label then a.bb_label else src` mp_tac) >>
+  simp[] >> strip_tac >> qexists `src` >> simp[]
+QED
+
+Theorem rtc_map_simulation:
+  (!x y. r x y ==> f x = f y \/ s (f x) (f y)) ==>
+  !x y. RTC r x y ==> RTC s (f x) (f y)
+Proof
+  strip_tac >> ho_match_mp_tac relationTheory.RTC_INDUCT >> simp[] >>
+  rpt strip_tac >>
+  `f x = f x' \/ s (f x) (f x')` by metis_tac[]
+  >- gvs[] >> metis_tac[relationTheory.RTC_RULES]
+QED
+
+Theorem chain_merge_all_reachable:
+  wf_function fn /\ first_block_no_preds fn /\ all_reachable fn /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks := update_succ_phi_labels b.bb_label a.bb_label
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+    (bb_succs (merge_blocks a b))) ==> all_reachable fn'
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (fn_labels fn') /\ fn_has_entry fn'` by
+    (gvs[] >> irule chain_merge_labels_entry >> qexistsl [`a`, `b`, `fn`] >>
+     simp[] >> fs[wf_function_def] >> conj_tac >>
+     irule venomExecPropsTheory.MEM_lookup_block >> simp[GSYM fn_labels_def]) >>
+  `fn.fn_blocks <> [] /\ fn'.fn_blocks <> []` by
+    fs[wf_function_def, fn_has_entry_def] >>
+  `(HD fn'.fn_blocks).bb_label = (HD fn.fn_blocks).bb_label` by
+    (gvs[] >> irule chain_merge_entry_label >> simp[]) >>
+  `(HD fn.fn_blocks).bb_label <> b.bb_label` by
+    (fs[first_block_no_preds_def, EVERY_MEM, can_merge_blocks_def] >>
+     qpat_x_assum `!bb. _` (qspec_then `a` mp_tac) >> simp[]) >>
+  `!x y. RTC (fn_cfg_edge fn) x y ==>
+    RTC (fn_cfg_edge fn') (if x = b.bb_label then a.bb_label else x)
+      (if y = b.bb_label then a.bb_label else y)` by
+    (ho_match_mp_tac rtc_map_simulation >> rpt strip_tac >>
+     irule chain_merge_edge_simulation >> metis_tac[]) >>
+  simp[all_reachable_def] >> qx_gen_tac `bb` >> strip_tac >>
+  `MEM bb.bb_label (fn_labels fn')` by
+    (simp[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `MEM bb.bb_label (fn_labels fn) /\ bb.bb_label <> b.bb_label` by
+    gvs[chain_merge_fn_labels, MEM_FILTER] >>
+  `fn_reachable fn bb.bb_label` by
+    (fs[all_reachable_def, fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `fn_entry_label fn' = fn_entry_label fn` by
+    (Cases_on `fn.fn_blocks` >> Cases_on `fn'.fn_blocks` >>
+     gvs[fn_entry_label_def, entry_block_def]) >>
+  gvs[fn_reachable_def] >>
+  `entry = (HD fn.fn_blocks).bb_label` by
+    (Cases_on `fn.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def]) >>
+  first_x_assum (qspecl_then [`entry`, `bb.bb_label`] mp_tac) >> simp[]
+QED
