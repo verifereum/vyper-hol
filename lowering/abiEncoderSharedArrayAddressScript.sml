@@ -27,8 +27,13 @@ Theorem abi_encoder_array_address_step_globals[local]:
   (s.vs_accounts,s.vs_transient,s.vs_logs,s.vs_requests,s.vs_pending_deletions)
 Proof
   strip_tac >>
-  gvs[step_inst_base_def, exec_pure2_def, exec_read1_def,
-    AllCaseEqs(), update_var_def]
+  qpat_x_assum `step_inst_base i s = OK t` mp_tac >>
+  qpat_assum `i.inst_opcode = _` (fn eq =>
+    PURE_ONCE_REWRITE_TAC
+      [tryfind (fn th => MATCH_MP th eq)
+         (CONJUNCTS step_inst_base_opcode_eqs)]) >>
+  simp_tac (srw_ss()) [exec_pure2_def, exec_read1_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >> simp[update_var_def]
 QED
 
 Theorem abi_encoder_array_address_raw_globals:
