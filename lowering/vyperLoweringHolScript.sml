@@ -25,7 +25,7 @@ Ancestors
   immutableStagingBridge
   immutableCodeLayout
   e2eDeployFrame
-  deployFrameReplay asmDataSuffixProps
+  deployFrameReplay asmDataSuffixProps deployEntryLayout deployUnitProducers
   immutableLocationProps
   loweringShapeDefs
   loweringShapeProps
