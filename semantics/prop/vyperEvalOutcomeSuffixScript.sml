@@ -526,6 +526,7 @@ Proof
   Cases_on `rof` >> gvs[AllCaseEqs(), evaluation_state_accfupds] >>
   TRY (qexists_tac `[]` >> simp[] >> NO_TAC) >>
   Cases_on `outcome.co_success` >>
+  Cases_on `outcome.co_created = 0w` >>
   qexists_tac `[outcome]` >> simp[]
 QED
 
