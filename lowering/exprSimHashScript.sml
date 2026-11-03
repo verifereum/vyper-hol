@@ -450,6 +450,7 @@ Theorem hash_alloc_mstore_frame:
     stmt_state_rel ctx func cenv cx es t /\
     eval_operand buf.buf_operand t = SOME addr /\
     t.vs_memory = (mstore (w2n addr) w s).vs_memory /\
+    t.vs_labels = s.vs_labels /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n addr,cap) /\
     w2n addr + cap < dimword (:256) /\
     (!aid b len. aid < sa.cs_next_id /\
@@ -550,6 +551,170 @@ Resume hash_alloc_mstore_frame[compose]:
 QED
 
 Finalise hash_alloc_mstore_frame
+
+(* Two adjacent words share the same owned allocation. *)
+Theorem hash_alloc_two_words_frame:
+  compile_alloc_buffer 64 sa = (buf,sm) /\
+  emit_void MSTORE [buf.buf_operand; op0] sm = ((),sh) /\
+  emit_op ADD [buf.buf_operand; Lit 32w] sh = (wordptr,sp) /\
+  emit_void MSTORE [wordptr; op1] sp = ((),sb) /\
+  (!x. op0 = Var x ==> not_fresh_at sa x) /\
+  (!x. op1 = Var x ==> not_fresh_at sa x) /\
+  eval_operand op0 s = SOME w0 /\ eval_operand op1 s = SOME w1 /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
+  ?t addr. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    stmt_state_rel ctx func cenv cx es t /\
+    eval_operand buf.buf_operand t = SOME addr /\
+    mem_bytes_at (w2n addr) 64 t.vs_memory =
+      word_to_bytes_be w0 ++ word_to_bytes_be w1 /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n addr,64) /\
+    w2n addr + 64 < dimword (:256) /\
+    (!aid b len. aid < sa.cs_next_id /\
+       FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+       regions_disjoint (w2n addr) 64 b len) /\
+    (!name b len. local_region cenv es.scopes t name b len ==>
+       regions_disjoint (w2n addr) 64 b len) /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+       FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!aid b len. aid < sa.cs_next_id /\
+       FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
+    (!n b sz. local_region cenv es.scopes s n b sz ==>
+       mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory)
+Proof
+  strip_tac >>
+  drule_at (Pat `compile_alloc_buffer _ _ = _`) hash_alloc_mstore_frame >>
+  simp[wordsTheory.dimword_def] >> disch_then drule_all >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sh) s = OK s1` >>
+  suspend "second_store"
+QED
+
+Resume hash_alloc_two_words_frame[second_store]:
+  drule_at (Pat `emit_op ADD _ _ = _`) emit_ADD_frame >>
+  disch_then (qspecl_then [`32w`, `addr`, `s1`] mp_tac) >>
+  simp[eval_operand_def] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sh sp) s1 = OK s2` >>
+  `s2.vs_labels = s.vs_labels /\ s2.vs_memory = s1.vs_memory /\
+   s2.vs_allocas = s1.vs_allocas` by
+    (qpat_assum `s2 with vs_vars := _ = _`
+       (mp_tac o Q.AP_TERM `\z. (z.vs_labels,z.vs_memory,z.vs_allocas)`) >> simp[]) >>
+  `eval_operand op1 s2 = SOME w1` by
+    (Cases_on `op1` >> gvs[eval_operand_def] >>
+     rename1 `lookup_var v s = SOME w1` >>
+     `not_fresh_at sh v` by
+       (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+     simp[]) >>
+  `w2n (addr + 32w) = w2n addr + 32` by
+    simp[wordsTheory.word_add_def, wordsTheory.dimword_def] >>
+  `run_inst_seq (emitted_insts sp sb) s2 =
+     OK (mstore (w2n addr + 32) w1 s2)` by
+    (drule_all literal_emit_mstore_run >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx es s2` by
+    (irule hash_readonly_state_rel >> goal_assum (drule_at Any) >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx es (mstore (w2n addr + 32) w1 s2)` by
+    (irule literal_mstore_state_rel >> simp[] >>
+     qexistsl [`w2n addr`,
+       `mk_inst sa.cs_next_id ALLOCA [Lit 64w]
+          [STRING #"%" (toString sa.cs_next_var)]`, `64`] >>
+     simp[mk_inst_def] >> rpt strip_tac >>
+     `local_region cenv es.scopes s1 name lb lsz` by
+       (drule_at (Pat `local_region _ _ _ _ _ _`) exprSimOpsTheory.local_region_frame >>
+        disch_then irule >> simp[] >> conj_tac
+        >- (qexists `sh` >> simp[]) >>
+        qexists `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
+     qpat_x_assum `!name b len. local_region _ _ s1 _ _ _ ==> _` drule >>
+     simp[regions_disjoint_def]) >>
+  suspend "compose_two"
+QED
+
+Resume hash_alloc_two_words_frame[compose_two]:
+  qpat_assum `emit_op ADD _ _ = _` (mp_then Any mp_tac emitted_insts_emit_op) >>
+  strip_tac >>
+  qpat_assum `emit_void MSTORE [wordptr; op1] _ = _`
+    (mp_then Any mp_tac emitted_insts_emit_void) >> strip_tac >>
+  `run_inst_seq (emitted_insts sa sp) s = OK s2 /\
+   sp.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sp` by
+    (qpat_assum `run_inst_seq (emitted_insts sa sh) s = OK s1`
+       (mp_then (Pat `run_inst_seq _ _ = OK _`) mp_tac run_inst_seq_chain) >>
+     disch_then (qspec_then `sp` mp_tac) >> simp[]) >>
+  `run_inst_seq (emitted_insts sa sb) s = OK (mstore (w2n addr+32) w1 s2)` by
+    (qpat_assum `run_inst_seq (emitted_insts sa sp) s = OK s2`
+       (mp_then (Pat `run_inst_seq _ _ = OK _`) mp_tac run_inst_seq_chain) >>
+     disch_then (qspec_then `sb` mp_tac) >> simp[]) >>
+  `eval_operand buf.buf_operand s2 = SOME addr` by
+    (`s2.vs_labels = s1.vs_labels` by simp[] >>
+     Cases_on `buf.buf_operand` >> gvs[eval_operand_def] >> res_tac >> gvs[]) >>
+  `(mstore (w2n addr+32) w1 s2).vs_allocas = s1.vs_allocas` by simp[mstore_def] >>
+  qexistsl [`mstore (w2n addr+32) w1 s2`, `addr`] >>
+  simp[eval_operand_mstore] >>
+  rpt conj_tac
+  >- suspend "two_word_view"
+  >- suspend "old_separation"
+  >- suspend "local_separation"
+  >- suspend "old_variables"
+  >- suspend "allocation_memory"
+  >> suspend "local_memory"
+QED
+
+Resume hash_alloc_two_words_frame[two_word_view]:
+  `mem_bytes_at (w2n addr) 32 (mstore (w2n addr+32) w1 s2).vs_memory =
+   mem_bytes_at (w2n addr) 32 s2.vs_memory` by
+    (irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> simp[]) >>
+  `64 = 32 + 32` by simp[] >>
+  asm_rewrite_tac[valueEncodingProofsTheory.mem_bytes_at_split_padded] >>
+  simp[valueEncodingPropsTheory.mem_bytes_at_mstore_same,
+       word_to_bytes_be_def]
+QED
+
+Resume hash_alloc_two_words_frame[old_separation]:
+  qpat_assum `!aid b len. _ ==> regions_disjoint _ _ _ _` ACCEPT_TAC
+QED
+
+Resume hash_alloc_two_words_frame[local_separation]:
+  rpt strip_tac >>
+  `local_region cenv es.scopes s1 name b len` by
+    (drule_at (Pat `local_region _ _ _ _ _ _`) exprSimOpsTheory.local_region_frame >>
+     disch_then irule >> simp[mstore_def, GSYM lookup_var_def] >> conj_tac
+     >- (qexists `sh` >> simp[]) >>
+     qexists `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
+  qpat_x_assum `!name b len. local_region _ _ s1 _ _ _ ==> _` drule >> simp[]
+QED
+
+Resume hash_alloc_two_words_frame[old_variables]:
+  rpt strip_tac >>
+  `not_fresh_at sh x` by
+    (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  simp[]
+QED
+
+Resume hash_alloc_two_words_frame[allocation_memory]:
+  rpt strip_tac >>
+  `regions_disjoint (w2n addr) 64 b len` by
+    (qpat_x_assum `!aid b len. _ ==> regions_disjoint _ _ _ _` drule_all >> simp[]) >>
+  `mem_bytes_at b len (mstore (w2n addr+32) w1 s2).vs_memory =
+   mem_bytes_at b len s2.vs_memory` by
+    (irule mstore_region_frame >> qexistsl [`w2n addr`, `64`] >> simp[]) >>
+  simp[] >> irule mstore_region_frame >> qexistsl [`w2n addr`, `64`] >> simp[]
+QED
+
+Resume hash_alloc_two_words_frame[local_memory]:
+  rpt strip_tac >>
+  `local_region cenv es.scopes s1 n b sz` by
+    (drule_at (Pat `local_region _ _ s _ _ _`) exprSimOpsTheory.local_region_frame_fwd >>
+     disch_then irule >> simp[] >> qexists `sa` >> simp[]) >>
+  `regions_disjoint (w2n addr) 64 b sz` by
+    (qpat_x_assum `!name b len. local_region _ _ s1 _ _ _ ==> _` drule >> simp[]) >>
+  `mem_bytes_at b sz (mstore (w2n addr+32) w1 s2).vs_memory =
+   mem_bytes_at b sz s2.vs_memory` by
+    (irule mstore_region_frame >> qexistsl [`w2n addr`, `64`] >> simp[]) >>
+  simp[] >> irule mstore_region_frame >> qexistsl [`w2n addr`, `64`] >> simp[]
+QED
+
+Finalise hash_alloc_two_words_frame
 
 Theorem compile_keccak256_bytesm_frame:
   compile_keccak256_bytesm val_op (LENGTH bs) sa = (op, sb) /\
