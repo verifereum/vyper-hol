@@ -401,7 +401,8 @@ Proof
   strip_tac >> gvs[] >>
   simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+  simp_tac bool_ss [Once step_inst_base_def, mk_inst_def] >>
+  simp[exec_pure2_def] >>
   simp[run_inst_seq_def, eval_operand_update_var]
 QED
 
