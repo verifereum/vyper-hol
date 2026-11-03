@@ -678,6 +678,7 @@ Definition asm_exec_create_def:
       value :: offset :: sz :: stk =>
         let off = w2n offset in
         let size = w2n sz in
+        if size > 2 * max_code_size then AsmFault (s with as_returndata := []) else
         let mem = asm_expand_memory (off + size) s.as_memory in
         let init_code = TAKE size (DROP off mem) in
         let sender = s.as_call_ctx.cc_address in
@@ -702,6 +703,7 @@ Definition asm_exec_create2_def:
       value :: offset :: sz :: salt :: stk =>
         let off = w2n offset in
         let size = w2n sz in
+        if size > 2 * max_code_size then AsmFault (s with as_returndata := []) else
         let mem = asm_expand_memory (off + size) s.as_memory in
         let init_code = TAKE size (DROP off mem) in
         let sender = s.as_call_ctx.cc_address in

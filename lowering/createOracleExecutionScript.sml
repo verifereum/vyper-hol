@@ -72,7 +72,9 @@ QED
 Theorem exec_create_single:
   inst.inst_outputs = [out] ==>
   exec_create inst s v off sz salt =
-    OK (update_var out
+    if w2n sz > 2 * max_code_size then
+      Abort ExHalt_abort (halt_state (set_returndata [] s))
+    else OK (update_var out
       (FST (consume_create_outcome (venom_create_request s v off sz salt) s))
       (SND (consume_create_outcome (venom_create_request s v off sz salt) s)))
 Proof
@@ -121,7 +123,9 @@ Theorem exec_create_success_regression:
   inst.inst_outputs = [out] /\ s.vs_outcomes = outcome::rest /\
   outcome.co_success ==>
   exec_create inst s value offset sz salt =
-    OK (update_var out (w2w outcome.co_created)
+    if w2n sz > 2 * max_code_size then
+      Abort ExHalt_abort (halt_state (set_returndata [] s))
+    else OK (update_var out (w2w outcome.co_created)
       (s with <| vs_outcomes := rest;
         vs_requests := s.vs_requests ++
           [venom_create_request s value offset sz salt];
@@ -140,7 +144,9 @@ Theorem exec_create_failure_regression:
   inst.inst_outputs = [out] /\ s.vs_outcomes = outcome::rest /\
   ~outcome.co_success ==>
   exec_create inst s value offset sz salt =
-    OK (update_var out 0w
+    if w2n sz > 2 * max_code_size then
+      Abort ExHalt_abort (halt_state (set_returndata [] s))
+    else OK (update_var out 0w
       (s with <| vs_outcomes := rest;
         vs_requests := s.vs_requests ++
           [venom_create_request s value offset sz salt];
@@ -161,7 +167,9 @@ Theorem exec_create_preentry_failure_regression:
   inst.inst_outputs = [out] /\ s.vs_outcomes = outcome::rest /\
   ~outcome.co_success /\ outcome.co_returnData = [] ==>
   exec_create inst s value offset sz salt =
-    OK (update_var out 0w
+    if w2n sz > 2 * max_code_size then
+      Abort ExHalt_abort (halt_state (set_returndata [] s))
+    else OK (update_var out 0w
       (s with <| vs_outcomes := rest;
         vs_requests := s.vs_requests ++
           [venom_create_request s value offset sz salt];
@@ -177,7 +185,9 @@ QED
 Theorem exec_create_exhausted_regression:
   inst.inst_outputs = [out] /\ s.vs_outcomes = [] ==>
   exec_create inst s value offset sz salt =
-    OK (update_var out 0w
+    if w2n sz > 2 * max_code_size then
+      Abort ExHalt_abort (halt_state (set_returndata [] s))
+    else OK (update_var out 0w
       (s with <| vs_requests := s.vs_requests ++
           [venom_create_request s value offset sz salt];
         vs_returndata := [] |>))

@@ -508,11 +508,14 @@ End
 (* CREATE/CREATE2 share the observed outcome oracle with CALL. *)
 Definition exec_create_def:
   exec_create inst s value offset sz salt_opt =
-    let rq = venom_create_request s value offset sz salt_opt;
-        (output, s') = consume_create_outcome rq s
-    in case inst.inst_outputs of
-         [out] => OK (update_var out output s')
-       | _ => Error "create requires single output"
+    case inst.inst_outputs of
+      [out] =>
+        if w2n sz > 2 * max_code_size then
+          Abort ExHalt_abort (halt_state (set_returndata [] s))
+        else let rq = venom_create_request s value offset sz salt_opt;
+                 (output, s') = consume_create_outcome rq s
+             in OK (update_var out output s')
+    | _ => Error "create requires single output"
 End
 
 (* Bump-allocate: record region in vs_allocas without touching vs_memory.

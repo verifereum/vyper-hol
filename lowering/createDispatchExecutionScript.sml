@@ -16,7 +16,9 @@ Theorem compile_create_dispatch_unchecked_execution:
     result = Var out ∧
     let consumed = consume_create_outcome (venom_create_request s v p n salt_value) s in
     run_inst_seq (emitted_insts cs cs') s =
-      OK (update_var out (FST consumed) (SND consumed)) ∧
+      (if w2n n > 2 * max_code_size then
+         Abort ExHalt_abort (halt_state (set_returndata [] s))
+       else OK (update_var out (FST consumed) (SND consumed))) ∧
     eval_operand result (update_var out (FST consumed) (SND consumed)) =
       SOME (FST consumed)
 Proof
