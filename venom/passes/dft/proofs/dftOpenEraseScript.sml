@@ -2,7 +2,7 @@
    Budgets are administrative; erasure never changes states or gas counters. *)
 Theory dftOpenErase
 Ancestors
-  dftOpenFuel dftOpenMachine venomExecSemantics venomInst
+  dftOpenFuel dftOpenMachine venomExecSemantics venomInst arithmetic
 
 Definition dft_fill_frame_def:
   dft_fill_frame k (DftCaller fn b bb inst s) = DftCaller fn k bb inst s
@@ -224,4 +224,183 @@ Proof
        dft_fill_frame_def, dft_open_next_def, dft_open_return_def,
        dft_open_deliver_def, dft_open_continue_def, is_terminator_def, dft_erase_def,
        listTheory.MAP_MAP_o, combinTheory.o_DEF, listTheory.MAP_EQ_f]
+QED
+
+Definition dft_frame_budget_ge_def:
+  dft_frame_budget_ge k (DftCaller fn b bb inst s) <=> k <= b
+End
+
+Definition dft_control_budget_ge_def:
+  (dft_control_budget_ge k (DftEnter fn b s) <=> k <= b) /\
+  (dft_control_budget_ge k (DftAt fn b bb s) <=> k <= b) /\
+  (dft_control_budget_ge k (DftDone r) <=> T)
+End
+
+Definition dft_budgets_ge_def:
+  dft_budgets_ge k (DftOpen control stack n) <=>
+    dft_control_budget_ge k control /\ EVERY (dft_frame_budget_ge k) stack
+End
+
+Theorem dft_budgets_fill:
+  k <= j ==> dft_budgets_ge k (dft_fill j c)
+Proof
+  Cases_on `c` >> Cases_on `d` >>
+  simp[dft_fill_def, dft_fill_control_def, dft_budgets_ge_def,
+       dft_control_budget_ge_def, listTheory.EVERY_MAP,
+       dft_frame_budget_ge_def, dft_fill_frame_def] >>
+  strip_tac >> irule listTheory.EVERY_MONOTONIC >>
+  qexists_tac `\f. T` >> simp[] >> Cases >> simp[dft_fill_frame_def, dft_frame_budget_ge_def]
+QED
+
+Theorem dft_budgets_mono:
+  dft_budgets_ge j c /\ k <= j ==> dft_budgets_ge k c
+Proof
+  Cases_on `c` >> Cases_on `d` >>
+  simp[dft_budgets_ge_def, dft_control_budget_ge_def] >>
+  rpt strip_tac >> gvs[] >>
+  irule listTheory.EVERY_MONOTONIC >>
+  qexists_tac `dft_frame_budget_ge j` >> simp[] >>
+  Cases >> simp[dft_frame_budget_ge_def] >> decide_tac
+QED
+
+Theorem dft_budgets_nonzero:
+  dft_budgets_ge (SUC k) c ==> ~dft_zero_entry c
+Proof
+  Cases_on `c` >> Cases_on `d` >>
+  simp[dft_budgets_ge_def, dft_control_budget_ge_def, dft_zero_entry_def] >> decide_tac
+QED
+
+Theorem dft_budget_continue[local]:
+  k <= b ==> dft_control_budget_ge k (dft_open_continue fn b bb inst before after)
+Proof
+  simp[dft_open_continue_def] >>
+  Cases_on `is_terminator inst.inst_opcode` >> Cases_on `after.vs_halted` >>
+  simp[dft_control_budget_ge_def]
+QED
+
+Theorem dft_budget_deliver[local]:
+  k <= b /\ EVERY (dft_frame_budget_ge k) stack ==>
+  dft_budgets_ge k (dft_open_deliver fn b bb inst before stack n r)
+Proof
+  Cases_on `r` >> simp[dft_open_deliver_def, dft_budgets_ge_def,
+    dft_control_budget_ge_def, dft_budget_continue]
+QED
+
+Theorem dft_budget_return[local]:
+  EVERY (dft_frame_budget_ge k) stack ==>
+  dft_budgets_ge k (dft_open_return r stack n)
+Proof
+  Cases_on `r` >> Cases_on `stack` >>
+  simp[dft_open_return_def, dft_budgets_ge_def, dft_control_budget_ge_def] >>
+  Cases_on `h` >>
+  simp[dft_frame_budget_ge_def, dft_open_return_def] >>
+  rename1 `bind_outputs call.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state caller cs))` >>
+  Cases_on `bind_outputs call.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state caller cs))` >>
+  simp[dft_budgets_ge_def, dft_control_budget_ge_def, dft_budget_deliver]
+QED
+
+Theorem dft_budget_invoke[local]:
+  k <= b /\ EVERY (dft_frame_budget_ge k) stack ==>
+  dft_budgets_ge k (dft_open_invoke ctx fn b bb inst s stack n)
+Proof
+  simp[dft_open_invoke_def] >> Cases_on `decode_invoke inst` >>
+  simp[dft_budgets_ge_def, dft_control_budget_ge_def] >>
+  PairCases_on `x` >> simp[] >>
+  Cases_on `lookup_function x0 ctx.ctx_functions` >>
+  simp[dft_budgets_ge_def, dft_control_budget_ge_def] >>
+  Cases_on `eval_operands x1 s` >>
+  simp[dft_budgets_ge_def, dft_control_budget_ge_def] >>
+  rename1 `setup_callee callee args s` >>
+  Cases_on `setup_callee callee args s` >>
+  simp[dft_budgets_ge_def, dft_control_budget_ge_def, dft_frame_budget_ge_def]
+QED
+
+Theorem dft_budgets_next:
+  dft_budgets_ge (SUC k) c ==> dft_budgets_ge k (dft_open_next a ctx c)
+Proof
+  strip_tac >>
+  `dft_budgets_ge k c` by (irule dft_budgets_mono >> qexists_tac `SUC k` >> simp[]) >>
+  Cases_on `c` >> Cases_on `d` >>
+  gvs[dft_budgets_ge_def, dft_control_budget_ge_def] >>
+  simp[dft_open_next_def, dft_budget_return]
+  >- (Cases_on `n'` >> gvs[] >>
+      Cases_on `lookup_block v.vs_current_bb i.fn_blocks` >>
+      simp[dft_budgets_ge_def, dft_control_budget_ge_def] >>
+      rename1 `eval_phis s bb.bb_instructions` >>
+      Cases_on `eval_phis s bb.bb_instructions` >>
+      simp[dft_budgets_ge_def, dft_control_budget_ge_def]) >>
+  Cases_on `get_instruction b v.vs_inst_idx` >>
+  simp[dft_budgets_ge_def, dft_control_budget_ge_def] >>
+  rename1 `inst.inst_opcode = INVOKE` >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- simp[dft_budget_invoke] >>
+  Cases_on `inst.inst_opcode = GAS` >> simp[dft_budget_deliver] >>
+  Cases_on `inst.inst_outputs` >>
+  simp[dft_budgets_ge_def, dft_control_budget_ge_def] >>
+  Cases_on `t` >> simp[dft_budget_deliver, dft_budgets_ge_def, dft_control_budget_ge_def]
+QED
+
+Theorem dft_erase_prefix:
+  !j c. dft_budgets_ge j c ==> !h. h <= j ==>
+  dft_erase (FUNPOW (dft_open_next a ctx) h c) =
+  FUNPOW (dft_next_inf a ctx) h (dft_erase c)
+Proof
+  Induct_on `j` >- simp[] >> rpt strip_tac >>
+  Cases_on `h` >- simp[] >>
+  simp[FUNPOW] >>
+  `~dft_zero_entry c` by metis_tac[dft_budgets_nonzero] >>
+  `dft_budgets_ge j (dft_open_next a ctx c)` by metis_tac[dft_budgets_next] >>
+  first_x_assum drule >> disch_then (qspec_then `n` mp_tac) >>
+  simp[dft_erase_next]
+QED
+
+Theorem dft_fill_decorates:
+  h <= j ==>
+  dft_erase (FUNPOW (dft_open_next a ctx) h (dft_fill j c)) =
+  FUNPOW (dft_next_inf a ctx) h (dft_erase c)
+Proof
+  strip_tac >> mp_tac dft_erase_prefix >>
+  disch_then (qspecl_then [`j`, `dft_fill j c`] mp_tac) >>
+  simp[dft_budgets_fill]
+QED
+
+Theorem dft_inf_error_iterations[local]:
+  FUNPOW (dft_open_next a ctx) j (DftOpen (DftDone (Error e)) [] n) =
+  DftOpen (DftDone (Error e)) [] n
+Proof
+  Induct_on `j` >> simp[FUNPOW, dft_open_next_def, dft_open_return_def]
+QED
+
+Theorem dft_zero_entry_no_active_prefix[local]:
+  dft_zero_entry c ==>
+  FUNPOW (dft_open_next a ctx) j c <> DftOpen (DftAt fn b bb s) stack n
+Proof
+  Cases_on `j` >> simp[FUNPOW, dft_zero_entry_def] >>
+  rpt strip_tac >> gvs[dft_open_next_def, dft_inf_error_iterations]
+QED
+
+Theorem dft_erase_active_prefix:
+  !j c fn b bb s stack n.
+  FUNPOW (dft_open_next a ctx) j c = DftOpen (DftAt fn b bb s) stack n ==>
+  !h. h <= j ==>
+  dft_erase (FUNPOW (dft_open_next a ctx) h c) =
+  FUNPOW (dft_next_inf a ctx) h (dft_erase c)
+Proof
+  Induct_on `j` >- simp[] >> rpt gen_tac >>
+  rewrite_tac[FUNPOW] >> strip_tac >>
+  `~dft_zero_entry c` by metis_tac[dft_zero_entry_no_active_prefix, FUNPOW] >>
+  Cases_on `h` >> simp[FUNPOW] >> strip_tac >>
+  first_x_assum drule >> disch_then (qspec_then `n'` mp_tac) >>
+  simp[dft_erase_next]
+QED
+
+Theorem dft_erase_active:
+  FUNPOW (dft_open_next a ctx) j c = DftOpen (DftAt fn b bb s) stack n ==>
+  FUNPOW (dft_next_inf a ctx) j (dft_erase c) =
+  dft_erase (DftOpen (DftAt fn b bb s) stack n)
+Proof
+  strip_tac >> drule dft_erase_active_prefix >>
+  disch_then (qspec_then `j` mp_tac) >> simp[]
 QED
