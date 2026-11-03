@@ -42,7 +42,7 @@ Ancestors
   (* interprocedural *)
   functionInliner
   (* configured pipeline runner structural guarantees *)
-  venomPipelineRunnerProps
+  venomPipelineRunnerProps venomPipelineData
   (* dead function traversal *)
   venomDft
   (* invoke copy forwarding *)
