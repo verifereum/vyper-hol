@@ -3,7 +3,7 @@
 Theory allocaHistory
 Ancestors
   venomInst venomWf venomState venomExecSemantics venomExecProps
-  venomMemDefs venomMemProofs venomInstProps venomInstProofs1 opcodeClass finite_map list arithmetic
+  venomMemDefs venomMemProofs venomInstProps venomInstProofs1 opcodeClass venomExecProofs finite_map list arithmetic
 
 Definition alloca_block_order_def:
   alloca_block_order bb (sites : (num, num # num) fmap) <=>
@@ -332,7 +332,61 @@ Theorem alloca_history_exec_block:
      exec_block fuel ctx bb s = IntRet ret t) ==>
     alloca_history func t
 Proof
-  cheat
+  rpt gen_tac >> map_every qid_spec_tac [`ret`, `t`] >>
+  measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  simp[Once exec_block_def] >>
+  strip_tac >> gvs[AllCaseEqs()]
+  >- (drule_all alloca_history_step >> simp[])
+  >~ [`step_inst fuel ctx inst s = IntRet ret t`]
+  >- (drule history_intret_fields >> strip_tac >>
+      irule alloca_history_frame >> qexists `s` >> simp[]) >>
+  drule_all alloca_history_step >> simp[] >> strip_tac >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    (gvs[get_instruction_def, AllCaseEqs()]) >>
+  `alloca_inv (s'' with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (drule_all alloca_inv_step_inst_proof >>
+     simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def]) >>
+  `s''.vs_current_bb = s.vs_current_bb` by
+    metis_tac[step_preserves_control_flow] >>
+  first_x_assum (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >>
+  disch_then (qspec_then `s'' with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >> disch_then irule >> metis_tac[]
+QED
+
+Theorem history_phi_prefix_opcode[local]:
+  !insts k. k < phi_prefix_length insts ==> (EL k insts).inst_opcode = PHI
+Proof
+  Induct >> simp[phi_prefix_length_def] >> rpt gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  Cases_on `k` >> simp[]
+QED
+
+Theorem history_phi_entry[local]:
+  !func s bb u.
+    alloca_history func s /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    eval_phis s bb.bb_instructions = OK u ==>
+    alloca_history func (u with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `u.vs_allocas = s.vs_allocas` by metis_tac[eval_phis_preserves_alloca_fields] >>
+  `u.vs_current_bb = s.vs_current_bb` by metis_tac[eval_phis_preserves_current_bb] >>
+  rw[alloca_history_def]
+  >- (gvs[alloca_history_def] >> metis_tac[]) >>
+  gvs[get_instruction_def, AllCaseEqs()] >>
+  drule history_phi_prefix_opcode >> simp[]
+QED
+
+Theorem history_phi_entry_inv[local]:
+  !s insts u p. alloca_inv s /\ eval_phis s insts = OK u ==>
+    alloca_inv (u with vs_inst_idx := p)
+Proof
+  rpt strip_tac >> drule eval_phis_preserves_alloca_fields >>
+  strip_tac >> gvs[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
+  metis_tac[]
 QED
 
 Theorem alloca_history_run_blocks:
