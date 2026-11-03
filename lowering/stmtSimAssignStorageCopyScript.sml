@@ -276,10 +276,9 @@ Theorem storage_copy_dyn_live_word[local]:
     w2n (lookup_storage (n2w base) st) = len /\
     i < 1 + word_size cap /\ b < 32 /\
     ~dyn_bytes_dead st base cap (base + i) b ==>
-    32 * i < 32 + 32 * word_size len
+    32 * i < 32 + len
 Proof
   rpt gen_tac >> strip_tac >>
-  `len <= 32 * word_size len` by simp[le_word_size_mul] >>
   fs[dyn_bytes_dead_def] >> decide_tac
 QED
 
@@ -440,7 +439,7 @@ Theorem storage_copy_dyn_footprint[local]:
     k < dimword (:256) /\ LENGTH bs < dimword (:256) /\
     i < 1 + word_size cap /\ b < 32 /\
     ~dyn_bytes_dead (apply_writes (n2w k) writes st) k cap (k+i) b ==>
-    32*i < 32 + 32 * word_size (LENGTH bs)
+    32*i < 32 + LENGTH bs
 Proof
   rpt gen_tac >> strip_tac >>
   `w2n (lookup_storage (n2w k) (apply_writes (n2w k) writes st)) = LENGTH bs` by
