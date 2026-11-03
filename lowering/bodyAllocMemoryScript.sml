@@ -468,6 +468,40 @@ Proof
   irule locals_kept_mem >> simp[]
 QED
 
+Theorem body_name_source_region:
+  expr_sim_pre ce cx env (Name ann id) es /\
+  stmt_state_rel ctx func ce cx es s ==>
+  ?entry p sz w.
+    lookup_scopes id es.scopes = SOME entry /\
+    evaluate_type (get_tenv cx) ann = SOME entry.type /\
+    value_has_type entry.type entry.value /\
+    FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    lookup_var p s = SOME w /\
+    local_region ce es.scopes s id (w2n w) sz /\
+    type_memory_size entry.type <= sz /\ val_wf entry.type entry.value /\
+    val_in_memory entry.type entry.value (w2n w) s.vs_memory /\
+    w2n w + sz <= s.vs_alloca_next
+Proof
+  rpt strip_tac >>
+  `?entry. lookup_scopes id es.scopes = SOME entry /\
+           evaluate_type (get_tenv cx) ann = SOME entry.type /\
+           value_has_type entry.type entry.value` by
+    (gvs[expr_sim_pre_def, expr_sim_inv_def] >>
+     drule_all well_typed_Name_lookup >> strip_tac >>
+     gvs[env_consistent_def, env_context_consistent_def]) >>
+  `?p sz. FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz)` by
+    gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
+  `?w. lookup_var p s = SOME w /\ type_memory_size entry.type <= sz /\
+       val_wf entry.type entry.value /\
+       val_in_memory entry.type entry.value (w2n w) s.vs_memory` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+     first_x_assum drule_all >> metis_tac[]) >>
+  `local_region ce es.scopes s id (w2n w) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  drule_all body_local_region_frontier >> strip_tac >>
+  qexistsl [`entry`, `p`, `sz`, `w`] >> simp[]
+QED
+
 val () = List.app (fn th =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
   in if null axioms andalso null (Thm.hyp th) andalso
@@ -490,4 +524,5 @@ val () = List.app (fn th =>
         body_local_ptr_MLOAD_frontier,
         body_word_name_region,
         body_word_name_MLOAD_frontier,
-        compile_name_word_body_sim_mem];
+        compile_name_word_body_sim_mem,
+        body_name_source_region];
