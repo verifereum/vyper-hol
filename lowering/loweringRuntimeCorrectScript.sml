@@ -93,25 +93,6 @@ Proof
   simp[]
 QED
 
-Theorem well_formed_type_byte_bits[local]:
-  well_formed_type tenv ty ==> type_bits ty MOD 8 = 0
-Proof
-  Cases_on `ty` >> simp[type_bits_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[type_bits_def, well_formed_type_def, vyperValueTheory.evaluate_type_def] >>
-  metis_tac[]
-QED
-
-Theorem checked_name_literal_byte_width_probe[local]:
-  (!id ty. FLOOKUP env.var_types id = SOME ty ==>
-      well_formed_type env.type_defs ty) ==>
-  (well_typed_expr env (Name ty id) ==> byte_widths_expr (Name ty id)) /\
-  (well_typed_expr env (Literal ty lit) ==> byte_widths_expr (Literal ty lit))
-Proof
-  simp[well_typed_expr_def, byte_widths_expr_def] >>
-  metis_tac[well_formed_type_byte_bits]
-QED
-
 Theorem external_selected_body_typing:
   supported_program tops /\ source_typing_ok tops am tx /\
   source_deployment_rel tops am tx /\
@@ -314,7 +295,7 @@ Proof
   drule_all transfer_value_preserves_contract_storage_well_formed >> simp[]
 QED
 
-(* ADMITTED (typing soundness): the body of a checked external function
+(* Typing soundness: the body of a checked external function
    ends in an outcome the statement judgment speaks of (no type error, no
    break or continue outside a loop), and it falls off its end only when
    the function has no return type (the type checker's
@@ -596,7 +577,7 @@ Proof
   drule_all checked_single_module_bare_global_no_hashmap >> simp[]
 QED
 
-(* ADMITTED (#637): at the start of the selected function's body, the
+(* Body frame (#637): at the start of the selected function's body, the
    premises of body_stmts_sim other than the frame's returns: the frame is
    the lowered program's (body_inv), the body is supported and typed at
    the return type in a type environment env_t of the parameters, which
