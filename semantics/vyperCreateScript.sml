@@ -527,7 +527,8 @@ Definition create_oracle_result_def:
     | (INR ex, st') => (INR ex, st')
     | (INL (rq,outcome), st') =>
         let st'' = SND (vyperCallOutcome$adopt_call_outcome rq outcome st') in
-        if (create_success outcome) then (INL (Value (AddressV (create_created outcome))), st'')
+        if create_success outcome /\ create_created outcome <> 0w
+        then (INL (Value (AddressV (create_created outcome))), st'')
         else if rof then (INR (Error (RevertData (create_returnData outcome))), st'')
         else (INL (Value (AddressV 0w)), st'')
 End
