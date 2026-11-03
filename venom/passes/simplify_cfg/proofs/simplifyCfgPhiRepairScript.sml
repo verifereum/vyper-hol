@@ -193,3 +193,79 @@ Proof
   simp[phi_well_formed_def, phi_pairs_def, resolve_phi_def] >>
   rpt strip_tac >> gvs[] >> IF_CASES_TAC >> simp[] >> metis_tac[]
 QED
+
+Theorem stable_partition_order_split:
+  ~P y ==>
+  ?pre' mid' post'.
+    FILTER P (pre ++ x::mid ++ y::post) ++
+    FILTER (\z. ~P z) (pre ++ x::mid ++ y::post) =
+    pre' ++ x::mid' ++ y::post'
+Proof
+  strip_tac >> Cases_on `P x`
+  >- (qexistsl [`FILTER P pre`,
+        `FILTER P mid ++ FILTER P post ++ FILTER (\z. ~P z) pre ++
+         FILTER (\z. ~P z) mid`, `FILTER (\z. ~P z) post`] >>
+      simp[FILTER_APPEND, APPEND_ASSOC]) >>
+  qexistsl [`FILTER P pre ++ FILTER P mid ++ FILTER P post ++ FILTER (\z. ~P z) pre`,
+             `FILTER (\z. ~P z) mid`, `FILTER (\z. ~P z) post`] >>
+  simp[FILTER_APPEND, APPEND_ASSOC]
+QED
+
+Theorem strict_indices_split:
+  !xs i j. i < j /\ j < LENGTH xs ==>
+    ?pre mid post. xs = pre ++ EL i xs::mid ++ EL j xs::post
+Proof
+  Induct >> simp[] >> qx_gen_tac `x` >>
+  Cases_on `i` >> Cases_on `j` >> simp[] >> rpt strip_tac
+  >- (qexists `[]` >> simp[] >>
+      qexistsl [`TAKE n xs`, `DROP (SUC n) xs`] >> simp[TAKE_DROP_SUC]) >>
+  rename [`a < b`, `b < LENGTH xs`] >>
+  first_x_assum (qspecl_then [`a`, `b`] mp_tac) >>
+  simp[] >> strip_tac >> qexistsl [`x::pre`, `mid`, `post`] >> simp[]
+QED
+
+Theorem split_strict_indices:
+  xs = pre ++ x::mid ++ y::post ==>
+  ?i j. i < j /\ j < LENGTH xs /\ EL i xs = x /\ EL j xs = y
+Proof
+  strip_tac >> qexistsl [`LENGTH pre`, `LENGTH pre + SUC (LENGTH mid)`] >>
+  simp[EL_APPEND_EQN]
+QED
+
+Theorem fix_phis_in_block_strict_order:
+  i < j /\ j < LENGTH bb.bb_instructions /\
+  (EL j bb.bb_instructions).inst_opcode <> PHI ==>
+  ?i' j'. i' < j' /\
+    j' < LENGTH (fix_phis_in_block actual_preds bb).bb_instructions /\
+    EL i' (fix_phis_in_block actual_preds bb).bb_instructions =
+      fix_phi_inst actual_preds (EL i bb.bb_instructions) /\
+    EL j' (fix_phis_in_block actual_preds bb).bb_instructions =
+      EL j bb.bb_instructions
+Proof
+  strip_tac >> drule_all strict_indices_split >> strip_tac >>
+  qabbrev_tac `x = EL i bb.bb_instructions` >>
+  qabbrev_tac `y = EL j bb.bb_instructions` >>
+  irule split_strict_indices >>
+  simp[fix_phis_in_block_def] >>
+  qpat_assum `bb.bb_instructions = _` (fn th => once_rewrite_tac[th]) >>
+  simp[MAP_APPEND, fix_phi_inst_non_phi] >>
+  qabbrev_tac `A = MAP (fix_phi_inst actual_preds) pre` >>
+  qabbrev_tac `B = MAP (fix_phi_inst actual_preds) mid` >>
+  qabbrev_tac `C = MAP (fix_phi_inst actual_preds) post` >>
+  qabbrev_tac `u = fix_phi_inst actual_preds x` >>
+  Cases_on `u.inst_opcode = PHI`
+  >- (qexistsl [`FILTER (\z. z.inst_opcode = PHI) B ++
+        FILTER (\z. z.inst_opcode = PHI) C ++
+        FILTER (\z. z.inst_opcode <> PHI) A ++
+        FILTER (\z. z.inst_opcode <> PHI) B`,
+        `FILTER (\z. z.inst_opcode <> PHI) C`,
+        `FILTER (\z. z.inst_opcode = PHI) A`] >>
+      simp[FILTER_APPEND, APPEND_ASSOC]) >>
+  qexistsl [`FILTER (\z. z.inst_opcode <> PHI) B`,
+    `FILTER (\z. z.inst_opcode <> PHI) C`,
+    `FILTER (\z. z.inst_opcode = PHI) A ++
+     FILTER (\z. z.inst_opcode = PHI) B ++
+     FILTER (\z. z.inst_opcode = PHI) C ++
+     FILTER (\z. z.inst_opcode <> PHI) A`] >>
+  simp[FILTER_APPEND, APPEND_ASSOC]
+QED
