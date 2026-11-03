@@ -808,8 +808,15 @@ Proof
   Induct >> simp[add_module_var_locations_def] >>
   rpt gen_tac >> simp[Once add_module_var_locations_def] >>
   strip_tac >> first_x_assum drule >>
-  Cases_on `h` >> simp[] >> rpt (CASE_TAC >> simp[]) >>
-  rw[finite_mapTheory.FLOOKUP_UPDATE] >> simp[]
+  Cases_on `h` >> simp[]
+  >- (rename1 `VariableDecl ann kind name ty slot_opt` >>
+      Cases_on `slot_opt` >> simp[] >>
+      Cases_on `kind` >> simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+      rw[] >> gvs[])
+  >> rename1 `HashMapDecl ann transient name kt vt slot_opt` >>
+  Cases_on `slot_opt` >> simp[] >>
+  Cases_on `transient` >> simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+  rw[] >> gvs[]
 QED
 
 Theorem add_immutable_locations_FLOOKUP:
