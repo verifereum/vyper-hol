@@ -118,7 +118,9 @@ Theorem external_entry_reaches_body_mem:
      s0.
       set_external_package_target rpolicy.rpol_target
         (package_external_fn tops F (assign_nkeys tops 0)
-           (mut, F, F, tx.function_name, args, [], ret, fbody)) =
+           (mut, F, lookup_raw_return_or_F (NONE : num option)
+                       tx.function_name External tops,
+            tx.function_name, args, [], ret, fbody)) =
         (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
          rt) /\
       compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
@@ -161,7 +163,9 @@ Theorem external_frame_ret_ok_mem:
     bind_arguments (type_env tops) args tx.args = SOME env /\
     set_external_package_target rpolicy.rpol_target
       (package_external_fn tops F (assign_nkeys tops 0)
-         (mut, F, F, tx.function_name, args, [], ret, fbody)) =
+         (mut, F, lookup_raw_return_or_F (NONE : num option)
+                     tx.function_name External tops,
+          tx.function_name, args, [], ret, fbody)) =
       (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
        rt) /\
     compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
