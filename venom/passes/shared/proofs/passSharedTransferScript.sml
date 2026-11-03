@@ -430,6 +430,12 @@ QED
    agree unconditionally. This combines step_inst_preserves_all (fields
    not written are preserved) with output_determined (fields written are
    determined by inputs). Proved by the same opcode case split. *)
+Theorem transfer_pure2_update[local]:
+  exec_pure2 f inst s = OK v ==> ?out w. v = update_var out w s
+Proof
+  simp[exec_pure2_def] >> strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
 Theorem step_inst_base_scalar_agree:
   !inst s1 s2 v1 v2.
     step_inst_base inst s1 = OK v1 /\
@@ -494,7 +500,10 @@ Proof
       read_effects_def, write_effects_def,
       all_effects_def, empty_effects_def]
   >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
+  >- (qpat_assum `inst.inst_opcode = SUB` (fn th =>
+        RULE_ASSUM_TAC (REWRITE_RULE [step_inst_base_def, th, opcode_case_def])) >>
+      dxrule transfer_pure2_update >> strip_tac >>
+      dxrule transfer_pure2_update >> strip_tac >> gvs[update_var_def])
   >- transfer_determined_finish_tac
   >- transfer_determined_finish_tac
   >- transfer_determined_finish_tac
@@ -733,6 +742,11 @@ QED
    read-state agree, the output variable values agree.
    Restricted to is_effect_free_op because write-only ops (MSTORE etc)
    don't write to vs_vars, so the conclusion is not provable for them. *)
+(* Normalize effect premises only within the selected opcode branch. *)
+val transfer_determined_finish_tac =
+  fs[is_terminator_def, read_effects_def, write_effects_def,
+     all_effects_def, empty_effects_def] >> transfer_determined_finish_tac;
+
 Theorem step_inst_base_effect_free_output_determined_vars:
   !inst s1 s2 v1 v2.
     step_inst_base inst s1 = OK v1 /\
@@ -777,9 +791,8 @@ Theorem step_inst_base_effect_free_output_determined_vars:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `inst.inst_opcode` >>
-  gvs[is_effect_free_op_def, is_terminator_def,
-      read_effects_def, write_effects_def,
-      all_effects_def, empty_effects_def]
+  qpat_x_assum `is_effect_free_op _` mp_tac >>
+  simp[is_effect_free_op_def] >> strip_tac
   >- transfer_determined_finish_tac  (* ADD *)
   >- transfer_determined_finish_tac  (* SUB *)
   >- transfer_determined_finish_tac  (* MUL *)
