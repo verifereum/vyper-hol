@@ -627,9 +627,18 @@ Proof
   imp_res_tac eval_operand_equiv >>
   `s1.vs_immutables = s2.vs_immutables` by
     fs[state_equiv_def, execution_equiv_def] >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def,
-    state_equiv_def, execution_equiv_def, lookup_var_def,
-    istore_def, mstore_def]
+  Cases_on `inst.inst_operands` >> gvs[result_equiv_def] >>
+  rename1 `h :: rest` >>
+  Cases_on `rest` >> gvs[result_equiv_def] >>
+  rename1 `h :: v :: rest` >>
+  Cases_on `rest` >> gvs[result_equiv_def] >>
+  `eval_operand h s1 = eval_operand h s2` by metis_tac[] >>
+  `eval_operand v s1 = eval_operand v s2` by metis_tac[] >>
+  asm_rewrite_tac[] >>
+  Cases_on `eval_operand h s2` >> gvs[result_equiv_def] >>
+  Cases_on `eval_operand v s2` >> gvs[result_equiv_def,
+    revert_equiv_def, state_equiv_def, execution_equiv_def,
+    lookup_var_def, istore_def, mstore_def]
 QED
 
 (* DLOADBYTES/CODECOPY: copy from data section/code to memory, 3 operands *)
@@ -765,8 +774,13 @@ Proof
       >- (disch_then irule >> rw[] >> first_x_assum irule >>
           metis_tac[MEM_DROP_IMP, MEM_REVERSE])
       >> Induct >> rw[eval_operands_def]) >>
-  simp[] >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def, state_equiv_def,
+  gvs[listTheory.EL] >>
+  Cases_on `eval_operand (HD (REVERSE rest)) s2` >>
+  gvs[result_equiv_def] >>
+  Cases_on `eval_operand (EL 1 (REVERSE rest)) s2` >>
+  gvs[result_equiv_def] >>
+  Cases_on `eval_operands (DROP 2 (REVERSE rest)) s2` >>
+  gvs[result_equiv_def, revert_equiv_def, state_equiv_def,
     execution_equiv_def, lookup_var_def]
 QED
 
