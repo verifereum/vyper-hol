@@ -973,9 +973,15 @@ Proof
   Cases_on `inst.inst_outputs` >> simp[exec_ext_call_def, result_equiv_def] >>
   rename1 `inst.inst_outputs = out::rest_outputs` >>
   Cases_on `rest_outputs` >> simp[exec_ext_call_def, result_equiv_def] >>
-  rw[state_equiv_def, execution_equiv_def, lookup_var_def,
-     update_var_def, FLOOKUP_UPDATE, write_memory_with_expansion_def] >>
-  gvs[lookup_var_def] >> Cases_on `out = v` >> simp[]
+  qpat_abbrev_tac `taken = take_outcome _ _` >>
+  qpat_abbrev_tac `adopted = adopt_outcome _ _ _` >>
+  `!off bs. (write_memory_with_expansion off bs s1).vs_memory =
+            (write_memory_with_expansion off bs s2).vs_memory` by
+    simp[write_memory_with_expansion_def] >>
+  asm_rewrite_tac[] >>
+  rw[state_equiv_def, execution_equiv_def] >>
+  gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  Cases_on `out = v` >> simp[]
 QED
 
 (* Original concrete-call proof retained:
