@@ -79,6 +79,33 @@ Proof
   metis_tac[])
 QED
 
+Theorem mem_edge_erase[local]:
+  gas_path_mem_edge ctx fn s n r ==> gas_path_edge ctx fn s n r
+Proof
+  simp[gas_path_mem_edge_def, gas_path_edge_def] >> metis_tac[]
+QED
+
+Theorem mem_edge_normal[local]:
+  gas_path_mem_edge ctx fn s n (OK t) ==> ~t.vs_halted
+Proof
+  metis_tac[mem_edge_erase, gas_path_edge_normal]
+QED
+
+Theorem mem_edge_exit[local]:
+  gas_path_mem_edge ctx fn s n r /\ exit_result r ==>
+  ?fuel. run_from fuel ctx fn s = r /\ mem_safe_run fuel ctx fn s
+Proof
+  rw[gas_path_mem_edge_def] >>
+  gvs[fragExecTheory.exit_result_def] >>
+  qexists_tac `fuel` >>
+  simp[run_from_def, Once exec_block_def,
+       mem_safe_run_def, Once mem_safe_block_def] >>
+  simp[Once exec_block_def] >>
+  Cases_on `step_inst fuel ctx inst s` >>
+  gvs[fragExecTheory.exit_result_def] >>
+  simp[Once exec_block_def]
+QED
+
 (* A normal landing transfers the existing conditional continuation check;
    a terminal path supplies its own safe run. *)
 Theorem gas_path_mem_exec:
