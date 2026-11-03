@@ -1303,6 +1303,38 @@ QED
      require correct operand arity from step_inst_base=OK, giving
      mem_write_ops<>NONE, contradicting mem_write_ops=NONE).
      SSTORE/TSTORE/LOG don't write memory. *)
+Theorem no_mem_ops_writer_opcode[local]:
+  !opc. ~is_effect_free_op opc /\ ~is_alloca_op opc /\
+    ~is_terminator opc /\ ~is_ext_call_op opc /\ opc <> INVOKE /\
+    Eff_MEMORY IN write_effects opc ==>
+    (opc = MSTORE \/ opc = MSTORE8 \/ opc = ISTORE \/ opc = MCOPY \/
+     opc = CALLDATACOPY \/ opc = DLOADBYTES \/ opc = CODECOPY \/
+     opc = RETURNDATACOPY \/ opc = EXTCODECOPY)
+Proof
+  Cases >>
+  simp[write_effects_def, all_effects_def, empty_effects_def,
+       is_effect_free_op_def, is_alloca_op_def, is_terminator_def,
+       is_ext_call_op_def]
+QED
+
+Theorem no_mem_ops_writer_descriptor[local]:
+  !inst s v.
+    (inst.inst_opcode = MSTORE \/ inst.inst_opcode = MSTORE8 \/
+     inst.inst_opcode = ISTORE \/ inst.inst_opcode = MCOPY \/
+     inst.inst_opcode = CALLDATACOPY \/ inst.inst_opcode = DLOADBYTES \/
+     inst.inst_opcode = CODECOPY \/ inst.inst_opcode = RETURNDATACOPY \/
+     inst.inst_opcode = EXTCODECOPY) /\
+    step_inst_base inst s = OK v ==> mem_write_ops inst <> NONE
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  pure_rewrite_tac[step_inst_base_def] >>
+  asm_rewrite_tac[] >>
+  pure_rewrite_tac[opcode_case_def] >>
+  simp[mem_write_ops_def, exec_write2_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
 Theorem step_inst_base_mem_preserves_no_mem_ops[local]:
   !inst s v.
     step_inst_base inst s = OK v /\
@@ -1327,17 +1359,11 @@ Proof
      arity for step_inst_base=OK, giving mem_write_ops<>NONE. *)
   >- (`Eff_MEMORY NOTIN write_effects inst.inst_opcode` by
         (spose_not_then strip_assume_tac >>
-         qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-         qpat_x_assum `mem_write_ops _ = _` mp_tac >>
-         simp[step_inst_base_def, mem_write_ops_def] >>
-         Cases_on `inst.inst_opcode` >>
-         gvs[is_effect_free_op_def, is_alloca_op_def,
-             is_terminator_def, is_ext_call_op_def,
-             write_effects_def, all_effects_def, empty_effects_def] >>
-         simp[exec_write2_def, AllCaseEqs()] >>
-         rpt strip_tac >> gvs[]) >>
+         drule_all no_mem_ops_writer_opcode >> disch_then assume_tac >>
+         drule_all no_mem_ops_writer_descriptor >> simp[]) >>
       first_x_assum (qspecl_then [`0`, `ARB`] assume_tac) >>
-      drule_all write_effects_sound_memory >> REWRITE_TAC[])
+      drule_all write_effects_sound_memory >>
+      disch_then ACCEPT_TAC)
 QED
 
 (* Bridging: when mem_read_ops = NONE and step_inst_base succeeds,
