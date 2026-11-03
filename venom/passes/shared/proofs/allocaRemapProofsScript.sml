@@ -4249,7 +4249,16 @@ QED
 Resume step_inst_base_error_transfer[LOG]:
   Cases_on `inst.inst_operands` >> gvs[] >>
   Cases_on `h` >> gvs[] >>
-  error_inline_tac
+  Cases_on `LENGTH t <> w2n c + 2` >- gvs[] >>
+  gvs[] >>
+  Cases_on `eval_operand (HD (REVERSE t)) s1`
+  >- (res_tac >> simp[]) >>
+  Cases_on `eval_operand (EL 1 (REVERSE t)) s1`
+  >- (res_tac >> Cases_on `eval_operand (HD (REVERSE t)) s2` >> simp[]) >>
+  Cases_on `eval_operands (DROP 2 (REVERSE t)) s1`
+  >- (res_tac >> Cases_on `eval_operand (HD (REVERSE t)) s2` >> simp[] >>
+      Cases_on `eval_operand (EL 1 (REVERSE t)) s2` >> simp[]) >>
+  gvs[]
 QED
 Resume step_inst_base_error_transfer[MCOPY]:
   error_inline_tac
