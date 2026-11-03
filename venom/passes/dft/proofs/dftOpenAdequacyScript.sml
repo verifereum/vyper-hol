@@ -1174,3 +1174,343 @@ Proof
       qexists_tac `k` >> simp[]) >>
   irule dft_open_step_forward_non_invoke >> simp[]
 QED
+
+Theorem dft_open_classified_block_exit[local]:
+  dft_open_classified_exit stack rr d m ==>
+  dft_open_block_exit fn budget stack d
+Proof
+  simp[dft_open_classified_exit_def, dft_open_block_exit_def,
+       dft_open_stack_exit_def] >> metis_tac[]
+QED
+
+Theorem dft_open_step_hit_block[local]:
+  dft_first_hit (dft_open_next a ctx)
+    (dft_open_inst_exit fn budget bb stack i) c k d /\
+  dft_open_block_exit fn budget stack d ==>
+  dft_first_hit (dft_open_next a ctx)
+    (dft_open_block_exit fn budget stack) c k d
+Proof
+  simp[dft_first_hit_def, dft_open_inst_exit_def] >> metis_tac[]
+QED
+
+Theorem dft_open_non_ok_step_block[local]:
+  dft_open_step_segment a xs ctx fn budget bb inst s stack n r /\
+  (!t. r <> OK t) ==>
+  dft_open_block_segment a xs ctx fn budget bb s stack n r
+Proof
+  simp[dft_open_step_segment_def] >> strip_tac >>
+  `!t. rr <> OK t` by
+    (Cases_on `rr` >> Cases_on `r` >>
+     gvs[dft_open_materialize_result_def]) >>
+  `dft_open_classified_exit stack rr d m` by (Cases_on `rr` >> gvs[]) >>
+  simp[dft_open_block_segment_def] >>
+  qexistsl_tac [`rr`, `m`, `k`, `d`] >> simp[] >> conj_tac
+  >- (irule dft_open_step_hit_block >> simp[] >>
+      metis_tac[dft_open_classified_block_exit]) >>
+  Cases_on `rr` >> gvs[]
+QED
+
+Theorem dft_open_terminator_step_block[local]:
+  dft_open_step_segment a xs ctx fn budget bb inst s stack n (OK after) /\
+  is_terminator inst.inst_opcode ==>
+  dft_open_block_segment a xs ctx fn budget bb s stack n
+    (if after.vs_halted then Halt after else OK after)
+Proof
+  simp[dft_open_step_segment_def] >> strip_tac >>
+  Cases_on `rr` >> gvs[dft_open_materialize_result_def] >>
+  rename1 `OK (dft_open_materialize xs m t)` >>
+  Cases_on `t.vs_halted` >>
+  gvs[dft_open_deliver_def, dft_open_continue_def,
+      dft_open_materialize_def] >>
+  simp[dft_open_block_segment_def]
+  >- (qexistsl_tac [`Halt t`, `m`, `k`,
+        `DftOpen (DftDone (Halt t)) stack m`] >>
+      simp[dft_open_materialize_result_def, dft_open_materialize_def,
+           dft_open_classified_exit_def] >>
+      irule dft_open_step_hit_block >>
+      simp[dft_open_block_exit_def, dft_open_stack_exit_def] >>
+      qexistsl_tac [`bb`, `s.vs_inst_idx`] >> simp[]) >>
+  qexistsl_tac [`OK t`, `m`, `k`, `DftOpen (DftEnter fn budget t) stack m`] >>
+  simp[dft_open_materialize_result_def, dft_open_materialize_def] >>
+  irule dft_open_step_hit_block >> simp[dft_open_block_exit_def] >>
+  qexistsl_tac [`bb`, `s.vs_inst_idx`] >> simp[]
+QED
+
+Theorem dft_open_step_block_prefix[local]:
+  dft_first_hit (dft_open_next a ctx)
+    (dft_open_inst_exit fn budget bb stack i) c k d ==>
+  FUNPOW (dft_open_next a ctx) k c = d /\
+  (!j. j < k ==> ~dft_open_block_exit fn budget stack
+    (FUNPOW (dft_open_next a ctx) j c))
+Proof
+  simp[dft_first_hit_def, dft_open_inst_exit_def] >> metis_tac[]
+QED
+
+Theorem dft_open_sequential_step_block[local]:
+  dft_open_step_segment a xs ctx fn budget bb inst s stack n (OK after) /\
+  ~is_terminator inst.inst_opcode /\
+  dft_open_block_forward a xs budget ctx bb
+    (after with vs_inst_idx := SUC s.vs_inst_idx) ==>
+  dft_open_block_segment a xs ctx fn budget bb s stack n
+    (exec_block budget ctx bb (after with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  simp[dft_open_step_segment_def] >> strip_tac >>
+  Cases_on `rr` >> gvs[dft_open_materialize_result_def] >>
+  rename1 `dft_open_deliver fn budget bb inst s stack m (OK t)` >>
+  gvs[dft_open_deliver_def, dft_open_continue_def] >>
+  drule_all dft_open_step_block_prefix >> strip_tac >>
+  qpat_x_assum `dft_open_block_forward _ _ _ _ _ _` mp_tac >>
+  simp[dft_open_block_forward_def] >>
+  disch_then (qspecl_then [`t with vs_inst_idx := SUC s.vs_inst_idx`,
+    `m`, `fn`, `stack`] mp_tac) >>
+  simp[dft_open_materialize_def, dft_open_block_segment_def] >> strip_tac >>
+  qexistsl_tac [`rr`, `m'`, `k + k'`, `d`] >> simp[] >>
+  irule dft_first_hit_prefix >> conj_tac >- simp[] >>
+  qexists_tac `DftOpen (DftAt fn budget bb
+    (t with vs_inst_idx := SUC s.vs_inst_idx)) stack m` >> simp[]
+QED
+
+Theorem dft_open_block_error_segment[local]:
+  dft_open_next a ctx (DftOpen (DftAt fn budget bb s) stack n) =
+    DftOpen (DftDone (Error e)) [] n ==>
+  dft_open_block_segment a xs ctx fn budget bb s stack n (Error e')
+Proof
+  strip_tac >> simp[dft_open_block_segment_def] >>
+  qexistsl_tac [`Error e`, `n`, `1`, `DftOpen (DftDone (Error e)) [] n`] >>
+  simp[dft_open_materialize_result_def, dft_open_classified_exit_def,
+       dft_open_fatal_def, dft_first_hit_def,
+       dft_open_block_exit_def, dft_open_stack_exit_def]
+QED
+
+Theorem dft_open_materialize_idx[simp]:
+  (dft_open_materialize xs n s).vs_inst_idx = s.vs_inst_idx
+Proof
+  simp[dft_open_materialize_def]
+QED
+
+Theorem dft_open_block_forward_step[local]:
+  (!inst after. get_instruction bb u.vs_inst_idx = SOME inst /\
+    step_inst budget ctx inst u = OK after /\ ~is_terminator inst.inst_opcode ==>
+    dft_open_block_forward a xs budget ctx bb
+      (after with vs_inst_idx := SUC u.vs_inst_idx)) /\
+  (!inst. get_instruction bb u.vs_inst_idx = SOME inst ==>
+    dft_open_step_forward a xs budget ctx inst u) ==>
+  dft_open_block_forward a xs budget ctx bb u
+Proof
+  strip_tac >> simp[dft_open_block_forward_def] >> rpt strip_tac >> gvs[] >>
+  Cases_on `get_instruction bb s.vs_inst_idx`
+  >- (simp[Once exec_block_def] >>
+      irule dft_open_block_error_segment >> simp[dft_open_next_def]) >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  `dft_open_step_forward a xs budget ctx inst (dft_open_materialize xs n s)` by
+    (first_x_assum irule >> simp[]) >>
+  `dft_open_step_segment a xs ctx fn budget bb inst s stack n
+    (step_inst budget ctx inst (dft_open_materialize xs n s))` by
+    (gvs[dft_open_step_forward_def]) >>
+  Cases_on `?after. step_inst budget ctx inst (dft_open_materialize xs n s) = OK after`
+  >- (pop_assum strip_assume_tac >> gvs[] >>
+      Cases_on `is_terminator inst.inst_opcode`
+      >- (simp[Once exec_block_def] >>
+          irule dft_open_terminator_step_block >> simp[] >> metis_tac[]) >>
+      simp[Once exec_block_def] >>
+      irule dft_open_sequential_step_block >> simp[] >>
+      qexists_tac `inst` >> simp[]) >>
+  `exec_block budget ctx bb (dft_open_materialize xs n s) =
+    step_inst budget ctx inst (dft_open_materialize xs n s)` by
+    (simp[Once exec_block_def] >>
+     Cases_on `step_inst budget ctx inst (dft_open_materialize xs n s)` >> gvs[]) >>
+  simp[] >> irule dft_open_non_ok_step_block >> simp[] >> metis_tac[]
+QED
+
+Theorem dft_first_hit_prefix_step[local]:
+  N c = b /\ ~E c /\ dft_first_hit N B b k d /\
+  (!x. E x ==> B x) ==>
+  FUNPOW N (SUC k) c = d /\
+  (!j. j < SUC k ==> ~E (FUNPOW N j c))
+Proof
+  simp[dft_first_hit_def] >> strip_tac >> conj_tac
+  >- simp[FUNPOW] >> rpt strip_tac >> Cases_on `j` >- gvs[] >>
+  gvs[FUNPOW] >> metis_tac[]
+QED
+
+Theorem dft_open_block_run_prefix[local]:
+  dft_open_next a ctx (DftOpen (DftEnter fn fuel s) stack n) =
+    DftOpen (DftAt fn budget bb sp) stack n /\
+  dft_first_hit (dft_open_next a ctx) (dft_open_block_exit fn budget stack)
+    (DftOpen (DftAt fn budget bb sp) stack n) k d ==>
+  FUNPOW (dft_open_next a ctx) (SUC k)
+    (DftOpen (DftEnter fn fuel s) stack n) = d /\
+  (!j. j < SUC k ==> ~dft_open_stack_exit stack
+    (FUNPOW (dft_open_next a ctx) j (DftOpen (DftEnter fn fuel s) stack n)))
+Proof
+  strip_tac >> irule dft_first_hit_prefix_step >>
+  simp[dft_open_stack_exit_def] >>
+  qexists_tac `dft_open_block_exit fn budget stack` >>
+  simp[dft_open_block_exit_def, dft_open_stack_exit_def] >> metis_tac[]
+QED
+
+Theorem dft_open_non_ok_block_run[local]:
+  dft_open_next a ctx (DftOpen (DftEnter fn fuel s) stack n) =
+    DftOpen (DftAt fn budget bb sp) stack n /\
+  dft_open_block_segment a xs ctx fn budget bb sp stack n r /\
+  (!t. r <> OK t) ==>
+  dft_open_run_segment a xs ctx fn fuel s stack n r
+Proof
+  simp[dft_open_block_segment_def] >> strip_tac >>
+  `!t. rr <> OK t` by
+    (Cases_on `rr` >> Cases_on `r` >> gvs[dft_open_materialize_result_def]) >>
+  `dft_open_classified_exit stack rr d m` by (Cases_on `rr` >> gvs[]) >>
+  drule_all dft_open_block_run_prefix >> strip_tac >>
+  simp[dft_open_run_segment_def] >>
+  qexistsl_tac [`rr`, `m`, `SUC k`, `d`] >> simp[dft_first_hit_def] >>
+  gvs[dft_open_classified_exit_def, dft_open_stack_exit_def] >> metis_tac[]
+QED
+
+Theorem dft_open_ok_block_run[local]:
+  dft_open_next a ctx (DftOpen (DftEnter fn fuel s) stack n) =
+    DftOpen (DftAt fn budget bb sp) stack n /\
+  dft_open_block_segment a xs ctx fn budget bb sp stack n (OK after) /\
+  dft_open_run_forward a xs budget ctx fn after ==>
+  dft_open_run_segment a xs ctx fn fuel s stack n
+    (run_blocks budget ctx fn after)
+Proof
+  simp[dft_open_block_segment_def] >> strip_tac >>
+  Cases_on `rr` >> gvs[dft_open_materialize_result_def] >>
+  rename1 `DftOpen (DftEnter fn budget t) stack m` >>
+  drule_all dft_open_block_run_prefix >> strip_tac >>
+  qpat_x_assum `dft_open_run_forward _ _ _ _ _ _` mp_tac >>
+  simp[dft_open_run_forward_def] >>
+  disch_then (qspecl_then [`t`, `m`, `stack`] mp_tac) >>
+  simp[dft_open_run_segment_def] >> strip_tac >>
+  qexistsl_tac [`rr`, `m'`, `SUC k + k'`, `d`] >> simp[] >>
+  drule_all dft_first_hit_prefix >> simp[]
+QED
+
+Theorem dft_open_run_error_segment[local]:
+  dft_open_next a ctx (DftOpen (DftEnter fn fuel s) stack n) =
+    DftOpen (DftDone (Error e)) st n /\ (st = stack \/ st = []) ==>
+  dft_open_run_segment a xs ctx fn fuel s stack n (Error e')
+Proof
+  strip_tac >> simp[dft_open_run_segment_def] >>
+  qexistsl_tac [`Error e`, `n`, `1`, `DftOpen (DftDone (Error e)) st n`] >>
+  simp[dft_open_materialize_result_def, dft_open_classified_exit_def,
+       dft_open_fatal_def, dft_first_hit_def, dft_open_stack_exit_def]
+QED
+
+Theorem dft_open_materialize_fields[simp]:
+  (dft_open_materialize xs n s).vs_current_bb = s.vs_current_bb /\
+  (dft_open_materialize xs n s).vs_halted = s.vs_halted /\
+  (dft_open_materialize xs n s with vs_inst_idx := i) =
+    dft_open_materialize xs n (s with vs_inst_idx := i)
+Proof
+  simp[dft_open_materialize_def]
+QED
+
+Theorem dft_open_run_forward_step[local]:
+  (!budget bb sp after.
+    fuel = SUC budget /\ lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+    eval_phis u bb.bb_instructions = OK sp /\
+    exec_block budget ctx bb
+      (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions) = OK after /\
+    ~after.vs_halted ==> dft_open_run_forward a xs budget ctx fn after) /\
+  (!budget bb sp.
+    fuel = SUC budget /\ lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+    eval_phis u bb.bb_instructions = OK sp ==>
+    dft_open_block_forward a xs budget ctx bb
+      (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)) ==>
+  dft_open_run_forward a xs fuel ctx fn u
+Proof
+  strip_tac >> simp[dft_open_run_forward_def] >> rpt strip_tac >> gvs[] >>
+  Cases_on `fuel`
+  >- (simp[Once run_blocks_def] >> irule dft_open_run_error_segment >>
+      simp[dft_open_next_def]) >>
+  rename1 `SUC budget` >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+  >- (simp[Once run_blocks_def] >> irule dft_open_run_error_segment >>
+      simp[dft_open_next_def]) >>
+  rename1 `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` >>
+  reverse (qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs)
+  >- (mp_tac (Q.INST [`insts` |-> `bb.bb_instructions`] dft_open_phis_materialize) >>
+      simp[dft_open_materialize_result_def] >> strip_tac >>
+      simp[Once run_blocks_def] >> irule dft_open_run_error_segment >>
+      simp[dft_open_next_def]) >>
+  rename1 `eval_phis s bb.bb_instructions = OK sp` >>
+  `eval_phis (dft_open_materialize xs n s) bb.bb_instructions =
+    OK (dft_open_materialize xs n sp)` by
+    (mp_tac (Q.INST [`insts` |-> `bb.bb_instructions`] dft_open_phis_materialize) >>
+     simp[dft_open_materialize_result_def]) >>
+  `dft_open_block_forward a xs budget ctx bb
+    (dft_open_materialize xs n
+      (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions))` by
+    gvs[] >>
+  qpat_x_assum `dft_open_block_forward _ _ _ _ _ _` mp_tac >>
+  simp[dft_open_block_forward_def] >>
+  disch_then (qspecl_then [`sp with vs_inst_idx := phi_prefix_length bb.bb_instructions`,
+    `n`, `fn`, `stack`] mp_tac) >> simp[] >> strip_tac >>
+  `dft_open_next a ctx (DftOpen (DftEnter fn (SUC budget) s) stack n) =
+    DftOpen (DftAt fn budget bb
+      (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)) stack n` by
+      (irule dft_open_block_entry >> simp[]) >>
+  Cases_on `?after. exec_block budget ctx bb
+    (dft_open_materialize xs n
+      (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)) = OK after`
+  >- (pop_assum strip_assume_tac >>
+      `~after.vs_halted` by metis_tac[dft_exec_block_ok_not_halted] >>
+      gvs[] >> simp[Once run_blocks_def] >>
+      irule dft_open_ok_block_run >>
+      first_assum (irule_at (Pat `dft_open_block_segment _ _ _ _ _ _ _ _ _ _`)) >>
+      simp[]) >>
+  `run_blocks (SUC budget) ctx fn (dft_open_materialize xs n s) =
+    exec_block budget ctx bb (dft_open_materialize xs n
+      (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions))` by
+    (simp[Once run_blocks_def] >>
+     Cases_on `exec_block budget ctx bb (dft_open_materialize xs n
+       (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions))` >> gvs[]) >>
+  simp[] >> irule dft_open_non_ok_block_run >>
+  first_assum (irule_at (Pat `dft_open_block_segment _ _ _ _ _ _ _ _ _ _`)) >>
+  metis_tac[]
+QED
+
+Theorem dft_open_forward_segments:
+  dft_sparse_oracle a xs ==>
+  (!budget ctx inst u. dft_open_step_forward a xs budget ctx inst u) /\
+  (!budget ctx bb u. dft_open_block_forward a xs budget ctx bb u) /\
+  (!fuel ctx fn u. dft_open_run_forward a xs fuel ctx fn u)
+Proof
+  strip_tac >> ho_match_mp_tac run_defs_ind >> conj_tac
+  >- (rpt strip_tac >> irule dft_open_step_forward_invoke >> simp[]) >>
+  conj_tac >- (rpt strip_tac >> irule dft_open_block_forward_step >> simp[]) >>
+  rpt strip_tac >> irule dft_open_run_forward_step >> simp[]
+QED
+
+Theorem dft_open_step_forward_segment:
+  dft_sparse_oracle a xs /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  step_inst budget ctx inst (dft_open_materialize xs n s) = r ==>
+  dft_open_step_segment a xs ctx fn budget bb inst s stack n r
+Proof
+  strip_tac >>
+  drule (cj 1 dft_open_forward_segments) >>
+  simp[dft_open_step_forward_def] >> metis_tac[]
+QED
+
+Theorem dft_open_block_forward_segment:
+  dft_sparse_oracle a xs /\
+  exec_block budget ctx bb (dft_open_materialize xs n s) = r ==>
+  dft_open_block_segment a xs ctx fn budget bb s stack n r
+Proof
+  strip_tac >>
+  drule (cj 2 dft_open_forward_segments) >>
+  simp[dft_open_block_forward_def] >> metis_tac[]
+QED
+
+Theorem dft_open_run_forward_segment:
+  dft_sparse_oracle a xs /\
+  run_blocks fuel ctx fn (dft_open_materialize xs n s) = r ==>
+  dft_open_run_segment a xs ctx fn fuel s stack n r
+Proof
+  strip_tac >>
+  drule (cj 3 dft_open_forward_segments) >>
+  simp[dft_open_run_forward_def] >> metis_tac[]
+QED
