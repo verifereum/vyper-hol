@@ -22,7 +22,7 @@ Ancestors
   list rich_list arithmetic words byte vfmTypes vfmState valueEncodingProofs
   compileEnv valueEncoding accountsRelProps exprSimAttributeFields
   vyperStorageLayoutSafety vyperStorageFrame
-  vyperEncodeDecode vyperTyping vyperStorage vyperValue
+  vyperEncodeDecode vyperTyping vyperStorage vyperValue storageDecodeMemory
 
 (* ===== Memory and primitive encoding boundaries ===== *)
 

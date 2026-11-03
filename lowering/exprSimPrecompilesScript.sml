@@ -48,6 +48,7 @@
 
 Theory exprSimPrecompiles
 Ancestors
+  exprSimAlloc
   list fragExec loweringSlice exprSim exprSimHyps exprSimWordBuiltins
   exprSimLiteralBuffer abiDecodeStaticProps dftCommutation loweringHalt
   exprSimWordArgs exprSimOperators exprSimHash exprBopLowering exprLowering

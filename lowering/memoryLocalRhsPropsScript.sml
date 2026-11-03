@@ -365,7 +365,7 @@ Proof
     gvs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
         vyperTypeInvariantsTheory.env_context_consistent_def] >>
   gvs[value_runtime_typed_def] >>
-  metis_tac[exprSimAggregateLayoutTheory.expr_sim_inv_memory_size]
+  metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size]
 QED
 
 Theorem eval_empty_type_read:
@@ -540,7 +540,7 @@ Proof
      >- metis_tac[expr_body_pre_type_evaluates, optionTheory.IS_SOME_EXISTS] >>
      metis_tac[bytestring_memory_bound_evaluates]) >>
   qexists_tac `ltv` >> simp[] >>
-  metis_tac[exprSimAggregateLayoutTheory.expr_sim_inv_memory_size]
+  metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size]
 QED
 
 Theorem type_widens_to_has_length_word_source:
