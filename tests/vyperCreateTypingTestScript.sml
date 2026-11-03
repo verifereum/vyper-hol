@@ -14,7 +14,7 @@ val target = rhs (concl (EVAL
 fun check_create label accepted kind has_salt payload_ty args =
   List.app (fn in_deploy => let
     val expression = ``Call (BaseT AddressT)
-      (CreateTarget ^kind ^has_salt T) ^args NONE``
+      (CreateTarget ^kind ^has_salt T []) ^args NONE``
     val result = vyperCheckContractLib.check_contract_conv
       (vyperCheckContractLib.mk_check_contract
         {in_deploy = in_deploy, address = ``0w : address``,
