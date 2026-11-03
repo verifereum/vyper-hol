@@ -8,7 +8,7 @@ Ancestors
   fragExec freshWrites loweringSlice venomExecSemantics venomState
   words list integer_word valueCopyBytes abiDecoderString
 
-(* Exhaustive checker boundary; integers are admitted only for Bytes. *)
+(* Exhaustive checker boundary for dynamic bytestring results. *)
 Theorem valid_conversion_to_bytestring:
   !src dst.
     is_bytestring_type dst ==>
@@ -16,11 +16,7 @@ Theorem valid_conversion_to_bytestring:
       (?i n. src = BaseT (BytesT (Dynamic i)) /\
              (dst = BaseT (BytesT (Dynamic n)) \/ dst = BaseT (StringT n))) \/
       (?i n. src = BaseT (StringT i) /\
-             (dst = BaseT (BytesT (Dynamic n)) \/ dst = BaseT (StringT n))) \/
-      (?m n. src = BaseT (BytesT (Fixed m)) /\ m <= n /\
-             (dst = BaseT (BytesT (Dynamic n)) \/ dst = BaseT (StringT n))) \/
-      (?b n. (src = BaseT (IntT b) \/ src = BaseT (UintT b)) /\
-             dst = BaseT (BytesT (Dynamic n)) /\ 32 <= n))
+             (dst = BaseT (BytesT (Dynamic n)) \/ dst = BaseT (StringT n))))
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `dst` >> gvs[is_bytestring_type_def] >>
@@ -41,19 +37,9 @@ Theorem mk_convert_op_to_bytestring:
     mk_convert_op (BaseT (StringT i)) (BaseT (BytesT (Dynamic n))) =
       ConvBytestringCast n i /\
     mk_convert_op (BaseT (StringT i)) (BaseT (StringT n)) =
-      ConvBytestringCast n i) /\
-  (!m n.
-    mk_convert_op (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Dynamic n))) =
-      ConvFixedToBytestring m /\
-    mk_convert_op (BaseT (BytesT (Fixed m))) (BaseT (StringT n)) =
-      ConvFixedToBytestring m) /\
-  (!b n.
-    mk_convert_op (BaseT (IntT b)) (BaseT (BytesT (Dynamic n))) =
-      ConvFixedToBytestring 32 /\
-    mk_convert_op (BaseT (UintT b)) (BaseT (BytesT (Dynamic n))) =
-      ConvFixedToBytestring 32)
+      ConvBytestringCast n i)
 Proof
-  simp[mk_convert_op_def, is_bytestring_type_def, fixed_bytes_size_def]
+  simp[mk_convert_op_def, is_bytestring_type_def]
 QED
 
 (* These equations include the empty-payload and failed-capacity cases. *)
@@ -99,7 +85,7 @@ Theorem compile_convert_bytestring_shape:
       let (x, s1) = lower_value compile_expr cenv (expr_type e1) e1 sa in
       as_stack_val ann (compile_type_convert x (mk_convert_op (expr_type e1) t) s1)
 Proof
-  rpt strip_tac >>
+  rpt strip_tac >> drule is_bytestring_word_type >> strip_tac >>
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def] >>
   simp[Once (CONJUNCT2 (CONJUNCT2 compile_expr_raw_def)),
        compile_type_builtin_dispatch_body_def] >>
@@ -107,6 +93,22 @@ Proof
   simp[exprBopLoweringTheory.lower_value_child_call, vyperASTTheory.expr_size_def,
        listTheory.list_size_def, vyperASTTheory.expr_type_def] >>
   Cases_on `t` >> gvs[is_bytestring_type_def]
+QED
+
+Theorem lower_value_convert_bytestring[local]:
+  !cenv ty ann t e1 sa op sb.
+    lower_value compile_expr cenv ty (TypeBuiltin ann Convert t [e1]) sa =
+      (op,sb) /\ is_bytestring_type t ==>
+    ?x s1.
+      lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
+      compile_type_convert x (mk_convert_op (expr_type e1) t) s1 = (op,sb)
+Proof
+  rpt strip_tac >> drule is_bytestring_word_type >> strip_tac >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+  simp[Once lower_value_def, comp_bind_def] >>
+  simp[compile_convert_bytestring_shape] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[as_stack_val_pair, unwrap_value_def, comp_return_def]
 QED
 
 Theorem bytestring_type_cases[local]:
@@ -282,297 +284,6 @@ Proof
   irule (cj 1 convert_bytestring_footprint_small) >>
   simp[byteTheory.word_to_bytes_be_def, byteTheory.word_to_bytes_def,
        byteTheory.LENGTH_word_to_bytes_aux]
-QED
-
-Theorem convert_fixed_buffer_shape:
-  !x m sa op sb.
-    compile_type_convert x (ConvFixedToBytestring m) sa = (op,sb) ==>
-    ?buf s1 s2 data s3.
-      context$compile_alloc_buffer 64 sa = (buf,s1) /\
-      emit_void MSTORE [buf.buf_operand; Lit (n2w m)] s1 = ((),s2) /\
-      emit_op ADD [buf.buf_operand; Lit 32w] s2 = (data,s3) /\
-      emit_void MSTORE [data;x] s3 = ((),sb) /\ op = buf.buf_operand
-Proof
-  rpt gen_tac >>
-  simp[compile_type_convert_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
-  rpt (goal_assum $ drule_at Any) >> simp[]
-QED
-
-Theorem convert_fixed_store_insts:
-  !ptr x m i j k tmp s p w.
-    eval_operand ptr s = SOME p /\ eval_operand x s = SOME w /\
-    (!z. x = Var z ==> z <> tmp) ==>
-    run_inst_seq
-      [mk_inst i MSTORE [ptr; Lit (n2w m)] [];
-       mk_inst j ADD [ptr; Lit 32w] [tmp];
-       mk_inst k MSTORE [Var tmp; x] []] s =
-    OK (mstore (w2n (p + 32w)) w
-      (update_var tmp (p + 32w) (mstore (w2n p) (n2w m) s)))
-Proof
-  rpt strip_tac >> rename1 `mk_inst i MSTORE [pop; Lit (n2w m)] []` >>
-  qmatch_goalsub_abbrev_tac `OK (mstore _ _ (update_var _ _ s1))` >>
-  `eval_operand pop s1 = SOME p /\ eval_operand x s1 = SOME w` by
-    simp[Abbr `s1`, emitHelperPropsTheory.eval_operand_mstore] >>
-  `step_inst_base (mk_inst i MSTORE [pop; Lit (n2w m)] []) s = OK s1` by
-    (simp[Abbr `s1`] >> irule emitHelperPropsTheory.step_MSTORE >>
-     simp[eval_operand_def]) >>
-  `step_inst_base (mk_inst j ADD [pop; Lit 32w] [tmp]) s1 =
-     OK (update_var tmp (p + 32w) s1)` by
-    (irule emitHelperPropsTheory.step_ADD >> simp[eval_operand_def]) >>
-  `eval_operand x (update_var tmp (p + 32w) s1) = SOME w` by
-    (Cases_on `x` >> gvs[eval_operand_def,
-       emitHelperPropsTheory.lookup_var_update_var]) >>
-  `step_inst_base (mk_inst k MSTORE [Var tmp; x] [])
-     (update_var tmp (p + 32w) s1) =
-     OK (mstore (w2n (p + 32w)) w (update_var tmp (p + 32w) s1))` by
-    (irule emitHelperPropsTheory.step_MSTORE >>
-     simp[eval_operand_def, emitHelperPropsTheory.lookup_var_update_var]) >>
-  simp[exprLoweringPropsTheory.run_inst_seq_def]
-QED
-
-Theorem convert_fixed_store_memory:
-  !off m w tmp z s.
-    let t = mstore (off + 32) w
-      (update_var tmp z (mstore off (n2w m) s)) in
-    mem_word_at off t.vs_memory = n2w m /\
-    mem_word_at (off + 32) t.vs_memory = w /\
-    (!a len. a + len <= off \/ off + 64 <= a ==>
-      mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
-Proof
-  rpt gen_tac >> simp[LET_THM] >> conj_tac
-  >- simp[valueEncodingPropsTheory.mstore_mem_word_at_disjoint,
-          valueEncodingPropsTheory.mstore_mem_word_at_same, update_var_def] >>
-  conj_tac >- simp[valueEncodingPropsTheory.mstore_mem_word_at_same] >>
-  rpt strip_tac >>
-  `a + len <= off + 32 \/ off + 32 + 32 <= a` by decide_tac >>
-  simp[valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint, update_var_def]
-QED
-
-Theorem convert_fixed_store_run:
-  !pop x m sa s1 data s2 sb s p w.
-    emit_void MSTORE [pop; Lit (n2w m)] sa = ((),s1) /\
-    emit_op ADD [pop; Lit 32w] s1 = (data,s2) /\
-    emit_void MSTORE [data;x] s2 = ((),sb) /\
-    eval_operand pop s = SOME p /\ eval_operand x s = SOME w /\
-    (!z. x = Var z ==> not_fresh_at sa z) ==>
-    run_inst_seq (emitted_insts sa sb) s =
-    OK (mstore (w2n (p + 32w)) w
-      (update_var (STRING #"%" (toString sa.cs_next_var)) (p + 32w)
-        (mstore (w2n p) (n2w m) s)))
-Proof
-  rpt gen_tac >> strip_tac >>
-  gvs[emitHelperTheory.emit_void_def, emitHelperTheory.emit_op_def,
-      emitHelperTheory.emit_inst_def, comp_bind_def, comp_ignore_bind_def,
-      fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
-  simp[exprLoweringPropsTheory.emitted_insts_def] >>
-  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
-  simp[rich_listTheory.DROP_LENGTH_APPEND] >>
-  irule convert_fixed_store_insts >> simp[] >>
-  rpt strip_tac >> gvs[not_fresh_at_def]
-QED
-
-Theorem convert_fixed_store_extends:
-  !pop x m sa s1 data s2 sb.
-    emit_void MSTORE [pop; Lit (n2w m)] sa = ((),s1) /\
-    emit_op ADD [pop; Lit 32w] s1 = (data,s2) /\
-    emit_void MSTORE [data;x] s2 = ((),sb) ==>
-    cs_extends sa sb /\ sb.cs_next_var = sa.cs_next_var + 1 /\
-    sb.cs_next_id = sa.cs_next_id + 3 /\
-    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb
-Proof
-  rpt gen_tac >> strip_tac >>
-  gvs[emitHelperTheory.emit_void_def, emitHelperTheory.emit_op_def,
-      emitHelperTheory.emit_inst_def, comp_bind_def, comp_ignore_bind_def,
-      fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
-  simp[exprLoweringPropsTheory.emitted_insts_def,
-       rich_listTheory.DROP_LENGTH_APPEND] >>
-  irule cs_extends_same_block >> simp[rich_listTheory.IS_PREFIX_APPEND]
-QED
-
-Theorem convert_fixed_alloc_store_run:
-  !func cenv cx es sa sm buf m s1 data s2 sb x s w ctx.
-    context$compile_alloc_buffer 64 sa = (buf,sm) /\
-    emit_void MSTORE [buf.buf_operand; Lit (n2w m)] sm = ((),s1) /\
-    emit_op ADD [buf.buf_operand; Lit 32w] s1 = (data,s2) /\
-    emit_void MSTORE [data;x] s2 = ((),sb) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
-    eval_operand x s = SOME w /\
-    (!z. x = Var z ==> not_fresh_at sa z) ==>
-    ?q p.
-      run_inst_seq (emitted_insts sa sb) s =
-        OK (mstore (w2n p + 32) w
-          (update_var (STRING #"%" (toString sm.cs_next_var)) (p + 32w)
-            (mstore (w2n p) (n2w m) q))) /\
-      stmt_state_rel ctx func cenv cx es q /\
-      eval_operand buf.buf_operand q = SOME p /\
-      FLOOKUP q.vs_allocas sa.cs_next_id = SOME (w2n p,64) /\
-      w2n p + 64 < dimword (:256) /\ q.vs_memory = s.vs_memory /\
-      (!z. not_fresh_at sa z ==> lookup_var z q = lookup_var z s) /\
-      (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
-         FLOOKUP q.vs_allocas aid = SOME entry) /\
-      (!aid b len. aid < sa.cs_next_id /\
-         FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
-         regions_disjoint (w2n p) 64 b len) /\
-      (!name b len. local_region cenv es.scopes q name b len ==>
-         regions_disjoint (w2n p) 64 b len) /\
-      q.vs_labels = s.vs_labels /\ wb_frame cenv es sa s q
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all convert_fixed_store_extends >> strip_tac >>
-  drule loweringHaltTheory.compile_alloc_buffer_extends >> strip_tac >>
-  `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
-  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
-    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
-    (irule buffer_alloc_code >> goal_assum (drule_at Any) >> simp[]) >>
-  `64 < dimword (:256)` by simp[dimword_def] >>
-  drule_all alloc_buffer_frame_run >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts sa sm) s = OK q` >>
-  `eval_operand x q = SOME w` by
-    (Cases_on `x` >> gvs[eval_operand_def]) >>
-  drule loweringHaltTheory.compile_alloc_buffer_parts >> strip_tac >>
-  `!z. x = Var z ==> not_fresh_at sm z` by metis_tac[] >>
-  drule_all convert_fixed_store_run >> strip_tac >>
-  `w2n (w' + 32w) = w2n w' + 32` by
-    (irule buffer_offset_no_wrap >> qexists `64` >> simp[]) >>
-  drule loweringHaltTheory.compile_alloc_buffer_insts >> strip_tac >>
-  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
-    (irule exprLoweringPropsTheory.emitted_insts_append >> simp[] >>
-     simp[exprLoweringPropsTheory.emitted_insts_def,
-          rich_listTheory.DROP_LENGTH_APPEND]) >>
-  qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK q`
-    (mp_then Any mp_tac exprLoweringPropsTheory.run_inst_seq_append) >>
-  disch_then (qspec_then `emitted_insts sm sb` assume_tac) >>
-  qexistsl [`q`, `w'`] >> gvs[] >> metis_tac[]
-QED
-
-Theorem convert_fixed_store_state_rel:
-  !func cenv cx es q off m w tmp z inst ctx.
-    stmt_state_rel ctx func cenv cx es q /\
-    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-    FLOOKUP q.vs_allocas inst.inst_id = SOME (off,64) /\
-    not_local_ptr cenv es.scopes tmp /\
-    (!name b len. local_region cenv es.scopes q name b len ==>
-       regions_disjoint off 64 b len) ==>
-    stmt_state_rel ctx func cenv cx es
-      (mstore (off + 32) w (update_var tmp z (mstore off (n2w m) q)))
-Proof
-  rpt gen_tac >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es (mstore off (n2w m) q)` by
-    (irule literal_mstore_state_rel >>
-     simp[] >> qexistsl [`off`, `inst`, `64`] >> simp[] >>
-     gvs[regions_disjoint_def]) >>
-  `stmt_state_rel ctx func cenv cx es
-     (update_var tmp z (mstore off (n2w m) q))` by
-    (irule exprLoweringPropsTheory.stmt_state_rel_update_var >> simp[]) >>
-  irule literal_mstore_state_rel >> simp[] >> qexistsl [`off`, `inst`, `64`] >>
-  simp[mstore_def, update_var_def] >> rpt strip_tac >>
-  `local_region cenv es.scopes q name lb lsz` by
-    (gvs[local_region_def, not_local_ptr_def,
-         emitHelperPropsTheory.lookup_var_update_var,
-         emitHelperPropsTheory.lookup_var_mstore, lookup_var_def,
-         finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
-  metis_tac[regions_disjoint_def]
-QED
-
-Theorem convert_fixed_store_wb_frame:
-  !cenv es sa s q off m w tmp z.
-    wb_frame cenv es sa s q /\ local_ptrs_reserved cenv sa /\
-    ~not_fresh_at sa tmp /\
-    (!aid b len. aid < sa.cs_next_id /\
-       FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
-       regions_disjoint off 64 b len) /\
-    (!name b len. local_region cenv es.scopes q name b len ==>
-       regions_disjoint off 64 b len) ==>
-    wb_frame cenv es sa s
-      (mstore (off + 32) w (update_var tmp z (mstore off (n2w m) q)))
-Proof
-  rpt gen_tac >> strip_tac >>
-  qmatch_goalsub_abbrev_tac `wb_frame _ _ _ _ t` >>
-  `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x q` by
-    (rpt strip_tac >> Cases_on `x = tmp` >>
-     gvs[Abbr `t`, emitHelperPropsTheory.lookup_var_mstore,
-         emitHelperPropsTheory.lookup_var_update_var]) >>
-  `!a len. a + len <= off \/ off + 64 <= a ==>
-     mem_bytes_at a len t.vs_memory = mem_bytes_at a len q.vs_memory` by
-    (qspecl_then [`off`, `m`, `w`, `tmp`, `z`, `q`] mp_tac
-       convert_fixed_store_memory >> simp[LET_THM, Abbr `t`] >>
-     strip_tac >> simp[]) >>
-  `locals_kept cenv es s t` by
-    (irule locals_kept_regions_tail >> qexists `q` >>
-     reverse conj_tac >- gvs[exprSimWordArgsTheory.wb_frame_def] >>
-     rpt strip_tac >>
-     `local_region cenv es.scopes q n b sz` by
-       (irule exprSimOpsTheory.local_region_frame_fwd >>
-        qexistsl [`s`, `sa`, `es.scopes`] >>
-        gvs[exprSimWordArgsTheory.wb_frame_def] >> metis_tac[]) >>
-     gvs[regions_disjoint_def] >> metis_tac[]) >>
-  gvs[exprSimWordArgsTheory.wb_frame_def] >> conj_tac
-  >- simp[Abbr `t`, mstore_def, update_var_def]
-  >> rpt strip_tac >>
-  `regions_disjoint off 64 off' sz` by metis_tac[] >>
-  gvs[regions_disjoint_def] >> metis_tac[]
-QED
-
-Theorem convert_fixed_buffer_run:
-  !func cenv cx es sa sb op x m s w ctx.
-    compile_type_convert x (ConvFixedToBytestring m) sa = (op,sb) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
-    eval_operand x s = SOME w /\
-    (!z. x = Var z ==> not_fresh_at sa z) ==>
-    ?t p.
-      run_inst_seq (emitted_insts sa sb) s = OK t /\
-      stmt_state_rel ctx func cenv cx es t /\
-      eval_operand op t = SOME p /\
-      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n p,64) /\
-      sa.cs_next_id < sb.cs_next_id /\
-      w2n p + 64 < dimword (:256) /\
-      mem_word_at (w2n p) t.vs_memory = n2w m /\
-      mem_word_at (w2n p + 32) t.vs_memory = w /\
-      wb_frame cenv es sa s t /\
-      (!a len. a + len <= w2n p \/ w2n p + 64 <= a ==>
-         mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule convert_fixed_buffer_shape >> strip_tac >> gvs[] >>
-  drule_all convert_fixed_alloc_store_run >> strip_tac >>
-  rename1 `FLOOKUP q.vs_allocas sa.cs_next_id = SOME (w2n p,64)` >>
-  drule loweringHaltTheory.compile_alloc_buffer_parts >> strip_tac >>
-  drule_all convert_fixed_store_extends >> strip_tac >>
-  drule loweringHaltTheory.compile_alloc_buffer_extends >> strip_tac >>
-  `fn_has_code sa s1 func` by metis_tac[fn_has_code_split] >>
-  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
-    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
-    (irule buffer_alloc_code >> goal_assum (drule_at Any) >> simp[]) >>
-  `not_local_ptr cenv es.scopes (STRING #"%" (toString s1.cs_next_var))` by
-    (irule exprLoweringPropsTheory.local_ptrs_reserved_fresh >>
-     qexists `sa` >> simp[]) >>
-  `~not_fresh_at sa (STRING #"%" (toString s1.cs_next_var))` by
-    gvs[not_fresh_at_def] >>
-  qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts sa sb) s = OK t` >>
-  `stmt_state_rel ctx func cenv cx es t` by
-    (simp[Abbr `t`] >> irule convert_fixed_store_state_rel >> simp[] >>
-     conj_tac >- metis_tac[] >> reverse conj_tac >- gvs[] >>
-     qexists `mk_inst sa.cs_next_id ALLOCA [Lit 64w]
-       [STRING #"%" (toString sa.cs_next_var)]` >>
-     simp[venomInstTheory.mk_inst_def]) >>
-  `wb_frame cenv es sa s t` by
-    (simp[Abbr `t`] >> irule convert_fixed_store_wb_frame >>
-     gvs[] >> metis_tac[]) >>
-  qexistsl [`t`, `p`] >> simp[] >>
-  `STRING #"%" (toString sa.cs_next_var) <>
-   STRING #"%" (toString s1.cs_next_var)` by
-    (strip_tac >> gvs[not_fresh_at_def]) >>
-  conj_tac
-  >- gvs[Abbr `t`, emitHelperPropsTheory.eval_operand_mstore,
-         eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >>
-  conj_tac >- simp[Abbr `t`, mstore_def, update_var_def] >>
-  qspecl_then [`w2n p`, `m`, `w`, `STRING #"%" (toString s1.cs_next_var)`,
-                `p + 32w`, `q`] mp_tac convert_fixed_store_memory >>
-  simp[LET_THM, Abbr `t`] >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
 Theorem convert_bytes_capacity:
@@ -1074,38 +785,6 @@ Proof
   drule_all convert_cast_abort_run >> simp[]
 QED
 
-Theorem convert_word_bytestring_payload:
-  !cx src dst tv1 tv2 v m off mem.
-    valid_conversion src dst /\ is_word_type src /\ is_bytestring_type dst /\
-    evaluate_type (get_tenv cx) src = SOME tv1 /\
-    evaluate_type (get_tenv cx) dst = SOME tv2 /\ value_has_type tv1 v /\
-    mk_convert_op src dst = ConvFixedToBytestring m /\
-    mem_word_at off mem = n2w m /\
-    mem_word_at (off + 32) mem = typed_val_to_w256 tv1 v ==>
-    ?v'. convert_result cx src dst v = INL v' /\
-      value_has_type tv2 v' /\ val_in_memory tv2 v' off mem /\
-      val_footprint tv2 v' <= 64
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule valid_conversion_to_bytestring >> strip_tac >>
-  gvs[is_word_type_def, evaluate_type_def, mk_convert_op_to_bytestring] >>
-  Cases_on `v` >>
-  gvs[vyperTypingTheory.value_has_type_def, typed_val_to_w256_def,
-      convert_result_bytes_to_bytestring, convert_result_int_to_bytestring,
-      AllCaseEqs()]
-  >- (conj_tac
-      >- (irule (cj 1 convert_fixed_bytes_memory) >>
-          simp[typed_val_to_w256_def]) >>
-      irule (cj 1 convert_bytestring_footprint_small) >> simp[])
-  >- (conj_tac
-      >- (irule (cj 2 convert_fixed_bytes_memory) >>
-          simp[typed_val_to_w256_def]) >>
-      irule (cj 2 convert_bytestring_footprint_small) >> simp[]) >>
-  fs[val_to_w256_def] >> drule_all convert_integer_bytes_memory >>
-  simp[byteTheory.word_to_bytes_be_def, byteTheory.word_to_bytes_def,
-       byteTheory.LENGTH_word_to_bytes_aux]
-QED
-
 Theorem convert_wb_frame_trans:
   !ctx func cenv cx es es1 sa sm s0 s1 s2.
     wb_frame cenv es sa s0 s1 /\ wb_frame cenv es1 sm s1 s2 /\
@@ -1139,92 +818,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem convert_fixed_buffer_local_sep:
-  !x m sa op sb func cenv cx es tt p ctx.
-    compile_type_convert x (ConvFixedToBytestring m) sa = (op,sb) /\
-    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es tt /\
-    FLOOKUP tt.vs_allocas sa.cs_next_id = SOME (w2n p,64) ==>
-    !name lb lsz. local_region cenv es.scopes tt name lb lsz ==>
-      w2n p + 64 <= lb \/ lb + lsz <= w2n p
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule convert_fixed_buffer_shape >> strip_tac >>
-  drule_all convert_fixed_store_extends >> strip_tac >>
-  drule loweringHaltTheory.compile_alloc_buffer_extends >> strip_tac >>
-  `fn_has_code sa s1 func` by metis_tac[fn_has_code_split] >>
-  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
-    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
-    (irule buffer_alloc_code >> goal_assum (drule_at Any) >> simp[]) >>
-  rpt strip_tac >>
-  irule (REWRITE_RULE [regions_disjoint_def]
-    localPtrsPropsTheory.local_ptrs_rel_alloca_disjoint) >>
-  goal_assum (drule_at Any) >>
-  qexistsl_tac [`func`,
-    `mk_inst sa.cs_next_id ALLOCA [Lit 64w]
-      [STRING #"%" (toString sa.cs_next_var)]`,
-    `STRING #"%" (toString sa.cs_next_var)`] >>
-  gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
-      venomInstTheory.mk_inst_def] >>
-  irule exprLoweringPropsTheory.local_ptrs_reserved_fresh >>
-  qexists_tac `sa` >> simp[not_fresh_at_def]
-QED
-
-Theorem convert_fixed_run_frag:
-  !x m sa op sb ctx P Q R.
-    compile_type_convert x (ConvFixedToBytestring m) sa = (op,sb) /\
-    (!s. P s ==> ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      Q (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
-    frag_exec ctx sa sb P Q R
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule convert_fixed_buffer_shape >> strip_tac >>
-  irule fragExecTheory.frag_exec_run_inst_seq >>
-  gvs[contextTheory.compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
-      emitHelperTheory.emit_void_def, comp_bind_def, comp_ignore_bind_def,
-      comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
-  simp[exprLoweringPropsTheory.emitted_insts_def,
-       exprLoweringPropsTheory.same_blocks_def] >>
-  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
-  simp[rich_listTheory.DROP_LENGTH_APPEND, rich_listTheory.IS_PREFIX_APPEND,
-       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
-QED
-
-Theorem convert_fixed_frag:
-  !ctx func cenv cx es sa sb x op m w s0 R.
-    compile_type_convert x (ConvFixedToBytestring m) sa = (op,sb) /\
-    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\
-    (!z. x = Var z ==> not_fresh_at sa z) ==>
-    frag_exec ctx sa sb
-      (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\
-        eval_operand x ss = SOME w)
-      (\tt. ?p. stmt_state_rel ctx func cenv cx es tt /\
-        eval_operand op tt = SOME p /\
-        FLOOKUP tt.vs_allocas sa.cs_next_id = SOME (w2n p,64) /\
-        sa.cs_next_id < sb.cs_next_id /\ w2n p + 64 < dimword (:256) /\
-        mem_word_at (w2n p) tt.vs_memory = n2w m /\
-        mem_word_at (w2n p + 32) tt.vs_memory = w /\
-        (!name lb lsz. local_region cenv es.scopes tt name lb lsz ==>
-          w2n p + 64 <= lb \/ lb + lsz <= w2n p) /\
-        wb_frame cenv es sa s0 tt) R
-Proof
-  rpt gen_tac >> strip_tac >>
-  irule convert_fixed_run_frag >> reverse conj_tac
-  >- (goal_assum (drule_at Any)) >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  drule_all convert_fixed_buffer_run >> strip_tac >>
-  `!name lb lsz. local_region cenv es.scopes t name lb lsz ==>
-     w2n p + 64 <= lb \/ lb + lsz <= w2n p` by
-    (rpt strip_tac >> irule convert_fixed_buffer_local_sep >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  goal_assum (drule_at Any) >> qexists_tac `p` >>
-  fs[exprLoweringPropsTheory.stmt_state_rel_inst_idx,
-     eval_operand_def, lookup_var_def, local_region_def,
-     exprSimWordArgsTheory.wb_frame_def, locals_kept_def] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
 Theorem convert_buffer_expr_post:
   !ctx func cenv cx e es es' sa sb s0 tt v tv op p sz.
     ~is_word_type (expr_type e) /\
@@ -1244,38 +837,6 @@ Proof
   reverse conj_tac >- metis_tac[] >>
   disj1_tac >> qexistsl_tac [`sa.cs_next_id`, `w2n p`, `sz`] >>
   simp[] >> metis_tac[]
-QED
-
-Theorem convert_word_frag:
-  !ctx func cenv cx es e src tv1 tv2 v sa sb x op m s0 R.
-    valid_conversion src (expr_type e) /\ is_word_type src /\
-    is_bytestring_type (expr_type e) /\
-    evaluate_type (get_tenv cx) src = SOME tv1 /\
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tv2 /\
-    value_has_type tv1 v /\
-    mk_convert_op src (expr_type e) = ConvFixedToBytestring m /\
-    compile_type_convert x (ConvFixedToBytestring m) sa = (op,sb) /\
-    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\
-    (!z. x = Var z ==> not_fresh_at sa z) ==>
-    frag_exec ctx sa sb
-      (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\
-        eval_operand x ss = SOME (typed_val_to_w256 tv1 v))
-      (\tt. ?v'. convert_result cx src (expr_type e) v = INL v' /\
-        expr_post ctx func cenv cx e es sa sb s0 es v' op tt) R
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all convert_fixed_frag >>
-  disch_then (qspecl_then [`ctx`, `cx`, `es`]
-    (qspecl_then [`typed_val_to_w256 tv1 v`, `s0`, `R`] mp_tac)) >>
-  disch_then (mp_then Any irule frag_exec_weaken) >>
-  simp[] >> rpt gen_tac >> strip_tac >>
-  drule_all convert_word_bytestring_payload >> strip_tac >>
-  goal_assum (drule_at Any) >>
-  irule convert_buffer_expr_post >>
-  simp[is_bytestring_word_type] >>
-  conj_tac >- (first_assum ACCEPT_TAC) >>
-  irule valueTypingMemoryPropsTheory.value_has_type_memory_wf >> simp[]
 QED
 
 Theorem convert_expr_post_compose:
@@ -1394,20 +955,6 @@ Proof
       emitHelperTheory.emit_inst_def, fresh_id_def, fresh_var_def, emit_def]
 QED
 
-Theorem convert_fixed_grows[local]:
-  !x m sa op sb.
-    compile_type_convert x (ConvFixedToBytestring m) sa = (op,sb) ==>
-    cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
-    sa.cs_next_id <= sb.cs_next_id
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule convert_fixed_buffer_shape >> strip_tac >>
-  drule_all convert_fixed_store_extends >> strip_tac >>
-  drule loweringHaltTheory.compile_alloc_buffer_extends >> strip_tac >>
-  drule loweringHaltTheory.compile_alloc_buffer_parts >> strip_tac >>
-  simp[] >> metis_tac[cs_extends_trans]
-QED
-
 Theorem convert_bytestring_suffix_grows:
   !src dst x sa op sb.
     valid_conversion src dst /\ is_bytestring_type dst /\
@@ -1418,7 +965,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule valid_conversion_to_bytestring >> strip_tac >>
   gvs[mk_convert_op_to_bytestring] >>
-  metis_tac[convert_cast_grows, convert_fixed_grows]
+  metis_tac[convert_cast_grows]
 QED
 
 Theorem convert_operand_typed[local]:
@@ -1512,37 +1059,6 @@ Proof
   qexistsl_tac [`s`, `sm`, `x`] >> simp[]
 QED
 
-Theorem convert_word_cont[local]:
-  !ctx func cenv cx e e1 es es1 sa sm sb s0 s v x op tv1 tv2 m.
-    valid_conversion (expr_type e1) (expr_type e) /\
-    is_word_type (expr_type e1) /\ is_bytestring_type (expr_type e) /\
-    evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tv2 /\
-    value_has_type tv1 v /\
-    expr_post ctx func cenv cx e1 es sa sm s0 es1 v x s /\
-    mk_convert_op (expr_type e1) (expr_type e) = ConvFixedToBytestring m /\
-    compile_type_convert x (ConvFixedToBytestring m) sm = (op,sb) /\
-    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
-    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-    sa.cs_next_id <= sm.cs_next_id /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-    (!z. x = Var z ==> not_fresh_at sm z) ==>
-    frag_exec ctx sm sb (\ss. ss = s)
-      (\tt. ?v'. convert_result cx (expr_type e1) (expr_type e) v = INL v' /\
-        expr_post ctx func cenv cx e es sa sb s0 es1 v' op tt)
-      (expr_exit (convert_result cx (expr_type e1) (expr_type e) v))
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all convert_word_frag >>
-  disch_then (qspecl_then [`ctx`, `es1`, `s`, `expr_exit (convert_result cx (expr_type e1) (expr_type e) v)`] mp_tac) >>
-  disch_then (mp_then Any irule frag_exec_weaken) >>
-  simp[] >> conj_tac
-  >- (gvs[expr_post_def, expr_val_rel_def]) >>
-  rpt gen_tac >> strip_tac >> goal_assum (drule_at Any) >>
-  irule convert_expr_post_compose >> goal_assum (drule_at Any) >> simp[] >>
-  qexistsl_tac [`e1`, `s`, `sm`, `v`, `x`] >> simp[]
-QED
-
 Theorem convert_bytestring_cont[local]:
   !ctx func cenv cx e e1 es es1 sa sm sb s0 s v x op tv1 tv2.
     valid_conversion (expr_type e1) (expr_type e) /\
@@ -1563,24 +1079,13 @@ Theorem convert_bytestring_cont[local]:
       (expr_exit (convert_result cx (expr_type e1) (expr_type e) v))
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `is_bytestring_type (expr_type e1)`
-  >- (qpat_x_assum `valid_conversion _ _` mp_tac >>
-      simp[valid_conversion_to_bytestring] >> strip_tac >>
-      gvs[is_bytestring_type_def, mk_convert_op_to_bytestring] >>
-      qpat_assum `expr_type e1 = _` (fn th => pure_rewrite_tac [GSYM th]) >>
-      qpat_assum `expr_type e = _` (fn th => pure_rewrite_tac [GSYM th]) >>
-      irule convert_dynamic_cont >> goal_assum (drule_at Any) >>
-      simp[] >> qexists_tac `x` >> simp[]) >>
   qpat_x_assum `valid_conversion _ _` mp_tac >>
   simp[valid_conversion_to_bytestring] >> strip_tac >>
   gvs[is_bytestring_type_def, mk_convert_op_to_bytestring] >>
   qpat_assum `expr_type e1 = _` (fn th => pure_rewrite_tac [GSYM th]) >>
   qpat_assum `expr_type e = _` (fn th => pure_rewrite_tac [GSYM th]) >>
-  irule convert_word_cont >> goal_assum (drule_at Any) >>
-  simp[is_word_type_def, is_bytestring_type_def, mk_convert_op_to_bytestring,
-       valid_conversion_def] >>
-  gvs[evaluate_type_def, AllCaseEqs()] >>
-  qexists_tac `x` >> simp[]
+  irule convert_dynamic_cont >> goal_assum (drule_at Any) >>
+  simp[] >> qexists_tac `x` >> simp[]
 QED
 
 Theorem convert_operand_run[local]:
@@ -1613,7 +1118,7 @@ Proof
       qexistsl_tac [`\s. F`, `\s. F`, `\r. F`] >>
       simp[frag_exec_false_pre]) >>
   `!n. t <> FlagT n` by (Cases_on `t` >> gvs[is_bytestring_type_def]) >>
-  drule_all lower_value_convert >> strip_tac >>
+  drule_all lower_value_convert_bytestring >> strip_tac >>
   drule (cj 2 exprLoweringPropsTheory.compile_expr_grows) >> strip_tac >>
   drule_all convert_bytestring_suffix_grows >> strip_tac >>
   `fn_has_code sa s1 func /\ fn_has_code s1 sb func` by
