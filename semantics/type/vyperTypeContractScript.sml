@@ -884,8 +884,9 @@ Definition check_toplevel_decl_def:
     | EventDecl id fields =>
         EVERY (\((_,ty),indexed). assignable_type tenv ty) fields
     | ErrorDecl id args => params_ok tenv args
-    | FunctionDecl vis mut nr _ _ args dflts ret body =>
+    | FunctionDecl vis mut nr rr _ args dflts ret body =>
         params_ok tenv args /\ well_formed_type tenv ret /\
+        (rr ==> vis = External /\ (?n. ret = BaseT (BytesT (Dynamic n)))) /\
         (* Vyper: "Constructor may not use default arguments" *)
         (vis = Deploy ==> dflts = []) /\
         function_mutability_ok mods vis mut nr dflts body
