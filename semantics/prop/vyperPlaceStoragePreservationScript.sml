@@ -164,12 +164,41 @@ Theorem pop_memory_place_storage:
   pop_place cx (MemoryPlace id path) st = (res,st') ==>
   !tr. get_storage cx st' tr = get_storage cx st tr
 Proof
-  simp[pop_place_def, bind_def, get_scopes_def, lift_option_type_def,
-       type_check_def, assert_def, lift_sum_def, set_scopes_def,
-       return_def, raise_def, ignore_bind_def, check_def, pairTheory.UNCURRY] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, ignore_bind_def, type_check_def, assert_def,
-           lift_sum_def, set_scopes_def, return_def, raise_def]) >>
+  simp_tac bool_ss [pop_place_def, bind_def, get_scopes_def, return_def] >>
+  Cases_on `find_containing_scope id st.scopes`
+  >- simp[lift_option_type_def, raise_def, bind_def] >>
+  rename1 `find_containing_scope id st.scopes = SOME found` >>
+  PairCases_on `found` >>
+  rename1 `find_containing_scope id st.scopes = SOME (pre,env,entry,rest)` >>
+  asm_simp_tac std_ss [lift_option_type_def, return_def, bind_def,
+    pairTheory.UNCURRY, ignore_bind_def, type_check_def, assert_def] >>
+  reverse (Cases_on `entry.assignable`)
+  >- (simp[return_def, raise_def] >> strip_tac >> gvs[]) >>
+  simp[return_def] >>
+  Cases_on `read_memory_path entry path`
+  >~ [`read_memory_path entry path = INR err`] >-
+    (simp[lift_sum_def, raise_def] >> strip_tac >> gvs[]) >>
+  rename1 `read_memory_path entry path = INL arr` >>
+  simp[lift_sum_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `case test of NONE => raise err | SOME v => return v` >>
+  Cases_on `test`
+  >- (simp[raise_def] >> strip_tac >> gvs[]) >>
+  simp[return_def] >>
+  rename1 `check (vs <> []) _ st` >>
+  reverse (Cases_on `vs <> []`)
+  >- (simp[check_def, assert_def] >> strip_tac >> gvs[]) >>
+  simp[check_def, assert_def] >>
+  Cases_on `popped_value arr`
+  >~ [`popped_value arr = INR err`] >-
+    (simp[lift_sum_def, raise_def] >> strip_tac >> gvs[]) >>
+  simp[lift_sum_def, return_def] >>
+  Cases_on `pop_element arr`
+  >~ [`pop_element arr = INR err`] >-
+    (simp[lift_sum_def, raise_def] >> strip_tac >> gvs[]) >>
+  simp[lift_sum_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `case update of INL v => return v | INR e => raise (Error e)` >>
+  Cases_on `update` >>
+  simp[lift_sum_def, return_def, raise_def, bind_def, set_scopes_def] >>
   rpt strip_tac >> gvs[get_storage_scopes]
 QED
 
