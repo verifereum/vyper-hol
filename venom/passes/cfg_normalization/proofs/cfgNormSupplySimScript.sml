@@ -1436,7 +1436,14 @@ Theorem supply_old_inst_index_unique:
   EL i bb.bb_instructions = EL j bb.bb_instructions ==> i = j
 Proof
   strip_tac >>
-  drule_all cfgNormBaseTheory.wf_function_block_inst_ids_distinct >>
+  `ALL_DISTINCT (MAP (\inst. inst.inst_id) bb.bb_instructions)` by
+    (qpat_x_assum `wf_function fn` mp_tac >>
+     simp[wf_function_def, fn_inst_ids_distinct_def] >> strip_tac >>
+     qpat_x_assum `ALL_DISTINCT (FLAT _)` mp_tac >>
+     qpat_x_assum `MEM bb _` mp_tac >>
+     qspec_tac (`fn.fn_blocks`, `bbs`) >>
+     Induct >> simp[] >> rpt strip_tac >>
+     gvs[listTheory.ALL_DISTINCT_APPEND]) >>
   metis_tac[listTheory.ALL_DISTINCT_EL_IMP, listTheory.EL_MAP, listTheory.LENGTH_MAP]
 QED
 
@@ -2729,7 +2736,7 @@ Proof
   simp[supply_step_nonterm_prev_bb] >>
   Cases_on `step_inst fuel ctx inst st` >>
   Cases_on `step_inst fuel ctx inst st'` >>
-  simp[exec_result_map_prev_bb_def, lift_result_def,
+  simp[exec_result_map_prev_bb_def, stateEquivTheory.lift_result_def,
        stateEquivTheory.state_equiv_def,
        GSYM supply_state_agree_execution_equiv, supply_state_agree_prev_bb]
 QED
