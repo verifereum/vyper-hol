@@ -2,7 +2,7 @@
 Theory bodyLoopContractProbe
 Ancestors
   supportedStmts supportedTargets vyperTypeSystem vyperInterpreter
-  stmtLowering finite_map venomExecSemantics fragExec
+  stmtLowering finite_map venomExecSemantics fragExec exprSimHyps
 
 Definition loop_probe_body_def:
   loop_probe_body =
@@ -128,3 +128,97 @@ val () = List.app (fn th =>
      else raise Fail "body loop probe inherited admission"
   end) [loop_probe_supported, loop_probe_typed, loop_probe_source_result,
         loop_probe_compiled_result];
+
+(* The first execution probe uses immediate memory locations; the actual
+   body contract requires pointer-valued locals. This rejection is specific
+   to that initial layout, not to the mutating source program. *)
+Theorem loop_probe_immediate_layout_rejected:
+  ~expr_sim_inv loop_probe_cenv cx loop_probe_env es
+Proof
+  strip_tac >>
+  fs[expr_sim_inv_def] >>
+  qpat_x_assum `!id ty. FLOOKUP loop_probe_env.var_types id = SOME ty ==> ?p sz. _`
+    (qspec_then `"xs"` mp_tac) >>
+  simp[loop_probe_env_def, loop_probe_cenv_def, FUPDATE_LIST, FLOOKUP_UPDATE]
+QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag loop_probe_immediate_layout_rejected)
+  in if null axioms andalso null (Thm.hyp loop_probe_immediate_layout_rejected) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_LOOP_LAYOUT_KERNEL_AUDIT OK\n"
+     else raise Fail "body loop layout probe inherited admission"
+  end;
+
+Definition loop_probe_ptr_cenv_def:
+  loop_probe_ptr_cenv = loop_probe_cenv with ce_vars :=
+    FEMPTY |++ [("xs", PtrVar (Var "%0") 64);
+                ("out", PtrVar (Var "%1") 32)]
+End
+
+Definition loop_probe_ptr_cs_def:
+  loop_probe_ptr_cs = loop_probe_cs with cs_next_var := 2
+End
+
+Definition loop_probe_ptr_compiled_def:
+  loop_probe_ptr_compiled = SND
+    (compile_stmt loop_probe_ptr_cenv NoLoop NoneT loop_probe_stmt loop_probe_ptr_cs)
+End
+
+Definition loop_probe_ptr_func_def:
+  loop_probe_ptr_func = mk_raw_function "probe_ptr"
+    (loop_probe_ptr_compiled.cs_blocks ++
+     [<| bb_label := loop_probe_ptr_compiled.cs_current_bb;
+         bb_instructions := loop_probe_ptr_compiled.cs_current_insts ++
+           [mk_inst 100 STOP [] []] |>])
+End
+
+Definition loop_probe_ptr_vs_def:
+  loop_probe_ptr_vs = (loop_probe_vs with vs_vars :=
+    FEMPTY |++ [("%0", 0w); ("%1", 64w)])
+End
+
+Theorem loop_probe_ptr_compiled_result:
+  ?s. run_from 30 ctx loop_probe_ptr_func loop_probe_ptr_vs = Halt s /\
+      mload 64 s = 2w
+Proof
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_blocks``]) >> simp[] >>
+  once_rewrite_tac[run_blocks_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_blocks``]) >> simp[] >>
+  once_rewrite_tac[run_blocks_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_blocks``]) >> simp[] >>
+  once_rewrite_tac[run_blocks_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_blocks``]) >> simp[] >>
+  once_rewrite_tac[run_blocks_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_blocks``]) >> simp[] >>
+  once_rewrite_tac[run_blocks_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_blocks``]) >> simp[] >>
+  once_rewrite_tac[run_blocks_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_blocks``]) >> simp[] >>
+  once_rewrite_tac[run_blocks_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_blocks``]) >> simp[] >>
+  once_rewrite_tac[run_blocks_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_blocks``]) >> simp[] >>
+  once_rewrite_tac[run_blocks_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_blocks``]) >> simp[] >>
+  EVAL_TAC
+QED
+
+Theorem loop_probe_ptr_locals_interface:
+  (!id ty. FLOOKUP loop_probe_env.var_types id = SOME ty ==>
+     ?p sz. FLOOKUP loop_probe_ptr_cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+  (!id ty. FLOOKUP loop_probe_env.var_types id = SOME ty ==>
+     loop_probe_ptr_cenv.ce_var_type id = SOME ty)
+Proof
+  simp[loop_probe_env_def, loop_probe_ptr_cenv_def, loop_probe_cenv_def,
+       FUPDATE_LIST, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_LOOP_POINTER_KERNEL_AUDIT OK\n"
+     else raise Fail "body loop pointer probe inherited admission"
+  end) [loop_probe_ptr_compiled_result, loop_probe_ptr_locals_interface];
