@@ -7,6 +7,9 @@ version = "0.2.3"
 
 [build]
 roots = ["vyperHolScript.sml",
+         "venom/proofs/allocaHistoryScript.sml",
+         "lowering/allocaHistoryFragmentScript.sml",
+         "lowering/concatMemoryScript.sml",
          "tests/vyperTestsHolScript.sml",
          "tests/vyperRawSystemProofAuditScript.sml",
          "lowering/e2eBoundaryTestScript.sml",
@@ -58,6 +61,7 @@ roots = ["vyperHolScript.sml",
          "venom/passes/concretize_mem_loc/proofs/concretizeCallFrameRegressionScript.sml",
          "lowering/targetPlaceTestScript.sml",
          "lowering/targetPlaceSimCasesScript.sml",
+         "lowering/builtinBytesMemoryScript.sml",
          "venom/passes/dft/tests/dftEffectOrderTestScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerAbiTupleStringScript.sml",
          "tests/eventEndpointAuditScript.sml",

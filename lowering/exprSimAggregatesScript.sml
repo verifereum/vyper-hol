@@ -7,7 +7,7 @@
  * literals, empty(T), max_value, min_value, epsilon, and the conversions
  * exprSimConvert proves (which rest on the cheated lower_value_word_shape).
  * Struct and array literals store each child with unwrap_value_sim, so
- * they carry exprSimUnwrap's cheated storage, immutable and copy cases.
+ * they carry exprSimUnwrap's cheated constructor immutable cases.
  * Cheated, for the later #636 PRs: the other conversions, abi_encode and
  * abi_decode.
  *
@@ -63,6 +63,7 @@
 
 Theory exprSimAggregates
 Ancestors
+  exprSimAlloc
   allocLimits
   list exprSim exprSimHyps exprSimConvert exprLowering compileEnv
   valueEncoding vyperAST vyperInterpreter vyperState vyperContext

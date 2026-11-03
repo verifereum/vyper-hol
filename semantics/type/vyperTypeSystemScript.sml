@@ -197,8 +197,10 @@ Definition nonneg_int_literal_def:
     case int_literal_value e of SOME n => 0 <= n | NONE => F
 End
 
-(* Vyper requires an unsigned shift amount; a non-negative literal amount is
-   accepted although the annotated AST may give it a signed type. *)
+(* A shift amount that cannot be negative: of an unsigned type, or a
+   non-negative literal, which the annotated AST may give a signed type (the
+   4 in x << 4 is an int8).  Vyper requires an unsigned amount for << and >>,
+   but not for <<= and >>= (see type_stmt's AugAssign). *)
 Definition shift_amount_ok_def:
   shift_amount_ok e <=> is_uint_type (expr_type e) \/ nonneg_int_literal e
 End
@@ -957,6 +959,9 @@ Definition type_stmt_def:
         well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
         (* the target is never a literal, so ** needs a literal exponent *)
         (bop = Exp ==> nonneg_int_literal e) /\
+        (* Stricter than Vyper, which accepts <<= and >>= by a signed
+           amount: its code shifts by the amount's word where the semantics
+           raises on a negative amount. *)
         (bop = ShL \/ bop = ShR ==> shift_amount_ok e)
      then SOME env else NONE) /\
   type_stmt env ret_ty (If e ss1 ss2) =
