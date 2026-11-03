@@ -18,7 +18,7 @@ End
 Definition abi_builtin_encode_setup_def:
   abi_builtin_encode_setup method_id_opt maxlen =
     let mid_size = case method_id_opt of SOME _ => 4 | NONE => 0 in
-    do buf <- compile_alloc_buffer (maxlen + 32 + mid_size);
+    do buf <- compile_alloc_buffer (32 + 32 * word_size (maxlen + mid_size));
        data_ptr <- emit_op ADD [buf.buf_operand; Lit (n2w (32 + mid_size))];
        abi_builtin_encode_method_id method_id_opt buf.buf_operand;
        return (buf.buf_operand,data_ptr)
@@ -70,7 +70,7 @@ QED
 Theorem abi_builtin_encode_setup_trace:
   abi_builtin_encode_setup method_id_opt maxlen st = (ops,ready) ==>
   ?buf allocated data_ptr address_st.
-    compile_alloc_buffer (maxlen + 32 + (case method_id_opt of SOME _ => 4 | NONE => 0))
+    compile_alloc_buffer (32 + 32 * word_size (maxlen + (case method_id_opt of SOME _ => 4 | NONE => 0)))
       st = (buf,allocated) /\
     emit_op ADD [buf.buf_operand; Lit (n2w (32 +
       (case method_id_opt of SOME _ => 4 | NONE => 0)))] allocated = (data_ptr,address_st) /\

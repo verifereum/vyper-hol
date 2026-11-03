@@ -3,7 +3,52 @@ Ancestors
   abiDecoderReentryAddress abiDecoderReentry abiDecoderContract context compileEnv emitHelper
   emitHelperProps exprLoweringProps venomExecSemantics venomState venomInst finite_map words
   arithmetic list abiBuiltinPrefix abiDecoderDynamicLoopSetup abiDecoderAllocation
-  abiDecoderArrayInitExec abiDecoderFrame
+  abiDecoderArrayInitExec abiDecoderFrame vfmConstants
+
+(* Rounded output allocations include the length word and physical payload
+   padding.  The effect frame intentionally owns this padding as well. *)
+Theorem abi_builtin_word_size_capacity:
+  !n. n <= 32 * word_size n
+Proof
+  gen_tac >> rewrite_tac[word_size_def] >>
+  qspec_then `32` mp_tac DIVISION >> simp[] >>
+  disch_then (qspec_then `n + 31` strip_assume_tac) >>
+  `(n + 31) MOD 32 < 32` by simp[] >> intLib.ARITH_TAC
+QED
+
+Theorem abi_builtin_rounded_padding_bound:
+  32 + 32 * word_size n <= 32 + n + 31
+Proof
+  rewrite_tac[word_size_def] >>
+  qspec_then `32` mp_tac DIVISION >> simp[] >>
+  disch_then (qspec_then `n + 31` strip_assume_tac) >>
+  intLib.ARITH_TAC
+QED
+
+Theorem abi_builtin_rounded_end:
+  k <= n ==> p + 32 + k <= p + (32 + 32 * word_size n)
+Proof
+  mp_tac (Q.SPEC `n` abi_builtin_word_size_capacity) >> decide_tac
+QED
+
+Theorem abi_builtin_rounded_selector_store:
+  64 <= 32 + 32 * word_size (maxlen + 4)
+Proof
+  rewrite_tac[word_size_def] >>
+  qspec_then `32` mp_tac DIVISION >> simp[] >>
+  disch_then (qspec_then `maxlen + 4 + 31` strip_assume_tac) >>
+  `(maxlen + 4 + 31) MOD 32 < 32` by simp[] >>
+  intLib.ARITH_TAC
+QED
+
+Theorem abi_builtin_rounded_capacity_checks:
+  32 + 32 * word_size 0 = 32 /\
+  32 + 32 * word_size 32 = 64 /\
+  32 + 32 * word_size 4 = 64 /\
+  32 + 32 * word_size 36 = 96
+Proof
+  EVAL_TAC
+QED
 
 (* ===== Builtin Allocation ===== *)
 
