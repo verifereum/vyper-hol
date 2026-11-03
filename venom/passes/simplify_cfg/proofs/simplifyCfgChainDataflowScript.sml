@@ -347,3 +347,136 @@ Proof
   qpat_x_assum `MAP _ _ = MAP _ _` (mp_tac o Q.AP_TERM `EL i`) >>
   simp[EL_MAP] >> rpt IF_CASES_TAC >> gvs[]
 QED
+
+Theorem update_succ_phi_labels_point_correspondence:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
+  MEM bb' (update_succ_phi_labels old_lbl new_lbl bbs succs) ==>
+  ?bb. MEM bb bbs /\ bb'.bb_label = bb.bb_label /\
+    (!use v. use.inst_opcode <> PHI ==>
+      ((?i j. i < j /\ j < LENGTH bb'.bb_instructions /\
+          MEM v (EL i bb'.bb_instructions).inst_outputs /\
+          EL j bb'.bb_instructions = use) <=>
+       (?i j. i < j /\ j < LENGTH bb.bb_instructions /\
+          MEM v (EL i bb.bb_instructions).inst_outputs /\
+          EL j bb.bb_instructions = use)))
+Proof
+  strip_tac >> drule_all update_succ_phi_labels_index_correspondence >>
+  strip_tac >> qexists `bb` >> simp[] >> rpt strip_tac >>
+  eq_tac >> strip_tac >> qexistsl [`i`, `j`] >> simp[] >>
+  `i < LENGTH bb.bb_instructions` by decide_tac >>
+  first_assum (qspec_then `i` mp_tac) >>
+  first_x_assum (qspec_then `j` mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem merge_blocks_point_prefix:
+  i < j /\ j < LENGTH (FRONT a.bb_instructions) ==>
+  i < j /\ j < LENGTH (merge_blocks a b).bb_instructions /\
+  EL i (merge_blocks a b).bb_instructions = EL i a.bb_instructions /\
+  EL j (merge_blocks a b).bb_instructions = EL j a.bb_instructions
+Proof
+  strip_tac >>
+  `i < LENGTH (FRONT a.bb_instructions)` by decide_tac >>
+  simp[merge_blocks_def, EL_APPEND_EQN] >>
+  Cases_on `a.bb_instructions` >> gvs[EL_FRONT]
+QED
+
+Theorem merge_blocks_point_suffix:
+  i < j /\ j < LENGTH b.bb_instructions ==>
+  LENGTH (FRONT a.bb_instructions) + i < LENGTH (FRONT a.bb_instructions) + j /\
+  LENGTH (FRONT a.bb_instructions) + j < LENGTH (merge_blocks a b).bb_instructions /\
+  EL (LENGTH (FRONT a.bb_instructions) + i) (merge_blocks a b).bb_instructions =
+    EL i b.bb_instructions /\
+  EL (LENGTH (FRONT a.bb_instructions) + j) (merge_blocks a b).bb_instructions =
+    EL j b.bb_instructions
+Proof
+  simp[merge_blocks_def, EL_APPEND_EQN]
+QED
+
+Theorem merge_blocks_output_before_suffix:
+  bb_well_formed a /\ EVERY inst_wf a.bb_instructions /\
+  MEM inst a.bb_instructions /\ MEM v inst.inst_outputs /\
+  j < LENGTH b.bb_instructions ==>
+  ?i. i < LENGTH (FRONT a.bb_instructions) + j /\
+    LENGTH (FRONT a.bb_instructions) + j < LENGTH (merge_blocks a b).bb_instructions /\
+    MEM v (EL i (merge_blocks a b).bb_instructions).inst_outputs /\
+    EL (LENGTH (FRONT a.bb_instructions) + j) (merge_blocks a b).bb_instructions =
+      EL j b.bb_instructions
+Proof
+  strip_tac >> drule_all bb_output_in_front >>
+  disch_then (strip_assume_tac o REWRITE_RULE [MEM_EL]) >> qexists `n` >>
+  simp[merge_blocks_def, EL_APPEND_EQN] >> gvs[]
+QED
+
+Theorem chain_merge_retained_point_correspondence:
+  wf_function fn /\ a.bb_label <> b.bb_label /\
+  MEM bb' (update_succ_phi_labels b.bb_label a.bb_label
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+    (bb_succs (merge_blocks a b))) /\ bb'.bb_label <> a.bb_label ==>
+  ?bb. MEM bb fn.fn_blocks /\ bb'.bb_label = bb.bb_label /\
+    (!use v. use.inst_opcode <> PHI ==>
+      ((?i j. i < j /\ j < LENGTH bb'.bb_instructions /\
+          MEM v (EL i bb'.bb_instructions).inst_outputs /\
+          EL j bb'.bb_instructions = use) <=>
+       (?i j. i < j /\ j < LENGTH bb.bb_instructions /\
+          MEM v (EL i bb.bb_instructions).inst_outputs /\
+          EL j bb.bb_instructions = use)))
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label)
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks)))` by
+    (irule chain_merge_base_labels >> fs[wf_function_def]) >>
+  drule_all update_succ_phi_labels_point_correspondence >> strip_tac >>
+  qexists `bb` >> simp[] >>
+  gvs[replace_block_def, remove_block_def, MEM_MAP, MEM_FILTER] >>
+  Cases_on `bb''.bb_label = a.bb_label` >> gvs[merge_blocks_def]
+QED
+
+Theorem chain_merge_def_on_all_paths_retained_point:
+  wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+      (bb_succs (merge_blocks a b))) /\
+  MEM bb fn.fn_blocks /\ MEM bb' fn'.fn_blocks /\
+  bb'.bb_label = bb.bb_label /\ bb.bb_label <> a.bb_label /\
+  use.inst_opcode <> PHI /\ def_on_all_paths fn bb (SOME use) v ==>
+  def_on_all_paths fn' bb' (SOME use) v
+Proof
+  strip_tac >>
+  `a.bb_label <> b.bb_label` by fs[can_merge_blocks_def] >>
+  `?bb0. MEM bb0 fn.fn_blocks /\ bb'.bb_label = bb0.bb_label /\
+    (!use v. use.inst_opcode <> PHI ==>
+      ((?i j. i < j /\ j < LENGTH bb'.bb_instructions /\
+          MEM v (EL i bb'.bb_instructions).inst_outputs /\ EL j bb'.bb_instructions = use) <=>
+       (?i j. i < j /\ j < LENGTH bb0.bb_instructions /\
+          MEM v (EL i bb0.bb_instructions).inst_outputs /\ EL j bb0.bb_instructions = use)))` by
+    (irule chain_merge_retained_point_correspondence >>
+     simp[] >> qexistsl [`a`, `b`] >> gvs[]) >>
+  `bb0 = bb` by metis_tac[same_label_same_block] >>
+  qpat_x_assum `bb0 = bb` SUBST_ALL_TAC >>
+  `fn_entry_label fn' = fn_entry_label fn` by
+    (qpat_assum `fn' = _` SUBST1_TAC >> irule chain_merge_entry >> simp[]) >>
+  pure_rewrite_tac[def_on_all_paths_def] >> rpt strip_tac >>
+  `MEM (LAST path) (fn_labels fn')` by
+    (pure_rewrite_tac[fn_labels_def, MEM_MAP] >> qexists `bb'` >> simp[]) >>
+  drule_all chain_merge_path_input >> strip_tac >>
+  `fn_entry_label fn = SOME entry` by metis_tac[] >>
+  qpat_x_assum `def_on_all_paths fn bb (SOME use) v` mp_tac >>
+  simp[def_on_all_paths_def] >>
+  disch_then (qspec_then `chain_prefix a.bb_label b.bb_label path ++ [LAST path]` mp_tac) >>
+  simp[chain_prefix_head] >> strip_tac
+  >- (`MEM def_bb.bb_label
+         (FRONT (chain_prefix a.bb_label b.bb_label path ++ [LAST path]))` by
+        (simp[mem_front_index] >> qexists `k` >> simp[]) >>
+      drule_all chain_merge_earlier_output_witness >> strip_tac >>
+      disj1_tac >>
+      qpat_x_assum `MEM bb''.bb_label (FRONT path)` mp_tac >>
+      simp[mem_front_index] >> disch_then (qx_choose_then `idx` strip_assume_tac) >>
+      qexistsl [`idx`, `bb''`, `inst'`] >> simp[]) >>
+  disj2_tac >> first_x_assum (qspecl_then [`use`, `v`] mp_tac) >>
+  simp[] >> disch_then (mp_tac o iffRL) >>
+  (impl_tac >- (qexistsl [`i`, `j`] >> simp[])) >>
+  disch_then (qx_choose_then `di` (qx_choose_then `ui` strip_assume_tac)) >>
+  qexists `di` >> conj_tac >- decide_tac >> simp[] >> qexists `ui` >> simp[]
+QED
