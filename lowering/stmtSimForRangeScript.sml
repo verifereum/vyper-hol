@@ -540,7 +540,7 @@ Theorem compile_stmt_for_range_checked:
   !cenv lctx ty id fty e1 e2 bound body st op1 s1 op2 s2.
     lower_value compile_expr cenv fty e1 st = (op1, s1) /\
     lower_value compile_expr cenv fty e2 s1 = (op2, s2) /\
-    ~((?w. op1 = Lit w) /\ (?w. op2 = Lit w)) ==>
+    ~(?a1 n1 a2 n2. e1 = Literal a1 (IntL n1) /\ e2 = Literal a2 (IntL n2)) ==>
     compile_stmt cenv lctx ty (For id fty (Range e1 e2) bound body) st =
     for_range_checked_code cenv lctx ty id fty bound body op1 op2 s2
 Proof
@@ -551,7 +551,10 @@ Proof
   qpat_assum `lower_value _ _ _ e2 _ = _`
     (fn th => simp[MATCH_MP comp_bind_eq th]) >>
   simp[for_range_checked_code_def] >>
-  Cases_on `op1` >> Cases_on `op2` >> gvs[]
+  Cases_on `e1` >> gvs[] >>
+  rename1 `Literal a lit` >> Cases_on `lit` >> gvs[] >>
+  Cases_on `e2` >> gvs[] >>
+  rename1 `Literal a' lit'` >> Cases_on `lit'` >> gvs[]
 QED
 
 Theorem emit_op_if[local]:
@@ -866,10 +869,7 @@ Theorem compile_for_range_checked_frag:
     well_typed_expr env e1 /\ well_typed_expr env e2 /\
     (!x t. FLOOKUP env.var_types x = SOME t ==>
            well_formed_type env.type_defs t) /\
-    (!sa op1 s1 op2 s2.
-       lower_value compile_expr cenv fty e1 sa = (op1, s1) /\
-       lower_value compile_expr cenv fty e2 s1 = (op2, s2) ==>
-       ~((?w. op1 = Lit w) /\ (?w. op2 = Lit w))) /\
+    ~(?a1 n1 a2 n2. e1 = Literal a1 (IntL n1) /\ e2 = Literal a2 (IntL n2)) /\
     (!st0 c st1 ex inc ei n1 j r2 es2.
        declare_local cenv id fty st0 = (c, st1) /\
        P ei /\ lookup_scopes id ei.scopes = NONE /\
@@ -917,9 +917,6 @@ Proof
   rename1 `_ = (op1, s1)` >>
   Cases_on `lower_value compile_expr cenv fty e2 s1` >>
   rename1 `_ = (op2, s2)` >>
-  qpat_x_assum `!sa op1 s1 op2 s2. lower_value _ _ _ e1 _ = _ /\ _ ==> _`
-    (qspecl_then [`sa`, `op1`, `s1`, `op2`, `s2`] mp_tac) >>
-  impl_tac >- simp[] >> disch_then assume_tac >>
   qspecl_then [`cenv`, `env`, `fty`, `e1`, `sa`, `op1`, `s1`] mp_tac
     lower_value_word_shape >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
@@ -1190,7 +1187,10 @@ Resume compile_for_range_checked_frag[state]:
      irule stmt_state_rel_vars_frame >> simp[stmt_state_rel_jump_to] >>
      qx_genl_tac [`nm`, `en`, `q`, `qsz`] >> strip_tac >>
      `not_fresh_at s2 q` by
-       (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+       (qpat_x_assum `local_ptrs_reserved cenv s2`
+          (mp_tac o CONJUNCT2 o PURE_REWRITE_RULE [local_ptrs_reserved_def]) >>
+        disch_then (qspecl_then [`nm`, `nm`, `q`, `qsz`, `qsz`] mp_tac) >>
+        simp[]) >>
      qpat_assum `!q. not_fresh_at s2 q ==> _` (drule_then strip_assume_tac) >>
      qpat_x_assum `!x. ~MEM x _ ==> _` drule >>
      fs[lookup_var_def, jump_to_def]) >>

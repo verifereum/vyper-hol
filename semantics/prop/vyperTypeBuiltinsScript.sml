@@ -2449,6 +2449,7 @@ Theorem well_typed_builtin_app_no_type_error:
 Proof
   strip_tac >>
   Cases_on `blt` >>
+  fs[] >>
   gvs[well_typed_builtin_app_def, LET_THM,
       LENGTH_EQ_NUM_compute,
       Excl "is_int_type_def", Excl "is_numeric_type_def", Excl "is_bool_type_def",
@@ -2727,7 +2728,10 @@ Theorem is_sized_type_cases[local]:
     (∃elem n. t = ArrayT elem (Dynamic n)) ∨ (∃n. t = BaseT (StringT n)) ∨
     (∃n. t = BaseT (BytesT (Dynamic n)))
 Proof
-  simp[oneline is_sized_type_def] >> rpt CASE_TAC >> simp[]
+  Cases_on `t` >> simp[is_sized_type_def]
+  >- (rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_sized_type_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_sized_type_def]) >>
+  rename1 `ArrayT elem bd` >> Cases_on `bd` >> simp[is_sized_type_def]
 QED
 
 (* Len consumes a forced Value, so only the sized value cases are needed. *)
