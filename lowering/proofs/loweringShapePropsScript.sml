@@ -7747,6 +7747,20 @@ Proof
   Cases_on `rest` >> Cases_on `bi` >> gvs[FUN_EQ_THM, compile_expr_body_def, expr_type_def]
 QED
 
+Theorem pop_load_selector_mem[local]:
+  !loc. MEM (case loc of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD)
+    [MLOAD; SLOAD; TLOAD]
+Proof
+  Cases >> simp[]
+QED
+
+Theorem pop_store_selector_mem[local]:
+  !loc. MEM (case loc of LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE)
+    [MSTORE; SSTORE; TSTORE]
+Proof
+  Cases >> simp[]
+QED
+
 Theorem compile_expr_body_shape:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
@@ -7884,8 +7898,8 @@ Resume compile_expr_body_shape[pop]:
   qexists_tac `\op st. cenv_shape_ok st cenv /\ plain_operand st op` >>
   reverse conj_tac
   >- (shape_under_tac compile_dynarray_pop_shape `\st. cenv_shape_ok st cenv` >>
-      simp[cenv_shape_ok_stable] >> rpt conj_tac >> CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[]) >>
+      simp[cenv_shape_ok_stable, SRULE [MEM] pop_load_selector_mem,
+           SRULE [MEM] pop_store_selector_mem]) >>
   gen_tac >> simp[shape_step_def, shape_extends_refl, value_shape_ok_def, mk_ptr_def] >>
   Cases_on `r1` >> gvs[]
 QED
@@ -12012,8 +12026,10 @@ Proof
   ho_match_mp_tac supportedExprsTheory.supported_effect_expr_ind >>
   rw[supportedExprsTheory.supported_effect_expr_def,
      supported_expr_exists_def, expr_shape_root_def] >>
-  metis_tac[supported_pure_shape, supported_expr_exists_def,
-            expr_shape_root_def]
+  imp_res_tac (cj 1 supported_pure_shape) >>
+  imp_res_tac (cj 2 supported_pure_shape) >>
+  imp_res_tac (cj 4 supported_pure_shape) >>
+  gvs[supported_expr_exists_def, expr_shape_root_def]
 QED
 
 Theorem supported_expr_shape[local]:
@@ -12084,10 +12100,11 @@ Theorem supported_string_reason_shape[local]:
   supported_string_reason tops e ==>
   ~supported_expr_exists expr_shape_root e
 Proof
-  Cases_on `e` >>
-  simp[supportedStmtsTheory.supported_string_reason_def,
-       supported_expr_exists_def, expr_shape_root_def] >>
-  metis_tac[supported_pure_shape, supported_expr_exists_def, expr_shape_root_def]
+  Cases_on `e`
+  >~ [`Literal ty lit`]
+  >- simp[supported_expr_exists_def, expr_shape_root_def] >>
+  simp[supportedStmtsTheory.supported_string_reason_def] >>
+  metis_tac[cj 1 supported_pure_shape]
 QED
 
 Theorem supported_assert_reason_shape[local]:
@@ -12125,11 +12142,16 @@ Proof
   qmatch_goalsub_rename_tac `supported_expr_exists expr_shape_root start_expr` >>
   Cases_on `start_expr` >> simp[]
   >~ [`Literal lit_ty lit`]
-  >- (simp[supported_expr_exists_def, expr_shape_root_def] >>
-      qmatch_goalsub_rename_tac `supported_expr_exists expr_shape_root finish_expr` >>
-      Cases_on `finish_expr` >>
-      simp[supported_expr_exists_def, expr_shape_root_def] >>
-      metis_tac[supported_pure_shape, supported_expr_exists_def, expr_shape_root_def]) >>
+  >- (rename1 `~supported_expr_exists expr_shape_root (Literal lit_ty lit) /\
+               ~supported_expr_exists expr_shape_root finish_expr` >>
+      Cases_on `finish_expr` >> simp[]
+      >~ [`~supported_expr_exists expr_shape_root (Literal lit_ty lit) /\
+            ~supported_expr_exists expr_shape_root (Literal end_ty end_lit)`]
+      >- (Cases_on `lit` >> Cases_on `end_lit` >>
+          simp[supported_expr_exists_def, expr_shape_root_def]) >>
+      strip_tac >>
+      imp_res_tac (cj 1 supported_pure_shape) >>
+      gvs[supported_expr_exists_def, expr_shape_root_def]) >>
   metis_tac[supported_pure_shape]
 QED
 
@@ -12169,13 +12191,9 @@ Theorem add_module_var_locations_static:
     !n loc. FLOOKUP (add_module_var_locations tops vars) n = SOME loc ==>
       static_loc loc
 Proof
-  Induct_on `tops` >- simp[add_module_var_locations_def] >>
-  rpt gen_tac >> strip_tac >>
-  simp[Once add_module_var_locations_def] >>
-  first_x_assum match_mp_tac >>
-  Cases_on `h` >> simp[] >>
-  rpt (CASE_TAC >> simp[]) >>
-  rpt strip_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs(), static_loc_def] >>
+  rpt strip_tac >>
+  drule compileVyperTheory.add_module_var_locations_FLOOKUP >>
+  strip_tac >> gvs[static_loc_def] >>
   metis_tac[]
 QED
 
@@ -12258,6 +12276,21 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
+Theorem classify_function_fallback_source_step[local]:
+  !top acc mut nr rr fname args defaults ret body.
+    FST (SND (SND (classify_function top acc))) =
+      SOME (mut,nr,rr,fname,args,defaults,ret,body) ==>
+    top = FunctionDecl External mut nr rr fname args defaults ret body \/
+    FST (SND (SND acc)) =
+      SOME (mut,nr,rr,fname,args,defaults,ret,body)
+Proof
+  rpt gen_tac >> PairCases_on `acc` >> Cases_on `top` >>
+  simp[classify_function_def] >>
+  rename1 `case vis of External => _ | Internal => _ | Deploy => _` >>
+  Cases_on `vis` >> simp[] >>
+  IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]
+QED
+
 Theorem classify_functions_fallback_mem:
   !tops mut nr rr fname args defaults ret body.
     FST (SND (SND (classify_functions tops))) =
@@ -12266,14 +12299,10 @@ Theorem classify_functions_fallback_mem:
 Proof
   Induct_on `tops` >- simp[classify_functions_def] >>
   rpt gen_tac >>
-  simp[classify_functions_def] >>
-  qmatch_goalsub_abbrev_tac `classify_function h acc` >>
-  PairCases_on `acc` >>
-  Cases_on `h` >> simp[classify_function_def] >>
-  rpt (CASE_TAC >> simp[]) >>
-  strip_tac >> gvs[] >>
-  gvs[classify_functions_def] >>
-  metis_tac[]
+  simp[classify_functions_def] >> strip_tac >>
+  drule classify_function_fallback_source_step >>
+  strip_tac >- simp[] >>
+  fs[GSYM classify_functions_def] >> metis_tac[]
 QED
 
 (* Without immutable declarations, build_compile_env maps module variables
