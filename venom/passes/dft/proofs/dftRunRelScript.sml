@@ -1200,6 +1200,130 @@ Proof
   simp[dft_res_rel_def]
 QED
 
+Theorem dft_fn_rel_setup_callee:
+  dft_fn_rel fn fn' ==> setup_callee fn' args s = setup_callee fn args s
+Proof
+  strip_tac >> fs[dft_fn_rel_def] >>
+  Cases_on `fn.fn_blocks` >> Cases_on `fn'.fn_blocks` >>
+  gvs[setup_callee_def, dft_block_rel_def]
+QED
+
+Theorem dft_setup_callee_entry:
+  setup_callee fn args s = SOME t ==>
+  fn_entry_label fn = SOME t.vs_current_bb
+Proof
+  Cases_on `fn.fn_blocks` >>
+  simp[setup_callee_def, fn_entry_label_def, entry_block_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem dft_res_rel_refl[simp]:
+  dft_res_rel r r
+Proof
+  Cases_on `r` >> simp[dft_res_rel_def]
+QED
+
+Theorem dft_step_context_rel:
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  (!name fn fn' t.
+    lookup_function name C.ctx_functions = SOME fn /\
+    lookup_function name C'.ctx_functions = SOME fn' /\
+    fn_entry_label fn = SOME t.vs_current_bb /\ ctx_labels_bound C t.vs_labels ==>
+    dft_res_rel (run_blocks fuel C fn t) (run_blocks fuel C' fn' t)) /\
+  ctx_labels_bound C s.vs_labels ==>
+  dft_res_rel (step_inst fuel C i s) (step_inst fuel C' i s)
+Proof
+  strip_tac >> Cases_on `i.inst_opcode = INVOKE`
+  >- (simp[Ntimes step_inst_def 2] >>
+      Cases_on `decode_invoke i` >- simp[dft_res_rel_def] >> simp[] >>
+      rename1 `decode_invoke i = SOME pair` >> PairCases_on `pair` >> simp[] >>
+      drule dft_fn_rel_lookup_function >>
+      disch_then (qspec_then `pair0` mp_tac) >>
+      Cases_on `lookup_function pair0 C.ctx_functions` >>
+      Cases_on `lookup_function pair0 C'.ctx_functions` >>
+      simp[optionTheory.OPTREL_def] >> strip_tac >>
+      rename1 `dft_fn_rel callee callee'` >>
+      `!args. setup_callee callee' args s = setup_callee callee args s` by
+        metis_tac[dft_fn_rel_setup_callee] >>
+      simp[] >> Cases_on `eval_operands pair1 s` >- simp[dft_res_rel_def] >>
+      simp[] >> rename1 `eval_operands pair1 s = SOME args` >>
+      Cases_on `setup_callee callee args s` >- simp[dft_res_rel_def] >>
+      simp[] >> rename1 `setup_callee callee args s = SOME t` >>
+      `fn_entry_label callee = SOME t.vs_current_bb` by
+        metis_tac[dft_setup_callee_entry] >>
+      `ctx_labels_bound C t.vs_labels` by
+        metis_tac[ctx_labels_bound_setup_callee] >>
+      first_x_assum (drule_all_then mp_tac) >>
+      Cases_on `run_blocks fuel C callee t` >>
+      Cases_on `run_blocks fuel C' callee' t` >>
+      simp[dft_res_rel_def] >> rpt strip_tac >> gvs[] >>
+      Cases_on `bind_outputs i.inst_outputs i'.iret_values
+        (adopt_return_fmp i' (merge_callee_state s v))` >> simp[]) >>
+  simp[step_inst_non_invoke]
+QED
+
+Theorem dft_suffix_context_rel:
+  !xs fuel C C' s.
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  (!name fn fn' t.
+    lookup_function name C.ctx_functions = SOME fn /\
+    lookup_function name C'.ctx_functions = SOME fn' /\
+    fn_entry_label fn = SOME t.vs_current_bb /\ ctx_labels_bound C t.vs_labels ==>
+    dft_res_rel (run_blocks fuel C fn t) (run_blocks fuel C' fn' t)) /\
+  ctx_labels_bound C s.vs_labels ==>
+  dft_res_rel (dft_exec_suffix fuel C xs s) (dft_exec_suffix fuel C' xs s)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- simp[dft_exec_suffix_def] >>
+  `dft_res_rel (step_inst fuel C h s) (step_inst fuel C' h s)` by
+    (irule dft_step_context_rel >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  simp[dft_exec_suffix_cons, dft_exec_cons_def] >>
+  Cases_on `step_inst fuel C h s` >> Cases_on `step_inst fuel C' h s` >>
+  qpat_x_assum `dft_res_rel _ _` mp_tac >>
+  simp[dft_res_rel_def] >> rpt strip_tac >> gvs[] >>
+  Cases_on `is_terminator h.inst_opcode`
+  >- (Cases_on `v.vs_halted` >> simp[]) >>
+  simp[GSYM dft_res_rel_def] >> first_x_assum irule >>
+  rpt conj_tac >- first_assum ACCEPT_TAC >>
+  simp[] >> irule ctx_labels_bound_step >>
+  metis_tac[]
+QED
+
+Theorem dft_exec_block_context_rel:
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  (!name fn fn' t.
+    lookup_function name C.ctx_functions = SOME fn /\
+    lookup_function name C'.ctx_functions = SOME fn' /\
+    fn_entry_label fn = SOME t.vs_current_bb /\ ctx_labels_bound C t.vs_labels ==>
+    dft_res_rel (run_blocks fuel C fn t) (run_blocks fuel C' fn' t)) /\
+  ctx_labels_bound C s.vs_labels ==>
+  dft_res_rel (exec_block fuel C bb s) (exec_block fuel C' bb s)
+Proof
+  strip_tac >>
+  `!D. exec_block fuel D bb s =
+    dft_exec_suffix fuel D (DROP s.vs_inst_idx bb.bb_instructions) s` by
+    (gen_tac >> irule dft_exec_suffix_boundary >> simp[]) >>
+  simp[] >> irule dft_suffix_context_rel >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem dft_run_block_context_rel:
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  (!name fn fn' t.
+    lookup_function name C.ctx_functions = SOME fn /\
+    lookup_function name C'.ctx_functions = SOME fn' /\
+    fn_entry_label fn = SOME t.vs_current_bb /\ ctx_labels_bound C t.vs_labels ==>
+    dft_res_rel (run_blocks fuel C fn t) (run_blocks fuel C' fn' t)) /\
+  ctx_labels_bound C s.vs_labels ==>
+  dft_res_rel (run_block fuel C bb s) (run_block fuel C' bb s)
+Proof
+  strip_tac >> simp[run_block_def] >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac eval_phis_ok_or_error_defs >>
+  simp[] >> irule dft_exec_block_context_rel >>
+  rpt conj_tac >- first_assum ACCEPT_TAC >>
+  simp[] >> metis_tac[venomExecPropsTheory.eval_phis_preserves_labels]
+QED
+
 (* Why it holds (unchecked notes):
    - Same fuel works: fuel is per block and per call depth, and the
      schedule visits the same blocks and makes the same calls.
