@@ -187,15 +187,17 @@ End
 
 (* PROPOSED ADEQUACY OBLIGATIONS -- NOT THEOREMS, NOT ASSUMPTIONS.
 
-   Terminal adequacy (same fuel, arbitrary starting function/state):
+   Terminal adequacy modulo Error text (same fuel, arbitrary function/state;
+   dft_open_result_eq is defined in dftOpenAdequacy):
 
    dft_sparse_oracle a s.vs_gas_readings ==>
-   (run_blocks fuel ctx fn s = result <=>
+   (dft_open_result_eq (run_blocks fuel ctx fn s) result <=>
       ?steps rr n.
         FUNPOW (dft_open_next a ctx) steps
           (DftOpen (DftEnter fn fuel s) [] 0) =
             DftOpen (DftDone rr) [] n /\
-        dft_open_materialize_result s.vs_gas_readings n rr = result)
+        dft_open_result_eq
+          (dft_open_materialize_result s.vs_gas_readings n rr) result)
 
    Raw-observation adequacy (all finite prefixes, including open calls):
    Let initial = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl;
