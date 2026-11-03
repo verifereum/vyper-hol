@@ -191,7 +191,17 @@ Theorem encoder_dynamic_iteration_stores:
     OK (mstore idx_p (n2w (i+1)) v)
 Proof
   strip_tac >>
-  simp[step_inst_base_def, exec_write2_def] >> gvs[]
+  conj_tac
+  >- (qpat_assum `eval_operand head_op t = _`
+        (mp_then Any mp_tac emitHelperPropsTheory.step_MSTORE) >>
+      disch_then (qspec_then `offset_op` mp_tac) >> simp[]) >>
+  conj_tac
+  >- (qpat_assum `eval_operand dyn_op u = _`
+        (mp_then Any mp_tac emitHelperPropsTheory.step_MSTORE) >>
+      disch_then (qspec_then `next_dyn_op` mp_tac) >> simp[]) >>
+  qpat_assum `eval_operand idx_op v = _`
+    (mp_then Any mp_tac emitHelperPropsTheory.step_MSTORE) >>
+  disch_then (qspec_then `next_idx_op` mp_tac) >> simp[]
 QED
 
 Theorem encoder_registered_cell_initialization_and_repeat:
