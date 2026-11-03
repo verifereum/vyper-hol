@@ -447,7 +447,17 @@ Proof
   rewrite_tac[local_ptrs_rel_def] >> conj_tac
   >- (rpt strip_tac >>
       Cases_on `name' = name`
-      >- (gvs[] >> qexists_tac `w` >> simp[]) >>
+      >- (qpat_x_assum `name' = name` SUBST_ALL_TAC >>
+          `entry' = entry` by
+            (qpat_x_assum `lookup_scopes name scopes' = SOME entry'` mp_tac >>
+             simp[]) >>
+          `p' = p /\ sz' = sz` by
+            (qpat_x_assum `FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p') sz')`
+               mp_tac >> simp[]) >>
+          qpat_x_assum `entry' = entry` SUBST_ALL_TAC >>
+          qpat_x_assum `p' = p` SUBST_ALL_TAC >>
+          qpat_x_assum `sz' = sz` SUBST_ALL_TAC >>
+          qexists_tac `w` >> simp[]) >>
       `lookup_scopes name' scopes = SOME entry'` by
         (qpat_x_assum `∀n. P n ⇒ lookup_scopes n scopes' = lookup_scopes n scopes`
            (qspec_then `name'` mp_tac) >> simp[]) >>
