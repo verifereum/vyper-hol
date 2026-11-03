@@ -937,7 +937,6 @@ Definition check_function_body_def:
       (ret = NoneT \/ stmts_no_fallthrough body) /\
       stmts_no_control_escape body /\
       well_typed_exprs (defaults_env env) dflts /\
-      EVERY (runtime_constant_expr mods) dflts /\
       MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 End
 

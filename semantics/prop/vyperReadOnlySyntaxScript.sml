@@ -190,6 +190,34 @@ Proof
   disch_then drule >> simp[]
 QED
 
+Theorem external_getter_defaults:
+  external_getter_tuple src decl = SOME (mut,nr,args,(dflts:expr list),ret,body) ==>
+  dflts = []
+Proof
+  Cases_on `decl` >> simp[external_getter_tuple_def]
+  >- (rename1 `VariableDecl vis _ _ _ _` >> Cases_on `vis` >>
+      simp[external_getter_tuple_def, getter_def, pairTheory.UNCURRY] >>
+      rpt strip_tac >> gvs[AllCaseEqs()]) >>
+  rename1 `HashMapDecl vis _ _ _ _ _` >> Cases_on `vis` >>
+  simp[external_getter_tuple_def, getter_def, pairTheory.UNCURRY]
+QED
+
+Theorem selected_entry_defaults_read_only:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  selected_entry am tx mods (mut,nr,args,dflts,ret,body) /\
+  (mut = View \/ mut = Pure) ==>
+  EVERY (expr_mutability_ok mods View) dflts
+Proof
+  rpt strip_tac >> drule selected_entry_checked_cases >>
+  disch_then drule >>
+  disch_then (qspec_then `find_function_module am tx.target tx.function_name` mp_tac) >>
+  simp[] >> strip_tac >> gvs[]
+  >>~- ([`external_getter_tuple _ _ = SOME _`],
+        drule external_getter_defaults >> simp[]) >>
+  drule checked_function_read_only >> disch_then drule >>
+  disch_then drule >> simp[]
+QED
+
 (* get_module_code_stk from vyperLookupStorage supplies stack transport. *)
 Theorem context_internal_read_only:
   check_contract F layouts cx.txn.target mods = SOME art /\

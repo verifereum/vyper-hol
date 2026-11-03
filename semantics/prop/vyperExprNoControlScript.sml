@@ -2,7 +2,8 @@ Theory vyperExprNoControl
 
 Ancestors
   pair vyperCreate vyperCreateFrame vyperInterpreter vyperAST vyperMisc
-  vyperCallFrame vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches vyperCallOutcomeFrame
+  vyperCallFrame vyperCallOutcome vyperCallOutcomeProps
+  vyperCallOutcomeBranches vyperCallOutcomeFrame
   vyperRuntimeAccounts vyperState
 Libs
   pairLib monadsyntax
@@ -354,21 +355,40 @@ Proof
   gvs[COND_RATOR, AllCaseEqs(), raise_def, no_control_exc_def] >> metis_tac[]
 QED
 
+Theorem array_length_backend_no_failure[local]:
+  !cx tr s exc s'. get_storage_backend cx tr s <> (INR exc, s')
+Proof
+  Cases_on `tr` >>
+  simp[get_storage_backend_def, bind_def, get_transient_storage_def,
+       get_accounts_def, return_def]
+QED
+
+Theorem array_length_value_no_control[local]:
+  !v s exc s'.
+  (case v of
+   | ArrayV (DynArrayV vs) => return (LENGTH vs)
+   | ArrayV (SArrayV vs) => return (LENGTH vs)
+   | ArrayV (TupleV vs) => return (LENGTH vs)
+   | BytesV bs => return (LENGTH bs)
+   | StringV bs => return (LENGTH bs)
+   | _ => raise (Error (TypeError "result_array_length"))) s = (INR exc, s') ==>
+  no_control_exc exc
+Proof
+  Cases_on `v` >>
+  simp[return_def, raise_def, no_control_exc_def] >>
+  rename1 `array_value_CASE av` >> Cases_on `av` >> simp[return_def]
+QED
+
 Theorem result_array_length_no_control:
   ∀cx tv s exc s'.
   result_array_length cx tv s = (INR exc, s') ⇒ no_control_exc exc
 Proof
   ho_match_mp_tac result_array_length_ind >> rpt gen_tac >>
-  simp[result_array_length_def, bind_def, return_def,
-    prod_CASE_rator, sum_CASE_rator, vyperValueTheory.value_CASE_rator,
-    vyperValueTheory.array_value_CASE_rator, get_storage_backend_def,
-    get_transient_storage_def, get_accounts_def, COND_RATOR] >>
-  rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def, no_control_exc_def] >>
-  FIRST [
-    qpat_x_assum `get_storage_backend _ tr _ = _` mp_tac >>
-      Cases_on `tr` >> simp[get_storage_backend_def, bind_def,
-        get_transient_storage_def, get_accounts_def, return_def],
-    metis_tac[read_result_no_control, no_control_exc_def]]
+  simp[result_array_length_def, return_def] >>
+  rpt strip_tac >> drule bind_no_control >> disch_then irule >>
+  simp[array_length_backend_no_failure, return_def] >>
+  (conj_tac >- metis_tac[read_result_no_control]) >>
+  rpt strip_tac >> drule array_length_value_no_control >> simp[]
 QED
 
 Theorem place_type_value_no_control:
@@ -573,7 +593,9 @@ Theorem eval_ext_call_no_control:
   eval_ext_call cx static skip_check sig opts vs st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-  PairCases_on `sig` >> Cases_on `vs` >>
+  PairCases_on `sig` >> Cases_on `vs`
+  >- simp[eval_ext_call_def, eval_ext_call_effects_def,
+          raise_def, no_control_exc_def] >>
   simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >> strip_tac >>
   rpt CALL_NO_CONTROL_STEP
 QED
