@@ -289,20 +289,6 @@ Proof
   FORALL_PROD] >> metis_tac[]
 QED
 
-(* place_ptr_rel reads the state only through the live locals' pointers,
-   which code from sa on does not write. *)
-Theorem place_ptr_rel_vars_frame:
-  !cenv cx s t sa pv w loc vt.
-    place_ptr_rel cenv cx s pv w loc vt /\ local_ptrs_reserved cenv sa /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) ==>
-    place_ptr_rel cenv cx t pv w loc vt
-Proof
-  rpt gen_tac >> Cases_on `pv` >> simp[place_ptr_rel_def] >>
-  rename1 `PlaceR pl` >> Cases_on `pl` >> simp[place_ptr_rel_def] >>
-  rpt strip_tac >> gvs[] >>
-  `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
-  metis_tac[]
-QED
 
 Theorem target_post_inst_idx[simp]:
   !ctx func cenv cx es sa sb s0 es' pv vt r s n.
