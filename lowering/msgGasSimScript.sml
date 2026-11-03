@@ -38,6 +38,45 @@ Proof
        next_gas_reading_def, read_result_def]
 QED
 
+Theorem msg_gas_edge[local]:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id GAS [] [out]) ==>
+  ?w. gas_prefix 1 s.vs_gas_readings = [w] /\
+    gas_path_edge ctx func s 1
+      (OK (update_var out w
+        (s with <|vs_gas_readings := DROP 1 s.vs_gas_readings;
+                   vs_inst_idx := SUC s.vs_inst_idx|>)))
+Proof
+  strip_tac >>
+  `1 = SUC 0` by decide_tac >>
+  `?w. gas_prefix 1 s.vs_gas_readings = [w] /\
+    step_inst 0 ctx (mk_inst id GAS [] [out]) s =
+      OK (update_var out w
+        (s with vs_gas_readings := DROP 1 s.vs_gas_readings))`
+    by (Cases_on `s.vs_gas_readings`
+        >- (qexists_tac `0w` >> conj_tac
+            >- (qpat_assum `1 = SUC 0` (fn th => once_rewrite_tac[th]) >>
+                simp[gas_prefix_suc, gas_prefix_zero]) >>
+            qpat_x_assum `1 = SUC 0` kall_tac >>
+        simp[step_inst_non_invoke, mk_inst_def] >>
+            simp[step_inst_base_def, exec_gas_def] >>
+            gvs[update_var_def, venom_state_component_equality]) >>
+        rename1 `s.vs_gas_readings = w::ws` >>
+        qexists_tac `w` >> conj_tac
+        >- (qpat_assum `1 = SUC 0` (fn th => once_rewrite_tac[th]) >>
+            simp[gas_prefix_suc, gas_prefix_zero]) >>
+        qpat_x_assum `1 = SUC 0` kall_tac >>
+        simp[step_inst_non_invoke, mk_inst_def] >>
+        simp[step_inst_base_def, exec_gas_def]) >>
+  qpat_x_assum `1 = SUC 0` kall_tac >>
+  qexists_tac `w` >> simp[] >>
+  rewrite_tac[gas_path_edge_def] >> simp[] >>
+  qexists_tac `0:num` >>
+  simp[gas_count_step_def, mk_inst_def, is_terminator_def, update_var_def] >>
+  gvs[update_var_def]
+QED
+
 Theorem compile_msg_gas_path:
   compile_env_var MsgGas sa = (op, sb) /\
   fn_has_code sa sb func /\ ~s0.vs_halted /\
