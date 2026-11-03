@@ -62,7 +62,7 @@ Ancestors
   venomState
   compileEnv e2eDefs supportedProgram compileVyper immutableSectionRel
   unitTransformDefs unitShapeDefs o1PassContract
-  fragExec loweringHalt loweringShapeProps retAbiPlanProps
+  fragExec loweringHalt loweringShapeProps loweringShapeSource retAbiPlanProps
   venomInst venomWf contextCodegenRel memSafeRun allocaFrontierBound
 
 (* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
@@ -878,17 +878,21 @@ QED
 
 (* ===== Planned lowering stages (NOT certificates) ===== *)
 
-(* S2, Milestone 5: proved in loweringShapeProps as
-   lower_vyper_runtime_unit_source_unit_ok_names. Raw O1 shape excludes
-   DLOAD; the immutable-free hypothesis restricts this theorem's source
-   domain, not the runtime immutable compiler. *)
+(* S2, Milestone 5: proved in loweringShapeSource as
+   lower_vyper_runtime_unit_source_unit_ok_checked. The type checker supplies
+   builtin arities and distinct internal names; raw_shape_free_program
+   excludes msg.gas values and raw_call (wider than the unit shape needs:
+   a plain raw_call passes it, but the body-shape proof lacks that case).
+   Raw O1 shape excludes DLOAD; the immutable-free hypothesis restricts this
+   theorem's source domain, not the runtime immutable compiler. *)
 Theorem lower_vyper_runtime_unit_source_unit_ok:
-  !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
-    immutable_free_program tops
+  !tops rpolicy unit layouts addr art.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    check_contract F layouts addr [(NONE, tops)] = SOME art /\
+    raw_shape_free_program tops /\ immutable_free_program tops
     ==> o1_source_unit_ok unit
 Proof
-  ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_names
+  ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_checked
 QED
 
 (* S2b: planned admission, Milestone 5. The lowering's PHI-free code
