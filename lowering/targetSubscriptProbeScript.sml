@@ -1383,3 +1383,71 @@ QED
      theorem is not itself an execution theorem for this compiled code.
    These concrete equations do not establish either universal expression
    case judgment or an inhabited statement-state relation. *)
+
+Theorem probe_word_conditional_copy_relational_agree:
+  !st mt n m.
+    n <= 1 /\ (n = 1 ==> m <= 1) /\
+    lookup_storage 3w st = n2w n /\ lookup_storage 4w st = n2w m /\
+    storage_agree (storage_dead probe_word_context F st) st mt ==>
+    let live =
+      if n = 0 then update_storage 0w 0w st
+      else if m = 0 then update_storage 1w 0w (update_storage 0w 1w st)
+      else update_storage 2w (lookup_storage 5w st)
+             (update_storage 1w 1w (update_storage 0w 1w st))
+    in storage_agree (storage_dead probe_word_context F live) live
+      (if n = 0 then update_storage 0w 0w mt
+       else update_storage 0w (lookup_storage 3w mt)
+         (update_storage 2w (lookup_storage 5w mt)
+           (update_storage 1w (lookup_storage 4w mt) mt)))
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `n = 0`
+  >- (gvs[] >> simp[storage_agree_def] >> rpt strip_tac >>
+      qpat_x_assum `storage_agree _ _ _` mp_tac >>
+      simp[storage_agree_def] >> strip_tac >>
+      first_x_assum (qspecl_then [`k`,`b`] mp_tac) >>
+      simp[probe_word_dead_bytes] >>
+      gvs[probe_word_dead_bytes, lookup_storage_def, update_storage_def,
+          APPLY_UPDATE_THM] >>
+      Cases_on `k = 0w` >>
+      gvs[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]) >>
+  drule_all probe_word_copy_relational_agree >>
+  simp[update_storage_def, UPDATE_COMMUTES,
+       dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
+
+Theorem probe_word_conditional_copy_pre_summary:
+  !cenv env e0 es mt.
+    expr_body_pre cenv probe_word_context env e0 es /\
+    storage_agree
+      (storage_dead probe_word_context F (get_storage probe_word_context es F))
+      (get_storage probe_word_context es F) mt ==>
+    ?es'. eval_expr probe_word_context
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es =
+      (INL (Value (IntV 0)), es') /\ es'.scopes = es.scopes /\
+      storage_agree
+        (storage_dead probe_word_context F (get_storage probe_word_context es' F))
+        (get_storage probe_word_context es' F)
+        (if w2n (lookup_storage 3w (get_storage probe_word_context es F)) = 0
+         then update_storage 0w 0w mt
+         else update_storage 0w (lookup_storage 3w mt)
+           (update_storage 2w (lookup_storage 5w mt)
+             (update_storage 1w (lookup_storage 4w mt) mt)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule probe_word_pre_shapes >> strip_tac >>
+  qspecl_then [`es`,
+    `w2n (lookup_storage 3w (get_storage probe_word_context es F))`,
+    `w2n (lookup_storage 4w (get_storage probe_word_context es F))`]
+    mp_tac probe_word_copy_symbolic_success >>
+  (impl_tac >- (simp[] >> strip_tac >>
+    first_x_assum irule >> metis_tac[wordsTheory.n2w_w2n])) >>
+  strip_tac >> qexists_tac `es'` >> simp[] >>
+  simp[get_storage_def, set_storage_def] >>
+  qspecl_then [`get_storage probe_word_context es F`, `mt`,
+    `w2n (lookup_storage 3w (get_storage probe_word_context es F))`,
+    `w2n (lookup_storage 4w (get_storage probe_word_context es F))`]
+    mp_tac probe_word_conditional_copy_relational_agree >>
+  (impl_tac >- (simp[] >> strip_tac >> first_x_assum irule >>
+    metis_tac[wordsTheory.n2w_w2n])) >>
+  simp[get_storage_def]
+QED
