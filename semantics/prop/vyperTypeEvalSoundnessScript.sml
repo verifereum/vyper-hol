@@ -7512,7 +7512,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_CreateTarget]:
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
                          type_check_def, assert_def, return_def, raise_def,
                          lift_option_type_def, get_accounts_def, update_accounts_def] >>
-    simp[] >>
+    simp_tac (srw_ss()) [] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
