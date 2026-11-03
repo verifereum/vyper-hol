@@ -381,6 +381,15 @@ Termination
        listTheory.list_size_map, SF ETA_ss]
 End
 
+Theorem well_formed_type_byte_bits:
+  well_formed_type tenv ty ==> type_bits ty MOD 8 = 0
+Proof
+  Cases_on `ty` >> simp[type_bits_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[type_bits_def, well_formed_type_def, vyperValueTheory.evaluate_type_def] >>
+  metis_tac[]
+QED
+
 Definition expr_sim_pre_def:
   expr_sim_pre cenv cx env e es <=>
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
