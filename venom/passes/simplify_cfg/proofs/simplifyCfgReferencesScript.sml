@@ -75,7 +75,11 @@ Theorem label_positions_codecopy[local]:
   MEM (Label l) i.inst_operands ==>
   l = "runtime_begin"
 Proof
-  rw[label_positions_ok_def] >> gvs[AllCaseEqs(), EVERY_MEM] >>
+  strip_tac >> qpat_x_assum `MEM _ _` mp_tac >>
+  qpat_x_assum `label_positions_ok _` mp_tac >>
+  simp[label_positions_ok_def] >>
+  rpt CASE_TAC >> rw[] >>
+  gvs[EVERY_MEM, stackPlanTypesTheory.is_label_operand_def] >>
   metis_tac[stackPlanTypesTheory.is_label_operand_def]
 QED
 
