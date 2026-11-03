@@ -51,6 +51,34 @@ Proof
   metis_tac[cj 1 mem_safe_fuel_mono_up]
 QED
 
+Theorem mem_jump_boundary[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  step_inst (SUC k) ctx inst s = OK t /\
+  is_terminator inst.inst_opcode /\ ~t.vs_halted /\
+  lookup_block t.vs_current_bb fn.fn_blocks = SOME target /\
+  eval_phis t target.bb_instructions = OK entered /\
+  (revert_forward_at bb s.vs_inst_idx \/
+   mem_safe_step (SUC k) ctx inst s) ==>
+  run_from (SUC k) ctx fn s =
+    run_from k ctx fn
+      (entered with vs_inst_idx := phi_prefix_length target.bb_instructions) /\
+  (mem_safe_run k ctx fn
+      (entered with vs_inst_idx := phi_prefix_length target.bb_instructions) ==>
+   mem_safe_run (SUC k) ctx fn s)
+Proof
+  strip_tac >> (
+  `exec_block (SUC k) ctx bb s = OK t` by
+    simp[Once exec_block_def] >>
+  drule_all run_blocks_run_from >> strip_tac >>
+  drule_all mem_safe_blocks_run >> strip_tac >>
+  conj_tac
+  >- (simp[Once run_from_def] >> metis_tac[]) >>
+  disch_tac >>
+  simp[Once mem_safe_run_def, Once mem_safe_block_def] >>
+  metis_tac[])
+QED
+
 (* A normal landing transfers the existing conditional continuation check;
    a terminal path supplies its own safe run. *)
 Theorem gas_path_mem_exec:
