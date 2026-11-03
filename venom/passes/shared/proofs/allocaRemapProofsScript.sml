@@ -3188,6 +3188,17 @@ Proof
   strip_tac >> simp[step_inst_base_def]
 QED
 
+Theorem mcopy_matching_access_shape[local]:
+  inst.inst_opcode = MCOPY /\
+  (?ops. (mem_write_ops inst = SOME ops \/ mem_read_ops inst = SOME ops) /\
+         ops.iao_ofst = Var v) ==>
+  ((?v6 sz. inst.inst_operands = [Var v; v6; sz]) \/
+   (?v2 sz. inst.inst_operands = [v2; Var v; sz]))
+Proof
+  rpt strip_tac >>
+  fs[mem_write_ops_def, mem_read_ops_def, AllCaseEqs()] >> gvs[]
+QED
+
 (* Standalone MCOPY helper: proves the MCOPY case for remap_preserved_mem_ops.
    Extracted from Resume block to avoid by-clause failures with 30+ assumptions. *)
 Theorem mcopy_preserves_remap[local]:
@@ -3210,16 +3221,20 @@ Theorem mcopy_preserves_remap[local]:
     ?v2. step_inst_base inst s2 = OK v2 /\
          alloca_remap_rel fn roots remap v1 v2
 Proof
-  rpt strip_tac >> gvs[] >>
-  (* Case split on whether Var v matched write or read ops *)
-  fs[mem_write_ops_def, mem_read_ops_def, AllCaseEqs()] >> gvs[]
-  >- suspend "wr"
-  >- suspend "rd"
+  rpt gen_tac >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all mcopy_matching_access_shape >>
+  disch_then (DISJ_CASES_THEN2
+    (qx_choose_then `v6` (qx_choose_then `sz` assume_tac))
+    (qx_choose_then `v2` (qx_choose_then `sz` assume_tac)))
+  >- (qpat_x_assum `?ops. _` kall_tac >> gvs[] >> suspend "wr")
+  >- (qpat_x_assum `?ops. _` kall_tac >> gvs[] >> suspend "rd")
 QED
 
 Resume mcopy_preserves_remap[wr]:
   (* Case 1: Var v is the dst (write) address — operands = [Var v; v6; sz] *)
-  fs[step_inst_base_def, AllCaseEqs()] >>
+  drule_all step_inst_base_mcopy >>
+  disch_then (fn th => fs[th, AllCaseEqs()]) >>
   fs[eval_operand_def, lookup_var_def] >>
   extract_clause2b >>
   first_x_assum (qspec_then `v` mp_tac) >>
