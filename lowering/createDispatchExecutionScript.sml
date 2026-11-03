@@ -25,8 +25,13 @@ Proof
   rpt gen_tac >> Cases_on `salt` >> Cases_on `salt_value` >>
   simp[optionTheory.OPTREL_def, compile_create_dispatch_def,
        compile_check_create_result_def, comp_bind_def, comp_return_def,
-       pairTheory.UNCURRY] >>
-  rpt strip_tac >> imp_res_tac emitted_insts_emit_op >> gvs[] >>
-  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_create_def,
-       eval_operand_update_var]
+       pairTheory.UNCURRY, Excl "consume_create_outcome_eq"] >>
+  rpt strip_tac >> imp_res_tac emitted_insts_emit_op >>
+  gvs[Excl "consume_create_outcome_eq"] >>
+  Cases_on `w2n n > 2 * max_code_size` >>
+  simp[run_inst_seq_def, Excl "consume_create_outcome_eq"] >>
+  asm_simp_tac (srw_ss())
+    [step_inst_base_opcode_eqs, mk_inst_def, Excl "consume_create_outcome_eq"] >>
+  simp[exec_create_def, mk_inst_def, eval_operand_update_var,
+       pairTheory.UNCURRY, Excl "consume_create_outcome_eq"]
 QED
