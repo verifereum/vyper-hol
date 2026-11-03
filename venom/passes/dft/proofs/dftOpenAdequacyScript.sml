@@ -92,3 +92,25 @@ Proof
   Cases_on `inst.inst_outputs` >> gvs[] >>
   Cases_on `t` >> gvs[]
 QED
+
+Theorem dft_open_setup_materialize:
+  setup_callee callee args (dft_open_materialize xs n s) =
+    OPTION_MAP (dft_open_materialize xs n) (setup_callee callee args s)
+Proof
+  simp[dft_open_materialize_def, gas_setup_callee] >>
+  AP_THM_TAC >> AP_TERM_TAC >> simp[FUN_EQ_THM, dft_open_materialize_def]
+QED
+
+Theorem dft_open_return_materialize:
+  bind_outputs inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret
+      (merge_callee_state (dft_open_materialize xs i caller)
+                          (dft_open_materialize xs n cs))) =
+  OPTION_MAP (dft_open_materialize xs n)
+    (bind_outputs inst.inst_outputs ret.iret_values
+      (adopt_return_fmp ret (merge_callee_state caller cs)))
+Proof
+  simp[dft_open_materialize_def, gas_merge_callee, gas_adopt_return,
+       gas_bind_outputs] >>
+  AP_THM_TAC >> AP_TERM_TAC >> simp[FUN_EQ_THM, dft_open_materialize_def]
+QED
