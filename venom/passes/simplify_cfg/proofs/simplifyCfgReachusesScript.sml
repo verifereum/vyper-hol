@@ -881,3 +881,71 @@ Proof
       Cases_on `t'` >> simp[scfg_jnz_inst_ok_def]) >>
   simp[fix_phi_inst_def]
 QED
+
+Theorem remove_unreachable_blocks_jnz_condition_ok:
+  scfg_jnz_condition_ok fn ==> scfg_jnz_condition_ok (remove_unreachable_blocks fn)
+Proof
+  simp[scfg_jnz_condition_ok_def, remove_unreachable_blocks_def] >>
+  Cases_on `fn_entry_label fn` >> simp[MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem fix_all_phis_jnz_condition_ok:
+  scfg_jnz_condition_ok fn ==> scfg_jnz_condition_ok (fix_all_phis fn)
+Proof
+  simp[scfg_jnz_condition_ok_def, fix_all_phis_def, fix_phis_in_block_def,
+       MEM_MAP, MEM_APPEND, MEM_FILTER, PULL_EXISTS] >>
+  metis_tac[scfg_jnz_inst_ok_fix_phi_inst]
+QED
+
+Theorem chain_merge_jnz_condition_ok:
+  scfg_jnz_condition_ok fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  fn' = (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+      (bb_succs (merge_blocks a b))) ==> scfg_jnz_condition_ok fn'
+Proof
+  strip_tac >>
+  `EVERY (\bb. EVERY scfg_jnz_inst_ok bb.bb_instructions) fn.fn_blocks` by
+    (fs[scfg_jnz_condition_ok_def, EVERY_MEM] >> metis_tac[]) >>
+  drule chain_merge_every_inst >>
+  disch_then (qspecl_then [`b`, `a`] mp_tac) >>
+  impl_tac >- metis_tac[scfg_jnz_inst_ok_subst_label] >>
+  gvs[scfg_jnz_condition_ok_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem do_merge_jump_jnz_condition_ok:
+  wf_function fn /\ scfg_jnz_condition_ok fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  do_merge_jump fn a b lm = SOME (fn',lm') ==> scfg_jnz_condition_ok fn'
+Proof
+  strip_tac >> pure_rewrite_tac[scfg_jnz_condition_ok_def] >> rpt strip_tac >>
+  drule_all do_merge_jump_block_map >> strip_tac >>
+  qpat_x_assum `MEM inst _` mp_tac >> asm_rewrite_tac[] >>
+  simp[MEM_MAP] >> disch_then (qx_choose_then `orig` strip_assume_tac) >>
+  `scfg_jnz_inst_ok orig` by metis_tac[scfg_jnz_condition_ok_def] >>
+  Cases_on `bb'.bb_label = a.bb_label` >>
+  Cases_on `target = a.bb_label` >> Cases_on `bb'.bb_label = target` >>
+  Cases_on `is_terminator orig.inst_opcode` >>
+  gvs[combinTheory.I_DEF] >>
+  metis_tac[scfg_jnz_inst_ok_subst_label, scfg_jnz_inst_ok_canon,
+            scfg_jnz_inst_ok_update_phi_bypass]
+QED
+
+Theorem scfg_jnz_inst_ok_subst_block_labels:
+  scfg_jnz_inst_ok inst ==> scfg_jnz_inst_ok (subst_block_labels_inst lm inst)
+Proof
+  Cases_on `is_block_label_opcode inst.inst_opcode` >>
+  simp[subst_block_labels_inst_def, subst_label_map_inst_def,
+       scfg_jnz_inst_ok_def] >> rpt strip_tac >>
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  rename1 `is_label_operand (subst_label_map_op lm head)` >>
+  Cases_on `head` >> gvs[subst_label_map_op_def, is_label_operand_def]
+QED
+
+Theorem subst_block_labels_fn_jnz_condition_ok:
+  scfg_jnz_condition_ok fn ==> scfg_jnz_condition_ok (subst_block_labels_fn lm fn)
+Proof
+  simp[scfg_jnz_condition_ok_def, subst_block_labels_fn_def,
+       subst_block_labels_block_def, MEM_MAP, PULL_EXISTS] >>
+  metis_tac[scfg_jnz_inst_ok_subst_block_labels]
+QED
