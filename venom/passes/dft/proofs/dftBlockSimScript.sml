@@ -1318,6 +1318,72 @@ Proof
       mp_tac independent_commute_eq >> simp[gas_pair_def])
 QED
 
+(* GAS-first construction applies to both GAS/GAS and GAS/INVOKE. *)
+Theorem gas_first_reorder[local]:
+  inst1.inst_opcode = GAS /\
+  DISJOINT (set (inst_defs inst1)) (set (inst_uses inst2)) /\
+  DISJOINT (set (inst_defs inst1)) (set (inst_defs inst2)) /\
+  step_inst fuel ctx inst2 ss = OK v2 /\
+  step_inst fuel ctx inst1 v2 = OK s21 ==>
+  ?ss1 v1. ss = (ss1 with vs_gas_readings := ss.vs_gas_readings) /\
+           step_inst fuel ctx inst1 ss1 = OK v1 /\
+           step_inst fuel ctx inst2 v1 = OK s21
+Proof
+  strip_tac >> drule_all step_inst_ok_gas >> strip_tac >>
+  `(!y. MEM (Var y) inst2.inst_operands ==> x <> y) /\
+   ~MEM x inst2.inst_outputs` by
+    (gvs[inst_defs_def, inst_uses_def, DISJOINT_DEF, EXTENSION] >>
+     metis_tac[mem_var_operand_vars]) >>
+  qpat_x_assum `step_inst fuel ctx inst1 v2 = OK s21` kall_tac >>
+  drule_all step_inst_ok_gas_replay >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `s21 = update_var x y _` >>
+  qabbrev_tac `tail = DROP 1 v2.vs_gas_readings` >>
+  qabbrev_tac `gs = gas_prefix n ss.vs_gas_readings ++ tail` >>
+  qexistsl_tac [`ss with vs_gas_readings := y::gs`,
+                `update_var x y (ss with vs_gas_readings := gs)`] >>
+  conj_tac >- simp[] >> conj_tac
+  >- (drule_all step_inst_gas_single >>
+      disch_then (qspecl_then [`ss with vs_gas_readings := y::gs`,
+                               `fuel`, `ctx`] mp_tac) >> simp[]) >>
+  qpat_x_assum `s21 = _` SUBST1_TAC >>
+  irule step_inst_ok_frame >> simp[Abbr `gs`, Abbr `tail`] >> metis_tac[]
+QED
+
+Theorem gas_second_reorder[local]:
+  inst2.inst_opcode = GAS /\
+  DISJOINT (set (inst_defs inst2)) (set (inst_uses inst1)) /\
+  DISJOINT (set (inst_defs inst1)) (set (inst_defs inst2)) /\
+  step_inst fuel ctx inst2 ss = OK v2 /\
+  step_inst fuel ctx inst1 v2 = OK s21 ==>
+  ?ss1 v1. ss = (ss1 with vs_gas_readings := ss.vs_gas_readings) /\
+           step_inst fuel ctx inst1 ss1 = OK v1 /\
+           step_inst fuel ctx inst2 v1 = OK s21
+Proof
+  strip_tac >> drule_all step_inst_ok_gas >> strip_tac >>
+  `(!y. MEM (Var y) inst1.inst_operands ==> x <> y) /\
+   ~MEM x inst1.inst_outputs` by
+    (gvs[inst_defs_def, inst_uses_def, DISJOINT_DEF, EXTENSION] >>
+     metis_tac[mem_var_operand_vars]) >>
+  qpat_x_assum `step_inst fuel ctx inst2 ss = OK v2` kall_tac >>
+  qmatch_asmsub_abbrev_tac `v2 = update_var x y _` >>
+  qpat_x_assum `v2 = _` SUBST_ALL_TAC >>
+  drule_all step_inst_ok_frame_reverse >> strip_tac >>
+  qpat_x_assum `step_inst fuel ctx inst1 (update_var _ _ _) = _` kall_tac >>
+  drule_all step_inst_ok_gas_replay >> strip_tac >>
+  qabbrev_tac `gs = gas_prefix n (DROP 1 ss.vs_gas_readings) ++
+                         y :: DROP n (DROP 1 ss.vs_gas_readings)` >>
+  qexistsl_tac [`ss with vs_gas_readings := gs`,
+                `u with vs_gas_readings := y :: u.vs_gas_readings`] >>
+  conj_tac >- simp[] >> conj_tac
+  >- (first_x_assum (qspec_then `y :: u.vs_gas_readings` mp_tac) >>
+      simp[Abbr `gs`]) >>
+  qpat_x_assum `s21 = _` SUBST1_TAC >>
+  drule_all step_inst_gas_single >>
+  disch_then (qspecl_then [`u with vs_gas_readings := y::u.vs_gas_readings`,
+                           `fuel`, `ctx`] mp_tac) >>
+  simp[update_var_def, venom_state_component_equality]
+QED
+
 (* Gas pairs commute up to a reordering of the readings.  The start state of
    the original order differs from ss only in vs_gas_readings (gas_variant,
    o1PassContract, unfolded here), and both orders end in the same state. *)
