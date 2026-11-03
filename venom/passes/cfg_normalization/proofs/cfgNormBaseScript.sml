@@ -3291,11 +3291,14 @@ Proof
 QED
 
 val subst_label_nonjump_tac =
-  gvs[step_inst_base_def, subst_label_inst_def,
-      eval_operands_subst_label, eval_operand_subst_label,
-      parse_dret_shape_subst_label] >>
-  BasicProvers.every_case_tac >>
-  gvs[eval_operand_subst_label, parse_dret_shape_subst_label];
+  simp[step_inst_base_def, subst_label_inst_def,
+       eval_operands_subst_label, eval_operand_subst_label,
+       parse_dret_shape_subst_label] >>
+  namedCases_on `inst.inst_operands` ["", "arg rest"] >>
+  simp[eval_operand_subst_label] >>
+  namedCases_on `rest` ["", "arg2 rest2"] >>
+  simp[eval_operand_subst_label] >>
+  Cases_on `rest2` >> simp[eval_operand_subst_label];
 
 (* For non-jump terminators, subst_label_inst has no effect on step_inst_base
    when vs_labels agrees on old and new labels *)
