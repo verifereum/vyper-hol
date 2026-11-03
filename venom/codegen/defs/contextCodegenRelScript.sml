@@ -274,12 +274,48 @@ Definition reachability_closed_def:
        fn_entry_inv Inv ctx callee cs)
 End
 
+(* Revert forwarding: RETURNDATACOPY [p; 0; rds] immediately followed by
+   REVERT [p; rds].  After a failed call, the lowering copies the callee's
+   revert data to p (a zero-size ALLOCA or address 0) and reverts with it
+   (extcall_fail, raw_call's call_failed, create_fail), as Python does.
+   Both instructions touch [p, p + rds), past the frontier when rds > 0;
+   the REVERT discards memory, so that write is never read by anything
+   but the REVERT itself. *)
+Definition revert_forward_def:
+  revert_forward bb i <=>
+    ?inst1 inst2 p rds.
+      get_instruction bb i = SOME inst1 /\
+      get_instruction bb (SUC i) = SOME inst2 /\
+      inst1.inst_opcode = RETURNDATACOPY /\
+      inst1.inst_operands = [p; Lit 0w; rds] /\
+      inst2.inst_opcode = REVERT /\
+      inst2.inst_operands = [p; rds]
+End
+
+(* Index i is one of the two instructions of a revert forwarding. *)
+Definition revert_forward_at_def:
+  revert_forward_at bb i <=>
+    revert_forward bb i \/ (0 < i /\ revert_forward bb (i - 1))
+End
+
+(* The instruction state s of fn is one of a revert forwarding's two
+   instructions. *)
+Definition in_revert_forward_def:
+  in_revert_forward fn s <=>
+    ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+         revert_forward_at bb s.vs_inst_idx
+End
+
+(* A revert forwarding is exempt: it copies the callee's revert data to
+   its pointer and reverts with it, reading nothing else (the REVERT's
+   operands are loaded onto the stack before the copy writes), and the
+   revert discards memory. *)
 Definition codegen_memory_obligations_def:
   codegen_memory_obligations Inv ctx cp <=>
     !fn inst vs1 vs2 fuel.
       Inv ctx fn inst vs1 /\
       MEM fn ctx.ctx_functions /\
-      MEM inst (fn_insts fn) ==>
+      MEM inst (fn_insts fn) /\ ~in_revert_forward fn vs1 ==>
       source_memory_reads_disjoint cp inst vs1 /\
       context_source_memory_writes_disjoint cp inst vs1 /\
       (step_inst fuel ctx inst vs1 = OK vs2 ==>

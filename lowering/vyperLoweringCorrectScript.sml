@@ -28,18 +28,21 @@
  *     whose return may release a transient nonreentrant lock
  *   (S1, lower_vyper_runtime_unit_correct, is in loweringRuntimeCorrect)
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
- *   lower_vyper_runtime_unit_run_mem_safe -- S3's memory-safe run (planned
- *     admission, Milestone 5)
- *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5), from the run
- *     through mem_safe_raw_unit_memory_ok
  *   lower_vyper_runtime_unit_o1_shape_extras -- S2b (planned admission,
  *     Milestone 5): the non-INVOKE label operands are local, the entry
  *     function has no PARAM, no first block has a PHI
+ *   lower_vyper_runtime_unit_run_mem_safe -- S3's memory-safe run (planned
+ *     admission, Milestone 5)
+ *   lower_vyper_runtime_unit_ptr_taint -- S3's pointer discipline and taint
+ *     bound (planned admission, Milestone 5)
+ *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5), from the run
+ *     through mem_safe_raw_unit_memory_ok and from the pointer discipline
+ *     and taint bound
  *
  * TASK056: obsolete NONE-mode relation retained as inactive source provenance.
  * STATUS: S2 is proved; S2b is a statement; S3 is proved from the admitted
- *   memory-safe run lower_vyper_runtime_unit_run_mem_safe, so it is NOT yet
- *   a proved correctness certificate.
+ *   lower_vyper_runtime_unit_run_mem_safe and lower_vyper_runtime_unit_ptr_taint,
+ *   so it is NOT yet a proved correctness certificate.
  * Before major proof repair, check lowering definitions against the chosen
  * upstream compiler target; see docs/compiler-definition-parity.md.
  *)
@@ -61,7 +64,7 @@ Ancestors
   venomExecSemantics
   venomState
   compileEnv e2eDefs supportedProgram compileVyper immutableSectionRel
-  unitTransformDefs unitShapeDefs o1PassContract
+  unitTransformDefs unitShapeDefs o1PassContract ptrDiscipline
   fragExec loweringHalt loweringShapeProps retAbiPlanProps
   venomInst venomWf contextCodegenRel memSafeRun allocaFrontierBound
 
@@ -919,6 +922,22 @@ QED
 
 (* ===== S3: memory safety ===== *)
 
+(* run_lowering builds every function with mk_raw_function, which leaves
+   fn_eom unset. *)
+Theorem run_lowering_eom_none:
+  run_lowering selectors external_fns internal_fns fallback_fn rpolicy
+    bucket_count fn_metadata_bytes dense_buckets entry_info entry_label =
+      SOME u ==>
+  EVERY (\fn. fn.fn_eom = NONE) u.cu_context.ctx_functions
+Proof
+  simp[run_lowering_def, extract_context_with_internals_def,
+       mk_venom_context_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >>
+  gvs[mk_raw_function_def] >>
+  drule package_internal_blocks_raw_defaults >>
+  simp[listTheory.EVERY_MEM, function_raw_metadata_defaults_def]
+QED
+
 (* A unit that lowers comes from run_lowering with the entry label
    "__entry". *)
 Theorem lower_vyper_runtime_unit_run_lowering:
@@ -962,12 +981,60 @@ Proof
   cheat
 QED
 
+(* The dead bytes of a source call's result: those storage_dead gives in
+   the running contract's storage and transient storage, by the layout the
+   success case of external_call_result_rel compares with.  The pipeline
+   may change them (o1PassContract's dead_result_rel), and the source
+   relation already ignores them.  S3 bounds by them what a call request
+   or the result may read from moved memory (taint_within). *)
+Definition external_call_dead_def:
+  external_call_dead tx ((res : value + exception), am',
+                      (rqs : call_request list)) =
+    let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
+    <| d_stor := (\a st. if a = tx.target
+                         then {(k,b) | storage_dead cx F st (w2n k) b}
+                         else {});
+       d_trans := (\a st. if a = tx.target
+                          then {(k,b) | storage_dead cx T st (w2n k) b}
+                          else {});
+       d_imm := K {}; d_ret := K {} |>
+End
+
+(* S3's pointer discipline and taint bound: planned admission, Milestone 5.
+   The rest of o1PassContract's source invariant (o1_src_inv), which the O1
+   pipeline's simulation (S4) takes beside raw_unit_memory_ok: every
+   reachable access other than a revert forward stays in the frame's
+   allocations or above the empty reserved region, and what a call request
+   or the result reads from moved memory is bounded by the call's dead
+   bytes.  Proof idea: the same allocation-budget and buffer-layout
+   induction as lower_vyper_runtime_unit_run_mem_safe. *)
+Theorem lower_vyper_runtime_unit_ptr_taint:
+  !tops rpolicy unit am tx ret vs.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
+    ==> ptr_discipline 0 unit.cu_context vs /\
+        taint_within
+          (external_call_dead tx (call_external (SOME vs.vs_outcomes) [] am tx))
+          unit.cu_context vs
+Proof
+  cheat
+QED
+
 (* S3, Milestone 5: the memory-safe run (above) through the bridge
    mem_safe_raw_unit_memory_ok, with alloca_frontier_inv as the frontier
-   bound.  The bridge's structural premises (an entry function with an entry
-   block, distinct labels, an acyclic reachable call graph, the allocation
-   budget below the word size) are lowering_context_ok, which run_lowering
-   checks. *)
+   bound, and the pointer discipline and taint bound (above), with the
+   empty reserved region.  The bridge's structural premises (an entry
+   function with an entry block, distinct labels, an acyclic reachable call
+   graph, the allocation budget below the word size) are
+   lowering_context_ok, which run_lowering checks.  The other conjuncts
+   come from run_lowering: no eom, and no reserved global region. *)
 Theorem lower_vyper_runtime_unit_memory_ok:
   !tops rpolicy unit am tx ret vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -979,7 +1046,13 @@ Theorem lower_vyper_runtime_unit_memory_ok:
     initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok tops am tx vs.vs_outcomes /\
     ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
-    ==> raw_unit_memory_ok unit.cu_context vs
+    ==> raw_unit_memory_ok unit.cu_context vs /\
+        EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+        fixed_region_reserved 0 unit.cu_context /\
+        ptr_discipline 0 unit.cu_context vs /\
+        taint_within
+          (external_call_dead tx (call_external (SOME vs.vs_outcomes) [] am tx))
+          unit.cu_context vs
 Proof
   rpt strip_tac >>
   drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
@@ -995,22 +1068,28 @@ Proof
   `?lbl. fn_entry_label fn = SOME lbl` by
     (Cases_on `fn.fn_blocks` >>
      gvs[fn_has_entry_def, fn_entry_label_def, entry_block_def]) >>
-  qspecl_then [`unit.cu_context`, `vs`, `"__entry"`, `fn`, `lbl`,
-               `alloca_frontier_inv`] mp_tac mem_safe_raw_unit_memory_ok >>
-  impl_tac
-  >- (rpt conj_tac
-      >- simp[]
-      >- simp[]
-      >- simp[]
-      >- fs[listTheory.EVERY_MEM]
-      >- (irule alloca_frontier_inv_closed >> simp[])
-      >- (irule alloca_frontier_inv_entry >>
-          simp[ctx_wf_def, ctx_has_entry_def, ctx_fn_names_def, listTheory.MEM_MAP,
-               reachable_call_graph_acyclic_def] >>
-          fs[initial_venom_state_rel_def] >> metis_tac[])
-      >- metis_tac[alloca_frontier_inv_bound]
-      >> drule_all lower_vyper_runtime_unit_run_mem_safe >> simp[]) >>
-  simp[]
+  `EVERY (\f. ALL_DISTINCT (fn_labels f)) unit.cu_context.ctx_functions` by
+    fs[listTheory.EVERY_MEM] >>
+  `reachability_closed alloca_frontier_inv unit.cu_context` by
+    (irule alloca_frontier_inv_closed >> simp[]) >>
+  `fn_entry_inv alloca_frontier_inv unit.cu_context fn
+     (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                 vs_inst_idx := 0 |>)` by
+    (irule alloca_frontier_inv_entry >>
+     simp[ctx_wf_def, ctx_has_entry_def, ctx_fn_names_def, listTheory.MEM_MAP,
+          reachable_call_graph_acyclic_def] >>
+     fs[initial_venom_state_rel_def] >> metis_tac[]) >>
+  `!f inst s. alloca_frontier_inv unit.cu_context f inst s ==>
+              s.vs_alloca_next < dimword (:256)` by
+    (rpt strip_tac >> drule alloca_frontier_inv_bound >> simp[]) >>
+  `!fuel. mem_safe_blocks fuel unit.cu_context fn
+            (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                        vs_inst_idx := 0 |>)` by
+    (drule_all lower_vyper_runtime_unit_run_mem_safe >> simp[]) >>
+  drule_all mem_safe_raw_unit_memory_ok >> strip_tac >>
+  drule run_lowering_eom_none >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_ptr_taint >> strip_tac >>
+  simp[fixed_region_reserved_def]
 QED
 
 (* ===== Superseded admission provenance ===== *)

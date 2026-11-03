@@ -98,7 +98,8 @@ QED
 
 (* Label operands sit only where the codegen expects them: jump targets,
    PHI sources, the INVOKE target, and the second operand of LowerDload's
-   ADD [ptr; Label "code_end"] (Python's lower_dload.py emits the same). *)
+   ADD [ptr; Label "code_end"] (Python's lower_dload.py emits the same),
+   and the source of the deploy code's CODECOPY of the runtime. *)
 Definition label_positions_ok_def:
   label_positions_ok inst <=>
     case (inst.inst_opcode, inst.inst_operands) of
