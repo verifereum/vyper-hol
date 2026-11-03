@@ -11,6 +11,38 @@ val () = holbuild_extra_deps ["fixtures/run_test_json/basic.json"];
 val () = holbuild_extra_outputs [".emit/json-smoke.expected"];
 val () = OS.FileSys.mkDir ".emit" handle OS.SysErr _ => ();
 
+(* Exercise the replay consumer, including the complete-document boundary. *)
+val () = let
+  fun with_json_file contents consume = let
+    val path = OS.FileSys.tmpName ()
+    fun remove () = OS.FileSys.remove path
+    fun run () = let
+      val stream = TextIO.openOut path
+      val () = TextIO.output (stream,contents)
+        handle ex => (TextIO.closeOut stream; raise ex)
+      val () = TextIO.closeOut stream
+    in consume path end
+    val result = run () handle ex => (remove (); raise ex)
+    val () = remove ()
+  in result end
+  fun accepts contents = with_json_file contents (fn path =>
+    case vyperJsonReplayLib.prepare_file path of
+      [(_,traces)] =>
+        if listSyntax.is_nil traces then ()
+        else raise Fail "empty JSON trace array prepared nonempty traces"
+    | _ => raise Fail "empty JSON trace array did not prepare one case")
+  fun rejects contents = with_json_file contents (fn path => let
+    val rejected =
+      (vyperJsonReplayLib.prepare_file path; false) handle _ => true
+  in
+    if rejected then ()
+    else raise Fail "replay accepted content after the JSON document"
+  end)
+in
+  List.app accepts ["[]", "[] \t\r\n"];
+  List.app rejects ["[] {}", "[] garbage", "[]\011", "[]\012"]
+end;
+
 val fixture = "fixtures/run_test_json/basic.json";
 val prepared = vyperJsonReplayLib.prepare_file fixture;
 val replays = vyperJsonReplayLib.replay_file fixture;

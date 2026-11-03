@@ -61,4 +61,4 @@ loads = ["jsonImportTerm", "JsonImportHol", "JsonASTDecodeFn"]
 loads = ["jsonImportTerm", "JsonTraceDecodeFn"]
 
 [actions.vyperJsonReplayLib]
-loads = ["jsonImportTerm", "jsonASTLib", "JsonTraceDecodeFn"]
+loads = ["jsonImportTerm", "jsonASTLib", "JsonTraceDecodeFn", "jsonDocumentLib"]

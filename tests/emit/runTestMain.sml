@@ -56,33 +56,6 @@ structure RunTestMain = struct
     val () = TextIO.flushOut TextIO.stdOut
   in passed end
 
-  (* JSONParser.parse consumes one value, not the whole document. Inspect its
-     remaining stream directly, accepting only JSON whitespace before EOF. *)
-  fun require_eof (source : JSONParser.source) =
-    case !source of
-      NONE => raise Fail "closed JSON source"
-    | SOME (stream,line) =>
-        (case TextIO.StreamIO.input1 stream of
-           NONE => ()
-         | SOME (c,rest) =>
-             if c = #" " orelse c = #"\t" orelse
-                c = #"\r" orelse c = #"\n" then
-               (source := SOME (rest,if c = #"\n" then line+1 else line);
-                require_eof source)
-             else raise Fail "unexpected content after JSON document")
-
-  fun parse_document source = let
-    val json = JSONParser.parse source
-    val () = require_eof source
-  in json end
-
-  fun parse_file file = let
-    val source = JSONParser.openFile file
-    val json = parse_document source
-      handle ex => (JSONParser.close source; raise ex)
-    val () = JSONParser.close source
-  in json end
-
   fun main () = let
     val (dump,path) =
       case CommandLine.arguments () of
@@ -92,8 +65,8 @@ structure RunTestMain = struct
       | [] => (false,NONE)
       | _ => raise Fail "usage: run-test [--dump-input] [case.json]"
     val json = case path of
-        SOME file => parse_file file
-      | NONE => parse_document (JSONParser.openStream TextIO.stdIn)
+        SOME file => jsonDocumentLib.parse_file file
+      | NONE => jsonDocumentLib.parse_document (JSONParser.openStream TextIO.stdIn)
     val cases = Decode.decode_cases json
     val () = if null cases then raise Fail "input contains no test cases" else ()
     val passed = List.foldl (fn (item,all) => execute dump item andalso all) true cases
