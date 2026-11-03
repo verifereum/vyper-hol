@@ -623,27 +623,56 @@ QED
    bodyStoragePreservation.  The outcomes still to consume are a suffix of
    the earlier ones (vyperEvalOutcomeSuffix), so oracle_storage_ok
    carries over. *)
+Theorem expr_pre_storage_preserved:
+  !cenv cx env e es res es'.
+    expr_sim_inv cenv cx env es /\
+    (well_typed_expr env e \/ ?vt. type_place_expr env e = SOME vt) /\
+    call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
+    EVERY (\c. FST c = NONE /\
+               ?tops. supported_program tops /\
+                      get_module_code cx NONE = SOME tops) (int_calls_expr e) /\
+    eval_expr cx e es = (res, es') ==>
+    contract_storage_well_formed cx es' /\ oracle_storage_ok cx es'
+Proof
+  rpt gen_tac >> strip_tac >> (conj_tac
+  >- (Cases_on `int_calls_expr e = []`
+      >- (drule_at (Pat `eval_expr _ _ _ = _`)
+            (cj 5 exprOracleStoragePreservationTheory.eval_expr_oracle_storage_mutual) >>
+          disch_then (qspec_then `env` mp_tac) >>
+          (impl_tac >-
+            gvs[expr_sim_inv_def, expr_has_evm_run_def,
+                runtime_storage_consistent_def, runtime_consistent_def]) >>
+          metis_tac[]) >>
+      `?tops. supported_program tops /\ get_module_code cx NONE = SOME tops`
+        by (Cases_on `int_calls_expr e` >> gvs[] >> metis_tac[]) >>
+      drule_at (Pat `eval_expr _ _ _ = _`) (cj 5 body_oracle_storage_mutual) >>
+      disch_then (qspecl_then [`tops`, `env`] mp_tac) >>
+      (impl_tac >-
+        (gvs[expr_sim_inv_def, listTheory.EVERY_CONJ,
+             runtime_storage_consistent_def, runtime_consistent_def] >>
+         metis_tac[])) >>
+      metis_tac[]) >>
+  irule oracle_storage_ok_suffix >> qexists_tac `es` >>
+  gvs[expr_sim_inv_def] >>
+  drule_then irule (cj 5 eval_outcome_suffix_mutual))
+QED
+
 Theorem expr_body_pre_storage_preserved:
   !cenv cx env e es res es'.
     expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
     contract_storage_well_formed cx es' /\ oracle_storage_ok cx es'
 Proof
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- (Cases_on `int_calls_expr e = []`
-      >- (irule eval_expr_oracle_preserves_contract_storage_well_formed >>
-          gvs[expr_body_pre_def, expr_sim_inv_def,
-              runtime_storage_consistent_def, runtime_consistent_def] >>
-          metis_tac[]) >>
-      `?tops. supported_program tops /\ get_module_code cx NONE = SOME tops`
-        by (Cases_on `int_calls_expr e` >> gvs[expr_body_pre_def] >>
-            metis_tac[]) >>
-      irule eval_expr_body_oracle_storage >>
-      gvs[expr_body_pre_def, expr_sim_inv_def, listTheory.EVERY_CONJ,
-          runtime_storage_consistent_def, runtime_consistent_def] >>
-      metis_tac[]) >>
-  irule oracle_storage_ok_suffix >> qexists_tac `es` >>
-  gvs[expr_body_pre_def, expr_sim_inv_def] >>
-  drule_then irule (cj 5 eval_outcome_suffix_mutual)
+  rpt gen_tac >> disch_tac >> irule expr_pre_storage_preserved >>
+  gvs[expr_body_pre_def] >> metis_tac[]
+QED
+
+Theorem expr_map_pre_storage_preserved:
+  !cenv cx env e es res es'.
+    expr_map_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
+    contract_storage_well_formed cx es' /\ oracle_storage_ok cx es'
+Proof
+  rpt gen_tac >> disch_tac >> irule expr_pre_storage_preserved >>
+  gvs[expr_map_pre_def] >> metis_tac[]
 QED
 
 (* The outcomes stay SOME: evaluation only drops some from the front. *)
@@ -835,6 +864,113 @@ Proof
      gvs[outcomes_accounts_typed_def]) >>
   Cases_on `res` >> gvs[] >>
   rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem expr_map_pre_eval_result:
+  !cenv cx env e es res es'.
+    expr_map_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
+    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    !vt tv. type_place_expr env e = SOME vt /\ res = INL tv ==>
+            eval_result_typed (env,cx,es') tv vt
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all expr_map_pre_storage_preserved >> strip_tac >>
+  `IS_SOME es'.outcomes` by
+    (irule eval_expr_outcomes_some >>
+     gvs[expr_map_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+  qpat_x_assum `expr_map_pre _ _ _ _ _` mp_tac >>
+  simp[expr_map_pre_def, expr_sim_inv_def] >> strip_tac >>
+  drule_all eval_expr_popped_keys_indexed >> strip_tac >>
+  qspecl_then [`cx`, `e`] (mp_tac o CONJUNCT1)
+    (cj 5 eval_scc_type_sound_mutual) >>
+  disch_then (qspecl_then [`env`, `es`, `res`, `es'`] mp_tac) >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  `outcomes_accounts_typed es'.outcomes` by
+    (rw[outcomes_accounts_typed_def] >>
+     drule (cj 5 eval_outcome_suffix_mutual) >> strip_tac >>
+     drule_then irule outcome_suffix_EVERY >>
+     gvs[outcomes_accounts_typed_def]) >>
+  rename1 `type_place_expr env e = SOME (HashMapT kt vty)` >>
+  qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> _`
+    (qspec_then `HashMapT kt vty` mp_tac) >>
+  simp[] >> Cases_on `res` >> gvs[] >> metis_tac[]
+QED
+
+Theorem expr_map_pre_subscript_base:
+  !cenv cx env ann obj idx es.
+    expr_map_pre cenv cx env (Subscript ann obj idx) es ==>
+    expr_map_pre cenv cx env obj es
+Proof
+  rpt gen_tac >>
+  simp[expr_map_pre_def, well_typed_expr_def,
+       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
+       expr_has_evm_run_thm, EVERY_APPEND] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  rename1 `subscript_vtype bty (expr_type idx) = SOME (HashMapT kt vt)` >>
+  Cases_on `bty` >> gvs[subscript_vtype_def, AllCaseEqs()]
+  >~ [`subscript_vtype (Type ty) _ = SOME (HashMapT _ _)`]
+  >- (Cases_on `ty` >> gvs[subscript_vtype_def, AllCaseEqs()]) >>
+  metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left]
+QED
+
+Theorem expr_body_pre_map_subscript_base:
+  !cenv cx env ann obj idx kt vt es.
+    expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+    place_type cenv obj = MapPT kt vt ==>
+    expr_map_pre cenv cx env obj es
+Proof
+  rpt gen_tac >> strip_tac >>
+  `place_map_tables_agree_on_defined cenv env /\
+   (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
+              cenv.ce_hashmap_info nsid = NONE)` by
+    gvs[expr_body_pre_def, expr_sim_inv_def] >>
+  gvs[expr_body_pre_def, Once well_typed_expr_def,
+      byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
+      expr_has_evm_run_thm, EVERY_APPEND]
+  >- (drule_all place_type_well_typed_on_defined >> simp[]) >>
+  drule_all place_type_checked_place_on_defined >> strip_tac >>
+  rename1 `type_place_expr env obj = SOME bty` >>
+  Cases_on `bty` >> gvs[value_type_place_def] >>
+  simp[expr_map_pre_def] >>
+  metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left]
+QED
+
+Theorem expr_map_pre_res_ok:
+  !cenv cx env e es res es'.
+    expr_map_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
+    expr_map_res_ok res
+Proof
+  rpt strip_tac >> drule_all expr_map_pre_eval_result >> strip_tac >>
+  Cases_on `res` >> gvs[expr_map_res_ok_def] >>
+  drule (cj 1 eval_expr_no_control) >>
+  rename1 `INR exc` >> Cases_on `exc` >>
+  gvs[no_control_exc_def, no_type_error_result_def] >>
+  rename1 `Error err` >> Cases_on `err` >> gvs[]
+QED
+
+Theorem int_calls_subscript_operands:
+  !nocalls ann obj idx.
+    (nocalls ==> int_calls_expr (Subscript ann obj idx) = []) ==>
+    (nocalls ==> int_calls_expr obj = []) /\
+    (nocalls ==> int_calls_expr idx = [])
+Proof
+  simp[int_calls_expr_def]
+QED
+
+Theorem expr_subscript_pre_index:
+  !cenv cx env ann obj idx es es'.
+    (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
+     expr_map_pre cenv cx env (Subscript ann obj idx) es) /\
+    expr_sim_inv cenv cx env es' ==>
+    expr_body_pre cenv cx env idx es'
+Proof
+  rpt gen_tac >>
+  simp[expr_body_pre_def, expr_map_pre_def, well_typed_expr_def,
+       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
+       expr_has_evm_run_thm, EVERY_APPEND] >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs()] >>
+  metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right]
 QED
 
 Theorem expr_sim_pre_eval_result:
