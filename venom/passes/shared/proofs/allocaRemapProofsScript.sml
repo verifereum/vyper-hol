@@ -3177,6 +3177,17 @@ Proof
   simp[]
 QED
 
+Theorem step_inst_base_mcopy[local]:
+  inst.inst_opcode = MCOPY /\ inst.inst_operands = [d; r; n] ==>
+  step_inst_base inst s =
+    (case (eval_operand d s, eval_operand r s, eval_operand n s) of
+       (SOME dst, SOME src, SOME sz) =>
+         OK (mcopy (w2n dst) (w2n src) (w2n sz) s)
+     | _ => Error "undefined operand")
+Proof
+  strip_tac >> simp[step_inst_base_def]
+QED
+
 (* Standalone MCOPY helper: proves the MCOPY case for remap_preserved_mem_ops.
    Extracted from Resume block to avoid by-clause failures with 30+ assumptions. *)
 Theorem mcopy_preserves_remap[local]:
