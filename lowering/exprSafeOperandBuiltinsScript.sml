@@ -293,11 +293,21 @@ Theorem compile_array_membership_loop_safe_operand:
   safe_operand sb r
 Proof
   Cases_on `isin` >> Cases_on `off > 0` >>
-  simp[compile_array_membership_loop_def, emit_op_def, emit_inst_def,
-       fresh_label_def, new_block_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
-  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
-  qpat_x_assum `!p s v t. _` drule_all >>
+  simp[compile_array_membership_loop_def, comp_ignore_bind_def, comp_bind_def] >>
+  strip_tac >>
+  ntac 5 (pairarg_tac >> gvs[]) >>
+  ntac 5 (pairarg_tac >> gvs[]) >>
+  ntac 5 (pairarg_tac >> gvs[]) >>
+  ntac 5 (pairarg_tac >> gvs[]) >>
+  ntac 5 (pairarg_tac >> gvs[]) >>
+  rpt (pairarg_tac >> gvs[]) >>
+  qpat_x_assum `!p s v t. _` drule_all >> strip_tac >>
+  gvs[comp_return_def, fresh_label_def] >>
+  gvs[new_block_def] >>
+  gvs[emit_inst_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def, emit_def] >>
+  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_id_def, fresh_var_def, emit_def] >>
+  gvs[fresh_var_def] >>
   simp[safe_operand_def, not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
