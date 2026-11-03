@@ -434,3 +434,41 @@ Proof
   disch_then (mp_tac o Q.AP_TERM `MEM (p,v)`) >>
   simp[MEM_FILTER]
 QED
+
+Theorem remove_unreachable_blocks_head:
+  HD (remove_unreachable_blocks fn).fn_blocks = HD fn.fn_blocks
+Proof
+  Cases_on `fn.fn_blocks` >>
+  simp[remove_unreachable_blocks_def, fn_entry_label_def, entry_block_def] >>
+  `reachable fn h.bb_label` by
+    simp[reachable_def, fn_entry_label_def, entry_block_def] >> simp[]
+QED
+
+Theorem remove_unreachable_blocks_entry_no_phi:
+  EVERY (\inst. inst.inst_opcode <> PHI) (HD fn.fn_blocks).bb_instructions ==>
+  EVERY (\inst. inst.inst_opcode <> PHI)
+    (HD (remove_unreachable_blocks fn).fn_blocks).bb_instructions
+Proof
+  simp[remove_unreachable_blocks_head]
+QED
+
+Theorem remove_unreachable_blocks_phi_safe:
+  wf_function fn /\ scfg_phi_safe fn ==>
+  scfg_phi_safe (remove_unreachable_blocks fn)
+Proof
+  strip_tac >> simp[scfg_phi_safe_def, remove_unreachable_blocks_head] >>
+  conj_tac >- simp[scfg_phi_safe_entry] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label` by
+        metis_tac[remove_unreachable_blocks_member] >>
+      `MEM bb' fn.fn_blocks /\ fn_reachable fn bb'.bb_label` by
+        metis_tac[remove_unreachable_blocks_member] >>
+      irule scfg_phi_safe_unique_output >> metis_tac[]) >>
+  rpt strip_tac >>
+  `MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label` by
+    metis_tac[remove_unreachable_blocks_member] >>
+  `MEM pred_bb fn.fn_blocks /\ fn_reachable fn pred_bb.bb_label` by
+    metis_tac[remove_unreachable_blocks_member] >>
+  irule scfg_phi_safe_coverage >> metis_tac[]
+QED
