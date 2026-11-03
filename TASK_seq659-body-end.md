@@ -1,4 +1,4 @@
-# TASK: S3 memory-safe run: the body end and the composition
+# TASK: S3: falling off the end of the guarded body is memory-safe
 
 ## Meta
 Status: planned
@@ -8,8 +8,8 @@ Location: lowering/loweringMemCorrectScript.sml
 
 ## Theorem Statement (FROZEN)
 
-Two theorems, each currently `cheat` in `lowering/loweringMemCorrectScript.sml`.
-Prove both. Copy of each statement as it stands in the source:
+One theorem, currently `cheat` in `lowering/loweringMemCorrectScript.sml`.
+Prove it. Copy of each statement as it stands in the source:
 
 ```sml
 Theorem compile_guarded_body_end_mem_safe:
@@ -21,24 +21,6 @@ Theorem compile_guarded_body_end_mem_safe:
     s.vs_current_bb = sb.cs_current_bb /\
     s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
     !fuel. mem_safe_run fuel ctx fn s /\ (!e. run_from fuel ctx fn s <> Error e)
-
-Theorem lower_vyper_runtime_unit_run_mem_safe:
-  !tops rpolicy unit am tx ret vs fn lbl.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
-    lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
-    fn_entry_label fn = SOME lbl
-    ==>
-    !fuel. mem_safe_blocks fuel unit.cu_context fn
-             (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                         vs_inst_idx := 0 |>)
 ```
 
 **Do not modify these statements.** Prove them as-is, or produce a
@@ -46,14 +28,13 @@ counterexample.
 
 ## Completion Criteria
 
-1. `holbuild -j4 build loweringMemCorrectTheory` passes with the two theorems
-   above proved (no `cheat` in their proofs) and no FAILs.
+1. `holbuild -j4 build loweringMemCorrectTheory` passes with the theorem
+   above proved (no `cheat` in its proof) and no FAILs.
 2. The only `cheat`s left in `lowering/loweringMemCorrectScript.sml` are the
    four named admissions `body_stmts_sim_mem`,
    `external_entry_value_revert_mem`, `external_entry_reaches_body_mem` and
-   `external_frame_ret_ok_mem`, unchanged. Don't prove, restate, weaken or
-   add to them; `lower_vyper_runtime_unit_run_mem_safe` is proved *from*
-   them.
+   `external_frame_ret_ok_mem`, unchanged, and `lower_vyper_runtime_unit_run_mem_safe` (proved by a separate run). Don't prove,
+   restate, weaken or add to the admissions.
 3. No `cheat` in `lowering/entryHaltMemScript.sml` (all its theorems are
    proved already; don't change them).
 4. No duplicate or near-duplicate lemmas; helpers in their most general form.
@@ -142,6 +123,8 @@ all fuel.
 | alloca_next_valid | venom/defs/venomMemDefsScript.sml | alloca invariant |
 
 ## Notes
+
+- Scope: only `compile_guarded_body_end_mem_safe`. Leave every other cheat in the file alone; a separate run proves `lower_vyper_runtime_unit_run_mem_safe`.
 
 - A statement check (by reading) judged both provable against the earlier
   body judgments. The body judgments since gained the `alloca_history`
