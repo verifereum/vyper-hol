@@ -3099,8 +3099,10 @@ Resume regular_inst_ok_sim[emitted]:
   `(if inst.inst_outputs = [] \/ is_halting then ([],emitted)
     else popmany_plan (MAP Var (FILTER (\out. ~MEM out next_liveness)
       inst.inst_outputs)) emitted) = (popops,popped)` by
-    (qpat_x_assum `if inst.inst_outputs = [] \/ is_halting then _ else _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> IF_CASES_TAC >> simp[]) >>
+    (`~(LENGTH inst.inst_outputs > 1)` by decide_tac >>
+     qpat_x_assum `if inst.inst_outputs = [] \/ _ then (popops,popped) = _ else _` mp_tac >>
+     qpat_x_assum `~(LENGTH inst.inst_outputs > 1)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >> IF_CASES_TAC >> gvs[]) >>
   `(if FILTER (\out. MEM out next_liveness) inst.inst_outputs = [] then ([],popped)
     else optimistic_swap_plan dfg inst next_liveness next_is_term popped) = (optops,tail)` by
     (qpat_x_assum `if inst.inst_outputs = [] \/ FILTER _ _ = [] then _ else _` mp_tac >>
