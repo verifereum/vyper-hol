@@ -1027,3 +1027,184 @@ Theorem probe_word_copy_call_supported:
 Proof
   EVAL_TAC >> simp[]
 QED
+
+(* Symbolic copy probe: keep all caller-state fields arbitrary. *)
+Definition probe_word_context_def:
+  probe_word_context = empty_evaluation_context with
+    <| sources := [(0w,[(NONE,probe_word_copy_code)])];
+       layouts := [(0w,([((NONE,"outer"),0);((NONE,"donor"),3)],[]))];
+       stk := [(NONE,"caller")] |>
+End
+
+Theorem probe_word_copy_symbolic_success:
+  !es n m.
+    n <= 1 /\ (n = 1 ==> m <= 1) /\
+    lookup_storage 3w (get_storage probe_word_context es F) = n2w n /\
+    lookup_storage 4w (get_storage probe_word_context es F) = n2w m ==>
+    ?es'. eval_expr probe_word_context
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es =
+      (INL (Value (IntV 0)), es') /\ es'.scopes = es.scopes /\
+      es' = set_storage probe_word_context es F
+        (if n = 0 then
+           update_storage 0w 0w (get_storage probe_word_context es F)
+         else if m = 0 then
+           update_storage 1w 0w
+             (update_storage 0w 1w (get_storage probe_word_context es F))
+         else
+           update_storage 2w
+             (lookup_storage 5w (get_storage probe_word_context es F))
+             (update_storage 1w 1w
+               (update_storage 0w 1w (get_storage probe_word_context es F))))
+Proof
+  rpt strip_tac >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_storage_backend``,
+    ``set_storage_backend``, ``lookup_storage``]) >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_storage_backend``,
+    ``set_storage_backend``, ``lookup_storage``]) >>
+  simp[get_storage_backend_eq, get_storage_scopes] >>
+  gvs[get_storage_def, probe_word_context_def,
+      empty_evaluation_context_def, empty_call_txn_def] >>
+  `n = 0 \/ n = 1` by decide_tac >> gvs[] >>
+  Cases_on `m = 0` >> Cases_on `m = 1` >> gvs[] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_storage_backend``,
+    ``set_storage_backend``, ``lookup_storage``]) >>
+  simp[set_storage_backend_eq, handle_function_def, return_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_storage_backend``,
+    ``set_storage_backend``, ``lookup_storage``]) >>
+  simp[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_storage_backend``,
+    ``set_storage_backend``, ``lookup_storage``]) >>
+  simp[set_storage_backend_eq, handle_function_def, return_def] >>
+  simp[evaluation_state_component_equality] >>
+  qspec_then `lookup_storage 5w (es.accounts 0w).storage` mp_tac
+    wordsTheory.w2n_lt >>
+  simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  strip_tac >> simp[]
+QED
+
+Theorem probe_word_declared_region:
+  !mid name subs tr slot tv.
+    declared_storage_region probe_word_context mid name subs =
+      SOME (tr,slot,tv) <=>
+    mid = NONE /\ subs = [] /\ tr = F /\
+    tv = ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1) /\
+    ((name = "outer" /\ slot = 0w) \/ (name = "donor" /\ slot = 3w))
+Proof
+  rpt gen_tac >> Cases_on `mid` >>
+  simp[declared_storage_region_def] >> EVAL_TAC >>
+  Cases_on `name = "outer"` >> gvs[] >>
+  Cases_on `name = "donor"` >> gvs[] >>
+  Cases_on `subs = []` >> gvs[] >> EVAL_TAC >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  metis_tac[]
+QED
+
+Theorem probe_word_pre_shapes:
+  !cenv env e es.
+    expr_body_pre cenv probe_word_context env e es ==>
+    w2n (lookup_storage 3w (get_storage probe_word_context es F)) <= 1 /\
+    (lookup_storage 3w (get_storage probe_word_context es F) = 1w ==>
+     w2n (lookup_storage 4w (get_storage probe_word_context es F)) <= 1)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `contract_storage_well_formed probe_word_context es` by
+    metis_tac[expr_body_pre_def, expr_sim_inv_def] >>
+  `slots_in_range (get_storage probe_word_context es F) 3
+     (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1))` by
+    (qpat_assum `contract_storage_well_formed _ _` mp_tac >>
+     simp[NoAsms, contract_storage_well_formed_def, get_storage_backend_eq,
+          probe_word_declared_region] >> strip_tac >>
+     first_x_assum (qspecl_then [`"donor"`,`3w`] mp_tac) >>
+     simp[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]) >>
+  qpat_x_assum `slots_in_range _ _ _` mp_tac >>
+  simp[Once vyperLookupStorageTheory.slots_in_range_def,
+       vyperStorageTheory.read_slot_def] >>
+  strip_tac >> strip_tac >> gvs[] >>
+  qpat_x_assum `dyn_slots_in_range _ _ _ _` mp_tac >>
+  pure_rewrite_tac[arithmeticTheory.ONE,
+    vyperLookupStorageTheory.slots_in_range_def] >>
+  simp[vyperStorageTheory.read_slot_def]
+QED
+
+Theorem probe_word_dead_destination:
+  !st j b.
+    b < 32 /\
+    ((lookup_storage 0w st = 0w /\ (j = 1 \/ j = 2)) \/
+     (lookup_storage 1w st = 0w /\ j = 2)) ==>
+    storage_dead probe_word_context F st j b
+Proof
+  rpt gen_tac >> strip_tac >>
+  pure_rewrite_tac[storage_dead_def] >>
+  qexistsl [`NONE`,`"outer"`,`[]`,`0w`,
+    `ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1)`] >>
+  simp[probe_word_declared_region, type_slot_size_def,
+       vyperStorageFrameTheory.ranges_disjoint_def, dimword_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  simp[dead_bytes_def] >>
+  gvs[type_slot_size_def] >> rpt strip_tac >> gvs[] >>
+  simp[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
+
+Theorem probe_word_live_copy_agree:
+  !st n m.
+    n <= 1 /\ (n = 1 ==> m <= 1) /\
+    lookup_storage 3w st = n2w n /\ lookup_storage 4w st = n2w m ==>
+    let live =
+      if n = 0 then update_storage 0w 0w st
+      else if m = 0 then update_storage 1w 0w (update_storage 0w 1w st)
+      else update_storage 2w (lookup_storage 5w st)
+             (update_storage 1w 1w (update_storage 0w 1w st))
+    in storage_agree (storage_dead probe_word_context F live) live
+      (update_storage 2w (lookup_storage 5w st)
+        (update_storage 1w (lookup_storage 4w st)
+          (update_storage 0w (lookup_storage 3w st) st)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `n = 0 \/ n = 1` by decide_tac >> gvs[] >>
+  Cases_on `m = 0` >> Cases_on `m = 1` >> gvs[] >>
+  simp[storage_agree_def] >> rpt strip_tac >>
+  Cases_on `k = 0w` >> Cases_on `k = 1w` >> Cases_on `k = 2w` >>
+  gvs[lookup_storage_def, update_storage_def, APPLY_UPDATE_THM,
+      dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  `F` suffices_by simp[] >>
+  qpat_x_assum `~storage_dead _ _ _ _ _` mp_tac >> simp[] >>
+  irule probe_word_dead_destination >>
+  simp[lookup_storage_def, APPLY_UPDATE_THM]
+QED
+
+Theorem probe_word_copy_pre_summary:
+  !cenv env e0 es.
+    expr_body_pre cenv probe_word_context env e0 es ==>
+    ?es'. eval_expr probe_word_context
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es =
+      (INL (Value (IntV 0)), es') /\ es'.scopes = es.scopes /\
+      storage_agree
+        (storage_dead probe_word_context F (get_storage probe_word_context es' F))
+        (get_storage probe_word_context es' F)
+        (update_storage 2w (lookup_storage 5w (get_storage probe_word_context es F))
+          (update_storage 1w (lookup_storage 4w (get_storage probe_word_context es F))
+            (update_storage 0w (lookup_storage 3w (get_storage probe_word_context es F))
+              (get_storage probe_word_context es F))))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule probe_word_pre_shapes >> strip_tac >>
+  qspecl_then [`es`,
+    `w2n (lookup_storage 3w (get_storage probe_word_context es F))`,
+    `w2n (lookup_storage 4w (get_storage probe_word_context es F))`]
+    mp_tac probe_word_copy_symbolic_success >>
+  (impl_tac >- (simp[] >> strip_tac >>
+    first_x_assum irule >>
+    metis_tac[wordsTheory.n2w_w2n])) >>
+  strip_tac >> qexists_tac `es'` >> simp[] >>
+  simp[get_storage_def, set_storage_def] >>
+  qspecl_then [`get_storage probe_word_context es F`,
+    `w2n (lookup_storage 3w (get_storage probe_word_context es F))`,
+    `w2n (lookup_storage 4w (get_storage probe_word_context es F))`]
+    mp_tac probe_word_live_copy_agree >>
+  (impl_tac >- (simp[] >> strip_tac >> first_x_assum irule >>
+    metis_tac[wordsTheory.n2w_w2n])) >>
+  simp[get_storage_def]
+QED
