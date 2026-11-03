@@ -554,6 +554,48 @@ Proof
       rich_listTheory.TAKE_SNOC, EL_LENGTH_SNOC]
 QED
 
+Theorem do_spill_at_stack_count:
+  !d ps ops ps' x.
+    d < LENGTH ps.ps_stack /\ d <= 16 /\
+    do_spill_at d ps = (ops,ps') ==>
+    LIST_ELEM_COUNT x ps'.ps_stack +
+      LIST_ELEM_COUNT x [stack_peek d ps.ps_stack] =
+    LIST_ELEM_COUNT x ps.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ps.ps_stack <> []` by (strip_tac >> gvs[]) >>
+  Cases_on `d = 0`
+  >- (gvs[do_spill_at_def, do_spill_tos_def, LET_THM] >>
+      Cases_on `alloc_spill_slot ps.ps_alloc` >> gvs[] >>
+      qspecl_then [`x`, `ps.ps_stack`] mp_tac
+        stack_pop_one_elem_count >> simp[] >> decide_tac) >>
+  `stack_peek 0 (stack_swap d ps.ps_stack) =
+    stack_peek d ps.ps_stack` by
+    (simp[stack_peek_def, stack_swap_def, LET_THM, EL_LUPDATE] >>
+     IF_CASES_TAC >> gvs[] >> decide_tac) >>
+  `LIST_ELEM_COUNT x (stack_swap d ps.ps_stack) =
+    LIST_ELEM_COUNT x ps.ps_stack` by
+    (qspecl_then [`d`, `ps`, `x`] mp_tac do_swap_multiplicity >>
+     simp[do_swap_def]) >>
+  gvs[do_spill_at_def, do_spill_tos_def, LET_THM] >>
+  Cases_on `alloc_spill_slot ps.ps_alloc` >> gvs[] >>
+  `stack_swap d ps.ps_stack <> []` by
+    (strip_tac >> gvs[stack_swap_def]) >>
+  qspecl_then [`x`, `stack_swap d ps.ps_stack`] mp_tac
+    stack_pop_one_elem_count >> simp[] >> decide_tac
+QED
+
+Theorem do_spill_at_other_stack_count:
+  !d ps ops ps' x.
+    d < LENGTH ps.ps_stack /\ d <= 16 /\
+    do_spill_at d ps = (ops,ps') /\
+    x <> stack_peek d ps.ps_stack ==>
+    LIST_ELEM_COUNT x ps'.ps_stack = LIST_ELEM_COUNT x ps.ps_stack
+Proof
+  rpt strip_tac >> drule_all do_spill_at_stack_count >>
+  disch_then (qspec_then `x` mp_tac) >> simp[LIST_ELEM_COUNT_THM]
+QED
+
 Theorem do_spill_at_multiplicity_layout[local]:
   !d ps ops ps'.
     spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
