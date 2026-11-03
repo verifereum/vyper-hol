@@ -2,7 +2,8 @@
  * Venom unit-transform boundary (PLAN §5.8, D17-D20).
  * TOP-LEVEL: unit_result_rel, ctx_transform_correct,
  *   checked_unit_transform_correct, o1_initial_state_ok,
- *   inst_mem_below_frontier, raw_unit_memory_ok.
+ *   inst_mem_below_frontier, revert_forward, inst_mem_ok_in_fn,
+ *   raw_unit_memory_ok.
  * Forward simulation only, from ONE initial state; no GAS-reading list.
  * Successful runs compare observable_equiv, including executed requests.
  * Aborts compare neither states nor requests: REVERT alone must stay REVERT.
@@ -105,11 +106,44 @@ Definition inst_mem_below_frontier_def:
       (source_memory_read_ranges inst s ++ source_memory_write_ranges inst s)
 End
 
+(* Revert forwarding: RETURNDATACOPY [p; 0; rds] immediately followed by
+   REVERT [p; rds].  After a failed call, the lowering copies the callee's
+   revert data to p (a zero-size ALLOCA or address 0) and reverts with it
+   (extcall_fail, raw_call's call_failed, create_fail), as Python does.
+   Both instructions touch [p, p + rds), past the frontier when rds > 0;
+   the REVERT discards memory, so that write is never read by anything
+   but the REVERT itself. *)
+Definition revert_forward_def:
+  revert_forward bb i <=>
+    ?inst1 inst2 p rds.
+      get_instruction bb i = SOME inst1 /\
+      get_instruction bb (SUC i) = SOME inst2 /\
+      inst1.inst_opcode = RETURNDATACOPY /\
+      inst1.inst_operands = [p; Lit 0w; rds] /\
+      inst2.inst_opcode = REVERT /\
+      inst2.inst_operands = [p; rds]
+End
+
+(* Index i is one of the two instructions of a revert forwarding. *)
+Definition revert_forward_at_def:
+  revert_forward_at bb i <=>
+    revert_forward bb i \/ (0 < i /\ revert_forward bb (i - 1))
+End
+
+(* The raw memory check at an instruction state of fn: below the frontier,
+   or part of a revert forwarding. *)
+Definition inst_mem_ok_in_fn_def:
+  inst_mem_ok_in_fn fn inst s <=>
+    inst_mem_below_frontier inst s \/
+    ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+         revert_forward_at bb s.vs_inst_idx
+End
+
 Definition raw_unit_memory_ok_def:
   raw_unit_memory_ok ctx vs <=>
     ?Inv. codegen_reachability_package Inv ctx vs /\
       !fn inst s. Inv ctx fn inst s ==>
-        s.vs_alloca_next < dimword (:256) /\ inst_mem_below_frontier inst s
+        s.vs_alloca_next < dimword (:256) /\ inst_mem_ok_in_fn fn inst s
 End
 
 (* Boundary elimination keeps all three corrected reachability clauses. *)
@@ -118,8 +152,8 @@ Theorem raw_unit_memory_ok_invariant:
   ?Inv. codegen_reachability_package Inv ctx vs /\
         reachability_closed Inv ctx /\
         (!fn inst s. Inv ctx fn inst s ==>
-          s.vs_alloca_next < dimword (:256) /\ inst_mem_below_frontier inst s)
+          s.vs_alloca_next < dimword (:256) /\ inst_mem_ok_in_fn fn inst s)
 Proof
   rw[raw_unit_memory_ok_def] >> qexists_tac `Inv` >>
-  fs[codegen_reachability_package_def] >> first_assum ACCEPT_TAC
+  fs[codegen_reachability_package_def] >> metis_tac[]
 QED

@@ -12,7 +12,7 @@ Ancestors
   unitShapeDefs fcgPruning venomWf venomInst o1FnScheduleDecomp stackPlanGen
   venomPipelineRunner venomPassDispatcher venomFnScheduleRunner
   fcgBridge fcgDefs fcgPostorder fcgAnalysisProps venomPipelineDriver
-  venomPassSchedule irSupply pred_set list rich_list
+  venomPassSchedule irSupply dretDesugarDefs pred_set list rich_list
 
 Theorem o1_ctx_shape_wf:
   o1_ctx_shape C ==> ctx_wf C /\ wf_invoke_targets C
@@ -58,11 +58,12 @@ Theorem source_member_shape:
   MEM fn u.cu_context.ctx_functions ==>
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\
   first_block_no_preds fn /\ first_block_no_phi fn /\
-  fn_invoke_ok (ctx_fn_names u.cu_context) fn
+  fn_invoke_ok (ctx_fn_names u.cu_context) fn /\ no_dret fn
 Proof
   rw[unit_wf_def, venom_wf_def, o1_source_unit_ok_def, unit_first_block_no_phi_def,
-     unit_shape_ok_def, EVERY_MEM, fn_invoke_ok_def] >>
-  gvs[wf_invoke_targets_def] >> metis_tac[]
+     unit_shape_ok_def, EVERY_MEM, fn_invoke_ok_def, no_dret_def] >>
+  gvs[wf_invoke_targets_def] >> res_tac >> gvs[raw_opcode_ok_def] >>
+  metis_tac[]
 QED
 
 Theorem source_entry_shape:

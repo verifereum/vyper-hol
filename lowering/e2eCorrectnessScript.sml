@@ -14,8 +14,8 @@ Theory e2eCorrectness
 Ancestors
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
-  vyperLoweringCorrect loweringRuntimeCorrect loweringShapeProps
-  loweringShapeSource vfmExecution
+  vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
+  loweringShapeProps loweringShapeSource vfmExecution
   venomPipelineCorrect
   passSimulationDefs
   codegenCorrectness
@@ -220,11 +220,15 @@ Theorem e2e_vyper_to_evm:
          ctx ctx' vs vs /\
        !fuel. ?r es'.
          run_call es = SOME (r, es') /\
-         (frame_resource_starved es r es' \/ precompile_call_starved es \/
+         (frame_resource_starved es r es' \/
+          (precompile_call_starved es /\
+           ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
           venom_frame_rel es r es' (run_context fuel ctx' vs)))
     ==>
     ?r es'. run_call es = SOME (r, es') /\
-            (frame_resource_starved es r es' \/ precompile_call_starved es \/
+            (frame_resource_starved es r es' \/
+             (precompile_call_starved es /\
+              ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
              call_result_rel tops ret am tx es r es')
 Proof
   rpt strip_tac >>
@@ -241,7 +245,9 @@ Proof
     metis_tac[dead_result_rel_terminates] >>
   (* gvs identifies every stage-3 witness with the actual run by uniqueness. *)
   qpat_x_assum `!fuel. frame_resource_starved es r es' \/ _`
-    (qspec_then `fuel'` strip_assume_tac) >>
+    (qspec_then `fuel'` strip_assume_tac)
+  >- gvs[]
+  >- (gvs[] >> metis_tac[]) >>
   gvs[] >>
   drule_all external_call_result_rel_dead_transport >> strip_tac >>
   drule_all external_call_result_rel_frame >> simp[]
@@ -747,7 +753,8 @@ Theorem vyper_call_correct:
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       precompile_call_starved es \/
+       (precompile_call_starved es /\
+        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
        call_result_rel tops ret am tx es r es')
 Proof
   rpt strip_tac >>
@@ -887,7 +894,9 @@ Theorem e2e_deploy_correctness:
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/ precompile_call_starved es \/
+      (frame_resource_starved es r es' \/
+       (precompile_call_starved es /\
+        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
        case load_contract NONE [] am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
             ?section lgs.
@@ -932,7 +941,9 @@ val _ =
       deploy_state_rel tops deploy_bc am tx es /\
       ~(?t. runtime_bc = 0xEFw :: t) ==>
       ?r es'. run_call es = SOME (r,es') /\
-        (frame_resource_starved es r es' \/ precompile_call_starved es \/
+        (frame_resource_starved es r es' \/
+         (precompile_call_starved es /\
+          ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
          deploy_result_rel tops runtime_bc tx es r es'
            (load_contract NONE [] am tx [(NONE,tops)] []))``;
     val expanded = concl (REWRITE_RULE [deploy_result_rel_def] (ASSUME expected));

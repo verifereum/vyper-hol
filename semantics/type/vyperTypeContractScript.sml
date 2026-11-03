@@ -14,7 +14,7 @@ Theory vyperTypeContract
 Ancestors
   list rich_list arithmetic finite_map option pair pred_set
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
-  vyperEvent vyperTypeSystem vyperTypeCallGraph
+  vyperTypeSystem vyperTypeCallGraph vyperEvent
 Libs
   wordsLib
 
@@ -26,7 +26,8 @@ Datatype:
     cta_bare_globals             : (nsid |-> type);
     cta_bare_global_assignable   : (nsid |-> type);
     cta_toplevel_vtypes          : (nsid |-> value_type);
-    cta_flag_members             : (nsid |-> string list)
+    cta_flag_members    : (nsid |-> string list);
+    cta_event_fields    : (nsid |-> ((string # type) # bool) list)
   |>
 End
 
@@ -36,7 +37,8 @@ Definition empty_contract_type_artifact_def:
        cta_bare_globals := FEMPTY;
        cta_bare_global_assignable := FEMPTY;
        cta_toplevel_vtypes := FEMPTY;
-       cta_flag_members := FEMPTY |>
+       cta_flag_members := FEMPTY;
+       cta_event_fields := FEMPTY |>
 End
 
 Definition artifact_env_def:
@@ -49,7 +51,8 @@ Definition artifact_env_def:
        toplevel_vtypes := art.cta_toplevel_vtypes;
        type_defs := type_env_all_modules mods;
        fn_sigs := art.cta_fn_sigs;
-       flag_members := art.cta_flag_members |>
+       flag_members := art.cta_flag_members;
+       event_fields := art.cta_event_fields |>
 End
 
 Definition function_entry_env_def:
@@ -102,6 +105,9 @@ Definition add_toplevel_static_maps_def:
     | HashMapDecl _ _ id kt vt _ =>
         art with cta_toplevel_vtypes updated_by
           (flip FUPDATE ((src,id), HashMapT kt vt))
+    | EventDecl id fields =>
+        art with cta_event_fields updated_by
+          (flip FUPDATE ((src,id), fields))
     | FlagDecl fid members =>
         art with cta_flag_members updated_by
           (flip FUPDATE ((src,fid), members))
@@ -150,6 +156,11 @@ Definition type_def_keys_toplevel_def:
   type_def_keys_toplevel _ _ = []
 End
 
+Definition event_keys_toplevel_def:
+  event_keys_toplevel src (EventDecl id fields) = [(src,id)] /\
+  event_keys_toplevel _ _ = []
+End
+
 Definition contract_keys_def:
   contract_keys f mods = FLAT (MAP (\(src,tls). FLAT (MAP (f src) tls)) mods)
 End
@@ -161,7 +172,8 @@ Definition contract_namespaces_ok_def:
     ALL_DISTINCT (contract_keys toplevel_vtype_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys flag_member_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys error_sig_keys_toplevel mods) /\
-    ALL_DISTINCT (contract_keys type_def_keys_toplevel mods)
+    ALL_DISTINCT (contract_keys type_def_keys_toplevel mods) /\
+    ALL_DISTINCT (contract_keys event_keys_toplevel mods)
 End
 
 Definition custom_error_resolved_def:
@@ -858,6 +870,12 @@ Termination
   simp[value_type_size_def]
 End
 
+Definition event_indexable_type_def:
+  event_indexable_type (BaseT _) = T /\
+  event_indexable_type (FlagT _) = T /\
+  event_indexable_type _ = F
+End
+
 Definition check_toplevel_decl_def:
   check_toplevel_decl mods art src tl =
     let tenv = type_env_all_modules mods in
@@ -882,7 +900,8 @@ Definition check_toplevel_decl_def:
         EVERY (\(fn,args,ret,mut).
           params_ok tenv args /\ well_formed_type tenv ret) funcs
     | EventDecl id fields =>
-        EVERY (\((_,ty),indexed). assignable_type tenv ty) fields
+        EVERY (\((_,ty),indexed). assignable_type tenv ty /\
+                                  (indexed ==> event_indexable_type ty)) fields
     | ErrorDecl id args => params_ok tenv args
     | FunctionDecl vis mut nr rr _ args dflts ret body =>
         params_ok tenv args /\ well_formed_type tenv ret /\
@@ -987,3 +1006,4 @@ Proof
   qpat_x_assum `!x. MEM x tls ==> check_toplevel_decl _ _ _ x` drule >>
   simp[check_toplevel_decl_def]
 QED
+

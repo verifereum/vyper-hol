@@ -192,3 +192,12 @@ Proof
   rw[env_extends_def] >>
   metis_tac[type_stmts_var_types_preserve, type_stmts_var_assignable_T_preserve]
 QED
+
+(* Event tables are static: local typing operations never change resolution. *)
+Theorem local_env_event_fields[simp]:
+  (extend_local env id ty a).event_fields = env.event_fields /\
+  (defaults_env env).event_fields = env.event_fields
+Proof
+  simp[extend_local_def, defaults_env_def]
+QED
+

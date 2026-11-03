@@ -46,7 +46,7 @@ Theory loweringRuntimeCorrect
 Ancestors
   list pair fragExec stmtSim bodySim bodySimMain loweringHalt stmtLoweringMono exprSim exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering
-  e2eDefs supportedProgram vyperLoweringCorrect
+  e2eDefs supportedProgram vyperLoweringCorrect rawReturnHeader
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperInterpreter vyperState vyperContext
   venomState venomExecSemantics venomWf
@@ -175,7 +175,9 @@ Theorem external_entry_reaches_body:
      s0.
       set_external_package_target rpolicy.rpol_target
         (package_external_fn tops F (assign_nkeys tops 0)
-           (mut, F, F, tx.function_name, args, [], ret, fbody)) =
+           (mut, F, lookup_raw_return_or_F (NONE : num option)
+                       tx.function_name External tops,
+            tx.function_name, args, [], ret, fbody)) =
         (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
          rt) /\
       compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
@@ -223,7 +225,9 @@ Theorem external_body_frame:
       (INL (), es0) /\
     set_external_package_target rpolicy.rpol_target
       (package_external_fn tops F (assign_nkeys tops 0)
-         (mut, F, F, tx.function_name, args, [], ret, fbody)) =
+         (mut, F, lookup_raw_return_or_F (NONE : num option)
+                     tx.function_name External tops,
+          tx.function_name, args, [], ret, fbody)) =
       (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
        rt) /\
     compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
@@ -271,7 +275,9 @@ Theorem external_frame_ret_ok:
     bind_arguments (type_env tops) args tx.args = SOME env /\
     set_external_package_target rpolicy.rpol_target
       (package_external_fn tops F (assign_nkeys tops 0)
-         (mut, F, F, tx.function_name, args, [], ret, fbody)) =
+         (mut, F, lookup_raw_return_or_F (NONE : num option)
+                     tx.function_name External tops,
+          tx.function_name, args, [], ret, fbody)) =
       (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
        rt) /\
     compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
@@ -325,6 +331,7 @@ QED
 Theorem external_fallthrough_result_rel_any:
   !ctx cenv cenv' nkey ut iv stmts st x st' sb func cx es tops tx srcs exps
      layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_guarded_body cenv F nkey ut iv stmts NONE st = (x, st') /\
     compile_stmts cenv NoLoop (BaseT BoolT) stmts st = ((), sb) /\
@@ -345,7 +352,7 @@ Proof
                `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
     external_halt_success_unlock >>
   impl_tac >- gvs[vyperStateTheory.return_def] >>
-  strip_tac >> gvs[external_call_result_rel_def, return_bytes_def,
+  strip_tac >> gvs[external_call_result_rel_def, tx_return_bytes_def, return_bytes_def,
                   abstract_machine_from_state_def]
 QED
 
@@ -434,7 +441,7 @@ QED
 
 (* The guarded body's code from sa: the body's statements to sb, then (if
    the block is still open) the end, to st'. *)
-Theorem guarded_body_code[local]:
+Theorem guarded_body_code:
   !cenv nkey ut iv fbody rt sa st'.
     compile_guarded_body cenv F nkey ut iv fbody rt sa = ((), st') ==>
     ?sb. compile_stmts cenv NoLoop
@@ -466,7 +473,7 @@ QED
    the return type the typing checks the body against, while
    compile_guarded_body compiles a function without a return type at
    BaseT BoolT. *)
-Theorem guarded_body_stmts_env[local]:
+Theorem guarded_body_stmts_env:
   !tops bindings ctx cx cenv fbody ret rt env_t env' sa sb.
     supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
     rt = (if ret = NoneT then NONE else SOME ret) /\
@@ -565,6 +572,8 @@ Proof
   simp[source_unit_execution_correct_def] >> strip_tac
   >- ((* the body falls off its end *)
       `res = INL ()` by gvs[stmt_lands_def] >> gvs[] >>
+      `~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops` by
+        (irule source_typing_none_return_plain >> metis_tac[]) >>
       `state_rel func cenv' cx es' s` by fs[stmt_state_rel_def] >>
       qspecl_then [`unit.cu_context`, `cenv`, `cenv'`, `nkey`, `ut'`, `iv`,
                    `fbody`, `sa`, `()`, `st'`, `sb`, `func`, `cx`, `es'`,
