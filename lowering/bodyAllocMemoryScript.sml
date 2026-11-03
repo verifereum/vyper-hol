@@ -43,10 +43,41 @@ Proof
   simp[mk_inst_def]
 QED
 
+Theorem compile_alloc_buffer_body_header_mem_ok:
+  !ctx func cenv cx es s n sa buf sm value sb.
+    compile_alloc_buffer n sa = (buf,sm) /\
+    emit_void MSTORE [buf.buf_operand; value] sm = ((),sb) /\
+    fn_has_code sa sm func /\ ~block_is_terminated sa /\
+    stmt_state_rel ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
+    32 <= n /\ n < dimword (:256) ==>
+    run_inst_seq_mem_ok
+      (emitted_insts sa sm ++ emitted_insts sm sb) s
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_alloc_buffer_body_site >> strip_tac >>
+  `alloca_next_valid s` by fs[stmt_state_rel_def, alloca_inv_def] >>
+  irule compile_alloc_buffer_header_store_mem_ok >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem compile_alloc_buffer_body_frontier:
+  !ctx func cenv cx es s n sa buf sb.
+    compile_alloc_buffer n sa = (buf,sb) /\
+    fn_has_code sa sb func /\ ~block_is_terminated sa /\
+    stmt_state_rel ctx func cenv cx es s /\ n < dimword (:256) ==>
+    s.vs_alloca_next <=
+      (abi_builtin_allocate_state sa.cs_next_id n s).vs_alloca_next
+Proof
+  rpt strip_tac >> simp[abi_builtin_allocate_state_def] >>
+  Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id = NONE` >> simp[]
+QED
+
 val () = List.app (fn th =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
   in if null axioms andalso null (Thm.hyp th) andalso
         List.all (fn name => name = "DISK_THM") oracles
      then print "BODY_ALLOC_MEMORY_AUDIT OK\n"
      else raise Fail "body allocation inherited admission"
-  end) [compile_alloc_buffer_body_site];
+  end) [compile_alloc_buffer_body_site,
+        compile_alloc_buffer_body_header_mem_ok,
+        compile_alloc_buffer_body_frontier];
