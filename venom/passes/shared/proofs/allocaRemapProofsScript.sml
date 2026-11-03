@@ -3413,7 +3413,21 @@ Proof
   Cases_on `inst.inst_opcode` >> gvs[is_immutable_op_def] >>
   qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
   simp[step_inst_base_opcode_eqs, exec_read1_def] >>
-  rpt (CASE_TAC >> simp[]) >> strip_tac >>
+  simp[AllCaseEqs()] >> strip_tac >>
+  gvs[update_var_def, istore_def, mstore_def,
+      write_memory_with_expansion_def, write_memory_def]
+QED
+
+Theorem immutable_op_gas_readings_preserved[local]:
+  !inst s v. is_immutable_op inst.inst_opcode /\
+             step_inst_base inst s = OK v ==>
+             v.vs_gas_readings = s.vs_gas_readings
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_immutable_op_def] >>
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  simp[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs()] >>
+  strip_tac >>
   gvs[update_var_def, istore_def, mstore_def,
       write_memory_with_expansion_def, write_memory_def]
 QED
@@ -3473,6 +3487,8 @@ Theorem immutable_op_preserves_remap[local]:
 Proof
   rpt strip_tac >>
   imp_res_tac alloca_remap_rel_scalars >>
+  `s1.vs_gas_readings = s2.vs_gas_readings` by
+    (drule remap_gas_readings_agree >> simp[]) >>
   (* 1. Operand agreement *)
   `!op. MEM op inst.inst_operands ==>
         eval_operand op s1 = eval_operand op s2` by (
@@ -3491,9 +3507,7 @@ Proof
   `v1.vs_memory = s1.vs_memory /\ v2.vs_memory = s2.vs_memory` by
     metis_tac[immutable_op_mem_preserved] >>
   (* 5. Scalar fields + immutables *)
-  mp_tac (Q.SPECL [`fn`, `roots`, `remap`, `inst`, `s1`, `s2`, `v1`, `v2`]
-    immutable_op_scalars_agree) >>
-  impl_tac >- simp[] >> strip_tac >>
+  drule_all immutable_op_scalars_agree >> strip_tac >>
   (* 6. No PV outputs *)
   `!v. MEM v inst.inst_outputs ==> v NOTIN pointer_derived_vars fn roots` by
     metis_tac[no_pv_outputs_from_no_pv_inputs] >>
@@ -3509,42 +3523,31 @@ Proof
     `nm NOTIN pointer_derived_vars fn roots` by res_tac >>
     metis_tac[alloca_remap_rel_non_pv_lookup]) >>
   (* 9. Output vars agree in v1/v2 *)
-  mp_tac (Q.SPECL [`inst`, `s1`, `s2`, `v1`, `v2`]
-    immutable_op_output_vars_agree) >>
-  impl_tac >- simp[] >> strip_tac >>
+  drule immutable_op_output_vars_agree >>
+  disch_then (qspecl_then [`s1`, `s2`, `v1`, `v2`] mp_tac) >>
+  simp[] >> strip_tac >>
   (* 10. Reconstruct alloca_remap_rel *)
   `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   drule_all remap_step_oracle >> strip_tac >>
-  irule remap_rel_from_equiv >> gvs[] >> rpt conj_tac
-  (* Non-PV vars *)
+  drule_all remap_step_pending_deletions >> strip_tac >>
+  `v1.vs_gas_readings = v2.vs_gas_readings` by
+    metis_tac[immutable_op_gas_readings_preserved] >>
+  `alloca_remap_frame v1 = alloca_remap_frame v2` by
+    (asm_simp_tac bool_ss
+       [alloca_remap_frame_def, venom_state_component_equality,
+        venom_state_accfupds, combinTheory.K_THM]) >>
+  irule remap_rel_from_preserved_pointers >>
+  simp[Excl "pass_residual_mask_equality"] >> conj_tac
   >- (rpt strip_tac >>
       Cases_on `MEM v inst.inst_outputs`
-      >- res_tac
-      >> metis_tac[alloca_remap_rel_non_pv_lookup,
-                  step_inst_base_non_output_vars])
-  (* Existential: root vars, pv vars *)
-  >- (qexistsl_tac [`s1`, `s2`] >> simp[] >> rpt conj_tac
-      (* Root vars *)
-      >- (rpt strip_tac >>
-          `v IN pointer_derived_vars fn roots` by
-            metis_tac[roots_in_pointer_derived_vars] >>
-          `~MEM v inst.inst_outputs` by
-            (strip_tac >> res_tac >> gvs[]) >>
-          `lookup_var v v1 = lookup_var v s1 /\
-           lookup_var v v2 = lookup_var v s2` by (
-            qpat_assum `!nm. ~MEM nm inst.inst_outputs ==> _`
-              (qspec_then `v` mp_tac) >> simp[]) >>
-          qpat_assum `alloca_remap_rel _ _ _ _ _` mp_tac >>
-          REWRITE_TAC[alloca_remap_rel_def, LET_DEF] >> BETA_TAC >>
-          strip_tac >> res_tac >> gvs[])
-      (* PV vars *)
-      >- (rpt strip_tac >>
-          `~MEM v inst.inst_outputs` by
-            (strip_tac >> res_tac >> gvs[]) >>
-          DISJ1_TAC >>
-          qpat_assum `!nm. ~MEM nm inst.inst_outputs ==> _`
-            (qspec_then `v` mp_tac) >> simp[]))
+      >- metis_tac[] >>
+      metis_tac[alloca_remap_rel_non_pv_lookup]) >>
+  qexistsl_tac [`s1`, `s2`] >>
+  simp[Excl "pass_residual_mask_equality"] >>
+  rpt strip_tac >>
+  `~MEM v inst.inst_outputs` by metis_tac[] >>
+  metis_tac[]
 QED
 
 (* ===== Main theorem ===== *)
