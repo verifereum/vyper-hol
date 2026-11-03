@@ -6,6 +6,7 @@ Ancestors
   vyperStorageLayoutSafety vyperStorageWritePreservation
   vyperStoragePlaceRegion vyperStorageRegionWrite vyperStoragePlaceProvenance
   vyperPlaceTyping vyperPlaceFrames vyperTypeStoragePreservation
+  vyperPlaceMutationSoundness
 Libs
   wordsLib
 
@@ -164,13 +165,9 @@ Theorem pop_memory_place_storage:
   pop_place cx (MemoryPlace id path) st = (res,st') ==>
   !tr. get_storage cx st' tr = get_storage cx st tr
 Proof
-  simp[pop_place_def, bind_def, get_scopes_def, lift_option_type_def,
-       type_check_def, assert_def, lift_sum_def, set_scopes_def,
-       return_def, raise_def, ignore_bind_def, check_def, pairTheory.UNCURRY] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, ignore_bind_def, type_check_def, assert_def,
-           lift_sum_def, set_scopes_def, return_def, raise_def]) >>
-  rpt strip_tac >> gvs[get_storage_scopes]
+  strip_tac >> drule pop_memory_place_state_frame >>
+  disch_then (fn th => once_rewrite_tac[th]) >>
+  simp[get_storage_scopes]
 QED
 
 Theorem pop_immutable_place_storage:
