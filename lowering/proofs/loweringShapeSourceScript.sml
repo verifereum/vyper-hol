@@ -10,7 +10,9 @@ Ancestors
   supportedStmtTraverse compileVyper vyperAST
 
 (* The shape roots the type checker doesn't exclude: expr_shape_root less its
-   builtin arity cases. *)
+   builtin arity cases.  The unit shape rejects msg.gas as a value, a
+   delegate raw_call (DELEGATECALL) and the calldata form (DALLOCA); a plain
+   raw_call passes it, but the body-shape proof has no case for it yet. *)
 Definition expr_raw_shape_root_def:
   expr_raw_shape_root e <=>
     (?ty es. e = Builtin ty (Env MsgGas) es) \/

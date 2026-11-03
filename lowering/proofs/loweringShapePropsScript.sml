@@ -12325,7 +12325,7 @@ QED
 (* Without immutable declarations, build_compile_env maps module variables
    to storage/transient slots and arguments and locals to MemLoc;
    external functions have no return PC. *)
-Theorem package_external_fn_shape_ok_bodies:
+Theorem package_external_fn_shape_ok:
   !tops use_trans nkey_map target src.
     runtime_bodies_shape_ok tops /\ immutable_free_program tops /\
     MEM src (FST (classify_functions tops)) ==>
@@ -12345,7 +12345,7 @@ Proof
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
-Theorem package_internal_fn_shape_ok_bodies:
+Theorem package_internal_fn_shape_ok:
   !tops use_trans nkey_map target src.
     runtime_bodies_shape_ok tops /\ immutable_free_program tops /\
     MEM src (FST (SND (classify_functions tops))) ==>
@@ -12364,7 +12364,7 @@ Proof
   irule build_compile_env_static >> simp[]
 QED
 
-Theorem package_fallback_fn_shape_ok_bodies:
+Theorem package_fallback_fn_shape_ok:
   !tops use_trans nkey_map target.
     runtime_bodies_shape_ok tops /\ immutable_free_program tops ==>
     fallback_shape_ok
@@ -12384,42 +12384,6 @@ Proof
        fallback_shape_ok_def, build_compile_env_external_no_return_pc] >>
   simp[cenv_static_ok_def] >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
-QED
-
-Theorem package_external_fn_shape_ok:
-  !tops use_trans nkey_map target src.
-    supported_program tops /\ immutable_free_program tops /\
-    MEM src (FST (classify_functions tops)) ==>
-    external_fn_shape_ok
-      (set_external_package_target target
-         (package_external_fn tops use_trans nkey_map src))
-Proof
-  rpt strip_tac >> irule package_external_fn_shape_ok_bodies >>
-  simp[supported_program_runtime_bodies_shape_ok]
-QED
-
-Theorem package_internal_fn_shape_ok:
-  !tops use_trans nkey_map target src.
-    supported_program tops /\ immutable_free_program tops /\
-    MEM src (FST (SND (classify_functions tops))) ==>
-    internal_fn_shape_ok
-      (set_internal_package_target target
-         (package_internal_fn tops use_trans nkey_map F 0 src))
-Proof
-  rpt strip_tac >> irule package_internal_fn_shape_ok_bodies >>
-  simp[supported_program_runtime_bodies_shape_ok]
-QED
-
-Theorem package_fallback_fn_shape_ok:
-  !tops use_trans nkey_map target.
-    supported_program tops /\ immutable_free_program tops ==>
-    fallback_shape_ok
-      (set_fallback_package_target target
-         (package_fallback_fn tops use_trans nkey_map
-            (FST (SND (SND (classify_functions tops))))))
-Proof
-  rpt strip_tac >> irule package_fallback_fn_shape_ok_bodies >>
-  simp[supported_program_runtime_bodies_shape_ok]
 QED
 
 (* ===== Labels ===== *)
@@ -12755,29 +12719,6 @@ Proof
   simp[source_internal_fn_descriptor_def]
 QED
 
-Theorem classified_internal_names_distinct:
-  !tops. ALL_DISTINCT (supported_function_names tops) ==>
-    ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
-      (FST (SND (classify_functions tops))))
-Proof
-  Induct >> simp[classify_functions_def, supported_function_names_def] >>
-  gen_tac >> fs[classify_functions_def] >>
-  qmatch_goalsub_abbrev_tac `classify_function h acc` >>
-  PairCases_on `acc` >> Cases_on `h` >>
-  gvs[classify_function_def, supported_function_names_def] >>
-  rename1 `case vis of External => _ | Internal => _ | Deploy => _` >>
-  Cases_on `vis` >> simp[]
-  >- (IF_CASES_TAC >> simp[]) >>
-  rpt strip_tac >> simp[] >>
-  gvs[MEM_MAP] >>
-  rename1 `MEM payload acc1` >> PairCases_on `payload` >> gvs[] >>
-  `MEM (payload0,payload1,payload2,payload3,payload4,payload5,payload6,payload7)
-    (FST (SND (classify_functions tops)))` by
-    simp[classify_functions_def] >>
-  drule (iffLR MEM_classify_internal) >>
-  metis_tac[MEM_supported_function_names]
-QED
-
 (* Labels are distinct when equal labels mean equal names and the names are
    distinct. *)
 Theorem ALL_DISTINCT_MAP_name_reflect[local]:
@@ -12794,8 +12735,7 @@ QED
    Internal in tops (MEM_classify_internal), and its label is
    internal_fn_label of its id and name (internal_fn_label_prefix).  Equal
    labels have equal ids (internal_fn_label_id_11), hence equal names
-   (build_func_ids_11); the names are a sublist of supported_function_names
-   tops, which supported_declaration_names makes ALL_DISTINCT. *)
+   (build_func_ids_11), which the hypothesis keeps apart. *)
 Theorem internal_descriptors_ok:
   !tops is_ctor.
     ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
@@ -12817,22 +12757,6 @@ Proof
       imp_res_tac (iffLR MEM_classify_internal) >>
       metis_tac[build_func_ids_11, function_visibility_distinct]) >>
   simp[]
-QED
-
-Theorem supported_internal_descriptors_ok:
-  !tops is_ctor.
-    supported_program tops ==>
-    EVERY (\d. internal_label_ok (FST d))
-      (MAP (source_internal_fn_descriptor tops is_ctor)
-         (FST (SND (classify_functions tops)))) /\
-    ALL_DISTINCT
-      (MAP FST (MAP (source_internal_fn_descriptor tops is_ctor)
-                  (FST (SND (classify_functions tops)))))
-Proof
-  rpt gen_tac >> strip_tac >> irule internal_descriptors_ok >>
-  irule classified_internal_names_distinct >>
-  drule supported_program_names >>
-  metis_tac[supported_declaration_names_unique]
 QED
 
 (* S2's statement, proved from the generator and source lemmas above.
@@ -12866,17 +12790,17 @@ Proof
        external_fn_shape_ok
          (set_external_package_target rpolicy.rpol_target
             (package_external_fn tops F (assign_nkeys tops 0) x))`
-    by (rpt strip_tac >> irule package_external_fn_shape_ok_bodies >> gs[]) >>
+    by (rpt strip_tac >> irule package_external_fn_shape_ok >> gs[]) >>
   `!x. MEM x ints ==>
        internal_fn_shape_ok
          (set_internal_package_target rpolicy.rpol_target
             (package_internal_fn tops F (assign_nkeys tops 0) F 0 x))`
-    by (rpt strip_tac >> irule package_internal_fn_shape_ok_bodies >> gs[]) >>
+    by (rpt strip_tac >> irule package_internal_fn_shape_ok >> gs[]) >>
   `fallback_shape_ok
      (set_fallback_package_target rpolicy.rpol_target
         (package_fallback_fn tops F (assign_nkeys tops 0) fb))`
     by (qspecl_then [`tops`, `F`, `assign_nkeys tops 0`,
-                     `rpolicy.rpol_target`] mp_tac package_fallback_fn_shape_ok_bodies >>
+                     `rpolicy.rpol_target`] mp_tac package_fallback_fn_shape_ok >>
         gs[]) >>
   drule run_lowering_source_unit_ok >> disch_then match_mp_tac >>
   gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
@@ -12884,16 +12808,3 @@ Proof
   fs[MEM_MAP, PULL_EXISTS]
 QED
 
-Theorem lower_vyper_runtime_unit_source_unit_ok_names:
-  !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\ immutable_free_program tops ==>
-    o1_source_unit_ok unit
-Proof
-  rpt strip_tac >>
-  drule_then irule lower_vyper_runtime_unit_source_unit_ok_shape >>
-  simp[supported_program_runtime_bodies_shape_ok] >>
-  irule classified_internal_names_distinct >>
-  drule supported_program_names >>
-  metis_tac[supported_declaration_names_unique]
-QED

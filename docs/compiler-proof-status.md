@@ -19,9 +19,11 @@ Current integration boundary:
 - S2 (`lower_vyper_runtime_unit_source_unit_ok`) is proved for any
   contract `check_contract` accepts, under `raw_shape_free_program tops /\
   immutable_free_program tops`. `raw_shape_free_program` excludes `msg.gas`
-  as a value and every `raw_call` from runtime bodies; the unit shape still
-  rejects their lowerings (GAS as an ordinary operand, DELEGATECALL, and
-  DALLOCA for `msg.data`). The public `vyper_call_correct` theorem still
+  as a value and every `raw_call` from runtime bodies. The unit shape
+  rejects some of their lowerings (GAS as an ordinary operand, DELEGATECALL,
+  DALLOCA for `msg.data`); a plain CALL/STATICCALL `raw_call` passes the
+  shape, but the body-shape proof has no case for it yet, so the exclusion
+  is wider than the shape needs. The public `vyper_call_correct` theorem still
   carries `supported_program`, which implies `raw_shape_free_program`.
   Immutable compilation and its encoding/deployment proofs remain available;
   the raw O1 shape contract excludes `DLOAD` and `DLOADBYTES`, so this proof
