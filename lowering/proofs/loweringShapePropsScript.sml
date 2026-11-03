@@ -13114,3 +13114,18 @@ Proof
   FIRST [irule comp_ignore_bind_labels >> simp[emit_inst_labels, comp_return_labels],
          irule comp_bind_labels >> simp[emit_op_labels]]
 QED
+
+Theorem compile_safe_pow_labels:
+  !x y ty base_literal exp_literal s P.
+    cs_extends s (SND (compile_safe_pow x y ty base_literal exp_literal s)) /\
+    EVERY P (added_labels s
+      (SND (compile_safe_pow x y ty base_literal exp_literal s)))
+Proof
+  rpt gen_tac >> Cases_on `base_literal` >> Cases_on `exp_literal` >>
+  simp[compile_safe_pow_def, LET_THM] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac, IF_CASES_TAC] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[emit_op_labels, emit_void_labels, comp_return_labels,
+            compile_clamp_labels])
+QED
