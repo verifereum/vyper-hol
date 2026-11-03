@@ -203,9 +203,23 @@ Theorem ci_mono_return_helpers:
   (!cenv t m tgs s sa.
      ci_mono sa (SND (compile_tuple_unpack cenv t m tgs s sa)))
 Proof
-  rpt conj_tac >> rpt gen_tac >>
-  simp[compile_internal_return_def, compile_internal_return_from_env_def,
-       compile_external_return_def, compile_tuple_unpack_def] >>
+  conj_asm1_tac
+  >- (rpt gen_tac >> Cases_on `n > 0` >> Cases_on `v` >>
+      Cases_on `rb` >> Cases_on `ets = []` >>
+      simp[compile_internal_return_def] >>
+      ci_mono_chain_tac
+        (ci_mono_list_helpers :: ci_mono_stmt_helpers :: ci_mono_stmt_rws)) >>
+  conj_tac
+  >- (rpt gen_tac >> simp[compile_internal_return_from_env_def] >>
+      ci_mono_chain_tac
+        (ci_mono_list_helpers :: ci_mono_stmt_helpers :: ci_mono_stmt_rws)) >>
+  conj_tac
+  >- (rpt gen_tac >> Cases_on `v` >> Cases_on `p` >>
+      Cases_on `r` >> Cases_on `n` >>
+      simp[compile_external_return_def] >>
+      ci_mono_chain_tac
+        (ci_mono_list_helpers :: ci_mono_stmt_helpers :: ci_mono_stmt_rws)) >>
+  rpt gen_tac >> simp[compile_tuple_unpack_def] >>
   ci_mono_chain_tac
     (ci_mono_list_helpers :: ci_mono_stmt_helpers :: ci_mono_stmt_rws)
 QED
