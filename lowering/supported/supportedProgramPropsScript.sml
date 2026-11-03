@@ -2,7 +2,7 @@
    fixture proofs. Plain EVAL on tops; source typing stays a separate premise. *)
 Theory supportedProgramProps
 Ancestors
-  moduleLowering supportedProgram supportedStmts supportedStmtTraverse supportedNames
+  compileVyper moduleLowering supportedProgram supportedStmts supportedStmtTraverse supportedNames
   supportedExprTraverse supportedExprProps supportedExprFormProps vyperAST list integer
 Libs
   intLib
@@ -258,4 +258,61 @@ Proof
   strip_tac >>
   `MEM id (MAP FST args)` by (simp[MEM_MAP] >> qexists `(id,ty)` >> simp[]) >>
   metis_tac[]
+QED
+
+Theorem supported_function_names_mem:
+  !tops vis mut nr rr name args defaults ret body.
+    MEM (FunctionDecl vis mut nr rr name args defaults ret body) tops ==>
+    MEM name (supported_function_names tops)
+Proof
+  Induct >> simp[supported_function_names_def] >>
+  rpt gen_tac >> Cases_on `h` >> simp[supported_function_names_def] >>
+  metis_tac[]
+QED
+
+Theorem distinct_external_classification:
+  !tops mut nr rr name args defaults ret body exts ints fb ctor.
+    ALL_DISTINCT (supported_function_names tops) /\
+    MEM (FunctionDecl External mut nr rr name args defaults ret body) tops /\
+    classify_functions tops = (exts,ints,fb,ctor) ==>
+    (if name = "__default__" then
+       fb = SOME (mut,nr,rr,name,args,defaults,ret,body)
+     else MEM (mut,nr,rr,name,args,defaults,ret,body) exts)
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  Cases_on `h` >>
+  simp[supported_function_names_def, classify_functions_def,
+       classify_function_def] >>
+  rpt strip_tac >> gvs[GSYM classify_functions_def] >>
+  gvs[classify_function_def, AllCaseEqs()] >>
+  drule supported_function_names_mem >> strip_tac >>
+  Cases_on `name = "__default__"` >> gvs[] >> metis_tac[]
+QED
+
+Theorem supported_external_classification:
+  supported_program tops /\
+  MEM (FunctionDecl External mut nr rr name args defaults ret fbody) tops /\
+  classify_functions tops = (exts,ints,fb,ctor) ==>
+  (if name = "__default__" then
+     fb = SOME (mut,nr,rr,name,args,defaults,ret,fbody)
+   else MEM (mut,nr,rr,name,args,defaults,ret,fbody) exts)
+Proof
+  strip_tac >> irule distinct_external_classification >>
+  drule supported_program_names >>
+  simp[supported_declaration_names_def] >> metis_tac[]
+QED
+
+Theorem supported_external_allocs_ok:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\
+  MEM (FunctionDecl External mut nr rr name args defaults ret fbody) tops ==>
+  fn_allocs_ok tops (mut,nr,rr,name,args,defaults,ret,fbody)
+Proof
+  strip_tac >> Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  drule_all supported_external_classification >> strip_tac >>
+  irule lower_vyper_runtime_unit_allocs_ok >>
+  conj_tac >- metis_tac[] >>
+  qexistsl [`r2`, `q`, `r1`, `r0`] >>
+  simp[] >> Cases_on `name = "__default__"` >> gvs[]
 QED
