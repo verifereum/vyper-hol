@@ -2,6 +2,7 @@
 Theory abiDecoderDynarrayPrefix
 Ancestors
   abiEncoder abiDecoderRange abiDecoderBytesBound abiDecoderDynarrayBound abiDecoderGuards abiDecoderContract compileEnv emitHelper
+  exprLoweringProps emitHelperProps venomInst list rich_list
   venomExecSemantics venomState words
 
 Definition abi_decode_dynarray_prefix_def:
@@ -164,4 +165,25 @@ Proof
   simp[abi_decode_dynarray_position_prefix_def, abi_decode_bytes_head_def,
        abi_decode_dynarray_payload_guard_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def, FUN_EQ_THM]
+QED
+
+Theorem abi_decode_dynarray_position_prefix_shape:
+  abi_decode_dynarray_position_prefix src opc base_op hi maxn abi_sz st = (addr,st') /\
+  abi_decode_source_opcode opc ==>
+  inst_extends st st' /\ st'.cs_blocks = st.cs_blocks /\
+  st'.cs_current_bb = st.cs_current_bb /\
+  st.cs_next_var <= st'.cs_next_var /\ st.cs_next_id <= st'.cs_next_id /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+    ~is_alloca_op i.inst_opcode) (emitted_insts st st')
+Proof
+  strip_tac >> Cases_on `hi = Lit 0w` >> Cases_on `base_op = Lit 0w` >>
+  gvs[abi_decode_dynarray_position_prefix_def, abi_decode_bytes_head_def,
+      compile_abi_dec_addr_def, abi_decode_count_guard_def,
+      abi_decode_dynarray_payload_guard_def, compile_abi_decode_range_check_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
+      inst_extends_def, emitted_insts_def, IS_PREFIX_APPEND] >>
+  pure_rewrite_tac [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
+  gvs[DROP_LENGTH_APPEND, abi_decode_source_opcode_def,
+      is_terminator_def, is_alloca_op_def, mk_inst_def]
 QED
