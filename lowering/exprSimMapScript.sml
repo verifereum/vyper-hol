@@ -343,3 +343,52 @@ Proof
   Cases_on `is_bytestring_type kt` >> gvs[comp_return_def] >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem mapping_leaf_storage_valid:
+  storage_mapping_region cx tr slot (Type typ) /\
+  evaluate_type (get_tenv cx) typ = SOME tv /\
+  contract_storage_well_formed cx es ==>
+  slots_in_range (get_storage cx es tr) (w2n slot) tv /\
+  storage_read_live cx tr (get_storage cx es tr) slot tv
+Proof
+  strip_tac >>
+  qpat_x_assum `storage_mapping_region _ _ _ _` mp_tac >>
+  rewrite_tac[storage_mapping_region_def] >> strip_tac >>
+  qpat_x_assum `!subs leaf_slot leaf_tv. _`
+    (qspecl_then [`[]`, `slot`, `tv`] mp_tac) >>
+  simp[vyperStorageLayoutSafetyTheory.resolve_hashmap_leaf_def] >> strip_tac >>
+  conj_tac
+  >- (irule vyperStorageLayoutSafetyTheory.contract_storage_well_formed_region >>
+      simp[vyperStorageBackendTheory.get_storage_backend_eq] >>
+      goal_assum (drule_at Any) >> qexists `es` >> simp[]) >>
+  irule accountsRelPropsTheory.declared_storage_region_read_live >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem mapping_leaf_storage_holds:
+  storage_mapping_region cx tr slot (Type typ) /\
+  evaluate_type (get_tenv cx) typ = SOME tv /\
+  contract_storage_well_formed cx es ==>
+  storage_holds cx tr typ (PlaceR (StoragePlace tr slot tv)) slot es
+Proof
+  strip_tac >> drule_all mapping_leaf_storage_valid >> strip_tac >>
+  drule vyperTypeValuesTheory.evaluate_type_well_formed_type_value >> strip_tac >>
+  drule_all vyperLookupStorageTheory.decode_value_from_slots_in_range >> strip_tac >>
+  simp[exprSimTheory.storage_holds_def, read_result_def, read_place_def,
+       read_storage_slot_def, bind_def, lift_option_def, return_def,
+       vyperStorageBackendTheory.get_storage_backend_eq]
+QED
+
+Theorem mapping_leaf_vv_holds:
+  storage_mapping_region cx tr slot (Type typ) /\
+  evaluate_type (get_tenv cx) typ = SOME tv /\
+  contract_storage_well_formed cx es /\
+  p.ptr_location = slot_loc tr /\
+  eval_operand p.ptr_operand s = SOME slot ==>
+  vv_holds cenv cx typ (PlaceR (StoragePlace tr slot tv))
+    (LocatedValue typ p) es s
+Proof
+  strip_tac >> drule_all mapping_leaf_storage_holds >> strip_tac >>
+  Cases_on `tr` >>
+  gvs[exprSimTheory.vv_holds_def, slot_loc_def]
+QED
