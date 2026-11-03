@@ -201,7 +201,7 @@ Proof
     (Cases_on `ptr_op` >> gvs[eval_operand_def, lookup_var_update_var] >>
      gvs[not_fresh_at_def]) >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, exec_pure2_def, eval_operand_def,
+  simp[stepInstBaseLib.simp_opcode_clause ``ADD``, exec_pure2_def, eval_operand_def,
        bind_outputs_def] >>
   simp[Once run_inst_seq_def] >>
   simp[Once step_inst_base_def, eval_operand_def, lookup_var_update_var,
