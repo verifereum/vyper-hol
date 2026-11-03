@@ -805,11 +805,21 @@ Theorem add_module_var_locations_FLOOKUP:
     FLOOKUP vars n = SOME loc \/
     ?slot. loc = StorageLoc slot \/ loc = TransientLoc slot
 Proof
-  Induct >> simp[add_module_var_locations_def] >>
-  rpt gen_tac >> simp[Once add_module_var_locations_def] >>
+  Induct >- simp[add_module_var_locations_def] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[Once add_module_var_locations_def]
+  >- (qmatch_goalsub_rename_tac `option_CASE slot_opt _ _` >>
+      Cases_on `slot_opt` >> simp[] >>
+      qmatch_goalsub_rename_tac `variable_mutability_CASE mut _ _ _ _` >>
+      Cases_on `mut` >> simp[] >>
+      strip_tac >> first_x_assum drule >>
+      rw[finite_mapTheory.FLOOKUP_UPDATE] >> gvs[])
+  >> qmatch_goalsub_rename_tac `option_CASE slot_opt _ _` >>
+  Cases_on `slot_opt` >> simp[] >>
+  qmatch_goalsub_rename_tac `if transient then _ else _` >>
+  Cases_on `transient` >> simp[] >>
   strip_tac >> first_x_assum drule >>
-  Cases_on `h` >> simp[] >> rpt (CASE_TAC >> simp[]) >>
-  rw[finite_mapTheory.FLOOKUP_UPDATE] >> simp[]
+  rw[finite_mapTheory.FLOOKUP_UPDATE] >> gvs[]
 QED
 
 Theorem add_immutable_locations_FLOOKUP:
