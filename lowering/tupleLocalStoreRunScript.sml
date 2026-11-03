@@ -332,8 +332,9 @@ Resume tuple_store_mixed_locals_run[cons]:
   drule_all tuple_store_local_step >> strip_tac >>
   `~is_word_type ty ==> (vt = ty \/ is_bytestring_type vt) /\
      0 < type_memory_bytes cenv vt` by
-    (strip_tac >> qpat_x_assum `~is_word_type ty ==> _` mp_tac >>
-     simp[] >> metis_tac[]) >>
+    (qpat_x_assum `~is_word_type ty ==> _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     rpt strip_tac >> gvs[] >> metis_tac[]) >>
   drule_all tuple_store_head_code_shape >> strip_tac >>
   suspend "head_code"
 QED
