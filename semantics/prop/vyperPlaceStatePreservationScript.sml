@@ -251,6 +251,8 @@ Proof
   gen_tac >> Cases_on `h`
   >- (Cases_on `v` >> simp[subscripts_type_def, Once assign_subscripts_def] >>
       rpt gen_tac >> strip_tac >>
+      gvs[] >> Cases_on `a` >>
+      full_simp_tac bool_ss [value_case_def, sumTheory.sum_distinct] >>
       gvs[subscripts_type_def, AllCaseEqs()] >>
       rename1 `subscript_type root_tv (ValueSubscript (IntV i)) = SOME etv` >>
       `well_formed_type_value etv` by metis_tac[subscript_type_well_formed] >>
