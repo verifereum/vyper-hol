@@ -1961,8 +1961,9 @@ Theorem probe_word_load_round_allocation_frame:
     (probe_word_load_round s i bufaddr).vs_allocas = s.vs_allocas /\
     (probe_word_load_round s i bufaddr).vs_return_pc_token = s.vs_return_pc_token
 Proof
-  simp[probe_word_load_round_def, probe_word_load_state_def,
-       probe_word_load_cond_state_def, jump_to_def, update_var_def, mstore_def]
+  rewrite_tac[probe_word_load_round_def, probe_word_load_state_def,
+       probe_word_load_cond_state_def, LET_THM, jump_to_def, update_var_def,
+       mstore_def] >> simp[]
 QED
 
 Theorem probe_word_loaded_allocation_frame:
@@ -1973,4 +1974,476 @@ Theorem probe_word_loaded_allocation_frame:
 Proof
   simp[probe_word_loaded_state_def, probe_word_load_cond_state_def,
        jump_to_def, update_var_def, probe_word_load_round_allocation_frame]
+QED
+
+Definition probe_word_copy_cond_state_def:
+  probe_word_copy_cond_state s i n =
+    update_var "%13" (bool_to_word (~(i <+ n)))
+      (update_var "%12" (bool_to_word (i <+ n)) s)
+End
+
+Theorem probe_word_copy_cond_sequence:
+  !s i n.
+    lookup_var "%11" s = SOME i /\ lookup_var "%10" s = SOME n ==>
+    run_inst_seq (TAKE 2 (EL 4 probe_word_compiled.cs_blocks).bb_instructions) s =
+      OK (probe_word_copy_cond_state s i n)
+Proof
+  rpt strip_tac >> simp[probe_word_compiled_copy_cond] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def,
+       mk_inst_def, eval_operands_def, eval_operand_def] >>
+  simp[run_inst_seq_def, Once step_inst_base_def, exec_pure1_def,
+       mk_inst_def, eval_operands_def, eval_operand_def, lookup_var_update_var,
+       probe_word_copy_cond_state_def, bool_to_word_def] >>
+  Cases_on `i <+ n` >> gvs[WORD_LO, bool_to_word_def]
+QED
+
+Theorem probe_word_copy_cond_block:
+  !s i n fuel ctx.
+    lookup_var "%11" s = SOME i /\ lookup_var "%10" s = SOME n /\
+    ~s.vs_halted ==>
+    exec_block fuel ctx (EL 4 probe_word_compiled.cs_blocks)
+      (s with vs_inst_idx := 0) =
+    OK (jump_to (if i <+ n then "@dyn_body_4" else "@dyn_exit_5")
+      (probe_word_copy_cond_state s i n))
+Proof
+  rpt strip_tac >>
+  `jump_to (if i <+ n then "@dyn_body_4" else "@dyn_exit_5")
+      (probe_word_copy_cond_state s i n) =
+   jump_to (if bool_to_word (~(i <+ n)) <> 0w then "@dyn_exit_5" else "@dyn_body_4")
+      (probe_word_copy_cond_state s i n)` by
+    (Cases_on `i <+ n` >> simp[bool_to_word_def]) >>
+  pop_assum SUBST1_TAC >> irule exec_block_inst_seq_jnz >>
+  conj_tac >- simp[probe_word_copy_cond_state_def] >>
+  qexistsl [`Var "%13"`,
+    `TAKE 2 (EL 4 probe_word_compiled.cs_blocks).bb_instructions`, `20`] >>
+  simp[probe_word_copy_cond_sequence, probe_word_compiled_copy_cond,
+       probe_word_copy_cond_state_def, lookup_var_update_var,
+       eval_operand_def, mk_inst_def, is_terminator_def, get_instruction_def] >>
+  rpt strip_tac >> `k = 0 \/ k = 1` by decide_tac >> gvs[]
+QED
+
+Theorem probe_word_run_copy_cond:
+  !s i n fuel ctx.
+    lookup_var "%11" s = SOME i /\ lookup_var "%10" s = SOME n /\
+    ~s.vs_halted /\ s.vs_current_bb = "@dyn_cond_3" ==>
+    run_blocks (SUC fuel) ctx probe_word_function s =
+    run_blocks fuel ctx probe_word_function
+      (jump_to (if i <+ n then "@dyn_body_4" else "@dyn_exit_5")
+        (probe_word_copy_cond_state s i n))
+Proof
+  rpt strip_tac >>
+  simp[Once run_blocks_unfold, probe_word_function_blocks,
+       lookup_block_def, probe_word_compiled_entry,
+       probe_word_compiled_load_cond, probe_word_compiled_load_body,
+       probe_word_compiled_load_exit, probe_word_compiled_copy_cond,
+       listTheory.FIND_thm] >>
+  simp[run_block_def, eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
+  rewrite_tac[GSYM (SRULE [mk_inst_def] probe_word_compiled_copy_cond)] >>
+  drule_all probe_word_copy_cond_block >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[jump_to_def, probe_word_copy_cond_state_def]
+QED
+
+Definition probe_word_copy_body_state_def:
+  probe_word_copy_body_state s i bufaddr =
+    update_var "%20" 0w
+      (update_var "%19" (0w + (1w + i * 2w))
+        (update_var "%18" (1w + i * 2w)
+          (update_var "%17" (i * 2w)
+            (update_var "%16" (bufaddr + (32w + i * 64w))
+              (update_var "%15" (32w + i * 64w)
+                (update_var "%14" (i * 64w) s))))))
+End
+
+Theorem probe_word_copy_body_sequence:
+  !s i bufaddr.
+    lookup_var "%11" s = SOME i /\ lookup_var "%2" s = SOME bufaddr ==>
+    run_inst_seq (TAKE 7 (EL 3 probe_word_compiled.cs_blocks).bb_instructions) s =
+      OK (probe_word_copy_body_state s i bufaddr)
+Proof
+  rpt strip_tac >> simp[probe_word_compiled_copy_body] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def,
+       mk_inst_def, eval_operands_def, eval_operand_def] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def,
+       mk_inst_def, eval_operands_def, eval_operand_def, lookup_var_update_var] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def,
+       mk_inst_def, eval_operands_def, eval_operand_def, lookup_var_update_var] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def,
+       mk_inst_def, eval_operands_def, eval_operand_def, lookup_var_update_var] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def,
+       mk_inst_def, eval_operands_def, eval_operand_def, lookup_var_update_var] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def,
+       mk_inst_def, eval_operands_def, eval_operand_def, lookup_var_update_var] >>
+  simp[run_inst_seq_def, Once step_inst_base_def, eval_operand_def,
+       mk_inst_def, probe_word_copy_body_state_def]
+QED
+
+Theorem probe_word_copy_body_block:
+  !s i bufaddr fuel ctx.
+    lookup_var "%11" s = SOME i /\ lookup_var "%2" s = SOME bufaddr /\
+    ~s.vs_halted ==>
+    exec_block fuel ctx (EL 3 probe_word_compiled.cs_blocks)
+      (s with vs_inst_idx := 0) =
+    OK (jump_to "@wcopy_cond_6" (probe_word_copy_body_state s i bufaddr))
+Proof
+  rpt strip_tac >> irule exec_block_inst_seq_jmp >>
+  conj_tac >- simp[probe_word_copy_body_state_def] >>
+  qexists_tac `TAKE 7 (EL 3 probe_word_compiled.cs_blocks).bb_instructions` >>
+  simp[probe_word_copy_body_sequence, probe_word_compiled_copy_body,
+       mk_inst_def, is_terminator_def, get_instruction_def] >>
+  rpt strip_tac >>
+  `k = 0 \/ k = 1 \/ k = 2 \/ k = 3 \/ k = 4 \/ k = 5 \/ k = 6`
+    by decide_tac >> gvs[]
+QED
+
+Definition probe_word_elem_cond_state_def:
+  probe_word_elem_cond_state s i = update_var "%21" (bool_to_word (i = 2w)) s
+End
+
+Theorem probe_word_elem_cond_block:
+  !s i fuel ctx.
+    lookup_var "%20" s = SOME i /\ ~s.vs_halted ==>
+    exec_block fuel ctx (EL 2 probe_word_compiled.cs_blocks)
+      (s with vs_inst_idx := 0) =
+    OK (jump_to (if i = 2w then "@wcopy_exit_8" else "@wcopy_body_7")
+      (probe_word_elem_cond_state s i))
+Proof
+  rpt strip_tac >>
+  simp[Once exec_block_def, probe_word_compiled_elem_cond,
+       get_instruction_def, mk_inst_def] >>
+  simp[Once step_inst_def] >>
+  simp[Once step_inst_base_def, exec_pure2_def, eval_operands_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       is_terminator_def] >>
+  simp[Once exec_block_def, get_instruction_def, Once step_inst_def,
+       Once step_inst_base_def, eval_operand_def, lookup_var_update_var,
+       update_var_def, probe_word_elem_cond_state_def, jump_to_def,
+       bool_to_word_def] >>
+  Cases_on `i = 2w` >>
+  gvs[lookup_var_def, FLOOKUP_UPDATE, is_terminator_def, bool_to_word_def]
+QED
+
+Definition probe_word_elem_body_state_def:
+  probe_word_elem_body_state s i src dst =
+    let offset = i * 32w in
+    let addr = src + offset in
+    let value = mload (w2n addr) s in
+    let t = update_var "%25" (dst + i)
+      (update_var "%24" value
+        (update_var "%23" addr (update_var "%22" offset s))) in
+    update_var "%20" (i + 1w)
+      (update_var "%26" (i + 1w) (sstore (dst + i) value t))
+End
+
+Theorem probe_word_elem_body_sequence:
+  !s i src dst.
+    lookup_var "%20" s = SOME i /\ lookup_var "%16" s = SOME src /\
+    lookup_var "%19" s = SOME dst ==>
+    run_inst_seq (TAKE 7 (EL 1 probe_word_compiled.cs_blocks).bb_instructions) s =
+      OK (probe_word_elem_body_state s i src dst)
+Proof
+  rpt strip_tac >> simp[probe_word_compiled_elem_body] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def,
+       mk_inst_def, eval_operands_def, eval_operand_def] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def,
+       mk_inst_def, eval_operands_def, eval_operand_def, lookup_var_update_var] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_read1_def,
+       mk_inst_def, eval_operands_def, eval_operand_def, lookup_var_update_var,
+       mload_def, update_var_def] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def,
+       mk_inst_def, eval_operands_def, eval_operand_def, lookup_var_update_var] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_write2_def,
+       mk_inst_def, eval_operands_def, eval_operand_def, lookup_var_update_var] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def,
+       mk_inst_def, eval_operands_def, eval_operand_def, lookup_var_update_var,
+       lookup_var_def, sstore_def, update_var_def, FLOOKUP_UPDATE] >>
+  simp[run_inst_seq_def, Once step_inst_base_def, eval_operand_def,
+       mk_inst_def, probe_word_elem_body_state_def, mload_def, update_var_def,
+       sstore_def] >> gvs[lookup_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem probe_word_elem_body_block:
+  !s i src dst fuel ctx.
+    lookup_var "%20" s = SOME i /\ lookup_var "%16" s = SOME src /\
+    lookup_var "%19" s = SOME dst /\ ~s.vs_halted ==>
+    exec_block fuel ctx (EL 1 probe_word_compiled.cs_blocks)
+      (s with vs_inst_idx := 0) =
+    OK (jump_to "@wcopy_cond_6" (probe_word_elem_body_state s i src dst))
+Proof
+  rpt strip_tac >> irule exec_block_inst_seq_jmp >>
+  conj_tac >- simp[probe_word_elem_body_state_def, sstore_def] >>
+  qexists_tac `TAKE 7 (EL 1 probe_word_compiled.cs_blocks).bb_instructions` >>
+  simp[probe_word_elem_body_sequence, probe_word_compiled_elem_body,
+       mk_inst_def, is_terminator_def, get_instruction_def] >>
+  rpt strip_tac >>
+  `k = 0 \/ k = 1 \/ k = 2 \/ k = 3 \/ k = 4 \/ k = 5 \/ k = 6`
+    by decide_tac >> gvs[]
+QED
+
+Definition probe_word_elem_exit_state_def:
+  probe_word_elem_exit_state s i =
+    update_var "%11" (i + 1w) (update_var "%27" (i + 1w) s)
+End
+
+Theorem probe_word_elem_exit_sequence:
+  !s i.
+    lookup_var "%11" s = SOME i ==>
+    run_inst_seq (TAKE 2 (EL 0 probe_word_compiled.cs_blocks).bb_instructions) s =
+      OK (probe_word_elem_exit_state s i)
+Proof
+  rpt strip_tac >> simp[probe_word_compiled_elem_exit] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def,
+       mk_inst_def, eval_operands_def, eval_operand_def] >>
+  simp[run_inst_seq_def, Once step_inst_base_def, eval_operand_def,
+       mk_inst_def, lookup_var_update_var, probe_word_elem_exit_state_def]
+QED
+
+Theorem probe_word_elem_exit_block:
+  !s i fuel ctx.
+    lookup_var "%11" s = SOME i /\ ~s.vs_halted ==>
+    exec_block fuel ctx (EL 0 probe_word_compiled.cs_blocks)
+      (s with vs_inst_idx := 0) =
+    OK (jump_to "@dyn_cond_3" (probe_word_elem_exit_state s i))
+Proof
+  rpt strip_tac >> irule exec_block_inst_seq_jmp >>
+  conj_tac >- simp[probe_word_elem_exit_state_def] >>
+  qexists_tac `TAKE 2 (EL 0 probe_word_compiled.cs_blocks).bb_instructions` >>
+  simp[probe_word_elem_exit_sequence, probe_word_compiled_elem_exit,
+       mk_inst_def, is_terminator_def, get_instruction_def] >>
+  rpt strip_tac >> `k = 0 \/ k = 1` by decide_tac >> gvs[]
+QED
+
+Theorem probe_word_run_copy_body:
+  !s i bufaddr fuel ctx.
+    lookup_var "%11" s = SOME i /\ lookup_var "%2" s = SOME bufaddr /\
+    ~s.vs_halted /\ s.vs_current_bb = "@dyn_body_4" ==>
+    run_blocks (SUC fuel) ctx probe_word_function s =
+    run_blocks fuel ctx probe_word_function
+      (jump_to "@wcopy_cond_6" (probe_word_copy_body_state s i bufaddr))
+Proof
+  rpt strip_tac >>
+  simp[Once run_blocks_unfold, probe_word_function_blocks,
+       lookup_block_def, probe_word_compiled_entry,
+       probe_word_compiled_load_cond, probe_word_compiled_load_body,
+       probe_word_compiled_load_exit, probe_word_compiled_copy_cond,
+       probe_word_compiled_copy_body, listTheory.FIND_thm] >>
+  simp[run_block_def, eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
+  rewrite_tac[GSYM (SRULE [mk_inst_def] probe_word_compiled_copy_body)] >>
+  drule_all probe_word_copy_body_block >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[jump_to_def, probe_word_copy_body_state_def]
+QED
+
+Theorem probe_word_run_elem_cond:
+  !s i fuel ctx.
+    lookup_var "%20" s = SOME i /\ ~s.vs_halted /\
+    s.vs_current_bb = "@wcopy_cond_6" ==>
+    run_blocks (SUC fuel) ctx probe_word_function s =
+    run_blocks fuel ctx probe_word_function
+      (jump_to (if i = 2w then "@wcopy_exit_8" else "@wcopy_body_7")
+        (probe_word_elem_cond_state s i))
+Proof
+  rpt strip_tac >>
+  simp[Once run_blocks_unfold, probe_word_function_blocks,
+       lookup_block_def, probe_word_compiled_entry,
+       probe_word_compiled_load_cond, probe_word_compiled_load_body,
+       probe_word_compiled_load_exit, probe_word_compiled_copy_cond,
+       probe_word_compiled_copy_body, probe_word_compiled_elem_cond,
+       listTheory.FIND_thm] >>
+  simp[run_block_def, eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
+  rewrite_tac[GSYM (SRULE [mk_inst_def] probe_word_compiled_elem_cond)] >>
+  drule_all probe_word_elem_cond_block >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[jump_to_def, probe_word_elem_cond_state_def]
+QED
+
+Theorem probe_word_run_elem_body:
+  !s i src dst fuel ctx.
+    lookup_var "%20" s = SOME i /\ lookup_var "%16" s = SOME src /\
+    lookup_var "%19" s = SOME dst /\ ~s.vs_halted /\
+    s.vs_current_bb = "@wcopy_body_7" ==>
+    run_blocks (SUC fuel) ctx probe_word_function s =
+    run_blocks fuel ctx probe_word_function
+      (jump_to "@wcopy_cond_6" (probe_word_elem_body_state s i src dst))
+Proof
+  rpt strip_tac >>
+  simp[Once run_blocks_unfold, probe_word_function_blocks,
+       lookup_block_def, probe_word_compiled_entry,
+       probe_word_compiled_load_cond, probe_word_compiled_load_body,
+       probe_word_compiled_load_exit, probe_word_compiled_copy_cond,
+       probe_word_compiled_copy_body, probe_word_compiled_elem_cond,
+       probe_word_compiled_elem_body, listTheory.FIND_thm] >>
+  simp[run_block_def, eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
+  rewrite_tac[GSYM (SRULE [mk_inst_def] probe_word_compiled_elem_body)] >>
+  drule_all probe_word_elem_body_block >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[jump_to_def, probe_word_elem_body_state_def, sstore_def]
+QED
+
+Theorem probe_word_run_elem_exit:
+  !s i fuel ctx.
+    lookup_var "%11" s = SOME i /\ ~s.vs_halted /\
+    s.vs_current_bb = "@wcopy_exit_8" ==>
+    run_blocks (SUC fuel) ctx probe_word_function s =
+    run_blocks fuel ctx probe_word_function
+      (jump_to "@dyn_cond_3" (probe_word_elem_exit_state s i))
+Proof
+  rpt strip_tac >>
+  simp[Once run_blocks_unfold, probe_word_function_blocks,
+       lookup_block_def, probe_word_compiled_entry,
+       probe_word_compiled_load_cond, probe_word_compiled_load_body,
+       probe_word_compiled_load_exit, probe_word_compiled_copy_cond,
+       probe_word_compiled_copy_body, probe_word_compiled_elem_cond,
+       probe_word_compiled_elem_body, probe_word_compiled_elem_exit,
+       PURE_REWRITE_RULE [CONJUNCT1 listTheory.EL] probe_word_compiled_elem_exit,
+       listTheory.FIND_thm] >>
+  simp[run_block_def, eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
+  rewrite_tac[GSYM (SRULE [mk_inst_def] probe_word_compiled_elem_exit)] >>
+  drule_all probe_word_elem_exit_block >>
+  disch_then (fn th => rewrite_tac[th,
+    PURE_REWRITE_RULE [CONJUNCT1 listTheory.EL] th]) >>
+  simp[jump_to_def, probe_word_elem_exit_state_def]
+QED
+
+Theorem probe_word_return_block:
+  !s n retpc fuel ctx.
+    lookup_var "%10" s = SOME n /\ lookup_var "%0" s = SOME retpc /\
+    ~s.vs_halted ==>
+    exec_block fuel ctx
+      <| bb_label := "@dyn_exit_5"; bb_instructions :=
+        [mk_inst 42 SSTORE [Lit 0w; Var "%10"] [];
+         mk_inst 43 RET [Lit 0w; Var "%0"] []] |>
+      (s with vs_inst_idx := 0) =
+    IntRet <| iret_values := [0w]; iret_adopt_fmp := NONE |>
+      (sstore 0w n (s with vs_inst_idx := 1))
+Proof
+  rpt strip_tac >>
+  simp[Once exec_block_def, get_instruction_def, mk_inst_def] >>
+  simp[Once step_inst_def, Once step_inst_base_def, exec_write2_def,
+       eval_operands_def, eval_operand_def, lookup_var_def] >>
+  gvs[lookup_var_def] >>
+  simp[Once exec_block_def, get_instruction_def, mk_inst_def, sstore_def] >>
+  simp[Once step_inst_def, Once step_inst_base_def, eval_operands_def,
+       eval_operand_def, lookup_var_def, is_terminator_def, sstore_def]
+QED
+
+Theorem probe_word_run_return:
+  !s n retpc fuel ctx.
+    lookup_var "%10" s = SOME n /\ lookup_var "%0" s = SOME retpc /\
+    ~s.vs_halted /\ s.vs_current_bb = "@dyn_exit_5" ==>
+    run_blocks (SUC fuel) ctx probe_word_function s =
+    IntRet <| iret_values := [0w]; iret_adopt_fmp := NONE |>
+      (sstore 0w n (s with vs_inst_idx := 1))
+Proof
+  rpt strip_tac >>
+  simp[Once run_blocks_unfold, probe_word_function_blocks,
+       lookup_block_def, probe_word_compiled_entry,
+       probe_word_compiled_load_cond, probe_word_compiled_load_body,
+       probe_word_compiled_load_exit, probe_word_compiled_copy_cond,
+       probe_word_compiled_copy_body, probe_word_compiled_elem_cond,
+       probe_word_compiled_elem_body, probe_word_compiled_elem_exit,
+       listTheory.FIND_thm] >>
+  simp[run_block_def, eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
+  drule_all probe_word_return_block >>
+  simp[mk_inst_def]
+QED
+
+Theorem probe_word_elem_body_vars:
+  !s i src dst v.
+    lookup_var v (probe_word_elem_body_state s i src dst) =
+      if v = "%20" \/ v = "%26" then SOME (i + 1w)
+      else if v = "%25" then SOME (dst + i)
+      else if v = "%24" then SOME (mload (w2n (src + i * 32w)) s)
+      else if v = "%23" then SOME (src + i * 32w)
+      else if v = "%22" then SOME (i * 32w)
+      else lookup_var v s
+Proof
+  simp[probe_word_elem_body_state_def, lookup_var_update_var,
+       lookup_var_def, update_var_def, sstore_def, FLOOKUP_UPDATE] >>
+  rpt gen_tac >> Cases_on `v = "%20"` >> simp[] >>
+  Cases_on `v = "%26"` >> simp[]
+QED
+
+Theorem probe_word_elem_body_halted:
+  !s i src dst.
+    (probe_word_elem_body_state s i src dst).vs_halted = s.vs_halted
+Proof
+  simp[probe_word_elem_body_state_def, sstore_def]
+QED
+
+Definition probe_word_elem_round_def:
+  probe_word_elem_round s i src dst =
+    jump_to "@wcopy_cond_6"
+      (probe_word_elem_body_state
+        (jump_to "@wcopy_body_7" (probe_word_elem_cond_state s i)) i src dst)
+End
+
+Theorem probe_word_elem_round_observations:
+  !s i src dst v.
+    (v = "%0" \/ v = "%2" \/ v = "%10" \/ v = "%11" \/
+     v = "%16" \/ v = "%19" ==> lookup_var v (probe_word_elem_round s i src dst) = lookup_var v s) /\
+    lookup_var "%20" (probe_word_elem_round s i src dst) = SOME (i + 1w) /\
+    (probe_word_elem_round s i src dst).vs_halted = s.vs_halted /\
+    (probe_word_elem_round s i src dst).vs_current_bb = "@wcopy_cond_6"
+Proof
+  simp[probe_word_elem_round_def, control_moves_keep_vars,
+       probe_word_elem_body_vars, probe_word_elem_body_halted,
+       probe_word_elem_cond_state_def, lookup_var_update_var] >>
+  rpt gen_tac >> conj_tac >- (strip_tac >> gvs[]) >>
+  simp[Once jump_to_def]
+QED
+
+Theorem probe_word_run_elem_round:
+  !s i src dst fuel ctx.
+    lookup_var "%20" s = SOME i /\ lookup_var "%16" s = SOME src /\
+    lookup_var "%19" s = SOME dst /\ ~s.vs_halted /\
+    s.vs_current_bb = "@wcopy_cond_6" /\ i <> 2w ==>
+    run_blocks (SUC (SUC fuel)) ctx probe_word_function s =
+    run_blocks fuel ctx probe_word_function (probe_word_elem_round s i src dst)
+Proof
+  rpt strip_tac >> drule_all probe_word_run_elem_cond >> simp[] >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `run_blocks (SUC fuel) ctx probe_word_function t` >>
+  `lookup_var "%20" t = SOME i /\ lookup_var "%16" t = SOME src /\
+   lookup_var "%19" t = SOME dst /\ ~t.vs_halted /\
+   t.vs_current_bb = "@wcopy_body_7"` by
+    (simp[Abbr `t`, control_moves_keep_vars, probe_word_elem_cond_state_def,
+          lookup_var_update_var] >> simp[Once jump_to_def]) >>
+  drule_all probe_word_run_elem_body >>
+  simp[Abbr `t`, probe_word_elem_round_def]
+QED
+
+Definition probe_word_elems_copied_state_def:
+  probe_word_elems_copied_state s src dst =
+    jump_to "@wcopy_exit_8"
+      (probe_word_elem_cond_state
+        (probe_word_elem_round (probe_word_elem_round s 0w src dst) 1w src dst) (2w:bytes32))
+End
+
+Theorem probe_word_run_elem_loop:
+  !s src dst fuel ctx.
+    lookup_var "%20" s = SOME 0w /\ lookup_var "%16" s = SOME src /\
+    lookup_var "%19" s = SOME dst /\ ~s.vs_halted /\
+    s.vs_current_bb = "@wcopy_cond_6" ==>
+    run_blocks (SUC (SUC (SUC (SUC (SUC fuel))))) ctx probe_word_function s =
+    run_blocks fuel ctx probe_word_function (probe_word_elems_copied_state s src dst)
+Proof
+  rpt strip_tac >>
+  `(0w:bytes32) <> 2w /\ (1w:bytes32) <> 2w` by
+    simp[n2w_11, dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  drule_all probe_word_run_elem_round >> simp[] >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `run_blocks _ ctx probe_word_function t` >>
+  `lookup_var "%20" t = SOME 1w /\ lookup_var "%16" t = SOME src /\
+   lookup_var "%19" t = SOME dst /\ ~t.vs_halted /\
+   t.vs_current_bb = "@wcopy_cond_6"` by
+    simp[Abbr `t`, probe_word_elem_round_observations] >>
+  drule_all probe_word_run_elem_round >> simp[] >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `run_blocks _ ctx probe_word_function u` >>
+  `lookup_var "%20" u = SOME 2w /\ ~u.vs_halted /\
+   u.vs_current_bb = "@wcopy_cond_6"` by
+    simp[Abbr `u`, probe_word_elem_round_observations, word_add_n2w] >>
+  drule_all probe_word_run_elem_cond >>
+  simp[Abbr `u`, Abbr `t`, probe_word_elems_copied_state_def]
 QED
