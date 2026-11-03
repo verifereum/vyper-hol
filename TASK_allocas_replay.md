@@ -163,6 +163,13 @@ Theorem step_inst_base_error_transfer[local]:
     ~is_ext_call_op inst.inst_opcode /\
     step_inst_base inst s1 = Error err ==>
     ?err'. step_inst_base inst s2 = Error err'
+Theorem step_inst_base_mem_length_mono[local]:
+  !inst s v.
+    step_inst_base inst s = OK v /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_ext_call_op inst.inst_opcode /\
+    ~is_alloca_op inst.inst_opcode ==>
+    LENGTH s.vs_memory <= LENGTH v.vs_memory
 ```
 
 Do not modify this statement. Prove it as-is, or produce a counterexample.
@@ -180,6 +187,7 @@ Do not modify this statement. Prove it as-is, or produce a counterexample.
 - Repair only the encountered SHA3 resume of step_inst_base_error_transfer, keeping its full statement and other resumes unchanged.
 - Repair encountered default-limit tactic failures in the existing remap_preserved_mem_ops resumes (currently CODECOPY), keeping its full statement and completed repairs unchanged.
 - Repair encountered default-limit tactic failures in step_inst_base_error_transfer resumes (currently EXTCODECOPY), keeping its full statement and completed SHA3 repair unchanged.
+- Repair the encountered step_inst_base_mem_length_mono proof without changing its statement.
 - Build allocaRemapProofsTheory at the default tactic limit.
 - Preserve all other existing proofs, definitions and statements.
 
@@ -193,7 +201,7 @@ A forced default replay at eaf96a2fa timed out at the classification gvs after o
 
 ## Domain Constraints
 
-- The prior six repairs, allocation-size resume and pure3 error transfer now pass incrementally at e7674da9c. Preserve all these completed repairs and helpers. Edit only inst_ids_fresh_after_step, encountered timed-out proof steps anywhere within remap_preserved_mem_ops or step_inst_base_error_transfer, including common pre-suspend prefixes (current memory classification prefix), and necessary local helper theorems in venom/passes/shared/proofs/allocaRemapProofsScript.sml. Preserve the completed LOG/MSTORE8 memory resumes, exec_pure3_error_transfer, the completed SHA3 error-transfer resume, shared exec_err_tac/error_inline_tac, and every error-transfer proof/resume that has no encountered timeout. A needed declarative Ancestors entry is allowed if it introduces no dependency cycle.
+- All previously authorized root/resume repairs now pass incrementally at 562c9aa1d and are frozen. Edit only the newly encountered step_inst_base_mem_length_mono proof and necessary local helpers. No other completed proof, shared tactic, statement or definition may change. A needed declarative Ancestors entry is allowed only without a dependency cycle.
 - All existing definitions and statements, including local declarations, are frozen. No new definitions, axioms, admissions, strengthened premises, opcode exclusions or supported-subset changes.
 - Preserve all completed gas, CFG and DRET proofs.
 - Default 2.5-second tactic limit; no timeout override and no TRY/ORELSE/FIRST around search.
@@ -243,3 +251,5 @@ Replay at f426dcedc passes the SHA3 error transfer and unchanged MSTORE8 memory 
 Default replay at e7674da9c passes the new CODECOPY/DLOADBYTES success boundaries and their existing memory-operation resumes, then encounters step_inst_base_error_transfer[EXTCODECOPY] at error_inline_tac. The prior fresh independent audit covered this complete frozen root and every admitted opcode error producer, explicitly including EXTCODECOPY, and found PROVABLE. This amendment permits bounded proof-only repair of actual encountered timeouts within that already audited error-transfer root. Preserve completed SHA3/pure3 and all nonfailing resumes, plus shared tactics. Any different root still requires separate audit before scope expansion. No statement, definition, premise, opcode exclusion or timeout amendment is authorized.
 
 The already-audited memory-operation root now has an actual timeout in its common classification prefix before the opcode resumes. This prefix is part of the SAME complete frozen theorem already independently audited against every producer. Permission covers bounded repair of this actual common-prefix timeout as well as encountered resume timeouts. The same interpretation applies to the already-audited error-transfer root. Preserve completed repairs; no speculative cleanup or other root edits. No new theorem schema, definition, premise or invariant is authorized.
+
+Forced default owner replay at 562c9aa1d encounters a new unchanged root, step_inst_base_mem_length_mono, at a classification simplification over 101 opcodes. A fresh independent audit of the exact complete statement and all OK-producing opcode branches found PROVABLE for arbitrary admitted states/operands/readings. GAS preserves memory; ISTORE uses mstore and an immutable-field update; remaining writers use nondecreasing expansion. Existing venomMemProps memory-length facts are available, and that theory is already an ancestor. This extension authorizes only the new root proof and necessary local helpers; all prior completed repairs are frozen. No new premise, definition, opcode exclusion, admission or timeout override is permitted.
