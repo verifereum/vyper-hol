@@ -155,7 +155,9 @@ Proof
 QED
 
 (* Bytelike literals and ABI encoding results carry their produced bound,
-   independently of the annotated destination bound. *)
+   independently of the annotated destination bound; an internal call's
+   value is its callee's return buffer, at the declared return type.
+   Mirrors Python: vv.typ (_lower_bytelike, _lower_internal_call). *)
 Definition lowered_value_type_def:
   lowered_value_type cenv (Literal (BaseT (StringT _)) (StringL s)) =
     BaseT (StringT (LENGTH s)) ∧
@@ -167,6 +169,8 @@ Definition lowered_value_type_def:
      BaseT (BytesT (Dynamic
        (abi_size_bound cenv.ce_struct_fields enc_ty +
         if IS_SOME method_id then 4 else 0)))) ∧
+  lowered_value_type cenv (Call _ (IntCall func_id) _ _) =
+    cenv.ce_func_return_type (nsid_to_string func_id) ∧
   lowered_value_type cenv e = expr_type e
 End
 
@@ -1323,7 +1327,7 @@ Definition compile_stage_intcall_args_def:
         do (if is_word_type ty then emit_void MSTORE [buf; val_op]
             else if is_bs then
               do compile_store_bytestring val_op buf; return () od
-            else emit_void MCOPY [buf; val_op; Lit (n2w mem_size)]);
+            else compile_store_memory cenv val_op buf ty (vv_type vv));
            rest <- compile_stage_intcall_args cenv vals flags tys;
            return (buf :: rest)
         od
@@ -2193,7 +2197,7 @@ Definition compile_make_tuple_def:
     do vv <- cfn cenv e_ty e;
        dst <- emit_op ADD [buf_op; Lit (n2w cur_offset)];
        v <- unwrap_value cenv vv;
-       compile_store_memory cenv v dst e_ty e_ty;
+       compile_store_memory cenv v dst e_ty (lowered_value_type cenv e);
        compile_make_tuple cfn cenv es buf_op (cur_offset + elem_size)
     od
 Termination
@@ -2212,7 +2216,7 @@ Definition compile_make_array_elems_def:
        (* Materialize the destination before unwrapping the child value. *)
        dst <- emit_op ADD [buf_op; Lit (n2w data_offset)];
        v <- unwrap_value cenv vv;
-       compile_store_memory cenv v dst elem_ty e_ty;
+       compile_store_memory cenv v dst elem_ty (lowered_value_type cenv e);
        compile_make_array_elems cfn cenv es elem_ty elem_size has_length_word
                                 buf_op (cur_idx + 1)
     od
@@ -2369,7 +2373,7 @@ Definition compile_struct_lit_def:
     do vv <- cfn cenv e_ty e;
        dst <- emit_op ADD [buf_op; Lit (n2w cur_offset)];
        v <- unwrap_value cenv vv;
-       compile_store_memory cenv v dst field_ty e_ty;
+       compile_store_memory cenv v dst field_ty (lowered_value_type cenv e);
        compile_struct_lit cfn cenv ty rest buf_op (cur_offset + field_size)
     od
 Termination
@@ -2422,16 +2426,35 @@ Definition compile_materialize_vv_def:
     od
 End
 
+(* Operand of one ternary arm, given its lowered value. A non-word arm whose
+   layout differs from the result type's is copied into a fresh temporary
+   of the result type, since the result pointer is read with that layout.
+   Mirrors Python: expr.py lower_IfExp lower_arm, ensure_memory_layout with
+   same_memory_layout (vyperlang/vyper#5236, vyperlang/vyper#5331). *)
+Definition compile_ifexp_arm_def:
+  compile_ifexp_arm cenv res_ty arm_ty vv =
+    if is_word_type res_ty ∨ same_memory_layout cenv arm_ty res_ty then
+      unwrap_value cenv vv
+    else
+      do tmp <- compile_alloc_buffer (type_memory_bytes cenv res_ty);
+         src <- unwrap_value cenv vv;
+         compile_store_memory cenv src tmp.buf_operand res_ty arm_ty;
+         return tmp.buf_operand
+      od
+End
+
 (* Lower one keyword operand of extcall/staticcall: value= and gas= are
    uint256 words; default_return_value= is a word of the return type, or,
-   for any other type, a value Python materializes where it is lowered
-   (_parse_external_call_kwargs). Returns the operand and its type. *)
+   for any other type, a value Python materializes where it is lowered, at
+   its lowered type (default_vv.typ in _parse_external_call_kwargs). Returns
+   the operand and its type. *)
 Definition compile_ext_call_kwarg_def:
   compile_ext_call_kwarg cfn cenv return_type k e =
     if k = EKDefault /\ ~is_word_type return_type then
+      let d_ty = lowered_value_type cenv e in
       do vv <- cfn cenv (expr_type e) e;
-         op <- compile_materialize_vv cenv (expr_type e) vv;
-         comp_return (op, expr_type e)
+         op <- compile_materialize_vv cenv d_ty vv;
+         comp_return (op, d_ty)
       od
     else
       do op <- lower_value cfn cenv
@@ -2471,6 +2494,10 @@ Definition compile_call_def:
     let label = internal_fn_label (cenv.ce_func_ids name) name
                   (cenv.ce_func_param_types name) cenv.ce_is_ctor in
     let (returns_count, return_buf_size, pass_via_stack) = cenv.ce_func_info name in
+    (* The value is the callee's return buffer, laid out at the declared
+       return type even where the call is used at a wider type.
+       Mirrors Python: _make_ptr_value(return_buf, MEMORY, func_t.return_type) *)
+    let call_ty = cenv.ce_func_return_type name in
     let arg_types = MAP expr_type args in
     let (arg_vals, st1) = compile_multi_vvs cfn cenv args st in
     let (return_buf, st2) =
@@ -2493,16 +2520,16 @@ Definition compile_call_def:
           let (results, st4) = emit_multi_op INVOKE
                 (Label label :: all_invoke_args) returns_count st3 in
           let (_, st5) = store_multi_results rbuf.buf_operand results 0 st4 in
-          (LocatedValue ret_ty (base_ptr rbuf), st5)
+          (LocatedValue call_ty (base_ptr rbuf), st5)
       | NONE =>
           let (result, st4) = emit_op INVOKE
                 (Label label :: all_invoke_args) st3 in
-          (StackValue ret_ty result, st4)
+          (StackValue call_ty result, st4)
     else
       let (_, st4) = emit_void INVOKE (Label label :: all_invoke_args) st3 in
       (case return_buf of
-         SOME rbuf => (LocatedValue ret_ty (base_ptr rbuf), st4)
-       | NONE => (StackValue ret_ty (Lit 0w), st4))) ∧
+         SOME rbuf => (LocatedValue call_ty (base_ptr rbuf), st4)
+       | NONE => (StackValue call_ty (Lit 0w), st4))) ∧
   compile_call cfn cenv ret_ty ty (ExtCall is_static skip_contract_check
                                      (func_name, arg_types, return_type) opts)
               args default_ret st =
@@ -2786,16 +2813,21 @@ Definition compile_expr_body_def:
         let (exit_lbl, st5) = fresh_label "exit" st4 in
         let (_, st6) = emit_inst JNZ [cond_op; Label then_lbl; Label else_lbl] [] st5 in
         let (_, st7) = new_block then_lbl st6 in
-        let (then_op, st8) = lower_value compile_expr cenv ty then_e st7 in
+        let (then_vv, st7a) = compile_expr cenv ty then_e st7 in
+        let (then_op, st8) = compile_ifexp_arm cenv ret_ty
+                               (lowered_value_type cenv then_e) then_vv st7a in
         let (_, st9) = emit_inst ASSIGN [then_op] [result_var] st8 in
         let (_, st10) = emit_inst JMP [Label exit_lbl] [] st9 in
         let (_, st11) = new_block else_lbl st10 in
-        let (else_op, st12) = lower_value compile_expr cenv ty else_e st11 in
+        let (else_vv, st11a) = compile_expr cenv ty else_e st11 in
+        let (else_op, st12) = compile_ifexp_arm cenv ret_ty
+                                (lowered_value_type cenv else_e) else_vv st11a in
         let (_, st13) = emit_inst ASSIGN [else_op] [result_var] st12 in
         let (_, st14) = emit_inst JMP [Label exit_lbl] [] st13 in
         let (_, st15) = new_block exit_lbl st14 in
-        (* A non-word result is the PHI of two memory pointers, so it is a
-           memory pointer value, as in Python's lower_IfExp
+        (* A non-word result is the PHI of two memory pointers, each laid
+           out at the result type (compile_ifexp_arm), so it is a memory
+           pointer value, as in Python's lower_IfExp
            (vyper/codegen_venom/expr.py): an aggregate ternary assigned to a
            local is then copied through a temporary like any memory value. *)
         if is_word_type ret_ty then (StackValue ret_ty (Var result_var), st15)
@@ -3400,6 +3432,7 @@ QED
 (* Unequal aggregate types must enter typed copying, not flat MCOPY. *)
 Theorem compile_make_array_typed_tuple_order:
   expr_type e = TupleT [BaseT BoolT; BaseT BoolT] /\
+  lowered_value_type cenv e = expr_type e /\
   acyclic_struct_metadata cenv.ce_struct_fields ==>
   MAP (\i. i.inst_opcode)
     (SND (compile_make_array

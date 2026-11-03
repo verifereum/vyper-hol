@@ -493,6 +493,11 @@ Datatype:
        func_name → arg types. Spells the INVOKE target (internal_fn_label).
        Mirrors Python: func_t.arguments in expr.py lower_Call *)
     ce_func_param_types : string -> type list;
+    (* Internal function declared return types: func_name → return type.
+       The value of an internal call is its callee's return buffer, laid out
+       at this type even where the call is used at a wider type.
+       Mirrors Python: func_t.return_type in expr.py _lower_internal_call *)
+    ce_func_return_type : string -> type;
     (* Internal function ids: func_name → id. Spells the INVOKE target
        (internal_fn_label).
        Mirrors Python: func_t._function_id in expr.py lower_Call *)

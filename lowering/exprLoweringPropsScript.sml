@@ -3276,7 +3276,7 @@ Proof
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
       >- (IF_CASES_TAC >> simp[ci_mono_emit_void] >>
-          IF_CASES_TAC >> simp[ci_mono_emit_void] >-
+          IF_CASES_TAC >> simp[ci_mono_compile_store_memory] >-
             (rpt strip_tac >>
              ho_match_mp_tac ci_mono_ignore_bind >>
              simp[ci_mono_compile_store_bytestring, ci_mono_comp_return])) >>
@@ -3332,8 +3332,8 @@ Theorem ci_mono_compile_ext_call_kwarg:
     (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
     ci_mono sa (SND (compile_ext_call_kwarg cfn cenv rt k e sa))
 Proof
-  rpt strip_tac >> rewrite_tac[compile_ext_call_kwarg_def] >>
-  IF_CASES_TAC >> ho_match_mp_tac ci_mono_bind >> rpt strip_tac >> BETA_TAC
+  rpt strip_tac >> rewrite_tac[compile_ext_call_kwarg_def, LET_THM] >>
+  BETA_TAC >> IF_CASES_TAC >> ho_match_mp_tac ci_mono_bind >> rpt strip_tac >> BETA_TAC
   >- fs[]
   >- (ho_match_mp_tac ci_mono_bind >>
       simp[ci_mono_compile_materialize_vv, ci_mono_comp_return])
@@ -3733,6 +3733,20 @@ Proof
   simp[comp_bind_def, LET_THM, pairTheory.UNCURRY]
 QED
 
+Theorem ci_mono_compile_ifexp_arm:
+  ∀cenv res_ty arm_ty vv s.
+    ci_mono s (SND (compile_ifexp_arm cenv res_ty arm_ty vv s))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_ifexp_arm_def] >>
+  IF_CASES_TAC >- simp[ci_mono_unwrap_value] >>
+  ho_match_mp_tac ci_mono_bind >> simp[ci_mono_compile_alloc_buffer] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> simp[ci_mono_unwrap_value] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >>
+  simp[ci_mono_compile_store_memory, ci_mono_comp_return]
+QED
+
 Theorem ci_mono_compile_expr_ifexp[local]:
   (∀ce ty e s. ci_mono s (SND (f ce ty e s))) ⇒
   ci_mono st (SND (compile_expr_body f g h cenv ty
@@ -3741,7 +3755,8 @@ Proof
   strip_tac >> simp[compile_expr_body_def, LET_THM] >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_lower_value_cfn, ci_mono_fresh_var,
-               ci_mono_fresh_label, ci_mono_emit_inst, ci_mono_new_block]
+               ci_mono_fresh_label, ci_mono_emit_inst, ci_mono_new_block,
+               ci_mono_compile_ifexp_arm]
        >> rpt gen_tac >> BETA_TAC) >>
   IF_CASES_TAC >> simp[ci_mono_refl]
 QED

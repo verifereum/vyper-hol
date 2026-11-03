@@ -422,17 +422,32 @@ Proof
   simp[vyperASTTheory.expr_type_def,
        contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
   rpt strip_tac >> gvs[] >>
+  `!ce t e s r s'. cfn ce t e s = (r,s') ==> s.cs_next_var <= s'.cs_next_var` by
+    (rpt strip_tac >>
+     qpat_x_assum `!ce ty e s. ci_mono s (SND (cfn ce ty e s))`
+       (qspecl_then [`ce`, `t`, `e`, `s`] mp_tac) >>
+     simp[ci_mono_def]) >>
   qpat_x_assum `!ce ty e s. ci_mono s (SND (cfn ce ty e s))` kall_tac >>
   qpat_x_assum `lower_value _ _ _ cond _ = _` kall_tac >>
   gvs[fresh_var_def, fresh_id_def, fresh_label_def, emit_inst_def, emit_def,
       new_block_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
       contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
-  qmatch_asmsub_abbrev_tac `lower_value cfn cenv ty te sthen` >>
-  qmatch_asmsub_abbrev_tac `lower_value cfn cenv ty ee selse` >>
-  `sthen.cs_next_var <= st8.cs_next_var` by
-    metis_tac[ci_mono_def, pairTheory.SND] >>
-  `selse.cs_next_var <= st12.cs_next_var` by
-    metis_tac[ci_mono_def, pairTheory.SND] >>
+  qmatch_asmsub_abbrev_tac `cfn cenv ty te sthen` >>
+  qmatch_asmsub_abbrev_tac `cfn cenv ty ee selse` >>
+  `sthen.cs_next_var <= st7a.cs_next_var` by
+    (first_assum (qspecl_then [`cenv`, `ty`, `te`, `sthen`, `then_vv`, `st7a`]
+                    mp_tac) >> simp[]) >>
+  `selse.cs_next_var <= st11a.cs_next_var` by
+    (first_assum (qspecl_then [`cenv`, `ty`, `ee`, `selse`, `else_vv`, `st11a`]
+                    mp_tac) >> simp[]) >>
+  `st7a.cs_next_var <= st8.cs_next_var` by
+    (qspecl_then [`cenv`, `expr_type (IfExp ann cond te ee)`,
+                  `lowered_value_type cenv te`, `then_vv`, `st7a`] mp_tac
+       ci_mono_compile_ifexp_arm >> simp[ci_mono_def]) >>
+  `st11a.cs_next_var <= st12.cs_next_var` by
+    (qspecl_then [`cenv`, `expr_type (IfExp ann cond te ee)`,
+                  `lowered_value_type cenv ee`, `else_vv`, `st11a`] mp_tac
+       ci_mono_compile_ifexp_arm >> simp[ci_mono_def]) >>
   gvs[Abbr `sthen`, Abbr `selse`, compileEnvTheory.not_fresh_at_def,
       ASCIInumbersTheory.toString_11]
 QED
@@ -1933,7 +1948,8 @@ Resume compiler_expr_body_reserved_cong[ifexp]:
   rpt (ho_match_mp_tac compiler_reserved_pair_cong >>
        (conj_tac >- simp[]) >>
        (conj_tac >- simp[ci_mono_lower_value_cfn, ci_mono_fresh_var,
-                         ci_mono_fresh_label, ci_mono_new_block, ci_mono_emit_inst]) >>
+                         ci_mono_fresh_label, ci_mono_new_block, ci_mono_emit_inst,
+                         ci_mono_compile_ifexp_arm]) >>
        (reverse conj_tac >- simp[]) >>
        rpt gen_tac >> disch_tac) >>
   simp[]
