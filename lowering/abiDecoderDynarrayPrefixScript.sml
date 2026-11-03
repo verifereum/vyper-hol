@@ -1,7 +1,7 @@
 (* The emitted count clamp and optional endpoint guard, before array writes. *)
 Theory abiDecoderDynarrayPrefix
 Ancestors
-  abiDecoderRange abiDecoderBytesBound abiDecoderDynarrayBound abiDecoderGuards abiDecoderContract compileEnv emitHelper
+  abiEncoder abiDecoderRange abiDecoderBytesBound abiDecoderDynarrayBound abiDecoderGuards abiDecoderContract compileEnv emitHelper
   venomExecSemantics venomState words
 
 Definition abi_decode_dynarray_prefix_def:
@@ -101,4 +101,67 @@ Proof
   `run_inst_seq (emitted_insts st st') s = OK t /\ inst_extends st st'` by
     (irule abi_decode_sequence_chain >> qexistsl_tac [`s1`, `c1`] >> simp[]) >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+(* Position guards retain their scalar operands; the resolved address is saved
+   once for the clamp load and the later header reload. *)
+Definition abi_decode_dynarray_position_prefix_def:
+  abi_decode_dynarray_position_prefix src opc base_op hi maxn abi_sz =
+    do head <- abi_decode_bytes_head src hi;
+       addr <- compile_abi_dec_addr base_op src;
+       cnt <- abi_decode_count_guard opc addr maxn;
+       abi_decode_dynarray_payload_guard head cnt abi_sz hi;
+       return addr
+    od
+End
+
+Theorem abi_decode_dynarray_position_prefix_trace:
+  abi_decode_dynarray_position_prefix src opc base_op hi maxn abi_sz st = (addr,st') <=>
+  ?head cnt head_st addr_st count_st.
+    abi_decode_bytes_head src hi st = (head,head_st) /\
+    compile_abi_dec_addr base_op src head_st = (addr,addr_st) /\
+    abi_decode_count_guard opc addr maxn addr_st = (cnt,count_st) /\
+    abi_decode_dynarray_payload_guard head cnt abi_sz hi count_st = ((),st')
+Proof
+  simp[abi_decode_dynarray_position_prefix_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  eq_tac >> rpt strip_tac >> gvs[] >> metis_tac[pairTheory.PAIR, pairTheory.pair_CASES, oneTheory.one]
+QED
+
+Theorem abi_decode_dynarray_position_prefix_zero_base:
+  abi_decode_dynarray_position_prefix src opc (Lit 0w) hi maxn abi_sz =
+  do head <- abi_decode_bytes_head src hi;
+     cnt <- abi_decode_count_guard opc src maxn;
+     abi_decode_dynarray_payload_guard head cnt abi_sz hi;
+     return src
+  od
+Proof
+  simp[abi_decode_dynarray_position_prefix_def, compile_abi_dec_addr_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, FUN_EQ_THM]
+QED
+
+Theorem abi_decode_dynarray_position_prefix_resolved_base:
+  base_op <> Lit 0w ==>
+  abi_decode_dynarray_position_prefix src opc base_op hi maxn abi_sz =
+  do head <- abi_decode_bytes_head src hi;
+     addr <- emit_op ADD [base_op;src];
+     cnt <- abi_decode_count_guard opc addr maxn;
+     abi_decode_dynarray_payload_guard head cnt abi_sz hi;
+     return addr
+  od
+Proof
+  simp[abi_decode_dynarray_position_prefix_def, compile_abi_dec_addr_def]
+QED
+
+Theorem abi_decode_dynarray_position_prefix_unbounded:
+  abi_decode_dynarray_position_prefix src opc base_op (Lit 0w) maxn abi_sz =
+  do addr <- compile_abi_dec_addr base_op src;
+     cnt <- abi_decode_count_guard opc addr maxn;
+     return addr
+  od
+Proof
+  simp[abi_decode_dynarray_position_prefix_def, abi_decode_bytes_head_def,
+       abi_decode_dynarray_payload_guard_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, FUN_EQ_THM]
 QED
