@@ -216,33 +216,6 @@ Definition account_item_type_def:
   account_item_type Code = BaseT (BytesT (Dynamic 24576))
 End
 
-(* Static capacities used by Vyper's concat and slice result inference. *)
-Definition bytelike_type_bound_def:
-  bytelike_type_bound (BaseT (BytesT bd)) = bound_length bd /\
-  bytelike_type_bound (BaseT (StringT n)) = n /\
-  bytelike_type_bound _ = 0
-End
-
-(* Slice's result bound depends on its reduced length expression. Folded
-   names lose literal-start provenance, so start bounds stay runtime checks. *)
-Definition slice_operands_ok_def:
-  slice_operands_ok bi es <=>
-    case bi of
-    | Slice n =>
-      (case EL 0 es of
-       | Builtin _ (Acc Code) [addr] =>
-           (case EL 2 es of
-            | Literal _ (IntL len) => 1 <= len /\ &n = len
-            | _ => F)
-       | _ =>
-        let src_bound = bytelike_type_bound (expr_type (EL 0 es)) in
-        (case EL 2 es of
-         | Literal _ (IntL len) =>
-             1 <= len /\ len <= &src_bound /\ &n = len
-         | _ => n = src_bound))
-    | _ => T
-End
-
 Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (Bop bop) ts =
     (LENGTH ts = 2 /\ well_typed_binop ty bop (EL 0 ts) (EL 1 ts)) /\
@@ -265,7 +238,7 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (AsWeiValue _) ts =
     (LENGTH ts = 1 ∧ ty = BaseT (UintT 256) ∧ is_uint_type (HD ts)) ∧
   well_typed_builtin_app ty (Concat n) ts =
-    (2 <= LENGTH ts /\ n = SUM (MAP bytelike_type_bound ts) /\
+    (2 <= LENGTH ts /\
      ((ty = BaseT (BytesT (Dynamic n)) /\ EVERY (\t. ?bd. t = BaseT (BytesT bd)) ts) \/
       (ty = BaseT (StringT n) /\ EVERY (\t. ?m. t = BaseT (StringT m)) ts))) /\
   well_typed_builtin_app ty (Slice n) ts =
@@ -541,8 +514,7 @@ Definition well_typed_type_builtin_args_def:
   well_typed_type_builtin_args Convert target_ty ts =
     (LENGTH ts = 1 /\ valid_conversion (HD ts) target_ty) /\
   well_typed_type_builtin_args Extract32 target_ty ts =
-    (LENGTH ts = 2 /\ (?m. EL 0 ts = BaseT (BytesT (Dynamic m))) /\
-     is_uint_type (EL 1 ts) /\
+    (LENGTH ts = 2 /\ (?bd. EL 0 ts = BaseT (BytesT bd)) /\ is_int_type (EL 1 ts) /\
      (?bt. target_ty = BaseT bt /\ extract32_result_base_ok bt)) /\
   well_typed_type_builtin_args (AbiDecode _) target_ty ts =
     (LENGTH ts = 1 /\ ?bd. HD ts = BaseT (BytesT bd)) /\
@@ -714,15 +686,8 @@ Definition well_typed_expr_def:
     (well_typed_expr env e /\ attribute_type_ok env.type_defs (expr_type e) id ty /\
      well_formed_type env.type_defs ty) /\
   well_typed_expr env (Builtin ty blt es) =
-    ((case (blt, es) of
-      | (Slice n, [Builtin code_ty (Acc Code) [addr]; start; len]) =>
-          well_typed_expr env addr /\ well_typed_exprs env [start; len] /\
-          well_typed_builtin_app code_ty (Acc Code) [expr_type addr] /\
-          well_formed_type env.type_defs code_ty
-      | _ => blt <> Acc Code /\ well_typed_exprs env es) /\
-     well_typed_builtin_app ty blt (MAP expr_type es) /\
-     slice_operands_ok blt es /\ builtin_operands_ok blt es /\
-     well_formed_type env.type_defs ty) /\
+    (well_typed_exprs env es /\ well_typed_builtin_app ty blt (MAP expr_type es) /\
+     builtin_operands_ok blt es /\ well_formed_type env.type_defs ty) /\
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\ well_formed_type env.type_defs ty /\
      type_builtin_result_ok env.type_defs tb ty target_ty (MAP expr_type es) /\

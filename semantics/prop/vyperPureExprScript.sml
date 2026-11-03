@@ -174,120 +174,39 @@ Proof
   imp_res_tac select_result_state >> gvs[] >> metis_tac[]
 QED
 
-(* Select the exact generated case by its conclusion, not its position. *)
-val builtin_state_case = let
-  fun spine tm =
-    if is_forall tm then spine (snd (dest_forall tm))
-    else if is_imp tm then
-      let val (a,b) = dest_imp tm in
-        if is_comb a andalso same_const (fst (strip_comb a)) ``pure_expr``
-        then SOME a else spine b
-      end
-    else NONE
-  fun is_builtin tm =
-    case spine tm of
-      NONE => false
-    | SOME p => same_const (fst (strip_comb (rand p))) ``Builtin``
-  val cases = strip_conj (fst (dest_imp (concl expr_state_ind_principle)))
-  val matches = List.filter is_builtin cases
-in
-  case matches of [tm] => tm
-  | _ => raise Fail "expected unique Builtin preservation case"
-end;
-
-(* Simplify guarded IHs independently: never cross-rewrite the IH bank. *)
-fun builtin_branch_normalize (g as (asl,_)) = let
-  fun guarded tm = is_forall tm orelse (is_imp tm andalso not (is_neg tm))
-  val facts = map ASSUME (List.filter (not o guarded) asl)
-  fun norm th = if guarded (concl th)
-    then SIMP_RULE (srw_ss()) facts th else th
-in
-  (RULE_ASSUM_TAC norm >> rpt (qpat_x_assum `T` kall_tac) >>
-   simp_tac (srw_ss()) facts) g
-end;
-
 Theorem case_Builtin[local]:
-  ^builtin_state_case
+  ∀cx ty bt es.
+    (∀s'' x t.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ∧
+       bt ≠ Len ∧ bt ≠ Env MsgGas ⇒
+       ∀st res st'.
+         eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st') ∧
+    (∀s'' x t.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ∧
+       bt = Len ⇒
+       ∀st res st'.
+         eval_expr cx (HD es) st = (res, st') ⇒ pure_expr (HD es) ⇒ st = st') ⇒
+    (∀st res st'.
+       eval_expr cx (Builtin ty bt es) st = (res, st') ⇒
+       pure_expr (Builtin ty bt es) ⇒ st = st')
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `bt = Len`
-  >- (qpat_assum `bt = Len` (fn eq =>
-        RULE_ASSUM_TAC (SIMP_RULE bool_ss [eq]) >> assume_tac eq) >>
-      rpt (qpat_x_assum `T` kall_tac) >>
-      rpt strip_tac >>
-      gvs[Once evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
+  >- (rpt strip_tac >>
+      gvs[evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
           type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
       gvs[bind_def, return_def, raise_def, AllCaseEqs()] >>
       imp_res_tac result_array_length_state >> gvs[] >>
       `pure_expr (HD es)` by
         (Cases_on `es` >> gvs[builtin_args_length_ok_def]) >>
       metis_tac[type_check_def, assert_def, return_def]) >>
-  rpt gen_tac >> disch_tac >> disch_tac >>
-  RULE_ASSUM_TAC (SIMP_RULE (srw_ss())
-    [pure_expr_def, type_check_def, assert_def, return_def]) >>
-  rpt (qpat_x_assum `T` kall_tac) >>
-  qpat_x_assum `eval_expr _ _ _ = _`
-    (mp_tac o ONCE_REWRITE_RULE [evaluate_def]) >>
-  simp_tac (srw_ss())
-    [bind_def, ignore_bind_def, type_check_def, assert_def, return_def,
-     raise_def] >>
-  qpat_x_assum `bt <> Env MsgGas /\ _` strip_assume_tac >>
-  Cases_on `builtin_args_length_ok bt (LENGTH es)`
-  >- (builtin_branch_normalize >>
-      Cases_on `bt` >> builtin_branch_normalize
-      >~ [`Slice n`] >- suspend "slice"
-      >> gvs[bind_def, ignore_bind_def, get_accounts_def, lift_sum_def,
-             return_def, raise_def, AllCaseEqs()] >>
-      gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
-      metis_tac[]) >>
-  builtin_branch_normalize >> simp[]
+  rpt strip_tac >>
+  gvs[evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
+      type_check_def, assert_def, return_def, raise_def,
+      get_accounts_def, lift_sum_def, AllCaseEqs()] >>
+  gvs[get_accounts_def, ETA_THM, return_def, raise_def,
+      sum_CASE_rator, AllCaseEqs()] >> metis_tac[]
 QED
-
-Resume case_Builtin[slice]:
-  qpat_x_assum `builtin_args_length_ok _ _` mp_tac >>
-  simp_tac (srw_ss()) [builtin_args_length_ok_def, listTheory.LENGTH_EQ_NUM_compute] >>
-  strip_tac >>
-  rpt (qpat_x_assum `(_:expr list) = _` SUBST_ALL_TAC) >>
-  builtin_branch_normalize >>
-  rename1 `EVERY _ [first; start; len]` >>
-  Cases_on `first` >> builtin_branch_normalize
-  >~ [`Builtin code_ty inner args`] >- suspend "slice_builtin"
-  >> gvs[bind_def, ignore_bind_def, get_accounts_def, lift_sum_def,
-         return_def, raise_def, AllCaseEqs(), pure_expr_def] >>
-  gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >> metis_tac[]
-QED
-
-Resume case_Builtin[slice_builtin]:
-  Cases_on `inner` >> builtin_branch_normalize
-  >~ [`Acc acc`] >- suspend "slice_acc"
-  >> gvs[bind_def, ignore_bind_def, get_accounts_def, lift_sum_def,
-         return_def, raise_def, AllCaseEqs(), pure_expr_def] >>
-  gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >> metis_tac[]
-QED
-
-Resume case_Builtin[slice_acc]:
-  Cases_on `acc` >> builtin_branch_normalize
-  >~ [`Acc Code`] >- suspend "slice_code"
-  >> gvs[bind_def, ignore_bind_def, get_accounts_def, lift_sum_def,
-         return_def, raise_def, AllCaseEqs(), pure_expr_def] >>
-  gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >> metis_tac[]
-QED
-
-Resume case_Builtin[slice_code]:
-  namedCases_on `args` ["", "addr rest"] >> builtin_branch_normalize
-  >- (gvs[bind_def, ignore_bind_def, get_accounts_def, lift_sum_def,
-          return_def, raise_def, AllCaseEqs(), pure_expr_def] >>
-      gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >> metis_tac[]) >>
-  Cases_on `rest` >> builtin_branch_normalize
-  >- (gvs[bind_def, ignore_bind_def, get_accounts_def, lift_sum_def,
-          return_def, raise_def, AllCaseEqs(), pure_expr_def] >>
-      gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >> metis_tac[]) >>
-  gvs[bind_def, ignore_bind_def, get_accounts_def, lift_sum_def,
-      return_def, raise_def, AllCaseEqs(), pure_expr_def] >>
-  gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >> metis_tac[]
-QED
-
-Finalise case_Builtin
 
 Theorem case_Pop[local]:
   ∀cx ty bt.

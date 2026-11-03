@@ -1539,13 +1539,7 @@ Definition evaluate_def:
       return $ IntV (&len)
     od else if bt = Env MsgGas then next_gas_reading
     else do
-      vs <- (case (bt, es) of
-        (Slice n, [Builtin code_ty (Acc Code) [addr]; start; len]) => do
-          tail_vs <- eval_exprs cx [start; len];
-          code_vs <- eval_exprs cx [Builtin code_ty (Acc Code) [addr]];
-          return (code_vs ++ tail_vs)
-        od
-      | _ => eval_exprs cx es);
+      vs <- eval_exprs cx es;
       acc <- get_accounts;
       lift_sum $ evaluate_builtin cx acc ty bt (MAP expr_type es) vs
     od;
