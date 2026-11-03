@@ -14,7 +14,7 @@ QED
 
 Theorem abi_decoder_pre_from_prefix:
   abi_decoder_metadata ce env ty tv di av v /\
-  abi_decoder_reservation st.cs_next_id last b cap s /\
+  abi_decoder_reservation (abi_decoder_entry_floor st) last b cap s /\
   abi_decoder_ranges opc base_op hi src dst src_base sb (LENGTH bs) d (type_memory_bytes ce ty) b cap s /\
   mem_bytes_at (src_base + sb) (LENGTH bs) (abi_decode_source opc s) = bs /\
   LENGTH (enc (vyper_to_abi_type env ty) av) <= LENGTH bs /\
@@ -43,7 +43,7 @@ QED
 Theorem abi_decoder_recursive_pre_from_prefix:
   abi_decoder_coherent ce env sf ty tv /\
   abi_decoder_metadata ce env ty tv (type_to_abi_dec_info ce.ce_struct_fields ce ty) av v /\
-  abi_decoder_reservation st.cs_next_id last b cap s /\
+  abi_decoder_reservation (abi_decoder_entry_floor st) last b cap s /\
   abi_decoder_ranges opc base_op hi src dst src_base sb (LENGTH bs) d (type_memory_bytes ce ty) b cap s /\
   mem_bytes_at (src_base + sb) (LENGTH bs) (abi_decode_source opc s) = bs /\
   LENGTH (enc (vyper_to_abi_type env ty) av) <= LENGTH bs /\

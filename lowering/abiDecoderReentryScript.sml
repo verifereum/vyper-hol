@@ -98,7 +98,7 @@ QED
 
 Theorem abi_decoder_pre_prune:
   abi_decoder_metadata ce env ty tv di av v /\
-  abi_decoder_reservation st.cs_next_id last b cap s /\
+  abi_decoder_reservation (abi_decoder_entry_floor st) last b cap s /\
   abi_decoder_ranges opc base_op hi src dst src_base sb (LENGTH (enc (vyper_to_abi_type env ty) av))
     d (type_memory_bytes ce ty) b cap s /\
   mem_bytes_at (src_base + sb) (LENGTH (enc (vyper_to_abi_type env ty) av))

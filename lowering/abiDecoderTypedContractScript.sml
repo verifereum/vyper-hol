@@ -37,6 +37,28 @@ Definition abi_decoder_reservation_def:
        b <= off /\ off + sz <= b + cap)
 End
 
+(* The dispatcher entry itself never allocates scratch. Allocation/child
+   phases recover their ordinary frontier using emitted-instruction bounds. *)
+Definition abi_decoder_entry_floor_def:
+  abi_decoder_entry_floor st = st.cs_next_id + 1
+End
+
+Theorem abi_decoder_reservation_restrict:
+  abi_decoder_reservation a last b cap s /\ a <= c ==>
+  abi_decoder_reservation c last b cap s
+Proof
+  rw[abi_decoder_reservation_def] >>
+  `a <= id` by decide_tac >> first_x_assum drule_all >> simp[]
+QED
+
+Theorem abi_decoder_reservation_entry_phase:
+  abi_decoder_reservation (abi_decoder_entry_floor st) last b cap s /\
+  abi_decoder_entry_floor st <= phase.cs_next_id ==>
+  abi_decoder_reservation phase.cs_next_id last b cap s
+Proof
+  metis_tac[abi_decoder_reservation_restrict]
+QED
+
 Definition abi_decoder_ranges_def:
   abi_decoder_ranges opc src_base_op hi src dst src_base sb len d outsz b cap s <=>
     abi_decode_source_opcode opc /\
@@ -55,7 +77,7 @@ Definition abi_decoder_pre_def:
   abi_decoder_pre ce env ty tv di av v st last src dst opc src_base_op hi src_base sb d b cap s <=>
     abi_decoder_metadata ce env ty tv di av v /\
     fresh_vars_wrt st s /\
-    abi_decoder_reservation st.cs_next_id last b cap s /\
+    abi_decoder_reservation (abi_decoder_entry_floor st) last b cap s /\
     abi_decoder_ranges opc src_base_op hi src dst src_base sb
       (LENGTH (enc (vyper_to_abi_type env ty) av)) d
       (type_memory_bytes ce ty) b cap s /\
@@ -322,4 +344,21 @@ Proof
   qpat_x_assum `mem_bytes_at (src_base + sb) _ _ = _` mp_tac >>
   rewrite_tac[vyperABITheory.vyper_base_to_abi_type_def,
       vyperABITheory.vyper_to_abi_type_def]
+QED
+
+(* Compatibility: callers with the former stronger entry reservation retain
+   the same typed contract, without a new resource condition. *)
+Theorem abi_decoder_pre_from_full_reservation:
+  abi_decoder_metadata ce env ty tv di av v /\ fresh_vars_wrt st s /\
+  abi_decoder_reservation st.cs_next_id last b cap s /\
+  abi_decoder_ranges opc base_op hi src dst src_base sb
+    (LENGTH (enc (vyper_to_abi_type env ty) av)) d
+    (type_memory_bytes ce ty) b cap s /\
+  mem_bytes_at (src_base + sb) (LENGTH (enc (vyper_to_abi_type env ty) av))
+    (abi_decode_source opc s) = enc (vyper_to_abi_type env ty) av ==>
+  abi_decoder_pre ce env ty tv di av v st last src dst opc base_op hi src_base sb d b cap s
+Proof
+  strip_tac >> simp[abi_decoder_pre_def] >>
+  irule abi_decoder_reservation_restrict >> goal_assum (drule_at Any) >>
+  simp[abi_decoder_entry_floor_def]
 QED

@@ -260,3 +260,13 @@ Proof
   simp_tac (srw_ss()) [update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   asm_rewrite_tac[]
 QED
+
+(* Budget credit starts at the first possible scratch site, not necessarily
+   at the instruction frontier at dispatcher entry. *)
+Theorem abi_decoder_budget_entry_reservation:
+  abi_decoder_budget first last b cap s /\ first <= abi_decoder_entry_floor st ==>
+  abi_decoder_reservation (abi_decoder_entry_floor st) last b cap s
+Proof
+  strip_tac >> drule abi_decoder_budget_reservation >> strip_tac >>
+  irule abi_decoder_reservation_restrict >> goal_assum (drule_at Any) >> simp[]
+QED
