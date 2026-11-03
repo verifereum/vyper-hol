@@ -2184,7 +2184,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
   drule emit_op_same_blocks >> strip_tac >>
-  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+  pure_rewrite_tac[run_inst_seq_def, mk_inst_def] >>
+  simp[step_inst_base_def] >>
+  simp[exec_alloca_def] >>
   Cases_on `FLOOKUP ss.vs_allocas st.cs_next_id` >> simp[]
   >- suspend "none_case"
   >> suspend "some_case"
