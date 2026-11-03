@@ -1111,3 +1111,25 @@ Proof
   >- (irule cs_extends_same_block >> simp[]) >>
   simp[added_labels_def, all_blocks_def, MAP_APPEND, DROP_LENGTH_TOO_LONG]
 QED
+
+Theorem fresh_vars_labels:
+  !n s P. cs_extends s (SND (fresh_vars n s)) /\
+    EVERY P (added_labels s (SND (fresh_vars n s)))
+Proof
+  Induct >> simp[fresh_vars_def, comp_return_labels] >> rpt gen_tac >>
+  irule comp_bind_labels >> reverse conj_tac
+  >- (simp[fresh_var_def] >> rpt strip_tac
+      >- (irule cs_extends_same_block >> simp[]) >>
+      simp[added_labels_def, all_blocks_def, MAP_APPEND, DROP_LENGTH_TOO_LONG]) >>
+  rpt gen_tac >> BETA_TAC >> irule comp_bind_labels >> simp[comp_return_labels]
+QED
+
+Theorem emit_multi_op_labels:
+  !opc ops n s P. cs_extends s (SND (emit_multi_op opc ops n s)) /\
+    EVERY P (added_labels s (SND (emit_multi_op opc ops n s)))
+Proof
+  rpt gen_tac >> simp[emit_multi_op_def] >>
+  irule comp_bind_labels >> simp[fresh_vars_labels] >>
+  rpt gen_tac >> irule comp_ignore_bind_labels >>
+  simp[emit_inst_labels, comp_return_labels]
+QED
