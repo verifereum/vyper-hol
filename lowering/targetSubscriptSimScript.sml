@@ -2,7 +2,7 @@
 Theory targetSubscriptSim
 Ancestors
   targetPlaceSim exprNoPopScopes exprLowering emitHelper compileEnv
-  vyperAST pair
+  vyperAST pair exprSimOps exprSim exprLoweringProps loweringShapeDefs fragExec
 Libs
   pairLib
 
@@ -43,4 +43,123 @@ Proof
   rename1 `SND (SND rb) = SOME pt` >> Cases_on `pt` >>
   gvs[comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+QED
+
+(* The index keeps the captured base pointer and composes its memory frame. *)
+Theorem target_post_index_frame:
+  !ctx func cenv cx es sa sm sn s0 es1 es2 pv vt rb t e v ix u.
+    target_post ctx func cenv cx es sa sm s0 es1 pv vt rb t /\
+    expr_post ctx func cenv cx e es1 sm sn t es2 v ix u /\
+    stmt_state_rel ctx func cenv cx es s0 /\
+    local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+    MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    es2.scopes = es1.scopes /\
+    sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\ (!l. FST rb <> Label l) ==>
+    target_post ctx func cenv cx es sa sn s0 es2 pv vt rb u
+Proof
+  rpt gen_tac >> simp[target_post_def, expr_post_def] >> strip_tac >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
+    metis_tac[not_fresh_at_mono] >>
+  `!x. not_fresh_at sm x ==> not_fresh_at sn x` by
+    metis_tac[not_fresh_at_mono] >>
+  simp[] >> rpt conj_tac
+  >- (qexists_tac `w` >> conj_tac
+      >- (irule eval_operand_frame >> simp[] >> qexistsl_tac [`sm`, `t`] >> simp[]) >>
+      irule place_ptr_rel_vars_frame >> qexistsl_tac [`t`, `sm`] >> simp[]) 
+  >- (irule place_readable_scopes_frame >> qexists_tac `es1` >> simp[])
+  >- (rpt strip_tac >>
+      `local_ptrs_rel func cenv es.scopes s0` by
+        fs[stmt_state_rel_def, state_rel_def] >>
+      `!n b sz'. local_region cenv es1.scopes t n b sz' ==>
+                  off + sz <= b \/ b + sz' <= off` by
+        (rpt strip_tac >>
+         qpat_x_assum `!n b sz'. local_region cenv es.scopes s0 _ _ _ ==> _` irule >>
+         qexists_tac `n` >> irule local_region_frame >>
+         conj_tac >- (qexists_tac `func` >> simp[]) >>
+         qexistsl_tac [`sa`, `es1.scopes`, `t`] >> simp[]) >>
+      `FLOOKUP t.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
+      `aid < sm.cs_next_id` by decide_tac >>
+      metis_tac[]) >>
+  irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `t`] >> simp[]
+QED
+
+Theorem target_index_frag:
+  !ctx func cenv cx es sa sm sn s0 es1 es2 pv vt rb t e v ix.
+    target_post ctx func cenv cx es sa sm s0 es1 pv vt rb t /\
+    expr_sim ctx func cenv cx (expr_type e) e es1 /\
+    lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) /\
+    (do raw <- eval_expr cx e; read_result cx raw od) es1 = (INL v,es2) /\
+    fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s0 /\
+    local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+    MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    es2.scopes = es1.scopes /\
+    sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\ (!l. FST rb <> Label l) ==>
+    frag_exec ctx sm sn (\s. s = t)
+      (\s. target_post ctx func cenv cx es sa sn s0 es2 pv vt rb s /\
+           expr_post ctx func cenv cx e es1 sm sn t es2 v ix s)
+      (expr_exit (INL v : value + exception))
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+    (mp_tac o SIMP_RULE std_ss [expr_sim_def]) >>
+  disch_then (qspecl_then [`sm`, `sn`, `ix`, `INL v`, `es2`, `t`] mp_tac) >>
+  simp[expr_res_ok_def] >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx es1 t` by fs[target_post_def] >>
+  irule frag_exec_conseq >> first_assum (irule_at Any) >>
+  simp[] >> rpt strip_tac >>
+  drule_all target_post_index_frame >> simp[]
+QED
+
+Theorem target_base_index_prefix:
+  !ctx func cenv cx es sa sm sn s0 es1 es2 pv vt rb e v ix.
+    frag_exec ctx sa sm
+      (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. target_post ctx func cenv cx es sa sm s0 es1 pv vt rb s)
+      (expr_exit (INL v : value + exception)) /\
+    expr_sim ctx func cenv cx (expr_type e) e es1 /\
+    lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) /\
+    (do raw <- eval_expr cx e; read_result cx raw od) es1 = (INL v,es2) /\
+    fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s0 /\
+    local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+    MAP FDOM es.scopes = MAP FDOM es1.scopes /\ es2.scopes = es1.scopes /\
+    sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\ (!l. FST rb <> Label l) /\
+    cs_extends sa sm /\ cs_extends sm sn ==>
+    frag_exec ctx sa sn
+      (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. target_post ctx func cenv cx es sa sn s0 es2 pv vt rb s /\
+           ?t. expr_post ctx func cenv cx e es1 sm sn t es2 v ix s)
+      (expr_exit (INL v : value + exception))
+Proof
+  rpt strip_tac >>
+  qpat_assum `frag_exec _ sa sm _ _ _` (mp_then Any irule frag_exec_then) >>
+  simp[] >> rpt strip_tac >>
+  drule_all target_index_frag >> strip_tac >>
+  irule frag_exec_conseq >> first_assum (irule_at Any) >>
+  simp[] >> metis_tac[]
+QED
+
+(* An exceptional index exits before either pointer suffix is reached. *)
+Theorem target_index_exception_frag:
+  !ctx func cenv cx es sm sn ix exc es2 t.
+    expr_sim ctx func cenv cx (expr_type ix) ix es /\
+    lower_value compile_expr cenv (expr_type ix) ix sm = (t,sn) /\
+    (do raw <- eval_expr cx ix; read_result cx raw od) es = (INR exc,es2) /\
+    expr_res_ok (INR exc : value + exception) /\
+    fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sm ==>
+    frag_exec ctx sm sn (stmt_state_rel ctx func cenv cx es)
+      (\s. F) (expr_exit (INR exc : value + exception))
+Proof
+  rpt strip_tac >> irule frag_exec_pointwise >> rpt strip_tac >>
+  rename1 `stmt_state_rel ctx func cenv cx es s0` >>
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+    (mp_tac o SIMP_RULE std_ss [expr_sim_def]) >>
+  disch_then (qspecl_then [`sm`, `sn`, `t`, `INR exc`, `es2`, `s0`] mp_tac) >>
+  simp[] >> strip_tac >>
+  irule frag_exec_conseq >> first_assum (irule_at Any) >> simp[]
 QED
