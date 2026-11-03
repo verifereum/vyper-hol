@@ -428,7 +428,7 @@ Theorem assign_name_scratch_run[local]:
 Proof
   rpt strip_tac >>
   drule_all body_name_source_region >> strip_tac >> gvs[] >>
-  drule_all exprSimBufferTheory.buffer_alloc_code >> strip_tac >>
+  drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK a` >>
   `w2n w' + type_memory_size entry.type <= a.vs_alloca_next` by

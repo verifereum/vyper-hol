@@ -284,7 +284,7 @@ Proof
   rpt strip_tac >> drule_all buffer_copy_memory_run >>
   asm_rewrite_tac[] >> strip_tac >> gvs[] >>
   Cases_on `n = 0` >- gvs[] >> gvs[] >>
-  drule_all exprSimBufferTheory.buffer_alloc_code >> strip_tac >>
+  drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
   drule body_scratch_alloc_operand >> strip_tac >>
   irule body_stmt_state_rel_mcopy_alloca >> simp[] >>
   goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
