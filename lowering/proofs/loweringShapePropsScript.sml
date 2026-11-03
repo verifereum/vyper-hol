@@ -12961,3 +12961,39 @@ Theorem compile_invert_labels:
 Proof
   rpt gen_tac >> Cases_on `ty` >> simp[compile_invert_def, emit_op_labels]
 QED
+
+Theorem compile_env_var_labels:
+  !item s P. cs_extends s (SND (compile_env_var item s)) /\
+    EVERY P (added_labels s (SND (compile_env_var item s)))
+Proof
+  rpt gen_tac >> Cases_on `item` >> simp[compile_env_var_def, emit_op_labels] >>
+  irule comp_bind_labels >> simp[emit_op_labels] >>
+  rpt gen_tac >> irule comp_bind_labels >> simp[emit_op_labels]
+QED
+
+Theorem compile_clamp_labels:
+  !val_op ty s P. cs_extends s (SND (compile_clamp val_op ty s)) /\
+    EVERY P (added_labels s (SND (compile_clamp val_op ty s)))
+Proof
+  rpt gen_tac >> simp[compile_clamp_def, LET_THM, pairTheory.UNCURRY] >>
+  IF_CASES_TAC >>
+  rpt (irule comp_bind_labels >> simp[emit_op_labels, emit_void_labels] >>
+       rpt gen_tac >> BETA_TAC)
+QED
+
+Theorem clamp_and_return_labels:
+  !res ty s P. cs_extends s (SND (clamp_and_return res ty s)) /\
+    EVERY P (added_labels s (SND (clamp_and_return res ty s)))
+Proof
+  rpt gen_tac >> simp[clamp_and_return_def] >>
+  irule comp_ignore_bind_labels >> simp[compile_clamp_labels, comp_return_labels]
+QED
+
+Theorem wrap_truncate_labels:
+  !res ty s P. cs_extends s (SND (wrap_truncate res ty s)) /\
+    EVERY P (added_labels s (SND (wrap_truncate res ty s)))
+Proof
+  rpt gen_tac >> simp[wrap_truncate_def] >>
+  IF_CASES_TAC >> simp[comp_return_labels] >>
+  IF_CASES_TAC >> simp[emit_op_labels, comp_return_labels]
+QED
