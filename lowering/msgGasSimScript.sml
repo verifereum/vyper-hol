@@ -27,6 +27,17 @@ Proof
   first_x_assum (qspec_then `0` mp_tac) >> simp[]
 QED
 
+Theorem msg_gas_source[local]:
+  bind (eval_expr cx (Builtin (env_item_type MsgGas) (Env MsgGas) []))
+       (read_result cx) (es with gas_obs := w::tail) =
+    (INL (IntV (&w2n w)), es with gas_obs := tail)
+Proof
+  once_rewrite_tac[evaluate_def] >>
+  simp[vyperContextTheory.builtin_args_length_ok_def, bind_def, ignore_bind_def,
+       type_check_def, check_def, assert_def, return_def,
+       next_gas_reading_def, read_result_def]
+QED
+
 Theorem compile_msg_gas_path:
   compile_env_var MsgGas sa = (op, sb) /\
   fn_has_code sa sb func /\ ~s0.vs_halted /\
