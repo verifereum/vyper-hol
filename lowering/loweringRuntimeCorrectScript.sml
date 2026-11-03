@@ -350,6 +350,47 @@ Proof
   decide_tac
 QED
 
+Theorem compile_entry_checks_same_blocks[local]:
+  compile_entry_checks min_cds pay st = ((),st') ==>
+  same_blocks st st'
+Proof
+  Cases_on `pay` >> Cases_on `4 < min_cds` >>
+  simp[compile_entry_checks_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def, fresh_id_def,
+       fresh_var_def, emit_def, same_blocks_def] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem external_checks_unshadowed[local]:
+  !pre post lbl ce args min_cds pay nr key ut iv body rt sd sa st st'.
+    EVERY external_fn_shape_ok
+      (pre ++ (lbl,ce,args,min_cds,pay,nr,key,ut,iv,body,rt)::post) /\
+    ALL_DISTINCT (MAP FST
+      (pre ++ (lbl,ce,args,min_cds,pay,nr,key,ut,iv,body,rt)::post)) /\
+    shape_state sd /\ ~compiler_label lbl /\
+    ~MEM lbl (MAP (\bb. bb.bb_label) (all_blocks sd)) /\
+    compile_external_fn_bodies pre sd = ((),sa) /\
+    new_block lbl sa = (sa.cs_current_bb,st) /\
+    compile_entry_checks min_cds pay st = ((),st') ==>
+    ~MEM lbl (MAP (\bb. bb.bb_label) (REVERSE st.cs_blocks)) /\
+    !se func. cs_extends st' se /\ func.fn_blocks = all_blocks se ==>
+      fn_has_code st st' func
+Proof
+  rpt gen_tac >> strip_tac >>
+  `EVERY external_fn_shape_ok pre /\ ~MEM lbl (MAP FST pre)` by
+    (gvs[EVERY_APPEND, ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+  drule_all loweringShapePropsTheory.compile_external_fn_bodies_label_absent >> strip_tac >>
+  `st.cs_current_bb = lbl /\
+   ~MEM lbl (MAP (\bb. bb.bb_label) (REVERSE st.cs_blocks))` by
+    gvs[new_block_def, loweringShapeDefsTheory.all_blocks_def, LET_THM] >>
+  conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  drule compile_entry_checks_same_blocks >>
+  rewrite_tac[same_blocks_def] >> strip_tac >>
+  simp[fn_has_code_def, emitted_blocks_def] >>
+  drule loweringShapeRulesTheory.cs_extends_open_lookup >> simp[]
+QED
+
 Theorem selected_external_package[local]:
   !tops target mut rr name args ret fbody.
   ?cenv pos_args min_cds is_payable nkey ut iv rt.
