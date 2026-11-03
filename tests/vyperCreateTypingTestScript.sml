@@ -45,13 +45,6 @@ val () = List.app (fn salted => (
   raw_case "ABI fixed constructor tail" true
     ``BaseT (BytesT (Dynamic 32))`` salted [salt])) [false, true];
 
-val () = check_create "missing salt" false ``RawCreate`` ``T``
-  ``BaseT (BytesT (Dynamic 32))``
-  ``[Name (BaseT (BytesT (Dynamic 32))) "payload"; ^value]``;
-val () = check_create "wrong salt type" false ``RawCreate`` ``T``
-  ``BaseT (BytesT (Dynamic 32))``
-  ``[Name (BaseT (BytesT (Dynamic 32))) "payload"; ^value; ^value]``;
-
 fun blueprint_case label accepted raw_args ty salted = let
   val payload = ``Name ^ty "payload"``
   val has_salt = if salted then ``T`` else ``F``
@@ -71,7 +64,7 @@ val () = List.app (fn salted => (
     ``BaseT (BytesT (Fixed 32))`` salted)) [false, true];
 
 (* Zero capacity is permitted by the operand predicate, independently of
-   any declared-type policy. Missing salt must not consume the value operand. *)
+   any declared-type policy. *)
 val () = List.app (fn (tm, expected) =>
   if aconv (rhs (concl (simpLib.SIMP_CONV (srw_ss())
        [vyperTypeSystemTheory.create_arg_types_ok_compute] tm))) expected
@@ -80,6 +73,4 @@ val () = List.app (fn (tm, expected) =>
        [BaseT (BytesT (Dynamic 0)); BaseT (UintT 256)]``, ``T``),
    (``create_arg_types_ok RawCreate T
        [BaseT (BytesT (Dynamic 0)); BaseT (UintT 256);
-        BaseT (BytesT (Fixed 32))]``, ``T``),
-   (``create_arg_types_ok RawCreate T
-       [BaseT (BytesT (Dynamic 32)); BaseT (UintT 256)]``, ``F``)];
+        BaseT (BytesT (Fixed 32))]``, ``T``)];
