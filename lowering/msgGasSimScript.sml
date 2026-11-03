@@ -90,7 +90,19 @@ Theorem compile_msg_gas_path:
         (s0 with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
                    vs_inst_idx := LENGTH sb.cs_current_insts|>)))
 Proof
-  cheat
+  strip_tac >> drule_all msg_gas_placement >> strip_tac >>
+  `?w. gas_prefix 1 s0.vs_gas_readings = [w] /\
+    gas_path_edge ctx func s0 1
+      (OK (update_var out w
+        (s0 with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
+                   vs_inst_idx := SUC s0.vs_inst_idx|>)))`
+    by (irule msg_gas_edge >> metis_tac[]) >>
+  qexistsl_tac [`out`, `w`] >> simp[] >>
+  drule gas_path_edge_normal >> strip_tac >>
+  gvs[] >>
+  drule (cj 2 gas_path_rules) >>
+  disch_then (qspec_then `0` mp_tac) >>
+  simp[gas_path_rules]
 QED
 
 Theorem compile_msg_gas_summary:
