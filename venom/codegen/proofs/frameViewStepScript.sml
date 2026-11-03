@@ -17,6 +17,7 @@ Theory frameViewStep
 Ancestors
   frameRel contextCodegenRel codegenRel stackPlanGen unitShapeDefs
   venomExecSemantics venomState venomInst
+  frameViewFacts frameViewScalar frameViewRead frameViewWrite frameViewCall
 
 (* m' is the substituted memory after the step: it agrees with the Venom
    memory after the step wherever m agreed before, and it changes only
@@ -38,5 +39,16 @@ Theorem step_inst_frame_view:
                 (source_memory_write_ranges inst vs) ==>
               read_byte i m' = read_byte i m)
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode = ASSIGN`
+  >- (irule assign_step_frame_view >> simp[]) >>
+  Cases_on `MEM inst.inst_opcode [MLOAD; ILOAD; SHA3; LOG]`
+  >- (irule memory_read_step_frame_view >> simp[]) >>
+  Cases_on `MEM inst.inst_opcode
+    [MSTORE; MSTORE8; ISTORE; MCOPY; CODECOPY; CALLDATACOPY;
+     DLOADBYTES; RETURNDATACOPY; EXTCODECOPY]`
+  >- (irule memory_write_step_frame_view >> simp[]) >>
+  Cases_on `MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]`
+  >- (irule external_step_frame_view >> simp[]) >>
+  irule nonmemory_step_frame_view >> gvs[]
 QED
