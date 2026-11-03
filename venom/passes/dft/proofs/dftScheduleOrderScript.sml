@@ -69,7 +69,7 @@ Definition dft_fallible_order_kept_def:
     LIST_REL
       (\bb bb'.
          !x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
-               is_fallible x /\ is_fallible y /\
+               ~abort_compatible x.inst_opcode y.inst_opcode /\
                id_before (MAP (\i. i.inst_id) bb.bb_instructions)
                  x.inst_id y.inst_id ==>
                id_before (MAP (\i. i.inst_id) bb'.bb_instructions)
