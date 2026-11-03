@@ -887,3 +887,25 @@ Proof
   drule_all sub_layout_dynarray_elem >>
   simp[NoAsms, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
 QED
+
+Theorem sub_layout_sarray_elem:
+  sub_layout itv iv k (ArrayTV et (Fixed bound)) (ArrayV (SArrayV kvs)) /\
+  j < bound ==>
+  sub_layout itv iv (k + j * type_memory_size et) et
+    (case ALOOKUP kvs j of NONE => default_value et | SOME v => v)
+Proof
+  strip_tac >>
+  `SUC j * type_memory_size et <= bound * type_memory_size et` by simp[] >>
+  qpat_x_assum `sub_layout _ _ _ _ _` mp_tac >>
+  rewrite_tac[sub_layout_def, valueEncodingTheory.type_memory_size_def] >>
+  strip_tac >> conj_tac
+  >- (qpat_x_assum `SUC j * _ <= _` mp_tac >>
+      pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  rpt strip_tac >> first_x_assum drule >>
+  simp[valueEncodingPropsTheory.val_in_memory_sarray] >> strip_tac >>
+  Cases_on `ALOOKUP kvs j`
+  >- (simp[] >> first_x_assum drule_all >>
+      simp[NoAsms]) >>
+  simp[] >> drule_all valueEncodingProofsTheory.kvs_in_memory_lookup >>
+  SIMP_TAC bool_ss [arithmeticTheory.ADD_ASSOC]
+QED
