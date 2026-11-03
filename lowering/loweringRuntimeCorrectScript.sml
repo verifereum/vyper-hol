@@ -675,6 +675,52 @@ Proof
   qexistsl_tac [`func`, `fb`, `sa`, `sd`, `st`, `st'`] >> simp[]
 QED
 
+Theorem linear_dispatch_entry_no_phi[local]:
+  !selectors fallback sa sd func.
+    compile_selector_dispatch_linear selectors fallback sa = ((),sd) /\
+    fn_has_code sa sd func /\ sa.cs_current_insts = [] ==>
+    ?bb. lookup_block sa.cs_current_bb func.fn_blocks = SOME bb /\
+         phi_prefix_length bb.bb_instructions = 0
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_selector_dispatch_linear _ _ _ = _` mp_tac >>
+  simp[compile_selector_dispatch_linear_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> fs[]) >> strip_tac >>
+  rename1 `emit_inst JMP _ _ a9 = (_,sd)` >>
+  rename1 `compile_selector_checks _ _ a8 = (_,a9)` >>
+  rename1 `emit_op SHR _ a7 = (_,a8)` >>
+  rename1 `emit_op CALLDATALOAD _ a6 = (_,a7)` >>
+  rename1 `new_block dispatch_lbl a5 = (_,a6)` >>
+  rename1 `emit_inst JNZ _ _ a4 = (_,a5)` >>
+  rename1 `fresh_label "dispatch" a3 = (_,a4)` >>
+  rename1 `emit_op ISZERO _ a2 = (_,a3)` >>
+  rename1 `emit_op LT _ a1 = (_,a2)` >>
+  `cs_extends sa a1 /\ cs_extends a1 a2 /\ cs_extends a2 a3 /\
+   cs_extends a3 a4 /\ cs_extends a4 a5 /\ cs_extends a5 a6 /\
+   cs_extends a6 a7 /\ cs_extends a7 a8 /\ cs_extends a8 a9 /\
+   cs_extends a9 sd` by
+    (rpt conj_tac >> metis_tac[cs_appends_def, cs_appends_emit_helpers,
+                             cs_appends_prims, compile_selector_checks_appends]) >>
+  `fn_has_code a5 a6 func` by
+    metis_tac[fn_has_code_mid, fn_has_code_split, cs_extends_trans] >>
+  drule_all fn_has_code_new_block >> strip_tac >>
+  `a5.cs_current_bb = sa.cs_current_bb /\
+   phi_prefix_length a5.cs_current_insts = 0` suffices_by
+    (strip_tac >> qexists_tac `<|bb_label := a5.cs_current_bb;
+                               bb_instructions := a5.cs_current_insts|>` >> gvs[]) >>
+  qpat_x_assum `sa.cs_current_insts = []` mp_tac >>
+  qpat_x_assum `emit_inst JNZ _ _ _ = _` mp_tac >>
+  qpat_x_assum `fresh_label "dispatch" _ = _` mp_tac >>
+  qpat_x_assum `emit_op ISZERO _ _ = _` mp_tac >>
+  qpat_x_assum `emit_op LT _ _ = _` mp_tac >>
+  qpat_x_assum `emit_op CALLDATASIZE _ _ = _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  simp_tac std_ss [emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+    emitHelperTheory.emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def, fresh_var_def, fresh_id_def, fresh_label_def, emit_def,
+    LET_THM] >> rpt strip_tac >> gvs[phi_prefix_length_def, venomInstTheory.mk_inst_def]
+QED
+
 Theorem external_entry_reaches_checks:
   !tops rpolicy unit am tx ret vs mut args fbody.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
