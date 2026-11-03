@@ -484,3 +484,80 @@ QED
    bytes/count; metadata compatibility and nonwrap/capacity obligations for
    each translated child remain required. These conditional shell results
    do not discharge any of those recursive obligations. *)
+
+(* Position-aware header descriptions.  The optional address register follows
+   the index register; all later outputs shift by one in that branch. *)
+Definition abi_decode_position_header_delta_def:
+  abi_decode_position_header_delta base_op = if base_op = Lit 0w then 0 else 1
+End
+
+Definition abi_decode_position_header_insts_def:
+  abi_decode_position_header_insts id ip src opc base_op first body_lbl exit =
+    let delta = abi_decode_position_header_delta base_op;
+        iv = STRING #"%" (toString first);
+        addr = STRING #"%" (toString (first + 1));
+        cv = STRING #"%" (toString (first + 1 + delta));
+        cmp = STRING #"%" (toString (first + 2 + delta));
+        done = STRING #"%" (toString (first + 3 + delta))
+    in
+      [mk_inst id MLOAD [ip] [iv]] ++
+      (if base_op = Lit 0w then [] else
+        [mk_inst (id+1) ADD [base_op;src] [addr]]) ++
+      [mk_inst (id+1+delta) opc
+         [if base_op = Lit 0w then src else Var addr] [cv];
+       mk_inst (id+2+delta) LT [Var iv;Var cv] [cmp];
+       mk_inst (id+3+delta) ISZERO [Var cmp] [done];
+       mk_inst (id+4+delta) JNZ [Var done;Label exit;Label body_lbl] []]
+End
+
+Definition abi_decode_position_header_state_def:
+  abi_decode_position_header_state base_op first B sb i ncount s =
+    let delta = abi_decode_position_header_delta base_op;
+        iv = STRING #"%" (toString first);
+        addr = STRING #"%" (toString (first + 1));
+        cv = STRING #"%" (toString (first + 1 + delta));
+        cmp = STRING #"%" (toString (first + 2 + delta));
+        done = STRING #"%" (toString (first + 3 + delta));
+        indexed = update_var iv (n2w i) s;
+        addressed = if base_op = Lit 0w then indexed else
+          update_var addr (n2w (B + sb)) indexed
+    in update_var done (bool_to_word (~(i < ncount)))
+         (update_var cmp (bool_to_word (i < ncount))
+           (update_var cv (n2w ncount) addressed))
+End
+
+Theorem abi_decode_position_header_length:
+  LENGTH (abi_decode_position_header_insts id ip src opc base_op first body_lbl exit) =
+    5 + abi_decode_position_header_delta base_op
+Proof
+  Cases_on `base_op = Lit 0w` >>
+  simp[abi_decode_position_header_insts_def, abi_decode_position_header_delta_def]
+QED
+
+Theorem abi_decode_position_header_zero:
+  abi_decode_position_header_insts id ip src opc (Lit 0w) first body_lbl exit =
+    abi_decode_header_insts id ip src opc
+      (STRING #"%" (toString first)) (STRING #"%" (toString (first+1)))
+      (STRING #"%" (toString (first+2))) (STRING #"%" (toString (first+3))) body_lbl exit /\
+  abi_decode_position_header_state (Lit 0w) first B sb i ncount s =
+    abi_decode_header_state
+      (STRING #"%" (toString first)) (STRING #"%" (toString (first+1)))
+      (STRING #"%" (toString (first+2))) (STRING #"%" (toString (first+3))) i ncount s
+Proof
+  simp[abi_decode_position_header_insts_def, abi_decode_position_header_state_def,
+       abi_decode_position_header_delta_def, abi_decode_header_insts_def,
+       abi_decode_header_state_def]
+QED
+
+Theorem abi_decode_position_header_observations:
+  abi_decode_footprint_frame fp s
+    (abi_decode_position_header_state base_op first B sb i ncount s) /\
+  mload p (abi_decode_position_header_state base_op first B sb i ncount s) = mload p s /\
+  abi_decode_load opc srcaddr
+    (abi_decode_position_header_state base_op first B sb i ncount s) =
+      abi_decode_load opc srcaddr s
+Proof
+  Cases_on `base_op = Lit 0w` >>
+  simp[abi_decode_position_header_state_def, abi_decode_footprint_frame_def,
+       abi_decode_load_def, abi_decode_source_def, mload_def, update_var_def]
+QED
