@@ -53,3 +53,12 @@ loads = ["jsonImportTerm"]
 
 [actions.JsonImportHol]
 loads = ["jsonImportTerm"]
+
+[actions.jsonASTLib]
+loads = ["jsonImportTerm", "JsonImportHol", "JsonASTDecodeFn"]
+
+[actions.vyperTestLib]
+loads = ["jsonImportTerm", "JsonTraceDecodeFn"]
+
+[actions.vyperJsonReplayLib]
+loads = ["jsonImportTerm", "jsonASTLib", "JsonTraceDecodeFn"]

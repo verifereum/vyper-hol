@@ -1,6 +1,3 @@
-val () = load "jsonImportTerm";
-val () = load "jsonASTLib";
-val () = load "JsonTraceDecodeFn";
 structure vyperJsonReplayLib :> vyperJsonReplayLib = struct
 
 open HolKernel boolLib bossLib cv_transLib cv_repLib cv_miscLib cv_computeLib

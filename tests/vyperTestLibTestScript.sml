@@ -19,8 +19,6 @@ val _ = expect "explicit gas" NONE
 val _ = expect "negative missing source" (SOME "missing source_code") [];
 val _ = expect "blank source" (SOME "blank source_code") [source " \n"];
 
-val () = load "JsonTraceDecodeFn";
-
 structure TraceDecode = JsonTraceDecodeFn (
   structure B = JsonImportHol
   structure AST = jsonASTLib

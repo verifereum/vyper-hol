@@ -1,5 +1,3 @@
-val () = load "jsonImportTerm";
-val () = load "JsonTraceDecodeFn";
 structure vyperTestLib :> vyperTestLib = struct
 
 open HolKernel boolLib bossLib cv_transLib wordsLib intLib
