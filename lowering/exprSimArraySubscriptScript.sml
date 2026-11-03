@@ -3,7 +3,7 @@ Theory exprSimArraySubscript
 Ancestors
   compileEnv exprSim exprSimNoPop exprSimArrayIndex vyperPlaceResultTyping vyperState
   vyperTypeEnv vyperTypeInvariants exprSimHyps supportedExprTraverse exprSimAttribute
-  vyperPlaceFrames vyperStatePreservation vyperInterpreter vyperArray
+  vyperPlaceFrames vyperStatePreservation vyperInterpreter vyperArray exprSimLen
 
 (* A current-value path takes priority over every historical snapshot. *)
 Theorem read_memory_path_current_append:
@@ -812,4 +812,78 @@ Theorem immutable_holds_source_frame:
   immutable_holds cenv cx ty tv w t
 Proof
   simp[immutable_holds_def] >> metis_tac[]
+QED
+
+(* The semantic load dispatch and the length-loader execution agree. *)
+Theorem array_len_ok_ptr_load:
+  eval_operand op ss = SOME w /\ (loc = LocCode ==> ~ctor) ==>
+  array_len_ok T cnt (compile_ptr_load ctor imm loc) op ss
+    (ptr_load_val ctor loc w ss)
+Proof
+  Cases_on `loc` >> simp[builtinPropsTheory.ptr_load_val_def] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[array_len_ok_MLOAD, array_len_ok_SLOAD, array_len_ok_TLOAD,
+            array_len_ok_LocCode, array_len_ok_CALLDATALOAD]
+QED
+
+Theorem vv_holds_array_len_ok:
+  stmt_state_rel ctx func cenv cx es ss /\
+  vv_holds cenv cx t tv vv es ss /\ is_sized_type t /\
+  evaluate_type (get_tenv cx) t = SOME tvt /\
+  env.type_defs = get_tenv cx /\
+  eval_result_typed (env,cx,es) tv (Type t) /\
+  (!v. read_result cx tv es = (INL v,es) ==> value_has_type tvt v) /\
+  (vv_location vv = SOME LocCode ==> ~cenv.ce_is_ctor) /\
+  result_array_length cx tv es = (INL n,es) ==>
+  array_len_ok T cnt
+    (compile_ptr_load cenv.ce_is_ctor imm
+      (case vv_location vv of SOME l => l | NONE => LocMemory))
+    (vv_operand vv) ss (n2w n)
+Proof
+  strip_tac >> drule_all vv_holds_len_header >> strip_tac >>
+  qpat_x_assum `ptr_load_val _ _ _ _ = _` (SUBST1_TAC o SYM) >>
+  irule array_len_ok_ptr_load >> simp[] >>
+  Cases_on `vv_location vv` >> gvs[]
+QED
+
+Theorem sub_layout_dynarray_elem:
+  sub_layout itv iv k (ArrayTV et (Dynamic bound)) (ArrayV (DynArrayV vs)) /\
+  LENGTH vs <= bound /\ j < LENGTH vs ==>
+  sub_layout itv iv (k + 32 + j * type_memory_size et) et (EL j vs)
+Proof
+  strip_tac >>
+  `SUC j <= bound` by decide_tac >>
+  `SUC j * type_memory_size et <= bound * type_memory_size et` by
+    simp[] >>
+  qpat_x_assum `sub_layout _ _ _ _ _` mp_tac >>
+  rewrite_tac[sub_layout_def, valueEncodingTheory.type_memory_size_def] >>
+  strip_tac >> conj_tac
+  >- (qpat_x_assum `SUC j * _ <= _` mp_tac >>
+      pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  rpt strip_tac >> first_x_assum drule >>
+  simp[valueEncodingPropsTheory.val_in_memory_dynarray] >> strip_tac >>
+  drule_all exprSimAggregateEncodingTheory.elems_in_memory_EL >>
+  simp[NoAsms, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
+Theorem immutable_holds_dynarray_elem:
+  immutable_holds cenv cx (ArrayT et (Dynamic bound)) tv w es /\
+  read_result cx tv es = (INL (ArrayV (DynArrayV vs)),es) /\
+  evaluate_type (get_tenv cx) et = SOME evt /\
+  j < LENGTH vs /\
+  read_result cx tv' es = (INL (EL j vs),es) ==>
+  immutable_holds cenv cx et tv'
+    (w + n2w (32 + j * type_memory_size evt)) es
+Proof
+  rw[immutable_holds_def] >>
+  gvs[vyperValueTheory.evaluate_type_def, vyperTypingTheory.value_has_type_def] >>
+  `value_has_type evt (EL j vs)` by
+    (fs[vyperTypingTheory.all_have_type_EVERY, listTheory.EVERY_EL] >>
+     first_x_assum drule >> simp[]) >>
+  qexistsl_tac [`name`, `off`, `itv`, `iv`,
+                `k + 32 + j * type_memory_size evt`] >>
+  ASM_SIMP_TAC bool_ss [wordsTheory.word_add_n2w,
+    AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  drule_all sub_layout_dynarray_elem >>
+  simp[NoAsms, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
 QED
