@@ -149,96 +149,6 @@ Proof
   metis_tac[aug_place_pure_expr_scopes]
 QED
 
-(* Pending effect induction, retained until its semantic boundaries are ready.
-Theorem aug_place_effect_scopes_mutual:
-  (!tops e. supported_effect_expr tops e ==>
-    !cx s r s'. eval_expr cx e s = (r,s') ==> s'.scopes = s.scopes) /\
-  (!tops e. supported_effect_place_expr tops e ==>
-    !cx s r s'. eval_expr cx e s = (r,s') ==> s'.scopes = s.scopes)
-Proof
-  ho_match_mp_tac supported_effect_expr_ind >>
-  rpt conj_tac >> rpt gen_tac >> simp[supported_effect_expr_def]
-  >- suspend "intcall"
-  >- suspend "extcall"
-  >- suspend "send"
-  >- suspend "send_gas"
-  >- suspend "pop"
-  >- suspend "subscript"
-  >- suspend "attribute"
-  >- suspend "place_subscript"
-  >> suspend "place_attribute"
-QED
-
-Resume aug_place_effect_scopes_mutual[subscript]:
-  rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-  gvs[] >> metis_tac[aug_place_pure_expr_scopes, aug_place_place_expr_scopes]
-QED
-Resume aug_place_effect_scopes_mutual[attribute]:
-  rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
-QED
-Resume aug_place_effect_scopes_mutual[place_subscript]:
-  rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-  gvs[] >> metis_tac[aug_place_pure_expr_scopes, aug_place_place_expr_scopes]
-QED
-Resume aug_place_effect_scopes_mutual[place_attribute]:
-  rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
-QED
-Resume aug_place_effect_scopes_mutual[send]:
-  rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-      assert_def, return_def, raise_def, AllCaseEqs()] >>
-  imp_res_tac eval_send_preserves_non_accounts >> gvs[] >>
-  metis_tac[aug_place_pure_exprs_scopes, supported_pure_expr_def]
-QED
-Resume aug_place_effect_scopes_mutual[send_gas]:
-  rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-      assert_def, return_def, raise_def, AllCaseEqs()] >>
-  imp_res_tac eval_send_preserves_non_accounts >> gvs[] >>
-  metis_tac[aug_place_pure_exprs_scopes, supported_pure_expr_def]
-QED
-Resume aug_place_effect_scopes_mutual[extcall]:
-  rpt strip_tac >>
-  `supported_pure_exprs tops (TAKE 1 args) /\
-   supported_pure_exprs tops (TAKE (LENGTH arg_types) (DROP 1 args)) /\
-   supported_pure_exprs tops (DROP (1 + LENGTH arg_types) args)` by
-    (gvs[supported_pure_exprs_every] >>
-     metis_tac[rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP]) >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-  imp_res_tac eval_ext_call_preserves_non_accounts >>
-  imp_res_tac read_results_state >> gvs[] >>
-  metis_tac[aug_place_pure_exprs_scopes, aug_place_pure_results_scopes]
-QED
-Resume aug_place_effect_scopes_mutual[pop]:
-  PairCases_on `id` >> rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), get_place_def,
-      return_def, raise_def] >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), get_place_def,
-      return_def, raise_def] >>
-  imp_res_tac lookup_global_state >> imp_res_tac get_place_state >> gvs[] >>
-  qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
-  simp[lookup_global_def, bind_def, lift_option_type_def,
-       return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[option_CASE_rator, prod_CASE_rator, var_decl_info_CASE_rator,
-      bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
-  gvs[get_place_def, return_def, raise_def] >>
-  imp_res_tac pop_storage_place_scopes_immutables >>
-  gvs[pop_place_def, raise_def]
-QED
-Resume aug_place_effect_scopes_mutual[intcall]:
-  FAIL_TAC "intcall boundary"
-QED
-Finalise aug_place_effect_scopes_mutual
-*)
 
 Theorem aug_place_lookup_global_not_memory:
   lookup_global cx src id s = (INL pv,s') ==>
@@ -335,4 +245,90 @@ Proof
   imp_res_tac aug_place_lock_scopes >>
   gvs[option_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
   first_x_assum drule >> strip_tac >> gvs[push_function_def, return_def]
+QED
+
+Theorem aug_place_effect_scopes_mutual:
+  (!tops e. supported_effect_expr tops e ==>
+    !cx s r s'. eval_expr cx e s = (r,s') ==> s'.scopes = s.scopes) /\
+  (!tops e. supported_effect_place_expr tops e ==>
+    !cx s r s'. eval_expr cx e s = (r,s') ==> s'.scopes = s.scopes)
+Proof
+  ho_match_mp_tac supported_effect_expr_ind >>
+  rpt conj_tac >> rpt gen_tac >> simp[supported_effect_expr_def]
+  >- suspend "intcall"
+  >- suspend "extcall"
+  >- suspend "send"
+  >- suspend "send_gas"
+  >- suspend "pop"
+  >- suspend "subscript"
+  >- suspend "attribute"
+  >- suspend "place_subscript"
+  >> suspend "place_attribute"
+QED
+
+Resume aug_place_effect_scopes_mutual[subscript]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+  gvs[] >> metis_tac[aug_place_pure_expr_scopes, aug_place_place_expr_scopes]
+QED
+Resume aug_place_effect_scopes_mutual[attribute]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+QED
+Resume aug_place_effect_scopes_mutual[place_subscript]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+  gvs[] >> metis_tac[aug_place_pure_expr_scopes, aug_place_place_expr_scopes]
+QED
+Resume aug_place_effect_scopes_mutual[place_attribute]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+QED
+Resume aug_place_effect_scopes_mutual[send]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+      assert_def, return_def, raise_def, AllCaseEqs()] >>
+  imp_res_tac eval_send_preserves_non_accounts >> gvs[] >>
+  metis_tac[aug_place_pure_exprs_scopes, supported_pure_expr_def]
+QED
+Resume aug_place_effect_scopes_mutual[send_gas]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+      assert_def, return_def, raise_def, AllCaseEqs()] >>
+  imp_res_tac eval_send_preserves_non_accounts >> gvs[] >>
+  metis_tac[aug_place_pure_exprs_scopes, supported_pure_expr_def]
+QED
+Resume aug_place_effect_scopes_mutual[extcall]:
+  rpt strip_tac >>
+  `supported_pure_exprs tops (TAKE 1 args) /\
+   supported_pure_exprs tops (TAKE (LENGTH arg_types) (DROP 1 args)) /\
+   supported_pure_exprs tops (DROP (1 + LENGTH arg_types) args)` by
+    (gvs[supported_pure_exprs_every] >>
+     metis_tac[rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP]) >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
+  imp_res_tac eval_ext_call_preserves_non_accounts >>
+  imp_res_tac read_results_state >> gvs[] >>
+  metis_tac[aug_place_pure_exprs_scopes, aug_place_pure_results_scopes]
+QED
+Resume aug_place_effect_scopes_mutual[pop]:
+  rpt strip_tac >> irule aug_place_top_level_pop_scopes >>
+  goal_assum (drule_at Any)
+QED
+Resume aug_place_effect_scopes_mutual[intcall]:
+  rpt strip_tac >> irule aug_place_intcall_scopes >>
+  goal_assum (drule_at Any) >>
+  metis_tac[aug_place_pure_results_scopes]
+QED
+Finalise aug_place_effect_scopes_mutual
+
+Theorem aug_place_supported_expr_scopes:
+  supported_expr tops e /\ eval_expr cx e s = (r,s') ==>
+  s'.scopes = s.scopes
+Proof
+  simp[supported_expr_def] >>
+  metis_tac[aug_place_pure_expr_scopes, aug_place_effect_scopes_mutual]
 QED
