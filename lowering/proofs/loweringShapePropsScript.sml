@@ -12614,6 +12614,20 @@ Proof
   rpt strip_tac >> gvs[] >> res_tac >> fs[EVERY_MEM]
 QED
 
+(* Successful packaging exposes the first delimiter prefix independently
+   of the contents of the later internal function segments. *)
+Theorem package_internal_blocks_entry_prefix:
+  !name has_ret_buf rc rest prefix bb suffix entry_blocks functions.
+    ~MEM name (MAP (\b. b.bb_label) prefix) /\ bb.bb_label = name /\
+    package_internal_blocks ((name, has_ret_buf, rc)::rest)
+      (prefix ++ bb::suffix) = SOME (entry_blocks, functions) ==>
+    entry_blocks = prefix
+Proof
+  rpt strip_tac >>
+  drule_all split_blocks_at_append_delimiter >> strip_tac >>
+  gvs[Once package_internal_blocks_def, AllCaseEqs()]
+QED
+
 (* package_internal_blocks splits the stream exactly at the segments. *)
 Theorem package_internal_blocks_segments:
   !descs segs entry.
