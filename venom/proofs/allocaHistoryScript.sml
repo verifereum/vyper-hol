@@ -314,7 +314,14 @@ Theorem alloca_history_step:
       (if is_terminator inst.inst_opcode then t
        else t with vs_inst_idx := SUC s.vs_inst_idx)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> Cases_on `inst.inst_opcode = INVOKE`
+  >- (`~is_terminator inst.inst_opcode /\ inst.inst_opcode <> ALLOCA`
+        by simp[is_terminator_def] >> simp[] >>
+      drule_all history_nonalloca_advance >> strip_tac >>
+      drule_all history_invoke_fields >> strip_tac >>
+      irule alloca_history_frame >>
+      qexists `s with vs_inst_idx := SUC s.vs_inst_idx` >> simp[]) >>
+  gvs[step_inst_non_invoke] >> drule_all alloca_history_base_step >> simp[]
 QED
 
 Theorem alloca_history_exec_block:
@@ -340,6 +347,7 @@ Theorem alloca_history_callee_entry:
   !func args s t. setup_callee func args s = SOME t ==>
     alloca_history func t
 Proof
-  cheat
+  rpt gen_tac >> simp[setup_callee_def, AllCaseEqs()] >> strip_tac >>
+  irule alloca_history_empty >> gvs[]
 QED
 
