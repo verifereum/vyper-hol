@@ -4,7 +4,7 @@ Ancestors
   abiDecoderBytesPhases abiDecoderComposition abiDecoderRange abiDecoderGuards
   abiDecoderBytesBound abiDecoderContract abiEncoder compileEnv emitHelper
   exprLoweringProps emitHelperProps venomInst list rich_list
-  venomExecSemantics venomState words
+  venomExecSemantics venomMemProps venomState words
 
 Definition abi_decode_bytes_position_prefix_def:
   abi_decode_bytes_position_prefix pos opc base_op hi n =
@@ -160,3 +160,38 @@ Resume abi_decode_bytes_position_prefix_sequence[bounded]:
 QED
 
 Finalise abi_decode_bytes_position_prefix_sequence
+
+(* Early observation, independent of typed decoder reservation contracts. *)
+Theorem abi_decode_nonallocating_sequence_frame:
+  !insts s t.
+  EVERY (\i. ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode) insts /\
+  run_inst_seq insts s = OK t ==>
+  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  Induct >> simp[run_inst_seq_def] >> qx_gen_tac `inst` >> rpt gen_tac >> strip_tac >>
+  Cases_on `step_inst_base inst s` >> gvs[] >>
+  drule_all step_inst_base_preserves_alloca_state >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem abi_decode_bytes_runtime_tail_allocation_frame:
+  abi_decode_bytes_runtime_tail dst addr cnt st = ((),st') /\
+  run_inst_seq (emitted_insts st st') s = OK t ==>
+  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >> drule abi_decode_bytes_runtime_tail_shape >> strip_tac >>
+  irule abi_decode_nonallocating_sequence_frame >>
+  qexists_tac `emitted_insts st st'` >> simp[] >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem abi_decode_bytes_position_allocation_frame:
+  compile_abi_decode_to_buf dst pos opc base_op hi (DecBytestring n) st = ((),st') /\
+  abi_decode_source_opcode opc /\ run_inst_seq (emitted_insts st st') s = OK t ==>
+  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >> drule_all abi_decode_bytes_position_shape >> strip_tac >>
+  irule abi_decode_nonallocating_sequence_frame >>
+  qexists_tac `emitted_insts st st'` >> simp[] >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED
