@@ -89,6 +89,13 @@ Proof
   ci_mono_chain_tac ci_mono_grows_rws
 QED
 
+Theorem ci_mono_compile_return_unlock:
+  !cenv sa. ci_mono sa (SND (compile_return_unlock cenv sa))
+Proof
+  rpt gen_tac >> simp[compile_return_unlock_def, pairTheory.ELIM_UNCURRY] >>
+  IF_CASES_TAC >> simp[ci_mono_comp_return, ci_mono_context_helpers]
+QED
+
 Theorem ci_mono_compile_dynarray_append:
   !cenv b v ws es dt st cap p lo so sa.
     ci_mono sa
@@ -218,7 +225,8 @@ Proof
   simp[compile_internal_return_def, compile_internal_return_from_env_def,
        compile_external_return_def, compile_tuple_unpack_def] >>
   ci_mono_chain_tac
-    (ci_mono_list_helpers :: ci_mono_stmt_helpers :: ci_mono_stmt_rws)
+    (ci_mono_compile_return_unlock :: ci_mono_list_helpers ::
+     ci_mono_stmt_helpers :: ci_mono_stmt_rws)
 QED
 
 (* ===== compile_stmt ===== *)
@@ -228,7 +236,8 @@ QED
 val stmt_ci_tac =
   let val chain =
         ci_mono_chain_tac
-          (ci_mono_return_helpers :: ci_mono_list_helpers ::
+          (ci_mono_return_helpers :: ci_mono_compile_return_unlock ::
+           ci_mono_list_helpers ::
            ci_mono_stmt_helpers :: ci_mono_compile_get_target_ptr ::
            ci_mono_stmt_rws)
   in
