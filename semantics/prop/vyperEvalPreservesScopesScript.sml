@@ -1416,11 +1416,13 @@ Proof
   >- (strip_tac >> irule preserves_tv_eq >>
       metis_tac[append_storage_place_scopes_immutables]) >>
   simp[append_place_def, bind_def, lift_sum_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, ignore_bind_def, lift_sum_def, return_def, raise_def]) >>
-  rpt strip_tac >>
+  simp[AllCaseEqs()] >> rpt strip_tac >>
   imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
-  gvs[] >> metis_tac[write_place_preserves_tv]
+  gvs[bind_def, ignore_bind_def, lift_sum_def, return_def, raise_def,
+      AllCaseEqs()] >>
+  Cases_on `append_element tv old v` >>
+  gvs[return_def, raise_def] >>
+  metis_tac[write_place_preserves_tv, preserves_tv_eq]
 QED
 
 Theorem pop_place_preserves_tv:
