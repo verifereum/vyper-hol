@@ -5722,3 +5722,220 @@ Proof
      metis_tac[]) >>
   gvs[Abbr `desired`, MAP_APPEND, APPEND_ASSOC, Once (GSYM EL_def)]
 QED
+
+Theorem restore_safety_map_cong[local]:
+  !offsets ps qs initial_fmp lo.
+    ps.ps_spilled = qs.ps_spilled ==>
+    (prefix_spill_wf initial_fmp lo (MAP SORestore offsets) ps <=>
+     prefix_spill_wf initial_fmp lo (MAP SORestore offsets) qs)
+Proof
+  Induct >> simp[prefix_spill_wf_def, spill_op_wf_def] >>
+  rpt strip_tac >> AP_TERM_TAC >> first_x_assum irule >>
+  simp[apply_prefix_op_def]
+QED
+
+Theorem restore_swap_safety_projection[local]:
+  !offsets ps initial_fmp lo.
+    prefix_spill_wf initial_fmp lo
+      (FLAT (MAP (\off. [SORestore off; SOSwap 1]) offsets)) ps ==>
+    prefix_spill_wf initial_fmp lo (MAP SORestore offsets) ps
+Proof
+  Induct >> simp[prefix_spill_wf_def] >> rpt strip_tac >>
+  first_x_assum drule >>
+  match_mp_tac (iffLR restore_safety_map_cong) >>
+  simp[apply_prefix_op_def, apply_simple_op_def]
+QED
+
+Theorem safe_spill_restore_provenance[local]:
+  !items offsets ros ps bs initial_fmp lo.
+    ps.ps_stack = bs ++ REVERSE items /\
+    LENGTH offsets = LENGTH items /\ PERM ros offsets /\
+    (!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
+                FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
+                a + 32 <= b \/ b + 32 <= a) /\
+    prefix_spill_wf initial_fmp lo (MAP SOSpill offsets) ps /\
+    prefix_spill_wf initial_fmp lo (MAP SORestore ros)
+      (apply_prefix_ops initial_fmp lo (MAP SOSpill offsets) ps) ==>
+    ALL_DISTINCT items /\
+    (!i. i < LENGTH items ==>
+      FLOOKUP (apply_prefix_ops initial_fmp lo (MAP SOSpill offsets) ps).ps_spilled
+        (EL i items) = SOME (EL i offsets))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `mid = apply_prefix_ops initial_fmp lo (MAP SOSpill offsets) ps` >>
+  `!x a y b. FLOOKUP mid.ps_spilled x = SOME a /\
+              FLOOKUP mid.ps_spilled y = SOME b /\ x <> y ==>
+              a + 32 <= b \/ b + 32 <= a` by
+    (simp[Abbr `mid`] >> match_mp_tac safe_prefix_spilled_separated >> metis_tac[]) >>
+  `ALL_DISTINCT ros` by metis_tac[safe_restore_offsets_distinct] >>
+  `ALL_DISTINCT offsets` by metis_tac[ALL_DISTINCT_PERM] >>
+  `!off. MEM off offsets ==> ?x. FLOOKUP mid.ps_spilled x = SOME off` by
+    (rpt strip_tac >> irule prefix_spill_wf_map_restore_initial_lookup >>
+     qexistsl [`initial_fmp`, `lo`, `ros`] >> metis_tac[PERM_MEM_EQ]) >>
+  `!i. i < LENGTH items ==>
+    FLOOKUP mid.ps_spilled (EL i items) = SOME (EL i offsets)` by
+    (simp[Abbr `mid`] >> match_mp_tac safe_spill_trace_provenance >>
+     qexists `bs` >> metis_tac[]) >>
+  metis_tac[indexed_spill_provenance_distinct]
+QED
+
+Theorem dup_restore_stack_from_provenance[local]:
+  !items offsets lo ps stem d.
+    0 < LENGTH items /\ LENGTH offsets = LENGTH items /\
+    ALL_DISTINCT items /\ ps.ps_stack = stem ++ [d] /\
+    (!i. i < LENGTH items ==>
+      FLOOKUP ps.ps_spilled (EL i (REVERSE items)) = SOME (EL i offsets)) /\
+    (!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
+                FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
+                a + 32 <= b \/ b + 32 <= a) ==>
+    let k = LENGTH offsets;
+        idxs = if k <= 16 then GENLIST (\i. k - 2 - i) (k - 1) ++ [k - 1]
+               else GENLIST (\i. k - 1 - i) k;
+        ops = FLAT (MAP (\idx. SORestore (EL idx offsets) ::
+                         (if k <= 16 then [] else [SOSwap 1])) idxs) ++
+                         (if k <= 16 then [SOSwap k] else []) in
+    (apply_prefix_ops initial_fmp lo ops ps).ps_stack = stem ++ items ++ [d]
+Proof
+  rpt gen_tac >> strip_tac >> simp[LET_THM] >>
+  Cases_on `LENGTH offsets <= 16`
+  >- (Cases_on `items` >- gvs[] >>
+      qabbrev_tac `idxs = GENLIST (\i. LENGTH offsets - 2 - i)
+        (LENGTH offsets - 1) ++ [LENGTH offsets - 1]` >>
+      `LENGTH idxs = LENGTH offsets` by (simp[Abbr `idxs`] >> decide_tac) >>
+      `EVERY (\i. i < LENGTH offsets) idxs` by
+        (simp[Abbr `idxs`, EVERY_APPEND, EVERY_GENLIST] >> decide_tac) >>
+      `MAP (\i. EL i (REVERSE (h::t))) idxs = t ++ [h]` by
+        (qspecl_then [`h`, `t`] mp_tac dup_restore_small_values >>
+         simp[Abbr `idxs`]) >>
+      `!j. j < LENGTH offsets ==>
+        FLOOKUP ps.ps_spilled (EL j (t ++ [h])) =
+          SOME (EL j (MAP (\i. EL i offsets) idxs))` by
+        (rpt strip_tac >> qpat_x_assum `MAP _ idxs = _` (SUBST1_TAC o SYM) >>
+         `j < LENGTH idxs` by decide_tac >>
+         simp[EL_MAP] >> gvs[EVERY_EL] >> metis_tac[]) >>
+      mp_tac (Q.SPECL [`t`, `h`, `MAP (\i. EL i offsets) idxs`,
+        `lo`, `ps`, `stem`, `d`] apply_restore_swapk_stack_spilled) >>
+      (impl_tac >- (simp[] >> metis_tac[])) >>
+      gvs[Abbr `idxs`, flat_map_singleton, MAP_MAP_o, combinTheory.o_DEF, ADD1]) >>
+  `GENLIST (\i. LENGTH offsets - 1 - i) (LENGTH offsets) =
+     REVERSE (GENLIST I (LENGTH offsets))` by
+    simp[REVERSE_GENLIST, PRE_SUB1, combinTheory.I_THM] >>
+  simp[] >>
+  `MAP (\i. EL i offsets) (REVERSE (GENLIST I (LENGTH offsets))) = REVERSE offsets` by
+    simp[map_el_reverse_indices] >>
+  `!j. j < LENGTH items ==>
+    FLOOKUP ps.ps_spilled (EL j items) = SOME (EL j (REVERSE offsets))` by
+    (rpt strip_tac >>
+     first_x_assum (qspec_then `LENGTH items - 1 - j` mp_tac) >>
+     simp[EL_REVERSE] >>
+     `LENGTH items - 1 - j < LENGTH items /\
+      LENGTH items - (LENGTH items - j) = j /\
+      PRE (j + 1) = j /\
+      PRE (LENGTH items - j) = LENGTH items - (j + 1)` by decide_tac >> simp[]) >>
+  `FLAT (MAP (\i. [SORestore (EL i offsets); SOSwap 1])
+      (REVERSE (GENLIST I (LENGTH offsets)))) =
+   FLAT (MAP (\off. [SORestore off; SOSwap 1]) (REVERSE offsets))` by
+    (qpat_x_assum `MAP _ _ = REVERSE offsets` (SUBST1_TAC o SYM) >>
+     simp[MAP_MAP_o, combinTheory.o_DEF]) >>
+  simp[] >>
+  mp_tac (Q.SPECL [`items`, `REVERSE offsets`, `lo`, `ps`, `stem`, `d`]
+    apply_restore_swap1_stack_spilled) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> gvs[]
+QED
+
+Theorem dup_restore_safety_projection[local]:
+  !k idxs offsets ps initial_fmp lo.
+    prefix_spill_wf initial_fmp lo
+      (FLAT (MAP (\idx. SORestore (EL idx offsets) ::
+        (if k <= 16 then [] else [SOSwap 1])) idxs) ++
+       (if k <= 16 then [SOSwap k] else [])) ps ==>
+    prefix_spill_wf initial_fmp lo
+      (MAP SORestore (MAP (\i. EL i offsets) idxs)) ps
+Proof
+  rpt gen_tac >> Cases_on `k <= 16` >>
+  simp[flat_map_singleton, MAP_MAP_o, combinTheory.o_DEF, prefix_spill_wf_append] >>
+  strip_tac >>
+  qspecl_then [`MAP (\i. EL i offsets) idxs`, `ps`, `initial_fmp`, `lo`]
+    mp_tac restore_swap_safety_projection >>
+  simp[MAP_MAP_o, combinTheory.o_DEF]
+QED
+
+Theorem do_dup_safe_stack_replay:
+  !d ps lo.
+    d < LENGTH ps.ps_stack /\
+    (!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
+                FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
+                a + 32 <= b \/ b + 32 <= a) /\
+    prefix_spill_wf initial_fmp lo (FST (do_dup d ps)) ps ==>
+    (apply_prefix_ops initial_fmp lo (FST (do_dup d ps)) ps).ps_stack =
+      (SND (do_dup d ps)).ps_stack
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `d <= 15`
+  >- metis_tac[native_dup_safe_replay] >>
+  `d > 15` by decide_tac >>
+  qabbrev_tac `k = d - 15` >>
+  qabbrev_tac `items = top_n k ps.ps_stack` >>
+  qabbrev_tac `offsets = FST (spill_alloc_n [] ps.ps_alloc (REVERSE items))` >>
+  qabbrev_tac `idxs = if k <= 16 then
+    GENLIST (\i. k - 2 - i) (k - 1) ++ [k - 1]
+    else GENLIST (\i. k - 1 - i) k` >>
+  qabbrev_tac `ros = MAP (\i. EL i offsets) idxs` >>
+  qabbrev_tac `ops = FLAT (MAP (\idx. SORestore (EL idx offsets) ::
+    (if k <= 16 then [] else [SOSwap 1])) idxs) ++
+    (if k <= 16 then [SOSwap k] else [])` >>
+  `FST (do_dup d ps) = MAP SOSpill offsets ++ [SODup 16] ++ ops /\
+   (SND (do_dup d ps)).ps_stack = stack_dup d ps.ps_stack` by
+    (drule_all do_dup_big_decompose >>
+     simp[LET_THM, Abbr `k`, Abbr `items`, Abbr `offsets`, Abbr `idxs`, Abbr `ops`, APPEND_ASSOC]) >>
+  qabbrev_tac `stem = TAKE (LENGTH ps.ps_stack - k) ps.ps_stack` >>
+  `LENGTH items = k /\ 0 < k /\ k < LENGTH ps.ps_stack` by
+    (simp[Abbr `items`, top_n_def, LENGTH_TAKE, Abbr `k`] >> decide_tac) >>
+  `LENGTH offsets = k` by simp[Abbr `offsets`, spill_alloc_n_offsets_length] >>
+  `ps.ps_stack = stem ++ items` by
+    (simp[Abbr `stem`, Abbr `items`] >> sym_tac >> irule top_n_suffix >> simp[]) >>
+  qabbrev_tac `mid = apply_prefix_ops initial_fmp lo (MAP SOSpill offsets) ps` >>
+  qabbrev_tac `dup = apply_prefix_op initial_fmp lo (SODup 16) mid` >>
+  `prefix_spill_wf initial_fmp lo (MAP SOSpill offsets) ps /\
+   prefix_spill_wf initial_fmp lo ops dup` by
+    gvs[prefix_spill_wf_append, prefix_spill_wf_def, apply_prefix_ops_append,
+        apply_prefix_ops_def, Abbr `mid`, Abbr `dup`] >>
+  `dup.ps_spilled = mid.ps_spilled` by
+    simp[Abbr `dup`, apply_prefix_op_def, apply_simple_op_def] >>
+  `prefix_spill_wf initial_fmp lo (MAP SORestore ros) mid` by
+    (irule (iffLR restore_safety_map_cong) >> qexists `dup` >> simp[] >>
+     simp[Abbr `ros`] >> irule dup_restore_safety_projection >> qexists `k` >>
+     gvs[Abbr `ops`]) >>
+  `GENLIST (\i. EL i offsets) k = offsets` by metis_tac[GENLIST_ID] >>
+  `PERM ros offsets` by
+    (qspec_then `k` mp_tac dup_restore_indices_perm >> simp[] >>
+     disch_then (mp_tac o Q.ISPEC `\i. EL i (offsets:num list)` o MATCH_MP PERM_MAP) >>
+     simp[Abbr `ros`, Abbr `idxs`, MAP_GENLIST, combinTheory.o_DEF, GENLIST_ID]) >>
+  `ALL_DISTINCT (REVERSE items) /\
+   (!i. i < LENGTH (REVERSE items) ==> FLOOKUP mid.ps_spilled (EL i (REVERSE items)) = SOME (EL i offsets))` by
+    (qunabbrev_tac `mid` >> match_mp_tac safe_spill_restore_provenance >>
+     qexistsl [`ros`, `stem`] >> simp[] >> metis_tac[]) >>
+  `!x a y b. FLOOKUP dup.ps_spilled x = SOME a /\
+              FLOOKUP dup.ps_spilled y = SOME b /\ x <> y ==>
+              a + 32 <= b \/ b + 32 <= a` by
+    (simp[] >> simp[Abbr `mid`] >> match_mp_tac safe_prefix_spilled_separated >> metis_tac[]) >>
+  `mid.ps_stack = stem` by
+    simp[Abbr `mid`, apply_spill_ops_stack, LENGTH_APPEND, TAKE_APPEND] >>
+  `dup.ps_stack = stem ++ [stack_peek 15 stem]` by
+    simp[Abbr `dup`, apply_prefix_op_def, apply_simple_op_def,
+         stack_dup_def, stack_push_def, stack_peek_def, SNOC_APPEND] >>
+  `stack_peek 15 stem = stack_peek d ps.ps_stack` by
+    (`15 < LENGTH stem /\ k + LENGTH stem - (d + 1) = LENGTH stem - 16 /\
+      k + LENGTH stem < d + (LENGTH stem + 1)` by
+       (gvs[Abbr `stem`, LENGTH_TAKE, Abbr `k`] >> decide_tac) >>
+     simp[stack_peek_def] >>
+     qpat_x_assum `ps.ps_stack = stem ++ items` SUBST1_TAC >>
+     simp[EL_APPEND_EQN]) >>
+  ` (apply_prefix_ops initial_fmp lo ops dup).ps_stack =
+      stem ++ items ++ [stack_peek 15 stem]` by
+    (mp_tac (Q.SPECL [`items`, `offsets`, `lo`, `dup`, `stem`, `stack_peek 15 stem`]
+      dup_restore_stack_from_provenance) >>
+     (impl_tac >- (gvs[ALL_DISTINCT_REVERSE] >> metis_tac[])) >>
+     simp[LET_THM, Abbr `ops`, Abbr `idxs`]) >>
+  simp[apply_prefix_ops_append, apply_prefix_ops_def] >>
+  gvs[stack_dup_def, stack_push_def, SNOC_APPEND]
+QED
