@@ -193,7 +193,7 @@ Theorem abi_guard_emit_frame[local]:
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   gvs[run_inst_seq_def] >>
-  gvs[Once step_inst_base_def, mk_inst_def] >>
+  gvs[step_inst_base_opcode_eqs, mk_inst_def] >>
   gvs[exec_pure2_def, exec_pure1_def, AllCaseEqs(), update_var_def]
 QED
 
