@@ -24,11 +24,11 @@
 Theory entryHaltMem
 Ancestors
   list fragExec fragExecMem memSafeRun allocaFootprint loweringHalt
-  entryArgPtrs entryDecodePlanProps abiDecodeStaticProps
+  entryArgPtrs entryDecodePlanProps entryDecodeStaticProps abiDecodeStaticProps
   compileEnv stmtLowering moduleLowering emitHelper abiBuiltinAllocation
   unitTransformDefs venomState venomInst venomExecSemantics venomMemDefs
   words instMemFrontier venomExecProofs emitHelperProps instIdxIndep
-  abiEncoder exprLoweringProps entryDecodeProps
+  abiEncoder exprLoweringProps entryDecodeProps retAbiPlanProps compileVyper
 
 (* ===== STOP ===== *)
 
@@ -492,6 +492,74 @@ Resume decode_static_buf_mem_ok[tail]:
 QED
 Finalise decode_static_buf_mem_ok
 
+(* The head-pointer ADD of an argument's decode touches no memory, and
+   keeps the frontier and every defined operand. *)
+Theorem decode_head_ptr_mem_ok[local]:
+  !off st src st1 st' s.
+    emit_op ADD [Lit 4w; Lit (n2w (off - 4))] st = (src, st1) /\
+    inst_extends st1 st' /\ 4 <= off /\ fresh_vars_wrt st s /\
+    (!t. eval_operand src t = SOME (n2w off) /\ fresh_vars_wrt st1 t /\
+         t.vs_alloca_next = s.vs_alloca_next /\
+         (!op v. eval_operand op s = SOME v ==> eval_operand op t = SOME v) ==>
+         run_inst_seq_mem_ok (emitted_insts st1 st') t) ==>
+    run_inst_seq_mem_ok (emitted_insts st st') s
+Proof
+  rpt strip_tac >>
+  `inst_extends st st1` by metis_tac[inst_extends_emit_op] >>
+  `emitted_insts st st' = emitted_insts st st1 ++ emitted_insts st1 st'` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  pop_assum SUBST1_TAC >>
+  match_mp_tac run_inst_seq_mem_ok_append >> conj_tac
+  >- (drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+      simp[run_inst_seq_mem_ok_last] >> irule below_frontier_no_ranges >>
+      simp[mk_inst_def]) >>
+  rpt strip_tac >> drule_all decode_head_ptr_run >> strip_tac >> gvs[] >>
+  first_x_assum irule >> simp[] >>
+  qpat_x_assum `vars_pc_only s _` mp_tac >>
+  rw[moduleLoweringPropsTheory.vars_pc_only_def] >>
+  pop_assum (SUBST1_TAC o SYM) >> simp[]
+QED
+
+Theorem compile_abi_decode_static_extends[local]:
+  !src dst cl st st'.
+    compile_abi_decode_static src dst CALLDATALOAD
+      (\v. compile_abi_clamp_basetype v cl) st = ((), st') ==>
+    inst_extends st st'
+Proof
+  simp[compile_abi_decode_static_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt gen_tac >> strip_tac >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `emit_op CALLDATALOAD [src] st = (v, st1)` >>
+  rename1 `compile_abi_clamp_basetype v cl st1 = (_, st2)` >>
+  `compile_abi_clamp_basetype v cl st1 = ((), st2)` by
+    metis_tac[oneTheory.one] >>
+  `inst_extends st st1` by metis_tac[inst_extends_emit_op] >>
+  `inst_extends st1 st2` by (drule compile_abi_clamp_structure >> simp[]) >>
+  `inst_extends st2 st'` by metis_tac[inst_extends_emit_void] >>
+  metis_tac[inst_extends_trans]
+QED
+
+(* A primitive argument's decode: the head-pointer ADD, then the clamped
+   CALLDATALOAD into the argument's slot. *)
+Theorem compile_decode_word_arg_phases[local]:
+  !cenv name dyn sz info off hi st st' loc dst.
+    compile_decode_args cenv [(name, T, dyn, sz, info)] off
+      CALLDATALOAD hi 4 st = ((), st') /\
+    FLOOKUP cenv.ce_vars name = SOME loc /\
+    var_location_decode_operand loc = SOME dst ==>
+    ?src st1.
+      emit_op ADD [Lit 4w; Lit (n2w (off - 4))] st = (src, st1) /\
+      compile_abi_decode_static src dst CALLDATALOAD
+        (\v. compile_abi_clamp_basetype v
+               (case info of DecPrimWord c => c | _ => NoClamp)) st1 =
+        ((), st')
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `compile_decode_args _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_decode_args_def, compile_abi_decode_static_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[oneTheory.one]
+QED
+
 (* entry_decode_arg_run's premises, with the argument's buffer [p, p + its
    memory size) below the frontier: every instruction the decode runs is
    below the frontier where it runs. *)
@@ -516,5 +584,43 @@ Theorem entry_decode_arg_mem_ok:
     w2n p + type_memory_size tv <= s0.vs_alloca_next ==>
     run_inst_seq_mem_ok (emitted_insts st st') s0
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `4 <= off` by simp[] >>
+  qpat_x_assum `off = _` kall_tac >>
+  Cases_on `EL i args` >> rename1 `EL i args = (name, ty)` >>
+  Cases_on `is_word_type ty` >> fs[build_positional_arg_def]
+  >- (
+      drule_all compile_decode_word_arg_phases >> strip_tac >>
+      `type_memory_size tv = 32` by metis_tac[word_type_memory_size] >>
+      drule compile_abi_decode_static_extends >> strip_tac >>
+      irule decode_head_ptr_mem_ok >> simp[] >>
+      qexistsl [`off`, `src`, `st1`] >> simp[] >>
+      rpt strip_tac >>
+      `eval_operand dst t = SOME p` by metis_tac[] >>
+      irule compile_abi_decode_static_mem_ok >> simp[] >>
+      qexistsl [`case type_to_abi_dec_info cenv0.ce_struct_fields cenv0 ty of
+                   DecPrimWord c => c | _ => NoClamp`, `dst`, `p`, `src`] >>
+      simp[]) >>
+  fs[] >>
+  `~is_abi_dynamic cenv0.ce_struct_fields ty` by
+    (fs[dec_cenv_agrees_def] >>
+     `tenv SUBMAP tenv` by simp[] >>
+     drule_all abi_elem_props >> simp[]) >>
+  `abi_dec_plan tenv ty
+     (type_to_abi_dec_info cenv0.ce_struct_fields cenv0 ty)` by
+    (irule type_to_abi_dec_info_plan >> fs[dec_cenv_agrees_def] >>
+     qexists_tac `tenv` >> fs[dec_cenv_agrees_def]) >>
+  `static_dec (type_to_abi_dec_info cenv0.ce_struct_fields cenv0 ty)
+     (type_memory_size tv)` by metis_tac[cj 1 abi_dec_plan_static] >>
+  fs[] >>
+  drule_all compile_decode_static_arg_phases >> strip_tac >>
+  `dec_straight st1 st'` by
+    (drule (cj 1 static_dec_straight) >> disch_then drule >> simp[]) >>
+  irule decode_head_ptr_mem_ok >> simp[] >>
+  qexistsl [`off`, `src`, `st1`] >> fs[dec_straight_def] >>
+  rpt strip_tac >>
+  `eval_operand dst t = SOME p` by metis_tac[] >>
+  `w2n (n2w off : bytes32) = off` by (simp[] >> decide_tac) >>
+  drule (cj 1 decode_static_buf_mem_ok) >> disch_then irule >> simp[] >>
+  qexistsl [`n2w off`, `dst`, `p`, `src`] >> simp[]
 QED
