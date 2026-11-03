@@ -148,9 +148,7 @@ Theorem call_external_transaction_pending_deletions:
     am'.pending_deletions = []
 Proof
   rw[call_external_transaction_def] >> Cases_on `r`
-  >- (qpat_x_assum `call_external _ _ _ _ = _` mp_tac >>
-      simp[call_external_def] >> rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
-      rw[] >> simp[])
+  >- gvs[call_external_def, AllCaseEqs()]
   >> drule call_external_error_rollback >> simp[clear_machine_logs_def]
 QED
 

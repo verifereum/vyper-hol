@@ -263,3 +263,16 @@ Termination
   | INR (_,ts,_) => list_size assignment_target_size ts)` >>
   simp[assignment_target_size_def, list_size_def]
 End
+
+Theorem stmt_exprs_ok_from_traversal_bounds:
+  ~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss /\
+  ~supported_stmts_expr_exists (\e. ~alloc_limits_expr cenv e) ss /\
+  alloc_limits_stmts cenv ss ==>
+  EVERY (stmt_exprs_ok cenv) ss
+Proof
+  `!e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e) =
+        (~byte_widths_expr e \/ ~alloc_limits_expr cenv e)` by metis_tac[] >>
+  simp[EVERY_MEM, stmt_exprs_ok_def, supported_stmt_expr_exists_disj,
+       supported_stmts_expr_exists_list, EXISTS_MEM] >>
+  Induct_on `ss` >> simp[allocLimitsTheory.alloc_limits_stmt_def] >> metis_tac[]
+QED
