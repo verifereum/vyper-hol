@@ -156,6 +156,13 @@ Theorem exec_pure3_error_transfer[local]:
     (!op. eval_operand op s1 = NONE ==> eval_operand op s2 = NONE) /\
     exec_pure3 f inst s1 = Error err ==>
     ?err'. exec_pure3 f inst s2 = Error err'
+Theorem step_inst_base_error_transfer[local]:
+  !fn roots remap inst s1 s2 err.
+    alloca_remap_rel fn roots remap s1 s2 /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_ext_call_op inst.inst_opcode /\
+    step_inst_base inst s1 = Error err ==>
+    ?err'. step_inst_base inst s2 = Error err'
 ```
 
 Do not modify this statement. Prove it as-is, or produce a counterexample.
@@ -170,6 +177,7 @@ Do not modify this statement. Prove it as-is, or produce a counterexample.
 - Repair the encountered inst_ids_fresh_after_step proof without changing its statement.
 - Repair the encountered exec_alloca_preserves_remap[sizes] and remap_preserved_mem_ops[mstore8] proof resumes without changing their statements or other resumes.
 - Repair the encountered exec_pure3_error_transfer proof without changing its statement.
+- Repair only the encountered SHA3 resume of step_inst_base_error_transfer, keeping its full statement and other resumes unchanged.
 - Build allocaRemapProofsTheory at the default tactic limit.
 - Preserve all other existing proofs, definitions and statements.
 
@@ -183,7 +191,7 @@ A forced default replay at eaf96a2fa timed out at the classification gvs after o
 
 ## Domain Constraints
 
-- The prior six repairs and the allocation-size resume now pass incrementally at 5613bd390. Preserve all these completed repairs and helpers. Edit only inst_ids_fresh_after_step, remap_preserved_mem_ops[mstore8], exec_pure3_error_transfer, and necessary local helper theorems in venom/passes/shared/proofs/allocaRemapProofsScript.sml. Preserve the shared exec_err_tac and all other error-transfer proofs. A needed declarative Ancestors entry is allowed if it introduces no dependency cycle.
+- The prior six repairs, allocation-size resume and pure3 error transfer now pass incrementally at 9e4fb772a. Preserve all these completed repairs and helpers. Edit only inst_ids_fresh_after_step, remap_preserved_mem_ops[mstore8], step_inst_base_error_transfer[SHA3], and necessary local helper theorems in venom/passes/shared/proofs/allocaRemapProofsScript.sml. Preserve exec_pure3_error_transfer, shared exec_err_tac/error_inline_tac, and every other error-transfer proof/resume. A needed declarative Ancestors entry is allowed if it introduces no dependency cycle.
 - All existing definitions and statements, including local declarations, are frozen. No new definitions, axioms, admissions, strengthened premises, opcode exclusions or supported-subset changes.
 - Preserve all completed gas, CFG and DRET proofs.
 - Default 2.5-second tactic limit; no timeout override and no TRY/ORELSE/FIRST around search.
@@ -225,3 +233,5 @@ The next actual default-replay failure is the ALLOCA branch of inst_ids_fresh_af
 Default replay now encounters two earlier actual prerequisite timeouts before reaching the authorized freshness proof: exec_alloca_preserves_remap[sizes] at its broad fs[] (one unchanged replay passed), and remap_preserved_mem_ops[mstore8] at full dispatcher expansion. Independent read-only audit of both complete exact theorem statements and these real obligations found PROVABLE from existing allocation-map correspondence, fresh-site/no-wrap/zero-region facts, pointer confinement, one-byte bounds and residual-frame transport. The scope now permits only these two resumes plus the already authorized freshness proof/local helpers; all completed repairs, other resumes, statements and definitions remain frozen. No new premise, invariant, opcode exclusion or supported-subset restriction is authorized.
 
 Incremental replay at 5613bd390 bounded the allocation-size resume but stopped earlier than the pending MSTORE8/freshness obligations in exec_pure3_error_transfer: the shared exec_err_tac expansion exceeds the default tactic limit. A fresh independent audit of the exact complete statement and exec_pure3/eval_operand definitions found PROVABLE: only arity errors or failed operand evaluation can produce Error; the existing NONE-transfer premise suffices. No GAS reading or state-changing error branch is involved. This amendment permits only that additional proof and necessary local helpers. Keep the existing generic tactic and other error-transfer proofs frozen. No statement, definition or premise change is authorized.
+
+Default replay at 9e4fb772a passes the pure3 repair and next stops in step_inst_base_error_transfer[SHA3] at error_inline_tac. Independent audit of the complete theorem against every admitted opcode/error producer found PROVABLE: structural errors and undefined operands transfer from the existing relation; PARAM/FMP_PARAM bounds use equal parameters; SHA3 has no memory-bound Error branch. This extension permits only the SHA3 resume and necessary local helpers, not shared tactics or other resumes. Preserve all previous repairs and every schema/definition. No additional assumption is authorized.
