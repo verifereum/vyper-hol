@@ -112,11 +112,14 @@ proofs may be reusable. Do not restore old executable definitions.
 - No TRY/ORELSE around proof search. Do not raise/remove the tactic timeout.
 - Do not work on full compile_abi_decode_case/compile_abi_encode_case, checker
   domain, encoder allocation migration, target/place or val_footprint.
-- Narrow prerequisite exception: a proof-only repair of
-  semantics/prop/vyperScopePreservationScript.sml:append_place_scopes_dom is
-  permitted after the reproduced default-timeout failures. Keep its exact
-  statement, source semantics and default tactic limit unchanged. This does
-  not authorize target/place case proofs or other changes in that file.
+- The target/place exclusion concerns implementing those expression cases or
+  changing their contracts. It does not exclude necessary proof-only repairs
+  of existing proven ancestors that block this decoder build. After an
+  untouched step fails, rerun that one theory once unchanged; if it still
+  fails, repair only the failing proof body, retaining the exact statement,
+  definitions, semantics and default tactic limit. This covers the observed
+  append_place_scopes_dom and extend_place_state failures. No broader cleanup,
+  new target/place case proof, admission or contract change is authorized.
 - Search before adding helpers; reuse existing results rather than duplicate
   them, including local copies. Export or move a shared helper when needed.
 - Proof helpers describing emitted code may change with that code. Retain
