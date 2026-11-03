@@ -979,3 +979,86 @@ Proof
      Cases_on `w` >> simp[wordsTheory.word_add_n2w, wordsTheory.w2n_n2w]) >>
   gvs[]
 QED
+
+Theorem stride_interval_index_unique[local]:
+  !a i k sz q.
+    a + i * sz <= q /\ q < a + i * sz + sz /\
+    a + k * sz <= q /\ q < a + k * sz + sz ==> i = k
+Proof
+  rpt strip_tac >>
+  Cases_on `i < k`
+  >- (`SUC i * sz <= k * sz` by simp[] >>
+      qpat_x_assum `SUC _ * _ <= _` mp_tac >>
+      pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  Cases_on `k < i`
+  >- (`SUC k * sz <= i * sz` by simp[] >>
+      qpat_x_assum `SUC _ * _ <= _` mp_tac >>
+      pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  decide_tac
+QED
+
+Theorem dead_bytes_array_elem:
+  dead_bytes st a (ArrayTV evt bd) q b /\
+  j < (case bd of Fixed n => n
+       | Dynamic n => MIN n (w2n (lookup_storage (n2w a) st))) /\
+  a + (case bd of Fixed n => 0 | Dynamic n => 1) +
+    j * type_slot_size evt <= q /\
+  q < a + (case bd of Fixed n => 0 | Dynamic n => 1) +
+    j * type_slot_size evt + type_slot_size evt ==>
+  dead_bytes st
+    (a + (case bd of Fixed n => 0 | Dynamic n => 1) +
+     j * type_slot_size evt) evt q b
+Proof
+  Cases_on `bd` >> simp[Once dead_bytes_def] >> rpt strip_tac
+  >- (rename1 `i < n` >>
+      drule (cj 1 accountsRelPropsTheory.dead_bytes_range) >> strip_tac >>
+      `i = j` by (irule stride_interval_index_unique >>
+                   qexistsl [`a`, `q`, `type_slot_size evt`] >> simp[]) >>
+      gvs[]) >>
+  rename1 `i < n` >>
+  qpat_x_assum `if _ then _ else _` mp_tac >> IF_CASES_TAC >> strip_tac
+  >- (drule (cj 1 accountsRelPropsTheory.dead_bytes_range) >> strip_tac >>
+      `i = j` by (irule stride_interval_index_unique >>
+                   qexistsl [`a + 1`, `q`, `type_slot_size evt`] >> simp[]) >>
+      gvs[]) >>
+  `i = j` by (irule stride_interval_index_unique >>
+               qexistsl [`a + 1`, `q`, `type_slot_size evt`] >>
+               fs[arithmeticTheory.RIGHT_ADD_DISTRIB]) >>
+  gvs[]
+QED
+
+Theorem storage_read_live_array_elem:
+  storage_read_live cx tr st w (ArrayTV evt bd) /\
+  j < (case bd of Fixed n => n
+       | Dynamic n => MIN n (w2n (lookup_storage w st))) ==>
+  storage_read_live cx tr st
+    (w + n2w ((case bd of Fixed n => 0 | Dynamic n => 1) +
+              j * type_slot_size evt)) evt
+Proof
+  strip_tac >>
+  qmatch_goalsub_abbrev_tac `storage_read_live cx tr st (w + n2w off) evt` >>
+  `off + type_slot_size evt <= type_slot_size (ArrayTV evt bd)` by
+    (Cases_on `bd` >> gvs[Abbr `off`, vyperValueTheory.type_slot_size_def] >>
+     `SUC j * type_slot_size evt <= n * type_slot_size evt` by simp[] >>
+     qpat_x_assum `SUC _ * _ <= _` mp_tac >>
+     pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  Cases_on `type_slot_size evt = 0`
+  >- (simp[storage_read_live_def] >> rpt strip_tac >>
+      qspec_then `w + n2w off` mp_tac wordsTheory.w2n_lt >> decide_tac) >>
+  qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+  rewrite_tac[storage_read_live_def] >> strip_tac >>
+  qx_gen_tac `slot` >> qx_gen_tac `byte` >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `w2n w + off < dimword (:256)` by decide_tac >>
+  `w2n (w + n2w off) = w2n w + off` by
+    (Cases_on `w` >> gvs[wordsTheory.word_add_n2w]) >>
+  simp[] >> strip_tac >>
+  `w2n w <= slot /\ slot < w2n w + type_slot_size (ArrayTV evt bd)` by
+    decide_tac >>
+  `dead_bytes st (w2n w) (ArrayTV evt bd) slot byte` by
+    (first_x_assum irule >> simp[]) >>
+  drule dead_bytes_array_elem >> disch_then (qspec_then `j` mp_tac) >>
+  SIMP_TAC bool_ss [Abbr `off`, wordsTheory.n2w_w2n,
+    AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  disch_then irule >> simp[]
+QED
