@@ -455,3 +455,77 @@ val () = List.app (fn th =>
   end) [body_scratch_alloc_operand, body_scratch_copy_state,
         body_scratch_prefix_run, body_scratch_prefix_shape,
         compile_scratch_prefix_body_frag_mem];
+
+Theorem annassign_memory_assign_body_frag_mem:
+  !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sa sb sw d R info bytes.
+    compile_assign_value cenv (Var p) LocMemory src F (SOME LocMemory)
+      ty ty info bytes sa = ((), sb) /\
+    (!x. src = Var x ==> not_fresh_at sa x) /\ not_fresh_at sa p /\
+    eval_operand src s = SOME sw /\ lookup_var p s = SOME w /\
+    ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tyv /\
+    value_has_type tyv v /\ val_wf tyv v /\
+    val_in_memory tyv v (w2n sw) s.vs_memory /\
+    type_memory_bytes cenv ty = type_memory_size tyv /\
+    type_memory_size tyv <= sz /\ type_memory_size tyv + 64 < dimword (:256) /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    not_local_ptr cenv es.scopes p /\ MEM inst (fn_insts func) /\
+    inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
+    local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
+    w2n sw + type_memory_size tyv <= s.vs_alloca_next /\
+    w2n w + type_memory_size tyv <= s.vs_alloca_next /\
+    alloca_history func s /\ return_buf_frame d cenv sa s ==>
+    frag_exec_mem ctx sa sb (\u. u = s)
+      (\t. stmt_state_rel ctx func cenv cx
+          (es with scopes :=
+            (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
+        alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+        return_buf_frame d cenv sb t /\
+        (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+        (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)) R
+Proof
+  rpt gen_tac >> strip_tac >> drule_all assign_memory_body_code >> strip_tac >>
+  `cs_extends sa sn` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sn func` by metis_tac[fn_has_code_split] >>
+  `val_footprint tyv v <= type_memory_bytes cenv ty` by
+    (drule val_footprint_le >> simp[]) >>
+  `type_memory_bytes cenv ty < dimword (:256)` by decide_tac >>
+  `w2n sw + type_memory_bytes cenv ty <= s.vs_alloca_next` by simp[] >>
+  drule_all compile_scratch_prefix_body_frag_mem >>
+  disch_then (qspec_then `R` mp_tac) >>
+  disch_then (mp_tac o MATCH_MP frag_exec_mem_then) >>
+  disch_then irule >> simp[] >> rpt strip_tac >>
+  `sa.cs_next_var <= sn.cs_next_var` by
+    (drule_all body_scratch_prefix_shape >> simp[]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sn x` by
+    metis_tac[not_fresh_at_mono] >>
+  `local_ptrs_reserved cenv sn` by
+    (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `!x. buf.buf_operand = Var x ==> not_fresh_at sn x` by
+    (drule body_scratch_alloc_operand >> strip_tac >>
+     drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >> strip_tac >>
+     drule buffer_copy_memory_shape >> strip_tac >>
+     qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+     simp[emit_op_def, fresh_var_def, fresh_id_def, emit_def, comp_bind_def,
+          comp_ignore_bind_def, comp_return_def] >> strip_tac >> gvs[not_fresh_at_def]) >>
+  `lookup_var p t = SOME w /\
+   FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
+   w2n w + type_memory_size tyv <= t.vs_alloca_next` by
+    (simp[] >> decide_tac) >>
+  `w2n w' + type_memory_size tyv <= t.vs_alloca_next` by decide_tac >>
+  `not_fresh_at sn p` by simp[] >>
+  drule_all annassign_memory_store_body_frag_mem >>
+  disch_then (qspecl_then [`a`, `R`] mp_tac) >>
+  disch_then (mp_tac o MATCH_MP frag_exec_mem_weaken) >>
+  disch_then irule >> simp[] >> rpt strip_tac
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_DECL_ASSIGN_MEMORY_AUDIT OK\n"
+     else raise Fail "body declaration assignment inherited admission"
+  end) [assign_memory_body_code, annassign_memory_assign_body_frag_mem];

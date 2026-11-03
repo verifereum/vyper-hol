@@ -357,7 +357,7 @@ Proof
   metis_tac[pairTheory.PAIR]
 QED
 
-Theorem assign_memory_body_code[local]:
+Theorem assign_memory_body_code:
   compile_assign_value ce dst LocMemory src F (SOME LocMemory)
     ann ann info bytes sa = ((),sb) /\ fn_has_code sa sb func ==>
   ?buf sm sn.
