@@ -573,8 +573,27 @@ Theorem eval_ext_call_no_control:
   eval_ext_call cx static skip_check sig opts vs st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-  PairCases_on `sig` >> Cases_on `vs` >>
+  PairCases_on `sig` >> Cases_on `vs`
+  >- simp[eval_ext_call_def, eval_ext_call_effects_def, raise_def, no_control_exc_def] >>
   simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >> strip_tac >>
+  ibind_step_tac
+  >- close_type_check >>
+  qpat_x_assum `type_check _ _ _ = _` kall_tac >>
+  bind_step_tac
+  >- close_lift_option_type >>
+  qpat_x_assum `lift_option_type _ _ _ = _` kall_tac >>
+  bind_step_tac
+  >- (rpt CALL_NO_CONTROL_STEP) >>
+  bind_step_tac
+  >- close_lift_option_type >>
+  qpat_x_assum `lift_option_type _ _ _ = _` kall_tac >>
+  qpat_x_assum `(if _ then _ else _) _ = _` kall_tac >>
+  bind_step_tac
+  >- (rpt CALL_NO_CONTROL_STEP) >>
+  ibind_step_tac
+  >- (rpt CALL_NO_CONTROL_STEP) >>
+  bind_step_tac
+  >- (rpt CALL_NO_CONTROL_STEP) >>
   rpt CALL_NO_CONTROL_STEP
 QED
 
