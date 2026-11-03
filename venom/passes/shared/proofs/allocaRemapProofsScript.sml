@@ -4331,7 +4331,22 @@ Resume step_inst_base_error_transfer[BUMP]:
   Cases_on `eval_operand size_op s2` >> simp[]
 QED
 Resume step_inst_base_error_transfer[CALLDATACOPY]:
-  error_inline_tac
+  Cases_on `inst.inst_operands` >- gvs[] >>
+  rename1 `inst.inst_operands = dst_op::ops` >>
+  Cases_on `ops` >- gvs[] >>
+  rename1 `inst.inst_operands = dst_op::src_op::ops2` >>
+  Cases_on `ops2` >- gvs[] >>
+  rename1 `inst.inst_operands = dst_op::src_op::size_op::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  Cases_on `eval_operand dst_op s1`
+  >- (first_x_assum drule >> simp[]) >>
+  Cases_on `eval_operand src_op s1`
+  >- (first_x_assum drule >>
+      Cases_on `eval_operand dst_op s2` >> simp[]) >>
+  Cases_on `eval_operand size_op s1` >> gvs[] >>
+  first_x_assum drule >>
+  Cases_on `eval_operand dst_op s2` >>
+  Cases_on `eval_operand src_op s2` >> simp[]
 QED
 Resume step_inst_base_error_transfer[CODECOPY]:
   error_inline_tac
