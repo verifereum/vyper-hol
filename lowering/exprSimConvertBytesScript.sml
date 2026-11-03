@@ -8,7 +8,7 @@ Ancestors
   fragExec freshWrites loweringSlice venomExecSemantics venomState
   words list integer_word valueCopyBytes abiDecoderString
 
-(* Exhaustive checker boundary for dynamic bytestring results. *)
+(* Dynamic bytestring results require a dynamic bytestring source. *)
 Theorem valid_conversion_to_bytestring:
   !src dst.
     valid_conversion src dst /\ is_bytestring_type dst ==>
