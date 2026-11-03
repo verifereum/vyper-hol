@@ -1258,3 +1258,167 @@ Proof
     metis_tac[step_inst_preserves_inst_idx] >>
   simp[] >> metis_tac[]
 QED
+
+Definition dft_gas_swap_pair_def:
+  dft_gas_swap_pair x y <=>
+    DISJOINT (set (inst_defs x)) (set (inst_uses y)) /\
+    DISJOINT (set (inst_defs y)) (set (inst_uses x)) /\
+    DISJOINT (set (inst_defs x)) (set (inst_defs y)) /\
+    effects_independent x.inst_opcode y.inst_opcode /\
+    abort_compatible x.inst_opcode y.inst_opcode /\
+    ~is_terminator x.inst_opcode /\ ~is_terminator y.inst_opcode /\
+    ~is_alloca_op x.inst_opcode /\ ~is_alloca_op y.inst_opcode /\
+    ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode
+End
+
+Theorem dft_gas_swap_pair_sym:
+  dft_gas_swap_pair x y <=> dft_gas_swap_pair y x
+Proof
+  rw[dft_gas_swap_pair_def, effects_independent_def, abort_compatible_def] >>
+  metis_tac[pred_setTheory.DISJOINT_SYM]
+QED
+
+
+(* Zero-consumption replay gives an exact successful oracle frame, without
+   requiring equality of error strings from lift_result. *)
+Theorem dft_nonconsuming_ok_oracle:
+  i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+  step_inst fuel C i s = OK t ==>
+  step_inst fuel C i (s with vs_gas_readings := gs) =
+    OK (t with vs_gas_readings := gs)
+Proof
+  strip_tac >> gvs[step_inst_non_invoke] >>
+  drule gas_base_non_gas >>
+  disch_then (qspec_then `s` mp_tac) >>
+  simp[gas_replay_at_def] >>
+  disch_then (qspec_then `gs` mp_tac) >>
+  Cases_on `step_inst_base i (s with vs_gas_readings := gs)` >>
+  simp[lift_result_def]
+QED
+
+Theorem dft_nonconsuming_oracle_frame:
+  i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE ==>
+  lift_result
+    (\a b. b = (a with vs_gas_readings := gs))
+    (\a b. b = (a with vs_gas_readings := gs))
+    (\a b. b = (a with vs_gas_readings := gs))
+    (step_inst fuel C i s)
+    (step_inst fuel C i (s with vs_gas_readings := gs))
+Proof
+  strip_tac >> simp[step_inst_non_invoke] >>
+  drule gas_base_non_gas >>
+  disch_then (qspec_then `s` mp_tac) >>
+  simp[gas_replay_at_def] >>
+  disch_then (qspec_then `gs` mp_tac) >>
+  Cases_on `step_inst_base i s` >>
+  Cases_on `step_inst_base i (s with vs_gas_readings := gs)` >>
+  simp[lift_result_def]
+QED
+
+Theorem dft_nonconsuming_ok_readings:
+  i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+  step_inst fuel C i s = OK t ==>
+  t.vs_gas_readings = s.vs_gas_readings
+Proof
+  strip_tac >> gvs[step_inst_non_invoke] >>
+  drule gas_base_non_gas >>
+  disch_then (qspec_then `s` mp_tac) >>
+  simp[gas_replay_at_def] >>
+  disch_then (qspec_then `[]` mp_tac) >>
+  Cases_on `step_inst_base i (s with vs_gas_readings := [])` >>
+  simp[lift_result_def]
+QED
+
+Theorem dft_gas_ok_shape:
+  g.inst_opcode = GAS /\ inst_wf g ==>
+  ?out. g.inst_outputs = [out] /\
+    !fuel C s. step_inst fuel C g s =
+      OK (update_var out (if s.vs_gas_readings = [] then 0w
+                          else HD s.vs_gas_readings)
+        (s with vs_gas_readings := TL s.vs_gas_readings))
+Proof
+  strip_tac >>
+  `LENGTH g.inst_outputs = 1` by gvs[inst_wf_def] >>
+  Cases_on `g.inst_outputs` >> gvs[] >>
+  simp[step_inst_non_invoke, Once step_inst_base_def, exec_gas_def] >>
+  gen_tac >> Cases_on `s.vs_gas_readings` >> simp[] >>
+  simp[update_var_def, venom_state_component_equality]
+QED
+
+Theorem dft_independent_gas_output:
+  dft_gas_swap_pair g i /\ g.inst_outputs = [out] ==>
+  (!v. MEM (Var v) i.inst_operands ==> out <> v) /\
+  ~MEM out i.inst_outputs
+Proof
+  strip_tac >>
+  gvs[dft_gas_swap_pair_def, inst_defs_def, inst_uses_def,
+      pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+  metis_tac[dftBlockSimTheory.mem_var_operand_vars]
+QED
+
+Theorem dft_gas_noninvoke_ok_diamond:
+  dft_gas_swap_pair g i /\ g.inst_opcode = GAS /\ inst_wf g /\
+  i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+  step_inst fuel C i s = OK t ==>
+  ?sg st. step_inst fuel C g s = OK sg /\
+    step_inst fuel C g t = OK st /\ step_inst fuel C i sg = OK st
+Proof
+  strip_tac >> drule_all dft_gas_ok_shape >> strip_tac >>
+  drule_all dft_independent_gas_output >> strip_tac >>
+  drule_all dft_nonconsuming_ok_readings >> strip_tac >>
+  qexistsl_tac
+    [`update_var out (if s.vs_gas_readings = [] then 0w else HD s.vs_gas_readings)
+        (s with vs_gas_readings := TL s.vs_gas_readings)`,
+     `update_var out (if t.vs_gas_readings = [] then 0w else HD t.vs_gas_readings)
+        (t with vs_gas_readings := TL t.vs_gas_readings)`] >>
+  simp[] >>
+  drule_all dftCommutationTheory.step_inst_frame >>
+  disch_then (qspecl_then [`fuel`, `C`, `s with vs_gas_readings := TL s.vs_gas_readings`,
+    `if s.vs_gas_readings = [] then 0w else HD s.vs_gas_readings`] mp_tac) >>
+  drule_all dft_nonconsuming_ok_oracle >>
+  disch_then (qspec_then `TL s.vs_gas_readings` mp_tac) >>
+  simp[dftCommutationTheory.map_result_state_def]
+QED
+
+Theorem dft_nonconsuming_updated_ok:
+  i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+  (!v. MEM (Var v) i.inst_operands ==> out <> v) /\
+  ~MEM out i.inst_outputs /\
+  step_inst fuel C i (update_var out value s with vs_gas_readings := gs) = OK u ==>
+  ?t. step_inst fuel C i s = OK t
+Proof
+  strip_tac >>
+  drule_all dftCommutationTheory.step_inst_frame >>
+  disch_then (qspecl_then [`fuel`, `C`, `s with vs_gas_readings := gs`,
+    `value`] mp_tac) >>
+  Cases_on `step_inst fuel C i (s with vs_gas_readings := gs)` >>
+  simp[dftCommutationTheory.map_result_state_def] >> strip_tac >>
+  drule_all dft_nonconsuming_oracle_frame >>
+  disch_then (qspecl_then [`s`, `gs`, `fuel`, `C`] mp_tac) >>
+  Cases_on `step_inst fuel C i s` >> simp[lift_result_def]
+QED
+
+Theorem dft_gas_noninvoke_success_first:
+  dft_gas_swap_pair g i /\ g.inst_opcode = GAS /\ inst_wf g /\
+  i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+  step_inst fuel C g s = OK sg /\ step_inst fuel C i sg = OK st ==>
+  ?t. step_inst fuel C i s = OK t /\ step_inst fuel C g t = OK st
+Proof
+  strip_tac >> drule_all dft_gas_ok_shape >> strip_tac >>
+  drule_all dft_independent_gas_output >> strip_tac >>
+  gvs[] >>
+  `!v. MEM (Var v) i.inst_operands ==> out <> v` by metis_tac[] >>
+  drule_all dft_nonconsuming_updated_ok >> strip_tac >>
+  drule_all dft_gas_noninvoke_ok_diamond >> strip_tac >>
+  qexists_tac `t` >> gvs[]
+QED
+
+Theorem dft_gas_noninvoke_success_second:
+  dft_gas_swap_pair g i /\ g.inst_opcode = GAS /\ inst_wf g /\
+  i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+  step_inst fuel C i s = OK t /\ step_inst fuel C g t = OK st ==>
+  ?sg. step_inst fuel C g s = OK sg /\ step_inst fuel C i sg = OK st
+Proof
+  strip_tac >> drule_all dft_gas_noninvoke_ok_diamond >> strip_tac >>
+  qexists_tac `sg` >> gvs[]
+QED
