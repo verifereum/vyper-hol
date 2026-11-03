@@ -417,3 +417,20 @@ Resume target_toplevel_case[mapping]:
 QED
 
 Finalise target_toplevel_case
+
+(* Memory-place readability depends only on the caller's scopes. *)
+Theorem place_readable_scopes_frame:
+  es'.scopes = es.scopes /\ place_readable cx es pv ==>
+  place_readable cx es' pv
+Proof
+  Cases_on `pv` >> simp[place_readable_def] >>
+  rename1 `PlaceR pl` >> Cases_on `pl` >> simp[place_readable_def] >>
+  rpt strip_tac >>
+  gvs[place_readable_def, read_place_def, bind_def, get_scopes_def,
+      lift_option_type_def, lift_sum_def, return_def, raise_def,
+      AllCaseEqs()] >>
+  rename1 `lookup_scopes id es.scopes` >>
+  Cases_on `lookup_scopes id es.scopes` >> gvs[raise_def, return_def] >>
+  rename1 `read_memory_path entry path` >>
+  Cases_on `read_memory_path entry path` >> gvs[raise_def, return_def]
+QED
