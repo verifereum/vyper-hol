@@ -1436,3 +1436,150 @@ Proof
       simp[vv_at_def, contextTheory.mk_ptr_def]) >>
   first_assum ACCEPT_TAC
 QED
+
+Theorem eval_mutual_noeffect_storage[local]:
+  (!(cx:evaluation_context) (s:stmt). T) /\
+  (!(cx:evaluation_context) (ss:stmt list). T) /\
+  (!(cx:evaluation_context) (it:iterator). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+  (!cx e. ~expr_has_effect e ==> !s res t tr.
+    eval_expr cx e s = (res,t) ==> get_storage cx t tr = get_storage cx s tr) /\
+  (!cx es. ~supported_exprs_exists expr_effect_root es ==> !s res t tr.
+    eval_exprs cx es s = (res,t) ==> get_storage cx t tr = get_storage cx s tr) /\
+  (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
+  (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
+  (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
+  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T) /\
+  (!(cx:evaluation_context) (es:expr list). T)
+Proof
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
+  simp[expr_has_effect_def, supported_expr_exists_def, expr_effect_root_def]
+  >~ [`eval_expr _ (Name _ _) _ = _`]
+  >- (rpt strip_tac >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
+          type_check_def, assert_def, return_def, raise_def, AllCaseEqs()])
+  >~ [`eval_expr _ (TopLevelName _ _) _ = _`]
+  >- (rpt strip_tac >> gvs[Once evaluate_def] >> drule lookup_global_state >> simp[])
+  >~ [`eval_expr _ (FlagMember _ _ _) _ = _`]
+  >- (rpt strip_tac >> gvs[Once evaluate_def] >> drule lookup_flag_mem_state >> simp[])
+  >~ [`eval_expr _ (Literal _ _) _ = _`]
+  >- simp[Once evaluate_def, return_def]
+  >~ [`eval_expr _ (IfExp _ _ _ _) _ = _`]
+  >- suspend "IfExp"
+  >~ [`eval_expr _ (StructLit _ _ _) _ = _`]
+  >- suspend "StructLit"
+  >~ [`eval_expr _ (Subscript _ _ _) _ = _`]
+  >- suspend "Subscript"
+  >~ [`eval_expr _ (Attribute _ _ _) _ = _`]
+  >- suspend "Attribute"
+  >~ [`eval_expr _ (Builtin _ _ _) _ = _`]
+  >- suspend "Builtin"
+  >~ [`eval_expr _ (TypeBuiltin _ _ _ _) _ = _`]
+  >- suspend "TypeBuiltin"
+  >~ [`eval_exprs _ [] _ = _`]
+  >- simp[Once evaluate_def, return_def] >>
+  suspend "Cons"
+QED
+
+Resume eval_mutual_noeffect_storage[IfExp]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def,
+      switch_BoolV_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac read_result_state >> imp_res_tac conditional_result_state >> gvs[] >>
+  gvs[COND_RATOR, AllCaseEqs(), raise_def] >> metis_tac[]
+QED
+Resume eval_mutual_noeffect_storage[StructLit]:
+  simp[supported_fields_exists_every, supported_exprs_exists_every,
+       listTheory.EXISTS_MAP] >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
+  imp_res_tac lift_sum_state >> gvs[] >> metis_tac[]
+QED
+Resume eval_mutual_noeffect_storage[Subscript]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+  gvs[] >> metis_tac[]
+QED
+Resume eval_mutual_noeffect_storage[Attribute]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+QED
+Resume eval_mutual_noeffect_storage[Builtin]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `builtin_args_length_ok bt (LENGTH es)`
+  >- (Cases_on `bt = Len` >> rpt gen_tac >> strip_tac >>
+      Cases_on `bt = Env MsgGas` >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+          assert_def, return_def, raise_def, AllCaseEqs()] >>
+      rpt strip_tac >> imp_res_tac result_array_length_state >>
+      imp_res_tac next_gas_reading_state >>
+      imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >> gvs[] >>
+      gvs[vyperStorageBackendTheory.get_storage_def,
+          type_check_def, assert_def, return_def,
+          supported_exprs_exists_every, listTheory.EXISTS_MEM,
+          vyperContextTheory.builtin_args_length_ok_def] >>
+      all_tac
+      >>~- ([`LENGTH es = 1`], Cases_on `es` >> gvs[] >> metis_tac[]) >>
+      Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+  simp[Once evaluate_def, type_check_def, assert_def, bind_def,
+       ignore_bind_def, raise_def]
+QED
+Resume eval_mutual_noeffect_storage[TypeBuiltin]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `type_builtin_args_length_ok tb (LENGTH es)` >>
+  rpt gen_tac >> strip_tac >>
+  gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
+      ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> imp_res_tac lift_sum_state >> gvs[] >> metis_tac[]
+QED
+Resume eval_mutual_noeffect_storage[Cons]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac read_result_state >> gvs[] >>
+  qpat_x_assum `!s res t tr. eval_expr _ _ _ = _ ==> _` drule >>
+  disch_then (qspec_then `tr` assume_tac) >>
+  qpat_x_assum `!s0 tv t0 s1 v t1. _ /\ _ ==> _` drule_all >>
+  strip_tac >> simp[]
+QED
+Finalise eval_mutual_noeffect_storage
+
+Theorem eval_expr_noeffect_storage:
+  ~expr_has_effect e /\ eval_expr cx e s = (res,t) ==>
+  get_storage cx t tr = get_storage cx s tr
+Proof
+  strip_tac >>
+  drule (cj 5 eval_mutual_noeffect_storage) >>
+  disch_then drule >> simp[]
+QED
+
+Theorem eval_expr_noeffect_storage_read:
+  ~expr_has_effect e /\ eval_expr cx e s = (res,t) ==>
+  read_storage_slot cx tr w tvt t =
+    (case read_storage_slot cx tr w tvt s of (r,_) => (r,t))
+Proof
+  strip_tac >> drule_all eval_expr_noeffect_storage >> strip_tac >>
+  simp[vyperStorageBackendTheory.read_storage_slot_eq] >>
+  Cases_on `decode_value (get_storage cx s tr) (w2n w) tvt` >> simp[]
+QED
+
+Theorem eval_expr_noeffect_storage_place_read:
+  ~expr_has_effect e /\ eval_expr cx e s = (res,t) ==>
+  read_result cx (PlaceR (StoragePlace tr w tvt)) t =
+    (case read_result cx (PlaceR (StoragePlace tr w tvt)) s of (r,_) => (r,t))
+Proof
+  strip_tac >> simp[read_result_def, read_place_def] >>
+  irule eval_expr_noeffect_storage_read >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem eval_expr_noeffect_storage_holds:
+  ~expr_has_effect e /\ eval_expr cx e s = (res,t) /\
+  storage_holds cx tr ty (PlaceR (StoragePlace tr' slot tvt)) w s ==>
+  storage_holds cx tr ty (PlaceR (StoragePlace tr' slot tvt)) w t
+Proof
+  strip_tac >>
+  `!tr. get_storage cx t tr = get_storage cx s tr` by
+    (gen_tac >> drule_all eval_expr_noeffect_storage >> simp[]) >>
+  gvs[storage_holds_def, read_result_def, read_place_def,
+      vyperStorageBackendTheory.read_storage_slot_eq, AllCaseEqs()]
+QED
