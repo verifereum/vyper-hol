@@ -1902,16 +1902,16 @@ Proof
     first_x_assum drule >> rw[]) >>
   (* Builtin *)
   conj_tac >- (
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_apply, ignore_bind_apply,
-        AllCaseEqs(), COND_RATOR, return_def] >>
-    imp_res_tac type_check_state >>
-    imp_res_tac lift_sum_state >>
-    imp_res_tac read_result_state >>
-    imp_res_tac result_array_length_state >>
-    imp_res_tac next_gas_reading_state >> gvs[] >>
-    rpt(first_x_assum drule >> rw[]) >>
-    gvs[get_accounts_def, return_def]) >>
+    rpt gen_tac >> strip_tac >>
+    Cases_on `builtin_args_length_ok bt (LENGTH es)`
+    >- (Cases_on `bt = Len`
+        >- suspend "BuiltinLen_tv"
+        >> Cases_on `bt = Env MsgGas`
+        >- suspend "BuiltinGas_tv"
+        >> suspend "BuiltinRest_tv") >>
+    rpt gen_tac >>
+    simp[Once evaluate_def, type_check_def, assert_def, bind_def,
+         ignore_bind_def, raise_def]) >>
   (* Pop *)
   conj_tac >- (
     rpt strip_tac >>
@@ -2360,6 +2360,444 @@ Resume eval_preserves_tv_with_results[IntCall_ptv]:
     simp[finally_def, ignore_bind_def, bind_def, return_def, raise_def]
   ) >>
   irule preserves_tv_trans >> qexists_tac `r'` >> simp[]
+QED
+
+Resume eval_preserves_tv_with_results[BuiltinLen_tv]:
+  qpat_x_assum `!s x t. _ /\ bt = Len ==> _` mp_tac >>
+  rpt (qpat_x_assum `!s t. _` kall_tac) >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, AllCaseEqs()] >>
+  strip_tac >> imp_res_tac result_array_length_state >> gvs[] >>
+  first_x_assum (qspecl_then [`st`, `st`] mp_tac) >>
+  simp[type_check_def, assert_def, return_def]
+QED
+
+Resume eval_preserves_tv_with_results[BuiltinGas_tv]:
+  rpt (qpat_x_assum `!s t. _` kall_tac) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, AllCaseEqs()] >>
+  strip_tac >> imp_res_tac next_gas_reading_state >> gvs[]
+QED
+
+(* Select the applicable guarded IH before normalizing the branch. *)
+fun tv_keep_builtin pat =
+  qpat_x_assum pat mp_tac >>
+  rpt (qpat_x_assum `!s. _` kall_tac) >> strip_tac;
+
+val tv_builtin_ordinary_tac =
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >>
+  gvs[] >> rpt (first_x_assum drule >> rw[]);
+
+Resume eval_preserves_tv_with_results[BuiltinRest_tv]:
+  Cases_on `bt`
+  >- (qpat_x_assum `Len <> Len` mp_tac >> simp[NoAsms])
+  >- suspend "TVCalldataLen"
+  >- suspend "TVCalldataSlice"
+  >- suspend "TVNot"
+  >- suspend "TVNeg"
+  >- suspend "TVAbs"
+  >- suspend "TVKeccak"
+  >- suspend "TVSha"
+  >- suspend "TVWei"
+  >- suspend "TVConcat"
+  >- suspend "TVSlice"
+  >- suspend "TVUint"
+  >- suspend "TVArray"
+  >- suspend "TVCeil"
+  >- suspend "TVFloor"
+  >- suspend "TVAddMod"
+  >- suspend "TVMulMod"
+  >- suspend "TVBop"
+  >- suspend "TVBlockHash"
+  >- suspend "TVBlobHash"
+  >- suspend "TVEnv"
+  >- suspend "TVAcc"
+  >- suspend "TVMethod"
+  >- suspend "TVRecover"
+  >- suspend "TVECAdd"
+  >- suspend "TVECMul"
+  >> suspend "TVPow"
+QED
+
+Resume eval_preserves_tv_with_results[TVCalldataLen]:
+  tv_keep_builtin `!s x t nm body. _ /\ _ /\ _ /\ _ /\ nm = CalldataLen ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVCalldataSlice]:
+  tv_keep_builtin `!s x t nm body k. _ /\ _ /\ _ /\ _ /\ nm = CalldataSlice k ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNot]:
+  tv_keep_builtin `!s x t nm body. _ /\ _ /\ _ /\ _ /\ nm = Not ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNeg]:
+  tv_keep_builtin `!s x t nm body. _ /\ _ /\ _ /\ _ /\ nm = Neg ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVAbs]:
+  tv_keep_builtin `!s x t nm body. _ /\ _ /\ _ /\ _ /\ nm = Abs ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVKeccak]:
+  tv_keep_builtin `!s x t nm body. _ /\ _ /\ _ /\ _ /\ nm = Keccak256 ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVSha]:
+  tv_keep_builtin `!s x t nm body. _ /\ _ /\ _ /\ _ /\ nm = Sha256 ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVWei]:
+  tv_keep_builtin `!s x t nm body k. _ /\ _ /\ _ /\ _ /\ nm = AsWeiValue k ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVConcat]:
+  tv_keep_builtin `!s x t nm body k. _ /\ _ /\ _ /\ _ /\ nm = Concat k ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVUint]:
+  tv_keep_builtin `!s x t nm body k. _ /\ _ /\ _ /\ _ /\ nm = Uint2Str k ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVArray]:
+  tv_keep_builtin `!s x t nm body k m. _ /\ _ /\ _ /\ _ /\ nm = MakeArray k m ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVCeil]:
+  tv_keep_builtin `!s x t nm body. _ /\ _ /\ _ /\ _ /\ nm = Ceil ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVFloor]:
+  tv_keep_builtin `!s x t nm body. _ /\ _ /\ _ /\ _ /\ nm = Floor ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVAddMod]:
+  tv_keep_builtin `!s x t nm body. _ /\ _ /\ _ /\ _ /\ nm = AddMod ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVMulMod]:
+  tv_keep_builtin `!s x t nm body. _ /\ _ /\ _ /\ _ /\ nm = MulMod ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVBop]:
+  tv_keep_builtin `!s x t nm body k. _ /\ _ /\ _ /\ _ /\ nm = Bop k ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVBlockHash]:
+  tv_keep_builtin `!s x t nm body. _ /\ _ /\ _ /\ _ /\ nm = BlockHash ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVBlobHash]:
+  tv_keep_builtin `!s x t nm body. _ /\ _ /\ _ /\ _ /\ nm = BlobHash ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVEnv]:
+  tv_keep_builtin `!s x t nm body k. _ /\ _ /\ _ /\ _ /\ nm = Env k ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVAcc]:
+  tv_keep_builtin `!s x t nm body k. _ /\ _ /\ _ /\ _ /\ nm = Acc k ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVMethod]:
+  tv_keep_builtin `!s x t nm body. _ /\ _ /\ _ /\ _ /\ nm = MethodId ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVRecover]:
+  tv_keep_builtin `!s x t nm body. _ /\ _ /\ _ /\ _ /\ nm = ECRecover ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVECAdd]:
+  tv_keep_builtin `!s x t nm body. _ /\ _ /\ _ /\ _ /\ nm = ECAdd ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVECMul]:
+  tv_keep_builtin `!s x t nm body. _ /\ _ /\ _ /\ _ /\ nm = ECMul ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVPow]:
+  tv_keep_builtin `!s x t nm body. _ /\ _ /\ _ /\ _ /\ nm = PowMod256 ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVSlice]:
+  qpat_assum `builtin_args_length_ok _ _` mp_tac >>
+  simp[NoAsms, vyperContextTheory.builtin_args_length_ok_def] >> strip_tac >>
+  namedCases_on `es` ["", "operand rest1"]
+  >- (qpat_x_assum `LENGTH [] = 3` mp_tac >> simp[NoAsms]) >>
+  namedCases_on `rest1` ["", "start rest2"]
+  >- (qpat_x_assum `LENGTH [_] = 3` mp_tac >> simp[NoAsms]) >>
+  namedCases_on `rest2` ["", "len rest3"]
+  >- (qpat_x_assum `LENGTH [_;_] = 3` mp_tac >> simp[NoAsms]) >>
+  Cases_on `rest3`
+  >- suspend "TVSliceThree" >>
+  qpat_x_assum `LENGTH _ = 3` mp_tac >> simp[NoAsms]
+QED
+
+Resume eval_preserves_tv_with_results[TVSliceThree]:
+  namedCases_on `operand`
+    ["ty id", "ty id", "ty id flag", "ty test yes no",
+     "ty lit", "ty name fields", "ty base ix", "ty base field",
+     "ct builtin args", "ty tb tv args", "ty target", "ty call args keys"]
+  >- suspend "TVSliceName"
+  >- suspend "TVSliceTopName"
+  >- suspend "TVSliceFlag"
+  >- suspend "TVSliceIf"
+  >- suspend "TVSliceLiteral"
+  >- suspend "TVSliceStruct"
+  >- suspend "TVSliceSubscript"
+  >- suspend "TVSliceAttribute"
+  >- suspend "TVSliceBuiltin"
+  >- suspend "TVSliceTypeBuiltin"
+  >- suspend "TVSlicePop"
+  >> suspend "TVSliceCall"
+QED
+
+Resume eval_preserves_tv_with_results[TVSliceName]:
+  tv_keep_builtin `!s x t nm body k a tl ty id. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ a = Name ty id ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVSliceTopName]:
+  tv_keep_builtin `!s x t nm body k a tl ty id. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ a = TopLevelName ty id ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVSliceFlag]:
+  tv_keep_builtin `!s x t nm body k a tl ty id f. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ a = FlagMember ty id f ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVSliceIf]:
+  tv_keep_builtin `!s x t nm body k a tl ty b c d. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ a = IfExp ty b c d ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVSliceLiteral]:
+  tv_keep_builtin `!s x t nm body k a tl ty lit. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ a = Literal ty lit ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVSliceStruct]:
+  tv_keep_builtin `!s x t nm body k a tl ty name fields. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ a = StructLit ty name fields ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVSliceSubscript]:
+  tv_keep_builtin `!s x t nm body k a tl ty base ix. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ a = Subscript ty base ix ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVSliceAttribute]:
+  tv_keep_builtin `!s x t nm body k a tl ty base field. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ a = Attribute ty base field ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVSliceTypeBuiltin]:
+  tv_keep_builtin `!s x t nm body k a tl ty b c d. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ a = TypeBuiltin ty b c d ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVSlicePop]:
+  tv_keep_builtin `!s x t nm body k a tl ty target. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ a = Pop ty target ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVSliceCall]:
+  tv_keep_builtin `!s x t nm body k a tl ty call args keys. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ a = Call ty call args keys ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+
+Resume eval_preserves_tv_with_results[TVSliceBuiltin]:
+  Cases_on `builtin = Acc Code`
+  >- (namedCases_on `args` ["", "addr rest"]
+      >- suspend "TVSliceCodeEmpty" >>
+      Cases_on `rest`
+      >- suspend "TVSliceCodeOne" >> suspend "TVSliceCodeMany") >>
+  suspend "TVSliceOtherBuiltin"
+QED
+Resume eval_preserves_tv_with_results[TVSliceCodeEmpty]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args acc. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ args = [] ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVSliceCodeMany]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args acc addr rest x' xs. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ rest = x'::xs ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVSliceCodeOne]:
+  qpat_x_assum `!s x t nm body k a tl ct b args acc addr rest start' tail len' nil ps vs pt. _ ==> !st res st'. eval_exprs _ [Builtin _ (Acc Code) [_]] st = _ ==> _` mp_tac >>
+  qpat_x_assum `!s x t nm body k a tl ct b args acc addr rest start' tail len' nil. _ ==> !st res st'. eval_exprs _ [start';len'] st = _ ==> _` mp_tac >>
+  rpt (qpat_x_assum `!s. _` kall_tac) >> ntac 2 strip_tac >>
+  gvs[type_check_def, assert_def, return_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >>
+  gvs[] >> rpt (first_x_assum drule_all >> strip_tac) >>
+  metis_tac[preserves_tv_trans]
+QED
+Resume eval_preserves_tv_with_results[TVSliceOtherBuiltin]:
+  Cases_on `builtin`
+  >- suspend "TVNestedLen"
+  >- suspend "TVNestedCalldataLen"
+  >- suspend "TVNestedCalldataSlice"
+  >- suspend "TVNestedNot"
+  >- suspend "TVNestedNeg"
+  >- suspend "TVNestedAbs"
+  >- suspend "TVNestedKeccak"
+  >- suspend "TVNestedSha"
+  >- suspend "TVNestedWei"
+  >- suspend "TVNestedConcat"
+  >- suspend "TVNestedSlice"
+  >- suspend "TVNestedUint"
+  >- suspend "TVNestedArray"
+  >- suspend "TVNestedCeil"
+  >- suspend "TVNestedFloor"
+  >- suspend "TVNestedAddMod"
+  >- suspend "TVNestedMulMod"
+  >- suspend "TVNestedBop"
+  >- suspend "TVNestedBlockHash"
+  >- suspend "TVNestedBlobHash"
+  >- suspend "TVNestedEnv"
+  >- suspend "TVNestedAcc"
+  >- suspend "TVNestedMethod"
+  >- suspend "TVNestedRecover"
+  >- suspend "TVNestedECAdd"
+  >- suspend "TVNestedECMul"
+  >> suspend "TVNestedPow"
+QED
+Resume eval_preserves_tv_with_results[TVNestedLen]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = Len ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedCalldataLen]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = CalldataLen ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedCalldataSlice]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args p. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = CalldataSlice p ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedNot]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = Not ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedNeg]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = Neg ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedAbs]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = Abs ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedKeccak]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = Keccak256 ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedSha]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = Sha256 ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedWei]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args p. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = AsWeiValue p ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedConcat]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args p. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = Concat p ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedSlice]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args p. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = Slice p ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedUint]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args p. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = Uint2Str p ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedArray]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args p q. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = MakeArray p q ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedCeil]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = Ceil ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedFloor]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = Floor ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedAddMod]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = AddMod ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedMulMod]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = MulMod ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedBop]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args p. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = Bop p ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedBlockHash]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = BlockHash ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedBlobHash]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = BlobHash ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedEnv]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args p. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = Env p ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedAcc]:
+  Cases_on `a`
+  >- suspend "TVNestedAddress"
+  >- suspend "TVNestedBalance"
+  >- suspend "TVNestedCodehash"
+  >- suspend "TVNestedCodesize"
+  >- suspend "TVNestedIsContract" >>
+  qpat_x_assum `Acc Code <> Acc Code` mp_tac >> simp[NoAsms]
+QED
+Resume eval_preserves_tv_with_results[TVNestedAddress]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args acc. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ acc = Address ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedBalance]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args acc. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ acc = Balance ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedCodehash]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args acc. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ acc = Codehash ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedCodesize]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args acc. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ acc = Codesize ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedIsContract]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args acc. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ acc = IsContract ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedMethod]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = MethodId ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedRecover]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = ECRecover ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedECAdd]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = ECAdd ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedECMul]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = ECMul ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
+QED
+Resume eval_preserves_tv_with_results[TVNestedPow]:
+  tv_keep_builtin `!s x t nm body k a tl ct b args. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ b = PowMod256 ==> _` >>
+  gvs[type_check_def, assert_def, return_def] >> tv_builtin_ordinary_tac
 QED
 
 Finalise eval_preserves_tv_with_results

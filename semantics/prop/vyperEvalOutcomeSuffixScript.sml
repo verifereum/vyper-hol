@@ -570,6 +570,15 @@ val OUTCOMES_GUARD_TAC =
   rpt (first_assum (irule_at Any)) >>
   simp[ignore_bind_def];
 
+val OUTCOMES_WITNESSED_IH_TAC = FIRST [
+  first_assum (fn th => if is_forall (concl th) then NO_TAC
+    else CONTR_TAC (SIMP_RULE (srw_ss()) [] th)),
+  first_assum (fn th => FIRST_PROVE [
+    irule th >> rpt (first_assum (irule_at Any)) >>
+    (fn g as (asl,_) => simp_tac (srw_ss())
+      (ignore_bind_def :: map ASSUME
+        (List.filter (fn a => not (is_forall a)) asl)) g)])];
+
 val OUTCOMES_CONSTRUCTOR_TAC =
   rpt strip_tac >> simp_tac bool_ss (Once evaluate_def :: lock_helper_defs) >>
   RULE_ASSUM_TAC (PURE_REWRITE_RULE lock_helper_defs) >>
@@ -702,8 +711,246 @@ Resume eval_outcomes_suffix_with_results[c36]:
   OUTCOMES_CONSTRUCTOR_TAC
 QED
 Resume eval_outcomes_suffix_with_results[c37]:
-  OUTCOMES_CONSTRUCTOR_TAC
+  rpt strip_tac >>
+  simp_tac bool_ss [Once evaluate_def] >>
+  OUTCOMES_SUFFIX_TAC >>>
+  (fn gs => let val n = ref 0 in
+    ALLGOALS (fn g => (n := !n + 1;
+      suspend ("builtin" ^ Int.toString (!n)) g)) gs end)
 QED
+
+Resume eval_outcomes_suffix_with_results[builtin1]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin2]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin3]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin4]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin5]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin6]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin7]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin8]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin9]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin10]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin11]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin12]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin13]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin14]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin15]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin16]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin17]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin18]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin19]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin20]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin21]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin22]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin23]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin24]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin25]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin26]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin27]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin28]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin29]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin30]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin31]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin32]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin33]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin34]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin35]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin36]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin37]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin38]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin39]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin40]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin41]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin42]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin43]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin44]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin45]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin46]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin47]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin48]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin49]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin50]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin51]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin52]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin53]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin54]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin55]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin56]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin57]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin58]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin59]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin60]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin61]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin62]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin63]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin64]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin65]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin66]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin67]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin68]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin69]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin70]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin71]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin72]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin73]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin74]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin75]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin76]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+Resume eval_outcomes_suffix_with_results[builtin77]:
+  OUTCOMES_WITNESSED_IH_TAC
+QED
+
 Resume eval_outcomes_suffix_with_results[c38]:
   OUTCOMES_CONSTRUCTOR_TAC
 QED
