@@ -1,6 +1,6 @@
 Theory abiDecoderMemberBound
 Ancestors
-  abiDecoderBytesBound abiDecoderGuards abiDecoderContract abiEncoder emitHelperProps
+  abiDecoderRange abiDecoderBytesBound abiDecoderGuards abiDecoderContract abiEncoder emitHelperProps
   exprLoweringProps compileEnv emitHelper venomExecSemantics venomState words abiDecoderGuard
   arithmetic
 

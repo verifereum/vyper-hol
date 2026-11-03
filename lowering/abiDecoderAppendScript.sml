@@ -10,6 +10,13 @@ val APPEND_BIND = APPEND_BIND_WITH [];
 val APPEND_IGNORE = ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
   >- simp append_simps;
 
+Theorem cs_appends_abi_range_check:
+  !src endp hi. cs_appends (compile_abi_decode_range_check src endp hi)
+Proof
+  rpt gen_tac >> rewrite_tac[compile_abi_decode_range_check_def] >>
+  ntac 5 APPEND_BIND >> simp append_simps
+QED
+
 Theorem cs_appends_abi_clamp:
   !c v. cs_appends (compile_abi_clamp_basetype v c)
 Proof
@@ -51,7 +58,7 @@ Proof
   ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp[cs_appends_return] >>
       ntac 2 APPEND_BIND >> APPEND_IGNORE >>
-      ntac 3 APPEND_BIND >> simp append_simps) >>
+      APPEND_BIND >> simp[cs_appends_abi_range_check]) >>
   simp[cs_appends_return]
 QED
 
@@ -80,19 +87,27 @@ QED
 
 Resume cs_appends_abi_decode_mutual[bytes]:
   rewrite_tac[Once compile_abi_decode_to_buf_def] >>
-  ntac 3 APPEND_BIND >> APPEND_IGNORE >>
+  ho_match_mp_tac cs_appends_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp[cs_appends_return] >>
+      APPEND_BIND >> ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
+      >- simp[cs_appends_abi_range_check] >> simp[cs_appends_return]) >>
+  rpt gen_tac >> ntac 3 APPEND_BIND >> APPEND_IGNORE >>
   ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp[cs_appends_return] >>
-      ntac 4 APPEND_BIND >> simp append_simps) >>
+      APPEND_BIND >> simp[cs_appends_abi_range_check]) >>
   Cases_on `opc` >> simp append_simps
 QED
 
 Resume cs_appends_abi_decode_mutual[array]:
   rewrite_tac[Once compile_abi_decode_to_buf_def] >>
-  ntac 3 APPEND_BIND >> APPEND_IGNORE >>
+  ho_match_mp_tac cs_appends_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp[cs_appends_return] >>
+      APPEND_BIND >> ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
+      >- simp[cs_appends_abi_range_check] >> simp[cs_appends_return]) >>
+  rpt gen_tac >> ntac 3 APPEND_BIND >> APPEND_IGNORE >>
   ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp[cs_appends_return] >>
-      ntac 5 APPEND_BIND >> simp append_simps) >>
+      ntac 2 APPEND_BIND >> simp[cs_appends_abi_range_check]) >>
   APPEND_BIND >> APPEND_IGNORE >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gvs[]
   >- (ntac 3 APPEND_BIND >> Cases_on `opc` >> simp append_simps) >>
@@ -105,7 +120,8 @@ Resume cs_appends_abi_decode_mutual[complex]:
   simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC
   >- (first_x_assum (qspec_then `FOLDR (\(_,abi_sz:num,_) acc. abi_sz + acc) 0 elems`
         mp_tac) >> simp[]) >>
-  ntac 3 APPEND_BIND >> APPEND_IGNORE >>
+  APPEND_BIND >> ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
+  >- simp[cs_appends_abi_range_check] >>
   first_x_assum (qspec_then `FOLDR (\(_,abi_sz:num,_) acc. abi_sz + acc) 0 elems`
     mp_tac) >> simp[]
 QED

@@ -1,5 +1,6 @@
 Theory abiDecoderBulk
 Ancestors
+  abiDecoderRange abiDecoderBytesBound abiDecoderDynarrayBound abiDecoderArrayLoopInit
   abiDecoderDynarrayBound abiDecoderBytesBound abiDecoderCopy abiDecoderComposition
   abiDecoderContract abiDecoderGuards emitHelperProps exprLoweringProps compileEnv emitHelper
   valueEncoding venomExecSemantics venomState words abiDecoderArrayHeader abiDecoderFrameCompose
@@ -131,13 +132,14 @@ Theorem abi_decode_bulk_phases:
   abi_decode_source_opcode opc /\ ~dec_info_needs_clamp ei ==>
   compile_abi_decode_to_buf dst src opc hi
     (DecDynArray ei abi_sz mem_sz F maxn) =
-    do abi_decode_dynarray_prefix src opc hi maxn abi_sz;
+    do abi_decode_dynarray_checked_prefix src opc hi maxn abi_sz;
        abi_decode_bulk_body dst src opc mem_sz
     od
 Proof
   strip_tac >> gvs[abi_decode_source_opcode_def] >> Cases_on `hi = Lit 0w` >>
   simp[FUN_EQ_THM, compile_abi_decode_to_buf_def,
-       abi_decode_dynarray_prefix_def, abi_decode_count_guard_def,
+       abi_decode_dynarray_checked_prefix_def, abi_decode_count_guard_def,
+       abi_decode_bytes_head_def, abi_decode_dynarray_payload_guard_def,
        abi_decode_dynarray_end_guard_def, abi_decode_dynarray_end_def,
        abi_decode_le_guard_def, abi_decode_bulk_body_def,
        abi_decode_array_header_def, abi_decode_bulk_payload_def,
@@ -171,9 +173,9 @@ Proof
   asm_simp_tac bool_ss [abi_decode_bulk_phases, comp_ignore_bind_def,
                        comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >>
-  rename1 `abi_decode_dynarray_prefix src opc hi maxn abi_sz st = (prefix_result,c1)` >>
+  rename1 `abi_decode_dynarray_checked_prefix src opc hi maxn abi_sz st = (prefix_result,c1)` >>
   Cases_on `prefix_result` >>
-  mp_tac (Q.INST [`st'` |-> `c1`] abi_decode_dynarray_prefix_sequence) >>
+  mp_tac (Q.INST [`st'` |-> `c1`] abi_decode_dynarray_checked_prefix_sequence) >>
   impl_tac >- simp[] >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
   `eval_operand src s1 = SOME (n2w sb) /\
@@ -357,6 +359,24 @@ Proof
   qexistsl_tac [`d`, `32 + LENGTH vs * mem_sz`] >> simp[]
 QED
 
+Theorem abi_decode_bulk_body_shape:
+  abi_decode_bulk_body dst src opc mem_sz st = ((),st') /\
+  abi_decode_source_opcode opc ==>
+  inst_extends st st' /\ st'.cs_blocks = st.cs_blocks /\
+  st'.cs_current_bb = st.cs_current_bb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st st')
+Proof
+  strip_tac >> gvs[abi_decode_source_opcode_def] >>
+  gvs[abi_decode_bulk_body_def, abi_decode_array_header_def,
+      abi_decode_bulk_payload_def, abi_decode_copy_opcode_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
+      inst_extends_def, emitted_insts_def] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+  gvs[DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def]
+QED
+
 Theorem abi_decoder_bulk_shape:
   compile_abi_decode_to_buf dst src opc hi
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
@@ -366,12 +386,25 @@ Theorem abi_decoder_bulk_shape:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st st')
 Proof
-  strip_tac >> gvs[abi_decode_source_opcode_def] >> Cases_on `hi = Lit 0w` >>
-  gvs[compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
-      comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
-      fresh_id_def, emit_def, emitted_insts_def, IS_PREFIX_APPEND] >>
-  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
-  gvs[DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def]
+  strip_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [abi_decode_bulk_phases, comp_ignore_bind_def, comp_bind_def, LET_THM] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  rename1 `abi_decode_dynarray_checked_prefix src opc hi maxn abi_sz st = (u,c1)` >>
+  Cases_on `u` >>
+  drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
+  drule_all abi_decode_bulk_body_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st c1)` by
+    (irule listTheory.EVERY_MONOTONIC >> goal_assum (drule_at Any) >> simp[]) >>
+  `st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts st st') /\ inst_extends st st'` by
+    metis_tac[abi_decode_fragment_shape_trans] >>
+  simp[] >> qpat_x_assum `inst_extends st st'` mp_tac >>
+  simp_tac (srw_ss()) [inst_extends_def] >> strip_tac >>
+  qpat_x_assum `st'.cs_current_insts = _` (fn th => once_rewrite_tac[th]) >>
+  simp[IS_PREFIX_APPEND]
 QED
 
 Theorem abi_decoder_typed_bulk_fragment:

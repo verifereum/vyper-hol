@@ -123,7 +123,8 @@ Theorem abi_decode_array_pointer_allocation_shape:
     (emitted_insts st st')
 Proof
   strip_tac >> gvs[abi_decode_source_opcode_def] >> Cases_on `hi = Lit 0w` >>
-  gvs[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_ignore_bind_def,
+  gvs[compile_abi_decode_dyn_elem_ptr_def, compile_abi_decode_range_check_def,
+      comp_bind_def, comp_ignore_bind_def,
       comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
       fresh_id_def, emit_def, emitted_insts_def] >>
   pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>

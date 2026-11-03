@@ -1,7 +1,7 @@
 (* Primitive decoder execution, including validation and exact word copying. *)
 Theory abiDecoderClampedWord
 Ancestors
-  abiDecoderClamp abiDecoderUnsignedClamp abiDecoderGuards abiDecoderContract
+  abiDecoderRange abiDecoderClamp abiDecoderUnsignedClamp abiDecoderGuards abiDecoderContract
   abiDecoderWordCopy abiDecoderTypedCompose abiDecoderReservation
   abiEncoder emitHelperProps exprLoweringProps compileEnv emitHelper
   valueEncoding valueEncodingProps venomExecSemantics venomState venomInst

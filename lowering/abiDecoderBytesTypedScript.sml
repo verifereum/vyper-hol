@@ -1,7 +1,7 @@
 (* Typed bytestring success from canonical input, without an assumed load value. *)
 Theory abiDecoderBytesTyped
 Ancestors
-  venomMemProps
+  venomMemProps abiDecoderBytesBound abiDecoderGuards abiDecoderComposition emitHelperProps
   abiDecoderBytes abiDecoderTypedContract abiCanonicalBytes abiCanonicalHeadSize
   abiDecoderContract abiDecoderFrame valueEncoding valueEncodingProps compileEnv
   vyperABI vyperTyping vyperValue contractABI vfmConstants words arithmetic
@@ -94,12 +94,31 @@ Theorem abi_decoder_bytes_shape:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st st')
 Proof
-  strip_tac >> gvs[abi_decode_source_opcode_def] >> Cases_on `hi = Lit 0w` >>
-  gvs[compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
-      comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
-      fresh_id_def, emit_def, emitted_insts_def, IS_PREFIX_APPEND] >>
-  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
-  gvs[DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def]
+  strip_tac >> drule abi_decode_bytes_phases >> strip_tac >>
+  gvs[comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  imp_res_tac abi_decode_bytes_head_fragment_shape >>
+  drule_all abi_decode_count_guard_fragment_shape >> strip_tac >>
+  imp_res_tac abi_decode_bytes_payload_guard_fragment_shape >>
+  rename1 `emit_void (abi_decode_copy_opcode opc) ops c3 = ((),st')` >>
+  `st'.cs_blocks = c3.cs_blocks /\ st'.cs_current_bb = c3.cs_current_bb /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts c3 st') /\ inst_extends c3 st'` by
+    (imp_res_tac inst_extends_emit_void >>
+     gvs[abi_decode_source_opcode_def] >>
+     gvs[abi_decode_copy_opcode_def, emit_void_def, comp_bind_def,
+         fresh_id_def, emit_def, emitted_insts_def, DROP_LENGTH_APPEND,
+         is_terminator_def, mk_inst_def]) >>
+  qpat_x_assum `!src' n' hi' dst'. _` kall_tac >>
+  `st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts st st') /\ inst_extends st st'` by
+    metis_tac[abi_decode_fragment_shape_trans] >>
+  simp[] >>
+  qpat_x_assum `inst_extends st st'` mp_tac >>
+  simp_tac (srw_ss()) [inst_extends_def] >> strip_tac >>
+  qpat_x_assum `st'.cs_current_insts = _` (fn th => once_rewrite_tac[th]) >>
+  simp[IS_PREFIX_APPEND]
 QED
 
 Theorem abi_decoder_typed_bytes_fragment:

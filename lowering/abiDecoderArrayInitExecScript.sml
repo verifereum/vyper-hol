@@ -1,6 +1,6 @@
 Theory abiDecoderArrayInitExec
 Ancestors
-  abiDecoderArrayLoopInit abiDecoderDynarrayPrefix abiDecoderArrayHeader abiDecoderReservation
+  abiDecoderRange abiDecoderArrayLoopInit abiDecoderDynarrayPrefix abiDecoderArrayHeader abiDecoderReservation
   abiDecoderReentryPointer abiDecoderGuards abiDecoderContract exprLoweringProps emitHelperProps
   compileEnv venomState words list arithmetic abiDecoderIndexInit abiDecoderAllocation
   abiDecoderReentry abiDecoderFrameCompose abiDecoderFrame abiDecoderPrimitiveLoopFrames
@@ -23,7 +23,7 @@ Proof
 QED
 
 Theorem abi_decode_array_prepare_sequence:
-  abi_decode_dynarray_prefix src opc hi maxn abi_sz st = ((),guard_st) /\
+  abi_decode_dynarray_checked_prefix src opc hi maxn abi_sz st = ((),guard_st) /\
   abi_decode_array_header dst src opc guard_st = (cnt,header_st) /\
   abi_decode_source_opcode opc /\ eval_operand src s = SOME (n2w sb) /\
   eval_operand dst s = SOME (n2w d) /\ d < dimword (:256) /\
@@ -39,9 +39,9 @@ Theorem abi_decode_array_prepare_sequence:
     prepared.vs_halted = s.vs_halted /\ inst_extends st header_st
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
-  drule_all abi_decode_dynarray_prefix_sequence >> strip_tac >>
+  drule_all abi_decode_dynarray_checked_prefix_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st guard_st) s = OK guarded` >>
   drule_all abi_decoder_guard_sequence_fields >> strip_tac >>
   `eval_operand src guarded = SOME (n2w sb) /\ eval_operand dst guarded = SOME (n2w d)`
@@ -124,7 +124,7 @@ Theorem abi_decode_array_loop_init_sequence:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_decode_array_loop_init_trace >> strip_tac >>
-  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >>
   drule_all abi_decode_array_prepare_sequence >> strip_tac >>

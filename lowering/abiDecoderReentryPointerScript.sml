@@ -399,14 +399,27 @@ Theorem abi_decoder_array_pointer_code:
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode /\
     ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode) (emitted_insts st st')
 Proof
-  Cases_on `hi = Lit 0w` >>
-  simp[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_ignore_bind_def,
+  Cases_on `hi = Lit 0w`
+  >- (simp[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
        fresh_id_def, emit_def, emitted_insts_def] >>
+      rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+      pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+      gvs[DROP_LENGTH_APPEND, abi_decoder_reentry_opcode_def, mk_inst_def,
+          abi_decode_source_opcode_def, is_terminator_def, is_alloca_op_def]) >>
+  simp[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  pure_rewrite_tac [GSYM APPEND_ASSOC] >>
-  gvs[DROP_LENGTH_APPEND, abi_decoder_reentry_opcode_def, mk_inst_def,
-      abi_decode_source_opcode_def, is_terminator_def, is_alloca_op_def]
+  drule abi_decode_range_reentry_trace >> strip_tac >>
+  gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_var_def, fresh_id_def, emit_def,
+      emitted_insts_def, inst_extends_def, DROP_LENGTH_APPEND] >>
+  qpat_x_assum `_ = _ ++ _ ++ _` (fn th => once_rewrite_tac[th]) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp_tac (srw_ss()) [DROP_LENGTH_APPEND, EVERY_APPEND, EVERY_DEF,
+      mk_inst_def] >>
+  gvs[EVERY_CONJ, abi_decode_source_opcode_def, abi_decoder_reentry_opcode_def,
+      is_terminator_def, is_alloca_op_def]
 QED
 
 Theorem abi_decoder_array_pointer_sequence:

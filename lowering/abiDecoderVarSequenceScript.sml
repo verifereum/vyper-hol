@@ -6,7 +6,7 @@ Ancestors
 
 Definition abi_decoder_reentry_opcode_def:
   abi_decoder_reentry_opcode opc <=>
-    MEM opc [ADD;MUL;EQ;LT;GT;ISZERO;SHL;SHR;SIGNEXTEND;MLOAD;MSTORE;MCOPY;
+    MEM opc [ADD;MUL;AND;EQ;LT;GT;ISZERO;SHL;SHR;SIGNEXTEND;MLOAD;MSTORE;MCOPY;
       CALLDATALOAD;CALLDATACOPY;DLOAD;DLOADBYTES;ASSERT;ALLOCA;JMP;JNZ]
 End
 

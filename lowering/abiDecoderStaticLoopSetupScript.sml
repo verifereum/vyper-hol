@@ -1,6 +1,7 @@
 (* Concrete source and destination setup for clamped static array elements. *)
 Theory abiDecoderStaticLoopSetup
 Ancestors
+  abiDecoderRange
   abiDecoderLoopSetup abiDecoderIndexedAddress abiDecoderReentryAddress abiDecoderReentry
   abiDecoderGuards abiDecoderContract abiDecoderDynamic
   emitHelperProps exprLoweringProps compileEnv emitHelper venomState venomInst

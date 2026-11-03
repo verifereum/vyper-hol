@@ -1,14 +1,14 @@
 (* Dynamic-array child bounds: no-wrap, endpoint ADD, and upper-bound assertion. *)
 Theory abiDecoderArrayBound
 Ancestors
-  abiDecoderArrayPtr abiDecoderGuard abiDecoderBytesBound abiDecoderGuards abiDecoderContract
+  abiDecoderRange abiDecoderArrayPtr abiDecoderGuard abiDecoderBytesBound abiDecoderGuards abiDecoderContract
   abiEncoder compileEnv emitHelper venomExecSemantics venomState words arithmetic
 
 Definition abi_decode_array_pointer_guard_def:
   abi_decode_array_pointer_guard child_op src_data hi abi_sz =
     do abi_decode_ge_guard child_op src_data;
        end_op <- emit_op ADD [child_op; Lit (n2w abi_sz)];
-       abi_decode_le_guard end_op hi
+       compile_abi_decode_range_check child_op end_op hi
     od
 End
 
@@ -38,13 +38,17 @@ Proof
   `eval_operand (Lit (n2w abi_sz)) s1 = SOME (n2w abi_sz)` by simp[eval_operand_def] >>
   drule_all abi_decode_add_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts c1 c2) s1 = OK s2` >>
-  `eval_operand hi s2 = SOME (n2w hb)` by metis_tac[] >>
-  `w2n ((n2w child_base : bytes32) + n2w abi_sz) <= w2n (n2w hb : bytes32)` by
-    simp[word_add_n2w, w2n_n2w] >>
-  drule_all abi_decode_le_guard_sequence >> strip_tac >>
+  gvs[word_add_n2w] >>
+  `eval_operand child_op s2 = SOME (n2w child_base) /\
+   eval_operand hi s2 = SOME (n2w hb)` by metis_tac[] >>
+  `eval_operand end_op s2 = SOME (n2w (child_base + abi_sz))` by simp[ADD_COMM] >>
+  `w2n (n2w child_base : bytes32) <= w2n (n2w (child_base + abi_sz) : bytes32) /\
+   w2n (n2w (child_base + abi_sz) : bytes32) <= w2n (n2w hb : bytes32)` by
+    simp[w2n_n2w] >>
+  drule_all compile_abi_decode_range_check_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts c2 st') s2 = OK t` >>
   drule abi_decode_ge_guard_shape >> strip_tac >>
-  drule abi_decode_le_guard_shape >> strip_tac >>
+  drule compile_abi_decode_range_check_shape >> strip_tac >>
   `run_inst_seq (emitted_insts c1 st') s1 = OK t /\ inst_extends c1 st'` by
     (irule abi_decode_sequence_chain >> qexistsl_tac [`s2`, `c2`] >> simp[]) >>
   `run_inst_seq (emitted_insts st st') s = OK t /\ inst_extends st st'` by
@@ -62,7 +66,7 @@ Theorem abi_decode_bounded_array_pointer_phases:
 Proof
   strip_tac >> simp[FUN_EQ_THM, compile_abi_decode_dyn_elem_ptr_def,
     abi_decode_array_pointer_guard_def, abi_decode_ge_guard_def,
-    abi_decode_le_guard_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+    comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt gen_tac >> rpt (pairarg_tac >> gvs[])
 QED
 

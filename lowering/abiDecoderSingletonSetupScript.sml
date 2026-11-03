@@ -1,7 +1,7 @@
 (* The actual outer head check and pointer setup for one dynamic member. *)
 Theory abiDecoderSingletonSetup
 Ancestors
-  abiDecoderComplexHead abiDecoderMemberBound abiDecoderReservation abiDecoderGuard
+  abiDecoderRange abiDecoderComplexHead abiDecoderMemberBound abiDecoderReservation abiDecoderGuard
   abiDecoderBytesBound abiDecoderGuards abiDecoderContract abiEncoder emitHelperProps
   exprLoweringProps compileEnv emitHelper venomExecSemantics venomState venomInst words
   arithmetic rich_list
@@ -79,7 +79,7 @@ Theorem abi_decode_singleton_setup_shape:
 Proof
   strip_tac >> gvs[abi_decode_source_opcode_def] >> Cases_on `hi = Lit 0w` >>
   gvs[abi_decode_singleton_setup_def, abi_decode_complex_head_guard_def,
-      abi_decode_le_guard_def, compile_getelemptr_abi_def,
+      compile_abi_decode_range_check_def, compile_getelemptr_abi_def,
       comp_bind_def, comp_ignore_bind_def, comp_return_def,
       emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
       emit_def, emitted_insts_def, IS_PREFIX_APPEND] >>

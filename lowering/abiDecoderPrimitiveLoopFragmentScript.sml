@@ -1,6 +1,6 @@
 Theory abiDecoderPrimitiveLoopFragment
 Ancestors
-  abiDecoderArrayAdvance abiDecoderArrayPrefix abiDecoderPrimitiveMemory
+  abiDecoderRange abiDecoderArrayAdvance abiDecoderArrayPrefix abiDecoderPrimitiveMemory
   abiDecoderStaticLoopSetup abiDecoderReentry abiDecoderGuards abiDecoderFrameCompose
   abiDecoderContract abiDecoderCoherence abiDecoderTypedContract abiDecoderDynamic
   abiDecoderLoopSetup exprLoweringProps emitHelperProps compileEnv valueEncoding venomState

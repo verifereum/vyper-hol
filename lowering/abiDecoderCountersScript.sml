@@ -83,6 +83,28 @@ Proof
   simp[abi_decoder_vars_mono_return]
 QED
 
+Theorem abi_decoder_vars_mono_range_check:
+  abi_decoder_vars_mono (compile_abi_decode_range_check start_op end_op hi_op)
+Proof
+  rewrite_tac[compile_abi_decode_range_check_def] >>
+  ntac 5 VARS_BIND >> simp vars_simps
+QED
+
+Theorem abi_decoder_vars_mono_head_check:
+  abi_decoder_vars_mono
+    (if hi = Lit 0w then comp_return (Lit 0w)
+     else do head_end <- emit_op ADD [src; Lit 32w];
+             compile_abi_decode_range_check src head_end hi;
+             comp_return head_end
+          od)
+Proof
+  IF_CASES_TAC >> simp[abi_decoder_vars_mono_return] >>
+  VARS_BIND >>
+  ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac
+  >- simp[abi_decoder_vars_mono_range_check] >>
+  simp vars_simps
+QED
+
 Theorem abi_decoder_vars_mono_abi_array_pointer:
   abi_decoder_vars_mono (compile_abi_decode_dyn_elem_ptr opc src data hi sz)
 Proof
@@ -90,7 +112,7 @@ Proof
   ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp[abi_decoder_vars_mono_return] >>
       ntac 2 VARS_BIND >> VARS_IGNORE >>
-      ntac 3 VARS_BIND >> simp vars_simps) >>
+      VARS_BIND >> simp[abi_decoder_vars_mono_range_check]) >>
   simp[abi_decoder_vars_mono_return]
 QED
 
@@ -119,19 +141,21 @@ QED
 
 Resume abi_decoder_vars_mono_mutual[bytes]:
   rewrite_tac[Once compile_abi_decode_to_buf_def] >>
+  VARS_BIND_WITH [abi_decoder_vars_mono_head_check] >>
   ntac 3 VARS_BIND >> VARS_IGNORE >>
   ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp[abi_decoder_vars_mono_return] >>
-      ntac 4 VARS_BIND >> simp vars_simps) >>
+      VARS_BIND >> simp[abi_decoder_vars_mono_range_check]) >>
   Cases_on `opc` >> simp vars_simps
 QED
 
 Resume abi_decoder_vars_mono_mutual[array]:
   rewrite_tac[Once compile_abi_decode_to_buf_def] >>
+  VARS_BIND_WITH [abi_decoder_vars_mono_head_check] >>
   ntac 3 VARS_BIND >> VARS_IGNORE >>
   ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp[abi_decoder_vars_mono_return] >>
-      ntac 5 VARS_BIND >> simp vars_simps) >>
+      ntac 2 VARS_BIND >> simp[abi_decoder_vars_mono_range_check]) >>
   VARS_BIND >> VARS_IGNORE >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gvs[]
   >- (ntac 3 VARS_BIND >> Cases_on `opc` >> simp vars_simps) >>
@@ -144,7 +168,9 @@ Resume abi_decoder_vars_mono_mutual[complex]:
   simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC
   >- (first_x_assum (qspec_then `FOLDR (\(_,abi_sz:num,_) acc. abi_sz + acc) 0 elems`
         mp_tac) >> simp[]) >>
-  ntac 3 VARS_BIND >> VARS_IGNORE >>
+  VARS_BIND >>
+  ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac
+  >- simp[abi_decoder_vars_mono_range_check] >>
   first_x_assum (qspec_then `FOLDR (\(_,abi_sz:num,_) acc. abi_sz + acc) 0 elems`
     mp_tac) >> simp[]
 QED

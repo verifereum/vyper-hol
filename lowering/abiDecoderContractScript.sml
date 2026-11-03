@@ -1,7 +1,7 @@
 (* Canonical-success interface probes, not recursive decoder correctness. *)
 Theory abiDecoderContract
 Ancestors
-  fragExec abiBoundaryChecks abiTupleProps emitHelperProps valueEncodingProps
+  abiDecoderRange fragExec abiBoundaryChecks abiTupleProps emitHelperProps valueEncodingProps
   exprLowering vyperABI venomExecSemantics venomInst venomState compileEnv abiEncoder
   emitHelper valueEncoding words venomExecProofs exprLoweringProps
 
@@ -222,32 +222,20 @@ Proof
   simp[compile_abi_decode_to_buf_def] >> strip_tac >>
   gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  pairarg_tac >> gvs[] >>
-  pairarg_tac >> gvs[] >>
-  rename1 `emit_void ASSERT [ok] c3 = ((),c4)` >>
-  rename1 `emit_op ISZERO [oob] c2 = (ok,c3)` >>
-  rename1 `emit_op GT [item_end; hi] c1 = (oob,c2)` >>
+  rename1 `emit_op ADD [src; Lit 0w] st = (item_end,c1)` >>
   `eval_operand (Lit 0w) s = SOME 0w` by simp[eval_operand_def] >>
   drule_all emit_op_ADD_correct >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
-  `eval_operand hi s1 = SOME h` by metis_tac[] >>
-  drule_all emit_op_GT_correct >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts c1 c2) s1 = OK s2` >>
-  drule_all emit_op_ISZERO_correct >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts c2 c3) s2 = OK s3` >>
-  gvs[WORD_ADD_0, bool_to_word_def] >>
-  `1w <> (0w:bytes32)` by simp[] >>
-  drule_all emit_void_ASSERT_ok >> strip_tac >>
-  imp_res_tac abi_guard_emit_frame >> gvs[] >>
-  `s1.vs_call_ctx = s.vs_call_ctx /\ s1.vs_data_section = s.vs_data_section /\
-   s1.vs_memory = s.vs_memory /\ s2.vs_call_ctx = s.vs_call_ctx /\
-   s2.vs_data_section = s.vs_data_section /\ s2.vs_memory = s.vs_memory /\
-   s3.vs_data_section = s.vs_data_section` by metis_tac[] >>
-  imp_res_tac emit_op_extends >> imp_res_tac emit_void_extends >>
-  drule_all abi_decode_seq_compose >> strip_tac >>
-  drule_all abi_decode_seq_compose >> strip_tac >>
-  drule_all abi_decode_seq_compose >> strip_tac >>
-  qexists_tac `s3` >> simp[] >> metis_tac[]
+  gvs[WORD_ADD_0] >>
+  `eval_operand src s1 = SOME p /\ eval_operand hi s1 = SOME h` by metis_tac[] >>
+  `w2n p <= w2n p` by simp[] >>
+  drule_all compile_abi_decode_range_check_sequence >> strip_tac >>
+  drule_all (SIMP_RULE (srw_ss()) []
+    (Q.INST [`opc` |-> `ADD`] abi_decode_pure_emit_frame)) >> strip_tac >>
+  imp_res_tac inst_extends_emit_op >>
+  imp_res_tac compile_abi_decode_range_check_shape >>
+  drule_all abi_decode_sequence_chain >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem abi_decode_empty_bounded_fragment:
@@ -266,12 +254,22 @@ Proof
   >- (rpt strip_tac >> disj1_tac >> gvs[] >>
       drule_all abi_decode_empty_bounded_sequence >> strip_tac >> gvs[]) >>
   gvs[compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
-      comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
-      fresh_id_def, emit_def, emitted_insts_def,
-      rich_listTheory.DROP_LENGTH_APPEND, is_terminator_def,
-      rich_listTheory.IS_PREFIX_APPEND] >>
-  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
-  simp[rich_listTheory.DROP_LENGTH_APPEND, is_terminator_def]
+      comp_return_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `compile_abi_decode_range_check src item_end hi c1 = ((),final)` >>
+  drule compile_abi_decode_range_check_fragment_shape >> strip_tac >>
+  qpat_x_assum `inst_extends c1 final` (assume_tac o REWRITE_RULE [inst_extends_def]) >>
+  qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
+       fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `EVERY _ tail` >>
+  simp_tac pure_ss [emitted_insts_def] >>
+  qpat_x_assum `final.cs_current_insts = _` (fn th => once_rewrite_tac[th]) >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,
+                   rich_listTheory.DROP_LENGTH_APPEND] >>
+  conj_tac
+  >- simp[is_terminator_def, mk_inst_def] >>
+  simp[rich_listTheory.IS_PREFIX_APPEND]
 QED
 
 (* Proof-integrity check for this theory only. Unrelated existing admissions in
