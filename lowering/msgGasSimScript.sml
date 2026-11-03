@@ -151,11 +151,24 @@ Proof
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexists_tac `w` >> simp[] >>
   `!fuel. mem_safe_step fuel ctx (mk_inst id GAS [] [out]) s` by
-    simp[mem_safe_step_non_invoke, inst_mem_below_frontier_def,
-         source_memory_read_ranges_def, source_memory_write_ranges_def,
-         mk_inst_def] >>
-  fs[gas_path_edge_def] >>
-  simp[gas_path_mem_edge_def] >> metis_tac[]
+    (simp[mem_safe_step_non_invoke, mk_inst_def] >>
+     simp[inst_mem_below_frontier_def] >>
+     simp[source_memory_read_ranges_def, source_memory_write_ranges_def]) >>
+  qpat_x_assum `gas_path_edge _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_path_edge_def] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (qx_choose_then `fuel` (qx_choose_then `bb'`
+      (qx_choose_then `inst` (qx_choose_then `middle`
+        (CONJUNCTS_THEN2 assume_tac
+          (CONJUNCTS_THEN2 assume_tac
+            (CONJUNCTS_THEN2 assume_tac
+              (CONJUNCTS_THEN2 assume_tac assume_tac))))))))) >>
+  `bb' = bb` by metis_tac[optionTheory.SOME_11] >>
+  `inst = mk_inst id GAS [] [out]` by metis_tac[optionTheory.SOME_11] >>
+  rewrite_tac[gas_path_mem_edge_def] >>
+  conj_tac >- asm_rewrite_tac[] >>
+  qexistsl_tac [`fuel`, `bb'`, `inst`, `middle`] >>
+  gvs[]
 QED
 
 Theorem compile_msg_gas_mem_path:
