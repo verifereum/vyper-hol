@@ -62,6 +62,18 @@ Proof
   simp[storage_agree_def]
 QED
 
+(* A machine-only write to a wholly source-dead word is unobservable. *)
+Theorem storage_agree_dead_update_right:
+  !D st1 st2 k v.
+    storage_agree D st1 st2 /\
+    (!b. b < 32 ==> D (w2n k) b) ==>
+    storage_agree D st1 (update_storage k v st2)
+Proof
+  rw[storage_agree_def, update_storage_def, lookup_storage_def,
+     combinTheory.APPLY_UPDATE_THM] >>
+  rename1 `k = k'` >> Cases_on `k = k'` >> gvs[]
+QED
+
 Theorem accounts_agree_refl[simp]:
   !cx a. accounts_agree cx a a
 Proof
@@ -158,6 +170,23 @@ Proof
       combinTheory.APPLY_UPDATE_THM] >>
   rw[] >>
   qpat_x_assum `_ with storage := _ = _` (SUBST1_TAC o SYM) >> simp[]
+QED
+
+Theorem accounts_rel_sstore_dead_right:
+  !cx es s k v.
+    accounts_rel cx es s /\
+    s.vs_call_ctx.cc_address = cx.txn.target /\
+    (!b. b < 32 ==>
+      storage_dead cx F
+        (lookup_account cx.txn.target es.accounts).storage (w2n k) b) ==>
+    accounts_rel cx es (sstore k v s)
+Proof
+  rpt strip_tac >>
+  gvs[accounts_rel_def, accounts_agree_def, sstore_def,
+      lookup_account_def, combinTheory.APPLY_UPDATE_THM] >>
+  conj_tac
+  >- (qpat_x_assum `_ with storage := _ = _` (SUBST1_TAC o SYM) >> simp[]) >>
+  irule storage_agree_dead_update_right >> simp[]
 QED
 
 Theorem accounts_rel_set_transient:

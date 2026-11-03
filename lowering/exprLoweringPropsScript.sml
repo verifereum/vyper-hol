@@ -3919,11 +3919,17 @@ Theorem ci_mono_builtin_membership[local]:
           as_stack_val ret_ty
             (compile_var_array_membership cenv needle vv rhs_ty is_in st'))))
 Proof
-  strip_tac >> Cases_on `e` >> simp[LET_THM] >> rpt TOP_CASE_TAC >>
+  strip_tac >> Cases_on `e` >> simp[LET_THM] >>
+  (all_tac >>~- ([`SND (_ (f cenv rhs_ty _ st))`],
+    irule ci_mono_uncurry >> reverse conj_tac
+    >- simp[] >> rpt gen_tac >> BETA_TAC >>
+    simp[ci_mono_as_stack_val, ci_mono_compile_var_array_membership])) >>
+  rename1 `case bi of MakeArray _ _ => _ | _ => _` >>
+  Cases_on `bi` >> simp[LET_THM] >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_compile_multi_exprs]
        >> rpt gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >>
+  Cases_on `is_in` >>
   simp[ci_mono_as_stack_val, ci_mono_compile_list_membership_in,
        ci_mono_compile_list_membership_notin, ci_mono_compile_var_array_membership]
 QED
