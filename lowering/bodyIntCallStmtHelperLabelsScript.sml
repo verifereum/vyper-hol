@@ -537,3 +537,167 @@ Proof
       metis_tac[compile_store_memory_typed_label_bounds]) >>
   simp[compiler_label_hoare_typed_primitives]
 QED
+
+Theorem compiler_block_tail_assign_memory:
+  compiler_block_tail (compile_assign_value ce dst LocMemory value prim src_loc ty sty da sz)
+Proof
+  Cases_on `prim` >> simp[compile_assign_value_def, compiler_block_tail_primitives] >>
+  Cases_on `src_loc = SOME LocMemory` >>
+  simp[compiler_block_tail_store_memory, LET_THM] >>
+  irule compiler_block_tail_bind >> reverse conj_tac
+  >- simp[compiler_block_tail_alloc_buffer] >>
+  gen_tac >> BETA_TAC >> rewrite_tac[comp_ignore_bind_def] >>
+  irule compiler_block_tail_bind >> reverse conj_tac
+  >- simp[compiler_block_tail_primitives] >>
+  gen_tac >> BETA_TAC >> irule compiler_block_tail_bind >>
+  simp[compiler_block_tail_copy_memory, compiler_block_tail_store_memory]
+QED
+
+Theorem compiler_label_hoare_assign_memory:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_assign_value ce dst LocMemory value prim src_loc ty sty da sz)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  `!src dst ty sty. compiler_label_hoare (compiler_label_reservation origin pending)
+     (compile_store_memory ce src dst ty sty)
+     (\r out. compiler_label_reservation origin pending out)` by
+    (rpt gen_tac >> irule compiler_label_hoare_preserves_reservation >>
+     metis_tac[compile_store_memory_label_bounds]) >>
+  Cases_on `prim` >> simp[compile_assign_value_def, compiler_label_hoare_typed_primitives] >>
+  Cases_on `src_loc = SOME LocMemory` >> simp[LET_THM] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- simp[compiler_label_hoare_alloc_buffer] >>
+  gen_tac >> BETA_TAC >> rewrite_tac[comp_ignore_bind_def] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- simp[compiler_label_hoare_typed_primitives] >>
+  gen_tac >> BETA_TAC >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- (irule compiler_label_hoare_preserves_reservation >>
+      metis_tac[compile_copy_memory_label_bounds]) >> simp[]
+QED
+
+Theorem compiler_block_tail_assign_storage:
+  compiler_block_tail (compile_assign_value ce dst LocStorage value prim src_loc ty sty da sz)
+Proof
+  simp[Once compile_assign_value_def] >>
+  irule compiler_block_tail_bind >> reverse conj_tac
+  >- MATCH_ACCEPT_TAC compiler_block_tail_assign_normalize >>
+  gen_tac >> BETA_TAC >> Cases_on `prim` >> simp[compiler_block_tail_primitives] >>
+  Cases_on `da` >> simp[compiler_block_tail_dynarray_to_storage] 
+  >- (Cases_on `sz <= 32` >> simp[] >> rewrite_tac[comp_ignore_bind_def] >>
+      irule compiler_block_tail_bind >>
+      simp[compiler_block_tail_primitives, compiler_block_tail_storage_transfers]) >>
+  split_pair_case_tac >> simp[compiler_block_tail_dynarray_to_storage]
+QED
+
+Theorem compiler_label_hoare_assign_storage:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_assign_value ce dst LocStorage value prim src_loc ty sty da sz)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  simp[Once compile_assign_value_def] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- MATCH_ACCEPT_TAC compiler_label_hoare_assign_normalize >>
+  gen_tac >> BETA_TAC >> Cases_on `prim` >> simp[compiler_label_hoare_typed_primitives] >>
+  Cases_on `da`
+  >- (simp[] >> Cases_on `sz <= 32` >> simp[] >> rewrite_tac[comp_ignore_bind_def]
+      >- (irule compiler_label_hoare_preserving_bind >>
+          simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]) >>
+      irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+      >- (irule compiler_label_hoare_preserves_reservation >>
+          metis_tac[compile_memory_to_storage_label_bounds]) >>
+      simp[compiler_label_hoare_typed_primitives]) >>
+  simp[] >> split_pair_case_tac >> simp[] >>
+  irule compiler_label_hoare_preserves_reservation >>
+  metis_tac[compile_dynarray_to_storage_label_bounds]
+QED
+
+Theorem compiler_block_tail_assign_transient:
+  compiler_block_tail (compile_assign_value ce dst LocTransient value prim src_loc ty sty da sz)
+Proof
+  simp[Once compile_assign_value_def] >>
+  irule compiler_block_tail_bind >> reverse conj_tac
+  >- MATCH_ACCEPT_TAC compiler_block_tail_assign_normalize >>
+  gen_tac >> BETA_TAC >> Cases_on `prim` >> simp[compiler_block_tail_primitives] >>
+  Cases_on `da` >> simp[compiler_block_tail_dynarray_to_storage]
+  >- (Cases_on `sz <= 32` >> simp[] >> rewrite_tac[comp_ignore_bind_def] >>
+      irule compiler_block_tail_bind >>
+      simp[compiler_block_tail_primitives, compiler_block_tail_storage_transfers]) >>
+  split_pair_case_tac >> simp[compiler_block_tail_dynarray_to_storage]
+QED
+
+Theorem compiler_label_hoare_assign_transient:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_assign_value ce dst LocTransient value prim src_loc ty sty da sz)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  simp[Once compile_assign_value_def] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- MATCH_ACCEPT_TAC compiler_label_hoare_assign_normalize >>
+  gen_tac >> BETA_TAC >> Cases_on `prim` >> simp[compiler_label_hoare_typed_primitives] >>
+  Cases_on `da`
+  >- (simp[] >> Cases_on `sz <= 32` >> simp[] >> rewrite_tac[comp_ignore_bind_def]
+      >- (irule compiler_label_hoare_preserving_bind >>
+          simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]) >>
+      irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+      >- (irule compiler_label_hoare_preserves_reservation >>
+          metis_tac[compile_memory_to_transient_label_bounds]) >>
+      simp[compiler_label_hoare_typed_primitives]) >>
+  simp[] >> split_pair_case_tac >> simp[] >>
+  irule compiler_label_hoare_preserves_reservation >>
+  metis_tac[compile_dynarray_to_storage_label_bounds]
+QED
+
+Theorem compiler_block_tail_assign_code:
+  compiler_block_tail (compile_assign_value ce dst LocCode value prim src_loc ty sty da sz)
+Proof
+  simp[Once compile_assign_value_def] >>
+  irule compiler_block_tail_bind >> reverse conj_tac
+  >- MATCH_ACCEPT_TAC compiler_block_tail_assign_normalize >>
+  gen_tac >> BETA_TAC >> Cases_on `prim` >>
+  simp[compiler_block_tail_immutable_primitives] >>
+  Cases_on `sz <= 32` >> simp[compiler_block_tail_immutable_primitives,
+    compiler_block_tail_imm_store_words] >>
+  irule compiler_block_tail_bind >>
+  simp[compiler_block_tail_primitives, compiler_block_tail_immutable_primitives]
+QED
+
+Theorem compiler_label_hoare_assign_code:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_assign_value ce dst LocCode value prim src_loc ty sty da sz)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  simp[Once compile_assign_value_def] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- MATCH_ACCEPT_TAC compiler_label_hoare_assign_normalize >>
+  gen_tac >> BETA_TAC >> Cases_on `prim` >>
+  simp[compiler_label_hoare_immutable_primitives] >>
+  Cases_on `sz <= 32` >> simp[]
+  >- (irule compiler_label_hoare_preserving_bind >>
+      simp[compiler_label_hoare_context_primitives, compiler_label_hoare_immutable_primitives]) >>
+  irule compiler_label_hoare_preserves_reservation >>
+  metis_tac[compile_imm_store_words_label_bounds]
+QED
+
+Theorem compiler_block_tail_assign_value:
+  compiler_block_tail (compile_assign_value ce dst loc value prim src_loc ty sty da sz)
+Proof
+  Cases_on `loc` >> simp[compiler_block_tail_assign_memory,
+    compiler_block_tail_assign_storage, compiler_block_tail_assign_transient,
+    compiler_block_tail_assign_code] >>
+  simp[compile_assign_value_def, comp_ignore_bind_def] >>
+  irule compiler_block_tail_bind >> simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_assign_value:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_assign_value ce dst loc value prim src_loc ty sty da sz)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  Cases_on `loc` >> simp[compiler_label_hoare_assign_memory,
+    compiler_label_hoare_assign_storage, compiler_label_hoare_assign_transient,
+    compiler_label_hoare_assign_code] >>
+  simp[compile_assign_value_def, comp_ignore_bind_def] >>
+  irule compiler_label_hoare_preserving_bind >>
+  simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]
+QED
