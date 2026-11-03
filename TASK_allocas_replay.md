@@ -33,6 +33,31 @@ Theorem remap_preserved_no_pointer_ops[local]:
             v NOTIN pointer_derived_vars fn roots) ==>
     ?v2. step_inst_base inst s2 = OK v2 /\
          alloca_remap_rel fn roots remap v1 v2
+Theorem remap_preserved_mem_ops[local]:
+  !fn roots remap inst s1 s2 v1 bb.
+    alloca_remap_rel fn roots remap s1 s2 /\
+    allocas_in_memory s1 /\ allocas_in_memory s2 /\
+    FINITE roots /\
+    roots SUBSET alloca_roots fn /\
+    wf_function fn /\
+    ssa_form fn /\
+    pointer_confined fn roots /\
+    all_mem_via_pointer fn roots /\
+    alloca_safe_access fn roots s1 /\
+    alloca_safe_access fn roots s2 /\
+
+    step_inst_base inst s1 = OK v1 /\
+    ~is_alloca_op inst.inst_opcode /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_ext_call_op inst.inst_opcode /\
+    inst.inst_opcode <> ISTORE /\
+    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+    (?ops. (mem_write_ops inst = SOME ops \/ mem_read_ops inst = SOME ops) /\
+           ?v. ops.iao_ofst = Var v /\ v IN pointer_derived_vars fn roots) /\
+    (!u. u IN pointer_derived_vars fn roots ==>
+         LENGTH (FILTER ($= (Var u)) inst.inst_operands) <= 1) ==>
+    ?v2. step_inst_base inst s2 = OK v2 /\
+         alloca_remap_rel fn roots remap v1 v2
 ```
 
 Do not modify this statement. Prove it as-is, or produce a counterexample.
@@ -41,6 +66,7 @@ Do not modify this statement. Prove it as-is, or produce a counterexample.
 
 - Repair the existing step_inst_base_allocas proof without changing its statement.
 - Repair the existing remap_preserved_no_pointer_ops proof so full replay continues.
+- Repair the encountered remap_preserved_mem_ops[log] proof while preserving the full theorem statement and other opcode resumes.
 - Build allocaRemapProofsTheory at the default tactic limit.
 - Preserve all other existing proofs, definitions and statements.
 
@@ -54,7 +80,7 @@ A forced default replay at eaf96a2fa timed out at the classification gvs after o
 
 ## Domain Constraints
 
-- Edit only these two proofs and necessary helper theorems in venom/passes/shared/proofs/allocaRemapProofsScript.sml. A needed declarative Ancestors entry is allowed if it introduces no dependency cycle. Preserve the completed allocation-map proof repair.
+- The first two frozen roots now pass incrementally at ffd26407e. Preserve both completed repairs and their helper proofs. Edit only the remap_preserved_mem_ops[log] resume and necessary helper theorems in venom/passes/shared/proofs/allocaRemapProofsScript.sml. A needed declarative Ancestors entry is allowed if it introduces no dependency cycle. Preserve the completed allocation-map proof repair.
 - All existing definitions and statements, including local declarations, are frozen. No new definitions, axioms, admissions, strengthened premises, opcode exclusions or supported-subset changes.
 - Preserve all completed gas, CFG and DRET proofs.
 - Default 2.5-second tactic limit; no timeout override and no TRY/ORELSE/FIRST around search.
@@ -77,8 +103,12 @@ A forced default replay at eaf96a2fa timed out at the classification gvs after o
 - `venom/passes/shared/proofs/passSharedTransferScript.sml`
 - `venom/passes/shared/proofs/passSharedFieldScript.sml`
 
+- `venom/analysis/shared/defs/memLocDefsScript.sml`
+
 ## Notes
 
 This exact statement parsed in the forced failing build. The owner separately checks frozen schemas, forced default/CI replay and dependency tags after return.
 
 The first root now passes incrementally as 24293f5fd, but full replay stopped in the second exact existing root while discharging a GAS-readings agreement premise of the scalar bridge. An independent audit of the complete second statement, its residual frame, GAS step and SSA/pointer producers found PROVABLE under the current definitions. No new invariant or assumption is authorized or needed. This amendment permits only that second proof and necessary helper theorems; all old schemas and completed proofs remain frozen.
+
+The incremental default-limit replay at ffd26407e passes both previously authorized roots, then stops in the distinct LOG resume at its initial full-dispatch simplification (2.5s). An independent read-only audit of the exact full remap_preserved_mem_ops statement and LOG producer/semantics found PROVABLE: existing pointer/read bounds and residual-frame equality suffice, including all gas fields. This scope extension permits only the LOG resume and necessary local helpers; no statements, definitions or completed proof bodies may change. Report any further prerequisite before expansion.
