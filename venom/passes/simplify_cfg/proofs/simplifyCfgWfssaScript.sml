@@ -1,7 +1,9 @@
 Theory simplifyCfgWfssa
 Ancestors
-  simplifyCfgPhiRepair simplifyCfgDataflow simplifyCfgStruct
-  venomWf venomExecProofs cfgWf list rich_list relation
+  simplifyCfgPhiRepair simplifyCfgDataflow simplifyCfgStruct simplifyCfgDefs
+  simplifyCfgRepairDataflow
+  venomWf venomInst venomExecProofs cfgWf unitShapeDefs simplifyCfgLabelProps
+  list rich_list relation
 
 Theorem is_fn_path_first_arrival:
   !path. path <> [] /\ is_fn_path fn path /\ LAST path = b ==>
@@ -101,4 +103,134 @@ Proof
       fs[all_reachable_def, fn_defs_reach_uses_def] >> metis_tac[]) >>
   simp[] >> rpt strip_tac >> irule def_on_all_paths_available >>
   fs[all_reachable_def, fn_defs_reach_uses_def] >> metis_tac[]
+QED
+
+Theorem inst_wf_fix_phi_inst:
+  inst_wf inst ==> inst_wf (fix_phi_inst actual_preds inst)
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = PHI`
+  >- (`phi_well_formed (filter_phi_ops actual_preds inst.inst_operands)` by
+        (irule filter_phi_ops_well_formed >> fs[inst_wf_def]) >>
+      fs[inst_wf_def] >> simp[fix_phi_inst_def] >>
+      Cases_on `filter_phi_ops actual_preds inst.inst_operands` >> simp[inst_wf_def] >>
+      Cases_on `t` >> gvs[phi_well_formed_def] >>
+      Cases_on `t'` >> gvs[inst_wf_def]) >>
+  simp[fix_phi_inst_non_phi]
+QED
+
+Theorem label_positions_ok_fix_phi_inst:
+  inst_wf inst /\ label_positions_ok inst ==>
+  label_positions_ok (fix_phi_inst actual_preds inst)
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = PHI`
+  >- (`phi_well_formed (filter_phi_ops actual_preds inst.inst_operands)` by
+        (irule filter_phi_ops_well_formed >> fs[inst_wf_def]) >>
+      simp[fix_phi_inst_def] >>
+      Cases_on `filter_phi_ops actual_preds inst.inst_operands` >>
+      simp[label_positions_ok_def] >>
+      Cases_on `t` >> gvs[phi_well_formed_def] >>
+      Cases_on `t'` >> gvs[label_positions_ok_def, stackPlanTypesTheory.is_label_operand_def] >>
+      Cases_on `h` >> Cases_on `h'` >>
+      gvs[phi_well_formed_def, label_positions_ok_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  simp[fix_phi_inst_non_phi]
+QED
+
+Theorem fix_all_phis_fn_inst_wf:
+  fn_inst_wf fn ==> fn_inst_wf (fix_all_phis fn)
+Proof
+  simp[fn_inst_wf_def, fix_all_phis_def, MEM_MAP, PULL_EXISTS,
+       fix_phis_in_block_mem] >> rpt strip_tac >> gvs[] >>
+  irule inst_wf_fix_phi_inst >> metis_tac[]
+QED
+
+Theorem fix_all_phis_label_positions_ok:
+  fn_inst_wf fn /\ EVERY label_positions_ok (fn_insts fn) ==>
+  EVERY label_positions_ok (fn_insts (fix_all_phis fn))
+Proof
+  simp[EVERY_MEM, fn_insts_def, fn_insts_blocks_mem, fix_all_phis_def,
+       MEM_MAP, PULL_EXISTS, fix_phis_in_block_mem] >> rpt strip_tac >> gvs[] >>
+  irule label_positions_ok_fix_phi_inst >>
+  fs[fn_inst_wf_def] >> metis_tac[]
+QED
+
+Theorem remove_unreachable_blocks_fn_inst_wf:
+  fn_inst_wf fn ==> fn_inst_wf (remove_unreachable_blocks fn)
+Proof
+  simp[fn_inst_wf_def] >> strip_tac >>
+  Cases_on `fn_entry_label fn` >>
+  simp[remove_unreachable_blocks_def, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem remove_unreachable_blocks_label_positions_ok:
+  EVERY label_positions_ok (fn_insts fn) ==>
+  EVERY label_positions_ok (fn_insts (remove_unreachable_blocks fn))
+Proof
+  simp[EVERY_MEM] >> strip_tac >>
+  ho_match_mp_tac (GEN_ALL remove_unreachable_blocks_inst_property) >> simp[]
+QED
+
+Theorem remove_unreachable_blocks_ssa_invariant:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  first_block_no_preds fn /\ scfg_phi_safe fn /\ fn_defs_reach_uses fn /\
+  EVERY label_positions_ok (fn_insts fn) ==>
+  wf_ssa (remove_unreachable_blocks fn) /\
+  wf_function (remove_unreachable_blocks fn) /\
+  fn_inst_wf (remove_unreachable_blocks fn) /\
+  first_block_no_preds (remove_unreachable_blocks fn) /\
+  scfg_phi_safe (remove_unreachable_blocks fn) /\
+  fn_defs_reach_uses (remove_unreachable_blocks fn) /\
+  EVERY label_positions_ok (fn_insts (remove_unreachable_blocks fn)) /\
+  all_reachable (remove_unreachable_blocks fn)
+Proof
+  strip_tac >> rpt conj_tac
+  >- (fs[wf_ssa_def] >>
+      metis_tac[remove_unreachable_blocks_ssa,
+                remove_unreachable_blocks_def_dominates_uses])
+  >- metis_tac[remove_unreachable_blocks_wf]
+  >- metis_tac[remove_unreachable_blocks_fn_inst_wf]
+  >- metis_tac[remove_unreachable_blocks_first_block_no_preds]
+  >- metis_tac[remove_unreachable_blocks_phi_safe]
+  >- metis_tac[remove_unreachable_blocks_defs_reach_uses]
+  >- metis_tac[remove_unreachable_blocks_label_positions_ok] >>
+  metis_tac[remove_unreachable_blocks_reachable]
+QED
+
+Theorem fix_all_phis_ssa_invariant:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  first_block_no_preds fn /\ scfg_phi_safe fn /\ fn_defs_reach_uses fn /\
+  EVERY label_positions_ok (fn_insts fn) /\ all_reachable fn ==>
+  wf_ssa (fix_all_phis fn) /\ wf_function (fix_all_phis fn) /\
+  fn_inst_wf (fix_all_phis fn) /\ first_block_no_preds (fix_all_phis fn) /\
+  scfg_phi_safe (fix_all_phis fn) /\ fn_defs_reach_uses (fix_all_phis fn) /\
+  EVERY label_positions_ok (fn_insts (fix_all_phis fn)) /\
+  all_reachable (fix_all_phis fn)
+Proof
+  strip_tac >> rpt conj_tac
+  >- (fs[wf_ssa_def] >>
+      metis_tac[fix_all_phis_ssa, fix_all_phis_def_dominates_uses])
+  >- metis_tac[fix_all_phis_wf]
+  >- metis_tac[fix_all_phis_fn_inst_wf]
+  >- metis_tac[fix_all_phis_first_block_no_preds]
+  >- metis_tac[fix_all_phis_phi_safe]
+  >- metis_tac[fix_all_phis_defs_reach_uses]
+  >- metis_tac[fix_all_phis_label_positions_ok] >>
+  metis_tac[fix_all_phis_all_reachable]
+QED
+
+Theorem simplify_cfg_round_entry_ssa_invariant:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  first_block_no_preds fn /\ scfg_phi_safe fn /\ fn_defs_reach_uses fn /\
+  EVERY label_positions_ok (fn_insts fn) ==>
+  wf_ssa (fix_all_phis (remove_unreachable_blocks fn)) /\
+  wf_function (fix_all_phis (remove_unreachable_blocks fn)) /\
+  fn_inst_wf (fix_all_phis (remove_unreachable_blocks fn)) /\
+  first_block_no_preds (fix_all_phis (remove_unreachable_blocks fn)) /\
+  scfg_phi_safe (fix_all_phis (remove_unreachable_blocks fn)) /\
+  fn_defs_reach_uses (fix_all_phis (remove_unreachable_blocks fn)) /\
+  EVERY label_positions_ok
+    (fn_insts (fix_all_phis (remove_unreachable_blocks fn))) /\
+  all_reachable (fix_all_phis (remove_unreachable_blocks fn))
+Proof
+  strip_tac >> drule_all remove_unreachable_blocks_ssa_invariant >>
+  strip_tac >> irule fix_all_phis_ssa_invariant >> simp[]
 QED
