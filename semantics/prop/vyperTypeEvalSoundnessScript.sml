@@ -9051,7 +9051,7 @@ Resume eval_scc_type_sound_results_mutual[TraceCreateBlueprint]:
   strip_tac >>
   qpat_x_assum `!env st res st'. well_typed_exprs _ _ /\ _ ==> _` drule_all >>
   strip_tac >>
-  Cases_on `prefix_res` >> gvs[]
+  Cases_on `prefix_res` >> simp_tac (srw_ss()) []
   >- (rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
         (INL prefix,prefix_st)` >>
       Cases_on `check_create_blueprint has_salt prefix prefix_st` >>
