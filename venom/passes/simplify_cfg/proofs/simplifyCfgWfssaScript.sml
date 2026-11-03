@@ -1,7 +1,8 @@
 Theory simplifyCfgWfssa
 Ancestors
   simplifyCfgPhiRepair simplifyCfgDataflow simplifyCfgStruct simplifyCfgDefs
-  simplifyCfgRepairDataflow
+  simplifyCfgRepairDataflow simplifyCfgChainDataflow simplifyCfgBypassDataflow
+  cfgTransform simplifyCfgPhiPreds
   venomWf venomInst venomExecProofs cfgWf unitShapeDefs simplifyCfgLabelProps
   list rich_list relation
 
@@ -233,4 +234,83 @@ Theorem simplify_cfg_round_entry_ssa_invariant:
 Proof
   strip_tac >> drule_all remove_unreachable_blocks_ssa_invariant >>
   strip_tac >> irule fix_all_phis_ssa_invariant >> simp[]
+QED
+
+Theorem subst_phi_pair_origin:
+  phi_well_formed inst.inst_operands /\
+  phi_well_formed inst'.inst_operands /\ p <> old /\
+  subst_label_inst old new inst' = subst_label_inst old new inst /\
+  MEM (p,v) (phi_pairs inst'.inst_operands) ==>
+  ?q. MEM (q,v) (phi_pairs inst.inst_operands) /\
+      p = (if q = old then new else q)
+Proof
+  strip_tac >>
+  `MEM (p,v) (phi_pairs (subst_label_inst old new inst').inst_operands)` by
+    (qpat_x_assum `subst_label_inst _ _ _ = _` kall_tac >>
+     simp[subst_label_inst_def, phi_pairs_subst_label_ops, MEM_MAP] >>
+     qexists `(p,v)` >> simp[]) >>
+  `MEM (p,v) (phi_pairs (subst_label_inst old new inst).inst_operands)` by
+    metis_tac[] >>
+  qpat_x_assum `subst_label_inst _ _ _ = _` kall_tac >>
+  qpat_x_assum `MEM _ (phi_pairs (subst_label_inst _ _ inst').inst_operands)` kall_tac >>
+  gvs[subst_label_inst_def, phi_pairs_subst_label_ops, MEM_MAP] >>
+  rename1 `MEM pair (phi_pairs inst.inst_operands)` >>
+  qexists `FST pair` >> simp[]
+QED
+
+Theorem chain_merge_phi_defs_reach_uses:
+  wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  scfg_phi_preds fn /\ fn_defs_reach_uses fn /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks := update_succ_phi_labels b.bb_label a.bb_label
+    (replace_block a.bb_label (merge_blocks a b)
+      (remove_block b.bb_label fn.fn_blocks)) (bb_succs (merge_blocks a b))) /\
+  MEM bb' fn'.fn_blocks /\ MEM inst' bb'.bb_instructions /\ inst'.inst_opcode = PHI /\
+  MEM (p,v) (phi_pairs inst'.inst_operands) /\
+  MEM pb' fn'.fn_blocks /\ pb'.bb_label = p ==>
+  def_on_all_paths fn' pb' NONE v
+Proof
+  strip_tac >>
+  `fn_inst_wf fn'` by
+    (gvs[] >> irule chain_merge_fn_inst_wf >> simp[]) >>
+  `inst_wf inst'` by metis_tac[fn_inst_wf_def] >>
+  `phi_well_formed inst'.inst_operands` by gvs[inst_wf_def] >>
+  `MEM p (fn_labels fn')` by
+    (simp[NoAsms, fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `fn_labels fn' = FILTER (\lbl. lbl <> b.bb_label) (fn_labels fn)` by
+    gvs[chain_merge_fn_labels] >>
+  `p <> b.bb_label` by fs[MEM_FILTER] >>
+  `?bb inst. MEM bb fn.fn_blocks /\ bb'.bb_label = bb.bb_label /\
+    MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
+    subst_label_inst b.bb_label a.bb_label inst' =
+      subst_label_inst b.bb_label a.bb_label inst` by
+    (irule chain_merge_phi_source >> gvs[]) >>
+  `inst_wf inst` by metis_tac[fn_inst_wf_def] >>
+  `phi_well_formed inst.inst_operands` by gvs[inst_wf_def] >>
+  drule_all subst_phi_pair_origin >> strip_tac >>
+  `fn_cfg_edge fn q bb.bb_label` by
+    (fs[simplifyCfgPhiPredsTheory.scfg_phi_preds_def] >> metis_tac[]) >>
+  `?pb. MEM pb fn.fn_blocks /\ pb.bb_label = q` by
+    (fs[fn_cfg_edge_def] >> metis_tac[]) >>
+  `def_on_all_paths fn pb NONE v` by
+    (fs[fn_defs_reach_uses_def] >> metis_tac[]) >>
+  `pb'.bb_label = (if pb.bb_label = b.bb_label then a.bb_label else pb.bb_label)` by
+    metis_tac[] >>
+  drule_all chain_merge_def_on_all_paths_endpoint >> simp[]
+QED
+
+Theorem chain_merge_defs_reach_uses:
+  wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  scfg_phi_preds fn /\ fn_defs_reach_uses fn /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks := update_succ_phi_labels b.bb_label a.bb_label
+    (replace_block a.bb_label (merge_blocks a b)
+      (remove_block b.bb_label fn.fn_blocks)) (bb_succs (merge_blocks a b))) ==>
+  fn_defs_reach_uses fn'
+Proof
+  strip_tac >> simp[NoAsms, fn_defs_reach_uses_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode = PHI` >> simp[IgnAsm `fn' = _`]
+  >- (rpt strip_tac >> irule chain_merge_phi_defs_reach_uses >> metis_tac[]) >>
+  rpt strip_tac >> irule chain_merge_ordinary_defs_reach_uses >> metis_tac[]
 QED
