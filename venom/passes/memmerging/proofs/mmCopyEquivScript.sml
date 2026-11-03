@@ -205,12 +205,12 @@ Proof
   >> `TAKE 32 (DROP (src + 32) (replace_bytes dst data1
         (expand_mem mem (dst + 32))) ++ REPLICATE 32 0w)
       = TAKE 32 (DROP (src + 32) mem ++ REPLICATE 32 0w)`
-       by (simp[Abbr`data1`]
-           >> rw[LIST_EQ_REWRITE, replace_bytes_def, expand_mem_def,
-                 LENGTH_APPEND, LENGTH_TAKE, LENGTH_DROP, LENGTH_REPLICATE]
-           >> rw[EL_APPEND_EQN, EL_TAKE, EL_DROP, EL_REPLICATE,
-                 LENGTH_APPEND, LENGTH_TAKE, LENGTH_DROP, LENGTH_REPLICATE, MAX_DEF]
-           >> fs[interval_overlaps_def, mk_interval_def, interval_end_def])
+       by (`src + 64 <= dst \/ dst + 32 <= src + 32` by
+             (fs[interval_overlaps_def, mk_interval_def, interval_end_def]
+              >> decide_tac)
+           >> qspecl_then [`dst`, `data1`, `mem`, `src + 32`, `32`] mp_tac
+                read_nonoverlap_expand
+           >> simp[])
   >> pop_assum SUBST_ALL_TAC
   (* Combine adjacent replace_bytes *)
   >> qabbrev_tac `data2 = TAKE 32 (DROP (src + 32) mem ++ REPLICATE 32 (0w:word8))`
@@ -259,11 +259,12 @@ Proof
   >> `TAKE 32 (DROP (src + sz) (replace_bytes dst data1
         (expand_mem mem (dst + sz))) ++ REPLICATE 32 0w)
       = TAKE 32 (DROP (src + sz) mem ++ REPLICATE 32 0w)`
-       by (rw[LIST_EQ_REWRITE, replace_bytes_def, expand_mem_def,
-              LENGTH_APPEND, LENGTH_TAKE, LENGTH_DROP, LENGTH_REPLICATE]
-           >> rw[EL_APPEND_EQN, EL_TAKE, EL_DROP, EL_REPLICATE,
-                 LENGTH_APPEND, LENGTH_TAKE, LENGTH_DROP, LENGTH_REPLICATE, MAX_DEF]
-           >> fs[interval_overlaps_def, mk_interval_def, interval_end_def])
+       by (`src + sz + 32 <= dst \/ dst + sz <= src + sz` by
+             (fs[interval_overlaps_def, mk_interval_def, interval_end_def]
+              >> decide_tac)
+           >> qspecl_then [`dst`, `data1`, `mem`, `src + sz`, `32`] mp_tac
+                read_nonoverlap_expand
+           >> simp[])
   >> pop_assum SUBST_ALL_TAC
   (* Combine replace_bytes *)
   >> qabbrev_tac `data2 = TAKE 32 (DROP (src + sz) mem ++ REPLICATE 32 (0w:word8))`
