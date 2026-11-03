@@ -2811,7 +2811,7 @@ Theorem step_inst_base_ret_prev_bb[local]:
       (step_inst_base inst s)
 Proof
   rpt strip_tac >>
-  simp[step_inst_base_def, eval_operands_prev_bb] >>
+  simp[step_inst_base_opcode_eqs, eval_operands_prev_bb] >>
   Cases_on `eval_operands inst.inst_operands s` >>
   simp[exec_result_map_prev_bb_def] >>
   Cases_on `x` >> simp[exec_result_map_prev_bb_def]
