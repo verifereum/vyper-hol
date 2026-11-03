@@ -467,8 +467,8 @@ QED
 Theorem evaluate_membership_success_bool:
   evaluate_membership tv neg v1 v2 = INL v ==> ?b. v = BoolV b
 Proof
-  Cases_on `v2` >> Cases_on `v1` >> Cases_on `neg` >>
-  simp[evaluate_membership_def, evaluate_binop_def, binop_negate_def] >>
+  Cases_on `v2` >> rw[evaluate_membership_def] >>
+  Cases_on `v1` >> fs[evaluate_binop_def, binop_negate_def] >>
   metis_tac[]
 QED
 
