@@ -24,6 +24,7 @@ Ancestors
   localPtrsProps
   immutableStagingBridge
   immutableCodeLayout
+  e2eDeployFrame
   immutableLocationProps
   loweringShapeDefs
   loweringShapeProps
