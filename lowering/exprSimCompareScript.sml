@@ -328,10 +328,10 @@ Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`cx`, `ann`, `if mm = Min then Lt else Gt`, `ty`, `tv`, `v1`,
                `v2`, `es`] mp_tac bop_result_compare >>
-  fs[word_value_def] >> gvs[] >> Cases_on `v2` >>
+  fs[word_value_def] >> gvs[value_has_type_inv] >> Cases_on `v2` >>
+  gvs[value_has_type_inv, value_has_type_def] >>
   gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
       expr_res_ok_def] >>
-  (impl_tac >- asm_rewrite_tac[]) >>
   disch_then (fn th => rewrite_tac [GSYM th]) >> rw[word_value_def] >>
   `n = i` by ARITH_TAC >> simp[]
 QED
