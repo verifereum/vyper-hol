@@ -12,10 +12,10 @@ Ancestors
    TOP-LEVEL: abi_decoder_complex_trace, abi_decoder_complex_code,
      abi_decoder_complex_guard_inputs. *)
 Theorem abi_decoder_complex_trace:
-  compile_abi_decode_to_buf dst src opc hi (DecComplex dyn infos) st = ((),final) ==>
+  compile_abi_decode_to_buf dst src opc base_op hi (DecComplex dyn infos) st = ((),final) ==>
   ?middle. abi_decode_complex_head_guard src hi (FOLDR (\(_,asz,_) acc. asz + acc) 0 infos)
       st = ((),middle) /\
-    compile_abi_decode_complex_elems dst src opc hi infos 0 0 middle = ((),final)
+    compile_abi_decode_complex_elems dst src opc base_op hi infos 0 0 middle = ((),final)
 Proof
   simp_tac bool_ss [abi_decode_complex_phases, comp_ignore_bind_def, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
@@ -25,7 +25,7 @@ QED
 
 Theorem abi_decoder_complex_code:
   abi_decode_complex_head_guard src hi head_sz st = ((),middle) /\
-  compile_abi_decode_complex_elems dst src opc hi infos 0 0 middle = ((),final) /\
+  compile_abi_decode_complex_elems dst src opc base_op hi infos 0 0 middle = ((),final) /\
   abi_decode_source_opcode opc /\ fn_has_code st final func ==>
   fn_has_code st middle func /\ fn_has_code middle final func /\
   cs_extends st middle /\ cs_extends middle final /\ middle.cs_blocks = st.cs_blocks /\
@@ -45,7 +45,7 @@ QED
 
 Theorem abi_decoder_complex_guard_inputs:
   abi_decoder_members ce env sf tys tvs avs vs /\
-  abi_decoder_ranges opc hi src dst sb
+  abi_decoder_ranges opc base_op hi src dst B sb
     (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)))
     d (SUM (MAP (type_memory_bytes ce) tys)) b cap initial ==>
   abi_decode_source_opcode opc /\ eval_operand src initial = SOME (n2w sb) /\
@@ -61,7 +61,7 @@ Proof
   `FOLDR (\(_,asz,_) acc. asz + acc) 0 (abi_decoder_member_infos sf ce tys) <=
     LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs))` by
     (gvs[Excl "enc_def"] >> decide_tac) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   asm_simp_tac bool_ss [] >> Cases_on `hi = Lit 0w` >- simp[] >>
   qpat_x_assum `hi = Lit 0w \/ _` mp_tac >> asm_simp_tac bool_ss [] >> strip_tac >>
@@ -73,18 +73,20 @@ QED
    TOP-LEVEL: abi_decoder_complex_execute. *)
 Theorem abi_decoder_complex_execute:
   LIST_REL (abi_decoder_correct ce env sf) tys tvs /\
-  compile_abi_decode_to_buf dst src opc hi (DecComplex dyn (abi_decoder_member_infos sf ce tys))
+  (base_op = Lit 0w \/ opc = MLOAD) /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecComplex dyn (abi_decoder_member_infos sf ce tys))
     st = ((),final) /\ fn_has_code st final func /\
   (st.cs_blocks = final.cs_blocks \/
     !bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_decoder_members ce env sf tys tvs avs vs /\
-  abi_decoder_ranges opc hi src dst sb
+  abi_decoder_ranges opc base_op hi src dst B sb
     (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)))
     d (SUM (MAP (type_memory_bytes ce) tys)) b cap initial /\
-  mem_bytes_at sb (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)))
+  mem_bytes_at (B + sb) (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)))
     (abi_decode_source opc initial) = enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var hi /\
   abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ final.cs_next_id <= last /\
   final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
@@ -115,6 +117,7 @@ Proof
      mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `prepared:venom_state`]
        abi_decoder_budget_transport) >> asm_simp_tac bool_ss []) >>
   `abi_decoder_operand_live middle.cs_next_var src /\ abi_decoder_operand_live middle.cs_next_var dst /\
+   abi_decoder_operand_live middle.cs_next_var base_op /\
    abi_decoder_operand_live middle.cs_next_var hi` by
     (rpt conj_tac >> irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
   drule abi_decoder_members_correct_list >> strip_tac >>
