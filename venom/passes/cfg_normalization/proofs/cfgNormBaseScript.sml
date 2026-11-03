@@ -2908,6 +2908,28 @@ Proof
   simp[exec_result_map_prev_bb_def, halt_state_def, venom_state_fupdcanon]
 QED
 
+Theorem step_inst_base_dret_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = DRET ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >>
+  simp[step_inst_base_def, eval_operands_prev_bb] >>
+  Cases_on `inst.inst_outputs = []` >>
+  simp[exec_result_map_prev_bb_def] >>
+  Cases_on `parse_dret_shape inst` >>
+  simp[exec_result_map_prev_bb_def] >>
+  PairCases_on `x` >> simp[] >>
+  Cases_on `eval_operands inst.inst_operands s` >>
+  simp[exec_result_map_prev_bb_def] >>
+  Cases_on `pair_dret_words (TAKE (2 * x1) (DROP (x0 + 1) x))` >>
+  simp[exec_result_map_prev_bb_def, pack_dret_dynamic_prev_bb_eq] >>
+  Cases_on `pack_dret_dynamic s.vs_call_entry_fmp x' s` >>
+  PairCases_on `r` >>
+  simp[exec_result_map_prev_bb_def, venom_state_fupdcanon]
+QED
+
 val nonjump_term_prev_bb_tac =
   simp[step_inst_base_def, eval_operand_prev_bb,
        eval_operands_prev_bb, halt_state_def, revert_state_def,
