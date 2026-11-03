@@ -76,9 +76,9 @@ Definition abi_decoder_primitive_loop_code_def:
 End
 
 Theorem abi_decoder_primitive_body_counters:
-  abi_decode_array_element_setup ip src dst opc hi (DecPrimWord clamp) 32 32
+  abi_decode_array_element_setup ip src dst opc base_op hi (DecPrimWord clamp) 32 32
     st0 = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi (DecPrimWord clamp)
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi (DecPrimWord clamp)
     middle = ((),st1) ==>
   st0.cs_next_var + 7 <= st1.cs_next_var
 Proof
@@ -90,9 +90,9 @@ QED
 
 Theorem abi_decoder_primitive_body_contained:
   abi_decoder_primitive_loop_code fn st0 st1 ops ip src opc hdr exit_lbl hid first iv /\
-  abi_decode_array_element_setup ip src dst opc hi (DecPrimWord clamp) 32 32
+  abi_decode_array_element_setup ip src dst opc base_op hi (DecPrimWord clamp) 32 32
     st0 = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi (DecPrimWord clamp)
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi (DecPrimWord clamp)
     middle = ((),st1) /\ abi_decode_source_opcode opc ==>
   fn_has_code st0 st1 fn
 Proof

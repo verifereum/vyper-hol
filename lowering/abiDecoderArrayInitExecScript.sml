@@ -23,11 +23,12 @@ Proof
 QED
 
 Theorem abi_decode_array_prepare_sequence:
-  abi_decode_dynarray_checked_prefix src opc hi maxn abi_sz st = ((),guard_st) /\
-  abi_decode_array_header dst src opc guard_st = (cnt,header_st) /\
+  abi_decode_dynarray_position_prefix src opc base_op hi maxn abi_sz st = (addr,guard_st) /\
+  abi_decode_array_header dst addr opc guard_st = (cnt,header_st) /\
   abi_decode_source_opcode opc /\ eval_operand src s = SOME (n2w sb) /\
   eval_operand dst s = SOME (n2w d) /\ d < dimword (:256) /\
-  abi_decode_load opc (n2w sb:bytes32) s = n2w n /\ n <= maxn /\ maxn < dimword (:256) /\
+  eval_operand base_op s = SOME (n2w B) /\
+  abi_decode_load opc (n2w (B + sb):bytes32) s = n2w n /\ n <= maxn /\ maxn < dimword (:256) /\
   (hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
     sb + 32 + n * abi_sz <= h /\ h < dimword (:256)) /\ fresh_vars_wrt st s ==>
   ?prepared. run_inst_seq (emitted_insts st header_st) s = OK prepared /\
@@ -39,14 +40,13 @@ Theorem abi_decode_array_prepare_sequence:
     prepared.vs_halted = s.vs_halted /\ inst_extends st header_st
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
+  drule_all abi_decode_dynarray_position_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
-  drule_all abi_decode_dynarray_checked_prefix_sequence >> strip_tac >>
+  drule_all abi_decode_dynarray_position_prefix_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st guard_st) s = OK guarded` >>
   drule_all abi_decoder_guard_sequence_fields >> strip_tac >>
-  `eval_operand src guarded = SOME (n2w sb) /\ eval_operand dst guarded = SOME (n2w d)`
-    by metis_tac[] >>
-  `abi_decode_load opc (n2w sb:bytes32) guarded = n2w n` by
+  `eval_operand dst guarded = SOME (n2w d)` by metis_tac[] >>
+  `abi_decode_load opc (n2w (B + sb):bytes32) guarded = n2w n` by
     gvs[abi_decode_load_def, abi_decode_source_def, mload_def] >>
   drule_all abi_decode_array_header_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts guard_st header_st) guarded = OK prepared` >>
@@ -102,10 +102,11 @@ Proof
 QED
 
 Theorem abi_decode_array_loop_init_sequence:
-  abi_decode_array_loop_init dst src opc hi maxn abi_sz st = (setup,loop_st) /\
+  abi_decode_array_loop_init dst src opc base_op hi maxn abi_sz st = (setup,loop_st) /\
   abi_decode_source_opcode opc /\ eval_operand src s = SOME (n2w sb) /\
   eval_operand dst s = SOME (n2w d) /\ d < dimword (:256) /\
-  abi_decode_load opc (n2w sb:bytes32) s = n2w n /\ n <= maxn /\ maxn < dimword (:256) /\
+  eval_operand base_op s = SOME (n2w B) /\
+  abi_decode_load opc (n2w (B + sb):bytes32) s = n2w n /\ n <= maxn /\ maxn < dimword (:256) /\
   (hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
     sb + 32 + n * abi_sz <= h /\ h < dimword (:256)) /\
   abi_decoder_budget first last b cap s /\ first <= st.cs_next_id /\ loop_st.cs_next_id <= last /\
@@ -124,7 +125,7 @@ Theorem abi_decode_array_loop_init_sequence:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_decode_array_loop_init_trace >> strip_tac >>
-  drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
+  drule_all abi_decode_dynarray_position_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >>
   drule_all abi_decode_array_prepare_sequence >> strip_tac >>
