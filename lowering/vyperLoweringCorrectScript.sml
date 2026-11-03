@@ -313,6 +313,7 @@ Theorem external_return_none_unlock_result_rel:
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
     cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr /\ ~iv ==> ut) /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') ==>
@@ -432,6 +433,7 @@ Theorem external_return_none_result_rel:
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
     cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr ==> iv) ==>
     frag_exec ctx st st'
       (\s. state_rel func cenv cx es s)

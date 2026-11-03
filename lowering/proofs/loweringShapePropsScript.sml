@@ -88,12 +88,14 @@ Definition loc_shape_ok_def:
   loc_shape_ok st (TransientLoc slot) = T
 End
 
-(* ce_return_pc decides the Return lowering: NONE is external code. *)
+(* Internal returns use ce_return_pc; constructor exits use a jump label. *)
 Definition cenv_shape_ok_def:
   cenv_shape_ok st cenv <=>
     (!n loc. FLOOKUP cenv.ce_vars n = SOME loc ==> loc_shape_ok st loc) /\
     (!n loc. FLOOKUP cenv.ce_module_vars n = SOME loc ==> loc_shape_ok st loc) /\
     (!loc. cenv.ce_return_buf = SOME loc ==> loc_shape_ok st loc) /\
+    (!l. cenv.ce_return_pc = NONE /\ cenv.ce_ctor_exit_label = SOME l ==>
+         jump_label_ok l) /\
     case cenv.ce_return_pc of
       NONE => T
     | SOME (MemLoc off sz) => T
@@ -115,7 +117,9 @@ Definition cenv_static_ok_def:
     (!n loc. FLOOKUP cenv.ce_vars n = SOME loc ==> static_loc loc) /\
     (!n loc. FLOOKUP cenv.ce_module_vars n = SOME loc ==> static_loc loc) /\
     (!loc. cenv.ce_return_buf = SOME loc ==> ?off sz. loc = MemLoc off sz) /\
-    (!loc. cenv.ce_return_pc = SOME loc ==> ?off sz. loc = MemLoc off sz)
+    (!loc. cenv.ce_return_pc = SOME loc ==> ?off sz. loc = MemLoc off sz) /\
+    (!l. cenv.ce_return_pc = NONE /\ cenv.ce_ctor_exit_label = SOME l ==>
+         jump_label_ok l)
 End
 
 Definition value_shape_ok_def:
@@ -9339,13 +9343,25 @@ Theorem compile_return_none_shape:
 Proof
   rpt gen_tac >> Cases_on `cenv.ce_return_pc` >>
   simp[Once compile_stmt_def]
-  >- (pairarg_tac >> simp[] >>
+  >- (Cases_on `cenv.ce_ctor_exit_label` >> simp[]
+      >- (pairarg_tac >> simp[] >>
       stmt_sequence `\u st. T`
         (IF_CASES_TAC
          >- (irule shape_step_conseq >>
              qexistsl_tac [`compiler_label`, `\st. T`, `\u st. T`] >>
              simp[compile_nonreentrant_unlock_shape]) >>
          irule shape_step_return >> simp[]) >> stmt_plain_inst_drop) >>
+      rename1 `SOME exit_lbl` >>
+      mp_tac (Q.SPECL [`F`,
+        `\st. cenv_shape_ok st cenv /\ loop_ctx_shape_ok lctx`,
+        `JMP`, `[Label exit_lbl]`, `[]`] stmt_shape_emit_inst) >>
+      simp[cenv_shape_ok_stable, shape_stable_conj, shape_stable_def,
+           label_or_plain_def, stackPlanTypesTheory.is_label_operand_def,
+           lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def,
+           inst_shape_ok_def, inst_jump_labels_ok_def, is_terminator_def,
+           is_read0_opcode_def, label_positions_ok_def, is_param_opcode_def] >>
+      impl_tac >- (rpt strip_tac >> gvs[cenv_shape_ok_def]) >>
+      rewrite_tac[shape_step_def] >> metis_tac[]) >>
   rename1 `SOME loc` >>
   namedCases_on `loc` ["off sz", "slot", "slot", "imm", "ret_op sz"] >>
   simp[] >>
@@ -9371,7 +9387,7 @@ Resume compile_return_none_shape[internal]:
     `\u st. T`] >> simp[SRULE [] (Q.SPEC `[]` stmt_ret_shape)] >>
   rpt strip_tac >> gvs[cenv_shape_ok_def]
 QED
-Finalise compile_return_none_shape[local]
+Finalise compile_return_none_shape
 
 Theorem compile_return_some_shape:
   !cenv lctx ty e.
@@ -12365,8 +12381,7 @@ Proof
   simp[package_internal_fn_def, set_internal_package_target_def,
        update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
        cenv_static_ok_def] >>
-  pure_rewrite_tac[GSYM cenv_static_ok_def] >>
-  irule build_compile_env_static >> simp[]
+  metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
 Theorem package_fallback_fn_shape_ok:
