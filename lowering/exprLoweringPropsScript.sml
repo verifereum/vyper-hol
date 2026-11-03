@@ -4083,7 +4083,8 @@ Proof
   strip_tac >> simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
   irule ci_mono_uncurry >> reverse conj_tac
   >- simp[ci_mono_lower_value_cfn] >>
-  rpt gen_tac >> BETA_TAC >> Cases_on `ret_ty` >>
+  rpt gen_tac >> BETA_TAC >> IF_CASES_TAC >- simp[ci_mono_refl] >>
+  Cases_on `ret_ty` >>
   simp[ci_mono_as_stack_val, ci_mono_compile_type_convert]
 QED
 
