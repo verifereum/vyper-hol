@@ -23,6 +23,8 @@ Ancestors
   vyperDecimalMulTest
   vyperDelegateRawCallTest
   vyperECPrecompileTest
+  vyperEventFixtureTest
+  vyperEventRegression
   vyperExtCallConsumptionTest
   vyperExtCallCpsCVKernelCheck
   vyperExtCallCpsCVTest
