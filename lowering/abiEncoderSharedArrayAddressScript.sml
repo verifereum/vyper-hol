@@ -27,7 +27,7 @@ Theorem abi_encoder_array_address_step_globals[local]:
   (s.vs_accounts,s.vs_transient,s.vs_logs,s.vs_requests,s.vs_pending_deletions)
 Proof
   strip_tac >>
-  gvs[step_inst_base_def, exec_pure2_def, exec_read1_def,
+  gvs[step_inst_base_opcode_eqs, exec_pure2_def, exec_read1_def,
     AllCaseEqs(), update_var_def]
 QED
 
