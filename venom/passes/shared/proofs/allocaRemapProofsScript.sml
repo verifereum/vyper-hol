@@ -1497,6 +1497,17 @@ Proof
   fs[alloca_remap_rel_def, LET_DEF] >> metis_tac[]
 QED
 
+Theorem step_memtop_eq[local]:
+  inst.inst_opcode = MEMTOP ==>
+  step_inst_base inst s =
+    case inst.inst_outputs of
+      [out] => OK (update_var out
+        (n2w (((LENGTH s.vs_memory + 31) DIV 32) * 32)) s)
+    | _ => Error "read0 requires single output"
+Proof
+  strip_tac >> simp[step_inst_base_def, exec_read0_def]
+QED
+
 Theorem remap_preserved_no_pointer_ops[local]:
   !fn roots remap inst s1 s2 v1 bb.
     alloca_remap_rel fn roots remap s1 s2 /\
@@ -1524,7 +1535,7 @@ Proof
         metis_tac[no_pv_outputs_from_no_pv_inputs] >>
       `LENGTH s1.vs_memory = LENGTH s2.vs_memory` by
         fs[alloca_remap_rel_def, LET_DEF] >>
-      gvs[step_inst_base_def, exec_read0_def, exec_gas_def, AllCaseEqs()] >>
+      gvs[step_memtop_eq, AllCaseEqs()] >>
       irule remap_update_nonpointer >> simp[]) >>
   `s1.vs_gas_readings = s2.vs_gas_readings` by
     (drule remap_gas_readings_agree >> simp[]) >>
