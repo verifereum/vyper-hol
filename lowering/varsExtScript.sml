@@ -216,6 +216,377 @@ Proof
   simp exec_simps
 QED
 
+local
+(* Select one already-proved dispatch equation, keeping simplification local. *)
+fun vars_ext_opcode_eq opc =
+  valOf (List.find
+    (fn th => aconv (rhs (fst (dest_imp (snd (strip_forall (concl th)))))) opc)
+    (CONJUNCTS step_inst_base_opcode_eqs));
+
+Theorem step_inst_base_ADD_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = ADD /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> asm_simp_tac bool_ss [vars_ext_opcode_eq ``ADD``] >>
+  irule exec_pure2_vars_ext >> simp[]
+QED
+
+Theorem step_inst_base_MSTORE_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = MSTORE /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> asm_simp_tac bool_ss [vars_ext_opcode_eq ``MSTORE``] >>
+  irule exec_write2_vars_ext >> asm_simp_tac (srw_ss()) ext_simps
+QED
+
+Theorem step_inst_base_RETURNDATACOPY_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = RETURNDATACOPY /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >>
+  asm_simp_tac bool_ss [vars_ext_opcode_eq ``RETURNDATACOPY``] >> ext_tac
+QED
+
+val vars_ext_dispatch_tac =
+  qpat_assum `inst.inst_opcode = _`
+    (fn eq => asm_simp_tac bool_ss [vars_ext_opcode_eq (rhs (concl eq))]);
+
+Theorem step_inst_base_pure1_vars_ext[local]:
+  !inst s V.
+    MEM inst.inst_opcode [ISZERO; NOT] /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rw[MEM] >> vars_ext_dispatch_tac >>
+  irule exec_pure1_vars_ext >> simp[]
+QED
+
+Theorem step_inst_base_arith_vars_ext[local]:
+  !inst s V.
+    MEM inst.inst_opcode [SUB; MUL; Div; Mod; SDIV; SMOD; Exp; OFFSET] /\
+    s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rw[MEM] >> vars_ext_dispatch_tac >>
+  irule exec_pure2_vars_ext >> simp[]
+QED
+
+Theorem step_inst_base_compare_vars_ext[local]:
+  !inst s V.
+    MEM inst.inst_opcode [EQ; LT; GT; SLT; SGT] /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rw[MEM] >> vars_ext_dispatch_tac >>
+  irule exec_pure2_vars_ext >> simp[]
+QED
+
+Theorem step_inst_base_bitwise_vars_ext[local]:
+  !inst s V.
+    MEM inst.inst_opcode [AND; OR; XOR; SHL; SHR; SAR; SIGNEXTEND; BYTE] /\
+    s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rw[MEM] >> vars_ext_dispatch_tac >>
+  irule exec_pure2_vars_ext >> simp[]
+QED
+
+Theorem step_inst_base_pure3_vars_ext[local]:
+  !inst s V.
+    MEM inst.inst_opcode [ADDMOD; MULMOD] /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rw[MEM] >> vars_ext_dispatch_tac >>
+  irule exec_pure3_vars_ext >> simp[]
+QED
+
+Theorem step_inst_base_context_vars_ext[local]:
+  !inst s V.
+    MEM inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE;
+                         CHAINID] /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rw[MEM] >> vars_ext_dispatch_tac >>
+  irule exec_read0_vars_ext >> asm_simp_tac (srw_ss()) ext_simps
+QED
+
+Theorem step_inst_base_block_vars_ext[local]:
+  !inst s V.
+    MEM inst.inst_opcode [COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT;
+                         BASEFEE; BLOBBASEFEE] /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rw[MEM] >> vars_ext_dispatch_tac >>
+  irule exec_read0_vars_ext >> asm_simp_tac (srw_ss()) ext_simps
+QED
+
+Theorem step_inst_base_size_vars_ext[local]:
+  !inst s V.
+    MEM inst.inst_opcode [SELFBALANCE; CALLDATASIZE; RETURNDATASIZE;
+                         MEMTOP; CODESIZE] /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rw[MEM] >> vars_ext_dispatch_tac >>
+  irule exec_read0_vars_ext >> asm_simp_tac (srw_ss()) ext_simps
+QED
+
+Theorem step_inst_base_load_vars_ext[local]:
+  !inst s V.
+    MEM inst.inst_opcode [MLOAD; SLOAD; TLOAD; ILOAD; DLOAD; CALLDATALOAD] /\
+    s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rw[MEM] >> vars_ext_dispatch_tac >>
+  irule exec_read1_vars_ext >> asm_simp_tac (srw_ss()) ext_simps
+QED
+
+Theorem step_inst_base_query_vars_ext[local]:
+  !inst s V.
+    MEM inst.inst_opcode [BLOCKHASH; BLOBHASH; BALANCE; EXTCODESIZE;
+                         EXTCODEHASH] /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rw[MEM] >> vars_ext_dispatch_tac >>
+  irule exec_read1_vars_ext >> asm_simp_tac (srw_ss()) ext_simps
+QED
+
+Theorem step_inst_base_store_vars_ext[local]:
+  !inst s V.
+    MEM inst.inst_opcode [MSTORE8; SSTORE; TSTORE] /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rw[MEM] >> vars_ext_dispatch_tac >>
+  irule exec_write2_vars_ext >> asm_simp_tac (srw_ss()) ext_simps
+QED
+
+Theorem step_inst_base_MCOPY_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = MCOPY /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> vars_ext_dispatch_tac >> ext_tac
+QED
+
+Theorem step_inst_base_CALLDATACOPY_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = CALLDATACOPY /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> vars_ext_dispatch_tac >> ext_tac
+QED
+
+Theorem step_inst_base_CODECOPY_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = CODECOPY /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> vars_ext_dispatch_tac >> ext_tac
+QED
+
+Theorem step_inst_base_EXTCODECOPY_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = EXTCODECOPY /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> vars_ext_dispatch_tac >> ext_tac
+QED
+
+Theorem step_inst_base_DLOADBYTES_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = DLOADBYTES /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> vars_ext_dispatch_tac >> ext_tac
+QED
+
+Theorem step_inst_base_SHA3_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = SHA3 /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> vars_ext_dispatch_tac >> ext_tac
+QED
+
+Theorem step_inst_base_ISTORE_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = ISTORE /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> vars_ext_dispatch_tac >> ext_tac
+QED
+
+Theorem step_inst_base_LOG_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = LOG /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> vars_ext_dispatch_tac >> ext_tac
+QED
+
+Theorem step_inst_base_ALLOCA_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = ALLOCA /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> vars_ext_dispatch_tac >> simp[exec_alloca_def] >> ext_tac
+QED
+
+Theorem step_inst_base_DALLOCA_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = DALLOCA /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> vars_ext_dispatch_tac >> ext_tac
+QED
+
+Theorem step_inst_base_BUMP_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = BUMP /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> vars_ext_dispatch_tac >> ext_tac
+QED
+
+Theorem step_inst_base_ASSERT_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = ASSERT /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> vars_ext_dispatch_tac >> ext_tac
+QED
+
+Theorem step_inst_base_ASSERT_UNREACHABLE_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = ASSERT_UNREACHABLE /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> vars_ext_dispatch_tac >> ext_tac
+QED
+
+Theorem step_inst_base_PARAM_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = PARAM /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> vars_ext_dispatch_tac >> ext_tac
+QED
+
+Theorem step_inst_base_FMP_PARAM_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = FMP_PARAM /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> vars_ext_dispatch_tac >> ext_tac
+QED
+
+Theorem step_inst_base_RETPC_PARAM_vars_ext[local]:
+  !inst s V.
+    inst.inst_opcode = RETPC_PARAM /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> vars_ext_dispatch_tac >> ext_tac
+QED
+
+Theorem step_inst_base_frame_vars_ext[local]:
+  !inst s V.
+    MEM inst.inst_opcode [GETFMP; SETFMP; INITIAL_FMP] /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rw[MEM] >> vars_ext_dispatch_tac >> ext_tac
+QED
+
+Theorem step_inst_base_misc_vars_ext[local]:
+  !inst s V.
+    MEM inst.inst_opcode [ASSIGN; NOP; PHI; INVALID] /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rw[MEM] >> vars_ext_dispatch_tac >> ext_tac
+QED
+
+(* Dispatch by constructor to a checked fact, not by simplifying execution. *)
+val vars_ext_opcode_facts =
+  [([``ADD``], step_inst_base_ADD_vars_ext),
+   ([``MSTORE``], step_inst_base_MSTORE_vars_ext),
+   ([``RETURNDATACOPY``], step_inst_base_RETURNDATACOPY_vars_ext),
+   ([``ISZERO``, ``NOT``], step_inst_base_pure1_vars_ext),
+   ([``SUB``, ``MUL``, ``Div``, ``Mod``, ``SDIV``, ``SMOD``, ``Exp``, ``OFFSET``],
+    step_inst_base_arith_vars_ext),
+   ([``EQ``, ``LT``, ``GT``, ``SLT``, ``SGT``], step_inst_base_compare_vars_ext),
+   ([``AND``, ``OR``, ``XOR``, ``SHL``, ``SHR``, ``SAR``, ``SIGNEXTEND``, ``BYTE``],
+    step_inst_base_bitwise_vars_ext),
+   ([``ADDMOD``, ``MULMOD``], step_inst_base_pure3_vars_ext),
+   ([``CALLER``, ``ADDRESS``, ``CALLVALUE``, ``ORIGIN``, ``GASPRICE``,
+     ``CHAINID``], step_inst_base_context_vars_ext),
+   ([``COINBASE``, ``TIMESTAMP``, ``NUMBER``, ``PREVRANDAO``, ``GASLIMIT``,
+     ``BASEFEE``, ``BLOBBASEFEE``], step_inst_base_block_vars_ext),
+   ([``SELFBALANCE``, ``CALLDATASIZE``, ``RETURNDATASIZE``, ``MEMTOP``, ``CODESIZE``],
+    step_inst_base_size_vars_ext),
+   ([``MLOAD``, ``SLOAD``, ``TLOAD``, ``ILOAD``, ``DLOAD``, ``CALLDATALOAD``],
+    step_inst_base_load_vars_ext),
+   ([``BLOCKHASH``, ``BLOBHASH``, ``BALANCE``, ``EXTCODESIZE``, ``EXTCODEHASH``],
+    step_inst_base_query_vars_ext),
+   ([``MSTORE8``, ``SSTORE``, ``TSTORE``], step_inst_base_store_vars_ext),
+   ([``MCOPY``], step_inst_base_MCOPY_vars_ext),
+   ([``CALLDATACOPY``], step_inst_base_CALLDATACOPY_vars_ext),
+   ([``CODECOPY``], step_inst_base_CODECOPY_vars_ext),
+   ([``EXTCODECOPY``], step_inst_base_EXTCODECOPY_vars_ext),
+   ([``DLOADBYTES``], step_inst_base_DLOADBYTES_vars_ext),
+   ([``SHA3``], step_inst_base_SHA3_vars_ext),
+   ([``ISTORE``], step_inst_base_ISTORE_vars_ext),
+   ([``LOG``], step_inst_base_LOG_vars_ext),
+   ([``ALLOCA``], step_inst_base_ALLOCA_vars_ext),
+   ([``DALLOCA``], step_inst_base_DALLOCA_vars_ext),
+   ([``BUMP``], step_inst_base_BUMP_vars_ext),
+   ([``ASSERT``], step_inst_base_ASSERT_vars_ext),
+   ([``ASSERT_UNREACHABLE``], step_inst_base_ASSERT_UNREACHABLE_vars_ext),
+   ([``PARAM``], step_inst_base_PARAM_vars_ext),
+   ([``FMP_PARAM``], step_inst_base_FMP_PARAM_vars_ext),
+   ([``RETPC_PARAM``], step_inst_base_RETPC_PARAM_vars_ext),
+   ([``GETFMP``, ``SETFMP``, ``INITIAL_FMP``], step_inst_base_frame_vars_ext),
+   ([``ASSIGN``, ``NOP``, ``PHI``, ``INVALID``], step_inst_base_misc_vars_ext)];
+
+val vars_ext_apply_opcode_fact =
+  qpat_assum `inst.inst_opcode = _`
+    (fn eq =>
+      let val opc = rhs (concl eq)
+          val (_, fact) = valOf (List.find
+            (fn (ops, _) => List.exists (aconv opc) ops) vars_ext_opcode_facts)
+      in irule fact >> simp[MEM] end);
+in
+
 Theorem step_inst_base_vars_ext:
   !inst s V.
     s.vs_vars SUBMAP V /\ ~is_terminator inst.inst_opcode /\
@@ -225,41 +596,13 @@ Theorem step_inst_base_vars_ext:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >>
-  fs[is_terminator_def, is_ext_call_op_def] >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs]
-  >>~- ([`vars_ext_result (exec_pure1 _ _ _) _`],
-        irule exec_pure1_vars_ext >> simp[])
-  >>~- ([`vars_ext_result (exec_pure2 _ _ _) _`],
-        irule exec_pure2_vars_ext >> simp[])
-  >>~- ([`vars_ext_result (exec_pure3 _ _ _) _`],
-        irule exec_pure3_vars_ext >> simp[])
-  >>~- ([`vars_ext_result (exec_read0 _ _ _) _`],
-        irule exec_read0_vars_ext >> asm_simp_tac (srw_ss()) ext_simps)
-  >>~- ([`vars_ext_result (exec_gas _ _) _`],
-        irule exec_gas_vars_ext >> simp[])
-  >>~- ([`vars_ext_result (exec_read1 _ _ _) _`],
-        irule exec_read1_vars_ext >> asm_simp_tac (srw_ss()) ext_simps)
-  >>~- ([`vars_ext_result (exec_write2 _ _ _) _`],
-        irule exec_write2_vars_ext >> asm_simp_tac (srw_ss()) ext_simps) >>
-  simp[exec_alloca_def]
-  (* one step per opcode: together they run past the step limit *)
-  >>~- ([`inst.inst_opcode = MCOPY`], ext_tac)
-  >>~- ([`inst.inst_opcode = CALLDATACOPY`], ext_tac)
-  >>~- ([`inst.inst_opcode = RETURNDATACOPY`], ext_tac)
-  >>~- ([`inst.inst_opcode = CODECOPY`], ext_tac)
-  >>~- ([`inst.inst_opcode = EXTCODECOPY`], ext_tac)
-  >>~- ([`inst.inst_opcode = DLOADBYTES`], ext_tac)
-  >>~- ([`inst.inst_opcode = SHA3`], ext_tac)
-  >>~- ([`inst.inst_opcode = ISTORE`], ext_tac)
-  >>~- ([`inst.inst_opcode = LOG`], ext_tac)
-  >>~- ([`inst.inst_opcode = ALLOCA`], ext_tac)
-  >>~- ([`inst.inst_opcode = DALLOCA`], ext_tac)
-  >>~- ([`inst.inst_opcode = BUMP`], ext_tac)
-  >>~- ([`inst.inst_opcode = ASSERT`], ext_tac)
-  >>~- ([`inst.inst_opcode = PARAM`], ext_tac)
-  >>~- ([`inst.inst_opcode = FMP_PARAM`], ext_tac) >>
-  ext_tac
+  fs[is_terminator_def, is_ext_call_op_def]
+  >~ [`inst.inst_opcode = GAS`]
+  >- (asm_simp_tac bool_ss [vars_ext_opcode_eq ``GAS``] >>
+     irule exec_gas_vars_ext >> simp[]) >>
+  vars_ext_apply_opcode_fact
 QED
+end
 
 Theorem step_inst_base_vars_ext_state:
   !inst s s'.
