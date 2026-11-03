@@ -6,7 +6,7 @@
 
 Theory simplifyCfgCorrectness
 Ancestors
-  simplifyCfgProof cfgWf unitShapeDefs venomInst
+  simplifyCfgProof simplifyCfgJnzdist cfgWf unitShapeDefs venomInst
 
 Theorem simplify_cfg_pass_correct:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
@@ -80,5 +80,9 @@ Theorem simplify_cfg_jnz_targets_distinct:
   !inst. MEM inst (fn_insts (simplify_cfg_fn fn)) /\ inst.inst_opcode = JNZ ==>
          ?c t f. inst.inst_operands = [c; Label t; Label f] /\ t <> f
 Proof
-  cheat
+  strip_tac >>
+  simp[simplifyCfgDefsTheory.simplify_cfg_fn_def,
+       simplifyCfgDefsTheory.simplify_cfg_fn_with_labels_def] >>
+  qspecl_then [`LENGTH fn.fn_blocks`, `fn`] mp_tac
+    simplify_cfg_iter_with_labels_jnz_distinct >> simp[]
 QED
