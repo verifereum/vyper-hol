@@ -194,6 +194,58 @@ QED
    4. eval_operand preserved by step on non-output vars
    ================================================================ *)
 
+Theorem gas_output_lookup_agree:
+  inst.inst_opcode = GAS /\
+  step_inst fuel ctx inst s = OK s' /\
+  step_inst fuel ctx inst t = OK t' /\
+  s.vs_gas_readings = t.vs_gas_readings /\ MEM w inst.inst_outputs ==>
+  lookup_var w s' = lookup_var w t'
+Proof
+  strip_tac >>
+  drule_all step_inst_ok_gas >> strip_tac >>
+  qpat_x_assum `step_inst fuel ctx inst t = OK t'` kall_tac >>
+  drule_all step_inst_ok_gas >> strip_tac >>
+  gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem gas_neutral_commute:
+  step_inst fuel ctx inst1 ss = OK v1 /\
+  step_inst fuel ctx inst2 ss = OK v2 /\
+  step_inst fuel ctx inst2 v1 = OK s12 /\
+  step_inst fuel ctx inst1 v2 = OK s21 /\
+  DISJOINT (set (inst_defs inst1)) (set (inst_uses inst2)) /\
+  DISJOINT (set (inst_defs inst1)) (set (inst_defs inst2)) /\
+  inst1.inst_opcode = GAS /\ inst2.inst_opcode <> GAS /\
+  inst2.inst_opcode <> INVOKE ==>
+  s12 = s21
+Proof
+  strip_tac >>
+  `?x. inst1.inst_outputs = [x]` by metis_tac[step_inst_ok_gas] >>
+  `(!y. MEM (Var y) inst2.inst_operands ==> x <> y) /\
+   ~MEM x inst2.inst_outputs` by
+    (gvs[inst_defs_def, inst_uses_def, DISJOINT_DEF, EXTENSION] >>
+     metis_tac[mem_var_operand_vars]) >>
+  `v2.vs_gas_readings = ss.vs_gas_readings /\
+   !gs. step_inst fuel ctx inst2 (ss with vs_gas_readings := gs) =
+        OK (v2 with vs_gas_readings := gs)` by
+    metis_tac[step_inst_ok_non_gas_oracle] >>
+  `v1 = update_var x
+       (case ss.vs_gas_readings of [] => 0w | h::tl => h)
+       (ss with vs_gas_readings := DROP 1 ss.vs_gas_readings)` by
+    (drule_all step_inst_gas_single >>
+     disch_then (qspecl_then [`ss`, `fuel`, `ctx`] mp_tac) >> simp[]) >>
+  `s21 = update_var x
+       (case ss.vs_gas_readings of [] => 0w | h::tl => h)
+       (v2 with vs_gas_readings := DROP 1 ss.vs_gas_readings)` by
+    (drule_all step_inst_gas_single >>
+     disch_then (qspecl_then [`v2`, `fuel`, `ctx`] mp_tac) >> simp[]) >>
+  `step_inst fuel ctx inst2 v1 = OK s21` by
+    (qpat_assum `v1 = _` SUBST1_TAC >>
+     qpat_assum `s21 = _` SUBST1_TAC >>
+     irule step_inst_ok_frame >> simp[] >> metis_tac[]) >>
+  gvs[]
+QED
+
 Theorem eval_operand_step_pres:
   !fuel ctx inst s s' op.
     step_inst fuel ctx inst s = OK s' /\
