@@ -625,7 +625,7 @@ Proof
   rpt strip_tac >> irule expr_ok_stack >> rpt conj_tac
   >~ [`dynarray_type`]
   >- (rw[expr_sim_pre_def, well_typed_expr_def, vyperASTTheory.expr_type_def, dynarray_type_def] >>
-      Cases_on `tb` >>
+      CCONTR_TAC >> gvs[] >>
       gvs[type_builtin_result_ok_def, well_typed_type_builtin_args_def])
   >~ [`eval_expr`] >- metis_tac[eval_expr_type_builtin_value]
   >~ [`expr_sim_ok`]
