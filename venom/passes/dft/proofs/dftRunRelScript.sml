@@ -1422,3 +1422,31 @@ Proof
   strip_tac >> drule_all dft_gas_noninvoke_ok_diamond >> strip_tac >>
   qexists_tac `sg` >> gvs[]
 QED
+
+Theorem dft_noninvoke_ok_update_iff[local]:
+  i.inst_opcode <> INVOKE /\
+  ~MEM (Var out) i.inst_operands /\ ~MEM out i.inst_outputs ==>
+  (step_inst fuel C i (update_var out value s) = OK u <=>
+   ?t. step_inst fuel C i s = OK t /\ u = update_var out value t)
+Proof
+  strip_tac >>
+  `!v. MEM (Var v) i.inst_operands ==> out <> v` by metis_tac[] >>
+  drule_all dftCommutationTheory.step_inst_frame >>
+  disch_then (qspecl_then [`fuel`, `C`, `s`, `value`] mp_tac) >>
+  Cases_on `step_inst fuel C i s` >>
+  simp[dftCommutationTheory.map_result_state_def] >> metis_tac[]
+QED
+
+Theorem dft_noninvoke_ok_fold_iff:
+  !us s u.
+  i.inst_opcode <> INVOKE /\
+  EVERY (\p. ~MEM (Var (FST p)) i.inst_operands /\
+             ~MEM (FST p) i.inst_outputs) us ==>
+  (step_inst fuel C i (FOLDL (\s p. update_var (FST p) (SND p) s) s us) = OK u <=>
+   ?t. step_inst fuel C i s = OK t /\
+       u = FOLDL (\s p. update_var (FST p) (SND p) s) t us)
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum (qspec_then `update_var (FST h) (SND h) s` mp_tac) >>
+  simp[dft_noninvoke_ok_update_iff] >> metis_tac[]
+QED
