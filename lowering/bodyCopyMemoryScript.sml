@@ -1,7 +1,7 @@
 (* Actual typed copy producers: memory prefix and landing boundaries. *)
 Theory bodyCopyMemory
 Ancestors
-  bodyAllocMemory exprSimBufferStore fragExec fragExecMem instMemFrontier
+  bodyAllocMemory exprSimBufferStore exprSimLiteralBuffer fragExec fragExecMem instMemFrontier
   allocaHistoryFragment exprLoweringProps exprLowering emitHelperProps emitHelper
   compileEnv context venomInst venomState venomExecSemantics venomMemDefs
   valueEncoding valueEncodingProofs list rich_list finite_map words arithmetic
@@ -148,3 +148,158 @@ val () = List.app (fn th =>
   end) [compile_copy_memory_body_mem_ok, copy_memory_body_slice,
         copy_memory_body_history, copy_memory_body_run,
         copy_memory_frag_at_cursor, compile_copy_memory_body_frag_mem];
+
+Theorem copy_len_arithmetic_mem_ok[local]:
+  run_inst_seq_mem_ok
+    [mk_inst a ADD ops xs; mk_inst b AND ops' ys; mk_inst c ADD ops'' zs] s
+Proof
+  `!s. inst_mem_below_frontier (mk_inst a ADD ops xs) s /\
+       inst_mem_below_frontier (mk_inst b AND ops' ys) s /\
+       inst_mem_below_frontier (mk_inst c ADD ops'' zs) s` by
+    simp[below_frontier_no_ranges, mk_inst_def] >>
+  simp[run_inst_seq_mem_ok_cons] >>
+  Cases_on `step_inst_base (mk_inst a ADD ops xs) s` >> simp[] >>
+  Cases_on `step_inst_base (mk_inst b AND ops' ys) v` >>
+  simp[run_inst_seq_mem_ok_last]
+QED
+
+Theorem compile_bytestring_copy_len_body_mem_ok:
+  compile_bytestring_copy_len src sa = (out,sb) /\
+  eval_operand src s = SOME w /\ w2n w + 32 <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  rpt strip_tac >>
+  gvs[compile_bytestring_copy_len_def, emit_op_def, comp_bind_def,
+      comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+      emit_def, emitted_insts_def, DROP_APPEND1] >>
+  pure_once_rewrite_tac[run_inst_seq_mem_ok_cons] >>
+  simp[below_frontier_MLOAD, copy_len_arithmetic_mem_ok] >>
+  Cases_on `step_inst_base (mk_inst sa.cs_next_id MLOAD [src]
+    [STRING #"%" (toString sa.cs_next_var)]) s` >> simp[]
+QED
+
+Theorem compile_store_bytestring_body_mem_ok:
+  compile_store_bytestring src dst sa = ((),sb) /\
+  eval_operand src s = SOME w /\ eval_operand dst s = SOME d /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  mload (w2n w) s = n2w len /\
+  32 + 32 * word_size len < dimword (:256) /\
+  w2n w + (32 + 32 * word_size len) <= s.vs_alloca_next /\
+  w2n d + (32 + 32 * word_size len) <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `compile_store_bytestring _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [compile_store_bytestring_def, comp_bind_def, LET_THM] >>
+  pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [] >> strip_tac >>
+  rename1 `compile_bytestring_copy_len src sa = (out,mid)` >>
+  drule_all buffer_copy_len_run >> strip_tac >>
+  drule buffer_copy_len_shape >> strip_tac >>
+  drule emit_void_extends >> strip_tac >>
+  `emitted_insts sa sb = emitted_insts sa mid ++ emitted_insts mid sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  `run_inst_seq_mem_ok (emitted_insts sa mid) s` by
+    (irule compile_bytestring_copy_len_body_mem_ok >>
+     qexistsl_tac [`out`, `src`, `w`] >> simp[] >> decide_tac) >>
+  asm_rewrite_tac[] >> irule run_inst_seq_mem_ok_append >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  `q.vs_alloca_next = s.vs_alloca_next` by
+    (qpat_x_assum `q with vs_vars := _ = s` mp_tac >>
+     simp[venom_state_component_equality] >> metis_tac[]) >>
+  `eval_operand src q = SOME w` by
+    (`eval_operand src q = eval_operand src s` by
+       (irule literal_operand_frame >> simp[] >> qexists_tac `sa` >> simp[]) >> simp[]) >>
+  `eval_operand dst q = SOME d` by
+    (`eval_operand dst q = eval_operand dst s` by
+       (irule literal_operand_frame >> simp[] >> qexists_tac `sa` >> simp[]) >> simp[]) >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  simp[run_inst_seq_mem_ok_last, below_frontier_MCOPY]
+QED
+
+Theorem store_bytestring_body_code[local]:
+  compile_store_bytestring src dst sa = ((),sb) ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb)
+Proof
+  rpt strip_tac >>
+  gvs[compile_store_bytestring_def, compile_bytestring_copy_len_def,
+      emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_id_def, fresh_var_def, emit_def,
+      emitted_insts_def, DROP_APPEND1] >>
+  simp[mk_inst_def, is_terminator_def]
+QED
+
+Theorem store_bytestring_body_history[local]:
+  compile_store_bytestring src dst sa = ((),sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ alloca_inv s /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts)
+Proof
+  rpt strip_tac >> drule buffer_store_bytestring_shape >> strip_tac >>
+  drule store_bytestring_body_code >> strip_tac >>
+  `(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+      DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest) /\
+    s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts /\
+    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+    (gvs[fn_has_code_def, IS_PREFIX_APPEND, same_blocks_def] >>
+     simp[DROP_APPEND, DROP_LENGTH_TOO_LONG] >> fs[EVERY_MEM]) >>
+  drule_all alloca_history_run_inst_seq >> simp[]
+QED
+
+Theorem compile_store_bytestring_body_frag_mem:
+  compile_store_bytestring src dst sa = ((),sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~block_is_terminated sa /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  32 + 32 * word_size len < dimword (:256) ==>
+  frag_exec_mem ctx sa sb
+    (\s. s = s0 /\ eval_operand src s = SOME w /\
+      eval_operand dst s = SOME d /\ mload (w2n w) s = n2w len /\
+      w2n w + (32 + 32 * word_size len) <= s.vs_alloca_next /\
+      w2n d + (32 + 32 * word_size len) <= s.vs_alloca_next /\
+      alloca_history func s /\ alloca_inv s)
+    (\t. t.vs_memory =
+        (mcopy (w2n d) (w2n w) (32 + 32 * word_size len) s0).vs_memory /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s0) /\
+      t.vs_allocas = s0.vs_allocas /\
+      t.vs_alloca_next = s0.vs_alloca_next /\ alloca_history func t /\
+      (!a k. a + k <= w2n d \/ w2n d + (32 + 32 * word_size len) <= a ==>
+        mem_bytes_at a k t.vs_memory = mem_bytes_at a k s0.vs_memory)) R
+Proof
+  rpt strip_tac >> drule buffer_store_bytestring_shape >> strip_tac >>
+  irule copy_memory_frag_at_cursor >>
+  simp[same_blocks_def, IS_PREFIX_APPEND] >>
+  reverse conj_tac
+  >- (fs[same_blocks_def] >> metis_tac[store_bytestring_body_code]) >>
+  rpt strip_tac >> gvs[]
+  >- (irule compile_store_bytestring_body_mem_ok >> metis_tac[ADD_COMM]) >>
+  drule buffer_store_bytestring_run >>
+  disch_then drule >> disch_then drule >>
+  disch_then (qspec_then `len` mp_tac) >>
+  (impl_tac >- metis_tac[ADD_COMM]) >> strip_tac >>
+  `q.vs_allocas = s0.vs_allocas /\ q.vs_alloca_next = s0.vs_alloca_next` by
+    (qpat_x_assum `q with <|vs_vars := _; vs_memory := _|> = s0` mp_tac >>
+     simp[venom_state_component_equality] >> metis_tac[]) >>
+  `alloca_history func (q with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (irule store_bytestring_body_history >> metis_tac[]) >>
+  qpat_x_assum `q with <|vs_vars := _; vs_memory := _|> = s0` kall_tac >>
+  qexists_tac `q` >> asm_simp_tac (srw_ss()) [lookup_var_def, ADD_COMM] >>
+  conj_tac >- fs[lookup_var_def] >>
+  conj_tac
+  >- (qpat_x_assum `alloca_history func (_ with vs_inst_idx := _)` mp_tac >>
+      asm_simp_tac (srw_ss()) [LENGTH_APPEND]) >>
+  metis_tac[buffer_mcopy_exterior]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_BYTESTRING_COPY_MEMORY_AUDIT OK\n"
+     else raise Fail "body bytestring copy inherited admission"
+  end) [copy_len_arithmetic_mem_ok, compile_bytestring_copy_len_body_mem_ok,
+        compile_store_bytestring_body_mem_ok, store_bytestring_body_code,
+        store_bytestring_body_history, compile_store_bytestring_body_frag_mem];
