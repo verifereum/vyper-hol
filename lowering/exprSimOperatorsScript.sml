@@ -270,6 +270,7 @@ Theorem compile_bop_word_case:
 Proof
   rpt gen_tac >> strip_tac >> simp[Once expr_sim_case_def] >>
   rpt gen_tac >> strip_tac >>
+  drule expr_body_pre_bop_operands >> strip_tac >>
   drule expr_body_pre_bop >> strip_tac >>
   drule int_calls_bop_operands >> strip_tac >>
   `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
@@ -303,9 +304,16 @@ Proof
       impl_tac >- gvs[] >> strip_tac >>
       first_x_assum (qspec_then `v2` mp_tac) >> simp[] >>
       strip_tac >> rename1 `value_has_type tv2 v2` >> simp[] >>
+      drule eval_expr_read_INL >> strip_tac >>
+      rev_drule eval_expr_read_INL >> strip_tac >>
+      `(!n. expr_int_literal e1 = SOME n ==> v1 = IntV n) /\
+       (!n. expr_int_literal e2 = SOME n ==> v2 = IntV n)` by
+        metis_tac[eval_expr_int_literal_agrees] >>
+      `(bop = ShL \/ bop = ShR ==> ?i. v2 = IntV i /\ 0 <= i)` by
+        (strip_tac >> irule eval_expr_shift_amount >> metis_tac[]) >>
       qspecl_then [`ctx`, `func`, `cenv`, `cx`, `bop`, `ann`, `e1`, `e2`,
                    `v1`, `v2`, `es2`, `tv1`, `tv2`] mp_tac binop_frag_typed >>
-      impl_tac >- gvs[] >> simp[])
+      impl_tac >- (simp[] >> metis_tac[]) >> simp[])
   >~ [`compile_binop`]
   >- (rpt gen_tac >> strip_tac >> drule compile_binop_shape >> simp[])
   >~ [`lower_value`]

@@ -598,7 +598,8 @@ Proof
   conj_tac
   >- (conj_tac
       >- (gvs[eval_operand_def] >>
-          simp[run_inst_seq_def, mk_inst_def, step_inst_base_def,
+          simp[run_inst_seq_def, mk_inst_def,
+               venomExecSemanticsTheory.step_inst_base_opcode_eqs,
                exec_pure2_def, eval_operand_def]) >>
       simp[copy_static_def, update_var_def, lookup_var_def,
            finite_mapTheory.FLOOKUP_UPDATE] >>
@@ -626,7 +627,8 @@ Proof
        same_blocks_def] >>
   conj_tac
   >- (conj_tac
-      >- simp[run_inst_seq_def, mk_inst_def, step_inst_base_def,
+      >- simp[run_inst_seq_def, mk_inst_def,
+              venomExecSemanticsTheory.step_inst_base_opcode_eqs,
               exec_read1_def, immutable_copy_read_def] >>
       simp[copy_static_def, update_var_def, lookup_var_def,
            finite_mapTheory.FLOOKUP_UPDATE] >> rpt strip_tac >>
@@ -826,9 +828,11 @@ Proof
     (Cases_on `dst` >> gvs[eval_operand_def, lookup_var_def,
        update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
   simp[emitted_insts_def, listTheory.DROP_APPEND, run_inst_seq_def,
-       mk_inst_def, step_inst_base_def, exec_read1_def, exec_write2_def] >>
+       mk_inst_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       exec_read1_def, exec_write2_def] >>
   `LENGTH mid.cs_current_insts - (LENGTH mid.cs_current_insts + 1) = 0` by decide_tac >>
-  simp[run_inst_seq_def, step_inst_base_def, exec_write2_def,
+  simp[run_inst_seq_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       exec_write2_def,
        eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE] >>
   gvs[update_var_def] >>

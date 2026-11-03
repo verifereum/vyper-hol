@@ -600,7 +600,7 @@ Proof
        bind_outputs_def, eval_operand_def,
        emitHelperPropsTheory.lookup_var_update_var,
        valueEncodingPropsTheory.mem_word_at_eq_mload] >>
-  simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, exec_pure2_def,
        bind_outputs_def, eval_operand_def] >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_write2_def,
        eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >>

@@ -41,19 +41,13 @@ Proof
   fs[abi_footprint_disjoint_def]
 QED
 
-Theorem abi_scratch_decoder_ranges_budget_bound[local]:
-  abi_decoder_budget first last b cap s ==> b + cap < dimword (:256)
-Proof
-  pure_rewrite_tac [abi_decoder_budget_def] >> strip_tac >>
-  first_assum ACCEPT_TAC
-QED
-
 Theorem abi_scratch_decoder_point_reservation:
   abi_decoder_budget first last b cap s ==>
   abi_decoder_reservation st.cs_next_id st.cs_next_id s.vs_alloca_next 0 s
 Proof
   strip_tac >> drule abi_decoder_budget_frontier >> strip_tac >>
-  `b + cap < dimword (:256)` by (drule abi_scratch_decoder_ranges_budget_bound >> simp[]) >>
+  `b + cap < dimword (:256)` by
+    (drule abiDecoderIndexInitTheory.abi_decoder_budget_word_bound >> simp[]) >>
   `s.vs_alloca_next < dimword (:256)` by decide_tac >>
   rw[abi_decoder_reservation_def] >> decide_tac
 QED

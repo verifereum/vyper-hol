@@ -1291,3 +1291,55 @@ Theorem eval_expr_read_INL:
 Proof
   simp[bind_def, AllCaseEqs()] >> metis_tac[]
 QED
+
+(* Operand syntax contracts transported through successful evaluation. *)
+Theorem expr_int_literal_value:
+  !e. expr_int_literal e = int_literal_value e
+Proof
+  Cases >> simp[expr_int_literal_def, int_literal_value_def] >>
+  rename1 `Literal _ l` >> Cases_on `l` >>
+  simp[expr_int_literal_def, int_literal_value_def]
+QED
+
+Theorem eval_expr_int_literal_agrees:
+  !cx e es tv es' v es'' n.
+    eval_expr cx e es = (INL tv, es') /\
+    read_result cx tv es' = (INL v, es'') /\
+    expr_int_literal e = SOME n ==> v = IntV n
+Proof
+  Cases_on `e` >> simp[expr_int_literal_def] >>
+  rename1 `Literal _ l` >> Cases_on `l` >> simp[expr_int_literal_def] >>
+  rpt strip_tac >>
+  gvs[Once evaluate_def, return_def, vyperValueOperationTheory.evaluate_literal_def, read_result_def]
+QED
+
+Theorem eval_expr_shift_amount:
+  !cx e es tv es' v es'' tenv vt.
+    eval_expr cx e es = (INL tv, es') /\
+    read_result cx tv es' = (INL v, es'') /\
+    evaluate_type tenv (expr_type e) = SOME vt /\ value_has_type vt v /\
+    shift_amount_ok e ==> ?i. v = IntV i /\ 0 <= i
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[shift_amount_ok_def]
+  >- (gvs[is_uint_type_def, vyperValueTheory.evaluate_type_def,
+          AllCaseEqs()] >>
+      Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]) >>
+  gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
+  Cases_on `expr_int_literal e` >> gvs[] >>
+  drule_all eval_expr_int_literal_agrees >> strip_tac >> metis_tac[]
+QED
+
+Theorem expr_body_pre_bop_operands:
+  !cenv cx env ann bop e1 e2 es.
+    expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
+    (bop = Exp ==> IS_SOME (expr_int_literal e1) \/
+      ?n. expr_int_literal e2 = SOME n /\ 0 <= n) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e2)
+Proof
+  simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
+       builtin_operands_ok_def, nonneg_int_literal_def,
+       GSYM expr_int_literal_value] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  Cases_on `expr_int_literal e2` >> gvs[]
+QED

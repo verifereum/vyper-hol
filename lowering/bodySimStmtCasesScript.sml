@@ -2000,6 +2000,9 @@ Proof
     (drule_all augassign_attr_local_place >> strip_tac >>
      first_x_assum irule >> metis_tac[]) >>
   `expr_sim ctx func cenv cx ty e es` by metis_tac[body_expr_ok_def] >>
+  `(bop = Exp ==> nonneg_int_literal e) /\
+   (bop = ShL \/ bop = ShR ==> shift_amount_ok e)` by
+    gvs[type_stmt_def, well_typed_expr_def, DISJ_IMP_THM, AllCaseEqs()] >>
   irule compile_augassign_attr_local_case >> simp[] >> metis_tac[]
 QED
 
@@ -2156,6 +2159,9 @@ Proof
     (drule_all augassign_attr_storage_place >> strip_tac >>
      first_x_assum irule >> metis_tac[]) >>
   `expr_sim ctx func cenv cx ty e es` by metis_tac[body_expr_ok_def] >>
+  `(bop = Exp ==> nonneg_int_literal e) /\
+   (bop = ShL \/ bop = ShR ==> shift_amount_ok e)` by
+    gvs[type_stmt_def, well_typed_expr_def, DISJ_IMP_THM, AllCaseEqs()] >>
   irule compile_augassign_attr_storage_case >> simp[] >> metis_tac[]
 QED
 

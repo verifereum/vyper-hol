@@ -630,6 +630,8 @@ Theorem compile_augassign_attr_local_case:
     FLOOKUP env.var_types id = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (ty, fsz) /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
@@ -728,6 +730,15 @@ Resume compile_augassign_attr_local_case[frag_pre]:
                       (case type_to_int_bound ty of
                          SOME u => u | NONE => Unsigned 0) ftv bop fv v2` >>
           gvs[expr_res_ok_def, stmt_res_ok_def]) >>
+      drule eval_expr_read_INL >> strip_tac >>
+      `!n. expr_int_literal e = SOME n ==> v2 = IntV n` by
+        metis_tac[eval_expr_int_literal_agrees] >>
+      `(bop = ShL \/ bop = ShR ==> ?i. v2 = IntV i /\ 0 <= i)` by
+        (strip_tac >> irule eval_expr_shift_amount >> metis_tac[]) >>
+      `(bop = Exp ==> ?n. expr_int_literal e = SOME n /\ 0 <= n)` by
+        (strip_tac >> gvs[nonneg_int_literal_def,
+                          GSYM expr_int_literal_value] >>
+         Cases_on `expr_int_literal e` >> gvs[]) >>
       irule binop_frag_word_typed >> simp[] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   Cases_on `evaluate_binop
@@ -748,6 +759,8 @@ Theorem compile_augassign_attr_local_stmt_frag:
     FLOOKUP env.var_types id = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (ty, fsz) /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
