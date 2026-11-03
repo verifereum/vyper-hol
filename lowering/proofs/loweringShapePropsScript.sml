@@ -13335,3 +13335,95 @@ Proof
   irule comp_ignore_bind_labels >>
   simp[emit_inst_labels, comp_return_labels]
 QED
+
+(* Hashing helpers only allocate buffers and emit instructions: none opens a block. *)
+Theorem compile_keccak256_bytes_labels:
+  !ptr s P. cs_extends s (SND (compile_keccak256_bytes ptr s)) /\
+    EVERY P (added_labels s (SND (compile_keccak256_bytes ptr s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinHashingTheory.compile_keccak256_bytes_def] >>
+  irule comp_bind_labels >> simp[emit_op_labels] >>
+  rpt gen_tac >> BETA_TAC >> irule comp_bind_labels >> simp[emit_op_labels]
+QED
+
+Theorem compile_keccak256_bytesm_labels:
+  !v m s P. cs_extends s (SND (compile_keccak256_bytesm v m s)) /\
+    EVERY P (added_labels s (SND (compile_keccak256_bytesm v m s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinHashingTheory.compile_keccak256_bytesm_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[compile_alloc_buffer_labels, comp_return_labels,
+            emit_void_labels, emit_op_labels])
+QED
+
+Theorem compile_keccak256_word_labels:
+  !v s P. cs_extends s (SND (compile_keccak256_word v s)) /\
+    EVERY P (added_labels s (SND (compile_keccak256_word v s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinHashingTheory.compile_keccak256_word_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[compile_alloc_buffer_labels, comp_return_labels,
+            emit_void_labels, emit_op_labels])
+QED
+
+Theorem compile_method_id_hash_labels:
+  !ty v s P. cs_extends s (SND (compile_method_id_hash ty v s)) /\
+    EVERY P (added_labels s (SND (compile_method_id_hash ty v s)))
+Proof
+  ho_match_mp_tac builtinHashingTheory.compile_method_id_hash_ind >>
+  simp[builtinHashingTheory.compile_method_id_hash_def,
+       compile_keccak256_bytes_labels, compile_keccak256_bytesm_labels]
+QED
+
+Theorem compile_method_id_runtime_labels:
+  !ty v b s P. cs_extends s (SND (compile_method_id_runtime ty v b s)) /\
+    EVERY P (added_labels s (SND (compile_method_id_runtime ty v b s)))
+Proof
+  rpt gen_tac >> Cases_on `b` >>
+  rewrite_tac[builtinHashingTheory.compile_method_id_runtime_def, COND_CLAUSES] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[compile_method_id_hash_labels, compile_alloc_buffer_labels,
+            comp_return_labels, emit_void_labels, emit_op_labels])
+QED
+
+Theorem compile_sha256_bytes_labels:
+  !ptr s P. cs_extends s (SND (compile_sha256_bytes ptr s)) /\
+    EVERY P (added_labels s (SND (compile_sha256_bytes ptr s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinHashingTheory.compile_sha256_bytes_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[compile_alloc_buffer_labels, comp_return_labels,
+            emit_void_labels, emit_op_labels])
+QED
+
+Theorem compile_sha256_bytesm_labels:
+  !v m s P. cs_extends s (SND (compile_sha256_bytesm v m s)) /\
+    EVERY P (added_labels s (SND (compile_sha256_bytesm v m s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinHashingTheory.compile_sha256_bytesm_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[compile_alloc_buffer_labels, comp_return_labels,
+            emit_void_labels, emit_op_labels])
+QED
+
+Theorem compile_sha256_word_labels:
+  !v s P. cs_extends s (SND (compile_sha256_word v s)) /\
+    EVERY P (added_labels s (SND (compile_sha256_word v s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinHashingTheory.compile_sha256_word_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[compile_alloc_buffer_labels, comp_return_labels,
+            emit_void_labels, emit_op_labels])
+QED
