@@ -18,7 +18,7 @@ Ancestors
   fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclStore
   stmtSimDecl stmtSimDeclMem valueCopyBytes
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding valueEncodingProps
+  compileEnv valueEncoding valueEncodingProps memoryValueEncoding
   vyperInterpreter vyperState vyperValue vyperTyping
   venomExecSemantics venomInst venomState
 Libs
@@ -58,7 +58,8 @@ Proof
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s`, `id`, `p`, `sz`, `w`,
                `inst`, `default_value tyv`, `tyv`, `sc`, `rest`, `a`,
                `Lit 0w`, `st`, `st'`, `0w`] mp_tac annassign_word_store_run >>
-  impl_tac >- simp[eval_operand_lit] >>
+  impl_tac >- (simp[eval_operand_lit] >>
+    metis_tac[default_val_in_memory_memory_value_rel]) >>
   disch_then ACCEPT_TAC
 QED
 

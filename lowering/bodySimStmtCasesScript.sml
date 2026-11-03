@@ -954,7 +954,7 @@ Proof
   gvs[value_runtime_typed_def] >>
   qspecl_then [`cenv`, `cx`, `env`, `es1`, `id`, `expr_type e`] mp_tac
     expr_sim_inv_local >> simp[] >> strip_tac >> gvs[] >>
-  metis_tac[store_lays_out_typed]
+  metis_tac[store_lays_out_typed, loweringSliceTheory.evaluate_word_memory_type]
 QED
 
 (* A storage declaration found by name is a variable declaration of tops
@@ -1667,7 +1667,7 @@ Theorem tuple_target_local_lays_out[local]:
     expr_sim_inv cenv cx env es1 /\ FLOOKUP env.var_types id = SOME ty /\
     evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
     lookup_scopes id es1.scopes = SOME entry ==>
-    if is_word_type ty then store_lays_out tv entry.type v
+    if is_word_type ty then word_memory_type entry.type /\ store_lays_out tv entry.type v
     else
       ?vt. cenv.ce_var_type id = SOME vt /\
            evaluate_type (get_tenv cx) vt = SOME entry.type /\
@@ -1678,7 +1678,8 @@ Proof
     metis_tac[expr_sim_inv_local] >>
   `entry.type = tv` by metis_tac[optionTheory.SOME_11] >>
   `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
-  IF_CASES_TAC >> simp[] >> metis_tac[store_lays_out_typed]
+  IF_CASES_TAC >> simp[] >>
+  metis_tac[store_lays_out_typed, loweringSliceTheory.evaluate_word_memory_type]
 QED
 
 (* The buffer a tuple assignment stages a memory view's value in fits

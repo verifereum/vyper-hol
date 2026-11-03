@@ -29,7 +29,7 @@ Ancestors
   stmtSimDecl stmtSimDeclMem stmtSimAssignStore stmtSimAssign
   valueCopy valueCopySource valueCopyBytes exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding
+  compileEnv valueEncoding memoryValueEncoding
   vyperInterpreter vyperState vyperValue vyperLookup vyperExprNoControl
   venomExecSemantics venomExecProofs venomInst venomState
 Libs
@@ -189,6 +189,8 @@ Proof
      qexists_tac `type_memory_size entry.type` >> simp[] >>
      rpt strip_tac >> qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ _ = _` irule >>
      decide_tac) >>
+  `memory_value_rel entry.type v (w2n w) t.vs_memory` by
+    metis_tac[val_in_memory_memory_value_rel] >>
   `stmt_state_rel ctx func cenv cx es1 t` by
     (drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
   `t.vs_allocas = s.vs_allocas` by
@@ -696,7 +698,7 @@ Theorem local_header_store_state:
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\ 32 <= type_memory_size entry.type /\
     val_wf entry.type v /\
-    val_in_memory entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
+    memory_value_rel entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes := pre ++
         (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
@@ -749,7 +751,7 @@ Theorem local_header_store_frag:
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\ 32 <= type_memory_size entry.type /\
     val_wf entry.type v /\
-    val_in_memory entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
+    memory_value_rel entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
     frag_exec ctx sa sb (\t. t = s)
       (\t. stmt_state_rel ctx func cenv cx
          (es with scopes := pre ++
@@ -795,6 +797,9 @@ Proof
     (irule memory_length_word_layout >>
      simp[valueEncodingPropsTheory.mstore_mem_word_at_same] >>
      qexistsl_tac [`get_tenv cx`, `vtyp`] >> simp[]) >>
+  `memory_value_rel entry.type (default_value entry.type) (w2n w)
+     (mstore (w2n w) 0w s0).vs_memory` by
+    metis_tac[default_val_in_memory_memory_value_rel] >>
   gvs[] >> drule_all local_header_store_frag >>
   disch_then (qspec_then `\r. F` mp_tac) >>
   strip_tac >> drule frag_exec_no_exit_run >>

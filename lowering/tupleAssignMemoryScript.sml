@@ -104,7 +104,7 @@ Theorem assign_tuple_locals_memory_success_run:
       (do result <- eval_expr cx e; read_result cx result od) es =
         (INL (ArrayV (TupleV vs)),es1) /\ i < LENGTH ids /\
       lookup_scopes (EL i ids) es1.scopes = SOME entry ==>
-      if is_word_type (EL i tys) then store_lays_out (EL i tvs) entry.type (EL i vs)
+      if is_word_type (EL i tys) then word_memory_type entry.type /\ store_lays_out (EL i tvs) entry.type (EL i vs)
       else ?vt. cenv.ce_var_type (EL i ids) = SOME vt /\
         evaluate_type (get_tenv cx) vt = SOME entry.type /\
         value_has_type entry.type (EL i vs)) /\

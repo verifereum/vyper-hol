@@ -448,6 +448,8 @@ Proof
     (strip_assume_tac o SIMP_RULE (srw_ss()) [val_wf_def] o
      REWRITE_RULE [ASSUME ``entry.type = ArrayTV etv (Dynamic n)``,
                    ASSUME ``entry.value = ArrayV (DynArrayV vs)``]) >>
+  `val_in_memory entry.type entry.value (w2n w) s0.vs_memory` by
+    metis_tac[memoryValueEncodingTheory.memory_value_rel_val_in_memory] >>
   qpat_x_assum `val_in_memory _ _ _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [val_in_memory_def] o
      REWRITE_RULE [ASSUME ``entry.type = ArrayTV etv (Dynamic n)``,
@@ -479,6 +481,7 @@ Theorem pop_local_ptrs_rel:
     w2n w + sz <= s0.vs_alloca_next /\
     entry.type = ArrayTV etv (Dynamic n) /\ vs <> [] /\
     LENGTH vs <= n /\ elems_val_wf vs etv /\
+    EVERY (value_has_type etv) vs /\
     32 + n * type_memory_size etv <= sz /\
     elems_in_memory vs (w2n w + 32) etv s0.vs_memory /\
     u.vs_memory = (mstore (w2n w) (n2w (LENGTH vs) - 1w) s0).vs_memory /\
@@ -527,9 +530,18 @@ Proof
   >~ [`type_memory_size _ <= _`] >- fs[type_memory_size_def, pop_name_entry_def]
   >~ [`val_wf`]
   >- fs[val_wf_def, LENGTH_FRONT, elems_val_wf_FRONT, pop_name_entry_def]
-  >~ [`val_in_memory`]
-  >- fs[val_in_memory_def, mstore_mem_word_at_same, elems_in_memory_FRONT,
-        elems_in_memory_mstore_before, pop_name_entry_def] >>
+  >~ [`memory_value_rel`]
+  >- (irule memoryValueEncodingTheory.val_in_memory_memory_value_rel >>
+      conj_tac
+      >- (fs[value_has_type_def, all_have_type_EVERY,
+              LENGTH_FRONT, pop_name_entry_def] >>
+          qpat_x_assum `EVERY _ vs` mp_tac >>
+          qpat_x_assum `vs <> []` mp_tac >>
+          rpt (pop_assum kall_tac) >>
+          Induct_on `vs` >> simp[FRONT_DEF] >>
+          rpt strip_tac >> Cases_on `vs = []` >> gvs[]) >>
+      fs[val_in_memory_def, mstore_mem_word_at_same, elems_in_memory_FRONT,
+         elems_in_memory_mstore_before, pop_name_entry_def]) >>
   rpt strip_tac >> gvs[]
 QED
 

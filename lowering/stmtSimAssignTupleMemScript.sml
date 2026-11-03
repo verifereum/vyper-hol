@@ -72,7 +72,7 @@ Theorem compile_assign_tuple_locals_memory_stmt_frag:
        i < LENGTH ids /\
        lookup_scopes (EL i ids) es1.scopes = SOME entry ==>
        if is_word_type (EL i tys) then
-         store_lays_out (EL i tvs) entry.type (EL i vs)
+         word_memory_type entry.type /\ store_lays_out (EL i tvs) entry.type (EL i vs)
        else
          ?vt. cenv.ce_var_type (EL i ids) = SOME vt /\
               evaluate_type (get_tenv cx) vt = SOME entry.type /\

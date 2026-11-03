@@ -262,7 +262,7 @@ Theorem annassign_word_store_run:
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     32 <= sz /\ type_memory_size tyv <= sz /\
-    val_in_memory tyv v (w2n w) (mstore (w2n w) wd s).vs_memory /\
+    memory_value_rel tyv v (w2n w) (mstore (w2n w) wd s).vs_memory /\
     val_wf tyv v ==>
     ?t. stmt_state_rel ctx func cenv cx
           (es with scopes :=
@@ -328,7 +328,7 @@ Theorem annassign_word_store_post_run[local]:
     expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
     is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
-    store_lays_out etv tyv v /\
+    store_lays_out etv tyv v /\ word_memory_type tyv /\
     emit_void MSTORE [Var p; op] sb = ((), sf) /\ fn_has_code sb sf func /\
     ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
     s.vs_inst_idx = LENGTH sb.cs_current_insts /\ fn_inst_ids_distinct func /\
@@ -362,6 +362,9 @@ Proof
      (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory /\
    val_wf tyv v /\ type_memory_size tyv = 32` by fs[store_lays_out_def] >>
   `type_memory_size tyv <= sz` by simp[] >>
+  `memory_value_rel tyv v (w2n w)
+     (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory` by
+    metis_tac[word_memory_value_rel_iff] >>
   drule_all annassign_word_store_run >>
   disch_then (qspecl_then [`a`] mp_tac) >> strip_tac >>
   qexists_tac `t` >> simp[] >> metis_tac[]
@@ -419,7 +422,7 @@ QED
 Theorem annassign_word_success_run[local]:
   !ctx func cenv cx id vtyp e es es' etv sa sb sf op p sz s0 w inst.
     eval_stmt cx (AnnAssign id vtyp e) es = (INL (), es') /\
-    is_word_type (expr_type e) /\ evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
+    is_word_type vtyp /\ is_word_type (expr_type e) /\ evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
     (!tyv v es1. evaluate_type (get_tenv cx) vtyp = SOME tyv /\
                  (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es1) ==>
        store_lays_out etv tyv v) /\
@@ -455,6 +458,8 @@ Proof
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
   `lookup_scopes id es1.scopes = NONE` by gvs[] >>
+  `word_memory_type tyv` by
+    (irule evaluate_word_memory_type >> metis_tac[]) >>
   drule_all annassign_word_store_post_run >>
   disch_then (qspecl_then [`T`] mp_tac) >> strip_tac >>
   qexists_tac `t` >> simp[] >> metis_tac[]

@@ -176,11 +176,12 @@ Theorem word_val_in_memory_complete:
     val_in_memory tv v off mem ==>
     memory_value_rel tv v off mem
 Proof
-  rpt gen_tac >> Cases_on `ty` >> simp[is_word_type_def]
-  >- (rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def] >>
-      TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_word_type_def]) >>
-      simp[evaluate_type_def, memory_value_rel_def]) >>
-  simp[evaluate_type_def, AllCaseEqs(), memory_value_rel_def]
+  rpt gen_tac >> strip_tac >> Cases_on `ty` >> gvs[is_word_type_def]
+  >- (rename1 `BaseT bt` >> Cases_on `bt` >>
+      gvs[is_word_type_def, evaluate_type_def, memory_value_rel_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >>
+      gvs[is_word_type_def, evaluate_type_def, memory_value_rel_def]) >>
+  gvs[evaluate_type_def, AllCaseEqs(), memory_value_rel_def]
 QED
 
 Theorem word_dec_value:
@@ -348,9 +349,10 @@ Proof
   Induct
   >- (Cases_on `fts` >> simp[memory_value_rel_def]) >>
   rpt gen_tac >> Cases_on `fts` >- simp[memory_value_rel_def] >>
-  rename1 `memory_fields_rel (ft::fts) (field::fields) off mem` >>
-  PairCases_on `field` >> PairCases_on `ft` >>
-  simp[memory_value_rel_def]
+  strip_tac >>
+  qmatch_goalsub_rename_tac `memory_fields_rel (field_tv::_) (field_v::_) _ _` >>
+  PairCases_on `field_v` >> PairCases_on `field_tv` >>
+  gvs[memory_value_rel_def]
 QED
 
 Theorem decs_value_struct:
@@ -522,7 +524,8 @@ Proof
      map_replicate, SUM_REPLICATE, type_memory_size_def, dec_ok_def,
      static_dec_complex] >>
   gvs[enc_tuple_static_acc, EVERY_REPLICATE] >>
-  drule_all sparse_tuple_memory >> simp[]
+  qpat_x_assum `!off mem. _ ==> tuple_in_memory _ _ _ _ /\ _` drule >>
+  strip_tac >> drule_all sparse_tuple_memory >> simp[]
 QED
 
 (* ===== Plans decode values ===== *)

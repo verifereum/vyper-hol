@@ -451,6 +451,8 @@ Proof
   `store_lays_out entry1.type entry1.type v` by
     (irule store_lays_out_word_value >>
      metis_tac[word_value_type_memory_size]) >>
+  `word_memory_type entry1.type` by
+    metis_tac[loweringSliceTheory.evaluate_word_memory_type] >>
   drule_all assign_local_store_run >>
   strip_tac >>
   disj1_tac >> qexists_tac `t` >>

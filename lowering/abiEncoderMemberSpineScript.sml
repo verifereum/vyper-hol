@@ -88,7 +88,12 @@ Proof
   rename1 `abi_encoder_member_spine _ _ (info::rest) _ _ _ _` >>
   PairCases_on `info` >>
   simp_tac bool_ss [abi_encoder_member_spine_def] >>
-  metis_tac[abi_encoder_spine_child_mono]
+  rpt strip_tac >>
+  qpat_x_assum `!B q result s t. _` (drule_then assume_tac) >>
+  qpat_x_assum `!c s t. _`
+    (mp_tac o MATCH_MP abi_encoder_spine_child_mono) >>
+  disch_then (drule_then assume_tac) >>
+  qexistsl_tac [`elem_src`, `p`, `len`, `ce`, `r`, `u`] >> simp[]
 QED
 
 Definition abi_encoder_spine_core_code_def:

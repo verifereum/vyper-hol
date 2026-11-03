@@ -181,10 +181,13 @@ Proof
   `local_ptrs_rel func cenv es.scopes s /\ alloca_room ctx func s` by
     fs[stmt_state_rel_def, state_rel_def] >>
   `w2n w0 + sz <= s.vs_alloca_next /\ type_memory_size entry.type <= sz /\
-   val_in_memory entry.type entry.value (w2n w0) s.vs_memory` by
+   memory_value_rel entry.type entry.value (w2n w0) s.vs_memory` by
     (qpat_x_assum `local_ptrs_rel _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
      first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  `val_in_memory entry.type entry.value (w2n w0) s.vs_memory` by
+    (irule memoryValueEncodingTheory.memory_value_rel_val_in_memory >>
+     gvs[value_has_type_def]) >>
   `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
   `struct_field_offset flds fld + type_memory_size ftv <=
      type_memory_size_fields fs` by metis_tac[struct_field_offset_le] >>
@@ -612,7 +615,8 @@ Proof
                                          v1 v2 es1
                            | INR ex => INR ex)`]
     mp_tac assign_attr_local_store >>
-  impl_tac >- gvs[eval_operand_def] >>
+  impl_tac >- (gvs[eval_operand_def] >>
+    metis_tac[loweringSliceTheory.evaluate_word_memory_type]) >>
   disch_then (mp_then Any irule frag_exec_weaken) >>
   fs[] >> metis_tac[]
 QED

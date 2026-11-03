@@ -84,7 +84,7 @@ Theorem stmt_state_rel_write_local:
     (!b n. b + n <= w2n w \/ w2n w + type_memory_size entry.type <= b ==>
            mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t /\
-    val_wf entry.type v /\ val_in_memory entry.type v (w2n w) t.vs_memory ==>
+    val_wf entry.type v /\ memory_value_rel entry.type v (w2n w) t.vs_memory ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
          pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
@@ -204,7 +204,7 @@ Theorem stmt_state_rel_write_local_word:
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\
     type_memory_size entry.type = 32 /\ val_wf entry.type v /\
-    val_in_memory entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
+    memory_value_rel entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
          pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
@@ -241,14 +241,14 @@ Theorem stmt_state_rel_write_local_store:
     stmt_state_rel ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    lookup_var p s = SOME w /\ store_lays_out etv entry.type v ==>
+    lookup_var p s = SOME w /\ word_memory_type entry.type /\ store_lays_out etv entry.type v ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
          pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
       (mstore (w2n w) (typed_val_to_w256 etv v) s)
 Proof
   rw[store_lays_out_def] >> irule stmt_state_rel_write_local_word >>
-  simp[] >> metis_tac[]
+  simp[] >> metis_tac[word_memory_value_rel_iff]
 QED
 
 (* The MSTORE of the typed word of v at a live local's pointer, run: it
@@ -264,7 +264,7 @@ Theorem assign_local_store_run_framed:
     stmt_state_rel ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    store_lays_out etv entry.type v ==>
+    word_memory_type entry.type /\ store_lays_out etv entry.type v ==>
     ?dw t. lookup_var p s = SOME dw /\
         stmt_state_rel ctx func cenv cx
           (es with scopes :=
@@ -329,7 +329,7 @@ Theorem assign_local_store_run:
     stmt_state_rel ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    store_lays_out etv entry.type v ==>
+    word_memory_type entry.type /\ store_lays_out etv entry.type v ==>
     ?t. stmt_state_rel ctx func cenv cx
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::

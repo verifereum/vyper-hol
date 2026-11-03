@@ -217,6 +217,18 @@ Proof
   drule_all abi_encoder_member_phase_extend_sim >> simp[]
 QED
 
+Theorem abi_encoder_array_exit_step_update[local]:
+  (i.inst_opcode = ADD \/ i.inst_opcode = MUL \/ i.inst_opcode = MLOAD) /\
+  step_inst_base i s = OK t ==> ?out value. t = update_var out value s
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst_base i s = OK t` mp_tac >>
+  qpat_x_assum `i.inst_opcode = _`
+    (fn opcode => pure_rewrite_tac [step_inst_base_def, opcode, opcode_case_def]) >>
+  simp[exec_pure2_def, exec_read1_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
 Theorem abi_encoder_array_exit_readonly:
   (if active then abi_encode_array_dynamic_exit src dp st = (out,final)
    else abi_encode_array_static_exit src asz st = (out,final)) /\
@@ -246,7 +258,9 @@ Proof
      qexists_tac `emitted_insts st final` >> asm_rewrite_tac [] >> rpt strip_tac >>
      `i.inst_opcode = ADD \/ i.inst_opcode = MUL \/ i.inst_opcode = MLOAD` by
        (fs[EVERY_MEM] >> metis_tac[]) >>
-     gvs[step_inst_base_def, exec_pure2_def, exec_read1_def, AllCaseEqs(), update_var_def]) >>
+     `?out value. ss2 = update_var out value ss1` by
+       metis_tac[abi_encoder_array_exit_step_update] >>
+     gvs[update_var_def]) >>
   gvs[]
 QED
 

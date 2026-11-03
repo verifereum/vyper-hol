@@ -68,7 +68,7 @@ Theorem tuple_local_store_head_run:
     (~m ==> is_word_type ty) /\
     eval_operand op s = SOME w /\
     (if is_word_type ty then
-       w = typed_val_to_w256 tv v /\ store_lays_out tv entry.type v
+       w = typed_val_to_w256 tv v /\ word_memory_type entry.type /\ store_lays_out tv entry.type v
      else
        ~is_word_type vt /\ evaluate_type (get_tenv cx) vt = SOME entry.type /\
        value_has_type entry.type v /\ val_wf entry.type v /\
@@ -128,7 +128,7 @@ Theorem tuple_store_layout_write_local:
     find_containing_scope id sc = SOME (pre, env, entry, rest) /\
     (!i e. i < LENGTH ids /\ lookup_scopes (EL i ids) sc = SOME e ==>
        if is_word_type (EL i tys) then
-         store_lays_out (EL i tvs) e.type (EL i vs)
+         word_memory_type e.type /\ store_lays_out (EL i tvs) e.type (EL i vs)
        else ?vt. cenv.ce_var_type (EL i ids) = SOME vt /\
                  evaluate_type (get_tenv cx) vt = SOME e.type /\
                  value_has_type e.type (EL i vs)) ==>
@@ -136,7 +136,7 @@ Theorem tuple_store_layout_write_local:
       lookup_scopes (EL i ids)
         (pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) = SOME e ==>
       if is_word_type (EL i tys) then
-        store_lays_out (EL i tvs) e.type (EL i vs)
+        word_memory_type e.type /\ store_lays_out (EL i tvs) e.type (EL i vs)
       else ?vt. cenv.ce_var_type (EL i ids) = SOME vt /\
                 evaluate_type (get_tenv cx) vt = SOME e.type /\
                 value_has_type e.type (EL i vs)
@@ -281,7 +281,7 @@ Theorem tuple_store_mixed_locals_run:
                  type_memory_bytes cenv vt = type_memory_size vtv /\
                  0 < type_memory_size vtv /\ type_memory_size vtv + 64 < dimword (:256))) /\
     (!i entry. i < LENGTH ids /\ lookup_scopes (EL i ids) es.scopes = SOME entry ==>
-       if is_word_type (EL i tys) then store_lays_out (EL i tvs) entry.type (EL i vs)
+       if is_word_type (EL i tys) then word_memory_type entry.type /\ store_lays_out (EL i tvs) entry.type (EL i vs)
        else ?vt. cenv.ce_var_type (EL i ids) = SOME vt /\
                  evaluate_type (get_tenv cx) vt = SOME entry.type /\
                  value_has_type entry.type (EL i vs)) /\
@@ -333,7 +333,7 @@ Resume tuple_store_mixed_locals_run[cons]:
   `~is_word_type ty ==> (vt = ty \/ is_bytestring_type vt) /\
      0 < type_memory_bytes cenv vt` by
     (strip_tac >> qpat_x_assum `~is_word_type ty ==> _` mp_tac >>
-     simp[] >> metis_tac[]) >>
+     simp[] >> rpt (pop_assum kall_tac) >> metis_tac[]) >>
   drule_all tuple_store_head_code_shape >> strip_tac >>
   suspend "head_code"
 QED
@@ -373,7 +373,8 @@ Resume tuple_store_mixed_locals_run[head_execution]:
    (m ==> (!x. op = Var x ==> not_fresh_at st x) /\ local_ptrs_reserved cenv st)` by
     (qpat_x_assum `ih :- _` kall_tac >> fs[]) >>
   `if is_word_type ty then
-     w = typed_val_to_w256 tv v /\ store_lays_out tv entry.type v
+     w = typed_val_to_w256 tv v /\ word_memory_type entry.type /\
+     store_lays_out tv entry.type v
    else
      ~is_word_type vt /\ evaluate_type (get_tenv cx) vt = SOME entry.type /\
      value_has_type entry.type v /\ val_wf entry.type v /\
@@ -493,7 +494,7 @@ Resume tuple_store_mixed_locals_run[tail_memory]:
     (Cases_on `is_word_type ty` >-
        (qpat_x_assum `!i. _ ==> evaluate_type _ _ = _ /\ _`
           (qspec_then `0` mp_tac) >>
-        qpat_x_assum `if is_word_type ty then store_lays_out _ _ _ else _` mp_tac >>
+        qpat_x_assum `if is_word_type ty then word_memory_type _ /\ store_lays_out _ _ _ else _` mp_tac >>
         simp[stmtSimDeclStoreTheory.store_lays_out_def]) >>
      simp[]) >>
   drule_all tuple_store_memory_tail >>

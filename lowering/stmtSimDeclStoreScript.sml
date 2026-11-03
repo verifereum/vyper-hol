@@ -25,9 +25,17 @@ Ancestors
   list rich_list finite_map pred_set
   fragExec localPtrsProps venomMemDefs loweringSlice exprSim
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding valueEncodingProps
+  compileEnv valueEncoding valueEncodingProps memoryValueDefs
   vyperInterpreter vyperState vyperValue vyperTyping
   venomExecSemantics venomInst venomState
+
+Theorem word_memory_value_rel_iff:
+  !tv v off mem.
+    word_memory_type tv ==>
+    (memory_value_rel tv v off mem <=> val_in_memory tv v off mem)
+Proof
+  rw[word_memory_type_def] >> simp[memory_value_rel_def]
+QED
 
 Theorem stmt_state_rel_declare_memory:
   !func cenv cx es s t id p sz w inst v tyv sc rest a ctx.
@@ -52,7 +60,7 @@ Theorem stmt_state_rel_declare_memory:
     (!n b sz'. n <> id /\ local_region cenv es.scopes s n b sz' ==>
          mem_bytes_at b sz' s.vs_memory = mem_bytes_at b sz' t.vs_memory) /\
     type_memory_size tyv <= sz /\ val_wf tyv v /\
-    val_in_memory tyv v (w2n w) t.vs_memory ==>
+    memory_value_rel tyv v (w2n w) t.vs_memory ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
          (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest) t
@@ -130,7 +138,7 @@ Theorem stmt_state_rel_declare_store:
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     32 <= sz /\ type_memory_size tyv <= sz /\
-    val_in_memory tyv v (w2n w) (mstore (w2n w) x s).vs_memory /\
+    memory_value_rel tyv v (w2n w) (mstore (w2n w) x s).vs_memory /\
     val_wf tyv v ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=

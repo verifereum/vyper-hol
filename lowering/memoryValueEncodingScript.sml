@@ -228,3 +228,128 @@ Theorem memory_tuple_rel_val_in_memory:
 Proof
   simp[val_in_memory_def] >> metis_tac[memory_tuple_rel_tuple_in_memory]
 QED
+
+Theorem default_array_memory_completeness:
+  !tv bound.
+    (!offset mem. val_in_memory tv (default_value tv) offset mem ==>
+      memory_value_rel tv (default_value tv) offset mem) ==>
+    !offset mem.
+      val_in_memory (ArrayTV tv bound) (default_value (ArrayTV tv bound)) offset mem ==>
+      memory_value_rel (ArrayTV tv bound) (default_value (ArrayTV tv bound)) offset mem
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `bound` >>
+  simp[default_value_def, memory_value_rel_def, val_in_memory_def] >>
+  metis_tac[]
+QED
+
+Theorem default_memory_completeness:
+  (!tv offset mem.
+    val_in_memory tv (default_value tv) offset mem ==>
+    memory_value_rel tv (default_value tv) offset mem) /\
+  (!tvs offset mem.
+    fields_in_memory (MAP (\(name,tv). (name,default_value tv)) tvs) tvs offset mem ==>
+    memory_fields_rel tvs (MAP (\(name,tv). (name,default_value tv)) tvs) offset mem) /\
+  (!p:string # type_value. !offset mem.
+    val_in_memory (SND p) (default_value (SND p)) offset mem ==>
+    memory_value_rel (SND p) (default_value (SND p)) offset mem) /\
+  (!tvs offset mem.
+    tuple_in_memory (MAP default_value tvs) tvs offset mem ==>
+    memory_tuple_rel tvs (MAP default_value tvs) offset mem)
+Proof
+  ho_match_mp_tac type_value_mutual_induction >>
+  simp[default_value_def, default_value_struct_MAP, default_value_tuple_MAP,
+       memory_value_rel_def, val_in_memory_def, default_array_memory_completeness] >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac
+  >- (PairCases_on `p` >> fs[memory_value_rel_def, val_in_memory_def]) >>
+  metis_tac[]
+QED
+
+Theorem typed_fixed_memory_completeness:
+  !tv bound sparse offset mem.
+    (!v off m. value_has_type tv v /\ val_in_memory tv v off m ==>
+      memory_value_rel tv v off m) /\
+    value_has_type (ArrayTV tv (Fixed bound)) (ArrayV (SArrayV sparse)) /\
+    val_in_memory (ArrayTV tv (Fixed bound)) (ArrayV (SArrayV sparse)) offset mem ==>
+    memory_value_rel (ArrayTV tv (Fixed bound)) (ArrayV (SArrayV sparse)) offset mem
+Proof
+  rpt gen_tac >> simp_tac bool_ss [value_has_type_def, val_in_memory_def,
+    canonical_sparse_entries, memory_value_rel_def] >> simp[] >> strip_tac >>
+  qx_gen_tac `i` >> strip_tac >> Cases_on `ALOOKUP sparse i`
+  >- (simp[] >> metis_tac[default_memory_completeness]) >>
+  simp[] >>
+  `MEM (i,x) sparse` by (drule alistTheory.ALOOKUP_MEM >> simp[]) >>
+  `value_has_type tv x` by (drule_all typed_sparse_entry >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem typed_dynamic_memory_completeness:
+  !tv bound vs offset mem.
+    (!v off m. value_has_type tv v /\ val_in_memory tv v off m ==>
+      memory_value_rel tv v off m) /\
+    value_has_type (ArrayTV tv (Dynamic bound)) (ArrayV (DynArrayV vs)) /\
+    val_in_memory (ArrayTV tv (Dynamic bound)) (ArrayV (DynArrayV vs)) offset mem ==>
+    memory_value_rel (ArrayTV tv (Dynamic bound)) (ArrayV (DynArrayV vs)) offset mem
+Proof
+  rpt gen_tac >> simp_tac bool_ss [value_has_type_def, val_in_memory_def,
+    canonical_elements_indexed, memory_value_rel_def] >> simp[] >> strip_tac >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  `value_has_type tv (EL i vs)` by fs[all_have_type_EVERY, EVERY_EL] >>
+  metis_tac[]
+QED
+
+Theorem typed_memory_completeness:
+  (!tv v offset mem. value_has_type tv v /\ val_in_memory tv v offset mem ==>
+    memory_value_rel tv v offset mem) /\
+  (!tvs vs offset mem. struct_has_type tvs vs /\ fields_in_memory vs tvs offset mem ==>
+    memory_fields_rel tvs vs offset mem) /\
+  (!p:string # type_value. !v offset mem.
+    value_has_type (SND p) v /\ val_in_memory (SND p) v offset mem ==>
+    memory_value_rel (SND p) v offset mem) /\
+  (!tvs vs offset mem. values_have_types tvs vs /\ tuple_in_memory vs tvs offset mem ==>
+    memory_tuple_rel tvs vs offset mem)
+Proof
+  ho_match_mp_tac type_value_mutual_induction >>
+  rpt conj_tac >> rpt gen_tac
+  >- simp[memory_value_rel_def]
+  >- (strip_tac >> Cases_on `v` >> simp[value_has_type_def] >>
+      rename1 `value_has_type _ (ArrayV av)` >> Cases_on `av` >>
+      simp[value_has_type_def, val_in_memory_def, memory_value_rel_def])
+  >- (strip_tac >> Cases_on `bd` >> Cases_on `v` >> simp[value_has_type_def] >>
+      rename1 `value_has_type _ (ArrayV av)` >> Cases_on `av` >>
+      simp[value_has_type_def] >> rpt strip_tac
+      >- (irule typed_fixed_memory_completeness >> simp[value_has_type_def]) >>
+      irule typed_dynamic_memory_completeness >> simp[value_has_type_def])
+  >- (strip_tac >> Cases_on `v` >>
+      simp[value_has_type_def, val_in_memory_def, memory_value_rel_def])
+  >- simp[memory_value_rel_def]
+  >- (Cases_on `v` >> simp[value_has_type_def, memory_value_rel_def])
+  >- (Cases_on `vs` >> simp[value_has_type_def, memory_value_rel_def])
+  >- (strip_tac >> qmatch_goalsub_rename_tac `struct_has_type (entry::tvs)` >>
+      PairCases_on `entry` >> Cases_on `vs` >>
+      simp[value_has_type_def] >> rename1 `struct_has_type _ (h::t)` >>
+      PairCases_on `h` >>
+      fs[value_has_type_def, val_in_memory_def, memory_value_rel_def] >>
+      metis_tac[])
+  >- simp[]
+  >- (Cases_on `vs` >> simp[value_has_type_def, memory_value_rel_def]) >>
+  strip_tac >> Cases_on `vs` >>
+  simp[value_has_type_def, val_in_memory_def, memory_value_rel_def]
+QED
+
+(* Source typing makes the legacy layout complete. Defaults also have the
+   complete shape, independently of source type well-formedness. *)
+Theorem val_in_memory_memory_value_rel:
+  !tv v offset mem.
+    value_has_type tv v /\ val_in_memory tv v offset mem ==>
+    memory_value_rel tv v offset mem
+Proof
+  metis_tac[typed_memory_completeness]
+QED
+
+Theorem default_val_in_memory_memory_value_rel:
+  !tv offset mem.
+    val_in_memory tv (default_value tv) offset mem ==>
+    memory_value_rel tv (default_value tv) offset mem
+Proof
+  metis_tac[default_memory_completeness]
+QED

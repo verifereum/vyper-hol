@@ -35,7 +35,8 @@ Theorem stmt_state_rel_declare_word_alloca[local]:
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
-    32 <= sz /\ word_value v /\ type_memory_size tyv = 32 ==>
+    32 <= sz /\ word_value v /\ type_memory_size tyv = 32 /\
+    word_memory_type tyv ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
          (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest)
@@ -52,7 +53,7 @@ Proof
      simp[] >> qexistsl_tac [`w2n w`, `func`, `inst`, `sz`] >> simp[]) >>
   irule stmt_state_rel_declare_memory >>
   simp[word_value_wf] >> qexistsl_tac [`inst`, `s`, `w`] >>
-  simp[word_value_in_memory] >> conj_tac
+  simp[word_value_memory_rel] >> conj_tac
   >- (rpt strip_tac >>
       `regions_disjoint (w2n w) sz b sz'` by
         (irule local_ptrs_rel_alloca_disjoint >>
@@ -189,7 +190,8 @@ Theorem for_body_entry:
     not_local_ptr bc (FEMPTY :: esk.scopes) p /\ dv <> p /\ dv <> cv /\
     MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
     ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
-    32 <= sz /\ type_memory_size tyv = 32 /\ cap <= w2n w /\
+    32 <= sz /\ type_memory_size tyv = 32 /\ word_memory_type tyv /\
+    cap <= w2n w /\
     (cenv.ce_is_ctor ==>
        immutable_prefix_bound cenv cx.txn.target cenv.ce_module esk cap) ==>
     ?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\

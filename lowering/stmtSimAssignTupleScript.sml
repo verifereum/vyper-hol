@@ -171,7 +171,7 @@ Theorem tuple_store_locals_run:
       SOME (MAP (\(tv, v). typed_val_to_w256 tv v) (ZIP (tvs, vs))) /\
     (!i entry. i < LENGTH ids /\
                lookup_scopes (EL i ids) es.scopes = SOME entry ==>
-               store_lays_out (EL i tvs) entry.type (EL i vs)) /\
+               word_memory_type entry.type /\ store_lays_out (EL i tvs) entry.type (EL i vs)) /\
     fn_has_code st st' func /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
@@ -207,7 +207,9 @@ Resume tuple_store_locals_run[premises]:
       `MEM (EL i ids) ids` by (irule EL_MEM >> simp[]) >>
       gvs[EVERY_MEM] >> first_x_assum drule >> strip_tac >> simp[]) >>
   `is_word_type (EL i tys)` by gvs[EVERY_EL] >>
-  simp[] >> first_x_assum drule_all >> simp[]
+  simp[] >>
+  qpat_x_assum `!i entry. _` (qspec_then `i` mp_tac) >>
+  simp[] >> disch_then drule >> simp[]
 QED
 
 Finalise tuple_store_locals_run
@@ -351,7 +353,7 @@ Theorem assign_tuple_locals_success_run[local]:
          (INL (ArrayV (TupleV vs)), es1) /\
        tup_tv = TupleTV tvs /\ i < LENGTH ids /\
        lookup_scopes (EL i ids) es1.scopes = SOME entry ==>
-       store_lays_out (EL i tvs) entry.type (EL i vs)) /\
+       word_memory_type entry.type /\ store_lays_out (EL i tvs) entry.type (EL i vs)) /\
     expr_sim ctx func cenv cx (TupleT tys) e es /\
     lower_value compile_expr cenv (TupleT tys) e sa = (op, s1) /\
     compile_load_tuple_elements cenv op tys 0 s1 = (elems, s2) /\
@@ -489,7 +491,7 @@ Theorem compile_assign_tuple_locals_stmt_frag:
          (INL (ArrayV (TupleV vs)), es1) /\
        tup_tv = TupleTV tvs /\ i < LENGTH ids /\
        lookup_scopes (EL i ids) es1.scopes = SOME entry ==>
-       store_lays_out (EL i tvs) entry.type (EL i vs)) /\
+       word_memory_type entry.type /\ store_lays_out (EL i tvs) entry.type (EL i vs)) /\
     expr_sim ctx func cenv cx (TupleT tys) e es ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty

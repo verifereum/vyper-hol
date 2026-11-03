@@ -136,7 +136,7 @@ Theorem assign_local_word_success_run:
        (do result <- eval_expr cx e; read_result cx result od) es =
          (INL v, es1) /\
        lookup_scopes id es1.scopes = SOME entry ==>
-       store_lays_out etv entry.type v) /\
+       word_memory_type entry.type /\ store_lays_out etv entry.type v) /\
     expr_sim ctx func cenv cx (expr_type e) e es /\
     lower_value compile_expr cenv (expr_type e) e sa = (op, sb) /\
     emit_void MSTORE [Var p; op] sb = ((), sf) /\
@@ -163,7 +163,7 @@ Proof
   drule write_place_local >> simp[] >> strip_tac >> gvs[] >>
   `lookup_scopes id es1.scopes = SOME entry` by
     metis_tac[find_containing_scope_lookup] >>
-  `store_lays_out etv entry.type v` by metis_tac[] >>
+  `word_memory_type entry.type /\ store_lays_out etv entry.type v` by metis_tac[] >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sa`, `sb`, `op`, `INL v`, `es1`, `s0`] mp_tac) >>
   impl_tac >- simp[expr_res_ok_def] >>
@@ -195,7 +195,7 @@ Theorem compile_assign_local_stmt_frag:
        (do result <- eval_expr cx e; read_result cx result od) es =
          (INL v, es1) /\
        lookup_scopes id es1.scopes = SOME entry ==>
-       store_lays_out etv entry.type v) /\
+       word_memory_type entry.type /\ store_lays_out etv entry.type v) /\
     expr_sim ctx func cenv cx (expr_type e) e es ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Assign (BaseTarget (NameTarget id)) e))
