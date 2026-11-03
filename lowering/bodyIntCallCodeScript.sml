@@ -321,3 +321,171 @@ Proof
   gvs[internal_fn_descriptors_append, internal_fn_descriptors_def,
       EL_APPEND_EQN]
 QED
+
+Theorem compiler_block_tail_clean_run:
+  compiler_block_tail m /\ m entry = (r,final) /\
+  m (entry with cs_blocks := []) = (v,clean) ==>
+  r = v /\ final = clean with cs_blocks := clean.cs_blocks ++ entry.cs_blocks
+Proof
+  simp[compiler_block_tail_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`entry.cs_blocks`, `entry with cs_blocks := []`] mp_tac) >>
+  simp[]
+QED
+
+Theorem compiler_block_tail_segment_distinct:
+  compiler_block_tail m /\ m entry = (r,final) /\
+  new_block label before = (old,entry) /\
+  all_blocks final = all_blocks before ++ seg /\
+  compile_state_ok (entry with cs_blocks := []) /\
+  (!st v out. m st = (v,out) /\ compile_state_ok st ==> compile_state_ok out) ==>
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) seg)
+Proof
+  strip_tac >> Cases_on `m (entry with cs_blocks := [])` >>
+  rename1 `_ = (v,clean)` >>
+  `compile_state_ok clean` by metis_tac[] >>
+  drule_all compiler_block_tail_clean_run >> strip_tac >>
+  gvs[new_block_def, loweringShapeDefsTheory.all_blocks_def, APPEND_ASSOC] >>
+  fs[compile_state_ok_def, ALL_DISTINCT_APPEND, MEM_MAP, MEM_REVERSE,
+     MAP_REVERSE, ALL_DISTINCT_REVERSE]
+QED
+
+Theorem compile_runtime_internal_segment_distinct:
+  supported_stmts tops bindings ss /\
+  ~supported_stmts_expr_exists expr_internal_call_root ss /\
+  ~compiler_label label /\
+  compile_internal_fn_bodies
+    [(label,ce,params,has_buf,F,nkey,transient,view,F,imm_len,ss,ret)]
+    before = (r,final) /\
+  all_blocks final = all_blocks before ++ seg ==>
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) seg)
+Proof
+  strip_tac >> drule compile_internal_fn_bodies_singleton >> strip_tac >>
+  irule (INST_TYPE [alpha |-> ``:unit``] compiler_block_tail_segment_distinct) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  `compile_state_ok (entry with cs_blocks := [])` by
+    metis_tac[new_block_clean_entry_ok] >> simp[] >> reverse conj_tac
+  >- (irule compiler_block_tail_runtime_internal_function >> metis_tac[]) >>
+  rpt strip_tac >> drule_all compile_runtime_internal_function_label_bounds >> simp[]
+QED
+
+Theorem compile_runtime_internal_singleton_code:
+  supported_stmts tops bindings ss /\
+  ~supported_stmts_expr_exists expr_internal_call_root ss /\
+  ~compiler_label label /\ shape_state before /\
+  internal_fn_shape_ok
+    (label,ce,params,has_buf,F,nkey,transient,view,F,imm_len,ss,ret) /\
+  compile_internal_fn_bodies
+    [(label,ce,params,has_buf,F,nkey,transient,view,F,imm_len,ss,ret)]
+    before = (r,final) /\
+  all_blocks final = all_blocks before ++ func.fn_blocks ==>
+  ?old entry cenv2 pc body_start body_env body_end.
+    new_block label before = (old,entry) /\
+    compile_internal_function ce params has_buf F nkey transient view F imm_len ss ret
+      entry = ((),final) /\
+    fn_has_code entry final func /\
+    compile_internal_prologue ce params has_buf ret entry = ((cenv2,pc),body_start) /\
+    stmts_env (cenv2 with <| ce_imm_alloca := NONE; ce_alloca_locals := T |>) NoLoop
+      (case ret of SOME t => t | NONE => BaseT BoolT) ss body_start =
+      (body_env,body_end) /\
+    (if block_is_terminated body_end then ((),body_end)
+     else case ret of NONE => emit_inst RET [pc] [] body_end
+                    | SOME t => emit_inst INVALID [] [] body_end) = ((),final)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) func.fn_blocks)` by
+    (irule compile_runtime_internal_segment_distinct >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  drule_all compile_internal_fn_singleton_code >> strip_tac >>
+  drule compile_internal_function_body_states >> strip_tac >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem run_lowering_selected_code_segment:
+  run_lowering selectors external_fns (xs ++ [selected] ++ ys) fallback_fn rpolicy
+    bucket_count fn_metadata_bytes dense_buckets entry_info "__entry" = SOME unit /\
+  EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl) selectors /\
+  EVERY external_fn_shape_ok external_fns /\ fallback_shape_ok fallback_fn /\
+  EVERY internal_fn_shape_ok (xs ++ [selected] ++ ys) /\
+  EVERY (\d. internal_label_ok (FST d))
+    (internal_fn_descriptors (xs ++ [selected] ++ ys)) ==>
+  ?before after seg.
+    shape_state before /\
+    (?v. compile_internal_fn_bodies [selected] before = (v,after)) /\
+    all_blocks after = all_blocks before ++ seg /\
+    lookup_function (FST (HD (internal_fn_descriptors [selected])))
+      unit.cu_context.ctx_functions =
+    SOME (mk_internal_function (FST (HD (internal_fn_descriptors [selected]))) seg
+      (FST (SND (HD (internal_fn_descriptors [selected]))))
+      (SND (SND (HD (internal_fn_descriptors [selected])))))
+Proof
+  strip_tac >>
+  Cases_on `compile_generate_runtime selectors external_fns (xs ++ [selected] ++ ys)
+    fallback_fn Linear bucket_count fn_metadata_bytes dense_buckets entry_info
+    (initial_compile_state "__entry")` >>
+  rename1 `_ = (u,final)` >> Cases_on `u` >>
+  drule_all compile_generate_runtime_internal_start >> strip_tac >>
+  drule_all compile_internal_fn_bodies_selected_segments >> strip_tac >>
+  `shape_state before` by
+    (qpat_assum `compile_internal_fn_bodies xs start = _`
+      (mp_then Any mp_tac compile_internal_fn_bodies_shape) >> fs[] >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP FST (internal_fn_descriptors (xs ++ [selected] ++ ys)))` by
+    metis_tac[run_lowering_descriptors_distinct] >>
+  `EVERY (\d. ~compiler_label (FST d) /\
+      ~MEM (FST d) (MAP (\bb. bb.bb_label) (all_blocks start)))
+    (internal_fn_descriptors (xs ++ [selected] ++ ys))` by
+    (rewrite_tac[EVERY_MEM] >> gen_tac >> disch_tac >>
+     BETA_TAC >> irule internal_name_not_entry_label >> fs[EVERY_MEM]) >>
+  `lookup_function (FST (HD (internal_fn_descriptors [selected])))
+     unit.cu_context.ctx_functions =
+   SOME (mk_internal_function (FST (HD (internal_fn_descriptors [selected]))) seg
+     (FST (SND (HD (internal_fn_descriptors [selected]))))
+     (SND (SND (HD (internal_fn_descriptors [selected])))))` by
+    (irule run_lowering_selected_partition_lookup >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> simp[FLAT_APPEND, APPEND_ASSOC] >> metis_tac[]) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem run_lowering_runtime_internal_code:
+  selected = (label,ce,params,has_buf,F,nkey,transient,view,F,imm_len,ss,ret) /\
+  run_lowering selectors external_fns (xs ++ [selected] ++ ys) fallback_fn rpolicy
+    bucket_count fn_metadata_bytes dense_buckets entry_info "__entry" = SOME unit /\
+  EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl) selectors /\
+  EVERY external_fn_shape_ok external_fns /\ fallback_shape_ok fallback_fn /\
+  EVERY internal_fn_shape_ok (xs ++ [selected] ++ ys) /\
+  EVERY (\d. internal_label_ok (FST d))
+    (internal_fn_descriptors (xs ++ [selected] ++ ys)) /\
+  supported_stmts tops bindings ss /\
+  ~supported_stmts_expr_exists expr_internal_call_root ss ==>
+  ?func before old entry final cenv2 pc body_start body_env body_end.
+    lookup_function label unit.cu_context.ctx_functions = SOME func /\
+    new_block label before = (old,entry) /\
+    compile_internal_function ce params has_buf F nkey transient view F imm_len ss ret
+      entry = ((),final) /\
+    fn_has_code entry final func /\
+    compile_internal_prologue ce params has_buf ret entry = ((cenv2,pc),body_start) /\
+    stmts_env (cenv2 with <| ce_imm_alloca := NONE; ce_alloca_locals := T |>) NoLoop
+      (case ret of SOME t => t | NONE => BaseT BoolT) ss body_start =
+      (body_env,body_end) /\
+    (if block_is_terminated body_end then ((),body_end)
+     else case ret of NONE => emit_inst RET [pc] [] body_end
+                    | SOME t => emit_inst INVALID [] [] body_end) = ((),final)
+Proof
+  strip_tac >> drule_all run_lowering_selected_code_segment >> strip_tac >>
+  `internal_fn_shape_ok selected` by fs[] >>
+  `internal_label_ok label` by
+    gvs[internal_fn_descriptors_append, internal_fn_descriptors_def] >>
+  `~compiler_label label` by
+    (strip_tac >> drule compiler_label_prefix >> strip_tac >>
+     gvs[internal_label_ok_def]) >>
+  gvs[internal_fn_descriptors_def] >>
+  qmatch_asmsub_abbrev_tac `lookup_function label _ = SOME func` >>
+  `all_blocks after = all_blocks before ++ func.fn_blocks` by
+    simp[Abbr `func`, mk_internal_function_def, mk_raw_function_def] >>
+  drule_all compile_runtime_internal_singleton_code >> strip_tac >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED

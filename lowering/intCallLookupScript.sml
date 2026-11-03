@@ -123,7 +123,7 @@ Proof
   simp[mk_internal_function_metadata]
 QED
 
-Theorem run_lowering_descriptors_distinct[local]:
+Theorem run_lowering_descriptors_distinct:
   !selectors external_fns internal_fns fallback_fn rpolicy bucket_count
    fn_metadata_bytes dense_buckets entry_info entry_label unit.
     run_lowering selectors external_fns internal_fns fallback_fn rpolicy
