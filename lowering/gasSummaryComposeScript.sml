@@ -44,5 +44,26 @@ Theorem gas_summary_bind:
     (\res es_end r. ?exc. res = INR exc /\ R (INR exc) es_end r) ==>
   gas_summary (ctx, func) (bind source next) (es, s0) Q R
 Proof
-  cheat
+  rewrite_tac[gas_summary_def] >>
+  disch_then (qx_choose_then `left` (qx_choose_then `res`
+    (qx_choose_then `mid` strip_assume_tac)))
+  >- (gvs[] >> (
+      rename1 `!tail. next v (mid with gas_obs := gas_explicit right t.vs_gas_readings ++ tail) = (out, fin with gas_obs := tail)` >>
+      qexistsl_tac [`left ++ right`, `out`, `fin`] >>
+      conj_tac
+      >- (`gas_explicit (left ++ right) s0.vs_gas_readings =
+             gas_explicit left s0.vs_gas_readings ++
+             gas_explicit right t.vs_gas_readings` by
+            (irule gas_explicit_append_path >> metis_tac[]) >>
+          asm_rewrite_tac[] >>
+          irule gas_source_bind_normal >>
+          qexistsl_tac [`mid`, `v`] >> simp[]) >>
+      simp[LENGTH_APPEND] >>
+      drule_all gas_path_then >> strip_tac >>
+      qmatch_asmsub_abbrev_tac `gas_path ctx func s0 (LENGTH left + LENGTH right) final` >>
+      qexists_tac `final` >> simp[Abbr `final`])) >>
+  gvs[] >> qexistsl_tac [`left`, `INR exc`, `mid`] >>
+  conj_tac
+  >- (irule gas_source_bind_exception >> simp[]) >>
+  qexists_tac `r` >> simp[]
 QED
