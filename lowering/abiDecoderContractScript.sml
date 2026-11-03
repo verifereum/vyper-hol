@@ -184,17 +184,29 @@ Proof
 QED
 
 (* A single successful pure emission changes only the SSA map. *)
-Theorem abi_guard_emit_frame[local]:
+Theorem abi_decode_pure_emit_frame:
   emit_op opc ops st = (v,st') /\
-  (opc = ADD \/ opc = GT \/ opc = ISZERO) /\
-  run_inst_seq (emitted_insts st st') s = OK s' ==>
-  s'.vs_memory = s.vs_memory /\ s'.vs_call_ctx = s.vs_call_ctx /\
-  s'.vs_data_section = s.vs_data_section
+  (opc = ADD \/ opc = MUL \/ opc = GT \/ opc = LT \/ opc = ISZERO) /\
+  run_inst_seq (emitted_insts st st') s = OK t ==>
+  t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+  t.vs_data_section = s.vs_data_section
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
-  gvs[run_inst_seq_def] >>
-  gvs[Once step_inst_base_def, mk_inst_def] >>
-  gvs[exec_pure2_def, exec_pure1_def, AllCaseEqs(), update_var_def]
+  qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
+  qpat_x_assum `emit_op _ _ _ = _` kall_tac >>
+  qpat_x_assum `st'.cs_current_insts = _` kall_tac >>
+  rpt (qpat_x_assum `emitted_insts _ _ = _` SUBST1_TAC) >>
+  simp[run_inst_seq_def, mk_inst_def]
+  >- (simp[Once step_inst_base_def] >>
+      simp[exec_pure2_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[])
+  >- (simp[Once step_inst_base_def] >>
+      simp[exec_pure2_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[])
+  >- (simp[Once step_inst_base_def] >>
+      simp[exec_pure2_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[])
+  >- (simp[Once step_inst_base_def] >>
+      simp[exec_pure2_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[])
+  >> simp[Once step_inst_base_def] >>
+  simp[exec_pure1_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[]
 QED
 
 Theorem abi_decode_seq_compose[local]:
@@ -238,7 +250,7 @@ Proof
   gvs[WORD_ADD_0, bool_to_word_def] >>
   `1w <> (0w:bytes32)` by simp[] >>
   drule_all emit_void_ASSERT_ok >> strip_tac >>
-  imp_res_tac abi_guard_emit_frame >> gvs[] >>
+  imp_res_tac abi_decode_pure_emit_frame >> gvs[] >>
   `s1.vs_call_ctx = s.vs_call_ctx /\ s1.vs_data_section = s.vs_data_section /\
    s1.vs_memory = s.vs_memory /\ s2.vs_call_ctx = s.vs_call_ctx /\
    s2.vs_data_section = s.vs_data_section /\ s2.vs_memory = s.vs_memory /\
