@@ -829,8 +829,14 @@ Proof
   Induct >> simp[add_module_var_locations_def] >>
   rpt gen_tac >> simp[Once add_module_var_locations_def] >>
   strip_tac >> first_x_assum drule >>
-  Cases_on `h` >> simp[] >> rpt (CASE_TAC >> simp[]) >>
-  rw[finite_mapTheory.FLOOKUP_UPDATE] >> simp[]
+  Cases_on `h` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `option_CASE slot_opt no_slot with_slot` >>
+  Cases_on `slot_opt` >> simp[Abbr `no_slot`, Abbr `with_slot`] >>
+  rw[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()] >>
+  gvs[AllCaseEqs()] >>
+  qmatch_asmsub_rename_tac `variable_mutability_CASE mut` >>
+  Cases_on `mut` >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
+  gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem add_immutable_locations_FLOOKUP:
