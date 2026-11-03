@@ -2229,6 +2229,87 @@ QED
    target/place judgment, as body_assign_place_word: the current word is
    loaded at the place's pointer (MLOAD, SLOAD or TLOAD by its location)
    and the result stored back there.  GAP: cheated, for alan. *)
+Theorem aug_place_local_pop_index_unsupported[local]:
+  !tops ty ety id key.
+    ~supported_expr tops (Subscript ty (Pop ety (NameTarget id)) key)
+Proof
+  simp[supported_expr_def, supported_pure_expr_def,
+       supported_effect_expr_def]
+QED
+
+Theorem aug_place_nested_pop_target_unsupported[local]:
+  !tops bindings ty ety id outer inner bop rhs.
+    ~supported_stmt tops bindings
+      (AugAssign ty
+        (SubscriptTarget (SubscriptTarget (NameTarget id) outer)
+          (Subscript ty (Pop ety (NameTarget id)) inner)) bop rhs)
+Proof
+  simp[supported_stmt_def, supported_aug_target_def,
+       supportedTargetsTheory.supported_target_info_def, aug_place_local_pop_index_unsupported,
+       supported_target_def]
+QED
+
+Theorem aug_place_read_memory_current[local]:
+  !entry path v.
+    evaluate_subscripts entry.type entry.value path = INL v ==>
+    read_memory_path entry path = INL v
+Proof
+  simp[read_memory_path_def]
+QED
+
+Theorem aug_place_typing[local]:
+  !env ret_ty ty t bop e env'.
+    type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' ==>
+    type_place_target env t = SOME (Type ty) /\
+    well_typed_expr env e /\
+    assignable_type env.type_defs ty /\
+    assignable_type env.type_defs (expr_type e) /\
+    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+    word_value_type ty /\ word_value_type (expr_type e) /\ env' = env
+Proof
+  rpt gen_tac >> simp[type_stmt_def, well_typed_target_def] >>
+  strip_tac >> gvs[] >> metis_tac[well_typed_binop_augassign_word]
+QED
+
+Theorem aug_place_code_parts[local]:
+  !cenv lctx ret_ty ty t bop e sa c sf.
+    stmt_env cenv lctx ret_ty (AugAssign ty t bop e) sa = (c,sf) ==>
+    c = cenv /\
+    ?r s0. compile_get_target_ptr compile_expr cenv t sa = (r,s0) /\
+      ((FST (SND r) = NONE /\ emit_void INVALID [] s0 = ((),sf)) \/
+       ?loc cur rhs result s1 s2 s3.
+         FST (SND r) = SOME loc /\
+         emit_op (case loc of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD)
+           [FST r] s0 = (cur,s1) /\
+         lower_value compile_expr cenv ty e s1 = (rhs,s2) /\
+         compile_binop bop cur rhs ty NONE
+           (if bop = Exp then expr_int_literal e else NONE) s2 = (result,s3) /\
+         emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE)
+           [FST r; result] s3 = ((),sf))
+Proof
+  rpt gen_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  Cases_on `compile_get_target_ptr compile_expr cenv t sa` >>
+  rename1 `compile_get_target_ptr _ _ _ _ = (ptr_result,cstart)` >>
+  Cases_on `FST (SND ptr_result)` >>
+  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] 
+  >- (Cases_on `emit_void INVALID [] cstart` >> simp[oneTheory.one]) >>
+  rename1 `FST (SND ptr_result) = SOME loc` >>
+  Cases_on `emit_op (case loc of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD) [FST ptr_result] cstart` >>
+  rename1 `_ = (cur,s1)` >> simp[] >>
+  Cases_on `lower_value compile_expr cenv ty e s1` >>
+  rename1 `_ = (rhs,s2)` >> simp[] >>
+  Cases_on `compile_binop bop cur rhs ty NONE
+    (if bop = Exp then expr_int_literal e else NONE) s2` >>
+  rename1 `compile_binop _ _ _ _ _ _ _ = (result,cstore)` >>
+  simp[] >>
+  Cases_on `emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE) [FST ptr_result; result] cstore` >>
+  simp[oneTheory.one]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
