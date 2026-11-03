@@ -55,9 +55,13 @@ Definition artifact_env_def:
        event_fields := art.cta_event_fields |>
 End
 
+(* Vyper rejects writes to the arguments of external and deploy functions
+   ("Cannot write to calldata", _handle_modification in
+   vyper/semantics/analysis/local.py); internal-function arguments are
+   writable. *)
 Definition function_entry_env_def:
-  function_entry_env art mods src args =
-    FOLDL (\env (id,ty). extend_local env id ty T)
+  function_entry_env art mods src vis args =
+    FOLDL (\env (id,ty). extend_local env id ty (vis = Internal))
       (artifact_env art mods src) args
 End
 
@@ -914,9 +918,9 @@ End
 (* ===== Callable-body checks ===== *)
 
 Definition check_function_body_def:
-  check_function_body layouts addr mods art src mut nr args dflts ret body =
+  check_function_body layouts addr mods art src vis mut nr args dflts ret body =
     let tenv = type_env_all_modules mods in
-    let env = function_entry_env art mods src args in
+    let env = function_entry_env art mods src vis args in
       params_ok tenv args /\
       (nr ==> lookup_nonreentrant_slot layouts addr = SOME 0) /\
       IS_SOME (evaluate_type tenv ret) /\
@@ -940,7 +944,7 @@ Definition check_toplevel_body_def:
     | FunctionDecl vis mut nr _ fn args dflts ret body =>
         function_live layouts addr mods live (src,fn) /\
         check_function_body_in_mode in_deploy vis ==>
-        check_function_body layouts addr mods art src mut nr args dflts ret body
+        check_function_body layouts addr mods art src vis mut nr args dflts ret body
     | _ => T
 End
 

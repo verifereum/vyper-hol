@@ -1255,9 +1255,9 @@ Proof
      Cases_on `t'` >> gvs[]) >>
   gvs[] >>
   Cases_on `bd` >> Cases_on `y` >>
-  gvs[vht_BaseTV_BytesT_Fixed, vht_BaseTV_BytesT_Dynamic,
-      evaluate_builtin_def, evaluate_slice_def, LET_THM,
-      compatible_bound_def, AllCaseEqs(), LENGTH_TAKE]
+  gvs[vht_BaseTV_BytesT_Fixed, vht_BaseTV_BytesT_Dynamic] >>
+  gvs[evaluate_builtin_def, evaluate_slice_def, LET_THM] >>
+  gvs[compatible_bound_def, AllCaseEqs(), LENGTH_TAKE]
 QED
 
 Theorem slice_string_builtin_success_type[local]:
