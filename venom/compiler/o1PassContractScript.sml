@@ -459,9 +459,7 @@ End
    static layout. *)
 Definition o1_static_inv_def:
   o1_static_inv C vs <=>
-    (?eom. ctx_eom_bounded eom C /\ mem_inv (static_mem_ok eom) C vs) /\
-    EVERY (\fn. EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn))
-      C.ctx_functions
+    ?eom. ctx_eom_bounded eom C /\ mem_inv (static_mem_ok eom) C vs
 End
 
 (* After FmpLowering: static, or dynamic at or above the initial fmp. *)
