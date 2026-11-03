@@ -34,7 +34,9 @@ End
  * invariants from ConcretizeMemLoc on need for max_live_eom; and every
  * DLOAD/DLOADBYTES offset stays below 2^256 once added to the code
  * prefix's length (mem_inv dload_offset_ok), so LowerDload's code_end
- * offset does not wrap.
+ * offset does not wrap; and the alloca frontier stays below 2^256 with
+ * 32 bytes to spare per DLOAD (mem_inv dload_headroom_ok), so LowerDload's
+ * new scratch sites do not wrap either.
  * The runs match up to any well-formed set D of dead bytes (dead_wf):
  * ConcretizeMemLoc moves buffers, so bytes nothing reads may differ. *)
 Theorem run_venom_pipeline_correct:
@@ -45,7 +47,8 @@ Theorem run_venom_pipeline_correct:
     o1_run_state_ok vs /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     raw_unit_memory_ok unit.cu_context vs /\
-    mem_inv dload_offset_ok unit.cu_context vs /\ dead_wf D
+    mem_inv dload_offset_ok unit.cu_context vs /\
+    mem_inv dload_headroom_ok unit.cu_context vs /\ dead_wf D
     ==>
     ctx_sim D unit.cu_context out.po_unit.cu_context vs vs
 Proof
@@ -66,7 +69,8 @@ Theorem run_venom_pipeline_mem_inv:
     o1_run_state_ok vs /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     raw_unit_memory_ok unit.cu_context vs /\
-    mem_inv dload_offset_ok unit.cu_context vs
+    mem_inv dload_offset_ok unit.cu_context vs /\
+    mem_inv dload_headroom_ok unit.cu_context vs
     ==>
     ?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
           mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp))

@@ -11,6 +11,8 @@
  *
  * TOP-LEVEL:
  *   lower_dload_stage_dload_ok   - the DLOAD offset bound, vacuous after
+ *   lower_dload_stage_headroom   - the DLOAD headroom bound, raw_mem_ok's
+ *                                  frontier bound after
  *   lower_dload_stage_sim        - the runs match, up to the dead bytes D
  *   lower_dload_stage_mem        - raw memory of the output
  *   o1_contract_lower_dload      - the contract theorem
@@ -82,8 +84,22 @@ Proof
   Induct_on `raw_reachable` >> rw[] >> metis_tac[]
 QED
 
-(* The output has no DLOAD or DLOADBYTES, so its DLOAD offset bound holds
-   at every reachable instruction. *)
+(* The output has no DLOAD or DLOADBYTES. *)
+Theorem lower_dload_stage_no_dload[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+  o1_ctx_shape C /\ MEM g C'.ctx_functions /\ MEM inst (fn_insts g) ==>
+  inst.inst_opcode <> DLOAD /\ inst.inst_opcode <> DLOADBYTES
+Proof
+  strip_tac >> drule_all lower_dload_stage_fn >> strip_tac >>
+  drule_all lower_dload_function_supply_member >> strip_tac >>
+  `inst_wf i` by
+    (fs[o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def, fn_inst_wf_def,
+        fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[]) >>
+  drule_all lower_dload_inst_supply_no_dload >> simp[EVERY_MEM] >>
+  disch_then drule >> simp[]
+QED
+
+(* So its DLOAD offset bound holds at every reachable instruction. *)
 Theorem lower_dload_stage_dload_ok:
   !rpolicy view C C' vs.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
@@ -98,26 +114,39 @@ Proof
   rpt strip_tac >> rename1 `raw_reachable vs C' g inst s` >>
   drule raw_reachable_lookup >> strip_tac >>
   `MEM g C'.ctx_functions` by metis_tac[lookup_function_MEM] >>
-  drule_all lower_dload_stage_fn >> strip_tac >>
   `MEM inst (fn_insts g)` by
     (fs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >>
      metis_tac[EL_MEM]) >>
-  drule_all lower_dload_function_supply_member >> strip_tac >>
-  `inst_wf i` by
-    (fs[o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def, fn_inst_wf_def,
-        fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[]) >>
-  drule_all lower_dload_inst_supply_no_dload >> simp[EVERY_MEM] >>
-  disch_then drule >> simp[dload_offset_ok_def]
+  drule_all lower_dload_stage_no_dload >> simp[dload_offset_ok_def]
+QED
+
+(* And no DLOAD to need headroom for: the bound is raw_mem_ok's frontier
+   bound. *)
+Theorem lower_dload_stage_headroom:
+  !rpolicy view C C' vs.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    o1_ctx_shape C /\ mem_inv raw_mem_ok C' vs ==>
+    mem_inv dload_headroom_ok C' vs
+Proof
+  rpt strip_tac >>
+  `ctx_dload_count C' = 0` by
+    (simp[ctx_dload_count_def, SUM_eq_0, MEM_MAP, PULL_EXISTS,
+          FILTER_EQ_NIL, EVERY_MEM] >>
+     metis_tac[lower_dload_stage_no_dload]) >>
+  irule mem_inv_mono >> qexists_tac `raw_mem_ok` >>
+  simp[raw_mem_ok_def, dload_headroom_ok_def]
 QED
 
 (* The simulation: every terminating run of C is matched by a run of C'
    up to the dead bytes D.  The DLOAD offset bound (in o1_src_inv) keeps
    the code_end-relative CODECOPY offset from wrapping; code_layout_valid
-   (in o1_run_state_ok) binds "code_end" to the code/data boundary. *)
+   (in o1_run_state_ok) binds "code_end" to the code/data boundary; the
+   headroom bound (in o1_src_inv) keeps the shifted alloca sites from
+   wrapping. *)
 Theorem lower_dload_stage_sim:
   !rpolicy D view C C' vs.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_src_inv C vs ==>
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_src_inv C vs ==>
     ctx_sim D C C' vs vs
 Proof
   cheat
@@ -145,6 +174,8 @@ Proof
   `mem_inv dload_offset_ok C' vs` by
     (irule lower_dload_stage_dload_ok >> fs[o1_src_inv_def] >>
      metis_tac[]) >>
+  `mem_inv dload_headroom_ok C' vs` by
+    metis_tac[lower_dload_stage_headroom] >>
   fs[o1_src_inv_def, ctx_pass_stage_def]
 QED
 

@@ -274,6 +274,25 @@ Definition dload_offset_ok_def:
         dimword (:256)
 End
 
+(* The number of DLOAD instructions in a context. *)
+Definition ctx_dload_count_def:
+  ctx_dload_count (ctx:venom_context) =
+    SUM (MAP (\fn. LENGTH (FILTER (\inst. inst.inst_opcode = DLOAD)
+                                  (fn_insts fn)))
+             ctx.ctx_functions)
+End
+
+(* The expansion gives each DLOAD a fresh 32-byte ALLOCA site, and a frame
+   allocates each site once, so the output's alloca frontier runs at most
+   32 bytes per DLOAD in the context ahead of the input's.  This bound keeps
+   that frontier below 2^256, where exec_alloca's offsets would wrap onto
+   live sites.  Stated per reachable state (mem_inv), like the frontier
+   bound in raw_mem_ok. *)
+Definition dload_headroom_ok_def:
+  dload_headroom_ok (ctx:venom_context) (fn:ir_function) inst s <=>
+    s.vs_alloca_next + 32 * ctx_dload_count ctx < dimword (:256)
+End
+
 (* ===== Variable Tracking ===== *)
 
 (* Fresh variables introduced by expanding a single instruction.
