@@ -14,7 +14,7 @@
 Theory loweringShapeRules
 Ancestors
   list rich_list compileEnv emitHelper emitHelperProps fragExec venomInst
-  unitShapeDefs loweringShapeDefs cfgNormSim
+  unitShapeDefs loweringShapeDefs cfgNormSim exprCallBounds
 
 (* ===== Composition rules ===== *)
 
@@ -985,4 +985,57 @@ Proof
   rpt strip_tac
   >- metis_tac[cs_extends_fresh_label] >>
   drule added_labels_fresh_label >> simp[]
+QED
+
+Theorem invalid_expr_call_labels:
+  !ty s P. cs_extends s (SND (invalid_expr_call ty s)) /\
+    EVERY P (added_labels s (SND (invalid_expr_call ty s)))
+Proof
+  rpt gen_tac >>
+  simp[invalid_expr_call_def, emit_inst_def, comp_bind_def,
+       fresh_id_def, emit_def] >>
+  conj_tac
+  >- (irule cs_extends_same_block >> simp[]) >>
+  simp[added_labels_def, all_blocks_def, MAP_APPEND, DROP_LENGTH_TOO_LONG]
+QED
+
+Theorem expr_child_callback_labels:
+  !bound f P.
+    (!ce ty e s. expr_size e < bound ==>
+      cs_extends s (SND (f ce ty e s)) /\
+      EVERY P (added_labels s (SND (f ce ty e s)))) ==>
+    !ce ty e s.
+      cs_extends s (SND (expr_child_callback bound f ce ty e s)) /\
+      EVERY P (added_labels s (SND (expr_child_callback bound f ce ty e s)))
+Proof
+  rpt gen_tac >> disch_tac >> rpt gen_tac >>
+  Cases_on `expr_size e < bound` >> simp[invalid_expr_call_labels]
+QED
+
+Theorem builtin_child_callback_labels:
+  !bound f P.
+    (!ce rt ty bi args s. list_size expr_size args < bound ==>
+      cs_extends s (SND (f ce rt ty bi args s)) /\
+      EVERY P (added_labels s (SND (f ce rt ty bi args s)))) ==>
+    !ce rt ty bi args s.
+      cs_extends s (SND (builtin_child_callback bound f ce rt ty bi args s)) /\
+      EVERY P (added_labels s
+        (SND (builtin_child_callback bound f ce rt ty bi args s)))
+Proof
+  rpt gen_tac >> disch_tac >> rpt gen_tac >>
+  Cases_on `list_size expr_size args < bound` >> simp[invalid_expr_call_labels]
+QED
+
+Theorem type_child_callback_labels:
+  !bound f P.
+    (!ce vt ty tb rt args s. list_size expr_size args < bound ==>
+      cs_extends s (SND (f ce vt ty tb rt args s)) /\
+      EVERY P (added_labels s (SND (f ce vt ty tb rt args s)))) ==>
+    !ce vt ty tb rt args s.
+      cs_extends s (SND (type_child_callback bound f ce vt ty tb rt args s)) /\
+      EVERY P (added_labels s
+        (SND (type_child_callback bound f ce vt ty tb rt args s)))
+Proof
+  rpt gen_tac >> disch_tac >> rpt gen_tac >>
+  Cases_on `list_size expr_size args < bound` >> simp[invalid_expr_call_labels]
 QED
