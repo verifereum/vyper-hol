@@ -368,7 +368,8 @@ Definition build_create_code_def:
           | SOME args_enc => SOME <|
               cc_initcode := raw_create_initcode bytecode args_enc;
               cc_source_ok := T;
-              cc_size_ok := T
+              cc_size_ok :=
+                (LENGTH (raw_create_initcode bytecode args_enc) <= 2 * max_code_size)
             |>)
      | _ => NONE)
 End
