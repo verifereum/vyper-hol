@@ -61,3 +61,12 @@ Proof
   qexistsl [`bb`, `rest`, `s`] >> simp[] >>
   gvs[alloca_history_def]
 QED
+
+val () =
+  let val th = alloca_history_run_inst_seq
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "ALLOCA_HISTORY_FRAGMENT_AUDIT OK\n"
+     else raise Fail "allocation history fragment inherited admission"
+  end;
