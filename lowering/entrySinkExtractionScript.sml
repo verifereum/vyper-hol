@@ -87,7 +87,7 @@ Theorem step_inst_base_nonterminator_no_exit:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `i.inst_opcode` >> gvs[is_terminator_def] >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+  stepInstBaseLib.with_opcode_clause (asm_simp_tac bool_ss) >>
   simp[exec_pure1_no_exit, exec_pure2_no_exit, exec_pure3_no_exit,
        exec_read0_no_exit, exec_read1_no_exit, exec_write2_no_exit] >>
   simp[exec_ext_call_def, AllCaseEqs()] >>
