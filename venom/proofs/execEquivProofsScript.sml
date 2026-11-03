@@ -450,7 +450,17 @@ Triviality step_inst_djmp_equiv:
 Proof
   rw[] >> step_inst_base_opcode_tac >> simp[] >>
   imp_res_tac eval_operand_equiv >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def] >>
+  Cases_on `inst.inst_operands`
+  >- simp[result_equiv_def, revert_equiv_def] >>
+  rename1 `inst.inst_operands = selector::labels` >>
+  `eval_operand selector s1 = eval_operand selector s2` by
+    (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  simp[] >>
+  Cases_on `eval_operand selector s2`
+  >- simp[result_equiv_def, revert_equiv_def] >>
+  Cases_on `extract_labels labels`
+  >- simp[result_equiv_def, revert_equiv_def] >>
+  simp[] >> IF_CASES_TAC >> simp[result_equiv_def, revert_equiv_def] >>
   irule jump_to_preserves >> simp[]
 QED
 
@@ -627,9 +637,23 @@ Proof
   imp_res_tac eval_operand_equiv >>
   `s1.vs_immutables = s2.vs_immutables` by
     fs[state_equiv_def, execution_equiv_def] >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def,
-    state_equiv_def, execution_equiv_def, lookup_var_def,
-    istore_def, mstore_def]
+  Cases_on `inst.inst_operands`
+  >- simp[result_equiv_def] >>
+  rename1 `inst.inst_operands = offop::ops` >>
+  Cases_on `ops`
+  >- simp[result_equiv_def] >>
+  rename1 `inst.inst_operands = offop::valop::rest` >>
+  Cases_on `rest`
+  >- (`eval_operand offop s1 = eval_operand offop s2` by
+        (first_x_assum irule >> simp[] >> metis_tac[]) >>
+      `eval_operand valop s1 = eval_operand valop s2` by
+        (first_x_assum irule >> simp[] >> metis_tac[]) >>
+      simp[] >> Cases_on `eval_operand offop s2` >>
+      simp[result_equiv_def] >> Cases_on `eval_operand valop s2` >>
+      gvs[result_equiv_def, revert_equiv_def,
+          state_equiv_def, execution_equiv_def, lookup_var_def,
+          istore_def, mstore_def]) >>
+  simp[result_equiv_def]
 QED
 
 (* DLOADBYTES/CODECOPY: copy from data section/code to memory, 3 operands *)
@@ -765,8 +789,16 @@ Proof
       >- (disch_then irule >> rw[] >> first_x_assum irule >>
           metis_tac[MEM_DROP_IMP, MEM_REVERSE])
       >> Induct >> rw[eval_operands_def]) >>
+  `eval_operand (HD (REVERSE rest)) s1 =
+   eval_operand (HD (REVERSE rest)) s2` by
+    metis_tac[EL] >>
   simp[] >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def, state_equiv_def,
+  Cases_on `eval_operand (HD (REVERSE rest)) s2` >>
+  simp[result_equiv_def, revert_equiv_def] >>
+  Cases_on `eval_operand (EL 1 (REVERSE rest)) s2` >>
+  simp[result_equiv_def, revert_equiv_def] >>
+  Cases_on `eval_operands (DROP 2 (REVERSE rest)) s2` >>
+  gvs[result_equiv_def, revert_equiv_def, state_equiv_def,
     execution_equiv_def, lookup_var_def]
 QED
 
