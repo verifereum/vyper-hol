@@ -220,7 +220,9 @@ The return_buf_frame and frame_ret_ok_mem definitions are also unchanged.
    stmtControlMemoryTheory and fragLoopMemoryTheory build with all existing
    kernel guards intact. No newly admitted helpers or changed public premises.
 3. Keep every frozen statement and definition exactly unchanged. Preserve
-   existing successful proofs. Commit only proof sources and necessary roots.
+   existing successful proofs, except the narrowly scoped dependency repair
+   authorized in Domain Constraints below. Commit only proof sources and
+   necessary roots.
 4. No change to functional S1 judgments, source semantics, executable compiler
    definitions, supported-program checks, top-level S3 assumptions or GAS
    counting judgments. No new axiom, timeout override, TRY/ORELSE search wrapper.
@@ -245,7 +247,14 @@ The generic control proofs need the same history and guard plumbing.
 ## Domain Constraints
 
 - Scope: additive memory proof theories, existing memory composition proof
-  repairs and required holproject build roots. S1 functional files are read-only.
+  repairs and required holproject build roots. S1 functional files are read-only
+  except for the proof of slice_bytes_builtin_success_type in
+  semantics/prop/vyperTypeBuiltinsScript.sml: split the repeated timed-out gvs
+  at lines 1258–1260 into smaller simplification steps. This proof-only exception
+  preserves its theorem statement, all definitions and the default 2.5s budget.
+  Edit no other S1 proof. Build vyperTypeBuiltinsTheory, commit this repair
+  separately, and report its exact hunk for the shared load-timeout record
+  before continuing the conditional-expression consumer.
 - Keep shared definitions frozen. Shared helper contexts use records/tuples,
   never let in a theorem statement. Private local lemma contracts can be fixed
   if their intended statements are false, but report each change.
@@ -263,7 +272,8 @@ The generic control proofs need the same history and guard plumbing.
 - Safety covers every executed prefix including Error/stuck paths. Conditional
   frag_exec_mem normal-continuation transfer alone does not establish this;
   the final body result must support the actual S3 continuation composition.
-- Use the default 2.5-second budget. Do not modify checked public leaf proofs.
+- Use the default 2.5-second budget. Do not modify checked public leaf proofs
+  except the explicit slice_bytes_builtin_success_type proof-only repair above.
 
 ## Available Resources
 
@@ -289,8 +299,11 @@ The generic control proofs need the same history and guard plumbing.
 
 ## Notes
 
-Owner performs exact frozen-statement comparisons, CI-flag forced replay,
-export checks and dependency auditing after completion. This supersedes the
+Owner performs exact frozen-statement comparisons, export checks and
+dependency auditing after completion. Before each push, perform one
+`holbuild -j4 build --skip-checkpoints` of the edited theories at the default
+step limit, with proof steps and cache enabled; no second forced or CI-flag
+replay is required. This supersedes the
 stopped TASK_body_history_thread.md by including the approved guard and actual
 body consumer on the current integration base. The old task is not amended.
 
