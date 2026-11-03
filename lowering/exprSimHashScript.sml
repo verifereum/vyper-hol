@@ -224,6 +224,126 @@ Proof
                        finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
+Theorem emit_length_prefixed_hash_run:
+  ((emit_op MLOAD [ptr_op] sa = (len,sm) /\
+    emit_op ADD [ptr_op; Lit 32w] sm = (data,sn)) \/
+   (emit_op ADD [ptr_op; Lit 32w] sa = (data,sm) /\
+    emit_op MLOAD [ptr_op] sm = (len,sn))) /\
+  emit_op SHA3 [data; len] sn = (op,sb) /\
+  (!x. ptr_op = Var x ==> not_fresh_at sa x) /\
+  eval_operand ptr_op s = SOME (n2w b) /\
+  mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
+  mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
+  b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME
+      (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  disch_tac >>
+  `?s2. run_inst_seq (emitted_insts sa sn) s = OK s2 /\
+    sn.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sn /\
+    sa.cs_next_var <= sn.cs_next_var /\
+    eval_operand data s2 = SOME (n2w (b+32)) /\
+    eval_operand len s2 = SOME (n2w (LENGTH bs)) /\
+    s2.vs_memory = s.vs_memory /\
+    (s2 with vs_vars := s.vs_vars) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x s2 = lookup_var x s)` by
+    (qpat_x_assum `_ /\ _` strip_assume_tac
+     >- suspend "load_first"
+     >> suspend "add_first") >>
+  qpat_x_assum `_ /\ _` (mp_tac o CONJUNCT2) >> strip_tac >>
+  drule_at (Pat `emit_op SHA3 _ _ = _`) emit_SHA3_bytes_frame >>
+  disch_then (qspecl_then [`s2`, `n2w (b+32)`, `n2w (LENGTH bs)`, `bs`] mp_tac) >>
+  simp[GSYM mem_bytes_at_def] >> strip_tac >>
+  qpat_assum `emit_op SHA3 _ _ = _` (mp_then Any mp_tac emitted_insts_emit_op) >>
+  strip_tac >>
+  `run_inst_seq (emitted_insts sa sb) s = OK t` by
+    (qpat_assum `run_inst_seq (emitted_insts sa sn) s = OK s2`
+       (mp_then (Pat `run_inst_seq _ _ = OK _`) mp_tac run_inst_seq_chain) >>
+     disch_then (qspec_then `sb` mp_tac) >> simp[]) >>
+  qexists `t` >> simp[] >> conj_tac
+  >- (qpat_x_assum `t with vs_vars := _ = _`
+        (mp_tac o Q.AP_TERM `\z. z with vs_vars := s.vs_vars`) >> simp[]) >>
+  rpt strip_tac >> `not_fresh_at sn x` by
+    (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >> simp[]
+QED
+
+Resume emit_length_prefixed_hash_run[load_first]:
+  drule_at (Pat `emit_op MLOAD _ _ = _`) emit_MLOAD_frame >>
+  disch_then drule >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK s1` >>
+  `eval_operand ptr_op s1 = SOME (n2w b)` by
+    (`s1.vs_labels = s.vs_labels` by
+       (qpat_x_assum `s1 with vs_vars := _ = _`
+          (mp_tac o Q.AP_TERM `\z. z.vs_labels`) >> simp[]) >>
+     Cases_on `ptr_op` >> gvs[eval_operand_def] >> res_tac >> gvs[]) >>
+  drule_at (Pat `emit_op ADD _ _ = _`) emit_ADD_frame >>
+  disch_then (qspecl_then [`32w`, `n2w b`, `s1`] mp_tac) >>
+  simp[eval_operand_def] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sm sn) s1 = OK s2` >>
+  `b < dimword (:256)` by decide_tac >>
+  `s2.vs_memory = s.vs_memory` by
+    (qpat_x_assum `s2 with vs_vars := _ = _`
+       (mp_tac o Q.AP_TERM `\z. z.vs_memory`) >>
+     qpat_x_assum `s1 with vs_vars := _ = _`
+       (mp_tac o Q.AP_TERM `\z. z.vs_memory`) >> simp[]) >>
+  qpat_assum `emit_op MLOAD _ _ = _` (mp_then Any mp_tac emitted_insts_emit_op) >> strip_tac >>
+  qpat_assum `emit_op ADD _ _ = _` (mp_then Any mp_tac emitted_insts_emit_op) >> strip_tac >>
+  `eval_operand len s2 = SOME (n2w (LENGTH bs))` by
+    gvs[eval_operand_def, not_fresh_at_def, mload_def, mem_word_at_def] >>
+  `run_inst_seq (emitted_insts sa sn) s = OK s2 /\
+   sn.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sn` by
+    (qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK s1`
+       (mp_then (Pat `run_inst_seq _ _ = OK _`) mp_tac run_inst_seq_chain) >>
+     disch_then (qspec_then `sn` mp_tac) >> simp[]) >>
+  qexists `s2` >> simp[word_add_n2w] >> conj_tac
+  >- (qpat_x_assum `s2 with vs_vars := _ = _`
+        (mp_tac o Q.AP_TERM `\z. z with vs_vars := s.vs_vars`) >> simp[]) >>
+  rpt strip_tac >> `not_fresh_at sm x` by
+    (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >> simp[]
+QED
+
+Resume emit_length_prefixed_hash_run[add_first]:
+  drule_at (Pat `emit_op ADD _ _ = _`) emit_ADD_frame >>
+  disch_then (qspecl_then [`32w`, `n2w b`, `s`] mp_tac) >>
+  simp[eval_operand_def] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK s1` >>
+  `eval_operand ptr_op s1 = SOME (n2w b)` by
+    (`s1.vs_labels = s.vs_labels` by
+       (qpat_x_assum `s1 with vs_vars := _ = _`
+          (mp_tac o Q.AP_TERM `\z. z.vs_labels`) >> simp[]) >>
+     Cases_on `ptr_op` >> gvs[eval_operand_def] >> res_tac >> gvs[]) >>
+  drule_at (Pat `emit_op MLOAD _ _ = _`) emit_MLOAD_frame >>
+  disch_then drule >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sm sn) s1 = OK s2` >>
+  `b < dimword (:256)` by decide_tac >>
+  `s1.vs_memory = s.vs_memory /\ s2.vs_memory = s.vs_memory` by
+    (qpat_x_assum `s2 with vs_vars := _ = _`
+       (mp_tac o Q.AP_TERM `\z. z.vs_memory`) >>
+     qpat_x_assum `s1 with vs_vars := _ = _`
+       (mp_tac o Q.AP_TERM `\z. z.vs_memory`) >> simp[]) >>
+  qpat_assum `emit_op ADD _ _ = _` (mp_then Any mp_tac emitted_insts_emit_op) >> strip_tac >>
+  qpat_assum `emit_op MLOAD _ _ = _` (mp_then Any mp_tac emitted_insts_emit_op) >> strip_tac >>
+  `eval_operand data s2 = SOME (n2w (b+32))` by
+    gvs[eval_operand_def, not_fresh_at_def, word_add_n2w] >>
+  `run_inst_seq (emitted_insts sa sn) s = OK s2 /\
+   sn.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sn` by
+    (qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK s1`
+       (mp_then (Pat `run_inst_seq _ _ = OK _`) mp_tac run_inst_seq_chain) >>
+     disch_then (qspec_then `sn` mp_tac) >> simp[]) >>
+  `eval_operand len s2 = SOME (n2w (LENGTH bs))` by
+    gvs[mload_def, mem_word_at_def] >>
+  qexists `s2` >> simp[] >> conj_tac
+  >- (qpat_x_assum `s2 with vs_vars := _ = _`
+        (mp_tac o Q.AP_TERM `\z. z with vs_vars := s.vs_vars`) >> simp[]) >>
+  rpt strip_tac >> `not_fresh_at sm x` by
+    (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >> simp[]
+QED
+
+Finalise emit_length_prefixed_hash_run
+
 Theorem compile_keccak256_bytes_run:
   compile_keccak256_bytes ptr_op sa = (op, sb) /\
   (!x. ptr_op = Var x ==> not_fresh_at sa x) /\
@@ -244,54 +364,9 @@ Proof
   rename1 `emit_op ADD _ _ = (data,sn)` >>
   `emit_op SHA3 [data; len] sn = (op,sb)` by
     gvs[compile_keccak256_bytes_def, comp_bind_def] >>
-  drule_at (Pat `emit_op MLOAD _ _ = _`) emit_MLOAD_frame >>
-  disch_then drule >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts sa sm) s = OK s1` >>
-  `eval_operand ptr_op s1 = SOME (n2w b)` by
-    (`s1.vs_labels = s.vs_labels` by
-       (qpat_x_assum `s1 with vs_vars := _ = _`
-          (mp_tac o Q.AP_TERM `\z. z.vs_labels`) >> simp[]) >>
-     Cases_on `ptr_op` >> gvs[eval_operand_def] >> res_tac >> gvs[]) >>
-  drule_at (Pat `emit_op ADD _ _ = _`) emit_ADD_frame >>
-  disch_then (qspecl_then [`32w`, `n2w b`, `s1`] mp_tac) >>
-  simp[eval_operand_def] >>
-  strip_tac >>
-  rename1 `run_inst_seq (emitted_insts sm sn) s1 = OK s2` >>
-  `b < dimword (:256)` by decide_tac >>
-  `s2.vs_memory = s.vs_memory` by
-    (qpat_x_assum `s2 with vs_vars := _ = _`
-       (mp_tac o Q.AP_TERM `\z. z.vs_memory`) >>
-     qpat_x_assum `s1 with vs_vars := _ = _`
-       (mp_tac o Q.AP_TERM `\z. z.vs_memory`) >> simp[]) >>
-  qpat_assum `emit_op MLOAD _ _ = _` (mp_then Any mp_tac emitted_insts_emit_op) >> strip_tac >>
-  qpat_assum `emit_op ADD _ _ = _` (mp_then Any mp_tac emitted_insts_emit_op) >> strip_tac >>
-  `eval_operand len s2 = SOME (n2w (LENGTH bs))` by
-    (gvs[eval_operand_def, not_fresh_at_def, mload_def, mem_word_at_def]) >>
-  drule_at (Pat `emit_op SHA3 _ _ = _`) emit_SHA3_bytes_frame >>
-  disch_then (qspecl_then [`s2`, `n2w (b+32)`, `n2w (LENGTH bs)`, `bs`] mp_tac) >>
-  simp[word_add_n2w, GSYM mem_bytes_at_def] >>
-  strip_tac >>
-  qpat_assum `emit_op SHA3 _ _ = _` (mp_then Any mp_tac emitted_insts_emit_op) >>
-  strip_tac >>
-  `run_inst_seq (emitted_insts sa sn) s = OK s2 /\
-   sn.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sn` by
-    (qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK s1`
-       (mp_then (Pat `run_inst_seq _ _ = OK _`) mp_tac run_inst_seq_chain) >>
-     disch_then (qspec_then `sn` mp_tac) >> simp[]) >>
-  `run_inst_seq (emitted_insts sa sb) s = OK t` by
-    (qpat_assum `run_inst_seq (emitted_insts sa sn) s = OK s2`
-       (mp_then (Pat `run_inst_seq _ _ = OK _`) mp_tac run_inst_seq_chain) >>
-     disch_then (qspec_then `sb` mp_tac) >> simp[]) >>
-  qexists `t` >> simp[] >> conj_tac
-  >- (qpat_x_assum `t with vs_vars := _ = _`
-        (mp_tac o Q.AP_TERM `\z. z with vs_vars := s.vs_vars`) >>
-      simp[] >>
-      qpat_x_assum `s2 with vs_vars := _ = _`
-        (mp_tac o Q.AP_TERM `\z. z with vs_vars := s.vs_vars`) >> simp[]) >>
-  rpt strip_tac >>
-  `not_fresh_at sm x /\ not_fresh_at sn x` by gvs[not_fresh_at_def] >>
-  simp[]
-
+  drule_at (Pat `emit_op SHA3 _ _ = _`) emit_length_prefixed_hash_run >>
+  disch_then irule >> simp[] >>
+  qexistsl [`b`, `ptr_op`, `sm`] >> simp[]
 QED
 
 (* Read-only suffixes need only preserve the reserved pointer variables. *)
