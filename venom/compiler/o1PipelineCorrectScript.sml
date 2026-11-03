@@ -38,7 +38,7 @@ End
  * above a reserved fixed region, and what it writes out or returns
  * reads only bytes in D (taint_within). *)
 Theorem run_venom_pipeline_correct:
-  !D rpolicy unit out vs.
+  !D lo rpolicy unit out vs.
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
     unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
@@ -46,8 +46,8 @@ Theorem run_venom_pipeline_correct:
     raw_unit_memory_ok unit.cu_context vs /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
     ~ctx_has_dalloca unit.cu_context /\
-    (?lo. fixed_region_reserved lo unit.cu_context /\
-          ptr_discipline lo unit.cu_context vs) /\
+    fixed_region_reserved lo unit.cu_context /\
+    ptr_discipline lo unit.cu_context vs /\
     taint_within D unit.cu_context vs /\ dead_wf D
     ==>
     ctx_sim D unit.cu_context out.po_unit.cu_context vs vs
@@ -62,7 +62,7 @@ QED
 (* The output's memory invariant: every access is static (below some
  * layout end) or dynamic (at or above the initial frame pointer). *)
 Theorem run_venom_pipeline_mem_inv:
-  !rpolicy unit out vs.
+  !lo rpolicy unit out vs.
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
     unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
@@ -70,8 +70,8 @@ Theorem run_venom_pipeline_mem_inv:
     raw_unit_memory_ok unit.cu_context vs /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
     ~ctx_has_dalloca unit.cu_context /\
-    (?lo. fixed_region_reserved lo unit.cu_context /\
-          ptr_discipline lo unit.cu_context vs)
+    fixed_region_reserved lo unit.cu_context /\
+    ptr_discipline lo unit.cu_context vs
     ==>
     ?eom. mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp))
             out.po_unit.cu_context vs
