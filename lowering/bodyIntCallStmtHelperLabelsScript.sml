@@ -938,3 +938,106 @@ Proof
       metis_tac[compiler_label_hoare_supported_expr, supportedExprsTheory.supported_expr_def]) >>
   irule compiler_label_hoare_target_attribute >> simp[compiler_label_hoare_target_top]
 QED
+
+Theorem tuple_comp_return_bind[local]:
+  comp_bind (comp_return x) f = f x
+Proof
+  simp[comp_bind_def, comp_return_def, FUN_EQ_THM]
+QED
+
+Theorem compiler_block_tail_tuple_store_all:
+  !tys targets vals.
+    (!bt. MEM (BaseTarget bt) targets ==>
+      compiler_block_tail (compile_get_target_ptr ce bt)) ==>
+    compiler_block_tail (compile_tuple_store_all ce tys targets vals)
+Proof
+  Induct >> Cases_on `targets` >> Cases_on `vals` >>
+  simp[compile_tuple_store_all_def, compiler_block_tail_primitives] >>
+  rename1 `target::targets` >> Cases_on `target` >>
+  simp[compile_tuple_store_all_def, comp_ignore_bind_def, LET_THM] >> rpt strip_tac
+  >- suspend "base" >>
+  irule compiler_block_tail_bind >> simp[compiler_block_tail_primitives] >>
+  metis_tac[MEM]
+QED
+
+Resume compiler_block_tail_tuple_store_all[base]:
+  irule compiler_block_tail_bind >> reverse conj_tac >- metis_tac[MEM] >>
+  gen_tac >> BETA_TAC >> simp[tuple_comp_return_bind, LET_THM] >>
+  irule compiler_block_tail_bind >> reverse conj_tac
+  >- (rpt IF_CASES_TAC >>
+      simp[compiler_block_tail_store_at_loc, compiler_block_tail_assign_value,
+           compiler_block_tail_primitives]) >>
+  metis_tac[MEM]
+QED
+
+Finalise compiler_block_tail_tuple_store_all
+
+Theorem compiler_label_hoare_tuple_store_all:
+  !tys targets vals.
+    (!bt. MEM (BaseTarget bt) targets ==>
+      compiler_label_hoare (compiler_label_reservation origin pending)
+        (compile_get_target_ptr ce bt)
+        (\r out. compiler_label_reservation origin pending out)) ==>
+    compiler_label_hoare (compiler_label_reservation origin pending)
+      (compile_tuple_store_all ce tys targets vals)
+      (\r out. compiler_label_reservation origin pending out)
+Proof
+  Induct >> Cases_on `targets` >> Cases_on `vals` >>
+  simp[compile_tuple_store_all_def, compiler_label_hoare_typed_primitives] >>
+  rename1 `target::targets` >> Cases_on `target` >>
+  simp[compile_tuple_store_all_def, comp_ignore_bind_def, LET_THM] >> rpt strip_tac
+  >- suspend "base" >>
+  irule compiler_label_hoare_preserving_bind >> simp[compiler_label_hoare_typed_primitives] >>
+  metis_tac[MEM]
+QED
+
+Resume compiler_label_hoare_tuple_store_all[base]:
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac >- metis_tac[MEM] >>
+  gen_tac >> BETA_TAC >> simp[tuple_comp_return_bind, LET_THM] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- (rpt IF_CASES_TAC >>
+      simp[compiler_label_hoare_store_at_loc, compiler_label_hoare_assign_value,
+           compiler_label_hoare_typed_primitives]) >>
+  metis_tac[MEM]
+QED
+
+Finalise compiler_label_hoare_tuple_store_all
+
+Theorem compiler_block_tail_tuple_unpack:
+  (!bt. MEM (BaseTarget bt) targets ==>
+    compiler_block_tail (compile_get_target_ptr ce bt)) ==>
+  compiler_block_tail (compile_tuple_unpack ce ty may_stage targets src_op)
+Proof
+  strip_tac >> simp[compile_tuple_unpack_def, LET_THM] >>
+  IF_CASES_TAC >> simp[compiler_block_tail_primitives] >>
+  irule compiler_block_tail_bind >> reverse conj_tac
+  >- (IF_CASES_TAC >> simp[compiler_block_tail_primitives, comp_ignore_bind_def] >>
+      irule compiler_block_tail_bind >>
+      simp[compiler_block_tail_primitives, compiler_block_tail_alloc_buffer,
+           tuple_comp_return_bind] >>
+      gen_tac >> irule compiler_block_tail_bind >> simp[compiler_block_tail_primitives]) >>
+  gen_tac >> BETA_TAC >> irule compiler_block_tail_bind >>
+  simp[compiler_block_tail_tuple_load_all, compiler_block_tail_tuple_store_all]
+QED
+
+Theorem compiler_label_hoare_tuple_unpack:
+  (!bt. MEM (BaseTarget bt) targets ==>
+    compiler_label_hoare (compiler_label_reservation origin pending)
+      (compile_get_target_ptr ce bt)
+      (\r out. compiler_label_reservation origin pending out)) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_tuple_unpack ce ty may_stage targets src_op)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >> simp[compile_tuple_unpack_def, LET_THM] >>
+  IF_CASES_TAC >> simp[compiler_label_hoare_typed_primitives,
+                        compiler_label_hoare_context_primitives] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- (IF_CASES_TAC >> simp[compiler_label_hoare_typed_primitives, comp_ignore_bind_def] >>
+      irule compiler_label_hoare_preserving_bind >>
+      simp[compiler_label_hoare_typed_primitives, compiler_label_hoare_alloc_buffer,
+           tuple_comp_return_bind] >>
+      gen_tac >> irule compiler_label_hoare_preserving_bind >> simp[compiler_label_hoare_typed_primitives]) >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_preserving_bind >>
+  simp[compiler_label_hoare_tuple_load_all, compiler_label_hoare_tuple_store_all]
+QED
