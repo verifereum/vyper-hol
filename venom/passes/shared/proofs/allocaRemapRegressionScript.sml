@@ -491,6 +491,42 @@ Proof
   rpt IF_CASES_TAC >> fs[] >> TRY decide_tac
 QED
 
+Theorem dret_call_entry_fmp:
+  dret_s1.vs_call_entry_fmp = 32w /\
+  dret_s2.vs_call_entry_fmp = 32w
+Proof
+  simp[dret_s1_def, dret_s2_def]
+QED
+
+Theorem dret_execution:
+  ?d. step_inst_base dret_inst dret_s1 =
+        IntRet d (mcopy 32 31 1 dret_s1 with vs_fmp := 64w) /\
+      step_inst_base dret_inst dret_s2 =
+        IntRet d (mcopy 32 31 1 dret_s2 with vs_fmp := 64w)
+Proof
+  simp[dret_inst_def, step_inst_base_def, parse_dret_shape_def,
+       eval_operands_def, eval_operand_def, pair_dret_words_def,
+       dret_call_entry_fmp, pack_dret_dynamic_def,
+       venomLayoutTheory.ceil32_def]
+QED
+
+Theorem dret_copied_memory_disagrees:
+  !remap. FLOOKUP remap 0 = SOME 64 ==>
+  ~alloca_mem_agrees remap
+    (mcopy 32 31 1 dret_s1 with vs_fmp := 64w)
+    (mcopy 32 31 1 dret_s2 with vs_fmp := 64w)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `alloca_mem_agrees _ _ _`
+    (mp_tac o Q.SPECL [`0`,`32`,`32`,`64`] o
+     REWRITE_RULE[alloca_mem_agrees_def]) >>
+  simp[dret_s1_def, dret_s2_def, init_venom_state_def,
+       mcopy_def, write_memory_with_expansion_def, write_memory_def,
+       FLOOKUP_UPDATE] >>
+  qexists_tac `0` >>
+  simp[mem_byte_at_def, dret_memory_def, expand_memory_def] >> EVAL_TAC
+QED
+
 Theorem dret_remap_output:
   !remap. FLOOKUP remap 0 = SOME 64 ==>
   ~lift_result (alloca_remap_rel dret_fn {} remap)
@@ -506,22 +542,10 @@ Theorem dret_remap_output:
      | IntRet vs s => IntRet vs s | Error e => Error e)
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[dret_inst_def, step_inst_base_def, parse_dret_shape_def,
-       eval_operands_def, eval_operand_def, pair_dret_words_def,
-       pack_dret_dynamic_def, dret_s1_def, dret_s2_def,
-       init_venom_state_def, venomLayoutTheory.ceil32_def, lift_result_def] >> strip_tac >>
-  `alloca_mem_agrees remap
-    (mcopy 32 31 1 dret_s1 with vs_fmp := 64w)
-    (mcopy 32 31 1 dret_s2 with vs_fmp := 64w)` by
-    fs[alloca_remap_rel_def, LET_DEF, dret_s1_def, dret_s2_def,
-       init_venom_state_def] >>
-  pop_assum (mp_tac o Q.SPECL [`0`,`32`,`32`,`64`] o
-    REWRITE_RULE[alloca_mem_agrees_def]) >>
-  simp[dret_remap_def, dret_s1_def, dret_s2_def, init_venom_state_def,
-       mcopy_def, write_memory_with_expansion_def, write_memory_def,
-       FLOOKUP_UPDATE] >>
-  qexists_tac `0` >>
-  simp[mem_byte_at_def, dret_memory_def, expand_memory_def] >> EVAL_TAC
+  strip_assume_tac dret_execution >>
+  simp[lift_result_def] >> strip_tac >>
+  drule dret_copied_memory_disagrees >>
+  fs[alloca_remap_rel_def, LET_DEF]
 QED
 
 (* Every exact old block-contract hypothesis, including freshness and
