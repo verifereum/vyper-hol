@@ -319,6 +319,13 @@ Theorem hash_alloc_mstore_frame:
     stmt_state_rel ctx func cenv cx es t /\
     eval_operand buf.buf_operand t = SOME addr /\
     t.vs_memory = (mstore (w2n addr) w s).vs_memory /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n addr,cap) /\
+    w2n addr + cap < dimword (:256) /\
+    (!aid b len. aid < sa.cs_next_id /\
+       FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+       regions_disjoint (w2n addr) cap b len) /\
+    (!name b len. local_region cenv es.scopes t name b len ==>
+       regions_disjoint (w2n addr) cap b len) /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -399,9 +406,16 @@ Resume hash_alloc_mstore_frame[compose]:
      irule mstore_region_frame >>
      qexistsl [`w2n addr`, `cap`] >> simp[] >>
      qpat_x_assum `!name b len. local_region _ _ allocated _ _ _ ==> _` drule >> simp[]) >>
+  `!name b len.
+     local_region cenv es.scopes (mstore (w2n addr) w allocated) name b len ==>
+     regions_disjoint (w2n addr) cap b len` by
+    (simp[local_region_def, mstore_def] >>
+     rpt strip_tac >> first_x_assum irule >>
+     simp[local_region_def] >> qexists_tac `name` >>
+     goal_assum (drule_at Any) >> simp[]) >>
   qexistsl_tac [`mstore (w2n addr) w allocated`, `addr`] >>
-  simp[] >> gvs[mstore_def, lookup_var_def] >>
-  conj_tac >> first_assum ACCEPT_TAC
+  simp[] >> conj_tac >- simp[mstore_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Finalise hash_alloc_mstore_frame
