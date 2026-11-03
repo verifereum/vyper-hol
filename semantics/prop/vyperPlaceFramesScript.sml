@@ -154,14 +154,23 @@ Theorem extend_place_state:
 Proof
   Cases_on `res`
   >- simp[extend_place_def, raise_def]
-  >- (Cases_on `p` >>
-      simp[extend_place_def, bind_def, ignore_bind_def, return_def, raise_def] >>
-      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-      metis_tac[extend_storage_place_state, place_type_value_state,
-                read_place_state, lift_sum_state, return_state]) >>
-  Cases_on `sb` >>
-  simp[extend_place_def, bind_def, lift_option_type_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def])
+  >- (Cases_on `p` >> simp[extend_place_def, ignore_bind_def]
+      >- (match_mp_tac bind_state_observation >>
+          metis_tac[extend_storage_place_state, return_state]) >>
+      (match_mp_tac bind_state_observation >>
+       conj_tac >- metis_tac[place_type_value_state] >>
+       gen_tac >> BETA_TAC >>
+       match_mp_tac bind_state_observation >>
+       conj_tac >- metis_tac[read_place_state] >>
+       gen_tac >> BETA_TAC >>
+       match_mp_tac bind_state_observation >>
+       metis_tac[lift_sum_state, return_state])) >>
+  Cases_on `sb` >> simp[extend_place_def, raise_def] >>
+  Cases_on `v` >> simp[]
+  >- (map_every qid_spec_tac [`st'`, `result`, `st`] >>
+      match_mp_tac bind_state_observation >>
+      metis_tac[lift_option_type_state, return_state]) >>
+  metis_tac[return_state]
 QED
 
 Theorem select_result_state:

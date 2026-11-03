@@ -97,7 +97,7 @@ Proof
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> fs[return_def, raise_def]
 QED
 
-Theorem bind_state_observation[local]:
+Theorem bind_state_observation:
   (!s r s'. f s = (r,s') ==> s' = s) /\
   (!x s r s'. g x s = (r,s') ==> s' = s) ==>
   !s r s'. monad_bind f g s = (r,s') ==> s' = s
