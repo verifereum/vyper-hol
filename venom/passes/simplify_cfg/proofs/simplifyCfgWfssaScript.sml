@@ -1375,3 +1375,121 @@ Proof
   irule do_merge_jump_ssa_invariant >> goal_assum (drule_at Any) >>
   simp[] >> metis_tac[lookup_block_member_label]
 QED
+
+Theorem collapse_ssa_invariant_joint:
+  (!fn lm visited lbl.
+    wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+    scfg_phi_safe fn /\ fn_defs_reach_uses fn /\
+    EVERY label_positions_ok (fn_insts fn) /\ all_reachable fn ==>
+    wf_ssa (FST (collapse_dfs fn lm visited lbl)) /\
+    wf_function (FST (collapse_dfs fn lm visited lbl)) /\
+    fn_inst_wf (FST (collapse_dfs fn lm visited lbl)) /\
+    first_block_no_preds (FST (collapse_dfs fn lm visited lbl)) /\
+    scfg_phi_safe (FST (collapse_dfs fn lm visited lbl)) /\
+    fn_defs_reach_uses (FST (collapse_dfs fn lm visited lbl)) /\
+    EVERY label_positions_ok (fn_insts (FST (collapse_dfs fn lm visited lbl))) /\
+    all_reachable (FST (collapse_dfs fn lm visited lbl))) /\
+  (!fn lm visited succs.
+    wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+    scfg_phi_safe fn /\ fn_defs_reach_uses fn /\
+    EVERY label_positions_ok (fn_insts fn) /\ all_reachable fn ==>
+    wf_ssa (FST (collapse_dfs_succs fn lm visited succs)) /\
+    wf_function (FST (collapse_dfs_succs fn lm visited succs)) /\
+    fn_inst_wf (FST (collapse_dfs_succs fn lm visited succs)) /\
+    first_block_no_preds (FST (collapse_dfs_succs fn lm visited succs)) /\
+    scfg_phi_safe (FST (collapse_dfs_succs fn lm visited succs)) /\
+    fn_defs_reach_uses (FST (collapse_dfs_succs fn lm visited succs)) /\
+    EVERY label_positions_ok (fn_insts (FST (collapse_dfs_succs fn lm visited succs))) /\
+    all_reachable (FST (collapse_dfs_succs fn lm visited succs)))
+Proof
+  ho_match_mp_tac collapse_property_joint >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule chain_merge_ssa_invariant >>
+      simp[] >> qexistsl [`a`, `b`, `fn`] >> simp[] >>
+      metis_tac[lookup_block_member_label]) >>
+  rpt gen_tac >> strip_tac >> irule try_bypass_ssa_invariant >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem block_label_operand_live:
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  MEM inst bb.bb_instructions /\ is_block_label_opcode inst.inst_opcode /\
+  MEM (Label lbl) inst.inst_operands ==> MEM lbl (fn_labels fn)
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = PHI`
+  >- (`phi_edge_uses_wf fn bb inst` by
+        (fs[wf_ssa_def, def_dominates_uses_def] >> metis_tac[]) >>
+      `MEM lbl (MAP FST (phi_pairs inst.inst_operands))` by
+        metis_tac[phi_edge_uses_wf_def, phi_pair_label_mem] >>
+      fs[phi_edge_uses_wf_def, MEM_MAP] >>
+      `fn_cfg_edge fn lbl bb.bb_label` by metis_tac[] >>
+      fs[fn_cfg_edge_def, fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `is_terminator inst.inst_opcode` by fs[is_block_label_opcode_def] >>
+  `bb_well_formed bb` by fs[wf_function_def] >>
+  `inst = LAST bb.bb_instructions` by metis_tac[bb_well_formed_terminator_last] >>
+  `MEM lbl (bb_succs bb)` by
+    (Cases_on `bb.bb_instructions` >> fs[bb_well_formed_def, bb_succs_def,
+      get_successors_mem_label] >> metis_tac[]) >>
+  fs[wf_function_def, fn_succs_closed_def] >> metis_tac[]
+QED
+
+Theorem subst_block_labels_inst_absent:
+  (!l. MEM (Label l) inst.inst_operands ==> ~MEM l (MAP FST lm)) ==>
+  subst_block_labels_inst lm inst = inst
+Proof
+  strip_tac >>
+  `MAP (subst_label_map_op lm) inst.inst_operands = inst.inst_operands` by
+    (GEN_REWRITE_TAC RAND_CONV empty_rewrites [GSYM MAP_ID] >>
+     irule MAP_CONG >> simp[] >> rpt strip_tac >>
+     irule subst_label_map_op_absent >> metis_tac[]) >>
+  simp[subst_block_labels_inst_def, subst_label_map_inst_def]
+QED
+
+Theorem subst_block_labels_fn_absent:
+  wf_ssa fn /\ wf_function fn /\
+  EVERY (\entry. ~MEM (FST entry) (fn_labels fn)) lm ==>
+  subst_block_labels_fn lm fn = fn
+Proof
+  strip_tac >>
+  `!bb. MEM bb fn.fn_blocks ==> subst_block_labels_block lm bb = bb` by
+    (rpt strip_tac >>
+     `MAP (subst_block_labels_inst lm) bb.bb_instructions = bb.bb_instructions` by
+       (GEN_REWRITE_TAC RAND_CONV empty_rewrites [GSYM MAP_ID] >>
+        irule MAP_CONG >> simp[] >> qx_gen_tac `inst` >> strip_tac >>
+        Cases_on `is_block_label_opcode inst.inst_opcode`
+        >- (irule subst_block_labels_inst_absent >> rpt strip_tac >>
+            `MEM l (fn_labels fn)` by (irule block_label_operand_live >> metis_tac[]) >>
+            fs[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
+        simp[subst_block_labels_inst_def]) >>
+     simp[subst_block_labels_block_def]) >>
+  `MAP (subst_block_labels_block lm) fn.fn_blocks = fn.fn_blocks` by
+    (GEN_REWRITE_TAC RAND_CONV empty_rewrites [GSYM MAP_ID] >>
+     irule MAP_CONG >> simp[]) >>
+  simp[subst_block_labels_fn_def]
+QED
+
+Theorem collapse_dfs_sources_absent:
+  ALL_DISTINCT (fn_labels fn) /\
+  collapse_dfs fn [] visited lbl = (fn',lm',visited') ==>
+  EVERY (\entry. ~MEM (FST entry) (fn_labels fn')) lm'
+Proof
+  strip_tac >>
+  qspecl_then [`fn`, `[]`, `visited`, `lbl`] mp_tac (cj 1 collapse_events_joint) >>
+  simp[collapse_dfs_result_def, collapse_result_events_def, fn_result_events_def] >>
+  strip_tac >> gvs[] >> simp[EVERY_REVERSE] >>
+  irule label_event_trace_sources_absent >> metis_tac[]
+QED
+
+Theorem collapse_dfs_subst_identity:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  scfg_phi_safe fn /\ fn_defs_reach_uses fn /\
+  EVERY label_positions_ok (fn_insts fn) /\ all_reachable fn /\
+  collapse_dfs fn [] visited lbl = (fn',lm',visited') ==>
+  subst_block_labels_fn lm' fn' = fn'
+Proof
+  strip_tac >>
+  qspecl_then [`fn`, `[]`, `visited`, `lbl`] mp_tac
+    (cj 1 collapse_ssa_invariant_joint) >> simp[] >> strip_tac >>
+  irule subst_block_labels_fn_absent >> simp[] >>
+  irule collapse_dfs_sources_absent >> goal_assum (drule_at Any) >>
+  fs[wf_function_def]
+QED
