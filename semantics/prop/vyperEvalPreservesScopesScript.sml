@@ -1415,9 +1415,8 @@ Proof
   Cases_on `p`
   >- (strip_tac >> irule preserves_tv_eq >>
       metis_tac[append_storage_place_scopes_immutables]) >>
-  simp[append_place_def, bind_def, lift_sum_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, ignore_bind_def, lift_sum_def, return_def, raise_def]) >>
+  simp[append_place_def, bind_def, lift_sum_def, return_def, raise_def,
+       vyperMiscTheory.sum_CASE_rator, AllCaseEqs()] >>
   rpt strip_tac >>
   imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
   gvs[] >> metis_tac[write_place_preserves_tv]
@@ -1649,8 +1648,16 @@ Proof
     Cases_on `err` >> rpt strip_tac >>
     qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
     simp[Once evaluate_def, bind_def, raise_def, AllCaseEqs()] >>
-    rpt CASE_TAC >> rpt strip_tac >>
-    gvs[bind_def, raise_def, AllCaseEqs()] >>
+    rename1 `CustomError id positional kwargs` >>
+    Cases_on `get_module_code cx (FST id)`
+    >- simp[raise_def] >>
+    rename1 `get_module_code cx (FST id) = SOME tops` >>
+    Cases_on `lookup_custom_error_args_in (SND id) tops`
+    >- simp[raise_def] >>
+    rename1 `lookup_custom_error_args_in (SND id) tops = SOME params` >>
+    Cases_on `order_custom_error_args params (CustomError id positional kwargs)`
+    >- simp[raise_def] >>
+    simp[bind_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
     imp_res_tac lift_option_state >>
     imp_res_tac lift_option_type_state >> gvs[] >>
     first_x_assum drule_all >> rw[] ) >>

@@ -569,13 +569,66 @@ val CALL_NO_CONTROL_STEP = FIRST [
   qpat_x_assum `_ = (INR _,_)` mp_tac >>
     BasicProvers.TOP_CASE_TAC >> simp[] >> strip_tac];
 
+Theorem eval_ext_call_effects_no_control[local]:
+  eval_ext_call_effects cx target_addr calldata value_opt gas accounts st =
+    (INR exc,st') ==> no_control_exc exc
+Proof
+  simp[eval_ext_call_effects_def, bind_def, return_def] >>
+  Cases_on `st.outcomes` >> simp[]
+  >- (simp[get_transient_storage_def, Once bind_def, return_def] >>
+      strip_tac >> drule bind_INR >> strip_tac
+      >- metis_tac[lift_option_no_control] >>
+      gvs[] >> rename1 `lift_option _ _ _ = (INL result,_)` >>
+      Cases_on `FST result` >>
+      gvs[ignore_bind_def, bind_def, return_def, raise_def, no_control_exc_def,
+          update_accounts_def, update_transient_def, AllCaseEqs()] >>
+      metis_tac[append_logs_no_control, no_control_exc_def]) >>
+  strip_tac >> drule bind_INR >> strip_tac
+  >- (drule take_call_outcome_error >> simp[no_control_exc_def] >>
+      strip_tac >> gvs[no_control_exc_def]) >>
+  rename1 `take_call_outcome _ _ _ _ = (INL taken,_)` >>
+  PairCases_on `taken` >> gvs[] >>
+  rename1 `adopt_call_outcome rq outcome` >> Cases_on `outcome.co_success` >>
+  gvs[ignore_bind_def, bind_def, return_def, raise_def, no_control_exc_def,
+      adopt_call_outcome_equation]
+QED
+
 Theorem eval_ext_call_no_control:
   eval_ext_call cx static skip_check sig opts vs st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-  PairCases_on `sig` >> Cases_on `vs` >>
-  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >> strip_tac >>
-  rpt CALL_NO_CONTROL_STEP
+  PairCases_on `sig` >> Cases_on `vs`
+  >- simp[eval_ext_call_def, raise_def, no_control_exc_def] >>
+  rename1 `eval_ext_call _ _ _ _ _ (target::rest)` >>
+  simp_tac bool_ss [eval_ext_call_def, LET_THM] >> strip_tac >>
+  dxrule ignore_bind_INR >> strip_tac
+  >- metis_tac[type_check_no_control] >>
+  gvs[] >> dxrule bind_INR >> strip_tac
+  >- metis_tac[lift_option_type_no_control] >>
+  gvs[] >> dxrule bind_INR >> strip_tac
+  >- (Cases_on `static` >> gvs[return_def] >>
+      qpat_x_assum `_ = (INR _,_)` mp_tac >>
+      Cases_on `ext_call_kwarg EKValue opts (DROP (LENGTH sig1) rest)` >>
+      simp[return_def] >> strip_tac >> dxrule bind_INR >> strip_tac
+      >- metis_tac[lift_option_type_no_control] >> gvs[return_def]) >>
+  gvs[] >> dxrule bind_INR >> strip_tac
+  >- metis_tac[lift_option_type_no_control] >>
+  gvs[] >>
+  qpat_x_assum `bind get_accounts _ _ = _` mp_tac >>
+  simp[get_accounts_def, Once bind_def, return_def] >> strip_tac >>
+  dxrule ignore_bind_INR >> strip_tac
+  >- metis_tac[check_no_control] >>
+  gvs[] >> dxrule bind_INR >> strip_tac
+  >- metis_tac[eval_ext_call_effects_no_control] >>
+  gvs[] >> qpat_x_assum `(case _ of NONE => _ | SOME _ => _) _ = _` mp_tac >>
+  qmatch_goalsub_abbrev_tac `if _ then default_kw else NONE` >>
+  qmatch_goalsub_abbrev_tac `if empty_data then _ else NONE` >>
+  Cases_on `if empty_data then default_kw else NONE` >> simp[]
+  >- (strip_tac >> dxrule bind_INR >> strip_tac
+      >- metis_tac[lift_sum_runtime_no_control] >> gvs[return_def]) >>
+  simp[get_accounts_def, Once bind_def, return_def] >> strip_tac >>
+  dxrule ignore_bind_INR >> strip_tac
+  >- metis_tac[check_no_control] >> gvs[return_def]
 QED
 
 Theorem eval_send_no_control:
