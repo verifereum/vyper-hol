@@ -893,6 +893,136 @@ Definition well_typed_custom_error_def:
 End
 
 
+(* ===== Writes to a for loop's iterated array ===== *)
+
+(* Vyper rejects a for loop whose body writes to the place it iterates over
+   (ImmutableViolation "Cannot modify loop variable" in
+   vyper/semantics/analysis/local.py).  The evaluator iterates over a copy
+   of the array but the compiled loop reads it in place, so the two agree
+   only on programs Vyper accepts.
+
+   A place is compared by VarAccess (base.py): its variable and its
+   attribute path up to the first subscript, which is an analysis barrier.
+   place_access tgt [] gives both. *)
+Definition place_access_def:
+  place_access (NameTarget id) attrs = (NameTarget id, attrs) /\
+  place_access (TopLevelNameTarget n) attrs = (TopLevelNameTarget n, attrs) /\
+  place_access (SubscriptTarget tgt _) attrs = place_access tgt [] /\
+  place_access (AttributeTarget tgt a) attrs = place_access tgt (a::attrs)
+End
+
+(* VarAccess.contains: writing w may change place p. *)
+Definition place_contains_def:
+  place_contains w p <=>
+    FST (place_access w []) = FST (place_access p []) /\
+    isPREFIX (SND (place_access w [])) (SND (place_access p []))
+End
+
+(* _get_variable_access on an iterator: NONE for anything but a variable
+   seen through attributes and subscripts. *)
+Definition expr_place_def:
+  expr_place (Name _ id) = SOME (NameTarget id) /\
+  expr_place (TopLevelName _ n) = SOME (TopLevelNameTarget n) /\
+  expr_place (Subscript _ e i) =
+    OPTION_MAP (\tgt. SubscriptTarget tgt i) (expr_place e) /\
+  expr_place (Attribute _ e a) =
+    OPTION_MAP (\tgt. AttributeTarget tgt a) (expr_place e) /\
+  expr_place _ = NONE
+End
+
+(* ok holds of every place written by pop() in an expression.  The
+   evaluator ignores a Call's last field. *)
+Definition expr_writes_ok_def:
+  expr_writes_ok ok (Name _ _) = T /\
+  expr_writes_ok ok (TopLevelName _ _) = T /\
+  expr_writes_ok ok (FlagMember _ _ _) = T /\
+  expr_writes_ok ok (IfExp _ c x y) =
+    (expr_writes_ok ok c /\ expr_writes_ok ok x /\ expr_writes_ok ok y) /\
+  expr_writes_ok ok (Literal _ _) = T /\
+  expr_writes_ok ok (StructLit _ _ kes) =
+    EVERY (expr_writes_ok ok) (MAP SND kes) /\
+  expr_writes_ok ok (Subscript _ x y) =
+    (expr_writes_ok ok x /\ expr_writes_ok ok y) /\
+  expr_writes_ok ok (Attribute _ x _) = expr_writes_ok ok x /\
+  expr_writes_ok ok (Builtin _ _ es) = EVERY (expr_writes_ok ok) es /\
+  expr_writes_ok ok (TypeBuiltin _ _ _ es) = EVERY (expr_writes_ok ok) es /\
+  expr_writes_ok ok (Pop _ tgt) = (ok tgt /\ target_writes_ok ok tgt) /\
+  expr_writes_ok ok (Call _ _ es _) = EVERY (expr_writes_ok ok) es /\
+  target_writes_ok ok (NameTarget _) = T /\
+  target_writes_ok ok (TopLevelNameTarget _) = T /\
+  target_writes_ok ok (SubscriptTarget tgt e) =
+    (target_writes_ok ok tgt /\ expr_writes_ok ok e) /\
+  target_writes_ok ok (AttributeTarget tgt _) = target_writes_ok ok tgt
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL (_,e) => expr_size e
+    | INR (_,tgt) => base_assignment_target_size tgt)` >>
+  rw[] >>
+  TRY (Induct_on `kes` >> rw[] >> PairCases_on `h` >> rw[] >>
+       res_tac >> simp[] >> NO_TAC) >>
+  Induct_on `es` >> rw[] >> res_tac >> simp[]
+End
+
+Definition atarget_writes_ok_def:
+  atarget_writes_ok ok (BaseTarget tgt) = (ok tgt /\ target_writes_ok ok tgt) /\
+  atarget_writes_ok ok (TupleTarget tgts) = EVERY (atarget_writes_ok ok) tgts
+Termination
+  WF_REL_TAC `measure (\(_,tgt). assignment_target_size tgt)` >>
+  rw[] >> Induct_on `tgts` >> rw[] >> res_tac >> simp[]
+End
+
+(* ok holds of every place a statement writes: assignment targets, append()
+   and pop() targets, in nested statements and expressions too. *)
+Definition stmt_writes_ok_def:
+  stmt_writes_ok ok Pass = T /\
+  stmt_writes_ok ok Continue = T /\
+  stmt_writes_ok ok Break = T /\
+  stmt_writes_ok ok (Expr e) = expr_writes_ok ok e /\
+  stmt_writes_ok ok (For _ _ it _ body) =
+    ((case it of
+      | Array e => expr_writes_ok ok e
+      | Range x y => expr_writes_ok ok x /\ expr_writes_ok ok y) /\
+     stmts_writes_ok ok body) /\
+  stmt_writes_ok ok (If e yes no) =
+    (expr_writes_ok ok e /\ stmts_writes_ok ok yes /\ stmts_writes_ok ok no) /\
+  stmt_writes_ok ok (Assert e reason) =
+    (expr_writes_ok ok e /\
+     case reason of
+     | AssertReason r => expr_writes_ok ok r
+     | AssertCustomError err => EVERY (expr_writes_ok ok) (custom_error_exprs err)
+     | _ => T) /\
+  stmt_writes_ok ok (Log _ es) = EVERY (expr_writes_ok ok) es /\
+  stmt_writes_ok ok (Raise reason) =
+    (case reason of
+     | RaiseReason r => expr_writes_ok ok r
+     | RaiseCustomError err => EVERY (expr_writes_ok ok) (custom_error_exprs err)
+     | _ => T) /\
+  stmt_writes_ok ok (Return NONE) = T /\
+  stmt_writes_ok ok (Return (SOME e)) = expr_writes_ok ok e /\
+  stmt_writes_ok ok (Assign tgt e) =
+    (atarget_writes_ok ok tgt /\ expr_writes_ok ok e) /\
+  stmt_writes_ok ok (AugAssign _ tgt _ e) =
+    (ok tgt /\ target_writes_ok ok tgt /\ expr_writes_ok ok e) /\
+  stmt_writes_ok ok (Append tgt e) =
+    (ok tgt /\ target_writes_ok ok tgt /\ expr_writes_ok ok e) /\
+  stmt_writes_ok ok (AnnAssign _ _ e) = expr_writes_ok ok e /\
+  stmts_writes_ok ok [] = T /\
+  stmts_writes_ok ok (s::ss) = (stmt_writes_ok ok s /\ stmts_writes_ok ok ss)
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL (_,s) => stmt_size s
+    | INR (_,ss) => list_size stmt_size ss)` >>
+  simp[]
+End
+
+Definition iterator_unmodified_def:
+  iterator_unmodified (Range _ _) body = T /\
+  iterator_unmodified (Array e) body =
+    case expr_place e of
+    | NONE => T
+    | SOME p => stmts_writes_ok (\w. ~place_contains w p) body
+End
+
 (* ===== Executable statement typing ===== *)
 
 Definition type_stmt_def:
@@ -956,7 +1086,7 @@ Definition type_stmt_def:
      then SOME env else NONE) /\
   type_stmt env ret_ty (For id typ it n body) =
     (if assignable_type env.type_defs typ /\ well_typed_iterator env typ it /\
-        id NOTIN FDOM env.var_types /\
+        id NOTIN FDOM env.var_types /\ iterator_unmodified it body /\
         IS_SOME (type_stmts (extend_local env id typ F) ret_ty body)
      then SOME env else NONE) /\
   type_stmts env ret_ty [] = SOME env /\
