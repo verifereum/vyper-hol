@@ -175,7 +175,9 @@ Theorem external_entry_reaches_body:
      s0.
       set_external_package_target rpolicy.rpol_target
         (package_external_fn tops F (assign_nkeys tops 0)
-           (mut, F, F, tx.function_name, args, [], ret, fbody)) =
+           (mut, F, lookup_raw_return_or_F (NONE : num option)
+                       tx.function_name External tops,
+            tx.function_name, args, [], ret, fbody)) =
         (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
          rt) /\
       compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
@@ -223,7 +225,9 @@ Theorem external_body_frame:
       (INL (), es0) /\
     set_external_package_target rpolicy.rpol_target
       (package_external_fn tops F (assign_nkeys tops 0)
-         (mut, F, F, tx.function_name, args, [], ret, fbody)) =
+         (mut, F, lookup_raw_return_or_F (NONE : num option)
+                     tx.function_name External tops,
+          tx.function_name, args, [], ret, fbody)) =
       (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
        rt) /\
     compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
@@ -271,7 +275,9 @@ Theorem external_frame_ret_ok:
     bind_arguments (type_env tops) args tx.args = SOME env /\
     set_external_package_target rpolicy.rpol_target
       (package_external_fn tops F (assign_nkeys tops 0)
-         (mut, F, F, tx.function_name, args, [], ret, fbody)) =
+         (mut, F, lookup_raw_return_or_F (NONE : num option)
+                     tx.function_name External tops,
+          tx.function_name, args, [], ret, fbody)) =
       (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
        rt) /\
     compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
@@ -434,7 +440,7 @@ QED
 
 (* The guarded body's code from sa: the body's statements to sb, then (if
    the block is still open) the end, to st'. *)
-Theorem guarded_body_code[local]:
+Theorem guarded_body_code:
   !cenv nkey ut iv fbody rt sa st'.
     compile_guarded_body cenv F nkey ut iv fbody rt sa = ((), st') ==>
     ?sb. compile_stmts cenv NoLoop
@@ -466,7 +472,7 @@ QED
    the return type the typing checks the body against, while
    compile_guarded_body compiles a function without a return type at
    BaseT BoolT. *)
-Theorem guarded_body_stmts_env[local]:
+Theorem guarded_body_stmts_env:
   !tops bindings ctx cx cenv fbody ret rt env_t env' sa sb.
     supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
     rt = (if ret = NoneT then NONE else SOME ret) /\
