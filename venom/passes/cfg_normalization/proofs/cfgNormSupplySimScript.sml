@@ -2790,3 +2790,27 @@ Proof
   Cases_on `bind_outputs inst.inst_outputs i.iret_values
     (adopt_return_fmp i (merge_callee_state st v))` >> simp[]
 QED
+
+Theorem supply_step_invoke:
+  supply_state_agree fn st st' /\
+  st.vs_current_bb = st'.vs_current_bb /\
+  st.vs_inst_idx = st'.vs_inst_idx /\
+  inst.inst_opcode = INVOKE /\
+  (!v. MEM (Var v) inst.inst_operands ==> MEM v (irSupply$fn_ir_vars fn)) ==>
+  lift_result
+    (\s t. supply_state_agree fn s t /\
+           s.vs_current_bb = t.vs_current_bb /\ s.vs_inst_idx = t.vs_inst_idx)
+    (supply_state_agree fn) (supply_state_agree fn)
+    (step_inst fuel ctx inst st) (step_inst fuel ctx inst st')
+Proof
+  strip_tac >>
+  `supply_state_agree fn st (st' with vs_prev_bb := st.vs_prev_bb)` by
+    simp[supply_state_agree_prev_bb] >>
+  drule supply_step_inst >>
+  disch_then (qspecl_then [`inst`,`fuel`,`ctx`] mp_tac) >>
+  simp[supply_step_invoke_prev_bb] >>
+  Cases_on `step_inst fuel ctx inst st` >>
+  Cases_on `step_inst fuel ctx inst st'` >>
+  simp[stateEquivTheory.lift_result_def, stateEquivTheory.state_equiv_def,
+       GSYM supply_state_agree_execution_equiv, supply_state_agree_prev_bb]
+QED
