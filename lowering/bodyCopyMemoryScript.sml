@@ -418,6 +418,12 @@ Theorem assign_name_scratch_run[local]:
     w2n w + type_memory_size entry.type <= t.vs_alloca_next /\
     t.vs_vars = a.vs_vars /\ t.vs_allocas = a.vs_allocas /\
     t.vs_alloca_next = a.vs_alloca_next /\
+    t.vs_labels = s.vs_labels /\
+    s.vs_alloca_next <= a.vs_alloca_next /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_size entry.type) /\
+    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+    (!b k. b + k <= w2n w \/ w2n w + type_memory_size entry.type <= b ==>
+      mem_bytes_at b k t.vs_memory = mem_bytes_at b k s.vs_memory) /\
     (!x. not_fresh_at sa x ==> lookup_var x a = lookup_var x s)
 Proof
   rpt strip_tac >>
@@ -436,7 +442,24 @@ Proof
     asm_simp_tac (srw_ss()) [] >>
   `val_footprint entry.type entry.value <= type_memory_size entry.type` by
     simp[val_footprint_le] >>
+  `s.vs_alloca_next <= a.vs_alloca_next /\ a.vs_labels = s.vs_labels` by
+    (drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >> strip_tac >>
+     drule emitted_insts_emit_op >> strip_tac >>
+     qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK a` mp_tac >>
+     asm_simp_tac (srw_ss()) [run_inst_seq_def, step_inst_base_def, mk_inst_def,
+       eval_operand_def, exec_alloca_def] >>
+     Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
+     >- (simp[LET_THM, update_var_def] >> rpt strip_tac >> gvs[]) >>
+     PairCases_on `x` >> simp[LET_THM, update_var_def] >>
+     rpt strip_tac >> gvs[]) >>
   drule_all copy_memory_body_run >> strip_tac >>
+  `t.vs_labels = s.vs_labels` by
+    (drule_all buffer_copy_memory_run >>
+     qpat_x_assum `run_inst_seq (emitted_insts sm sn) a = OK t`
+       (fn th => rewrite_tac [th]) >>
+     simp_tac (srw_ss()) [] >> disch_then SUBST1_TAC >>
+     Cases_on `type_memory_size entry.type = 0` >>
+     asm_simp_tac (srw_ss()) [mcopy_def, write_memory_with_expansion_def, LET_THM]) >>
   `run_inst_seq_mem_ok (emitted_insts sa sm) s` by
     (drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >> strip_tac >>
      drule emitted_insts_emit_op >> strip_tac >>
@@ -453,7 +476,11 @@ Proof
   conj_tac
   >- (qpat_x_assum `eval_operand buf.buf_operand a = SOME w'` mp_tac >>
       asm_simp_tac (srw_ss()) [eval_operand_def, lookup_var_def]) >>
-  decide_tac
+  conj_tac >- decide_tac >>
+  qx_gen_tac `b` >> qx_gen_tac `k` >>
+  qpat_x_assum `!a' k. _ \/ _ ==> _`
+    (qspecl_then [`b`, `k`] mp_tac) >>
+  asm_simp_tac (srw_ss()) [ADD_COMM]
 QED
 
 (* Actual assignment prefix, stopping immediately before the typed scratch store. *)
@@ -482,6 +509,12 @@ Theorem compile_assign_value_name_staging_prefix_mem_ok:
     w2n w + type_memory_size entry.type <= t.vs_alloca_next /\
     t.vs_vars = a.vs_vars /\ t.vs_allocas = a.vs_allocas /\
     t.vs_alloca_next = a.vs_alloca_next /\
+    t.vs_labels = s.vs_labels /\
+    s.vs_alloca_next <= a.vs_alloca_next /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_size entry.type) /\
+    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+    (!b k. b + k <= w2n w \/ w2n w + type_memory_size entry.type <= b ==>
+      mem_bytes_at b k t.vs_memory = mem_bytes_at b k s.vs_memory) /\
     (!x. not_fresh_at sa x ==> lookup_var x a = lookup_var x s)
 Proof
   rpt strip_tac >> drule_all assign_memory_body_code >> strip_tac >>
@@ -492,7 +525,8 @@ Proof
       rpt strip_tac >> gvs[]) >>
   rev_drule run_inst_seq_append >>
   disch_then (qspec_then `emitted_insts sm sn` mp_tac) >>
-  asm_simp_tac (srw_ss()) []
+  asm_simp_tac (srw_ss()) [] >> rpt strip_tac >>
+  qpat_x_assum `!b k. _ \/ _ ==> _` irule >> simp[]
 QED
 
 val () = List.app (fn th =>
@@ -503,3 +537,77 @@ val () = List.app (fn th =>
      else raise Fail "body assignment staging inherited admission"
   end) [assign_memory_body_parts, assign_memory_body_code,
         assign_name_scratch_run, compile_assign_value_name_staging_prefix_mem_ok];
+
+Theorem compile_assign_value_name_staged_mem_ok:
+  expr_sim_pre ce cx env (Name ann id) es /\
+  stmt_state_rel ctx func ce cx es s /\
+  lookup_scopes id es.scopes = SOME entry /\
+  FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  ~is_word_type ann /\
+  type_memory_bytes ce ann = type_memory_size entry.type /\
+  type_memory_size entry.type < dimword (:256) /\
+  compile_assign_value ce dst LocMemory (Var p) F (SOME LocMemory)
+    ann ann info bytes sa = ((),sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\
+  (!x. Var p = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand dst s = SOME d /\
+  w2n d + type_memory_size entry.type <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  rpt strip_tac >>
+  `not_fresh_at sa p` by metis_tac[] >>
+  drule_all compile_assign_value_name_staging_prefix_mem_ok >> strip_tac >>
+  drule_all assign_memory_body_code >> strip_tac >> gvs[] >>
+  `eval_operand dst t = SOME d` by
+    (Cases_on `dst` >> gvs[eval_operand_def] >>
+     rename1 `lookup_var x s = SOME d` >>
+     `not_fresh_at sa x` by
+       (qpat_x_assum `!x. _ \/ _ ==> not_fresh_at sa x` irule >> simp[]) >>
+     qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x a = _` drule >>
+     asm_simp_tac (srw_ss()) [lookup_var_def]) >>
+  `w2n d + type_memory_size entry.type <= t.vs_alloca_next` by decide_tac >>
+  `!x. buf.buf_operand = Var x \/ dst = Var x ==> not_fresh_at sn x` by
+    (drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >> strip_tac >>
+     drule buffer_copy_memory_shape >> strip_tac >>
+     drule emit_op_extends >> strip_tac >>
+     `sm.cs_next_var = sa.cs_next_var + 1 /\
+      buf.buf_operand = Var (STRING #"%" (toString sa.cs_next_var))` by
+       gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+           fresh_var_def, fresh_id_def, emit_def] >>
+     gvs[not_fresh_at_def, ASCIInumbersTheory.toString_11] >>
+     rpt strip_tac >> gvs[] >>
+     qpat_x_assum `!x. _ \/ _ ==> _`
+       (qspec_then `STRING #"%" (toString n)` mp_tac) >>
+     simp[] >> qexists_tac `n` >> simp[]) >>
+  `run_inst_seq_mem_ok (emitted_insts sn sb) t` by
+    (drule_all body_name_source_region >> strip_tac >>
+     qpat_x_assum `val_in_memory _ _ _ a.vs_memory` kall_tac >>
+     drule val_footprint_le >> strip_tac >>
+     Cases_on `is_bytestring_type ann`
+     >- (gvs[compile_store_memory_def] >>
+         drule_all buffer_typed_bytestring_header >> strip_tac >>
+         `32 + 32 * word_size len < dimword (:256) /\
+          w2n w + (32 + 32 * word_size len) <= t.vs_alloca_next /\
+          w2n d + (32 + 32 * word_size len) <= t.vs_alloca_next` by decide_tac >>
+         irule compile_store_bytestring_body_mem_ok >>
+         qexistsl_tac [`d`, `dst`, `len`, `buf.buf_operand`, `w`] >>
+         simp[] >> rpt strip_tac >>
+         qpat_x_assum `!x. buf.buf_operand = Var x \/ _ ==> _` irule >> simp[]) >>
+     gvs[compile_store_memory_def] >>
+     irule compile_copy_memory_body_mem_ok >>
+     qexistsl_tac [`d`, `dst`, `type_memory_size entry.type`, `buf.buf_operand`, `w`] >>
+     simp[]) >>
+  rewrite_tac [APPEND_ASSOC] >>
+  irule run_inst_seq_mem_ok_append >> simp[] >>
+  rpt strip_tac >> gvs[]
+QED
+
+val () =
+  let val th = compile_assign_value_name_staged_mem_ok
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_ASSIGN_STAGED_MEMORY_AUDIT OK\n"
+     else raise Fail "body assignment staged memory inherited admission"
+  end;
