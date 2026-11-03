@@ -766,3 +766,97 @@ Proof
     (Cases_on `fn.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def]) >>
   first_x_assum (qspecl_then [`entry`, `bb.bb_label`] mp_tac) >> simp[]
 QED
+
+Theorem chain_merge_label_positions_ok:
+  EVERY label_positions_ok (fn_insts fn) /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  fn' = (fn with fn_blocks := update_succ_phi_labels b.bb_label a.bb_label
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+    (bb_succs (merge_blocks a b))) ==>
+  EVERY label_positions_ok (fn_insts fn')
+Proof
+  strip_tac >>
+  `EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn.fn_blocks` by
+    (fs[EVERY_MEM, fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]) >>
+  `EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn'.fn_blocks` by
+    (gvs[] >> irule chain_merge_every_inst >> simp[] >> rpt strip_tac >>
+     gvs[subst_label_inst_def, label_positions_ok_def]) >>
+  fs[EVERY_MEM, fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]
+QED
+
+Theorem chain_merge_entry_no_phis:
+  wf_function fn /\ first_block_no_preds fn /\ scfg_phi_safe fn /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks := update_succ_phi_labels b.bb_label a.bb_label
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+    (bb_succs (merge_blocks a b))) ==>
+  EVERY (\inst. inst.inst_opcode <> PHI) (HD fn'.fn_blocks).bb_instructions
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (fn_labels fn') /\ fn_has_entry fn'` by
+    (gvs[] >> irule chain_merge_labels_entry >> qexistsl [`a`, `b`, `fn`] >>
+     simp[] >> fs[wf_function_def] >> conj_tac >>
+     irule venomExecPropsTheory.MEM_lookup_block >> simp[GSYM fn_labels_def]) >>
+  `fn.fn_blocks <> [] /\ fn'.fn_blocks <> []` by
+    fs[wf_function_def, fn_has_entry_def] >>
+  `(HD fn'.fn_blocks).bb_label = (HD fn.fn_blocks).bb_label` by
+    (gvs[] >> irule chain_merge_entry_label >> simp[]) >>
+  simp[EVERY_MEM] >> qx_gen_tac `inst'` >> strip_tac >> strip_tac >>
+  `?bb inst. MEM bb fn.fn_blocks /\ (HD fn'.fn_blocks).bb_label = bb.bb_label /\
+    MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
+    inst' = (if MEM (HD fn'.fn_blocks).bb_label (bb_succs (merge_blocks a b))
+             then subst_label_inst b.bb_label a.bb_label inst else inst)` by
+    (`MEM (HD fn'.fn_blocks) fn'.fn_blocks` by
+       (Cases_on `fn'.fn_blocks` >> gvs[]) >>
+     irule chain_merge_phi_source_exact >> gvs[]) >>
+  `MEM (HD fn.fn_blocks) fn.fn_blocks` by
+    (Cases_on `fn.fn_blocks` >> gvs[]) >>
+  `bb = HD fn.fn_blocks` by metis_tac[same_label_same_block] >>
+  drule scfg_phi_safe_entry >> disch_then assume_tac >>
+  fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem wf_ssa_phi_preds:
+  wf_ssa fn ==> scfg_phi_preds fn
+Proof
+  simp[scfg_phi_preds_def] >> rpt strip_tac >>
+  `phi_edge_uses_wf fn bb inst` by
+    (fs[wf_ssa_def, def_dominates_uses_def] >> metis_tac[]) >>
+  fs[phi_edge_uses_wf_def] >> metis_tac[pairTheory.FST]
+QED
+
+Theorem chain_merge_ssa_invariant:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  scfg_phi_safe fn /\ fn_defs_reach_uses fn /\
+  EVERY label_positions_ok (fn_insts fn) /\ all_reachable fn /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks := update_succ_phi_labels b.bb_label a.bb_label
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+    (bb_succs (merge_blocks a b))) ==>
+  wf_ssa fn' /\ wf_function fn' /\ fn_inst_wf fn' /\ first_block_no_preds fn' /\
+  scfg_phi_safe fn' /\ fn_defs_reach_uses fn' /\
+  EVERY label_positions_ok (fn_insts fn') /\ all_reachable fn'
+Proof
+  strip_tac >>
+  `lookup_block a.bb_label fn.fn_blocks = SOME a /\
+   lookup_block b.bb_label fn.fn_blocks = SOME b` by
+    (conj_tac >> irule venomExecPropsTheory.MEM_lookup_block >>
+     fs[wf_function_def, fn_labels_def]) >>
+  `wf_function fn'` by (gvs[] >> irule chain_merge_wf >> simp[]) >>
+  `fn_inst_wf fn'` by (gvs[] >> irule chain_merge_fn_inst_wf >> simp[]) >>
+  `first_block_no_preds fn'` by
+    (gvs[] >> irule chain_merge_first_block_no_preds >> simp[]) >>
+  `all_reachable fn'` by (irule chain_merge_all_reachable >> metis_tac[]) >>
+  `ssa_form fn'` by
+    (gvs[] >> irule chain_merge_ssa >> fs[wf_ssa_def]) >>
+  `scfg_phi_preds fn` by metis_tac[wf_ssa_phi_preds] >>
+  `fn_defs_reach_uses fn'` by (irule chain_merge_defs_reach_uses >> metis_tac[]) >>
+  `wf_ssa fn'` by
+    (irule reachable_defs_reach_uses_wf_ssa >> simp[] >>
+     rpt gen_tac >> strip_tac >> irule chain_merge_phi_shape >> simp[] >>
+     qexistsl [`a`, `b`, `fn`] >> simp[]) >>
+  `scfg_phi_safe fn'` by
+    (irule wf_ssa_phi_safe >> conj_tac >- asm_rewrite_tac[] >>
+     irule chain_merge_entry_no_phis >> metis_tac[]) >>
+  `EVERY label_positions_ok (fn_insts fn')` by
+    (irule chain_merge_label_positions_ok >> metis_tac[]) >> simp[]
+QED
