@@ -864,3 +864,125 @@ Proof
   irule cs_extends_open_lookup >>
   fs[compile_state_ok_def, MAP_REVERSE]
 QED
+
+(* Label-only extension does not constrain the instructions of the open block. *)
+Theorem cs_extends_labels:
+  !a b. cs_extends a b ==>
+    MAP (\bb. bb.bb_label) (all_blocks b) =
+      MAP (\bb. bb.bb_label) (all_blocks a) ++ added_labels a b
+Proof
+  rpt strip_tac >> drule cs_extends_block_stream >> strip_tac >>
+  gvs[all_blocks_def, MAP_APPEND]
+QED
+
+Theorem added_labels_trans:
+  !a b c. cs_extends a b /\ cs_extends b c ==>
+    added_labels a c = added_labels a b ++ added_labels b c
+Proof
+  rpt strip_tac >>
+  `cs_extends a c` by metis_tac[cs_extends_trans] >>
+  qpat_assum `cs_extends a b` (mp_tac o MATCH_MP cs_extends_labels) >>
+  qpat_assum `cs_extends b c` (mp_tac o MATCH_MP cs_extends_labels) >>
+  qpat_assum `cs_extends a c` (mp_tac o MATCH_MP cs_extends_labels) >>
+  rpt disch_tac >> metis_tac[APPEND_ASSOC, APPEND_11]
+QED
+
+Theorem cs_extends_labels_trans:
+  !a b c P.
+    cs_extends a b /\ cs_extends b c /\
+    EVERY P (added_labels a b) /\ EVERY P (added_labels b c) ==>
+    cs_extends a c /\ EVERY P (added_labels a c)
+Proof
+  rpt strip_tac
+  >- metis_tac[cs_extends_trans] >>
+  drule_all added_labels_trans >> simp[]
+QED
+
+Theorem comp_bind_labels:
+  !m k P.
+    (!s. cs_extends s (SND (m s)) /\
+         EVERY P (added_labels s (SND (m s)))) /\
+    (!x s. cs_extends s (SND (k x s)) /\
+           EVERY P (added_labels s (SND (k x s)))) ==>
+    !s. cs_extends s (SND (comp_bind m k s)) /\
+        EVERY P (added_labels s (SND (comp_bind m k s)))
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  simp[comp_bind_def] >> pairarg_tac >> gvs[] >>
+  irule cs_extends_labels_trans >> qexists_tac `cs'` >>
+  first_x_assum (qspec_then `s` mp_tac) >> simp[]
+QED
+
+Theorem added_labels_new_block:
+  !lbl s v t. new_block lbl s = (v,t) ==> added_labels s t = [lbl]
+Proof
+  rpt gen_tac >> simp[new_block_def] >> strip_tac >>
+  gvs[] >> simp[added_labels_def, all_blocks_def, MAP_APPEND] >>
+  once_rewrite_tac[DROP_APPEND] >> simp[]
+QED
+
+Theorem added_labels_emit:
+  !inst s v t. emit inst s = (v,t) ==> added_labels s t = []
+Proof
+  rpt gen_tac >> simp[emit_def] >> strip_tac >>
+  gvs[added_labels_def, all_blocks_def, MAP_APPEND, LENGTH_MAP]
+QED
+
+Theorem added_labels_fresh_var:
+  !s v t. fresh_var s = (v,t) ==> added_labels s t = []
+Proof
+  rpt gen_tac >> simp[fresh_var_def] >> strip_tac >>
+  gvs[added_labels_def, all_blocks_def, MAP_APPEND, LENGTH_MAP]
+QED
+
+Theorem added_labels_fresh_label:
+  !sfx s v t. fresh_label sfx s = (v,t) ==> added_labels s t = []
+Proof
+  rpt gen_tac >> simp[fresh_label_def] >> strip_tac >>
+  gvs[added_labels_def, all_blocks_def, MAP_APPEND, LENGTH_MAP]
+QED
+
+Theorem comp_return_labels:
+  !x s P. cs_extends s (SND (comp_return x s)) /\
+    EVERY P (added_labels s (SND (comp_return x s)))
+Proof
+  simp[comp_return_def, cs_extends_refl, added_labels_def, all_blocks_def,
+       MAP_APPEND] >> once_rewrite_tac[DROP_APPEND] >>
+  simp[DROP_LENGTH_TOO_LONG]
+QED
+
+Theorem new_block_labels:
+  !lbl s v t P. new_block lbl s = (v,t) /\ P lbl ==>
+    cs_extends s t /\ EVERY P (added_labels s t)
+Proof
+  rpt strip_tac
+  >- metis_tac[cs_extends_new_block] >>
+  drule added_labels_new_block >> simp[]
+QED
+
+Theorem emit_labels:
+  !inst s v t P. emit inst s = (v,t) ==>
+    cs_extends s t /\ EVERY P (added_labels s t)
+Proof
+  rpt strip_tac
+  >- metis_tac[cs_extends_emit] >>
+  drule added_labels_emit >> simp[]
+QED
+
+Theorem fresh_var_labels:
+  !s v t P. fresh_var s = (v,t) ==>
+    cs_extends s t /\ EVERY P (added_labels s t)
+Proof
+  rpt strip_tac
+  >- metis_tac[cs_extends_fresh_var] >>
+  drule added_labels_fresh_var >> simp[]
+QED
+
+Theorem fresh_label_labels:
+  !sfx s v t P. fresh_label sfx s = (v,t) ==>
+    cs_extends s t /\ EVERY P (added_labels s t)
+Proof
+  rpt strip_tac
+  >- metis_tac[cs_extends_fresh_label] >>
+  drule added_labels_fresh_label >> simp[]
+QED
