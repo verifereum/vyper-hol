@@ -47,7 +47,6 @@
  *   access_ok, taint_ok                       - the per-state part
  *   ptr_discipline                            - the stage fact
  *   taint_within                              - taint reaches only dead bytes
- *   ctx_sim_dead                              - the stage relation
  *)
 
 
@@ -596,37 +595,17 @@ Definition final_taint_def:
       tn = step_taint inst s s_h T0 /\ R = ret_taint T0 inst s
 End
 
-(* The bytes nothing reads, as functions of where they are: the running
-   contract's storage and transient storage, the immutables, and the
-   return data.  The end-to-end theorem takes them from the source
-   program's layout (storage_dead). *)
+(* The bytes nothing reads, as functions of where they are: each
+   account's storage and transient storage, the immutables, and the
+   return data.  A stage may change them (ConcretizeMemLoc: the unwritten
+   capacity of a stored buffer).  The end-to-end theorem takes them from
+   the source program's layout (storage_dead), at the running contract
+   only. *)
 Datatype:
-  dead = <| d_stor : storage -> (bytes32 # num) set;
-            d_trans : storage -> (bytes32 # num) set;
+  dead = <| d_stor : address -> storage -> (bytes32 # num) set;
+            d_trans : address -> storage -> (bytes32 # num) set;
             d_imm : (num |-> bytes32) -> (num # num) set;
             d_ret : word8 list -> num set |>
-End
-
-(* Taint only ever reaches dead bytes: at each call request (whose
-   snapshot is the state before the call) and at the halt. *)
-Definition taint_within_def:
-  taint_within D ctx vs <=>
-    (!stk PG G tn fn inst s fuel s'.
-       frame_reachable vs ctx stk PG G tn fn inst s /\ active_inst fn inst s /\
-       inst.inst_opcode <> INVOKE /\ step_inst fuel ctx inst s = OK s' /\
-       LENGTH s.vs_requests < LENGTH s'.vs_requests ==>
-       tn.t_stor SUBSET
-         D.d_stor (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
-       tn.t_trans SUBSET
-         D.d_trans (s.vs_transient s.vs_call_ctx.cc_address)) /\
-    (!s_h tn R.
-       final_taint vs ctx s_h tn R ==>
-       tn.t_stor SUBSET
-         D.d_stor (s_h.vs_accounts s_h.vs_call_ctx.cc_address).storage /\
-       tn.t_trans SUBSET
-         D.d_trans (s_h.vs_transient s_h.vs_call_ctx.cc_address) /\
-       tn.t_imm SUBSET D.d_imm s_h.vs_immutables /\
-       R SUBSET D.d_ret s_h.vs_returndata)
 End
 
 Definition word_agree_except_def:
@@ -640,20 +619,18 @@ Definition storage_agree_except_def:
     !k. word_agree_except (key_taint X k) (st1 k) (st2 k)
 End
 
-(* Equal at every address but addr, whose accounts are equal but for
-   their storage, which agrees outside the dead bytes of the first. *)
+(* Accounts equal but for their storage, which agrees outside the dead
+   bytes of the first. *)
 Definition accounts_agree_except_def:
-  accounts_agree_except D addr (a1:evm_accounts) a2 <=>
-    (!a. a <> addr ==> a1 a = a2 a) /\
-    (a1 addr with storage := (a2 addr).storage) = a2 addr /\
-    storage_agree_except (D.d_stor (a1 addr).storage)
-      (a1 addr).storage (a2 addr).storage
+  accounts_agree_except D (a1:evm_accounts) a2 <=>
+    !a. (a1 a with storage := (a2 a).storage) = a2 a /\
+        storage_agree_except (D.d_stor a (a1 a).storage)
+          (a1 a).storage (a2 a).storage
 End
 
 Definition transient_agree_except_def:
-  transient_agree_except D addr (t1:transient_storage) t2 <=>
-    (!a. a <> addr ==> t1 a = t2 a) /\
-    storage_agree_except (D.d_trans (t1 addr)) (t1 addr) (t2 addr)
+  transient_agree_except D (t1:transient_storage) t2 <=>
+    !a. storage_agree_except (D.d_trans a (t1 a)) (t1 a) (t2 a)
 End
 
 Definition imms_agree_except_def:
@@ -664,56 +641,71 @@ Definition imms_agree_except_def:
 End
 
 Definition request_agree_except_def:
-  request_agree_except D addr (r1:call_request) r2 <=>
+  request_agree_except D (r1:call_request) r2 <=>
     r1 with <| cr_accounts := r2.cr_accounts;
                cr_tStorage := r2.cr_tStorage |> = r2 /\
-    accounts_agree_except D addr r1.cr_accounts r2.cr_accounts /\
-    transient_agree_except D addr r1.cr_tStorage r2.cr_tStorage
+    accounts_agree_except D r1.cr_accounts r2.cr_accounts /\
+    transient_agree_except D r1.cr_tStorage r2.cr_tStorage
 End
 
 (* unit_result_rel, but at a halt the runs may differ at the dead bytes of
-   the first run's state: in the running contract's storage and transient
-   storage (at the end and in each request's snapshot), the immutables and
-   the return data. *)
+   the first run's state: in storage and transient storage (at the end and
+   in each request's snapshot), the immutables and the return data. *)
 Definition dead_result_rel_def:
   dead_result_rel D res res' <=>
     case (res, res') of
       (Halt s, Halt s') =>
-        accounts_agree_except D s.vs_call_ctx.cc_address
-          s.vs_accounts s'.vs_accounts /\
-        transient_agree_except D s.vs_call_ctx.cc_address
-          s.vs_transient s'.vs_transient /\
+        accounts_agree_except D s.vs_accounts s'.vs_accounts /\
+        transient_agree_except D s.vs_transient s'.vs_transient /\
         imms_agree_except D s.vs_immutables s'.vs_immutables /\
         LENGTH s.vs_returndata = LENGTH s'.vs_returndata /\
         (!i. i < LENGTH s.vs_returndata /\ i NOTIN D.d_ret s.vs_returndata ==>
              EL i s.vs_returndata = EL i s'.vs_returndata) /\
         s.vs_halted = s'.vs_halted /\ s.vs_logs = s'.vs_logs /\
         s.vs_pending_deletions = s'.vs_pending_deletions /\
-        LIST_REL (request_agree_except D s.vs_call_ctx.cc_address)
-          s.vs_requests s'.vs_requests
+        LIST_REL (request_agree_except D) s.vs_requests s'.vs_requests
     | (Abort a s, Abort a' s') => (a = Revert_abort ==> a' = Revert_abort)
     | _ => F
 End
 
 (* The dead bytes are fixed by the bytes that aren't: two states that agree
-   outside the first's dead bytes have the same dead bytes.  storage_dead
-   has this (dead_bytes_frame), and it makes dead_result_rel transitive. *)
+   outside the first's dead bytes have the same dead bytes.  It makes
+   dead_result_rel transitive (dead_result_rel_trans). *)
 Definition dead_wf_def:
   dead_wf D <=>
-    (!st1 st2. storage_agree_except (D.d_stor st1) st1 st2 ==>
-               D.d_stor st2 = D.d_stor st1) /\
-    (!st1 st2. storage_agree_except (D.d_trans st1) st1 st2 ==>
-               D.d_trans st2 = D.d_trans st1) /\
+    (!a st1 st2. storage_agree_except (D.d_stor a st1) st1 st2 ==>
+                 D.d_stor a st2 = D.d_stor a st1) /\
+    (!a st1 st2. storage_agree_except (D.d_trans a st1) st1 st2 ==>
+                 D.d_trans a st2 = D.d_trans a st1) /\
     (!i1 i2. imms_agree_except D i1 i2 ==> D.d_imm i2 = D.d_imm i1) /\
     (!r1 r2. LENGTH r1 = LENGTH r2 /\
              (!i. i < LENGTH r1 /\ i NOTIN D.d_ret r1 ==> EL i r1 = EL i r2) ==>
              D.d_ret r2 = D.d_ret r1)
 End
 
-(* ctx_sim up to dead bytes. *)
-Definition ctx_sim_dead_def:
-  ctx_sim_dead D ctx ctx' vs <=>
-    !fuel. terminates (run_context fuel ctx vs) ==>
-      ?fuel'. dead_result_rel D (run_context fuel ctx vs)
-                (run_context fuel' ctx' vs)
+(* Taint only ever reaches dead bytes: at each call request (whose
+   snapshot is the state before the call) and at the halt. *)
+Definition taint_within_def:
+  taint_within D ctx vs <=>
+    (!stk PG G tn fn inst s fuel s'.
+       frame_reachable vs ctx stk PG G tn fn inst s /\ active_inst fn inst s /\
+       inst.inst_opcode <> INVOKE /\ step_inst fuel ctx inst s = OK s' /\
+       LENGTH s.vs_requests < LENGTH s'.vs_requests ==>
+       tn.t_stor SUBSET
+         D.d_stor s.vs_call_ctx.cc_address
+           (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+       tn.t_trans SUBSET
+         D.d_trans s.vs_call_ctx.cc_address
+           (s.vs_transient s.vs_call_ctx.cc_address)) /\
+    (!s_h tn R.
+       final_taint vs ctx s_h tn R ==>
+       tn.t_stor SUBSET
+         D.d_stor s_h.vs_call_ctx.cc_address
+           (s_h.vs_accounts s_h.vs_call_ctx.cc_address).storage /\
+       tn.t_trans SUBSET
+         D.d_trans s_h.vs_call_ctx.cc_address
+           (s_h.vs_transient s_h.vs_call_ctx.cc_address) /\
+       tn.t_imm SUBSET D.d_imm s_h.vs_immutables /\
+       R SUBSET D.d_ret s_h.vs_returndata)
 End
+

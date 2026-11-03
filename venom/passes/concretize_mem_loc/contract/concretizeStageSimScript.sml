@@ -66,7 +66,7 @@ Theorem concretize_stage_sim:
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions ==>
-  ctx_sim_dead D C C' vs
+  ctx_sim D C C' vs vs
 Proof
   cheat
 QED
