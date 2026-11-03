@@ -1,7 +1,7 @@
 (* The bounded-memory bytestring endpoint, including both emitted additions. *)
 Theory abiDecoderBytesBound
 Ancestors
-  abiDecoderGuard abiDecoderGuards emitHelperProps exprLoweringProps compileEnv emitHelper
+  abiDecoderContract abiDecoderGuard abiDecoderGuards emitHelperProps exprLoweringProps compileEnv emitHelper
   venomExecSemantics venomState words arithmetic
 
 Theorem abi_decode_add_sequence:
@@ -18,7 +18,7 @@ Proof
   rpt strip_tac >> drule_all emit_op_ADD_correct >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st st') s = OK t` >>
   drule_all (SIMP_RULE (srw_ss()) []
-    (Q.INST [`opc` |-> `ADD`] abi_decode_pure_emit_frame)) >> strip_tac >>
+    (Q.INST [`opc` |-> `ADD`] abiDecoderContractTheory.abi_decode_pure_emit_frame)) >> strip_tac >>
   drule inst_extends_emit_op >> strip_tac >> qexists_tac `t` >> simp[]
 QED
 
