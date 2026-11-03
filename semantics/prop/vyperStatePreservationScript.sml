@@ -97,14 +97,35 @@ Proof
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> fs[return_def, raise_def]
 QED
 
+Theorem bind_state_observation[local]:
+  (!s r s'. f s = (r,s') ==> s' = s) /\
+  (!x s r s'. g x s = (r,s') ==> s' = s) ==>
+  !s r s'. monad_bind f g s = (r,s') ==> s' = s
+Proof
+  rpt strip_tac >> Cases_on `f s` >> Cases_on `q` >>
+  gvs[bind_def] >> metis_tac[]
+QED
+
 Theorem lookup_global_state:
   !cx src n st res st'. lookup_global cx src n st = (res, st') ==> st' = st
 Proof
-  rpt strip_tac >> gvs[lookup_global_def, bind_def, lift_option_type_def,
-       get_immutables_def, get_address_immutables_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, get_immutables_def, get_address_immutables_def,
-           lift_option_type_def, return_def, raise_def])
+  ntac 3 gen_tac >> simp[lookup_global_def] >>
+  match_mp_tac bind_state_observation >>
+  conj_tac >- metis_tac[lift_option_type_state] >>
+  gen_tac >> BETA_TAC >>
+  Cases_on `find_var_decl_by_name n x`
+  >- (simp[] >> match_mp_tac bind_state_observation >>
+      conj_tac >- metis_tac[get_immutables_state] >>
+      gen_tac >> BETA_TAC >> Cases_on `FLOOKUP x' n` >> simp[] >>
+      metis_tac[return_state, raise_state]) >>
+  PairCases_on `x'` >> Cases_on `x'0` >> simp[]
+  >- (match_mp_tac bind_state_observation >>
+      conj_tac >- metis_tac[lift_option_type_state] >>
+      gen_tac >> BETA_TAC >>
+      match_mp_tac bind_state_observation >>
+      metis_tac[lift_option_type_state, return_state]) >>
+  match_mp_tac bind_state_observation >>
+  metis_tac[lift_option_type_state, return_state]
 QED
 
 Theorem lookup_flag_mem_state:
@@ -157,15 +178,6 @@ Proof
   imp_res_tac read_result_state >>
   imp_res_tac get_storage_backend_state >> gvs[] >>
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
-QED
-
-Theorem bind_state_observation[local]:
-  (!s r s'. f s = (r,s') ==> s' = s) /\
-  (!x s r s'. g x s = (r,s') ==> s' = s) ==>
-  !s r s'. monad_bind f g s = (r,s') ==> s' = s
-Proof
-  rpt strip_tac >> Cases_on `f s` >> Cases_on `q` >>
-  gvs[bind_def] >> metis_tac[]
 QED
 
 (* Original proof expanded the aggregate-selection predicate and timed out:
