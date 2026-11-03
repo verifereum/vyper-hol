@@ -17,6 +17,7 @@
  * Layer 2 (compound types):
  *   type_memory_size_prim — primitive base types occupy 32 bytes
  *   type_memory_size_flag — FlagTV occupies 32 bytes
+ *   type_memory_size_pos  — a type that takes a storage slot takes memory
  *   mstore_preserves_val_in_memory — compound disjointness (mutual induction)
  *   val_in_memory_mem_agree — val_in_memory depends only on its footprint
  *   val_in_memory_struct  — struct decomposition
@@ -185,6 +186,17 @@ QED
 Theorem type_memory_size_flag:
   ∀ name. type_memory_size (FlagTV name) = 32
 Proof ACCEPT_TAC type_memory_size_flag_proof
+QED
+
+Theorem type_memory_size_pos:
+  (!tv. 0 < type_slot_size tv ==> 0 < type_memory_size tv) /\
+  (!tvs. 0 < type_slot_size_list tvs ==> 0 < type_memory_size_list tvs) /\
+  (!fs. 0 < type_slot_size_fields fs ==> 0 < type_memory_size_fields fs)
+Proof
+  ho_match_mp_tac type_memory_size_ind >>
+  rw[type_memory_size_def, vyperValueTheory.type_slot_size_def] >>
+  gvs[arithmeticTheory.ZERO_LESS_MULT] >>
+  CCONTR_TAC >> gvs[]
 QED
 
 (* ===== Layer 2: compound disjointness ===== *)
