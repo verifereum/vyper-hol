@@ -1493,3 +1493,63 @@ Proof
   irule collapse_dfs_sources_absent >> goal_assum (drule_at Any) >>
   fs[wf_function_def]
 QED
+
+Theorem simplify_cfg_round_ssa_invariant:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  scfg_phi_safe fn /\ fn_defs_reach_uses fn /\
+  EVERY label_positions_ok (fn_insts fn) ==>
+  wf_ssa (FST (simplify_cfg_round_with_labels fn)) /\
+  wf_function (FST (simplify_cfg_round_with_labels fn)) /\
+  fn_inst_wf (FST (simplify_cfg_round_with_labels fn)) /\
+  first_block_no_preds (FST (simplify_cfg_round_with_labels fn)) /\
+  scfg_phi_safe (FST (simplify_cfg_round_with_labels fn)) /\
+  fn_defs_reach_uses (FST (simplify_cfg_round_with_labels fn)) /\
+  EVERY label_positions_ok (fn_insts (FST (simplify_cfg_round_with_labels fn)))
+Proof
+  strip_tac >> Cases_on `fn_entry_label fn`
+  >- simp[simplify_cfg_round_with_labels_def] >>
+  drule_all simplify_cfg_round_entry_ssa_invariant >> strip_tac >>
+  qabbrev_tac `start = fix_all_phis (remove_unreachable_blocks fn)` >>
+  Cases_on `collapse_dfs start [] [] x` >> PairCases_on `r` >>
+  `wf_ssa q /\ wf_function q /\ fn_inst_wf q /\ first_block_no_preds q /\
+   scfg_phi_safe q /\ fn_defs_reach_uses q /\
+   EVERY label_positions_ok (fn_insts q) /\ all_reachable q` by
+    (qspecl_then [`start`, `[]`, `[]`, `x`] mp_tac
+      (cj 1 collapse_ssa_invariant_joint) >> simp[]) >>
+  `subst_block_labels_fn r0 q = q` by
+    (drule_at (Pat `collapse_dfs _ _ _ _ = _`) collapse_dfs_subst_identity >> simp[]) >>
+  drule_all simplify_cfg_round_entry_ssa_invariant >> strip_tac >>
+  fs[Abbr `start`] >> simp[simplify_cfg_round_with_labels_def]
+QED
+
+Theorem simplify_cfg_iter_ssa_invariant:
+  !fuel fn.
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  scfg_phi_safe fn /\ fn_defs_reach_uses fn /\
+  EVERY label_positions_ok (fn_insts fn) ==>
+  wf_ssa (FST (simplify_cfg_iter_with_labels fuel fn)) /\
+  wf_function (FST (simplify_cfg_iter_with_labels fuel fn)) /\
+  fn_inst_wf (FST (simplify_cfg_iter_with_labels fuel fn)) /\
+  first_block_no_preds (FST (simplify_cfg_iter_with_labels fuel fn)) /\
+  scfg_phi_safe (FST (simplify_cfg_iter_with_labels fuel fn)) /\
+  fn_defs_reach_uses (FST (simplify_cfg_iter_with_labels fuel fn)) /\
+  EVERY label_positions_ok (fn_insts (FST (simplify_cfg_iter_with_labels fuel fn)))
+Proof
+  Induct_on `fuel` >- simp[simplify_cfg_iter_with_labels_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all simplify_cfg_round_ssa_invariant >> strip_tac >>
+  Cases_on `simplify_cfg_round_with_labels fn` >> gvs[] >>
+  simp[simplify_cfg_iter_with_labels_def] >> IF_CASES_TAC >> simp[] >>
+  Cases_on `simplify_cfg_iter_with_labels fuel q` >> simp[] >>
+  first_x_assum (qspec_then `q` mp_tac) >> simp[]
+QED
+
+Theorem simplify_cfg_fn_ssa_invariant:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
+  scfg_phi_safe fn /\ fn_defs_reach_uses fn /\
+  EVERY label_positions_ok (fn_insts fn) ==>
+  wf_ssa (simplify_cfg_fn fn)
+Proof
+  strip_tac >> simp[simplify_cfg_fn_def, simplify_cfg_fn_with_labels_def] >>
+  drule_all simplify_cfg_iter_ssa_invariant >> simp[]
+QED
