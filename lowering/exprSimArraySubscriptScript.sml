@@ -1082,3 +1082,82 @@ Proof
   goal_assum (drule_at Any) >> drule alistTheory.ALOOKUP_MEM >>
   strip_tac >> qexists_tac `j` >> simp[]
 QED
+
+Theorem decode_static_array_elem:
+  !n stor off evt vs j.
+    decode_static_array stor off evt n = SOME vs /\ j < n ==>
+    decode_value stor (off + j * type_slot_size evt) evt = SOME (EL j vs)
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  simp[Once vyperStorageTheory.decode_value_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  Cases_on `j` >> gvs[] >>
+  first_x_assum drule_all >>
+  simp_tac bool_ss [arithmeticTheory.MULT_CLAUSES,
+    AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
+Theorem decode_dyn_array_elem:
+  !n stor off evt vs j.
+    decode_dyn_array stor off evt n = SOME vs /\ j < n ==>
+    decode_value stor (off + j * type_slot_size evt) evt = SOME (EL j vs)
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  simp[Once vyperStorageTheory.decode_value_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  Cases_on `j` >> gvs[] >>
+  first_x_assum drule_all >>
+  simp_tac bool_ss [arithmeticTheory.MULT_CLAUSES,
+    AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
+Theorem read_storage_slot_array_elem:
+  read_storage_slot cx tr w (ArrayTV evt bd) es = (INL arr,es') /\
+  evaluate_subscripts (ArrayTV evt bd) arr
+    [ValueSubscript (IntV (&j))] = INL v ==>
+  read_storage_slot cx tr
+    (w + n2w ((case bd of Fixed n => 0 | Dynamic n => 1) +
+              j * type_slot_size evt)) evt es = (INL v,es')
+Proof
+  Cases_on `tr` >>
+  simp[read_storage_slot_def, get_storage_backend_def,
+       get_transient_storage_def, get_accounts_def, bind_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `decode_value stor` >>
+  Cases_on `bd` >>
+  simp[Once vyperStorageTheory.decode_value_def, AllCaseEqs(),
+       lift_option_def, raise_def, return_def] >>
+  rpt strip_tac
+  >>~- ([`decode_static_array stor (w2n w) evt n`],
+     (Cases_on `decode_static_array stor (w2n w) evt n` >>
+      gvs[raise_def, return_def] >>
+      rename1 `decode_static_array stor (w2n w) evt n = SOME vs` >>
+      drule vyperTypeStatePreservationTheory.decode_static_array_length >>
+      strip_tac >>
+      gvs[evaluate_subscripts_def, vyperValueOperationTheory.array_index_def,
+          AllCaseEqs()] >>
+      drule vyperValueTheory.enumerate_static_array_ALOOKUP >>
+      disch_then (qspecl_then [`default_value evt`, `0`] mp_tac) >>
+      simp[] >> strip_tac >>
+      drule_all decode_static_array_elem >>
+      strip_tac >>
+      `decode_value stor (w2n (w + n2w (j * type_slot_size evt))) evt =
+       decode_value stor (w2n w + j * type_slot_size evt) evt` by
+        (irule (cj 1 exprSimAttributeFieldsTheory.decode_value_n2w) >>
+         rewrite_tac[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n]) >>
+      gvs[return_def])) >>
+  Cases_on `w2n (read_slot stor (w2n w)) <= n` >>
+  gvs[raise_def, return_def] >>
+  Cases_on `decode_dyn_array stor (w2n w + 1) evt
+    (MIN (w2n (read_slot stor (w2n w))) n)` >>
+  gvs[raise_def, return_def] >>
+  rename1 `decode_dyn_array stor (w2n w + 1) evt len = SOME vs` >>
+  drule vyperTypeStatePreservationTheory.decode_dyn_array_length >>
+  strip_tac >>
+  gvs[evaluate_subscripts_def, vyperValueOperationTheory.array_index_def,
+      listTheory.oEL_THM, AllCaseEqs()] >>
+  drule_all decode_dyn_array_elem >> strip_tac >>
+  `decode_value stor (w2n (w + n2w (j * type_slot_size evt + 1))) evt =
+   decode_value stor (w2n w + 1 + j * type_slot_size evt) evt` by
+    (irule (cj 1 exprSimAttributeFieldsTheory.decode_value_n2w) >>
+     rewrite_tac[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
+     simp_tac bool_ss [AC wordsTheory.WORD_ADD_ASSOC wordsTheory.WORD_ADD_COMM]) >>
+  simp[return_def]
+QED
