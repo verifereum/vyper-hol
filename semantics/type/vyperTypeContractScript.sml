@@ -85,7 +85,7 @@ Definition add_toplevel_static_maps_def:
         art with <| cta_bare_globals updated_by
                     (flip FUPDATE ((src,id), typ));
                     cta_bare_global_assignable updated_by
-                    (flip FUPDATE ((src,id), typ));
+                    (if in_deploy then flip FUPDATE ((src,id), typ) else I);
                     cta_toplevel_vtypes updated_by
                     (flip FUPDATE ((src,id), Type typ)) |>
     | VariableDecl _ (Constant e) id typ _ =>

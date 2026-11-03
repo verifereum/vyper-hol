@@ -879,13 +879,10 @@ QED
 (* The deployment flag only changes function signatures. *)
 Theorem add_toplevel_static_maps_nonsig_mode_rel[local]:
   art1.cta_bare_globals = art2.cta_bare_globals /\
-  art1.cta_bare_global_assignable = art2.cta_bare_global_assignable /\
   art1.cta_toplevel_vtypes = art2.cta_toplevel_vtypes /\
   art1.cta_flag_members = art2.cta_flag_members ==>
   (add_toplevel_static_maps T src tl art1).cta_bare_globals =
     (add_toplevel_static_maps F src tl art2).cta_bare_globals /\
-  (add_toplevel_static_maps T src tl art1).cta_bare_global_assignable =
-    (add_toplevel_static_maps F src tl art2).cta_bare_global_assignable /\
   (add_toplevel_static_maps T src tl art1).cta_toplevel_vtypes =
     (add_toplevel_static_maps F src tl art2).cta_toplevel_vtypes /\
   (add_toplevel_static_maps T src tl art1).cta_flag_members =
@@ -899,13 +896,10 @@ QED
 
 Theorem add_module_static_maps_nonsig_mode_rel[local]:
   art1.cta_bare_globals = art2.cta_bare_globals /\
-  art1.cta_bare_global_assignable = art2.cta_bare_global_assignable /\
   art1.cta_toplevel_vtypes = art2.cta_toplevel_vtypes /\
   art1.cta_flag_members = art2.cta_flag_members ==>
   (add_module_static_maps T src tls art1).cta_bare_globals =
     (add_module_static_maps F src tls art2).cta_bare_globals /\
-  (add_module_static_maps T src tls art1).cta_bare_global_assignable =
-    (add_module_static_maps F src tls art2).cta_bare_global_assignable /\
   (add_module_static_maps T src tls art1).cta_toplevel_vtypes =
     (add_module_static_maps F src tls art2).cta_toplevel_vtypes /\
   (add_module_static_maps T src tls art1).cta_flag_members =
@@ -920,17 +914,12 @@ QED
 
 Theorem add_contract_static_maps_nonsig_mode_rel[local]:
   art1.cta_bare_globals = art2.cta_bare_globals /\
-  art1.cta_bare_global_assignable = art2.cta_bare_global_assignable /\
   art1.cta_toplevel_vtypes = art2.cta_toplevel_vtypes /\
   art1.cta_flag_members = art2.cta_flag_members ==>
   (FOLDL (\art (src,tls). add_module_static_maps T src tls art) art1 mods).
       cta_bare_globals =
     (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art2 mods).
       cta_bare_globals /\
-  (FOLDL (\art (src,tls). add_module_static_maps T src tls art) art1 mods).
-      cta_bare_global_assignable =
-    (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art2 mods).
-      cta_bare_global_assignable /\
   (FOLDL (\art (src,tls). add_module_static_maps T src tls art) art1 mods).
       cta_toplevel_vtypes =
     (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art2 mods).
@@ -949,8 +938,6 @@ QED
 Theorem build_contract_type_artifact_nonsig_mode_irrelevant:
   (build_contract_type_artifact T mods).cta_bare_globals =
     (build_contract_type_artifact F mods).cta_bare_globals /\
-  (build_contract_type_artifact T mods).cta_bare_global_assignable =
-    (build_contract_type_artifact F mods).cta_bare_global_assignable /\
   (build_contract_type_artifact T mods).cta_toplevel_vtypes =
     (build_contract_type_artifact F mods).cta_toplevel_vtypes /\
   (build_contract_type_artifact T mods).cta_flag_members =
@@ -997,7 +984,7 @@ Proof
 QED
 
 Theorem add_toplevel_static_maps_bare_global_assignable_sound:
-  FLOOKUP (add_toplevel_static_maps F src tl art).cta_bare_global_assignable k = SOME ty ==>
+  FLOOKUP (add_toplevel_static_maps mode src tl art).cta_bare_global_assignable k = SOME ty ==>
   FLOOKUP art.cta_bare_global_assignable k = SOME ty \/
   ?vis id typ init.
     tl = VariableDecl vis Immutable id typ init /\
@@ -1060,7 +1047,7 @@ Proof
 QED
 
 Theorem add_module_static_maps_bare_global_assignable_sound:
-  FLOOKUP (add_module_static_maps F src tls art).cta_bare_global_assignable k = SOME ty ==>
+  FLOOKUP (add_module_static_maps mode src tls art).cta_bare_global_assignable k = SOME ty ==>
   FLOOKUP art.cta_bare_global_assignable k = SOME ty \/
   ?tl vis id typ init.
     MEM tl tls /\ tl = VariableDecl vis Immutable id typ init /\
@@ -1068,7 +1055,7 @@ Theorem add_module_static_maps_bare_global_assignable_sound:
 Proof
   qid_spec_tac `art` >> Induct_on `tls` >- rw[add_module_static_maps_def] >>
   rw[add_module_static_maps_def] >>
-  first_x_assum (qspec_then `add_toplevel_static_maps F src h art` mp_tac) >>
+  first_x_assum (qspec_then `add_toplevel_static_maps mode src h art` mp_tac) >>
   simp[add_module_static_maps_def] >> strip_tac >-
     (drule add_toplevel_static_maps_bare_global_assignable_sound >> rw[] >> gvs[] >> metis_tac[]) >>
   metis_tac[]
@@ -1125,7 +1112,7 @@ Proof
 QED
 
 Theorem add_contract_static_maps_bare_global_assignable_sound:
-  FLOOKUP (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art mods).cta_bare_global_assignable k = SOME ty ==>
+  FLOOKUP (FOLDL (\art (src,tls). add_module_static_maps mode src tls art) art mods).cta_bare_global_assignable k = SOME ty ==>
   FLOOKUP art.cta_bare_global_assignable k = SOME ty \/
   ?src tls tl vis id typ init.
     MEM (src,tls) mods /\ MEM tl tls /\ tl = VariableDecl vis Immutable id typ init /\
@@ -1133,7 +1120,7 @@ Theorem add_contract_static_maps_bare_global_assignable_sound:
 Proof
   qid_spec_tac `art` >> Induct_on `mods` >- rw[] >>
   gen_tac >> PairCases_on `h` >> rw[] >>
-  first_x_assum (qspec_then `add_module_static_maps F h0 h1 art` mp_tac) >>
+  first_x_assum (qspec_then `add_module_static_maps mode h0 h1 art` mp_tac) >>
   simp[] >> strip_tac >-
     (drule add_module_static_maps_bare_global_assignable_sound >> rw[] >> gvs[] >> metis_tac[]) >>
   metis_tac[]
@@ -1185,8 +1172,8 @@ Proof
 QED
 
 Theorem build_contract_type_artifact_bare_global_assignable_sound:
-  contract_namespaces_ok F mods /\
-  FLOOKUP (build_contract_type_artifact F mods).cta_bare_global_assignable (src,id) = SOME ty ==>
+  contract_namespaces_ok mode mods /\
+  FLOOKUP (build_contract_type_artifact mode mods).cta_bare_global_assignable (src,id) = SOME ty ==>
   ?ts vis id_str init.
     ALOOKUP mods src = SOME ts /\ MEM (VariableDecl vis Immutable id_str ty init) ts /\
     id = id_str
@@ -1803,7 +1790,7 @@ Proof
 QED
 
 Theorem add_toplevel_static_maps_bare_global_assignable_complete_Immutable[local]:
-  FLOOKUP (add_toplevel_static_maps F src (VariableDecl vis Immutable id ty init) art).cta_bare_global_assignable
+  FLOOKUP (add_toplevel_static_maps T src (VariableDecl vis Immutable id ty init) art).cta_bare_global_assignable
     (src,id) = SOME ty
 Proof
   rw[add_toplevel_static_maps_def, FLOOKUP_UPDATE]
@@ -1812,7 +1799,7 @@ QED
 Theorem add_toplevel_static_maps_bare_global_assignable_preserve[local]:
   FLOOKUP art.cta_bare_global_assignable k = SOME ty /\
   ~(MEM k (toplevel_vtype_keys_toplevel src tl)) ==>
-  FLOOKUP (add_toplevel_static_maps F src tl art).cta_bare_global_assignable k = SOME ty
+  FLOOKUP (add_toplevel_static_maps T src tl art).cta_bare_global_assignable k = SOME ty
 Proof
   Cases_on `tl` >>
   rw[add_toplevel_static_maps_def, toplevel_vtype_keys_toplevel_def, FLOOKUP_UPDATE] >>
@@ -1822,13 +1809,13 @@ QED
 Theorem add_module_static_maps_bare_global_assignable_preserve[local]:
   FLOOKUP art.cta_bare_global_assignable k = SOME ty /\
   ~(MEM k (FLAT (MAP (toplevel_vtype_keys_toplevel src) tls))) ==>
-  FLOOKUP (add_module_static_maps F src tls art).cta_bare_global_assignable k = SOME ty
+  FLOOKUP (add_module_static_maps T src tls art).cta_bare_global_assignable k = SOME ty
 Proof
   qid_spec_tac `art` >>
   Induct_on `tls` >- rw[add_module_static_maps_def] >>
   rw[add_module_static_maps_def] >>
   simp[GSYM add_module_static_maps_def] >>
-  first_x_assum (qspec_then `add_toplevel_static_maps F src h art` irule) >>
+  first_x_assum (qspec_then `add_toplevel_static_maps T src h art` irule) >>
   simp[] >>
   irule add_toplevel_static_maps_bare_global_assignable_preserve >>
   simp[]
@@ -1837,7 +1824,7 @@ QED
 Theorem add_module_static_maps_bare_global_assignable_complete_Immutable[local]:
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) tls)) /\
   MEM (VariableDecl vis Immutable id ty init) tls ==>
-  FLOOKUP (add_module_static_maps F src tls art).cta_bare_global_assignable (src,id) = SOME ty
+  FLOOKUP (add_module_static_maps T src tls art).cta_bare_global_assignable (src,id) = SOME ty
 Proof
   qid_spec_tac `art` >>
   Induct_on `tls` >- rw[add_module_static_maps_def] >>
@@ -1847,7 +1834,7 @@ Proof
      simp[add_toplevel_static_maps_bare_global_assignable_complete_Immutable] >>
      gvs[ALL_DISTINCT_APPEND, toplevel_vtype_keys_toplevel_def]) >>
   gvs[ALL_DISTINCT_APPEND] >>
-  first_x_assum (qspec_then `add_toplevel_static_maps F src h art` mp_tac) >>
+  first_x_assum (qspec_then `add_toplevel_static_maps T src h art` mp_tac) >>
   simp[add_module_static_maps_def] >> strip_tac >>
   irule add_toplevel_static_maps_bare_global_assignable_preserve >>
   simp[] >>
@@ -1858,21 +1845,21 @@ QED
 Theorem add_contract_static_maps_bare_global_assignable_preserve[local]:
   FLOOKUP art.cta_bare_global_assignable k = SOME ty /\
   ~(MEM k (contract_keys toplevel_vtype_keys_toplevel mods)) ==>
-  FLOOKUP (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art mods).cta_bare_global_assignable k = SOME ty
+  FLOOKUP (FOLDL (\art (src,tls). add_module_static_maps T src tls art) art mods).cta_bare_global_assignable k = SOME ty
 Proof
   qid_spec_tac `art` >>
   Induct_on `mods` >- rw[] >>
   gen_tac >> PairCases_on `h` >> rw[contract_keys_def] >>
-  first_x_assum (qspec_then `add_module_static_maps F h0 h1 art` irule) >>
+  first_x_assum (qspec_then `add_module_static_maps T h0 h1 art` irule) >>
   conj_tac >- simp[contract_keys_def] >>
   irule add_module_static_maps_bare_global_assignable_preserve >>
   simp[]
 QED
 
 Theorem add_contract_static_maps_bare_global_assignable_complete_MEM_Immutable[local]:
-  contract_namespaces_ok F mods /\ MEM (src,tls) mods /\
+  contract_namespaces_ok T mods /\ MEM (src,tls) mods /\
   MEM (VariableDecl vis Immutable id ty init) tls ==>
-  FLOOKUP (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art mods).cta_bare_global_assignable
+  FLOOKUP (FOLDL (\art (src,tls). add_module_static_maps T src tls art) art mods).cta_bare_global_assignable
     (src,id) = SOME ty
 Proof
   qid_spec_tac `art` >>
@@ -1885,7 +1872,7 @@ Proof
      irule add_module_static_maps_bare_global_assignable_complete_Immutable >>
      gvs[contract_namespaces_ok_def, contract_keys_def, ALL_DISTINCT_APPEND] >>
      metis_tac[]) >>
-  first_x_assum (qspec_then `add_module_static_maps F h0 h1 art` mp_tac) >>
+  first_x_assum (qspec_then `add_module_static_maps T h0 h1 art` mp_tac) >>
   impl_tac >-
     (gvs[contract_namespaces_ok_def, contract_keys_def, ALL_DISTINCT_APPEND]) >>
   simp[] >> strip_tac >>
@@ -1896,10 +1883,10 @@ Proof
 QED
 
 Theorem build_contract_type_artifact_bare_global_assignable_complete[local]:
-  contract_namespaces_ok F mods /\
+  contract_namespaces_ok T mods /\
   ALOOKUP mods src = SOME ts /\
   MEM (VariableDecl vis Immutable id ty init) ts ==>
-  FLOOKUP (build_contract_type_artifact F mods).cta_bare_global_assignable
+  FLOOKUP (build_contract_type_artifact T mods).cta_bare_global_assignable
     (src,id) = SOME ty
 Proof
   rw[build_contract_type_artifact_def] >>
@@ -2045,6 +2032,43 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+(* Outside deployment nothing is assignable: an immutable is written only by
+   the constructor. *)
+Theorem add_toplevel_static_maps_runtime_assignable[local]:
+  (add_toplevel_static_maps F src tl art).cta_bare_global_assignable =
+    art.cta_bare_global_assignable
+Proof
+  Cases_on `tl` >> simp[add_toplevel_static_maps_def] >>
+  rpt (CASE_TAC >> simp[])
+QED
+
+Theorem add_module_static_maps_runtime_assignable[local]:
+  !art. (add_module_static_maps F src tls art).cta_bare_global_assignable =
+          art.cta_bare_global_assignable
+Proof
+  Induct_on `tls` >>
+  simp[add_module_static_maps_def, add_toplevel_static_maps_runtime_assignable] >>
+  simp[GSYM add_module_static_maps_def, add_toplevel_static_maps_runtime_assignable]
+QED
+
+Theorem build_contract_type_artifact_runtime_assignable:
+  (build_contract_type_artifact F mods).cta_bare_global_assignable = FEMPTY
+Proof
+  `!art. (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art mods).
+           cta_bare_global_assignable = art.cta_bare_global_assignable` by
+    (Induct_on `mods` >> simp[] >> Cases >>
+     simp[add_module_static_maps_runtime_assignable]) >>
+  simp[build_contract_type_artifact_def, empty_contract_type_artifact_def]
+QED
+
+Theorem check_contract_runtime_assignable:
+  check_contract F layouts addr mods = SOME art ==>
+  art.cta_bare_global_assignable = FEMPTY
+Proof
+  rw[check_contract_def] >>
+  simp[live_artifact_def, build_contract_type_artifact_runtime_assignable]
+QED
+
 Theorem check_contract_bare_global_assignable_complete_initial:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
@@ -2052,11 +2076,23 @@ Theorem check_contract_bare_global_assignable_complete_initial:
   bare_global_assignable_complete art.cta_bare_global_assignable
     (initial_evaluation_context sources layouts tx src)
 Proof
+  rw[bare_global_assignable_complete_def, initial_evaluation_context_def] >>
+  metis_tac[check_contract_runtime_assignable]
+QED
+
+Theorem check_contract_bare_global_assignable_complete_deploy:
+  check_contract T layouts addr mods = SOME art /\
+  ALOOKUP sources addr = SOME mods /\
+  tx.target = addr ==>
+  bare_global_assignable_complete art.cta_bare_global_assignable
+    (initial_evaluation_context sources layouts tx src with in_deploy := T)
+Proof
   rw[check_contract_def, bare_global_assignable_complete_def] >> gvs[] >>
   gvs[get_module_code_def, initial_evaluation_context_def] >>
   irule build_contract_type_artifact_bare_global_assignable_complete >>
   simp[] >> metis_tac[]
 QED
+
 
 Theorem lookup_flag_SOME_MEM_FlagDecl[local]:
   lookup_flag fid ts = SOME members ==>
@@ -2257,13 +2293,25 @@ Proof
   metis_tac[assignable_type_not_NoneT]
 QED
 
-Theorem check_contract_bare_global_assignable_consistent_initial:
-  check_contract F layouts addr mods = SOME art /\
+Theorem check_contract_toplevel_decl_MEM_checked:
+  check_contract mode layouts addr mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\ MEM tl ts ==>
+  check_toplevel_decl mods art src tl
+Proof
+  rw[check_contract_def] >> gvs[EVERY_MEM] >>
+  `MEM (src,ts) mods` by metis_tac[ALOOKUP_MEM] >>
+  first_x_assum drule >>
+  simp[check_module_def, EVERY_MEM]
+QED
+
+Theorem check_contract_bare_global_assignable_consistent_deploy:
+  check_contract T layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr ==>
   !src id ty.
     FLOOKUP art.cta_bare_global_assignable (src,id) = SOME ty ==>
-    ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src = SOME ts /\
+    ?ts. get_module_code
+           (initial_evaluation_context sources layouts tx src with in_deploy := T) src = SOME ts /\
          FLOOKUP art.cta_bare_globals (src,id) = SOME ty /\
          FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\
          is_immutable_decl id ts /\
@@ -2273,6 +2321,8 @@ Proof
   rpt strip_tac >>
   drule check_contract_artifact_fields >> strip_tac >> gvs[] >>
   drule_all build_contract_type_artifact_bare_global_assignable_sound >> rw[] >>
+  drule contract_namespaces_ok_deploy_implies_runtime >> strip_tac >>
+  fs[build_contract_type_artifact_nonsig_mode_irrelevant] >>
   qexists `ts` >>
   simp[get_module_code_def, initial_evaluation_context_def] >>
   conj_tac >-
@@ -2292,9 +2342,26 @@ Proof
       metis_tac[ALOOKUP_MEM]) >>
     metis_tac[]) >>
   `check_toplevel_decl mods art src (VariableDecl vis Immutable id ty init)` by
-    metis_tac[check_contract_toplevel_decl_MEM] >>
+    metis_tac[check_contract_toplevel_decl_MEM_checked] >>
   gvs[check_toplevel_decl_def] >>
   metis_tac[assignable_type_not_NoneT]
+QED
+
+Theorem check_contract_bare_global_assignable_consistent_initial:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP sources addr = SOME mods /\
+  tx.target = addr ==>
+  !src id ty.
+    FLOOKUP art.cta_bare_global_assignable (src,id) = SOME ty ==>
+    ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src = SOME ts /\
+         FLOOKUP art.cta_bare_globals (src,id) = SOME ty /\
+         FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\
+         is_immutable_decl id ts /\
+         find_var_decl_by_name id ts = NONE /\
+         ty <> NoneT
+Proof
+  rpt strip_tac >> drule check_contract_runtime_assignable >> strip_tac >>
+  gvs[]
 QED
 
 Theorem check_contract_toplevel_vtypes_consistent_initial:
@@ -2415,7 +2482,7 @@ Theorem check_contract_nonsig_maps:
   check_contract mode layouts addr mods = SOME art ==>
   art.cta_bare_globals = (build_contract_type_artifact F mods).cta_bare_globals /\
   art.cta_bare_global_assignable =
-    (build_contract_type_artifact F mods).cta_bare_global_assignable /\
+    (build_contract_type_artifact mode mods).cta_bare_global_assignable /\
   art.cta_toplevel_vtypes =
     DRESTRICT (build_contract_type_artifact F mods).cta_toplevel_vtypes
       (var_allocated layouts addr mods) /\
@@ -2423,17 +2490,6 @@ Theorem check_contract_nonsig_maps:
 Proof
   strip_tac >> drule check_contract_artifact_fields >> Cases_on `mode` >>
   simp[build_contract_type_artifact_nonsig_mode_irrelevant]
-QED
-
-Theorem check_contract_toplevel_decl_MEM_checked:
-  check_contract mode layouts addr mods = SOME art /\
-  ALOOKUP mods src = SOME ts /\ MEM tl ts ==>
-  check_toplevel_decl mods art src tl
-Proof
-  rw[check_contract_def] >> gvs[EVERY_MEM] >>
-  `MEM (src,ts) mods` by metis_tac[ALOOKUP_MEM] >>
-  first_x_assum drule >>
-  simp[check_module_def, EVERY_MEM]
 QED
 
 (* Constants and immutables need no slot, so the checked artifact types
