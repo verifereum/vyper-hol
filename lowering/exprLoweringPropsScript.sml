@@ -3804,9 +3804,34 @@ Theorem ci_mono_compile_expr_builtin[local]:
   (∀ce rt t bi es s. ci_mono s (SND (g ce rt t bi es s))) ⇒
   ci_mono st (SND (compile_expr_body f g h cenv ty (Builtin ann bi args) st))
 Proof
-  strip_tac >> Cases_on `bi` >>
-  simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @
-       case_lift_thms)
+  strip_tac >> Cases_on `bi`
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >- simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
+  >> simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @ case_lift_thms)
 QED
 
 Theorem ci_mono_compile_expr_body[local]:
@@ -3889,21 +3914,26 @@ Theorem ci_mono_builtin_hash[local]:
   ∀bi. (bi = Keccak256 ∨ bi = Sha256) ⇒
   ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st))
 Proof
-  strip_tac >> gen_tac >> Cases_on `bi` >> simp[]
-  >- (simp[compile_builtin_dispatch_body_def, LET_THM] >>
-      rpt IF_CASES_TAC >> rpt TOP_CASE_TAC >>
+  let
+    val compose =
       rpt (irule ci_mono_uncurry >> reverse conj_tac
            >- simp[ci_mono_lower_value_cfn]
            >> rpt gen_tac >> BETA_TAC) >>
       simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_bytes,
-           ci_mono_compile_keccak256_bytesm, ci_mono_compile_keccak256_word]) >>
-  simp[compile_builtin_dispatch_body_def, LET_THM] >>
-  rpt IF_CASES_TAC >> rpt TOP_CASE_TAC >>
-  rpt (irule ci_mono_uncurry >> reverse conj_tac
-       >- simp[ci_mono_lower_value_cfn]
-       >> rpt gen_tac >> BETA_TAC) >>
-  simp[ci_mono_as_stack_val, ci_mono_compile_sha256_bytes,
-       ci_mono_compile_sha256_bytesm, ci_mono_compile_sha256_word]
+           ci_mono_compile_keccak256_bytesm, ci_mono_compile_keccak256_word,
+           ci_mono_compile_sha256_bytes, ci_mono_compile_sha256_bytesm,
+           ci_mono_compile_sha256_word]
+    val dispatch =
+      simp[compile_builtin_dispatch_body_def, LET_THM] >>
+      rpt IF_CASES_TAC >> Cases_on `expr_type (HD args)` >> simp[] >>
+      (all_tac >>~- ([`BaseT bt`],
+        Cases_on `bt` >> simp[] >>
+        (all_tac >>~- ([`BytesT bd`], Cases_on `bd` >> simp[] >> compose)) >>
+        compose)) >> compose
+  in
+    strip_tac >> gen_tac >> Cases_on `bi` >> simp[]
+    >- dispatch >> dispatch
+  end
 QED
 
 Theorem ci_mono_builtin_membership[local]:
@@ -3919,13 +3949,19 @@ Theorem ci_mono_builtin_membership[local]:
           as_stack_val ret_ty
             (compile_var_array_membership cenv needle vv rhs_ty is_in st'))))
 Proof
-  strip_tac >> Cases_on `e` >> simp[LET_THM] >> rpt TOP_CASE_TAC >>
-  rpt (irule ci_mono_uncurry >> reverse conj_tac
-       >- simp[ci_mono_compile_multi_exprs]
-       >> rpt gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >>
-  simp[ci_mono_as_stack_val, ci_mono_compile_list_membership_in,
-       ci_mono_compile_list_membership_notin, ci_mono_compile_var_array_membership]
+  let
+    val compose =
+      rpt (irule ci_mono_uncurry >> reverse conj_tac
+           >- simp[ci_mono_compile_multi_exprs]
+           >> rpt gen_tac >> BETA_TAC) >>
+      rpt IF_CASES_TAC >>
+      simp[ci_mono_as_stack_val, ci_mono_compile_list_membership_in,
+           ci_mono_compile_list_membership_notin, ci_mono_compile_var_array_membership]
+  in
+    strip_tac >> Cases_on `e` >> simp[LET_THM] >>
+    (all_tac >>~- ([`Builtin ann bi es`],
+      Cases_on `bi` >> simp[LET_THM] >> compose)) >> compose
+  end
 QED
 
 Theorem ci_mono_builtin_bop[local]:
