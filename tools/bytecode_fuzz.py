@@ -12,9 +12,9 @@ lowering/defs/bytecode/README.md). Programs Python Vyper rejects are
 discarded; programs the HOL frontend, check_contract or the compiler rejects
 are coverage gaps, counted separately from divergences. check_contract runs
 through `holbuild run` on lowering/defs/bytecode/native/check_programs.sml,
-so build vyperCheckContractFrontendLib's theories first. Every program that
-is not a PASS is kept in the output directory with its JSON, oracle, native
-bytes and verdict.
+after the driver brings vyperCheckContractFrontendLib up to date with
+`holbuild build`. Every program that is not a PASS is kept in the output
+directory with its JSON, oracle, native bytes and verdict.
 
 Vyper's bytecode at the pin depends on PYTHONHASHSEED for some programs, so
 the oracle uses seed 0, and a mismatch counts as a divergence only if seeds
@@ -429,6 +429,10 @@ def main():
     compiler = run(["vyper", "--version"]).stdout.strip()
     if not compiler.endswith("commit." + pin[:8]):
         raise SystemExit(f"vyper on PATH is {compiler!r}, not VYPER_PIN {pin}")
+    # holbuild run loads the checker's theories as built; stale ones fail to load.
+    subprocess.run(["holbuild", "build", "--skip-checkpoints", "--skip-proof-steps",
+                    "vyperCheckContractFrontendLib"], cwd=ROOT, check=True,
+                   stdin=subprocess.DEVNULL)
     work = args.out / "work"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
