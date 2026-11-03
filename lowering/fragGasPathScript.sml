@@ -135,7 +135,11 @@ QED
 Theorem gas_path_suffix:
   gas_path ctx fn s n r ==> gas_count_suffix n s r
 Proof
-  cheat
+  map_every qid_spec_tac [`r`, `n`, `s`, `fn`, `ctx`] >>
+  ho_match_mp_tac gas_path_ind >> rpt conj_tac
+  >- simp[gas_count_suffix_def]
+  >- metis_tac[gas_path_edge_suffix, gas_count_suffix_compose]
+  >> metis_tac[gas_path_edge_suffix]
 QED
 
 Theorem gas_path_normal:
@@ -159,5 +163,17 @@ Theorem gas_path_then:
   gas_path ctx fn s n (OK t) /\ gas_path ctx fn t m r ==>
   gas_path ctx fn s (n + m) r
 Proof
-  cheat
+  `!ctx fn s n res. gas_path ctx fn s n res ==>
+     !t m r. res = OK t /\ gas_path ctx fn t m r ==>
+       gas_path ctx fn s (n + m) r` suffices_by metis_tac[] >>
+  ho_match_mp_tac gas_path_ind >> rpt conj_tac
+  >- simp[]
+  >- (rpt strip_tac >> gvs[] >>
+      first_x_assum drule >> strip_tac >>
+      `gas_path ctx fn s (n + (m + n')) r` by
+        (irule (cj 2 gas_path_rules) >> qexists_tac `s''` >> simp[]) >>
+      `m + (n + n') = n + (m + n')` by decide_tac >>
+      asm_rewrite_tac[])
+  >> rpt strip_tac >> gvs[exit_result_def]
+
 QED
