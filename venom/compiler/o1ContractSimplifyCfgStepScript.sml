@@ -141,8 +141,76 @@ Proof
   metis_tac[]
 QED
 
+Theorem simplify_cfg_o1_fn_shape:
+  o1_fn_shape ctx f ==> o1_fn_shape ctx (FST (simplify_cfg_fn_with_labels f))
+Proof
+  strip_tac >>
+  drule simplify_cfg_structural_shape >> strip_tac >>
+  drule simplify_cfg_fn_shape >> strip_tac >>
+  `wf_function (FST (simplify_cfg_fn_with_labels f))` by
+    (rewrite_tac[GSYM simplify_cfg_fn_def] >>
+     irule simplify_cfg_preserves_wf_function >> gvs[o1_fn_shape_def]) >>
+  `fn_identity_metadata_eq (FST (simplify_cfg_fn_with_labels f)) f` by
+    (irule (cj 1 simplify_cfg_fn_with_labels_metadata) >>
+     qexists_tac `SND (simplify_cfg_fn_with_labels f)` >> simp[]) >>
+  `fn_inst_wf (FST (simplify_cfg_fn_with_labels f))` by
+    (gvs[fn_inst_wf_def, EVERY_MEM, fn_insts_def, fn_insts_blocks_MEM] >>
+     metis_tac[]) >>
+  simp[o1_fn_shape_def] >> rpt conj_tac
+  >- (rewrite_tac[fn_invoke_ok_def] >> rpt strip_tac >>
+      `inst_wf inst` by gvs[EVERY_MEM] >>
+      `?lbl rest. inst.inst_operands = Label lbl :: rest` by
+        gvs[inst_wf_def] >>
+      qexistsl_tac [`lbl`, `rest`] >> simp[] >>
+      `MEM lbl (simplify_cfg_fn_invoke_labels
+          (FST (simplify_cfg_fn_with_labels f)))` by
+        (gvs[simplify_cfg_fn_invoke_labels_mem, fn_insts_def,
+             fn_insts_blocks_MEM] >> metis_tac[]) >>
+      drule simplify_cfg_fn_with_labels_no_new_call_edges >>
+      simp[simplify_cfg_fn_invoke_labels_mem] >> strip_tac >>
+      gvs[o1_fn_shape_def, fn_invoke_ok_def, fn_insts_def,
+          fn_insts_blocks_MEM] >>
+      first_x_assum (qspec_then `inst'` mp_tac) >> simp[] >>
+      (impl_tac >- metis_tac[]) >> simp[])
+  >- (gvs[fn_identity_metadata_eq_def] >> strip_tac >>
+      conj_tac
+      >- (irule simplify_cfg_entry_no_return >> gvs[o1_fn_shape_def]) >>
+      irule simplify_cfg_entry_no_params >> gvs[o1_fn_shape_def]) >>
+  gvs[fn_identity_metadata_eq_def] >> strip_tac >>
+  ho_match_mp_tac simplify_cfg_fn_with_labels_opcodes >> gvs[o1_fn_shape_def]
+QED
+
 Theorem simplify_cfg_step_contract:
   o1_step_contract rpolicy (CFP_Simple VP_SimplifyCFG)
 Proof
-  cheat
+  rewrite_tac[o1_step_contract_def] >> rpt gen_tac >> strip_tac >>
+  `MEM fn observed.cu_context.ctx_functions` by
+    (gvs[fn_pass_step_def] >>
+     metis_tac[venomFnScheduleRunnerPropsTheory.lookup_unique_function_member]) >>
+  `o1_fn_shape observed.cu_context fn` by
+    gvs[o1_ctx_shape_def, EVERY_MEM] >>
+  qpat_x_assum `fn_pass_step _ _ _ _ _ _` mp_tac >>
+  simp[fn_pass_step_def, pairTheory.FORALL_PROD] >>
+  Cases_on `simplify_cfg_fn_with_labels fn` >> simp[] >> strip_tac >>
+  gvs[] >>
+  drule simplify_cfg_o1_fn_shape >> simp[] >> strip_tac >>
+  `ALL_DISTINCT (fn_labels fn)` by gvs[o1_fn_shape_def, wf_function_def] >>
+  drule simplify_cfg_fn_with_labels_transition >> simp[] >> strip_tac >>
+  conj_tac
+  >- (simp[fresh_names_ok_def] >> conj_tac
+      >- (gvs[label_map_transition_def, EVERY_MEM] >> metis_tac[]) >>
+      rpt strip_tac >> disj1_tac >>
+      mp_tac (Q.INST [`f` |-> `fn`] simplify_cfg_fn_with_labels_ids) >>
+      gvs[irSupplyTheory.fn_ir_inst_ids_def, MEM_FLAT, MEM_MAP,
+          irSupplyTheory.block_ir_inst_ids_def, fn_insts_def,
+          fn_insts_blocks_MEM] >>
+      (impl_tac >- metis_tac[]) >> strip_tac >>
+      qexists_tac `MAP (\i. i.inst_id) bb.bb_instructions` >>
+      simp[MEM_MAP] >> metis_tac[]) >>
+  `MEM fn.fn_name (fn_labels q)` by
+    (gvs[o1_fn_shape_def, fn_shape_ok_def, fn_entry_label_def,
+         entry_block_def, fn_labels_def, NULL_EQ] >>
+     Cases_on `q.fn_blocks` >> gvs[]) >>
+  gvs[label_map_sources_ok_def, label_map_transition_def, EVERY_MEM] >>
+  metis_tac[]
 QED

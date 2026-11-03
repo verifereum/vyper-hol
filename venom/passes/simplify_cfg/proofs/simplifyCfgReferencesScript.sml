@@ -59,21 +59,39 @@ Proof
   gvs[pred_labels_mem, fn_labels_def, MEM_MAP] >> metis_tac[]
 QED
 
+Theorem label_positions_default[local]:
+  i.inst_opcode <> JMP /\ i.inst_opcode <> JNZ /\
+  i.inst_opcode <> PHI /\ i.inst_opcode <> INVOKE /\
+  i.inst_opcode <> ADD ==>
+  (label_positions_ok i <=>
+   EVERY (\op. ~is_label_operand op) i.inst_operands)
+Proof
+  Cases_on `i.inst_opcode` >> simp[label_positions_ok_def]
+QED
+
 Theorem label_positions_block_or_reserved:
   label_positions_ok i /\ i.inst_opcode <> INVOKE /\
   MEM (Label l) i.inst_operands ==>
   is_block_label_opcode i.inst_opcode \/ reserved_label l
 Proof
-  strip_tac >> Cases_on `i.inst_opcode` >>
-  gvs[is_block_label_opcode_def, is_terminator_def,
-      label_positions_ok_def, EVERY_MEM]
-  >- (Cases_on `i.inst_operands` >- gvs[] >>
+  strip_tac >>
+  Cases_on `i.inst_opcode = JMP`
+  >- simp[is_block_label_opcode_def, is_terminator_def] >>
+  Cases_on `i.inst_opcode = JNZ`
+  >- simp[is_block_label_opcode_def, is_terminator_def] >>
+  Cases_on `i.inst_opcode = PHI`
+  >- simp[is_block_label_opcode_def] >>
+  Cases_on `i.inst_opcode = ADD`
+  >- (gvs[label_positions_ok_def, EVERY_MEM] >>
+      Cases_on `i.inst_operands` >- gvs[] >>
       rename1 `i.inst_operands = h::rest` >>
       Cases_on `rest` >- gvs[stackPlanTypesTheory.is_label_operand_def] >>
       rename1 `i.inst_operands = h::second::tail` >>
       Cases_on `second` >> Cases_on `tail` >>
       gvs[stackPlanTypesTheory.is_label_operand_def, reserved_label_def] >>
       metis_tac[stackPlanTypesTheory.is_label_operand_def]) >>
+  drule_all label_positions_default >>
+  gvs[EVERY_MEM] >>
   metis_tac[stackPlanTypesTheory.is_label_operand_def]
 QED
 

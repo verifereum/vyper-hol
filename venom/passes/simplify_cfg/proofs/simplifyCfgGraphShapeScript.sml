@@ -399,7 +399,7 @@ Proof
   rename1 `MEM bb fn.fn_blocks` >>
   Cases_on `bb.bb_label = a.bb_label` >> simp[merge_blocks_succs,
     EVERY_MEM, MEM_FILTER] >> disch_tac >> gen_tac >> disch_tac >> reverse conj_tac
-  >- metis_tac[fn_succs_closed_def] 
+  >- metis_tac[fn_succs_closed_def]
   >- (strip_tac >> `b = a` by
         (irule num_preds_one_unique >> gvs[can_merge_blocks_def] >>
          metis_tac[]) >> gvs[can_merge_blocks_def])
