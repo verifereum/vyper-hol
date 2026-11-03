@@ -11,12 +11,8 @@ Ancestors
 (* Exhaustive checker boundary for dynamic bytestring results. *)
 Theorem valid_conversion_to_bytestring:
   !src dst.
-    is_bytestring_type dst ==>
-    (valid_conversion src dst <=>
-      (?i n. src = BaseT (BytesT (Dynamic i)) /\
-             (dst = BaseT (BytesT (Dynamic n)) \/ dst = BaseT (StringT n))) \/
-      (?i n. src = BaseT (StringT i) /\
-             (dst = BaseT (BytesT (Dynamic n)) \/ dst = BaseT (StringT n))))
+    valid_conversion src dst /\ is_bytestring_type dst ==>
+    is_bytestring_type src
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `dst` >> gvs[is_bytestring_type_def] >>
@@ -963,8 +959,8 @@ Theorem convert_bytestring_suffix_grows:
     sa.cs_next_id <= sb.cs_next_id
 Proof
   rpt gen_tac >> strip_tac >>
-  drule valid_conversion_to_bytestring >> strip_tac >>
-  gvs[mk_convert_op_to_bytestring] >>
+  drule_all valid_conversion_to_bytestring >> strip_tac >>
+  gvs[bytestring_type_cases, mk_convert_op_to_bytestring] >>
   metis_tac[convert_cast_grows]
 QED
 
@@ -1079,9 +1075,8 @@ Theorem convert_bytestring_cont[local]:
       (expr_exit (convert_result cx (expr_type e1) (expr_type e) v))
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `valid_conversion _ _` mp_tac >>
-  simp[valid_conversion_to_bytestring] >> strip_tac >>
-  gvs[is_bytestring_type_def, mk_convert_op_to_bytestring] >>
+  drule_all valid_conversion_to_bytestring >> strip_tac >>
+  gvs[bytestring_type_cases, mk_convert_op_to_bytestring] >>
   qpat_assum `expr_type e1 = _` (fn th => pure_rewrite_tac [GSYM th]) >>
   qpat_assum `expr_type e = _` (fn th => pure_rewrite_tac [GSYM th]) >>
   irule convert_dynamic_cont >> goal_assum (drule_at Any) >>
