@@ -3235,8 +3235,23 @@ Proof
     simp[]
 QED
 
-val mul_sdiv_mismatch_tac =
-  strip_tac >>
+Theorem w2i_n2w_min_256[local]:
+  w2i (n2w (2 ** 255) : bytes32) = -&(2 ** 255)
+Proof
+  CONV_TAC EVAL
+QED
+
+Theorem signed_mul_div_exception[local]:
+  !ty (a:bytes32) b.
+    is_signed_type ty /\ type_bits ty <= 256 /\
+    in_type_range ty (math_val ty a) /\ b <> 0w /\
+    ~(INT_MIN (:256) <= w2i a * w2i b /\
+      w2i a * w2i b <= INT_MAX (:256)) ==>
+    (safe_sdiv (a * b) b = a ==>
+     type_bits ty = 256 /\ a = n2w (2 ** 255) /\
+     b = n2w (2 ** 256 - 1))
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >>
   reverse (Cases_on `a = n2w (2 ** 255) ∧ b = n2w (2 ** 256 − 1)`)
   >- (`safe_sdiv (a * b) b ≠ a` suffices_by simp[] >>
       irule safe_sdiv_mul_overflow >>
@@ -3247,7 +3262,14 @@ val mul_sdiv_mismatch_tac =
   `2 ** (type_bits ty − 1) < 2 ** 255` by simp[] >>
   qpat_x_assum `in_type_range ty (math_val ty a)` mp_tac >>
   qpat_x_assum `a = _ ∧ _` (fn th => rewrite_tac [CONJUNCT1 th]) >>
-  simp[math_val_def, in_type_range_def, w2i_int_min_w_256] >> intLib.ARITH_TAC;
+  pure_rewrite_tac[math_val_def] >>
+  asm_rewrite_tac[] >> pure_rewrite_tac[w2i_n2w_min_256] >>
+  pure_rewrite_tac[in_type_range_def, LET_THM] >> BETA_TAC >>
+  asm_rewrite_tac[] >>
+  `&(2 ** (type_bits ty - 1)) < &(2 ** 255) : int` by
+    (pure_rewrite_tac[integerTheory.INT_LT] >> first_assum ACCEPT_TAC) >>
+  intLib.ARITH_TAC
+QED
 
 (* An integer multiplication whose product is out of the type's range
    reverts: by the clamp up to 128 bits, by the division check when the
@@ -3325,7 +3347,9 @@ Proof
            ≠ a ∨
          (is_signed_type ty ∧ type_bits ty = 256 ∧ a = n2w (2 ** 255) ∧
           b = n2w (2 ** 256 − 1))` by
-          (Cases_on `is_signed_type ty` >> fs[] >- mul_sdiv_mismatch_tac >- mul_sdiv_mismatch_tac >>
+          (Cases_on `is_signed_type ty` >> fs[]
+           >- (strip_tac >> irule (SRULE [] signed_mul_div_exception) >> simp[int_min_256, int_max_256])
+           >- (strip_tac >> irule (SRULE [] signed_mul_div_exception) >> simp[int_min_256, int_max_256]) >>
            irule safe_div_mul_overflow >> fs[]) >>
         qspecl_then [`x`, `y`, `res`, `is_signed_type ty`, `type_bits ty`, `cs'`,
                      `cs''`, `ss'`, `a`, `b`] mp_tac mul_overflow_check_reverts >>
