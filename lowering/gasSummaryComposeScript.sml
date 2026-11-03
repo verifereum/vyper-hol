@@ -14,6 +14,28 @@ Proof
   simp[gas_count_suffix_def, gas_explicit_append]
 QED
 
+Theorem gas_source_bind_normal:
+  (!tail. source (es with gas_obs := xs ++ tail) =
+     (INL v, mid with gas_obs := tail)) /\
+  (!tail. next v ((mid with gas_obs := []) with gas_obs := ys ++ tail) =
+     (res, fin with gas_obs := tail)) ==>
+  !tail. bind source next (es with gas_obs := (xs ++ ys) ++ tail) =
+     (res, fin with gas_obs := tail)
+Proof
+  strip_tac >> gen_tac >>
+  gvs[] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[bind_def]
+QED
+
+Theorem gas_source_bind_exception:
+  (!tail. source (es with gas_obs := xs ++ tail) =
+     (INR exc, fin with gas_obs := tail)) ==>
+  !tail. bind source next (es with gas_obs := xs ++ tail) =
+     (INR exc, fin with gas_obs := tail)
+Proof
+  simp[bind_def]
+QED
+
 Theorem gas_summary_bind:
   gas_summary (ctx, func) source (es, s0)
     (\res es_mid t.
