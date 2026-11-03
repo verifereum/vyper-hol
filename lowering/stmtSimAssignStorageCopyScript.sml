@@ -826,7 +826,7 @@ Proof
           ((if tr then tstore else sstore) k (mload (w2n b) s) s))` by
        (irule stmt_state_rel_update_var >> simp[]) >>
      Cases_on `tr` >>
-     simp[run_inst_seq_def, step_inst_base_def, exec_write2_def,
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, exec_write2_def,
           mk_inst_def, eval_operand_def, lookup_var_def, update_var_def,
           FLOOKUP_UPDATE, stmt_state_rel_inst_idx] >>
      qpat_x_assum `stmt_state_rel _ _ _ _ _ (update_var _ _ _)` mp_tac >>
