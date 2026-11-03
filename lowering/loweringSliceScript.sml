@@ -245,6 +245,7 @@ Proof
   ho_match_mp_tac val_wf_ind >> rpt conj_tac >> rpt gen_tac >>
   TRY (qmatch_goalsub_rename_tac
          `immutable_value_admissible tv _ ==> val_wf tv _` >> Cases_on `tv`) >>
+  simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
   TRY (qmatch_goalsub_rename_tac `BaseTV bt` >> Cases_on `bt`) >>
   TRY (qmatch_goalsub_rename_tac `BytesT bound` >> Cases_on `bound`) >>
   TRY (qmatch_goalsub_rename_tac `ArrayTV _ bound` >> Cases_on `bound`) >>
@@ -258,10 +259,11 @@ Proof
   simp[immutable_value_admissible_def, val_wf_def, type_memory_size_def,
        AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
   TRY (first_x_assum irule >> simp[] >> NO_TAC) >>
-  FIRST [BasicProvers.TOP_CASE_TAC >> gvs[immutable_value_admissible_def],
+  FIRST [BasicProvers.FULL_CASE_TAC >> gvs[immutable_value_admissible_def],
          fs[ETA_THM] >> NO_TAC,
          metis_tac[immutableEncodingProofsTheory.immutable_capacity_roundup,
-                   arithmeticTheory.LESS_EQ_TRANS]]
+                   arithmeticTheory.LESS_EQ_TRANS]] >>
+  metis_tac[ETA_THM]
 QED
 
 (* Transport the semantic immutable relation by capacity-sized memory
