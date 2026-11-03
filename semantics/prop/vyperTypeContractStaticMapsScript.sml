@@ -2439,7 +2439,7 @@ QED
 (* Constants and immutables need no slot, so the checked artifact types
    them whatever the layouts. *)
 Theorem check_contract_bare_global_toplevel_vtype:
-  check_contract mode (checker_layouts : ('checker_addr, ((num option # string), 'checker_slot) alist # ((num option # string), 'checker_slot) alist) alist) checker_addr mods = SOME art /\
+  check_contract mode (checker_layouts : ('checker_addr, ((num option # string), num) alist # ((num option # string), num) alist) alist) checker_addr mods = SOME art /\
   ALOOKUP mods src = SOME ts /\
   MEM (VariableDecl vis mut id ty init) ts /\
   (mut = Immutable \/ ?e. mut = Constant e) ==>
@@ -2457,7 +2457,7 @@ Proof
 QED
 
 Theorem check_contract_bare_globals_consistent_checked:
-  check_contract mode (checker_layouts : ('checker_addr, ((num option # string), 'checker_slot) alist # ((num option # string), 'checker_slot) alist) alist) checker_addr mods = SOME art /\
+  check_contract mode (checker_layouts : ('checker_addr, ((num option # string), num) alist # ((num option # string), num) alist) alist) checker_addr mods = SOME art /\
   ALOOKUP sources tx.target = SOME mods ==>
   !src id ty.
     FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==>

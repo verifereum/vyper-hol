@@ -899,7 +899,7 @@ Definition check_function_body_def:
     let tenv = type_env_all_modules mods in
     let env = function_entry_env art mods src args in
       params_ok tenv args /\
-      (nr ==> IS_SOME (lookup_nonreentrant_slot layouts addr)) /\
+      (nr ==> lookup_nonreentrant_slot layouts addr = SOME 0) /\
       IS_SOME (evaluate_type tenv ret) /\
       IS_SOME (type_stmts env ret body) /\
       custom_errors_stmts_ok mods body /\
