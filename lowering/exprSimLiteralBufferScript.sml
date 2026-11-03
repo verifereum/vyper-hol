@@ -338,7 +338,8 @@ Proof
       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
   simp[exprLoweringPropsTheory.emitted_insts_def, exprLoweringPropsTheory.same_blocks_def, rich_listTheory.DROP_APPEND1,
        exprLoweringPropsTheory.run_inst_seq_def,
-       venomExecSemanticsTheory.step_inst_base_def,
+       stepInstBaseLib.simp_opcode_clause ``ADD``,
+       stepInstBaseLib.simp_opcode_clause ``MSTORE``, venomInstTheory.mk_inst_def,
        venomExecSemanticsTheory.exec_pure2_def,
        venomExecSemanticsTheory.exec_write2_def, eval_operand_def,
        venomExecSemanticsTheory.bind_outputs_def, emitHelperPropsTheory.lookup_var_update_var] >>
