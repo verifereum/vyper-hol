@@ -60,7 +60,8 @@ QED
 
 Theorem update_succ_phi_labels_block_correspondence:
   ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
-  (!inst. project (subst_label_inst old_lbl new_lbl inst) = project inst) ==>
+  (!inst. inst.inst_opcode = PHI ==>
+    project (subst_label_inst old_lbl new_lbl inst) = project inst) ==>
   (!bb'. MEM bb' (update_succ_phi_labels old_lbl new_lbl bbs succs) ==>
     ?bb. MEM bb bbs /\ bb'.bb_label = bb.bb_label /\
          MAP project bb'.bb_instructions = MAP project bb.bb_instructions) /\
@@ -318,4 +319,31 @@ Proof
   qexistsl [`bb''`, `inst'`] >> simp[] >>
   irule chain_endpoint_path_member >> simp[] >> qexists `bb.bb_label` >>
   fs[Abbr `expanded`]
+QED
+
+Theorem update_succ_phi_labels_index_correspondence:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
+  MEM bb' (update_succ_phi_labels old_lbl new_lbl bbs succs) ==>
+  ?bb. MEM bb bbs /\ bb'.bb_label = bb.bb_label /\
+    LENGTH bb'.bb_instructions = LENGTH bb.bb_instructions /\
+    (!i. i < LENGTH bb.bb_instructions ==>
+      (EL i bb'.bb_instructions).inst_outputs = (EL i bb.bb_instructions).inst_outputs /\
+      ((EL i bb'.bb_instructions).inst_opcode = PHI <=>
+       (EL i bb.bb_instructions).inst_opcode = PHI) /\
+      ((EL i bb.bb_instructions).inst_opcode <> PHI ==>
+       EL i bb'.bb_instructions = EL i bb.bb_instructions))
+Proof
+  strip_tac >>
+  `?bb. MEM bb bbs /\ bb'.bb_label = bb.bb_label /\
+    MAP (\i. (i.inst_outputs, if i.inst_opcode = PHI then NONE else SOME i))
+      bb'.bb_instructions =
+    MAP (\i. (i.inst_outputs, if i.inst_opcode = PHI then NONE else SOME i))
+      bb.bb_instructions` by
+    (irule (cj 1 update_succ_phi_labels_block_correspondence) >>
+     simp[subst_label_inst_def] >> metis_tac[]) >>
+  `LENGTH bb'.bb_instructions = LENGTH bb.bb_instructions` by
+    metis_tac[LENGTH_MAP] >>
+  qexists `bb` >> simp[] >> gen_tac >> strip_tac >>
+  qpat_x_assum `MAP _ _ = MAP _ _` (mp_tac o Q.AP_TERM `EL i`) >>
+  simp[EL_MAP] >> rpt IF_CASES_TAC >> gvs[]
 QED

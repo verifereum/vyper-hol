@@ -1122,7 +1122,8 @@ QED
 
 Theorem update_succ_phi_labels_block_projection:
   !succs bbs. ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
-  (!inst. project (subst_label_inst old_lbl new_lbl inst) = project inst) ==>
+  (!inst. inst.inst_opcode = PHI ==>
+    project (subst_label_inst old_lbl new_lbl inst) = project inst) ==>
   MAP (\bb. (bb.bb_label, MAP project bb.bb_instructions))
     (update_succ_phi_labels old_lbl new_lbl bbs succs) =
   MAP (\bb. (bb.bb_label, MAP project bb.bb_instructions)) bbs
@@ -1136,7 +1137,7 @@ Proof
    MAP (\b. (b.bb_label, MAP project b.bb_instructions)) bbs` by
     (simp[Abbr `bs`] >> irule replace_block_projection >>
      simp[MAP_MAP_o, combinTheory.o_DEF] >>
-     irule MAP_CONG >> simp[] >> rpt strip_tac >> IF_CASES_TAC >> simp[]) >>
+     irule MAP_CONG >> simp[] >> rpt strip_tac >> IF_CASES_TAC >> fs[]) >>
   `ALL_DISTINCT (MAP (\b. b.bb_label) bs)` by
     simp[Abbr `bs`, cfgTransformPropsTheory.fn_labels_replace_block] >>
   first_x_assum (qspec_then `bs` mp_tac) >>
@@ -1151,6 +1152,8 @@ Theorem update_succ_phi_labels_projection:
   MAP (\bb. MAP project bb.bb_instructions) bbs
 Proof
   rpt strip_tac >>
+  `!inst. inst.inst_opcode = PHI ==>
+    project (subst_label_inst old_lbl new_lbl inst) = project inst` by simp[] >>
   drule_all update_succ_phi_labels_block_projection >>
   disch_then (qspec_then `succs` mp_tac) >>
   disch_then (mp_tac o Q.AP_TERM `MAP SND`) >>
