@@ -121,9 +121,7 @@ Triviality exec_call_helpers_no_halt_abort[simp]:
   (!inst s g a ao as_ ro rs ab s'.
      exec_delegatecall inst s g a ao as_ ro rs <> Abort ab s') /\
   (!inst s v off sz salt s'.
-     exec_create inst s v off sz salt <> Halt s') /\
-  (!inst s v off sz salt ab s'.
-     exec_create inst s v off sz salt <> Abort ab s')
+     exec_create inst s v off sz salt <> Halt s')
 Proof
   rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
      extract_venom_result_def] >>

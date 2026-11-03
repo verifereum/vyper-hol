@@ -634,87 +634,312 @@ Theorem step_inst_base_output_vars_agree:
     !v. MEM v inst.inst_outputs ==> lookup_var v v1 = lookup_var v v2
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
-      read_effects_def, write_effects_def,
-      all_effects_def, empty_effects_def]
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >- output_vars_finish_tac
-  >> output_vars_finish_tac
+  Cases_on `inst.inst_opcode`
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >- (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
+  >> (gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+          read_effects_def, write_effects_def, all_effects_def, empty_effects_def] >>
+      output_vars_finish_tac)
 QED
+
 
 (* Output variable determinism for effect-free ops: if operands and
    read-state agree, the output variable values agree.
