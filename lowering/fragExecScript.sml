@@ -982,8 +982,9 @@ Theorem frag_outcome_jmp[local]:
   frag_outcome ctx fn s sb Q R
 Proof
   rpt strip_tac >> irule frag_outcome_jump >>
-  goal_assum (drule_at Any) >>
-  simp[mk_inst_def, is_terminator_def, step_inst_base_def] >> metis_tac[]
+  conj_tac >- simp[] >>
+  qexistsl_tac [`bb`, `mk_inst id JMP [Label lbl] []`, `lbl`] >>
+  simp[mk_inst_def, is_terminator_def, Once step_inst_base_def]
 QED
 
 Theorem frag_outcome_jnz[local]:
