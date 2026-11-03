@@ -1476,3 +1476,64 @@ Theorem popped_base_read_kept:
 Proof
   cheat
 QED
+
+(* Mapping execution consumers need the compiler's exact key/value types,
+   not only the existential types in expr_map_sim. *)
+Theorem expr_map_pre_checked_type:
+  expr_map_pre cenv cx env obj es /\
+  place_type cenv obj = MapPT kt vt ==>
+  type_place_expr env obj = SOME (HashMapT kt vt)
+Proof
+  strip_tac >>
+  `place_map_tables_agree_on_defined cenv env /\
+   ?bkt bvt. type_place_expr env obj = SOME (HashMapT bkt bvt)` by
+    gvs[expr_map_pre_def, expr_sim_inv_def] >>
+  drule_all place_type_checked_place_on_defined >>
+  simp[value_type_place_def] >> strip_tac >> gvs[]
+QED
+
+Theorem expr_map_pre_result_types:
+  expr_map_pre cenv cx env obj es /\
+  place_type cenv obj = MapPT kt vt /\
+  eval_expr cx obj es = (INL (HashMapRef tr slot kt' vt'),em) ==>
+  kt' = kt /\ vt' = vt
+Proof
+  strip_tac >> drule_all expr_map_pre_eval_result >> strip_tac >>
+  drule_all expr_map_pre_checked_type >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem eval_expr_subscript_forced_index:
+  eval_expr cx obj es = (INL bres,em) /\
+  (do ir <- eval_expr cx idx; read_result cx ir od) em = (kr,en) ==>
+  eval_expr cx (Subscript ann obj idx) es =
+    case kr of
+      INL kv => select_result cx (expr_type obj) bres (ValueSubscript kv) en
+    | INR exc => (INR exc,en)
+Proof
+  strip_tac >>
+  Cases_on `eval_expr cx idx em` >> rename1 `_ = (ir,ei)` >>
+  Cases_on `ir` >> gvs[bind_def]
+  >- (rename1 `read_result cx iv ei = (kr,en)` >>
+      Cases_on `kr` >> gvs[] >> simp[Once evaluate_def, bind_def]) >>
+  simp[Once evaluate_def, bind_def]
+QED
+
+Theorem mapping_subscript_key_type:
+  (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
+   expr_map_pre cenv cx env (Subscript ann obj idx) es) /\
+  place_type cenv obj = MapPT kt vt ==>
+  expr_type idx = kt /\ hashmap_key_type kt
+Proof
+  strip_tac >>
+  `expr_map_pre cenv cx env obj es` by
+    metis_tac[expr_body_pre_map_subscript_base, expr_map_pre_subscript_base] >>
+  drule_all expr_map_pre_checked_type >> strip_tac >>
+  gvs[expr_body_pre_def, expr_map_pre_def, Once well_typed_expr_def,
+      subscript_vtype_def, AllCaseEqs()] >>
+  `place_map_tables_agree_on_defined cenv env /\
+   (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
+              cenv.ce_hashmap_info nsid = NONE)` by
+    gvs[expr_sim_inv_def] >>
+  drule_all place_type_well_typed_on_defined >> simp[]
+QED

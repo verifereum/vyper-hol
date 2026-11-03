@@ -409,3 +409,29 @@ Proof
   simp[] >> irule expr_subscript_pre_index >>
   simp[] >> qexistsl [`ann`, `es`, `obj`] >> simp[]
 QED
+
+Theorem mapping_subscript_key_typed:
+  (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
+   expr_map_pre cenv cx env (Subscript ann obj idx) es) /\
+  place_type cenv obj = MapPT kt vt /\
+  eval_expr cx obj es = (INL bres,em) /\
+  (do ir <- eval_expr cx idx; read_result cx ir od) em = (INL kv,en) ==>
+  expr_sim_inv cenv cx env en /\ expr_type idx = kt /\
+  hashmap_key_type kt /\
+  ?tv. evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv
+Proof
+  strip_tac >>
+  `expr_body_pre cenv cx env idx em` by
+    metis_tac[mapping_subscript_index_pre] >>
+  `expr_type idx = kt /\ hashmap_key_type kt` by
+    metis_tac[mapping_subscript_key_type] >>
+  drule_all expr_body_pre_eval >> strip_tac >>
+  gvs[vyperTypeExprResultTheory.expr_result_typed_def,
+      vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
+      vyperTypeExprSoundnessTheory.value_runtime_typed_def,
+      vyperTypeInvariantsTheory.value_result_typed_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  metis_tac[]
+QED
