@@ -194,7 +194,8 @@ Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   gvs[run_inst_seq_def] >>
   qpat_x_assum `_ = OK s'` mp_tac >>
-  simp_tac (srw_ss()) [Once step_inst_base_def, mk_inst_def] >>
+  simp_tac (srw_ss()) [mk_inst_def] >>
+  simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
   simp[exec_pure2_def, exec_pure1_def, AllCaseEqs(), update_var_def] >>
   rpt strip_tac >> gvs[]
 QED
