@@ -1298,3 +1298,17 @@ Proof
       gvs[] >> decide_tac) >>
   disj2_tac >> disj2_tac >> decide_tac
 QED
+
+Theorem array_element_encoding_typing_probe[local]:
+  val_wf (ArrayTV (BaseTV (UintT 256)) (Fixed 1))
+    (ArrayV (SArrayV [(0,NoneV)])) /\
+  val_in_memory (ArrayTV (BaseTV (UintT 256)) (Fixed 1))
+    (ArrayV (SArrayV [(0,NoneV)])) 0 (REPLICATE 32 (1w:8 word)) /\
+  evaluate_subscripts (ArrayTV (BaseTV (UintT 256)) (Fixed 1))
+    (ArrayV (SArrayV [(0,NoneV)])) [ValueSubscript (IntV 0)] = INL NoneV /\
+  mem_word_at 0 (REPLICATE 32 (1w:8 word)) <>
+    typed_val_to_w256 (BaseTV (UintT 256)) NoneV
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def] >> rpt strip_tac >> gvs[]
+QED
+
