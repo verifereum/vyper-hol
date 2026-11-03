@@ -10,7 +10,11 @@
  * tuple or a mapping, which do not type.  Cheated, for the later #636 PRs:
  * array and mapping subscripts and pop on any other target, by kind
  * (compile_pop_storage_sim, compile_pop_immutable_sim,
- * compile_pop_nested_sim).
+ * compile_pop_nested_sim).  Admitted: an array subscript with a pop
+ * (compile_subscript_array_pop_case), with a call in the index of a
+ * storage or transient base (compile_subscript_array_storage_call_case),
+ * or of an immutable in the constructor
+ * (compile_subscript_array_ctor_code_case).
  *
  * TOP-LEVEL:
  *   compile_subscript_case — static and dynamic arrays with the
@@ -175,23 +179,95 @@ Proof
   Cases_on `expr_type obj` >> gvs[subscript_vtype_def]
 QED
 
-(* An element of a static or dynamic array, with the bounds-check abort.
-   Cheated: compile_subscript lowers the index after the base, and the
-   base's value_vv must still hold its value when the index's fragment
-   ends.  Where the base points into a live local's region (x[i] for a
-   local x), the index can change that local (x[x.pop()]), and expr_post
-   then says only that the local holds its new value, at its region: the
-   base's pointer is the local's place at a path, but vv_holds does not say
-   so, so the element's value at the base's pointer does not follow.  The
-   proof needs vv_holds to relate a pointer into a local's region to the
-   place it reads (a place-pointer relation), or a fragment for the index
-   that keeps the base's bytes (exprSimOperands keeps a base in the
-   expression's own allocations only).  The bounds check itself, a source
-   RuntimeError for an index out of range against compile_array_subscript's
-   ASSERT, which aborts, is in expr_exit's allowance (exprSimArrayIndex).
-   A dynamic array in code (an immutable, LocCode) reads its length with
-   compile_ptr_load's compile_imm_load_word (ILOAD or DLOAD), for which
-   exprSimArrayIndex has no array_len_ok lemma yet. *)
+(* An element of a static or dynamic array, with the bounds-check abort,
+   for a subscript with no pop, no call in the index of a storage or
+   transient base, and no immutable base in the constructor.  Cheated, for
+   the alan run: compile_subscript lowers the index after the base.  Where
+   the base points into a local (x[i] for a local x), vv_holds gives the
+   base's pointer as the local's place at the base's path (local_place_at),
+   which the index's fragment keeps (local_place_at_vars_frame); without a
+   pop the index leaves the source locals as they were (a call restores
+   the caller's scopes), so the base's path still reads the current value
+   and the element is at the base's pointer plus its offset.  The bounds
+   check itself, a source RuntimeError for an index out of range against
+   compile_array_subscript's ASSERT, which aborts, is in expr_exit's
+   allowance (exprSimArrayIndex).  A dynamic array in code (an immutable,
+   LocCode) reads its length with compile_ptr_load's compile_imm_load_word
+   (ILOAD or DLOAD), for which exprSimArrayIndex has no array_len_ok lemma
+   yet. *)
+Theorem compile_subscript_array_nopop_case:
+  !nocalls ctx func cenv cx ann obj idx et bd.
+    expr_vv_case nocalls ctx func cenv cx obj /\
+    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
+              expr_sim_case nocalls ctx func cenv cx idx) /\
+    expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
+    ~expr_has_pop (Subscript ann obj idx) /\
+    (!ty st l. vv_location (FST (compile_expr cenv ty obj st)) = SOME l /\
+               is_slot_addressed l ==> ~expr_has_effect idx) /\
+    (!ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode ==>
+             ~cenv.ce_is_ctor) ==>
+    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
+Proof
+  cheat
+QED
+
+(* An element of an array in a subscript with a pop (expr_has_pop,
+   exprSimHyps).  ADMITTED (cheat), with target_subscript_pop_case on the
+   write side: a pop in the base or the index that pops the base's array
+   (x[1][x.pop()]) leaves the source reading the base's path from the
+   popped history (read_memory_path), which no invariant relates to memory
+   yet, and a nested pop (x[0][x[0].pop()]) writes an inner length word
+   that the shared locals_kept frame keeps.  The repair of that frame
+   replaces this lemma. *)
+Theorem compile_subscript_array_pop_case:
+  !nocalls ctx func cenv cx ann obj idx et bd.
+    expr_vv_case nocalls ctx func cenv cx obj /\
+    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
+              expr_sim_case nocalls ctx func cenv cx idx) /\
+    expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
+    expr_has_pop (Subscript ann obj idx) ==>
+    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
+Proof
+  cheat
+QED
+
+(* An element of a storage or transient array whose index has a call
+   (expr_has_effect).  ADMITTED (cheat): the call can shrink the array
+   (self.a[0][self.f()] with f popping self.a), and the source and the
+   lowering then both read the element at the base's slot, past the
+   array's new length, but storage_holds asks that the result's bytes are
+   live (storage_read_live), which they are not.  A storage judgment that
+   allows a dead place read replaces this lemma. *)
+Theorem compile_subscript_array_storage_call_case:
+  !nocalls ctx func cenv cx ann obj idx et bd ty st l.
+    expr_vv_case nocalls ctx func cenv cx obj /\
+    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
+              expr_sim_case nocalls ctx func cenv cx idx) /\
+    expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
+    vv_location (FST (compile_expr cenv ty obj st)) = SOME l /\
+    is_slot_addressed l /\ expr_has_effect idx ==>
+    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
+Proof
+  cheat
+QED
+
+(* An element of an immutable array in the constructor.  ADMITTED (cheat),
+   as exprSimBuiltins' compile_len_ctor_code_case is for len: the lowering
+   loads the array's length word with ILOAD, but immutables_rel relates
+   that word to typed_val_to_w256 of the whole value, not to its length. *)
+Theorem compile_subscript_array_ctor_code_case:
+  !nocalls ctx func cenv cx ann obj idx et bd ty st.
+    expr_vv_case nocalls ctx func cenv cx obj /\
+    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
+              expr_sim_case nocalls ctx func cenv cx idx) /\
+    expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
+    vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode /\
+    cenv.ce_is_ctor ==>
+    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
+Proof
+  cheat
+QED
+
 Theorem compile_subscript_array_case:
   !nocalls ctx func cenv cx ann obj idx et bd.
     expr_vv_case nocalls ctx func cenv cx obj /\
@@ -200,7 +276,15 @@ Theorem compile_subscript_array_case:
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
-  cheat
+  rpt strip_tac >> Cases_on `expr_has_pop (Subscript ann obj idx)`
+  >- metis_tac[compile_subscript_array_pop_case] >>
+  Cases_on `?ty st l. vv_location (FST (compile_expr cenv ty obj st)) = SOME l /\
+                      is_slot_addressed l /\ expr_has_effect idx`
+  >- metis_tac[compile_subscript_array_storage_call_case] >>
+  Cases_on `cenv.ce_is_ctor /\
+            ?ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode`
+  >- metis_tac[compile_subscript_array_ctor_code_case] >>
+  irule compile_subscript_array_nopop_case >> metis_tac[]
 QED
 
 (* By place_type of the base: compile_subscript_map_case for a mapping,

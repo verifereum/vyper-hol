@@ -201,9 +201,10 @@ Proof
     (gvs[vyperValueTheory.within_int_bound_def] >> Cases_on `0 < n` >>
      gvs[] >> irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
      qexists_tac `2 ** (n - 1)` >> simp[arithmeticTheory.EXP_BASE_LE_MONO]) >>
+  `2 ** n <= 2 ** 256` by simp[arithmeticTheory.EXP_BASE_LE_MONO] >>
   simp[vyperValueTheory.within_int_bound_def] >>
   irule arithmeticTheory.LESS_LESS_EQ_TRANS >> qexists_tac `2 ** n` >>
-  simp[arithmeticTheory.EXP_BASE_LE_MONO]
+  fs[]
 QED
 
 (* << and >> on a 256-bit integer by a non-negative amount. *)

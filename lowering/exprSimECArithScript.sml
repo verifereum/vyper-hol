@@ -1574,7 +1574,7 @@ Resume ec_points_run[allocation]:
     simp[] >> rpt strip_tac >>
     `eval_operand p1 s1 = SOME point /\ eval_operand p2 s1 = SOME second_word` by
       (conj_tac >> Cases_on `p1` >> Cases_on `p2` >>
-       gvs[eval_operand_def] >> metis_tac[]) >>
+       fs[eval_operand_def] >> metis_tac[]) >>
     `!x. MEM (Var x) [p1;p2;ib.buf_operand] ==> not_fresh_at sa x` by
       (qpat_x_assum `!x. MEM (Var x) [p1;p2] ==> _` mp_tac >>
        qpat_x_assum `ib.buf_operand = Var _` mp_tac >>

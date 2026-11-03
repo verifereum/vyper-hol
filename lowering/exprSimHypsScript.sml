@@ -1313,30 +1313,25 @@ Proof
   simp[bind_def, AllCaseEqs()] >> metis_tac[]
 QED
 
-(* ===== A subscript base read through the popped history ===== *)
+(* ===== Pops in a subscript ===== *)
 
-(* A memory place of a local, read before an index's evaluation, reads the
-   same value after it.  A subscript lowers its base before its index, and
-   the index can pop the base's array (x[1][x.pop()]): the source then
-   reads the base's path from the popped history (read_memory_path), and
-   the lowering reads the element's bytes, which the root pop leaves in
-   memory (locals_kept exempts only a root dynamic array's length word).
-   ADMITTED (cheat), for the subscript read and write cases alike: the
-   value holds where only root pops run in the index, as each snapshot then
-   holds the element its pop removed and later pops remove lower indices,
-   but no invariant yet relates the popped history to memory or rules out
-   a nested pop (whose inner length word locals_kept keeps).  The repair of
-   that shared frame replaces this lemma. *)
-Theorem popped_base_read_kept:
-  !ctx func cenv cx idx es es' iv sa sb s0 v op s id entry0 entry path v0.
-    eval_expr cx idx es = (INL iv, es') /\
-    stmt_state_rel ctx func cenv cx es s0 /\
-    expr_post ctx func cenv cx idx es sa sb s0 es' v op s /\
-    lookup_scopes id es.scopes = SOME entry0 /\
-    read_memory_path entry0 path = INL v0 /\
-    lookup_scopes id es'.scopes = SOME entry /\
-    ISR (evaluate_subscripts entry.type entry.value path) ==>
-    read_memory_path entry path = INL v0
-Proof
-  cheat
-QED
+(* An expression with a pop in it (x.pop(), anywhere in its syntax), and a
+   target with one in an index.  A subscript lowers its base before its
+   index, and a pop in either can change the base's array (x[1][x.pop()],
+   x[1][len(x.pop())][j]): the source then reads the base's path from the
+   popped history (read_memory_path), and a nested pop (x[0][x[0].pop()])
+   writes an inner length word that locals_kept keeps.  The subscript read
+   and write cases with a pop are admitted (compile_subscript_array_pop_case,
+   target_subscript_pop_case). *)
+Definition expr_pop_root_def:
+  expr_pop_root (Pop ty target) = T /\
+  expr_pop_root _ = F
+End
+
+Definition expr_has_pop_def:
+  expr_has_pop e <=> supported_expr_exists expr_pop_root e
+End
+
+Definition target_has_pop_def:
+  target_has_pop t <=> supported_target_exists expr_pop_root t
+End

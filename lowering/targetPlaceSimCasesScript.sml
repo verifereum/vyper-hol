@@ -6,13 +6,15 @@
  * base's pointer with one ADD: struct_field_offset bytes for a local's
  * place, struct_field_offset_slots slots for a storage one, where the
  * source extends the base's place by the field.  An element of an array or
- * a mapping is cheated (target_subscript_case says what it needs).
+ * a mapping is cheated for a target with no pop
+ * (target_subscript_nopop_case says what it needs) and admitted for one
+ * with one (target_subscript_pop_case).
  *
  * TOP-LEVEL:
  *   target_attr_case       — a field: the base's pointer plus the field's
  *                          byte offset (memory) or slot offset (storage)
- *   target_subscript_case  — an element of an array or a mapping
- *                          (cheated, see there)
+ *   target_subscript_case  — an element of an array or a mapping, by
+ *                          whether the index has a pop (both cheated)
  *   target_case_all        — every target, by induction, from the indices'
  *                          judgments
  *   target_indices, target_idx_case_ok — the indices' judgments from
@@ -529,24 +531,18 @@ Finalise target_attr_case
 
 (* ===== Subscripts ===== *)
 
-(* An element of an array or a mapping: the base's fragment, the index's
-   (lower_value), then, by the base's place type, the slot of the key
-   (compile_mapping_subscript, with compile_keccak256_key for a bytes or
-   string key) or the bounds check and the element's pointer
-   (compile_array_subscript).  Cheated, for the later #636 PRs:
-   - the shared locals_kept frame exempts only a root DynArray's length.
-     A nested pop in an index, such as x[0][x[0].pop()], writes an inner
-     length word that this frame preserves.  Both target_post and the
-     index's expr_vv_case inherit this restriction; their shared frame
-     must be repaired before this case covers nested-pop indices;
+(* An element of an array or a mapping, for a target with no pop: the
+   base's fragment, the index's (lower_value), then, by the base's place
+   type, the slot of the key (compile_mapping_subscript, with
+   compile_keccak256_key for a bytes or string key) or the bounds check and
+   the element's pointer (compile_array_subscript).  Cheated, for the alan
+   run:
    - the index runs after the base, so the base's target_post must survive
      its fragment: place_ptr_rel does (place_ptr_rel_vars_frame: the local
      pointers and the base's operand are not fresh at the index's start),
-     but place_readable does not, as the index can pop the base's array;
-     the source then reads the base from the popped history
-     (read_memory_path), and the element's bytes are still in memory, as
-     a root pop writes only its exempt length word, but nothing relates
-     the popped history to memory yet;
+     and without a pop the index leaves the source locals as they were
+     (a call restores the caller's scopes), so
+     place_readable does too;
    - the bounds check: a source RuntimeError for an index out of range
      (evaluate_subscripts array_index for a local's place,
      resolve_array_element's checks for a storage one) against
@@ -559,6 +555,40 @@ Finalise target_attr_case
    Given those, the element's place is at the base's pointer plus the
    element's offset (mem_step_offset) for a local, and at the element's
    slot for storage. *)
+Theorem target_subscript_nopop_case:
+  !nocalls ctx func cenv cx bt e.
+    target_case nocalls ctx func cenv cx bt /\
+    ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
+     expr_sim_case nocalls ctx func cenv cx e /\
+     expr_vv_case nocalls ctx func cenv cx e) /\
+    ~target_has_pop (SubscriptTarget bt e) ==>
+    target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
+Proof
+  cheat
+QED
+
+(* An element of a target with a pop (target_has_pop, exprSimHyps).
+   ADMITTED (cheat), with exprSimPlaces' compile_subscript_array_pop_case
+   on the read side: a pop in the base or the index that pops the base's
+   array leaves the source reading the base from the popped history
+   (read_memory_path), which no invariant relates to memory yet (a root
+   pop writes only its exempt length word, so the element's bytes are
+   still there), and a nested pop
+   (x[0][x[0].pop()]) writes an inner length word that the shared
+   locals_kept frame keeps, which target_post and the index's expr_vv_case
+   both inherit.  The repair of that frame replaces this lemma. *)
+Theorem target_subscript_pop_case:
+  !nocalls ctx func cenv cx bt e.
+    target_case nocalls ctx func cenv cx bt /\
+    ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
+     expr_sim_case nocalls ctx func cenv cx e /\
+     expr_vv_case nocalls ctx func cenv cx e) /\
+    target_has_pop (SubscriptTarget bt e) ==>
+    target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
+Proof
+  cheat
+QED
+
 Theorem target_subscript_case:
   !nocalls ctx func cenv cx bt e.
     target_case nocalls ctx func cenv cx bt /\
@@ -567,7 +597,9 @@ Theorem target_subscript_case:
      expr_vv_case nocalls ctx func cenv cx e) ==>
     target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
 Proof
-  cheat
+  rpt strip_tac >> Cases_on `target_has_pop (SubscriptTarget bt e)`
+  >- metis_tac[target_subscript_pop_case] >>
+  metis_tac[target_subscript_nopop_case]
 QED
 
 (* ===== Every target ===== *)
