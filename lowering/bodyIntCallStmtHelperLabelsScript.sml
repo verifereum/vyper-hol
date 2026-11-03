@@ -506,3 +506,34 @@ Proof
   simp[compile_store_at_loc_def, compiler_label_hoare_typed_primitives,
     compiler_label_hoare_immutable_primitives]
 QED
+
+
+Theorem compiler_block_tail_assign_normalize:
+  compiler_block_tail
+    (if b then comp_bind (compile_alloc_buffer sz) (\a.
+       comp_ignore_bind (compile_store_memory_typed ce a.buf_operand ty value sty)
+         (comp_return a.buf_operand)) else comp_return value)
+Proof
+  Cases_on `b` >> simp[compiler_block_tail_primitives] >>
+  irule compiler_block_tail_bind >> reverse conj_tac
+  >- simp[compiler_block_tail_alloc_buffer] >>
+  gen_tac >> BETA_TAC >> irule compiler_block_tail_ignore_bind >>
+  simp[compiler_block_tail_typed_copy, compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_assign_normalize:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (if b then comp_bind (compile_alloc_buffer sz) (\a.
+       comp_ignore_bind (compile_store_memory_typed ce a.buf_operand ty value sty)
+         (comp_return a.buf_operand)) else comp_return value)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  Cases_on `b` >> simp[compiler_label_hoare_typed_primitives] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- simp[compiler_label_hoare_alloc_buffer] >>
+  gen_tac >> BETA_TAC >> rewrite_tac[comp_ignore_bind_def] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- (irule compiler_label_hoare_preserves_reservation >>
+      metis_tac[compile_store_memory_typed_label_bounds]) >>
+  simp[compiler_label_hoare_typed_primitives]
+QED
