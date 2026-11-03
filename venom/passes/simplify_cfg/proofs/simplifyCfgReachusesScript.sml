@@ -3,7 +3,7 @@ Ancestors
   simplifyCfgDefs simplifyCfgStruct simplifyCfgPhiRepair
   simplifyCfgDataflow simplifyCfgRepairDataflow simplifyCfgPhiPreds
   simplifyCfgChainDataflow simplifyCfgBypassDataflow
-  venomInst venomWf venomExecProofs cfgTransform list rich_list
+  venomInst venomWf venomExecProofs cfgTransform cfgTransformInstWf list rich_list
 
 Theorem fix_phi_inst_inst_wf:
   inst_wf inst ==> inst_wf (fix_phi_inst actual_preds inst)
@@ -317,4 +317,21 @@ Proof
      `bb'' = a` by metis_tac[same_label_same_block] >>
      gvs[can_merge_blocks_def]) >>
   gvs[] >> drule_all chain_merge_edge >> simp[]
+QED
+
+Theorem do_merge_jump_fn_inst_wf:
+  wf_function fn /\ fn_inst_wf fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  do_merge_jump fn a b lm = SOME (fn',lm') ==> fn_inst_wf fn'
+Proof
+  strip_tac >> pure_rewrite_tac[fn_inst_wf_def] >> rpt strip_tac >>
+  drule_all do_merge_jump_block_map >> strip_tac >>
+  qpat_x_assum `MEM inst _` mp_tac >> asm_rewrite_tac[] >>
+  simp[MEM_MAP] >> disch_then (qx_choose_then `orig` strip_assume_tac) >>
+  `inst_wf orig` by metis_tac[fn_inst_wf_def] >>
+  Cases_on `bb'.bb_label = a.bb_label` >>
+  Cases_on `target = a.bb_label` >>
+  Cases_on `bb'.bb_label = target` >>
+  Cases_on `is_terminator orig.inst_opcode` >>
+  gvs[inst_wf_update_phi_bypass, inst_wf_canon_jnz_inst, inst_wf_subst_label_inst]
 QED
