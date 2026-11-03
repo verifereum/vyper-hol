@@ -192,8 +192,28 @@ QED
 
 Resume eval_mutual_preserves_scopes_dom[CreateTarget]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  Cases_on `kind` >> gvs[] >>
-  gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  Cases_on `kind`
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def] >> gvs[] >>
+      simp[bind_def, ignore_bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac eval_create_preserves_scopes_immutables >>
+      metis_tac[])
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def] >> gvs[] >>
+      simp[bind_def, ignore_bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac eval_create_preserves_scopes_immutables >>
+      metis_tac[])
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def] >> gvs[] >>
+      simp[bind_def, ignore_bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac check_create_blueprint_result_state >> gvs[] >>
+      imp_res_tac read_results_state >> gvs[] >>
+      res_tac >>
+      imp_res_tac eval_create_preserves_scopes_immutables >> gvs[] >>
+      metis_tac[]) >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def] >> gvs[] >>
+  simp[bind_def, ignore_bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac check_create_blueprint_result_state >> gvs[] >>
   imp_res_tac read_results_state >> gvs[] >>
   res_tac >>
