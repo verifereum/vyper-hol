@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallSupportedExprLabels bodyIntCallMaterialLabels
   stmtLowering moduleLowering supportedStmts supportedStmtTraverse compileEnv supportedExprs list supportedTargets
   bodyIntCallLabelFrame bodyIntCallLabelReservations bodyIntCallContextLabels
-  emitHelper bodyIntCallExprLabels exprLowering
+  emitHelper bodyIntCallExprLabels bodyIntCallExprBodyLabels exprLowering
 
 Theorem declare_local_return_pc:
   declare_local ce id ty st = (ce',out) ==>
@@ -701,3 +701,182 @@ Proof
   irule compiler_label_hoare_preserving_bind >>
   simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]
 QED
+
+Theorem compiler_block_tail_target_info:
+  !target ce pt.
+    supportedTargets$supported_target_info tops bindings target = SOME pt /\
+    ~supportedExprTraverse$target_has_internal_call target ==>
+    compiler_block_tail (compile_get_target_ptr ce target)
+Proof
+  `( (!e:expr. T) /\ (!target. !ce pt.
+      supportedTargets$supported_target_info tops bindings target = SOME pt /\
+      ~supportedExprTraverse$target_has_internal_call target ==>
+      compiler_block_tail (compile_get_target_ptr ce target)))` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[] >> rpt conj_tac >> rpt gen_tac >> strip_tac
+  >- suspend "name"
+  >- suspend "top"
+  >- suspend "subscript"
+  >> suspend "attribute"
+QED
+
+Resume compiler_block_tail_target_info[name]:
+  rename1 `NameTarget id` >> simp[compile_get_target_ptr_def] >>
+  Cases_on `FLOOKUP ce.ce_vars id` >> simp[compiler_block_tail_primitives] >>
+  rename1 `FLOOKUP _ _ = SOME loc` >>
+  Cases_on `loc` >> simp[compiler_block_tail_primitives]
+QED
+
+Resume compiler_block_tail_target_info[top]:
+  rename1 `TopLevelNameTarget nsid` >> simp[compile_get_target_ptr_def, LET_THM] >>
+  Cases_on `FLOOKUP ce.ce_module_vars nsid` >> simp[compiler_block_tail_primitives] >>
+  rename1 `FLOOKUP _ _ = SOME loc` >>
+  Cases_on `loc` >> simp[compiler_block_tail_primitives]
+QED
+
+Resume compiler_block_tail_target_info[attribute]:
+  rpt strip_tac >> drule supported_target_info_attribute_target_base >> strip_tac >>
+  gvs[supportedExprTraverseTheory.target_has_internal_call_def,
+      supportedExprTraverseTheory.supported_expr_exists_def] >>
+  simp[Once compile_get_target_ptr_def] >>
+  irule compiler_block_tail_bind >> reverse conj_tac
+  >- metis_tac[] >>
+  gen_tac >> BETA_TAC >> simp[LET_THM] >>
+  irule compiler_block_tail_bind >> simp[compiler_block_tail_primitives]
+QED
+
+Resume compiler_block_tail_target_info[subscript]:
+  rpt strip_tac >> drule_all supported_target_info_subscript_expr >> strip_tac >>
+  `!ty. compiler_block_tail (lower_value compile_expr ce ty e)` by
+    (gen_tac >> irule compiler_block_tail_lower_value >>
+     metis_tac[compiler_block_tail_supported_expr, supportedExprsTheory.supported_expr_def]) >>
+  gvs[supportedExprTraverseTheory.target_has_internal_call_def,
+      supportedExprTraverseTheory.supported_expr_exists_def] >>
+  simp[Once compile_get_target_ptr_def] >>
+  irule compiler_block_tail_bind >> reverse conj_tac
+  >- metis_tac[] >>
+  gen_tac >> BETA_TAC >> simp[LET_THM] >>
+  rename1 `SND (SND result)` >>
+  Cases_on `SND (SND result)` >> simp[]
+  >- suspend "array_none" >>
+  rename1 `SND (SND result) = SOME place` >> Cases_on `place` >> simp[]
+  >- suspend "map" >>
+  suspend "array_value"
+QED
+
+Resume compiler_block_tail_target_info[array_none]:
+  irule compiler_block_tail_bind >> reverse conj_tac >- simp[] >>
+  gen_tac >> BETA_TAC >> irule compiler_block_tail_bind >> reverse conj_tac
+  >- (irule compiler_block_tail_array_subscript >> simp[compiler_block_tail_primitives]) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Resume compiler_block_tail_target_info[array_value]:
+  irule compiler_block_tail_bind >> reverse conj_tac >- simp[] >>
+  gen_tac >> BETA_TAC >> irule compiler_block_tail_bind >> reverse conj_tac
+  >- (irule compiler_block_tail_array_subscript >> simp[compiler_block_tail_primitives]) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Resume compiler_block_tail_target_info[map]:
+  irule compiler_block_tail_bind >> reverse conj_tac >- simp[] >>
+  gen_tac >> BETA_TAC >> irule compiler_block_tail_bind >> reverse conj_tac
+  >- (IF_CASES_TAC >> simp[compiler_block_tail_mapping_helpers, compiler_block_tail_primitives]) >>
+  gen_tac >> BETA_TAC >> irule compiler_block_tail_bind >>
+  simp[compiler_block_tail_mapping_helpers, compiler_block_tail_primitives]
+QED
+
+Finalise compiler_block_tail_target_info
+
+Theorem compiler_label_hoare_target_info:
+  !target ce pt origin pending.
+    supportedTargets$supported_target_info tops bindings target = SOME pt /\
+    ~supportedExprTraverse$target_has_internal_call target ==>
+    compiler_label_hoare (compiler_label_reservation origin pending)
+      (compile_get_target_ptr ce target)
+      (\r out. compiler_label_reservation origin pending out)
+Proof
+  `((!e:expr. T) /\ (!target. !ce pt origin pending.
+      supportedTargets$supported_target_info tops bindings target = SOME pt /\
+      ~supportedExprTraverse$target_has_internal_call target ==>
+      compiler_label_hoare (compiler_label_reservation origin pending)
+        (compile_get_target_ptr ce target)
+        (\r out. compiler_label_reservation origin pending out)))` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[] >> rpt conj_tac >> rpt gen_tac >> strip_tac
+  >- suspend "name"
+  >- suspend "top"
+  >- suspend "subscript"
+  >> suspend "attribute"
+QED
+
+Resume compiler_label_hoare_target_info[name]:
+  rename1 `NameTarget id` >> simp[compile_get_target_ptr_def] >>
+  Cases_on `FLOOKUP ce.ce_vars id` >> simp[compiler_label_hoare_typed_primitives] >>
+  rename1 `FLOOKUP _ _ = SOME loc` >>
+  Cases_on `loc` >> simp[compiler_label_hoare_typed_primitives]
+QED
+
+Resume compiler_label_hoare_target_info[top]:
+  rename1 `TopLevelNameTarget nsid` >> simp[compile_get_target_ptr_def, LET_THM] >>
+  Cases_on `FLOOKUP ce.ce_module_vars nsid` >> simp[compiler_label_hoare_typed_primitives] >>
+  rename1 `FLOOKUP _ _ = SOME loc` >>
+  Cases_on `loc` >> simp[compiler_label_hoare_typed_primitives]
+QED
+
+Resume compiler_label_hoare_target_info[attribute]:
+  rpt strip_tac >> drule supported_target_info_attribute_target_base >> strip_tac >>
+  gvs[supportedExprTraverseTheory.target_has_internal_call_def,
+      supportedExprTraverseTheory.supported_expr_exists_def] >>
+  simp[Once compile_get_target_ptr_def] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- metis_tac[] >>
+  gen_tac >> BETA_TAC >> simp[LET_THM] >>
+  irule compiler_label_hoare_preserving_bind >>
+  simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]
+QED
+
+Resume compiler_label_hoare_target_info[subscript]:
+  rpt strip_tac >> drule_all supported_target_info_subscript_expr >> strip_tac >>
+  `!ty. compiler_label_hoare (compiler_label_reservation origin pending)
+      (lower_value compile_expr ce ty e)
+      (\r out. compiler_label_reservation origin pending out)` by
+    (gen_tac >> irule compiler_label_hoare_lower_value >>
+     metis_tac[compiler_label_hoare_supported_expr, supportedExprsTheory.supported_expr_def]) >>
+  gvs[supportedExprTraverseTheory.target_has_internal_call_def,
+      supportedExprTraverseTheory.supported_expr_exists_def] >>
+  simp[Once compile_get_target_ptr_def] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- metis_tac[] >>
+  gen_tac >> BETA_TAC >> simp[LET_THM] >>
+  rename1 `SND (SND result)` >>
+  Cases_on `SND (SND result)` >> simp[]
+  >- suspend "array_none" >>
+  rename1 `SND (SND result) = SOME place` >> Cases_on `place` >> simp[]
+  >- suspend "map" >>
+  suspend "array_value"
+QED
+
+Resume compiler_label_hoare_target_info[array_none]:
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac >- simp[] >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- (irule compiler_label_hoare_array_subscript >> simp[compiler_label_hoare_context_primitives]) >>
+  simp[compiler_label_hoare_typed_primitives]
+QED
+
+Resume compiler_label_hoare_target_info[array_value]:
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac >- simp[] >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- (irule compiler_label_hoare_array_subscript >> simp[compiler_label_hoare_context_primitives]) >>
+  simp[compiler_label_hoare_typed_primitives]
+QED
+
+Resume compiler_label_hoare_target_info[map]:
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac >- simp[] >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- (IF_CASES_TAC >> simp[compiler_label_hoare_mapping_helpers, compiler_label_hoare_typed_primitives]) >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_preserving_bind >>
+  simp[compiler_label_hoare_mapping_helpers, compiler_label_hoare_typed_primitives]
+QED
+
+Finalise compiler_label_hoare_target_info
