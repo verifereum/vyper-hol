@@ -30,7 +30,7 @@ Ancestors
   valueEncoding valueEncodingProps valueEncodingProofs exprSim valueCopyBytes
   compileEnv context exprLoweringProps emitHelper emitHelperProps
   entryDecodeProps vyperValue vyperTyping vfmConstants immutableMemoryFrame
-  venomInst venomState venomExecSemantics venomMemProps
+  venomInst venomState venomExecSemantics venomMemProps alignment
 Libs
   blastLib
 
@@ -183,11 +183,9 @@ Proof
     (`(-32w:bytes32) = (~0w) << 5` by
        simp[wordsTheory.word_1comp_n2w, wordsTheory.word_lsl_n2w] >>
      pop_assum SUBST1_TAC >>
-     rw_tac (arith_ss++fcpLib.FCP_ss)
-       [wordsTheory.word_and_def, wordsTheory.word_lsr_def,
-        wordsTheory.word_lsl_def, wordsTheory.word_1comp_def,
-        wordsTheory.word_0] >>
-     Cases_on `5 <= i` >> gvs[]) >>
+     REWRITE_TAC [wordsTheory.WORD_NOT_0, wordsTheory.WORD_NEG_1,
+                  GSYM alignmentTheory.align_bitwise_and,
+                  alignmentTheory.align_shift]) >>
   `(L + 31) DIV 32 * 32 <= L + 31` by
     (qspec_then `32` mp_tac DIVISION >> simp[] >>
      disch_then (qspec_then `L + 31` mp_tac) >> decide_tac) >>
@@ -249,7 +247,7 @@ Theorem step_MCOPY_some[local]:
 Proof
   rpt strip_tac >> Cases_on `eval_operand d s` >>
   Cases_on `eval_operand a s` >> Cases_on `eval_operand n s` >> gvs[] >>
-  simp[step_inst_base_def]
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def]
 QED
 
 Theorem store_bytestring_run[local]:
@@ -333,7 +331,8 @@ Proof
        venomInstTheory.is_terminator_def, run_inst_seq_def] >>
   gvs[emit_void_def, comp_bind_def, fresh_id_def, emit_def,
       comp_ignore_bind_def, comp_return_def] >>
-  simp[step_inst_base_def, venomInstTheory.mk_inst_def, eval_operand_def]
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def,
+       eval_operand_def]
 QED
 
 (* compile_store_memory at one type ty: a word type's value, held by src
@@ -436,7 +435,7 @@ Resume compile_store_memory_run_size_bound_capacity[copy]:
   >- (rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >> decide_tac)
   >~ [`LENGTH _ <= LENGTH _`]
   >- simp[mcopy_def, immutable_write_memory_capacity, MAX_DEF] >>
-  simp[mcopy_def, write_memory_with_expansion_def, LET_THM,
+  simp_tac (srw_ss()) [mcopy_def, write_memory_with_expansion_def, LET_THM,
        venom_state_component_equality]
 QED
 

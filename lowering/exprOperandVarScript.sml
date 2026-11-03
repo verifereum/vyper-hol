@@ -1750,7 +1750,13 @@ Proof
   >~ [`Concat _`] >- suspend "concat" >>
   simp[compile_builtin_dispatch_body_def, LET_THM]
   >~ [`compile_acc _ _ _ _ _`] >-
-    (AP_TERM_TAC >> irule compiler_acc_reserved_cong >> simp[]) >>
+    (AP_TERM_TAC >> irule compiler_acc_reserved_cong >> simp[])
+  (* one step per remaining builtin, so each fits the step budget *)
+  >- rpt compiler_reserved_pair_tac
+  >- rpt compiler_reserved_pair_tac
+  >- rpt compiler_reserved_pair_tac
+  >- rpt compiler_reserved_pair_tac
+  >- rpt compiler_reserved_pair_tac >>
   rpt compiler_reserved_pair_tac
 QED
 

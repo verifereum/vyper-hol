@@ -2457,8 +2457,9 @@ Proof
   simp[eval_result_typed_def, evaluate_type_def,
        expr_result_typed_def, expr_runtime_typed_def] >>
   rpt gen_tac >> strip_tac >>
-  Cases_on `expr_type e` >> gvs[is_int_type_def, evaluate_type_def,
-       AllCaseEqs(), value_result_typed_def] >>
+  (* drop the non-integer index types before unfolding the rest *)
+  Cases_on `expr_type e` >> gvs[is_int_type_def] >>
+  gvs[evaluate_type_def, AllCaseEqs(), value_result_typed_def] >>
   Cases_on `v` >> gvs[value_has_type_def] >>
   drule_all extend_live_array_place_sound >> strip_tac >> simp[] >>
   Cases_on `res` >> gvs[] >> simp[eval_result_typed_def] >> metis_tac[]
@@ -7631,7 +7632,10 @@ Resume eval_scc_type_sound_results_mutual[Exprs_cons]:
           qexists_tac `tv::tvs` >> simp[]) >>
       strip_tac >> gvs[]) >>
     strip_tac >> gvs[no_type_error_result_def]) >>
-  strip_tac >> gvs[no_type_error_result_def]
+  (* the expression raised: the induction hypotheses are not needed, and
+     gvs over them runs past the step budget *)
+  strip_tac >> rpt (qpat_x_assum `!x. _` kall_tac) >>
+  gvs[no_type_error_result_def]
 QED
 
 (* Each transition root has exactly one semantic key and one suspended goal. *)
