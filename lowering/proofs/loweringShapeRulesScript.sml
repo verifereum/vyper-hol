@@ -1039,3 +1039,44 @@ Proof
   rpt gen_tac >> disch_tac >> rpt gen_tac >>
   Cases_on `list_size expr_size args < bound` >> simp[invalid_expr_call_labels]
 QED
+
+(* Label-only sequencing interfaces used by compiler body proofs. *)
+Theorem comp_ignore_bind_labels:
+  !m k P.
+    (!s. cs_extends s (SND (m s)) /\
+         EVERY P (added_labels s (SND (m s)))) /\
+    (!s. cs_extends s (SND (k s)) /\
+         EVERY P (added_labels s (SND (k s)))) ==>
+    !s. cs_extends s (SND (comp_ignore_bind m k s)) /\
+        EVERY P (added_labels s (SND (comp_ignore_bind m k s)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[comp_ignore_bind_def] >> irule comp_bind_labels >> simp[]
+QED
+
+Theorem uncurry_labels:
+  !f P.
+    (!x y s. cs_extends s (SND (f x y s)) /\
+             EVERY P (added_labels s (SND (f x y s)))) ==>
+    !xy s. cs_extends s (SND (UNCURRY f xy s)) /\
+           EVERY P (added_labels s (SND (UNCURRY f xy s)))
+Proof
+  rpt strip_tac >> PairCases_on `xy` >> simp[]
+QED
+
+Theorem fresh_id_labels:
+  !s P. cs_extends s (SND (fresh_id s)) /\
+    EVERY P (added_labels s (SND (fresh_id s)))
+Proof
+  rpt gen_tac >> simp[fresh_id_def] >> conj_tac
+  >- (irule cs_extends_same_block >> simp[]) >>
+  simp[added_labels_def, all_blocks_def, MAP_APPEND, DROP_LENGTH_TOO_LONG]
+QED
+
+Theorem fresh_label_prefix:
+  !suffix (s:compile_state) lbl t. fresh_label suffix s = (lbl,t) ==>
+    isPREFIX "@" lbl
+Proof
+  rpt strip_tac >> gvs[compileEnvTheory.fresh_label_def,
+    fresh_label_output_def]
+QED
