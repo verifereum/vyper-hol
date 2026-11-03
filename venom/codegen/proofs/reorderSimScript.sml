@@ -4124,6 +4124,67 @@ Proof
   metis_tac[reorder_one_preserves_fixed]
 QED
 
+Theorem reorder_one_materialised_length_floor:
+  !dfg pending idx ps ops ps'.
+    idx < LENGTH pending /\ LENGTH pending <= 16 /\
+    LENGTH pending <= LENGTH ps.ps_stack /\
+    (!x. MEM x pending ==>
+      LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
+    (!i. i < idx ==>
+      stack_peek (LENGTH pending - 1 - i) ps.ps_stack = EL i pending) /\
+    reorder_one dfg pending idx (EL idx pending) ps = (ops,ps') ==>
+    LENGTH pending <= LENGTH ps'.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!x. LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack` by
+    (gen_tac >> Cases_on `MEM x pending`
+     >- simp[] >> gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
+  `?d. stack_get_unfixed_depth (EL idx pending)
+    (LENGTH pending - 1 - idx) (LENGTH pending) ps.ps_stack = SOME d` by
+    metis_tac[materialised_pending_next_on_stack_window] >>
+  gvs[] >>
+  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  simp[reorder_one_def, LET_THM] >>
+  Cases_on `d > 16` >> simp[]
+  >- (pairarg_tac >> simp[] >>
+      rename1 `reduce_depth_plan _ _ _ _ _ ps = (reduce_ops,ps2)` >>
+      `LENGTH pending <= LENGTH ps2.ps_stack` by
+        (drule reduce_depth_plan_length_floor >> simp[] >> decide_tac) >>
+      Cases_on `stack_get_unfixed_depth (EL idx pending)
+        (LENGTH pending - 1 - idx) (LENGTH pending) ps2.ps_stack` >> simp[]
+      >- (strip_tac >> gvs[]) >>
+      `x < LENGTH ps2.ps_stack` by
+        metis_tac[stack_get_unfixed_depth_props] >>
+      Cases_on `x = LENGTH pending - 1 - idx` >> simp[]
+      >- (strip_tac >> gvs[]) >>
+      `LENGTH pending - 1 - idx < LENGTH ps2.ps_stack` by decide_tac >>
+      simp[] >> Cases_on `operand_equiv dfg (EL idx pending)
+        (stack_peek (LENGTH pending - 1 - idx) ps2.ps_stack)` >>
+      simp[stack_poke_def, LENGTH_LUPDATE]
+      >- (strip_tac >> gvs[]) >>
+      Cases_on `do_swap x ps2` >> simp[] >>
+      rename1 `do_swap x ps2 = (s1,ps3)` >>
+      `LENGTH ps3.ps_stack = LENGTH ps2.ps_stack` by
+        (qspec_then `x` (qspec_then `ps2` mp_tac) do_swap_length >> simp[]) >>
+      Cases_on `do_swap (LENGTH pending - 1 - idx) ps3` >> simp[] >>
+      strip_tac >> gvs[] >>
+      qspecl_then [`LENGTH pending - 1 - idx`, `ps3`] mp_tac do_swap_length >>
+      simp[] >> decide_tac) >>
+  `d < LENGTH ps.ps_stack` by metis_tac[stack_get_unfixed_depth_props] >>
+  Cases_on `d = LENGTH pending - 1 - idx` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  `LENGTH pending - 1 - idx < LENGTH ps.ps_stack` by decide_tac >>
+  simp[] >> Cases_on `operand_equiv dfg (EL idx pending)
+    (stack_peek (LENGTH pending - 1 - idx) ps.ps_stack)` >>
+  simp[stack_poke_def, LENGTH_LUPDATE]
+  >- (strip_tac >> gvs[]) >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  `LENGTH ps3.ps_stack = LENGTH ps.ps_stack` by
+    (qspecl_then [`d`, `ps`] mp_tac do_swap_length >> simp[]) >>
+  qspecl_then [`LENGTH pending - 1 - idx`, `ps3`] mp_tac do_swap_length >>
+  simp[] >> decide_tac
+QED
+
 Theorem do_restore_preserves_not_spilled[local]:
   !op ps x.
     x NOTIN FDOM ps.ps_spilled ==>
@@ -6324,6 +6385,127 @@ Proof
   simp[Once plan_steps_def, LET_THM] >>
   pairarg_tac >> simp[] >>
   pairarg_tac >> simp[]
+QED
+
+Theorem plan_steps_reorder_materialised[local]:
+  !items k dfg pending ps ops ps'.
+    k + LENGTH items = LENGTH pending /\
+    (!j. j < LENGTH items ==>
+      EL j items = (k + j, EL (k + j) pending)) /\
+    LENGTH pending <= 16 /\
+    LENGTH pending <= LENGTH ps.ps_stack /\
+    (!x. MEM x pending ==>
+      LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
+    (!i. i < k ==>
+      stack_peek (LENGTH pending - 1 - i) ps.ps_stack = EL i pending) /\
+    plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps)
+      items ps = (ops,ps') ==>
+    LENGTH pending <= LENGTH ps'.ps_stack /\
+    (!x. MEM x pending ==>
+      LIST_ELEM_COUNT x ps'.ps_stack = LIST_ELEM_COUNT x ps.ps_stack) /\
+    (!i. i < LENGTH pending ==>
+      stack_peek (LENGTH pending - 1 - i) ps'.ps_stack = EL i pending)
+Proof
+  Induct
+  >- (rpt gen_tac >> simp[plan_steps_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  `h = (k, EL k pending)` by
+    (qpat_x_assum `!j. j < LENGTH (h::items) ==> _`
+       (qspec_then `0` mp_tac) >> simp[]) >>
+  `k < LENGTH pending` by (fs[] >> decide_tac) >>
+  drule plan_steps_cons_result >> strip_tac >>
+  qpat_x_assum `h = _` SUBST_ALL_TAC >>
+  RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV pairLib.GEN_BETA_CONV)) >>
+  rename1 `reorder_one dfg pending k (EL k pending) ps = (step_ops,ps1)` >>
+  `LENGTH pending <= LENGTH ps1.ps_stack` by
+    metis_tac[reorder_one_materialised_length_floor] >>
+  `!i. i < SUC k ==>
+    stack_peek (LENGTH pending - 1 - i) ps1.ps_stack = EL i pending` by
+    metis_tac[reorder_one_advances_fixed_window] >>
+  `!x. LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack` by
+    (gen_tac >> Cases_on `MEM x pending`
+     >- simp[] >>
+     `LIST_ELEM_COUNT x pending = 0` by
+       (qpat_x_assum `~MEM x pending` mp_tac >>
+        rpt (pop_assum kall_tac) >> simp[GSYM LIST_ELEM_COUNT_MEM]) >>
+     simp[]) >>
+  `?d. stack_get_unfixed_depth (EL k pending)
+    (LENGTH pending - 1 - k) (LENGTH pending) ps.ps_stack = SOME d` by
+    metis_tac[materialised_pending_next_on_stack_window] >>
+  `MEM (EL k pending) pending` by simp[EL_MEM] >>
+  `!x. MEM x pending ==>
+    LIST_ELEM_COUNT x ps1.ps_stack = LIST_ELEM_COUNT x ps.ps_stack` by
+    (drule_at (Pat `reorder_one _ _ _ _ _ = _`)
+       reorder_one_materialised_counts_unconditional >> simp[]) >>
+  qpat_x_assum `!k dfg pending ps ops ps'. _` (qspec_then `SUC k` mp_tac) >>
+  disch_then (qspecl_then [`dfg`, `pending`, `ps1`, `rest_ops`, `ps'`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> conj_tac
+      >- (fs[] >> decide_tac) >>
+      gen_tac >> strip_tac >>
+      qpat_x_assum `!j. j < LENGTH (_::items) ==> _`
+        (qspec_then `SUC j` mp_tac) >> simp[ADD_CLAUSES, ADD_COMM]) >>
+  metis_tac[]
+QED
+
+Theorem reorder_plan_materialised_invariants[local]:
+  !dfg pending ps ops ps'.
+    LENGTH pending <= 16 /\
+    LENGTH pending <= LENGTH ps.ps_stack /\
+    (!x. MEM x pending ==>
+      LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
+    reorder_plan dfg pending ps = (ops,ps') ==>
+    LENGTH pending <= LENGTH ps'.ps_stack /\
+    (!x. MEM x pending ==>
+      LIST_ELEM_COUNT x ps'.ps_stack = LIST_ELEM_COUNT x ps.ps_stack) /\
+    (!i. i < LENGTH pending ==>
+      stack_peek (LENGTH pending - 1 - i) ps'.ps_stack = EL i pending)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`MAPi (\i op. (i,op)) pending`, `0`]
+    mp_tac plan_steps_reorder_materialised >>
+  disch_then (qspecl_then [`dfg`, `pending`, `ps`, `ops`, `ps'`] mp_tac) >>
+  simp[reorder_plan_eq_plan_steps, indexedListsTheory.LENGTH_MAPi,
+       indexedListsTheory.EL_MAPi] >>
+  metis_tac[reorder_plan_eq_plan_steps]
+QED
+
+Theorem reorder_plan_materialised_order:
+  !dfg pending ps ops ps'.
+    LENGTH pending <= 16 /\
+    LENGTH pending <= LENGTH ps.ps_stack /\
+    (!x. MEM x pending ==>
+      LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
+    reorder_plan dfg pending ps = (ops,ps') ==>
+    !i. i < LENGTH pending ==>
+      stack_peek (LENGTH pending - 1 - i) ps'.ps_stack = EL i pending
+Proof
+  metis_tac[reorder_plan_materialised_invariants]
+QED
+
+Theorem reorder_plan_materialised_length_floor:
+  !dfg pending ps ops ps'.
+    LENGTH pending <= 16 /\
+    LENGTH pending <= LENGTH ps.ps_stack /\
+    (!x. MEM x pending ==>
+      LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
+    reorder_plan dfg pending ps = (ops,ps') ==>
+    LENGTH pending <= LENGTH ps'.ps_stack
+Proof
+  metis_tac[reorder_plan_materialised_invariants]
+QED
+
+Theorem reorder_plan_materialised_counts:
+  !dfg pending ps ops ps'.
+    LENGTH pending <= 16 /\
+    LENGTH pending <= LENGTH ps.ps_stack /\
+    (!x. MEM x pending ==>
+      LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
+    reorder_plan dfg pending ps = (ops,ps') ==>
+    !x. MEM x pending ==>
+      LIST_ELEM_COUNT x ps'.ps_stack = LIST_ELEM_COUNT x ps.ps_stack
+Proof
+  metis_tac[reorder_plan_materialised_invariants]
 QED
 
 Theorem plan_steps_reorder_venom_asm_rel_residual[local]:
