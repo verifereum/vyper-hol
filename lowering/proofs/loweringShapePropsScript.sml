@@ -13094,3 +13094,12 @@ Proof
   irule comp_bind_labels >> simp[emit_op_labels] >> rpt gen_tac >>
   irule comp_ignore_bind_labels >> simp[emit_void_labels, emit_op_labels]
 QED
+
+Theorem compile_builtin_abs_labels:
+  !v s P. cs_extends s (SND (compile_builtin_abs v s)) /\
+    EVERY P (added_labels s (SND (compile_builtin_abs v s)))
+Proof
+  rpt gen_tac >> simp[builtinSimpleTheory.compile_builtin_abs_def] >>
+  rpt (irule comp_bind_labels >> simp[emit_op_labels] >> rpt gen_tac >> BETA_TAC) >>
+  irule comp_ignore_bind_labels >> simp[emit_void_labels, compile_select_labels]
+QED
