@@ -1258,3 +1258,69 @@ Proof
     (Cases_on `fn.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def]) >>
   first_x_assum (qspecl_then [`entry`, `bb.bb_label`] mp_tac) >> simp[]
 QED
+
+Theorem update_phi_bypass_label_positions_ok:
+  label_positions_ok inst ==> label_positions_ok (update_phi_bypass a b inst)
+Proof
+  Cases_on `inst.inst_opcode = PHI` >> simp[update_phi_bypass_def] >>
+  Cases_on `MEM (Label a) inst.inst_operands` >> simp[label_positions_ok_def]
+QED
+
+Theorem canon_jnz_inst_label_positions_ok:
+  label_positions_ok inst ==> label_positions_ok (canon_jnz_inst inst)
+Proof
+  Cases_on `inst.inst_opcode = JNZ`
+  >- (Cases_on `inst.inst_operands` >> simp[canon_jnz_inst_def] >>
+      Cases_on `t` >> simp[canon_jnz_inst_def] >>
+      Cases_on `t'` >> simp[canon_jnz_inst_def] >>
+      Cases_on `t` >> simp[canon_jnz_inst_def] >>
+      IF_CASES_TAC >> simp[] >> gvs[] >>
+      Cases_on `h'` >>
+      gvs[label_positions_ok_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  simp[canon_jnz_inst_def] >> rpt strip_tac >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >> Cases_on `t'` >> simp[] >>
+  Cases_on `t` >> simp[]
+QED
+
+Theorem do_merge_jump_label_positions_ok:
+  EVERY label_positions_ok (fn_insts fn) /\ MEM a fn.fn_blocks /\
+  do_merge_jump fn a b lm = SOME (fn',lm') ==>
+  EVERY label_positions_ok (fn_insts fn')
+Proof
+  strip_tac >>
+  `EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn.fn_blocks` by
+    (fs[EVERY_MEM, fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]) >>
+  `EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn'.fn_blocks` by
+    (irule do_merge_jump_every_inst >> qexistsl [`a`, `b`, `fn`, `lm`, `lm'`] >>
+     simp[update_phi_bypass_label_positions_ok] >> rpt strip_tac >>
+     IF_CASES_TAC >> simp[canon_jnz_inst_label_positions_ok,
+       subst_label_inst_label_positions_ok]) >>
+  fs[EVERY_MEM, fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]
+QED
+
+Theorem do_merge_jump_entry_no_phis:
+  wf_function fn /\ first_block_no_preds fn /\ scfg_phi_safe fn /\
+  lookup_block a.bb_label fn.fn_blocks = SOME a /\
+  lookup_block b.bb_label fn.fn_blocks = SOME b /\
+  can_bypass_jump fn a b /\ do_merge_jump fn a b lm = SOME (fn',lm') ==>
+  EVERY (\inst. inst.inst_opcode <> PHI) (HD fn'.fn_blocks).bb_instructions
+Proof
+  strip_tac >>
+  `MEM a fn.fn_blocks` by metis_tac[lookup_block_member_label] >>
+  `fn.fn_blocks <> []` by fs[wf_function_def, fn_has_entry_def] >>
+  `(HD fn'.fn_blocks).bb_label = (HD fn.fn_blocks).bb_label` by
+    (irule do_merge_jump_entry_label >> metis_tac[]) >>
+  `fn'.fn_blocks <> []` by
+    (`fn_has_entry fn'` by metis_tac[do_merge_jump_labels_entry] >>
+     fs[fn_has_entry_def]) >>
+  simp[EVERY_MEM] >> qx_gen_tac `phi` >> strip_tac >> strip_tac >>
+  `MEM (HD fn'.fn_blocks) fn'.fn_blocks` by
+    (Cases_on `fn'.fn_blocks` >> gvs[]) >>
+  drule_all do_merge_jump_phi_source_exact >> strip_tac >>
+  `MEM (HD fn.fn_blocks) fn.fn_blocks` by
+    (Cases_on `fn.fn_blocks` >> gvs[]) >>
+  `bb = HD fn.fn_blocks` by metis_tac[same_label_same_block] >>
+  drule scfg_phi_safe_entry >> disch_then assume_tac >>
+  fs[EVERY_MEM] >> metis_tac[]
+QED
