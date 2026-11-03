@@ -5,7 +5,7 @@ Ancestors
   fragGasPathMem fragExecMem fragExec gasCount memSafeRun
   venomExecSemantics venomInstProofs venomState list rich_list arithmetic
 
-Theorem straight_line_mem_edge[local]:
+Theorem straight_line_mem_edge:
   ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME i /\
