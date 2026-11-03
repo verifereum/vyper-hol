@@ -1865,3 +1865,70 @@ Proof
     gvs[dft_gas_swap_pair_def] >>
   simp[dft_exec_suffix_cons, dft_exec_cons_def]
 QED
+
+(* Stopping INVOKEs retain their callee state and callee instruction index. *)
+Theorem dft_invoke_stopping_idx:
+  i.inst_opcode = INVOKE /\ (!t. r <> OK t) ==>
+  (step_inst fuel C i (s with vs_inst_idx := n) = r <=>
+   step_inst fuel C i s = r)
+Proof
+  strip_tac >>
+  simp[analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only] >>
+  Cases_on `step_inst fuel C i s` >> simp[] >> metis_tac[]
+QED
+
+Theorem dft_invoke_stopping_update:
+  i.inst_opcode = INVOKE /\ (!t. r <> OK t) /\
+  (!v. MEM (Var v) i.inst_operands ==> out <> v) /\
+  ~MEM out i.inst_outputs ==>
+  (step_inst fuel C i (update_var out value s) = r <=>
+   step_inst fuel C i s = r)
+Proof
+  strip_tac >> drule_all dftCommutationTheory.step_inst_invoke_frame >>
+  disch_then (qspecl_then [`fuel`, `C`, `s`, `value`] mp_tac) >>
+  Cases_on `step_inst fuel C i s` >> simp[] >> metis_tac[]
+QED
+
+Theorem dft_gas_invoke_stopping_first:
+  dft_gas_swap_pair g c /\ g.inst_opcode = GAS /\ inst_wf g /\
+  c.inst_opcode = INVOKE /\ (!t. r <> OK t) /\
+  step_inst fuel C c s' = r ==>
+  ?s. s' = (s with vs_gas_readings := s'.vs_gas_readings) /\
+    dft_exec_suffix fuel C (g::c::tail) s = r /\
+    dft_exec_suffix fuel C (c::g::tail) s' = r
+Proof
+  strip_tac >> drule_all dft_gas_ok_shape >> strip_tac >>
+  drule_all dft_independent_gas_output >> strip_tac >>
+  qexists_tac `s' with vs_gas_readings := 0w::s'.vs_gas_readings` >>
+  simp[] >>
+  `step_inst fuel C c (update_var out 0w s' with vs_inst_idx := SUC s'.vs_inst_idx) = r` by
+    (simp[dft_invoke_stopping_idx] >>
+     metis_tac[dft_invoke_stopping_update]) >>
+  Cases_on `r` >> gvs[dft_exec_suffix_cons, dft_exec_cons_def,
+    is_terminator_def, update_var_def]
+QED
+
+Theorem dft_gas_invoke_stopping_second:
+  dft_gas_swap_pair g c /\ g.inst_opcode = GAS /\ inst_wf g /\
+  c.inst_opcode = INVOKE /\ (!t. r <> OK t) /\
+  step_inst fuel C g s' = OK sg /\
+  step_inst fuel C c (sg with vs_inst_idx := SUC s'.vs_inst_idx) = r ==>
+  ?s. s' = (s with vs_gas_readings := s'.vs_gas_readings) /\
+    dft_exec_suffix fuel C (c::g::tail) s = r /\
+    dft_exec_suffix fuel C (g::c::tail) s' = r
+Proof
+  strip_tac >> drule_all dft_gas_ok_shape >> strip_tac >>
+  drule_all dft_independent_gas_output >> strip_tac >>
+  qexists_tac `s' with vs_gas_readings := TL s'.vs_gas_readings` >>
+  simp[] >>
+  `step_inst fuel C c (s' with vs_gas_readings := TL s'.vs_gas_readings) = r` by
+    (`step_inst fuel C c sg = r` by
+       metis_tac[dft_invoke_stopping_idx] >>
+     `sg = update_var out
+        (if s'.vs_gas_readings = [] then 0w else HD s'.vs_gas_readings)
+        (s' with vs_gas_readings := TL s'.vs_gas_readings)` by gvs[] >>
+     qpat_x_assum `sg = _` SUBST_ALL_TAC >>
+     metis_tac[dft_invoke_stopping_update]) >>
+  Cases_on `r` >> gvs[dft_exec_suffix_cons, dft_exec_cons_def,
+    is_terminator_def]
+QED
