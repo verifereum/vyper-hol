@@ -200,3 +200,101 @@ Proof
        sized_source_write_range_def, byte_in_memory_range_def] >>
   rpt strip_tac >> simp[read_byte_write_memory_with_expansion, LENGTH_TAKE]
 QED
+
+Theorem expanded_write_base_frame_view:
+  s' = write_memory_with_expansion off bytes s /\
+  step_inst_base inst (frame_view fn ra s with vs_memory := m) =
+    OK (write_memory_with_expansion off bytes
+          (frame_view fn ra s with vs_memory := m)) /\
+  (!i. EVERY (\r. ~byte_in_memory_range r i)
+         (source_memory_write_ranges inst s) ==>
+       ~(off <= i /\ i < off + LENGTH bytes)) ==>
+  ?m'. step_inst_base inst (frame_view fn ra s with vs_memory := m) =
+         OK (frame_view fn ra s' with vs_memory := m') /\
+       (!i. read_byte i m = read_byte i s.vs_memory ==>
+            read_byte i m' = read_byte i s'.vs_memory) /\
+       (!i. EVERY (\r. ~byte_in_memory_range r i)
+              (source_memory_write_ranges inst s) ==>
+            read_byte i m' = read_byte i m)
+Proof
+  strip_tac >> gvs[] >>
+  qexists_tac `(write_memory_with_expansion off bytes
+                  (s with vs_memory := m)).vs_memory` >>
+  simp[expanded_write_frame_view, write_memory_byte_agreement] >>
+  rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  simp[read_byte_write_memory_with_expansion]
+QED
+
+Theorem external_copy_base_frame_view:
+  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  MEM inst.inst_opcode
+    [CODECOPY; CALLDATACOPY; DLOADBYTES; RETURNDATACOPY; EXTCODECOPY] /\
+  step_inst_base inst s = OK s' ==>
+  ?m'. step_inst_base inst (frame_view fn ra s with vs_memory := m) =
+         OK (frame_view fn ra s' with vs_memory := m') /\
+       (!i. read_byte i m = read_byte i s.vs_memory ==>
+            read_byte i m' = read_byte i s'.vs_memory) /\
+       (!i. EVERY (\r. ~byte_in_memory_range r i)
+              (source_memory_write_ranges inst s) ==>
+            read_byte i m' = read_byte i m)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_opcode = CODECOPY`
+  >- (irule codecopy_base_frame_view >> simp[]) >>
+  `!op. MEM op inst.inst_operands ==>
+    eval_operand op (frame_view fn ra s with vs_memory := m) = eval_operand op s`
+    by (rpt strip_tac >> irule eval_operand_frame_view >> gen_tac >> disch_tac >>
+        irule ordinary_operand_not_retpc >> simp[] >> qexists_tac `inst` >> gvs[]) >>
+  qpat_x_assum `MEM inst.inst_opcode _` mp_tac >> simp[] >> strip_tac >>
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  simp[Once (opcode_equation ``CALLDATACOPY``),
+       Once (opcode_equation ``DLOADBYTES``),
+       Once (opcode_equation ``RETURNDATACOPY``),
+       Once (opcode_equation ``EXTCODECOPY``), AllCaseEqs()] >> strip_tac >>
+  fs[] >>
+  qpat_assum `write_memory_with_expansion _ _ _ = s'`
+    (assume_tac o SYM) >>
+  irule expanded_write_base_frame_view >>
+  goal_assum (drule_at Any) >>
+  (conj_tac
+   >- (simp[source_memory_write_ranges_def, sized_source_write_range_def,
+            byte_in_memory_range_def] >>
+       rpt strip_tac >> simp[LENGTH_TAKE]) >>
+   simp[opcode_equation ``CALLDATACOPY``, opcode_equation ``DLOADBYTES``,
+        opcode_equation ``RETURNDATACOPY``, opcode_equation ``EXTCODECOPY``] >>
+   simp[frame_view_def])
+QED
+
+Theorem memory_write_step_frame_view:
+  step_inst fuel ctx inst s = OK s' /\
+  MEM inst.inst_opcode
+    [MSTORE; MSTORE8; ISTORE; MCOPY; CODECOPY; CALLDATACOPY;
+     DLOADBYTES; RETURNDATACOPY; EXTCODECOPY] /\
+  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  (!i. source_memory_read_byte inst s i ==>
+       read_byte i m = read_byte i s.vs_memory) ==>
+  ?m'. step_inst fuel ctx inst (frame_view fn ra s with vs_memory := m) =
+         OK (frame_view fn ra s' with vs_memory := m') /\
+       (!i. read_byte i m = read_byte i s.vs_memory ==>
+            read_byte i m' = read_byte i s'.vs_memory) /\
+       (!i. EVERY (\r. ~byte_in_memory_range r i)
+              (source_memory_write_ranges inst s) ==>
+            read_byte i m' = read_byte i m)
+Proof
+  strip_tac >>
+  `inst.inst_opcode <> INVOKE` by gvs[] >>
+  `step_inst_base inst s = OK s'` by
+    (qpat_x_assum `step_inst fuel ctx inst s = OK s'` mp_tac >>
+     simp[Once step_inst_def]) >>
+  simp[Once step_inst_def] >>
+  Cases_on `inst.inst_opcode = MSTORE`
+  >- (irule mstore_base_frame_view >> simp[]) >>
+  Cases_on `inst.inst_opcode = MSTORE8`
+  >- (irule mstore8_base_frame_view >> simp[]) >>
+  Cases_on `inst.inst_opcode = ISTORE`
+  >- (irule istore_base_frame_view >> simp[]) >>
+  Cases_on `inst.inst_opcode = MCOPY`
+  >- (irule mcopy_base_frame_view >> simp[]) >>
+  irule external_copy_base_frame_view >> gvs[]
+QED
