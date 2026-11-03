@@ -484,3 +484,225 @@ Proof
       valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def,
       valueEncodingPropsTheory.val_in_memory_dynarray]
 QED
+
+(* Any occupied old allocation or complete local window keeps its subwindows. *)
+Theorem expr_post_occupied_window:
+  expr_post ctx func cenv cx e es sm sn s0 es' iv iop s1 /\
+  (!n b sz. local_region cenv es.scopes s0 n b sz ==>
+    mem_bytes_at b sz s1.vs_memory = mem_bytes_at b sz s0.vs_memory) /\
+  ((?aid b sz. FLOOKUP s0.vs_allocas aid = SOME (b, sz) /\
+               aid < sm.cs_next_id /\ b <= off /\ off + len <= b + sz /\
+               (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
+                 b + sz <= lb \/ lb + lsz <= b)) \/
+   (?n b sz. local_region cenv es.scopes s0 n b sz /\
+              b <= off /\ off + len <= b + sz) \/ len = 0) ==>
+  mem_bytes_at off len s1.vs_memory = mem_bytes_at off len s0.vs_memory
+Proof
+  strip_tac
+  >~ [`len = 0`] >- simp[valueEncodingTheory.mem_bytes_at_def]
+  >~ [`FLOOKUP s0.vs_allocas aid = SOME (b, sz)`] >-
+    (`mem_bytes_at b sz s1.vs_memory = mem_bytes_at b sz s0.vs_memory` by
+       (fs[expr_post_def] >>
+        qpat_x_assum `!aid off sz. FLOOKUP _ _ = _ /\ _ ==> _`
+          (qspecl_then [`aid`, `b`, `sz`] mp_tac) >> simp[] >>
+        disch_then irule >> rpt gen_tac >> strip_tac >>
+        first_x_assum drule >> simp[]) >>
+     drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
+     strip_tac >> sym_tac >>
+     qpat_x_assum `!off2 len2. _ /\ _ ==> _` irule >> simp[]) >>
+  `mem_bytes_at b sz s1.vs_memory = mem_bytes_at b sz s0.vs_memory` by
+    (qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> _` drule_all >> simp[]) >>
+  drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
+  strip_tac >> sym_tac >>
+     qpat_x_assum `!off2 len2. _ /\ _ ==> _` irule >> simp[]
+QED
+
+Theorem expr_post_occupied_region_frame:
+  expr_post ctx func cenv cx e es sm sn s0 es' iv iop s1 /\
+  es'.scopes = es.scopes /\ local_ptrs_reserved cenv sm /\
+  local_ptrs_rel func cenv es.scopes s0 /\ sm.cs_next_id <= sn.cs_next_id /\
+  ((?aid b sz. FLOOKUP s0.vs_allocas aid = SOME (b, sz) /\
+               sa.cs_next_id <= aid /\ aid < sm.cs_next_id /\
+               b <= off /\ off + len <= b + sz /\
+               (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
+                 b + sz <= lb \/ lb + lsz <= b)) \/
+   (?n b sz. local_region cenv es.scopes s0 n b sz /\
+              b <= off /\ off + len <= b + sz /\
+              (dynarray_local cenv n /\ ~dynarray_type ty ==> b + 32 <= off)) \/
+   len = 0) ==>
+  ((?aid b sz. FLOOKUP s1.vs_allocas aid = SOME (b, sz) /\
+               sa.cs_next_id <= aid /\ aid < sn.cs_next_id /\
+               b <= off /\ off + len <= b + sz /\
+               (!n lb lsz. local_region cenv es'.scopes s1 n lb lsz ==>
+                 b + sz <= lb \/ lb + lsz <= b)) \/
+   (?n b sz. local_region cenv es'.scopes s1 n b sz /\
+              b <= off /\ off + len <= b + sz /\
+              (dynarray_local cenv n /\ ~dynarray_type ty ==> b + 32 <= off)) \/
+   len = 0)
+Proof
+  strip_tac
+  >~ [`FLOOKUP s0.vs_allocas aid = SOME (b, sz)`] >-
+    (disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >>
+     `FLOOKUP s1.vs_allocas aid = SOME (b, sz)` by
+       (fs[expr_post_def] >> first_x_assum drule >> simp[]) >>
+     simp[] >> rpt gen_tac >> strip_tac >>
+     `local_region cenv es.scopes s0 n lb lsz` by
+       (irule exprSimOpsTheory.local_region_frame >>
+        conj_tac >- (qexists_tac `func` >> simp[]) >>
+        qexistsl_tac [`sm`, `es.scopes`, `s1`] >> fs[expr_post_def]) >>
+     first_x_assum drule >> simp[])
+  >~ [`local_region cenv es.scopes s0 n b sz`] >-
+    (disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[] >>
+     irule exprSimOpsTheory.local_region_frame_fwd >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     fs[expr_post_def] >> simp[]) >>
+  simp[]
+QED
+
+Theorem expr_val_at_expr_post_frame:
+  expr_val_at cenv cx ty sa sm es v op s0 /\
+  expr_post ctx func cenv cx e es sm sn s0 es' iv iop s1 /\
+  es'.scopes = es.scopes /\ local_ptrs_reserved cenv sm /\
+  local_ptrs_rel func cenv es.scopes s0 /\ sm.cs_next_id <= sn.cs_next_id /\
+  (!w. eval_operand op s0 = SOME w ==> eval_operand op s1 = SOME w) ==>
+  expr_val_at cenv cx ty sa sn es' v op s1
+Proof
+  strip_tac >> rewrite_tac[expr_val_at_def] >> rpt strip_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >>
+  `eval_operand op s1 = SOME w` by (first_x_assum drule >> simp[]) >>
+  simp[] >> drule expr_post_occupied_region_frame >> simp[] >>
+  disch_then (qspecl_then [`ty`, `sa`, `w2n w`, `val_footprint tv v`] mp_tac) >>
+  simp[] >> disch_then irule
+  >~ [`FLOOKUP s0.vs_allocas aid = SOME (b, sz)`] >-
+    (disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
+     first_assum ACCEPT_TAC) >>
+  disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[]
+QED
+
+Theorem vv_at_located_nonword:
+  ~is_word_type ty ==>
+  (vv_at cenv cx ty sa sb es tv (LocatedValue t p) s <=>
+   (p.ptr_location = LocMemory ==>
+    !v. read_result cx tv es = (INL v, es) ==>
+      expr_val_at cenv cx ty sa sb es v p.ptr_operand s))
+Proof
+  simp[vv_at_def, expr_val_at_def, GSYM AND_IMP_INTRO,
+       RIGHT_FORALL_IMP_THM]
+QED
+
+Theorem vv_at_expr_post_frame:
+  ~is_word_type ty /\ vv_at cenv cx ty sa sm es tv vv s0 /\
+  expr_post ctx func cenv cx e es sm sn s0 es' iv iop s1 /\
+  es'.scopes = es.scopes /\ local_ptrs_reserved cenv sm /\
+  local_ptrs_rel func cenv es.scopes s0 /\ sm.cs_next_id <= sn.cs_next_id /\
+  (!w. eval_operand (vv_operand vv) s0 = SOME w ==>
+       eval_operand (vv_operand vv) s1 = SOME w) /\
+  (!v. read_result cx tv es' = (INL v, es') <=>
+       read_result cx tv es = (INL v, es)) ==>
+  vv_at cenv cx ty sa sn es' tv vv s1
+Proof
+  Cases_on `vv` >-
+    (rename1 `StackValue vt sop` >>
+     simp[vv_at_def, contextTheory.vv_operand_def] >> rpt strip_tac >>
+     qpat_x_assum `!v. read_result _ _ _ = _ ==> _` drule_all >> strip_tac >>
+     drule_all expr_val_at_expr_post_frame >> simp[]) >>
+  simp[vv_at_located_nonword, contextTheory.vv_operand_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[vv_at_located_nonword] >> strip_tac >>
+  drule_all expr_val_at_expr_post_frame >> simp[]
+QED
+
+Theorem expr_val_at_expr_post_bytes:
+  expr_val_at cenv cx ty sa sm es v op s0 /\ ~is_word_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME tvt /\ eval_operand op s0 = SOME w /\
+  expr_post ctx func cenv cx e es sm sn s0 es' iv iop s1 /\
+  (!n b sz. local_region cenv es.scopes s0 n b sz ==>
+    mem_bytes_at b sz s1.vs_memory = mem_bytes_at b sz s0.vs_memory) ==>
+  mem_bytes_at (w2n w) (val_footprint tvt v) s1.vs_memory =
+    mem_bytes_at (w2n w) (val_footprint tvt v) s0.vs_memory
+Proof
+  strip_tac >> qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >> gvs[]
+  >~ [`val_footprint tvt v = 0`] >- simp[valueEncodingTheory.mem_bytes_at_def] >>
+  drule expr_post_occupied_window >> simp[] >>
+  disch_then (qspecl_then [`w2n w`, `val_footprint tvt v`] mp_tac) >>
+  simp[] >> disch_then irule >> (conj_tac >- first_assum ACCEPT_TAC)
+  >~ [`FLOOKUP s0.vs_allocas aid = SOME (b, sz)`] >-
+    (disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
+     first_assum ACCEPT_TAC) >>
+  disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[]
+QED
+
+Theorem expr_val_rel_expr_post_nonword_frame:
+  ~is_word_type ty /\ expr_val_rel cx ty v op s0 /\
+  expr_val_at cenv cx ty sa sm es v op s0 /\
+  expr_post ctx func cenv cx e es sm sn s0 es' iv iop s1 /\
+  (!n b sz. local_region cenv es.scopes s0 n b sz ==>
+    mem_bytes_at b sz s1.vs_memory = mem_bytes_at b sz s0.vs_memory) /\
+  (!w. eval_operand op s0 = SOME w ==> eval_operand op s1 = SOME w) ==>
+  expr_val_rel cx ty v op s1
+Proof
+  strip_tac >> qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
+  simp[expr_val_rel_def] >> strip_tac >>
+  `eval_operand op s1 = SOME w` by (first_x_assum drule >> simp[]) >>
+  simp[expr_val_rel_def] >> rpt strip_tac >>
+  `val_wf tv v` by
+    (qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[expr_val_at_def]) >>
+  `mem_bytes_at (w2n w) (val_footprint tv v) s1.vs_memory =
+   mem_bytes_at (w2n w) (val_footprint tv v) s0.vs_memory` by
+    (drule_all expr_val_at_expr_post_bytes >> simp[]) >>
+  irule val_in_memory_footprint_agree >> simp[] >>
+  qexists_tac `s0.vs_memory` >> simp[EQ_SYM_EQ]
+QED
+
+Theorem vv_holds_expr_post_nonword_frame:
+  ~is_word_type ty /\ vv_holds cenv cx ty tv vv es s0 /\
+  vv_at cenv cx ty sa sm es tv vv s0 /\
+  expr_post ctx func cenv cx e es sm sn s0 es' iv iop s1 /\
+  (!n b sz. local_region cenv es.scopes s0 n b sz ==>
+    mem_bytes_at b sz s1.vs_memory = mem_bytes_at b sz s0.vs_memory) /\
+  (!w. eval_operand (vv_operand vv) s0 = SOME w ==>
+       eval_operand (vv_operand vv) s1 = SOME w) /\
+  (!n q sz w. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) sz) /\
+              lookup_var q s0 = SOME w ==> lookup_var q s1 = SOME w) /\
+  (!v. read_result cx tv es' = (INL v, es') <=>
+       read_result cx tv es = (INL v, es)) /\
+  (!tr w. storage_holds cx tr ty tv w es ==> storage_holds cx tr ty tv w es') /\
+  (!w. immutable_holds cenv cx ty tv w es ==> immutable_holds cenv cx ty tv w es') ==>
+  vv_holds cenv cx ty tv vv es' s1
+Proof
+  Cases_on `vv` >-
+    (rename1 `StackValue vt sop` >>
+     simp[vv_holds_def, vv_at_def, contextTheory.vv_operand_def] >>
+     strip_tac >> simp[] >>
+     `expr_val_at cenv cx ty sa sm es v sop s0` by
+       (first_x_assum drule >> simp[]) >>
+     drule_all expr_val_rel_expr_post_nonword_frame >> simp[]) >>
+  qmatch_goalsub_rename_tac `LocatedValue vt aptr` >>
+  simp[vv_holds_def, contextTheory.vv_operand_def] >> strip_tac >>
+  gvs[] >> Cases_on `aptr.ptr_location` >> gvs[]
+  >~ [`val_in_memory`] >- suspend "memory"
+  >> first_x_assum drule >> simp[]
+QED
+
+Resume vv_holds_expr_post_nonword_frame[memory]:
+  conj_tac >-
+    (qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[vv_at_located_nonword] >> strip_tac >> rpt strip_tac >>
+     `val_wf tvt v` by
+       (qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+        simp[expr_val_at_def]) >>
+     `mem_bytes_at (w2n w) (val_footprint tvt v) s1.vs_memory =
+      mem_bytes_at (w2n w) (val_footprint tvt v) s0.vs_memory` by
+       (drule_all expr_val_at_expr_post_bytes >> simp[]) >>
+     irule val_in_memory_footprint_agree >> simp[] >>
+     qexists_tac `s0.vs_memory` >> simp[EQ_SYM_EQ]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!id path. _ ==> local_place_at _ _ _ _ _ _ _` drule_all >>
+  strip_tac >>
+  drule_all exprSimAggregateChildrenTheory.local_place_at_vars_frame >> simp[]
+QED
+Finalise vv_holds_expr_post_nonword_frame
