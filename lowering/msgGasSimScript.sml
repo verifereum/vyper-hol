@@ -1,7 +1,8 @@
 (* The explicit msg.gas leaf uses one actual target GAS event. *)
 Theory msgGasSim
 Ancestors
-  gasSummary fragGasPath gasCount gasOracleReplay fragExec
+  gasSummary fragGasPath fragGasPathMem gasCount gasOracleReplay fragExec
+  memSafeRun unitTransformDefs contextCodegenRel codegenRel
   exprLowering emitHelper compileEnv venomExecSemantics venomExecProofs
   venomInst venomState vyperInterpreter vyperState vyperValue
   vyperTypeSystem list rich_list pair arithmetic
@@ -27,7 +28,7 @@ Proof
   first_x_assum (qspec_then `0` mp_tac) >> simp[]
 QED
 
-Theorem msg_gas_source[local]:
+Theorem msg_gas_source:
   bind (eval_expr cx (Builtin (env_item_type MsgGas) (Env MsgGas) []))
        (read_result cx) (es with gas_obs := w::tail) =
     (INL (IntV (&w2n w)), es with gas_obs := tail)
@@ -134,4 +135,56 @@ Proof
                vs_inst_idx := LENGTH sb.cs_current_insts|>))` >>
   gvs[eval_operand_def, update_var_def, lookup_var_def,
       finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem msg_gas_mem_edge:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id GAS [] [out]) ==>
+  ?w. gas_prefix 1 s.vs_gas_readings = [w] /\
+    gas_path_mem_edge ctx func s 1
+      (OK (update_var out w
+        (s with <|vs_gas_readings := DROP 1 s.vs_gas_readings;
+                   vs_inst_idx := SUC s.vs_inst_idx|>)))
+Proof
+  strip_tac >> drule_all msg_gas_edge >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `w` >> simp[] >>
+  `!fuel. mem_safe_step fuel ctx (mk_inst id GAS [] [out]) s` by
+    simp[mem_safe_step_non_invoke, inst_mem_below_frontier_def,
+         source_memory_read_ranges_def, source_memory_write_ranges_def,
+         mk_inst_def] >>
+  fs[gas_path_edge_def] >>
+  simp[gas_path_mem_edge_def] >> metis_tac[]
+QED
+
+Theorem compile_msg_gas_mem_path:
+  compile_env_var MsgGas sa = (op, sb) /\
+  fn_has_code sa sb func /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?out w.
+    op = Var out /\ gas_prefix 1 s0.vs_gas_readings = [w] /\
+    sb.cs_current_bb = sa.cs_current_bb /\
+    gas_path_mem ctx func s0 1
+      (OK (update_var out w
+        (s0 with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
+                   vs_inst_idx := LENGTH sb.cs_current_insts|>)))
+Proof
+  strip_tac >> drule_all msg_gas_placement >> strip_tac >>
+  `?w. gas_prefix 1 s0.vs_gas_readings = [w] /\
+    gas_path_mem_edge ctx func s0 1
+      (OK (update_var out w
+        (s0 with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
+                   vs_inst_idx := SUC s0.vs_inst_idx|>)))`
+    by (irule msg_gas_mem_edge >> metis_tac[]) >>
+  qexistsl_tac [`out`, `w`] >> simp[] >>
+  `~(update_var out w
+      (s0 with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
+                 vs_inst_idx := SUC s0.vs_inst_idx|>)).vs_halted` by
+    simp[update_var_def] >>
+  gvs[] >>
+  drule (cj 2 gas_path_mem_rules) >>
+  disch_then (qspec_then `0` mp_tac) >>
+  simp[gas_path_mem_rules]
 QED
