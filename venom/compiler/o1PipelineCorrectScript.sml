@@ -31,20 +31,21 @@ End
  * the initial state's dynamic-memory pointer is its initial free-memory
  * pointer (o1_run_state_ok), as the entry state has it; and the
  * context's global reservations are well-formed, which the stage
- * invariants from ConcretizeMemLoc on need for max_live_eom. *)
+ * invariants from ConcretizeMemLoc on need for max_live_eom.
+ * The runs match up to any well-formed set D of dead bytes (dead_wf):
+ * ConcretizeMemLoc moves buffers, so bytes nothing reads may differ. *)
 Theorem run_venom_pipeline_correct:
-  !rpolicy unit out vs.
+  !D rpolicy unit out vs.
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
     unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
     o1_run_state_ok vs /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
-    raw_unit_memory_ok unit.cu_context vs
+    raw_unit_memory_ok unit.cu_context vs /\ dead_wf D
     ==>
-    checked_unit_transform_correct o1_pipeline rpolicy unit vs
+    ctx_sim D unit.cu_context out.po_unit.cu_context vs vs
 Proof
   rpt strip_tac >>
-  simp[checked_unit_transform_correct_def, ctx_transform_correct_ctx_sim] >>
   fs[o1_pipeline_def] >>
   `o1_src_inv unit.cu_context vs` by
     fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv] >>
@@ -71,7 +72,11 @@ Proof
   `o1_src_inv unit.cu_context vs` by
     fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv] >>
   drule_all o1_pipeline_stage_facts >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
+  (* Any well-formed dead-byte set will do; take none. *)
+  first_x_assum (qspecl_then [`<| d_stor := K (K {}); d_trans := K (K {});
+                                  d_imm := K {}; d_ret := K {} |>`, `vs`]
+                   mp_tac) >>
+  simp[dead_wf_def] >> strip_tac >>
   fs[o1_lowered_inv_def, mem_inv_raw_reachable] >>
   rpt strip_tac >> first_x_assum drule >>
   drule raw_reachable_initial_fmp >> simp[lowered_mem_fact_def]

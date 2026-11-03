@@ -855,7 +855,7 @@ Definition compile_generate_deploy_def:
          exit_lbl <- fresh_label "ctor_exit";
          (* Early returns and fallthrough share the unlock and epilogue. *)
          compile_stmts (cenv' with ce_ctor_exit_label := SOME exit_lbl)
-           NoLoop (BaseT BoolT) body;
+           NoLoop NoneT body;
          cs <- comp_get;
          (if block_is_terminated cs then return ()
           else emit_inst JMP [Label exit_lbl] []);

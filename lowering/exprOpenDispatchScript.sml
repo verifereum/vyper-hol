@@ -129,7 +129,9 @@ Theorem compile_type_dispatch_convert_open:
     ~block_is_terminated sb
 Proof
   rpt gen_tac >> simp[compile_type_builtin_dispatch_body_def] >>
-  pairarg_tac >> simp[] >> Cases_on `rty` >>
+  pairarg_tac >> simp[] >> IF_CASES_TAC
+  >- (rpt strip_tac >> gvs[] >> first_x_assum drule >> simp[]) >>
+  Cases_on `rty` >>
   simp[oneline as_stack_val_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
   drule_all compile_type_convert_open >> simp[]
 QED
@@ -189,16 +191,26 @@ Theorem compile_builtin_body_open:
     compile_expr_body cfn bfn tfn cenv ty (Builtin ann bi args) sa = (vv,sb) ==>
     ~block_is_terminated sb
 Proof
-  rpt gen_tac >> Cases_on `bi` >>
-  simp[compile_expr_body_def, vyperASTTheory.expr_type_def] >>
-  strip_tac >> gvs[AllCaseEqs()]
-  >~ [`compile_addmod_names _ _ _ _ _ _ _ _ _ = _`]
-    >>~- ([`compile_addmod_names _ _ _ _ _ _ _ _ _ = _`],
-      drule compile_addmod_names_open >> simp[])
-  >~ [`compile_mulmod_names _ _ _ _ _ _ _ _ _ = _`]
-    >>~- ([`compile_mulmod_names _ _ _ _ _ _ _ _ _ = _`],
-      drule compile_mulmod_names_open >> simp[]) >>
-  drule compile_powmod256_names_open >> simp[]
+  rpt gen_tac >> Cases_on `args`
+  >- (simp[compile_expr_body_def, vyperASTTheory.expr_type_def] >> metis_tac[]) >>
+  rename1 `Builtin ann bi (a::rest)` >> Cases_on `a`
+  >~ [`Builtin ann bi (Name aty an::rest)`]
+  >- (Cases_on `rest`
+      >- (simp[compile_expr_body_def, vyperASTTheory.expr_type_def] >> metis_tac[]) >>
+      rename1 `Name aty an::b::rest2` >> Cases_on `b`
+      >~ [`Name aty an::Name bty bn::rest2`]
+      >- (Cases_on `rest2`
+          >- (Cases_on `bi` >>
+              simp[compile_expr_body_def, vyperASTTheory.expr_type_def] >>
+              metis_tac[compile_powmod256_names_open]) >>
+          rename1 `Name aty an::Name bty bn::m::rest3` >> Cases_on `m`
+          >~ [`Name aty an::Name bty bn::Name mty mn::rest3`]
+          >- (Cases_on `rest3` >> Cases_on `bi` >>
+              simp[compile_expr_body_def, vyperASTTheory.expr_type_def] >>
+              metis_tac[compile_addmod_names_open, compile_mulmod_names_open]) >>
+          simp[compile_expr_body_def, vyperASTTheory.expr_type_def] >> metis_tac[]) >>
+      simp[compile_expr_body_def, vyperASTTheory.expr_type_def] >> metis_tac[]) >>
+  simp[compile_expr_body_def, vyperASTTheory.expr_type_def] >> metis_tac[]
 QED
 
 Theorem compile_pop_body_open:
