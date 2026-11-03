@@ -322,9 +322,14 @@ hypotheses and both fragment branches were not certified. Actual pinned Python
 9362e36b rejects the shown xs[1] assignment inside iteration over xs with
 ImmutableViolation. Argon approved matching that active-iterator write policy
 in type_stmt's For guard, keeping supported/body/stage hypotheses unchanged.
-A separate worker owns that checker repair and checker_defs registration;
-these executable sources remain read-only here. The owner will supply its
-checked dependency. Continue independent body proof work without a new premise;
+A separate worker delivered that checker repair in PR944, now merged into
+this tree with the current integration dependencies at cdcd1bba8. These
+executable sources remain read-only here. Continue body proof work without a new premise;
 do not spend this task completing a refutation using a Python-rejected input.
-The local diagnostic's positive typing test will require its expected result
-to change once the authorized checker dependency is integrated.
+The retired loop diagnostic was removed after its expected typing rejection
+was checked; the checker regression remains in PR944. Owner forced replay of
+bodyAllocMemoryTheory, bodyCopyMemoryTheory, bodyDeclMemoryTheory and
+bodyMemoryPredsTheory passed at 7f3bfea5f with CI flags (585.553s) and default
+2.5s steps (508.682s). Preserve their checked proofs, moved-theory imports and
+kernel guards. The unfinished declaration wrapper is restored as a working
+proof for this run; it is not part of the checked checkpoint.
