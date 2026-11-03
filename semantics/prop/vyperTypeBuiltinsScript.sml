@@ -726,12 +726,6 @@ Proof
   imp_res_tac Num_int_lt >> simp[]
 QED
 
-Theorem w2n_word_exp_lt_256[local]:
-  !i i'. w2n (i2w i ** i2w i' : 256 word) < dimword (:256)
-Proof
-  irule wordsTheory.w2n_lt
-QED
-
 Theorem within_int_bound_min[local]:
   !n i i'. within_int_bound (Signed n) i ∧ within_int_bound (Signed n) i' ==>
     ∃i''. (i < i' ∧ i = i'' ∨ ¬(i < i') ∧ i' = i'') ∧ within_int_bound (Signed n) i''
@@ -880,9 +874,6 @@ Proof
     gvs[within_int_bound_def] >> NO_TAC) >>
   (* Decimal Mul: the checked signed quotient is the returned value. *)
   TRY (gvs[within_int_bound_def] >> NO_TAC) >>
-  (* ExpMod: word_exp result bounded by 2^256 *)
-  TRY (
-    mp_tac w2n_word_exp_lt_256 >> simp[] >> NO_TAC) >>
   (* Flag bitwise: unfold to int_bitwise, apply nat bound (just the < part) *)
   PURE_REWRITE_TAC[int_bitwiseTheory.int_and_def, int_bitwiseTheory.int_or_def,
                    int_bitwiseTheory.int_xor_def] >>
