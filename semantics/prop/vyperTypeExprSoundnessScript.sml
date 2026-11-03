@@ -13,7 +13,7 @@ Ancestors
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
-  vyperTypeEnv vyperTypeBuiltins
+  vyperTypeEnv vyperTypeBuiltins vyperHashMapStorage
 Libs
   wordsLib
 
@@ -26,6 +26,22 @@ End
 Definition no_type_error_eval_def:
   no_type_error_eval res <=> no_type_error_result (FST res)
 End
+
+Theorem select_result_hashmap_no_type_error:
+  select_result cx ty (HashMapRef tr slot kt vt) (ValueSubscript kv) en =
+    (res,en') /\ no_type_error_result res ==>
+  en' = en /\ ?tv. res = INL tv
+Proof
+  Cases_on `vt`
+  >- (rename1 `Type t` >>
+      Cases_on `evaluate_type (get_tenv cx) t`
+      >- simp[select_result_def, extend_place_def, lift_option_type_def,
+              lift_option_def, bind_def, return_def, raise_def,
+              no_type_error_result_def] >>
+      drule select_result_hashmap_leaf >> disch_then (fn th => rewrite_tac[th]) >>
+      rpt strip_tac >> gvs[]) >>
+  simp[select_result_hashmap_nested] >> rpt strip_tac >> gvs[]
+QED
 
 Theorem read_value_result_no_type_error:
   value_result_typed tv tyv /\ tyv <> NoneTV /\ (!t b. tyv <> ArrayTV t b) /\

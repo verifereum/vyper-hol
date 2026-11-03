@@ -580,3 +580,141 @@ Proof
   simp[exprSimWordArgsTheory.wb_frame_def, lookup_var_def] >>
   strip_tac >> first_assum ACCEPT_TAC
 QED
+
+Theorem compile_mapping_operand_not_label:
+  type_place_expr env obj = SOME (HashMapT kt vt) /\
+  compile_expr cenv ty obj sa = (vv,sm) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  Cases_on `obj` >> simp[well_typed_expr_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def]
+  >~ [`FLOOKUP cenv.ce_module_vars id`]
+  >- (Cases_on `FLOOKUP cenv.ce_module_vars id` >>
+      gvs[AllCaseEqs()] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      rpt strip_tac >>
+      gvs[contextTheory.vv_operand_def, contextTheory.mk_ptr_def])
+  >> strip_tac >>
+  drule exprSafeOperandBuiltinsTheory.compile_subscript_not_label >>
+  simp[]
+QED
+
+
+Theorem compile_mapping_index_success_tail:
+  expr_post ctx func cenv cx idx em sm sn s1 en kv key t /\
+  expr_type idx = kt /\ hashmap_key_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
+  (if is_bytestring_type kt then compile_keccak256_key key F sn
+   else (key,sn)) = (hashed,sp) /\
+  compile_mapping_subscript base_op hashed sp = (slot,sb) /\
+  (!x. key = Var x ==> not_fresh_at sn x) /\
+  (!x. base_op = Var x ==> not_fresh_at sm x) /\ (!l. base_op <> Label l) /\
+  eval_operand base_op s1 = SOME base_slot /\
+  fn_inst_ids_distinct func /\ fn_has_code sp sb func /\
+  stmt_state_rel ctx func cenv cx em s1 /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM em.scopes = MAP FDOM en.scopes /\
+  sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id ==>
+  frag_exec ctx sn sb (\s. s = t)
+    (\u. eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
+         stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv em sm s1 u) R
+Proof
+  strip_tac >>
+  `eval_operand base_op t = SOME base_slot` by
+    (irule exprSimOpsTheory.eval_operand_frame >>
+     simp[] >> qexistsl [`sm`, `s1`] >>
+     gvs[exprSimTheory.expr_post_def]) >>
+  `!x. base_op = Var x ==> not_fresh_at sn x` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `local_ptrs_reserved cenv sn` by
+    (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
+  drule_all compile_hashmap_tail_frag >>
+  disch_then (qspecl_then [`base_slot`, `R`] mp_tac) >>
+  disch_then (mp_then Any irule frag_exec_conseq) >> simp[]
+QED
+
+Theorem compile_mapping_index_continuation:
+  (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
+   expr_map_pre cenv cx env (Subscript ann obj idx) es) /\
+  (nocalls ==> int_calls_expr (Subscript ann obj idx) = []) /\
+  expr_sim_case nocalls ctx func cenv cx idx /\
+  place_type cenv obj = MapPT kt vt /\
+  eval_expr cx obj es = (INL (HashMapRef tr base_slot kt vt),em) /\
+  eval_expr cx (Subscript ann obj idx) es = (res,es') /\
+  storage_mapping_region cx tr base_slot (HashMapT kt vt) /\
+  p.ptr_location = slot_loc tr /\
+  eval_operand p.ptr_operand s1 = SOME base_slot /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
+  (!l. p.ptr_operand <> Label l) /\
+  stmt_state_rel ctx func cenv cx em s1 /\ wb_frame cenv es sa s0 s1 /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id /\
+  lower_value compile_expr cenv (expr_type idx) idx sm = (key,sn) /\
+  (if is_bytestring_type kt then compile_keccak256_key key F sn
+   else (key,sn)) = (hashed,sp) /\
+  compile_mapping_subscript p.ptr_operand hashed sp = (slot,sb) /\
+  fn_has_code sm sn func /\ fn_has_code sp sb func /\
+  fn_inst_ids_distinct func /\ cs_extends sm sn /\ cs_extends sn sb ==>
+  frag_exec ctx sm sb (\s. s = s1)
+    (\s. ?tr base_slot kv tv.
+      res = INL tv /\ storage_mapping_region cx tr base_slot (HashMapT kt vt) /\
+      select_result cx (expr_type obj) (HashMapRef tr base_slot kt vt)
+        (ValueSubscript kv) es' = (INL tv,es') /\
+      p.ptr_location = slot_loc tr /\
+      eval_operand slot s = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
+      stmt_state_rel ctx func cenv cx es' s /\ wb_frame cenv es sa s0 s)
+    (expr_exit res)
+Proof
+  strip_tac >>
+  `expr_body_pre cenv cx env idx em` by
+    metis_tac[mapping_subscript_index_pre] >>
+  `expr_sim ctx func cenv cx (expr_type idx) idx em` by
+    (gvs[expr_sim_case_def] >> first_x_assum irule >>
+     conj_tac >- metis_tac[int_calls_subscript_operands] >>
+     qexists `env` >> simp[]) >>
+  Cases_on `(do ir <- eval_expr cx idx; read_result cx ir od) em` >>
+  rename1 `_ = (kr,en)` >>
+  `expr_res_ok kr` by metis_tac[expr_body_pre_res_ok] >>
+  drule_all eval_expr_subscript_forced_index >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `frag_exec ctx sm sb _ Q _` >>
+  irule frag_exec_conseq >>
+  qexistsl [`\s. s = s1 /\ stmt_state_rel ctx func cenv cx em s`,
+            `Q`, `expr_exit res`] >> simp[] >>
+  irule expr_sim_suffix >>
+  goal_assum (drule_at Any) >> simp[] >>
+  first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  (conj_tac
+  >- (Cases_on `kr` >> gvs[] >> gen_tac >> Cases_on `r` >>
+      gvs[exprSimTheory.expr_res_ok_def, exprSimTheory.expr_exit_def]) >>
+  rpt strip_tac >>
+  `no_type_error_result res` by
+    metis_tac[expr_body_pre_eval_result, expr_map_pre_eval_result] >>
+  `select_result cx (expr_type obj) (HashMapRef tr base_slot kt vt)
+     (ValueSubscript v) en = (res,es')` by
+    (qpat_x_assum `!ann. eval_expr _ _ _ = _`
+       (qspec_then `ann` mp_tac) >> simp[]) >>
+  drule_all vyperTypeExprSoundnessTheory.select_result_hashmap_no_type_error >> strip_tac >> gvs[] >>
+  `expr_sim_inv cenv cx env en /\ expr_type idx = kt /\
+   hashmap_key_type kt /\
+   ?tv. evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv v` by
+    metis_tac[mapping_subscript_key_typed] >>
+  `!x. key = Var x ==> not_fresh_at sn x` by
+    metis_tac[exprOperandVarTheory.compile_lower_value_var] >>
+  `MAP FDOM em.scopes = MAP FDOM en.scopes` by
+    metis_tac[exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom] >>
+  `MAP FDOM es.scopes = MAP FDOM em.scopes` by
+    metis_tac[vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom] >>
+  drule_all compile_mapping_index_success_tail >>
+  disch_then (qspec_then `expr_exit (INL tv)` mp_tac) >>
+  disch_then (mp_then Any irule frag_exec_conseq) >> simp[] >>
+  rpt strip_tac >> simp[Abbr `Q`] >>
+  qexistsl [`tr`, `base_slot`, `v`] >> simp[] >>
+  irule exprSimWordArgsTheory.wb_frame_trans >>
+  goal_assum (drule_at Any) >> simp[] >>
+  conj_tac >- (qexistsl [`em`, `sm`, `s1`] >> simp[]) >>
+  goal_assum (drule_at Any))
+QED
