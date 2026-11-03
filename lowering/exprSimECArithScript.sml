@@ -2003,7 +2003,7 @@ Proof
         (simp[FUN_EQ_THM] >> metis_tac[]) >>
       simp[] >> irule frag_exec_false_pre) >>
   `expr_body_pre cenv cx env a es` by
-    (`expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
+    (`expr_sim_inv cenv cx env es /\ source_supply es` by gvs[expr_body_pre_def] >>
      drule expr_body_pre_builtin_arg >>
      disch_then (qspecl_then [`a`, `es`] mp_tac) >> simp[]) >>
   `nocalls ==> int_calls_expr a = []` by
@@ -2012,7 +2012,7 @@ Proof
     (gvs[exprs_case_def, expr_sim_case_def] >> metis_tac[]) >>
   Cases_on `(do r <- eval_expr cx a; read_result cx r od) es` >>
   rename1 `(do r <- eval_expr cx a; read_result cx r od) es = (r1,es1)` >>
-  `expr_sim_inv cenv cx env es1 /\ expr_res_ok r1` by
+  `expr_sim_inv cenv cx env es1 /\ source_supply es1 /\ expr_res_ok r1` by
     metis_tac[expr_body_pre_eval, expr_body_pre_res_ok] >>
   reverse (Cases_on `r1`)
   >- suspend "first_exit" >>
