@@ -2804,6 +2804,110 @@ Proof
   simp[]
 QED
 
+Theorem step_inst_base_ret_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = RET ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >>
+  simp[step_inst_base_def, eval_operands_prev_bb] >>
+  Cases_on `eval_operands inst.inst_operands s` >>
+  simp[exec_result_map_prev_bb_def] >>
+  Cases_on `x` >> simp[exec_result_map_prev_bb_def]
+QED
+
+Theorem step_inst_base_retfmp_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = RETFMP ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >>
+  simp[step_inst_base_def, eval_operands_prev_bb] >>
+  Cases_on `eval_operands inst.inst_operands s` >>
+  simp[exec_result_map_prev_bb_def] >>
+  Cases_on `x` >> simp[exec_result_map_prev_bb_def]
+QED
+
+Theorem step_inst_base_stop_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = STOP ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >> simp[step_inst_base_def, halt_state_def,
+    exec_result_map_prev_bb_def, venom_state_fupdcanon]
+QED
+
+Theorem step_inst_base_sink_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = SINK ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >> simp[step_inst_base_def, halt_state_def,
+    exec_result_map_prev_bb_def, venom_state_fupdcanon]
+QED
+
+Theorem step_inst_base_invalid_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = INVALID ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >> simp[step_inst_base_def, halt_state_def,
+    set_returndata_def, exec_result_map_prev_bb_def, venom_state_fupdcanon]
+QED
+
+Theorem step_inst_base_return_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = RETURN ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >> simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >> simp[exec_result_map_prev_bb_def] >>
+  Cases_on `t` >> simp[exec_result_map_prev_bb_def] >>
+  Cases_on `t'` >> simp[exec_result_map_prev_bb_def] >>
+  simp[eval_operand_prev_bb] >>
+  Cases_on `eval_operand h s` >> simp[exec_result_map_prev_bb_def] >>
+  Cases_on `eval_operand h' s` >>
+  simp[exec_result_map_prev_bb_def, halt_state_def, set_returndata_def,
+    venom_state_fupdcanon]
+QED
+
+Theorem step_inst_base_revert_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = REVERT ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >> simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >> simp[exec_result_map_prev_bb_def] >>
+  Cases_on `t` >> simp[exec_result_map_prev_bb_def] >>
+  Cases_on `t'` >> simp[exec_result_map_prev_bb_def] >>
+  simp[eval_operand_prev_bb] >>
+  Cases_on `eval_operand h s` >> simp[exec_result_map_prev_bb_def] >>
+  Cases_on `eval_operand h' s` >>
+  simp[exec_result_map_prev_bb_def, revert_state_def, set_returndata_def,
+    venom_state_fupdcanon]
+QED
+
+Theorem step_inst_base_selfdestruct_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = SELFDESTRUCT ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >> simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >> simp[exec_result_map_prev_bb_def] >>
+  Cases_on `t` >> simp[exec_result_map_prev_bb_def] >>
+  simp[eval_operand_prev_bb] >>
+  Cases_on `eval_operand h s` >>
+  simp[exec_result_map_prev_bb_def, halt_state_def, venom_state_fupdcanon]
+QED
+
 val nonjump_term_prev_bb_tac =
   simp[step_inst_base_def, eval_operand_prev_bb,
        eval_operands_prev_bb, halt_state_def, revert_state_def,
