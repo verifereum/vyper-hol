@@ -1276,11 +1276,21 @@ Proof
       gvs[rich_listTheory.EL_APPEND, rich_listTheory.EL_CONS,
           arithmeticTheory.PRE_SUB1] >>
       `i = LENGTH x0` by decide_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> gvs[]) >>
+  rename1 `ImmutablePlace src name path` >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target`
+  >- simp[write_place_def, bind_def, get_immutables_def,
+          get_address_immutables_def, lift_option_type_def, return_def,
+          raise_def, preserves_tv_refl] >>
+  rename1 `ALOOKUP st.immutables cx.txn.target = SOME imms` >>
+  Cases_on `FLOOKUP (get_source_immutables src imms) name`
+  >- simp[write_place_def, bind_def, get_immutables_def,
+          get_address_immutables_def, lift_option_type_def, return_def,
+          raise_def, preserves_tv_refl] >>
+  rename1 `FLOOKUP (get_source_immutables src imms) name = SOME tv` >>
+  Cases_on `assign_subscripts (FST tv) (SND tv) path (Replace v)` >>
   simp[write_place_def, bind_def, lift_option_type_def, lift_sum_def,
        get_immutables_def, get_address_immutables_def, set_immutable_def,
-       set_address_immutables_def, return_def, raise_def, AllCaseEqs()] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, return_def, raise_def]) >>
+       set_address_immutables_def, return_def, raise_def] >>
   rpt strip_tac >> gvs[] >>
   gvs[AllCaseEqs(), return_def, raise_def, preserves_tv_def,
       get_source_immutables_def, set_source_immutables_def] >>
@@ -1416,11 +1426,12 @@ Proof
   >- (strip_tac >> irule preserves_tv_eq >>
       metis_tac[append_storage_place_scopes_immutables]) >>
   simp[append_place_def, bind_def, lift_sum_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, ignore_bind_def, lift_sum_def, return_def, raise_def]) >>
+  simp[AllCaseEqs(), ignore_bind_def, lift_sum_def, return_def, raise_def] >>
   rpt strip_tac >>
   imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
-  gvs[] >> metis_tac[write_place_preserves_tv]
+  gvs[] >>
+  Cases_on `append_element tv old v` >> gvs[return_def, raise_def] >>
+  metis_tac[write_place_preserves_tv, preserves_tv_refl]
 QED
 
 Theorem pop_place_preserves_tv:
@@ -1446,10 +1457,31 @@ Proof
           arithmeticTheory.PRE_SUB1] >>
       `i = LENGTH x0` by decide_tac >>
       gvs[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> gvs[]) >>
-  simp[pop_place_def, bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
-       get_immutables_def, get_address_immutables_def, set_immutable_def,
-       set_address_immutables_def, return_def, raise_def, AllCaseEqs()] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def]) >>
+  rename1 `ImmutablePlace src name path` >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target`
+  >- simp[pop_place_def, bind_def, get_immutables_def,
+          get_address_immutables_def, lift_option_type_def, return_def,
+          raise_def, preserves_tv_refl] >>
+  rename1 `ALOOKUP st.immutables cx.txn.target = SOME imms` >>
+  Cases_on `FLOOKUP (get_source_immutables src imms) name`
+  >- simp[pop_place_def, bind_def, get_immutables_def,
+          get_address_immutables_def, lift_option_type_def, return_def,
+          raise_def, preserves_tv_refl] >>
+  rename1 `FLOOKUP (get_source_immutables src imms) name = SOME tv` >>
+  Cases_on `evaluate_subscripts (FST tv) (SND tv) path`
+  >- (rename1 `evaluate_subscripts (FST tv) (SND tv) path = INL arr` >>
+      Cases_on `popped_value arr` >>
+      Cases_on `assign_subscripts (FST tv) (SND tv) path PopOp` >>
+      simp[pop_place_def, bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
+           get_immutables_def, get_address_immutables_def, set_immutable_def,
+           set_address_immutables_def, return_def, raise_def] >>
+      rpt strip_tac >> gvs[] >>
+      gvs[preserves_tv_def, get_source_immutables_def, set_source_immutables_def] >>
+      rw[] >> CASE_TAC >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
+      rw[] >> gvs[alistTheory.ALOOKUP_ADELKEY]) >>
+  simp[pop_place_def, bind_def, lift_option_type_def, lift_sum_def,
+       get_immutables_def, get_address_immutables_def, return_def, raise_def,
+       preserves_tv_refl] >>
   rpt strip_tac >> gvs[] >>
   gvs[AllCaseEqs(), return_def, raise_def, preserves_tv_def,
       get_source_immutables_def, set_source_immutables_def] >>
