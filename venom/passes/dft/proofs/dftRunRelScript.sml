@@ -9,7 +9,7 @@ Ancestors
   dftScheduleOrder dftStructural dftPermSim dftDefs passSharedDefs venomExecSemantics venomWf
   venomInst venomState venomEffects venomExecProps list finite_map sorting rich_list dftCorrectness
   dftAvailability dftWf dftIndexedExec
-  unitLabelMapIdentity sccpCorrectnessProofs
+  unitLabelMapIdentity sccpCorrectnessProofs gasOracleReplay stateEquiv
 
 Definition dft_res_rel_def:
   dft_res_rel r r' <=>
@@ -1135,3 +1135,71 @@ Proof
   match_mp_tac LIST_REL_mono >> metis_tac[dft_task_fn_rel_implies_current]
 QED
 
+
+(* A successful executed prefix can be replayed with any prescribed unread
+   suffix. The earlier consumed values are fixed before choosing that suffix. *)
+Theorem dft_prefix_replay_tail:
+  !pre s t.
+  EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+  FOLDR (dft_exec_cons fuel C) OK pre s = OK t ==>
+  ?gs. !tail.
+    FOLDR (dft_exec_cons fuel C) OK pre
+      (s with vs_gas_readings := gs ++ tail) =
+    OK (t with vs_gas_readings := tail)
+Proof
+  Induct
+  >- (simp[] >> rpt strip_tac >> qexists_tac `[]` >> simp[]) >>
+  rpt gen_tac >> simp[dft_exec_cons_def] >>
+  Cases_on `step_inst fuel C h s` >> simp[] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  mp_tac (cj 1 gas_oracle_replay) >>
+  disch_then (qspecl_then [`fuel`, `C`, `h`, `s`] strip_assume_tac) >>
+  qexists_tac `gas_prefix n s.vs_gas_readings ++ gs` >>
+  gen_tac >>
+  qpat_x_assum `!tail. lift_result _ _ _ _ _`
+    (qspec_then `gs ++ tail` mp_tac) >>
+  simp[GSYM gas_prefix_def] >>
+  Cases_on `step_inst fuel C h
+    (s with vs_gas_readings := gas_prefix n s.vs_gas_readings ++ (gs ++ tail))` >>
+  simp[lift_result_def] >> strip_tac >> gvs[lift_result_def] >>
+  simp[dft_exec_cons_def, APPEND_ASSOC]
+QED
+
+Theorem dft_prefix_replay_variant:
+  EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+  FOLDR (dft_exec_cons fuel C) OK pre s = OK t /\
+  t = (u with vs_gas_readings := t.vs_gas_readings) ==>
+  ?s0. s = (s0 with vs_gas_readings := s.vs_gas_readings) /\
+    FOLDR (dft_exec_cons fuel C) OK pre s0 = OK u
+Proof
+  strip_tac >> drule_all dft_prefix_replay_tail >> strip_tac >>
+  qexists_tac `s with vs_gas_readings := gs ++ u.vs_gas_readings` >>
+  simp[] >>
+  `u = (t with vs_gas_readings := u.vs_gas_readings)` by
+    (qpat_x_assum `t = _` SUBST1_TAC >> simp[]) >>
+  metis_tac[]
+QED
+
+(* Lift a gas-variant suffix simulation through a prefix already executed on
+   the scheduled side. The earlier prefix readings are replayed, not changed. *)
+Theorem dft_suffix_prefix_variant:
+  EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+  (!t. FOLDR (dft_exec_cons fuel C) OK pre s' = OK t ==>
+    ?u. t = (u with vs_gas_readings := t.vs_gas_readings) /\
+      dft_res_rel (dft_exec_suffix fuel C xs u)
+                  (dft_exec_suffix fuel C ys t)) ==>
+  ?s. s' = (s with vs_gas_readings := s'.vs_gas_readings) /\
+    dft_res_rel (dft_exec_suffix fuel C (pre ++ xs) s)
+                (dft_exec_suffix fuel C (pre ++ ys) s')
+Proof
+  strip_tac >>
+  Cases_on `FOLDR (dft_exec_cons fuel C) OK pre s'`
+  >- (gvs[] >>
+      drule_all dft_prefix_replay_variant >> strip_tac >>
+      qexists_tac `s0` >> simp[dft_exec_suffix_append] >>
+      simp[Once dft_exec_prefix_continue] >>
+      simp[Once dft_exec_prefix_continue]) >>
+  qexists_tac `s'` >> simp[dft_exec_suffix_append] >>
+  simp[Once dft_exec_prefix_continue] >>
+  simp[Once dft_exec_prefix_continue]
+QED
