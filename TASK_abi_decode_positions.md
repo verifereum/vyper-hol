@@ -85,7 +85,8 @@ holbuild -j2 build abiBuiltinValidSourceTheory abiBuiltinValidUnwrapTheory abiDe
 
 Build changed lower prerequisites first. Normal checkpoints, default2.5s tactic
 limit, shared wrapper/default memory. Tool wall timeout up to7200s is permitted;
-never remove a live lock or start duplicate builds. Owner does final forced replay.
+never remove a live lock or start duplicate builds. Owner checks changed theories
+with proof steps, cache and checkpoints enabled; no forced or CI-mode replay.
 
 ## Background
 
@@ -111,6 +112,13 @@ proofs may be reusable. Do not restore old executable definitions.
 - No TRY/ORELSE around proof search. Do not raise/remove the tactic timeout.
 - Do not work on full compile_abi_decode_case/compile_abi_encode_case, checker
   domain, encoder allocation migration, target/place or val_footprint.
+- Narrow prerequisite exception: a proof-only repair of
+  semantics/prop/vyperScopePreservationScript.sml:append_place_scopes_dom is
+  permitted after the reproduced default-timeout failures. Keep its exact
+  statement, source semantics and default tactic limit unchanged. This does
+  not authorize target/place case proofs or other changes in that file.
+- Search before adding helpers; reuse existing results rather than duplicate
+  them, including local copies. Export or move a shared helper when needed.
 - Proof helpers describing emitted code may change with that code. Retain
   substantive semantic results; report any false old helper with its consumers.
 - Working TASK/PLAN/STATE/REFERENCE files stay out of the final PR.
