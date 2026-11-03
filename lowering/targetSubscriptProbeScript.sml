@@ -4,7 +4,7 @@ Ancestors
   compileEnv vyperStoragePlaceRegion vyperStorageLayoutSafety vfmState
   words finite_map combin vyperValue targetSubscriptSim
   emitHelperProps emitHelper exprLoweringProps venomExecSemantics venomState venomInst
-  fragExec
+  fragExec vyperInterpreter vyperContext vyperState vyperStorageBackend exprSimHyps
 
 Theorem frag_exec_refutation_probe:
   !ctx sa sb P Q R fn s.
@@ -320,3 +320,84 @@ QED
    facts follows from the checked callee alone. The STOP probe establishes
    a non-Error distinguishing suffix interface, not a target counterexample.
 *)
+
+Definition probe_outer_type_def:
+  probe_outer_type = ArrayT (ArrayT (BaseT BoolT) (Dynamic 1)) (Dynamic 1)
+End
+
+Definition probe_guarded_code_def:
+  probe_guarded_code =
+    [VariableDecl Private Storage "outer" probe_outer_type (SOME 0);
+     FunctionDecl Internal Nonpayable F F "shrink" [] [] (BaseT (UintT 256))
+       [If (Builtin (BaseT BoolT) (Bop Gt)
+              [Builtin (BaseT (UintT 256)) Len
+                [TopLevelName probe_outer_type (NONE,"outer")];
+               Literal (BaseT (UintT 256)) (IntL 0)])
+           [Expr (Pop (ArrayT (BaseT BoolT) (Dynamic 1))
+                   (TopLevelNameTarget (NONE,"outer")))] [];
+        Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))]]
+End
+
+Definition probe_guarded_context_def:
+  probe_guarded_context = empty_evaluation_context with
+    <| sources := [(0w,[(NONE,probe_guarded_code)])];
+       layouts := [(0w,([((NONE,"outer"),0)],[]))] |>
+End
+
+Definition probe_guarded_state_def:
+  probe_guarded_state len = SND (set_storage_backend probe_guarded_context F
+    (update_storage 0w (n2w len) (update_storage 1w 1w empty_storage))
+    empty_state)
+End
+
+(* Concrete empty and singleton call results are checked below. These
+   evaluator fixtures do not inhabit expr_sim_inv: see the no-oracle check.
+   Neither universal expression simulation nor target_pre is established. *)
+
+(* Gt on IntV uses integer$int_gt, explicitly nocompute in integerTheory. *)
+Theorem probe_guard_comparisons[local]:
+  (integer$int_gt (0:int) 0 = F) /\
+  (integer$int_gt (1:int) 0 = T)
+Proof
+  simp[integerTheory.int_gt]
+QED
+
+Theorem probe_guarded_empty_return:
+  FST (eval_expr probe_guarded_context
+    (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
+    (probe_guarded_state 0)) = INL (Value (IntV 0))
+Proof
+  EVAL_TAC >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  EVAL_TAC >> simp[integerTheory.int_gt] >> EVAL_TAC >> simp[] >> EVAL_TAC
+QED
+
+Theorem probe_guarded_singleton_return:
+  FST (eval_expr probe_guarded_context
+    (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
+    (probe_guarded_state 1)) = INL (Value (IntV 0))
+Proof
+  EVAL_TAC >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  EVAL_TAC >> simp[integerTheory.int_gt] >> EVAL_TAC >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  EVAL_TAC >> simp[] >> EVAL_TAC >> simp[] >> EVAL_TAC
+QED
+
+(* The concrete evaluator fixtures above are not yet invariant witnesses:
+   empty_state supplies NONE, whereas simulation requires an outcome oracle. *)
+Theorem probe_guarded_state_no_oracle:
+  !len. (probe_guarded_state len).outcomes = NONE
+Proof
+  gen_tac >> EVAL_TAC
+QED
+
+Theorem probe_guarded_fixture_not_invariant:
+  !cenv env len.
+    ~expr_sim_inv cenv probe_guarded_context env (probe_guarded_state len)
+Proof
+  simp[expr_sim_inv_def, probe_guarded_state_no_oracle]
+QED
