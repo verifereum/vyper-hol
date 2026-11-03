@@ -13236,3 +13236,22 @@ Theorem compile_builtin_calldatasize_labels:
 Proof
   simp[builtinSimpleTheory.compile_builtin_calldatasize_def, emit_op_labels]
 QED
+
+Theorem compile_builtin_len_labels:
+  !ic imm ptr loc s P.
+    cs_extends s (SND (compile_builtin_len ic imm ptr loc s)) /\
+    EVERY P (added_labels s (SND (compile_builtin_len ic imm ptr loc s)))
+Proof
+  simp[builtinSimpleTheory.compile_builtin_len_def, compile_ptr_load_labels]
+QED
+
+Theorem compile_bytestring_hash_labels:
+  !ptr s P.
+    cs_extends s (SND (compile_bytestring_hash ptr s)) /\
+    EVERY P (added_labels s (SND (compile_bytestring_hash ptr s)))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_bytestring_hash_def] >>
+  irule comp_bind_labels >> reverse conj_tac >- simp[emit_op_labels] >>
+  rpt gen_tac >> BETA_TAC >>
+  irule comp_bind_labels >> simp[emit_op_labels]
+QED
