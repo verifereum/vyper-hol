@@ -250,3 +250,64 @@ Proof
   irule hash_readonly_state_rel >> goal_assum (drule_at Any) >>
   gvs[exprSimTheory.expr_post_def]
 QED
+
+(* The slot hash uses exactly the two staged words; SHA3 itself is readonly. *)
+Theorem compile_mapping_subscript_run:
+  compile_mapping_subscript base_op key sa = (op,sb) /\
+  (!x. base_op = Var x ==> not_fresh_at sa x) /\
+  (!x. key = Var x ==> not_fresh_at sa x) /\
+  eval_operand base_op s = SOME w0 /\ eval_operand key s = SOME w1 /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (hashmap_slot w0 w1) /\
+    stmt_state_rel ctx func cenv cx es t /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+       FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!aid b len. aid < sa.cs_next_id /\
+       FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
+    (!n b sz. local_region cenv es.scopes s n b sz ==>
+       mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory)
+Proof
+  strip_tac >> drule compile_mapping_subscript_parts >> strip_tac >>
+  drule_all hash_alloc_two_words_frame >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sq) s = OK staged` >>
+  `eval_operand (Lit 64w) staged = SOME 64w` by simp[eval_operand_def] >>
+  drule_at (Pat `emit_op SHA3 _ _ = _`) emit_SHA3_bytes_frame >>
+  simp[eval_operand_def] >> disch_then drule_all >> strip_tac >>
+  `t.vs_memory = staged.vs_memory /\ t.vs_allocas = staged.vs_allocas` by
+    (qpat_assum `t with vs_vars := _ = _`
+       (mp_tac o Q.AP_TERM `\z. (z.vs_memory,z.vs_allocas)`) >> simp[]) >>
+  `sb.cs_current_insts = sq.cs_current_insts ++ emitted_insts sq sb` by
+    (qpat_assum `emit_op SHA3 _ _ = _` (mp_then Any mp_tac emitHelperPropsTheory.emitted_insts_emit_op) >> simp[]) >>
+  `sq.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sq /\
+   sa.cs_next_var <= sq.cs_next_var` by
+    (qpat_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     qpat_assum `emit_void MSTORE [buf.buf_operand; base_op] _ = _` mp_tac >>
+     qpat_assum `emit_op ADD _ _ = _` mp_tac >>
+     qpat_assum `emit_void MSTORE [ptr'; key] _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
+       fresh_var_def, emit_def] >> rpt strip_tac >> gvs[] >>
+     rewrite_tac[emitted_insts_def] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND]) >>
+  `local_ptrs_reserved cenv sq` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx es t` by
+    (irule hash_readonly_state_rel >> qexistsl [`staged`, `sq`] >> simp[]) >>
+  `run_inst_seq (emitted_insts sa sb) s = OK t` by
+    (qpat_assum `run_inst_seq (emitted_insts sa sq) s = OK staged`
+       (mp_then (Pat `run_inst_seq _ _ = OK _`) mp_tac run_inst_seq_chain) >>
+     disch_then (qspec_then `sb` mp_tac) >> simp[]) >>
+  qexists `t` >> simp[vyperStorageTheory.hashmap_slot_def, byteTheory.word_of_bytes_be_def] >> rpt conj_tac
+  >- (rpt strip_tac >> `not_fresh_at sq x` by
+        (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >> simp[])
+  >- (rpt strip_tac >> qpat_x_assum `!aid b len. _ ==> mem_bytes_at _ _ _ = _` drule_all >> simp[])
+  >> rpt strip_tac >> qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> _` drule >> simp[]
+QED
