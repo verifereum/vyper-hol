@@ -585,7 +585,7 @@ Theorem ctx_bisim_ctx_sim:
   ctx_bisim C C' /\ C'.ctx_entry = C.ctx_entry /\
   (!fuel v t. run_context fuel C vs <> IntRet v t) /\
   vs.vs_vars = FEMPTY /\ ~vs.vs_halted ==>
-  ctx_sim C C' vs vs
+  ctx_sim D C C' vs vs
 Proof
   strip_tac >> rw[ctx_sim_def] >>
   Cases_on `C.ctx_entry` >>
@@ -603,6 +603,7 @@ Proof
   first_x_assum drule >> strip_tac >>
   first_x_assum drule >> strip_tac >>
   qexists_tac `fuel'` >>
+  irule unit_result_rel_dead_result_rel >>
   irule frame_result_rel_unit >> simp[]
 QED
 

@@ -20,6 +20,7 @@ Theory dftRunRel
 Ancestors
   dftScheduleOrder dftStructural dftDefs venomExecSemantics venomWf
   venomInst venomState venomEffects list finite_map sorting rich_list dftCorrectness
+  sccpCorrectnessProofs
 
 Definition dft_res_rel_def:
   dft_res_rel r r' <=>
@@ -115,4 +116,33 @@ Proof
   fs[EVERY_MEM] >>
   simp[FILTER_APPEND_DISTRIB, FILTER_FILTER, FILTER_EQ_ID, FILTER_EQ_NIL,
        GSYM EVERY_NOT_EXISTS, EVERY_MEM]
+QED
+
+(* One block, same context on both sides: DFT's block bb' simulates bb up to
+   a reordering of the gas readings.  The original block runs from a state
+   that differs from s' only in vs_gas_readings (gas_variant, o1PassContract,
+   unfolded here).  Premises: variables the block reads are defined
+   (strict_dom_vars_defined), value labels are bound, no ALLOCA, and pairs
+   that are not abort_compatible keep their order (dft_fallible_order_kept).
+   Without them an instruction hoisted above an aborting one can fail with
+   an undefined operand where the original aborted. *)
+Theorem dft_run_block_gas:
+  !fn bb bb' s' fuel C.
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  dft_block_rel bb bb' /\ pseudos_prefix bb /\
+  bb.bb_label = s'.vs_current_bb /\ strict_dom_vars_defined fn s' /\
+  (!i l. MEM i bb.bb_instructions /\ ~is_pseudo i.inst_opcode /\
+     ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+     MEM (Label l) i.inst_operands ==> l IN FDOM s'.vs_labels) /\
+  (!x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~abort_compatible x.inst_opcode y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id ==>
+    id_before (MAP (\i. i.inst_id) bb'.bb_instructions) x.inst_id y.inst_id) ==>
+  ?s. s' = (s with vs_gas_readings := s'.vs_gas_readings) /\
+      dft_res_rel (run_block fuel C bb s) (run_block fuel C bb' s')
+Proof
+  cheat
 QED

@@ -57,10 +57,10 @@ Proof
 QED
 
 Theorem opaque_use_not_flippable:
-  gas_use_ok i x \/ retpc_use_ok i x ==> ~is_flippable i.inst_opcode
+  retpc_use_ok i x ==> ~is_flippable i.inst_opcode
 Proof
   Cases_on `i.inst_opcode` >>
-  simp[gas_use_ok_def, retpc_use_ok_def, is_flippable_def,
+  simp[retpc_use_ok_def, is_flippable_def,
        is_commutative_def, is_comparator_def]
 QED
 
@@ -76,11 +76,7 @@ Proof
   `!origin. MEM origin [GAS; RETPC_PARAM] /\
       copy_phi_var origin (dft_fn fn) x ==> copy_phi_var origin fn x` by
     (rpt strip_tac >> drule_all dft_shape_copy_phi_var >> simp[]) >>
-  conj_tac >> strip_tac
-  >- (`gas_var fn x` by gvs[gas_var_def] >>
-      `gas_use_ok j x` by metis_tac[opaque_use_ok_gas_use] >>
-      `~is_flippable j.inst_opcode` by metis_tac[opaque_use_not_flippable] >>
-      gvs[]) >>
+  strip_tac >>
   `retpc_var fn x` by gvs[retpc_var_def] >>
   `retpc_use_ok j x` by metis_tac[opaque_use_ok_retpc_use] >>
   `~is_flippable j.inst_opcode` by metis_tac[opaque_use_not_flippable] >> gvs[]

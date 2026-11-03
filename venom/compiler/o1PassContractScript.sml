@@ -545,7 +545,7 @@ Proof
   rw[gas_variant_def] >>
   qpat_x_assum `vs_out = _` mp_tac >>
   disch_then (fn th => RULE_ASSUM_TAC (ONCE_REWRITE_RULE [th])) >>
-  gvs[o1_run_state_ok_def, o1_initial_state_ok_def]
+  gvs[o1_run_state_ok_def, o1_initial_state_ok_def, code_layout_valid_def]
 QED
 
 Theorem o1_stage_contract_imp_gas:

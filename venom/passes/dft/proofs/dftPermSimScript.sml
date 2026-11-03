@@ -66,13 +66,15 @@ Definition bi_independent_def:
     ~is_terminator i1.inst_opcode /\ ~is_terminator i2.inst_opcode /\
     ~is_alloca_op i1.inst_opcode /\ ~is_alloca_op i2.inst_opcode /\
     ~is_ext_call_op i1.inst_opcode /\ ~is_ext_call_op i2.inst_opcode /\
-    i1.inst_opcode <> INVOKE /\ i2.inst_opcode <> INVOKE
+    i1.inst_opcode <> INVOKE /\ i2.inst_opcode <> INVOKE /\
+    ~gas_pair i1.inst_opcode i2.inst_opcode
 End
 
 Triviality bi_independent_sym:
   !i1 i2. bi_independent i1 i2 <=> bi_independent i2 i1
 Proof
-  rw[bi_independent_def, effects_independent_def, abort_compatible_def] >>
+  rw[bi_independent_def, effects_independent_def, abort_compatible_def,
+     gas_pair_def] >>
   metis_tac[DISJOINT_SYM]
 QED
 
@@ -105,14 +107,15 @@ Definition ext_bi_independent_def:
     abort_compatible i1.inst_opcode i2.inst_opcode /\
     ~is_terminator i1.inst_opcode /\ ~is_terminator i2.inst_opcode /\
     ~is_alloca_op i1.inst_opcode /\ ~is_alloca_op i2.inst_opcode /\
-    ~is_ext_call_op i1.inst_opcode /\ ~is_ext_call_op i2.inst_opcode
+    ~is_ext_call_op i1.inst_opcode /\ ~is_ext_call_op i2.inst_opcode /\
+    ~gas_pair i1.inst_opcode i2.inst_opcode
 End
 
 (* Extended bilateral independence is symmetric. *)
 Theorem ext_bi_independent_sym:
   !i1 i2. ext_bi_independent i1 i2 <=> ext_bi_independent i2 i1
 Proof
-  rw[ext_bi_independent_def, effects_independent_def,
+  rw[ext_bi_independent_def, effects_independent_def, gas_pair_def,
      abort_compatible_def] >>
   metis_tac[DISJOINT_SYM]
 QED
@@ -352,7 +355,7 @@ QED
 Triviality pure_step_is_update_var:
   !fuel ctx b s sb.
     step_inst fuel ctx b s = OK sb /\
-    b.inst_opcode <> INVOKE /\
+    b.inst_opcode <> INVOKE /\ b.inst_opcode <> GAS /\
     ~is_terminator b.inst_opcode /\
     ~is_alloca_op b.inst_opcode /\
     ~is_ext_call_op b.inst_opcode /\
@@ -520,7 +523,7 @@ Triviality step_ok_transfer_forward_ext_invoke:
     DISJOINT (set b.inst_outputs) (set (operand_vars a.inst_operands)) /\
     DISJOINT (set (inst_defs a)) (set (inst_defs b)) /\
     effects_independent a.inst_opcode b.inst_opcode /\
-    inst_wf b ==>
+    inst_wf b /\ b.inst_opcode <> GAS ==>
     ?sba. step_inst fuel ctx a sb = OK sba
 Proof
   rpt strip_tac >>
@@ -587,12 +590,13 @@ Triviality step_ok_transfer_forward_ext:
     DISJOINT (set b.inst_outputs) (set (operand_vars a.inst_operands)) /\
     DISJOINT (set (inst_defs a)) (set (inst_defs b)) /\
     effects_independent a.inst_opcode b.inst_opcode /\
-    inst_wf b ==>
+    inst_wf b /\ ~gas_pair a.inst_opcode b.inst_opcode ==>
     ?sba. step_inst fuel ctx a sb = OK sba
 Proof
   rpt strip_tac >>
   Cases_on `a.inst_opcode = INVOKE`
-  >- (irule step_ok_transfer_forward_ext_invoke >> metis_tac[])
+  >- (`b.inst_opcode <> GAS` by gvs[gas_pair_def] >>
+      irule step_ok_transfer_forward_ext_invoke >> metis_tac[])
   >> (irule step_ok_transfer_forward_ext_non_invoke >> metis_tac[])
 QED
 
@@ -667,7 +671,7 @@ Triviality step_swap_ok_ext_invoke_fold:
     MAP FST pairs = a.inst_outputs /\
     step_inst_base a s =
       OK (FOLDL (\st (out,value). update_var out value st) s pairs) /\
-    a.inst_opcode <> INVOKE /\
+    a.inst_opcode <> INVOKE /\ a.inst_opcode <> GAS /\
     write_effects a.inst_opcode = {} /\
     read_effects a.inst_opcode = {} /\
     inst_wf a /\ inst_wf b /\
@@ -706,7 +710,7 @@ Proof
   qexistsl_tac
     [`ctx`, `fuel`, `a`, `b`, `s`,
      `FOLDL (\st (out,value). update_var out value st) s pairs`, `sb`] >>
-  gvs[]
+  gvs[gas_pair_def]
 QED
 
 (* Helper: INVOKE b case. a must be pure (invoke_implies_pure). *)
@@ -724,6 +728,7 @@ Proof
   `effects_independent INVOKE a.inst_opcode` by
     metis_tac[effects_independent_sym] >>
   drule invoke_implies_pure >> strip_tac >>
+  `a.inst_opcode <> GAS` by gvs[gas_pair_def] >>
   `step_inst_base a s = OK sa` by gvs[step_inst_non_invoke] >>
   qspecl_then [`a`, `s`, `sa`] mp_tac pure_step_structure >>
   simp[] >> strip_tac >> gvs[] >>

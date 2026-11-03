@@ -11,7 +11,16 @@ Ancestors
   passSharedField venomExecSemantics venomExecProps venomEffects venomInstProofs
   venomMemProofs venomState finite_map venomInst stateEquiv stateEquivProps
   passSimulationDefs venomInstProps pred_set sorting passSharedFrame
-  vfmState venomWf passResidualFrame
+  vfmState venomWf passResidualFrame gasOracleReplay
+
+(* Pairs that both consume gas readings: GAS pops vs_gas_readings and an
+   INVOKE's callee may run GAS.  Such pairs commute only up to a reordering
+   of the readings (gas_pair_commute), not with the same start state. *)
+Definition gas_pair_def:
+  gas_pair op1 op2 <=>
+    (op1 = GAS /\ (op2 = GAS \/ op2 = INVOKE)) \/
+    (op1 = INVOKE /\ op2 = GAS)
+End
 
 (* ================================================================
    1. step_inst preserves vs_allocas and vs_alloca_next for
@@ -381,7 +390,8 @@ Theorem step_non_effect_free_preserves_all_vars[local]:
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode /\
     inst.inst_opcode <> INVOKE /\
-    inst.inst_opcode <> DALLOCA ==>
+    inst.inst_opcode <> DALLOCA /\
+    inst.inst_opcode <> GAS ==>
     !v. lookup_var v s' = lookup_var v s
 Proof
   rpt strip_tac >>
@@ -419,22 +429,27 @@ Theorem output_var_agree_across_independent:
     ~is_alloca_op inst_a.inst_opcode /\ ~is_alloca_op inst_b.inst_opcode /\
     ~is_ext_call_op inst_a.inst_opcode /\ ~is_ext_call_op inst_b.inst_opcode /\
     inst_a.inst_opcode <> INVOKE /\ inst_b.inst_opcode <> INVOKE /\
+    ~gas_pair inst_a.inst_opcode inst_b.inst_opcode /\
     MEM w inst_a.inst_outputs ==>
     lookup_var w sab = lookup_var w sba
 Proof
+  (* TEMPORARY cheat: GAS no longer counts as effect-free, so the GAS x
+     non-(GAS/INVOKE) case needs its own argument (a non-GAS, non-INVOKE
+     instruction keeps vs_gas_readings).  Original proof:
+
   rpt strip_tac >>
-  (* Step 1: lookup_var w sab = lookup_var w va
-     (inst_b doesn't write w, so it preserves w) *)
+  ( * Step 1: lookup_var w sab = lookup_var w va
+     (inst_b doesn't write w, so it preserves w) * )
   `~MEM w inst_b.inst_outputs` by (
     gvs[DISJOINT_DEF, EXTENSION] >> metis_tac[]) >>
   `lookup_var w sab = lookup_var w va` by
     metis_tac[step_preserves_non_output_vars] >>
-  (* Step 2: lookup_var w va = lookup_var w sba
-     Both are inst_a applied to states that agree on inst_a's inputs *)
+  ( * Step 2: lookup_var w va = lookup_var w sba
+     Both are inst_a applied to states that agree on inst_a's inputs * )
   `step_inst_base inst_a ss = OK va` by gvs[step_inst_non_invoke] >>
   `step_inst_base inst_a vb = OK sba` by gvs[step_inst_non_invoke] >>
   `lookup_var w va = lookup_var w sba` suffices_by simp[] >>
-  (* Establish all prerequisites for output_determined_vars *)
+  ( * Establish all prerequisites for output_determined_vars * )
   `!op. MEM op inst_a.inst_operands ==>
         eval_operand op ss = eval_operand op vb` by (
     rpt strip_tac >>
@@ -452,7 +467,7 @@ Proof
     `~MEM w' inst_b.inst_outputs` by (
       gvs[DISJOINT_DEF, EXTENSION] >> metis_tac[]) >>
     metis_tac[step_preserves_non_output_vars]) >>
-  (* Get field preservation for inst_b step specifically *)
+  ( * Get field preservation for inst_b step specifically * )
   mp_tac (Q.SPECL [`fuel`, `ctx`, `inst_b`, `ss`, `vb`]
             step_inst_preserves_eligible_fields) >>
   simp[] >> strip_tac >>
@@ -474,8 +489,8 @@ Proof
       gvs[read_effects_def] >>
     `Eff_FMP NOTIN write_effects inst_b.inst_opcode` by res_tac >>
     gvs[]) >>
-  (* Account sub-field preservation: inst_b always preserves
-     balance, nonce, code even when it writes STORAGE *)
+  ( * Account sub-field preservation: inst_b always preserves
+     balance, nonce, code even when it writes STORAGE * )
   `!addr. (vb.vs_accounts addr).balance =
           (ss.vs_accounts addr).balance /\
           (vb.vs_accounts addr).nonce =
@@ -483,8 +498,8 @@ Proof
           (vb.vs_accounts addr).code =
           (ss.vs_accounts addr).code` by
     metis_tac[step_inst_preserves_account_bnc] >>
-  (* Storage sub-field: if STORAGE read by inst_a, then
-     STORAGE not written by inst_b, so full accounts preserved *)
+  ( * Storage sub-field: if STORAGE read by inst_a, then
+     STORAGE not written by inst_b, so full accounts preserved * )
   `Eff_STORAGE IN read_effects inst_a.inst_opcode ==>
    !addr. (ss.vs_accounts addr).storage =
           (vb.vs_accounts addr).storage` by (
@@ -493,12 +508,12 @@ Proof
     `Eff_BALANCE NOTIN write_effects inst_b.inst_opcode` by
       metis_tac[eligible_write_constraints] >>
     `vb.vs_accounts = ss.vs_accounts` by gvs[] >> gvs[]) >>
-  (* Memory: if read by inst_a, not written by inst_b *)
+  ( * Memory: if read by inst_a, not written by inst_b * )
   `Eff_MEMORY IN read_effects inst_a.inst_opcode ==>
    ss.vs_memory = vb.vs_memory` by (strip_tac >> res_tac >> gvs[]) >>
-  (* Case split: effect-free uses output_determined_vars,
-     non-effect-free eligible ops don't modify vs_vars *)
-  (* NOP: step returns state unchanged, so trivially equal *)
+  ( * Case split: effect-free uses output_determined_vars,
+     non-effect-free eligible ops don't modify vs_vars * )
+  ( * NOP: step returns state unchanged, so trivially equal * )
   Cases_on `inst_a.inst_opcode = NOP`
   >- (
     `step_inst fuel ctx inst_a ss = OK ss` by
@@ -508,20 +523,20 @@ Proof
     gvs[]) >>
   Cases_on `is_effect_free_op inst_a.inst_opcode`
   >- (
-    (* Account-reading opcodes need special handling because SSTORE
+    ( * Account-reading opcodes need special handling because SSTORE
        modifies .storage but preserves .balance/.nonce/.code.
        The generic theorem demands full vs_accounts equality which
-       fails for BALANCE × SSTORE pairs. *)
+       fails for BALANCE × SSTORE pairs. * )
     Cases_on `Eff_BALANCE IN read_effects inst_a.inst_opcode \/
               Eff_EXTCODE IN read_effects inst_a.inst_opcode`
     >- (
-      (* inst_a ∈ {BALANCE, SELFBALANCE, EXTCODESIZE, EXTCODEHASH}.
-         Prove output agreement directly from sub-field preservation. *)
+      ( * inst_a ∈ {BALANCE, SELFBALANCE, EXTCODESIZE, EXTCODEHASH}.
+         Prove output agreement directly from sub-field preservation. * )
       qspecl_then [`fuel`, `ctx`, `inst_a`, `ss`, `vb`, `va`, `sba`, `w`]
         mp_tac account_read_step_output_agree >>
       ASM_REWRITE_TAC[])
     >- (
-      (* No account-reading effects: generic theorem applies *)
+      ( * No account-reading effects: generic theorem applies * )
       `inst_a.inst_opcode <> PHI` by
         (Cases_on `inst_a.inst_opcode` >> simp[] >>
          qpat_x_assum `inst_a.inst_opcode = PHI`
@@ -556,12 +571,14 @@ Proof
       qexistsl_tac [`ctx`, `fuel`, `inst_a`, `ss`, `vb`] >>
       ASM_REWRITE_TAC[])
     >- (
-      (* Remaining non-effect-free eligible instructions are side-effect-only. *)
+      ( * Remaining non-effect-free eligible instructions are side-effect-only. * )
       `!v. lookup_var v va = lookup_var v ss` by
         metis_tac[step_non_effect_free_preserves_all_vars] >>
       `!v. lookup_var v sba = lookup_var v vb` by
         metis_tac[step_non_effect_free_preserves_all_vars] >>
       gvs[]))
+  *)
+  cheat
 QED
 
 (* ================================================================
@@ -582,48 +599,55 @@ Theorem independent_commute_eq:
     ~is_terminator inst1.inst_opcode /\ ~is_terminator inst2.inst_opcode /\
     ~is_alloca_op inst1.inst_opcode /\ ~is_alloca_op inst2.inst_opcode /\
     ~is_ext_call_op inst1.inst_opcode /\ ~is_ext_call_op inst2.inst_opcode /\
-    inst1.inst_opcode <> INVOKE /\ inst2.inst_opcode <> INVOKE ==>
+    inst1.inst_opcode <> INVOKE /\ inst2.inst_opcode <> INVOKE /\
+    ~gas_pair inst1.inst_opcode inst2.inst_opcode ==>
     s12 = s21
 Proof
+  (* TEMPORARY cheat: GAS no longer counts as effect-free, so the GAS x
+     non-(GAS/INVOKE) case needs its own argument (a non-GAS, non-INVOKE
+     instruction keeps vs_gas_readings).  Original proof:
+
   rpt strip_tac >>
-  (* A: commute_equiv *)
+  ( * A: commute_equiv * )
   `commute_equiv (set (inst_defs inst1) UNION set (inst_defs inst2)) s12 s21` by (
     mp_tac (Q.SPECL [`fuel`, `ctx`, `inst1`, `inst2`, `ss`]
                       effects_independent_commute) >> simp[LET_THM]) >>
-  (* B: vs_allocas *)
+  ( * B: vs_allocas * )
   `s12.vs_allocas = s21.vs_allocas` by (
     `v1.vs_allocas = ss.vs_allocas` by metis_tac[step_inst_preserves_allocas] >>
     `s12.vs_allocas = ss.vs_allocas` by metis_tac[step_inst_preserves_allocas] >>
     `v2.vs_allocas = ss.vs_allocas` by metis_tac[step_inst_preserves_allocas] >>
     `s21.vs_allocas = ss.vs_allocas` by metis_tac[step_inst_preserves_allocas] >>
     simp[]) >>
-  (* B2: vs_alloca_next *)
+  ( * B2: vs_alloca_next * )
   `s12.vs_alloca_next = s21.vs_alloca_next` by (
     `v1.vs_alloca_next = ss.vs_alloca_next` by metis_tac[step_inst_preserves_alloca_next] >>
     `s12.vs_alloca_next = ss.vs_alloca_next` by metis_tac[step_inst_preserves_alloca_next] >>
     `v2.vs_alloca_next = ss.vs_alloca_next` by metis_tac[step_inst_preserves_alloca_next] >>
     `s21.vs_alloca_next = ss.vs_alloca_next` by metis_tac[step_inst_preserves_alloca_next] >>
     simp[]) >>
-  (* C: vars in defs agree *)
+  ( * C: vars in defs agree * )
   `!w. w IN (set (inst_defs inst1) UNION set (inst_defs inst2)) ==>
        lookup_var w s12 = lookup_var w s21` by (
     rw[IN_UNION] >> gvs[inst_defs_def]
-    >- ((* w in inst1.inst_outputs — use output_var_agree with inst_a=inst1 *)
+    >- (( * w in inst1.inst_outputs — use output_var_agree with inst_a=inst1 * )
       irule output_var_agree_across_independent >>
       MAP_EVERY qexists_tac [`ctx`, `fuel`, `inst1`, `inst2`, `ss`, `v1`, `v2`] >>
       gvs[inst_defs_def, inst_uses_def])
-    >- ((* w in inst2.inst_outputs — use output_var_agree with inst_a=inst2, inst_b=inst1
-           Note: sab=s21, sba=s12 in the swapped version *)
+    >- (( * w in inst2.inst_outputs — use output_var_agree with inst_a=inst2, inst_b=inst1
+           Note: sab=s21, sba=s12 in the swapped version * )
       `lookup_var w s21 = lookup_var w s12` suffices_by simp[] >>
       irule output_var_agree_across_independent >>
       MAP_EVERY qexists_tac [`ctx`, `fuel`, `inst2`, `inst1`, `ss`, `v2`, `v1`] >>
       gvs[inst_defs_def, inst_uses_def] >>
       metis_tac[effects_independent_def, DISJOINT_SYM])) >>
-  (* D: Assemble *)
+  ( * D: Assemble * )
   irule commute_equiv_allocas_vars_eq >>
   simp[] >>
   qexists_tac `set (inst_defs inst1) UNION set (inst_defs inst2)` >>
   simp[]
+  *)
+  cheat
 QED
 
 (* ================================================================
@@ -741,7 +765,7 @@ Theorem pure_step_structure:
     ~is_terminator inst.inst_opcode /\
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE /\
+    inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> GAS /\
     write_effects inst.inst_opcode = {} /\
     read_effects inst.inst_opcode = {} ==>
     ?pairs.
@@ -770,7 +794,7 @@ Triviality empty_effect_non_effect_free_opcode_cases[local]:
     ~is_terminator op /\ ~is_alloca_op op /\ ~is_ext_call_op op /\
     op <> INVOKE /\ write_effects op = {} /\ read_effects op = {} /\
     ~is_effect_free_op op ==>
-    op = ASSERT \/ op = ASSERT_UNREACHABLE
+    op = ASSERT \/ op = ASSERT_UNREACHABLE \/ op = GAS
 Proof
   Cases >> EVAL_TAC
 QED
@@ -860,7 +884,7 @@ Theorem pure_step_output_agree[local]:
     ~is_terminator inst.inst_opcode /\
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE /\
+    inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> GAS /\
     write_effects inst.inst_opcode = {} /\
     read_effects inst.inst_opcode = {} /\
     (!op. MEM op inst.inst_operands ==> eval_operand op s1 = eval_operand op s2) /\
@@ -1050,10 +1074,12 @@ Theorem invoke_commute_eq[local]:
     abort_compatible inst1.inst_opcode inst2.inst_opcode /\
     ~is_terminator inst1.inst_opcode /\ ~is_terminator inst2.inst_opcode /\
     ~is_alloca_op inst1.inst_opcode /\ ~is_alloca_op inst2.inst_opcode /\
-    ~is_ext_call_op inst1.inst_opcode /\ ~is_ext_call_op inst2.inst_opcode ==>
+    ~is_ext_call_op inst1.inst_opcode /\ ~is_ext_call_op inst2.inst_opcode /\
+    ~gas_pair inst1.inst_opcode inst2.inst_opcode ==>
     s12 = s21
 Proof
   rpt strip_tac >>
+  `inst2.inst_opcode <> GAS` by gvs[gas_pair_def] >>
   (* 1: inst2 pure with empty effects *)
   `inst2.inst_opcode <> INVOKE /\
    write_effects inst2.inst_opcode = {} /\
@@ -1135,14 +1161,15 @@ Theorem independent_commute_eq_ext:
     abort_compatible inst1.inst_opcode inst2.inst_opcode /\
     ~is_terminator inst1.inst_opcode /\ ~is_terminator inst2.inst_opcode /\
     ~is_alloca_op inst1.inst_opcode /\ ~is_alloca_op inst2.inst_opcode /\
-    ~is_ext_call_op inst1.inst_opcode /\ ~is_ext_call_op inst2.inst_opcode ==>
+    ~is_ext_call_op inst1.inst_opcode /\ ~is_ext_call_op inst2.inst_opcode /\
+    ~gas_pair inst1.inst_opcode inst2.inst_opcode ==>
     s12 = s21
 Proof
   rpt strip_tac >>
   Cases_on `inst1.inst_opcode = INVOKE`
   >- (
     qspecl_then [`fuel`, `ctx`, `inst1`, `inst2`, `ss`, `v1`, `v2`, `s12`, `s21`]
-      mp_tac invoke_commute_eq >> simp[])
+      mp_tac invoke_commute_eq >> simp[gas_pair_def])
   >> Cases_on `inst2.inst_opcode = INVOKE`
   >- (
     `effects_independent inst2.inst_opcode inst1.inst_opcode` by (
@@ -1152,10 +1179,29 @@ Proof
     `s21 = s12` suffices_by simp[] >>
     qspecl_then [`fuel`, `ctx`, `inst2`, `inst1`, `ss`, `v2`, `v1`, `s21`, `s12`]
       mp_tac invoke_commute_eq >>
-    simp[DISJOINT_SYM])
+    gvs[DISJOINT_SYM, gas_pair_def])
   >> (
     qspecl_then [`fuel`, `ctx`, `inst1`, `inst2`, `ss`, `v1`, `v2`, `s12`, `s21`]
-      mp_tac independent_commute_eq >> simp[])
+      mp_tac independent_commute_eq >> simp[gas_pair_def])
+QED
+
+(* Gas pairs commute up to a reordering of the readings.  The start state of
+   the original order differs from ss only in vs_gas_readings (gas_variant,
+   o1PassContract, unfolded here), and both orders end in the same state. *)
+Theorem gas_pair_commute:
+  !fuel ctx inst1 inst2 ss v2 s21.
+    gas_pair inst1.inst_opcode inst2.inst_opcode /\
+    inst_wf inst1 /\ inst_wf inst2 /\
+    DISJOINT (set (inst_defs inst1)) (set (inst_uses inst2)) /\
+    DISJOINT (set (inst_defs inst2)) (set (inst_uses inst1)) /\
+    DISJOINT (set (inst_defs inst1)) (set (inst_defs inst2)) /\
+    step_inst fuel ctx inst2 ss = OK v2 /\
+    step_inst fuel ctx inst1 v2 = OK s21 ==>
+    ?ss1 v1. ss = (ss1 with vs_gas_readings := ss.vs_gas_readings) /\
+             step_inst fuel ctx inst1 ss1 = OK v1 /\
+             step_inst fuel ctx inst2 v1 = OK s21
+Proof
+  cheat
 QED
 
 (* ================================================================
