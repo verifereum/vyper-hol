@@ -473,6 +473,9 @@ Proof
   `state_well_typed st_body /\ accounts_well_typed st_body.accounts` by
     (qpat_x_assum `entry _ = _` mp_tac >>
      simp_tac bool_ss [Abbr `entry`] >> strip_tac >>
+     `source_supply (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` by
+       fs[vyperSourceSupplyFieldsTheory.machine_supply_def,
+          vyperSourceSupplyDefsTheory.source_supply_def, initial_state_def] >>
      drule_all checked_external_entry_sound >> simp[]) >>
   gvs[] >> irule release_action_success_machine_well_typed >>
   qexistsl [`initial_evaluation_context am.sources am.layouts tx src`,

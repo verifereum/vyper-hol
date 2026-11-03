@@ -232,16 +232,6 @@ Proof
   imp_res_tac vyperCallFrameTheory.concrete_send_error >> gvs[]
 QED
 
-Theorem call_external_function_empty_body_no_halt[local]:
-  call_external_function orc gobs am cx F mut ts mods args dflts vals [] ret <>
-    (INR HaltException,am_out,rqs)
-Proof
-  rpt strip_tac >>
-  gvs[Once call_external_function_def, Once evaluate_def, bind_def,
-      ignore_bind_def, return_def, raise_def, triple_identity, AllCaseEqs()] >>
-  imp_res_tac send_call_value_error >> gvs[]
-QED
-
 Theorem call_external_function_deploy_success_evaluate_all_constants[local]:
   !orc rqs am cx nr mut ts all_mods args dflts vals body ret v am_out.
   cx.in_deploy /\
@@ -1600,7 +1590,13 @@ Proof
   Cases_on `lock st` >> Cases_on `q` >> simp[] >> strip_tac >>
   `r.scopes = st.scopes /\ r.immutables = st.immutables /\ r.accounts = st.accounts` by
     (unabbrev_all_tac >> drule call_lock_action_frame_c53 >> simp[])
-  >- (`body_entry_ready art cx scope r` by gvs[body_entry_ready_def, state_well_typed_def] >>
+  >- (`source_supply r` by
+        (`source_supply st` by fs[body_entry_ready_def] >>
+         unabbrev_all_tac >> Cases_on `nr` >> gvs[return_def] >>
+         Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
+         metis_tac[vyperSourceSupplyDefsTheory.source_supply_action_result,
+                   vyperSourcePrimitiveSupplyTheory.source_supply_locks]) >>
+      `body_entry_ready art cx scope r` by gvs[body_entry_ready_def, state_well_typed_def] >>
       `eval_stmts cx body r = (res,rt)` by fs[] >>
       drule_all checked_explicit_external_current_body_sound >> simp[])
   >> `no_type_error_eval (lock st)` by
@@ -1635,7 +1631,7 @@ Theorem checked_external_defaults_body_sound:
   module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
-  context_well_typed cx /\ state_well_typed st /\ accounts_well_typed st.accounts /\
+  context_well_typed cx /\ state_well_typed st /\ accounts_well_typed st.accounts /\ source_supply st /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx st.immutables /\
   (do
      dvs <- eval_external_defaults cx (DROP k dflts);
@@ -1671,6 +1667,9 @@ Proof
       >- (rpt strip_tac >> gvs[raise_def, vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
       strip_tac >>
       `scope_well_typed x` by metis_tac[bind_arguments_scope_well_typed_from_success] >>
+      `source_supply (r with scopes := [x])` by
+        (`source_supply r` by metis_tac[eval_external_defaults_source_supply] >>
+         fs[vyperSourceSupplyDefsTheory.source_supply_def]) >>
       `body_entry_ready art cx x (r with scopes := [x])` by
         gvs[body_entry_ready_def, state_well_typed_def] >>
       qpat_assum `cx = _` (fn th =>
@@ -1689,7 +1688,7 @@ Theorem checked_external_entry_sound:
   module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
-  context_well_typed cx /\ state_well_typed st /\ accounts_well_typed st.accounts /\
+  context_well_typed cx /\ state_well_typed st /\ accounts_well_typed st.accounts /\ source_supply st /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx st.immutables /\
   (do
      send_call_value mut cx;
@@ -1715,6 +1714,9 @@ Proof
   Cases_on `send_call_value mut cx st` >> Cases_on `q` >> simp[] >> strip_tac >>
   drule_all send_call_value_state_sound_c53 >> strip_tac
   >- (`immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx r.immutables` by metis_tac[] >>
+      `source_supply r` by
+        metis_tac[vyperSourceSupplyDefsTheory.source_supply_action_result,
+                  vyperSourceTransferSupplyTheory.source_supply_action_send_call_value] >>
       qpat_assum `cx = _` (fn th =>
         qpat_x_assum `bind _ _ r = (res,rt)`
           (assume_tac o REWRITE_RULE [GSYM th])) >>
@@ -1934,6 +1936,9 @@ Proof
      `immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx
        (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>).immutables` by
        (simp_tac (srw_ss()) [initial_state_def] >> metis_tac[]) >>
+     `source_supply (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` by
+       fs[vyperSourceSupplyFieldsTheory.machine_supply_def,
+          vyperSourceSupplyDefsTheory.source_supply_def, initial_state_def] >>
      drule_all checked_external_entry_sound >> simp[]) >>
   qabbrev_tac `unlock = (if nr /\ mut <> View /\ mut <> Pure then
     case cx.nonreentrant_slot of NONE => return ()

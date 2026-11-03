@@ -14,7 +14,8 @@ val () = Parse.type_abbrev ("exception", ``:vyperState$exception``);
 
 Definition supply_adoption_safe_def:
   supply_adoption_safe request outcome <=>
-    (outcome.co_success /\ ~request.cr_static ==>
+    (~request.cr_static /\
+     (outcome.co_success \/ request.cr_kind <> MessageCall) ==>
       accounts_supply_bounded outcome.co_accounts)
 End
 
@@ -59,7 +60,7 @@ Proof
      (call_outcome_request target calldata value_opt before).cr_accounts` by
     simp[call_outcome_request_def] >>
   drule_all supply_safe_take_outcome >> strip_tac >>
-  simp[supply_adoption_safe_def]
+  gvs[supply_adoption_safe_def, call_outcome_request_def]
 QED
 
 Theorem source_supply_take_safe:
@@ -77,8 +78,7 @@ Theorem source_supply_action_adopt:
 Proof
   strip_tac >> simp[source_supply_action_def, adopt_call_outcome_equation] >>
   gen_tac >> strip_tac >>
-  Cases_on `outcome.co_success /\ ~request.cr_static` >>
-  gvs[source_supply_def, supply_adoption_safe_def]
+  rw[] >> gvs[source_supply_def, supply_adoption_safe_def]
 QED
 
 val () = proofAuditLib.check_theory "vyperSourceOracleSupply";

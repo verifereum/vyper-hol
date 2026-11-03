@@ -289,7 +289,7 @@ Resume eval_source_supply_mutual[eval_expr_Attribute]:
 QED
 
 Resume eval_source_supply_mutual[eval_expr_Builtin]:
-  simp[Once evaluate_def] >> SUPPLY_TAC
+  simp[Once evaluate_def] >> rpt SUPPLY_STEP >> metis_tac[]
 QED
 
 Resume eval_source_supply_mutual[eval_expr_Pop]:

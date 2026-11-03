@@ -1054,9 +1054,14 @@ Theorem check_contract_explicit_external_entry_no_type_error:
       body
       (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>))
 Proof
+  strip_tac >>
+  `source_supply (initial_state am [scope] with
+     <|outcomes := orc; requests := rqs; gas_obs := gobs|>)` by
+    fs[vyperSourceSupplyFieldsTheory.machine_supply_def,
+       vyperSourceSupplyDefsTheory.source_supply_def, initial_state_def] >>
   metis_tac[
     checked_explicit_external_entry_establishes_type_soundness_preconditions,
-    machine_supply_initial_state, eval_stmts_no_type_error]
+    eval_stmts_no_type_error]
 QED
 
 Theorem checked_explicit_external_post_prefix_body_no_type_error_selected:

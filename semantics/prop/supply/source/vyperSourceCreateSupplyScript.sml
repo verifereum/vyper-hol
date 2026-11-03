@@ -3,10 +3,48 @@
 Theory vyperSourceCreateSupply
 Ancestors
   list pair option arithmetic vyperMisc vyperSourceSupplyDefs
-  vyperSupplyBoundary vyperAdapterSupply vyperCreate vyperState
+  vyperSupplyBoundary vyperAdapterSupply vyperCreate vyperState vyperCallOutcome
 Libs
   proofAuditLib
   pairLib
+
+Theorem source_supply_action_create_oracle_result[local]:
+  source_supply_action (create_oracle_result salt value initcode rof)
+Proof
+  simp[source_supply_action_def] >> qx_gen_tac `before` >> strip_tac >>
+  simp[create_oracle_result_def] >>
+  qmatch_goalsub_abbrev_tac `take_create_outcome kind value initcode before` >>
+  Cases_on `take_create_outcome kind value initcode before` >>
+  rename1 `_ = (res, mid)` >>
+  Cases_on `res` >> simp[]
+  >- (PairCases_on `x` >> drule take_create_outcome_success >> strip_tac >>
+      `accounts_supply_bounded x0.cr_accounts /\ supply_safe_outcomes os` by
+        gvs[create_outcome_request_def, source_supply_def] >>
+      drule_all supply_safe_take_outcome_bounded >> strip_tac >>
+      rw[] >> gvs[adopt_call_outcome_equation] >> rw[] >>
+      gvs[source_supply_def]) >>
+  drule take_create_outcome_frame >> strip_tac >>
+  Cases_on `before.outcomes`
+  >- gvs[take_create_outcome_def] >>
+  drule_all take_create_outcome_suffix >> strip_tac >>
+  gvs[source_supply_def, supply_safe_outcomes_def, EVERY_APPEND,
+      evaluation_state_component_equality]
+QED
+
+Theorem create_oracle_result_supply[local]:
+  accounts_supply_bounded st.accounts /\
+  (!os. st.outcomes = SOME os ==> supply_safe_outcomes os) ==>
+  accounts_supply_bounded (SND (create_oracle_result salt value initcode rof st)).accounts /\
+  (!os. (SND (create_oracle_result salt value initcode rof st)).outcomes = SOME os ==>
+        supply_safe_outcomes os)
+Proof
+  strip_tac >>
+  `source_supply (SND (create_oracle_result salt value initcode rof st))` by
+    (irule (REWRITE_RULE [source_supply_action_def]
+              source_supply_action_create_oracle_result) >>
+     simp[source_supply_def]) >>
+  gvs[source_supply_def]
+QED
 
 (* Account replacement after the EVM run uses the adapter's proved bound;
    the temporary funded prelude is never used as a fresh funding premise. *)
@@ -25,6 +63,7 @@ Proof
     gvs[return_def, raise_def, source_supply_def, evaluation_state_accfupds,
         accounts_supply_increment_nonce, accounts_supply_create_rollback,
         NOT_LESS, AllCaseEqs()]) >>
+  TRY (irule create_oracle_result_supply >> simp[] >> NO_TAC) >>
   drule_all (SRULE [] run_create_evm_supply) >> simp[]
 QED
 

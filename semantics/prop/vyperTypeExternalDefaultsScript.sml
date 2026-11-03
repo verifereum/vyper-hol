@@ -84,7 +84,7 @@ Theorem eval_external_defaults_type_sound:
   state_well_typed st /\
   state_well_typed (st with scopes := [FEMPTY]) /\
   context_well_typed cx /\ accounts_well_typed st.accounts /\
-  functions_well_typed cx /\
+  functions_well_typed cx /\ source_supply st /\
   call_evaluation_safe cx (int_calls_exprs es) /\
   eval_external_defaults cx es st = (res,rt) ==>
   state_well_typed rt /\ accounts_well_typed rt.accounts /\
@@ -95,6 +95,7 @@ Proof
   Cases_on `eval_exprs cx es (st with scopes := [FEMPTY])` >>
   simp[] >> strip_tac >> gvs[] >>
   `accounts_well_typed (st with scopes := [FEMPTY]).accounts` by simp[] >>
+  `source_supply (st with scopes := [FEMPTY])` by fs[vyperSourceSupplyDefsTheory.source_supply_def] >>
   drule_all (cj 1 (SPEC_ALL (cj 6 eval_scc_type_sound_mutual))) >>
   strip_tac >>
   Cases_on `q` >> gvs[state_well_typed_def] >>
@@ -104,9 +105,24 @@ QED
 Definition body_entry_ready_def:
   body_entry_ready art cx scope st <=>
     st.scopes = [scope] /\ state_well_typed st /\
-    accounts_well_typed st.accounts /\
+    accounts_well_typed st.accounts /\ source_supply st /\
     immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx st.immutables
 End
+
+(* Supply survives the default-argument run: it restores only the scopes. *)
+Theorem eval_external_defaults_source_supply:
+  source_supply st /\ eval_external_defaults cx es st = (res,rt) ==>
+  source_supply rt
+Proof
+  simp[eval_external_defaults_run] >>
+  Cases_on `eval_exprs cx es (st with scopes := [FEMPTY])` >>
+  simp[] >> strip_tac >> gvs[] >>
+  `source_supply (st with scopes := [FEMPTY])` by fs[vyperSourceSupplyDefsTheory.source_supply_def] >>
+  `source_supply r` by
+    metis_tac[vyperSourceSupplyDefsTheory.source_supply_action_result,
+              cj 6 vyperEvalSupplyTheory.eval_source_supply_mutual] >>
+  fs[vyperSourceSupplyDefsTheory.source_supply_def]
+QED
 
 (* The current-state setup deliberately does not identify immutable values with
    their values in the incoming machine. *)
@@ -125,7 +141,7 @@ Theorem checked_explicit_external_body_setup_current:
     type_stmts env_body ret body = SOME env_after /\
     env_consistent env_body cx st /\ context_well_typed cx /\
     functions_well_typed cx /\ state_well_typed st /\
-    accounts_well_typed st.accounts
+    accounts_well_typed st.accounts /\ source_supply st
 Proof
   strip_tac >> gvs[body_entry_ready_def] >>
   `functions_well_typed (initial_evaluation_context am.sources am.layouts tx src)` by
@@ -241,6 +257,8 @@ Theorem external_call_result_success_cases:
                  | SOME v_cast =>
                      (INL v_cast, abstract_machine_from_state srcs exps layouts st', st'.requests))
         | (INR e, st') => (INR e, am, st'.requests))
+   | (INR HaltException, st) =>
+       (INR HaltException, abstract_machine_from_state srcs exps layouts st, st.requests)
    | (INR e, st) => (INR e, am, st.requests)) = (INL v, am_out, rqs) ==>
   ?res st_body st_unlocked.
     body_res = (res,st_body) /\

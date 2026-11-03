@@ -676,15 +676,16 @@ Proof
     get_transient_storage_def, lift_option_def, raise_def,
     update_accounts_def, update_transient_def, LET_THM,
     prod_CASE_rator, sum_CASE_rator, COND_RATOR] >>
-  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def]
-  >- (drule append_logs_no_control >> simp[no_control_exc_def])
-  >- (qpat_x_assum `_ st = (INR exc,_)` mp_tac >>
-      BasicProvers.TOP_CASE_TAC >> simp[return_def, raise_def] >>
-      strip_tac >> gvs[])
-  >- (pairarg_tac >> gvs[bind_def, return_def, raise_def,
-        adopt_call_outcome_equation, AllCaseEqs()] >>
-      Cases_on `outcome.co_success` >> gvs[return_def, raise_def])
-  >> drule take_call_outcome_error >> strip_tac >> gvs[]
+  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def] >>
+  TRY (drule append_logs_no_control >> simp[no_control_exc_def] >> NO_TAC) >>
+  TRY (qpat_x_assum `_ st = (INR exc,_)` mp_tac >>
+       BasicProvers.TOP_CASE_TAC >> simp[return_def, raise_def] >>
+       strip_tac >> gvs[] >> NO_TAC) >>
+  TRY (pairarg_tac >> gvs[bind_def, return_def, raise_def,
+         adopt_call_outcome_equation, AllCaseEqs()] >>
+       Cases_on `outcome.co_success` >> gvs[return_def, raise_def] >> NO_TAC) >>
+  TRY (drule take_call_outcome_error >> strip_tac >> gvs[] >> NO_TAC) >>
+  gvs[update_pending_deletions_def, return_def]
 QED
 
 Theorem eval_ext_call_no_control:

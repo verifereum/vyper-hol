@@ -78,7 +78,7 @@ Theorem eval_external_defaults_typed_cases:
   env_consistent env cx (st with scopes := [FEMPTY]) /\
   state_well_typed st /\ state_well_typed (st with scopes := [FEMPTY]) /\
   context_well_typed cx /\ accounts_well_typed st.accounts /\
-  functions_well_typed cx /\
+  functions_well_typed cx /\ source_supply st /\
   call_evaluation_safe cx (int_calls_exprs
     (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts)) /\
   (!arg. MEM arg args ==> ?tv. evaluate_type env.type_defs (SND arg) = SOME tv) /\

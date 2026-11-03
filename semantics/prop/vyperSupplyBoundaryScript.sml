@@ -4,9 +4,10 @@ Ancestors
   vfmExecution pred_set arithmetic vyperInterpreter
 
 (* Proof-only contracts. Neither predicate changes runtime acceptance. *)
+(* Failed creations adopt their outcome's accounts too, so every outcome
+   carries the bound, not only successful ones. *)
 Definition supply_safe_outcome_def:
-  supply_safe_outcome outcome <=>
-    (outcome.co_success ==> accounts_supply_bounded outcome.co_accounts)
+  supply_safe_outcome outcome <=> accounts_supply_bounded outcome.co_accounts
 End
 
 Definition supply_safe_outcomes_def:
@@ -25,9 +26,19 @@ Proof
       supply_safe_outcome_def]
 QED
 
+Theorem supply_safe_take_outcome_bounded:
+  accounts_supply_bounded rq.cr_accounts /\ supply_safe_outcomes os /\
+  take_outcome rq os = (outcome, rest) ==>
+  supply_safe_outcomes rest /\ accounts_supply_bounded outcome.co_accounts
+Proof
+  rw[take_outcome_def] >>
+  gvs[AllCaseEqs(), failed_outcome_def, supply_safe_outcomes_def,
+      supply_safe_outcome_def]
+QED
+
 Theorem supply_safe_adopt:
   accounts_supply_bounded st.accounts /\
-  (outcome.co_success /\ ~rq.cr_static ==>
+  (~rq.cr_static /\ (outcome.co_success \/ rq.cr_kind <> MessageCall) ==>
     accounts_supply_bounded outcome.co_accounts) /\
   adopt_call_outcome rq outcome st = (res,st') ==>
   accounts_supply_bounded st'.accounts
@@ -49,7 +60,8 @@ Proof
     simp[call_outcome_request_def] >>
   drule_all supply_safe_take_outcome >> strip_tac >>
   gvs[adopt_call_outcome_equation, call_outcome_request_def] >>
-  IF_CASES_TAC >> gvs[]
+  Cases_on `outcome.co_success` >> Cases_on `value_opt` >> gvs[] >>
+  rpt (IF_CASES_TAC >> gvs[])
 QED
 
 Theorem accounts_supply_install_same_balance:

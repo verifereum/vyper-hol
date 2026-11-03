@@ -2618,6 +2618,32 @@ Proof
   gvs[machine_log_extends_def, vyperInterpreterTheory.finalize_pending_deletions_def]
 QED
 
+(* A halting entry adopts its final state, so the whole send / defaults /
+   lock / body pipeline must only extend the log. *)
+Theorem external_entry_log_extends[local]:
+  (do
+     send_call_value mut cx;
+     dflt_vs <- eval_external_defaults cx es;
+     case bind_arguments tenv args (vals ++ dflt_vs) of
+       NONE => raise (Error (RuntimeError "call bind_arguments"))
+     | SOME env => do set_scopes [env]; lock_action; eval_stmts cx body od
+   od) st = (res,st') ==>
+  (!s0 r s1. lock_action s0 = (r,s1) ==> s1.logs = s0.logs) ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `_ st = (res,st')` mp_tac >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.raise_def, vyperStateTheory.return_def,
+       vyperStateTheory.set_scopes_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac send_call_value_logs >>
+  imp_res_tac eval_external_defaults_log_extends >>
+  imp_res_tac eval_stmts_log_extends >>
+  res_tac >> gvs[log_extends_def] >>
+  metis_tac[rich_listTheory.IS_PREFIX_TRANS, rich_listTheory.IS_PREFIX_REFL]
+QED
+
 Theorem call_external_function_halt_log_extends:
   call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret =
     (INR HaltException,am',rqs) ==>
@@ -2625,40 +2651,17 @@ Theorem call_external_function_halt_log_extends:
 Proof
   rpt strip_tac >>
   qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[Once vyperInterpreterTheory.call_external_function_def,
-       AllCaseEqs()] >>
-  rpt strip_tac >>
-  Cases_on `(do
-               if nr then
-                 case cx.nonreentrant_slot of
-                   NONE => raise (Error (TypeError "nonreentrant slot missing"))
-                 | SOME slot =>
-                     acquire_nonreentrant_lock cx.txn.target slot
-                       (mut = View \/ mut = Pure)
-               else return ();
-               send_call_value mut cx;
-               eval_stmts cx body
-             od) (initial_state am_c [env] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
-  Cases_on `q` >> gvs[AllCaseEqs(), machine_log_extends_refl] >>
-  Cases_on `(if nr /\ mut <> View /\ mut <> Pure then
-               case cx.nonreentrant_slot of
-                 NONE => return ()
-               | SOME slot =>
-                   release_nonreentrant_lock cx.txn.target slot
-             else return ()) r` >>
-  Cases_on `q` >> gvs[AllCaseEqs(), machine_log_extends_refl] >>
-  TRY (Cases_on `y` >> gvs[AllCaseEqs(), machine_log_extends_refl]) >>
-  TRY (Cases_on `evaluate_type (type_env_all_modules all_mods) ret` >>
-       gvs[AllCaseEqs(), machine_log_extends_refl]) >>
-  TRY (Cases_on `safe_cast x v'` >> gvs[AllCaseEqs(), machine_log_extends_refl]) >>
-  TRY (Cases_on `safe_cast x v` >> gvs[AllCaseEqs(), machine_log_extends_refl]) >>
-  drule call_body_pipeline_log_extends >>
-  (impl_tac >-
-     (rpt strip_tac >> imp_res_tac entry_lock_action_logs)) >>
+  simp[Once vyperInterpreterTheory.call_external_function_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[machine_log_extends_refl] >>
+  drule external_entry_log_extends >>
+  (impl_tac >- (rpt strip_tac >> imp_res_tac entry_lock_action_logs)) >>
   strip_tac >>
-  imp_res_tac external_unlock_action_logs >>
-  imp_res_tac evaluate_all_constants_logs >>
-  gvs[machine_log_extends_def, log_extends_def, abstract_machine_from_state_def]
+  `am_c.logs = am.logs` by
+    (Cases_on `cx.in_deploy` >> gvs[] >>
+     imp_res_tac evaluate_all_constants_logs >> gvs[]) >>
+  gvs[machine_log_extends_def, log_extends_def,
+      vyperInterpreterTheory.initial_state_def,
+      vyperInterpreterTheory.abstract_machine_from_state_def]
 QED
 
 Theorem call_external_halt_log_extends:

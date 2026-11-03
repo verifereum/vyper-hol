@@ -160,7 +160,7 @@ Theorem eval_external_defaults_success_typed:
   env_consistent env cx (st with scopes := [FEMPTY]) /\
   state_well_typed (st with scopes := [FEMPTY]) /\
   context_well_typed cx /\ accounts_well_typed st.accounts /\
-  functions_well_typed cx /\
+  functions_well_typed cx /\ source_supply st /\
   call_evaluation_safe cx (int_calls_exprs es) /\
   eval_external_defaults cx es st = (INL vs, rt) ==>
   exprs_runtime_typed env es vs
@@ -169,6 +169,7 @@ Proof
   gvs[eval_external_defaults_run] >>
   Cases_on `eval_exprs cx es (st with scopes := [FEMPTY])` >> gvs[] >>
   `accounts_well_typed (st with scopes := [FEMPTY]).accounts` by simp[] >>
+  `source_supply (st with scopes := [FEMPTY])` by fs[vyperSourceSupplyDefsTheory.source_supply_def] >>
   drule_all (cj 1 (SPEC_ALL (cj 6 eval_scc_type_sound_mutual))) >> simp[]
 QED
 
@@ -190,7 +191,7 @@ Theorem checked_defaults_ready_values_typed:
   state_well_typed (st with scopes := [FEMPTY]) /\
   context_well_typed cx /\
   accounts_well_typed st.accounts /\
-  functions_well_typed cx /\
+  functions_well_typed cx /\ source_supply st /\
   call_evaluation_safe cx
     (int_calls_exprs (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts)) /\
   eval_external_defaults cx
@@ -271,7 +272,7 @@ Theorem checked_call_inputs_ready_bind_arguments:
   state_well_typed (st with scopes := [FEMPTY]) /\
   context_well_typed cx /\
   accounts_well_typed st.accounts /\
-  functions_well_typed cx /\
+  functions_well_typed cx /\ source_supply st /\
   call_evaluation_safe cx
     (int_calls_exprs (DROP (LENGTH dflts - (LENGTH params - LENGTH vals)) dflts)) /\
   eval_external_defaults cx

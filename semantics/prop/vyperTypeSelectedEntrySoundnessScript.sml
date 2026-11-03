@@ -116,7 +116,7 @@ QED
 Theorem checked_selected_entry_no_static_error:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\ call_tx_well_typed tx /\
+  machine_well_typed am /\ machine_supply am orc /\ call_tx_well_typed tx /\
   selected_entry am tx mods (mut,nr,args,dflts,ret,body) /\
   src = find_function_module am tx.target tx.function_name /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\

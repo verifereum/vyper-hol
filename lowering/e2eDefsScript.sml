@@ -103,8 +103,12 @@ Definition call_outcomes_ok_def:
             os
 End
 
+(* call_outcomes_ok bounds only successful outcomes, but a failed creation
+   adopts its outcome's accounts too, so the outcome bound is a premise here
+   until call_outcomes_ok covers failed outcomes. *)
 Theorem source_typing_outcomes_supply:
-  source_typing_ok tops am tx /\ call_outcomes_ok tops am tx os ==>
+  source_typing_ok tops am tx /\ call_outcomes_ok tops am tx os /\
+  supply_safe_outcomes os ==>
   machine_supply am (SOME os)
 Proof
   rw[source_typing_ok_def, call_outcomes_ok_def, machine_supply_def,
