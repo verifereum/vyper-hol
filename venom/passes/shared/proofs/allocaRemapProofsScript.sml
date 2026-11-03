@@ -2692,8 +2692,8 @@ QED
 
 (* --- MSTORE: write 32 bytes at pv address --- *)
 Resume remap_preserved_mem_ops[mstore]:
-  (* Invert s1 step *)
-  fs[step_inst_base_def, exec_write2_def, AllCaseEqs()] >>
+  (* Invert only the classified MSTORE dispatcher branch. *)
+  fs[step_inst_base_opcode_eqs, exec_write2_def, AllCaseEqs()] >>
   fs[eval_operand_def, lookup_var_def] >>
   mem_op_preamble >>
   (* Non-address operand agrees *)
@@ -3396,6 +3396,36 @@ Proof
   rpt (CASE_TAC >> simp[]) >> strip_tac >> gvs[update_var_def]
 QED
 
+Theorem exec_read1_preserves_immutables[local]:
+  !f inst s v. exec_read1 f inst s = OK v ==>
+    v.vs_immutables = s.vs_immutables
+Proof
+  rpt gen_tac >>
+  Cases_on `inst.inst_operands` >- simp[exec_read1_def] >>
+  rename1 `inst.inst_operands = op::ops` >>
+  Cases_on `ops` >> simp[exec_read1_def] >>
+  Cases_on `eval_operand op s` >> simp[] >>
+  Cases_on `inst.inst_outputs` >- simp[] >>
+  rename1 `inst.inst_outputs = out::outs` >>
+  Cases_on `outs` >> simp[update_var_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem exec_write2_success[local]:
+  !f inst s v. exec_write2 f inst s = OK v ==>
+    ?op1 op2 x y. inst.inst_operands = [op1; op2] /\
+      eval_operand op1 s = SOME x /\ eval_operand op2 s = SOME y /\
+      v = f x y s
+Proof
+  rpt gen_tac >>
+  Cases_on `inst.inst_operands` >- simp[exec_write2_def] >>
+  rename1 `inst.inst_operands = op1::ops` >>
+  Cases_on `ops` >- simp[exec_write2_def] >>
+  rename1 `inst.inst_operands = op1::op2::rest` >>
+  Cases_on `rest` >> simp[exec_write2_def] >>
+  Cases_on `eval_operand op1 s` >> simp[] >>
+  Cases_on `eval_operand op2 s` >> simp[] >> metis_tac[]
+QED
+
 Theorem immutable_op_immutables_agree[local]:
   !inst s1 s2 v1 v2.
     is_immutable_op inst.inst_opcode /\
@@ -3412,6 +3442,22 @@ Proof
   simp[step_inst_base_opcode_eqs, exec_read1_def] >>
   rpt (CASE_TAC >> simp[]) >> rpt strip_tac >>
   gvs[update_var_def, istore_def]
+QED
+
+Theorem exec_read1_success[local]:
+  !f inst s v. exec_read1 f inst s = OK v ==>
+    ?op x out. inst.inst_operands = [op] /\
+      eval_operand op s = SOME x /\ inst.inst_outputs = [out] /\
+      v = update_var out (f x s) s
+Proof
+  rpt gen_tac >>
+  Cases_on `inst.inst_operands` >- simp[exec_read1_def] >>
+  rename1 `inst.inst_operands = op::ops` >>
+  Cases_on `ops` >> simp[exec_read1_def] >>
+  Cases_on `eval_operand op s` >> simp[] >>
+  Cases_on `inst.inst_outputs` >- simp[] >>
+  rename1 `inst.inst_outputs = out::outs` >>
+  Cases_on `outs` >> simp[] >> rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
 Theorem immutable_op_output_vars_agree[local]:
@@ -5218,12 +5264,18 @@ Proof
   >- (
     (* Memory-writing instruction: result uses mstore/mstore8/mcopy/wmwe.
        All of these preserve or grow memory (wmwe_mem_length_mono). *)
-    qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-    simp[step_inst_base_def] >>
-    Cases_on `inst.inst_opcode` >>
+    `MEM inst.inst_opcode
+      [MSTORE; MSTORE8; ISTORE; MCOPY; CALLDATACOPY; DLOADBYTES;
+       CODECOPY; RETURNDATACOPY; EXTCODECOPY; CALL; DELEGATECALL;
+       STATICCALL; MLOAD; ILOAD; RETURN; CREATE; CREATE2; SHA3; LOG; REVERT]`
+      by (irule mem_ops_opcode_support >> metis_tac[]) >>
+    qpat_x_assum `MEM inst.inst_opcode _`
+      (strip_assume_tac o REWRITE_RULE[MEM]) >>
     gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
         mem_write_ops_def] >>
-    (* Only memory-writing opcodes remain after gvs *)
+    qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+    simp[step_inst_base_opcode_eqs] >>
+    (* Only memory-writing opcodes remain after classification *)
     simp[exec_write2_def] >>
     rpt strip_tac >> gvs[AllCaseEqs()] >>
     rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
