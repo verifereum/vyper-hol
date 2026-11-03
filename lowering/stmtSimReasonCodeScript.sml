@@ -292,12 +292,13 @@ Proof
   `?t p. vv = LocatedValue t p` by metis_tac[reason_code_vv_def] >>
   gvs[] >>
   reverse (Cases_on `res1`)
-  >- (drule compile_expr_extends >> strip_tac >>
+  >- (rename1 `INR ex` >>
+      drule compile_expr_extends >> strip_tac >>
       `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
       qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
         (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
       disch_then (qspecl_then [`sa`, `sm`, `LocatedValue t p`,
-                              `INR y`, `es1`, `s0`] mp_tac) >>
+                              `INR ex`, `es1`, `s0`] mp_tac) >>
       simp[] >> strip_tac >>
       irule frag_exec_exit_prefix >> qexists `sm` >> simp[] >>
       irule frag_exec_conseq >>
