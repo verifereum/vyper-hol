@@ -40,6 +40,7 @@ roots = ["vyperHolScript.sml",
          "lowering/supported/supportedProgramPropsScript.sml",
          "venom/codegen/proofs/contextReachabilityChecksScript.sml",
          "venom/codegen/proofs/genFrameSimScript.sml",
+         "venom/compiler/o1PassLiftScript.sml",
          "tests/vyperPlaceProbesTestScript.sml",
          "tests/vyperPlaceSanityTestScript.sml"]
 
