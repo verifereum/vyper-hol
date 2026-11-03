@@ -481,3 +481,45 @@ Proof
        simp[subst_label_inst_def] >>
      Cases_on `i.inst_opcode = PHI` >> simp[subst_label_inst_idempotent]) >> simp[]
 QED
+
+Theorem update_succ_phi_labels_phi_source_exact:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
+  MEM bb' (update_succ_phi_labels old new bbs succs) /\
+  MEM inst' bb'.bb_instructions /\ inst'.inst_opcode = PHI ==>
+  ?bb inst. MEM bb bbs /\ bb'.bb_label = bb.bb_label /\
+    MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
+    inst' = (if MEM bb'.bb_label succs then subst_label_inst old new inst else inst)
+Proof
+  strip_tac >>
+  gvs[update_succ_phi_labels_exact, MEM_MAP] >>
+  rename1 `MEM bb bbs` >> Cases_on `MEM bb.bb_label succs` >> gvs[]
+  >- (gvs[MEM_MAP] >> qexistsl [`bb`, `i`] >>
+      Cases_on `i.inst_opcode = PHI` >> gvs[subst_label_inst_def]) >>
+  qexists `bb` >> simp[]
+QED
+
+Theorem chain_merge_phi_source_exact:
+  wf_function fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  can_merge_blocks fn a b /\
+  MEM bb' (update_succ_phi_labels b.bb_label a.bb_label
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+    (bb_succs (merge_blocks a b))) /\
+  MEM inst' bb'.bb_instructions /\ inst'.inst_opcode = PHI ==>
+  ?bb inst. MEM bb fn.fn_blocks /\ bb'.bb_label = bb.bb_label /\
+    MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
+    inst' = (if MEM bb'.bb_label (bb_succs (merge_blocks a b))
+             then subst_label_inst b.bb_label a.bb_label inst else inst)
+Proof
+  strip_tac >>
+  `a.bb_label <> b.bb_label /\ no_phis b` by fs[can_merge_blocks_def] >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label)
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks)))` by
+    (irule chain_merge_base_labels >> fs[wf_function_def]) >>
+  drule_all update_succ_phi_labels_phi_source_exact >> strip_tac >>
+  gvs[replace_block_def, remove_block_def, MEM_MAP, MEM_FILTER] >>
+  Cases_on `bb''.bb_label = a.bb_label` >> gvs[merge_blocks_def, MEM_APPEND]
+  >- (qexistsl [`a`, `inst`] >> simp[] >>
+      Cases_on `a.bb_instructions` >> fs[] >> drule MEM_FRONT >> simp[])
+  >- (fs[no_phis_def, EVERY_MEM] >> metis_tac[]) >>
+  qexistsl [`bb''`, `inst`] >> simp[]
+QED
