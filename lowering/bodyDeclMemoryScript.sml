@@ -8,7 +8,7 @@ Ancestors
   loweringSlice exprLowering exprSimBufferStore valueEncodingProofs
   words venomExecSemantics stmtLowering context fragExec fragExecMem
   allocaHistoryFragment list rich_list emitHelper emitHelperProps venomInst
-  exprSimLiteralBuffer exprSimBuffer
+  exprSimLiteralBuffer exprSimBuffer finite_map
 
 Theorem body_stmt_state_rel_declare_store_frame:
   !func cenv cx es s t sa id p sz w inst v tyv sc rest a ctx.
@@ -529,3 +529,125 @@ val () = List.app (fn th =>
      then print "BODY_DECL_ASSIGN_MEMORY_AUDIT OK\n"
      else raise Fail "body declaration assignment inherited admission"
   end) [assign_memory_body_code, annassign_memory_assign_body_frag_mem];
+
+Theorem annassign_setup_shape:
+  declare_local ce id ty sa = (c,st) /\ ce.ce_alloca_locals /\
+  lookup_scopes id es.scopes = NONE /\
+  (!l. FLOOKUP ce.ce_vars id = SOME l ==> ?q sz. l = PtrVar q sz) /\
+  p = STRING #"%" (toString sa.cs_next_var) /\
+  emit_inst ALLOCA [Lit (n2w (type_memory_bytes ce ty))] [p] st = ((),sA) /\
+  fn_has_code sa sA func /\ local_ptrs_reserved ce sa ==>
+  st = sa with cs_next_var := sa.cs_next_var + 1 /\
+  FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) (type_memory_bytes ce ty)) /\
+  c.ce_return_buf = ce.ce_return_buf /\
+  not_local_ptr c es.scopes p /\
+  (!x. not_fresh_at sa x ==> x <> p) /\
+  local_ptrs_reserved c sA /\ not_fresh_at sA p /\
+  MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes ce ty))] [p])
+    (fn_insts func)
+Proof
+  rpt gen_tac >> strip_tac >> drule_all declare_local_ptr >> strip_tac >>
+  `cs_extends sA sA` by simp[cs_extends_def] >>
+  `fn_has_code st sA func` by gvs[fn_has_code_def, emitted_blocks_def] >>
+  gvs[] >> drule_all annassign_alloca_code >> strip_tac >>
+  `c.ce_return_buf = ce.ce_return_buf` by
+    (qpat_x_assum `c with <|ce_vars := _; ce_dynarray_capacity := _; ce_var_type := _|> = ce` mp_tac >>
+     simp[compile_env_component_equality] >> metis_tac[]) >>
+  simp[] >> conj_tac
+  >- (simp[not_local_ptr_def] >> rpt strip_tac >>
+      Cases_on `name = id` >> gvs[] >>
+      fs[local_ptrs_reserved_def, not_fresh_at_def] >> metis_tac[]) >>
+  rpt strip_tac >> gvs[not_fresh_at_def]
+QED
+
+Theorem body_decl_alloca_run[local]:
+  stmt_state_rel ctx func c cx es s /\ fn_inst_ids_distinct func /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  inst.inst_operands = [Lit (n2w sz)] /\ inst.inst_outputs = [p] /\
+  not_local_ptr c es.scopes p /\ sz < dimword (:256) ==>
+  ?t w. exec_alloca inst s (n2w sz : bytes32) = OK t /\
+    stmt_state_rel ctx func c cx es t /\ lookup_var p t = SOME w /\
+    FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
+    w2n w + sz <= t.vs_alloca_next /\ s.vs_alloca_next <= t.vs_alloca_next /\
+    (!x. x <> p ==> lookup_var x t = lookup_var x s) /\
+    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?t. exec_alloca inst s (n2w sz : bytes32) = OK t` by
+    (Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >>
+     simp[exec_alloca_def] >> PairCases_on `x` >> simp[exec_alloca_def]) >>
+  drule_all stmt_state_rel_exec_alloca >> strip_tac >>
+  `w2n w + sz <= t.vs_alloca_next` by
+    (fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
+        venomMemDefsTheory.alloca_next_valid_def] >>
+     gvs[wordsTheory.w2n_n2w] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  qexistsl_tac [`t`, `w`] >> simp[] >>
+  qpat_x_assum `exec_alloca _ _ _ = OK t` mp_tac >>
+  simp[exec_alloca_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> Cases_on `inst.inst_id = aid` >> gvs[]
+QED
+
+Theorem annassign_setup_body_frag_mem:
+  !ctx func ce c cx es s sa st sA id ty p d R.
+    declare_local ce id ty sa = (c,st) /\ ce.ce_alloca_locals /\
+    lookup_scopes id es.scopes = NONE /\
+    (!l. FLOOKUP ce.ce_vars id = SOME l ==> ?q sz. l = PtrVar q sz) /\
+    p = STRING #"%" (toString sa.cs_next_var) /\
+    emit_inst ALLOCA [Lit (n2w (type_memory_bytes ce ty))] [p] st = ((),sA) /\
+    type_memory_bytes ce ty < dimword (:256) /\
+    fn_has_code sa sA func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s /\
+    alloca_history func s /\ return_buf_frame d ce sa s ==>
+    frag_exec_mem ctx sa sA (\u. u = s)
+      (\t. stmt_state_rel ctx func c cx es t /\ alloca_history func t /\
+        return_buf_frame d c sA t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+        local_ptrs_reserved c sA /\ not_fresh_at sA p /\
+        FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) (type_memory_bytes ce ty)) /\
+        not_local_ptr c es.scopes p /\
+        (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+        (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+        ?w. lookup_var p t = SOME w /\
+          FLOOKUP t.vs_allocas st.cs_next_id = SOME (w2n w,type_memory_bytes ce ty) /\
+          w2n w + type_memory_bytes ce ty <= t.vs_alloca_next) R
+Proof
+  rpt gen_tac >> strip_tac >> drule_all annassign_setup_shape >> strip_tac >>
+  `stmt_state_rel ctx func c cx es s` by metis_tac[stmt_state_rel_declare_local_entry] >>
+  qabbrev_tac `A = mk_inst st.cs_next_id ALLOCA
+    [Lit (n2w (type_memory_bytes ce ty))] [p]` >>
+  `A.inst_opcode = ALLOCA /\ A.inst_operands = [Lit (n2w (type_memory_bytes ce ty))] /\
+   A.inst_outputs = [p] /\ A.inst_id = st.cs_next_id` by simp[Abbr `A`, mk_inst_def] >>
+  drule_all body_decl_alloca_run >> strip_tac >>
+  `sa.cs_next_var <= sA.cs_next_var` by
+    (drule emit_inst_extends >> gvs[]) >>
+  `return_buf_frame d c sA t` by
+    (irule return_buf_frame_frame >> qexistsl_tac [`ce`, `s`, `sa`] >> simp[]) >>
+  `emitted_insts sa sA = [A] /\ same_blocks sa sA /\
+   sA.cs_current_insts = sa.cs_current_insts ++ [A]` by
+    (drule emit_inst_extends >> strip_tac >>
+     gvs[emitted_insts_def, same_blocks_def, Abbr `A`, DROP_LENGTH_APPEND]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sA)` by simp[is_terminator_def] >>
+  irule body_decl_frag_at_cursor >> fs[same_blocks_def, IS_PREFIX_APPEND] >>
+  rpt strip_tac >> gvs[]
+  >- (simp[run_inst_seq_mem_ok_last] >> irule instMemFrontierTheory.below_frontier_no_ranges >> simp[Abbr `A`, mk_inst_def]) >>
+  `run_inst_seq (emitted_insts sa sA) s = OK t` by
+    (gvs[mk_inst_def] >> simp[run_inst_seq_def, step_inst_base_def]) >>
+  `alloca_history func (t with vs_inst_idx := LENGTH sA.cs_current_insts)` by
+    (irule body_store_memory_history >> simp[same_blocks_def] >>
+     qexistsl_tac [`s`, `sa`] >> simp[] >> fs[stmt_state_rel_def]) >>
+  `return_buf_frame d c sA (t with vs_inst_idx := LENGTH sA.cs_current_insts)` by
+    (Cases_on `d` >- fs[return_buf_frame_def] >>
+     rename1 `return_buf_frame (SOME pair)` >> PairCases_on `pair` >>
+     fs[return_buf_frame_def, lookup_var_def]) >>
+  qexists_tac `t` >> gvs[stmt_state_rel_inst_idx, lookup_var_def] >>
+  rpt strip_tac >> first_x_assum irule >> strip_tac >> gvs[]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_DECL_SETUP_MEMORY_AUDIT OK\n"
+     else raise Fail "body declaration setup inherited admission"
+  end) [annassign_setup_shape, body_decl_alloca_run, annassign_setup_body_frag_mem];
