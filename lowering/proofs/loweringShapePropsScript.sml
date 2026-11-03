@@ -13040,3 +13040,32 @@ Proof
   irule comp_ignore_bind_labels >> simp[emit_void_labels] >> gen_tac >>
   IF_CASES_TAC >> simp[emit_op_labels]
 QED
+
+Theorem compile_mul_overflow_check_labels:
+  !x y res is_signed bits s P.
+    cs_extends s (SND (compile_mul_overflow_check x y res is_signed bits s)) /\
+    EVERY P (added_labels s
+      (SND (compile_mul_overflow_check x y res is_signed bits s)))
+Proof
+  rpt gen_tac >> simp[compile_mul_overflow_check_def, LET_THM] >>
+  rpt (irule comp_bind_labels >> simp[emit_op_labels] >> rpt gen_tac >> BETA_TAC) >>
+  simp[emit_void_labels] >>
+  gen_tac >> IF_CASES_TAC >> simp[comp_return_labels] >>
+  rpt (irule comp_bind_labels >> simp[emit_op_labels] >>
+       rpt gen_tac >> BETA_TAC)
+QED
+
+Theorem compile_safe_mul_labels:
+  !x y ty s P. cs_extends s (SND (compile_safe_mul x y ty s)) /\
+    EVERY P (added_labels s (SND (compile_safe_mul x y ty s)))
+Proof
+  rpt gen_tac >> simp[compile_safe_mul_def, LET_THM] >>
+  irule comp_bind_labels >> simp[emit_op_labels] >> rpt gen_tac >>
+  irule comp_ignore_bind_labels >> conj_tac
+  >- (gen_tac >> IF_CASES_TAC >>
+      simp[compile_mul_overflow_check_labels, comp_return_labels]) >>
+  gen_tac >> irule comp_bind_labels >> reverse conj_tac
+  >- (gen_tac >> IF_CASES_TAC >> simp[emit_op_labels, comp_return_labels]) >>
+  rpt gen_tac >> BETA_TAC >> IF_CASES_TAC >>
+  simp[clamp_and_return_labels, comp_return_labels]
+QED
