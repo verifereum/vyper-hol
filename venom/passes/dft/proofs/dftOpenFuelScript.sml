@@ -1,7 +1,7 @@
 (* Uniformly shifting active and saved fuel preserves active observations. *)
 Theory dftOpenFuel
 Ancestors
-  dftOpenMachine arithmetic
+  dftOpenMachine dftOpenAdequacy arithmetic
 
 Definition dft_shift_frame_def:
   dft_shift_frame delta (DftCaller fn b bb inst s) =
@@ -141,5 +141,102 @@ Theorem dft_shift_observe:
 Proof
   simp[dft_open_observe_def] >> rpt strip_tac >>
   drule dft_shift_active >> strip_tac >>
+  metis_tac[]
+QED
+
+Theorem dft_shift_frame_inj[simp]:
+  dft_shift_frame delta x = dft_shift_frame delta y <=> x = y
+Proof
+  Cases_on `x` >> Cases_on `y` >> simp[dft_shift_frame_def]
+QED
+
+Theorem dft_shift_control_inj[simp]:
+  dft_shift_control delta x = dft_shift_control delta y <=> x = y
+Proof
+  Cases_on `x` >> Cases_on `y` >> simp[dft_shift_control_def]
+QED
+
+Theorem dft_shift_stack_inj[local,simp]:
+  !xs ys. MAP (dft_shift_frame delta) xs = MAP (dft_shift_frame delta) ys <=> xs = ys
+Proof
+  Induct >> Cases_on `ys` >> simp[]
+QED
+
+Theorem dft_shift_config_inj[simp]:
+  dft_shift_config delta x = dft_shift_config delta y <=> x = y
+Proof
+  Cases_on `x` >> Cases_on `y` >> simp[dft_shift_config_def]
+QED
+
+Theorem dft_shift_stack_exit:
+  dft_open_stack_exit (MAP (dft_shift_frame delta) bst) (dft_shift_config delta c) <=>
+  dft_open_stack_exit bst c
+Proof
+  Cases_on `c` >> Cases_on `d` >>
+  simp[dft_open_stack_exit_def, dft_shift_config_def, dft_shift_control_def]
+QED
+
+Theorem dft_shift_active_prefix:
+  !j c fn b bb s stack n.
+  FUNPOW (dft_open_next a ctx) j c = DftOpen (DftAt fn b bb s) stack n ==>
+  !h. h <= j ==>
+  FUNPOW (dft_open_next a ctx) h (dft_shift_config delta c) =
+  dft_shift_config delta (FUNPOW (dft_open_next a ctx) h c)
+Proof
+  Induct_on `j`
+  >- simp[] >>
+  rpt gen_tac >> rewrite_tac[FUNPOW] >> strip_tac >>
+  `~dft_zero_entry c` by metis_tac[dft_zero_entry_no_active, FUNPOW] >>
+  Cases_on `h` >> simp[FUNPOW, dft_shift_next] >>
+  strip_tac >> first_x_assum irule >> metis_tac[]
+QED
+
+Theorem dft_shift_pre_exit_bound:
+  FUNPOW (dft_open_next a ctx) j c0 =
+    DftOpen (DftAt fn b bb s) stack n /\
+  (!h. h <= j ==> ~dft_open_stack_exit bst
+    (FUNPOW (dft_open_next a ctx) h c0)) /\
+  FUNPOW (dft_open_next a ctx) t (dft_shift_config delta c0) =
+    DftOpen (DftDone (IntRet ret cr)) (MAP (dft_shift_frame delta) bst) q /\
+  (!h. h <= t ==> ?control frames m.
+    FUNPOW (dft_open_next a ctx) h (dft_shift_config delta c0) =
+      DftOpen control frames m /\ m <= q) ==>
+  j < t /\ n <= q /\
+  FUNPOW (dft_open_next a ctx) j (dft_shift_config delta c0) =
+    DftOpen (DftAt fn (b+delta) bb s) (MAP (dft_shift_frame delta) stack) n
+Proof
+  strip_tac >>
+  `j < t` by
+    (spose_not_then assume_tac >>
+     `t <= j` by decide_tac >>
+     drule dft_shift_active_prefix >>
+     disch_then (qspecl_then [`delta`, `t`] mp_tac) >>
+     asm_rewrite_tac[] >> strip_tac >>
+     `dft_open_stack_exit (MAP (dft_shift_frame delta) bst)
+       (dft_shift_config delta (FUNPOW (dft_open_next a ctx) t c0))` by
+       metis_tac[dft_open_stack_exit_def] >>
+     metis_tac[dft_shift_stack_exit]) >>
+  drule dft_shift_active >> strip_tac >>
+  `n <= q` by
+    (qpat_x_assum `!h. h <= t ==> _` (qspec_then `j` mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  simp[]
+QED
+
+Theorem dft_shift_pre_exit_observe:
+  dft_open_observe fn inst s (FUNPOW (dft_open_next a ctx) j c0) /\
+  (!h. h <= j ==> ~dft_open_stack_exit bst
+    (FUNPOW (dft_open_next a ctx) h c0)) /\
+  FUNPOW (dft_open_next a ctx) t (dft_shift_config delta c0) =
+    DftOpen (DftDone (IntRet ret cr)) (MAP (dft_shift_frame delta) bst) q /\
+  (!h. h <= t ==> ?control frames m.
+    FUNPOW (dft_open_next a ctx) h (dft_shift_config delta c0) =
+      DftOpen control frames m /\ m <= q) ==>
+  j < t /\
+  dft_open_observe fn inst s
+    (FUNPOW (dft_open_next a ctx) j (dft_shift_config delta c0))
+Proof
+  simp[dft_open_observe_def] >> rpt strip_tac >>
+  drule_all dft_shift_pre_exit_bound >> strip_tac >>
   metis_tac[]
 QED
