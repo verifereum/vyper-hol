@@ -3034,7 +3034,7 @@ QED
 (* --- RETURNDATACOPY: 3-op write with OOB check --- *)
 (* Note: OOB branch dismissed by AllCaseEqs — OK branch has no REPLICATE padding *)
 Resume remap_preserved_mem_ops[returndatacopy]:
-  fs[step_inst_base_def, AllCaseEqs()] >>
+  fs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
   fs[eval_operand_def, lookup_var_def] >>
   mem_op_preamble >>
   `v6 <> Var v` by pv_uniqueness_contra >>
