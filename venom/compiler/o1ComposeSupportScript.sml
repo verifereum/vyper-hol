@@ -9,7 +9,7 @@ Ancestors
   o1PassContract o1ScheduleDecomp o1PartialSchedule o1ScheduleDecompHelpers
   ctxLookupAgree
   venomCompilerWf
-  unitShapeDefs fcgPruning venomWf venomInst o1FnScheduleDecomp
+  unitShapeDefs fcgPruning venomWf venomInst o1FnScheduleDecomp stackPlanGen
   venomPipelineRunner venomPassDispatcher venomFnScheduleRunner
   fcgBridge fcgDefs fcgPostorder fcgAnalysisProps venomPipelineDriver
   venomPassSchedule irSupply pred_set list rich_list
@@ -122,7 +122,7 @@ Proof
 QED
 
 Theorem o1_schedule_stages:
-  EVERY (o1_step_contract rp) passes /\
+  o1_step_contracts_from rp 0 passes /\
   run_named_fn_schedules execute_configured_fn_pass rp passes names u s =
     SOME (u',s') /\
   o1_ctx_shape u.cu_context /\
@@ -136,7 +136,8 @@ Theorem o1_schedule_stages:
       o1_ctx_shape (stage k) /\
       (stage k).ctx_entry = u.cu_context.ctx_entry /\
       (stage k).ctx_global_reserved = u.cu_context.ctx_global_reserved /\
-      ctx_fn_names (stage k) = ctx_fn_names u.cu_context) /\
+      ctx_fn_names (stage k) = ctx_fn_names u.cu_context /\
+      EVERY (o1_fn_row k) (stage k).ctx_functions) /\
     (!k. k < LENGTH passes ==>
       ctx_pass_stage rp (EL k passes) any_view (stage k) (stage (SUC k)) /\
       (callee_first names u.cu_context.ctx_functions ==>
@@ -152,9 +153,11 @@ Proof
   qexists_tac `stage_ctx u.cu_context chains` >>
   conj_tac >- (irule chain_facts_zero >> metis_tac[]) >>
   conj_tac >- simp[] >> conj_tac
-  >- (rpt strip_tac >>
-      drule_all chain_facts_stage_shape >>
-      simp[stage_ctx_def]) >>
+  >- (qx_gen_tac `k` >> disch_tac >>
+      `EVERY (o1_fn_row k) (stage_ctx u.cu_context chains k).ctx_functions` by
+        (irule stage_ctx_rows >> metis_tac[]) >>
+      drule_all chain_facts_stage_shape >> strip_tac >>
+      fs[stage_ctx_def]) >>
   qx_gen_tac `k` >> disch_tac >> drule_all chain_facts_stages >> simp[]
 QED
 
@@ -173,9 +176,42 @@ Proof
   `ALL_DISTINCT (ctx_fn_names u.cu_context)` by
     (drule o1_ctx_shape_wf >> simp[ctx_wf_def, ctx_distinct_fn_names_def]) >>
   fs[run_mapped_functions_def] >>
+  `o1_step_contracts_from rp 0 [pass]` by
+    simp[o1_step_contracts_from_def, o1_step_contract_at_plain] >>
   drule_at (Pos (el 2)) o1_schedule_stages >> simp[] >>
   strip_tac >> gvs[] >>
   first_x_assum (qspec_then `1` mp_tac) >> simp[]
+QED
+
+(* A run whose pass keeps every function's static layout keeps the
+ * context's spill base, which the static and lowered rows quantify over:
+ * every function's fn_eom is unchanged (fn_pass_effects_hold under
+ * FSLE_Preserve) and so is the global reserved list. *)
+Theorem collect_fn_eoms_rel:
+  !fns fns'.
+    LIST_REL (\fn fn'. fn'.fn_eom = fn.fn_eom) fns fns' ==>
+    collect_fn_eoms fns' = collect_fn_eoms fns
+Proof
+  Induct >> simp[listTheory.LIST_REL_CONS1, PULL_EXISTS,
+                 stackPlanGenTheory.collect_fn_eoms_def] >>
+  rw[] >> res_tac >> simp[stackPlanGenTheory.collect_fn_eoms_def]
+QED
+
+Theorem ctx_pass_stage_max_live_eom:
+  ctx_pass_stage rpolicy pass view C C' /\
+  fn_pass_static_layout_effect (fn_pass_tag pass) = FSLE_Preserve ==>
+  max_live_eom C' = max_live_eom C
+Proof
+  strip_tac >>
+  `collect_fn_eoms C'.ctx_functions = collect_fn_eoms C.ctx_functions` by (
+    irule collect_fn_eoms_rel >>
+    fs[ctx_pass_stage_def, listTheory.LIST_REL_EL_EQN] >> rw[] >>
+    `n < LENGTH C.ctx_functions` by fs[] >>
+    first_x_assum drule >> strip_tac >>
+    gvs[fn_pass_step_def, venomPassDispatcherTheory.fn_pass_effects_hold_def,
+        venomPassDispatcherTheory.fn_static_layout_effect_holds_def,
+        venomInstTheory.fn_static_layout_eq_def]) >>
+  fs[ctx_pass_stage_def, stackPlanGenTheory.max_live_eom_def]
 QED
 
 Theorem member_invoke_direct_call:

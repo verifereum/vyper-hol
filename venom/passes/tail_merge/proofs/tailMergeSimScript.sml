@@ -546,6 +546,7 @@ Proof
   gvs[AllCaseEqs(), result_equiv_def, LET_THM] >>
   TRY (BasicProvers.TOP_CASE_TAC >> gvs[result_equiv_def]) >>
   irule halt_state_ee_UNIV >>
+  irule set_returndata_ee_UNIV >>
   irule ee_UNIV_with_accounts >>
   ASM_REWRITE_TAC[]
 QED

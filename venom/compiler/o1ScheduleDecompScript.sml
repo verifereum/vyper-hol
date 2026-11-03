@@ -42,6 +42,14 @@ Proof
   gvs[chain_facts_def, EVERY_EL] >> first_x_assum irule >> simp[]
 QED
 
+Theorem chain_facts_row:
+  chain_facts rpolicy passes unit order chains i /\ k <= LENGTH passes ==>
+  o1_fn_row k (EL k (FST (EL i chains)))
+Proof
+  strip_tac >> drule chain_facts_length >> strip_tac >>
+  gvs[chain_facts_def]
+QED
+
 Theorem chain_facts_step:
   chain_facts rpolicy passes unit order chains i /\ k < LENGTH passes ==>
   ?s out. fn_pass_step rpolicy (EL k passes) (EL k (SND (EL i chains)))
@@ -100,6 +108,17 @@ Proof
   simp[EL_MAP] >> irule chain_facts_shape >> metis_tac[]
 QED
 
+Theorem stage_ctx_rows:
+  LENGTH chains = LENGTH unit.cu_context.ctx_functions /\
+  (!i. i < LENGTH chains ==> chain_facts rpolicy passes unit order chains i) /\
+  k <= LENGTH passes ==>
+  EVERY (o1_fn_row k) (stage_ctx unit.cu_context chains k).ctx_functions
+Proof
+  strip_tac >> simp[stage_ctx_def, stage_fns_def, EVERY_MAP, EVERY_EL] >>
+  qx_gen_tac `i` >> strip_tac >> `i < LENGTH chains` by simp[] >>
+  simp[EL_MAP] >> irule chain_facts_row >> metis_tac[]
+QED
+
 Theorem stage_lookup_index:
   LENGTH chains = LENGTH unit.cu_context.ctx_functions /\
   (!i. i < LENGTH chains ==> chain_facts rpolicy passes unit order chains i) /\
@@ -138,7 +157,7 @@ QED
 
 
 Theorem run_named_fn_schedules_decomp:
-  EVERY (o1_step_contract rpolicy) passes /\
+  o1_step_contracts_from rpolicy 0 passes /\
   run_named_fn_schedules execute_configured_fn_pass rpolicy passes names
     unit s = SOME (unit', s') /\
   o1_ctx_shape unit.cu_context /\

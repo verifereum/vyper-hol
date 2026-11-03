@@ -90,12 +90,14 @@ Definition deploy_state_rel_def:
       ctxt.msgParams.code = deploy_bc ++ args_bytes /\
       ctxt.msgParams.parsed = parse_code 0 FEMPTY (deploy_bc ++ args_bytes) /\
       buffer_to_list ctxt.msgParams.data = [] /\
+      tx.calldata = [] /\
       constructor_args_encode tops tx args_bytes /\
       ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
       ctxt.returnData = [] /\ buffer_to_list ctxt.memory = [] /\
       value_transfer_ok tx am.accounts /\
       es.rollback.accounts = accounts_after_transfer tx am.accounts /\
       es.rollback.tStorage = am.tStorage /\ am.logs = [] /\
+      am.pending_deletions = [] /\
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
       ctxt.msgParams.value = tx.value /\
       tx_block_fields_rel tx es.txParams /\
@@ -130,7 +132,7 @@ Definition deploy_result_rel_def:
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                       (exc = Reverted \/ s = "UNREACHABLE")
     | INR (Error e) =>
-        decode_strictness_exempt tops e \/
+        unspecified_behaviour_exempt tops e \/
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
     | INR BreakException => F
     | INR ContinueException => F

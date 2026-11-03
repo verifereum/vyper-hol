@@ -46,7 +46,7 @@ Theorem alloc_limits_struct_fields:
 Proof
   ho_match_mp_tac alloc_limits_expr_ind >> rpt conj_tac >> rpt gen_tac >>
   rpt strip_tac >> drule type_memory_bytes_frame >> strip_tac >>
-  simp[alloc_limits_expr_def]
+  simp[alloc_limits_expr_def, type_alloc_ok_def]
 QED
 
 Theorem alloc_limits_expr_exists:
@@ -160,26 +160,30 @@ Proof
       alloc_limits_raise_def]
 QED
 
+(* A statement's check reads the struct sizes and, for a log, the events. *)
 Theorem alloc_limits_stmt_struct_fields:
-  (!c s c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c s c'. c'.ce_struct_fields = c.ce_struct_fields /\
+            c'.ce_event_info = c.ce_event_info ==>
             alloc_limits_stmt c' s = alloc_limits_stmt c s) /\
-  (!c ss c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c ss c'. c'.ce_struct_fields = c.ce_struct_fields /\
+             c'.ce_event_info = c.ce_event_info ==>
              alloc_limits_stmts c' ss = alloc_limits_stmts c ss)
 Proof
   ho_match_mp_tac alloc_limits_stmt_ind >> rpt conj_tac >> rpt gen_tac >>
   rpt strip_tac >> drule alloc_limits_frame >> strip_tac >>
-  gvs[alloc_limits_stmt_def]
+  gvs[alloc_limits_stmt_def, log_alloc_ok_def]
 QED
 
 (* A function the runtime unit lowers (lower_vyper_runtime_unit_allocs_ok)
    has its parameters' sizes, alloc_limits_expr of its body's expressions,
    its locals' sizes and its return type's size below the limit in every compile env
-   with the program's struct sizes: build_compile_env's, and the packaged
-   functions'. *)
+   with the program's struct sizes and events: build_compile_env's, and the
+   packaged functions'. *)
 Theorem fn_allocs_ok_body:
   !tops mut nr rr fname fargs dflts ret ss cenv.
     fn_allocs_ok tops (mut, nr, rr, fname, fargs, dflts, ret, ss) /\
-    cenv.ce_struct_fields = make_struct_fields_map tops ==>
+    cenv.ce_struct_fields = make_struct_fields_map tops /\
+    cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) ==>
     EVERY (\(_,ty). type_memory_bytes cenv ty < 2 ** 64) fargs /\
     alloc_limits_exprs cenv dflts /\ alloc_limits_stmts cenv ss /\
     ~supported_stmts_expr_exists (\e. ~alloc_limits_expr cenv e) ss /\
@@ -189,6 +193,8 @@ Proof
   qabbrev_tac `c = build_compile_env tops Internal mut fname fargs ret ss F` >>
   `cenv.ce_struct_fields = c.ce_struct_fields` by
     simp[Abbr `c`, build_compile_env_ce_struct_fields] >>
+  `cenv.ce_event_info = c.ce_event_info` by
+    (simp[Abbr `c`, build_compile_env_def] >> rpt (pairarg_tac >> gvs[])) >>
   drule alloc_limits_frame >> strip_tac >>
   `alloc_limits_stmts cenv ss` by
     metis_tac[alloc_limits_stmt_struct_fields] >>

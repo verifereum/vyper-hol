@@ -386,7 +386,8 @@ Proof
              is_read0_opcode_def, label_positions_ok_def, is_label_operand_def,
              mk_inst_def] >>
         simp[Abbr `callee`, mk_raw_function_def, fn_entry_label_def,
-             entry_block_def, reserved_label_def] >>
+             entry_block_def, reserved_label_def, call_checks_ok_def,
+             calls_flagged_def, mk_inst_def] >>
         rpt strip_tac >> gvs[] >> qexists_tac `[]` >> simp[]) >>
   simp[unit_shape_ok_def, entry_fn_first_def, fn_shape_ok_def,
        shape_probe_fn_def, mk_venom_context_def, mk_raw_function_def,
@@ -404,6 +405,41 @@ Theorem first_block_predecessor_checks:
   ~first_block_no_preds (mk_raw_function "entry"
     [<| bb_label := "entry"; bb_instructions := [mk_inst 0 JMP [Label "b"] []] |>;
      <| bb_label := "b"; bb_instructions := [mk_inst 1 JMP [Label "entry"] []] |>])
+Proof
+  EVAL_TAC
+QED
+
+(* ===== Call success checks ===== *)
+
+(* An entry block holding insts, beside a block "fail" that reverts. *)
+Definition call_probe_fn_def:
+  call_probe_fn insts = mk_raw_function "entry"
+    [<| bb_label := "entry"; bb_instructions := insts |>;
+     <| bb_label := "fail";
+        bb_instructions := [mk_inst 9 REVERT [Lit 0w; Lit 0w] []] |>]
+End
+
+Definition probe_call_def:
+  probe_call = mk_inst 0 CALL (REPLICATE 7 (Lit 0w)) ["s"]
+End
+
+Theorem call_check_checks:
+  call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 ASSERT [Var "s"] []; mk_inst 2 STOP [] []]) /\
+  call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 ASSIGN [Var "s"] ["t"];
+     mk_inst 2 ASSERT [Var "t"] []; mk_inst 3 STOP [] []]) /\
+  call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 JNZ [Var "s"; Label "ok"; Label "fail"] []]) /\
+  ~call_checks_ok (call_probe_fn [probe_call; mk_inst 1 STOP [] []]) /\
+  ~call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 MSTORE [Lit 0w; Lit 0w] [];
+     mk_inst 2 ASSERT [Var "s"] []; mk_inst 3 STOP [] []]) /\
+  ~call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 INVOKE [Label "f"] [];
+     mk_inst 2 ASSERT [Var "s"] []; mk_inst 3 STOP [] []]) /\
+  ~call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 JNZ [Var "s"; Label "fail"; Label "ok"] []])
 Proof
   EVAL_TAC
 QED

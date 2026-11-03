@@ -13,7 +13,9 @@
  * The pieces therefore run one after the other, each from the state the
  * previous one leaves (augassign_attr_bop_frag): the ADD and the MLOAD,
  * then e's expr_sim and the operator's binop_frag, which keep every
- * variable defined before them, dst among them.
+ * variable defined before them, dst among them.  The part after the load
+ * is augassign_load_bop_frag, for any load fragment, which
+ * stmtSimAugAssignAttrStorage reuses with SLOAD/TLOAD.
  *
  * TOP-LEVEL:
  *   compile_augassign_attr_local_case — x.f op= e, every outcome, e's
@@ -25,7 +27,8 @@
  *
  * Helpers: struct_has_type_field, eval_augassign_attr_local,
  *   augassign_attr_local_code_parts, stmt_state_rel_field_word,
- *   attr_load_frag, augassign_attr_bop_frag, write_attr_local_typed,
+ *   attr_load_frag, augassign_load_bop_frag, augassign_attr_bop_frag,
+ *   write_attr_local_typed,
  *   augassign_attr_local_frag
  *)
 
@@ -252,6 +255,128 @@ QED
 
 (* ===== x.f op e ===== *)
 
+(* A load of the target's current word (sa to s1: dst holds its address a,
+   cur its word), then e and the operator, one after the other: e's errors
+   and the operator's exit, and on a value v of the operator the result
+   holds v's word, dst still holds a, and the frame from before the load
+   holds.  The local and storage fields' loads are its instances. *)
+Theorem augassign_load_bop_frag:
+  !ctx func cenv cx es ty bop e el sa dst cur s1 rhs s2 res_op s3 s0 a v1
+   r1 es1.
+    (!R. frag_exec ctx sa s1
+           (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+           (\s. stmt_state_rel ctx func cenv cx es s /\
+                eval_operand dst s = SOME a /\
+                eval_operand cur s = SOME (val_to_w256 v1) /\
+                (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
+                       lookup_var x s = SOME u) /\
+                (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                         FLOOKUP s.vs_allocas aid = SOME b)) R) /\
+    cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var /\
+    (!z. dst = Var z ==> not_fresh_at s1 z) /\ (!l. dst <> Label l) /\
+    (!z. cur = Var z ==> not_fresh_at s1 z) /\ (!l. cur <> Label l) /\
+    lower_value compile_expr cenv ty e s1 = (rhs, s2) /\
+    compile_binop bop cur rhs ty NONE el s2 = (res_op, s3) /\
+    cs_extends s1 s2 /\ s1.cs_next_var <= s2.cs_next_var /\
+    (!z. rhs = Var z ==> not_fresh_at s2 z) /\ (!l. rhs <> Label l) /\
+    fn_has_code sa s3 func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    expr_sim ctx func cenv cx ty e es /\
+    (do result <- eval_expr cx e; read_result cx result od) es = (r1, es1) /\
+    expr_res_ok r1 /\
+    (!v2. r1 = INL v2 ==>
+          word_value v2 /\ is_word_type (expr_type e) /\
+          IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
+          expr_res_ok (bop_result cx ty bop [ty; expr_type e] v1 v2 es1) /\
+          binop_frag ctx func cenv cx bop ty ty NONE el [ty; expr_type e]
+            v1 v2 es1) ==>
+    frag_exec ctx sa s3 (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. ?v2 v. r1 = INL v2 /\
+                  bop_result cx ty bop [ty; expr_type e] v1 v2 es1 = INL v /\
+                  word_value v /\ stmt_state_rel ctx func cenv cx es1 s /\
+                  eval_operand res_op s = SOME (val_to_w256 v) /\
+                  eval_operand dst s = SOME a /\
+                  (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
+                         lookup_var x s = SOME u) /\
+                  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                           FLOOKUP s.vs_allocas aid = SOME b))
+      (expr_exit (case r1 of
+                    INL v2 => bop_result cx ty bop [ty; expr_type e] v1 v2 es1
+                  | INR ex => INR ex))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `cs_extends s2 s3 /\ s2.cs_next_var <= s3.cs_next_var` by
+    metis_tac[compile_binop_shape] >>
+  `cs_extends s1 s3` by metis_tac[cs_extends_trans] >>
+  `fn_has_code s1 s3 func` by metis_tac[fn_has_code_split] >>
+  `fn_has_code s1 s2 func /\ fn_has_code s2 s3 func` by
+    metis_tac[fn_has_code_split] >>
+  `local_ptrs_reserved cenv s1 /\ local_ptrs_reserved cenv s2` by
+    metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
+  `(!x. not_fresh_at sa x ==> not_fresh_at s1 x) /\
+   (!x. not_fresh_at s1 x ==> not_fresh_at s2 x) /\
+   (!x. not_fresh_at s2 x ==> not_fresh_at s3 x)` by
+    metis_tac[not_fresh_at_mono] >>
+  qpat_x_assum `!R. frag_exec _ _ _ _ _ R` (qspec_then
+    `expr_exit (case r1 of
+                  INL v2 => bop_result cx ty bop [ty; expr_type e] v1 v2 es1
+                | INR ex => INR ex)` mp_tac) >>
+  disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
+  fs[] >> rpt strip_tac >>
+  reverse (Cases_on `r1`) >> fs[]
+  >- ((* e raises *)
+      rename1 `_ = (INR ex, es1)` >>
+      qpat_x_assum `expr_sim _ _ _ _ _ e _`
+        (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+      disch_then (qspecl_then [`s1`, `s2`, `rhs`, `INR ex`, `es1`, `t`]
+                    mp_tac) >>
+      impl_tac >- fs[] >>
+      disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
+      disch_then (qspecl_then [`\s. s = t`, `\s. F`, `expr_exit (INR ex : value + exception)`]
+                    mp_tac) >>
+      impl_tac >- fs[] >> strip_tac >>
+      irule frag_exec_exit_prefix >> qexists_tac `s2` >> fs[]) >>
+  (* e's value, from t to u *)
+  rename1 `_ = (INL v2, es1)` >>
+  qpat_x_assum `expr_sim _ _ _ _ _ e _`
+    (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+  disch_then (qspecl_then [`s1`, `s2`, `rhs`, `INL v2`, `es1`, `t`] mp_tac) >>
+  impl_tac >- fs[expr_res_ok_def] >>
+  disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
+  disch_then (qspecl_then
+    [`\s. s = t`,
+     `expr_exit (bop_result cx ty bop [ty; expr_type e] v1 v2 es1)`]
+    mp_tac) >>
+  impl_tac >- fs[] >>
+  disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
+  fs[] >> rpt strip_tac >>
+  rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ u` >>
+  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  `?tv2. evaluate_type (get_tenv cx) (expr_type e) = SOME tv2` by
+    fs[optionTheory.IS_SOME_EXISTS] >>
+  `eval_operand rhs u = SOME (val_to_w256 v2)` by
+    (qpat_x_assum `expr_val_rel _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [expr_val_rel_def]) >>
+     first_x_assum drule >> gvs[typed_val_to_w256_word_value]) >>
+  `eval_operand cur u = SOME (val_to_w256 v1) /\
+   eval_operand dst u = SOME (a)` by
+    (conj_tac >>
+     (irule eval_operand_frame >> conj_tac >- fs[] >>
+      qexistsl_tac [`s1`, `t`] >> fs[])) >>
+  (* the operator, from u *)
+  qpat_x_assum `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [binop_frag_def, binop_frag_words_def]) >>
+  disch_then (qspecl_then [`s2`, `s3`, `cur`, `rhs`, `res_op`, `u`] mp_tac) >>
+  impl_tac >- fs[] >>
+  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
+  fs[] >> rpt strip_tac >>
+  `eval_operand dst s = SOME (a)` by
+    (irule eval_operand_frame >> conj_tac >- fs[] >>
+     qexistsl_tac [`s2`, `u`] >> fs[]) >>
+  qexists_tac `v` >> fs[]
+QED
+
 (* The ADD, the MLOAD, e and the operator, one after the other: e's errors
    and the operator's exit, and on a value v of the operator the result
    holds v's word, dst still holds the field's address, and the frame from
@@ -295,86 +420,25 @@ Proof
   rpt gen_tac >> strip_tac >>
   `ci_mono sa sn /\ ci_mono sn s1` by
     metis_tac[ci_mono_emit_op, pairTheory.SND] >>
-  `cs_extends s2 s3 /\ s2.cs_next_var <= s3.cs_next_var` by
-    metis_tac[compile_binop_shape] >>
-  `cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var` by
-    (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
-  `cs_extends s1 s3` by metis_tac[cs_extends_trans] >>
-  `fn_has_code s1 s3 func` by metis_tac[fn_has_code_split] >>
-  `fn_has_code s1 s2 func /\ fn_has_code s2 s3 func` by
-    metis_tac[fn_has_code_split] >>
-  `local_ptrs_reserved cenv s1 /\ local_ptrs_reserved cenv s2` by
-    metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
-  `(!x. not_fresh_at sa x ==> not_fresh_at s1 x) /\
-   (!x. not_fresh_at s1 x ==> not_fresh_at s2 x) /\
-   (!x. not_fresh_at s2 x ==> not_fresh_at s3 x)` by
-    metis_tac[not_fresh_at_mono] >>
-  `(!z. dst = Var z ==> not_fresh_at s1 z) /\ (!l. dst <> Label l) /\
-   (!z. cur = Var z ==> not_fresh_at s1 z) /\ (!l. cur <> Label l)` by
-    (imp_res_tac emitted_insts_emit_op >> fs[ci_mono_def] >>
-     gvs[not_fresh_at_def, ASCIInumbersTheory.toString_11]) >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `p`, `off`, `sa`, `dst`,
-               `sn`, `cur`, `s1`, `s0`, `w0`,
-               `expr_exit (case r1 of
-                             INL v2 => bop_result cx ty bop [ty; expr_type e]
-                                         v1 v2 es1
-                           | INR ex => INR ex)`]
-    mp_tac attr_load_frag >>
-  impl_tac >- fs[] >>
-  disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
-  fs[] >> rpt strip_tac >>
-  reverse (Cases_on `r1`) >> fs[]
-  >- ((* e raises *)
-      rename1 `_ = (INR ex, es1)` >>
-      qpat_x_assum `expr_sim _ _ _ _ _ e _`
-        (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-      disch_then (qspecl_then [`s1`, `s2`, `rhs`, `INR ex`, `es1`, `t`]
-                    mp_tac) >>
-      impl_tac >- fs[] >>
-      disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
-      disch_then (qspecl_then [`\s. s = t`, `\s. F`, `expr_exit (INR ex : value + exception)`]
-                    mp_tac) >>
-      impl_tac >- fs[] >> strip_tac >>
-      irule frag_exec_exit_prefix >> qexists_tac `s2` >> fs[]) >>
-  (* e's value, from t to u *)
-  rename1 `_ = (INL v2, es1)` >>
-  qpat_x_assum `expr_sim _ _ _ _ _ e _`
-    (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`s1`, `s2`, `rhs`, `INL v2`, `es1`, `t`] mp_tac) >>
-  impl_tac >- fs[expr_res_ok_def] >>
-  disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
-  disch_then (qspecl_then
-    [`\s. s = t`,
-     `expr_exit (bop_result cx ty bop [ty; expr_type e] v1 v2 es1)`]
-    mp_tac) >>
-  impl_tac >- fs[] >>
-  disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
-  fs[] >> rpt strip_tac >>
-  rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ u` >>
-  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-  `?tv2. evaluate_type (get_tenv cx) (expr_type e) = SOME tv2` by
-    fs[optionTheory.IS_SOME_EXISTS] >>
-  `eval_operand rhs u = SOME (val_to_w256 v2)` by
-    (qpat_x_assum `expr_val_rel _ _ _ _ _`
-       (strip_assume_tac o REWRITE_RULE [expr_val_rel_def]) >>
-     first_x_assum drule >> gvs[typed_val_to_w256_word_value]) >>
-  `eval_operand cur u = SOME (val_to_w256 v1) /\
-   eval_operand dst u = SOME (w0 + n2w off)` by
-    (conj_tac >>
-     (irule eval_operand_frame >> conj_tac >- fs[] >>
-      qexistsl_tac [`s1`, `t`] >> fs[])) >>
-  (* the operator, from u *)
-  qpat_x_assum `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [binop_frag_def, binop_frag_words_def]) >>
-  disch_then (qspecl_then [`s2`, `s3`, `cur`, `rhs`, `res_op`, `u`] mp_tac) >>
-  impl_tac >- fs[] >>
-  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
-  fs[] >> rpt strip_tac >>
-  `eval_operand dst s = SOME (w0 + n2w off)` by
-    (irule eval_operand_frame >> conj_tac >- fs[] >>
-     qexistsl_tac [`s2`, `u`] >> fs[]) >>
-  qexists_tac `v` >> fs[]
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `ty`, `bop`, `e`, `el`,
+               `sa`, `dst`, `cur`, `s1`, `rhs`, `s2`, `res_op`, `s3`, `s0`,
+               `w0 + n2w off`, `v1`, `r1`, `es1`] mp_tac
+    augassign_load_bop_frag >>
+  impl_tac >- (
+    fs[] >> rpt conj_tac
+    >~ [`frag_exec`]
+    >- (gen_tac >>
+        qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `p`, `off`, `sa`,
+                     `dst`, `sn`, `cur`, `s1`, `s0`, `w0`, `R`] mp_tac
+          attr_load_frag >>
+        impl_tac >- fs[] >> fs[])
+    >~ [`cs_extends`]
+    >- (fs[ci_mono_def] >> metis_tac[cs_extends_trans])
+    >~ [`_.cs_next_var <= _.cs_next_var`]
+    >- (fs[ci_mono_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+    imp_res_tac emitted_insts_emit_op >> fs[ci_mono_def] >>
+    gvs[not_fresh_at_def, ASCIInumbersTheory.toString_11]) >>
+  simp[]
 QED
 
 (* ===== The statement ===== *)

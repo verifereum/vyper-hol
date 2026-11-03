@@ -601,7 +601,7 @@ Definition build_compile_env_def:
        locals get no slot here.
        Mirrors Python: Context.new_variable -> allocate_buffer -> alloca *)
     let (ret_buf, ret_pc) =
-      if is_external then (NONE, NONE)
+      if vis <> Internal then (NONE, NONE)
       else allocate_internal_special_vars has_return_buf args_end in
     let dynarray_cap = build_dynarray_capacity (args ++ locals) in
     let func_info = build_func_info sft_fn tops in
@@ -629,6 +629,7 @@ Definition build_compile_env_def:
        ce_returns_count := rc;
        ce_return_buf := ret_buf;
        ce_return_pc := ret_pc;
+       ce_ctor_exit_label := NONE;
        ce_is_external := is_external;
        ce_ret_enc_info := AbiPrimWord;
        ce_ret_dec_info := DecPrimWord NoClamp;
@@ -769,6 +770,26 @@ Proof
   rpt strip_tac
   >> simp[build_compile_env_def]
   >> rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem build_compile_env_no_ctor_exit[simp]:
+  !tops vis mut func_name args ret_type (body : stmt list) use_trans.
+    (build_compile_env tops vis mut func_name args ret_type body
+       use_trans).ce_ctor_exit_label = NONE
+Proof
+  rpt gen_tac >> simp[build_compile_env_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem build_compile_env_deploy_no_internal_return:
+  !tops mut func_name args ret_type (body : stmt list) use_trans.
+    (build_compile_env tops Deploy mut func_name args ret_type body
+       use_trans).ce_return_pc = NONE /\
+    (build_compile_env tops Deploy mut func_name args ret_type body
+       use_trans).ce_return_buf = NONE
+Proof
+  rpt gen_tac >> simp[build_compile_env_def] >>
+  rpt (pairarg_tac >> gvs[])
 QED
 
 (* allocate_args places each argument at a MemLoc slot and leaves every
@@ -1059,9 +1080,8 @@ Definition package_internal_fn_def:
     let sft = make_struct_fields_map tops in
     let sft_fn = get_struct_fields sft in
     let sft_types = (λname. MAP (FST o SND) (sft_fn name)) in
-    let vis = if is_ctor_context then Deploy else Internal in
     let cenv = (build_compile_env tops
-                  vis mut fname fargs ret body use_trans)
+                  Internal mut fname fargs ret body use_trans)
                  with <| ce_is_ctor := is_ctor_context;
                          ce_raw_return := rr |> in
     let rc = returns_stack_count sft_types ret in

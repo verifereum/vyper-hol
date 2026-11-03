@@ -178,6 +178,40 @@ Proof
   first_x_assum (qspecl_then [`ix`, `il`] mp_tac) >> simp[]
 QED
 
+Theorem front_last_pairwise_num[local]:
+  !(h:num) t x.
+    ALL_DISTINCT (h::t) /\
+    MEM x (FRONT (h::t)) /\
+    (!i j. i < LENGTH (h::t) /\ j < LENGTH (h::t) /\ i <> j ==>
+       EL i (h::t) + 32 <= EL j (h::t) \/ EL j (h::t) + 32 <= EL i (h::t)) ==>
+    LAST (h::t) + 32 <= x \/ x + 32 <= LAST (h::t)
+Proof
+  rpt strip_tac >>
+  `MEM x (h::t)` by metis_tac[MEM_FRONT] >>
+  `MEM (LAST (h::t)) (h::t)` by simp[MEM_LAST] >>
+  `~MEM (LAST (h::t)) (FRONT (h::t))` by
+    (irule MEM_FRONT_NOT_LAST >> simp[]) >>
+  `?ix. ix < LENGTH (h::t) /\ x = EL ix (h::t)` by metis_tac[MEM_EL] >>
+  `?il. il < LENGTH (h::t) /\ LAST (h::t) = EL il (h::t)` by metis_tac[MEM_EL] >>
+  `ix <> il` by (strip_tac >> gvs[]) >>
+  first_x_assum (qspecl_then [`ix`, `il`] mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem spill_slots_front_separated[local]:
+  !(h:num) t.
+    (!i j. i < LENGTH (h::t) /\ j < LENGTH (h::t) /\ i <> j ==>
+       EL i (h::t) + 32 <= EL j (h::t) \/
+       EL j (h::t) + 32 <= EL i (h::t)) ==>
+    !i j. i < LENGTH (FRONT (h::t)) /\
+          j < LENGTH (FRONT (h::t)) /\ i <> j ==>
+       EL i (FRONT (h::t)) + 32 <= EL j (FRONT (h::t)) \/
+       EL j (FRONT (h::t)) + 32 <= EL i (FRONT (h::t))
+Proof
+  rpt strip_tac >>
+  fs[LENGTH_FRONT, EL_FRONT] >>
+  first_x_assum irule >> simp[]
+QED
+
 (* =========================================================================
    alloc_spill_slot preserves wf and produces valid offset
    ========================================================================= *)
@@ -227,6 +261,62 @@ Proof
       first_x_assum (qspecl_then [`ix`, `il`] mp_tac) >> fs[])
 QED
 
+Theorem spill_alloc_layout_preservation_core[local]:
+  !al spilled off al' op.
+    spill_alloc_layout_wf al spilled /\
+    alloc_spill_slot al = (off, al') ==>
+    spill_alloc_layout_wf al' (spilled |+ (op, off))
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[spill_alloc_layout_wf_def, alloc_spill_slot_def] >>
+  Cases_on `al.sa_free_slots` >> gvs[]
+  >- (simp[spill_alloc_layout_wf_def, FLOOKUP_UPDATE] >>
+      conj_tac
+      >- (rpt gen_tac >> IF_CASES_TAC >> simp[] >> strip_tac >> gvs[] >>
+          qpat_x_assum `!op off'. FLOOKUP _ _ = _ ==> _ /\ _` drule >> strip_tac >> decide_tac) >>
+      rpt gen_tac >>
+      Cases_on `op1 = op` >> Cases_on `op2 = op` >> simp[] >>
+      rpt strip_tac >> gvs[]
+      >- (qpat_x_assum `!op off. FLOOKUP _ _ = _ ==> _ /\ _` drule >> simp[])
+      >- (qpat_x_assum `!op off. FLOOKUP _ _ = _ ==> _ /\ _` drule >> simp[]) >>
+      qpat_x_assum `!op1 off1 op2 off2. _` irule >>
+      metis_tac[]) >>
+  rename1 `h::t` >>
+  `MEM (LAST (h::t)) (h::t)` by simp[MEM_LAST] >>
+  `al.sa_spill_base <= LAST (h::t) /\
+   LAST (h::t) + 32 <= al.sa_next_offset` by
+    (qpat_x_assum `!off'. _ ==> _ /\ _` irule >> fs[]) >>
+  `!k v. FLOOKUP spilled k = SOME v ==>
+      v + 32 <= LAST (h::t) \/ LAST (h::t) + 32 <= v` by
+    (rpt strip_tac >>
+     qpat_x_assum `!op off1 off2. _` irule >> metis_tac[MEM]) >>
+  qpat_x_assum `MEM (LAST _) _` kall_tac >>
+  conj_tac
+  >- (rpt gen_tac >> simp[FLOOKUP_UPDATE] >> IF_CASES_TAC >>
+      simp[] >> strip_tac >> gvs[] >>
+      qpat_x_assum `!op off. FLOOKUP _ _ = _ ==> _ /\ _` drule >> simp[]) >>
+  conj_tac
+  >- (gen_tac >> strip_tac >>
+      `MEM off (h::t)` by metis_tac[MEM_FRONT] >>
+      qpat_x_assum `!off'. _ ==> _ /\ _` irule >> fs[]) >>
+  conj_tac
+  >- (rpt gen_tac >> simp[FLOOKUP_UPDATE] >>
+      Cases_on `op = op1` >> Cases_on `op = op2` >> simp[] >>
+      rpt strip_tac >> gvs[]
+      >- metis_tac[]
+      >- metis_tac[] >>
+      qpat_x_assum `!op1 off1 op2 off2. _` irule >> metis_tac[]) >>
+  conj_tac >- (irule ALL_DISTINCT_FRONT >> simp[]) >>
+  conj_tac
+  >- (mp_tac (Q.SPECL [`h`, `t`] spill_slots_front_separated) >> simp[]) >>
+  rpt gen_tac >> simp[FLOOKUP_UPDATE] >> IF_CASES_TAC >> simp[] >>
+  rpt strip_tac >> gvs[]
+  >- (`ALL_DISTINCT (h::t)` by simp[] >>
+      irule front_last_pairwise_num >> simp[]) >>
+  `MEM off2 (h::t)` by metis_tac[MEM_FRONT] >>
+  qpat_x_assum `!op off1 off2. _` irule >> metis_tac[MEM]
+QED
+
 (* spill_alloc_wf preserved after one allocation + FUPDATE *)
 Theorem spill_alloc_wf_after_spill:
   !al spilled off al' op.
@@ -236,32 +326,8 @@ Theorem spill_alloc_wf_after_spill:
     spill_alloc_wf al' (spilled |+ (op, off))
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all alloc_spill_slot_wf >> strip_tac >>
-  fs[spill_alloc_wf_def] >>
-  fs[alloc_spill_slot_def] >>
-  Cases_on `al.sa_free_slots` >> gvs[]
-  (* Empty free_slots: off = next_offset, al' bumps by 32 *)
-  >- (fs[FLOOKUP_UPDATE] >> rpt conj_tac >> rpt gen_tac >>
-      every_case_tac >> rpt strip_tac >> gvs[] >>
-      res_tac >> decide_tac)
-  (* Non-empty free_slots: off = LAST, al' uses FRONT *)
-  >> rename1 `h::t'` >>
-  simp[FLOOKUP_UPDATE] >> rpt conj_tac >> rpt gen_tac >>
-  every_case_tac >> rpt strip_tac >> gvs[MEM_FRONT, ALL_DISTINCT_FRONT] >>
-  TRY (res_tac >> decide_tac) >>
-  TRY decide_tac >>
-  (* remaining: FRONT membership → full list membership *)
-  TRY (imp_res_tac MEM_FRONT >> gvs[] >> res_tac >> decide_tac) >>
-  (* EL FRONT pairwise *)
-  TRY (fs[EL_FRONT, LENGTH_FRONT] >>
-       qpat_x_assum `!i j. i < SUC _ /\ _ ==> _`
-         (qspecl_then [`i`, `j`] mp_tac) >>
-       simp[]) >>
-  (* spilled vs FRONT: need MEM_FRONT then use spilled-vs-free hyp *)
-  imp_res_tac MEM_FRONT >> fs[] >>
-  qpat_x_assum `!op off1 off2. FLOOKUP _ _ = SOME _ /\ _ ==> _`
-    (qspecl_then [`op'`, `off1`, `off2`] mp_tac) >>
-  simp[]
+  gvs[spill_alloc_wf_iff_layout_ready] >>
+  irule spill_alloc_layout_preservation_core >> metis_tac[]
 QED
 
 
@@ -274,31 +340,8 @@ Theorem spill_alloc_layout_wf_after_spill:
     alloc_spill_slot al = (off, al') ==>
     spill_alloc_layout_wf al' (spilled |+ (op, off))
 Proof
-  rpt gen_tac >> strip_tac >>
-  `spill_alloc_wf al spilled` by
-    simp[spill_alloc_wf_iff_layout_ready] >>
-  drule_all alloc_spill_slot_wf >> strip_tac >>
-  fs[spill_alloc_layout_wf_def, alloc_spill_slot_def] >>
-  Cases_on `al.sa_free_slots` >> gvs[]
-  >- (fs[FLOOKUP_UPDATE, spill_alloc_layout_wf_def] >>
-      rpt conj_tac >> rpt gen_tac >>
-      every_case_tac >> rpt strip_tac >> gvs[] >>
-      res_tac >> decide_tac)
-  >> rename1 `h::t'` >>
-  simp[FLOOKUP_UPDATE, spill_alloc_layout_wf_def] >>
-  rpt conj_tac >> rpt gen_tac >>
-  every_case_tac >> rpt strip_tac >> gvs[MEM_FRONT, ALL_DISTINCT_FRONT] >>
-  TRY (res_tac >> decide_tac) >>
-  TRY decide_tac >>
-  TRY (imp_res_tac MEM_FRONT >> gvs[] >> res_tac >> decide_tac) >>
-  TRY (fs[EL_FRONT, LENGTH_FRONT] >>
-       qpat_x_assum `!i j. i < SUC _ /\ _ ==> _`
-         (qspecl_then [`i`, `j`] mp_tac) >>
-       simp[]) >>
-  imp_res_tac MEM_FRONT >> fs[] >>
-  qpat_x_assum `!op off1 off2. FLOOKUP _ _ = SOME _ /\ _ ==> _`
-    (qspecl_then [`op'`, `off1`, `off2`] mp_tac) >>
-  simp[]
+  rpt strip_tac >> irule spill_alloc_layout_preservation_core >>
+  metis_tac[]
 QED
 
 
@@ -309,59 +352,8 @@ Theorem spill_alloc_layout_wf_after_alloc:
     alloc_spill_slot al = (off, al') ==>
     spill_alloc_layout_wf al' (spilled |+ (op, off))
 Proof
-  rpt gen_tac >> strip_tac >>
-  fs[spill_alloc_layout_wf_def, alloc_spill_slot_def] >>
-  Cases_on `al.sa_free_slots` >> gvs[]
-  >- (simp[FLOOKUP_UPDATE, spill_alloc_layout_wf_def] >>
-      rpt conj_tac >> rpt gen_tac >>
-      every_case_tac >> rpt strip_tac >> gvs[] >>
-      res_tac >> decide_tac)
-  >> rename1 `h::tail` >>
-  `al.sa_spill_base <= LAST (h::tail) /\
-   LAST (h::tail) + 32 <= al.sa_next_offset` by (
-    qpat_x_assum `!off'. off' = h \/ MEM off' tail ==> _`
-      (qspec_then `LAST (h::tail)` mp_tac) >>
-    (impl_tac >-
-      (`MEM (LAST (h::tail)) (h::tail)` by simp[MEM_LAST] >> fs[])) >>
-    simp[]) >>
-  `!op0 off0. FLOOKUP spilled op0 = SOME off0 ==>
-      off0 + 32 <= LAST (h::tail) \/ LAST (h::tail) + 32 <= off0` by (
-    rpt gen_tac >> strip_tac >>
-    qpat_x_assum `!op off1 off2. FLOOKUP spilled op = SOME off1 /\ _ ==> _`
-      (qspecl_then [`op0`, `off0`, `LAST (h::tail)`] mp_tac) >>
-    (impl_tac >- (`MEM (LAST (h::tail)) (h::tail)` by simp[MEM_LAST] >> fs[])) >>
-    simp[]) >>
-  `!x. MEM x (FRONT (h::tail)) ==>
-      x + 32 <= LAST (h::tail) \/ LAST (h::tail) + 32 <= x` by (
-    rpt strip_tac >>
-    `MEM x (h::tail)` by metis_tac[MEM_FRONT] >>
-    `MEM (LAST (h::tail)) (h::tail)` by simp[MEM_LAST] >>
-    `ALL_DISTINCT (h::tail)` by simp[] >>
-    `~MEM (LAST (h::tail)) (FRONT (h::tail))` by
-      (irule MEM_FRONT_NOT_LAST >> simp[]) >>
-    `x <> LAST (h::tail)` by metis_tac[] >>
-    `?ix. ix < LENGTH (h::tail) /\ x = EL ix (h::tail)` by
-      metis_tac[MEM_EL] >>
-    `?il. il < LENGTH (h::tail) /\ LAST (h::tail) = EL il (h::tail)` by
-      metis_tac[MEM_EL] >>
-    `ix <> il` by metis_tac[] >>
-    qpat_x_assum `!i j. i < SUC _ /\ j < SUC _ /\ i <> j ==> _`
-      (qspecl_then [`ix`, `il`] mp_tac) >>
-    (impl_tac >- gvs[]) >> simp[]) >>
-  simp[FLOOKUP_UPDATE, spill_alloc_layout_wf_def] >>
-  rpt conj_tac >> rpt gen_tac >>
-  every_case_tac >> rpt strip_tac >> gvs[MEM_FRONT, ALL_DISTINCT_FRONT] >>
-  TRY (res_tac >> decide_tac) >>
-  TRY decide_tac >>
-  TRY (imp_res_tac MEM_FRONT >> gvs[] >> res_tac >> decide_tac) >>
-  TRY (fs[EL_FRONT, LENGTH_FRONT] >>
-       qpat_x_assum `!i j. i < SUC _ /\ _ ==> _`
-         (qspecl_then [`i`, `j`] mp_tac) >>
-       simp[]) >>
-  imp_res_tac MEM_FRONT >> fs[] >>
-  qpat_x_assum `!op off1 off2. FLOOKUP _ _ = SOME _ /\ _ ==> _`
-    (qspecl_then [`op'`, `off1`, `off2`] mp_tac) >>
-  simp[]
+  rpt strip_tac >> irule spill_alloc_layout_preservation_core >>
+  metis_tac[]
 QED
 
 
@@ -735,7 +727,7 @@ QED
    prefix_spill_wf decomposition (must come before spill_gen)
    ========================================================================= *)
 
-Theorem prefix_spill_wf_append[local]:
+Theorem prefix_spill_wf_append:
   !l1 l2 lo ps.
     prefix_spill_wf initial_fmp lo (l1 ++ l2) ps <=>
     prefix_spill_wf initial_fmp lo l1 ps /\
@@ -745,6 +737,17 @@ Proof
   metis_tac[]
 QED
 
+
+Theorem prefix_spill_wf_front_suffix:
+  !f lo prefix suffix ps.
+    prefix_spill_wf f lo (FRONT (prefix ++ suffix)) ps ==>
+    ?spill_view. prefix_spill_wf f lo (FRONT suffix) spill_view
+Proof
+  rpt gen_tac >> Cases_on `suffix = []`
+  >- simp[prefix_spill_wf_def] >>
+  simp[FRONT_APPEND_NOT_NIL, prefix_spill_wf_append] >>
+  strip_tac >> goal_assum drule
+QED
 
 (* SOSpill applies the same high-water MAX fold as the allocator interface. *)
 Theorem apply_spill_ops_next_offset[local]:
@@ -2524,6 +2527,59 @@ Proof
   rpt strip_tac >> simp[el_reverse_desired_list]
 QED
 
+(* Physical temporary slots remain free in the final layout. *)
+Theorem spill_alloc_n_temporary_layout:
+  spill_alloc_layout_wf al sp /\
+  offsets = FST (spill_alloc_n [] al items) /\
+  al2 = FOLDL (\a off. free_spill_slot off a)
+          (SND (spill_alloc_n [] al items)) offsets ==>
+  spill_alloc_layout_wf al2 sp /\
+  LENGTH offsets = LENGTH items /\ ALL_DISTINCT offsets /\
+  al2.sa_spill_base = al.sa_spill_base /\
+  al.sa_next_offset <= al2.sa_next_offset /\
+  EVERY (\off. al2.sa_spill_base <= off /\ off + 32 <= al2.sa_next_offset) offsets /\
+  (!k. k < LENGTH offsets ==>
+    (!op old. FLOOKUP sp op = SOME old ==>
+      old + 32 <= EL k offsets \/ EL k offsets + 32 <= old) /\
+    (!j. j < LENGTH offsets /\ j <> k ==>
+      EL j offsets + 32 <= EL k offsets \/ EL k offsets + 32 <= EL j offsets))
+Proof
+  strip_tac >>
+  `spill_alloc_layout_wf al2 sp` by
+    (drule spill_alloc_n_free_layout_wf_arbitrary >>
+     disch_then (qspec_then `items` mp_tac) >> simp[LET_THM]) >>
+  `al2.sa_free_slots = (SND (spill_alloc_n [] al items)).sa_free_slots ++ offsets` by
+    simp[foldl_free_free_slots] >>
+  `!k. k < LENGTH offsets ==> MEM (EL k offsets) al2.sa_free_slots` by
+    (rpt strip_tac >> asm_rewrite_tac[] >> simp[MEM_EL] >> metis_tac[]) >>
+  `ALL_DISTINCT offsets` by
+    (drule spill_alloc_layout_wf_free_all_distinct >>
+     simp[] >> gvs[ALL_DISTINCT_APPEND]) >>
+  `LENGTH offsets = LENGTH items` by simp[spill_alloc_n_offsets_length] >>
+  `al2.sa_spill_base = al.sa_spill_base` by
+    simp[foldl_free_spill_base, spill_alloc_n_spill_base] >>
+  `al.sa_next_offset <= al2.sa_next_offset` by
+    (simp[foldl_free_next_offset] >>
+     irule spill_alloc_n_next_offset_mono >> simp[]) >>
+  `EVERY (\off. al2.sa_spill_base <= off /\ off + 32 <= al2.sa_next_offset) offsets` by
+    (pure_rewrite_tac[EVERY_EL] >> rpt strip_tac >>
+     `MEM (EL n offsets) al2.sa_free_slots` by metis_tac[] >>
+     drule_all spill_alloc_layout_wf_free_bound >> simp[]) >>
+  rpt conj_tac >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (rpt strip_tac >>
+      irule spill_alloc_layout_wf_durable_free_separated >>
+      qexistsl [`al2`, `op`, `sp`] >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `EL j offsets <> EL k offsets` by metis_tac[ALL_DISTINCT_EL_IMP] >>
+  irule spill_alloc_layout_wf_free_separated >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`al2`, `sp`] >> simp[]
+QED
+
 (* Occurrence-indexed temporary offsets for a deep swap.  This interface is
    deliberately independent of operand equality. *)
 Theorem deep_swap_occurrence_offsets[local]:
@@ -2554,42 +2610,16 @@ Proof
   qabbrev_tac `offsets = FST (spill_alloc_n [] al items)` >>
   qabbrev_tac `alloc2 = FOLDL (\a off. free_spill_slot off a)
     (SND (spill_alloc_n [] al items)) offsets` >>
-  `spill_alloc_layout_wf alloc2 sp` by
-    (qspecl_then [`al`, `sp`, `items`] mp_tac
-       spill_alloc_n_free_layout_wf_arbitrary >>
-     simp[LET_THM, Abbr `alloc2`, Abbr `offsets`]) >>
-  `alloc2.sa_free_slots =
-     (SND (spill_alloc_n [] al items)).sa_free_slots ++ offsets` by
-    simp[Abbr `alloc2`, foldl_free_free_slots] >>
-  `ALL_DISTINCT offsets` by
-    (drule spill_alloc_layout_wf_free_all_distinct >>
-     simp[] >> gvs[ALL_DISTINCT_APPEND]) >>
-  conj_tac >- simp[Abbr `offsets`, spill_alloc_n_offsets_length] >>
+  `offsets = FST (spill_alloc_n [] al items)` by simp[Abbr `offsets`] >>
+  `alloc2 = FOLDL (\a off. free_spill_slot off a)
+    (SND (spill_alloc_n [] al items)) offsets` by simp[Abbr `alloc2`] >>
+  drule_all spill_alloc_n_temporary_layout >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac
-  >- (rpt gen_tac >> strip_tac >>
-      `MEM (EL k offsets) alloc2.sa_free_slots` by
-        (ASM_REWRITE_TAC[] >> simp[MEM_EL] >> metis_tac[]) >>
-      conj_tac
-      >- (qspecl_then [`alloc2`, `sp`, `EL k offsets`] mp_tac
-            spill_alloc_layout_wf_free_bound >>
-          simp[foldl_free_spill_base, spill_alloc_n_spill_base,
-               Abbr `alloc2`] >> metis_tac[]) >>
-      conj_tac
-      >- (fs[EVERY_EL, Abbr `offsets`] >> metis_tac[]) >>
-      conj_tac
-      >- (rpt strip_tac >>
-          irule spill_alloc_layout_wf_durable_free_separated >>
-          qexistsl [`alloc2`, `op`, `sp`] >> simp[]) >>
-      rpt gen_tac >> strip_tac >>
-      `EL j offsets <> EL k offsets` by
-        metis_tac[ALL_DISTINCT_EL_IMP] >>
-      irule spill_alloc_layout_wf_free_separated >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl [`alloc2`, `sp`] >> simp[] >>
-      ASM_REWRITE_TAC[] >> simp[MEM_EL] >> metis_tac[]) >>
-  conj_tac >- simp[EVERY_EL, desired_rev_el_bound, Abbr `offsets`,
-                    spill_alloc_n_offsets_length] >>
+  >- (rule_assum_tac (PURE_REWRITE_RULE [EVERY_EL]) >>
+      rpt strip_tac >> metis_tac[]) >>
+  conj_tac >- simp[EVERY_EL, desired_rev_el_bound] >>
   first_assum ACCEPT_TAC
 QED
 
@@ -2648,7 +2678,7 @@ Proof
        asm_next_def, asm_steps_def, mem_write32_def]
 QED
 
-Theorem raw_spill_bulk_steps[local]:
+Theorem raw_spill_bulk_steps:
   !offsets lo o2pc prog st.
     LENGTH offsets <= LENGTH st.as_stack /\
     EVERY (\off. off < dimword(:256)) offsets /\
@@ -2688,7 +2718,7 @@ Proof
   gvs[asm_state_component_equality]
 QED
 
-Theorem raw_spill_fold_read_disjoint[local]:
+Theorem raw_spill_fold_read_disjoint:
   !offsets vals target mem.
     LENGTH offsets = LENGTH vals /\
     EVERY (\off. target + 32 <= off \/ off + 32 <= target) offsets ==>
@@ -2702,7 +2732,7 @@ Proof
   irule mem_write32_read32_disjoint >> simp[]
 QED
 
-Theorem raw_spill_fold_read_occurrence[local]:
+Theorem raw_spill_fold_read_occurrence:
   !offsets vals mem k.
     LENGTH offsets = LENGTH vals /\
     k < LENGTH offsets /\
@@ -2732,7 +2762,7 @@ Proof
   simp[]
 QED
 
-Theorem raw_spill_fold_read_byte_outside[local]:
+Theorem raw_spill_fold_read_byte_outside:
   !offsets vals mem i.
     LENGTH offsets = LENGTH vals /\
     EVERY (\off. ~(off <= i /\ i < off + 32)) offsets ==>
@@ -2904,7 +2934,7 @@ Proof
   Induct >> simp[word_of_bytes_take_drop_expand]
 QED
 
-Theorem raw_restore_bulk_steps[local]:
+Theorem raw_restore_bulk_steps:
   !restore_offsets lo o2pc prog st.
     EVERY (\off. off < dimword(:256)) restore_offsets /\
     asm_block_at prog st.as_pc
@@ -2942,7 +2972,7 @@ Proof
   gvs[asm_state_component_equality, APPEND_ASSOC]
 QED
 
-Theorem raw_restore_fold_read_byte[local]:
+Theorem raw_restore_fold_read_byte:
   !offsets mem i.
     read_byte i
       (FOLDL (\m off. asm_expand_memory (off + 32) m) mem offsets) =
@@ -2951,7 +2981,7 @@ Proof
   Induct >> simp[read_byte_expand]
 QED
 
-Theorem raw_restore_indexed_steps[local]:
+Theorem raw_restore_indexed_steps:
   !offsets vals perm lo o2pc prog st.
     LENGTH offsets = LENGTH vals /\
     EVERY (\off. off < dimword(:256)) offsets /\
@@ -2985,6 +3015,129 @@ Proof
   (impl_tac >-
     (fs[EVERY_EL] >> simp[EVERY_EL, EL_MAP])) >>
   simp[]
+QED
+
+Theorem raw_dup_steps:
+  !lo o2pc prog depth st.
+    depth < 16 /\ depth < LENGTH st.as_stack /\
+    asm_block_at prog st.as_pc [AsmOp (dup_name (depth + 1))] ==>
+    asm_steps lo o2pc prog 1 st =
+      AsmOK (asm_next (st with as_stack := EL depth st.as_stack :: st.as_stack))
+Proof
+  rpt strip_tac >>
+  `st.as_pc < LENGTH prog /\ EL st.as_pc prog = AsmOp (dup_name (depth + 1))` by
+    (gvs[asm_block_at_def] >> first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  SUBST1_TAC (DECIDE ``1 = SUC 0``) >>
+  simp[Once asm_steps_def] >>
+  drule_all stackOpAsmSimTheory.asm_step_dup_ok >>
+  simp[asm_steps_def]
+QED
+
+Theorem plan_stack_rel_deep_dup_raw:
+  !lo vs ps_stk as_stk dist k.
+    plan_stack_rel lo vs ps_stk as_stk /\
+    dist < LENGTH ps_stk /\ dist = k + 15 ==>
+    plan_stack_rel lo vs (stack_dup dist ps_stk)
+      (EL 15 (DROP k as_stk) :: (TAKE k as_stk ++ DROP k as_stk))
+Proof
+  rpt strip_tac >>
+  `LENGTH ps_stk = LENGTH as_stk` by metis_tac[plan_stack_rel_length] >>
+  `15 < LENGTH as_stk - k` by decide_tac >>
+  simp[TAKE_DROP, EL_DROP, stack_dup_def] >>
+  irule plan_stack_rel_push >> simp[] >>
+  drule_all plan_stack_rel_el >>
+  simp[EL_REVERSE, stack_peek_def, PRE_SUB1, ADD_COMM]
+QED
+
+Theorem raw_swap_steps:
+  !lo o2pc prog k st.
+    0 < k /\ k <= 16 /\ k < LENGTH st.as_stack /\
+    asm_block_at prog st.as_pc [AsmOp (swap_name k)] ==>
+    asm_steps lo o2pc prog 1 st =
+      AsmOK (asm_next (st with as_stack :=
+        LUPDATE (HD st.as_stack) k
+          (LUPDATE (EL k st.as_stack) 0 st.as_stack)))
+Proof
+  rpt strip_tac >>
+  `st.as_pc < LENGTH prog /\ EL st.as_pc prog = AsmOp (swap_name k)` by
+    (gvs[asm_block_at_def] >> first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  SUBST1_TAC (DECIDE ``1 = SUC 0``) >>
+  simp[Once asm_steps_def] >>
+  drule_all stackOpAsmSimTheory.asm_step_swap_ok >>
+  simp[asm_steps_def]
+QED
+
+Theorem raw_restore_swap1_steps[local]:
+  !lo o2pc prog off st q tail.
+    off < dimword(:256) /\ st.as_stack = q::tail /\
+    asm_block_at prog st.as_pc
+      (execute_plan initial_fmp [SORestore off; SOSwap 1]) ==>
+    asm_steps lo o2pc prog 3 st =
+      AsmOK (st with <|
+        as_stack := q :: word_of_bytes T (0w:bytes32)
+          (TAKE 32 (DROP off st.as_memory)) :: tail;
+        as_memory := asm_expand_memory (off + 32) st.as_memory;
+        as_pc := st.as_pc + 3 |>)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `asm_block_at _ _ _` mp_tac >>
+  pure_rewrite_tac[execute_plan_def, MAP, FLAT, APPEND,
+    exec_stack_op_def] >>
+  rewrite_tac[GSYM APPEND_ASSOC, asm_block_at_cons] >> strip_tac >>
+  `asm_block_at prog st.as_pc
+    [AsmPush (encode_num_bytes off); AsmOp "MLOAD"]` by
+    simp[asm_block_at_cons] >>
+  drule_all raw_restore_asm_steps >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `asm_steps _ _ _ 2 _ = AsmOK mid` >>
+  `asm_block_at prog mid.as_pc [AsmOp (swap_name 1)]` by
+    (fs[ADD_ASSOC] >> simp[Abbr `mid`, asm_block_at_cons,
+      asm_block_at_def, ADD_ASSOC]) >>
+  `1 < LENGTH mid.as_stack` by simp[Abbr `mid`] >>
+  drule_at (Pat `asm_block_at _ _ _`) raw_swap_steps >>
+  simp[] >> strip_tac >>
+  pure_once_rewrite_tac[DECIDE ``(3:num) = 2 + 1``] >>
+  irule asm_steps_compose_ok >> qexists_tac `mid` >> simp[] >>
+  gvs[Abbr `mid`, asm_next_def, asm_state_component_equality, LUPDATE_compute]
+QED
+
+Theorem execute_plan_restore_swap_cons[local]:
+  execute_plan f (SORestore off::SOSwap 1::ops) =
+    execute_plan f [SORestore off; SOSwap 1] ++ execute_plan f ops
+Proof
+  simp[execute_plan_def]
+QED
+
+Theorem raw_restore_swap1_bulk_steps:
+  !offsets lo o2pc prog st q tail.
+    EVERY (\off. off < dimword(:256)) offsets /\
+    st.as_stack = q::tail /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp
+      (FLAT (MAP (\off. [SORestore off; SOSwap 1]) offsets))) ==>
+    asm_steps lo o2pc prog (3 * LENGTH offsets) st =
+      AsmOK (st with <|
+        as_stack := q :: (REVERSE (MAP (\off. word_of_bytes T (0w:bytes32)
+          (TAKE 32 (DROP off st.as_memory))) offsets) ++ tail);
+        as_memory := FOLDL (\mem off. asm_expand_memory (off + 32) mem)
+          st.as_memory offsets;
+        as_pc := st.as_pc + 3 * LENGTH offsets |>)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[asm_state_component_equality] >>
+  fs[Once execute_plan_restore_swap_cons, asm_block_at_append] >>
+  drule_all raw_restore_swap1_steps >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `asm_steps _ _ _ 3 _ = AsmOK mid` >>
+  first_x_assum (qspecl_then [`lo`, `o2pc`, `prog`, `mid`, `q`,
+    `word_of_bytes T (0w:bytes32) (TAKE 32 (DROP h st.as_memory))::tail`]
+    mp_tac) >>
+  (impl_tac >-
+    (simp[Abbr `mid`] >>
+     qpat_x_assum `asm_block_at _ (_ + _) _` mp_tac >>
+     simp[execute_plan_def, exec_stack_op_def, ADD_COMM])) >> strip_tac >>
+  pure_once_rewrite_tac[DECIDE
+    ``3 * SUC (LENGTH offsets) = 3 + 3 * LENGTH offsets``] >>
+  irule asm_steps_compose_ok >> qexists_tac `mid` >> simp[] >>
+  gvs[Abbr `mid`, asm_state_component_equality, APPEND_ASSOC,
+    raw_restore_map_reads_expand]
 QED
 
 Theorem raw_restore_reverse_map[local]:
@@ -3021,6 +3174,120 @@ Proof
      simp[EVERY_REVERSE])) >>
   simp[raw_restore_reverse_map]
 QED
+Theorem raw_swap_restored_stack[local]:
+  !(front:bytes32 list) last q tail.
+    LUPDATE last (LENGTH front + 1)
+      (LUPDATE q 0 (last :: (front ++ q::tail))) =
+    q :: (front ++ last::tail)
+Proof
+  rpt gen_tac >>
+  pure_rewrite_tac[GSYM ADD1, LUPDATE_def] >>
+  simp_tac std_ss [LUPDATE_APPEND2, LUPDATE_def]
+QED
+
+Theorem dup_restore_small_reversed_values[local]:
+  !(front:bytes32 list) last.
+    REVERSE (MAP (\i. EL i (front ++ [last]))
+      (GENLIST (\i. LENGTH front - 1 - i) (LENGTH front) ++
+       [LENGTH front])) = last::front
+Proof
+  rpt gen_tac >>
+  qspecl_then [`last`, `REVERSE front`] mp_tac dup_restore_small_values >>
+  simp[DECIDE ``SUC n - (i + 2) = n - (i + 1)``] >>
+  strip_tac >> simp[]
+QED
+
+Theorem dup_restore_small_steps:
+  !offsets vals lo o2pc prog st q tail.
+    LENGTH offsets = LENGTH vals /\
+    0 < LENGTH offsets /\ LENGTH offsets <= 16 /\
+    EVERY (\off. off < dimword(:256)) offsets /\
+    st.as_stack = q::tail /\
+    (!i. i < LENGTH offsets ==>
+      word_of_bytes T (0w:bytes32)
+        (TAKE 32 (DROP (EL i offsets) st.as_memory)) = EL i vals) /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp
+      (MAP SORestore (MAP (\i. EL i offsets)
+        (GENLIST (\i. LENGTH offsets - 2 - i) (LENGTH offsets - 1) ++
+         [LENGTH offsets - 1])) ++ [SOSwap (LENGTH offsets)])) ==>
+    asm_steps lo o2pc prog (2 * LENGTH offsets + 1) st =
+      AsmOK (st with <|
+        as_stack := q :: (vals ++ tail);
+        as_memory := FOLDL (\mem off. asm_expand_memory (off + 32) mem)
+          st.as_memory (MAP (\i. EL i offsets)
+            (GENLIST (\i. LENGTH offsets - 2 - i) (LENGTH offsets - 1) ++
+             [LENGTH offsets - 1]));
+        as_pc := st.as_pc + (2 * LENGTH offsets + 1) |>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `idxs = GENLIST (\i. LENGTH offsets - 2 - i)
+    (LENGTH offsets - 1) ++ [LENGTH offsets - 1]` >>
+  qspec_then `vals` strip_assume_tac SNOC_CASES
+  >- gvs[] >>
+  rename1 `vals = SNOC last front` >>
+  gvs[SNOC_APPEND] >>
+  `LENGTH idxs = LENGTH offsets` by (simp[Abbr `idxs`] >> decide_tac) >>
+  `EVERY (\i. i < LENGTH offsets) idxs` by
+    (simp[Abbr `idxs`, EVERY_APPEND, EVERY_GENLIST] >> decide_tac) >>
+  fs[execute_plan_append, asm_block_at_append,
+    execute_plan_map_restore_length] >>
+  drule_at (Pat `asm_block_at _ _ _`) raw_restore_indexed_steps >>
+  disch_then (qspec_then `front ++ [last]` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `asm_steps _ _ _ (2 * _) _ = AsmOK mid` >>
+  `mid.as_stack = last::(front ++ q::tail)` by
+    (simp[Abbr `mid`, Abbr `idxs`] >>
+     mp_tac (Q.SPECL [`front`, `last`] dup_restore_small_reversed_values) >>
+     simp[DECIDE ``SUC n - (i + 2) = n - (i + 1)``]) >>
+  `asm_block_at prog mid.as_pc [AsmOp (swap_name (LENGTH offsets))]` by
+    gvs[execute_plan_def, exec_stack_op_def, Abbr `mid`, ADD_COMM] >>
+  `LENGTH offsets < LENGTH mid.as_stack` by simp[] >>
+  drule_at (Pat `asm_block_at _ _ _`) raw_swap_steps >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  irule asm_steps_compose_ok >> qexists_tac `mid` >> simp[] >>
+  gvs[Abbr `mid`, asm_next_def, asm_state_component_equality,
+    EL_APPEND_EQN] >>
+  qspecl_then [`front`, `last`, `q`, `tail`] mp_tac raw_swap_restored_stack >>
+  simp[GSYM ADD1, EL, EL_APPEND_EQN]
+QED
+
+Theorem dup_restore_large_steps:
+  !offsets vals lo o2pc prog st q tail.
+    LENGTH offsets = LENGTH vals /\
+    EVERY (\off. off < dimword(:256)) offsets /\
+    st.as_stack = q::tail /\
+    (!i. i < LENGTH offsets ==>
+      word_of_bytes T (0w:bytes32)
+        (TAKE 32 (DROP (EL i offsets) st.as_memory)) = EL i vals) /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp
+      (FLAT (MAP (\i. [SORestore (EL i offsets); SOSwap 1])
+        (GENLIST (\i. LENGTH offsets - 1 - i) (LENGTH offsets))))) ==>
+    asm_steps lo o2pc prog (3 * LENGTH offsets) st =
+      AsmOK (st with <|
+        as_stack := q :: (vals ++ tail);
+        as_memory := FOLDL (\mem off. asm_expand_memory (off + 32) mem)
+          st.as_memory (REVERSE offsets);
+        as_pc := st.as_pc + 3 * LENGTH offsets |>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `GENLIST (\i. LENGTH offsets - 1 - i) (LENGTH offsets) =
+    REVERSE (GENLIST I (LENGTH offsets))` by
+    simp[REVERSE_GENLIST, PRE_SUB1, combinTheory.I_THM] >>
+  `FLAT (MAP (\i. [SORestore (EL i offsets); SOSwap 1])
+      (GENLIST (\i. LENGTH offsets - 1 - i) (LENGTH offsets))) =
+    FLAT (MAP (\off. [SORestore off; SOSwap 1]) (REVERSE offsets))` by
+    (simp[] >>
+     qspec_then `offsets` (SUBST1_TAC o SYM) map_el_reverse_indices >>
+     simp[MAP_MAP_o, combinTheory.o_DEF]) >>
+  `MAP (\off. word_of_bytes T (0w:bytes32)
+    (TAKE 32 (DROP off st.as_memory))) offsets = vals` by
+    (simp[LIST_EQ_REWRITE, EL_MAP] >> rpt strip_tac >> simp[]) >>
+  qpat_x_assum `asm_block_at _ _ _` mp_tac >>
+  asm_rewrite_tac[] >> disch_tac >>
+  drule_at (Pat `asm_block_at _ _ _`) raw_restore_swap1_bulk_steps >>
+  simp[EVERY_REVERSE, MAP_REVERSE]
+QED
+
 (* EL at a desired-permuted index in items equals EL at the
    reverse-permuted index in REVERSE items. *)
 Theorem el_desired_reverse_items[local]:
@@ -4067,6 +4334,93 @@ Proof
   irule memory_rel_expand >> first_assum ACCEPT_TAC
 QED
 
+(* Physical scratch frames compose storage with arbitrary restore expansion. *)
+Theorem plan_spill_rel_scratch:
+  plan_spill_rel lo vs spilled before /\
+  LENGTH offsets = LENGTH vals /\
+  (!k op off. k < LENGTH offsets /\ FLOOKUP spilled op = SOME off ==>
+     off + 32 <= EL k offsets \/ EL k offsets + 32 <= off) /\
+  after = FOLDL (\m off. asm_expand_memory (off + 32) m)
+    (FOLDL (\m p. mem_write32 (FST p) (SND p) m) before
+      (ZIP (offsets,vals))) restores ==>
+  plan_spill_rel lo vs spilled after
+Proof
+  strip_tac >> asm_rewrite_tac[] >>
+  irule plan_spill_rel_expand_fold >>
+  irule plan_spill_rel_raw_fold >> simp[] >> metis_tac[]
+QED
+
+Theorem memory_rel_scratch:
+  memory_rel old_alloc vm before /\
+  new_alloc.sa_spill_base = old_alloc.sa_spill_base /\
+  old_alloc.sa_next_offset <= new_alloc.sa_next_offset /\
+  LENGTH offsets = LENGTH vals /\
+  EVERY (\off. new_alloc.sa_spill_base <= off /\
+    off + 32 <= new_alloc.sa_next_offset) offsets /\
+  after = FOLDL (\m off. asm_expand_memory (off + 32) m)
+    (FOLDL (\m p. mem_write32 (FST p) (SND p) m) before
+      (ZIP (offsets,vals))) restores ==>
+  memory_rel new_alloc vm after
+Proof
+  strip_tac >> asm_rewrite_tac[] >>
+  irule memory_rel_expand_fold >>
+  irule memory_rel_write_fold >> simp[] >>
+  irule memory_rel_widen >> qexists `old_alloc` >> simp[]
+QED
+
+Theorem venom_asm_rel_scratch_finish:
+  venom_asm_rel lo ps vs before /\
+  target.ps_spilled = ps.ps_spilled /\
+  after = before with <|as_stack := stk; as_memory := mem; as_pc := pc|> /\
+  plan_stack_rel lo vs target.ps_stack stk /\
+  plan_spill_rel lo vs ps.ps_spilled mem /\
+  memory_rel target.ps_alloc vs.vs_memory mem ==>
+  venom_asm_rel lo target vs after
+Proof
+  simp[venom_asm_rel_def]
+QED
+
+Theorem venom_asm_rel_temporary_scratch:
+  venom_asm_rel lo ps vs before /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  offsets = FST (spill_alloc_n [] ps.ps_alloc items) /\
+  target.ps_alloc = FOLDL (\a off. free_spill_slot off a)
+    (SND (spill_alloc_n [] ps.ps_alloc items)) offsets /\
+  target.ps_spilled = ps.ps_spilled /\
+  LENGTH offsets = LENGTH vals /\
+  mem = FOLDL (\m off. asm_expand_memory (off + 32) m)
+    (FOLDL (\m p. mem_write32 (FST p) (SND p) m) before.as_memory
+      (ZIP (offsets,vals))) restores /\
+  after = before with <|as_stack := stk; as_memory := mem; as_pc := pc|> /\
+  plan_stack_rel lo vs target.ps_stack stk ==>
+  venom_asm_rel lo target vs after
+Proof
+  strip_tac >>
+  `spill_alloc_layout_wf target.ps_alloc ps.ps_spilled /\
+   LENGTH offsets = LENGTH items /\ ALL_DISTINCT offsets /\
+   target.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base /\
+   ps.ps_alloc.sa_next_offset <= target.ps_alloc.sa_next_offset /\
+   EVERY (\off. target.ps_alloc.sa_spill_base <= off /\
+     off + 32 <= target.ps_alloc.sa_next_offset) offsets /\
+   (!k. k < LENGTH offsets ==>
+     (!op old. FLOOKUP ps.ps_spilled op = SOME old ==>
+       old + 32 <= EL k offsets \/ EL k offsets + 32 <= old) /\
+     (!j. j < LENGTH offsets /\ j <> k ==>
+       EL j offsets + 32 <= EL k offsets \/
+       EL k offsets + 32 <= EL j offsets))` by
+    (irule spill_alloc_n_temporary_layout >> simp[]) >>
+  `plan_spill_rel lo vs ps.ps_spilled mem` by
+    (irule plan_spill_rel_scratch >>
+     qexistsl [`before.as_memory`, `offsets`, `restores`, `vals`] >>
+     simp[] >> fs[venom_asm_rel_def] >> metis_tac[]) >>
+  `memory_rel target.ps_alloc vs.vs_memory mem` by
+    (irule memory_rel_scratch >> qexists `before.as_memory` >>
+     qexistsl [`offsets`, `ps.ps_alloc`, `restores`, `vals`] >>
+     simp[] >> fs[venom_asm_rel_def]) >>
+  irule venom_asm_rel_scratch_finish >>
+  qexistsl [`before`, `mem`, `pc`, `ps`, `stk`] >> simp[]
+QED
+
 Theorem el_reverse_desired_items[local]:
   !(items:'a list) k.
     LENGTH items >= 2 /\ k < LENGTH items ==>
@@ -4176,13 +4530,416 @@ QED
    do_swap_venom_asm_rel_big: dist > 16 case
    --------------------------------------------------------------- *)
 
-Theorem do_swap_venom_asm_rel_big[local]:
+Theorem raw_spill_dup16_steps:
+  LENGTH offsets + 15 < LENGTH st.as_stack /\
+  EVERY (\off. off < dimword(:256)) offsets /\
+  vals = TAKE (LENGTH offsets) st.as_stack /\
+  spill_st = st with <|
+    as_stack := DROP (LENGTH offsets) st.as_stack;
+    as_memory := FOLDL (\m p. mem_write32 (FST p) (SND p) m)
+      st.as_memory (ZIP (offsets,vals));
+    as_pc := st.as_pc + 2 * LENGTH offsets |> /\
+  dup_st = asm_next (spill_st with as_stack :=
+    EL 15 spill_st.as_stack :: spill_st.as_stack) /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp
+    (MAP SOSpill offsets ++ [SODup 16])) ==>
+  asm_steps lo o2pc prog (2 * LENGTH offsets + 1) st = AsmOK dup_st
+Proof
+  strip_tac >>
+  `LENGTH offsets <= LENGTH st.as_stack` by decide_tac >>
+  `asm_block_at prog st.as_pc
+      (execute_plan initial_fmp (MAP SOSpill offsets)) /\
+   asm_block_at prog spill_st.as_pc [AsmOp (dup_name (15 + 1))]` by
+    (qpat_x_assum `asm_block_at _ _ _` mp_tac >>
+     pure_rewrite_tac[execute_plan_append, asm_block_at_append,
+       execute_plan_map_spill_length] >> strip_tac >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_x_assum `spill_st = _` SUBST1_TAC >>
+     qpat_x_assum `asm_block_at _ (_ + _) _` mp_tac >>
+     simp[execute_plan_def, exec_stack_op_def]) >>
+  `asm_steps lo o2pc prog (2 * LENGTH offsets) st = AsmOK spill_st` by
+    (drule_all raw_spill_bulk_steps >> simp[]) >>
+  `15 < LENGTH spill_st.as_stack` by gvs[] >>
+  `asm_steps lo o2pc prog 1 spill_st = AsmOK dup_st` by
+    (drule_at (Pat `asm_block_at _ _ _`) raw_dup_steps >>
+     simp[]) >>
+  irule asm_steps_compose_ok >> qexists `spill_st` >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem raw_spill_dup16_prefix:
+  LENGTH offsets + 15 < LENGTH st.as_stack /\
+  EVERY (\off. off < dimword(:256)) offsets /\
+  (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets + 32 <= EL j offsets \/
+    EL j offsets + 32 <= EL i offsets) /\
+  vals = TAKE (LENGTH offsets) st.as_stack /\
+  spill_st = st with <|
+    as_stack := DROP (LENGTH offsets) st.as_stack;
+    as_memory := FOLDL (\m p. mem_write32 (FST p) (SND p) m)
+      st.as_memory (ZIP (offsets,vals));
+    as_pc := st.as_pc + 2 * LENGTH offsets |> /\
+  dup_st = asm_next (spill_st with as_stack :=
+    EL 15 spill_st.as_stack :: spill_st.as_stack) /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp
+    ((MAP SOSpill offsets ++ [SODup 16]) ++ rest)) ==>
+  asm_steps lo o2pc prog (2 * LENGTH offsets + 1) st = AsmOK dup_st /\
+  asm_block_at prog dup_st.as_pc (execute_plan initial_fmp rest) /\
+  (!i. i < LENGTH offsets ==>
+    word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP (EL i offsets) dup_st.as_memory)) = EL i vals)
+Proof
+  strip_tac >>
+  `LENGTH offsets <= LENGTH st.as_stack` by decide_tac >>
+  qpat_x_assum `asm_block_at _ _ _`
+    (strip_assume_tac o PURE_ONCE_REWRITE_RULE [asm_block_at_append] o
+     PURE_ONCE_REWRITE_RULE [execute_plan_append]) >>
+  conj_tac >- (drule_all raw_spill_dup16_steps >> simp[]) >>
+  conj_tac
+  >- (qpat_x_assum `dup_st = _` SUBST1_TAC >>
+      qpat_x_assum `spill_st = _` SUBST1_TAC >>
+      qpat_x_assum `asm_block_at _ (_ + _) _` mp_tac >>
+      pure_rewrite_tac[execute_plan_append, LENGTH_APPEND,
+        execute_plan_map_spill_length] >>
+      simp_tac (srw_ss()) [asm_next_def, execute_plan_def,
+        exec_stack_op_def, ADD_COMM] >>
+      metis_tac[ADD_ASSOC, ADD_COMM]) >>
+  rpt strip_tac >>
+  qpat_x_assum `dup_st = _` SUBST1_TAC >>
+  qpat_x_assum `spill_st = _` SUBST1_TAC >>
+  simp[asm_next_def] >>
+  irule raw_spill_fold_read_occurrence >> simp[] >> metis_tac[]
+QED
+
+Theorem raw_deep_dup_small_steps:
+  LENGTH offsets + 15 < LENGTH st.as_stack /\
+  0 < LENGTH offsets /\ LENGTH offsets <= 16 /\
+  EVERY (\off. off < dimword(:256)) offsets /\
+  (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets + 32 <= EL j offsets \/
+    EL j offsets + 32 <= EL i offsets) /\
+  vals = TAKE (LENGTH offsets) st.as_stack /\
+  idxs = GENLIST (\i. LENGTH offsets - 2 - i) (LENGTH offsets - 1) ++
+    [LENGTH offsets - 1] /\
+  spill_st = st with <|
+    as_stack := DROP (LENGTH offsets) st.as_stack;
+    as_memory := FOLDL (\m p. mem_write32 (FST p) (SND p) m)
+      st.as_memory (ZIP (offsets,vals));
+    as_pc := st.as_pc + 2 * LENGTH offsets |> /\
+  dup_st = asm_next (spill_st with as_stack :=
+    EL 15 spill_st.as_stack :: spill_st.as_stack) /\
+  final_st = dup_st with <|
+    as_stack := EL 15 spill_st.as_stack :: (vals ++ spill_st.as_stack);
+    as_memory := FOLDL (\m off. asm_expand_memory (off + 32) m)
+      dup_st.as_memory (MAP (\i. EL i offsets) idxs);
+    as_pc := dup_st.as_pc + (2 * LENGTH offsets + 1) |> /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp
+    ((MAP SOSpill offsets ++ [SODup 16]) ++
+     (MAP SORestore (MAP (\i. EL i offsets) idxs) ++
+      [SOSwap (LENGTH offsets)]))) ==>
+  asm_steps lo o2pc prog
+    ((2 * LENGTH offsets + 1) + (2 * LENGTH offsets + 1)) st = AsmOK final_st
+Proof
+  strip_tac >> drule_all raw_spill_dup16_prefix >>
+  disch_then (qspecl_then [`o2pc`, `lo`] strip_assume_tac) >>
+  qpat_x_assum `idxs = _` SUBST_ALL_TAC >>
+  `asm_steps lo o2pc prog (2 * LENGTH offsets + 1) dup_st = AsmOK final_st` by
+    (qpat_x_assum `final_st = _` SUBST1_TAC >>
+     irule dup_restore_small_steps >>
+     ntac 6 (conj_tac >- simp[asm_next_def]) >>
+     qexists `initial_fmp` >> first_assum ACCEPT_TAC) >>
+  irule asm_steps_compose_ok >> qexists `dup_st` >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem raw_deep_dup_large_steps:
+  LENGTH offsets + 15 < LENGTH st.as_stack /\
+  EVERY (\off. off < dimword(:256)) offsets /\
+  (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets + 32 <= EL j offsets \/
+    EL j offsets + 32 <= EL i offsets) /\
+  vals = TAKE (LENGTH offsets) st.as_stack /\
+  spill_st = st with <|
+    as_stack := DROP (LENGTH offsets) st.as_stack;
+    as_memory := FOLDL (\m p. mem_write32 (FST p) (SND p) m)
+      st.as_memory (ZIP (offsets,vals));
+    as_pc := st.as_pc + 2 * LENGTH offsets |> /\
+  dup_st = asm_next (spill_st with as_stack :=
+    EL 15 spill_st.as_stack :: spill_st.as_stack) /\
+  final_st = dup_st with <|
+    as_stack := EL 15 spill_st.as_stack :: (vals ++ spill_st.as_stack);
+    as_memory := FOLDL (\m off. asm_expand_memory (off + 32) m)
+      dup_st.as_memory (REVERSE offsets);
+    as_pc := dup_st.as_pc + 3 * LENGTH offsets |> /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp
+    ((MAP SOSpill offsets ++ [SODup 16]) ++
+     FLAT (MAP (\i. [SORestore (EL i offsets); SOSwap 1])
+       (GENLIST (\i. LENGTH offsets - 1 - i) (LENGTH offsets))))) ==>
+  asm_steps lo o2pc prog ((2 * LENGTH offsets + 1) + 3 * LENGTH offsets) st =
+    AsmOK final_st
+Proof
+  strip_tac >> drule_all raw_spill_dup16_prefix >>
+  disch_then (qspecl_then [`o2pc`, `lo`] strip_assume_tac) >>
+  `LENGTH offsets <= LENGTH st.as_stack` by decide_tac >>
+  `asm_steps lo o2pc prog (3 * LENGTH offsets) dup_st = AsmOK final_st` by
+    (qpat_x_assum `final_st = _` SUBST1_TAC >>
+     irule dup_restore_large_steps >>
+     ntac 4 (conj_tac >- simp[asm_next_def]) >>
+     qexists `initial_fmp` >> first_assum ACCEPT_TAC) >>
+  irule asm_steps_compose_ok >> qexists `dup_st` >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem flat_map_singleton[local]:
+  !xs (f:'a -> 'b). FLAT (MAP (\x. [f x]) xs) = MAP f xs
+Proof
+  Induct >> simp[]
+QED
+
+Theorem execute_plan_restore_swap1_length[local]:
+  !idxs offsets. LENGTH (execute_plan initial_fmp
+    (FLAT (MAP (\i. [SORestore (EL i offsets); SOSwap 1]) idxs))) =
+    3 * LENGTH idxs
+Proof
+  Induct >> simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
+  fs[execute_plan_def]
+QED
+
+Theorem do_dup_venom_asm_rel_big_numeric:
+  !dist ps ops ps' lo o2pc prog vs st.
+    do_dup dist ps = (ops, ps') /\
+    dist > 15 /\ dist < LENGTH ps.ps_stack /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    EVERY (\off. off < dimword(:256))
+      (FST (spill_alloc_n [] ps.ps_alloc
+        (REVERSE (top_n (dist - 15) ps.ps_stack)))) /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st =
+      AsmOK st' /\ venom_asm_rel lo ps' vs st' /\
+      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `k = dist - 15` >>
+  qabbrev_tac `items = REVERSE (top_n k ps.ps_stack)` >>
+  qabbrev_tac `offsets = FST (spill_alloc_n [] ps.ps_alloc items)` >>
+  qabbrev_tac `alloc2 = FOLDL (\a off. free_spill_slot off a)
+    (SND (spill_alloc_n [] ps.ps_alloc items)) offsets` >>
+  `0 < k /\ dist = k + 15` by (simp[Abbr `k`] >> decide_tac) >>
+  `LENGTH items = k` by
+    (simp[Abbr `items`, top_n_def] >> decide_tac) >>
+  `ops = MAP SOSpill offsets ++ [SODup 16] ++
+     (if k <= 16 then
+        MAP SORestore (MAP (\i. EL i offsets)
+          (GENLIST (\i. k - 2 - i) (k - 1) ++ [k - 1])) ++ [SOSwap k]
+      else FLAT (MAP (\i. [SORestore (EL i offsets); SOSwap 1])
+        (GENLIST (\i. k - 1 - i) k))) /\
+   ps' = ps with <|ps_stack := stack_dup dist ps.ps_stack;
+     ps_alloc := alloc2|>` by
+    (qspecl_then [`dist`, `ps`] mp_tac do_dup_big_decompose >>
+     (impl_tac >- simp[]) >>
+     Cases_on `k <= 16` >>
+     simp[LET_THM, Abbr `k`, Abbr `items`, Abbr `offsets`, Abbr `alloc2`,
+       flat_map_singleton, MAP_MAP_o, combinTheory.o_DEF]) >>
+  suspend "resources"
+QED
+
+Resume do_dup_venom_asm_rel_big_numeric[resources]:
+  `spill_alloc_layout_wf alloc2 ps.ps_spilled /\
+   LENGTH offsets = LENGTH items /\ ALL_DISTINCT offsets /\
+   alloc2.sa_spill_base = ps.ps_alloc.sa_spill_base /\
+   ps.ps_alloc.sa_next_offset <= alloc2.sa_next_offset /\
+   EVERY (\off. alloc2.sa_spill_base <= off /\
+     off + 32 <= alloc2.sa_next_offset) offsets /\
+   (!i. i < LENGTH offsets ==>
+     (!op old. FLOOKUP ps.ps_spilled op = SOME old ==>
+       old + 32 <= EL i offsets \/ EL i offsets + 32 <= old) /\
+     (!j. j < LENGTH offsets /\ j <> i ==>
+       EL j offsets + 32 <= EL i offsets \/
+       EL i offsets + 32 <= EL j offsets))` by
+    (irule spill_alloc_n_temporary_layout >>
+     simp[Abbr `offsets`, Abbr `alloc2`]) >>
+  `LENGTH offsets = k` by simp[] >>
+  `k + 15 < LENGTH st.as_stack` by
+    (qpat_x_assum `venom_asm_rel _ _ _ _`
+       (strip_assume_tac o PURE_REWRITE_RULE [venom_asm_rel_def]) >>
+     drule plan_stack_rel_length >> decide_tac) >>
+  `!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets + 32 <= EL j offsets \/
+    EL j offsets + 32 <= EL i offsets` by metis_tac[] >>
+  qabbrev_tac `vals = TAKE k st.as_stack` >>
+  qabbrev_tac `spill_mem = FOLDL (\m p. mem_write32 (FST p) (SND p) m)
+    st.as_memory (ZIP (offsets,vals))` >>
+  qabbrev_tac `spill_st = st with <|as_stack := DROP k st.as_stack;
+    as_memory := spill_mem; as_pc := st.as_pc + 2 * k|>` >>
+  qabbrev_tac `dup_st = asm_next (spill_st with as_stack :=
+    EL 15 spill_st.as_stack :: spill_st.as_stack)` >>
+  qabbrev_tac `restores = if k <= 16 then
+    MAP (\i. EL i offsets) (GENLIST (\i. k - 2 - i) (k - 1) ++ [k - 1])
+    else REVERSE offsets` >>
+  qabbrev_tac `final_mem = FOLDL (\m off. asm_expand_memory (off + 32) m)
+    spill_mem restores` >>
+  qabbrev_tac `nrestore = if k <= 16 then 2 * k + 1 else 3 * k` >>
+  qabbrev_tac `final_st = dup_st with <|
+    as_stack := EL 15 spill_st.as_stack :: (vals ++ spill_st.as_stack);
+    as_memory := final_mem; as_pc := dup_st.as_pc + nrestore|>` >>
+  suspend "run"
+QED
+
+Resume do_dup_venom_asm_rel_big_numeric[run]:
+  `asm_steps lo o2pc prog ((2 * k + 1) + nrestore) st = AsmOK final_st` by
+    (Cases_on `k <= 16`
+     >- (`nrestore = 2 * LENGTH offsets + 1` by simp[Abbr `nrestore`] >>
+         qpat_x_assum `nrestore = _` SUBST1_TAC >>
+         qpat_assum `LENGTH offsets = k` (SUBST1_TAC o SYM) >>
+         irule raw_deep_dup_small_steps >>
+         simp[Abbr `vals`, Abbr `spill_st`, Abbr `dup_st`,
+           Abbr `final_st`, Abbr `final_mem`, Abbr `spill_mem`,
+           Abbr `restores`, Abbr `nrestore`, asm_next_def] >>
+         qexists `initial_fmp` >>
+         qpat_x_assum `asm_block_at _ _ _` mp_tac >>
+         simp[execute_plan_append]) >>
+     `nrestore = 3 * LENGTH offsets` by simp[Abbr `nrestore`] >>
+     qpat_x_assum `nrestore = _` SUBST1_TAC >>
+     qpat_assum `LENGTH offsets = k` (SUBST1_TAC o SYM) >>
+     irule raw_deep_dup_large_steps >>
+     simp[Abbr `vals`, Abbr `spill_st`, Abbr `dup_st`,
+       Abbr `final_st`, Abbr `final_mem`, Abbr `spill_mem`,
+       Abbr `restores`, Abbr `nrestore`, asm_next_def] >>
+     qexists `initial_fmp` >>
+     qpat_x_assum `asm_block_at _ _ _` mp_tac >>
+     simp[execute_plan_append]) >>
+  suspend "finish"
+QED
+
+Resume do_dup_venom_asm_rel_big_numeric[finish]:
+  `LENGTH (execute_plan initial_fmp ops) = (2 * k + 1) + nrestore` by
+    (qpat_x_assum `ops = _` SUBST1_TAC >> Cases_on `k <= 16` >>
+     simp[Abbr `nrestore`, execute_plan_append,
+       execute_plan_map_spill_length, execute_plan_map_restore_length,
+       execute_plan_restore_swap1_length] >>
+     simp[execute_plan_def, exec_stack_op_def] >> decide_tac) >>
+  `plan_stack_rel lo vs ps'.ps_stack final_st.as_stack` by
+    (`plan_stack_rel lo vs ps.ps_stack st.as_stack` by
+       (qpat_x_assum `venom_asm_rel _ _ _ _` mp_tac >>
+        simp_tac (srw_ss()) [venom_asm_rel_def] >>
+        strip_tac >> first_assum ACCEPT_TAC) >>
+     drule plan_stack_rel_deep_dup_raw >>
+     disch_then (qspecl_then [`dist`, `k`] mp_tac) >>
+     simp[Abbr `final_st`, Abbr `spill_st`, Abbr `vals`]) >>
+  suspend "relation"
+QED
+
+Resume do_dup_venom_asm_rel_big_numeric[relation]:
+  qexists `final_st` >>
+  (conj_tac >- metis_tac[]) >>
+  reverse conj_tac
+  >- simp[Abbr `final_st`, Abbr `dup_st`, Abbr `spill_st`, asm_next_def] >>
+  irule (INST_TYPE [alpha |-> ``:operand``] venom_asm_rel_temporary_scratch) >>
+  qexistsl [`st`, `items`, `final_mem`, `offsets`,
+    `final_st.as_pc`, `ps`, `restores`, `final_st.as_stack`, `vals`] >>
+  simp[Abbr `alloc2`, Abbr `offsets`, Abbr `final_mem`,
+    Abbr `spill_mem`, Abbr `vals`] >>
+  simp[Abbr `final_st`, Abbr `dup_st`, Abbr `spill_st`, asm_next_def]
+QED
+
+Finalise do_dup_venom_asm_rel_big_numeric
+
+Theorem do_dup_venom_asm_rel_numeric:
+  !dist ps ops ps' lo o2pc prog vs st.
+    do_dup dist ps = (ops,ps') /\ dist < LENGTH ps.ps_stack /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    EVERY (\s. case s of SOSpill off => off < dimword(:256)
+      | SORestore off => off < dimword(:256) | _ => T) ops /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+          venom_asm_rel lo ps' vs st' /\
+          st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  rpt strip_tac >> Cases_on `dist <= 15`
+  >- (gvs[do_dup_def] >>
+      `prefix_wf lo (LENGTH ps.ps_stack) [SODup (dist + 1)]` by
+        simp[prefix_wf_def, stack_op_wf_def] >>
+      `EVERY is_simple_stack_op [SODup (dist + 1)]` by
+        simp[is_simple_stack_op_def] >>
+      drule_all simple_prefix_venom_asm_rel >>
+      disch_then (qspec_then `o2pc` strip_assume_tac) >>
+      qexists `st'` >> simp[] >>
+      qpat_x_assum `venom_asm_rel lo (apply_simple_ops _ _ _) _ _` mp_tac >>
+      simp[apply_simple_ops_def, apply_simple_op_def, stack_dup_def,
+        stack_peek_def]) >>
+  `dist > 15` by decide_tac >>
+  irule do_dup_venom_asm_rel_big_numeric >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`dist`, `ps`] >> simp[] >>
+  drule do_dup_big_decompose >>
+  disch_then (qspec_then `ps` mp_tac) >>
+  asm_rewrite_tac[] >> simp_tac std_ss [LET_THM] >> strip_tac >>
+  qpat_x_assum `EVERY _ ops` mp_tac >> asm_rewrite_tac[] >>
+  simp[EVERY_APPEND, EVERY_MAP]
+QED
+
+Theorem raw_spill_restore_schedule_steps:
+  LENGTH offsets <= LENGTH st.as_stack /\
+  EVERY (\off. off < dimword(:256)) offsets /\
+  (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets + 32 <= EL j offsets \/
+    EL j offsets + 32 <= EL i offsets) /\
+  EVERY (\i. i < LENGTH offsets) desired /\
+  vals = TAKE (LENGTH offsets) st.as_stack /\
+  spill_st = st with <|
+    as_stack := DROP (LENGTH offsets) st.as_stack;
+    as_memory := FOLDL (\m p. mem_write32 (FST p) (SND p) m)
+      st.as_memory (ZIP (offsets,vals));
+    as_pc := st.as_pc + 2 * LENGTH offsets |> /\
+  final_st = spill_st with <|
+    as_stack := MAP (\i. EL i vals) desired ++ spill_st.as_stack;
+    as_memory := FOLDL (\m off. asm_expand_memory (off + 32) m)
+      spill_st.as_memory (MAP (\i. EL i offsets) (REVERSE desired));
+    as_pc := spill_st.as_pc + 2 * LENGTH desired |> /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp
+    (MAP SOSpill offsets ++
+     MAP SORestore (MAP (\i. EL i offsets) (REVERSE desired)))) ==>
+  asm_steps lo o2pc prog (2 * LENGTH offsets + 2 * LENGTH desired) st =
+    AsmOK final_st
+Proof
+  strip_tac >>
+  `asm_block_at prog st.as_pc
+      (execute_plan initial_fmp (MAP SOSpill offsets)) /\
+   asm_block_at prog spill_st.as_pc
+      (execute_plan initial_fmp
+        (MAP SORestore (MAP (\i. EL i offsets) (REVERSE desired))))` by
+    (qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
+     pure_rewrite_tac[execute_plan_append, asm_block_at_append,
+          execute_plan_map_spill_length] >> strip_tac >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_x_assum `spill_st = _` SUBST1_TAC >> simp[] >>
+     metis_tac[ADD_COMM]) >>
+  `asm_steps lo o2pc prog (2 * LENGTH offsets) st = AsmOK spill_st` by
+    (drule_all raw_spill_bulk_steps >> simp[]) >>
+  `!k. k < LENGTH offsets ==>
+    word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP (EL k offsets) spill_st.as_memory)) = EL k vals` by
+    (rpt strip_tac >> asm_rewrite_tac[] >> simp[] >>
+     irule raw_spill_fold_read_occurrence >> simp[] >> metis_tac[]) >>
+  `asm_steps lo o2pc prog (2 * LENGTH desired) spill_st = AsmOK final_st` by
+    (`LENGTH offsets = LENGTH vals` by simp[] >>
+     drule_all raw_restore_reversed_perm_steps >>
+     qpat_x_assum `final_st = _` (fn th => pure_rewrite_tac[th]) >>
+     disch_then MATCH_ACCEPT_TAC) >>
+  irule asm_steps_compose_ok >> qexists `spill_st` >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem do_swap_venom_asm_rel_big_numeric:
   !dist ps ops ps' lo o2pc prog vs st.
     do_swap dist ps = (ops, ps') /\
     dist > 16 /\
     dist < LENGTH ps.ps_stack /\
     spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
-    prefix_spill_wf initial_fmp lo ops ps /\
+    EVERY (\off. off < dimword(:256))
+      (FST (spill_alloc_n [] ps.ps_alloc (top_n (dist + 1) ps.ps_stack))) /\
     venom_asm_rel lo ps vs st /\
     asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
     ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st =
@@ -4222,11 +4979,12 @@ Proof
      simp[LET_THM, Abbr `items`, Abbr `offsets`, Abbr `desired`,
           Abbr `restore_offsets`] >>
      metis_tac[]) >>
-  `prefix_spill_wf initial_fmp lo (MAP SOSpill offsets) ps` by
-    (qpat_x_assum `prefix_spill_wf initial_fmp lo ops ps` mp_tac >>
-     simp[prefix_spill_wf_append]) >>
+  suspend "resources"
+QED
+
+Resume do_swap_venom_asm_rel_big_numeric[resources]:
   `EVERY (\off. off < dimword(:256)) offsets` by
-    metis_tac[prefix_spill_wf_map_spill_bounds] >>
+    simp[Abbr `offsets`, Abbr `items`] >>
   `LENGTH offsets = LENGTH items /\
    ALL_DISTINCT offsets /\
    (!k. k < LENGTH offsets ==>
@@ -4250,62 +5008,30 @@ Proof
     simp[Abbr `desired`] >>
   `EVERY (\i. i < LENGTH offsets) desired` by
     fs[EVERY_REVERSE] >>
-  `asm_block_at prog st.as_pc
-     (execute_plan initial_fmp (MAP SOSpill offsets)) /\
-   asm_block_at prog (st.as_pc + 2 * LENGTH offsets)
-     (execute_plan initial_fmp (MAP SORestore restore_offsets))` by
-    (qpat_x_assum `asm_block_at prog st.as_pc (execute_plan initial_fmp ops)`
-       mp_tac >>
-     simp[execute_plan_append, asm_block_at_append,
-          execute_plan_map_spill_length] >>
-     metis_tac[]) >>
-  `asm_steps lo o2pc prog (2 * LENGTH offsets) st = AsmOK spill_st /\
-   (!k. k < LENGTH offsets ==>
-      EL k (REVERSE items) = dead_stack_marker \/
-      operand_val vs lo (EL k (REVERSE items)) = SOME
-        (word_of_bytes T (0w:bytes32)
-          (TAKE 32 (DROP (EL k offsets) spill_mem)))) /\
-   (!i. EVERY (\off. ~(off <= i /\ i < off + 32)) offsets ==>
-      read_byte i spill_mem = read_byte i st.as_memory)` by
-    (qspecl_then [`offsets`, `items`, `lo`, `o2pc`, `prog`, `ps`, `vs`, `st`]
-       mp_tac raw_spill_venom_occurrence_sim >>
-     simp[LET_THM, Abbr `vals`, Abbr `spill_mem`, Abbr `spill_st`] >>
-     metis_tac[]) >>
   `LENGTH offsets <= LENGTH st.as_stack` by
     (fs[venom_asm_rel_def, plan_stack_rel_def] >> decide_tac) >>
-  `!k. k < LENGTH offsets ==>
-     word_of_bytes T (0w:bytes32)
-       (TAKE 32 (DROP (EL k offsets) spill_mem)) = EL k vals` by
-    (rpt strip_tac >>
-     simp[Abbr `spill_mem`] >>
-     irule raw_spill_fold_read_occurrence >>
-     simp[Abbr `vals`] >>
+  `asm_steps lo o2pc prog (2 * LENGTH offsets + 2 * LENGTH desired) st =
+     AsmOK final_st` by
+    (irule raw_spill_restore_schedule_steps >>
+     conj_tac >- metis_tac[] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac
+     >- (qexistsl [`spill_st`, `vals`] >>
+         simp[Abbr `vals`, Abbr `spill_st`, Abbr `final_st`,
+              Abbr `final_mem`, Abbr `spill_mem`, Abbr `restore_offsets`]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists `initial_fmp` >>
      metis_tac[]) >>
-  `plan_spill_rel lo vs ps.ps_spilled spill_mem` by
-    (qspecl_then [`offsets`, `vals`, `lo`, `vs`, `ps.ps_spilled`,
-       `st.as_memory`] mp_tac plan_spill_rel_raw_fold >>
-     (impl_tac >-
-       (simp[Abbr `vals`, LENGTH_TAKE] >>
-        fs[venom_asm_rel_def] >> metis_tac[])) >>
-     simp[Abbr `spill_mem`]) >>
+  suspend "memory"
+QED
+
+Resume do_swap_venom_asm_rel_big_numeric[memory]:
   `plan_spill_rel lo vs ps.ps_spilled final_mem` by
-    (simp[Abbr `final_mem`] >> irule plan_spill_rel_expand_fold >>
-     first_assum ACCEPT_TAC) >>
-  `asm_steps lo o2pc prog (2 * LENGTH desired) spill_st = AsmOK final_st` by
-    (qspecl_then [`offsets`, `vals`, `desired`, `lo`, `o2pc`, `prog`, `spill_st`]
-       mp_tac raw_restore_reversed_perm_steps >>
-     (impl_tac >-
-       (rpt conj_tac
-        >- (simp[Abbr `vals`, LENGTH_TAKE] >> decide_tac)
-        >- first_assum ACCEPT_TAC
-        >- first_assum ACCEPT_TAC
-        >- (simp[Abbr `spill_st`] >> first_assum ACCEPT_TAC)
-        >- (simp[Abbr `spill_st`] >>
-            qpat_x_assum `asm_block_at prog (st.as_pc + 2 * LENGTH offsets) _`
-              mp_tac >> simp[]))) >>
-     simp[Abbr `restore_offsets`, Abbr `final_mem`, Abbr `final_st`,
-          Abbr `spill_st`] >>
-     decide_tac) >>
+    (irule plan_spill_rel_scratch >>
+     qexistsl [`st.as_memory`, `offsets`, `restore_offsets`, `vals`] >>
+     simp[Abbr `final_mem`, Abbr `spill_mem`, Abbr `vals`, LENGTH_TAKE] >>
+     fs[venom_asm_rel_def] >> metis_tac[]) >>
   `spill_alloc_layout_wf ps'.ps_alloc ps.ps_spilled` by gvs[] >>
   `ps'.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base /\
    ps.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset` by
@@ -4320,34 +5046,20 @@ Proof
     (PURE_REWRITE_TAC[EVERY_MEM] >> rpt strip_tac >> BETA_TAC >>
      qspecl_then [`ps'.ps_alloc`, `ps.ps_spilled`, `e`] mp_tac
        spill_alloc_layout_wf_free_bound >> simp[]) >>
-  `memory_rel ps'.ps_alloc vs.vs_memory st.as_memory` by
-    (irule memory_rel_widen >>
-     qexists_tac `ps.ps_alloc` >>
-     fs[venom_asm_rel_def] >> decide_tac) >>
-  `memory_rel ps'.ps_alloc vs.vs_memory spill_mem` by
-    (qspecl_then [`offsets`, `vals`, `ps'.ps_alloc`, `vs.vs_memory`,
-       `st.as_memory`] mp_tac memory_rel_write_fold >>
-     (impl_tac >-
-       (rpt conj_tac
-        >- (simp[Abbr `vals`, LENGTH_TAKE] >> decide_tac)
-        >- first_assum ACCEPT_TAC
-        >- first_assum ACCEPT_TAC)) >>
-     simp[Abbr `spill_mem`]) >>
   `memory_rel ps'.ps_alloc vs.vs_memory final_mem` by
-    (qspecl_then [`restore_offsets`, `ps'.ps_alloc`, `vs.vs_memory`,
-       `spill_mem`] mp_tac memory_rel_expand_fold >>
-     (impl_tac >- first_assum ACCEPT_TAC) >>
-     simp[Abbr `final_mem`]) >>
+    (irule memory_rel_scratch >>
+     qexists `st.as_memory` >>
+     qexistsl [`offsets`, `ps.ps_alloc`, `restore_offsets`, `vals`] >>
+     simp[Abbr `final_mem`, Abbr `spill_mem`, Abbr `vals`, LENGTH_TAKE] >>
+     fs[venom_asm_rel_def]) >>
+  suspend "finish"
+QED
+
+Resume do_swap_venom_asm_rel_big_numeric[finish]:
   qexists_tac `final_st` >>
   conj_tac
-  >- (qpat_x_assum `asm_steps lo o2pc prog (2 * LENGTH offsets) st = _`
-        (fn spill_th =>
-          qpat_x_assum `asm_steps lo o2pc prog (2 * LENGTH desired) spill_st = _`
-            (fn restore_th =>
-              mp_tac (MATCH_MP (GEN_ALL asm_steps_compose_ok)
-                (CONJ spill_th restore_th)))) >>
-      simp[execute_plan_spill_restore_length, Abbr `restore_offsets`] >>
-      decide_tac) >>
+  >- (qpat_x_assum `asm_steps lo o2pc prog _ st = AsmOK final_st` mp_tac >>
+      simp[execute_plan_spill_restore_length, Abbr `restore_offsets`]) >>
   conj_tac
   >- (`plan_stack_rel lo vs ps'.ps_stack final_st.as_stack` by
         (qspecl_then [`dist`, `lo`, `vs`, `ps.ps_stack`, `st.as_stack`,
@@ -4362,28 +5074,73 @@ Proof
             >- simp[Abbr `desired`]
             >- (simp[Abbr `vals`] >> decide_tac) >>
             rpt strip_tac >>
-            simp[Abbr `vals`] >>
-            metis_tac[])) >>
+            simp[Abbr `vals`, EL_TAKE] >>
+            irule plan_stack_rel_top_n_occurrence >>
+            qexistsl [`dist + 1`, `ps.ps_stack`] >>
+            simp[Abbr `items`] >> fs[venom_asm_rel_def])) >>
          simp[Abbr `final_st`, Abbr `spill_st`] >>
          metis_tac[]) >>
       `ps'.ps_spilled = ps.ps_spilled` by gvs[] >>
-      `final_st.as_memory = final_mem` by
-        simp[Abbr `final_st`, Abbr `spill_st`] >>
-      PURE_REWRITE_TAC[venom_asm_rel_def] >>
-      rpt conj_tac
-      >- first_assum ACCEPT_TAC
-      >- (qpat_assum `ps'.ps_spilled = ps.ps_spilled`
-            (fn th => rewrite_tac[th]) >>
-          qpat_assum `final_st.as_memory = final_mem`
-            (fn th => rewrite_tac[th]) >>
-          first_assum ACCEPT_TAC)
-      >- (qpat_assum `final_st.as_memory = final_mem`
-            (fn th => rewrite_tac[th]) >>
-          first_assum ACCEPT_TAC) >>
-      fs[venom_asm_rel_def, Abbr `final_st`, Abbr `spill_st`]) >>
+      irule venom_asm_rel_scratch_finish >>
+      qexistsl [`st`, `final_mem`, `final_st.as_pc`, `ps`,
+        `final_st.as_stack`] >>
+      simp[Abbr `final_st`, Abbr `spill_st`]) >>
   simp[Abbr `final_st`, Abbr `spill_st`, Abbr `restore_offsets`,
        execute_plan_spill_restore_length] >>
   decide_tac
+QED
+
+Finalise do_swap_venom_asm_rel_big_numeric
+
+Theorem do_swap_venom_asm_rel_big[local]:
+  !dist ps ops ps' lo o2pc prog vs st.
+    do_swap dist ps = (ops, ps') /\
+    dist > 16 /\
+    dist < LENGTH ps.ps_stack /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    prefix_spill_wf initial_fmp lo ops ps /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st =
+            AsmOK st' /\
+          venom_asm_rel lo ps' vs st' /\
+          st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  rpt strip_tac >> irule do_swap_venom_asm_rel_big_numeric >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`dist`, `ps`] >> simp[] >>
+  drule do_swap_big_decompose >>
+  disch_then (qspec_then `ps` mp_tac) >>
+  asm_rewrite_tac[] >> simp_tac std_ss [LET_THM] >>
+  strip_tac >>
+  qpat_x_assum `prefix_spill_wf initial_fmp lo ops ps` mp_tac >>
+  asm_rewrite_tac[] >> rewrite_tac[prefix_spill_wf_append] >>
+  metis_tac[prefix_spill_wf_map_spill_bounds]
+QED
+
+Theorem do_swap_venom_asm_rel_numeric:
+  !dist ps ops ps' lo o2pc prog vs st.
+    do_swap dist ps = (ops,ps') /\ dist < LENGTH ps.ps_stack /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    EVERY (\s. case s of SOSpill off => off < dimword(:256)
+      | SORestore off => off < dimword(:256) | _ => T) ops /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+          venom_asm_rel lo ps' vs st' /\
+          st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  rpt strip_tac >> Cases_on `dist <= 16`
+  >- (irule do_swap_venom_asm_rel_small >> metis_tac[]) >>
+  `dist > 16` by decide_tac >>
+  irule do_swap_venom_asm_rel_big_numeric >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`dist`, `ps`] >> simp[] >>
+  drule do_swap_big_decompose >>
+  disch_then (qspec_then `ps` mp_tac) >>
+  asm_rewrite_tac[] >> simp_tac std_ss [LET_THM] >> strip_tac >>
+  qpat_x_assum `EVERY _ ops` mp_tac >> asm_rewrite_tac[] >>
+  simp[EVERY_APPEND, EVERY_MAP]
 QED
 
 (* Combined do_swap simulation for all distances and arbitrary valid free slots. *)
@@ -4678,12 +5435,6 @@ Proof
   `FOLDL (\sp item. sp \\ item) ps.ps_spilled items = sp` by
     (simp[] >> irule foldl_domsub_cancel >> simp[MAP_ZIP]) >>
   gvs[]
-QED
-
-Theorem flat_map_singleton[local]:
-  !xs (f:'a -> 'b). FLAT (MAP (\x. [f x]) xs) = MAP f xs
-Proof
-  Induct >> simp[]
 QED
 
 Theorem dup_restore_apply:

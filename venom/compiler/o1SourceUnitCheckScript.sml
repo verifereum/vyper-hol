@@ -172,7 +172,7 @@ Definition fn_shape_check_def:
   fn_shape_check fn <=>
     fn_entry_label fn = SOME fn.fn_name /\ opaque_use_check fn /\
     retpc_shape_check fn /\ EVERY (\bb. ~reserved_label bb.bb_label) fn.fn_blocks /\
-    EVERY inst_shape_ok (fn_insts fn)
+    EVERY inst_shape_ok (fn_insts fn) /\ call_checks_ok fn
 End
 
 Theorem fn_shape_check_sound:
