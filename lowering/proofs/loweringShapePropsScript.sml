@@ -8088,9 +8088,7 @@ Resume compile_expr_body_shape[call]:
   >~ [`compile_call _ _ _ _ RawLog _ _`]
   >- (irule compile_call_raw_log_shape >> simp[])
   >~ [`compile_call _ _ _ _ RawRevert _ _`]
-  >- (irule compile_call_raw_revert_shape >> simp[])
-  >~ [`compile_call _ _ _ _ (CreateTarget kind salted rof order)`]
-  >- gvs[] >>
+  >- (irule compile_call_raw_revert_shape >> simp[]) >>
   gvs[] >> shape_send_invalid_tac
 QED
 
