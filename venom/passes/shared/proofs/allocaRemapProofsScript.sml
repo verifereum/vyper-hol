@@ -2719,7 +2719,7 @@ QED
 
 (* --- MSTORE8: write 1 byte at pv address --- *)
 Resume remap_preserved_mem_ops[mstore8]:
-  fs[step_inst_base_def, exec_write2_def, AllCaseEqs()] >>
+  fs[step_inst_base_opcode_eqs, exec_write2_def, AllCaseEqs()] >>
   fs[eval_operand_def, lookup_var_def] >>
   mem_op_preamble >>
   (* Non-address operand agrees *)
@@ -3474,13 +3474,19 @@ Theorem immutable_op_output_vars_agree[local]:
     !v. MEM v inst.inst_outputs ==> lookup_var v v1 = lookup_var v v2
 Proof
   rpt strip_tac >>
-  ntac 2 (qpat_x_assum `step_inst_base _ _ = OK _` mp_tac) >>
   Cases_on `inst.inst_opcode` >> gvs[is_immutable_op_def] >>
-  simp[step_inst_base_opcode_eqs, exec_read1_def] >>
-  rpt (CASE_TAC >> fs[]) >>
-  rpt strip_tac >> gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE,
-                       istore_def, mstore_def, mload_def,
-                       write_memory_with_expansion_def, write_memory_def]
+  gvs[step_inst_base_opcode_eqs]
+  >- (
+    qpat_x_assum `exec_read1 _ _ s1 = OK _`
+      (strip_assume_tac o MATCH_MP exec_read1_success) >>
+    qpat_x_assum `exec_read1 _ _ s2 = OK _`
+      (strip_assume_tac o MATCH_MP exec_read1_success) >>
+    gvs[] >>
+    gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE, mload_def]) >>
+  qpat_x_assum `_ = OK v1` mp_tac >>
+  simp[AllCaseEqs()] >> strip_tac >>
+  gvs[] >>
+  gvs[istore_def, lookup_var_def, mstore_def]
 QED
 
 Theorem immutable_op_scalar_preserved[local]:
