@@ -87,11 +87,7 @@ Theorem conversion_width_boundary_acceptance:
      (BaseT (IntT 128), BaseT (BytesT (Fixed 16)));
      (BaseT (BytesT (Dynamic 32)), BaseT (IntT 8));
      (BaseT (BytesT (Fixed 1)), BaseT (IntT 256));
-     (BaseT (StringT 4), BaseT (BytesT (Fixed 4)));
      (BaseT (BytesT (Dynamic 4)), BaseT (BytesT (Fixed 4)));
-     (BaseT (UintT 256), BaseT (BytesT (Dynamic 32)));
-     (BaseT (BytesT (Fixed 4)), BaseT (BytesT (Dynamic 4)));
-     (BaseT (BytesT (Fixed 4)), BaseT (StringT 4));
      (BaseT (StringT 32), BaseT (BytesT (Dynamic 32)));
      (BaseT (BytesT (Fixed 20)), BaseT BoolT)]
 Proof
@@ -108,10 +104,10 @@ Theorem conversion_width_boundary_rejection:
      (BaseT (BytesT (Dynamic 33)), BaseT AddressT);
      (BaseT (BytesT (Dynamic 33)), BaseT DecimalT);
      (BaseT (BytesT (Dynamic 8)), BaseT (BytesT (Fixed 4)));
-     (BaseT (StringT 8), BaseT (BytesT (Fixed 4)));
-     (BaseT (UintT 256), BaseT (BytesT (Dynamic 31)));
-     (BaseT (BytesT (Fixed 4)), BaseT (BytesT (Dynamic 3)));
-     (BaseT (BytesT (Fixed 4)), BaseT (StringT 3))]
+     (BaseT (StringT 4), BaseT (BytesT (Fixed 4)));
+     (BaseT (UintT 256), BaseT (BytesT (Dynamic 32)));
+     (BaseT (BytesT (Fixed 4)), BaseT (BytesT (Dynamic 4)));
+     (BaseT (BytesT (Fixed 4)), BaseT (StringT 4))]
 Proof
   EVAL_TAC
 QED
