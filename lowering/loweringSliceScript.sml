@@ -255,6 +255,9 @@ Proof
             PairCases_on `field`)) >>
   TRY (qmatch_goalsub_rename_tac `immutable_tuple_admissible tvs _` >>
        Cases_on `tvs`) >>
+  (* close the ~190 type/value mismatches with the admissibility equations
+     alone before the full simp, which is too slow for all of them at once *)
+  simp[immutable_value_admissible_def] >>
   simp[immutable_value_admissible_def, val_wf_def, type_memory_size_def,
        AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
   TRY (first_x_assum irule >> simp[] >> NO_TAC) >>
