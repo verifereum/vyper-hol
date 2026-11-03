@@ -3298,7 +3298,8 @@ QED
 
 Resume mcopy_preserves_remap[rd]:
   (* Case 2: Var v is the src (read) address — operands = [v2; Var v; sz] *)
-  fs[step_inst_base_def, AllCaseEqs()] >>
+  drule_all step_inst_base_mcopy >>
+  disch_then (fn th => fs[th, AllCaseEqs()]) >>
   fs[eval_operand_def, lookup_var_def] >>
   (* Extract clause 2b for src var v *)
   extract_clause2b >>
