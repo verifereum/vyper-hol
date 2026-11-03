@@ -439,6 +439,79 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
+Theorem linear_dispatch_shape[local]:
+  !selectors fallback sa sd.
+    EVERY (\(sel,lbl). jump_label_ok lbl) selectors /\
+    fresh_label "fallback" (initial_compile_state "__entry") = (fallback,sa) /\
+    compile_selector_dispatch_linear selectors fallback sa = ((),sd) ==>
+    shape_state sd /\ cs_extends sa sd
+Proof
+  rpt gen_tac >> strip_tac >>
+  `shape_state (initial_compile_state "__entry")` by
+    simp[loweringShapePropsTheory.shape_state_initial_compile_state] >>
+  mp_tac (Q.SPECL [`F`, `jump_label_ok`, `\st. T`, `"fallback"`]
+    loweringShapeRulesTheory.shape_step_fresh_label) >>
+  simp[loweringShapeDefsTheory.shape_stable_def,
+       loweringShapeDefsTheory.shape_step_def] >>
+  disch_then drule_all >> strip_tac >>
+  `jump_label_ok fallback` by simp[loweringShapeDefsTheory.jump_label_ok_def] >>
+  drule_all loweringShapePropsTheory.compile_selector_dispatch_linear_shape >>
+  rewrite_tac[loweringShapeDefsTheory.shape_step_def] >>
+  disch_then drule_all >>
+  simp[loweringShapeDefsTheory.shape_extends_def]
+QED
+
+Theorem run_lowering_entry_function[local]:
+  !selectors external_fns internal_fns fallback_fn rpolicy buckets metadata dense info unit.
+    run_lowering selectors external_fns internal_fns fallback_fn rpolicy
+      buckets metadata dense info "__entry" = SOME unit /\
+    EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl) selectors /\
+    EVERY external_fn_shape_ok external_fns /\ fallback_shape_ok fallback_fn /\
+    EVERY internal_fn_shape_ok internal_fns /\
+    EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internal_fns) /\
+    ALL_DISTINCT (MAP FST (internal_fn_descriptors internal_fns)) ==>
+    ?se func.
+      (do fb <- fresh_label "fallback";
+          compile_selector_dispatch_linear (MAP (\(sel,lbl,z). (sel,lbl)) selectors) fb;
+          compile_external_fn_bodies external_fns;
+          new_block fb;
+          (case fallback_fn of
+             NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+           | SOME (ce,pay,nr,key,ut,iv,body,rt) =>
+               compile_fallback_body ce pay nr key ut iv body rt)
+       od) (initial_compile_state "__entry") = ((),se) /\
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      func.fn_blocks = all_blocks se /\
+      func.fn_blocks <> [] /\ (HD func.fn_blocks).bb_label = "__entry"
+Proof
+  rpt gen_tac >> strip_tac >>
+  `lowering_policy_ok rpolicy` by
+    (qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     rw[vyperCompilerTheory.run_lowering_def]) >>
+  `rpolicy.rpol_frontend_dispatch = Linear` by
+    fs[vyperCompilerTheory.lowering_policy_ok_def] >>
+  Cases_on `compile_generate_runtime selectors external_fns internal_fns fallback_fn
+    Linear buckets metadata dense info (initial_compile_state "__entry")` >>
+  rename1 `_ = (u,sf)` >> Cases_on `u` >>
+  drule_all loweringShapePropsTheory.compile_generate_runtime_shape >> strip_tac >>
+  `?fs. package_internal_blocks (internal_fn_descriptors internal_fns)
+     (entry_blocks ++ FLAT segs) = SOME (entry_blocks,fs)` by
+    (irule_at Any loweringShapePropsTheory.package_internal_blocks_segments >> simp[] >>
+     rewrite_tac[EVERY_MEM] >> rpt strip_tac >> BETA_TAC >>
+     irule loweringShapePropsTheory.internal_name_not_entry_label >>
+     gvs[EVERY_MEM]) >>
+  qexistsl_tac [`entry_st`, `mk_raw_function "__entry" entry_blocks`] >>
+  simp[] >>
+  qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  gvs[vyperCompilerTheory.run_lowering_def,
+      vyperCompilerTheory.extract_context_with_internals_def,
+      loweringShapeDefsTheory.all_blocks_def,
+      venomInstTheory.mk_venom_context_def, venomInstTheory.mk_raw_function_def,
+      venomInstTheory.lookup_function_def, FIND_thm] >>
+  strip_tac >> gvs[FIND_thm]
+QED
+
 Theorem external_entry_reaches_checks:
   !tops rpolicy unit am tx ret vs mut args fbody.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\

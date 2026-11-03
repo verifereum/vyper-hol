@@ -11814,7 +11814,7 @@ Proof
 
 QED
 
-Theorem shape_state_initial_compile_state[local]:
+Theorem shape_state_initial_compile_state:
   !lbl. shape_state (initial_compile_state lbl)
 Proof
   simp[initial_compile_state_def, shape_state_def, opaque_insts_ok_def,
@@ -11934,8 +11934,19 @@ Theorem compile_generate_runtime_shape:
     fallback_shape_ok fallback_fn /\
     EVERY internal_fn_shape_ok internal_fns ==>
     shape_state st1 /\
-    ?entry_blocks segs.
-      all_blocks st1 = entry_blocks ++ FLAT segs /\
+    ?entry_blocks segs entry_st.
+      (do fallback_lbl <- fresh_label "fallback";
+          compile_selector_dispatch_linear
+            (MAP (\(sel, lbl, z). (sel, lbl)) selectors) fallback_lbl;
+          compile_external_fn_bodies external_fns;
+          new_block fallback_lbl;
+          (case fallback_fn of
+             NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+           | SOME (fb_cenv, fb_pay, fb_nr, fb_key, fb_trans, fb_view, fb_body, fb_ty) =>
+               compile_fallback_body fb_cenv fb_pay fb_nr fb_key fb_trans fb_view fb_body fb_ty)
+       od) (initial_compile_state "__entry") = ((),entry_st) /\
+      entry_blocks = all_blocks entry_st /\
+      all_blocks st1 = entry_blocks ++ FLAT segs /\ 
       entry_blocks <> [] /\ (HD entry_blocks).bb_label = "__entry" /\
       EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) entry_blocks)) /\
       EVERY (\bb. EVERY (lowered_inst_ok F) bb.bb_instructions)
@@ -11966,7 +11977,7 @@ Proof
   drule_all compile_internal_fn_bodies_shape >> strip_tac >>
   gvs[] >>
   rename1 `LIST_REL internal_segment_ok _ runtime_segs` >>
-  qexistsl_tac [`all_blocks entry_st`, `runtime_segs`] >> simp[]
+  qexists_tac `runtime_segs` >> simp[]
 QED
 
 (* ===== Source side conditions from supported_program ===== *)
@@ -12666,7 +12677,7 @@ Proof
               segs)`
     by (match_mp_tac package_internal_blocks_segments >> ASM_REWRITE_TAC [] >>
         REWRITE_TAC [EVERY_MEM] >> gen_tac >> strip_tac >> BETA_TAC >>
-        match_mp_tac internal_name_not_entry_label >> fs[EVERY_MEM]) >>
+        match_mp_tac internal_name_not_entry_label >> gvs[EVERY_MEM]) >>
   qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_x_assum `all_blocks st1 = _` (assume_tac o REWRITE_RULE [all_blocks_def]) >>
   gs[run_lowering_def, extract_context_with_internals_def] >>
