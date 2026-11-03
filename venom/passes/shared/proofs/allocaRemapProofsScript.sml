@@ -37,7 +37,7 @@
 Theory allocaRemapProofs
 Ancestors
   allocaRemapDefs pointerConfinedDefs memLocDefs passResidualFrame oracleExecProps
-  venomExecSemantics venomEffects venomWf venomMemDefs
+  venomExecSemantics venomEffects venomWf venomMemDefs venomMemProps
   venomInst venomState venomInstProps passSharedTransfer
   allocaRemapSSA stateEquiv passSharedField passSharedFrame opcodeClass
   list rich_list byte arithmetic finite_map alist words pred_set
@@ -1208,16 +1208,11 @@ Theorem step_inst_base_allocas[local]:
     v.vs_allocas = s.vs_allocas
 Proof
   rpt strip_tac >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_def] >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[is_alloca_op_def, is_terminator_def, is_ext_call_op_def] >>
-  simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  simp[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
-       istore_def, mcopy_def, write_memory_with_expansion_def, write_memory_def]
+  `inst.inst_opcode <> INVOKE` by metis_tac[not_invoke_from_ok] >>
+  `inst.inst_opcode <> ALLOCA` by
+    (strip_tac >> gvs[is_alloca_op_def]) >>
+  irule venomMemPropsTheory.step_inst_base_preserves_allocas >>
+  qexists_tac `inst` >> simp[]
 QED
 
 (* Helper: non-pointer operand agreement *)
