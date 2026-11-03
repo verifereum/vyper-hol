@@ -6,7 +6,7 @@
 
 Theory simplifyCfgCorrectness
 Ancestors
-  simplifyCfgProof cfgWf unitShapeDefs venomInst
+  simplifyCfgProof simplifyCfgPhi2 cfgWf unitShapeDefs venomInst
 
 Theorem simplify_cfg_pass_correct:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
@@ -68,7 +68,7 @@ Theorem simplify_cfg_phi_two_pairs:
   !inst. MEM inst (fn_insts (simplify_cfg_fn fn)) /\ inst.inst_opcode = PHI ==>
          2 <= LENGTH (phi_pairs inst.inst_operands)
 Proof
-  cheat
+  strip_tac >> match_mp_tac simplify_cfg_fn_phi_arity >> simp[]
 QED
 
 (* A bypass that makes a JNZ's targets meet turns it into a JMP
