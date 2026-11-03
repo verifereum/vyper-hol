@@ -5914,8 +5914,8 @@ Resume compile_stage_intcall_args_shape[buffer]:
           >- (shape_under_tac compile_store_bytestring_shape_framed `BufFrame` >>
               simp[Abbr `BufFrame`, Abbr `ValFrame`]) >>
           gen_tac >> irule shape_step_return >> simp[]) >>
-      shape_under_tac shape_step_emit_void_plain `BufFrame` >>
-      simp[Abbr `BufFrame`, Abbr `ValFrame`] >> shape_opcode_tac) >>
+      shape_under_tac compile_store_memory_shape_framed `BufFrame` >>
+      simp[Abbr `BufFrame`, Abbr `ValFrame`]) >>
   gen_tac >> simp[] >>
   qabbrev_tac `HeadFrame = \st. R st /\ plain_operand st buf_alloc.buf_operand` >>
   `shape_stable HeadFrame` by
