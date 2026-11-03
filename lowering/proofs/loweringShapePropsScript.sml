@@ -13129,3 +13129,22 @@ Proof
        simp[emit_op_labels, emit_void_labels, comp_return_labels,
             compile_clamp_labels])
 QED
+
+Theorem compile_binop_labels:
+  !op x y ty base_literal exp_literal s P.
+    cs_extends s (SND (compile_binop op x y ty base_literal exp_literal s)) /\
+    EVERY P (added_labels s
+      (SND (compile_binop op x y ty base_literal exp_literal s)))
+Proof
+  rpt gen_tac >> Cases_on `op` >>
+  simp[compile_binop_def, LET_THM, compile_safe_add_labels,
+       compile_safe_sub_labels, compile_safe_mul_labels, compile_safe_div_labels,
+       compile_safe_mod_labels, compile_safe_decimal_div_labels,
+       compile_safe_pow_labels, compile_compare_labels, emit_op_labels] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac, IF_CASES_TAC] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[emit_op_labels, emit_inst_labels, emit_void_labels,
+            comp_return_labels, wrap_truncate_labels, compile_select_labels,
+            compile_safe_decimal_div_labels, compile_safe_div_labels])
+QED
