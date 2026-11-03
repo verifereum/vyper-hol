@@ -212,6 +212,7 @@ Theorem exec_create_frame_regression:
 Proof
   strip_tac >> drule exec_create_single >>
   disch_then (fn th => fs[th]) >>
+  gvs[AllCaseEqs()] >>
   gvs[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
