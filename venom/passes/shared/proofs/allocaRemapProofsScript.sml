@@ -4854,7 +4854,7 @@ Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[is_pointer_preserving_op_def] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_def, exec_pure2_def, AllCaseEqs()] >>
+  simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
 QED
 
