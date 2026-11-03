@@ -252,3 +252,37 @@ val () = List.app (fn th =>
      then print "BODY_IFEXP_BRANCH_MEMORY_AUDIT OK\n"
      else raise Fail "ifexp branch memory inherited admission"
   end) [ifexp_jump_result_mem, ifexp_branch_to_exit_mem, ifexp_history_jump];
+
+Theorem ifexp_point_branch_to_exit_mem[local]:
+  !ctx fn sc jbb jnz sa sb sx sd lbl lbl' x Q R.
+    lookup_block sc.vs_current_bb fn.fn_blocks = SOME jbb /\
+    get_instruction jbb sc.vs_inst_idx = SOME jnz /\
+    is_terminator jnz.inst_opcode /\ jnz.inst_opcode <> INVOKE /\
+    step_inst_base jnz sc = OK (jump_to sa.cs_current_bb sc) /\
+    ~sc.vs_halted /\ inst_mem_below_frontier jnz sc /\
+    sa.cs_current_insts = [] /\
+    frag_exec_mem ctx sa sb (\s. s = jump_to sa.cs_current_bb sc) Q R /\
+    cs_extends sa sb /\ emit_inst JMP [Label lbl] [] sb = ((),sx) /\
+    new_block lbl' sx = (x,sd) /\ fn_has_code sa sd fn ==>
+    (?s'. Q s' /\ ~s'.vs_halted /\
+          !fuel r. run_from fuel ctx fn (jump_to lbl s') = r /\
+                   (!e. r <> Error e) ==>
+                   ?fuel'. run_from fuel' ctx fn sc = r /\
+                     (mem_safe_run fuel ctx fn (jump_to lbl s') ==>
+                      mem_safe_run fuel' ctx fn sc)) \/
+    (?fuel r. run_from fuel ctx fn sc = r /\ exit_result r /\ R r /\
+              mem_safe_run fuel ctx fn sc)
+Proof
+  rpt strip_tac >> irule ifexp_branch_to_exit_mem >>
+  qexists_tac `\s. s = jump_to sa.cs_current_bb sc` >>
+  simp[] >> metis_tac[]
+QED
+
+val () =
+  let val th = ifexp_point_branch_to_exit_mem
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_IFEXP_POINT_BRANCH_MEMORY_AUDIT OK\n"
+     else raise Fail "ifexp point branch memory inherited admission"
+  end;
