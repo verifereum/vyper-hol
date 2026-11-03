@@ -686,6 +686,160 @@ Proof
   qexists_tac `mid` >> simp[]
 QED
 
+Theorem create_plan_prefix_alignment[local]:
+  !dfg inputs opc nl ps lo vs mid.
+    opc <> INVOKE /\ LENGTH inputs <= 16 /\
+    LENGTH inputs <= LENGTH (SND (emit_input_plan opc inputs nl ps)).ps_stack /\
+    (!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
+      FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
+      a + 32 <= b \/ b + 32 <= a) /\
+    (!op. MEM op inputs /\ is_var_operand op ==>
+      MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    (!op. MEM op inputs ==> eval_operand op vs = operand_val vs lo op) /\
+    (!op. MEM op inputs ==> op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==>
+        operand_val vs lo op = operand_val vs lo at /\ at <> dead_stack_marker) /\
+    prefix_spill_wf initial_fmp lo
+      (FST (emit_input_plan opc inputs nl ps) ++
+       FST (reorder_plan dfg inputs (SND (emit_input_plan opc inputs nl ps)))) ps /\
+    venom_asm_rel lo (apply_prefix_ops initial_fmp lo
+      (FST (emit_input_plan opc inputs nl ps) ++
+       FST (reorder_plan dfg inputs (SND (emit_input_plan opc inputs nl ps)))) ps) vs mid ==>
+    LENGTH inputs <= LENGTH mid.as_stack /\
+    (!i. i < LENGTH inputs ==>
+      eval_operand (EL i (REVERSE inputs)) vs = SOME (EL i mid.as_stack))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `emit_input_plan opc inputs nl ps` >>
+  Cases_on `reorder_plan dfg inputs (SND (emit_input_plan opc inputs nl ps))` >>
+  gvs[] >>
+  rename1 `emit_input_plan opc inputs nl ps = (iops, ips)` >>
+  rename1 `reorder_plan dfg inputs ips = (rops, rps)` >>
+  `!xs ys lo ps. prefix_spill_wf initial_fmp lo (xs ++ ys) ps <=>
+    prefix_spill_wf initial_fmp lo xs ps /\
+    prefix_spill_wf initial_fmp lo ys (apply_prefix_ops initial_fmp lo xs ps)` by
+    (Induct >> simp[prefix_spill_wf_def, apply_prefix_ops_def] >> metis_tac[]) >>
+  `prefix_spill_wf initial_fmp lo iops ps /\
+   prefix_spill_wf initial_fmp lo rops (apply_prefix_ops initial_fmp lo iops ps)` by
+    metis_tac[] >>
+  `plan_stack_sem_eq lo vs
+    (apply_prefix_ops initial_fmp lo iops ps).ps_stack ips.ps_stack` by
+    (`iops = FST (emit_input_plan opc inputs nl ps)` by simp[] >>
+     `ips = SND (emit_input_plan opc inputs nl ps)` by
+       (qpat_assum `emit_input_plan _ _ _ _ = _`
+         (fn th => pure_rewrite_tac[th, pairTheory.SND]) >> REFL_TAC) >>
+     pop_assum SUBST1_TAC >> pop_assum SUBST1_TAC >>
+     irule emit_input_plan_same_initial_stack_value_replay >> simp[] >> metis_tac[]) >>
+  `!x a y b.
+    FLOOKUP (apply_prefix_ops initial_fmp lo iops ps).ps_spilled x = SOME a /\
+    FLOOKUP (apply_prefix_ops initial_fmp lo iops ps).ps_spilled y = SOME b /\
+    x <> y ==> a + 32 <= b \/ b + 32 <= a` by
+    (match_mp_tac safe_prefix_spilled_separated >> metis_tac[]) >>
+  `!x. LIST_ELEM_COUNT x inputs <= LIST_ELEM_COUNT x ips.ps_stack` by
+    metis_tac[emit_input_plan_stack_counts] >>
+  `plan_stack_sem_eq lo vs
+    (apply_prefix_ops initial_fmp lo rops
+      (apply_prefix_ops initial_fmp lo iops ps)).ps_stack rps.ps_stack` by
+    (irule reorder_plan_materialised_stack_value_replay >> metis_tac[]) >>
+  `plan_stack_rel lo vs rps.ps_stack mid.as_stack` by
+    (irule plan_stack_rel_sem_eq >>
+     qexists_tac `(apply_prefix_ops initial_fmp lo rops
+       (apply_prefix_ops initial_fmp lo iops ps)).ps_stack` >>
+     gvs[venom_asm_rel_def, apply_prefix_ops_append]) >>
+  `LENGTH inputs <= LENGTH rps.ps_stack` by
+    metis_tac[reorder_plan_materialised_length_floor] >>
+  `!j. j < LENGTH inputs ==>
+    stack_peek (LENGTH inputs - 1 - j) rps.ps_stack = EL j inputs` by
+    metis_tac[reorder_plan_materialised_order] >>
+  qpat_x_assum `plan_stack_rel _ _ _ _` mp_tac >>
+  simp[plan_stack_rel_def] >> strip_tac >>
+  rpt strip_tac >>
+  `LENGTH inputs - 1 - i < LENGTH inputs` by decide_tac >>
+  qpat_x_assum `!j. j < LENGTH inputs ==> _`
+    (qspec_then `LENGTH inputs - 1 - i` mp_tac) >>
+  simp[stack_peek_def] >>
+  `LENGTH inputs - 1 - (LENGTH inputs - 1 - i) = i` by decide_tac >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `!i. i < LENGTH rps.ps_stack ==> _`
+    (qspec_then `i` mp_tac) >>
+  simp[EL_REVERSE] >>
+  `PRE (LENGTH mid.as_stack - i) = LENGTH mid.as_stack - (i + 1)` by decide_tac >>
+  `PRE (LENGTH inputs - i) = LENGTH inputs - (i + 1)` by decide_tac >>
+  `MEM (EL (LENGTH inputs - (i + 1)) inputs) inputs` by
+    (irule EL_MEM >> decide_tac) >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `!op. MEM op inputs ==> op <> _ /\ _` drule >>
+  qpat_x_assum `!op. MEM op inputs ==> eval_operand _ _ = _` drule >>
+  metis_tac[]
+QED
+
+Theorem create_plan_aligned_prefix_setup[local]:
+  !liveness dfg cfg fn inst nl halting next_term bb ps ops ps' lo o2pc prog vs st.
+    generate_inst_plan liveness dfg cfg fn inst nl halting next_term bb ps =
+      SOME (ops,ps') /\
+    inst_wf inst /\
+    (inst.inst_opcode = CREATE \/ inst.inst_opcode = CREATE2) /\
+    LENGTH (compute_operands inst) <= 16 /\
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) nl ps)).ps_stack /\
+    (!l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)) /\
+    prefix_spill_wf initial_fmp lo (FRONT ops) ps /\
+    (!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
+      FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
+      a + 32 <= b \/ b + 32 <= a) /\
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+      (?d. stack_get_depth op ps.ps_stack = SOME d) \/ IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    (!op. MEM op (compute_operands inst) ==>
+      eval_operand op vs = operand_val vs lo op) /\
+    (!op1 op2. MEM op1 (compute_operands inst) /\ operand_equiv dfg op1 op2 ==>
+      operand_val vs lo op1 = operand_val vs lo op2) /\
+    (!op. MEM op (compute_operands inst) ==>
+      op <> dead_stack_marker /\ ~operand_equiv dfg op dead_stack_marker) /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?pre name tail mid.
+      name = (if inst.inst_opcode = CREATE then "CREATE" else "CREATE2") /\
+      ops = pre ++ SOEmit name :: tail /\
+      asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp pre)) st = AsmOK mid /\
+      venom_asm_rel lo (apply_prefix_ops initial_fmp lo pre ps) vs mid /\
+      asm_block_at prog mid.as_pc (execute_plan initial_fmp (SOEmit name :: tail)) /\
+      LENGTH (compute_operands inst) <= LENGTH mid.as_stack /\
+      (!i. i < LENGTH (compute_operands inst) ==>
+        eval_operand (EL i (REVERSE (compute_operands inst))) vs = SOME (EL i mid.as_stack))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all create_plan_actual_prefix_setup >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexistsl_tac [`pre`, `name`, `tail`, `mid`] >>
+  `prefix_spill_wf initial_fmp lo pre ps` by
+    (irule prefix_spill_wf_front_prefix >>
+     qexists_tac `SOEmit name :: tail` >> metis_tac[NOT_CONS_NIL]) >>
+  `LENGTH (compute_operands inst) <= LENGTH mid.as_stack /\
+    (!i. i < LENGTH (compute_operands inst) ==>
+      eval_operand (EL i (REVERSE (compute_operands inst))) vs = SOME (EL i mid.as_stack))` by
+    (qpat_x_assum `pre = _` SUBST_ALL_TAC >>
+     irule create_plan_prefix_alignment >> simp[] >>
+     goal_assum (drule_at Any) >>
+     conj_tac >- metis_tac[] >>
+     simp[] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >-
+       (rpt strip_tac >>
+        qpat_x_assum `!op. MEM op _ /\ is_var_operand op ==> _` drule_all >>
+        strip_tac
+        >- (drule stack_get_depth_props >>
+            simp[stack_peek_def] >> strip_tac >>
+            `LENGTH ps.ps_stack - (d + 1) < LENGTH ps.ps_stack` by decide_tac >>
+            disj1_tac >> metis_tac[EL_MEM]) >>
+        disj2_tac >>
+        qpat_x_assum `IS_SOME _` mp_tac >>
+        simp[finite_mapTheory.FLOOKUP_DEF] >>
+        Cases_on `op IN FDOM ps.ps_spilled` >> simp[]) >>
+     gvs[] >> simp[]) >>
+  simp[]
+QED
+
 (* ===== Memory read_byte helpers ===== *)
 
 (* read_byte of zero-padded memory = read_byte of original *)
@@ -938,6 +1092,47 @@ Proof
   IF_CASES_TAC >> gvs[halt_state_def, set_returndata_def]
 QED
 
+Theorem step_inst_create_abort[local]:
+  !fuel ctx inst vs a vs'.
+    inst.inst_opcode = CREATE /\
+    step_inst fuel ctx inst vs = Abort a vs' ==>
+    ?val_op off_op sz_op value offset sz out.
+      inst.inst_operands = [val_op; off_op; sz_op] /\
+      inst.inst_outputs = [out] /\
+      eval_operand val_op vs = SOME value /\
+      eval_operand off_op vs = SOME offset /\
+      eval_operand sz_op vs = SOME sz /\
+      w2n sz > 2 * max_code_size /\
+      a = ExHalt_abort /\ vs' = halt_state (set_returndata [] vs)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = Abort _ _` mp_tac >>
+  simp[Once step_inst_def, is_terminator_def] >>
+  simp[Once step_inst_base_def] >>
+  simp[exec_create_abort_iff, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem step_inst_create2_abort[local]:
+  !fuel ctx inst vs a vs'.
+    inst.inst_opcode = CREATE2 /\
+    step_inst fuel ctx inst vs = Abort a vs' ==>
+    ?val_op off_op sz_op salt_op value offset sz salt out.
+      inst.inst_operands = [val_op; off_op; sz_op; salt_op] /\
+      inst.inst_outputs = [out] /\
+      eval_operand val_op vs = SOME value /\
+      eval_operand off_op vs = SOME offset /\
+      eval_operand sz_op vs = SOME sz /\
+      eval_operand salt_op vs = SOME salt /\
+      w2n sz > 2 * max_code_size /\
+      a = ExHalt_abort /\ vs' = halt_state (set_returndata [] vs)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = Abort _ _` mp_tac >>
+  simp[Once step_inst_def, is_terminator_def] >>
+  simp[Once step_inst_base_def] >>
+  simp[exec_create_abort_iff, AllCaseEqs()] >> metis_tac[]
+QED
+
 (* What step_inst ASSERT_UNREACHABLE abort produces *)
 Theorem step_inst_assert_unreachable_abort[local]:
   !fuel ctx inst vs a vs'.
@@ -984,6 +1179,54 @@ Proof
          asm_step_control_def, asm_step_extcall_def,
          asm_step_copy_def, asm_returndatacopy_def, LET_THM] >>
   simp[] >>
+  fs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def]
+QED
+
+Theorem terminal_create_fault_step[local]:
+  !lo o2pc prog st value offset sz rest vs.
+    asm_block_at prog st.as_pc [AsmOp "CREATE"] /\
+    st.as_stack = value :: offset :: sz :: rest /\
+    venom_asm_terminal_rel vs st /\
+    w2n sz > 2 * max_code_size ==>
+    ?st'. asm_steps lo o2pc prog 1 st = AsmFault st' /\
+      venom_asm_terminal_rel (halt_state (set_returndata [] vs)) st'
+Proof
+  rpt strip_tac >>
+  fs[asm_block_at_def] >>
+  `asm_step lo o2pc (AsmOp "CREATE") st =
+   AsmFault (st with as_returndata := [])` by
+    simp[asm_step_def, asm_step_op_def,
+         asm_step_arith_def, asm_step_compare_def,
+         asm_step_bitwise_def, asm_step_memory_def,
+         asm_step_control_def, asm_step_extcall_def,
+         asm_exec_create_def] >>
+  `1 = SUC 0` by simp[] >>
+  pop_assum SUBST1_TAC >>
+  simp[Once asm_steps_def, asm_steps_def] >>
+  fs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def]
+QED
+
+Theorem terminal_create2_fault_step[local]:
+  !lo o2pc prog st value offset sz salt rest vs.
+    asm_block_at prog st.as_pc [AsmOp "CREATE2"] /\
+    st.as_stack = value :: offset :: sz :: salt :: rest /\
+    venom_asm_terminal_rel vs st /\
+    w2n sz > 2 * max_code_size ==>
+    ?st'. asm_steps lo o2pc prog 1 st = AsmFault st' /\
+      venom_asm_terminal_rel (halt_state (set_returndata [] vs)) st'
+Proof
+  rpt strip_tac >>
+  fs[asm_block_at_def] >>
+  `asm_step lo o2pc (AsmOp "CREATE2") st =
+   AsmFault (st with as_returndata := [])` by
+    simp[asm_step_def, asm_step_op_def,
+         asm_step_arith_def, asm_step_compare_def,
+         asm_step_bitwise_def, asm_step_memory_def,
+         asm_step_control_def, asm_step_extcall_def,
+         asm_exec_create2_def] >>
+  `1 = SUC 0` by simp[] >>
+  pop_assum SUBST1_TAC >>
+  simp[Once asm_steps_def, asm_steps_def] >>
   fs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def]
 QED
 
@@ -1816,6 +2059,8 @@ Proof
        no cross-block dependency. *)
     suspend "assert_unreachable"
   )
+  >- suspend "create"
+  >- suspend "create2"
   >- suspend "returndatacopy"
   >- (
     (* INVOKE — recursive: step_inst uses fuel, invokes run_blocks on callee.
@@ -1935,6 +2180,93 @@ Resume gen_inst_abort_sim[invalid]:
   (impl_tac >- simp[]) >> strip_tac >>
   qexistsl_tac [`LENGTH (execute_plan initial_fmp ops) - 1 + 1`, `st''`] >>
   simp[]
+QED
+
+Resume gen_inst_abort_sim[create]:
+  `?pre name tail mid.
+    name = (if inst.inst_opcode = CREATE then "CREATE" else "CREATE2") /\
+    ops = pre ++ SOEmit name :: tail /\
+    asm_steps label_offsets offset_to_pc prog
+      (LENGTH (execute_plan initial_fmp pre)) as = AsmOK mid /\
+    venom_asm_rel label_offsets (apply_prefix_ops initial_fmp label_offsets pre ps) vs mid /\
+    asm_block_at prog mid.as_pc (execute_plan initial_fmp (SOEmit name :: tail)) /\
+    LENGTH (compute_operands inst) <= LENGTH mid.as_stack /\
+    (!i. i < LENGTH (compute_operands inst) ==>
+      eval_operand (EL i (REVERSE (compute_operands inst))) vs = SOME (EL i mid.as_stack))` by
+    (irule create_plan_aligned_prefix_setup >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  drule_all step_inst_create_abort >> strip_tac >>
+  qpat_x_assum `!st_mid. venom_asm_rel _ _ _ _ ==> _` kall_tac >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `prefix_spill_wf _ _ _ _` kall_tac >>
+  qpat_x_assum `asm_block_at _ as.as_pc _` kall_tac >>
+  qpat_x_assum `venom_asm_rel _ ps vs as` kall_tac >>
+  gvs[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def] >>
+  qpat_assum `!i. i < 3 ==> _` (qspec_then `0` assume_tac) >>
+  qpat_assum `!i. i < 3 ==> _` (qspec_then `1` assume_tac) >>
+  qpat_x_assum `!i. i < 3 ==> _` (qspec_then `2` assume_tac) >>
+  `?rest. mid.as_stack = value :: offset :: sz :: rest` by
+    (Cases_on `mid.as_stack` >> gvs[] >>
+     rename1 `3 <= SUC (LENGTH rest1)` >>
+     Cases_on `rest1` >> gvs[] >>
+     rename1 `3 <= SUC (SUC (LENGTH rest2))` >>
+     Cases_on `rest2` >> gvs[]) >>
+  `venom_asm_terminal_rel vs mid` by
+    metis_tac[venom_asm_rel_terminal] >>
+  `asm_block_at prog mid.as_pc [AsmOp "CREATE"]` by
+    (qpat_x_assum `asm_block_at _ mid.as_pc _` mp_tac >>
+     simp[execute_plan_def, exec_stack_op_def] >>
+     simp[asm_block_at_cons, asm_block_at_def]) >>
+  drule_all terminal_create_fault_step >>
+  disch_then (qspecl_then [`label_offsets`, `offset_to_pc`] strip_assume_tac) >>
+  irule_at Any asm_steps_compose_fault >>
+  goal_assum (drule_at Any) >>
+  metis_tac[]
+QED
+
+Resume gen_inst_abort_sim[create2]:
+  `?pre name tail mid.
+    name = (if inst.inst_opcode = CREATE then "CREATE" else "CREATE2") /\
+    ops = pre ++ SOEmit name :: tail /\
+    asm_steps label_offsets offset_to_pc prog
+      (LENGTH (execute_plan initial_fmp pre)) as = AsmOK mid /\
+    venom_asm_rel label_offsets (apply_prefix_ops initial_fmp label_offsets pre ps) vs mid /\
+    asm_block_at prog mid.as_pc (execute_plan initial_fmp (SOEmit name :: tail)) /\
+    LENGTH (compute_operands inst) <= LENGTH mid.as_stack /\
+    (!i. i < LENGTH (compute_operands inst) ==>
+      eval_operand (EL i (REVERSE (compute_operands inst))) vs = SOME (EL i mid.as_stack))` by
+    (irule create_plan_aligned_prefix_setup >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  drule_all step_inst_create2_abort >> strip_tac >>
+  qpat_x_assum `!st_mid. venom_asm_rel _ _ _ _ ==> _` kall_tac >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `prefix_spill_wf _ _ _ _` kall_tac >>
+  qpat_x_assum `asm_block_at _ as.as_pc _` kall_tac >>
+  qpat_x_assum `venom_asm_rel _ ps vs as` kall_tac >>
+  gvs[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def] >>
+  qpat_assum `!i. i < 4 ==> _` (qspec_then `0` assume_tac) >>
+  qpat_assum `!i. i < 4 ==> _` (qspec_then `1` assume_tac) >>
+  qpat_assum `!i. i < 4 ==> _` (qspec_then `2` assume_tac) >>
+  qpat_x_assum `!i. i < 4 ==> _` (qspec_then `3` assume_tac) >>
+  `?rest. mid.as_stack = value :: offset :: sz :: salt :: rest` by
+    (Cases_on `mid.as_stack` >> gvs[] >>
+     rename1 `4 <= SUC (LENGTH rest1)` >>
+     Cases_on `rest1` >> gvs[] >>
+     rename1 `4 <= SUC (SUC (LENGTH rest2))` >>
+     Cases_on `rest2` >> gvs[] >>
+     rename1 `4 <= SUC (SUC (SUC (LENGTH rest3)))` >>
+     Cases_on `rest3` >> gvs[]) >>
+  `venom_asm_terminal_rel vs mid` by
+    metis_tac[venom_asm_rel_terminal] >>
+  `asm_block_at prog mid.as_pc [AsmOp "CREATE2"]` by
+    (qpat_x_assum `asm_block_at _ mid.as_pc _` mp_tac >>
+     simp[execute_plan_def, exec_stack_op_def] >>
+     simp[asm_block_at_cons, asm_block_at_def]) >>
+  drule_all terminal_create2_fault_step >>
+  disch_then (qspecl_then [`label_offsets`, `offset_to_pc`] strip_assume_tac) >>
+  irule_at Any asm_steps_compose_fault >>
+  goal_assum (drule_at Any) >>
+  metis_tac[]
 QED
 
 Resume gen_inst_abort_sim[returndatacopy]:
