@@ -27,8 +27,12 @@ Theorem abi_decode_copy_step:
       (abi_decode_copy_bytes opc (w2n p) (w2n n) s) s)
 Proof
   strip_tac >> gvs[abi_decode_source_opcode_def] >>
-  simp[abi_decode_copy_opcode_def, abi_decode_copy_bytes_def,
-       abi_decode_source_def, Once step_inst_base_def, mk_inst_def, mcopy_def]
+  simp[abi_decode_copy_opcode_def, mk_inst_def] >>
+  once_rewrite_tac[step_inst_base_def] >>
+  CONV_TAC (LAND_CONV (RATOR_CONV (REWRITE_CONV
+    [instruction_accfupds, instruction_accessors, combinTheory.K_THM]))) >>
+  simp[] >>
+  simp[abi_decode_copy_bytes_def, abi_decode_source_def, mcopy_def]
 QED
 
 Theorem abi_decode_copy_sequence:
