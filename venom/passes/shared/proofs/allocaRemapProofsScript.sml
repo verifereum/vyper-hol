@@ -1485,12 +1485,10 @@ Proof
   strip_tac >> irule remap_rel_from_equiv >>
   simp[Excl "pass_residual_mask_equality"] >>
   qexistsl_tac [`s1`, `s2`] >>
-  simp[Excl "pass_residual_mask_equality"] >> conj_tac
-  >- (rpt strip_tac >>
-      `v IN pointer_derived_vars fn roots` by
-        metis_tac[roots_in_pointer_derived_vars] >>
-      fs[alloca_remap_rel_def, LET_DEF] >> metis_tac[]) >>
-  metis_tac[]
+  simp[Excl "pass_residual_mask_equality"] >> rpt strip_tac >>
+  `v IN pointer_derived_vars fn roots` by
+    metis_tac[roots_in_pointer_derived_vars] >>
+  fs[alloca_remap_rel_def, LET_DEF] >> metis_tac[]
 QED
 
 Theorem remap_preserved_no_pointer_ops[local]:
@@ -1596,43 +1594,26 @@ Proof
   `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   drule_all remap_step_oracle >> strip_tac >>
-  irule remap_rel_from_equiv >>
-  gvs[] >> rpt conj_tac
-  (* Non-pv vars agree *)
+  drule_all remap_step_pending_deletions >> strip_tac >>
+  `alloca_remap_frame v1 = alloca_remap_frame v2` by
+    (asm_simp_tac bool_ss
+       [alloca_remap_frame_def, venom_state_component_equality,
+        venom_state_accfupds, combinTheory.K_THM]) >>
+  irule remap_rel_from_preserved_pointers >>
+  simp[Excl "pass_residual_mask_equality"] >> conj_tac
   >- (rpt strip_tac >>
       Cases_on `MEM v inst.inst_outputs`
-      >- (`lookup_var v v1 = lookup_var v v2` by res_tac >> gvs[])
-      >- (`lookup_var v v1 = lookup_var v s1 /\
-           lookup_var v v2 = lookup_var v s2` by
-            (qpat_assum `!nm. ~MEM nm inst.inst_outputs ==> _`
-              (qspec_then `v` mp_tac) >> simp[]) >>
-          `lookup_var v s1 = lookup_var v s2` by
-            (qpat_assum `alloca_remap_rel _ _ _ _ _` mp_tac >>
-             REWRITE_TAC[alloca_remap_rel_def, LET_DEF] >> BETA_TAC >>
-             strip_tac >> res_tac) >>
-          gvs[]))
-  (* Existential: root vars, pv vars, allocas/memory/remap *)
-  >- (qexistsl_tac [`s1`, `s2`] >> simp[] >> rpt conj_tac
-      (* Root vars: not outputs (roots ⊆ pv, outputs ∉ pv), so preserved *)
-      >- (rpt strip_tac >>
-          `v IN pointer_derived_vars fn roots` by
-            metis_tac[roots_in_pointer_derived_vars] >>
-          `~MEM v inst.inst_outputs` by
-            (strip_tac >> res_tac >> gvs[]) >>
-          `lookup_var v v1 = lookup_var v s1 /\
-           lookup_var v v2 = lookup_var v s2` by
-            (qpat_assum `!nm. ~MEM nm inst.inst_outputs ==> _`
-              (qspec_then `v` mp_tac) >> simp[]) >>
-          qpat_assum `alloca_remap_rel _ _ _ _ _` mp_tac >>
-          REWRITE_TAC[alloca_remap_rel_def, LET_DEF] >> BETA_TAC >>
-          strip_tac >> res_tac >> gvs[])
-      (* PV vars: not outputs, so preserved from input *)
-      >- (rpt strip_tac >>
-          `~MEM v inst.inst_outputs` by
-            (strip_tac >> res_tac >> gvs[]) >>
-          DISJ1_TAC >>
-          qpat_assum `!nm. ~MEM nm inst.inst_outputs ==> _`
-            (qspec_then `v` mp_tac) >> simp[]))
+      >- metis_tac[] >>
+      `lookup_var v s1 = lookup_var v s2` by
+        (qpat_assum `alloca_remap_rel _ _ _ _ _` mp_tac >>
+         pure_rewrite_tac[alloca_remap_rel_def, LET_DEF] >>
+         BETA_TAC >> strip_tac >> res_tac) >>
+      metis_tac[]) >>
+  qexistsl_tac [`s1`, `s2`] >>
+  simp[Excl "pass_residual_mask_equality"] >>
+  rpt strip_tac >>
+  `~MEM v inst.inst_outputs` by metis_tac[] >>
+  metis_tac[]
 QED
 
 
