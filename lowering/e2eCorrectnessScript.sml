@@ -17,7 +17,7 @@ Ancestors
   vyperLoweringCorrect loweringShapeProps vfmExecution
   venomPipelineCorrect
   passSimulationDefs
-  codegenCorrectness
+  codegenCorrectness immutableCodeLayout
   stateEquiv stateEquivProps
   venomExecSemantics
   vyperABI
@@ -729,6 +729,23 @@ QED
 
 *)
 
+(* Planned S7 admission (codegen track): the runtime assembly the compiler
+   generates is encodable (opcodes valid, pushes of at most 32 bytes, label
+   offsets within symbol_size) when the installed code fits EIP-170.
+   vyper_call_correct uses it to bind "code_end" in the entry state
+   (generated_entry_immutable_code_layout); codegen_correct's bytecode
+   simulation rests on the same fact. *)
+Theorem compile_vyper_runtime_asm_encoding_wf:
+  !tops rpolicy unit out prog am tx es.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    codegen_assembly rpolicy out.po_unit = SOME prog /\
+    call_state_rel tops (assemble prog) am tx es ==>
+    asm_encoding_wf prog
+Proof
+  cheat
+QED
+
 (* ===== PLAN §2.1 call theorem: seven stage leaves, raw O1 source domain ===== *)
 (* Runtime immutable compilation remains available, but the raw O1 shape
    theorem excludes DLOAD and therefore requires immutable_free_program. *)
@@ -762,6 +779,9 @@ Proof
   disch_then (qspec_then `cplan` assume_tac) >>
   qspecl_then [`prog`, `cplan`, `es`] assume_tac
     entry_venom_state_o1_initial_state_ok >>
+  drule_all compile_vyper_runtime_asm_encoding_wf >> strip_tac >>
+  drule_all generated_entry_immutable_code_layout >>
+  disch_then (qspec_then `cplan` assume_tac) >>
   qabbrev_tac `vs = entry_venom_state prog cplan es` >>
   `vs.vs_outcomes = MAP SND (call_trace es) /\
    vs.vs_initial_fmp = n2w cplan.cp_initial_fmp /\

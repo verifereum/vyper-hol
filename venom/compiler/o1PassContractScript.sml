@@ -48,7 +48,7 @@ Ancestors
   unitTransformDefs unitShapeDefs unitMemInv venomPipelineDriver
   venomPassSchedule venomFnScheduleRunner venomPassDispatcher venomWf
   venomExecSemantics venomInst irSupply contextCodegenRel stackPlanGen
-  venomState stateEquiv passSimulationDefs vfmState extCallOracle finite_map
+  venomState lowerDloadDefs stateEquiv passSimulationDefs vfmState extCallOracle finite_map
   list
 
 (* ===== Equivalence up to dead bytes ===== *)
@@ -483,10 +483,12 @@ End
 (* The initial state of a stage run: the pipeline's initial state, with
    the dynamic-memory pointer at the run's initial free-memory pointer,
    as the entry state has it (FmpLowering seeds its pointer variable from
-   vs_initial_fmp). *)
+   vs_initial_fmp), and "code_end" bound to the code/data boundary
+   (code_layout_valid), which LowerDload's ADD [_; Label "code_end"] reads. *)
 Definition o1_run_state_ok_def:
   o1_run_state_ok vs <=>
-    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp
+    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs
 End
 
 (* The memory facts of unitMemInv depend on a state only through the
@@ -596,17 +598,31 @@ End
    the run that establishes it, and a conjunct of row 0 is a premise of
    S4 that the lowering stage owes.  A row may speak of the dead bytes D
    the runs are matched up to. *)
+(* DFT's input (row 7): SSA, and no ALLOCA (ConcretizeMemLoc removed
+   them), which an ALLOCA's unlisted effect on the frame would need. *)
+Definition dft_in_ok_def:
+  dft_in_ok C <=>
+    EVERY (\fn. wf_ssa fn /\ EVERY (\i. i.inst_opcode <> ALLOCA) (fn_insts fn))
+      C.ctx_functions
+End
+
 Definition o1_inv_def:
   o1_inv (D : dead) (k : num) =
     if k <= 2 then o1_src_inv
     else if k = 3 then o1_static_inv
+    else if k = 7 then (\C vs. o1_lowered_inv C vs /\ dft_in_ok C)
+    else if k = 8 then
+      (\C vs. o1_lowered_inv C vs /\ EVERY wf_ssa C.ctx_functions)
     else o1_lowered_inv
 End
 
-(* The input-to-output relation the k-th run's contract may assume; none
-   today. *)
+(* The input-to-output relation the k-th run's contract may assume.  DFT
+   (run 7): its output keeps every block's fallible instructions in order,
+   which the pinned DFT does not do (o1_dft_keeps_fallible_order). *)
 Definition o1_pre_def:
-  o1_pre (k : num) (C : venom_context) (C' : venom_context) <=> T
+  o1_pre (k : num) (C : venom_context) (C' : venom_context) <=>
+    (k = 7 ==>
+     LIST_REL dft_fallible_order_kept C.ctx_functions C'.ctx_functions)
 End
 
 (* ===== The schedule ===== *)

@@ -20,7 +20,7 @@
  *)
 Theory o1ContractTheorems
 Ancestors
-  o1PassContract unitMemInv venomPassSchedule venomCompilerTypes
+  o1PassContract o1ContractDft unitMemInv venomPassSchedule venomCompilerTypes
 
 (* ===== The pre-walk runs ===== *)
 
@@ -95,12 +95,23 @@ Proof
   cheat
 QED
 
+(* DFT's pre (o1_pre 7): its output keeps every block's fallible
+   instructions in order.  False at the current Vyper pin: the pinned DFT
+   can schedule an ASSERT above an INVOKE it followed (vyperlang/vyper#5329),
+   so this admission stays until the pin moves to a DFT that orders them. *)
+Theorem o1_dft_keeps_fallible_order:
+  ctx_pass_stage rpolicy (CFP_Simple VP_DFT) view C C' ==>
+  LIST_REL dft_fallible_order_kept C.ctx_functions C'.ctx_functions
+Proof
+  cheat
+QED
+
 (* DFT reorders GAS reads: forall-out exists-in over the oracle. *)
 Theorem o1_contract_dft:
   o1_step_contract rpolicy (CFP_Simple VP_DFT) /\
   o1_run_contract_gas rpolicy D 7
 Proof
-  cheat
+  simp[dft_contract_gas]
 QED
 
 Theorem o1_contract_cfg_normalization:

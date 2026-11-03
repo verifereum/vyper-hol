@@ -169,6 +169,33 @@ Definition is_fallible_def:
   is_fallible inst <=> opcode_fail_class inst.inst_opcode <> NoFail
 End
 
+(* a comes before b in the list l. *)
+Definition id_before_def:
+  id_before l a b <=> ?i j. i < j /\ j < LENGTH l /\ EL i l = a /\ EL j l = b
+End
+
+(* fn' keeps the relative order of every pair of fn's instructions that
+   can abort in different ways (not abort_compatible: an ASSERT's revert,
+   the exceptional halt of ASSERT_UNREACHABLE, RETURNDATACOPY and INVALID,
+   and an INVOKE's anything), in every block.  Instructions that abort the
+   same way may swap.  dft_fn does not keep it (it schedules over
+   build_eda, which leaves an ASSERT free to move above an INVOKE); Vyper's
+   fix for that (vyperlang/vyper#5329) orders exactly the aborting
+   instructions of different kinds.  The O1 contract assumes it of DFT's
+   output until the pin moves to that fix. *)
+Definition dft_fallible_order_kept_def:
+  dft_fallible_order_kept fn fn' <=>
+    LIST_REL
+      (\bb bb'.
+         !x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+               ~abort_compatible x.inst_opcode y.inst_opcode /\
+               id_before (MAP (\i. i.inst_id) bb.bb_instructions)
+                 x.inst_id y.inst_id ==>
+               id_before (MAP (\i. i.inst_id) bb'.bb_instructions)
+                 x.inst_id y.inst_id)
+      fn.fn_blocks fn'.fn_blocks
+End
+
 (* Chain all fallible instructions so abort-incompatible pairs can never
    be reordered. Ensures abort_compatible for every reorderable pair.
    (Diverges from Python DFT which lacks this — upstream bug.) *)
