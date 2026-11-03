@@ -533,3 +533,12 @@ Proof
   simp[dft_first_hit_def, dft_open_inst_boundary_initial, dft_open_next_def,
        dft_open_deliver_boundary]
 QED
+
+Theorem dft_open_inst_boundary_pushed_entry:
+  ~dft_open_inst_boundary fn budget bb stack i
+    (DftOpen (DftEnter callee fuel t) (frame::stack) n)
+Proof
+  simp[dft_open_inst_boundary_def, dft_open_run_boundary_def] >>
+  strip_tac >>
+  `LENGTH (frame::stack) = LENGTH stack` by simp[] >> gvs[]
+QED
