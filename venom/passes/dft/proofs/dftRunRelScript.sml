@@ -1203,3 +1203,58 @@ Proof
   simp[Once dft_exec_prefix_continue] >>
   simp[Once dft_exec_prefix_continue]
 QED
+
+(* Successful gas pairs have an exact endpoint, including the unread oracle.
+   Convert only OK results across indices: stopping INVOKEs carry callee indices. *)
+Theorem dft_indexed_gas_pair_ok:
+  gas_pair x.inst_opcode y.inst_opcode /\
+  inst_wf x /\ inst_wf y /\
+  ~is_terminator x.inst_opcode /\ ~is_terminator y.inst_opcode /\
+  DISJOINT (set (inst_defs x)) (set (inst_uses y)) /\
+  DISJOINT (set (inst_defs y)) (set (inst_uses x)) /\
+  DISJOINT (set (inst_defs x)) (set (inst_defs y)) /\
+  step_inst fuel C y s' = OK sy /\
+  step_inst fuel C x (sy with vs_inst_idx := SUC s'.vs_inst_idx) = OK syx ==>
+  ?s sx sxy.
+    s' = (s with vs_gas_readings := s'.vs_gas_readings) /\
+    step_inst fuel C x s = OK sx /\
+    step_inst fuel C y (sx with vs_inst_idx := SUC s.vs_inst_idx) = OK sxy /\
+    (sxy with vs_inst_idx := SUC (SUC s.vs_inst_idx)) =
+    (syx with vs_inst_idx := SUC (SUC s'.vs_inst_idx))
+Proof
+  strip_tac >>
+  `step_inst fuel C x sy = OK (syx with vs_inst_idx := sy.vs_inst_idx)` by
+    (qpat_x_assum `step_inst _ _ y s' = _` kall_tac >>
+     drule_all dft_step_ok_idx >>
+     disch_then (qspec_then `sy.vs_inst_idx` mp_tac) >> simp[]) >>
+  drule_all dftBlockSimTheory.gas_pair_commute >> strip_tac >>
+  qexistsl_tac [`ss1`, `v1`,
+    `syx with vs_inst_idx := SUC s'.vs_inst_idx`] >>
+  `ss1.vs_inst_idx = s'.vs_inst_idx` by
+    (qpat_x_assum `s' = _` SUBST1_TAC >> simp[]) >>
+  simp[] >>
+  drule_all dft_step_ok_idx >>
+  disch_then (qspec_then `SUC s'.vs_inst_idx` mp_tac) >> simp[]
+QED
+
+Theorem dft_suffix_gas_pair_ok:
+  gas_pair x.inst_opcode y.inst_opcode /\
+  inst_wf x /\ inst_wf y /\
+  ~is_terminator x.inst_opcode /\ ~is_terminator y.inst_opcode /\
+  DISJOINT (set (inst_defs x)) (set (inst_uses y)) /\
+  DISJOINT (set (inst_defs y)) (set (inst_uses x)) /\
+  DISJOINT (set (inst_defs x)) (set (inst_defs y)) /\
+  step_inst fuel C y s' = OK sy /\
+  step_inst fuel C x (sy with vs_inst_idx := SUC s'.vs_inst_idx) = OK syx ==>
+  ?s. s' = (s with vs_gas_readings := s'.vs_gas_readings) /\
+    dft_exec_suffix fuel C (x::y::tail) s =
+    dft_exec_suffix fuel C (y::x::tail) s'
+Proof
+  strip_tac >> drule_all dft_indexed_gas_pair_ok >> strip_tac >>
+  qexists_tac `s` >> simp[dft_exec_suffix_cons, dft_exec_cons_def] >>
+  `s.vs_inst_idx = s'.vs_inst_idx` by
+    (qpat_x_assum `s' = _` SUBST1_TAC >> simp[]) >>
+  `sx.vs_inst_idx = s.vs_inst_idx /\ sy.vs_inst_idx = s'.vs_inst_idx` by
+    metis_tac[step_inst_preserves_inst_idx] >>
+  simp[] >> metis_tac[]
+QED
