@@ -372,7 +372,8 @@ Theorem checked_compile_log_data_execution:
   abi_enc_plan (type_env tops) (TupleT (log_non_indexed_types flags fts)) ei /\
   capacity = MAX 32 (abi_size_bound cenv.ce_struct_fields (TupleT (log_non_indexed_types flags fts))) /\
   LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv) fts ftvs /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_exprs exprs) /\
+  functions_well_typed cx /\ source_supply es /\
+  call_evaluation_safe cx (int_calls_exprs exprs) /\
   data_capacity = MAX 32 (SUM (MAP (type_memory_bytes cenv) (log_non_indexed_types flags fts))) /\
   ei = type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT (log_non_indexed_types flags fts)) /\
   ~NULL (SND (split_log_ops args flags)) /\

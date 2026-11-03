@@ -30,7 +30,8 @@ QED
 
 Theorem checked_log_argument_source_state:
   !env cx es e v es'.
-    runtime_consistent env cx es /\ functions_well_typed cx /\ well_typed_expr env e /\
+    runtime_consistent env cx es /\ source_supply es /\ functions_well_typed cx /\
+    well_typed_expr env e /\
     call_evaluation_safe cx (int_calls_expr e) /\ eval_argument cx e es = (INL v,es') ==>
     runtime_consistent env cx es' /\ value_runtime_typed env (expr_type e) v
 Proof

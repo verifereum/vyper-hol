@@ -65,7 +65,7 @@ QED
 
 Theorem checked_log_evaluated_argument_types:
   !env cx es ret event_id exprs env' values es'.
-    runtime_consistent env cx es /\ functions_well_typed cx /\
+    runtime_consistent env cx es /\ source_supply es /\ functions_well_typed cx /\
     type_stmt env ret (Log event_id exprs) = SOME env' /\
     call_evaluation_safe cx (int_calls_exprs exprs) /\
     eval_exprs cx exprs es = (INL values,es') ==>
