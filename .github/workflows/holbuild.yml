@@ -3,13 +3,12 @@ name: holbuild
 on:
   workflow_dispatch:
   pull_request:
-    # Only ready PRs into main from branches of this repository run jobs:
-    # pushing a branch here needs write access, and those runs get the cache
-    # login. Fork and draft PRs run nothing; the merge queue tests them.
+    # Ready PRs from branches of this repository run jobs, whatever their
+    # base: pushing a branch here needs write access, and those runs get the
+    # cache login. Fork and draft PRs run nothing; the merge queue tests them.
     # ready_for_review starts CI when a draft is marked ready; converted_to_draft
     # cancels the run of a PR turned back into a draft. edited starts CI when a
-    # PR is retargeted to main; any other edit (title, description) runs no jobs.
-    branches: [main]
+    # PR is retargeted; any other edit (title, description) runs no jobs.
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited]
   merge_group:
   push:
