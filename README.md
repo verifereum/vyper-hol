@@ -179,6 +179,8 @@ rejected because it contains no tests, while `[]` runs the empty trace successfu
 HOL replay uses the same complete-document parser. Hexadecimal words reject
 leading signs, and JSON result messages escape non-ASCII bytes as `\u00XX` so
 arbitrary assertion reasons still produce valid UTF-8 JSON.
+Test names retain their original UTF-8 text; byte escaping applies only to error
+messages, whose contents need not be valid UTF-8.
 
 The build first emits HOL-derived SML, then invokes MLton. Native compilation can
 take substantially longer than emission. The emitter normalizes word dimensions

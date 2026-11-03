@@ -63,6 +63,20 @@ class NativeInputTests(unittest.TestCase):
             "output": None,
         }
 
+    def test_unicode_case_name_round_trip(self) -> None:
+        name = "test_café_λ"
+        document = json.dumps({
+            name: {"item_type": "test", "deps": [],
+                   "traces": [{"trace_type": "clear_transient_storage"}]},
+        })
+        for source in ("stdin", "file"):
+            with self.subTest(source=source):
+                result = self.run_document(document, source)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                record = json.loads(result.stdout)
+                self.assertEqual(record["name"], name)
+                self.assertEqual(record["status"], "passed")
+
     def test_single_document_and_json_whitespace(self) -> None:
         document = json.dumps([{"trace_type": "clear_transient_storage"}])
         for source in ("stdin", "file"):

@@ -9,18 +9,21 @@ structure RunTestMain = struct
       (RunTestML.translate_annotated_ast (JsonImportCV.encode ast))
   )
 
-  fun quote s = let
+  fun quote_string escape_bytes s = let
     fun escape #"\"" = "\\\""
       | escape #"\\" = "\\\\"
       | escape #"\n" = "\\n"
       | escape #"\r" = "\\r"
       | escape #"\t" = "\\t"
       | escape c =
-          if Char.ord c < 32 orelse Char.ord c >= 128 then let
+          if Char.ord c < 32 orelse (escape_bytes andalso Char.ord c >= 128) then let
             val hex = Int.fmt StringCvt.HEX (Char.ord c)
           in "\\u00" ^ (if size hex=1 then "0" else "") ^ hex end
           else String.str c
   in "\"" ^ String.translate escape s ^ "\"" end
+
+  val quote = quote_string false
+  val quote_bytes = quote_string true
 
   fun cv_string cv = let
     fun go (Num n) chars =
@@ -49,7 +52,7 @@ structure RunTestMain = struct
       | _ => raise Fail "invalid emitted result summary"
     val fields = ["\"name\":" ^ quote name,
       "\"status\":" ^ quote (if passed then "passed" else "failed")] @
-      (if passed then [] else ["\"error\":" ^ quote message]) @
+      (if passed then [] else ["\"error\":" ^ quote_bytes message]) @
       (if dump then ["\"input\":" ^ quote (encoding input),
                      "\"result\":" ^ quote (encoding result)] else [])
     val () = TextIO.output (TextIO.stdOut,"{" ^ String.concatWith "," fields ^ "}\n")
