@@ -3,7 +3,7 @@ Ancestors
   simplifyCfgDefs simplifyCfgStruct simplifyCfgPhiRepair
   simplifyCfgDataflow simplifyCfgRepairDataflow simplifyCfgPhiPreds
   simplifyCfgChainDataflow simplifyCfgBypassDataflow
-  venomInst venomWf cfgTransform list rich_list
+  venomInst venomWf venomExecProofs cfgTransform list rich_list
 
 Theorem fix_phi_inst_inst_wf:
   inst_wf inst ==> inst_wf (fix_phi_inst actual_preds inst)
@@ -220,3 +220,74 @@ Proof
     simp[subst_label_inst_def] >>
   simp[subst_label_inst_idempotent]
 QED
+
+Theorem chain_merge_base_phi_source:
+  MEM a fn.fn_blocks /\ can_merge_blocks fn a b /\
+  MEM bb' (replace_block a.bb_label (merge_blocks a b)
+    (remove_block b.bb_label fn.fn_blocks)) /\
+  MEM phi bb'.bb_instructions /\ phi.inst_opcode = PHI ==>
+  ?bb. MEM bb fn.fn_blocks /\ bb'.bb_label = bb.bb_label /\
+       MEM phi bb.bb_instructions
+Proof
+  strip_tac >>
+  fs[replace_block_def, remove_block_def, MEM_MAP, MEM_FILTER] >>
+  Cases_on `bb.bb_label = a.bb_label` >> gvs[merge_blocks_def, MEM_APPEND]
+  >- (qexists `a` >> simp[] >>
+      Cases_on `a.bb_instructions` >> fs[] >> drule MEM_FRONT >> simp[])
+  >- (fs[can_merge_blocks_def, no_phis_def, EVERY_MEM] >> metis_tac[]) >>
+  qexists `bb` >> simp[]
+QED
+
+Theorem chain_merge_phi_pair_not_removed:
+  wf_function fn /\ fn_inst_wf fn /\ scfg_phi_preds fn /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  fn' = (fn with fn_blocks :=
+    update_succ_phi_labels b.bb_label a.bb_label
+      (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+      (bb_succs (merge_blocks a b))) /\
+  MEM bb' fn'.fn_blocks /\ MEM phi bb'.bb_instructions /\ phi.inst_opcode = PHI /\
+  MEM (p,v) (phi_pairs phi.inst_operands) ==> p <> b.bb_label
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label)
+    (replace_block a.bb_label (merge_blocks a b)
+      (remove_block b.bb_label fn.fn_blocks)))` by
+    (irule chain_merge_base_labels >> fs[wf_function_def]) >>
+  qpat_x_assum `MEM bb' fn'.fn_blocks` mp_tac >>
+  asm_rewrite_tac[] >> simp[update_succ_phi_labels_exact, MEM_MAP] >>
+  disch_then (qx_choose_then `srcbb` strip_assume_tac) >>
+  Cases_on `MEM srcbb.bb_label (bb_succs (merge_blocks a b))` >> gvs[]
+  >- suspend "targeted" >>
+  suspend "untargeted"
+QED
+
+Resume chain_merge_phi_pair_not_removed[targeted]:
+  qpat_x_assum `MEM phi (MAP _ _)` mp_tac >> simp[MEM_MAP] >>
+  disch_then (qx_choose_then `orig` strip_assume_tac) >>
+  Cases_on `orig.inst_opcode = PHI` >> gvs[subst_label_inst_def] >>
+  `?bb. MEM bb fn.fn_blocks /\ srcbb.bb_label = bb.bb_label /\
+        MEM orig bb.bb_instructions` by
+    metis_tac[chain_merge_base_phi_source] >>
+  `inst_wf orig` by metis_tac[fn_inst_wf_def] >>
+  `phi_well_formed orig.inst_operands` by
+    (qpat_x_assum `inst_wf orig` mp_tac >> simp[inst_wf_def]) >>
+  fs[phi_pairs_subst_label_ops, MEM_MAP] >>
+  rename1 `MEM pair (phi_pairs orig.inst_operands)` >>
+  Cases_on `FST pair = b.bb_label` >> gvs[can_merge_blocks_def]
+QED
+
+Resume chain_merge_phi_pair_not_removed[untargeted]:
+  strip_tac >> gvs[] >>
+  drule_all chain_merge_base_phi_source >> strip_tac >>
+  `fn_cfg_edge fn b.bb_label bb.bb_label` by
+    metis_tac[scfg_phi_preds_edge] >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    fs[wf_function_def, fn_labels_def] >>
+  `MEM bb.bb_label (bb_succs b)` by
+    (fs[fn_cfg_edge_def] >> metis_tac[same_label_same_block]) >>
+  `b.bb_instructions <> []` by
+    (Cases_on `b.bb_instructions` >> fs[bb_succs_def]) >>
+  fs[bb_succs_merge_blocks]
+QED
+
+Finalise chain_merge_phi_pair_not_removed
