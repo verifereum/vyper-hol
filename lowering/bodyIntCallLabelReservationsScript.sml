@@ -27,6 +27,14 @@ Proof
   Cases_on `m st` >> simp[comp_bind_def] >> metis_tac[]
 QED
 
+Theorem compiler_label_hoare_result:
+  compiler_label_hoare P m Q /\
+  (!st r out. m st = (r,out) ==> A r) ==>
+  compiler_label_hoare P m (\r out. A r /\ Q r out)
+Proof
+  simp[compiler_label_hoare_def] >> metis_tac[]
+QED
+
 Theorem compiler_label_hoare_return:
   compiler_label_hoare P (comp_return x) (\r st. r = x /\ P st)
 Proof

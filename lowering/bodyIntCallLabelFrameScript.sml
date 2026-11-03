@@ -152,6 +152,21 @@ Definition compiler_block_tail_def:
       cs_blocks := (SND (m st)).cs_blocks ++ tail)
 End
 
+Theorem compiler_block_tail_bind_result:
+  compiler_block_tail m /\
+  (!st r out. m st = (r,out) ==> A r) /\
+  (!r. A r ==> compiler_block_tail (k r)) ==>
+  compiler_block_tail (comp_bind m k)
+Proof
+  simp[compiler_block_tail_def] >> strip_tac >> rpt gen_tac >>
+  Cases_on `m st` >> rename1 `m st = (value,mid)` >>
+  `A value` by metis_tac[] >>
+  `m (st with cs_blocks := st.cs_blocks ++ tail) =
+     (value,mid with cs_blocks := mid.cs_blocks ++ tail)` by
+    (qpat_x_assum `!tail st. m _ = _` (qspecl_then [`tail`,`st`] mp_tac) >> simp[]) >>
+  simp[comp_bind_def] >> first_x_assum drule >> simp[]
+QED
+
 Theorem compiler_block_tail_bind:
   compiler_block_tail m /\ (!x. compiler_block_tail (k x)) ==>
   compiler_block_tail (comp_bind m k)

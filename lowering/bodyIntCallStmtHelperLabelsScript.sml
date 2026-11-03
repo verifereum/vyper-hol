@@ -187,6 +187,40 @@ Proof
   simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]
 QED
 
+Theorem compiler_label_hoare_declare_local_result:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (declare_local ce id ty)
+    (\bce out. bce.ce_return_pc = ce.ce_return_pc /\
+      compiler_label_reservation origin pending out)
+Proof
+  ho_match_mp_tac compiler_label_hoare_result >>
+  simp[compiler_label_hoare_declare_local] >>
+  metis_tac[declare_local_return_pc]
+QED
+
+Theorem compiler_label_hoare_declare_local_bind:
+  (!bce. bce.ce_return_pc = ce.ce_return_pc ==>
+    compiler_label_hoare (compiler_label_reservation origin pending) (k bce) R) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (comp_bind (declare_local ce id ty) k) R
+Proof
+  strip_tac >> irule compiler_label_hoare_bind >>
+  qexists_tac `\bce out. bce.ce_return_pc = ce.ce_return_pc /\
+    compiler_label_reservation origin pending out` >>
+  simp[compiler_label_hoare_declare_local_result] >> gen_tac >>
+  irule compiler_label_hoare_pure_pre >> simp[]
+QED
+
+Theorem compiler_block_tail_declare_local_bind:
+  (!bce. bce.ce_return_pc = ce.ce_return_pc ==> compiler_block_tail (k bce)) ==>
+  compiler_block_tail (comp_bind (declare_local ce id ty) k)
+Proof
+  strip_tac >> irule compiler_block_tail_bind_result >>
+  reverse conj_tac >- simp[compiler_block_tail_declare_local] >>
+  qexists_tac `\bce. bce.ce_return_pc = ce.ce_return_pc` >>
+  simp[compiler_block_tail_declare_local] >> metis_tac[declare_local_return_pc]
+QED
+
 Theorem compiler_block_tail_declare_stmt_local:
   compiler_block_tail (declare_stmt_local ce s)
 Proof
@@ -200,6 +234,28 @@ Theorem compiler_label_hoare_declare_stmt_local:
 Proof
   Cases_on `s` >> simp[declare_stmt_local_def, compiler_label_hoare_declare_local,
     compiler_label_hoare_typed_primitives]
+QED
+
+Theorem compiler_label_hoare_declare_stmt_local_result:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (declare_stmt_local ce s)
+    (\bce out. bce.ce_return_pc = ce.ce_return_pc /\
+      compiler_label_reservation origin pending out)
+Proof
+  ho_match_mp_tac compiler_label_hoare_result >>
+  simp[compiler_label_hoare_declare_stmt_local] >>
+  metis_tac[declare_stmt_local_return_pc]
+QED
+
+Theorem compiler_block_tail_declare_stmt_local_bind:
+  (!bce. bce.ce_return_pc = ce.ce_return_pc ==> compiler_block_tail (k bce)) ==>
+  compiler_block_tail (comp_bind (declare_stmt_local ce s) k)
+Proof
+  strip_tac >> irule compiler_block_tail_bind_result >>
+  reverse conj_tac >- simp[compiler_block_tail_declare_stmt_local] >>
+  qexists_tac `\bce. bce.ce_return_pc = ce.ce_return_pc` >>
+  simp[compiler_block_tail_declare_stmt_local] >>
+  metis_tac[declare_stmt_local_return_pc]
 QED
 
 Theorem compiler_block_tail_emit_local_alloca:
@@ -940,7 +996,7 @@ Proof
   irule compiler_label_hoare_target_attribute >> simp[compiler_label_hoare_target_top]
 QED
 
-Theorem tuple_comp_return_bind[local]:
+Theorem tuple_comp_return_bind:
   comp_bind (comp_return x) f = f x
 Proof
   simp[comp_bind_def, comp_return_def, FUN_EQ_THM]
