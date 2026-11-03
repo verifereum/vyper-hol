@@ -27,6 +27,14 @@ Theorem no_mem_read_effect_from_no_mem_read_ops[local]:
     ~is_terminator inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode ==>
     Eff_MEMORY NOTIN read_effects inst.inst_opcode
+
+Theorem step_inst_base_error_transfer[local]:
+  !fn roots remap inst s1 s2 err.
+    alloca_remap_rel fn roots remap s1 s2 /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_ext_call_op inst.inst_opcode /\
+    step_inst_base inst s1 = Error err ==>
+    ?err'. step_inst_base inst s2 = Error err'
 ```
 
 Do not modify these statements. Prove them as-is, or produce a counterexample.
@@ -43,13 +51,15 @@ Do not modify these statements. Prove them as-is, or produce a counterexample.
 
 ## Background
 
+Owner amendment: replay27899 made no source edits and reached step_inst_base_error_transfer[CALLDATACOPY], line4334, error_inline_tac over2.5seconds. The complete exact Error-transfer schema, including all opcodes and malformed envelope/error cases, was already independently audited PROVABLE at the descriptor/BUMP task; its schema and executable definitions remain unchanged. This amendment adds that complete frozen root and only actually demonstrated failing resumes to the authorized repair scope. No extra premise or semantic change. Obtain an updated strategist plan before editing; the prior run is stopped, not complete.
+
 Prior task27613's scoped memory-preservation repair passed replay, but the complete theory then failed its frozen neighbor no_mem_read_effect_from_no_mem_read_ops, gvs classification over101opcode goals,2.5seconds. That task is stopped. Its two local writer helpers and bounded root repair are retained explicitly as partial source without a full-theory certificate.
 
 Both complete exact schemas have now independently been audited PROVABLE against every admitted opcode/arity/effect in current definitions. The read bridge audit includes LOG's actual count/list/reversal producer, malformed descriptors, MEMTOP exclusion and base INVOKE failure; no additional hypothesis or executable change is needed. Existing proof is retained.
 
 ## Domain Constraints
 
-- Source edits only within the two frozen roots and necessary local helper theorems in venom/passes/shared/proofs/allocaRemapProofsScript.sml, and only after an actual demonstrated failure. Start at the read bridge; do not alter the retained writer helpers or root unless a new actual replay failure requires it.
+- Source edits only within the three frozen roots and necessary local helper theorems in venom/passes/shared/proofs/allocaRemapProofsScript.sml, and only after an actual demonstrated failure. The observed outside-root CALLDATACOPY Error-transfer failure is now explicitly in scope. Repair that actual failing resume, preserving the shared error_inline_tac and unfailed resumes. Do not alter the retained writer helpers/root or read bridge unless actual replay demonstrates a failure.
 - All statements, definitions, shared tactics, other proof bodies and completed remap repairs are frozen.
 - No new definition, axiom, admission, premise, opcode exclusion, semantic change, timeout override or TRY/ORELSE/FIRST around proof search.
 - Report any new outside-root failure before editing. No blind unchanged retries or speculative cleanup. Do not amend generated records from the prior task.
