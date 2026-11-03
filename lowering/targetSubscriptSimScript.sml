@@ -8,10 +8,79 @@ Ancestors
   exprSimAggregateEncoding tupleMemoryLayout exprSimAttributeFields
   vyperTyping valueEncoding arithmetic vyperValueOperation valueEncodingProofs list
   vyperPlaceStatePreservation vyperPlaceTyping vyperTypeStatePreservation
-  words finite_map option exprSimArrayIndex valueEncodingProps
+  words finite_map option exprSimArrayIndex valueEncodingProps accountsRelProps
+  venomState venomMemDefs
 Libs
   pairLib
 
+Theorem stmt_state_rel_sstore_dead_right:
+  !ctx func cenv cx es s k v.
+    stmt_state_rel ctx func cenv cx es s /\
+    s.vs_call_ctx.cc_address = cx.txn.target /\
+    (!b. b < 32 ==> storage_dead cx F
+      (lookup_account cx.txn.target es.accounts).storage (w2n k) b) ==>
+    stmt_state_rel ctx func cenv cx es (sstore k v s)
+Proof
+  rpt strip_tac >>
+  `accounts_rel cx es (sstore k v s)` by
+    (irule accounts_rel_sstore_dead_right >>
+     gvs[stmt_state_rel_def, state_rel_def]) >>
+  `storage_rel cx cx.txn.target es (sstore k v s) /\
+   transient_rel cx cx.txn.target es (sstore k v s)` by
+    (drule accounts_rel_storage_transient >> simp[sstore_def]) >>
+  gvs[stmt_state_rel_def, state_rel_def, sstore_def,
+      local_ptrs_rel_def, local_backed_def, local_region_def, lookup_var_def,
+      immutables_rel_def, logs_rel_def, alloca_inv_def, alloca_room_def,
+      pending_alloca_size_def, immutable_alloca_sep_def,
+      allocas_non_overlapping_def, alloca_next_valid_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem expr_post_sstore_dead_right:
+  !ctx func cenv cx e es sa sb s0 es' val op s k v.
+    expr_post ctx func cenv cx e es sa sb s0 es' val op s /\
+    s.vs_call_ctx.cc_address = cx.txn.target /\
+    (!b. b < 32 ==> storage_dead cx F
+      (lookup_account cx.txn.target es'.accounts).storage (w2n k) b) ==>
+    expr_post ctx func cenv cx e es sa sb s0 es' val op (sstore k v s)
+Proof
+  rpt strip_tac >>
+  `stmt_state_rel ctx func cenv cx es' (sstore k v s)` by
+    (irule stmt_state_rel_sstore_dead_right >> gvs[expr_post_def]) >>
+  gvs[expr_post_def, expr_val_rel_def, expr_val_at_def,
+      locals_kept_def, local_region_def, lookup_var_def,
+      eval_operand_def, sstore_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+
+Theorem vv_holds_sstore:
+  !cenv cx t tv vv es s k v.
+    vv_holds cenv cx t tv vv es (sstore k v s) =
+    vv_holds cenv cx t tv vv es s
+Proof
+  rpt gen_tac >> Cases_on `vv` >>
+  simp[vv_holds_def, expr_val_rel_def, local_place_at_def,
+       eval_operand_def, lookup_var_def, sstore_def]
+QED
+
+Theorem vv_post_sstore_dead_right:
+  !ctx func cenv cx e es sa sb s0 es' tv vv s k v.
+    vv_post ctx func cenv cx e es sa sb s0 es' tv vv s /\
+    s.vs_call_ctx.cc_address = cx.txn.target /\
+    (!b. b < 32 ==> storage_dead cx F
+      (lookup_account cx.txn.target es'.accounts).storage (w2n k) b) ==>
+    vv_post ctx func cenv cx e es sa sb s0 es' tv vv (sstore k v s)
+Proof
+  rpt strip_tac >>
+  `stmt_state_rel ctx func cenv cx es' (sstore k v s)` by
+    (irule stmt_state_rel_sstore_dead_right >> gvs[vv_post_def]) >>
+  gvs[vv_post_def, vv_holds_sstore] >>
+  Cases_on `vv` >>
+  gvs[vv_at_def, expr_val_at_def, locals_kept_def,
+      local_region_def, lookup_var_def, eval_operand_def, sstore_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
 (* Current representation follows a typed field offset, independently of
    the compiler's syntactic field-layout table. *)
 Theorem fields_in_memory_mem_field_offset:

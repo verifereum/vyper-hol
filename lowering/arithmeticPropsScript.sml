@@ -3235,19 +3235,21 @@ Proof
     simp[]
 QED
 
-val mul_sdiv_mismatch_tac =
-  strip_tac >>
-  reverse (Cases_on `a = n2w (2 ** 255) ∧ b = n2w (2 ** 256 − 1)`)
-  >- (`safe_sdiv (a * b) b ≠ a` suffices_by simp[] >>
-      irule safe_sdiv_mul_overflow >>
-      rpt conj_tac >- first_assum ACCEPT_TAC >- (simp[int_min_256, int_max_256] >> fs[]) >>
-      first_assum ACCEPT_TAC) >>
-  `type_bits ty = 256` suffices_by simp[] >>
-  CCONTR_TAC >> `type_bits ty < 256` by decide_tac >>
-  `2 ** (type_bits ty − 1) < 2 ** 255` by simp[] >>
-  qpat_x_assum `in_type_range ty (math_val ty a)` mp_tac >>
-  qpat_x_assum `a = _ ∧ _` (fn th => rewrite_tac [CONJUNCT1 th]) >>
-  simp[math_val_def, in_type_range_def, w2i_int_min_w_256] >> intLib.ARITH_TAC;
+Theorem signed_int_min_width[local]:
+  is_signed_type ty /\ type_bits ty <= 256 /\
+  in_type_range ty (math_val ty (n2w (2 ** 255) : bytes32)) ==>
+  type_bits ty = 256
+Proof
+  strip_tac >> CCONTR_TAC >>
+  `type_bits ty < 256` by decide_tac >>
+  `2 ** (type_bits ty - 1) < 2 ** 255` by simp[] >>
+  qpat_x_assum `in_type_range _ _` mp_tac >>
+  asm_rewrite_tac[math_val_def, in_type_range_def] >>
+  rewrite_tac[w2i_int_min_w_256] >>
+  simp[] >> rewrite_tac[w2i_int_min_w_256] >>
+  qpat_x_assum `_ < 2 ** 255` mp_tac >>
+  simp[] >> intLib.ARITH_TAC
+QED
 
 (* An integer multiplication whose product is out of the type's range
    reverts: by the clamp up to 128 bits, by the division check when the
@@ -3325,7 +3327,25 @@ Proof
            ≠ a ∨
          (is_signed_type ty ∧ type_bits ty = 256 ∧ a = n2w (2 ** 255) ∧
           b = n2w (2 ** 256 − 1))` by
-          (Cases_on `is_signed_type ty` >> fs[] >- mul_sdiv_mismatch_tac >- mul_sdiv_mismatch_tac >>
+          (Cases_on `is_signed_type ty` >> fs[]
+           >- (strip_tac >>
+               reverse (Cases_on `a = n2w (2 ** 255) /\ b = n2w (2 ** 256 - 1)`)
+               >- (`safe_sdiv (a * b) b <> a` suffices_by simp[] >>
+                   irule safe_sdiv_mul_overflow >>
+                   rpt conj_tac >- first_assum ACCEPT_TAC
+                   >- (simp[int_min_256, int_max_256] >> fs[]) >>
+                   first_assum ACCEPT_TAC) >>
+               `type_bits ty = 256` suffices_by simp[] >>
+               irule signed_int_min_width >> gvs[])
+           >- (strip_tac >>
+               reverse (Cases_on `a = n2w (2 ** 255) /\ b = n2w (2 ** 256 - 1)`)
+               >- (`safe_sdiv (a * b) b <> a` suffices_by simp[] >>
+                   irule safe_sdiv_mul_overflow >>
+                   rpt conj_tac >- first_assum ACCEPT_TAC
+                   >- (simp[int_min_256, int_max_256] >> fs[]) >>
+                   first_assum ACCEPT_TAC) >>
+               `type_bits ty = 256` suffices_by simp[] >>
+               irule signed_int_min_width >> gvs[]) >>
            irule safe_div_mul_overflow >> fs[]) >>
         qspecl_then [`x`, `y`, `res`, `is_signed_type ty`, `type_bits ty`, `cs'`,
                      `cs''`, `ss'`, `a`, `b`] mp_tac mul_overflow_check_reverts >>
