@@ -590,7 +590,9 @@ Proof
     (gvs[bb_well_formed_def] >> rpt strip_tac >>
      `i < LENGTH bb.bb_instructions` by decide_tac >>
      `i = PRE (LENGTH bb.bb_instructions)` by metis_tac[] >> decide_tac) >>
-  `bb.bb_instructions <> []` by gvs[bb_well_formed_def] >>
+  `bb.bb_instructions <> []` by
+    (qpat_x_assum `bb_well_formed bb` mp_tac >>
+     simp_tac (srw_ss()) [bb_well_formed_def]) >>
   `MEM sp.vs_current_bb (bb_succs bb)` by
     metis_tac[run_block_current_bb_in_succs] >>
   irule venomExecProofsTheory.fn_reachable_step >>
@@ -2912,4 +2914,24 @@ Theorem supply_probe_original_terminates:
   terminates (run_blocks 3 ctx supply_probe_fn supply_probe_state)
 Proof
   EVAL_TAC
+QED
+
+Theorem supply_probe_no_match:
+  !fuel. ~frame_result_rel
+    (run_blocks 3 ctx supply_probe_fn supply_probe_state)
+    (run_blocks fuel ctx supply_probe_fn' supply_probe_state)
+Proof
+  gen_tac >> Cases_on `fuel` >- EVAL_TAC >>
+  rename1 `SUC n` >>
+  once_rewrite_tac[venomExecSemanticsTheory.run_blocks_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_blocks``]) >>
+  simp[wordsTheory.WORD_EQ] >>
+  Cases_on `n`
+  >- (once_rewrite_tac[venomExecSemanticsTheory.run_blocks_def] >>
+      CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_blocks``]) >> simp[]) >>
+  once_rewrite_tac[venomExecSemanticsTheory.run_blocks_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_blocks``]) >> simp[] >>
+  rename1 `run_blocks n _ _ _` >> Cases_on `n` >>
+  once_rewrite_tac[venomExecSemanticsTheory.run_blocks_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_blocks``]) >> simp[]
 QED
