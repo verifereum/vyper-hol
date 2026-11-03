@@ -311,3 +311,35 @@ Proof
   >- (rpt strip_tac >> qpat_x_assum `!aid b len. _ ==> mem_bytes_at _ _ _ = _` drule_all >> simp[])
   >> rpt strip_tac >> qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> _` drule >> simp[]
 QED
+
+Theorem compile_expr_mapping_subscript_parts:
+  compile_expr cenv ty (Subscript ann obj idx) sa = (vv,sb) /\
+  place_type cenv obj = MapPT kt vt ==>
+  ?bvv sm key sn hashed sp slot.
+    compile_expr cenv ty obj sa = (bvv,sm) /\
+    lower_value compile_expr cenv (expr_type idx) idx sm = (key,sn) /\
+    (if is_bytestring_type kt then compile_keccak256_key key F sn
+     else (key,sn)) = (hashed,sp) /\
+    compile_mapping_subscript (vv_operand bvv) hashed sp = (slot,sb) /\
+    vv = LocatedValue ann (mk_ptr slot
+      (case vv_location bvv of SOME loc => loc | NONE => LocMemory))
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
+  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+       compile_subscript_def, comp_bind_def, comp_return_def,
+       vyperASTTheory.expr_size_def, vyperASTTheory.expr_type_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  qpat_x_assum `lower_value cb cenv ity idx sm = _`
+    (fn th => mp_tac th) >>
+  `lower_value
+     (expr_child_callback (expr_size idx + (expr_size obj + (type_size ann + 1)))
+        compile_expr) cenv (expr_type idx) idx =
+   lower_value compile_expr cenv (expr_type idx) idx` by
+    (irule exprCallbackContractsTheory.lower_value_callback_contract >>
+     simp[exprCallbackContractsTheory.expr_callbacks_agree_def,
+          FUN_EQ_THM, exprCallBoundsTheory.expr_child_callback_def]) >>
+  simp[SF ETA_ss] >> strip_tac >>
+  Cases_on `is_bytestring_type kt` >> gvs[comp_return_def] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
