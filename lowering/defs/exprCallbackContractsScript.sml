@@ -298,13 +298,17 @@ Proof
   rename1 `target::tail` >> Cases_on `tail`
   >- simp[compile_create_call_def] >>
   rename1 `target::value::rest` >> simp[] >> strip_tac >>
+  Cases_on `ck = RawCreate`
+  >- (gvs[] >> Cases_on `salted` >>
+      simp[compile_create_call_def] >> TRY IF_CASES_TAC >> simp[] >>
+      irule compile_raw_create_callback_contract >> simp[] >>
+      conj_tac
+      >- (irule expr_callbacks_agree_front >> simp[] >>
+          Cases_on `rest` >> fs[]) >>
+      fs[expr_callbacks_agree_def] >>
+      metis_tac[MEM_LAST_NOT_NIL, LENGTH_NIL]) >>
   Cases_on `salted` >> Cases_on `ck` >>
-  simp[compile_create_call_def] >> TRY IF_CASES_TAC >> simp[] >>
-  TRY (irule compile_raw_create_callback_contract >> simp[] >>
-       TRY (conj_tac >- (irule expr_callbacks_agree_front >> simp[] >>
-                         Cases_on `rest` >> fs[]) >>
-            fs[expr_callbacks_agree_def] >>
-            metis_tac[MEM_LAST_NOT_NIL, LENGTH_NIL])) >>
+  gvs[compile_create_call_def] >> TRY IF_CASES_TAC >> simp[] >>
   Cases_on `rest` >> fs[compile_create_salt_def, lower_value_def] >>
   imp_res_tac compile_create_blueprint_args_callback_contract >>
   fs[] >> rename1 `expr_callbacks_agree f g cenv suffix` >>

@@ -62,21 +62,6 @@ Proof
   imp_res_tac step_inst_base_oracle >> gvs[]
 QED
 
-Theorem remap_step_pending_deletions[local]:
-  alloca_remap_rel fn roots remap s1 s2 /\
-  inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
-  step_inst_base inst s1 = OK v1 /\ step_inst_base inst s2 = OK v2 ==>
-  v1.vs_pending_deletions = v2.vs_pending_deletions
-Proof
-  rpt strip_tac >>
-  `alloca_remap_frame s1 = alloca_remap_frame s2` by
-    fs[alloca_remap_rel_def] >>
-  qpat_x_assum `alloca_remap_frame _ = _`
-    (mp_tac o AP_TERM ``venom_state_vs_pending_deletions``) >>
-  simp[alloca_remap_frame_def] >> strip_tac >>
-  imp_res_tac step_inst_base_oracle >> gvs[]
-QED
-
 (* ===== Operand Agreement ===== *)
 
 (* Non-pointer operands evaluate identically under alloca_remap_rel. *)
@@ -1570,7 +1555,6 @@ Proof
    inst.inst_opcode <> DELEGATECALL` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   drule_all remap_step_oracle >> strip_tac >>
-  drule_all remap_step_pending_deletions >> strip_tac >>
   irule remap_rel_from_equiv >>
   gvs[] >> rpt conj_tac
   (* Non-pv vars agree *)
@@ -3495,7 +3479,6 @@ Proof
    inst.inst_opcode <> DELEGATECALL` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   drule_all remap_step_oracle >> strip_tac >>
-  drule_all remap_step_pending_deletions >> strip_tac >>
   irule remap_rel_from_equiv >> gvs[] >> rpt conj_tac
   (* Non-PV vars *)
   >- (rpt strip_tac >>
