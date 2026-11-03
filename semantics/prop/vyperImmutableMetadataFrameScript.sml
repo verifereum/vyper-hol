@@ -88,10 +88,9 @@ Proof
   >- (strip_tac >> irule immutable_metadata_frame_eq >>
       metis_tac[vyperScopePreservationTheory.append_storage_place_scopes_immutables]) >>
   simp[append_place_def, bind_def, lift_sum_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, ignore_bind_def, lift_sum_def, return_def, raise_def]) >>
-  rpt strip_tac >>
+  gvs[AllCaseEqs()] >> rpt strip_tac >>
   imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
+  fs[GSYM lift_sum_def] >> imp_res_tac lift_sum_state >>
   gvs[] >> metis_tac[write_place_metadata_frame, immutable_metadata_frame_refl]
 QED
 

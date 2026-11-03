@@ -131,7 +131,8 @@ Theorem eval_stmts_preserves_immutables_addr_dom:
     eval_stmts cx ss st = (res, st') ⇒
     ∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇔ IS_SOME (ALOOKUP st'.immutables tgt)
 Proof
-  metis_tac[immutables_dom_extended, preserves_immutables_dom_def]
+  rpt strip_tac >> drule (cj 2 immutables_dom_extended) >>
+  rw[preserves_immutables_dom_def]
 QED
 
 Theorem eval_stmts_preserves_immutables_dom:
