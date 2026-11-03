@@ -1139,6 +1139,67 @@ Proof
      pred_setTheory.SUBSET_DEF, MEM_FILTER] >> metis_tac[]
 QED
 
+Theorem dft_run_block_same_context:
+  !fn bb bb' s fuel C.
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  dft_block_rel bb bb' /\ pseudos_prefix bb /\
+  bb.bb_label = s.vs_current_bb /\ strict_dom_vars_defined fn s /\
+  (!i l. MEM i bb.bb_instructions /\ ~is_pseudo i.inst_opcode /\
+     ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+     MEM (Label l) i.inst_operands ==> l IN FDOM s.vs_labels) /\
+  (!x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~abort_compatible x.inst_opcode y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id ==>
+    id_before (MAP (\i. i.inst_id) bb'.bb_instructions) x.inst_id y.inst_id) ==>
+  dft_res_rel (run_block fuel C bb s) (run_block fuel C bb' s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `bb.bb_instructions =
+     FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions ++
+     FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions` by
+    (qspecl_then [`bb.bb_instructions`, `\i. is_pseudo i.inst_opcode`]
+       mp_tac dftCorrectnessTheory.sorted_pred_split >>
+     simp[combinTheory.o_DEF] >>
+     (impl_tac >- fs[pseudos_prefix_def]) >> simp[]) >>
+  qpat_assum `dft_block_rel bb bb'`
+    (strip_assume_tac o REWRITE_RULE[dft_block_rel_def]) >>
+  rename1 `bb'.bb_instructions = _ ++ scheduled` >>
+  `EVERY (\i. ~is_pseudo i.inst_opcode) scheduled` by
+    (fs[EVERY_MEM, from_block_def] >>
+     metis_tac[flip_operands_is_pseudo]) >>
+  qmatch_asmsub_abbrev_tac `bb'.bb_instructions = pre ++ scheduled` >>
+  qmatch_asmsub_abbrev_tac `bb.bb_instructions = pre ++ original` >>
+  `EVERY (\i. ~is_pseudo i.inst_opcode) original` by
+    simp[Abbr `original`, EVERY_FILTER] >>
+  qspecl_then [`bb`, `pre`, `original`] mp_tac dft_run_block_prefix >>
+  (impl_tac >- simp[]) >>
+  disch_then (qspecl_then [`fuel`, `C`, `s`] assume_tac) >>
+  qspecl_then [`bb'`, `pre`, `scheduled`] mp_tac dft_run_block_prefix >>
+  (impl_tac >- simp[]) >>
+  disch_then (qspecl_then [`fuel`, `C`, `s`] assume_tac) >>
+  simp[] >>
+  qspecl_then [`s`, `pre`] strip_assume_tac eval_phis_ok_or_error_defs >> simp[]
+  >- (`EVERY (\i. ~is_terminator i.inst_opcode) pre` by
+        (simp[Abbr `pre`, EVERY_FILTER, EVERY_MEM] >>
+         rpt strip_tac >> Cases_on `i.inst_opcode` >>
+         gvs[is_pseudo_def, is_terminator_def]) >>
+      `EVERY (\i. ~is_terminator i.inst_opcode)
+         (DROP (phi_prefix_length pre) pre)` by
+        (qspecl_then [`phi_prefix_length pre`, `pre`] mp_tac TAKE_DROP >>
+         disch_then (fn th => qpat_x_assum `EVERY _ pre` mp_tac >>
+           once_rewrite_tac[GSYM th]) >> simp[EVERY_APPEND]) >>
+      irule dft_exec_prefix_rel >> simp[] >> rpt strip_tac >>
+      fs[Abbr `original`, Abbr `pre`] >>
+      drule_all dft_remaining_inv_initialized >> strip_tac >>
+      drule_at (Pat `dft_remaining_inv _ _ _ _`) dft_scheduled_body_rel >>
+      disch_then (qspecl_then [`bb'`, `scheduled`, `fuel`, `C`] mp_tac) >>
+      simp[]) >>
+  simp[dft_res_rel_def]
+QED
+
 (* Why it holds (unchecked notes):
    - Same fuel works: fuel is per block and per call depth, and the
      schedule visits the same blocks and makes the same calls.

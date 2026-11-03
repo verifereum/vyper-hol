@@ -4701,7 +4701,7 @@ Proof
 QED
 
 (* Sorted-by-predicate list decomposes as FILTER P ++ FILTER ~P *)
-Triviality sorted_pred_split:
+Theorem sorted_pred_split:
   !l P. (!i j. i < j /\ j < LENGTH l /\ P (EL j l) ==> P (EL i l)) ==>
     FILTER P l ++ FILTER ($~ o P) l = l
 Proof
