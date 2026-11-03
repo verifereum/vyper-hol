@@ -404,3 +404,94 @@ Proof
       irule fix_all_phis_def_on_all_paths_point >> simp[]) >>
   irule fix_all_phis_converted_paths_use >> metis_tac[]
 QED
+
+Theorem unique_predecessor_available_before_point:
+  fn_entry_label fn = SOME entry /\ bb.bb_label <> entry /\ fn_reachable fn bb.bb_label /\
+  (!q. fn_cfg_edge fn q bb.bb_label ==> q = pb.bb_label) /\
+  def_available_at fn pb NONE v ==>
+  def_available_at fn bb (SOME use_inst) v
+Proof
+  strip_tac >> drule_all unique_predecessor_avoiding_path >> strip_tac >>
+  fs[def_available_at_def] >>
+  `MEM def_bb.bb_label path` by
+    (fs[fn_dominates_def] >> metis_tac[]) >>
+  `def_bb.bb_label <> bb.bb_label` by metis_tac[] >>
+  qexistsl [`def_bb`, `def_inst`] >> simp[] >>
+  conj_tac
+  >- (simp[fn_dominates_def] >> rpt strip_tac >>
+      rename1 `is_fn_path fn target_path` >>
+      `2 <= LENGTH target_path` by
+        (Cases_on `target_path` >> gvs[] >> Cases_on `t` >> gvs[]) >>
+      drule unique_predecessor_path_split >>
+      disch_then (qspec_then `target_path` mp_tac) >> simp[] >>
+      disch_then (qx_choose_then `pre` strip_assume_tac) >>
+      `MEM def_bb.bb_label pre` by (fs[fn_dominates_def] >> metis_tac[]) >>
+      gvs[]) >>
+  metis_tac[]
+QED
+
+Theorem fix_all_phis_converted_available_use:
+  wf_function fn /\ fn_inst_wf fn /\ all_reachable fn /\ scfg_phi_safe fn /\
+  def_dominates_uses fn /\ MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+  inst.inst_opcode = PHI /\
+  filter_phi_ops (pred_labels fn bb.bb_label) inst.inst_operands = [Label p; Var v] ==>
+  def_available_at (fix_all_phis fn)
+    (fix_phis_in_block (pred_labels fn bb.bb_label) bb)
+    (SOME (fix_phi_inst (pred_labels fn bb.bb_label) inst)) v
+Proof
+  strip_tac >> drule_all single_pair_phi_predecessors >> strip_tac >>
+  `inst_wf inst` by (fs[fn_inst_wf_def] >> metis_tac[]) >>
+  `phi_well_formed inst.inst_operands` by gvs[inst_wf_def] >>
+  drule_all filter_phi_ops_single_pair_source >> strip_tac >>
+  `phi_edge_uses_wf fn bb inst` by (fs[def_dominates_uses_def] >> metis_tac[]) >>
+  `?pb. MEM pb fn.fn_blocks /\ pb.bb_label = p /\ def_available_at fn pb NONE v` by
+    (fs[phi_edge_uses_wf_def] >> metis_tac[]) >>
+  `?entry. fn_entry_label fn = SOME entry` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[wf_function_def, fn_has_entry_def, fn_entry_label_def, entry_block_def]) >>
+  `bb.bb_label <> entry` by (irule scfg_phi_safe_nonentry >> metis_tac[]) >>
+  irule unique_predecessor_available_before_point >> conj_tac
+  >- (qexists `entry` >>
+      simp[fix_all_phis_entry, simplifyCfgLabelPropsTheory.bb_label_fix_phis_in_block]) >>
+  conj_tac
+  >- (simp[simplifyCfgLabelPropsTheory.bb_label_fix_phis_in_block] >>
+      irule (iffRL fix_all_phis_reachable) >> fs[wf_function_def, all_reachable_def]) >>
+  qexists `fix_phis_in_block (pred_labels fn pb.bb_label) pb` >>
+  simp[simplifyCfgLabelPropsTheory.bb_label_fix_phis_in_block] >> conj_tac
+  >- (`!b. MEM b fn.fn_blocks ==> bb_well_formed b` by fs[wf_function_def] >>
+      simp[fix_all_phis_edge] >> metis_tac[]) >>
+  gvs[] >> irule fix_all_phis_def_available_endpoint >> simp[]
+QED
+
+Theorem fix_all_phis_def_dominates_uses:
+  wf_function fn /\ fn_inst_wf fn /\ all_reachable fn /\ scfg_phi_safe fn /\
+  def_dominates_uses fn ==> def_dominates_uses (fix_all_phis fn)
+Proof
+  strip_tac >> simp[def_dominates_uses_def] >> rpt gen_tac >> strip_tac >>
+  `?orig_bb. MEM orig_bb fn.fn_blocks /\
+    bb = fix_phis_in_block (pred_labels fn orig_bb.bb_label) orig_bb` by
+    (fs[fix_all_phis_def, MEM_MAP] >> metis_tac[]) >>
+  Cases_on `inst.inst_opcode = PHI` >> simp[]
+  >- (`?orig_inst. MEM orig_inst orig_bb.bb_instructions /\
+        inst = fix_phi_inst (pred_labels fn orig_bb.bb_label) orig_inst` by
+        (gvs[fix_phis_in_block_member] >> metis_tac[]) >>
+      `orig_inst.inst_opcode = PHI` by
+        (gvs[] >> drule fix_phi_inst_surviving_phi >> simp[]) >>
+      `phi_edge_uses_wf fn orig_bb orig_inst` by
+        (fs[def_dominates_uses_def] >> metis_tac[]) >>
+      gvs[] >> irule fix_all_phis_phi_edge_uses >> simp[]) >>
+  rpt strip_tac >>
+  `?orig_inst. MEM orig_inst orig_bb.bb_instructions /\
+    inst = fix_phi_inst (pred_labels fn orig_bb.bb_label) orig_inst /\
+    ((orig_inst.inst_opcode <> PHI /\ MEM (Var v) orig_inst.inst_operands) \/
+     (orig_inst.inst_opcode = PHI /\ ?p.
+      filter_phi_ops (pred_labels fn orig_bb.bb_label) orig_inst.inst_operands =
+      [Label p; Var v]))` by
+    (irule fix_phis_in_block_ordinary_use >> metis_tac[]) >>
+  gvs[]
+  >- (`def_available_at fn orig_bb (SOME orig_inst) v` by
+        (fs[def_dominates_uses_def] >> metis_tac[]) >>
+      gvs[fix_phi_inst_non_phi] >>
+      irule fix_all_phis_def_available_point >> simp[]) >>
+  irule fix_all_phis_converted_available_use >> metis_tac[]
+QED
