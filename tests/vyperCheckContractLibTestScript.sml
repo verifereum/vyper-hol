@@ -1375,17 +1375,25 @@ val () = List.app assert_none
    aug_function i256 i256 ``vyperAST$ShR`` (op_name i256 "y"),
    binop_function u256 u256 ``vyperAST$ExpMod`` (op_name u256 "y")]
 
+(* f(x, y) returns `2 ** y`. *)
+val pow_literal_base_function =
+  check_operator_function ``[("x", ^u256); ("y", ^u256)]`` u256
+    ``[Return (SOME (Builtin ^u256 (Bop vyperAST$Exp)
+                       [^(op_lit u256 2); ^(op_name u256 "y")]))]``
+
 (* An over-large literal exponent stays accepted: compile_safe_pow checks the
    base against it. >> of a narrow unsigned value and the bitwise augmented
    assignments on bool compute what the semantics does. *)
 val () = List.app assert_some
   [binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 300),
    binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 0),
+   pow_literal_base_function,
    aug_function u256 u256 ``vyperAST$Exp`` (op_lit u256 2),
    neg_function i256,
    binop_function u8 u8 ``vyperAST$ShR`` (op_name u8 "y"),
    aug_function u8 u8 ``vyperAST$ShR`` (op_lit u8 1),
    binop_function u256 i8 ``vyperAST$ShL`` (op_lit i8 4),
+   binop_function i256 u256 ``vyperAST$ShL`` (op_name u256 "y"),
    binop_function i256 u8 ``vyperAST$ShR`` (op_name u8 "y"),
    aug_function bool_ty bool_ty ``vyperAST$And`` (op_name bool_ty "y"),
    aug_function bool_ty bool_ty ``vyperAST$Or`` (op_name bool_ty "y"),

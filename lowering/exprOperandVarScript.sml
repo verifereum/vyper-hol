@@ -927,17 +927,42 @@ Proof
   gvs[compileEnvTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
+Theorem compiler_var_keep_bind[local]:
+  (!s. s.cs_next_var <= (SND (m s)).cs_next_var) /\
+  (!a s op t. not_fresh_at s x /\ f a s = (op,t) ==>
+     !y. op = Var y ==> not_fresh_at t y) ==>
+  !s op t. not_fresh_at s x /\ comp_bind m f s = (op,t) ==>
+     !y. op = Var y ==> not_fresh_at t y
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `m s` >>
+  simp[comp_bind_def] >>
+  metis_tac[not_fresh_at_mono, pairTheory.SND]
+QED
+
+Theorem compiler_var_fresh_bind[local]:
+  (!x s op t. not_fresh_at s x /\ f x s = (op,t) ==>
+     !y. op = Var y ==> not_fresh_at t y) ==>
+  !s op t. comp_bind fresh_var f s = (op,t) ==>
+     !y. op = Var y ==> not_fresh_at t y
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `fresh_var s` >>
+  simp[comp_bind_def] >> strip_tac >>
+  drule fresh_var_safe_operand >> simp[safe_operand_def] >>
+  metis_tac[]
+QED
+
 Theorem compiler_uint2str_var:
   compile_uint2str v nd n sa = (op,sb) ==>
   !x. op = Var x ==> not_fresh_at sb x
 Proof
-  simp[builtinStringsTheory.compile_uint2str_def,
-       contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
-       emit_inst_def, new_block_def, fresh_label_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, fresh_var_def, emit_def] >>
-  rpt strip_tac >> gvs[] >>
-  gvs[compileEnvTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  simp[builtinStringsTheory.compile_uint2str_def, comp_ignore_bind_def] >>
+  map_every qid_spec_tac [`sb`, `op`, `sa`] >>
+  ntac 6 (ho_match_mp_tac compiler_var_prefix >> gen_tac) >>
+  ho_match_mp_tac compiler_var_fresh_bind >> gen_tac >>
+  rpt (ho_match_mp_tac compiler_var_keep_bind >> conj_tac
+       >- simp[compiler_counter_primitives, compiler_counter_emit] >>
+       gen_tac >> BETA_TAC) >>
+  simp[comp_return_def]
 QED
 
 Theorem compiler_as_wei_value_var:

@@ -230,7 +230,7 @@ Proof
     shape_step_emit_op)) >>
   simp[shape_stable_def, lowered_inst_ok_def, raw_opcode_ok_def,
        inst_shape_ok_def, inst_jump_labels_ok_def, mk_inst_def,
-       is_read0_opcode_def, label_positions_ok_def, is_terminator_def,
+       is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def,
        is_param_opcode_def])
 QED
 
@@ -254,7 +254,7 @@ Proof
     shape_step_emit_op)) >>
   simp[shape_stable_def, lowered_inst_ok_def, raw_opcode_ok_def,
        inst_shape_ok_def, inst_jump_labels_ok_def, mk_inst_def,
-       is_read0_opcode_def, label_positions_ok_def, is_terminator_def,
+       is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def,
        is_param_opcode_def, stackPlanTypesTheory.is_label_operand_def]
 QED
 
@@ -340,7 +340,7 @@ Resume compile_word_copy_loop_shape[initialization]:
       conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
       simp[lowered_inst_ok_def, raw_opcode_ok_def,
            inst_shape_ok_def, inst_jump_labels_ok_def, mk_inst_def,
-           is_read0_opcode_def, label_positions_ok_def, is_terminator_def,
+           is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def,
            is_param_opcode_def, label_or_plain_def, plain_operand_def,
            stackPlanTypesTheory.is_label_operand_def]) >>
   ho_match_mp_tac shape_step_fresh_var >>
@@ -362,7 +362,7 @@ Resume compile_word_copy_loop_shape[init_jump]:
   conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   simp[lowered_inst_ok_def, raw_opcode_ok_def,
        inst_shape_ok_def, inst_jump_labels_ok_def, mk_inst_def,
-       is_read0_opcode_def, label_positions_ok_def, is_terminator_def,
+       is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def,
        is_param_opcode_def, label_or_plain_def, jump_label_ok_def,
        stackPlanTypesTheory.is_label_operand_def]
 QED
@@ -377,7 +377,7 @@ Resume compile_word_copy_loop_shape[condition]:
   conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   simp[lowered_inst_ok_def, raw_opcode_ok_def,
        inst_shape_ok_def, inst_jump_labels_ok_def, mk_inst_def,
-       is_read0_opcode_def, label_positions_ok_def, is_terminator_def,
+       is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def,
        is_param_opcode_def, label_or_plain_def, plain_operand_def,
        stackPlanTypesTheory.is_label_operand_def]
 QED
@@ -392,7 +392,7 @@ Resume compile_word_copy_loop_shape[condition_branch]:
   conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   simp[lowered_inst_ok_def, raw_opcode_ok_def,
        inst_shape_ok_def, inst_jump_labels_ok_def, mk_inst_def,
-       is_read0_opcode_def, label_positions_ok_def, is_terminator_def,
+       is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def,
        is_param_opcode_def, label_or_plain_def, plain_operand_def, jump_label_ok_def,
        stackPlanTypesTheory.is_label_operand_def] >>
   rpt strip_tac >> gvs[stackPlanTypesTheory.is_label_operand_def]
@@ -424,7 +424,7 @@ Resume compile_word_copy_loop_shape[source_offset]:
   conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   simp[lowered_inst_ok_def, raw_opcode_ok_def,
        inst_shape_ok_def, inst_jump_labels_ok_def, mk_inst_def,
-       is_read0_opcode_def, label_positions_ok_def, is_terminator_def,
+       is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def,
        is_param_opcode_def, label_or_plain_def, plain_operand_def,
        stackPlanTypesTheory.is_label_operand_def]
 QED
@@ -455,7 +455,7 @@ Resume compile_word_copy_loop_shape[destination_offset]:
   conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   simp[lowered_inst_ok_def, raw_opcode_ok_def,
        inst_shape_ok_def, inst_jump_labels_ok_def, mk_inst_def,
-       is_read0_opcode_def, label_positions_ok_def, is_terminator_def,
+       is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def,
        is_param_opcode_def, label_or_plain_def, plain_operand_def,
        stackPlanTypesTheory.is_label_operand_def]
 QED
@@ -472,7 +472,7 @@ Resume compile_word_copy_loop_shape[destination_add]:
   conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   simp[lowered_inst_ok_def, raw_opcode_ok_def,
        inst_shape_ok_def, inst_jump_labels_ok_def, mk_inst_def,
-       is_read0_opcode_def, label_positions_ok_def, is_terminator_def,
+       is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def,
        is_param_opcode_def, label_or_plain_def, plain_operand_def,
        stackPlanTypesTheory.is_label_operand_def]
 QED
@@ -490,7 +490,7 @@ Resume compile_word_copy_loop_shape[store]:
   conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   simp[lowered_inst_ok_def, raw_opcode_ok_def,
        inst_shape_ok_def, inst_jump_labels_ok_def, mk_inst_def,
-       is_read0_opcode_def, label_positions_ok_def, is_terminator_def,
+       is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def,
        is_param_opcode_def, label_or_plain_def, plain_operand_def,
        stackPlanTypesTheory.is_label_operand_def]
 QED
@@ -507,7 +507,7 @@ Resume compile_word_copy_loop_shape[increment]:
   conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   simp[lowered_inst_ok_def, raw_opcode_ok_def,
        inst_shape_ok_def, inst_jump_labels_ok_def, mk_inst_def,
-       is_read0_opcode_def, label_positions_ok_def, is_terminator_def,
+       is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def,
        is_param_opcode_def, label_or_plain_def, plain_operand_def,
        stackPlanTypesTheory.is_label_operand_def]
 QED
@@ -521,7 +521,7 @@ Resume compile_word_copy_loop_shape[counter_assign]:
   conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   simp[lowered_inst_ok_def, raw_opcode_ok_def,
        inst_shape_ok_def, inst_jump_labels_ok_def, mk_inst_def,
-       is_read0_opcode_def, label_positions_ok_def, is_terminator_def,
+       is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def,
        is_param_opcode_def, label_or_plain_def, plain_operand_def,
        stackPlanTypesTheory.is_label_operand_def]
 QED
@@ -537,7 +537,7 @@ Resume compile_word_copy_loop_shape[back_edge]:
   ho_match_mp_tac shape_step_emit_inst_guarded >>
   simp[shape_stable_def, lowered_inst_ok_def, raw_opcode_ok_def,
        inst_shape_ok_def, inst_jump_labels_ok_def, mk_inst_def,
-       is_read0_opcode_def, label_positions_ok_def, is_terminator_def,
+       is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def,
        is_param_opcode_def, label_or_plain_def, jump_label_ok_def,
        stackPlanTypesTheory.is_label_operand_def]
 QED
@@ -587,7 +587,7 @@ Resume compile_ensure_in_memory_shape[slot_copy]:
        conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
        simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
             inst_jump_labels_ok_def, mk_inst_def, is_read0_opcode_def,
-            label_positions_ok_def, is_terminator_def, is_param_opcode_def,
+            label_positions_ok_def, operand_case_not_label, is_terminator_def, is_param_opcode_def,
             label_or_plain_def, plain_operand_def] >> metis_tac[]) >>
    irule shape_step_ignore_bind >>
    qexists_tac `\x st. plain_operand st buf.buf_operand` >>
@@ -608,7 +608,7 @@ Resume compile_ensure_in_memory_shape[single_store]:
    conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
    simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
         inst_jump_labels_ok_def, mk_inst_def, is_read0_opcode_def,
-        label_positions_ok_def, is_terminator_def, is_param_opcode_def,
+        label_positions_ok_def, operand_case_not_label, is_terminator_def, is_param_opcode_def,
         label_or_plain_def, plain_operand_def] >> metis_tac[])
 QED
 
@@ -644,7 +644,7 @@ Resume compile_ensure_in_memory_shape[calldata]:
   conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
        inst_jump_labels_ok_def, mk_inst_def, is_read0_opcode_def,
-       label_positions_ok_def, is_terminator_def, is_param_opcode_def,
+       label_positions_ok_def, operand_case_not_label, is_terminator_def, is_param_opcode_def,
        label_or_plain_def, plain_operand_def]
 QED
 
@@ -657,7 +657,7 @@ Resume compile_ensure_in_memory_shape[cd_store]:
   conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
        inst_jump_labels_ok_def, mk_inst_def, is_read0_opcode_def,
-       label_positions_ok_def, is_terminator_def, is_param_opcode_def,
+       label_positions_ok_def, operand_case_not_label, is_terminator_def, is_param_opcode_def,
        label_or_plain_def, plain_operand_def] >> metis_tac[]
 QED
 
@@ -669,7 +669,7 @@ Resume compile_ensure_in_memory_shape[cd_adds]:
   conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
        inst_jump_labels_ok_def, mk_inst_def, is_read0_opcode_def,
-       label_positions_ok_def, is_terminator_def, is_param_opcode_def,
+       label_positions_ok_def, operand_case_not_label, is_terminator_def, is_param_opcode_def,
        label_or_plain_def, plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >> metis_tac[]
 QED
 
@@ -681,7 +681,7 @@ Resume compile_ensure_in_memory_shape[cd_src]:
   conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
        inst_jump_labels_ok_def, mk_inst_def, is_read0_opcode_def,
-       label_positions_ok_def, is_terminator_def, is_param_opcode_def,
+       label_positions_ok_def, operand_case_not_label, is_terminator_def, is_param_opcode_def,
        label_or_plain_def, plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >> metis_tac[]
 QED
 
@@ -694,7 +694,7 @@ Resume compile_ensure_in_memory_shape[cd_copy]:
   conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
        inst_jump_labels_ok_def, mk_inst_def, is_read0_opcode_def,
-       label_positions_ok_def, is_terminator_def, is_param_opcode_def,
+       label_positions_ok_def, operand_case_not_label, is_terminator_def, is_param_opcode_def,
        label_or_plain_def, plain_operand_def] >> metis_tac[]
 QED
 
@@ -783,7 +783,7 @@ Proof
   irule (BETA_RULE (Q.SPECL [`internal`, `LP`, `\st. T`] shape_step_emit_void)) >>
   simp[Abbr `opc`, Abbr `ops`, shape_stable_def,
        lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
-       label_positions_ok_def, is_read0_opcode_def, inst_jump_labels_ok_def,
+       label_positions_ok_def, operand_case_not_label, is_read0_opcode_def, inst_jump_labels_ok_def,
        is_terminator_def, is_param_opcode_def, mk_inst_def,
        stackPlanTypesTheory.is_label_operand_def])
 QED
@@ -796,7 +796,7 @@ Proof
   let
     val inst_simp = simp[label_or_plain_def, plain_operand_def,
       lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
-      label_positions_ok_def, is_read0_opcode_def, inst_jump_labels_ok_def,
+      label_positions_ok_def, operand_case_not_label, is_read0_opcode_def, inst_jump_labels_ok_def,
       is_terminator_def, is_param_opcode_def, mk_inst_def,
       stackPlanTypesTheory.is_label_operand_def]
   in
@@ -901,7 +901,7 @@ Proof
   simp[cenv_shape_ok_stable, label_or_plain_def, plain_operand_def,
        stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def, mk_inst_def,
        raw_opcode_ok_def, inst_shape_ok_def, inst_jump_labels_ok_def,
-       is_terminator_def, is_read0_opcode_def, label_positions_ok_def,
+       is_terminator_def, is_read0_opcode_def, label_positions_ok_def, operand_case_not_label,
        is_param_opcode_def]
 QED
 
@@ -921,7 +921,7 @@ Proof
            stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def,
            mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def,
            inst_jump_labels_ok_def, is_terminator_def, is_read0_opcode_def,
-           label_positions_ok_def, is_param_opcode_def]) >>
+           label_positions_ok_def, operand_case_not_label, is_param_opcode_def]) >>
   simp[shape_step_def, comp_get_def, shape_extends_refl]
 QED
 
@@ -987,7 +987,7 @@ QED
 val stmt_shape_emit_simp = simp[
   lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def,
   inst_jump_labels_ok_def, is_terminator_def, is_read0_opcode_def,
-  label_positions_ok_def, is_param_opcode_def];
+  label_positions_ok_def, operand_case_not_label, is_param_opcode_def];
 
 Theorem compile_with_byte_offset_shape[local]:
   !internal base offset.
@@ -1006,7 +1006,8 @@ Proof
   >- (simp[label_or_plain_def, plain_operand_def,
            stackPlanTypesTheory.is_label_operand_def]) >>
   stmt_shape_emit_simp >>
-  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]
 QED
 
 Theorem stmt_shape_frame[local]:
@@ -1035,7 +1036,8 @@ val stmt_plain_emit =
   >- simp[label_or_plain_def, plain_operand_def,
           stackPlanTypesTheory.is_label_operand_def] >>
   stmt_shape_emit_simp >>
-  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def];
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label];
 
 Theorem compile_bytestring_copy_len_shape[local]:
   !internal val_op.
@@ -1072,7 +1074,8 @@ Proof
   >- simp[label_or_plain_def, plain_operand_def,
           stackPlanTypesTheory.is_label_operand_def] >>
   stmt_shape_emit_simp >>
-  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]
 QED
 
 Theorem compile_copy_memory_shape[local]:
@@ -1121,7 +1124,8 @@ val stmt_plain_void =
       irule stmt_shape_stable_plain) >>
   simp[label_or_plain_def] >>
   stmt_shape_emit_simp >>
-  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def];
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label];
 
 Theorem compile_store_byte_chunks_shape[local]:
   !data_ptr bs off internal.
@@ -1146,7 +1150,8 @@ Proof
   >- simp[label_or_plain_def, plain_operand_def,
           stackPlanTypesTheory.is_label_operand_def] >>
   stmt_shape_emit_simp >>
-  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]
 QED
 
 Theorem compile_bytelike_literal_shape[local]:
@@ -1222,7 +1227,8 @@ Proof
       ho_match_mp_tac stmt_shape_emit_op >>
       simp[shape_stable_conj, stmt_shape_stable_plain, label_or_plain_def] >>
       stmt_shape_emit_simp >>
-      simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+      simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
   irule shape_step_bind >>
   qexists_tac `\x st. plain_operand st x /\ plain_operand st base_op` >> conj_tac
   >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >>
@@ -1258,7 +1264,8 @@ Proof
      qexists_tac `\u st. plain_operand st x /\ plain_operand st y` >>
      conj_tac
      >- (gen_tac >> BETA_TAC >> irule shape_step_return >>
-         simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+         simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
      ho_match_mp_tac stmt_shape_emit_inst >>
      simp[shape_stable_conj, stmt_shape_stable_plain, label_or_plain_def] >>
      stmt_shape_emit_simp)]
@@ -1588,7 +1595,8 @@ Resume compile_safe_pow_shape[small_base]:
   >- (irule shape_step_bind >> qexists_tac `\a st. plain_operand st a` >> conj_tac
       >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >> stmt_plain_emit) >>
   irule shape_step_return >>
-  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]
 QED
 Finalise compile_safe_pow_shape[local]
 
@@ -1708,7 +1716,8 @@ Proof
      (irule shape_step_ignore_bind >>
       qexists_tac `\u st. plain_operand st x /\ plain_operand st y` >> conj_tac
       >- (gen_tac >> BETA_TAC >> irule shape_step_return >>
-          simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+          simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
       ho_match_mp_tac stmt_shape_emit_inst >>
       simp[shape_stable_conj, stmt_shape_stable_plain, label_or_plain_def] >>
       stmt_shape_emit_simp)])
@@ -1802,7 +1811,8 @@ Resume compile_word_copy_loop_noncode_shape[loop]:
   simp[Abbr `wcopy_live`] >> stmt_frame_emit `\st. plain_operand st (Var ctr)`
 QED
 Resume compile_word_copy_loop_noncode_shape[initial_assign]:
-  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]
 QED
 Resume compile_word_copy_loop_noncode_shape[copy]:
   qabbrev_tac `wcopy_live = \st. (plain_operand st src /\ plain_operand st dst) /\ plain_operand st (Var ctr)` >>
@@ -1844,7 +1854,8 @@ Resume compile_word_copy_loop_noncode_shape[increment]:
     (ho_match_mp_tac stmt_shape_emit_inst >>
      simp[shape_stable_conj, stmt_shape_stable_plain, label_or_plain_def] >>
      stmt_shape_emit_simp >>
-     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
   stmt_sequence `\u st. plain_operand st new_ctr /\ plain_operand st (Var ctr)`
     (ho_match_mp_tac stmt_shape_jmp >>
      simp[shape_stable_conj, stmt_shape_stable_plain]) >>
@@ -1922,7 +1933,8 @@ Resume stmt_typed_copy_loop_shape[counter]:
   stmt_sequence `\u st. typed_live st /\ plain_operand st bound`
     (ho_match_mp_tac stmt_shape_emit_inst >>
      simp[Abbr `typed_live`, shape_stable_conj, stmt_shape_stable_plain, label_or_plain_def] >>
-     stmt_shape_emit_simp >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+     stmt_shape_emit_simp >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
   stmt_sequence `\u st. typed_live st /\ plain_operand st bound`
     (ho_match_mp_tac stmt_shape_jmp >> simp[Abbr `typed_live`, shape_stable_conj, stmt_shape_stable_plain]) >>
   stmt_sequence `\u st. typed_live st /\ plain_operand st bound`
@@ -1979,7 +1991,8 @@ Resume stmt_typed_copy_loop_shape[increment]:
     (ho_match_mp_tac stmt_shape_emit_inst >>
      simp[shape_stable_conj, stmt_shape_stable_plain, label_or_plain_def] >>
      stmt_shape_emit_simp >>
-     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
   stmt_sequence `\u st. plain_operand st next /\ plain_operand st (Var ctr)`
     (ho_match_mp_tac stmt_shape_jmp >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
   irule shape_step_bind >> qexists_tac `\u st. T` >> conj_tac
@@ -2098,7 +2111,8 @@ Resume compile_typed_copy_shape[sarray]:
               qexistsl_tac [`compiler_label`,
                 `\st. plain_operand st dst /\ plain_operand st src /\ plain_operand st (Lit (n2w ncopy))`, `\u st. T`] >>
               simp[] >> conj_tac
-              >- simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
+              >- simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label] >>
               ho_match_mp_tac stmt_typed_copy_loop_shape >> simp[]) >>
           ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
       ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
@@ -2197,7 +2211,8 @@ Proof
   qexists_tac `\v st. plain_operand st v /\ plain_operand st dst` >> conj_tac
   >- (gen_tac >> BETA_TAC >>
       stmt_sequence `\u st. T` stmt_plain_void_drop >>
-      irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+      irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
   stmt_frame_emit `\st. plain_operand st src`
 QED
 
@@ -2209,10 +2224,13 @@ Theorem compile_abi_encode_static_info_shape[local]:
 Proof
   rpt gen_tac >> Cases_on `info` >> simp[compile_abi_encode_static_info_def]
   >- irule compile_abi_encode_static_shape
-  >- (irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def])
+  >- (irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label])
   >- (stmt_sequence `\u st. T` stmt_plain_void_drop >>
-      irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def])
-  >> irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+      irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label])
+  >> irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]
 QED
 
 Theorem compile_abi_encode_dyn_static_loop_shape:
@@ -2361,13 +2379,16 @@ Proof
   >- suspend "bytes"
   >- (rpt gen_tac >> simp[Once compile_abi_encode_child_def] >>
       stmt_sequence `\u st. T` stmt_plain_void_drop >>
-      irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def])
+      irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label])
   >- suspend "array"
   >- (rpt gen_tac >> simp[Once compile_abi_encode_child_def] >>
-      irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def])
+      irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label])
   >- suspend "complex"
   >- (rpt gen_tac >> simp[Once compile_abi_encode_child_def] >>
-      irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def])
+      irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label])
   >- suspend "elems"
   >> suspend "dyn_loop"
 QED
@@ -2490,9 +2511,11 @@ Resume compile_abi_encode_shape[complex]:
     (irule shape_step_conseq >>
      qexistsl_tac [`compiler_label`, `\st. plain_operand st dst /\ plain_operand st src /\ plain_operand st (Lit 0w)`, `\v st. plain_operand st v`] >>
      simp[] >> conj_tac
-     >- simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
+     >- simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label] >>
      first_x_assum irule >> gvs[]) >>
-  irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+  irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]
 QED
 Resume compile_abi_encode_shape[complex_alloc]:
   qx_gen_tac `buf` >> BETA_TAC >> simp[] >>
@@ -2551,7 +2574,8 @@ Resume compile_abi_encode_shape[dyn_init_store]:
   >- (qspec_then `[init_dyn; dbuf.buf_operand; ibuf.buf_operand; dst; src; len_op]` mp_tac shape_stable_plain_operands >>
       simp[EVERY_DEF, Abbr `dyn_live`]) >>
   simp[Abbr `dyn_live`, label_or_plain_def] >>
-  stmt_shape_emit_simp >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+  stmt_shape_emit_simp >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]
 QED
 Resume compile_abi_encode_shape[dyn_labels]:
   irule shape_step_bind >> qexists_tac `\l st. dyn_live st /\ compiler_label l` >> conj_tac
@@ -2792,12 +2816,14 @@ Proof
           stmt_frame_emit `\st. plain_operand st idx_op /\ plain_operand st len`) >>
       IF_CASES_TAC
       >- (stmt_frame_emit `\st. plain_operand st idx_op`) >>
-      irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+      irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
   IF_CASES_TAC
   >- (ho_match_mp_tac stmt_shape_frame >>
       qexists_tac `\st. plain_operand st base_op` >>
       simp[stmt_shape_stable_plain, shape_stable_conj]) >>
-  irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+  irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]
 QED
 
 Theorem compile_dynarray_append_shape:
@@ -2903,7 +2929,8 @@ Proof
      `Induct` produced; they go with the induction lemma above. *)
   recInduct base_assignment_target_induct >> rpt conj_tac >> BETA_TAC >>
   simp[compile_target_base_def] >> rpt strip_tac >>
-  BasicProvers.TOP_CASE_TAC >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
+  BasicProvers.TOP_CASE_TAC >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label] >>
   rename1 `FLOOKUP _ _ = SOME vloc` >>
   `loc_shape_ok st vloc` by
     metis_tac[cenv_shape_ok_lookup, cenv_shape_ok_module_lookup] >>
@@ -3007,7 +3034,7 @@ Proof
   >- (mp_tac (Q.SPECL [`internal`, `compiler_label`, `\st. T`,
                        `INVALID`, `[]`, `[]`] shape_step_emit_inst) >>
       simp[shape_stable_def, lowered_inst_ok_def, mk_inst_def,
-           raw_opcode_ok_def, inst_shape_ok_def, label_positions_ok_def,
+           raw_opcode_ok_def, inst_shape_ok_def, label_positions_ok_def, operand_case_not_label,
            inst_jump_labels_ok_def,
            is_terminator_def, is_param_opcode_def]) >>
   gen_tac >> irule shape_step_return >>
@@ -3178,7 +3205,7 @@ QED
 (* Consequence adaptation is shared by plain-operand primitive consumers. *)
 val shape_opcode_tac =
   simp[lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def,
-       inst_shape_ok_def, label_positions_ok_def, inst_jump_labels_ok_def,
+       inst_shape_ok_def, label_positions_ok_def, operand_case_not_label, inst_jump_labels_ok_def,
        is_read0_opcode_def, is_terminator_def, is_param_opcode_def,
        plain_operand_def, label_or_plain_def,
        stackPlanTypesTheory.is_label_operand_def];
@@ -6871,7 +6898,8 @@ QED
 
 Resume compile_get_target_ptr_cfn_shape[name]:
   BasicProvers.TOP_CASE_TAC
-  >- (irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  >- (irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
   rename1 `FLOOKUP _ _ = SOME vloc` >> Cases_on `vloc` >> simp[] >>
   irule shape_step_return >> BETA_TAC >> rpt strip_tac >>
   drule_all cenv_shape_ok_lookup >>
@@ -6879,7 +6907,8 @@ Resume compile_get_target_ptr_cfn_shape[name]:
 QED
 Resume compile_get_target_ptr_cfn_shape[toplevel]:
   BasicProvers.TOP_CASE_TAC
-  >- (irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  >- (irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
   rename1 `FLOOKUP _ _ = SOME vloc` >> Cases_on `vloc` >> simp[] >>
   irule shape_step_return >> BETA_TAC >> rpt strip_tac >>
   drule_all cenv_shape_ok_module_lookup >>
@@ -7720,6 +7749,20 @@ Proof
   Cases_on `rest` >> Cases_on `bi` >> gvs[FUN_EQ_THM, compile_expr_body_def, expr_type_def]
 QED
 
+Theorem pop_load_selector_mem[local]:
+  !loc. MEM (case loc of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD)
+    [MLOAD; SLOAD; TLOAD]
+Proof
+  Cases >> simp[]
+QED
+
+Theorem pop_store_selector_mem[local]:
+  !loc. MEM (case loc of LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE)
+    [MSTORE; SSTORE; TSTORE]
+Proof
+  Cases >> simp[]
+QED
+
 Theorem compile_expr_body_shape:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
@@ -7859,8 +7902,8 @@ Resume compile_expr_body_shape[pop]:
   qexists_tac `\op st. cenv_shape_ok st cenv /\ plain_operand st op` >>
   reverse conj_tac
   >- (shape_under_tac compile_dynarray_pop_shape `\st. cenv_shape_ok st cenv` >>
-      simp[cenv_shape_ok_stable] >> rpt conj_tac >> CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[]) >>
+      simp[cenv_shape_ok_stable, SRULE [MEM] pop_load_selector_mem,
+           SRULE [MEM] pop_store_selector_mem]) >>
   gen_tac >> simp[shape_step_def, shape_extends_refl, value_shape_ok_def, mk_ptr_def] >>
   Cases_on `r1` >> gvs[]
 QED
@@ -8182,7 +8225,8 @@ val stmt_revert_void_drop = stmt_drop
   (ho_match_mp_tac stmt_shape_emit_void >>
    conj_tac >- (rpt (ho_match_mp_tac shape_stable_conj >> conj_tac) >> irule stmt_shape_stable_plain) >>
    simp[label_or_plain_def] >> stmt_shape_emit_simp >>
-   simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]);
+   simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]);
 
 fun stmt_revert_emit input =
   ho_match_mp_tac stmt_shape_frame >> qexists_tac input >>
@@ -8211,7 +8255,8 @@ Proof
     (ho_match_mp_tac stmt_shape_emit_void >>
      simp[cenv_shape_ok_stable, value_shape_ok_stable, stmt_shape_stable_plain,
           shape_stable_conj, label_or_plain_def] >> stmt_shape_emit_simp >>
-     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
   stmt_bind `\payload st. plain_operand st payload /\
     (plain_operand st buf.buf_operand /\
      (cenv_shape_ok st cenv /\ value_shape_ok st msg_vv))` `payload`
@@ -8330,7 +8375,8 @@ Resume compile_revert_with_reason_shape[finish_encoding]:
     (stmt_revert_emit `\st. plain_operand st encoded_len`) >>
   stmt_drop (ho_match_mp_tac stmt_shape_emit_inst >>
     simp[stmt_shape_stable_plain, shape_stable_conj, label_or_plain_def] >>
-    stmt_shape_emit_simp >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
+    stmt_shape_emit_simp >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label] >>
     rpt strip_tac >> gvs[stackPlanTypesTheory.is_label_operand_def])
 QED
 Finalise compile_revert_with_reason_shape[local]
@@ -8346,7 +8392,7 @@ Proof
   >- (mp_tac (Q.SPECL [`internal`, `compiler_label`, `\st. T`,
                        `INVALID`, `[]`, `[]`] shape_step_emit_inst) >>
       simp[shape_stable_def, lowered_inst_ok_def, mk_inst_def,
-           raw_opcode_ok_def, inst_shape_ok_def, label_positions_ok_def,
+           raw_opcode_ok_def, inst_shape_ok_def, label_positions_ok_def, operand_case_not_label,
            inst_jump_labels_ok_def,
            is_terminator_def, is_param_opcode_def]) >>
   gen_tac >> irule shape_step_return >> simp[]
@@ -8591,7 +8637,8 @@ Resume compile_dynarray_to_storage_shape[loop]:
     (ho_match_mp_tac stmt_shape_emit_inst >>
      simp[Abbr `live`, shape_stable_conj, stmt_shape_stable_plain, label_or_plain_def] >>
      stmt_shape_emit_simp >>
-     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
   stmt_sequence `\u st. live st`
     (ho_match_mp_tac stmt_shape_jmp >>
      simp[Abbr `live`, shape_stable_conj, stmt_shape_stable_plain]) >>
@@ -8688,7 +8735,8 @@ val stmt_dyn_storage_tail =
     (stmt_drop (ho_match_mp_tac stmt_shape_emit_inst >>
      simp[shape_stable_conj, stmt_shape_stable_plain, label_or_plain_def] >>
      stmt_shape_emit_simp >>
-     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def])) >>
+     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label])) >>
   stmt_sequence `\u st. plain_operand st len /\ plain_operand st dst`
     (ho_match_mp_tac stmt_shape_jmp >>
      simp[shape_stable_conj, stmt_shape_stable_plain]) >>
@@ -8864,7 +8912,8 @@ Proof
            (ho_match_mp_tac stmt_shape_emit_void >>
             simp[cenv_shape_ok_stable, stmt_shape_stable_plain, shape_stable_conj,
                  label_or_plain_def] >> stmt_shape_emit_simp >>
-            simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+            simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
          irule shape_step_return >> simp[]) >>
      irule shape_step_return >> simp[]) >>
   stmt_bind `\vals st. EVERY (plain_operand st) vals /\ cenv_shape_ok st cenv` `vals`
@@ -8952,7 +9001,8 @@ Proof
   stmt_bind `\op st. plain_operand st op /\ cenv_shape_ok st cenv` `source_op`
     (IF_CASES_TAC
      >- (irule shape_step_return >>
-         simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+         simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
      ho_match_mp_tac stmt_shape_frame >>
      qexists_tac `\st. cenv_shape_ok st cenv /\ value_shape_ok st v` >>
      simp[cenv_shape_ok_stable, unwrap_value_shape]) >>
@@ -8973,7 +9023,8 @@ Resume compile_annassign_shape[stores]:
   >- (stmt_drop (ho_match_mp_tac stmt_shape_emit_void >>
        simp[cenv_shape_ok_stable, stmt_shape_stable_plain, shape_stable_conj,
             label_or_plain_def] >> stmt_shape_emit_simp >>
-       simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
+       simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label] >>
        rpt strip_tac >> drule_all cenv_shape_ok_lookup >>
        simp[loc_shape_ok_def, plain_operand_def])) >>
   qmatch_goalsub_abbrev_tac `compile_assign_value cenv dst LocMemory` >>
@@ -9180,7 +9231,8 @@ val stmt_plain_inst_drop = stmt_drop
   (ho_match_mp_tac stmt_shape_emit_inst >>
    simp[stmt_shape_stable_plain, shape_stable_conj, stmt_shape_stable_const,
         label_or_plain_def] >> stmt_shape_emit_simp >>
-   simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
+   simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label] >>
    metis_tac[stackPlanTypesTheory.is_label_operand_def]);
 
 Theorem compile_external_return_shape:
@@ -9271,7 +9323,8 @@ Resume compile_internal_return_from_env_shape[buffer_cases]:
          qexists_tac `\st. plain_operand st (Lit (n2w off))` >>
          simp[stmt_shape_stable_plain, stmt_shape_stable_retpc, shape_stable_conj] >>
          conj_tac >- stmt_plain_emit >>
-         simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >> irule shape_step_return >> simp[]) >>
+         simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >> irule shape_step_return >> simp[]) >>
   irule shape_step_return >> simp[] >> rpt strip_tac >>
   gvs[cenv_shape_ok_def, loc_shape_ok_def]
 QED
@@ -9346,7 +9399,8 @@ Resume compile_return_some_shape[internal]:
          qexists_tac `\st. plain_operand st (Lit (n2w off))` >>
          simp[shape_stable_conj, stmt_shape_stable_plain, cenv_shape_ok_stable] >>
          conj_tac >- stmt_plain_emit >>
-         simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+         simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
       irule shape_step_conseq >>
       qexistsl_tac [`compiler_label`,
         `\st. cenv_shape_ok st cenv /\ plain_operand st value_op /\
@@ -9591,7 +9645,8 @@ Resume compile_for_range_shape[counter]:
      simp[Abbr `ctr_live`, Abbr `live`, shape_stable_conj,
        cenv_shape_ok_stable, stmt_shape_stable_plain, label_or_plain_def] >>
      stmt_shape_emit_simp >>
-     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
   stmt_bind `\r st. plain_operand st r /\ ctr_live st` `rounds` (suspend "rounds") >>
   stmt_sequence `\u st. plain_operand st rounds /\ ctr_live st` (suspend "checks") >>
   stmt_bind `\v st. plain_operand st v /\ ctr_live st` `end_val`
@@ -9616,7 +9671,8 @@ QED
 Resume compile_for_range_shape[rounds]:
   Cases_on `start_op` >> Cases_on `end_op` >> simp[] >>
   TRY (irule shape_step_return >>
-    simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >> NO_TAC) >>
+    simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label] >> NO_TAC) >>
   qmatch_goalsub_abbrev_tac `emit_op SUB ops` >>
   ho_match_mp_tac stmt_shape_frame >>
   qexists_tac `\st. EVERY (plain_operand st) ops` >>
@@ -9659,7 +9715,8 @@ Resume compile_for_range_shape[body]:
   stmt_sequence `\u st. plain_operand st new_counter /\ plain_operand st (Var counter_var)`
     (ho_match_mp_tac stmt_shape_emit_inst >> simp[shape_stable_conj,
        stmt_shape_stable_plain, label_or_plain_def] >> stmt_shape_emit_simp >>
-     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
   stmt_sequence `\u st. plain_operand st new_counter /\ plain_operand st (Var counter_var)`
     (ho_match_mp_tac stmt_shape_jmp >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
   stmt_sequence `\u st. plain_operand st new_counter /\ plain_operand st (Var counter_var)`
@@ -9677,7 +9734,8 @@ Resume compile_for_range_shape[store]:
   ho_match_mp_tac stmt_shape_emit_void >> simp[SF ETA_ss] >>
   simp[Abbr `ctr_live`, Abbr `live`, label_or_plain_def] >>
   stmt_shape_emit_simp >>
-  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label] >>
   rpt strip_tac >> drule_all cenv_shape_ok_lookup >>
   simp[loc_shape_ok_def, plain_operand_def]
 QED
@@ -9736,7 +9794,8 @@ Resume compile_for_array_shape[length]:
       simp[cenv_shape_ok_stable, stmt_shape_stable_plain, shape_stable_conj] >>
       irule compile_ptr_load_shape >> simp[]) >>
   irule shape_step_return >>
-  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]
 QED
 Resume compile_for_array_shape[labels]:
   simp[] >>
@@ -9831,7 +9890,8 @@ Resume compile_for_array_shape[body]:
   stmt_sequence `\u st. plain_operand st new_idx /\ plain_operand st (Var idx_var)`
     (ho_match_mp_tac stmt_shape_emit_inst >> simp[shape_stable_conj,
        stmt_shape_stable_plain, label_or_plain_def] >> stmt_shape_emit_simp >>
-     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label]) >>
   stmt_sequence `\u st. plain_operand st new_idx /\ plain_operand st (Var idx_var)`
     (ho_match_mp_tac stmt_shape_jmp >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
   stmt_sequence `\u st. plain_operand st new_idx /\ plain_operand st (Var idx_var)`
@@ -10050,7 +10110,7 @@ Proof
       conj_tac
       >- (qspec_then `[method_id]` mp_tac shape_stable_plain_operands >> simp[]) >>
       simp[lowered_inst_ok_def, raw_opcode_ok_def,
-           inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+           inst_shape_ok_def, label_positions_ok_def, operand_case_not_label, is_read0_opcode_def,
            mk_inst_def, is_terminator_def, is_param_opcode_def,
            inst_jump_labels_ok_def, label_or_plain_def, plain_operand_def,
            stackPlanTypesTheory.is_label_operand_def]) >>
@@ -10079,7 +10139,7 @@ Resume compile_selector_checks_shape[branches]:
   >- (ho_match_mp_tac shape_step_emit_inst_under >>
       conj_tac >- (rw[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
       simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
-           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           label_positions_ok_def, operand_case_not_label, is_read0_opcode_def, mk_inst_def,
            is_terminator_def, is_param_opcode_def, inst_jump_labels_ok_def,
            jump_label_ok_def, label_or_plain_def,
            stackPlanTypesTheory.is_label_operand_def] >>
@@ -10104,7 +10164,7 @@ Resume compile_selector_checks_shape[blocks]:
       conj_tac
       >- (qspec_then `[method_id]` mp_tac shape_stable_plain_operands >> simp[]) >>
       simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
-           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           label_positions_ok_def, operand_case_not_label, is_read0_opcode_def, mk_inst_def,
            is_terminator_def, is_param_opcode_def, inst_jump_labels_ok_def,
            label_or_plain_def, stackPlanTypesTheory.is_label_operand_def]) >>
   gen_tac >> BETA_TAC >>
@@ -10131,7 +10191,7 @@ Proof
   qexists_tac `\x st. T /\ plain_operand st x` >> reverse conj_tac
   >- (ho_match_mp_tac shape_step_emit_op_under >>
       simp[shape_stable_def, lowered_inst_ok_def, raw_opcode_ok_def,
-           inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+           inst_shape_ok_def, label_positions_ok_def, operand_case_not_label, is_read0_opcode_def,
            mk_inst_def, is_terminator_def, is_param_opcode_def,
            inst_jump_labels_ok_def]) >>
   qx_gen_tac `cds` >> BETA_TAC >>
@@ -10144,7 +10204,7 @@ Proof
       conj_tac
       >- (qspec_then `[cds]` mp_tac shape_stable_plain_operands >> simp[]) >>
       simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
-           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           label_positions_ok_def, operand_case_not_label, is_read0_opcode_def, mk_inst_def,
            is_terminator_def, is_param_opcode_def, inst_jump_labels_ok_def,
            label_or_plain_def, plain_operand_def,
            stackPlanTypesTheory.is_label_operand_def]) >>
@@ -10164,7 +10224,7 @@ Resume compile_selector_dispatch_linear_shape[iszero]:
       conj_tac
       >- (qspec_then `[has_sel]` mp_tac shape_stable_plain_operands >> simp[]) >>
       simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
-           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           label_positions_ok_def, operand_case_not_label, is_read0_opcode_def, mk_inst_def,
            is_terminator_def, is_param_opcode_def, inst_jump_labels_ok_def,
            label_or_plain_def]) >>
   qx_gen_tac `cond` >> BETA_TAC >>
@@ -10189,7 +10249,7 @@ Resume compile_selector_dispatch_linear_shape[jump]:
   >- (ho_match_mp_tac shape_step_emit_inst_under >>
       conj_tac >- (rw[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
       simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
-           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           label_positions_ok_def, operand_case_not_label, is_read0_opcode_def, mk_inst_def,
            is_terminator_def, is_param_opcode_def, inst_jump_labels_ok_def,
            label_or_plain_def, stackPlanTypesTheory.is_label_operand_def] >>
       rpt strip_tac >> gvs[jump_label_ok_def] >>
@@ -10212,7 +10272,7 @@ Resume compile_selector_dispatch_linear_shape[load]:
   qexists_tac `\x st. T /\ plain_operand st x` >> reverse conj_tac
   >- (ho_match_mp_tac shape_step_emit_op_under >>
       simp[shape_stable_def, lowered_inst_ok_def, raw_opcode_ok_def,
-           inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+           inst_shape_ok_def, label_positions_ok_def, operand_case_not_label, is_read0_opcode_def,
            mk_inst_def, is_terminator_def, is_param_opcode_def,
            inst_jump_labels_ok_def, label_or_plain_def, plain_operand_def,
            stackPlanTypesTheory.is_label_operand_def]) >>
@@ -10226,7 +10286,7 @@ Resume compile_selector_dispatch_linear_shape[load]:
       conj_tac
       >- (qspec_then `[raw]` mp_tac shape_stable_plain_operands >> simp[]) >>
       simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
-           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           label_positions_ok_def, operand_case_not_label, is_read0_opcode_def, mk_inst_def,
            is_terminator_def, is_param_opcode_def, inst_jump_labels_ok_def,
            label_or_plain_def, plain_operand_def,
            stackPlanTypesTheory.is_label_operand_def]) >>
@@ -10239,7 +10299,7 @@ Resume compile_selector_dispatch_linear_shape[load]:
   gen_tac >> BETA_TAC >>
   ho_match_mp_tac shape_step_emit_inst_under >>
   simp[shape_stable_def, lowered_inst_ok_def, raw_opcode_ok_def,
-       inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+       inst_shape_ok_def, label_positions_ok_def, operand_case_not_label, is_read0_opcode_def,
        mk_inst_def, is_terminator_def, is_param_opcode_def,
        inst_jump_labels_ok_def, label_or_plain_def,
        stackPlanTypesTheory.is_label_operand_def]
@@ -10297,7 +10357,7 @@ QED
 val extbodies_opcode_tac =
   simp[lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def,
        inst_jump_labels_ok_def, jump_label_ok_def, is_terminator_def,
-       is_param_opcode_def, is_read0_opcode_def, label_positions_ok_def,
+       is_param_opcode_def, is_read0_opcode_def, label_positions_ok_def, operand_case_not_label,
        plain_operand_def, label_or_plain_def, stackPlanTypesTheory.is_label_operand_def];
 
 (* The three clamp forms have the same emit/emit/assert proof skeleton. *)
@@ -10838,7 +10898,8 @@ val extbodies_args_decode_tail_tac =
     `\u st. cenv_shape_ok st cenv /\ T`] >>
   conj_tac >- simp[] >> conj_tac
   >- (BETA_TAC >> rpt strip_tac >> drule_all cenv_decode_operand_plain >>
-      simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
+      simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label] >>
       gvs[plain_operand_def]) >>
   conj_tac >- simp[] >>
   ho_match_mp_tac extbodies_cenv_frame >> simp[compile_abi_decode_shape];
@@ -11176,7 +11237,7 @@ Proof
   (pure_rewrite_tac[emit_inst_def, GSYM emit_void_def] >>
    irule shape_step_emit_void_pre >>
    simp[lowered_inst_ok_def, raw_opcode_ok_def,
-        inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+        inst_shape_ok_def, label_positions_ok_def, operand_case_not_label, is_read0_opcode_def,
         inst_jump_labels_ok_def, is_terminator_def, is_param_opcode_def,
         mk_inst_def])
 QED
@@ -11193,7 +11254,7 @@ Proof
   let
     val inst_simp = simp[label_or_plain_def, plain_operand_def,
       lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
-      label_positions_ok_def, is_read0_opcode_def, inst_jump_labels_ok_def,
+      label_positions_ok_def, operand_case_not_label, is_read0_opcode_def, inst_jump_labels_ok_def,
       is_terminator_def, is_param_opcode_def, mk_inst_def,
       stackPlanTypesTheory.is_label_operand_def]
   in
@@ -11241,7 +11302,7 @@ Proof
       simp[shape_stable_def, label_or_plain_def, plain_operand_def,
            stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def, mk_inst_def,
            raw_opcode_ok_def, inst_shape_ok_def, inst_jump_labels_ok_def,
-           is_read0_opcode_def, label_positions_ok_def, is_terminator_def]) >>
+           is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def]) >>
   gen_tac >> BETA_TAC >> irule shape_step_bind >>
   qexists_tac `\r st. plain_operand st x /\
     EVERY (\(name,is_stack,op). plain_operand st op) (FST r)` >>
@@ -11334,7 +11395,7 @@ Resume materialize_internal_params_shape[alloc_rule]:
   simp[GSYM CONJ_ASSOC, label_or_plain_def, plain_operand_def,
     stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def,
     mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def, inst_jump_labels_ok_def,
-    is_read0_opcode_def, label_positions_ok_def, is_terminator_def]
+    is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def]
 QED
 Resume materialize_internal_params_shape[store_rule]:
   `shape_stable (\st. cenv_shape_ok st cenv /\ plain_operand st h2 /\
@@ -11354,7 +11415,7 @@ Resume materialize_internal_params_shape[store_rule]:
     `MSTORE`, `[x:operand; h2]`] shape_step_emit_void) >>
   simp[lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def,
     inst_shape_ok_def, inst_jump_labels_ok_def, is_read0_opcode_def,
-    label_positions_ok_def, is_terminator_def] >>
+    label_positions_ok_def, operand_case_not_label, is_terminator_def] >>
   simp[shape_step_def, label_or_plain_def] >> rpt strip_tac >>
   `~is_label_operand x /\ ~is_label_operand h2` by
     (conj_tac
@@ -11377,7 +11438,7 @@ Proof
   simp[shape_stable_def, label_or_plain_def, plain_operand_def,
     stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def,
     mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def, inst_jump_labels_ok_def,
-    is_read0_opcode_def, label_positions_ok_def, is_terminator_def]
+    is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def]
 QED
 
 
@@ -11401,7 +11462,7 @@ Proof
   simp[shape_stable_def, label_or_plain_def, plain_operand_def,
     stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def,
     mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def, inst_jump_labels_ok_def,
-    is_read0_opcode_def, label_positions_ok_def, is_terminator_def] >>
+    is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def] >>
   simp[shape_step_def] >> metis_tac[]
 QED
 
@@ -11410,7 +11471,7 @@ val intfn_emit_simps =
   [shape_stable_def, label_or_plain_def, plain_operand_def,
    stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def,
    mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def, inst_jump_labels_ok_def,
-   is_read0_opcode_def, label_positions_ok_def, is_terminator_def];
+   is_read0_opcode_def, label_positions_ok_def, operand_case_not_label, is_terminator_def];
 
 
 Theorem internal_cenv_install_shape[local]:
@@ -11814,7 +11875,7 @@ Proof
       ho_match_mp_tac shape_step_emit_inst >>
       simp[shape_stable_def, lowered_inst_ok_def, mk_inst_def,
            raw_opcode_ok_def, inst_shape_ok_def, inst_jump_labels_ok_def,
-           is_param_opcode_def, is_read0_opcode_def, label_positions_ok_def,
+           is_param_opcode_def, is_read0_opcode_def, label_positions_ok_def, operand_case_not_label,
            is_terminator_def, stackPlanTypesTheory.is_label_operand_def]) >>
   PairCases_on `x` >> strip_tac >>
   drule compile_fallback_body_shape >> strip_tac >>
@@ -11969,8 +12030,10 @@ Proof
   ho_match_mp_tac supportedExprsTheory.supported_effect_expr_ind >>
   rw[supportedExprsTheory.supported_effect_expr_def,
      supported_expr_exists_def, expr_shape_root_def] >>
-  metis_tac[supported_pure_shape, supported_expr_exists_def,
-            expr_shape_root_def]
+  imp_res_tac (cj 1 supported_pure_shape) >>
+  imp_res_tac (cj 2 supported_pure_shape) >>
+  imp_res_tac (cj 4 supported_pure_shape) >>
+  gvs[supported_expr_exists_def, expr_shape_root_def]
 QED
 
 Theorem supported_expr_shape[local]:
@@ -12041,10 +12104,11 @@ Theorem supported_string_reason_shape[local]:
   supported_string_reason tops e ==>
   ~supported_expr_exists expr_shape_root e
 Proof
-  Cases_on `e` >>
-  simp[supportedStmtsTheory.supported_string_reason_def,
-       supported_expr_exists_def, expr_shape_root_def] >>
-  metis_tac[supported_pure_shape, supported_expr_exists_def, expr_shape_root_def]
+  Cases_on `e`
+  >~ [`Literal ty lit`]
+  >- simp[supported_expr_exists_def, expr_shape_root_def] >>
+  simp[supportedStmtsTheory.supported_string_reason_def] >>
+  metis_tac[cj 1 supported_pure_shape]
 QED
 
 Theorem supported_assert_reason_shape[local]:
@@ -12082,11 +12146,16 @@ Proof
   qmatch_goalsub_rename_tac `supported_expr_exists expr_shape_root start_expr` >>
   Cases_on `start_expr` >> simp[]
   >~ [`Literal lit_ty lit`]
-  >- (simp[supported_expr_exists_def, expr_shape_root_def] >>
-      qmatch_goalsub_rename_tac `supported_expr_exists expr_shape_root finish_expr` >>
-      Cases_on `finish_expr` >>
-      simp[supported_expr_exists_def, expr_shape_root_def] >>
-      metis_tac[supported_pure_shape, supported_expr_exists_def, expr_shape_root_def]) >>
+  >- (rename1 `~supported_expr_exists expr_shape_root (Literal lit_ty lit) /\
+               ~supported_expr_exists expr_shape_root finish_expr` >>
+      Cases_on `finish_expr` >> simp[]
+      >~ [`~supported_expr_exists expr_shape_root (Literal lit_ty lit) /\
+            ~supported_expr_exists expr_shape_root (Literal end_ty end_lit)`]
+      >- (Cases_on `lit` >> Cases_on `end_lit` >>
+          simp[supported_expr_exists_def, expr_shape_root_def]) >>
+      strip_tac >>
+      imp_res_tac (cj 1 supported_pure_shape) >>
+      gvs[supported_expr_exists_def, expr_shape_root_def]) >>
   metis_tac[supported_pure_shape]
 QED
 
@@ -12126,13 +12195,9 @@ Theorem add_module_var_locations_static:
     !n loc. FLOOKUP (add_module_var_locations tops vars) n = SOME loc ==>
       static_loc loc
 Proof
-  Induct_on `tops` >- simp[add_module_var_locations_def] >>
-  rpt gen_tac >> strip_tac >>
-  simp[Once add_module_var_locations_def] >>
-  first_x_assum match_mp_tac >>
-  Cases_on `h` >> simp[] >>
-  rpt (CASE_TAC >> simp[]) >>
-  rpt strip_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs(), static_loc_def] >>
+  rpt strip_tac >>
+  drule compileVyperTheory.add_module_var_locations_FLOOKUP >>
+  strip_tac >> gvs[static_loc_def] >>
   metis_tac[]
 QED
 
@@ -12215,6 +12280,21 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
+Theorem classify_function_fallback_source_step[local]:
+  !top acc mut nr rr fname args defaults ret body.
+    FST (SND (SND (classify_function top acc))) =
+      SOME (mut,nr,rr,fname,args,defaults,ret,body) ==>
+    top = FunctionDecl External mut nr rr fname args defaults ret body \/
+    FST (SND (SND acc)) =
+      SOME (mut,nr,rr,fname,args,defaults,ret,body)
+Proof
+  rpt gen_tac >> PairCases_on `acc` >> Cases_on `top` >>
+  simp[classify_function_def] >>
+  rename1 `case vis of External => _ | Internal => _ | Deploy => _` >>
+  Cases_on `vis` >> simp[] >>
+  IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]
+QED
+
 Theorem classify_functions_fallback_mem:
   !tops mut nr rr fname args defaults ret body.
     FST (SND (SND (classify_functions tops))) =
@@ -12223,14 +12303,10 @@ Theorem classify_functions_fallback_mem:
 Proof
   Induct_on `tops` >- simp[classify_functions_def] >>
   rpt gen_tac >>
-  simp[classify_functions_def] >>
-  qmatch_goalsub_abbrev_tac `classify_function h acc` >>
-  PairCases_on `acc` >>
-  Cases_on `h` >> simp[classify_function_def] >>
-  rpt (CASE_TAC >> simp[]) >>
-  strip_tac >> gvs[] >>
-  gvs[classify_functions_def] >>
-  metis_tac[]
+  simp[classify_functions_def] >> strip_tac >>
+  drule classify_function_fallback_source_step >>
+  strip_tac >- simp[] >>
+  fs[GSYM classify_functions_def] >> metis_tac[]
 QED
 
 (* Without immutable declarations, build_compile_env maps module variables
