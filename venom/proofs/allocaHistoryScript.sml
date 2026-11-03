@@ -3,7 +3,7 @@
 Theory allocaHistory
 Ancestors
   venomInst venomWf venomState venomExecSemantics venomExecProps
-  venomMemDefs venomMemProofs finite_map list arithmetic
+  venomMemDefs venomMemProofs venomInstProps venomInstProofs1 finite_map list arithmetic
 
 Definition alloca_block_order_def:
   alloca_block_order bb (sites : (num, num # num) fmap) <=>
@@ -180,6 +180,97 @@ Proof
   drule_all history_allocated_advance >>
   simp[alloca_history_def, update_var_def] >> metis_tac[]
 QED
+
+Theorem history_nonalloca_advance[local]:
+  !func s bb inst.
+    alloca_history func s /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\ inst.inst_opcode <> ALLOCA ==>
+    alloca_history func (s with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rw[alloca_history_def] >>
+  Cases_on `k = s.vs_inst_idx`
+  >- (gvs[] >> metis_tac[optionTheory.SOME_11]) >>
+  `k < s.vs_inst_idx` by decide_tac >> metis_tac[]
+QED
+
+Theorem history_bind_outputs_fields[local]:
+  !outs vals s t. bind_outputs outs vals s = SOME t ==>
+    t.vs_allocas = s.vs_allocas /\ t.vs_current_bb = s.vs_current_bb /\
+    t.vs_inst_idx = s.vs_inst_idx
+Proof
+  rpt strip_tac >>
+  `(\r:venom_state. (r.vs_allocas,r.vs_current_bb,r.vs_inst_idx)) t =
+   (\r:venom_state. (r.vs_allocas,r.vs_current_bb,r.vs_inst_idx)) s`
+    suffices_by simp[] >>
+  irule bind_outputs_preserves >> simp[update_var_def] >> metis_tac[]
+QED
+
+Theorem history_adopt_fields[local,simp]:
+  (adopt_return_fmp ir s).vs_allocas = s.vs_allocas /\
+  (adopt_return_fmp ir s).vs_current_bb = s.vs_current_bb /\
+  (adopt_return_fmp ir s).vs_inst_idx = s.vs_inst_idx
+Proof
+  Cases_on `ir.iret_adopt_fmp` >> simp[adopt_return_fmp_def]
+QED
+
+Theorem history_invoke_fields[local]:
+  !inst fuel ctx s t.
+    inst.inst_opcode = INVOKE /\ step_inst fuel ctx inst s = OK t ==>
+    t.vs_allocas = s.vs_allocas /\ t.vs_current_bb = s.vs_current_bb /\
+    t.vs_inst_idx = s.vs_inst_idx
+Proof
+  rpt strip_tac >> gvs[Once step_inst_def, AllCaseEqs()] >>
+  drule history_bind_outputs_fields >> simp[merge_callee_state_def]
+QED
+
+Theorem history_base_control_flow:
+  !inst s t.
+    step_inst_base inst s = OK t /\ ~is_terminator inst.inst_opcode ==>
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by metis_tac[step_inst_base_OK_not_INVOKE] >>
+  `step_inst 0 ARB inst s = OK t` by simp[step_inst_non_invoke] >>
+  metis_tac[step_preserves_control_flow]
+QED
+Theorem history_base_terminator_reset[local]:
+  !inst s t. is_terminator inst.inst_opcode /\ step_inst_base inst s = OK t ==>
+    t.vs_inst_idx = 0
+Proof
+  rpt strip_tac >> Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  qpat_x_assum `step_inst_base inst s = OK t` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> asm_rewrite_tac[] >>
+  simp_tac (srw_ss()) [] >>
+  strip_tac >> gvs[AllCaseEqs(), jump_to_def] >>
+  pairarg_tac >> gvs[]
+QED
+
+Theorem alloca_history_base_step:
+  !func s bb inst t.
+    fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\ step_inst_base inst s = OK t ==>
+    alloca_history func
+      (if is_terminator inst.inst_opcode then t
+       else t with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `inst.inst_opcode <> INVOKE` by metis_tac[step_inst_base_OK_not_INVOKE] >>
+  Cases_on `inst.inst_opcode = ALLOCA`
+  >- (gvs[] >>
+      qpat_x_assum `step_inst_base inst s = OK t` mp_tac >>
+      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> asm_rewrite_tac[] >>
+      simp_tac (srw_ss()) [] >> strip_tac >> gvs[AllCaseEqs()] >>
+      drule_all history_exec_alloca >> simp[is_terminator_def]) >>
+  `t.vs_allocas = s.vs_allocas` by metis_tac[step_inst_base_preserves_alloca_fields] >>
+  Cases_on `is_terminator inst.inst_opcode` >> simp[]
+  >- (metis_tac[alloca_history_jump, history_base_terminator_reset]) >>
+  drule_all history_nonalloca_advance >> strip_tac >>
+  irule alloca_history_frame >> qexists `s with vs_inst_idx := SUC s.vs_inst_idx` >>
+  simp[] >> metis_tac[history_base_control_flow]
+QED
+
 
 Theorem alloca_history_step:
   !func s bb inst fuel ctx t.
