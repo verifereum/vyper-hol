@@ -421,7 +421,7 @@ Theorem dfg_sound_fresh_untracked_extension:
     ==>
     dfg_sound dfg env'
 Proof
-  rpt strip_tac >> fs[dfg_sound_def] >> rpt conj_tac
+  rpt gen_tac >> strip_tac >> fs[dfg_sound_def] >> rpt conj_tac
   >- (PURE_ONCE_REWRITE_TAC[dfg_assign_sound_def] >> rpt strip_tac >>
       `v IN FDOM env` by metis_tac[dfg_tracked_opcode_def] >>
       `u IN FDOM env` by
@@ -462,7 +462,6 @@ Proof
          metis_tac[dfg_tracked_opcode_def, listTheory.MEM]) >>
       qpat_x_assum `dfg_compare_sound dfg env` mp_tac >>
       PURE_ONCE_REWRITE_TAC[dfg_compare_sound_def] >> strip_tac >>
-
       `FLOOKUP env' u = FLOOKUP env u` by
         (qpat_x_assum `!u. MEM (Var u) [lhs; rhs] ==> _`
            (qspec_then `u` mp_tac) >>
