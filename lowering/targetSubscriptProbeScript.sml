@@ -4,6 +4,53 @@ Ancestors
   compileEnv vyperStoragePlaceRegion vyperStorageLayoutSafety vfmState
   words finite_map combin vyperValue targetSubscriptSim
   emitHelperProps emitHelper exprLoweringProps venomExecSemantics venomState venomInst
+  fragExec
+
+Theorem frag_exec_refutation_probe:
+  !ctx sa sb P Q R fn s.
+    fn_has_code sa sb fn /\ P s /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    (!s'. Q s' /\ ~s'.vs_halted /\
+      s'.vs_current_bb = sb.cs_current_bb /\
+      s'.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+      ?fuel r. run_from fuel ctx fn s' = r /\ (!e. r <> Error e) /\
+        !fuel'. run_from fuel' ctx fn s <> r) /\
+    (!fuel r. run_from fuel ctx fn s = r ==> ~(exit_result r /\ R r)) ==>
+    ~frag_exec ctx sa sb P Q R
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[frag_exec_def] >>
+  qexistsl [`fn`,`s`] >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> spose_not_then strip_assume_tac >>
+      first_x_assum drule_all >> strip_tac >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem probe_STOP_observation:
+  !ctx fn s bb id.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME (mk_inst id STOP [] []) ==>
+    run_from 0 ctx fn s = Halt (halt_state (s with vs_returndata := []))
+Proof
+  rpt strip_tac >> irule run_from_halt >>
+  qexistsl [`bb`,`mk_inst id STOP [] []`] >>
+  simp[mk_inst_def, Once step_inst_base_def]
+QED
+
+Theorem probe_STOP_distinguishes_no_halt:
+  !ctx fn s0 s bb id.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME (mk_inst id STOP [] []) /\
+    (!fuel t. run_from fuel ctx fn s0 <> Halt t) ==>
+    ?fuel r. run_from fuel ctx fn s = r /\ (!e. r <> Error e) /\
+      !fuel'. run_from fuel' ctx fn s0 <> r
+Proof
+  rpt strip_tac >> drule_all probe_STOP_observation >> strip_tac >>
+  qexistsl [`0`,`Halt (halt_state (s with vs_returndata := []))`] >>
+  simp[] >> metis_tac[exec_result_distinct]
+QED
 
 Theorem probe_RET_literals:
   !id ss.
@@ -249,4 +296,27 @@ QED
    - eventual target refutation still needs target_case bt, a concrete
      target_pre witness, the full compiled target fragment and proof that
      no successful frag_exec/allowed exit exists. All remain open.
+*)
+
+(* Continuation audit for C0.2.2.1:
+   frag_exec_refutation_probe handles BOTH existential alternatives. A bad
+   actual endpoint alone cannot refute frag_exec. probe_STOP_observation
+   checks the proposed suffix: append mk_inst id STOP [] [] exactly at
+   sb's endpoint, in a function containing the fragment. Every nonhalted
+   alleged endpoint at that instruction yields a Halt observation, regardless
+   of its variables, memory, accounts or target_post fields. The result may
+   depend on that endpoint state; probe_STOP_distinguishes_no_halt still
+   excludes it if no fuel from the initial state yields any Halt.
+
+   Missing for application to the captured-header candidate: a concrete fn
+   containing the full lowered target plus this STOP; the exact endpoint
+   instruction lookup for every proposed successful state; and proof that
+   every fuel from the start aborts (or otherwise cannot produce any such
+   Halt). Internal INVOKE consumes fuel, so out-of-fuel Error for small fuel
+   must also be handled, not assumed to be Abort. A suitable more precise
+   application premise is 'no fuel from the start yields Halt', allowing
+   both Abort and Error. Finally the permitted-exit disjunct must be ruled
+   out with expr_exit/target source success. None of those complete-target
+   facts follows from the checked callee alone. The STOP probe establishes
+   a non-Error distinguishing suffix interface, not a target counterexample.
 *)
