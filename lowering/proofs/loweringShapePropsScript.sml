@@ -13427,3 +13427,137 @@ Proof
        simp[compile_alloc_buffer_labels, comp_return_labels,
             emit_void_labels, emit_op_labels])
 QED
+
+Theorem compile_ecrecover_labels:
+  !h v r sig s P. cs_extends s (SND (compile_ecrecover h v r sig s)) /\
+    EVERY P (added_labels s (SND (compile_ecrecover h v r sig s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinMiscTheory.compile_ecrecover_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[compile_alloc_buffer_labels, comp_return_labels,
+            emit_void_labels, emit_op_labels])
+QED
+
+Theorem compile_ecadd_labels:
+  !x1 y1 x2 y2 s P. cs_extends s (SND (compile_ecadd x1 y1 x2 y2 s)) /\
+    EVERY P (added_labels s (SND (compile_ecadd x1 y1 x2 y2 s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinMiscTheory.compile_ecadd_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[compile_alloc_buffer_labels, comp_return_labels,
+            emit_void_labels, emit_op_labels])
+QED
+
+Theorem compile_ecmul_labels:
+  !x y k s P. cs_extends s (SND (compile_ecmul x y k s)) /\
+    EVERY P (added_labels s (SND (compile_ecmul x y k s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinMiscTheory.compile_ecmul_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[compile_alloc_buffer_labels, comp_return_labels,
+            emit_void_labels, emit_op_labels])
+QED
+
+Theorem compile_assert_slice_bounds_labels:
+  !start len src s P.
+    cs_extends s (SND (compile_assert_slice_bounds start len src s)) /\
+    EVERY P (added_labels s (SND (compile_assert_slice_bounds start len src s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinBytesTheory.compile_assert_slice_bounds_def] >>
+  rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+       simp[emit_void_labels, emit_op_labels])
+QED
+
+Theorem compile_bytestring_src_labels:
+  !ptr s P. cs_extends s (SND (compile_bytestring_src ptr s)) /\
+    EVERY P (added_labels s (SND (compile_bytestring_src ptr s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinBytesTheory.compile_bytestring_src_def] >>
+  rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_op_labels])
+QED
+
+Theorem compile_slice_data_labels:
+  !src_len src_data start len size s P.
+    cs_extends s (SND (compile_slice_data src_len src_data start len size s)) /\
+    EVERY P (added_labels s
+      (SND (compile_slice_data src_len src_data start len size s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinBytesTheory.compile_slice_data_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[compile_assert_slice_bounds_labels, compile_alloc_buffer_labels,
+            comp_return_labels, emit_void_labels, emit_op_labels])
+QED
+
+Theorem compile_slice_out_buf_labels:
+  !size s P. cs_extends s (SND (compile_slice_out_buf size s)) /\
+    EVERY P (added_labels s (SND (compile_slice_out_buf size s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinBytesTheory.compile_slice_out_buf_def] >>
+  rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+       simp[compile_alloc_buffer_labels, comp_return_labels, emit_op_labels])
+QED
+
+Theorem compile_slice_calldata_labels:
+  !start len size s P.
+    cs_extends s (SND (compile_slice_calldata start len size s)) /\
+    EVERY P (added_labels s (SND (compile_slice_calldata start len size s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinBytesTheory.compile_slice_calldata_def] >>
+  irule comp_bind_labels >> reverse conj_tac
+  >- simp[compile_slice_out_buf_labels] >>
+  Cases >> rpt gen_tac >> rewrite_tac[pairTheory.UNCURRY_DEF] >> BETA_TAC >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[compile_assert_slice_bounds_labels, comp_return_labels,
+            emit_void_labels, emit_op_labels])
+QED
+
+Theorem compile_slice_code_labels:
+  !start len size s P.
+    cs_extends s (SND (compile_slice_code start len size s)) /\
+    EVERY P (added_labels s (SND (compile_slice_code start len size s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinBytesTheory.compile_slice_code_def] >>
+  irule comp_bind_labels >> reverse conj_tac
+  >- simp[compile_slice_out_buf_labels] >>
+  Cases >> rpt gen_tac >> rewrite_tac[pairTheory.UNCURRY_DEF] >> BETA_TAC >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[compile_assert_slice_bounds_labels, comp_return_labels,
+            emit_void_labels, emit_op_labels])
+QED
+
+Theorem compile_slice_extcode_labels:
+  !addr start len buf data s P.
+    cs_extends s (SND (compile_slice_extcode addr start len buf data s)) /\
+    EVERY P (added_labels s (SND (compile_slice_extcode addr start len buf data s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinBytesTheory.compile_slice_extcode_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[compile_assert_slice_bounds_labels, comp_return_labels,
+            emit_void_labels, emit_op_labels])
+QED
+
+Theorem compile_extract32_load_labels:
+  !src data start s P.
+    cs_extends s (SND (compile_extract32_load src data start s)) /\
+    EVERY P (added_labels s (SND (compile_extract32_load src data start s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinBytesTheory.compile_extract32_load_def] >>
+  irule comp_ignore_bind_labels >> conj_tac
+  >- simp[compile_assert_slice_bounds_labels] >>
+  rpt gen_tac >> BETA_TAC >> irule comp_bind_labels >> simp[emit_op_labels]
+QED
