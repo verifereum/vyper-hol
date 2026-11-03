@@ -1221,6 +1221,27 @@ Proof
   drule_all val_footprint_le >> decide_tac
 QED
 
+Theorem val_in_memory_array_elem:
+  val_wf (ArrayTV evt bd) arr /\
+  val_in_memory (ArrayTV evt bd) arr a mem /\
+  evaluate_subscripts (ArrayTV evt bd) arr
+    [ValueSubscript (IntV (&j))] = INL v ==>
+  val_in_memory evt v
+    (a + ((case bd of Fixed cap => 0 | Dynamic cap => 32) +
+          j * type_memory_size evt)) mem
+Proof
+  Cases_on `arr` >> simp[valueEncodingTheory.val_wf_def, evaluate_subscripts_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >> Cases_on `bd` >>
+  simp[valueEncodingTheory.val_wf_def, evaluate_subscripts_def,
+       vyperValueOperationTheory.array_index_def, AllCaseEqs(),
+       listTheory.oEL_THM, valueEncodingPropsTheory.val_in_memory_dynarray,
+       valueEncodingPropsTheory.val_in_memory_sarray] >>
+  rpt strip_tac >> gvs[]
+  >- (drule_all exprSimAggregateEncodingTheory.elems_in_memory_EL >>
+      simp[NoAsms, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
+  drule_all valueEncodingProofsTheory.kvs_in_memory_lookup >> simp[]
+QED
+
 Theorem array_elem_ptr_w2n:
   stmt_state_rel ctx func cenv cx es q /\
   vv_at cenv cx (ArrayT et bd) sa sn es tv bvv q /\
