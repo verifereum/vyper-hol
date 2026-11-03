@@ -381,7 +381,7 @@ Proof
   CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   conj_tac >> strip_tac >> simp[] >>
   simp[Once run_inst_seq_def] >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure3_def] >>
@@ -401,7 +401,7 @@ Proof
   strip_tac >> gvs[] >>
   simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
   simp[run_inst_seq_def, eval_operand_update_var]
 QED
 

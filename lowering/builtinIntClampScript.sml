@@ -52,10 +52,6 @@ val clamp_step_tac =
        eval_operand_def, lookup_var_update_var, eval_operand_update_var_if,
        fresh_var_name_eq];
 
-val clamp_close_tac =
-  rpt (BasicProvers.FULL_CASE_TAC >>
-    gvs[eval_operand_update_var_if, lookup_var_update_var, fresh_var_name_eq, SF SFY_ss]);
-
 Theorem compile_int_clamp_exec:
   !s b v w ss st op st'.
     compile_int_clamp s b v st = (op, st') /\
@@ -84,5 +80,9 @@ Proof
   clamp_step_tac >> clamp_step_tac >>
   clamp_step_tac >> clamp_step_tac >>
   clamp_step_tac >> clamp_step_tac >>
-  clamp_step_tac >> clamp_step_tac >> clamp_close_tac
+  clamp_step_tac >> clamp_step_tac >>
+  rpt IF_CASES_TAC >>
+  gvs[eval_operand_update_var_if, lookup_var_update_var, fresh_var_name_eq] >>
+  rpt (BasicProvers.FULL_CASE_TAC >>
+    gvs[lookup_var_update_var, fresh_var_name_eq, SF SFY_ss])
 QED
