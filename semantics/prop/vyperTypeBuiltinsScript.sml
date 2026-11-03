@@ -803,8 +803,9 @@ Theorem negated_equality_INL[local]:
   binop_negate (evaluate_binop u tv Eq v1 v2) = INL v ==>
   ?b. v = BoolV b
 Proof
-  Cases_on `v1` >> Cases_on `v2` >>
-  simp[Once evaluate_binop_def, binop_negate_def] >>
+  simp[Once evaluate_binop_def] >>
+  Cases_on `v1` >> simp[binop_negate_def] >>
+  Cases_on `v2` >> simp[binop_negate_def] >>
   metis_tac[]
 QED
 

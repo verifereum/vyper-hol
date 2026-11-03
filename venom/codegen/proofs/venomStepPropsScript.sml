@@ -165,24 +165,109 @@ Theorem step_inst_base_ok_halted:
     step_inst_base inst st = OK st' ==>
     st'.vs_halted = st.vs_halted
 Proof
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs()] >>
-  TRY (imp_res_tac exec_pure1_ok_halted >> gvs[] >> NO_TAC) >>
-  TRY (imp_res_tac exec_pure2_ok_halted >> gvs[] >> NO_TAC) >>
-  TRY (imp_res_tac exec_pure3_ok_halted >> gvs[] >> NO_TAC) >>
-  TRY (imp_res_tac exec_read0_ok_halted >> gvs[] >> NO_TAC) >>
-  TRY (imp_res_tac exec_read1_ok_halted >> gvs[] >> NO_TAC) >>
-  TRY (imp_res_tac exec_ext_call_ok_halted >> gvs[] >> NO_TAC) >>
-  TRY (imp_res_tac exec_delegatecall_ok_halted >> gvs[] >> NO_TAC) >>
-  TRY (imp_res_tac exec_create_ok_halted >> gvs[] >> NO_TAC) >>
-  TRY (imp_res_tac exec_alloca_ok_halted >> gvs[] >> NO_TAC) >>
-  (* Remaining: direct OK cases — NOP, ASSERT, ASSERT_UNREACHABLE, ISTORE,
-     LOG, MCOPY, CALLDATACOPY, RETURNDATACOPY, CODECOPY, EXTCODECOPY,
-     DLOADBYTES, SHA3, JMP, JNZ, DJMP, PARAM, ASSIGN, PHI, OFFSET,
-     and exec_write2 cases: MSTORE, SSTORE, TSTORE *)
-  gvs[LET_THM, exec_write2_def, istore_def, AllCaseEqs()] >>
-  (* DRET's opaque packing continuation can only return IntRet. *)
-  pairarg_tac >> gvs[]
+  rpt gen_tac >> Cases_on `inst.inst_opcode`
+  >~ [`inst.inst_opcode = ADD`] >-
+    (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = SUB`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = MUL`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = Div`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = Mod`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = SDIV`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = SMOD`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = Exp`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = ADDMOD`] >- (rw[step_inst_base_def] >> drule exec_pure3_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = MULMOD`] >- (rw[step_inst_base_def] >> drule exec_pure3_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = EQ`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = LT`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = GT`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = SLT`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = SGT`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = ISZERO`] >- (rw[step_inst_base_def] >> drule exec_pure1_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = AND`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = OR`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = XOR`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = NOT`] >- (rw[step_inst_base_def] >> drule exec_pure1_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = SHL`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = SHR`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = SAR`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = SIGNEXTEND`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = BYTE`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = OFFSET`] >- (rw[step_inst_base_def] >> drule exec_pure2_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = MLOAD`] >- (rw[step_inst_base_def] >> drule exec_read1_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = SLOAD`] >- (rw[step_inst_base_def] >> drule exec_read1_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = TLOAD`] >- (rw[step_inst_base_def] >> drule exec_read1_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = ILOAD`] >- (rw[step_inst_base_def] >> drule exec_read1_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = DLOAD`] >- (rw[step_inst_base_def] >> drule exec_read1_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = BLOCKHASH`] >- (rw[step_inst_base_def] >> drule exec_read1_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = BLOBHASH`] >- (rw[step_inst_base_def] >> drule exec_read1_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = BALANCE`] >- (rw[step_inst_base_def] >> drule exec_read1_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = CALLDATALOAD`] >- (rw[step_inst_base_def] >> drule exec_read1_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = EXTCODESIZE`] >- (rw[step_inst_base_def] >> drule exec_read1_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = EXTCODEHASH`] >- (rw[step_inst_base_def] >> drule exec_read1_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = CALLER`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = ADDRESS`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = CALLVALUE`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = GAS`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = ORIGIN`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = GASPRICE`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = CHAINID`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = COINBASE`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = TIMESTAMP`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = NUMBER`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = PREVRANDAO`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = GASLIMIT`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = BASEFEE`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = BLOBBASEFEE`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = SELFBALANCE`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = CALLDATASIZE`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = RETURNDATASIZE`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = MEMTOP`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = CODESIZE`] >- (rw[step_inst_base_def] >> drule exec_read0_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = MSTORE`] >- (rw[step_inst_base_def, exec_write2_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = MSTORE8`] >- (rw[step_inst_base_def, exec_write2_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = SSTORE`] >- (rw[step_inst_base_def, exec_write2_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = TSTORE`] >- (rw[step_inst_base_def, exec_write2_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = ISTORE`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[istore_def])
+  >~ [`inst.inst_opcode = MCOPY`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = JMP`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = JNZ`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = DJMP`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = RET`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = RETFMP`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = DRET`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]))
+  >~ [`inst.inst_opcode = RETURN`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = REVERT`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = STOP`] >- simp[step_inst_base_def]
+  >~ [`inst.inst_opcode = SINK`] >- simp[step_inst_base_def]
+  >~ [`inst.inst_opcode = PHI`] >- simp[step_inst_base_def]
+  >~ [`inst.inst_opcode = INVALID`] >- simp[step_inst_base_def]
+  >~ [`inst.inst_opcode = NOP`] >- simp[step_inst_base_def]
+  >~ [`inst.inst_opcode = PARAM`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = ASSIGN`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = DALLOCA`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = GETFMP`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = SETFMP`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = INITIAL_FMP`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = BUMP`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = FMP_PARAM`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = RETPC_PARAM`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = ASSERT`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = ASSERT_UNREACHABLE`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = CALLDATACOPY`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = RETURNDATACOPY`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = SHA3`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = DLOADBYTES`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = CODECOPY`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = EXTCODECOPY`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = LOG`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = SELFDESTRUCT`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[])
+  >~ [`inst.inst_opcode = CALL`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[] >> drule exec_ext_call_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = STATICCALL`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[] >> drule exec_ext_call_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = DELEGATECALL`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[] >> drule exec_delegatecall_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = CREATE`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[] >> drule exec_create_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = CREATE2`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[] >> drule exec_create_ok_halted >> simp[])
+  >~ [`inst.inst_opcode = ALLOCA`] >- (rw[step_inst_base_def] >> every_case_tac >> gvs[] >> drule exec_alloca_ok_halted >> simp[]) >>
+  simp[step_inst_base_def]
 QED
 
 (* ===================================================================
