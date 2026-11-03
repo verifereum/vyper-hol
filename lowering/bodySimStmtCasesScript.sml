@@ -1191,7 +1191,7 @@ Proof
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   `evaluate_type (get_tenv cx) ty = SOME entry.type` by metis_tac[] >>
   `type_memory_bytes cenv ty = type_memory_size entry.type` by
-    metis_tac[exprSimAggregateLayoutTheory.expr_sim_inv_memory_size] >>
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
   `type_memory_bytes cenv ty < 2 ** 64` by
     metis_tac[locals_alloc_ok_def] >>
   Cases_on `has_length_word (expr_type e) /\ is_empty_value_expr e`
@@ -1485,9 +1485,9 @@ Proof
   disch_then drule >> simp[] >> disch_then drule >>
   disch_then drule >> strip_tac >> gvs[] >>
   drule_all body_assign_copy_rhs_pre >> strip_tac >>
-  drule_all exprSimAggregateLayoutTheory.expr_sim_inv_memory_size >> strip_tac >>
+  drule_all exprSimHypsTheory.expr_sim_inv_memory_size >> strip_tac >>
   `0 < type_slot_size tvt` by
-    gvs[exprSimAttributeFieldsTheory.type_memory_size_slots] >>
+    gvs[storageDecodeMemoryTheory.type_memory_size_slots] >>
   `storage_layout_safe cx /\ env_consistent env cx es` by
     fs[expr_sim_inv_def] >>
   `storage_var_info cx NONE id = SOME (tr,off,tvt)` by
@@ -1655,7 +1655,7 @@ Proof
   qexistsl_tac [`p`, `sz`, `ty`] >> simp[] >>
   Cases_on `is_word_type ty` >> simp[] >>
   `type_memory_bytes cenv ty = type_memory_size tv` by
-    metis_tac[exprSimAggregateLayoutTheory.expr_sim_inv_memory_size] >>
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
   `type_memory_bytes cenv ty < 2 ** 64` by metis_tac[locals_alloc_ok_def] >>
   metis_tac[allocation_limit_word_room]
 QED
@@ -1696,7 +1696,7 @@ Proof
   `type_memory_bytes cenv (TupleT tys) < 2 ** 64` by
     gvs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
   `type_memory_bytes cenv (TupleT tys) = type_memory_size (TupleTV tvs)` by
-    metis_tac[exprSimAggregateLayoutTheory.expr_sim_inv_memory_size] >>
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
   `type_memory_size (TupleTV tvs) + 64 < dimword (:256)` by
     metis_tac[allocation_limit_word_room] >>
   decide_tac
