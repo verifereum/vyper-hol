@@ -61,7 +61,7 @@ Theorem gas_summary_conseq:
   (!res es_end r. R res es_end r ==> R' res es_end r) ==>
   gas_summary (ctx, func) source (es, s0) Q' R'
 Proof
-  cheat
+  pure_rewrite_tac[gas_summary_def] >> metis_tac[]
 QED
 
 Theorem gas_summary_no_source_read:
