@@ -4407,7 +4407,7 @@ QED
    Requires a global separation condition: ALL pairs in ps_spilled
    have separated offsets. This is stronger than pairwise on items only
    but is needed because spill_hilbert_unique quantifies over all entries. *)
-Theorem apply_restore_ops_stack[local]:
+Theorem apply_restore_ops_stack:
   !items offsets lo ps.
     LENGTH items = LENGTH offsets /\
     ALL_DISTINCT items /\
