@@ -712,6 +712,15 @@ Proof
   >~ [`compile_call f cenv rt ty (ExtCall b b0 p l) args default_ret sa = _`]
     >- suspend "external"
   >~ [`r.rcf_max_outsize`] >- suspend "raw"
+  >~ [`raw_log_topic_exprs _`] >-
+    (BasicProvers.every_case_tac >> gvs[reason_result_shape_def] >>
+     rpt (pairarg_tac >> gvs[reason_result_shape_def]))
+  >~ [`compile_raw_revert _ _`] >-
+    (BasicProvers.every_case_tac >> gvs[reason_result_shape_def] >>
+     rpt (pairarg_tac >> gvs[reason_result_shape_def]))
+  >~ [`compile_selfdestruct _ _`] >-
+    (BasicProvers.every_case_tac >> gvs[reason_result_shape_def] >>
+     rpt (pairarg_tac >> gvs[reason_result_shape_def]))
   >> suspend "send"
 QED
 
