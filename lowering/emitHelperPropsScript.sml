@@ -228,7 +228,8 @@ Theorem step_SAR:
     step_inst_base (mk_inst id SAR [op1; op2] [out]) ss =
       OK (update_var out (word_asr v2 (w2n v1)) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rpt strip_tac >> pure_rewrite_tac[Once step_inst_base_def] >>
+  simp[] >> irule exec_pure2_ok >> simp[]
 QED
 
 Theorem step_NOT:
