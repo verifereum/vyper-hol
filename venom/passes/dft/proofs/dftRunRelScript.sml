@@ -1551,8 +1551,9 @@ Theorem dft_gas_external_read_accounts[local]:
 Proof
   strip_tac >>
   `y.inst_opcode = STATICCALL` by
-    (Cases_on `y.inst_opcode` >>
-     gvs[dft_gas_swap_pair_def, is_ext_call_op_def, effects_independent_def,
+    (qpat_x_assum `is_ext_call_op _` mp_tac >>
+     Cases_on `y.inst_opcode` >> simp[is_ext_call_op_def] >>
+     gvs[dft_gas_swap_pair_def, effects_independent_def,
          write_effects_def, all_effects_def, empty_effects_def,
          pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[]) >>
   irule venomInstProofsTheory.write_effects_sound_accounts >>
@@ -1808,4 +1809,59 @@ Proof
       metis_tac[dft_gas_noninvoke_success_second]) >>
   metis_tac[dft_gas_free_external_success_first,
             dft_gas_free_external_success_second])
+QED
+
+Theorem dft_nongas_pair_success:
+  dft_gas_swap_pair a b /\ ~gas_pair a.inst_opcode b.inst_opcode /\
+  inst_wf a /\ inst_wf b /\
+  step_inst fuel C a s = OK sa /\ step_inst fuel C b sa = OK sab ==>
+  ?sb. step_inst fuel C b s = OK sb /\ step_inst fuel C a sb = OK sab
+Proof
+  strip_tac >>
+  Cases_on `is_ext_call_op a.inst_opcode \/ is_ext_call_op b.inst_opcode`
+  >- (drule_all dft_gas_external_success >> simp[]) >>
+  `ext_bi_independent a b` by
+    gvs[dft_gas_swap_pair_def, ext_bi_independent_def] >>
+  drule_all step_swap_ok_ext >> simp[]
+QED
+
+Theorem dft_indexed_nongas_pair_ok:
+  dft_gas_swap_pair x y /\ ~gas_pair x.inst_opcode y.inst_opcode /\
+  inst_wf x /\ inst_wf y /\
+  step_inst fuel C y s = OK sy /\
+  step_inst fuel C x (sy with vs_inst_idx := SUC s.vs_inst_idx) = OK syx ==>
+  ?sx sxy.
+    step_inst fuel C x s = OK sx /\
+    step_inst fuel C y (sx with vs_inst_idx := SUC s.vs_inst_idx) = OK sxy /\
+    (sxy with vs_inst_idx := SUC (SUC s.vs_inst_idx)) =
+    (syx with vs_inst_idx := SUC (SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `~is_terminator x.inst_opcode /\ ~is_terminator y.inst_opcode` by
+    gvs[dft_gas_swap_pair_def] >>
+  `step_inst fuel C x sy = OK (syx with vs_inst_idx := sy.vs_inst_idx)` by
+    (qpat_x_assum `step_inst _ _ y s = _` kall_tac >>
+     drule_all dft_step_ok_idx >>
+     disch_then (qspec_then `sy.vs_inst_idx` mp_tac) >> simp[]) >>
+  `dft_gas_swap_pair y x /\ ~gas_pair y.inst_opcode x.inst_opcode` by
+    (gvs[dft_gas_swap_pair_sym, dftBlockSimTheory.gas_pair_def] >> metis_tac[]) >>
+  drule_all dft_nongas_pair_success >> strip_tac >>
+  qexistsl_tac [`sb`, `syx with vs_inst_idx := SUC s.vs_inst_idx`] >>
+  simp[] >>
+  drule_all dft_step_ok_idx >>
+  disch_then (qspec_then `SUC s.vs_inst_idx` mp_tac) >> simp[]
+QED
+
+Theorem dft_suffix_nongas_pair_ok:
+  dft_gas_swap_pair x y /\ ~gas_pair x.inst_opcode y.inst_opcode /\
+  inst_wf x /\ inst_wf y /\
+  step_inst fuel C y s = OK sy /\
+  step_inst fuel C x (sy with vs_inst_idx := SUC s.vs_inst_idx) = OK syx ==>
+  dft_exec_suffix fuel C (x::y::tail) s =
+  dft_exec_suffix fuel C (y::x::tail) s
+Proof
+  strip_tac >> drule_all dft_indexed_nongas_pair_ok >> strip_tac >>
+  `~is_terminator x.inst_opcode /\ ~is_terminator y.inst_opcode` by
+    gvs[dft_gas_swap_pair_def] >>
+  simp[dft_exec_suffix_cons, dft_exec_cons_def]
 QED
