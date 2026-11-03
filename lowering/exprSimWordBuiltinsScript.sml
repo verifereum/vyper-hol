@@ -721,7 +721,7 @@ Proof
   Induct >> simp[wb_args_ready_def, exprs_case_def] >> rpt gen_tac >>
   strip_tac >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
-      `expr_body_pre cenv cx env h es /\ (nocalls ==> int_calls_expr h = []) /\
+      `expr_body_pre cenv cx env h s /\ (nocalls ==> int_calls_expr h = []) /\
        word_value_type (expr_type h)` by metis_tac[] >>
       rpt conj_tac
       >- metis_tac[expr_sim_case_def]
@@ -744,7 +744,7 @@ Proof
   Induct >> simp[wb_args_ready_def] >> rpt gen_tac >> strip_tac >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
-      `expr_sim_pre cenv cx env h es /\ word_value_type (expr_type h)` by
+      `expr_sim_pre cenv cx env h s /\ word_value_type (expr_type h)` by
         metis_tac[] >>
       rpt conj_tac
       >- metis_tac[expr_sim_ok_def]
