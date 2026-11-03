@@ -9,7 +9,7 @@
 Theory o1DftLift
 Ancestors
   dftRunRel dftScheduleOrder o1PassLift unitShapeDefs venomExecSemantics venomWf
-  venomInst venomState list
+  venomInst venomState list dftFrameCompose dftFrameSwap
 
 (* Why it holds (unchecked notes): take the same instruction in C.
    - Memory ranges depend only on operand values, which the schedule
@@ -40,5 +40,14 @@ Theorem dft_frame_sim:
                        frame_sim L C C' fn fn')
              C.ctx_functions C'.ctx_functions
 Proof
-  cheat
+  rpt strip_tac >> irule LIST_REL_MEM_MONO >>
+  qexists_tac `dft_fn_rel` >> simp[] >>
+  Cases >> simp[] >> strip_tac >>
+  `LENGTH C.ctx_functions = LENGTH C'.ctx_functions` by
+    metis_tac[LIST_REL_LENGTH] >>
+  `MEM q C.ctx_functions` by (fs[MEM_ZIP, MEM_EL] >> metis_tac[]) >>
+  `fn_shape_ok q` by metis_tac[EVERY_MEM] >>
+  `dft_labels_bound q L` by
+    (fs[dft_labels_bound_def, ctx_labels_bound_def] >> metis_tac[]) >>
+  metis_tac[dft_fn_context_frame_sim, dft_fn_rel_entry_label, dft_fn_rel_def]
 QED
