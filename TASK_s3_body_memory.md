@@ -306,15 +306,12 @@ stops in compile_expr_stmt_frag_ok_mem on propagation of the new result guard.
 This is local migration work, not an external precondition. Preserve all
 existing generic proofs and repair them.
 
-The committed allocation-history checkpoint4720852ee has four completed base
-exports (empty/frame/jump/pair), independently checked against the frozen
-definitions/statements. Owner forced replay passed59.730s: the four exports were freshly saved and
-exported, and all four kernel guards passed. The same core theory still has
-four unfinished producer scaffolds, plus the separate adapter scaffold; those
-are not completed results or permitted downstream memory dependencies.
-The four pending generic producer exports plus raw-sequence adapter remain
-separately owned. Do not use those five admitted statements in a downstream
-proof; report a dependency block only when progress actually needs them.
-An owner will provide the checked producer dependency when its run completes.
+The allocation-history dependency at88f21f48d is now merged. Its two definitions
+and all nine principal producer/adapter statements are unchanged from the
+independently audited freeze. Owner forced replay of allocaHistoryTheory and
+allocaHistoryFragmentTheory passed114.508s with all nine principal exports
+freshly saved/exported, nine clean kernel guards and no CHEAT. Execution,
+block/run, callee-entry and normalized raw-sequence history facts are available
+as checked dependencies. Preserve their proofs and kernel guards unchanged.
 Report genuine blocking producer defects with an exercised witness rather than
 adding premises, exclusions or definition workarounds.
