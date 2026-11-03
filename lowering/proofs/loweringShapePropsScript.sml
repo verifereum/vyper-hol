@@ -13085,3 +13085,12 @@ Proof
       irule comp_ignore_bind_labels >> simp[emit_void_labels, comp_return_labels]) >>
   IF_CASES_TAC >> simp[clamp_and_return_labels, comp_return_labels]
 QED
+
+Theorem compile_neg_labels:
+  !v ty s P. cs_extends s (SND (compile_neg v ty s)) /\
+    EVERY P (added_labels s (SND (compile_neg v ty s)))
+Proof
+  rpt gen_tac >> simp[compile_neg_def, LET_THM, pairTheory.UNCURRY] >>
+  irule comp_bind_labels >> simp[emit_op_labels] >> rpt gen_tac >>
+  irule comp_ignore_bind_labels >> simp[emit_void_labels, emit_op_labels]
+QED
