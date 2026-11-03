@@ -958,7 +958,7 @@ Proof
   simp[do_restore_def, stack_get_depth_push_inventory]
 QED
 
-Theorem emit_one_input_inventory_mono_aux[local]:
+Theorem emit_one_input_inventory_mono_aux:
   !opc nl op (ps : plan_state) x.
     LIST_ELEM_COUNT x ps.ps_stack +
       (if x IN FDOM ps.ps_spilled then 1 else 0) <=
@@ -1048,7 +1048,7 @@ Proof
   >- (drule elem_count_mem_pos_inventory >> decide_tac)
   >> simp[]
 QED
-Theorem emit_one_input_inventory_inc[local]:
+Theorem emit_one_input_inventory_inc:
   !opc nl op (ps : plan_state).
     (~is_var_operand op \/
      ?v. op = Var v /\ MEM v nl /\

@@ -1,6 +1,6 @@
 Theory createSizePrefixProbe
 Ancestors
-  stackPlanGen stackPlanOps dfgDefs mixedPrefixSim rich_list doSwapSim
+  stackPlanGen stackPlanOps dfgDefs mixedPrefixSim rich_list doSwapSim reorderSim
 Libs wordsLib
 
 (* Concrete deep output suffix: no dependency on genBlockSim admissions. *)
@@ -273,4 +273,132 @@ Proof
   first_x_assum (qspec_then `0` mp_tac) >>
   CONV_TAC (LAND_CONV EVAL) >>
   strip_tac >> disj2_tac >> qexists_tac `0` >> EVAL_TAC >> gvs[]
+QED
+
+(* Lower-bound inventory, deliberately independent of allocator layout. *)
+Definition probe_inventory_def:
+  probe_inventory x (ps : plan_state) =
+    LIST_ELEM_COUNT x ps.ps_stack +
+    (if x IN FDOM ps.ps_spilled then 1 else 0)
+End
+
+Theorem probe_inventory_mono[local]:
+  probe_inventory x ps <=
+  probe_inventory x (SND (emit_one_input opc nl op ps))
+Proof
+  simp[probe_inventory_def, emit_one_input_inventory_mono_aux]
+QED
+
+Theorem probe_inventory_covered[local]:
+  1 <= probe_inventory x ps ==>
+  MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled
+Proof
+  Cases_on `x IN FDOM ps.ps_spilled` >> simp[probe_inventory_def] >>
+  rewrite_tac[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac
+QED
+
+Theorem probe_inventory_increment[local]:
+  (~is_var_operand x \/
+   (?v. x = Var v /\ MEM v nl /\ 1 <= probe_inventory x ps)) ==>
+  probe_inventory x ps + 1 <=
+  probe_inventory x (SND (emit_one_input opc nl x ps))
+Proof
+  strip_tac >> rewrite_tac[probe_inventory_def] >>
+  irule emit_one_input_inventory_inc >>
+  metis_tac[probe_inventory_covered]
+QED
+
+Theorem probe_mem_operand_vars[local]:
+  !ops v. MEM v (dfgDefs$operand_vars ops) <=> MEM (Var v) ops
+Proof
+  Induct >> simp[dfgDefsTheory.operand_vars_def] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def]
+QED
+
+Theorem probe_input_inventory_accumulation[local]:
+  !operands ps opc nl iops ps1 x.
+    emit_input_plan opc operands nl ps = (iops, ps1) /\
+    (is_var_operand x /\ MEM x operands ==> 1 <= probe_inventory x ps) ==>
+    probe_inventory x ps + LIST_ELEM_COUNT x operands <=
+    probe_inventory x ps1 +
+      (if is_var_operand x /\ MEM x operands then 1 else 0)
+Proof
+  Induct >> simp[emit_input_plan_def, LIST_ELEM_COUNT_THM] >>
+  rpt gen_tac >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >>
+  gvs[] >>
+  `probe_inventory x ps <= probe_inventory x ps1'` by
+    (qspec_then `x` mp_tac (GEN_ALL probe_inventory_mono) >>
+     disch_then (qspecl_then [`ps`, `opc`, `h`, `operand_vars operands ++ nl`] mp_tac) >>
+     simp[]) >>
+  `LIST_ELEM_COUNT x operands + probe_inventory x ps1' <=
+   probe_inventory x ps1 +
+     (if is_var_operand x /\ MEM x operands then 1 else 0)` by
+    (first_x_assum irule >> conj_tac >- metis_tac[] >>
+     strip_tac >> `1 <= probe_inventory x ps` by simp[] >> decide_tac) >>
+  `(x = h /\ (~is_var_operand x \/ MEM x operands)) ==>
+   probe_inventory x ps + 1 <= probe_inventory x ps1'` by
+    (strip_tac >> gvs[] >>
+     qspecl_then [`h`, `ps`, `opc`, `operand_vars operands ++ nl`] mp_tac
+       (GEN_ALL probe_inventory_increment) >>
+     simp[] >> disch_then irule >>
+     Cases_on `h` >>
+     gvs[stackPlanTypesTheory.is_var_operand_def,
+         venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
+         probe_mem_operand_vars]) >>
+  Cases_on `x = h` >> Cases_on `is_var_operand x` >>
+  Cases_on `MEM x operands` >> gvs[LIST_ELEM_COUNT_THM] >> decide_tac
+QED
+
+Theorem probe_inventory_accessible[local]:
+  ((?d. stack_get_depth x ps.ps_stack = SOME d) \/
+   IS_SOME (FLOOKUP ps.ps_spilled x)) ==>
+  1 <= probe_inventory x ps
+Proof
+  strip_tac
+  >- (drule stackModelTheory.stack_get_depth_props >> strip_tac >>
+      `MEM x ps.ps_stack` by
+        (gvs[stackModelTheory.stack_peek_def] >>
+         irule listTheory.EL_MEM >> decide_tac) >>
+      `0 < LIST_ELEM_COUNT x ps.ps_stack` by
+        (drule (iffRL LIST_ELEM_COUNT_MEM) >> decide_tac) >>
+      simp[probe_inventory_def] >> decide_tac) >>
+  `x IN FDOM ps.ps_spilled` by
+    (Cases_on `FLOOKUP ps.ps_spilled x` >>
+     gvs[finite_mapTheory.flookup_thm]) >>
+  simp[probe_inventory_def]
+QED
+
+Theorem probe_emit_input_plan_pending_inventory:
+  !opc operands next_live ps input_ops ps1.
+    (opc = CREATE \/ opc = CREATE2) /\
+    (!op. MEM op operands /\ is_var_operand op ==>
+      (?d. stack_get_depth op ps.ps_stack = SOME d) \/
+      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    emit_input_plan opc operands next_live ps = (input_ops, ps1) ==>
+    pending_inventory_wf operands ps1
+Proof
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[pending_inventory_wf_def] >> gen_tac >>
+  `is_var_operand op /\ MEM op operands ==> 1 <= probe_inventory op ps` by
+    (strip_tac >> irule probe_inventory_accessible >> metis_tac[]) >>
+  drule probe_input_inventory_accumulation >>
+  disch_then (qspec_then `op` mp_tac) >> simp[] >>
+  Cases_on `is_var_operand op /\ MEM op operands` >>
+  gvs[probe_inventory_def] >> strip_tac >>
+  Cases_on `op IN FDOM ps.ps_spilled` >>
+  Cases_on `op IN FDOM ps1.ps_spilled` >> gvs[] >> decide_tac
+QED
+
+Theorem probe_repeated_spilled_create_inventory:
+  let ps = probe_ps with <| ps_stack := [];
+    ps_spilled := FEMPTY |+ (Var "x", 1024) |> in
+  pending_inventory_wf [Var "x"; Var "x"; Var "x"]
+    (SND (emit_input_plan CREATE [Var "x"; Var "x"; Var "x"] [] ps)) /\
+  pending_inventory_wf [Var "x"; Var "x"; Var "x"; Var "x"]
+    (SND (emit_input_plan CREATE2
+      [Var "x"; Var "x"; Var "x"; Var "x"] [] ps))
+Proof
+  EVAL_TAC >> simp[]
 QED
