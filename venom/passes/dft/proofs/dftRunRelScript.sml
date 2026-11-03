@@ -11,16 +11,17 @@
  * Why the abort state may differ: the schedule can run instructions with
  * independent effects in another order before an instruction that stops
  * the run (an INVOKE whose callee aborts, a failing ASSERT).  It keeps the
- * fallible instructions in order (dft_fallible_order_kept), so the first
- * one to stop the run is the same on both sides; what can run early is an
- * instruction that cannot stop the run.  ctx_labels_bound keeps one with
- * a label operand (OFFSET) from erroring there.
+ * incompatible abort classes in order. Independent compatible aborts may
+ * stop at different instructions, but preserve the required abort kind.
+ * Successful and halting results remain exact. ctx_labels_bound keeps an
+ * instruction with a label operand (OFFSET) from erroring there.
  *)
 Theory dftRunRel
 Ancestors
   dftScheduleOrder dftStructural dftPermSim dftDefs passSharedDefs venomExecSemantics venomWf
   venomInst venomState venomEffects venomExecProps list finite_map sorting rich_list dftCorrectness
   dftAvailability dftSuccessSwap dftWf dftStoppingSwap dftIndexedExec
+  unitLabelMapIdentity
 
 Definition dft_res_rel_def:
   dft_res_rel r r' <=>
@@ -1324,11 +1325,92 @@ Proof
   simp[] >> metis_tac[venomExecPropsTheory.eval_phis_preserves_labels]
 QED
 
-(* Why it holds (unchecked notes):
-   - Same fuel works: fuel is per block and per call depth, and the
-     schedule visits the same blocks and makes the same calls.
-   - Non-terminator Abort/Halt comes only from fallible opcodes (ASSERT,
-     ASSERT_UNREACHABLE, RETURNDATACOPY) and INVOKE, which keep their order.
+Theorem dft_fn_block_same_context:
+  dft_fn_rel fn fn' /\ MEM fn C.ctx_functions /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  lookup_block s.vs_current_bb fn'.fn_blocks = SOME bb' /\
+  strict_dom_vars_defined fn s /\ ctx_labels_bound C s.vs_labels ==>
+  dft_res_rel (run_block fuel C bb s) (run_block fuel C bb' s)
+Proof
+  strip_tac >> drule_all dft_fn_rel_lookup_order >> strip_tac >>
+  `MEM bb fn.fn_blocks` by
+    (fs[lookup_block_def] >> metis_tac[venomExecPropsTheory.FIND_MEM]) >>
+  `bb.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[bb_inst_ids_distinct, dft_fn_rel_def] >>
+  irule dft_run_block_same_context >>
+  fs[dft_fn_rel_def, fn_inst_wf_def, fn_pseudos_prefix_def] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> fs[ctx_labels_bound_def] >>
+      first_x_assum irule >> metis_tac[MEM_fn_insts])
+  >- (simp[EVERY_MEM] >> metis_tac[])
+  >- (fs[EVERY_MEM] >> rpt strip_tac >>
+      `i.inst_opcode <> ALLOCA` by metis_tac[MEM_fn_insts] >>
+      Cases_on `i.inst_opcode` >> fs[is_alloca_op_def]) >>
+  qexists_tac `fn` >> simp[]
+QED
+
+Theorem dft_run_blocks_reachable_rel:
+  !fuel C C' fn fn' s.
+    LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+    dft_fn_rel fn fn' /\ MEM fn C.ctx_functions /\
+    fn_reachable fn s.vs_current_bb /\ strict_dom_vars_defined fn s /\
+    ctx_labels_bound C s.vs_labels ==>
+    dft_res_rel (run_blocks fuel C fn s) (run_blocks fuel C' fn' s)
+Proof
+  Induct >- (simp[Once run_blocks_def, dft_res_rel_def] >>
+             simp[run_blocks_def]) >>
+  rpt gen_tac >> strip_tac >>
+  `!name f f' t.
+    lookup_function name C.ctx_functions = SOME f /\
+    lookup_function name C'.ctx_functions = SOME f' /\
+    fn_entry_label f = SOME t.vs_current_bb /\ ctx_labels_bound C t.vs_labels ==>
+    dft_res_rel (run_blocks fuel C f t) (run_blocks fuel C' f' t)` by
+    (rpt strip_tac >> first_x_assum irule >> simp[] >>
+     rpt conj_tac
+     >- (fs[lookup_function_def] >> metis_tac[venomExecPropsTheory.FIND_MEM])
+     >- (drule dft_fn_rel_lookup_function >>
+         disch_then (qspec_then `name` mp_tac) >> simp[])
+     >- simp[fn_reachable_def]
+     >- metis_tac[sccpCorrectnessProofsTheory.strict_dom_vars_defined_entry]) >>
+  `OPTREL dft_block_rel (lookup_block s.vs_current_bb fn.fn_blocks)
+      (lookup_block s.vs_current_bb fn'.fn_blocks)` by
+    (irule dft_block_rel_lookup_block >> fs[dft_fn_rel_def]) >>
+  simp[run_blocks_unfold] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
+  Cases_on `lookup_block s.vs_current_bb fn'.fn_blocks` >>
+  gvs[] >>
+  rename1 `lookup_block _ fn.fn_blocks = SOME bb` >>
+  rename1 `lookup_block _ fn'.fn_blocks = SOME bb'` >>
+  `dft_res_rel (run_block fuel C bb s) (run_block fuel C' bb' s)` by
+    (irule dft_res_rel_trans >> qexists_tac `run_block fuel C bb' s` >>
+     conj_tac >- (irule dft_fn_block_same_context >> metis_tac[]) >>
+     irule dft_run_block_context_rel >> metis_tac[]) >>
+  Cases_on `run_block fuel C bb s` >> Cases_on `run_block fuel C' bb' s` >>
+  qpat_x_assum `dft_res_rel _ _` mp_tac >>
+  simp[dft_res_rel_def] >> rpt strip_tac >> gvs[] >>
+  Cases_on `v.vs_halted` >> simp[dft_res_rel_refl] >>
+  simp[GSYM dft_res_rel_def] >>
+  qpat_x_assum `!C C' fn fn' s. _` irule >> simp[] >>
+  `MEM bb fn.fn_blocks` by
+    (fs[lookup_block_def] >> metis_tac[venomExecPropsTheory.FIND_MEM]) >>
+  `bb.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
+  `EVERY inst_wf bb.bb_instructions` by
+    (fs[dft_fn_rel_def, fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
+  `fn_reachable fn v.vs_current_bb /\ strict_dom_vars_defined fn v` by
+    (irule dft_successor_available >>
+     fs[dft_fn_rel_def, wf_ssa_def] >>
+     qexistsl_tac [`bb`, `C`, `fuel`, `s`] >> simp[]) >>
+  simp[] >> metis_tac[ctx_labels_bound_run_block]
+QED
+
+(* Proof outline:
+   - Fuel induction in dft_run_blocks_reachable_rel supplies both callee
+     entry contracts and successor-block contracts at the smaller fuel.
+   - Same-context scheduling preserves the directional result relation;
+     incompatible abort classes keep their order, while compatible aborts
+     may stop at different instructions. Context replacement then uses
+     the callee contract.
    - A non-fallible instruction with no effects (pure ops, ASSIGN, BUMP,
      OFFSET, environment reads such as GAS) changes only vs_vars and
      vs_inst_idx, and returns OK when inst_wf holds, its variables are
@@ -1356,5 +1438,11 @@ Theorem dft_run_blocks_rel:
       ctx_labels_bound C s.vs_labels ==>
       dft_res_rel (run_blocks fuel C fn s) (run_blocks fuel C' fn' s)
 Proof
-  cheat
+  rpt strip_tac >> irule dft_run_blocks_reachable_rel >> simp[] >>
+  rpt conj_tac
+  >- (fs[lookup_function_def] >> metis_tac[venomExecPropsTheory.FIND_MEM])
+  >- (drule dft_fn_rel_lookup_function >>
+      disch_then (qspec_then `name` mp_tac) >> simp[])
+  >- simp[fn_reachable_def]
+  >- metis_tac[sccpCorrectnessProofsTheory.strict_dom_vars_defined_entry]
 QED
