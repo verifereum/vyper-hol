@@ -36,6 +36,33 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
+(* Proof-only counterexample: source embedded size includes the dynamic tail,
+   whereas compiler embedded static size is only the head offset. *)
+Theorem abi_props_vyper_typed_string_counterexample:
+  sfields_tenv_consistent FEMPTY FEMPTY /\
+  evaluate_type FEMPTY (BaseT (StringT 0)) =
+    SOME (BaseTV (StringT 0)) /\
+  abi_embedded_static_size FEMPTY (BaseT (StringT 0)) = 32 /\
+  vyper_abi_embedded_size FEMPTY (BaseT (StringT 0)) = 64
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def]
+QED
+
+Theorem abi_props_vyper_typed_false:
+  ~(!sf tenv ty tv.
+    sfields_tenv_consistent sf tenv /\
+    evaluate_type tenv ty = SOME tv ==>
+    is_abi_dynamic sf ty = vyper_is_dynamic tenv ty /\
+    abi_size_bound sf ty = vyper_abi_size_bound tenv ty /\
+    abi_embedded_static_size sf ty = vyper_abi_embedded_size tenv ty)
+Proof
+  strip_tac >>
+  first_x_assum (qspecl_then
+    [`FEMPTY`, `FEMPTY`, `BaseT (StringT 0)`, `BaseTV (StringT 0)`]
+    mp_tac) >>
+  simp[abi_props_vyper_typed_string_counterexample]
+QED
+
 (* Struct names can collide after string conversion. Evaluated type sizes
    still decrease down fields: colliding ancestor and child names would
    force equal field lists and equal evaluated types, contradicting that
