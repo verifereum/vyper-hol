@@ -20,8 +20,13 @@
  *   compile_generate_runtime_shape — the whole runtime block stream
  *   package_internal_blocks_segments
  *   run_lowering_source_unit_ok
- *   supported_function_body_shape, package_*_shape_ok — supported_program
- *                                gives the generator side conditions
+ *   runtime_bodies_shape_ok    — no expr_shape_root in runtime bodies
+ *   supported_function_body_shape — supported_program gives it
+ *   package_*_shape_ok         — runtime_bodies_shape_ok gives the generator
+ *                                side conditions
+ *   internal_descriptors_ok    — distinct names give distinct, legal
+ *                                internal labels
+ *   lower_vyper_runtime_unit_source_unit_ok_shape — S2 from the two facts
  *)
 Theory loweringShapeProps
 Ancestors
@@ -85,12 +90,14 @@ Definition loc_shape_ok_def:
   loc_shape_ok st (TransientLoc slot) = T
 End
 
-(* ce_return_pc decides the Return lowering: NONE is external code. *)
+(* Internal returns use ce_return_pc; constructor exits use a jump label. *)
 Definition cenv_shape_ok_def:
   cenv_shape_ok st cenv <=>
     (!n loc. FLOOKUP cenv.ce_vars n = SOME loc ==> loc_shape_ok st loc) /\
     (!n loc. FLOOKUP cenv.ce_module_vars n = SOME loc ==> loc_shape_ok st loc) /\
     (!loc. cenv.ce_return_buf = SOME loc ==> loc_shape_ok st loc) /\
+    (!l. cenv.ce_return_pc = NONE /\ cenv.ce_ctor_exit_label = SOME l ==>
+         jump_label_ok l) /\
     case cenv.ce_return_pc of
       NONE => T
     | SOME (MemLoc off sz) => T
@@ -112,7 +119,9 @@ Definition cenv_static_ok_def:
     (!n loc. FLOOKUP cenv.ce_vars n = SOME loc ==> static_loc loc) /\
     (!n loc. FLOOKUP cenv.ce_module_vars n = SOME loc ==> static_loc loc) /\
     (!loc. cenv.ce_return_buf = SOME loc ==> ?off sz. loc = MemLoc off sz) /\
-    (!loc. cenv.ce_return_pc = SOME loc ==> ?off sz. loc = MemLoc off sz)
+    (!loc. cenv.ce_return_pc = SOME loc ==> ?off sz. loc = MemLoc off sz) /\
+    (!l. cenv.ce_return_pc = NONE /\ cenv.ce_ctor_exit_label = SOME l ==>
+         jump_label_ok l)
 End
 
 Definition value_shape_ok_def:
@@ -9338,13 +9347,25 @@ Theorem compile_return_none_shape:
 Proof
   rpt gen_tac >> Cases_on `cenv.ce_return_pc` >>
   simp[Once compile_stmt_def]
-  >- (pairarg_tac >> simp[] >>
+  >- (Cases_on `cenv.ce_ctor_exit_label` >> simp[]
+      >- (pairarg_tac >> simp[] >>
       stmt_sequence `\u st. T`
         (IF_CASES_TAC
          >- (irule shape_step_conseq >>
              qexistsl_tac [`compiler_label`, `\st. T`, `\u st. T`] >>
              simp[compile_nonreentrant_unlock_shape]) >>
          irule shape_step_return >> simp[]) >> stmt_plain_inst_drop) >>
+      rename1 `SOME exit_lbl` >>
+      mp_tac (Q.SPECL [`F`,
+        `\st. cenv_shape_ok st cenv /\ loop_ctx_shape_ok lctx`,
+        `JMP`, `[Label exit_lbl]`, `[]`] stmt_shape_emit_inst) >>
+      simp[cenv_shape_ok_stable, shape_stable_conj, shape_stable_def,
+           label_or_plain_def, stackPlanTypesTheory.is_label_operand_def,
+           lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def,
+           inst_shape_ok_def, inst_jump_labels_ok_def, is_terminator_def,
+           is_read0_opcode_def, label_positions_ok_def, is_param_opcode_def] >>
+      impl_tac >- (rpt strip_tac >> gvs[cenv_shape_ok_def]) >>
+      rewrite_tac[shape_step_def] >> metis_tac[]) >>
   rename1 `SOME loc` >>
   namedCases_on `loc` ["off sz", "slot", "slot", "imm", "ret_op sz"] >>
   simp[] >>
@@ -9370,7 +9391,7 @@ Resume compile_return_none_shape[internal]:
     `\u st. T`] >> simp[SRULE [] (Q.SPEC `[]` stmt_ret_shape)] >>
   rpt strip_tac >> gvs[cenv_shape_ok_def]
 QED
-Finalise compile_return_none_shape[local]
+Finalise compile_return_none_shape
 
 Theorem compile_return_some_shape:
   !cenv lctx ty e.
@@ -12189,6 +12210,23 @@ Proof
   metis_tac[supported_stmts_shape]
 QED
 
+(* The runtime unit lowers every function but the constructor. *)
+Definition runtime_bodies_shape_ok_def:
+  runtime_bodies_shape_ok tops <=>
+    !vis mut nr rr name args dflts ret body.
+      MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
+      vis <> Deploy ==>
+      ~supported_stmts_expr_exists expr_shape_root body
+End
+
+Theorem supported_program_runtime_bodies_shape_ok:
+  !tops. supported_program tops ==> runtime_bodies_shape_ok tops
+Proof
+  rw[runtime_bodies_shape_ok_def] >>
+  drule_all supported_program_function >> strip_tac >>
+  drule supported_function_body_shape >> simp[]
+QED
+
 Theorem add_module_var_locations_static:
   !tops vars.
     (!n loc. FLOOKUP vars n = SOME loc ==> static_loc loc) ==>
@@ -12314,7 +12352,7 @@ QED
    external functions have no return PC. *)
 Theorem package_external_fn_shape_ok:
   !tops use_trans nkey_map target src.
-    supported_program tops /\ immutable_free_program tops /\
+    runtime_bodies_shape_ok tops /\ immutable_free_program tops /\
     MEM src (FST (classify_functions tops)) ==>
     external_fn_shape_ok
       (set_external_package_target target
@@ -12322,8 +12360,8 @@ Theorem package_external_fn_shape_ok:
 Proof
   rpt gen_tac >> strip_tac >> PairCases_on `src` >>
   drule classify_functions_external_source >> strip_tac >>
-  drule_all supported_program_function >> strip_tac >>
-  drule supported_function_body_shape >> strip_tac >>
+  `~supported_stmts_expr_exists expr_shape_root src7`
+    by (gs[runtime_bodies_shape_ok_def] >> first_x_assum drule >> simp[]) >>
   simp[package_external_fn_def, set_external_package_target_def,
        external_fn_shape_ok_def] >>
   rpt CASE_TAC >>
@@ -12334,7 +12372,7 @@ QED
 
 Theorem package_internal_fn_shape_ok:
   !tops use_trans nkey_map target src.
-    supported_program tops /\ immutable_free_program tops /\
+    runtime_bodies_shape_ok tops /\ immutable_free_program tops /\
     MEM src (FST (SND (classify_functions tops))) ==>
     internal_fn_shape_ok
       (set_internal_package_target target
@@ -12342,18 +12380,17 @@ Theorem package_internal_fn_shape_ok:
 Proof
   rpt gen_tac >> PairCases_on `src` >> strip_tac >>
   drule (iffLR MEM_classify_internal) >> strip_tac >>
-  drule_all supported_program_function >>
-  strip_tac >> drule supported_function_body_shape >> strip_tac >>
+  `~supported_stmts_expr_exists expr_shape_root src7`
+    by (gs[runtime_bodies_shape_ok_def] >> first_x_assum drule >> simp[]) >>
   simp[package_internal_fn_def, set_internal_package_target_def,
        update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
        cenv_static_ok_def] >>
-  pure_rewrite_tac[GSYM cenv_static_ok_def] >>
-  irule build_compile_env_static >> simp[]
+  metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
 Theorem package_fallback_fn_shape_ok:
   !tops use_trans nkey_map target.
-    supported_program tops /\ immutable_free_program tops ==>
+    runtime_bodies_shape_ok tops /\ immutable_free_program tops ==>
     fallback_shape_ok
       (set_fallback_package_target target
          (package_fallback_fn tops use_trans nkey_map
@@ -12365,8 +12402,8 @@ Proof
           fallback_shape_ok_def] >>
   rename1 `_ = SOME src` >> PairCases_on `src` >>
   drule classify_functions_fallback_mem >> strip_tac >>
-  drule_all supported_program_function >>
-  disch_then (assume_tac o MATCH_MP supported_function_body_shape) >>
+  `~supported_stmts_expr_exists expr_shape_root src7`
+    by (gs[runtime_bodies_shape_ok_def] >> first_x_assum drule >> simp[]) >>
   simp[package_fallback_fn_def, set_fallback_package_target_def,
        fallback_shape_ok_def, build_compile_env_external_no_return_pc] >>
   simp[cenv_static_ok_def] >>
@@ -12706,29 +12743,6 @@ Proof
   simp[source_internal_fn_descriptor_def]
 QED
 
-Theorem classified_internal_names_distinct:
-  !tops. ALL_DISTINCT (supported_function_names tops) ==>
-    ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
-      (FST (SND (classify_functions tops))))
-Proof
-  Induct >> simp[classify_functions_def, supported_function_names_def] >>
-  gen_tac >> fs[classify_functions_def] >>
-  qmatch_goalsub_abbrev_tac `classify_function h acc` >>
-  PairCases_on `acc` >> Cases_on `h` >>
-  gvs[classify_function_def, supported_function_names_def] >>
-  rename1 `case vis of External => _ | Internal => _ | Deploy => _` >>
-  Cases_on `vis` >> simp[]
-  >- (IF_CASES_TAC >> simp[]) >>
-  rpt strip_tac >> simp[] >>
-  gvs[MEM_MAP] >>
-  rename1 `MEM payload acc1` >> PairCases_on `payload` >> gvs[] >>
-  `MEM (payload0,payload1,payload2,payload3,payload4,payload5,payload6,payload7)
-    (FST (SND (classify_functions tops)))` by
-    simp[classify_functions_def] >>
-  drule (iffLR MEM_classify_internal) >>
-  metis_tac[MEM_supported_function_names]
-QED
-
 (* Labels are distinct when equal labels mean equal names and the names are
    distinct. *)
 Theorem ALL_DISTINCT_MAP_name_reflect[local]:
@@ -12745,11 +12759,11 @@ QED
    Internal in tops (MEM_classify_internal), and its label is
    internal_fn_label of its id and name (internal_fn_label_prefix).  Equal
    labels have equal ids (internal_fn_label_id_11), hence equal names
-   (build_func_ids_11); the names are a sublist of supported_function_names
-   tops, which supported_declaration_names makes ALL_DISTINCT. *)
-Theorem supported_internal_descriptors_ok:
+   (build_func_ids_11), which the hypothesis keeps apart. *)
+Theorem internal_descriptors_ok:
   !tops is_ctor.
-    supported_program tops ==>
+    ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
+                    (FST (SND (classify_functions tops)))) ==>
     EVERY (\d. internal_label_ok (FST d))
       (MAP (source_internal_fn_descriptor tops is_ctor)
          (FST (SND (classify_functions tops)))) /\
@@ -12762,26 +12776,26 @@ Proof
       REWRITE_TAC [internal_label_ok_def, internal_fn_label_prefix]) >>
   REWRITE_TAC [MAP_MAP_o] >>
   irule ALL_DISTINCT_MAP_name_reflect >> rpt conj_tac
-  >~ [`ALL_DISTINCT _`]
-  >- (irule classified_internal_names_distinct >>
-      drule supported_program_names >>
-      metis_tac[supported_declaration_names_unique]) >>
-  simp[pairTheory.FORALL_PROD] >> rpt strip_tac >>
-  imp_res_tac internal_fn_label_id_11 >>
-  imp_res_tac (iffLR MEM_classify_internal) >>
-  metis_tac[build_func_ids_11, function_visibility_distinct]
+  >- (simp[pairTheory.FORALL_PROD] >> rpt strip_tac >>
+      imp_res_tac internal_fn_label_id_11 >>
+      imp_res_tac (iffLR MEM_classify_internal) >>
+      metis_tac[build_func_ids_11, function_visibility_distinct]) >>
+  simp[]
 QED
 
 (* S2's statement, proved from the generator and source lemmas above.
    package_internal_blocks splits the block stream at each internal entry
-   label; supported_internal_descriptors_ok keeps those labels apart from
+   label; internal_descriptors_ok keeps those labels apart from
    each other and from every other label. The raw O1 theorem excludes
    DLOAD, hence the explicit immutable-free source-side hypothesis; runtime
    immutable compilation itself remains unrestricted. *)
-Theorem lower_vyper_runtime_unit_source_unit_ok_names:
+Theorem lower_vyper_runtime_unit_source_unit_ok_shape:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\ immutable_free_program tops ==>
+    runtime_bodies_shape_ok tops /\
+    ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
+                    (FST (SND (classify_functions tops)))) /\
+    immutable_free_program tops ==>
     o1_source_unit_ok unit
 Proof
   rpt gen_tac >> strip_tac >>
@@ -12790,8 +12804,8 @@ Proof
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
   rename1 `classify_functions tops = (exts, ints, fb, ctor)` >>
   simp[] >> strip_tac >>
-  qspecl_then [`tops`, `F`] mp_tac supported_internal_descriptors_ok >>
-  impl_tac >- first_assum ACCEPT_TAC >>
+  qspecl_then [`tops`, `F`] mp_tac internal_descriptors_ok >>
+  impl_tac >- fs[] >>
   REWRITE_TAC [pairTheory.FST, pairTheory.SND] >> strip_tac >>
   `EVERY (\(sel, lbl, z). isPREFIX "fn_" lbl)
      (build_selectors (type_env tops) exts)`
@@ -12817,3 +12831,4 @@ Proof
      internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP, EVERY_MEM] >>
   fs[MEM_MAP, PULL_EXISTS]
 QED
+

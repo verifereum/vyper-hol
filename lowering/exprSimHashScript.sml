@@ -542,7 +542,9 @@ Theorem step_STATICCALL_sha256:
          (word_to_bytes (SHA_256_bytes bs) T) s) with
          vs_returndata := word_to_bytes (SHA_256_bytes bs) T))
 Proof
-  strip_tac >> simp[Once step_inst_base_def, mk_inst_def, eval_operand_def] >>
+  strip_tac >>
+  pure_rewrite_tac [Once step_inst_base_def] >>
+  simp[mk_inst_def, eval_operand_def] >>
   irule (SRULE [mk_inst_def] sha256_exec_ext_call) >> simp[]
 QED
 
@@ -1095,7 +1097,10 @@ Proof
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[run_inst_seq_def, step_SHR, step_SHL,
        eval_operand_def, lookup_var_update_var, bind_outputs_def] >>
-  simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
+  simp[stepInstBaseLib.simp_opcode_clause ``SHR``, mk_inst_def,
+       exec_pure2_def, eval_operand_def, bind_outputs_def] >>
+  simp[stepInstBaseLib.simp_opcode_clause ``SHL``, mk_inst_def,
+       exec_pure2_def, eval_operand_def,
        bind_outputs_def, lookup_var_update_var] >>
   simp[dimword_def, update_var_def] >> rpt strip_tac >>
   gvs[not_fresh_at_def] >>
@@ -1406,9 +1411,10 @@ Proof
      simp[contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
           comp_bind_def, comp_ignore_bind_def, comp_return_def,
           fresh_id_def, fresh_var_def, emit_def] >> rpt strip_tac >>
-     gvs[emitted_insts_def, not_fresh_at_def, toString_inj,
-         rich_listTheory.DROP_LENGTH_APPEND, rich_listTheory.DROP_APPEND1,
-         rich_listTheory.DROP_APPEND2, APPEND_ASSOC]) >>
+     gvs[] >>
+     simp[emitted_insts_def, not_fresh_at_def, toString_inj,
+          rich_listTheory.DROP_LENGTH_APPEND, rich_listTheory.DROP_APPEND1,
+          rich_listTheory.DROP_APPEND2, APPEND_ASSOC]) >>
   `local_ptrs_reserved cenv sn` by
     (gvs[local_ptrs_reserved_def, not_fresh_at_def] >>
      metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_ADD]) >>

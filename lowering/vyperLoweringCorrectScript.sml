@@ -62,7 +62,7 @@ Ancestors
   venomState
   compileEnv e2eDefs supportedProgram compileVyper immutableSectionRel
   unitTransformDefs unitShapeDefs o1PassContract
-  fragExec loweringHalt loweringShapeProps retAbiPlanProps
+  fragExec loweringHalt loweringShapeProps loweringShapeSource retAbiPlanProps
   venomInst venomWf contextCodegenRel memSafeRun allocaFrontierBound
 
 (* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
@@ -315,6 +315,7 @@ Theorem external_return_none_unlock_result_rel:
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
     cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr /\ ~iv ==> ut) /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') ==>
@@ -434,6 +435,7 @@ Theorem external_return_none_result_rel:
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
     cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr ==> iv) ==>
     frag_exec ctx st st'
       (\s. state_rel func cenv cx es s)
@@ -880,17 +882,21 @@ QED
 
 (* ===== Planned lowering stages (NOT certificates) ===== *)
 
-(* S2, Milestone 5: proved in loweringShapeProps as
-   lower_vyper_runtime_unit_source_unit_ok_names. Raw O1 shape excludes
-   DLOAD; the immutable-free hypothesis restricts this theorem's source
-   domain, not the runtime immutable compiler. *)
+(* S2, Milestone 5: proved in loweringShapeSource as
+   lower_vyper_runtime_unit_source_unit_ok_checked. The type checker supplies
+   builtin arities and distinct internal names; raw_shape_free_program
+   excludes msg.gas values and raw_call (wider than the unit shape needs:
+   a plain raw_call passes it, but the body-shape proof lacks that case).
+   Raw O1 shape excludes DLOAD; the immutable-free hypothesis restricts this
+   theorem's source domain, not the runtime immutable compiler. *)
 Theorem lower_vyper_runtime_unit_source_unit_ok:
-  !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
-    immutable_free_program tops
+  !tops rpolicy unit layouts addr art.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    check_contract F layouts addr [(NONE, tops)] = SOME art /\
+    raw_shape_free_program tops /\ immutable_free_program tops
     ==> o1_source_unit_ok unit
 Proof
-  ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_names
+  ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_checked
 QED
 
 (* S2b: planned admission, Milestone 5. The lowering's PHI-free code
