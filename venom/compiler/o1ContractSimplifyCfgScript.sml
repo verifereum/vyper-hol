@@ -347,10 +347,11 @@ Proof
       metis_tac[mem_corr_closed_lowered_mem_fact]) >>
   drule simplify_cfg_stage_functions >> strip_tac >>
   simp[EVERY_MEM, MEM_MAP] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  `simplify_cfg_fn_ok y` by gvs[EVERY_MEM] >>
   irule simplify_cfg_preserves_wf_ssa >>
   gvs[o1_ctx_shape_def, o1_ssa_inv_def, EVERY_MEM] >>
   `o1_fn_shape C y` by metis_tac[] >>
-  gvs[o1_fn_shape_def, first_block_no_phi_def, EVERY_MEM]
+  gvs[o1_fn_shape_def]
 QED
 
 Theorem o1_contract_simplify_cfg_pre_walk:
