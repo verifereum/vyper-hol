@@ -240,7 +240,11 @@ Proof
      qexists_tac `emitted_insts st final` >> asm_rewrite_tac [] >> rpt strip_tac >>
      `i.inst_opcode = ADD \/ i.inst_opcode = MUL \/ i.inst_opcode = MLOAD` by
        (fs[EVERY_MEM] >> metis_tac[]) >>
-     gvs[step_inst_base_def, exec_pure2_def, exec_read1_def, AllCaseEqs(), update_var_def]) >>
+     qpat_x_assum `step_inst_base i ss1 = OK ss2` mp_tac >>
+     pure_once_rewrite_tac [step_inst_base_def] >>
+     pure_asm_rewrite_tac [opcode_case_def] >>
+     simp[exec_pure2_def, exec_read1_def] >>
+     simp[AllCaseEqs()] >> strip_tac >> gvs[update_var_def]) >>
   gvs[]
 QED
 
