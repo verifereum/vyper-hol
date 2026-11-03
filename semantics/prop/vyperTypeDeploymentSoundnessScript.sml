@@ -62,6 +62,15 @@ Definition call_constructor_body_def:
     | (INL (), st) => call_external_body am cx nr mut tenv st scope body ret
 End
 
+Theorem send_call_value_not_halt[local]:
+  send_call_value mut cx st = (INR exc,st') ==> exc <> HaltException
+Proof
+  rw[send_call_value_def, bind_def, ignore_bind_def, check_def,
+     assert_def, return_def, raise_def] >>
+  gvs[AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac vyperCallFrameTheory.concrete_send_error >> gvs[]
+QED
+
 Theorem constructor_call_observed[local]:
   cx.in_deploy /\
   evaluate_all_constants cx am0 cx.txn.target mods = SOME am_c /\
@@ -69,12 +78,14 @@ Theorem constructor_call_observed[local]:
   bind_arguments (type_env_all_modules mods) args vals = SOME scope ==>
   (case call_external_function orc gobs am0 cx nr mut (ts:toplevel list)
           mods args [] vals body ret of
-     (INR e,_,_) => INR e
-   | (INL v,am',rqs) => INL (v,am',rqs)) =
+     (INR HaltException,am',rqs) => INL (NONE,am',rqs)
+   | (INR e,_,_) => INR e
+   | (INL v,am',rqs) => INL (SOME v,am',rqs)) =
   (case call_constructor_body orc gobs am_c cx nr mut (type_env_all_modules mods)
           scope body ret of
-     (INR e,_,_) => INR e
-   | (INL v,am',rqs) => INL (v,am',rqs))
+     (INR HaltException,am',rqs) => INL (NONE,am',rqs)
+   | (INR e,_,_) => INR e
+   | (INL v,am',rqs) => INL (SOME v,am',rqs))
 Proof
   strip_tac >>
   simp[call_external_function_def, call_constructor_body_def] >>
@@ -83,6 +94,7 @@ Proof
   Cases_on `q` >>
   simp[call_external_body_def, bind_def, ignore_bind_def, set_scopes_def, return_def] >>
   TRY (rename1 `send_call_value _ _ _ = (INR exc,_)` >>
+       drule send_call_value_not_halt >>
        drule send_call_value_no_control_c53 >>
        Cases_on `exc` >> simp[no_control_exc_def] >> NO_TAC) >>
   qabbrev_tac `lock_action = if nr then
@@ -99,6 +111,10 @@ Proof
     case cx.nonreentrant_slot of NONE => return ()
     | SOME slot => release_nonreentrant_lock cx.txn.target slot
     else return ()` >>
+  `!s e s'. unlock_action s <> (INR e,s')` by
+    (rw[Abbr `unlock_action`, return_def] >> CASE_TAC >>
+     simp[release_nonreentrant_lock_def, bind_def, get_transient_storage_def,
+          update_transient_def, return_def]) >>
   TRY (rename1 `eval_stmts _ _ _ = (INR exc,_)` >>
        Cases_on `exc` >> simp[]) >>
   TRY (rename1 `lock_action _ = (INR exc,_)` >>
@@ -106,7 +122,7 @@ Proof
   TRY (rename1 `send_call_value _ _ _ = (INR exc,_)` >>
        Cases_on `exc` >> simp[]) >>
   TRY (qmatch_goalsub_rename_tac `unlock_action final_st` >>
-       Cases_on `unlock_action final_st` >> Cases_on `q` >> simp[]) >>
+       Cases_on `unlock_action final_st` >> Cases_on `q` >> gvs[]) >>
   rpt (CASE_TAC >> simp[])
 QED
 
@@ -393,6 +409,8 @@ Proof
      simp[initial_state_def]) >>
   `ALL_DISTINCT (MAP FST args)` by
     (drule_all checked_constructor_args_distinct >> simp[]) >>
+  `source_supply body_st` by
+    (vyperSourceSupplyLib.forward >> first_assum ACCEPT_TAC) >>
   `?env_body env_after.
      type_stmts env_body ret body = SOME env_after /\
      env_consistent env_body cx body_st /\
