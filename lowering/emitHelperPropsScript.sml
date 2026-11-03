@@ -97,7 +97,9 @@ Theorem step_EQ:
     step_inst_base (mk_inst id EQ [op1; op2] [out]) ss =
       OK (update_var out (bool_to_word (v1 = v2)) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rpt strip_tac >>
+  simp_tac bool_ss [step_inst_base_def, mk_inst_opcode, opcode_case_def] >>
+  irule exec_pure2_ok >> simp[]
 QED
 
 Theorem step_SHR:
