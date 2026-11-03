@@ -1383,6 +1383,27 @@ Proof
        is_alloca_op_def, is_terminator_def, is_ext_call_op_def]
 QED
 
+Theorem no_mem_ops_reader_descriptor[local]:
+  !inst s v.
+    (inst.inst_opcode = MLOAD \/ inst.inst_opcode = ILOAD \/
+     inst.inst_opcode = MCOPY \/ inst.inst_opcode = SHA3 \/
+     inst.inst_opcode = LOG) /\
+    step_inst_base inst s = OK v ==> mem_read_ops inst <> NONE
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  pure_rewrite_tac[step_inst_base_def] >>
+  asm_rewrite_tac[] >>
+  pure_rewrite_tac[opcode_case_def] >>
+  simp[mem_read_ops_def, exec_read1_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  rename1 `LENGTH rest = w2n tc + 2` >>
+  `3 <= LENGTH (REVERSE (Lit tc::rest))` by simp[] >>
+  Cases_on `REVERSE (Lit tc::rest)` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `t'` >> gvs[]
+QED
+
 Theorem no_mem_read_effect_from_no_mem_read_ops[local]:
   !inst s v.
     step_inst_base inst s = OK v /\
@@ -1394,17 +1415,10 @@ Theorem no_mem_read_effect_from_no_mem_read_ops[local]:
     Eff_MEMORY NOTIN read_effects inst.inst_opcode
 Proof
   rpt strip_tac >>
+  imp_res_tac not_invoke_from_ok >>
   spose_not_then strip_assume_tac >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  qpat_x_assum `mem_read_ops _ = _` mp_tac >>
-  simp[step_inst_base_def, mem_read_ops_def] >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[is_alloca_op_def, is_terminator_def, is_ext_call_op_def,
-      read_effects_def, all_effects_def, empty_effects_def] >>
-  simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
-       AllCaseEqs()] >>
-  rpt strip_tac >> gvs[]
+  drule_all no_mem_ops_reader_opcode >> disch_then assume_tac >>
+  drule_all no_mem_ops_reader_descriptor >> simp[]
 QED
 
 
@@ -4374,7 +4388,22 @@ Resume step_inst_base_error_transfer[DALLOCA]:
   error_inline_tac
 QED
 Resume step_inst_base_error_transfer[DLOADBYTES]:
-  error_inline_tac
+  Cases_on `inst.inst_operands` >- gvs[] >>
+  rename1 `inst.inst_operands = dst_op::ops` >>
+  Cases_on `ops` >- gvs[] >>
+  rename1 `inst.inst_operands = dst_op::src_op::ops2` >>
+  Cases_on `ops2` >- gvs[] >>
+  rename1 `inst.inst_operands = dst_op::src_op::size_op::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  Cases_on `eval_operand dst_op s1`
+  >- (first_x_assum drule >> simp[]) >>
+  Cases_on `eval_operand src_op s1`
+  >- (first_x_assum drule >>
+      Cases_on `eval_operand dst_op s2` >> simp[]) >>
+  Cases_on `eval_operand size_op s1` >> gvs[] >>
+  first_x_assum drule >>
+  Cases_on `eval_operand dst_op s2` >>
+  Cases_on `eval_operand src_op s2` >> simp[]
 QED
 Resume step_inst_base_error_transfer[EXTCODECOPY]:
   Cases_on `inst.inst_operands` >- gvs[] >>
