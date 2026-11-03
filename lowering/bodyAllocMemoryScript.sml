@@ -6,7 +6,7 @@ Ancestors
   fragExec fragExecMem allocaHistoryFragment rich_list
   bodyMemoryDefs loweringSlice exprSim exprSimOperators exprSimHyps stmtSimAugAssign vyperTypeEnv vyperTypeSystem vyperTypeInvariants
   emitHelperProps emitHelper compileEnv context venomInst venomState
-  venomExecSemantics venomMemDefs list finite_map words arithmetic
+  venomExecSemantics venomMemDefs vyperInterpreter vyperState list finite_map words arithmetic
 
 Theorem compile_alloc_buffer_body_inst[local]:
   !n sa buf sb func.
@@ -502,6 +502,43 @@ Proof
   qexistsl [`entry`, `p`, `sz`, `w`] >> simp[]
 QED
 
+Theorem compile_name_body_vv_sim_mem:
+  !ctx func ce cx env ty ann id es.
+    expr_sim_pre ce cx env (Name ann id) es ==>
+    expr_vv_sim_mem ctx func ce cx ty (Name ann id) es
+Proof
+  rpt strip_tac >> simp[expr_vv_sim_mem_def] >> rpt strip_tac >>
+  `?entry. lookup_scopes id es.scopes = SOME entry` by
+    (gvs[expr_sim_pre_def, expr_sim_inv_def] >>
+     drule_all well_typed_Name_lookup >> metis_tac[]) >>
+  `?p sz. FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz)` by
+    gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
+  `ce.ce_var_type id = SOME ann` by
+    gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
+  drule_then (qspecl_then [`cx`, `ann`] assume_tac) eval_name_word >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       type_check_def, assert_def, check_def, ignore_bind_def] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       type_check_def, assert_def, check_def, ignore_bind_def,
+       read_result_def] >> strip_tac >>
+  gvs[compile_expr_def, compile_name_vv_def, comp_return_def,
+      contextTheory.mk_ptr_def, vyperASTTheory.expr_type_def] >>
+  irule frag_exec_mem_refl >> rpt strip_tac >> gvs[] >>
+  drule_all body_name_source_region >> strip_tac >> gvs[] >>
+  simp[vv_post_def, vv_holds_def, vv_at_def, read_result_def, return_def,
+       vyperASTTheory.expr_type_def, eval_operand_def] >>
+  rpt conj_tac
+  >- metis_tac[val_in_memory_word_type]
+  >- (disj2_tac >> disj1_tac >>
+      qexistsl [`id`, `w2n w`, `sz`] >>
+      asm_simp_tac (srw_ss()) [local_region_def, dynarray_local_def] >>
+      drule val_footprint_le >> decide_tac) >>
+  rpt strip_tac >> gvs[]
+QED
+
 val () = List.app (fn th =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
   in if null axioms andalso null (Thm.hyp th) andalso
@@ -525,4 +562,5 @@ val () = List.app (fn th =>
         body_word_name_region,
         body_word_name_MLOAD_frontier,
         compile_name_word_body_sim_mem,
-        body_name_source_region];
+        body_name_source_region,
+        compile_name_body_vv_sim_mem];
