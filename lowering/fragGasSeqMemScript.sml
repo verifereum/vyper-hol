@@ -5,6 +5,23 @@ Ancestors
   fragGasPathMem fragExecMem fragExec gasCount memSafeRun
   venomExecSemantics venomInstProofs venomState list rich_list arithmetic
 
+Theorem straight_line_mem_edge[local]:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+  inst_mem_below_frontier i s /\ step_inst_base i s = OK u ==>
+  gas_path_mem_edge ctx func s (if i.inst_opcode = GAS then 1 else 0)
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `step_inst 0 ctx i s = OK u` by simp[step_inst_non_invoke] >>
+  `~u.vs_halted` by metis_tac[step_preserves_halted] >>
+  simp[gas_path_mem_edge_def] >>
+  qexists_tac `0` >>
+  simp[mem_safe_step_non_invoke, gas_count_step_def]
+QED
+
 Theorem run_inst_seq_gas_path_mem:
   !code s t ctx func bb.
     ~s.vs_halted /\
