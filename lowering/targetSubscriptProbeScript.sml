@@ -401,3 +401,63 @@ Theorem probe_guarded_fixture_not_invariant:
 Proof
   simp[expr_sim_inv_def, probe_guarded_state_no_oracle]
 QED
+
+(* Symbolic operational contract: no typing or simulation premise is used. *)
+Theorem probe_guarded_symbolic_call:
+  !es n.
+    n <= 1 /\
+    lookup_storage 0w (get_storage probe_guarded_context es F) = n2w n ==>
+    eval_expr probe_guarded_context
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es =
+    (INL (Value (IntV 0)),
+     if n = 0 then es else
+       set_storage probe_guarded_context es F
+         (update_storage 0w 0w (get_storage probe_guarded_context es F)))
+Proof
+  rpt strip_tac >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_storage_backend``,
+    ``set_storage_backend``, ``lookup_storage``]) >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_storage_backend``,
+    ``set_storage_backend``, ``lookup_storage``]) >>
+  simp[get_storage_backend_eq, get_storage_scopes] >>
+  gvs[get_storage_def, probe_guarded_context_def,
+      empty_evaluation_context_def, empty_call_txn_def] >>
+  `n = 0 \/ n = 1` by decide_tac >> gvs[] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``set_storage_backend``,
+    ``lookup_storage``]) >>
+  simp[integerTheory.int_gt] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_storage_backend``,
+    ``set_storage_backend``, ``lookup_storage``]) >>
+  simp[return_def] >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_storage_backend``,
+    ``set_storage_backend``, ``lookup_storage``]) >>
+  simp[get_storage_backend_eq, get_storage_scopes, get_storage_def] >>
+  simp[set_storage_backend_eq, set_storage_def, get_storage_def,
+       probe_guarded_context_def, empty_evaluation_context_def,
+       empty_call_txn_def, handle_function_def, return_def] >>
+  simp[evaluation_state_component_equality]
+QED
+
+Theorem probe_guarded_symbolic_projections:
+  !es n res es'.
+    n <= 1 /\
+    lookup_storage 0w (get_storage probe_guarded_context es F) = n2w n /\
+    eval_expr probe_guarded_context
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es =
+      (res,es') ==>
+    res = INL (Value (IntV 0)) /\ es'.scopes = es.scopes /\
+    lookup_storage 0w (get_storage probe_guarded_context es' F) = 0w /\
+    (!k. k <> 0w ==>
+      lookup_storage k (get_storage probe_guarded_context es' F) =
+      lookup_storage k (get_storage probe_guarded_context es F))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all probe_guarded_symbolic_call >>
+  Cases_on `n = 0` >>
+  gvs[get_storage_after_set, lookup_storage_def, update_storage_def,
+      APPLY_UPDATE_THM]
+QED
