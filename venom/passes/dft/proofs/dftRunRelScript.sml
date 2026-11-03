@@ -2562,3 +2562,50 @@ Proof
   strip_tac >> irule dft_suffix_prefix_variant >> simp[] >>
   rpt strip_tac >> irule dft_suffix_swap_variant >> metis_tac[]
 QED
+
+Theorem dft_remaining_inv_gas_variant:
+  s' = (s with vs_gas_readings := s'.vs_gas_readings) /\
+  dft_remaining_inv fn bb todo s' ==> dft_remaining_inv fn bb todo s
+Proof
+  strip_tac >> qpat_x_assum `s' = _` SUBST_ALL_TAC >>
+  gvs[dft_remaining_inv_def,
+    sccpCorrectnessProofsTheory.strict_dom_vars_defined_def] >> metis_tac[]
+QED
+
+Theorem dft_remaining_inv_terminal:
+  wf_function fn /\ MEM bb fn.fn_blocks /\
+  dft_remaining_inv fn bb (y::post) s /\ is_terminator y.inst_opcode ==>
+  post = []
+Proof
+  strip_tac >> Cases_on `post` >> simp[] >>
+  `MEM y bb.bb_instructions /\
+   id_before (MAP (\i. i.inst_id) bb.bb_instructions) y.inst_id h.inst_id` by
+    (gvs[dft_remaining_inv_def] >>
+     first_x_assum irule >> simp[dft_id_before_cons]) >>
+  metis_tac[dft_wf_order_nonterminator]
+QED
+
+Theorem dft_crossing_swap_pair:
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+  MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+  ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+  id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+  ~dft_must_order x y /\ abort_compatible x.inst_opcode y.inst_opcode ==>
+  dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y /\
+  ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
+    write_effects x.inst_opcode = empty_effects)
+Proof
+  strip_tac >>
+  `DISJOINT (set (inst_defs y)) (set (inst_uses x))` by
+    metis_tac[dft_reverse_dependency_disjoint] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[wf_fn_block_inst_ids_distinct] >>
+  `x <> y` by metis_tac[id_before_asym] >>
+  `DISJOINT (set (inst_defs x)) (set (inst_defs y))` by
+    metis_tac[ssa_disjoint_defs, wf_ssa_def] >>
+  `~is_terminator x.inst_opcode` by metis_tac[dft_wf_order_nonterminator] >>
+  gvs[dft_must_order_def, dft_gas_swap_pair_def,
+      effects_independent_def, EVERY_MEM] >> metis_tac[pred_setTheory.DISJOINT_SYM]
+QED
