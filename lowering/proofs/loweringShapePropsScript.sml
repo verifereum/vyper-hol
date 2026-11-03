@@ -12041,10 +12041,13 @@ Theorem supported_string_reason_shape[local]:
   supported_string_reason tops e ==>
   ~supported_expr_exists expr_shape_root e
 Proof
+  Cases_on `supported_pure_expr tops e`
+  >- metis_tac[cj 1 supported_pure_shape] >>
   Cases_on `e` >>
-  simp[supportedStmtsTheory.supported_string_reason_def,
-       supported_expr_exists_def, expr_shape_root_def] >>
-  metis_tac[supported_pure_shape, supported_expr_exists_def, expr_shape_root_def]
+  gvs[supportedStmtsTheory.supported_string_reason_def] >>
+  rename1 `Literal _ lit` >> Cases_on `lit` >>
+  gvs[supportedStmtsTheory.supported_string_reason_def,
+      supported_expr_exists_def, expr_shape_root_def]
 QED
 
 Theorem supported_assert_reason_shape[local]:

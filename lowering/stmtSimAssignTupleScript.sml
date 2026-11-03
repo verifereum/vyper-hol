@@ -462,7 +462,12 @@ Resume assign_tuple_locals_success_run[loads]:
         (simp[Abbr `sl`] >> fs[lookup_var_def] >> metis_tac[]) >>
       metis_tac[])
   >- (rpt strip_tac >> simp[] >> fs[Abbr `sl`] >> metis_tac[]) >>
-  rpt strip_tac >> metis_tac[]
+  rpt strip_tac >>
+  qpat_x_assum `!fuel r. _ ==> ?fuel'. run_from fuel' ctx func sl = r` mp_tac >>
+  qpat_x_assum `!fuel. _ ==> ?fuel'. run_from fuel' ctx func sv = _` mp_tac >>
+  qpat_x_assum `!fuel. _ ==> ?fuel'. run_from fuel' ctx func s0 = _` mp_tac >>
+  qpat_x_assum `!e. run_from fuel ctx func t <> Error e` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> metis_tac[]
 QED
 
 Finalise assign_tuple_locals_success_run

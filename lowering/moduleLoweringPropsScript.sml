@@ -39,6 +39,26 @@ Ancestors
 Libs
   wordsLib
 
+Theorem compile_selector_checks_no_fn_labels:
+  !selectors method_id sa sd.
+    compile_selector_checks method_id selectors sa = ((), sd) /\
+    (!l. l IN bound_labels sa ==> ~isPREFIX "fn_" l) ==>
+    !l. l IN bound_labels sd ==> ~isPREFIX "fn_" l
+Proof
+  Induct_on `selectors`
+  >- simp[compile_selector_checks_def, comp_return_def] >>
+  qx_gen_tac `h` >> PairCases_on `h` >> rpt gen_tac >>
+  simp[Once compile_selector_checks_def, comp_return_def, comp_bind_def,
+       comp_ignore_bind_def, emitHelperTheory.emit_op_def,
+       emitHelperTheory.emit_inst_def, fresh_var_def,
+       fresh_id_def, fresh_label_def, emit_def, new_block_def] >>
+  strip_tac >> first_x_assum (drule_at Any) >>
+  simp[] >> disch_tac >> gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[] >>
+  simp[bound_labels_def, fresh_label_output_def] >>
+  fs[bound_labels_def] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
 Theorem compile_selector_checks_state_ok:
   !selectors method_id sa sd.
     compile_selector_checks method_id selectors sa = ((), sd) /\
@@ -101,6 +121,25 @@ Proof
   first_x_assum (qspec_then `fresh_label_output "dispatch" sa.cs_next_label` mp_tac) >>
   simp[fresh_label_output_in_future]
 QED
+Theorem compile_selector_dispatch_linear_no_fn_labels:
+  !selectors fallback sa sd.
+    compile_selector_dispatch_linear selectors fallback sa = ((), sd) /\
+    (!l. l IN bound_labels sa ==> ~isPREFIX "fn_" l) ==>
+    !l. l IN bound_labels sd ==> ~isPREFIX "fn_" l
+Proof
+  rpt gen_tac >>
+  simp[compile_selector_dispatch_linear_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def,
+       emitHelperTheory.emit_op_def, emitHelperTheory.emit_inst_def,
+       fresh_var_def, fresh_id_def, fresh_label_def, emit_def, new_block_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  simp[bound_labels_def] >>
+  drule compile_selector_checks_no_fn_labels >>
+  simp[bound_labels_def, fresh_label_output_def] >>
+  disch_tac >> gen_tac >> strip_tac >> first_x_assum irule >> simp[] >>
+  fs[bound_labels_def] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
 
 (* ===== Selector Dispatch =====
 

@@ -371,6 +371,33 @@ QED
    compile_external_fn_bodies opens that label's block with the entry
    checks.  Only variables and the position change
    on the way, and every result from s0 is a result of run_context. *)
+Theorem linear_dispatch_prefix_code[local]:
+  !selectors fallback sa sd se func.
+    fresh_label "fallback" (initial_compile_state "__entry") = (fallback, sa) /\
+    compile_selector_dispatch_linear selectors fallback sa = ((), sd) /\
+    cs_extends sd se /\ func.fn_blocks = all_blocks se ==>
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks sd)) /\
+    (!l. l IN bound_labels sd ==> ~isPREFIX "fn_" l) /\
+    fn_has_code sa sd func
+Proof
+  rpt gen_tac >> strip_tac >>
+  `compile_state_ok (initial_compile_state "__entry")` by
+    (irule compile_state_ok_initial >>
+     simp[compiler_labels_future_def, fresh_label_output_def]) >>
+  drule_all emitHelperPropsTheory.fresh_label_produces_external >> strip_tac >>
+  `compile_state_ok sd` by
+    (drule_all compile_selector_dispatch_linear_state_ok >> simp[]) >>
+  conj_tac
+  >- (irule loweringShapeRulesTheory.compile_state_ok_all_blocks_distinct >> simp[]) >>
+  conj_tac
+  >- (gen_tac >> strip_tac >>
+      drule compile_selector_dispatch_linear_no_fn_labels >>
+      disch_then irule >> simp[] >>
+      simp[vyperCompilerTheory.initial_compile_state_def, bound_labels_def]) >>
+  irule loweringShapeRulesTheory.cs_extends_fn_has_code >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem external_entry_reaches_checks:
   !tops rpolicy unit am tx ret vs mut args fbody.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\

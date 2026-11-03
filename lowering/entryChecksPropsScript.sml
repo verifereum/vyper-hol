@@ -100,7 +100,9 @@ Theorem step_cds_check_ops[local]:
 Proof
   rpt conj_tac >>
   rewrite_tac[mk_inst_def] >>
-  rewrite_tac[Once step_inst_base_def] >> simp[]
+  rewrite_tac[Once step_inst_base_def] >>
+  pure_rewrite_tac[instruction_accfupds, instruction_accessors,
+                   combinTheory.K_THM, opcode_case_def] >> simp[]
 QED
 
 (* The four instructions run to the end when the calldata is not shorter

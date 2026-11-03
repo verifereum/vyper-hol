@@ -838,3 +838,29 @@ Proof
   qexists_tac `bb` >> simp[lookup_block_APPEND] >>
   simp[lookup_block_def, FIND_thm]
 QED
+
+Theorem compile_state_ok_all_blocks_distinct:
+  !st. compile_state_ok st ==>
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks st))
+Proof
+  simp[compile_state_ok_def, all_blocks_def, MAP_REVERSE,
+       ALL_DISTINCT_APPEND, ALL_DISTINCT_REVERSE, MEM_MAP] >>
+  metis_tac[]
+QED
+
+Theorem cs_extends_fn_has_code:
+  !sa sd se func.
+    compile_state_ok sd /\ cs_extends sd se /\
+    func.fn_blocks = all_blocks se ==> fn_has_code sa sd func
+Proof
+  rpt strip_tac >> simp[fn_has_code_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `MEM bb sd.cs_blocks` by
+        metis_tac[emitted_blocks_def, MEM_TAKE] >>
+      irule cs_extends_finished_lookup >>
+      qexists_tac `sd` >> simp[] >>
+      irule venomExecProofsTheory.MEM_lookup_block >>
+      fs[compile_state_ok_def, MAP_REVERSE, ALL_DISTINCT_REVERSE]) >>
+  irule cs_extends_open_lookup >>
+  fs[compile_state_ok_def, MAP_REVERSE]
+QED

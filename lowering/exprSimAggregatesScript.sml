@@ -176,6 +176,13 @@ Proof
     eval_operand_def, val_in_memory_def] >>
   qexistsl [`b`,`sm`,`type_memory_size_list tvs`,`t`] >>
   simp[wordsTheory.dimword_def] >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> disch_tac >>
+  qpat_x_assum `!aid p n. FLOOKUP t.vs_allocas aid = SOME (p,n) /\ _ ==> _`
+    (qspecl_then [`aid`,`a`,`n`] mp_tac) >>
+  qpat_x_assum `FLOOKUP t.vs_allocas aid = SOME (a,n) /\ _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
