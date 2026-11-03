@@ -388,3 +388,96 @@ Proof
   asm_rewrite_tac[] >> irule ALL_DISTINCT_MAP_INJ >> simp[] >>
   rpt gen_tac >> strip_tac >> Cases_on `x = b` >> Cases_on `y = b` >> gvs[]
 QED
+
+Theorem replace_block_lookup_map:
+  !bbs. ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
+    lookup_block lbl bbs = SOME bb ==>
+    replace_block lbl (f bb) bbs =
+      MAP (\b. if b.bb_label = lbl then f b else b) bbs
+Proof
+  Induct >> simp[lookup_block_def, FIND_thm] >> gen_tac >>
+  Cases_on `h.bb_label = lbl` >>
+  simp[lookup_block_def, FIND_thm, replace_block_def] >> strip_tac
+  >- (gvs[] >> irule MAP_CONG >>
+      simp[] >> fs[MEM_MAP] >> metis_tac[]) >>
+  qpat_x_assum `_ ==> _` mp_tac >>
+  simp[lookup_block_def, replace_block_def]
+QED
+
+Theorem update_succ_phi_labels_nil:
+  update_succ_phi_labels old new bbs [] = bbs
+Proof
+  simp[update_succ_phi_labels_def]
+QED
+
+Theorem update_succ_phi_labels_cons:
+  update_succ_phi_labels old new bbs (h::ss) =
+  update_succ_phi_labels old new
+    (case lookup_block h bbs of NONE => bbs | SOME bb =>
+      replace_block h (bb with bb_instructions :=
+        MAP (\i. if i.inst_opcode = PHI then subst_label_inst old new i else i)
+          bb.bb_instructions) bbs) ss
+Proof
+  `(\i. if i.inst_opcode <> PHI then i else subst_label_inst old new i) =
+   (\i. if i.inst_opcode = PHI then subst_label_inst old new i else i)` by
+    (simp[FUN_EQ_THM] >> gen_tac >> Cases_on `i.inst_opcode = PHI` >> simp[]) >>
+  simp[update_succ_phi_labels_def]
+QED
+
+Theorem update_succ_phi_labels_singleton:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) ==>
+  update_succ_phi_labels old new bbs [h] =
+    MAP (\bb. if bb.bb_label = h then bb with bb_instructions :=
+      MAP (\i. if i.inst_opcode = PHI then subst_label_inst old new i else i)
+        bb.bb_instructions else bb) bbs
+Proof
+  strip_tac >> rewrite_tac[update_succ_phi_labels_cons, update_succ_phi_labels_nil] >>
+  Cases_on `lookup_block h bbs` >> simp[]
+  >- (irule LIST_EQ >> simp[EL_MAP] >> rpt strip_tac >>
+      `MEM (EL x bbs) bbs` by simp[EL_MEM] >>
+      `!bb. MEM bb bbs ==> bb.bb_label <> h` by
+        (rpt strip_tac >>
+         `lookup_block bb.bb_label bbs = SOME bb` by
+           (irule venomExecPropsTheory.MEM_lookup_block >> simp[]) >> gvs[]) >>
+      simp[]) >>
+  drule_all replace_block_lookup_map >>
+  disch_then (qspec_then
+    `\bb. bb with bb_instructions := MAP
+      (\i. if i.inst_opcode = PHI then subst_label_inst old new i else i)
+      bb.bb_instructions` mp_tac) >> simp[]
+QED
+
+Theorem update_succ_phi_labels_exact:
+  !succs bbs. ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) ==>
+  update_succ_phi_labels old new bbs succs =
+    MAP (\bb. if MEM bb.bb_label succs then bb with bb_instructions :=
+      MAP (\i. if i.inst_opcode = PHI then subst_label_inst old new i else i)
+        bb.bb_instructions else bb) bbs
+Proof
+  Induct >- simp[update_succ_phi_labels_nil] >> rpt strip_tac >>
+  `update_succ_phi_labels old new bbs (h::succs) =
+   update_succ_phi_labels old new
+     (update_succ_phi_labels old new bbs [h]) succs` by
+    simp[update_succ_phi_labels_cons, update_succ_phi_labels_nil] >>
+  asm_rewrite_tac[] >>
+  asm_simp_tac (srw_ss()) [update_succ_phi_labels_singleton] >>
+  qmatch_goalsub_abbrev_tac `update_succ_phi_labels old new bs succs` >>
+  `MAP (\b. b.bb_label) bs = MAP (\b. b.bb_label) bbs` by
+    (simp[Abbr `bs`, MAP_MAP_o, combinTheory.o_DEF] >>
+     irule MAP_CONG >> simp[] >> rpt strip_tac >> IF_CASES_TAC >> simp[]) >>
+  first_x_assum (qspec_then `bs` mp_tac) >> asm_rewrite_tac[] >>
+  disch_then SUBST1_TAC >>
+  simp[Abbr `bs`, MAP_MAP_o, combinTheory.o_DEF] >>
+  irule MAP_CONG >> simp[] >> rpt strip_tac >>
+  Cases_on `x.bb_label = h` >> Cases_on `MEM x.bb_label succs` >> gvs[] >>
+  `MAP (\i. if i.inst_opcode = PHI then subst_label_inst old new i else i)
+    (MAP (\i. if i.inst_opcode = PHI then subst_label_inst old new i else i)
+      x.bb_instructions) =
+   MAP (\i. if i.inst_opcode = PHI then subst_label_inst old new i else i)
+      x.bb_instructions` by
+    (simp[MAP_MAP_o, combinTheory.o_DEF] >> irule MAP_CONG >> simp[] >>
+     rpt strip_tac >> rename1 `MEM i x.bb_instructions` >>
+     ` (subst_label_inst old new i).inst_opcode = i.inst_opcode` by
+       simp[subst_label_inst_def] >>
+     Cases_on `i.inst_opcode = PHI` >> simp[subst_label_inst_idempotent]) >> simp[]
+QED
