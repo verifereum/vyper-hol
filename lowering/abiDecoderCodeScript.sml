@@ -392,3 +392,87 @@ Theorem abi_decoder_code_sequential_intervals:
 Proof
   simp[abi_decoder_code_def] >> rpt strip_tac >> decide_tac
 QED
+
+(* An emitted instruction, unlike a label, advances the scratch-site floor.
+   These facts apply to the MSTORE before the array index allocation and the
+   destination ADD immediately preceding each recursive child invocation. *)
+Theorem abi_decoder_emit_op_entry_floor:
+  abi_decoder_code start before /\ emit_op opc ops before = (v,after) /\
+  abi_decoder_code after phase /\ abi_decoder_code phase final ==>
+  start.cs_next_id + 1 <= phase.cs_next_id /\
+  phase.cs_next_id <= final.cs_next_id
+Proof
+  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
+       fresh_id_def, emit_def, abi_decoder_code_def] >>
+  rpt strip_tac >> gvs[] >> decide_tac
+QED
+
+Theorem abi_decoder_emit_void_entry_floor:
+  abi_decoder_code start before /\ emit_void opc ops before = ((),after) /\
+  abi_decoder_code after phase /\ abi_decoder_code phase final ==>
+  start.cs_next_id + 1 <= phase.cs_next_id /\
+  phase.cs_next_id <= final.cs_next_id
+Proof
+  simp[emit_void_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, emit_def, abi_decoder_code_def] >>
+  rpt strip_tac >> gvs[] >> decide_tac
+QED
+
+Theorem abi_decoder_member_pointer_entry_floor:
+  compile_getelemptr_abi src dyn off opc base_op hi start = (elem_ptr,end_st) ==>
+  start.cs_next_id + 1 <= end_st.cs_next_id
+Proof
+  Cases_on `dyn` >> Cases_on `base_op = Lit 0w` >> Cases_on `hi = Lit 0w` >>
+  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def,
+       emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* Last instruction of the dynamic-array header, immediately before ALLOCA.
+   The prefix certificate can include either optional bound/address branch. *)
+Theorem abi_decoder_array_allocation_entry_floor:
+  abi_decoder_code start header_st /\
+  emit_void MSTORE [dst; cnt] header_st = ((),alloc_st) /\
+  abi_decoder_code alloc_st end_st ==>
+  start.cs_next_id + 1 <= alloc_st.cs_next_id /\
+  alloc_st.cs_next_id <= end_st.cs_next_id
+Proof
+  strip_tac >> irule abi_decoder_emit_void_entry_floor >>
+  goal_assum (drule_at Any) >> simp[abi_decoder_code_refl] >>
+  goal_assum (drule_at Any) >> simp[abi_decoder_code_refl]
+QED
+
+(* The destination ADD is unconditional in both complex-member and dynamic
+   loop child setup. Earlier prefix instructions need only monotone IDs. *)
+Theorem abi_decoder_child_add_entry_floor:
+  abi_decoder_code start prefix_st /\
+  emit_op ADD [dst_base; dst_offset] prefix_st = (elem_dst,child_st) /\
+  abi_decoder_code child_st end_st ==>
+  start.cs_next_id + 1 <= child_st.cs_next_id /\
+  child_st.cs_next_id <= end_st.cs_next_id
+Proof
+  strip_tac >> irule abi_decoder_emit_op_entry_floor >>
+  goal_assum (drule_at Any) >> simp[abi_decoder_code_refl] >>
+  goal_assum (drule_at Any) >> simp[abi_decoder_code_refl]
+QED
+
+Theorem abi_decoder_complex_child_entry_floor:
+  compile_getelemptr_abi src dyn off opc base_op hi start = (elem_src,pointer_st) /\
+  emit_op ADD [dst; Lit (n2w vo)] pointer_st = (elem_dst,child_st) /\
+  abi_decoder_code child_st end_st ==>
+  start.cs_next_id + 1 <= child_st.cs_next_id /\
+  child_st.cs_next_id <= end_st.cs_next_id
+Proof
+  strip_tac >> drule abi_decoder_member_pointer_entry_floor >> strip_tac >>
+  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_var_def, fresh_id_def, emit_def, abi_decoder_code_def] >>
+  decide_tac
+QED
+
+Theorem abi_decoder_entry_floor_credit:
+  first <= start.cs_next_id + 1 /\ start.cs_next_id + 1 <= phase.cs_next_id ==>
+  first <= phase.cs_next_id
+Proof
+  decide_tac
+QED
