@@ -207,3 +207,26 @@ Proof
   gvs[Once well_typed_expr_def, subscript_vtype_def, AllCaseEqs()] >>
   gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def]
 QED
+
+Theorem extend_place_memory_live:
+  !cx id path sb es es' entry v pv.
+    lookup_scopes id es.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL v /\
+    extend_place cx (PlaceR (MemoryPlace id path)) sb es = (INL pv,es') ==>
+    es' = es /\ pv = PlaceR (MemoryPlace id (path ++ [sb])) /\
+    ?w. evaluate_subscripts entry.type entry.value (path ++ [sb]) = INL w
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `extend_place _ _ _ _ = _` mp_tac >>
+  simp[extend_place_def, place_type_value_def, read_place_def,
+       get_scopes_def, bind_def, ignore_bind_def, lift_option_type_def,
+       lift_sum_def, return_def, raise_def, read_memory_path_def,
+       extend_memory_place_def, AllCaseEqs()] >> strip_tac >>
+  Cases_on `subscripts_type entry.type path` >>
+  gvs[return_def, raise_def] >>
+  rename1 `subscripts_type entry.type path = SOME ptv` >>
+  Cases_on `evaluate_subscripts ptv v [sb]` >>
+  gvs[return_def, raise_def] >>
+  drule_all vyperPlaceResultTypingTheory.evaluate_subscripts_append >>
+  disch_then (qspec_then `[sb]` mp_tac) >> simp[]
+QED
