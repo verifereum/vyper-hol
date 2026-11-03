@@ -255,3 +255,67 @@ Theorem aug_place_probe_function_shape:
 Proof
   EVAL_TAC >> simp[]
 QED
+
+(* Nested-copy probe: a live outer element contains an empty inner array. *)
+Definition aug_place_nested_ty_def:
+  aug_place_nested_ty = ArrayT aug_place_probe_ty (Dynamic 1)
+End
+
+Definition aug_place_nested_rhs_def:
+  aug_place_nested_rhs = Builtin aug_place_nested_ty
+    (MakeArray (SOME aug_place_probe_ty) (Dynamic 1))
+    [Builtin aug_place_probe_ty
+      (MakeArray (SOME (ArrayT (BaseT (UintT 256)) (Fixed 1))) (Dynamic 1)) []]
+End
+
+Definition aug_place_nested_body_def:
+  aug_place_nested_body =
+    [Assign (BaseTarget (TopLevelNameTarget (NONE,"outer"))) aug_place_nested_rhs;
+     Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))]
+End
+
+Definition aug_place_nested_tops_def:
+  aug_place_nested_tops =
+    [VariableDecl Private Storage "outer" aug_place_nested_ty (SOME 0);
+     FunctionDecl Internal Nonpayable F F "key" [] [] (BaseT (UintT 256))
+       aug_place_nested_body]
+End
+
+Theorem aug_place_nested_supported:
+  supported_program aug_place_nested_tops
+Proof
+  EVAL_TAC
+QED
+
+Definition aug_place_nested_env_def:
+  aug_place_nested_env = aug_place_probe_env with
+    <| toplevel_vtypes := FEMPTY |+ ((NONE,"outer"),Type aug_place_nested_ty);
+       type_defs := type_env aug_place_nested_tops |>
+End
+
+Theorem aug_place_nested_typed:
+  IS_SOME (type_stmts aug_place_nested_env (BaseT (UintT 256)) aug_place_nested_body)
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def, type_slot_size_def]
+QED
+
+Definition aug_place_nested_cenv_def:
+  aug_place_nested_cenv = build_compile_env aug_place_nested_tops
+    Internal Nonpayable "key" [] (BaseT (UintT 256)) aug_place_nested_body F
+End
+
+Definition aug_place_nested_lowered_def:
+  aug_place_nested_lowered = SND (compile_stmt aug_place_nested_cenv NoLoop
+    (BaseT (UintT 256)) (HD aug_place_nested_body) (initial_compile_state "entry"))
+End
+
+Theorem aug_place_nested_copy_selected:
+  MAP (\i. i.inst_opcode)
+    (EL 1 aug_place_nested_lowered.cs_blocks).bb_instructions =
+    [MUL; ADD; MLOAD; ADD; SSTORE; ADD; ASSIGN; JMP] /\
+  MAP (\i. i.inst_opcode)
+    (EL 5 aug_place_nested_lowered.cs_blocks).bb_instructions =
+    [ALLOCA; MSTORE; ALLOCA; MSTORE; ADD; MCOPY; MLOAD; ASSIGN; JMP]
+Proof
+  EVAL_TAC
+QED
