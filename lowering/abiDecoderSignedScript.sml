@@ -24,12 +24,18 @@ Theorem abi_decoder_sign_extend_cast_bit:
 Proof
   strip_tac >>
   `8 * n + 7 = dimindex (:'a) - 1 /\ dimindex (:'a) <= 256` by decide_tac >>
-  Cases_on `word_msb w` >>
-  rw_tac (std_ss ++ fcpLib.FCP_ss ++ numSimps.ARITH_ss)
-    [word_and_def, word_lsr_def, sw2sw, word_msb_def, word_index, word_0,
-     dimindex_256, abi_signed_bit_one] >>
-  Cases_on `i = 0` >> gvs[sw2sw, word_msb_def] >>
-  `8 * (n + 1) - 1 = dimindex (:'a) - 1` by decide_tac >> asm_rewrite_tac[]
+  Cases_on `word_msb w` >> asm_simp_tac bool_ss [] >>
+  simp_tac bool_ss [fcpTheory.CART_EQ] >>
+  qx_gen_tac `i` >> strip_tac >>
+  Cases_on `i = 0` >> gvs[] >>
+  asm_simp_tac (std_ss ++ fcpLib.FCP_ss)
+    [word_and_def, word_index, word_0, abi_signed_bit_one, dimindex_256] >>
+  simp_tac (std_ss ++ fcpLib.FCP_ss)
+    [word_lsr_def, dimindex_256] >>
+  `8 * (n + 1) - 1 = dimindex (:'a) - 1` by decide_tac >>
+  `8 * (n + 1) < 257` by decide_tac >>
+  asm_simp_tac arith_ss [sw2sw, dimindex_256] >>
+  gvs[word_msb_def]
 QED
 
 Theorem abi_decoder_sign_extend_cast_mask:
