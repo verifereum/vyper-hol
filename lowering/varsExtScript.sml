@@ -206,17 +206,9 @@ Proof
   simp exec_simps
 QED
 
-Theorem step_inst_base_vars_ext:
-  !inst s V.
-    s.vs_vars SUBMAP V /\ ~is_terminator inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE /\ ~is_ext_call_op inst.inst_opcode ==>
-    vars_ext_result (step_inst_base inst s)
-      (step_inst_base inst (s with vs_vars := V))
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  fs[is_terminator_def, is_ext_call_op_def] >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs]
+(* Applied to a single already-dispatched opcode, never the opcode family. *)
+val dispatched_vars_ext_tac =
+  all_tac
   >>~- ([`vars_ext_result (exec_pure1 _ _ _) _`],
         irule exec_pure1_vars_ext >> simp[])
   >>~- ([`vars_ext_result (exec_pure2 _ _ _) _`],
@@ -229,24 +221,185 @@ Proof
         irule exec_read1_vars_ext >> asm_simp_tac (srw_ss()) ext_simps)
   >>~- ([`vars_ext_result (exec_write2 _ _ _) _`],
         irule exec_write2_vars_ext >> asm_simp_tac (srw_ss()) ext_simps) >>
-  simp[exec_alloca_def]
-  (* one step per opcode: together they run past the step limit *)
-  >>~- ([`inst.inst_opcode = MCOPY`], ext_tac)
-  >>~- ([`inst.inst_opcode = CALLDATACOPY`], ext_tac)
-  >>~- ([`inst.inst_opcode = RETURNDATACOPY`], ext_tac)
-  >>~- ([`inst.inst_opcode = CODECOPY`], ext_tac)
-  >>~- ([`inst.inst_opcode = EXTCODECOPY`], ext_tac)
-  >>~- ([`inst.inst_opcode = DLOADBYTES`], ext_tac)
-  >>~- ([`inst.inst_opcode = SHA3`], ext_tac)
-  >>~- ([`inst.inst_opcode = ISTORE`], ext_tac)
-  >>~- ([`inst.inst_opcode = LOG`], ext_tac)
-  >>~- ([`inst.inst_opcode = ALLOCA`], ext_tac)
-  >>~- ([`inst.inst_opcode = DALLOCA`], ext_tac)
-  >>~- ([`inst.inst_opcode = BUMP`], ext_tac)
-  >>~- ([`inst.inst_opcode = ASSERT`], ext_tac)
-  >>~- ([`inst.inst_opcode = PARAM`], ext_tac)
-  >>~- ([`inst.inst_opcode = FMP_PARAM`], ext_tac) >>
-  ext_tac
+  simp[exec_alloca_def] >> ext_tac;
+
+Theorem step_inst_base_vars_ext:
+  !inst s V.
+    s.vs_vars SUBMAP V /\ ~is_terminator inst.inst_opcode /\
+    inst.inst_opcode <> INVOKE /\ ~is_ext_call_op inst.inst_opcode ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  fs[is_terminator_def, is_ext_call_op_def] >>
+  all_tac
+  >>~- ([`inst.inst_opcode = ADD`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = SUB`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = MUL`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = Div`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = SDIV`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = Mod`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = SMOD`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = Exp`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = ADDMOD`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = MULMOD`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = EQ`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = LT`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = GT`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = SLT`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = SGT`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = ISZERO`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = AND`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = OR`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = XOR`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = NOT`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = SHL`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = SHR`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = SAR`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = SIGNEXTEND`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = BYTE`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = MLOAD`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = MSTORE`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = MSTORE8`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = MCOPY`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = MEMTOP`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = SLOAD`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = SSTORE`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = TLOAD`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = TSTORE`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = ILOAD`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = ISTORE`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = PHI`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = PARAM`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = ASSIGN`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = NOP`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = ALLOCA`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = DALLOCA`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = GETFMP`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = SETFMP`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = INITIAL_FMP`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = BUMP`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = FMP_PARAM`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = RETPC_PARAM`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = CALLER`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = CALLVALUE`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = CALLDATALOAD`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = CALLDATASIZE`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = CALLDATACOPY`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = ADDRESS`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = ORIGIN`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = GASPRICE`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = GAS`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = GASLIMIT`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = COINBASE`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = TIMESTAMP`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = NUMBER`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = PREVRANDAO`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = CHAINID`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = SELFBALANCE`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = BALANCE`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = BLOCKHASH`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = BASEFEE`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = CODESIZE`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = CODECOPY`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = EXTCODESIZE`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = EXTCODEHASH`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = EXTCODECOPY`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = RETURNDATASIZE`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = RETURNDATACOPY`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = BLOBHASH`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = BLOBBASEFEE`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = SHA3`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = LOG`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = ASSERT`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = ASSERT_UNREACHABLE`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = DLOAD`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = DLOADBYTES`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
+  >>~- ([`inst.inst_opcode = OFFSET`],
+        asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> dispatched_vars_ext_tac)
 QED
 
 Theorem step_inst_base_vars_ext_state:
