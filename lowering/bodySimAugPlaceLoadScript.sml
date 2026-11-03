@@ -6,6 +6,7 @@ Ancestors
   vyperTypeInvariants exprSimHyps vyperTyping vyperPlaceFrames
   vyperInterpreter vyperScopePreservation vyperValueOperation
   vyperPlaceStatePreservation vyperAssignPreservesType
+  exprSimBuffer exprLoweringProps compileEnv exprSim
 
 Theorem aug_place_projection_needs_shape:
   mem_path_offset (StructTV [("a",BaseTV BoolT);("b",BaseTV BoolT)])
@@ -260,4 +261,72 @@ Proof
   `evaluate_subscripts etv v' path = INL v` by metis_tac[] >>
   first_x_assum drule_all >>
   simp_tac bool_ss [arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem aug_place_memory_word:
+  !ctx func cenv cx es s id p sz w entry path off ptv v ty.
+    stmt_state_rel ctx func cenv cx es s /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    lookup_var p s = SOME w /\ lookup_scopes id es.scopes = SOME entry /\
+    value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
+    mem_path_offset entry.type path = SOME (off,ptv) /\
+    evaluate_subscripts entry.type entry.value path = INL v /\
+    is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME ptv ==>
+    mload (w2n (w + n2w off)) s = typed_val_to_w256 ptv v
+Proof
+  rpt strip_tac >>
+  `local_ptrs_rel func cenv es.scopes s /\ alloca_room ctx func s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `w2n w + sz <= s.vs_alloca_next /\ type_memory_size entry.type <= sz /\
+   val_in_memory entry.type entry.value (w2n w) s.vs_memory` by
+    (qpat_x_assum `local_ptrs_rel _ _ _ _`
+      (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
+     first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
+  drule mem_path_offset_sound >> strip_tac >>
+  `w2n (w + n2w off) = w2n w + off` by
+    (irule buffer_offset_no_wrap >> qexists_tac `sz` >> decide_tac) >>
+  `val_in_memory ptv v (w2n w + off) s.vs_memory` by
+    metis_tac[aug_place_path_project] >>
+  `value_has_type ptv v` by metis_tac[evaluate_subscripts_type] >>
+  simp[GSYM mem_word_at_eq_mload] >>
+  irule val_in_memory_word_type >> metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem aug_place_entry_type_agrees:
+  expr_sim_inv cenv cx env s /\ s'.scopes = s.scopes /\
+  lookup_scopes id s'.scopes = SOME entry /\
+  cenv.ce_var_type id = SOME ty ==>
+  evaluate_type (get_tenv cx) ty = SOME entry.type
+Proof
+  rpt strip_tac >>
+  gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+  `?ety. FLOOKUP env.var_types id = SOME ety` by metis_tac[optionTheory.IS_SOME_EXISTS] >>
+  metis_tac[optionTheory.SOME_11]
+QED
+
+Theorem aug_place_memory_load:
+  expr_sim_inv cenv cx env es /\
+  supported_target_info tops bindings t = SOME info /\
+  eval_target_place cx t es = (INL (MemoryPlace id path),st) /\
+  read_place cx (MemoryPlace id path) st = (INL cur,st') /\
+  stmt_state_rel ctx func cenv cx st s /\
+  place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w loc (Type ty) /\
+  is_word_type ty ==>
+  ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
+       mload (w2n w) s = typed_val_to_w256 tv cur
+Proof
+  rpt strip_tac >>
+  drule_all aug_place_target_memory_live >> strip_tac >>
+  `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by
+    metis_tac[aug_place_target_entry_typed] >>
+  `st.scopes = es.scopes` by metis_tac[aug_place_target_scopes] >>
+  gvs[place_ptr_rel_def] >>
+  `tv0 = entry.type` by metis_tac[aug_place_entry_type_agrees, optionTheory.SOME_11] >>
+  gvs[] >>
+  `cur = v` by
+    gvs[read_place_def, get_scopes_def, bind_def, lift_option_type_def,
+        lift_sum_def, return_def, read_memory_path_def] >>
+  irule aug_place_memory_word >>
+  goal_assum (drule_at Any) >> metis_tac[]
 QED
