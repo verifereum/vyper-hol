@@ -21,3 +21,4 @@ handle e => "CHECKER-REJECT " ^ path ^ ": " ^
 val paths = String.tokens (fn c => c = #"\n")
   (TextIO.inputAll (TextIO.openIn (valOf (OS.Process.getEnv "CHECK_LIST"))))
 val () = List.app (fn p => (print (check p ^ "\n"); TextIO.flushOut TextIO.stdOut)) paths
+val () = OS.Process.exit OS.Process.success

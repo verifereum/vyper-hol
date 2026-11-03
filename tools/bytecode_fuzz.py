@@ -282,7 +282,8 @@ def checker_rejects(paths):
     listing = paths[0].parent / f"check-{paths[0].stem}.txt"
     listing.write_text("".join(f"{p}\n" for p in paths))
     result = subprocess.run(["holbuild", "run", str(CHECKER)], cwd=ROOT, capture_output=True,
-                            text=True, env={**os.environ, "CHECK_LIST": str(listing)})
+                            stdin=subprocess.DEVNULL, text=True,
+                            env={**os.environ, "CHECK_LIST": str(listing)})
     listing.unlink()
     lines = [l.split(" ", 1) for l in result.stdout.splitlines() if l.startswith("CHECK")]
     if len(lines) != len(paths):
@@ -421,6 +422,7 @@ def main():
     parser.add_argument("--minimize", action="store_true",
                         help="also reduce each divergence to <name>.min.vy")
     args = parser.parse_args()
+    args.out = args.out.resolve()  # the checker runs from the repository root
     if not RUNNER.exists():
         raise SystemExit(f"missing {RUNNER}; run tools/build_native_json_parity.py")
     pin = (ROOT / "VYPER_PIN").read_text().strip()
