@@ -1,7 +1,7 @@
 (* Relation-level probes only: not a counterexample to target_case. *)
 Theory targetSubscriptProbe
 Ancestors
-  compileEnv vyperStoragePlaceRegion vyperStorageLayoutSafety vfmState
+  moduleLowering vyperCompiler compileEnv vyperStoragePlaceRegion vyperStorageLayoutSafety vfmState
   words finite_map combin vyperValue targetSubscriptSim
   emitHelperProps emitHelper exprLoweringProps venomExecSemantics venomState venomInst
   fragExec vyperInterpreter vyperContext vyperState vyperStorageBackend exprSimHyps
@@ -1231,3 +1231,155 @@ Proof
     metis_tac[wordsTheory.n2w_w2n])) >>
   simp[get_storage_def]
 QED
+
+(* Concrete compilation boundary only, not universal call simulation. *)
+Definition probe_word_compiled_def:
+  probe_word_compiled =
+    let body =
+      [Assign (BaseTarget (TopLevelNameTarget (NONE,"outer")))
+         (TopLevelName probe_word_outer_type (NONE,"donor"));
+       Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))] in
+    let cenv = build_compile_env probe_word_copy_code
+      Internal Nonpayable "shrink" [] (BaseT (UintT 256)) body F in
+    SND (compile_internal_function cenv [] F F 0 F F F 0 body
+      (SOME (BaseT (UintT 256))) (initial_compile_state "entry"))
+End
+
+Theorem probe_word_compiled_block_count:
+  LENGTH probe_word_compiled.cs_blocks = 9
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_word_compiled_entry:
+  EL 8 probe_word_compiled.cs_blocks =
+    <| bb_label := "entry"; bb_instructions :=
+      [mk_inst 0 RETPC_PARAM [Lit 0w] ["%0"];
+       mk_inst 1 ALLOCA [Lit 32w] ["%1"];
+       mk_inst 2 ALLOCA [Lit 96w] ["%2"];
+       mk_inst 3 ASSIGN [Lit 0w] ["%3"];
+       mk_inst 4 JMP [Label "@wcopy_cond_0"] []] |>
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_word_compiled_load_cond:
+  EL 7 probe_word_compiled.cs_blocks =
+    <| bb_label := "@wcopy_cond_0"; bb_instructions :=
+      [mk_inst 5 EQ [Var "%3"; Lit 3w] ["%4"];
+       mk_inst 6 JNZ [Var "%4"; Label "@wcopy_exit_2";
+         Label "@wcopy_body_1"] []] |>
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_word_compiled_load_body:
+  EL 6 probe_word_compiled.cs_blocks =
+    <| bb_label := "@wcopy_body_1"; bb_instructions :=
+      [mk_inst 7 ADD [Lit 3w; Var "%3"] ["%5"];
+       mk_inst 8 SLOAD [Var "%5"] ["%6"];
+       mk_inst 9 MUL [Var "%3"; Lit 32w] ["%7"];
+       mk_inst 10 ADD [Var "%2"; Var "%7"] ["%8"];
+       mk_inst 11 MSTORE [Var "%8"; Var "%6"] [];
+       mk_inst 12 ADD [Var "%3"; Lit 1w] ["%9"];
+       mk_inst 13 ASSIGN [Var "%9"] ["%3"];
+       mk_inst 14 JMP [Label "@wcopy_cond_0"] []] |>
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_word_compiled_load_exit:
+  EL 5 probe_word_compiled.cs_blocks =
+    <| bb_label := "@wcopy_exit_2"; bb_instructions :=
+      [mk_inst 15 MLOAD [Var "%2"] ["%10"];
+       mk_inst 16 ASSIGN [Lit 0w] ["%11"];
+       mk_inst 17 JMP [Label "@dyn_cond_3"] []] |>
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_word_compiled_copy_cond:
+  EL 4 probe_word_compiled.cs_blocks =
+    <| bb_label := "@dyn_cond_3"; bb_instructions :=
+      [mk_inst 18 LT [Var "%11"; Var "%10"] ["%12"];
+       mk_inst 19 ISZERO [Var "%12"] ["%13"];
+       mk_inst 20 JNZ [Var "%13"; Label "@dyn_exit_5";
+         Label "@dyn_body_4"] []] |>
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_word_compiled_copy_body:
+  EL 3 probe_word_compiled.cs_blocks =
+    <| bb_label := "@dyn_body_4"; bb_instructions :=
+      [mk_inst 21 MUL [Var "%11"; Lit 64w] ["%14"];
+       mk_inst 22 ADD [Lit 32w; Var "%14"] ["%15"];
+       mk_inst 23 ADD [Var "%2"; Var "%15"] ["%16"];
+       mk_inst 24 MUL [Var "%11"; Lit 2w] ["%17"];
+       mk_inst 25 ADD [Lit 1w; Var "%17"] ["%18"];
+       mk_inst 26 ADD [Lit 0w; Var "%18"] ["%19"];
+       mk_inst 27 ASSIGN [Lit 0w] ["%20"];
+       mk_inst 28 JMP [Label "@wcopy_cond_6"] []] |>
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_word_compiled_elem_cond:
+  EL 2 probe_word_compiled.cs_blocks =
+    <| bb_label := "@wcopy_cond_6"; bb_instructions :=
+      [mk_inst 29 EQ [Var "%20"; Lit 2w] ["%21"];
+       mk_inst 30 JNZ [Var "%21"; Label "@wcopy_exit_8";
+         Label "@wcopy_body_7"] []] |>
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_word_compiled_elem_body:
+  EL 1 probe_word_compiled.cs_blocks =
+    <| bb_label := "@wcopy_body_7"; bb_instructions :=
+      [mk_inst 31 MUL [Var "%20"; Lit 32w] ["%22"];
+       mk_inst 32 ADD [Var "%16"; Var "%22"] ["%23"];
+       mk_inst 33 MLOAD [Var "%23"] ["%24"];
+       mk_inst 34 ADD [Var "%19"; Var "%20"] ["%25"];
+       mk_inst 35 SSTORE [Var "%25"; Var "%24"] [];
+       mk_inst 36 ADD [Var "%20"; Lit 1w] ["%26"];
+       mk_inst 37 ASSIGN [Var "%26"] ["%20"];
+       mk_inst 38 JMP [Label "@wcopy_cond_6"] []] |>
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_word_compiled_elem_exit:
+  EL 0 probe_word_compiled.cs_blocks =
+    <| bb_label := "@wcopy_exit_8"; bb_instructions :=
+      [mk_inst 39 ADD [Var "%11"; Lit 1w] ["%27"];
+       mk_inst 40 ASSIGN [Var "%27"] ["%11"];
+       mk_inst 41 JMP [Label "@dyn_cond_3"] []] |>
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_word_compiled_return:
+  (probe_word_compiled.cs_current_bb,
+   probe_word_compiled.cs_current_insts) =
+    ("@dyn_exit_5",
+     [mk_inst 42 SSTORE [Lit 0w; Var "%10"] [];
+      mk_inst 43 RET [Lit 0w; Var "%0"] []])
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+(* Checked artifact interface:
+   - %0 is the return PC; %1 is an unused 32-byte return-value allocation.
+   - %2 is a fresh 96-byte buffer. The first wcopy loop unconditionally
+     SLOADs donor slots 3,4,5 into that buffer (counter %3, bound 3).
+   - %10 is the donor outer length loaded from %2; counter %11 is tested
+     against it by @dyn_cond_3. For each live outer element, the second
+     wcopy loop copies TWO words, including the possibly dead child word,
+     from %2+32+64*%11 to slots 1+2*%11 and 2+2*%11.
+   - @dyn_exit_5 always stores %10 to slot 0 and returns stack value 0
+     through %0. Thus destination writes are length-dependent, not an
+     unconditional three-slot copy. The accepted relational full-copy
+     theorem is not itself an execution theorem for this compiled code.
+   These concrete equations do not establish either universal expression
+   case judgment or an inhabited statement-state relation. *)
