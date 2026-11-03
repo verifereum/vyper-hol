@@ -485,6 +485,12 @@ QED
 
 (* ===== All binary operators ===== *)
 
+Theorem stack_value_pair_exists[local]:
+  ?t op sb. (StackValue a x, y) = (StackValue t op, sb)
+Proof
+  simp[]
+QED
+
 (* A binary operator is lowered to a StackValue. *)
 Theorem compile_bop_stack:
   !cenv ty ann bop args sa.
@@ -498,7 +504,11 @@ Proof
   rw[] >>
   Cases_on `HD (TL args)` >>
   simp[pairTheory.UNCURRY] >>
-  rename1 `Builtin _ bi _` >> Cases_on `bi` >> simp[]
+  (* reduce the case on the builtin top-down, then close each of the ~100
+     goals, a StackValue pair, by rewriting rather than a full simp *)
+  rename1 `Builtin _ bi _` >> Cases_on `bi` >>
+  ONCE_REWRITE_TAC [vyperASTTheory.builtin_case_def] >>
+  rewrite_tac[stack_value_pair_exists] >> simp[]
 QED
 
 (* A binary operator, from its operands' judgments, e2's where e1

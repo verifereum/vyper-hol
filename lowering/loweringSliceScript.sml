@@ -242,119 +242,30 @@ Theorem immutable_admissible_val_wf:
      kvs_val_wf kvs tv n) /\
   (!vs tvs. immutable_tuple_admissible tvs vs ==> tuple_val_wf vs tvs)
 Proof
-  ho_match_mp_tac val_wf_ind >> rpt conj_tac
-  >- suspend "bool"
-  >- suspend "int"
-  >- suspend "flag"
-  >- suspend "decimal"
-  >- suspend "bytes"
-  >- suspend "string"
-  >- simp[val_wf_def]
-  >- suspend "struct"
-  >- suspend "dynamic"
-  >- suspend "sparse"
-  >- suspend "tuple"
-  >- simp[val_wf_def]
-  >- suspend "fields_cons"
-  >- simp[val_wf_def]
-  >- (simp[val_wf_def] >> metis_tac[])
-  >- simp[val_wf_def]
-  >- (simp[val_wf_def] >> metis_tac[])
-  >- simp[val_wf_def]
-  >> suspend "tuple_cons"
+  ho_match_mp_tac val_wf_ind >> rpt conj_tac >> rpt gen_tac >>
+  TRY (qmatch_goalsub_rename_tac
+         `immutable_value_admissible tv _ ==> val_wf tv _` >> Cases_on `tv`) >>
+  TRY (qmatch_goalsub_rename_tac `BaseTV bt` >> Cases_on `bt`) >>
+  TRY (qmatch_goalsub_rename_tac `BytesT bound` >> Cases_on `bound`) >>
+  TRY (qmatch_goalsub_rename_tac `ArrayTV _ bound` >> Cases_on `bound`) >>
+  TRY (qmatch_goalsub_rename_tac `immutable_fields_admissible tvs _` >>
+       Cases_on `tvs` >>
+       TRY (qmatch_goalsub_rename_tac
+              `immutable_fields_admissible (field::_) _` >>
+            PairCases_on `field`)) >>
+  TRY (qmatch_goalsub_rename_tac `immutable_tuple_admissible tvs _` >>
+       Cases_on `tvs`) >>
+  (* close the ~190 type/value mismatches with the admissibility equations
+     alone before the full simp, which is too slow for all of them at once *)
+  simp[immutable_value_admissible_def] >>
+  simp[immutable_value_admissible_def, val_wf_def, type_memory_size_def,
+       AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  TRY (first_x_assum irule >> simp[] >> NO_TAC) >>
+  FIRST [BasicProvers.TOP_CASE_TAC >> gvs[immutable_value_admissible_def],
+         fs[ETA_THM] >> NO_TAC,
+         metis_tac[immutableEncodingProofsTheory.immutable_capacity_roundup,
+                   arithmeticTheory.LESS_EQ_TRANS]]
 QED
-
-Resume immutable_admissible_val_wf[bool]:
-  rpt gen_tac >> Cases_on `tv` >>
-  simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
-  rename1 `BaseTV bt` >> Cases_on `bt` >>
-  simp[immutable_value_admissible_def, type_memory_size_def]
-QED
-
-Resume immutable_admissible_val_wf[int]:
-  rpt gen_tac >> Cases_on `tv` >>
-  simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
-  rename1 `BaseTV bt` >> Cases_on `bt` >>
-  simp[immutable_value_admissible_def, type_memory_size_def]
-QED
-
-Resume immutable_admissible_val_wf[flag]:
-  rpt gen_tac >> Cases_on `tv` >>
-  simp[immutable_value_admissible_def, val_wf_def, type_memory_size_def] >>
-  rename1 `BaseTV bt` >> Cases_on `bt` >> simp[immutable_value_admissible_def]
-QED
-
-Resume immutable_admissible_val_wf[decimal]:
-  rpt gen_tac >> Cases_on `tv` >>
-  simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
-  rename1 `BaseTV bt` >> Cases_on `bt` >>
-  simp[immutable_value_admissible_def, type_memory_size_def]
-QED
-
-Resume immutable_admissible_val_wf[bytes]:
-  rpt gen_tac >> Cases_on `tv` >>
-  simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
-  rename1 `BaseTV bt` >> Cases_on `bt` >>
-  simp[immutable_value_admissible_def, type_memory_size_def] >>
-  rename1 `BytesT bound` >> Cases_on `bound` >>
-  simp[immutable_value_admissible_def, type_memory_size_def] >>
-  metis_tac[immutableEncodingProofsTheory.immutable_capacity_roundup,
-            arithmeticTheory.LESS_EQ_TRANS]
-QED
-
-Resume immutable_admissible_val_wf[string]:
-  rpt gen_tac >> Cases_on `tv` >>
-  simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
-  rename1 `BaseTV bt` >> Cases_on `bt` >>
-  simp[immutable_value_admissible_def, type_memory_size_def] >>
-  metis_tac[immutableEncodingProofsTheory.immutable_capacity_roundup,
-            arithmeticTheory.LESS_EQ_TRANS]
-QED
-
-Resume immutable_admissible_val_wf[struct]:
-  rpt gen_tac >> Cases_on `tv` >>
-  simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
-  metis_tac[]
-QED
-
-Resume immutable_admissible_val_wf[dynamic]:
-  rpt gen_tac >> Cases_on `tv`
-  >~ [`immutable_value_admissible (ArrayTV elem bound) _`]
-  >- (Cases_on `bound` >>
-      simp[immutable_value_admissible_def, val_wf_def] >> metis_tac[]) >>
-  simp[immutable_value_admissible_def, val_wf_def] >>
-  rpt BasicProvers.TOP_CASE_TAC >> simp[]
-QED
-
-Resume immutable_admissible_val_wf[sparse]:
-  rpt gen_tac >> Cases_on `tv`
-  >~ [`immutable_value_admissible (ArrayTV elem bound) _`]
-  >- (Cases_on `bound` >>
-      simp[immutable_value_admissible_def, val_wf_def] >> metis_tac[]) >>
-  simp[immutable_value_admissible_def, val_wf_def] >>
-  rpt BasicProvers.TOP_CASE_TAC >> simp[]
-QED
-
-Resume immutable_admissible_val_wf[tuple]:
-  rpt gen_tac >> Cases_on `tv` >>
-  simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
-  rpt BasicProvers.TOP_CASE_TAC >> gvs[] >> metis_tac[]
-QED
-
-Resume immutable_admissible_val_wf[fields_cons]:
-  rpt gen_tac >> Cases_on `tvs` >- simp[immutable_value_admissible_def] >>
-  rename1 `fields_val_wf _ (fld::tail)` >>
-  PairCases_on `fld` >> simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
-  metis_tac[]
-QED
-
-Resume immutable_admissible_val_wf[tuple_cons]:
-  rpt gen_tac >> Cases_on `tvs` >>
-  simp[immutable_value_admissible_def, val_wf_def, AllCaseEqs()] >>
-  rpt BasicProvers.TOP_CASE_TAC >> gvs[] >> metis_tac[]
-QED
-
-Finalise immutable_admissible_val_wf
 
 (* Transport the semantic immutable relation by capacity-sized memory
    agreement, without strengthening it to canonical padding. *)

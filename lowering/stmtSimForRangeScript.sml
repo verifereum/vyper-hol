@@ -351,7 +351,10 @@ Proof
     (rpt strip_tac >> irule eval_operand_update_other_op >> metis_tac[]) >>
   `!s. (s = s1 \/ s = s2 \/ s = s3 \/ s = s4 \/ s = s5 \/ s = s6) ==>
        eval_operand op1 s = SOME a /\ eval_operand op2 s = SOME b` by
-    (rpt strip_tac >> gvs[markerTheory.Abbrev_def]) >>
+    (rpt strip_tac >> qpat_x_assum `s = _` SUBST_ALL_TAC >>
+     qpat_assum `!x w s. MEM x _ ==> _` (fn th =>
+       simp[th, Abbr`s1`, Abbr`s2`, Abbr`s3`, Abbr`s4`, Abbr`s5`, Abbr`s6`]) >>
+     asm_rewrite_tac[]) >>
   `eval_operand (Var rv) s2 = SOME (b - a) /\
    eval_operand (Var rv) s6 = SOME (b - a) /\
    eval_operand (Var g1) s3 = SOME (bool_to_word bad1) /\
@@ -978,7 +981,8 @@ Resume compile_for_range_checked_frag[ends]:
     (qpat_x_assum `expr_post ctx _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def, expr_val_rel_def] >> rpt strip_tac >>
      TRY (first_x_assum (qspec_then `tyv` mp_tac)) >>
-     simp[typed_val_to_w256_word_value, word_value_def, val_to_w256_def]) >>
+     simp_tac (srw_ss ())
+       [typed_val_to_w256_word_value, word_value_def, val_to_w256_def]) >>
   `stmt_state_rel ctx func cenv cx es1 t1` by fs[expr_post_def] >>
   qpat_x_assum `expr_sim _ _ _ _ _ e2 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
@@ -1011,7 +1015,8 @@ Resume compile_for_range_checked_frag[alloca]:
     (qpat_x_assum `expr_post ctx _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def, expr_val_rel_def] >> rpt strip_tac >>
      TRY (first_x_assum (qspec_then `tyv` mp_tac)) >>
-     simp[typed_val_to_w256_word_value, word_value_def, val_to_w256_def]) >>
+     simp_tac (srw_ss ())
+       [typed_val_to_w256_word_value, word_value_def, val_to_w256_def]) >>
   `!x w. not_fresh_at s1 x /\ lookup_var x t1 = SOME w ==>
          lookup_var x t2 = SOME w` by fs[expr_post_def] >>
   `eval_operand op1 t2 = SOME (i2w n1)` by
