@@ -97,8 +97,11 @@ Proof
 QED
 
 (* Label operands sit only where the codegen expects them: jump targets,
-   PHI sources, the INVOKE target, and the second operand of LowerDload's
-   ADD [ptr; Label "code_end"] (Python's lower_dload.py emits the same). *)
+   PHI sources, the INVOKE target, the second operand of LowerDload's
+   ADD [ptr; Label "code_end"] (Python's lower_dload.py emits the same), and
+   the source operand of the constructor's CODECOPY [dst; Label "runtime_begin"; sz].
+   Fixed labels are equations rather than literal patterns, so the case
+   doesn't split on the label's characters. *)
 Definition label_positions_ok_def:
   label_positions_ok inst <=>
     case (inst.inst_opcode, inst.inst_operands) of
@@ -107,8 +110,8 @@ Definition label_positions_ok_def:
     | (PHI, ops) => T
     | (INVOKE, Label l :: args) => EVERY (\op. ~is_label_operand op) args
     | (ADD, [op; Label l]) => l = "code_end" /\ ~is_label_operand op
-    | (CODECOPY, [dst; Label "runtime_begin"; sz]) =>
-        ~is_label_operand dst /\ ~is_label_operand sz
+    | (CODECOPY, [dst; Label l; sz]) =>
+        l = "runtime_begin" /\ ~is_label_operand dst /\ ~is_label_operand sz
     | (_, ops) => EVERY (\op. ~is_label_operand op) ops
 End
 

@@ -62,11 +62,21 @@ QED
 Theorem label_positions_default[local]:
   i.inst_opcode <> JMP /\ i.inst_opcode <> JNZ /\
   i.inst_opcode <> PHI /\ i.inst_opcode <> INVOKE /\
-  i.inst_opcode <> ADD ==>
+  i.inst_opcode <> ADD /\ i.inst_opcode <> CODECOPY ==>
   (label_positions_ok i <=>
    EVERY (\op. ~is_label_operand op) i.inst_operands)
 Proof
-  Cases_on `i.inst_opcode` >> simp[label_positions_ok_def]
+  strip_tac >> simp[label_positions_ok_def] >>
+  Cases_on `i.inst_opcode` >> gvs[]
+QED
+
+Theorem label_positions_codecopy[local]:
+  label_positions_ok i /\ i.inst_opcode = CODECOPY /\
+  MEM (Label l) i.inst_operands ==>
+  l = "runtime_begin"
+Proof
+  rw[label_positions_ok_def] >> gvs[AllCaseEqs(), EVERY_MEM] >>
+  metis_tac[stackPlanTypesTheory.is_label_operand_def]
 QED
 
 Theorem label_positions_block_or_reserved:
@@ -90,6 +100,9 @@ Proof
       Cases_on `second` >> Cases_on `tail` >>
       gvs[stackPlanTypesTheory.is_label_operand_def, reserved_label_def] >>
       metis_tac[stackPlanTypesTheory.is_label_operand_def]) >>
+  Cases_on `i.inst_opcode = CODECOPY`
+  >- (disj2_tac >> drule_all label_positions_codecopy >>
+      simp[reserved_label_def]) >>
   drule_all label_positions_default >>
   gvs[EVERY_MEM] >>
   metis_tac[stackPlanTypesTheory.is_label_operand_def]
