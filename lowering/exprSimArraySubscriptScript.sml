@@ -2,7 +2,7 @@
 Theory exprSimArraySubscript
 Ancestors
   compileEnv exprSim exprSimNoPop exprSimArrayIndex vyperPlaceResultTyping vyperState
-  vyperTypeEnv exprSimHyps supportedExprTraverse exprSimAttribute
+  vyperTypeEnv vyperTypeInvariants exprSimHyps supportedExprTraverse exprSimAttribute
   vyperPlaceFrames vyperStatePreservation vyperInterpreter vyperArray
 
 (* A current-value path takes priority over every historical snapshot. *)
@@ -706,3 +706,110 @@ Resume vv_holds_expr_post_nonword_frame[memory]:
   drule_all exprSimAggregateChildrenTheory.local_place_at_vars_frame >> simp[]
 QED
 Finalise vv_holds_expr_post_nonword_frame
+
+(* Environment consistency connects compile-time local types to scope entries. *)
+Theorem expr_sim_inv_lookup_scope_type:
+  expr_sim_inv cenv cx env es /\
+  lookup_scopes n es.scopes = SOME entry ==>
+  ?ty. cenv.ce_var_type n = SOME ty /\
+       evaluate_type (get_tenv cx) ty = SOME entry.type
+Proof
+  strip_tac >>
+  `env_scopes_consistent env cx es` by
+    fs[expr_sim_inv_def, env_consistent_def] >>
+  `IS_SOME (FLOOKUP env.var_types n)` by
+    (fs[env_scopes_consistent_def] >> first_x_assum drule >> simp[]) >>
+  Cases_on `FLOOKUP env.var_types n` >> gvs[] >>
+  rename1 `FLOOKUP env.var_types n = SOME ty` >>
+  qexists_tac `ty` >> conj_tac
+  >- (fs[expr_sim_inv_def] >> first_x_assum drule >> simp[]) >>
+  fs[env_scopes_consistent_def] >> first_x_assum drule_all >> simp[]
+QED
+
+Theorem expr_sim_inv_dynarray_scope_type:
+  expr_sim_inv cenv cx env es /\
+  lookup_scopes n es.scopes = SOME entry /\ dynarray_local cenv n ==>
+  ?et bd. entry.type = ArrayTV et (Dynamic bd)
+Proof
+  strip_tac >> drule_all expr_sim_inv_lookup_scope_type >> strip_tac >>
+  gvs[dynarray_local_def, dynarray_type_def] >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  metis_tac[]
+QED
+
+Theorem expr_sim_inv_unchanged_scopes_complete_regions:
+  expr_sim_inv cenv cx env es /\ es'.scopes = es.scopes /\
+  local_ptrs_rel func cenv es.scopes s0 /\
+  local_ptrs_rel func cenv es'.scopes s1 /\
+  locals_kept cenv es s0 s1 /\
+  (!n q sz w. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) sz) /\
+              lookup_var q s0 = SOME w ==> lookup_var q s1 = SOME w) ==>
+  !n b sz. local_region cenv es.scopes s0 n b sz ==>
+    mem_bytes_at b sz s1.vs_memory = mem_bytes_at b sz s0.vs_memory
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  irule locals_kept_complete_regions >>
+  goal_assum (drule_at Any) >> simp[] >>
+  `EVERY scope_well_typed es.scopes` by
+    fs[expr_sim_inv_def, state_well_typed_def] >>
+  `!id entry. lookup_scopes id es.scopes = SOME entry /\ dynarray_local cenv id ==>
+     ?et bd. entry.type = ArrayTV et (Dynamic bd)` by
+    (rpt strip_tac >> drule_all expr_sim_inv_dynarray_scope_type >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  irule local_ptrs_rel_unchanged_scopes_headers >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  qexistsl_tac [`es'`, `func`] >> simp[] >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+
+(* Read-only observations of a captured result use only its corresponding
+   source component; bookkeeping and the other locations may change. *)
+Theorem read_result_source_components:
+  (!id path. tv = PlaceR (MemoryPlace id path) ==> t.scopes = s.scopes) /\
+  (!tr slot ty. tv = PlaceR (StoragePlace tr slot ty) ==>
+     get_storage cx t tr = get_storage cx s tr) /\
+  (!src id path. tv = PlaceR (ImmutablePlace src id path) ==>
+     t.immutables = s.immutables) ==>
+  (read_result cx tv t = (INL v, t) <=>
+   read_result cx tv s = (INL v, s))
+Proof
+  Cases_on `tv` >> simp[read_result_def, return_def, raise_def] >>
+  rename1 `read_place cx p` >> Cases_on `p` >>
+  simp[read_place_def, vyperStorageBackendTheory.read_storage_slot_eq,
+       get_scopes_def, get_immutables_def, get_address_immutables_def,
+       bind_def, return_def, lift_option_type_def, lift_option_def,
+       lift_sum_def, raise_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def]
+  >~ [`lookup_scopes id s.scopes`] >-
+    (Cases_on `lookup_scopes id s.scopes` >> simp[return_def, raise_def] >>
+     rename1 `read_memory_path entry path` >>
+     Cases_on `read_memory_path entry path` >> simp[return_def, raise_def]) >>
+  Cases_on `ALOOKUP s.immutables cx.txn.target` >> simp[return_def, raise_def] >>
+  rename1 `FLOOKUP (get_source_immutables src imms) id` >>
+  Cases_on `FLOOKUP (get_source_immutables src imms) id` >>
+  simp[return_def, raise_def] >>
+  rename1 `evaluate_subscripts (FST pair) (SND pair) path` >>
+  Cases_on `evaluate_subscripts (FST pair) (SND pair) path` >>
+  simp[return_def, raise_def]
+QED
+
+Theorem storage_holds_source_frame:
+  get_storage cx t tr = get_storage cx s tr /\
+  (!v. read_result cx tv t = (INL v, t) <=>
+       read_result cx tv s = (INL v, s)) /\
+  storage_holds cx tr ty tv w s ==>
+  storage_holds cx tr ty tv w t
+Proof
+  simp[storage_holds_def, vyperStorageBackendTheory.read_storage_slot_eq,
+       AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem immutable_holds_source_frame:
+  t.immutables = s.immutables /\
+  (!v. read_result cx tv t = (INL v, t) <=>
+       read_result cx tv s = (INL v, s)) /\
+  immutable_holds cenv cx ty tv w s ==>
+  immutable_holds cenv cx ty tv w t
+Proof
+  simp[immutable_holds_def] >> metis_tac[]
+QED
