@@ -168,7 +168,19 @@ Theorem eval_stmts_storage_conjs:
 
 Do not modify these statements. Prove them as-is, or produce a counterexample.
 All existing expression/body simulation statements and executable definitions are frozen.
-The internal helper statements in lowering/bodyStorageCasesScript.sml are weakly frozen: the sole permitted statement change is adding source_supply on entry states and the corresponding recursive-IH states where required by this migration. Preserve every existing premise and conclusion. Pure frame helpers need no extra domain.
+The internal helper statements in lowering/bodyStorageCasesScript.sml are weakly frozen: add source_supply on entry states and the corresponding recursive-IH states where required by this migration. Preserve every existing premise and conclusion except for the single explicitly authorized cleanup correction below. Pure frame helpers need no extra domain.
+
+The owner authorizes correcting the false internal expansion helper body_eval_intcall_empty_defaults to match the existing evaluator exactly. Its RHS must bind rv using:
+```sml
+      rv <- finally_unless_halt
+        (finally
+          (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+          (pop_function prev))
+        (unlock_if_nr cx nr (is_view_mut mut));
+```
+All other parts of that statement stay unchanged. Adapt its intcall_live consumer to this exact expansion, retaining every normal/error/halt case. The current unconditional unlock expansion has a checked reachable Halt counterexample even with source_supply. This correction changes no executable definition or frozen interface and adds no premise. Remove the diagnostic body_intcall_halt_probe from the final source once its evidence has been preserved outside the committed scripts. Resume the remaining supply migration and all five required theory builds; no human authorization is outstanding.
+
+Independent statement audit classifies the corrected expansion PROVABLE from the evaluator and empty-defaults reduction. Its continuation reaches intcall_return and body_intcall_return_storage/body_intcall_finally_storage, which describe the old cleanup arrangement. Retain those valid standalone lemmas; add consumed local frame variants for the actual nested cleanup if needed. Those variants must preserve the same storage conclusion on every result, including Halt, and may not change executable definitions or require new assumptions on the frozen interfaces.
 
 ## Completion Criteria
 
