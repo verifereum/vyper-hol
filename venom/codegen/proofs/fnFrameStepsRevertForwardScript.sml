@@ -397,3 +397,47 @@ Proof
   irule EQ_TRANS >> goal_assum (drule_at Any) >>
   irule operand_val_update_var >> Cases_on `op` >> gvs[]
 QED
+
+Theorem rf_value_inv_index[simp]:
+  rf_value_inv fn ra bb j lo entry k (s with vs_inst_idx := q) <=>
+  rf_value_inv fn ra bb j lo entry k s
+Proof
+  simp[rf_value_inv_def] >> eq_tac >> rpt strip_tac >>
+  first_x_assum drule >> Cases_on `op` >>
+  simp[frame_view_def, codegenRelTheory.operand_val_def,
+       venomStateTheory.lookup_var_def]
+QED
+
+Theorem rf_value_inv_output_free:
+  get_instruction bb k = SOME inst /\ inst.inst_outputs = [] /\
+  s'.vs_vars = s.vs_vars /\ rf_value_inv fn ra bb j lo entry k s ==>
+  rf_value_inv fn ra bb j lo entry (SUC k) s'
+Proof
+  strip_tac >> simp[rf_value_inv_def] >> rpt strip_tac >>
+  `rf_live_use bb k j op` by
+    (irule rf_live_use_backward >> simp[] >> metis_tac[MEM]) >>
+  `operand_val (frame_view fn ra s) lo op =
+   operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)` by
+    metis_tac[rf_value_inv_def] >>
+  `operand_val (frame_view fn ra s') lo op =
+   operand_val (frame_view fn ra s) lo op` by
+    (Cases_on `op` >>
+     simp[NoAsms, frame_view_def, codegenRelTheory.operand_val_def,
+          venomStateTheory.lookup_var_def] >> gvs[]) >>
+  simp[]
+QED
+
+Theorem rf_value_inv_returndatacopy:
+  get_instruction bb k = SOME inst /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  step_inst fuel ctx inst s = OK s' /\
+  rf_value_inv fn ra bb j lo entry k s ==>
+  rf_value_inv fn ra bb j lo entry (SUC k)
+    (s' with vs_inst_idx := SUC k)
+Proof
+  strip_tac >> simp[] >> irule rf_value_inv_output_free >>
+  simp[] >> qexists_tac `s` >> simp[] >>
+  qpat_x_assum `step_inst fuel ctx inst s = OK s'` mp_tac >>
+  simp[Once step_inst_def, Once step_inst_base_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[venomStateTheory.write_memory_with_expansion_def]
+QED
