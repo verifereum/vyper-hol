@@ -588,6 +588,59 @@ Proof
   strip_tac >> gvs[]
 QED
 
+(* Coverage is deliberately explicit: this consumer does not produce source
+   witnesses for target observations. *)
+Theorem taint_within_observation_transport:
+  dead_wf D /\ taint_within D C vs /\
+  (!stk PG G tt fn j t fuel t'.
+    frame_reachable vs C' stk PG G tt fn j t /\ active_inst fn j t /\
+    j.inst_opcode <> INVOKE /\ step_inst fuel C' j t = OK t' /\
+    LENGTH t.vs_requests < LENGTH t'.vs_requests ==>
+    ?stk0 PG0 G0 tn fn0 inst s s' fuel0.
+      frame_reachable vs C stk0 PG0 G0 tn fn0 inst s /\
+      active_inst fn0 inst s /\ inst.inst_opcode <> INVOKE /\
+      step_inst fuel0 C inst s = OK s' /\
+      LENGTH s.vs_requests < LENGTH s'.vs_requests /\
+      t.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
+      storage_agree_except
+        (D.d_stor s.vs_call_ctx.cc_address
+          (s.vs_accounts s.vs_call_ctx.cc_address).storage)
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage
+        (t.vs_accounts t.vs_call_ctx.cc_address).storage /\
+      storage_agree_except
+        (D.d_trans s.vs_call_ctx.cc_address (s.vs_transient s.vs_call_ctx.cc_address))
+        (s.vs_transient s.vs_call_ctx.cc_address)
+        (t.vs_transient t.vs_call_ctx.cc_address) /\
+      tt.t_stor SUBSET tn.t_stor /\ tt.t_trans SUBSET tn.t_trans) /\
+  (!t tt Rt. final_taint vs C' t tt Rt ==>
+    ?s tn R. final_taint vs C s tn R /\
+      t.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
+      storage_agree_except
+        (D.d_stor s.vs_call_ctx.cc_address
+          (s.vs_accounts s.vs_call_ctx.cc_address).storage)
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage
+        (t.vs_accounts t.vs_call_ctx.cc_address).storage /\
+      storage_agree_except
+        (D.d_trans s.vs_call_ctx.cc_address (s.vs_transient s.vs_call_ctx.cc_address))
+        (s.vs_transient s.vs_call_ctx.cc_address)
+        (t.vs_transient t.vs_call_ctx.cc_address) /\
+      imms_agree_except D s.vs_immutables t.vs_immutables /\
+      LENGTH s.vs_returndata = LENGTH t.vs_returndata /\
+      (!i. i < LENGTH s.vs_returndata /\ i NOTIN D.d_ret s.vs_returndata ==>
+        EL i s.vs_returndata = EL i t.vs_returndata) /\
+      tt.t_stor SUBSET tn.t_stor /\ tt.t_trans SUBSET tn.t_trans /\
+      tt.t_imm SUBSET tn.t_imm /\ Rt SUBSET R) ==>
+  taint_within D C' vs
+Proof
+  strip_tac >> rewrite_tac[taint_within_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!stk PG G tt fn j t fuel t'. _` drule_all >>
+      strip_tac >> drule_all request_taint_transport >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!t tt Rt. _` drule >> strip_tac >>
+  drule_all final_taint_transport >> simp[]
+QED
+
 (* The output's taint reaches only the dead bytes D. *)
 Theorem lower_dload_stage_taint:
   !rpolicy D view C C' vs names.
