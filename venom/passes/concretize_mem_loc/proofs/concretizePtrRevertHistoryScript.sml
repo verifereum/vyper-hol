@@ -135,7 +135,8 @@ Theorem ptr_chrono_revert_suffix:
   ALL_DISTINCT (fn_labels (EL i h).po_fn) /\
   in_revert_forward (EL i h).po_fn (EL i h).po_state ==>
   (EL j h).po_inst.inst_opcode = ASSIGN \/
-  (EL j h).po_inst.inst_opcode = REVERT
+  ((EL j h).po_inst.inst_opcode = REVERT /\
+   in_revert_forward (EL j h).po_fn (EL j h).po_state)
 Proof
   strip_tac >>
   `?bb p q. lookup_block (EL i h).po_state.vs_current_bb
@@ -152,8 +153,11 @@ Proof
     metis_tac[ptr_revert_history_active] >>
   `ALL_DISTINCT (fn_labels (EL j h).po_fn)` by metis_tac[] >>
   drule_all ptr_revert_active_lookup >> strip_tac >> gvs[] >>
-  Cases_on `(EL j h).po_state.vs_inst_idx = q` >>
-  gvs[revert_forward_pair_def] >>
+  Cases_on `(EL j h).po_state.vs_inst_idx = q`
+  >- (`in_revert_forward (EL j h).po_fn (EL j h).po_state` by
+        metis_tac[in_revert_forward_def, revert_forward_at_def] >>
+      gvs[revert_forward_pair_def]) >>
+  disj1_tac >> gvs[revert_forward_pair_def] >>
   `(EL j h).po_state.vs_inst_idx < q` by decide_tac >> metis_tac[]
 QED
 
@@ -188,8 +192,7 @@ QED
 Theorem ptr_chrono_ordinary_non_revert:
   o1_ctx_shape ctx /\ ptr_chrono_history vs0 ctx h endpoint /\
   ~in_revert_forward endpoint.po_fn endpoint.po_state /\
-  endpoint.po_inst.inst_opcode <> ASSIGN /\
-  endpoint.po_inst.inst_opcode <> REVERT ==>
+  endpoint.po_inst.inst_opcode <> ASSIGN ==>
   EVERY (\obs. ~in_revert_forward obs.po_fn obs.po_state) h
 Proof
   strip_tac >>
