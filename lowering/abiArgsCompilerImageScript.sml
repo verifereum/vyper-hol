@@ -1,6 +1,6 @@
 Theory abiArgsCompilerImage
 Ancestors
-  exprLowering context compileEnv emitHelper vyperAST
+  exprLowering context compileEnv emitHelper vyperAST exprWordOperand exprSafeOperand exprOperandVar exprSafeOperandBuiltins
 
 Theorem abi_image_convert_label:
   compile_type_convert op conv sa = (Label l,sb) ==>
@@ -340,4 +340,338 @@ Theorem abi_image_flag_not_label:
 Proof
   simp[compile_expr_body_def, comp_return_def, vv_operand_def] >>
   rpt strip_tac >> gvs[vv_operand_def]
+QED
+
+Theorem abi_image_acc_label:
+  compile_acc f ce e item sa = (Label l,sb) ==>
+  item = Address /\ lower_value f ce (BaseT AddressT) e sa = (Label l,sb)
+Proof
+  Cases_on `item` >> simp[compile_acc_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[abi_image_emit_not_label]
+QED
+
+Theorem abi_image_wei_int_label:
+  compile_as_wei_value_int v scale signed sa = (Label l,sb) ==>
+  v = Label l /\ sb = sa /\ scale = 1
+Proof
+  simp[builtinMiscTheory.compile_as_wei_value_int_def] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[abi_image_emit_not_label]
+QED
+
+Theorem abi_image_wei_decimal_not_label:
+  compile_as_wei_value_decimal v scale divisor sa = (op,sb) ==> op <> Label l
+Proof
+  Cases_on `scale = 1` >>
+  simp[builtinMiscTheory.compile_as_wei_value_decimal_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[abi_image_emit_not_label]
+QED
+
+Theorem abi_image_abi_encode_not_label:
+  lower_abi_encode ensure mid src info maxlen sa = (op,sb) ==> op <> Label l
+Proof
+  simp[builtinAbiTheory.lower_abi_encode_def, LET_THM,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[abi_image_alloc_not_label]
+QED
+
+Theorem abi_image_abi_decode_not_label:
+  lower_abi_decode data info mn mx sz sa = (op,sb) ==> op <> Label l
+Proof
+  simp[builtinAbiTheory.lower_abi_decode_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[abi_image_alloc_not_label]
+QED
+
+Theorem abi_image_stack_not_label:
+  as_stack_val t res = (vv,sb) /\ word_result_ok sb vv ==>
+  vv_operand vv <> Label l
+Proof
+  Cases_on `res` >> simp[as_stack_val_def] >> strip_tac >>
+  gvs[word_result_ok_def, vv_operand_def, safe_operand_def]
+QED
+
+Theorem abi_image_builtin_scalar_not_label:
+  (bi = Not \/ bi = Neg \/ bi = Abs \/ bi = BlockHash \/ bi = BlobHash \/
+   bi = Ceil \/ bi = Floor \/ bi = AddMod \/ bi = MulMod \/ bi = PowMod256 \/
+   bi = ECRecover \/ bi = CalldataLen \/ (?item. bi = Env item)) /\
+  compile_builtin_dispatch_body f ce vt ty bi args sa = (vv,sb) ==>
+  vv_operand vv <> Label l
+Proof
+  strip_tac >>
+  `word_result_ok sb vv` by metis_tac[word_builtin_scalar] >>
+  gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs(), as_stack_val_def] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[abi_image_stack_not_label]
+QED
+
+Theorem abi_image_builtin_hash_not_label:
+  (bi = Keccak256 \/ bi = Sha256) /\
+  compile_builtin_dispatch_body f ce vt ty bi args sa = (vv,sb) ==>
+  vv_operand vv <> Label l
+Proof
+  strip_tac >>
+  `word_result_ok sb vv` by metis_tac[word_builtin_hash] >>
+  gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs(), as_stack_val_def] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[abi_image_stack_not_label]
+QED
+
+Theorem abi_image_builtin_len_not_label:
+  compile_builtin_dispatch_body f ce vt ty Len args sa = (vv,sb) ==>
+  vv_operand vv <> Label l
+Proof
+  strip_tac >>
+  `word_result_ok sb vv` by metis_tac[word_builtin_len] >>
+  gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[as_stack_val_def] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[abi_image_stack_not_label]
+QED
+
+Theorem abi_image_builtin_bop_not_label:
+  compile_builtin_dispatch_body f ce vt ty (Bop bop) args sa = (vv,sb) ==>
+  vv_operand vv <> Label l
+Proof
+  strip_tac >>
+  `word_result_ok sb vv` by metis_tac[word_builtin_bop] >>
+  gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+  metis_tac[abi_image_stack_not_label]
+QED
+
+Theorem abi_image_slice_out_not_label:
+  compile_slice_out_buf sz sa = ((buf,data),sb) ==> buf <> Label l
+Proof
+  simp[builtinBytesTheory.compile_slice_out_buf_def, comp_bind_def,
+       comp_return_def] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[abi_image_alloc_not_label]
+QED
+
+Theorem abi_image_slice_data_not_label:
+  compile_slice_data len data start lenop sz sa = (op,sb) ==> op <> Label l
+Proof
+  simp[builtinBytesTheory.compile_slice_data_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[abi_image_alloc_not_label]
+QED
+
+Theorem abi_image_slice_adhoc_not_label:
+  (!start lenop sz sa op sb.
+    compile_slice_calldata start lenop sz sa = (op,sb) ==> op <> Label l) /\
+  (!start lenop sz sa op sb.
+    compile_slice_code start lenop sz sa = (op,sb) ==> op <> Label l) /\
+  (!addr start lenop buf data sa op sb.
+    buf <> Label l /\ compile_slice_extcode addr start lenop buf data sa = (op,sb) ==>
+    op <> Label l)
+Proof
+  rpt conj_tac >> rpt gen_tac >>
+  simp[builtinBytesTheory.compile_slice_calldata_def,
+       builtinBytesTheory.compile_slice_code_def,
+       builtinBytesTheory.compile_slice_extcode_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[abi_image_slice_out_not_label]
+QED
+
+Theorem abi_image_ec_not_label:
+  (!p q sa op sb. compile_ecadd_points p q sa = (op,sb) ==> op <> Label l) /\
+  (!p scalar sa op sb. compile_ecmul_point p scalar sa = (op,sb) ==> op <> Label l)
+Proof
+  conj_tac >> rpt gen_tac >>
+  simp[builtinMiscTheory.compile_ecadd_points_def,
+       builtinMiscTheory.compile_ecmul_point_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[abi_image_alloc_not_label]
+QED
+
+Theorem abi_image_uint2str_not_label:
+  compile_uint2str v digits sz sa = (op,sb) ==> op <> Label l
+Proof
+  simp[builtinStringsTheory.compile_uint2str_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[]
+QED
+
+Theorem abi_image_builtin_fresh_not_label:
+  ((?n. bi = CalldataSlice n) \/ bi = ECAdd \/ bi = ECMul \/
+   (?n. bi = Concat n) \/ (?n. bi = Slice n) \/ (?n. bi = Uint2Str n)) /\
+  compile_builtin_dispatch_body f ce vt ty bi args sa = (vv,sb) ==>
+  vv_operand vv <> Label l
+Proof
+  strip_tac >> gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()]
+  >~ [`LocatedValue _ (base_ptr _)`] >-
+    (gvs[vv_operand_def, base_ptr_def] >> metis_tac[abi_image_alloc_not_label]) >>
+  qpat_x_assum `as_ptr_val _ _ _ = _` mp_tac >>
+  qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory res` >>
+  Cases_on `res` >> gvs[as_ptr_val_def, markerTheory.Abbrev_def] >>
+  strip_tac >> gvs[vv_operand_def, mk_ptr_def] >>
+  metis_tac[abi_image_slice_adhoc_not_label, abi_image_slice_out_not_label,
+            abi_image_slice_data_not_label, abi_image_ec_not_label,
+            abi_image_uint2str_not_label]
+QED
+
+Theorem abi_image_builtin_makearray_not_label:
+  compile_builtin_dispatch_body f ce vt ty (MakeArray et bd) args sa = (vv,sb) ==>
+  vv_operand vv <> Label l
+Proof
+  Cases_on `et` >> simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  qpat_x_assum `as_ptr_val _ _ _ = _` mp_tac >>
+  qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory res` >>
+  Cases_on `res` >> gvs[as_ptr_val_def, markerTheory.Abbrev_def] >>
+  strip_tac >> gvs[vv_operand_def, mk_ptr_def] >>
+  metis_tac[compiler_make_tuple_result, compiler_make_array_result,
+            abi_image_alloc_not_label]
+QED
+
+Theorem abi_image_method_not_label:
+  compile_method_id_runtime ty v flag sa = (op,sb) ==> op <> Label l
+Proof
+  Cases_on `flag`
+  >- metis_tac[compile_method_id_word_safe_operand, safe_operand_def] >>
+  simp[builtinHashingTheory.compile_method_id_runtime_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[abi_image_alloc_not_label]
+QED
+
+Theorem abi_image_builtin_method_not_label:
+  compile_builtin_dispatch_body f ce vt ty MethodId args sa = (vv,sb) ==>
+  vv_operand vv <> Label l
+Proof
+  simp[compile_builtin_dispatch_body_def, LET_THM] >> strip_tac >>
+  gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()]
+  >~ [`compile_literal_vv _ _ _ = _`] >- metis_tac[abi_image_literal_not_label]
+  >~ [`as_ptr_val _ _ _ = _`] >-
+    (qpat_x_assum `as_ptr_val _ _ _ = _` mp_tac >>
+     qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory res` >>
+     Cases_on `res` >> gvs[as_ptr_val_def, markerTheory.Abbrev_def] >>
+     strip_tac >> gvs[vv_operand_def, mk_ptr_def] >>
+     metis_tac[abi_image_method_not_label]) >>
+  qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
+  qmatch_goalsub_abbrev_tac `as_stack_val vt res` >>
+  Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
+  strip_tac >> gvs[vv_operand_def] >> metis_tac[abi_image_method_not_label]
+QED
+
+Theorem abi_image_builtin_acc_label:
+  compile_builtin_dispatch_body f ce vt ty (Acc item) args sa = (vv,sb) /\
+  vv_operand vv = Label l ==>
+  item = Address /\ lower_value f ce (BaseT AddressT) (HD args) sa = (Label l,sb)
+Proof
+  simp[compile_builtin_dispatch_body_def, LET_THM] >> strip_tac >>
+  qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
+  qmatch_goalsub_abbrev_tac `as_stack_val vt res` >>
+  Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
+  strip_tac >> gvs[vv_operand_def] >> metis_tac[abi_image_acc_label]
+QED
+
+Theorem abi_image_builtin_wei_label:
+  compile_builtin_dispatch_body f ce vt ty (AsWeiValue denom) args sa = (vv,sb) /\
+  vv_operand vv = Label l ==>
+  lower_value f ce (expr_type (HD args)) (HD args) sa = (Label l,sb)
+Proof
+  simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[AllCaseEqs()] >>
+  qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
+  qmatch_goalsub_abbrev_tac `as_stack_val vt res` >>
+  Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
+  strip_tac >> gvs[vv_operand_def] >>
+  metis_tac[abi_image_wei_int_label, abi_image_wei_decimal_not_label]
+QED
+
+Theorem abi_image_builtin_label:
+  compile_builtin_dispatch_body f ce vt ty bi args sa = (vv,sb) /\
+  vv_operand vv = Label l ==>
+  (bi = Acc Address /\
+   lower_value f ce (BaseT AddressT) (HD args) sa = (Label l,sb)) \/
+  (?denom. bi = AsWeiValue denom /\
+   lower_value f ce (expr_type (HD args)) (HD args) sa = (Label l,sb))
+Proof
+  Cases_on `bi` >> strip_tac
+  >~ [`compile_builtin_dispatch_body _ _ _ _ (Acc item) _ _ = _`] >-
+    (drule_all abi_image_builtin_acc_label >> strip_tac >> gvs[])
+  >~ [`compile_builtin_dispatch_body _ _ _ _ (AsWeiValue denom) _ _ = _`] >-
+    (drule_all abi_image_builtin_wei_label >> strip_tac >> gvs[]) >>
+  metis_tac[abi_image_builtin_scalar_not_label, abi_image_builtin_hash_not_label,
+            abi_image_builtin_len_not_label, abi_image_builtin_bop_not_label,
+            abi_image_builtin_fresh_not_label, abi_image_builtin_makearray_not_label,
+            abi_image_builtin_method_not_label]
+QED
+
+Theorem abi_image_empty_not_label:
+  compile_builtin_empty_complex sz bs sa = (buf,sb) ==> buf.buf_operand <> Label l
+Proof
+  simp[builtinSimpleTheory.compile_builtin_empty_complex_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> Cases_on `bs` >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[abi_image_alloc_not_label]
+QED
+
+Theorem abi_image_type_builtin_nonconvert_not_label:
+  tb <> Convert /\
+  compile_type_builtin_dispatch_body f ce vt ty tb rt args sa = (vv,sb) ==>
+  vv_operand vv <> Label l
+Proof
+  Cases_on `tb` >>
+  simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[vv_operand_def]
+  >~ [`if is_word_type _ then _ else _`] >-
+    (gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
+     gvs[vv_operand_def, base_ptr_def] >> metis_tac[abi_image_empty_not_label])
+  >~ [`as_stack_val _ _ = _`] >-
+    (qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
+     qmatch_goalsub_abbrev_tac `as_stack_val vt res` >>
+     Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
+     strip_tac >> gvs[vv_operand_def] >>
+     drule compile_extract32_load_safe_operand >> strip_tac >>
+     metis_tac[compile_clamp_basetype_safe_operand, safe_operand_def]) >>
+  gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
+  qpat_x_assum `as_ptr_val _ _ _ = _` mp_tac >>
+  qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory res` >>
+  Cases_on `res` >> gvs[as_ptr_val_def, markerTheory.Abbrev_def] >>
+  strip_tac >> gvs[vv_operand_def, mk_ptr_def] >>
+  metis_tac[abi_image_abi_encode_not_label, abi_image_abi_decode_not_label]
+QED
+
+Theorem abi_image_type_builtin_convert_label:
+  compile_type_builtin_dispatch_body f ce vt ty Convert rt args sa = (vv,sb) /\
+  vv_operand vv = Label l ==>
+  ?sm. lower_value f ce (expr_type (HD args)) (HD args) sa = (Label l,sm) /\
+       sb.cs_blocks = sm.cs_blocks
+Proof
+  simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  Cases_on `rt` >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
+  qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
+  qmatch_goalsub_abbrev_tac `as_stack_val vt res` >>
+  Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
+  strip_tac >> gvs[vv_operand_def] >>
+  metis_tac[abi_image_convert_label]
+QED
+
+Theorem abi_image_type_builtin_label:
+  compile_type_builtin_dispatch_body f ce vt ty tb rt args sa = (vv,sb) /\
+  vv_operand vv = Label l ==>
+  tb = Convert /\
+  ?sm. lower_value f ce (expr_type (HD args)) (HD args) sa = (Label l,sm) /\
+       sb.cs_blocks = sm.cs_blocks
+Proof
+  Cases_on `tb = Convert` >> strip_tac >> gvs[]
+  >- metis_tac[abi_image_type_builtin_convert_label] >>
+  metis_tac[abi_image_type_builtin_nonconvert_not_label]
 QED
