@@ -383,3 +383,44 @@ This remains **same-context** callee transport only. Recursively edited
 callee contexts, general independent effectful edits, intermediate schedule
 readiness, schedule composition, and the frozen context/block obligations
 are not established by this theory.
+
+## Mixed GAS/INVOKE caller boundary (C3.2.15)
+
+`dftOccurrenceCallStackScript.sml` now provides a mixed stack, rather than
+one distinguished residual under an identical nested prefix. Each paired
+caller retains its own common saved path/visit. A normal caller has mapped
+syntax and equal saved states at an actual INVOKE slot on both sides. A
+pending caller has the single-variable GAS cut, source index `SUC (LENGTH
+pre)`, target index `LENGTH pre`, and its value fixed by the saved address.
+Counters are independent. Empty/cons/head-inversion, alignment lengths and
+erased-frame boundaries are exported.
+
+The checked transition boundaries are:
+
+* `dft_mixed_init` and `dft_mixed_sync_enter`: mapped entry, including missing
+  block and PHI failure, with the remaining mixed callers unchanged unless
+  the machine clears them.
+* `dft_mixed_sync_at`: actual oracle steps outside both edited slots.
+  INVOKE lookup/setup uses the mapped context and enters a mapped callee;
+  it pushes an ordinary frame onto any mixed tail. Setup failure clears
+  the stacks. GAS and ordinary instructions have their actual transitions.
+* `dft_mixed_sync_done`: an ordinary pop rejoins synchronization; a pending
+  pop produces `dft_mixed_discharge`, not synchronization; a failed return
+  or non-return result clears the stacks. No callee termination premise is
+  used: this theorem classifies the actual Done constructor when present.
+* `dft_mixed_discharge_next`: one actual target GAS step rejoins with the
+  source while retaining the remaining mixed stack and its saved addresses.
+
+`dft_mixed_pending_instance` and `dft_mixed_two_pending_instance` give symbolic
+non-vacuous saved frames at the actual two call indices.
+`dft_mixed_two_pending_pop` and `dft_mixed_two_pending_discharge` expose the
+unchanged outer descriptor/address in the actual transition equations.
+`dft_mixed_two_pending_return_discharge` additionally requires both frames
+to be pending and composes the actual inner return and target GAS discharge.
+It permits return arity failure explicitly rather than assuming success.
+
+This is a boundary checkpoint only. It excludes active execution across the
+edited pair and does not prove unrestricted recursive trajectories,
+intermediate-phase observation transport, schedule readiness, whole-schedule
+composition, terminal step accounting, or realization by a finite gas list.
+The frozen block and context obligations remain unresolved.
