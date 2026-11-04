@@ -747,3 +747,175 @@ Proof
   `op <> dead_stack_marker` by (gvs[] >> metis_tac[]) >>
   drule_all bottom_dead_equiv_below_all_live >> simp[] >> gvs[] >> metis_tac[]
 QED
+
+Theorem stack_get_depth_is_some:
+  !op stk. IS_SOME (stack_get_depth op stk) <=> MEM op stk
+Proof
+  rpt gen_tac >> Cases_on `stack_get_depth op stk` >> simp[]
+  >- (strip_tac >> drule stack_get_depth_core >>
+      disch_then (qspec_then `[]` mp_tac) >> simp[]) >>
+  drule stack_get_depth_props >> strip_tac >>
+  qpat_x_assum `stack_peek _ _ = op` (SUBST1_TAC o SYM) >>
+  pure_rewrite_tac[stack_peek_def] >> irule EL_MEM >> simp[]
+QED
+
+Theorem mark_dead_stack_prefix:
+  !m pre live retained.
+    set retained = set pre /\ DISJOINT (set pre) (set live) ==>
+    mark_dead_stack retained (REPLICATE m dead_stack_marker ++ pre ++ live) =
+      REPLICATE (m + LENGTH pre) dead_stack_marker ++ live
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MAP (\op. if MEM op retained then dead_stack_marker else op) pre =
+     REPLICATE (LENGTH pre) dead_stack_marker` by
+    (simp[LIST_EQ_REWRITE, EL_MAP, EL_REPLICATE] >> rpt strip_tac >>
+     `MEM (EL x pre) pre` by metis_tac[EL_MEM] >> ASM_SET_TAC[]) >>
+  `MAP (\op. if MEM op retained then dead_stack_marker else op) live = live` by
+    (simp[LIST_EQ_REWRITE, EL_MAP] >> rpt strip_tac >>
+     `MEM (EL x live) live` by metis_tac[EL_MEM] >>
+     `~MEM (EL x live) pre` by ASM_SET_TAC[] >> simp[]) >>
+  simp[mark_dead_stack_def, LIST_EQ_REWRITE, EL_APPEND_EQN, EL_REPLICATE]
+QED
+
+Theorem cleanup_physical_core:
+  !S ps m core inputs layout physical.
+    lineage_inventory S ps /\ lineage_core m core ps /\
+    DISJOINT (set core) (FDOM ps.ps_spilled) /\
+    set core UNION FDOM ps.ps_spilled = S /\
+    S SUBSET set (MAP Var inputs) UNION set (MAP Var layout) UNION FDOM ps.ps_spilled /\
+    physical = FILTER (\op. IS_SOME (stack_get_depth op ps.ps_stack))
+      (MAP Var (FILTER (\v. ~MEM v inputs) layout)) ==>
+    set physical = set core DIFF set (MAP Var inputs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `set (MAP Var (FILTER (\v. ~MEM v inputs) layout)) =
+     set (MAP Var layout) DIFF set (MAP Var inputs)` by
+    (simp[EXTENSION, MEM_MAP, MEM_FILTER] >> Cases >> simp[] >> metis_tac[]) >>
+  `set physical = set (MAP Var (FILTER (\v. ~MEM v inputs) layout)) INTER
+     set ps.ps_stack` by
+    (simp[EXTENSION, MEM_FILTER, stack_get_depth_is_some] >> metis_tac[]) >>
+  `~MEM dead_stack_marker (MAP Var layout)` by
+    simp[MEM_MAP, dead_stack_marker_def] >>
+  `DISJOINT (set (REPLICATE m dead_stack_marker)) (set (MAP Var layout))` by
+    (simp[DISJOINT_DEF, EXTENSION, MEM_REPLICATE] >> metis_tac[]) >>
+  gvs[lineage_core_def] >> ASM_SET_TAC[]
+QED
+
+Theorem cleanup_retained_core:
+  !m core ps inputs physical retained removed.
+    lineage_core m core ps /\ ALL_DISTINCT core /\ EVERY is_var_operand core /\
+    set physical = set core DIFF set (MAP Var inputs) /\
+    retained = FILTER (\op. below_all_live op inputs ps.ps_stack) physical /\
+    removed = FILTER (\op. ~MEM op retained) physical ==>
+    ?n live.
+      mark_dead_stack retained (SND (popmany_plan removed ps)).ps_stack =
+        REPLICATE n dead_stack_marker ++ live /\
+      ALL_DISTINCT live /\ EVERY is_var_operand live /\
+      set live = set core INTER set (MAP Var inputs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all below_all_live_core_prefix >>
+  disch_then (qspecl_then [`m`, `inputs`] strip_assume_tac) >>
+  `set retained = set pre` by
+    (simp[EXTENSION, MEM_FILTER] >> gvs[lineage_core_def] >>
+     ASM_SET_TAC[]) >>
+  `set removed = set physical DIFF set retained` by
+    (simp[EXTENSION, MEM_FILTER] >> metis_tac[]) >>
+  `DISJOINT (set (REPLICATE m dead_stack_marker ++ pre)) (set removed)` by
+    (`~MEM dead_stack_marker physical` by
+       (fs[EVERY_MEM] >>
+        `~is_var_operand dead_stack_marker` by
+          simp[stackPlanTypesTheory.is_var_operand_def, dead_stack_marker_def] >>
+        ASM_SET_TAC[]) >>
+     gvs[] >> simp[DISJOINT_DEF, EXTENSION, MEM_REPLICATE] >> metis_tac[]) >>
+  `ps.ps_stack = (REPLICATE m dead_stack_marker ++ pre) ++ tail` by
+    fs[lineage_core_def] >>
+  `ALL_DISTINCT tail` by gvs[ALL_DISTINCT_APPEND] >>
+  drule_all popmany_plan_core >> strip_tac >>
+  `DISJOINT (set pre) (set core')` by
+    (fs[ALL_DISTINCT_APPEND] >> ASM_SET_TAC[]) >>
+  `set core' = set core INTER set (MAP Var inputs)` by
+    (gvs[ALL_DISTINCT_APPEND] >> ASM_SET_TAC[]) >>
+  qexistsl_tac [`m + LENGTH pre`, `core'`] >>
+  conj_tac
+  >- (qpat_x_assum `(SND (popmany_plan _ _)).ps_stack = _` SUBST1_TAC >>
+      irule mark_dead_stack_prefix >> simp[]) >>
+  simp[] >> fs[EVERY_MEM] >> gen_tac >> disch_tac >>
+  `MEM e core` by ASM_SET_TAC[] >> metis_tac[]
+QED
+
+Theorem cleanup_payload_inventory:
+  !S ps inputs layout to_pop physical retained removed ok promised result.
+    lineage_inventory S ps /\ set (MAP Var inputs) SUBSET S /\
+    S SUBSET set (MAP Var inputs) UNION set (MAP Var layout) UNION FDOM ps.ps_spilled /\
+    to_pop = FILTER (\v. ~MEM v inputs) layout /\
+    physical = FILTER (\op. IS_SOME (stack_get_depth op ps.ps_stack)) (MAP Var to_pop) /\
+    retained = FILTER (\op. below_all_live op inputs ps.ps_stack) physical /\
+    removed = FILTER (\op. ~MEM op retained) physical /\
+    result =
+      (if NULL inputs /\ ok then
+         ps with <| ps_stack := MAP (K dead_stack_marker) ps.ps_stack;
+                    ps_cleanup_promised := promised |>
+       else if ok then
+         (SND (popmany_plan removed ps)) with
+           <| ps_stack := mark_dead_stack retained (SND (popmany_plan removed ps)).ps_stack;
+              ps_cleanup_promised := promised |>
+       else SND (popmany_plan (MAP Var to_pop) ps)) ==>
+    lineage_inventory (set (MAP Var inputs) UNION FDOM ps.ps_spilled) result
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ok`
+  >- (Cases_on `NULL inputs`
+      >- suspend "empty"
+      >> suspend "marked") >>
+  suspend "popped"
+QED
+
+Resume cleanup_payload_inventory[empty]:
+  gvs[NULL_EQ] >>
+  fs[lineage_inventory_def] >>
+  simp[lineage_inventory_def, lineage_core_def] >>
+  qexistsl_tac [`LENGTH ps.ps_stack`, `[]`] >>
+  simp[LIST_EQ_REWRITE, EL_MAP, EL_REPLICATE, combinTheory.K_DEF]
+QED
+
+Resume cleanup_payload_inventory[marked]:
+  qpat_x_assum `lineage_inventory _ ps` mp_tac >>
+  qmatch_goalsub_rename_tac `lineage_inventory inventory_set ps` >> disch_tac >>
+  `?m core. lineage_core m core ps /\ ALL_DISTINCT core /\
+     EVERY is_var_operand core /\ DISJOINT (set core) (FDOM ps.ps_spilled) /\
+     set core UNION FDOM ps.ps_spilled = inventory_set` by
+    (fs[lineage_inventory_def] >> metis_tac[]) >>
+  `set physical = set core DIFF set (MAP Var inputs)` by
+    (qpat_x_assum `to_pop = _` SUBST_ALL_TAC >>
+     drule_all cleanup_physical_core >> simp[]) >>
+  drule_all cleanup_retained_core >> strip_tac >>
+  gvs[] >> simp[lineage_inventory_def, lineage_core_def, popmany_plan_spilled_unchanged] >>
+  qexistsl_tac [`n`, `live`] >> simp[] >>
+  conj_tac >- ASM_SET_TAC[] >>
+  conj_tac >- ASM_SET_TAC[] >>
+  fs[lineage_inventory_def] >> metis_tac[]
+QED
+
+Resume cleanup_payload_inventory[popped]:
+  qpat_x_assum `lineage_inventory _ ps` mp_tac >>
+  qmatch_goalsub_rename_tac `lineage_inventory inventory_set ps` >> disch_tac >>
+  gvs[] >>
+  `~MEM dead_stack_marker (MAP Var (FILTER (\v. ~MEM v inputs) layout))` by
+    simp[MEM_MAP, dead_stack_marker_def] >>
+  drule_all popmany_plan_lineage_inventory >>
+  `inventory_set DIFF (set (MAP Var (FILTER (\v. ~MEM v inputs) layout)) INTER set ps.ps_stack) =
+     set (MAP Var inputs) UNION FDOM ps.ps_spilled` by
+    (`set (MAP Var (FILTER (\v. ~MEM v inputs) layout)) =
+        set (MAP Var layout) DIFF set (MAP Var inputs)` by
+       (simp[EXTENSION, MEM_MAP, MEM_FILTER] >> Cases >> simp[] >> metis_tac[]) >>
+     qpat_x_assum `lineage_inventory _ ps` mp_tac >>
+     rewrite_tac[lineage_inventory_def, lineage_core_def] >> strip_tac >>
+     `~MEM dead_stack_marker (MAP Var inputs)` by simp[MEM_MAP, dead_stack_marker_def] >>
+     `~MEM dead_stack_marker (MAP Var layout)` by simp[MEM_MAP, dead_stack_marker_def] >>
+     `DISJOINT (set (REPLICATE m dead_stack_marker)) (set (MAP Var layout))` by
+       (simp[DISJOINT_DEF, EXTENSION, MEM_REPLICATE] >> metis_tac[]) >>
+     gvs[] >> ASM_SET_TAC[]) >> simp[]
+QED
+
+Finalise cleanup_payload_inventory
