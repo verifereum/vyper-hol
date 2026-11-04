@@ -307,3 +307,104 @@ Proof
   first_x_assum drule >> strip_tac >>
   gvs[is_terminator_def]
 QED
+
+Definition entry_ret_family_def:
+  entry_ret_family n = (entry_probe_fn 0) with fn_blocks :=
+    [<|bb_label := "entry"; bb_instructions :=
+      entry_probe_params n ++
+      [mk_inst n RETPC_PARAM [Lit (n2w n)] ["retpc"];
+       mk_inst (SUC n) RET
+         (MAP (\i. Var (entry_probe_name i)) (GENLIST I n) ++
+          [Var "retpc"]) []]|>]
+End
+
+Theorem entry_ret_family_opcodes_ready:
+  EVERY codegen_ready_inst
+    (HD (entry_ret_family n).fn_blocks).bb_instructions
+Proof
+  simp[entry_ret_family_def, entry_probe_fn_def, entry_probe_params_def,
+       EVERY_APPEND, EVERY_GENLIST, codegen_ready_inst_def,
+       mk_inst_def, is_pre_codegen_opcode_def,
+       is_unlowered_fmp_opcode_def, is_raw_fmp_opcode_def,
+       is_unlowered_internal_call_opcode_def, dead_stack_marker_def,
+       MEM_MAP]
+QED
+
+Theorem entry_ret_family_small:
+  (HD (entry_ret_family 1).fn_blocks).bb_instructions =
+    [mk_inst 0 PARAM [Lit 0w] [""];
+     mk_inst 1 RETPC_PARAM [Lit 1w] ["retpc"];
+     mk_inst 2 RET [Var ""; Var "retpc"] []]
+Proof
+  EVAL_TAC
+QED
+
+Theorem entry_ret_family_get_params:
+  get_params (HD (entry_ret_family n).fn_blocks).bb_instructions =
+    entry_probe_params n ++
+      [mk_inst n RETPC_PARAM [Lit (n2w n)] ["retpc"]]
+Proof
+  qspec_then `entry_probe_params n ++
+    [mk_inst n RETPC_PARAM [Lit (n2w n)] ["retpc"]]` mp_tac get_params_prefix >>
+  disch_then (qspec_then `[mk_inst (SUC n) RET
+    (MAP (\i. Var (entry_probe_name i)) (GENLIST I n) ++ [Var "retpc"]) []]` mp_tac) >>
+  simp[entry_ret_family_def, entry_probe_params_def, EVERY_APPEND,
+       EVERY_GENLIST, mk_inst_def, no_param_insts_def, is_param_opcode_def]
+QED
+
+Theorem entry_ret_family_has_retpc:
+  fn_has_retpc (entry_ret_family n)
+Proof
+  simp[fn_has_retpc_def, entry_ret_family_get_params,
+       EXISTS_APPEND, mk_inst_def]
+QED
+
+Theorem entry_probe_name_not_retpc[simp]:
+  entry_probe_name i <> "retpc"
+Proof
+  Cases_on `i` >> simp[entry_probe_name_def, REPLICATE]
+QED
+
+Theorem entry_ret_family_reachable:
+  reachable_fn (entry_ret_family n) = entry_ret_family n
+Proof
+  irule reachable_fn_single_block >>
+  simp[entry_ret_family_def, entry_probe_fn_def, entry_probe_params_def,
+       EVERY_APPEND, EVERY_GENLIST, mk_inst_def]
+QED
+
+Theorem entry_ret_family_opaque_vars:
+  !x. (retpc_var (entry_ret_family n) x <=> x = "retpc") /\
+      ~gas_var (entry_ret_family n) x
+Proof
+  gen_tac >> simp[retpc_var_def, gas_var_def] >>
+  once_rewrite_tac[copy_phi_var_cases] >>
+  simp[entry_ret_family_def, entry_probe_fn_def, entry_probe_params_def,
+       fn_insts_def, fn_insts_blocks_def, mk_inst_def,
+       MEM_FLAT, MEM_MAP, MEM_GENLIST] >>
+  dsimp[] >> rpt strip_tac >> disj1_tac >> rpt strip_tac >> gvs[]
+QED
+
+Theorem entry_ret_family_opaque_ok:
+  opaque_use_ok (entry_ret_family n)
+Proof
+  simp[opaque_use_ok_def, entry_ret_family_opaque_vars,
+       entry_ret_family_def, entry_probe_fn_def, entry_probe_params_def,
+       fn_insts_def, fn_insts_blocks_def, MEM_FLAT, MEM_MAP, MEM_GENLIST,
+       mk_inst_def] >> rpt strip_tac >> gvs[] >>
+  simp[retpc_use_ok_def, MEM_MAP] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem entry_ret_family_retpc_shape:
+  retpc_shape_ok (entry_ret_family n)
+Proof
+  simp[retpc_shape_ok_def, entry_ret_family_reachable,
+       entry_ret_family_opaque_vars] >>
+  simp[entry_ret_family_def, entry_probe_fn_def, entry_probe_params_def,
+       fn_insts_def, fn_insts_blocks_def, MEM_FLAT, MEM_MAP, MEM_GENLIST,
+       EVERY_APPEND, EVERY_GENLIST, mk_inst_def] >>
+  rpt strip_tac >> gvs[] >>
+  qexistsl [`MAP (\i. Var (entry_probe_name i)) (GENLIST I n)`, `"retpc"`] >>
+  simp[entry_ret_family_opaque_vars]
+QED
