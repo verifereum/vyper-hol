@@ -4624,3 +4624,139 @@ Proof
        integer_wordTheory.i2w_def]
 QED
 
+
+Theorem probe_word_outer_zero_case:
+  !nocalls ctx func cenv.
+    FLOOKUP cenv.ce_module_vars (NONE,"outer") = SOME (StorageLoc 0w) /\
+    cenv.ce_hashmap_info (NONE,"outer") = NONE /\
+    cenv.ce_module_var_type (NONE,"outer") = SOME probe_word_outer_type ==>
+    target_case nocalls ctx func cenv probe_word_context
+      (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+        (Literal (BaseT (UintT 256)) (IntL 0)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all probe_word_outer_zero_compile >> strip_tac >>
+  rw[targetPlaceSimTheory.target_case_def, targetPlaceSimTheory.target_sim_def,
+     probe_word_outer_zero_eval] >>
+  qpat_x_assum `do _ od sa = _` mp_tac >>
+  simp[comp_bind_def, comp_return_def, pairTheory.FORALL_PROD] >>
+  strip_tac >>
+  Cases_on `compile_array_subscript (Lit 0w) (Lit 0w) T 0 1 2 F
+    (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocStorage) sa` >>
+  rename1 `compile_array_subscript _ _ _ _ _ _ _ _ _ = (result_op, result_cs)` >>
+  gvs[] >>
+  qpat_x_assum `extend_place _ _ _ _ = _` mp_tac >>
+  simp[extend_place_def, extend_storage_place_def,
+       resolve_array_element_def, bind_def, ignore_bind_def,
+       check_def, return_def, raise_def, get_storage_backend_def,
+       LET_THM, assert_def, get_accounts_def] >>
+  Cases_on `stmt_state_rel ctx func cenv probe_word_context es s0`
+  >- suspend "related" >>
+  strip_tac >> simp[SF CONJ_ss, frag_exec_false_pre]
+QED
+
+Resume probe_word_outer_zero_case[related]:
+  `storage_read_live probe_word_context F
+     (lookup_account probe_word_context.txn.target es.accounts).storage 0w
+     (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1))` by
+    (irule accountsRelPropsTheory.declared_storage_region_read_live >>
+     qexistsl_tac [`NONE`, `"outer"`, `[]`] >>
+     simp[probe_word_declared_region]) >>
+  `sload 0w s0 = lookup_storage 0w
+      (lookup_account probe_word_context.txn.target es.accounts).storage` by
+    (`s0.vs_call_ctx.cc_address = probe_word_context.txn.target` by
+       fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+     `storage_agree
+        (storage_dead probe_word_context F
+          (lookup_account probe_word_context.txn.target es.accounts).storage)
+        (lookup_account probe_word_context.txn.target es.accounts).storage
+        (contract_storage s0)` by
+       fs[stmt_state_rel_def, state_rel_def, storage_rel_def] >>
+     drule accountsRelPropsTheory.storage_agree_read_head >>
+     disch_then drule >>
+     simp[type_slot_size_def, sload_def, contract_storage_def]) >>
+  qpat_x_assum `sload _ _ = _` (assume_tac o GSYM) >>
+  Cases_on `0 < w2n (sload 0w s0)` >>
+  simp[return_def] >>
+  strip_tac >> gvs[]
+  >- suspend "success" >>
+  suspend "oob"
+QED
+
+Resume probe_word_outer_zero_case[oob]:
+  `~idx_in_range F 0w (sload 0w s0)` by simp[exprSimArrayIndexTheory.idx_in_range_def] >>
+  `(!x. Lit 0w = Var x ==> not_fresh_at sa x) /\
+   eval_operand (Lit 0w) s0 = SOME 0w` by simp[eval_operand_def] >>
+  drule_all exprSimArrayIndexTheory.compile_storage_array_dynamic_frag_oob >>
+  disch_then (qspecl_then [`ctx`, `func`, `probe_word_context`, `es`] mp_tac) >>
+  disch_then (qspec_then `\s. F` mp_tac) >>
+  strip_tac >> drule frag_exec_weaken >> disch_then irule >>
+  simp[exprSimTheory.expr_exit_def] >> rpt strip_tac >> gvs[exprSimTheory.expr_exit_def]
+QED
+
+Resume probe_word_outer_zero_case[success]:
+  `env_consistent env probe_word_context es` by
+    fs[targetPlaceSimTheory.target_pre_def, expr_sim_inv_def] >>
+  `FLOOKUP env.bare_globals (NONE,"outer") = NONE` by
+    (Cases_on `FLOOKUP env.bare_globals (NONE,"outer")` >> simp[] >>
+     drule_all vyperTypeInvariantsTheory.env_consistent_bare_global_find_NONE >>
+     CONV_TAC (computeLib.RESTR_EVAL_CONV [``env``]) >>
+     simp[find_var_decl_by_name_def, vyperTypeInvariantsTheory.is_bare_global_decl_def]) >>
+  `FLOOKUP env.bare_global_assignable (NONE,"outer") = NONE` by
+    (Cases_on `FLOOKUP env.bare_global_assignable (NONE,"outer")` >> simp[] >>
+     fs[vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+     first_x_assum drule >> simp[]) >>
+  `FLOOKUP env.toplevel_vtypes (NONE,"outer") = SOME (Type probe_word_outer_type)` by
+    (`vyperTypeInvariants$toplevel_vtypes_complete env.toplevel_vtypes probe_word_context` by
+       fs[vyperTypeInvariantsTheory.env_consistent_def,
+          vyperTypeInvariantsTheory.env_context_consistent_def] >>
+     fs[vyperTypeInvariantsTheory.toplevel_vtypes_complete_def] >>
+     first_x_assum (qspecl_then [`NONE`, `probe_word_copy_code`, `Private`,
+       `Storage`, `"outer"`, `probe_word_outer_type`, `SOME 0`] mp_tac) >>
+     CONV_TAC (computeLib.RESTR_EVAL_CONV [``env``]) >> simp[]) >>
+  qpat_x_assum `type_place_target _ _ = _` mp_tac >>
+  simp[Once vyperTypeSystemTheory.well_typed_expr_def] >>
+  simp[Once vyperTypeSystemTheory.well_typed_expr_def, probe_word_outer_type_def,
+       vyperTypeSystemTheory.subscript_vtype_def, vyperASTTheory.expr_type_def] >>
+  strip_tac >>
+  gvs[Once vyperTypeSystemTheory.well_typed_expr_def,
+      vyperTypeSystemTheory.subscript_vtype_def, probe_word_outer_type_def] >>
+  `idx_in_range F 0w (sload 0w s0)` by
+    simp[exprSimArrayIndexTheory.idx_in_range_def] >>
+  `(!x. Lit 0w = Var x ==> not_fresh_at sa x) /\
+   eval_operand (Lit 0w) s0 = SOME 0w` by simp[eval_operand_def] >>
+  drule_all exprSimArrayIndexTheory.compile_storage_array_dynamic_frag >>
+  disch_then (qspecl_then [`ctx`, `func`, `probe_word_context`, `es`] mp_tac) >>
+  strip_tac >> drule frag_exec_conseq >> disch_then irule >> simp[] >>
+  rpt strip_tac >> suspend "post"
+QED
+
+Resume probe_word_outer_zero_case[post]:
+  `(!x. result_op = Var x ==> not_fresh_at result_cs x)` by
+    (qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[exprLoweringTheory.compile_array_subscript_def, comp_bind_def,
+          comp_ignore_bind_def, comp_return_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+     drule exprSafeOperandTheory.emit_op_safe_operand >>
+     simp[exprSafeOperandTheory.safe_operand_def]) >>
+  simp[targetPlaceSimTheory.target_post_def,
+       targetPlaceSimTheory.place_ptr_rel_def, targetPlaceSimTheory.place_readable_def,
+       exprSimHypsTheory.slot_loc_def, exprLoweringTheory.value_type_place_def] >>
+  conj_tac
+  >- (CONV_TAC (computeLib.RESTR_EVAL_CONV []) >>
+      simp[wordsTheory.WORD_MULT_CLAUSES, dimword_def,
+           fcpLib.INDEX_CONV ``dimindex (:256)``]) >>
+  irule exprSimTheory.locals_kept_mem >> simp[]
+QED
+
+Finalise probe_word_outer_zero_case
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag probe_word_outer_zero_case)
+  in
+    if null axioms andalso null (Thm.hyp probe_word_outer_zero_case) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print "BASE_TARGET_AUDIT probe_word_outer_zero_case OK\n"
+    else raise Fail "probe_word_outer_zero_case: admitted proof dependency"
+  end;
