@@ -1012,3 +1012,26 @@ Proof
   simp[compile_call_def] >> irule pair_let_snd_preserves >>
   simp[bound_labels_emit_inst]
 QED
+
+Theorem bound_labels_addmod_names:
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_addmod_names ce rt aty a bty b mty m s))))
+Proof
+  strip_tac >> simp[compile_addmod_names_def] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_name_vv] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_unwrap_value] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_name_vv] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_unwrap_value] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_name_vv] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_unwrap_value] >> rpt strip_tac >> simp[] >>
+  simp[as_stack_val_def] >> irule pair_let_snd_preserves >>
+  simp[bound_labels_addmod, as_stack_val_def]
+QED
