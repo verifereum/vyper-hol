@@ -342,6 +342,11 @@ Triviality step_inst_base_abort_type:
     (opcode_fail_class inst.inst_opcode = CanExHalt ==> a = ExHalt_abort)
 Proof
   rpt strip_tac >>
+  Cases_on `inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+            inst.inst_opcode = LOG \/ inst.inst_opcode = CALL \/
+            inst.inst_opcode = CREATE \/ inst.inst_opcode = CREATE2`
+  >- (drule_all step_inst_base_static_write_abort >> strip_tac >>
+      gvs[opcode_fail_class_def]) >>
   Cases_on `inst.inst_opcode` >>
   gvs[opcode_fail_class_def, is_terminator_def] >>
   gvs[step_inst_base_def, AllCaseEqs()]
@@ -383,6 +388,11 @@ Triviality step_inst_base_abort_returndata:
     s'.vs_returndata = []
 Proof
   rpt strip_tac >>
+  Cases_on `inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+            inst.inst_opcode = LOG \/ inst.inst_opcode = CALL \/
+            inst.inst_opcode = CREATE \/ inst.inst_opcode = CREATE2`
+  >- (drule_all step_inst_base_static_write_abort >> strip_tac >>
+      gvs[halt_state_def, set_returndata_def]) >>
   Cases_on `opcode_fail_class inst.inst_opcode` >> gvs[]
   >- metis_tac[step_inst_nofail_not_halt_abort]
   >- ((* CanRevert — only ASSERT has this class among non-term/non-ext *)

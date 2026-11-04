@@ -4844,7 +4844,8 @@ Theorem step_inst_base_abort_input_equiv:
     (!x. MEM (Var x) inst.inst_operands ==>
          lookup_var x s1 = lookup_var x s2) /\
     s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_labels = s2.vs_labels ==>
+    s1.vs_labels = s2.vs_labels /\
+    s1.vs_call_ctx.cc_static = s2.vs_call_ctx.cc_static ==>
     ?s2'. step_inst_base inst s2 = Abort a s2'
 Proof
   ACCEPT_TAC passSharedFrameTheory.step_inst_base_abort_input_equiv
@@ -5179,7 +5180,8 @@ Resume m2v_nonterminal_abort_sim[body]:
   (* Get s2 abort *)
   SUBGOAL_THEN ``?s2'. step_inst_base inst s2 = Abort a s2'``
     strip_assume_tac
-  >- (mp_tac (Q.SPECL [`inst`,`s1`,`s2`,`a`,`s1'`]
+  >- (drule m2v_inv_noix_call_ctx >> strip_tac >>
+      mp_tac (Q.SPECL [`inst`,`s1`,`s2`,`a`,`s1'`]
         step_inst_base_abort_input_equiv) >>
       simp[] >> gvs[m2v_inv_noix_def])
   >>
