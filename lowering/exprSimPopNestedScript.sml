@@ -493,6 +493,132 @@ Proof
   EVAL_TAC
 QED
 
+Definition nested_counterexample_body_def[local]:
+  nested_counterexample_body =
+    case LAST nested_counterexample_program of
+      FunctionDecl fv fm nr rr id args dflts ret bdy => bdy
+    | _ => []
+End
+
+Theorem nested_counterexample_module_lookup[local]:
+  get_module_code nested_counterexample_context src =
+    if src = NONE then SOME nested_counterexample_program else NONE
+Proof
+  Cases_on `src` >> EVAL_TAC
+QED
+
+Theorem nested_counterexample_callable_lookup[local]:
+  lookup_callable_function dep fn nested_counterexample_program =
+    if fn = "shrink" then
+      SOME (Nonpayable,F,[],[],BaseT (UintT 256),nested_counterexample_body)
+    else if dep then SOME (Payable,F,[],[],NoneT,[]) else NONE
+Proof
+  simp[nested_counterexample_program_def, nested_counterexample_body_def,
+       lookup_callable_function_def, vyperInterpreterTheory.lookup_function_def] >>
+  Cases_on `fn = "shrink"` >> simp[]
+QED
+
+Theorem nested_counterexample_body_calls[local]:
+  function_int_calls [] nested_counterexample_body = []
+Proof
+  EVAL_TAC
+QED
+
+Theorem nested_counterexample_body_typed[local]:
+  env.current_src = NONE /\ env.type_defs = FEMPTY /\
+  FLOOKUP env.bare_globals (NONE,"a") = NONE /\
+  FLOOKUP env.bare_global_assignable (NONE,"a") = NONE /\
+  FLOOKUP env.toplevel_vtypes (NONE,"a") =
+    SOME (Type nested_inner_shrink_ast_type) ==>
+  type_stmts env (BaseT (UintT 256)) nested_counterexample_body = SOME env
+Proof
+  strip_tac >>
+  simp[nested_counterexample_body_def, nested_counterexample_program_def] >>
+  EVAL_TAC >> gvs[nested_inner_shrink_ast_type_def]
+QED
+
+Theorem nested_counterexample_toplevel_complete[local]:
+  toplevel_vtypes_complete tvs nested_counterexample_context ==>
+  FLOOKUP tvs (NONE,"a") = SOME (Type nested_inner_shrink_ast_type)
+Proof
+  rw[vyperTypeInvariantsTheory.toplevel_vtypes_complete_def] >>
+  first_x_assum irule >>
+  qexistsl_tac [`SOME 0`, `Storage`, `nested_counterexample_program`, `Private`] >>
+  simp[nested_counterexample_module_lookup, nested_counterexample_program_def] >>
+  EVAL_TAC
+QED
+
+Theorem nested_counterexample_type_env[local]:
+  get_tenv nested_counterexample_context = FEMPTY /\
+  find_var_decl_by_name "a" nested_counterexample_program =
+    SOME (StorageVarDecl F nested_inner_shrink_ast_type,"a") /\
+  stmts_no_fallthrough nested_counterexample_body /\
+  stmts_no_control_escape nested_counterexample_body
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem nested_counterexample_context_fields[local]:
+  nested_counterexample_context.stk = [(NONE,"caller")] /\
+  ~nested_counterexample_context.in_deploy
+Proof
+  EVAL_TAC
+QED
+
+Theorem nested_counterexample_functions_typed[local]:
+  functions_well_typed nested_counterexample_context
+Proof
+  rw[vyperTypeInvariantsTheory.functions_well_typed_def] >>
+  gvs[nested_counterexample_module_lookup, AllCaseEqs(),
+      nested_counterexample_callable_lookup, nested_counterexample_context_fields] >>
+  drule nested_counterexample_toplevel_complete >> strip_tac >>
+  `FLOOKUP bare_globals (NONE,"a") = NONE` by
+    (Cases_on `FLOOKUP bare_globals (NONE,"a")` >> simp[] >>
+     qpat_x_assum `!src id ty. FLOOKUP bare_globals _ = _ ==> _` drule >>
+     simp[nested_counterexample_type_env]) >>
+  `FLOOKUP bare_global_assignable (NONE,"a") = NONE` by
+    (Cases_on `FLOOKUP bare_global_assignable (NONE,"a")` >> simp[] >>
+     qpat_x_assum `!src id ty. FLOOKUP bare_global_assignable _ = _ ==> _` drule >>
+     simp[nested_counterexample_type_env]) >>
+  qabbrev_tac `eb = nested_counterexample_env with
+    <| fn_sigs := fn_sigs; bare_globals := bare_globals;
+       bare_global_assignable := bare_global_assignable;
+       toplevel_vtypes := toplevel_vtypes; flag_members := flag_members |>` >>
+  qexistsl_tac [`eb`, `BaseTV (UintT 256)`, `eb`] >>
+  simp[Abbr `eb`, nested_counterexample_env_def, nested_counterexample_type_env,
+       vyperValueTheory.evaluate_type_def, well_typed_expr_def] >>
+  irule nested_counterexample_body_typed >>
+  simp[nested_counterexample_env_def]
+QED
+
+Theorem nested_counterexample_graph_tc[local]:
+  !x y. TC (call_edge_rel [((NONE,"caller"),(NONE,"shrink"))]) x y ==>
+    x = (NONE,"caller") /\ y = (NONE,"shrink")
+Proof
+  ho_match_mp_tac relationTheory.TC_INDUCT >>
+  simp[vyperTypeCallGraphSoundnessTheory.call_edge_rel_def] >> metis_tac[]
+QED
+
+Theorem nested_counterexample_call_safe[local]:
+  call_evaluation_safe nested_counterexample_context [(NONE,"shrink")]
+Proof
+  rw[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_def] >>
+  qexistsl_tac [`[((NONE,"caller"),(NONE,"shrink"))]`,
+               `(NONE,"caller")`, `[]`] >>
+  simp[nested_counterexample_context_fields,
+       vyperTypeCallStackSoundnessTheory.call_stack_follows_def,
+       vyperTypeCallStackSoundnessTheory.calls_follow_call_graph_def,
+       vyperTypeCallGraphSoundnessTheory.call_edge_rel_def] >>
+  conj_tac
+  >- (rw[relationTheory.irreflexive_def] >> strip_tac >>
+      drule nested_counterexample_graph_tc >> simp[]) >>
+  rw[vyperTypeCallStackSoundnessTheory.functions_follow_call_graph_def,
+     nested_counterexample_module_lookup] >>
+  gvs[AllCaseEqs(), nested_counterexample_callable_lookup,
+      nested_counterexample_context_fields] >>
+  simp[nested_counterexample_body_calls]
+QED
+
 Definition nested_pop_suffix_def[local]:
   nested_pop_suffix hdr tr id esz x0 x1 x2 x3 x4 x5 x6 =
     [mk_inst id (if tr then TLOAD else SLOAD) [hdr] [x0];
