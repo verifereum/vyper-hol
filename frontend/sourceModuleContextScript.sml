@@ -19,6 +19,9 @@ Definition source_module_signature_context_def:
         ctx.sm_bindings;
       sm_events := FLAT (MAP (\(key,src).
         source_module_event_bindings trust.smt_ids key
+          (case ALOOKUP signatures src of SOME tls => tls | NONE => [])) trust.smt_ids);
+      sm_errors := FLAT (MAP (\(key,src).
+        source_module_error_bindings trust.smt_ids key
           (case ALOOKUP signatures src of SOME tls => tls | NONE => [])) trust.smt_ids) |>
 End
 

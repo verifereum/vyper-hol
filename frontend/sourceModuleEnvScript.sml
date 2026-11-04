@@ -25,7 +25,8 @@ End
 Definition source_module_constructors_def:
   source_module_constructors = [STC_String; STC_Bytes; STC_DynArray; STC_HashMap;
     STC_Qualifier SCQ_Constant; STC_Qualifier SCQ_Immutable;
-    STC_Qualifier SCQ_Public; STC_Qualifier SCQ_Transient; STC_Qualifier SCQ_Indexed]
+    STC_Qualifier SCQ_Public; STC_Qualifier SCQ_Transient; STC_Qualifier SCQ_Indexed;
+    STC_Qualifier SCQ_Reentrant]
 End
 
 Definition source_module_intrinsics_def:
@@ -93,7 +94,7 @@ Definition source_module_context_def:
          FLAT (MAP (\(path,identity). case source_type_identity identity of
            ST_Ok ty => [(path,SE_Type ty)] | ST_Error err => []) trust.smt_nominals);
        sm_names := source_module_names scopes table trust.smt_nominals;
-       sm_events := []; sm_owner := owner |>
+       sm_events := []; sm_errors := []; sm_owner := owner |>
 End
 
 (* Declaration-only module identities are derived from the explicit preserved
@@ -128,6 +129,13 @@ Definition source_module_event_bindings_def:
     FLAT (MAP (\tl. case tl of EventDecl name fields =>
       [(owner ++ [name],((case ALOOKUP ids owner of SOME src => src | NONE => NONE),name),
         MAP (SND o FST) fields)] | _ => []) tops)
+End
+
+Definition source_module_error_bindings_def:
+  source_module_error_bindings ids owner tops =
+    FLAT (MAP (\tl. case tl of ErrorDecl name fields =>
+      [(owner ++ [name],((case ALOOKUP ids owner of SOME src => src | NONE => NONE),name),
+        fields)] | _ => []) tops)
 End
 
 Definition source_module_nominal_names_def:

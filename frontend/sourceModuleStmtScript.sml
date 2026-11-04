@@ -86,6 +86,34 @@ Definition source_module_log_def:
     | _ => SM_Error (SME_Declaration "event-call")
 End
 
+(* A raise/assert reason that calls a declared error. Positional operands take
+   the declaration's leading field types and keywords their named fields; as in
+   the JSON frontend, both stay separate and the declaration orders them. *)
+Definition source_module_custom_error_def:
+  source_module_custom_error fuel ctx original =
+    case original of SX_Call callee args keywords =>
+      (case source_expr_path callee of NONE => NONE
+       | SOME path => case source_resolve_name ctx.sm_scopes ctx.sm_table path of
+           SOME (id,SR_Type) =>
+             (case ALOOKUP ctx.sm_errors id of NONE => NONE
+              | SOME (error_id,fields) => SOME (
+                  if LENGTH args + LENGTH keywords = LENGTH fields /\
+                     ALL_DISTINCT (MAP FST keywords) /\
+                     EVERY (\k. MEM k (MAP FST (DROP (LENGTH args) fields))) (MAP FST keywords)
+                  then
+                    source_module_bind (source_module_collect (MAP (\(ty,e).
+                      source_module_expression fuel ctx ty e) (ZIP (MAP SND (TAKE (LENGTH args) fields),args))))
+                    (\es. source_module_bind (source_module_collect (MAP (\(k,e).
+                      case ALOOKUP fields k of
+                        NONE => SM_Error (SME_Declaration "error-keywords")
+                      | SOME ty => source_module_bind (source_module_expression fuel ctx ty e)
+                          (\v. SM_Ok (k,v))) keywords))
+                    (\ks. SM_Ok (CustomError error_id es ks)))
+                  else SM_Error (SME_Declaration "error-arguments")))
+         | _ => NONE)
+    | _ => NONE
+End
+
 Definition source_module_statements_def:
   source_module_statements 0 ctx ret ss = SM_Error (SME_Declaration "statement-fuel") /\
   source_module_statements (SUC fuel) ctx ret [] = SM_Ok ([],ctx) /\
@@ -106,14 +134,19 @@ Definition source_module_statements_def:
         (\r. SM_Ok (Expr r,ctx))
     | SS_Raise NONE => SM_Ok (Raise RaiseBare,ctx)
     | SS_Raise (SOME (SX_Name "UNREACHABLE")) => SM_Ok (Raise RaiseUnreachable,ctx)
-    | SS_Raise (SOME e) => source_module_bind (source_module_infer fuel ctx e)
-        (\r. SM_Ok (Raise (RaiseReason r),ctx))
+    | SS_Raise (SOME e) =>
+        (case source_module_custom_error fuel ctx e of
+           SOME err => source_module_bind err (\err. SM_Ok (Raise (RaiseCustomError err),ctx))
+         | NONE => source_module_bind (source_module_infer fuel ctx e)
+             (\r. SM_Ok (Raise (RaiseReason r),ctx)))
     | SS_Assert condition reason =>
         source_module_bind (source_module_expression fuel ctx (BaseT BoolT) condition) (\c.
           case reason of NONE => SM_Ok (Assert c AssertBare,ctx)
           | SOME (SX_Name "UNREACHABLE") => SM_Ok (Assert c AssertUnreachable,ctx)
-          | SOME e => source_module_bind (source_module_infer fuel ctx e)
-              (\r. SM_Ok (Assert c (AssertReason r),ctx)))
+          | SOME e => case source_module_custom_error fuel ctx e of
+              SOME err => source_module_bind err (\err. SM_Ok (Assert c (AssertCustomError err),ctx))
+            | NONE => source_module_bind (source_module_infer fuel ctx e)
+                (\r. SM_Ok (Assert c (AssertReason r),ctx)))
     | SS_AnnAssign name annotation (SOME value) =>
         source_module_bind (source_module_type ctx annotation) (\ty.
         if name IN FDOM ctx.sm_env.var_types then SM_Error (SME_Declaration "duplicate-local") else
@@ -132,6 +165,8 @@ Definition source_module_statements_def:
           (\e. SM_Ok (Assign (BaseTarget bt) e,ctx))))
     | SS_AugAssign target op value =>
         source_module_bind (source_module_infer fuel ctx target) (\old.
+        if ~source_expr_binary_domain op (expr_type old) then
+          SM_Error (SME_Unsupported (SCS_Syntax "source-binary-domain")) else
         source_module_bind (source_module_target fuel ctx target) (\bt.
         source_module_bind (source_module_expression fuel ctx (expr_type old) value)
           (\e. SM_Ok (AugAssign (expr_type old) bt (source_expr_binary op) e,ctx))))

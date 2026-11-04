@@ -7,7 +7,8 @@ signature sourceConstASTLib = sig
      Calls always remain SCE_Call; a later resolver owns builtin identity.
      Decimal exponent scaling is closed HOL arithmetic inside SCL_Decimal;
      consumers must evaluate it in HOL rather than destruct only ML numerals.
-     Hex retains validated spelling; Bytes/HexBytes decode to octet lists. *)
+     Hex retains validated spelling; Bytes and HexBytes decode to octet lists
+     under separate literal constructors. *)
   (* Shared strict operator decoding for the general source-syntax API. *)
   val unary_operator : term JSONDecode.decoder
   val binary_operator : term JSONDecode.decoder

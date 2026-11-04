@@ -38,6 +38,8 @@ Definition source_module_variable_def:
       let vis = if MEM SCQ_Public qs then Public else Private in
       let slot = ALOOKUP slots (ctx.sm_env.current_src,name) in
       if MEM SCQ_Indexed qs then SM_Error (SME_Declaration "indexed-variable") else
+      if MEM SCQ_Reentrant qs /\ ~MEM SCQ_Public qs then
+        SM_Error (SME_Declaration "reentrant-variable") else
       case source_type_vtype r of
         HashMapT kt vt =>
           if initializer <> NONE \/ MEM SCQ_Constant qs \/ MEM SCQ_Immutable qs
@@ -100,6 +102,8 @@ Definition source_module_signature_def:
     | SD_Struct name fields => source_module_bind (source_module_args ctx fields)
         (\fs. SM_Ok [StructDecl name fs])
     | SD_Flag name members => SM_Ok [FlagDecl name members]
+    | SD_Error name fields => source_module_bind (source_module_args ctx fields)
+        (\fs. SM_Ok [ErrorDecl name fs])
     | SD_Event name fields => source_module_bind
         (source_module_collect (MAP (source_module_event_field ctx) fields))
         (\fs. SM_Ok [EventDecl name fs])
@@ -115,9 +119,28 @@ Definition source_module_signature_def:
     | SD_Implements e => SM_Ok []
 End
 
+(* `reentrant(...)` and `@reentrant` are allowed only under
+   `#pragma nonreentrancy on`, which the policy-free path cannot see. *)
+Definition source_module_reentrant_annotation_def:
+  source_module_reentrant_annotation (SCA_Qualified q a) =
+    (q = SCQ_Reentrant \/ source_module_reentrant_annotation a) /\
+  source_module_reentrant_annotation _ = F
+End
+
+Definition source_module_mentions_reentrant_def:
+  source_module_mentions_reentrant syntax =
+    EXISTS (\d. case d of
+        SD_Variable name a initializer => source_module_reentrant_annotation a
+      | SD_Function name decorators args defaults returns body =>
+          MEM (SX_Name "reentrant") decorators
+      | _ => F) (source_module_declarations syntax)
+End
+
 Definition source_module_signatures_def:
   source_module_signatures fuel ctx slots syntax =
-    source_module_bind (source_module_collect
+    if source_module_mentions_reentrant syntax then
+      SM_Error (SME_Declaration "reentrant-without-pragma")
+    else source_module_bind (source_module_collect
       (MAP (source_module_signature fuel ctx slots) (source_module_declarations syntax)))
       (\tls. SM_Ok (FLAT tls))
 End
@@ -161,7 +184,10 @@ End
 
 Definition source_module_policy_signatures_def:
   source_module_policy_signatures fuel ctx slots policy syntax =
-    source_module_bind (source_module_collect
+    if source_module_mentions_reentrant syntax /\
+       ~source_module_nonreentrant_default policy then
+      SM_Error (SME_Declaration "reentrant-without-pragma")
+    else source_module_bind (source_module_collect
       (MAP (source_module_policy_signature fuel ctx slots policy)
         (source_module_declarations syntax))) (\tls. SM_Ok (FLAT tls))
 End

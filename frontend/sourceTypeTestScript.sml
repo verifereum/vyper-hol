@@ -17,7 +17,8 @@ Definition source_type_test_names_def:
      (["HashMap"], STI_Constructor STC_HashMap);
      (["public"], STI_Constructor (STC_Qualifier SCQ_Public));
      (["immutable"], STI_Constructor (STC_Qualifier SCQ_Immutable));
-     (["constant"], STI_Constructor (STC_Qualifier SCQ_Constant))]
+     (["constant"], STI_Constructor (STC_Qualifier SCQ_Constant));
+     (["reentrant"], STI_Constructor (STC_Qualifier SCQ_Reentrant))]
 End
 
 Theorem source_type_primitives:
@@ -83,6 +84,14 @@ Theorem source_type_hashmap_value_types:
   source_type_resolve FEMPTY source_type_test_names []
     (SCA_HashMap (SCA_Name ["d"]) (SCA_Name ["b"])) =
     ST_Error STE_HashMapKey
+Proof
+  EVAL_TAC
+QED
+
+Theorem source_type_reentrant_public:
+  source_type_resolve FEMPTY source_type_test_names []
+    (SCA_Qualified SCQ_Reentrant (SCA_Qualified SCQ_Public (SCA_Name ["u"]))) =
+    ST_Ok (SourceTypeResolution (Type (BaseT (UintT 256))) [SCQ_Reentrant; SCQ_Public] [])
 Proof
   EVAL_TAC
 QED

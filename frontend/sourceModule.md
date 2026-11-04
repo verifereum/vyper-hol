@@ -16,7 +16,9 @@ are errors; no old JSON translator or metadata-backed retry is reachable.
 `SourceModulePolicy nr_default declaration_only`. Missing/misaligned entries
 reject; no policy is guessed. The policy-free helpers are
 `source_module_elaborate_simple`/`check_simple` and
-`sourceModuleFrontendLib.elaborate_simple`/`check_simple`.
+`sourceModuleFrontendLib.elaborate_simple`/`check_simple`. The policy-free path can't
+see `#pragma nonreentrancy on`, so it rejects `reentrant(...)` and
+`@reentrant`; the policy-aware path accepts them only under that pragma.
 
 `source_module_check` applies `check_contract T` to exactly the elaborated
 modules, including constructors. `source_module_check_equations` exposes the
@@ -26,8 +28,9 @@ phase, source-retention and checking equations.
 the registry, constant dependency result, exports and override links.
 `sourceModuleFrontendLib.elaborate` returns a `linking` theorem;
 `sourceModuleFrontendLib.check` returns the equations, actual checker input and
-artifact. `elaborate_file` uses `sourceSyntaxLib`;
-`elaborate_loaded`/`check_loaded` preserve both module policies. Inputs must be
+artifact. `elaborate_loaded`/`check_loaded` preserve both module policies, so
+source read from a file goes through the loader: a bare program carries no
+pragmas. Inputs must be
 pre-erasure source JSON: compiler `is_constant`/`is_immutable` flags do not repair
 qualifiers lost from post-erasure annotated JSON.
 

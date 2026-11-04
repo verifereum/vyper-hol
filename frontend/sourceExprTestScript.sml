@@ -531,3 +531,45 @@ fun audit_source_expr_theory thy =
 val () = List.app audit_source_expr_theory
   ["sourceExprDefs", "sourceExprCall", "sourceExprElaborate", "sourceExprProps",
    "sourceExprWitnessDefs", "sourceExprTest"];
+
+(* A constant's declared type, not its value's shape: a DynArray constant is
+   not a static array. *)
+Theorem source_expr_hint_constant_declared_type:
+  source_expr_hint [[("C",["C"])]] [(["C"],SR_Constant)] []
+    [(["C"],SE_Runtime (Name (ArrayT (BaseT (UintT 256)) (Dynamic 5)) "C"))]
+    (SX_Name "C") = SOME (ArrayT (BaseT (UintT 256)) (Dynamic 5))
+Proof
+  EVAL_TAC
+QED
+
+(* A tuple or subscript over a declared constant is typed from the declared
+   member types, not from the folded list's static shape. *)
+Theorem source_expr_infer_constant_declared_members:
+  source_expr_infer 4 env [[("C",["C"])]] [(["C"],SR_Constant)]
+    [(["C"],SC_Constant (SCV_List [SCV_Int 1; SCV_Int 2]))]
+    [(["C"],SE_Runtime (Name (ArrayT (BaseT (UintT 256)) (Dynamic 5)) "C"))]
+    (SX_Tuple [SX_Name "C"; SX_Literal (SCL_Bool T)]) =
+    SOME (TupleT [ArrayT (BaseT (UintT 256)) (Dynamic 5); BaseT BoolT]) /\
+  source_expr_infer 4 env [[("C",["C"])]] [(["C"],SR_Constant)]
+    [(["C"],SC_Constant (SCV_List [SCV_List [SCV_Int 1]]))]
+    [(["C"],SE_Runtime (Name (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 5)) (Fixed 1)) "C"))]
+    (SX_Subscript (SX_Name "C") (SX_Literal (SCL_Int 0))) =
+    SOME (ArrayT (BaseT (UintT 256)) (Dynamic 5)) /\
+  source_expr_hint [[("C",["C"])]] [(["C"],SR_Constant)]
+    [(["C"],SC_Constant (SCV_List [SCV_Int 1; SCV_Int 2]))]
+    [(["C"],SE_Runtime (Name (ArrayT (BaseT (UintT 256)) (Dynamic 5)) "C"))]
+    (SX_Tuple [SX_Name "C"; SX_Literal (SCL_Bool T)]) = NONE /\
+  source_expr_hint [[("C",["C"])]] [(["C"],SR_Constant)]
+    [(["C"],SC_Constant (SCV_Int 0))]
+    [(["C"],SE_Runtime (Name (BaseT (IntT 256)) "C"))]
+    (SX_Binary SCB_Sub (SX_Name "C") (SX_Literal (SCL_Int 1))) =
+    SOME (BaseT (IntT 256)) /\
+  source_expr_infer 4 env [[("C",["C"])]] [(["C"],SR_Constant)]
+    [(["C"],SC_Constant
+       (SCV_List [SCV_Hex "0x0000000000000000000000000000000000000001"]))]
+    [(["C"],SE_Runtime (Name (ArrayT (BaseT (BytesT (Fixed 20))) (Fixed 1)) "C"))]
+    (SX_Subscript (SX_Name "C") (SX_Literal (SCL_Int 0))) =
+    SOME (BaseT (BytesT (Fixed 20)))
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED

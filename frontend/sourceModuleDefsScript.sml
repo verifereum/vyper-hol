@@ -75,6 +75,7 @@ Datatype:
     sm_bindings : (string list # source_expr_binding) list;
     sm_names : (string list # source_type_identity) list;
     sm_events : (string list # (nsid # type list)) list;
+    sm_errors : (string list # (nsid # (string # type) list)) list;
     sm_owner : string list
   |>
 End

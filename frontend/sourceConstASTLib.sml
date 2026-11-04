@@ -158,7 +158,7 @@ in dispatch (fn
   | "NameConstant" => literal "SCL_Bool" (JSONDecode.map boolSyntax.mk_bool bool)
   | "Str" => literal "SCL_String" (JSONDecode.map stringSyntax.fromMLstring string)
   | "Bytes" => literal "SCL_Bytes" (andThen string hex_octets)
-  | "HexBytes" => literal "SCL_Bytes" (andThen string hex_octets)
+  | "HexBytes" => literal "SCL_HexBytes" (andThen string hex_octets)
   | "Hex" => andThen (required "value" string) (fn s =>
       if s = "0x" then error "empty Hex literal"
       else JSONDecode.map (fn _ => source "SCE_Literal"
@@ -192,7 +192,12 @@ and keywords_decoder () : term decoder = JSONDecode.map
 val expression = delay expression_decoder
 val keyword = delay keyword_decoder
 val keywords = delay keywords_decoder
-val annotation_bound = expression
+(* An interface may leave a bound open (`Bytes[...]` in a .vyi). That is not a
+   constant expression, so it decodes as unsupported, never as a value. *)
+val annotation_bound = dispatch (fn
+    "Ellipsis" => succeed (source "SCE_Unsupported"
+      [stringSyntax.fromMLstring "ellipsis", exprs []])
+  | _ => expression)
 
 (* ===== Source annotations and qualifiers ===== *)
 
@@ -228,7 +233,7 @@ fun annotation_decoder () : term decoder = let
     case List.find (fn (s,_) => path = [s])
       [("constant","SCQ_Constant"), ("immutable","SCQ_Immutable"),
        ("public","SCQ_Public"), ("transient","SCQ_Transient"),
-       ("indexed","SCQ_Indexed")] of
+       ("indexed","SCQ_Indexed"), ("reentrant","SCQ_Reentrant")] of
       NONE => error "unsupported annotation qualifier"
     | SOME (_,ctor) => andThen
         (tuple2 (required "args" (array child), required "keywords" (array raw)))

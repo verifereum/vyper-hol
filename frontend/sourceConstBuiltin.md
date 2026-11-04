@@ -3,7 +3,6 @@
 Builtin rules for the [source constant core](sourceConstCore.md). Semantic
 reference is VYPER_PIN, in particular `builtins/functions.py` and its original
 argument/type validation, not merely the folder's permissive `_try_fold`.
-See [constant evaluation](constant-evaluation.md) for pipeline and trust boundaries.
 
 ## Resolver/decoder API
 
@@ -30,6 +29,8 @@ Fixed selector output is the existing `SCV_Hex`, dynamic output is the existing
 
 * `len`: one String/Bytes operand, actual byte length. Not fixed bytes: although
   `_try_fold` can count Hex, the original builtin signature excludes BytesM.
+  A list operand (a `DynArray` constant or literal) is unsupported, not invalid:
+  the signature accepts it, but `_try_fold` does not fold it.
 * `min`/`max`: two Ints with a common signed/unsigned integer type, or two
   Decimal coefficients fitting signed 168 bits. No mixed literal kinds or Bool.
 * `abs`: one signed int256 and a representable signed int256 result. Reject

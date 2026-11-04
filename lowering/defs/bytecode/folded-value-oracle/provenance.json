@@ -226,7 +226,7 @@
       "source_sha256": "a010436d3d2116452e9cb568307488cb34bb09555b38a82922227fe1382e5d3a"
     }
   },
-  "generator_note": "Per-witness invocations of python_o1_bytecode_oracle.py; source labels corrected from its hardcoded baseline directory. Original provenance and command logs retained in single/ and logs/.",
+  "generator_note": "Per-witness invocations of python_o1_bytecode_oracle.py; source labels corrected from its hardcoded baseline directory. Original provenance and command logs retained in single/ and logs/. Re-checked at vyper_commit: every deploy/runtime hash and annotated AST is byte-identical to the cd74ce4f run.",
   "producer": "pinned Python Vyper",
   "python_version": "3.11.11",
   "schema_version": 2,
@@ -245,6 +245,6 @@
   "source_checkout": "/home/lukasz/vyper",
   "source_revision": "ac6681fe013c4762158d1bc24e9ae206a19781e8",
   "uv_version": "0.10.11",
-  "vyper_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
-  "vyper_version": "0.5.0a4+cd74ce4f"
+  "vyper_commit": "9362e36b145c4b63ceb6a893018ea970e78bf6a6",
+  "vyper_version": "0.5.0a4+9362e36b"
 }

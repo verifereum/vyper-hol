@@ -183,6 +183,19 @@ Proof
   EVAL_TAC
 QED
 
+(* Vyper unwraps public and reentrant in either order before constant. *)
+Theorem resolve_reentrant_public_constant:
+  source_resolve_registry_constants [(["main"],SourceModule
+    [SD_Variable "N" (SCA_Qualified SCQ_Reentrant (SCA_Qualified SCQ_Public
+       (SCA_Qualified SCQ_Constant (SCA_Name ["uint256"])))) (SOME (SX_Literal (SCL_Int 7)));
+     SD_Variable "M" (SCA_Qualified SCQ_Constant (SCA_Name ["uint256"]))
+       (SOME (SX_Binary SCB_Add (SX_Name "N") (SX_Literal (SCL_Int 1))))])] =
+    SOME (SCEnv_Resolved [(["main";"N"],SC_Constant (SCV_Int 7));
+                         (["main";"M"],SC_Constant (SCV_Int 8))])
+Proof
+  EVAL_TAC
+QED
+
 Theorem resolve_claims_validate_source_import_edges:
   source_resolve_claims_ok resolve_test_registry
     [SourceImportClaim ["main"] (SI_Import "lib" (SOME "alias")) ["lib"] 17] /\
@@ -190,7 +203,7 @@ Theorem resolve_claims_validate_source_import_edges:
     [SourceImportClaim ["main"] (SI_Import "lib" (SOME "alias")) ["main"] 17] /\
   ~source_resolve_claims_ok resolve_test_registry []
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
 QED
 
 Theorem resolve_relative_imports:
@@ -247,7 +260,7 @@ Theorem resolve_checked_builtin_and_primitive:
   source_resolve_module_candidate [(["main"],SourceModule [])] ["missing"]
     (SX_Name "len") = NONE
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
 QED
 
 Theorem resolve_checked_source_shadowing:
@@ -263,7 +276,7 @@ Theorem resolve_checked_source_shadowing:
     (SX_Call (SX_Name "method_id") [] [("output_type",SX_Name "bytes4")]) =
       SOME (SCE_Builtin SCB_MethodId [] [("output_type",SCE_Unsupported "type" [])])
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
 QED
 
 Theorem resolve_program_registry_keeps_distinct_bodies:
@@ -275,7 +288,7 @@ Theorem resolve_program_registry_keeps_distinct_bodies:
   source_resolve_program_registry
     (SourceProgram (SourceModule []) [SourceModule []]) [["one"]] = NONE
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
 QED
 
 (* Every export is kernel-closed: only standard persisted theorem tags. *)

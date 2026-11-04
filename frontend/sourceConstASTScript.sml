@@ -37,11 +37,13 @@ End
    Hex retains source spelling: equality ignores case, membership does not.
    SCL_Hex is a token, NOT a compiler-inferred Address/bytesM tag: executable
    consumers independently check length, uniform case or EIP-55 checksum in
-   the resolved type context. A decoder validates its lexical shape first. *)
+   the resolved type context. A decoder validates its lexical shape first.
+   SCL_HexBytes is an x"..." literal: the pinned folder treats it as a node
+   kind distinct from b"...", so it is kept apart from SCL_Bytes. *)
 Datatype:
   source_const_literal = SCL_Int int | SCL_Bool bool | SCL_Decimal int num
                        | SCL_String string | SCL_Bytes (num list)
-                       | SCL_Hex string
+                       | SCL_HexBytes (num list) | SCL_Hex string
 End
 
 (* SCE_BytesType carries a resolved type constructor and original bound:
@@ -90,7 +92,8 @@ Datatype:
 End
 
 Datatype:
-  source_const_unsupported = SCS_DecimalOperation | SCS_Power
+  source_const_unsupported = SCS_DecimalOperation | SCS_HexOperation | SCS_HexBytes
+                           | SCS_Power
                            | SCS_Membership | SCS_Subscript
                            | SCS_Builtin source_const_builtin | SCS_Call
                            | SCS_UnresolvedName (string list) | SCS_Syntax string

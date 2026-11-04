@@ -174,6 +174,7 @@ Definition source_const_builtin_apply_def:
          | _ => SC_Invalid SCErr_Type)
     | SCB_Len =>
         (case args of
+         | [SCV_List _] => SC_Unsupported (SCS_Builtin SCB_Len)
          | [arg] =>
              if (case arg of SCV_Hex _ => F | _ => T) then
                (case source_const_byte_input arg of

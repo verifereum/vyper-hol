@@ -100,7 +100,8 @@ Definition source_type_constructor_path_def:
   source_type_constructor_path (STC_Qualifier SCQ_Immutable) = ["immutable"] /\
   source_type_constructor_path (STC_Qualifier SCQ_Public) = ["public"] /\
   source_type_constructor_path (STC_Qualifier SCQ_Transient) = ["transient"] /\
-  source_type_constructor_path (STC_Qualifier SCQ_Indexed) = ["indexed"]
+  source_type_constructor_path (STC_Qualifier SCQ_Indexed) = ["indexed"] /\
+  source_type_constructor_path (STC_Qualifier SCQ_Reentrant) = ["reentrant"]
 End
 
 Definition source_type_require_constructor_def:

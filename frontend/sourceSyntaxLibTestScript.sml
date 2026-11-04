@@ -154,6 +154,46 @@ val () = app (fn n => if n = "method_id_var" then () else
     (JSONDecode.decodeFile JSONDecode.raw
       ("../lowering/defs/bytecode/folded-value-oracle/" ^ n ^ ".json"))) names;
 
+(* Error declarations and the reentrant qualifier, from the pre-erasure capture
+   and from ordinary annotated JSON of the same pinned source. *)
+val error_decl = ``SD_Error "Unauthorized"
+  [SourceArg "caller" (SOME (SCA_Name ["address"]));
+   SourceArg "code" (SOME (SCA_Name ["uint256"]))]``;
+fun extra n = "../tests/fixtures/check_contract/source_syntax/extra/" ^ n ^ ".json";
+val () = let
+    val captured = JSONDecode.decodeFile sourceSyntaxLib.annotated_ast (extra "error_reentrant")
+    val ordinary = JSONDecode.decodeFile sourceSyntaxLib.annotated_ast
+      (extra "error_reentrant.annotated")
+  in require_subterm "captured error" error_decl captured;
+     require_subterm "captured reentrant" ``SCA_Qualified SCQ_Reentrant
+       (SCA_Qualified SCQ_Public (SCA_Name ["uint256"]))`` captured;
+     require_subterm "ordinary error" error_decl ordinary
+  end;
+val () = let
+    val captured = JSONDecode.decodeFile sourceSyntaxLib.annotated_ast (extra "empty_error_hex")
+    val ordinary = JSONDecode.decodeFile sourceSyntaxLib.annotated_ast
+      (extra "empty_error_hex.annotated")
+    val empty_error = ``SD_Error "Empty" []``
+    val hex_bytes = ``SCL_HexBytes [171; 205]``
+  in require_subterm "captured empty error" empty_error captured;
+     require_subterm "captured hex bytes" hex_bytes captured;
+     require_subterm "ordinary empty error" empty_error ordinary;
+     require_subterm "ordinary hex bytes" hex_bytes ordinary
+  end;
+
+(* The deprecated enum keyword is a flag, and hex digits may contain spaces. *)
+val () = let
+    val captured = JSONDecode.decodeFile sourceSyntaxLib.annotated_ast (extra "enum_spaced_hex")
+    val ordinary = JSONDecode.decodeFile sourceSyntaxLib.annotated_ast
+      (extra "enum_spaced_hex.annotated")
+    val flag = ``SD_Flag "Role" ["ADMIN"; "USER"]``
+    val hex_bytes = ``SCL_HexBytes [171; 205]``
+  in require_subterm "captured enum" flag captured;
+     require_subterm "captured spaced hex" hex_bytes captured;
+     require_subterm "ordinary enum" flag ordinary;
+     require_subterm "ordinary spaced hex" hex_bytes ordinary
+  end;
+
 Theorem source_candidates_keep_unresolved_calls = checked "unresolved callee"
   ``source_constant_candidate (SX_Call (SX_Name "method_id") [SX_Name "s"]
      [("output_type",SX_Name "bytes4")])``
@@ -221,6 +261,12 @@ val () = require_subterm "nested HashMap source" ``SCA_Qualified SCQ_Public
 val () = ignore (checked "flags cannot invent qualifiers"
   (dd (poisoned (integer 7) (variable "plain" (name "uint256") JSON.NULL)))
   ``SD_Variable "plain" (SCA_Name ["uint256"]) NONE``);
+val () = ignore (checked "implements from annotated children"
+  (dd (ast "ImplementsDecl" [("children",arr [name "I"])]))
+  (dd (ast "ImplementsDecl" [("annotation",name "I")])));
+val () = ignore (checked "implements several interfaces"
+  (dd (ast "ImplementsDecl" [("children",arr [name "I",name "J"])]))
+  (dd (ast "ImplementsDecl" [("annotation",tuple [name "I",name "J"])])));
 val () = require_subterm "event indexed qualifier" ``SCA_Qualified SCQ_Indexed (SCA_Bytes (SCE_Name ["N"]))``
   (dp declaration_program);
 

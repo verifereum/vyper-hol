@@ -86,20 +86,48 @@ QED
 
 (* ===== Evaluation depends only on resolved name dependencies ===== *)
 
+Theorem source_const_eval_list_congruence[local]:
+  (!x. MEM x xs ==>
+       (!path. MEM path (source_const_names x) ==>
+               ALOOKUP env path = ALOOKUP other path) ==>
+       source_const_eval env x = source_const_eval other x) ==>
+  (!path x. MEM x xs /\ MEM path (source_const_names x) ==>
+            ALOOKUP env path = ALOOKUP other path) ==>
+  MAP (\x. source_const_eval env x) xs = MAP (\x. source_const_eval other x) xs
+Proof
+  rpt strip_tac >> simp[MAP_EQ_f] >> metis_tac[]
+QED
+
+Theorem source_const_eval_keyword_congruence[local]:
+  (!kw. MEM kw kws ==>
+        (!path. MEM path (source_const_names (SND kw)) ==>
+                ALOOKUP env path = ALOOKUP other path) ==>
+        source_const_eval env (SND kw) = source_const_eval other (SND kw)) ==>
+  (!path kw. MEM kw kws /\ MEM path (source_const_names (SND kw)) ==>
+             ALOOKUP env path = ALOOKUP other path) ==>
+  MAP (\kw. source_const_eval env (SND kw)) kws =
+  MAP (\kw. source_const_eval other (SND kw)) kws
+Proof
+  rpt strip_tac >> simp[MAP_EQ_f] >> metis_tac[]
+QED
+
 Theorem source_const_eval_name_congruence:
   !env expr. !other.
     (!path. MEM path (source_const_names expr) ==>
             ALOOKUP env path = ALOOKUP other path) ==>
     source_const_eval env expr = source_const_eval other expr
 Proof
+  (* Fix other before induction, so each single-child hypothesis is a closed
+     conditional rewrite; child lists go through the two lemmas above. *)
+  rpt gen_tac >> qid_spec_tac `expr` >> qid_spec_tac `env` >>
   ho_match_mp_tac source_const_eval_ind >> rpt conj_tac >> rpt gen_tac >>
   simp[Once source_const_names_def, MEM_FLAT, MEM_MAP, PULL_EXISTS,
        DISJ_IMP_THM, FORALL_AND_THM] >> rpt strip_tac >>
   simp[source_const_eval_def, source_const_lookup_def] >>
-  rpt (FIRST [FIRST_ASSUM (fn th => irule th >> metis_tac[]),
-              cong_tac (SOME 1)])
+  imp_res_tac source_const_eval_list_congruence >>
+  imp_res_tac source_const_eval_keyword_congruence >>
+  simp[]
 QED
-
 Theorem source_const_eval_append:
   source_const_ready env expr ==>
   source_const_eval (env ++ added) expr = source_const_eval env expr

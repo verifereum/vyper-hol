@@ -88,6 +88,7 @@ Definition source_const_literal_def:
   source_const_literal (SCL_Bytes bs) =
     (if EVERY (\b. b < 256) bs then SC_Value (SCV_Bytes bs)
      else SC_Invalid SCErr_Octet) /\
+  source_const_literal (SCL_HexBytes bs) = SC_Unsupported SCS_HexBytes /\
   source_const_literal (SCL_Hex s) =
     (if source_const_hex_ok s then SC_Value (SCV_Hex s)
      else SC_Invalid SCErr_HexToken)
@@ -248,6 +249,8 @@ Definition source_const_unary_def:
   source_const_unary SCU_Not (SCV_Bool b) = SC_Value (SCV_Bool (~b)) /\
   source_const_unary SCU_Invert (SCV_Int i) =
     SC_Value (SCV_Int (int_xor (2 ** 256 - 1) i)) /\
+  (* The pinned compiler accepts ~ of a bytesM Hex but does not fold it. *)
+  source_const_unary SCU_Invert (SCV_Hex h) = SC_Unsupported SCS_HexOperation /\
   source_const_unary _ _ = SC_Invalid SCErr_Domain
 End
 
@@ -256,6 +259,15 @@ Definition source_const_binary_def:
     source_const_integer_binary bop a b /\
   source_const_binary bop (SCV_Decimal a) (SCV_Decimal b) =
     source_const_decimal_binary bop a b /\
+  (* The pinned compiler accepts &, | and ^ of bytesM Hex operands and shifts
+     of a bytes32 Hex by an Int count, but does not fold them. *)
+  source_const_binary bop (SCV_Hex a) (SCV_Hex b) =
+    (if bop = SCB_BitAnd \/ bop = SCB_BitOr \/ bop = SCB_BitXor then
+       SC_Unsupported SCS_HexOperation
+     else SC_Invalid SCErr_Domain) /\
+  source_const_binary bop (SCV_Hex a) (SCV_Int b) =
+    (if bop = SCB_LShift \/ bop = SCB_RShift then SC_Unsupported SCS_HexOperation
+     else SC_Invalid SCErr_Domain) /\
   source_const_binary _ _ _ = SC_Invalid SCErr_Domain
 End
 
@@ -389,6 +401,9 @@ Definition source_const_subscript_def:
        SC_Unsupported SCS_Subscript
      else if i < 0 \/ &(LENGTH vs) <= i then SC_Invalid SCErr_Index
      else SC_Value (EL (Num i) vs)) /\
+  (* The pinned compiler accepts an Int subscript of a tuple constant but
+     does not fold it. *)
+  source_const_subscript (SCV_Tuple vs) (SCV_Int i) = SC_Unsupported SCS_Subscript /\
   source_const_subscript _ _ = SC_Invalid SCErr_Domain
 End
 

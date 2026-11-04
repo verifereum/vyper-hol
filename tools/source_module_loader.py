@@ -19,7 +19,7 @@ from pathlib import Path
 
 PROTOCOL = "vyper-hol/source-loader-v1"
 BOUNDARY = "annotate_python_ast-before-get_node"
-PIN = "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c"
+PIN = (Path(__file__).resolve().parents[1] / "VYPER_PIN").read_text().strip()
 
 
 def convert(value):
@@ -40,6 +40,10 @@ def convert(value):
             if len(operators) != 1 or len(operands) != 1:
                 raise ValueError("chained comparisons are not sourceSyntax")
             result["op"], result["right"] = operators[0], operands[0]
+        if kind == "HexBytes":
+            # get_node's HexBytes normalizes the digits and adds the prefix;
+            # the capture skips get_node.
+            result["value"] = "0x" + bytes.fromhex(result["value"]).hex()
         if kind in {"Tuple", "List"}:
             result["elements"] = result.pop("elts")
         if kind == "ImportFrom" and result.get("module") is None:
@@ -57,6 +61,23 @@ def convert(value):
     if value is Ellipsis:
         return None
     return value
+
+
+STRUCTURAL = {"exports": "ExportsDecl", "initializes": "InitializesDecl",
+              "uses": "UsesDecl", "implements": "ImplementsDecl"}
+
+
+def classify(syntax):
+    """Mirror only get_node's syntactic top-level renaming. Crucially, do NOT
+    call it: VariableDecl construction erases qualifier syntax."""
+    for declaration in syntax["body"]:
+        if declaration["ast_type"] == "AnnAssign":
+            target = declaration["target"]
+            name = target.get("id") if target.get("ast_type") == "Name" else None
+            declaration["ast_type"] = STRUCTURAL.get(name, "VariableDecl")
+        elif declaration["ast_type"] == "EnumDef":
+            declaration["ast_type"] = "FlagDef"
+    return syntax
 
 
 def capture(manifest):
@@ -85,22 +106,13 @@ def capture(manifest):
         pre.parse(source)
         tree = ast.parse(pre.reformatted_code)
         annotate_python_ast(tree, source, pre, source_id=entry.get("source_id", 0),
-                            module_path=str(path), resolved_path=str(path.resolve()))
-        syntax = convert(tree)
-        # Mirror only get_node's syntactic top-level classification. Crucially,
-        # do NOT call it: VariableDecl construction erases qualifier syntax.
-        structural = {"exports": "ExportsDecl", "initializes": "InitializesDecl",
-                      "uses": "UsesDecl", "implements": "ImplementsDecl"}
-        for declaration in syntax["body"]:
-            if declaration["ast_type"] == "AnnAssign":
-                target = declaration["target"]
-                name = target.get("id") if target.get("ast_type") == "Name" else None
-                declaration["ast_type"] = structural.get(name, "VariableDecl")
+                            module_path=str(path), resolved_path=str(path))
+        syntax = classify(convert(tree))
         keys.append(key)
         trees.append(syntax)
         policies.append(bool(pre.settings.nonreentrancy_by_default))
         interfaces.append(interface)
-        provenance.append({"key": key, "path": str(path.resolve()),
+        provenance.append({"key": key, "path": str(path),
                            "source_sha256": hashlib.sha256(source.encode()).hexdigest()})
     if not trees:
         raise ValueError("main source module is required")

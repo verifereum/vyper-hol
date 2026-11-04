@@ -13,7 +13,7 @@ val syntax = JSONDecode.decodeFile JSONDecode.raw
 fun capture program = JSON.OBJECT
   [("protocol",JSON.STRING "vyper-hol/source-loader-v1"),
    ("phase",JSON.STRING "annotate_python_ast-before-get_node"),
-   ("vyper_pin",JSON.STRING "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c"),
+   ("vyper_pin",JSON.STRING "9362e36b145c4b63ceb6a893018ea970e78bf6a6"),
    ("keys",JSON.ARRAY [JSON.ARRAY [JSON.STRING "main"]]),
    ("nonreentrancy_by_default",JSON.ARRAY [JSON.BOOL false]),
    ("declaration_only",JSON.ARRAY [JSON.BOOL false]),

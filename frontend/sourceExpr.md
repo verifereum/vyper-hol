@@ -76,10 +76,9 @@ defaults. These helpers are not complete statement/range elaborators.
 required-constant provenance and local constant replacement with represented
 values and unchanged states. It does not prove a universal structural
 source-to-runtime simulation. [sourceMeaning](sourceMeaning.md) supplies
-independent staged relations, and
-[sourceMeaningLocation](sourceMeaningLocation.md) handles location-sensitive
-forms. These retain explicit derivation and context-agreement premises; neither
-asserts that every accepted expression has an independent semantic derivation.
+independent staged relations. These retain explicit derivation and
+context-agreement premises; they do not assert that every accepted expression
+has an independent semantic derivation.
 
 This is a contextual fragment, not a complete source typer. Mixed-sign
 comparisons, context-polymorphic negative boundaries, structs, many builtin/call

@@ -126,6 +126,7 @@ Definition source_expr_literal_domain_def:
     (case ty of BaseT (StringT n) => T | _ => F) /\
   source_expr_literal_domain (SCL_Bytes _) ty =
     (case ty of BaseT (BytesT (Dynamic n)) => T | _ => F) /\
+  source_expr_literal_domain (SCL_HexBytes _) ty = F /\
   source_expr_literal_domain (SCL_Hex s) ty =
     (case ty of
        BaseT AddressT => source_const_address_hex s
@@ -305,16 +306,52 @@ Definition source_expr_call_hint_def:
   source_expr_call_hint scopes table bindings _ = NONE
 End
 
+(* A named constant has its declared type when its signature binding is
+   available; its value's shape alone would make a DynArray constant a static
+   array. *)
+Definition source_expr_constant_type_def:
+  source_expr_constant_type scopes table bindings e =
+    case source_expr_path e of
+      NONE => NONE
+    | SOME names => case source_resolve_name scopes table names of
+        SOME (path,SR_Constant) =>
+          (case ALOOKUP bindings path of
+             SOME (SE_Runtime e) => SOME (expr_type e) | _ => NONE)
+      | _ => NONE
+End
+
+Definition source_expr_aggregate_value_def:
+  source_expr_aggregate_value v =
+    case v of SCV_List _ => T | SCV_Tuple _ => T | SCV_Struct _ _ => T | _ => F
+End
+
+Definition source_expr_member_def:
+  source_expr_member e =
+    case e of SX_Subscript _ _ => T | SX_Attribute _ _ => T | _ => F
+End
+
 Definition source_expr_hint_def:
   source_expr_hint scopes table constants variables e =
     case source_expr_variable scopes table variables e of
       SOME e => SOME (expr_type e)
     | NONE => case source_expr_call_hint scopes table variables e of
         SOME ty => SOME ty
-      | NONE => case source_resolve_candidate scopes table e of
+      | NONE => case source_expr_constant_type scopes table variables e of
+          SOME ty => SOME ty
+        | NONE => case source_resolve_candidate scopes table e of
           NONE => NONE
         | SOME resolved => case source_const_eval constants resolved of
-            SC_Value v => source_expr_value_type v
+            SC_Value v =>
+              (* A folded value's shape is not its declared type: a
+                 DynArray constant folds to a list, and an element of a
+                 bytes20 array to a token that may read as an address. An
+                 aggregate, subscript or attribute tree naming a declared
+                 constant gets no hint, so inference types it structurally
+                 from the declarations. *)
+              if (source_expr_aggregate_value v \/ source_expr_member e) /\
+                 EXISTS (\path. IS_SOME (ALOOKUP variables path))
+                   (source_const_names resolved) then NONE
+              else source_expr_value_type v
           | _ => NONE
 End
 

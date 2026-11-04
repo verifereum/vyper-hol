@@ -8,7 +8,7 @@ Ancestors
    Missing annotations belong in an option at the consumer, not this AST. *)
 Datatype:
   source_const_qualifier = SCQ_Constant | SCQ_Immutable | SCQ_Public
-                         | SCQ_Transient | SCQ_Indexed
+                         | SCQ_Transient | SCQ_Indexed | SCQ_Reentrant
 End
 
 Datatype:

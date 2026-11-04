@@ -13,7 +13,7 @@ fun flags xs = listSyntax.mk_list (List.map (fn b => if b then boolSyntax.T else
 val source_capture = andThen (tuple3
   (claim "protocol" "vyper-hol/source-loader-v1",
    claim "phase" "annotate_python_ast-before-get_node",
-   claim "vyper_pin" "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c")) (fn _ =>
+   claim "vyper_pin" "9362e36b145c4b63ceb6a893018ea970e78bf6a6")) (fn _ =>
   andThen (tuple4 (required "keys" (array (array string)),
     required "nonreentrancy_by_default" (array bool),
     required "declaration_only" (array bool),

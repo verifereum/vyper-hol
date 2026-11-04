@@ -139,6 +139,13 @@ val natural = andThen intInf (fn n => if n < 0 then error "negative import level
 fun declaration_decoder () : term decoder = let
   fun named_fields ctor = JSONDecode.map (fn (n,fs) => construct ctor [text n,terms arg_ty fs])
     (tuple2 (required "name" identifier,required "body" (array argument)))
+  (* Events and errors may have a single Pass body: no members. *)
+  fun members ctor = andThen (required "body" (array raw)) (fn fields =>
+      if length fields = 1 andalso
+         JSONDecode.decode (optional "ast_type" string) (hd fields) = SOME "Pass"
+      then JSONDecode.map (fn n => construct ctor [text n,terms arg_ty []])
+        (required "name" identifier)
+      else named_fields ctor)
   fun structural ctor = JSONDecode.map (fn e => construct ctor [e]) (required "annotation" expression)
   fun imports from = JSONDecode.map (fn (prefix,aliases) => construct "SD_Import"
       [terms import_ty (List.map (fn (n,a) => if from then
@@ -161,12 +168,8 @@ in dispatch (fn
           (required "args" (array argument),required "defaults" (array expression)))),
         annotation_option "returns",required "body" (array statement)))
   | "StructDef" => named_fields "SD_Struct"
-  | "EventDef" => andThen (required "body" (array raw)) (fn fields =>
-      if length fields = 1 andalso
-         JSONDecode.decode (optional "ast_type" string) (hd fields) = SOME "Pass"
-      then JSONDecode.map (fn n => construct "SD_Event" [text n,terms arg_ty []])
-        (required "name" identifier)
-      else named_fields "SD_Event")
+  | "ErrorDef" => members "SD_Error"
+  | "EventDef" => members "SD_Event"
   | "InterfaceDef" => JSONDecode.map (fn (n,ds) => construct "SD_Interface" [text n,terms decl_ty ds])
       (tuple2 (required "name" identifier,required "body" (array (delay declaration_decoder))))
   | "FlagDef" => JSONDecode.map (fn (n,members) => construct "SD_Flag"
@@ -177,7 +180,13 @@ in dispatch (fn
   | "ExportsDecl" => structural "SD_Exports"
   | "InitializesDecl" => structural "SD_Initializes"
   | "UsesDecl" => structural "SD_Uses"
-  | "ImplementsDecl" => structural "SD_Implements"
+  (* Annotated JSON stores the interfaces in children: ImplementsDecl pops
+     its annotation. A Python AST capture keeps the annotation. *)
+  | "ImplementsDecl" => andThen (optional "annotation" raw) (fn
+        SOME _ => structural "SD_Implements"
+      | NONE => JSONDecode.map (fn es => construct "SD_Implements"
+          [case es of [e] => e | _ => construct "SX_Tuple" [terms expr_ty es]])
+        (required "children" (array expression)))
   | kind => error ("unsupported declaration " ^ kind)) end
 val declaration = delay declaration_decoder
 val source_module = node "Module" (JSONDecode.map

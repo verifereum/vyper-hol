@@ -7,11 +7,11 @@ signature sourceModuleFrontendLib = sig
                   artifact:term, checking:thm, composition:thm}
   val elaborate : input -> elaborated
   val check : input -> {layouts:term, address:term} -> checked
-  (* Original, policy-free equations remain available for older consumers. *)
+  (* Policy-free equations. A bare program carries no pragmas, so it is
+     elaborated as if `#pragma nonreentrancy` were off. Source read from a
+     file goes through the loader, which carries the pragma as a policy. *)
   val elaborate_simple : simple_input -> elaborated
   val check_simple : simple_input -> {layouts:term, address:term} -> checked
-  (* Pre-erasure syntax only; no qualifier reconstruction from inferred flags. *)
-  val elaborate_file : {fuel:term, trust:term, keys:term, path:string} -> elaborated
   val elaborate_loaded : {fuel:term, trust:term, source:sourceModuleLoaderLib.loaded} -> elaborated
   val check_loaded : {fuel:term, trust:term, source:sourceModuleLoaderLib.loaded} ->
     {layouts:term, address:term} -> checked

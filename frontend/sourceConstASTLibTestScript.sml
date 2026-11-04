@@ -80,7 +80,7 @@ val () = app test_expr
       ``SCE_Literal (SCL_String "foo()")``),
    ("bytes hexadecimal encoding",literal "Bytes" "0x0001fF",
       ``SCE_Literal (SCL_Bytes [0;1;255])``),
-   ("HexBytes",literal "HexBytes" "0xDeAd",``SCE_Literal (SCL_Bytes [222;173])``),
+   ("HexBytes",literal "HexBytes" "0xDeAd",``SCE_Literal (SCL_HexBytes [222;173])``),
    ("empty bytes",literal "Bytes" "0x",``SCE_Literal (SCL_Bytes [])``),
    ("hex spelling remains distinct",literal "Hex" "0xaAbB",
       ``SCE_Literal (SCL_Hex "0xaAbB")``),
@@ -176,11 +176,15 @@ val () = app test_ann
       ``SCA_String (SCE_Name ["N"])``),
    ("qualified nominal",attribute (name "lib") "Thing",``SCA_Name ["lib";"Thing"]``),
    ("tuple annotation",sequence "Tuple" [name "bool",subscript (name "Bytes") (integer 4)],
-      ``SCA_Tuple [SCA_Name ["bool"];SCA_Bytes (SCE_Literal (SCL_Int 4))]``)];
+      ``SCA_Tuple [SCA_Name ["bool"];SCA_Bytes (SCE_Literal (SCL_Int 4))]``),
+   (* An interface's open bound, `Bytes[...]` in a .vyi, as the pin emits it. *)
+   ("interface wildcard bound",subscript (name "Bytes") (ast "Ellipsis" []),
+      ``SCA_Bytes (SCE_Unsupported "ellipsis" [])``)];
 val () = app (fn (spelling,qualifier) => test_ann (spelling,
   qualify spelling ann_bound,``SCA_Qualified ^qualifier ^(da ann_bound)``))
   [("constant",``SCQ_Constant``),("immutable",``SCQ_Immutable``),
-   ("transient",``SCQ_Transient``),("indexed",``SCQ_Indexed``),("public",``SCQ_Public``)];
+   ("transient",``SCQ_Transient``),("indexed",``SCQ_Indexed``),("public",``SCQ_Public``),
+   ("reentrant",``SCQ_Reentrant``)];
 val () = app (independent "annotations" sourceConstASTLib.annotation)
   [ann_bound,complex_annotation,qualify "constant" (subscript (name "String") (integer 4))];
 

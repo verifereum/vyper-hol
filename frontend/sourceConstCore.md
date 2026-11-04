@@ -3,8 +3,7 @@
 ## Semantic sources
 
 A pure, partial source evaluator. Only `SC_Value` satisfies a required constant
-position; failure must not fall back to compiler-folded metadata. See
-[constant evaluation](constant-evaluation.md) for pipeline and trust boundaries.
+position; failure must not fall back to compiler-folded metadata.
 
 Semantic reference: the repository's `VYPER_PIN`, especially these modules:
 
@@ -68,6 +67,7 @@ Unimplemented parents remain Unsupported even when some children are dynamic.
 | Int / Bool literals | Mathematical integer / Boolean |
 | Decimal literal | Exact coefficient * 10^(10-places), places <= 10 |
 | String / Bytes / Hex | Validated ASCII / octets / original Hex token |
+| HexBytes (`x"..."`) | Unsupported: the pin folds it as a node kind distinct from Bytes, so mixed lists and comparisons stay unfolded there |
 | Unary minus | Mathematical integer; Decimal context rounding before negation result |
 | Boolean not | Boolean only |
 | Invert | Integer XOR (2^256 - 1), the pinned AST mask |
@@ -77,6 +77,7 @@ Unimplemented parents remain Unsupported even when some children are dynamic.
 | Integer power | Negative exponents rejected; zero exponent gives 1, including 0**0; bases 0, 1, -1 have arbitrary-exponent fast paths; see guard boundary below |
 | Integer shifts | Count 0..256; unwrapped left shift, arithmetic right shift |
 | Integer &, \|, ^ | Mathematical signed bitwise operations |
+| Hex &, \|, ^, shifts, invert | Unsupported: the pin accepts them for bytesM operands but does not fold them; other Hex arithmetic is invalid |
 | Decimal +, - | Round result to the 78-significant-digit context |
 | Decimal * | Context-round the scale-20 product, then truncate toward zero to scale 10 |
 | Decimal / | Context-round the rational quotient, then truncate toward zero to scale 10; preserve the pinned negative-result recomputation |
@@ -144,7 +145,8 @@ Subscript homogeneity is **shallow folded node kind**, not recursive element typ
 `[[1], [True]][1]` folds to `[True]`, but `[1, True][0]` does not fold. Negative,
 out-of-range and empty-list indices are invalid; Bool indices are not Int.
 Tuple, String, Bytes and Hex subscripting are not pinned literal-list folding
-rules. Nominal struct values are not claimed to identify a folded AST node kind;
+rules. An Int subscript of a tuple is unsupported, not invalid: the compiler
+accepts it but does not fold it. Nominal struct values are not claimed to identify a folded AST node kind;
 subscript lists containing them remain explicitly unsupported.
 
 ## Eagerness, proofs and regressions

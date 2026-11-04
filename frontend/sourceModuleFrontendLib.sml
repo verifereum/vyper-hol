@@ -100,9 +100,6 @@ end
 fun check source = check_phase "" source_module_check_def (elaborate source) (arguments source)
 fun check_simple source = check_phase "_simple" source_module_check_simple_def
   (elaborate_simple source) (simple_arguments source)
-fun elaborate_file {fuel,trust,keys,path} = elaborate_simple
-  {fuel=fuel,trust=trust,keys=keys,
-   program=JSONDecode.decodeFile sourceSyntaxLib.annotated_ast path}
 fun loaded_input {fuel,trust,source:sourceModuleLoaderLib.loaded} : input =
   {fuel=fuel,trust=trust,keys= #keys source,program= #program source,
    policies=sourceModuleLoaderLib.policies source}

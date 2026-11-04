@@ -626,8 +626,39 @@ Theorem source_const_subscript_examples:
   source_const_subscript (SCV_List [SCV_Int 1]) (SCV_Bool F) =
     SC_Invalid SCErr_Domain /\
   source_const_subscript (SCV_Tuple [SCV_Int 1]) (SCV_Int 0) =
+    SC_Unsupported SCS_Subscript /\
+  source_const_subscript (SCV_Tuple [SCV_Int 1]) (SCV_Bool F) =
     SC_Invalid SCErr_Domain /\
   source_const_subscript (SCV_Bytes [1]) (SCV_Int 0) = SC_Invalid SCErr_Domain
+Proof
+  EVAL_TAC
+QED
+
+(* x"..." and b"..." are distinct folded node kinds at the pin, so a mixed
+   list is not folded there; HexBytes stays Unsupported rather than Bytes. *)
+Theorem source_const_hex_bytes_examples:
+  source_const_literal (SCL_HexBytes [97]) = SC_Unsupported SCS_HexBytes /\
+  source_const_eval [] (SCE_Subscript
+    (SCE_List [SCE_Literal (SCL_HexBytes [97]); SCE_Literal (SCL_Bytes [98])])
+    (SCE_Literal (SCL_Int 0))) = SC_Unsupported SCS_HexBytes /\
+  source_const_eval [] (SCE_Compare SCC_Eq (SCE_Literal (SCL_HexBytes [97]))
+    (SCE_Literal (SCL_Bytes [97]))) = SC_Unsupported SCS_HexBytes
+Proof
+  EVAL_TAC
+QED
+
+Theorem source_const_hex_operation_examples:
+  source_const_binary SCB_BitAnd (SCV_Hex "0x01") (SCV_Hex "0x02") =
+    SC_Unsupported SCS_HexOperation /\
+  source_const_binary SCB_BitXor (SCV_Hex "0x01") (SCV_Hex "0x02") =
+    SC_Unsupported SCS_HexOperation /\
+  source_const_binary SCB_LShift (SCV_Hex "0x01") (SCV_Int 1) =
+    SC_Unsupported SCS_HexOperation /\
+  source_const_unary SCU_Invert (SCV_Hex "0x01") = SC_Unsupported SCS_HexOperation /\
+  source_const_binary SCB_Add (SCV_Hex "0x01") (SCV_Hex "0x02") =
+    SC_Invalid SCErr_Domain /\
+  source_const_binary SCB_BitAnd (SCV_Int 1) (SCV_Hex "0x02") =
+    SC_Invalid SCErr_Domain
 Proof
   EVAL_TAC
 QED

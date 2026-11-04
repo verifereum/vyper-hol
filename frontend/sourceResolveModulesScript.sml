@@ -38,7 +38,8 @@ End
 
 Definition source_resolve_is_constant_def:
   source_resolve_is_constant (SCA_Qualified q a) =
-    (q = SCQ_Constant \/ (q = SCQ_Public /\ source_resolve_is_constant a)) /\
+    (q = SCQ_Constant \/
+     ((q = SCQ_Public \/ q = SCQ_Reentrant) /\ source_resolve_is_constant a)) /\
   source_resolve_is_constant _ = F
 End
 
@@ -73,6 +74,7 @@ Definition source_resolve_decl_bindings_def:
     [(owner ++ [name],SR_Function)] /\
   source_resolve_decl_bindings owner (SD_Struct name fields) = [(owner ++ [name],SR_Type)] /\
   source_resolve_decl_bindings owner (SD_Event name fields) = [(owner ++ [name],SR_Type)] /\
+  source_resolve_decl_bindings owner (SD_Error name fields) = [(owner ++ [name],SR_Type)] /\
   source_resolve_decl_bindings owner (SD_Interface name ds) = [(owner ++ [name],SR_Type)] /\
   source_resolve_decl_bindings owner (SD_Flag name fields) = [(owner ++ [name],SR_Type)] /\
   source_resolve_decl_bindings owner (SD_Import imports) =

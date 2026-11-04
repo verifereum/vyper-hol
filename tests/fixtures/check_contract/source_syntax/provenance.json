@@ -1,5 +1,10 @@
 {
   "boundary": "annotate_python_ast before vy_ast.get_node; no semantic analysis",
+  "extra_source_sha256": {
+    "empty_error_hex": "0df5a9127dd86988b00bc90c04c2c43e66bd0ed62609aa18773f20fa51a815c4",
+    "enum_spaced_hex": "4f795733f9a43d96096bb482eebd997b2203fd1380ed47fa96a835a6592ae3db",
+    "error_reentrant": "c21bc5fa0c83389f628f10bc893e71fc4e7d6896d3977ec1ec4498671aaa5e60"
+  },
   "source_sha256": {
     "boolop_and3": "23382e14d46ecd71a9eb8baf548bd1d95c6d88f9907c3945a91feb010f1188d4",
     "c16_const_string_in_expr": "a7f26567b7b849acfb38f56862d510ae2e83e8174e6d940b4d4c1540b6c57529",
@@ -39,5 +44,5 @@
     "rc09_abi_encode_data": "e356ac466773485a2ca6dc08d433c6819a7350c2d5b6f9a6a8349e3a10a748b0",
     "rr03_abi": "a010436d3d2116452e9cb568307488cb34bb09555b38a82922227fe1382e5d3a"
   },
-  "vyper_pin": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c"
+  "vyper_pin": "9362e36b145c4b63ceb6a893018ea970e78bf6a6"
 }

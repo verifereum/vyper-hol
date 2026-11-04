@@ -1,6 +1,7 @@
 """Retain pinned parser syntax BEFORE vy_ast.get_node erases qualifiers.
 
-Run with PYTHONPATH=<VYPER_PIN checkout> <pinned venv python> generate.py
+Run with PYTHONPATH=<VYPER_PIN checkout> <pinned venv python, 3.12 or later:
+the captures include FunctionDef.type_params> generate.py
 (or --check). This is untrusted frontend fixture generation, not evaluation or
 source acceptance evidence. No semantic analysis or constant folder is invoked.
 Python AST -> JSON adapts only field names/shapes expected by Vyper JSON:
@@ -23,10 +24,10 @@ from vyper.ast.pre_parser import PreParser
 ROOT = Path(__file__).resolve().parents[4]
 BASE = ROOT / "lowering/defs/bytecode"
 OUT = Path(__file__).resolve().parent
-PIN = "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c"
+PIN = (ROOT / "VYPER_PIN").read_text().strip()
 
 
-convert = runpy.run_path(str(ROOT / "tools/source_module_loader.py"))["convert"]
+loader = runpy.run_path(str(ROOT / "tools/source_module_loader.py"))
 
 
 def retained(source, name):
@@ -34,11 +35,7 @@ def retained(source, name):
     pre.parse(source)
     tree = ast.parse(pre.reformatted_code)
     annotate_python_ast(tree, source, pre, module_path=name + ".vy", resolved_path=name + ".vy")
-    result = convert(tree)
-    for decl in result["body"]:
-        if decl["ast_type"] == "AnnAssign":
-            decl["ast_type"] = "VariableDecl"
-    return {"ast": result, "imports": []}
+    return {"ast": loader["classify"](loader["convert"](tree)), "imports": []}
 
 
 def main():
@@ -58,7 +55,25 @@ def main():
             assert path.read_text() == data, name
         else:
             path.write_text(data)
+    # Extra sources for declarations the folded-value witnesses lack. Besides
+    # the capture, each gets the pinned compiler's ordinary annotated AST, the
+    # one output here that runs semantic analysis.
+    extra_hashes = {}
+    for source_path in sorted((OUT / "extra").glob("*.vy")):
+        name = source_path.stem
+        source = source_path.read_text()
+        extra_hashes[name] = hashlib.sha256(source.encode()).hexdigest()
+        ordinary = vyper.compile_code(source, contract_path="extra/" + source_path.name,
+                                      source_id=0, output_formats=("annotated_ast_dict",))
+        for path, value in ((OUT / "extra" / (name + ".json"), retained(source, name)),
+                            (OUT / "extra" / (name + ".annotated.json"), ordinary["annotated_ast_dict"])):
+            data = json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n"
+            if args.check:
+                assert path.read_text() == data, path.name
+            else:
+                path.write_text(data)
     data = json.dumps({"vyper_pin": PIN, "source_sha256": hashes,
+                       "extra_source_sha256": extra_hashes,
                        "boundary": "annotate_python_ast before vy_ast.get_node; no semantic analysis"},
                       indent=2, sort_keys=True) + "\n"
     if args.check:

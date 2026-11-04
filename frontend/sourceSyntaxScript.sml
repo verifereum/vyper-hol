@@ -58,6 +58,7 @@ Datatype:
                   (source_expr list) (source_const_annotation option) (source_stmt list)
               | SD_Struct string (source_arg list)
               | SD_Event string (source_arg list)
+              | SD_Error string (source_arg list)
               | SD_Interface string (source_decl list)
               | SD_Flag string (string list)
               | SD_Import (source_import list)

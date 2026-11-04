@@ -141,6 +141,8 @@ Theorem source_const_length_examples:
   source_const_builtin SCB_Len [SCV_Bytes [0;255;0]] [] = SC_Value (SCV_Int 3) /\
   source_const_builtin SCB_Len [SCV_Bytes []] [] = SC_Value (SCV_Int 0) /\
   source_const_builtin SCB_Len [SCV_Hex "0x0102"] [] = SC_Invalid SCErr_Domain /\
+  source_const_eval [] (SCE_Builtin SCB_Len [SCE_List []] []) =
+    SC_Unsupported (SCS_Builtin SCB_Len) /\
   source_const_builtin SCB_Keccak256 [SCV_Hex "0x0102"] [] = SC_Invalid SCErr_Domain /\
   source_const_builtin SCB_Keccak256 [SCV_Int 1] [] = SC_Invalid SCErr_Domain
 Proof

@@ -71,6 +71,54 @@ val () = app (fn name => let
     in print ("SOURCE_MODULE_ACCEPT_CHECK " ^ name ^ "\n") end
   end) names;
 
+(* Error declarations and the reentrant qualifier, which the JSON frontend
+   translates, elaborate here too. *)
+val error_reentrant_slots = ``[((NONE,"value"),0:num)]:storage_layout``;
+fun module_tops thm =
+  case rhs (concl thm) |> dest_comb of
+    (ok,retained) =>
+      if same_const ok ``SM_Ok :(num option # toplevel list) list source_retained ->
+          (num option # toplevel list) list source_retained source_module_result``
+      then retained |> rand |> listSyntax.dest_list |> fst
+      else raise Fail ("module rejected: " ^ thm_to_string thm);
+(* The fixture sets `#pragma nonreentrancy on`. The policy-free path can't
+   see the pragma, so it rejects `reentrant`; with the loader's policy, the
+   external `poke` is nonreentrant, as in Vyper and the JSON route. *)
+val error_reentrant_simple = EVAL ``source_module_elaborate_simple 80
+  ^(trust error_reentrant_slots) ^keys ^(source "extra/error_reentrant")``;
+val () =
+  if aconv (rhs (concl error_reentrant_simple))
+       ``SM_Error (SME_Declaration "reentrant-without-pragma") :
+         (num option # toplevel list) list source_retained source_module_result``
+  then ignore (save_thm ("source_module_error_reentrant_simple",error_reentrant_simple))
+  else raise Fail ("unexpected simple error_reentrant outcome: " ^
+    thm_to_string error_reentrant_simple);
+val error_reentrant_phase = EVAL ``source_module_elaborate 80
+  ^(trust error_reentrant_slots) [(["main"],SourceModulePolicy T F)] ^keys
+  ^(source "extra/error_reentrant")``;
+val error_reentrant_expected = ``(NONE:num option,
+  [ErrorDecl "Unauthorized"
+     [("caller",BaseT AddressT); ("code",BaseT (UintT 256))];
+   VariableDecl Public Storage "value" (BaseT (UintT 256)) (SOME 0);
+   FunctionDecl External Nonpayable T F "poke" [] [] NoneT
+     [Raise (RaiseCustomError (CustomError (NONE,"Unauthorized")
+        [Builtin (BaseT AddressT) (Env Sender) [];
+         Literal (BaseT (UintT 256)) (IntL 1)] []))]])``;
+val () =
+  if (case module_tops error_reentrant_phase of
+        [tops] => aconv tops error_reentrant_expected | _ => false)
+  then ignore (save_thm ("source_module_error_reentrant_phase",error_reentrant_phase))
+  else raise Fail ("unexpected error_reentrant outcome: " ^ thm_to_string error_reentrant_phase);
+val empty_error_phase = EVAL ``source_module_elaborate_simple 80
+  ^(trust ``[]:storage_layout``) ^keys ^(source "extra/empty_error_hex")``;
+(* x"..." constants are Unsupported, so this module fails closed. *)
+val () =
+  if aconv (rhs (concl empty_error_phase))
+       ``SM_Error (SME_Dependencies (SCEnv_Unsupported ["main"; "H"] SCS_HexBytes)) :
+         (num option # toplevel list) list source_retained source_module_result``
+  then ignore (save_thm ("source_module_empty_error_hex_phase",empty_error_phase))
+  else raise Fail ("unexpected empty_error_hex outcome: " ^ thm_to_string empty_error_phase);
+
 (* Exact independently stated module equation: forward declarations, original
    defaults and local annotations are all elaborated in source contexts. *)
 Definition source_module_forward_fixture_def:
@@ -113,6 +161,33 @@ Proof
 QED
 
 val _ = save_thm ("source_module_forward_check", #composition forward);
+
+(* Augmented assignment checks the operator's domain as the binary
+   expression does: `/=` on an integer is rejected, `//=` is accepted. *)
+Definition source_module_augassign_fixture_def:
+  source_module_augassign_fixture op = SourceProgram (SourceModule
+    [SD_Function "f" [SX_Name "external";SX_Name "pure"]
+       [SourceArg "x" (SOME (SCA_Name ["uint256"]))] []
+       (SOME (SCA_Name ["uint256"]))
+       [SS_AnnAssign "y" (SCA_Name ["uint256"]) (SOME (SX_Name "x"));
+        SS_AugAssign (SX_Name "y") op (SX_Literal (SCL_Int 2));
+        SS_Return (SOME (SX_Name "y"))]]) []
+End
+
+val augassign_div = EVAL ``source_module_elaborate_simple 80
+  ^(trust ``[]:storage_layout``) ^keys (source_module_augassign_fixture SCB_Div)``;
+val () =
+  if aconv (rhs (concl augassign_div))
+       ``SM_Error (SME_Unsupported (SCS_Syntax "source-binary-domain")) :
+         (num option # toplevel list) list source_retained source_module_result``
+  then ignore (save_thm ("source_module_augassign_domain",augassign_div))
+  else raise Fail ("unexpected augassign_div outcome: " ^ thm_to_string augassign_div);
+
+val augassign_floor = EVAL ``source_module_elaborate_simple 80
+  ^(trust ``[]:storage_layout``) ^keys (source_module_augassign_fixture SCB_FloorDiv)``;
+val () = case module_tops augassign_floor of
+    [_] => ignore (save_thm ("source_module_augassign_floor",augassign_floor))
+  | _ => raise Fail "unexpected augassign_floor outcome";
 
 fun audit thy = app (fn (name,th) => let
     val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
