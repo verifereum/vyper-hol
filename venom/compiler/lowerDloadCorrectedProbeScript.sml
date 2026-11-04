@@ -677,3 +677,47 @@ Proof
        memory_range_of_operands_def, mk_inst_def, eval_operand_def,
        op_taint_def] >> rpt gen_tac >> Cases_on `op` >> simp[]
 QED
+
+
+Theorem corrected_call_control:
+  corrected_call_post.vs_current_bb = corrected_c5.vs_current_bb /\
+  corrected_call_post.vs_inst_idx = corrected_c5.vs_inst_idx /\
+  corrected_call_post.vs_halted = corrected_c5.vs_halted
+Proof
+  qspec_then `0` assume_tac corrected_call_step >>
+  drule venomInstPropsTheory.step_ext_call_preserves >>
+  impl_tac >- simp[venomInstTheory.is_ext_call_op_def, mk_inst_def] >>
+  disch_then strip_assume_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+val _ = temp_overload_on ("corrected_CG5",
+  ``step_prov [] corrected_CG4 (mk_inst 7 SSTORE [Lit 0w; Var "v"] []) corrected_cs``);
+val _ = temp_overload_on ("corrected_c6",
+  ``corrected_call_post with vs_inst_idx := SUC corrected_c5.vs_inst_idx``);
+val _ = temp_overload_on ("corrected_CG6",
+  ``step_prov [] corrected_CG5 corrected_call_inst corrected_call_post``);
+val _ = temp_overload_on ("corrected_ct6",
+  ``step_taint corrected_call_inst corrected_c5 corrected_call_post corrected_ct5``);
+
+Theorem corrected_assert_active:
+  active_inst corrected_entry (mk_inst 9 ASSERT [Var "ok"] []) corrected_c6
+Proof
+  qmatch_goalsub_abbrev_tac `active_inst _ _ (s with vs_inst_idx := n)` >>
+  `s.vs_current_bb = "entry"` by
+    (simp_tac pure_ss [Abbr `s`, corrected_call_control] >> EVAL_TAC) >>
+  `n = 6` by (simp_tac pure_ss [Abbr `n`] >> EVAL_TAC) >>
+  simp[active_inst_def, mk_raw_function_def]
+QED
+
+Theorem corrected_caller_assert_reachable:
+  frame_reachable corrected_vs corrected_context [] [] corrected_CG6 corrected_ct6
+    corrected_entry (mk_inst 9 ASSERT [Var "ok"] []) corrected_c6
+Proof
+  irule frame_reachable_next >>
+  conj_tac >- simp[mk_inst_def, is_terminator_def] >>
+  conj_tac >- simp[mk_inst_def] >>
+  conj_tac >- (qexists_tac `0` >> rewrite_tac[corrected_call_step]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- ACCEPT_TAC corrected_assert_active >>
+  ACCEPT_TAC corrected_caller_call_reachable
+QED
