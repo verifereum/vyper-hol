@@ -111,10 +111,12 @@ Proof
   rw[gas_path_mem_edge_def] >> gvs[fragExecTheory.exit_result_def]
   >- suspend "within"
   >- suspend "enter"
+  >- suspend "jump"
   >- (Cases_on `step_inst fuel' ctx inst s` >>
       gvs[fragExecTheory.exit_result_def])
   >- suspend "within_check"
   >- suspend "enter_check"
+  >- suspend "jump_check"
   >> (Cases_on `step_inst fuel' ctx inst s` >>
       gvs[fragExecTheory.exit_result_def])
 QED
@@ -222,6 +224,14 @@ Resume gas_path_mem_edge_continue[enter_check]:
     (irule mem_safe_run_fuel_mono_up >> simp[] >>
      qexists_tac `fuel` >> simp[]) >>
   metis_tac[]
+QED
+Resume gas_path_mem_edge_continue[jump]:
+  qexists_tac `SUC fuel` >>
+  irule mem_safe_run_jump_result >> metis_tac[]
+QED
+Resume gas_path_mem_edge_continue[jump_check]:
+  qexists_tac `SUC fuel` >>
+  irule mem_safe_run_jump_result >> metis_tac[]
 QED
 Finalise gas_path_mem_edge_continue[local]
 
