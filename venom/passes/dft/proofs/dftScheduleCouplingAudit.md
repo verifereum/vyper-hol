@@ -424,3 +424,154 @@ edited pair and does not prove unrestricted recursive trajectories,
 intermediate-phase observation transport, schedule readiness, whole-schedule
 composition, terminal step accounting, or realization by a finite gas list.
 The frozen block and context obligations remain unresolved.
+
+## Safe mixed trajectories and directional terminal audit (C3.2.18--21)
+
+### Checked boundary, not global DFT correctness
+
+CallPosition establishes safe entry/continuation/return cuts. CallTrace's
+`dft_mixed_good` adds positional safety only to synchronized cuts and proves
+actual macro closure and `dft_mixed_good_prefix` (source index <= 2*n).
+CallObserve proves nonempty memory-range observation coverage at source
+index <= 2*n+1, preserving memory, alloca_next and the complete range list.
+These cover the fixed adjacent GAS/INVOKE edit recursively, including mixed
+pending caller stacks. They do not cover arbitrary effectful adjacent edits,
+intermediate readiness, schedule composition, or a materialized finite oracle.
+
+### Actual consumers inspected
+
+* `o1PassContract.ctx_sim_def` quantifies source native fuel first, and asks
+  for some target fuel on source termination. It is NOT target termination
+  implies source termination. `terminates_def` excludes only Error; OK and
+  IntRet count as terminating there. `dead_result_rel_def` accepts only paired
+  Halt or paired Abort. Thus an eventual compiler corollary must additionally
+  use context shape to rule out root OK/IntRet, not assume that terminates
+  means Halt/Abort. Native nonexhaustion also must be justified, not assumed.
+* `run_context_def` resolves the entry function and `run_function_def` resolves
+  its label and normalizes prev_bb/current_bb/inst_idx before `run_blocks`.
+  Occurrence start is `dft_occ_start entry lbl vs0`, with exactly these entry
+  fields, no saved callers and numeric count zero.
+* `dft_occ_native_result` characterizes a native result via a budgeted
+  `dft_first_hit (dft_open_next a ctx) (dft_open_stack_exit stack)` and
+  `dft_open_classified_exit`. It uses `dft_open_result_eq`, which treats Error
+  text weakly but non-Error state constructors exactly. It is not an erased
+  terminal theorem. `dft_occ_budget_prefix_replay` needs numeric/oracle
+  compatibility and absence of zero-entry exhaustion along the prefix.
+* For the opposite boundary, `dft_fill_decorates` decorates any finite erased
+  prefix of length h using filled budget j >= h. Together with occurrence
+  prefix replay and native first-hit reflection this is a route to SOME
+  target native fuel, not the same source fuel. The first-hit/classified-exit
+  step still needs a dedicated terminal consumer, including earlier exits.
+* `dft_occ_observation_raw` / `dft_raw_occ_adequacy` handle observations;
+  the new CallObserve coverage feeds that separate mem_inv direction. Neither
+  raw observation adequacy nor the upper prefix bound supplies termination.
+
+### Exhaustive macro case table (source count, target count)
+
+Here H abbreviates exactly the structural/GAS/call independence premises of
+`dft_mixed_good_next`. S and T are the two actual oracle-next functions.
+
+| Current good alternative/control | Counts | Actual next alternative |
+| --- | --- | --- |
+| sync Enter, lookup/PHI success | 1,1 | sync safe At |
+| sync Enter, missing block or PHI failure | 1,1 | sync safe Done |
+| sync At outside both slots, ordinary or GAS | 1,1 | sync safe continuation/Enter/Done, including malformed GAS |
+| sync At outside slots, INVOKE success | 1,1 | sync safe Enter; ordinary mixed frame pushed |
+| sync At outside slots, INVOKE failure | 1,1 | matched cleared Done |
+| sync At first slot, valid fixed GAS then successful INVOKE | 2,1 | sync safe mapped callee Enter; pending frame pushed |
+| same crossing, decode/lookup/arguments/setup failure | 2,1 | cleared equal Error; no return required |
+| sync At second slot | impossible | excluded by safe_sync |
+| sync Done IntRet, nonempty ordinary frame, restore success | 1,1 | sync safe At |
+| sync Done IntRet, nonempty pending frame, restore success | 1,1 | discharge |
+| sync Done IntRet, restore failure | 1,1 | cleared Error |
+| sync Done with non-IntRet, nonempty stack | 1,1 | equal Done, stacks cleared |
+| sync root Done, any result | 1,1 | same root Done, saved ghosts cleared |
+| discharge | 0,1 | sync safe; target executes its pending GAS |
+| cleared | 1,1 | cleared, same root result |
+
+This classification is independent of stack depth. A pending inner pop leaves
+its outer mixed tail intact; the discharge step executes the pending target
+GAS before any further return. Two successive zero-source discharge steps are
+therefore unnecessary: the proved discharge boundary returns a synchronized
+safe cut. This is a proposed progress proof, NOT a property already exported
+by the existential upper-bound macro theorem.
+
+### Exact proposed missing interfaces (not proved by this audit)
+
+No reverse relation is needed merely to compare final results if progress is
+proved explicitly. Keep existing good/phase exports unchanged. Suitable new
+statements, with H expanded at export, are:
+
+1. Positive synchronized macro:
+   `H /\ dft_mixed_sync bb0 pre gas call post v w l r /\
+    dft_mixed_safe_sync bb0 pre l ==>
+    ?a. 1 <= a /\ a <= 2 /\
+      dft_mixed_good bb0 pre gas call post v w (FUNPOW S a l) (T r)`.
+   Missing helper: retain the actual chosen counts 1/2 from the checked
+   control split instead of forgetting them in good_next.
+2. Two-target-step progress:
+   `H /\ dft_mixed_good bb0 pre gas call post v w l r ==>
+    ?a. 1 <= a /\ a <= 4 /\
+      dft_mixed_good bb0 pre gas call post v w (FUNPOW S a l) (FUNPOW T 2 r)`.
+   Discharge uses 0 then the positive synchronized macro; sync/cleared uses
+   positive first count then good_next. Even stationary root Done may be
+   assigned a positive iteration count because S is defined there.
+3. Cofinal prefix:
+   `H /\ dft_mixed_good bb0 pre gas call post v w l r ==>
+    !j. ?m. j <= m /\ m <= 4*j /\
+      dft_mixed_good bb0 pre gas call post v w (FUNPOW S m l) (FUNPOW T (2*j) r)`.
+   This is ordinary induction using (2), not an inference from m<=2*n.
+4. Root terminal comparison (counters must remain separate):
+   `dft_mixed_good bb0 pre gas call post v w l r ==>
+    ((?nL. l.dft_occ_core = DftOpen (DftDone result) [] nL) <=>
+     (?nR. r.dft_occ_core = DftOpen (DftDone result) [] nR))`.
+   Mixed sync has equal Done result and stack-length alignment; discharge
+   has At on both sides; cleared explicitly contains equal root results.
+   Missing helper: this elimination theorem plus root-result absorption for
+   occurrence oracle next (from dft_mixed_done_clear, or directly).
+5. Direction required for ctx_sim:
+   `H /\ dft_mixed_good bb0 pre gas call post v w l r /\
+    (FUNPOW S j l).dft_occ_core = DftOpen (DftDone result) [] nL ==>
+    ?k nR. (FUNPOW T k r).dft_occ_core = DftOpen (DftDone result) [] nR`.
+   Candidate k=2*j: (3) reaches source m>=j; root absorption retains result,
+   then (4) transports it. Target-to-source terminal transport instead follows
+   from existing good_prefix plus (4), with no cofinal progress required.
+
+These formulas use S=`dft_occ_oracle_next w C` and
+T=`dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre gas call post C)`.
+All results here refer to erased ghost states. Native results require
+materialization at each side's OWN counter/list, not equality of counters or
+remaining gas lists. Exact ghost result equality implies the observable
+non-GAS fields agree after materialization; a compiler lemma must establish
+the appropriate dead_result_rel consequence for Halt/Abort.
+
+### Challenge: source prefix ends between GAS and INVOKE
+
+At an edited first slot the positive synchronized macro skips two source
+steps. The source prefix after only GAS has INVOKE ready, while the target
+before its call still has the pre-GAS state; in general these are not good.
+Thus good cuts do NOT give exact reverse matching of every source index.
+That source middle prefix is nonterminal: GAS has fixed single output and
+its checked transition advances to At/INVOKE. Final-result reflection can
+avoid representing it: cofinal progress overshoots any requested source
+terminal index, and root Done is absorbing. If a future consumer demands
+reverse observations or every exact source prefix, a new middle-cut relation
+would be required; it is not justified by the present good definition.
+
+Nested unreturned calls cause no gap in the above progress proposal: Enter,
+At and nonempty-stack Done always select positive counts, with only a
+single zero-source GAS discharge between positive phases. Root Done is
+stationary in core but may count as many iterations as needed. Failed call
+entry is Error, hence irrelevant to a terminating ctx_sim antecedent, but
+must remain an explicit branch in occurrence progress and result comparison.
+
+### Remaining native bridge obligations
+
+Before claiming a native terminal theorem: prove source non-Error run yields
+a nonexhausting occurrence prefix with compatible oracle; transport root
+result by (5); replay the finite target prefix with its compatible numeric
+oracle; decorate it with sufficiently large fuel; identify a classified
+first exit; reflect to run_blocks/run_context with their entry normalization.
+No existing prefix theorem alone closes this chain, and no theorem in this
+audit asserts same-fuel matching, finite oracle realization, general
+schedule closure or either frozen task obligation.
