@@ -69,6 +69,7 @@
 
 Theory exprSimBuiltins
 Ancestors
+  exprSimUnopProps
   exprSimSource
   exprSimHypsDefs
   exprSimDefs

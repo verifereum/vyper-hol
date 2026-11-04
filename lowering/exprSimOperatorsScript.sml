@@ -72,6 +72,7 @@
 
 Theory exprSimOperators
 Ancestors
+  exprSimUnopProps
   exprSimSource
   exprSimHypsDefs
   exprSimDefs
@@ -95,24 +96,6 @@ Ancestors
    to the pointer to s (ConvIdentity); for a local of the ill-formed type
    bytes40, which the Name typing rule admits, convert(x, bytes32) lowers
    to the pointer to x (ConvBytesMToBytesM). *)
-Theorem lower_value_word_shape:
-  !cenv env ty e sa op sb.
-    lower_value compile_expr cenv ty e sa = (op, sb) /\
-    well_typed_expr env e /\
-    (!id t. FLOOKUP env.var_types id = SOME t ==>
-            well_formed_type env.type_defs t) /\
-    is_word_type (expr_type e) ==>
-    cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
-    sa.cs_next_id <= sb.cs_next_id /\
-    (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule (cj 2 exprLoweringPropsTheory.compile_expr_grows) >> strip_tac >>
-  drule lower_value_word_safe_operand >>
-  disch_then (qspec_then `env` mp_tac) >>
-  disch_then drule_all >> simp[exprSafeOperandTheory.safe_operand_def]
-QED
-
 Theorem compile_binop_shape:
   !bop x y ty bl el sa op sb.
     compile_binop bop x y ty bl el sa = (op, sb) ==>
@@ -124,24 +107,6 @@ QED
 
 (* lower_value_word_shape for an operand that meets expr_body_pre, which
    carries both typing hypotheses. *)
-Theorem expr_body_pre_lower_value_word_shape:
-  !cenv cx env e es ty sa op sb.
-    lower_value compile_expr cenv ty e sa = (op, sb) /\
-    expr_body_pre cenv cx env e es /\ is_word_type (expr_type e) ==>
-    cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
-    sa.cs_next_id <= sb.cs_next_id /\
-    (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `well_typed_expr env e` by fs[expr_body_pre_def] >>
-  `!id t. FLOOKUP env.var_types id = SOME t ==>
-          well_formed_type env.type_defs t` by
-    metis_tac[expr_body_pre_var_types_well_formed] >>
-  drule lower_value_word_shape >> disch_then (qspec_then `env` mp_tac) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  simp[]
-QED
-
 Theorem expr_sim_pre_lower_value_word_shape:
   !cenv cx env e es ty sa op sb.
     lower_value compile_expr cenv ty e sa = (op, sb) /\
@@ -156,20 +121,6 @@ QED
 (* ===== Binary operators ===== *)
 
 (* Forced success has the expression's evaluated type, including place reads. *)
-Theorem expr_body_pre_word_value:
-  !cenv cx env e es v es'.
-    expr_body_pre cenv cx env e es /\ is_word_type (expr_type e) /\
-    (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
-    ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
-          value_has_type tyv v
-Proof
-  rpt strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
-  `env.type_defs = get_tenv cx` by
-    gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
-        env_context_consistent_def] >>
-  gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def]
-QED
-
 Theorem expr_sim_pre_word_value:
   !cenv cx env e es v es'.
     expr_sim_pre cenv cx env e es /\ is_word_type (expr_type e) /\

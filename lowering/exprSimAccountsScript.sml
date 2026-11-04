@@ -31,6 +31,7 @@
 
 Theory exprSimAccounts
 Ancestors
+  exprSimUnopProps
   exprSimSource
   exprSimHypsDefs
   loweringPosts

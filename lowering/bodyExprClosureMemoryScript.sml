@@ -1,6 +1,11 @@
 (* Reachability-aligned recursive expression memory closure. *)
 Theory bodyExprClosureMemory
 Ancestors
+  bodyNotFlagMemory
+  bodyNotBytesMemory
+  bodyNotUintMemory
+  bodyAbsMemory
+  bodyNotBoolMemory
   bodyNameNonwordMemory
   bodyNameValueMemory
   bodyNameWordMemory
