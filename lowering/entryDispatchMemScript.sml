@@ -671,3 +671,97 @@ Proof
       gvs[not_fresh_at_def]) >>
   simp[update_var_def]
 QED
+
+Theorem linear_fallback_mem_safe[local]:
+  emit_inst JMP [Label fallback] [] a9 = ((),st') /\
+  fn_has_code a9 st' fn /\
+  ss.vs_current_bb = a9.cs_current_bb /\
+  ss.vs_inst_idx = LENGTH a9.cs_current_insts /\
+  (!n. mem_safe_blocks n ctx fn (jump_to fallback ss)) ==>
+  (!n. mem_safe_run n ctx fn ss) /\
+  (a9.cs_current_insts = [] ==> !n. mem_safe_blocks n ctx fn ss)
+Proof
+  strip_tac >> drule_all linear_fallback_code >> strip_tac >>
+  `!n. mem_safe_run n ctx fn ss` by
+    (irule mem_safe_run_jmp >> qexists_tac `bb` >> simp[] >>
+     qexistsl_tac [`a9.cs_next_id`, `fallback`] >> simp[]) >>
+  simp[] >> strip_tac >>
+  `ss with vs_inst_idx := 0 = ss` by
+    (gvs[] >> metis_tac[venom_state_component_equality]) >>
+  irule mem_safe_blocks_no_phi >> simp[] >> gvs[] >>
+  `?rest. bb.bb_instructions = mk_inst a9.cs_next_id JMP [Label fallback] [] :: rest` by
+    (Cases_on `bb.bb_instructions` >> gvs[get_instruction_def]) >>
+  simp[eval_phis_def, phi_prefix_length_def, mk_inst_def]
+QED
+
+Theorem linear_method_prefix_mem_safe[local]:
+  emit_op CALLDATALOAD [Lit 0w] a6 = (raw,a7) /\
+  emit_op SHR [Lit 224w; raw] a7 = (mid,a8) /\
+  fn_has_code a6 a8 fn /\ fresh_vars_wrt a6 ss /\
+  4 <= LENGTH ss.vs_call_ctx.cc_calldata /\
+  ss.vs_current_bb = a6.cs_current_bb /\
+  ss.vs_inst_idx = LENGTH a6.cs_current_insts /\
+  (!t. eval_operand mid t = SOME (calldata_method_id ss.vs_call_ctx.cc_calldata) /\
+       vars_pc_only ss t /\ fresh_vars_wrt a8 t /\
+       (!x. not_fresh_at a6 x ==> lookup_var x t = lookup_var x ss) /\
+       t.vs_current_bb = a8.cs_current_bb /\ t.vs_halted = ss.vs_halted /\
+       t.vs_inst_idx = LENGTH a8.cs_current_insts ==>
+       !n. mem_safe_run n ctx fn t) ==>
+  !n. mem_safe_run n ctx fn ss
+Proof
+  strip_tac >> drule_all linear_method_prefix_eval >> strip_tac >>
+  drule_all linear_method_prefix_code >> strip_tac >>
+  `?bb. lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts a6 a8) (DROP ss.vs_inst_idx bb.bb_instructions)` by
+    (gvs[fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+     pure_rewrite_tac[rich_listTheory.DROP_LENGTH_APPEND, APPEND] >>
+     qexists_tac `l` >> REFL_TAC) >>
+  `run_inst_seq_mem_ok (emitted_insts a6 a8) ss /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts a6 a8)` by
+    (imp_res_tac emitted_insts_emit_op >> simp[is_terminator_def] >>
+     irule (SRULE [LET_THM, is_terminator_def] linear_method_ops_mem)) >>
+  `!n. mem_safe_run n ctx fn (u with vs_inst_idx := LENGTH a8.cs_current_insts)` by
+    (first_x_assum irule >> simp[control_moves_keep_vars] >>
+     irule vars_pc_only_inst_idx >> simp[]) >>
+  gen_tac >> drule_all mem_safe_run_inst_seq >>
+  disch_then (qspecl_then [`n`, `ctx`] mp_tac) >> gvs[]
+QED
+
+Theorem linear_size_prefix_mem_safe[local]:
+  emit_op CALLDATASIZE [] st = (cds,a1) /\
+  emit_op LT [cds; Lit 4w] a1 = (small,a2) /\
+  emit_op ISZERO [small] a2 = (cond,a3) /\
+  fresh_label "dispatch" a3 = (dispatch,a4) /\
+  emit_inst JNZ [cond; Label dispatch; Label fallback] [] a4 = ((),a5) /\
+  new_block dispatch a5 = (old,a6) /\ fn_has_code st a6 fn /\
+  fresh_vars_wrt st ss /\ LENGTH ss.vs_call_ctx.cc_calldata < dimword(:256) /\
+  ss.vs_current_bb = st.cs_current_bb /\
+  ss.vs_inst_idx = LENGTH st.cs_current_insts /\
+  (!t. eval_operand cond t = SOME (bool_to_word (4 <= LENGTH ss.vs_call_ctx.cc_calldata)) /\
+       vars_pc_only ss t /\ fresh_vars_wrt a3 t /\
+       (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x ss) /\
+       t.vs_current_bb = a3.cs_current_bb /\ t.vs_halted = ss.vs_halted /\
+       t.vs_inst_idx = LENGTH a3.cs_current_insts ==>
+       !n. mem_safe_run n ctx fn t) ==>
+  !n. mem_safe_run n ctx fn ss
+Proof
+  strip_tac >> drule_all linear_size_prefix_eval >> strip_tac >>
+  drule_all linear_size_prefix_code >> strip_tac >>
+  `?bb. lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts st a3) (DROP ss.vs_inst_idx bb.bb_instructions)` by
+    (simp[] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+     pure_rewrite_tac[rich_listTheory.DROP_LENGTH_APPEND, APPEND] >> simp[]) >>
+  `run_inst_seq_mem_ok (emitted_insts st a3) ss /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts st a3)` by
+    (imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
+     simp[is_terminator_def] >>
+     irule (SRULE [LET_THM, is_terminator_def] linear_size_ops_mem)) >>
+  `!n. mem_safe_run n ctx fn (u with vs_inst_idx := LENGTH a3.cs_current_insts)` by
+    (first_x_assum irule >> simp[control_moves_keep_vars] >>
+     irule vars_pc_only_inst_idx >> simp[]) >>
+  gen_tac >> drule_all mem_safe_run_inst_seq >>
+  disch_then (qspecl_then [`n`, `ctx`] mp_tac) >> gvs[]
+QED
