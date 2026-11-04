@@ -2,7 +2,7 @@
 Theory bodyIntCallStorageLayout
 Ancestors
   compileEnv vyperEncodeDecode vyperLookupStorage words accountsRelProps
-  vyperStorage byte list venomMemProps valueEncoding valueEncodingProps valueTypingMemoryProps abiDecoderString abiDecoderFixedMemory
+  vyperStorage byte list venomMemProps valueEncoding valueEncodingProps valueTypingMemoryProps abiDecoderString abiDecoderFixedMemory exprSimAttributeFields
 
 (* Selected reads inherit agreement at their live bytes, including when
    slot arithmetic is modular. A globally dead byte forces this particular
@@ -653,4 +653,135 @@ Proof
   `k+j < n` by decide_tac >>
   `b+32*(k+j) = b+32*k+32*j` by decide_tac >>
   `off+(k+j) = off+k+j` by decide_tac >> simp[]
+QED
+
+Theorem decoded_copied_memory_mutual:
+  (!st off tv v b mem.
+    decode_value st off tv = SOME v ==>
+    well_formed_type_value tv /\ slots_in_range st off tv /\
+    (!j. j < type_slot_size tv ==>
+      mem_word_at (b+32*j) mem = read_slot st (off+j)) ==>
+    val_in_memory tv v b mem) /\
+  (!st off tvs vs b mem.
+    decode_tuple st off tvs = SOME vs ==>
+    EVERY well_formed_type_value tvs /\ tuple_slots_in_range st off tvs /\
+    (!j. j < type_slot_size_list tvs ==>
+      mem_word_at (b+32*j) mem = read_slot st (off+j)) ==>
+    tuple_in_memory vs tvs b mem) /\
+  (!st off tv n vs b mem.
+    decode_static_array st off tv n = SOME vs ==>
+    well_formed_type_value tv /\ static_slots_in_range st off tv n /\
+    (!j. j < n*type_slot_size tv ==>
+      mem_word_at (b+32*j) mem = read_slot st (off+j)) ==>
+    LENGTH vs = n /\ elems_in_memory vs b tv mem) /\
+  (!st off tv n vs b mem.
+    decode_dyn_array st off tv n = SOME vs ==>
+    well_formed_type_value tv /\ dyn_slots_in_range st off tv n /\
+    (!j. j < n*type_slot_size tv ==>
+      mem_word_at (b+32*j) mem = read_slot st (off+j)) ==>
+    LENGTH vs = n /\ elems_in_memory vs b tv mem) /\
+  (!st off fields vs b mem.
+    decode_struct st off fields = SOME vs ==>
+    EVERY (well_formed_type_value o SND) fields /\
+    struct_slots_in_range st off fields /\
+    (!j. j < type_slot_size_fields fields ==>
+      mem_word_at (b+32*j) mem = read_slot st (off+j)) ==>
+    fields_in_memory vs fields b mem)
+Proof
+  ho_match_mp_tac decode_value_ind >> rpt conj_tac >> rpt gen_tac >>
+  rpt strip_tac
+  >>~- ([`val_in_memory (BaseTV _)`], irule decoded_base_in_memory >> metis_tac[])
+  >~ [`val_in_memory (FlagTV _)`]
+  >- (gvs[decode_value_def, slots_in_range_def] >>
+      irule decoded_scalar_in_memory >> simp[] >>
+      goal_assum (drule_at Any) >> gvs[vyperValueTheory.type_slot_size_def])
+  >~ [`val_in_memory NoneTV`]
+  >- gvs[decode_value_def, val_in_memory_def] >>
+  gvs[decode_value_def, slots_in_range_def, val_in_memory_def,
+      vyperTypingTheory.well_formed_type_value_def, AllCaseEqs()]
+  >~ [`type_slot_size (TupleTV _)`]
+  >- (gvs[vyperValueTheory.type_slot_size_def, ETA_THM] >> first_x_assum irule >> simp[])
+  >~ [`type_slot_size (StructTV _)`]
+  >- (gvs[vyperValueTheory.type_slot_size_def, ETA_THM] >> first_x_assum irule >> simp[])
+  >~ [`type_slot_size (ArrayTV _ (Fixed _))`]
+  >- (gvs[vyperValueTheory.type_slot_size_def] >>
+      `LENGTH vs = n /\ elems_in_memory vs b tv mem` by
+        (first_x_assum irule >> simp[]) >>
+      irule (SRULE [val_in_memory_def] abi_decoder_fixed_array_memory) >>
+      qpat_x_assum `LENGTH vs = n` (SUBST_ALL_TAC o SYM) >>
+      simp[tuple_in_memory_replicate])
+  >~ [`type_slot_size (ArrayTV _ (Dynamic _))`]
+  >- suspend "dynamic_array"
+  >~ [`tuple_in_memory _ _ _ _`]
+  >- suspend "tuple_cons" >>
+  gvs[vyperValueTheory.type_slot_size_def, type_memory_size_slots,
+      arithmeticTheory.MULT_CLAUSES]
+  >~ [`fields_in_memory _ _ _ _`]
+  >- (first_x_assum irule >> rpt strip_tac >>
+      first_x_assum (qspec_then `type_slot_size tv + j` mp_tac) >>
+      `b + 32 * (type_slot_size tv + j) = b + 32 * type_slot_size tv + 32 * j` by decide_tac >>
+      `type_slot_size tv + j + off = j + (off + type_slot_size tv)` by decide_tac >> simp[]) >>
+  `LENGTH vs' = n /\ elems_in_memory vs' (b + 32 * type_slot_size tv) tv mem` by
+    (first_x_assum irule >> rpt strip_tac >>
+     first_x_assum (qspec_then `type_slot_size tv + j` mp_tac) >>
+     `b + 32 * (type_slot_size tv + j) = b + 32 * type_slot_size tv + 32 * j` by decide_tac >>
+     `type_slot_size tv + j + off = j + (off + type_slot_size tv)` by decide_tac >> simp[]) >>
+  simp[]
+QED
+
+Resume decoded_copied_memory_mutual[tuple_cons]:
+  gvs[vyperValueTheory.type_slot_size_def, type_memory_size_slots] >>
+  first_x_assum irule >> rpt strip_tac >>
+  first_x_assum (qspec_then `type_slot_size tv + j` mp_tac) >>
+  `b + 32 * (type_slot_size tv + j) = b + 32 * type_slot_size tv + 32 * j` by decide_tac >>
+  `type_slot_size tv + j + off = j + (off + type_slot_size tv)` by decide_tac >>
+  simp[]
+QED
+
+
+Resume decoded_copied_memory_mutual[dynamic_array]:
+  `MIN (w2n (read_slot st off)) max = w2n (read_slot st off)` by
+    simp[arithmeticTheory.MIN_DEF] >>
+  gvs[vyperValueTheory.type_slot_size_def] >>
+  `LENGTH vs = w2n (read_slot st off) /\ elems_in_memory vs (b+32) tv mem` by
+    (first_x_assum irule >> rpt strip_tac >>
+     first_x_assum (qspec_then `SUC j` mp_tac) >>
+     `SUC j < type_slot_size tv * max + 1` by
+       (`type_slot_size tv * w2n (read_slot st off) <= type_slot_size tv * max` by
+          simp[arithmeticTheory.LE_MULT_LCANCEL] >> decide_tac) >>
+     `b+32*SUC j = b+32+32*j` by decide_tac >>
+     `SUC j+off = j+(off+1)` by decide_tac >> simp[]) >>
+  simp[] >> first_x_assum (qspec_then `0` mp_tac) >> simp[]
+QED
+
+Finalise decoded_copied_memory_mutual
+
+
+Theorem decoded_copied_in_memory:
+  !st off tv v b mem.
+    well_formed_type_value tv /\ slots_in_range st off tv /\
+    decode_value st off tv = SOME v /\
+    (!j. j < type_slot_size tv ==>
+      mem_word_at (b+32*j) mem = read_slot st (off+j)) ==>
+    val_in_memory tv v b mem
+Proof
+  metis_tac[cj 1 decoded_copied_memory_mutual]
+QED
+
+(* Agreement is needed only on live bytes. In particular no equality of
+   the dead suffix of the last payload slot is assumed. *)
+Theorem storage_read_copied_in_memory:
+  !cx tr st st' a tv v b mem.
+    storage_agree (storage_dead cx tr st) st st' /\
+    storage_read_live cx tr st a tv /\
+    well_formed_type_value tv /\ slots_in_range st (w2n a) tv /\
+    decode_value st (w2n a) tv = SOME v /\
+    (!j. j < type_slot_size tv ==>
+      mem_word_at (b+32*j) mem = read_slot st' (w2n a+j)) ==>
+    val_in_memory tv v b mem
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all decode_value_storage_read_live >> strip_tac >>
+  drule_all slots_in_range_storage_read_live >> strip_tac >>
+  irule decoded_copied_in_memory >> simp[] >> qexistsl [`w2n a`, `st'`] >> simp[]
 QED
