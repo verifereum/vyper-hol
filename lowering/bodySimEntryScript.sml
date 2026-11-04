@@ -520,6 +520,8 @@ Theorem immutable_semantic_readiness_probe[local]:
   ?am tx.
     tx.target = 0w /\ tx.function_name = "foo" /\ tx.args = [] /\ tx.value = 0 /\
     tx_env_ok tx /\ am.logs = [] /\ am.pending_deletions = [] /\
+    tx.calldata = [194w;152w;85w;120w] /\
+    ALOOKUP am.layouts tx.target = SOME ([],[]) /\ 
     account_immutables am tx.target =
       [(NONE,FEMPTY |+ ("large",
         (ArrayTV (BaseTV (UintT 256)) (Fixed (2 ** 251)),
@@ -541,7 +543,8 @@ Proof
           (ArrayTV (BaseTV (UintT 256)) (Fixed (2 ** 251)),
            ArrayV (SArrayV []))))])]|>`,
     `empty_call_txn with <|target := 0w; function_name := "foo";
-                          block_number := 1; block_hashes := [0w]|>`] >>
+                          block_number := 1; block_hashes := [0w];
+                          calldata := [194w;152w;85w;120w]|>`] >>
   simp[source_typing_ok_def, source_deployment_rel_def, tx_env_ok_def,
        account_immutables_def,
        vyperInterpreterTheory.initial_machine_state_def,
@@ -656,6 +659,8 @@ QED
 Theorem immutable_joint_initial_probe[local]:
   ?am tx vs.
     tx.target = 0w /\ tx.function_name = "foo" /\ tx.args = [] /\ tx.value = 0 /\
+    tx.calldata = [194w;152w;85w;120w] /\
+    ALOOKUP am.layouts tx.target = SOME ([],[]) /\ 
     source_typing_ok
       [VariableDecl Private Immutable "large"
          (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
@@ -680,4 +685,183 @@ Proof
     (irule immutable_initial_state_existence_probe >> gvs[] >>
      goal_assum (drule_at Any)) >>
   metis_tac[]
+QED
+
+Theorem immutable_storage_compatibility_probe[local]:
+  source_deployment_rel
+    [VariableDecl Private Immutable "large"
+       (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+     FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]] am tx /\
+  ALOOKUP am.layouts tx.target = SOME ([],[]) ==>
+  source_storage_ok
+    [VariableDecl Private Immutable "large"
+       (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+     FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]] am tx
+Proof
+  strip_tac >> fs[source_deployment_rel_def] >>
+  simp[source_storage_ok_def] >>
+  qmatch_goalsub_abbrev_tac `contract_storage_well_formed cx es` >>
+  `(!mid n. storage_var_info cx mid n = NONE) /\
+   (!mid n subs. declared_storage_region cx mid n subs = NONE)` by
+    (simp[Abbr `cx`, vyperLookupStorageTheory.storage_var_info_def,
+          vyperStorageLayoutSafetyTheory.declared_storage_region_def,
+          vyperInterpreterTheory.initial_evaluation_context_def,
+          vyperContextTheory.get_module_code_def] >>
+     rpt conj_tac >> rpt gen_tac >> Cases_on `mid` >> simp[] >>
+     CONV_TAC EVAL) >>
+  simp[vyperStorageLayoutSafetyTheory.contract_storage_well_formed_def,
+       vyperLookupStorageTheory.well_formed_storage_def,
+       vyperLookupStorageTheory.storage_var_in_range_def,
+       vyperStorageLayoutSafetyTheory.storage_layout_safe_def,
+       vyperLookupStorageTheory.well_formed_layout_def,
+       vyperStorageLayoutSafetyTheory.nonreentrant_slot_separated_def,
+       Abbr `cx`, vyperInterpreterTheory.initial_evaluation_context_def,
+       vyperInterpreterTheory.lookup_nonreentrant_slot_def]
+QED
+
+Theorem immutable_valid_call_probe[local]:
+  tx.function_name = "foo" /\ tx.args = [] ==>
+  valid_vyper_call
+    [VariableDecl Private Immutable "large"
+       (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+     FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]]
+    tx [194w;152w;85w;120w] NoneT
+Proof
+  strip_tac >> simp[valid_vyper_call_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``selectorDispatch$calldata_encodes``]) >>
+  simp[selectorDispatchTheory.calldata_encodes_def] >>
+  CONV_TAC (ONCE_DEPTH_CONV supportedEvalLib.function_selector_conv) >>
+  CONV_TAC EVAL
+QED
+
+Theorem immutable_package_registration_probe[local]:
+  ?lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st cenv sa.
+    set_external_package_target (K T)
+      (package_external_fn
+        [VariableDecl Private Immutable "large"
+           (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+         FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]]
+        F (assign_nkeys
+        [VariableDecl Private Immutable "large"
+           (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+         FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]] 0)
+        (Nonpayable,F,F,"foo",[],[],NoneT,[Pass])) =
+      (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,[Pass],rt) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa)
+Proof
+  simp[package_external_fn_def, set_external_package_target_def,
+       build_positional_args_def, min_calldata_size_def,
+       update_cenv_nonreentrant_def,
+       moduleLoweringTheory.compile_register_positional_args_def,
+       compileEnvTheory.comp_return_def]
+QED
+
+Theorem immutable_frame_antecedent_probe[local]:
+  ?tops rpolicy unit am tx ret vs mut args fbody env es0 lbl cenv0 pos_args
+   min_cds is_payable nkey ut' iv rt st cenv sa.
+    tops =
+      [VariableDecl Private Immutable "large"
+         (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+       FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]] /\
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INL (), es0) /\
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops F (assign_nkeys tops 0)
+         (mut, F, F, tx.function_name, args, [], ret, fbody)) =
+      (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
+       rt) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
+    get_module_code (initial_evaluation_context am.sources am.layouts tx NONE) NONE =
+      SOME tops
+Proof
+  mp_tac immutable_joint_initial_probe >> strip_tac >>
+  mp_tac immutable_runtime_acceptance_probe >>
+  simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+  mp_tac immutable_package_registration_probe >> strip_tac >>
+  qexistsl [
+    `<|rpol_target := K T; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize|>`,
+    `x`, `am`, `tx`, `NoneT`, `vs`, `Nonpayable`, `[]`, `[Pass]`, `FEMPTY`] >>
+  gvs[] >>
+  qmatch_asmsub_abbrev_tac `source_typing_ok tops am tx` >>
+  `source_storage_ok tops am tx` by
+    (gvs[Abbr `tops`] >>
+     irule (SRULE [] immutable_storage_compatibility_probe) >> simp[]) >>
+  `vs.vs_call_ctx.cc_calldata = [194w;152w;85w;120w]` by
+    fs[initial_venom_state_rel_def, venom_env_rel_def, call_ctx_rel_def] >>
+  `valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata NoneT` by
+    (simp[Abbr `tops`] >> irule (SRULE [] immutable_valid_call_probe) >> simp[]) >>
+  qexistsl [`initial_state am [FEMPTY] with
+                <|outcomes := SOME vs.vs_outcomes; requests := []|>`,
+    `lbl`, `cenv0`, `pos_args`, `min_cds`, `is_payable`, `nkey`, `ut'`, `iv`,
+    `rt`, `st`, `cenv`, `sa`] >>
+  simp[Abbr `tops`, SRULE [] immutable_program_support_probe,
+       call_outcomes_ok_def, vyperInterpreterTheory.bind_arguments_def,
+       vyperInterpreterTheory.send_call_value_def,
+       vyperInterpreterTheory.initial_evaluation_context_def,
+       vyperStateTheory.return_def] >>
+  conj_tac >- (CONV_TAC EVAL) >>
+  gvs[source_deployment_rel_def, vyperContextTheory.get_module_code_def]
+QED
+
+Theorem immutable_frozen_frame_counterexample[local]:
+  ~(!tops rpolicy unit am tx ret vs mut args fbody env es0 lbl cenv0 pos_args
+   min_cds is_payable nkey ut' iv rt st cenv sa.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INL (), es0) /\
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops F (assign_nkeys tops 0)
+         (mut, F, F, tx.function_name, args, [], ret, fbody)) =
+      (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
+       rt) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
+    body_inv tops unit.cu_context cenv
+      (initial_evaluation_context am.sources am.layouts tx NONE) /\
+    cenv.ce_return_pc = NONE /\
+    ?bindings env_t env'.
+      supported_stmts tops bindings fbody /\
+      expr_sim_inv cenv
+        (initial_evaluation_context am.sources am.layouts tx NONE) env_t es0 /\
+      ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
+      type_stmts env_t ret fbody = SOME env' /\
+      EVERY (stmt_exprs_ok cenv) fbody /\
+      call_evaluation_safe
+        (initial_evaluation_context am.sources am.layouts tx NONE)
+        (int_calls_stmts fbody))
+Proof
+  strip_tac >>
+  mp_tac immutable_frame_antecedent_probe >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  gvs[] >>
+  drule_all (SRULE [] immutable_endpoint_obstruction_probe) >> simp[] >>
+  goal_assum (drule_at Any)
 QED
