@@ -442,9 +442,12 @@ Definition bp_get_read_location_def:
   bp_get_read_location result inst addr_sp =
     case addr_sp of
       AddrSp_Memory =>
-        (* Raw frame operations use an unknown memory segment exactly when
-           their conservative effect table says they may read memory. *)
-        if is_raw_fmp_opcode inst.inst_opcode then
+        (* Returns to the caller (RET, DRET, RETFMP) read an unknown segment:
+           the caller may read what the callee wrote (vyper#5297).  Other raw
+           frame operations use an unknown memory segment exactly when their
+           conservative effect table says they may read memory. *)
+        if inst.inst_opcode ∈ {DRET; RETFMP} then ml_undefined
+        else if is_raw_fmp_opcode inst.inst_opcode then
           if Eff_MEMORY ∈ read_effects inst.inst_opcode then ml_undefined
           else ml_empty
         else if inst.inst_opcode = DLOAD then
@@ -467,7 +470,10 @@ Definition bp_get_read_location_def:
            | _ => ml_undefined)
         else if inst.inst_opcode ∈ {CALL; DELEGATECALL; STATICCALL;
                                      INVOKE; CREATE; CREATE2} then ml_undefined
-        else if inst.inst_opcode ∈ {RETURN; STOP; SINK; RET} then ml_undefined
+        (* Halting and returning to the caller commit or hand back storage:
+           future reads (vyper#5297 for DRET and RETFMP). *)
+        else if inst.inst_opcode ∈ {RETURN; STOP; SINK; SELFDESTRUCT;
+                                     RET; DRET; RETFMP} then ml_undefined
         else ml_empty
     | AddrSp_Transient =>
         (* Transient is word-addressed: word_scale = 1 *)
@@ -480,7 +486,10 @@ Definition bp_get_read_location_def:
            | _ => ml_undefined)
         else if inst.inst_opcode ∈ {CALL; DELEGATECALL; STATICCALL;
                                      INVOKE; CREATE; CREATE2} then ml_undefined
-        else if inst.inst_opcode ∈ {RETURN; STOP; SINK; RET} then ml_undefined
+        (* Halting and returning to the caller commit or hand back storage:
+           future reads (vyper#5297 for DRET and RETFMP). *)
+        else if inst.inst_opcode ∈ {RETURN; STOP; SINK; SELFDESTRUCT;
+                                     RET; DRET; RETFMP} then ml_undefined
         else ml_empty
     (* Read-only/copyable address spaces.
      * Matches Python _get_copyable_read_location.
