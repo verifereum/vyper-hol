@@ -462,3 +462,169 @@ Proof
   metis_tac[]
 QED
 
+
+Theorem corrected_helper_new_site[local]:
+  new_site_bytes corrected_h0 corrected_ha = {i | i < 32}
+Proof
+  `corrected_h0.vs_allocas = FEMPTY /\ corrected_h0.vs_fmp = 0w /\
+   corrected_ha.vs_allocas = FEMPTY |+ (0,(0,32)) /\ corrected_ha.vs_fmp = 0w` by
+    (rpt conj_tac >> EVAL_TAC) >>
+  qmatch_goalsub_abbrev_tac `new_site_bytes s t` >>
+  `s.vs_allocas = FEMPTY /\ s.vs_fmp = 0w /\
+   t.vs_allocas = FEMPTY |+ (0,(0,32)) /\ t.vs_fmp = 0w` by simp[Abbr `s`, Abbr `t`] >>
+  simp[new_site_bytes_def, FLOOKUP_UPDATE, pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+Theorem probe_alloca_writes[local]:
+  range_bytes (step_writes (mk_inst aid ALLOCA [Lit sz] [out]) s t) = {} /\
+  written_taint tn (mk_inst aid ALLOCA [Lit sz] [out]) s = {}
+Proof
+  simp[step_writes_def, source_memory_write_ranges_def, mk_inst_def,
+       range_bytes_def, written_taint_def]
+QED
+
+Theorem corrected_helper_alloca_taint:
+  corrected_t1.t_mem = {i | i < 32}
+Proof
+  simp[Once step_taint_def, mem_taint_def, corrected_helper_new_site,
+       probe_alloca_writes, entry_taint_def]
+QED
+
+Theorem corrected_helper_store_new_site[local]:
+  new_site_bytes corrected_h1 corrected_hs = {}
+Proof
+  qmatch_goalsub_abbrev_tac `new_site_bytes s t` >>
+  `t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp` by
+    simp[Abbr `t`, Abbr `s`, mstore_def] >>
+  simp[new_site_bytes_def, pred_setTheory.EXTENSION] >>
+  rpt gen_tac >> Cases_on `aid IN FDOM s.vs_allocas` >> simp[FLOOKUP_DEF]
+QED
+
+Theorem corrected_helper_store_writes[local]:
+  range_bytes (step_writes (mk_inst 1 MSTORE [Var "p"; Lit 1w] []) corrected_h1 corrected_hs) =
+    {i | i < 32} /\
+  written_taint corrected_t1 (mk_inst 1 MSTORE [Var "p"; Lit 1w] []) corrected_h1 = {}
+Proof
+  `eval_operand (Var "p") corrected_h1 = SOME 0w` by
+    simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  qmatch_goalsub_abbrev_tac `step_writes _ s t` >>
+  `eval_operand (Var "p") s = SOME 0w` by simp[Abbr `s`] >>
+  simp[step_writes_def, source_memory_write_ranges_def, mk_inst_def,
+       fixed_source_write_range_def, eval_operand_def,
+       range_bytes_def, written_taint_def, op_taint_def] >>
+  simp[pred_setTheory.EXTENSION]
+QED
+
+Theorem corrected_helper_store_taint:
+  corrected_t2.t_mem = {}
+Proof
+  simp[Once step_taint_def, Once mem_taint_def, corrected_helper_store_new_site,
+       corrected_helper_store_writes, corrected_helper_alloca_taint]
+QED
+
+Theorem corrected_dload_new_site[local]:
+  new_site_bytes corrected_c1 corrected_cd = {}
+Proof
+  qmatch_goalsub_abbrev_tac `new_site_bytes s t` >>
+  `t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp` by
+    simp[Abbr `t`, update_var_def] >>
+  simp[new_site_bytes_def, pred_setTheory.EXTENSION] >>
+  rpt gen_tac >> Cases_on `aid IN FDOM s.vs_allocas` >> simp[FLOOKUP_DEF]
+QED
+
+Theorem corrected_dload_writes[local]:
+  range_bytes (step_writes (mk_inst 4 DLOAD [Lit 0w] ["d"]) corrected_c1 corrected_cd) = {} /\
+  written_taint corrected_ct (mk_inst 4 DLOAD [Lit 0w] ["d"]) corrected_c1 = {}
+Proof
+  simp[step_writes_def, source_memory_write_ranges_def, mk_inst_def,
+       range_bytes_def, written_taint_def]
+QED
+
+Theorem corrected_dload_taint:
+  corrected_ct2.t_mem = {}
+Proof
+  simp[Once step_taint_def, Once mem_taint_def, corrected_dload_new_site,
+       corrected_dload_writes, corrected_helper_store_taint]
+QED
+
+Theorem corrected_caller_alloca_taint:
+  corrected_ct3.t_mem = {i | i < 32}
+Proof
+  simp[Once step_taint_def, Once mem_taint_def, corrected_caller_new_site,
+       probe_alloca_writes, corrected_dload_taint]
+QED
+
+Theorem corrected_mload_out_taint[local]:
+  out_taint corrected_ct3 (mk_inst 6 MLOAD [Var "q"] ["v"]) corrected_c3 = {k | k < 32}
+Proof
+  `eval_operand (Var "q") corrected_c3 = SOME 0w` by
+    simp[eval_operand_def, corrected_q_memory] >>
+  qmatch_goalsub_abbrev_tac `out_taint tn inst s` >>
+  `eval_operand (Var "q") s = SOME 0w` by simp[Abbr `s`] >>
+  `tn.t_mem = {i | i < 32}` by simp[Abbr `tn`, corrected_caller_alloca_taint] >>
+  simp[out_taint_def, Abbr `inst`, mk_inst_def, mem_word_taint_def]
+QED
+
+Theorem corrected_mload_var_taint:
+  FLOOKUP corrected_ct4.t_var "v" = SOME {k | k < 32}
+Proof
+  simp[Once step_taint_def, corrected_mload_out_taint, set_var_taint_def,
+       mk_inst_def, FLOOKUP_UPDATE]
+QED
+
+Theorem corrected_pre_sstore_storage_taint:
+  corrected_ct4.t_stor = {}
+Proof
+  simp[Once step_taint_def, adopt_reset_def, store_taint_def, mk_inst_def] >>
+  simp[Once step_taint_def, adopt_reset_def, store_taint_def, mk_inst_def] >>
+  simp[Once step_taint_def, adopt_reset_def, store_taint_def, mk_inst_def] >>
+  simp[Once step_taint_def, adopt_reset_def, store_taint_def, mk_inst_def] >>
+  simp[Once step_taint_def, adopt_reset_def, store_taint_def, mk_inst_def] >>
+  simp[entry_taint_def]
+QED
+
+val _ = temp_overload_on ("corrected_ct5",
+  ``step_taint (mk_inst 7 SSTORE [Lit 0w; Var "v"] []) corrected_c4 corrected_cs corrected_ct4``);
+
+Theorem corrected_pre_call_storage_taint:
+  corrected_ct5.t_stor = {(key,k) | key = (0w:bytes32) /\ k < 32}
+Proof
+  qmatch_goalsub_abbrev_tac `step_taint inst s t tn` >>
+  `FLOOKUP tn.t_var "v" = SOME {k | k < 32} /\ tn.t_stor = {}` by
+    simp[Abbr `tn`, corrected_mload_var_taint, corrected_pre_sstore_storage_taint] >>
+  simp[Once step_taint_def, adopt_reset_def, Abbr `inst`, mk_inst_def, store_taint_def,
+       eval_operand_def, op_taint_def, key_update_def, pred_setTheory.EXTENSION] >>
+  metis_tac[]
+QED
+
+Theorem corrected_post_call_accounts:
+  corrected_call_post.vs_accounts = K empty_account_state
+Proof
+  `~corrected_c5.vs_call_ctx.cc_static /\
+   corrected_c5.vs_outcomes = [corrected_outcome]` by simp[corrected_before_call] >>
+  qmatch_goalsub_abbrev_tac `consume_call_outcome _ _ _ st` >>
+  `~st.vs_call_ctx.cc_static /\ st.vs_outcomes = [corrected_outcome]` by simp[Abbr `st`] >>
+  simp[update_var_def, consume_call_outcome_def, reset_probe_ordinary,
+       take_outcome_def, Excl "consume_call_outcome_eq"] >>
+  simp[adopt_outcome_def, venom_call_request_def]
+QED
+
+Theorem corrected_call_changes_accounts:
+  corrected_call_post.vs_accounts <> corrected_c5.vs_accounts
+Proof
+  strip_tac >>
+  `corrected_c5.vs_accounts = K empty_account_state` by
+    (mp_tac corrected_post_call_accounts >> asm_rewrite_tac[]) >>
+  `sload 0w corrected_c5 = 0w` by
+    (simp[sload_def, contract_storage_def] >> EVAL_TAC) >>
+  mp_tac corrected_before_call >> simp[]
+QED
+
+Theorem corrected_post_call_storage_taint:
+  (step_taint corrected_call_inst corrected_c5 corrected_call_post corrected_ct5).t_stor = {}
+Proof
+  qmatch_goalsub_abbrev_tac `step_taint inst s t tn` >>
+  `t.vs_accounts <> s.vs_accounts` by
+    simp[Abbr `t`, Abbr `s`, corrected_call_changes_accounts] >>
+  simp[Once step_taint_def, adopt_reset_def, Abbr `inst`, mk_inst_def]
+QED
