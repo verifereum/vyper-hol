@@ -454,3 +454,25 @@ Proof
   rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
   metis_tac[LESS_EQ_TRANS, LESS_EQ_REFL]
 QED
+
+Theorem typed_sarray_pointer_fresh[local]:
+  sc.cs_next_var = sa.cs_next_var+7 /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) ==>
+  let ctr = "%" ++ toString sa.cs_next_var;
+      so = "%" ++ toString (sa.cs_next_var+3);
+      dso = "%" ++ toString (sa.cs_next_var+4);
+      sp = "%" ++ toString (sa.cs_next_var+5);
+      dp = "%" ++ toString (sa.cs_next_var+6)
+  in ALL_DISTINCT [so;dso;sp;dp] /\ ~MEM ctr [so;dso;sp;dp] /\
+    not_fresh_at sc ctr /\
+    (!x. src = Var x \/ dst = Var x ==> ~MEM x [so;dso;sp;dp]) /\
+    (!x. not_fresh_at sa x ==> not_fresh_at sc x /\ ~MEM x [so;dso;sp;dp])
+Proof
+  simp[LET_THM] >> strip_tac >>
+  simp[ASCIInumbersTheory.toString_inj, not_fresh_at_def]
+  >- (rpt strip_tac >> `not_fresh_at sa x` by metis_tac[] >>
+      gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]) >>
+  rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  metis_tac[DECIDE ``n <= n+3 /\ n <= n+4 /\ n <= n+5 /\ n <= n+6 /\ n <= n+7``]
+QED
+
