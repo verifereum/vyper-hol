@@ -39,11 +39,14 @@ Theorem abi_decoder_sign_extend_cast_mask:
    else (sw2sw w : bytes32) && (1w << dimindex (:'a) - 1w)) = sw2sw w
 Proof
   strip_tac >> Cases_on `word_msb w` >>
-  simp_tac bool_ss [] >>
-  rw_tac (std_ss ++ fcpLib.FCP_ss ++ numSimps.ARITH_ss)
-    [word_and_def, word_or_def, word_1comp_def, sw2sw, SHIFT_1_SUB_1,
-     dimindex_256] >>
-  Cases_on `i < dimindex (:'a)` >> gvs[]
+  asm_simp_tac (std_ss ++ numSimps.ARITH_ss) [SHIFT_1_SUB_1, dimindex_256] >>
+  asm_simp_tac bool_ss [] >>
+  simp_tac std_ss [word_and_def, word_or_def, word_1comp_def] >>
+  rw_tac (std_ss ++ fcpLib.FCP_ss) [sw2sw, dimindex_256] >>
+  Cases_on `i < dimindex (:'a)` >> gvs[] >>
+  pure_rewrite_tac [GSYM word_sub_def] >>
+  `i < 256` by decide_tac >>
+  asm_simp_tac bool_ss [SHIFT_1_SUB_1, dimindex_256]
 QED
 
 Theorem abi_decoder_sign_extend_cast:
