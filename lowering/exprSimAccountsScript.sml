@@ -337,6 +337,7 @@ Proof
   impl_tac >- (
     rpt conj_tac
     >- simp[]
+    >- simp[]
     >- simp[builtin_args_length_ok_def]
     >- simp[account_item_type_word]
     >- simp[is_word_type_def]

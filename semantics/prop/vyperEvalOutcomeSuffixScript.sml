@@ -567,9 +567,21 @@ Proof
   rpt (outcomes_suffix_step outcomes_suffix_base_facts)
 QED
 
+(* A precompile builtin's success check consumes at most the head outcome. *)
+Theorem outcomes_suffix_precompile_call_success:
+  outcomes_suffix (precompile_call_success bt)
+Proof
+  simp[outcomes_suffix_def, precompile_call_success_def] >> gen_tac >>
+  Cases_on `precompile_builtin bt` >> simp[return_def] >>
+  Cases_on `st.outcomes` >> simp[return_def] >>
+  rename1 `SOME os` >> Cases_on `os` >> simp[check_def, assert_def] >>
+  simp[outcome_suffix_def] >> qexists_tac `[h]` >> simp[]
+QED
+
 val OUTCOMES_SUFFIX_TAC = rpt (outcomes_suffix_step
   (outcomes_suffix_ext_call :: outcomes_suffix_send ::
-   outcomes_suffix_raw_call :: outcomes_suffix_base_facts));
+   outcomes_suffix_raw_call :: outcomes_suffix_precompile_call_success ::
+   outcomes_suffix_base_facts));
 
 Theorem outcomes_suffix_create:
   outcomes_suffix (eval_create cx kind has_salt rof arg_tys vs blueprint_size)
@@ -580,7 +592,8 @@ QED
 
 val OUTCOMES_SUFFIX_TAC = rpt (outcomes_suffix_step
   (outcomes_suffix_create :: outcomes_suffix_ext_call :: outcomes_suffix_send ::
-   outcomes_suffix_raw_call :: outcomes_suffix_base_facts));
+   outcomes_suffix_raw_call :: outcomes_suffix_precompile_call_success ::
+   outcomes_suffix_base_facts));
 (* The IntCall case's lock steps, unfolded in the goal and the hypotheses. *)
 val lock_helper_defs = [lock_if_nr_def, unlock_if_nr_def, is_view_mut_def];
 

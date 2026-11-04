@@ -2256,7 +2256,7 @@ QED
 Theorem compile_typed_unary_builtin_vv_sim_with_initial_rel:
   expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
   expr_sim ctx func cenv cx ty e es /\ expr_type e = BaseT bty /\
-  bt <> Len /\ builtin_args_length_ok bt 1 /\
+  ~precompile_builtin bt /\ bt <> Len /\ builtin_args_length_ok bt 1 /\
   (!sa sb vv. compile_expr cenv ty (Builtin ann bt [e]) sa = (vv,sb) ==>
     ?x sm. lower_value compile_expr cenv ty e sa = (x,sm) /\
       code x sm = (vv,sb)) /\
