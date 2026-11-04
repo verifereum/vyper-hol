@@ -1,6 +1,8 @@
 Theory algebraicOptRangeConditionProofs
 Ancestors
   rangeAnalysisProofs rangeAnalysisDefs dfgAnalysis venomInst finite_map
+  algebraicOptFreshnessProofs algebraicOptTraceProofs
+  venomExecSemantics venomState venomWf rich_list
 
 (* Conditional interfaces: producer provenance is a separate obligation. *)
 Theorem ao_range_condition_assign_local:
@@ -53,14 +55,14 @@ QED
    availability for its actual ordinary use. Trace initialization and source
    location bridges must still be discharged, not silently assumed.
 
-   Missing generalization for ASSIGN-chain integration: from a last execution
-   of each used ASSIGN, transport its operand value to the branch observation,
-   and justify availability of that operand there even though it is not a
-   syntactic operand of JNZ. The ISZERO-specific last-event theorem is not a
-   generic producer-stability theorem and cannot simply be applied to ASSIGN,
-   EQ or comparisons. Need an actual trace suffix with no writes to the
-   relevant operands, justified by dynamic order/dominance, not arbitrary
-   all-stored-variable stability. No such general implication is claimed here.
+   Checked ASSIGN-chain boundary: ao_source_trace_assign_operand below
+   gives current operand evaluation and recursive variable availability at
+   the same ordinary observation. Var transport uses the generic last-producer
+   operand boundary and availability composition. Lit uses the successful
+   last-output event; Label additionally uses source-trace label-map
+   preservation, not an assumption that labels are state-independent.
+   These interfaces do not assert arbitrary all-stored-variable stability.
+   EQ/comparison terminal provenance and full condition closure remain separate.
 
    Terminal signature ledger (rangeAnalysisProofs):
    - range_apply_iszero_sound needs zero/nonzero consequences for the current
@@ -76,3 +78,60 @@ QED
 
    These conditional boundaries do not establish reachable range soundness.
 *)
+
+Theorem ao_assign_step_value:
+  !q ctx inst u w op x.
+    inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
+    inst.inst_outputs = [x] /\ step_inst q ctx inst u = OK w ==>
+    eval_operand op u = lookup_var x w
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[Once step_inst_def, step_inst_base_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem ao_source_trace_assign_operand:
+  !ctx fn trace bp r prod x op target use_opt h t value.
+    wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ trace <> [] /\
+    ao_source_trace ctx fn trace /\ LAST trace = (h,F,t) /\
+    lookup_var x (SND (SND (HD trace))) = NONE /\
+    lookup_var x t = SOME value /\ MEM bp fn.fn_blocks /\
+    get_instruction bp r = SOME prod /\ prod.inst_opcode = ASSIGN /\
+    prod.inst_outputs = [x] /\ prod.inst_operands = [op] /\
+    phi_prefix_length bp.bb_instructions <= r /\
+    lookup_block t.vs_current_bb fn.fn_blocks = SOME target /\
+    def_available_at fn target use_opt x /\
+    (case use_opt of
+       SOME use => get_instruction target t.vs_inst_idx = SOME use /\
+                   use.inst_opcode <> PHI
+     | NONE => ?term. get_instruction target t.vs_inst_idx = SOME term /\
+                      is_terminator term.inst_opcode) ==>
+    eval_operand op t = SOME value /\
+    (!z. op = Var z ==> def_available_at fn target use_opt z)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM prod bp.bb_instructions` by
+    (gvs[get_instruction_def, AllCaseEqs()] >> metis_tac[listTheory.MEM_EL]) >>
+  `!z. op = Var z ==> def_available_at fn bp (SOME prod) z` by
+    (rpt strip_tac >> fs[wf_ssa_def, def_dominates_uses_def] >>
+     first_x_assum drule_all >> simp[]) >>
+  reverse conj_tac
+  >- (rpt strip_tac >> irule ao_available_through_producer >>
+      simp[] >> qexistsl [`bp`,`prod`,`x`] >> simp[]) >>
+  `prod.inst_opcode <> PHI /\ ~is_terminator prod.inst_opcode /\
+   MEM x prod.inst_outputs` by simp[is_terminator_def] >>
+  Cases_on `op`
+  >~ [`eval_operand (Var z) t = SOME value`]
+  >- (`MEM (Var z) prod.inst_operands /\
+      def_available_at fn bp (SOME prod) z` by simp[] >>
+     drule_all ao_source_trace_last_producer_operand >> strip_tac >>
+     drule_all ao_assign_step_value >>
+     gvs[lookup_var_def]) >>
+  drule_all ao_source_trace_last_output >> strip_tac >>
+  `MEM (q,F,u) trace` by simp[] >>
+  `MEM (h,F,t) trace` by metis_tac[rich_listTheory.LAST_MEM] >>
+  `t.vs_labels = u.vs_labels` by metis_tac[ao_source_trace_labels] >>
+  drule_all ao_assign_step_value >>
+  gvs[eval_operand_def, lookup_var_def]
+QED
