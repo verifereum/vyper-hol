@@ -84,3 +84,127 @@ Proof
  first_x_assum (qspec_then `s` mp_tac) >> simp[] >>
  strip_tac >> metis_tac[]
 QED
+
+(* API audit: block_sim_function_pointwise[_reachable] quantifies over arbitrary
+   block-input states (the latter only adds a prev_bb guard). analysisSim's
+   sound predicates likewise contain no entry-origin ordered history.
+   exec_block_decompose extracts states only under a successful whole-block
+   run and does not link them to function entry. None is a prefix interface.
+   The relation below records only successful continuation transitions; it
+   does not require future success. INVOKE remains one actual step_inst event.
+   A PHI event is one atomic batch, using cse_phi_reads_eval_phis above. *)
+Datatype:
+ cse_phase = CseRun num venom_state | CseExec num basic_block venom_state
+End
+
+Datatype:
+ cse_event = CsePhi num basic_block venom_state venom_state
+           | CseStep num basic_block instruction venom_state venom_state
+End
+
+Inductive cse_prefix:
+[~entry:]
+ (!ctx fn fuel s.
+   s.vs_inst_idx = 0 /\ fn_entry_label fn = SOME s.vs_current_bb ==>
+   cse_prefix ctx fn fuel s [] (CseRun fuel s))
+[~phi:]
+ (!ctx fn fuel0 s0 events fuel s bb t.
+   cse_prefix ctx fn fuel0 s0 events (CseRun (SUC fuel) s) /\
+   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+   eval_phis s bb.bb_instructions = OK t ==>
+   cse_prefix ctx fn fuel0 s0 (events ++ [CsePhi fuel bb s t])
+     (CseExec fuel bb
+       (t with vs_inst_idx := phi_prefix_length bb.bb_instructions)))
+[~ordinary:]
+ (!ctx fn fuel0 s0 events fuel bb s inst t.
+   cse_prefix ctx fn fuel0 s0 events (CseExec fuel bb s) /\
+   get_instruction bb s.vs_inst_idx = SOME inst /\
+   step_inst fuel ctx inst s = OK t /\
+   ~is_terminator inst.inst_opcode ==>
+   cse_prefix ctx fn fuel0 s0 (events ++ [CseStep fuel bb inst s t])
+     (CseExec fuel bb (t with vs_inst_idx := SUC s.vs_inst_idx)))
+[~branch:]
+ (!ctx fn fuel0 s0 events fuel bb s inst t.
+   cse_prefix ctx fn fuel0 s0 events (CseExec fuel bb s) /\
+   get_instruction bb s.vs_inst_idx = SOME inst /\
+   step_inst fuel ctx inst s = OK t /\
+   is_terminator inst.inst_opcode /\ ~t.vs_halted ==>
+   cse_prefix ctx fn fuel0 s0 (events ++ [CseStep fuel bb inst s t])
+     (CseRun fuel t))
+End
+
+Theorem cse_prefix_empty:
+ !ctx fn fuel0 s0 phase.
+ cse_prefix ctx fn fuel0 s0 [] phase <=>
+ s0.vs_inst_idx = 0 /\ fn_entry_label fn = SOME s0.vs_current_bb /\
+ phase = CseRun fuel0 s0
+Proof
+ rpt gen_tac >> once_rewrite_tac[cse_prefix_cases] >> simp[] >> metis_tac[]
+QED
+
+Theorem cse_prefix_phi_extend:
+ !ctx fn fuel0 s0 events fuel s bb t.
+ cse_prefix ctx fn fuel0 s0 events (CseRun (SUC fuel) s) /\
+ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+ eval_phis s bb.bb_instructions = OK t ==>
+ cse_prefix ctx fn fuel0 s0 (events ++ [CsePhi fuel bb s t])
+   (CseExec fuel bb
+     (t with vs_inst_idx := phi_prefix_length bb.bb_instructions))
+Proof
+ metis_tac[cse_prefix_rules]
+QED
+
+Theorem cse_prefix_ordinary_extend:
+ !ctx fn fuel0 s0 events fuel bb s inst t.
+ cse_prefix ctx fn fuel0 s0 events (CseExec fuel bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME inst /\
+ step_inst fuel ctx inst s = OK t /\ ~is_terminator inst.inst_opcode ==>
+ cse_prefix ctx fn fuel0 s0 (events ++ [CseStep fuel bb inst s t])
+   (CseExec fuel bb (t with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+ metis_tac[cse_prefix_rules]
+QED
+
+Theorem cse_prefix_branch_extend:
+ !ctx fn fuel0 s0 events fuel bb s inst t.
+ cse_prefix ctx fn fuel0 s0 events (CseExec fuel bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME inst /\
+ step_inst fuel ctx inst s = OK t /\
+ is_terminator inst.inst_opcode /\ ~t.vs_halted ==>
+ cse_prefix ctx fn fuel0 s0 (events ++ [CseStep fuel bb inst s t])
+   (CseRun fuel t)
+Proof
+ metis_tac[cse_prefix_rules]
+QED
+
+(* Phase inversion is exported by cse_prefix_cases. In particular, CseRun 0
+   has no PHI successor; a halting/terminal step has no continuation event.
+   The following atomic-PHI inversion also exposes the accepted shared-snapshot
+   read certificate, without sequentializing writes. *)
+Theorem cse_prefix_phi_snapshot:
+ !ctx fn fuel0 s0 events fuel s bb t.
+ cse_prefix ctx fn fuel0 s0 events (CseRun (SUC fuel) s) /\
+ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+ eval_phis s bb.bb_instructions = OK t ==>
+ ?writes.
+ cse_phi_reads s bb.bb_instructions writes /\
+ t = FOLDR (\(out,v) acc. update_var out v acc) s writes /\
+ cse_prefix ctx fn fuel0 s0 (events ++ [CsePhi fuel bb s t])
+   (CseExec fuel bb
+     (t with vs_inst_idx := phi_prefix_length bb.bb_instructions))
+Proof
+ rpt strip_tac >> drule (iffLR cse_phi_reads_eval_phis) >> strip_tac >>
+ qexists_tac `writes` >> simp[] >>
+ irule cse_prefix_phi_extend >> simp[]
+QED
+
+(* Proposed consumer law (pending the separate correspondence checkpoint):
+   quantify over events,fuel,bb,s,t,inst with
+     cse_prefix ctx fn fuel0 s0 events (CseExec fuel bb s),
+     get_instruction bb s.vs_inst_idx = SOME inst, and R_ok s t.
+   Require error-or-lift_result for step_inst fuel ctx inst s versus the
+   point-indexed transformed instruction at bb/s.vs_inst_idx on t.
+   Function/block shape and unchanged atomic PHI batches are separate structural
+   premises. The consumer must generalize over this accumulated prefix, not
+   discard it at recursive run_blocks calls. No consumer theorem is claimed
+   here, nor extraction/projection for complete executions. *)
