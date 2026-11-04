@@ -2,7 +2,8 @@ Theory makeSsaCurrentTreeTrace
 Ancestors
   makeSsaCurrentCertificate makeSsaCurrentAllocation makeSsaCurrentRenameTrace
   makeSsaCurrentEdgeTrace makeSsaCurrentInduct makeSsaCurrentDefs
-  makeSsaCurrentProps makeSsaDefs cfgTransform cfgTransformProps makeSsaHelper list pair
+  makeSsaCurrentProps makeSsaDefs cfgTransform cfgTransformProps makeSsaHelper
+  makeSsaCurrentAnalysis venomInst venomWf list pair sorting
 
 (* Sibling calls retain global counters/history but restore the lexical
    stacks and environment of their parent. These boundaries do not equate
@@ -328,4 +329,173 @@ Proof
     (irule (cj 1 current_tree_trace_exists) >> simp[]) >>
   drule (cj 1 current_tree_trace_projection) >> strip_tac >> gvs[] >>
   metis_tac[]
+QED
+
+Definition current_annotation_map_def:
+  current_annotation_map bbs
+    (annsss : (current_token # string) list list list) l =
+    case ALOOKUP (ZIP (MAP (\bb. bb.bb_label) bbs,annsss)) l of
+      NONE => [] | SOME anns => anns
+End
+
+Theorem current_annotation_map_owners:
+  !bbs annsss.
+    LIST_REL (\bb anns.
+      LIST_REL (\a inst. MAP SND a = inst.inst_outputs) anns bb.bb_instructions)
+      bbs annsss ==>
+    !l bb. lookup_block l bbs = SOME bb ==>
+      LIST_REL (\a inst. MAP SND a = inst.inst_outputs)
+        (current_annotation_map bbs annsss l) bb.bb_instructions
+Proof
+  Induct >> Cases_on `annsss` >>
+  simp[lookup_block_def, FIND_thm, current_annotation_map_def] >>
+  rpt strip_tac >> rename1 `old.bb_label = l` >>
+  Cases_on `old.bb_label = l` >> gvs[] >>
+  first_x_assum drule >> simp[current_annotation_map_def, lookup_block_def]
+QED
+
+Theorem current_annotation_map_initial:
+  LIST_REL (\bb anns.
+    LIST_REL (\a inst. MAP SND a = inst.inst_outputs) anns bb.bb_instructions)
+    bbs annsss ==>
+  current_unvisited_annotations (current_annotation_map bbs annsss) [] bbs
+Proof
+  simp[current_unvisited_annotations_def] >>
+  metis_tac[current_annotation_map_owners]
+QED
+
+Theorem current_provenance_map_owners:
+  !olds news annsss.
+  LENGTH olds = LENGTH news /\
+  LIST_REL (\pair anns. current_block_provenance fn (FST pair) (SND pair) anns)
+    (ZIP (olds,news)) annsss ==>
+  LIST_REL (\bb anns.
+    LIST_REL (\a inst. MAP SND a = inst.inst_outputs) anns bb.bb_instructions)
+    news annsss
+Proof
+  Induct >> Cases_on `news` >> Cases_on `annsss` >> simp[] >>
+  rpt gen_tac >> strip_tac
+  >- (fs[current_block_provenance_def, LIST_REL_EL_EQN] >> metis_tac[]) >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Theorem current_provenance_map_initial:
+  LENGTH olds = LENGTH news /\
+  LIST_REL (\pair anns. current_block_provenance fn (FST pair) (SND pair) anns)
+    (ZIP (olds,news)) annsss ==>
+  current_unvisited_annotations (current_annotation_map news annsss) [] news
+Proof
+  strip_tac >> irule current_annotation_map_initial >>
+  irule current_provenance_map_owners >> metis_tac[]
+QED
+
+Theorem current_tree_labels_postorder:
+  (!tree.
+    (!l. MEM l (dom_tree_labels tree) <=> MEM l (dom_tree_postorder tree)) /\
+    (ALL_DISTINCT (dom_tree_labels tree) <=> ALL_DISTINCT (dom_tree_postorder tree))) /\
+  (!trees.
+    (!l. MEM l (FLAT (MAP dom_tree_labels trees)) <=>
+         MEM l (FLAT (MAP dom_tree_postorder trees))) /\
+    (ALL_DISTINCT (FLAT (MAP dom_tree_labels trees)) <=>
+     ALL_DISTINCT (FLAT (MAP dom_tree_postorder trees))))
+Proof
+  ho_match_mp_tac current_dom_tree_induction >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      simp[dom_tree_labels_def, dom_tree_postorder_def, ALL_DISTINCT_APPEND,
+        EVERY_MEM] >> metis_tac[]) >>
+  conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  simp[ALL_DISTINCT_APPEND, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem current_actual_tree_labels_distinct:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME bb ==>
+  ALL_DISTINCT (dom_tree_labels (current_dom_tree fn))
+Proof
+  strip_tac >> drule_all current_dom_postorder_perm >> strip_tac >>
+  `ALL_DISTINCT (fn_labels fn)` by fs[wf_function_def] >>
+  `ALL_DISTINCT (current_dom_postorder fn)` by
+    metis_tac[ALL_DISTINCT_PERM] >>
+  gvs[current_dom_postorder_def, current_tree_labels_postorder]
+QED
+
+Theorem current_actual_tree_trace:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME bb /\
+  add_phi_nodes_supply s (current_frontier_map fn) (current_pred_map fn)
+    (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+      (liveness_analyze fn) fn) fn.fn_blocks
+    (compute_defs (MAP THE (FILTER IS_SOME
+      (MAP (\lbl. lookup_block lbl fn.fn_blocks) (current_dom_postorder fn)))))
+    = (bbs1,s1) /\
+  rename_current_blocks s1 rs bbs1 sm (current_dom_tree fn) = (ctrs',s',bbs') ==>
+  ?annsss H' visited' events.
+    LIST_REL (\pair anns. current_block_provenance fn (FST pair) (SND pair) anns)
+      (ZIP (fn.fn_blocks,bbs1)) annsss /\
+    ALL_DISTINCT (MAP FST (FLAT (FLAT annsss))) /\
+    current_tree_trace (current_annotation_map bbs1 annsss) sm (current_dom_tree fn)
+      s1 rs bbs1 H E [] ctrs' s' bbs' H' visited' events
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    fs[wf_function_def, fn_labels_def] >>
+  drule_all current_actual_provenance >> strip_tac >>
+  `LENGTH fn.fn_blocks = LENGTH bbs1` by
+    (drule current_actual_block_provenance >>
+     metis_tac[LIST_REL_LENGTH]) >>
+  `current_unvisited_annotations (current_annotation_map bbs1 annsss) [] bbs1` by
+    (irule current_provenance_map_initial >> metis_tac[]) >>
+  `ALL_DISTINCT (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_labels_distinct] >>
+  qexists_tac `annsss` >> simp[] >>
+  irule current_tree_trace_for_result >> simp[]
+QED
+
+(* Local trace endpoints stay interpretable in the final global history. *)
+Definition current_event_trace_def:
+  current_event_trace (A : string -> (current_token # string) list list) finalH
+    (l,bb,s,rs,H,E,insts1,s1,rs1,H1,E1,
+      (bbs1 : basic_block list),(bbs2 : basic_block list)) <=>
+    current_local_trace (A l) bb.bb_instructions s rs H E
+      insts1 s1 rs1 H1 E1 /\ ?tail. finalH = H1 ++ tail
+End
+
+Theorem current_event_trace_extend:
+  current_event_trace A H ev ==>
+  current_event_trace A (H ++ tail) ev
+Proof
+  PairCases_on `ev` >> simp[current_event_trace_def] >>
+  metis_tac[APPEND_ASSOC]
+QED
+
+Theorem current_events_trace_extend:
+  EVERY (current_event_trace A H) events ==>
+  EVERY (current_event_trace A (H ++ tail)) events
+Proof
+  simp[EVERY_MEM] >> metis_tac[current_event_trace_extend]
+QED
+
+Theorem current_tree_trace_events:
+  (!tree A sm s rs bbs H E visited ctrs' s' bbs' H' visited' events.
+    current_tree_trace A sm tree s rs bbs H E visited
+      ctrs' s' bbs' H' visited' events ==>
+    EVERY (current_event_trace A H') events) /\
+  (!trees A sm s ctrs stacks bbs H E visited ctrs' s' bbs' H' visited' events.
+    current_children_trace A sm trees s ctrs stacks bbs H E visited
+      ctrs' s' bbs' H' visited' events ==>
+    EVERY (current_event_trace A H') events)
+Proof
+  ho_match_mp_tac current_dom_tree_induction >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >>
+      simp[current_tree_trace_def] >>
+      Cases_on `lookup_block lbl bbs` >> simp[] >> strip_tac >> gvs[] >>
+      drule (cj 2 current_tree_trace_history) >> strip_tac >>
+      first_x_assum drule >> strip_tac >>
+      simp[current_event_trace_def] >> metis_tac[])
+  >- simp[current_tree_trace_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[current_tree_trace_def] >> strip_tac >> gvs[] >>
+  drule (cj 2 current_tree_trace_history) >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  simp[EVERY_APPEND] >> metis_tac[current_events_trace_extend]
 QED
