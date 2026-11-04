@@ -371,3 +371,25 @@ Proof
   >- (Cases_on `op` >> simp_tac (srw_ss()) [] >> STMT_LEAF) >>
   STMT_LEAF
 QED
+
+Theorem label_preserving_declare_stmt_local[local]:
+  !stmt s r t. declare_stmt_local ce stmt s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  Cases >> rewrite_tac[declare_stmt_local_def] >>
+  metis_tac[label_preserving_declare_local, label_preserving_return]
+QED
+
+Theorem label_preserving_internal_return_from_env[local]:
+  !s r t. compile_internal_return_from_env ce ty sty v rpc s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[compile_internal_return_from_env_def] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (Cases_on `ce.ce_return_buf` >>
+      simp_tac pure_ss [optionTheory.option_CLAUSES]
+      >- STMT_LEAF >> Cases_on `x` >> simp_tac (srw_ss()) [] >>
+      all_tac >~ [`emit_op MLOAD`] >- (STMT_BIND >> STMT_LEAF) >> STMT_LEAF) >>
+  gen_tac >> STMT_BIND >> metis_tac[label_preserving_internal_return]
+QED
+
