@@ -1,7 +1,7 @@
 Theory abiEncodeArgsSim
 Ancestors
   abiEncodeMaterialize abiEncodeArgsScopes abiEncodeArgsWindows
-  exprSimHyps exprSimWordArgs
+  exprSim exprSimHyps exprSimWordArgs
 
 Definition abi_args_post_def:
   abi_args_post ctx func ce cx es sa sb s0 es' args ops vs s <=>
@@ -94,4 +94,27 @@ Theorem abi_args_capture_size:
   n < 2 ** 64 ==> n + 64 < dimword (:256)
 Proof
   simp[wordsTheory.dimword_def] >> decide_tac
+QED
+
+Theorem abi_args_local_type_coherent:
+  expr_sim_inv ce cx env es /\ lookup_scopes name es.scopes = SOME entry ==>
+  ?ty. ce.ce_var_type name = SOME ty /\
+       evaluate_type (get_tenv cx) ty = SOME entry.type
+Proof
+  simp[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
+       vyperTypeInvariantsTheory.env_scopes_consistent_def] >>
+  rpt strip_tac >>
+  `IS_SOME (FLOOKUP env.var_types name)` by metis_tac[] >>
+  Cases_on `FLOOKUP env.var_types name` >> gvs[] >> metis_tac[]
+QED
+
+Theorem abi_args_dynamic_local_type:
+  expr_sim_inv ce cx env es /\ lookup_scopes name es.scopes = SOME entry /\
+  dynarray_local ce name ==>
+  ?etv n. entry.type = ArrayTV etv (Dynamic n)
+Proof
+  strip_tac >> drule_all abi_args_local_type_coherent >> strip_tac >>
+  gvs[dynarray_local_def] >>
+  Cases_on `ty` >> gvs[dynarray_type_def, vyperValueTheory.evaluate_type_def,
+                         AllCaseEqs()] >> metis_tac[]
 QED
