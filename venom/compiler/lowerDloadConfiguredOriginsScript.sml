@@ -2,7 +2,8 @@
 Theory lowerDloadConfiguredOrigins
 Ancestors
   o1ContractLowerDload o1PassContract lowerDloadDefs
-  venomPassDispatcher irSupply list rich_list arithmetic
+  venomPassDispatcher irSupply venomExecSemantics contextCodegenRel
+  venomInst venomWf list rich_list arithmetic
 
 Theorem lower_dload_insts_supply_at:
   lower_dload_insts_supply u ins = (outs,v) /\ j < LENGTH ins ==>
@@ -105,4 +106,223 @@ Proof
   first_x_assum (qspec_then `n` mp_tac) >> simp[] >> strip_tac >>
   qexistsl_tac [`observed`,`s`,`out`] >> simp[] >>
   gvs[fn_pass_step_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem lower_dload_inst_supply_phi_length:
+  lower_dload_inst_supply u i = (xs,v) ==>
+  phi_prefix_length (xs ++ rest) =
+    if i.inst_opcode = PHI then SUC (phi_prefix_length rest) else 0
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[phi_prefix_length_def]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[phi_prefix_length_def]) >>
+  simp[lower_dload_inst_supply_def] >> strip_tac >>
+  gvs[phi_prefix_length_def]
+QED
+
+Theorem lower_dload_insts_supply_phi_length:
+  !u xs v. lower_dload_insts_supply u ins = (xs,v) ==>
+  phi_prefix_length xs = phi_prefix_length ins
+Proof
+  Induct_on `ins`
+  >- simp[lower_dload_insts_supply_def] >>
+  rpt gen_tac >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >> strip_tac >>
+  gvs[] >> drule lower_dload_inst_supply_phi_length >>
+  disch_then (qspec_then `outs` mp_tac) >>
+  first_x_assum drule >> simp[phi_prefix_length_def]
+QED
+
+Theorem lower_dload_inst_supply_eval_phis:
+  lower_dload_inst_supply u i = (xs,v) ==>
+  eval_phis s (xs ++ rest) = eval_phis s (i::rest)
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[eval_phis_def]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[eval_phis_def]) >>
+  simp[lower_dload_inst_supply_def] >> strip_tac >> gvs[]
+QED
+
+Theorem lower_dload_insts_supply_eval_phis:
+  !u xs v. lower_dload_insts_supply u ins = (xs,v) ==>
+  eval_phis s xs = eval_phis s ins
+Proof
+  Induct_on `ins`
+  >- simp[lower_dload_insts_supply_def] >>
+  rpt gen_tac >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >> strip_tac >>
+  gvs[] >> drule lower_dload_inst_supply_eval_phis >>
+  disch_then (qspecl_then [`s`,`outs`] mp_tac) >>
+  first_x_assum drule >> simp[eval_phis_def]
+QED
+
+Theorem lower_dload_blocks_supply_lookup:
+  !u cs v. lower_dload_blocks_supply u bs = (cs,v) /\
+  lookup_block label bs = SOME b ==>
+  ?u0 is u1.
+    lower_dload_insts_supply u0 b.bb_instructions = (is,u1) /\
+    lookup_block label cs = SOME (b with bb_instructions := is)
+Proof
+  Induct_on `bs`
+  >- simp[lookup_block_def, FIND_thm] >>
+  rpt gen_tac >>
+  simp[Once lower_dload_blocks_supply_def, lower_dload_block_supply_def,
+       AllCaseEqs(), lookup_block_def, FIND_thm] >> strip_tac >>
+  Cases_on `h.bb_label = label` >> gvs[]
+  >- (qexistsl_tac [`u`,`insts`,`s1`] >> simp[FIND_thm]) >>
+  simp[FIND_thm] >>
+  gvs[GSYM lookup_block_def] >> first_x_assum drule_all >> simp[]
+QED
+
+Theorem lower_dload_function_supply_enters_block:
+  lower_dload_function_supply u f = (g,v) /\ enters_block f s s1 ==>
+  enters_block g s s1
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> strip_tac >>
+  gvs[enters_block_def] >>
+  drule_all lower_dload_blocks_supply_lookup >> strip_tac >>
+  drule lower_dload_insts_supply_eval_phis >>
+  disch_then (qspec_then `s` assume_tac) >>
+  drule lower_dload_insts_supply_phi_length >> strip_tac >>
+  qexistsl_tac [`bb with bb_instructions := is`,`s_phi`] >> simp[]
+QED
+
+Theorem lower_dload_blocks_supply_lookup_origin:
+  !u cs v. lower_dload_blocks_supply u bs = (cs,v) /\
+  lookup_block label cs = SOME b' ==>
+  ?b u0 is u1.
+    lookup_block label bs = SOME b /\
+    lower_dload_insts_supply u0 b.bb_instructions = (is,u1) /\
+    b' = b with bb_instructions := is
+Proof
+  Induct_on `bs`
+  >- simp[lower_dload_blocks_supply_def, lookup_block_def, FIND_thm] >>
+  rpt gen_tac >>
+  simp[Once lower_dload_blocks_supply_def, lower_dload_block_supply_def,
+       AllCaseEqs(), lookup_block_def, FIND_thm] >> strip_tac >>
+  Cases_on `h.bb_label = label` >> gvs[FIND_thm]
+  >- (qexistsl_tac [`u`,`insts`,`s1`] >> simp[]) >>
+  gvs[GSYM lookup_block_def] >> first_x_assum drule_all >> strip_tac >>
+  qexistsl_tac [`b`,`u0`,`is`,`u1`] >>
+  simp[lookup_block_def, FIND_thm]
+QED
+
+Theorem lower_dload_function_supply_enters_block_origin:
+  lower_dload_function_supply u f = (g,v) /\ enters_block g s s1 ==>
+  enters_block f s s1
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> strip_tac >>
+  gvs[enters_block_def] >>
+  drule_all lower_dload_blocks_supply_lookup_origin >> strip_tac >>
+  drule lower_dload_insts_supply_eval_phis >>
+  disch_then (qspec_then `s` assume_tac) >>
+  drule lower_dload_insts_supply_phi_length >> strip_tac >>
+  qexistsl_tac [`b`,`s_phi`] >> gvs[]
+QED
+
+(* Resolving original operands through the expanded prefix must not see
+   private definitions.  A malformed DLOADBYTES may carry outputs that
+   lowering drops, hence the well-formedness premise is essential. *)
+Theorem lower_dload_inst_supply_resolve:
+  lower_dload_inst_supply u i = (xs,v) /\ inst_wf i /\
+  (!w. op = Var w ==> MEM w u.irs_used_vars) ==>
+  resolve_block_assigns (REVERSE xs ++ rest) op =
+  resolve_block_assigns (i::rest) op
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >> imp_res_tac fresh_ir_var_contract >>
+      Cases_on `op` >> gvs[resolve_block_assigns_def] >> metis_tac[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >> imp_res_tac fresh_ir_var_contract >>
+      gvs[inst_wf_def] >>
+      Cases_on `op` >> gvs[resolve_block_assigns_def] >> metis_tac[]) >>
+  simp[lower_dload_inst_supply_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem lower_dload_inst_supply_used_vars_mono:
+  lower_dload_inst_supply u i = (xs,v) /\ MEM w u.irs_used_vars ==>
+  MEM w v.irs_used_vars
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >> imp_res_tac fresh_ir_var_contract >> gvs[] >> metis_tac[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >> imp_res_tac fresh_ir_var_contract >> gvs[] >> metis_tac[]) >>
+  simp[lower_dload_inst_supply_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem lower_dload_insts_supply_used_vars_mono:
+  !u xs v. lower_dload_insts_supply u ins = (xs,v) /\ MEM w u.irs_used_vars ==>
+  MEM w v.irs_used_vars
+Proof
+  Induct_on `ins`
+  >- simp[lower_dload_insts_supply_def] >>
+  rpt gen_tac >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >> strip_tac >>
+  drule_all lower_dload_inst_supply_used_vars_mono >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem lower_dload_insts_supply_resolve:
+  !u xs v rest op.
+  lower_dload_insts_supply u ins = (xs,v) /\ EVERY inst_wf ins /\
+  (!i w. MEM i ins /\ MEM (Var w) i.inst_operands ==>
+         MEM w u.irs_used_vars) /\
+  (!w. op = Var w ==> MEM w u.irs_used_vars) ==>
+  resolve_block_assigns (REVERSE xs ++ rest) op =
+  resolve_block_assigns (REVERSE ins ++ rest) op
+Proof
+  Induct_on `ins` using SNOC_INDUCT
+  >- simp[lower_dload_insts_supply_def] >>
+  rpt gen_tac >> rewrite_tac[SNOC_APPEND] >> strip_tac >>
+  drule lower_dload_insts_supply_append >> strip_tac >>
+  gvs[lower_dload_insts_supply_def, AllCaseEqs(), EVERY_APPEND] >>
+  `!w. op = Var w ==> MEM w u'.irs_used_vars` by
+    metis_tac[lower_dload_insts_supply_used_vars_mono] >>
+  drule_all lower_dload_inst_supply_resolve >>
+  disch_then (qspec_then `REVERSE ys ++ rest` mp_tac) >>
+  pure_rewrite_tac[REVERSE_APPEND, GSYM APPEND_ASSOC, REVERSE_DEF, APPEND] >>
+  disch_then SUBST1_TAC >>
+  Cases_on `op` >> simp[resolve_block_assigns_def] >>
+  IF_CASES_TAC >> simp[]
+  >- (IF_CASES_TAC >> simp[] >>
+      first_x_assum irule >> qexistsl_tac [`u`,`u'`] >> simp[] >> conj_tac
+      >- metis_tac[] >>
+      Cases_on `x.inst_operands` >> gvs[] >> metis_tac[MEM]) >>
+  first_x_assum irule >> qexistsl_tac [`u`,`u'`] >> simp[] >> metis_tac[]
+QED
+
+Theorem lower_dload_insts_supply_length:
+  !u xs v. lower_dload_insts_supply u ins = (xs,v) ==>
+  LENGTH ins <= LENGTH xs
+Proof
+  Induct_on `ins`
+  >- simp[lower_dload_insts_supply_def] >>
+  rpt gen_tac >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >> strip_tac >>
+  drule lower_dload_inst_supply_nonempty >> strip_tac >>
+  first_x_assum drule >> Cases_on `out` >> gvs[]
+QED
+
+Theorem lower_dload_insts_supply_append_eq:
+  !u xs v ys w.
+  lower_dload_insts_supply u pre = (xs,v) /\
+  lower_dload_insts_supply v post = (ys,w) ==>
+  lower_dload_insts_supply u (pre ++ post) = (xs ++ ys,w)
+Proof
+  Induct_on `pre`
+  >- simp[lower_dload_insts_supply_def] >>
+  rpt gen_tac >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  simp[Once lower_dload_insts_supply_def] >> gvs[APPEND_ASSOC]
 QED
