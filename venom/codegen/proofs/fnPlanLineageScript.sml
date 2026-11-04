@@ -15,7 +15,7 @@
  *   dfs_block_state             — the state the planner planned a block from
  *   lineage_state               — planner states along any CFG path that
  *                                 replays each block's DFS code
- *   lineage_state_block_plan    — ADMITTED successor transfer: a lineage
+ *   lineage_state_block_plan    — CHEATED successor transfer: a lineage
  *                                 state regenerates the block's DFS code
  * Helper:
  *   lineage_state_dfs_fields    — a lineage state is a DFS state with its
@@ -142,7 +142,7 @@ QED
 
 (* ===== Successor transfer ===== *)
 
-(* KEY LEMMA (ADMITTED, for alan): a lineage state regenerates the block's
+(* KEY LEMMA (cheated, for alan): a lineage state regenerates the block's
    DFS code, so the code at the block's label is the plan of a state that
    carries the run-time path's stack and spill map.  With the cleanup
    fields taken from the DFS state the code can differ: entered from a
@@ -152,12 +152,27 @@ QED
    test only on the run-time path; hence the existential h, promised.
 
    Why it should hold: lineage and DFS states share alloc, label counter
-   and the planner inputs; at a join (cfg_is_normalized: each predecessor
-   ends in a JMP whose reorder produces the target stack, with no spills
-   left) the stacks agree except for a bottom prefix of dead_stack_marker
-   entries, which stack_get_depth (Var _), stack_get_phi_depth,
-   stack_get_unfixed_depth and select_spill_candidate do not see; along
-   other edges the induction carries that agreement. *)
+   and the planner inputs.  The entry block has no predecessors
+   (block_entries_ready), so its only lineage state is the initial one.  At
+   a join every predecessor ends in a JMP (block_entries_ready), whose
+   reorder produces the target stack with no spills left, so the stacks
+   agree except for a bottom prefix of dead_stack_marker entries and, before
+   the PHI prefix, the names at PHI slots (phi_operands_ready makes the PHI
+   code the same).  No operand of the function is a dead_stack_marker, so
+   the operand searches never stop in that prefix.  Along other edges the
+   induction carries the agreement.
+
+   The planner does not fail on an operand missing from the stack, so the
+   agreement alone does not carry through: the length-dependent branches
+   (reorder_one's final_dist < LENGTH, stack_swap's truncated index) need
+   an invariant of lineage states, e.g. ps_stack is a dead_stack_marker
+   prefix followed by distinct variables, disjoint from FDOM ps_spilled,
+   which together are the live set at the edge (at a join entry: exactly
+   input_vars_from P lbl (live_vars_at liveness lbl 0), in that order, with
+   ps_spilled = FEMPTY).  That invariant is static (planner against
+   liveness_analyze; livenessAnalysisProps, livenessConvergenceProofs), not
+   about execution.  Every DFS state is also a lineage state, since
+   generate_succs_plan restores the parent's stack and spill map. *)
 Theorem lineage_state_block_plan:
   !liveness dfg cfg ch growth spill_base lbl_ctr fn fn_ops ps_end lbl bb
    ps ps_dfs block_ops ps_dfs_after.
@@ -165,6 +180,8 @@ Theorem lineage_state_block_plan:
     cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
     generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
       spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
     lookup_block lbl fn.fn_blocks = SOME bb /\
     lineage_state liveness dfg cfg fn
       (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
