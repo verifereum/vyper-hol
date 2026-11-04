@@ -98,3 +98,47 @@ Proof
   irule ld_ptr_rel_compare >>
   qexistsl [`bs`, `B (bs,sz)`, `sz`] >> simp[]
 QED
+
+Theorem ld_vars_update:
+  ld_vars V B G H tn un s t /\ ld_value B ps pt Ms Mt x y ==>
+  ld_vars V B (set_prov G [out] ps) (set_prov H [out] pt)
+    (tn with t_var := set_var_taint tn.t_var [out] Ms)
+    (un with t_var := set_var_taint un.t_var [out] Mt)
+    (update_var out x s) (update_var out y t)
+Proof
+  simp[ld_vars_def] >> rpt strip_tac >>
+  Cases_on `v = out` >>
+  gvs[update_var_def, lookup_var_def, op_taint_def, set_var_taint_def,
+      FLOOKUP_UPDATE] >>
+  Cases_on `ps` >> Cases_on `pt` >>
+  gvs[set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >> metis_tac[]
+QED
+
+Theorem ld_value_add:
+  ld_value B (SOME (bs,sz)) pt Ms Mt x y ==>
+  ld_value B (SOME (bs,sz)) pt Ms Mt (x+k) (y+k)
+Proof
+  simp[ld_value_def] >> metis_tac[ld_ptr_rel_add]
+QED
+
+Theorem ld_value_sub:
+  ld_value B (SOME (bs,sz)) pt Ms Mt x y ==>
+  ld_value B (SOME (bs,sz)) pt Ms Mt (x-k) (y-k)
+Proof
+  simp[ld_value_def] >> metis_tac[ld_ptr_rel_sub]
+QED
+
+Theorem ld_vars_update_untracked:
+  ld_vars V B G H tn un s t /\ out NOTIN V ==>
+  ld_vars V B (set_prov G [out] ps) (set_prov H [out] pt)
+    (tn with t_var := set_var_taint tn.t_var [out] Ms)
+    (un with t_var := set_var_taint un.t_var [out] Mt)
+    (update_var out x s) (update_var out y t)
+Proof
+  simp[ld_vars_def, update_var_def] >> rpt strip_tac >>
+  `v <> out` by metis_tac[] >>
+  gvs[lookup_var_def, FLOOKUP_UPDATE] >>
+  Cases_on `ps` >> Cases_on `pt` >>
+  gvs[update_var_def, lookup_var_def, op_taint_def, set_var_taint_def,
+      set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >> metis_tac[]
+QED
