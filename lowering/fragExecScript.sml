@@ -699,7 +699,7 @@ Proof
   simp[]
 QED
 
-Theorem eval_phis_no_phi[local]:
+Theorem eval_phis_no_phi:
   !l s. phi_prefix_length l = 0 ==> eval_phis s l = OK s
 Proof
   Cases >> rw[eval_phis_def, phi_prefix_length_def]
