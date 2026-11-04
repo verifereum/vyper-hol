@@ -270,3 +270,39 @@ Proof
   simp[operand_vars_def] >> Cases_on `h` >>
   simp[operand_var_def] >> metis_tac[]
 QED
+
+Theorem ld_read_access_cases:
+  access_ok lo (ld_erase A o_f H) fn inst s /\
+  ~in_revert_forward fn s /\ mem_read_ops inst = SOME ops /\
+  MEM (w2n x,n) (source_memory_read_ranges inst s) /\ 0 < n /\
+  (op_prov H ops.iao_ofst = NONE ==> x = y) /\
+  (!a. op_prov H ops.iao_ofst = SOME a ==> ld_wordrel A (SOME a) x y) /\
+  (!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword (:256)) ==>
+  (w2n x+n <= lo /\ y=x) \/
+  (?a b c sz delta. op_prov H ops.iao_ofst = SOME a /\
+    FLOOKUP A a = SOME (b,c,sz) /\ w2n x=b+delta /\
+    w2n y=c+delta /\ delta+n <= sz)
+Proof
+  strip_tac >>
+  qpat_x_assum `access_ok _ _ _ _ _` mp_tac >>
+  simp[access_ok_def] >> strip_tac >>
+  qpat_x_assum `!off len. MEM (off,len) (source_memory_read_ranges inst s) /\ _ ==> _`
+    (qspecl_then [`w2n x`, `n`] mp_tac) >> simp[] >>
+  Cases_on `op_prov H ops.iao_ofst` >> gvs[]
+  >- (Cases_on `w2n y+n <= lo` >> simp[] >>
+      strip_tac >> Cases_on `ops.iao_ofst` >>
+      gvs[op_prov_def, FLOOKUP_o_f]) >>
+  `?b c sz. FLOOKUP A x' = SOME (b,c,sz)` by
+    metis_tac[ld_wordrel_SOME] >>
+  `op_prov (ld_erase A o_f H) ops.iao_ofst = SOME (b,sz)` by
+    (Cases_on `ops.iao_ofst` >> gvs[op_prov_def, FLOOKUP_o_f, ld_erase_def]) >>
+  simp[] >> strip_tac >>
+  `b <= w2n x /\ w2n x+n <= b+sz` by
+    (gvs[op_prov_def, FLOOKUP_o_f, ld_erase_def]) >>
+  `w2n y = c+(w2n x-b)` by
+    (irule ld_wordrel_site_value >> simp[] >>
+     qexistsl_tac [`A`, `x'`, `sz`] >> simp[] >>
+     metis_tac[]) >>
+  disj2_tac >> qexists_tac `w2n x-b` >>
+  simp[] >> decide_tac
+QED

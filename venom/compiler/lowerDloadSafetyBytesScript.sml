@@ -3,6 +3,7 @@ Theory lowerDloadSafetyBytes
 Ancestors
   lowerDloadSafetyKernel venomState codegenRel list rich_list arithmetic
     finite_map pred_set regularCallEmitSim byte ptrDiscipline venomMemProps
+    lowerDloadSafetyValues
 
 Theorem ld_read_memory_byte:
   j < n ==> EL j (read_memory off n s) = read_byte (off+j) s.vs_memory
@@ -138,4 +139,22 @@ Proof
   strip_tac >> irule ld_mload_masked >> simp[] >> rpt strip_tac >>
   irule ld_memory_read_slot_masked >> simp[] >>
   qexistsl_tac [`A`, `k`, `lo`, `sz`, `tn`] >> simp[GSYM ADD_ASSOC]
+QED
+
+Theorem ld_memory_mload_access:
+  access_ok lo (ld_erase A o_f H) fn inst s /\
+  ~in_revert_forward fn s /\ mem_read_ops inst = SOME ops /\
+  MEM (w2n x,32) (source_memory_read_ranges inst s) /\
+  (op_prov H ops.iao_ofst = NONE ==> x = y) /\
+  (!a. op_prov H ops.iao_ofst = SOME a ==> ld_wordrel A (SOME a) x y) /\
+  (!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword (:256)) /\
+  ld_memory lo A tn s t ==>
+  word_agree_except (mem_word_taint tn.t_mem (w2n x))
+    (mload (w2n x) s) (mload (w2n y) t)
+Proof
+  strip_tac >>
+  `0 < (32:num)` by simp[] >>
+  drule_all ld_read_access_cases >> strip_tac
+  >- (gvs[mem_word_taint_def] >> once_rewrite_tac[ADD_COMM] >> irule ld_memory_mload_low >> metis_tac[]) >>
+  gvs[mem_word_taint_def] >> rewrite_tac[ADD_ASSOC] >> irule ld_memory_mload_slot >> metis_tac[]
 QED
