@@ -471,3 +471,60 @@ Proof
   rpt strip_tac >>
   `not_fresh_at entry x` by fs[not_fresh_at_def] >> metis_tac[]
 QED
+
+Theorem if_selected_outcome_prefix:
+  gas_marked_exec F (ctx,func) (bind (eval_expr cx c) (read_result cx))
+    (es,s0) marks (INL (BoolV b)) mid (OK t) /\
+  gas_path ctx func t 0 (OK (jump_to label t)) /\
+  expr_post ctx func cenv cx c es sa cond s0 (mid with gas_obs := []) (BoolV b) op t /\
+  sa.cs_next_var <= entry.cs_next_var /\
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (ignore_bind push_scope (finally (eval_stmts cx (if b then ss1 else ss2)) pop_scope))
+    (mid with gas_obs := [],jump_to label t)
+    (stmt_post ctx func cx lctx cenv cenv entry sb (jump_to label t))
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) (eval_stmt cx (If c ss1 ss2)) (es,s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+Proof
+  strip_tac >>
+  `gas_marked_exec F (ctx,func) (bind (eval_expr cx c) (read_result cx))
+     (es,s0) marks (INL (BoolV b)) mid (OK (jump_to label t))` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def] >>
+     strip_tac >> simp[] >> drule_all gas_path_then >> simp[]) >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
+  >- suspend "normal"
+  >- suspend "exit"
+  >> suspend "cert"
+QED
+
+Resume if_selected_outcome_prefix[normal]:
+  gvs[] >> qexists_tac `marks ++ marks'` >> disj1_tac >>
+  qexistsl_tac [`res`, `es_end`, `OK t'`] >> conj_tac
+  >- (rewrite_tac[eval_stmt_if_forced] >>
+      irule gas_marked_exec_bind_normal >>
+      qexistsl_tac [`mid`, `jump_to label t`, `BoolV b`] >>
+      simp[] >> Cases_on `b` >> fs[]) >>
+  disj1_tac >> simp[] >> drule_all if_condition_stmt_post >> simp[]
+QED
+Resume if_selected_outcome_prefix[exit]:
+  qexists_tac `marks ++ marks'` >> disj1_tac >>
+  qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
+  rewrite_tac[eval_stmt_if_forced] >>
+  irule gas_marked_exec_bind_normal >>
+  qexistsl_tac [`mid`, `jump_to label t`, `BoolV b`] >>
+  simp[] >> Cases_on `b` >> fs[]
+QED
+Resume if_selected_outcome_prefix[cert]:
+  qexists_tac `marks ++ marks'` >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  rewrite_tac[eval_stmt_if_forced] >>
+  pure_once_rewrite_tac[ignore_bind_def] >>
+  pure_once_rewrite_tac[vyperStateTheory.bind_assoc] >>
+  irule gas_exempt_cert_bind_value >>
+  qexistsl_tac [`mid`, `jump_to label t`, `BoolV b`] >> simp[] >>
+  Cases_on `b` >> fs[GSYM ignore_bind_def]
+QED
+Finalise if_selected_outcome_prefix
