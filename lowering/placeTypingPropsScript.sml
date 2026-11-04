@@ -48,6 +48,21 @@ Proof
   simp[vtype_annotation_ok_def]
 QED
 
+(* A place has no internal call, so its lowered layout is its annotation. *)
+Theorem type_place_expr_lowered_value_type:
+  !e cenv env vt.
+    type_place_expr env e = SOME vt ==>
+    lowered_value_type cenv e = expr_type e
+Proof
+  ho_match_mp_tac expr_ind >> rpt conj_tac >> rpt strip_tac >>
+  qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
+  simp[Once well_typed_expr_def, lowered_value_type_def,
+       vyperASTTheory.expr_type_def] >>
+  TRY (rename1 `TopLevelName _ nsid` >> PairCases_on `nsid` >>
+       simp[Once well_typed_expr_def]) >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
 Theorem place_type_checked_place:
   !e cenv env vt.
     place_map_tables_agree cenv env /\
@@ -68,6 +83,8 @@ Proof
       Cases_on `cenv.ce_hashmap_info (p0,p1)` >>
       gvs[] >> PairCases_on `x` >> gvs[])
   >> `place_type cenv e = value_type_place vt'` by metis_tac[]
+  >> drule_then (qspec_then `cenv` assume_tac) type_place_expr_lowered_value_type
+  >> simp[lowered_value_type_def]
   >> Cases_on `vt'`
   >> gvs[value_type_place_def, subscript_vtype_def, AllCaseEqs()]
   >> Cases_on `t'`
@@ -141,6 +158,8 @@ Proof
       Cases_on `cenv.ce_hashmap_info (p0,p1)` >>
       gvs[] >> PairCases_on `x` >> gvs[])
   >> `place_type cenv e = value_type_place vt'` by metis_tac[]
+  >> drule_then (qspec_then `cenv` assume_tac) type_place_expr_lowered_value_type
+  >> simp[lowered_value_type_def]
   >> Cases_on `vt'`
   >> gvs[value_type_place_def, subscript_vtype_def, AllCaseEqs()]
   >> Cases_on `t'`
@@ -171,8 +190,8 @@ Proof
   simp[place_type_def]
 QED
 
-(* A well-typed expression's dispatch type is its own type, when the map
-   table agrees on the declared names and has no entry for a bare global
+(* A well-typed expression's dispatch type is its lowered layout, when the
+   map table agrees on the declared names and has no entry for a bare global
    (an immutable or a constant). *)
 Theorem place_type_well_typed_on_defined:
   !e cenv env.
@@ -180,11 +199,11 @@ Theorem place_type_well_typed_on_defined:
     (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
                cenv.ce_hashmap_info nsid = NONE) /\
     well_typed_expr env e ==>
-    place_type cenv e = ValPT (expr_type e)
+    place_type cenv e = ValPT (lowered_value_type cenv e)
 Proof
   ho_match_mp_tac expr_ind >> rpt conj_tac >> rpt strip_tac >>
   qpat_x_assum `well_typed_expr _ _` mp_tac >>
-  simp[Once well_typed_expr_def, place_type_def,
+  simp[Once well_typed_expr_def, place_type_def, lowered_value_type_def,
        vyperASTTheory.expr_type_def] >>
   rpt strip_tac >> gvs[]
   >~ [`TopLevelName`]
@@ -193,7 +212,10 @@ Proof
       >> first_x_assum drule >> simp[])
   >~ [`subscript_type_ok`] >- (res_tac >> simp[])
   >> drule_all place_type_checked_place_on_defined >> strip_tac >>
-  Cases_on `vt` >> gvs[value_type_place_def, subscript_vtype_def, AllCaseEqs()]
+  drule_then (qspec_then `cenv` assume_tac) type_place_expr_lowered_value_type >>
+  Cases_on `vt` >>
+  gvs[value_type_place_def, subscript_vtype_def, lowered_value_type_def,
+      AllCaseEqs()]
 QED
 
 (* Fail the build rather than silently export an admitted bridge. *)

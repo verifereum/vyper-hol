@@ -47,6 +47,100 @@ Libs
    Type helpers (is_signed_type, is_decimal_type, decimal_divisor,
    type_bits, type_bounds) in compileEnv. *)
 
+(* Helper: extract literal integer index from an expression.
+   Used for tuple/struct subscript where the index must be a compile-time constant. *)
+Definition literal_int_index_def:
+  literal_int_index (Literal _ (IntL n)) = Num (ABS n) ∧
+  literal_int_index _ = 0
+End
+
+(* Bytelike literals and ABI encoding results carry their produced bound,
+   independently of the annotated destination bound; an internal call's
+   value is its callee's return buffer, at the declared return type. A
+   subscript's element is laid out at the element type of its base's
+   layout, which differs from the annotation under a widened internal call
+   (a (DynArray[Bytes[32], 2], uint256) result annotated with Bytes[64]).
+   Mirrors Python: vv.typ (_lower_bytelike, _lower_internal_call, and
+   lower_Subscript's base_typ.value_type and tuple member types). A word
+   element stays at its annotation, which a well-typed program's widening
+   leaves equal to the element of the layout. *)
+Definition lowered_value_type_def:
+  lowered_value_type cenv (Literal (BaseT (StringT _)) (StringL s)) =
+    BaseT (StringT (LENGTH s)) ∧
+  lowered_value_type cenv (Literal (BaseT (BytesT (Dynamic _))) (BytesL bs)) =
+    BaseT (BytesT (Dynamic (LENGTH bs))) ∧
+  lowered_value_type cenv (TypeBuiltin _ (AbiEncode ensure method_id) _ args) =
+    (let enc_ty = if LENGTH args = 1 ∧ ¬ensure then expr_type (HD args)
+                  else TupleT (MAP expr_type args) in
+     BaseT (BytesT (Dynamic
+       (abi_size_bound cenv.ce_struct_fields enc_ty +
+        if IS_SOME method_id then 4 else 0)))) ∧
+  lowered_value_type cenv (Call _ (IntCall func_id) _ _) =
+    cenv.ce_func_return_type (nsid_to_string func_id) ∧
+  lowered_value_type cenv (Subscript ty base_e idx) =
+    (let bt = lowered_value_type cenv base_e in
+     if bt = expr_type base_e ∨ is_word_type ty then ty
+     else case bt of
+            ArrayT et _ => et
+          | TupleT ts =>
+              if literal_int_index idx < LENGTH ts
+              then EL (literal_int_index idx) ts else ty
+          | _ => ty) ∧
+  lowered_value_type cenv e = expr_type e
+End
+
+(* The type an operand's value is read at. An internal call's value, and an
+   element of one, is laid out at the callee's return type, which a widening
+   call site annotates with a wider type of another stride. A word or
+   bytestring reads the same at either type, so those stay at the
+   annotation, as does every other expression's value. *)
+Definition post_value_type_def:
+  post_value_type cenv e =
+    if is_word_type (expr_type e) ∨ is_bytestring_type (expr_type e)
+    then expr_type e
+    else case e of
+           Call _ (IntCall _) _ _ => lowered_value_type cenv e
+         | Subscript _ _ _ => lowered_value_type cenv e
+         | _ => expr_type e
+End
+
+Theorem post_value_type_word[simp]:
+  !cenv e. is_word_type (expr_type e) ==> post_value_type cenv e = expr_type e
+Proof
+  simp[post_value_type_def]
+QED
+
+Theorem post_value_type_bytestring[simp]:
+  !cenv e. is_bytestring_type (expr_type e) ==>
+           post_value_type cenv e = expr_type e
+Proof
+  simp[post_value_type_def]
+QED
+
+Theorem post_value_type_not_call_subscript[simp]:
+  !cenv e. (!ty fid args drv. e <> Call ty (IntCall fid) args drv) /\
+           (!ty base_e idx. e <> Subscript ty base_e idx) ==>
+           post_value_type cenv e = expr_type e
+Proof
+  rpt gen_tac >> Cases_on `e` >> simp[post_value_type_def] >>
+  rename1 `Call _ tgt _ _` >> Cases_on `tgt` >> simp[]
+QED
+
+Theorem post_value_type_int_call:
+  post_value_type cenv (Call ty (IntCall fid) args drv) =
+    if is_word_type ty \/ is_bytestring_type ty then ty
+    else cenv.ce_func_return_type (nsid_to_string fid)
+Proof
+  simp[post_value_type_def, lowered_value_type_def, expr_type_def]
+QED
+
+Theorem post_value_type_lowered:
+  lowered_value_type cenv e = expr_type e ==>
+  post_value_type cenv e = expr_type e
+Proof
+  rw[post_value_type_def] >> BasicProvers.every_case_tac >> gvs[]
+QED
+
 (* A map place retains the declaration's value-type tree, which is not
    representable by an expression type annotation. Locations remain attached
    to compiled values rather than to this purely structural descriptor. *)
@@ -67,14 +161,14 @@ Definition place_type_def:
   place_type cenv (Subscript ty base_e idx) =
     (case place_type cenv base_e of
        MapPT kt vt => value_type_place vt
-     | ValPT _ => ValPT ty) ∧
-  place_type cenv e = ValPT (expr_type e)
+     | ValPT _ => ValPT (lowered_value_type cenv (Subscript ty base_e idx))) ∧
+  place_type cenv e = ValPT (lowered_value_type cenv e)
 End
 
 Theorem place_type_name[simp]:
   place_type cenv (Name ty id) = ValPT ty
 Proof
-  simp[place_type_def, expr_type_def]
+  simp[place_type_def, lowered_value_type_def, expr_type_def]
 QED
 
 Theorem place_type_module_map:
@@ -93,7 +187,8 @@ QED
 
 Theorem place_type_subscript_value:
   place_type cenv base_e = ValPT bt ⇒
-  place_type cenv (Subscript ty base_e idx) = ValPT ty
+  place_type cenv (Subscript ty base_e idx) =
+  ValPT (lowered_value_type cenv (Subscript ty base_e idx))
 Proof
   simp[place_type_def]
 QED
@@ -126,10 +221,26 @@ Proof
   simp[place_type_def, value_type_place_def]
 QED
 
-(* Only the map table influences structural place resolution. Local-variable
-   allocation and local type updates cannot turn a local into a module map. *)
+(* A lowered layout depends only on the struct table and the callees'
+   return types. *)
+Theorem lowered_value_type_env_cong:
+  !cenv e cenv'.
+    cenv.ce_struct_fields = cenv'.ce_struct_fields /\
+    cenv.ce_func_return_type = cenv'.ce_func_return_type ==>
+    lowered_value_type cenv e = lowered_value_type cenv' e
+Proof
+  ho_match_mp_tac lowered_value_type_ind >>
+  rw[lowered_value_type_def] >>
+  first_x_assum (qspec_then `cenv'` mp_tac) >> gvs[] >> strip_tac >> gvs[]
+QED
+
+(* Only the map table and the lowered layouts influence structural place
+   resolution. Local-variable allocation and local type updates cannot turn
+   a local into a module map. *)
 Theorem place_type_env_cong:
-  !e cenv cenv'. cenv.ce_hashmap_info = cenv'.ce_hashmap_info ==>
+  !e cenv cenv'. cenv.ce_hashmap_info = cenv'.ce_hashmap_info /\
+    cenv.ce_struct_fields = cenv'.ce_struct_fields /\
+    cenv.ce_func_return_type = cenv'.ce_func_return_type ==>
     place_type cenv e = place_type cenv' e
 Proof
   (* `Induct` on `expr` fails on the pinned HOL (HOL-Theorem-Prover/HOL#2115),
@@ -137,7 +248,15 @@ Proof
      `base_assignment_target` part as `λ_. T`.  Revert with #2115's fix. *)
   ho_match_mp_tac
     (expr_induction |> Q.SPEC `P` |> Q.SPEC `λ_. T` |> SIMP_RULE (srw_ss()) []) >>
-  simp[place_type_def] >> metis_tac[]
+  rpt strip_tac >> simp[place_type_def] >>
+  metis_tac[lowered_value_type_env_cong]
+QED
+
+Theorem lowered_value_type_local_updates[simp]:
+  lowered_value_type (cenv with <| ce_vars := vars; ce_var_type := tys |>) e =
+  lowered_value_type cenv e
+Proof
+  irule lowered_value_type_env_cong >> simp[]
 QED
 
 Theorem place_type_local_updates[simp]:
@@ -154,25 +273,6 @@ Proof
   simp[place_type_def]
 QED
 
-(* Bytelike literals and ABI encoding results carry their produced bound,
-   independently of the annotated destination bound; an internal call's
-   value is its callee's return buffer, at the declared return type.
-   Mirrors Python: vv.typ (_lower_bytelike, _lower_internal_call). *)
-Definition lowered_value_type_def:
-  lowered_value_type cenv (Literal (BaseT (StringT _)) (StringL s)) =
-    BaseT (StringT (LENGTH s)) ∧
-  lowered_value_type cenv (Literal (BaseT (BytesT (Dynamic _))) (BytesL bs)) =
-    BaseT (BytesT (Dynamic (LENGTH bs))) ∧
-  lowered_value_type cenv (TypeBuiltin _ (AbiEncode ensure method_id) _ args) =
-    (let enc_ty = if LENGTH args = 1 ∧ ¬ensure then expr_type (HD args)
-                  else TupleT (MAP expr_type args) in
-     BaseT (BytesT (Dynamic
-       (abi_size_bound cenv.ce_struct_fields enc_ty +
-        if IS_SOME method_id then 4 else 0)))) ∧
-  lowered_value_type cenv (Call _ (IntCall func_id) _ _) =
-    cenv.ce_func_return_type (nsid_to_string func_id) ∧
-  lowered_value_type cenv e = expr_type e
-End
 
 (* The type Python's lowering gives an external-call argument (v.typ in
    _lower_external_call). A storage, transient or immutable variable is read
@@ -1397,13 +1497,6 @@ Definition compile_array_subscript_def:
        offset <- emit_op MUL [idx_op; Lit (n2w elem_size)];
        emit_op ADD [data_ptr; offset]
     od
-End
-
-(* Helper: extract literal integer index from an expression.
-   Used for tuple/struct subscript where the index must be a compile-time constant. *)
-Definition literal_int_index_def:
-  literal_int_index (Literal _ (IntL n)) = Num (ABS n) ∧
-  literal_int_index _ = 0
 End
 
 (* ===== Tuple Subscript ===== *)
@@ -2843,7 +2936,10 @@ Definition compile_expr_body_def:
    | TypeBuiltin _ tb tbt_ret_ty args =>
        compile_type_builtin_dispatch cenv ret_ty ty tb tbt_ret_ty args st
    | Subscript _ base_e idx_e =>
-       compile_subscript compile_expr cenv ret_ty ty base_e idx_e st
+       (* The element is tagged at its layout, as Python's lower_Subscript
+          tags it with the base's element type. *)
+       compile_subscript compile_expr cenv (lowered_value_type cenv e) ty
+         base_e idx_e st
    | Attribute _ base_e fld_name =>
        compile_attribute compile_expr cenv ret_ty ty base_e fld_name st
    | StructLit _ name fields =>
@@ -2924,7 +3020,8 @@ Definition compile_builtin_dispatch_body_def:
                 (* Variable array: lower to pointer, then delegate to helper *)
                 let (arr_vv, st2) = compile_expr cenv rhs_ty e2 st1 in
                 as_stack_val ret_ty
-                  (compile_var_array_membership cenv needle arr_vv rhs_ty is_in st2)
+                  (compile_var_array_membership cenv needle arr_vv
+                     (lowered_value_type cenv e2) is_in st2)
           else if is_bytestring_type op_ty ∧ (op = Eq ∨ op = NotEq) then
             (* lower_value handles ensure_in_memory for complex types *)
             let (m1, st1) = lower_value compile_expr cenv op_ty e1 st in
@@ -3213,9 +3310,11 @@ Definition compile_type_builtin_dispatch_body_def:
           if LENGTH args = 1 ∧ ¬ensure then
           let e1 = HD args in
           let src_ty = expr_type e1 in
-          let enc_ty = src_ty in
+          (* Encode from the argument's layout; the output bound stays at the
+             annotation (lowered_value_type), which a widening only enlarges. *)
+          let enc_ty = post_value_type cenv e1 in
           let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
-          let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in
+          let maxlen = abi_size_bound cenv.ce_struct_fields src_ty in
           if is_word_type src_ty then
             (* Prim word: stage to temp memory for encoder *)
             let (v, st1) = lower_value compile_expr cenv src_ty e1 st in
@@ -3230,10 +3329,11 @@ Definition compile_type_builtin_dispatch_body_def:
             as_ptr_val vv_ty LocMemory
               (lower_abi_encode ensure method_id_word src_op enc_info maxlen st2)
           else
-          let arg_tys = MAP expr_type args in
+          let arg_tys = MAP (post_value_type cenv) args in
           let enc_ty = TupleT arg_tys in
           let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
-          let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in
+          let maxlen = abi_size_bound cenv.ce_struct_fields
+                         (TupleT (MAP expr_type args)) in
           let (vs, st1) = compile_multi_exprs compile_expr cenv args st in
           let (tup_alloc, st2) =
                 compile_alloc_buffer (type_memory_bytes cenv enc_ty) st1 in

@@ -62,7 +62,163 @@ Ancestors
 Libs
   pairLib
 
+(* Internal calls return memory buffers, or stack values whose default
+   operand location is memory. *)
+Theorem compile_intcall_memory[local]:
+  compile_call cfn cenv ret_ty ty (IntCall fid) args drv sa = (vv,sb) ==>
+  vv_loc vv = LocMemory
+Proof
+  simp[compile_call_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  Cases_on `returns_count > 0` >> Cases_on `return_buf` >>
+  simp[] >> rpt (pairarg_tac >> gvs[]) >>
+  strip_tac >> gvs[vv_loc_def, vv_location_def, base_ptr_def]
+QED
+
+Theorem compile_subscript_location[local]:
+  compile_subscript cfn cenv ret_ty ty obj idx sa = (vv,sb) /\
+  cfn cenv ty obj sa = (bvv,s1) ==>
+  vv_loc vv = vv_loc bvv
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_subscript _ _ _ _ _ _ _ = _` mp_tac >>
+  Cases_on `place_type cenv obj`
+  >- (simp[compile_subscript_def, comp_bind_def, comp_return_def] >>
+      rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+      gvs[vv_loc_def, vv_location_def, mk_ptr_def]) >>
+  rename1 `place_type cenv obj = ValPT bty` >>
+  Cases_on `bty` >>
+  simp[compile_subscript_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  gvs[vv_loc_def, vv_location_def, mk_ptr_def]
+QED
+
 (* ===== Lists ===== *)
+
+Theorem compile_widened_memory[local]:
+  !obj cenv cx env es ty sa vv sb.
+    expr_body_pre cenv cx env obj es /\
+    post_value_type cenv obj <> expr_type obj /\
+    compile_expr cenv ty obj sa = (vv,sb) ==>
+    vv_loc vv = LocMemory
+Proof
+  measureInduct_on `expr_size obj` >> rpt strip_tac >>
+  Cases_on `?ann fid args drv. obj = Call ann (IntCall fid) args drv`
+  >- (gvs[] >>
+      qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+      simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def] >>
+      strip_tac >> drule compile_intcall_memory >> simp[]) >>
+  Cases_on `?ann base_e idx. obj = Subscript ann base_e idx`
+  >- (gvs[] >>
+      `well_typed_expr env (Subscript ann base_e idx)` by fs[expr_body_pre_def] >>
+      `post_value_type cenv base_e <> expr_type base_e` by
+        metis_tac[post_subscript_annotation, vyperASTTheory.expr_type_def] >>
+      `expr_body_pre cenv cx env base_e es` by
+        (gvs[expr_body_pre_def, Once well_typed_expr_def,
+             byte_widths_expr_def, allocLimitsTheory.alloc_limits_expr_def,
+             vyperTypeCallGraphTheory.int_calls_expr_def,
+             supportedExprTraverseTheory.expr_has_evm_run_thm,
+             vyperTypeCallStackSoundnessTheory.call_evaluation_safe_def]
+         >- (qexists_tac `edges` >> simp[]) >>
+         drule_then (qspec_then `cenv` assume_tac)
+           placeTypingPropsTheory.type_place_expr_lowered_value_type >>
+         metis_tac[post_value_type_lowered]) >>
+      Cases_on `compile_expr cenv ty base_e sa` >>
+      rename1 `compile_expr cenv ty base_e sa = (bvv,s1)` >>
+      `vv_loc bvv = LocMemory` by
+        (first_x_assum irule >> simp[] >> goal_assum (drule_at Any) >>
+         goal_assum (drule_at Any) >> simp[]) >>
+      `vv_loc vv = vv_loc bvv` suffices_by simp[] >>
+      qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
+      simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def] >>
+      strip_tac >> drule compile_subscript_location >> simp[]) >>
+  metis_tac[post_value_type_not_call_subscript]
+QED
+Theorem arg_type_fits_bytestring_source_local[local]:
+  !t u. is_bytestring_type u /\ arg_type_fits t u ==> is_bytestring_type t
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `u` >> gvs[is_bytestring_type_def] >>
+  rename1 `BaseT ub` >> Cases_on `ub` >> gvs[is_bytestring_type_def]
+  >~ [`is_bytestring_type (BaseT (BytesT bd))`]
+  >- (Cases_on `bd` >> gvs[is_bytestring_type_def] >>
+      Cases_on `t` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
+      rename1 `arg_type_fits (BaseT tb) _` >> Cases_on `tb` >>
+      gvs[arg_type_fits_def, is_bytestring_type_def] >>
+      rename1 `arg_type_fits (BaseT (BytesT bd)) _` >> Cases_on `bd` >>
+      gvs[arg_type_fits_def, is_bytestring_type_def]) >>
+  Cases_on `t` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  rename1 `arg_type_fits (BaseT tb) _` >> Cases_on `tb` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  rename1 `arg_type_fits (BaseT (BytesT bd)) _` >> Cases_on `bd` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def]
+QED
+
+Theorem bytestring_vv_holds_widen[local]:
+  type_widens_to (get_tenv cx) lt ann /\ is_bytestring_type ann /\
+  evaluate_type (get_tenv cx) lt = SOME ltv /\
+  evaluate_type (get_tenv cx) ann = SOME atv /\
+  (!v. read_result cx tv es = (INL v,es) ==>
+       value_has_type atv v) /\
+  vv_holds cenv cx lt tv (LocatedValue lt (mk_ptr dst LocMemory)) es q ==>
+  vv_holds cenv cx ann tv (LocatedValue lt (mk_ptr dst LocMemory)) es q
+Proof
+  strip_tac >>
+  `is_bytestring_type lt` by
+    metis_tac[type_widens_to_def,
+              arg_type_fits_bytestring_source_local] >>
+  gvs[vv_holds_def, mk_ptr_def] >>
+  simp[valueCopyBytesTheory.is_bytestring_word_type] >>
+  irule valueCopyBytesTheory.bytestring_val_in_memory_transfer >>
+  simp[] >> qexistsl [`lt`, `ann`, `get_tenv cx`, `ltv`] >> simp[]
+QED
+
+
+Theorem bytestring_widen_footprint[local]:
+  type_widens_to tenv lt ann /\ is_bytestring_type ann /\
+  evaluate_type tenv lt = SOME ltv /\
+  evaluate_type tenv ann = SOME atv /\ value_has_type atv v ==>
+  val_footprint ltv v = val_footprint atv v
+Proof
+  strip_tac >> Cases_on `lt = ann` >- gvs[] >>
+  gvs[type_widens_to_def] >>
+  Cases_on `ann` >> gvs[is_bytestring_type_def] >>
+  rename1 `BaseT ab` >> Cases_on `ab` >> gvs[is_bytestring_type_def]
+  >~ [`is_bytestring_type (BaseT (BytesT bd))`]
+  >- (Cases_on `bd` >> gvs[is_bytestring_type_def] >>
+      Cases_on `lt` >> gvs[type_widens_to_def, arg_type_fits_def] >>
+      rename1 `arg_type_fits (BaseT lb) _` >> Cases_on `lb` >>
+      gvs[arg_type_fits_def] >>
+      rename1 `arg_type_fits (BaseT (BytesT sbd)) _` >> Cases_on `sbd` >>
+      gvs[arg_type_fits_def, evaluate_type_def] >>
+      Cases_on `v` >> gvs[value_has_type_def, val_footprint_def]) >>
+  Cases_on `lt` >> gvs[type_widens_to_def, arg_type_fits_def] >>
+  rename1 `arg_type_fits (BaseT lb) _` >> Cases_on `lb` >>
+  gvs[arg_type_fits_def, evaluate_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def, val_footprint_def]
+QED
+
+Theorem bytestring_vv_at_widen[local]:
+  type_widens_to (get_tenv cx) lt ann /\ is_bytestring_type ann /\
+  evaluate_type (get_tenv cx) lt = SOME ltv /\
+  evaluate_type (get_tenv cx) ann = SOME atv /\
+  value_has_type atv v /\ read_result cx tv es = (INL v,es) /\
+  vv_at cenv cx lt sa sb es tv (LocatedValue pt (mk_ptr dst LocMemory)) q ==>
+  vv_at cenv cx ann sa sb es tv (LocatedValue pt (mk_ptr dst LocMemory)) q
+Proof
+  strip_tac >>
+  `is_bytestring_type lt` by
+    metis_tac[type_widens_to_def, arg_type_fits_bytestring_source_local] >>
+  `~dynarray_type lt /\ ~dynarray_type ann` by
+    (conj_tac >> Cases_on `lt` >> Cases_on `ann` >>
+     gvs[is_bytestring_type_def, dynarray_type_def]) >>
+  `val_footprint ltv v = val_footprint atv v` by
+    (irule bytestring_widen_footprint >> metis_tac[]) >>
+  `val_wf atv v` by
+    metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
+  gvs[vv_at_def, mk_ptr_def] >>
+  metis_tac[]
+QED
 
 Theorem opt_mmap_el[local]:
   !l l' k f.
@@ -112,6 +268,48 @@ Definition tuple_offset_def:
     SUM (TAKE k (MAP (elem_size_in_location cenv loc) tys))
 End
 
+(* Outside internal calls and subscripts, the lowered layout is the
+   annotation or a bytelike result's produced bound. *)
+Theorem lowered_value_type_not_call_subscript[local]:
+  !cenv e.
+    (!a f b c. e <> Call a (IntCall f) b c) /\ (!a b c. e <> Subscript a b c) ==>
+    lowered_value_type cenv e = expr_type e \/
+    is_bytestring_type (lowered_value_type cenv e)
+Proof
+  ho_match_mp_tac lowered_value_type_ind >>
+  rw[lowered_value_type_def, is_bytestring_type_def]
+QED
+
+(* A subscript of a base described at its annotation is laid out at its own
+   annotation. *)
+Theorem lowered_subscript_post_base[local]:
+  !cenv ann obj idx.
+    post_value_type cenv obj = expr_type obj /\
+    ~is_word_type (expr_type obj) /\ ~is_bytestring_type (expr_type obj) ==>
+    lowered_value_type cenv (Subscript ann obj idx) = ann
+Proof
+  rpt strip_tac >> simp[lowered_value_type_def] >>
+  Cases_on `(?a f b c. obj = Call a (IntCall f) b c) \/
+            (?a b c. obj = Subscript a b c)`
+  >- gvs[post_value_type_def] >>
+  `lowered_value_type cenv obj = expr_type obj \/
+   is_bytestring_type (lowered_value_type cenv obj)` by
+    (irule lowered_value_type_not_call_subscript >> metis_tac[]) >>
+  simp[] >> Cases_on `lowered_value_type cenv obj` >>
+  gvs[is_bytestring_type_def]
+QED
+
+(* Its post type too. *)
+Theorem post_subscript_post_base[local]:
+  !cenv ann obj idx.
+    post_value_type cenv obj = expr_type obj /\
+    ~is_word_type (expr_type obj) /\ ~is_bytestring_type (expr_type obj) ==>
+    post_value_type cenv (Subscript ann obj idx) = ann
+Proof
+  rpt strip_tac >> simp[post_value_type_def, vyperASTTheory.expr_type_def] >>
+  rw[] >> irule lowered_subscript_post_base >> simp[]
+QED
+
 Theorem compile_expr_tuple_subscript[local]:
   !cenv ty ann obj idx tys st vv st'.
     compile_expr cenv ty (Subscript ann obj idx) st = (vv, st') /\
@@ -121,7 +319,8 @@ Theorem compile_expr_tuple_subscript[local]:
       emit_op ADD [vv_operand bvv;
                    Lit (n2w (tuple_offset cenv tys (vv_loc bvv)
                                (literal_int_index idx)))] st1 = (p, st') /\
-      vv = LocatedValue ann (mk_ptr p (vv_loc bvv))
+      vv = LocatedValue (lowered_value_type cenv (Subscript ann obj idx))
+             (mk_ptr p (vv_loc bvv))
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
@@ -486,6 +685,92 @@ Proof
       supportedExprTraverseTheory.expr_has_evm_run_thm]
 QED
 
+Theorem widened_tuple_pre_base[local]:
+  !cenv cx env ann obj idx es tys.
+    expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+    post_value_type cenv obj = TupleT tys /\
+    post_value_type cenv obj <> expr_type obj ==>
+    expr_body_pre cenv cx env obj es /\
+    int_calls_expr (Subscript ann obj idx) = int_calls_expr obj /\
+    ?ats ity k. expr_type obj = TupleT ats /\
+      idx = Literal ity (IntL (&k)) /\ k < LENGTH ats /\ EL k ats = ann /\
+      type_widens_to env.type_defs (TupleT tys) (TupleT ats)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `expr_body_pre cenv cx env obj es` by
+    (gvs[expr_body_pre_def, Once well_typed_expr_def,
+         byte_widths_expr_def, allocLimitsTheory.alloc_limits_expr_def,
+         vyperTypeCallGraphTheory.int_calls_expr_def,
+         supportedExprTraverseTheory.expr_has_evm_run_thm,
+         vyperTypeCallStackSoundnessTheory.call_evaluation_safe_def]
+     >- (qexists_tac `edges` >> simp[]) >>
+     drule_then (qspec_then `cenv` assume_tac)
+       placeTypingPropsTheory.type_place_expr_lowered_value_type >>
+     metis_tac[post_value_type_lowered]) >>
+  `type_widens_to env.type_defs (TupleT tys) (expr_type obj)` by
+    (fs[expr_body_pre_def] >>
+     metis_tac[exprSimHypsTheory.post_value_type_widens]) >>
+  `?ats. expr_type obj = TupleT ats` by
+    (Cases_on `expr_type obj` >> gvs[type_widens_to_def, arg_type_fits_def]) >>
+  drule_all tuple_pre_base >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem tuple_arg_types_fit_el[local]:
+  !ts us. arg_types_fit ts us ==>
+    LENGTH ts = LENGTH us /\
+    !k. k < LENGTH us ==> arg_type_fits (EL k ts) (EL k us)
+Proof
+  Induct >- (Cases >> simp[arg_type_fits_def]) >>
+  gen_tac >> Cases >> simp[arg_type_fits_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[] >>
+  Cases >> simp[]
+QED
+
+Theorem widened_tuple_evaluations[local]:
+  !cenv cx env obj es tys ats k.
+    expr_body_pre cenv cx env obj es /\
+    post_value_type cenv obj = TupleT tys /\ expr_type obj = TupleT ats /\
+    k < LENGTH ats ==>
+    ?tvs atvs. evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
+      OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
+      evaluate_type (get_tenv cx) (TupleT ats) = SOME (TupleTV atvs) /\
+      OPT_MMAP (evaluate_type (get_tenv cx)) ats = SOME atvs /\
+      LENGTH tvs = LENGTH tys /\ LENGTH atvs = LENGTH ats /\
+      LENGTH tys = LENGTH ats /\ k < LENGTH tvs /\
+      evaluate_type (get_tenv cx) (EL k tys) = SOME (EL k tvs) /\
+      evaluate_type (get_tenv cx) (EL k ats) = SOME (EL k atvs) /\
+      type_widens_to (get_tenv cx) (EL k tys) (EL k ats)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule exprSimHypsTheory.expr_body_pre_post_type_evaluates >> strip_tac >>
+  drule expr_body_pre_type_evaluates >>
+  simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >> gvs[] >>
+  qpat_assum `evaluate_type _ (TupleT tys) = SOME _`
+    (strip_assume_tac o MATCH_MP evaluate_tuple_type) >>
+  qpat_assum `evaluate_type _ (TupleT ats) = SOME _`
+    (strip_assume_tac o MATCH_MP evaluate_tuple_type) >> gvs[] >>
+  rename1 `OPT_MMAP _ ats = SOME atvs` >>
+  rename1 `OPT_MMAP _ tys = SOME tvs` >>
+  `type_widens_to (get_tenv cx) (TupleT tys) (TupleT ats)` by
+    (`expr_sim_inv cenv cx env es /\ well_typed_expr env obj` by
+       fs[expr_body_pre_def] >>
+     drule_all exprSimHypsTheory.post_value_type_widens >>
+     gvs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
+         vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+  `LENGTH tys = LENGTH ats /\
+   (EL k tys = EL k ats \/ arg_type_fits (EL k tys) (EL k ats))` by
+    (gvs[type_widens_to_def, arg_type_fits_def] >>
+     metis_tac[tuple_arg_types_fit_el]) >>
+  `LENGTH tvs = LENGTH tys /\ LENGTH atvs = LENGTH ats` by
+    metis_tac[vyperTypeABITheory.OPT_MMAP_LENGTH] >>
+  `evaluate_type (get_tenv cx) (EL k tys) = SOME (EL k tvs) /\
+   evaluate_type (get_tenv cx) (EL k ats) = SOME (EL k atvs)` by
+    metis_tac[opt_mmap_el] >>
+  simp[] >>
+  simp[type_widens_to_def, well_formed_type_def, optionTheory.IS_SOME_EXISTS] >>
+  metis_tac[]
+QED
+
 Theorem eval_expr_tuple_subscript[local]:
   !cx ann obj ity k es.
     eval_expr cx (Subscript ann obj (Literal ity (IntL (&k)))) es =
@@ -596,7 +881,10 @@ Proof
    w2n w + SUM (TAKE k (MAP type_memory_size tvs))` by
     (irule field_ptr_w2n >>
      qexistsl [`type_memory_size (EL k tvs)`, `type_memory_size_list tvs`] >>
-     simp[] >> res_tac >> DECIDE_TAC) >>
+     simp[] >> res_tac >>
+     fs[wordsTheory.dimword_def] >>
+     CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >>
+     decide_tac) >>
   simp[] >> metis_tac[]
 QED
 
@@ -752,6 +1040,8 @@ Proof
   >- (simp[storage_read_live_def] >> rpt strip_tac >>
       qspec_then `w + n2w (tuple_prefix_slot_size k tvs)` mp_tac
         wordsTheory.w2n_lt >>
+      simp[wordsTheory.dimword_def] >>
+      CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >>
       decide_tac) >>
   qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
   rewrite_tac[storage_read_live_def] >> strip_tac >>
@@ -762,7 +1052,7 @@ Proof
   `w2n (w + n2w (tuple_prefix_slot_size k tvs)) =
    w2n w + tuple_prefix_slot_size k tvs` by
     (Cases_on `w` >> gvs[wordsTheory.word_add_n2w]) >>
-  simp[] >> strip_tac >>
+  fs[wordsTheory.dimword_def] >> strip_tac >>
   `w2n w <= j /\ j < w2n w + type_slot_size (TupleTV tvs)` by decide_tac >>
   `dead_bytes_list st (w2n w) tvs j b` by
     (qpat_x_assum `_ ==> dead_bytes _ _ _ _ _` mp_tac >>
@@ -772,6 +1062,17 @@ Proof
 QED
 
 (* The element's value_vv holds the element, from the base's. *)
+Theorem type_widens_from_word[local]:
+  !tenv t u. type_widens_to tenv t u /\ is_word_type t ==> t = u
+Proof
+  rw[type_widens_to_def] >>
+  Cases_on `t` >> Cases_on `u` >> gvs[arg_type_fits_def, is_word_type_def] >>
+  rename1 `arg_type_fits (BaseT b1) (BaseT b2)` >>
+  Cases_on `b1` >> Cases_on `b2` >> gvs[arg_type_fits_def, is_word_type_def] >>
+  rename1 `arg_type_fits (BaseT (BytesT d1)) (BaseT (BytesT d2))` >>
+  Cases_on `d1` >> Cases_on `d2` >> gvs[arg_type_fits_def, is_word_type_def]
+QED
+
 Theorem tuple_vv_holds_elem[local]:
   !func cenv cx env es sa sn es1 tv bvv q w dst tys tvs vs k tv' ctx.
     stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
@@ -824,6 +1125,47 @@ Proof
   simp[tuple_elem_slots_in_range, storage_read_live_tuple_elem]
 QED
 
+Theorem tuple_memory_vv_holds_elem[local]:
+  !func cenv cx env es sa sn es1 tv bvv q w dst tys tvs vs k tv' ctx ann atv.
+    stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
+    vv_holds cenv cx (TupleT tys) tv bvv es1 q /\
+    vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
+    vv_loc bvv = LocMemory /\
+    read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
+    LENGTH vs = LENGTH tvs /\
+    type_widens_to (get_tenv cx) (EL k tys) ann /\
+    evaluate_type (get_tenv cx) ann = SOME atv /\
+    value_has_type atv (EL k vs) /\
+    read_result cx tv' es1 = (INL (EL k vs), es1) /\
+    eval_operand (vv_operand bvv) q = SOME w /\
+    eval_operand dst q =
+      SOME (w + n2w (tuple_offset cenv tys (vv_loc bvv) k)) /\
+    OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
+    evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
+    k < LENGTH tvs ==>
+    vv_holds cenv cx (EL k tys) tv'
+      (LocatedValue (EL k tys) (mk_ptr dst LocMemory)) es1 q
+Proof
+  rpt gen_tac >> strip_tac >>
+  `evaluate_type (get_tenv cx) (EL k tys) = SOME (EL k tvs)` by
+    (drule opt_mmap_el >> disch_then (qspec_then `k` mp_tac) >>
+     impl_tac >- (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+     simp[]) >>
+  qspecl_then [`cenv`, `cx`, `TupleT tys`, `tv`, `bvv`, `es1`, `q`,
+               `TupleTV tvs`, `w`] mp_tac base_vv_holds_loc >>
+  impl_tac >- simp[is_word_type_def] >> strip_tac >> gvs[] >>
+  simp[vv_holds_def, mk_ptr_def] >>
+  drule_all tuple_elem_ptr >> strip_tac >> gvs[wordsTheory.WORD_ADD_0] >>
+  `val_in_memory (EL k tvs) (EL k vs)
+     (SUM (TAKE k (MAP type_memory_size tvs)) + w2n w) q.vs_memory` by
+    (once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+     irule tuple_in_memory_elem >> gvs[val_in_memory_def]) >>
+  gvs[wordsTheory.WORD_ADD_0] >> strip_tac >>
+  `EL k tys = ann` by metis_tac[type_widens_from_word] >>
+  `atv = EL k tvs` by metis_tac[optionTheory.SOME_11] >>
+  irule val_in_memory_word_type >> metis_tac[]
+QED
+
 (* The base's read, a tuple of the element types. *)
 Theorem tuple_base_read[local]:
   !func cenv cx obj es sa sb s0 es1 btv bvv s w tys tvs ctx.
@@ -849,6 +1191,30 @@ Proof
   metis_tac[values_have_types_length]
 QED
 
+Theorem widened_tuple_base_read[local]:
+  !func cenv cx obj es sa sb s0 es1 btv bvv s w tys tvs atvs k ctx.
+    vv_post ctx func cenv cx obj es sa sb s0 es1 btv bvv s /\
+    post_value_type cenv obj = TupleT tys /\
+    evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
+    eval_operand (vv_operand bvv) s = SOME w /\
+    LENGTH atvs = LENGTH tvs /\ k < LENGTH atvs /\
+    (!v. read_result cx btv es1 = (INL v, es1) ==>
+         value_has_type (TupleTV atvs) v) ==>
+    ?vs. read_result cx btv es1 = (INL (ArrayV (TupleV vs)), es1) /\
+         LENGTH vs = LENGTH tvs /\ value_has_type (EL k atvs) (EL k vs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?v. read_result cx btv es1 = (INL v, es1)` by
+    (gvs[vv_post_def] >>
+     `~is_word_type (TupleT tys)` by simp[is_word_type_def] >>
+     drule_all base_vv_holds_loc >> simp[is_word_type_def] >>
+     metis_tac[]) >>
+  `value_has_type (TupleTV atvs) v` by metis_tac[] >>
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >> gvs[value_has_type_def] >>
+  metis_tac[values_have_types_el]
+QED
+
 (* The element's value_vv after the ADD, from the base's. *)
 Theorem tuple_vv_post[local]:
   !func cenv cx env obj idx es sa sn s0 es1 tv bvv q w dst tys tvs vs k tv' ctx.
@@ -869,6 +1235,9 @@ Theorem tuple_vv_post[local]:
       (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q
 Proof
   rpt gen_tac >> strip_tac >>
+  `post_value_type cenv (Subscript (EL k tys) obj idx) = EL k tys` by
+    (irule post_subscript_post_base >>
+     simp[is_word_type_def, is_bytestring_type_def]) >>
   qpat_x_assum `vv_post _ _ _ _ obj _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   rewrite_tac[vv_post_def] >> gvs[vyperASTTheory.expr_type_def] >>
@@ -878,6 +1247,83 @@ Proof
                `bvv`, `q`, `w`, `dst`, `tys`, `tvs`, `vs`, `k`, `tv'`,
                `EL k tys`, `ctx`] mp_tac tuple_vv_at_elem >>
   imp_res_tac values_have_types_length >> simp[]
+QED
+
+Theorem type_widens_to_word_local[local]:
+  !tenv t u. type_widens_to tenv t u /\ is_word_type u ==> t = u
+Proof
+  rw[type_widens_to_def] >>
+  Cases_on `t` >> Cases_on `u` >> gvs[arg_type_fits_def, is_word_type_def] >>
+  rename1 `arg_type_fits (BaseT b1) (BaseT b2)` >>
+  Cases_on `b1` >> Cases_on `b2` >> gvs[arg_type_fits_def, is_word_type_def] >>
+  rename1 `arg_type_fits (BaseT (BytesT d1)) (BaseT (BytesT d2))` >>
+  Cases_on `d1` >> Cases_on `d2` >> gvs[arg_type_fits_def, is_word_type_def]
+QED
+
+Theorem widened_tuple_subscript_types[local]:
+  post_value_type cenv obj = TupleT tys /\
+  post_value_type cenv obj <> expr_type obj /\
+  literal_int_index idx = k /\ k < LENGTH tys /\
+  type_widens_to tenv (EL k tys) ann ==>
+  lowered_value_type cenv (Subscript ann obj idx) = EL k tys /\
+  post_value_type cenv (Subscript ann obj idx) =
+    if is_bytestring_type ann then ann else EL k tys
+Proof
+  strip_tac >>
+  `lowered_value_type cenv obj = TupleT tys` by
+    (Cases_on `is_word_type (expr_type obj) \/ is_bytestring_type (expr_type obj)`
+     >- gvs[post_value_type_def] >>
+     qpat_x_assum `post_value_type _ _ = _` mp_tac >>
+     simp[post_value_type_def] >> Cases_on `obj` >>
+     gvs[post_value_type_def, vyperASTTheory.expr_type_def] >>
+     rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
+     gvs[post_value_type_def, vyperASTTheory.expr_type_def]) >>
+  `is_word_type ann ==> EL k tys = ann` by
+    metis_tac[type_widens_to_word_local] >>
+  simp[lowered_value_type_def, post_value_type_def, vyperASTTheory.expr_type_def] >>
+  Cases_on `is_word_type ann` >> gvs[]
+QED
+
+Theorem widened_tuple_vv_post[local]:
+  !func cenv cx env obj idx ann es sa sn s0 es1 tv bvv q w dst
+     tys tvs vs k tv' atv ctx.
+    vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
+    post_value_type cenv obj = TupleT tys /\ vv_loc bvv = LocMemory /\
+    expr_sim_inv cenv cx env es /\
+    eval_operand (vv_operand bvv) q = SOME w /\
+    eval_operand dst q = SOME (w + n2w (tuple_offset cenv tys LocMemory k)) /\
+    OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
+    evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
+    evaluate_type (get_tenv cx) ann = SOME atv /\
+    type_widens_to (get_tenv cx) (EL k tys) ann /\
+    k < LENGTH tvs /\ LENGTH vs = LENGTH tvs /\
+    read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
+    read_result cx tv' es1 = (INL (EL k vs), es1) /\
+    value_has_type atv (EL k vs) /\
+    post_value_type cenv (Subscript ann obj idx) =
+      (if is_bytestring_type ann then ann else EL k tys) ==>
+    vv_post ctx func cenv cx (Subscript ann obj idx) es sa sn s0 es1 tv'
+      (LocatedValue (EL k tys) (mk_ptr dst LocMemory)) q
+Proof
+  rpt gen_tac >> strip_tac >>
+  `evaluate_type (get_tenv cx) (EL k tys) = SOME (EL k tvs)` by
+    (drule opt_mmap_el >> disch_then (qspec_then `k` mp_tac) >>
+     impl_tac >- (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >> simp[]) >>
+  qpat_x_assum `vv_post _ _ _ _ obj _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+  `vv_holds cenv cx (EL k tys) tv'
+     (LocatedValue (EL k tys) (mk_ptr dst LocMemory)) es1 q` by
+    (irule tuple_memory_vv_holds_elem >> simp[] >> metis_tac[]) >>
+  `vv_at cenv cx (EL k tys) sa sn es1 tv'
+     (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q` by
+    (irule tuple_vv_at_elem >> simp[] >> metis_tac[]) >>
+  gvs[] >> rewrite_tac[vv_post_def] >> simp[] >>
+  Cases_on `is_bytestring_type ann` >> simp[] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
+  >~ [`vv_holds _ _ ann _ _ _ _`]
+  >- (irule bytestring_vv_holds_widen >> simp[] >> metis_tac[]) >>
+  irule bytestring_vv_at_widen >> simp[] >>
+  qexistsl [`EL k tys`, `EL k tvs`] >> simp[]
 QED
 
 (* ===== The simulation ===== *)
@@ -963,7 +1409,11 @@ Proof
   `literal_int_index (Literal ity (IntL (&k))) = k` by
     simp[literal_int_index_def] >>
   simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
-  drule_all compile_expr_tuple_subscript >> strip_tac >> gvs[] >>
+  drule_all compile_expr_tuple_subscript >> strip_tac >>
+  `!a i. lowered_value_type cenv (Subscript a obj i) = a` by
+    (rpt gen_tac >> irule lowered_subscript_post_base >>
+     simp[is_word_type_def, is_bytestring_type_def]) >>
+  gvs[] >>
   rename1 `compile_expr cenv ty obj sa = (bvv, sm)` >>
   drule attr_extends >> strip_tac >>
   drule compile_expr_extends >> strip_tac >>
@@ -1005,3 +1455,86 @@ Proof
       qexistsl [`btv`, `vs`] >> simp[]) >>
   irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[]
 QED
+
+(* A tuple base described at its post type, which for a widened internal
+   call (or an element of one) is the callee's layout rather than the
+   annotation: compile_subscript offsets into the base at that layout's
+   member types (place_type), and the element is read there. *)
+Theorem compile_subscript_widened_tuple_sim:
+  !nocalls ctx func cenv cx ann obj idx tys.
+    expr_vv_case nocalls ctx func cenv cx obj /\
+    post_value_type cenv obj = TupleT tys /\
+    place_type cenv obj = ValPT (TupleT tys) ==>
+    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `post_value_type cenv obj = expr_type obj`
+  >- (irule compile_subscript_tuple_sim >> simp[] >> metis_tac[]) >>
+  simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
+  drule_all widened_tuple_pre_base >> strip_tac >> gvs[] >>
+  `~tuple_popped_clash cx obj (Literal ity (IntL (&k))) es` by
+    (drule_all tuple_popped_clash_unreachable >> simp[]) >>
+  `expr_vv_sim ctx func cenv cx ty obj es` by
+    (qpat_x_assum `expr_vv_case _ _ _ _ _ obj` mp_tac >>
+     simp[expr_vv_case_def] >> disch_then irule >> simp[] >>
+     qexists_tac `env` >> simp[]) >>
+  `literal_int_index (Literal ity (IntL (&k))) = k` by
+    simp[literal_int_index_def] >>
+  drule_all widened_tuple_evaluations >> strip_tac >>
+  rename1 `OPT_MMAP _ ats = SOME atvs` >>
+  rename1 `OPT_MMAP _ tys = SOME tvs` >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `lowered_value_type cenv (Subscript (EL k ats) obj (Literal ity (IntL (&k)))) = EL k tys /\
+   post_value_type cenv (Subscript (EL k ats) obj (Literal ity (IntL (&k)))) =
+     (if is_bytestring_type (EL k ats) then EL k ats else EL k tys)` by
+    (irule widened_tuple_subscript_types >> simp[] >> metis_tac[]) >>
+  simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
+  drule_all compile_expr_tuple_subscript >> strip_tac >> gvs[] >>
+  rename1 `compile_expr cenv ty obj sa = (bvv, sm)` >>
+  `post_value_type cenv obj <> expr_type obj` by simp[] >>
+  `vv_loc bvv = LocMemory` by
+    (drule_all compile_widened_memory >> simp[]) >>
+  suspend "execute"
+QED
+
+Resume compile_subscript_widened_tuple_sim[execute]:
+  drule attr_extends >> strip_tac >>
+  drule compile_expr_extends >> strip_tac >>
+  drule_all fn_has_code_split >> strip_tac >>
+  gvs[eval_expr_tuple_subscript, bind_def] >>
+  Cases_on `eval_expr cx obj es` >> rename1 `_ = (er, es1)` >>
+  `expr_vv_res_ok er` by (drule_all expr_body_pre_vv_res_ok >> simp[]) >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ obj _` mp_tac >>
+  simp[expr_vv_sim_def] >>
+  disch_then drule_all >> disch_then (qspec_then `s0` assume_tac) >>
+  Cases_on `er` >> gvs[]
+  >- (rename1 `eval_expr cx obj es = (INL btv, es1)` >>
+      drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[] >>
+      `~popped_at_elem btv k es1` by
+        (fs[tuple_popped_clash_def] >> metis_tac[]) >>
+      `!m. res <> INR (Error (TypeError m))` by
+        (rpt strip_tac >> gvs[expr_vv_res_ok_def]) >>
+      irule frag_exec_seq >>
+      qexistsl_tac [`\s. vv_post ctx func cenv cx obj es sa sm s0 es1 btv bvv s`,
+                    `sm`] >>
+      simp[] >> conj_tac
+      >- (irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[]) >>
+      qmatch_asmsub_abbrev_tac `emit_op ADD [_; Lit (n2w off)] sm = _` >>
+      drule_all attr_add_frag >>
+      disch_then (qspecl_then [`ctx`, `func`, `cx`, `es`, `s0`, `es1`, `btv`,
+                               `expr_exit res`] assume_tac) >>
+      irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+      rpt strip_tac >>
+      `LENGTH atvs = LENGTH tvs /\ k < LENGTH atvs` by simp[] >>
+      drule_all widened_tuple_base_read >> strip_tac >>
+      drule select_tuple_read >>
+      disch_then (drule_at (Pat `select_result _ _ _ _ _ = _`)) >>
+      simp[] >> strip_tac >> gvs[] >>
+      irule widened_tuple_vv_post >> simp[Abbr `off`] >> metis_tac[]) >>
+  irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Finalise compile_subscript_widened_tuple_sim
+
+
+

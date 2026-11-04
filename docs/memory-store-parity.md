@@ -32,7 +32,10 @@ Since this comparison, `p16_return_tuple_bytes_widen` from #542 and 11
 memory-construction fixtures from #560 have been added, bringing the retained
 parity suite to 41 fixtures; `method_id_lit` and `st_forward_ref_lit` (a struct
 field naming a later struct) make 43, and `p20_nested_pop` (pops from
-arrays nested in memory, storage and hashmap places) makes 44. The `p16` bytecode matches the oracle. The
+arrays nested in memory, storage and hashmap places) makes 44. `w01_return_intcall_dynarray_bytes_widen` (an internal call's result
+returned at a wider stride) makes 45, and
+`w03_log_intcall_dynarray_bytes_widen` (an internal call's result logged at a
+wider event field) makes 46. The `p16` bytecode matches the oracle. The
 `set_byte_bit_field_insert` rule is no longer needed: `word_of_bytes_T_0w_256` in
 `vyperMiscScript.sml` lets EVAL compute 256-bit words built from bytes.
 With the `raw_call` lowering of #554, `rc07_rof_false_tuple` matches the oracle

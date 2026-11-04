@@ -3943,15 +3943,20 @@ Theorem ci_mono_builtin_membership[local]:
      | _ =>
          (let (vv, st') = f cenv rhs_ty e st in
           as_stack_val ret_ty
-            (compile_var_array_membership cenv needle vv rhs_ty is_in st'))))
+            (compile_var_array_membership cenv needle vv arr_ty is_in st'))))
 Proof
-  strip_tac >> Cases_on `e` >> simp[LET_THM] >> rpt TOP_CASE_TAC >>
-  rpt (irule ci_mono_uncurry >> reverse conj_tac
-       >- simp[ci_mono_compile_multi_exprs]
-       >> rpt gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >>
+  strip_tac >>
+  `ci_mono st (SND ((λ(vv,st').
+      as_stack_val ret_ty (compile_var_array_membership cenv needle vv arr_ty is_in st'))
+      (f cenv rhs_ty e st)))`
+    by (irule ci_mono_uncurry >> simp[] >> rpt gen_tac >>
+        simp[ci_mono_as_stack_val, ci_mono_compile_var_array_membership]) >>
+  Cases_on `e` >> gvs[LET_THM] >>
+  rename1 `Builtin ann bi elems` >> Cases_on `bi` >> gvs[LET_THM] >>
+  irule ci_mono_uncurry >> simp[ci_mono_compile_multi_exprs] >> rpt gen_tac >>
+  IF_CASES_TAC >>
   simp[ci_mono_as_stack_val, ci_mono_compile_list_membership_in,
-       ci_mono_compile_list_membership_notin, ci_mono_compile_var_array_membership]
+       ci_mono_compile_list_membership_notin]
 QED
 
 Theorem ci_mono_builtin_bop[local]:

@@ -491,57 +491,6 @@ Proof
   qexists_tac `s.vs_memory` >> simp[]
 QED
 
-(* The type at which expr_post and vv_post describe e's value: the type its
-   lowered memory is laid out at.  An internal call's value is its callee's
-   return buffer, laid out at the callee's declared return type
-   (lowered_value_type), which a widening call site (a DynArray[Bytes[32], 2]
-   result used as DynArray[Bytes[64], 2]) annotates with a wider type of
-   another stride.  A word or bytestring value reads the same at either type,
-   so those stay at the annotation; every other expression's value is laid
-   out at its annotation. *)
-Definition post_value_type_def[simp]:
-  post_value_type cenv (Call ty (IntCall fid) args drv) =
-    (if is_word_type ty \/ is_bytestring_type ty then ty
-     else lowered_value_type cenv (Call ty (IntCall fid) args drv)) /\
-  post_value_type cenv e = expr_type e
-End
-
-Theorem post_value_type_word[simp]:
-  !cenv e. is_word_type (expr_type e) ==> post_value_type cenv e = expr_type e
-Proof
-  rpt gen_tac >> Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
-  >- gvs[post_value_type_def, vyperASTTheory.expr_type_def] >>
-  Cases_on `e` >> gvs[post_value_type_def] >>
-  rename1 `Call _ tgt _ _` >> Cases_on `tgt` >> gvs[post_value_type_def]
-QED
-
-Theorem post_value_type_bytestring[simp]:
-  !cenv e. is_bytestring_type (expr_type e) ==>
-           post_value_type cenv e = expr_type e
-Proof
-  rpt gen_tac >> Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
-  >- gvs[post_value_type_def, vyperASTTheory.expr_type_def] >>
-  Cases_on `e` >> gvs[post_value_type_def] >>
-  rename1 `Call _ tgt _ _` >> Cases_on `tgt` >> gvs[post_value_type_def]
-QED
-
-Theorem post_value_type_not_int_call[simp]:
-  !cenv e. (!ty fid args drv. e <> Call ty (IntCall fid) args drv) ==>
-           post_value_type cenv e = expr_type e
-Proof
-  rpt gen_tac >> Cases_on `e` >> simp[post_value_type_def] >>
-  rename1 `Call _ tgt _ _` >> Cases_on `tgt` >> simp[post_value_type_def]
-QED
-
-Theorem post_value_type_lowered:
-  !cenv e. lowered_value_type cenv e = expr_type e ==>
-           post_value_type cenv e = expr_type e
-Proof
-  rpt strip_tac >>
-  Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
-  >- gvs[post_value_type_def, vyperASTTheory.expr_type_def] >>
-  irule post_value_type_not_int_call >> metis_tac[]
-QED
 
 (* Where the fragment of e that started in s0, related at es, lowered from
    compile state sa to sb, ends when the source gives v and es': related at

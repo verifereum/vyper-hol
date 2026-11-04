@@ -180,6 +180,8 @@ Proof
   >- (Induct >> simp[compile_log_topic_ops_def] >>
       ci_mono_chain_tac ci_mono_stmt_rws)
   >- (gen_tac >> Induct >> simp[compile_log_store_data_def] >>
+      rpt strip_tac >> TRY (PairCases_on `h`) >>
+      simp[compile_log_store_data_def] >>
       ci_mono_chain_tac ci_mono_stmt_rws)
   >- (gen_tac >> gen_tac >> Induct >> simp[compile_tuple_load_all_def] >>
       ci_mono_chain_tac (ci_mono_context_helpers :: ci_mono_stmt_rws))

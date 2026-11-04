@@ -38,14 +38,16 @@ End
    evaluates all args before splitting. *)
 
 (* Evaluate all log arg expressions in AST order.
-   Returns list of (operand, type) pairs preserving AST order. *)
+   Returns (operand, annotated type, lowered type) triples preserving AST
+   order: the data is laid out at the annotation and copied from the layout
+   the argument was produced at (Python's arg_typ and arg_vv.typ). *)
 Definition compile_log_eval_all_def:
-  compile_log_eval_all cenv [] = return ([] : (operand # type) list) ∧
+  compile_log_eval_all cenv [] = return ([] : (operand # type # type) list) ∧
   compile_log_eval_all cenv (e::es) =
     (let arg_ty = expr_type e in
      do v <- lower_value compile_expr cenv arg_ty e;
         rest <- compile_log_eval_all cenv es;
-        return ((v, arg_ty) :: rest)
+        return ((v, arg_ty, lowered_value_type cenv e) :: rest)
      od)
 Termination
   WF_REL_TAC `measure (λ(cenv,es). LENGTH es)`
@@ -55,14 +57,14 @@ End
    indexed_flags: bool list parallel to evaluated ops. *)
 Definition split_log_ops_def:
   split_log_ops [] [] = ([] : (operand # bool) list,
-                          [] : (operand # type) list) ∧
-  split_log_ops ((op, ty) :: rest) (T :: flags) =
+                          [] : (operand # type # type) list) ∧
+  split_log_ops ((op, ty, src_ty) :: rest) (T :: flags) =
     (let (topics, data) = split_log_ops rest flags in
      let is_bs = is_bytestring_type ty in
      ((op, is_bs) :: topics, data)) ∧
-  split_log_ops ((op, ty) :: rest) (F :: flags) =
+  split_log_ops ((op, ty, src_ty) :: rest) (F :: flags) =
     (let (topics, data) = split_log_ops rest flags in
-     (topics, (op, ty) :: data)) ∧
+     (topics, (op, ty, src_ty) :: data)) ∧
   split_log_ops _ _ = ([], [])
 End
 
@@ -80,24 +82,18 @@ Termination
 End
 
 (* Store already-evaluated data operands to buffer.
-   Input: list of (operand, type) *)
+   Input: list of (operand, annotated type, lowered type).
+   Mirrors Python: store_memory(val, dst, typ, src_typ=src_typ) *)
 Definition compile_log_store_data_def:
   compile_log_store_data cenv [] buf_op offset = return () ∧
-  compile_log_store_data cenv (x :: rest) buf_op offset =
-    (let v = FST x in let arg_ty = SND x in
-     let mem_size = type_memory_bytes cenv arg_ty in
-     let is_prim = is_word_type arg_ty in
+  compile_log_store_data cenv ((v, arg_ty, src_ty) :: rest) buf_op offset =
+    (let mem_size = type_memory_bytes cenv arg_ty in
      do (* Python's tuple-data lowering keeps the explicit base-plus-offset
            operation even for offset zero; retain it for identical IR shape. *)
         dst <- emit_op ADD [buf_op; Lit (n2w offset)];
-        (if is_prim then emit_void MSTORE [dst; v]
-         else if is_bytestring_type arg_ty then
-           compile_store_bytestring v dst
-         else emit_void MCOPY [dst; v; Lit (n2w mem_size)]);
+        compile_store_memory cenv v dst arg_ty src_ty;
         compile_log_store_data cenv rest buf_op (offset + mem_size)
      od)
-Termination
-  WF_REL_TAC `measure (λ(cenv,ops,buf,off). LENGTH ops)`
 End
 
 (* Declared type and DynArray capacity of the target's root variable: a
@@ -979,7 +975,7 @@ Definition compile_stmt_def:
               emit_inst (LOG : opcode)
                 (Lit (n2w n_topics) :: REVERSE all_topics ++ [Lit 0w; Lit 0w]) []
             else
-              let data_types = MAP SND data_ops in
+              let data_types = MAP (FST o SND) data_ops in
               let data_tuple_t = TupleT data_types in
               let data_mem_size = SUM (MAP (type_memory_bytes cenv) data_types) in
               do data_buf_alloc <- compile_alloc_buffer (MAX 32 data_mem_size);
@@ -1248,7 +1244,13 @@ Definition compile_stmt_def:
      let loc = infer_array_location cenv arr_e in
      let slot_addr = is_slot_addressed loc in
      let ws = word_scale loc in
-     let elem_size = elem_size_in_location cenv loc fty in
+     (* The element stride is the array's own element type's, which differs
+        from the loop variable's when it widens (for x: Bytes[704] in arr
+        with arr: DynArray[Bytes[540], 10]).
+        Mirrors Python: array_typ.value_type.get_size_in(location) *)
+     let arr_elem_ty = (case lowered_value_type cenv arr_e of
+                          ArrayT et _ => et | _ => fty) in
+     let elem_size = elem_size_in_location cenv loc arr_elem_ty in
      let load_opc = load_opc_for loc in
      do arr_vv <- compile_expr cenv (expr_type arr_e) arr_e;
         arr_op <- return (vv_operand arr_vv);
@@ -1297,8 +1299,6 @@ Definition compile_stmt_def:
            arr: DynArray[Bytes[540], 10]).
            Mirrors Python: store_memory(elem_addr, dst, target_type,
                             src_typ=array_typ.value_type) *)
-        arr_elem_ty <- return (case expr_type arr_e of
-                                  ArrayT et _ => et | _ => fty);
         (case FLOOKUP body_cenv.ce_vars id of
            SOME (MemLoc off _) =>
              compile_iter_elem_copy cenv elem_ptr (Lit (n2w off)) elem_size

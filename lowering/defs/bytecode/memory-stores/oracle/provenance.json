@@ -84,6 +84,7 @@
     "tup_nested_ret.vy": "4cbbf533cd45ca654f1c14437230f174f6f1b08f4764857c27af9a5bc3c9574a",
     "tup_unpack_local.vy": "b4f517f8665fb595310d0cd0db9f906d4aef3e8db2a2a793796a377d0e68c1d0",
     "w01_return_intcall_dynarray_bytes_widen.vy": "cef1ee002d71721b2f46d33002e1352f8d3c55fdaa870a08edd409128412509b",
+    "w03_log_intcall_dynarray_bytes_widen.vy": "4ddd6a6d9cc955d00da1cc9e26eee0f17cf790c1215e489e9ba0940b3f494f44",
     "x08_return_storage_string.vy": "3866d43be59e076c7e84ef94c6ddb2e522eadfc024e6006fb483047ef644b340",
     "x09_ifexp_storage_string.vy": "87d70cf17720c6fe699dd3189dbf0fda5bee2ef7d0f19da02aad090386063808"
   },
@@ -177,6 +178,8 @@
     "tup_nested_ret.hex": "4d80d88d293b02eed5152cb1b10dbfc7b0e5cfb90b74f5fbac938a6e1742d529",
     "tup_nested_ret.json": "7cc7e02438b5adda01df5b95cdff3f084abcd18cd19def89dfae3a436fc80ef3",
     "w01_return_intcall_dynarray_bytes_widen.hex": "ac82c3c45d9c9e944cae6e7802235e27535149e7804f361602e789a75f43c025",
-    "w01_return_intcall_dynarray_bytes_widen.json": "27b7b59f058b0f8f82bcfd613a4bec911429fec3d6231be86f1b06d7a9a3df2a"
+    "w01_return_intcall_dynarray_bytes_widen.json": "27b7b59f058b0f8f82bcfd613a4bec911429fec3d6231be86f1b06d7a9a3df2a",
+    "w03_log_intcall_dynarray_bytes_widen.hex": "9693dd6dd134623efccb90adeb1486cc09eab18401c230c09100bccf2eacc04f",
+    "w03_log_intcall_dynarray_bytes_widen.json": "4d57768ef3dd52c70fdaa4c527f5ba4c3f367144741828a4ea0744e0afb17117"
   }
 }

@@ -152,11 +152,14 @@ Proof
   metis_tac[body_struct_lit_widened_call_elem]
 QED
 
-(* A subscript whose base value the lowering lays out differently from the
-   base's type: an internal call whose callee's return type the call's type
-   widens.  compile_subscript reads the base at offsets taken from the base's
-   type (place_type), so for a tuple base this reads the wrong field until the
-   subscript readers use the lowered layout. *)
+(* A subscript of a widened internal call (post_value_type of the base not
+   its annotation) whose element is itself widened: its value is laid out at
+   an element type of the callee's return type, of another stride than the
+   subscript's own type.  As for body_ifexp_widened_call_arm, describing
+   that value at its lowered type is the internal-call simulation's work
+   (body_intcall_case).  The pointer itself (expr_vv_sim) is
+   exprSimTuple's compile_subscript_widened_tuple_sim and exprSimPlaces'
+   compile_subscript_array_case. *)
 Theorem body_subscript_widened_call_base:
   !cx v8 e1 e2.
     (!s'' res t. eval_expr cx e1 s'' = (INL res,t) ==> body_expr_ok cx e2) /\
@@ -164,16 +167,19 @@ Theorem body_subscript_widened_call_base:
     !tops ctx func cenv env ty es.
       body_inv tops ctx cenv cx /\
       expr_body_pre cenv cx env (Subscript v8 e1 e2) es /\
-      post_value_type cenv e1 <> expr_type e1 ==>
-      expr_sim ctx func cenv cx ty (Subscript v8 e1 e2) es /\
-      expr_vv_sim ctx func cenv cx ty (Subscript v8 e1 e2) es
+      post_value_type cenv e1 <> expr_type e1 /\
+      post_value_type cenv (Subscript v8 e1 e2) <> v8 /\
+      expr_vv_sim ctx func cenv cx ty (Subscript v8 e1 e2) es ==>
+      expr_sim ctx func cenv cx ty (Subscript v8 e1 e2) es
 Proof
   cheat
 QED
 
 (* exprSimPlaces' compile_subscript_case, whose array and mapping cases are
-   cheated there for compile_expr_sim too; a widened internal-call base is
-   body_subscript_widened_call_base. *)
+   cheated there for compile_expr_sim too.  For a widened internal-call base
+   the pointer is compile_subscript_widened_tuple_sim's or
+   compile_subscript_array_case's, and the value expr_sim_case_of_vv's
+   unless the element is itself widened (body_subscript_widened_call_base). *)
 Theorem body_subscript_case:
   !cx v8 e1 e2.
     (!s'' res t. eval_expr cx e1 s'' = (INL res,t) ==> body_expr_ok cx e2) /\
@@ -182,13 +188,32 @@ Theorem body_subscript_case:
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
   reverse (Cases_on `post_value_type cenv e1 = expr_type e1`)
-  >- (rw[expr_sim_case_def, expr_vv_case_def] >>
+  >- (`expr_vv_case F ctx func cenv cx e1` by metis_tac[body_expr_ok_case] >>
+      drule_then assume_tac post_widened_place_type >>
+      `expr_vv_case F ctx func cenv cx (Subscript v8 e1 e2)` by
+        (simp[Once expr_vv_case_def] >> rpt strip_tac >>
+         `expr_sim_inv cenv cx env es /\
+          well_typed_expr env (Subscript v8 e1 e2)` by
+           gvs[expr_body_pre_def] >>
+         drule_all widened_subscript_base_shape >> strip_tac
+         >- (`expr_vv_case F ctx func cenv cx (Subscript v8 e1 e2)` by
+               (irule exprSimTupleTheory.compile_subscript_widened_tuple_sim >> gvs[]) >>
+             gvs[expr_vv_case_def] >> metis_tac[]) >>
+         `expr_vv_case F ctx func cenv cx (Subscript v8 e1 e2)` by
+           (irule exprSimPlacesTheory.compile_subscript_array_case >>
+            gvs[] >> metis_tac[body_expr_ok_case]) >>
+         gvs[expr_vv_case_def] >> metis_tac[]) >>
+      Cases_on `post_value_type cenv (Subscript v8 e1 e2) = v8`
+      >- (simp[] >> irule expr_sim_case_of_vv >> simp[vyperASTTheory.expr_type_def]) >>
+      simp[] >> rw[expr_sim_case_def] >> gvs[expr_vv_case_def] >>
       metis_tac[body_subscript_widened_call_base]) >>
   `expr_vv_case F ctx func cenv cx (Subscript v8 e1 e2)` by
     (irule exprSimPlacesTheory.compile_subscript_case >> rpt conj_tac
      >- metis_tac[body_expr_ok_case] >>
      rpt strip_tac >> metis_tac[body_expr_ok_case]) >>
-  simp[expr_sim_case_of_vv]
+  simp[] >> irule expr_sim_case_of_vv_typed >>
+  simp[vyperASTTheory.expr_type_def] >> rpt strip_tac >>
+  gvs[expr_body_pre_def] >> metis_tac[post_subscript_annotation]
 QED
 
 (* exprSimAttribute's compile_attribute_case. *)
