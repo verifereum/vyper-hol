@@ -6,7 +6,7 @@ Ancestors
   frameViewFacts instSimHelpers emitSim venomExecSemantics venomInst
   strongPrefixSim asmFrameHelpers planExec prefixExec stackOpAsmSim
   stackOpSim blockSimHelpers asmSem stackModel rich_list codegenRel planWf
-  reorderSim genBlockSim doSwapSim planAlign
+  reorderSim genBlockSim doSwapSim planAlign livenessAnalysisProps stackPlanOps
 
 Theorem resolve_block_assigns_cong:
   !insts at h.
@@ -1325,4 +1325,131 @@ Proof
   strip_tac >> gvs[] >> irule rf_inventory_inv_release >>
   irule rf_inventory_inv_vars_subset >> qexistsl_tac [`ps`, `s`] >>
   asm_rewrite_tac[] >> simp[stack_pop_def] >> metis_tac[MEM_TAKE]
+QED
+
+(* Future source ownership is protected by intra-block liveness. *)
+Theorem rf_live_use_liveness:
+  !fn bb k j x.
+    wf_function fn /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    rf_live_use bb k j (Var x) ==>
+    MEM x (live_vars_at (liveness_analyze fn) bb.bb_label k)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[rf_live_use_def, get_instruction_def] >>
+  `MEM (Var x) (EL r bb.bb_instructions).inst_operands` by
+    (qpat_x_assum `MEM _ (compute_operands _)` mp_tac >>
+     simp[compute_operands_def] >>
+     rpt (IF_CASES_TAC >> simp[asmIRTheory.get_non_label_operands_def, MEM_FILTER]) >>
+     metis_tac[MEM_TL]) >>
+  `MEM x (inst_uses (EL r bb.bb_instructions))` by
+    metis_tac[operand_var_in_inst_uses] >>
+  `MEM x (live_vars_at (liveness_analyze fn) bb.bb_label r)` by
+    (irule (SRULE [LET_THM] live_vars_at_uses) >>
+     simp[] >> qexists_tac `bb` >> simp[]) >>
+  irule (SRULE [LET_THM] live_vars_at_propagate_range) >>
+  simp[] >> qexists_tac `r` >> simp[inst_defs_def] >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+Theorem rf_copy_plan_result:
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  emit_input_plan RETURNDATACOPY (compute_operands inst) nl ps = (ins,ps1) /\
+  reorder_plan dfg (compute_operands inst) ps1 = (ros,ps2) ==>
+  generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl ps =
+    (ins ++ ros ++ [SOEmit "RETURNDATACOPY"],
+     release_dead_spills nl
+       (ps2 with ps_stack := stack_pop (LENGTH (compute_operands inst)) ps2.ps_stack))
+Proof
+  strip_tac >>
+  simp[generate_regular_inst_plan_def, venomEffectsTheory.is_commutative_def,
+    generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def]
+QED
+
+Theorem rf_copy_plan_inventory:
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  LENGTH (compute_operands inst) <= 16 /\
+  rf_inventory_inv fn ra lo entry ps s /\ s'.vs_vars = s.vs_vars /\
+  (!op. MEM op (compute_operands inst) ==>
+    operand_val (frame_view fn ra s) lo op =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)) /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
+    nl halting term lbl ps = (ops,ps') ==>
+  rf_inventory_inv fn ra lo entry ps' s'
+Proof
+  strip_tac >>
+  Cases_on `emit_input_plan RETURNDATACOPY (compute_operands inst) nl ps` >>
+  rename1 `_ = (ins,ps1)` >>
+  Cases_on `reorder_plan (dfg_build_function fn) (compute_operands inst) ps1` >>
+  rename1 `_ = (ros,ps2)` >>
+  `rf_inventory_inv fn ra lo entry ps2 s` by
+    (drule_at (Pat `reorder_plan _ _ _ = _`) rf_inventory_inv_preparation >>
+     simp[] >> disch_then irule >> asm_rewrite_tac[] >>
+     qexistsl_tac [`ins`, `nl`, `RETURNDATACOPY`, `ps`] >> simp[]) >>
+  drule_all rf_copy_plan_result >> strip_tac >> gvs[] >>
+  irule rf_inventory_inv_copy_pop >> metis_tac[]
+QED
+
+Theorem rf_emit_live_reserve:
+  !inputs opc nl ps iops ps1 x.
+    MEM x nl /\
+    (MEM (Var x) ps.ps_stack \/ Var x IN FDOM ps.ps_spilled) /\
+    emit_input_plan opc inputs nl ps = (iops,ps1) ==>
+    LIST_ELEM_COUNT (Var x) ps.ps_stack +
+      (if Var x IN FDOM ps.ps_spilled then 1 else 0) +
+      LIST_ELEM_COUNT (Var x) inputs <=
+    LIST_ELEM_COUNT (Var x) ps1.ps_stack +
+      (if Var x IN FDOM ps1.ps_spilled then 1 else 0)
+Proof
+  Induct >- simp[emit_input_plan_def, LIST_ELEM_COUNT_THM] >>
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+  Cases_on `emit_one_input opc (operand_vars inputs ++ nl) h ps` >>
+  rename1 `emit_one_input _ _ _ _ = (step_ops,ps_mid)` >>
+  Cases_on `emit_input_plan opc inputs nl ps_mid` >>
+  gnvs[emit_input_plan_cons] >>
+  qspecl_then [`opc`, `operand_vars inputs ++ nl`, `h`, `ps`, `Var x`]
+    mp_tac emit_one_input_inventory_mono_aux >> simp[] >> strip_tac >>
+  first_x_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
+  disch_then (qspec_then `x` mp_tac) >> asm_rewrite_tac[] >>
+  (impl_tac >-
+    (Cases_on `Var x IN FDOM ps.ps_spilled` >>
+     Cases_on `Var x IN FDOM ps_mid.ps_spilled` >>
+     gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac)) >> strip_tac >>
+  Cases_on `h = Var x`
+  >- (gvs[LIST_ELEM_COUNT_THM] >>
+      qspecl_then [`opc`, `operand_vars inputs ++ nl`, `Var x`, `ps`]
+        mp_tac emit_one_input_inventory_inc >> simp[] >>
+      Cases_on `Var x IN FDOM ps.ps_spilled` >>
+      Cases_on `Var x IN FDOM ps_mid.ps_spilled` >>
+      Cases_on `Var x IN FDOM ps1.ps_spilled` >> gvs[] >> decide_tac) >>
+  gvs[LIST_ELEM_COUNT_THM] >>
+  Cases_on `Var x IN FDOM ps.ps_spilled` >>
+  Cases_on `Var x IN FDOM ps_mid.ps_spilled` >>
+  Cases_on `Var x IN FDOM ps1.ps_spilled` >> gvs[] >> decide_tac
+QED
+
+Theorem rf_reduce_spill_free[local]:
+  !fuel pending op f n ps ops ps'.
+    reduce_depth_plan fuel pending op f n ps = (ops,ps') /\
+    (!off. ~MEM (SOSpill off) ops) ==> ps' = ps /\ ops = []
+Proof
+  Induct >> simp[Once reduce_depth_plan_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[] >>
+  rename1 `stack_get_unfixed_depth _ _ _ _ = SOME dist` >>
+  Cases_on `dist <= 16` >> simp[] >>
+  Cases_on `select_spill_candidate ps.ps_stack pending dist n` >> simp[] >>
+  rename1 `select_spill_candidate _ _ _ _ = SOME cand` >>
+  Cases_on `do_spill_at cand ps` >> rename1 `do_spill_at _ _ = (sops,ps_mid)` >>
+  Cases_on `reduce_depth_plan fuel pending op f n ps_mid` >>
+  simp[MEM_APPEND] >> strip_tac >>
+  qpat_x_assum `do_spill_at _ _ = _`
+    (mp_tac o PURE_REWRITE_RULE [do_spill_at_def, do_spill_tos_def]) >>
+  Cases_on `alloc_spill_slot ps.ps_alloc` >>
+  Cases_on `cand = 0` >> simp[] >> strip_tac >> gvs[] >>
+  metis_tac[]
 QED

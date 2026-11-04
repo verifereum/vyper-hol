@@ -130,7 +130,7 @@ Proof
   Cases_on `h` >> gvs[operand_var_def]
 QED
 
-Theorem operand_var_in_inst_uses[local]:
+Theorem operand_var_in_inst_uses:
   !inst v. MEM (Var v) inst.inst_operands ==>
            MEM v (inst_uses inst)
 Proof
