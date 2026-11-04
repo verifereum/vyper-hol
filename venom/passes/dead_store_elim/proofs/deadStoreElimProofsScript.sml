@@ -42,7 +42,7 @@
 
 Theory deadStoreElimProofs
 Ancestors
-  deadStoreElimEquiv deadStoreElimFrame deadStoreElimDefs passSimulationProps basePtrProps passSharedProps While
+  deadStoreElimSafety deadStoreElimEquiv deadStoreElimFrame deadStoreElimDefs passSimulationProps basePtrProps passSharedProps While
   venomMemProps venomMemProofs memAliasDefs passSharedField cfgAnalysisProps
   stateEquiv stateEquivProps venomState venomInst venomInstProps
   passSimulationDefs passSharedDefs execEquivParamDefs
@@ -61,15 +61,7 @@ val _ = augment_srw_ss [deadStoreElimFrameLib.frame_ss];
 (* ===== Single-pass correctness helpers ===== *)
 
 
-(* H1: get_instruction in transformed block *)
-Triviality get_instruction_block_map_transform:
-  !f bb idx.
-    get_instruction (block_map_transform f bb) idx =
-    case get_instruction bb idx of NONE => NONE | SOME i => SOME (f i)
-Proof
-  simp[get_instruction_def, block_map_transform_def] >>
-  rw[] >> simp[listTheory.EL_MAP]
-QED
+(* H1 is shared by deadStoreElimSafety. *)
 
 (* H2: block_map_transform preserves label *)
 Triviality block_map_transform_label:

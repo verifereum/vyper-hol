@@ -121,7 +121,7 @@ QED
 
 (* FILTER/TAKE helpers for index correspondence *)
 
-Triviality filter_take_el:
+Theorem filter_take_el:
   !l (P:'a -> bool) i. i < LENGTH l /\ P (EL i l) ==>
     EL (LENGTH (FILTER P (TAKE i l))) (FILTER P l) = EL i l
 Proof
@@ -142,7 +142,7 @@ Proof
   Induct >> simp[] >> rw[] >> Cases_on `i` >> gvs[]
 QED
 
-Triviality filter_take_lt:
+Theorem filter_take_lt:
   !l (P:'a -> bool) i. i < LENGTH l /\ P (EL i l) ==>
     LENGTH (FILTER P (TAKE i l)) < LENGTH (FILTER P l)
 Proof
