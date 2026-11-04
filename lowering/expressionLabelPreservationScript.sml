@@ -1816,7 +1816,21 @@ Resume label_preserving_builtin_bop[neq]:
   strip_tac >> gvs[] >> metis_tac[label_extends_trans]
 QED
 
-val MEMBERSHIP_VAR =
+Resume label_preserving_builtin_bop[membership]:
+  CALL_VALUE >> Cases_on `HD (TL args)` >>
+  simp_tac (srw_ss()) []
+  >~ [`Builtin bt bi es`] >- (Cases_on `bi` >>
+      simp_tac (srw_ss()) []
+      >~ [`compile_multi_exprs`] >- suspend "membership_list" >>
+      pairarg_tac >> asm_rewrite_tac[] >>
+      CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+      first_assum (drule_then strip_assume_tac) >>
+      qmatch_goalsub_abbrev_tac `as_stack_val ret_ty action` >>
+      Cases_on `action` >> gvs[markerTheory.Abbrev_def, as_stack_val_def] >>
+      qpat_x_assum `(_,_) = compile_var_array_membership _ _ _ _ _ _`
+        (assume_tac o SYM) >>
+      drule_all label_preserving_var_array_membership >> strip_tac >>
+      strip_tac >> gvs[] >> metis_tac[label_extends_trans]) >>
   pairarg_tac >> asm_rewrite_tac[] >>
   CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
   first_assum (drule_then strip_assume_tac) >>
@@ -1825,15 +1839,7 @@ val MEMBERSHIP_VAR =
   qpat_x_assum `(_,_) = compile_var_array_membership _ _ _ _ _ _`
     (assume_tac o SYM) >>
   drule_all label_preserving_var_array_membership >> strip_tac >>
-  strip_tac >> gvs[] >> metis_tac[label_extends_trans];
-
-Resume label_preserving_builtin_bop[membership]:
-  CALL_VALUE >> Cases_on `HD (TL args)` >>
-  simp_tac (srw_ss()) []
-  >~ [`Builtin bt bi es`] >- (Cases_on `bi` >>
-      simp_tac (srw_ss()) []
-      >~ [`compile_multi_exprs`] >- suspend "membership_list" >>
-      MEMBERSHIP_VAR) >> MEMBERSHIP_VAR
+  strip_tac >> gvs[] >> metis_tac[label_extends_trans]
 QED
 
 Resume label_preserving_builtin_bop[membership_list]:
@@ -1853,3 +1859,143 @@ Resume label_preserving_builtin_bop[membership_list]:
 QED
 
 Finalise label_preserving_builtin_bop
+
+Theorem label_preserving_builtin_abs[local]:
+  !s r t. compile_builtin_abs v s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[builtinSimpleTheory.compile_builtin_abs_def,
+    comp_ignore_bind_def] >> ntac 6 LABEL_BIND >>
+  metis_tac[label_preserving_select]
+QED
+
+Theorem label_preserving_addmod[local]:
+  !s r t. compile_addmod a b c s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinMathTheory.compile_addmod_def] >>
+  LABEL_IGNORE >> LABEL_LEAF
+QED
+
+Theorem label_preserving_mulmod[local]:
+  !s r t. compile_mulmod a b c s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinMathTheory.compile_mulmod_def] >>
+  LABEL_IGNORE >> LABEL_LEAF
+QED
+
+Theorem label_preserving_pow_mod256[local]:
+  !s r t. compile_pow_mod256 a b s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinMathTheory.compile_pow_mod256_def] >> LABEL_LEAF
+QED
+
+Theorem label_preserving_builtin_calldatasize[local]:
+  !s r t. compile_builtin_calldatasize s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinSimpleTheory.compile_builtin_calldatasize_def] >> LABEL_LEAF
+QED
+
+Theorem label_preserving_blockhash[local]:
+  !s r t. compile_blockhash v s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinMiscTheory.compile_blockhash_def,
+    comp_ignore_bind_def] >> rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_blobhash[local]:
+  !s r t. compile_blobhash v s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinMiscTheory.compile_blobhash_def] >> LABEL_LEAF
+QED
+
+Theorem label_preserving_floor[local]:
+  !s r t. compile_floor v divisor s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[builtinMiscTheory.compile_floor_def] >> ntac 2 LABEL_BIND >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_select] >> gen_tac >> LABEL_LEAF
+QED
+
+Theorem label_preserving_ceil[local]:
+  !s r t. compile_ceil v divisor s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[builtinMiscTheory.compile_ceil_def] >> ntac 2 LABEL_BIND >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_select] >> gen_tac >> LABEL_LEAF
+QED
+
+Theorem label_preserving_as_wei_value_int[local]:
+  !s r t. compile_as_wei_value_int v scale signed s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinMiscTheory.compile_as_wei_value_int_def,
+    comp_ignore_bind_def] >> IF_CASES_TAC >- LABEL_LEAF >>
+  ntac 5 LABEL_BIND >> ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (IF_CASES_TAC >- (rpt LABEL_BIND >> LABEL_LEAF) >> LABEL_LEAF) >>
+  gen_tac >> LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_as_wei_value_decimal[local]:
+  !s r t. compile_as_wei_value_decimal v scale divisor s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinMiscTheory.compile_as_wei_value_decimal_def,
+    comp_ignore_bind_def] >> ntac 3 LABEL_BIND >> IF_CASES_TAC
+  >- LABEL_LEAF >> LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_keccak256_word[local]:
+  !s r t. compile_keccak256_word v s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinHashingTheory.compile_keccak256_word_def,
+    comp_ignore_bind_def] >> rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_keccak256_bytes[local]:
+  !s r t. compile_keccak256_bytes v s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinHashingTheory.compile_keccak256_bytes_def] >>
+  rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_keccak256_bytesm[local]:
+  !s r t. compile_keccak256_bytesm v m s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinHashingTheory.compile_keccak256_bytesm_def,
+    comp_ignore_bind_def] >> rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_sha256_word[local]:
+  !s r t. compile_sha256_word v s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinHashingTheory.compile_sha256_word_def,
+    comp_ignore_bind_def] >> rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_sha256_bytes[local]:
+  !s r t. compile_sha256_bytes v s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinHashingTheory.compile_sha256_bytes_def,
+    comp_ignore_bind_def] >> rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_sha256_bytesm[local]:
+  !s r t. compile_sha256_bytesm v m s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinHashingTheory.compile_sha256_bytesm_def,
+    comp_ignore_bind_def] >> rpt LABEL_BIND >> LABEL_LEAF
+QED
