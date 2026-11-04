@@ -131,6 +131,7 @@ QED
 Theorem expr_post_ifexp:
   !func cenv cx t c a b e es es1 es' sa s1 sc sd sb s0 tt u cop aop
              rv v1 v lbl w k xl ctx.
+    post_value_type cenv e = expr_type e /\
     expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
     expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) es' v aop u /\
     expr_type e = t /\ eval_operand aop u = SOME w /\
@@ -143,7 +144,7 @@ Theorem expr_post_ifexp:
     expr_post ctx func cenv cx (IfExp t c a b) es sa sb s0 es' v (Var rv)
       (jump_to xl (update_var rv w u with vs_inst_idx := k))
 Proof
-  rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
+  rpt gen_tac >> simp[expr_post_def] >> strip_tac >> rfs[] >>
   qabbrev_tac `ss = jump_to xl (update_var rv w u with vs_inst_idx := k)` >>
   `ss.vs_memory = u.vs_memory /\ ss.vs_allocas = u.vs_allocas /\
    lookup_var rv ss = SOME w /\
@@ -165,10 +166,10 @@ Proof
      simp[lookup_var_def, FLOOKUP_UPDATE]) >>
   asm_rewrite_tac[] >> simp[vyperASTTheory.expr_type_def] >>
   conj_tac
-  >- (qpat_x_assum `expr_val_rel cx (expr_type e) v aop u` mp_tac >>
+  >- (qpat_x_assum `expr_val_rel cx _ v aop u` mp_tac >>
       simp[expr_val_rel_def, eval_operand_def] >> strip_tac >> gvs[]) >>
   conj_tac
-  >- (qpat_x_assum `expr_val_at cenv cx (expr_type e) sc sd es' v aop u` mp_tac >>
+  >- (qpat_x_assum `expr_val_at cenv cx _ sc sd es' v aop u` mp_tac >>
       simp[expr_val_at_def, eval_operand_def] >> rpt strip_tac >>
       first_x_assum drule_all >> strip_tac
       >- (disj1_tac >> qexists_tac `aid` >> first_assum (irule_at Any) >>
@@ -249,6 +250,7 @@ QED
    compile_expr makes of the variable. *)
 Theorem vv_post_of_expr_post:
   !func cenv cx e es sa sb s0 es' v rv s ctx.
+    post_value_type cenv e = expr_type e /\
     expr_post ctx func cenv cx e es sa sb s0 es' v (Var rv) s ==>
     vv_post ctx func cenv cx e es sa sb s0 es' (Value v)
       (if is_word_type (expr_type e) then StackValue (expr_type e) (Var rv)
@@ -310,6 +312,7 @@ QED
 Theorem ifexp_jnz_arm:
   !ctx func cenv cx t c a b e bv es es1 es' res sa sb s0 s1 s5 s6 x6 s7
    bs bm bn bo bx bp tl el xl bl lbl rv cond_op eop tt.
+    post_value_type cenv e = expr_type e /\
     frag_exec ctx bs bn (\s. s = jump_to bl tt)
       (\s. ?v u w. res = INL v /\
              expr_post ctx func cenv cx e es1 bs bm (jump_to bl tt) es' v eop u /\
@@ -414,6 +417,7 @@ QED
 Theorem ifexp_branch_sim:
   !ctx func cenv cx ty t c a b e bv es es1 es' res sa sb s0 s1 s5 s6 x6 s7
    bs bm bn bo bx bp tl el xl bl lbl rv cond_op eop.
+    post_value_type cenv e = expr_type e /\
     expr_type c = BaseT BoolT /\ expr_sim ctx func cenv cx (BaseT BoolT) c es /\
     expr_sim ctx func cenv cx ty e es1 /\
     (do result <- eval_expr cx c; read_result cx result od) es = (INL (BoolV bv), es1) /\
@@ -484,7 +488,10 @@ Proof
   rename1 `expr_post ctx func cenv cx c es sa s1 s0 es1 (BoolV bv) cond_op tt` >>
   `stmt_state_rel ctx func cenv cx es1 tt /\
    eval_operand cond_op tt = SOME (val_to_w256 (BoolV bv))` by
-    (fs[expr_post_def] >>
+    (`post_value_type cenv c = BaseT BoolT` by
+       (irule EQ_TRANS >> qexists_tac `expr_type c` >>
+        simp[post_value_type_word, is_word_type_def]) >>
+     fs[expr_post_def] >>
      qspecl_then [`cx`, `BaseT BoolT`, `BoolV bv`, `cond_op`, `tt`] mp_tac
        expr_val_rel_word >>
      simp[word_value_def, is_word_type_def, evaluate_type_def] >>
@@ -630,6 +637,8 @@ QED
 
 Theorem compile_ifexp_forced_frag[local]:
   !ctx func cenv cx ty t c a b es.
+    post_value_type cenv a = expr_type a /\
+    post_value_type cenv b = expr_type b /\
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
     (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
@@ -661,16 +670,17 @@ Proof
   drule_all compile_expr_ifexp_states >> strip_tac >>
   drule eval_expr_ifexp_cases >> strip_tac
   >- ((* the condition raises *)
+      qpat_x_assum `res = INR exc` SUBST_ALL_TAC >>
       `fn_has_code sa s1 func` by metis_tac[fn_has_code_split] >>
       qpat_x_assum `expr_sim _ _ _ _ (BaseT BoolT) c _`
         (mp_tac o REWRITE_RULE [expr_sim_def]) >>
       disch_then (qspecl_then [`sa`, `s1`, `cond_op`, `INR exc`, `es'`, `s0`]
                     mp_tac) >>
-      (impl_tac >- gvs[]) >>
+      (impl_tac >- simp[]) >>
       disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
       disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
-                               `\s. F`, `expr_exit res`] mp_tac) >>
-      (impl_tac >- gvs[]) >> strip_tac >>
+                               `\s. F`, `expr_exit (INR exc : value + exception)`] mp_tac) >>
+      (impl_tac >- simp[]) >> strip_tac >>
       irule frag_exec_exit_prefix >> qexists_tac `s1` >> simp[])
   >- (qpat_x_assum `!tv es1. (do result <- eval_expr cx c; read_result cx result od) es = _ ==> _` drule >>
       strip_tac >> Cases_on `bv` >> fs[]
@@ -688,7 +698,8 @@ Proof
       qpat_assum `new_block xl s14 = _` (irule_at Any) >>
       simp[] >> qpat_assum `emit_inst JNZ _ _ _ = _` (irule_at Any) >>
       qpat_assum `new_block tl s6 = _` (irule_at Any) >> simp[cs_extends_refl]) >>
-  gvs[expr_res_ok_def]
+  qpat_x_assum `expr_res_ok res` mp_tac >>
+  qpat_x_assum `res = _` (fn th => rewrite_tac[th, expr_res_ok_def]) >> simp[]
 QED
 
 Theorem compile_ifexp_vv_sim:

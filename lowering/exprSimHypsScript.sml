@@ -450,7 +450,7 @@ Proof
   >- (gvs[] >> rename1 `IntCall fid` >> PairCases_on `fid` >>
       gvs[expr_sim_inv_def, well_typed_expr_def, lowered_value_type_def,
           vyperASTTheory.expr_type_def] >>
-      rw[type_widens_to_def] >> res_tac >> gvs[]) >>
+      metis_tac[type_widens_to_def]) >>
   `post_value_type cenv e = expr_type e` by metis_tac[post_value_type_not_int_call] >>
   simp[type_widens_to_def]
 QED
@@ -1157,10 +1157,14 @@ QED
 Theorem expr_ok_of_vv:
   !cenv e. expr_vv_ok cenv e ==> expr_ok cenv e
 Proof
-  rw[expr_ok_def, expr_sim_ok_def] >> irule expr_sim_of_vv_sim >>
-  rpt strip_tac
-  >~ [`expr_vv_sim`] >- (fs[expr_vv_ok_def] >> metis_tac[]) >>
-  metis_tac[expr_body_pre_copy_ok, expr_sim_pre_body_pre]
+  rw[expr_ok_def, expr_sim_ok_def] >>
+  `expr_body_pre cenv cx env e es` by
+    metis_tac[expr_sim_pre_body_pre] >>
+  `post_value_type cenv e = expr_type e` by
+    (fs[expr_sim_pre_def] >> simp[post_value_type_no_calls]) >>
+  irule expr_sim_of_vv_sim >> simp[] >> conj_tac
+  >- (rpt strip_tac >> drule_all expr_body_pre_copy_ok >> simp[]) >>
+  fs[expr_vv_ok_def] >> metis_tac[]
 QED
 
 (* A form lowered to a StackValue, with only values as results: expr_ok
@@ -1226,6 +1230,7 @@ QED
 (* expr_ok_of_vv for one ctx, func and cx. *)
 Theorem expr_sim_case_of_vv:
   !nocalls ctx func cenv cx e.
+    post_value_type cenv e = expr_type e /\
     expr_vv_case nocalls ctx func cenv cx e ==>
     expr_sim_case nocalls ctx func cenv cx e
 Proof
