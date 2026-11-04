@@ -1546,6 +1546,174 @@ Proof
        GSYM mem_bytes_at_def]
 QED
 
+(* RETURNDATASIZE only binds a fresh, non-local variable. *)
+Theorem raw_call_size_state[local]:
+  emit_op RETURNDATASIZE [] sa = (v,sb) /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  stmt_state_rel ctx func cenv cx es t /\
+  t.vs_returndata = s.vs_returndata
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  gvs[run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+      exec_read0_def, bind_outputs_def] >>
+  irule stmt_state_rel_update_var >> simp[] >>
+  irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]
+QED
+
+Theorem raw_call_failure_prefix[local]:
+  emit_op RETURNDATASIZE [] sa = (rds,sb) /\
+  compile_alloc_buffer 0 sb = (buf,sc) /\
+  fresh_vars_wrt sa s /\ stmt_state_rel ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ fn_inst_ids_distinct func /\
+  MEM (mk_inst sb.cs_next_id ALLOCA [Lit 0w]
+    [STRING #"%" (toString sb.cs_next_var)]) (fn_insts func) ==>
+  ?t u addr. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    run_inst_seq (emitted_insts sb sc) t = OK u /\
+    eval_operand buf.buf_operand u = SOME addr /\
+    eval_operand rds u = SOME (n2w (LENGTH s.vs_returndata)) /\
+    u.vs_returndata = s.vs_returndata
+Proof
+  strip_tac >> drule_all raw_call_size_run >> strip_tac >>
+  drule_all raw_call_size_state >> strip_tac >>
+  `local_ptrs_reserved cenv sb` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[] >>
+     drule emitted_insts_emit_op >> simp[]) >>
+  drule literal_alloc_buffer_run >>
+  disch_then (drule_at (Pat `stmt_state_rel`)) >> simp[] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sb sc) t = OK u` >>
+  `not_fresh_at sb (STRING #"%" (toString sa.cs_next_var))` by
+    (drule emitted_insts_emit_op >> strip_tac >>
+     simp[not_fresh_at_def, ASCIInumbersTheory.toString_11]) >>
+  `eval_operand rds u = SOME (n2w (LENGTH s.vs_returndata))` by
+    (drule emitted_insts_emit_op >> strip_tac >>
+     gvs[eval_operand_def]) >>
+  `u.vs_returndata = t.vs_returndata` by
+    (drule loweringHaltTheory.compile_alloc_buffer_insts >> strip_tac >>
+     qpat_x_assum `run_inst_seq (emitted_insts sb sc) t = OK u` mp_tac >>
+     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
+          run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+          exec_alloca_def] >>
+     Cases_on `FLOOKUP t.vs_allocas sb.cs_next_id` >>
+     simp[AllCaseEqs()] >> rpt strip_tac >> gvs[update_var_def]) >>
+  qexistsl_tac [`u`,`w`] >> simp[]
+QED
+
+Theorem raw_call_failure_prefix_frag[local]:
+  emit_op RETURNDATASIZE [] sa = (rds,sb) /\
+  compile_alloc_buffer 0 sb = (buf,sc) /\ fn_has_code sa sc func /\
+  fresh_vars_wrt sa s /\ stmt_state_rel ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ fn_inst_ids_distinct func ==>
+  frag_exec ctx sa sc (\t. t = s)
+    (\u. ?addr. eval_operand buf.buf_operand u = SOME addr /\
+       eval_operand rds u = SOME (n2w (LENGTH s.vs_returndata)) /\
+       u.vs_returndata = s.vs_returndata) R
+Proof
+  strip_tac >>
+  `cs_appends (emit_op RETURNDATASIZE [])` by simp[cs_appends_emit_helpers] >>
+  `cs_extends sa sb /\ cs_extends sb sc` by
+    (fs[cs_appends_def] >> metis_tac[loweringHaltTheory.compile_alloc_buffer_extends]) >>
+  drule emit_op_extends >> strip_tac >>
+  drule loweringHaltTheory.compile_alloc_buffer_insts >> strip_tac >>
+  `emitted_insts sb sc =
+    [mk_inst sb.cs_next_id ALLOCA [Lit 0w] [STRING #"%" (toString sb.cs_next_var)]]` by
+    (pure_rewrite_tac[emitted_insts_def] >>
+     qpat_assum `sc.cs_current_insts = _` (fn th => pure_rewrite_tac[th]) >>
+     pure_rewrite_tac[rich_listTheory.DROP_LENGTH_APPEND] >> REFL_TAC) >>
+  `fn_has_code sb sc func` by
+    (irule fn_has_code_mid >> conj_tac >- simp[] >>
+     goal_assum (drule_at (Pat `fn_has_code`)) >> simp[cs_extends_refl]) >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  drule_all raw_call_failure_prefix >> strip_tac >>
+  `run_inst_seq (emitted_insts sa sc) s = OK u` by
+    (irule run_emitted_compose2 >> qexistsl_tac [`t`,`sb`] >> simp[] >>
+     imp_res_tac emit_op_extends >>
+     imp_res_tac loweringHaltTheory.compile_alloc_buffer_extends >>
+     simp[]) >>
+  irule frag_exec_run_inst_seq >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[] >> disj1_tac >>
+      qexists_tac `u` >> simp[] >> qexists_tac `addr` >>
+      gvs[eval_operand_def, lookup_var_def]) >>
+  qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+  simp[contextTheory.compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_var_def, fresh_id_def,
+       emit_def] >> rpt strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >>
+  pure_rewrite_tac [GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+  simp[mk_inst_def, is_terminator_def, rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Theorem raw_call_failure_tail_frag[local]:
+  emit_void RETURNDATACOPY [dst;Lit 0w;sz] sa = ((),sb) /\
+  emit_inst REVERT [dst;sz] [] sb = ((),sc) /\
+  eval_operand dst s = SOME addr /\
+  eval_operand sz s = SOME (n2w (LENGTH s.vs_returndata)) /\
+  LENGTH s.vs_returndata < dimword (:256) /\
+  (!t. t.vs_returndata = s.vs_returndata ==> R (Abort Revert_abort t)) ==>
+  frag_exec ctx sa sc (\t. t = s) Q R
+Proof
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `eval_operand sz s = SOME sizew` >>
+  qabbrev_tac `u = (write_memory_with_expansion (w2n addr) s.vs_returndata s)
+    with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  `step_inst_base (mk_inst sa.cs_next_id RETURNDATACOPY [dst;Lit 0w;sz] []) s =
+     OK (write_memory_with_expansion (w2n addr) s.vs_returndata s)` by
+    (irule raw_call_failure_copy >> simp[Abbr `sizew`]) >>
+  `frag_exec ctx sa sb (\t. t = s) (\t. t = u) R` by
+    (irule frag_exec_run_inst_seq >>
+     drule emit_void_extends >> strip_tac >>
+     drule emitted_insts_emit_void >> strip_tac >>
+     simp[same_blocks_def] >>
+     conj_tac
+     >- (rpt strip_tac >> gvs[] >> disj1_tac >>
+         simp[run_inst_seq_def, Abbr `u`]) >>
+     fs[mk_inst_def, is_terminator_def, rich_listTheory.IS_PREFIX_APPEND,
+        same_blocks_def]) >>
+  `frag_exec ctx sb sc (\t. t = u) Q R` by
+    (irule raw_call_revert_frag >> goal_assum (drule_at (Pat `emit_inst`)) >>
+     qexistsl_tac [`addr`,`sizew`] >>
+     `eval_operand dst u = SOME addr /\ eval_operand sz u = SOME sizew` by
+       (Cases_on `dst` >> Cases_on `sz` >>
+        gvs[Abbr `u`, eval_operand_def, lookup_var_def,
+            write_memory_with_expansion_def, LET_THM]) >>
+     simp[] >> first_x_assum irule >>
+     simp[Abbr `u`, revert_state_def, set_returndata_def,
+          hash_write_memory_read_self, Abbr `sizew`,
+          wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD]) >>
+  irule frag_exec_seq >> qexistsl_tac [`\t. t = u`,`sb`] >> simp[] >>
+  metis_tac[cs_appends_emit_helpers, cs_appends_def, loweringHaltTheory.emit_inst_metadata]
+QED
+
+Theorem raw_call_failure_frag[local]:
+  emit_op RETURNDATASIZE [] sa = (rds,sb) /\
+  compile_alloc_buffer 0 sb = (buf,sc) /\
+  emit_void RETURNDATACOPY [buf.buf_operand;Lit 0w;rds] sc = ((),sd) /\
+  emit_inst REVERT [buf.buf_operand;rds] [] sd = ((),se) /\
+  fn_has_code sa sc func /\ fresh_vars_wrt sa s /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  fn_inst_ids_distinct func /\ LENGTH s.vs_returndata < dimword (:256) /\
+  (!t. t.vs_returndata = s.vs_returndata ==> R (Abort Revert_abort t)) ==>
+  frag_exec ctx sa se (\t. t = s) Q R
+Proof
+  strip_tac >>
+  drule_all raw_call_failure_prefix_frag >>
+  disch_then (qspec_then `R` assume_tac) >>
+  irule frag_exec_seq_pointwise >>
+  goal_assum (drule_at (Pat `frag_exec`)) >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[] >> irule raw_call_failure_tail_frag >>
+      simp[] >> goal_assum (drule_at (Pat `emit_void`)) >>
+      qexists_tac `addr` >> simp[]) >>
+  `cs_appends (emit_op RETURNDATASIZE []) /\
+   cs_appends (emit_void RETURNDATACOPY [buf.buf_operand;Lit 0w;rds])` by
+    simp[cs_appends_emit_helpers] >>
+  fs[cs_appends_def] >>
+  metis_tac[loweringHaltTheory.compile_alloc_buffer_extends,
+            loweringHaltTheory.emit_inst_metadata, cs_extends_trans]
+QED
+
 (* TOP-LEVEL *)
 Theorem compile_raw_call_case:
   !nocalls ctx func cenv cx ann flags args dflt.
