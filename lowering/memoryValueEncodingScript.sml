@@ -228,3 +228,169 @@ Theorem memory_tuple_rel_val_in_memory:
 Proof
   simp[val_in_memory_def] >> metis_tac[memory_tuple_rel_tuple_in_memory]
 QED
+
+(* ===== Converse bridge ===== *)
+
+(* For a source-typed value the canonical relation also gives the complete
+   layout: typing fixes the value's shape to the type's, and val_in_memory
+   already lays out the defaults of a sparse fixed array's absent indices. *)
+
+Theorem default_array_memory_layout:
+  !tv bound.
+    (!offset mem. val_in_memory tv (default_value tv) offset mem ==>
+      memory_value_rel tv (default_value tv) offset mem) ==>
+    !offset mem.
+      val_in_memory (ArrayTV tv bound) (default_value (ArrayTV tv bound)) offset mem ==>
+      memory_value_rel (ArrayTV tv bound) (default_value (ArrayTV tv bound)) offset mem
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `bound` >>
+  simp[default_value_def, memory_value_rel_def, val_in_memory_def] >>
+  metis_tac[]
+QED
+
+Theorem default_memory_layout:
+  (!tv offset mem.
+    val_in_memory tv (default_value tv) offset mem ==>
+    memory_value_rel tv (default_value tv) offset mem) /\
+  (!tvs offset mem.
+    fields_in_memory (MAP (\(name,tv). (name,default_value tv)) tvs) tvs offset mem ==>
+    memory_fields_rel tvs (MAP (\(name,tv). (name,default_value tv)) tvs) offset mem) /\
+  (!p:string # type_value. !offset mem.
+    val_in_memory (SND p) (default_value (SND p)) offset mem ==>
+    memory_value_rel (SND p) (default_value (SND p)) offset mem) /\
+  (!tvs offset mem.
+    tuple_in_memory (MAP default_value tvs) tvs offset mem ==>
+    memory_tuple_rel tvs (MAP default_value tvs) offset mem)
+Proof
+  ho_match_mp_tac type_value_mutual_induction >>
+  simp[default_value_def, default_value_struct_MAP, default_value_tuple_MAP,
+       memory_value_rel_def, val_in_memory_def, default_array_memory_layout] >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  TRY (qmatch_asmsub_rename_tac `val_in_memory (SND entry) _ _ _` >>
+       PairCases_on `entry` >> fs[memory_value_rel_def, val_in_memory_def]) >>
+  metis_tac[]
+QED
+
+Definition memory_layout_bridge_def:
+  memory_layout_bridge tv <=>
+    !v offset mem. value_has_type tv v /\ val_in_memory tv v offset mem ==>
+      memory_value_rel tv v offset mem
+End
+
+Definition memory_fields_layout_bridge_def:
+  memory_fields_layout_bridge tvs <=>
+    !vs offset mem. struct_has_type tvs vs /\ fields_in_memory vs tvs offset mem ==>
+      memory_fields_rel tvs vs offset mem
+End
+
+Definition memory_tuple_layout_bridge_def:
+  memory_tuple_layout_bridge tvs <=>
+    !vs offset mem. values_have_types tvs vs /\ tuple_in_memory vs tvs offset mem ==>
+      memory_tuple_rel tvs vs offset mem
+End
+
+Theorem typed_fixed_memory_layout:
+  !tv bound sparse offset mem.
+    memory_layout_bridge tv /\
+    value_has_type (ArrayTV tv (Fixed bound)) (ArrayV (SArrayV sparse)) /\
+    val_in_memory (ArrayTV tv (Fixed bound)) (ArrayV (SArrayV sparse)) offset mem ==>
+    memory_value_rel (ArrayTV tv (Fixed bound)) (ArrayV (SArrayV sparse)) offset mem
+Proof
+  rpt gen_tac >> simp_tac bool_ss [value_has_type_def, memory_value_rel_def] >>
+  simp[val_in_memory_def, canonical_sparse_entries] >> strip_tac >>
+  qx_gen_tac `i` >> strip_tac >> Cases_on `ALOOKUP sparse i` >> simp[]
+  >- metis_tac[default_memory_layout] >>
+  drule ALOOKUP_MEM >> strip_tac >>
+  `value_has_type tv x` by (drule_all typed_sparse_entry >> simp[]) >>
+  fs[memory_layout_bridge_def]
+QED
+
+Theorem typed_dynamic_memory_layout:
+  !tv bound vs offset mem.
+    memory_layout_bridge tv /\
+    value_has_type (ArrayTV tv (Dynamic bound)) (ArrayV (DynArrayV vs)) /\
+    val_in_memory (ArrayTV tv (Dynamic bound)) (ArrayV (DynArrayV vs)) offset mem ==>
+    memory_value_rel (ArrayTV tv (Dynamic bound)) (ArrayV (DynArrayV vs)) offset mem
+Proof
+  rpt gen_tac >> simp_tac bool_ss [value_has_type_def, memory_value_rel_def] >>
+  simp[val_in_memory_def, canonical_elements_indexed] >> strip_tac >>
+  qx_gen_tac `i` >> strip_tac >>
+  `value_has_type tv (EL i vs)` by fs[all_have_type_EVERY, EVERY_EL] >>
+  fs[memory_layout_bridge_def]
+QED
+
+Theorem memory_layout_bridge_array:
+  !tv bound. memory_layout_bridge tv ==> memory_layout_bridge (ArrayTV tv bound)
+Proof
+  rpt gen_tac >> strip_tac >> simp_tac bool_ss [memory_layout_bridge_def] >>
+  Cases_on `bound` >> Cases_on `v` >> simp[value_has_type_def] >>
+  rename1 `value_has_type _ (ArrayV array_value)` >> Cases_on `array_value` >>
+  simp[value_has_type_def] >> rpt strip_tac >>
+  FIRST [irule typed_fixed_memory_layout, irule typed_dynamic_memory_layout] >>
+  simp[value_has_type_def]
+QED
+
+Theorem memory_layout_bridge_struct:
+  !tvs. memory_fields_layout_bridge tvs ==> memory_layout_bridge (StructTV tvs)
+Proof
+  simp_tac bool_ss [memory_layout_bridge_def, memory_fields_layout_bridge_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `v` >>
+  simp[value_has_type_def, memory_value_rel_def, val_in_memory_def]
+QED
+
+Theorem memory_layout_bridge_tuple:
+  !tvs. memory_tuple_layout_bridge tvs ==> memory_layout_bridge (TupleTV tvs)
+Proof
+  simp_tac bool_ss [memory_layout_bridge_def, memory_tuple_layout_bridge_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `v` >> simp[value_has_type_def] >>
+  rename1 `value_has_type _ (ArrayV array_value)` >> Cases_on `array_value` >>
+  simp[value_has_type_def, memory_value_rel_def, val_in_memory_def]
+QED
+
+Theorem memory_fields_layout_bridge_cons:
+  !name tv tvs.
+    memory_layout_bridge tv /\ memory_fields_layout_bridge tvs ==>
+    memory_fields_layout_bridge ((name,tv)::tvs)
+Proof
+  simp_tac bool_ss [memory_layout_bridge_def, memory_fields_layout_bridge_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `vs` >> simp[value_has_type_def] >>
+  rename1 `struct_has_type _ (entry::rest)` >> PairCases_on `entry` >>
+  simp[value_has_type_def, memory_value_rel_def, val_in_memory_def]
+QED
+
+Theorem memory_tuple_layout_bridge_cons:
+  !tv tvs.
+    memory_layout_bridge tv /\ memory_tuple_layout_bridge tvs ==>
+    memory_tuple_layout_bridge (tv::tvs)
+Proof
+  simp_tac bool_ss [memory_layout_bridge_def, memory_tuple_layout_bridge_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `vs` >>
+  simp[value_has_type_def, memory_value_rel_def, val_in_memory_def]
+QED
+
+Theorem memory_layout_bridges:
+  (!tv. memory_layout_bridge tv) /\
+  (!tvs. memory_fields_layout_bridge tvs) /\
+  (!p:string # type_value. memory_layout_bridge (SND p)) /\
+  (!tvs. memory_tuple_layout_bridge tvs)
+Proof
+  ho_match_mp_tac type_value_mutual_induction >>
+  simp[memory_layout_bridge_array, memory_layout_bridge_struct,
+       memory_layout_bridge_tuple, memory_fields_layout_bridge_cons,
+       memory_tuple_layout_bridge_cons] >>
+  rpt conj_tac >> rpt gen_tac
+  >- simp[memory_layout_bridge_def, memory_value_rel_def]
+  >- simp[memory_layout_bridge_def, memory_value_rel_def]
+  >- (simp_tac bool_ss [memory_layout_bridge_def] >> Cases_on `v` >>
+      simp[value_has_type_def, memory_value_rel_def, val_in_memory_def])
+  >- (simp_tac bool_ss [memory_fields_layout_bridge_def] >> Cases_on `vs` >>
+      simp[value_has_type_def, memory_value_rel_def])
+  >- (strip_tac >> qmatch_asmsub_rename_tac `memory_layout_bridge (SND entry)` >>
+      PairCases_on `entry` >> fs[memory_fields_layout_bridge_cons]) >>
+  simp_tac bool_ss [memory_tuple_layout_bridge_def] >> Cases_on `vs` >>
+  simp[value_has_type_def, memory_value_rel_def]
+QED
+
+(* Prerequisites: the canonical relation and source value typing. *)
+Theorem val_in_memory_memory_value_rel =
+  CONJUNCT1 memory_layout_bridges |> REWRITE_RULE [memory_layout_bridge_def];
