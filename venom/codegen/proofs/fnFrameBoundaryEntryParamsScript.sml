@@ -3,6 +3,7 @@ Ancestors
   frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel
   callLayoutDefs venomExecSemantics venomState venomInst list rich_list
   arithmetic words unitShapeDefs venomWf phiBlock cfgHelpers
+  livenessAnalysisProps cfgAnalysisProps
 
 (* Installing the symbolic parameter names emits no code. *)
 Theorem parameter_stack_fold:
@@ -669,3 +670,33 @@ QED
    every other frozen premise and rule out every assembly step-count with
    the required PC.  No theorem-level counterexample is asserted here.
 *)
+
+Theorem entry_ret_family_preorder_entry[local]:
+  MEM "entry" (cfg_analyze (entry_ret_family n)).cfg_dfs_pre
+Proof
+  `entry_block (entry_ret_family n) =
+    SOME (HD (entry_ret_family n).fn_blocks)` by
+    simp[entry_block_def, entry_ret_family_def] >>
+  drule cfg_analyze_preorder_entry_first >> strip_tac >>
+  `(HD (entry_ret_family n).fn_blocks).bb_label = "entry"` by
+    simp[entry_ret_family_def] >>
+  Cases_on `(cfg_analyze (entry_ret_family n)).cfg_dfs_pre` >> gvs[]
+QED
+
+Theorem entry_ret_family_all_live:
+  !n v. MEM v (MAP entry_probe_name (GENLIST I n) ++ ["retpc"]) ==>
+    MEM v (live_vars_at (liveness_analyze (entry_ret_family n)) "entry" (n+1))
+Proof
+  rpt strip_tac >>
+  qspec_then `entry_ret_family n` mp_tac
+    livenessAnalysisPropsTheory.live_vars_at_uses >>
+  simp_tac pure_ss [entry_ret_family_wf, LET_THM] >>
+  disch_then irule >>
+  simp_tac (srw_ss()) [entry_ret_family_preorder_entry] >>
+  qexists `HD (entry_ret_family n).fn_blocks` >>
+  simp[entry_ret_family_wf, entry_ret_family_preorder_entry,
+       entry_ret_family_def, lookup_block_def, FIND_thm,
+       entry_probe_params_def, EL_APPEND_EQN, inst_uses_def, mk_inst_def,
+       passSharedDefsTheory.MEM_operand_vars_eq_Var, MEM_MAP] >>
+  gvs[MEM_MAP]
+QED
