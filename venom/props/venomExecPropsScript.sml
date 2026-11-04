@@ -303,7 +303,9 @@ Theorem step_inst_base_term_succs:
     step_inst_base inst s = OK s' /\ ~s'.vs_halted ==>
     MEM s'.vs_current_bb (get_successors inst)
 Proof
-  ACCEPT_TAC venomExecProofsTheory.step_inst_base_term_succs
+  rpt strip_tac >>
+  irule venomExecProofsTheory.step_inst_base_term_succs >>
+  simp[] >> goal_assum drule
 QED
 
 Theorem exec_block_ok_nonempty:
@@ -323,7 +325,9 @@ Theorem exec_block_current_bb_in_succs:
     exec_block fuel ctx bb s = OK s1 ==>
     MEM s1.vs_current_bb (bb_succs bb)
 Proof
-  ACCEPT_TAC venomExecProofsTheory.exec_block_current_bb_in_succs
+  rpt strip_tac >>
+  irule venomExecProofsTheory.exec_block_current_bb_in_succs >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem step_inst_base_term_prev_bb:
