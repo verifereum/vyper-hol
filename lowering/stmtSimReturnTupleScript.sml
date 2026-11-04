@@ -19,21 +19,22 @@ Libs
    local_ptrs_reserved), so they do not overwrite it.  Typing is required
    of the value after read_result, including results read from places. *)
 Theorem compile_return_tuple_int_frag:
-  !ctx func cx lctx cenv e es res es' rpc rsz tys ret_tv.
-    eval_stmt cx (Return (SOME e)) es = (res, es') /\
+  !ctx func cx lctx cenv e es rpc rsz tys ret_tv.
     cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
     cenv.ce_returns_count = LENGTH tys /\ 1 < LENGTH tys /\
     cenv.ce_return_buf = NONE /\
     expr_type e = TupleT tys /\ EVERY is_word_type tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME ret_tv /\
-    (!v es1. (do raw <- eval_expr cx e; read_result cx raw od) es =
+    (!gs v es1. (do raw <- eval_expr cx e; read_result cx raw od)
+                 (es with gas_obs := gs) =
                (INL v, es1) ==> value_has_type ret_tv v) /\
     expr_sim ctx func cenv cx (TupleT tys) e es /\
     (!sa op sb. local_ptrs_reserved cenv sa /\
                 lower_value compile_expr cenv (TupleT tys) e sa = (op, sb) ==>
                 !x. op = Var x ==> not_fresh_at sb x) ==>
     stmt_frag ctx func cx lctx (intret_q func cenv cx ret_tv) cenv
-      (stmt_env cenv lctx (TupleT tys) (Return (SOME e))) es res es'
+      (stmt_env cenv lctx (TupleT tys) (Return (SOME e)))
+      (eval_stmt cx (Return (SOME e))) es
 Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
   strip_tac >> disj2_tac >>

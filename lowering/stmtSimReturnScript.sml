@@ -403,10 +403,8 @@ Theorem eval_operands_vars_inst_idx:
     eval_operands ops (s with <| vs_vars := v; vs_inst_idx := n |>) =
     eval_operands ops (s with vs_vars := v)
 Proof
-  rpt gen_tac >>
-  qspecl_then [`ops`, `s with vs_vars := v`, `n`] mp_tac
-    eval_operands_inst_idx >>
-  simp[]
+  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
+  Cases_on `h` >> simp[eval_operand_def, lookup_var_def]
 QED
 
 Theorem word_tuple_size:
