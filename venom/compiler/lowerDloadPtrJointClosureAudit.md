@@ -562,3 +562,37 @@ freshness witnesses are still needed to reconstruct the endpoint block/prefix
 fields if that route is used. Independent source/target reachability or an
 unindexed suffix is NOT enough to invoke the guard theorem. No theorem here
 claims reachable-constructor closure, nor does it discharge the frozen contract.
+
+## Checked actual terminal entry (C1.12.70.3.1)
+
+`dload_actual_copy_terminal_entry` in lowerDloadPtrTerminalScript.sml now
+builds, including its table-stack Resume and Finalise (build evidence
+TO_ld_ptr_v2-20261104T185312Z_m5704_t001 and
+TO_ld_ptr_v2-20261104T185312Z_m5706_t001). This is an entry result,
+not recursive terminal closure or proof of the frozen contract.
+
+The inline witness is exactly the theorem's existential `s',ss,tt,bb,tb,bs,bt,mid`.
+The suffix starts at the bumped indices, is nonempty ASSIGN*;REVERT, and
+retains the actual block transformation and every emitted-prefix length.
+The alternative is a target forwarding pair at `tt.vs_inst_idx-1` ending
+at `tt.vs_inst_idx+LENGTH mid-1`, or `LENGTH mid=1`. No source forwarding
+pair, all-U taint equality, or post-copy memory agreement is assumed.
+
+Premise-origin ledger:
+- Source success, real successor reachability, Defs(U), equal labels,
+  vars_match(V), and unchanged allocation fields: actual copy next consumer.
+- Target suffix: actual target exemption and active instruction; distinct
+  target labels identify the forwarding block. Immediate mode supplies the
+  one-element next-REVERT suffix.
+- Cover and normal control: covering block-supply slice origin supplies
+  source lookup, original operand membership, used-set coverage, identical
+  source slice, and all prefix equations.
+- Source active instruction: post-copy control correspondence.
+- Post-copy provenance domain support: frame_reachable_prov_supported
+  at the actual source successor, using EVERY(fn_ptr_ok P).
+- Live layout: normal boundary layout and unchanged frontiers.
+- Table stack: normal boundary tables and unchanged allocation maps and
+  frontiers; saved frames are unchanged. The table proof specializes the
+  original index equation before splitting zero/successor indices.
+
+Recursive ASSIGN closure and endpoint constructor exclusions remain open.
