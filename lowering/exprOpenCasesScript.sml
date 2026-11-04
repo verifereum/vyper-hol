@@ -12,6 +12,7 @@
 
 Theory exprOpenCases
 Ancestors
+  exprSimHypsDefs
   exprOpenCopies exprOpenPrimitives exprOpenTerminals exprOpenBuiltins
   supportedExprs supportedExprForms
   exprLowering exprSimHyps vyperTypeSystem compileEnv finite_map

@@ -42,6 +42,20 @@ Definition source_deployment_rel_def:
     layouts_agree tops am tx
 End
 
+Theorem source_deployment_context:
+  source_deployment_rel tops am tx ==>
+  get_tenv (initial_evaluation_context am.sources am.layouts tx NONE) =
+    type_env tops /\
+  get_module_code (initial_evaluation_context am.sources am.layouts tx NONE)
+    NONE = SOME tops
+Proof
+  simp[source_deployment_rel_def, initial_evaluation_context_def,
+       vyperContextTheory.get_tenv_def, vyperContextTheory.get_module_code_def,
+       vyperContextTheory.type_env_all_modules_def,
+       vyperContextTheory.type_env_def, finite_mapTheory.FUNION_FEMPTY_2] >>
+  rpt strip_tac >> simp[]
+QED
+
 Definition source_typing_ok_def:
   source_typing_ok tops am tx <=>
     ?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\

@@ -54,19 +54,18 @@ QED
  * reserved fixed region, and what it writes out or returns reads only
  * bytes in D (taint_within).  No DALLOCA follows from o1_source_unit_ok. *)
 Theorem run_venom_pipeline_correct:
-  !D lo rpolicy unit out vs.
+  !D rpolicy unit out vs_out.
     o1_pipeline rpolicy unit = SOME out /\
-    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
-    unit_fmp_unsealed unit /\ o1_run_state_ok vs /\
+    o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
+    unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
+    o1_run_state_ok vs_out /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
-    raw_unit_memory_ok unit.cu_context vs /\
-    EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
-    fixed_region_reserved lo unit.cu_context /\
-    ptr_discipline lo unit.cu_context vs /\
-    taint_within D unit.cu_context vs /\
-    mem_inv dload_offset_ok unit.cu_context vs /\ dead_wf D
+    dead_wf D
     ==>
-    ctx_sim D unit.cu_context out.po_unit.cu_context vs vs
+    ?vs_in. gas_variant vs_in vs_out /\
+      (raw_unit_memory_ok unit.cu_context vs_in ==>
+       ctx_sim D unit.cu_context out.po_unit.cu_context vs_in vs_out /\
+       o1_lowered_inv out.po_unit.cu_context vs_out)
 Proof
   rpt strip_tac >>
   `fmp_free_ctx unit.cu_context` by (irule source_fmp_free >> fs[]) >>
@@ -74,44 +73,45 @@ Proof
     (fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv,
         o1_source_unit_ok_no_dalloca] >> metis_tac[]) >>
   fs[o1_pipeline_def] >>
+  `!vi. raw_unit_memory_ok unit.cu_context vi ==>
+        o1_src_inv unit.cu_context vi` by
+    fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv] >>
   drule_all o1_pipeline_stage_facts >> strip_tac >> metis_tac[]
+QED
+
+Theorem o1_lowered_inv_fixed_pointer[local]:
+  o1_lowered_inv C vs ==>
+  ?eom. max_live_eom C = SOME eom /\
+        mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp)) C vs
+Proof
+  strip_tac >> fs[o1_lowered_inv_def] >>
+  fs[mem_inv_raw_reachable] >>
+  rpt strip_tac >> first_x_assum drule >>
+  drule raw_reachable_initial_fmp >> simp[lowered_mem_fact_def]
 QED
 
 (* The output's memory invariant: every access is static (below some
  * layout end) or dynamic (at or above the initial frame pointer). *)
 Theorem run_venom_pipeline_mem_inv:
-  !lo rpolicy unit out vs.
+  !rpolicy unit out vs_out.
     o1_pipeline rpolicy unit = SOME out /\
-    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
-    unit_fmp_unsealed unit /\ o1_run_state_ok vs /\
-    reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
-    raw_unit_memory_ok unit.cu_context vs /\
-    EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
-    fixed_region_reserved lo unit.cu_context /\
-    ptr_discipline lo unit.cu_context vs /\
-    mem_inv dload_offset_ok unit.cu_context vs
+    o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
+    unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
+    o1_run_state_ok vs_out /\
+    reserved_intervals_wf unit.cu_context.ctx_global_reserved
     ==>
-    ?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
-          mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp))
-            out.po_unit.cu_context vs
+    ?vs_in. gas_variant vs_in vs_out /\
+      (raw_unit_memory_ok unit.cu_context vs_in ==>
+       ?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+             mem_inv (lowered_mem_ok eom (w2n vs_out.vs_initial_fmp))
+               out.po_unit.cu_context vs_out)
 Proof
   rpt strip_tac >>
-  (* Any well-formed dead-byte set will do; take every byte, which bounds
-     any taint. *)
-  qabbrev_tac `D = <| d_stor := K (K UNIV); d_trans := K (K UNIV);
-                      d_imm := K UNIV; d_ret := K UNIV |>` >>
-  `dead_wf D /\ taint_within D unit.cu_context vs` by
-    simp[Abbr `D`, dead_wf_def, taint_within_def] >>
-  `fmp_free_ctx unit.cu_context` by (irule source_fmp_free >> fs[]) >>
-  `o1_src_inv D unit.cu_context vs` by
-    (fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv,
-        o1_source_unit_ok_no_dalloca] >> metis_tac[]) >>
-  fs[o1_pipeline_def] >>
-  drule_all o1_pipeline_stage_facts >> strip_tac >>
-  first_x_assum (qspecl_then [`D`, `vs`] mp_tac) >> simp[] >> strip_tac >>
-  fs[o1_lowered_inv_def, mem_inv_raw_reachable] >>
-  rpt strip_tac >> first_x_assum drule >>
-  drule raw_reachable_initial_fmp >> simp[lowered_mem_fact_def]
+  `dead_wf <| d_stor := K (K {}); d_trans := K (K {});
+              d_imm := K {}; d_ret := K {} |>` by simp[dead_wf_def] >>
+  drule_all run_venom_pipeline_correct >> strip_tac >>
+  qexists_tac `vs_in` >> simp[] >> strip_tac >>
+  irule o1_lowered_inv_fixed_pointer >> metis_tac[]
 QED
 
 (* ===== S5: output codegen memory obligations ===== *)

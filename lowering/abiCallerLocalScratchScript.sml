@@ -47,7 +47,8 @@ QED
 
 Theorem abi_caller_generated_local_scratch:
   alloca_inv s /\ fn_inst_ids_distinct func /\
-  local_ptrs_rel func ce scopes s /\ local_region ce scopes s name lo sz /\
+  local_ptrs_rel func ce scopes s /\ immutable_base_zero ce s /\
+  local_region ce scopes s name lo sz /\
   fresh_vars_wrt st s /\ FINITE ids /\ s.vs_alloca_next <= b + cap /\
   (!id off len. id IN ids /\ FLOOKUP s.vs_allocas id = SOME (off,len) ==>
     ?inst k. MEM inst (fn_insts func) /\ inst.inst_id = id /\

@@ -1,7 +1,7 @@
 Theory convertScalarSim
 Ancestors
   exprSimConvert exprSimUnop convertScalarTyping exprSimOps
-  exprSim exprSimHyps exprLowering compileEnv vyperAST freshWrites fragExec exprLoweringProps
+  exprSimDefs exprSimProps exprSimHyps exprLowering compileEnv vyperAST freshWrites fragExec exprLoweringProps
 
 Theorem scalar_convert_sim_to_vv:
   !ctx func cenv cx ty ann t e1 es.

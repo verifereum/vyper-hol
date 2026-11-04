@@ -1,6 +1,7 @@
 (* Body-side discharge for primitive storage Append. *)
 Theory bodyAppendStorageAdapter
 Ancestors
+  exprSimHypsDefs
   bodyAppendStorageFacts bodyExprPreFacts stmtSimAppendStorageCompose
   stmtSimAssignStorage bodySim exprSimHyps supportedStmts supportedStmtTraverse
   vyperStorageLayoutSafety vyperTypeSystem vyperTypeValues compileEnv

@@ -39,10 +39,6 @@ Inductive copy_phi_var:
     copy_phi_var origin fn y ==> copy_phi_var origin fn x)
 End
 
-Definition gas_var_def:
-  gas_var fn x <=> copy_phi_var GAS fn x
-End
-
 Definition retpc_var_def:
   retpc_var fn x <=> copy_phi_var RETPC_PARAM fn x
 End
@@ -65,13 +61,6 @@ QED
 
 (* ===== Opaque uses and label positions ===== *)
 
-Definition gas_use_ok_def:
-  gas_use_ok inst x <=>
-    inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PHI \/
-    ((inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
-     ?rest. inst.inst_operands = Var x :: rest /\ ~MEM (Var x) rest)
-End
-
 Definition retpc_use_ok_def:
   retpc_use_ok inst x <=>
     inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PHI \/
@@ -82,16 +71,8 @@ End
 Definition opaque_use_ok_def:
   opaque_use_ok fn <=>
     !inst x. MEM inst (fn_insts fn) /\ MEM (Var x) inst.inst_operands ==>
-      (gas_var fn x ==> gas_use_ok inst x) /\
       (retpc_var fn x ==> retpc_use_ok inst x)
 End
-
-Theorem opaque_use_ok_gas_use:
-  opaque_use_ok fn /\ gas_var fn x /\ MEM inst (fn_insts fn) /\
-  MEM (Var x) inst.inst_operands ==> gas_use_ok inst x
-Proof
-  metis_tac[opaque_use_ok_def]
-QED
 
 Theorem opaque_use_ok_retpc_use:
   opaque_use_ok fn /\ retpc_var fn x /\ MEM inst (fn_insts fn) /\

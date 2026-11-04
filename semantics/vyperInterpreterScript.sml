@@ -1964,6 +1964,13 @@ End
 
 val () = cv_auto_trans abstract_machine_from_state_def;
 
+Theorem abstract_machine_from_state_gas_obs:
+  abstract_machine_from_state srcs exps layouts (st with gas_obs := readings) =
+  abstract_machine_from_state srcs exps layouts st
+Proof
+  simp[abstract_machine_from_state_def]
+QED
+
 (* Top-level entry-points into the semantics: loading (deploying) a contract,
 * and calling its external functions *)
 

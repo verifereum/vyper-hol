@@ -34,9 +34,14 @@
 
 Theory exprSimConvert
 Ancestors
-  allocLimits exprSimUnop
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs exprSimStack
+  loweringPosts
+  allocLimits
+  exprSimUnop
   arithmetic list integer words integer_word
-  fragExec varsExt exprSim freshWrites exprSimOps exprSimArith
+  fragExec varsExt freshWrites exprSimOps exprSimArith
   exprBopLowering loweringSlice
   exprLowering emitHelper emitHelperProps exprLoweringProps arithmeticProps
   compileEnv vyperAST vyperInterpreter vyperState vyperContext vyperValue
@@ -122,6 +127,19 @@ Proof
        convert_result_def, evaluate_type_builtin_def] >>
   Cases_on `evaluate_convert_from (get_tenv cx) (expr_type e1) v1 t` >>
   simp[read_result_def, return_def, raise_def] >> rw[] >> gvs[]
+QED
+
+Theorem eval_expr_convert_of_child:
+  !cx ann ty e es v ee.
+    bind (eval_expr cx e) (read_result cx) es = (INL v, ee) ==>
+    bind (eval_expr cx (TypeBuiltin ann Convert ty [e])) (read_result cx) es =
+      (convert_result cx (expr_type e) ty v, ee)
+Proof
+  rpt strip_tac >>
+  Cases_on `bind (eval_expr cx (TypeBuiltin ann Convert ty [e]))
+                 (read_result cx) es` >>
+  drule (SRULE [SF ETA_ss] eval_expr_convert_cases) >>
+  strip_tac >> gvs[]
 QED
 
 (* ===== The conversion's fragment ===== *)
@@ -728,8 +746,10 @@ Proof
      well_typed_type_builtin_args_def] >>
   Cases_on `args` >> gvs[] >> rename1 `h::tl` >> Cases_on `tl` >>
   gvs[well_typed_expr_def, int_calls_expr_def,
-      supportedExprTraverseTheory.expr_has_evm_run_thm, byte_widths_expr_def,
-      alloc_limits_expr_def] >>
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.supported_expr_exists_def,
+      supportedExprTraverseTheory.supported_exprs_exists_every,
+      byte_widths_expr_def, alloc_limits_expr_def] >>
   metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
             listTheory.APPEND_ASSOC]
 QED

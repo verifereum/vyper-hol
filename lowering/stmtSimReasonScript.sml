@@ -23,8 +23,12 @@
 
 Theory stmtSimReason
 Ancestors
+  stmtSimProps
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimIf loweringHalt
+  fragExec localPtrsProps  loweringSlice  stmtSimIf loweringHalt
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperExprNoControl
@@ -74,6 +78,7 @@ Proof
   simp[run_inst_seq_def, step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def,
        exec_pure2_def, exec_write2_def, eval_operand_def, bind_outputs_def,
        lookup_var_update_var] >>
+  simp[run_inst_seq_def] >>
   rpt strip_tac >> simp[lookup_var_mstore, lookup_var_update_var] >>
   gvs[not_fresh_at_def]
 QED

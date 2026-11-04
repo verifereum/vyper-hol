@@ -18,8 +18,11 @@
 
 Theory stmtSimAssignTupleMem
 Ancestors
+  stmtSimProps
+  stmtSimDefs
+  loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclMem
+  fragExec localPtrsProps  loweringSlice  stmtSimDeclMem
   stmtSimAssignStore stmtSimAssign stmtSimAssignMem stmtSimAssignTuple
   stmtSimReturn exprOperandVar freshWrites tupleAssignMemory valueCopyBytes
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps

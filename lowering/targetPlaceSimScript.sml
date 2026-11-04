@@ -48,8 +48,11 @@
 
 Theory targetPlaceSim
 Ancestors
+  targetPlaceSimDefs
+  exprSimHypsDefs
+  loweringPosts
   list rich_list finite_map pair
-  fragExec exprSim exprSimHyps exprSimAttributeFields
+  fragExec  exprSimHyps exprSimAttributeFields
   exprLowering exprLoweringProps compileEnv
   valueEncoding vyperAST vyperInterpreter vyperState vyperValue
   vyperTypeSystem vyperTypeEnv vyperTypeInvariants vyperPlaceResultTyping
@@ -61,40 +64,10 @@ Libs
 
 (* The byte offset of a field in a struct's memory layout, and its type:
    the preceding fields' sizes, as struct_field_slot sums slots. *)
-Definition mem_field_offset_def:
-  mem_field_offset [] id = NONE /\
-  mem_field_offset ((name,tv)::fields) id =
-    if name = id then SOME (0n,tv)
-    else OPTION_MAP (\(off,ftv). (type_memory_size tv + off,ftv))
-           (mem_field_offset fields id)
-End
 
 (* One step of a path: a field, or an element of an array (past the length
    word of a DynArray) or a tuple, where subscript_type has it. *)
-Definition mem_step_offset_def:
-  mem_step_offset (StructTV fields) (AttrSubscript id) =
-    mem_field_offset fields id /\
-  mem_step_offset (ArrayTV etv (Fixed n)) (ValueSubscript (IntV i)) =
-    (if 0 <= i /\ Num i < n then SOME (Num i * type_memory_size etv, etv)
-     else NONE) /\
-  mem_step_offset (ArrayTV etv (Dynamic n)) (ValueSubscript (IntV i)) =
-    (if 0 <= i /\ Num i < n then SOME (32 + Num i * type_memory_size etv, etv)
-     else NONE) /\
-  mem_step_offset (TupleTV tvs) (ValueSubscript (IntV i)) =
-    (if 0 <= i /\ Num i < LENGTH tvs then
-       SOME (type_memory_size_list (TAKE (Num i) tvs), EL (Num i) tvs)
-     else NONE) /\
-  mem_step_offset _ _ = NONE
-End
 
-Definition mem_path_offset_def:
-  mem_path_offset tv [] = SOME (0n,tv) /\
-  mem_path_offset tv (sb::path) =
-    case mem_step_offset tv sb of
-    | NONE => NONE
-    | SOME (k,etv) =>
-        OPTION_MAP (\(k',ptv). (k + k',ptv)) (mem_path_offset etv path)
-End
 
 Theorem mem_path_offset_snoc:
   !path tv k ptv sb k2 etv.
@@ -186,41 +159,14 @@ QED
 (* ===== The judgment ===== *)
 
 (* The location of a storage or transient place. *)
-Definition slot_loc_def:
-  slot_loc tr = if tr then LocTransient else LocStorage
-End
 
 (* w is where the lowering finds the source place pv of type vt, at
    location loc, in s (see the header).  A local's place is at its pointer
    plus the path's offset in its declared type. *)
-Definition place_ptr_rel_def:
-  (place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w loc vt <=>
-     ?p sz b t0 tv0 k tv t.
-       FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-       lookup_var p s = SOME b /\
-       cenv.ce_var_type id = SOME t0 /\
-       evaluate_type (get_tenv cx) t0 = SOME tv0 /\
-       mem_path_offset tv0 path = SOME (k,tv) /\
-       w = b + n2w k /\ loc = SOME LocMemory /\
-       vt = Type t /\ evaluate_type (get_tenv cx) t = SOME tv) /\
-  (place_ptr_rel cenv cx s (PlaceR (StoragePlace tr slot tv)) w loc vt <=>
-     w = slot /\ loc = SOME (slot_loc tr) /\
-     ?t. vt = Type t /\ evaluate_type (get_tenv cx) t = SOME tv) /\
-  (place_ptr_rel cenv cx s (HashMapRef tr slot kt vt') w loc vt <=>
-     w = slot /\ loc = SOME (slot_loc tr) /\ vt = HashMapT kt vt') /\
-  (place_ptr_rel cenv cx s (PlaceR (ImmutablePlace src id path)) w loc vt <=>
-     F) /\
-  (place_ptr_rel cenv cx s (Value v) w loc vt <=> F)
-End
 
 (* A local's place reads at es: extending it can fail only by a type
    error.  A place is formed where it reads, but an index evaluated after
    the base can pop the base's array (x[i][x[i].pop()]). *)
-Definition place_readable_def:
-  (place_readable cx es (PlaceR (MemoryPlace id path)) <=>
-     ?v. read_place cx (MemoryPlace id path) es = (INL v,es)) /\
-  (place_readable cx es pv <=> T)
-End
 
 (* After the target's fragment, run from s0 related at es, in s related at
    es', with the source's place pv of type vt: the pointer r's operand is
@@ -232,52 +178,13 @@ End
    Nested length words are not exempt: indices that pop nested arrays
    require a repair of the shared expression/target frame (see
    target_subscript_case). *)
-Definition target_post_def:
-  target_post ctx func cenv cx es sa sb s0 es' pv vt
-    (r : operand # data_location option # place_ty option) s <=>
-    stmt_state_rel ctx func cenv cx es' s /\
-    (?w. eval_operand (FST r) s = SOME w /\
-         place_ptr_rel cenv cx s pv w (FST (SND r)) vt) /\
-    SND (SND r) = SOME (value_type_place vt) /\
-    (!x. FST r = Var x ==> not_fresh_at sb x) /\
-    place_readable cx es' pv /\
-    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-           lookup_var x s = SOME w) /\
-    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-             FLOOKUP s.vs_allocas aid = SOME b) /\
-    (!aid off sz.
-       FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
-       (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
-                  off + sz <= b \/ b + sz' <= off) ==>
-       mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s
-End
 
 (* The source results the judgment speaks of: a place or a mapping, an
    error other than a type error, or an assertion. *)
-Definition target_res_ok_def:
-  target_res_ok (res : eval_result + exception) <=>
-    (?pv. res = INL pv) \/ (?m. res = INR (Error (RuntimeError m))) \/
-    (?d. res = INR (Error (RevertData d))) \/
-    (?str. res = INR (AssertException str))
-End
 
 (* The judgment: the target's fragment of bt, typed vt, run from a state
    related at es, reaches its end in target_post on a place, and exits as
    expr_exit allows on an error. *)
-Definition target_sim_def:
-  target_sim ctx func cenv cx env bt es <=>
-    !vt sa sb r res es' s0.
-      type_place_target env bt = SOME vt /\
-      compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
-      eval_base_place cx bt es = (res, es') /\ target_res_ok res /\
-      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-        (\s. ?pv. res = INL pv /\
-                  target_post ctx func cenv cx es sa sb s0 es' pv vt r s)
-        (expr_exit res)
-End
 
 (* ===== Premises ===== *)
 

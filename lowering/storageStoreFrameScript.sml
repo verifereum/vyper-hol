@@ -1,7 +1,7 @@
 (* A single storage instruction, with all non-storage state framed. *)
 Theory storageStoreFrame
 Ancestors
-  list rich_list finite_map fragExec stmtSim stmtSimDecl emitHelper emitHelperProps
+  list rich_list finite_map fragExec stmtSimDefs stmtSimProps stmtSimDecl emitHelper emitHelperProps
   exprLoweringProps venomExecSemantics venomInst venomState
 
 Theorem storage_emit_frame_frag:

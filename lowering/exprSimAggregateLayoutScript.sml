@@ -25,6 +25,7 @@
  *)
 Theory exprSimAggregateLayout
 Ancestors
+  exprSimHypsDefs
   structFieldsProps vyperTypeSystem valueEncoding valueEncodingProps compileEnv
   exprSimHyps exprSimBufferEmpty vyperValue list pair finite_map vfmConstants
   exprCallbackContracts exprLowering exprSimWordBuiltins

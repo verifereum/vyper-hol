@@ -3,7 +3,7 @@ Theory appendStorageRel
 Ancestors
   stmtSimAppendStorage accountsRelProps vyperStorageFrame compileEnv
   vyperValue vyperStorageBackend vyperStorage words vfmState venomState
-  stmtSim exprLoweringProps exprSim varsExt stateFrame finite_map
+  stmtSimDefs stmtSimProps exprLoweringProps exprSimDefs exprSimProps varsExt stateFrame finite_map
 
 Theorem append_dead_bytes_word[local]:
   type_slot_size tv = 1 ==> ~dead_bytes st bs tv j b

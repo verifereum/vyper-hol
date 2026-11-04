@@ -11,6 +11,7 @@
 
 Theory exprOpenMain
 Ancestors
+  exprSimHypsDefs
   exprOpenDispatch exprOpenFirstOperand exprOpenChild exprOpenCases
   exprOpenPrimitives exprOpenCopies exprOpenTerminals exprOpenBuiltins
   bodySim exprSimHyps supportedExprs supportedExprForms supportedTypes

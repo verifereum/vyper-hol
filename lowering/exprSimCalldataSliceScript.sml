@@ -21,9 +21,14 @@
 
 Theory exprSimCalldataSlice
 Ancestors
+  exprSimUnwrapProps
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
+  loweringPosts
   exprSimAlloc
   allocLimits
-  list fragExec loweringSlice builtinBytes exprSim exprSimHyps exprBopLowering
+  list fragExec loweringSlice builtinBytes  exprSimHyps exprBopLowering
   exprSimOperators vyperEvalExprPreservesScopesDom
   exprLowering exprLoweringProps builtinSimple emitHelper compileEnv
   valueEncoding venomExecSemantics venomInst venomState vyperAST
@@ -272,6 +277,12 @@ Proof
          first_x_assum drule >> decide_tac) >>
      simp_tac (srw_ss()) [mstore_def, write_memory_with_expansion_def, lookup_var_def, LET_THM] >>
      rpt strip_tac >> gvs[]) >>
+  `immutable_base_zero cenv
+     (mstore p (n2w (LENGTH data))
+       (write_memory_with_expansion (p + 32) data s))` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     simp[mstore_def, write_memory_with_expansion_def, lookup_var_def, LET_THM] >>
+     gvs[stmt_state_rel_def]) >>
   qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
   rewrite_tac[Once stmt_state_rel_def] >> strip_tac >>
   rewrite_tac[stmt_state_rel_def] >> conj_tac
@@ -286,6 +297,8 @@ Proof
   conj_tac
   >- (irule fmp_room_fields >> qexists_tac `s` >>
       asm_simp_tac (srw_ss()) [mstore_def, write_memory_with_expansion_def, LET_THM]) >>
+  simp[] >>
+  qpat_x_assum `immutable_base_zero cenv (mstore _ _ _)` kall_tac >>
   qpat_x_assum `immutables_rel _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `local_ptrs_rel _ _ _ _` kall_tac >>
   qpat_x_assum `state_rel _ _ _ _ _` kall_tac >>
@@ -742,6 +755,9 @@ Proof
       >- (rpt strip_tac >>
           fs[local_ptrs_reserved_def] >>
           qpat_x_assum `!n1 n2 p sz1 sz2. _` drule >> strip_tac >> simp[])
+      >- (rpt strip_tac >> drule_all local_ptrs_reserved_imm_base >> strip_tac >>
+          qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x t` irule >>
+          first_assum ACCEPT_TAC)
       >- (qpat_assum `u.vs_memory = _` (fn th => once_rewrite_tac[th]) >>
           simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
                immutableMemoryFrameTheory.immutable_write_memory_capacity] >>
@@ -765,7 +781,7 @@ Proof
   reverse conj_tac
   >- (rpt strip_tac >>
       `local_region cenv es.scopes t nm lb len` by
-        (irule exprSimOpsTheory.local_region_frame >> conj_tac
+        (irule exprSimPropsTheory.local_region_frame >> conj_tac
          >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
          qexistsl [`sa`, `es.scopes`, `u`] >> simp[] >>
          rpt strip_tac >>
@@ -776,7 +792,7 @@ Proof
   irule locals_kept_regions >> rpt strip_tac >>
   rename1 `local_region cenv es.scopes s nm b sz` >>
   `local_region cenv es.scopes t nm b sz` by
-    (irule exprSimOpsTheory.local_region_frame_fwd >>
+    (irule exprSimPropsTheory.local_region_frame_fwd >>
      qexistsl [`s`, `sa`, `es.scopes`] >> simp[]) >>
   `b + sz <= w2n w \/ w2n w + 32 + n <= b` by
     (qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _` drule >>
@@ -1000,7 +1016,7 @@ Proof
           disch_then (qspec_then `s0` mp_tac) >> simp[] >> strip_tac >>
           irule frag_exec_exit_prefix >> qexists_tac `sm` >> simp[] >>
           irule frag_exec_conseq >> goal_assum (drule_at Any) >>
-          simp[exprSimUnwrapTheory.expr_exit_exception_transport]) >>
+          simp[exprSimUnwrapPropsTheory.expr_exit_exception_transport]) >>
       gvs[eval_exprs_nil]) >>
   drule eval_exprs_cons_cases >> strip_tac
   >- gvs[] >>

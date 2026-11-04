@@ -8,10 +8,11 @@
  *)
 Theory tupleTypedLoad
 Ancestors
+  exprSimProps
   tupleLoadProps tupleMemoryLayout tupleStageProps stmtSimReturn exprSimLeaves
   stmtLowering compileEnv valueEncoding vyperTyping
   list rich_list words arithmetic valueEncodingProofs vyperTypeDefaults
-  exprLoweringProps venomMemDefs finite_map exprSim venomState fragExec
+  exprLoweringProps venomMemDefs finite_map  venomState fragExec
   emitHelperProps venomExecSemantics
 
 Theorem tuple_prefix_sizes:
@@ -101,6 +102,11 @@ Proof
      lookup_var p (s with vs_vars := V) = lookup_var p s` by
     (rpt gen_tac >> strip_tac >> first_x_assum irule >>
      fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `!p. cenv.ce_imm_alloca = SOME (Var p) ==>
+     lookup_var p (s with vs_vars := V) = lookup_var p s` by
+    (rpt strip_tac >>
+     qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
+     metis_tac[local_ptrs_reserved_imm_base]) >>
   conj_tac >- (irule stmt_state_rel_vars_frame >> asm_rewrite_tac[]) >>
   conj_tac >- (irule local_ptrs_reserved_next_var >> metis_tac[]) >>
   rpt gen_tac >> rewrite_tac[local_region_def] >>

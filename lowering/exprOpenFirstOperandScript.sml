@@ -10,6 +10,7 @@
 
 Theory exprOpenFirstOperand
 Ancestors
+  exprSimHypsDefs
   exprSimHyps allocLimits vyperTypeSystem vyperTypeCallStackSoundness vyperInterpreter
   vyperAST vyperState vyperTypeCallGraph list
 

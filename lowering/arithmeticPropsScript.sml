@@ -3480,7 +3480,6 @@ Proof
     strip_tac >> `A = -&X` by intLib.ARITH_TAC >> fs[]
 QED
 
-
 (* compile_safe_div_ok: a division by a non-zero word, but for the signed
    minimum by -1, runs through and gives the word quotient.  The success
    counterpart of compile_safe_div_by_zero and compile_safe_div_overflow. *)

@@ -34,7 +34,8 @@
  *   fresh_vars_wrt       — compiler var counter ahead of existing venom vars
  *   local_region         — a live local's region through its pointer variable
  *   local_backed         — what backs a live local's region in the current frame
- *   not_local_ptr        — a variable is not a live local's pointer
+ *   not_local_ptr        — a variable is not a live local's pointer or the
+ *                          constructor's immutable base
  *   bound_labels         — set of labels bound to blocks in compile state
  *   compiler_labels_future — co-domain of fresh_label for counter values ≥ n
  *)
@@ -880,11 +881,21 @@ End
 
 (* x is not the pointer variable of a live local, so assigning it leaves the
    locals in place. *)
-Definition not_local_ptr_def:
-  not_local_ptr cenv scopes x ⇔
+Definition not_scope_ptr_def:
+  not_scope_ptr cenv scopes x ⇔
     ∀name entry sz.
       lookup_scopes name scopes = SOME entry ⇒
       FLOOKUP cenv.ce_vars name ≠ SOME (PtrVar (Var x) sz)
+End
+
+(* x is neither the pointer variable of a live local nor the constructor's
+   immutable base, so assigning it leaves the locals and the base in place. *)
+Definition not_local_ptr_def:
+  not_local_ptr cenv scopes x ⇔
+    (∀name entry sz.
+       lookup_scopes name scopes = SOME entry ⇒
+       FLOOKUP cenv.ce_vars name ≠ SOME (PtrVar (Var x) sz)) ∧
+    cenv.ce_imm_alloca ≠ SOME (Var x)
 End
 
 (* The locals of cenv are held through pointer variables that were handed out
@@ -898,14 +909,20 @@ End
    - no compiler variable fresh at st is a local's pointer, so a temporary of
      the code compiled from st on never overwrites one;
    - distinct locals have distinct pointers, so declaring a local leaves the
-     others' pointers alone. *)
+     others' pointers alone;
+   - the constructor's immutable base variable (ASSIGN 0 in the prologue,
+     before the body) is no fresh compiler variable and no local's pointer,
+     so neither a temporary nor a local's pointer overwrites it. *)
 Definition local_ptrs_reserved_def:
   local_ptrs_reserved cenv (st:compile_state) ⇔
     (∀name off sz. FLOOKUP cenv.ce_vars name ≠ SOME (MemLoc off sz)) ∧
-    ∀n1 n2 p sz1 sz2.
-      FLOOKUP cenv.ce_vars n1 = SOME (PtrVar (Var p) sz1) ⇒
-      not_fresh_at st p ∧
-      (FLOOKUP cenv.ce_vars n2 = SOME (PtrVar (Var p) sz2) ⇒ n1 = n2)
+    (∀n1 n2 p sz1 sz2.
+       FLOOKUP cenv.ce_vars n1 = SOME (PtrVar (Var p) sz1) ⇒
+       not_fresh_at st p ∧
+       (FLOOKUP cenv.ce_vars n2 = SOME (PtrVar (Var p) sz2) ⇒ n1 = n2)) ∧
+    ∀x. cenv.ce_imm_alloca = SOME (Var x) ⇒
+      not_fresh_at st x ∧
+      ∀name sz. FLOOKUP cenv.ce_vars name ≠ SOME (PtrVar (Var x) sz)
 End
 
 (* What backs a live local's region [base, base + sz) in the current frame
@@ -1143,11 +1160,12 @@ End
    ce_module_vars maps (src_id_opt, name) to ImmutableLoc byte_offset.
    Semantic contents and capacity bounds do not determine unused padding;
    exact staging is tracked separately in immutableRelation. *)
-(* Base invariant is separate: register updates need not preserve it unless
-   they leave the chosen region operand alone. *)
+(* Constructor accesses keep the region base at zero and retain the runtime
+   label needed by the deployment epilogue. *)
 Definition immutable_base_zero_def:
   immutable_base_zero cenv ss <=>
-    !base. cenv.ce_imm_alloca = SOME base ==> eval_operand base ss = SOME 0w
+    (!base. cenv.ce_imm_alloca = SOME base ==> eval_operand base ss = SOME 0w) /\
+    (cenv.ce_is_ctor ==> IS_SOME (FLOOKUP ss.vs_labels "runtime_begin"))
 End
 
 Definition immutables_rel_def:
@@ -1455,6 +1473,14 @@ Definition state_rel_def:
      vs.pending_deletions = ss.vs_pending_deletions)
 End
 
+Theorem state_rel_gas_obs:
+  state_rel func cenv cx (es with gas_obs := readings) s =
+  state_rel func cenv cx es s
+Proof
+  simp[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
+       immutables_rel_def, logs_rel_def]
+QED
+
 (* ===== Result Relation ===== *)
 
 (* Maps Vyper evaluation results to Venom exec_result.
@@ -1514,6 +1540,18 @@ Definition result_rel_def:
   (* Everything else: no relation *)
   (result_rel _ _ _ _ _ _ = F)
 End
+
+Theorem result_rel_gas_obs:
+  result_rel func ret_tv cenv cx (res, es with gas_obs := readings) r =
+  result_rel func ret_tv cenv cx (res, es) r
+Proof
+  Cases_on `res`
+  >- (rename1 `INL u` >> Cases_on `u` >> Cases_on `r` >>
+      simp[result_rel_def, state_rel_gas_obs]) >>
+  rename1 `INR exc` >> Cases_on `exc` >> Cases_on `r` >>
+  simp[result_rel_def, state_rel_gas_obs] >>
+  Cases_on `a` >> simp[result_rel_def]
+QED
 
 (* ===== Type Classification ===== *)
 

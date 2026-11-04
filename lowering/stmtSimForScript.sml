@@ -12,9 +12,12 @@
 
 Theory stmtSimFor
 Ancestors
-  stmtSim stmtSimForParts stmtSimForLoop
+  stmtSimProps
+  stmtSimDefs
+  loweringPosts
+   stmtSimForParts stmtSimForLoop
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim loweringSlice
+  fragExec localPtrsProps  loweringSlice
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperEvalPreservesScopes
@@ -30,12 +33,7 @@ Theorem reserved_fresh_not_local:
     local_ptrs_reserved cenv st /\ st.cs_next_var <= n ==>
     not_local_ptr cenv scs (STRING #"%" (toString n))
 Proof
-  rw[not_local_ptr_def] >> strip_tac >>
-  fs[local_ptrs_reserved_def, not_fresh_at_def] >>
-  qpat_x_assum `!n1 n2 p sz1 sz2. _`
-    (qspecl_then [`name`, `name`, `STRING #"%" (toString n)`, `sz`, `sz`]
-       mp_tac) >>
-  simp[] >> qexists_tac `n` >> simp[]
+  metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_fresh]
 QED
 
 (* For over a range whose ends are source integer literals: the loop
@@ -175,8 +173,8 @@ Proof
      `not_local_ptr cenv (FEMPTY::scs) p` by
        (qpat_assum `p = _` SUBST1_TAC >> irule reserved_fresh_not_local >>
         qexists_tac `sa` >> simp[]) >>
-     fs[not_local_ptr_def] >> rpt strip_tac >>
-     `name <> id` by (strip_tac >> fs[lookup_scopes_def]) >> metis_tac[]) >>
+     irule not_local_ptr_name_update >> qexistsl_tac [`cenv`, `id`] >> simp[] >>
+     qpat_assum `_ = cenv` (fn th => ONCE_REWRITE_TAC [SYM th]) >> simp[]) >>
   (* the state at the condition block *)
   qabbrev_tac `cc = jump_to cond_lbl (update_var ev (i2w n2)
                   (update_var cv (i2w n1) (jump_to entry_lbl s1)))` >>
