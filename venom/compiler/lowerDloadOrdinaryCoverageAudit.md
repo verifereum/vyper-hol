@@ -588,3 +588,72 @@ coverage witness interfaces at their ownership threading points; a conditional
 PARAM coverage theorem alone is not a solution. Neither route is implemented
 or asserted proved by this diagnostic. No counterexample to the frozen contract
 has been produced. Terminal/current-state raw safety remains separate.
+
+## Correlated ownership integration audit (C1.11.5.74)
+
+This section supersedes the *unimplemented ownership proposal* at .69 above;
+that historical diagnostic is not a claim about the current interfaces.
+The invariant is still explicit syntax, not a new definition. Its quantifiers
+are `?stk PG G tn fn inst s t0 A frames N X p h`; inside them lie sync, global,
+configured supplies, active name order, image equality, envelope, prefix and
+`ti = EL h X`, followed by stack-wide selected-Q permission on **frames**.
+The same P is used in sync and permission. There is no independently quantified
+ownership stack and no ownership assumption added to the frozen theorem.
+
+### Checked establishment/preservation signatures
+
+| Boundary | Exact supplying signature/source | Operational status |
+|---|---|---|
+| Root | `ld_sync_source_entry` (Entry:65-86) supplies `?lo P f`, reservation/discipline/static pointer witness, `f.lf_fn=fn`, configured `f.lf_supply=u`, `f.lf_Q=[]`, sync and global on `[f]`. | Entry source synchronization checked. Permission follows from Q=[]; selecting u=Sigma fn_name supplies configuration. Full target entry/image/location assembly still must use stage lookup/entry alignment and `ld_owned_pair_zero`; source entry alone does not do this. |
+| Frame replacement | `ld_ownership_replace`: Own(f::fs), g.fn=f.fn, g.Q=f.Q imply Own(g::fs). | Algebra only; no semantic step supplied. |
+| Ordinary advance | `ld_sync_ordinary_witness` exposes `newframe` with the same fn/Q and updated src/tgt/H/tv; `ld_sync_ordinary_owned_coverage` (OrdinaryCoverage:135-179) takes Own(f::fs), sync/global/shape, non-expansion non-control opcode, successful target/source steps, unchanged allocations/frontiers/block fields, new vars/memory/nonghost/erasure/range, target next active location, supply/name order. | Produces the full correlated existential above at the next target index. No family-by-family owned wrappers are necessary. Concrete effect producers must be applied before this adapter. |
+| PARAM | `ld_sync_param_effect` (ParamCoverage:10-52) takes sync/global/Own, opcode=PARAM and target OK; returns source OK and all ordinary effect fields including selected H' liveness. `ld_sync_param_owned_coverage` (:54-85) additionally takes shape, target next active instruction, supplies/name order. | Concrete successful PARAM coverage checked, with Own inside the returned existential. This closes the PARAM ownership seam, not exhaustive opcode coverage. |
+| Initial prefix | `ld_owned_pair_zero` (OwnedLocations:38-67) takes sync/global/config/order, distinct source labels, image equality, target active instruction and Own. | Packages the same frames at expansion h=0 using `ld_pair_zero_witness`. Does not simulate an expansion instruction. |
+| Arbitrary prefix packaging | `ld_owned_prefix_pack` (OwnedLocations:8-36) takes all existential-body conjuncts, including existing prefix and Own. | Existential introduction only; no prefix advancement or completion. |
+| INVOKE push | `ld_ownership_push_saved` (OwnedLocations:82-98) takes Own(caller::fs), saved fn/Q unchanged, caller vars and ptr_use_ok, INVOKE decoding `(nm,args)`, callee fn_name=nm and Q=MAP(op_prov caller.H) args. | Proves Own(callee::saved::fs) using `ld_arguments_permission`; operational call setup, allocation maps, sync and target/source recursion remain unimplemented consumers. |
+| Return pop | `ld_ownership_pop` (OwnedLocations:71-80) takes Own(callee::saved::fs) and restored fn/Q=saved fn/Q. | Proves Own(restored::fs). Allocation restriction, erasure, memory/taint and actual source reachable return are separate obligations. |
+| Forgetting | `ld_owned_coverage_pair` (OrdinaryCoverage:182-198) takes the entire correlated existential and concludes `ld_pair`. | One-way forgetting boundary only. Cannot recover Own from ld_pair. |
+
+### Remaining operational consumers and exact frame transformations
+
+* Ordinary unchanged-allocation families already have several sync effect
+  producers (arithmetic, assignment/RETPC, classified reads, storage writes,
+  identity/assertions, oracle CALL/STATICCALL and reads). Their existing ld_pair
+  wrappers intentionally forget witnesses. New reachability induction must call
+  the producers and `ld_sync_ordinary_owned_coverage` directly. It must NOT use
+  those wrappers and then invent a separate owned stack. No such induction is
+  implemented in the current task target. Copy/ISTORE/hash/log/remaining external
+  calls/FMP interfaces still need complete effects as inventoried above.
+* JMP/JNZ/DJMP/block PHIs: replace the head retaining fn/Q; establish source
+  destination and PHI-batch step, new ghost/taint/vars, block and envelope alignment.
+  `ld_phis_effect` is not a full owned block transition.
+* Original ALLOCA: replace head retaining fn/Q, extend A and H by the selected
+  original identity, preserve saved frames/maps/memory and global constraints,
+  and reconstruct the successor envelope. Ownership replacement alone does not
+  establish any allocation invariant.
+* DLOAD/DLOADBYTES prefixes: retain the pre-expansion sync frames while h advances;
+  completion replaces head retaining fn/Q and updates scratch E/charge and state.
+  Checked conditional raw-prefix safety does not supply semantic prefix coverage
+  or the completed synchronized successor.
+* INVOKE: push `callee::saved::fs`, selected Q exactly MAP(op_prov caller.H) args;
+  retain caller permission via saved fn/Q and use decoded nm equality for callee
+  permission. Need concrete setup, new serial/maps, saved ghosts, active-stack
+  charge and full sync/global/envelope. No source termination assumption allowed.
+* Return: pop to restored saved tail, preserving its fn/Q. Need actual target-run
+  induction to obtain source IntRet/frame_reachable_ret, caller frontier restore,
+  map restriction, and current (not saved) memory/taint agreement.
+* Terminal/failing-current states: keep owned sync/prefix coverage where available,
+  or the separate target-only forward suffix disjunct. No fabricated owned frame
+  witness is needed for that suffix. Successful OK successor lemmas do not prove
+  safety before Error/Abort/Halt or terminal classification.
+
+### Verification and scope
+
+Build TO_ld_mem-20261104T190123Z_m5109_t001 checked OwnedLocations, PARAM,
+Arithmetic, Assignment, ClassifiedRead, Read, StorageWrite, Identity and the
+current task target. This is a passing build, NOT a zero-cheat certification:
+`o1ContractLowerDloadMemScript.sml:23` still contains the original cheat and its
+frozen theorem has not been changed. The target does not yet import the helper
+coverage assembly. No counterexample has been verified. Remaining full coverage
+and terminal integration require the next strategist-owned phase, not more
+ownership algebra or redundant opcode-union wrappers.
