@@ -164,6 +164,13 @@ Definition ac_iz_var_def:
   ac_iz_var (id:num) = STRCAT "ac_iz_" (toString id)
 End
 
+(* Instruction id of the OR inserted for the assert with id `id`; its ISZERO
+   gets the next id. Above id_base, so fresh when id_base exceeds every id
+   in the function (ac_id_base). *)
+Definition ac_or_id_def:
+  ac_or_id (id_base:num) (id:num) = id_base + 2 * id
+End
+
 (*
  * Apply merge: given merge candidates, transform the instruction list.
  *
@@ -177,7 +184,7 @@ End
  * Otherwise pred_a would be lost when processing C.
  *)
 Definition ac_apply_merge_step_def:
-  ac_apply_merge_step candidates (merged_preds, acc) inst =
+  ac_apply_merge_step id_base candidates (merged_preds, acc) inst =
     (* Phase 1: "second" merge — compute OR/ISZERO, update merged_preds *)
     let (merged_preds1, pre_insts, merged_op) =
       case FIND (\mc. mc.mc_second_id = inst.inst_id) candidates of
@@ -194,10 +201,10 @@ Definition ac_apply_merge_step_def:
             let id = inst.inst_id in
             let or_v = ac_or_var id in
             let iz_v = ac_iz_var id in
-            let or_inst = <| inst_id := id; inst_opcode := OR;
+            let or_inst = <| inst_id := ac_or_id id_base id; inst_opcode := OR;
                 inst_operands := [actual_first_pred; mc.mc_second_pred];
                 inst_outputs := [or_v] |> in
-            let iz_inst = <| inst_id := id + 1; inst_opcode := ISZERO;
+            let iz_inst = <| inst_id := ac_or_id id_base id + 1; inst_opcode := ISZERO;
                 inst_operands := [Var or_v];
                 inst_outputs := [iz_v] |> in
             ((mc.mc_second_id, Var or_v) :: merged_preds,
@@ -220,11 +227,18 @@ End
 
 (* ===== Block and Function Transform ===== *)
 
+(* Instruction ids for the inserted OR/ISZERO start above every id in the
+   function, so they never collide with an existing instruction. *)
+Definition ac_id_base_def:
+  ac_id_base (fn : ir_function) : num =
+    SUC (FOLDL MAX 0 (MAP (λi. i.inst_id) (fn_insts fn)))
+End
+
 Definition ac_transform_block_def:
-  ac_transform_block dfg bb =
+  ac_transform_block dfg id_base bb =
     let candidates = ac_scan_block dfg bb.bb_instructions NONE in
     bb with bb_instructions :=
-      SND (FOLDL (ac_apply_merge_step candidates) ([], [])
+      SND (FOLDL (ac_apply_merge_step id_base candidates) ([], [])
                   bb.bb_instructions)
 End
 
@@ -232,7 +246,7 @@ Definition ac_transform_function_def:
   ac_transform_function fn =
     let dfg = dfg_build_function fn in
     fn with fn_blocks :=
-      MAP (ac_transform_block dfg) fn.fn_blocks
+      MAP (ac_transform_block dfg (ac_id_base fn)) fn.fn_blocks
 End
 
 Definition ac_transform_context_def:
