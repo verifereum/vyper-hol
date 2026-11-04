@@ -1179,3 +1179,66 @@ Proof
   qexists `s.vs_vars` >> simp[] >>
   Cases_on `op` >> gvs[venomStateTheory.eval_operand_def,venomStateTheory.lookup_var_def]
 QED
+
+(* Freshly defined inputs separate successor refinement from SSA input availability. *)
+Definition ao_range_defined_probe_def:
+  ao_range_defined_probe op = mk_raw_function "defined_probe"
+    [<| bb_label := "entry"; bb_instructions :=
+       [mk_inst 0 CALLDATALOAD [Lit 0w] ["input"];
+        mk_inst 1 op (if op = ISZERO then [Var "input"] else [Var "input"; Lit 0w]) ["cond"];
+        mk_inst 2 JNZ [Var "cond"; Label "dst"; Label "dst"] []] |>;
+     <| bb_label := "dst"; bb_instructions :=
+       [mk_inst 3 EQ [Var "input"; Lit 0w] ["result"];
+        mk_inst 4 STOP [] []] |>]
+End
+
+Theorem ao_range_defined_probe_structural_audit:
+  !op. MEM op [EQ; ISZERO; SLT] ==>
+    wf_function (ao_range_defined_probe op) /\
+    wf_ssa (ao_range_defined_probe op) /\
+    fn_inst_wf (ao_range_defined_probe op) /\
+    ~EVERY label_positions_ok (fn_insts (ao_range_defined_probe op))
+Proof
+  gen_tac >> strip_tac >>
+  qabbrev_tac `f = ao_range_defined_probe op` >>
+  `fn_entry_label f = SOME "entry"` by (unabbrev_all_tac >> EVAL_TAC) >>
+  `fn_cfg_edge f "entry" "dst"` by
+    (simp[venomWfTheory.fn_cfg_edge_def] >>
+     qexists_tac `HD f.fn_blocks` >> unabbrev_all_tac >> EVAL_TAC) >>
+  `!lbl. MEM lbl ["entry";"dst"] ==> fn_reachable f lbl` by
+    (simp[listTheory.MEM,venomWfTheory.fn_reachable_def] >>
+     rpt strip_tac >> gvs[] >>
+     metis_tac[relationTheory.RTC_REFL,relationTheory.RTC_SINGLE]) >>
+  `!lbl. MEM lbl ["entry";"dst"] ==> fn_dominates f "entry" lbl` by
+    (rpt strip_tac >> simp[venomWfTheory.fn_dominates_def] >>
+     rpt strip_tac >> Cases_on `path` >> gvs[]) >>
+  rpt conj_tac
+  >- (unabbrev_all_tac >> gvs[listTheory.MEM] >> EVAL_TAC)
+  >- (simp[venomWfTheory.wf_ssa_def] >> conj_tac
+      >- (unabbrev_all_tac >> gvs[listTheory.MEM] >> EVAL_TAC) >>
+      qabbrev_tac `b = HD f.fn_blocks` >>
+      qabbrev_tac `d = EL 1 f.fn_blocks` >>
+      `f.fn_blocks = [b;d]` by (unabbrev_all_tac >> EVAL_TAC) >>
+      `b.bb_label = "entry" /\ d.bb_label = "dst"` by
+        (unabbrev_all_tac >> EVAL_TAC) >>
+      `b.bb_instructions =
+        [mk_inst 0 CALLDATALOAD [Lit 0w] ["input"];
+         mk_inst 1 op (if op = ISZERO then [Var "input"] else [Var "input";Lit 0w]) ["cond"];
+         mk_inst 2 JNZ [Var "cond";Label "dst";Label "dst"] []] /\
+       d.bb_instructions =
+        [mk_inst 3 EQ [Var "input";Lit 0w] ["result"];mk_inst 4 STOP [] []]` by
+        (unabbrev_all_tac >> EVAL_TAC) >>
+      `b <> d` by (strip_tac >> gvs[]) >>
+      simp[venomWfTheory.def_dominates_uses_def,listTheory.MEM] >>
+      rpt strip_tac >> gvs[listTheory.MEM,venomInstTheory.mk_inst_def] >>
+      simp[venomWfTheory.def_available_at_def] >>
+      qexists_tac `b` >>
+      simp[listTheory.MEM] >>
+      simp[RIGHT_AND_OVER_OR,LEFT_AND_OVER_OR,EXISTS_OR_THM,listTheory.MEM]
+      >> qmatch_goalsub_abbrev_tac
+           `?i j. i < j /\ j < 3 /\ EL i insts = prod /\ EL j insts = use` >>
+      qexistsl [`prod.inst_id`,`use.inst_id`] >>
+      simp[Abbr `prod`,Abbr `use`,Abbr `insts`] >> EVAL_TAC)
+  >- (unabbrev_all_tac >> gvs[listTheory.MEM] >> EVAL_TAC)
+  >> (unabbrev_all_tac >> gvs[listTheory.MEM] >> EVAL_TAC)
+QED
