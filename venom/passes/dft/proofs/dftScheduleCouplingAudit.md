@@ -250,3 +250,29 @@ No counterexample to the frozen task theorem is claimed by this audit.
 
 Verification: `holbuild(targets=['dftStoppingRangesTheory'])`, including its
 repaired SCCP prerequisite, succeeds. The new theory has no cheats.
+
+## Bounded square checkpoint (C3.2.9)
+
+`dftOccurrenceSquareTheory` defines a six-configuration certificate with four
+actual `dft_occ_oracle_next` equalities. Phase tags select before/middle/after
+on each trajectory independently. Left/right prefix projections and the
+final join projection are checked. The join forgets function and block
+identity but requires the same state, empty-budget At control, stack, counter,
+and occurrence ghosts; it is not a recursive caller relation.
+
+`dft_gas_square_ok` constructs the certificate by computing two distinct-output
+GAS instructions in opposite order. It assumes no endpoint equality, numeric
+oracle agreement, or transition certificate. The shared address oracle w is
+arbitrary and can give different values at the two original IDs; both runs
+consult the same address for each ID. Distinct finite-map updates commute,
+indices reach 2 and counters increase twice. `dft_gas_square_inhabited`
+instantiates IDs 0 and 1 from an arbitrary instruction template, so these
+premises are non-vacuous. The two directional absent-edge theorems are also
+checked from the actual GAS effects/uses and nonempty output lists.
+
+Limits: this certificate does not assert that middle states agree, establish
+any general pair diamond, or transport observations at its skewed cuts. The
+GAS test has empty stacks and two-instruction blocks which need not terminate.
+Saved caller phase relations, recursive entry/return, terminal propagation,
+readiness of intermediate schedules, and native adequacy integration remain
+unproved; no global uniform-witness theorem follows from this checkpoint.
