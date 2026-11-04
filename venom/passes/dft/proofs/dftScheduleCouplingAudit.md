@@ -575,3 +575,119 @@ first exit; reflect to run_blocks/run_context with their entry normalization.
 No existing prefix theorem alone closes this chain, and no theorem in this
 audit asserts same-fuel matching, finite oracle realization, general
 schedule closure or either frozen task obligation.
+
+
+## Generic intermediate readiness audit (C3.2.26)
+
+This section is inspection/design evidence only. The native terminal gaps in
+older sections have since been addressed by dftOccurrenceTerminal and
+ dftTerminalResult; those results still require compatible trajectories.
+The remaining generic edit gap is not a native-fuel or GAS-counter gap.
+
+### Premise-to-producer map
+
+Here `bb` and `fn` always mean the ORIGINAL SSA block/function. An
+intermediate list is not assumed to be the block of `dft_fn fn`.
+
+| Premise / consumer | Existing producer and exact scope | Missing bridge for generic intermediate schedules |
+|---|---|---|
+| wf_ssa, wf_function, membership, inst_wf, no ALLOCA | `dft_fn_rel` supplies original structural data; `dft_crossing_swap_pair` (dftRunRel:2559-2581) consumes these plus original ID order, nonpseudo membership, absent directional edge and abort compatibility | Reconstruct instruction identity from intermediate IDs; legal operand flips must be handled separately, not called equality |
+| Reverse def/use and disjoint definitions | `dft_reverse_dependency_disjoint` and `ssa_disjoint_defs`, used inside crossing_swap_pair; they use ORIGINAL SSA/order | Do not require intermediate SSA as a substitute; retain original provenance |
+| Protected forward dependencies/failure order | `inv_edit_schedule_edges` and RTC version (dftScheduleEdits:161-184) preserve `schedule_edges orig R`; PERM/distinct projections at 186-197 | Instantiate R with actual original instructions/IDs, prove destination edges from block relation and fallible-order relation, preserve fixed pseudo prefix/last terminator |
+| Operand variables available | `dft_ready_operand_defined` (dftAvailability:9-31): original SSA/wf, original block label=current_bb, non-PHI instruction membership, strict_dom_vars_defined, and every earlier original same-block producer's output in FDOM | Protected edges alone are insufficient: prove that each producer is pseudo-initialized or in a successfully executed intermediate prefix |
+| Variables already produced | `dft_prefix_fdom` (144-158), `dft_executed_producers` (190-209): native FOLDR success, nonpseudo/nonterminating wf prefix; pseudo outputs must already be initialized | Lift finite successful prefix FDOM accounting to actual occurrence steps without requiring future INVOKE return |
+| Strict-dominator availability within block | `dft_prefix_dominators` (173-188): native successful prefix preserves current_bb and grows FDOM | Occurrence-step/caller invariant required at arbitrary prefixes, including inside an unreturned call |
+| Bubble-specific readiness | `dft_bubble_head_ready` (473-502), `dft_remaining_inv_ready` (579-595), `dft_bubble_executed_ready` (614-645) require ORIGINAL order among remaining suffix elements, executed producers, and absent edges across bubble prefix | `dft_remaining_inv` requires *all* remaining relative orders to agree with original; an arbitrary intermediate schedule need not satisfy it. Do not apply these unchanged to the entire edit chain |
+| Labels available | `dft_prefix_ready_preserved` (211-228) preserves already-defined variable/label operands across a native successful prefix; dft_remaining_inv stores labels for all original ordinary nonterminating instructions except INVOKE | Obtain original bindings from ctx_labels_bound; lift label preservation through actual entry/ordinary/call-return transitions; INVOKE labels are context lookup, not numeric label-map lookup |
+| External request validity / structural errors | `dft_guarded_nofail_total` (dftGuards:121-151) also excludes `dft_runtime_error_opcode` = DELEGATECALL/CREATE/CREATE2 (78-80); readiness of operand evaluation alone does NOT exclude these errors | Need effects/partner classification or explicit actual-state diamond, not a new assumption that every external request succeeds. Terminal simulation need not turn source Error into termination |
+| Next block dominance | `dft_successor_available` (72-119): ORIGINAL function reachability, ssa_form, strict dom availability and actual native `run_block fuel ctx bb s = OK t`, nonhalted | It is a whole ORIGINAL block native theorem. Generic intermediate block/occurrence block-exit version and predecessor/PHI correspondence remain missing |
+| PHI and pseudo initialization | `dft_pseudo_initialization` (245-274): actual eval_phis plus successful residual pseudo execution; initializes outputs, preserves labels/current block and grows FDOM | Preserve predecessor and incoming operands across block transition, then occurrence Enter bridge. Prefix syntax preservation is not initialization |
+| Call entry and return | Existing specialized open-call receipt/setup/pop lemmas handle GAS skew; synchronized non-PHI edit kernel preserves identical current fetch | General effectful skew cannot use a variable-only GAS receipt. Need paired saved caller phases plus strict-dom/labels/producers invariants at fresh callee entry and return |
+| Initial runtime data | o1_ctx_shape = ctx_wf plus o1_fn_shape per function (o1PassContract:442-445); o1_run_state_ok = initial_state_ok plus fmp and code-layout conditions (488-492) | These do not literally assert every intermediate ready. Initial entry/parameters, then PHI/block/call transition induction must establish the runtime invariant |
+
+Scope warning: all FOLDR/run_block and suffix-swap interfaces above use ONE
+native context `C` and fixed native `fuel`. `dft_ready_operand_defined` and
+`dft_crossing_swap_pair` themselves have no execution/context premise.
+`dft_prefix_ready_preserved` preserves readiness, but does not create it.
+`dft_nongas_suffix_swap` (2412-2458) requires pair independence, wf,
+y-variable readiness, non-INVOKE label readiness, and a nonroot x. Its
+conclusion is dft_res_rel of whole same-context suffix executions. It is
+neither occurrence-step equality nor cross-context callee simulation.
+
+### Finite pair-class / transition table
+
+| Class or transition | Both successful | Early Halt/Abort | Error and readiness | Target nonempty-range coverage |
+|---|---|---|---|---|
+| Neither GAS nor INVOKE | dft_indexed_nongas_pair_ok (1799-1824) gives actual pre/post states and equality after two index updates; occurrence lift still needed | nonterminator Halt impossible except INVOKE; nonroot Abort classification and suffix_abort facts exist | Need y readiness before x for early stopping x; successful diamond alone assumes both target successes | Transfer operands/effects at skewed cut; stoppingRanges excludes ranges/calls of crossed y after stopping x, not all observations |
+| GAS / non-INVOKE (either direction) | Not a gas_pair: same native diamond applies; fixed address w must supply GAS value by original ID, not reading-list position | GAS cannot stop when well formed; stopping non-GAS case needs same classification | GAS always advances, other instruction still needs its own guards | GAS range empty; other instruction needs operand/range preservation across one GAS write |
+| Non-GAS / INVOKE (either direction) | Native nongas diamond only handles a completed call; no prefix/open-call theorem follows | Halt in call preserves callee result; native suffix Halt facts exist; Abort compatibility separately required | Failed lookup/args/setup and runtime Error must be retained as explicit branches | Before call: partner ranges empty by dft_invoke_crossing_ranges in original direction. Inside call: recursive coverage without return premise is still needed |
+| GAS / GAS or GAS / INVOKE | Existing specialized fixed-w phase results retained | Existing specialized terminal/cofinal results retained | Not a new generic readiness proof | Existing specialized observation results retained; no extension inferred |
+| Ordinary synchronized instruction | Shared non-PHI kernel handles unchanged fetch with mapped syntax/stack | Result classification already available | Preserve actual error, do not assert totality | Identical fetched instruction plus relevant operands suffices, but skew phases need separate certificates |
+| PHI / next block | Pseudo prefix fixed; successful block exit must reestablish predecessor and dominance | Terminator stays last; stopping terminator does not enter successor | Native successor_available cannot be applied directly to an intermediate block | Relate entry prestate and PHI incoming values before next body observation |
+| Call entry / saved return | Setup/push/pop need paired phase invariant | Root Halt/Abort projection already available once related | Unreturned calls must remain in relation; no future-return premise | Match each finite callee observation recursively, even on divergent execution |
+
+### Proposed next bounded semantic boundary (UNPROVED)
+
+The smallest useful missing bridge is producer accounting for an arbitrary
+protected intermediate body prefix, rather than another successful pair
+commutation theorem. The following is an exact proposed HOL statement (not a
+new source theorem or allowed global assumption):
+
+```sml
+!fn bb pp done y todo s t fuel C.
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  pp = FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions /\
+  PERM (done ++ y::todo)
+       (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions) /\
+  schedule_edges bb.bb_instructions dft_must_order
+    (pp ++ done ++ y::todo) /\
+  bb.bb_label = s.vs_current_bb /\ strict_dom_vars_defined fn s /\
+  (!d v. MEM d pp /\ MEM v d.inst_outputs ==> v IN FDOM s.vs_vars) /\
+  EVERY (\i. inst_wf i /\ ~is_pseudo i.inst_opcode /\
+             ~is_terminator i.inst_opcode) done /\
+  FOLDR (dft_exec_cons fuel C) OK done s = OK t ==>
+  !v. MEM (Var v) y.inst_operands ==> v IN FDOM t.vs_vars
+```
+
+`id_before`/`schedule_edges` here are instantiated on INSTRUCTIONS, not IDs;
+this avoids an unspecified ID-to-instruction choice in the statement. A
+separate reconstruction bridge must eventually connect the checked ID edit
+factorization to these instruction-level edges. `fn`/`bb` remain original.
+`y` is nonpseudo by the PERM premise. No original relative order is required
+among remaining `todo` instructions. This is precisely what the existing
+remaining_inv boundary cannot express.
+
+Proof outline: native prefix frame/dominator preservation; PERM membership
+for y; apply dft_ready_operand_defined. For an original earlier producer d,
+if pseudo use initialization. Otherwise its def/use overlap gives
+ dft_must_order d y, so the protected instruction edge places d before y
+in pp++done++y::todo. Distinct original IDs from wf_function (hence distinct
+instructions) and PERM exclude d=y, membership in todo, and duplicates.
+Thus d is in done. dft_prefix_fdom supplies the output in t. Translate
+original ID order to instruction order using unique IDs/EL witnesses where
+needed; do not assume these two order types are definitionally identical.
+
+Non-vacuity witness shape: one original entry block with no pseudos, a
+well-formed literal ADD producing v, a second ADD using Var v and a literal,
+then STOP, with distinct IDs/unique outputs. Choose done=[first ADD], y=second
+ADD, todo=[STOP], pp=[], and the original schedule itself. Start with empty
+vars, current_bb the entry label, no strict dominators; execute the first ADD
+successfully. The proposed conclusion genuinely establishes v in FDOM at t
+although v was absent at s. This is a proposed instance, NOT an EVAL-checked
+probe or a proof certificate.
+
+Limit of this checkpoint: this bounded theorem deliberately has actual native
+prefix success and entry availability premises, not a global reachability
+claim. Even if proved, occurrence-prefix producer accounting, entry/PHI/
+call/return invariants, reconstruction of protected instruction edges, and
+fixed-w generic phase composition remain obligations. If the strategist wants
+an occurrence-first version instead, its exact transition accounting interface
+must be selected before adding code; the audit does not justify importing a
+native suffix theorem as an occurrence diamond.
+
+Validation: inspected dftAvailability, dftRunRel, dftGuards,
+dftScheduleEdits and o1PassContract signatures in source. Existing
+ dftOccurrenceTerminalTheory, dftOccurrenceCallObserveTheory and
+ dftTerminalResultTheory build cleanly at this checkpoint. No SML edits,
+new theorem stubs, assumptions or simulation certificates were introduced.
