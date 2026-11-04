@@ -8,6 +8,7 @@
  *)
 Theory tupleAssignMemory
 Ancestors
+  loweringPosts
   tupleAssignParts tupleAssignPrefix
   tupleTypedLoad tupleStageProps stmtSimAssignTuple tupleLocalStoreProps
   tupleLocalStoreRun stmtSimReturn stmtSimDeclMem valueCopyBytes
