@@ -2,7 +2,8 @@
 Theory fnFrameTerminalPrep
 Ancestors
   genFrameSim frameRel contextCodegenRelProps contextCodegenRel codegenRel
-  instSimHelpers asmFrame
+  instSimHelpers asmFrame stackPlanTypes stackPlanGen venomInst genBlockSim
+  mixedPrefixSim stackModel
 
 Theorem fn_frame_inv_local_state:
   !ctx cplan lo fn ra rest mem0 ps vs st.
@@ -37,4 +38,49 @@ Proof
     (strip_tac >> qpat_x_assum `~context_spill_byte cplan i` mp_tac >>
      simp[context_spill_byte_def] >> qexists `r` >> simp[]) >>
   metis_tac[]
+QED
+
+(* Initial depth 15 becomes 16 after the first literal input. *)
+Definition terminal_escape_ps_def:
+  terminal_escape_ps = (init_plan_state 0) with
+    ps_stack := Var "size" :: MAP (\n. Var (REPLICATE n #"x")) (COUNT_LIST 15)
+End
+
+Theorem terminal_escape_input_plan:
+  FST (emit_input_plan RETURN [Lit 32w; Var "size"] ["size"] terminal_escape_ps) =
+  [SOPush (Lit 32w); SOSpill 0; SODup 16; SORestore 0; SOSwap 1]
+Proof
+  EVAL_TAC
+QED
+
+Definition terminal_escape_inst_def:
+  terminal_escape_inst = mk_inst 0 RETURN [Var "size"; Lit 32w] []
+End
+
+Theorem terminal_escape_generated_ops:
+  !lv dfg cfg fn ih nt lbl.
+  OPTION_MAP FST (generate_inst_plan lv dfg cfg fn terminal_escape_inst
+    ["size"] ih nt lbl terminal_escape_ps) =
+  SOME [SOPush (Lit 32w); SOSpill 0; SODup 16; SORestore 0; SOSwap 1;
+        SOEmit "RETURN"]
+Proof
+  rpt gen_tac >> EVAL_TAC
+QED
+
+Theorem terminal_escape_initial_wf:
+  generated_plan_state_wf 0 terminal_escape_ps /\
+  stack_get_depth (Var "size") terminal_escape_ps.ps_stack = SOME 15 /\
+  LENGTH (compute_operands terminal_escape_inst) = 2 /\
+  LENGTH (SND (emit_input_plan RETURN (compute_operands terminal_escape_inst)
+    ["size"] terminal_escape_ps)).ps_stack = 18
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem terminal_escape_prefix_spill_wf:
+  prefix_spill_wf 0 FEMPTY
+    [SOPush (Lit 32w); SOSpill 0; SODup 16; SORestore 0; SOSwap 1]
+    terminal_escape_ps
+Proof
+  EVAL_TAC >> simp[] >> qexists `Lit 32w` >> simp[]
 QED
