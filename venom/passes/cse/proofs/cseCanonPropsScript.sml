@@ -1,5 +1,5 @@
 Theory cseCanonProps
-Ancestors cseDefs
+Ancestors cseDefs availExprDefs dfAnalyzeDefs
 
 (* These are syntactic matching facts, not runtime value equalities. *)
 Theorem operand_ids_match_length:
@@ -213,4 +213,232 @@ Theorem cse_canon_record_compute_canon:
 Proof
  simp[cse_canon_record_projection, cse_canon_inputs_def,
       cse_canon_blocks_inputs, compute_canon_def]
+QED
+
+(* Contraction counts keys as well as list entries: empty-valued keys matter. *)
+Definition cse_avail_weight_def:
+ cse_avail_weight (a : avail_exprs) =
+ CARD (FDOM a) + SIGMA (\k. LENGTH (a ' k)) (FDOM a)
+End
+
+Theorem cse_avail_meet_domain:
+ !a b. FDOM (avail_meet_two a b) = FDOM a INTER FDOM b
+Proof
+ simp[avail_meet_two_def, finite_mapTheory.FUN_FMAP_DEF]
+QED
+
+Theorem cse_avail_meet_apply:
+ !a b k. k IN FDOM a /\ k IN FDOM b ==>
+ (avail_meet_two a b) ' k = FILTER (\i. MEM i (b ' k)) (a ' k)
+Proof
+ rpt strip_tac >>
+ simp[avail_meet_two_def, finite_mapTheory.FUN_FMAP_DEF,
+      finite_mapTheory.FLOOKUP_DEF]
+QED
+
+Theorem cse_avail_meet_sum_le:
+ !a b. SIGMA (\k. LENGTH (avail_meet_two a b ' k))
+             (FDOM (avail_meet_two a b)) <=
+       SIGMA (\k. LENGTH (a ' k)) (FDOM a)
+Proof
+ rpt gen_tac >> simp[cse_avail_meet_domain] >>
+ irule arithmeticTheory.LESS_EQ_TRANS >>
+ qexists_tac `SIGMA (\k. LENGTH (a ' k)) (FDOM a INTER FDOM b)` >>
+ conj_tac
+ >- (irule pred_setTheory.SUM_IMAGE_MONO_LESS_EQ >>
+     simp[cse_avail_meet_apply, rich_listTheory.LENGTH_FILTER_LEQ]) >>
+ irule pred_setTheory.SUM_IMAGE_SUBSET_LE >>
+ simp[pred_setTheory.INTER_SUBSET]
+QED
+
+Theorem cse_avail_meet_weight_le:
+ !a b. cse_avail_weight (avail_meet_two a b) <= cse_avail_weight a
+Proof
+ rpt gen_tac >>
+ mp_tac (Q.SPECL [`a`, `b`] cse_avail_meet_sum_le) >>
+ `CARD (FDOM (avail_meet_two a b)) <= CARD (FDOM a)` by
+   (irule pred_setTheory.CARD_SUBSET >>
+    simp[cse_avail_meet_domain, pred_setTheory.INTER_SUBSET]) >>
+ simp[cse_avail_weight_def]
+QED
+
+Theorem cse_filter_length_eq[local]:
+ !P xs. LENGTH (FILTER P xs) = LENGTH xs ==> FILTER P xs = xs
+Proof
+ gen_tac >> Induct >> simp[] >> gen_tac >>
+ Cases_on `P h` >> simp[] >>
+ mp_tac (Q.SPECL [`P`, `xs`] rich_listTheory.LENGTH_FILTER_LEQ) >>
+ simp[]
+QED
+
+Theorem cse_avail_meet_weight_eq_domain[local]:
+ !a b. cse_avail_weight (avail_meet_two a b) = cse_avail_weight a ==>
+ FDOM (avail_meet_two a b) = FDOM a
+Proof
+ rpt strip_tac >>
+ spose_not_then assume_tac >>
+ `CARD (FDOM (avail_meet_two a b)) < CARD (FDOM a)` by
+   (irule pred_setTheory.CARD_PSUBSET >>
+    gvs[cse_avail_meet_domain, pred_setTheory.PSUBSET_DEF,
+        pred_setTheory.INTER_SUBSET]) >>
+ mp_tac (Q.SPECL [`a`, `b`] cse_avail_meet_sum_le) >>
+ gvs[cse_avail_weight_def]
+QED
+
+Theorem cse_avail_meet_weight_eq:
+ !a b. cse_avail_weight (avail_meet_two a b) = cse_avail_weight a ==>
+ avail_meet_two a b = a
+Proof
+ rpt strip_tac >>
+ drule cse_avail_meet_weight_eq_domain >> strip_tac >>
+ simp[finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM] >> gen_tac >>
+ rename1 `FLOOKUP a k` >> reverse (Cases_on `k IN FDOM a`)
+ >- (simp[finite_mapTheory.FLOOKUP_DEF]) >>
+ simp[finite_mapTheory.FLOOKUP_DEF] >>
+ `k IN FDOM b` by
+   metis_tac[cse_avail_meet_domain, pred_setTheory.IN_INTER] >>
+ simp[cse_avail_meet_apply] >>
+ irule cse_filter_length_eq >>
+ spose_not_then assume_tac >>
+ `LENGTH (FILTER (\i. MEM i (b ' k)) (a ' k)) < LENGTH (a ' k)` by
+   (`LENGTH (FILTER (\i. MEM i (b ' k)) (a ' k)) <= LENGTH (a ' k)` by
+      simp[rich_listTheory.LENGTH_FILTER_LEQ] >> decide_tac) >>
+ `SIGMA (\j. LENGTH (avail_meet_two a b ' j)) (FDOM a) <
+  SIGMA (\j. LENGTH (a ' j)) (FDOM a)` by
+   (irule pred_setTheory.SUM_IMAGE_MONO_LESS >> rpt conj_tac
+    >- (rpt strip_tac >>
+        `x IN FDOM b` by
+          metis_tac[cse_avail_meet_domain, pred_setTheory.IN_INTER] >>
+        simp[cse_avail_meet_apply, rich_listTheory.LENGTH_FILTER_LEQ])
+    >- (qexists_tac `k` >> simp[cse_avail_meet_apply]) >> simp[]) >>
+ gvs[cse_avail_weight_def]
+QED
+
+Theorem cse_avail_meet_weight_lt:
+ !a b. avail_meet_two a b <> a ==>
+ cse_avail_weight (avail_meet_two a b) < cse_avail_weight a
+Proof
+ rpt strip_tac >>
+ mp_tac (Q.SPECL [`a`, `b`] cse_avail_meet_weight_le) >>
+ `cse_avail_weight (avail_meet_two a b) <> cse_avail_weight a` by
+   metis_tac[cse_avail_meet_weight_eq] >> decide_tac
+QED
+
+Definition cse_boundary_rank_def:
+ cse_boundary_rank U (h : string -> avail_exprs option) =
+ (CARD {k | k IN U /\ h k = NONE},
+  SIGMA (\k. case h k of NONE => 0 | SOME a => cse_avail_weight a) U)
+End
+
+
+Theorem cse_sum_split[local]:
+ !U f k. FINITE U /\ k IN U ==>
+ SIGMA f U = f k + SIGMA f (U DELETE k)
+Proof
+ rpt strip_tac >>
+ `U = k INSERT (U DELETE k)` by metis_tac[pred_setTheory.INSERT_DELETE] >>
+ qpat_x_assum `_ = _ INSERT _`
+   (fn th => GEN_REWRITE_TAC (LAND_CONV o RAND_CONV) empty_rewrites [th]) >>
+ simp[pred_setTheory.SUM_IMAGE_THM]
+QED
+
+Theorem cse_boundary_rank_some:
+ !U h k a b. FINITE U /\ k IN U /\ h k = SOME a /\
+ avail_meet_two a b <> a ==>
+ FST (cse_boundary_rank U ((k =+ SOME (avail_meet_two a b)) h)) =
+ FST (cse_boundary_rank U h) /\
+ SND (cse_boundary_rank U ((k =+ SOME (avail_meet_two a b)) h)) <
+ SND (cse_boundary_rank U h)
+Proof
+ rpt strip_tac
+ >- (simp[cse_boundary_rank_def] >> AP_TERM_TAC >>
+     simp[pred_setTheory.EXTENSION, combinTheory.APPLY_UPDATE_THM] >>
+     metis_tac[optionTheory.NOT_SOME_NONE]) >>
+ simp[cse_boundary_rank_def] >>
+ qmatch_goalsub_abbrev_tac `SIGMA g U < SIGMA f U` >>
+ `SIGMA g U = g k + SIGMA g (U DELETE k)` by
+   metis_tac[cse_sum_split] >>
+ `SIGMA f U = f k + SIGMA f (U DELETE k)` by
+   metis_tac[cse_sum_split] >>
+ `SIGMA g (U DELETE k) = SIGMA f (U DELETE k)` by
+   (irule pred_setTheory.SUM_IMAGE_CONG >>
+    simp[Abbr `g`, Abbr `f`, combinTheory.APPLY_UPDATE_THM]) >>
+ `g k < f k` by
+   simp[Abbr `g`, Abbr `f`, combinTheory.APPLY_UPDATE_THM,
+        cse_avail_meet_weight_lt] >> decide_tac
+QED
+
+Theorem cse_boundary_rank_none:
+ !U h k a. FINITE U /\ k IN U /\ h k = NONE ==>
+ FST (cse_boundary_rank U ((k =+ SOME a) h)) <
+ FST (cse_boundary_rank U h)
+Proof
+ rpt strip_tac >> simp[cse_boundary_rank_def] >>
+ irule pred_setTheory.CARD_PSUBSET >>
+ simp[pred_setTheory.PSUBSET_DEF, pred_setTheory.SUBSET_DEF,
+      pred_setTheory.EXTENSION, combinTheory.APPLY_UPDATE_THM] >>
+ conj_tac
+ >- (irule pred_setTheory.SUBSET_FINITE >> qexists_tac `U` >>
+     simp[pred_setTheory.SUBSET_DEF]) >>
+ qexists_tac `k` >> simp[]
+QED
+
+Theorem cse_lex_components[local]:
+ !p q : num # num. ($< LEX $<) p q <=>
+ FST p < FST q \/ (FST p = FST q /\ SND p < SND q)
+Proof
+ rpt gen_tac >> PairCases_on `p` >> PairCases_on `q` >>
+ simp[pairTheory.LEX_DEF]
+QED
+
+Theorem cse_boundary_rank_meet:
+ !U h k v. FINITE U /\ k IN U /\
+ avail_meet_opt (h k) v <> h k ==>
+ ($< LEX $<)
+   (cse_boundary_rank U ((k =+ avail_meet_opt (h k) v) h))
+   (cse_boundary_rank U h)
+Proof
+ rpt strip_tac >> Cases_on `h k` >> Cases_on `v` >>
+ gvs[avail_meet_opt_def]
+ >- (simp[cse_lex_components] >>
+     disj1_tac >> irule cse_boundary_rank_none >> simp[]) >>
+ simp[cse_lex_components] >> disj2_tac >>
+ irule cse_boundary_rank_some >> simp[]
+QED
+
+Theorem cse_boundary_update_function[local]:
+ !st k v.
+ df_boundary NONE (st with ds_boundary := st.ds_boundary |+ (k,v)) =
+ (k =+ v) (df_boundary NONE st)
+Proof
+ rpt gen_tac >> simp[FUN_EQ_THM, df_boundary_def,
+   finite_mapTheory.FLOOKUP_UPDATE, combinTheory.APPLY_UPDATE_THM] >>
+ qx_gen_tac `l` >> Cases_on `k = l` >> simp[]
+QED
+
+(* Worklist API ledger:
+   - This discharges changed-step descent for valid labels k IN U, including
+     both first materialization and contraction of an existing boundary.
+   - wl_iterate_fixpoint_process_restricted instead requires an increasing
+     scalar m with a uniform bound b. No such m/b is supplied here: first
+     materialization has no asserted bound on its second coordinate.
+   - Preservation of a reachable-state invariant, dependency completeness,
+     initial worklist coverage and closure of valid labels remain separate.
+   Thus this local theorem does not assert analysis convergence/provenance. *)
+Theorem cse_process_boundary_rank:
+ !U dir transfer edge ctx entry cfg bbs k st.
+ FINITE U /\ k IN U /\
+ df_process_block dir NONE avail_meet_opt transfer edge ctx entry cfg bbs k st
+   <> st ==>
+ ($< LEX $<)
+ (cse_boundary_rank U
+   (df_boundary NONE
+     (df_process_block dir NONE avail_meet_opt transfer edge ctx entry cfg bbs k st)))
+ (cse_boundary_rank U (df_boundary NONE st))
+Proof
+ rpt gen_tac >> strip_tac >>
+ gvs[df_process_block_def, LET_THM] >> pairarg_tac >> gvs[] >>
+ IF_CASES_TAC >> gvs[] >>
+ simp[cse_boundary_update_function] >>
+ irule cse_boundary_rank_meet >> simp[]
 QED
