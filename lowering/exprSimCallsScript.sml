@@ -13,17 +13,29 @@
  *     compile_raw_revert_sim, compile_selfdestruct_sim
  *   5 the creates: compile_create_sim
  *
- * Unprovable as the definitions stand:
+ * Unprovable as the definitions stand (for compile_raw_call_sim,
+ * compile_raw_call_calldata_sim and compile_create_sim, once
+ * expr_sim_pre's exclusion of them, below, is lifted):
  *   - compile_create_sim: compile_call lowers CreateTarget to INVALID
  *     (builtinCreate's compile_create_* are not called yet), where the
  *     source can succeed.
+ *   - compile_raw_call_sim and compile_raw_call_calldata_sim: the source
+ *     raw_call runs the callee on the EVM even with the outcome oracle,
+ *     where the lowered CALL/STATICCALL consumes an oracle outcome. With
+ *     is_delegate_call both sides run the EVM, but differently: the source
+ *     (run_delegate_call) dispatches a precompile address to
+ *     dispatch_precompiles and fails unless ext_call_success_accounts_ok,
+ *     while Venom's DELEGATECALL (exec_delegatecall) runs the target's
+ *     account code with neither, so a delegate call to a precompile
+ *     returns the precompile's output in the source and empty success in
+ *     Venom.
  *   - compile_raw_call_calldata_sim, and the create lowerings once they are
  *     wired in: they allocate with DALLOCA, at vs_fmp, which
  *     stmt_state_rel does not relate to the ALLOCA allocations, so
  *     expr_post's memory frame does not follow (#668, #636 Infrastructure
  *     row 2).
- * RawLog and SelfDestructTarget are wired into compile_call; RawCallTarget
- * still lowers to INVALID.
+ * RawLog, RawRevert, SelfDestructTarget and both raw_call forms are wired
+ * into compile_call.
  * Their case lemmas remain admitted.  For SelfDestructTarget, expr_exit
  * now covers HaltException by Halt with empty returndata only; full
  * terminal effects correctness is the separate loweringHalt/e2e bridge's

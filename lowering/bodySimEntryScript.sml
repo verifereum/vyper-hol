@@ -12,12 +12,16 @@
  *   fallback_entry_declared, internal_entry_declared
  *                                — each entry's compile env binds the
  *                                  parameters only
+ *   build_compile_env_bare_globals
+ *                                — expr_sim_inv's immutable clause
+ *                                  for build_compile_env
  *)
 
 Theory bodySimEntry
 Ancestors
   list finite_map bodySim compileEnv compileVyper moduleLowering
-  intCallCallee
+  intCallCallee supportedDecls supportedProgram vyperTypeInvariants
+  immutableLocationProps immutableSectionRel immutableRelation option pair
 Libs
   monadsyntax
 
@@ -164,4 +168,74 @@ Proof
   rpt BasicProvers.VAR_EQ_TAC >>
   drule_all materialize_internal_params_bound >> strip_tac >> gvs[] >>
   gvs[Abbr `ce`] >> drule build_compile_env_bound >> simp[]
+QED
+
+(* A supported program declares no constants, so every bare global of it
+   is an immutable. *)
+Theorem supported_bare_global_immutable:
+  !tops id.
+    supported_declaration_headers tops /\ is_bare_global_decl id tops ==>
+    ?vis ty slot. MEM (VariableDecl vis Immutable id ty slot) tops
+Proof
+  simp[supported_declaration_headers_def] >>
+  `!ts tops id.
+     EVERY (supported_declaration_header tops) ts /\
+     is_bare_global_decl id ts ==>
+     ?vis ty slot. MEM (VariableDecl vis Immutable id ty slot) ts`
+    suffices_by metis_tac[] >>
+  Induct >> simp[is_bare_global_decl_def] >> rpt strip_tac >>
+  Cases_on `h` >> gvs[is_bare_global_decl_def]
+  >~ [`VariableDecl dvis dmut dname dty dslot`]
+  >- (Cases_on `dmut` >> Cases_on `dvis` >> Cases_on `dslot` >>
+      Cases_on `dname = id` >>
+      gvs[is_bare_global_decl_def, supported_declaration_header_def] >>
+      metis_tac[]) >>
+  metis_tac[]
+QED
+
+(* expr_sim_inv's immutable clause at a body's entry: build_compile_env
+   places every immutable of a supported single-module program, and the
+   installed immutables section, whose length is below 2 ** 256, holds
+   each one's bytes (immutables_section_rel). *)
+Theorem build_compile_env_bare_globals:
+  !tops vis mut fname args ret body locks cenv cx env es imms section.
+    cenv = build_compile_env tops vis mut fname args ret body locks /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    (!src ts. get_module_code cx src = SOME ts ==> src = NONE) /\
+    env_consistent env cx es /\
+    ALOOKUP es.immutables cx.txn.target = SOME imms /\
+    immutables_section_rel tops imms section /\
+    LENGTH section < dimword (:256) ==>
+    !src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==>
+      src = cenv.ce_module /\
+      ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+            !tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+                 off + type_memory_size tv < dimword (:256)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all env_consistent_bare_global_find_NONE >> strip_tac >>
+  `src = NONE` by metis_tac[] >> gvs[build_compile_env_module_vars] >>
+  `?dvis dty dslot. MEM (VariableDecl dvis Immutable id dty dslot) tops` by
+    metis_tac[supported_bare_global_immutable, supported_program_def] >>
+  drule immutable_build_compile_env_declared >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  gvs[build_compile_env_module_vars] >>
+  rpt strip_tac >>
+  mp_tac (Q.SPEC `tops` immutable_build_compile_env_layout) >>
+  simp[immutable_section_layout_def, build_compile_env_module_vars] >>
+  disch_then drule >> strip_tac >>
+  `env_immutables_consistent env cx es` by fs[env_consistent_def] >>
+  `IS_SOME (FLOOKUP (get_source_immutables NONE imms) id) /\
+   !itv iv. FLOOKUP (get_source_immutables NONE imms) id = SOME (itv,iv) ==>
+            evaluate_type (get_tenv cx) ty = SOME itv` by
+    (qpat_x_assum `env_immutables_consistent _ _ _` mp_tac >>
+     simp[env_immutables_consistent_def] >> rpt strip_tac >> metis_tac[SOME_11]) >>
+  `?itv iv. FLOOKUP (get_source_immutables NONE imms) id = SOME (itv,iv)` by
+    (gvs[IS_SOME_EXISTS] >> metis_tac[PAIR]) >>
+  qpat_x_assum `tops = _`
+    (assume_tac o REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+  drule_all immutables_section_rel_lookup >> strip_tac >>
+  `tv = itv` by (res_tac >> gvs[]) >>
+  qpat_x_assum `tops = _` kall_tac >>
+  gvs[] >> decide_tac
 QED

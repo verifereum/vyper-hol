@@ -15,7 +15,8 @@
  *   update_cenv_ret_abi_plan -- the plan and size of a return type
  *   build_compile_env_ret_abi_plan -- the same at package_external_fn's env
  *   supported_return_type_assignable -- a supported, well-formed return type
- *     other than NoneT is assignable, as the two above assume
+ *     other than NoneT and an empty struct is assignable, as the two above
+ *     assume
  * Helpers:
  *   vyper_to_abi_type_submap -- evaluation and ABI type in a larger env
  *   sfields_tenv_consistent_domsub -- struct map and env drop a struct
@@ -576,14 +577,17 @@ Proof
 QED
 
 (* A supported return type other than NoneT is assignable where it is well
-   formed, as the source checker requires of a function's return type
-   (check_toplevel_decl).  supported_return_type alone does not give it: it
-   bounds neither a bytestring's nor a dynamic array's length, so it admits
-   Bytes[2 ** 256], which does not evaluate. *)
+   formed (as check_toplevel_decl requires of a function's return type) and
+   is not a struct with no fields.  supported_return_type alone does not give
+   it: it bounds neither a bytestring's nor a dynamic array's length, so it
+   admits Bytes[2 ** 256], which does not evaluate; and it admits a struct
+   with no fields, which assignable_type rejects and which neither
+   supported_value_type nor the source checker excludes. *)
 Theorem supported_return_type_assignable:
   !tops ret.
     supported_return_type tops ret /\ ret <> NoneT /\
-    well_formed_type (type_env tops) ret ==>
+    well_formed_type (type_env tops) ret /\
+    (!id. ret = StructT id ==> supported_struct_fields tops id <> SOME []) ==>
     assignable_type (type_env tops) ret
 Proof
   rw[supported_return_type_def, supported_value_type_def]
@@ -592,7 +596,7 @@ Proof
   >~ [`TupleT ts`]
   >- (simp[assignable_type_def] >>
       gvs[well_formed_type_def, evaluate_type_def, AllCaseEqs(),
-          evaluate_types_OPT_MMAP] >>
+          evaluate_types_OPT_MMAP, NULL_EQ] >>
       `EVERY IS_SOME (MAP (evaluate_type (type_env tops)) ts)` by
         (simp[GSYM IS_SOME_OPT_MMAP] >>
          Cases_on `OPT_MMAP (evaluate_type (type_env tops)) ts` >> gvs[]) >>

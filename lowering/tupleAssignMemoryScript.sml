@@ -86,8 +86,9 @@ Theorem assign_tuple_locals_memory_success_run:
       es = (INL (), es') /\
     ids <> [] /\ expr_type e = TupleT tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
-    (EXISTS (\t. ~is_word_type t) tys ==>
-      cenv.ce_target CapMcopy /\ type_memory_size (TupleTV tvs) < dimword (:256)) /\
+    (EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy) /\
+    (is_memory_view e /\ EXISTS (\t. ~is_word_type t) tys ==>
+     type_memory_size (TupleTV tvs) < dimword (:256)) /\
     (!i. i < LENGTH ids ==> ?p sz vt.
       FLOOKUP cenv.ce_vars (EL i ids) = SOME (PtrVar (Var p) sz) /\
       cenv.ce_var_type (EL i ids) = SOME vt /\
@@ -280,7 +281,7 @@ Resume assign_tuple_locals_memory_success_run[store_ready]:
   map_every (fn q => qpat_x_assum q kall_tac)
     [`!i. i < LENGTH ids ==> ?p sz vt. _ /\ _ /\ if _ then _ else _`,
      `value_has_type _ _`, `evaluate_type _ (TupleT tys) = _`,
-     `(EXISTS _ tys ==> _ /\ _)`, `(EXISTS _ tys ==> _)`,
+     `(is_memory_view _ /\ EXISTS _ tys ==> _)`, `(EXISTS _ tys ==> _)`,
      `bind (eval_expr _ _) _ _ = _`, `compile_tuple_load_all _ _ _ _ _ = _`,
      `local_ptrs_reserved cenv sa`, `local_ptrs_reserved cenv su`,
      `eval_operand staged st = _`,
