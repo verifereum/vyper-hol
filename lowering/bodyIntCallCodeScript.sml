@@ -8,6 +8,7 @@ Ancestors
   bodyIntCallSupportedExprLabels bodyIntCallStmtHelperLabels bodyIntCallStmtControlLabels
   bodyIntCallSupportedStmtLabels bodyIntCallFunctionLabels bodyIntCallPrefix
   bodyIntCallPrefixLabels abiDecoderAppend emitHelperProps pred_set loweringShapeDefs
+  supportedProgram supportedDecls compileVyper
 
 Theorem compile_internal_fn_bodies_append:
   !xs ys st.
@@ -947,4 +948,101 @@ Proof
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem package_internal_supported_label_body:
+  supported_program tops /\
+  MEM src (FST (SND (classify_functions tops))) ==>
+  (\(lbl,ce,params,has_buf,nr,key,trans,view,ctor,imm_len,ss,ret).
+    ~nr /\ ~ctor /\ ~compiler_label lbl /\
+    ?bindings. supported_stmts tops bindings ss /\
+      ~supported_stmts_expr_exists expr_internal_call_root ss)
+    (set_internal_package_target target
+      (package_internal_fn tops use_trans nkeys F 0 src))
+Proof
+  strip_tac >> PairCases_on `src` >>
+  drule (iffLR MEM_classify_internal) >> strip_tac >>
+  drule_all supported_program_function >> strip_tac >>
+  drule_all supported_program_declaration >>
+  simp[supported_declaration_body_def, supported_function_header_contract] >>
+  strip_tac >>
+  simp[package_internal_fn_def, set_internal_package_target_def] >>
+  conj_tac
+  >- (irule internal_label_not_compiler >>
+      simp[internal_label_ok_def, internal_fn_label_prefix]) >>
+  gvs[supported_function_body_def] >> metis_tac[]
+QED
+
+Theorem supported_runtime_internal_packages:
+  supported_program tops ==>
+  EVERY (\(lbl,ce,params,has_buf,nr,key,trans,view,ctor,imm_len,ss,ret).
+    ~nr /\ ~ctor /\ ~compiler_label lbl /\
+    ?bindings. supported_stmts tops bindings ss /\
+      ~supported_stmts_expr_exists expr_internal_call_root ss)
+    (MAP (set_internal_package_target target o
+      package_internal_fn tops use_trans nkeys F 0)
+      (FST (SND (classify_functions tops)))) /\
+  EVERY (\d. internal_label_ok (FST d))
+    (internal_fn_descriptors
+      (MAP (set_internal_package_target target o
+        package_internal_fn tops use_trans nkeys F 0)
+        (FST (SND (classify_functions tops)))))
+Proof
+  strip_tac >> conj_tac
+  >- (simp[EVERY_MAP, EVERY_MEM, combinTheory.o_DEF] >> rpt strip_tac >>
+      irule package_internal_supported_label_body >> simp[]) >>
+  simp[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
+       internal_fn_descriptors_MAP_package_internal_fn] >>
+  drule supported_internal_descriptors_ok >> simp[]
+QED
+
+Theorem lower_vyper_runtime_unit_selected_internal_code:
+  supported_program tops /\
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  MEM src (FST (SND (classify_functions tops))) /\
+  set_internal_package_target rpolicy.rpol_target
+    (package_internal_fn tops F (assign_nkeys tops 0) F 0 src) =
+    (label,ce,params,has_buf,F,nkey,transient,view,F,imm_len,ss,ret) ==>
+  ?func before old entry final cenv2 pc body_start body_env body_end.
+    lookup_function label unit.cu_context.ctx_functions = SOME func /\
+    new_block label before = (old,entry) /\
+    compile_internal_function ce params has_buf F nkey transient view F imm_len ss ret
+      entry = ((),final) /\
+    fn_has_code entry final func /\
+    compile_internal_prologue ce params has_buf ret entry = ((cenv2,pc),body_start) /\
+    stmts_env (cenv2 with <| ce_imm_alloca := NONE; ce_alloca_locals := T |>) NoLoop
+      (case ret of SOME t => t | NONE => BaseT BoolT) ss body_start =
+      (body_env,body_end) /\
+    (if block_is_terminated body_end then ((),body_end)
+     else case ret of NONE => emit_inst RET [pc] [] body_end
+                    | SOME t => emit_inst INVALID [] [] body_end) = ((),final)
+Proof
+  strip_tac >>
+  `MEM (label,ce,params,has_buf,F,nkey,transient,view,F,imm_len,ss,ret)
+    (MAP (set_internal_package_target rpolicy.rpol_target o
+      package_internal_fn tops F (assign_nkeys tops 0) F 0)
+      (FST (SND (classify_functions tops))))` by
+    (simp[MEM_MAP] >> qexists_tac `src` >> simp[]) >>
+  drule (iffLR MEM_SPLIT) >> strip_tac >>
+  drule supported_runtime_internal_packages >>
+  disch_then (qspecl_then [`F`, `rpolicy.rpol_target`, `assign_nkeys tops 0`]
+    strip_assume_tac) >>
+  qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
+  simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  gvs[] >>
+  qpat_x_assum `MAP _ int_fns = _` (assume_tac o GSYM) >>
+  `l1 ++ (label,ce,params,has_buf,F,nkey,transient,view,F,imm_len,ss,ret)::l2 =
+    l1 ++ [(label,ce,params,has_buf,F,nkey,transient,view,F,imm_len,ss,ret)] ++ l2` by simp[] >>
+  drule_at (Pat `run_lowering _ _ _ _ _ _ _ _ _ _ = _`)
+    run_lowering_source_runtime_internal_code >>
+  simp[] >>
+  disch_then (qspecl_then [`F`, `tops`, `rpolicy.rpol_target`, `assign_nkeys tops 0`]
+    mp_tac) >> simp[] >>
+  impl_tac >- (qexists_tac `bindings` >> simp[]) >>
+  strip_tac >> gvs[] >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> gvs[] >>
+  Cases_on `block_is_terminated body_end` >> gvs[]
 QED

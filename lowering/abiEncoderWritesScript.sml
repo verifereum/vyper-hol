@@ -191,7 +191,7 @@ Theorem encoder_dynamic_iteration_stores:
     OK (mstore idx_p (n2w (i+1)) v)
 Proof
   strip_tac >>
-  simp[step_inst_base_def, exec_write2_def] >> gvs[]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def] >> gvs[]
 QED
 
 Theorem encoder_registered_cell_initialization_and_repeat:
