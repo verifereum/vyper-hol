@@ -290,14 +290,20 @@ Proof
          DROP_LENGTH_APPEND] >>
   gvs[] >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
-  simp[exprLoweringPropsTheory.run_inst_seq_def,
-       venomExecSemanticsTheory.step_inst_base_def,
+  simp[Once exprLoweringPropsTheory.run_inst_seq_def,
+       Once venomExecSemanticsTheory.step_inst_base_def,
        venomExecSemanticsTheory.exec_read0_def,
+       venomInstTheory.mk_inst_def] >>
+  simp[Once exprLoweringPropsTheory.run_inst_seq_def,
+       Once venomExecSemanticsTheory.step_inst_base_def,
        venomExecSemanticsTheory.exec_pure1_def,
        venomInstTheory.mk_inst_def, eval_operand_def,
        lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   Cases_on `s0.vs_call_ctx.cc_callvalue = 0w` >>
   simp[venomExecSemanticsTheory.bool_to_word_def] >>
+  simp[exprLoweringPropsTheory.run_inst_seq_def,
+       venomExecSemanticsTheory.step_inst_base_def, eval_operand_def,
+       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   strip_tac >> gvs[] >>
   conj_tac
   >- simp[vars_pc_only_def] >>
