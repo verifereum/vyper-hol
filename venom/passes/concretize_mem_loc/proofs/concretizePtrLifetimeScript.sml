@@ -1,6 +1,7 @@
 Theory concretizePtrLifetime
 Ancestors concretizePtrChronologicalHistory concretizePtrAllocationOwnership
-  concretizePtrAllocationOrigins ptrDisciplineEmptyTaint venomExecSemantics
+  concretizePtrAllocationOrigins concretizePtrActivationSupport
+  ptrDisciplineEmptyTaint venomExecSemantics
   venomState venomInst venomMemProps list rich_list finite_map
 
 Definition ptr_obs_states_def:
@@ -10,21 +11,6 @@ End
 Definition ptr_bottom_state_def:
   ptr_bottom_state d obs = EL (LENGTH obs.po_stack - d) (ptr_obs_states obs)
 End
-
-Theorem ptr_step_alloc_lookup[local]:
-  step_inst fuel ctx inst s = OK s' /\
-  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> DALLOCA /\
-  FLOOKUP s.vs_allocas aid = SOME site ==>
-  FLOOKUP s'.vs_allocas aid = SOME site
-Proof
-  strip_tac >> Cases_on `inst.inst_opcode = ALLOCA`
-  >- (gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
-      metis_tac[exec_alloca_lookup_preserved]) >>
-  `s'.vs_allocas = s.vs_allocas` by
-    (drule step_inst_non_alloca_preserves_allocas >>
-     impl_tac >- (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >> simp[]) >>
-  simp[]
-QED
 
 Theorem ptr_chrono_bottom_lookup_step:
   ptr_chrono_step ctx a b /\ a.po_inst.inst_opcode <> DALLOCA /\
@@ -36,12 +22,12 @@ Proof
   simp[Once ptr_chrono_step_cases] >> rpt strip_tac >>
   gvs[ptr_bottom_state_def, ptr_obs_states_def, ptr_observe_def]
   >- (Cases_on `LENGTH stk - d` >> gvs[] >>
-      metis_tac[ptr_step_alloc_lookup])
+      metis_tac[ptr_step_allocas_extend])
   >- (drule ptr_alloc_enters_fields >> strip_tac >>
       `inst.inst_opcode <> INVOKE` by
         (Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]) >>
       Cases_on `LENGTH stk - d` >> gvs[] >>
-      metis_tac[ptr_step_alloc_lookup])
+      metis_tac[ptr_step_allocas_extend])
   >- (`SUC (LENGTH stk) - d = SUC (LENGTH stk - d)` by decide_tac >> simp[]) >>
   `SUC (LENGTH stk) - d = SUC (LENGTH stk - d)` by decide_tac >>
   gvs[] >> drule ptr_alloc_return_fields >> strip_tac >>
