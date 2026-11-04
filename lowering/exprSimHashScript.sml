@@ -1938,16 +1938,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem vv_post_frame_intro:
-  stmt_state_rel ctx func cenv cx es' t /\
-  vv_holds cenv cx (expr_type e) tv vv es' t /\
-  vv_at cenv cx (expr_type e) sa sb es' tv vv t /\
-  wb_frame cenv es sa s0 t ==>
-  vv_post ctx func cenv cx e es sa sb s0 es' tv vv t
-Proof
-  simp[vv_post_def, wb_frame_def] >> metis_tac[]
-QED
-
 Theorem vv_post_word_intro:
   stmt_state_rel ctx func cenv cx es' s /\ is_word_type (expr_type e) /\
   (?w. eval_operand op s = SOME w /\
