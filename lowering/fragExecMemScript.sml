@@ -393,9 +393,49 @@ Proof
   Cases_on `r` >> gvs[]
 QED
 
+Theorem resolve_block_assigns_non_var[local]:
+  !l op. (!v. op <> Var v) ==> resolve_block_assigns l op = op
+Proof
+  Cases_on `l` >> Cases_on `op` >> simp[resolve_block_assigns_def]
+QED
+
+Theorem resolve_block_assigns_no_outputs[local]:
+  !inst rest op.
+    inst.inst_outputs = [] ==>
+    resolve_block_assigns (inst :: rest) op = resolve_block_assigns rest op
+Proof
+  rpt strip_tac >> Cases_on `op` >>
+  simp[resolve_block_assigns_def, resolve_block_assigns_non_var]
+QED
+
+(* Adjacent RETURNDATACOPY [p; 0; rds] and REVERT [p; rds] form a pair. *)
+Theorem revert_forward_pair_adjacent[local]:
+  !bb i id1 id2 p rds.
+    get_instruction bb i = SOME (mk_inst id1 RETURNDATACOPY [p; Lit 0w; rds] []) /\
+    get_instruction bb (SUC i) = SOME (mk_inst id2 REVERT [p; rds] []) ==>
+    revert_forward_at bb i /\ revert_forward_at bb (SUC i)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `revert_forward_pair bb i (SUC i)` suffices_by
+    (rw[revert_forward_at_def] >> metis_tac[]) >>
+  `i < LENGTH bb.bb_instructions /\
+   EL i bb.bb_instructions = mk_inst id1 RETURNDATACOPY [p; Lit 0w; rds] []` by
+    gvs[get_instruction_def, AllCaseEqs()] >>
+  `TAKE (SUC i) bb.bb_instructions =
+   SNOC (mk_inst id1 RETURNDATACOPY [p; Lit 0w; rds] [])
+        (TAKE i bb.bb_instructions)` by
+    metis_tac[rich_listTheory.SNOC_EL_TAKE] >>
+  gvs[revert_forward_pair_def, listTheory.REVERSE_SNOC,
+      resolve_block_assigns_no_outputs, resolve_block_assigns_non_var,
+      mk_inst_def] >>
+  rpt strip_tac >>
+  `~(k < SUC i)` by (qpat_x_assum `i < k` mp_tac >> simp[]) >>
+  gvs[]
+QED
+
 (* RETURNDATACOPY [p; 0; rds] then REVERT [p; rds], the lowering's revert
    forwarding after a failed call.  raw_unit_memory_ok exempts the pair
-   (revert_forward), so it is memory-safe wherever p points; the run exits
+   (revert_forward_pair), so it is memory-safe wherever p points; the run exits
    at the copy's abort or at the REVERT. *)
 Theorem revert_forward_frag_mem:
   !ctx st st' id1 id2 p rds P Q R.
@@ -424,15 +464,15 @@ Proof
     (qpat_x_assum `!i. _` (fn th =>
        qspec_then `0` mp_tac th >> qspec_then `1` mp_tac th) >>
      simp[arithmeticTheory.ADD1]) >>
-  `revert_forward bb s.vs_inst_idx` by
-    (simp[revert_forward_def] >> unabbrev_all_tac >> simp[mk_inst_def]) >>
+  `revert_forward_at bb s.vs_inst_idx /\ revert_forward_at bb (SUC s.vs_inst_idx)` by
+    (unabbrev_all_tac >> drule_all revert_forward_pair_adjacent >> simp[]) >>
   `i1.inst_opcode = RETURNDATACOPY /\ i2.inst_opcode = REVERT` by
     (unabbrev_all_tac >> simp[mk_inst_def]) >>
   first_x_assum drule >> strip_tac
   >- (`step_inst 0 ctx i1 s = Abort a s1` by simp[step_inst_non_invoke] >>
       qspecl_then [`0`, `ctx`, `fn`, `s`, `bb`, `i1`, `Abort a s1`] mp_tac
         run_from_step_exit_forward >>
-      gvs[revert_forward_at_def] >> strip_tac >>
+      gvs[] >> strip_tac >>
       qexists_tac `0` >> simp[exit_result_def]) >>
   `step_inst 0 ctx i1 s = OK s1` by simp[step_inst_non_invoke] >>
   `s1.vs_current_bb = s.vs_current_bb` by
@@ -449,7 +489,7 @@ Proof
     run_from_step_exit_forward >>
   `t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = SUC s.vs_inst_idx` by
     simp[Abbr `t`] >>
-  gvs[revert_forward_at_def] >> strip_tac >>
+  gvs[] >> strip_tac >>
   qexists_tac `0` >> simp[exit_result_def]
 QED
 
