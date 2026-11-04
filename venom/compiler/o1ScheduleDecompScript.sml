@@ -213,13 +213,6 @@ Proof
   irule stage_ctx_shape >> metis_tac[]
 QED
 
-(* Every call goes to a function scheduled earlier. *)
-Definition callee_first_def:
-  callee_first names fns <=>
-    !g callee. MEM g fns /\ MEM callee (fn_invoke_targets g) ==>
-      list_precedes callee g.fn_name names
-End
-
 Theorem chain_facts_walk_view:
   LENGTH chains = LENGTH unit.cu_context.ctx_functions /\
   o1_ctx_shape unit.cu_context /\

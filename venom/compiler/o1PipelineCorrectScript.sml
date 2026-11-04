@@ -40,7 +40,8 @@ QED
  * Premises added to the original admission: the source's non-INVOKE label
  * operands are local (unit_label_refs_ok), which unit_wf does not give for
  * PHI; its entry function has no PARAM (unit_entry_no_params); no
- * function has a PHI in its first block (unit_first_block_no_phi); and
+ * function has a PHI in its first block (unit_first_block_no_phi); no
+ * function has its FMP convention set yet (unit_fmp_unsealed); and
  * the initial state's dynamic-memory pointer is its initial free-memory
  * pointer (o1_run_state_ok), as the entry state has it; and the
  * context's global reservations are well-formed, which the stage
@@ -59,7 +60,7 @@ Theorem run_venom_pipeline_correct:
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
     unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
-    o1_run_state_ok vs /\
+    unit_fmp_unsealed unit /\ o1_run_state_ok vs /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     raw_unit_memory_ok unit.cu_context vs /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
@@ -71,6 +72,7 @@ Theorem run_venom_pipeline_correct:
     ctx_sim D unit.cu_context out.po_unit.cu_context vs vs
 Proof
   rpt strip_tac >>
+  `fmp_free_ctx unit.cu_context` by (irule source_fmp_free >> fs[]) >>
   `o1_src_inv D unit.cu_context vs` by
     (fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv,
         o1_source_unit_ok_no_dalloca] >> metis_tac[]) >>
@@ -85,7 +87,7 @@ Theorem run_venom_pipeline_mem_inv:
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
     unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
-    o1_run_state_ok vs /\
+    unit_fmp_unsealed unit /\ o1_run_state_ok vs /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     raw_unit_memory_ok unit.cu_context vs /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
@@ -104,6 +106,7 @@ Proof
                       d_imm := K UNIV; d_ret := K UNIV |>` >>
   `dead_wf D /\ taint_within D unit.cu_context vs` by
     simp[Abbr `D`, dead_wf_def, taint_within_def] >>
+  `fmp_free_ctx unit.cu_context` by (irule source_fmp_free >> fs[]) >>
   `o1_src_inv D unit.cu_context vs` by
     (fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv,
         o1_source_unit_ok_no_dalloca] >> metis_tac[]) >>
@@ -130,7 +133,7 @@ Theorem o1_pipeline_memory_obligations:
     generate_context_plan out.po_unit.cu_context = SOME cp /\
     o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
     unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
-    o1_run_state_ok vs /\
+    unit_fmp_unsealed unit /\ o1_run_state_ok vs /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     raw_unit_memory_ok unit.cu_context vs /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
