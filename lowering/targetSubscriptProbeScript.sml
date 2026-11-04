@@ -2447,3 +2447,176 @@ Proof
   drule_all probe_word_run_elem_cond >>
   simp[Abbr `u`, Abbr `t`, probe_word_elems_copied_state_def]
 QED
+
+Theorem probe_word_copy_cond_observations:
+  !s i n v lbl.
+    (v <> "%12" /\ v <> "%13" ==>
+      lookup_var v (probe_word_copy_cond_state s i n) = lookup_var v s) /\
+    (probe_word_copy_cond_state s i n).vs_halted = s.vs_halted /\
+    (jump_to lbl (probe_word_copy_cond_state s i n)).vs_current_bb = lbl
+Proof
+  simp[probe_word_copy_cond_state_def, lookup_var_update_var] >>
+  simp[Once jump_to_def]
+QED
+
+Theorem probe_word_copy_body_observations:
+  !s i bufaddr v.
+    (v = "%0" \/ v = "%2" \/ v = "%10" \/ v = "%11" ==>
+      lookup_var v (probe_word_copy_body_state s i bufaddr) = lookup_var v s) /\
+    lookup_var "%16" (probe_word_copy_body_state s i bufaddr) =
+      SOME (bufaddr + (32w + i * 64w)) /\
+    lookup_var "%19" (probe_word_copy_body_state s i bufaddr) =
+      SOME (0w + (1w + i * 2w)) /\
+    lookup_var "%20" (probe_word_copy_body_state s i bufaddr) = SOME 0w /\
+    (probe_word_copy_body_state s i bufaddr).vs_halted = s.vs_halted
+Proof
+  simp[probe_word_copy_body_state_def, lookup_var_update_var] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem probe_word_elems_copied_observations:
+  !s src dst v.
+    (v = "%0" \/ v = "%2" \/ v = "%10" \/ v = "%11" ==>
+      lookup_var v (probe_word_elems_copied_state s src dst) = lookup_var v s) /\
+    (probe_word_elems_copied_state s src dst).vs_halted = s.vs_halted /\
+    (probe_word_elems_copied_state s src dst).vs_current_bb = "@wcopy_exit_8"
+Proof
+  simp[probe_word_elems_copied_state_def, control_moves_keep_vars,
+       probe_word_elem_cond_state_def, lookup_var_update_var] >>
+  rpt gen_tac >> conj_tac
+  >- (strip_tac >> gvs[probe_word_elem_round_observations]) >>
+  simp[probe_word_elem_round_observations, Once jump_to_def]
+QED
+
+Definition probe_word_copy_setup_state_def:
+  probe_word_copy_setup_state s i n bufaddr =
+    jump_to "@wcopy_cond_6"
+      (probe_word_copy_body_state
+        (jump_to "@dyn_body_4" (probe_word_copy_cond_state s i n)) i bufaddr)
+End
+
+Theorem probe_word_run_copy_setup:
+  !s i n bufaddr fuel ctx.
+    lookup_var "%11" s = SOME i /\ lookup_var "%10" s = SOME n /\
+    lookup_var "%2" s = SOME bufaddr /\ ~s.vs_halted /\
+    s.vs_current_bb = "@dyn_cond_3" /\ i <+ n ==>
+    run_blocks (SUC (SUC fuel)) ctx probe_word_function s =
+    run_blocks fuel ctx probe_word_function (probe_word_copy_setup_state s i n bufaddr)
+Proof
+  rpt strip_tac >> drule_all probe_word_run_copy_cond >> simp[] >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `run_blocks (SUC fuel) ctx probe_word_function t` >>
+  `lookup_var "%11" t = SOME i /\ lookup_var "%2" t = SOME bufaddr /\
+   ~t.vs_halted /\ t.vs_current_bb = "@dyn_body_4"` by
+    simp[Abbr `t`, control_moves_keep_vars, probe_word_copy_cond_observations] >>
+  drule_all probe_word_run_copy_body >>
+  simp[Abbr `t`, probe_word_copy_setup_state_def]
+QED
+
+Theorem probe_word_copy_setup_observations:
+  !s i n bufaddr v.
+    (v = "%0" \/ v = "%2" \/ v = "%10" \/ v = "%11" ==>
+      lookup_var v (probe_word_copy_setup_state s i n bufaddr) = lookup_var v s) /\
+    lookup_var "%16" (probe_word_copy_setup_state s i n bufaddr) =
+      SOME (bufaddr + (32w + i * 64w)) /\
+    lookup_var "%19" (probe_word_copy_setup_state s i n bufaddr) =
+      SOME (0w + (1w + i * 2w)) /\
+    lookup_var "%20" (probe_word_copy_setup_state s i n bufaddr) = SOME 0w /\
+    (probe_word_copy_setup_state s i n bufaddr).vs_halted = s.vs_halted /\
+    (probe_word_copy_setup_state s i n bufaddr).vs_current_bb = "@wcopy_cond_6"
+Proof
+  simp[probe_word_copy_setup_state_def, control_moves_keep_vars,
+       probe_word_copy_body_observations] >>
+  rpt gen_tac >> conj_tac
+  >- (strip_tac >> gvs[probe_word_copy_body_observations,
+       probe_word_copy_cond_observations, control_moves_keep_vars]) >>
+  simp[probe_word_copy_body_observations, probe_word_copy_cond_observations,
+       control_moves_keep_vars, Once jump_to_def]
+QED
+
+Definition probe_word_copy_round_def:
+  probe_word_copy_round s i n bufaddr =
+    jump_to "@dyn_cond_3"
+      (probe_word_elem_exit_state
+        (probe_word_elems_copied_state (probe_word_copy_setup_state s i n bufaddr)
+          (bufaddr + (32w + i * 64w)) (0w + (1w + i * 2w))) i)
+End
+
+Theorem probe_word_run_copy_round:
+  !s i n bufaddr fuel ctx.
+    lookup_var "%11" s = SOME i /\ lookup_var "%10" s = SOME n /\
+    lookup_var "%2" s = SOME bufaddr /\ ~s.vs_halted /\
+    s.vs_current_bb = "@dyn_cond_3" /\ i <+ n ==>
+    run_blocks (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC fuel))))))))
+      ctx probe_word_function s =
+    run_blocks fuel ctx probe_word_function (probe_word_copy_round s i n bufaddr)
+Proof
+  rpt strip_tac >> drule_all probe_word_run_copy_setup >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `run_blocks _ ctx probe_word_function t` >>
+  `lookup_var "%20" t = SOME 0w /\
+   lookup_var "%16" t = SOME (bufaddr + (32w + i * 64w)) /\
+   lookup_var "%19" t = SOME (0w + (1w + i * 2w)) /\
+   ~t.vs_halted /\ t.vs_current_bb = "@wcopy_cond_6"` by
+    simp[Abbr `t`, probe_word_copy_setup_observations] >>
+  drule_all probe_word_run_elem_loop >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `run_blocks _ ctx probe_word_function u` >>
+  `lookup_var "%11" u = SOME i /\ ~u.vs_halted /\
+   u.vs_current_bb = "@wcopy_exit_8"` by
+    simp[Abbr `u`, Abbr `t`, probe_word_elems_copied_observations,
+         probe_word_copy_setup_observations] >>
+  drule_all probe_word_run_elem_exit >>
+  simp[Abbr `u`, Abbr `t`, probe_word_copy_round_def]
+QED
+
+Theorem probe_word_copy_round_observations:
+  !s i n bufaddr v.
+    (v = "%0" \/ v = "%2" \/ v = "%10" ==>
+      lookup_var v (probe_word_copy_round s i n bufaddr) = lookup_var v s) /\
+    lookup_var "%11" (probe_word_copy_round s i n bufaddr) = SOME (i + 1w) /\
+    (probe_word_copy_round s i n bufaddr).vs_halted = s.vs_halted /\
+    (probe_word_copy_round s i n bufaddr).vs_current_bb = "@dyn_cond_3"
+Proof
+  simp[probe_word_copy_round_def, control_moves_keep_vars,
+       probe_word_elem_exit_state_def, lookup_var_update_var] >>
+  rpt gen_tac >> conj_tac
+  >- (strip_tac >> gvs[probe_word_elems_copied_observations,
+       probe_word_copy_setup_observations]) >>
+  simp[probe_word_elems_copied_observations, probe_word_copy_setup_observations,
+       Once jump_to_def]
+QED
+
+Definition probe_word_copied_state_def:
+  probe_word_copied_state s n bufaddr =
+    if n = 0w then jump_to "@dyn_exit_5" (probe_word_copy_cond_state s 0w n)
+    else jump_to "@dyn_exit_5"
+      (probe_word_copy_cond_state (probe_word_copy_round s 0w n bufaddr) 1w n)
+End
+
+Theorem probe_word_run_copy_loop:
+  !s n bufaddr fuel ctx.
+    lookup_var "%11" s = SOME 0w /\ lookup_var "%10" s = SOME n /\
+    lookup_var "%2" s = SOME bufaddr /\ ~s.vs_halted /\
+    s.vs_current_bb = "@dyn_cond_3" /\ (n = 0w \/ n = 1w) ==>
+    run_blocks ((if n = 0w then 1 else 9) + fuel) ctx probe_word_function s =
+    run_blocks fuel ctx probe_word_function (probe_word_copied_state s n bufaddr)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `n = 0w`
+  >- (gvs[probe_word_copied_state_def] >>
+      drule_all probe_word_run_copy_cond >> simp[WORD_LO, arithmeticTheory.ADD1]) >>
+  `n = 1w` by gvs[] >> gvs[] >>
+  `(0w:bytes32) <+ 1w /\ ~((1w:bytes32) <+ 1w)` by
+    simp[WORD_LO, dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  `fuel + 9 = SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC fuel))))))))`
+    by decide_tac >>
+  pure_asm_rewrite_tac [] >> drule_all probe_word_run_copy_round >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `run_blocks (SUC fuel) ctx probe_word_function t` >>
+  `lookup_var "%11" t = SOME 1w /\ lookup_var "%10" t = SOME 1w /\
+   ~t.vs_halted /\ t.vs_current_bb = "@dyn_cond_3"` by
+    simp[Abbr `t`, probe_word_copy_round_observations] >>
+  drule_all probe_word_run_copy_cond >>
+  simp[Abbr `t`, probe_word_copied_state_def, n2w_11,
+       dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
