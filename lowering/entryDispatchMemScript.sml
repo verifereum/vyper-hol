@@ -2,7 +2,9 @@
 Theory entryDispatchMem
 Ancestors
   memSafeRun venomExecSemantics venomExecProofs venomState venomInst
-  instMemFrontier fragExecMem list
+  instMemFrontier fragExecMem list moduleLoweringProps emitHelperProps
+  compileEnv moduleLowering stateEquiv finite_map fragExec exprLoweringProps
+  emitHelper rich_list
 
 Theorem mem_safe_run_terminator_intro[local]:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -58,4 +60,160 @@ Proof
   reverse conj_tac
   >- (irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
   drule step_jnz_behavior >> Cases_on `w = 0w` >> gvs[]
+QED
+
+Theorem selector_eq_state_invariants[local]:
+  fresh_vars_wrt st ss /\ eval_operand mid ss = SOME m /\
+  st.cs_next_var < st'.cs_next_var ==>
+  let tt = update_var (STRING #"%" (toString st.cs_next_var)) w ss
+             with vs_inst_idx := SUC ss.vs_inst_idx in
+    vars_pc_only ss tt /\ fresh_vars_wrt st' tt /\
+    (!x. not_fresh_at st x ==> lookup_var x tt = lookup_var x ss) /\
+    eval_operand mid tt = SOME m
+Proof
+  strip_tac >> simp[LET_THM, control_moves_keep_vars] >> conj_tac
+  >- (irule vars_pc_only_inst_idx >> irule vars_pc_only_update_var >>
+      irule vars_pc_only_refl) >> conj_tac
+  >- (irule fresh_vars_wrt_advance >>
+      qexistsl_tac [`st.cs_next_var`, `st`] >> simp[]) >> conj_tac
+  >- (rw[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+      gvs[not_fresh_at_def]) >>
+  irule eval_operand_update_fresh >> simp[] >>
+  qexists_tac `st` >> simp[]
+QED
+
+Theorem selector_clause_code[local]:
+  emit_op EQ [mid; Lit (n2w sel)] st = (op, s1) /\
+  fresh_label "match" s1 = (yes, s2) /\
+  fresh_label "next" s2 = (no, s3) /\
+  emit_inst JNZ [op; Label yes; Label no] [] s3 = ((), s4) /\
+  new_block yes s4 = (old, s5) /\
+  emit_inst JMP [Label lbl] [] s5 = ((), s6) /\
+  new_block no s6 = (old', s7) /\ fn_has_code st s7 fn ==>
+  op = Var (STRING #"%" (toString st.cs_next_var)) /\
+  s7.cs_next_var = st.cs_next_var + 1 /\
+  s7.cs_current_bb = no /\ s7.cs_current_insts = [] /\
+  lookup_block st.cs_current_bb fn.fn_blocks = SOME
+    <| bb_label := st.cs_current_bb; bb_instructions :=
+       st.cs_current_insts ++
+       [mk_inst st.cs_next_id EQ [mid; Lit (n2w sel)]
+          [STRING #"%" (toString st.cs_next_var)];
+        mk_inst (st.cs_next_id + 1) JNZ [op; Label yes; Label no] []] |> /\
+  lookup_block yes fn.fn_blocks = SOME
+    <| bb_label := yes; bb_instructions :=
+       [mk_inst (st.cs_next_id + 2) JMP [Label lbl] []] |>
+Proof
+  strip_tac >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_emit_helpers) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_prims) >>
+  `fn_has_code s4 s5 fn /\ fn_has_code s6 s7 fn` by
+    (conj_tac >> irule fn_has_code_mid >>
+     goal_assum (drule_at Any) >> metis_tac[cs_extends_trans, cs_extends_refl]) >>
+  imp_res_tac fn_has_code_new_block >>
+  imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
+  imp_res_tac fresh_label_props >> imp_res_tac emit_inst_extends >>
+  imp_res_tac new_block_props >> gvs[same_blocks_def, arithmeticTheory.ADD1]
+QED
+
+Theorem selector_eq_safe[local]:
+  lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb ss.vs_inst_idx =
+    SOME (mk_inst id EQ [mid; Lit (n2w sel)] [name]) /\
+  eval_operand mid ss = SOME m /\
+  (!n. mem_safe_run n ctx fn
+    (update_var name (bool_to_word (m = n2w sel)) ss
+      with vs_inst_idx := SUC ss.vs_inst_idx)) ==>
+  !n. mem_safe_run n ctx fn ss
+Proof
+  strip_tac >> gen_tac >>
+  `step_inst n ctx (mk_inst id EQ [mid; Lit (n2w sel)] [name]) ss =
+     OK (update_var name (bool_to_word (m = n2w sel)) ss)` by
+    (simp[step_inst_non_invoke, mk_inst_def] >>
+     irule (SRULE [mk_inst_def] step_EQ) >> simp[eval_operand_def]) >>
+  `mem_safe_run n ctx fn ss <=>
+     (revert_forward_at bb ss.vs_inst_idx \/
+       mem_safe_step n ctx (mk_inst id EQ [mid; Lit (n2w sel)] [name]) ss) /\
+     mem_safe_run n ctx fn
+       (update_var name (bool_to_word (m = n2w sel)) ss
+         with vs_inst_idx := SUC ss.vs_inst_idx)` by
+    (irule mem_safe_run_step >> goal_assum (drule_at Any) >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  gvs[] >> disj2_tac >> simp[mem_safe_step_non_invoke, mk_inst_def] >>
+  irule below_frontier_no_ranges >> simp[]
+QED
+
+Theorem selector_clause_safe_control[local]:
+  lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb ss.vs_inst_idx =
+    SOME (mk_inst id EQ [mid; Lit (n2w sel)] [name]) /\
+  get_instruction bb (SUC ss.vs_inst_idx) =
+    SOME (mk_inst (id + 1) JNZ [Var name; Label yes; Label no] []) /\
+  lookup_block yes fn.fn_blocks = SOME
+    <| bb_label := yes; bb_instructions := [mk_inst jid JMP [Label lbl] []] |> /\
+  eval_operand mid ss = SOME m /\
+  tt = (update_var name (bool_to_word (m = n2w sel)) ss
+          with vs_inst_idx := SUC ss.vs_inst_idx) /\
+  (m = n2w sel ==> !n. mem_safe_blocks n ctx fn
+      (jump_to lbl (jump_to yes tt))) /\
+  (m <> n2w sel ==> !n. mem_safe_blocks n ctx fn (jump_to no tt)) ==>
+  !n. mem_safe_run n ctx fn ss
+Proof
+  strip_tac >> irule selector_eq_safe >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
+  qpat_assum `tt = _` (fn th => rewrite_tac[GSYM th]) >>
+  irule mem_safe_run_jnz >> qexists_tac `bb` >>
+  `tt.vs_current_bb = ss.vs_current_bb /\
+   tt.vs_inst_idx = SUC ss.vs_inst_idx /\
+   eval_operand (Var name) tt = SOME (bool_to_word (m = n2w sel))` by
+    simp[update_var_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  simp[mk_inst_def] >> Cases_on `m = n2w sel` >> gvs[bool_to_word_def] >>
+  irule mem_safe_blocks_no_phi >> reverse conj_tac
+  >- (qexists_tac `<| bb_label := yes;
+        bb_instructions := [mk_inst jid JMP [Label lbl] []] |>` >>
+      simp[jump_to_def, eval_phis_def, phi_prefix_length_def, mk_inst_def]) >>
+  irule mem_safe_run_jmp >>
+  qexists_tac `<| bb_label := yes;
+    bb_instructions := [mk_inst jid JMP [Label lbl] []] |>` >>
+  gvs[get_instruction_def, jump_to_def, mk_inst_def]
+QED
+
+Theorem selector_clause_mem_safe[local]:
+  emit_op EQ [mid; Lit (n2w sel)] st = (op, s1) /\
+  fresh_label "match" s1 = (yes, s2) /\
+  fresh_label "next" s2 = (no, s3) /\
+  emit_inst JNZ [op; Label yes; Label no] [] s3 = ((), s4) /\
+  new_block yes s4 = (old, s5) /\
+  emit_inst JMP [Label lbl] [] s5 = ((), s6) /\
+  new_block no s6 = (old', s7) /\ fn_has_code st s7 fn /\
+  fresh_vars_wrt st ss /\ eval_operand mid ss = SOME m /\ ~ss.vs_halted /\
+  ss.vs_current_bb = st.cs_current_bb /\
+  ss.vs_inst_idx = LENGTH st.cs_current_insts /\
+  (!t. vars_pc_only ss t /\ fresh_vars_wrt s7 t /\
+       (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x ss) /\
+       eval_operand mid t = SOME m /\ ~t.vs_halted /\
+       t.vs_current_bb = (if m = n2w sel then lbl else s7.cs_current_bb) /\
+       t.vs_inst_idx = 0 ==>
+       !n. mem_safe_blocks n ctx fn t) ==>
+  !n. mem_safe_run n ctx fn ss
+Proof
+  strip_tac >> drule_all selector_clause_code >> strip_tac >>
+  qabbrev_tac `tt = update_var (STRING #"%" (toString st.cs_next_var))
+    (bool_to_word (m = n2w sel)) ss with vs_inst_idx := SUC ss.vs_inst_idx` >>
+  `vars_pc_only ss tt /\ fresh_vars_wrt s7 tt /\
+   (!x. not_fresh_at st x ==> lookup_var x tt = lookup_var x ss) /\
+   eval_operand mid tt = SOME m` by
+    (mp_tac (Q.INST [`st'` |-> `s7`,
+       `w` |-> `bool_to_word (m = n2w sel)`] selector_eq_state_invariants) >>
+     simp[LET_THM, Abbr `tt`]) >>
+  `~tt.vs_halted` by (simp[Abbr `tt`, update_var_def]) >>
+  irule selector_clause_safe_control >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  simp[get_instruction_def, EL_APPEND_EQN, arithmeticTheory.ADD1,
+       mk_inst_def] >>
+  qexists_tac `sel` >> simp[] >>
+  conj_tac >> strip_tac >> gvs[Abbr `tt`, control_moves_keep_vars] >>
+  first_x_assum irule >>
+  simp[control_moves_keep_vars, vars_pc_only_jump_to,
+       vars_pc_only_inst_idx, vars_pc_only_update_var, vars_pc_only_refl] >>
+  simp[jump_to_def]
 QED
