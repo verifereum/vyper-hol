@@ -17,13 +17,14 @@ Ancestors
   makeSsaCurrentFinalBlock makeSsaCurrentTreePaths makeSsaCurrentTraceCertificate
   makeSsaCurrentAvailability venomExecProofs allocaRemapSSA removeUnusedSsaProofs
   makeSsaCurrentCleanupShape sorting venomFnScheduleRunner
-  makeSsaCurrentCleanupBoundary makeSsaCurrentEdgeTrace
+  makeSsaCurrentCleanupBoundary makeSsaCurrentEdgeTrace makeSsaCurrentFinalSlots
+  makeSsaCurrentSimDefs
   makeSsaCurrentAnalysis dominatorProofs dominatorDefs
   makeSsaCurrentPathBridge makeSsaCurrentGraphCut makeSsaCurrentCertificate
   makeSsaCurrentTokens makeSsaCurrentLiveTransport livenessAnalysisProps
   makeSsaCurrentDemand makeSsaCurrentDemandDominance makeSsaCurrentDominanceBridge
   makeSsaCurrentDemandedCut makeSsaCurrentTokenGraph makeSsaCurrentLastSite
-  makeSsaCurrentPlacementCut ssaPipeline
+  makeSsaCurrentPlacementCut ssaPipeline codegenReadyCompute
 Libs
   rich_listTheory
 
@@ -2167,10 +2168,12 @@ Theorem current_wf_precleanup_output_available:
   wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
   MEM dev events /\ current_wf_output_at A H dev k tok /\
   current_token_name H tok = SOME v /\
-  MEM bb renamed /\ n < LENGTH bb.bb_instructions /\ EL n bb.bb_instructions = inst /\
-  fn_dominates fn (current_event_label dev) bb.bb_label /\
-  (current_event_label dev = bb.bb_label ==> k < n) ==>
-  def_available_at (fn with fn_blocks := renamed) bb (SOME inst) v
+  MEM bb renamed /\
+  (use_opt = NONE \/ ?n inst. use_opt = SOME inst /\
+    n < LENGTH bb.bb_instructions /\ EL n bb.bb_instructions = inst /\
+    (current_event_label dev = bb.bb_label ==> k < n)) /\
+  fn_dominates fn (current_event_label dev) bb.bb_label ==>
+  def_available_at (fn with fn_blocks := renamed) bb use_opt v
 Proof
   strip_tac >> drule_all current_wf_precleanup_output >> strip_tac >>
   rename1 `lookup_block (current_event_label dev) renamed = SOME db` >>
@@ -2194,6 +2197,240 @@ Proof
   strip_tac >> drule_all current_wf_precleanup_names >> strip_tac >>
   fs[EVERY_MEM] >> rpt strip_tac >>
   irule current_wf_event_output_at >> metis_tac[]
+QED
+
+Definition current_wf_probe_defs_def:
+  current_wf_probe_defs = compute_defs (MAP THE (FILTER IS_SOME
+    (MAP (\lbl. lookup_block lbl current_probe_loop.fn_blocks)
+      (current_dom_postorder current_probe_loop))))
+End
+
+Definition current_wf_probe_insertion_def:
+  current_wf_probe_insertion = add_phi_nodes_supply current_probe_supply
+    (current_frontier_map current_probe_loop) (current_pred_map current_probe_loop)
+    (select_current_live_in (blocks_have_leading_phi current_probe_loop.fn_blocks)
+      (liveness_analyze current_probe_loop) current_probe_loop)
+    current_probe_loop.fn_blocks current_wf_probe_defs
+End
+
+Definition current_wf_probe_renamed_def:
+  current_wf_probe_renamed = SND (SND (rename_current_blocks
+    (SND current_wf_probe_insertion) (init_current_rename_state current_wf_probe_defs)
+    (FST current_wf_probe_insertion) (current_succ_map current_probe_loop)
+    (current_dom_tree current_probe_loop)))
+End
+
+Theorem current_wf_probe_precleanup_header:
+  (EL 1 current_wf_probe_renamed).bb_instructions =
+  [current_probe_inst 10 PHI
+     [Label "E"; Var "v"; Label "D"; Var "formal_var_0"] ["v"];
+   current_probe_inst 2 PHI
+     [Label "E"; Var "a"; Label "D"; Var "b"] ["formal_var_0"];
+   current_probe_inst 3 ASSIGN [Lit 2w] ["b"];
+   current_probe_inst 4 JNZ [Var "formal_var_0"; Label "D"; Label "X"] []]
+Proof
+  EVAL_TAC
+QED
+
+(* The historical simulation fixture is not a frozen-contract input: its
+   supply omits function-level names.  In addition its final output is SSA,
+   despite the unavailable slot observed before cleanup below. *)
+Theorem current_wf_probe_input_structural_contract:
+  fn_inst_wf current_probe_loop /\ wf_function current_probe_loop /\
+  first_block_no_preds current_probe_loop /\ first_block_no_phi current_probe_loop /\
+  ~ir_supply_covers_fn current_probe_supply current_probe_loop /\
+  ir_supply_inst_ok current_probe_supply
+Proof
+  EVAL_TAC
+QED
+
+Theorem current_wf_probe_final_ssa:
+  wf_ssa (FST (make_ssa_current_fn current_probe_supply current_probe_loop))
+Proof
+  rewrite_tac[wf_ssa_def] >> EVAL_TAC
+QED
+
+Theorem current_wf_probe_precleanup_unavailable:
+  ~def_available_at (current_probe_loop with fn_blocks := current_wf_probe_renamed)
+    (EL 0 current_wf_probe_renamed) NONE "v"
+Proof
+  spose_not_then assume_tac >>
+  fs[def_available_at_def] >>
+  qpat_x_assum `MEM def_bb _` mp_tac >> EVAL_TAC >> strip_tac >>
+  gvs[] >>
+  fs[fn_dominates_def] >>
+  first_x_assum (qspec_then `["E"]` mp_tac) >> EVAL_TAC
+QED
+
+Theorem current_wf_tree_phi_slot_shape:
+  current_tree_trace A sm tree s rs bbs H E visited
+    ctrs' s' bbs' H' visited' events /\
+  (!p ss. ALOOKUP sm p = SOME ss ==> ALL_DISTINCT ss) /\
+  lookup_block h bbs = SOME old /\ k < LENGTH old.bb_instructions /\
+  (EL k old.bb_instructions).inst_opcode = PHI /\
+  (EL k old.bb_instructions).inst_operands = current_phi_slots slots ==>
+  ?new slots'. lookup_block h bbs' = SOME new /\
+    LENGTH new.bb_instructions = LENGTH old.bb_instructions /\
+    k < LENGTH new.bb_instructions /\ (EL k new.bb_instructions).inst_opcode = PHI /\
+    (EL k new.bb_instructions).inst_operands = current_phi_slots slots' /\
+    MAP FST slots' = MAP FST slots
+Proof
+  strip_tac >> drule_all current_tree_trace_phi_lookup >> strip_tac >>
+  drule_all current_phi_view_fold_instruction >> strip_tac >>
+  qexistsl_tac [`new`, `MAP (\slot.
+    FOLDL (\slot ev. current_event_pair_action sm h ev slot) slot events) slots`] >>
+  simp[current_event_fold_slots, MAP_MAP_o, combinTheory.o_DEF, ETA_THM]
+QED
+
+Theorem current_wf_event_exit_cut:
+  current_event_trace A H ev ==>
+  current_source_cut A ev (LENGTH (current_event_input_block ev).bb_instructions)
+    (current_event_exit_rs ev) (current_event_exit_env ev)
+Proof
+  PairCases_on `ev` >>
+  simp[current_event_trace_def, current_event_input_block_def,
+    current_event_exit_rs_def, current_event_exit_env_def, current_source_cut_end]
+QED
+
+Theorem current_wf_precleanup_exit_available:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
+  fn_phi_operands_single_def fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  first_block_no_phi fn /\ entry_block fn = SOME eb /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM ev events /\ lookup_block (current_event_label ev) fn.fn_blocks = SOME old /\
+  current_demand fn v (current_event_label ev) (LENGTH old.bb_instructions) /\
+  current_token_name H (current_event_exit_env ev v) = SOME n /\
+  MEM bb renamed /\ bb.bb_label = current_event_label ev ==>
+  def_available_at (fn with fn_blocks := renamed) bb NONE n
+Proof
+  strip_tac >> drule current_wf_precleanup_structural >> strip_tac >>
+  drule_all current_wf_certificate_actual_prefix >> strip_tac >>
+  `LENGTH (current_event_input_block ev).bb_instructions =
+    LENGTH pre + LENGTH old.bb_instructions` by
+    (qpat_x_assum `current_edge_shape _ (current_event_input_block ev)` mp_tac >>
+     simp[current_edge_shape_def, LIST_REL_EL_EQN]) >>
+  `current_source_cut A ev (LENGTH pre + LENGTH old.bb_instructions)
+    (current_event_exit_rs ev) (current_event_exit_env ev)` by
+    metis_tac[current_wf_event_exit_cut] >>
+  `!dev k j. MEM dev events /\ k < LENGTH (A (current_event_label dev)) /\
+     j < LENGTH (EL k (A (current_event_label dev))) ==>
+     current_wf_output_at A H dev k (FST (EL j (EL k (A (current_event_label dev)))))` by
+    metis_tac[current_wf_precleanup_output_sites] >>
+  `LENGTH (collect_phis old.bb_instructions) <= LENGTH old.bb_instructions` by
+    simp[current_collect_phis_length] >>
+  `?dev k. MEM dev events /\ current_wf_output_at A H dev k (current_event_exit_env ev v) /\
+    ((dev = ev /\ k < LENGTH pre + LENGTH old.bb_instructions) \/
+     (current_event_label dev <> current_event_label ev /\
+      fn_dominates fn (current_event_label dev) (current_event_label ev)))` by
+    (irule current_wf_demanded_source_cut_output >> simp[] >> metis_tac[]) >>
+  `fn_reachable fn (current_event_label ev)` by
+    (drule lookup_block_MEM >> strip_tac >>
+     drule lookup_block_label >> strip_tac >> fs[all_reachable_def] >> metis_tac[]) >>
+  `fn_dominates fn (current_event_label ev) (current_event_label ev)` by
+    (simp[fn_dominates_def] >> metis_tac[LAST_MEM]) >>
+  irule current_wf_precleanup_output_available >> simp[] >> metis_tac[]
+QED
+
+Theorem current_wf_precleanup_static_slot:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  defs = compute_defs (MAP THE (FILTER IS_SOME
+    (MAP (\lbl. lookup_block lbl fn.fn_blocks) (current_dom_postorder fn)))) /\
+  add_phi_nodes_supply s (current_frontier_map fn) (current_pred_map fn)
+    (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+      (liveness_analyze fn) fn) fn.fn_blocks defs = (ins,si) /\
+  lookup_block h ins = SOME old /\ fn_cfg_edge fn p h /\
+  k < LENGTH old.bb_instructions /\
+  (EL k old.bb_instructions).inst_opcode = PHI /\
+  (EL k old.bb_instructions).inst_operands = current_phi_slots slots /\
+  i < LENGTH slots /\ EL i slots = (p,v) ==>
+  ?new path n. lookup_block h renamed = SOME new /\
+    current_tree_ancestor_path (current_dom_tree fn) p path /\
+    current_token_name H
+      (current_block_token fn (current_actual_inserted fn) v p
+        (current_inherited_token fn (current_actual_inserted fn) v path)) = SOME n /\
+    LENGTH new.bb_instructions = LENGTH old.bb_instructions /\
+    k < LENGTH new.bb_instructions /\ (EL k new.bb_instructions).inst_opcode = PHI /\
+    EL (2 * i) (EL k new.bb_instructions).inst_operands = Label p /\
+    EL (2 * i + 1) (EL k new.bb_instructions).inst_operands = Var n
+Proof
+  strip_tac >> drule_all current_wf_precleanup_names >> strip_tac >>
+  gvs[current_wf_precleanup_certificate_def] >>
+  `MAP (\b. b.bb_label) ins = MAP (\b. b.bb_label) fn.fn_blocks /\
+    ssa_vars_covered si (FLAT (MAP block_ir_vars ins)) /\
+    ssa_vars_covered si (MAP FST (compute_defs (MAP THE (FILTER IS_SOME
+      (MAP (\lbl. lookup_block lbl fn.fn_blocks) (current_dom_postorder fn))))))` by
+    (irule current_insertion_initial_supply >> metis_tac[]) >>
+  `LENGTH fn.fn_blocks = LENGTH ins` by metis_tac[LENGTH_MAP] >>
+  `!old. MEM old fn.fn_blocks ==> lookup_block old.bb_label fn.fn_blocks = SOME old` by
+    (rpt strip_tac >> irule MEM_lookup_block >> fs[wf_function_def, fn_labels_def]) >>
+  `!l. MEM l (dom_tree_labels (current_dom_tree fn)) ==> IS_SOME (lookup_block l ins)` by
+    metis_tac[current_actual_tree_lookup_coverage] >>
+  `ALL_DISTINCT (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_labels_distinct] >>
+  `MEM p (fn_labels fn)` by
+    (fs[fn_cfg_edge_def, fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `MEM p (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_label_member] >>
+  `MEM h (case ALOOKUP (current_succ_map fn) p of NONE => [] | SOME ss => ss)` by
+    simp[ALOOKUP_current_succ_map, GSYM current_cfg_edge_succs] >>
+  `MEM v (FLAT (MAP block_ir_vars ins))` by
+    metis_tac[current_initial_slot_var_covered] >>
+  irule current_provenance_tree_static_slot >>
+  metis_tac[current_actual_succs_distinct]
+QED
+
+Theorem current_wf_precleanup_named_slot:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  defs = compute_defs (MAP THE (FILTER IS_SOME
+    (MAP (\lbl. lookup_block lbl fn.fn_blocks) (current_dom_postorder fn)))) /\
+  add_phi_nodes_supply s (current_frontier_map fn) (current_pred_map fn)
+    (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+      (liveness_analyze fn) fn) fn.fn_blocks defs = (ins,si) /\
+  lookup_block h ins = SOME old /\ fn_cfg_edge fn p h /\
+  k < LENGTH old.bb_instructions /\
+  (EL k old.bb_instructions).inst_opcode = PHI /\
+  (EL k old.bb_instructions).inst_operands = current_phi_slots slots /\
+  i < LENGTH slots /\ EL i slots = (p,v) ==>
+  ?new ev n. lookup_block h renamed = SOME new /\
+    MEM ev events /\ current_event_label ev = p /\
+    current_token_name H (current_event_exit_env ev v) = SOME n /\
+    LENGTH new.bb_instructions = LENGTH old.bb_instructions /\
+    k < LENGTH new.bb_instructions /\ (EL k new.bb_instructions).inst_opcode = PHI /\
+    EL (2 * i) (EL k new.bb_instructions).inst_operands = Label p /\
+    EL (2 * i + 1) (EL k new.bb_instructions).inst_operands = Var n
+Proof
+  strip_tac >> drule_all current_wf_precleanup_names >> strip_tac >>
+  gvs[current_wf_precleanup_certificate_def] >>
+  `MAP (\b. b.bb_label) ins = MAP (\b. b.bb_label) fn.fn_blocks` by
+    metis_tac[add_phi_nodes_supply_labels] >>
+  `!l. MEM l (dom_tree_labels (current_dom_tree fn)) ==> IS_SOME (lookup_block l ins)` by
+    metis_tac[current_actual_tree_lookup_coverage] >>
+  `ALL_DISTINCT (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_labels_distinct] >>
+  `MEM p (fn_labels fn)` by
+    (fs[fn_cfg_edge_def, fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `MEM p (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_label_member] >>
+  `MEM h (case ALOOKUP (current_succ_map fn) p of NONE => [] | SOME ss => ss)` by
+    simp[ALOOKUP_current_succ_map, GSYM current_cfg_edge_succs] >>
+  `MEM v (FLAT (MAP block_ir_vars ins))` by
+    metis_tac[current_initial_slot_var_covered] >>
+  drule_all current_tree_trace_event_coverage >> strip_tac >>
+  `ALL_DISTINCT (MAP current_event_label events)` by
+    metis_tac[cj 1 current_trace_event_labels_distinct] >>
+  `!p ss. ALOOKUP (current_succ_map fn) p = SOME ss ==> ALL_DISTINCT ss` by
+    metis_tac[current_actual_succs_distinct] >>
+  `FST (EL i slots) = current_event_label ev` by simp[] >>
+  `MEM h (case ALOOKUP (current_succ_map fn) (current_event_label ev) of
+     NONE => [] | SOME ss => ss)` by simp[] >>
+  drule_all current_tree_trace_phi_slot >> strip_tac >>
+  qexistsl_tac [`new`, `ev`, `latest_current_name (current_event_exit_rs ev) v`] >>
+  fs[EVERY_MEM] >> metis_tac[current_event_names_accessors]
 QED
 
 Theorem current_wf_precleanup_ordinary_available:
