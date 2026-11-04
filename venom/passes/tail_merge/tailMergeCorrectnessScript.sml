@@ -6,7 +6,7 @@
 
 Theory tailMergeCorrectness
 Ancestors
-  tailMergeProof unitShapeDefs
+  tailMergeProof tailMergeWf unitShapeDefs
 
 (* label_positions_ok keeps block labels out of value operands: the pass
    rewrites every label operand of a terminator, and eval_operand reads a
@@ -30,11 +30,11 @@ QED
 Theorem tail_merge_preserves_ssa_form:
   ∀func. ssa_form func ∧ wf_function func ⇒ ssa_form (tail_merge_fn func)
 Proof
-  cheat
+  metis_tac[tail_merge_fn_ssa_form]
 QED
 
 Theorem tail_merge_preserves_wf_function:
   ∀func. wf_function func ⇒ wf_function (tail_merge_fn func)
 Proof
-  cheat
+  ACCEPT_TAC tail_merge_fn_wf_function
 QED
