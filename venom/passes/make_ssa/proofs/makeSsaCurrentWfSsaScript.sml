@@ -789,6 +789,29 @@ Proof
   simp[current_replay_edges_outputs]
 QED
 
+Theorem current_wf_certificate_output_coverage:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  ALL_DISTINCT (FLAT (MAP (\ev. FLAT (MAP instruction_inst_outputs
+    (current_event_renamed_block ev).bb_instructions)) events)) ==>
+  !b. MEM b fn'.fn_blocks ==> ?ev. MEM ev events /\
+    current_event_label ev = b.bb_label /\
+    ALL_DISTINCT (FLAT (MAP instruction_inst_outputs b.bb_instructions)) /\
+    (!v. MEM v (FLAT (MAP instruction_inst_outputs b.bb_instructions)) ==>
+      MEM v (FLAT (MAP instruction_inst_outputs
+        (current_event_renamed_block ev).bb_instructions)))
+Proof
+  strip_tac >> drule_all current_wf_certificate_labels >> strip_tac >>
+  qx_gen_tac `b` >> strip_tac >>
+  `?ev. MEM ev events /\ current_event_label ev = b.bb_label` by metis_tac[] >>
+  `ALL_DISTINCT (FLAT (MAP instruction_inst_outputs
+     (current_event_renamed_block ev).bb_instructions))` by
+    (`?before after. events = before ++ ev::after` by metis_tac[MEM_SPLIT] >>
+     gvs[MAP_APPEND, ALL_DISTINCT_APPEND]) >>
+  qexists_tac `ev` >> simp[] >>
+  metis_tac[current_wf_certificate_block_outputs]
+QED
+
 Theorem current_wf_named_structural_certificate:
   wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
