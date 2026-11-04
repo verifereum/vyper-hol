@@ -696,3 +696,124 @@ Proof
       rpt strip_tac >> imp_res_tac (cj 4 fresh_ir_var_contract) >> gvs[]) >>
   simp[lower_dload_inst_supply_def] >> rpt strip_tac >> gvs[]
 QED
+
+Theorem lower_dload_insts_supply_prefix:
+  !s xs t. lower_dload_insts_supply s ins = (xs,t) ==>
+  s.irs_next_inst <= t.irs_next_inst /\
+  (?ids. t.irs_used_inst_ids = ids ++ s.irs_used_inst_ids /\
+     ALL_DISTINCT ids /\
+     EVERY (\k. s.irs_next_inst <= k /\ k < t.irs_next_inst) ids /\
+     EVERY (\j. MEM j.inst_id (MAP (\i. i.inst_id) ins) \/ MEM j.inst_id ids) xs) /\
+  (?vars. t.irs_used_vars = vars ++ s.irs_used_vars /\
+     ALL_DISTINCT vars /\
+     EVERY (\w. ~MEM w s.irs_used_vars) vars /\
+     EVERY (\w. MEM w (FLAT (MAP inst_ir_vars ins)) \/ MEM w vars)
+       (FLAT (MAP inst_ir_vars xs)))
+Proof
+  Induct_on `ins`
+  >- (simp[lower_dload_insts_supply_def] >> rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >> strip_tac >>
+  drule lower_dload_inst_supply_prefix >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  conj_tac >- decide_tac >>
+  conj_tac
+  >- (qexists_tac `ids' ++ ids` >>
+      gvs[EVERY_MEM, ALL_DISTINCT_APPEND] >>
+      rpt strip_tac >> metis_tac[LESS_EQ_TRANS, LESS_LESS_EQ_TRANS, LESS_EQ_LESS_TRANS,
+        NOT_LESS]) >>
+  qexists_tac `vars' ++ vars` >>
+  gvs[EVERY_MEM, ALL_DISTINCT_APPEND] >> rpt strip_tac >> metis_tac[]
+QED
+
+Theorem lower_dload_insts_supply_distinct_ids:
+  !s xs t. lower_dload_insts_supply s ins = (xs,t) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) ins) /\
+    EVERY (\i. i.inst_id < s.irs_next_inst) ins ==>
+    ALL_DISTINCT (MAP (\i. i.inst_id) xs)
+Proof
+  Induct_on `ins`
+  >- (simp[lower_dload_insts_supply_def] >> rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >> strip_tac >>
+  drule lower_dload_inst_supply_prefix >> strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) out)` by
+    metis_tac[lower_dload_inst_supply_distinct_ids] >>
+  `EVERY (\i. i.inst_id < s1.irs_next_inst) ins` by
+    (gvs[EVERY_MEM] >> rpt strip_tac >>
+     metis_tac[LESS_LESS_EQ_TRANS]) >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  drule lower_dload_insts_supply_prefix >> strip_tac >>
+  gvs[ALL_DISTINCT_APPEND, EVERY_MEM, MEM_MAP] >>
+  rpt strip_tac >>
+  metis_tac[LESS_LESS_EQ_TRANS, LESS_EQ_LESS_TRANS, NOT_LESS]
+QED
+
+(* Flattening commutes with the threaded block traversal. *)
+Theorem lower_dload_blocks_supply_flat:
+  !s bs t. lower_dload_blocks_supply s bbs = (bs,t) ==>
+  lower_dload_insts_supply s (FLAT (MAP (\b. b.bb_instructions) bbs)) =
+    (FLAT (MAP (\b. b.bb_instructions) bs),t)
+Proof
+  Induct_on `bbs`
+  >- simp[lower_dload_blocks_supply_def, lower_dload_insts_supply_def] >>
+  rpt gen_tac >>
+  simp[Once lower_dload_blocks_supply_def, lower_dload_block_supply_def,
+    AllCaseEqs()] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  irule lower_dload_insts_supply_append_eq >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_prefix:
+  lower_dload_function_supply s f = (g,t) ==>
+  s.irs_next_inst <= t.irs_next_inst /\
+  (?ids. t.irs_used_inst_ids = ids ++ s.irs_used_inst_ids /\
+     ALL_DISTINCT ids /\
+     EVERY (\k. s.irs_next_inst <= k /\ k < t.irs_next_inst) ids /\
+     EVERY (\k. MEM k (fn_ir_inst_ids f) \/ MEM k ids) (fn_ir_inst_ids g)) /\
+  (?vars. t.irs_used_vars = vars ++ s.irs_used_vars /\
+     ALL_DISTINCT vars /\
+     EVERY (\w. ~MEM w s.irs_used_vars) vars /\
+     EVERY (\w. MEM w (fn_ir_vars f) \/ MEM w vars) (fn_ir_vars g))
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule lower_dload_blocks_supply_flat >> strip_tac >>
+  drule lower_dload_insts_supply_prefix >>
+  simp[fn_ir_inst_ids_def, block_ir_inst_ids_def, fn_ir_vars_def,
+    block_ir_vars_def, EVERY_MEM, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+  metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_distinct_ids:
+  lower_dload_function_supply s f = (g,t) /\
+  ALL_DISTINCT (fn_ir_inst_ids f) /\
+  EVERY (\k. k < s.irs_next_inst) (fn_ir_inst_ids f) ==>
+  ALL_DISTINCT (fn_ir_inst_ids g)
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule lower_dload_blocks_supply_flat >> strip_tac >>
+  drule lower_dload_insts_supply_distinct_ids >>
+  simp[MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF,
+    fn_ir_inst_ids_def, block_ir_inst_ids_def, EVERY_MEM, MEM_FLAT, MEM_MAP,
+    PULL_EXISTS] >>
+  gvs[fn_ir_inst_ids_def, lambdify block_ir_inst_ids_def, EVERY_MEM,
+    MEM_FLAT, MEM_MAP, PULL_EXISTS] >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_fresh:
+  ir_supply_covers_fn s f /\ ALL_DISTINCT (fn_ir_inst_ids f) /\
+  lower_dload_function_supply s f = (g,t) ==>
+  ALL_DISTINCT (fn_ir_inst_ids g) /\
+  EVERY (\k. MEM k (fn_ir_inst_ids f) \/
+    (s.irs_next_inst <= k /\ k < t.irs_next_inst)) (fn_ir_inst_ids g) /\
+  ?vars. t.irs_used_vars = vars ++ s.irs_used_vars /\
+    ALL_DISTINCT vars /\ EVERY (\w. ~MEM w s.irs_used_vars) vars /\
+    EVERY (\w. MEM w (fn_ir_vars f) \/ MEM w vars) (fn_ir_vars g)
+Proof
+  rpt strip_tac >>
+  `ALL_DISTINCT (fn_ir_inst_ids g)` by
+    (irule lower_dload_function_supply_distinct_ids >>
+     gvs[ir_supply_covers_fn_def] >> metis_tac[]) >>
+  drule lower_dload_function_supply_prefix >> strip_tac >>
+  simp[] >> gvs[EVERY_MEM] >> metis_tac[]
+QED
