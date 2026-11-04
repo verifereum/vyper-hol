@@ -53,7 +53,7 @@ Ancestors
   list rich_list finite_map pair
   fragExec exprSim exprSimHyps exprSimUnwrap exprSimLen exprSimLeaves
   exprSimAggregateLayout exprSimAttributeFields exprSimAttribute
-  placeTypingProps
+  placeTypingProps placeProvenance
   exprLowering exprLoweringProps compileEnv context
   valueEncoding vyperAST vyperInterpreter vyperState vyperStorage vyperValue
   vyperValueOperation vyperTyping vyperTypeSystem vyperTypeExprSoundness
@@ -483,6 +483,7 @@ Proof
   gvs[expr_body_pre_def, well_typed_expr_def,
       vyperTypeCallGraphTheory.int_calls_expr_def, byte_widths_expr_def,
       allocLimitsTheory.alloc_limits_expr_def,
+      supportedExprTraverseTheory.supported_expr_exists_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm]
 QED
 
@@ -862,7 +863,9 @@ Theorem tuple_vv_post[local]:
     k < LENGTH tvs /\
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
     values_have_types tvs vs /\
-    read_result cx tv' es1 = (INL (EL k vs), es1) ==>
+    read_result cx tv' es1 = (INL (EL k vs), es1) /\
+    select_result cx (TupleT tys) tv (ValueSubscript (IntV (&k))) es1 =
+      (INL tv', es1) ==>
     vv_post ctx func cenv cx (Subscript (EL k tys) obj idx) es sa sn s0 es1 tv'
       (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q
 Proof
@@ -871,12 +874,66 @@ Proof
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   rewrite_tac[vv_post_def] >> gvs[vyperASTTheory.expr_type_def] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
-  >- (irule tuple_vv_holds_elem >> simp[] >> metis_tac[]) >>
-  qspecl_then [`func`, `cenv`, `cx`, `env`, `es`, `sa`, `sn`, `es1`, `tv`,
-               `bvv`, `q`, `w`, `dst`, `tys`, `tvs`, `vs`, `k`, `tv'`,
-               `EL k tys`, `ctx`] mp_tac tuple_vv_at_elem >>
-  imp_res_tac values_have_types_length >> simp[]
+  >- (irule tuple_vv_holds_elem >> simp[] >> metis_tac[])
+  >- (irule tuple_vv_at_elem >> simp[] >>
+      conj_tac >- metis_tac[] >>
+      conj_tac >- metis_tac[] >>
+      qexistsl [`tv`, `vs`] >>
+      drule values_have_types_length >> simp[]) >>
+  suspend "provenance"
 QED
+
+Resume tuple_vv_post[provenance]:
+  rpt strip_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `!x w. not_fresh_at _ _ /\ _ ==> _` kall_tac >>
+  qpat_x_assum `!aid b. FLOOKUP _ _ = _ ==> _` kall_tac >>
+  qpat_x_assum `!aid off sz. _ ==> _` kall_tac >>
+  qpat_x_assum `locals_kept _ _ _ _` kall_tac >>
+  Cases_on `tv`
+  >- gvs[select_result_def, bind_def, return_def, lift_sum_def,
+         lift_option_type_def, raise_def, AllCaseEqs()]
+  >- (rename1 `select_result cx (TupleT tys) (PlaceR bp) _ _ = _` >>
+      Cases_on `bp` >>
+      gvs[select_result_def, extend_place_def, extend_memory_place_def,
+          bind_def, ignore_bind_def, return_def, lift_sum_def,
+          lift_option_type_def, raise_def, AllCaseEqs()] >>
+      Cases_on `bvv` >>
+      gvs[vv_holds_def, vv_place_ptr_rel_def, place_ptr_rel_def, vv_operand_def,
+          vv_loc_def, vv_location_def, mk_ptr_def, AllCaseEqs()]
+      >- (gvs[extend_storage_place_def, bind_def, return_def, raise_def,
+              check_def, assert_def, ignore_bind_def, lift_option_type_def,
+              oEL_THM, place_ptr_rel_def] >>
+          `evaluate_type (get_tenv cx) (EL k tys) = SOME (EL k tvs)` by
+            (drule opt_mmap_el >> disch_then (qspec_then `k` mp_tac) >>
+             impl_tac >- (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >> simp[]) >>
+          `tuple_offset cenv tys (slot_loc b) k = tuple_prefix_slot_size k tvs` by
+            (irule tuple_offset_slots >> simp[] >>
+             conj_tac >- (Cases_on `b` >> simp[slot_loc_def]) >>
+             qexistsl [`cx`, `env`, `es`] >> simp[slot_loc_def]) >>
+          simp[])
+      >- (`evaluate_type (get_tenv cx) (EL k tys) = SOME (EL k tvs)` by
+            (drule opt_mmap_el >> disch_then (qspec_then `k` mp_tac) >>
+             impl_tac >- (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >> simp[]) >>
+          `mem_step_offset (TupleTV tvs) (ValueSubscript (IntV (&k))) =
+             SOME (type_memory_size_list (TAKE k tvs), EL k tvs)` by
+            simp[mem_step_offset_def] >>
+          drule_all mem_path_offset_snoc >> strip_tac >>
+          goal_assum (drule_at Any) >>
+          drule_all tuple_offset_memory >> disch_then (qspec_then `k` assume_tac) >>
+          simp[type_memory_size_list_sum, MAP_TAKE, wordsTheory.word_add_n2w,
+               GSYM wordsTheory.WORD_ADD_ASSOC]) >>
+      drule_all tuple_offset_code >> disch_then (qspec_then `k` assume_tac) >>
+      simp[] >> irule immutable_holds_tuple_elem >> simp[] >>
+      conj_tac
+      >- (drule opt_mmap_el >> disch_then (qspec_then `k` mp_tac) >>
+          impl_tac >- (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >> simp[]) >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  gvs[read_result_def, raise_def]
+QED
+
+Finalise tuple_vv_post
 
 (* ===== The simulation ===== *)
 
@@ -999,3 +1056,12 @@ Proof
       qexistsl [`btv`, `vs`] >> simp[]) >>
   irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[]
 QED
+
+(* The provenance repair and its public consumer must remain admission-free. *)
+val _ = List.app (fn (name,th) =>
+  let val (ors,axs) = Tag.dest_tag (Thm.tag th) in
+    if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+    then raise Fail ("Tuple repair dependency: " ^ name) else ()
+  end)
+  [("tuple_pre_base", tuple_pre_base), ("tuple_vv_post", tuple_vv_post),
+   ("compile_subscript_tuple_sim", compile_subscript_tuple_sim)];
