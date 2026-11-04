@@ -819,3 +819,54 @@ Proof
   qexists_tac `rs` >>
   gvs[consume_call_outcome_eq, current_name_agree_def, lookup_var_def]
 QED
+
+Theorem current_setfmp_agree:
+  inst.inst_opcode = SETFMP /\ inst'.inst_opcode = SETFMP /\
+  LENGTH inst.inst_operands = 1 /\ inst.inst_outputs = [] /\ inst'.inst_outputs = [] /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs demand st st' ==>
+  current_result_agree rs demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> drule_all current_rename_operands_pointwise >> strip_tac >>
+  gvs[LENGTH_EQ_NUM_compute, LIST_REL_def, current_rename_operands_map] >>
+  rename1 `inst.inst_operands = [a]` >>
+  qpat_x_assum `eval_operand a st = _` (assume_tac o SYM) >>
+  asm_rewrite_tac[step_inst_base_def] >>
+  Cases_on `eval_operand a st`
+  >- simp[current_result_agree_def] >>
+  simp[] >> irule current_effect_agree >> simp[] >>
+  conj_tac
+  >- (qpat_x_assum `execution_frame _ = _` mp_tac >>
+      simp[execution_frame_def, venom_state_component_equality]) >>
+  qexistsl_tac [`st`,`st'`] >> simp[]
+QED
+
+Theorem current_sha3_agree:
+  inst.inst_opcode = SHA3 /\ inst'.inst_opcode = SHA3 /\
+  LENGTH inst.inst_operands = 2 /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> drule_all current_rename_operands_pointwise >> strip_tac >>
+  gvs[LENGTH_EQ_NUM_compute, LIST_REL_def, current_rename_operands_map] >>
+  rename1 `inst.inst_operands = [a;b]` >>
+  qpat_x_assum `eval_operand a st = _` (assume_tac o SYM) >>
+  qpat_x_assum `eval_operand b st = _` (assume_tac o SYM) >>
+  `st.vs_memory = st'.vs_memory` by
+    (qpat_x_assum `execution_frame _ = _`
+      (mp_tac o AP_TERM ``\s:venom_state. s.vs_memory``) >> simp[execution_frame_def]) >>
+  asm_rewrite_tac[step_inst_base_def] >>
+  Cases_on `eval_operand a st`
+  >- simp[current_result_agree_def] >>
+  Cases_on `eval_operand b st`
+  >- simp[current_result_agree_def] >>
+  simp[] >> irule current_single_output_agree >> metis_tac[]
+QED
