@@ -3320,3 +3320,92 @@ Proof
    mk_inst 0 JNZ [Lit 1w; Label "@then_0"; Label "@else_1"] []` by simp[] >>
   gvs[observer_collision_array_end_fields, mk_inst_def]
 QED
+
+Definition observer_prefilled_start_def:
+  observer_prefilled_start cenv = observer_collision_start with
+    cs_current_insts := (observer_collision_array_end cenv).cs_current_insts
+End
+
+Definition observer_prefilled_index_end_def:
+  observer_prefilled_index_end cenv =
+    SND (lower_value compile_expr cenv (BaseT (UintT 256))
+           observer_collision_index (observer_prefilled_start cenv))
+End
+
+Definition observer_prefilled_array_end_def:
+  observer_prefilled_array_end cenv =
+    SND (compile_array_subscript (Lit 0w) (Var "%0") F 2 32 32 F
+      (\p. emit_op MLOAD [p]) (observer_prefilled_index_end cenv))
+End
+
+Theorem observer_prefilled_fields[local]:
+  FST (lower_value compile_expr cenv (BaseT (UintT 256))
+       observer_collision_index (observer_prefilled_start cenv)) = Var "%0" /\
+  (observer_prefilled_index_end cenv).cs_current_insts = [] /\
+  (observer_prefilled_index_end cenv).cs_current_bb = "@exit_2" /\
+  (observer_prefilled_array_end cenv).cs_current_bb = "@exit_2" /\
+  (observer_prefilled_array_end cenv).cs_current_insts =
+    (observer_collision_array_end cenv).cs_current_insts /\
+  (observer_prefilled_array_end cenv).cs_blocks =
+    (observer_prefilled_index_end cenv).cs_blocks /\
+  (observer_prefilled_index_end cenv).cs_blocks =
+    [<| bb_label := "@else_1"; bb_instructions :=
+        [mk_inst 3 ASSIGN [Lit 1w] ["%0"];
+         mk_inst 4 JMP [Label "@exit_2"] []] |>;
+     <| bb_label := "@then_0"; bb_instructions :=
+        [mk_inst 1 ASSIGN [Lit 0w] ["%0"];
+         mk_inst 2 JMP [Label "@exit_2"] []] |>;
+     <| bb_label := "@exit_2"; bb_instructions :=
+        (observer_collision_array_end cenv).cs_current_insts ++
+        [mk_inst 0 JNZ [Lit 1w; Label "@then_0"; Label "@else_1"] []] |>]
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem observer_prefilled_containment_probe:
+  fn_has_code (observer_prefilled_start cenv)
+    (observer_prefilled_array_end cenv)
+    (fn with fn_blocks := (observer_prefilled_array_end cenv).cs_blocks) /\
+  fn_inst_ids_distinct
+    (fn with fn_blocks := (observer_prefilled_array_end cenv).cs_blocks) /\
+  ?bb. MEM bb (emitted_blocks (observer_prefilled_start cenv)
+                   (observer_prefilled_index_end cenv)) /\
+       bb.bb_label = (observer_prefilled_index_end cenv).cs_current_bb
+Proof
+  conj_tac
+  >- (simp[fn_has_code_def, emitted_blocks_def, observer_prefilled_fields,
+           observer_prefilled_start_def, observer_collision_start_def,
+           lookup_block_def, listTheory.FIND_thm] >>
+      rpt strip_tac >> gvs[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  simp[emitted_blocks_def, observer_prefilled_fields,
+       observer_prefilled_start_def, observer_collision_start_def] >>
+  qexists `<| bb_label := "@exit_2"; bb_instructions :=
+    (observer_collision_array_end cenv).cs_current_insts ++
+    [mk_inst 0 JNZ [Lit 1w; Label "@then_0"; Label "@else_1"] []] |>` >>
+  simp[]
+QED
+
+Theorem observer_prefilled_return_observer_not_contained:
+  ~fn_has_code (observer_prefilled_start cenv) (observer_prefilled_index_end cenv)
+    (fragment_return_observer
+      (fn with fn_blocks := (observer_prefilled_array_end cenv).cs_blocks)
+      (observer_prefilled_index_end cenv))
+Proof
+  rewrite_tac[fn_has_code_def] >> strip_tac >>
+  qpat_x_assum `!bb. _` (qspec_then
+    `<| bb_label := "@exit_2"; bb_instructions :=
+       (observer_collision_array_end cenv).cs_current_insts ++
+       [mk_inst 0 JNZ [Lit 1w; Label "@then_0"; Label "@else_1"] []] |>` mp_tac) >>
+  simp[emitted_blocks_def, observer_prefilled_fields,
+       observer_prefilled_start_def, observer_collision_start_def,
+       fragment_return_observer_def, lookup_block_def, listTheory.FIND_thm,
+       observer_collision_array_end_fields] >>
+  strip_tac >>
+  `HD ((observer_collision_array_end cenv).cs_current_insts ++
+       [mk_inst 0 JNZ [Lit 1w; Label "@then_0"; Label "@else_1"] []]) =
+    mk_inst (observer_prefilled_index_end cenv).cs_next_id RET [Lit 0w] []`
+    by simp[] >>
+  Cases_on `(observer_collision_array_end cenv).cs_current_insts` >>
+  gvs[observer_collision_array_end_fields, mk_inst_def]
+QED
