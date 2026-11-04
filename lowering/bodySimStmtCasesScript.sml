@@ -5881,6 +5881,75 @@ Proof
   metis_tac[]
 QED
 
+Theorem aug_place_tuple_range_selected[local]:
+  !tvs off i tv storage.
+    tuple_slots_in_range storage off tvs /\ oEL i tvs = SOME tv ==>
+    slots_in_range storage (off + tuple_prefix_slot_size i tvs) tv
+Proof
+  Induct >> simp[listTheory.oEL_def] >>
+  rpt gen_tac >> Cases_on `i` >>
+  simp[listTheory.oEL_def, tuple_prefix_slot_size_def,
+       Once vyperLookupStorageTheory.slots_in_range_def] >>
+  rpt strip_tac >> gvs[] >> first_x_assum drule_all >>
+  pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >> simp[]
+QED
+
+Theorem aug_place_range_word_offset[local]:
+  slots_in_range storage (w2n (w:bytes32) + off) tv ==>
+  slots_in_range storage (w2n (w + n2w off)) tv
+Proof
+  strip_tac >>
+  `slots_in_range storage (w2n w + off) tv =
+   slots_in_range storage (w2n (w + n2w off)) tv` by
+    (irule (cj 1 vyperLookupStorageTheory.slots_in_range_offset_cong) >>
+     `w + n2w off = n2w (w2n w + off)` by
+       simp[GSYM wordsTheory.word_add_n2w] >>
+     asm_rewrite_tac[wordsTheory.n2w_w2n]) >>
+  gvs[]
+QED
+
+Theorem aug_place_resolve_array_empty[local]:
+  resolve_array_element cx tr slot tv [] st = (INL (slot,tv,[]),st)
+Proof
+  Cases_on `tv` >> simp[resolve_array_element_def, return_def]
+QED
+
+Theorem aug_place_storage_extend_range:
+  slots_in_range (get_storage cx st tr) (w2n slot) tv /\
+  storage_read_live cx tr (get_storage cx st tr) slot tv /\
+  extend_storage_place cx tr slot tv sb st =
+    (INL (StoragePlace tr' child leaf),st') ==>
+  slots_in_range (get_storage cx st' tr') (w2n child) leaf
+Proof
+  strip_tac >> Cases_on `sb` >> Cases_on `tv` >>
+  gvs[extend_storage_place_def, raise_def] >>
+  TRY (rename1 `ValueSubscript key` >> Cases_on `key` >>
+       gvs[extend_storage_place_def, raise_def]) >>
+  gvs[bind_def, ignore_bind_def, check_def, assert_def, lift_option_type_def,
+      return_def, raise_def, AllCaseEqs()]
+  >~ [`StructTV fs`]
+  >- (Cases_on `struct_field_slot fs s` >>
+      gvs[raise_def, return_def] >> PairCases_on `x` >>
+      gvs[return_def] >>
+      irule vyperLookupStorageTheory.storage_field_slots_in_range >>
+      goal_assum (drule_at Any) >> simp[])
+  >~ [`TupleTV tvs`]
+  >- (Cases_on `oEL (Num i) tvs` >> gvs[return_def, raise_def] >>
+      irule aug_place_range_word_offset >>
+      irule aug_place_tuple_range_selected >>
+      gvs[Once vyperLookupStorageTheory.slots_in_range_def] >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  Cases_on `b` >>
+  gvs[resolve_array_element_def, bind_def, ignore_bind_def, check_def,
+      assert_def, return_def, raise_def, AllCaseEqs(),
+      vyperStorageBackendTheory.get_storage_backend_eq] >>
+  gvs[aug_place_resolve_array_empty, return_def] >>
+  >- (irule aug_place_range_word_offset >>
+      gvs[Once vyperLookupStorageTheory.slots_in_range_def,
+          cj 1 vyperLookupStorageTheory.array_slots_in_range_indexed]) >>
+  FAIL_TAC "dynamic indexed range"
+QED
+
 (* A field or element of a local, or of a storage or transient variable
    whose indices have no effect (supported_pure_expr): the place's
    current word is loaded where the target's code left it. *)
