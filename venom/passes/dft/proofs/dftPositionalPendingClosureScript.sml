@@ -1270,3 +1270,118 @@ Proof
   PairCases_on `x` >> fs[dft_pos_pending_gas_frame_def] >> gvs[] >> metis_tac[]
 QED
 
+
+Theorem dft_pending_plain_restore_failure:
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post (NONE::zs) H l r /\
+  l.dft_occ_core = DftOpen (DftDone (IntRet ret cs))
+    (DftCaller f 0 b inst t::ls) nL /\
+  r.dft_occ_core = DftOpen (DftDone (IntRet ret cs))
+    (DftCaller g 0 b' inst s::rs) nR /\
+  dft_restore inst.inst_outputs ret cs s = NONE ==>
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post []
+    (dft_pos_pending_gas_events (NONE::zs) ++ H)
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r) /\
+  pending_segment_account C D w 1 1 l r
+    (dft_pos_pending_gas_events (NONE::zs) ++ H)
+    (dft_pos_pending_gas_events [] ++ (dft_pos_pending_gas_events (NONE::zs) ++ H))
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  reverse conj_tac >- (irule dft_pending_done_abandon_account >> metis_tac[]) >>
+  `t = s` by
+    (fs[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def,
+        dft_pos_pending_gas_stack_def, dft_pos_pending_gas_frame_def,
+        dft_pos_frame_def] >> gvs[]) >>
+  `dft_original_ready (dft_occ_oracle_next w C l) /\
+   dft_original_ready (dft_occ_oracle_next w D r)` by
+    (fs[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def] >>
+     metis_tac[dft_original_runtime_next]) >>
+  gvs[dftOccurrenceReturnTheory.dft_restore_def, dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+      dft_fill_def, dft_fill_control_def, dft_fill_frame_def, dft_open_next_def,
+      dft_open_return_def, dft_erase_def, dft_occ_update_def] >>
+  fs[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def] >>
+  gvs[dft_pos_control_def, dft_pos_pending_gas_stack_def,
+      dft_pos_pending_gas_events_def, dft_pos_pending_saved_def]
+QED
+
+Theorem dft_pending_done_closed:
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H l r /\
+  l.dft_occ_core = DftOpen (DftDone result) ls nL /\
+  r.dft_occ_core = DftOpen (DftDone result) rs nR ==>
+  ?b zs' H'. 0 < b /\ b <= 2 /\
+    dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs' H'
+      (dft_occ_oracle_next w C l) (FUNPOW (dft_occ_oracle_next w D) b r) /\
+    pending_segment_account C D w 1 b l r
+      (dft_pos_pending_gas_events zs ++ H) (dft_pos_pending_gas_events zs' ++ H')
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  Cases_on `?ret cs. result = IntRet ret cs`
+  >- (pop_assum strip_assume_tac >> fs[] >>
+      drule_all dft_pending_done_head >> strip_tac
+      >- (qexistsl [`1`,`[]`,`H`] >> simp[dft_pos_pending_gas_events_def] >>
+          metis_tac[dft_pending_terminal_self]) >>
+      Cases_on `z = NONE`
+      >- (Cases_on `dft_restore inst.inst_outputs ret cs s`
+          >- (qexistsl [`1`,`[]`,`dft_pos_pending_gas_events (NONE::zt) ++ H`] >>
+              conj_tac >- decide_tac >> conj_tac >- decide_tac >>
+              pure_rewrite_tac[FUNPOW_1] >> fs[] >>
+              drule_all dft_pending_plain_restore_failure >> simp[]) >>
+          qexistsl [`1`,`zt`,`H`] >> conj_tac >- decide_tac >> conj_tac >- decide_tac >>
+          pure_rewrite_tac[FUNPOW_1] >> fs[] >>
+          drule_all dft_pending_plain_return >> simp[]) >>
+      fs[] >>
+      `?addr. z = SOME (gas,addr) /\ inst = call` by metis_tac[] >>
+      Cases_on `dft_restore call.inst_outputs ret cs s`
+      >- (qexistsl [`1`,`[]`,`dft_pos_pending_gas_events zs ++ H`] >>
+          conj_tac >- decide_tac >> conj_tac >- decide_tac >>
+          pure_rewrite_tac[FUNPOW_1] >>
+          drule_all dft_pending_restore_failure >> gvs[]) >>
+      `?path visit saved. l.dft_occ_saved = (path,visit)::saved` by
+        (fs[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def] >>
+         Cases_on `l.dft_occ_saved` >> gvs[] >> Cases_on `h` >> metis_tac[]) >>
+      qexistsl [`2`,`zt`,`H`] >> conj_tac >- decide_tac >> conj_tac >- decide_tac >>
+      drule_all dft_pending_crossing_return >> simp[]) >>
+  qexistsl [`1`,`[]`,`dft_pos_pending_gas_events zs ++ H`] >>
+  conj_tac >- decide_tac >> conj_tac >- decide_tac >>
+  pure_rewrite_tac[FUNPOW_1] >> irule dft_pending_done_nonreturn >> metis_tac[]
+QED
+
+Theorem dft_pending_bounded_closed:
+  D = dft_pos_edit_ctx fi bi pre gas call post C /\
+  dft_pos_runtime_ready C fi bi pre gas call post /\
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  call.inst_opcode = INVOKE /\ ~MEM (Var v) call.inst_operands /\ ~MEM v call.inst_outputs /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H l r ==>
+  ?a b zs' H'. 0 < a /\ a <= 2 /\ 0 < b /\ b <= 2 /\
+    dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs' H'
+      (FUNPOW (dft_occ_oracle_next w C) a l) (FUNPOW (dft_occ_oracle_next w D) b r) /\
+    pending_segment_account C D w a b l r
+      (dft_pos_pending_gas_events zs ++ H) (dft_pos_pending_gas_events zs' ++ H')
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `?ctl ctl' ls rs nL nR.
+     l.dft_occ_core = DftOpen ctl ls nL /\ r.dft_occ_core = DftOpen ctl' rs nR /\
+     dft_pos_control C D fi bi pre ctl ctl'` by
+    (fs[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def] >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  qpat_x_assum `dft_pos_control _ _ _ _ _ _ _` mp_tac >>
+  simp[dft_pos_control_def] >> strip_tac
+  >- (qexistsl [`1`,`1`] >> simp[NoAsms] >>
+      irule dft_pending_enter_closed >> metis_tac[]) 
+  >- (`?a zs' H'. 0 < a /\ a <= 2 /\
+         dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs' H'
+           (FUNPOW (dft_occ_oracle_next w C) a l) (dft_occ_oracle_next w D r) /\
+         pending_segment_account C D w a 1 l r
+           (dft_pos_pending_gas_events zs ++ H) (dft_pos_pending_gas_events zs' ++ H')` by
+        (irule dft_pending_at_closed >> metis_tac[]) >>
+      qexistsl [`a`,`1`,`zs'`,`H'`] >> gvs[]) >>
+  `?b zs' H'. 0 < b /\ b <= 2 /\
+     dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs' H'
+       (dft_occ_oracle_next w C l) (FUNPOW (dft_occ_oracle_next w D) b r) /\
+     pending_segment_account C D w 1 b l r
+       (dft_pos_pending_gas_events zs ++ H) (dft_pos_pending_gas_events zs' ++ H')` by
+    (irule dft_pending_done_closed >> metis_tac[]) >>
+  qexistsl [`1`,`b`,`zs'`,`H'`] >> gvs[]
+QED
