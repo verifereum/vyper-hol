@@ -10,7 +10,7 @@ Theorem dalloca_expansion_exec:
     lookup_var runner s = SOME frontier /\
     ALL_DISTINCT [plus31;mask;aligned;runner;out] ==>
     run_insts fuel ctx
-      [mk_inst ai ADD [size_op;Lit 31w] [plus31];
+      [mk_inst ai ADD [Lit 31w;size_op] [plus31];
        mk_inst ni NOT [Lit 31w] [mask];
        mk_inst mi AND [Var plus31;Var mask] [aligned];
        mk_inst bi BUMP [Var runner;Var aligned] [out;runner]] s =
@@ -28,7 +28,7 @@ Proof
        exec_pure1_def, exec_pure2_def, eval_operand_def] >>
   fs[lookup_var_def] >>
   simp[lookup_var_def, update_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE, dalloca_mask_value]
+       finite_mapTheory.FLOOKUP_UPDATE, dalloca_mask_value, wordsTheory.WORD_ADD_COMM]
 QED
 
 (* Supply equalities record the actual original-point expansion, rather than
@@ -42,7 +42,7 @@ Theorem fmp_lower_dalloca_code:
   fresh_inst_id s2 = (ai,s3) /\ fresh_inst_id s3 = (ni,s3a) /\
   fresh_inst_id s3a = (mi,s4) /\ fresh_inst_id s4 = (bi,s5) ==>
   fmp_lower_inst infos c runner supply inst =
-    SOME ([mk_inst ai ADD [size_op;Lit 31w] [plus31];
+    SOME ([mk_inst ai ADD [Lit 31w;size_op] [plus31];
            mk_inst ni NOT [Lit 31w] [mask];
            mk_inst mi AND [Var plus31;Var mask] [aligned];
            mk_inst bi BUMP [Var runner;Var aligned] [out;runner]],s5)
@@ -76,7 +76,7 @@ Theorem dalloca_expansion_observables:
   eval_operand size_op s = SOME sz /\ lookup_var runner s = SOME s.vs_fmp /\
   ALL_DISTINCT [plus31;mask;aligned;runner;out] /\
   run_insts fuel ctx
-      [mk_inst ai ADD [size_op;Lit 31w] [plus31];
+      [mk_inst ai ADD [Lit 31w;size_op] [plus31];
        mk_inst ni NOT [Lit 31w] [mask];
        mk_inst mi AND [Var plus31;Var mask] [aligned];
        mk_inst bi BUMP [Var runner;Var aligned] [out;runner]] s = OK low /\

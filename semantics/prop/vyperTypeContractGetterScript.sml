@@ -998,61 +998,61 @@ QED
 Theorem function_entry_env_args_lookup_package[local]:
   ALL_DISTINCT (MAP FST args) ==>
   (!id ty. MEM (id,ty) args ==>
-     FLOOKUP (function_entry_env art mods src args).var_types
+     FLOOKUP (function_entry_env art mods src External args).var_types
        id = SOME ty /\
-     FLOOKUP (function_entry_env art mods src args).var_assignable
-       id = SOME T) /\
-  (!n ty. FLOOKUP (function_entry_env art mods src args).var_types n = SOME ty ==>
+     IS_SOME (FLOOKUP (function_entry_env art mods src External args).var_assignable
+       id)) /\
+  (!n ty. FLOOKUP (function_entry_env art mods src External args).var_types n = SOME ty ==>
      ?id. MEM (id,ty) args /\ n = id) /\
-  (!n b. FLOOKUP (function_entry_env art mods src args).var_assignable n = SOME b ==>
-     ?id ty. MEM (id,ty) args /\ n = id /\ b = T)
+  (!n b. FLOOKUP (function_entry_env art mods src External args).var_assignable n = SOME b ==>
+     ?id ty. MEM (id,ty) args /\ n = id)
 Proof
   rw[function_entry_env_def]
   >- metis_tac[FOLDL_extend_local_args_formal_lookup]
-  >- metis_tac[FOLDL_extend_local_args_formal_lookup]
+  >- (drule_all FOLDL_extend_local_args_formal_lookup >> simp[])
   >- (drule_all FOLDL_extend_local_args_var_types_range >>
       simp[artifact_env_def])
   >- (drule_all FOLDL_extend_local_args_var_assignable_range >>
-      simp[artifact_env_def])
+      simp[artifact_env_def] >> metis_tac[])
 QED
 
 Theorem build_getter_function_entry_typing_package[local]:
   build_getter e kt vt n = (args,ret,exp) ==>
-  type_place_expr (function_entry_env art mods src args) e = SOME container_vt ==>
+  type_place_expr (function_entry_env art mods src External args) e = SOME container_vt ==>
   subscript_vtype container_vt kt = SOME vt ==>
   check_value_type (type_env_all_modules mods) vt ==>
   ALL_DISTINCT (MAP FST args) /\
   (?env_after.
-     type_stmts (function_entry_env art mods src args) ret
+     type_stmts (function_entry_env art mods src External args) ret
        [Return (SOME exp)] = SOME env_after) /\
   (!id ty. MEM (id,ty) args ==>
-     FLOOKUP (function_entry_env art mods src args).var_types
+     FLOOKUP (function_entry_env art mods src External args).var_types
        id = SOME ty /\
-     FLOOKUP (function_entry_env art mods src args).var_assignable
-       id = SOME T) /\
-  (!m ty. FLOOKUP (function_entry_env art mods src args).var_types m = SOME ty ==>
+     IS_SOME (FLOOKUP (function_entry_env art mods src External args).var_assignable
+       id)) /\
+  (!m ty. FLOOKUP (function_entry_env art mods src External args).var_types m = SOME ty ==>
      ?id. MEM (id,ty) args /\ m = id) /\
-  (!m b. FLOOKUP (function_entry_env art mods src args).var_assignable m = SOME b ==>
-     ?id ty. MEM (id,ty) args /\ m = id /\ b = T)
+  (!m b. FLOOKUP (function_entry_env art mods src External args).var_assignable m = SOME b ==>
+     ?id ty. MEM (id,ty) args /\ m = id)
 Proof
   rpt strip_tac >>
   `ALL_DISTINCT (MAP FST args)` by
     metis_tac[build_getter_args_all_distinct] >>
   `(!id ty. MEM (id,ty) args ==>
-       FLOOKUP (function_entry_env art mods src args).var_types
+       FLOOKUP (function_entry_env art mods src External args).var_types
          id = SOME ty /\
-       FLOOKUP (function_entry_env art mods src args).var_assignable
-         id = SOME T) /\
-   (!m ty. FLOOKUP (function_entry_env art mods src args).var_types m = SOME ty ==>
+       IS_SOME (FLOOKUP (function_entry_env art mods src External args).var_assignable
+         id)) /\
+   (!m ty. FLOOKUP (function_entry_env art mods src External args).var_types m = SOME ty ==>
        ?id. MEM (id,ty) args /\ m = id) /\
-   (!m b. FLOOKUP (function_entry_env art mods src args).var_assignable m = SOME b ==>
-       ?id ty. MEM (id,ty) args /\ m = id /\ b = T)` by
+   (!m b. FLOOKUP (function_entry_env art mods src External args).var_assignable m = SOME b ==>
+       ?id ty. MEM (id,ty) args /\ m = id)` by
     metis_tac[function_entry_env_args_lookup_package] >>
-  `well_typed_expr (function_entry_env art mods src args) exp /\
+  `well_typed_expr (function_entry_env art mods src External args) exp /\
    expr_type exp = ret` by
     (drule build_getter_well_typed >>
      disch_then (qspecl_then
-       [`function_entry_env art mods src args`, `container_vt`] mp_tac) >>
+       [`function_entry_env art mods src External args`, `container_vt`] mp_tac) >>
      simp[function_entry_env_def, artifact_env_def,
           FOLDL_extend_local_args_static] >>
      metis_tac[]) >>
@@ -1075,16 +1075,16 @@ Theorem checked_public_getter_body_typing_package:
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) ==>
   ALL_DISTINCT (MAP FST args) /\
   (?env_after.
-     type_stmts (function_entry_env art mods src args) ret body = SOME env_after) /\
+     type_stmts (function_entry_env art mods src External args) ret body = SOME env_after) /\
   (!id ty. MEM (id,ty) args ==>
-     FLOOKUP (function_entry_env art mods src args).var_types
+     FLOOKUP (function_entry_env art mods src External args).var_types
        id = SOME ty /\
-     FLOOKUP (function_entry_env art mods src args).var_assignable
-       id = SOME T) /\
-  (!n ty. FLOOKUP (function_entry_env art mods src args).var_types n = SOME ty ==>
+     IS_SOME (FLOOKUP (function_entry_env art mods src External args).var_assignable
+       id)) /\
+  (!n ty. FLOOKUP (function_entry_env art mods src External args).var_types n = SOME ty ==>
      ?id. MEM (id,ty) args /\ n = id) /\
-  (!n b. FLOOKUP (function_entry_env art mods src args).var_assignable n = SOME b ==>
-     ?id ty. MEM (id,ty) args /\ n = id /\ b = T)
+  (!n b. FLOOKUP (function_entry_env art mods src External args).var_assignable n = SOME b ==>
+     ?id ty. MEM (id,ty) args /\ n = id)
 Proof
   Cases_on `decl` >>
   simp[is_public_getter_decl_def, external_getter_tuple_def] >>

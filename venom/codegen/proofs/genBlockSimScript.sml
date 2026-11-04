@@ -2499,8 +2499,9 @@ Theorem assert_reorder_full_rel[local]:
     stack_get_depth op ps.ps_stack = SOME d /\ d <= 15 /\
     op <> dead_stack_marker /\
     (!at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
-    (!op1 at. operand_equiv dfg op1 at ==>
-      operand_val vs lo op1 = operand_val vs lo at) /\
+    (!at. (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+      operand_equiv dfg op at ==>
+      operand_val vs lo op = operand_val vs lo at) /\
     venom_asm_rel lo ps vs st /\
     asm_block_at prog st.as_pc (execute_plan initial_fmp (rops ++ suffix)) ==>
     ?st2.
@@ -2565,8 +2566,9 @@ Theorem assert_prepare_full_rel[local]:
     (!l. op = Label l ==> IS_SOME (FLOOKUP lo l)) /\
     op <> dead_stack_marker /\
     (!at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
-    (!op1 at. operand_equiv dfg op1 at ==>
-      operand_val vs lo op1 = operand_val vs lo at) /\
+    (!at. (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ at = op) /\
+      operand_equiv dfg op at ==>
+      operand_val vs lo op = operand_val vs lo at) /\
     operand_val vs lo op = SOME v /\
     suffix <> [] /\
     prefix_spill_wf initial_fmp lo (FRONT (inp ++ reo ++ suffix)) ps /\
@@ -2602,6 +2604,11 @@ Proof
   qpat_x_assum `suffix <> []` kall_tac >>
   drule_all assert_input_full_rel >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  `!at. (MEM at p1.ps_stack \/ at IN FDOM p1.ps_spilled) /\
+    operand_equiv dfg op at ==>
+    operand_val vs lo op = operand_val vs lo at` by
+    (drule_at (Pat `emit_input_plan _ _ _ _ = _`)
+       emit_input_plan_inventory_subset >> simp[] >> metis_tac[]) >>
   drule_all assert_reorder_full_rel >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
   qexistsl_tac [`st2`, `TL st2.as_stack`] >>
@@ -2656,7 +2663,8 @@ Theorem assert_prefix_operand[local]:
        stack_get_depth (Var s) ps.ps_stack = SOME d ==> d <= 15) /\
     op <> dead_stack_marker /\
     (!at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
-    (!at. operand_equiv dfg op at ==>
+    (!at. (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ at = op) /\
+       operand_equiv dfg op at ==>
        operand_val vs lo op = operand_val vs lo at) /\
     venom_asm_rel lo (apply_prefix_ops initial_fmp lo (inp ++ reo) ps) vs mid /\
     mid.as_stack <> [] ==>
@@ -2672,6 +2680,11 @@ Proof
    (apply_prefix_ops initial_fmp lo reo p1).ps_stack` by
     (rewrite_tac[apply_prefix_ops_append] >>
      irule (cj 1 apply_prefix_ops_ext_stack_spilled) >> simp[]) >>
+  `!at. (MEM at p1.ps_stack \/ at IN FDOM p1.ps_spilled) /\
+    operand_equiv dfg op at ==>
+    operand_val vs lo op = operand_val vs lo at` by
+    (drule_at (Pat `emit_one_input _ _ _ _ = _`)
+       emit_one_input_inventory_subset >> metis_tac[]) >>
   drule emit_one_input_on_stack >> simp[] >> strip_tac >>
   irule reorder_single_op_val_on_tos >> simp[] >>
   qexistsl [`dfg`, `initial_fmp`, `p1`] >>
@@ -2728,6 +2741,8 @@ Theorem assert_abort_sim:
     (* DFG operand_equiv is sound: equivalent operands have the same
        runtime value. Dischargeable from DFG construction correctness. *)
     (!op1 op2. MEM op1 (compute_operands inst) /\
+               (MEM op2 ps.ps_stack \/ op2 IN FDOM ps.ps_spilled \/
+                MEM op2 (compute_operands inst)) /\
                operand_equiv dfg op1 op2 ==>
                operand_val vs label_offsets op1 =
                operand_val vs label_offsets op2) /\
@@ -2884,6 +2899,8 @@ Theorem gen_inst_abort_sim:
     (* DFG operand_equiv is sound: equivalent operands have the same
        runtime value. Dischargeable from DFG construction correctness. *)
     (!op1 op2. MEM op1 (compute_operands inst) /\
+               (MEM op2 ps.ps_stack \/ op2 IN FDOM ps.ps_spilled \/
+                MEM op2 (compute_operands inst)) /\
                operand_equiv dfg op1 op2 ==>
                operand_val vs label_offsets op1 =
                operand_val vs label_offsets op2) /\
@@ -3310,6 +3327,11 @@ Resume gen_inst_abort_sim[main]:
   `cond_op <> dead_stack_marker /\
    (!at. operand_equiv dfg cond_op at ==> at <> dead_stack_marker)` by
     metis_tac[] >>
+  `!at. (MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled) /\
+    operand_equiv dfg cond_op at ==>
+    operand_val vs label_offsets cond_op = operand_val vs label_offsets at` by
+    (drule_at (Pat `emit_one_input _ _ _ _ = _`)
+       emit_one_input_inventory_subset >> metis_tac[]) >>
   `operand_val vs label_offsets cond_op = SOME (HD st_mid.as_stack)` by (
     match_mp_tac reorder_single_op_val_on_tos >>
     Q.EXISTS_TAC `dfg` >> Q.EXISTS_TAC `ps1` >>
@@ -3321,8 +3343,7 @@ Resume gen_inst_abort_sim[main]:
     >- first_assum ACCEPT_TAC
     >- simp[]
     >- metis_tac[]
-    >> (rpt strip_tac >>
-        qpat_x_assum `!op2. operand_equiv _ _ _ ==> _` drule >> simp[])) >>
+    >> metis_tac[]) >>
   (* conclude *)
   gvs[]
 QED
@@ -3593,8 +3614,9 @@ Theorem assign_singleton_reorder_sim[local]:
     reorder_plan dfg [op] ps = (rops, ps') /\
     op <> dead_stack_marker /\
     (!at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
-    (!a b. operand_equiv dfg a b ==>
-       operand_val vs lo a = operand_val vs lo b) /\
+    (!at. (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+       operand_equiv dfg op at ==>
+       operand_val vs lo op = operand_val vs lo at) /\
     venom_asm_rel lo ps vs st /\
     asm_block_at prog st.as_pc (execute_plan initial_fmp rops) ==>
     ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp rops)) st =
@@ -3849,7 +3871,10 @@ Theorem regular_inst_ok_sim:
          IS_SOME (FLOOKUP lo l)) /\
     (!op. MEM op (compute_operands inst) ==>
           eval_operand op vs = operand_val vs lo op) /\
-    (!op at. operand_equiv dfg op at ==>
+    (!op at. MEM op (compute_operands inst) /\
+             (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+              MEM at (compute_operands inst)) /\
+             operand_equiv dfg op at ==>
              operand_val vs lo op = operand_val vs lo at) /\
     EVERY (\op. op <> dead_stack_marker /\
       !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
@@ -3979,8 +4004,10 @@ Resume regular_inst_ok_sim[emitted]:
   `(if inst.inst_outputs = [] \/ is_halting then ([],emitted)
     else popmany_plan (MAP Var (FILTER (\out. ~MEM out next_liveness)
       inst.inst_outputs)) emitted) = (popops,popped)` by
-    (qpat_x_assum `if inst.inst_outputs = [] \/ is_halting then _ else _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> IF_CASES_TAC >> simp[]) >>
+    (`~(LENGTH inst.inst_outputs > 1)` by decide_tac >>
+     qpat_x_assum `if inst.inst_outputs = [] \/ _ then (popops,popped) = _ else _` mp_tac >>
+     qpat_x_assum `~(LENGTH inst.inst_outputs > 1)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >> IF_CASES_TAC >> gvs[]) >>
   `(if FILTER (\out. MEM out next_liveness) inst.inst_outputs = [] then ([],popped)
     else optimistic_swap_plan dfg inst next_liveness next_is_term popped) = (optops,tail)` by
     (qpat_x_assum `if inst.inst_outputs = [] \/ FILTER _ _ = [] then _ else _` mp_tac >>
@@ -4411,8 +4438,9 @@ Theorem assign_preparation_sim[local]:
     ~MEM (Var out) ps.ps_stack /\ Var out NOTIN FDOM ps.ps_spilled /\
     op <> dead_stack_marker /\
     (!at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
-    (!a b. operand_equiv dfg a b ==>
-       operand_val vs lo a = operand_val vs lo b) /\
+    (!at. (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ at = op) /\
+       operand_equiv dfg op at ==>
+       operand_val vs lo op = operand_val vs lo at) /\
     operand_val vs lo op = SOME v /\ venom_asm_rel lo ps vs st /\
     asm_block_at prog st.as_pc (execute_plan initial_fmp (iops ++ rops)) ==>
     ?st4.
@@ -4435,6 +4463,11 @@ Proof
   `asm_block_at prog st1.as_pc (execute_plan initial_fmp rops)` by
     (qpat_x_assum `st1.as_pc = _` (fn th => rewrite_tac[th]) >>
      first_assum ACCEPT_TAC) >>
+  `!at. (MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled) /\
+    operand_equiv dfg op at ==>
+    operand_val vs lo op = operand_val vs lo at` by
+    (drule_at (Pat `emit_input_plan _ _ _ _ = _`)
+       emit_input_plan_inventory_subset >> simp[] >> metis_tac[]) >>
   drule_all assign_singleton_reorder_sim >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
   rename1 `venom_asm_rel lo ps4 vs st4` >>
@@ -4556,7 +4589,10 @@ Theorem assign_inst_ok_sim:
     (* DFG alias soundness: planner-equivalent operands denote the same
        runtime word under the current value state and label environment.
        This is an explicit pipeline obligation for alias-only reorder steps. *)
-    (!op at. operand_equiv dfg op at ==>
+    (!op at. MEM op (compute_operands inst) /\
+             (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+              MEM at (compute_operands inst)) /\
+             operand_equiv dfg op at ==>
              operand_val vs lo op = operand_val vs lo at) /\
     EVERY (\op. op <> dead_stack_marker /\
       !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
@@ -4850,7 +4886,9 @@ Theorem log_prefix_sim[local]:
     (!l. MEM (Label l) rest ==> IS_SOME (FLOOKUP lo l)) /\
     EVERY (\op. op <> dead_stack_marker /\
       !at. operand_equiv dfg op at ==> at <> dead_stack_marker) rest /\
-    (!op at. operand_equiv dfg op at ==>
+    (!op at. MEM op rest /\
+      (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at rest) /\
+      operand_equiv dfg op at ==>
       operand_val vs lo op = operand_val vs lo at) /\
     emit_input_plan LOG rest nl ps = (input_ops,ps1) /\
     LENGTH rest <= LENGTH ps1.ps_stack /\ LENGTH rest <= 16 /\
@@ -4893,6 +4931,12 @@ Proof
   `ps4.ps_stack = stack_pop (LENGTH rest) ps4.ps_stack ++ rest` by
     (irule reorder_plan_materialised_suffix >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `!op at. MEM op rest /\
+    (MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled) /\
+    operand_equiv dfg op at ==>
+    operand_val vs lo op = operand_val vs lo at` by
+    (drule_at (Pat `emit_input_plan _ _ _ _ = _`)
+       emit_input_plan_inventory_subset >> metis_tac[]) >>
   drule_all (SRULE [] reorder_plan_venom_asm_rel_residual_addresses) >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
   goal_assum (drule_at Any) >>
@@ -5083,7 +5127,10 @@ Theorem log_inst_ok_sim:
     (* DFG alias soundness: planner-equivalent operands denote the same
        runtime word under the current value state and label environment.
        This is an explicit pipeline obligation for alias-only reorder steps. *)
-    (!op at. operand_equiv dfg op at ==>
+    (!op at. MEM op (compute_operands inst) /\
+             (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+              MEM at (compute_operands inst)) /\
+             operand_equiv dfg op at ==>
              operand_val vs lo op = operand_val vs lo at) /\
     EVERY (\op. op <> dead_stack_marker /\
       !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
@@ -5219,7 +5266,10 @@ Theorem assert_inst_ok_sim:
     (* DFG alias soundness: planner-equivalent operands denote the same
        runtime word under the current value state and label environment.
        This is an explicit pipeline obligation for alias-only reorder steps. *)
-    (!op at. operand_equiv dfg op at ==>
+    (!op at. MEM op (compute_operands inst) /\
+             (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+              MEM at (compute_operands inst)) /\
+             operand_equiv dfg op at ==>
              operand_val vs lo op = operand_val vs lo at) /\
     EVERY (\op. op <> dead_stack_marker /\
       !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
@@ -5280,7 +5330,7 @@ Proof
      goal_assum $ drule_at Any >> simp[] >>
      goal_assum $ drule_at Any >> simp[] >>
      goal_assum $ drule_at Any >> simp[] >>
-     qexistsl_tac [`next_liveness`, `ASSERT`] >> simp[]) >>
+     qexistsl_tac [`next_liveness`, `ASSERT`] >> simp[] >> metis_tac[]) >>
   `asm_block_at prog st2.as_pc
      [AsmOp "ISZERO"; AsmPushLabel "revert"; AsmOp "JUMPI"]` by
     fs[execute_plan_def, exec_stack_op_def] >>
@@ -5355,7 +5405,10 @@ Theorem assert_unreachable_inst_ok_sim:
     (* DFG alias soundness: planner-equivalent operands denote the same
        runtime word under the current value state and label environment.
        This is an explicit pipeline obligation for alias-only reorder steps. *)
-    (!op at. operand_equiv dfg op at ==>
+    (!op at. MEM op (compute_operands inst) /\
+             (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+              MEM at (compute_operands inst)) /\
+             operand_equiv dfg op at ==>
              operand_val vs lo op = operand_val vs lo at) /\
     EVERY (\op. op <> dead_stack_marker /\
       !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
@@ -5415,7 +5468,7 @@ Proof
      goal_assum $ drule_at Any >> simp[] >>
      goal_assum $ drule_at Any >> simp[] >>
      goal_assum $ drule_at Any >> simp[] >>
-     qexistsl_tac [`next_liveness`, `ASSERT_UNREACHABLE`] >> simp[]) >>
+     qexistsl_tac [`next_liveness`, `ASSERT_UNREACHABLE`] >> simp[] >> metis_tac[]) >>
   qpat_x_assum `!lbl' i. _` (qspecl_then
     [`lbl`, `LENGTH (execute_plan initial_fmp (inp ++ reo)) + 3`] mp_tac) >>
   simp[execute_plan_append, execute_plan_def, exec_stack_op_def,
@@ -5525,7 +5578,10 @@ Theorem gen_inst_ok_sim:
     (* DFG alias soundness: planner-equivalent operands denote the same
        runtime word under the current value state and label environment.
        This is an explicit pipeline obligation for alias-only reorder steps. *)
-    (!op at. operand_equiv dfg op at ==>
+    (!op at. MEM op (compute_operands inst) /\
+             (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+              MEM at (compute_operands inst)) /\
+             operand_equiv dfg op at ==>
              operand_val vs lo op = operand_val vs lo at) /\
     EVERY (\op. op <> dead_stack_marker /\
       !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
@@ -6715,7 +6771,9 @@ Theorem bump_input_reorder_venom_asm_rel[local]:
       (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
       IS_SOME (FLOOKUP ps.ps_spilled op)) /\
     (!l. MEM (Label l) [h;h'] ==> IS_SOME (FLOOKUP lo l)) /\
-    (!op at. operand_equiv dfg op at ==>
+    (!op at. MEM op [h;h'] /\
+       (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at [h;h']) /\
+       operand_equiv dfg op at ==>
        operand_val vs lo op = operand_val vs lo at) /\
     emit_input_plan BUMP [h;h'] nl ps = (input_ops,ps1) /\
     2 <= LENGTH ps1.ps_stack /\
@@ -6779,6 +6837,12 @@ Proof
     (qpat_x_assum `asm_block_at prog as.as_pc
        (execute_plan initial_fmp (input_ops ++ reorder_ops))` mp_tac >>
      simp[execute_plan_append, asm_block_at_append] >> metis_tac[]) >>
+  `!op at. MEM op [h;h'] /\
+    (MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled) /\
+    operand_equiv dfg op at ==>
+    operand_val vs lo op = operand_val vs lo at` by
+    (drule_at (Pat `emit_input_plan _ _ _ _ = _`)
+       emit_input_plan_inventory_subset >> metis_tac[]) >>
   qspecl_then [`base'`, `dfg`, `h`, `h'`, `ps1`, `reorder_ops`, `ps4`,
     `lo`, `o2pc`, `prog`, `vs`, `st'`] mp_tac
     reorder_plan_exact_two_venom_asm_rel >>
@@ -6855,7 +6919,10 @@ Theorem gen_inst_bump_ok_sim:
     (!l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)) /\
     (!op. MEM op (compute_operands inst) ==>
           eval_operand op vs = operand_val vs lo op) /\
-    (!op at. operand_equiv dfg op at ==>
+    (!op at. MEM op (compute_operands inst) /\
+             (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+              MEM at (compute_operands inst)) /\
+             operand_equiv dfg op at ==>
              operand_val vs lo op = operand_val vs lo at) /\
     EVERY (\op. op <> dead_stack_marker /\
       !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
@@ -7079,14 +7146,7 @@ Resume gen_inst_bump_ok_sim[bump]:
        (update_var h'³' (x + x')
          (update_var h'' x vs)) as8 /\
      as8.as_pc = as''.as_pc + LENGTH (execute_plan initial_fmp pop_ops)` by
-    (Cases_on `is_halting`
-     >- (qpat_x_assum `(if ~T then _ else _) = (pop_ops,ps8)` mp_tac >>
-         simp[] >> strip_tac >> gvs[] >>
-         qexistsl [`0`, `as''`] >>
-         conj_tac >- simp[asm_steps_def] >>
-         conj_tac >- first_assum ACCEPT_TAC >>
-         simp[execute_plan_def])
-     >> qspecl_then
+    (qspecl_then
           [`~MEM h'' next_liveness`, `~MEM h'³' next_liveness`,
            `Var h''`, `Var h'³'`, `stack_pop 2 ps4.ps_stack`,
            `ps4 with ps_stack :=
@@ -7100,18 +7160,14 @@ Resume gen_inst_bump_ok_sim[bump]:
           ((conj_tac >- simp[stack_push_def]) >>
            (conj_tac >- simp[]) >>
            (conj_tac >-
-             (qpat_x_assum `(if ~F then _ else _) = (pop_ops,ps8)` mp_tac >>
+             (qpat_x_assum `popmany_plan _ _ = (pop_ops,ps8)` mp_tac >>
               Cases_on `MEM h'' next_liveness` >>
               Cases_on `MEM h'³' next_liveness` >> simp[])) >>
            (conj_tac >- first_assum ACCEPT_TAC) >>
            first_assum ACCEPT_TAC)) >>
         simp[]) >>
   `generated_plan_state_wf base' ps8` by
-    (Cases_on `is_halting`
-     >- (qpat_x_assum `(if ~T then _ else _) = (pop_ops,ps8)` mp_tac >>
-         simp[] >> strip_tac >> gvs[] >>
-         first_assum ACCEPT_TAC)
-     >> qspecl_then
+    (qspecl_then
           [`base'`, `~MEM h'' next_liveness`, `~MEM h'³' next_liveness`,
            `Var h''`, `Var h'³'`, `stack_pop 2 ps4.ps_stack`,
            `ps4 with ps_stack :=
@@ -7122,7 +7178,7 @@ Resume gen_inst_bump_ok_sim[bump]:
           ((conj_tac >- first_assum ACCEPT_TAC) >>
            (conj_tac >- simp[stack_push_def]) >>
            (conj_tac >- simp[]) >>
-           (qpat_x_assum `(if ~F then _ else _) = (pop_ops,ps8)` mp_tac >>
+           (qpat_x_assum `popmany_plan _ _ = (pop_ops,ps8)` mp_tac >>
             Cases_on `MEM h'' next_liveness` >>
             Cases_on `MEM h'³' next_liveness` >> simp[]))) >>
         simp[]) >>
@@ -7202,7 +7258,7 @@ Resume gen_inst_ok_sim[bump]:
   simp[Once generate_inst_plan_def, is_param_opcode_def] >>
   disch_then irule >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
-  qexistsl_tac [`base'`, `ctx`, `fuel`, `vs`] >> simp[]
+  qexistsl_tac [`base'`, `ctx`, `fuel`, `vs`] >> simp[] >> metis_tac[]
 QED
 
 Resume gen_inst_ok_sim[none]:
@@ -7379,7 +7435,8 @@ Resume gen_inst_ok_sim[istore]:
     `as`] mp_tac bump_input_reorder_venom_asm_rel >>
   (impl_tac >- (ASM_REWRITE_TAC[] >>
     fs[compute_operands_def, python_stack_operands_def,
-       ir_specific_operand_order_def, exact_two_planner_ready_def])) >>
+       ir_specific_operand_order_def, exact_two_planner_ready_def] >>
+    metis_tac[])) >>
   strip_tac >>
   `ps4.ps_stack = stack_pop 2 ps4.ps_stack ++ [h;h'] /\
    generated_plan_state_wf base'

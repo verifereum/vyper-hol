@@ -189,14 +189,14 @@ QED
 
 Theorem defaults_env_FOLDL_extend_local[local]:
   !args env.
-    defaults_env (FOLDL (\env (id,ty). extend_local env id ty T) env args) =
+    defaults_env (FOLDL (\env (id,ty). extend_local env id ty asg) env args) =
     defaults_env env
 Proof
   Induct >> simp[] >> Cases >> simp[extend_local_def, defaults_env_def]
 QED
 
 Theorem defaults_env_function_entry_env:
-  defaults_env (function_entry_env art mods src args) = artifact_env art mods src
+  defaults_env (function_entry_env art mods src vis args) = artifact_env art mods src
 Proof
   simp[function_entry_env_def, defaults_env_FOLDL_extend_local] >>
   simp[defaults_env_def, artifact_env_def]
@@ -290,7 +290,7 @@ Theorem checked_explicit_external_defaults_typed[local]:
 Proof
   strip_tac >>
   `External <> Deploy` by simp[] >>
-  `check_function_body am.layouts tx.target mods art src mut nr args dflts ret body` by
+  `check_function_body am.layouts tx.target mods art src External mut nr args dflts ret body` by
     metis_tac[check_contract_runtime_function_body_MEM] >>
   rpt conj_tac
   >- fs[check_function_body_def, defaults_env_function_entry_env]

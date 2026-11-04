@@ -1,8 +1,9 @@
 Theory vyperRawSystemTypingTest
 Ancestors
-  vyperTypeSystem vyperAST vyperValue finite_map list jsonToVyper jsonAST
+  vyperTypeSystem vyperTypeContract vyperAST vyperValue finite_map list
+  jsonToVyper jsonAST
 Libs
-  wordsLib vyperCheckContractFrontendLib
+  wordsLib vyperCheckContractLib vyperCheckContractFrontendLib
 
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps ["fixtures/check_contract/raw_log_folded_topics.json"];
@@ -11,7 +12,7 @@ Theorem raw_log_rejects_named_topics:
   !env data.
     ~well_typed_expr env
       (Call NoneT RawLog
-        [Name (ArrayT (BaseT (BytesT (Fixed 32))) (Fixed 1)) "topics";
+        [Name (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic 4)) "topics";
          data] NONE)
 Proof
   simp[well_typed_expr_def]
@@ -24,6 +25,30 @@ Theorem raw_log_rejects_fixed_data_other_than_bytes32:
         [topics; Name (BaseT (BytesT (Fixed 1))) "data"] NONE)
 Proof
   simp[well_typed_expr_def, expr_type_def]
+QED
+
+Theorem raw_log_rejects_fixed_topic_arrays:
+  !env n topics data.
+    ~well_typed_expr env
+      (Call NoneT RawLog
+        [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Fixed n))
+           (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Fixed n)) topics;
+         data] NONE)
+Proof
+  simp[well_typed_expr_def, expr_type_def]
+QED
+
+Theorem raw_log_fixed_topics_contract_rejected:
+  check_contract F [] (0w : address)
+    [(NONE, [FunctionDecl External Nonpayable F F "f" [] [] NoneT
+      [Expr (Call NoneT RawLog
+        [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Fixed 1))
+           (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Fixed 1))
+           [Literal (BaseT (BytesT (Fixed 32))) (BytesL (REPLICATE 32 0w))];
+         Literal (BaseT (BytesT (Dynamic 0))) (BytesL [])] NONE)]])]
+  = NONE
+Proof
+  CONV_TAC (LAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
 QED
 
 Theorem raw_revert_rejects_fixed_data:

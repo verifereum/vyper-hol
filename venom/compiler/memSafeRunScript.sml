@@ -392,8 +392,7 @@ Theorem revert_forward_at_opcode:
     get_instruction bb i = SOME inst /\ revert_forward_at bb i ==>
     inst.inst_opcode = RETURNDATACOPY \/ inst.inst_opcode = REVERT
 Proof
-  rw[revert_forward_at_def, revert_forward_def] >> gvs[] >>
-  `SUC (i - 1) = i` by simp[] >> gvs[]
+  rw[revert_forward_at_def, revert_forward_pair_def] >> gvs[]
 QED
 
 Theorem mem_safe_point_mem:

@@ -99,7 +99,7 @@ QED
 Theorem entry_some_cv:
   entry_test_observations (SOME []) /\
   entry_test_observations (SOME [extCallOracle$failed_outcome
-    <|cr_target := 9w; cr_value := 0; cr_data := []; cr_static := F;
+    <|cr_kind := MessageCall; cr_gas := NONE; cr_data_len := 0; cr_target := 9w; cr_value := 0; cr_data := []; cr_static := F;
       cr_accounts := empty_accounts; cr_tStorage := empty_transient_storage|>])
 Proof
   CONV_TAC cv_eval

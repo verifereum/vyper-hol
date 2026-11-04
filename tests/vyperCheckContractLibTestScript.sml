@@ -618,13 +618,13 @@ val builtin_cases = [
        [Name (BaseT (BytesT (Dynamic 32))) "b"]``),
   ("RawCreate", ``Nonpayable``, ``[("b", BaseT (BytesT (Dynamic 100)))]``,
    ``BaseT AddressT``,
-   ``Call (BaseT AddressT) (CreateTarget RawCreate F T)
+   ``Call (BaseT AddressT) (CreateTarget RawCreate F T [])
        [Name (BaseT (BytesT (Dynamic 100))) "b";
         Literal (BaseT (UintT 256)) (IntL 0)] NONE``),
   ("RawCreate salt", ``Nonpayable``,
    ``[("b", BaseT (BytesT (Dynamic 100))); ("s", BaseT (BytesT (Fixed 32)))]``,
    ``BaseT AddressT``,
-   ``Call (BaseT AddressT) (CreateTarget RawCreate T T)
+   ``Call (BaseT AddressT) (CreateTarget RawCreate T T [])
        [Name (BaseT (BytesT (Dynamic 100))) "b";
         Literal (BaseT (UintT 256)) (IntL 0);
         Name (BaseT (BytesT (Fixed 32))) "s"] NONE``),
@@ -632,7 +632,7 @@ val builtin_cases = [
    ``[("b", BaseT (BytesT (Dynamic 100))); ("a", BaseT (UintT 256));
       ("s", BaseT (BytesT (Fixed 32)))]``,
    ``BaseT AddressT``,
-   ``Call (BaseT AddressT) (CreateTarget RawCreate T T)
+   ``Call (BaseT AddressT) (CreateTarget RawCreate T T [])
        [Name (BaseT (BytesT (Dynamic 100))) "b";
         Literal (BaseT (UintT 256)) (IntL 0);
         Name (BaseT (UintT 256)) "a";
@@ -778,6 +778,39 @@ val () = List.app (assert_some o check_constants)
    [tdecl b32 "K" keccak_a,
     tdecl ``BaseT BoolT`` "E"
       ``Builtin (BaseT BoolT) (Bop Eq) [^(tname b32 "K"); ^(tname b32 "K")]``]]
+
+(* a13-08 p15x: retain the exact p03 uint8 conversion/store and getter, then
+   mutate only the constructor's defaults. Both baseline modes must accept. *)
+val p03_constructor =
+  ``FunctionDecl Deploy Nonpayable F F "__init__"
+      [("a",BaseT (UintT 8))] [] NoneT
+      [Assign (BaseTarget (TopLevelNameTarget (NONE,"x")))
+        (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
+          [Name (BaseT (UintT 8)) "a"]) ]``;
+val p03_constructor_modules =
+  ``[(NONE,
+      [VariableDecl Private Storage "x" (BaseT (UintT 256)) (SOME 0);
+       ^p03_constructor;
+       FunctionDecl External Nonpayable F F "get" [] [] (BaseT (UintT 256))
+         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"x")))]])]
+    : (num option # toplevel list) list``;
+val p03_constructor_layouts =
+  ``[(0w : address,
+      ([((NONE,"x"),0)] : storage_layout, [] : storage_layout))]``;
+val p15x_constructor_modules = let
+  val (head,fields) = strip_comb p03_constructor
+  val changed = List.take (fields,6) @
+    [``[Literal (BaseT (UintT 8)) (IntL 5)]``] @ List.drop (fields,7)
+in subst [p03_constructor |-> list_mk_comb (head,changed)]
+     p03_constructor_modules end;
+val () = List.app (fn in_deploy => let
+  fun check modules = vyperCheckContractLib.check_contract_conv
+    (vyperCheckContractLib.mk_check_contract
+      {in_deploy = in_deploy, layouts = p03_constructor_layouts,
+       address = zero_address, modules = modules})
+in assert_some (check p03_constructor_modules);
+   assert_none (check p15x_constructor_modules)
+end) [false,true];
 
 (* Event declaration regressions: indexed aggregates and duplicate event names
    are rejected; field-name duplication and four indexed fields remain legal. *)
@@ -1222,7 +1255,8 @@ val () = body_case "transient write" ``NoneT``
   ``[Assign (BaseTarget (TopLevelNameTarget (NONE, "t"))) ^(uint 1)]``
   [``Nonpayable``] [``View``]
 val () = body_case "write inside a tuple target" ``NoneT``
-  ``[Assign (TupleTarget [BaseTarget (NameTarget "a");
+  ``[AnnAssign "y" (BaseT AddressT) ^arg_a;
+     Assign (TupleTarget [BaseTarget (NameTarget "y");
                           BaseTarget (TopLevelNameTarget (NONE, "x"))])
        (Builtin (TupleT [BaseT AddressT; BaseT (UintT 256)])
           (MakeArray NONE (Fixed 2)) [^arg_a; ^(uint 1)])]``
@@ -1246,7 +1280,7 @@ val () = expr_case "send" ``Call NoneT (Send F) [^arg_a; ^(uint 1)] NONE``
 val () = expr_case "selfdestruct" ``Call NoneT SelfDestructTarget [^arg_a] NONE``
   [``Nonpayable``] [``View``]
 val () = return_case "create_minimal_proxy_to" ``BaseT AddressT``
-  ``Call (BaseT AddressT) (CreateTarget CreateMinimalProxy F T)
+  ``Call (BaseT AddressT) (CreateTarget CreateMinimalProxy F T [])
       [^arg_a; ^(uint 0)] NONE``
   [``Nonpayable``] [``View``]
 
@@ -1270,6 +1304,23 @@ val () = return_case "staticcall with default_return_value" u256
 val () = expr_case "void extcall with default_return_value"
   ``Call NoneT (ExtCall F F ("poke", [], NoneT) [EKDefault])
       [^arg_a; Call NoneT SelfDestructTarget [^arg_a] NONE] NONE``
+  [] [``Payable``, ``Nonpayable``]
+val () = return_case "staticcall returning a tuple"
+  ``TupleT [BaseT (UintT 256); BaseT (UintT 256)]``
+  ``Call (TupleT [BaseT (UintT 256); BaseT (UintT 256)])
+      (ExtCall T F ("pair", [BaseT (UintT 256)],
+                    TupleT [BaseT (UintT 256); BaseT (UintT 256)]) [])
+      [^arg_a; ^(uint 1)] NONE``
+  [``Pure``, ``View``] []
+(* Vyper can't name None in a type, so no interface returns or takes a type
+   with None inside. *)
+val () = expr_case "staticcall returning a tuple of None"
+  ``Call (TupleT [NoneT]) (ExtCall T F ("f", [], TupleT [NoneT]) [])
+      [^arg_a] NONE``
+  [] [``Pure``, ``View``, ``Nonpayable``, ``Payable``]
+val () = expr_case "extcall with a None parameter"
+  ``Call NoneT (ExtCall F F ("poke", [NoneT], NoneT) [])
+      [^arg_a; Call NoneT (Send F) [^arg_a; ^(uint 1)] NONE] NONE``
   [] [``Payable``, ``Nonpayable``]
 val () = expr_case "raw_call"
   ``Call NoneT (RawCallTarget ^raw_call_flags)
@@ -1327,6 +1378,20 @@ val () = mutability_case ("constructor", ``Deploy``, ``F``, no_dflts, ``NoneT``,
   ``[Pass]``, [``Nonpayable``, ``Payable``], [``View``, ``Pure``])
 val () = mutability_case ("nonreentrant", ``External``, ``T``, no_dflts,
   ``NoneT``, ``[Pass]``, [``View``], [``Pure``])
+
+(* Arguments of external functions are calldata: no write to one
+   type-checks.  Internal-function arguments are writable.  These checks run
+   in runtime mode, which skips the constructor body; vyperArgWriteTypingTest
+   covers constructor arguments. *)
+val arg_n_write = ``[Assign (BaseTarget (NameTarget "n")) ^(uint 1)]``
+val () = mutability_case ("external argument write", ``External``, ``F``,
+  no_dflts, ``NoneT``, arg_n_write, [], [``Nonpayable``, ``Payable``])
+val () = mutability_case ("external argument augmented assignment",
+  ``External``, ``F``, no_dflts, ``NoneT``,
+  ``[AugAssign (BaseT (UintT 256)) (NameTarget "n") Add ^(uint 1)]``,
+  [], [``Nonpayable``])
+val () = mutability_case ("internal argument write", ``Internal``, ``F``,
+  no_dflts, ``NoneT``, arg_n_write, [``Pure``, ``Nonpayable``], [])
 
 (* A module that nothing initializes has no storage in the layout.  Its
    functions that no live function calls are not checked, so get_x and the
@@ -1543,6 +1608,39 @@ val () = List.app assert_some
    aug_function bool_ty bool_ty ``vyperAST$And`` (op_name bool_ty "y"),
    aug_function bool_ty bool_ty ``vyperAST$Or`` (op_name bool_ty "y"),
    aug_function bool_ty bool_ty ``vyperAST$XOr`` (op_name bool_ty "y")]
+
+(* Each collision has an accepted control differing only in its getter name
+   or omitted-default prefix. Check the full checker in both modes. *)
+fun check_selector_decls in_deploy layouts decls =
+  vyperCheckContractLib.check_contract_conv
+    ``check_contract ^(if in_deploy then T else F) ^layouts ^zero_address
+        [(NONE, ^decls)]``
+
+val () = List.app (fn in_deploy =>
+  (List.app (fn (name, expect) => let
+     val layouts =
+       ``([((0w : address),
+            ([((NONE, ^name), 0)] : storage_layout, [] : storage_layout))]
+           : (address # (storage_layout # storage_layout)) list)``
+     val decls =
+       ``[FunctionDecl External Nonpayable F F "burn"
+            [("a", BaseT (UintT 256))] [] NoneT [];
+          HashMapDecl Public F ^name (BaseT (BytesT (Fixed 16)))
+            (Type (BaseT (UintT 256))) (SOME 0)]``
+   in
+     expect (check_selector_decls in_deploy layouts decls)
+   end)
+   [(``"collate_propagate_storage"``, assert_none),
+    (``"stored"``, assert_some)];
+   List.app (fn (dflts, expect) =>
+     expect (check_selector_decls in_deploy empty_layouts
+       ``[FunctionDecl External Nonpayable F F "burn"
+            [("a", BaseT (UintT 256)); ("b", BaseT (UintT 256))]
+            ^dflts NoneT [];
+          FunctionDecl External Nonpayable F F "collate_propagate_storage"
+            [("a", BaseT (BytesT (Fixed 16)))] [] NoneT []]``))
+   [(``[Literal (BaseT (UintT 256)) (IntL 0)]``, assert_none),
+    (``([] : expr list)``, assert_some)])) [false, true]
 
 (* Like Vyper (ImmutableViolation "Cannot modify loop variable"), a loop
    body may not write the array it iterates over: the evaluator iterates

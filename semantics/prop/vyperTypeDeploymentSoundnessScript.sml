@@ -64,7 +64,7 @@ Proof
   first_x_assum drule >> simp[check_module_def, EVERY_MEM] >>
   strip_tac >>
   qpat_x_assum `!e. MEM e ts ==> check_toplevel_decl _ _ _ _` drule >>
-  simp[check_toplevel_decl_def]
+  simp[check_toplevel_decl_def, function_header_ok_def, NULL_EQ]
 QED
 
 (* TOP-LEVEL: the constructor counterpart of
@@ -101,6 +101,37 @@ Proof
   simp[DROP_LENGTH_TOO_LONG]
 QED
 
+Theorem deployment_wrapped_body[local]:
+  cx.in_deploy /\ cx.txn.target = addr /\
+  LENGTH vals = LENGTH args /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  evaluate_all_constants cx am0 addr mods = SOME am_c ==>
+  (case call_external_function orc gobs am0 cx nr mut ts mods args [] vals body ret of
+     (INR e,_,_) => INR e
+   | (INL v,am',rqs) => INL (finalize_pending_deletions
+       (am' with sources updated_by CONS (addr,mods)),rqs)) =
+  (case call_external_body orc gobs am_c cx nr mut (type_env_all_modules mods)
+          scope body ret of
+     (INR e,_,_) => INR e
+   | (INL v,am',rqs) => INL (finalize_pending_deletions
+       (am' with sources updated_by CONS (addr,mods)),rqs))
+Proof
+  strip_tac >>
+  simp[call_external_function_def, evaluate_defaults_def] >>
+  simp[call_external_body_def, is_view_mut_def, lock_if_nr_def,
+       unlock_if_nr_def] >>
+  qpat_abbrev_tac `prefix_result = ignore_bind _ _ _` >>
+  PairCases_on `prefix_result` >> Cases_on `prefix_result0` >> gvs[]
+  >- (qpat_abbrev_tac `unlock = (if nr /\ mut <> View /\ mut <> Pure then _ else _) prefix_result1` >>
+      PairCases_on `unlock` >> Cases_on `unlock0` >> gvs[] >>
+      Cases_on `x` >> gvs[]) >>
+  Cases_on `y` >> gvs[] >>
+  qpat_abbrev_tac `unlock = (if nr /\ mut <> View /\ mut <> Pure then _ else _) prefix_result1` >>
+  PairCases_on `unlock` >> Cases_on `unlock0` >> gvs[] >>
+  Cases_on `evaluate_type (type_env_all_modules mods) ret` >> gvs[] >>
+  Cases_on `safe_cast x v` >> gvs[]
+QED
+
 (* TOP-LEVEL: load_contract is the constructor body run once setup has
    succeeded. *)
 Theorem load_contract_constructor_body:
@@ -125,9 +156,11 @@ Theorem load_contract_constructor_body:
                (am' with sources updated_by CONS (tx.target,mods)), rqs)
 Proof
   strip_tac >>
-  gvs[load_contract_def, call_external_function_def, call_external_body_def,
-      evaluate_defaults_def, initial_evaluation_context_def] >>
-  BasicProvers.EVERY_CASE_TAC >> gvs[]
+  `cx.in_deploy /\ cx.txn.target = tx.target` by
+    simp[initial_evaluation_context_def] >>
+  qpat_x_assum `cx = _` (fn th => simp[load_contract_def, GSYM th]) >>
+  irule deployment_wrapped_body >>
+  gvs[abstract_machine_fupdcanon]
 QED
 
 (* ===== Constructor static boundary ===== *)
