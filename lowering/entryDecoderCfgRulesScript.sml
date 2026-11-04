@@ -324,9 +324,9 @@ QED
 Theorem entry_cfg_loop_open[local]:
   !start s0 B P hdr body_lbl exit s1 s2 s3 s4 s5 old.
   entry_cfg_cert start s0 B P F /\
-  fresh_label "hdr" s0 = (hdr,s1) /\
-  fresh_label "body_lbl" s1 = (body_lbl,s2) /\
-  fresh_label "exit" s2 = (exit,s3) /\
+  fresh_label hdr_suffix s0 = (hdr,s1) /\
+  fresh_label body_suffix s1 = (body_lbl,s2) /\
+  fresh_label exit_suffix s2 = (exit,s3) /\
   emit_void JMP [Label hdr] s3 = ((),s4) /\
   new_block hdr s4 = (old,s5) ==>
   hdr NOTIN P /\ body_lbl NOTIN P /\ exit NOTIN P /\
@@ -416,18 +416,18 @@ Theorem entry_cfg_loop_skeleton:
   !start s0 B P hdr body_lbl exit s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13
    header prefix nested update v1 v2 v3 v4 old1 old2 old3 cond.
   entry_cfg_cert start s0 B P F /\
-  entry_cfg_preserves header /\ entry_cfg_preserves prefix /\
-  entry_cfg_preserves nested /\ entry_cfg_preserves update /\
-  fresh_label "hdr" s0 = (hdr,s1) /\
-  fresh_label "body_lbl" s1 = (body_lbl,s2) /\
-  fresh_label "exit" s2 = (exit,s3) /\
+  fresh_label hdr_suffix s0 = (hdr,s1) /\
+  fresh_label body_suffix s1 = (body_lbl,s2) /\
+  fresh_label exit_suffix s2 = (exit,s3) /\
   emit_void JMP [Label hdr] s3 = ((),s4) /\
   new_block hdr s4 = (old1,s5) /\ header s5 = (v1,s6) /\
   emit_void JNZ [cond; Label exit; Label body_lbl] s6 = ((),s7) /\
   new_block body_lbl s7 = (old2,s8) /\ prefix s8 = (v2,s9) /\
   nested s9 = (v3,s10) /\ update s10 = (v4,s11) /\
   emit_void JMP [Label hdr] s11 = ((),s12) /\
-  new_block exit s12 = (old3,s13) ==>
+  new_block exit s12 = (old3,s13) /\
+  entry_cfg_preserves header /\ entry_cfg_preserves prefix /\
+  entry_cfg_preserves nested /\ entry_cfg_preserves update ==>
   ?B'. entry_cfg_cert start s13 B' P F /\ B SUBSET B' /\
        hdr IN B' /\ body_lbl IN B' /\ exit IN B'
 Proof
