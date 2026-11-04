@@ -130,3 +130,87 @@ Proof
   qexistsl [`\n. 2*n`, `\n:num. n`] >>
   simp[dft_unequal_cuts_probe]
 QED
+
+(* Annotations are chosen jointly with the segment, and passed to the next cut. *)
+Definition dft_annotated_choice_def:
+  dft_annotated_choice L R P account z c d =
+    @abz. 0 < FST abz /\ 0 < FST (SND abz) /\
+      P (SND (SND abz)) (FUNPOW L (FST abz) c) (FUNPOW R (FST (SND abz)) d) /\
+      account z (SND (SND abz)) (FST abz) (FST (SND abz)) c d
+End
+
+Theorem dft_annotated_choice_spec[local]:
+  (!z c d. P z c d ==> ?a b z'. 0 < a /\ 0 < b /\
+    P z' (FUNPOW L a c) (FUNPOW R b d) /\ account z z' a b c d) /\ P z c d ==>
+  0 < FST (dft_annotated_choice L R P account z c d) /\
+  0 < FST (SND (dft_annotated_choice L R P account z c d)) /\
+  P (SND (SND (dft_annotated_choice L R P account z c d)))
+    (FUNPOW L (FST (dft_annotated_choice L R P account z c d)) c)
+    (FUNPOW R (FST (SND (dft_annotated_choice L R P account z c d))) d) /\
+  account z (SND (SND (dft_annotated_choice L R P account z c d)))
+    (FST (dft_annotated_choice L R P account z c d))
+    (FST (SND (dft_annotated_choice L R P account z c d))) c d
+Proof
+  strip_tac >> simp[dft_annotated_choice_def] >> SELECT_ELIM_TAC >>
+  conj_tac >- (first_x_assum drule >> strip_tac >> qexists `(a,b,z')` >> simp[]) >> simp[]
+QED
+
+Definition dft_annotated_cuts_def:
+  dft_annotated_cuts L R P account z c d 0 = (0,0,z) /\
+  dft_annotated_cuts L R P account z c d (SUC n) =
+    let abz = dft_annotated_cuts L R P account z c d n;
+        step = dft_annotated_choice L R P account (SND (SND abz))
+          (FUNPOW L (FST abz) c) (FUNPOW R (FST (SND abz)) d)
+    in (FST abz + FST step, FST (SND abz) + FST (SND step), SND (SND step))
+End
+
+Theorem dft_annotated_cuts_related[local]:
+  P z c d /\ (!z u v. P z u v ==> ?a b z'. 0 < a /\ 0 < b /\
+    P z' (FUNPOW L a u) (FUNPOW R b v) /\ account z z' a b u v) ==>
+  !n. P (SND (SND (dft_annotated_cuts L R P account z c d n)))
+        (FUNPOW L (FST (dft_annotated_cuts L R P account z c d n)) c)
+        (FUNPOW R (FST (SND (dft_annotated_cuts L R P account z c d n))) d)
+Proof
+  strip_tac >> Induct >> simp[dft_annotated_cuts_def] >>
+  drule_all dft_annotated_choice_spec >>
+  simp[dft_annotated_cuts_def, FUNPOW_ADD, ADD_COMM]
+QED
+
+Theorem dft_annotated_positive_segments:
+  P z c d /\ (!z u v. P z u v ==> ?a b z'. 0 < a /\ 0 < b /\
+    P z' (FUNPOW L a u) (FUNPOW R b v) /\ account z z' a b u v) ==>
+  ?A B Z. A 0 = 0 /\ B 0 = 0 /\ Z 0 = z /\
+    (!n. A n < A (SUC n) /\ B n < B (SUC n)) /\
+    (!n. P (Z n) (FUNPOW L (A n) c) (FUNPOW R (B n) d)) /\
+    (!n. account (Z n) (Z (SUC n)) (A (SUC n) - A n) (B (SUC n) - B n)
+      (FUNPOW L (A n) c) (FUNPOW R (B n) d))
+Proof
+  strip_tac >>
+  qexistsl [`\n. FST (dft_annotated_cuts L R P account z c d n)`,
+            `\n. FST (SND (dft_annotated_cuts L R P account z c d n))`,
+            `\n. SND (SND (dft_annotated_cuts L R P account z c d n))`] >> simp[] >>
+  `!n. P (SND (SND (dft_annotated_cuts L R P account z c d n)))
+        (FUNPOW L (FST (dft_annotated_cuts L R P account z c d n)) c)
+        (FUNPOW R (FST (SND (dft_annotated_cuts L R P account z c d n))) d)` by
+    metis_tac[dft_annotated_cuts_related] >>
+  simp[dft_annotated_cuts_def] >> conj_tac
+  >- metis_tac[dft_annotated_choice_spec] >>
+  metis_tac[dft_annotated_choice_spec]
+QED
+
+Theorem dft_annotated_cofinal_segments:
+  P z c d /\ (!z u v. P z u v ==> ?a b z'. 0 < a /\ 0 < b /\
+    P z' (FUNPOW L a u) (FUNPOW R b v) /\ account z z' a b u v) ==>
+  ?A B Z. A 0 = 0 /\ B 0 = 0 /\ Z 0 = z /\
+    (!n. A n < A (SUC n) /\ B n < B (SUC n)) /\
+    (!n. n <= A n /\ n <= B n) /\
+    (!j. ?n. A n <= j /\ j < A (SUC n)) /\
+    (!j. ?n. B n <= j /\ j < B (SUC n)) /\
+    (!n. P (Z n) (FUNPOW L (A n) c) (FUNPOW R (B n) d)) /\
+    (!n. account (Z n) (Z (SUC n)) (A (SUC n) - A n) (B (SUC n) - B n)
+      (FUNPOW L (A n) c) (FUNPOW R (B n) d))
+Proof
+  strip_tac >> drule_all dft_annotated_positive_segments >> strip_tac >>
+  qexistsl [`A`,`B`,`Z`] >> simp[] >>
+  metis_tac[dft_increasing_cuts_bound, dft_increasing_cuts_cover]
+QED
