@@ -1101,6 +1101,22 @@ Proof
   simp[] >> qexists_tac `env` >> simp[reason_typable_def]
 QED
 
+Theorem compile_expr_operand_not_label:
+  well_typed_expr env e /\
+  (!id t. FLOOKUP env.var_types id = SOME t ==>
+     ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+  compile_expr cenv ty e sa = (vv,sb) ==>
+  case vv of
+    StackValue t op => (!l. op <> Label l)
+  | LocatedValue t p => (!l. p.ptr_operand <> Label l)
+Proof
+  strip_tac >> drule_all compile_expr_reason_uniform >>
+  disch_then (qspec_then `ty` mp_tac) >>
+  simp[reason_uniform_shape_def] >> strip_tac >>
+  first_x_assum drule >>
+  Cases_on `vv` >> simp[reason_result_shape_def]
+QED
+
 (* Why it holds: only TopLevelName, Pop (infer_array_location) and the
    base a Subscript or Attribute passes through give a location other
    than memory: storage, transient, or code for an immutable.  That

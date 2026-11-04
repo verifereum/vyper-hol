@@ -2,6 +2,7 @@
 Theory bodyIntCallArgLifetime
 Ancestors
   exprSimAggregateChildren exprSimAggregateSource exprLowering compileEnv vyperEvalPureExpr vyperPureExpr supportedExprs supportedExprForms
+  exprReasonOperand exprSimHyps exprOperandVar exprSafeOperand context venomState exprSim
 
 Theorem compile_multi_vvs_empty:
   compile_multi_vvs cfn cenv [] st = ([],st)
@@ -33,4 +34,45 @@ Theorem supported_pure_eval_expr_state:
   es' = es
 Proof
   metis_tac[supported_purity_semantic, eval_expr_preserves_state]
+QED
+
+(* A compiled operand is already reserved at the next compile boundary.
+   The semantic invariant rules out label-valued local pointers. *)
+Theorem compile_expr_operand_safe:
+  expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+  local_ptrs_reserved cenv sa /\ compile_expr cenv ty e sa = (vv,sb) ==>
+  safe_operand sb (vv_operand vv)
+Proof
+  strip_tac >>
+  `!id t. FLOOKUP env.var_types id = SOME t ==>
+     ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
+    gvs[expr_sim_inv_def] >>
+  drule_all compile_expr_operand_not_label >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sb x` by
+    metis_tac[CONJUNCT1 compiler_compile_var] >>
+  Cases_on `vv` >> simp[safe_operand_def, vv_operand_def]
+QED
+
+Theorem safe_operand_value_preserved:
+  safe_operand sa op /\
+  (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+         lookup_var x s = SOME w) /\
+  eval_operand op s0 = SOME w ==>
+  eval_operand op s = SOME w
+Proof
+  Cases_on `op` >> simp[safe_operand_def, eval_operand_def] >>
+  metis_tac[]
+QED
+
+Theorem vv_post_preserves_compiled_operand:
+  expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+  local_ptrs_reserved cenv sa /\ compile_expr cenv ty e sa = (vv,sm) /\
+  vv_post ctx func cenv cx e' es0 sm sb s0 es' tv vv' s /\
+  eval_operand (vv_operand vv) s0 = SOME w ==>
+  eval_operand (vv_operand vv) s = SOME w
+Proof
+  strip_tac >> irule safe_operand_value_preserved >>
+  qexists_tac `s0` >> qexists_tac `sm` >> simp[] >>
+  conj_tac >- gvs[vv_post_def] >>
+  irule compile_expr_operand_safe >> metis_tac[]
 QED
