@@ -1,7 +1,7 @@
 (* Opcode-independent ambient projections of synchronization. *)
 Theory lowerDloadSafetyAmbient
 Ancestors
-  lowerDloadSafetyRelation lowerDloadSafetyKernel lowerDloadDefs words
+  lowerDloadSafetyRelation lowerDloadSafetyKernel lowerDloadDefs words lowerDloadFrontier
   o1PassContract venomWf venomInst list contextCodegenRel venomExecProps venomInstProps venomExecSemantics venomExecProofs contextRawReachable ptrDiscipline unitMemInv
 
 Theorem ld_sync_labels:
@@ -432,4 +432,15 @@ Theorem ld_sync_ambient_headroom:
 Proof
   strip_tac >> drule_all ld_sync_source_mem_inv >> strip_tac >>
   drule_all ld_sync_target_headroom >> simp[]
+QED
+
+Theorem ld_sync_frontier_lower_bound:
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
+  lo <= t.vs_alloca_next
+Proof
+  strip_tac >> drule ld_sync_source >> strip_tac >>
+  drule_all ld_frame_raw_reachable >>
+  strip_tac >> drule ld_raw_reachable_frontier >> strip_tac >>
+  drule ld_sync_frontier >> gvs[ptr_discipline_def]
 QED
