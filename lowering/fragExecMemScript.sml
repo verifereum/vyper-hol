@@ -279,7 +279,7 @@ Theorem frag_exec_mem_step:
     st'.cs_current_insts = st.cs_current_insts ++ [inst] /\
     inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
     (!s. P s ==>
-       inst_mem_below_frontier inst s /\
+       inst_mem_below_frontier inst s /\ inst_dload_in_section inst s /\
        ((?s1. step_inst_base inst s = OK s1 /\
               Q (s1 with vs_inst_idx := LENGTH st'.cs_current_insts)) \/
         (?a s1. step_inst_base inst s = Abort a s1 /\ R (Abort a s1)))) ==>
@@ -526,12 +526,12 @@ QED
 
 (* ===== Straight-line sequences ===== *)
 
-(* Every instruction of a straight-line sequence is below the frontier in
-   the state it runs in. *)
+(* Every instruction of a straight-line sequence is below the frontier,
+   and reads the data section from within it, in the state it runs in. *)
 Definition run_inst_seq_mem_ok_def:
   run_inst_seq_mem_ok [] s = T /\
   run_inst_seq_mem_ok (i::is) s =
-    (inst_mem_below_frontier i s /\
+    (inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
      case step_inst_base i s of
        OK s' => run_inst_seq_mem_ok is s'
      | _ => T)
@@ -549,9 +549,11 @@ Proof
 QED
 
 (* Successful prefixes supply exactly the state-dependent checks needed by
-   the recursive straight-line memory-safety predicate. *)
+   the recursive straight-line memory-safety predicate, for a sequence
+   without data-section reads. *)
 Theorem run_inst_seq_mem_ok_of_prefix_safe:
   !xs s.
+    EVERY (\i. i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES) xs /\
     (!pre i post u. xs = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
       inst_mem_below_frontier i u) ==>
     run_inst_seq_mem_ok xs s
@@ -560,13 +562,15 @@ Proof
   >- (first_x_assum irule >>
       qexistsl_tac [`xs`, `[]`] >> simp[run_inst_seq_def]) >>
   Cases_on `step_inst_base h s` >> simp[] >>
-  first_x_assum irule >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >> rpt strip_tac >>
   first_x_assum irule >>
   qexistsl_tac [`post`, `h::pre`] >> simp[run_inst_seq_def]
 QED
 
 Theorem run_inst_seq_mem_ok_every:
-  !code s. EVERY (\i. !t. inst_mem_below_frontier i t) code ==>
+  !code s.
+    EVERY (\i. !t. inst_mem_below_frontier i t /\ inst_dload_in_section i t)
+      code ==>
     run_inst_seq_mem_ok code s
 Proof
   Induct >> simp[run_inst_seq_mem_ok_def] >>
@@ -574,7 +578,8 @@ Proof
 QED
 
 Theorem run_inst_seq_mem_ok_last:
-  run_inst_seq_mem_ok [i] s <=> inst_mem_below_frontier i s
+  run_inst_seq_mem_ok [i] s <=>
+  inst_mem_below_frontier i s /\ inst_dload_in_section i s
 Proof
   Cases_on `step_inst_base i s` >> simp[run_inst_seq_mem_ok_def]
 QED
@@ -584,7 +589,7 @@ QED
    frontier checks. *)
 Theorem run_inst_seq_mem_ok_cons:
   run_inst_seq_mem_ok (i::j::is) s <=>
-  inst_mem_below_frontier i s /\
+  inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
   case step_inst_base i s of
     OK s' => run_inst_seq_mem_ok (j::is) s'
   | _ => T

@@ -6,6 +6,23 @@ Ancestors
   exprLoweringProps compileEnv emitHelper valueEncoding venomExecSemantics
   venomState venomInst words arithmetic list rich_list
 
+Theorem calldata_bulk_opcodes:
+  compile_abi_decode_to_buf dst src CALLDATALOAD hi
+    (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
+  ~dec_info_needs_clamp ei ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+    (emitted_insts st st')
+Proof
+  strip_tac >> Cases_on `hi = Lit 0w` >>
+  gvs[compile_abi_decode_to_buf_def] >>
+  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      emit_op_def, emit_void_def, fresh_var_def,
+      fresh_id_def, emit_def, emitted_insts_def] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+  gvs[DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def]
+QED
+
 Theorem calldata_bulk_payload_sequence:
   abi_decode_bulk_payload dst src cnt mem_sz CALLDATALOAD st = ((),st') /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
@@ -462,6 +479,7 @@ Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_bulk_shape >> strip_tac >>
+  drule_all calldata_bulk_opcodes >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_bulk_prefix_safe) >>
@@ -486,6 +504,7 @@ Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_bulk_shape >> strip_tac >>
+  drule_all calldata_bulk_opcodes >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_bulk_prefix_safe) >>
