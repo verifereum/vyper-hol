@@ -508,3 +508,95 @@ Proof
   >- (drule ml_liveat_pass_false_boundary >> simp[]) >>
   drule ml_used_pass_false_boundary >> simp[]
 QED
+
+(* Full scans, without early exit, for comparison with the executable fueled
+   iterator.  The executable analysis itself is not changed. *)
+Definition ml_full_rounds_def:
+  (ml_full_rounds bpr mems sizes pallocas cfg fn 0 = (FEMPTY,FEMPTY)) /\
+  (ml_full_rounds bpr mems sizes pallocas cfg fn (SUC n) =
+    case ml_full_rounds bpr mems sizes pallocas cfg fn n of (la,us) =>
+    case ml_one_pass bpr mems sizes pallocas cfg fn la us of (changed,la',us') =>
+      (la',us'))
+End
+
+Theorem ml_full_rounds_ordered:
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas ==>
+  !n. ptr_ml_ordered (FST (ml_full_rounds bpr mems sizes pallocas cfg fn n)) /\
+      ptr_ml_ordered (SND (ml_full_rounds bpr mems sizes pallocas cfg fn n))
+Proof
+  strip_tac >> Induct >> simp[ml_full_rounds_def] >>
+  Cases_on `ml_full_rounds bpr mems sizes pallocas cfg fn n` >> gvs[] >>
+  rename1 `ml_full_rounds bpr mems sizes pallocas cfg fn n = (la,us)` >>
+  Cases_on `ml_one_pass bpr mems sizes pallocas cfg fn la us` >>
+  rename1 `ml_one_pass bpr mems sizes pallocas cfg fn la us = (changed,result)` >>
+  Cases_on `result` >> gvs[] >>
+  drule_all ptr_one_pass_ordered >> simp[]
+QED
+
+Theorem ml_one_pass_sw_scan:
+  ml_one_pass bpr mems sizes pallocas cfg fn la us = (changed,la',us') /\
+  (!nm. OL alloc_to (mems nm)) /\ ptr_ml_ordered la /\
+  EVERY (\bb. bb.bb_instructions <> []) fn.fn_blocks /\
+  (!lbl. MEM a (ml_lookup la (lbl,0)) <=> T IN X lbl) /\
+  (!lbl. MEM a (ml_used_boundary_lookup fn.fn_blocks us lbl) <=> T IN Y lbl) ==>
+  (!lbl. MEM a (ml_lookup la' (lbl,0)) <=>
+    T IN sw_scan (MAP (ml_liveat_boundary_desc a bpr mems sizes cfg)
+      (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_post)) X lbl) /\
+  (!lbl. MEM a (ml_used_boundary_lookup fn.fn_blocks us' lbl) <=>
+    T IN sw_scan (MAP (ml_used_boundary_desc a bpr mems pallocas cfg)
+      (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_pre)) Y lbl)
+Proof
+  simp[ml_one_pass_def] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >> conj_tac
+  >- (drule_all ml_liveat_pass_sw_scan >> simp[]) >>
+  drule_all ml_used_pass_sw_scan >> simp[]
+QED
+
+Theorem ml_used_boundary_lookup_empty[simp]:
+  ml_used_boundary_lookup blocks FEMPTY lbl = []
+Proof
+  simp[ml_used_boundary_lookup_def, ml_lookup_def] >>
+  Cases_on `FIND (\b. b.bb_label = lbl) blocks` >> simp[]
+QED
+
+Theorem ml_full_rounds_boundary_exact:
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  EVERY (\bb. bb.bb_instructions <> []) fn.fn_blocks ==>
+  !n.
+  (!lbl. MEM a (ml_lookup (FST (ml_full_rounds bpr mems sizes pallocas cfg fn n)) (lbl,0)) <=>
+    T IN sw_rounds (MAP (ml_liveat_boundary_desc a bpr mems sizes cfg)
+      (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_post)) n lbl) /\
+  (!lbl. MEM a (ml_used_boundary_lookup fn.fn_blocks
+      (SND (ml_full_rounds bpr mems sizes pallocas cfg fn n)) lbl) <=>
+    T IN sw_rounds (MAP (ml_used_boundary_desc a bpr mems pallocas cfg)
+      (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_pre)) n lbl)
+Proof
+  strip_tac >> Induct
+  >- simp[ml_full_rounds_def, sw_rounds_def, ml_lookup_def] >>
+  `ptr_ml_ordered (FST (ml_full_rounds bpr mems sizes pallocas cfg fn n))` by
+    (drule_all ml_full_rounds_ordered >> simp[]) >>
+  simp[ml_full_rounds_def, sw_rounds_def] >>
+  Cases_on `ml_full_rounds bpr mems sizes pallocas cfg fn n` >> gvs[] >>
+  rename1 `ml_full_rounds bpr mems sizes pallocas cfg fn n = (la,us)` >>
+  Cases_on `ml_one_pass bpr mems sizes pallocas cfg fn la us` >>
+  rename1 `ml_one_pass bpr mems sizes pallocas cfg fn la us = (changed,result)` >>
+  Cases_on `result` >> gvs[] >>
+  drule_all ml_one_pass_sw_scan >> simp[]
+QED
+
+Theorem ml_full_rounds_boundary_stable:
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  EVERY (\bb. bb.bb_instructions <> []) fn.fn_blocks /\
+  LENGTH fn.fn_blocks <= n ==>
+  (!lbl. MEM a (ml_lookup (FST (ml_full_rounds bpr mems sizes pallocas cfg fn (SUC n))) (lbl,0)) <=>
+         MEM a (ml_lookup (FST (ml_full_rounds bpr mems sizes pallocas cfg fn n)) (lbl,0))) /\
+  (!lbl. MEM a (ml_used_boundary_lookup fn.fn_blocks
+      (SND (ml_full_rounds bpr mems sizes pallocas cfg fn (SUC n))) lbl) <=>
+         MEM a (ml_used_boundary_lookup fn.fn_blocks
+      (SND (ml_full_rounds bpr mems sizes pallocas cfg fn n)) lbl))
+Proof
+  strip_tac >> drule_all ml_full_rounds_boundary_exact >>
+  strip_tac >> simp[] >> conj_tac >> gen_tac >> simp[sw_rounds_def] >>
+  AP_TERM_TAC >> AP_THM_TAC >>
+  irule ml_boundary_rounds_stable >> simp[ml_boundary_desc_out]
+QED
