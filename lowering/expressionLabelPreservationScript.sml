@@ -921,3 +921,242 @@ Proof
   CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
   rpt IF_CASES_TAC >> rpt CONVERT_BIND >> CONVERT_LEAF
 QED
+
+Theorem label_preserving_bytestring_widen_copy:
+  !s r t. compile_bytestring_widen_copy ds v sz s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[compile_bytestring_widen_copy_def, comp_ignore_bind_def] >>
+  rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_neg:
+  !s r t. compile_neg v ty s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[compile_neg_def] >> simp_tac pure_ss [LET_THM] >> pairarg_tac >>
+  asm_rewrite_tac[] >> CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  rewrite_tac[comp_ignore_bind_def] >> rpt CONVERT_BIND >> CONVERT_LEAF
+QED
+
+Theorem label_preserving_lower_value:
+  (!s r t. cfn cenv ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !s r t. lower_value cfn cenv ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rewrite_tac[lower_value_def] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- first_assum MATCH_ACCEPT_TAC >> gen_tac >>
+  rpt strip_tac >> metis_tac[label_preserving_unwrap_value]
+QED
+
+Theorem label_preserving_lower_value_with_loc:
+  (!s r t. cfn cenv ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !s r t. lower_value_with_loc cfn cenv ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rewrite_tac[lower_value_with_loc_def] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- first_assum MATCH_ACCEPT_TAC >> gen_tac >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (rpt strip_tac >> metis_tac[label_preserving_unwrap_value]) >>
+  gen_tac >> CONVERT_LEAF
+QED
+
+val CALLBACK_LEAF = rpt strip_tac >> metis_tac[label_preserving_return,
+  label_preserving_emit_op, label_preserving_emit_void,
+  label_preserving_unwrap_value, label_preserving_store_memory,
+  label_preserving_lower_value];
+val CALLBACK_BIND = ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- CALLBACK_LEAF >> gen_tac;
+
+Theorem label_preserving_concat[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !es dp infos off s r t.
+    compile_concat cfn cenv es dp infos off s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> Induct >> ntac 3 gen_tac
+  >- (rewrite_tac[compile_concat_def] >> CALLBACK_LEAF) >>
+  Cases_on `infos`
+  >- (rewrite_tac[compile_concat_def] >> CALLBACK_LEAF) >>
+  PairCases_on `h'` >> rewrite_tac[compile_concat_def, comp_ignore_bind_def] >>
+  gen_tac >> IF_CASES_TAC >> rpt CALLBACK_BIND >> CALLBACK_LEAF
+QED
+
+Theorem label_preserving_make_tuple[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !es buf off s r t.
+    compile_make_tuple cfn cenv es buf off s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> Induct
+  >- (rewrite_tac[compile_make_tuple_def] >> CONVERT_LEAF) >>
+  ntac 3 gen_tac >>
+  rewrite_tac[compile_make_tuple_def, comp_ignore_bind_def] >>
+  simp_tac pure_ss [LET_THM] >> rpt CALLBACK_BIND >> CALLBACK_LEAF
+QED
+
+Theorem label_preserving_make_array_elems[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !es et sz haslen buf idx s r t.
+    compile_make_array_elems cfn cenv es et sz haslen buf idx s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> Induct
+  >- (rewrite_tac[compile_make_array_elems_def] >> CONVERT_LEAF) >>
+  ntac 6 gen_tac >>
+  rewrite_tac[compile_make_array_elems_def, comp_ignore_bind_def] >>
+  simp_tac pure_ss [LET_THM] >> rpt CALLBACK_BIND >> CALLBACK_LEAF
+QED
+
+Theorem label_preserving_multi_exprs[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !es s r t. compile_multi_exprs cfn cenv es s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> Induct
+  >- (rewrite_tac[compile_multi_exprs_def] >> CONVERT_LEAF) >>
+  gen_tac >> rewrite_tac[compile_multi_exprs_def] >>
+  simp_tac pure_ss [LET_THM] >> rpt CALLBACK_BIND >> CALLBACK_LEAF
+QED
+
+Theorem label_preserving_make_array[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !s r t. compile_make_array cfn cenv es et sz hl buf s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rewrite_tac[compile_make_array_def, comp_ignore_bind_def] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (IF_CASES_TAC >> CONVERT_LEAF) >> gen_tac >>
+  metis_tac[label_preserving_make_array_elems]
+QED
+
+Theorem label_preserving_struct_lit[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !fields buf off s r t.
+    compile_struct_lit cfn cenv ty fields buf off s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> Induct
+  >- (rewrite_tac[compile_struct_lit_def] >> CONVERT_LEAF) >>
+  ntac 3 gen_tac >> PairCases_on `h` >>
+  rewrite_tac[compile_struct_lit_def, comp_ignore_bind_def] >>
+  simp_tac pure_ss [LET_THM] >> rpt CALLBACK_BIND >> CALLBACK_LEAF
+QED
+
+Theorem label_preserving_store_abi_tuple[local]:
+  !vals buf off s r t.
+    compile_store_abi_tuple cenv buf off vals s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  Induct
+  >- (rewrite_tac[compile_store_abi_tuple_def] >> CONVERT_LEAF) >>
+  ntac 3 gen_tac >> PairCases_on `h` >>
+  rewrite_tac[compile_store_abi_tuple_def, comp_ignore_bind_def] >>
+  LABEL_BIND >> IF_CASES_TAC >> rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_materialize_vv[local]:
+  !s r t. compile_materialize_vv cenv ty vv s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[compile_materialize_vv_def, comp_ignore_bind_def] >>
+  rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_extcall_store_args[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !es tys buf off s r t.
+    compile_extcall_store_args cfn cenv es tys buf off s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> Induct
+  >- (rewrite_tac[compile_extcall_store_args_def] >> CONVERT_LEAF) >>
+  ntac 4 gen_tac >> Cases_on `tys` >>
+  rewrite_tac[compile_extcall_store_args_def, comp_ignore_bind_def] >>
+  simp_tac pure_ss [LET_THM] >> CALLBACK_BIND >> rpt IF_CASES_TAC >>
+  rpt CONVERT_BIND >> rpt IF_CASES_TAC >> rpt CONVERT_BIND >>
+  all_tac >>~- ([`compile_store_bytestring v dst`],
+    ho_match_mp_tac label_preserving_bind >> conj_tac
+    >- metis_tac[label_preserving_store_bytestring] >> gen_tac >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem label_preserving_ext_call_kwarg[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !s r t. compile_ext_call_kwarg cfn cenv rt k e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rewrite_tac[compile_ext_call_kwarg_def] >> IF_CASES_TAC >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- CALLBACK_LEAF
+  >- (gen_tac >> ho_match_mp_tac label_preserving_bind >> conj_tac
+      >- metis_tac[label_preserving_materialize_vv] >> gen_tac >> CONVERT_LEAF)
+  >- CALLBACK_LEAF >> gen_tac >> CONVERT_LEAF
+QED
+
+Theorem label_preserving_ext_call_kwargs[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !ks es s r t. compile_ext_call_kwargs cfn cenv rt ks es s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> Induct
+  >- (rewrite_tac[compile_ext_call_kwargs_def] >> CONVERT_LEAF) >>
+  ntac 2 gen_tac >> Cases_on `es`
+  >- (rewrite_tac[compile_ext_call_kwargs_def] >> CONVERT_LEAF) >>
+  rewrite_tac[compile_ext_call_kwargs_def] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_ext_call_kwarg] >>
+  gen_tac >> PairCases_on `r` >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- CALLBACK_LEAF >> gen_tac >> PairCases_on `r` >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >> CONVERT_LEAF
+QED
+
+Theorem label_preserving_attribute[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !s r t. compile_attribute cfn cenv rt ty e fld s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rewrite_tac[compile_attribute_def] >> CALLBACK_BIND >>
+  simp_tac pure_ss [LET_THM] >> rpt CONVERT_BIND >> CONVERT_LEAF
+QED
+
+Theorem label_preserving_subscript[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !s r t. compile_subscript cfn cenv rt ty be ie s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rewrite_tac[compile_subscript_def] >> CALLBACK_BIND >>
+  simp_tac pure_ss [LET_THM] >> Cases_on `place_type cenv be`
+  >- (CONV_TAC (STRIP_QUANT_CONV (LAND_CONV (LAND_CONV
+        (RATOR_CONV (SIMP_CONV (srw_ss()) []))))) >>
+      CALLBACK_BIND >> IF_CASES_TAC >>
+      ntac 2 (ho_match_mp_tac label_preserving_bind >> conj_tac
+        >- metis_tac[label_preserving_return, label_preserving_keccak256_key,
+                    label_preserving_mapping_subscript] >> gen_tac) >> CONVERT_LEAF) >>
+  rename1 `ValPT vt` >> Cases_on `vt` >>
+  CONV_TAC (STRIP_QUANT_CONV (LAND_CONV (LAND_CONV
+    (RATOR_CONV (SIMP_CONV (srw_ss()) [compile_tuple_subscript_def]))))) >>
+  all_tac >>~- ([`lower_value cfn cenv ty ie`],
+    CALLBACK_BIND >> ho_match_mp_tac label_preserving_bind >> conj_tac
+    >- (ho_match_mp_tac label_preserving_array_subscript >>
+        rpt strip_tac >> metis_tac[label_preserving_ptr_load]) >>
+    gen_tac >> CONVERT_LEAF) >>
+  CONVERT_BIND >> CONVERT_LEAF
+QED
