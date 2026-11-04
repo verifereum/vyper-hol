@@ -755,8 +755,7 @@ Theorem expr_sim_of_vv_sim_buffer:
   !ctx func cenv cx ty e es.
     expr_vv_sim ctx func cenv cx ty e es /\
     (!sa. ?t p sb. compile_expr cenv ty e sa = (LocatedValue t p,sb) /\
-      p.ptr_location = LocMemory /\ ~is_word_type t) /\
-    (!tv es'. eval_expr cx e es = (INL tv,es') ==> ?v. tv = Value v) ==>
+      p.ptr_location = LocMemory) ==>
     expr_sim ctx func cenv cx ty e es
 Proof
   rw[expr_sim_def] >>
@@ -764,7 +763,6 @@ Proof
   simp[lower_value_def, comp_bind_def] >>
   Cases_on `compile_expr cenv ty e sa` >> rename1 `_ = (vv, sm)` >>
   simp[] >> strip_tac >>
-  qpat_x_assum `!tv es'. eval_expr _ _ _ = _ ==> _` kall_tac >>
   qpat_x_assum `!sa. ?t p sb. _` (qspec_then `sa` strip_assume_tac) >>
   gvs[] >> rename1 `compile_expr cenv ty e sa = (LocatedValue t p, sm)` >>
   drule compile_expr_extends >> strip_tac >>

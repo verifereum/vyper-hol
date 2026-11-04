@@ -5,7 +5,7 @@ Ancestors
   words finite_map combin vyperValue targetSubscriptSim
   emitHelperProps emitHelper exprLoweringProps venomExecSemantics venomState venomInst
   fragExec vyperInterpreter vyperContext vyperState vyperStorageBackend exprSimHyps
-  calleeTransport stmtSimDecl exprSimWordArgs exprSimOperands
+  calleeTransport stmtSimDecl exprSimWordArgs exprSimOperands exprSimUnwrap
 
 Theorem frag_exec_refutation_probe:
   !ctx sa sb P Q R fn s.
@@ -4551,3 +4551,36 @@ Proof
       rpt strip_tac >> gvs[]) >>
   simp[SF CONJ_ss, frag_exec_false_pre]
 QED
+
+Theorem probe_word_shrink_sim_case:
+  !nocalls ctx func cenv bufsz flags.
+    cenv.ce_func_info "shrink" = (1,bufsz,flags) /\
+    lookup_function
+      (internal_fn_label (cenv.ce_func_ids "shrink") "shrink"
+         (cenv.ce_func_param_types "shrink") cenv.ce_is_ctor)
+      ctx.ctx_functions = SOME (probe_word_function with fn_name :=
+        internal_fn_label (cenv.ce_func_ids "shrink") "shrink"
+          (cenv.ce_func_param_types "shrink") cenv.ce_is_ctor) ==>
+    expr_sim_case nocalls ctx func cenv probe_word_context
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all probe_word_shrink_vv_case >>
+  rewrite_tac[expr_vv_case_def, expr_sim_case_def] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  irule expr_sim_of_vv_sim_buffer >> reverse conj_tac
+  >- (first_x_assum irule >> conj_tac
+      >- (qexists_tac `F` >> simp[]) >> qexists_tac `env` >> simp[]) >>
+  gen_tac >> drule probe_word_shrink_compile_expr >>
+  disch_then (qspecl_then [`sa`, `ty`] assume_tac) >>
+  gvs[] >> simp[contextTheory.base_ptr_def]
+QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag probe_word_shrink_sim_case)
+  in
+    if null axioms andalso null (Thm.hyp probe_word_shrink_sim_case) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print "SHRINK_SIM_AUDIT probe_word_shrink_sim_case OK\n"
+    else raise Fail "probe_word_shrink_sim_case: admitted proof dependency"
+  end;
