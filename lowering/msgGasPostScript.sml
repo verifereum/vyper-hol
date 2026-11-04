@@ -14,18 +14,7 @@ Proof
   Cases_on `args` >> simp[]
 QED
 
-Theorem msg_gas_source[local]:
-  bind (eval_expr cx (Builtin (env_item_type MsgGas) (Env MsgGas) []))
-       (read_result cx) (es with gas_obs := w::tail) =
-    (INL (IntV (&w2n w)), es with gas_obs := tail)
-Proof
-  once_rewrite_tac[evaluate_def] >>
-  simp[vyperContextTheory.builtin_args_length_ok_def, bind_def, ignore_bind_def,
-       type_check_def, check_def, assert_def, return_def,
-       next_gas_reading_def, read_result_def]
-QED
-
-Theorem msg_gas_state_frame[local]:
+Theorem msg_gas_state_frame:
   stmt_state_rel ctx func cenv cx es s ==>
   stmt_state_rel ctx func cenv cx (es with gas_obs := gs)
     (s with <|vs_gas_readings := readings; vs_inst_idx := k|>)
@@ -98,7 +87,7 @@ Theorem compile_msg_gas_post:
 Proof
   rpt strip_tac >> drule msg_gas_typed >> strip_tac >> gvs[] >>
   drule lower_value_env >> strip_tac >>
-  drule_all compile_msg_gas_path >>
+  drule_all compile_msg_gas_mem_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   `expr_post ctx func cenv cx (Builtin (env_item_type MsgGas) (Env MsgGas) [])
     es sa sb s0 (es with gas_obs := []) (IntV (&w2n w)) (Var out)
@@ -107,11 +96,10 @@ Proof
     (irule msg_gas_post_frame >> simp[]) >>
   `gas_explicit [T] s0.vs_gas_readings = [w]`
     by simp[gas_explicit_def] >>
-  rewrite_tac[gas_summary_at_def] >>
-  qexistsl_tac [`INL (IntV (&w2n w))`, `es`] >>
-  conj_tac >- simp[msg_gas_source] >>
-  qexists_tac `OK (update_var out w
-    (s0 with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
-               vs_inst_idx := LENGTH sb.cs_current_insts|>))` >>
-  gvs[update_var_def]
+  rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
+  qexistsl_tac [`INL (IntV (&w2n w))`, `es`,
+    `OK (update_var out w
+      (s0 with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
+                 vs_inst_idx := LENGTH sb.cs_current_insts|>))`] >>
+  simp[msg_gas_source] >> gvs[update_var_def]
 QED

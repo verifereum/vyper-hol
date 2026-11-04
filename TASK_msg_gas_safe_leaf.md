@@ -52,7 +52,7 @@ Only lowering/msgGasSimScript.sml at and after msg_gas_mem_edge plus prover task
 - lowering/fragGasSeqMemScript.sml
 - lowering/fragGasPathMemScript.sml
 - lowering/fragGasPathScript.sml
-- lowering/gasCountScript.sml
+- venom/proofs/gasCountScript.sml
 - lowering/fragExecMemScript.sml
 - venom/compiler/memSafeRunScript.sml
 - lowering/defs/exprLoweringScript.sml

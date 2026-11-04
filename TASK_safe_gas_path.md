@@ -30,7 +30,7 @@ The gas_path_mem_edge definition and gas_path_mem inductive clauses in lowering/
 - Consumed local proof helpers are allowed; no unrelated existing theory edits, no new general framework.
 
 ## Build
-holbuild -j4 build --skip-checkpoints fragGasPathMemTheory
+holbuild -j4 build fragGasPathMemTheory
 
 ## Background
 Lowering needs both exact GAS event counts and the existing memory consumer guarantees. The new path refines gas_path with the actual runner's memory checks, at the SAME fuel as its step and gas count, including INVOKE's callee checks and the existing revert-forward exception. The theorem must erase to gas_path and provide conditional normal continuation safety or an actual safe terminal run. It cannot obtain either by weakening the existing consumer or assuming the program has no memory/calls/GAS.
