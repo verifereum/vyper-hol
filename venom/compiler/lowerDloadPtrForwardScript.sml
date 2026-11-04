@@ -356,3 +356,131 @@ Proof
   `(EL (SUC i + n) bb.bb_instructions).inst_opcode = ASSIGN` by metis_tac[] >>
   gvs[EL_TAKE, EL_DROP, ADD_COMM]
 QED
+
+Theorem take_between_endpoints[local]:
+  !i j xs. i < j /\ j < LENGTH xs ==>
+    TAKE j xs = TAKE i xs ++ EL i xs ::
+      TAKE (j - SUC i) (DROP (SUC i) xs)
+Proof
+  Induct >> Cases_on `xs` >> Cases_on `j` >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+Theorem lower_dload_insts_supply_prefix_resolve:
+  lower_dload_insts_supply s (TAKE n xs) = (ps,u) /\
+  V SUBSET set s.irs_used_vars /\
+  (!q v. MEM q xs /\ MEM (Var v) q.inst_operands ==> v IN V) /\
+  (!q. MEM q xs /\ q.inst_opcode = DLOADBYTES ==> q.inst_outputs = []) /\
+  (!v. op = Var v ==> v IN V) ==>
+  resolve_block_assigns (REVERSE ps) op =
+    resolve_block_assigns (REVERSE (TAKE n xs)) op
+Proof
+  strip_tac >> irule lower_dload_insts_supply_resolve >>
+  conj_tac >- metis_tac[MEM_TAKE] >>
+  qexistsl_tac [`V`, `s`, `u`] >> simp[] >>
+  metis_tac[MEM_TAKE]
+QED
+
+Theorem lower_dload_insts_supply_forward_pair:
+  lower_dload_insts_supply s bb.bb_instructions = (ys,t) /\
+  V SUBSET set s.irs_used_vars /\
+  (!q v. MEM q bb.bb_instructions /\ MEM (Var v) q.inst_operands ==> v IN V) /\
+  (!q. MEM q bb.bb_instructions /\ q.inst_opcode = DLOADBYTES ==>
+       q.inst_outputs = []) /\
+  revert_forward_pair bb i j ==>
+  ?prei si pj sj.
+    lower_dload_insts_supply s (TAKE i bb.bb_instructions) = (prei,si) /\
+    lower_dload_insts_supply s (TAKE j bb.bb_instructions) = (pj,sj) /\
+    revert_forward_pair (bb with bb_instructions := ys) (LENGTH prei) (LENGTH pj)
+Proof
+  strip_tac >>
+  `EVERY (\q. q.inst_opcode = ASSIGN)
+    (TAKE (j - SUC i) (DROP (SUC i) bb.bb_instructions))` by
+    metis_tac[revert_forward_pair_middle_assigns] >>
+  qpat_x_assum `revert_forward_pair _ _ _` mp_tac >>
+  rewrite_tac[revert_forward_pair_def] >> strip_tac >>
+  `i < LENGTH bb.bb_instructions /\ j < LENGTH bb.bb_instructions /\
+   EL i bb.bb_instructions = inst1 /\ EL j bb.bb_instructions = inst2` by
+    gvs[get_instruction_def, AllCaseEqs()] >>
+  `?prei si qi. lower_dload_insts_supply s (TAKE i bb.bb_instructions) = (prei,si) /\
+    lower_dload_insts_supply si (DROP (SUC i) bb.bb_instructions) = (qi,t) /\
+    ys = prei ++ inst1::qi` by
+    (irule lower_dload_insts_supply_at_unchanged >> simp[]) >>
+  `?pj sj qj. lower_dload_insts_supply s (TAKE j bb.bb_instructions) = (pj,sj) /\
+    lower_dload_insts_supply sj (DROP (SUC j) bb.bb_instructions) = (qj,t) /\
+    ys = pj ++ inst2::qj` by
+    (irule lower_dload_insts_supply_at_unchanged >> simp[]) >>
+  qmatch_asmsub_abbrev_tac `EVERY _ mid` >>
+  `TAKE j bb.bb_instructions = TAKE i bb.bb_instructions ++ inst1::mid` by
+    (drule_all take_between_endpoints >> simp[Abbr `mid`]) >>
+  `lower_dload_insts_supply si mid = (mid,si)` by
+    (irule lower_dload_insts_supply_unchanged >>
+     gvs[EVERY_MEM] >> metis_tac[]) >>
+  `pj = prei ++ inst1::mid` by
+    (qpat_x_assum `lower_dload_insts_supply s (TAKE j _) = _` mp_tac >>
+     asm_rewrite_tac[] >> strip_tac >>
+     drule_then strip_assume_tac lower_dload_insts_supply_append >>
+     gvs[lower_dload_insts_supply_def, lower_dload_inst_supply_def]) >>
+  `!op. (!v. op = Var v ==> v IN V) ==>
+    resolve_block_assigns (REVERSE prei) op =
+    resolve_block_assigns (REVERSE (TAKE i bb.bb_instructions)) op` by
+    (rpt strip_tac >> irule lower_dload_insts_supply_prefix_resolve >>
+     conj_tac >- simp[] >> qexistsl_tac [`V`, `s`, `si`] >> metis_tac[]) >>
+  `!op. (!v. op = Var v ==> v IN V) ==>
+    resolve_block_assigns (REVERSE pj) op =
+    resolve_block_assigns (REVERSE (TAKE j bb.bb_instructions)) op` by
+    (rpt strip_tac >> irule lower_dload_insts_supply_prefix_resolve >>
+     conj_tac >- simp[] >> qexistsl_tac [`V`, `s`, `sj`] >> metis_tac[]) >>
+  `MEM inst1 bb.bb_instructions /\ MEM inst2 bb.bb_instructions` by
+    metis_tac[MEM_EL] >>
+  `resolve_block_assigns (REVERSE prei) src = Lit 0w /\
+   resolve_block_assigns (REVERSE prei) p = resolve_block_assigns (REVERSE pj) p' /\
+   resolve_block_assigns (REVERSE prei) rds = resolve_block_assigns (REVERSE pj) rds'` by
+    (qpat_assum `!q v. MEM q bb.bb_instructions /\ _ ==> _`
+       (qspec_then `inst1` mp_tac) >>
+     qpat_assum `!q v. MEM q bb.bb_instructions /\ _ ==> _`
+       (qspec_then `inst2` mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  qexistsl_tac [`prei`, `si`, `pj`, `sj`] >> simp[] >>
+  conj_tac >- suspend "middle" >>
+  suspend "endpoints"
+QED
+
+Resume lower_dload_insts_supply_forward_pair[middle]:
+  qpat_x_assum `EVERY _ mid` mp_tac >>
+  rpt (pop_assum kall_tac) >> strip_tac >> rpt strip_tac >>
+  `~(k < LENGTH prei) /\ k - LENGTH prei <> 0 /\
+   k - LENGTH prei - 1 < LENGTH mid` by decide_tac >>
+  gvs[get_instruction_def, EL_APPEND, EL_CONS, AllCaseEqs()] >>
+  gvs[EVERY_EL]
+QED
+
+Resume lower_dload_insts_supply_forward_pair[endpoints]:
+  qexistsl_tac [`inst1`, `inst2`, `p`, `src`, `rds`, `p'`, `rds'`] >>
+  `LENGTH prei - (LENGTH prei + SUC (LENGTH mid)) = 0` by decide_tac >>
+  simp[get_instruction_def, EL_APPEND, EL_CONS, TAKE_APPEND, TAKE_LENGTH_TOO_LONG] >>
+  metis_tac[]
+QED
+
+Finalise lower_dload_insts_supply_forward_pair
+
+
+(* The configured consumer obtains the resolver's shape premise from the
+   source context, not from an additional pass-stage assumption. *)
+Theorem lower_dload_block_supply_forward_pair:
+  o1_ctx_shape C /\ MEM fn C.ctx_functions /\ MEM bb fn.fn_blocks /\
+  lower_dload_block_supply s bb = (bb',t) /\
+  V SUBSET set s.irs_used_vars /\
+  (!q v. MEM q bb.bb_instructions /\ MEM (Var v) q.inst_operands ==> v IN V) /\
+  revert_forward_pair bb i j ==>
+  ?prei si prej sj.
+    lower_dload_insts_supply s (TAKE i bb.bb_instructions) = (prei,si) /\
+    lower_dload_insts_supply s (TAKE j bb.bb_instructions) = (prej,sj) /\
+    revert_forward_pair bb' (LENGTH prei) (LENGTH prej)
+Proof
+  strip_tac >>
+  `!q. MEM q bb.bb_instructions /\ q.inst_opcode = DLOADBYTES ==>
+       q.inst_outputs = []` by metis_tac[o1_ctx_shape_dloadbytes_outputs] >>
+  gvs[lower_dload_block_supply_def, AllCaseEqs()] >>
+  irule lower_dload_insts_supply_forward_pair >> metis_tac[]
+QED
