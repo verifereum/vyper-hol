@@ -132,6 +132,22 @@ Proof
   gvs[ml_lookup_def, FLOOKUP_UPDATE]
 QED
 
+Theorem ml_liveat_inst_bit_mono:
+  ml_liveat_inst bpr mems sizes lbl idx inst live la = (before,la') /\
+  ml_liveat_inst bpr mems sizes lbl idx inst live2 la2 = (before2,la2') /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to live /\ OL alloc_to live2 /\
+  (MEM a live ==> MEM a live2) ==>
+  (MEM a before ==> MEM a before2) /\
+  (MEM a (ml_lookup la' (lbl,idx)) ==> MEM a (ml_lookup la2' (lbl,idx)))
+Proof
+  rpt strip_tac
+  >- (drule_all ml_liveat_before_exact >> disch_then (qspec_then `a` assume_tac) >>
+      rev_drule_all ml_liveat_before_exact >> disch_then (qspec_then `a` assume_tac) >>
+      metis_tac[]) >>
+  drule ml_liveat_record_exact >> disch_then (qspec_then `a` assume_tac) >>
+  rev_drule ml_liveat_record_exact >> disch_then (qspec_then `a` assume_tac) >> metis_tac[]
+QED
+
 Theorem ml_liveat_inst_bit_cong:
   ml_liveat_inst bpr mems sizes lbl idx inst live la = (before,la') /\
   ml_liveat_inst bpr mems sizes lbl idx inst live2 la2 = (before2,la2') /\
@@ -140,12 +156,25 @@ Theorem ml_liveat_inst_bit_cong:
   (MEM a before <=> MEM a before2) /\
   (MEM a (ml_lookup la' (lbl,idx)) <=> MEM a (ml_lookup la2' (lbl,idx)))
 Proof
-  rpt strip_tac
-  >- (drule_all ml_liveat_before_exact >> disch_then (qspec_then `a` assume_tac) >>
-      rev_drule_all ml_liveat_before_exact >> disch_then (qspec_then `a` assume_tac) >>
-      simp[]) >>
-  drule ml_liveat_record_exact >> disch_then (qspec_then `a` assume_tac) >>
-  rev_drule ml_liveat_record_exact >> disch_then (qspec_then `a` assume_tac) >> simp[]
+  strip_tac >>
+  `MEM a live ==> MEM a live2` by simp[] >>
+  `MEM a live2 ==> MEM a live` by simp[] >>
+  drule_at (Pat `MEM _ _ ==> MEM _ _`) ml_liveat_inst_bit_mono >>
+  disch_then drule_all >> strip_tac >>
+  rev_drule_at (Pat `MEM _ _ ==> MEM _ _`) ml_liveat_inst_bit_mono >>
+  disch_then drule_all >> metis_tac[]
+QED
+
+Theorem ml_used_inst_bit_mono:
+  ml_used_inst bpr mems lbl idx inst used us = (after,us') /\
+  ml_used_inst bpr mems lbl idx inst used2 us2 = (after2,us2') /\
+  (MEM a used ==> MEM a used2) ==>
+  (MEM a after ==> MEM a after2) /\
+  (MEM a (ml_lookup us' (lbl,idx)) ==> MEM a (ml_lookup us2' (lbl,idx)))
+Proof
+  strip_tac >>
+  drule ml_used_exact >> disch_then (qspec_then `a` assume_tac) >>
+  rev_drule ml_used_exact >> disch_then (qspec_then `a` assume_tac) >> metis_tac[]
 QED
 
 Theorem ml_used_inst_bit_cong:
@@ -156,8 +185,12 @@ Theorem ml_used_inst_bit_cong:
   (MEM a (ml_lookup us' (lbl,idx)) <=> MEM a (ml_lookup us2' (lbl,idx)))
 Proof
   strip_tac >>
-  drule ml_used_exact >> disch_then (qspec_then `a` assume_tac) >>
-  rev_drule ml_used_exact >> disch_then (qspec_then `a` assume_tac) >> simp[]
+  `MEM a used ==> MEM a used2` by simp[] >>
+  `MEM a used2 ==> MEM a used` by simp[] >>
+  drule_at (Pat `MEM _ _ ==> MEM _ _`) ml_used_inst_bit_mono >>
+  disch_then drule_all >> strip_tac >>
+  rev_drule_at (Pat `MEM _ _ ==> MEM _ _`) ml_used_inst_bit_mono >>
+  disch_then drule_all >> metis_tac[]
 QED
 
 Theorem ml_liveat_insts_other_address:
@@ -187,16 +220,16 @@ Proof
   metis_tac[ml_used_other_address]
 QED
 
-Theorem ml_liveat_insts_bit_cong:
+Theorem ml_liveat_insts_bit_mono:
   !live la live2 la2 before la' before2 la2'.
   ml_liveat_insts_rev bpr mems sizes lbl live la insts = (before,la') /\
   ml_liveat_insts_rev bpr mems sizes lbl live2 la2 insts = (before2,la2') /\
   (!nm. OL alloc_to (mems nm)) /\ OL alloc_to live /\ OL alloc_to live2 /\
-  ptr_ml_ordered la /\ ptr_ml_ordered la2 /\ (MEM a live <=> MEM a live2) ==>
-  (MEM a before <=> MEM a before2) /\
+  ptr_ml_ordered la /\ ptr_ml_ordered la2 /\ (MEM a live ==> MEM a live2) ==>
+  (MEM a before ==> MEM a before2) /\
   (!addr. ((?idx inst. MEM (idx,inst) insts /\ addr = (lbl,idx)) \/
-     (MEM a (ml_lookup la addr) <=> MEM a (ml_lookup la2 addr))) ==>
-     (MEM a (ml_lookup la' addr) <=> MEM a (ml_lookup la2' addr)))
+     (MEM a (ml_lookup la addr) ==> MEM a (ml_lookup la2 addr))) ==>
+     (MEM a (ml_lookup la' addr) ==> MEM a (ml_lookup la2' addr)))
 Proof
   Induct_on `insts`
   >- (pure_rewrite_tac [ml_liveat_insts_rev_def, pairTheory.PAIR_EQ] >> rpt strip_tac >> gvs[]) >>
@@ -209,24 +242,46 @@ Proof
   first_x_assum drule_all >> strip_tac >>
   `OL alloc_to tail_live /\ OL alloc_to tail_live2` by
     metis_tac[ptr_liveat_insts_ordered, pairTheory.FST] >>
-  drule_all ml_liveat_inst_bit_cong >> strip_tac >> conj_tac >- simp[] >>
+  drule_all ml_liveat_inst_bit_mono >> strip_tac >> conj_tac >- simp[] >>
   gen_tac >> Cases_on `addr = (lbl,h0)` >- gvs[] >>
   disch_tac >>
   `ml_lookup la' addr = ml_lookup tail_la addr /\
    ml_lookup la2' addr = ml_lookup tail_la2 addr` by
     metis_tac[ml_liveat_other_address] >>
-  simp[] >> first_x_assum irule >> metis_tac[]
+  qpat_x_assum `!addr. _` (qspec_then `addr` mp_tac) >> simp[] >> metis_tac[]
 QED
 
-Theorem ml_used_insts_bit_cong:
+Theorem ml_liveat_insts_bit_cong:
+  ml_liveat_insts_rev bpr mems sizes lbl live la insts = (before,la') /\
+  ml_liveat_insts_rev bpr mems sizes lbl live2 la2 insts = (before2,la2') /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to live /\ OL alloc_to live2 /\
+  ptr_ml_ordered la /\ ptr_ml_ordered la2 /\ (MEM a live <=> MEM a live2) ==>
+  (MEM a before <=> MEM a before2) /\
+  (!addr. ((?idx inst. MEM (idx,inst) insts /\ addr = (lbl,idx)) \/
+     (MEM a (ml_lookup la addr) <=> MEM a (ml_lookup la2 addr))) ==>
+     (MEM a (ml_lookup la' addr) <=> MEM a (ml_lookup la2' addr)))
+Proof
+  strip_tac >>
+  `MEM a live ==> MEM a live2` by simp[] >>
+  `MEM a live2 ==> MEM a live` by simp[] >>
+  drule_at (Pat `MEM _ _ ==> MEM _ _`) ml_liveat_insts_bit_mono >>
+  disch_then drule_all >> strip_tac >>
+  rev_drule_at (Pat `MEM _ _ ==> MEM _ _`) ml_liveat_insts_bit_mono >>
+  disch_then drule_all >> strip_tac >> conj_tac >- metis_tac[] >>
+  gen_tac >> strip_tac >>
+  first_x_assum (qspec_then `addr` mp_tac) >>
+  first_x_assum (qspec_then `addr` mp_tac) >> metis_tac[]
+QED
+
+Theorem ml_used_insts_bit_mono:
   !used us used2 us2 after us' after2 us2'.
   ml_used_insts bpr mems lbl used us insts = (after,us') /\
   ml_used_insts bpr mems lbl used2 us2 insts = (after2,us2') /\
-  (MEM a used <=> MEM a used2) ==>
-  (MEM a after <=> MEM a after2) /\
+  (MEM a used ==> MEM a used2) ==>
+  (MEM a after ==> MEM a after2) /\
   (!addr. ((?idx inst. MEM (idx,inst) insts /\ addr = (lbl,idx)) \/
-     (MEM a (ml_lookup us addr) <=> MEM a (ml_lookup us2 addr))) ==>
-     (MEM a (ml_lookup us' addr) <=> MEM a (ml_lookup us2' addr)))
+     (MEM a (ml_lookup us addr) ==> MEM a (ml_lookup us2 addr))) ==>
+     (MEM a (ml_lookup us' addr) ==> MEM a (ml_lookup us2' addr)))
 Proof
   Induct_on `insts`
   >- (pure_rewrite_tac [ml_used_insts_def, pairTheory.PAIR_EQ] >> rpt strip_tac >> gvs[]) >>
@@ -236,14 +291,36 @@ Proof
   Cases_on `ml_used_inst bpr mems lbl h0 h1 used2 us2` >>
   rename1 `ml_used_inst bpr mems lbl h0 h1 used2 us2 = (head_used2,head_us2)` >>
   simp[NoAsms] >> strip_tac >>
-  drule_all ml_used_inst_bit_cong >> strip_tac >>
+  drule_all ml_used_inst_bit_mono >> strip_tac >>
   first_x_assum drule_all >> strip_tac >> conj_tac >- simp[] >>
-  gen_tac >> disch_tac >> first_x_assum irule >>
+  gen_tac >> disch_tac >>
+  qpat_x_assum `!addr. _` (qspec_then `addr` mp_tac) >>
   Cases_on `addr = (lbl,h0)` >- gvs[] >>
   `ml_lookup head_us addr = ml_lookup us addr /\
    ml_lookup head_us2 addr = ml_lookup us2 addr` by
     metis_tac[ml_used_other_address] >>
   simp[] >> metis_tac[]
+QED
+
+Theorem ml_used_insts_bit_cong:
+  ml_used_insts bpr mems lbl used us insts = (after,us') /\
+  ml_used_insts bpr mems lbl used2 us2 insts = (after2,us2') /\
+  (MEM a used <=> MEM a used2) ==>
+  (MEM a after <=> MEM a after2) /\
+  (!addr. ((?idx inst. MEM (idx,inst) insts /\ addr = (lbl,idx)) \/
+     (MEM a (ml_lookup us addr) <=> MEM a (ml_lookup us2 addr))) ==>
+     (MEM a (ml_lookup us' addr) <=> MEM a (ml_lookup us2' addr)))
+Proof
+  strip_tac >>
+  `MEM a used ==> MEM a used2` by simp[] >>
+  `MEM a used2 ==> MEM a used` by simp[] >>
+  drule_at (Pat `MEM _ _ ==> MEM _ _`) ml_used_insts_bit_mono >>
+  disch_then drule_all >> strip_tac >>
+  rev_drule_at (Pat `MEM _ _ ==> MEM _ _`) ml_used_insts_bit_mono >>
+  disch_then drule_all >> strip_tac >> conj_tac >- metis_tac[] >>
+  gen_tac >> strip_tac >>
+  first_x_assum (qspec_then `addr` mp_tac) >>
+  first_x_assum (qspec_then `addr` mp_tac) >> metis_tac[]
 QED
 
 Theorem ml_liveat_block_join_mem:
@@ -268,14 +345,14 @@ Theorem ml_used_block_join_mem:
 Proof simp[ptr_smerge_union, ml_merge_fold_mem, MEM_MAP] >> metis_tac[]
 QED
 
-Theorem ml_liveat_block_bit_factor:
+Theorem ml_liveat_block_bit_mono:
   ml_liveat_block bpr mems sizes cfg la bb = (changed,la') /\
   ml_liveat_block bpr mems sizes cfg la2 bb = (changed2,la2') /\
   (!nm. OL alloc_to (mems nm)) /\ ptr_ml_ordered la /\ ptr_ml_ordered la2 /\
-  ((?lbl. MEM lbl (cfg_succs_of cfg bb.bb_label) /\ MEM a (ml_lookup la (lbl,0))) <=>
+  ((?lbl. MEM lbl (cfg_succs_of cfg bb.bb_label) /\ MEM a (ml_lookup la (lbl,0))) ==>
    (?lbl. MEM lbl (cfg_succs_of cfg bb.bb_label) /\ MEM a (ml_lookup la2 (lbl,0)))) /\
   i < LENGTH bb.bb_instructions ==>
-  (MEM a (ml_lookup la' (bb.bb_label,i)) <=> MEM a (ml_lookup la2' (bb.bb_label,i)))
+  (MEM a (ml_lookup la' (bb.bb_label,i)) ==> MEM a (ml_lookup la2' (bb.bb_label,i)))
 Proof
   simp[ml_liveat_block_def] >> ntac 2 (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
   `OL alloc_to (FOLDL (smerge alloc_to) []
@@ -285,13 +362,60 @@ Proof
     (conj_tac >> irule ptr_ordered_merge_fold >>
      fs[OL, EVERY_MAP, EVERY_MEM, ptr_ml_ordered_def]) >>
   `MEM a (FOLDL (smerge alloc_to) []
-    (MAP (\lbl. ml_lookup la (lbl,0)) (cfg_succs_of cfg bb.bb_label))) <=>
+    (MAP (\lbl. ml_lookup la (lbl,0)) (cfg_succs_of cfg bb.bb_label))) ==>
    MEM a (FOLDL (smerge alloc_to) []
     (MAP (\lbl. ml_lookup la2 (lbl,0)) (cfg_succs_of cfg bb.bb_label)))` by
     simp[ml_liveat_block_join_mem] >>
-  drule_all ml_liveat_insts_bit_cong >> strip_tac >>
-  first_x_assum irule >> disj1_tac >>
-  qexistsl [`i`, `EL i bb.bb_instructions`] >> simp[indexedListsTheory.MEM_MAPi]
+  drule_all ml_liveat_insts_bit_mono >> strip_tac >>
+  qpat_x_assum `!addr. _` (qspec_then `(bb.bb_label,i)` mp_tac) >>
+  impl_tac >- (disj1_tac >>
+    qexistsl [`i`, `EL i bb.bb_instructions`] >> simp[indexedListsTheory.MEM_MAPi]) >> simp[]
+QED
+
+Theorem ml_liveat_block_bit_factor:
+  ml_liveat_block bpr mems sizes cfg la bb = (changed,la') /\
+  ml_liveat_block bpr mems sizes cfg la2 bb = (changed2,la2') /\
+  (!nm. OL alloc_to (mems nm)) /\ ptr_ml_ordered la /\ ptr_ml_ordered la2 /\
+  ((?lbl. MEM lbl (cfg_succs_of cfg bb.bb_label) /\ MEM a (ml_lookup la (lbl,0))) <=>
+   (?lbl. MEM lbl (cfg_succs_of cfg bb.bb_label) /\ MEM a (ml_lookup la2 (lbl,0)))) /\
+  i < LENGTH bb.bb_instructions ==>
+  (MEM a (ml_lookup la' (bb.bb_label,i)) <=> MEM a (ml_lookup la2' (bb.bb_label,i)))
+Proof
+  strip_tac >> eq_tac >> strip_tac >>
+  irule ml_liveat_block_bit_mono >> metis_tac[]
+QED
+
+Theorem ml_used_block_bit_mono:
+  ml_used_block bpr mems live_pallocas cfg us bb blocks = (changed,us') /\
+  ml_used_block bpr mems live_pallocas cfg us2 bb blocks = (changed2,us2') /\
+  (!lbl. MEM lbl (cfg_preds_of cfg bb.bb_label) ==>
+    (MEM a (case FIND (\b. b.bb_label = lbl) blocks of
+       NONE => ml_lookup us (lbl,0)
+     | SOME b => ml_lookup us (b.bb_label,PRE (LENGTH b.bb_instructions))) ==>
+     MEM a (case FIND (\b. b.bb_label = lbl) blocks of
+       NONE => ml_lookup us2 (lbl,0)
+     | SOME b => ml_lookup us2 (b.bb_label,PRE (LENGTH b.bb_instructions))))) /\
+  i < LENGTH bb.bb_instructions ==>
+  (MEM a (ml_lookup us' (bb.bb_label,i)) ==> MEM a (ml_lookup us2' (bb.bb_label,i)))
+Proof
+  simp[ml_used_block_def] >> ntac 2 (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  `MEM a (smerge alloc_to live_pallocas
+     (FOLDL (smerge alloc_to) [] (MAP (\lbl.
+       case FIND (\b. b.bb_label = lbl) blocks of
+         NONE => ml_lookup us (lbl,0)
+       | SOME b => ml_lookup us (b.bb_label,PRE (LENGTH b.bb_instructions)))
+       (cfg_preds_of cfg bb.bb_label)))) ==>
+   MEM a (smerge alloc_to live_pallocas
+     (FOLDL (smerge alloc_to) [] (MAP (\lbl.
+       case FIND (\b. b.bb_label = lbl) blocks of
+         NONE => ml_lookup us2 (lbl,0)
+       | SOME b => ml_lookup us2 (b.bb_label,PRE (LENGTH b.bb_instructions)))
+       (cfg_preds_of cfg bb.bb_label))))` by
+     (simp[ml_used_block_join_mem] >> metis_tac[]) >>
+  drule_all ml_used_insts_bit_mono >> strip_tac >>
+  qpat_x_assum `!addr. _` (qspec_then `(bb.bb_label,i)` mp_tac) >>
+  impl_tac >- (disj1_tac >>
+    qexistsl [`i`, `EL i bb.bb_instructions`] >> simp[indexedListsTheory.MEM_MAPi]) >> simp[]
 QED
 
 Theorem ml_used_block_bit_factor:
@@ -307,21 +431,82 @@ Theorem ml_used_block_bit_factor:
   i < LENGTH bb.bb_instructions ==>
   (MEM a (ml_lookup us' (bb.bb_label,i)) <=> MEM a (ml_lookup us2' (bb.bb_label,i)))
 Proof
-  simp[ml_used_block_def] >> ntac 2 (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-  `MEM a (smerge alloc_to live_pallocas
-     (FOLDL (smerge alloc_to) [] (MAP (\lbl.
-       case FIND (\b. b.bb_label = lbl) blocks of
-         NONE => ml_lookup us (lbl,0)
-       | SOME b => ml_lookup us (b.bb_label,PRE (LENGTH b.bb_instructions)))
-       (cfg_preds_of cfg bb.bb_label)))) <=>
-   MEM a (smerge alloc_to live_pallocas
-     (FOLDL (smerge alloc_to) [] (MAP (\lbl.
-       case FIND (\b. b.bb_label = lbl) blocks of
-         NONE => ml_lookup us2 (lbl,0)
-       | SOME b => ml_lookup us2 (b.bb_label,PRE (LENGTH b.bb_instructions)))
-       (cfg_preds_of cfg bb.bb_label))))` by
-     (simp[ml_used_block_join_mem] >> metis_tac[]) >>
-  drule_all ml_used_insts_bit_cong >> strip_tac >>
-  first_x_assum irule >> disj1_tac >>
-  qexistsl [`i`, `EL i bb.bb_instructions`] >> simp[indexedListsTheory.MEM_MAPi]
+  strip_tac >> eq_tac >> strip_tac >>
+  irule ml_used_block_bit_mono >> metis_tac[]
+QED
+
+(* Boolean projections of the indexed folds.  The record is made before
+   applying a backward kill; it is not the returned accumulator. *)
+Definition ml_liveat_before_bit_def:
+  (ml_liveat_before_bit a bpr mems sizes [] bit = bit) /\
+  (ml_liveat_before_bit a bpr mems sizes ((idx,inst)::rest) bit =
+    ((ml_liveat_before_bit a bpr mems sizes rest bit \/ ml_read_gen a bpr mems inst) /\
+      ~ptr_ml_can_kill a bpr sizes inst))
+End
+
+Definition ml_liveat_record_bit_def:
+  (ml_liveat_record_bit a bpr mems sizes lbl addr [] bit old = old) /\
+  (ml_liveat_record_bit a bpr mems sizes lbl addr ((idx,inst)::rest) bit old =
+    if addr = (lbl,idx) then
+      ml_liveat_before_bit a bpr mems sizes rest bit \/ ml_read_gen a bpr mems inst
+    else ml_liveat_record_bit a bpr mems sizes lbl addr rest bit old)
+End
+
+Theorem ml_liveat_insts_bits_exact:
+  !live la before la'.
+  ml_liveat_insts_rev bpr mems sizes lbl live la insts = (before,la') /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to live /\ ptr_ml_ordered la ==>
+  (MEM a before <=> ml_liveat_before_bit a bpr mems sizes insts (MEM a live)) /\
+  (!addr. MEM a (ml_lookup la' addr) <=>
+    ml_liveat_record_bit a bpr mems sizes lbl addr insts
+      (MEM a live) (MEM a (ml_lookup la addr)))
+Proof
+  Induct_on `insts`
+  >- (simp[ml_liveat_insts_rev_def, ml_liveat_before_bit_def, ml_liveat_record_bit_def]) >>
+  rpt gen_tac >> PairCases_on `h` >> pure_rewrite_tac[ml_liveat_insts_rev_def] >>
+  Cases_on `ml_liveat_insts_rev bpr mems sizes lbl live la insts` >>
+  rename1 `ml_liveat_insts_rev bpr mems sizes lbl live la insts = (tail_live,tail_la)` >>
+  simp[NoAsms] >> strip_tac >> first_x_assum drule_all >> strip_tac >>
+  `OL alloc_to tail_live` by metis_tac[ptr_liveat_insts_ordered, pairTheory.FST] >>
+  drule_all ml_liveat_before_exact >> disch_then (qspec_then `a` assume_tac) >>
+  drule ml_liveat_record_exact >> disch_then (qspec_then `a` assume_tac) >>
+  conj_tac >- simp[ml_liveat_before_bit_def] >>
+  gen_tac >> Cases_on `addr = (lbl,h0)`
+  >- gvs[ml_liveat_record_bit_def] >>
+  drule_all ml_liveat_other_address >> simp[ml_liveat_record_bit_def]
+QED
+
+Definition ml_used_after_bit_def:
+  (ml_used_after_bit a bpr mems [] bit = bit) /\
+  (ml_used_after_bit a bpr mems ((idx,inst)::rest) bit =
+    ml_used_after_bit a bpr mems rest (bit \/ ml_used_gen a bpr mems inst))
+End
+
+Definition ml_used_record_bit_def:
+  (ml_used_record_bit a bpr mems lbl addr [] bit old = old) /\
+  (ml_used_record_bit a bpr mems lbl addr ((idx,inst)::rest) bit old =
+    ml_used_record_bit a bpr mems lbl addr rest (bit \/ ml_used_gen a bpr mems inst)
+      (if addr = (lbl,idx) then bit \/ ml_used_gen a bpr mems inst else old))
+End
+
+Theorem ml_used_insts_bits_exact:
+  !used us after us'.
+  ml_used_insts bpr mems lbl used us insts = (after,us') ==>
+  (MEM a after <=> ml_used_after_bit a bpr mems insts (MEM a used)) /\
+  (!addr. MEM a (ml_lookup us' addr) <=>
+    ml_used_record_bit a bpr mems lbl addr insts
+      (MEM a used) (MEM a (ml_lookup us addr)))
+Proof
+  Induct_on `insts`
+  >- simp[ml_used_insts_def, ml_used_after_bit_def, ml_used_record_bit_def] >>
+  rpt gen_tac >> PairCases_on `h` >> pure_rewrite_tac[ml_used_insts_def] >>
+  Cases_on `ml_used_inst bpr mems lbl h0 h1 used us` >>
+  rename1 `ml_used_inst bpr mems lbl h0 h1 used us = (head_used,head_us)` >>
+  simp[NoAsms] >> strip_tac >>
+  drule ml_used_exact >> disch_then (qspec_then `a` assume_tac) >>
+  first_x_assum drule >> strip_tac >>
+  conj_tac >- simp[ml_used_after_bit_def] >>
+  gen_tac >> simp[ml_used_record_bit_def] >>
+  Cases_on `addr = (lbl,h0)` >- gvs[] >>
+  drule_all ml_used_other_address >> simp[]
 QED
