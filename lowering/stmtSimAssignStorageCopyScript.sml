@@ -84,7 +84,8 @@ Theorem assign_storage_copy_code_parts[local]:
       SOME (if tr then TransientLoc slot else StorageLoc slot) /\
     cenv.ce_hashmap_info nsid = NONE /\
     cenv.ce_module_var_type nsid = SOME vtyp /\
-    ~(has_length_word (expr_type e) /\ is_empty_value_expr e) ==>
+    ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
+    lowered_value_type cenv e = expr_type e ==>
     c = cenv /\
     ?vv sV sB op.
       compile_expr cenv (expr_type e) e sa = (vv, sV) /\
@@ -114,109 +115,12 @@ Proof
   simp[lower_value_def, comp_bind_def]
 QED
 
-(* Literal bounds can differ, but only within the bytestring family.
-   ABI encoding is the sole remaining exceptional expression constructor. *)
-Theorem storage_copy_lowered_type[local]:
-  !cenv e.
-    (!ann ensure mid t args.
-      e <> TypeBuiltin ann (AbiEncode ensure mid) t args) ==>
-    lowered_value_type cenv e = expr_type e \/
-    (is_bytestring_type (expr_type e) /\
-     is_bytestring_type (lowered_value_type cenv e))
-Proof
-  rpt gen_tac >> strip_tac >> Cases_on `e` >>
-  simp[lowered_value_type_def]
-  >- (rename1 `Literal t lit` >>
-      Cases_on `t` >> simp[lowered_value_type_def] >>
-      rename1 `BaseT bt` >> Cases_on `bt` >>
-      simp[lowered_value_type_def] >>
-      Cases_on `lit` >> simp[lowered_value_type_def, expr_type_def, is_bytestring_type_def] >>
-      rename1 `BytesT bd` >> Cases_on `bd` >>
-      simp[lowered_value_type_def, expr_type_def, is_bytestring_type_def]) >>
-  rename1 `TypeBuiltin ann tb t args` >> Cases_on `tb` >>
-  gvs[lowered_value_type_def]
-QED
-
-(* Fixed bytes are word types whenever their type evaluates. *)
-Theorem storage_copy_bytes_type[local]:
-  !tenv typ tvt bs.
-    evaluate_type tenv typ = SOME tvt /\ ~is_word_type typ /\
-    value_has_type tvt (BytesV bs) ==>
-    is_bytestring_type typ
-Proof
-  rpt gen_tac >> strip_tac >> Cases_on `typ` >>
-  gvs[evaluate_type_def, value_has_type_def, is_bytestring_type_def,
-      is_word_type_def, AllCaseEqs()] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  gvs[evaluate_type_def, value_has_type_def, is_bytestring_type_def,
-      is_word_type_def, AllCaseEqs()] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  gvs[evaluate_type_def, value_has_type_def, is_bytestring_type_def,
-      is_word_type_def, AllCaseEqs()]
-QED
-
-Theorem storage_copy_abi_value[local]:
-  !cx ensure mid t tys vs v.
-    evaluate_type_builtin cx (AbiEncode ensure mid) t tys vs = INL v ==>
-    ?bs. v = BytesV bs
-Proof
-  rpt gen_tac >>
-  simp[Once evaluate_type_builtin_def, LET_THM] >>
-  qmatch_goalsub_abbrev_tac
-    `(case encoded of INL bs => INL (BytesV (pre ++ bs))
-      | INR str => INR (RuntimeError str))` >>
-  Cases_on `encoded` >> simp[] >> metis_tac[]
-QED
-
-Theorem storage_copy_abi_eval[local]:
-  !cx ann ensure mid t args es v es1.
-    (do result <- eval_expr cx (TypeBuiltin ann (AbiEncode ensure mid) t args);
-        read_result cx result od) es = (INL v, es1) ==>
-    ?bs. v = BytesV bs
-Proof
-  rpt gen_tac >>
-  simp[Once evaluate_def, bind_def, type_check_def, assert_def,
-       return_def, raise_def] >>
-  simp[bind_def, ignore_bind_def, assert_def, return_def, raise_def] >>
-  Cases_on `type_builtin_args_length_ok (AbiEncode ensure mid) (LENGTH args)` >>
-  simp[] >>
-  Cases_on `eval_exprs cx args es` >> rename1 `eval_exprs _ _ _ = (rs, st)` >>
-  Cases_on `rs` >> simp[] >>
-  simp[lift_sum_def, bind_def, return_def, raise_def] >>
-  qmatch_goalsub_rename_tac `evaluate_type_builtin _ _ _ _ vs` >>
-  Cases_on `evaluate_type_builtin cx (AbiEncode ensure mid) t (MAP expr_type args) vs` >>
-  simp[read_result_def, return_def, raise_def] >> strip_tac >> gvs[] >>
-  drule storage_copy_abi_value >> simp[]
-QED
-
-(* Typed successful evaluation excludes the only non-bytestring
-   annotation mismatch introduced by lowered_value_type. *)
-Theorem storage_copy_success_compatible[local]:
-  !cx cenv e es v es1 tvt.
-    (do result <- eval_expr cx e; read_result cx result od) es =
-      (INL v, es1) /\
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
-    ~is_word_type (expr_type e) /\ value_has_type tvt v ==>
-    lowered_value_type cenv e = expr_type e \/
-    (is_bytestring_type (expr_type e) /\
-     is_bytestring_type (lowered_value_type cenv e))
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `?ann ensure mid t args.
-    e = TypeBuiltin ann (AbiEncode ensure mid) t args`
-  >- (gvs[] >> drule storage_copy_abi_eval >> strip_tac >> gvs[] >>
-      drule_all storage_copy_bytes_type >> strip_tac >>
-      simp[lowered_value_type_def, is_bytestring_type_def, LET_THM]) >>
-  irule storage_copy_lowered_type >> metis_tac[]
-QED
-
 (* Once source layout compatibility is known, only the size dispatch
    remains. No dynamic-array path or normalization can be selected. *)
 Theorem assign_storage_copy_suffix[local]:
   !cenv dst src tr loc typ src_ty mem_size.
     ~is_word_type typ /\
-    (typ = src_ty \/
-     (is_bytestring_type typ /\ is_bytestring_type src_ty)) ==>
+    typ = src_ty /\ type_memory_bytes cenv typ = mem_size ==>
     compile_assign_value cenv dst
       (if tr then LocTransient else LocStorage) src F loc
       typ src_ty NONE mem_size =
@@ -230,7 +134,7 @@ Theorem assign_storage_copy_suffix[local]:
           return ()
        od)
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `tr` >>
+  rpt gen_tac >> strip_tac >> gvs[] >> Cases_on `tr` >>
   simp[FUN_EQ_THM, compile_assign_value_def, comp_bind_def, comp_return_def]
 QED
 
@@ -255,7 +159,7 @@ Theorem assign_storage_copy_suffix_open[local]:
     compile_assign_value cenv dst (if tr then LocTransient else LocStorage)
       src F loc typ src_ty NONE mem_size sa = ((),sb) /\
     ~is_word_type typ /\
-    (typ = src_ty \/ (is_bytestring_type typ /\ is_bytestring_type src_ty)) ==>
+    typ = src_ty /\ type_memory_bytes cenv typ = mem_size ==>
     ~block_is_terminated sb
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -842,7 +746,7 @@ Theorem storage_copy_suffix_run[local]:
       (if tr then LocTransient else LocStorage) src F loc
       typ src_ty NONE (32 * n) sa = ((),sb) /\
     ~is_word_type typ /\
-    (typ = src_ty \/ (is_bytestring_type typ /\ is_bytestring_type src_ty)) /\
+    typ = src_ty /\ type_memory_bytes cenv typ = 32 * n /\
     0 < n /\ n < dimword (:256) /\
     (!x. src = Var x ==> not_fresh_at sa x) /\
     eval_operand src s = SOME b /\
@@ -928,6 +832,8 @@ Theorem storage_copy_success_run[local]:
     (do result <- eval_expr cx e; read_result cx result od) es = (INL v,es1) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     ~is_word_type (expr_type e) /\ value_has_type tv v /\
+    lowered_value_type cenv e = expr_type e /\
+    type_memory_bytes cenv (expr_type e) = type_memory_size tv /\
     declared_storage_region cx mid id [] = SOME (tr,n2w slot,tv) /\
     0 < type_slot_size tv /\ slot + type_slot_size tv <= dimword (:256) /\
     (!mid' id' subs' k' tv'.
@@ -939,7 +845,7 @@ Theorem storage_copy_success_run[local]:
     lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
     compile_assign_value cenv (Lit (n2w slot))
       (if tr then LocTransient else LocStorage) op F loc
-      (expr_type e) (lowered_value_type cenv e) NONE (type_memory_size tv) sm = ((),sf) /\
+      (expr_type e) (expr_type e) NONE (type_memory_size tv) sm = ((),sf) /\
     fn_has_code sa sm func /\ fn_has_code sm sf func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
@@ -960,7 +866,6 @@ Proof
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   `local_ptrs_reserved cenv sm` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  drule_all storage_copy_success_compatible >> disch_tac >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sa`, `sm`, `op`, `INL v`, `es1`, `s0`] mp_tac) >>
   (impl_tac >- simp[expr_res_ok_def]) >>
@@ -1103,9 +1008,7 @@ Proof
       drule_all (SRULE [] storage_copy_success_run) >> strip_tac >>
       disj1_tac >> qexists_tac `t` >>
       simp[stmt_lands_def, cenv_top_ext_refl] >>
-      drule_all storage_copy_success_compatible >>
-      disch_then (qspec_then `cenv` mp_tac) >>
-      strip_tac >> irule assign_storage_copy_suffix_open >> metis_tac[]) >>
+      irule assign_storage_copy_suffix_open >> metis_tac[]) >>
   rename1 `(INR err : value + exception, es1)` >>
   `expr_res_ok (INR err : value + exception)` by
     (qpat_x_assum `stmt_res_ok _ _` mp_tac >>
