@@ -13,6 +13,7 @@
 
 Theory stmtSimIf
 Ancestors
+  loweringPosts
   stmtSim
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim loweringSlice

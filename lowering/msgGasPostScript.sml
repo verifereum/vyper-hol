@@ -1,6 +1,7 @@
 (* The explicit read preserves the complete expression frame. *)
 Theory msgGasPost
 Ancestors
+  loweringPosts
   msgGasSim gasSummary exprSim exprSimHyps exprLoweringProps
   exprLowering emitHelperProps compileEnv loweringSlice
   vyperInterpreter vyperState venomState

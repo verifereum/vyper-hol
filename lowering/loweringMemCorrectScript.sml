@@ -25,6 +25,7 @@
  *)
 Theory loweringMemCorrect
 Ancestors
+  loweringPosts
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
   exprLoweringProps valueEncodingProofs vyperInterpreter vyperContext
   venomExecSemantics venomState compileEnv e2eDefs supportedProgram

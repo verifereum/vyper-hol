@@ -24,6 +24,7 @@
  *)
 Theory exprSimAggregateChildren
 Ancestors
+  loweringPosts
   exprSimAlloc
   exprSim exprSimHyps exprSimUnwrap exprSimBufferStore exprSimBuffer
   vyperInterpreter vyperValueOperation vyperState fragExec

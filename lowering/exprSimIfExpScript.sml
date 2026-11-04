@@ -21,6 +21,7 @@
 
 Theory exprSimIfExp
 Ancestors
+  loweringPosts
   list rich_list finite_map marker
   fragExec exprSim exprSimOps exprSimUnwrap freshWrites exprBopLowering loweringSlice
   vyperEvalExprPreservesScopesDom exprLowering emitHelperProps

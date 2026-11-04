@@ -25,6 +25,7 @@
  *)
 Theory exprSimHash
 Ancestors
+  loweringPosts
   exprSimAlloc
   allocLimits
   list rich_list byte words fragExec ASCIInumbers

@@ -25,6 +25,7 @@
 
 Theory stmtSimForRange
 Ancestors
+  loweringPosts
   stmtSim stmtSimForParts stmtSimForLoop exprWordOperand
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim loweringSlice freshWrites

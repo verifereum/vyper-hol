@@ -11,6 +11,7 @@
  *)
 Theory valueCopyBytes
 Ancestors
+  loweringPosts
   exprSim context compileEnv valueTypingMemoryProps vyperTyping vyperValue valueEncoding
 
 Theorem compile_store_memory_bytestring_src:

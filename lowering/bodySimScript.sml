@@ -33,6 +33,7 @@
 
 Theory bodySim
 Ancestors
+  loweringPosts
   list exprSim exprSimHyps stmtSim compileEnv compileVyper vyperTypeContract
   supportedProgram supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem

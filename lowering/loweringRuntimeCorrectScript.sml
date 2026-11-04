@@ -44,6 +44,7 @@
 
 Theory loweringRuntimeCorrect
 Ancestors
+  loweringPosts
   list pair fragExec stmtSim bodySim bodySimMain loweringHalt stmtLoweringMono exprSim exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering
   e2eDefs supportedProgram vyperLoweringCorrect

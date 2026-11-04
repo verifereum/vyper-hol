@@ -20,6 +20,7 @@
  *)
 Theory exprSimBufferStore
 Ancestors
+  loweringPosts
   exprSimBuffer exprSimLiteralBuffer words integer_word vfmConstants emitHelperProps
   exprLoweringProps context venomExecSemantics venomState compileEnv
   copyFwdEquiv allocaRemapDefs valueEncodingProofs list rich_list
@@ -415,7 +416,7 @@ Theorem buffer_store_memory_encoding:
         mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs[exprSimTheory.expr_val_rel_def] >>
+  gvs[loweringPostsTheory.expr_val_rel_def] >>
   Cases_on `is_word_type ty`
   >- (gvs[compile_store_memory_def] >>
       drule_all (SRULE [] buffer_store_word_encoding) >> strip_tac >>
@@ -461,7 +462,7 @@ Theorem buffer_store_memory_capacity:
     LENGTH s.vs_memory <= LENGTH q.vs_memory
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs[exprSimTheory.expr_val_rel_def] >>
+  gvs[loweringPostsTheory.expr_val_rel_def] >>
   Cases_on `is_word_type ty`
   >- (gvs[compile_store_memory_def] >>
       drule_all literal_emit_mstore_run >> strip_tac >> gvs[] >>

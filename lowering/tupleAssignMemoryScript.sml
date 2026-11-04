@@ -8,6 +8,7 @@
  *)
 Theory tupleAssignMemory
 Ancestors
+  loweringPosts
   tupleTypedLoad tupleStageProps stmtSimAssignTuple tupleLocalStoreProps
   tupleLocalStoreRun stmtSimReturn stmtSimDeclMem valueCopyBytes
   stmtSim exprSim exprOperandVar exprLoweringProps stmtLowering compileEnv
