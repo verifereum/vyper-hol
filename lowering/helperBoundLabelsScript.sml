@@ -51,7 +51,7 @@ Proof
   simp[compile_copy_memory_def, comp_return_def, bound_labels_emit_void]
 QED
 
-Theorem bound_labels_fresh_label_bind[local]:
+Theorem bound_labels_fresh_label_bind:
   (!l t. compiler_label l /\
      EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
      EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (g l t))))) ==>
