@@ -186,6 +186,16 @@ Proof
   simp[supported_iterator_def]
 QED
 
+Theorem supported_array_iterator_shape:
+  supported_iterator tops ty (Array e) n ==>
+    ?name. e = Name (ArrayT ty (Fixed n)) name
+Proof
+  Cases_on `e` >> simp[supported_iterator_def] >>
+  rename1 `arr_ty = ArrayT ty (Fixed n)` >> Cases_on `arr_ty` >>
+  simp[] >> rename1 `bd = Fixed n` >>
+  Cases_on `bd` >> simp[]
+QED
+
 Theorem supported_loop_body_contract:
   supported_stmt tops bindings (For name ty iter n loop_body) ==>
     supported_stmts tops bindings loop_body /\

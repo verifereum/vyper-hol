@@ -166,13 +166,11 @@ Theorem lowered_reads_disjoint[local]:
   (!r. MEM r cp.cp_regions ==> eom <= r.sr_spill_base /\ r.sr_spill_end <= fmp) ==>
   source_memory_reads_disjoint cp inst s
 Proof
-  rw[source_memory_reads_disjoint_def, source_memory_read_byte_def,
-     context_spill_byte_def] >>
-  CCONTR_TAC >> fs[] >>
-  rename1 `byte_in_memory_range rng i` >> PairCases_on `rng` >>
-  fs[byte_in_memory_range_def] >>
-  `MEM (rng0,rng1) (inst_mem_ranges inst s)` by simp[inst_mem_ranges_def] >>
-  drule_all lowered_mem_ok_range >> res_tac >> decide_tac
+  rw[source_memory_reads_disjoint_def, EVERY_MEM, FORALL_PROD] >>
+  rename1 `MEM (off,len) (source_memory_read_ranges inst s)` >>
+  `MEM (off,len) (inst_mem_ranges inst s)` by simp[inst_mem_ranges_def] >>
+  drule_all lowered_mem_ok_range >> strip_tac >> simp[] >>
+  disj2_tac >> rpt strip_tac >> res_tac >> decide_tac
 QED
 
 Theorem lowered_writes_disjoint[local]:

@@ -819,6 +819,285 @@ Proof
   gvs[] >> metis_tac[opaque_use_ok_gas_use, opaque_use_ok_retpc_use]
 QED
 
+Theorem lower_dload_function_supply_cfg_edge:
+  lower_dload_function_supply s f = (g,t) ==>
+  fn_cfg_edge g = fn_cfg_edge f
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule lower_dload_blocks_supply_cfg >> strip_tac >>
+  simp[FUN_EQ_THM, fn_cfg_edge_def] >> rpt gen_tac >>
+  `(!a b. (?bb. MEM bb bbs /\ bb.bb_label = a /\ MEM b (bb_succs bb)) <=>
+          (?su. MEM (a,su) (MAP (\bb. (bb.bb_label, bb_succs bb)) bbs) /\ MEM b su))` by
+    (simp[MEM_MAP] >> metis_tac[]) >>
+  simp[] >> simp[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_reachable:
+  lower_dload_function_supply s f = (g,t) ==>
+  fn_reachable g = fn_reachable f
+Proof
+  strip_tac >> drule lower_dload_function_supply_cfg_edge >> strip_tac >>
+  drule lower_dload_function_supply_labels >> strip_tac >>
+  simp[FUN_EQ_THM, fn_reachable_def]
+QED
+
+Theorem lower_dload_function_supply_reachable_preds:
+  lower_dload_function_supply s f = (g,t) ==>
+  reachable_preds g = reachable_preds f
+Proof
+  strip_tac >> drule lower_dload_function_supply_cfg_edge >> strip_tac >>
+  drule lower_dload_function_supply_reachable >> strip_tac >>
+  drule lower_dload_function_supply_labels >> strip_tac >>
+  gvs[FUN_EQ_THM, reachable_preds_def, fn_labels_def]
+QED
+
+Theorem lower_dload_function_supply_reachable_inst:
+  lower_dload_function_supply s f = (g,t) ==>
+  reachable_inst g = reachable_inst f
+Proof
+  strip_tac >> drule lower_dload_function_supply_reachable_preds >> strip_tac >>
+  simp[FUN_EQ_THM, reachable_inst_def]
+QED
+
+Theorem lower_dload_inst_supply_retained:
+  lower_dload_inst_supply s i = (xs,t) /\
+  MEM j.inst_opcode [GAS; RETPC_PARAM; ASSIGN; PHI; RET; RETFMP; DRET] ==>
+  (MEM j xs <=> j = i)
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >> eq_tac >> strip_tac >> gvs[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >> eq_tac >> strip_tac >> gvs[]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[]
+QED
+
+Theorem lower_dload_insts_supply_retained:
+  !s xs t. lower_dload_insts_supply s ins = (xs,t) /\
+  MEM i.inst_opcode [GAS; RETPC_PARAM; ASSIGN; PHI; RET; RETFMP; DRET] ==>
+  (MEM i xs <=> MEM i ins)
+Proof
+  Induct_on `ins`
+  >- simp[lower_dload_insts_supply_def] >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  drule lower_dload_inst_supply_retained >> simp[] >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem lower_dload_blocks_supply_retained:
+  !s bs t. lower_dload_blocks_supply s bbs = (bs,t) /\
+  MEM i.inst_opcode [GAS; RETPC_PARAM; ASSIGN; PHI; RET; RETFMP; DRET] ==>
+  ((?bb. MEM bb bs /\ bb.bb_label = lbl /\ MEM i bb.bb_instructions) <=>
+   (?bb. MEM bb bbs /\ bb.bb_label = lbl /\ MEM i bb.bb_instructions))
+Proof
+  Induct_on `bbs`
+  >- simp[lower_dload_blocks_supply_def] >>
+  simp[Once lower_dload_blocks_supply_def, lower_dload_block_supply_def,
+       AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule lower_dload_insts_supply_retained >> simp[] >> strip_tac >>
+  first_x_assum drule >>
+  simp[SF DNF_ss] >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_retained_location:
+  lower_dload_function_supply s f = (g,t) /\
+  MEM i.inst_opcode [GAS; RETPC_PARAM; ASSIGN; PHI; RET; RETFMP; DRET] ==>
+  ((?bb. MEM bb g.fn_blocks /\ bb.bb_label = lbl /\ MEM i bb.bb_instructions) <=>
+   (?bb. MEM bb f.fn_blocks /\ bb.bb_label = lbl /\ MEM i bb.bb_instructions))
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule lower_dload_blocks_supply_retained >> simp[]
+QED
+
+Theorem lower_dload_function_supply_retained_member:
+  lower_dload_function_supply s f = (g,t) /\
+  MEM i.inst_opcode [GAS; RETPC_PARAM; ASSIGN; PHI; RET; RETFMP; DRET] ==>
+  (MEM i (fn_insts g) <=> MEM i (fn_insts f))
+Proof
+  strip_tac >> drule_all lower_dload_function_supply_retained_location >>
+  simp[fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_retained_reachable:
+  lower_dload_function_supply s f = (g,t) /\
+  MEM i.inst_opcode [GAS; RETPC_PARAM; ASSIGN; PHI; RET; RETFMP; DRET] ==>
+  (MEM i (fn_insts (reachable_fn g)) <=> MEM i (fn_insts (reachable_fn f)))
+Proof
+  strip_tac >>
+  drule lower_dload_function_supply_reachable >> strip_tac >>
+  drule lower_dload_function_supply_reachable_inst >> strip_tac >>
+  simp[MEM_reachable_fn_insts] >> eq_tac >> rpt strip_tac >>
+  `MEM i'.inst_opcode [GAS; RETPC_PARAM; ASSIGN; PHI; RET; RETFMP; DRET]` by
+    metis_tac[reachable_inst_fields] >>
+  drule_all lower_dload_function_supply_retained_location >>
+  metis_tac[]
+QED
+
+Theorem lower_dload_inst_supply_reserved_output:
+  lower_dload_inst_supply s i = (xs,t) /\ MEM x s.irs_used_vars /\
+  MEM j xs /\ MEM x j.inst_outputs ==>
+  MEM x i.inst_outputs /\
+  (~MEM i.inst_opcode [DLOAD; DLOADBYTES] ==> j = i)
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >> imp_res_tac fresh_ir_var_contract >> gvs[] >> metis_tac[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >> imp_res_tac fresh_ir_var_contract >> gvs[] >> metis_tac[]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[]
+QED
+
+Theorem lower_dload_insts_supply_reserved_output:
+  !s xs t. lower_dload_insts_supply s ins = (xs,t) ==>
+  !x j. MEM x s.irs_used_vars /\ MEM j xs /\ MEM x j.inst_outputs ==>
+   ?i. MEM i ins /\ MEM x i.inst_outputs /\
+       (~MEM i.inst_opcode [DLOAD; DLOADBYTES] ==> j = i)
+Proof
+  Induct_on `ins`
+  >- simp[lower_dload_insts_supply_def] >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  drule lower_dload_inst_supply_preserves_vars >> strip_tac >>
+  first_x_assum drule >> strip_tac >> rpt strip_tac
+  >- (drule_all lower_dload_inst_supply_reserved_output >>
+      strip_tac >> qexists `h` >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem lower_dload_blocks_supply_reserved_output:
+  !s bs t. lower_dload_blocks_supply s bbs = (bs,t) ==>
+  !x b j. MEM x s.irs_used_vars /\ MEM b bs /\ MEM j b.bb_instructions /\
+           MEM x j.inst_outputs ==>
+   ?a i. MEM a bbs /\ MEM i a.bb_instructions /\ MEM x i.inst_outputs /\
+       (~MEM i.inst_opcode [DLOAD; DLOADBYTES] ==> j = i)
+Proof
+  Induct_on `bbs`
+  >- simp[lower_dload_blocks_supply_def] >>
+  simp[Once lower_dload_blocks_supply_def, lower_dload_block_supply_def,
+       AllCaseEqs()] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  drule lower_dload_insts_supply_reserved_operand >> strip_tac >>
+  drule lower_dload_insts_supply_reserved_output >> strip_tac >>
+  first_x_assum drule >> strip_tac >> rpt strip_tac
+  >- (qexists `h` >> gvs[] >> metis_tac[]) >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_reserved_output:
+  lower_dload_function_supply s f = (g,t) /\ MEM x s.irs_used_vars /\
+  MEM j (fn_insts g) /\ MEM x j.inst_outputs ==>
+  ?i. MEM i (fn_insts f) /\ MEM x i.inst_outputs /\
+      (~MEM i.inst_opcode [DLOAD; DLOADBYTES] ==> j = i)
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> strip_tac >>
+  gvs[fn_insts_def, lower_dload_insts_blocks_member] >>
+  drule lower_dload_blocks_supply_reserved_output >> strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem lower_dload_copy_phi_transport[local]:
+  !origin f x. copy_phi_var origin f x ==>
+  !g. (!i. MEM i.inst_opcode [origin; ASSIGN; PHI] /\ MEM i (fn_insts f) ==>
+           MEM i (fn_insts g)) ==> copy_phi_var origin g x
+Proof
+  Induct_on `copy_phi_var` >> rpt strip_tac >>
+  `MEM inst (fn_insts g)` by (first_x_assum irule >> simp[]) >>
+  metis_tac[copy_phi_var_rules]
+QED
+
+Theorem lower_dload_function_supply_copy_phi_iff:
+  lower_dload_function_supply s f = (g,t) /\ MEM origin [GAS; RETPC_PARAM] ==>
+  (copy_phi_var origin f x <=> copy_phi_var origin g x)
+Proof
+  strip_tac >> eq_tac
+  >- (strip_tac >> drule lower_dload_copy_phi_transport >>
+      disch_then irule >> rpt strip_tac >>
+      drule lower_dload_function_supply_retained_member >>
+      gvs[] >> metis_tac[]) >>
+  metis_tac[lower_dload_function_supply_copy_phi]
+QED
+
+Theorem lower_dload_function_supply_reachable_copy_phi_iff:
+  lower_dload_function_supply s f = (g,t) /\ MEM origin [GAS; RETPC_PARAM] ==>
+  (copy_phi_var origin (reachable_fn f) x <=>
+   copy_phi_var origin (reachable_fn g) x)
+Proof
+  strip_tac >> eq_tac >> strip_tac >>
+  drule lower_dload_copy_phi_transport >> disch_then irule >> rpt strip_tac >>
+  drule lower_dload_function_supply_retained_reachable >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_retpc_var:
+  lower_dload_function_supply s f = (g,t) ==> retpc_var g = retpc_var f
+Proof
+  strip_tac >> simp[FUN_EQ_THM, retpc_var_def] >>
+  metis_tac[lower_dload_function_supply_copy_phi_iff, MEM]
+QED
+
+Theorem lower_dload_function_supply_reachable_retpc_var:
+  lower_dload_function_supply s f = (g,t) ==>
+  retpc_var (reachable_fn g) = retpc_var (reachable_fn f)
+Proof
+  strip_tac >> simp[FUN_EQ_THM, retpc_var_def] >>
+  metis_tac[lower_dload_function_supply_reachable_copy_phi_iff, MEM]
+QED
+
+Theorem lower_dload_function_supply_retpc_writer:
+  lower_dload_function_supply s f = (g,t) /\ ir_supply_covers_fn s f /\
+  retpc_shape_ok f /\ MEM j (fn_insts g) /\ MEM x j.inst_outputs /\
+  retpc_var g x ==> MEM j (fn_insts f)
+Proof
+  strip_tac >> drule lower_dload_function_supply_retpc_var >> strip_tac >>
+  `retpc_var f x` by metis_tac[] >>
+  `MEM x s.irs_used_vars` by
+    (gvs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >>
+     metis_tac[lower_dload_copy_phi_ir_var, retpc_var_def]) >>
+  drule_all lower_dload_function_supply_reserved_output >> strip_tac >>
+  `~MEM i.inst_opcode [DLOAD; DLOADBYTES]` by
+    (qpat_x_assum `retpc_shape_ok f` mp_tac >>
+     simp[retpc_shape_ok_def] >> strip_tac >>
+     qpat_x_assum `!inst x. _` (qspecl_then [`i`,`x`] mp_tac) >> simp[] >>
+     strip_tac >> gvs[]) >>
+  gvs[]
+QED
+
+(* The lowered DLOAD/DLOADBYTES code writes only fresh variables and the
+   DLOAD's own output, which is never a return-PC variable; the RETPC_PARAM,
+   ASSIGN, PHI and return instructions and the CFG are kept as they are. *)
+Theorem lower_dload_function_supply_retpc_shape_ok:
+  lower_dload_function_supply s f = (g,t) /\ ir_supply_covers_fn s f /\
+  retpc_shape_ok f ==> retpc_shape_ok g
+Proof
+  strip_tac >>
+  drule lower_dload_function_supply_retpc_var >> strip_tac >>
+  drule lower_dload_function_supply_reachable_retpc_var >> strip_tac >>
+  simp[retpc_shape_ok_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `MEM inst (fn_insts (reachable_fn f))` by
+        (drule lower_dload_function_supply_retained_reachable >>
+         gvs[] >> metis_tac[]) >>
+      gvs[retpc_shape_ok_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `MEM inst (fn_insts (reachable_fn f))` by
+        (drule lower_dload_function_supply_retained_reachable >>
+         gvs[] >> metis_tac[]) >>
+      gvs[retpc_shape_ok_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `MEM inst (fn_insts f)` by
+        (irule lower_dload_function_supply_retpc_writer >> metis_tac[]) >>
+      qpat_x_assum `retpc_shape_ok f` mp_tac >>
+      simp[retpc_shape_ok_def] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `MEM i (fn_insts f) /\ MEM j (fn_insts f)` by
+    (conj_tac >> irule lower_dload_function_supply_retpc_writer >> metis_tac[]) >>
+  qpat_x_assum `retpc_shape_ok f` mp_tac >>
+  simp[retpc_shape_ok_def] >> metis_tac[]
+QED
+
 Theorem lower_dload_function_supply_fn_shape:
   lower_dload_function_supply s f = (g,t) /\ ir_supply_covers_fn s f /\
   fn_shape_ok f ==> fn_shape_ok g
@@ -826,6 +1105,7 @@ Proof
   strip_tac >> drule lower_dload_function_supply_labels >> strip_tac >>
   gvs[fn_shape_ok_def] >> conj_tac
   >- metis_tac[lower_dload_function_supply_opaque_use] >> conj_tac
+  >- metis_tac[lower_dload_function_supply_retpc_shape_ok] >> conj_tac
   >- (`EVERY (\l. ~reserved_label l) (fn_labels f)` by
         gvs[fn_labels_def, EVERY_MAP, combinTheory.o_DEF] >>
       `EVERY (\l. ~reserved_label l) (fn_labels g)` by gvs[] >>

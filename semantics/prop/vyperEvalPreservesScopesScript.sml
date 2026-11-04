@@ -24,6 +24,7 @@ Theorem preserves_scopes_dom_var_in_scope:
     preserves_scopes_dom st st' ⇒
     var_in_scope st' n
 Proof
+  rpt gen_tac >>
   simp[preserves_scopes_dom_def] >> rpt strip_tac >-
   (* Empty scopes case: contradicts var_in_scope *)
   gvs[var_in_scope_iff_lookup_name_typed, lookup_name_typed_def, lookup_scopes_def] >>
@@ -1221,6 +1222,13 @@ Proof
   simp[preserves_tv_def]
 QED
 
+Theorem preserves_tv_outcomes[simp]:
+  ∀cx st st' os.
+    preserves_tv cx st (st' with outcomes := os) ⇔ preserves_tv cx st st'
+Proof
+  simp[preserves_tv_def]
+QED
+
 Theorem preserves_tv_txn_eq:
   ∀cx cx' st st'.
     cx.txn = cx'.txn ⇒
@@ -1943,7 +1951,8 @@ Proof
     imp_res_tac lift_sum_state >>
     imp_res_tac read_result_state >>
     imp_res_tac result_array_length_state >>
-    imp_res_tac next_gas_reading_state >> gvs[] >>
+    imp_res_tac next_gas_reading_state >>
+    imp_res_tac precompile_call_success_state >> gvs[] >>
     rpt(first_x_assum drule >> rw[]) >>
     gvs[get_accounts_def, return_def]) >>
   (* Pop *)
@@ -2416,13 +2425,14 @@ Theorem eval_preserves_tv:
   (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> preserves_tv cx st st') /\
   (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> preserves_tv cx st st')
 Proof
-  metis_tac[eval_preserves_tv_with_results]
+  ACCEPT_TAC (LIST_CONJ
+    (List.take (CONJUNCTS eval_preserves_tv_with_results, 10)))
 QED
 
 Theorem eval_expr_results_preserves_tv:
   eval_expr_results cx es st = (res,st') ==> preserves_tv cx st st'
 Proof
-  metis_tac[eval_preserves_tv_with_results]
+  MATCH_ACCEPT_TAC (cj 11 eval_preserves_tv_with_results)
 QED
 
 Theorem eval_stmt_preserves_tv:
@@ -2491,3 +2501,37 @@ val () = List.app (fn (name,th) =>
        List.all (fn s => s = "DISK_THM") oracles then ()
     else raise Fail ("vyperEvalPreservesScopes." ^ name ^ ": admitted dependency")
   end) (DB.thms "vyperEvalPreservesScopes");
+
+Theorem preserves_tv_final_frame:
+  preserves_tv cx st mid /\
+  st'.scopes = mid.scopes /\ st'.immutables = mid.immutables ==>
+  preserves_tv cx st st'
+Proof
+  metis_tac[preserves_tv_trans, preserves_tv_eq]
+QED
+
+Theorem ExtCall_outcome_preserves_tv:
+  (!bs s res t. k bs s = (res,t) ==> preserves_tv cx s t) /\
+  (do
+    accounts <- get_accounts;
+    (if ret_type = NoneT then
+       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
+     else return ());
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success "ExtCall reverted";
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st = (res,st') ==> preserves_tv cx st st'
+Proof
+  rpt strip_tac >>
+  `!s t u. preserves_tv cx s t /\ preserves_tv cx t u ==>
+            preserves_tv cx s u` by metis_tac[preserves_tv_trans] >>
+  `!s os rqs. preserves_tv cx s
+      (s with <|outcomes := os; requests := rqs|>)` by simp[preserves_tv_def] >>
+  `!s accounts transient logs pending. preserves_tv cx s
+      (s with <|accounts := accounts; tStorage := transient;
+                logs := s.logs ++ logs; pending_deletions := pending|>)` by simp[preserves_tv_def] >>
+  `!s. preserves_tv cx s s` by simp[] >>
+  drule_all (ExtCall_outcome_transport |> Q.INST
+    [`R` |-> `preserves_tv cx`]) >> simp[]
+QED

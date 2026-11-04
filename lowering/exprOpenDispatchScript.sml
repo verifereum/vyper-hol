@@ -121,6 +121,19 @@ Proof
   drule_all compile_as_wei_value_int_open >> simp[]
 QED
 
+Theorem compile_bytestring_widen_copy_open[local]:
+  !d v sz sa r sb.
+    compile_bytestring_widen_copy d v sz sa = (r,sb) ==> ~block_is_terminated sb
+Proof
+  rpt gen_tac >>
+  simp[compile_bytestring_widen_copy_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  Cases_on `sz` >> gvs[compile_copy_memory_def, comp_return_def]
+  >- metis_tac[compile_alloc_buffer_open] >>
+  drule emit_void_terminated >> simp[is_terminator_def]
+QED
+
 Theorem compile_type_dispatch_convert_open:
   !cfn cenv vty ty rty args sa vv sb.
     (!v st. lower_value cfn cenv (expr_type (HD args)) (HD args) sa = (v,st) ==>
@@ -131,6 +144,9 @@ Proof
   rpt gen_tac >> simp[compile_type_builtin_dispatch_body_def] >>
   pairarg_tac >> simp[] >> IF_CASES_TAC
   >- (rpt strip_tac >> gvs[] >> first_x_assum drule >> simp[]) >>
+  IF_CASES_TAC
+  >- (simp[oneline as_stack_val_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+      drule compile_bytestring_widen_copy_open >> simp[]) >>
   Cases_on `rty` >>
   simp[oneline as_stack_val_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
   drule_all compile_type_convert_open >> simp[]

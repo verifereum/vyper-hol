@@ -2641,7 +2641,7 @@ Proof
   TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Dynamic n))) (Slice n) _ vs = INL v` >>
        metis_tac[slice_bytes_builtin_success_type] >> NO_TAC) >>
   TRY (rename1 `evaluate_builtin _ _ (BaseT (StringT n)) (Slice n) _ vs = INL v` >>
-       metis_tac[slice_string_builtin_success_type] >> NO_TAC) >>
+       drule_all slice_string_builtin_success_type >> simp[] >> NO_TAC) >>
   (* MakeArray success produces the tuple/array value requested by the static rule. *)
   TRY (rename1 `evaluate_builtin _ _ ty (MakeArray o' b) _ vs = INL v` >>
        metis_tac[make_array_success_type] >> NO_TAC) >>

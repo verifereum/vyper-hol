@@ -46,6 +46,10 @@ val mixed_event_types_ready_inst_wf_eval = save_thm
 val mixed_event_types_ready_ssa_eval = save_thm
   ("mixed_event_types_ready_ssa_eval",
    EVAL ``ssa_form ^mixed_event_types_final_fn``)
+val mixed_event_types_ready_phi_eval = EVAL
+  ``phi_operands_ready ^mixed_event_types_final_fn``
+val mixed_event_types_ready_entries_eval = EVAL
+  ``block_entries_ready (cfg_analyze ^mixed_event_types_final_fn) ^mixed_event_types_final_fn``
 
 (* Stage the concrete CFG and dominator analysis before expanding the
    per-use availability checks. *)
@@ -199,6 +203,8 @@ val mixed_event_types_final_fn_ready_rhs = LIST_CONJ
    mixed_event_types_ready_dom_eval,
    EQT_ELIM mixed_event_types_ready_sue_eval,
    EQT_ELIM mixed_event_types_ready_cfg_norm_exact_eval,
+   EQT_ELIM mixed_event_types_ready_entries_eval,
+   EQT_ELIM mixed_event_types_ready_phi_eval,
    EQT_ELIM mixed_event_types_ready_insts_eval]
 val mixed_event_types_final_fn_ready = prove
   (``codegen_ready_fn ^mixed_event_types_final_fn``,

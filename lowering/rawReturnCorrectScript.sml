@@ -13,7 +13,8 @@ Theorem external_raw_halt_unlock_result[local]:
     raw_return_bytes v = SOME bs /\ ss.vs_returndata = bs /\
     ss.vs_accounts = s.vs_accounts /\
     ss.vs_transient = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s).vs_transient /\
-    ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+    ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+    ss.vs_pending_deletions = s.vs_pending_deletions ==>
     external_call_result_rel tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es'), es'.requests)
@@ -26,7 +27,8 @@ Proof
     (Cases_on `nr /\ ~iv` >> fs[]) >>
   `accounts_agree (initial_evaluation_context srcs layouts tx NONE)
      (finalize_pending_deletions
-        (abstract_machine_from_state srcs exps layouts es')).accounts ss.vs_accounts /\
+        (abstract_machine_from_state srcs exps layouts es')).accounts
+     (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
    transient_agree (initial_evaluation_context srcs layouts tx NONE)
      (finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es')).tStorage ss.vs_transient /\
