@@ -711,3 +711,246 @@ Resume if_selected_outcome_prefix[cert]:
   Cases_on `b` >> fs[GSYM ignore_bind_def]
 QED
 Finalise if_selected_outcome_prefix
+
+Theorem if_branch_post_pop_mem:
+  (?cenv''.
+    stmt_lands lctx sb res t /\ ~t.vs_halted /\
+    (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
+    cenv_top_ext cenv cenv'' ee.scopes /\
+    stmt_state_rel ctx func cenv'' cx ee t /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x t = SOME w) /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+             FLOOKUP t.vs_allocas aid = SOME b) /\
+    return_buf_frame d cenv'' sb t /\ alloca_history func t /\
+    s0.vs_alloca_next <= t.vs_alloca_next) /\
+  ee.scopes = sc :: rest /\
+  (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
+  ?cenv''.
+    stmt_lands lctx sb res t /\ ~t.vs_halted /\
+    (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
+    cenv_top_ext cenv cenv'' (ee with scopes := rest).scopes /\
+    stmt_state_rel ctx func cenv'' cx (ee with scopes := rest) t /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x t = SOME w) /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+             FLOOKUP t.vs_allocas aid = SOME b) /\
+    return_buf_frame d cenv'' sb t /\ alloca_history func t /\
+    s0.vs_alloca_next <= t.vs_alloca_next
+Proof
+  strip_tac >> qexists_tac `cenv` >> simp[cenv_top_ext_refl] >>
+  conj_tac
+  >- (irule stmt_state_rel_pop_top_ext >>
+      conj_tac >- (qexists_tac `sc` >> simp[]) >>
+      qexists_tac `cenv''` >> simp[]) >>
+  `cenv''.ce_return_buf = cenv.ce_return_buf` by
+    (fs[cenv_top_ext_def, compile_env_component_equality]) >>
+  Cases_on `d` >> gvs[return_buf_frame_def] >>
+  PairCases_on `x` >> gvs[return_buf_frame_def]
+QED
+
+Theorem if_branch_outcome_cleanup_mem:
+  gas_outcome T (cx_tops cx) (ctx,func) (eval_stmts cx ss)
+    (es with scopes := FEMPTY :: es.scopes,s0)
+    (\res ee t. ?cenv''.
+      stmt_lands lctx sb res t /\ ~t.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel ctx func cenv'' cx ee t /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+             lookup_var x t = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+               FLOOKUP t.vs_allocas aid = SOME b) /\
+      return_buf_frame d cenv'' sb t /\ alloca_history func t /\
+      s0.vs_alloca_next <= t.vs_alloca_next)
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+  es.gas_obs = [] /\ ~s0.vs_halted ==>
+  gas_outcome T (cx_tops cx) (ctx,func)
+    (ignore_bind push_scope (finally (eval_stmts cx ss) pop_scope)) (es,s0)
+    (\res ee t. ?cenv''.
+      stmt_lands lctx sb res t /\ ~t.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel ctx func cenv'' cx ee t /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+             lookup_var x t = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+               FLOOKUP t.vs_allocas aid = SOME b) /\
+      return_buf_frame d cenv'' sb t /\ alloca_history func t /\
+      s0.vs_alloca_next <= t.vs_alloca_next)
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+Proof
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
+  >- (rename1 `gas_marked_exec _ _ _ _ marks res ee r` >>
+      drule if_branch_marked_scopes >> strip_tac >>
+      qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`res`, `ee with scopes := rest`, `r`] >>
+      conj_tac
+      >- (irule if_branch_marked_cleanup >> simp[] >> metis_tac[]) >>
+      disj1_tac >> qexists_tac `t` >> simp[] >>
+      irule (SRULE [] (Q.INST [`ee` |-> `ee with gas_obs := []`]
+        if_branch_post_pop_mem)) >> gvs[] >> metis_tac[])
+  >- (rename1 `gas_marked_exec _ _ _ _ marks res ee r` >>
+      drule if_branch_marked_scopes >> strip_tac >>
+      qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`res`, `ee with scopes := rest`, `r`] >>
+      conj_tac
+      >- (irule if_branch_marked_cleanup >> simp[] >> metis_tac[]) >>
+      disj2_tac >> gvs[stmt_exit_def]) >>
+  rename1 `gas_exempt_cert _ _ _ _ _ marks (err,ee) (leaf,fin)` >>
+  drule if_branch_cert_scopes >> strip_tac >>
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`, `ee with scopes := rest`, `leaf`, `fin`] >>
+  irule eval_stmt_if_scoped_cert >>
+  simp[if_push_scope_marked] >>
+  `es with <|scopes := FEMPTY :: es.scopes; gas_obs := []|> =
+   es with scopes := FEMPTY :: es.scopes` by
+    simp[evaluation_state_component_equality] >> simp[]
+QED
+
+Theorem if_branch_post_to_exit_mem:
+  (?cenv''.
+    stmt_lands lctx last res t /\ ~t.vs_halted /\
+    (res = INL () ==> ~block_is_terminated last /\ cenv'' = cenv) /\
+    cenv_top_ext cenv cenv'' ee.scopes /\
+    stmt_state_rel ctx func cenv'' cx ee t /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x t = SOME w) /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+             FLOOKUP t.vs_allocas aid = SOME b) /\
+    return_buf_frame d cenv'' last t /\ alloca_history func t /\
+    s0.vs_alloca_next <= t.vs_alloca_next) /\
+  last.cs_next_var <= sb.cs_next_var /\
+  (~block_is_terminated last ==>
+    emit_inst JMP [Label xl] [] last = ((),after) /\
+    fn_has_code last after func /\
+    sb.cs_current_bb = xl /\ sb.cs_current_insts = []) ==>
+  ?u. gas_path_mem ctx func t 0 (OK u) /\
+    ?cenv''.
+      stmt_lands lctx sb res u /\ ~u.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel ctx func cenv'' cx ee u /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+             lookup_var x u = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+               FLOOKUP u.vs_allocas aid = SOME b) /\
+      return_buf_frame d cenv'' sb u /\ alloca_history func u /\
+      s0.vs_alloca_next <= u.vs_alloca_next
+Proof
+  strip_tac >>
+  `return_buf_frame d cenv'' sb t` by
+    (Cases_on `d` >> gvs[return_buf_frame_def] >>
+     PairCases_on `x` >> gvs[return_buf_frame_def, not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  Cases_on `res = INL ()`
+  >- (fs[] >>
+      qpat_x_assum `~block_is_terminated last ==> _` mp_tac >>
+      simp[] >> strip_tac >>
+      `t.vs_current_bb = last.cs_current_bb /\
+       t.vs_inst_idx = LENGTH last.cs_current_insts` by
+        fs[stmt_lands_def] >>
+      `gas_path_mem ctx func t 0 (OK (jump_to xl t))` by
+        (irule emit_jump_zero_path_mem >> simp[] >>
+         qexistsl_tac [`last`, `after`] >>
+         fs[] >> drule emit_inst_extends >> simp[]) >>
+      qexists_tac `jump_to xl t` >> simp[] >>
+      fs[stmt_lands_def, stmt_state_rel_jump_to, block_is_terminated_def,
+         jump_to_def, lookup_var_def, allocaHistoryTheory.alloca_history_def] >>
+      Cases_on `d` >> gvs[return_buf_frame_def] >>
+      PairCases_on `x` >> gvs[return_buf_frame_def, lookup_var_def]) >>
+  qexists_tac `t` >>
+  conj_tac >- metis_tac[fragGasPathMemTheory.gas_path_mem_rules] >>
+  qexists_tac `cenv''` >> gvs[stmt_lands_def]
+QED
+
+Theorem if_branch_outcome_to_exit_mem:
+  gas_outcome T (cx_tops cx) (ctx,func) source (es,s0)
+    (\res ee t. ?cenv''.
+      stmt_lands lctx last res t /\ ~t.vs_halted /\
+      (res = INL () ==> ~block_is_terminated last /\ cenv'' = cenv) /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel ctx func cenv'' cx ee t /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+             lookup_var x t = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+               FLOOKUP t.vs_allocas aid = SOME b) /\
+      return_buf_frame d cenv'' last t /\ alloca_history func t /\
+      s0.vs_alloca_next <= t.vs_alloca_next) R /\
+  last.cs_next_var <= sb.cs_next_var /\
+  (~block_is_terminated last ==>
+    emit_inst JMP [Label xl] [] last = ((),after) /\
+    fn_has_code last after func /\
+    sb.cs_current_bb = xl /\ sb.cs_current_insts = []) ==>
+  gas_outcome T (cx_tops cx) (ctx,func) source (es,s0)
+    (\res ee t. ?cenv''.
+      stmt_lands lctx sb res t /\ ~t.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel ctx func cenv'' cx ee t /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+             lookup_var x t = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+               FLOOKUP t.vs_allocas aid = SOME b) /\
+      return_buf_frame d cenv'' sb t /\ alloca_history func t /\
+      s0.vs_alloca_next <= t.vs_alloca_next) R
+Proof
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
+  >- (rename1 `gas_marked_exec _ _ _ _ marks res ee r` >>
+      qpat_x_assum `(\res ee t. _) _ _ _` mp_tac >>
+      simp[] >> disch_tac >>
+      drule_all (SRULE [] (Q.INST [`ee` |-> `ee with gas_obs := []`]
+        if_branch_post_to_exit_mem)) >> strip_tac >>
+      qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`res`, `ee`, `OK u`] >> conj_tac
+      >- (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+          simp[gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def] >>
+          strip_tac >> simp[] >>
+          drule_all fragGasPathMemTheory.gas_path_mem_then >> simp[]) >>
+      disj1_tac >> qexists_tac `u` >> simp[] >>
+      qexists_tac `cenv''` >> simp[])
+  >- (qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`res`, `es_end`, `r`] >> simp[]) >>
+  qexists_tac `marks` >> disj2_tac >> metis_tac[]
+QED
+
+Theorem if_branch_outcome_mem:
+  gas_outcome T (cx_tops cx) (ctx,func) (eval_stmts cx ss)
+    (es with scopes := FEMPTY :: es.scopes,s0)
+    (\res ee t. ?cenv''.
+      stmt_lands lctx last res t /\ ~t.vs_halted /\
+      (res = INL () ==> ~block_is_terminated last /\ cenv'' = cenv') /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel ctx func cenv'' cx ee t /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+             lookup_var x t = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+               FLOOKUP t.vs_allocas aid = SOME b) /\
+      return_buf_frame d cenv'' last t /\ alloca_history func t /\
+      s0.vs_alloca_next <= t.vs_alloca_next)
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+  es.gas_obs = [] /\ ~s0.vs_halted /\
+  last.cs_next_var <= sb.cs_next_var /\
+  (~block_is_terminated last ==>
+    emit_inst JMP [Label xl] [] last = ((),after) /\
+    fn_has_code last after func /\
+    sb.cs_current_bb = xl /\ sb.cs_current_insts = []) ==>
+  gas_outcome T (cx_tops cx) (ctx,func)
+    (ignore_bind push_scope (finally (eval_stmts cx ss) pop_scope)) (es,s0)
+    (\res ee t. ?cenv''.
+      stmt_lands lctx sb res t /\ ~t.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel ctx func cenv'' cx ee t /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+             lookup_var x t = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+               FLOOKUP t.vs_allocas aid = SOME b) /\
+      return_buf_frame d cenv'' sb t /\ alloca_history func t /\
+      s0.vs_alloca_next <= t.vs_alloca_next)
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+Proof
+  strip_tac >> irule if_branch_outcome_to_exit_mem >>
+  qexistsl_tac [`after`, `last`, `xl`] >> simp[] >>
+  irule if_branch_outcome_cleanup_mem >> simp[] >> metis_tac[]
+QED
