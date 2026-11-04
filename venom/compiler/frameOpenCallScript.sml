@@ -96,7 +96,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem joint_open_call_saved_at[local]:
+Theorem joint_open_call_saved_at:
   joint_trace vs0 ctx q0 es qs q /\ c < j /\ j <= LENGTH es /\
   EL c (q0::qs) = JointConfig stk0 PG0 G0 tn0 owner invoke s0 oms0 om0 hs0 h0 /\
   LENGTH stk0 = d /\
