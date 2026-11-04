@@ -267,7 +267,7 @@ Theorem abi_decoder_recursive_array_initialize:
   abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     di (ListV avs) (ArrayV (DynArrayV vs)) st last src dst opc base_op hi B sb d b cap
     (abi_decoder_prune_vars st.cs_next_var initial) /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor st /\
   loop_st.cs_next_id <= owner_hi /\ owner_hi <= last /\
   loop_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   fn_has_code st loop_st func /\ ~initial.vs_halted /\
@@ -289,6 +289,7 @@ Proof
   drule_all abi_decode_array_loop_init_shape >> strip_tac >>
   drule_all abi_decode_array_loop_init_site_bounds >> strip_tac >>
   `loop_st.cs_next_id <= last` by decide_tac >>
+  drule_all abi_decode_array_loop_init_allocation_floor >> strip_tac >>
   `first <= loop_st.cs_next_id - 2` by decide_tac >>
   drule_all abi_decode_array_loop_init_reentry_from_state >>
   disch_then (qspec_then `ctx` assume_tac) >>
@@ -304,13 +305,15 @@ Proof
       simp_tac bool_ss [abi_decoder_ranges_def] >>
       disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> first_assum ACCEPT_TAC) >>
   `st.cs_next_id <= loop_st.cs_next_id-2 /\ loop_st.cs_next_id-2 < owner_hi` by decide_tac >>
+  `abi_decoder_effect first last (loop_st.cs_next_id-2) owner_hi st.cs_next_var limit_st
+    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial prepared` by
+    (irule abi_decoder_recursive_init_effect >>
+     asm_simp_tac bool_ss [] >>
+     qexistsl_tac [`LENGTH vs`, `setup`, `loop_st.cs_next_id-2`] >> simp[]) >>
   `abi_decoder_effect first last st.cs_next_id owner_hi st.cs_next_var limit_st
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial prepared` by
-    (mp_tac (Q.INST [`lo` |-> `st.cs_next_id`, `hi` |-> `owner_hi:num`,
-      `next` |-> `st.cs_next_var`, `site` |-> `loop_st.cs_next_id-2`,
-      `n` |-> `LENGTH (vs:vyperValue$value list)`,
-      `outsz` |-> `type_memory_bytes ce (ArrayT ty (Dynamic maxn))`]
-      abi_decoder_recursive_init_effect) >> asm_simp_tac bool_ss []) >>
+    (drule abi_decoder_effect_widen >>
+     disch_then irule >> simp[]) >>
   `slot < dimword (:256)` by
     (qpat_assum `abi_decoder_budget _ _ _ _ prepared` mp_tac >>
      simp_tac bool_ss [abi_decoder_budget_def] >> strip_tac >> decide_tac) >>
@@ -335,7 +338,7 @@ Theorem abi_decoder_recursive_array_execute:
   abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     di (ListV avs) (ArrayV (DynArrayV vs)) st last src dst opc base_op hi_op B sb d b cap
     (abi_decoder_prune_vars st.cs_next_var initial) /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ final.cs_next_id <= last /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor st /\ final.cs_next_id <= last /\
   final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -354,7 +357,9 @@ Proof
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   `fresh_vars_wrt limit_st prepared /\ abi_decoder_budget first last b cap prepared`
     by fs[abi_decoder_effect_def, Excl "enc_def"] >>
-  mp_tac (Q.INST [`lo` |-> `st.cs_next_id`, `hi` |-> `final.cs_next_id`,
+  drule_all abi_decode_array_loop_init_allocation_floor >> strip_tac >>
+  `first <= loop_st.cs_next_id-2` by decide_tac >>
+  mp_tac (Q.INST [`lo` |-> `loop_st.cs_next_id-2`, `hi` |-> `final.cs_next_id`,
     `ip` |-> `FST (setup:operand # operand)`,
     `cnt` |-> `SND (setup:operand # operand)`,
     `next` |-> `loop_st.cs_next_var`, `start` |-> `loop_st:compile_state`,
@@ -363,11 +368,9 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [LESS_EQ_REFL] >> strip_tac >>
   `abi_decoder_effect first last st.cs_next_id final.cs_next_id st.cs_next_var limit_st
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap prepared t` by
-    (mp_tac (Q.INST [`s` |-> `prepared:venom_state`, `t` |-> `t:venom_state`,
-      `lo` |-> `st.cs_next_id`, `hi` |-> `final.cs_next_id`, `next` |-> `st.cs_next_var`,
-      `child_next` |-> `loop_st.cs_next_var`,
-      `sz` |-> `type_memory_bytes ce (ArrayT ty (Dynamic maxn))`] abi_decoder_effect_lower_vars) >>
-     asm_simp_tac bool_ss []) >>
+    (drule_at (Pat `abi_decoder_effect _ _ _ _ _ _ _ _ _ _ prepared t`)
+       abi_decoder_effect_widen >>
+     disch_then irule >> simp[]) >>
   `abi_decoder_effect first last st.cs_next_id final.cs_next_id st.cs_next_var limit_st
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial t` by
     (drule_all abi_decoder_effect_trans >> simp[]) >>
