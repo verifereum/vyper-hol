@@ -12,7 +12,23 @@
 Theory makeSsaCurrentWfSsa
 Ancestors
   makeSsaCurrentDefs makeSsaCurrentProps venomWf cfgWf venomInst irSupply
-  unitShapeDefs o1PassContract
+  unitShapeDefs o1PassContract makeSsaCurrentRenameTrace list
+
+(* Consumer probe: the annotation at an output position names exactly the
+   concrete output at that position.  Defaults cannot be substituted here. *)
+Theorem current_wf_inst_output_name[local]:
+  current_inst_trace anns inst s rs H E inst' s' rs' H' E' /\
+  current_annotations_ok V H anns /\ j < LENGTH anns ==>
+  j < LENGTH inst'.inst_outputs /\
+  current_token_name H' (FST (EL j anns)) = SOME (EL j inst'.inst_outputs)
+Proof
+  simp[current_inst_trace_def] >> rpt strip_tac >>
+  drule_all current_outputs_trace_names >>
+  simp[LIST_REL_EL_EQN] >> strip_tac >>
+  Cases_on `inst.inst_opcode = PHI` >> gvs[] >>
+  first_x_assum (qspec_then `j` mp_tac) >>
+  Cases_on `EL j anns` >> simp[]
+QED
 
 Theorem make_ssa_current_fn_wf_ssa:
   fn_defs_reach_uses fn /\ fn_phi_operands_single_def fn /\
