@@ -64,6 +64,15 @@ QED
 
 (* ===== The entry ===== *)
 
+(* The raw lowering boundary rejects policies outside its frontend contract. *)
+Theorem run_lowering_policy_ok:
+  run_lowering selectors external_fns internal_fns fallback_fn rpolicy
+    bucket_count fn_metadata_bytes dense_buckets entry_info entry_label = SOME unit ==>
+  lowering_policy_ok rpolicy
+Proof
+  Cases_on `lowering_policy_ok rpolicy` >> simp[run_lowering_def]
+QED
+
 (* ADMITTED: external_entry_value_revert's run is pointer-safe. *)
 Theorem external_entry_value_revert_ptr:
   !tops rpolicy unit am tx ret vs mut args fbody env e st efn elbl.
