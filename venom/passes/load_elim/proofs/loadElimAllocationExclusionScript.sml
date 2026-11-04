@@ -2,6 +2,7 @@ Theory loadElimAllocationExclusion
 Ancestors
   finite_map words venomState venomInst venomMemDefs basePtrDefs memLocDefs
   dfgCorrectnessProof memoryCopyElisionSound loadElimSentinelHelpers
+  venomExecSemantics venomWf
 
 Definition le_erase_tracked_def:
   le_erase_tracked bp s = s with
@@ -65,4 +66,38 @@ Proof
        le_erase_tracked_bp_sound, allocas_non_overlapping_def,
        allocas_in_word_def, FLOOKUP_EMPTY, bp_ptrs_bounded_def,
        le_erase_tracked_memloc]
+QED
+
+Theorem le_erased_alloca_out_of_word:
+  inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit n] /\
+  inst.inst_outputs = [out] ==>
+  ?t. step_inst fuel ctx inst (le_erase_tracked bp s) = OK t /\
+      ~allocas_in_word (t with vs_inst_idx := 0)
+Proof
+  strip_tac >>
+  simp[step_inst_def, step_inst_base_def, exec_alloca_def, FLOOKUP_EMPTY] >>
+  simp[allocas_in_word_def, update_var_def] >>
+  qexistsl_tac [`inst.inst_id`, `dimword(:256)`, `w2n n`] >>
+  simp[FLOOKUP_UPDATE]
+QED
+
+Theorem le_step_preserves_no_alloca:
+  le_step_preserves bp dfg fn /\ bp_assigns_stable bp dfg /\
+  dfg_assigns_sound dfg s /\
+  MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\ inst_wf inst ==>
+  inst.inst_opcode <> ALLOCA
+Proof
+  strip_tac >> strip_tac >>
+  `?n out. inst.inst_operands = [Lit n] /\ inst.inst_outputs = [out]` by
+    (gvs[inst_wf_def] >> Cases_on `inst.inst_outputs` >> gvs[] >>
+     rename1 `h::t` >> Cases_on `t` >> gvs[]) >>
+  `le_step_invariants bp dfg fn (le_erase_tracked bp s)` by
+    (irule le_erase_tracked_invariants >> simp[]) >>
+  `?t. step_inst 0 ARB inst (le_erase_tracked bp s) = OK t /\
+       ~allocas_in_word (t with vs_inst_idx := 0)` by
+    (irule le_erased_alloca_out_of_word >> simp[] >> metis_tac[]) >>
+  `le_step_invariants bp dfg fn
+     (le_erase_tracked bp s with vs_inst_idx := 0)` by simp[] >>
+  fs[le_step_preserves_def] >>
+  metis_tac[le_erase_tracked_fields, le_step_invariants_def]
 QED
