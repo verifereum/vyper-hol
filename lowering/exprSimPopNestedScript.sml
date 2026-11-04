@@ -29,6 +29,8 @@ Ancestors
   targetPlaceSim targetPlaceSimCases
   exprLowering vyperAST vyperInterpreter vyperState vyperContext
   vyperTypeSystem vyperTypeCallGraph vyperCompiler stmtLowering
+  venomExecSemantics venomInst venomState emitHelper emitHelperProps
+  exprLoweringProps compileEnv finite_map
 
 (* The target's fragment, typed ty, evaluates to a place at the pointer
    (target_place_sim's conclusion, at every start). *)
@@ -489,6 +491,117 @@ Theorem nested_counterexample_supported_probe[local]:
   supported_program nested_counterexample_program
 Proof
   EVAL_TAC
+QED
+
+Definition nested_pop_suffix_def[local]:
+  nested_pop_suffix hdr tr id esz x0 x1 x2 x3 x4 x5 x6 =
+    [mk_inst id (if tr then TLOAD else SLOAD) [hdr] [x0];
+     mk_inst (id+1) ISZERO [Var x0] [x1];
+     mk_inst (id+2) ISZERO [Var x1] [x2];
+     mk_inst (id+3) ASSERT [Var x2] [];
+     mk_inst (id+4) SUB [Var x0; Lit 1w] [x3];
+     mk_inst (id+5) (if tr then TSTORE else SSTORE) [hdr; Var x3] [];
+     mk_inst (id+6) ADD [hdr; Lit 1w] [x4];
+     mk_inst (id+7) MUL [Var x3; Lit (n2w esz)] [x5];
+     mk_inst (id+8) ADD [Var x4; Var x5] [x6]]
+End
+
+Theorem nested_pop_suffix_shape[local]:
+  !hdr tr esz sa r sb.
+    compile_dynarray_pop hdr 1 esz
+      (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = (r,sb) ==>
+    ?x0 x1 x2 x3 x4 x5 x6.
+      ALL_DISTINCT [x0;x1;x2;x3;x4;x5;x6] /\
+      EVERY (\x. ~not_fresh_at sa x) [x0;x1;x2;x3;x4;x5;x6] /\
+      r = Var x6 /\
+      sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
+      sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
+      sb.cs_current_insts = sa.cs_current_insts ++
+        nested_pop_suffix hdr tr sa.cs_next_id esz x0 x1 x2 x3 x4 x5 x6
+Proof
+  simp[compile_dynarray_pop_def, emit_op_def, emit_void_def, fresh_id_def,
+       fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, LET_THM] >>
+  rpt strip_tac >> gvs[APPEND_ASSOC] >>
+  qexistsl_tac [`STRING #"%" (toString sa.cs_next_var)`,
+                `STRING #"%" (toString (sa.cs_next_var + 1))`,
+                `STRING #"%" (toString (sa.cs_next_var + 2))`,
+                `STRING #"%" (toString (sa.cs_next_var + 3))`,
+                `STRING #"%" (toString (sa.cs_next_var + 4))`,
+                `STRING #"%" (toString (sa.cs_next_var + 5))`] >>
+  simp[ASCIInumbersTheory.toString_11, not_fresh_at_def, APPEND_ASSOC,
+       nested_pop_suffix_def]
+QED
+
+Theorem nested_pop_step_load[local]:
+  IS_SOME (eval_operand hdr s) ==>
+  step_inst_base (mk_inst id (if tr then TLOAD else SLOAD) [hdr] [out]) s =
+    OK (update_var out (if tr then tload (THE (eval_operand hdr s)) s
+                       else sload (THE (eval_operand hdr s)) s) s)
+Proof
+  Cases_on `tr` >> Cases_on `eval_operand hdr s` >>
+  simp[step_inst_base_def, exec_read1_def, mk_inst_def]
+QED
+
+Theorem nested_pop_step_store[local]:
+  IS_SOME (eval_operand hdr s) /\ IS_SOME (lookup_var x s) ==>
+  step_inst_base (mk_inst id (if tr then TSTORE else SSTORE) [hdr; Var x] []) s =
+    OK (if tr then tstore (THE (eval_operand hdr s)) (THE (lookup_var x s)) s
+        else sstore (THE (eval_operand hdr s)) (THE (lookup_var x s)) s)
+Proof
+  Cases_on `tr` >> Cases_on `eval_operand hdr s` >> Cases_on `lookup_var x s` >>
+  simp[step_inst_base_def, exec_write2_def, mk_inst_def, eval_operand_def]
+QED
+
+Theorem nested_pop_step_add[local]:
+  IS_SOME (eval_operand hdr s) ==>
+  step_inst_base (mk_inst id ADD [hdr; Lit 1w] [out]) s =
+    OK (update_var out (THE (eval_operand hdr s) + 1w) s)
+Proof
+  Cases_on `eval_operand hdr s` >> simp[] >>
+  irule step_ADD >> simp[eval_operand_def]
+QED
+
+
+Theorem nested_pop_suffix_empty[local]:
+  ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\
+  eval_operand hdr s = SOME slot /\
+  (!x. hdr = Var x ==> ~MEM x [x0;x1;x2;x3;x4;x5;x6]) /\
+  (if tr then tload slot s else sload slot s) = 0w ==>
+  ?a s'. run_inst_seq
+    (nested_pop_suffix hdr tr id esz x0 x1 x2 x3 x4 x5 x6) s = Abort a s'
+Proof
+  Cases_on `hdr` >>
+  simp[eval_operand_def] >> strip_tac >>
+  fs[nested_pop_suffix_def, run_inst_seq_def, nested_pop_step_load,
+     pop_step_ISZERO, pop_step_ASSERT, eval_operand_def,
+     lookup_var_def, update_var_def, FLOOKUP_UPDATE, bool_to_word_def]
+QED
+
+Theorem nested_pop_suffix_run[local]:
+  ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\
+  eval_operand hdr s = SOME slot /\
+  (!x. hdr = Var x ==> ~MEM x [x0;x1;x2;x3;x4;x5;x6]) /\
+  (if tr then tload slot s else sload slot s) <> 0w ==>
+  ?u. run_inst_seq
+    (nested_pop_suffix hdr tr id esz x0 x1 x2 x3 x4 x5 x6) s = OK u /\
+    u = (if tr then tstore slot (tload slot s - 1w) s
+         else sstore slot (sload slot s - 1w) s) with vs_vars := u.vs_vars /\
+    (!x. ~MEM x [x0;x1;x2;x3;x4;x5;x6] ==> lookup_var x u = lookup_var x s) /\
+    lookup_var x6 u = SOME (slot + 1w +
+      ((if tr then tload slot s else sload slot s) - 1w) * n2w esz)
+Proof
+  Cases_on `hdr` >> simp[eval_operand_def] >> strip_tac >>
+  fs[nested_pop_suffix_def, run_inst_seq_def, nested_pop_step_load,
+     nested_pop_step_store, nested_pop_step_add,
+     pop_step_ISZERO, pop_step_ASSERT, pop_step_SUB_lit,
+     pop_step_MUL_lit, pop_step_ADD_var, eval_operand_def,
+     lookup_var_def, update_var_def, FLOOKUP_UPDATE, bool_to_word_def] >>
+  Cases_on `tr` >>
+  fs[nested_pop_step_store, nested_pop_step_add,
+     pop_step_MUL_lit, pop_step_ADD_var, eval_operand_def,
+     lookup_var_def, update_var_def, FLOOKUP_UPDATE, sstore_def, tstore_def] >>
+  simp[venom_state_component_equality, FLOOKUP_UPDATE] >> rw[] >> gvs[]
 QED
 
 (* A storage or transient root.  compile_get_target_ptr hands out the
