@@ -1010,3 +1010,13 @@ Proof
      metis_tac[]) >>
   simp[]
 QED
+
+(* Deep popmany uses the bulk do_swap path, which allocates scratch slots.
+   Thus a binary replay interface cannot preserve every nonstack field. *)
+Theorem popmany_deep_allocator_probe[local]:
+  (SND (popmany_plan [Var (IMPLODE [#"x"])]
+    ((init_plan_state 0) with ps_stack := probe_targets 18))).ps_alloc <>
+  (init_plan_state 0).ps_alloc
+Proof
+  EVAL_TAC
+QED
