@@ -10,7 +10,7 @@
 
 Theory ssaRenamedSim
 Ancestors
-  ssaSimDefs venomExecSemantics venomInst venomState opcodeClass
+  ssaSimDefs venomExecSemantics venomInst venomState opcodeClass passSharedFrame
   list rich_list finite_map pred_set venomCallOracleDefs
 Libs
   ssaRenamedSimLib ssaFrameLib
@@ -905,6 +905,13 @@ Proof
   TRY (irule jump_to_ssa_sim >> simp[])
 QED
 
+Triviality exec_ext_call_not_abort_ssa:
+  !inst s g a v ao as_ ro rs st ab vs'.
+    exec_ext_call inst s g a v ao as_ ro rs st <> Abort ab vs'
+Proof
+  rw[exec_ext_call_def] >> gvs[AllCaseEqs()]
+QED
+
 (* For non-terminator, non-INVOKE: if step_inst_base aborts on side 1,
    the renamed instruction also aborts with same reason + execution_equiv.
    Only ASSERT, ASSERT_UNREACHABLE, RETURNDATACOPY can abort among
@@ -920,6 +927,24 @@ Theorem step_base_abort_sim:
           execution_equiv UNIV s1' s2'
 Proof
   rpt gen_tac >> strip_tac >>
+  (* static frame: a state write aborts on both sides once its operands
+     evaluate *)
+  Cases_on `inst1.inst_opcode = SSTORE \/ inst1.inst_opcode = TSTORE \/
+            inst1.inst_opcode = LOG \/ inst1.inst_opcode = CALL \/
+            inst1.inst_opcode = CREATE \/ inst1.inst_opcode = CREATE2`
+  >- (
+    drule_all step_inst_base_static_write_abort >> strip_tac >>
+    gvs[inst_renamed_def, optionTheory.IS_SOME_EXISTS] >>
+    imp_res_tac ssa_sim_fields >>
+    drule_all eval_operands_renamed >> strip_tac >>
+    qexists_tac `halt_state (set_returndata [] s2)` >>
+    (conj_tac >- (
+       qpat_x_assum `step_inst_base inst1 s1 = _` mp_tac >>
+       gvs step_base_reduces >>
+       simp[AllCaseEqs(), exec_ext_call_not_abort_ssa] >> strip_tac >>
+       gvs[] >> imp_res_tac eval_operand_renamed >> gvs[])) >>
+    imp_res_tac ssa_sim_implies_exec_equiv_UNIV >>
+    gvs[execution_equiv_UNIV, halt_state_def, set_returndata_def]) >>
   drule step_inst_base_abort_opcodes >> strip_tac >>
   gvs[inst_renamed_def, is_terminator_def] >>
   imp_res_tac ssa_sim_fields >>
