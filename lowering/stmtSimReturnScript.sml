@@ -558,6 +558,7 @@ QED
    of the value after read_result, including results read from places. *)
 Theorem compile_return_tuple_int_frag:
   !ctx func cx lctx cenv e es res es' rpc rsz tys ret_tv.
+    post_value_type cenv e = expr_type e /\
     eval_stmt cx (Return (SOME e)) es = (res, es') /\
     cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
     cenv.ce_returns_count = LENGTH tys /\ 1 < LENGTH tys /\
