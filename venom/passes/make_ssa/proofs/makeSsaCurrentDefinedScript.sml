@@ -1,21 +1,9 @@
 Theory makeSsaCurrentDefined
 Ancestors
-  makeSsaCurrentDemand makeSsaCurrentOccurrence venomExecProofs venomWf venomInst list relation
+  makeSsaCurrentAvailability makeSsaCurrentDemand makeSsaCurrentOccurrence venomExecProofs venomWf venomInst list relation
   sccpCorrectnessProofs finite_map pred_set
 
 
-Theorem current_path_first_target[local]:
-  !path. is_fn_path fn path /\ path <> [] /\ LAST path = target ==>
-    ?pre. is_fn_path fn (pre ++ [target]) /\
-      HD (pre ++ [target]) = HD path /\ ~MEM target pre
-Proof
-  Induct >> simp[] >> gen_tac >> strip_tac >>
-  Cases_on `h = target`
-  >- (qexists_tac `[]` >> simp[is_fn_path_def]) >>
-  Cases_on `path` >> gvs[is_fn_path_def] >>
-  qexists_tac `h::pre` >> simp[] >>
-  Cases_on `pre` >> gvs[is_fn_path_def]
-QED
 
 
 Theorem current_single_def_dominates[local]:

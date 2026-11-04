@@ -1,6 +1,6 @@
 Theory makeSsaCurrentAvailability
 Ancestors
-  makeSsaCurrentDemand passSharedDefs
+  makeSsaCurrentDemand passSharedDefs venomExecProofs
 Libs
   listTheory arithmeticTheory venomWfTheory venomInstTheory
 
@@ -30,15 +30,17 @@ Proof
   disj2_tac >> qexists_tac `j` >> Cases_on `j = i` >> gvs[]
 QED
 
-Theorem current_path_snoc:
-  !path. path <> [] /\ is_fn_path fn path /\ fn_cfg_edge fn (LAST path) l ==>
-  is_fn_path fn (path ++ [l])
+Theorem current_path_first_target:
+  !path. is_fn_path fn path /\ path <> [] /\ LAST path = target ==>
+    ?pre. is_fn_path fn (pre ++ [target]) /\
+      HD (pre ++ [target]) = HD path /\ ~MEM target pre
 Proof
-  Induct >- simp[] >> Cases_on `path`
-  >- simp[is_fn_path_def] >>
-  rpt strip_tac >> fs[is_fn_path_def] >>
-  `is_fn_path fn ((h::t) ++ [l])` by metis_tac[NOT_CONS_NIL] >>
-  Cases_on `t` >> gvs[is_fn_path_def]
+  Induct >> simp[] >> gen_tac >> strip_tac >>
+  Cases_on `h = target`
+  >- (qexists_tac `[]` >> simp[is_fn_path_def]) >>
+  Cases_on `path` >> gvs[is_fn_path_def] >>
+  qexists_tac `h::pre` >> simp[] >>
+  Cases_on `pre` >> gvs[is_fn_path_def]
 QED
 
 Theorem current_available_cross:
@@ -54,7 +56,7 @@ Proof
     venomExecPropsTheory.lookup_block_label] >>
   fs[current_available_def] >>
   rpt strip_tac >>
-  `is_fn_path fn (path ++ [succ])` by metis_tac[current_path_snoc] >>
+  `is_fn_path fn (path ++ [succ])` by metis_tac[venomExecProofsTheory.is_fn_path_snoc] >>
   `HD (path ++ [succ]) = HD path` by (Cases_on `path` >> gvs[]) >>
   `LAST (path ++ [succ]) = succ` by simp[] >>
   qpat_x_assum `!path. _` (qspec_then `path ++ [succ]` mp_tac) >>
