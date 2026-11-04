@@ -919,3 +919,57 @@ Resume cleanup_payload_inventory[popped]:
 QED
 
 Finalise cleanup_payload_inventory
+
+Theorem clean_stack_plan_active_inventory:
+  !S ps liveness cfg fn bb pred_lbl pred_bb inputs layout.
+    lineage_inventory S ps /\
+    cfg_preds_of cfg bb.bb_label = [pred_lbl] /\
+    1 < LENGTH (cfg_succs_of cfg pred_lbl) /\
+    lookup_block pred_lbl fn.fn_blocks = SOME pred_bb /\
+    inputs = input_vars_from pred_lbl bb.bb_instructions
+      (live_vars_at liveness bb.bb_label 0) /\
+    layout = live_vars_at liveness pred_lbl (LENGTH pred_bb.bb_instructions) /\
+    set (MAP Var inputs) SUBSET S /\
+    S SUBSET set (MAP Var inputs) UNION set (MAP Var layout) UNION FDOM ps.ps_spilled ==>
+    lineage_inventory (set (MAP Var inputs) UNION FDOM ps.ps_spilled)
+      (SND (clean_stack_plan liveness cfg fn bb ps))
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[Once clean_stack_plan_def] >>
+  qpat_x_assum `inputs = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_x_assum `layout = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qabbrev_tac `to_pop = FILTER (\v. ~MEM v inputs) layout` >>
+  qmatch_goalsub_abbrev_tac `FILTER (\op. below_all_live op inputs ps.ps_stack) physical` >>
+  qmatch_goalsub_abbrev_tac `FILTER (\op. ~MEM op retained) physical` >>
+  qmatch_goalsub_abbrev_tac `popmany_plan removed ps` >>
+  qmatch_goalsub_abbrev_tac `if NULL inputs /\ ok then _ else _` >>
+  irule cleanup_payload_inventory >>
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`ok`, `physical`,
+    `ps.ps_cleanup_promised \/ ~NULL retained`, `removed`, `retained`, `to_pop`] >>
+  simp[Abbr `to_pop`, Abbr `physical`, Abbr `retained`, Abbr `removed`] >>
+  Cases_on `ok` >> simp[] >>
+  Cases_on `NULL inputs` >> simp[] >>
+  pairarg_tac >> simp[]
+QED
+
+Theorem clean_stack_plan_noop:
+  !liveness cfg fn bb ps.
+    ~(?pred_lbl pred_bb.
+      cfg_preds_of cfg bb.bb_label = [pred_lbl] /\
+      1 < LENGTH (cfg_succs_of cfg pred_lbl) /\
+      lookup_block pred_lbl fn.fn_blocks = SOME pred_bb) ==>
+    clean_stack_plan liveness cfg fn bb ps = ([], ps)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `cfg_preds_of cfg bb.bb_label`
+  >- simp[clean_stack_plan_def] >>
+  Cases_on `t`
+  >- (Cases_on `LENGTH (cfg_succs_of cfg h) <= 1`
+      >- simp[clean_stack_plan_def] >>
+      `lookup_block h fn.fn_blocks = NONE` by
+        (`1 < LENGTH (cfg_succs_of cfg h)` by decide_tac >>
+         Cases_on `lookup_block h fn.fn_blocks` >> simp[] >> metis_tac[]) >>
+      simp[clean_stack_plan_def]) >>
+  simp[clean_stack_plan_def]
+QED
