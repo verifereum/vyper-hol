@@ -1,6 +1,6 @@
 Theory fnPlanPlaceDfsBlock
 Ancestors
-  fnPlanLineage stackPlanGen venomExecProps stackOpSim
+  fnPlanLineage stackPlanGen venomExecProps stackOpSim codegen
   list rich_list arithmetic
 
 Theorem generate_context_regions_length:
@@ -153,4 +153,32 @@ Proof
   qpat_x_assum `generate_fn_plan_aux _ _ _ _ (_::_) _ _ = _` mp_tac >>
   simp[Once generate_fn_plan_aux_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
   qexistsl_tac [`pre`, `succ_ops ++ rest_ops ++ post`] >> simp[APPEND_ASSOC]
+QED
+
+Theorem codegen_assembly_symbols_ok:
+  codegen_assembly rpolicy unit = SOME prog ==> asm_symbols_ok prog
+Proof
+  simp[codegen_assembly_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem codegen_region_subplan_contained:
+  !cp rpolicy unit prog r pre_ops block_ops post_ops.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    MEM r cp.cp_regions /\
+    r.sr_plan = pre_ops ++ block_ops ++ post_ops ==>
+    ?pre post. prog = pre ++ execute_plan cp.cp_initial_fmp block_ops ++ post
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `MEM _ _` (strip_assume_tac o REWRITE_RULE [MEM_SPLIT]) >>
+  qpat_x_assum `codegen_assembly _ _ = _` mp_tac >>
+  simp[codegen_assembly_def, AllCaseEqs()] >> strip_tac >>
+  gvs[context_plan_ops_def, MAP_APPEND, FLAT_APPEND, execute_plan_append] >>
+  qmatch_goalsub_abbrev_tac `execute_plan fmp block_ops` >>
+  qexistsl_tac
+    [`execute_plan fmp (FLAT (MAP (\r. r.sr_plan) l1)) ++ execute_plan fmp pre_ops`,
+     `execute_plan fmp post_ops ++
+      execute_plan fmp (FLAT (MAP (\r. r.sr_plan) l2)) ++
+      execute_plan fmp revert_postamble ++ data_segment_asm unit.cu_data_segment ++
+      [AsmDataHeader "code_end"]`] >> simp[APPEND_ASSOC]
 QED
