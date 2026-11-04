@@ -4242,3 +4242,43 @@ Proof
       gvs[get_source_immutables_def] >> goal_assum (drule_at Any)) >>
   qexists `tops` >> simp[]
 QED
+
+(* Reapply the operand contract at the source endpoint, obtaining a fresh
+   representation rather than transporting an old immutable witness. *)
+Theorem compile_expr_called_main_array_endpoint_replay:
+  expr_vv_case nocalls ctx func cenv cx obj /\
+  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  MEM (NONE,callee) (int_calls_expr idx) /\ expr_type obj = ArrayT et bd /\
+  eval_expr cx obj es = (INL (PlaceR (ImmutablePlace NONE nm path)),mid) /\
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+  ~expr_has_pop obj /\ compile_expr cenv ty obj sc = (vv,sc') /\
+  vv_location vv = SOME LocCode /\
+  expr_body_pre cenv cx env obj mid /\ expr_body_pre cenv cx env idx mid /\
+  eval_expr cx idx mid = (res,later) /\
+  fn_has_code si si func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv si /\
+  (!x. op = Var x ==> not_fresh_at si x) /\
+  (!l. op <> Label l) /\ eval_operand op q = SOME iw ==>
+  frag_exec ctx si si
+    (\s. s = q /\ stmt_state_rel ctx func cenv cx later s)
+    (\s. vv_post ctx func cenv cx obj later si si q later
+           (PlaceR (ImmutablePlace NONE nm path)) vv s /\
+         eval_operand op s = SOME iw)
+    (expr_exit (INL (PlaceR (ImmutablePlace NONE nm path))))
+Proof
+  strip_tac >> drule_all compile_expr_called_main_array_root >> strip_tac >>
+  gvs[] >>
+  `expr_body_pre cenv cx env (TopLevelName a (NONE,nm)) later` by
+    (irule expr_body_pre_after_eval >> goal_assum (drule_at Any) >> simp[]) >>
+  `eval_expr cx (TopLevelName a (NONE,nm)) later =
+     (INL (PlaceR (ImmutablePlace NONE nm [])),later)` by
+    (drule_all eval_immutable_root_after_eval >> simp[]) >>
+  `compile_expr cenv ty (TopLevelName a (NONE,nm)) si =
+     (LocatedValue a (mk_ptr (Lit (n2w off)) LocCode),si)` by
+    (irule compile_immutable_root_shape >> simp[]) >>
+  `expr_vv_res_ok (INL (PlaceR (ImmutablePlace NONE nm [])))` by
+    (drule_all expr_body_pre_vv_res_ok >> simp[]) >>
+  irule expr_vv_case_zero_code_replay_operand >>
+  simp[vyperTypeCallGraphTheory.int_calls_expr_def] >>
+  rpt conj_tac >> goal_assum (drule_at Any)
+QED
