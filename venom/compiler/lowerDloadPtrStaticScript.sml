@@ -2,7 +2,7 @@ Theory lowerDloadPtrStatic
 Ancestors
   o1ContractLowerDload o1PassContract ptrDiscipline lowerDloadDefs
   venomPassSchedule list lowerDloadPtrClosure pointerConfinedDefs memLocDefs
-  pred_set venomInst mem2varBlockSimHelpers irSupply
+  pred_set venomInst mem2varBlockSimHelpers irSupply venomFnScheduleRunner
 
 (* A stage-level lifting boundary, also retaining the source membership
    required by consumers whose property depends on the input context. *)
@@ -214,4 +214,48 @@ Proof
   simp[lower_dload_function_supply_def, AllCaseEqs(), fn_insts_def] >>
   rpt strip_tac >> gvs[] >>
   metis_tac[lower_dload_blocks_supply_reserved_alloca]
+QED
+
+Theorem lower_dload_function_supply_scratch_fresh:
+  lower_dload_function_supply s f = (g,t) /\ ir_supply_covers_fn s f ==>
+  DISJOINT (alloca_roots g DIFF alloca_roots f) (set (fn_ir_vars f))
+Proof
+  simp[DISJOINT_DEF, EXTENSION, alloca_roots_def] >> rpt strip_tac >>
+  gvs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >>
+  metis_tac[lower_dload_function_supply_reserved_alloca]
+QED
+
+Theorem lower_dload_function_supply_alloca_roots:
+  lower_dload_function_supply s f = (g,t) ==>
+  alloca_roots f SUBSET alloca_roots g
+Proof
+  simp[alloca_roots_def, SUBSET_DEF] >> rpt strip_tac >>
+  qexists_tac `inst` >> simp[] >>
+  irule lower_dload_function_supply_retained >> simp[] >>
+  qexistsl [`f`,`s`,`t`] >> simp[]
+QED
+
+Theorem lower_dload_function_supply_ptr_roots:
+  lower_dload_function_supply s f = (g,t) ==>
+  ptr_roots P g = ptr_roots P f UNION alloca_roots g
+Proof
+  strip_tac >>
+  `g.fn_name = f.fn_name` by
+    gvs[lower_dload_function_supply_def, AllCaseEqs()] >>
+  `alloca_roots f SUBSET alloca_roots g` by
+    metis_tac[lower_dload_function_supply_alloca_roots] >>
+  simp[ptr_roots_def, EXTENSION] >> gen_tac >> eq_tac
+  >- (strip_tac >> simp[]
+      >- (drule_all lower_dload_function_supply_member >> strip_tac >>
+          `inst = i` by metis_tac[lower_dload_inst_supply_kept_dalloca] >>
+          gvs[] >> metis_tac[])
+      >- (metis_tac[lower_dload_function_supply_control, MEM])) >>
+  strip_tac >> simp[]
+  >- metis_tac[SUBSET_DEF]
+  >- (disj1_tac >> disj2_tac >> qexists_tac `inst` >> simp[] >>
+      irule lower_dload_function_supply_retained >> simp[] >>
+      qexistsl [`f`,`s`,`t`] >> simp[]) >>
+  disj2_tac >> qexistsl [`inst`,`idx`] >> simp[] >>
+  irule lower_dload_function_supply_retained >> simp[] >>
+  qexistsl [`f`,`s`,`t`] >> simp[]
 QED
