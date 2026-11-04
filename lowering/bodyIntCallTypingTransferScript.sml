@@ -108,3 +108,48 @@ Theorem well_typed_named_exprs_permission_transfer:
 Proof
   strip_tac >> gvs[] >> irule (cj 6 typing_permission_transfer) >> simp[]
 QED
+
+Theorem type_place_expr_permission_compatible:
+  !x env m vt vt'.
+    type_place_expr env x = SOME vt /\
+    type_place_expr (env with var_assignable := m) x = SOME vt' ==>
+    vt = vt'
+Proof
+  measureInduct_on `expr_size x` >> Cases_on `x` >>
+  simp[well_typed_expr_def, AllCaseEqs()] >> rpt strip_tac
+  >~ [`type_place_expr _ (TopLevelName _ p) = _`]
+  >- (PairCases_on `p` >> gvs[well_typed_expr_def, AllCaseEqs()]) >>
+  gvs[well_typed_expr_def, AllCaseEqs()] >>
+  first_x_assum (qspec_then `e` mp_tac) >> simp[] >>
+  disch_then drule_all >> strip_tac >> gvs[]
+QED
+
+Theorem typed_place_expr_permission_eq:
+  !x env m.
+    (!n. FLOOKUP env.var_assignable n = SOME T ==> FLOOKUP m n = SOME T) /\
+    well_typed_expr env x ==>
+    type_place_expr (env with var_assignable := m) x = type_place_expr env x
+Proof
+  measureInduct_on `expr_size x` >> Cases_on `x` >>
+  simp[well_typed_expr_def] >> rpt strip_tac
+  >~ [`type_place_expr _ (TopLevelName _ p)`]
+  >- (PairCases_on `p` >> simp[well_typed_expr_def])
+  >- (`well_typed_expr (env with var_assignable := m) e0` by
+        (irule (cj 1 typing_permission_transfer) >> simp[]) >>
+      first_x_assum (qspec_then `e` mp_tac) >>
+      simp[] >> disch_then drule_all >> simp[]) >>
+  `well_typed_expr (env with var_assignable := m) e0` by
+    (irule (cj 1 typing_permission_transfer) >> simp[]) >>
+  drule_all (cj 2 typing_permission_transfer) >> simp[]
+QED
+
+Theorem typed_expr_no_hashmap_permission_transfer:
+  env' = env with var_assignable := m /\
+  (!n. FLOOKUP env.var_assignable n = SOME T ==> FLOOKUP m n = SOME T) /\
+  well_typed_expr env x /\
+  ~(?kt vt. type_place_expr env x = SOME (HashMapT kt vt)) ==>
+  ~(?kt vt. type_place_expr env' x = SOME (HashMapT kt vt))
+Proof
+  strip_tac >> gvs[] >>
+  drule_all typed_place_expr_permission_eq >> simp[]
+QED
