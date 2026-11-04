@@ -10,9 +10,6 @@
  *
  *   raw_mem_ok              below the alloca frontier; S3's output
  *                           (raw_unit_memory_ok is mem_inv raw_mem_ok)
- *   site_mem_ok             raw_mem_ok, and every access inside one
- *                           registered alloca site of the current frame;
- *                           what ConcretizeMemLoc's relocation consumes
  *   static_mem_ok eom       below a static layout end; after ConcretizeMemLoc
  *   lowered_mem_ok eom fmp  static, or at or above the initial free-memory
  *                           pointer; after FmpLowering, what codegen consumes
@@ -24,11 +21,11 @@
  * (mem_inv_codegen_obligations).
  *
  * TOP-LEVEL:
- *   inst_mem_ranges, mem_inv, raw_mem_ok, site_mem_ok, static_mem_ok,
- *   lowered_mem_ok, step_write_footprint   - definitions
+ *   inst_mem_ranges, mem_inv, raw_mem_ok, static_mem_ok, lowered_mem_ok,
+ *   step_write_footprint                   - definitions
  *   raw_unit_memory_ok_mem_inv              - S3's statement is the raw phase
  *   mem_inv_raw_reachable                   - the witness is raw_reachable
- *   mem_inv_mono, site_mem_ok_raw, static_mem_ok_lowered
+ *   mem_inv_mono, static_mem_ok_lowered
  *   mem_inv_transport                       - transport along a simulation
  *   mem_inv_codegen_obligations             - what codegen consumes
  *)
@@ -54,45 +51,42 @@ Definition mem_inv_def:
           !fn inst s. Inv ctx fn inst s ==> M ctx fn inst s
 End
 
-(* Raw phase: the frontier fits a word and every access is below it. *)
+(* Raw phase: the frontier fits a word and every access is below it, or
+   part of a revert forwarding (inst_mem_ok_in_fn). *)
 Definition raw_mem_ok_def:
   raw_mem_ok (ctx:venom_context) (fn:ir_function) inst s <=>
-    s.vs_alloca_next < dimword (:256) /\ inst_mem_below_frontier inst s
+    s.vs_alloca_next < dimword (:256) /\ inst_mem_ok_in_fn fn inst s
 End
 
-(* Raw phase with provenance: the frame's sites are disjoint and below the
-   frontier, and every access lies inside one of them. *)
-Definition site_mem_ok_def:
-  site_mem_ok ctx fn inst s <=>
-    raw_mem_ok ctx fn inst s /\ alloca_inv s /\
-    EVERY (\(off,len). len = 0 \/
-             ?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
-                        b <= off /\ off + len <= b + sz)
-      (inst_mem_ranges inst s)
-End
-
-(* Static phase: every access is below the static layout end. *)
+(* Static phase: every access is below the static layout end, or part of
+   a revert forwarding. *)
 Definition static_mem_ok_def:
   static_mem_ok eom (ctx:venom_context) (fn:ir_function) inst s <=>
+    in_revert_forward fn s \/
     EVERY (\(off,len). len = 0 \/ off + len <= eom) (inst_mem_ranges inst s)
 End
 
-(* Lowered phase: every access is static or dynamic, never in [eom, fmp). *)
+(* Lowered phase: every access is static or dynamic, never in [eom, fmp),
+   or part of a revert forwarding. *)
 Definition lowered_mem_ok_def:
   lowered_mem_ok eom fmp (ctx:venom_context) (fn:ir_function) inst s <=>
+    in_revert_forward fn s \/
     EVERY (\(off,len). len = 0 \/ off + len <= eom \/ fmp <= off)
       (inst_mem_ranges inst s)
 End
 
-(* A step from a reachable state changes a byte only inside a write range
-   of a reachable instruction: its own, or for INVOKE one the callee runs. *)
+(* A step from a reachable state outside a revert forwarding changes a
+   byte only inside a write range of a reachable instruction outside one:
+   its own, or for INVOKE one the callee runs (a callee that forwards a
+   revert reverts, so the INVOKE does not step OK). *)
 Definition step_write_footprint_def:
   step_write_footprint ctx vs <=>
     !fn inst s s' fuel i.
-      raw_reachable vs ctx fn inst s /\ step_inst fuel ctx inst s = OK s' /\
+      raw_reachable vs ctx fn inst s /\ ~in_revert_forward fn s /\
+      step_inst fuel ctx inst s = OK s' /\
       read_byte i s.vs_memory <> read_byte i s'.vs_memory ==>
       ?fn2 inst2 s2 off len.
-        raw_reachable vs ctx fn2 inst2 s2 /\
+        raw_reachable vs ctx fn2 inst2 s2 /\ ~in_revert_forward fn2 s2 /\
         MEM (off,len) (source_memory_write_ranges inst2 s2) /\
         off <= i /\ i < off + len
 End
@@ -129,12 +123,6 @@ Proof
   rw[mem_inv_def] >> metis_tac[]
 QED
 
-Theorem site_mem_ok_raw:
-  site_mem_ok ctx fn inst s ==> raw_mem_ok ctx fn inst s
-Proof
-  simp[site_mem_ok_def]
-QED
-
 Theorem static_mem_ok_lowered:
   static_mem_ok eom ctx fn inst s ==> lowered_mem_ok eom fmp ctx fn inst s
 Proof
@@ -166,7 +154,7 @@ QED
 (* ===== What codegen consumes ===== *)
 
 Theorem lowered_mem_ok_range[local]:
-  lowered_mem_ok eom fmp ctx fn inst s /\
+  lowered_mem_ok eom fmp ctx fn inst s /\ ~in_revert_forward fn s /\
   MEM (off,len) (inst_mem_ranges inst s) ==>
   len = 0 \/ off + len <= eom \/ fmp <= off
 Proof
@@ -174,21 +162,19 @@ Proof
 QED
 
 Theorem lowered_reads_disjoint[local]:
-  lowered_mem_ok eom fmp ctx fn inst s /\
+  lowered_mem_ok eom fmp ctx fn inst s /\ ~in_revert_forward fn s /\
   (!r. MEM r cp.cp_regions ==> eom <= r.sr_spill_base /\ r.sr_spill_end <= fmp) ==>
   source_memory_reads_disjoint cp inst s
 Proof
-  rw[source_memory_reads_disjoint_def, source_memory_read_byte_def,
-     context_spill_byte_def] >>
-  CCONTR_TAC >> fs[] >>
-  rename1 `byte_in_memory_range rng i` >> PairCases_on `rng` >>
-  fs[byte_in_memory_range_def] >>
-  `MEM (rng0,rng1) (inst_mem_ranges inst s)` by simp[inst_mem_ranges_def] >>
-  drule_all lowered_mem_ok_range >> res_tac >> decide_tac
+  rw[source_memory_reads_disjoint_def, EVERY_MEM, FORALL_PROD] >>
+  rename1 `MEM (off,len) (source_memory_read_ranges inst s)` >>
+  `MEM (off,len) (inst_mem_ranges inst s)` by simp[inst_mem_ranges_def] >>
+  drule_all lowered_mem_ok_range >> strip_tac >> simp[] >>
+  disj2_tac >> rpt strip_tac >> res_tac >> decide_tac
 QED
 
 Theorem lowered_writes_disjoint[local]:
-  lowered_mem_ok eom fmp ctx fn inst s /\
+  lowered_mem_ok eom fmp ctx fn inst s /\ ~in_revert_forward fn s /\
   (!r. MEM r cp.cp_regions ==> eom <= r.sr_spill_base /\ r.sr_spill_end <= fmp) ==>
   context_source_memory_writes_disjoint cp inst s
 Proof
@@ -204,7 +190,8 @@ Theorem lowered_spill_step_safe[local]:
   (!fn inst s. raw_reachable vs ctx fn inst s ==>
                lowered_mem_ok eom fmp ctx fn inst s) /\
   (!r. MEM r cp.cp_regions ==> eom <= r.sr_spill_base /\ r.sr_spill_end <= fmp) /\
-  raw_reachable vs ctx fn inst s /\ step_inst fuel ctx inst s = OK s' ==>
+  raw_reachable vs ctx fn inst s /\ ~in_revert_forward fn s /\
+  step_inst fuel ctx inst s = OK s' ==>
   context_spill_step_safe cp s s'
 Proof
   rw[context_spill_step_safe_def, context_spill_byte_def] >>

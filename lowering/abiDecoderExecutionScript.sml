@@ -41,16 +41,16 @@ Proof
     (Cases_on `src` >> gvs[eval_operand_def, lookup_var_update_var]) >>
   `step_inst_base (mk_inst id MLOAD [ip] [iv]) s =
      OK (update_var iv (n2w i) s)` by
-    simp[Once step_inst_base_def, exec_read1_def, mk_inst_def] >>
+    simp[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def] >>
   `step_inst_base (mk_inst (id+1) opc [src] [cv])
       (update_var iv (n2w i) s) =
      OK (update_var cv (n2w ncount) (update_var iv (n2w i) s))` by
     (drule_all abi_decode_read_step >> simp[abi_decode_load_update]) >>
   `i < dimword(:256)` by decide_tac >>
   simp[abi_decode_header_insts_def, run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
        eval_operand_def, lookup_var_update_var, w2n_n2w] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure1_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def,
        eval_operand_def, lookup_var_update_var, abi_decode_header_state_def] >>
   Cases_on `i < ncount` >> simp[bool_to_word_def]
 QED
@@ -80,7 +80,7 @@ Proof
        abi_decode_source_opcode_def] >>
   strip_tac >> simp[] >>
   simp[Once exec_block_def, get_instruction_def, abi_decode_header_insts_def] >>
-  simp[step_inst_def, Once step_inst_base_def, mk_inst_def,
+  simp[step_inst_def, step_inst_base_opcode_eqs, mk_inst_def,
        abi_decode_header_state_def, eval_operand_def, lookup_var_update_var] >>
   Cases_on `i < ncount` >>
   simp[bool_to_word_def, lookup_var_def, update_var_def,
@@ -118,8 +118,8 @@ Proof
     (Cases_on `ip` >> gvs[eval_operand_def, lookup_var_update_var]) >>
   drule_all abi_decode_loop_increment_word >> strip_tac >>
   simp[abi_decode_backedge_insts_def, run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_write2_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
        eval_operand_update_var, eval_operand_lit]
 QED
 
@@ -140,7 +140,7 @@ Proof
   strip_tac >> simp[] >>
   simp[Once exec_block_def, get_instruction_def, abi_decode_backedge_insts_def,
        listTheory.EL_APPEND_EQN] >>
-  simp[step_inst_def, Once step_inst_base_def, mk_inst_def, is_terminator_def,
+  simp[step_inst_def, step_inst_base_opcode_eqs, mk_inst_def, is_terminator_def,
        jump_to_def, mstore_def, update_var_def]
 QED
 

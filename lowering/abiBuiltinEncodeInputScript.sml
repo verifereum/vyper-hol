@@ -9,7 +9,7 @@ Ancestors
 Definition abi_builtin_encode_pre_def:
   abi_builtin_encode_pre ei at av st method_id_opt src sb source_cap p maxlen first last b cap s <=>
     let mid_size = case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4 in
-    let outsz = maxlen+32+mid_size in
+    let outsz = 32+32*word_size (maxlen+mid_size) in
     abi_encoder_input ei at av sb source_cap s.vs_memory /\
     eval_operand src s = SOME (n2w sb) /\ abi_decoder_operand_live st.cs_next_var src /\
     sb+source_cap < dimword (:256) /\ p+outsz < dimword (:256) /\ LENGTH (enc at av) <= maxlen /\
@@ -26,13 +26,12 @@ Theorem abi_builtin_encode_pre_none:
   abi_builtin_encode_pre ei at av st NONE src sb source_cap p maxlen first last b cap s <=>
   abi_builtin_encode_no_method_pre ei at av st src sb source_cap p maxlen first last b cap s
 Proof
-  simp[abi_builtin_encode_pre_def, abi_builtin_encode_no_method_pre_def, LET_THM,
-    AC ADD_COMM ADD_ASSOC]
+  simp[abi_builtin_encode_pre_def, abi_builtin_encode_no_method_pre_def, LET_THM]
 QED
 
 Theorem abi_builtin_encode_method_ready:
   abi_builtin_encode_pre ei at av st (SOME mid) src sb source_cap p maxlen first last b cap initial /\
-  abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id (maxlen+36) p 32 initial prepared /\
+  abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id (32+32*word_size (maxlen+4)) p 32 initial prepared /\
   eval_operand dst prepared = SOME (n2w (p+36)) /\
   st.cs_next_var <= ready.cs_next_var /\ abi_decoder_operand_live ready.cs_next_var dst ==>
   abi_encoder_pre ei at av ready src dst sb source_cap (p+36) b cap prepared /\
@@ -44,7 +43,7 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE (srw_ss())
       [abi_builtin_encode_pre_def, LET_THM, GSYM ADD_ASSOC]) >>
   mp_tac (Q.INST [`next` |-> `st.cs_next_var`, `site` |-> `st.cs_next_id`,
-    `outsz` |-> `maxlen+36:num`, `write_size` |-> `32:num`,
+    `outsz` |-> `32+32*word_size (maxlen+4):num`, `write_size` |-> `32:num`,
     `s` |-> `initial:venom_state`, `t` |-> `prepared:venom_state`]
     abi_builtin_encode_setup_frame_input) >>
   impl_tac >- (asm_simp_tac bool_ss [] >> decide_tac) >> strip_tac >>
@@ -56,5 +55,6 @@ Proof
     (first_x_assum irule >> asm_simp_tac bool_ss []) >>
   `abi_decoder_operand_live ready.cs_next_var src` by
     (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> asm_simp_tac bool_ss []) >>
+  mp_tac (Q.SPEC `maxlen+4` abi_builtin_word_size_capacity) >>
   asm_simp_tac (srw_ss()) [abi_encoder_pre_def] >> decide_tac
 QED

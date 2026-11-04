@@ -165,7 +165,8 @@ Theorem step_inst_base_ok_halted:
     step_inst_base inst st = OK st' ==>
     st'.vs_halted = st.vs_halted
 Proof
-  rw[step_inst_base_def] >>
+  rpt strip_tac >> Cases_on `inst.inst_opcode` >>
+  stepInstBaseLib.with_opcode_clause fs >>
   gvs[AllCaseEqs()] >>
   TRY (imp_res_tac exec_pure1_ok_halted >> gvs[] >> NO_TAC) >>
   TRY (imp_res_tac exec_pure2_ok_halted >> gvs[] >> NO_TAC) >>

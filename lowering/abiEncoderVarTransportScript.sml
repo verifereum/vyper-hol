@@ -4,6 +4,16 @@ Ancestors
   abiDecoderVarSequence abiDecoderVarExtend abiEncoderObserver
   execEquivParamDefs execEquivParamProps stateEquiv venomExecSemantics venomState list
 
+(* Select the exported guarded opcode equation before simplifying its runner. *)
+fun encoder_rewrite_opcode eq = let
+  val opc = rhs (concl eq)
+  fun opcode_of th = rhs (#1 (dest_imp (#2 (strip_forall (concl th)))))
+  val branch = valOf (List.find (fn th => aconv (opcode_of th) opc)
+    (CONJUNCTS step_inst_base_opcode_eqs))
+in
+  PURE_ONCE_REWRITE_TAC [MATCH_MP branch eq]
+end;
+
 Theorem abi_encoder_vars_extend_prev:
   abi_decoder_vars_extend extras s t ==> s.vs_prev_bb = t.vs_prev_bb
 Proof
@@ -102,7 +112,7 @@ Proof
   Cases_on `inst.inst_opcode` >>
   gvs[abi_encoder_ignored_inputs_def, abi_decoder_reentry_opcode_def] >>
   qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
-  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+  qpat_assum `inst.inst_opcode = _` encoder_rewrite_opcode >>
   rpt strip_tac
   >>~- ([`exec_pure1 f inst s = OK u`],
         drule abi_decoder_pure1_inputs >> simp[])

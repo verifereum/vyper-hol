@@ -127,7 +127,7 @@ Theorem compile_abi_encode_memory_source:
     val_in_memory (BaseTV (BytesT (Dynamic (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))))
       (BytesV bytes) p actual.vs_memory /\
     abi_builtin_encode_effect first last ready final limit_st p
-      (maxlen+32+LENGTH (abi_encode_method_id_bytes method_id))
+      (32+32*word_size (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))
       (case method_id of NONE => 0 | SOME _ => 32) b cap prepared actual /\
     actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -364,7 +364,7 @@ Theorem compile_abi_encode_word_source:
     val_in_memory (BaseTV (BytesT (Dynamic (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))))
       (BytesV bytes) p actual.vs_memory /\
     abi_builtin_encode_staged_effect first last arg_st final limit_st sb 32 p
-      (maxlen+32+LENGTH (abi_encode_method_id_bytes method_id))
+      (32+32*word_size (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))
       (case method_id of NONE => 0 | SOME _ => 32) b cap prepared actual /\
     actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -389,7 +389,7 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   rename1 `abi_decode_sim ctx func staged_state actual` >>
   `abi_builtin_encode_staged_effect first last arg_st final limit_st sb 32 p
-    (abi_size_bound ce.ce_struct_fields (expr_type e)+32+LENGTH (abi_encode_method_id_bytes method_id))
+    (32+32*word_size (abi_size_bound ce.ce_struct_fields (expr_type e)+LENGTH (abi_encode_method_id_bytes method_id)))
     (case method_id of NONE => 0 | SOME _ => 32) b cap prepared actual` by
     (irule abi_builtin_encode_producer_compose >>
      qexistsl_tac [`staged_state`, `staged`] >> asm_simp_tac bool_ss [] >> decide_tac) >>

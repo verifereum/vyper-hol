@@ -16,7 +16,7 @@
  *   compile_raise_code_reason_frag   — raise with such a reason
  *   compile_assert_code_reason_frag  — assert with such a reason
  *
- * Helper: code_offset_insts, code_copy_insts, code_copy_frag,
+ * Helper: code_copy_frag,
  *   code_alloc_frag, unwrap_code_reason_defined_frag,
  *   unwrap_code_reason_var, code_reason_tail_known,
  *   compile_revert_code_reason_frag, reason_code_expr_revert_frag,
@@ -26,7 +26,7 @@
 Theory stmtSimReasonCode
 Ancestors
   list rich_list finite_map
-  fragExec varsExt freshWrites exprSim exprSimUnwrap exprSimStorageCopy
+  fragExec varsExt freshWrites exprSim exprSimUnwrap exprSimCopy exprSimStorageCopy
   exprOperandVar stmtSim stmtSimIf stmtSimReason stmtSimReasonExpr
   stmtSimReasonStorage exprReasonOperand immutableCopyExecution
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
@@ -36,51 +36,6 @@ Libs
   monadsyntax
 
 (* ===== The copy out of code ===== *)
-
-Theorem code_offset_insts[local]:
-  !op off st r st'.
-    compile_lit_byte_offset op off st = (r,st') ==>
-    EVERY (\i. i.inst_opcode = ADD) (emitted_insts st st')
-Proof
-  rpt gen_tac >> Cases_on `off = 0`
-  >- simp[compile_lit_byte_offset_def, comp_return_def, emitted_insts_def] >>
-  Cases_on `op` >>
-  simp[compile_lit_byte_offset_def, comp_return_def, emitted_insts_def] >>
-  strip_tac >> imp_res_tac emitted_insts_emit_op >>
-  gvs[emitted_insts_def, mk_inst_def]
-QED
-
-(* At runtime the copy emits, in the current block, ADDs for the offsets,
-   DLOADs and MSTOREs. *)
-Theorem code_copy_insts[local]:
-  !n imm src dst off sa sb.
-    compile_imm_copy_to_memory F imm src dst n off sa = ((),sb) ==>
-    same_blocks sa sb /\
-    ?is. sb.cs_current_insts = sa.cs_current_insts ++ is /\
-         EVERY (\i. MEM i.inst_opcode [ADD; DLOAD; MSTORE]) is
-Proof
-  Induct
-  >- simp[compile_imm_copy_to_memory_def, comp_return_def, same_blocks_def] >>
-  rpt gen_tac >>
-  simp[compile_imm_copy_to_memory_def, compile_imm_load_word_runtime,
-       comp_bind_def, comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  rename1 `compile_lit_byte_offset src off sa = (sop, s1)` >>
-  rename1 `emit_op DLOAD [sop] s1 = (v, s2)` >>
-  rename1 `compile_lit_byte_offset dst off s2 = (dop, s3)` >>
-  rename1 `emit_void MSTORE [dop; v] s3 = (u, s4)` >>
-  Cases_on `u` >>
-  first_x_assum drule >> strip_tac >>
-  imp_res_tac immutable_byte_offset_extends >>
-  imp_res_tac code_offset_insts >>
-  imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
-  imp_res_tac emitted_insts_emit_void >>
-  gvs[same_blocks_def] >>
-  conj_tac
-  >- gvs[emit_void_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
-         comp_return_def, fresh_id_def, emit_def] >>
-  fs[EVERY_MEM]
-QED
 
 (* The copy runs and keeps every variable bound before it. *)
 Theorem code_copy_frag[local]:

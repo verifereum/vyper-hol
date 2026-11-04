@@ -1423,7 +1423,7 @@ Proof
 QED
 
 (* eval_operand agrees for non-pv operands under CR *)
-Theorem cr_eval_operand_non_pv:
+Triviality cr_eval_operand_non_pv:
   !amap fn livesets init s1 s2.
     concretize_rel amap fn livesets init s1 s2 ==>
     !op. (!v. op = Var v ==> v NOTIN pointer_derived_vars fn (FDOM amap)) ==>
@@ -2170,7 +2170,7 @@ Proof
 QED
 
 (* CR pv clause: extract displacement + containment for a pv Var *)
-Theorem cr_pv_var_displacement:
+Triviality cr_pv_var_displacement:
   !amap fn livesets init s1 s2 v.
     concretize_rel amap fn livesets init s1 s2 /\
     v IN pointer_derived_vars fn (FDOM amap) /\
@@ -2189,7 +2189,7 @@ Proof
 QED
 
 (* CR pv clause: if pv var is NONE on s1, it's NONE on s2 *)
-Theorem cr_pv_var_none:
+Triviality cr_pv_var_none:
   !amap fn livesets init s1 s2.
     concretize_rel amap fn livesets init s1 s2 ==>
     !v. v IN pointer_derived_vars fn (FDOM amap) ==>
@@ -2764,7 +2764,8 @@ Proof
    s1.vs_return_pc_token = s2.vs_return_pc_token /\
    s1.vs_pending_deletions = s2.vs_pending_deletions` by
     fs[concretize_rel_def, LET_THM] >>
-  `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests` by
+  `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests /\
+   s1.vs_pending_deletions = s2.vs_pending_deletions` by
     fs[concretize_rel_def, LET_THM] >>
   (* Step 5: case split on opcode — SSTORE, TSTORE, STOP, SINK,
      INVALID, SELFDESTRUCT, RET remain (RETURN/REVERT eliminated by
@@ -3008,7 +3009,7 @@ Proof
 QED
 
 (* Helper: word displacement equation implies nat displacement equation *)
-Theorem word_displ_to_nat:
+Triviality word_displ_to_nat:
   !w1 w2 (addr:bytes32) orig_off sz.
     w1 - n2w orig_off = w2 - addr /\
     orig_off <= w2n w1 /\ w2n w1 < orig_off + sz /\
@@ -3822,17 +3823,10 @@ Triviality concretize_rel_mem_update:
     concretize_rel amap fn livesets init
       (s1 with vs_memory := m1') (s2 with vs_memory := m2')
 Proof
-  rpt strip_tac >>
   simp[concretize_rel_def, LET_THM, lookup_var_def,
-       allocas_non_overlapping_def] >>
-  qpat_x_assum `concretize_rel _ _ _ _ _ _` mp_tac >>
-  simp[concretize_rel_def, LET_THM, lookup_var_def,
-       allocas_non_overlapping_def] >>
-  rpt strip_tac >>
-  fs[concretize_rel_def, LET_THM, lookup_var_def, allocas_non_overlapping_def,
-     in_alloca_region_def, in_concrete_region_def, mem_byte_at_def] >>
-  rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac) >>
-  res_tac >> fs[]
+       allocas_non_overlapping_def, concretize_frame_def,
+       in_alloca_region_def] >>
+  metis_tac[]
 QED
 
 (* mstore is write_memory_with_expansion with word_to_bytes *)
@@ -3874,14 +3868,6 @@ Proof
   fs[mem_write_tail_non_pv_def, LET_THM] >>
   first_x_assum (qspecl_then [`bb`, `inst`, `v`] mp_tac) >>
   simp[memLocDefsTheory.mem_write_ops_def]
-QED
-
-Triviality mstore8_as_wmwe:
-  !off val s.
-    mstore8 off val s = write_memory_with_expansion off [w2w val : word8] s
-Proof
-  rpt strip_tac >>
-  simp[mstore8_def, write_memory_with_expansion_def, LET_THM]
 QED
 
 (* Helper: MSTORE8 value operand is non-pv *)
@@ -4798,7 +4784,7 @@ Proof
   gvs[lift_result_def] >>
   `?val. eval_operand op_val s2 = SOME val` by metis_tac[] >>
   gvs[lift_result_def] >>
-  simp[mstore8_as_wmwe] >>
+  simp[venomMemPropsTheory.mstore8_eq_write_mem] >>
   ONCE_REWRITE_TAC[wmwe_as_mem_update] >>
   irule concretize_rel_mem_update >> rpt conj_tac
   >- (
@@ -5736,7 +5722,7 @@ Proof
 QED
 
 (* concretize_rel preserved by any vs_inst_idx update on both sides *)
-Theorem concretize_rel_update_inst_idx:
+Triviality concretize_rel_update_inst_idx:
   !amap fn livesets init s1 s2 n m.
     concretize_rel amap fn livesets init s1 s2 ==>
     concretize_rel amap fn livesets init
@@ -5801,7 +5787,7 @@ QED
 
 (* Under all_allocas_mapped + fn_inst_wf + no input NOPs,
    clear_nops_block (bmt (ci amap) bb) = bmt (ci amap) bb *)
-Theorem clear_nops_bmt_identity:
+Triviality clear_nops_bmt_identity:
   !amap fn bb.
     all_allocas_mapped fn amap /\ fn_inst_wf fn /\
     MEM bb fn.fn_blocks /\
@@ -5831,7 +5817,7 @@ Proof
   Cases >> simp[is_alloca_op_def]
 QED
 
-Theorem concretize_inst_is_terminator:
+Triviality concretize_inst_is_terminator:
   !amap inst.
     is_terminator (concretize_inst amap inst).inst_opcode <=>
     is_terminator inst.inst_opcode
@@ -5870,7 +5856,7 @@ Proof
   simp[phi_prefix_length_def, concretize_inst_phi_iff]
 QED
 
-Theorem concretize_eval_phis_same_state:
+Triviality concretize_eval_phis_same_state:
   !amap s insts.
     eval_phis s (MAP (concretize_inst amap) insts) = eval_phis s insts
 Proof
@@ -5878,7 +5864,7 @@ Proof
   simp[eval_phis_def, concretize_inst_phi_iff, concretize_inst_phi_identity]
 QED
 
-Theorem concretize_bmt_phi_prefix_length:
+Triviality concretize_bmt_phi_prefix_length:
   !amap bb.
     phi_prefix_length
       (block_map_transform (concretize_inst amap) bb).bb_instructions =
@@ -6178,7 +6164,7 @@ Proof
   irule cr_update_var_non_pv >> simp[]
 QED
 
-Theorem concretize_eval_phis_rel:
+Triviality concretize_eval_phis_rel:
   !amap fn livesets init bb insts s1 s2.
     ssa_form fn /\ amap_from_allocas fn amap /\ fn_inst_wf fn /\
     concretize_pointer_confined fn amap /\ phi_pv_all_var fn (FDOM amap) /\
@@ -6267,7 +6253,7 @@ Proof
 QED
 
 (* alloca_inv preserved by vs_inst_idx update *)
-Theorem alloca_inv_update_inst_idx:
+Triviality alloca_inv_update_inst_idx:
   !s n. alloca_inv s ==> alloca_inv (s with vs_inst_idx := n)
 Proof
   rw[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def]
@@ -6345,7 +6331,7 @@ Proof
 QED
 
 (* alloca_overflow_safe preserved by vs_inst_idx update *)
-Theorem alloca_overflow_safe_update_inst_idx:
+Triviality alloca_overflow_safe_update_inst_idx:
   !fn amap s n.
     alloca_overflow_safe fn amap s ==>
     alloca_overflow_safe fn amap (s with vs_inst_idx := n)
@@ -6385,7 +6371,7 @@ QED
 
 (* Helper: alloca step through step_inst (not step_inst_base).
    Wraps concretize_step_alloca_assign with step_inst_non_invoke. *)
-Theorem alloca_step_inst_sim:
+Triviality alloca_step_inst_sim:
   !inst bb amap fn livesets init s1 s2 fuel ctx.
     fn_inst_wf fn /\ ssa_form fn /\ fn_inst_ids_distinct fn /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
@@ -6457,7 +6443,7 @@ Proof
 QED
 
 (* alloca_sizes_match preserved by step_inst for non-INVOKE instructions *)
-Theorem alloca_sizes_match_step_inst:
+Triviality alloca_sizes_match_step_inst:
   !fuel ctx inst s s' fn bb.
     step_inst fuel ctx inst s = OK s' /\
     inst.inst_opcode <> INVOKE /\
@@ -6498,7 +6484,7 @@ Proof
   rw[concretize_rel_def, LET_THM]
 QED
 
-Theorem alloca_sizes_match_update_inst_idx:
+Triviality alloca_sizes_match_update_inst_idx:
   !fn s n.
     alloca_sizes_match fn s ==>
     alloca_sizes_match fn (s with vs_inst_idx := n)
@@ -6506,7 +6492,7 @@ Proof
   rw[alloca_sizes_match_def]
 QED
 
-Theorem alloca_write_before_read_update_inst_idx:
+Triviality alloca_write_before_read_update_inst_idx:
   !fn roots livesets init s n.
     alloca_write_before_read fn roots livesets init s ==>
     alloca_write_before_read fn roots livesets init (s with vs_inst_idx := n)
@@ -6520,7 +6506,7 @@ Proof
   Cases_on `op` >> rw[eval_operand_def, lookup_var_def]
 QED
 
-Theorem alloca_safe_access_update_inst_idx:
+Triviality alloca_safe_access_update_inst_idx:
   !fn roots s n.
     alloca_safe_access fn roots s ==>
     alloca_safe_access fn roots (s with vs_inst_idx := n)
@@ -6529,7 +6515,7 @@ Proof
      eval_operand_update_inst_idx]
 QED
 
-Theorem concrete_allocas_non_overlapping_update_inst_idx:
+Triviality concrete_allocas_non_overlapping_update_inst_idx:
   !amap fn s n.
     concrete_allocas_non_overlapping amap fn s ==>
     concrete_allocas_non_overlapping amap fn (s with vs_inst_idx := n)
@@ -6854,7 +6840,7 @@ val terminator_alloca_frame_tac =
   gvs[AllCaseEqs(), jump_to_def, halt_state_def, revert_state_def,
       set_returndata_def];
 
-Theorem step_terminator_ok_preserves_alloca_overflow_safe:
+Triviality step_terminator_ok_preserves_alloca_overflow_safe:
   !fuel ctx inst s s' fn amap.
     step_inst fuel ctx inst s = OK s' /\
     is_terminator inst.inst_opcode /\
@@ -6929,7 +6915,7 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem eval_phis_alloca_inv_update_inst_idx:
+Triviality eval_phis_alloca_inv_update_inst_idx:
   !s insts s' n.
     eval_phis s insts = OK s' /\ alloca_inv s ==>
     alloca_inv (s' with vs_inst_idx := n)
@@ -6950,7 +6936,7 @@ Proof
   rw[alloca_overflow_safe_def, fn_remaining_alloca_size_def] >> metis_tac[]
 QED
 
-Theorem eval_phis_alloca_overflow_safe_update_inst_idx:
+Triviality eval_phis_alloca_overflow_safe_update_inst_idx:
   !fn amap s insts s' n.
     eval_phis s insts = OK s' /\ alloca_overflow_safe fn amap s ==>
     alloca_overflow_safe fn amap (s' with vs_inst_idx := n)
@@ -6963,7 +6949,7 @@ Proof
   irule alloca_overflow_safe_update_vars >> simp[]
 QED
 
-Theorem eval_phis_alloca_write_before_read_update_inst_idx:
+Triviality eval_phis_alloca_write_before_read_update_inst_idx:
   !amap fn livesets init bb insts s s' n.
     ssa_form fn /\ amap_from_allocas fn amap /\ fn_inst_wf fn /\
     phi_pv_all_var fn (FDOM amap) /\ MEM bb fn.fn_blocks /\
@@ -6988,7 +6974,7 @@ Proof
   simp[]
 QED
 
-Theorem eval_phis_concrete_allocas_non_overlapping_update_inst_idx:
+Triviality eval_phis_concrete_allocas_non_overlapping_update_inst_idx:
   !amap fn s insts s' n.
     eval_phis s insts = OK s' /\ concrete_allocas_non_overlapping amap fn s ==>
     concrete_allocas_non_overlapping amap fn (s' with vs_inst_idx := n)
@@ -7000,7 +6986,7 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-Theorem eval_phis_alloca_sizes_match_update_inst_idx:
+Triviality eval_phis_alloca_sizes_match_update_inst_idx:
   !fn s insts s' n.
     eval_phis s insts = OK s' /\ alloca_sizes_match fn s ==>
     alloca_sizes_match fn (s' with vs_inst_idx := n)

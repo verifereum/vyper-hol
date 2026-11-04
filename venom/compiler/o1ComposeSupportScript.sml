@@ -9,10 +9,10 @@ Ancestors
   o1PassContract o1ScheduleDecomp o1PartialSchedule o1ScheduleDecompHelpers
   ctxLookupAgree
   venomCompilerWf
-  unitShapeDefs fcgPruning venomWf venomInst o1FnScheduleDecomp
+  unitShapeDefs fcgPruning venomWf venomInst o1FnScheduleDecomp stackPlanGen
   venomPipelineRunner venomPassDispatcher venomFnScheduleRunner
   fcgBridge fcgDefs fcgPostorder fcgAnalysisProps venomPipelineDriver
-  venomPassSchedule irSupply pred_set list rich_list
+  venomPassSchedule irSupply dretDesugarDefs pred_set list rich_list
 
 Theorem o1_ctx_shape_wf:
   o1_ctx_shape C ==> ctx_wf C /\ wf_invoke_targets C
@@ -58,11 +58,12 @@ Theorem source_member_shape:
   MEM fn u.cu_context.ctx_functions ==>
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\
   first_block_no_preds fn /\ first_block_no_phi fn /\
-  fn_invoke_ok (ctx_fn_names u.cu_context) fn
+  fn_invoke_ok (ctx_fn_names u.cu_context) fn /\ no_dret fn
 Proof
   rw[unit_wf_def, venom_wf_def, o1_source_unit_ok_def, unit_first_block_no_phi_def,
-     unit_shape_ok_def, EVERY_MEM, fn_invoke_ok_def] >>
-  gvs[wf_invoke_targets_def] >> metis_tac[]
+     unit_shape_ok_def, EVERY_MEM, fn_invoke_ok_def, no_dret_def] >>
+  gvs[wf_invoke_targets_def] >> res_tac >> gvs[raw_opcode_ok_def] >>
+  metis_tac[]
 QED
 
 Theorem source_entry_shape:
@@ -96,6 +97,92 @@ Proof
   first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
+(* ===== The label and PHI facts the source shape implies ===== *)
+
+Theorem bb_well_formed_terminator_last[local]:
+  bb_well_formed bb /\ MEM inst bb.bb_instructions /\
+  is_terminator inst.inst_opcode ==>
+  inst = LAST bb.bb_instructions
+Proof
+  rw[bb_well_formed_def, MEM_EL] >>
+  `n = PRE (LENGTH bb.bb_instructions)` by metis_tac[] >>
+  simp[LAST_EL]
+QED
+
+(* Outside INVOKE and PHI, a label operand is a jump target, LowerDload's
+   "code_end" or the deploy code's "runtime_begin". *)
+Theorem label_positions_ok_label[local]:
+  label_positions_ok inst /\ MEM (Label l) inst.inst_operands /\
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> PHI ==>
+  is_terminator inst.inst_opcode \/ l = "code_end" \/ l = "runtime_begin"
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_opcode = CODECOPY`
+  >- (qpat_x_assum `label_positions_ok _` mp_tac >>
+      simp[label_positions_ok_def, CasePreds ["list", "operand"]] >>
+      strip_tac >> gvs[EVERY_MEM] >> res_tac >>
+      fs[stackPlanTypesTheory.is_label_operand_def]) >>
+  qpat_x_assum `label_positions_ok _` mp_tac >>
+  simp[label_positions_ok_def] >>
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
+  rpt strip_tac
+  >~ [`inst.inst_opcode = ADD`]
+  >- (BasicProvers.every_case_tac >> gvs[EVERY_MEM] >> res_tac >>
+      fs[stackPlanTypesTheory.is_label_operand_def]) >>
+  gvs[EVERY_MEM] >> res_tac >>
+  fs[stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem source_fn_label_refs_ok[local]:
+  wf_function fn /\ EVERY inst_shape_ok (fn_insts fn) /\
+  EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts fn) ==>
+  fn_label_refs_ok fn
+Proof
+  rw[fn_label_refs_ok_def, EVERY_MEM] >>
+  `label_positions_ok inst /\ inst.inst_opcode <> PHI` by
+    (res_tac >> fs[inst_shape_ok_def, raw_opcode_ok_def]) >>
+  drule_all label_positions_ok_label >> strip_tac
+  >~ [`l = "code_end"`] >- gvs[reserved_label_def]
+  >~ [`l = "runtime_begin"`] >- gvs[reserved_label_def] >>
+  disj1_tac >>
+  gvs[fn_insts_def, fn_insts_blocks_MEM, wf_function_def,
+      fn_succs_closed_def] >>
+  first_x_assum irule >> qexists_tac `bb` >> simp[] >>
+  `inst = LAST bb.bb_instructions` by
+    metis_tac[bb_well_formed_terminator_last] >>
+  Cases_on `bb.bb_instructions` >> gvs[] >>
+  simp[bb_succs_def, get_successors_def, MEM_MAP, MEM_FILTER,
+       PULL_EXISTS] >>
+  qexists_tac `Label l` >> simp[venomStateTheory.get_label_def]
+QED
+
+(* unit_wf gives every block a terminator at its end and closes jumps
+   over the function's blocks; with o1_source_unit_ok's label positions
+   and no PHI, label operands are local and no first block has a PHI. *)
+Theorem o1_source_unit_label_refs_no_phi:
+  unit_wf u /\ o1_source_unit_ok u ==>
+  unit_label_refs_ok u /\ unit_first_block_no_phi u
+Proof
+  strip_tac >>
+  `!fn. MEM fn u.cu_context.ctx_functions ==>
+        wf_function fn /\ fn_shape_ok fn /\
+        EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts fn)` by
+    (rpt strip_tac >>
+     gvs[unit_wf_def, venom_wf_def, o1_source_unit_ok_def, unit_shape_ok_def,
+         EVERY_MEM] >> metis_tac[]) >>
+  conj_tac
+  >- (simp[unit_label_refs_ok_def, EVERY_MEM] >> rpt strip_tac >>
+      irule source_fn_label_refs_ok >> gvs[fn_shape_ok_def] >> metis_tac[]) >>
+  simp[unit_first_block_no_phi_def, EVERY_MEM, first_block_no_phi_def] >>
+  rpt strip_tac >> rename1 `MEM f u.cu_context.ctx_functions` >>
+  first_x_assum drule >>
+  rw[wf_function_def, fn_has_entry_def, fn_insts_def, EVERY_MEM,
+     raw_opcode_ok_def] >>
+  Cases_on `f.fn_blocks` >> gvs[fn_insts_blocks_def] >>
+  disj2_tac >> disj2_tac >> disj1_tac >>
+  simp[EXISTS_MEM] >> qexists_tac `inst` >> simp[]
+QED
+
 Theorem entry_shape_from_members:
   entry_fn_first C /\ EVERY (o1_fn_shape C) C.ctx_functions ==>
   entry_fn_no_ret (HD C.ctx_functions) /\
@@ -122,7 +209,7 @@ Proof
 QED
 
 Theorem o1_schedule_stages:
-  EVERY (o1_step_contract rp) passes /\
+  o1_step_contracts_from rp 0 passes /\
   run_named_fn_schedules execute_configured_fn_pass rp passes names u s =
     SOME (u',s') /\
   o1_ctx_shape u.cu_context /\
@@ -136,7 +223,8 @@ Theorem o1_schedule_stages:
       o1_ctx_shape (stage k) /\
       (stage k).ctx_entry = u.cu_context.ctx_entry /\
       (stage k).ctx_global_reserved = u.cu_context.ctx_global_reserved /\
-      ctx_fn_names (stage k) = ctx_fn_names u.cu_context) /\
+      ctx_fn_names (stage k) = ctx_fn_names u.cu_context /\
+      EVERY (o1_fn_row k) (stage k).ctx_functions) /\
     (!k. k < LENGTH passes ==>
       ctx_pass_stage rp (EL k passes) any_view (stage k) (stage (SUC k)) /\
       (callee_first names u.cu_context.ctx_functions ==>
@@ -152,9 +240,11 @@ Proof
   qexists_tac `stage_ctx u.cu_context chains` >>
   conj_tac >- (irule chain_facts_zero >> metis_tac[]) >>
   conj_tac >- simp[] >> conj_tac
-  >- (rpt strip_tac >>
-      drule_all chain_facts_stage_shape >>
-      simp[stage_ctx_def]) >>
+  >- (qx_gen_tac `k` >> disch_tac >>
+      `EVERY (o1_fn_row k) (stage_ctx u.cu_context chains k).ctx_functions` by
+        (irule stage_ctx_rows >> metis_tac[]) >>
+      drule_all chain_facts_stage_shape >> strip_tac >>
+      fs[stage_ctx_def]) >>
   qx_gen_tac `k` >> disch_tac >> drule_all chain_facts_stages >> simp[]
 QED
 
@@ -173,9 +263,42 @@ Proof
   `ALL_DISTINCT (ctx_fn_names u.cu_context)` by
     (drule o1_ctx_shape_wf >> simp[ctx_wf_def, ctx_distinct_fn_names_def]) >>
   fs[run_mapped_functions_def] >>
+  `o1_step_contracts_from rp 0 [pass]` by
+    simp[o1_step_contracts_from_def, o1_step_contract_at_plain] >>
   drule_at (Pos (el 2)) o1_schedule_stages >> simp[] >>
   strip_tac >> gvs[] >>
   first_x_assum (qspec_then `1` mp_tac) >> simp[]
+QED
+
+(* A run whose pass keeps every function's static layout keeps the
+ * context's spill base, which the static and lowered rows quantify over:
+ * every function's fn_eom is unchanged (fn_pass_effects_hold under
+ * FSLE_Preserve) and so is the global reserved list. *)
+Theorem collect_fn_eoms_rel:
+  !fns fns'.
+    LIST_REL (\fn fn'. fn'.fn_eom = fn.fn_eom) fns fns' ==>
+    collect_fn_eoms fns' = collect_fn_eoms fns
+Proof
+  Induct >> simp[listTheory.LIST_REL_CONS1, PULL_EXISTS,
+                 stackPlanGenTheory.collect_fn_eoms_def] >>
+  rw[] >> res_tac >> simp[stackPlanGenTheory.collect_fn_eoms_def]
+QED
+
+Theorem ctx_pass_stage_max_live_eom:
+  ctx_pass_stage rpolicy pass view C C' /\
+  fn_pass_static_layout_effect (fn_pass_tag pass) = FSLE_Preserve ==>
+  max_live_eom C' = max_live_eom C
+Proof
+  strip_tac >>
+  `collect_fn_eoms C'.ctx_functions = collect_fn_eoms C.ctx_functions` by (
+    irule collect_fn_eoms_rel >>
+    fs[ctx_pass_stage_def, listTheory.LIST_REL_EL_EQN] >> rw[] >>
+    `n < LENGTH C.ctx_functions` by fs[] >>
+    first_x_assum drule >> strip_tac >>
+    gvs[fn_pass_step_def, venomPassDispatcherTheory.fn_pass_effects_hold_def,
+        venomPassDispatcherTheory.fn_static_layout_effect_holds_def,
+        venomInstTheory.fn_static_layout_eq_def]) >>
+  fs[ctx_pass_stage_def, stackPlanGenTheory.max_live_eom_def]
 QED
 
 Theorem member_invoke_direct_call:

@@ -70,8 +70,7 @@ Proof
   metis_tac[body_expr_ok_case]
 QED
 
-(* exprSimOperators' compile_ifexp_case, whose aggregate ternaries are
-   cheated there (compile_ifexp_aggregate_case) for compile_expr_sim too. *)
+(* exprSimOperators' compile_ifexp_case. *)
 Theorem body_ifexp_case:
   !cx v5 e1 e2 e3.
     (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_ok cx e2) /\
@@ -96,15 +95,20 @@ Proof
   metis_tac[body_exprs_ok_case]
 QED
 
-(* GAP (#636 operands with internal calls): subscripts.  Its case lemma is
-   still stated over expr_sim_below, for compile_expr_sim only. *)
+(* exprSimPlaces' compile_subscript_case, whose array and mapping cases are
+   cheated there for compile_expr_sim too. *)
 Theorem body_subscript_case:
   !cx v8 e1 e2.
     (!s'' res t. eval_expr cx e1 s'' = (INL res,t) ==> body_expr_ok cx e2) /\
     body_expr_ok cx e1 ==>
     body_expr_ok cx (Subscript v8 e1 e2)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  `expr_vv_case F ctx func cenv cx (Subscript v8 e1 e2)` by
+    (irule exprSimPlacesTheory.compile_subscript_case >> conj_tac
+     >- metis_tac[body_expr_ok_case] >>
+     rpt strip_tac >> metis_tac[body_expr_ok_case]) >>
+  simp[expr_sim_case_of_vv]
 QED
 
 (* exprSimAttribute's compile_attribute_case. *)
@@ -379,11 +383,15 @@ QED
      live regions, and intCallResult's store_multi_results_frag for
      stack results.
    Left (the push transfer): the callee body's premises at its entry:
-   body_inv and expr_sim_inv for the callee's compile env and env at
-   cxf, and frame_ret_ok for the internal return; and that the callee
+   body_inv (whose target conjunct needs the callee's compile env at the
+   unit's policy target, as set_*_package_target installs it) and
+   expr_sim_inv for the callee's compile env and env at cxf, and
+   frame_ret_ok for the internal return; and that the callee
    body's code in ctx is stmts_env's in that compile env.
    ce_locals_declared there is bodySimEntry's internal_entry_declared and
-   ce_locals_declared_params, for an env that has the parameters. *)
+   ce_locals_declared_params, for an env that has the parameters; the
+   body's locals_alloc_ok and stmt_exprs_ok's alloc_limits_stmt come from
+   fn_allocs_ok_body. *)
 Theorem body_intcall_case:
   !cx v16 src_id_opt fn es v17.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
@@ -507,7 +515,7 @@ QED
 (* GAP (#636 operands with internal calls): create.  Its case lemma is
    still stated over expr_sim_below, for compile_expr_sim only. *)
 Theorem body_create_case:
-  !cx ty kind has_salt rof es v26.
+  !cx ty kind has_salt rof kw_order es v26.
     (!raw_args s'' prefix t s'3' code_size t'.
        kind = CreateFromBlueprint raw_args /\
        eval_exprs cx (TAKE (if has_salt then 4 else 3) es) s'' = (INL prefix,t) /\
@@ -531,7 +539,7 @@ Theorem body_create_case:
     (kind = CreateCopyOf ==> body_exprs_ok cx es) /\
     (kind = CreateMinimalProxy ==> body_exprs_ok cx es) /\
     (kind = RawCreate ==> body_exprs_ok cx (TAKE 2 es)) ==>
-    body_expr_ok cx (Call ty (CreateTarget kind has_salt rof) es v26)
+    body_expr_ok cx (Call ty (CreateTarget kind has_salt rof kw_order) es v26)
 Proof
   rpt strip_tac >> irule body_expr_ok_intro >> cheat
 QED

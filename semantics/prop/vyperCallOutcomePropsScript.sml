@@ -59,15 +59,17 @@ Proof
 QED
 
 Theorem take_call_outcome_computed_valid:
-  st.outcomes = SOME os /\
+  st.outcomes = SOME (outcome::rest) /\
   rq = call_outcome_request target calldata value_opt st /\
   rq.cr_value = 0 /\
   precompile_result rq.cr_target rq.cr_data = SOME (SOME bs) ==>
   take_call_outcome target calldata value_opt st =
-    (if ~rq.cr_static /\ ~accounts_runtime_well_typed st.accounts
+    (if ~outcome.co_success then INL (rq, failed_outcome rq)
+     else if ~rq.cr_static /\ ~accounts_runtime_well_typed st.accounts
      then INR (Error (RuntimeError "call outcome accounts"))
      else INL (rq, failed_outcome rq with
-                       <|co_success := T; co_returnData := bs|>), st)
+                       <|co_success := T; co_returnData := bs|>),
+     st with outcomes := SOME rest)
 Proof
   rpt strip_tac >>
   gvs[take_call_outcome_def, take_outcome_def, record_request_def,
@@ -79,20 +81,24 @@ Theorem take_call_outcome_computed_invalid:
   st.outcomes = SOME os /\
   rq = call_outcome_request target calldata value_opt st /\
   rq.cr_value = 0 /\ precompile_result rq.cr_target rq.cr_data = SOME NONE ==>
-  take_call_outcome target calldata value_opt st = (INL (rq, failed_outcome rq), st)
+  take_call_outcome target calldata value_opt st =
+    (INL (rq, failed_outcome rq), st with outcomes := SOME (DROP 1 os))
 Proof
-  rpt strip_tac >>
+  rpt strip_tac >> Cases_on `os` >>
   gvs[take_call_outcome_def, take_outcome_def, record_request_def,
-      computed_precompile_def, evaluation_state_component_equality]
+      computed_precompile_def, call_outcome_request_def, evaluation_state_component_equality]
 QED
 
 (* ===== Whole-record frame and guarded typing ===== *)
 
+(* Failed CREATE outcomes retain their account/transient snapshots. Only
+   failed message calls, or any static request, leave the whole state alone. *)
 Theorem adopt_call_outcome_static_failed:
-  (rq.cr_static \/ ~outcome.co_success) ==>
+  (rq.cr_static \/ (rq.cr_kind = MessageCall /\ ~outcome.co_success)) ==>
   adopt_call_outcome rq outcome st = (INL (),st)
 Proof
-  rw[adopt_call_outcome_equation] >> gvs[]
+  rw[adopt_call_outcome_equation, adopt_outcome_deletions_def] >>
+  gvs[evaluation_state_component_equality]
 QED
 
 Theorem take_call_outcome_guard_rejected:
@@ -151,12 +157,13 @@ Theorem take_call_outcome_suffix:
   ?rest prefix. st'.outcomes = SOME rest /\ os = prefix ++ rest /\
     LENGTH prefix <= 1 /\
     (computed_precompile (call_outcome_request target calldata value_opt st) ==>
-       prefix = [] /\ st'.requests = st.requests)
+       st'.requests = st.requests)
 Proof
   rpt strip_tac >> gvs[take_call_outcome_def] >> pairarg_tac >>
-  gvs[AllCaseEqs(), take_outcome_def, record_request_def] >>
-  TRY (qexists_tac `[]` >> simp[] >> NO_TAC) >>
-  rename1 `os = head::tail` >> qexists_tac `[head]` >> simp[]
+  `rest = DROP 1 os` by metis_tac[take_outcome_rest, SND] >>
+  gvs[AllCaseEqs(), record_request_def] >>
+  Cases_on `os` >> simp[] >>
+  rename1 `head::tail` >> qexists_tac `[head]` >> simp[]
 QED
 
 Theorem take_adopt_call_outcome_typed:
@@ -166,6 +173,6 @@ Theorem take_adopt_call_outcome_typed:
   accounts_runtime_well_typed st''.accounts
 Proof
   rpt strip_tac >> drule take_call_outcome_success >> strip_tac >>
-  gvs[adopt_call_outcome_equation] >>
-  IF_CASES_TAC >> gvs[]
+  Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
+  gvs[adopt_call_outcome_equation, call_outcome_request_def]
 QED

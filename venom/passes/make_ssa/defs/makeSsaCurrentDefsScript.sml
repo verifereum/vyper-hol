@@ -413,8 +413,7 @@ Definition select_current_live_in_def:
 End
 
 (* Mirror Python's degenerate-PHI cleanup while preserving definitions and
-   instruction IDs: when the non-self inputs are all equal the PHI collapses
-   to an ASSIGN (no inputs: a NOP); otherwise it is kept as it is. *)
+   instruction IDs: self edges are discarded and equal inputs collapse. *)
 Definition current_phi_output_def:
   current_phi_output [out] = SOME out /\
   current_phi_output _ = NONE
@@ -455,9 +454,7 @@ Definition simplify_current_phi_raw_def:
             if EVERY (\w. w = v) vs then
               inst with <| inst_opcode := ASSIGN;
                            inst_operands := [Var v] |>
-            (* A PHI that stays a PHI keeps its self edges: eval_one_phi
-               needs an operand for every incoming edge. *)
-            else inst
+            else inst with inst_operands := cleaned
 End
 
 Definition keep_current_phi_vars_def:
