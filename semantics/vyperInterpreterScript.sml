@@ -4,7 +4,7 @@ Ancestors
   vyperCallOutcomeFrame[ignore_grammar]
   arithmetic alist combin option list finite_map pair
   rich_list sorting cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
-  vfmExecution[ignore_grammar] vyperAST vyperABI
+  vfmExecution[ignore_grammar] vyperAST vyperGetter vyperABI
   vyperMisc vyperNsidFmap vyperValue vyperValueOperation vyperStorage vyperContext vyperState
   vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
 Libs
@@ -58,58 +58,6 @@ val () = transfer_value_def
 * within a contract, including implicit functions associated with public
 * variables *)
 
-Definition getter_vtype_annotation_def:
-  getter_vtype_annotation (Type ty) = ty ∧
-  getter_vtype_annotation (HashMapT _ _) = NoneT
-End
-
-val () = cv_auto_trans getter_vtype_annotation_def;
-
-Definition build_getter_def:
-  build_getter e kt (Type vt) n =
-    (let vn = num_to_dec_string n in
-      if is_ArrayT vt then
-        (let (args, ret, exp) =
-           build_getter
-             (Subscript vt e (Name kt vn))
-             (BaseT (UintT 256)) (Type (ArrayT_type vt)) (SUC n) in
-           ((vn, kt)::args, ret, exp))
-      else ([(vn, kt)], vt, Subscript vt e (Name kt vn))) ∧
-  build_getter e kt (HashMapT typ vtyp) n =
-    (let vn = num_to_dec_string n in
-     let (args, ret, exp) =
-       build_getter
-         (Subscript (getter_vtype_annotation (HashMapT typ vtyp)) e (Name kt vn))
-         typ vtyp (SUC n) in
-     ((vn, kt)::args, ret, exp))
-Termination
-  WF_REL_TAC ‘measure (value_type_size o FST o SND o SND)’
-  \\ Cases \\ rw[type_size_def]
-End
-
-val () = cv_auto_trans_rec build_getter_def (
-  WF_REL_TAC ‘measure (cv_size o FST o SND o SND)’
-  \\ conj_tac \\ Cases \\ rw[]
-  >- (
-    qmatch_goalsub_rename_tac`cv_snd p`
-    \\ Cases_on`p` \\ rw[] )
-  \\ qmatch_asmsub_rename_tac`cv_is_ArrayT a`
-  \\ Cases_on `a` \\ gvs[cv_is_ArrayT_def, cv_ArrayT_type_def]
-  \\ rw[] \\ gvs[]
-  \\ qmatch_goalsub_rename_tac`cv_fst p`
-  \\ Cases_on `p` \\ gvs[]
-);
-
-Definition getter_def:
-  getter ne kt vt =
-  let (args, ret, exp) =
-    build_getter ne kt vt 0
-  in
-    (View, F, args, [], ret, [Return $ SOME exp])
-End
-
-val () = cv_auto_trans getter_def;
-
 (* Deploy lookup deliberately synthesizes an empty payable constructor when no
    matching declaration is found.  Thus source contracts without an explicit
    __init__ use the ordinary constructor-call path; Deploy lookup on a finite
@@ -120,15 +68,15 @@ Definition lookup_function_def:
   lookup_function src_id_opt name vis (FunctionDecl fv fm nr _ id args dflts ret body :: ts) =
   (if id = name ∧ vis = fv then SOME (fm, nr, args, dflts, ret, body)
    else lookup_function src_id_opt name vis ts) ∧
-  lookup_function src_id_opt name External (VariableDecl Public mut id typ _ :: ts) =
+  lookup_function src_id_opt name External (VariableDecl (Public nr) mut id typ _ :: ts) =
   (if id = name then
     let ne = TopLevelName typ (src_id_opt, id) in
     if ¬is_ArrayT typ
-    then SOME (View, F, [], [], typ, [Return (SOME ne)])
-    else SOME $ getter ne (BaseT (UintT 256)) (Type (ArrayT_type typ))
+    then SOME (View, nr, [], [], typ, [Return (SOME ne)])
+    else SOME $ getter nr ne (BaseT (UintT 256)) (Type (ArrayT_type typ))
    else lookup_function src_id_opt name External ts) ∧
-  lookup_function src_id_opt name External (HashMapDecl Public _ id kt vt _ :: ts) =
-  (if id = name then SOME $ getter (TopLevelName NoneT (src_id_opt, id)) kt vt
+  lookup_function src_id_opt name External (HashMapDecl (Public nr) _ id kt vt _ :: ts) =
+  (if id = name then SOME $ getter nr (TopLevelName NoneT (src_id_opt, id)) kt vt
    else lookup_function src_id_opt name External ts) ∧
   lookup_function src_id_opt name vis (_ :: ts) =
     lookup_function src_id_opt name vis ts
@@ -1798,73 +1746,57 @@ Termination
   | INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (cx,es)))))))))) => 4 * exprs_bound (remcode cx) es)`
   \\ conj_tac >- simp[prim_recTheory.WF_measure]
   \\ rpt conj_tac
-  \\ TRY (MATCH_ACCEPT_TAC custom_error_exprs_size)
-  \\ pure_rewrite_tac [prim_recTheory.measure_def, relationTheory.inv_image_def]
+  \\ simp_tac pure_ss [prim_recTheory.measure_def, relationTheory.inv_image_def,
+                sumTheory.sum_case_def, pairTheory.pair_case_def]
   \\ rw[bound_def, MAX_DEF, MULT, IS_SOME_EXISTS] \\ gvs[custom_error_exprs_size]
-  \\ rpt (FIRST [
-    (* Custom-error keyword operands are a declaration-order permutation. *)
-    (qmatch_asmsub_rename_tac
-       `order_custom_error_args params err = SOME es`
-    \\ drule_all order_custom_error_args_exprs_bound
-    \\ gvs[]),
-    (* Blueprint operand slices are bounded by the original argument list. *)
-    (qmatch_goalsub_abbrev_tac `exprs_bound fts (TAKE n es)`
-    \\ irule LESS_EQ_LESS_TRANS
-    \\ qexists_tac `exprs_bound fts es`
-    \\ simp[exprs_bound_TAKE] \\ NO_TAC),
-    (qmatch_goalsub_abbrev_tac `exprs_bound fts (DROP n es)`
-    \\ irule LESS_EQ_LESS_TRANS
-    \\ qexists_tac `exprs_bound fts es`
-    \\ simp[exprs_bound_DROP] \\ NO_TAC),
-    (* For loop: compatible_bound case *)
-    (rename1`compatible_bound`
-    \\ gvs[compatible_bound_def, check_def, type_check_def, assert_def]
-    \\ qmatch_goalsub_abbrev_tac`(LENGTH vs) * x`
-    \\ irule LESS_EQ_LESS_TRANS
-    \\ qexists_tac`LENGTH vs + n * x + 1` \\ simp[]
-    \\ PROVE_TAC[MULT_COMM, LESS_MONO_MULT]),
-    (* Builtin: builtin_args_length_ok case *)
-    (rename1`builtin_args_length_ok`
-    \\ gvs[builtin_args_length_ok_def, check_def, type_check_def, assert_def,
-           LENGTH_EQ_NUM_compute, bound_def]),
-    (* TypeBuiltin: type_builtin_args_length_ok case *)
-    (rename1`type_builtin_args_length_ok`
-    \\ gvs[type_builtin_args_length_ok_def, check_def, type_check_def, assert_def,
-           LENGTH_EQ_NUM_compute, bound_def]),
-    (* IntCall cases *)
-    (qmatch_asmsub_rename_tac
-       `lift_option_type (lookup_callable_function _ _ _) _ _ = (INL callable,_)`
-    \\ PairCases_on `callable`
-    \\ gvs[check_def, type_check_def, assert_def]
-    \\ gvs[push_function_def, return_def]
-    \\ gvs[lift_option_def, lift_option_type_def, CaseEq"option", CaseEq"prod", option_CASE_rator,
-           raise_def, return_def]
-    \\ gvs[remcode_def, get_module_code_def, ADELKEY_def]
-    \\ TRY (qpat_x_assum`OUTR _ _ = _`kall_tac)
-    \\ gvs[CaseEq"option"]
-    \\ simp[bound_def]
-    \\ qmatch_asmsub_rename_tac`lookup_callable_function _ fn ts = SOME (_, _, args, dflts, ret, bdy)`
-    \\ Cases_on`(dflts, bdy) = ([], [])`
+  (* Discharge each non-structural call class independently.  Selection is by
+     the bound or premise that justifies that class, rather than repeated
+     speculative simplification of every remaining call. *)
+  >>~- ([`order_custom_error_args params err = SOME es`],
+    drule_all order_custom_error_args_exprs_bound >> gvs[])
+  >>~- ([`compatible_bound`],
+    gvs[compatible_bound_def, check_def, type_check_def, assert_def]
+    >> qmatch_goalsub_abbrev_tac `(LENGTH vs) * x`
+    >> irule LESS_EQ_LESS_TRANS
+    >> qexists_tac `LENGTH vs + n * x + 1` >> simp[]
+    >> PROVE_TAC[MULT_COMM, LESS_MONO_MULT])
+  >>~- ([`builtin_args_length_ok`],
+    gvs[builtin_args_length_ok_def, check_def, type_check_def, assert_def,
+        LENGTH_EQ_NUM_compute, bound_def])
+  >>~- ([`type_builtin_args_length_ok`],
+    gvs[type_builtin_args_length_ok_def, check_def, type_check_def, assert_def,
+        LENGTH_EQ_NUM_compute, bound_def])
+  >>~- ([`lift_option_type (lookup_callable_function _ _ _) _ _ = (INL callable,_)`],
+    PairCases_on `callable`
+    >> gvs[check_def, type_check_def, assert_def]
+    >> gvs[push_function_def, return_def]
+    >> gvs[lift_option_def, lift_option_type_def, CaseEq "option", CaseEq "prod",
+           option_CASE_rator, raise_def, return_def]
+    >> gvs[remcode_def, get_module_code_def, ADELKEY_def]
+    >> rpt (qpat_x_assum `OUTR _ _ = _` kall_tac)
+    >> gvs[CaseEq "option"]
+    >> simp[bound_def]
+    >> qmatch_asmsub_rename_tac
+         `lookup_callable_function _ fn ts = SOME (_, _, args, dflts, ret, bdy)`
+    >> Cases_on `(dflts, bdy) = ([], [])`
     >- gvs[bound_def]
-    \\ `(dflts, bdy) <> ([], [])` by (strip_tac >> gvs[])
-    \\ drule_all_then(qspec_then`src_id_opt`strip_assume_tac)
+    >> `(dflts, bdy) <> ([], [])` by (strip_tac >> gvs[])
+    >> drule_all_then (qspec_then `src_id_opt` strip_assume_tac)
          lookup_callable_function_eq_ALOOKUP_module_fns
-    \\ drule_at_then Any drule ALOOKUP_FLAT_MAP_module_fns
-    \\ qmatch_goalsub_abbrev_tac`ALOOKUP (FILTER P ls) k`
-    \\ `P = λ(k,v). ¬MEM k cx.stk` by simp[Abbr`P`,FUN_EQ_THM,FORALL_PROD]
-    \\ TRY (simp[ALOOKUP_FILTER, FILTER_FILTER, Abbr`k`] \\ simp[LAMBDA_PROD]
-      \\ qmatch_goalsub_abbrev_tac`exprs_bound fts (DROP n dflts)`
-      \\ qspecl_then[`fts`,`n`,`dflts`]mp_tac exprs_bound_DROP
-      \\ simp[] \\ NO_TAC)
-    \\ pop_assum SUBST_ALL_TAC
-    \\ simp[ALOOKUP_FILTER]
-    \\ rw[FILTER_FILTER,UNCURRY,Abbr`k`]
-    \\ simp[LAMBDA_PROD])
-  ])
-  \\ irule LESS_EQ_LESS_TRANS
-  \\ qexists_tac `exprs_bound (remcode cx) es`
-  \\ simp[exprs_bound_TAKE_DROP, exprs_bound_TAKE, exprs_bound_DROP, DROP_DROP_T]
-  \\ TRY (MATCH_ACCEPT_TAC custom_error_exprs_size)
+    >> drule_at_then Any drule ALOOKUP_FLAT_MAP_module_fns
+    >> qmatch_goalsub_abbrev_tac `ALOOKUP (FILTER P ls) k`
+    >> `P = \(k,v). ~MEM k cx.stk` by simp[Abbr `P`, FUN_EQ_THM, FORALL_PROD]
+    >> pop_assum SUBST_ALL_TAC
+    >> simp[ALOOKUP_FILTER]
+    >> rw[FILTER_FILTER, UNCURRY, Abbr `k`]
+    >> simp[LAMBDA_PROD]
+    >> qmatch_goalsub_abbrev_tac `exprs_bound fts (DROP n dflts)`
+    >> qspecl_then [`fts`, `n`, `dflts`] mp_tac exprs_bound_DROP
+    >> simp[])
+  (* All remaining calls consume a slice of the original operands. *)
+  >> irule LESS_EQ_LESS_TRANS
+  >> qexists_tac `exprs_bound (remcode cx) es`
+  >> simp[exprs_bound_TAKE_DROP, exprs_bound_TAKE, exprs_bound_DROP, DROP_DROP_T]
 End
 
 Theorem eval_exprs_length:

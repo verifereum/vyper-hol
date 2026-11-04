@@ -372,8 +372,7 @@ Proof
   gvs[]
 QED
 
-(* The dynamic bytestrings, where footprint and store size are their own;
-   every other value takes its type's size. *)
+(* Dynamic bytestrings have their own footprint and store size. *)
 Theorem val_size_cases[local]:
   !tv v.
     (?bs n. v = BytesV bs /\ tv = BaseTV (BytesT (Dynamic n))) \/

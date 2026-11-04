@@ -4193,26 +4193,26 @@ Theorem ci_mono_builtin_hash[local]:
   ∀bi. (bi = Keccak256 ∨ bi = Sha256) ⇒
   ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st))
 Proof
-  strip_tac >> gen_tac >> Cases_on `bi` >> simp[]
-  >- (simp[compile_builtin_dispatch_body_def, LET_THM] >>
-      rpt IF_CASES_TAC >>
-      Cases_on `expr_type (HD args)` >> simp[] >>
-      TRY (rename1 `BaseT bt` >> Cases_on `bt` >> simp[] >>
-           TRY (rename1 `BytesT bound` >> Cases_on `bound` >> simp[])) >>
-      rpt (irule ci_mono_uncurry >> reverse conj_tac
-           >- simp[ci_mono_lower_value_cfn]
-           >> rpt gen_tac >> BETA_TAC) >>
-      simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_bytes,
-           ci_mono_compile_keccak256_bytesm, ci_mono_compile_keccak256_word]) >>
+  strip_tac >> gen_tac >> Cases_on `bi` >> simp[] >>
   simp[compile_builtin_dispatch_body_def, LET_THM] >>
-  rpt IF_CASES_TAC >>
-  Cases_on `expr_type (HD args)` >> simp[] >>
-  TRY (rename1 `BaseT bt` >> Cases_on `bt` >> simp[] >>
-       TRY (rename1 `BytesT bound` >> Cases_on `bound` >> simp[])) >>
+  rpt IF_CASES_TAC >> Cases_on `expr_type (HD args)` >> simp[] >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_lower_value_cfn]
        >> rpt gen_tac >> BETA_TAC) >>
-  simp[ci_mono_as_stack_val, ci_mono_compile_sha256_bytes,
+  simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_bytes,
+       ci_mono_compile_keccak256_bytesm, ci_mono_compile_keccak256_word,
+       ci_mono_compile_sha256_bytes, ci_mono_compile_sha256_bytesm,
+       ci_mono_compile_sha256_word] >>
+  Cases_on `b` >> simp[] >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_lower_value_cfn]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_word,
+       ci_mono_compile_sha256_word] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >> simp[] >>
+  irule ci_mono_uncurry >>
+  simp[ci_mono_lower_value_cfn, ci_mono_as_stack_val,
+       ci_mono_compile_keccak256_bytesm, ci_mono_compile_keccak256_word,
        ci_mono_compile_sha256_bytesm, ci_mono_compile_sha256_word]
 QED
 
@@ -4241,12 +4241,18 @@ Theorem ci_mono_builtin_membership[local]:
           as_stack_val ret_ty
             (compile_var_array_membership cenv needle vv rhs_ty is_in st'))))
 Proof
-  strip_tac >> drule ci_mono_membership_var_array >> strip_tac >>
-  Cases_on `e` >> gs[LET_THM] >>
-  rename1 `Builtin _ bt _` >> Cases_on `bt` >> gs[] >>
+  strip_tac >>
+  `!e. ci_mono st (SND
+     ((\(vv,st'). as_stack_val ret_ty
+         (compile_var_array_membership cenv needle vv rhs_ty is_in st'))
+       (f cenv rhs_ty e st)))` by
+    (gen_tac >> irule ci_mono_uncurry >>
+     simp[ci_mono_as_stack_val, ci_mono_compile_var_array_membership]) >>
+  Cases_on `e` >> simp[LET_THM] >>
+  rename1 `Builtin ann bi elems` >> Cases_on `bi` >> simp[] >>
   irule ci_mono_uncurry >> reverse conj_tac
   >- simp[ci_mono_compile_multi_exprs] >>
-  rpt gen_tac >> BETA_TAC >> rpt IF_CASES_TAC >>
+  rpt gen_tac >> Cases_on `is_in` >>
   simp[ci_mono_as_stack_val, ci_mono_compile_list_membership_in,
        ci_mono_compile_list_membership_notin]
 QED
