@@ -3957,3 +3957,45 @@ QED
    interface before the caller's MSTORE can establish locals_kept.
    These are residual integration obligations, not checked impossibility.
 *)
+
+Theorem probe_word_shrink_compile_expr:
+  !cenv sa bufsz flags ty.
+    cenv.ce_func_info "shrink" = (1,bufsz,flags) ==>
+    compile_expr cenv ty
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) sa =
+    (LocatedValue (BaseT (UintT 256))
+       (base_ptr <| buf_operand := Var ("%" ++ toString sa.cs_next_var);
+                    buf_size := 32 |>),
+     sa with <| cs_next_var := sa.cs_next_var + 3;
+                cs_next_id := sa.cs_next_id + 4;
+                cs_current_insts := sa.cs_current_insts ++
+       [mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+          ["%" ++ toString sa.cs_next_var];
+        mk_inst (sa.cs_next_id + 1) INVOKE
+          [Label (internal_fn_label (cenv.ce_func_ids "shrink") "shrink"
+             (cenv.ce_func_param_types "shrink") cenv.ce_is_ctor)]
+          ["%" ++ toString (sa.cs_next_var + 1)];
+        mk_inst (sa.cs_next_id + 2) ADD
+          [Var ("%" ++ toString sa.cs_next_var); Lit 0w]
+          ["%" ++ toString (sa.cs_next_var + 2)];
+        mk_inst (sa.cs_next_id + 3) MSTORE
+          [Var ("%" ++ toString (sa.cs_next_var + 2));
+           Var ("%" ++ toString (sa.cs_next_var + 1))] []] |>)
+Proof
+  rpt strip_tac >>
+  simp[Once exprLoweringTheory.compile_expr_def,
+       exprLoweringTheory.compile_call_def,
+       exprLoweringTheory.compile_multi_vvs_def, comp_return_def,
+       exprLoweringTheory.compile_stage_intcall_args_def, nsid_to_string_def,
+       contextTheory.compile_alloc_buffer_def, emit_op_def, emit_multi_op_def,
+       emit_inst_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, contextTheory.base_ptr_def,
+       vyperASTTheory.expr_type_def] >>
+  pure_rewrite_tac[numLib.num_CONV ``1``, fresh_vars_def] >>
+  simp[comp_bind_def, comp_return_def, fresh_var_def,
+       exprLoweringTheory.store_multi_results_def,
+       emit_op_def, emit_void_def, fresh_id_def, emit_def,
+       comp_ignore_bind_def, contextTheory.mk_ptr_def] >>
+  rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND]
+QED
+
