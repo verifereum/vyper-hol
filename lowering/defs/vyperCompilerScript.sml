@@ -25,6 +25,7 @@ Ancestors
   venomWf
   fcgDefs
   pointerConfinedDefs
+  defsReachCheck
 
 (* ===== Compile State Initialization ===== *)
 
@@ -476,8 +477,11 @@ End
    (mem_safe_raw_unit_memory_ok, alloca_frontier_inv_entry) asks of the
    unit: every function's labels distinct and an entry block, and the
    reachable call graph acyclic.  ptr_ok_check is what S3's pointer
-   discipline asks of it (fn_ptr_ok).  Like the inst-id and budget checks, they
-   are decided on the unit rather than proved of the lowering. *)
+   discipline asks of it (fn_ptr_ok).  The last conjunct is definite
+   assignment (every use is written on every path to it), which
+   SimplifyCFG's input contract asks for.  Like the inst-id and budget
+   checks, they are decided on the unit rather than proved of the
+   lowering. *)
 Definition lowering_context_ok_def:
   lowering_context_ok ctx <=>
     ALL_DISTINCT (ctx_fn_names ctx) /\
@@ -488,7 +492,8 @@ Definition lowering_context_ok_def:
     EVERY (\fn. ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn)
       ctx.ctx_functions /\
     reachable_fcg_acyclic ctx (fcg_analyze ctx) /\
-    ptr_ok_check ctx
+    ptr_ok_check ctx /\
+    EVERY fn_defs_reach_uses_check ctx.ctx_functions
 End
 (* ===== Policy Boundary ===== *)
 
@@ -538,6 +543,14 @@ Theorem lowering_context_ok_bridge:
         reachable_fcg_acyclic ctx (fcg_analyze ctx)
 Proof
   simp[lowering_context_ok_def]
+QED
+
+Theorem lowering_context_ok_defs_reach_uses:
+  !ctx. lowering_context_ok ctx ==>
+        EVERY fn_defs_reach_uses ctx.ctx_functions
+Proof
+  rw[lowering_context_ok_def, listTheory.EVERY_MEM] >>
+  metis_tac[fn_defs_reach_uses_check_sound]
 QED
 
 Definition internal_fn_matches_descriptor_def:
