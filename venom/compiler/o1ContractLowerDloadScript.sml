@@ -30,6 +30,79 @@ Ancestors
    is "code_end" as ADD's second operand, which label_positions_ok admits
    and which is reserved. *)
 
+(* Instruction-ID reservations are history only: fresh IDs are selected
+   by the counter, not by searching that history. *)
+Theorem lower_dload_inst_supply_history:
+  (s with irs_used_inst_ids := []) = (q with irs_used_inst_ids := []) /\
+  lower_dload_inst_supply s i = (xs,t) ==>
+  ?u. lower_dload_inst_supply q i = (xs,u) /\
+      (t with irs_used_inst_ids := []) = (u with irs_used_inst_ids := [])
+Proof
+  Cases_on `s` >> Cases_on `q` >>
+  simp[ir_supply_component_equality] >> strip_tac >> gvs[] >>
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, fresh_ir_var_def,
+          fresh_inst_id_def, AllCaseEqs()] >> simp[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, fresh_ir_var_def,
+          fresh_inst_id_def, AllCaseEqs()] >> simp[]) >>
+  gvs[lower_dload_inst_supply_def]
+QED
+
+Theorem lower_dload_insts_supply_history:
+  !s q xs t.
+  (s with irs_used_inst_ids := []) = (q with irs_used_inst_ids := []) /\
+  lower_dload_insts_supply s ins = (xs,t) ==>
+  ?u. lower_dload_insts_supply q ins = (xs,u) /\
+      (t with irs_used_inst_ids := []) = (u with irs_used_inst_ids := [])
+Proof
+  Induct_on `ins`
+  >- simp[lower_dload_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
+  drule_all lower_dload_inst_supply_history >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  simp[lower_dload_insts_supply_def] >> metis_tac[]
+QED
+
+Theorem lower_dload_block_supply_history:
+  (s with irs_used_inst_ids := []) = (q with irs_used_inst_ids := []) /\
+  lower_dload_block_supply s b = (b',t) ==>
+  ?u. lower_dload_block_supply q b = (b',u) /\
+      (t with irs_used_inst_ids := []) = (u with irs_used_inst_ids := [])
+Proof
+  simp[lower_dload_block_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule_all lower_dload_insts_supply_history >> strip_tac >>
+  simp[lower_dload_block_supply_def] >> metis_tac[]
+QED
+
+Theorem lower_dload_blocks_supply_history:
+  !s q bs t.
+  (s with irs_used_inst_ids := []) = (q with irs_used_inst_ids := []) /\
+  lower_dload_blocks_supply s bbs = (bs,t) ==>
+  ?u. lower_dload_blocks_supply q bbs = (bs,u) /\
+      (t with irs_used_inst_ids := []) = (u with irs_used_inst_ids := [])
+Proof
+  Induct_on `bbs`
+  >- simp[lower_dload_blocks_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[Once lower_dload_blocks_supply_def, AllCaseEqs()] >>
+  drule_all lower_dload_block_supply_history >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  simp[lower_dload_blocks_supply_def] >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_history:
+  (s with irs_used_inst_ids := []) = (q with irs_used_inst_ids := []) /\
+  lower_dload_function_supply s f = (g,t) ==>
+  ?u. lower_dload_function_supply q f = (g,u) /\
+      (t with irs_used_inst_ids := []) = (u with irs_used_inst_ids := [])
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule_all lower_dload_blocks_supply_history >> strip_tac >>
+  simp[lower_dload_function_supply_def] >> metis_tac[]
+QED
+
 Theorem lower_dload_inst_supply_nonempty:
   lower_dload_inst_supply s i = (xs,t) ==> xs <> []
 Proof
@@ -237,6 +310,34 @@ Proof
   simp[fn_ir_vars_def, block_ir_vars_def, MEM_FLAT, MEM_MAP,
        PULL_EXISTS, inst_ir_vars_def] >>
   gvs[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+(* A new output cannot shadow any source variable, including variables
+   that occur only as operands. *)
+Theorem lower_dload_function_supply_output_provenance:
+  lower_dload_function_supply s f = (g,t) /\ ir_supply_covers_fn s f /\
+  ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (fn_insts f))) /\
+  MEM j (fn_insts g) /\ MEM v j.inst_outputs /\ MEM v (fn_ir_vars f) ==>
+  ?i. MEM i (fn_insts f) /\ MEM v i.inst_outputs
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs(), fn_insts_def,
+       lower_dload_outputs_blocks] >> strip_tac >> gvs[] >>
+  rename1 `lower_dload_blocks_supply s f.fn_blocks = (bs,t)` >>
+  `EVERY (\v. MEM v s.irs_used_vars)
+    (FLAT (MAP (\b. FLAT (MAP (\k. k.inst_outputs) b.bb_instructions))
+       f.fn_blocks))` by
+    (gvs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >>
+     rpt strip_tac >> first_x_assum irule >>
+     simp[fn_ir_vars_def, block_ir_vars_def, MEM_FLAT, MEM_MAP,
+          PULL_EXISTS, inst_ir_vars_def] >>
+     gvs[MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  drule_all lower_dload_blocks_supply_vars >> strip_tac >>
+  `MEM v s.irs_used_vars` by
+    gvs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >>
+  `MEM v (FLAT (MAP (\b. FLAT (MAP (\k. k.inst_outputs) b.bb_instructions))
+       bs))` by
+    (gvs[fn_insts_blocks_MEM, MEM_FLAT, MEM_MAP, PULL_EXISTS] >> metis_tac[]) >>
+  gvs[fn_insts_blocks_MEM, MEM_FLAT, MEM_MAP, PULL_EXISTS] >> metis_tac[]
 QED
 
 Theorem lower_dload_function_supply_distinct_ids:
