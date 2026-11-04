@@ -168,3 +168,122 @@ Proof
   rpt gen_tac >> simp[FLOOKUP_UPDATE] >>
   Cases_on `id' = id` >> simp[] >> metis_tac[]
 QED
+
+Theorem dload_selected_insert_lookup:
+  p g = (p f |+ (a,(front:num,len:num))) /\ k < LENGTH (g::fs) ==>
+  (FLOOKUP (p (EL k (g::fs))) q = SOME (b,n) <=>
+    (k = 0 /\ q = a /\ b = front /\ n = len) \/
+    (~(k = 0 /\ q = a) /\
+     FLOOKUP (p (EL k (f::fs))) q = SOME (b,n)))
+Proof
+  strip_tac >> Cases_on `k` >> simp[FLOOKUP_UPDATE] >>
+  Cases_on `q = a` >> simp[] >> metis_tac[]
+QED
+
+Theorem dload_selected_insert_bounds:
+  p g = (p f |+ (a,(front:num,len:num))) /\ lo <= front /\
+  (!k q b n. k < LENGTH (f::fs) /\
+     FLOOKUP (p (EL k (f::fs))) q = SOME (b,n) ==>
+     lo <= b /\ b+n <= front) ==>
+  !k q b n. k < LENGTH (g::fs) /\
+     FLOOKUP (p (EL k (g::fs))) q = SOME (b,n) ==>
+     lo <= b /\ b+n <= front+len
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all dload_selected_insert_lookup >>
+  disch_then (drule o iffLR) >> strip_tac >- gvs[] >>
+  `lo <= b /\ b+n <= front` by (first_x_assum irule >> qexistsl [`k`,`q`] >> gvs[]) >>
+  decide_tac
+QED
+
+Theorem dload_selected_insert_separated:
+  p g = (p f |+ (a,(front:num,len:num))) /\
+  (!k q b n. k < LENGTH (f::fs) /\
+     FLOOKUP (p (EL k (f::fs))) q = SOME (b,n) ==> b+n <= front) /\
+  (!k j q r b n c m. k < LENGTH (f::fs) /\ j < LENGTH (f::fs) /\
+     FLOOKUP (p (EL k (f::fs))) q = SOME (b,n) /\
+     FLOOKUP (p (EL j (f::fs))) r = SOME (c,m) /\
+     (k <> j \/ q <> r) /\ 0 < n /\ 0 < m ==>
+     b+n <= c \/ c+m <= b) ==>
+  !k j q r b n c m. k < LENGTH (g::fs) /\ j < LENGTH (g::fs) /\
+     FLOOKUP (p (EL k (g::fs))) q = SOME (b,n) /\
+     FLOOKUP (p (EL j (g::fs))) r = SOME (c,m) /\
+     (k <> j \/ q <> r) /\ 0 < n /\ 0 < m ==>
+     b+n <= c \/ c+m <= b
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `FLOOKUP (p (EL k (g::fs))) q = SOME (b,n) <=>
+    (k = 0 /\ q = a /\ b = front /\ n = len) \/
+    (~(k = 0 /\ q = a) /\ FLOOKUP (p (EL k (f::fs))) q = SOME (b,n))`
+    by (irule dload_selected_insert_lookup >> simp[]) >>
+  `FLOOKUP (p (EL j (g::fs))) r = SOME (c,m) <=>
+    (j = 0 /\ r = a /\ c = front /\ m = len) \/
+    (~(j = 0 /\ r = a) /\ FLOOKUP (p (EL j (f::fs))) r = SOME (c,m))`
+    by (irule dload_selected_insert_lookup >> simp[]) >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem dload_layout_original_insert:
+  dload_live_layout lo sf tf (f::fs) /\
+  FLOOKUP f.dr_source id = NONE /\ FLOOKUP f.dr_target id = NONE /\
+  tf+n < dimword (:256) ==>
+  dload_live_layout lo (sf+n) (tf+n)
+    ((f with <|dr_source := f.dr_source |+ (id,(sf,n));
+               dr_target := f.dr_target |+ (id,(tf,n))|>)::fs)
+Proof
+  strip_tac >>
+  `dload_frame_sites f` by fs[dload_live_layout_def] >>
+  `id NOTIN f.dr_scratch` by
+    (fs[dload_frame_sites_def, FLOOKUP_DEF] >> metis_tac[]) >>
+  drule_all dload_frame_original_insert >> strip_tac >>
+  fs[dload_live_layout_def] >> simp[dload_live_layout_def] >>
+  conj_tac
+  >- (ho_match_mp_tac (SRULE [ADD_COMM] (Q.INST
+        [`front` |-> `sf`, `len` |-> `n`, `a` |-> `id`]
+        dload_selected_insert_bounds)) >> simp[] >> first_assum MATCH_ACCEPT_TAC) >>
+  conj_tac
+  >- (ho_match_mp_tac (SRULE [ADD_COMM] (Q.INST
+        [`front` |-> `tf`, `len` |-> `n`, `a` |-> `id`]
+        dload_selected_insert_bounds)) >> simp[] >> first_assum MATCH_ACCEPT_TAC) >>
+  conj_tac
+  >- (ho_match_mp_tac (SRULE [] (Q.INST
+        [`front` |-> `sf`, `len` |-> `n`, `a` |-> `id`]
+        dload_selected_insert_separated)) >> simp[] >>
+      rpt conj_tac >- (rpt strip_tac >> res_tac) >> first_assum MATCH_ACCEPT_TAC) >>
+  ho_match_mp_tac (SRULE [] (Q.INST
+    [`front` |-> `tf`, `len` |-> `n`, `a` |-> `id`]
+    dload_selected_insert_separated)) >> simp[] >>
+  rpt conj_tac >- (rpt strip_tac >> res_tac) >> first_assum MATCH_ACCEPT_TAC
+QED
+
+Theorem dload_layout_scratch_insert:
+  dload_live_layout lo sf tf (f::fs) /\
+  FLOOKUP f.dr_source id = NONE /\ FLOOKUP f.dr_target id = NONE /\
+  tf+32 < dimword (:256) ==>
+  dload_live_layout lo sf (tf+32)
+    ((f with <|dr_target := f.dr_target |+ (id,(tf,32));
+               dr_scratch := id INSERT f.dr_scratch|>)::fs)
+Proof
+  strip_tac >>
+  `dload_frame_sites f` by fs[dload_live_layout_def] >>
+  `id NOTIN FDOM f.dr_source` by fs[FLOOKUP_DEF] >>
+  drule_all dload_frame_scratch_insert >> strip_tac >>
+  fs[dload_live_layout_def] >> simp[dload_live_layout_def] >>
+  conj_tac
+  >- (rpt gen_tac >>
+      qpat_x_assum `!k id b n. _ ==> _ /\ _ <= sf` (qspec_then `k` mp_tac) >>
+      Cases_on `k` >> simp[] >> metis_tac[]) >>
+  conj_tac
+  >- (ho_match_mp_tac (SRULE [ADD_COMM] (Q.INST
+        [`front` |-> `tf`, `len` |-> `32`, `a` |-> `id`]
+        dload_selected_insert_bounds)) >> simp[] >> first_assum MATCH_ACCEPT_TAC) >>
+  conj_tac
+  >- (rpt gen_tac >>
+      qpat_x_assum `!k j id jd b n c m. _ /\ _ /\ FLOOKUP _.dr_source _ = _ /\ _ ==> _`
+        (qspecl_then [`k`,`j`] mp_tac) >>
+      Cases_on `k` >> Cases_on `j` >> simp[] >> metis_tac[]) >>
+  ho_match_mp_tac (SRULE [] (Q.INST
+    [`front` |-> `tf`, `len` |-> `32`, `a` |-> `id`]
+    dload_selected_insert_separated)) >> simp[] >>
+  rpt conj_tac >- (rpt strip_tac >> res_tac) >> first_assum MATCH_ACCEPT_TAC
+QED
