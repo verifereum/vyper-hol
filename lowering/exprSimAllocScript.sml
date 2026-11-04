@@ -194,7 +194,7 @@ Proof
   gvs[update_var_def]
 QED
 
-Theorem alloc_buffer_source_frag:
+Theorem alloc_buffer_source_frag_labels:
   !ctx func cenv cx es sm mid buf sz s src a R.
     compile_alloc_buffer sz sm = (buf,mid) /\ fn_has_code sm mid func /\
     stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -207,6 +207,7 @@ Theorem alloc_buffer_source_frag:
       eval_operand buf.buf_operand u = SOME w /\
       FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword (:256) /\ u.vs_memory = s.vs_memory /\
+      u.vs_labels = s.vs_labels /\
       sm.cs_next_id < mid.cs_next_id /\
       (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
       (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
@@ -237,4 +238,34 @@ Proof
       comp_ignore_bind_def, comp_return_def, emitted_insts_def,
       rich_listTheory.DROP_LENGTH_APPEND, rich_listTheory.IS_PREFIX_APPEND,
       mk_inst_def, is_terminator_def]
+QED
+
+Theorem alloc_buffer_source_frag:
+  !ctx func cenv cx es sm mid buf sz s src a R.
+    compile_alloc_buffer sz sm = (buf,mid) /\ fn_has_code sm mid func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sm /\ sz < dimword (:256) /\
+    eval_operand src s = SOME a /\
+    (!x. src = Var x ==> not_fresh_at sm x) ==>
+    ?u w. frag_exec ctx sm mid (\z. z = s) (\z. z = u) R /\
+      eval_operand src u = SOME a /\
+      stmt_state_rel ctx func cenv cx es u /\
+      eval_operand buf.buf_operand u = SOME w /\
+      FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n w,sz) /\
+      w2n w + sz < dimword (:256) /\ u.vs_memory = s.vs_memory /\
+      sm.cs_next_id < mid.cs_next_id /\
+      (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
+      (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+         FLOOKUP u.vs_allocas aid = SOME entry) /\
+      (!aid b len. aid < sm.cs_next_id /\
+         FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+         regions_disjoint (w2n w) sz b len) /\
+      (!name b len. local_region cenv es.scopes u name b len ==>
+         regions_disjoint (w2n w) sz b len) /\
+      (?p. buf.buf_operand = Var p /\ not_fresh_at mid p)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all alloc_buffer_source_frag_labels >>
+  disch_then (qspec_then `R` strip_assume_tac) >>
+  qexistsl_tac [`u`, `w`] >> simp[] >> metis_tac[]
 QED
