@@ -750,3 +750,70 @@ Proof
       availExprProofsTheory.avail_source_birth_def] >>
  rpt gen_tac >> IF_CASES_TAC >> gvs[] >> metis_tac[]
 QED
+
+(* A static preorder invariant; no dynamic epoch equality is asserted. *)
+Theorem compute_canon_inst_preorder:
+ transitive R /\ (!k. R (canonical_id c k) k) /\
+ (compute_canon_inst d c ae inst <> c ==>
+   !src. avail_get_source ae (mk_expr d inst) = SOME src ==>
+         R src.inst_id inst.inst_id) ==>
+ !k. R (canonical_id (compute_canon_inst d c ae inst) k) k
+Proof
+ rpt strip_tac >> Cases_on `compute_canon_inst d c ae inst = c`
+ >- metis_tac[] >>
+ drule compute_canon_inst_changed >> strip_tac >>
+ simp[canonical_id_update] >> Cases_on `k = inst.inst_id` >> gvs[] >>
+ fs[relationTheory.transitive_def] >> metis_tac[]
+QED
+
+Theorem cse_canon_record_preorder:
+ !xs initial.
+ transitive R /\ (!k. R (canonical_id initial k) k) /\
+ (!c ae inst. MEM (c,ae,inst) (SND (cse_canon_record d initial xs)) ==>
+   compute_canon_inst d c ae inst <> c ==>
+   !src. avail_get_source ae (mk_expr d inst) = SOME src ==>
+         R src.inst_id inst.inst_id) ==>
+ !k. R (canonical_id (FST (cse_canon_record d initial xs)) k) k
+Proof
+ Induct >- simp[cse_canon_record_def] >>
+ Cases_on `h` >> rpt gen_tac >>
+ simp[cse_canon_record_def] >> pairarg_tac >> gvs[] >>
+ rpt strip_tac >>
+ qpat_x_assum `!initial. transitive R /\ _ ==> _` (qspec_then `compute_canon_inst d initial q r` mp_tac) >>
+ simp[] >> disch_then irule >> conj_tac
+ >- metis_tac[] >>
+ irule compute_canon_inst_preorder >> metis_tac[]
+QED
+
+Theorem compute_canon_preorder:
+ reflexive R /\ transitive R /\
+ (!c ae inst.
+   MEM (c,ae,inst)
+     (SND (cse_canon_record d FEMPTY (cse_canon_inputs result fn))) ==>
+   compute_canon_inst d c ae inst <> c ==>
+   !src. avail_get_source ae (mk_expr d inst) = SOME src ==>
+         R src.inst_id inst.inst_id) ==>
+ !k. R (canonical_id (compute_canon d result fn) k) k
+Proof
+ rpt strip_tac >>
+ qspecl_then [`cse_canon_inputs result fn`, `FEMPTY`] mp_tac
+   cse_canon_record_preorder >>
+ simp[cse_canon_record_compute_canon, canonical_id_def] >>
+ fs[relationTheory.reflexive_def] >> metis_tac[]
+QED
+
+Theorem compute_canon_common_predecessor:
+ reflexive R /\ transitive R /\
+ (!c ae inst.
+   MEM (c,ae,inst)
+     (SND (cse_canon_record d FEMPTY (cse_canon_inputs result fn))) ==>
+   compute_canon_inst d c ae inst <> c ==>
+   !src. avail_get_source ae (mk_expr d inst) = SOME src ==>
+         R src.inst_id inst.inst_id) /\
+ canonical_id (compute_canon d result fn) a =
+ canonical_id (compute_canon d result fn) b ==>
+ ?r. R r a /\ R r b
+Proof
+ rpt strip_tac >> drule_all compute_canon_preorder >> strip_tac >>
+ qexists_tac `canonical_id (compute_canon d result fn) a` >> metis_tac[]
+QED
