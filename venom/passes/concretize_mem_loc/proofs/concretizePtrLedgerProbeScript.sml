@@ -323,3 +323,162 @@ Proof
     `mk_venom_context [ptr_ledger_probe_source] (SOME "probe")` assume_tac) >>
   drule_all ptr_ledger_follow_history >> simp[]
 QED
+
+Definition ptr_ledger_target_entry_def:
+  ptr_ledger_target_entry s = ptr_observe [] [] FEMPTY entry_taint
+    ptr_ledger_probe_target (mk_inst 10 ASSIGN [Lit 0w] ["p"])
+    (ptr_probe_entry_state s)
+End
+Definition ptr_ledger_t1_def:
+  ptr_ledger_t1 s = update_var "p" 0w (ptr_probe_entry_state s) with vs_inst_idx := 1
+End
+Definition ptr_ledger_t2_def:
+  ptr_ledger_t2 s = mstore 0 42w (ptr_ledger_t1 s) with vs_inst_idx := 2
+End
+Definition ptr_ledger_t3_def:
+  ptr_ledger_t3 s = update_var "r" (mload 0 (ptr_ledger_t2 s))
+    (ptr_ledger_t2 s) with vs_inst_idx := 3
+End
+
+Theorem ptr_ledger_target_active[local,simp]:
+  active_inst ptr_ledger_probe_target inst s <=>
+    s.vs_current_bb = "entry" /\ s.vs_inst_idx < 4 /\
+    EL s.vs_inst_idx
+      [mk_inst 10 ASSIGN [Lit 0w] ["p"];
+       mk_inst 11 MSTORE [Var "p"; Lit 42w] [];
+       mk_inst 13 MLOAD [Var "p"] ["r"];
+       mk_inst 14 STOP [] []] = inst
+Proof
+  simp[active_inst_def, ptr_ledger_probe_target_def, ptr_probe_fn_def,
+    mk_raw_function_def, EQ_SYM_EQ]
+QED
+Theorem ptr_ledger_target_entry_fields[local,simp]:
+  (ptr_ledger_target_entry s).po_fn = ptr_ledger_probe_target /\
+  (ptr_ledger_target_entry s).po_inst = mk_inst 10 ASSIGN [Lit 0w] ["p"] /\
+  (ptr_ledger_target_entry s).po_state = ptr_probe_entry_state s
+Proof
+  simp[ptr_ledger_target_entry_def, ptr_observe_def]
+QED
+Theorem ptr_ledger_t1_fields[local,simp]:
+  (ptr_ledger_t1 s).vs_current_bb = "entry" /\
+  (ptr_ledger_t1 s).vs_inst_idx = 1 /\
+  lookup_var "p" (ptr_ledger_t1 s) = SOME 0w
+Proof
+  simp[ptr_ledger_t1_def, ptr_probe_entry_state_def,
+    update_var_def, lookup_var_def, FLOOKUP_UPDATE]
+QED
+Theorem ptr_ledger_t2_fields[local,simp]:
+  (ptr_ledger_t2 s).vs_current_bb = "entry" /\
+  (ptr_ledger_t2 s).vs_inst_idx = 2 /\
+  lookup_var "p" (ptr_ledger_t2 s) = SOME 0w
+Proof
+  simp[ptr_ledger_t2_def, mstore_preserves, lookup_var_mstore_idx]
+QED
+Theorem ptr_ledger_t3_fields[local,simp]:
+  (ptr_ledger_t3 s).vs_current_bb = "entry" /\
+  (ptr_ledger_t3 s).vs_inst_idx = 3
+Proof
+  simp[ptr_ledger_t3_def, update_var_def]
+QED
+Theorem ptr_ledger_target_assign_edge[local]:
+  step_inst fuel ctx (mk_inst 10 ASSIGN [Lit 0w] ["p"])
+    (ptr_probe_entry_state s) = OK (ptr_ledger_t1 s with vs_inst_idx := 0)
+Proof
+  simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
+    eval_operand_def, ptr_ledger_t1_def, ptr_probe_entry_state_def, update_var_def]
+QED
+Theorem ptr_ledger_target_store_edge[local]:
+  step_inst fuel ctx (mk_inst 11 MSTORE [Var "p"; Lit 42w] [])
+    (ptr_ledger_t1 s) = OK (ptr_ledger_t2 s with vs_inst_idx := 1)
+Proof
+  simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
+    exec_write2_def, eval_operand_def, ptr_ledger_t2_def] >>
+  simp[ptr_ledger_t1_def, ptr_probe_entry_state_def, update_var_def, mstore_def]
+QED
+Theorem ptr_ledger_target_load_edge[local]:
+  step_inst fuel ctx (mk_inst 13 MLOAD [Var "p"] ["r"])
+    (ptr_ledger_t2 s) = OK (ptr_ledger_t3 s with vs_inst_idx := 2)
+Proof
+  simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
+    exec_read1_def, eval_operand_def, ptr_ledger_t3_def, update_var_def,
+    venom_state_component_equality]
+QED
+
+Definition ptr_ledger_q1_def:
+  ptr_ledger_q1 s = ptr_ledger_next (ptr_ledger_target_entry s)
+    (mk_inst 11 MSTORE [Var "p"; Lit 42w] [])
+    (ptr_ledger_t1 s with vs_inst_idx := 0)
+End
+Definition ptr_ledger_q2_def:
+  ptr_ledger_q2 s = ptr_ledger_next (ptr_ledger_q1 s)
+    (mk_inst 13 MLOAD [Var "p"] ["r"]) (ptr_ledger_t2 s with vs_inst_idx := 1)
+End
+Definition ptr_ledger_q3_def:
+  ptr_ledger_q3 s = ptr_ledger_next (ptr_ledger_q2 s)
+    (mk_inst 14 STOP [] []) (ptr_ledger_t3 s with vs_inst_idx := 2)
+End
+Theorem ptr_ledger_q1_fields[local,simp]:
+  (ptr_ledger_q1 s).po_fn = ptr_ledger_probe_target /\
+  (ptr_ledger_q1 s).po_inst = mk_inst 11 MSTORE [Var "p"; Lit 42w] [] /\
+  (ptr_ledger_q1 s).po_state = ptr_ledger_t1 s
+Proof
+  simp[ptr_ledger_q1_def, venom_state_component_equality]
+QED
+Theorem ptr_ledger_q2_fields[local,simp]:
+  (ptr_ledger_q2 s).po_fn = ptr_ledger_probe_target /\
+  (ptr_ledger_q2 s).po_inst = mk_inst 13 MLOAD [Var "p"] ["r"] /\
+  (ptr_ledger_q2 s).po_state = ptr_ledger_t2 s
+Proof
+  simp[ptr_ledger_q2_def, venom_state_component_equality]
+QED
+Theorem ptr_ledger_q3_fields[local,simp]:
+  (ptr_ledger_q3 s).po_fn = ptr_ledger_probe_target /\
+  (ptr_ledger_q3 s).po_inst = mk_inst 14 STOP [] [] /\
+  (ptr_ledger_q3 s).po_state = ptr_ledger_t3 s
+Proof
+  simp[ptr_ledger_q3_def, venom_state_component_equality]
+QED
+Theorem ptr_ledger_target_follows:
+  ptr_ledger_follow ctx
+    [mk_inst 11 MSTORE [Var "p"; Lit 42w] [];
+     mk_inst 13 MLOAD [Var "p"] ["r"];
+     mk_inst 14 STOP [] []] (ptr_ledger_target_entry s) =
+    SOME [ptr_ledger_q1 s; ptr_ledger_q2 s; ptr_ledger_q3 s]
+Proof
+  simp[Once ptr_ledger_follow_def, ptr_ledger_target_assign_edge,
+    is_terminator_def, GSYM ptr_ledger_q1_def] >>
+  simp[Once ptr_ledger_follow_def, ptr_ledger_target_store_edge,
+    is_terminator_def, GSYM ptr_ledger_q2_def] >>
+  simp[Once ptr_ledger_follow_def, ptr_ledger_target_load_edge,
+    is_terminator_def, GSYM ptr_ledger_q3_def] >>
+  simp[ptr_ledger_follow_def]
+QED
+
+Theorem ptr_ledger_target_entry_history[local]:
+  ptr_chrono_history s
+    (mk_venom_context [ptr_ledger_probe_target] (SOME "probe"))
+    [ptr_ledger_target_entry s] (ptr_ledger_target_entry s)
+Proof
+  simp[ptr_ledger_target_entry_def] >> irule (cj 1 ptr_chrono_history_rules) >>
+  simp[ptr_ledger_probe_target_def, ptr_probe_fn_def, ptr_probe_entry_state_def,
+    mk_venom_context_def, mk_raw_function_def, lookup_function_def,
+    fn_entry_label_def, enters_block_def, active_inst_def, lookup_block_def,
+    eval_phis_def, phi_prefix_length_def, FIND_def, INDEX_FIND_def,
+    entry_block_def, mk_inst_def]
+QED
+
+Theorem ptr_ledger_target_history:
+  ptr_chrono_history s
+    (mk_venom_context [ptr_ledger_probe_target] (SOME "probe"))
+    [ptr_ledger_target_entry s; ptr_ledger_q1 s; ptr_ledger_q2 s;
+     ptr_ledger_q3 s] (ptr_ledger_q3 s)
+Proof
+  qspec_then `s` assume_tac (GEN_ALL ptr_ledger_target_entry_history) >>
+  `ptr_ledger_follow (mk_venom_context [ptr_ledger_probe_target] (SOME "probe"))
+    [mk_inst 11 MSTORE [Var "p"; Lit 42w] [];
+     mk_inst 13 MLOAD [Var "p"] ["r"];
+     mk_inst 14 STOP [] []] (ptr_ledger_target_entry s) =
+    SOME [ptr_ledger_q1 s; ptr_ledger_q2 s; ptr_ledger_q3 s]` by
+    simp[ptr_ledger_target_follows] >>
+  drule_all ptr_ledger_follow_history >> simp[]
+QED
