@@ -201,3 +201,51 @@ one-function context before claiming task falsehood. If it is impossible, expose
 the exact safety theorem ruling it out. If only the optional universal coverage
 helper is false, retain task obligations and ask for a different invariant-transport
 boundary; helper failure alone is not task falsehood.
+
+## C3.2.41.1 bounded runtime investigation (partial, not a verdict)
+
+New `dftCreateErrorProbeScript.sml` is kernel-checked and build-clean:
+- `create_probe_state_ok`: default Venom state, labels code_end=0, call gas=1000
+  satisfies o1_run_state_ok. No account/call-context validity assumptions are
+  added by that predicate; its clauses constrain vars/halt/memory/allocas/fmp
+  and code layout, not EVM wf_state.
+- `create_probe_empty_extract`: running make_venom_create_state at address 1,
+  gas 100, value 0, empty init code produces a non-NONE extraction. Checked by
+  finite OWHILE unfolding and EVAL_TAC. It is a negative test, not safety.
+- `create_probe_extract_none_iff`: extraction NONE iff run-result NONE or
+  SOME(result,fs) with LENGTH fs.contexts <> 1. Result exception tag alone
+  is not an extraction failure, including vfm_abort at a singleton frame.
+- `create_probe_nonabort_extract`: wraps the actual run_contexts_length_1:
+  run es=SOME(r,fs), wf_state es and non-vfm_abort result imply non-NONE
+  extraction. These three premises remain obligations for arbitrary CREATE.
+
+Checked signature obtained after importing vfmContextLength:
+```
+run s = SOME (r,es') /\ wf_state s /\
+(!e. r = INR e ==> ~vfm_abort e) ==> LENGTH es'.contexts = 1
+```
+Loaded vfmExecution definitions distinguish fatal vfm_abort tags OutsideDomain,
+Unimplemented, Impossible from normal OutOfGas/InvalidOpcode/etc. handle_step
+reraises fatal tags; other tags go through handle_create/handle_exception.
+Thus an INVALID bytecode is not by itself evidence of extraction NONE.
+An attempted direct EVAL of one-byte INVALID (0xfe) hit the per-tactic timeout
+at the first EVM step; the experiment was removed, not admitted or retained
+as an unfinished theorem. Empty code's finite run was actually checked.
+Inspection of precompile_bls_pairing_def found malformed-input failure maps to
+OutOfGas, not Unimplemented; this does not classify every precompile/opcode.
+No nested fatal-abort witness has been checked.
+
+Residual runtime investigation, requiring strategy review before extension:
+1. Establish wf_state (make_venom_create_state ...) from precisely the allowed
+   initial constraints, or isolate a concrete permitted failure of wf_state.
+2. Establish existence of a SOME run (termination is NOT implied merely by
+   the spelling of finite gas); no usable universal termination theorem was
+   found in the loaded-name search for 'terminat'.
+3. Exclude fatal abort in nested contexts, or exhibit a concrete nested fatal
+   abort with final context count >1. A fatal abort with one context is not
+   enough, and an ordinary exceptional halt is not fatal vfm_abort.
+The preferred positive witness or universal safety claim is NOT established.
+The CREATE/MLOAD candidate remains unverified; no task counterexample follows.
+The environment provides dependency theories to holbuild but not their source
+paths in this worktree; DB queries through a temporary Theorem/FAIL_TAC probe
+were used for exact signatures, and all inspection dummy theorems were removed.
