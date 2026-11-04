@@ -4803,3 +4803,130 @@ Proof
   simp[wordsTheory.word_add_n2w, dimword_def,
        fcpLib.INDEX_CONV ``dimindex (:256)``]
 QED
+
+(* Three-level diagnostic: no simulation judgment is assumed here. *)
+Definition probe_deep_type_def:
+  probe_deep_type = ArrayT probe_word_outer_type (Dynamic 1)
+End
+
+Definition probe_deep_code_def:
+  probe_deep_code =
+    [VariableDecl Private Storage "outer" probe_deep_type (SOME 0);
+     VariableDecl Private Storage "donor" probe_deep_type (SOME 4);
+     FunctionDecl Internal Nonpayable F F "shrink" [] [] (BaseT (UintT 256))
+       [Assign (BaseTarget (TopLevelNameTarget (NONE,"outer")))
+          (TopLevelName probe_deep_type (NONE,"donor"));
+        Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))]]
+End
+
+Definition probe_deep_context_def:
+  probe_deep_context = empty_evaluation_context with
+    <| sources := [(0w,[(NONE,probe_deep_code)])];
+       layouts := [(0w,([((NONE,"outer"),0);((NONE,"donor"),4)],[]))];
+       stk := [(NONE,"caller")] |>
+End
+
+Theorem probe_deep_layout:
+  type_slot_size (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) = 2 /\
+  type_slot_size (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1)) = 3 /\
+  type_slot_size (ArrayTV (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1)) (Dynamic 1)) = 4
+Proof
+  EVAL_TAC
+QED
+
+Definition probe_deep_source_state_def:
+  probe_deep_source_state =
+    SND (set_storage_backend probe_deep_context F
+      (update_storage 0w 1w (update_storage 1w 1w
+        (update_storage 2w 1w (update_storage 4w 1w empty_storage)))) empty_state)
+      with <| scopes := [FEMPTY]; outcomes := SOME [] |>
+End
+
+Theorem probe_deep_source_call:
+  eval_expr probe_deep_context
+    (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
+    probe_deep_source_state =
+  (INL (Value (IntV 0)),
+   set_storage probe_deep_context probe_deep_source_state F
+     (update_storage 0w 1w (update_storage 1w 0w
+       (get_storage probe_deep_context probe_deep_source_state F))))
+Proof
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_storage_backend``,
+    ``set_storage_backend``, ``lookup_storage``]) >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  EVAL_TAC >> simp[dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``] >> EVAL_TAC >>
+  simp[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  EVAL_TAC >> simp[dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  simp[return_def, combinTheory.UPDATE_EQ,
+       combinTheory.UPDATE_COMMUTES, dimword_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
+
+Theorem probe_deep_capture:
+  eval_base_place probe_deep_context
+    (SubscriptTarget
+      (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+        (Literal (BaseT (UintT 256)) (IntL 0)))
+      (Literal (BaseT (UintT 256)) (IntL 0)))
+    probe_deep_source_state =
+  (INL (PlaceR (StoragePlace F 2w (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)))),
+   probe_deep_source_state)
+Proof
+  EVAL_TAC >> simp[return_def, dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``] >> EVAL_TAC >>
+  simp[return_def, dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``] >> EVAL_TAC >>
+  simp[return_def, dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``] >> EVAL_TAC >>
+  simp[return_def, dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  simp[word_add_n2w, return_def, dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``] >> EVAL_TAC >>
+  simp[word_add_n2w, return_def, dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
+
+Theorem probe_deep_source_extension:
+  extend_place probe_deep_context
+    (PlaceR (StoragePlace F 2w (ArrayTV (BaseTV (UintT 256)) (Dynamic 1))))
+    (ValueSubscript (IntV 0))
+    (set_storage probe_deep_context probe_deep_source_state F
+      (update_storage 0w 1w (update_storage 1w 0w
+        (get_storage probe_deep_context probe_deep_source_state F)))) =
+  (INL (PlaceR (StoragePlace F 3w (BaseTV (UintT 256)))),
+   set_storage probe_deep_context probe_deep_source_state F
+      (update_storage 0w 1w (update_storage 1w 0w
+        (get_storage probe_deep_context probe_deep_source_state F))))
+Proof
+  EVAL_TAC >> simp[return_def, dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``] >> EVAL_TAC >>
+  simp[return_def, word_add_n2w, dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
+
+Definition probe_deep_compiled_def:
+  probe_deep_compiled =
+    let body =
+      [Assign (BaseTarget (TopLevelNameTarget (NONE,"outer")))
+         (TopLevelName probe_deep_type (NONE,"donor"));
+       Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))] in
+    let cenv = build_compile_env probe_deep_code
+      Internal Nonpayable "shrink" [] (BaseT (UintT 256)) body F in
+    SND (compile_internal_function cenv [] F F 0 F F F 0 body
+      (SOME (BaseT (UintT 256))) (initial_compile_state "entry"))
+End
+
+Definition probe_deep_function_def:
+  probe_deep_function = mk_raw_function "shrink"
+    (REVERSE probe_deep_compiled.cs_blocks ++
+     [<| bb_label := probe_deep_compiled.cs_current_bb;
+         bb_instructions := probe_deep_compiled.cs_current_insts |>])
+End
+
+Definition probe_deep_machine_state_def:
+  probe_deep_machine_state =
+    (init_venom_state "entry") with vs_accounts := probe_deep_source_state.accounts
+End
