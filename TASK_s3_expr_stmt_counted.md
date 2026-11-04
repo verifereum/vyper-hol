@@ -37,6 +37,11 @@ Do not modify this statement. Prove it as-is, or produce a counterexample.
 The changed statement has not yet been parsed: its existing proof is retained
 and ancestors need the counted join. Independent audit: PROVABLE at composition
 level, matching the canonical ordinary stmtSimExpr source-action schema.
+Owner preflight reached stmtMemory after checking shared ancestors. It first
+reported undeclared cenv_top_ext_refl/expr_exit_INR_type; both are existing
+stmtSimProps exports, now imported explicitly. The old unused exprSimHyps
+proof import was removed to avoid unrelated unported ordinary operator proofs.
+Proceed from this source; the existing composer proof still needs migration.
 
 ## Background
 

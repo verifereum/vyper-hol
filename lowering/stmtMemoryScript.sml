@@ -3,10 +3,10 @@ Theory stmtMemory
 Ancestors
   stmtSimZero stmtSimPass stmtSimSeqMem
   exprSimMemDefs stmtSimDefs loweringPosts gasOutcome gasSummary gasContext
-  allocaHistory exprSimProps stmtSimExpr
-  bodyMemoryDefs stmtSim fragExecMem fragExec compileEnv stmtLowering exprSimDefs
+  allocaHistory exprSimProps stmtSimExpr stmtSimProps
+  bodyMemoryDefs fragExecMem fragExec compileEnv stmtLowering exprSimDefs
   vyperEvalPreservesScopes
-  exprSimHyps exprLoweringProps venomState venomExecSemantics
+  exprLoweringProps venomState venomExecSemantics
   vyperInterpreter vyperTypeSystem vyperState vyperExprNoControl list finite_map
 
 Theorem compile_expr_stmt_frag_ok_mem:

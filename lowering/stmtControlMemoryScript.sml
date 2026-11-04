@@ -2,7 +2,7 @@
 Theory stmtControlMemory
 Ancestors
   stmtSimJumpMem
-  bodyMemoryDefs stmtSimIf stmtSim fragExecMem exprSimDefs exprSimHyps
+  bodyMemoryDefs stmtSimIf stmtSimDefs fragExecMem exprSimDefs exprSimHyps
   exprLoweringProps stmtLowering compileEnv venomState venomExecSemantics
   vyperInterpreter vyperTypeSystem vyperState list finite_map
   fragExec memSafeRun venomInst emitHelperProps instMemFrontier venomExecProofs

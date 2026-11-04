@@ -2,7 +2,7 @@
 Theory bodyMemoryPreds
 Ancestors
   stmtSimZero stmtSimPass stmtSimSeqMem stmtSimJumpMem
-  bodyMemoryDefs bodyExprMemory stmtMemory stmtControlMemory stmtSim
+  bodyMemoryDefs bodyExprMemory stmtMemory stmtControlMemory stmtSimDefs
   bodySim bodySimStmtCases exprSimHyps supportedExprTraverse supportedStmtTraverse
   supportedStmts vyperTypeCallGraph
   vyperInterpreter vyperTypeSystem vyperState vyperAST list
