@@ -4,6 +4,7 @@ Ancestors
   makeSsaCurrentFinalBlock makeSsaCurrentCleanupShape makeSsaCurrentDefs
   makeSsaCurrentAnalysis makeSsaCurrentTokens cfgHelpers venomWf venomInst
   makeSsaCurrentTreePaths makeSsaCurrentInduct cfgTransformProps makeSsaHelper
+  makeSsaCurrentPlacementCut
 
 Theorem current_local_trace_lengths:
   !aa xs s rs H E ys s' rs' H' E'.
@@ -345,4 +346,143 @@ Proof
     (qpat_x_assum `EL _ rb.bb_instructions = _` mp_tac >>
      simp[EL_APPEND_EQN]) >>
   Cases_on `enabled` >> simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem current_prefix_lookup:
+  !olds news l old.
+  LIST_REL (\old new. ?pre.
+    new = old with bb_instructions := pre ++ old.bb_instructions /\
+    EVERY (\inst. inst.inst_opcode = PHI) pre) olds news /\
+  lookup_block l olds = SOME old ==>
+  ?pre. lookup_block l news =
+    SOME (old with bb_instructions := pre ++ old.bb_instructions) /\
+    EVERY (\inst. inst.inst_opcode = PHI) pre
+Proof
+  Induct >> Cases_on `news` >> simp[lookup_block_def, FIND_thm] >>
+  rpt strip_tac >> gvs[] >> IF_CASES_TAC >>
+  gvs[lookup_block_def, FIND_thm] >> metis_tac[]
+QED
+
+Theorem current_certificate_source_shape:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM ev events /\ lookup_block (current_event_label ev) fn.fn_blocks = SOME old ==>
+  ?pre. EVERY (\inst. inst.inst_opcode = PHI) pre /\
+    current_edge_shape
+      (old with bb_instructions := pre ++ old.bb_instructions)
+      (current_event_input_block ev) /\ current_event_trace A H ev
+Proof
+  simp[current_structural_certificate_def] >> rpt strip_tac >>
+  drule current_actual_insertion_prefix >> strip_tac >>
+  `LIST_REL (\old new. ?pre.
+     new = old with bb_instructions := pre ++ old.bb_instructions /\
+     EVERY (\inst. inst.inst_opcode = PHI) pre) fn.fn_blocks ins` by
+    (irule LIST_REL_mono >> goal_assum $ drule_at Any >>
+     simp[] >> rpt strip_tac >> qexists_tac `pre` >> simp[] >>
+     gvs[EVERY_MEM] >> rpt strip_tac >> first_x_assum drule >>
+     simp[build_phi_inst_supply_def] >> strip_tac >> gvs[]) >>
+  drule_all current_prefix_lookup >> strip_tac >>
+  `ALL_DISTINCT (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_labels_distinct] >>
+  `ALL_DISTINCT (MAP current_event_label events)` by
+    metis_tac[cj 1 current_trace_event_labels_distinct] >>
+  qexists_tac `pre` >> simp[] >> conj_tac
+  >- metis_tac[cj 1 current_trace_event_input_shape] >>
+  metis_tac[cj 1 current_tree_trace_events, EVERY_MEM]
+QED
+
+Theorem current_edge_shape_ordinary_partition:
+  current_edge_shape old bb /\ old.bb_instructions = pre ++ tail /\
+  EVERY (\inst. inst.inst_opcode = PHI) pre /\
+  (tail = [] \/ (HD tail).inst_opcode <> PHI) /\ i < LENGTH tail /\
+  (EL i tail).inst_opcode <> PHI ==>
+  ?bp bt. bb.bb_instructions = bp ++ bt /\ LENGTH bp = LENGTH pre /\
+    LENGTH bt = LENGTH tail /\ EVERY (\inst. inst.inst_opcode = PHI) bp /\
+    (bt = [] \/ (HD bt).inst_opcode <> PHI) /\
+    EL i bt = EL i tail
+Proof
+  strip_tac >> gvs[] >> drule current_edge_shape_opcodes >> strip_tac >>
+  `?bp bt. bb.bb_instructions = bp ++ bt /\
+    MAP instruction_inst_opcode bp = MAP instruction_inst_opcode pre /\
+    MAP instruction_inst_opcode bt = MAP instruction_inst_opcode tail` by
+    metis_tac[MAP_APPEND, MAP_EQ_APPEND] >>
+  qexistsl_tac [`bp`, `bt`] >> simp[] >>
+  fs[MAP_EQ_EVERY2, LIST_REL_EL_EQN] >>
+  conj_tac
+  >- (fs[EVERY_EL] >> metis_tac[]) >>
+  conj_tac
+  >- (Cases_on `bt` >> Cases_on `tail` >> gvs[] >>
+      first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  rpt (qpat_x_assum `LENGTH pre + LENGTH tail = LENGTH old.bb_instructions` kall_tac) >>
+  qpat_x_assum `current_edge_shape _ _`
+    (mp_tac o REWRITE_RULE [current_edge_shape_def, LIST_REL_EL_EQN]) >>
+  disch_then (qspec_then `LENGTH pre + i` mp_tac o CONJUNCT2 o CONJUNCT2) >>
+  simp[EL_APPEND_EQN]
+QED
+
+(* The source index i includes the original leading PHIs, but not the
+   inserted prefix. Cuts and the final position share exactly p+i. *)
+Theorem current_certificate_ordinary_position:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  events = before ++ (l,bb,s0,rs0,H0,E0,ren,s1,rs1,H1,E1,bbs1,bbs2)::after /\
+  lookup_block l fn.fn_blocks = SOME old /\
+  old.bb_instructions = phis ++ tail /\
+  EVERY (\inst. inst.inst_opcode = PHI) phis /\
+  (tail = [] \/ (HD tail).inst_opcode <> PHI) /\
+  j < LENGTH tail /\ (EL j tail).inst_opcode <> PHI /\ i = LENGTH phis + j ==>
+  ?ip out rs E sm Hm sn rn Hn En.
+    EVERY (\inst. inst.inst_opcode = PHI) ip /\
+    current_edge_shape
+      (old with bb_instructions := ip ++ old.bb_instructions) bb /\
+    lookup_block l fn'.fn_blocks = SOME out /\
+    current_source_cut A
+      (l,bb,s0,rs0,H0,E0,ren,s1,rs1,H1,E1,bbs1,bbs2) (LENGTH ip + i) rs E /\
+    current_inst_trace (EL (LENGTH ip + i) (A l)) (EL i old.bb_instructions)
+      sm rs Hm E (EL (LENGTH ip + i) ren) sn rn Hn En /\
+    current_source_cut A
+      (l,bb,s0,rs0,H0,E0,ren,s1,rs1,H1,E1,bbs1,bbs2)
+      (SUC (LENGTH ip + i)) rn En /\
+    current_inst_no_id (EL (LENGTH ip + i) out.bb_instructions) =
+      current_inst_no_id (EL (LENGTH ip + i) ren)
+Proof
+  strip_tac >> gvs[] >>
+  drule current_certificate_source_shape >>
+  disch_then (qspecl_then [`old`,
+    `(l,bb,s0,rs0,H0,E0,ren,s1,rs1,H1,E1,bbs1,bbs2)`, `eb`] mp_tac) >>
+  simp[current_event_label_def, current_event_input_block_def] >>
+  strip_tac >>
+  `?bp bt. bb.bb_instructions = bp ++ bt /\
+     LENGTH bp = LENGTH pre + LENGTH phis /\ LENGTH bt = LENGTH tail /\
+     EVERY (\inst. inst.inst_opcode = PHI) bp /\
+     (bt = [] \/ (HD bt).inst_opcode <> PHI) /\ EL j bt = EL j tail` by
+    (drule current_edge_shape_ordinary_partition >>
+     disch_then (qspecl_then [`tail`, `pre ++ phis`, `j`] mp_tac) >>
+     simp[EVERY_APPEND, APPEND_ASSOC]) >>
+  gvs[] >>
+  `LENGTH bp + j < LENGTH bb.bb_instructions` by simp[] >>
+  `EL (LENGTH bp + j) bb.bb_instructions = EL j tail` by
+    simp[EL_APPEND_EQN] >>
+  `?rs E. current_source_cut A
+    (l,bb,s0,rs0,H0,E0,ren,s1,rs1,H1,E1,bbs1,bbs2) (LENGTH bp + j) rs E` by
+    metis_tac[current_source_cut_exists, arithmeticTheory.LESS_IMP_LESS_OR_EQ] >>
+  drule_all current_source_cut_step >> strip_tac >>
+  `current_inst_no_id (EL (LENGTH bp + j)
+     (if blocks_have_leading_phi fn.fn_blocks then
+       simplify_current_phi_block
+         (current_replay_edges (current_succ_map fn)
+           ((l,bb,s0,rs0,H0,E0,ren,s1,rs1,H1,E1,bbs1,bbs2)::after)
+           (bb with bb_instructions := ren))
+      else current_replay_edges (current_succ_map fn)
+           ((l,bb,s0,rs0,H0,E0,ren,s1,rs1,H1,E1,bbs1,bbs2)::after)
+           (bb with bb_instructions := ren)).bb_instructions) =
+    current_inst_no_id (EL (LENGTH bp + j) ren)` by
+    (irule current_event_ordinary_index >> simp[] >> metis_tac[]) >>
+  drule current_structural_certificate_final_event >>
+  disch_then (qspecl_then
+    [`(l,bb,s0,rs0,H0,E0,ren,s1,rs1,H1,E1,bbs1,bbs2)`, `eb`, `before`, `after`] mp_tac) >>
+  simp[current_event_label_def, current_event_renamed_block_def] >> strip_tac >>
+  qexists_tac `pre` >> goal_assum $ drule_at Any >>
+  fs[EL_APPEND_EQN, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  metis_tac[]
 QED
