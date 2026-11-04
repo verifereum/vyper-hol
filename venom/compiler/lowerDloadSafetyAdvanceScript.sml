@@ -70,3 +70,11 @@ Proof
       (qspec_then `SUC n` mp_tac) >> gvs[]) >>
   gvs[ld_memory_def, ld_nonghost_def] >> metis_tac[]
 QED
+
+Theorem ld_vars_inst_indices:
+  ld_vars P A (f with <|lf_src := f.lf_src with vs_inst_idx := i;
+                       lf_tgt := f.lf_tgt with vs_inst_idx := j|>) <=>
+  ld_vars P A f
+Proof
+  simp[ld_vars_def]
+QED
