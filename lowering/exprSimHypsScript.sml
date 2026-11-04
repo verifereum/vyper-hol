@@ -22,7 +22,8 @@
  *   expr_sim_pre      — expr_sim_inv, the expression well typed, its
  *                       integer types of whole bytes, its buffers below
  *                       the allocation limit, and no internal call,
- *                       raw_call or create in it
+ *                       create, delegate raw_call or raw_call without
+ *                       revert_on_failure in it
  *   byte_widths_expr  — every node's type has a width of whole bytes
  *   expr_body_pre     — expr_sim_pre less int_calls_expr e = []: the
  *                       body simulation's (bodySim); its calls are to
@@ -177,8 +178,11 @@
  *     raises where the lowering reads the slot.  expr_sim_pre_eval
  *     carries them on by exprStoragePreservation, which needs no
  *     postulate about the code external calls run.
- *   - ~expr_has_evm_run e: no delegate raw_call or create.  The source
- *     runs these on the EVM even with the outcome oracle, and a delegate
+ *   - ~expr_has_evm_run e: no delegate raw_call or create, and no raw_call
+ *     without revert_on_failure (a computed precompile is answered as a
+ *     success without the oracle, while the EVM call can fail for lack of
+ *     gas, #1008).  The source runs the first two on the EVM even with the
+ *     outcome oracle, and a delegate
  *     raw_call can write anything into the contract's storage, so nothing
  *     keeps the storage clauses across them without a postulate on that
  *     code.

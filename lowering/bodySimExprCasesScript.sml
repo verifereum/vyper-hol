@@ -24,7 +24,7 @@
 Theory bodySimExprCases
 Ancestors
   list bodySim exprSim exprSimHyps exprSimOperators exprSimAttribute
-  exprSimPlaces exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
+  exprSimPlaces exprSimAggregates exprSimSend exprSimRawCall exprSimMain exprSimECArith vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph
 
 (* With no internal call in it, an expression simulates by
@@ -464,14 +464,14 @@ Proof
   rpt strip_tac >> irule body_expr_ok_intro >> cheat
 QED
 
-(* GAP (#636 operands with internal calls): raw_call.  Its case lemma is
-   still stated over expr_sim_below, for compile_expr_sim only. *)
+(* exprSimRawCall's compile_raw_call_case. *)
 Theorem body_raw_call_case:
   !cx ty flags es v18.
     body_exprs_ok cx es ==>
     body_expr_ok cx (Call ty (RawCallTarget flags) es v18)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  rpt strip_tac >> irule body_expr_ok_of_case >> rpt strip_tac >>
+  irule compile_raw_call_case >> metis_tac[body_exprs_ok_case]
 QED
 
 (* GAP (#636 operands with internal calls): raw_call with calldata.  Its

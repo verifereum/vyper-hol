@@ -8,9 +8,9 @@
  * need neither.  They take external calls and send from the outcome oracle
  * (the source's outcomes are SOME, as state_rel has it), whose successful
  * outcomes keep storage well formed by oracle_storage_ok; they make no
- * internal calls (int_calls_expr e = []); and they have no raw_call or
- * create (expr_has_evm_run), the calls the source runs on the EVM even
- * with the oracle.
+ * internal calls (int_calls_expr e = []); and they have no delegate
+ * raw_call or create (expr_has_evm_run), the calls the source runs on the
+ * EVM even with the oracle, and no raw_call without revert_on_failure.
  *
  * TOP-LEVEL:
  *   eval_expr_oracle_preserves_contract_storage_well_formed
