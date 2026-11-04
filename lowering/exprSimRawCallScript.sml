@@ -544,6 +544,8 @@ Theorem raw_call_addr_data_sim[local]:
   frag_exec ctx sa s4 (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
     (\t. ?av bs es1 ta td b.
       rr = INL [av;BytesV bs] /\
+      (?u. run_inst_seq (emitted_insts s2 s4) td = OK u /\
+           t = u with vs_inst_idx := t.vs_inst_idx) /\
       expr_post ctx func cenv cx a es sa s1 s0 es1 av addr ta /\
       expr_post ctx func cenv cx d es1 s1 s2 ta es2 (BytesV bs) data td /\
       expr_val_rel cx (BaseT AddressT) av addr t /\
@@ -779,6 +781,355 @@ Proof
   simp[] >> strip_tac >> gvs[] >>
   qexists_tac `s` >> simp[emitted_insts_def, run_inst_seq_def, wb_frame_refl]
 QED
+
+Theorem raw_call_kwargs_ready[local]:
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
+  (nocalls ==> int_calls_expr (Call ann (RawCallTarget flags) (a::d::kws) dflt) = []) /\
+  exprs_case nocalls ctx func cenv cx kws ==>
+  typed_args_ready ctx func cenv cx (K (BaseT (UintT 256)))
+    (expr_sim_inv cenv cx env) kws
+Proof
+  strip_tac >> drule raw_call_pre_flags >> strip_tac >>
+  drule raw_call_kwargs_types >> simp[] >> strip_tac >>
+  irule typed_args_ready_of_case >> qexists_tac `nocalls` >> simp[] >>
+  rpt gen_tac >> strip_tac >> rpt conj_tac
+  >- (`MEM e (a::d::kws)` by simp[] >>
+      drule_all expr_body_pre_raw_call_arg >> simp[]) 
+  >- (rw[] >> gvs[int_calls_expr_def] >> metis_tac[int_calls_exprs_mem]) >>
+  fs[EVERY_MEM, is_word_type_def]
+QED
+
+Theorem raw_call_eval_exprs_append[local]:
+  !xs ys cx st.
+    eval_exprs cx (xs ++ ys) st =
+    (case eval_exprs cx xs st of
+       (INR ex,st1) => (INR ex,st1)
+     | (INL vs,st1) =>
+       case eval_exprs cx ys st1 of
+         (INR ex,st2) => (INR ex,st2)
+       | (INL ws,st2) => (INL (vs ++ ws),st2))
+Proof
+  Induct_on `xs`
+  >- (simp[Once evaluate_def, return_def] >>
+      rpt gen_tac >> Cases_on `eval_exprs cx ys st` >>
+      rename1 `eval_exprs cx ys st = (res,t)` >> Cases_on `res` >> simp[])
+  >> rpt gen_tac >> simp[Once evaluate_def, bind_def, return_def] >>
+  simp[Once evaluate_def, bind_def, return_def] >>
+  Cases_on `eval_expr cx h st` >>
+  rename1 `eval_expr cx h st = (res,t)` >> Cases_on `res` >> simp[] >>
+  rename1 `read_result cx tv t` >>
+  Cases_on `read_result cx tv t` >>
+  rename1 `read_result cx tv t = (res,u)` >> Cases_on `res` >> simp[] >>
+  Cases_on `eval_exprs cx xs u` >>
+  rename1 `eval_exprs cx xs u = (res,vst)` >> Cases_on `res` >> simp[] >>
+  Cases_on `eval_exprs cx ys vst` >>
+  rename1 `eval_exprs cx ys vst = (res,wst)` >> Cases_on `res` >> simp[]
+QED
+
+Theorem raw_call_prefix_sim[local]:
+  exprs_case nocalls ctx func cenv cx (a::d::kws) /\
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
+  (nocalls ==> int_calls_expr (Call ann (RawCallTarget flags) (a::d::kws) dflt) = []) /\
+  lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
+  lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
+  emit_op MLOAD [data] s2 = (len,s3) /\
+  emit_op ADD [data; Lit 32w] s3 = (ptr_op,s4) /\
+  compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws kws s4 =
+    ((vo,go,ignored),s5) /\
+  (case go of SOME g => (g,s5) | NONE => emit_op GAS [] s5) = (gas,s6) /\
+  eval_exprs cx (a::d::kws) es = (rr,es') /\ fn_has_code sa s6 func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa s6 (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\t. ?av bs kvs xs b gw es2 tm tk.
+      rr = INL (av::BytesV bs::kvs) /\
+      eval_exprs cx [a;d] es = (INL [av;BytesV bs],es2) /\
+      eval_exprs cx kws es2 = (INL kvs,es') /\
+      expr_val_rel cx (BaseT AddressT) av addr t /\
+      typed_args_post ctx func cenv cx es2 s4 tm es' kws xs kvs tk /\
+      vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
+      go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ignored = NONE /\
+      (!x w. MEM x xs /\ eval_operand x tk = SOME w ==> eval_operand x t = SOME w) /\
+      eval_operand len t = SOME (n2w (LENGTH bs)) /\
+      eval_operand ptr_op t = SOME (n2w (b+32)) /\ eval_operand gas t = SOME gw /\
+      mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
+      b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
+      stmt_state_rel ctx func cenv cx es' t /\ wb_frame cenv es sa s0 t /\
+      (!x. addr = Var x \/ len = Var x \/ ptr_op = Var x \/ gas = Var x \/
+           MEM (Var x) xs ==> not_fresh_at s6 x))
+    (wb_args_exit rr)
+Proof
+  strip_tac >> drule raw_call_pre_flags >> strip_tac >>
+  drule raw_call_kwargs_types >> simp[] >> strip_tac >>
+  `LENGTH kws = LENGTH flags.rcf_kws` by fs[] >>
+  drule_all raw_call_kwargs_word_args >> strip_tac >>
+  qspecl_then [`kws`, `cenv`, `K (BaseT (UintT 256))`] mp_tac lower_word_args_shape >>
+  (impl_tac
+   >- (rpt strip_tac >>
+       `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+       `MEM e (a::d::kws)` by simp[] >>
+       `expr_body_pre cenv cx env e es` by
+         (drule_all expr_body_pre_raw_call_arg >> simp[]) >>
+       `is_word_type (expr_type e)` by fs[EVERY_MEM, is_word_type_def] >>
+       drule_all expr_body_pre_lower_value_word_shape >> simp[])) >>
+  disch_then drule >> strip_tac >>
+  `ci_mono sa s1 /\ ci_mono s1 s2` by
+    metis_tac[ci_mono_lower_value_cfn, compile_expr_ci_mono, pairTheory.SND] >>
+  `ci_mono s2 s3 /\ ci_mono s3 s4` by
+    metis_tac[ci_mono_emit_op, pairTheory.SND] >>
+  `cs_extends sa s4` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
+  `ci_mono s5 s6` by
+    (Cases_on `go` >> gvs[]
+     >- metis_tac[ci_mono_emit_op, pairTheory.SND] >> simp[ci_mono_refl]) >>
+  `cs_extends s4 s6` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
+  `fn_has_code sa s4 func /\ fn_has_code s4 s6 func` by
+    metis_tac[fn_has_code_split] >>
+  suspend "compose"
+QED
+
+Resume raw_call_prefix_sim[compose]:
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
+  >- (irule frag_exec_pointwise >> simp[]) >>
+  Cases_on `eval_exprs cx [a;d] es` >>
+  rename1 `eval_exprs cx [a;d] es = (rd,es2)` >>
+  `eval_exprs cx ([a;d] ++ kws) es = (rr,es')` by simp[] >>
+  qpat_x_assum `eval_exprs cx ([a;d] ++ kws) es = _` mp_tac >>
+  pure_rewrite_tac[raw_call_eval_exprs_append] >> asm_rewrite_tac[] >>
+  disch_tac >>
+  drule_all raw_call_addr_data_sim >>
+  disch_then (qspec_then `s0` mp_tac) >>
+  disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
+  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
+                         `wb_args_exit rr`] mp_tac) >>
+  (impl_tac >- (simp[] >> Cases_on `rd` >> gvs[wb_args_exit_def])) >>
+  disch_then (mp_tac o MATCH_MP frag_exec_then) >>
+  disch_then irule >> simp[] >> rpt strip_tac >>
+  `exprs_case nocalls ctx func cenv cx kws /\ expr_sim_inv cenv cx env es2` by
+    (qpat_assum `eval_exprs cx [a;d] es = _`
+       (strip_assume_tac o MATCH_MP eval_exprs_cons_cases) >>
+     gvs[] >>
+     qpat_assum `eval_exprs cx [d] _ = _`
+       (strip_assume_tac o MATCH_MP eval_exprs_cons_cases) >>
+     gvs[eval_exprs_nil] >>
+     drule_all raw_call_addr_data_values >> strip_tac >>
+     drule eval_expr_read_INL >> strip_tac >>
+     fs[exprs_case_def] >> metis_tac[eval_expr_read_INL]) >>
+  drule_all raw_call_kwargs_ready >> strip_tac >>
+  `wb_args_shape cenv (K (BaseT (UintT 256))) kws` by
+    (irule typed_stack_args_shape >> qexistsl_tac [`cx`, `env`, `es2`] >>
+     simp[] >> rpt gen_tac >> strip_tac >> conj_tac
+     >- (irule expr_body_pre_raw_call_arg >>
+         first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+     fs[EVERY_MEM, is_word_type_def]) >>
+  `local_ptrs_reserved cenv s4` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
+     fs[ci_mono_def] >> decide_tac) >>
+  `fn_has_code s4 s5 func` by
+    metis_tac[fn_has_code_split, ci_mono_def] >>
+  suspend "keywords"
+QED
+
+Resume raw_call_prefix_sim[keywords]:
+  `?cap. expr_type d = BaseT (BytesT (Dynamic cap))` by
+    (drule raw_call_pre_operands >> simp[] >> metis_tac[]) >>
+  `expr_body_pre cenv cx env d es2` by
+    (irule expr_body_pre_raw_call_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  `evaluate_type (get_tenv cx) (expr_type d) = SOME (BaseTV (BytesT (Dynamic cap)))` by
+    (drule_at (Pat `expr_body_pre _ _ _ d _`) expr_body_pre_type_evaluates >>
+     simp[vyperValueTheory.evaluate_type_def]) >>
+  drule_all hash_dynamic_post_view >> strip_tac >>
+  `b < dimword (:256) /\ b' < dimword (:256)` by decide_tac >>
+  `b = b'` by
+    (`(n2w b : bytes32) = n2w b'` by metis_tac[optionTheory.SOME_11] >>
+     fs[wordsTheory.n2w_11] >> metis_tac[arithmeticTheory.LESS_MOD]) >>
+  qpat_x_assum `b = b'` (fn th => fs[GSYM th]) >>
+  `local_ptrs_reserved cenv s1` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[ci_mono_def]) >>
+  `!x. data = Var x ==> not_fresh_at s2 x` by
+    metis_tac[compile_lower_value_var] >>
+  `local_ptrs_reserved cenv s2` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
+     fs[ci_mono_def] >> decide_tac) >>
+  `expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) s1 s2 es2 (BytesV bs) data td` by
+    fs[expr_post_def] >>
+  drule_all raw_call_data_prefix_placement >> strip_tac >>
+  `expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) s1 s2 es2 (BytesV bs) data t /\
+   eval_operand data t = SOME (n2w b)` by
+    (qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ u` mp_tac >>
+     qpat_x_assum `eval_operand data u = _` mp_tac >>
+     qpat_x_assum `t = u with vs_inst_idx := _` mp_tac >>
+     rpt (pop_assum kall_tac) >> strip_tac >>
+     once_asm_rewrite_tac[] >>
+     Cases_on `data` >>
+     simp[expr_val_at_def, eval_operand_def, lookup_var_def, local_region_def]) >>
+  suspend "kwargs_run"
+QED
+
+Resume raw_call_prefix_sim[kwargs_run]:
+  qpat_x_assum `run_inst_seq _ _ = OK u` kall_tac >>
+  qpat_x_assum `t = u with vs_inst_idx := _` kall_tac >>
+  qpat_x_assum `expr_post _ _ _ _ a _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `expr_post _ _ _ _ d _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ td` kall_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ u` kall_tac >>
+  `cs_extends s5 s6` by fs[ci_mono_def] >>
+  Cases_on `eval_exprs cx kws es2` >>
+  rename1 `eval_exprs cx kws es2 = (kr,es3)` >>
+  drule_all lower_typed_args_sim >>
+  disch_then (qspec_then `t` mp_tac) >>
+  disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
+  disch_then (qspecl_then [`\s. s = t`, `wb_args_exit rr`] mp_tac) >>
+  (impl_tac >- (simp[] >> Cases_on `kr` >> gvs[wb_args_exit_def])) >>
+  disch_then (mp_tac o MATCH_MP frag_exec_then) >>
+  disch_then irule >> simp[] >> rpt strip_tac >>
+  suspend "gas_run"
+QED
+
+Resume raw_call_prefix_sim[gas_run]:
+  gvs[] >>
+  `stmt_state_rel ctx func cenv cx es' t' /\ wb_frame cenv es2 s4 t t'` by
+    fs[typed_args_post_def] >>
+  `local_ptrs_reserved cenv s5` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `s4` >> simp[]) >>
+  `!ks (ops : operand list) g.
+     ext_call_kwarg EKGas ks ops = SOME g ==> MEM g ops` by
+    (rpt (pop_assum kall_tac) >>
+     Induct_on `ks` >> Cases_on `ops` >>
+     simp[ext_call_kwarg_def] >> rpt strip_tac >>
+     rename1 `(if key = EKGas then SOME op else _) = SOME g` >>
+     Cases_on `key = EKGas` >> gvs[] >> metis_tac[]) >>
+  `!g. ext_call_kwarg EKGas flags.rcf_kws xs = SOME g ==>
+       ?w. eval_operand g t' = SOME w` by
+    (rpt strip_tac >>
+     `MEM g xs` by metis_tac[] >>
+     qpat_x_assum `typed_args_post _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[typed_args_post_def] >> strip_tac >>
+     drule_all LIST_REL_MEM_IMP >> simp[] >> metis_tac[]) >>
+  drule_all raw_call_optional_gas_run >> strip_tac >>
+  suspend "gas_pack"
+QED
+
+Resume raw_call_prefix_sim[gas_pack]:
+  `mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs` by simp[] >>
+  `b < dimword (:256)` by decide_tac >>
+  `s2.cs_next_id <= s4.cs_next_id` by (fs[ci_mono_def] >> decide_tac) >>
+  `mem_bytes_at (b+32) (LENGTH bs) t'.vs_memory = bs` by
+    (drule_all raw_call_kwargs_payload >> simp[]) >>
+  `MAP FDOM es.scopes = MAP FDOM es2.scopes /\
+   MAP FDOM es2.scopes = MAP FDOM es'.scopes` by
+    metis_tac[eval_exprs_preserves_scopes_dom] >>
+  suspend "frames"
+QED
+
+Resume raw_call_prefix_sim[frames]:
+  `wb_frame cenv es sa s0 t'` by
+    (irule wb_frame_trans >> simp[] >> reverse conj_tac
+     >- (goal_assum (drule_at Any)) >>
+     qexistsl_tac [`es2`, `s4`, `t`] >> fs[ci_mono_def] >> decide_tac) >>
+  `wb_frame cenv es sa s0 t''` by
+    (irule wb_frame_trans >> simp[] >> reverse conj_tac
+     >- (goal_assum (drule_at Any)) >>
+     qexistsl_tac [`es'`, `s5`, `t'`] >> fs[ci_mono_def] >> decide_tac) >>
+  suspend "operand_keep"
+QED
+
+Resume raw_call_prefix_sim[operand_keep]:
+  `!x. not_fresh_at s4 x ==> not_fresh_at s5 x` by
+    (fs[not_fresh_at_def] >> decide_tac) >>
+  `!op w. (!x. op = Var x ==> not_fresh_at s4 x) /\
+           (!l. op <> Label l) /\ eval_operand op t = SOME w ==> eval_operand op t'' = SOME w` by
+    (qpat_x_assum `wb_frame cenv es2 s4 t t'` mp_tac >>
+     qpat_x_assum `wb_frame cenv es' s5 t' t''` mp_tac >>
+     qpat_x_assum `!x. not_fresh_at s4 x ==> _` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     Cases_on `op` >> gvs[eval_operand_def] >>
+     fs[wb_frame_def] >> metis_tac[]) >>
+  `!op w. MEM op xs /\ eval_operand op t' = SOME w ==>
+          eval_operand op t'' = SOME w` by
+    (qpat_x_assum `EVERY _ xs` mp_tac >>
+     qpat_x_assum `wb_frame cenv es' s5 t' t''` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[EVERY_MEM] >> rpt strip_tac >>
+     first_x_assum drule >> strip_tac >>
+     Cases_on `op` >> gvs[eval_operand_def] >> metis_tac[wb_frame_vars]) >>
+  suspend "run_final"
+QED
+
+Resume raw_call_prefix_sim[run_final]:
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `expr_body_pre cenv cx env a es` by
+    (irule expr_body_pre_raw_call_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  `expr_type a = BaseT AddressT` by
+    (drule raw_call_pre_operands >> simp[]) >>
+  `is_word_type (expr_type a)` by simp[is_word_type_def] >>
+  `!l. addr <> Label l` by
+    (qpat_x_assum `lower_value _ _ _ _ sa = (addr,s1)` mp_tac >>
+     qpat_x_assum `expr_body_pre _ _ _ a es` mp_tac >>
+     qpat_x_assum `is_word_type (expr_type a)` mp_tac >>
+     rpt (pop_assum kall_tac) >> metis_tac[expr_body_pre_lower_value_word_shape]) >>
+  `safe_operand s3 len /\ safe_operand s4 ptr_op` by
+    metis_tac[emit_op_safe_operand] >>
+  `eval_operand len t'' = SOME (n2w (LENGTH bs)) /\
+   eval_operand ptr_op t'' = SOME (n2w (b+32))` by
+    (fs[safe_operand_def] >> metis_tac[]) >>
+  suspend "address_final"
+QED
+
+Resume raw_call_prefix_sim[address_final]:
+  `expr_val_rel cx (BaseT AddressT) av addr t''` by
+    (qpat_x_assum `expr_val_rel _ _ _ addr t` mp_tac >>
+     qpat_x_assum `!op w. (_ /\ _ /\ _) ==> _` mp_tac >>
+     qpat_x_assum `!x. addr = Var x \/ _ ==> _` mp_tac >>
+     qpat_x_assum `!l. addr <> Label l` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[expr_val_rel_def, is_word_type_def] >> metis_tac[]) >>
+  suspend "fresh_final"
+QED
+
+Resume raw_call_prefix_sim[fresh_final]:
+  `!x. gas = Var x ==> not_fresh_at s6 x` by
+    (Cases_on `ext_call_kwarg EKGas flags.rcf_kws xs` >> gvs[]
+     >- metis_tac[emit_op_safe_operand, safe_operand_def] >>
+     rename1 `ext_call_kwarg EKGas flags.rcf_kws xs = SOME g` >>
+     `MEM g xs` by metis_tac[] >>
+     fs[EVERY_MEM, not_fresh_at_def, ci_mono_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  `!x. addr = Var x \/ len = Var x \/ ptr_op = Var x \/ gas = Var x \/
+       MEM (Var x) xs ==> not_fresh_at s6 x` by
+    (qpat_x_assum `!x. addr = Var x \/ len = Var x \/ ptr_op = Var x ==> _` mp_tac >>
+     qpat_x_assum `!x. gas = Var x ==> _` mp_tac >>
+     qpat_x_assum `EVERY _ xs` mp_tac >>
+     qpat_x_assum `ci_mono s5 s6` mp_tac >>
+     qpat_x_assum `s4.cs_next_var <= s5.cs_next_var` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[EVERY_MEM, not_fresh_at_def, ci_mono_def] >> rpt strip_tac >>
+     metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_TRANS]) >>
+  suspend "normalize_final"
+QED
+
+Resume raw_call_prefix_sim[normalize_final]:
+  irule frag_exec_run_inst_seq >> conj_tac
+  >- (simp[] >> qexistsl_tac [`xs`, `b`, `t`, `t'`] >>
+      simp[stmt_state_rel_inst_idx, wb_frame_def, lookup_var_def,
+           eval_operand_def, expr_val_rel_def] >>
+      fs[expr_val_rel_def, is_word_type_def, wb_frame_def, lookup_var_def] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  suspend "gas_code"
+QED
+
+Resume raw_call_prefix_sim[gas_code]:
+  Cases_on `ext_call_kwarg EKGas flags.rcf_kws xs` >> gvs[]
+  >- (qpat_x_assum `emit_op GAS [] _ = _` mp_tac >>
+      simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+           fresh_id_def, fresh_var_def, emit_def] >>
+      rpt strip_tac >> gvs[emitted_insts_def,
+        rich_listTheory.DROP_LENGTH_APPEND, is_terminator_def,
+        mk_inst_def, rich_listTheory.IS_PREFIX_APPEND]) >>
+  simp[emitted_insts_def]
+QED
+
+Finalise raw_call_prefix_sim
 
 (* TOP-LEVEL *)
 Theorem compile_raw_call_case:
