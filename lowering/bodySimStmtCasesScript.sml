@@ -4963,6 +4963,34 @@ Proof
   qexistsl_tac [`leaf`, `delta`, `sb`] >> gvs[]
 QED
 
+Theorem aug_place_dead_bytes_tuple_update:
+  !types i leaf bs k u st.
+    oEL i types = SOME leaf /\
+    bs + type_slot_size (TupleTV types) <= dimword (:256) /\
+    bs + tuple_prefix_slot_size i types <= w2n k /\
+    w2n k < bs + tuple_prefix_slot_size i types + type_slot_size leaf /\
+    (!j byte. dead_bytes (update_storage k u st)
+                (bs + tuple_prefix_slot_size i types) leaf j byte <=>
+              dead_bytes st (bs + tuple_prefix_slot_size i types) leaf j byte) ==>
+    !j byte. dead_bytes (update_storage k u st) bs (TupleTV types) j byte <=>
+             dead_bytes st bs (TupleTV types) j byte
+Proof
+  Induct_on `types` >- simp[listTheory.oEL_def] >>
+  rpt gen_tac >> Cases_on `i` >>
+  simp[listTheory.oEL_def, tuple_prefix_slot_size_def,
+       vyperValueTheory.type_slot_size_def] >> strip_tac >> gvs[] >>
+  simp[dead_bytes_def] >> rpt gen_tac
+  >- (AP_TERM_TAC >> irule (cj 2 accountsRelPropsTheory.dead_bytes_frame) >>
+      rpt strip_tac >> irule aug_place_update_lookup_other >> decide_tac) >>
+  `dead_bytes (update_storage k u st) bs h j byte <=>
+   dead_bytes st bs h j byte` by
+    (irule (cj 1 accountsRelPropsTheory.dead_bytes_frame) >> rpt strip_tac >>
+     irule aug_place_update_lookup_other >> decide_tac) >>
+  simp[] >> AP_TERM_TAC >>
+  first_x_assum (irule o SRULE [dead_bytes_def, vyperValueTheory.type_slot_size_def]) >>
+  conj_tac >- decide_tac >> qexistsl_tac [`n`, `leaf`] >> gvs[]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
