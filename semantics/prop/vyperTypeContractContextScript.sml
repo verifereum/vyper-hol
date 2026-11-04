@@ -10,7 +10,9 @@ Theory vyperTypeContractContext
 Ancestors
   list rich_list arithmetic finite_map alist option pair
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
-  vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeValues
+  vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeValues vyperTypeBindArguments
+  vyperTypeStmtSoundness vyperTypeInitialState vyperPureExpr vyperEvalPreservesScopes vyperEvalExprPreservesScopesDom
+  vyperEvalPreservesImmutablesDom vyperScopePreservation vyperStatePreservation
   vyperLookupStorage vyperTypeContractStaticMaps
 Libs
   wordsLib
@@ -275,23 +277,6 @@ Proof
   rw[] >>
   drule_all check_contract_toplevel_body_MEM >>
   simp[check_toplevel_body_def]
-QED
-
-(* Live runtime bodies never gain constructor immutable-write permission,
-   including when check_contract is invoked in deploy mode. *)
-Theorem check_contract_runtime_function_body_readonly_MEM:
-  check_contract in_deploy layouts addr mods = SOME art /\
-  ALOOKUP mods src = SOME ts /\
-  MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts /\
-  function_live layouts addr mods (live_functions layouts addr mods) (src,fn) /\
-  vis <> Deploy ==>
-  check_function_body layouts addr mods
-    (art with cta_bare_global_assignable := FEMPTY)
-    src mut nr args dflts ret body
-Proof
-  rw[] >>
-  drule_all check_contract_toplevel_body_MEM >>
-  simp[check_toplevel_body_def, check_function_body_in_mode_def]
 QED
 
 (* An entry point of an allocated module: the main module, or a module whose
