@@ -169,15 +169,6 @@ Definition alloc_limits_raise_def:
   alloc_limits_raise cenv RaiseUnreachable = T
 End
 
-(* alloc_limits_expr of every expression of a statement, targets' keys
-   included, and the limit for every local it declares: Python allocates a
-   declared local and a loop variable with Context.new_variable.  A tuple
-   assignment from a memory view (is_memory_view) needs a buffer of the
-   source's size: a memory source may be staged in one (compile_tuple_unpack;
-   Python's _lower_tuple_unpack allocates it with
-   Context.new_temporary_value), and a storage, transient or immutable source
-   is read into one (compile_ensure_in_memory; Python's Context.unwrap).  The
-   check covers both, so don't narrow it to the staging condition alone. *)
 (* A log's two buffers are below Python's allocation limit, as lower_Log
    allocates them through allocate_buffer: the data of its non-indexed
    arguments, and their ABI encoding.  An event the compile env doesn't
@@ -192,6 +183,16 @@ Definition log_alloc_ok_def:
           abi_size_bound cenv.ce_struct_fields (TupleT tys) < 2 ** 64
 End
 
+(* alloc_limits_expr of every expression of a statement, targets' keys
+   included, and the limit for every local it declares: Python allocates a
+   declared local and a loop variable with Context.new_variable.  A tuple
+   assignment from a memory view (is_memory_view) needs a buffer of the
+   source's size: a memory source may be staged in one (compile_tuple_unpack;
+   Python's _lower_tuple_unpack allocates it with
+   Context.new_temporary_value), and a storage, transient or immutable source
+   is read into one (compile_ensure_in_memory; Python's Context.unwrap).  The
+   check covers both, so don't narrow it to the staging condition alone.
+   A log's two buffers are bounded by log_alloc_ok. *)
 Definition alloc_limits_stmt_def:
   alloc_limits_stmt cenv Pass = T ∧
   alloc_limits_stmt cenv Break = T ∧

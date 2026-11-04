@@ -274,6 +274,19 @@ Proof
   ACCEPT_TAC (EQF_ELIM allocation_limit_log_rejected_eval)
 QED
 
+(* n = 2**63 - 64: the data buffer takes 2**64 - 64 bytes and fits; only
+   the ABI buffer, 2**64 bytes, reaches the limit. *)
+val allocation_limit_log_abi_rejected_eval =
+  EVAL ``fn_allocs_ok (allocation_limit_log_tops (2 ** 63 - 64))
+           (allocation_limit_log_fn (2 ** 63 - 64))``
+
+Theorem allocation_limit_log_abi_rejected:
+  ¬fn_allocs_ok (allocation_limit_log_tops (2 ** 63 - 64))
+     (allocation_limit_log_fn (2 ** 63 - 64))
+Proof
+  ACCEPT_TAC (EQF_ELIM allocation_limit_log_abi_rejected_eval)
+QED
+
 (* n = 2**63 - 96: the ABI buffer, the larger, takes 2**64 - 64 bytes. *)
 val allocation_limit_log_accepted_eval =
   EVAL ``fn_allocs_ok (allocation_limit_log_tops (2 ** 63 - 96))
