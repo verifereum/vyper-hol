@@ -532,6 +532,172 @@ Proof
   irule ao_inst_wf_terminator_outputs >> simp[]
 QED
 
+Theorem ao_iszero_label_positions:
+  label_positions_ok inst /\ inst.inst_opcode = ISZERO ==>
+  EVERY (\op. get_label op = NONE) inst.inst_operands
+Proof
+  simp[label_positions_ok_def] >> strip_tac >>
+  gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum drule >> Cases_on `op` >>
+  simp[stackPlanTypesTheory.is_label_operand_def, venomStateTheory.get_label_def]
+QED
+
+Theorem ao_label_free_lookup[local]:
+  EVERY (\p. EVERY (\op. get_label op = NONE) (SND p)) targets /\
+  ALOOKUP targets v = SOME ops ==>
+  EVERY (\op. get_label op = NONE) ops
+Proof
+  Induct_on `targets` >> simp[] >>
+  gen_tac >> PairCases_on `h` >> simp[] >>
+  Cases_on `h0 = v` >> simp[] >> metis_tac[]
+QED
+
+Theorem ao_resolve_iszero_op_label:
+  EVERY (\p. EVERY (\op. get_label op = NONE) (SND p)) targets ==>
+  get_label (ao_resolve_iszero_op targets opc op) = get_label op
+Proof
+  strip_tac >> Cases_on `op` >>
+  simp[ao_resolve_iszero_op_def, venomStateTheory.get_label_def] >>
+  rename1 `ALOOKUP targets v` >>
+  Cases_on `ALOOKUP targets v` >> simp[venomStateTheory.get_label_def] >>
+  IF_CASES_TAC >- simp[venomStateTheory.get_label_def] >>
+  IF_CASES_TAC >> simp[venomStateTheory.get_label_def] >>
+  drule_all ao_label_free_lookup >>
+  simp[listTheory.EVERY_EL] >> strip_tac >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem ao_resolve_iszero_inst_labels:
+  EVERY (\p. EVERY (\op. get_label op = NONE) (SND p)) targets ==>
+  MAP get_label (ao_resolve_iszero_inst targets inst).inst_operands =
+  MAP get_label inst.inst_operands
+Proof
+  strip_tac >> simp[ao_resolve_iszero_inst_def, listTheory.MAP_MAP_o,
+    combinTheory.o_DEF] >>
+  irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >>
+  irule ao_resolve_iszero_op_label >> simp[]
+QED
+
+Theorem ao_resolve_iszero_inst_successors:
+  EVERY (\p. EVERY (\op. get_label op = NONE) (SND p)) targets ==>
+  get_successors (ao_resolve_iszero_inst targets inst) = get_successors inst
+Proof
+  strip_tac >> simp[get_successors_def, ao_resolve_iszero_inst_structure,
+    ao_resolve_iszero_inst_labels]
+QED
+
+Theorem ao_transform_inst_terminator_successors:
+  inst_wf inst /\ is_terminator inst.inst_opcode /\
+  EVERY (\p. EVERY (\op. get_label op = NONE) (SND p)) targets ==>
+  MAP get_successors (ao_transform_inst dfg ra lbl idx targets fr inst) =
+    [get_successors inst]
+Proof
+  strip_tac >> drule_all ao_transform_inst_terminator >>
+  disch_then (qspecl_then [`targets`, `ra`, `lbl`, `idx`, `fr`, `dfg`] mp_tac) >>
+  simp[] >> disch_then SUBST1_TAC >>
+  simp[ao_resolve_iszero_inst_successors]
+QED
+
+Theorem ao_compute_iszero_step_label_free:
+  EVERY (\p. EVERY (\op. get_label op = NONE) (SND p)) targets /\
+  (inst.inst_opcode = ISZERO ==>
+   EVERY (\op. get_label op = NONE) inst.inst_operands) ==>
+  EVERY (\p. EVERY (\op. get_label op = NONE) (SND p))
+    (ao_compute_iszero_step targets inst)
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = ISZERO`
+  >- (Cases_on `inst.inst_operands` >> simp[ao_compute_iszero_step_def] >>
+      rename1 `inst.inst_operands = inp::rest` >>
+      Cases_on `rest` >> simp[] >>
+      Cases_on `inst.inst_outputs` >> simp[] >>
+      rename1 `inst.inst_outputs = out::outs` >>
+      Cases_on `outs` >> simp[] >>
+      gvs[] >> Cases_on `inp` >>
+      simp[venomStateTheory.get_label_def] >>
+      CASE_TAC >> simp[listTheory.EVERY_SNOC, venomStateTheory.get_label_def] >>
+      drule_all ao_label_free_lookup >> simp[]) >>
+  simp[ao_compute_iszero_step_def]
+QED
+
+Theorem ao_compute_iszero_fold_label_free:
+  EVERY (\p. EVERY (\op. get_label op = NONE) (SND p)) targets /\
+  EVERY (\inst. inst.inst_opcode = ISZERO ==>
+    EVERY (\op. get_label op = NONE) inst.inst_operands) insts ==>
+  EVERY (\p. EVERY (\op. get_label op = NONE) (SND p))
+    (FOLDL ao_compute_iszero_step targets insts)
+Proof
+  qid_spec_tac `targets` >> Induct_on `insts` >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >> simp[] >>
+  irule ao_compute_iszero_step_label_free >> simp[]
+QED
+
+Theorem ao_compute_fn_iszero_targets_label_free:
+  EVERY label_positions_ok (fn_insts fn) ==>
+  EVERY (\p. EVERY (\op. get_label op = NONE) (SND p))
+    (ao_compute_fn_iszero_targets fn)
+Proof
+  strip_tac >> simp[ao_compute_fn_iszero_targets_def, ao_compute_iszero_targets_def] >>
+  irule ao_compute_iszero_fold_label_free >> simp[] >>
+  rewrite_tac[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  rename1 `MEM inst (fn_insts fn)` >>
+  `label_positions_ok inst` by (gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  BETA_TAC >> strip_tac >> drule_all ao_iszero_label_positions >>
+  simp[listTheory.EVERY_MEM]
+QED
+
+Theorem ao_handle_offset_iszero:
+  (ao_handle_offset_inst inst).inst_opcode = ISZERO ==>
+  ao_handle_offset_inst inst = inst /\ inst.inst_opcode = ISZERO
+Proof
+  Cases_on `inst.inst_opcode = ADD`
+  >- (Cases_on `inst.inst_operands` >> simp[ao_handle_offset_inst_def] >>
+      rename1 `inst.inst_operands = a::xs` >>
+      Cases_on `a` >> simp[] >> Cases_on `xs` >> simp[] >>
+      rename1 `inst.inst_operands = Label l::b::ys` >>
+      Cases_on `b` >> simp[] >> Cases_on `ys` >> simp[]) >>
+  simp[ao_handle_offset_inst_def]
+QED
+
+Theorem ao_offset_iszero_inputs:
+  EVERY label_positions_ok insts ==>
+  EVERY (\inst. inst.inst_opcode = ISZERO ==>
+    EVERY (\op. get_label op = NONE) inst.inst_operands)
+    (MAP ao_handle_offset_inst insts)
+Proof
+  strip_tac >> simp[listTheory.EVERY_MAP] >>
+  gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  drule ao_handle_offset_iszero >> strip_tac >> gvs[] >>
+  rename1 `MEM inst insts` >>
+  `label_positions_ok inst` by metis_tac[] >>
+  drule_all ao_iszero_label_positions >> simp[listTheory.EVERY_MEM]
+QED
+
+Theorem ao_offset_blocks_iszero_inputs:
+  EVERY label_positions_ok (fn_insts_blocks bbs) ==>
+  EVERY (\inst. inst.inst_opcode = ISZERO ==>
+    EVERY (\op. get_label op = NONE) inst.inst_operands)
+    (fn_insts_blocks
+      (MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) bbs))
+Proof
+  Induct_on `bbs` >> simp[fn_insts_blocks_def] >>
+  metis_tac[ao_offset_iszero_inputs]
+QED
+
+Theorem ao_offset_fn_iszero_targets_label_free:
+  EVERY label_positions_ok (fn_insts fn) ==>
+  EVERY (\p. EVERY (\op. get_label op = NONE) (SND p))
+    (ao_compute_fn_iszero_targets
+      (fn with fn_blocks :=
+        MAP (\bb. bb with bb_instructions :=
+          MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks))
+Proof
+  strip_tac >>
+  simp[ao_compute_fn_iszero_targets_def, ao_compute_iszero_targets_def] >>
+  irule ao_compute_iszero_fold_label_free >> simp[fn_insts_def] >>
+  irule ao_offset_blocks_iszero_inputs >> gvs[fn_insts_def]
+QED
+
 Theorem ao_preserves_wf_function_proof:
   !sup fn fn' sup'.
     wf_function fn /\
