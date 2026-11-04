@@ -1749,6 +1749,71 @@ Proof
   irule locals_kept_regions_tail >> qexists_tac `s` >> simp[] >>
   metis_tac[]
 QED
+(* Forget temporary variables and control positions only in finish posts. *)
+Definition raw_call_finish_view_def[local]:
+  raw_call_finish_view (s:venom_state) =
+    s with <|vs_vars := FEMPTY; vs_prev_bb := NONE;
+             vs_current_bb := ""; vs_inst_idx := 0|>
+End
+
+Theorem raw_call_finish_view_control[local]:
+  raw_call_finish_view (jump_to l s) = raw_call_finish_view s /\
+  raw_call_finish_view (s with vs_inst_idx := k) = raw_call_finish_view s
+Proof
+  simp[raw_call_finish_view_def, jump_to_def]
+QED
+
+Theorem raw_call_finish_view_fields[local]:
+  (raw_call_finish_view s).vs_memory = s.vs_memory /\
+  (raw_call_finish_view s).vs_allocas = s.vs_allocas /\
+  (raw_call_finish_view s).vs_alloca_next = s.vs_alloca_next
+Proof
+  simp[raw_call_finish_view_def]
+QED
+
+(* Reconstruct allocation invariants after oracle consumption.  Unlike control
+   positions, local pointer variables must be retained by this boundary. *)
+Theorem raw_call_oracle_stmt_frame[local]:
+  take_call_outcome target calldata value_opt es = (INL (rq,outcome),es1) /\
+  es' = SND (adopt_call_outcome rq outcome es1) /\
+  stmt_state_rel ctx func cenv cx es s /\ state_rel func cenv cx es' t /\
+  t.vs_vars = s.vs_vars /\ t.vs_allocas = s.vs_allocas /\
+  t.vs_alloca_next = s.vs_alloca_next ==>
+  stmt_state_rel ctx func cenv cx es' t
+Proof
+  strip_tac >>
+  `es'.scopes = es.scopes /\ es'.immutables = es.immutables` by
+    (drule take_call_outcome_frame >>
+     simp[Once evaluation_state_component_equality] >> strip_tac >>
+     qpat_x_assum `es' = _` mp_tac >>
+     simp[adopt_call_outcome_equation] >>
+     Cases_on `outcome.co_success /\ ~rq.cr_static` >> simp[] >>
+     rpt strip_tac >> gvs[]) >>
+  irule stmt_state_rel_allocas_frame >>
+  reverse conj_tac >- (simp[] >> qexistsl_tac [`es`,`s`] >> simp[]) >>
+  irule immutable_alloca_sep_fields >>
+  qexistsl_tac [`s`,`es`] >> simp[] >>
+  reverse conj_tac >- fs[stmt_state_rel_def] >>
+  simp[local_region_def, lookup_var_def] >> metis_tac[]
+QED
+
+Theorem raw_call_control_operands[local]:
+  eval_operand a (jump_to l s) = eval_operand a s /\
+  fresh_vars_wrt st (jump_to l s) = fresh_vars_wrt st s /\
+  fresh_vars_wrt st (s with vs_inst_idx := k) = fresh_vars_wrt st s
+Proof
+  Cases_on `a` >> simp[eval_operand_def, lookup_var_def,
+    jump_to_def, fresh_vars_wrt_def]
+QED
+
+Theorem raw_call_control_frame[local]:
+  wb_frame cenv es st s0 (jump_to l s) = wb_frame cenv es st s0 s /\
+  wb_frame cenv es st s0 (s with vs_inst_idx := k) = wb_frame cenv es st s0 s
+Proof
+  simp[wb_frame_def, locals_kept_def, local_region_def, lookup_var_def,
+       jump_to_def]
+QED
+
 (* TOP-LEVEL *)
 Theorem compile_raw_call_case:
   !nocalls ctx func cenv cx ann flags args dflt.
