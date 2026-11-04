@@ -2099,7 +2099,14 @@ Proof
       >- metis_tac[expr_body_pre_type_evaluates]
       >- (rpt strip_tac >> drule_all expr_body_pre_stack_result >> simp[]) >>
       rpt strip_tac >> drule_all expr_body_pre_stack_result >> simp[]) >>
-  strip_tac >> first_x_assum irule >> metis_tac[]
+  strip_tac >> first_x_assum irule >> qexists_tac `nocalls` >>
+  reverse conj_tac
+  >- (first_x_assum irule >> qexistsl_tac [`s`, `tv`, `t`, `s1`, `v`, `t1`] >>
+      simp[]) >>
+  qx_genl_tac [`e0`, `s0`] >> strip_tac >>
+  qpat_x_assum `!e s. _ ==> expr_body_pre _ _ _ _ _ /\ _`
+    (qspecl_then [`e0`, `s0`] mp_tac) >>
+  simp[]
 QED
 
 Theorem typed_stack_args_shape:
