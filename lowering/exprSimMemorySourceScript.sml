@@ -1,7 +1,8 @@
 (* Source-side boundaries for counted memory forcing. *)
 Theory exprSimMemorySource
 Ancestors
-  exprSimDefs gasContext vyperInterpreter vyperState
+  exprSimDefs gasContext vyperInterpreter vyperState gasExemptCert
+  gasSummaryCompose exprSimUnwrapProps
 
 Theorem forced_expr_admissible_raw:
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es ==>
@@ -37,4 +38,23 @@ Proof
            lift_sum_def, return_def, raise_def] >>
       rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def])) >>
   simp[read_result_def, raise_def]
+QED
+
+Theorem force_ignore_bind_action:
+  ignore_bind (bind a (read_result cx)) (return ()) =
+  bind a (\tv. ignore_bind (read_result cx tv) (return ()))
+Proof
+  simp[FUN_EQ_THM, ignore_bind_def, bind_def, return_def] >>
+  gen_tac >> Cases_on `a x` >> Cases_on `q` >> simp[bind_def]
+QED
+
+Theorem force_exempt_cert:
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind a (return ())) (es,s0) marks (err,ee) (leaf,finstate) ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (bind a (read_result cx)) (return ()))
+    (es,s0) marks (err,ee) (leaf,finstate)
+Proof
+  rewrite_tac[force_ignore_bind_action] >> strip_tac >>
+  irule gas_exempt_cert_error_result >> simp[]
 QED
