@@ -223,6 +223,7 @@ Theorem assign_tuple_locals_code_decompose:
       (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) sa =
       (c, sf) /\
     expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\
     (EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy) ==>
     c = cenv /\
     ?vv sc op su staged sl elems ss.
@@ -276,7 +277,8 @@ Theorem assign_tuple_locals_code_parts[local]:
     stmt_env cenv lctx ty
       (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) sa =
       (c, sf) /\
-    expr_type e = TupleT tys /\ EVERY is_word_type tys /\
+    expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\ EVERY is_word_type tys /\
     EVERY (\id. ?p sz vt. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
                           cenv.ce_var_type id = SOME vt /\ is_word_type vt)
       ids /\
@@ -319,7 +321,8 @@ Theorem assign_tuple_locals_success_run[local]:
     EVERY (\id. ?p sz vt. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
                           cenv.ce_var_type id = SOME vt /\ is_word_type vt)
       ids /\
-    expr_type e = TupleT tys /\ EVERY is_word_type tys /\
+    expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\ EVERY is_word_type tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME tup_tv /\
     (!v es1. (do result <- eval_expr cx e; read_result cx result od) es =
                (INL v, es1) ==> value_has_type tup_tv v) /\
@@ -468,7 +471,8 @@ Theorem compile_assign_tuple_locals_stmt_frag:
     EVERY (\id. ?p sz vt. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
                           cenv.ce_var_type id = SOME vt /\ is_word_type vt)
       ids /\
-    expr_type e = TupleT tys /\ EVERY is_word_type tys /\
+    expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\ EVERY is_word_type tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME tup_tv /\
     (!v es1. (do result <- eval_expr cx e; read_result cx result od) es =
                (INL v, es1) ==> value_has_type tup_tv v) /\

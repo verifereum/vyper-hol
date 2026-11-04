@@ -122,3 +122,11 @@ Theorem p20_nested_pop_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation p20_nested_pop))) >> EVAL_TAC
 QED
+
+val w01_return_intcall_dynarray_bytes_widen = memoryStoreWitnessLib.evaluate fixture_root "w01_return_intcall_dynarray_bytes_widen"
+Theorem w01_return_intcall_dynarray_bytes_widen_matches_python_oracle:
+  ^(#term w01_return_intcall_dynarray_bytes_widen) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "w01_return_intcall_dynarray_bytes_widen")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation w01_return_intcall_dynarray_bytes_widen))) >> EVAL_TAC
+QED
