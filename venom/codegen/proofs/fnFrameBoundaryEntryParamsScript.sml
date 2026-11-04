@@ -2,7 +2,7 @@ Theory fnFrameBoundaryEntryParams
 Ancestors
   frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel
   callLayoutDefs venomExecSemantics venomState venomInst list rich_list
-  arithmetic words unitShapeDefs venomWf phiBlock
+  arithmetic words unitShapeDefs venomWf phiBlock cfgHelpers
 
 (* Installing the symbolic parameter names emits no code. *)
 Theorem parameter_stack_fold:
@@ -407,4 +407,187 @@ Proof
   rpt strip_tac >> gvs[] >>
   qexistsl [`MAP (\i. Var (entry_probe_name i)) (GENLIST I n)`, `"retpc"`] >>
   simp[entry_ret_family_opaque_vars]
+QED
+
+Theorem entry_ret_family_inst_wf:
+  fn_inst_wf (entry_ret_family n)
+Proof
+  simp[fn_inst_wf_def, entry_ret_family_def, entry_probe_params_def,
+       MEM_GENLIST, mk_inst_def] >> rpt strip_tac >> gvs[] >>
+  simp[inst_wf_def, mk_inst_def]
+QED
+
+Theorem entry_ret_family_ssa:
+  ssa_form (entry_ret_family n)
+Proof
+  `!m. FLAT (GENLIST (\i. [entry_probe_name i]) m) =
+        GENLIST entry_probe_name m` by
+    (Induct >> simp[GENLIST, FLAT_SNOC]) >>
+  simp[ssa_form_def, entry_ret_family_def, entry_probe_params_def,
+       fn_insts_def, fn_insts_blocks_def, mk_inst_def,
+       MAP_GENLIST, combinTheory.o_DEF, ALL_DISTINCT_APPEND,
+       ALL_DISTINCT_GENLIST, MEM_GENLIST]
+QED
+
+Theorem entry_ret_family_single_use:
+  single_use_form (entry_ret_family n)
+Proof
+  simp[passSharedDefsTheory.single_use_form_def,
+       passSharedDefsTheory.var_use_count_block_def,
+       entry_ret_family_def, entry_probe_params_def, FILTER_APPEND,
+       passSharedDefsTheory.sue_count_exempt_def, is_param_opcode_def,
+       mk_inst_def, FILTER_EQ_NIL, EVERY_GENLIST] >>
+  gen_tac >> qmatch_goalsub_abbrev_tac `FILTER p xs` >>
+  `FILTER p xs = []` by
+    simp[FILTER_EQ_NIL, Abbr `p`, Abbr `xs`, EVERY_GENLIST,
+         is_param_opcode_def] >>
+  simp[] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem entry_ret_family_wf:
+  wf_function (entry_ret_family n)
+Proof
+  simp[wf_function_def, fn_labels_def, fn_has_entry_def,
+       fn_succs_closed_def, fn_inst_ids_distinct_def,
+       entry_ret_family_def, entry_probe_params_def,
+       bb_succs_def, mk_inst_def, MAP_GENLIST, combinTheory.o_DEF,
+       ALL_DISTINCT_APPEND, ALL_DISTINCT_GENLIST, MEM_GENLIST] >>
+  simp[bb_well_formed_def, EL_APPEND_EQN, EL_GENLIST, is_terminator_def] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> Cases_on `i < n` >> gvs[is_terminator_def] >>
+      Cases_on `i = n` >> gvs[is_terminator_def] >>
+      `i = n + 1` by decide_tac >> gvs[is_terminator_def])
+  >- (rpt strip_tac >> Cases_on `j < n` >> gvs[] >>
+      Cases_on `j = n` >> gvs[] >>
+      `j = n + 1` by decide_tac >> gvs[]) >>
+  Cases_on `n` >>
+  simp[GENLIST_CONS, LAST_DEF, LAST_APPEND, get_successors_def,
+       is_terminator_def, FILTER_EQ_NIL, EVERY_GENLIST,
+       MAP_GENLIST, combinTheory.o_DEF, get_label_def,
+       MEM_MAP, MEM_FILTER, MEM_GENLIST] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem entry_ret_family_canonical:
+  canonical_param_prefix (entry_ret_family n)
+Proof
+  `!m k. param_insts_from k
+    (GENLIST (\i. mk_inst (k+i) PARAM [Lit (n2w (k+i))]
+       [entry_probe_name (k+i)]) m)` by
+    (Induct >> simp[GENLIST_CONS, param_insts_from_def, param_inst_at_def,
+                   mk_inst_def, is_param_opcode_def, combinTheory.o_DEF] >>
+     gen_tac >> first_x_assum (qspec_then `SUC k` mp_tac) >>
+     simp[mk_inst_def, ADD_CLAUSES] >> disch_tac >>
+     qmatch_asmsub_abbrev_tac `GENLIST f m` >>
+     qmatch_goalsub_abbrev_tac `GENLIST g m` >>
+     `f = g` by simp[Abbr `f`, Abbr `g`, FUN_EQ_THM, ADD_COMM] >>
+     gvs[]) >>
+  simp[canonical_param_prefix_def, entry_ret_family_def] >>
+  irule canonical_entry_params_from_prepend_users >>
+  simp[entry_probe_params_def, EVERY_GENLIST,
+       canonical_entry_params_from_def, param_inst_at_def,
+       no_param_insts_def, mk_inst_def, is_param_opcode_def] >>
+  first_x_assum (qspecl_then [`n`, `0`] mp_tac) >> simp[mk_inst_def]
+QED
+
+Theorem entry_ret_family_entry_dominates:
+  fn_dominates (entry_ret_family n) "entry" "entry"
+Proof
+  simp[fn_dominates_def, fn_reachable_def, fn_entry_label_def,
+       entry_block_def, entry_ret_family_def, relationTheory.RTC_REFL] >>
+  rpt strip_tac >> Cases_on `path` >> gvs[]
+QED
+
+Theorem entry_ret_family_dominance:
+  def_dominates_uses (entry_ret_family n)
+Proof
+  mp_tac entry_ret_family_entry_dominates >>
+  simp[entry_ret_family_def, entry_probe_params_def, mk_inst_def] >>
+  disch_tac >>
+  simp[def_dominates_uses_def, entry_ret_family_def,
+       entry_probe_params_def, MEM_GENLIST, mk_inst_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[MEM_MAP, MEM_GENLIST] >> rpt strip_tac >> gvs[] >>
+  simp[def_available_at_def]
+  >- (qexists_tac `mk_inst i PARAM [Lit (n2w i)] [entry_probe_name i]` >>
+      simp[mk_inst_def, MEM_GENLIST] >>
+      qexistsl [`i`, `n+1`] >>
+      simp[EL_APPEND_EQN, EL_GENLIST]) >>
+  qexists_tac `mk_inst n RETPC_PARAM [Lit (n2w n)] ["retpc"]` >>
+  simp[mk_inst_def] >> qexistsl [`n`, `n+1`] >>
+  simp[EL_APPEND_EQN, EL_GENLIST]
+QED
+
+Theorem entry_ret_family_no_preds:
+  cfg_preds_of (cfg_analyze (entry_ret_family n)) lbl = []
+Proof
+  simp[cfg_analyze_preds, entry_ret_family_def,
+       cfgDefsTheory.build_preds_def, cfgDefsTheory.build_succs_def,
+       cfgDefsTheory.init_succs_def, cfgDefsTheory.init_preds_def,
+       cfgDefsTheory.fmap_lookup_list_def] >>
+  Cases_on `n` >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE, entry_probe_params_def,
+       GENLIST_CONS, bb_succs_def, LAST_DEF, LAST_APPEND,
+       get_successors_def, mk_inst_def, is_terminator_def,
+       MEM_MAP, MEM_FILTER, MEM_GENLIST, MAP_GENLIST,
+       combinTheory.o_DEF, get_label_def]
+  >- (IF_CASES_TAC >> simp[]) >>
+  `FILTER IS_SOME (GENLIST (\x. NONE : string option) n' ++ [NONE]) = []` by
+    simp[FILTER_EQ_NIL, EVERY_GENLIST] >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem entry_ret_family_no_phis:
+  collect_phis (HD (entry_ret_family n).fn_blocks).bb_instructions = []
+Proof
+  Cases_on `n` >> simp[entry_ret_family_def, entry_probe_params_def,
+    GENLIST_CONS, livenessDefsTheory.collect_phis_def, mk_inst_def]
+QED
+
+Theorem entry_ret_family_ready:
+  codegen_ready_fn (entry_ret_family n)
+Proof
+  simp[codegen_ready_fn_def, entry_ret_family_canonical,
+       entry_ret_family_wf, entry_ret_family_inst_wf, entry_ret_family_ssa,
+       entry_ret_family_dominance, entry_ret_family_single_use] >>
+  simp[cfgDefsTheory.cfg_is_normalized_def, entry_ret_family_no_preds] >>
+  `(entry_ret_family n).fn_blocks =
+    [HD (entry_ret_family n).fn_blocks]` by simp[entry_ret_family_def] >>
+  `entry_block (entry_ret_family n) =
+    SOME (HD (entry_ret_family n).fn_blocks)` by
+    simp[entry_block_def, entry_ret_family_def] >>
+  simp[block_entries_ready_def, phi_operands_ready_def,
+       entry_ret_family_no_preds, entry_ret_family_no_phis,
+       entry_ret_family_opcodes_ready] >>
+  qpat_x_assum `_ = [HD _]` (fn th => once_rewrite_tac[th]) >>
+  simp[entry_ret_family_no_phis, entry_ret_family_opcodes_ready]
+QED
+
+(* The long member is admitted by every source-side contract. *)
+Theorem entry_ret_family_wrapped_contracts:
+  codegen_ready_fn (entry_ret_family (SUC (dimword (:256)) )) /\
+  retpc_shape_ok (entry_ret_family (SUC (dimword (:256)) )) /\
+  opaque_use_ok (entry_ret_family (SUC (dimword (:256)) ))
+Proof
+  simp[entry_ret_family_ready, entry_ret_family_retpc_shape,
+       entry_ret_family_opaque_ok]
+QED
+
+(* This checked read differs from the natural-position incoming value.
+   It is an index probe, not a refutation of the existential task theorem. *)
+Theorem entry_ret_family_wrapped_read:
+  !s id out.
+    step_inst_base
+      (mk_inst id PARAM [Lit (n2w (dimword (:256)))] [out])
+      (s with vs_params :=
+        GENLIST (\i. if i = 0 then 0w else 1w) (SUC (dimword (:256)))) =
+      OK (update_var out 0w
+        (s with vs_params :=
+          GENLIST (\i. if i = 0 then 0w else 1w) (SUC (dimword (:256))))) /\
+    EL (dimword (:256))
+      (GENLIST (\i. if i = 0 then 0w else 1w) (SUC (dimword (:256))) :
+         256 word list) = 1w
+Proof
+  simp[step_inst_base_def, mk_inst_def, w2n_n2w, EL_GENLIST,
+       param_index_wrap_discriminator]
 QED
