@@ -1691,6 +1691,40 @@ Proof
        vyperValueTheory.default_value_def] >> EVAL_TAC >> simp[]
 QED
 
+Theorem immutable_root_read:
+  !cx es md name tvt v.
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+               NONE => FEMPTY | SOME imms => get_source_immutables md imms)
+      name = SOME (tvt,v) ==>
+    read_result cx (PlaceR (ImmutablePlace md name [])) es = (INL v, es)
+Proof
+  rpt strip_tac >>
+  simp[read_result_def, read_place_def, get_immutables_def,
+       get_address_immutables_def, bind_def, return_def,
+       lift_option_type_def, lift_option_def, lift_sum_def,
+       evaluate_subscripts_def] >>
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >>
+  gvs[return_def, finite_mapTheory.FLOOKUP_EMPTY]
+QED
+
+Theorem immutable_holds_root:
+  !cenv cx ty es name off tvt v.
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+               NONE => FEMPTY | SOME imms => get_source_immutables cenv.ce_module imms)
+      name = SOME (tvt,v) /\
+    evaluate_type (get_tenv cx) ty = SOME tvt /\
+    value_has_type tvt v /\
+    off + type_memory_size tvt < dimword (:256) ==>
+    immutable_holds cenv cx ty
+      (PlaceR (ImmutablePlace cenv.ce_module name [])) (n2w off) es
+Proof
+  rpt strip_tac >> simp[immutable_holds_def] >>
+  qexistsl [`name`, `off`, `tvt`, `v`, `0`, `v`] >>
+  `off < dimword (:256)` by decide_tac >>
+  simp[sub_layout_def, immutable_root_read]
+QED
+
 (* A captured immutable root reads the replacement, not its old snapshot. *)
 Theorem immutable_root_replacement_read_probe[local]:
   !cx es.
@@ -1724,15 +1758,15 @@ Theorem immutable_root_replacement_holds_probe[local]:
           FEMPTY |+ ("a", (ArrayTV (BaseTV (UintT 256)) (Fixed 1),
             ArrayV (SArrayV [(0,IntV 1)]))))])])
 Proof
-  rpt strip_tac >> simp[immutable_holds_def] >>
-  qexistsl [`"a"`, `off`, `ArrayTV (BaseTV (UintT 256)) (Fixed 1)`,
-            `ArrayV (SArrayV [(0,IntV 1)])`, `0`,
-            `ArrayTV (BaseTV (UintT 256)) (Fixed 1)`,
+  rpt strip_tac >>
+  qpat_assum `cenv.ce_module = NONE` (fn th => once_rewrite_tac[GSYM th]) >>
+  irule immutable_holds_root >>
+  conj_tac >- simp[] >>
+  qexistsl [`ArrayTV (BaseTV (UintT 256)) (Fixed 1)`,
             `ArrayV (SArrayV [(0,IntV 1)])`] >>
   simp[get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE,
-       valueEncodingTheory.type_memory_size_def, vyperValueTheory.evaluate_type_def,
-       sub_layout_def, immutable_root_replacement_read_probe] >> EVAL_TAC >>
-  simp[wordsTheory.dimword_def]
+       valueEncodingTheory.type_memory_size_def, vyperValueTheory.evaluate_type_def] >>
+  EVAL_TAC >> simp[wordsTheory.dimword_def]
 QED
 
 Theorem immutable_mutation_call_probe[local]:
@@ -1919,4 +1953,29 @@ Theorem nested_immutable_type_unsupported_probe[local]:
       (ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 1)) (Dynamic 1))
 Proof
   gen_tac >> EVAL_TAC
+QED
+
+
+Theorem immutable_dynamic_root_reconstruction_probe[local]:
+  !cenv cx es off.
+    cenv.ce_module = NONE /\
+    FLOOKUP cenv.ce_module_vars (NONE,"a") = SOME (ImmutableLoc off) /\
+    off + 64 < dimword (:256) ==>
+    immutable_holds cenv cx (ArrayT (BaseT (UintT 256)) (Dynamic 1))
+      (PlaceR (ImmutablePlace NONE "a" [])) (n2w off)
+      (es with immutables :=
+        [(cx.txn.target, [(NONE,
+          FEMPTY |+ ("a", (ArrayTV (BaseTV (UintT 256)) (Dynamic 1),
+            ArrayV (DynArrayV []))))])])
+Proof
+  rpt strip_tac >>
+  qpat_assum `cenv.ce_module = NONE` (fn th => once_rewrite_tac[GSYM th]) >>
+  irule immutable_holds_root >>
+  conj_tac >- simp[] >>
+  qexistsl [`ArrayTV (BaseTV (UintT 256)) (Dynamic 1)`,
+            `ArrayV (DynArrayV [])`] >>
+  simp[get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE,
+       valueEncodingTheory.type_memory_size_def,
+       vyperValueTheory.evaluate_type_def] >> EVAL_TAC >>
+  simp[wordsTheory.dimword_def]
 QED
