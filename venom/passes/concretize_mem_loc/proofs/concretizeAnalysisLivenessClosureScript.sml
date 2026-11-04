@@ -1,5 +1,5 @@
 Theory concretizeAnalysisLivenessClosure
-Ancestors concretizeAnalysisLivenessTransfer singleWriterScan cfgWf
+Ancestors concretizeAnalysisLivenessTransfer singleWriterScan cfgWf venomWf
   concretizeMemLocDefs concretizePtrOrdering venomExecProofs enumeral list pred_set finite_map
 
 (* The boundary transfer is Boolean affine: a constant generator or the
@@ -996,4 +996,76 @@ Proof
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >> conj_tac
   >- (drule_all ml_liveat_pass_other_address >> simp[]) >>
   drule_all ml_used_pass_other_address >> simp[]
+QED
+
+Theorem ml_iterate_fuel_other_address:
+  !fuel la us la' us'.
+  ml_iterate_fuel fuel bpr mems sizes pallocas cfg fn la us = (la',us') /\
+  (!bb j. MEM bb fn.fn_blocks /\ j < LENGTH bb.bb_instructions ==>
+     addr <> (bb.bb_label,j)) ==>
+  ml_lookup la' addr = ml_lookup la addr /\
+  ml_lookup us' addr = ml_lookup us addr
+Proof
+  Induct >- simp[ml_iterate_fuel_def] >>
+  rpt gen_tac >> pure_once_rewrite_tac[ml_iterate_fuel_def] >>
+  pure_rewrite_tac[LET_THM] >> pairarg_tac >> simp[] >>
+  Cases_on `changed` >> simp[] >> strip_tac >> gvs[] >>
+  drule_all ml_one_pass_other_address >> strip_tac
+  >- (first_x_assum drule >> simp[] >> metis_tac[]) >> simp[]
+QED
+
+Theorem ml_iterate_fuel_fixed:
+  ml_iterate_fuel fuel bpr mems sizes pallocas cfg fn FEMPTY FEMPTY = (la,us) /\
+  ml_one_pass bpr mems sizes pallocas cfg fn la us = (changed,la',us') /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  EVERY (\bb. bb.bb_instructions <> []) fn.fn_blocks /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  (!bb. MEM bb fn.fn_blocks ==>
+    MEM bb.bb_label cfg.cfg_dfs_post /\ MEM bb.bb_label cfg.cfg_dfs_pre) /\
+  LENGTH fn.fn_blocks < fuel ==>
+  (!addr. MEM a (ml_lookup la' addr) <=> MEM a (ml_lookup la addr)) /\
+  (!addr. MEM a (ml_lookup us' addr) <=> MEM a (ml_lookup us addr))
+Proof
+  strip_tac >>
+  `!addr. (MEM a (ml_lookup la' addr) <=> MEM a (ml_lookup la addr)) /\
+          (MEM a (ml_lookup us' addr) <=> MEM a (ml_lookup us addr))` suffices_by metis_tac[] >>
+  gen_tac >> PairCases_on `addr` >>
+  Cases_on `?bb. MEM bb fn.fn_blocks /\ addr0 = bb.bb_label /\
+    addr1 < LENGTH bb.bb_instructions`
+  >- (pop_assum strip_assume_tac >> gvs[] >>
+      `FIND (\b. b.bb_label = bb.bb_label) fn.fn_blocks = SOME bb` by
+        (simp[GSYM venomInstTheory.lookup_block_def] >> irule MEM_lookup_block >> simp[]) >>
+      `MEM bb.bb_label cfg.cfg_dfs_post /\ MEM bb.bb_label cfg.cfg_dfs_pre` by metis_tac[] >>
+      drule_all ml_iterate_fuel_record_fixed >> simp[]) >>
+  `!bb j. MEM bb fn.fn_blocks /\ j < LENGTH bb.bb_instructions ==>
+     (addr0,addr1) <> (bb.bb_label,j)` by (simp[] >> metis_tac[]) >>
+  drule_all ml_one_pass_other_address >> simp[]
+QED
+
+Theorem ml_iterate_fuel_off_domain:
+  ml_iterate_fuel fuel bpr mems sizes pallocas cfg fn FEMPTY FEMPTY = (la,us) /\
+  (!bb j. MEM bb fn.fn_blocks /\ j < LENGTH bb.bb_instructions ==>
+     addr <> (bb.bb_label,j)) ==>
+  ml_lookup la addr = [] /\ ml_lookup us addr = []
+Proof
+  strip_tac >> drule_all ml_iterate_fuel_other_address >> simp[ml_lookup_def]
+QED
+
+(* Consumer boundary: the stronger block-count-plus-one bound implies the
+   planned 2*block-count+2 budget, independently of the allocation universe. *)
+Theorem ml_iterate_fuel_saturated:
+  wf_function fn /\
+  (!bb. MEM bb fn.fn_blocks ==>
+    MEM bb.bb_label cfg.cfg_dfs_post /\ MEM bb.bb_label cfg.cfg_dfs_pre) /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  LENGTH fn.fn_blocks < fuel /\
+  ml_iterate_fuel fuel bpr mems sizes pallocas cfg fn FEMPTY FEMPTY = (la,us) /\
+  ml_one_pass bpr mems sizes pallocas cfg fn la us = (changed,la',us') ==>
+  (!addr. MEM a (ml_lookup la' addr) <=> MEM a (ml_lookup la addr)) /\
+  (!addr. MEM a (ml_lookup us' addr) <=> MEM a (ml_lookup us addr))
+Proof
+  strip_tac >> irule ml_iterate_fuel_fixed >>
+  goal_assum (drule_at Any) >> simp[] >>
+  fs[wf_function_def, venomInstTheory.fn_labels_def, EVERY_MEM, bb_well_formed_def] >>
+  qexists `fuel` >> simp[]
 QED
