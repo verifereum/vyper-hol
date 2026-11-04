@@ -218,3 +218,120 @@ Proof
   drule ptr_used_insts_ordered >>
   metis_tac[pairTheory.FST, pairTheory.SND, smerge_OL]
 QED
+
+Theorem ptr_liveat_pass_ordered:
+  !la. (!name. OL alloc_to (mems name)) /\ ptr_ml_ordered la ==>
+  ptr_ml_ordered (SND (ml_one_pass_liveat bpr mems sizes cfg blocks labels la))
+Proof
+  Induct_on `labels` >- simp[ml_one_pass_liveat_def] >>
+  rpt gen_tac >> strip_tac >> simp[ml_one_pass_liveat_def] >>
+  CASE_TAC >> simp[] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  `ptr_ml_ordered la'` by
+    (drule ptr_liveat_block_ordered >> metis_tac[pairTheory.SND]) >>
+  first_x_assum (qspec_then `la'` mp_tac) >> simp[]
+QED
+
+Theorem ptr_used_pass_ordered:
+  !us. (!name. OL alloc_to (mems name)) /\ OL alloc_to pallocas /\
+  ptr_ml_ordered us ==>
+  ptr_ml_ordered (SND (ml_one_pass_used bpr mems pallocas cfg blocks labels us))
+Proof
+  Induct_on `labels` >- simp[ml_one_pass_used_def] >>
+  rpt gen_tac >> strip_tac >> simp[ml_one_pass_used_def] >>
+  CASE_TAC >> simp[] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  `ptr_ml_ordered us'` by
+    (drule ptr_used_block_ordered >> metis_tac[pairTheory.SND]) >>
+  first_x_assum (qspec_then `us'` mp_tac) >> simp[]
+QED
+
+Theorem ptr_one_pass_ordered:
+  (!name. OL alloc_to (mems name)) /\ OL alloc_to pallocas /\
+  ptr_ml_ordered la /\ ptr_ml_ordered us /\
+  ml_one_pass bpr mems sizes pallocas cfg fn la us = (changed,la',us') ==>
+  ptr_ml_ordered la' /\ ptr_ml_ordered us'
+Proof
+  strip_tac >>
+  qpat_x_assum `ml_one_pass _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[ml_one_pass_def] >> pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+  metis_tac[ptr_liveat_pass_ordered, ptr_used_pass_ordered, pairTheory.SND]
+QED
+
+Theorem ptr_iterate_fuel_ordered:
+  !la us la' us'.
+  (!name. OL alloc_to (mems name)) /\ OL alloc_to pallocas /\
+  ptr_ml_ordered la /\ ptr_ml_ordered us /\
+  ml_iterate_fuel fuel bpr mems sizes pallocas cfg fn la us = (la',us') ==>
+  ptr_ml_ordered la' /\ ptr_ml_ordered us'
+Proof
+  Induct_on `fuel` >- simp[ml_iterate_fuel_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `ml_iterate_fuel _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  pure_once_rewrite_tac[ml_iterate_fuel_def] >>
+  pure_rewrite_tac[LET_THM] >> pairarg_tac >> gvs[] >>
+  `ptr_ml_ordered liveat' /\ ptr_ml_ordered used'` by
+    (drule_all ptr_one_pass_ordered >> simp[]) >>
+  Cases_on `changed` >> simp[] >> metis_tac[]
+QED
+
+Theorem ptr_iterate_ordered:
+  (!name. OL alloc_to (mems name)) /\ OL alloc_to pallocas /\
+  ml_iterate bpr mems sizes pallocas cfg fn = SOME (changed,la,us) ==>
+  ptr_ml_ordered la /\ ptr_ml_ordered us
+Proof
+  strip_tac >>
+  ` (\(c,l,u). ptr_ml_ordered l /\ ptr_ml_ordered u) (changed,la,us)` suffices_by simp[] >>
+  irule WhileTheory.OWHILE_INV_IND >>
+  qexistsl [`\(c,l,u). c`,
+    `\(c,l,u). ml_one_pass bpr mems sizes pallocas cfg fn l u`,
+    `(T,FEMPTY,FEMPTY)`] >>
+  simp[GSYM ml_iterate_def] >>
+  rpt gen_tac >> PairCases_on `x` >> simp[] >>
+  strip_tac >> pairarg_tac >> gvs[] >>
+  drule_all ptr_one_pass_ordered >> simp[]
+QED
+
+Theorem ptr_sorted_iterate_fuel_ordered:
+  ml_iterate_fuel fuel bpr (\n. incr_ssort alloc_to (mems n)) sizes [] cfg fn
+    FEMPTY FEMPTY = (la,us) ==>
+  ptr_ml_ordered la /\ ptr_ml_ordered us
+Proof
+  strip_tac >> irule ptr_iterate_fuel_ordered >>
+  goal_assum (drule_at Any) >> simp[ptr_incr_ssort_ordered, OL]
+QED
+
+Theorem ptr_sorted_iterate_ordered:
+  ml_iterate bpr (\n. incr_ssort alloc_to (mems n)) sizes [] cfg fn =
+    SOME (changed,la,us) ==>
+  ptr_ml_ordered la /\ ptr_ml_ordered us
+Proof
+  strip_tac >> irule ptr_iterate_ordered >>
+  goal_assum (drule_at Any) >> simp[ptr_incr_ssort_ordered, OL]
+QED
+
+Theorem ptr_ordered_iter_used_ordered:
+  !la us ola keys us' ola' keys'.
+  OL alloc_to pallocas /\ ptr_ml_ordered la /\ ptr_ml_ordered us /\
+  ml_ordered_iter fuel bpr mems sizes pallocas cfg fn la us ola keys =
+    (us',ola',keys') ==> ptr_ml_ordered us'
+Proof
+  Induct_on `fuel` >- simp[ml_ordered_iter_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `ml_ordered_iter _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  pure_once_rewrite_tac[ml_ordered_iter_def] >>
+  pure_rewrite_tac[LET_THM] >> pairarg_tac >> gvs[] >>
+  `ptr_ml_ordered la' /\ ptr_ml_ordered us''` by
+    (irule ptr_one_pass_ordered >> goal_assum (drule_at Any) >>
+     simp[ptr_incr_ssort_ordered]) >>
+  pairarg_tac >> gvs[] >> Cases_on `changed` >> simp[] >> metis_tac[]
+QED
+
+Theorem ptr_ordered_iter_initial_used_ordered:
+  ml_ordered_iter fuel bpr mems sizes [] cfg fn FEMPTY FEMPTY FEMPTY [] =
+    (us,ola,keys) ==> ptr_ml_ordered us
+Proof
+  strip_tac >> irule ptr_ordered_iter_used_ordered >>
+  goal_assum (drule_at Any) >> simp[OL]
+QED
