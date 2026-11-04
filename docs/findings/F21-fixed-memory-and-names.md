@@ -44,8 +44,8 @@ reference compiler executions. They instantiate PLAN's four categories:
    buffer now live in `ce_return_pc`/`ce_return_buf`, `Return` decides
    internal/external from `ce_return_pc`, and both names are ordinary user
    identifiers. **Module-name shadowing is fixed** (#557, a04-03): module
-   variables are keyed `module_var_key` = `"self." ++ name` in `ce_vars`, so
-   a local `stored` no longer replaces `StorageLoc 5w`.
+   variables live in their own nsid-keyed `ce_module_vars`, apart from the
+   locals in `ce_vars`, so a local `stored` no longer replaces `StorageLoc 5w`.
 
 The whitelist rejects internal AnnAssign/For/IntCall, calls in loop bodies,
 fallback arguments and all duplicate arg/local/loop bindings. **Exclusion is not a proof these lowering bugs are

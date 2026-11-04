@@ -3,17 +3,16 @@ Ancestors
   placeTypingProps vyperTypeContract vyperTypeContractStaticMaps
   compileVyper compileEnv list finite_map
 
-(* A single-module checker does not reject dots in declaration identifiers.
-   A fabricated imported namespace can therefore alias a main-module key. *)
+(* A single-module checker does not reject dots in declaration identifiers,
+   so a main-module "0.m" spells like the imported (SOME 0,"m").  The
+   compile env keys module variables by nsid, so the two stay apart. *)
 Theorem map_namespace_collision_probe:
   let tops = [HashMapDecl Private F "0.m" (BaseT (UintT 256))
                 (Type (BaseT (UintT 256))) (SOME 0)] in
   let mods = [(NONE,tops)] in
   let layouts = [(0w, ([( (NONE,"0.m"), 0)], []))] in
   IS_SOME (check_contract F layouts 0w mods) /\
-  OPTION_MAP (\(tr,kt,vt). (kt,vt))
-    (build_hashmap_info tops (module_var_key (SOME 0,"m"))) =
-      SOME (BaseT (UintT 256), Type (BaseT (UintT 256))) /\
+  build_hashmap_info tops (SOME 0,"m") = NONE /\
   FLOOKUP (build_contract_type_artifact F mods).cta_toplevel_vtypes
     (SOME 0,"m") = NONE
 Proof
@@ -52,16 +51,10 @@ Proof
   irule add_module_vtypes_cong >> simp[]
 QED
 
-Theorem module_var_key_NONE_inj[simp]:
-  (module_var_key (NONE,a) = module_var_key (NONE,b)) <=> (a = b)
-Proof
-  simp[module_var_key_def, nsid_to_string_def]
-QED
-
 Theorem build_hashmap_info_absent_key:
   !tops id.
   ~MEM (NONE,id) (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) ==>
-  build_hashmap_info tops (module_var_key (NONE,id)) = NONE
+  build_hashmap_info tops (NONE,id) = NONE
 Proof
   Induct >> simp[build_hashmap_info_def] >>
   Cases_on `h` >> simp[build_hashmap_info_def,
@@ -72,7 +65,7 @@ Theorem build_hashmap_info_variable:
   !tops.
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
   MEM (VariableDecl vis mut id ty init) tops ==>
-  build_hashmap_info tops (module_var_key (NONE,id)) = NONE
+  build_hashmap_info tops (NONE,id) = NONE
 Proof
   Induct >> simp[] >> rpt strip_tac >>
   Cases_on `h` >>
@@ -86,7 +79,7 @@ Theorem build_hashmap_info_hashmap:
   !tops.
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
   MEM (HashMapDecl vis tr id kt vt slot) tops ==>
-  build_hashmap_info tops (module_var_key (NONE,id)) = SOME (tr,kt,vt)
+  build_hashmap_info tops (NONE,id) = SOME (tr,kt,vt)
 Proof
   Induct >> simp[] >> rpt strip_tac >>
   Cases_on `h` >>

@@ -18,7 +18,7 @@ Ancestors
 (* ===================================================================== *)
 
 (* A static external call (STATICCALL) preserves accounts, transient
-   storage, logs, and call context — value=0 and static mode mean no
+   storage, logs, pending deletions, and call context — value=0 and static mode mean no
    state mutation escapes the call. *)
 Theorem exec_ext_call_static_preserves:
   !inst s gas addr_w argsOff argsSize retOff retSize s'.
@@ -27,10 +27,12 @@ Theorem exec_ext_call_static_preserves:
     s'.vs_accounts = s.vs_accounts /\
     s'.vs_transient = s.vs_transient /\
     s'.vs_logs = s.vs_logs /\
+    s'.vs_pending_deletions = s.vs_pending_deletions /\
     s'.vs_call_ctx = s.vs_call_ctx
 Proof
   rw[exec_ext_call_def, AllCaseEqs(), update_var_def,
-     venom_call_request_def, adopt_outcome_def] >> simp[]
+     venom_call_request_def, adopt_outcome_def,
+     adopt_outcome_deletions_def] >> simp[]
 QED
 
 (* Original concrete-call proof, retained for the legacy helper argument:

@@ -39,26 +39,31 @@ val _ = Parse.hide "body";
 
 (* ===== Evaluating a list of well-typed defaults ===== *)
 
-(* evaluate_defaults stops at the first default whose own evaluation is not a
- * value; every default before it evaluated to one. *)
+(* evaluate_defaults stops at the first default whose own evaluation, with
+ * the gas readings g left at that point, is not a value; every default before
+ * it evaluated to one. *)
 Theorem evaluate_defaults_NONE_stop:
-  !es.
-    evaluate_defaults cx am es = NONE ==>
-    ?pre e post.
+  !es gobs.
+    evaluate_defaults cx am gobs es = NONE ==>
+    ?pre e post g.
       es = pre ++ e::post /\
-      EVERY (\e'. ?v. FST ((do result <- eval_expr cx e'; read_result cx result od)
-                          (initial_state am [FEMPTY])) =
+      EVERY (\e'. ?g' v. FST ((do result <- eval_expr cx e'; read_result cx result od)
+                          (initial_state am [FEMPTY] with gas_obs := g')) =
                         INL v) pre /\
       !v. FST ((do result <- eval_expr cx e; read_result cx result od)
-                (initial_state am [FEMPTY])) <> INL v
+                (initial_state am [FEMPTY] with gas_obs := g)) <> INL v
 Proof
   Induct >- simp[evaluate_defaults_def] >>
   rpt strip_tac >>
-  Cases_on `?v. FST ((do result <- eval_expr cx h; read_result cx result od)
-                    (initial_state am [FEMPTY])) = INL v`
+  Cases_on `(do result <- eval_expr cx h; read_result cx result od)
+              (initial_state am [FEMPTY] with gas_obs := gobs)` >>
+  rename1 `_ = (res1,st1)` >>
+  Cases_on `?v. res1 = INL v`
   >- (gvs[evaluate_defaults_def, AllCaseEqs()] >>
-      qexistsl [`h::pre`, `e`, `post`] >> simp[]) >>
-  qexistsl [`[]`, `h`, `es`] >> gvs[]
+      first_x_assum drule >> strip_tac >>
+      qexistsl [`h::pre`, `e`, `post`, `g`] >> simp[] >>
+      qexistsl [`gobs`, `v`] >> simp[]) >>
+  qexistsl [`[]`, `h`, `es`, `gobs`] >> gvs[]
 QED
 
 (* A well-typed default that cannot be read as a value raises a
@@ -73,16 +78,19 @@ Theorem default_eval_not_value_cases[local]:
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
   (!v. FST ((do result <- eval_expr cx e; read_result cx result od)
-                (initial_state am [FEMPTY])) <> INL v) ==>
+                (initial_state am [FEMPTY] with gas_obs := g)) <> INL v) ==>
   ?err. FST ((do result <- eval_expr cx e; read_result cx result od)
-               (initial_state am [FEMPTY])) = INR err /\
+               (initial_state am [FEMPTY] with gas_obs := g)) = INR err /\
         no_type_error_result (INR err : value + exception)
 Proof
   strip_tac >>
-  `accounts_well_typed (initial_state am [FEMPTY]).accounts` by
+  `accounts_well_typed (initial_state am [FEMPTY] with gas_obs := g).accounts` by
     simp[initial_state_def] >>
+  `env_consistent env cx (initial_state am [FEMPTY] with gas_obs := g) /\
+   state_well_typed (initial_state am [FEMPTY] with gas_obs := g)` by
+    simp[] >>
   Cases_on `(do result <- eval_expr cx e; read_result cx result od)
-              (initial_state am [FEMPTY])` >>
+              (initial_state am [FEMPTY] with gas_obs := g)` >>
   rename1 `_ = (res1,st1)` >>
   drule_all eval_expr_read_type_sound >> strip_tac >>
   Cases_on `res1` >> gvs[]
@@ -108,31 +116,32 @@ Theorem evaluate_defaults_typed_cases:
   accounts_well_typed am.accounts /\
   functions_well_typed cx /\
   (!e. MEM e es ==> call_evaluation_safe cx (int_calls_expr e)) ==>
-  (?vs.
-     evaluate_defaults cx am es = SOME vs /\
+  (?vs gobs'.
+     evaluate_defaults cx am gobs es = SOME (vs, gobs') /\
      LIST_REL
        (\v e. ?tv. evaluate_type env.type_defs (expr_type e) = SOME tv /\
                    value_has_type tv v)
        vs es) \/
-  (evaluate_defaults cx am es = NONE /\
-   ?pre e post.
+  (evaluate_defaults cx am gobs es = NONE /\
+   ?pre e post g.
      es = pre ++ e::post /\
-     EVERY (\e'. ?v. FST ((do result <- eval_expr cx e'; read_result cx result od)
-                          (initial_state am [FEMPTY])) =
+     EVERY (\e'. ?g' v. FST ((do result <- eval_expr cx e'; read_result cx result od)
+                          (initial_state am [FEMPTY] with gas_obs := g')) =
                        INL v) pre /\
      (?err. FST ((do result <- eval_expr cx e; read_result cx result od)
-                   (initial_state am [FEMPTY])) = INR err /\
+                   (initial_state am [FEMPTY] with gas_obs := g)) = INR err /\
              no_type_error_result (INR err : value + exception)))
 Proof
   strip_tac >>
-  Cases_on `evaluate_defaults cx am es`
+  Cases_on `evaluate_defaults cx am gobs es`
   >- (disj2_tac >> simp[] >>
       drule evaluate_defaults_NONE_stop >> strip_tac >>
-      qexistsl [`pre`, `e`, `post`] >> simp[] >>
+      qexistsl [`pre`, `e`, `post`, `g`] >> simp[] >>
       `MEM e es` by simp[] >>
       irule default_eval_not_value_cases >> simp[] >>
       qexists_tac `env` >> simp[] >>
       metis_tac[well_typed_exprs_MEM]) >>
+  rename1 `SOME res` >> PairCases_on `res` >>
   disj1_tac >> simp[] >>
   drule_all evaluate_defaults_success_values_typed >> simp[]
 QED
@@ -424,21 +433,22 @@ Theorem checked_selected_entry_defaults_cases:
     SOME (mut,nr,args,dflts,ret,body) /\
   LENGTH tx.args <= LENGTH args /\
   LENGTH args - LENGTH tx.args <= LENGTH dflts ==>
-  (?vs.
-     evaluate_defaults cx am
-       (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) = SOME vs /\
+  (?vs gobs'.
+     evaluate_defaults cx am gobs
+       (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) =
+       SOME (vs, gobs') /\
      args_values_typed (type_env_all_modules mods)
        (DROP (LENGTH tx.args) args) vs) \/
-  (evaluate_defaults cx am
+  (evaluate_defaults cx am gobs
      (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) = NONE /\
-   ?pre e post.
+   ?pre e post g.
      DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts =
        pre ++ e::post /\
-     EVERY (\e'. ?v. FST ((do result <- eval_expr cx e'; read_result cx result od)
-                          (initial_state am [FEMPTY])) =
+     EVERY (\e'. ?g' v. FST ((do result <- eval_expr cx e'; read_result cx result od)
+                          (initial_state am [FEMPTY] with gas_obs := g')) =
                        INL v) pre /\
      ?err. FST ((do result <- eval_expr cx e; read_result cx result od)
-                (initial_state am [FEMPTY])) = INR err /\
+                (initial_state am [FEMPTY] with gas_obs := g)) = INR err /\
            no_type_error_result (INR err : value + exception))
 Proof
   strip_tac >>
@@ -454,11 +464,11 @@ Proof
       simp[artifact_env_def] >>
       metis_tac[rich_listTheory.MEM_DROP_IMP]) >>
   strip_tac
-  >- (disj1_tac >> qexists_tac `vs` >> simp[] >>
+  >- (disj1_tac >> qexistsl [`vs`, `gobs'`] >> simp[] >>
       irule defaults_values_typed_args >>
       qexists_tac `needed` >> gvs[artifact_env_def]) >>
   disj2_tac >> simp[] >>
-  qexistsl [`pre`, `e`, `post`] >> gvs[]
+  qexistsl [`pre`, `e`, `post`, `g`] >> gvs[]
 QED
 
 (* Binding corollary: when the needed defaults evaluate, the provided and
@@ -475,8 +485,9 @@ Theorem checked_selected_entry_bind_arguments:
   LENGTH tx.args <= LENGTH args /\
   LENGTH args - LENGTH tx.args <= LENGTH dflts /\
   provided_args_typed (type_env_all_modules mods) args tx.args /\
-  evaluate_defaults cx am
-    (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) = SOME dflt_vs ==>
+  evaluate_defaults cx am gobs
+    (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) =
+    SOME (dflt_vs, gobs') ==>
   ?scope.
     bind_arguments (type_env_all_modules mods) args (tx.args ++ dflt_vs) =
       SOME scope /\
@@ -485,7 +496,8 @@ Proof
   strip_tac >>
   drule_all checked_selected_entry_defaults_setup >> strip_tac >>
   drule_all checked_entry_defaults_env_consistent >> strip_tac >>
-  `checked_call_inputs_ready (type_env_all_modules mods) cx am args dflts tx.args` by
+  `checked_call_inputs_ready (type_env_all_modules mods) cx am gobs args dflts
+     tx.args` by
     simp[checked_call_inputs_ready_def, checked_defaults_ready_def] >>
   mp_tac (Q.INST [`tenv` |-> `type_env_all_modules mods`,
                   `params` |-> `args`, `vals` |-> `tx.args`,

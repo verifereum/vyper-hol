@@ -45,8 +45,8 @@ Definition adopt_call_outcome_def:
       adopt_outcome rq outcome (st.accounts, st.tStorage, st.logs) in
     return () (st with <| accounts := accounts; tStorage := tStorage;
                          logs := logs;
-                         pending_deletions := if computed_precompile rq then st.pending_deletions
-                           else adopt_outcome_deletions rq outcome st.pending_deletions |>)
+                         pending_deletions :=
+                           adopt_outcome_deletions rq outcome st.pending_deletions |>)
 End
 val () = adopt_call_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_trans;
 
@@ -91,8 +91,7 @@ Theorem adopt_call_outcome_equation:
          st with <|accounts := outcome.co_accounts;
                    tStorage := outcome.co_tStorage;
                    logs := st.logs ++ outcome.co_logs;
-                   pending_deletions := if computed_precompile rq
-                     then st.pending_deletions else outcome.co_toDelete|>
+                   pending_deletions := outcome.co_toDelete ++ st.pending_deletions|>
        else if rq.cr_kind = MessageCall then st
        else st with <|accounts := outcome.co_accounts;
                      tStorage := outcome.co_tStorage|>)
@@ -113,14 +112,17 @@ QED
 
 Theorem adopt_call_outcome_computed_deletions:
   computed_precompile rq ==>
-  (SND (adopt_call_outcome rq outcome st)).pending_deletions = st.pending_deletions
+  (SND (adopt_call_outcome rq (FST (take_outcome rq os)) st)).pending_deletions =
+    st.pending_deletions
 Proof
-  rw[adopt_call_outcome_equation] >> gvs[]
+  rw[adopt_call_outcome_def, return_def, adopt_outcome_deletions_computed] >>
+  pairarg_tac >> simp[]
 QED
 
 Theorem adopt_call_outcome_observed_deletions:
-  ~computed_precompile rq /\ outcome.co_success /\ ~rq.cr_static ==>
-  (SND (adopt_call_outcome rq outcome st)).pending_deletions = outcome.co_toDelete
+  outcome.co_success /\ ~rq.cr_static ==>
+  (SND (adopt_call_outcome rq outcome st)).pending_deletions =
+    outcome.co_toDelete ++ st.pending_deletions
 Proof
   rw[adopt_call_outcome_equation] >> gvs[]
 QED
@@ -132,8 +134,7 @@ Proof
   rw[adopt_call_outcome_equation] >> gvs[]
 QED
 
-(* Nonempty queues detect synthetic precompile snapshots being mistaken
-   for an observed empty snapshot. No precompile algorithm is unfolded. *)
+(* Nonempty queues detect a neutral precompile delta wiping caller state. *)
 Theorem computed_success_keeps_pending_regression:
   rq.cr_kind = MessageCall /\ rq.cr_value = 0 /\ rq.cr_target = 1w /\ rq.cr_data = [] ==>
   (SND (adopt_call_outcome rq (FST (take_outcome rq os))
@@ -145,12 +146,12 @@ Proof
   simp[adopt_call_outcome_computed_deletions]
 QED
 
-Theorem observed_success_replaces_pending_regression:
+Theorem observed_success_prepends_pending_regression:
   ~computed_precompile rq /\ ~rq.cr_static ==>
   (SND (adopt_call_outcome rq (outcome with <|co_success := T; co_toDelete := []|>)
-    (st with pending_deletions := [9w]))).pending_deletions = [] /\
+    (st with pending_deletions := [9w]))).pending_deletions = [9w] /\
   (SND (adopt_call_outcome rq (outcome with <|co_success := T; co_toDelete := [8w]|>)
-    (st with pending_deletions := [9w]))).pending_deletions = [8w]
+    (st with pending_deletions := [9w]))).pending_deletions = [8w;9w]
 Proof
   strip_tac >> simp[adopt_call_outcome_observed_deletions]
 QED
@@ -312,7 +313,7 @@ Theorem adopt_create_outcome_equation:
     (INL (), st with <|accounts := outcome.co_accounts;
                       tStorage := outcome.co_tStorage;
                       logs := if outcome.co_success then st.logs ++ outcome.co_logs else st.logs;
-                      pending_deletions := if outcome.co_success then outcome.co_toDelete
+                      pending_deletions := if outcome.co_success then outcome.co_toDelete ++ st.pending_deletions
                                            else st.pending_deletions|>)
 Proof
   rw[adopt_call_outcome_equation, create_outcome_request_def] >>
@@ -367,7 +368,7 @@ QED
 Theorem adopt_create_outcome_deletions:
   (SND (adopt_call_outcome (create_outcome_request kind value initcode st0)
            outcome st)).pending_deletions =
-  if outcome.co_success then outcome.co_toDelete else st.pending_deletions
+  if outcome.co_success then outcome.co_toDelete ++ st.pending_deletions else st.pending_deletions
 Proof
   rw[adopt_call_outcome_equation, create_outcome_request_def]
 QED

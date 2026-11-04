@@ -18,8 +18,8 @@ Ancestors
 (* Expose a destination's region and capacity without unfolding the state
    relation in every suffix-frame consumer. *)
 Theorem tuple_store_destination_region:
-  !func cenv cx es s id p dsz entry dw.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx es s id p dsz entry dw ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     lookup_scopes id es.scopes = SOME entry /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) dsz) /\
     lookup_var p s = SOME dw ==>
@@ -35,8 +35,8 @@ QED
 (* This applies to either a 32-byte MSTORE or a runtime-sized memory
    copy. Only the unread suffix, not the already-consumed head, survives. *)
 Theorem tuple_local_write_suffix:
-  !func cenv cx es s id p dsz entry dw b sz addr elem vs tvs written mem'.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx es s id p dsz entry dw b sz addr elem vs tvs written mem' ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     lookup_scopes id es.scopes = SOME entry /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) dsz) /\
     lookup_var p s = SOME dw /\
@@ -78,14 +78,14 @@ Theorem tuple_local_store_head_run:
        type_memory_bytes cenv vt = type_memory_size entry.type /\
        type_memory_size entry.type + 64 < dimword (:256)) /\
     (m ==> (!x. op = Var x ==> not_fresh_at st x) /\ local_ptrs_reserved cenv st) /\
-    stmt_state_rel func cenv cx es s /\
+    stmt_state_rel ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) dsz) /\
     fn_has_code st st' func /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts ==>
     ?dw t. lookup_var p s = SOME dw /\
-      stmt_state_rel func cenv cx
+      stmt_state_rel ctx func cenv cx
         (es with scopes :=
           pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
       ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
@@ -103,7 +103,7 @@ Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `is_word_type ty`
   >- (fs[] >> drule_all assign_local_store_run_framed >>
-      disch_then (qspec_then `ctx` strip_assume_tac) >>
+      strip_tac >>
       qexistsl [`dw`, `t`] >> simp[] >> conj_tac
       >- (rpt strip_tac >> first_x_assum irule >> simp[]) >>
       rpt strip_tac >> first_x_assum irule >> simp[] >>
@@ -117,7 +117,7 @@ Proof
   drule_all (local_memory_store_run_framed |> SPEC_ALL
     |> Q.INST [`tyv` |-> `entry.type`] |> GEN_ALL
     |> PURE_REWRITE_RULE [REFL_CLAUSE, AND_CLAUSES]) >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  strip_tac >>
   qexistsl [`dw`, `t`] >> simp[] >> rpt strip_tac >>
   first_x_assum irule >> simp[] >> qexists `fuel` >> simp[]
 QED
@@ -185,8 +185,8 @@ Proof
 QED
 
 Theorem tuple_store_memory_tail:
-  !func cenv cx es s t st scopes' id p dsz entry dw b sz addr tv tvs v vs written.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx es s t st scopes' id p dsz entry dw b sz addr tv tvs v vs written ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     lookup_scopes id es.scopes = SOME entry /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) dsz) /\
     lookup_var p s = SOME dw /\
@@ -295,9 +295,9 @@ Theorem tuple_store_mixed_locals_run:
        tuple_in_memory vs tvs addr s.vs_memory) /\
     fn_has_code st st' func /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\
-    s.vs_inst_idx = LENGTH st.cs_current_insts /\ stmt_state_rel func cenv cx es s ==>
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\ stmt_state_rel ctx func cenv cx es s ==>
     (ids <> [] \/ ~block_is_terminated st ==> ~block_is_terminated st') /\
-    ?t. stmt_state_rel func cenv cx es' t /\ ~t.vs_halted /\
+    ?t. stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
         t.vs_current_bb = st'.cs_current_bb /\ t.vs_inst_idx = LENGTH st'.cs_current_insts /\
         (!x. (~m \/ not_fresh_at st x) ==> lookup_var x t = lookup_var x s) /\
         (!aid bs. FLOOKUP s.vs_allocas aid = SOME bs ==> FLOOKUP t.vs_allocas aid = SOME bs) /\
@@ -384,7 +384,6 @@ Resume tuple_store_mixed_locals_run[head_execution]:
      type_memory_size entry.type + 64 < dimword (:256)` by
     suspend "head_premises" >>
   drule_all tuple_local_store_head_run >>
-  disch_then (qspec_then `ctx` mp_tac) >>
   disch_then (qx_choose_then `dw` (qx_choose_then `s1`
     (map_every assume_tac o CONJUNCTS))) >>
   suspend "tail_execution"
@@ -512,7 +511,7 @@ Resume tuple_store_mixed_locals_run[tail_memory]:
 QED
 Resume tuple_store_mixed_locals_run[compose]:
   conj_tac >- (first_x_assum irule >> asm_rewrite_tac []) >>
-  qpat_x_assum `?t. stmt_state_rel _ _ _ _ _ /\ _` strip_assume_tac >>
+  qpat_x_assum `?t. stmt_state_rel ctx _ _ _ _ _ /\ _` strip_assume_tac >>
   qexists `t` >>
   simp_tac (srw_ss()) [] >>
   conj_tac >- first_assum ACCEPT_TAC >>

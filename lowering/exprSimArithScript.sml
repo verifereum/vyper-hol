@@ -17,9 +17,10 @@
  * product by 10^10 with SDIV, which truncates toward zero as the source's
  * SGN p * (ABS p / 10^10) does; Div scales the dividend before the SDIV.
  *
- * Not covered: Exp, blocked on #572.  The type system admits ** with no
- * literal operand, where compile_safe_pow emits an unchecked EXP that
- * wraps while the source reverts.
+ * Not covered: Exp (#572).  compile_safe_pow's overflow check comes from a
+ * literal operand, which the checker requires (builtin_operands_ok) but
+ * binop_frag does not see; with neither operand literal it emits an
+ * unchecked EXP that wraps while the source reverts.
  *
  * TOP-LEVEL:
  *   unsafe_word_op, unsafe_opcode   — the word operation and opcode of a

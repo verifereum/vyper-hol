@@ -52,7 +52,7 @@ Theorem call_external_view_frame:
   check_contract F am.layouts tx.target mods = SOME art /\
   selected_entry am tx mods (mut,nr,args,dflts,ret,body) /\
   (mut = View \/ mut = Pure) /\
-  call_external orc am tx = (INL v, am', rqs) ==>
+  call_external orc gobs am tx = (INL v, am', rqs) ==>
   am' = finalize_pending_deletions am
 Proof
   strip_tac >>
@@ -60,8 +60,8 @@ Proof
   disch_then (qspec_then `find_function_module am tx.target tx.function_name`
                 mp_tac) >>
   simp[] >> strip_tac >>
-  `call_external orc am tx =
-     case call_external_function orc am
+  `call_external orc gobs am tx =
+     case call_external_function orc gobs am
             (initial_evaluation_context am.sources am.layouts tx
                (find_function_module am tx.target tx.function_name))
             nr mut ts mods args dflts tx.args body ret of

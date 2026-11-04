@@ -405,8 +405,8 @@ QED
 (* A non-word value's footprint fits below 2 ** 256: it sits in an
    allocation or a live local's region, both below the frontier. *)
 Theorem expr_val_at_bound:
-  !func cenv cx t sa sb es v op s tv w.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx t sa sb es v op s tv w ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     expr_val_at cenv cx t sa sb es v op s /\
     evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
     eval_operand op s = SOME w ==>
@@ -624,7 +624,7 @@ Resume compile_return_tuple_int_frag[code]:
 QED
 
 Resume compile_return_tuple_int_frag[value]:
-  rename1 `expr_post func cenv cx e es sa s1 s0 es1 v op sv` >>
+  rename1 `expr_post ctx func cenv cx e es sa s1 s0 es1 v op sv` >>
   `value_has_type ret_tv v` by
     (qpat_x_assum `!v es1. _ ==> _` (qspecl_then [`v`, `es1`] mp_tac) >>
      simp[]) >>
@@ -690,10 +690,14 @@ Resume compile_return_tuple_int_frag[loads]:
     (qspec_then `fv` mp_tac) >> simp[] >> strip_tac >>
   rename1 `run_from f0 ctx func s0 = _` >>
   `state_rel func cenv cx (es' with scopes := []) sl` by
-    (irule state_rel_frame >>
+    (`state_rel func cenv cx (es' with scopes := []) sv` by
+       (irule state_rel_scopes_nil >> fs[stmt_state_rel_def]) >>
+     irule state_rel_frame >>
      simp[local_ptrs_rel_def, lookup_scopes_def, local_region_def] >>
      qexistsl [`es' with scopes := []`, `sv`] >> simp[Abbr `sl`] >>
-     irule state_rel_scopes_nil >> fs[stmt_state_rel_def]) >>
+     qpat_x_assum `state_rel _ _ _ _ sv` mp_tac >>
+     simp[state_rel_def, immutables_rel_def] >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
   `LENGTH vs = LENGTH tvs /\ LENGTH tvs = LENGTH tys` by
     (drule values_have_types_length >> drule LIST_REL_LENGTH >> simp[]) >>
   qexists_tac `f0` >>

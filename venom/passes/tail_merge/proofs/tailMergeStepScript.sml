@@ -162,6 +162,9 @@ Proof
      <|vs_returndata := q'.returnData;
        vs_accounts := if q = INR NONE then r.rollback.accounts else s2.vs_accounts;
        vs_logs := s2.vs_logs ++ if q = INR NONE then q'.logs else [];
+       vs_pending_deletions :=
+         if q = INR NONE then r.rollback.toDelete ++ s2.vs_pending_deletions
+         else s2.vs_pending_deletions;
        vs_memory :=
          (write_memory_with_expansion ro (TAKE rs q'.returnData) s2).vs_memory;
        vs_transient :=

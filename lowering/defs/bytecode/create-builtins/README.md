@@ -8,17 +8,31 @@ The independent `oracle/` files were generated with pinned Vyper
 `0.5.0a4+commit.cd74ce4f`, Prague, experimental codegen, optimization `NONE`,
 and no bytecode metadata. `provenance.json` records source and output hashes.
 
-With the pinned Vyper environment on `PATH`, regenerate and compare the inputs:
+The receipt is historical: it records `cd74ce4f`, rather than the current
+`VYPER_PIN`. The current compiler also rejects the retained
+`dom06_blueprint_rawargs_b32` source. Consequently, `prepare --check` cannot
+reproduce this entire archive at the current pin. Keep that diagnostic and
+its oracle files when checking the accepted fixtures.
+
+With the `VYPER_PIN` compiler on `PATH`, compare an accepted fixture's deploy
+and runtime bytecode with its committed `.hex` file, for example:
 
 ```sh
-python lowering/defs/bytecode/memory_store_witnesses.py prepare \
-  --corpus create-builtins --fixtures /tmp/create-oracle --check
+vyper --experimental-codegen --evm-version prague -O none \
+  --disable-bytecode-metadata -f bytecode,bytecode_runtime \
+  lowering/defs/bytecode/create-builtins/sources/cp01_proxy.vy
+cat lowering/defs/bytecode/create-builtins/oracle/cp01_proxy.hex
 ```
+
+The compiler prints deploy then runtime, each with an `0x` prefix; the archive
+uses `deploy=` and `runtime=` without that prefix. Repeat for the other
+accepted sources, excluding `dom06_blueprint_rawargs_b32`. This compares
+bytecode; it does not reproduce the historical environment receipt.
 
 Run the checked frontend and HOL compiler comparison from the repository root:
 
 ```sh
-holbuild compileVyperTheory supportedProgramTheory vyperCheckContractFrontendLib
+holbuild build compileVyperTheory supportedProgramTheory vyperCheckContractFrontendLib
 python3 lowering/defs/bytecode/memory_store_witnesses.py probe \
   --corpus create-builtins \
   --fixtures lowering/defs/bytecode/create-builtins/oracle \
@@ -44,7 +58,8 @@ The full 23-witness probe produced these verdicts:
 | `dom06_blueprint_rawargs_b32` | MATCH | 200-byte runtimes agree; the #571 source-domain restriction remains a separate prerequisite |
 | `nest01_create_in_call` | PARITY_DEFECT | Outer raw-call lowering (#554) still emits INVALID |
 
-Every witness is accepted by the checked frontend and produces `SOME` bytecode.
+In that historical run, every witness was accepted by the checked frontend
+and produced `SOME` bytecode.
 Creation remains excluded by `supported_program`, as required until #575.
 All 23 rows were compared against the current HOL compiler: 22 MATCH and one
 PARITY_DEFECT in the nested `raw_call` dependency (#554).

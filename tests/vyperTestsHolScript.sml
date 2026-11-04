@@ -15,6 +15,7 @@ Ancestors
   vyperCheckContractLibTest
   vyperCheckContractTraceLibTest
   vyperCreateSelfdestruct
+  vyperCreateStorageTest
   vyperCustomErrorTest
   vyperDecimalConvertTest
   vyperDecimalMulAudit

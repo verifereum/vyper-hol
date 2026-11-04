@@ -1,0 +1,114 @@
+Theory abiEncoderSequence
+Ancestors
+  abiEncoderCorrect abiDecoderCorrectLeaves abiDecoderEffect abiDecoderAllocation abiDecoderLoop
+  abiDecoderReentry abiDecoderContract fragExec emitHelperProps compileEnv valueEncoding
+  venomState venomExecSemantics instIdxIndep list rich_list words abiBuiltinPrefix
+  abiDecoderDynamicLoopSetup abiDecoderReentryAddress exprLoweringProps venomInst
+
+(* ===== Encoder Sequence ===== *)
+
+(* Lift proved straight-line encoder execution to its containing function. *)
+
+Definition abi_encoder_sequence_post_def:
+  abi_encoder_sequence_post at av out st limit_st d initial actual <=>
+    mem_bytes_at d (LENGTH (enc at av)) actual.vs_memory = enc at av /\
+    eval_operand out actual = SOME (n2w (LENGTH (enc at av))) /\
+    fresh_vars_wrt limit_st actual /\ abi_decode_frame d (LENGTH (enc at av)) initial actual /\
+    actual.vs_allocas = initial.vs_allocas /\ actual.vs_alloca_next = initial.vs_alloca_next /\
+    actual.vs_halted = initial.vs_halted /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op initial = SOME w ==>
+      eval_operand op actual = SOME w)
+End
+
+Theorem abi_encoder_sequence_post_inst_idx[simp]:
+  abi_encoder_sequence_post at av out st limit_st d initial (actual with vs_inst_idx := ix) <=>
+  abi_encoder_sequence_post at av out st limit_st d initial actual
+Proof
+  simp[abi_encoder_sequence_post_def, abi_decode_frame_def, fresh_vars_wrt_def,
+    lookup_var_def, eval_op_inst_idx]
+QED
+
+Theorem abi_encoder_sequence_post_effect:
+  abi_encoder_sequence_post at av out st limit_st d initial actual /\
+  abi_decoder_budget first last b cap initial /\
+  (d+LENGTH (enc at av) <= b \/ b+cap <= d) ==>
+  abi_decoder_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var
+    limit_st d (LENGTH (enc at av)) b cap initial actual
+Proof
+  simp_tac bool_ss [abi_encoder_sequence_post_def] >> strip_tac >>
+  irule abi_decoder_scratch_free_effect >> asm_simp_tac bool_ss []
+QED
+
+Theorem abi_encoder_sequence_from_state:
+  st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\ inst_extends st st' /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) (emitted_insts st st') /\
+  (?actual. run_inst_seq (emitted_insts st st') initial = OK actual /\
+    abi_encoder_sequence_post at av out st limit_st d initial actual) ==>
+  frag_exec ctx st st' (\s. s = initial)
+    (abi_encoder_sequence_post at av out st limit_st d initial) (K F)
+Proof
+  strip_tac >> `isPREFIX st.cs_current_insts st'.cs_current_insts` by
+    (gvs[inst_extends_def, IS_PREFIX_APPEND] >> metis_tac[]) >>
+  irule frag_exec_run_inst_seq >> simp[] >> qexists_tac `actual` >> simp[]
+QED
+
+Theorem abi_encoder_sequence_reach:
+  st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\ inst_extends st st' /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) (emitted_insts st st') /\
+  (?raw. run_inst_seq (emitted_insts st st') initial = OK raw /\
+    abi_encoder_sequence_post at av out st limit_st d initial raw) /\
+  fn_has_code st st' func /\ abi_decoder_budget first last b cap initial /\
+  (d+LENGTH (enc at av) <= b \/ b+cap <= d) /\ ~initial.vs_halted /\
+  initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?actual. mem_bytes_at d (LENGTH (enc at av)) actual.vs_memory = enc at av /\
+    eval_operand out actual = SOME (n2w (LENGTH (enc at av))) /\
+    abi_decoder_effect first last st.cs_next_id st'.cs_next_id st.cs_next_var
+      limit_st d (LENGTH (enc at av)) b cap initial actual /\
+    actual.vs_current_bb = st'.cs_current_bb /\ actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
+    ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encoder_sequence_from_state >> disch_then (qspec_then `ctx` assume_tac) >>
+  drule abi_decode_sim_from_fragment >> disch_then drule >> simp[] >> strip_tac >>
+  rename1 `abi_decode_sim ctx func initial actual` >>
+  `abi_decoder_effect first last st.cs_next_id st'.cs_next_id st.cs_next_var
+    limit_st d (LENGTH (enc at av)) b cap initial actual` by
+    (irule abi_encoder_sequence_post_effect >> asm_simp_tac bool_ss [] >>
+     qexists_tac `out` >> first_assum ACCEPT_TAC) >>
+  qexists_tac `actual` >> fs[abi_encoder_sequence_post_def, Excl "enc_def"]
+QED
+
+(* ===== Reach ===== *)
+
+(* Lift a proved straight-line execution to its exact containing-function endpoint. *)
+
+Theorem abi_encoder_run_sequence_reach:
+  st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\ inst_extends st st' /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) (emitted_insts st st') /\
+  fn_has_code st st' func /\ run_inst_seq (emitted_insts st st') initial = OK encoded /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. t = encoded with vs_inst_idx := LENGTH st'.cs_current_insts /\
+    t.vs_current_bb = st'.cs_current_bb /\ t.vs_inst_idx = LENGTH st'.cs_current_insts /\
+    abi_decode_sim ctx func initial t
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `isPREFIX st.cs_current_insts st'.cs_current_insts` by
+    (gvs[inst_extends_def, IS_PREFIX_APPEND] >> metis_tac[]) >>
+  `frag_exec ctx st st' (\s. s = initial)
+    (\t. t = encoded with vs_inst_idx := LENGTH st'.cs_current_insts) (K F)` by
+    (irule frag_exec_run_inst_seq >> simp[] >> qexists_tac `encoded` >> simp[]) >>
+  drule abi_decode_sim_from_fragment >> disch_then drule >> simp[]
+QED
+
+Theorem abi_builtin_emit_mul:
+  emit_op MUL [lhs;rhs] st = (out,st') /\
+  eval_operand lhs s = SOME a /\ eval_operand rhs s = SOME b /\
+  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+  ?t. eval_operand out t = SOME (a*b) /\ abi_builtin_prefix st st' limit_st s t
+Proof
+  strip_tac >> drule_all (SIMP_RULE (srw_ss()) []
+    (Q.INST [`opc` |-> `MUL`] abi_decoder_binary_reentry)) >> strip_tac >>
+  qexists_tac `update_var (STRING #"%" (toString st.cs_next_var)) (a*b) s` >>
+  fs[abi_builtin_prefix_def, abi_decoder_address_frame_def]
+QED

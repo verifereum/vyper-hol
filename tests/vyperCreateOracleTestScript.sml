@@ -81,7 +81,7 @@ Definition create_oracle_test_observe_def:
     (lookup_account 41w final.accounts).nonce = 3 ∧
     final.logs = (blueprint_test_state [0w]).logs ++
       (if success then [<|logger := 55w; topics := []; data := [88w]|>] else []) ∧
-    final.pending_deletions = (if success then [55w] else [44w]) ∧
+    final.pending_deletions = (if success then [55w;44w] else [44w]) ∧
     final.scopes = (blueprint_test_state [0w]).scopes ∧
     final.immutables = (blueprint_test_state [0w]).immutables
 End

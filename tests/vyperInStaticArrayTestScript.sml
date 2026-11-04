@@ -52,7 +52,7 @@ val () = cv_auto_trans in_static_array_machine_def;
 
 Definition in_static_array_call_def:
   in_static_array_call name args =
-    FST (call_external NONE in_static_array_machine
+    FST (call_external NONE [] in_static_array_machine
       (empty_call_txn with <| function_name := name; target := 0w; args := args |>))
 End
 val () = cv_auto_trans in_static_array_call_def;

@@ -103,6 +103,28 @@ Definition needs_clamp_def:
   needs_clamp BoolClamp = T
 End
 
+(* Recursive validation classification. Static aggregates can use a bulk copy
+   only when every recursively contained member needs no clamp. Dynamicness is
+   checked separately by the caller. *)
+Definition dec_info_needs_clamp_def:
+  dec_info_needs_clamp (DecPrimWord c) = needs_clamp c ∧
+  dec_info_needs_clamp (DecBytestring n) = T ∧
+  dec_info_needs_clamp (DecDynArray ei a m d c) = T ∧
+  dec_info_needs_clamp (DecComplex d elems) = dec_infos_need_clamp elems ∧
+  dec_infos_need_clamp [] = F ∧
+  dec_infos_need_clamp ((ei,a,m)::rest) =
+    (dec_info_needs_clamp ei ∨ dec_infos_need_clamp rest)
+End
+
+(* An empty fixed array has no payload to read, even when its ABI type is
+   dynamic. Its parent still validates and advances past the ABI head slot. *)
+Definition dec_info_needs_offset_def:
+  dec_info_needs_offset (DecPrimWord c) = F /\
+  dec_info_needs_offset (DecBytestring n) = T /\
+  dec_info_needs_offset (DecDynArray ei a m d n) = T /\
+  dec_info_needs_offset (DecComplex d elems) = (d /\ elems <> [])
+End
+
 (* ===== Element Pointer Navigation ===== *)
 (* Static aggregates of words also need no ABI validation.  Pinned Python's
    abi_decoder.needs_clamp recurses through tuple/struct/array members before
@@ -270,10 +292,8 @@ Definition compile_abi_encode_child_def:
                 compile_abi_encode_dyn_static_loop dst src elem_info
                   elem_abi_sz elem_mem_sz len_op
               else
-                do dst_data <- emit_op ADD [dst; Lit 32w];
-                   compile_abi_encode_dyn_loop
-                     dst_data src elem_info elem_abi_sz elem_mem_sz len_op
-                od);
+                compile_abi_encode_dyn_loop
+                  dst src elem_info elem_abi_sz elem_mem_sz len_op);
            parent_dyn <- emit_op MLOAD [parent_dyn_ptr];
            new_parent_dyn <- emit_op ADD [parent_dyn; encoded_size];
            emit_void MSTORE [parent_dyn_ptr; new_parent_dyn];
@@ -340,12 +360,13 @@ Definition compile_abi_encode_child_def:
              src_data <- emit_op ADD [src; Lit 32w];
              src_off <- emit_op MUL [i_op2; Lit (n2w elem_mem_sz)];
              child_src <- emit_op ADD [src_data; src_off];
+             dst_data <- emit_op ADD [dst; Lit 32w];
+             head_off <- emit_op MUL [i_op2; Lit (n2w elem_abi_sz)];
+             head_pos <- emit_op ADD [dst_data; head_off];
              dyn_ofst <- emit_op MLOAD [dyn_ptr];
-             child_dst <- emit_op ADD [dst; dyn_ofst];
+             child_dst <- emit_op ADD [dst_data; dyn_ofst];
              child_len <-
                compile_abi_encode_to_buf child_dst child_src elem_info;
-             head_off <- emit_op MUL [i_op2; Lit (n2w elem_abi_sz)];
-             head_pos <- emit_op ADD [dst; head_off];
              emit_void MSTORE [head_pos; dyn_ofst];
              new_dyn <- emit_op ADD [dyn_ofst; child_len];
              emit_void MSTORE [dyn_ptr; new_dyn];
@@ -353,6 +374,7 @@ Definition compile_abi_encode_child_def:
              emit_void MSTORE [i_ptr; new_i];
              emit_inst JMP [Label hdr_lbl] [];
              new_block exit_lbl;
+             emit_op MLOAD [src];
              final_dyn <- emit_op MLOAD [dyn_ptr];
              emit_op ADD [Lit 32w; final_dyn]
           od
@@ -375,7 +397,7 @@ End
 (* Get ABI element pointer, following offset indirection for dynamic types.
    Mirrors Python: abi/abi_decoder.py _getelemptr_abi *)
 Definition compile_getelemptr_abi_def:
-  compile_getelemptr_abi src_op is_dyn abi_offset load_opc =
+  compile_getelemptr_abi src_op is_dyn abi_offset load_opc hi_op =
     do (* Pinned Vyper emits the pointer ADD even for offset zero. *)
        head_ptr <- emit_op ADD [src_op; Lit (n2w abi_offset)];
        if ¬is_dyn then
@@ -383,9 +405,12 @@ Definition compile_getelemptr_abi_def:
        else
          do offset_val <- emit_op load_opc [head_ptr];
             actual_ptr <- emit_op ADD [src_op; offset_val];
-            underflow <- emit_op LT [actual_ptr; src_op];
-            ok <- emit_op ISZERO [underflow];
-            emit_void ASSERT [ok];
+            (if hi_op = Lit 0w then return ()
+             else
+               do underflow <- emit_op LT [actual_ptr; src_op];
+                  ok <- emit_op ISZERO [underflow];
+                  emit_void ASSERT [ok]
+               od);
             return actual_ptr
          od
     od
@@ -396,13 +421,16 @@ Definition compile_abi_decode_dyn_elem_ptr_def:
   compile_abi_decode_dyn_elem_ptr load_opc elem_src src_data hi_op elem_abi_sz =
     do off_val <- emit_op load_opc [elem_src];
        ptr <- emit_op ADD [src_data; off_val];
-       bad <- emit_op LT [ptr; src_data];
-       ok <- emit_op ISZERO [bad];
-       emit_void ASSERT [ok];
-       eend <- emit_op ADD [ptr; Lit (n2w elem_abi_sz)];
-       oob <- emit_op GT [eend; hi_op];
-       ok2 <- emit_op ISZERO [oob];
-       emit_void ASSERT [ok2];
+       (if hi_op = Lit 0w then return ()
+        else
+          do bad <- emit_op LT [ptr; src_data];
+             ok <- emit_op ISZERO [bad];
+             emit_void ASSERT [ok];
+             eend <- emit_op ADD [ptr; Lit (n2w elem_abi_sz)];
+             oob <- emit_op GT [eend; hi_op];
+             ok2 <- emit_op ISZERO [oob];
+             emit_void ASSERT [ok2]
+          od);
        return ptr
     od
 End
@@ -464,7 +492,8 @@ Definition compile_abi_decode_to_buf_def:
         (* Python reloads the count after clamping. *)
         cnt <- emit_op load_opc [src_op];
         emit_void MSTORE [dst; cnt];
-        let can_bulk_copy = (¬elem_is_dyn ∧ ¬abi_dec_needs_clamp elem_info) in
+        let can_bulk_copy =
+          (¬elem_is_dyn ∧ ¬dec_info_needs_clamp elem_info) in
         if can_bulk_copy then
           do copy_sz <- emit_op MUL [cnt; Lit (n2w elem_mem_sz)];
              src_data <- emit_op ADD [src_op; Lit 32w];
@@ -510,12 +539,9 @@ Definition compile_abi_decode_to_buf_def:
     (return () : unit compiler) ∧
   compile_abi_decode_complex_elems dst src_op load_opc hi_op
     ((ei, abi_sz, mem_sz)::rest) abi_offset vyper_offset =
-    (let is_dyn = (case ei of DecBytestring _ => T
-                             | DecDynArray _ _ _ _ _ => T
-                             | DecComplex is_d _ => is_d
-                             | _ => F) in
+    (let is_dyn = dec_info_needs_offset ei in
      do elem_src <-
-          compile_getelemptr_abi src_op is_dyn abi_offset load_opc;
+          compile_getelemptr_abi src_op is_dyn abi_offset load_opc hi_op;
         elem_dst <- emit_op ADD [dst; Lit (n2w vyper_offset)];
         compile_abi_decode_to_buf elem_dst elem_src
                        load_opc hi_op ei;
@@ -527,11 +553,7 @@ Definition compile_abi_decode_to_buf_def:
     (load_opc:opcode) (hi_op:operand)
     (elem_info:abi_dec_info) (elem_abi_sz:num) (elem_mem_sz:num)
     (i_ptr:operand) (cnt:operand) =
-    (let is_dyn_elem = (case elem_info of
-            DecBytestring _ => T
-          | DecDynArray _ _ _ _ _ => T
-          | DecComplex T _ => T
-          | _ => F) in
+    (let is_dyn_elem = dec_info_needs_offset elem_info in
      do hdr_lbl <- fresh_label "dec_dyn_hdr";
         body_lbl <- fresh_label "dec_dyn_body";
         exit_lbl <- fresh_label "dec_dyn_exit";

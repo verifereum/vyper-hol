@@ -13,8 +13,8 @@ QED
 (* Equations expose the recursive boundary without assuming a root name.
    In particular the key computation is sequenced after the recursive base. *)
 Theorem target_map_step:
-  compile_get_target_ptr ce bt st = ((op, loc, SOME (MapPT kt vt)), st1) ==>
-  compile_get_target_ptr ce (SubscriptTarget bt key) st =
+  compile_get_target_ptr compile_expr ce bt st = ((op, loc, SOME (MapPT kt vt)), st1) ==>
+  compile_get_target_ptr compile_expr ce (SubscriptTarget bt key) st =
     (do key_op <- lower_value compile_expr ce (expr_type key) key;
         hashed <- (if is_bytestring_type kt then compile_keccak256_key key_op F
                    else return key_op);
@@ -35,13 +35,13 @@ End
    module binding, its descriptor, and the specified layout. *)
 Definition target_test_env_def:
   target_test_env ce vt = ce with <|
-    ce_vars := FEMPTY |++ [("self.m", TransientLoc 7w)];
-    ce_hashmap_info := (\n. if n = "self.m" then
+    ce_module_vars := FEMPTY |++ [((NONE,"m"), TransientLoc 7w)];
+    ce_hashmap_info := (\n. if n = (NONE,"m") then
       SOME (T, BaseT (UintT 256), vt) else NONE) |>
 End
 
 Theorem target_transient_nonzero:
-  compile_get_target_ptr (target_test_env ce vt)
+  compile_get_target_ptr compile_expr (target_test_env ce vt)
     (TopLevelNameTarget (NONE,"m")) target_test_state =
   ((Lit 7w, SOME LocTransient, SOME (MapPT (BaseT (UintT 256)) vt)),
     target_test_state)
@@ -50,7 +50,7 @@ Proof
 QED
 
 Theorem target_nested_map_descriptor:
-  SND (SND (FST (compile_get_target_ptr
+  SND (SND (FST (compile_get_target_ptr compile_expr
     (target_test_env ce (HashMapT (BaseT AddressT) (Type (BaseT (UintT 256)))))
     (SubscriptTarget (TopLevelNameTarget (NONE,"m"))
       (Literal (BaseT (UintT 256)) (IntL 3))) target_test_state))) =
@@ -60,7 +60,7 @@ Proof
 QED
 
 Theorem target_map_value_descriptor_location:
-  let result = compile_get_target_ptr (target_test_env ce (Type t))
+  let result = compile_get_target_ptr compile_expr (target_test_env ce (Type t))
     (SubscriptTarget (TopLevelNameTarget (NONE,"m"))
       (Literal (BaseT (UintT 256)) (IntL 3))) target_test_state in
   FST (SND (FST result)) = SOME LocTransient /\
@@ -72,7 +72,7 @@ QED
 (* This equation distinguishes execution order even for effectful keys: the
    entire inner lower_value and hash precede the outer lower_value. *)
 Theorem target_nested_key_order:
-  compile_get_target_ptr
+  compile_get_target_ptr compile_expr
     (target_test_env ce (HashMapT (BaseT (UintT 256)) (Type t)))
     (SubscriptTarget
       (SubscriptTarget (TopLevelNameTarget (NONE,"m")) inner) outer) =
@@ -88,16 +88,15 @@ Theorem target_nested_key_order:
    od)
 Proof
   rewrite_tac[compile_get_target_ptr_def] >>
-  simp[target_test_env_def, module_var_key_def, nsid_to_string_def,
+  simp[target_test_env_def, nsid_to_string_def,
        value_type_place_def, is_bytestring_type_def, LET_THM,
        FUPDATE_LIST_THM, FLOOKUP_UPDATE, comp_bind_assoc, target_bind_return]
 QED
 
 Theorem target_local_module_collision:
-  compile_get_target_ptr
+  compile_get_target_ptr compile_expr
     ((target_test_env ce vt) with <|
-      ce_vars := FEMPTY |++ [("self.m", TransientLoc 7w);
-                            ("m", MemLoc 96 64)];
+      ce_vars := FEMPTY |++ [("m", MemLoc 96 64)];
       ce_var_type := (\n. SOME (ArrayT (BaseT (UintT 256)) (Fixed 2))) |>)
     (NameTarget "m") st =
   ((Lit 96w, SOME LocMemory,
@@ -107,7 +106,7 @@ Proof
 QED
 
 Theorem target_bytestring_key_hash:
-  compile_get_target_ptr
+  compile_get_target_ptr compile_expr
     ((target_test_env ce (Type t)) with
       ce_hashmap_info := (\n. SOME (T, BaseT (StringT 10), Type t)))
     (SubscriptTarget (TopLevelNameTarget (NONE,"m")) key) =
@@ -121,7 +120,7 @@ Theorem target_bytestring_key_hash:
    od)
 Proof
   rewrite_tac[compile_get_target_ptr_def] >>
-  simp[target_test_env_def, module_var_key_def, nsid_to_string_def,
+  simp[target_test_env_def, nsid_to_string_def,
        value_type_place_def, is_bytestring_type_def, LET_THM,
        FUPDATE_LIST_THM, FLOOKUP_UPDATE, comp_bind_assoc, target_bind_return]
 QED
@@ -135,19 +134,20 @@ QED
 
 (* The second subscript of a map-of-array is an array operation, not SHA3. *)
 Theorem target_map_array_continuation:
-  compile_get_target_ptr
+  compile_get_target_ptr compile_expr
     (target_test_env ce (Type (ArrayT (BaseT (UintT 256)) (Fixed 3))))
     (SubscriptTarget
       (SubscriptTarget (TopLevelNameTarget (NONE,"m"))
         (Literal (BaseT (UintT 256)) (IntL 1)))
       (Literal (BaseT (UintT 256)) (IntL 2))) =
   (do p <- compile_mapping_subscript (Lit 7w) (Lit 1w);
-      q <- compile_array_subscript p (Lit 2w) F 3 1 1 F TLOAD;
+      q <- compile_array_subscript p (Lit 2w) F 3 1 1 F
+             (compile_ptr_load ce.ce_is_ctor ce.ce_imm_alloca LocTransient);
       return (q, SOME LocTransient, SOME (ValPT (BaseT (UintT 256))))
    od)
 Proof
   rewrite_tac[compile_get_target_ptr_def] >>
-  simp[target_test_env_def, module_var_key_def, nsid_to_string_def,
+  simp[target_test_env_def, nsid_to_string_def,
        value_type_place_def, is_bytestring_type_def, LET_THM,
        FUPDATE_LIST_THM, FLOOKUP_UPDATE, comp_bind_assoc, target_bind_return,
        target_literal_key, word_scale_def, expr_type_def,
@@ -162,7 +162,7 @@ Definition target_struct_env_def:
 End
 
 Theorem target_map_struct_continuation:
-  compile_get_target_ptr (target_struct_env ce)
+  compile_get_target_ptr compile_expr (target_struct_env ce)
     (AttributeTarget
       (SubscriptTarget (TopLevelNameTarget (NONE,"m"))
         (Literal (BaseT (UintT 256)) (IntL 1))) "b") =
@@ -172,7 +172,7 @@ Theorem target_map_struct_continuation:
    od)
 Proof
   rewrite_tac[compile_get_target_ptr_def] >>
-  simp[target_struct_env_def, target_test_env_def, module_var_key_def,
+  simp[target_struct_env_def, target_test_env_def,
        nsid_to_string_def, value_type_place_def, is_bytestring_type_def,
        LET_THM, FUPDATE_LIST_THM, FLOOKUP_UPDATE,
        comp_bind_assoc, target_bind_return, target_literal_key,
@@ -184,13 +184,13 @@ QED
    map pointer. No blocks may hide persistent operations outside this trace. *)
 Definition target_transient_trace_def:
   target_transient_trace ce =
-    (do r <- compile_get_target_ptr (target_test_env ce (Type (BaseT (UintT 256))))
+    (do r <- compile_get_target_ptr compile_expr (target_test_env ce (Type (BaseT (UintT 256))))
           (SubscriptTarget (TopLevelNameTarget (NONE,"m"))
             (Literal (BaseT (UintT 256)) (IntL 3)));
         let loc = (case FST (SND r) of SOME l => l | NONE => LocMemory) in
         do compile_assign_value ce (FST r) loc (Lit 9w) T NONE
              (BaseT (UintT 256)) (BaseT (UintT 256)) NONE 32;
-           compile_ptr_load F loc (FST r)
+           compile_ptr_load F ce.ce_imm_alloca loc (FST r)
         od
      od) target_test_state
 End

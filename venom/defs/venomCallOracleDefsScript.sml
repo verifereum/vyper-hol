@@ -37,8 +37,8 @@ Definition consume_call_outcome_def:
          vs_accounts := accounts;
          vs_transient := ts;
          vs_logs := logs;
-         vs_toDelete := if computed_precompile rq then s.vs_toDelete
-                       else adopt_outcome_deletions rq outcome s.vs_toDelete;
+         vs_pending_deletions :=
+           adopt_outcome_deletions rq outcome s.vs_pending_deletions;
          vs_returndata := outcome.co_returnData;
          vs_memory := (write_memory_with_expansion retOff
            (TAKE retSize outcome.co_returnData) s).vs_memory |>)
@@ -61,9 +61,8 @@ Theorem consume_call_outcome_eq[simp]:
        vs_logs := SND (SND (adopt_outcome rq
          (FST (take_outcome rq s.vs_outcomes))
          (s.vs_accounts, s.vs_transient, s.vs_logs)));
-       vs_toDelete := if computed_precompile rq then s.vs_toDelete
-         else adopt_outcome_deletions rq
-           (FST (take_outcome rq s.vs_outcomes)) s.vs_toDelete;
+       vs_pending_deletions := adopt_outcome_deletions rq
+         (FST (take_outcome rq s.vs_outcomes)) s.vs_pending_deletions;
        vs_returndata := (FST (take_outcome rq s.vs_outcomes)).co_returnData;
        vs_memory := (write_memory_with_expansion ro
          (TAKE rs (FST (take_outcome rq s.vs_outcomes)).co_returnData) s).vs_memory |>)
@@ -95,7 +94,7 @@ Definition consume_create_outcome_def:
          vs_outcomes := rest;
          vs_requests := record_request rq s.vs_requests;
          vs_accounts := accounts; vs_transient := ts; vs_logs := logs;
-         vs_toDelete := adopt_outcome_deletions rq outcome s.vs_toDelete;
+         vs_pending_deletions := adopt_outcome_deletions rq outcome s.vs_pending_deletions;
          vs_returndata := outcome.co_returnData |>)
 End
 
@@ -112,8 +111,8 @@ Theorem consume_create_outcome_eq[simp]:
          (s.vs_accounts, s.vs_transient, s.vs_logs)));
        vs_logs := SND (SND (adopt_outcome rq (FST (take_outcome rq s.vs_outcomes))
          (s.vs_accounts, s.vs_transient, s.vs_logs)));
-       vs_toDelete := adopt_outcome_deletions rq
-         (FST (take_outcome rq s.vs_outcomes)) s.vs_toDelete;
+       vs_pending_deletions := adopt_outcome_deletions rq
+         (FST (take_outcome rq s.vs_outcomes)) s.vs_pending_deletions;
        vs_returndata := (FST (take_outcome rq s.vs_outcomes)).co_returnData |>)
 Proof
   simp[consume_create_outcome_def] >> pairarg_tac >> simp[] >>

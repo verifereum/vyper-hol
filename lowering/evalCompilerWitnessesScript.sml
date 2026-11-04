@@ -5,11 +5,15 @@
 Theory evalCompilerWitnesses
 Ancestors
   evalCompilerMemoryStores
+  evalCompilerImmutables
   evalCompilerExternalCalls
   evalCompilerNameCollisions
   evalCompilerCtorLocals
   evalCompilerInternalLabels
   evalCompilerSliceBuffers
+  evalCompilerBuiltinForms
   evalCompilerPhiPointers
   evalCompilerInternalFrames
   evalCompilerAllocationLimit
+  evalCompilerConversions
+  evalCompilerRawCalls

@@ -28,7 +28,7 @@ Theorem unit_result_success_observables_check:
   s.vs_halted = s'.vs_halted /\ s.vs_logs = s'.vs_logs /\
   s.vs_transient = s'.vs_transient /\ s.vs_immutables = s'.vs_immutables /\
   s.vs_requests = s'.vs_requests /\
-  s.vs_toDelete = s'.vs_toDelete
+  s.vs_pending_deletions = s'.vs_pending_deletions
 Proof
   simp[unit_result_rel_def, observable_equiv_def]
 QED

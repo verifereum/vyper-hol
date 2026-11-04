@@ -68,8 +68,8 @@ QED
 
 (* Every live container lies below the allocation frontier. *)
 Theorem tuple_container_bound:
-  !func cenv cx es s b sz.
-    stmt_state_rel func cenv cx es s /\
+  !func cenv cx es s b sz ctx.
+    stmt_state_rel ctx func cenv cx es s /\
     ((?aid. FLOOKUP s.vs_allocas aid = SOME (b,sz)) \/
      (?name. local_region cenv es.scopes s name b sz)) ==>
     b + sz < dimword (:256)
@@ -84,12 +84,12 @@ Proof
 QED
 
 Theorem tuple_load_vars_frame:
-  !func cenv cx es sa sb s V.
-    stmt_state_rel func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  !func cenv cx es sa sb s V ctx.
+    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
     sa.cs_next_var <= sb.cs_next_var /\
     (!x. not_fresh_at sa x ==>
       lookup_var x (s with vs_vars := V) = lookup_var x s) ==>
-    stmt_state_rel func cenv cx es (s with vs_vars := V) /\
+    stmt_state_rel ctx func cenv cx es (s with vs_vars := V) /\
     local_ptrs_reserved cenv sb /\
     (!name b sz. local_region cenv es.scopes (s with vs_vars := V) name b sz =
                  local_region cenv es.scopes s name b sz)
@@ -151,10 +151,10 @@ Theorem tuple_load_run_lift:
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     t = s with vs_vars := V /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-    stmt_state_rel func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
     frag_exec ctx sa sb (\x. x = s)
       (\x. x = t with vs_inst_idx := LENGTH sb.cs_current_insts) (\r. F) /\
-    stmt_state_rel func cenv cx es
+    stmt_state_rel ctx func cenv cx es
       (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     local_ptrs_reserved cenv sb /\
     (!name b sz. local_region cenv es.scopes
@@ -166,7 +166,7 @@ Proof
   >- (irule frag_exec_run_inst_seq >>
       fs[same_blocks_def, IS_PREFIX_APPEND3] >>
       rpt strip_tac >> metis_tac[]) >>
-  `stmt_state_rel func cenv cx es (s with vs_vars := V) /\
+  `stmt_state_rel ctx func cenv cx es (s with vs_vars := V) /\
    local_ptrs_reserved cenv sb /\
    (!name b sz. local_region cenv es.scopes (s with vs_vars := V) name b sz =
                 local_region cenv es.scopes s name b sz)` by
@@ -190,11 +190,11 @@ Theorem compile_tuple_load_all_typed_frag:
     LIST_REL (\t tv. type_memory_bytes cenv t = type_memory_size tv) tys tvs /\
     values_have_types tvs vals /\ tuple_in_memory vals tvs (w2n w) s.vs_memory /\
     w2n w + type_memory_size_list tvs < dimword (:256) /\
-    stmt_state_rel func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
     LENGTH elems = LENGTH tys /\ EVERY (\op. ?x. op = Var x) elems /\
     (!x. MEM (Var x) elems ==> not_fresh_at sb x) /\
     local_ptrs_reserved cenv sb /\
-    ?t. stmt_state_rel func cenv cx es t /\
+    ?t. stmt_state_rel ctx func cenv cx es t /\
       frag_exec ctx sa sb (\x. x = s) (\x. x = t) (\r. F) /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       t.vs_halted = s.vs_halted /\ t.vs_memory = s.vs_memory /\
@@ -211,7 +211,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all compile_tuple_load_all_typed_run >> strip_tac >>
   drule_all tuple_load_run_lift >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  strip_tac >>
   asm_rewrite_tac[] >>
   qexists `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   asm_rewrite_tac[] >> simp[] >>

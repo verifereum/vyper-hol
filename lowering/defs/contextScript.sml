@@ -111,37 +111,41 @@ End
 
 (* ===== Load/Store by Location ===== *)
 
-(* Emit a load instruction based on location.
-   is_ctor: T in constructor context — LocCode uses ILOAD (staging area).
-            F in runtime context — LocCode uses DLOAD (deployed bytecode).
-   Mirrors Python: context.py ptr_load + unwrap() is_ctor dispatch. *)
-Definition compile_ptr_load_def:
-  compile_ptr_load is_ctor LocMemory op = emit_op MLOAD [op] ∧
-  compile_ptr_load is_ctor LocStorage op = emit_op SLOAD [op] ∧
-  compile_ptr_load is_ctor LocTransient op = emit_op TLOAD [op] ∧
-  compile_ptr_load is_ctor LocCalldata op = emit_op CALLDATALOAD [op] ∧
-  compile_ptr_load is_ctor LocCode op =
-    if is_ctor then emit_op ILOAD [op]
-    else emit_op DLOAD [op]
+(* Constructor immutable addresses are offsets relative to the staged base.
+   Runtime immutable addresses index the installed data section. *)
+Definition compile_imm_load_word_def:
+  compile_imm_load_word is_ctor imm off =
+    if is_ctor then
+      (case imm of
+         SOME region_base => do addr <- emit_op ADD [off; region_base];
+                         emit_op ILOAD [addr] od
+       | NONE => emit_op ILOAD [off])
+    else emit_op DLOAD [off]
 End
 
-(* Emit a store instruction based on location.
-   is_ctor: T in constructor context — LocCode uses ISTORE (staging area).
-            F in runtime context — LocCode store is invalid (read-only).
-   Mirrors Python: context.py ptr_store + is_ctor dispatch. *)
+Definition compile_imm_store_word_def:
+  compile_imm_store_word imm off v =
+    case imm of
+      SOME region_base => do addr <- emit_op ADD [region_base; off];
+                      emit_void ISTORE [addr; v] od
+    | NONE => emit_void ISTORE [off; v]
+End
+
+Definition compile_ptr_load_def:
+  compile_ptr_load is_ctor imm LocMemory op = emit_op MLOAD [op] /\
+  compile_ptr_load is_ctor imm LocStorage op = emit_op SLOAD [op] /\
+  compile_ptr_load is_ctor imm LocTransient op = emit_op TLOAD [op] /\
+  compile_ptr_load is_ctor imm LocCalldata op = emit_op CALLDATALOAD [op] /\
+  compile_ptr_load is_ctor imm LocCode op = compile_imm_load_word is_ctor imm op
+End
+
 Definition compile_ptr_store_def:
-  compile_ptr_store is_ctor LocMemory dst val =
-    emit_void MSTORE [dst; val] ∧
-  compile_ptr_store is_ctor LocStorage dst val =
-    emit_void SSTORE [dst; val] ∧
-  compile_ptr_store is_ctor LocTransient dst val =
-    emit_void TSTORE [dst; val] ∧
-  compile_ptr_store is_ctor LocCode dst val =
-    (if is_ctor then emit_void ISTORE [dst; val]
-     else emit_void INVALID []) ∧  (* runtime: code is read-only *)
-  (* Python raises CompilerPanic("cannot store to: CALLDATA").
-     Emit INVALID instead of silent no-op. Unreachable for well-typed programs. *)
-  compile_ptr_store is_ctor LocCalldata _ _ = emit_void INVALID []
+  compile_ptr_store is_ctor imm LocMemory dst val = emit_void MSTORE [dst; val] /\
+  compile_ptr_store is_ctor imm LocStorage dst val = emit_void SSTORE [dst; val] /\
+  compile_ptr_store is_ctor imm LocTransient dst val = emit_void TSTORE [dst; val] /\
+  compile_ptr_store is_ctor imm LocCode dst val =
+    (if is_ctor then compile_imm_store_word imm dst val else emit_void INVALID []) /\
+  compile_ptr_store is_ctor imm LocCalldata _ _ = emit_void INVALID []
 End
 
 (* ===== Memory Copy ===== *)
@@ -184,7 +188,7 @@ Definition compile_word_copy_loop_def:
         emit_op ADD [src_op; scaled]
       od);
       (* Load from source *)
-      val_loaded <- compile_ptr_load is_ctor load_loc src_off;
+      val_loaded <- compile_ptr_load is_ctor NONE load_loc src_off;
       (* Compute dest offset *)
       dst_off <- (if dst_scale = 1 then
         emit_op ADD [dst_op; Var counter_var]
@@ -193,7 +197,7 @@ Definition compile_word_copy_loop_def:
         emit_op ADD [dst_op; scaled]
       od);
       (* Store to dest *)
-      compile_ptr_store is_ctor store_loc dst_off val_loaded;
+      compile_ptr_store is_ctor NONE store_loc dst_off val_loaded;
       (* Increment counter *)
       new_ctr <- emit_op ADD [Var counter_var; Lit 1w];
       emit_inst ASSIGN [new_ctr] [counter_var];
@@ -264,32 +268,28 @@ Proof
        emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def]
 QED
 
-(* Static allocation boundary.  Unlike compile_alloc_buffer, this exposes the
-   instruction ID as a separate result so fixed-placement metadata is keyed by
-   the emitted ALLOCA, never by its SSA output variable. *)
-Definition compile_alloc_buffer_with_id_def:
-  compile_alloc_buffer_with_id size =
+(* A globally reserved immutable region needs no allocator placement metadata. *)
+Definition compile_fixed_region_with_id_def:
+  compile_fixed_region_with_id size =
     do id <- fresh_id;
        out <- fresh_var;
-       emit (mk_inst id ALLOCA [Lit (n2w size)] [out]);
+       emit (mk_inst id ASSIGN [Lit 0w] [out]);
        return (id, <| buf_operand := Var out; buf_size := size |>)
     od
 End
 
-Theorem compile_alloc_buffer_with_id_result:
-  !(size:num) (st:compile_state) (id:num) (buf:buffer) (st':compile_state).
-  compile_alloc_buffer_with_id size st = ((id, buf), st') ==>
+Theorem compile_fixed_region_with_id_result:
+  !size st id buf st'.
+  compile_fixed_region_with_id size st = ((id, buf), st') ==>
   id = st.cs_next_id /\
   buf.buf_operand = Var ("%" ++ toString st.cs_next_var) /\
   buf.buf_size = size /\
   st'.cs_next_id = st.cs_next_id + 1 /\
   st'.cs_next_var = st.cs_next_var + 1 /\
-  st'.cs_current_insts =
-    st.cs_current_insts ++
-      [mk_inst st.cs_next_id ALLOCA [Lit (n2w size)]
-         ["%" ++ toString st.cs_next_var]]
+  st'.cs_current_insts = st.cs_current_insts ++
+    [mk_inst st.cs_next_id ASSIGN [Lit 0w] ["%" ++ toString st.cs_next_var]]
 Proof
-  simp[compile_alloc_buffer_with_id_def, fresh_id_def, fresh_var_def,
+  simp[compile_fixed_region_with_id_def, fresh_id_def, fresh_var_def,
        emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def]
 QED
 
@@ -463,8 +463,8 @@ End
 (* Load bytestring length from first slot at pointer.
    is_ctor needed for LocCode: ctor uses ILOAD, runtime uses DLOAD. *)
 Definition compile_bytestring_length_def:
-  compile_bytestring_length is_ctor ptr_op loc =
-    compile_ptr_load is_ctor loc ptr_op
+  compile_bytestring_length is_ctor imm ptr_op loc =
+    compile_ptr_load is_ctor imm loc ptr_op
 End
 
 (* Ensure bytestring is in memory. If from storage/transient/code,
@@ -474,8 +474,39 @@ End
    mem_bytes: memory_bytes_required (allocation size).
    word_count: storage_size_in_words (number of 32-byte slots to copy).
    Mirrors Python: context.py ensure_in_memory *)
+(* Python _with_byte_offset folds literal addresses and omits zero ADDs. *)
+Definition compile_lit_byte_offset_def:
+  compile_lit_byte_offset op off =
+    if off = 0 then return op
+    else case op of
+      Lit w => return (Lit (w + n2w off))
+    | _ => emit_op ADD [op; Lit (n2w off)]
+End
+
+Definition compile_imm_copy_to_memory_def:
+  compile_imm_copy_to_memory is_ctor imm src dst 0 off = return () /\
+  compile_imm_copy_to_memory is_ctor imm src dst (SUC n) off =
+    do src_op <- compile_lit_byte_offset src off;
+       value <- compile_imm_load_word is_ctor imm src_op;
+       dst_op <- compile_lit_byte_offset dst off;
+       emit_void MSTORE [dst_op; value];
+       compile_imm_copy_to_memory is_ctor imm src dst n (off + 32)
+    od
+End
+
+Definition compile_imm_store_words_def:
+  compile_imm_store_words imm src dst 0 off = return () /\
+  compile_imm_store_words imm src dst (SUC n) off =
+    do src_op <- compile_lit_byte_offset src off;
+       value <- emit_op MLOAD [src_op];
+       dst_op <- compile_lit_byte_offset dst off;
+       compile_imm_store_word imm dst_op value;
+       compile_imm_store_words imm src dst n (off + 32)
+    od
+End
+
 Definition compile_ensure_in_memory_def:
-  compile_ensure_in_memory ptr_op loc mem_bytes word_count is_ctor =
+  compile_ensure_in_memory ptr_op loc mem_bytes word_count is_ctor imm =
     case loc of
       LocMemory => return ptr_op
     | LocStorage =>
@@ -503,11 +534,10 @@ Definition compile_ensure_in_memory_def:
            od
         od
     | LocCode =>
-        (* Always DLOAD: code_to_memory reads from code section.
-           Mirrors Python: ensure_bytestring_in_memory → code_to_memory → dload. *)
         do buf_op_alloc <- compile_alloc_buffer mem_bytes;
            let buf_op = buf_op_alloc.buf_operand in
-           do compile_code_to_memory ptr_op buf_op word_count;
+           do compile_imm_copy_to_memory is_ctor imm ptr_op buf_op
+                ((mem_bytes + 31) DIV 32) 0;
               return buf_op
            od
         od
@@ -540,9 +570,8 @@ End
    is_ctor=T because store_immutable only runs in constructor context.
    Mirrors Python: context.py store_immutable *)
 Definition compile_store_immutable_def:
-  compile_store_immutable src_ptr dst_offset num_words =
-    compile_word_copy_loop src_ptr (Lit (n2w dst_offset)) num_words
-      LocMemory LocCode T
+  compile_store_immutable imm src_ptr dst_offset num_words =
+    compile_imm_store_words imm src_ptr (Lit (n2w dst_offset)) num_words 0
 End
 
 (* ===== Dynamic Array to Storage Copy ===== *)
@@ -994,3 +1023,142 @@ Definition compile_load_immutable_ctor_def:
            od
         od
 End
+
+(* Exact instruction boundaries for immutable word accesses. *)
+Theorem compile_imm_load_word_ctor_result:
+  !region_base off st out st'.
+  compile_imm_load_word T (SOME region_base) off st = (out, st') ==>
+  out = Var ("%" ++ toString (st.cs_next_var + 1)) /\
+  st'.cs_next_id = st.cs_next_id + 2 /\
+  st'.cs_next_var = st.cs_next_var + 2 /\
+  st'.cs_current_insts = st.cs_current_insts ++
+    [mk_inst st.cs_next_id ADD [off; region_base]
+       ["%" ++ toString st.cs_next_var];
+     mk_inst (st.cs_next_id + 1) ILOAD
+       [Var ("%" ++ toString st.cs_next_var)]
+       ["%" ++ toString (st.cs_next_var + 1)]]
+Proof
+  simp[compile_imm_load_word_def, emit_op_def, fresh_id_def, fresh_var_def,
+       emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       APPEND_ASSOC]
+QED
+
+Theorem compile_imm_store_word_result:
+  !region_base off value st st'.
+  compile_imm_store_word (SOME region_base) off value st = ((), st') ==>
+  st'.cs_next_id = st.cs_next_id + 2 /\
+  st'.cs_next_var = st.cs_next_var + 1 /\
+  st'.cs_current_insts = st.cs_current_insts ++
+    [mk_inst st.cs_next_id ADD [region_base; off]
+       ["%" ++ toString st.cs_next_var];
+     mk_inst (st.cs_next_id + 1) ISTORE
+       [Var ("%" ++ toString st.cs_next_var); value] []]
+Proof
+  simp[compile_imm_store_word_def, emit_op_def, emit_void_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, APPEND_ASSOC]
+QED
+
+Theorem compile_imm_load_word_runtime:
+  !imm off. compile_imm_load_word F imm off = emit_op DLOAD [off]
+Proof
+  simp[compile_imm_load_word_def]
+QED
+
+Theorem compile_imm_load_word_no_base:
+  !off. compile_imm_load_word T NONE off = emit_op ILOAD [off]
+Proof
+  simp[compile_imm_load_word_def]
+QED
+
+Theorem compile_imm_store_word_no_base:
+  !off value. compile_imm_store_word NONE off value = emit_void ISTORE [off; value]
+Proof
+  simp[compile_imm_store_word_def]
+QED
+
+(* A processed prefix composes with the remaining words, preserving all
+   fresh-name and emission state effects, not merely the word count. *)
+Theorem compile_imm_copy_to_memory_prefix:
+  !m n is_ctor imm src dst off.
+    compile_imm_copy_to_memory is_ctor imm src dst (m + n) off =
+    do compile_imm_copy_to_memory is_ctor imm src dst m off;
+       compile_imm_copy_to_memory is_ctor imm src dst n (off + 32 * m)
+    od
+Proof
+  Induct >> rpt gen_tac
+  >- simp[compile_imm_copy_to_memory_def, comp_ignore_bind_def,
+          FUN_EQ_THM, comp_bind_def, comp_return_def] >>
+  pure_rewrite_tac[arithmeticTheory.ADD_CLAUSES,
+                   compile_imm_copy_to_memory_def] >>
+  first_x_assum (qspec_then `n` (fn th => once_rewrite_tac[th])) >>
+  pure_rewrite_tac[comp_ignore_bind_def, comp_bind_assoc] >>
+  ntac 4 (BETA_TAC >> pure_rewrite_tac[comp_bind_assoc]) >> BETA_TAC >>
+  `off + 32 + 32 * m = off + 32 * SUC m` by decide_tac >>
+  asm_rewrite_tac[]
+QED
+
+Theorem compile_imm_store_words_prefix:
+  !m n imm src dst off.
+    compile_imm_store_words imm src dst (m + n) off =
+    do compile_imm_store_words imm src dst m off;
+       compile_imm_store_words imm src dst n (off + 32 * m)
+    od
+Proof
+  Induct >> rpt gen_tac
+  >- simp[compile_imm_store_words_def, comp_ignore_bind_def,
+          FUN_EQ_THM, comp_bind_def, comp_return_def] >>
+  pure_rewrite_tac[arithmeticTheory.ADD_CLAUSES,
+                   compile_imm_store_words_def] >>
+  first_x_assum (qspec_then `n` (fn th => once_rewrite_tac[th])) >>
+  pure_rewrite_tac[comp_ignore_bind_def, comp_bind_assoc] >>
+  ntac 4 (BETA_TAC >> pure_rewrite_tac[comp_bind_assoc]) >> BETA_TAC >>
+  `off + 32 + 32 * m = off + 32 * SUC m` by decide_tac >>
+  asm_rewrite_tac[]
+QED
+
+Theorem compile_imm_copy_zero:
+  !is_ctor imm src dst off st.
+    compile_imm_copy_to_memory is_ctor imm src dst 0 off st = ((), st)
+Proof
+  simp[compile_imm_copy_to_memory_def, comp_return_def]
+QED
+
+Theorem compile_imm_copy_two_opcode_shape:
+  !is_ctor st base.
+    MAP (\i. i.inst_opcode)
+      (SND (compile_imm_copy_to_memory is_ctor (SOME base)
+        (Lit 0w) (Lit 96w) (SUC (SUC 0)) 0 st)).cs_current_insts =
+    MAP (\i. i.inst_opcode) st.cs_current_insts ++
+      (if is_ctor then [ADD; ILOAD; MSTORE; ADD; ILOAD; MSTORE]
+       else [DLOAD; MSTORE; DLOAD; MSTORE])
+Proof
+  Cases >> simp[compile_imm_copy_to_memory_def, compile_lit_byte_offset_def,
+    compile_imm_load_word_def, emit_op_def, emit_void_def,
+    fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+    comp_ignore_bind_def, comp_return_def, mk_inst_def, APPEND_ASSOC]
+QED
+
+Theorem compile_imm_store_two_opcode_shape:
+  !st base.
+    MAP (\i. i.inst_opcode)
+      (SND (compile_imm_store_words (SOME base)
+        (Lit 96w) (Lit 0w) (SUC (SUC 0)) 0 st)).cs_current_insts =
+    MAP (\i. i.inst_opcode) st.cs_current_insts ++
+      [MLOAD; ADD; ISTORE; MLOAD; ADD; ISTORE]
+Proof
+  simp[compile_imm_store_words_def, compile_lit_byte_offset_def,
+    compile_imm_store_word_def, emit_op_def, emit_void_def,
+    fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+    comp_ignore_bind_def, comp_return_def, mk_inst_def, APPEND_ASSOC]
+QED
+
+(* These immutable compilation interfaces are kernel-closed. *)
+val () = List.app (fn th =>
+  if List.exists (fn tag => tag <> "DISK_THM")
+       (#1 (Tag.dest_tag (Thm.tag th))) then
+    raise Fail "oracle in immutable compilation interface"
+  else ())
+  [compile_imm_copy_to_memory_prefix, compile_imm_store_words_prefix,
+   compile_imm_copy_zero, compile_imm_copy_two_opcode_shape,
+   compile_imm_store_two_opcode_shape];

@@ -1,0 +1,6 @@
+(* MLton build of the native parity runner; see README.md. *)
+$(SML_LIB)/basis/basis.mlb
+compilerNativeRuntime.sml
+compilerNativeML.sml
+compilerNativeParity.sml
+compilerNativeMLtonMain.sml

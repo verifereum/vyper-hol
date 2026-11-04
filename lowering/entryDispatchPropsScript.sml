@@ -362,4 +362,3 @@ Proof
   irule payable_check_frag >> goal_assum $ drule_at Any >>
   goal_assum $ drule_at Any >> simp[]
 QED
-

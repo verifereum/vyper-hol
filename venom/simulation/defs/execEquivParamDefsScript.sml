@@ -110,8 +110,10 @@ Theorem vsr_frame_shared_updates[simp]:
   vsr_frame (s with vs_accounts := a) = vsr_frame s with vs_accounts := a /\
   vsr_frame (s with vs_returndata := r) = vsr_frame s with vs_returndata := r /\
   vsr_frame (s with vs_halted := h) = vsr_frame s with vs_halted := h /\
-  vsr_frame (s with vs_toDelete := d) = vsr_frame s with vs_toDelete := d /\
+  vsr_frame (s with vs_pending_deletions := d) = vsr_frame s with vs_pending_deletions := d /\
   vsr_frame (s with vs_logs := l) = vsr_frame s with vs_logs := l /\
+  vsr_frame (s with vs_pending_deletions := ds) =
+    vsr_frame s with vs_pending_deletions := ds /\
   vsr_frame (s with vs_immutables := im) = vsr_frame s with vs_immutables := im /\
   vsr_frame (s with vs_allocas := al) = vsr_frame s with vs_allocas := al /\
   vsr_frame (s with vs_alloca_next := n) = vsr_frame s with vs_alloca_next := n /\
@@ -129,8 +131,10 @@ Theorem vsr_term_frame_shared_updates[simp]:
   vsr_term_frame (s with vs_accounts := a) = vsr_term_frame s with vs_accounts := a /\
   vsr_term_frame (s with vs_returndata := r) = vsr_term_frame s with vs_returndata := r /\
   vsr_term_frame (s with vs_halted := h) = vsr_term_frame s with vs_halted := h /\
-  vsr_term_frame (s with vs_toDelete := d) = vsr_term_frame s with vs_toDelete := d /\
+  vsr_term_frame (s with vs_pending_deletions := d) = vsr_term_frame s with vs_pending_deletions := d /\
   vsr_term_frame (s with vs_logs := l) = vsr_term_frame s with vs_logs := l /\
+  vsr_term_frame (s with vs_pending_deletions := ds) =
+    vsr_term_frame s with vs_pending_deletions := ds /\
   vsr_term_frame (s with vs_immutables := im) = vsr_term_frame s with vs_immutables := im /\
   vsr_term_frame (s with vs_allocas := al) = vsr_term_frame s with vs_allocas := al /\
   vsr_term_frame (s with vs_alloca_next := n) = vsr_term_frame s with vs_alloca_next := n /\
@@ -167,6 +171,7 @@ Theorem vsr_frame_same_updates[simp]:
   (vsr_frame s with vs_returndata := s.vs_returndata) = vsr_frame s /\
   (vsr_frame s with vs_halted := s.vs_halted) = vsr_frame s /\
   (vsr_frame s with vs_logs := s.vs_logs) = vsr_frame s /\
+  (vsr_frame s with vs_pending_deletions := s.vs_pending_deletions) = vsr_frame s /\
   (vsr_frame s with vs_immutables := s.vs_immutables) = vsr_frame s /\
   (vsr_frame s with vs_allocas := s.vs_allocas) = vsr_frame s /\
   (vsr_frame s with vs_alloca_next := s.vs_alloca_next) = vsr_frame s /\
@@ -185,6 +190,8 @@ Theorem vsr_term_frame_same_updates[simp]:
   (vsr_term_frame s with vs_returndata := s.vs_returndata) = vsr_term_frame s /\
   (vsr_term_frame s with vs_halted := s.vs_halted) = vsr_term_frame s /\
   (vsr_term_frame s with vs_logs := s.vs_logs) = vsr_term_frame s /\
+  (vsr_term_frame s with vs_pending_deletions := s.vs_pending_deletions) =
+    vsr_term_frame s /\
   (vsr_term_frame s with vs_immutables := s.vs_immutables) = vsr_term_frame s /\
   (vsr_term_frame s with vs_allocas := s.vs_allocas) = vsr_term_frame s /\
   (vsr_term_frame s with vs_alloca_next := s.vs_alloca_next) = vsr_term_frame s /\

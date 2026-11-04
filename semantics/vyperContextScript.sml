@@ -221,23 +221,19 @@ val () = cv_auto_trans get_tenv_def;
 
 Definition evaluate_extract32_def:
   evaluate_extract32 bs n bt =
-  if n < LENGTH bs then let
-    bs = DROP n bs
+  if n + 32 ≤ LENGTH bs then let
+    w = TAKE 32 (DROP n bs)
   in case bt
      of BytesT (Fixed m) =>
-          if m ≤ LENGTH bs ∧ EVERY ($= 0w) (DROP m (TAKE 32 bs)) then
-            INL $ BytesV (TAKE m bs)
+          if EVERY ($= 0w) (DROP m w) then INL $ BytesV (TAKE m w)
           else INR (RuntimeError "evaluate_extract32 bytesM")
       | UintT m =>
-          evaluate_convert FEMPTY (BytesV (TAKE 32 bs)) (BaseT (UintT m))
+          evaluate_convert FEMPTY (BytesV w) (BaseT (UintT m))
       | IntT m =>
-          evaluate_convert FEMPTY (BytesV (TAKE 32 bs)) (BaseT (IntT m))
+          evaluate_convert FEMPTY (BytesV w) (BaseT (IntT m))
       | AddressT =>
-          if 32 ≤ LENGTH bs then
-            if EVERY ($= 0w) (TAKE 12 bs) then
-              INL $ BytesV (DROP 12 (TAKE 32 bs))
-            else INR (RuntimeError "evaluate_extract32 address clamp")
-          else INR (RuntimeError "evaluate_extract32 address")
+          if EVERY ($= 0w) (TAKE 12 w) then INL $ BytesV (DROP 12 w)
+          else INR (RuntimeError "evaluate_extract32 address clamp")
       | _ => INR (TypeError "evaluate_extract32 type")
   else INR (RuntimeError "evaluate_extract32 start")
 End

@@ -23,9 +23,17 @@
  *   frag_exec_mem_step_abort, frag_exec_mem_assert_fail, stop_frag_mem
  *                             — abort and halt lifting
  *   mstore_alloca_frag_mem    — an MSTORE into an ALLOCA'd buffer
+ *   run_inst_seq_mem_ok       — every instruction of a straight-line
+ *                               sequence is below the frontier where it runs
+ *   run_inst_seq_mem_ok_last, run_inst_seq_mem_ok_cons,
+ *   run_inst_seq_mem_ok_append
+ *                             — unfolding and composing it
+ *   frag_exec_mem_run_inst_seq
+ *                             — a straight-line fragment, by run_inst_seq
  *
  * Helpers:
  *   run_from_step_exit        — a step that does not continue ends the run
+ *   mem_safe_run_inst_seq     — run_inst_seq_mem_ok lifts to mem_safe_run
  *)
 
 Theory fragExecMem
@@ -33,6 +41,7 @@ Ancestors
   list rich_list compileEnv emitHelper emitHelperProps exprLoweringProps
   venomExecSemantics venomExecProofs venomInst venomInstProofs venomState
   venomMemDefs codegenRel contextCodegenRel unitTransformDefs fragExec memSafeRun
+  instIdxIndep instMemFrontier
 
 (* ===== Definition ===== *)
 
@@ -356,3 +365,183 @@ Proof
   simp[inst_mem_below_frontier_def, source_memory_read_ranges_def,
        source_memory_write_ranges_def, fixed_source_write_range_def]
 QED
+
+(* ===== Straight-line sequences ===== *)
+
+(* Every instruction of a straight-line sequence is below the frontier in
+   the state it runs in. *)
+Definition run_inst_seq_mem_ok_def:
+  run_inst_seq_mem_ok [] s = T /\
+  run_inst_seq_mem_ok (i::is) s =
+    (inst_mem_below_frontier i s /\
+     case step_inst_base i s of
+       OK s' => run_inst_seq_mem_ok is s'
+     | _ => T)
+End
+
+Theorem run_inst_seq_mem_ok_inst_idx[simp]:
+  !is s n.
+    EVERY (\i. ~is_terminator i.inst_opcode) is ==>
+    (run_inst_seq_mem_ok is (s with vs_inst_idx := n) <=>
+     run_inst_seq_mem_ok is s)
+Proof
+  Induct >> rw[run_inst_seq_mem_ok_def] >>
+  simp[step_inst_inst_idx_indep] >>
+  Cases_on `step_inst_base h s` >> gvs[exec_result_map_def]
+QED
+
+Theorem run_inst_seq_mem_ok_last:
+  run_inst_seq_mem_ok [i] s <=> inst_mem_below_frontier i s
+Proof
+  Cases_on `step_inst_base i s` >> simp[run_inst_seq_mem_ok_def]
+QED
+
+(* The cons clause, only where a next instruction follows: with
+   run_inst_seq_mem_ok_last it unfolds a known sequence to its per-step
+   frontier checks. *)
+Theorem run_inst_seq_mem_ok_cons:
+  run_inst_seq_mem_ok (i::j::is) s <=>
+  inst_mem_below_frontier i s /\
+  case step_inst_base i s of
+    OK s' => run_inst_seq_mem_ok (j::is) s'
+  | _ => T
+Proof
+  simp[run_inst_seq_mem_ok_def]
+QED
+
+Theorem run_inst_seq_mem_ok_append:
+  !is1 is2 s.
+    run_inst_seq_mem_ok is1 s /\
+    (!s'. run_inst_seq is1 s = OK s' ==> run_inst_seq_mem_ok is2 s') ==>
+    run_inst_seq_mem_ok (is1 ++ is2) s
+Proof
+  Induct >> simp[run_inst_seq_mem_ok_def, run_inst_seq_def] >>
+  rpt strip_tac >> Cases_on `step_inst_base h s` >> gvs[] >>
+  first_x_assum irule >> fs[]
+QED
+
+Theorem DROP_EQ_CONS[local]:
+  !l n h rest.
+    DROP n l = h :: rest ==>
+    n < LENGTH l /\ EL n l = h /\ DROP (SUC n) l = rest
+Proof
+  Induct >> rw[] >> Cases_on `n` >> gvs[] >>
+  first_x_assum drule >> simp[]
+QED
+
+(* A straight-line prefix of the block whose instructions are below the
+   frontier: a memory-safe run from past it is a memory-safe run from its
+   start, and a run that aborts in it is memory-safe. *)
+Theorem mem_safe_run_inst_seq:
+  !is s fuel ctx fn bb.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX is (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) is /\
+    run_inst_seq_mem_ok is s ==>
+    (!s'. run_inst_seq is s = OK s' /\
+          mem_safe_run fuel ctx fn
+            (s' with vs_inst_idx := s.vs_inst_idx + LENGTH is) ==>
+          mem_safe_run fuel ctx fn s) /\
+    (!a s'. run_inst_seq is s = Abort a s' ==> mem_safe_run fuel ctx fn s)
+Proof
+  Induct >> simp[run_inst_seq_def, run_inst_seq_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  `?rest. DROP s.vs_inst_idx bb.bb_instructions = h :: rest /\
+          isPREFIX is rest` by
+    (Cases_on `DROP s.vs_inst_idx bb.bb_instructions` >> gvs[]) >>
+  drule DROP_EQ_CONS >> strip_tac >>
+  `get_instruction bb s.vs_inst_idx = SOME h` by simp[get_instruction_def] >>
+  `!fuel. mem_safe_step fuel ctx h s` by simp[mem_safe_step_non_invoke] >>
+  `!fuel. step_inst fuel ctx h s = step_inst_base h s` by
+    simp[step_inst_non_invoke] >>
+  Cases_on `step_inst_base h s` >> gvs[]
+  >~ [`step_inst_base h s = OK s1`]
+  >- (`s1.vs_current_bb = s.vs_current_bb` by
+        metis_tac[step_preserves_control_flow] >>
+      `EVERY (\i. ~is_terminator i.inst_opcode) is` by fs[EVERY_MEM] >>
+      `mem_safe_run fuel ctx fn s <=>
+       mem_safe_run fuel ctx fn (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
+        (qspecl_then [`fuel`, `ctx`, `fn`, `s`, `bb`, `h`, `s1`] mp_tac
+           mem_safe_run_step >> simp[]) >>
+      simp[] >>
+      first_x_assum (qspecl_then [`s1 with vs_inst_idx := SUC s.vs_inst_idx`,
+                                  `fuel`, `ctx`, `fn`, `bb`] mp_tac) >>
+      simp[run_inst_seq_inst_idx] >>
+      Cases_on `run_inst_seq is s1` >> simp[exec_result_map_def] >>
+      simp[arithmeticTheory.ADD1]) >>
+  rename1 `step_inst_base h s = Abort a s1` >>
+  qspecl_then [`fuel`, `ctx`, `fn`, `s`, `bb`, `h`, `Abort a s1`] mp_tac
+    run_from_step_exit >> simp[]
+QED
+
+Theorem run_inst_seq_preserves_halted[local]:
+  !is s s'.
+    run_inst_seq is s = OK s' /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) is ==>
+    s'.vs_halted = s.vs_halted
+Proof
+  rpt strip_tac >>
+  drule_at (Pos hd)
+    (Q.ISPEC `\s:venom_state. s.vs_halted` run_inst_seq_preserves_field) >>
+  simp[] >> disch_then irule >> rpt strip_tac >> fs[EVERY_MEM] >>
+  metis_tac[step_preserves_halted, step_inst_non_invoke]
+QED
+
+(* frag_exec_run_inst_seq with memory safety: the straight-line fragment
+   is memory-safe when its instructions are below the frontier where they
+   run. *)
+Theorem frag_exec_mem_run_inst_seq:
+  !ctx st st' P Q R.
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    isPREFIX st.cs_current_insts st'.cs_current_insts /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts st st') /\
+    (!s. P s ==>
+       run_inst_seq_mem_ok (emitted_insts st st') s /\
+       ((?s'. run_inst_seq (emitted_insts st st') s = OK s' /\
+              Q (s' with vs_inst_idx := LENGTH st'.cs_current_insts)) \/
+        (?a s'. run_inst_seq (emitted_insts st st') s = Abort a s' /\
+                !n. R (Abort a (s' with vs_inst_idx := n))))) ==>
+    frag_exec_mem ctx st st' P Q R
+Proof
+  rw[frag_exec_mem_def] >>
+  `?bb. lookup_block st.cs_current_bb fn.fn_blocks = SOME bb /\
+        isPREFIX st'.cs_current_insts bb.bb_instructions` by
+    (gvs[fn_has_code_def] >> metis_tac[]) >>
+  `?t. st'.cs_current_insts = st.cs_current_insts ++ t /\
+       emitted_insts st st' = t` by
+    (qpat_x_assum `isPREFIX st.cs_current_insts st'.cs_current_insts` mp_tac >>
+     simp[IS_PREFIX_APPEND] >> strip_tac >>
+     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND]) >>
+  `isPREFIX t (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (qpat_x_assum `isPREFIX st'.cs_current_insts _` mp_tac >>
+     simp[IS_PREFIX_APPEND] >> strip_tac >>
+     simp[IS_PREFIX_APPEND] >>
+     rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+     metis_tac[]) >>
+  qpat_x_assum `emitted_insts st st' = t` (fn th => fs[th]) >>
+  first_x_assum drule >> strip_tac
+  >- (disj1_tac >>
+      `!fuel. s'.vs_current_bb = s.vs_current_bb /\
+              exec_block fuel ctx bb s =
+              exec_block fuel ctx bb
+                (s' with vs_inst_idx := s.vs_inst_idx + LENGTH t)` by
+        (gen_tac >>
+         qspecl_then [`t`, `s`, `fuel`, `ctx`, `bb`] mp_tac
+           exec_block_run_inst_seq >> simp[]) >>
+      `s'.vs_halted = s.vs_halted` by
+        metis_tac[run_inst_seq_preserves_halted] >>
+      qexists_tac `s' with vs_inst_idx := LENGTH st'.cs_current_insts` >>
+      gvs[] >> rpt strip_tac >>
+      qexists_tac `fuel` >> gvs[run_from_def] >>
+      qspecl_then [`t`, `s`, `fuel`, `ctx`, `fn`, `bb`] mp_tac
+        mem_safe_run_inst_seq >> simp[]) >>
+  disj2_tac >>
+  `?n. exec_block 0 ctx bb s = Abort a (s' with vs_inst_idx := n)` by
+    (qspecl_then [`t`, `s`, `0`, `ctx`, `bb`] mp_tac
+       exec_block_run_inst_seq >> simp[]) >>
+  qexists_tac `0` >> simp[run_from_def, exit_result_def] >>
+  qspecl_then [`t`, `s`, `0`, `ctx`, `fn`, `bb`] mp_tac
+    mem_safe_run_inst_seq >> simp[]
+QED
+

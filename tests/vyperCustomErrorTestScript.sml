@@ -121,12 +121,12 @@ End
 Definition custom_error_outcome_def:
   custom_error_outcome n =
     <|co_created := 0w;
-      co_toDelete := [];
       co_success := T;
       co_returnData := REPLICATE 31 0w ++ [n2w n];
       co_accounts := empty_accounts;
       co_tStorage := empty_transient_storage;
-      co_logs := []|>
+      co_logs := [];
+      co_toDelete := []|>
 End
 
 Definition custom_error_context_def:

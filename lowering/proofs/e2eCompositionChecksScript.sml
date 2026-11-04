@@ -11,7 +11,7 @@ Ancestors
 
 (* Exemption still supplies an actual run, without pipeline or codegen. *)
 Theorem exempt_source_actual_run:
-  source_exempt tops (call_external (SOME (MAP SND (call_trace es))) am tx) ==>
+  source_exempt tops (call_external (SOME (MAP SND (call_trace es))) [] am tx) ==>
   ?r es'. run_call es = SOME (r, es') /\
           call_result_rel tops ret am tx es r es'
 Proof
@@ -93,9 +93,9 @@ val expected_composition = ``
   !tops ret am tx ctx ctx' vs es.
     vs.vs_outcomes = MAP SND (call_trace es) /\
     (?fuel. external_call_result_rel tops ret tx
-              (call_external (SOME vs.vs_outcomes) am tx)
+              (call_external (SOME vs.vs_outcomes) [] am tx)
               (run_context fuel ctx vs)) /\
-    (~source_exempt tops (call_external (SOME vs.vs_outcomes) am tx) ==>
+    (~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) ==>
        ctx_transform_correct ctx ctx' vs /\
        !fuel. ?r es'.
          run_call es = SOME (r, es') /\

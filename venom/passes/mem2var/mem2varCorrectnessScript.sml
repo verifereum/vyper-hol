@@ -567,7 +567,10 @@ Proof
   >> `n = LENGTH bb.bb_instructions - 1` by decide_tac
   >> `inst_wf (EL n bb.bb_instructions)` by metis_tac[EVERY_EL]
   >> `is_terminator (EL n bb.bb_instructions).inst_opcode` by
-       (gvs[bb_well_formed_def, LAST_EL, arithmeticTheory.PRE_SUB1])
+       (qpat_x_assum `bb_well_formed bb`
+          (mp_tac o CONJUNCT1 o CONJUNCT2 o
+           REWRITE_RULE[bb_well_formed_def]) >>
+        simp[LAST_EL, arithmeticTheory.PRE_SUB1])
   >> drule_all terminator_no_outputs >> strip_tac >> gvs[]
 QED
 

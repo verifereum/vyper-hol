@@ -66,7 +66,7 @@ Theorem asm_step_mstore_side[local]:
     st'.as_logs = st.as_logs /\
     st'.as_outcomes = st.as_outcomes /\
     st'.as_requests = st.as_requests /\
-    st'.as_toDelete = st.as_toDelete
+    st'.as_pending_deletions = st.as_pending_deletions
 Proof
   rpt gen_tac >>
   Cases_on `st.as_stack` >>
@@ -85,7 +85,7 @@ Theorem asm_step_mload_side[local]:
     st'.as_logs = st.as_logs /\
     st'.as_outcomes = st.as_outcomes /\
     st'.as_requests = st.as_requests /\
-    st'.as_toDelete = st.as_toDelete
+    st'.as_pending_deletions = st.as_pending_deletions
 Proof
   rpt gen_tac >>
   Cases_on `st.as_stack` >>
@@ -108,7 +108,7 @@ Theorem pop_k_exec_ok[local]:
           st'.as_logs = st.as_logs /\
           st'.as_outcomes = st.as_outcomes /\
           st'.as_requests = st.as_requests /\
-          st'.as_toDelete = st.as_toDelete
+          st'.as_pending_deletions = st.as_pending_deletions
 Proof
   Induct >- simp[asm_steps_def] >>
   rpt strip_tac >>
@@ -153,7 +153,7 @@ Theorem spill_exec_ok[local]:
           st'.as_logs = st.as_logs /\
           st'.as_outcomes = st.as_outcomes /\
           st'.as_requests = st.as_requests /\
-          st'.as_toDelete = st.as_toDelete
+          st'.as_pending_deletions = st.as_pending_deletions
 Proof
   rpt gen_tac >> strip_tac >> fs[asm_block_at_def] >>
   qpat_x_assum `!j. _` (fn th =>
@@ -185,7 +185,7 @@ Theorem restore_exec_ok[local]:
           st'.as_logs = st.as_logs /\
           st'.as_outcomes = st.as_outcomes /\
           st'.as_requests = st.as_requests /\
-          st'.as_toDelete = st.as_toDelete
+          st'.as_pending_deletions = st.as_pending_deletions
 Proof
   rpt gen_tac >> strip_tac >> fs[asm_block_at_def] >>
   qpat_x_assum `!j. _` (fn th =>
@@ -221,7 +221,7 @@ Theorem stack_op_exec_ok:
           st'.as_logs = st.as_logs /\
           st'.as_outcomes = st.as_outcomes /\
           st'.as_requests = st.as_requests /\
-          st'.as_toDelete = st.as_toDelete
+          st'.as_pending_deletions = st.as_pending_deletions
 Proof
   Cases_on `op` >> simp[is_prefix_op_def, stack_op_wf_def, exec_stack_op_def]
   (* SOPush *)
@@ -310,7 +310,7 @@ Theorem prefix_sim:
           st'.as_logs = st.as_logs /\
           st'.as_outcomes = st.as_outcomes /\
           st'.as_requests = st.as_requests /\
-          st'.as_toDelete = st.as_toDelete
+          st'.as_pending_deletions = st.as_pending_deletions
 Proof
   Induct >- simp[prefix_wf_def, prefix_end_len_def, asm_steps_def] >>
   rpt gen_tac >> strip_tac >>

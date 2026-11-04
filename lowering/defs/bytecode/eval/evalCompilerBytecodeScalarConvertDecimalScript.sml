@@ -128,6 +128,11 @@ val scalar_convert_decimal_external_fns =
 val scalar_convert_decimal_return_buffers_ok_eval = save_thm
   ("scalar_convert_decimal_return_buffers_ok_eval",
    EQT_ELIM (EVAL ``EVERY external_return_buffer_ok ^scalar_convert_decimal_external_fns``))
+val scalar_convert_decimal_allocs_ok_eval = save_thm
+  ("scalar_convert_decimal_allocs_ok_eval",
+   EQT_ELIM (EVAL ``EVERY (fn_allocs_ok ^scalar_convert_decimal_tops)
+      (^scalar_convert_decimal_external_sources ++ ^scalar_convert_decimal_internal_sources ++
+       (case ^scalar_convert_decimal_fallback_source of NONE => [] | SOME f => [f]))``))
 val scalar_convert_decimal_internal_fns_eval = save_thm
   ("scalar_convert_decimal_internal_fns_eval",
    evalCompilerBytecodeLib.weak_eval ``MAP (set_internal_package_target
@@ -484,7 +489,8 @@ val scalar_convert_decimal_runtime_unit_eval = save_thm
       scalar_convert_decimal_fallback_fn_eval,
       scalar_convert_decimal_entry_info_eval,
       scalar_convert_decimal_run_lowering_eval,
-      scalar_convert_decimal_return_buffers_ok_eval, boolTheory.COND_CLAUSES,
+      scalar_convert_decimal_return_buffers_ok_eval, scalar_convert_decimal_allocs_ok_eval,
+      boolTheory.AND_CLAUSES, boolTheory.COND_CLAUSES,
       LET_THM, pairTheory.FST, pairTheory.SND,
       pairTheory.UNCURRY_DEF, pairTheory.pair_case_def] @
      CONJUNCTS
@@ -798,9 +804,13 @@ val scalar_convert_decimal_context_plan_step1 = SIMP_CONV (srw_ss())
   ``generate_context_plan (^scalar_convert_decimal_unit).cu_context``
 val scalar_convert_decimal_context_plan_step2 =
   EVAL (rhs (concl scalar_convert_decimal_context_plan_step1))
-val scalar_convert_decimal_actual_plan_call = find_term
-  (can (match_term ``generate_fn_plan f spill labels``))
-  (rhs (concl scalar_convert_decimal_context_plan_step2))
+(* The concrete plan rule can already discharge the context's planner call. *)
+val scalar_convert_decimal_context_plan_step3 =
+  case total (find_term
+    (can (match_term ``generate_fn_plan f spill labels``)))
+    (rhs (concl scalar_convert_decimal_context_plan_step2)) of
+    NONE => REFL (rhs (concl scalar_convert_decimal_context_plan_step2))
+  | SOME scalar_convert_decimal_actual_plan_call => let
 val scalar_convert_decimal_actual_plan_args =
   #2 (strip_comb scalar_convert_decimal_actual_plan_call)
 val scalar_convert_decimal_actual_fn = hd scalar_convert_decimal_actual_plan_args
@@ -834,9 +844,10 @@ val scalar_convert_decimal_actual_generate_fn_plan =
   TRANS scalar_convert_decimal_actual_generate_step1
     (TRANS scalar_convert_decimal_actual_generate_step2
       scalar_convert_decimal_actual_generate_step3)
-val scalar_convert_decimal_context_plan_step3 = PURE_REWRITE_CONV
-  [scalar_convert_decimal_actual_generate_fn_plan]
-  (rhs (concl scalar_convert_decimal_context_plan_step2))
+in
+  PURE_REWRITE_CONV [scalar_convert_decimal_actual_generate_fn_plan]
+    (rhs (concl scalar_convert_decimal_context_plan_step2))
+end
 val scalar_convert_decimal_context_plan_eval = save_thm
   ("scalar_convert_decimal_context_plan_eval",
    TRANS scalar_convert_decimal_context_plan_step1

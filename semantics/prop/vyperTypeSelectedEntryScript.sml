@@ -53,8 +53,8 @@ Theorem call_external_selected_entry:
   src = find_function_module am tx.target tx.function_name /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   ALOOKUP mods src = SOME ts ==>
-  call_external orc am tx =
-    case call_external_function orc am cx nr mut ts mods args dflts tx.args
+  call_external orc gobs am tx =
+    case call_external_function orc gobs am cx nr mut ts mods args dflts tx.args
            body ret of
       (INL value, am', rqs) => (INL value, finalize_pending_deletions am', rqs)
     | failure => failure
@@ -69,7 +69,7 @@ QED
    the machine unchanged and no requests. *)
 Theorem call_external_not_selected_entry:
   ~(?mods sel. selected_entry am tx mods sel) ==>
-  ?msg. call_external orc am tx = (INR (Error (RuntimeError msg)), am, [])
+  ?msg. call_external orc gobs am tx = (INR (Error (RuntimeError msg)), am, [])
 Proof
   rw[selected_entry_def] >>
   simp[Once call_external_def] >>

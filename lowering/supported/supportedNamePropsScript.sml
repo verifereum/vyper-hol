@@ -37,7 +37,7 @@ Proof
   EVAL_TAC
 QED
 
-(* Module variables are keyed "self." ++ name in compile_env, so locals may
+(* Module variables have their own compile_env tables, so locals may
    shadow them as in Python Vyper (#557, a04-03). *)
 Theorem supported_module_binding_shadowing_accept:
   supported_function_bindings supported_test_declarations
@@ -50,14 +50,6 @@ Theorem supported_module_binding_shadowing_accept:
   supported_declaration_names
     [VariableDecl Private Storage "x" (BaseT (UintT 256)) (SOME 0);
      FunctionDecl External View F F "f" [("x", BaseT BoolT)] [] NoneT []]
-Proof
-  EVAL_TAC
-QED
-
-Theorem supported_dotted_binding_reject:
-  ~supported_function_bindings [] [("self.x", BaseT BoolT)] [] [] /\
-  ~supported_function_bindings [] [] ["self.x"] [] /\
-  ~supported_function_bindings [] [] [] ["self.x"]
 Proof
   EVAL_TAC
 QED

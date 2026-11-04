@@ -17,9 +17,9 @@ val _ = Parse.hide "body";
 Theorem entry_body_failure_requests:
   ~cx.in_deploy /\ cx.txn.value = 0 /\
   eval_stmts cx body
-    (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>) =
+    (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>) =
       (INR (Error (RuntimeError msg)), st) ==>
-  call_external_function orc am cx F Nonpayable [] [] [] [] [] body NoneT =
+  call_external_function orc gobs am cx F Nonpayable [] [] [] [] [] body NoneT =
     (INR (Error (RuntimeError msg)), am, st.requests)
 Proof
   simp[call_external_function_def, evaluate_defaults_def, bind_arguments_def,
@@ -29,9 +29,9 @@ QED
 Theorem entry_body_success_requests:
   ~cx.in_deploy /\ cx.txn.value = 0 /\
   eval_stmts cx body
-    (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>) =
+    (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>) =
       (INL (), st) ==>
-  call_external_function orc am cx F Nonpayable [] [] [] [] [] body NoneT =
+  call_external_function orc gobs am cx F Nonpayable [] [] [] [] [] body NoneT =
     (INL NoneV, abstract_machine_from_state am.sources am.exports am.layouts st,
      st.requests)
 Proof
@@ -43,9 +43,9 @@ Theorem entry_return_cast_failure_requests:
   ~cx.in_deploy /\ cx.txn.value = 0 /\
   evaluate_type (type_env_all_modules []) ret = SOME tv /\ safe_cast tv v = NONE /\
   eval_stmts cx body
-    (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>) =
+    (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>) =
       (INR (ReturnException v), st) ==>
-  call_external_function orc am cx F Nonpayable [] [] [] [] [] body ret =
+  call_external_function orc gobs am cx F Nonpayable [] [] [] [] [] body ret =
     (INR (Error (TypeError "ext cast ret")), am, st.requests)
 Proof
   simp[call_external_function_def, evaluate_defaults_def, bind_arguments_def,
@@ -70,11 +70,11 @@ val () = cv_auto_trans entry_test_machine_def;
 Definition entry_test_observations_def:
   entry_test_observations orc =
   let am = entry_test_machine in
-  let ok = call_external orc am (empty_call_txn with function_name := "ok") in
-  let bad = call_external orc am (empty_call_txn with function_name := "fail") in
-  let fresh = call_external_transaction orc am
+  let ok = call_external orc [] am (empty_call_txn with function_name := "ok") in
+  let bad = call_external orc [] am (empty_call_txn with function_name := "fail") in
+  let fresh = call_external_transaction orc [] am
       (empty_call_txn with function_name := "fail") in
-  let loaded = load_contract orc initial_machine_state
+  let loaded = load_contract orc [] initial_machine_state
       (empty_call_txn with function_name := "__init__")
       [(NONE, entry_test_program)] [] in
     FST ok = INL NoneV /\ SND (SND ok) = [] /\
@@ -83,7 +83,7 @@ Definition entry_test_observations_def:
     (FST (SND fresh)).logs = [] /\ SND (SND fresh) = [] /\
     (case loaded of INR _ => F | INL (deployed,rqs) =>
        rqs = [] /\ LENGTH deployed.sources = 1) /\
-    ISR (load_contract orc initial_machine_state
+    ISR (load_contract orc [] initial_machine_state
       (empty_call_txn with function_name := "__init__")
       [(NONE, [FunctionDecl Deploy Payable F F "__init__" [] [] NoneT
         [Assert (Literal (BaseT BoolT) (BoolL F)) AssertBare]])] [])
@@ -106,14 +106,14 @@ Proof
 QED
 
 Theorem entry_failure_machine_rollback:
-  call_external orc am tx = (INR exc,am',rqs) ==>
+  call_external orc gobs am tx = (INR exc,am',rqs) ==>
   am' = am
 Proof
   metis_tac[call_external_error_rollback]
 QED
 
 Theorem entry_transaction_failure_rollback:
-  call_external_transaction orc am tx = (INR exc,am',rqs) ==>
+  call_external_transaction orc gobs am tx = (INR exc,am',rqs) ==>
   am' = clear_machine_logs am
 Proof
   simp[call_external_transaction_def] >>

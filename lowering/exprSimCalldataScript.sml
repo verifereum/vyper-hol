@@ -100,8 +100,8 @@ Proof
   rpt strip_tac >>
   gvs[lower_value_calldata_len] >>
   irule frag_exec_conseq >>
-  qexistsl_tac [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
-                `\s. stmt_state_rel func cenv cx es s /\
+  qexistsl_tac [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
+                `\s. stmt_state_rel ctx func cenv cx es s /\
                      eval_operand op s =
                        SOME (val_to_w256 (IntV &LENGTH cx.txn.calldata)) /\
                      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
