@@ -2,6 +2,8 @@ Theory makeSsaCurrentMergeSeed
 Ancestors makeSsaCurrentTokenOwnership makeSsaCurrentGraphCut
   makeSsaCurrentTokens makeSsaCurrentAnalysis dominatorProofs
   dominatorAnalysisProps dominatorDefs cfgDefs list
+  makeSsaCurrentPlacementCut makeSsaCurrentPlacement makeSsaCurrentFrontier
+  makeSsaCurrentDefs unitShapeDefs alist venomInst
 
 Theorem current_output_inserted_origin[local]:
   !xs j t. current_output_token v l i j xs t = CurrentInserted w h ==>
@@ -79,4 +81,46 @@ Proof
   drule_all exists_pred_not_dominated >> strip_tac >>
   goal_assum $ drule_at Any >> simp[] >>
   metis_tac[current_exit_inserted_dominates]
+QED
+
+Theorem current_merge_frontier_support[local]:
+  wf_function fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  current_frontier_edge (current_frontier_map fn) d h ==>
+  MEM h (fn_labels fn) /\
+  LENGTH (cfg_preds_of (cfg_analyze fn) h) > 1 /\ fn_entry_label fn <> SOME h
+Proof
+  simp[current_frontier_edge_def] >> strip_tac >>
+  `MEM d (fn_labels fn)` by
+    (imp_res_tac ALOOKUP_MEM >>
+     gvs[current_frontier_map_def, current_query_map_def, MEM_MAP] >> metis_tac[]) >>
+  metis_tac[current_frontier_target_support]
+QED
+
+Theorem current_pruned_merge_support[local]:
+  wf_function fn /\ all_reachable fn /\ first_block_no_preds fn ==>
+  !h. current_pruned_reach (current_frontier_map fn) li v roots h ==>
+    MEM h (fn_labels fn) /\
+    LENGTH (cfg_preds_of (cfg_analyze fn) h) > 1 /\ fn_entry_label fn <> SOME h
+Proof
+  strip_tac >> ho_match_mp_tac current_pruned_reach_ind >>
+  metis_tac[current_merge_frontier_support]
+QED
+
+Theorem current_actual_inserted_support:
+  wf_function fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  current_actual_inserted fn v h ==>
+  MEM h (fn_labels fn) /\
+  LENGTH (cfg_preds_of (cfg_analyze fn) h) > 1 /\ fn_entry_label fn <> SOME h
+Proof
+  simp[current_actual_inserted_def] >>
+  metis_tac[current_pruned_merge_support]
+QED
+
+Theorem current_actual_inserted_nonentry:
+  wf_function fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  entry_block fn = SOME eb /\ current_actual_inserted fn v h ==>
+  h <> eb.bb_label
+Proof
+  strip_tac >> drule_all current_actual_inserted_support >>
+  simp[fn_entry_label_def]
 QED
