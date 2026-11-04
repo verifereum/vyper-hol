@@ -402,3 +402,24 @@ Proof
   conj_tac >- fs[update_var_def] >>
   qexistsl [`G`,`H`] >> simp[]
 QED
+
+Theorem dload_boundary_core_add_temporary:
+  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  i.inst_opcode = ADD /\ i.inst_outputs = [tmp] /\ tmp NOTIN V /\
+  step_inst_base i t = OK u ==>
+  dload_boundary_core lo fs V Ws PG PH G (step_prov PH H i u)
+    tn (step_taint i t u un) s u cs ds
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst_base i t = OK u` mp_tac >>
+  simp[step_inst_base_def, exec_pure2_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  `step_taint i t (update_var tmp (v1+v2) t) un =
+    un with t_var := set_var_taint un.t_var [tmp] (out_taint un i t)` by
+    (simp[step_taint_def, mem_taint_def, adopt_reset_def,
+      store_taint_def, imm_taint_def, update_var_def, new_site_bytes_def,
+      step_writes_def, range_bytes_def, source_memory_write_ranges_def,
+      written_taint_def, FLOOKUP_DEF, taint_component_equality, EXTENSION] >>
+     simp[SF CONJ_ss]) >>
+  simp[step_prov_def] >> irule dload_boundary_core_target_temporary >> simp[]
+QED
