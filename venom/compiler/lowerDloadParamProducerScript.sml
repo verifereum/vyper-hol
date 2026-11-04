@@ -76,8 +76,8 @@ Proof
   simp[ld_alloc_account_def, update_var_def]
 QED
 
-Theorem ld_param_taint_nonvar:
-  i.inst_opcode = PARAM /\ i.inst_operands = [Lit idx] ==>
+Theorem ld_singleton_update_taint_nonvar:
+  i.inst_operands = [op] /\ source_memory_write_ranges i s = [] ==>
   (step_taint i s (update_var out x s) tn).t_mem = tn.t_mem /\
   (step_taint i s (update_var out x s) tn).t_stor = tn.t_stor /\
   (step_taint i s (update_var out x s) tn).t_trans = tn.t_trans /\
@@ -86,8 +86,19 @@ Proof
   strip_tac >>
   simp[step_taint_def, mem_taint_def, new_site_bytes_def,
        written_taint_def, step_writes_def, store_taint_def, imm_taint_def,
-       adopt_reset_def, update_var_def, source_memory_write_ranges_def,
+       adopt_reset_def, update_var_def,
        range_bytes_def, EXTENSION, FLOOKUP_DEF] >> metis_tac[]
+QED
+
+Theorem ld_param_taint_nonvar:
+  i.inst_opcode = PARAM /\ i.inst_operands = [Lit idx] ==>
+  (step_taint i s (update_var out x s) tn).t_mem = tn.t_mem /\
+  (step_taint i s (update_var out x s) tn).t_stor = tn.t_stor /\
+  (step_taint i s (update_var out x s) tn).t_trans = tn.t_trans /\
+  (step_taint i s (update_var out x s) tn).t_imm = tn.t_imm
+Proof
+  strip_tac >> irule ld_singleton_update_taint_nonvar >>
+  simp[source_memory_write_ranges_def]
 QED
 
 Theorem ld_byte_rel_update_var:
