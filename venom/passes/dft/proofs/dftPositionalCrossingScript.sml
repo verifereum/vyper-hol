@@ -5,7 +5,8 @@ Ancestors
   dftOriginalRuntime dftOriginalOrbit dftProtectedRuntime dftMixedCrossing
   dftRelationalEdit dftOccurrenceOrdinaryEdit dftOccurrenceResidual
   dftInvokeOrdinaryBoundary dftOccurrenceMachine dftOpenErase venomEffects
-  dftPositionalReturn dftOccurrenceFrame
+  dftPositionalReturn dftOccurrenceFrame dftRecursiveFixedSegment
+  dftOccurrenceReplay dftOpenMachine
   venomExecSemantics venomState venomInst list arithmetic
 
 Theorem dft_pos_crossing_blocks[local]:
@@ -272,3 +273,194 @@ Resume dft_pos_crossing_enter[assemble]:
   simp[dft_occ_event_def] >> metis_tac[]
 QED
 Finalise dft_pos_crossing_enter
+
+Theorem dft_pos_crossing_mid[local]:
+  dft_recursive_crossing_ready f0 b0 b pre x call post s /\
+  l.dft_occ_core = DftOpen (DftAt f 0 b s) ls n /\
+  dft_pos_stack C D fi bi pre x call post certs ls rs /\
+  LENGTH l.dft_occ_saved = LENGTH certs /\ step_inst_base x s = OK t ==>
+  dft_occ_oracle_next w C l = l with
+    <|dft_occ_core := DftOpen
+       (DftAt f 0 b (t with vs_inst_idx := SUC s.vs_inst_idx)) ls n;
+      dft_occ_saved := l.dft_occ_saved|>
+Proof
+  strip_tac >> drule dft_recursive_crossing_positions >> strip_tac >>
+  drule dft_pos_stack_fill >> strip_tac >>
+  drule_all dft_pos_stack_saved_empty >> strip_tac >>
+  `x.inst_opcode <> INVOKE /\ x.inst_opcode <> GAS /\
+   ~is_terminator x.inst_opcode` by
+    (fs[dft_recursive_crossing_ready_def] >>
+     drule_all dft_invoke_inversion_disjoint >>
+     Cases_on `x.inst_opcode = INVOKE` >>
+     simp[venomEffectsTheory.read_effects_def,
+          venomEffectsTheory.empty_effects_def, venomEffectsTheory.all_effects_def]) >>
+  drule_all dft_occ_ordinary_next >>
+  disch_then (qspecl_then [`w`, `C`] mp_tac) >>
+  Cases_on `ls` >> gvs[] >> simp[dft_occ_config_component_equality]
+QED
+
+Theorem dft_pos_invoke_failed_next[local]:
+  c.dft_occ_core = DftOpen (DftAt f 0 b s) ls n /\
+  get_instruction b s.vs_inst_idx = SOME call /\ call.inst_opcode = INVOKE /\
+  dft_open_invoke C f 1 b call s (MAP (dft_fill_frame 1) ls) n =
+    DftOpen (DftDone res) [] n ==>
+  dft_occ_oracle_next w C c = c with
+    <|dft_occ_core := DftOpen (DftDone res) [] n; dft_occ_saved := []|>
+Proof
+  strip_tac >>
+  simp[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+       dft_fill_def, dft_fill_control_def, dft_open_next_def,
+       dft_erase_def, dft_occ_update_def]
+QED
+
+Theorem dft_pos_crossing_failed[local]:
+  D = dft_pos_edit_ctx fi bi pre x call post C /\
+  dft_pos_runtime_ready C fi bi pre x call post /\
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_pos_phase C D fi bi pre x call post l r /\
+  dft_pos_slot C D fi bi f g b b' /\
+  l.dft_occ_core = DftOpen (DftAt f 0 b s) ls nL /\
+  r.dft_occ_core = DftOpen (DftAt g 0 b' s) rs nR /\
+  dft_recursive_crossing_ready f0 b0 b pre x call post s /\
+  step_inst_base x s = OK t /\
+  dft_open_invoke C f 1 b call (t with vs_inst_idx := SUC s.vs_inst_idx)
+    (MAP (dft_fill_frame 1) ls) nL = DftOpen (DftDone res) [] nL /\
+  dft_open_invoke D g 1 b' call s
+    (MAP (dft_fill_frame 1) rs) nR = DftOpen (DftDone res) [] nR ==>
+  dft_pos_phase C D fi bi pre x call post
+    (FUNPOW (dft_occ_oracle_next w C) 2 l) (dft_occ_oracle_next w D r) /\
+  dft_occ_count (FUNPOW (dft_occ_oracle_next w C) 2 l) = nL /\
+  dft_occ_count (dft_occ_oracle_next w D r) = nR
+Proof
+  strip_tac >> drule_all dft_pos_crossing_blocks >> strip_tac >>
+  `?certs. dft_pos_stack C D fi bi pre x call post certs ls rs /\
+    LENGTH l.dft_occ_saved = LENGTH certs` by
+    (fs[dft_pos_phase_def] >> metis_tac[]) >>
+  drule_all dft_pos_crossing_mid >> disch_then (qspec_then `w` assume_tac) >>
+  qmatch_asmsub_abbrev_tac `dft_occ_oracle_next w C l = mid` >>
+  `mid.dft_occ_core = DftOpen
+     (DftAt f 0 b (t with vs_inst_idx := SUC s.vs_inst_idx)) ls nL /\
+   mid.dft_occ_path = l.dft_occ_path /\ mid.dft_occ_visit = l.dft_occ_visit` by
+    simp[Abbr `mid`] >>
+  `get_instruction b (t with vs_inst_idx := SUC s.vs_inst_idx).vs_inst_idx = SOME call /\
+   get_instruction b' s.vs_inst_idx = SOME call /\ call.inst_opcode = INVOKE` by
+    (fs[dft_recursive_crossing_ready_def] >> simp[get_instruction_def, EL_APPEND_EQN]) >>
+  `dft_occ_oracle_next w C mid = mid with
+     <|dft_occ_core := DftOpen (DftDone res) [] nL; dft_occ_saved := []|>` by
+    (irule dft_pos_invoke_failed_next >> simp[] >>
+     qexists_tac `call` >> gvs[]) >>
+  `dft_occ_oracle_next w D r = r with
+     <|dft_occ_core := DftOpen (DftDone res) [] nR; dft_occ_saved := []|>` by
+    (irule dft_pos_invoke_failed_next >> simp[] >>
+     qexists_tac `call` >> gvs[]) >>
+  `dft_original_ready (dft_occ_oracle_next w C mid) /\
+   dft_original_ready (dft_occ_oracle_next w D r)` by
+    (fs[dft_pos_phase_def] >> metis_tac[dft_original_runtime_next]) >>
+  qpat_x_assum `D = _` kall_tac >>
+  simp[FUNPOW_2, dft_occ_count_def] >>
+  simp[dft_pos_phase_def, dft_pos_control_def, dft_pos_stack_def] >>
+  fs[dft_pos_phase_def] >> metis_tac[]
+QED
+
+Theorem dft_pos_crossing_next:
+  D = dft_pos_edit_ctx fi bi pre x call post C /\
+  dft_pos_runtime_ready C fi bi pre x call post /\
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_pos_phase C D fi bi pre x call post l r /\
+  dft_pos_slot C D fi bi f g b b' /\
+  l.dft_occ_core = DftOpen (DftAt f 0 b s) ls nL /\
+  r.dft_occ_core = DftOpen (DftAt g 0 b' s) rs nR /\
+  dft_recursive_crossing_ready f0 b0 b pre x call post s ==>
+  dft_pos_phase C D fi bi pre x call post
+    (FUNPOW (dft_occ_oracle_next w C) 2 l) (dft_occ_oracle_next w D r) /\
+  dft_occ_count (FUNPOW (dft_occ_oracle_next w C) 2 l) = nL /\
+  dft_occ_count (dft_occ_oracle_next w D r) = nR
+Proof
+  strip_tac >> drule dft_recursive_crossing_partner_success >> strip_tac >>
+  drule_all dft_recursive_partner_updates >> strip_tac >>
+  `dft_cut_pair us [] (t with vs_inst_idx := SUC s.vs_inst_idx) s` by
+    metis_tac[dft_recursive_pending_cut] >>
+  `EVERY (\p. ~MEM (Var (FST p)) call.inst_operands) us` by
+    (drule dft_recursive_partner_disjoint >> strip_tac >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  qpat_x_assum `t = _` kall_tac >>
+  Cases_on `decode_invoke call`
+  >- (irule dft_pos_crossing_failed >> simp[dft_open_invoke_def] >> metis_tac[]) >>
+  rename1 `decode_invoke call = SOME pair` >> PairCases_on `pair` >>
+  rename1 `decode_invoke call = SOME (nm,ops)` >>
+  `eval_operands ops (t with vs_inst_idx := SUC s.vs_inst_idx) = eval_operands ops s` by
+    (irule dft_cut_pair_eval_operands >> qexistsl_tac [`us`, `[]`] >> simp[] >>
+     metis_tac[dft_pos_decode_support]) >>
+  `OPTREL (dft_pos_functions C D)
+     (lookup_function nm C.ctx_functions) (lookup_function nm D.ctx_functions)` by
+    metis_tac[dft_pos_edit_function_lookup] >>
+  Cases_on `lookup_function nm C.ctx_functions`
+  >- suspend "missing" >>
+  rename1 `lookup_function nm C.ctx_functions = SOME calleeL` >>
+  `?calleeR. lookup_function nm D.ctx_functions = SOME calleeR /\
+     dft_pos_functions C D calleeL calleeR` by
+    (qpat_x_assum `OPTREL _ _ _` mp_tac >> simp[optionTheory.OPTREL_def]) >>
+  `setup_callee calleeL args (t with vs_inst_idx := SUC s.vs_inst_idx) =
+   setup_callee calleeR args s` by
+    (drule dft_cut_pair_setup_callee >>
+     metis_tac[dft_pos_edit_setup]) >>
+  Cases_on `eval_operands ops s`
+  >- suspend "operands" >>
+  rename1 `eval_operands ops s = SOME args'` >>
+  `setup_callee calleeL args' (t with vs_inst_idx := SUC s.vs_inst_idx) =
+   setup_callee calleeR args' s` by
+    (drule dft_cut_pair_setup_callee >> metis_tac[dft_pos_edit_setup]) >>
+  Cases_on `setup_callee calleeR args' s`
+  >- suspend "setup" >>
+  drule_all dft_pos_crossing_enter >>
+  disch_then (qspec_then `w` strip_assume_tac) >> simp[]
+QED
+
+Resume dft_pos_crossing_next[missing]:
+  `lookup_function nm D.ctx_functions = NONE` by
+    (qpat_x_assum `OPTREL _ _ _` mp_tac >> simp[optionTheory.OPTREL_def]) >>
+  gvs[] >> irule dft_pos_crossing_failed >> simp[dft_open_invoke_def] >> metis_tac[]
+QED
+Resume dft_pos_crossing_next[operands]:
+  gvs[] >> irule dft_pos_crossing_failed >> simp[dft_open_invoke_def] >> metis_tac[]
+QED
+Resume dft_pos_crossing_next[setup]:
+  gvs[] >> irule dft_pos_crossing_failed >> simp[dft_open_invoke_def] >> metis_tac[]
+QED
+Finalise dft_pos_crossing_next
+
+Theorem dft_pos_crossing_silent:
+  D = dft_pos_edit_ctx fi bi pre x call post C /\
+  dft_pos_runtime_ready C fi bi pre x call post /\
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_pos_phase C D fi bi pre x call post l r /\
+  dft_pos_slot C D fi bi f g b b' /\
+  l.dft_occ_core = DftOpen (DftAt f 0 b s) ls nL /\
+  r.dft_occ_core = DftOpen (DftAt g 0 b' s) rs nR /\
+  dft_recursive_crossing_ready f0 b0 b pre x call post s ==>
+  (!j. j < 2 ==> dft_fixed_silent_cut (FUNPOW (dft_occ_oracle_next w C) j l)) /\
+  (!k. k < 1 ==> dft_fixed_silent_cut (FUNPOW (dft_occ_oracle_next w D) k r))
+Proof
+  strip_tac >> drule_all dft_pos_crossing_blocks >> strip_tac >>
+  drule dft_recursive_crossing_partner_success >> strip_tac >>
+  `?certs. dft_pos_stack C D fi bi pre x call post certs ls rs /\
+    LENGTH l.dft_occ_saved = LENGTH certs` by
+    (fs[dft_pos_phase_def] >> metis_tac[]) >>
+  drule_all dft_pos_crossing_mid >> disch_then (qspec_then `w` assume_tac) >>
+  drule dft_recursive_crossing_positions >> strip_tac >>
+  `inst_mem_ranges x s = [] /\
+   inst_mem_ranges call (t with vs_inst_idx := SUC s.vs_inst_idx) = [] /\
+   inst_mem_ranges call s = []` by
+    (fs[dft_recursive_crossing_ready_def] >>
+     metis_tac[dft_invoke_partner_no_observations]) >>
+  `x.inst_opcode <> GAS /\ call.inst_opcode <> GAS` by
+    fs[dft_recursive_crossing_ready_def] >>
+  `get_instruction b' s.vs_inst_idx = SOME call` by
+    gvs[dftOccurrenceGasEditTheory.dft_gas_edit_block_def] >>
+  `dft_fixed_silent_cut l /\ dft_fixed_silent_cut r` by
+    metis_tac[dft_fixed_silent_at] >>
+  `dft_fixed_silent_cut (dft_occ_oracle_next w C l)` by
+    (irule (cj 1 dft_fixed_silent_at) >> simp[] >> metis_tac[]) >>
+  `!j:num. j < 2 <=> j = 0 \/ j = 1` by decide_tac >>
+  simp[] >> rpt strip_tac >> gvs[]
+QED
