@@ -1,7 +1,7 @@
 Theory lowerDloadPtrPhi
 Ancestors
   venomExecSemantics venomState venomInst execEquivParamBase
-  list pred_set finite_map lowerDloadDefs o1ContractLowerDload contextCodegenRel lowerDloadPtrRel ptrDiscipline
+  unitShapeDefs list pred_set finite_map lowerDloadDefs o1ContractLowerDload contextCodegenRel lowerDloadPtrRel ptrDiscipline
 
 Theorem eval_operand_definedness:
   s.vs_labels = t.vs_labels /\
@@ -248,4 +248,56 @@ Proof
       simp[phis_prov_def, phis_taint_def] >>
       irule dload_vars_match_write >> gvs[]) >>
   gvs[eval_phis_def, phis_prov_def, phis_taint_def]
+QED
+
+Theorem retpc_phi_input_tracked:
+  MEM i (fn_insts f) /\ i.inst_opcode = PHI /\
+  MEM v i.inst_outputs /\ ~retpc_var f v /\
+  MEM (Var w) i.inst_operands ==> ~retpc_var f w
+Proof
+  simp[retpc_var_def] >> metis_tac[copy_phi_var_phi]
+QED
+
+Theorem phi_prefix_member:
+  !xs i. MEM i (TAKE (phi_prefix_length xs) xs) ==>
+    MEM i xs /\ i.inst_opcode = PHI
+Proof
+  Induct_on `xs` >- simp[phi_prefix_length_def] >>
+  gen_tac >> Cases_on `h.inst_opcode = PHI` >>
+  simp[phi_prefix_length_def] >> metis_tac[MEM]
+QED
+
+Theorem phi_prefix_computations:
+  !xs. (!s. eval_phis s (TAKE (phi_prefix_length xs) xs) = eval_phis s xs) /\
+    (!prev G. phis_prov prev G (TAKE (phi_prefix_length xs) xs) = phis_prov prev G xs) /\
+    (!prev tn. phis_taint prev tn (TAKE (phi_prefix_length xs) xs) = phis_taint prev tn xs)
+Proof
+  Induct_on `xs`
+  >- simp[phi_prefix_length_def, eval_phis_def, phis_prov_def, phis_taint_def] >>
+  gen_tac >> Cases_on `h.inst_opcode = PHI` >>
+  simp[phi_prefix_length_def, eval_phis_def, phis_prov_def, phis_taint_def]
+QED
+
+Theorem dload_vars_match_phis_retpc:
+  (!i. MEM i xs ==> MEM i (fn_insts f)) /\
+  s.vs_prev_bb = t.vs_prev_bb /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fs {v | ~retpc_var f v} G H tn un s t /\
+  eval_phis s xs = OK s' /\ eval_phis t xs = OK t' ==>
+  dload_vars_match fs {v | ~retpc_var f v}
+    (phis_prov s.vs_prev_bb G xs) (phis_prov t.vs_prev_bb H xs)
+    (tn with t_var := phis_taint s.vs_prev_bb tn xs)
+    (un with t_var := phis_taint t.vs_prev_bb un xs) s' t'
+Proof
+  strip_tac >>
+  `!i v lbl op w. MEM i (TAKE (phi_prefix_length xs) xs) /\
+    i.inst_outputs = [v] /\ v IN {v | ~retpc_var f v} /\
+    s.vs_prev_bb = SOME lbl /\ resolve_phi lbl i.inst_operands = SOME op /\
+    op = Var w ==> w IN {v | ~retpc_var f v}` by
+    (rpt strip_tac >> gvs[] >> irule retpc_phi_input_tracked >>
+     drule phi_prefix_member >> strip_tac >>
+     qexistsl [`i`,`v`] >> simp[] >> metis_tac[resolve_phi_MEM]) >>
+  `eval_phis s (TAKE (phi_prefix_length xs) xs) = OK s' /\
+   eval_phis t (TAKE (phi_prefix_length xs) xs) = OK t'` by
+    simp[phi_prefix_computations] >>
+  drule_all dload_vars_match_phis >> simp[phi_prefix_computations]
 QED
