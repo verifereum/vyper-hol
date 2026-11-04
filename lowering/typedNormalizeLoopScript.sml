@@ -1,6 +1,6 @@
 Theory typedNormalizeLoop
 Ancestors
-  typedNormalizeFrame typedArrayLoopControlMem typedArrayLoopLayoutMem
+  typedNormalizeFrame typedArrayLoopControlMem typedArrayLoopLayoutMem memContinuation
   context compileEnv emitHelper emitHelperProps exprLoweringProps fragExec
   venomInst venomState venomExecSemantics valueEncoding valueEncodingProps
   words arithmetic list rich_list
@@ -263,4 +263,194 @@ Proof
      pure_rewrite_tac [LEFT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac) >>
   conj_tac >- (first_x_assum irule >> decide_tac) >>
   rpt strip_tac >> first_x_assum irule >> decide_tac
+QED
+
+(* The enclosing loop, rather than the element callback, executes the
+   conditional edge.  This boundary is valid for arbitrary element types. *)
+Theorem typed_sarray_header_cont[local]:
+  ~(type_memory_bytes ce dt = type_memory_bytes ce st /\
+    ~is_abi_dynamic ce.ce_struct_fields dt) /\
+  compile_copy_sarray_typed ce dst dt src st ncount sa = ((),sb) /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+  s.vs_current_bb = fresh_label_output "typed_sa_cond" sa.cs_next_label /\
+  eval_operand (Var ("%" ++ toString sa.cs_next_var)) s = SOME (n2w i) /\
+  i < ncount /\ ncount < dimword(:256) ==>
+  ?u. mem_cont_sim ctx fn s u /\ ~u.vs_halted /\ u.vs_inst_idx = 0 /\
+    u.vs_current_bb = fresh_label_output "typed_sa_body" (sa.cs_next_label+1) /\
+    (u with <|vs_vars := s.vs_vars; vs_current_bb := s.vs_current_bb;
+      vs_prev_bb := s.vs_prev_bb|>) = s /\
+    (!x. not_fresh_at sa x \/ x = "%" ++ toString sa.cs_next_var ==>
+      lookup_var x u = lookup_var x s)
+Proof
+  strip_tac >> drule_all typed_sarray_child_decompose >> strip_tac >>
+  map_every (fn pat => rpt (qpat_x_assum pat kall_tac))
+    [`compile_store_memory_typed _ _ _ _ _ _ = _`, `sb = _`,
+     `sc.cs_current_insts = _`, `cs_extends _ _`, `fn_has_code _ _ _`,
+     `ci_mono _ _`, `LENGTH sc.cs_current_insts = _`, `sc.cs_next_var = _`,
+     `isPREFIX _ _`] >>
+  `mem_cont_sim ctx fn s
+    (jump_to (if i < ncount then fresh_label_output "typed_sa_body" (sa.cs_next_label+1)
+              else fresh_label_output "typed_sa_exit" (sa.cs_next_label+2))
+      (typed_sa_header_state ("%" ++ toString (sa.cs_next_var+1))
+        ("%" ++ toString (sa.cs_next_var+2)) i ncount s))` by
+    (irule typed_sa_header_sim >> simp[] >>
+     conj_tac >- metis_tac[] >>
+     qexistsl_tac [`"%" ++ toString sa.cs_next_var`, `sa.cs_next_id+2`] >>
+     simp[] >> metis_tac[LESS_IMP_LESS_OR_EQ]) >>
+  gvs[] >> goal_assum (drule_at Any) >>
+  simp[jump_to_def, typed_sa_header_state_def, update_var_def,
+       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  conj_tac >- simp[venom_state_component_equality] >>
+  rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  metis_tac[DECIDE ``n <= n+1 /\ n <= n+2``]
+QED
+
+Theorem typed_sarray_exit_cont[local]:
+  ~(type_memory_bytes ce dt = type_memory_bytes ce st /\
+    ~is_abi_dynamic ce.ce_struct_fields dt) /\
+  compile_copy_sarray_typed ce dst dt src st ncount sa = ((),sb) /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+  s.vs_current_bb = fresh_label_output "typed_sa_cond" sa.cs_next_label /\
+  eval_operand (Var ("%" ++ toString sa.cs_next_var)) s = SOME (n2w ncount) /\
+  ncount < dimword(:256) /\
+  lookup_block sb.cs_current_bb fn.fn_blocks = SOME exit_bb /\
+  phi_prefix_length exit_bb.bb_instructions = 0 ==>
+  ?u. mem_cont_sim ctx fn s u /\ ~u.vs_halted /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (u with <|vs_vars := s.vs_vars; vs_current_bb := s.vs_current_bb;
+      vs_prev_bb := s.vs_prev_bb|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)
+Proof
+  strip_tac >> drule_all typed_sarray_child_decompose >> strip_tac >>
+  `sb.cs_current_bb = fresh_label_output "typed_sa_exit" (sa.cs_next_label+2) /\
+   sb.cs_current_insts = []` by simp[] >>
+  map_every (fn pat => rpt (qpat_x_assum pat kall_tac))
+    [`compile_store_memory_typed _ _ _ _ _ _ = _`, `sb = _`,
+     `sc.cs_current_insts = _`, `cs_extends _ _`, `fn_has_code _ _ _`,
+     `ci_mono _ _`, `LENGTH sc.cs_current_insts = _`, `sc.cs_next_var = _`,
+     `isPREFIX _ _`] >>
+  `mem_cont_sim ctx fn s
+    (jump_to (if ncount < ncount then fresh_label_output "typed_sa_body" (sa.cs_next_label+1)
+              else fresh_label_output "typed_sa_exit" (sa.cs_next_label+2))
+      (typed_sa_header_state ("%" ++ toString (sa.cs_next_var+1))
+        ("%" ++ toString (sa.cs_next_var+2)) ncount ncount s))` by
+    (irule typed_sa_header_sim >> simp[] >>
+     conj_tac >- metis_tac[] >>
+     qexistsl_tac [`"%" ++ toString sa.cs_next_var`, `sa.cs_next_id+2`] >> simp[]) >>
+  gvs[] >> goal_assum (drule_at Any) >>
+  simp[jump_to_def, typed_sa_header_state_def, update_var_def,
+       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  conj_tac >- simp[venom_state_component_equality] >>
+  rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  metis_tac[DECIDE ``n <= n+1 /\ n <= n+2``]
+QED
+
+(* Only the recursive element copy is delegated.  The four enclosing pointer
+   instructions execute here even when the child crosses arbitrary blocks. *)
+Theorem typed_array_pointer_child_cont[local]:
+  sc.cs_current_insts =
+    [mk_inst id MUL [Var ctr; Lit (n2w ss)] [so];
+     mk_inst (id+1) MUL [Var ctr; Lit (n2w ds)] [dso];
+     mk_inst (id+2) ADD [src; Var so] [sp];
+     mk_inst (id+3) ADD [dst; Var dso] [dp]] /\
+  lookup_block sc.cs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX sc.cs_current_insts bb.bb_instructions /\
+  ALL_DISTINCT [so;dso;sp;dp] /\ ~MEM ctr [so;dso;sp;dp] /\
+  not_fresh_at sc ctr /\
+  (!x. src = Var x \/ dst = Var x ==> ~MEM x [so;dso;sp;dp]) /\
+  eval_operand src s = SOME (n2w a) /\
+  eval_operand dst s = SOME (n2w b) /\
+  eval_operand (Var ctr) s = SOME (n2w i) /\
+  ~s.vs_halted /\ s.vs_inst_idx = 0 /\ s.vs_current_bb = sc.cs_current_bb /\
+  i < n /\ a+ss*n <= s.vs_alloca_next /\ b+ds*n <= s.vs_alloca_next /\
+  Src i (a+ss*i) s.vs_memory /\
+  (!j u. j < n /\ ~u.vs_halted /\
+    u.vs_current_bb = sc.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sc.cs_current_insts /\
+    eval_operand (Var sp) u = SOME (n2w (a+ss*j)) /\
+    eval_operand (Var dp) u = SOME (n2w (b+ds*j)) /\
+    a+ss*n <= u.vs_alloca_next /\ b+ds*n <= u.vs_alloca_next /\
+    Src j (a+ss*j) u.vs_memory ==>
+    ?v. mem_cont_sim ctx fn u v /\ ~v.vs_halted /\
+      v.vs_current_bb = ec.cs_current_bb /\
+      v.vs_inst_idx = LENGTH ec.cs_current_insts /\
+      D j (b+ds*j) v.vs_memory /\
+      (!p k. p+k <= b+ds*j \/ b+ds*j+ds <= p ==>
+        mem_bytes_at p k v.vs_memory = mem_bytes_at p k u.vs_memory) /\
+      (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
+        vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
+        vs_prev_bb := u.vs_prev_bb|>) = u /\
+      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u)) ==>
+  ?v. mem_cont_sim ctx fn s v /\ ~v.vs_halted /\
+    v.vs_current_bb = ec.cs_current_bb /\
+    v.vs_inst_idx = LENGTH ec.cs_current_insts /\
+    eval_operand (Var ctr) v = SOME (n2w i) /\
+    D i (b+ds*i) v.vs_memory /\
+    (!p k. p+k <= b+ds*i \/ b+ds*i+ds <= p ==>
+      mem_bytes_at p k v.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (v with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
+      vs_prev_bb := s.vs_prev_bb|>) = s /\
+    (!x. not_fresh_at sc x /\ ~MEM x [so;dso;sp;dp] ==>
+      lookup_var x v = lookup_var x s)
+Proof
+  strip_tac >>
+  `?u. mem_cont_sim ctx fn s u /\ u.vs_inst_idx = 4 /\
+    eval_operand (Var sp) u = SOME (n2w (a+ss*i)) /\
+    eval_operand (Var dp) u = SOME (n2w (b+ds*i)) /\
+    (u with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+    (!x. ~MEM x [so;dso;sp;dp] ==> lookup_var x u = lookup_var x s)` by
+    (irule typed_sa_pointer_cont >> simp[] >>
+     qexistsl_tac [`ctr`, `dst`, `id`, `src`] >> gvs[] >> metis_tac[]) >>
+  `u.vs_memory = s.vs_memory /\ u.vs_alloca_next = s.vs_alloca_next /\
+    ~u.vs_halted /\ u.vs_current_bb = sc.cs_current_bb` by
+    (qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  qpat_x_assum `!j u. _` (qspecl_then [`i`, `u`] mp_tac) >>
+  (impl_tac >- gvs[]) >> strip_tac >> qexists_tac `v` >>
+  conj_tac >- (irule mem_cont_sim_trans >> qexists_tac `u` >> simp[]) >>
+  simp[] >> conj_tac
+  >- (gvs[eval_operand_def] >> metis_tac[]) >>
+  conj_tac >- (gvs[] >> metis_tac[]) >>
+  qpat_x_assum `v with <|vs_vars := _; vs_memory := _;
+    vs_current_bb := _; vs_inst_idx := _; vs_prev_bb := _|> = u` mp_tac >>
+  qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = s` mp_tac >>
+  simp[venom_state_component_equality] >> rpt strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+(* The returned child state, not its entry, chooses the backedge instruction
+   IDs and temporary.  The counter update has no memory effect. *)
+Theorem typed_array_child_backedge_cont[local]:
+  lookup_block ec.cs_current_bb fn.fn_blocks = SOME
+    <|bb_label := ec.cs_current_bb; bb_instructions := ec.cs_current_insts ++
+      typed_sa_backedge_insts ec.cs_next_id ("%" ++ toString sa.cs_next_var)
+        ("%" ++ toString ec.cs_next_var) hdr|> /\
+  lookup_block hdr fn.fn_blocks = SOME header_bb /\
+  phi_prefix_length header_bb.bb_instructions = 0 /\
+  s.vs_current_bb = ec.cs_current_bb /\ s.vs_inst_idx = LENGTH ec.cs_current_insts /\
+  ~s.vs_halted /\
+  eval_operand (Var ("%" ++ toString sa.cs_next_var)) s = SOME (n2w i) /\
+  i < n /\ n < dimword(:256) /\ sa.cs_next_var <= ec.cs_next_var ==>
+  ?t. mem_cont_sim ctx fn s t /\ ~t.vs_halted /\
+    t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
+    eval_operand (Var ("%" ++ toString sa.cs_next_var)) t = SOME (n2w (SUC i)) /\
+    (t with <|vs_vars := s.vs_vars; vs_current_bb := s.vs_current_bb;
+      vs_inst_idx := s.vs_inst_idx; vs_prev_bb := s.vs_prev_bb|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
+  `mem_cont_sim ctx fn s
+    (jump_to hdr (typed_sa_backedge_state ("%" ++ toString sa.cs_next_var)
+      ("%" ++ toString ec.cs_next_var) i s))` by
+    (irule typed_sa_backedge_sim >> simp[] >>
+     conj_tac >- (qexists_tac `n` >> simp[]) >>
+     qexistsl_tac [`ec.cs_next_id`, `ec.cs_current_insts`] >> simp[]) >>
+  goal_assum (drule_at Any) >>
+  simp[jump_to_def, typed_sa_backedge_state_def, update_var_def,
+       eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  conj_tac >- simp[venom_state_component_equality] >>
+  rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  metis_tac[LESS_EQ_TRANS, LESS_EQ_REFL]
 QED
