@@ -4,6 +4,7 @@ Ancestors
   supportedStmts vyperState vyperInterpreter vyperMisc alist
   vyperStoragePlaceProvenance supportedTargets supportedDecls supportedExprForms
   targetPlaceSim vyperAST supportedProgram supportedExprTraverse supportedStmtTraverse
+  vyperTypeCallGraph
 
 (* Use the existing target-root traversal; read permission is deliberately
    independent of this write-root restriction. *)
@@ -209,48 +210,39 @@ Proof
   metis_tac[supported_target_root_main, main_root_base_place_immutable_module]
 QED
 
-Theorem supported_target_place_immutable_module:
-  (supported_target tops bindings bt \/
-   IS_SOME (supported_target_info tops bindings bt)) /\
-  eval_target_place cx bt s = (INL (ImmutablePlace md name path),t) ==>
-  md = NONE
-Proof
-  simp[Once evaluate_def, bind_def, get_place_def, return_def,
-       raise_def, AllCaseEqs()] >> rpt strip_tac >>
-  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
-  irule supported_base_place_immutable_module >>
-  goal_assum (drule_at Any) >>
-  qexistsl [`bindings`, `tops`] >> simp[]
-QED
-
 (* Syntactic proof interface for confining immutable mutations to NONE. *)
 Definition foreign_frame_bad_pop_def:
   foreign_frame_bad_pop (Pop ty bt) = ~target_root_main bt /\
   foreign_frame_bad_pop _ = F
 End
 
-Definition foreign_frame_bad_call_def:
-  foreign_frame_bad_call cx (Call ty (IntCall (src,name)) es opt) =
-    ~(src = NONE /\ ?tops. supported_program tops /\
-                          get_module_code cx NONE = SOME tops) /\
-  foreign_frame_bad_call cx _ = F
+Definition foreign_frame_callee_def:
+  foreign_frame_callee cx c <=>
+    FST c = NONE /\ ?tops. supported_program tops /\
+                          get_module_code cx NONE = SOME tops
 End
 
 Definition foreign_frame_bad_def:
   foreign_frame_bad cx e <=>
-    expr_evm_run_root e \/ foreign_frame_bad_pop e \/ foreign_frame_bad_call cx e
+    expr_evm_run_root e \/ foreign_frame_bad_pop e
 End
 
 Definition foreign_frame_expr_def:
-  foreign_frame_expr cx e <=> ~supported_expr_exists (foreign_frame_bad cx) e
+  foreign_frame_expr cx e <=>
+    ~supported_expr_exists (foreign_frame_bad cx) e /\
+    EVERY (foreign_frame_callee cx) (int_calls_expr e)
 End
 
 Definition foreign_frame_exprs_def:
-  foreign_frame_exprs cx es <=> ~supported_exprs_exists (foreign_frame_bad cx) es
+  foreign_frame_exprs cx es <=>
+    ~supported_exprs_exists (foreign_frame_bad cx) es /\
+    EVERY (foreign_frame_callee cx) (int_calls_exprs es)
 End
 
 Definition foreign_frame_target_def:
-  foreign_frame_target cx bt <=> ~supported_target_exists (foreign_frame_bad cx) bt
+  foreign_frame_target cx bt <=>
+    ~supported_target_exists (foreign_frame_bad cx) bt /\
+    EVERY (foreign_frame_callee cx) (int_calls_target bt)
 End
 
 Definition foreign_frame_write_target_def:
@@ -272,17 +264,20 @@ End
 
 Definition foreign_frame_iterator_def:
   foreign_frame_iterator cx it <=>
-    ~supported_iterator_exists (foreign_frame_bad cx) it
+    ~supported_iterator_exists (foreign_frame_bad cx) it /\
+    EVERY (foreign_frame_callee cx) (int_calls_iterator it)
 End
 
 Definition foreign_frame_assert_def:
   foreign_frame_assert cx reason <=>
-    ~supported_assert_exists (foreign_frame_bad cx) reason
+    ~supported_assert_exists (foreign_frame_bad cx) reason /\
+    EVERY (foreign_frame_callee cx) (int_calls_assert_reason reason)
 End
 
 Definition foreign_frame_raise_def:
   foreign_frame_raise cx reason <=>
-    ~supported_raise_exists (foreign_frame_bad cx) reason
+    ~supported_raise_exists (foreign_frame_bad cx) reason /\
+    EVERY (foreign_frame_callee cx) (int_calls_raise_reason reason)
 End
 
 Definition foreign_frame_stmt_def:
@@ -291,7 +286,8 @@ Definition foreign_frame_stmt_def:
   foreign_frame_stmt cx Continue = T /\
   foreign_frame_stmt cx (Expr e) = foreign_frame_expr cx e /\
   foreign_frame_stmt cx (Return opt) =
-    (~supported_opt_exists (foreign_frame_bad cx) opt) /\
+    (~supported_opt_exists (foreign_frame_bad cx) opt /\
+     EVERY (foreign_frame_callee cx) (int_calls_opt opt)) /\
   foreign_frame_stmt cx (AnnAssign name ty e) = foreign_frame_expr cx e /\
   foreign_frame_stmt cx (Assign at e) =
     (foreign_frame_assignment cx at /\ foreign_frame_expr cx e) /\
@@ -315,3 +311,205 @@ Termination
     INL (_,stmt) => stmt_size stmt | INR (_,stmts) => list_size stmt_size stmts)` >>
   simp[stmt_size_def, listTheory.list_size_def]
 End
+
+(* Internal-call confinement ignores the same optional fields as int_calls_expr. *)
+Theorem foreign_frame_ignored_option_regression:
+  let e = Call NoneT RawLog []
+    (SOME (Call NoneT (IntCall (SOME 0,"f")) [] NONE)) in
+  ~expr_has_pop e /\ ~expr_has_evm_run e /\
+  int_calls_expr e = [] /\ foreign_frame_expr cx e
+Proof
+  simp[expr_has_pop_def, expr_has_evm_run_def, int_calls_expr_def,
+       foreign_frame_expr_def, supported_expr_exists_def,
+       foreign_frame_bad_def, foreign_frame_bad_pop_def,
+       expr_evm_run_root_def, expr_pop_root_def]
+QED
+
+Theorem foreign_frame_nopop_entry_mutual[local]:
+  (!p e. p = foreign_frame_bad cx /\
+    ~supported_expr_exists expr_pop_root e /\
+    ~supported_expr_exists expr_evm_run_root e ==>
+    ~supported_expr_exists p e) /\
+  (!p bt. p = foreign_frame_bad cx /\
+    ~supported_target_exists expr_pop_root bt /\
+    ~supported_target_exists expr_evm_run_root bt ==>
+    ~supported_target_exists p bt) /\
+  (!p es. p = foreign_frame_bad cx /\
+    ~supported_exprs_exists expr_pop_root es /\
+    ~supported_exprs_exists expr_evm_run_root es ==>
+    ~supported_exprs_exists p es) /\
+  (!p opt. p = foreign_frame_bad cx /\
+    ~supported_opt_exists expr_pop_root opt /\
+    ~supported_opt_exists expr_evm_run_root opt ==>
+    ~supported_opt_exists p opt) /\
+  (!p fields. p = foreign_frame_bad cx /\
+    ~supported_fields_exists expr_pop_root fields /\
+    ~supported_fields_exists expr_evm_run_root fields ==>
+    ~supported_fields_exists p fields)
+Proof
+  ho_match_mp_tac supported_expr_exists_ind >>
+  rw[supported_expr_exists_def, foreign_frame_bad_def,
+     foreign_frame_bad_pop_def, expr_pop_root_def]
+QED
+
+Theorem foreign_frame_expr_entry:
+  ~expr_has_pop e /\ ~expr_has_evm_run e /\
+  EVERY (foreign_frame_callee cx) (int_calls_expr e) ==>
+  foreign_frame_expr cx e
+Proof
+  simp[expr_has_pop_def, expr_has_evm_run_def, foreign_frame_expr_def] >>
+  metis_tac[CONJUNCT1 foreign_frame_nopop_entry_mutual]
+QED
+
+Theorem foreign_frame_expr_children:
+  (foreign_frame_expr cx (IfExp ty c a b) ==>
+    foreign_frame_expr cx c /\ foreign_frame_expr cx a /\ foreign_frame_expr cx b) /\
+  (foreign_frame_expr cx (Subscript ty obj key) ==>
+    foreign_frame_expr cx obj /\ foreign_frame_expr cx key) /\
+  (foreign_frame_expr cx (Attribute ty obj fname) ==> foreign_frame_expr cx obj) /\
+  (foreign_frame_expr cx (Builtin ty blt es) ==> foreign_frame_exprs cx es) /\
+  (foreign_frame_expr cx (TypeBuiltin ty tblt target es) ==> foreign_frame_exprs cx es) /\
+  (foreign_frame_expr cx (Pop ty bt) ==> foreign_frame_write_target cx bt)
+Proof
+  simp[foreign_frame_expr_def, foreign_frame_exprs_def,
+       foreign_frame_write_target_def, foreign_frame_target_def,
+       supported_expr_exists_def, int_calls_expr_def, listTheory.EVERY_APPEND,
+       foreign_frame_bad_def, foreign_frame_bad_pop_def] >>
+  metis_tac[]
+QED
+
+Theorem foreign_frame_target_eqs[simp]:
+  foreign_frame_target cx (NameTarget name) /\
+  foreign_frame_target cx (TopLevelNameTarget id) /\
+  (foreign_frame_target cx (SubscriptTarget bt key) <=>
+    foreign_frame_target cx bt /\ foreign_frame_expr cx key) /\
+  (foreign_frame_target cx (AttributeTarget bt fname) <=> foreign_frame_target cx bt)
+Proof
+  simp[foreign_frame_target_def, foreign_frame_expr_def,
+       supported_expr_exists_def, int_calls_expr_def, listTheory.EVERY_APPEND] >>
+  metis_tac[]
+QED
+
+Theorem foreign_frame_exprs_eqs[simp]:
+  foreign_frame_exprs cx [] /\
+  (foreign_frame_exprs cx (e::es) <=>
+    foreign_frame_expr cx e /\ foreign_frame_exprs cx es)
+Proof
+  simp[foreign_frame_exprs_def, foreign_frame_expr_def,
+       supported_expr_exists_def, int_calls_expr_def, listTheory.EVERY_APPEND] >>
+  metis_tac[]
+QED
+
+Theorem foreign_frame_call_args:
+  foreign_frame_expr cx (Call ty ct es opt) ==> foreign_frame_exprs cx es
+Proof
+  Cases_on `ct` >>
+  simp[foreign_frame_expr_def, foreign_frame_exprs_def,
+       supported_expr_exists_def, int_calls_expr_def, listTheory.EVERY_APPEND] >>
+  metis_tac[]
+QED
+
+Theorem foreign_frame_intcall_callee:
+  foreign_frame_expr cx (Call ty (IntCall callee) es opt) ==>
+  foreign_frame_callee cx callee
+Proof
+  simp[foreign_frame_expr_def, int_calls_expr_def]
+QED
+
+Theorem foreign_frame_extcall_option:
+  foreign_frame_expr cx (Call ty (ExtCall a b c d) es (SOME e)) ==>
+  foreign_frame_expr cx e
+Proof
+  simp[foreign_frame_expr_def, supported_expr_exists_def,
+       int_calls_expr_def, listTheory.EVERY_APPEND]
+QED
+
+Theorem foreign_frame_named_exprs:
+  (~supported_fields_exists (foreign_frame_bad cx) fields /\
+   EVERY (foreign_frame_callee cx) (int_calls_named_exprs fields)) <=>
+  EVERY (\kv. foreign_frame_expr cx (SND kv)) fields
+Proof
+  Induct_on `fields` >- simp[supported_expr_exists_def, int_calls_expr_def] >>
+  qx_gen_tac `kv` >> PairCases_on `kv` >>
+  gvs[supported_expr_exists_def, int_calls_expr_def,
+      foreign_frame_expr_def, listTheory.EVERY_APPEND] >> metis_tac[]
+QED
+
+Theorem foreign_frame_structlit_fields:
+  foreign_frame_expr cx (StructLit ty id fields) ==>
+  EVERY (\kv. foreign_frame_expr cx (SND kv)) fields
+Proof
+  simp[foreign_frame_expr_def, supported_expr_exists_def, int_calls_expr_def,
+       GSYM foreign_frame_named_exprs]
+QED
+
+Theorem foreign_frame_iterator_eqs[simp]:
+  (foreign_frame_iterator cx (Array e) <=> foreign_frame_expr cx e) /\
+  (foreign_frame_iterator cx (Range lo hi) <=>
+    foreign_frame_expr cx lo /\ foreign_frame_expr cx hi)
+Proof
+  simp[foreign_frame_iterator_def, supported_iterator_exists_def,
+       int_calls_iterator_def, foreign_frame_expr_def, listTheory.EVERY_APPEND] >>
+  metis_tac[]
+QED
+
+Theorem foreign_frame_assert_eqs[simp]:
+  foreign_frame_assert cx AssertBare /\
+  foreign_frame_assert cx AssertUnreachable /\
+  (foreign_frame_assert cx (AssertReason e) <=> foreign_frame_expr cx e) /\
+  (foreign_frame_assert cx (AssertCustomError err) <=>
+    foreign_frame_exprs cx (custom_error_exprs err))
+Proof
+  simp[foreign_frame_assert_def, supported_assert_exists_def,
+       int_calls_assert_reason_def, foreign_frame_expr_def, foreign_frame_exprs_def,
+       supported_exprs_exists_every, listTheory.NOT_EXISTS]
+QED
+
+Theorem foreign_frame_raise_eqs[simp]:
+  foreign_frame_raise cx RaiseBare /\
+  foreign_frame_raise cx RaiseUnreachable /\
+  (foreign_frame_raise cx (RaiseReason e) <=> foreign_frame_expr cx e) /\
+  (foreign_frame_raise cx (RaiseCustomError err) <=>
+    foreign_frame_exprs cx (custom_error_exprs err))
+Proof
+  simp[foreign_frame_raise_def, supported_raise_exists_def,
+       int_calls_raise_reason_def, foreign_frame_expr_def, foreign_frame_exprs_def,
+       supported_exprs_exists_every, listTheory.NOT_EXISTS]
+QED
+
+Theorem foreign_frame_return_eqs[simp]:
+  foreign_frame_stmt cx (Return NONE) /\
+  (foreign_frame_stmt cx (Return (SOME e)) <=> foreign_frame_expr cx e)
+Proof
+  simp[foreign_frame_stmt_def, supported_expr_exists_def,
+       int_calls_expr_def, foreign_frame_expr_def]
+QED
+
+Theorem foreign_frame_read_write_regression:
+  foreign_frame_expr cx (TopLevelName ty (SOME md,name)) /\
+  ~foreign_frame_expr cx (Pop ty (TopLevelNameTarget (SOME md,name)))
+Proof
+  simp[foreign_frame_expr_def, supported_expr_exists_def, int_calls_expr_def,
+       foreign_frame_bad_def, foreign_frame_bad_pop_def, expr_evm_run_root_def]
+QED
+
+Theorem main_root_target_place_immutable_module:
+  target_root_main bt /\
+  eval_target_place cx bt s = (INL (ImmutablePlace md name path),t) ==>
+  md = NONE
+Proof
+  simp[Once evaluate_def, bind_def, get_place_def, return_def,
+       raise_def, AllCaseEqs()] >> rpt strip_tac >>
+  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
+  irule main_root_base_place_immutable_module >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem supported_target_place_immutable_module:
+  (supported_target tops bindings bt \/
+   IS_SOME (supported_target_info tops bindings bt)) /\
+  eval_target_place cx bt s = (INL (ImmutablePlace md name path),t) ==>
+  md = NONE
+Proof
+  metis_tac[supported_target_root_main, main_root_target_place_immutable_module]
+QED
