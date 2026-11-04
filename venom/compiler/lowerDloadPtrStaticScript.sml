@@ -3,7 +3,7 @@ Ancestors
   o1ContractLowerDload o1PassContract ptrDiscipline lowerDloadDefs
   venomPassSchedule list lowerDloadPtrClosure pointerConfinedDefs memLocDefs
   pred_set venomInst mem2varBlockSimHelpers irSupply venomFnScheduleRunner
-  venomExecSemantics
+  venomExecSemantics venomFnScheduleRunnerProps
 
 (* A stage-level lifting boundary, also retaining the source membership
    required by consumers whose property depends on the input context. *)
@@ -17,6 +17,31 @@ Proof
   rw[ctx_pass_stage_def, EVERY_MEM, LIST_REL_EL_EQN, MEM_EL] >>
   first_x_assum (qspec_then `n` mp_tac) >>
   impl_tac >- fs[] >> strip_tac >>
+  gvs[fn_pass_step_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+(* Input coverage is distinct from the runner's output-supply checks. *)
+Theorem fn_pass_step_input_covers_fn:
+  fn_pass_step rpolicy pass observed s f out ==>
+  ir_supply_covers_fn s f
+Proof
+  strip_tac >> irule lower_dload_covers_member >>
+  gvs[fn_pass_step_def] >>
+  drule lookup_unique_function_member >> metis_tac[]
+QED
+
+Theorem lower_dload_stage_every_covered:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+  EVERY P C.ctx_functions /\
+  (!f s g t. MEM f C.ctx_functions /\ P f /\
+     ir_supply_covers_fn s f /\
+     lower_dload_function_supply s f = (g,t) ==> Q g) ==>
+  EVERY Q C'.ctx_functions
+Proof
+  rw[ctx_pass_stage_def, EVERY_MEM, LIST_REL_EL_EQN, MEM_EL] >>
+  first_x_assum (qspec_then `n` mp_tac) >>
+  impl_tac >- fs[] >> strip_tac >>
+  drule fn_pass_step_input_covers_fn >> strip_tac >>
   gvs[fn_pass_step_def, AllCaseEqs()] >> metis_tac[]
 QED
 
