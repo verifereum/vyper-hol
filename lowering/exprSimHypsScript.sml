@@ -458,6 +458,52 @@ Definition expr_sim_case_def:
       expr_sim ctx func cenv cx ty e es
 End
 
+(* Changing the fixed function requires coverage in the reverse direction:
+   newly admitted compilations must already be covered by the old hypothesis.
+   The execution function quantified by frag_exec is not changed here.
+
+   Function-dependency audit (at fixed ctx):
+   - expr_body_pre, expr_val_rel, expr_val_at, locals_kept and expr_exit
+     do not depend on func; expr_post uses it only via stmt_state_rel.
+   - state_rel uses func only via local_ptrs_rel/local_backed: adding
+     ALLOCAs can add backing witnesses (one direction); equal ALLOCA
+     projections suffice for equivalence.
+   - immutable_alloca_sep and the size clause of stmt_state_rel quantify
+     over func's ALLOCAs. Adding instructions strengthens these clauses;
+     equal ALLOCA projections preserve them (runtime separation is trivial).
+   - pending_alloca_size depends on the ALLOCA projection, but alloca_room
+     ALSO requires lookup_function func.fn_name ctx.ctx_functions = SOME func.
+     Thus even adding a non-ALLOCA block with the same name fails this
+     clause at fixed ctx: two admitted same-name functions must be equal.
+     The call graph and unit budget depend on ctx, not just func's ALLOCAs.
+   - fn_has_code grows with compatible added blocks, whereas the coverage
+     premise below needs the reverse direction for each SAME compilation.
+
+   In particular, the sanitized fresh-entry compilation in
+   observer_sanitized_fixed_function_not_contained is outside the old
+   function's domain. Neither unchanged allocation budgets nor frag_exec's
+   independent execution-function quantifier supplies this coverage. *)
+Theorem expr_sim_case_function_transport:
+  !nocalls ctx f g cenv cx e.
+    fn_inst_ids_distinct f /\
+    (!ty sa op sb.
+       lower_value compile_expr cenv ty e sa = (op, sb) /\
+       fn_has_code sa sb g ==> fn_has_code sa sb f) /\
+    (!es ss. stmt_state_rel ctx f cenv cx es ss <=>
+             stmt_state_rel ctx g cenv cx es ss) /\
+    expr_sim_case nocalls ctx f cenv cx e ==>
+    expr_sim_case nocalls ctx g cenv cx e
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[expr_sim_case_def, expr_sim_def] >> rpt strip_tac >>
+  `fn_has_code sa sb f` by metis_tac[] >>
+  qpat_x_assum `expr_sim_case _ _ _ _ _ _` mp_tac >>
+  simp[expr_sim_case_def] >>
+  disch_then (qspecl_then [`env`, `ty`, `es`] mp_tac) >>
+  simp[expr_sim_def, expr_post_def] >>
+  disch_then drule_all >> simp[]
+QED
+
 Definition expr_vv_case_def:
   expr_vv_case nocalls ctx func cenv cx e <=>
     !env ty es.
