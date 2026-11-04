@@ -120,3 +120,54 @@ Proof
        return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
+
+(* Non-root paths of a dynamic local start beyond its exempt length word. *)
+Theorem mem_path_offset_dynamic_tail:
+  path <> [] /\
+  mem_path_offset (ArrayTV etv (Dynamic n)) path = SOME (k,tv) ==>
+  32 <= k
+Proof
+  Cases_on `path` >> simp[mem_path_offset_def] >>
+  Cases_on `h` >> simp[mem_step_offset_def] >>
+  rename1 `ValueSubscript v` >> Cases_on `v` >>
+  simp[mem_step_offset_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  PairCases_on `z` >> gvs[]
+QED
+
+(* Source reads, including read_popped, depend on these fields only. *)
+Theorem read_result_preserved_fields:
+  es2.scopes = es.scopes /\ es2.immutables = es.immutables /\
+  (!tr. get_storage cx es2 tr = get_storage cx es tr) /\
+  read_result cx tv es = (INL v,es) ==>
+  read_result cx tv es2 = (INL v,es2)
+Proof
+  rpt strip_tac >> Cases_on `tv` >> gvs[read_result_def, return_def, raise_def] >>
+  rename1 `read_place cx p es` >> Cases_on `p`
+  >- (gvs[read_place_def, read_storage_slot_def,
+          vyperStorageBackendTheory.get_storage_backend_eq, bind_def] >>
+      gvs[lift_option_def, vyperMiscTheory.option_CASE_rator,
+          AllCaseEqs(), return_def, raise_def])
+  >- (rename1 `MemoryPlace id path` >>
+      Cases_on `lookup_scopes id es.scopes` >>
+      gvs[read_place_def, get_scopes_def, bind_def, lift_option_type_def,
+          return_def, raise_def] >>
+      rename1 `read_memory_path entry path` >>
+      Cases_on `read_memory_path entry path` >>
+      gvs[lift_sum_def, return_def, raise_def]) >>
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >>
+  gvs[read_place_def, get_immutables_def, get_address_immutables_def,
+      bind_def, lift_option_type_def, return_def, raise_def] >>
+  rename1 `FLOOKUP (get_source_immutables src imms) id` >>
+  Cases_on `FLOOKUP (get_source_immutables src imms) id` >>
+  gvs[lift_option_type_def, bind_def, return_def, raise_def] >>
+  Cases_on `evaluate_subscripts (FST x) (SND x) l` >>
+  gvs[lift_sum_def, return_def, raise_def]
+QED
+
+val _ = List.app (fn (name,th) =>
+  let val (ors,axs) = Tag.dest_tag (Thm.tag th) in
+    if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+    then raise Fail ("Transport interface dependency: " ^ name) else ()
+  end)
+  [("mem_path_offset_dynamic_tail", mem_path_offset_dynamic_tail),
+   ("read_result_preserved_fields", read_result_preserved_fields)];
