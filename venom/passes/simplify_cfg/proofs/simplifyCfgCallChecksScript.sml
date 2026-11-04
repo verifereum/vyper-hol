@@ -11,7 +11,7 @@
  *)
 Theory simplifyCfgCallChecks
 Ancestors
-  simplifyCfgDefs simplifyCfgCollapseShape cfgTransform cfgTransformProps venomExecProps
+  simplifyCfgDefs simplifyCfgCollapseShape simplifyCfgReferences cfgTransform cfgTransformProps venomExecProps
   unitShapeDefs venomWf venomInst list rich_list
 
 Theorem revert_path_fuel_mono:
@@ -264,6 +264,77 @@ Proof
   Cases_on `bb.bb_instructions` >>
   gvs[bb_succs_def, get_successors_def, is_terminator_def,
       venomStateTheory.get_label_def]
+QED
+
+Theorem flag_fails_remove_unreachable:
+  ALL_DISTINCT (fn_labels fn) /\ MEM bb fn.fn_blocks /\
+  reachable fn bb.bb_label /\ bb_well_formed bb /\
+  MEM i bb.bb_instructions /\ flag_fails fn.fn_blocks vs i ==>
+  flag_fails (remove_unreachable_blocks fn).fn_blocks vs i
+Proof
+  strip_tac >>
+  `!l. is_terminator i.inst_opcode /\ MEM (Label l) i.inst_operands ==>
+       reachable fn l` by
+    (rpt strip_tac >> irule reachable_block_successor >> simp[] >>
+     qexists_tac `bb` >> simp[] >>
+     irule bb_terminator_label_successor >> metis_tac[]) >>
+  Cases_on `i.inst_opcode` >> gvs[flag_fails_def] >>
+  Cases_on `i.inst_operands` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[]
+  >- (irule revert_path_fuel_normalize >> qexists_tac `LENGTH fn.fn_blocks` >>
+      irule revert_path_remove_unreachable >> simp[is_terminator_def]) >>
+  Cases_on `h` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  irule revert_path_fuel_normalize >> qexists_tac `LENGTH fn.fn_blocks` >>
+  irule revert_path_remove_unreachable >> simp[is_terminator_def] >>
+  metis_tac[]
+QED
+
+Theorem flag_path_remove_unreachable:
+  !xs fn bb vs.
+    ALL_DISTINCT (fn_labels fn) /\ MEM bb fn.fn_blocks /\
+    reachable fn bb.bb_label /\ bb_well_formed bb /\
+    (!i. MEM i xs ==> MEM i bb.bb_instructions) /\
+    flag_path fn.fn_blocks vs xs ==>
+    flag_path (remove_unreachable_blocks fn).fn_blocks vs xs
+Proof
+  Induct >- simp[flag_path_def] >>
+  rpt gen_tac >> simp[flag_path_def] >> strip_tac >> simp[] >>
+  Cases_on `flag_fails fn.fn_blocks vs h`
+  >- (disj1_tac >> irule flag_fails_remove_unreachable >> metis_tac[MEM]) >>
+  disj2_tac >> first_x_assum irule >> metis_tac[MEM]
+QED
+
+Theorem calls_flagged_remove_unreachable:
+  !xs fn bb.
+    ALL_DISTINCT (fn_labels fn) /\ MEM bb fn.fn_blocks /\
+    reachable fn bb.bb_label /\ bb_well_formed bb /\
+    (!i. MEM i xs ==> MEM i bb.bb_instructions) /\
+    calls_flagged fn.fn_blocks xs ==>
+    calls_flagged (remove_unreachable_blocks fn).fn_blocks xs
+Proof
+  Induct >- simp[calls_flagged_def] >>
+  rpt gen_tac >> simp[calls_flagged_def] >> strip_tac >>
+  conj_tac
+  >- (strip_tac >> Cases_on `h.inst_outputs` >> gvs[] >>
+      Cases_on `t` >> gvs[] >>
+      irule flag_path_remove_unreachable >> metis_tac[MEM]) >>
+  first_x_assum irule >> metis_tac[MEM]
+QED
+
+Theorem remove_unreachable_call_checks_ok:
+  ALL_DISTINCT (fn_labels fn) /\ EVERY bb_well_formed fn.fn_blocks /\
+  call_checks_ok fn ==>
+  call_checks_ok (remove_unreachable_blocks fn)
+Proof
+  strip_tac >> Cases_on `fn_entry_label fn`
+  >- gvs[remove_unreachable_blocks_def] >>
+  `!bb. MEM bb fn.fn_blocks /\ reachable fn bb.bb_label ==>
+    calls_flagged (remove_unreachable_blocks fn).fn_blocks bb.bb_instructions` by
+    (rpt strip_tac >> irule calls_flagged_remove_unreachable >>
+     gvs[call_checks_ok_def, EVERY_MEM] >>
+     qexists_tac `bb` >> simp[]) >>
+  gvs[call_checks_ok_def, remove_unreachable_blocks_def, EVERY_MEM, MEM_FILTER]
 QED
 
 Theorem simplify_cfg_call_checks_ok:
