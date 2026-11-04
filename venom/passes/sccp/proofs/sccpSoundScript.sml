@@ -538,7 +538,17 @@ Theorem sccp_transfer_sound:
 Proof
   rw[transfer_sound_def] >> rpt strip_tac >>
   simp[sccp_transfer_inst_def] >>
-  rpt (IF_CASES_TAC >> gvs[]) >>
+  rpt (IF_CASES_TAC >> gvs[])
+  >- (irule const_sound_after_step_bottom >>
+      simp[is_terminator_def] >> metis_tac[])
+  >- (rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+      irule const_sound_after_terminator >> metis_tac[])
+  >- (rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+      rpt (IF_CASES_TAC >> gvs[]) >>
+      irule const_sound_after_terminator >> metis_tac[])
+  >- (irule const_sound_after_terminator >> metis_tac[])
+  >- (irule const_sound_after_terminator >> metis_tac[])
+  >- (irule const_sound_no_outputs >> metis_tac[]) >>
   rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
   rpt (IF_CASES_TAC >> gvs[]) >>
   REWRITE_TAC [FOLDL] >>
