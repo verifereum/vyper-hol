@@ -1,6 +1,7 @@
 Theory fnPlanLineageLiveness
 Ancestors
   stackPlanGen livenessConvergenceProofs livenessAnalysisProps venomInst
+  cfgNormSupplyProofs livenessProofs
 Libs
   livenessDefsTheory livenessBlockProofsTheory
 
@@ -52,6 +53,9 @@ Proof
   rpt strip_tac >>
   `wf_function fn` by gvs[codegen_ready_fn_def] >>
   irule analyzed_live_out_singleton >> simp[] >>
+  `pred_bb.bb_label = pred` by
+    (qpat_assum `lookup_block pred _ = _`
+      (mp_tac o MATCH_MP venomExecPropsTheory.lookup_block_label) >> simp[]) >>
   qpat_x_assum `lookup_block pred _ = _` mp_tac >>
   simp[venomInstTheory.lookup_block_def] >>
   strip_tac >> drule FIND_SOME_MEM >> strip_tac >>
@@ -132,4 +136,32 @@ Proof
       metis_tac[listTheory.EL_MEM]) >>
   qpat_assum `bb.bb_instructions = _` mp_tac >>
   disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]
+QED
+
+Theorem analyzed_ready_phi_live_through_edge:
+  !fn lbl bb pred v.
+    wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\ bb.bb_label = lbl /\
+    phi_block_ready (liveness_analyze fn) bb /\
+    MEM v (live_vars_at (liveness_analyze fn) lbl
+      (LENGTH (collect_phis bb.bb_instructions))) /\
+    EVERY (\inst. ~MEM v (inst_defs inst)) (collect_phis bb.bb_instructions) ==>
+    MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) lbl 0))
+Proof
+  rpt strip_tac >>
+  qspec_then `bb.bb_instructions` strip_assume_tac collect_phis_prefix >>
+  `MEM v (live_vars_at (liveness_analyze fn) lbl 0)` by
+    (drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+     disch_then (qspecl_then [`lbl`, `bb`, `0`,
+       `LENGTH (collect_phis bb.bb_instructions)`, `v`] mp_tac) >>
+     simp[] >> impl_tac >-
+       (qmatch_asmsub_abbrev_tac `bb.bb_instructions = phis ++ rest` >>
+        qpat_x_assum `bb.bb_instructions = _` SUBST1_TAC >>
+        gvs[listTheory.EVERY_EL, listTheory.EL_APPEND_EQN]) >> simp[]) >>
+  irule livenessProofsTheory.input_vars_from_non_phi >> simp[] >>
+  rpt strip_tac >>
+  gvs[phi_block_ready_def, listTheory.EVERY_MEM, listTheory.MEM_MAP] >>
+  drule cfgNormSupplyProofsTheory.MEM_phi_pairs_SND_operand_vars_pair >>
+  gvs[venomInstTheory.inst_uses_def] >> metis_tac[]
 QED
