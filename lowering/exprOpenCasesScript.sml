@@ -151,6 +151,7 @@ QED
 
 Theorem compile_struct_literal_body_open:
   !cfn bfn tfn cenv cx env es ty ann nsid fields sa vv sb.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_sim_inv cenv cx env es /\
     well_typed_expr env (StructLit ann nsid fields) /\
     compile_expr_body cfn bfn tfn cenv ty (StructLit ann nsid fields) sa = (vv,sb) ==>
@@ -161,7 +162,7 @@ Proof
   drule compile_alloc_buffer_open >> disch_tac >>
   drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`)
     compile_struct_lit_open >> simp[] >>
-  impl_tac >- (rpt strip_tac >> drule_all struct_literal_store_paths >> simp[]) >>
+  impl_tac >- (fs[] >> rpt strip_tac >> drule_all struct_literal_store_paths >> simp[]) >>
   simp[]
 QED
 

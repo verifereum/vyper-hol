@@ -653,6 +653,16 @@ Proof
   rename1 `BaseT b` >> Cases_on `b` >> simp[well_typed_literal_def]
 QED
 
+(* Only an internal call is lowered at a type its source type does not
+   fix: the callee's declared return type. *)
+Theorem lowered_value_type_not_call_word[local]:
+  !cenv e. (!a t es d. e <> Call a t es d) /\ ~is_word_type (expr_type e) ==>
+           ~is_word_type (lowered_value_type cenv e)
+Proof
+  ho_match_mp_tac lowered_value_type_ind >>
+  rw[lowered_value_type_def, is_word_type_def, expr_type_def]
+QED
+
 (* A supported reason is a string expression (supported_string_reason),
    so it compiles to a memory or stack value, a storage or transient
    pointer, or a pointer into code (compile_expr_string_reason):
@@ -677,6 +687,10 @@ Proof
         fs[supported_string_reason_def]) >>
      Cases_on `expr_type e` >> fs[] >>
      rename1 `BaseT b` >> Cases_on `b` >> fs[]) >>
+  `~is_word_type (lowered_value_type cenv e)` by
+    (irule lowered_value_type_not_call_word >>
+     gvs[is_word_type_def] >> rpt strip_tac >>
+     gvs[supported_string_reason_def, supported_pure_expr_def]) >>
   qspecl_then [`cenv`, `env`, `e`, `n`] mp_tac compile_expr_string_reason >>
   impl_tac >- (fs[expr_sim_inv_def] >> metis_tac[]) >>
   fs[reason_covered_def] >> metis_tac[]

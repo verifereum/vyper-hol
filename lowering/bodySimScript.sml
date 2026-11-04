@@ -50,7 +50,9 @@ Ancestors
    its functions in tops.  tops's module variables have distinct names, as
    the type checker gives (source_typing_ok_vtype_keys_distinct), and cenv
    has build_compile_env's hashmaps, module variable types and module
-   DynArray capacities, which no declaration changes.  cenv's target is the unit's policy target, as
+   DynArray capacities, which no declaration changes, and acyclic struct
+   metadata (build_compile_env_struct_metadata_acyclic), so a typed memory
+   copy never takes its INVALID fallback.  cenv's target is the unit's policy target, as
    set_*_package_target installs it, which run_lowering requires to have
    MCOPY (lowering_policy_ok). *)
 Definition body_inv_def:
@@ -63,6 +65,7 @@ Definition body_inv_def:
     cenv.ce_func_ids = build_func_ids 0 tops /\
     cenv.ce_func_param_types = build_func_param_types tops /\
     cenv.ce_func_return_type = build_func_return_type tops /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
     ~cenv.ce_is_ctor /\ cenv.ce_alloca_locals /\
     ALL_DISTINCT
