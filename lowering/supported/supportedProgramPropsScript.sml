@@ -194,10 +194,12 @@ Proof
   EVAL_TAC
 QED
 
-(* Entry/header validity is checked by check_contract, not the whitelist. *)
+(* Entry/header validity is checked by check_contract, not the whitelist.
+   Constructor defaults, which check_contract also rejects, are outside the
+   whitelist too: it admits defaults only on external functions. *)
 Theorem supported_entry_header_context:
   supported_program [FunctionDecl Deploy Nonpayable T F "__init__" [] [] NoneT []] /\
-  supported_program [FunctionDecl Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT []] /\
+  ~supported_program [FunctionDecl Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT []] /\
   ~function_header_ok Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT
 Proof
   EVAL_TAC
@@ -240,7 +242,8 @@ Theorem supported_default_expression_checks:
     [FunctionDecl External Pure F F "answer" [("x",BaseT (UintT 256))]
        [expr_test_uint] NoneT []] /\
   EVERY (\e. ~supported_program
-    [FunctionDecl Deploy Nonpayable F F "__init__" [] [e] NoneT []])
+    [FunctionDecl External Pure F F "answer" [("x",BaseT (UintT 256))]
+       [e] NoneT []])
     [Builtin (BaseT (UintT 256)) (Env MsgGas) [];
      Builtin (BaseT (UintT 256)) (Bop Add) [];
      Name (StructT (SOME 0,"S")) "x"]
