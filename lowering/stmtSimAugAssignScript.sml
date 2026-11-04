@@ -23,6 +23,7 @@
 
 Theory stmtSimAugAssign
 Ancestors
+  exprSimName
   stmtSimProps
   exprSimHypsDefs
   stmtSimDefs
