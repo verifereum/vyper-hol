@@ -32,6 +32,20 @@ Ancestors
 Libs
   pairLib
 
+(* The failure copy needs no allocation-capacity or destination-end bound:
+   it expands memory, and the exit judgment does not observe that memory. *)
+Theorem raw_call_failure_copy[local]:
+  eval_operand dst s = SOME w /\
+  eval_operand size_op s = SOME (n2w (LENGTH s.vs_returndata)) /\
+  LENGTH s.vs_returndata < dimword (:256) ==>
+  step_inst_base (mk_inst iid RETURNDATACOPY [dst; Lit 0w; size_op] []) s =
+    OK (write_memory_with_expansion (w2n w) s.vs_returndata s)
+Proof
+  strip_tac >>
+  simp[Once step_inst_base_def, mk_inst_def, eval_operand_def,
+       wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD]
+QED
+
 (* TOP-LEVEL *)
 Theorem compile_raw_call_case:
   !nocalls ctx func cenv cx ann flags args dflt.
