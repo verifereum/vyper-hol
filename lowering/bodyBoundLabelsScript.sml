@@ -1035,3 +1035,235 @@ Proof
   simp[as_stack_val_def] >> irule pair_let_snd_preserves >>
   simp[bound_labels_addmod, as_stack_val_def]
 QED
+
+Theorem bound_labels_mulmod_names:
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_mulmod_names ce rt aty a bty b mty m s))))
+Proof
+  strip_tac >> simp[compile_mulmod_names_def] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_name_vv] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_unwrap_value] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_name_vv] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_unwrap_value] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_name_vv] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_unwrap_value] >> rpt strip_tac >> simp[] >>
+  simp[as_stack_val_def] >> irule pair_let_snd_preserves >>
+  simp[bound_labels_mulmod, as_stack_val_def]
+QED
+
+Theorem bound_labels_powmod256_names:
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_powmod256_names ce rt aty a bty b s))))
+Proof
+  strip_tac >> simp[compile_powmod256_names_def] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_name_vv] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_unwrap_value] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_name_vv] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_unwrap_value] >> rpt strip_tac >> simp[] >>
+  simp[as_stack_val_def] >> irule pair_let_snd_preserves >>
+  simp[bound_labels_pow_mod256, as_stack_val_def]
+QED
+
+
+Theorem bound_labels_fresh_pair[local]:
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) /\
+  (!l t. compiler_label l /\
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (g (l,t)))))) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (g (fresh_label suffix s)))))
+Proof
+  strip_tac >> Cases_on `fresh_label suffix s` >>
+  drule bound_labels_fresh_label >> strip_tac >> gvs[]
+QED
+
+Theorem bound_labels_expr_ifexp[local]:
+  (!ce ty e t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (f ce ty e t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_expr_body f g h ce ty (IfExp ann cond_e then_e else_e) s))))
+Proof
+  strip_tac >> simp[compile_expr_body_def] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_primitives] >> rpt strip_tac >> simp[] >>
+  irule bound_labels_fresh_pair >> simp[] >> rpt strip_tac >> simp[] >>
+  irule bound_labels_fresh_pair >> simp[] >> rpt strip_tac >> simp[] >>
+  irule bound_labels_fresh_pair >> simp[] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_emit_inst] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_new_block] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_emit_inst] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_emit_inst] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_new_block] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_emit_inst] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_emit_inst] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_new_block] >> rpt strip_tac >> simp[] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem bound_labels_expr_structlit[local]:
+  (!ce ty e t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (f ce ty e t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_expr_body f g h ce ty (StructLit ann name fields) s))))
+Proof
+  strip_tac >> simp[compile_expr_body_def] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_alloc_buffer] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (irule bound_labels_struct_lit >> simp[]) >> simp[]
+QED
+
+Theorem bound_labels_expr_toplevelname[local]:
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_expr_body f g h ce ty (TopLevelName ann nsid) s))))
+Proof
+  strip_tac >> simp[compile_expr_body_def] >>
+  Cases_on `FLOOKUP ce.ce_module_vars nsid`
+  >- (simp[] >> irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]) >>
+  rename1 `SOME loc` >> Cases_on `loc` >> simp[] >>
+  irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]
+QED
+
+Theorem bound_labels_expr_pop[local]:
+  (!ce ty e t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (f ce ty e t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_expr_body f g h ce ty (Pop ann target) s))))
+Proof
+  strip_tac >> simp[compile_expr_body_def] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (irule bound_labels_get_target_ptr >> simp[]) >>
+  map_every qx_gen_tac [`v`, `t`] >> strip_tac >>
+  PairCases_on `v` >> simp[] >>
+  irule pair_let_snd_preserves >> simp[bound_labels_dynarray_pop]
+QED
+
+Theorem bound_labels_invalid_expr_call[local]:
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (invalid_expr_call ty s))))
+Proof
+  strip_tac >> simp[exprCallBoundsTheory.invalid_expr_call_def] >>
+  irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]
+QED
+
+Theorem bound_labels_expr_child_callback[local]:
+  (!ce ty e s. expr_size e < bound ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (f ce ty e s))))) ==>
+  !ce ty e s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+      (SND (expr_child_callback bound f ce ty e s))))
+Proof
+  rpt strip_tac >> simp[exprCallBoundsTheory.expr_child_callback_def] >>
+  IF_CASES_TAC >> simp[bound_labels_invalid_expr_call]
+QED
+
+Theorem bound_labels_builtin_child_callback[local]:
+  (!ce rt ty bi args s. list_size expr_size args < bound ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (f ce rt ty bi args s))))) ==>
+  !ce rt ty bi args s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+      (SND (builtin_child_callback bound f ce rt ty bi args s))))
+Proof
+  rpt strip_tac >> simp[exprCallBoundsTheory.builtin_child_callback_def] >>
+  IF_CASES_TAC >> simp[bound_labels_invalid_expr_call]
+QED
+
+Theorem bound_labels_type_child_callback[local]:
+  (!ce vt ty tb rt args s. list_size expr_size args < bound ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (f ce vt ty tb rt args s))))) ==>
+  !ce vt ty tb rt args s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+      (SND (type_child_callback bound f ce vt ty tb rt args s))))
+Proof
+  rpt strip_tac >> simp[exprCallBoundsTheory.type_child_callback_def] >>
+  IF_CASES_TAC >> simp[bound_labels_invalid_expr_call]
+QED
+
+Theorem bound_labels_list_case_constant[local]:
+  list_CASE xs c (\h t. c) = c
+Proof
+  Cases_on `xs` >> simp[]
+QED
+
+Theorem bound_labels_expr_case_constant[local]:
+  expr_CASE e (\a b. c) (\a b. c) (\a b d. c)
+    (\a b d f. c) (\a b. c) (\a b d. c) (\a b d. c)
+    (\a b d. c) (\a b d. c) (\a b d f. c) (\a b. c) (\a b d f. c) = c
+Proof
+  Cases_on `e` >> simp[]
+QED
+
+Theorem bound_labels_expr_builtin[local]:
+  (!ce rt ty bi args t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (g ce rt ty bi args t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_expr_body f g h ce ty (Builtin ann bi args) s))))
+Proof
+  strip_tac >> Cases_on `bi` >>
+  simp([compile_expr_body_def, bound_labels_addmod_names,
+        bound_labels_mulmod_names, bound_labels_powmod256_names,
+        bound_labels_list_case_constant, bound_labels_expr_case_constant] @
+       map TypeBase.case_rand_of [``:'a list``, ``:expr``])
+QED
+
+Theorem bound_labels_expr_body[local]:
+  (!ce ty e t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (f ce ty e t))))) /\
+  (!ce rt ty bi args t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (g ce rt ty bi args t))))) /\
+  (!ce vt ty tb rt args t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (h ce vt ty tb rt args t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_expr_body f g h ce ty e s))))
+Proof
+  strip_tac >> Cases_on `e` >>
+  simp[bound_labels_expr_ifexp, bound_labels_expr_structlit,
+       bound_labels_expr_toplevelname, bound_labels_expr_pop,
+       bound_labels_expr_builtin] >>
+  simp[compile_expr_body_def, bound_labels_literal_vv, bound_labels_name_vv] >>
+  FIRST [irule bound_labels_subscript, irule bound_labels_attribute,
+         irule bound_labels_call] >> simp[]
+QED
