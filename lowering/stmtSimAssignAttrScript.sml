@@ -26,7 +26,7 @@
  *                                      internal call
  *
  * Helpers: struct_field_type, eval_target_place_attr_local,
- *   write_place_attr_local, fields_in_memory_mstore_field,
+ *   write_place_attr_local, memory_fields_rel_mstore_field,
  *   fields_val_wf_update, assign_attr_local_code_parts,
  *   assign_attr_local_source, mstore_var_frag, assign_attr_local_frag
  *)
@@ -41,6 +41,7 @@ Ancestors
   stmtSimAssignMem stmtSimAugAssign
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   exprOperandVar compileEnv valueEncoding valueEncodingProps
+  memoryValueDefs memoryValueFrame
   vyperInterpreter vyperState vyperValue vyperLookup vyperExprNoControl
   vyperTyping vyperTypeEnv vyperTypeInvariants vyperTypeExprSoundness
   vyperTypeExprResult
@@ -212,14 +213,14 @@ QED
 
 (* ===== The struct in memory after a field store ===== *)
 
-Theorem fields_in_memory_mstore_field:
+Theorem memory_fields_rel_mstore_field:
   !vals fs flds off s fld v wd ftv.
     fields_layout flds fs /\ struct_has_type fs vals /\
-    fields_val_wf vals fs /\ fields_in_memory vals fs off s.vs_memory /\
+    fields_val_wf vals fs /\ memory_fields_rel fs vals off s.vs_memory /\
     ALOOKUP fs fld = SOME ftv /\ type_memory_size ftv = 32 /\
-    val_in_memory ftv v (off + struct_field_offset flds fld)
+    memory_value_rel ftv v (off + struct_field_offset flds fld)
       (mstore (off + struct_field_offset flds fld) wd s).vs_memory ==>
-    fields_in_memory (AFUPDKEY fld (K v) vals) fs off
+    memory_fields_rel fs (AFUPDKEY fld (K v) vals) off
       (mstore (off + struct_field_offset flds fld) wd s).vs_memory
 Proof
   Induct
@@ -232,13 +233,13 @@ Proof
   simp[fields_layout_def, value_has_type_def, AFUPDKEY_def,
        struct_field_offset_def] >>
   strip_tac >> gvs[] >>
-  Cases_on `h0 = fld` >> gvs[val_in_memory_def, val_wf_def]
-  >- (`mstore off wd s = mstore off wd (s with vs_memory := s.vs_memory)` by
-        simp[mstore_def] >>
-      pop_assum SUBST1_TAC >>
-      irule (cj 2 mstore_preserves_val_in_memory) >> simp[]) >>
+  Cases_on `h0 = fld` >> gvs[memory_value_rel_def, val_wf_def]
+  >- (`memory_value_rel (StructTV fs') (StructV vals) (off + 32)
+         (mstore off wd s).vs_memory` suffices_by simp[memory_value_rel_def] >>
+      irule mstore_preserves_memory_value_rel >>
+      simp[memory_value_rel_def, val_wf_def]) >>
   conj_tac
-  >- (irule mstore_keeps_val_in_memory >> simp[]) >>
+  >- (irule mstore_keeps_memory_value_rel >> simp[]) >>
   REWRITE_TAC [arithmeticTheory.ADD_ASSOC] >>
   first_x_assum irule >> REWRITE_TAC [GSYM arithmeticTheory.ADD_ASSOC] >>
   gvs[fields_layout_def]
@@ -288,15 +289,16 @@ Proof
   `local_ptrs_rel func cenv es.scopes s` by
     fs[stmt_state_rel_def, state_rel_def] >>
   `val_wf entry.type entry.value /\
-   val_in_memory entry.type entry.value (w2n w) s.vs_memory` by
+   memory_value_rel entry.type entry.value (w2n w) s.vs_memory` by
     (qpat_x_assum `local_ptrs_rel _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
      first_x_assum drule_all >> strip_tac >> gvs[]) >>
-  `fields_val_wf vals fs /\ fields_in_memory vals fs (w2n w) s.vs_memory` by
-    gvs[val_wf_def, val_in_memory_struct] >>
-  `val_wf ftv v /\ type_memory_size ftv = 32 /\
-   val_in_memory ftv v a t.vs_memory` by
-    gvs[store_lays_out_def, Abbr `t`] >>
+  `fields_val_wf vals fs /\ memory_fields_rel fs vals (w2n w) s.vs_memory` by
+    gvs[val_wf_def, memory_value_rel_def] >>
+  `memory_value_rel ftv v a t.vs_memory` by
+    (simp[Abbr `t`] >> irule store_lays_out_memory_value_rel >>
+     first_assum ACCEPT_TAC) >>
+  `val_wf ftv v /\ type_memory_size ftv = 32` by fs[store_lays_out_def] >>
   `struct_field_offset flds fld + 32 <= type_memory_size_fields fs` by
     metis_tac[struct_field_offset_le] >>
   `(t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s` by
@@ -310,10 +312,10 @@ Proof
      gvs[Abbr `a`, type_memory_size_def]) >>
   `val_wf entry.type (StructV (AFUPDKEY fld (K v) vals))` by
     (gvs[val_wf_def] >> irule fields_val_wf_update >> metis_tac[]) >>
-  `val_in_memory entry.type (StructV (AFUPDKEY fld (K v) vals)) (w2n w)
+  `memory_value_rel entry.type (StructV (AFUPDKEY fld (K v) vals)) (w2n w)
      t.vs_memory` by
-    (gvs[val_in_memory_struct, Abbr `t`, Abbr `a`] >>
-     irule fields_in_memory_mstore_field >> simp[] >> metis_tac[]) >>
+    (gvs[memory_value_rel_def, Abbr `t`, Abbr `a`] >>
+     irule memory_fields_rel_mstore_field >> simp[] >> metis_tac[]) >>
   `local_region cenv es.scopes s id (w2n w) sz` by simp[local_region_def] >>
   `type_memory_size entry.type <= sz` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>

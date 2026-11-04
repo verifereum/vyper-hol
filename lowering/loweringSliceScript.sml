@@ -120,6 +120,15 @@ Proof
   simp[memory_value_rel_def, word_value_in_memory]
 QED
 
+(* At a word type the complete layout is the canonical one. *)
+Theorem word_memory_type_memory_value_rel:
+  !ty v off mem.
+    word_memory_type ty ==>
+    (memory_value_rel ty v off mem <=> val_in_memory ty v off mem)
+Proof
+  rw[word_memory_type_def] >> simp[memory_value_rel_def]
+QED
+
 Theorem word_value_wf:
   !ty v. word_value v /\ type_memory_size ty = 32 ==> val_wf ty v
 Proof
