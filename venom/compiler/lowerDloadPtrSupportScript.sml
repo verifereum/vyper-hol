@@ -2,7 +2,7 @@ Theory lowerDloadPtrSupport
 Ancestors
   ptrDiscipline lowerDloadPtrClosure lowerDloadPtrStatic execEquivParamBase
   pointerConfinedDefs venomInst mem2varBlockSimHelpers o1PassContract
-  finite_map pred_set list
+  ctxLookupAgreeHelpers finite_map pred_set list
 
 (* Dynamic provenance cannot occur at a statically unsupported operand. *)
 Theorem op_prov_outside_support:
@@ -136,3 +136,67 @@ Proof
   `s IN fn_pv P caller` by gvs[FLOOKUP_DEF, SUBSET_DEF] >>
   metis_tac[]
 QED
+
+Theorem frame_reachable_prov_supported:
+  !vs0 C stk PG G tn fn inst s.
+    frame_reachable vs0 C stk PG G tn fn inst s ==>
+    !P. (!f. MEM f C.ctx_functions ==> fn_ptr_ok P f) ==>
+      MEM fn C.ctx_functions /\
+      FDOM G SUBSET fn_pv P fn /\
+      (!k. k < LENGTH PG /\ EL k PG <> NONE ==> k IN P fn.fn_name) /\
+      (!f. MEM f stk ==>
+        MEM f.cf_fn C.ctx_functions /\
+        FDOM f.cf_prov SUBSET fn_pv P f.cf_fn /\
+        (!k. k < LENGTH f.cf_params /\ EL k f.cf_params <> NONE ==>
+             k IN P f.cf_fn.fn_name))
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> drule venomInstTheory.lookup_function_MEM >>
+      rpt strip_tac >> gvs[])
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume frame_reachable_prov_supported[next]:
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `MEM inst (fn_insts fn)` by
+    (qpat_assum `active_inst fn inst s`
+       (mp_then (Pos last) mp_tac EVERY_active_inst) >>
+     disch_then (qspec_then `\i. MEM i (fn_insts fn)` mp_tac) >>
+     simp[EVERY_MEM]) >>
+  simp[] >> irule step_prov_supported >> simp[]
+QED
+Resume frame_reachable_prov_supported[block]:
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  simp[] >> irule entry_prov_supported >> simp[]
+QED
+Resume frame_reachable_prov_supported[call]:
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `MEM fn' C.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+  `fn'.fn_name = nm` by metis_tac[lookup_function_selected_name] >>
+  `MEM inst (fn_insts fn)` by
+    (qpat_assum `active_inst fn inst s`
+       (mp_then (Pos last) mp_tac EVERY_active_inst) >>
+     disch_then (qspec_then `\i. MEM i (fn_insts fn)` mp_tac) >>
+     simp[EVERY_MEM]) >>
+  `fn_ptr_ok P fn` by metis_tac[] >>
+  `!k. k < LENGTH (MAP (op_prov G) ops) /\
+       EL k (MAP (op_prov G) ops) <> NONE ==> k IN P nm` by
+    (drule invoke_prov_supported >>
+     disch_then (qspecl_then [`ops`, `nm`, `inst`, `G`] mp_tac) >> simp[]) >>
+  simp[] >> rpt strip_tac >> gvs[]
+QED
+Resume frame_reachable_prov_supported[ret]:
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `MEM f.cf_fn C.ctx_functions /\ FDOM f.cf_prov SUBSET fn_pv P f.cf_fn /\
+   (!k. k < LENGTH f.cf_params /\ EL k f.cf_params <> NONE ==>
+        k IN P f.cf_fn.fn_name)` by metis_tac[MEM] >>
+  simp[FDOM_DRESTRICT] >> gvs[SUBSET_DEF] >> metis_tac[]
+QED
+Finalise frame_reachable_prov_supported
