@@ -2,8 +2,9 @@
  * Load Elimination — Correctness Statement
  *
  * Results agree outside the PHI outputs "$le_phi_<id>" the pass adds,
- * under copy_elision_function_correct's premises plus freshness of that
- * prefix in fn.
+ * with memory compared up to trailing zero bytes, under
+ * copy_elision_function_correct's premises plus freshness of that prefix
+ * and no MEMTOP in fn or the functions it can call.
  *)
 
 Theory loadElimCorrectness
@@ -19,6 +20,9 @@ Theorem load_elim_function_correct:
     fn_inst_wf fn /\
     wf_ssa fn /\
     EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
+    (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> MEMTOP) /\
+    EVERY (\f. !inst. MEM inst (fn_insts f) ==> inst.inst_opcode <> MEMTOP)
+      ctx.ctx_functions /\
     s.vs_inst_idx = 0 /\
     fn_entry_label fn = SOME s.vs_current_bb /\
     dfg_assigns_sound (dfg_build_function fn) s /\
@@ -50,9 +54,9 @@ Theorem load_elim_function_correct:
        bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn (s1 with vs_inst_idx := 0)) /\
     LENGTH s.vs_memory < dimword (:256) ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result (state_equiv {v | isPREFIX "$le_phi_" v})
-      (execution_equiv {v | isPREFIX "$le_phi_" v})
-      (execution_equiv {v | isPREFIX "$le_phi_" v})
+    lift_result (le_state_equiv {v | isPREFIX "$le_phi_" v})
+      (le_exec_equiv {v | isPREFIX "$le_phi_" v})
+      (le_exec_equiv {v | isPREFIX "$le_phi_" v})
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (load_elim_function fn) s)
 Proof

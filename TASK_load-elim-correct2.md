@@ -15,6 +15,9 @@ Theorem load_elim_function_correct_proof:
     fn_inst_wf fn /\
     wf_ssa fn /\
     EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
+    (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> MEMTOP) /\
+    EVERY (\f. !inst. MEM inst (fn_insts f) ==> inst.inst_opcode <> MEMTOP)
+      ctx.ctx_functions /\
     s.vs_inst_idx = 0 /\
     fn_entry_label fn = SOME s.vs_current_bb /\
     dfg_assigns_sound (dfg_build_function fn) s /\
@@ -46,9 +49,9 @@ Theorem load_elim_function_correct_proof:
        bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn (s1 with vs_inst_idx := 0)) /\
     LENGTH s.vs_memory < dimword (:256) ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result (state_equiv {v | isPREFIX "$le_phi_" v})
-      (execution_equiv {v | isPREFIX "$le_phi_" v})
-      (execution_equiv {v | isPREFIX "$le_phi_" v})
+    lift_result (le_state_equiv {v | isPREFIX "$le_phi_" v})
+      (le_exec_equiv {v | isPREFIX "$le_phi_" v})
+      (le_exec_equiv {v | isPREFIX "$le_phi_" v})
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (load_elim_function fn) s)
 ```
@@ -68,7 +71,27 @@ in `venom/passes/load_elim/defs/loadElimDefsScript.sml`;
 `venom/analysis/base_ptr/defs/basePtrDefsScript.sml`; `alloca_inv`,
 `allocas_non_overlapping` in `venom/defs/venomMemDefsScript.sml`.
 
-**Do not modify this statement.** Prove it as-is, or produce a counterexample.
+Result relations (defined in the same file, part of the frozen statement):
+
+```sml
+Definition le_exec_equiv_def:
+  le_exec_equiv vars s1 s2 <=>
+    (!v. v NOTIN vars ==> lookup_var v s1 = lookup_var v s2) /\
+    (!i. read_memory i 1 s1 = read_memory i 1 s2) /\
+    execution_frame (s1 with vs_memory := []) =
+    execution_frame (s2 with vs_memory := [])
+End
+
+Definition le_state_equiv_def:
+  le_state_equiv vars s1 s2 <=>
+    le_exec_equiv vars s1 s2 /\
+    s1.vs_current_bb = s2.vs_current_bb /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    s1.vs_prev_bb = s2.vs_prev_bb
+End
+```
+
+**Do not modify this statement or these definitions.** Prove it as-is, or produce a counterexample.
 
 (*
  ************************************************************
@@ -111,9 +134,11 @@ or of a new PHI (output `$le_phi_<load id>`, inserted at the join block)
 when predecessors provide different known values; redundant stores
 become NOPs; NOPs are dropped at the end. The theorem says the
 transformed function behaves like the original, up to the new PHI
-variables. Its premise set is `copy_elision_function_correct`'s (a
+variables and trailing zero bytes of memory (a dropped redundant store
+may be the one that grew memory; Venom's `mload` doesn't grow it). Its premise set is `copy_elision_function_correct`'s (a
 proved pass using the same base-pointer analysis) plus freshness of the
-`$le_phi_` prefix.
+`$le_phi_` prefix and no `MEMTOP` (the only observer of memory length)
+in `fn` or the functions it can call.
 
 ## Domain Constraints
 
@@ -143,4 +168,5 @@ proved pass using the same base-pointer analysis) plus freshness of the
 ## Notes
 
 - `loadElimProofsTheory` builds with the cheat (statement parses).
-- The earlier statement (only `fn_inst_wf`, `inst_idx = 0`, arbitrary bp) was false: start mid-function, overlapping allocas under an arbitrary bp, and non-SSA input each break it.
+- Earlier statements were false: start mid-function, overlapping allocas under an arbitrary bp, non-SSA input, and exact memory comparison (`x = mload 0; mstore 0, x; stop`: the store is dropped and only it grew memory) each break them. The current statement closes all four.
+- `loadElimByteHelpers` (in proofs/) holds byte-level mload/mstore lemmas from an earlier run; reuse them if useful.

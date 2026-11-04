@@ -16,8 +16,9 @@
  * - The five rounds target disjoint load opcodes, so each load is
  *   rewritten in at most one round.
  * - A start state in the middle of fn, or bp not from bp_analyze, or a
- *   non-SSA fn, each make the old statement false (counterexamples in
- *   the PR that introduced this statement).
+ *   non-SSA fn, each make the old statement false; so does exact memory
+ *   comparison (mload 0; mstore 0 x: the store is dropped, and only it
+ *   grew memory).  Counterexamples in the PR that introduced this.
  *)
 
 Theory loadElimProofs
@@ -25,6 +26,29 @@ Ancestors
   loadElimDefs analysisSimProps passSimulationProps
   basePtrProps venomWf venomInst venomMemDefs venomExecSemantics
   cfgTransform dfgCorrectnessProof memoryCopyElisionSound stateEquiv
+  stateFrame
+
+(* Result relations for load elimination.  A redundant store the pass
+   removes may be the one that grew memory (Venom's mload doesn't grow
+   it), so memory is compared byte-wise with zero padding, i.e. up to
+   trailing zero bytes; everything else as state_equiv/execution_equiv.
+   MEMTOP, the only observer of memory length, is excluded by premise:
+   the pinned compiler rejects it and lowering never emits it. *)
+Definition le_exec_equiv_def:
+  le_exec_equiv vars s1 s2 <=>
+    (!v. v NOTIN vars ==> lookup_var v s1 = lookup_var v s2) /\
+    (!i. read_memory i 1 s1 = read_memory i 1 s2) /\
+    execution_frame (s1 with vs_memory := []) =
+    execution_frame (s2 with vs_memory := [])
+End
+
+Definition le_state_equiv_def:
+  le_state_equiv vars s1 s2 <=>
+    le_exec_equiv vars s1 s2 /\
+    s1.vs_current_bb = s2.vs_current_bb /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    s1.vs_prev_bb = s2.vs_prev_bb
+End
 
 Theorem load_elim_function_correct_proof:
   !fuel ctx fn s.
@@ -32,6 +56,9 @@ Theorem load_elim_function_correct_proof:
     fn_inst_wf fn /\
     wf_ssa fn /\
     EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
+    (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> MEMTOP) /\
+    EVERY (\f. !inst. MEM inst (fn_insts f) ==> inst.inst_opcode <> MEMTOP)
+      ctx.ctx_functions /\
     s.vs_inst_idx = 0 /\
     fn_entry_label fn = SOME s.vs_current_bb /\
     dfg_assigns_sound (dfg_build_function fn) s /\
@@ -63,9 +90,9 @@ Theorem load_elim_function_correct_proof:
        bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn (s1 with vs_inst_idx := 0)) /\
     LENGTH s.vs_memory < dimword (:256) ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result (state_equiv {v | isPREFIX "$le_phi_" v})
-      (execution_equiv {v | isPREFIX "$le_phi_" v})
-      (execution_equiv {v | isPREFIX "$le_phi_" v})
+    lift_result (le_state_equiv {v | isPREFIX "$le_phi_" v})
+      (le_exec_equiv {v | isPREFIX "$le_phi_" v})
+      (le_exec_equiv {v | isPREFIX "$le_phi_" v})
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (load_elim_function fn) s)
 Proof
