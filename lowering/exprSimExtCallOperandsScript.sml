@@ -462,3 +462,53 @@ QED
    General source mutation/history compatibility and recursive production
    dependency closure are still unproved; do not infer either from this test.
 *)
+
+(* Captured footprints are protected either by a private allocation or by
+   the local frame (which excludes mutable dynamic-array headers). *)
+Theorem operand_frame_footprint:
+  operand_frame cenv es s hi es2 s2 /\
+  (lo:compile_state).cs_next_id <= hi.cs_next_id /\
+  ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
+      lo.cs_next_id <= aid /\ aid < hi.cs_next_id /\
+      b <= off /\ off + len <= b + sz /\
+      (!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
+         b + sz <= lb \/ lb + lsz <= b)) \/
+   (?n b sz. local_region cenv es.scopes s n b sz /\
+      b <= off /\ off + len <= b + sz /\
+      (dynarray_local cenv n ==> b + 32 <= off)) \/ len = 0) ==>
+  mem_bytes_at off len s2.vs_memory = mem_bytes_at off len s.vs_memory
+Proof
+  pure_rewrite_tac[operand_frame_def] >> strip_tac
+  >- (`mem_bytes_at b sz s2.vs_memory = mem_bytes_at b sz s.vs_memory`
+        by metis_tac[] >>
+      drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
+      strip_tac >> metis_tac[])
+  >- metis_tac[locals_kept_def] >>
+  simp[valueEncodingTheory.mem_bytes_at_def]
+QED
+
+Theorem vv_at_nondynamic_memory_frame:
+  vv_at cenv cx t lo hi es tv (LocatedValue t' p) s /\
+  ~dynarray_type t /\ p.ptr_location = LocMemory /\
+  operand_frame cenv es s hi es2 s2 /\
+  lo.cs_next_id <= hi.cs_next_id /\
+  read_result cx tv es = (INL v,es) /\
+  evaluate_type (get_tenv cx) t = SOME tvt /\
+  eval_operand p.ptr_operand s = SOME w ==>
+  mem_bytes_at (w2n w) (val_footprint tvt v) s2.vs_memory =
+  mem_bytes_at (w2n w) (val_footprint tvt v) s.vs_memory
+Proof
+  simp[vv_at_def] >> rpt strip_tac >>
+  gvs[] >>
+  irule operand_frame_footprint >>
+  goal_assum (drule_at (Pat `operand_frame _ _ _ _ _ _`)) >>
+  qexists_tac `hi with cs_next_id := 0` >> simp[] >> metis_tac[]
+QED
+
+val _ = List.app (fn (name,th) =>
+  let val (ors,axs) = Tag.dest_tag (Thm.tag th) in
+    if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+    then raise Fail ("Operand footprint dependency: " ^ name) else ()
+  end)
+  [("operand_frame_footprint", operand_frame_footprint),
+   ("vv_at_nondynamic_memory_frame", vv_at_nondynamic_memory_frame)];
