@@ -288,3 +288,32 @@ Proof
     lift_option_type_def, bind_apply, ignore_bind_apply, return_def, FUN_EQ_THM,
     get_scopes_def, eval_empty_defaults_finally]
 QED
+
+Theorem eval_expr_intcall_args_factor:
+  ~MEM (src,fn) cx.stk /\ get_module_code cx src = SOME tops /\
+  lookup_callable_function cx.in_deploy fn tops = SOME (mut,nr,args,[],ret,ss) /\
+  LENGTH es = LENGTH args ==>
+  eval_expr cx (Call ty (IntCall (src,fn)) es kw) =
+  (do vs <- (do results <- eval_expr_results cx es; read_results cx results od);
+      prev <- get_scopes;
+      call_env <- lift_option_type (bind_arguments (get_tenv cx) args vs)
+        "IntCall bind_arguments";
+      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
+      lock_if_nr cx nr (is_view_mut mut);
+      cxf <- push_function (src,fn) call_env cx;
+      rv <- finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+        (do pop_function prev; unlock_if_nr cx nr (is_view_mut mut) od);
+      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+      return (Value crv) od)
+Proof
+  strip_tac >>
+  simp[Once evaluate_def, type_check_def, assert_def,
+    lift_option_type_def, bind_apply, ignore_bind_apply, return_def, FUN_EQ_THM,
+    get_scopes_def, eval_empty_defaults_finally] >>
+  qx_gen_tac `st` >> Cases_on `eval_expr_results cx es st` >>
+  Cases_on `q` >> simp[] >>
+  rename1 `eval_expr_results cx es st = (INL results,st')` >>
+  Cases_on `read_results cx results st'` >>
+  drule read_results_state >> strip_tac >> gvs[] >>
+  Cases_on `q` >> simp[]
+QED
