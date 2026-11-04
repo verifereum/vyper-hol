@@ -14,7 +14,7 @@ Ancestors
   makeSsaCurrentDefs makeSsaCurrentProps venomWf cfgWf venomInst irSupply
   unitShapeDefs o1PassContract makeSsaCurrentRenameTrace list
   makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentTreeTrace
-  makeSsaCurrentFinalBlock makeSsaCurrentTreePaths
+  makeSsaCurrentFinalBlock makeSsaCurrentTreePaths makeSsaCurrentTraceCertificate
 
 (* Consumer probe: the annotation at an output position names exactly the
    concrete output at that position.  Defaults cannot be substituted here. *)
@@ -118,6 +118,85 @@ Proof
   drule_all current_wf_local_output_name >> strip_tac >> simp[] >>
   qexists_tac `j` >> simp[] >>
   metis_tac[current_token_name_append_stable]
+QED
+
+Theorem current_wf_provenance_valid_events[local]:
+  LENGTH olds = LENGTH bbs /\
+  LIST_REL (\pair anns. current_block_provenance fn (FST pair) (SND pair) anns)
+    (ZIP (olds,bbs)) annsss /\
+  ALL_DISTINCT (MAP FST (FLAT (FLAT annsss))) /\
+  ssa_vars_covered s (FLAT (MAP block_ir_vars bbs)) /\
+  ssa_vars_covered s (MAP FST defs) /\
+  ALL_DISTINCT (dom_tree_labels tree) /\
+  current_tree_trace (current_annotation_map bbs annsss) sm tree
+    s (init_current_rename_state defs) bbs [] CurrentDefault []
+    ctrs' s' bbs' H' visited' events ==>
+  EVERY (current_event_valid (current_annotation_map bbs annsss)
+    (FLAT (MAP block_ir_vars bbs))) events
+Proof
+  strip_tac >>
+  `LENGTH bbs = LENGTH annsss` by (drule LIST_REL_LENGTH >> simp[]) >>
+  `LIST_REL (\bb anns.
+      LIST_REL (\a inst. MAP SND a = inst.inst_outputs) anns bb.bb_instructions)
+      bbs annsss` by
+    (irule current_provenance_map_owners >> metis_tac[]) >>
+  `current_annotations_ok (FLAT (MAP block_ir_vars bbs))
+      ([] : (current_token # string # string) list) (FLAT (FLAT annsss))` by
+    (irule current_provenance_annotations_ok >> simp[] >> conj_tac
+     >- (drule current_annotation_owners_in_vars >> simp[]) >>
+     qexistsl_tac [`fn`, `ZIP (olds,bbs)`] >> simp[]) >>
+  `current_pending_annotations (FLAT (MAP block_ir_vars bbs))
+      (current_annotation_map bbs annsss) [] []` by
+    metis_tac[current_annotation_map_pending] >>
+  `current_annotation_separation (current_annotation_map bbs annsss)` by
+    (irule current_annotation_map_separation >> fs[current_annotations_ok_def]) >>
+  `current_allocation_consistent (FLAT (MAP block_ir_vars bbs))
+      ([] : (current_token # string # string) list) s (init_current_rename_state defs) /\
+    current_env_realizes ([] : (current_token # string # string) list)
+      CurrentDefault (init_current_rename_state defs) (FLAT (MAP block_ir_vars bbs))` by
+    (irule current_initial_state_valid >> simp[]) >>
+  drule (cj 1 current_tree_trace_events_valid) >> simp[] >>
+  disch_then irule >> simp[]
+QED
+
+(* Validity, concrete names and local projections share this single history. *)
+Theorem current_wf_named_structural_certificate:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  make_ssa_current_fn s fn = (fn',s') ==>
+  ?A H events V.
+    current_structural_certificate s fn fn' s' A H events /\
+    EVERY (current_event_valid A V) events /\
+    EVERY (current_event_names H V) events /\
+    EVERY (current_event_trace A H) events /\
+    (!ev k j. MEM ev events /\
+      k < LENGTH (A (current_event_label ev)) /\
+      j < LENGTH (EL k (A (current_event_label ev))) ==>
+      current_wf_output_at A H ev k
+        (FST (EL j (EL k (A (current_event_label ev))))))
+Proof
+  strip_tac >> drule_all current_make_ssa_stages >> strip_tac >>
+  `MAP (\b. b.bb_label) ins = MAP (\b. b.bb_label) fn.fn_blocks /\
+    ssa_vars_covered si (FLAT (MAP block_ir_vars ins)) /\
+    ssa_vars_covered si (MAP FST defs)` by
+    (irule current_insertion_initial_supply >> metis_tac[]) >>
+  `LENGTH fn.fn_blocks = LENGTH ins` by metis_tac[LENGTH_MAP] >>
+  `ALL_DISTINCT (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_labels_distinct] >>
+  qpat_x_assum `defs = _` SUBST_ALL_TAC >>
+  drule_all current_actual_tree_trace >>
+  disch_then (qspecl_then [`[]`, `CurrentDefault`] strip_assume_tac) >>
+  `EVERY (current_event_valid (current_annotation_map ins annsss)
+    (FLAT (MAP block_ir_vars ins))) events` by
+    (drule_all current_wf_provenance_valid_events >> simp[]) >>
+  drule_all current_provenance_initial_tree_names >> strip_tac >>
+  `EVERY (current_event_trace (current_annotation_map ins annsss) H') events` by
+    metis_tac[cj 1 current_tree_trace_events] >>
+  qexistsl_tac [`current_annotation_map ins annsss`, `H'`, `events`,
+    `FLAT (MAP block_ir_vars ins)`] >> simp[] >> conj_tac
+  >- (simp[current_structural_certificate_def] >> metis_tac[]) >>
+  rpt strip_tac >> irule current_wf_event_output_at >>
+  fs[EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem make_ssa_current_fn_wf_ssa:
