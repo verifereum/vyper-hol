@@ -20,6 +20,7 @@ Ancestors
   makeSsaCurrentCleanupBoundary makeSsaCurrentEdgeTrace
   makeSsaCurrentAnalysis dominatorProofs dominatorDefs
   makeSsaCurrentPathBridge makeSsaCurrentGraphCut makeSsaCurrentCertificate
+  makeSsaCurrentTokens
 Libs
   rich_listTheory
 
@@ -79,6 +80,42 @@ Proof
   strip_tac >> drule current_wf_source_cut_env >>
   disch_then SUBST1_TAC >> asm_rewrite_tac[] >>
   sym_tac >> irule current_wf_block_annotation_prefix_scan >> simp[]
+QED
+
+Theorem current_wf_output_token_default[local]:
+  !xs j t. current_output_token v l i j xs t = CurrentDefault v <=>
+    t = CurrentDefault v /\ ~MEM v xs
+Proof
+  Induct >> simp[current_output_token_def] >> rpt gen_tac >>
+  Cases_on `h = v` >> simp[] >> metis_tac[]
+QED
+
+Theorem current_wf_original_scan_default:
+  !insts i t. current_original_scan v l i insts t = CurrentDefault v <=>
+    t = CurrentDefault v /\ EVERY (\inst. ~MEM v inst.inst_outputs) insts
+Proof
+  Induct >> simp[current_original_scan_def, current_wf_output_token_default] >>
+  metis_tac[]
+QED
+
+Theorem current_wf_block_token_default:
+  current_block_token fn ins v l t = CurrentDefault v <=>
+  t = CurrentDefault v /\
+  (!bb. lookup_block l fn.fn_blocks = SOME bb ==>
+    ~ins v l /\ EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions)
+Proof
+  Cases_on `lookup_block l fn.fn_blocks` >>
+  simp[current_block_token_def, current_wf_original_scan_default] >>
+  Cases_on `ins v l` >> simp[]
+QED
+
+Theorem current_wf_chain_token_default:
+  !ls t. current_chain_token fn ins v ls t = CurrentDefault v <=>
+    t = CurrentDefault v /\
+    EVERY (\l. current_block_token fn ins v l (CurrentDefault v) = CurrentDefault v) ls
+Proof
+  Induct >> simp[current_chain_token_def, current_wf_block_token_default] >>
+  metis_tac[]
 QED
 
 Theorem current_wf_path_lrc[local]:
