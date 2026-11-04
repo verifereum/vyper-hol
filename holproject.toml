@@ -9,6 +9,8 @@ version = "0.2.3"
 roots = ["tests/createSizeBoundaryTestScript.sml",
   "tests/createSizeClassificationCounterexampleScript.sml",
   "vyperHolScript.sml",
+         "lowering/calldataRecursiveExecutionScript.sml",
+         "lowering/actualAllocExecScript.sml",
          "lowering/calldataFiniteTypedScript.sml",
          "lowering/calldataAggregateTypedScript.sml",
          "lowering/actualDecoderPackagingScript.sml",
