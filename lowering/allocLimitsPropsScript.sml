@@ -17,21 +17,6 @@ Ancestors
   allocLimits compileVyper compileEnv supportedExprTraverse
   supportedStmtTraverse vyperAST list
 
-Theorem type_memory_bytes_struct_fields:
-  !c ty c'. c'.ce_struct_fields = c.ce_struct_fields ==>
-            type_memory_bytes c' ty = type_memory_bytes c ty
-Proof
-  recInduct type_memory_bytes_ind >> rw[type_memory_bytes_def] >>
-  AP_TERM_TAC >> irule MAP_CONG >> simp[]
-QED
-
-Theorem type_memory_bytes_frame:
-  !c c'. c'.ce_struct_fields = c.ce_struct_fields ==>
-         type_memory_bytes c' = type_memory_bytes c
-Proof
-  rw[FUN_EQ_THM] >> irule type_memory_bytes_struct_fields >> simp[]
-QED
-
 Theorem alloc_limits_struct_fields:
   (!c e c'. c'.ce_struct_fields = c.ce_struct_fields ==>
             alloc_limits_expr c' e = alloc_limits_expr c e) /\

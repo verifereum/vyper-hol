@@ -6,7 +6,7 @@ name = "vyper-hol"
 version = "0.2.3"
 
 [build]
-roots = ["tests/createSizeBoundaryTestScript.sml",
+roots = ["tests/ctorAbiDomainWitnessScript.sml","tests/createSizeBoundaryTestScript.sml",
   "tests/createSizeClassificationCounterexampleScript.sml",
   "vyperHolScript.sml",
          "lowering/typedMemoryCopyScript.sml",

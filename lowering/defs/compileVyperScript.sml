@@ -1596,3 +1596,20 @@ Definition compile_vyper_o1_def:
                    (tops : toplevel list) =
     compile_vyper finalizer (o1_policy all_capabilities) tops
 End
+
+Theorem build_positional_args_layout_cong:
+  ce'.ce_struct_fields = ce.ce_struct_fields /\
+  ce'.ce_flag_n_members = ce.ce_flag_n_members ==>
+  build_positional_args ce' args = build_positional_args ce args
+Proof
+  strip_tac >> simp[build_positional_args_def] >> irule listTheory.MAP_CONG >>
+  simp[pairTheory.FORALL_PROD, build_positional_arg_def] >>
+  metis_tac[type_to_abi_dec_info_layout_cong]
+QED
+
+Theorem build_positional_args_imm_alloca:
+  build_positional_args (ce with ce_imm_alloca := imm) args =
+  build_positional_args ce args
+Proof
+  irule build_positional_args_layout_cong >> simp[]
+QED
