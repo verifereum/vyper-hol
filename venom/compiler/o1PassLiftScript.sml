@@ -21,19 +21,20 @@
  *     none (an inserted instruction that touches no memory).  Every
  *     function pair related by frame_sim transports the shared memory
  *     invariant for any memory fact closed under that correspondence
- *     (frame_sim_mem_inv): static_mem_ok and lowered_mem_fact are.
+ *     (frame_sim_mem_inv).
  *
  *   - frame_sim_rf L C C' fn fn': as frame_sim, but only for states of fn'
  *     that touch memory and sit outside a revert-forward pair, matched
- *     with a state of fn also outside one.  raw_mem_ok exempts states in a
- *     revert-forward pair, so it is not closed under mem_corr alone; it is
- *     closed under the weaker mem_corr_closed_rf, and frame_sim plus
- *     frame_sim_rf transport any such fact (frame_sim_rf_mem_inv).
+ *     with a state of fn also outside one.  raw_mem_ok, static_mem_ok and
+ *     lowered_mem_fact exempt states in a revert-forward pair, so they are
+ *     not closed under mem_corr alone; they are closed under the weaker
+ *     mem_corr_closed_rf, and frame_sim plus frame_sim_rf transport any
+ *     such fact (frame_sim_rf_mem_inv).
  *
  * TOP-LEVEL: ctx_bisim_ctx_sim, fn_bisim_ctx_bisim, frame_sim_mem_inv,
  *   frame_sim_rf_mem_inv, mem_corr_closed_rf_raw_mem_ok,
- *   mem_corr_closed_rf_intro, mem_corr_closed_static_mem_ok,
- *   mem_corr_closed_lowered_mem_fact.
+ *   mem_corr_closed_rf_intro, mem_corr_closed_rf_static_mem_ok,
+ *   mem_corr_closed_rf_lowered_mem_fact.
  *)
 Theory o1PassLift
 Ancestors
@@ -850,15 +851,6 @@ Proof
   fs[mem_corr_closed_def] >> metis_tac[]
 QED
 
-(* A frame state at a revert-forward copy of its function: the copy and
-   the REVERT of the same range that follows it, which the raw memory fact
-   exempts (inst_mem_ok_in_fn). *)
-Definition in_revert_forward_def:
-  in_revert_forward fn s <=>
-    ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-         revert_forward_at bb s.vs_inst_idx
-End
-
 (* The revert-forward half of a pass's frame simulation: a frame state of
    fn' that touches memory away from a revert-forward copy corresponds to
    one of fn that is not at a revert-forward copy either.  States with no
@@ -972,15 +964,15 @@ Proof
   fs[] >> metis_tac[]
 QED
 
-Theorem mem_corr_closed_static_mem_ok:
-  mem_corr_closed (static_mem_ok eom)
+Theorem mem_corr_closed_rf_static_mem_ok:
+  mem_corr_closed_rf (static_mem_ok eom)
 Proof
-  rw[mem_corr_closed_def, mem_corr_def, static_mem_ok_def] >> fs[]
+  rw[mem_corr_closed_rf_def, mem_corr_def, static_mem_ok_def] >> fs[]
 QED
 
-Theorem mem_corr_closed_lowered_mem_fact:
-  mem_corr_closed (lowered_mem_fact eom)
+Theorem mem_corr_closed_rf_lowered_mem_fact:
+  mem_corr_closed_rf (lowered_mem_fact eom)
 Proof
-  rw[mem_corr_closed_def, mem_corr_def, lowered_mem_fact_def,
-     lowered_mem_ok_def] >> fs[]
+  rw[mem_corr_closed_rf_def, mem_corr_def, lowered_mem_fact_def,
+     lowered_mem_ok_def] >> fs[] >> metis_tac[]
 QED
