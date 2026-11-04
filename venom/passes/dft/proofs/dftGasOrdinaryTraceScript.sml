@@ -821,3 +821,120 @@ Proof
   disch_then (qspecl_then [`w`, `dft_gas_edit_ctx q pre gas inst post C`, `C`]
     strip_assume_tac) >> simp[]
 QED
+
+Theorem dft_mixed_gas_second_pair_segment:
+  q.bb_instructions = pre ++ [inst;gas] ++ post /\
+  dft_ordinary_sync q pre inst gas post c d /\
+  c.dft_occ_core = DftOpen (DftAt fn 0 q s) stack n /\
+  s.vs_inst_idx = LENGTH pre /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
+  ~is_terminator inst.inst_opcode /\
+  ~MEM (Var v) inst.inst_operands /\ ~MEM v inst.inst_outputs ==>
+  ((?t. step_inst_base inst s = OK t) \/
+   (?a t. step_inst_base inst s = Abort a t)) ==>
+  ?k j. 0 < k /\ k <= 3 /\ 0 < j /\ j <= 3 /\
+    dft_gas_ordinary_endpoint q pre inst gas post
+      (FUNPOW (dft_occ_oracle_next w C) k c)
+      (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx q pre inst gas post C)) j d) /\
+    dft_ordinary_prefix_cover (dft_gas_edit_fn q pre inst gas post) w C
+      (dft_gas_edit_ctx q pre inst gas post C) c d k j /\
+    dft_mixed_segment_events w C (dft_gas_edit_ctx q pre inst gas post C)
+      inst gas c d k j
+Proof
+  strip_tac >> drule_all dft_ordinary_sync_fetch >> strip_tac >>
+  `MAP (dft_fill_frame 0) stack = stack` by
+    (irule dft_mixed_safe_fill >> qexistsl_tac [`c`, `DftAt fn 0 q s`, `n`] >>
+     fs[dft_ordinary_sync_def]) >>
+  drule dft_mixed_fill_edit_stack >>
+  disch_then (qspecl_then [`dft_gas_edit_fn q pre inst gas post`,
+    `dft_gas_edit_block q pre inst gas post`] assume_tac) >>
+  `c.dft_occ_path = d.dft_occ_path /\ c.dft_occ_visit = d.dft_occ_visit` by
+    fs[dft_ordinary_sync_def, dft_edit_occ_def] >>
+  strip_tac
+  >- (qexistsl_tac [`2`, `2`] >> simp[] >> conj_tac
+      >- (simp[dft_gas_ordinary_endpoint_def] >> disj1_tac >>
+          irule dft_mixed_gas_second_sync_success >> metis_tac[]) >>
+      conj_tac
+      >- (irule dft_mixed_gas_second_success_cover >> metis_tac[]) >>
+      simp[dft_mixed_segment_events_def] >> disj1_tac >>
+      `dft_segment_gas_cover w (dft_gas_edit_ctx q pre inst gas post C) C d c 2 2` by
+        (irule dft_mixed_success_gas_cover >> metis_tac[]) >>
+      fs[dft_segment_gas_cover_def] >> metis_tac[]) >>
+  qexistsl_tac [`2`, `3`] >> simp[] >>
+  `dft_gas_ordinary_stopped
+    (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx q pre inst gas post C)) 3 d)
+    (FUNPOW (dft_occ_oracle_next w C) 2 c)` by
+    (irule dft_mixed_abort_endpoint >> metis_tac[]) >>
+  `dft_gas_ordinary_stopped
+    (FUNPOW (dft_occ_oracle_next w C) 2 c)
+    (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx q pre inst gas post C)) 3 d)` by
+    metis_tac[dft_gas_ordinary_stopped_def] >>
+  conj_tac >- simp[dft_gas_ordinary_endpoint_def] >> conj_tac
+  >- (irule dft_mixed_gas_second_abort_cover >> metis_tac[]) >>
+  simp[dft_mixed_segment_events_def] >> disj2_tac >> simp[] >>
+  drule_all dft_mixed_abort_gas_events >>
+  disch_then (qspecl_then [`w`, `C`, `dft_gas_edit_ctx q pre inst gas post C`]
+    strip_assume_tac) >> simp[]
+QED
+
+Theorem dft_original_mixed_sync_segment:
+  dft_original_gas_ordinary_environment Corig C L q pre x y post /\
+  dft_original_label_ready C L c /\ dft_ordinary_sync q pre x y post c d ==>
+  ?k j. 0 < k /\ k <= 3 /\ 0 < j /\ j <= 3 /\
+    dft_gas_ordinary_endpoint q pre x y post
+      (FUNPOW (dft_occ_oracle_next w C) k c)
+      (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x y post C)) j d) /\
+    dft_ordinary_prefix_cover (dft_gas_edit_fn q pre x y post) w C
+      (dft_gas_edit_ctx q pre x y post C) c d k j /\
+    dft_mixed_segment_events w C (dft_gas_edit_ctx q pre x y post C)
+      x y c d k j
+Proof
+  strip_tac >> Cases_on `dft_edit_before q (LENGTH pre) c`
+  >- (fs[dft_edit_before_def] >>
+      drule_all dft_original_mixed_crossing_static >> strip_tac >>
+      Cases_on `x.inst_opcode = GAS`
+      >- (`?v. x.inst_outputs = [v] /\ ~MEM (Var v) y.inst_operands /\
+               ~MEM v y.inst_outputs` by metis_tac[] >>
+          irule dft_mixed_gas_first_pair_segment >>
+          fs[dft_original_gas_ordinary_environment_def, dft_gas_ordinary_pair_def] >>
+          metis_tac[]) >>
+      `y.inst_opcode = GAS` by
+        fs[dft_original_gas_ordinary_environment_def, dft_gas_ordinary_pair_def] >>
+      `?v. y.inst_outputs = [v] /\ ~MEM (Var v) x.inst_operands /\
+           ~MEM v x.inst_outputs` by metis_tac[] >>
+      irule dft_mixed_gas_second_pair_segment >>
+      fs[dft_original_gas_ordinary_environment_def, dft_gas_ordinary_pair_def] >>
+      metis_tac[]) >>
+  drule_all dft_gas_ordinary_outside_segment >>
+  disch_then (qspec_then `w` strip_assume_tac) >>
+  qexistsl_tac [`1`, `1`] >> simp[FUNPOW, dft_mixed_segment_events_def]
+QED
+
+Theorem dft_original_mixed_endpoint_segment:
+  dft_original_gas_ordinary_environment Corig C L q pre x y post /\
+  dft_original_label_ready C L c /\
+  dft_gas_ordinary_endpoint q pre x y post c d ==>
+  ?k j. 0 < k /\ k <= 3 /\ 0 < j /\ j <= 3 /\
+    dft_gas_ordinary_endpoint q pre x y post
+      (FUNPOW (dft_occ_oracle_next w C) k c)
+      (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x y post C)) j d) /\
+    dft_original_label_ready C L (FUNPOW (dft_occ_oracle_next w C) k c) /\
+    dft_ordinary_prefix_cover (dft_gas_edit_fn q pre x y post) w C
+      (dft_gas_edit_ctx q pre x y post C) c d k j /\
+    dft_mixed_segment_events w C (dft_gas_edit_ctx q pre x y post C)
+      x y c d k j
+Proof
+  strip_tac >>
+  `dft_original_context Corig C` by
+    fs[dft_original_gas_ordinary_environment_def] >>
+  `!k. dft_original_label_ready C L (FUNPOW (dft_occ_oracle_next w C) k c)` by
+    metis_tac[dft_original_label_iter] >>
+  fs[dft_gas_ordinary_endpoint_def]
+  >- (drule_all dft_original_mixed_sync_segment >>
+      metis_tac[dft_gas_ordinary_endpoint_def]) >>
+  drule_all dft_gas_ordinary_stopped_segment >>
+  disch_then (qspecl_then [`y`, `x`, `w`, `dft_gas_edit_fn q pre x y post`,
+    `dft_gas_edit_ctx q pre x y post C`] strip_assume_tac) >>
+  qexistsl_tac [`1`, `1`] >> simp[FUNPOW]
+QED
