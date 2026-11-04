@@ -1,7 +1,8 @@
 Theory deadStoreElimFrameReadSteps
 Ancestors
   deadStoreElimLocal deadStoreElimPending deadStoreElimLiveness
-  deadStoreElimSafety deadStoreElimEquiv deadStoreElimDefs
+  deadStoreElimSafety deadStoreElimEquiv deadStoreElimDefs deadStoreElimDloadGuard
+  finite_map deadStoreElimStructure venomWf
   basePtrDefs memLocDefs venomExecSemantics venomState venomEffects venomInst list
 Libs
   deadStoreElimFrameLib
@@ -92,3 +93,81 @@ Proof
       empty_effects_def]
 QED
 *)
+
+Theorem dse_frame_read_no_clobber:
+  dse_frame_read_opcode inst.inst_opcode /\ ml_is_fixed loc /\
+  loc.ml_size <> SOME 0 /\ ~dse_inst_reads_alias FEMPTY bp sp loc inst ==>
+  ~dse_inst_clobbers bp sp loc inst
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = DLOAD`
+  >- (irule dse_dload_no_read_no_clobber >> simp[]) >>
+  fs[dse_frame_read_opcode_def] >> Cases_on `sp` >>
+  gvs[dse_inst_clobbers_def, bp_get_write_location_def,
+      is_raw_fmp_opcode_def, write_effects_def, empty_effects_def,
+      ml_empty_def, completely_contains_def, ml_is_fixed_def] >>
+  Cases_on `loc.ml_size` >> gvs[]
+QED
+
+Theorem dse_frame_read_pending_step:
+  dse_frame_read_opcode inst.inst_opcode /\
+  dse_pending_at cfg bp sp fn bb idx P s /\
+  get_instruction bb idx = SOME inst ==>
+  dse_pending_at cfg bp sp fn bb (SUC idx) P (update_var out w s)
+Proof
+  strip_tac >>
+  `idx < LENGTH bb.bb_instructions /\ EL idx bb.bb_instructions = inst` by
+    fs[get_instruction_def, AllCaseEqs()] >>
+  irule dse_pending_at_allocas_extend >>
+  qexists_tac `s` >> simp[update_var_def] >>
+  irule dse_pending_at_step >> simp[] >>
+  rpt gen_tac >> disch_tac >>
+  drule_all dse_pending_at_member >> strip_tac >>
+  drule_all dse_pending_at_no_read >> strip_tac >>
+  irule dse_frame_read_no_clobber >> gvs[]
+QED
+
+Theorem dse_local_agrees_frame_read_step:
+  dse_frame_read_opcode inst.inst_opcode /\
+  dse_local_agrees sp P s t /\
+  dse_pending_at cfg bp sp fn bb s.vs_inst_idx P s /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  step_inst fuel ctx inst s = OK s1 ==>
+  ?t1. step_inst fuel ctx inst t = OK t1 /\
+    dse_local_agrees sp P (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+      (t1 with vs_inst_idx := SUC t.vs_inst_idx) /\
+    dse_pending_at cfg bp sp fn bb (SUC s.vs_inst_idx) P s1
+Proof
+  strip_tac >> drule_all dse_frame_read_common_update >> strip_tac >>
+  qexists_tac `update_var out w t` >> simp[] >>
+  `s.vs_inst_idx = t.vs_inst_idx` by
+    fs[dse_local_agrees_def, dse_operational_agrees_def] >>
+  conj_tac
+  >- (gvs[] >> irule dse_local_agrees_inst_idx >>
+      irule dse_local_agrees_update_var >> simp[]) >>
+  gvs[] >> irule dse_frame_read_pending_step >> simp[] >> metis_tac[]
+QED
+
+(* Unconditional retention by opcode alone is invalid for DLOAD:
+   its static MEMORY write effect admits selection. Successful execution
+   requires an output, whereas the sound dead-store contract forbids it. *)
+Theorem dse_frame_read_success_outputs:
+  dse_frame_read_opcode inst.inst_opcode /\
+  step_inst fuel ctx inst s = OK s1 ==>
+  inst.inst_outputs <> []
+Proof
+  simp[dse_frame_read_opcode_def] >> strip_tac >>
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs,
+      exec_read0_def, exec_read1_def, AllCaseEqs()]
+QED
+
+Theorem dse_frame_read_retained:
+  wf_function fn /\ all_dead_stores dead_ids cfg aliases bp sp fn /\
+  MEM inst (fn_insts fn) /\ dse_frame_read_opcode inst.inst_opcode /\
+  step_inst fuel ctx inst s = OK s1 ==>
+  dse_inst dead_ids sp inst = inst
+Proof
+  strip_tac >> drule_all dse_frame_read_success_outputs >> strip_tac >>
+  Cases_on `inst.inst_id IN dead_ids` >- (
+    drule_all all_dead_stores_occurrence >> strip_tac >> gvs[]) >>
+  simp[dse_inst_def]
+QED
