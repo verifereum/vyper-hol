@@ -522,6 +522,310 @@ Proof
   asm_rewrite_tac[] >> simp[MEM_MAP, MEM_FILTER] >> metis_tac[]
 QED
 
+Theorem current_wf_cfg_paths:
+  (!a b. fn_cfg_edge g a b <=> fn_cfg_edge f a b) ==>
+  !path. is_fn_path g path <=> is_fn_path f path
+Proof
+  disch_tac >> Induct >> simp[is_fn_path_def] >>
+  Cases_on `path` >> simp[is_fn_path_def]
+QED
+
+Theorem current_wf_cfg_dominance:
+  fn_entry_label g = fn_entry_label f /\
+  (!a b. fn_cfg_edge g a b <=> fn_cfg_edge f a b) ==>
+  (fn_reachable g l <=> fn_reachable f l) /\
+  (fn_dominates g d n <=> fn_dominates f d n)
+Proof
+  strip_tac >>
+  `fn_cfg_edge g = fn_cfg_edge f` by simp[FUN_EQ_THM] >>
+  `!path. is_fn_path g path <=> is_fn_path f path` by
+    (irule current_wf_cfg_paths >> simp[]) >>
+  simp[fn_reachable_def, fn_dominates_def]
+QED
+
+Definition current_wf_block_replacement_def:
+  current_wf_block_replacement bb bb' <=>
+    ?pre tail pre' tail'.
+      bb.bb_instructions = pre ++ tail /\
+      bb'.bb_instructions = pre' ++ tail' /\
+      EVERY (\i. i.inst_opcode = PHI) pre /\
+      LENGTH pre' = LENGTH pre /\
+      PERM (FLAT (MAP (\i. i.inst_outputs) pre'))
+           (FLAT (MAP (\i. i.inst_outputs) pre)) /\
+      LIST_REL (\x y. current_inst_no_id x = current_inst_no_id y) tail tail'
+End
+
+Theorem current_wf_no_id_list_rel[local]:
+  !xs ys. LIST_REL (\x y. current_inst_no_id x = current_inst_no_id y) xs ys ==>
+    MAP current_inst_no_id xs = MAP current_inst_no_id ys
+Proof
+  Induct >> Cases_on `ys` >> simp[LIST_REL_def] >> metis_tac[]
+QED
+
+Theorem current_wf_block_replacement_outputs:
+  current_wf_block_replacement bb bb' ==>
+  PERM (FLAT (MAP (\i. i.inst_outputs) bb'.bb_instructions))
+       (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))
+Proof
+  simp[current_wf_block_replacement_def] >> strip_tac >>
+  drule current_wf_no_id_list_rel >> disch_tac >>
+  drule current_wf_no_id_outputs >> disch_tac >>
+  simp[PERM_APPEND_IFF]
+QED
+
+Theorem current_wf_replacement_outputs:
+  !bbs. (!bb. MEM bb bbs ==> current_wf_block_replacement bb (B bb)) ==>
+  PERM
+    (FLAT (MAP (\bb. FLAT (MAP (\i. i.inst_outputs) (B bb).bb_instructions)) bbs))
+    (FLAT (MAP (\bb. FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) bbs))
+Proof
+  Induct >- simp[] >> gen_tac >> strip_tac >>
+  `current_wf_block_replacement h (B h)` by metis_tac[MEM] >>
+  drule current_wf_block_replacement_outputs >> strip_tac >>
+  qpat_x_assum `(_ ==> PERM _ _)` mp_tac >>
+  (impl_tac >- metis_tac[MEM]) >> strip_tac >>
+  simp[] >> metis_tac[PERM_CONG]
+QED
+
+Theorem current_wf_replacement_ssa_form:
+  g.fn_blocks = MAP B f.fn_blocks /\
+  (!bb. MEM bb f.fn_blocks ==> current_wf_block_replacement bb (B bb)) /\
+  ssa_form f ==> ssa_form g
+Proof
+  strip_tac >>
+  `PERM
+    (FLAT (MAP (\bb. FLAT (MAP (\i. i.inst_outputs) (B bb).bb_instructions)) f.fn_blocks))
+    (FLAT (MAP (\bb. FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) f.fn_blocks))` by
+    (irule current_wf_replacement_outputs >> simp[]) >>
+  fs[ssa_form_def, fn_insts_def, fn_insts_blocks_flat,
+     MAP_FLAT, FLAT_FLAT, MAP_MAP_o, combinTheory.o_DEF] >>
+  metis_tac[ALL_DISTINCT_PERM, PERM_SYM]
+QED
+
+Theorem current_wf_block_replacement_defines:
+  current_wf_block_replacement bb bb' ==>
+  ((?i. MEM i bb'.bb_instructions /\ MEM v i.inst_outputs) <=>
+   (?i. MEM i bb.bb_instructions /\ MEM v i.inst_outputs))
+Proof
+  strip_tac >> drule current_wf_block_replacement_outputs >>
+  disch_then (mp_tac o MATCH_MP PERM_MEM_EQ) >>
+  simp[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem current_wf_replacement_endpoint:
+  g.fn_blocks = MAP B f.fn_blocks /\
+  (!bb. MEM bb f.fn_blocks ==> current_wf_block_replacement bb (B bb) /\
+     (B bb).bb_label = bb.bb_label) /\
+  fn_entry_label g = fn_entry_label f /\
+  (!a b. fn_cfg_edge g a b <=> fn_cfg_edge f a b) /\
+  MEM bb f.fn_blocks /\ def_available_at f bb NONE v ==>
+  def_available_at g (B bb) NONE v
+Proof
+  strip_tac >>
+  `!d n. fn_dominates g d n <=> fn_dominates f d n` by
+    metis_tac[current_wf_cfg_dominance] >>
+  gvs[def_available_at_def] >>
+  `current_wf_block_replacement def_bb (B def_bb)` by metis_tac[] >>
+  `?di. MEM di (B def_bb).bb_instructions /\ MEM v di.inst_outputs` by
+    metis_tac[current_wf_block_replacement_defines] >>
+  qexistsl_tac [`B def_bb`, `di`] >> simp[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem current_wf_prefix_output_before[local]:
+  LENGTH pre' = LENGTH pre /\
+  PERM (FLAT (MAP (\i. i.inst_outputs) pre'))
+       (FLAT (MAP (\i. i.inst_outputs) pre)) /\
+  LIST_REL (\x y. current_inst_no_id x = current_inst_no_id y) tail tail' /\
+  d < LENGTH pre + k /\ k < LENGTH tail /\
+  MEM v (EL d (pre ++ tail)).inst_outputs ==>
+  ?d'. d' < LENGTH pre' + k /\
+       MEM v (EL d' (pre' ++ tail')).inst_outputs
+Proof
+  strip_tac >> Cases_on `d < LENGTH pre`
+  >- (`MEM v (FLAT (MAP (\i. i.inst_outputs) pre))` by
+        (simp[MEM_FLAT, MEM_MAP] >> qexists_tac `(EL d pre).inst_outputs` >>
+         conj_tac
+         >- (qexists_tac `EL d pre` >> simp[EL_MEM]) >>
+         fs[EL_APPEND_EQN]) >>
+      `MEM v (FLAT (MAP (\i. i.inst_outputs) pre'))` by metis_tac[PERM_MEM_EQ] >>
+      fs[MEM_FLAT, MEM_MAP] >>
+      rename1 `MEM inst pre'` >>
+      qpat_x_assum `MEM inst pre'` mp_tac >> rewrite_tac[MEM_EL] >>
+      strip_tac >> qexists_tac `n` >>
+      gvs[EL_APPEND_EQN, GSYM MEM_EL]) >>
+  qexists_tac `d` >>
+  drule current_wf_no_id_list_rel >> disch_tac >>
+  drule current_wf_no_id_outputs >> disch_tac >>
+  `d - LENGTH pre < LENGTH tail` by decide_tac >>
+  `EL (d - LENGTH pre) (MAP (\i. i.inst_outputs) tail') =
+   EL (d - LENGTH pre) (MAP (\i. i.inst_outputs) tail)` by simp[] >>
+  `LENGTH tail = LENGTH tail'` by metis_tac[LIST_REL_LENGTH] >>
+  `d - LENGTH pre < LENGTH tail /\ d - LENGTH pre < LENGTH tail'` by decide_tac >>
+  fs[EL_MAP, EL_APPEND_EQN]
+QED
+
+Theorem current_wf_replacement_suffix:
+  g.fn_blocks = MAP B f.fn_blocks /\
+  (!b. MEM b f.fn_blocks ==> current_wf_block_replacement b (B b) /\
+     (B b).bb_label = b.bb_label) /\
+  fn_entry_label g = fn_entry_label f /\
+  (!a b. fn_cfg_edge g a b <=> fn_cfg_edge f a b) /\
+  ALL_DISTINCT (fn_labels f) /\ MEM bb f.fn_blocks /\
+  bb.bb_instructions = pre ++ tail /\
+  (B bb).bb_instructions = pre' ++ tail' /\
+  LENGTH pre' = LENGTH pre /\
+  PERM (FLAT (MAP (\i. i.inst_outputs) pre'))
+       (FLAT (MAP (\i. i.inst_outputs) pre)) /\
+  LIST_REL (\x y. current_inst_no_id x = current_inst_no_id y) tail tail' /\
+  ALL_DISTINCT bb.bb_instructions /\ k < LENGTH tail /\
+  def_available_at f bb (SOME (EL k tail)) v ==>
+  def_available_at g (B bb) (SOME (EL k tail')) v
+Proof
+  strip_tac >>
+  `!d n. fn_dominates g d n <=> fn_dominates f d n` by
+    metis_tac[current_wf_cfg_dominance] >>
+  qpat_x_assum `def_available_at _ _ _ _` mp_tac >>
+  simp[def_available_at_def] >> strip_tac >>
+  Cases_on `def_bb = bb`
+  >- (qpat_x_assum `MEM def_inst _` kall_tac >> gvs[] >>
+      `EL (LENGTH pre + k) (pre ++ tail) = EL k tail` by
+        simp[EL_APPEND_EQN] >>
+      `LENGTH pre + k < LENGTH (pre ++ tail)` by simp[] >>
+      `j < LENGTH (pre ++ tail)` by simp[] >>
+      `j = LENGTH pre + k` by metis_tac[ALL_DISTINCT_EL_IMP] >>
+      `?d'. d' < LENGTH pre' + k /\
+         MEM v (EL d' (pre' ++ tail')).inst_outputs` by
+        (irule current_wf_prefix_output_before >> metis_tac[]) >>
+      `LENGTH tail = LENGTH tail'` by metis_tac[LIST_REL_LENGTH] >>
+      `MEM (EL d' (pre' ++ tail')) (pre' ++ tail')` by
+        (irule EL_MEM >> simp[] >> decide_tac) >>
+      qexistsl_tac [`B bb`, `EL d' (pre' ++ tail')`] >>
+      simp[MEM_MAP] >> conj_tac
+      >- metis_tac[] >>
+      conj_tac >- metis_tac[MEM_APPEND] >>
+      qexistsl_tac [`d'`, `LENGTH pre' + k`] >> simp[EL_APPEND_EQN]) >>
+  `current_wf_block_replacement def_bb (B def_bb)` by metis_tac[] >>
+  `?di. MEM di (B def_bb).bb_instructions /\ MEM v di.inst_outputs` by
+    metis_tac[current_wf_block_replacement_defines] >>
+  `B def_bb <> B bb` by
+    (strip_tac >>
+     `def_bb.bb_label = bb.bb_label` by metis_tac[] >>
+     fs[fn_labels_def, MEM_EL] >>
+     metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP, EL_MAP]) >>
+  qexistsl_tac [`B def_bb`, `di`] >> simp[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem current_wf_no_id_fields[local]:
+  current_inst_no_id i = current_inst_no_id j ==>
+  i.inst_opcode = j.inst_opcode /\ i.inst_operands = j.inst_operands /\
+  i.inst_outputs = j.inst_outputs
+Proof
+  simp[current_inst_no_id_def] >> strip_tac >>
+  conj_tac
+  >- (qpat_x_assum `_ with inst_id := 0 = _` (mp_tac o Q.AP_TERM `\i. i.inst_opcode`) >> simp[]) >>
+  conj_tac
+  >- (qpat_x_assum `_ with inst_id := 0 = _` (mp_tac o Q.AP_TERM `\i. i.inst_operands`) >> simp[]) >>
+  qpat_x_assum `_ with inst_id := 0 = _` (mp_tac o Q.AP_TERM `\i. i.inst_outputs`) >> simp[]
+QED
+
+Theorem current_wf_replacement_phi:
+  g.fn_blocks = MAP B f.fn_blocks /\
+  (!b. MEM b f.fn_blocks ==> current_wf_block_replacement b (B b) /\
+     (B b).bb_label = b.bb_label) /\
+  fn_entry_label g = fn_entry_label f /\
+  (!a b. fn_cfg_edge g a b <=> fn_cfg_edge f a b) /\
+  MEM bb f.fn_blocks /\ current_inst_no_id i' = current_inst_no_id i /\
+  phi_edge_uses_wf f bb i ==>
+  phi_edge_uses_wf g (B bb) i'
+Proof
+  strip_tac >> drule current_wf_no_id_fields >> strip_tac >>
+  fs[phi_edge_uses_wf_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `!pred v. _` drule >> strip_tac >>
+  `def_available_at g (B pred_bb) NONE v` by
+    (irule current_wf_replacement_endpoint >> metis_tac[]) >>
+  qexists_tac `B pred_bb` >> simp[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem current_wf_replacement_strict_source:
+  g.fn_blocks = MAP B f.fn_blocks /\
+  (!b. MEM b f.fn_blocks ==> current_wf_block_replacement b (B b) /\
+     (B b).bb_label = b.bb_label) /\
+  fn_entry_label g = fn_entry_label f /\
+  (!a b. fn_cfg_edge g a b <=> fn_cfg_edge f a b) /\
+  MEM bb f.fn_blocks /\ MEM db f.fn_blocks /\
+  db.bb_label <> bb.bb_label /\ fn_dominates f db.bb_label bb.bb_label /\
+  MEM di db.bb_instructions /\ MEM v di.inst_outputs ==>
+  def_available_at g (B bb) (SOME i) v
+Proof
+  strip_tac >>
+  `?di'. MEM di' (B db).bb_instructions /\ MEM v di'.inst_outputs` by
+    metis_tac[current_wf_block_replacement_defines] >>
+  `fn_dominates g (B db).bb_label (B bb).bb_label` by
+    metis_tac[current_wf_cfg_dominance] >>
+  `B db <> B bb` by metis_tac[] >>
+  simp[def_available_at_def] >> qexistsl_tac [`B db`, `di'`] >>
+  simp[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem current_wf_replacement_wf_ssa:
+  g.fn_blocks = MAP B f.fn_blocks /\
+  fn_entry_label g = fn_entry_label f /\
+  (!a b. fn_cfg_edge g a b <=> fn_cfg_edge f a b) /\
+  ALL_DISTINCT (fn_labels f) /\ wf_ssa f /\
+  (!bb. MEM bb f.fn_blocks ==>
+    (B bb).bb_label = bb.bb_label /\ ALL_DISTINCT bb.bb_instructions /\
+    ?pre tail pre' tail'.
+      bb.bb_instructions = pre ++ tail /\
+      (B bb).bb_instructions = pre' ++ tail' /\
+      EVERY (\i. i.inst_opcode = PHI) pre /\
+      LENGTH pre' = LENGTH pre /\
+      PERM (FLAT (MAP (\i. i.inst_outputs) pre'))
+           (FLAT (MAP (\i. i.inst_outputs) pre)) /\
+      LIST_REL (\x y. current_inst_no_id x = current_inst_no_id y) tail tail' /\
+      (!i'. MEM i' pre' ==>
+        (i'.inst_opcode = PHI ==>
+           ?i. MEM i pre /\ current_inst_no_id i' = current_inst_no_id i) /\
+        (i'.inst_opcode <> PHI ==> !v. MEM (Var v) i'.inst_operands ==>
+           ?db di. MEM db f.fn_blocks /\ MEM di db.bb_instructions /\
+             MEM v di.inst_outputs /\ db.bb_label <> bb.bb_label /\
+             fn_dominates f db.bb_label bb.bb_label))) ==>
+  wf_ssa g
+Proof
+  strip_tac >>
+  `!bb. MEM bb f.fn_blocks ==> current_wf_block_replacement bb (B bb) /\
+      (B bb).bb_label = bb.bb_label` by
+    (rpt strip_tac >> first_x_assum drule >> strip_tac >>
+     simp[current_wf_block_replacement_def] >> metis_tac[]) >>
+  fs[wf_ssa_def] >> conj_tac
+  >- (irule current_wf_replacement_ssa_form >> metis_tac[]) >>
+  simp[def_dominates_uses_def] >> rpt gen_tac >> strip_tac >>
+  gvs[MEM_MAP] >> rename1 `MEM bb f.fn_blocks` >>
+  qpat_x_assum `!bb. MEM bb _ ==> ALL_DISTINCT _ /\ _` drule >>
+  strip_tac >>
+  Cases_on `MEM inst pre'`
+  >- (Cases_on `inst.inst_opcode = PHI` >> simp[]
+      >- (`?i. MEM i pre /\ current_inst_no_id inst = current_inst_no_id i` by metis_tac[] >>
+          `phi_edge_uses_wf f bb i` by
+            (fs[def_dominates_uses_def, EVERY_MEM] >> metis_tac[MEM_APPEND]) >>
+          irule current_wf_replacement_phi >> metis_tac[]) >>
+      rpt strip_tac >> irule current_wf_replacement_strict_source >> metis_tac[]) >>
+  `MEM inst tail'` by metis_tac[MEM_APPEND] >>
+  qpat_x_assum `MEM inst tail'` mp_tac >> rewrite_tac[MEM_EL] >> strip_tac >>
+  `n < LENGTH tail` by metis_tac[LIST_REL_LENGTH] >>
+  `current_inst_no_id (EL n tail) = current_inst_no_id inst` by
+    (fs[LIST_REL_EL_EQN] >> metis_tac[]) >>
+  drule current_wf_no_id_fields >> strip_tac >>
+  Cases_on `inst.inst_opcode = PHI` >> simp[]
+  >- (`phi_edge_uses_wf f bb (EL n tail)` by
+        (fs[def_dominates_uses_def] >> metis_tac[MEM_APPEND, EL_MEM]) >>
+      irule current_wf_replacement_phi >> metis_tac[]) >>
+  rpt strip_tac >>
+  `def_available_at f bb (SOME (EL n tail)) v` by
+    (fs[def_dominates_uses_def] >> metis_tac[MEM_APPEND, EL_MEM]) >>
+  irule current_wf_replacement_suffix >> metis_tac[]
+QED
+
 Theorem make_ssa_current_fn_wf_ssa:
   fn_defs_reach_uses fn /\ fn_phi_operands_single_def fn /\
   fn_phis_cover_preds fn /\
