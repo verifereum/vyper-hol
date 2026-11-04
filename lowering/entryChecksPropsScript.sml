@@ -99,7 +99,9 @@ Theorem step_cds_check_ops[local]:
     | NONE => Error "undefined operand"
 Proof
   rpt conj_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def]
+  simp_tac bool_ss [mk_inst_def, instruction_accessors, instruction_accfupds,
+                    combinTheory.K_THM, opcode_case_def] >>
+  simp[]
 QED
 
 (* The four instructions run to the end when the calldata is not shorter
