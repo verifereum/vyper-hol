@@ -1217,3 +1217,108 @@ Proof
  drule_all cse_prefix_event_provenance >> simp[] >>
  metis_tac[lookup_block_MEM]
 QED
+
+Theorem cse_prefix_available_write:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME inst /\
+ def_available_at fn bb (SOME inst) v ==>
+ ?ev. MEM ev events /\ cse_event_writes ev v
+Proof
+ strip_tac >>
+ drule_all cse_prefix_exec_control >> strip_tac >>
+ gvs[def_available_at_def] >>
+ Cases_on `def_bb = bb`
+ >- (gvs[] >>
+     `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+       (`MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+        qpat_x_assum `wf_function fn` mp_tac >>
+        simp[wf_function_def, fn_inst_ids_distinct_def] >> strip_tac >>
+        qpat_x_assum `ALL_DISTINCT (FLAT _)` mp_tac >>
+        qpat_x_assum `MEM bb _` mp_tac >>
+        qspec_tac (`fn.fn_blocks`, `bbs`) >>
+        Induct >> simp[ALL_DISTINCT_APPEND] >> rpt strip_tac >> gvs[]) >>
+     `j = s.vs_inst_idx` by
+       (gvs[get_instruction_def, AllCaseEqs()] >>
+        metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP, EL_MAP]) >>
+     `get_instruction bb i = SOME (EL i bb.bb_instructions)` by
+       simp[get_instruction_def] >>
+     `i < s.vs_inst_idx` by decide_tac >>
+     `?ev. MEM ev events /\ cse_event_covers ev bb i (EL i bb.bb_instructions)` by
+       metis_tac[cse_prefix_current_occurrence] >>
+     qexists `ev` >> metis_tac[cse_prefix_covered_write]) >>
+ `def_bb.bb_label <> bb.bb_label` by
+   (strip_tac >>
+    `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+      gvs[wf_function_def, fn_labels_def] >>
+    `lookup_block def_bb.bb_label fn.fn_blocks = SOME def_bb` by
+      metis_tac[MEM_lookup_block] >> gvs[]) >>
+ drule_all cse_prefix_visit_path >> strip_tac >>
+ `MEM def_bb.bb_label (cse_visit_path s0 events)` by
+   (qpat_x_assum `fn_dominates fn _ _` mp_tac >>
+    simp[fn_dominates_def] >> strip_tac >>
+    first_x_assum (qspec_then `cse_visit_path s0 events` mp_tac) >>
+    simp[cse_visit_path_def, cse_phase_state_def]) >>
+ drule_all cse_prefix_visit_segments >> strip_tac >>
+ gvs[cse_phase_state_def, MEM_APPEND, MEM_MAP] >>
+ `cse_visit_segment (FST visit) (SND visit)
+    (LENGTH (FST visit).bb_instructions)` by
+   (qpat_x_assum `EVERY _ done` mp_tac >> simp[EVERY_MEM] >>
+    disch_then (qspec_then `visit` mp_tac) >> simp[]) >>
+ `!ev. MEM ev (SND visit) ==>
+    MEM ev (FLAT (MAP SND done) ++ current)` by
+   (simp[MEM_APPEND, MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+ `MEM (FST visit) fn.fn_blocks` by
+   (irule cse_prefix_segment_block >> metis_tac[]) >>
+ `def_bb = FST visit` by
+   (`ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+      gvs[wf_function_def, fn_labels_def] >>
+    `lookup_block def_bb.bb_label fn.fn_blocks = SOME def_bb` by
+      metis_tac[MEM_lookup_block] >>
+    `lookup_block (FST visit).bb_label fn.fn_blocks = SOME (FST visit)` by
+      metis_tac[MEM_lookup_block] >> gvs[]) >>
+ gvs[] >>
+ `?k. k < LENGTH (FST visit).bb_instructions /\
+       EL k (FST visit).bb_instructions = def_inst` by metis_tac[MEM_EL] >>
+ `get_instruction (FST visit) k = SOME def_inst` by simp[get_instruction_def] >>
+ drule_all cse_visit_segment_occurrence >> strip_tac >>
+ qexists `ev` >> metis_tac[cse_prefix_covered_write, MEM_APPEND]
+QED
+
+Theorem cse_prefix_available_last_write:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME inst /\
+ def_available_at fn bb (SOME inst) v ==>
+ ?pre ev post. events = pre ++ [ev] ++ post /\
+ cse_event_writes ev v /\ EVERY (\e. ~cse_event_writes e v) post /\
+ lookup_var v s = lookup_var v (cse_event_output ev)
+Proof
+ strip_tac >> drule_all cse_prefix_available_write >> strip_tac >>
+ drule cse_prefix_last_write_or_initial >>
+ disch_then (qspec_then `v` mp_tac) >>
+ simp[cse_phase_state_def] >> strip_tac
+ >- (gvs[EVERY_MEM] >> metis_tac[]) >>
+ metis_tac[]
+QED
+
+Theorem cse_prefix_ordinary_use_last_write:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME inst /\
+ inst.inst_opcode <> PHI /\ MEM (Var v) inst.inst_operands ==>
+ ?pre ev post. events = pre ++ [ev] ++ post /\
+ cse_event_writes ev v /\ EVERY (\e. ~cse_event_writes e v) post /\
+ lookup_var v s = lookup_var v (cse_event_output ev)
+Proof
+ strip_tac >>
+ `MEM bb fn.fn_blocks` by
+   (drule_all cse_prefix_exec_control >> metis_tac[lookup_block_MEM]) >>
+ `MEM inst bb.bb_instructions` by
+   (gvs[get_instruction_def, AllCaseEqs()] >> metis_tac[MEM_EL]) >>
+ `def_available_at fn bb (SOME inst) v` by
+   (qpat_x_assum `wf_ssa fn` mp_tac >>
+    simp[wf_ssa_def, def_dominates_uses_def] >> strip_tac >>
+    first_x_assum (qspecl_then [`bb`, `inst`] mp_tac) >> simp[]) >>
+ irule cse_prefix_available_last_write >> metis_tac[]
+QED
