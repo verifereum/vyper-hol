@@ -99,7 +99,10 @@ Theorem take_call_outcome_transport:
 Proof
   rpt strip_tac >> drule take_call_outcome_frame >> strip_tac >>
   qpat_x_assum `!s os rqs. _` (qspecl_then
-    [`st`,`st'.outcomes`,`st'.requests`] mp_tac) >> metis_tac[]
+    [`st`,`st'.outcomes`,`st'.requests`] assume_tac) >>
+  qpat_x_assum `!s t observations. _` drule >>
+  disch_then (qspec_then `st'.storage_trace` mp_tac) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem adopt_call_outcome_transport:
@@ -111,25 +114,29 @@ Theorem adopt_call_outcome_transport:
   adopt_call_outcome rq outcome st = (res,st') ==>
   R st st'
 Proof
-  rpt strip_tac >>
-  `!a ts ls. R st (st with <|accounts := a; tStorage := ts;
-                             logs := st.logs ++ ls|>)` by
-    (rpt gen_tac >>
-     `st with <|accounts := a; tStorage := ts; logs := st.logs ++ ls;
-                pending_deletions := st.pending_deletions|> =
-      st with <|accounts := a; tStorage := ts; logs := st.logs ++ ls|>`
-       by simp[evaluation_state_component_equality] >>
-     first_x_assum (qspecl_then [`st`,`a`,`ts`,`ls`,`st.pending_deletions`] mp_tac) >>
-     simp[evaluation_state_fupdcanon]) >>
-  gvs[adopt_call_outcome_equation] >> rw[] >> gvs[] >>
-  `st with <|accounts := outcome.co_accounts; tStorage := outcome.co_tStorage;
-             logs := st.logs ++ []; pending_deletions := st.pending_deletions|> =
+  strip_tac >>
+  Cases_on `rq.cr_static` >- gvs[adopt_call_outcome_equation] >>
+  Cases_on `outcome.co_success`
+  >- (gvs[adopt_call_outcome_equation] >>
+      qpat_x_assum `!s accounts transient logs pending. _`
+        (qspecl_then [`st`,`outcome.co_accounts`,`outcome.co_tStorage`,
+                     `outcome.co_logs`,`outcome.co_toDelete ++ st.pending_deletions`]
+          assume_tac) >>
+      qpat_x_assum `!s t observations. _` drule >> simp[]) >>
+  Cases_on `rq.cr_kind = MessageCall`
+  >- gvs[adopt_call_outcome_equation] >>
+  gvs[adopt_call_outcome_equation] >>
+  qpat_x_assum `!s accounts transient logs pending. _`
+    (qspecl_then [`st`,`outcome.co_accounts`,`outcome.co_tStorage`,
+                 `[]`,`st.pending_deletions`] assume_tac) >>
+  `st with <|logs := st.logs ++ []; accounts := outcome.co_accounts;
+             tStorage := outcome.co_tStorage; pending_deletions := st.pending_deletions|> =
    st with <|accounts := outcome.co_accounts; tStorage := outcome.co_tStorage|>`
     by simp[evaluation_state_component_equality] >>
-  gvs[evaluation_state_fupdcanon] >>
-  first_x_assum (qspecl_then [`st`,`outcome.co_accounts`,
-    `outcome.co_tStorage`,`[]`,`st.pending_deletions`] mp_tac) >>
-  simp[]
+  qpat_x_assum `!s t observations. _` (qspec_then `st` mp_tac) >>
+  disch_then (qspec_then `st with <|accounts := outcome.co_accounts;
+    tStorage := outcome.co_tStorage|>` mp_tac) >>
+  simp[evaluation_state_fupdcanon] >> metis_tac[]
 QED
 
 Theorem checked_call_outcome_transport:
