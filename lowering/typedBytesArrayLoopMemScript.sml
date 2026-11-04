@@ -2,7 +2,7 @@
 Theory typedBytesArrayLoopMem
 Ancestors
   typedArrayLoopLayoutMem typedBytesArrayMem typedArrayLoopControlMem
-  memContinuation fragExec fragExecMem exprSimAggregateEncoding valueEncoding valueEncodingProps
+  memContinuation fragExec fragExecMem instMemFrontier exprSimAggregateEncoding valueEncoding valueEncodingProps
   venomState venomInst venomExecSemantics compileEnv exprLoweringProps emitHelperProps
   vyperValue vyperTyping words arithmetic list rich_list vfmConstants
 
@@ -161,3 +161,128 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+Theorem typed_bytes_array_loop_body_prefix[local]:
+  compile_copy_sarray_typed ce dst (BaseT (BytesT (Dynamic 33)))
+    src (BaseT (BytesT (Dynamic 1))) ncount sa = ((),sb) /\
+  fn_has_code sa sb fn /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME (n2w source_addr) /\
+  eval_operand dst s = SOME (n2w dest_addr) /\
+  eval_operand (Var ("%" ++ toString sa.cs_next_var)) s = SOME (n2w i) /\
+  ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+  s.vs_current_bb = fresh_label_output "typed_sa_body" (sa.cs_next_label+1) ==>
+  ?u. mem_cont_sim ctx fn s u /\ u.vs_inst_idx = 4 /\
+    u.vs_current_bb = s.vs_current_bb /\
+    eval_operand (Var ("%" ++ toString (sa.cs_next_var+5))) u =
+      SOME (n2w (source_addr + 64*i)) /\
+    eval_operand (Var ("%" ++ toString (sa.cs_next_var+6))) u =
+      SOME (n2w (dest_addr + 96*i)) /\
+    (u with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+    (!x. not_fresh_at sa x \/ x = "%" ++ toString sa.cs_next_var ==>
+      lookup_var x u = lookup_var x s)
+Proof
+  strip_tac >>
+  qabbrev_tac `ctr = "%" ++ toString sa.cs_next_var` >>
+  qabbrev_tac `so = "%" ++ toString (sa.cs_next_var+3)` >>
+  qabbrev_tac `dso = "%" ++ toString (sa.cs_next_var+4)` >>
+  qabbrev_tac `sp = "%" ++ toString (sa.cs_next_var+5)` >>
+  qabbrev_tac `dp = "%" ++ toString (sa.cs_next_var+6)` >>
+  `ALL_DISTINCT [so;dso;sp;dp] /\ ~MEM ctr [so;dso;sp;dp]` by
+    simp[Abbr `so`, Abbr `dso`, Abbr `sp`, Abbr `dp`, Abbr `ctr`] >>
+  `!x. src = Var x \/ dst = Var x ==> ~MEM x [so;dso;sp;dp]` by
+    (gen_tac >> disch_tac >> first_x_assum drule >>
+     simp[not_fresh_at_def, Abbr `so`, Abbr `dso`, Abbr `sp`, Abbr `dp`] >>
+     metis_tac[DECIDE ``n < n+k+1``]) >>
+  drule_all typed_sa_pointer_run >>
+  disch_then (qspec_then `sa.cs_next_id+5` mp_tac) >>
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq code s = OK q` >>
+  `mem_cont_sim ctx fn s (q with vs_inst_idx := 4)` by
+    (drule typed_bytes_array_loop_counters >> strip_tac >>
+     `lookup_block (HD sb.cs_blocks).bb_label fn.fn_blocks = SOME (HD sb.cs_blocks)` by
+       (fs[fn_has_code_def, emitted_blocks_def] >>
+        first_x_assum irule >> Cases_on `sb.cs_blocks` >> gvs[]) >>
+     drule typed_bytes_array_loop_blocks >> simp_tac bool_ss [LET_THM] >> strip_tac >>
+     `LENGTH code = 4` by simp[Abbr `code`] >>
+     qpat_x_assum `LENGTH code = 4` (fn th => once_rewrite_tac [GSYM th]) >>
+     irule typed_bytes_array_prefix_cont >> simp[] >> conj_tac
+     >- simp[Abbr `code`, mk_inst_def, is_terminator_def] >>
+     qexists_tac `HD sb.cs_blocks` >>
+     fs[Abbr `code`, Abbr `ctr`, Abbr `so`, Abbr `dso`, Abbr `sp`, Abbr `dp`]) >>
+  qexists_tac `q with vs_inst_idx := 4` >>
+  fs[venom_state_component_equality, lookup_var_def] >> simp[] >>
+  gen_tac >> disch_tac >> first_x_assum irule >>
+  fs[not_fresh_at_def, Abbr `ctr`, Abbr `so`, Abbr `dso`, Abbr `sp`, Abbr `dp`] >>
+  metis_tac[DECIDE ``n < n+k+1``]
+QED
+
+Theorem typed_bytes_array_body_copy[local]:
+  compile_copy_sarray_typed ce dst (BaseT (BytesT (Dynamic 33)))
+    src (BaseT (BytesT (Dynamic 1))) (LENGTH bss) sa = ((),sb) /\
+  fn_has_code sa sb fn /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME (n2w source_addr) /\
+  eval_operand dst s = SOME (n2w dest_addr) /\
+  eval_operand (Var ("%" ++ toString sa.cs_next_var)) s = SOME (n2w i) /\
+  ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+  s.vs_current_bb = fresh_label_output "typed_sa_body" (sa.cs_next_label+1) /\
+  i < LENGTH bss /\ EVERY (\bs. LENGTH bs <= 1) bss /\
+  source_addr + 64 * LENGTH bss <= s.vs_alloca_next /\
+  dest_addr + 96 * LENGTH bss <= s.vs_alloca_next /\
+  source_addr + 64 * LENGTH bss < dimword(:256) /\
+  dest_addr + 96 * LENGTH bss < dimword(:256) /\
+  (source_addr + 64 * LENGTH bss <= dest_addr \/
+   dest_addr + 96 * LENGTH bss <= source_addr) /\
+  typed_bytes_array_prefix bss source_addr 64 1 (LENGTH bss) s.vs_memory /\
+  typed_bytes_array_prefix bss dest_addr 96 33 i s.vs_memory ==>
+  ?v. mem_cont_sim ctx fn s v /\ v.vs_inst_idx = 9 /\
+    v.vs_current_bb = s.vs_current_bb /\
+    typed_bytes_array_prefix bss dest_addr 96 33 (SUC i) v.vs_memory /\
+    mem_bytes_at source_addr (64 * LENGTH bss) v.vs_memory =
+      mem_bytes_at source_addr (64 * LENGTH bss) s.vs_memory /\
+    (v with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_inst_idx := s.vs_inst_idx|>) = s /\
+    (!x. not_fresh_at sa x \/ x = "%" ++ toString sa.cs_next_var ==>
+      lookup_var x v = lookup_var x s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all typed_bytes_array_loop_body_prefix >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all typed_bytes_array_child_code >> strip_tac >>
+  `LENGTH (EL i bss) <= 1` by
+    (fs[EVERY_EL] >> first_x_assum irule >> simp[]) >>
+  `w2n (n2w (source_addr + 64*i):256 word) = source_addr + 64*i /\
+   w2n (n2w (dest_addr + 96*i):256 word) = dest_addr + 96*i` by
+    (simp[w2n_n2w] >> conj_tac >> irule LESS_MOD >> decide_tac) >>
+  `u.vs_memory = s.vs_memory /\ u.vs_alloca_next = s.vs_alloca_next /\ ~u.vs_halted` by
+    fs[venom_state_component_equality] >>
+  `val_in_memory (BaseTV (BytesT (Dynamic 1))) (BytesV (EL i bss))
+     (source_addr + 64*i) u.vs_memory` by
+    fs[typed_bytes_array_prefix_def] >>
+  `!x. Var ("%" ++ toString (sa.cs_next_var+5)) = Var x \/
+       Var ("%" ++ toString (sa.cs_next_var+6)) = Var x ==> not_fresh_at sc x` by
+    (rpt strip_tac >> gvs[]) >>
+  drule typed_bytes_array_child_cont >> disch_then drule >> disch_then drule >>
+  disch_then (qspecl_then [`source_addr`, `LENGTH bss`, `i`] mp_tac) >>
+  simp[] >> disch_then (qspecl_then [`fn`, `ctx`, `EL i bss`] mp_tac) >>
+  (impl_tac >- (gvs[] >> metis_tac[])) >> strip_tac >>
+  `typed_bytes_array_prefix bss dest_addr 96 33 (SUC i) q.vs_memory` by
+    (irule typed_bytes_array_prefix_suc >> simp[] >>
+     irule typed_bytes_array_prefix_preserved >>
+     conj_tac >- decide_tac >> conj_tac >- simp[] >>
+     qexists_tac `s.vs_memory` >> simp[]) >>
+  qexists_tac `q with vs_inst_idx := 9` >> simp[] >>
+  conj_tac >- (irule mem_cont_sim_trans >> qexists_tac `u` >> simp[]) >>
+  conj_tac >-
+    (qpat_x_assum `q with <|vs_memory := _; vs_vars := _|> = u` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  conj_tac >-
+    (qpat_x_assum `q with <|vs_memory := _; vs_vars := _|> = u` mp_tac >>
+     qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `not_fresh_at sc ("%" ++ toString sa.cs_next_var)` by
+    (simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >> rpt strip_tac >> decide_tac) >>
+  gvs[] >> rpt strip_tac >>
+  `lookup_var x q = lookup_var x u` by metis_tac[] >>
+  simp[lookup_var_def] >> gvs[lookup_var_def]
+QED
