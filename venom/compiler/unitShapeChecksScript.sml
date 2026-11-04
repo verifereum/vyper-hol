@@ -98,6 +98,13 @@ Proof
   EVAL_TAC
 QED
 
+(* A PHI's incoming pairs name distinct predecessors. *)
+Theorem phi_label_checks:
+  ~inst_shape_ok (mk_inst 0 PHI [Label "p"; Var "x"; Label "p"; Var "z"] ["y"])
+Proof
+  EVAL_TAC
+QED
+
 (* ===== Label and opaque operand positions ===== *)
 
 Theorem label_position_checks:
