@@ -96,3 +96,55 @@ Theorem ld_shared_requests:
 Proof
   simp[ld_shared_agree_def]
 QED
+
+Theorem ld_shared_accounts_observe:
+  ld_shared_agree D A tn s t /\
+  tn.t_stor SUBSET D.d_stor A (s.vs_accounts A).storage ==>
+  accounts_agree_except D s.vs_accounts t.vs_accounts
+Proof
+  simp[ld_shared_agree_def, accounts_agree_except_def,
+       storage_agree_except_def, key_taint_def, word_agree_except_def,
+       SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem ld_shared_transient_observe:
+  ld_shared_agree D A tn s t /\
+  tn.t_trans SUBSET D.d_trans A (s.vs_transient A) ==>
+  transient_agree_except D s.vs_transient t.vs_transient
+Proof
+  simp[ld_shared_agree_def, transient_agree_except_def,
+       storage_agree_except_def, key_taint_def, word_agree_except_def,
+       SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem ld_shared_immutables_observe:
+  ld_shared_agree D A tn s t /\
+  tn.t_imm SUBSET D.d_imm s.vs_immutables ==>
+  imms_agree_except D s.vs_immutables t.vs_immutables
+Proof
+  simp[ld_shared_agree_def, imms_agree_except_def,
+       word_agree_except_def, SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem ld_shared_halt_result:
+  ld_shared_agree D A tn s t /\
+  tn.t_stor SUBSET D.d_stor A (s.vs_accounts A).storage /\
+  tn.t_trans SUBSET D.d_trans A (s.vs_transient A) /\
+  tn.t_imm SUBSET D.d_imm s.vs_immutables /\
+  R SUBSET D.d_ret s.vs_returndata /\
+  LENGTH s.vs_returndata = LENGTH t.vs_returndata /\
+  (!i. i < LENGTH s.vs_returndata /\ i NOTIN R ==>
+       EL i s.vs_returndata = EL i t.vs_returndata) /\
+  s.vs_halted = t.vs_halted ==>
+  dead_result_rel D (Halt s) (Halt t)
+Proof
+  strip_tac >>
+  `accounts_agree_except D s.vs_accounts t.vs_accounts` by
+    (irule ld_shared_accounts_observe >> metis_tac[]) >>
+  `transient_agree_except D s.vs_transient t.vs_transient` by
+    (irule ld_shared_transient_observe >> metis_tac[]) >>
+  `imms_agree_except D s.vs_immutables t.vs_immutables` by
+    (irule ld_shared_immutables_observe >> metis_tac[]) >>
+  gvs[dead_result_rel_def, ld_shared_agree_def, SUBSET_DEF] >>
+  metis_tac[]
+QED
