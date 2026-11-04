@@ -16,6 +16,7 @@
 
 Theory exprSimCalldata
 Ancestors
+  loweringPosts
   list fragExec loweringSlice exprSim exprSimHyps exprSimWordBuiltins
   exprBopLowering exprLowering exprLoweringProps builtinSimple emitHelper
   compileEnv valueEncoding

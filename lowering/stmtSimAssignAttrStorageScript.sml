@@ -25,6 +25,7 @@
 
 Theory stmtSimAssignAttrStorage
 Ancestors
+  loweringPosts
   list rich_list finite_map pred_set alist
   storageStoreFrame fragExec exprSim exprSimHyps exprSimLeaves exprSimAttributeFields
   stmtSim stmtSimDecl stmtSimDeclMem stmtSimAssign stmtSimAssignMem

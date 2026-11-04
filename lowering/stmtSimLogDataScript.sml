@@ -1,5 +1,6 @@
 Theory stmtSimLogData
 Ancestors
+  loweringPosts
   stmtSimLogTopics exprSimBufferStore stmtLowering context compileEnv
   supportedTypes vyperValue valueEncoding words list abiEncoderInput
   emitHelper exprLoweringProps venomExecSemantics venomInst venomState emitHelperProps
@@ -96,7 +97,7 @@ Proof
      >- (qpat_assum `t with vs_vars := _ = s`
            (mp_tac o AP_TERM ``\z. z.vs_labels``) >> simp[]) >>
      first_x_assum irule >> first_x_assum irule >> simp[]) >>
-  qexists_tac `t` >> gvs[exprSimTheory.expr_val_rel_def]
+  qexists_tac `t` >> gvs[loweringPostsTheory.expr_val_rel_def]
 QED
 
 Theorem log_data_field_run:

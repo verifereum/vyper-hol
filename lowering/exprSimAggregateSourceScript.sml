@@ -22,6 +22,7 @@
  *)
 Theory exprSimAggregateSource
 Ancestors
+  loweringPosts
   allocLimits
   exprSim exprSimAggregateChildren exprSimHyps
   vyperInterpreter vyperValueOperation vyperState vyperTyping

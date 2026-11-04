@@ -67,6 +67,7 @@
 
 Theory exprSimBuiltins
 Ancestors
+  loweringPosts
   list rich_list exprSim exprSimHyps vyperAST exprSimWordBuiltins
   exprSimWordArgs exprSimHash vyperTypeSystem exprLowering compileEnv
   valueEncoding fragExec freshWrites varsExt builtinProps arithmeticProps emitHelper

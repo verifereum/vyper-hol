@@ -1,5 +1,6 @@
 Theory stmtSimLogTopics
 Ancestors
+  loweringPosts
   stmtSimLogArgs stmtSimLogSource stmtLowering compileEnv context
   exprSimHash exprSim exprSimWordArgs vyperEvent valueEncoding
   emitHelper emitHelperProps exprLoweringProps venomExecSemantics venomState

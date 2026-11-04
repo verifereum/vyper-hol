@@ -20,6 +20,7 @@
 
 Theory exprSimLen
 Ancestors
+  loweringPosts
   list fragExec exprSim exprSimHyps exprSimWordBuiltins exprBopLowering exprLowering
   exprLoweringProps builtinSimple emitHelper compileEnv accountsRelProps
   valueEncoding

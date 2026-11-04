@@ -66,6 +66,7 @@
 
 Theory stmtSim
 Ancestors
+  loweringPosts
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim loweringSlice
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
@@ -78,30 +79,6 @@ Libs
 
 (* ===== The judgment ===== *)
 
-(* compile_stmts, returning the compile environment after the list's
-   declarations. *)
-Definition stmts_env_def:
-  stmts_env cenv lctx ty [] = return cenv /\
-  stmts_env cenv lctx ty (s::ss) =
-    do cs <- comp_get;
-       if block_is_terminated cs then return cenv
-       else
-         do cenv' <- declare_stmt_local cenv s;
-            compile_stmt cenv' lctx ty s;
-            stmts_env cenv' lctx ty ss
-         od
-    od
-End
-
-(* A statement with its declaration, as compile_stmts compiles it,
-   returning the compile environment after the declaration. *)
-Definition stmt_env_def:
-  stmt_env cenv lctx ty s =
-    do cenv' <- declare_stmt_local cenv s;
-       compile_stmt cenv' lctx ty s;
-       return cenv'
-    od
-End
 
 (* The source outcomes the judgment speaks of: normal completion, a break
    or continue inside a loop, a return, an error other than a type error,
@@ -140,44 +117,6 @@ Proof
   rw[stmt_exit_def] >> Cases_on `rr` >> simp[expr_exit_def]
 QED
 
-(* Where the code of a fragment from sa to sb leaves off on an outcome
-   that does not exit: its end, or the start of the loop's exit or
-   increment block. *)
-Definition stmt_lands_def:
-  stmt_lands lctx (sb : compile_state) (res : unit + exception) s <=>
-    (res = INL () /\ s.vs_current_bb = sb.cs_current_bb /\
-     s.vs_inst_idx = LENGTH sb.cs_current_insts) \/
-    (?ex inc. lctx = InLoop ex inc /\ s.vs_inst_idx = 0 /\
-       ((res = INR BreakException /\ s.vs_current_bb = ex) \/
-        (res = INR ContinueException /\ s.vs_current_bb = inc)))
-End
-
-(* cenv' is cenv with bindings changed only for names of locals (unbound
-   or held through a pointer on both sides) that the scopes below the
-   innermost do not hold: the declarations of the innermost scope, and
-   names out of scope.  Leaving the innermost scope goes back to cenv
-   (stmt_state_rel_pop_top_ext).  Of the other fields only ce_var_type and
-   ce_dynarray_capacity may differ, for any name. *)
-Definition cenv_top_ext_def:
-  cenv_top_ext cenv cenv' (scopes : (string |-> scope_entry) list) <=>
-    cenv' with <| ce_vars := cenv.ce_vars; ce_var_type := cenv.ce_var_type;
-                  ce_dynarray_capacity := cenv.ce_dynarray_capacity |> =
-      cenv /\
-    !n. FLOOKUP cenv'.ce_vars n <> FLOOKUP cenv.ce_vars n ==>
-        (!l. FLOOKUP cenv.ce_vars n = SOME l ==> ?p sz. l = PtrVar p sz) /\
-        (!l. FLOOKUP cenv'.ce_vars n = SOME l ==> ?p sz. l = PtrVar p sz) /\
-        ?sc rest. scopes = sc :: rest /\ lookup_scopes n rest = NONE
-End
-
-(* The return PC of an internal function's frame (ce_return_pc, the
-   variable RETPC_PARAM binds at the function's entry) is defined, and it
-   was handed out before sa, so stmt_frag's frame on old variables keeps
-   it.  RET reads it; an external function has none. *)
-Definition ret_pc_ok_def:
-  ret_pc_ok cenv sa s <=>
-    !x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
-           not_fresh_at sa x /\ ?w. lookup_var x s = SOME w
-End
 
 (* The code m (a statement with its declaration, or a statement list),
    compiled in cenv from sa to sb under the code premises of the statement
