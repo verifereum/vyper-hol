@@ -13763,3 +13763,20 @@ Proof
        simp[comp_return_labels, emit_void_labels, emit_op_labels,
             emit_inst_labels, fresh_var_action_labels])
 QED
+
+Theorem compile_var_array_membership_labels:
+  !cenv needle arr ty is_in s.
+    cs_extends s (SND (compile_var_array_membership cenv needle arr ty is_in s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_var_array_membership cenv needle arr ty is_in s)))
+Proof
+  rpt gen_tac >> Cases_on `ty` >>
+  simp[compile_var_array_membership_def, LET_THM] >>
+  TRY (rename1 `case sz of Fixed _ => _ | Dynamic _ => _` >>
+       Cases_on `sz` >> simp[]) >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_op_labels, emit_inst_labels,
+            compile_ptr_load_labels, compile_array_membership_loop_labels])
+QED
