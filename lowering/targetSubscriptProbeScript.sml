@@ -3059,3 +3059,18 @@ Proof
        probe_word_load_exit_storage_frame, Abbr `l`, probe_word_loaded_storage_frame] >>
   Cases_on `sload 3w s = 0w` >> simp[]
 QED
+
+Theorem probe_word_final_memory_frame:
+  !s off len.
+    s.vs_alloca_next + 128 <= dimword (:256) /\
+    (off+len <= s.vs_alloca_next+32 \/ s.vs_alloca_next+128 <= off) ==>
+    mem_bytes_at off len (probe_word_final_state s).vs_memory =
+      mem_bytes_at off len s.vs_memory
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `off+len <= s.vs_alloca_next+32 \/ s.vs_alloca_next+64 <= off` by decide_tac >>
+  `off+len <= s.vs_alloca_next+64 \/ s.vs_alloca_next+96 <= off` by decide_tac >>
+  `off+len <= s.vs_alloca_next+96 \/ s.vs_alloca_next+128 <= off` by decide_tac >>
+  simp[probe_word_final_memory_footprint,
+       valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint]
+QED
