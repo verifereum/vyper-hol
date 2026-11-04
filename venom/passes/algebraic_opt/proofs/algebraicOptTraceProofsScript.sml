@@ -192,3 +192,57 @@ Proof
       qexistsl [`[]`,`h`,`h'`,`t`] >> simp[]) >>
   disj2_tac >> qexistsl [`h::front`,`a`,`b`,`back`] >> simp[]
 QED
+
+Definition ao_transition_writes_def:
+  ao_transition_writes fn x (k,phase,s) (b:num # bool # venom_state) =
+    if phase then
+      (?bb i. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+        MEM i bb.bb_instructions /\ i.inst_opcode = PHI /\ MEM x i.inst_outputs)
+    else
+      (?bb i. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+        get_instruction bb s.vs_inst_idx = SOME i /\
+        ~is_terminator i.inst_opcode /\ MEM x i.inst_outputs)
+End
+
+Theorem ao_eval_phis_non_output:
+  !is s p x. eval_phis s is = OK p /\
+    (!i. MEM i is /\ i.inst_opcode = PHI ==> ~MEM x i.inst_outputs) ==>
+    lookup_var x p = lookup_var x s
+Proof
+  Induct >- simp[eval_phis_def] >>
+  rpt gen_tac >> simp[eval_phis_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+      AllCaseEqs()] >> metis_tac[ao_eval_one_phi_output]
+QED
+
+Theorem ao_source_step_non_writer:
+  !ctx fn a b. ao_source_step ctx fn a b ==>
+    !x. ~ao_transition_writes fn x a b ==>
+    lookup_var x (SND (SND a)) = lookup_var x (SND (SND b))
+Proof
+  ho_match_mp_tac ao_source_step_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >>
+  simp[ao_transition_writes_def] >> rpt strip_tac
+  >- (`lookup_var x p = lookup_var x s` by
+        (irule ao_eval_phis_non_output >> metis_tac[]) >>
+      gvs[lookup_var_def])
+  >- (drule_all venomInstPropsTheory.step_preserves_non_output_vars >>
+      simp[lookup_var_def]) >>
+  drule_all venomExecPropsTheory.step_terminator_preserves_vars >>
+  disch_then (qspec_then `x` mp_tac) >> simp[lookup_var_def]
+QED
+
+Theorem ao_source_trace_non_writer:
+  !trace ctx fn x.
+    trace <> [] /\ ao_source_trace ctx fn trace /\
+    ao_trace_avoids (ao_transition_writes fn x) trace ==>
+    lookup_var x (SND (SND (HD trace))) =
+    lookup_var x (SND (SND (LAST trace)))
+Proof
+  Induct >> simp[ao_source_trace_def, ao_trace_avoids_def] >>
+  rpt gen_tac >> Cases_on `trace` >>
+  simp[ao_source_trace_def, ao_trace_avoids_def] >>
+  rpt strip_tac >> drule ao_source_step_non_writer >>
+  disch_then (qspec_then `x` mp_tac) >> simp[] >>
+  metis_tac[HD, LAST_DEF, NOT_CONS_NIL]
+QED
