@@ -24,6 +24,22 @@ Proof
   rw[execution_equiv_def, update_var_def]
 QED
 
+Theorem static_abort_ee_UNIV:
+  !s1 s2.
+    execution_equiv UNIV s1 s2 ==>
+    execution_equiv UNIV (halt_state (set_returndata [] s1))
+                         (halt_state (set_returndata [] s2))
+Proof
+  rw[execution_equiv_def, halt_state_def, set_returndata_def]
+QED
+
+Theorem static_guard_ok_eq:
+  !b a s x s'.
+    ((if b then Abort a s else x) = OK s') <=> ~b /\ x = OK s'
+Proof
+  rw[]
+QED
+
 Theorem eval_operands_match:
   !ops1 ops2 s1 s2.
     LENGTH ops1 = LENGTH ops2 /\
@@ -494,17 +510,24 @@ fun find_index _ [] _ = NONE
 fun get_cr opc = List.nth(fast_crs,
   valOf (find_index opc target_opcodes 0));
 
+(* Static writes (SSTORE, TSTORE) guard their exec_* call with an abort *)
+fun strip_static_guard rhs =
+  if is_cond rhs then #3 (dest_cond rhs) else rhs;
+
+fun is_static_guarded cr =
+  is_cond (snd (dest_eq (snd (dest_imp (concl cr))))) handle _ => false;
+
 fun get_rhs_head cr = let
   val (_, eq) = dest_imp (concl cr)
   val (_, rhs) = dest_eq eq
-  val (f, _) = strip_comb rhs
+  val (f, _) = strip_comb (strip_static_guard rhs)
   in fst (dest_const f) handle _ => "INLINE"
   end handle _ => "INLINE";
 
 fun get_exec_fn cr = let
   val (_, eq) = dest_imp (concl cr)
   val (_, rhs) = dest_eq eq
-  val (f_app, _) = dest_comb rhs
+  val (f_app, _) = dest_comb (strip_static_guard rhs)
   val (f_app2, _) = dest_comb f_app
   val (_, fn_arg) = dest_comb f_app2
   in fn_arg end;
@@ -524,8 +547,20 @@ fun prove_cat cat_thm opc cr = let
   val goal = ``!inst1 inst2 s1 s2.
     sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc ==>
     step_sim inst1 inst2 s1 s2``
+  val guard_tac =
+    if is_static_guarded cr then
+      `s2.vs_call_ctx = s1.vs_call_ctx` by gvs[execution_equiv_def] >>
+      `eval_operands inst2.inst_operands s2 =
+       eval_operands inst1.inst_operands s1` by
+        (irule EQ_SYM >> irule eval_operands_match >> gvs[]) >>
+      imp_res_tac cr >>
+      Cases_on `s1.vs_call_ctx.cc_static /\
+                IS_SOME (eval_operands inst1.inst_operands s1)`
+      >- simp[step_sim_def, static_abort_ee_UNIV]
+    else ALL_TAC
   in prove(goal,
     rpt gen_tac >> strip_tac >> fs[sim_pre_def] >>
+    guard_tac >>
     match_mp_tac cat_thm >> EXISTS_TAC fn_arg >>
     imp_res_tac cr >>
     rpt conj_tac >>
@@ -596,6 +631,11 @@ fun prove_inline cr opc =
     sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc ==>
     step_sim inst1 inst2 s1 s2``,
   rpt gen_tac >> strip_tac >> fs[sim_pre_def] >>
+  (* Static write guards read the call context and the operand list *)
+  `s2.vs_call_ctx = s1.vs_call_ctx` by gvs[execution_equiv_def] >>
+  `eval_operands inst2.inst_operands s2 =
+   eval_operands inst1.inst_operands s1` by
+    (irule EQ_SYM >> irule eval_operands_match >> gvs[]) >>
   imp_res_tac cr >> simp[step_sim_def] >>
   spec_evals >> decompose_ops >>
   split_outputs_for cr >>
@@ -862,6 +902,17 @@ Proof
     (fn th => ASSUME_TAC (SPEC ``s1:venom_state`` th)) >>
   qpat_x_assum `!st. step_inst_base inst2 st = _`
     (fn th => ASSUME_TAC (SPEC ``s2:venom_state`` th)) >>
+  (* Static LOG aborts on both sides alike *)
+  `eval_operands inst2.inst_operands s2 =
+   eval_operands inst1.inst_operands s1` by
+    (irule EQ_SYM >> irule eval_operands_match >> gvs[]) >>
+  qpat_x_assum `step_inst_base inst2 s2 = _` mp_tac >>
+  qpat_x_assum `step_inst_base inst1 s1 = _` mp_tac >>
+  qpat_x_assum `eval_operands _ _ = _` (fn th => REWRITE_TAC [th]) >>
+  qpat_assum `s2.vs_call_ctx = _` (fn th => REWRITE_TAC [th]) >>
+  IF_CASES_TAC
+  >- (rpt strip_tac >> gvs[step_sim_def, static_abort_ee_UNIV]) >>
+  pop_assum kall_tac >> rpt strip_tac >>
   Cases_on `inst1.inst_operands`
   >- (`inst2.inst_operands = []` by gvs[listTheory.LENGTH_NIL_SYM] >>
       gvs[step_sim_def, execution_equiv_refl])
@@ -1000,6 +1051,15 @@ fun EVAL_CASE_TAC_ASM (asl, g) = let
    fs[] resolves the list case. Then case-split each eval_operand option
    via EVAL_CASE_TAC_ASM. NONE: both sides Error, step_sim T.
    All SOME: irule bridge closes. *)
+(* Static guard: both sides abort alike; otherwise leave the else branch *)
+val static_guard_split_tac =
+  TRY (qpat_x_assum `step_inst_base inst2 s2 = if _ then _ else _` mp_tac >>
+       qpat_x_assum `step_inst_base inst1 s1 = if _ then _ else _` mp_tac >>
+       IF_CASES_TAC >> rpt strip_tac
+       >- gvs[step_sim_def, static_abort_ee_UNIV] >>
+       qpat_x_assum `~(_ /\ _)` kall_tac >>
+       RULE_ASSUM_TAC (REWRITE_RULE []));
+
 fun prove_ext_call bridge_thm cr opc =
   prove(``!inst1 inst2 s1 s2.
     sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc ==>
@@ -1007,20 +1067,27 @@ fun prove_ext_call bridge_thm cr opc =
   rpt gen_tac >> strip_tac >> fs[sim_pre_def] >>
   (* Get cr equations BEFORE decompose: Cases_on will substitute
      inst1/inst2.inst_operands in the cr assumptions too *)
+  `eval_operands inst2.inst_operands s2 =
+   eval_operands inst1.inst_operands s1` by
+    (irule EQ_SYM >> irule eval_operands_match >> gvs[]) >>
   imp_res_tac cr >>
   qpat_x_assum `!st. step_inst_base inst1 st = _`
     (fn th => ASSUME_TAC (SPEC ``s1:venom_state`` th)) >>
   qpat_x_assum `!st. step_inst_base inst2 st = _`
     (fn th => ASSUME_TAC (SPEC ``s2:venom_state`` th)) >>
   spec_evals >> decompose_ops >>
-  (* Wrong-length subgoals: cr gives Error on both sides *)
-  TRY (simp[step_sim_def] >> NO_TAC) >>
-  (* Right-length: unify cc_static so both exec_* calls use same is_static arg *)
+  (* Unify cc_static so both sides share the static guard and is_static *)
   `s2.vs_call_ctx = s1.vs_call_ctx` by gvs[execution_equiv_def] >>
   fs[] >>
+  (* CREATE's guard precedes the operand match *)
+  static_guard_split_tac >>
+  (* Wrong-length subgoals: cr gives Error on both sides *)
+  TRY (simp[step_sim_def] >> NO_TAC) >>
   (* Split eval_operand options: NONE => both Error => step_sim T *)
   rpt (EVAL_CASE_TAC_ASM >> gvs[] >-
     (PURE_ONCE_REWRITE_TAC[step_sim_def] >> simp[])) >>
+  (* CALL's guard follows the operand evaluation *)
+  static_guard_split_tac >>
   (* cr now resolved to exec_*. drule_all bridge matches all hypotheses
      (ee, LENGTH, and both cr equations), instantiating gas/addr/etc.
      Result: step_sim inst1 inst2 s1 s2 as new assumption. *)
@@ -1407,8 +1474,8 @@ fun prove_output_ext_call bridge_thm cr opc =
   fs[sim_pre_def] >> spec_evals >> decompose_ops >>
   TRY (gvs[] >> NO_TAC) >>
   `s2.vs_call_ctx = s1.vs_call_ctx` by gvs[execution_equiv_def] >>
-  gvs[] >>
-  rpt (EVAL_CASE_TAC_ASM >> gvs[]) >>
+  gvs[static_guard_ok_eq] >>
+  rpt (EVAL_CASE_TAC_ASM >> gvs[static_guard_ok_eq]) >>
   metis_tac[bridge_thm]);
 
 fun prove_output_opcode opc = let
