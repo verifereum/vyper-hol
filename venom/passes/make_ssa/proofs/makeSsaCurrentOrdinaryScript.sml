@@ -230,3 +230,32 @@ Theorem current_bind_outputs_empty_probe:
 Proof
   simp[bind_outputs_def, current_outputs_compatible_def]
 QED
+
+(* Malformed ignored outputs cannot license demand killing: NOP does not
+   perform the writes advertised in its output field. *)
+Theorem current_nop_ignored_output_probe:
+  !st.
+  current_outputs_compatible ([],[]) ["x"] ([],[("x",["y"])]) ["y"] ["x"] /\
+  current_name_agree ([],[]) (current_before_outputs ["x"] ["x"]) st st /\
+  step_inst_base
+    <|inst_id := 0; inst_opcode := NOP; inst_operands := []; inst_outputs := ["x"]|>
+    st = OK st /\
+  step_inst_base
+    <|inst_id := 0; inst_opcode := NOP; inst_operands := []; inst_outputs := ["y"]|>
+    st = OK st /\
+  (current_name_agree ([],[("x",["y"])]) ["x"] st st <=>
+    lookup_var "x" st = lookup_var "y" st)
+Proof
+  simp[current_outputs_compatible_def, current_write_compatible_def,
+       current_before_outputs_def, current_name_agree_def,
+       latest_current_name_def, step_inst_base_def]
+QED
+
+Theorem current_nop_post_agreement_fails_probe:
+  !st. ~current_name_agree ([],[("x",["y"])]) ["x"]
+    (st with vs_vars := FEMPTY |+ ("x",0w) |+ ("y",1w))
+    (st with vs_vars := FEMPTY |+ ("x",0w) |+ ("y",1w))
+Proof
+  simp[current_name_agree_def, latest_current_name_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >> EVAL_TAC
+QED
