@@ -238,7 +238,9 @@ Proof
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
   goal_assum $ drule_at Any >>
   `shape_step F (K T) (\st. T) (new_block lbl) (\x st. T)` by
-    (ho_match_mp_tac shape_step_new_block >> simp[shape_stable_def]) >>
+    (ho_match_mp_tac shape_step_new_block >> simp[shape_stable_def] >>
+     irule jump_label_ok_not_internal >>
+     gvs[external_fn_shape_ok_def, jump_label_ok_def]) >>
   pop_assum mp_tac >> simp[shape_step_def] >> disch_then drule >>
   simp[] >> strip_tac >>
   mp_tac compile_entry_checks_shape >> simp[shape_step_def] >>
@@ -295,10 +297,8 @@ Theorem external_fallback_suffix_extends:
   cs_extends st entry_end
 Proof
   strip_tac >>
-  `shape_step F (K T) (\st. T) (new_block fallback_lbl) (\x st. T)` by
-    (ho_match_mp_tac shape_step_new_block >> simp[shape_stable_def]) >>
-  pop_assum mp_tac >> simp[shape_step_def] >> disch_then drule >>
-  simp[] >> strip_tac >>
+  drule_all shape_state_new_block >> strip_tac >>
+  drule cs_extends_new_block >> strip_tac >>
   drule runtime_fallback_shape >> simp[shape_step_def] >>
   disch_then drule >> simp[] >> strip_tac >>
   gvs[shape_extends_def] >> metis_tac[cs_extends_trans]
