@@ -28,7 +28,7 @@ Ancestors
   list fragExec exprSim exprSimHyps exprSimPop exprSimPopStorage
   targetPlaceSim targetPlaceSimCases
   exprLowering vyperAST vyperInterpreter vyperState vyperContext
-  vyperTypeSystem vyperTypeCallGraph
+  vyperTypeSystem vyperTypeCallGraph vyperCompiler stmtLowering
 
 (* The target's fragment, typed ty, evaluates to a place at the pointer
    (target_place_sim's conclusion, at every start). *)
@@ -174,6 +174,108 @@ Proof
       vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
       combinTheory.APPLY_UPDATE_THM])
 QED
+
+(* Shrink-assignment diagnostic: outer capacity two, child capacity one.
+   The second child's header and payload occupy slots 3 and 4. *)
+Theorem nested_shrink_encode_probe[local]:
+  encode_value
+    (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 2))
+    (ArrayV (DynArrayV [ArrayV (DynArrayV [IntV 7])])) =
+    SOME [(0,1w);(1,1w);(2,7w)]
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem nested_shrink_source_slots_probe[local]:
+  !st.
+    let st' = apply_writes (0w:bytes32) [(0,1w);(1,1w);(2,7w)] st in
+    lookup_storage 3w st' = lookup_storage 3w st /\
+    lookup_storage 4w st' = lookup_storage 4w st
+Proof
+  simp[vyperStorageTheory.apply_writes_def,
+       vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
+       combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem nested_shrink_assignment_dispatch_probe[local]:
+  !cenv ty tr sa.
+    compile_assign_value cenv (Lit 0w)
+      (if tr then LocTransient else LocStorage) (Lit 0w) F
+      (SOME LocMemory) ty ty (SOME (2,64)) 160 sa =
+    compile_dynarray_to_storage (Lit 0w) (Lit 0w) 2 64 tr sa
+Proof
+  rpt gen_tac >> Cases_on `tr` >>
+  simp[compile_assign_value_def, compileEnvTheory.comp_bind_def,
+       compileEnvTheory.comp_return_def]
+QED
+(* With both children live, byte agreement at the captured second child
+   follows from range agreement; after shrink it does not follow from the
+   root's live-byte relation alone. *)
+Theorem nested_shrink_initial_live_probe[local]:
+  !st b.
+    lookup_storage (0w:bytes32) st = 2w /\
+    lookup_storage (3w:bytes32) st = 1w ==>
+    ~dead_bytes st 0
+      (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 2)) 3 b /\
+    ~dead_bytes st 0
+      (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 2)) 4 b
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[compileEnvTheory.dead_bytes_def, vyperValueTheory.type_slot_size_def] >>
+  gen_tac >> Cases_on `i = 1` >> gvs[] >> decide_tac
+QED
+
+
+Definition nested_shrink_function_def[local]:
+  nested_shrink_function tr =
+    let st = SND (compile_dynarray_to_storage (Lit 0w) (Lit 0w) 2 64 tr
+                   (initial_compile_state "entry")) in
+    let st' = SND (emit_void STOP [] st) in
+    mk_raw_function "entry"
+      (REVERSE st'.cs_blocks ++
+       [<|bb_label := st'.cs_current_bb;
+          bb_instructions := st'.cs_current_insts|>])
+End
+
+Theorem nested_shrink_run_probe[local]:
+  !ctx tr h v. case run_blocks 20 ctx (nested_shrink_function tr)
+    ((if tr then tstore else sstore) 4w v
+      ((if tr then tstore else sstore) 3w h
+      (((if tr then tstore else sstore) 0w 2w (init_venom_state "entry")) with vs_memory :=
+        word_to_bytes (1w:bytes32) T ++ word_to_bytes (1w:bytes32) T ++
+        word_to_bytes (7w:bytes32) T))) of
+    Halt s =>
+      (if tr then tload else sload) 0w s = 1w /\
+      (if tr then tload else sload) 1w s = 1w /\
+      (if tr then tload else sload) 2w s = 7w /\
+      (if tr then tload else sload) 3w s = h /\
+      (if tr then tload else sload) 4w s = v
+  | _ => F
+Proof
+  rpt gen_tac >> Cases_on `tr` >> CONV_TAC (computeLib.CBV_CONV
+    (wordsLib.add_words_compset true (computeLib.copy (computeLib.the_compset()))))
+QED
+Theorem nested_shrink_paired_slots_probe[local]:
+  !ctx tr st h v.
+    lookup_storage 3w st = h /\ lookup_storage 4w st = v ==>
+    case run_blocks 20 ctx (nested_shrink_function tr)
+      ((if tr then tstore else sstore) 4w v
+        ((if tr then tstore else sstore) 3w h
+        (((if tr then tstore else sstore) 0w 2w (init_venom_state "entry")) with vs_memory :=
+          word_to_bytes (1w:bytes32) T ++ word_to_bytes (1w:bytes32) T ++
+          word_to_bytes (7w:bytes32) T))) of
+      Halt s =>
+        let st' = apply_writes (0w:bytes32) [(0,1w);(1,1w);(2,7w)] st in
+        lookup_storage 3w st' = (if tr then tload else sload) 3w s /\
+        lookup_storage 4w st' = (if tr then tload else sload) 4w s
+    | _ => F
+Proof
+  rpt strip_tac >>
+  qspecl_then [`ctx`, `tr`, `h`, `v`] mp_tac nested_shrink_run_probe >>
+  qspec_then `st` strip_assume_tac nested_shrink_source_slots_probe >>
+  BasicProvers.TOP_CASE_TAC >> gvs[]
+QED
+
 
 (* A storage or transient root.  compile_get_target_ptr hands out the
    array's header slot with location storage (transient), and the source's
