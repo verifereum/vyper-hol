@@ -7736,7 +7736,20 @@ Resume compile_expr_body_shape[pop]:
   rename1 `Pop ann target` >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_expr_body_def, expr_type_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  Cases_on `target` >> simp[] >> shape_pop_case_tac
+  Cases_on `target` >> simp[] >>
+  (ntac 3 (qpat_x_assum `!ce. _` kall_tac) >>
+  irule shape_step_uncurry >>
+  qexists_tac `\op st. cenv_shape_ok st cenv /\ plain_operand st op` >>
+  reverse conj_tac
+  >- (shape_under_tac compile_dynarray_pop_shape `\st. cenv_shape_ok st cenv` >>
+      simp[cenv_shape_ok_stable, compile_target_base_shape] >>
+      rpt conj_tac >> rpt strip_tac >> gvs[] >>
+      qmatch_goalsub_abbrev_tac
+        `case loc of LocMemory => _ | LocStorage => _ | LocTransient => _ |
+                     LocCode => _ | LocCalldata => _` >>
+      Cases_on `loc` >> simp[]) >>
+  gen_tac >> simp[shape_step_def, shape_extends_refl, value_shape_ok_def, mk_ptr_def] >>
+  rpt strip_tac >> metis_tac[infer_array_location_shape])
 QED
 
 Resume compile_expr_body_shape[builtin]:
@@ -12015,9 +12028,12 @@ Theorem supported_string_reason_shape[local]:
   ~supported_expr_exists expr_shape_root e
 Proof
   Cases_on `e` >>
-  simp[supportedStmtsTheory.supported_string_reason_def,
-       supported_expr_exists_def, expr_shape_root_def] >>
-  metis_tac[supported_pure_shape, supported_expr_exists_def, expr_shape_root_def]
+  simp[supportedStmtsTheory.supported_string_reason_def]
+  >~ [`Literal ann lit`] >- (Cases_on `lit` >>
+      simp[supportedStmtsTheory.supported_string_reason_def,
+           supported_expr_exists_def, expr_shape_root_def]) >>
+  strip_tac >> irule (CONJUNCT1 supported_pure_shape) >>
+  goal_assum (drule_at Any)
 QED
 
 Theorem supported_assert_reason_shape[local]:
