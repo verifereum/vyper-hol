@@ -681,6 +681,16 @@ Proof
   metis_tac[compile_bound_builtin_case_sim, expr_ok_def, listTheory.MEM]
 QED
 
+Theorem compile_convert_arity_case:
+  !nocalls ctx func cenv cx ann t args.
+    LENGTH args <> 1 ==>
+    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t args)
+Proof
+  rw[expr_vv_case_def] >>
+  fs[expr_body_pre_def, well_typed_expr_def,
+     well_typed_type_builtin_args_def]
+QED
+
 (* The conversions exprSimConvert does not cover: those to or from
    decimal, address, bytesM, bytestrings and flags.  Cheated: for several
    of them the checker, the lowering and the semantics disagree (#548). *)
