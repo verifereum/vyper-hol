@@ -184,3 +184,105 @@ QED
    but no distinguishing operations were found in the authorized matrix.
    Stop the bounded search here for strategist review, not further variants.
 *)
+
+(* A backedge revisits the same static OFFSET output; no dynamic freshness
+   assumption is justified by SSA. *)
+Definition residual_loop_fn_def:
+  residual_loop_fn = mk_raw_function "loop"
+    [<| bb_label := "E"; bb_instructions :=
+        [mk_inst 0 PARAM [Lit 0w] ["c"];
+         mk_inst 1 JMP [Label "H"] []] |>;
+     <| bb_label := "H"; bb_instructions :=
+        [mk_inst 2 JNZ [Var "c"; Label "B"; Label "X"] []] |>;
+     <| bb_label := "B"; bb_instructions :=
+        [mk_inst 3 OFFSET [Lit 0w; Label "H"] ["r"];
+         mk_inst 4 JMP [Label "H"] []] |>;
+     <| bb_label := "X"; bb_instructions :=
+        [mk_inst 5 STOP [] []] |>]
+End
+
+Theorem residual_loop_ready:
+  codegen_ready_fn residual_loop_fn
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Definition residual_loop_step_def:
+  residual_loop_step = residual_matrix_step residual_loop_fn
+End
+
+Definition residual_loop_entry_def:
+  residual_loop_entry = SND (THE (residual_loop_step "E"
+    (init_cleanup_plan_state NONE [] 0 0)))
+End
+
+Definition residual_loop_lap_def:
+  residual_loop_lap ps = SND (THE (residual_loop_step "B"
+    (SND (THE (residual_loop_step "H" ps)))))
+End
+
+Theorem residual_loop_whole_some:
+  IS_SOME (generate_fn_plan_with_cleanup_analyzed
+    (liveness_analyze residual_loop_fn) (dfg_build_function residual_loop_fn)
+    (cfg_analyze residual_loop_fn) NONE [] residual_loop_fn 0 0)
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem residual_loop_laps:
+  residual_loop_entry.ps_stack = [Var "c"] /\
+  (residual_loop_lap residual_loop_entry).ps_stack = [Var "r"; Var "c"] /\
+  (residual_loop_lap (residual_loop_lap residual_loop_entry)).ps_stack =
+    [Var "r"; Var "r"; Var "c"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem residual_loop_replay:
+  FST (THE (residual_loop_step "H" residual_loop_entry)) =
+  FST (THE (residual_loop_step "H" (residual_loop_lap residual_loop_entry))) /\
+  FST (THE (residual_loop_step "B"
+    (SND (THE (residual_loop_step "H" residual_loop_entry))))) =
+  FST (THE (residual_loop_step "B"
+    (SND (THE (residual_loop_step "H"
+      (residual_loop_lap residual_loop_entry)))))) /\
+  residual_loop_lap residual_loop_entry =
+    residual_loop_entry with ps_stack := [Var "r"; Var "c"] /\
+  residual_loop_lap (residual_loop_lap residual_loop_entry) =
+    residual_loop_entry with ps_stack := [Var "r"; Var "r"; Var "c"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem residual_loop_cleanup_spills:
+  residual_loop_entry.ps_cleanup_height = NONE /\
+  residual_loop_entry.ps_cleanup_promised = F /\
+  residual_loop_entry.ps_spilled = FEMPTY /\
+  residual_a.ps_alloc = residual_b.ps_alloc /\
+  (SND (THE (residual_step "J" residual_a))).ps_alloc =
+  (SND (THE (residual_step "J" residual_b))).ps_alloc /\
+  (SND (THE (residual_step "J" residual_a))).ps_spilled = FEMPTY /\
+  (SND (THE (residual_step "J" residual_b))).ps_spilled = FEMPTY
+Proof
+  EVAL_TAC
+QED
+
+Theorem residual_join_exit_stacks:
+  (SND (THE (residual_step "J" residual_a))).ps_stack = [Var "r"] /\
+  (SND (THE (residual_step "J" residual_b))).ps_stack = []
+Proof
+  EVAL_TAC
+QED
+
+(* Compatibility boundary of the bounded loop test:
+   H is first visited from E; its DFS input has residual_loop_entry's stack.
+   B is first visited from H; its backedge has residual_loop_lap's stack.
+   The record equalities in residual_loop_replay show the non-stack fields
+   are unchanged, so the lineage step's splice from H's DFS record is exactly
+   that lap state. Repeating the lap uses the same static OFFSET definition
+   and obtains a second r, not a fresh variable. The equal H/B operation
+   lists are the replay premises, NOT a proof of general reachability.
+   Cleanup is disabled (height NONE); the JMP reset retains arbitrary dead
+   bottom cells. In particular neither diamond nor loop justifies erasing
+   r, replacing it by dead_stack_marker, or assuming residual distinctness.
+*)
