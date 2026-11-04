@@ -452,3 +452,173 @@ Proof
     (mp_tac o AP_TERM ``\s:venom_state. FLOOKUP s.vs_allocas 0``) >>
   simp[execution_frame_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
+
+Theorem current_exec_alloca_agree:
+  inst'.inst_id = inst.inst_id /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand
+    (exec_alloca inst st sz) (exec_alloca inst' st' sz)
+Proof
+  strip_tac >>
+  `st.vs_allocas = st'.vs_allocas /\ st.vs_alloca_next = st'.vs_alloca_next`
+    by (conj_tac >>
+        qpat_x_assum `execution_frame _ = _`
+          (mp_tac o AP_TERM ``\s:venom_state. (s.vs_allocas,s.vs_alloca_next)``) >>
+        simp[execution_frame_def]) >>
+  drule current_outputs_compatible_length >> strip_tac >>
+  Cases_on `inst.inst_outputs`
+  >- gvs[exec_alloca_def, current_outputs_compatible_def, current_result_agree_def] >>
+  rename1 `inst.inst_outputs = x::xs` >> Cases_on `xs`
+  >- (gvs[current_outputs_singleton_compatible] >>
+      simp[exec_alloca_def] >>
+      Cases_on `FLOOKUP st'.vs_allocas inst.inst_id`
+      >- (simp[] >> irule current_result_write_agree >> simp[] >>
+          conj_tac
+          >- (qpat_x_assum `execution_frame _ = _` mp_tac >>
+              simp[execution_frame_def] >>
+              disch_then (mp_tac o AP_TERM
+                ``\s:venom_state. s with <|
+                  vs_allocas := st'.vs_allocas |+ (inst.inst_id,(st'.vs_alloca_next,w2n sz));
+                  vs_alloca_next := st'.vs_alloca_next + w2n sz|>``) >> simp[]) >>
+          qexists_tac `rs` >>
+          gvs[current_before_outputs_def, current_name_agree_def, lookup_var_def]) >>
+      Cases_on `x'` >> simp[] >> irule current_result_write_agree >>
+      simp[] >> qexists_tac `rs` >> gvs[current_before_outputs_def]) >>
+  Cases_on `inst'.inst_outputs` >> gvs[] >>
+  rename1 `inst'.inst_outputs = y::ys` >> Cases_on `ys` >> gvs[] >>
+  simp[exec_alloca_def, current_result_agree_def]
+QED
+
+Theorem current_exec_write2_agree:
+  (!a b. current_result_agree rs demand (OK (f a b st)) (OK (f a b st'))) /\
+  LENGTH inst.inst_operands = 2 /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' ==>
+  current_result_agree rs demand (exec_write2 f inst st) (exec_write2 f inst' st')
+Proof
+  strip_tac >> drule_all current_rename_operands_pointwise >>
+  gvs[LENGTH_EQ_NUM_compute, current_rename_operands_map, LIST_REL_def] >>
+  strip_tac >> rename1 `inst.inst_operands = [a;b]` >>
+  qpat_x_assum `eval_operand a st = _` (assume_tac o SYM) >>
+  qpat_x_assum `eval_operand b st = _` (assume_tac o SYM) >>
+  simp[exec_write2_def] >>
+  Cases_on `eval_operand a st`
+  >- simp[current_result_agree_def] >>
+  Cases_on `eval_operand b st`
+  >- simp[current_result_agree_def] >> simp[]
+QED
+
+Theorem current_effect_agree:
+  execution_frame t = execution_frame t' /\
+  t.vs_current_bb = t'.vs_current_bb /\ t.vs_prev_bb = t'.vs_prev_bb /\
+  t.vs_vars = st.vs_vars /\ t'.vs_vars = st'.vs_vars /\
+  current_name_agree rs demand st st' ==>
+  current_result_agree rs demand (OK t) (OK t')
+Proof
+  simp[current_result_agree_def, current_name_agree_def, lookup_var_def]
+QED
+
+Theorem current_jump_agree:
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\
+  current_name_agree rs demand st st' ==>
+  current_result_agree rs demand (OK (jump_to lbl st)) (OK (jump_to lbl st'))
+Proof
+  simp[current_result_agree_def, jump_to_def, current_name_agree_def,
+       lookup_var_def]
+QED
+
+Theorem current_jnz_agree:
+  inst.inst_operands = [cond; Label yes; Label no] /\
+  inst.inst_opcode = JNZ /\ inst'.inst_opcode = JNZ /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs demand st st' ==>
+  current_result_agree rs demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >>
+  `eval_operand (HD (rename_current_operands rs [cond])) st' = eval_operand cond st`
+    by (irule current_eval_operand_occurrence >> metis_tac[MEM]) >>
+  gvs[current_rename_operands_map] >>
+  simp[step_inst_base_def] >>
+  Cases_on `eval_operand cond st`
+  >- simp[current_result_agree_def] >>
+  simp[] >> Cases_on `x = 0w` >> simp[] >>
+  irule current_jump_agree >> metis_tac[]
+QED
+
+Theorem current_djmp_agree:
+  inst.inst_operands = selector::labels /\
+  inst.inst_opcode = DJMP /\ inst'.inst_opcode = DJMP /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs demand st st' ==>
+  current_result_agree rs demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >>
+  `eval_operand (HD (rename_current_operands rs [selector])) st' = eval_operand selector st`
+    by (irule current_eval_operand_occurrence >> metis_tac[MEM]) >>
+  `rename_current_operands rs (selector::labels) =
+     HD (rename_current_operands rs [selector])::rename_current_operands rs labels`
+    by simp[current_rename_operands_map] >>
+  simp[step_inst_base_def, current_rename_operands_extract_labels] >>
+  Cases_on `eval_operand selector st`
+  >- simp[current_result_agree_def] >>
+  Cases_on `extract_labels labels`
+  >- simp[current_result_agree_def] >>
+  simp[] >> Cases_on `w2n x < LENGTH x'`
+  >- (simp[] >> irule current_jump_agree >> metis_tac[]) >>
+  simp[current_result_agree_def]
+QED
+
+Theorem current_ret_agree:
+  (inst.inst_opcode = RET \/ inst.inst_opcode = RETFMP) /\
+  inst'.inst_opcode = inst.inst_opcode /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >>
+  `st.vs_fmp = st'.vs_fmp` by
+    (qpat_x_assum `execution_frame _ = _`
+       (mp_tac o AP_TERM ``\s:venom_state. s.vs_fmp``) >>
+     simp[execution_frame_def]) >>
+  drule_all current_eval_operands_agree >> strip_tac >>
+  simp[step_inst_base_def] >>
+  Cases_on `eval_operands inst.inst_operands st` >>
+  gvs[current_result_agree_def] >>
+  Cases_on `x` >> gvs[]
+QED
+
+Theorem current_store_effects_agree:
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_name_agree rs demand st st' ==>
+  current_result_agree rs demand (OK (mstore off w st)) (OK (mstore off w st')) /\
+  current_result_agree rs demand (OK (mstore8 off w st)) (OK (mstore8 off w st')) /\
+  current_result_agree rs demand (OK (sstore key w st)) (OK (sstore key w st')) /\
+  current_result_agree rs demand (OK (tstore key w st)) (OK (tstore key w st'))
+Proof
+  strip_tac >>
+  `st.vs_memory = st'.vs_memory /\ st.vs_accounts = st'.vs_accounts /\
+   st.vs_call_ctx = st'.vs_call_ctx /\ st.vs_transient = st'.vs_transient` by
+    (rpt conj_tac >> qpat_x_assum `execution_frame _ = _`
+      (mp_tac o AP_TERM ``\s:venom_state.
+        (s.vs_memory,s.vs_accounts,s.vs_call_ctx,s.vs_transient)``) >>
+     simp[execution_frame_def]) >>
+  rpt conj_tac >> (irule current_effect_agree >>
+    simp[mstore_def, mstore8_def, sstore_def, tstore_def] >>
+    conj_tac
+    >- (qpat_x_assum `execution_frame _ = _` mp_tac >>
+        simp[execution_frame_def, venom_state_component_equality]) >>
+    qexistsl_tac [`st`,`st'`] >> simp[])
+QED
