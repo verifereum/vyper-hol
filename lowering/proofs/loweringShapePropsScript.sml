@@ -13561,3 +13561,49 @@ Proof
   >- simp[compile_assert_slice_bounds_labels] >>
   rpt gen_tac >> BETA_TAC >> irule comp_bind_labels >> simp[emit_op_labels]
 QED
+
+Theorem compile_as_wei_value_decimal_labels:
+  !v scale divisor s P.
+    cs_extends s (SND (compile_as_wei_value_decimal v scale divisor s)) /\
+    EVERY P (added_labels s (SND (compile_as_wei_value_decimal v scale divisor s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinMiscTheory.compile_as_wei_value_decimal_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac, IF_CASES_TAC] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_void_labels, emit_op_labels])
+QED
+
+Theorem compile_as_wei_value_int_labels:
+  !v scale signed s P.
+    cs_extends s (SND (compile_as_wei_value_int v scale signed s)) /\
+    EVERY P (added_labels s (SND (compile_as_wei_value_int v scale signed s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinMiscTheory.compile_as_wei_value_int_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac, IF_CASES_TAC] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_void_labels, emit_op_labels])
+QED
+
+Theorem load_bytestring_as_word_labels:
+  !v opc s P. cs_extends s (SND (load_bytestring_as_word v opc s)) /\
+    EVERY P (added_labels s (SND (load_bytestring_as_word v opc s)))
+Proof
+  rpt gen_tac >> rewrite_tac[load_bytestring_as_word_def] >>
+  rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_op_labels])
+QED
+
+Theorem compile_clamp_basetype_labels:
+  !v ty s P. cs_extends s (SND (compile_clamp_basetype v ty s)) /\
+    EVERY P (added_labels s (SND (compile_clamp_basetype v ty s)))
+Proof
+  ho_match_mp_tac compile_clamp_basetype_ind >> rpt conj_tac >> rpt gen_tac >>
+  simp[compile_clamp_basetype_def, comp_return_labels, clamp_and_return_labels] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac, IF_CASES_TAC] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, clamp_and_return_labels,
+            emit_void_labels, emit_op_labels])
+QED
