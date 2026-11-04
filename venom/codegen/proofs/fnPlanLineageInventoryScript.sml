@@ -1020,3 +1020,41 @@ Theorem popmany_deep_allocator_probe[local]:
 Proof
   EVAL_TAC
 QED
+
+(* Scratch allocation is shared, but need not equal the input allocator. *)
+Theorem do_swap_prefix_replay:
+  !d ps qs prefix prefix' core.
+    d < LENGTH core /\ ps.ps_stack = prefix ++ core /\
+    qs.ps_stack = prefix' ++ core /\ ps.ps_alloc = qs.ps_alloc ==>
+    ?ops al.
+      do_swap d ps =
+        (ops, ps with <|ps_stack := prefix ++ stack_swap d core;
+                       ps_alloc := al|>) /\
+      do_swap d qs =
+        (ops, qs with <|ps_stack := prefix' ++ stack_swap d core;
+                       ps_alloc := al|>)
+Proof
+  rpt strip_tac >> Cases_on `d <= 16`
+  >- (Cases_on `d = 0`
+      >- (qexistsl_tac [`[]`, `ps.ps_alloc`] >>
+          simp[do_swap_def, stack_swap_def, LUPDATE_SAME,
+               stackPlanTypesTheory.plan_state_component_equality]) >>
+      qexistsl_tac [`[SOSwap d]`, `ps.ps_alloc`] >>
+      simp[do_swap_def, stack_swap_bottom_extension,
+           stackPlanTypesTheory.plan_state_component_equality]) >>
+  `top_n (d + 1) ps.ps_stack = top_n (d + 1) core /\
+   top_n (d + 1) qs.ps_stack = top_n (d + 1) core` by
+    simp[top_n_def, TAKE_APPEND] >>
+  `d < LENGTH ps.ps_stack /\ d < LENGTH qs.ps_stack` by simp[] >>
+  `((SND (do_swap d ps)).ps_stack = prefix ++ stack_swap d core) /\
+   ((SND (do_swap d qs)).ps_stack = prefix' ++ stack_swap d core)` by
+    simp[do_swap_stack_result, stack_swap_bottom_extension] >>
+  qspec_then `d` mp_tac do_swap_big_decompose >>
+  disch_then (qspec_then `ps` mp_tac) >>
+  qspec_then `d` mp_tac do_swap_big_decompose >>
+  disch_then (qspec_then `qs` mp_tac) >>
+  simp[LET_THM] >> rpt strip_tac >>
+  gvs[] >>
+  simp[stackPlanTypesTheory.plan_state_component_equality]
+QED
+
