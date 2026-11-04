@@ -493,7 +493,7 @@ Proof
   simp[current_placement_work_inv_initial] >> strip_tac >>
   drule current_placement_work_inv_final >> strip_tac >>
   qexists_tac `FILTER (current_placement_live li v) final` >>
-  simp[ALL_DISTINCT_FILTER]
+  simp[FILTER_ALL_DISTINCT]
 QED
 
 Definition current_var_mark_def:
@@ -506,7 +506,7 @@ End
 Theorem current_var_mark_refl:
   current_var_mark li v hp hp bb bb
 Proof
-  simp[current_var_mark_def]
+  simp[current_var_mark_def] >> metis_tac[]
 QED
 
 Theorem current_var_mark_compose:
@@ -518,7 +518,7 @@ Theorem current_var_mark_compose:
 Proof
   simp[current_var_mark_def] >> rpt strip_tac >>
   Cases_on `a = b` >- (gvs[] >> metis_tac[]) >>
-  `b = c` by metis_tac[] >> gvs[] >> metis_tac[]
+  `b = c` by metis_tac[] >> metis_tac[]
 QED
 
 Theorem current_var_mark_list_compose:
@@ -537,7 +537,15 @@ Theorem current_insert_phi_changes:
   insert_phi_at_block phi bb <> bb
 Proof
   simp[insert_phi_at_block_def, basic_block_component_equality] >>
-  metis_tac[LENGTH, arithmeticTheory.NOT_SUC]
+  strip_tac >>
+  qpat_x_assum `_ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+  simp[]
+QED
+
+Theorem current_insert_phi_label[simp]:
+  (insert_phi_at_block phi bb).bb_label = bb.bb_label
+Proof
+  simp[insert_phi_at_block_def]
 QED
 
 Theorem current_var_mark_map_step:
@@ -547,5 +555,6 @@ Theorem current_var_mark_map_step:
 Proof
   Induct_on `bbs` >> simp[] >> strip_tac >>
   Cases_on `h.bb_label = f` >>
-  gvs[current_var_mark_def, current_insert_phi_changes, insert_phi_at_block_def]
+  gvs[current_var_mark_def, current_insert_phi_changes] >>
+  metis_tac[current_insert_phi_changes]
 QED
