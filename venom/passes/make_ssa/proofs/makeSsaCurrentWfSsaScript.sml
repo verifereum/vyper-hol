@@ -19,7 +19,7 @@ Ancestors
   makeSsaCurrentCleanupShape sorting venomFnScheduleRunner
   makeSsaCurrentCleanupBoundary makeSsaCurrentEdgeTrace
   makeSsaCurrentAnalysis dominatorProofs dominatorDefs
-  makeSsaCurrentPathBridge makeSsaCurrentGraphCut
+  makeSsaCurrentPathBridge makeSsaCurrentGraphCut makeSsaCurrentCertificate
 Libs
   rich_listTheory
 
@@ -40,6 +40,45 @@ Theorem current_wf_source_cut_env_unique:
   E = E'
 Proof
   metis_tac[current_wf_source_cut_env]
+QED
+
+Theorem current_wf_original_annotations_take[local]:
+  !insts n i. TAKE i (current_original_annotations l n insts) =
+    current_original_annotations l n (TAKE i insts)
+Proof
+  Induct >> simp[current_original_annotations_def] >>
+  gen_tac >> Cases_on `i` >> simp[current_original_annotations_def]
+QED
+
+Theorem current_wf_block_annotation_prefix_scan:
+  i <= LENGTH old.bb_instructions ==>
+  FOLDL (\env (t,w). (w =+ t) env) E
+    (FLAT (TAKE (LENGTH pre + i) (current_block_annotations old pre))) v =
+  current_original_scan v old.bb_label 0 (TAKE i old.bb_instructions)
+    (if (?inst. MEM inst pre /\ MEM v inst.inst_outputs)
+     then CurrentInserted v old.bb_label else E v)
+Proof
+  strip_tac >>
+  `LENGTH (current_inserted_annotations old.bb_label pre) = LENGTH pre` by
+    simp[current_inserted_annotations_def] >>
+  simp[current_block_annotations_def, TAKE_APPEND,
+       current_wf_original_annotations_take, TAKE_LENGTH_TOO_LONG,
+       FLAT_APPEND, FOLDL_APPEND,
+       current_original_annotations_scan, current_inserted_annotations_scan]
+QED
+
+Theorem current_wf_source_cut_original_scan:
+  i <= LENGTH old.bb_instructions /\
+  current_source_cut A ev (LENGTH pre + i) rs E /\
+  current_event_label ev = old.bb_label /\
+  A old.bb_label = current_block_annotations old pre ==>
+  current_original_scan v old.bb_label 0 (TAKE i old.bb_instructions)
+    (if (?inst. MEM inst pre /\ MEM v inst.inst_outputs)
+     then CurrentInserted v old.bb_label else current_event_entry_env ev v) = E v
+Proof
+  strip_tac >> drule current_wf_source_cut_env >>
+  disch_then SUBST1_TAC >> asm_rewrite_tac[] >>
+  sym_tac >> irule current_wf_block_annotation_prefix_scan >> simp[]
 QED
 
 Theorem current_wf_path_lrc[local]:
