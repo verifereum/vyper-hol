@@ -1649,3 +1649,39 @@ Resume compiler_label_hoare_stmt_assert[reason_exit]:
 QED
 
 Finalise compiler_label_hoare_stmt_assert
+
+(* External-return probe: aggregate encoding uses the general ABI boundary. *)
+Theorem compiler_block_tail_external_return:
+  compiler_block_tail
+    (compile_external_return rv prim raw info maxsz nr key transient view)
+Proof
+  Cases_on `rv` >> Cases_on `prim` >> Cases_on `raw` >>
+  Cases_on `nr` >> Cases_on `transient` >> Cases_on `view` >>
+  simp[compile_external_return_def, contextTheory.compile_nonreentrant_unlock_def,
+       comp_ignore_bind_def] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives, compiler_block_tail_alloc_buffer,
+               compiler_block_tail_abi_encode_to_buf] >>
+       gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives, compiler_block_tail_alloc_buffer,
+               compiler_block_tail_abi_encode_to_buf]
+QED
+
+Theorem compiler_label_hoare_external_return:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_external_return rv prim raw info maxsz nr key transient view)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  Cases_on `rv` >> Cases_on `prim` >> Cases_on `raw` >>
+  Cases_on `nr` >> Cases_on `transient` >> Cases_on `view` >>
+  simp[compile_external_return_def, contextTheory.compile_nonreentrant_unlock_def,
+       comp_ignore_bind_def] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives,
+               compiler_label_hoare_alloc_buffer,
+               compiler_label_hoare_abi_encode_to_buf] >>
+       gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_context_primitives,
+       compiler_label_hoare_typed_primitives, compiler_label_hoare_abi_encode_to_buf]
+QED
