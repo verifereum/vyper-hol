@@ -200,3 +200,111 @@ Proof
           conj_tac >- simp[] >> irule dft_pos_cleared_phase >>
   goal_assum (drule_at Any) >> metis_tac[]
 QED
+
+Theorem dft_pos_plain_return_success[local]:
+  dft_pos_phase C D fi bi pre x call post l r /\
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  l.dft_occ_core = DftOpen (DftDone (IntRet ret cs)) (lf::ls) nL /\
+  r.dft_occ_core = DftOpen (DftDone (IntRet ret cs)) (rf::rs) nR /\
+  dft_pos_frame C D fi bi pre x call post NONE lf rf /\
+  dft_pos_stack C D fi bi pre x call post certs ls rs /\
+  LENGTH l.dft_occ_saved = SUC (LENGTH certs) /\
+  (!f fuel bb inst s. lf = DftCaller f fuel bb inst s ==>
+    ?a. dft_restore inst.inst_outputs ret cs s = SOME a) ==>
+  dft_pos_phase C D fi bi pre x call post
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r)
+Proof
+  strip_tac >>
+  `l.dft_occ_saved = r.dft_occ_saved /\ dft_original_ready l /\ dft_original_ready r` by
+    fs[dft_pos_phase_def] >>
+  `dft_original_ready (dft_occ_oracle_next w C l) /\
+   dft_original_ready (dft_occ_oracle_next w D r)` by
+    metis_tac[dft_original_runtime_next] >>
+  Cases_on `l.dft_occ_saved` >> gvs[] >> PairCases_on `h` >>
+  drule dft_pos_stack_fill >> strip_tac >>
+  fs[dft_pos_frame_def] >> gvs[] >>
+  `dft_occ_oracle_next w C l = l with
+    <|dft_occ_core := DftOpen (DftAt f 0 b
+      (a with vs_inst_idx := SUC s.vs_inst_idx)) ls nL;
+      dft_occ_path := h0; dft_occ_visit := h1; dft_occ_saved := t|>` by
+    (irule dft_suspend_pop >> simp[]) >>
+  `dft_occ_oracle_next w D r = r with
+    <|dft_occ_core := DftOpen (DftAt g 0 b'
+      (a with vs_inst_idx := SUC s.vs_inst_idx)) rs nR;
+      dft_occ_path := h0; dft_occ_visit := h1; dft_occ_saved := t|>` by
+    (irule dft_suspend_pop >> simp[]) >>
+  asm_rewrite_tac[] >> simp[dft_pos_phase_def] >> qexists `certs` >>
+  gvs[dft_pos_control_def] >> metis_tac[]
+QED
+
+Theorem dft_pos_plain_return_failure[local]:
+  dft_pos_frame C D fi bi pre x call post NONE lf rf /\
+  l.dft_occ_core = DftOpen (DftDone (IntRet ret cs)) (lf::ls) nL /\
+  r.dft_occ_core = DftOpen (DftDone (IntRet ret cs)) (rf::rs) nR /\
+  (!f fuel bb inst s. lf = DftCaller f fuel bb inst s ==>
+    dft_restore inst.inst_outputs ret cs s = NONE) ==>
+  dft_occ_oracle_next w C l = l with
+    <|dft_occ_core := DftOpen (DftDone (Error "invoke: return arity mismatch")) [] nL;
+      dft_occ_saved := []|> /\
+  dft_occ_oracle_next w D r = r with
+    <|dft_occ_core := DftOpen (DftDone (Error "invoke: return arity mismatch")) [] nR;
+      dft_occ_saved := []|>
+Proof
+  strip_tac >> fs[dft_pos_frame_def] >> gvs[] >>
+  conj_tac >> irule dft_pos_return_clear >> simp[] >>
+  simp[dft_open_return_def, dft_fill_frame_def, GSYM dft_restore_def]
+QED
+
+Theorem dft_pos_done_next:
+  dft_pos_phase C D fi bi pre x call post l r /\
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  l.dft_occ_core = DftOpen (DftDone result) ls nL /\
+  r.dft_occ_core = DftOpen (DftDone result) rs nR ==>
+  ?b. (b = 1 \/ b = 2) /\
+    dft_pos_phase C D fi bi pre x call post
+      (dft_occ_oracle_next w C l) (FUNPOW (dft_occ_oracle_next w D) b r)
+Proof
+  strip_tac >>
+  `?certs. dft_pos_stack C D fi bi pre x call post certs ls rs /\
+    LENGTH l.dft_occ_saved = LENGTH certs` by (fs[dft_pos_phase_def] >> metis_tac[]) >>
+  Cases_on `certs`
+  >- (fs[dft_pos_stack_def] >> gvs[] >>
+      `dft_occ_oracle_next w C l = l with
+        <|dft_occ_core := DftOpen (DftDone result) [] nL; dft_occ_saved := []|>` by
+        (irule dft_pos_return_clear >> simp[] >> Cases_on `result` >>
+         simp[dft_open_return_def]) >>
+      `dft_occ_oracle_next w D r = r with
+        <|dft_occ_core := DftOpen (DftDone result) [] nR; dft_occ_saved := []|>` by
+        (irule dft_pos_return_clear >> simp[] >> Cases_on `result` >>
+         simp[dft_open_return_def]) >>
+      qexists `1` >> pure_rewrite_tac[FUNPOW_1] >> conj_tac >- simp[] >>
+      irule dft_pos_cleared_phase >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  fs[dft_pos_stack_def] >> gvs[] >> Cases_on `h`
+  >- suspend "plain" >>
+  irule dft_pos_pending_return >> goal_assum (drule_at Any) >>
+  metis_tac[dft_pos_stack_cons]
+QED
+
+Resume dft_pos_done_next[plain]:
+  qexists `1` >> pure_rewrite_tac[FUNPOW_1] >> conj_tac >- simp[] >>
+  Cases_on `?ret cs. result = IntRet ret cs`
+  >- (pop_assum strip_assume_tac >> gvs[] >> Cases_on `l'` >>
+      rename1 `DftCaller f fuel bb inst s` >>
+      Cases_on `dft_restore inst.inst_outputs ret cs s`
+      >- (`!f' fuel' bb' inst' s'.
+             DftCaller f fuel bb inst s = DftCaller f' fuel' bb' inst' s' ==>
+             dft_restore inst'.inst_outputs ret cs s' = NONE` by simp[] >>
+          drule_all dft_pos_plain_return_failure >> strip_tac >>
+          irule dft_pos_cleared_phase >> goal_assum (drule_at Any) >> metis_tac[]) >>
+      irule dft_pos_plain_return_success >> goal_assum (drule_at Any) >>
+      metis_tac[dft_open_frame_11]) >>
+  `!ret cs. result <> IntRet ret cs` by metis_tac[] >>
+  `dft_occ_oracle_next w C l = l with
+    <|dft_occ_core := DftOpen (DftDone result) [] nL; dft_occ_saved := []|>` by
+    (irule dft_pos_nonreturn_clear >> simp[]) >>
+  `dft_occ_oracle_next w D r = r with
+    <|dft_occ_core := DftOpen (DftDone result) [] nR; dft_occ_saved := []|>` by
+    (irule dft_pos_nonreturn_clear >> simp[]) >>
+  irule dft_pos_cleared_phase >> goal_assum (drule_at Any) >> metis_tac[]
+QED
+Finalise dft_pos_done_next
