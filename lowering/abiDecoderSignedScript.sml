@@ -133,12 +133,17 @@ Theorem abi_decoder_signed_canonical_i2w:
 Proof
   strip_tac >>
   drule abi_decoder_integer_widths >> strip_tac >>
-  qpat_x_assum `MEM bits _` (strip_assume_tac o PURE_REWRITE_RULE [MEM]) >> gvs[] >>
-  FIRST (List.tabulate (32, fn j =>
-    irule (SIMP_RULE (srw_ss()) [GSYM abi_decoder_signed_bound]
-      (INST [``n:num`` |-> numSyntax.term_of_int j]
-        (INST_TYPE [alpha |-> fcpLib.index_type (Arbnum.fromInt (8 * (j + 1)))]
-          abi_decoder_sign_extend_i2w))))) >>
+  qpat_x_assum `MEM bits _` (strip_assume_tac o PURE_REWRITE_RULE [MEM]) >>
+  qpat_x_assum `bits = _` (fn th =>
+    let val width = numSyntax.int_of_term (rhs (concl th))
+        val j = width div 8 - 1
+    in
+      SUBST_ALL_TAC th >> gvs[] >>
+      irule (SIMP_RULE (srw_ss()) [GSYM abi_decoder_signed_bound]
+        (INST [``n:num`` |-> numSyntax.term_of_int j]
+          (INST_TYPE [alpha |-> fcpLib.index_type (Arbnum.fromInt width)]
+            abi_decoder_sign_extend_i2w)))
+    end) >>
   CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >> simp[]
 QED
 
