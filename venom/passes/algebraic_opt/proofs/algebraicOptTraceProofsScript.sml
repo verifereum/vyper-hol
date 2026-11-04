@@ -717,3 +717,28 @@ Proof
   >- (drule_all ao_source_trace_non_writer >> simp[]) >>
   metis_tac[]
 QED
+
+Theorem ao_source_trace_initial_visit:
+  !tail ctx fn k s.
+    ao_source_trace ctx fn ((k,F,s)::tail) ==>
+    EVERY (\a. ~FST (SND a)) ((k,F,s)::tail) \/
+    ?front j u out back.
+      (k,F,s)::tail = front ++ (j,F,u)::(j,T,out)::back /\
+      EVERY (\a. ~FST (SND a)) (front ++ [(j,F,u)]) /\
+      HD (front ++ [(j,F,u)]) = (k,F,s) /\
+      ao_source_trace ctx fn (front ++ [(j,F,u)]) /\
+      ao_source_step ctx fn (j,F,u) (j,T,out) /\
+      ao_source_trace ctx fn ((j,T,out)::back)
+Proof
+  Induct_on `tail` >- simp[] >> rpt gen_tac >>
+  PairCases_on `h` >> simp[ao_source_trace_def] >> strip_tac >>
+  Cases_on `h1`
+  >- (drule ao_source_step_exit >> strip_tac >> gvs[] >>
+      qexistsl [`[]`, `h0`, `s`, `h2`, `tail`] >>
+      simp[ao_source_trace_def]) >>
+  gvs[] >> first_x_assum drule >> strip_tac
+  >- simp[] >>
+  disj2_tac >> qexistsl [`(k,F,s)::front`, `j`, `u`, `out`, `back`] >>
+  simp[ao_source_trace_def] >>
+  Cases_on `front` >> gvs[ao_source_trace_def]
+QED
