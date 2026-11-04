@@ -2768,7 +2768,9 @@ Theorem current_wf_precleanup_insertion_lookup:
       (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
         (liveness_analyze fn) fn) fn.fn_blocks defs = (ins,si) /\
     lookup_block h ins = SOME (old with bb_instructions := pre ++ old.bb_instructions) /\
-    A h = current_block_annotations old pre
+    A h = current_block_annotations old pre /\
+    (!v. current_actual_inserted fn v old.bb_label <=>
+      ?i. MEM i pre /\ MEM v i.inst_outputs)
 Proof
   simp[current_wf_precleanup_certificate_def] >> rpt strip_tac >>
   `MAP (\b. b.bb_label) ins = MAP (\b. b.bb_label) fn.fn_blocks` by
@@ -3536,6 +3538,121 @@ Proof
     metis_tac[current_actual_tree_labels_distinct] >>
   gvs[] >> drule (cj 1 current_wf_tree_event_history_provenance) >>
   simp[current_wf_history_provenance_def]
+QED
+
+Theorem current_wf_annotation_map_lookup:
+  !bbs annsss l t v. LENGTH bbs = LENGTH annsss /\
+  MEM (t,v) (FLAT (current_annotation_map bbs annsss l)) ==>
+  ?bb. lookup_block l bbs = SOME bb
+Proof
+  Induct >> Cases_on `annsss` >>
+  simp[current_annotation_map_def, lookup_block_def, FIND_thm] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h'.bb_label = l` >> gvs[] >>
+  qpat_x_assum `!annsss l t v. _`
+    (mp_tac o SRULE [lookup_block_def, current_annotation_map_def]) >>
+  metis_tac[]
+QED
+
+Theorem current_wf_block_annotation_owner:
+  MEM (t,v) (FLAT (current_block_annotations old pre)) ==>
+  ?inst. MEM inst (pre ++ old.bb_instructions) /\ MEM v inst.inst_outputs
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`new` |-> `old with bb_instructions := pre ++ old.bb_instructions`]
+    current_block_annotations_owners) >> simp[] >>
+  simp[LIST_REL_EL_EQN] >> strip_tac >>
+  qpat_x_assum `MEM (t,v) (FLAT _)`
+    (strip_assume_tac o REWRITE_RULE [MEM_FLAT, MEM_EL]) >>
+  `n < LENGTH (pre ++ old.bb_instructions)` by simp[] >>
+  first_x_assum (qspec_then `n` mp_tac) >> simp[] >> strip_tac >>
+  qexists_tac `EL n (pre ++ old.bb_instructions)` >> conj_tac
+  >- metis_tac[EL_MEM, MEM_APPEND] >>
+  qpat_x_assum `MAP SND _ = _` (SUBST1_TAC o SYM) >>
+  simp[MEM_MAP] >> qexists_tac `EL n' l` >>
+  conj_tac >- metis_tac[pairTheory.SND] >>
+  metis_tac[EL_MEM]
+QED
+
+Theorem current_wf_precleanup_annotation_lookup:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  MEM (t,v) (FLAT (A l)) ==>
+  ?old. lookup_block l fn.fn_blocks = SOME old
+Proof
+  simp[current_wf_precleanup_certificate_def] >> rpt strip_tac >>
+  `MAP (\bb. bb.bb_label) ins = MAP (\bb. bb.bb_label) fn.fn_blocks` by
+    metis_tac[add_phi_nodes_supply_labels] >>
+  `LENGTH ins = LENGTH fn.fn_blocks` by metis_tac[LENGTH_MAP] >>
+  `LENGTH ins = LENGTH annsss` by metis_tac[LIST_REL_LENGTH, LENGTH_ZIP] >>
+  gvs[] >>
+  `?bb. lookup_block l ins = SOME bb` by
+    metis_tac[current_wf_annotation_map_lookup] >>
+  drule makeSsaHelperTheory.lookup_block_labels_agree >>
+  disch_then (qspec_then `l` mp_tac) >> simp[] >>
+  Cases_on `lookup_block l fn.fn_blocks` >> simp[]
+QED
+
+Theorem current_wf_precleanup_annotation_changing:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  MEM (t,v) (FLAT (A l)) ==>
+  current_changing_site fn (current_actual_inserted fn) v l
+Proof
+  strip_tac >> drule_all current_wf_precleanup_annotation_lookup >> strip_tac >>
+  drule_all current_wf_precleanup_insertion_lookup >> strip_tac >>
+  `old.bb_label = l` by metis_tac[lookup_block_label] >>
+  `?inst. MEM inst (pre ++ old.bb_instructions) /\ MEM v inst.inst_outputs` by
+    metis_tac[current_wf_block_annotation_owner] >>
+  fs[MEM_APPEND] >> simp[current_changing_site_def]
+  >- (disj1_tac >> metis_tac[]) >>
+  disj2_tac >> metis_tac[lookup_block_MEM]
+QED
+
+Theorem current_wf_original_phi_annotation_locality:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ MEM db fn.fn_blocks /\
+  MEM di db.bb_instructions /\ di.inst_opcode = PHI /\ MEM v di.inst_outputs ==>
+  !l t. MEM (t,v) (FLAT (A l)) ==> l = db.bb_label
+Proof
+  strip_tac >>
+  `!l. current_changing_site fn (current_actual_inserted fn) v l ==> l = db.bb_label`
+    by metis_tac[current_wf_original_phi_single_site] >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events` by
+    fs[current_wf_phi_context_def] >>
+  rpt strip_tac >> first_x_assum irule >>
+  metis_tac[current_wf_precleanup_annotation_changing]
+QED
+
+Theorem current_wf_inserted_annotation_tokens:
+  EVERY (\(t,v). t = CurrentInserted v l)
+    (FLAT (current_inserted_annotations l pre))
+Proof
+  simp[current_inserted_annotations_def, EVERY_FLAT, EVERY_MAP, combinTheory.o_DEF]
+QED
+
+Theorem current_wf_inserted_annotation_first:
+  ALL_DISTINCT (MAP FST (FLAT (current_block_annotations old pre))) /\
+  MEM inst pre /\ MEM v inst.inst_outputs ==>
+  ?before after.
+    FLAT (current_block_annotations old pre) =
+      before ++ (CurrentInserted v old.bb_label,v)::after /\
+    EVERY (\a. SND a <> v) before
+Proof
+  strip_tac >>
+  `MEM (CurrentInserted v old.bb_label,v)
+    (FLAT (current_inserted_annotations old.bb_label pre))` by
+    (simp[current_inserted_annotations_def, MEM_FLAT, MEM_MAP] >>
+     qexists_tac `MAP (\w. (CurrentInserted w old.bb_label,w)) inst.inst_outputs` >>
+     conj_tac >- (qexists_tac `inst` >> simp[]) >>
+     simp[MEM_MAP]) >>
+  `?before after. FLAT (current_inserted_annotations old.bb_label pre) =
+    before ++ (CurrentInserted v old.bb_label,v)::after` by metis_tac[MEM_SPLIT] >>
+  qexistsl_tac [`before`, `after ++ FLAT (current_original_annotations old.bb_label 0 old.bb_instructions)`] >>
+  conj_tac >- simp[current_block_annotations_def, FLAT_APPEND, APPEND_ASSOC] >>
+  mp_tac (Q.INST [`l` |-> `old.bb_label`] current_wf_inserted_annotation_tokens) >>
+  fs[current_block_annotations_def, FLAT_APPEND, MAP_APPEND, ALL_DISTINCT_APPEND] >>
+  simp[EVERY_MEM] >> rpt strip_tac >> PairCases_on `a` >> gvs[] >>
+  qpat_x_assum `!e. MEM e before ==> _` drule >> simp[] >> strip_tac >>
+  gvs[MEM_MAP] >> metis_tac[pairTheory.FST]
 QED
 
 Theorem current_wf_outputs_trace_append:
