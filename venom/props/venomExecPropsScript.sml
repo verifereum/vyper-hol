@@ -536,6 +536,24 @@ Proof
   simp[]
 QED
 
+Theorem non_terminator_before_terminator:
+  !bb r inst n term.
+    bb_well_formed bb /\
+    get_instruction bb r = SOME inst /\
+    ~is_terminator inst.inst_opcode /\
+    get_instruction bb n = SOME term /\
+    is_terminator term.inst_opcode ==> r < n
+Proof
+  rpt strip_tac >>
+  `r < LENGTH bb.bb_instructions /\ inst = EL r bb.bb_instructions` by
+    gvs[venomInstTheory.get_instruction_def, AllCaseEqs()] >>
+  `n < LENGTH bb.bb_instructions /\ term = EL n bb.bb_instructions` by
+    gvs[venomInstTheory.get_instruction_def, AllCaseEqs()] >>
+  `n = PRE (LENGTH bb.bb_instructions)` by
+    metis_tac[venomWfTheory.bb_well_formed_def] >>
+  `r <> n` by metis_tac[] >> decide_tac
+QED
+
 (* setup_callee gives a clean initial callee state *)
 Theorem setup_callee_props:
   !fn args s cs.

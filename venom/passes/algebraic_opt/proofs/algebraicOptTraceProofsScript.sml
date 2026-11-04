@@ -569,15 +569,9 @@ Proof
   `bb' = bb` by gvs[] >> gvs[] >>
   `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
   `bb_well_formed bb` by metis_tac[wf_function_def] >>
-  `r < LENGTH bb.bb_instructions /\ inst = EL r bb.bb_instructions` by
-    gvs[get_instruction_def, AllCaseEqs()] >>
-  `t.vs_inst_idx < LENGTH bb.bb_instructions /\
-    inst' = EL t.vs_inst_idx bb.bb_instructions` by
-    gvs[get_instruction_def, AllCaseEqs()] >>
-  `t.vs_inst_idx = PRE (LENGTH bb.bb_instructions)` by
-    metis_tac[bb_well_formed_def] >>
-  `r <> t.vs_inst_idx` by metis_tac[] >>
-  `r < t.vs_inst_idx` by decide_tac >>
+  `r < t.vs_inst_idx` by
+    (irule venomExecPropsTheory.non_terminator_before_terminator >>
+     metis_tac[]) >>
   drule_all ao_source_trace_crosses_index >> simp[]
 QED
 
