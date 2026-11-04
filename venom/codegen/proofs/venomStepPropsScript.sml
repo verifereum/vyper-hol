@@ -156,6 +156,14 @@ Proof
   rw[exec_alloca_def, LET_THM] >> every_case_tac >> gvs[]
 QED
 
+(* One opcode's step_inst_base branch, so the proof below resolves the
+   dispatch once per opcode instead of case-splitting all of it. *)
+val opcode_equations = CONJUNCTS step_inst_base_opcode_eqs;
+fun opcode_equation opc =
+  valOf (List.find
+    (fn th => aconv (rhs (fst (dest_imp (snd (strip_forall (concl th)))))) opc)
+    opcode_equations);
+
 (* ===================================================================
    Main theorem: step_inst_base OK preserves vs_halted
    =================================================================== *)
@@ -165,7 +173,9 @@ Theorem step_inst_base_ok_halted:
     step_inst_base inst st = OK st' ==>
     st'.vs_halted = st.vs_halted
 Proof
-  rw[step_inst_base_def] >>
+  rpt strip_tac >> Cases_on `inst.inst_opcode` >>
+  qpat_assum `inst.inst_opcode = _`
+    (fn th => fs[opcode_equation (rhs (concl th))]) >>
   gvs[AllCaseEqs()] >>
   TRY (imp_res_tac exec_pure1_ok_halted >> gvs[] >> NO_TAC) >>
   TRY (imp_res_tac exec_pure2_ok_halted >> gvs[] >> NO_TAC) >>
