@@ -1058,3 +1058,67 @@ Proof
   simp[stackPlanTypesTheory.plan_state_component_equality]
 QED
 
+
+Theorem popmany_fold_prefix_replay[local]:
+  !b c p q requests core al ops0.
+    ALL_DISTINCT core /\ DISJOINT (set p) (set requests) /\
+    DISJOINT (set q) (set requests) ==>
+    ?ops core' al'.
+      FOLDL (\(ops, ps) v.
+        case stack_get_depth v ps.ps_stack of
+          NONE => (ops, ps)
+        | SOME d =>
+          (ops ++ FST (do_swap d ps) ++ [SOPop 1],
+           (SND (do_swap d ps)) with ps_stack :=
+             stack_pop 1 (SND (do_swap d ps)).ps_stack))
+        (ops0, b with <|ps_stack := p ++ core; ps_alloc := al|>) requests =
+        (ops, b with <|ps_stack := p ++ core'; ps_alloc := al'|>) /\
+      FOLDL (\(ops, ps) v.
+        case stack_get_depth v ps.ps_stack of
+          NONE => (ops, ps)
+        | SOME d =>
+          (ops ++ FST (do_swap d ps) ++ [SOPop 1],
+           (SND (do_swap d ps)) with ps_stack :=
+             stack_pop 1 (SND (do_swap d ps)).ps_stack))
+        (ops0, c with <|ps_stack := q ++ core; ps_alloc := al|>) requests =
+        (ops, c with <|ps_stack := q ++ core'; ps_alloc := al'|>) /\
+      ALL_DISTINCT core' /\ set core' = set core DIFF set requests
+Proof
+  ntac 4 gen_tac >> Induct_on `requests`
+  >- (rpt strip_tac >> qexistsl_tac [`ops0`, `core`, `al`] >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `~MEM h p /\ ~MEM h q` by (gvs[DISJOINT_ALT] >> metis_tac[]) >>
+  simp[stack_get_depth_bottom_excluded] >>
+  Cases_on `MEM h core`
+  >- (drule stack_get_depth_core >>
+      disch_then (qspec_then `[]` strip_assume_tac) >> gvs[] >>
+      `?ops al'.
+        do_swap d (b with <|ps_stack := p ++ core; ps_alloc := al|>) =
+          (ops, b with <|ps_stack := p ++ stack_swap d core; ps_alloc := al'|>) /\
+        do_swap d (c with <|ps_stack := q ++ core; ps_alloc := al|>) =
+          (ops, c with <|ps_stack := q ++ stack_swap d core; ps_alloc := al'|>)` by
+        (drule do_swap_prefix_replay >>
+         disch_then (qspecl_then
+           [`b with <|ps_stack := p ++ core; ps_alloc := al|>`,
+            `c with <|ps_stack := q ++ core; ps_alloc := al|>`, `p`, `q`] mp_tac) >>
+         simp[]) >>
+      `!r. stack_pop 1 (r ++ stack_swap d core) =
+           r ++ stack_pop 1 (stack_swap d core)` by
+        (gen_tac >> simp[stack_pop_def, TAKE_APPEND, stack_swap_def, LENGTH_TAKE]) >>
+      drule_all stack_pop_swap_core >>
+      disch_then (qspec_then `[]` strip_assume_tac) >>
+      gvs[stack_swap_bottom_extension] >> simp[] >>
+      first_x_assum (qspecl_then
+        [`stack_pop 1 (stack_swap d core)`, `al'`, `ops0 ++ ops ++ [SOPop 1]`]
+        mp_tac) >>
+      simp[] >> strip_tac >>
+      goal_assum (drule_at Any) >> simp[] >> ASM_SET_TAC[]) >>
+  `stack_get_depth h core = NONE` by
+    (simp[stack_get_depth_NONE, stack_peek_def] >> rpt strip_tac >>
+     qpat_x_assum `~MEM h core` mp_tac >> simp[MEM_EL] >>
+     qexists_tac `LENGTH core - (d + 1)` >> simp[]) >>
+  `set core DIFF (h INSERT set requests) = set core DIFF set requests` by
+    ASM_SET_TAC[] >>
+  simp[] >> first_x_assum irule >> gvs[DISJOINT_ALT]
+QED
+
