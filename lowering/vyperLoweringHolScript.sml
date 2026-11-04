@@ -29,7 +29,7 @@ Ancestors
   immutableLocationProps
   loweringShapeDefs
   loweringShapeProps
-  ctorShapeProps
+  ctorShapeProps ctorUnitShape
   intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
   structFieldsProps
   (* compiler + correctness *)

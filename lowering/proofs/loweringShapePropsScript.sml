@@ -12222,7 +12222,7 @@ Proof
   simp[FUN_EQ_THM, comp_bind_def, comp_return_def]
 QED
 
-Theorem cenv_shape_ok_install_imm_alloca[local]:
+Theorem cenv_shape_ok_install_imm_alloca:
   cenv_shape_ok st cenv /\ (!b. imm = SOME b ==> plain_operand st b) ==>
   cenv_shape_ok st (cenv with ce_imm_alloca := imm)
 Proof
@@ -12541,17 +12541,17 @@ Proof
   simp[rets_scoped_def]
 QED
 
-Theorem runtime_entry_blocks_shape:
-  !st. shape_extends F jump_label_ok (initial_compile_state "__entry") st ==>
+Theorem initial_entry_blocks_shape:
+  !lbl st. shape_extends F jump_label_ok (initial_compile_state lbl) st ==>
     all_blocks st <> [] /\
-    (HD (all_blocks st)).bb_label = "__entry" /\
+    (HD (all_blocks st)).bb_label = lbl /\
     EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) (all_blocks st))) /\
     EVERY (\bb. EVERY (lowered_inst_ok F) bb.bb_instructions) (all_blocks st)
 Proof
-  gen_tac >> strip_tac >>
-  `state_insts (initial_compile_state "__entry") = [] /\
-   MAP (\bb. bb.bb_label) (all_blocks (initial_compile_state "__entry")) =
-     ["__entry"]`
+  rpt gen_tac >> strip_tac >>
+  `state_insts (initial_compile_state lbl) = [] /\
+   MAP (\bb. bb.bb_label) (all_blocks (initial_compile_state lbl)) =
+     [lbl]`
     by simp[initial_compile_state_def, state_insts_def, all_blocks_def] >>
   qpat_x_assum `shape_extends _ _ _ _` mp_tac >>
   rewrite_tac[shape_extends_def] >> strip_tac >>
@@ -12565,6 +12565,16 @@ Proof
   qpat_x_assum `EVERY (lowered_inst_ok F) _` mp_tac >>
   qpat_x_assum `_ ++ _ = added_insts _ _` (fn th => rewrite_tac[GSYM th]) >>
   simp[EVERY_FLAT, EVERY_MAP]
+QED
+
+Theorem runtime_entry_blocks_shape:
+  !st. shape_extends F jump_label_ok (initial_compile_state "__entry") st ==>
+    all_blocks st <> [] /\
+    (HD (all_blocks st)).bb_label = "__entry" /\
+    EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) (all_blocks st))) /\
+    EVERY (\bb. EVERY (lowered_inst_ok F) bb.bb_instructions) (all_blocks st)
+Proof
+  ACCEPT_TAC (Q.SPEC `"__entry"` initial_entry_blocks_shape)
 QED
 
 Theorem runtime_fallback_shape:
@@ -13374,6 +13384,89 @@ Proof
   simp[mk_raw_function_def]
 QED
 
+Theorem entry_unit_source_ok:
+  !entry_label entry descs segs data.
+    ~jump_label_ok entry_label /\ ~reserved_label entry_label /\
+    entry <> [] /\ (HD entry).bb_label = entry_label /\
+    EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) entry)) /\
+    EVERY (\bb. EVERY (lowered_inst_ok F) bb.bb_instructions) entry /\
+    LIST_REL internal_segment_ok descs segs /\
+    EVERY (\d. internal_label_ok (FST d)) descs /\
+    EVERY (\bb. calls_flagged entry bb.bb_instructions) entry /\
+    EVERY (\seg. EVERY (\bb. calls_flagged seg bb.bb_instructions) seg) segs /\
+    opaque_insts_ok
+      (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
+    (!i x. MEM i (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
+           MEM x i.inst_outputs /\
+           opaque_out RETPC_PARAM
+             (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) x ==>
+           i.inst_opcode = RETPC_PARAM) /\
+    (!i j x.
+       MEM i (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
+       MEM j (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
+       i.inst_opcode = RETPC_PARAM /\
+       MEM x i.inst_outputs /\ MEM x j.inst_outputs ==> i = j) /\
+    rets_scoped (entry ++ FLAT segs) ==>
+    o1_source_unit_ok
+      <| cu_context :=
+           mk_venom_context
+             (mk_raw_function entry_label entry ::
+              MAP2 (\d seg. mk_internal_function (FST d) seg (FST (SND d))
+                              (SND (SND d))) descs segs)
+             (SOME entry_label);
+         cu_data_segment := data |>
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `insts = FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))` >>
+  qabbrev_tac `ifns = MAP2 (\d seg. mk_internal_function (FST d) seg
+                                     (FST (SND d)) (SND (SND d))) descs segs` >>
+  `!inst. MEM inst (fn_insts (mk_raw_function entry_label entry)) ==>
+          MEM inst insts`
+    by (rw[fn_insts_def, mk_raw_function_fields, MEM_fn_insts_blocks_iff,
+           Abbr `insts`, MEM_FLAT, MEM_MAP, PULL_EXISTS] >> metis_tac[]) >>
+  `fn_shape_ok (mk_raw_function entry_label entry) /\
+   EVERY (lowered_inst_ok F) (fn_insts (mk_raw_function entry_label entry)) /\
+   first_block_no_preds (mk_raw_function entry_label entry)`
+    by (match_mp_tac
+          (Q.SPECL [`F`, `mk_raw_function entry_label entry`, `insts`]
+             lowered_fn_ok) >>
+        gs[mk_raw_function_fields, call_checks_ok_def] >>
+        gvs[fn_insts_def, MEM_fn_insts_blocks_iff, mk_raw_function_fields,
+            EVERY_MEM, lowered_inst_ok_def] >> metis_tac[]) >>
+  `!fn. MEM fn ifns ==>
+        fn_shape_ok fn /\ EVERY (lowered_inst_ok T) (fn_insts fn) /\
+        first_block_no_preds fn`
+    by (rpt gen_tac >> strip_tac >>
+        match_mp_tac (Q.SPECL [`descs`, `segs`, `insts`, `fn`] internal_fns_ok) >>
+        gvs[Abbr `ifns`, Abbr `insts`, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+        conj_tac >- metis_tac[] >>
+        metis_tac[rets_scoped_segments]) >>
+  `entry_fn_no_ret (mk_raw_function entry_label entry)`
+    by (simp[contextCodegenRelTheory.entry_fn_no_ret_def,
+             mk_raw_function_fields, EVERY_MEM] >>
+        rpt strip_tac >> fs[EVERY_MEM, lowered_inst_ok_def] >> res_tac) >>
+  `get_params (HD entry).bb_instructions = []`
+    by (Cases_on `entry` >> fs[] >> rename1 `get_params bb0.bb_instructions` >>
+        Cases_on `bb0.bb_instructions` >>
+        fs[stackPlanGenTheory.get_params_def, lowered_inst_ok_def]) >>
+  `EVERY (\inst. raw_opcode_ok inst.inst_opcode)
+     (fn_insts (mk_raw_function entry_label entry))`
+    by fs[EVERY_MEM, lowered_inst_ok_def] >>
+  `EVERY fn_shape_ok ifns /\ EVERY first_block_no_preds ifns`
+    by fs[EVERY_MEM] >>
+  `EVERY (\fn. EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts fn))
+     ifns`
+    by (simp[EVERY_MEM] >> rpt strip_tac >> res_tac >>
+        fs[EVERY_MEM, lowered_inst_ok_def]) >>
+  `!fn. MEM fn ifns ==>
+        EVERY (\inst. ~MEM inst.inst_opcode [STOP; RETURN]) (fn_insts fn)`
+    by (rpt strip_tac >> res_tac >> fs[EVERY_MEM, lowered_inst_ok_def]) >>
+  simp[o1_source_unit_ok_def, unit_shape_ok_def, entry_fn_first_def,
+       mk_venom_context_def, internal_termination_ok_def,
+       mk_raw_function_fields] >>
+  rpt strip_tac >> gvs[] >> res_tac >> fs[EVERY_MEM]
+QED
+
 Theorem lowered_unit_source_ok:
   !entry descs segs data.
     entry <> [] /\ (HD entry).bb_label = "__entry" /\
@@ -13405,57 +13498,10 @@ Theorem lowered_unit_source_ok:
              (SOME "__entry");
          cu_data_segment := data |>
 Proof
-  rpt gen_tac >> strip_tac >>
-  qabbrev_tac `insts = FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))` >>
-  qabbrev_tac `ifns = MAP2 (\d seg. mk_internal_function (FST d) seg
-                                     (FST (SND d)) (SND (SND d))) descs segs` >>
-  `~jump_label_ok "__entry"` by metis_tac[jump_label_ok_names] >>
-  `~reserved_label "__entry"` by EVAL_TAC >>
-  `!inst. MEM inst (fn_insts (mk_raw_function "__entry" entry)) ==>
-          MEM inst insts`
-    by (rw[fn_insts_def, mk_raw_function_fields, MEM_fn_insts_blocks_iff,
-           Abbr `insts`, MEM_FLAT, MEM_MAP, PULL_EXISTS] >> metis_tac[]) >>
-  `fn_shape_ok (mk_raw_function "__entry" entry) /\
-   EVERY (lowered_inst_ok F) (fn_insts (mk_raw_function "__entry" entry)) /\
-   first_block_no_preds (mk_raw_function "__entry" entry)`
-    by (match_mp_tac
-          (Q.SPECL [`F`, `mk_raw_function "__entry" entry`, `insts`]
-             lowered_fn_ok) >>
-        gs[mk_raw_function_fields, call_checks_ok_def] >>
-        gvs[fn_insts_def, MEM_fn_insts_blocks_iff, mk_raw_function_fields,
-            EVERY_MEM, lowered_inst_ok_def] >> metis_tac[]) >>
-  `!fn. MEM fn ifns ==>
-        fn_shape_ok fn /\ EVERY (lowered_inst_ok T) (fn_insts fn) /\
-        first_block_no_preds fn`
-    by (rpt gen_tac >> strip_tac >>
-        match_mp_tac (Q.SPECL [`descs`, `segs`, `insts`, `fn`] internal_fns_ok) >>
-        gvs[Abbr `ifns`, Abbr `insts`, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
-        conj_tac >- metis_tac[] >>
-        metis_tac[rets_scoped_segments]) >>
-  `entry_fn_no_ret (mk_raw_function "__entry" entry)`
-    by (simp[contextCodegenRelTheory.entry_fn_no_ret_def,
-             mk_raw_function_fields, EVERY_MEM] >>
-        rpt strip_tac >> fs[EVERY_MEM, lowered_inst_ok_def] >> res_tac) >>
-  `get_params (HD entry).bb_instructions = []`
-    by (Cases_on `entry` >> fs[] >> rename1 `get_params bb0.bb_instructions` >>
-        Cases_on `bb0.bb_instructions` >>
-        fs[stackPlanGenTheory.get_params_def, lowered_inst_ok_def]) >>
-  `EVERY (\inst. raw_opcode_ok inst.inst_opcode)
-     (fn_insts (mk_raw_function "__entry" entry))`
-    by fs[EVERY_MEM, lowered_inst_ok_def] >>
-  `EVERY fn_shape_ok ifns /\ EVERY first_block_no_preds ifns`
-    by fs[EVERY_MEM] >>
-  `EVERY (\fn. EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts fn))
-     ifns`
-    by (simp[EVERY_MEM] >> rpt strip_tac >> res_tac >>
-        fs[EVERY_MEM, lowered_inst_ok_def]) >>
-  `!fn. MEM fn ifns ==>
-        EVERY (\inst. ~MEM inst.inst_opcode [STOP; RETURN]) (fn_insts fn)`
-    by (rpt strip_tac >> res_tac >> fs[EVERY_MEM, lowered_inst_ok_def]) >>
-  simp[o1_source_unit_ok_def, unit_shape_ok_def, entry_fn_first_def,
-       mk_venom_context_def, internal_termination_ok_def,
-       mk_raw_function_fields] >>
-  rpt strip_tac >> gvs[] >> res_tac >> fs[EVERY_MEM]
+  rpt strip_tac >> irule entry_unit_source_ok >>
+  pure_asm_rewrite_tac[] >> simp[] >> conj_tac
+  >- metis_tac[jump_label_ok_names]
+  >> EVAL_TAC
 QED
 
 (* package_internal_blocks splits the stream exactly at the segments. *)
@@ -13500,6 +13546,23 @@ Proof
       imp_res_tac internal_label_ok_append >> gvs[]) >>
   `n <> "__entry"` by metis_tac[internal_label_not_reserved] >>
   Cases_on `entry` >> gvs[EVERY_MEM] >> metis_tac[jump_label_ok_names]
+QED
+
+Theorem shape_state_source_certificates:
+  !st blocks. shape_state st /\ all_blocks st = blocks ==>
+    opaque_insts_ok (FLAT (MAP (\bb. bb.bb_instructions) blocks)) /\
+    (!i x. MEM i (FLAT (MAP (\bb. bb.bb_instructions) blocks)) /\
+       MEM x i.inst_outputs /\
+       opaque_out RETPC_PARAM (FLAT (MAP (\bb. bb.bb_instructions) blocks)) x ==>
+       i.inst_opcode = RETPC_PARAM) /\
+    (!i j x. MEM i (FLAT (MAP (\bb. bb.bb_instructions) blocks)) /\
+       MEM j (FLAT (MAP (\bb. bb.bb_instructions) blocks)) /\
+       i.inst_opcode = RETPC_PARAM /\
+       MEM x i.inst_outputs /\ MEM x j.inst_outputs ==> i = j) /\
+    raw_checked_blocks blocks /\ rets_scoped blocks
+Proof
+  rw[shape_state_def, shape_base_state_def, state_insts_def,
+     raw_checked_state_def] >> metis_tac[]
 QED
 
 Theorem run_lowering_source_unit_ok:
