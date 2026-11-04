@@ -557,11 +557,12 @@ Proof
      qpat_x_assum `!op. abi_decoder_operand_live _ op ==> _`
        (qspec_then `Var x` mp_tac) >>
      fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
-        not_fresh_at_def, eval_operand_def]) >>
+        not_fresh_at_def, eval_operand_def, Abbr `prepared`, lookup_var_def]) >>
+  `eval_operand src prepared = SOME (n2w sb)` by
+    fs[Abbr `prepared`, eval_op_inst_idx] >>
   `abi_decoder_operand_live middle.cs_next_var src` by
     (irule abi_decoder_operand_live_fresh >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any)) >>
-  `eval_operand src prepared = SOME (n2w sb)` by fs[] >>
   `sb < dimword (:256)` by decide_tac >>
   qpat_x_assum `st.cs_blocks = middle.cs_blocks` kall_tac >>
   irule ctor_arg_setup_decode_actual >> asm_rewrite_tac[] >>
@@ -666,7 +667,8 @@ Proof
        (qspec_then `Var x` mp_tac) >>
      qpat_x_assum `!op. abi_decoder_operand_live st.cs_next_var op ==> _`
        (qspec_then `Var x` mp_tac) >>
-     asm_rewrite_tac[eval_operand_def] >> metis_tac[]) >>
+     asm_rewrite_tac[eval_operand_def] >>
+     fs[Abbr `s1`, lookup_var_def] >> metis_tac[]) >>
   `abi_decode_sim ctx func initial prepared` by
     metis_tac[abi_decode_sim_trans] >>
   `abi_decoder_operand_live middle.cs_next_var src` by

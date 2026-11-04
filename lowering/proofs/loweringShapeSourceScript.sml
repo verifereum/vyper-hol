@@ -191,7 +191,7 @@ Theorem lower_vyper_runtime_unit_source_unit_ok_checked:
   !tops rpolicy unit layouts addr art.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     check_contract F layouts addr [(NONE, tops)] = SOME art /\
-    raw_shape_free_program tops /\ immutable_free_program tops ==>
+    raw_shape_free_program tops ==>
     o1_source_unit_ok unit
 Proof
   rpt strip_tac >>

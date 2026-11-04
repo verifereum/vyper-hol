@@ -512,6 +512,10 @@ Proof
   >- (rpt strip_tac >>
       qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
       gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all local_ptrs_reserved_imm_base >> strip_tac >>
+      qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
+      first_assum ACCEPT_TAC) >>
   rpt strip_tac >>
   qpat_x_assum `!a k. _ ==> mem_bytes_at a k _ = _` irule >>
   gvs[regions_disjoint_def] >> metis_tac[]

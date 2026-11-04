@@ -679,8 +679,8 @@ Theorem ctor_alloc_buffer_state_props[local]:
   abi_encoder_registered_effect (frag_ids st sa) [] initial a
 Proof
   strip_tac >>
-  `not_local_ptr ce scopes (STRING #"%" (toString st.cs_next_var))` by
-    (irule local_ptrs_rel_fresh_not_local_ptr >>
+  `not_scope_ptr ce scopes (STRING #"%" (toString st.cs_next_var))` by
+    (irule local_ptrs_rel_fresh_not_scope_ptr >>
      qexistsl [`func`, `initial`, `st`] >> simp[GREATER_EQ]) >>
   `exec_alloca (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
      [STRING #"%" (toString st.cs_next_var)]) initial (n2w n : bytes32) =

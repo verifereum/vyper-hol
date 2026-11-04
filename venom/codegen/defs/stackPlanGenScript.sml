@@ -243,6 +243,28 @@ End
    Port of _generate_evm_for_instruction (non-phi, non-offset cases)
    ========================================================================= *)
 
+(* The stack a JMP to a join reorders to: the target block's live-in
+   variables, in input_vars_from order. *)
+Definition join_target_ops_def:
+  join_target_ops liveness fn cur_bb_label inst =
+    case inst.inst_operands of
+      [Label target] =>
+        OPTION_MAP (λtarget_bb.
+            MAP Var (input_vars_from cur_bb_label target_bb.bb_instructions
+                       (live_vars_at liveness target 0)))
+          (lookup_block target fn.fn_blocks)
+    | _ => NONE
+End
+
+(* The stack ends in the join target's stack, if the instruction has one. *)
+Definition join_reached_def:
+  join_reached liveness fn cur_bb_label inst ps ⇔
+    case join_target_ops liveness fn cur_bb_label inst of
+      NONE => T
+    | SOME target_ops =>
+        stack_pop (LENGTH target_ops) ps.ps_stack ++ target_ops = ps.ps_stack
+End
+
 Definition generate_regular_inst_plan_def:
   generate_regular_inst_plan liveness dfg cfg fn inst
     next_liveness is_halting next_is_terminator cur_bb_label ps =
@@ -257,20 +279,17 @@ Definition generate_regular_inst_plan_def:
     let (input_ops, ps1) =
       emit_input_plan opc operands next_liveness ps in
 
-    (* Join-point reorder (jmp only) *)
+    (* Join-point reorder (jmp only).  compute_operands JMP is empty, so
+       emit_input_plan restored none of the target's operands; as Python's
+       _stack_reorder does, restore every spilled one before reordering. *)
     let (join_ops, ps2) =
       if opc = JMP then
-        (case inst.inst_operands of
-          [Label target] =>
-            let target_live = live_vars_at liveness target 0 in
-            (case lookup_block target fn.fn_blocks of
-              NONE => ([] : stack_op list, ps1)
-            | SOME target_bb =>
-                let target_stack =
-                  input_vars_from cur_bb_label
-                    target_bb.bb_instructions target_live in
-                reorder_plan dfg (MAP Var target_stack) ps1)
-        | _ => ([], ps1))
+        (case join_target_ops liveness fn cur_bb_label inst of
+          NONE => ([] : stack_op list, ps1)
+        | SOME target_ops =>
+            let (restore_ops, ps1') = restore_spilled_plan target_ops ps1 in
+            let (swap_ops, ps2) = reorder_plan dfg target_ops ps1' in
+            (restore_ops ++ swap_ops, ps2))
       else ([], ps1) in
 
     (* Commutative optimization.  Reuse the selected dry-run result rather
@@ -353,11 +372,20 @@ End
    These are what the caller (pipeline proof) must discharge.
    ========================================================================= *)
 
-(* Per-instruction: no pre-codegen opcodes *)
+(* There is no runtime operation for Python's _DeadStackItem.  Label operands
+   are never looked up on the existing stack, so this private marker gives the
+   plan model the same non-aliasing behaviour without emitting bytecode. *)
+Definition dead_stack_marker_def:
+  dead_stack_marker = Label ""
+End
+
+(* Per-instruction: no pre-codegen opcodes, and no operand the planner could
+   mistake for its dead_stack_marker *)
 Definition codegen_ready_inst_def:
   codegen_ready_inst inst ⇔
     ¬ is_pre_codegen_opcode inst.inst_opcode ∧
-    (inst.inst_opcode = INVOKE ==> invoke_operands_wf inst)
+    (inst.inst_opcode = INVOKE ==> invoke_operands_wf inst) ∧
+    ¬MEM dead_stack_marker inst.inst_operands
 End
 
 (* A block's PHI prefix keeps each PHI operand to its own PHI: no variable
@@ -452,9 +480,14 @@ Definition generate_inst_plan_def:
       SOME ([], ps)
     else
       (* ASSIGN and all other opcodes go through regular pipeline.
-         generate_emit_ops returns [] for opcodes with no EVM equivalent. *)
-      SOME (generate_regular_inst_plan liveness dfg cfg fn inst
-              next_liveness is_halting next_is_terminator cur_bb_label ps)
+         generate_emit_ops returns [] for opcodes with no EVM equivalent.
+         A JMP fails unless its join reorder reached the target stack, as
+         Python's _stack_reorder asserts. *)
+      let r = generate_regular_inst_plan liveness dfg cfg fn inst
+                next_liveness is_halting next_is_terminator cur_bb_label ps in
+      if inst.inst_opcode = JMP ∧
+         ¬join_reached liveness fn cur_bb_label inst (SND r)
+      then NONE else SOME r
 End
 
 Theorem generate_inst_plan_pre_codegen_none:
@@ -663,13 +696,6 @@ End
 Definition cleanup_elision_safe_def:
   cleanup_elision_safe ch growth cfg fn bb h <=>
     cleanup_height_safe ch growth cfg fn bb h
-End
-
-(* There is no runtime operation for Python's _DeadStackItem.  Label operands
-   are never looked up on the existing stack, so this private marker gives the
-   plan model the same non-aliasing behaviour without emitting bytecode. *)
-Definition dead_stack_marker_def:
-  dead_stack_marker = Label ""
 End
 
 Definition below_all_live_def:

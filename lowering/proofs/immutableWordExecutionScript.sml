@@ -72,7 +72,8 @@ Proof
 QED
 
 Theorem immutable_word_assign_base_zero:
-  cenv.ce_imm_alloca = SOME (Var out) ==>
+  cenv.ce_imm_alloca = SOME (Var out) /\
+  (cenv.ce_is_ctor ==> IS_SOME (FLOOKUP s.vs_labels "runtime_begin")) ==>
   run_inst_seq [mk_inst id ASSIGN [Lit 0w] [out]] s =
     OK (update_var out 0w s) /\
   immutable_base_zero cenv (update_var out 0w s)

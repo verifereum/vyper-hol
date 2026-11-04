@@ -177,6 +177,10 @@ Proof
     eval_operand_def, val_in_memory_def] >>
   qexistsl [`b`,`sm`,`type_memory_size_list tvs`,`t`] >>
   simp[wordsTheory.dimword_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `!aid p n. FLOOKUP t.vs_allocas aid = SOME (p,n) /\ _ ==> _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
@@ -260,6 +264,10 @@ Resume compile_make_array_vv_case[tuple]:
     eval_operand_def, val_in_memory_def] >>
   qexistsl [`b`,`sm`,`type_memory_size_list tvs`,`t`] >>
   simp[wordsTheory.dimword_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `!aid p n. FLOOKUP t.vs_allocas aid = SOME (p,n) /\ _ ==> _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
@@ -345,16 +353,12 @@ Resume compile_make_array_vv_case[array]:
   simp[wordsTheory.dimword_def] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
-  conj_tac
-  >- (map_every qx_gen_tac [`aid`,`a`,`n`] >> strip_tac >>
-      qpat_x_assum `!aid p n. FLOOKUP _ aid = SOME (p,n) /\ _ ==> _`
-        (qspecl_then [`aid`,`a`,`n`] irule) >>
-      simp[arithmeticTheory.ADD_COMM] >>
-      (reverse conj_tac >- (qexists `aid` >> simp[]) >>
-       map_every qx_gen_tac [`name`,`lo`,`sz`] >> strip_tac >>
-       qpat_x_assum `!name lo k. local_region _ _ _ name lo k ==> _`
-         (qspecl_then [`name`,`lo`,`sz`] mp_tac) >>
-       simp[arithmeticTheory.ADD_COMM])) >>
+  conj_tac >-
+    (rpt gen_tac >>
+     qpat_x_assum `!aid p n. FLOOKUP t.vs_allocas aid = SOME (p,n) /\ _ ==> _` mp_tac >>
+     qpat_x_assum `!name p n. local_region cenv es.scopes t name p n <=> _` mp_tac >>
+     qpat_x_assum `t.vs_memory = s0.vs_memory` mp_tac >>
+     rpt (pop_assum kall_tac) >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   `LENGTH vs = LENGTH args` by (drule eval_exprs_length >> simp[]) >>
   Cases_on `bnd`
   >- (gvs[vyperValueTheory.compatible_bound_def] >>
