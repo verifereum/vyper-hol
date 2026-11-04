@@ -1,6 +1,6 @@
 Theory algebraicOptRangeProofs
 Ancestors
-  rangeAnalysisDefs algebraicOptDefs venomExecSemantics
+  rangeAnalysisDefs algebraicOptDefs venomExecSemantics unitShapeDefs
 
 (* Coincident JNZ targets select the true-edge refinement.  This is a
    computation boundary only, not a reachable-state soundness assertion. *)
@@ -327,4 +327,262 @@ Proof
        ao_range_probe_input_query] >>
   simp[ao_range_valid_for_cmp_def,valueRangeDefsTheory.vr_is_top_def,
        passSharedDefsTheory.is_lit_op_def]
+QED
+
+Definition ao_range_backedge_probe_def:
+  ao_range_backedge_probe = mk_raw_function "backedge_probe"
+    [<| bb_label := "entry"; bb_instructions :=
+       [mk_inst 0 ASSIGN [Lit 7w] ["x"];mk_inst 1 JMP [Label "tail"] []] |>;
+     <| bb_label := "tail"; bb_instructions :=
+       [mk_inst 2 JMP [Label "entry"] []] |>]
+End
+
+Theorem ao_range_backedge_wf:
+  wf_function ao_range_backedge_probe /\
+  wf_ssa ao_range_backedge_probe /\
+  fn_inst_wf ao_range_backedge_probe /\
+  EVERY label_positions_ok (fn_insts ao_range_backedge_probe)
+Proof
+  rpt conj_tac
+  >- EVAL_TAC
+  >- (simp[venomWfTheory.wf_ssa_def,venomWfTheory.ssa_form_def,
+           venomWfTheory.def_dominates_uses_def,ao_range_backedge_probe_def,
+           venomInstTheory.mk_raw_function_def,venomInstTheory.mk_inst_def,
+           venomInstTheory.fn_insts_def] >>
+      rpt strip_tac >> gvs[listTheory.MEM] >> EVAL_TAC)
+  >- EVAL_TAC
+  >> EVAL_TAC
+QED
+
+Theorem ao_range_backedge_cfg:
+  cfg_analyze ao_range_backedge_probe =
+    <| cfg_succs := FEMPTY |+ ("entry",[]) |+ ("tail",[])
+                          |+ ("entry",["tail"]) |+ ("tail",["entry"]);
+       cfg_preds := FEMPTY |+ ("entry",[]) |+ ("tail",[])
+                          |+ ("tail",["entry"]) |+ ("entry",["tail"]);
+       cfg_reachable := FEMPTY |+ ("entry",T) |+ ("tail",T);
+       cfg_dfs_post := ["tail";"entry"];
+       cfg_dfs_pre := ["entry";"tail"] |>
+Proof
+  EVAL_TAC
+QED
+
+Theorem ao_range_backedge_dfg:
+  dfg_build_function ao_range_backedge_probe =
+    <| dfg_uses := FEMPTY;
+       dfg_defs := FEMPTY |+ ("x",mk_inst 0 ASSIGN [Lit 7w] ["x"]);
+       dfg_ids := FEMPTY |+ (2,mk_inst 2 JMP [Label "entry"] [])
+         |+ (1,mk_inst 1 JMP [Label "tail"] [])
+         |+ (0,mk_inst 0 ASSIGN [Lit 7w] ["x"]) |>
+Proof
+  EVAL_TAC
+QED
+
+Definition ao_range_backedge_process_def:
+  ao_range_backedge_process =
+    df_process_block_widen Forward NONE range_join_opt range_widen_opt
+      WIDEN_THRESHOLD range_transfer_opt range_edge_transfer_opt
+      (dfg_build_function ao_range_backedge_probe,ao_range_backedge_probe.fn_blocks)
+      (SOME ("entry",SOME FEMPTY)) (cfg_analyze ao_range_backedge_probe)
+      ao_range_backedge_probe.fn_blocks
+End
+
+Definition ao_range_backedge_initial_def:
+  ao_range_backedge_initial =
+    <| dws_inst := FEMPTY;
+       dws_boundary := FEMPTY |+ ("entry",NONE) |+ ("tail",NONE)
+                             |+ ("entry",SOME FEMPTY);
+       dws_entry := FEMPTY; dws_visits := FEMPTY |>
+End
+
+Theorem ao_range_backedge_first:
+  ao_range_backedge_process "entry" ao_range_backedge_initial = ao_range_backedge_initial
+Proof
+  rewrite_tac[ao_range_backedge_process_def,ao_range_backedge_cfg,ao_range_backedge_dfg] >>
+  EVAL_TAC >>
+  simp[finite_mapTheory.FUN_FMAP_EMPTY,finite_mapTheory.DRESTRICT_FEMPTY]
+QED
+
+Definition ao_range_backedge_boundary_def:
+  ao_range_backedge_boundary = ao_range_backedge_initial with <|
+    dws_boundary := ao_range_backedge_initial.dws_boundary |+ ("tail",SOME FEMPTY);
+    dws_entry := FEMPTY |+ ("tail",SOME FEMPTY);
+    dws_visits := FEMPTY |+ ("tail",1) |>
+End
+
+Theorem ao_range_backedge_tail:
+  ao_range_backedge_process "tail" ao_range_backedge_initial = ao_range_backedge_boundary
+Proof
+  rewrite_tac[ao_range_backedge_process_def,ao_range_backedge_cfg,ao_range_backedge_dfg] >>
+  EVAL_TAC >> simp[finite_mapTheory.FUN_FMAP_EMPTY,finite_mapTheory.DRESTRICT_FEMPTY]
+QED
+
+Definition ao_range_backedge_final_def:
+  ao_range_backedge_final = <|
+    dws_inst := FEMPTY;
+    dws_boundary := FEMPTY |+ ("entry",NONE) |+ ("tail",NONE)
+      |+ ("entry",SOME FEMPTY) |+ ("tail",SOME FEMPTY);
+    dws_entry := FEMPTY |+ ("tail",SOME FEMPTY) |+ ("entry",SOME FEMPTY);
+    dws_visits := FEMPTY |+ ("tail",1) |+ ("entry",1) |>
+End
+
+Theorem ao_range_backedge_reentry:
+  ao_range_backedge_process "entry" ao_range_backedge_boundary = ao_range_backedge_final
+Proof
+  rewrite_tac[ao_range_backedge_process_def,ao_range_backedge_cfg,ao_range_backedge_dfg] >>
+  EVAL_TAC >> simp[finite_mapTheory.FUN_FMAP_EMPTY,finite_mapTheory.DRESTRICT_FEMPTY] >>
+  simp[finite_mapTheory.fmap_eq_flookup,finite_mapTheory.FLOOKUP_UPDATE,
+       finite_mapTheory.FLOOKUP_EMPTY] >> gen_tac >>
+  Cases_on `x = "entry"` >> simp[]
+QED
+
+Theorem ao_range_backedge_tail_stable:
+  ao_range_backedge_process "tail" ao_range_backedge_final = ao_range_backedge_final
+Proof
+  rewrite_tac[ao_range_backedge_process_def,ao_range_backedge_cfg,ao_range_backedge_dfg] >>
+  EVAL_TAC >> simp[finite_mapTheory.FUN_FMAP_EMPTY,finite_mapTheory.DRESTRICT_FEMPTY]
+QED
+
+Theorem ao_range_backedge_steps:
+  wl_step ao_range_probe_changed ao_range_backedge_process
+    (cfg_succs_of (cfg_analyze ao_range_backedge_probe))
+    (["entry";"tail"],ao_range_backedge_initial) = (["tail"],ao_range_backedge_initial) /\
+  wl_step ao_range_probe_changed ao_range_backedge_process
+    (cfg_succs_of (cfg_analyze ao_range_backedge_probe))
+    (["tail"],ao_range_backedge_initial) = (["entry"],ao_range_backedge_boundary) /\
+  wl_step ao_range_probe_changed ao_range_backedge_process
+    (cfg_succs_of (cfg_analyze ao_range_backedge_probe))
+    (["entry"],ao_range_backedge_boundary) = (["tail"],ao_range_backedge_final) /\
+  wl_step ao_range_probe_changed ao_range_backedge_process
+    (cfg_succs_of (cfg_analyze ao_range_backedge_probe))
+    (["tail"],ao_range_backedge_final) = ([],ao_range_backedge_final)
+Proof
+  simp[worklistDefsTheory.wl_step_def,ao_range_backedge_first,ao_range_backedge_tail,
+       ao_range_backedge_reentry,ao_range_backedge_tail_stable,ao_range_probe_changed_def] >>
+  rewrite_tac[ao_range_backedge_cfg] >> EVAL_TAC
+QED
+
+Theorem ao_range_backedge_worklist:
+  wl_iterate ao_range_probe_changed ao_range_backedge_process
+    (cfg_succs_of (cfg_analyze ao_range_backedge_probe))
+    ["entry";"tail"] ao_range_backedge_initial = ([],ao_range_backedge_final)
+Proof
+  rewrite_tac[worklistDefsTheory.wl_iterate_def] >>
+  once_rewrite_tac[WhileTheory.WHILE] >> simp[ao_range_backedge_steps] >>
+  once_rewrite_tac[WhileTheory.WHILE] >> simp[ao_range_backedge_steps] >>
+  once_rewrite_tac[WhileTheory.WHILE] >> simp[ao_range_backedge_steps] >>
+  once_rewrite_tac[WhileTheory.WHILE] >> simp[ao_range_backedge_steps] >>
+  once_rewrite_tac[WhileTheory.WHILE] >> simp[]
+QED
+
+Theorem ao_range_backedge_folds:
+  df_fold_block Forward
+    (range_transfer_opt (dfg_build_function ao_range_backedge_probe,
+                         ao_range_backedge_probe.fn_blocks)) "entry"
+    [mk_inst 0 ASSIGN [Lit 7w] ["x"];mk_inst 1 JMP [Label "tail"] []]
+    (SOME FEMPTY) =
+    (SOME (FEMPTY |+ ("x",VR_Range 7 7)),
+     FEMPTY |+ (("entry",0),SOME FEMPTY)
+       |+ (("entry",1),SOME (FEMPTY |+ ("x",VR_Range 7 7)))
+       |+ (("entry",2),SOME (FEMPTY |+ ("x",VR_Range 7 7)))) /\
+  df_fold_block Forward
+    (range_transfer_opt (dfg_build_function ao_range_backedge_probe,
+                         ao_range_backedge_probe.fn_blocks)) "tail"
+    [mk_inst 2 JMP [Label "entry"] []] (SOME FEMPTY) =
+    (SOME FEMPTY,FEMPTY |+ (("tail",0),SOME FEMPTY) |+ (("tail",1),SOME FEMPTY))
+Proof
+  rewrite_tac[ao_range_backedge_dfg] >> EVAL_TAC >>
+  simp[wordsTheory.word_msb_def,wordsTheory.dimword_def,
+       wordsTheory.word_L_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+  CONV_TAC (DEPTH_CONV wordsLib.WORD_CONV) >> EVAL_TAC
+QED
+
+Definition ao_range_backedge_result_def:
+  ao_range_backedge_result = ao_range_backedge_final with dws_inst :=
+    FUNION (FEMPTY |+ (("tail",0),SOME FEMPTY) |+ (("tail",1),SOME FEMPTY))
+      (FUNION (FEMPTY |+ (("entry",0),SOME FEMPTY)
+        |+ (("entry",1),SOME (FEMPTY |+ ("x",VR_Range 7 7)))
+        |+ (("entry",2),SOME (FEMPTY |+ ("x",VR_Range 7 7)))) FEMPTY)
+End
+
+Theorem ao_range_backedge_population_inputs:
+  cfg_preds_of (cfg_analyze ao_range_backedge_probe) "entry" = ["tail"] /\
+  cfg_preds_of (cfg_analyze ao_range_backedge_probe) "tail" = ["entry"] /\
+  range_edge_transfer_opt
+    (dfg_build_function ao_range_backedge_probe,ao_range_backedge_probe.fn_blocks)
+    "entry" "tail" (SOME FEMPTY) = SOME FEMPTY /\
+  range_edge_transfer_opt
+    (dfg_build_function ao_range_backedge_probe,ao_range_backedge_probe.fn_blocks)
+    "tail" "entry" (SOME FEMPTY) = SOME FEMPTY /\
+  df_widen_boundary NONE ao_range_backedge_final "entry" = SOME FEMPTY /\
+  df_widen_boundary NONE ao_range_backedge_final "tail" = SOME FEMPTY /\
+  df_widen_visits ao_range_backedge_final "entry" = 1 /\
+  df_widen_visits ao_range_backedge_final "tail" = 1 /\
+  1 < WIDEN_THRESHOLD
+Proof
+  rewrite_tac[ao_range_backedge_cfg,ao_range_backedge_dfg] >> EVAL_TAC
+QED
+
+Theorem ao_range_backedge_population:
+  df_populate_widen_inst Forward NONE range_join_opt range_widen_opt
+    WIDEN_THRESHOLD range_transfer_opt range_edge_transfer_opt
+    (dfg_build_function ao_range_backedge_probe,ao_range_backedge_probe.fn_blocks)
+    (SOME ("entry",SOME FEMPTY)) (cfg_analyze ao_range_backedge_probe)
+    ao_range_backedge_probe.fn_blocks ["entry";"tail"] ao_range_backedge_final =
+    ao_range_backedge_result
+Proof
+  `lookup_block "entry" ao_range_backedge_probe.fn_blocks =
+    SOME <| bb_label := "entry"; bb_instructions :=
+      [mk_inst 0 ASSIGN [Lit 7w] ["x"];mk_inst 1 JMP [Label "tail"] []] |>` by EVAL_TAC >>
+  `lookup_block "tail" ao_range_backedge_probe.fn_blocks =
+    SOME <| bb_label := "tail"; bb_instructions :=
+      [mk_inst 2 JMP [Label "entry"] []] |>` by EVAL_TAC >>
+  rewrite_tac[dfAnalyzeWidenDefsTheory.df_populate_widen_inst_def] >>
+  simp[ao_range_backedge_population_inputs,range_join_opt_def,range_normalize_def,
+       finite_mapTheory.DRESTRICT_FEMPTY,ao_range_backedge_folds] >>
+  simp[ao_range_backedge_result_def,ao_range_backedge_final_def]
+QED
+
+Theorem ao_range_backedge_setup:
+  fn_entry_label ao_range_backedge_probe = SOME "entry" /\
+  MAP (\bb. bb.bb_label) ao_range_backedge_probe.fn_blocks = ["entry";"tail"] /\
+  (cfg_analyze ao_range_backedge_probe).cfg_dfs_pre = ["entry";"tail"] /\
+  (init_df_widen_state NONE ["entry";"tail"] with
+    dws_boundary := (init_df_widen_state NONE ["entry";"tail"]).dws_boundary
+      |+ ("entry",SOME FEMPTY)) = ao_range_backedge_initial
+Proof
+  rewrite_tac[ao_range_backedge_cfg] >> EVAL_TAC
+QED
+
+Theorem ao_range_backedge_analysis:
+  range_analyze ao_range_backedge_probe = ao_range_backedge_result
+Proof
+  rewrite_tac[range_analyze_def,dfAnalyzeWidenDefsTheory.df_analyze_widen_def] >>
+  simp[ao_range_backedge_setup] >>
+  rewrite_tac[GSYM ao_range_backedge_process_def,GSYM ao_range_probe_changed_def] >>
+  `(\lbl (old : range_state option df_widen_state) new.
+      df_widen_boundary NONE new lbl = df_widen_boundary NONE old lbl ==>
+      df_widen_entry NONE new lbl <> df_widen_entry NONE old lbl) =
+    ao_range_probe_changed` by simp[FUN_EQ_THM,ao_range_probe_changed_def] >>
+  asm_rewrite_tac[ao_range_backedge_worklist] >>
+  simp[ao_range_backedge_population]
+QED
+
+Theorem ao_range_backedge_initial_cache:
+  range_at_inst (range_analyze ao_range_backedge_probe) "entry" 0 = FEMPTY
+Proof
+  rewrite_tac[ao_range_backedge_analysis] >> EVAL_TAC >>
+  simp[finite_mapTheory.FLOOKUP_FUNION,finite_mapTheory.FLOOKUP_UPDATE,
+       finite_mapTheory.FLOOKUP_EMPTY,range_unwrap_def]
+QED
+
+(* The entry-backedge fixture has no constrained initial cache keys.
+   Thus both arbitrary values (including x = 8) and absent outputs are
+   sound here; this fixture does not distinguish those interfaces. *)
+Theorem ao_range_backedge_initial_sound:
+  !env. in_range_state
+    (range_at_inst (range_analyze ao_range_backedge_probe) "entry" 0) env
+Proof
+  simp[ao_range_backedge_initial_cache,rangeEvalDefsTheory.in_range_state_def,
+       finite_mapTheory.FLOOKUP_EMPTY]
 QED
