@@ -33,7 +33,7 @@ Definition intret_mem_q_def:
 End
 
 (* RET with only the return PC: an IntRet with no values. *)
-Theorem emit_ret_pc_frag[local]:
+Theorem emit_ret_pc_frag:
   !ctx sm sb rpc P Q R.
     emit_inst RET [rpc] [] sm = ((),sb) /\
     (!s. P s ==> (?pc. eval_operand rpc s = SOME pc) /\
