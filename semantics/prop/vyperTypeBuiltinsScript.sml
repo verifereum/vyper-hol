@@ -852,7 +852,7 @@ Proof
   PURE_REWRITE_TAC[vyperASTTheory.binop_case_def,
                    vyperValueTheory.value_case_def] >>
   simp_tac std_ss [LET_THM] >> strip_tac >>
-  gvs[AllCaseEqs()] >>
+  gvs[CaseEq "bool", CaseEq "sum", CaseEq "option"] >>
   gvs[value_has_type_def, Excl "within_int_bound_def"] >>
   (* Re-abstract within_int_bound that got expanded by value_has_type_def *)
   TRY (simp[GSYM within_int_bound_def] >> NO_TAC) >>
@@ -2727,7 +2727,10 @@ Theorem is_sized_type_cases[local]:
     (∃elem n. t = ArrayT elem (Dynamic n)) ∨ (∃n. t = BaseT (StringT n)) ∨
     (∃n. t = BaseT (BytesT (Dynamic n)))
 Proof
-  simp[oneline is_sized_type_def] >> rpt CASE_TAC >> simp[]
+  Cases_on `t` >> simp[is_sized_type_def]
+  >- (rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_sized_type_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_sized_type_def]) >>
+  rename1 `ArrayT elem bd` >> Cases_on `bd` >> simp[is_sized_type_def]
 QED
 
 (* Len consumes a forced Value, so only the sized value cases are needed. *)
