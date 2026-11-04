@@ -1,6 +1,6 @@
 Theory algebraicOptRangeConditionProofs
 Ancestors
-  rangeAnalysisProofs rangeAnalysisDefs dfgAnalysis venomInst finite_map
+  rangeAnalysisProofs rangeAnalysisDefs dfgAnalysis dfgAnalysisProps venomInst finite_map
   algebraicOptFreshnessProofs algebraicOptTraceProofs
   venomExecSemantics venomState venomWf rich_list
 
@@ -246,4 +246,40 @@ Proof
   gvs[eval_operand_def, lookup_var_def] >>
   qmatch_goalsub_abbrev_tac `bool_to_word test` >>
   Cases_on `test` >> simp[venomExecSemanticsTheory.bool_to_word_def]
+QED
+
+Theorem ao_non_phi_index_after_prefix[local]:
+  !insts r. r < LENGTH insts /\ (EL r insts).inst_opcode <> PHI ==>
+    phi_prefix_length insts <= r
+Proof
+  Induct_on `insts` >- simp[] >>
+  Cases_on `r` >> simp[phi_prefix_length_def] >> rpt strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem ao_dfg_source_producer:
+  !fn x prod.
+    dfg_get_def (dfg_build_function fn) x = SOME prod /\
+    prod.inst_opcode <> PHI ==>
+    MEM x prod.inst_outputs /\
+    ?bp r. MEM bp fn.fn_blocks /\ get_instruction bp r = SOME prod /\
+           phi_prefix_length bp.bb_instructions <= r
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule dfg_build_function_correct >> strip_tac >> simp[] >>
+  fs[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
+  qpat_x_assum `MEM prod _` (strip_assume_tac o REWRITE_RULE [listTheory.MEM_EL]) >>
+  qexistsl [`bb`,`n`] >> simp[get_instruction_def] >>
+  irule ao_non_phi_index_after_prefix >> gvs[]
+QED
+
+Theorem ao_dfg_singleton_output:
+  !fn x prod.
+    dfg_get_def (dfg_build_function fn) x = SOME prod /\
+    LENGTH prod.inst_outputs = 1 ==> prod.inst_outputs = [x]
+Proof
+  rpt strip_tac >> drule dfg_build_function_correct >> strip_tac >>
+  Cases_on `prod.inst_outputs` >> gvs[] >>
+  Cases_on `t` >> gvs[]
 QED
