@@ -37,10 +37,32 @@ QED
 (* label_positions_ok leaves one value use of a label outside jumps,
    PHIs and INVOKE: LowerDload's ADD [_; Label "code_end"], which
    code_layout_valid binds. *)
+Triviality label_positions_value_label:
+  label_positions_ok inst /\ MEM (Label l) inst.inst_operands /\
+  inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+  ~is_pseudo inst.inst_opcode ==> l = "code_end"
+Proof
+  rpt strip_tac >> fs[label_positions_ok_def] >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_terminator_def, is_pseudo_def, EVERY_MEM] >>
+  res_tac >> fs[stackPlanTypesTheory.is_label_operand_def] >>
+  (* only ADD [op; Label "code_end"] is left *)
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  Cases_on `t` >> gvs[stackPlanTypesTheory.is_label_operand_def] >>
+  BasicProvers.EVERY_CASE_TAC >> gvs[stackPlanTypesTheory.is_label_operand_def] >>
+  first_x_assum (qspec_then `Label l` mp_tac) >>
+  simp[stackPlanTypesTheory.is_label_operand_def]
+QED
+
 Theorem dft_ctx_labels_bound:
   o1_ctx_shape C /\ code_layout_valid vs ==> ctx_labels_bound C vs.vs_labels
 Proof
-  cheat
+  rw[ctx_labels_bound_def] >>
+  `o1_fn_shape C fn` by fs[o1_ctx_shape_def, EVERY_MEM] >>
+  `inst_shape_ok inst` by fs[o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM] >>
+  `l = "code_end"` by
+    (fs[inst_shape_ok_def] >> metis_tac[label_positions_value_label]) >>
+  gvs[code_layout_valid_def, finite_mapTheory.FLOOKUP_DEF]
 QED
 
 Theorem dft_fn_rel_stage:
@@ -49,7 +71,18 @@ Theorem dft_fn_rel_stage:
   LIST_REL dft_fallible_order_kept C.ctx_functions C'.ctx_functions ==>
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions
 Proof
-  cheat
+  rw[LIST_REL_EL_EQN] >>
+  `EL n C'.ctx_functions = dft_fn (EL n C.ctx_functions) /\
+   dft_fallible_order_kept (EL n C.ctx_functions) (EL n C'.ctx_functions)`
+    by metis_tac[] >>
+  `MEM (EL n C.ctx_functions) C.ctx_functions` by metis_tac[EL_MEM] >>
+  qabbrev_tac `f = EL n C.ctx_functions` >>
+  `o1_fn_shape C f /\ wf_ssa f /\ EVERY (\i. i.inst_opcode <> ALLOCA) (fn_insts f) /\
+   fn_pseudos_prefix f` by
+    (fs[o1_ctx_shape_def, dft_in_ok_def, EVERY_MEM] >> metis_tac[]) >>
+  `wf_function f /\ fn_inst_wf f` by fs[o1_fn_shape_def] >>
+  drule_all dftScheduleOrderTheory.dft_fn_block_rel >> strip_tac >>
+  gvs[dft_fn_rel_def]
 QED
 
 (* The witness vs holds the readings C' consumes from vs', reordered to
@@ -72,7 +105,16 @@ Theorem dft_out_wf_ssa:
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions ==>
   EVERY wf_ssa C'.ctx_functions
 Proof
-  cheat
+  rw[LIST_REL_EL_EQN, EVERY_EL] >>
+  `EL n C'.ctx_functions = dft_fn (EL n C.ctx_functions) /\
+   dft_fn_rel (EL n C.ctx_functions) (EL n C'.ctx_functions)` by metis_tac[] >>
+  qabbrev_tac `f = EL n C.ctx_functions` >>
+  gvs[dft_fn_rel_def] >>
+  `dft_fn f = f with fn_blocks := (dft_fn f).fn_blocks` by
+    (rewrite_tac[dft_fn_def, LET_THM] >>
+     CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >> simp[]) >>
+  pop_assum (fn th => ONCE_REWRITE_TAC[th]) >>
+  irule dftSsaPreserveTheory.dft_block_rel_wf_ssa >> simp[]
 QED
 
 Theorem dft_contract_gas:
