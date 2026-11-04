@@ -7,7 +7,7 @@ Ancestors
   exprSimHyps accountsRelProps vyperTypeGlobalLookupSoundness vyperTypeSystem
   bodyMemoryPreds vyperTypeCallGraph
 
-Theorem body_unwrap_location_word_mem[local]:
+Theorem body_unwrap_location_word_mem:
   unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient \/
    (p.ptr_location = LocCode /\ ~cenv.ce_is_ctor)) /\ is_word_type t /\
@@ -42,7 +42,7 @@ val () =
      else raise Fail "toplevel word memory inherited admission"
   end;
 
-Theorem body_location_word_sim_mem[local]:
+Theorem body_location_word_sim_mem:
   expr_vv_sim_mem ctx func cenv cx ty e es /\
   (storage_vars_rel cenv cx /\ transient_vars_rel cenv cx ==>
     !sa. ?p. compile_expr cenv ty e sa = (LocatedValue (expr_type e) p,sa) /\

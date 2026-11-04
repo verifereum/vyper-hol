@@ -7,7 +7,7 @@ Ancestors
   compileEnv fragExec valueEncoding valueEncodingProofs vyperValue vyperAST
   venomExecSemantics venomInst venomState words list rich_list context
 
-Theorem body_read1_frag_mem[local]:
+Theorem body_read1_frag_mem:
   emit_op opc args sm = (dst,sn) /\ ~is_terminator opc /\ opc <> INVOKE /\
   (!s. inst_mem_below_frontier
     (mk_inst sm.cs_next_id opc args [STRING #"%" (toString sm.cs_next_var)]) s) /\
