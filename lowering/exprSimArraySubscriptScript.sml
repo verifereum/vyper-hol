@@ -1979,3 +1979,122 @@ Proof
        vyperValueTheory.evaluate_type_def] >> EVAL_TAC >>
   simp[wordsTheory.dimword_def]
 QED
+
+Theorem supported_immutable_array_element_not_array:
+  !tops et bd inner ib.
+    supported_value_type tops (ArrayT et bd) ==>
+    et <> ArrayT inner ib
+Proof
+  rpt gen_tac >> Cases_on `bd` >>
+  simp[supportedTypesTheory.supported_value_array_depth] >>
+  rpt strip_tac >> gvs[supportedTypesTheory.supported_word_type_def]
+QED
+
+Theorem supported_immutable_tuple_element_not_array:
+  !tops ts et inner ib.
+    supported_value_type tops (TupleT ts) /\ MEM et ts ==>
+    et <> ArrayT inner ib
+Proof
+  rpt strip_tac >>
+  gvs[supportedTypesTheory.supported_value_tuple_depth,
+      listTheory.EVERY_MEM] >>
+  first_x_assum drule >>
+  simp[supportedTypesTheory.supported_scalar_type_def,
+       supportedTypesTheory.supported_word_type_def,
+       supportedTypesTheory.supported_string_type_def]
+QED
+
+Theorem supported_immutable_struct_field_not_array:
+  !tops ns fields name et inner ib.
+    supported_value_type tops (StructT ns) /\
+    supported_struct_fields tops ns = SOME fields /\
+    MEM (name,et) fields ==>
+    et <> ArrayT inner ib
+Proof
+  rpt strip_tac >>
+  gvs[supportedTypesTheory.supported_value_type_def,
+      supportedTypesTheory.supported_scalar_type_def,
+      supportedTypesTheory.supported_word_type_def,
+      supportedTypesTheory.supported_string_type_def,
+      listTheory.EVERY_MEM] >>
+  first_x_assum drule >>
+  simp[supportedTypesTheory.supported_word_type_def]
+QED
+
+Theorem compile_immutable_root_shape:
+  !cenv ty ann md name off st.
+    FLOOKUP cenv.ce_module_vars (md,name) = SOME (ImmutableLoc off) ==>
+    compile_expr cenv ty (TopLevelName ann (md,name)) st =
+      (LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode), st)
+Proof
+  rpt strip_tac >>
+  simp[Once (CONJUNCT1 exprLoweringTheory.compile_expr_raw_def),
+       exprLoweringTheory.compile_expr_body_def, vyperASTTheory.expr_type_def]
+QED
+
+Theorem eval_immutable_root:
+  !cx es ann md name ts tvt v.
+    get_module_code cx md = SOME ts /\
+    find_var_decl_by_name name ts = NONE /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+               NONE => FEMPTY | SOME imms => get_source_immutables md imms)
+      name = SOME (tvt,v) ==>
+    eval_expr cx (TopLevelName ann (md,name)) es =
+      (INL (PlaceR (ImmutablePlace md name [])), es)
+Proof
+  rpt strip_tac >>
+  simp[Once vyperInterpreterTheory.evaluate_def, lookup_global_def,
+       get_immutables_def, get_address_immutables_def,
+       bind_def, return_def, lift_option_type_def, lift_option_def] >>
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >>
+  gvs[return_def, finite_mapTheory.FLOOKUP_EMPTY]
+QED
+
+(* C1.4.12 consumer-interface ledger (not an asserted theorem):
+
+   Proposed remaining provenance interface:
+     expr_body_pre cenv cx env obj es /\
+     expr_type obj = ArrayT et bd /\ ~expr_has_pop obj /\
+     eval_expr cx obj es = (INL tv, em) /\
+     compile_expr cenv ty obj sa = (bvv, sm) /\
+     vv_location bvv = SOME LocCode
+       ==> ?name off.
+         tv = PlaceR (ImmutablePlace cenv.ce_module name []) /\
+         vv_operand bvv = Lit (n2w off) /\
+         FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+           SOME (ImmutableLoc off).
+
+   This interface is still UNPROVED and may require a conditional supported
+   program premise or a split on int_calls_expr idx. expr_body_pre does NOT
+   globally require supported_expr obj: supported_program tops is provided
+   only for members of int_calls_expr. Thus the three inversion facts above
+   cannot by themselves exclude all proper selected code subobjects at the
+   use site. With a call in idx, extract the supported module via its body
+   precondition; without calls a source immutable frame may be the relevant
+   route. Neither route is currently a formal provenance theorem.
+
+   Checked root branches: compile_immutable_root_shape fixes operand and
+   compiler offset; eval_immutable_root fixes source result and unchanged
+   source state from actual module-code/declaration/lookup premises. They do
+   not derive those premises from expr_body_pre. In particular ce_module
+   agreement and the source-name/compiler-name correspondence need proof.
+
+   Branch obligations still missing for the proposed general interface:
+   Subscript/Attribute propagate location but require typing plus supported
+   declaration inversion to exclude array-valued proper components; Pop is
+   excluded by syntax. IfExp has a checked non-code-location theorem. Name,
+   literals, StructLit, FlagMember, Call, builtin and type-builtin dispatch
+   have the audited output wrappers, but no general non-code theorem for
+   all these branches was found. No broad compiler induction is claimed.
+
+   Endpoint reconstruction ledger after the root facts are available:
+   - eval_expr_immutable_metadata_frame and immutable_metadata_frame_lookup
+     preserve lookup existence/type at the index endpoint, not its value;
+   - expr_body_pre_eval_result supplies the endpoint semantic invariants;
+     the typed immutable-lookup consequence must give value_has_type there;
+   - evaluate_type uses the same cx, so its root type equation is unchanged;
+   - compiler module-vars/offset and off+type_memory_size bounds are static;
+   - immutable_holds_root consumes precisely these current facts. No old/new
+     read equality is needed in this branch. vv_at/operand-frame integration
+     is separate and remains open; no frozen theorem proof follows yet.
+*)
