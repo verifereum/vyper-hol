@@ -4178,6 +4178,40 @@ Proof
   metis_tac[]
 QED
 
+Theorem current_wf_exceptional_inserted_pair_values:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ current_wf_inserted_phi_at A renamed h q v /\
+  lookup_block h fn.fn_blocks = SOME old /\ lookup_block h renamed = SOME new /\
+  k < LENGTH old.bb_instructions /\ (EL k old.bb_instructions).inst_opcode = PHI /\
+  (EL k old.bb_instructions).inst_outputs = [v] /\
+  current_token_name H (CurrentOriginal h k 0) = SOME n /\
+  (EL q new.bb_instructions).inst_operands = current_phi_slots pairs /\
+  MAP FST pairs = (case ALOOKUP (current_pred_map fn) h of SOME ps => ps | NONE => []) ==>
+  (EL q new.bb_instructions).inst_outputs = [v] /\ n <> v /\
+  (!p w. MEM (p,w) pairs ==> w = v \/ w = n)
+Proof
+  strip_tac >> drule_all current_wf_inserted_phi_prefix >> strip_tac >>
+  drule_all current_wf_exceptional_inserted_tokens >> strip_tac >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn /\ ir_supply_covers_fn s fn /\ ir_supply_inst_ok s` by
+    fs[current_wf_phi_context_def] >>
+  `(EL q new.bb_instructions).inst_outputs = [v]` by
+    (drule_all current_wf_inserted_phi_output >> strip_tac >>
+     metis_tac[optionTheory.SOME_11]) >>
+  `n <> v` by
+    (drule_all current_wf_precleanup_names >> strip_tac >>
+     strip_tac >>
+     `CurrentInserted v h = CurrentOriginal h k 0` by
+       (irule current_allocated_name_injective >> simp[] >> metis_tac[]) >>
+     fs[]) >>
+  simp[] >> rpt strip_tac >>
+  `?i. i < LENGTH pairs /\ EL i pairs = (p,w)` by metis_tac[MEM_EL] >>
+  drule_all current_wf_inserted_phi_pair >> strip_tac >>
+  `current_event_exit_env ev' v = CurrentDefault v \/
+   current_event_exit_env ev' v = CurrentOriginal h k 0` by metis_tac[] >>
+  fs[current_token_name_def] >> metis_tac[optionTheory.SOME_11]
+QED
+
 Theorem current_wf_precleanup_ordinary_available:
   current_wf_precleanup_certificate s fn renamed s' A H events /\
   wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
