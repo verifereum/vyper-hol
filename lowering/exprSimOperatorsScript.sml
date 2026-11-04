@@ -984,9 +984,10 @@ Proof
   >- (simp[] >> rpt conj_tac
       >- (rpt gen_tac >> disch_tac >> irule ifexp_body_pre_lowered_type_compatible >>
           conj_tac >- (Cases_on `nocalls` >> metis_tac[]) >>
-          qexistsl_tac [`cx`, `env`, `es`] >>
+          qexistsl_tac [`env`, `es`] >>
           `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
           metis_tac[])
+      >- (gvs[expr_body_pre_def] >> metis_tac[expr_sim_inv_memory_size])
       >- (rpt gen_tac >> disch_tac >>
           qspecl_then [`cenv`, `cx`, `env`, `IfExp t c a b`]
             mp_tac expr_body_pre_copy_ok >>
