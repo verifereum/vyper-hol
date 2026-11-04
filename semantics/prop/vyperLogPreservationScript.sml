@@ -352,7 +352,7 @@ Theorem set_global_logs[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `set_global _ _ _ _ _ = _` mp_tac >>
-  simp[Once vyperStateTheory.set_global_def, vyperStateTheory.bind_def,
+  simp[Once vyperStateTheory.set_global_def, ignore_bind_def, record_storage_event_def, vyperStateTheory.bind_def,
        vyperStateTheory.raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac lift_option_type_state >> gvs[] >>
@@ -1038,7 +1038,7 @@ Proof
     `lookup_storage (n2w slot)
        (vfmExecution$lookup_transient_storage addr st.tStorage) = 1w` >>
   Cases_on `is_view` >>
-  simp[vyperInterpreterTheory.acquire_nonreentrant_lock_def,
+  simp[vyperInterpreterTheory.acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def,
        vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
        vyperStateTheory.get_transient_storage_def,
        vyperStateTheory.update_transient_def, vyperStateTheory.return_def,
@@ -1051,7 +1051,7 @@ Theorem release_nonreentrant_lock_log_extends[local]:
   release_nonreentrant_lock addr slot st = (res,st') ==>
   log_extends st st'
 Proof
-  simp[vyperInterpreterTheory.release_nonreentrant_lock_def,
+  simp[vyperInterpreterTheory.release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def,
        vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
        vyperStateTheory.get_transient_storage_def,
        vyperStateTheory.update_transient_def, vyperStateTheory.return_def] >>
@@ -2321,7 +2321,7 @@ Theorem acquire_nonreentrant_lock_logs[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `acquire_nonreentrant_lock _ _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.acquire_nonreentrant_lock_def,
+  simp[vyperInterpreterTheory.acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def,
        vyperStateTheory.bind_def, vyperStateTheory.get_transient_storage_def,
        vyperStateTheory.update_transient_def, vyperStateTheory.return_def,
        vyperStateTheory.raise_def, AllCaseEqs()] >>
@@ -2339,7 +2339,7 @@ Theorem release_nonreentrant_lock_logs[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `release_nonreentrant_lock _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.release_nonreentrant_lock_def,
+  simp[vyperInterpreterTheory.release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def,
        vyperStateTheory.bind_def, vyperStateTheory.get_transient_storage_def,
        vyperStateTheory.update_transient_def, vyperStateTheory.return_def,
        AllCaseEqs()] >>

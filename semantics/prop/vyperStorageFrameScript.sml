@@ -298,7 +298,7 @@ Theorem fst_lookup_global_set_storage:
     FST (lookup_global cx mid m st)
 Proof
   rpt gen_tac >> strip_tac >>
-  SIMP_TAC (srw_ss()) [vyperStateTheory.lookup_global_def,
+  SIMP_TAC (srw_ss()) [vyperStateTheory.lookup_global_def, ignore_bind_def, record_storage_event_def,
        vyperStateTheory.bind_def,
        vyperStateTheory.lift_option_type_def,
        vyperStateTheory.return_def, vyperStateTheory.raise_def,
@@ -414,7 +414,7 @@ Proof
   rpt strip_tac >>
   gvs[storage_var_info_def, AllCaseEqs()] >>
   simp[update_toplevel_name_def,
-       Once vyperStateTheory.set_global_def,
+       Once vyperStateTheory.set_global_def, ignore_bind_def, record_storage_event_def,
        vyperStateTheory.bind_def,
        vyperStateTheory.lift_option_type_def,
        vyperStateTheory.return_def,
@@ -504,7 +504,7 @@ Proof
   rpt strip_tac >>
   gvs[is_leaf_hashmap_def, hashmap_var_info_def, AllCaseEqs()] >>
   simp[lookup_toplevel_name_def,
-       vyperStateTheory.lookup_global_def,
+       vyperStateTheory.lookup_global_def, ignore_bind_def, record_storage_event_def,
        vyperStateTheory.bind_def,
        vyperStateTheory.lift_option_type_def,
        vyperStateTheory.return_def]

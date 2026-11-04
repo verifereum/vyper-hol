@@ -1505,7 +1505,7 @@ Theorem acquire_nonreentrant_lock_immutables[local]:
     acquire_nonreentrant_lock addr slot is_view st = (res, st') ⇒
     st'.immutables = st.immutables
 Proof
-  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def,
      return_def, raise_def, LET_THM]
   \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
@@ -1516,7 +1516,7 @@ Theorem release_nonreentrant_lock_immutables[local]:
     release_nonreentrant_lock addr slot st = (res, st') ⇒
     st'.immutables = st.immutables
 Proof
-  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def,
      return_def, raise_def, LET_THM]
   \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]

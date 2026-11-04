@@ -149,8 +149,8 @@ Proof
     get_immutables_def, get_address_immutables_def,
     set_immutable_def, set_address_immutables_def,
     get_storage_backend_def, set_storage_backend_def, write_storage_slot_def,
-    set_global_def, transfer_value_def, get_accounts_def,
-    acquire_nonreentrant_lock_def, release_nonreentrant_lock_def,
+    set_global_def, ignore_bind_def, record_storage_event_def, transfer_value_def, get_accounts_def,
+    acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def,
     get_transient_storage_def, push_function_def, pop_function_def,
     bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >>

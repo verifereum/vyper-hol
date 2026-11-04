@@ -1265,7 +1265,7 @@ Proof
   rw[] >> gvs[return_def, raise_def] >>
   Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
   qpat_x_assum `acquire_nonreentrant_lock _ _ _ _ = _` mp_tac >>
-  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def, return_def, raise_def,
      assert_def, check_def] >>
   gvs[AllCaseEqs(), return_def, raise_def]
@@ -1346,7 +1346,7 @@ Proof
      vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
   gvs[return_def, raise_def] >>
   Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
-  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def,
      return_def, raise_def, assert_def, check_def] >>
   gvs[AllCaseEqs(), return_def, raise_def]
@@ -1363,7 +1363,7 @@ Proof
   rw[] >> gvs[return_def, no_control_exc_def] >>
   Cases_on `cx.nonreentrant_slot` >> gvs[return_def, no_control_exc_def] >>
   qpat_x_assum `release_nonreentrant_lock _ _ _ = _` mp_tac >>
-  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def,
      return_def, raise_def, assert_def, check_def] >>
   gvs[AllCaseEqs(), return_def, raise_def, no_control_exc_def]
@@ -1458,7 +1458,7 @@ Proof
      vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
   gvs[return_def, raise_def] >>
   Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
-  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def,
      return_def, raise_def, assert_def, check_def] >>
   gvs[AllCaseEqs(), return_def, raise_def]
@@ -1613,7 +1613,7 @@ Proof
             Cases_on `lookup_nonreentrant_slot am.layouts tx.target` >>
             gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
             qpat_x_assum `acquire_nonreentrant_lock _ _ _ _ = _` mp_tac >>
-            rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+            rw[acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
                get_transient_storage_def, update_transient_def, return_def,
                raise_def, assert_def, check_def] >>
             gvs[AllCaseEqs(), return_def, raise_def]) >>
@@ -1722,7 +1722,7 @@ Proof
      Cases_on `lookup_nonreentrant_slot am.layouts tx.target` >>
      Cases_on `nr` >>
      Cases_on `mut` >>
-     gvs[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+     gvs[release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
          get_transient_storage_def, update_transient_def,
          return_def, raise_def, assert_def, check_def,
          vyperTypeExprSoundnessTheory.no_type_error_eval_def,
@@ -2491,7 +2491,7 @@ Proof
     metis_tac[getter_context_equiv_extend_storage_place] >>
   `get_tenv cx1 = get_tenv cx2` by
     metis_tac[getter_context_equiv_get_tenv] >>
-  simp[oneline extend_place_def]
+  simp[oneline extend_place_def, ignore_bind_def, record_storage_event_def]
 QED
 
 Theorem getter_context_equiv_select_result[local]:
@@ -2582,7 +2582,7 @@ Proof
   `!tr slot tv. read_storage_slot cx1 tr slot tv =
                 read_storage_slot cx2 tr slot tv` by
     metis_tac[getter_context_equiv_read_storage_slot] >>
-  simp[lookup_global_def, bind_def, AllCaseEqs()]
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, AllCaseEqs()]
 QED
 
 Theorem getter_context_equiv_eval_TopLevelName[local]:
@@ -3262,7 +3262,7 @@ Theorem acquire_nonreentrant_lock_accounts[local]:
   acquire_nonreentrant_lock target slot ro st = (res,st') ==>
   st'.accounts = st.accounts
 Proof
-  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def, return_def, raise_def,
      assert_def, check_def] >>
   gvs[AllCaseEqs(), return_def, raise_def]

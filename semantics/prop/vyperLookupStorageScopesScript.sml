@@ -94,7 +94,7 @@ Theorem lookup_global_scopes_fst:
     FST (lookup_global cx mid id st)
 Proof
   rpt gen_tac >>
-  simp[lookup_global_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, ignore_bind_def] >>
   Cases_on `get_module_code cx mid` >> simp[return_def, raise_def] >>
   rename1 `SOME modcode` >>

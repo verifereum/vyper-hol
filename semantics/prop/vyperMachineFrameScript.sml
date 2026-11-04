@@ -123,7 +123,7 @@ QED
 Theorem machine_frame_view_lock:
   state_rel_frame machine_frame (acquire_nonreentrant_lock addr slot T)
 Proof
-  simp[state_rel_frame_def, acquire_nonreentrant_lock_def, bind_def,
+  simp[state_rel_frame_def, acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def,
        get_transient_storage_def, return_def] >> gen_tac >>
   IF_CASES_TAC >> simp[return_def, raise_def]
 QED
@@ -229,16 +229,16 @@ QED
 Theorem machine_frame_extend_place:
   state_rel_frame machine_frame (extend_place cx r sb)
 Proof
-  Cases_on `r` >> simp[extend_place_def, machine_frame_primitives]
+  Cases_on `r` >> simp[extend_place_def, ignore_bind_def, record_storage_event_def, machine_frame_primitives]
   >~ [`PlaceR p`] >-
-    (Cases_on `p` >> simp[extend_place_def] >>
+    (Cases_on `p` >> simp[extend_place_def, ignore_bind_def, record_storage_event_def] >>
      rpt (simp[ignore_bind_def] >> match_mp_tac machine_frame_bind >> conj_tac >-
        simp[machine_frame_primitives, machine_frame_place_type_value,
             machine_frame_read_place, machine_frame_extend_storage_place] >>
        gen_tac) >>
      simp[state_rel_frame_def, return_def]) >>
   Cases_on `sb` >> Cases_on `v` >>
-  simp[extend_place_def, state_rel_frame_def, bind_def,
+  simp[extend_place_def, ignore_bind_def, record_storage_event_def, state_rel_frame_def, bind_def,
        lift_option_type_def, return_def, raise_def] >>
   gen_tac >> rpt (BasicProvers.FULL_CASE_TAC >> simp[return_def, raise_def])
 QED
