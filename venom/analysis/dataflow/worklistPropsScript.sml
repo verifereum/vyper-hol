@@ -107,3 +107,35 @@ Theorem wl_iterate_invariant_process_restricted:
 Proof
   ACCEPT_TAC wl_iterate_invariant_process_restricted
 QED
+
+(* WF-ranked APIs: no scalar bound, and graph completeness only for fixpoint. *)
+Theorem wl_iterate_terminates_wf:
+ !R rho changed process deps wl0 st0 P valid.
+ WF R /\
+ (!l s. changed l s (process l s) <=> process l s <> s) /\
+ (!l s. valid l /\ P s /\ process l s <> s ==>
+        R (rho (process l s)) (rho s)) /\
+ (!l s. valid l /\ P s ==> P (process l s)) /\
+ P st0 /\ EVERY valid wl0 /\
+ (!l. valid l ==> EVERY valid (deps l)) ==>
+ FST (wl_iterate changed process deps wl0 st0) = [] /\
+ P (SND (wl_iterate changed process deps wl0 st0))
+Proof
+ ACCEPT_TAC worklistProofsTheory.wl_iterate_terminates_wf
+QED
+
+Theorem wl_iterate_fixpoint_wf:
+ !R rho changed process deps wl0 st0 labels P valid.
+ WF R /\
+ (!l s. changed l s (process l s) <=> process l s <> s) /\
+ (!l s. valid l /\ P s /\ process l s <> s ==>
+        R (rho (process l s)) (rho s)) /\
+ (!l s. valid l /\ P s ==> P (process l s)) /\
+ P st0 /\ EVERY valid wl0 /\
+ (!l. valid l ==> EVERY valid (deps l)) /\
+ wl_deps_complete changed process deps /\
+ (!l. MEM l labels ==> MEM l wl0) ==>
+ is_fixpoint process labels (SND (wl_iterate changed process deps wl0 st0))
+Proof
+ ACCEPT_TAC worklistProofsTheory.wl_iterate_fixpoint_wf
+QED
