@@ -15495,3 +15495,34 @@ Proof
        builtin_environment_labels, builtin_hash_labels, builtin_bop_labels,
        builtin_ec_labels, builtin_concat_labels, builtin_makearray_labels, builtin_slice_labels]
 QED
+
+Theorem compile_expr_structlit_labels[local]:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
+  cs_extends st (SND (compile_expr_body f g h cenv ty (StructLit ann name fields) st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_expr_body f g h cenv ty (StructLit ann name fields) st)))
+Proof
+  disch_tac >> once_rewrite_tac[compile_expr_body_def] >> simp[LET_THM] >>
+  ho_match_mp_tac pair_case_labels >> conj_tac
+  >- simp[compile_alloc_buffer_labels] >>
+  rpt gen_tac >> ho_match_mp_tac pair_case_labels >> conj_tac
+  >- (irule compile_struct_lit_labels >> simp[]) >>
+  simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
+QED
+
+Theorem compile_expr_toplevelname_labels[local]:
+  cs_extends st (SND (compile_expr_body f g h cenv ty (TopLevelName ann nsid) st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_expr_body f g h cenv ty (TopLevelName ann nsid) st)))
+Proof
+  once_rewrite_tac[compile_expr_body_def] >> simp[LET_THM] >>
+  Cases_on `FLOOKUP cenv.ce_module_vars nsid`
+  >- (simp[] >> ho_match_mp_tac pair_case_labels >>
+      simp[emit_inst_labels, cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]) >>
+  rename1 `SOME loc` >> Cases_on `loc` >> simp[] >>
+  all_tac >>~- ([`emit_inst INVALID [] [] st`],
+    ho_match_mp_tac pair_case_labels >>
+    simp[emit_inst_labels, cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]) >>
+  simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
+QED
