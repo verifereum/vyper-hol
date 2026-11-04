@@ -1,6 +1,7 @@
 Theory concretizePtrLayoutOutput
 Ancestors concretizePtrExecutedCoverage concretizePtrImportOrigins
   concretizeMemLocDefs staticLayoutDefs staticLayoutCompletionProofs
+  concretizePtrProductionSeparation staticLayoutAllocatorProofs
   o1PassContract list finite_map
 
 Theorem ptr_fresh_layout_representation:
@@ -64,4 +65,47 @@ Theorem ptr_mk_layout_positions:
   layout.cl_positions = completed
 Proof
   simp[mk_concretize_layout_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem ptr_output_local_import_separation:
+  fn.fn_eom = NONE /\ fn_ptr_ok P fn /\
+  concretize_function_fuel_in_context fuel ctx reserved fn = SOME fn' /\
+  fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
+  fn' = out.fpo_function /\
+  static_alloca_items fn = SOME items /\ MEM (a,sa) items /\
+  MEM (a,pa,sa) fn'.fn_mems_used /\
+  MEM (b,pb,sb) (imported_mems_used ctx fn) /\ 0 < sa /\ 0 < sb /\
+  (!c p sz. MEM (c,p,sz) (imported_mems_used ctx fn) ==>
+    ~MEM c (MAP (\i. Allocation i.inst_id)
+      (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts fn)))) /\
+  FLOOKUP (context_mem_livesets fuel ctx fn
+    (bp_analyze_fuel fuel (cfg_analyze fn) fn) (cfg_analyze fn)) a = SOME la /\
+  FLOOKUP (context_mem_livesets fuel ctx fn
+    (bp_analyze_fuel fuel (cfg_analyze fn) fn) (cfg_analyze fn)) b = SOME lb /\
+  MEM addr la /\ MEM addr lb ==>
+  reserved_intervals_disjoint (pa,sa) (pb,sb)
+Proof
+  strip_tac >> drule_all ptr_fresh_layout_representation >> strip_tac >>
+  `items' = items` by
+    (qpat_x_assum `static_alloca_items fn = SOME items'` mp_tac >> simp[]) >>
+  pop_assum SUBST_ALL_TAC >>
+  `imported_mems_used ctx fn <> []` by (strip_tac >> gvs[]) >>
+  qpat_x_assum `(fn_needs_liveness_allocation fn \/ _) ==> _` mp_tac >>
+  simp[] >> strip_tac >>
+  `?p. FLOOKUP completed a = SOME p` by
+    (drule static_alloca_items_MEM >> disch_then (qspec_then `(a,sa)` mp_tac) >>
+     disch_then (fn th => fs[th]) >>
+     drule_all (cj 2 complete_alloc_positions_with_imports_success) >>
+     metis_tac[]) >>
+  `layout.cl_positions = completed` by metis_tac[ptr_mk_layout_positions] >>
+  `out.fpo_function = apply_context_concretize_layout ctx layout fn /\
+   FLOOKUP layout.cl_positions a = SOME p /\
+   MEM (a,pa,sa) out.fpo_function.fn_mems_used` by
+    (asm_rewrite_tac[] >> metis_tac[]) >>
+  `pa = p` by
+    (drule_all ptr_step_layout_metadata_exact >> simp[]) >>
+  gvs[] >> irule ptr_production_completed_local_import >>
+  asm_rewrite_tac[] >>
+  goal_assum (drule_at (Pat `complete_alloc_positions_with_imports _ _ _ _ _ _ = SOME _`)) >>
+  asm_rewrite_tac[] >> metis_tac[]
 QED
