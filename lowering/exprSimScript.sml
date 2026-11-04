@@ -809,6 +809,8 @@ Proof
     (irule alloca_inv_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `alloca_room ctx func (s with vs_vars := V)` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+  `fmp_room ctx func (s with vs_vars := V)` by
+    (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `immutable_alloca_sep func cenv cx es (s with vs_vars := V)` by
     (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
      fs[stmt_state_rel_def] >>

@@ -2070,6 +2070,52 @@ Proof
   irule step_inst_base_alloca_room >> metis_tac[]
 QED
 
+Theorem step_inst_base_static_charge:
+  !func inst s t.
+    step_inst_base inst s = OK t /\ MEM inst (fn_insts func) /\
+    inst.inst_opcode <> INVOKE ==>
+    t.vs_alloca_next + pending_alloca_size func t <=
+      s.vs_alloca_next + pending_alloca_size func s
+Proof
+  rpt strip_tac >> Cases_on `inst.inst_opcode = ALLOCA`
+  >- (qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+      asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+      simp[AllCaseEqs()] >> strip_tac >>
+      irule exec_alloca_static_charge >> metis_tac[]) >>
+  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
+    metis_tac[step_inst_base_preserves_allocas,
+              step_inst_base_preserves_alloca_next] >>
+  simp[pending_alloca_size_def]
+QED
+
+Theorem run_inst_seq_static_charge:
+  !is func s t.
+    run_inst_seq is s = OK t /\
+    EVERY (\i. MEM i (fn_insts func) /\ i.inst_opcode <> INVOKE) is ==>
+    t.vs_alloca_next + pending_alloca_size func t <=
+      s.vs_alloca_next + pending_alloca_size func s
+Proof
+  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >>
+  Cases_on `step_inst_base h s` >> simp[] >> strip_tac >>
+  rename1 `run_inst_seq is s1 = OK t` >>
+  `t.vs_alloca_next + pending_alloca_size func t <=
+     s1.vs_alloca_next + pending_alloca_size func s1` by
+    (first_x_assum irule >> simp[]) >>
+  drule_all step_inst_base_static_charge >> decide_tac
+QED
+
+Theorem run_inst_seq_fmp_room:
+  !is func s t ctx.
+    run_inst_seq is s = OK t /\
+    EVERY (\i. MEM i (fn_insts func) /\ i.inst_opcode <> INVOKE) is /\
+    fmp_room ctx func s /\ t.vs_fmp = s.vs_fmp ==>
+    fmp_room ctx func t
+Proof
+  rpt strip_tac >> irule fmp_room_static_charge >>
+  qexists_tac `s` >> simp[] >>
+  irule run_inst_seq_static_charge >> metis_tac[]
+QED
+
 Theorem internal_prologue_run:
   !cenv params has_rb ret_type st0 cenv2 return_pc st1 func args caller
    s0 f cx vs env.
@@ -2334,7 +2380,7 @@ Theorem compile_internal_prologue_entry:
         (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
     caller.vs_alloca_next + internal_stack_size cenv params
       < dimword (:256) /\
-    alloca_room ctx func s0 ==>
+    alloca_room ctx func s0 /\ fmp_room ctx func s0 ==>
     ?s1.
       ~s1.vs_halted /\ s1.vs_current_bb = st1.cs_current_bb /\
       s1.vs_inst_idx = LENGTH st1.cs_current_insts /\
@@ -2364,16 +2410,23 @@ Proof
   simp[frag_exec_def] >>
   disch_then (qspec_then `func` mp_tac) >>
   simp[] >> strip_tac >>
-  `alloca_room ctx func t` by
-    (irule run_inst_seq_alloca_room >>
-     qexistsl_tac [`emitted_insts st0 st1`, `s0`] >> simp[] >>
-     fs[EVERY_MEM, emitted_insts_def, DROP_LENGTH_APPEND] >>
+  `EVERY (\i. MEM i (fn_insts func) /\ i.inst_opcode <> INVOKE)
+     (emitted_insts st0 st1)` by
+    (fs[EVERY_MEM, emitted_insts_def, DROP_LENGTH_APPEND] >>
      rpt strip_tac >> res_tac >> simp[] >>
      qpat_x_assum `fn_has_code st0 st1 func` mp_tac >>
      simp[fn_has_code_def] >> strip_tac >>
      irule lookup_block_fn_insts >>
      qexistsl_tac [`bb`, `st1.cs_current_bb`] >>
      fs[IS_PREFIX_APPEND] >> gvs[]) >>
+  `alloca_room ctx func t` by
+    (irule run_inst_seq_alloca_room >>
+     qexistsl_tac [`emitted_insts st0 st1`, `s0`] >> simp[]) >>
+  `fmp_room ctx func t` by
+    (irule run_inst_seq_fmp_room >>
+     qexistsl_tac [`emitted_insts st0 st1`, `s0`] >>
+     fs[mat_frame_def] >>
+     qpat_x_assum `t = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
   qexists_tac `t with vs_inst_idx := LENGTH st1.cs_current_insts` >>
   simp[stmt_state_rel_inst_idx, stmt_state_rel_def, fresh_vars_wrt_def,
        lookup_var_def] >>
