@@ -53,7 +53,8 @@
 Theory varsExt
 Ancestors
   list rich_list finite_map pred_set
-  venomExecSemantics venomState venomInst exprLoweringProps compileEnv
+  venomExecSemantics venomExecProofs venomState venomInst exprLoweringProps
+  compileEnv
   fragExec
 
 (* ===== More variables bound ===== *)
@@ -206,36 +207,6 @@ Proof
   simp exec_simps
 QED
 
-Theorem eval_operands_is_some_every[local]:
-  !ops s. IS_SOME (eval_operands ops s) <=>
-          EVERY (\op. IS_SOME (eval_operand op s)) ops
-Proof
-  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
-  first_x_assum (qspec_then `s` mp_tac) >>
-  Cases_on `eval_operand h s` >> simp[] >>
-  Cases_on `eval_operands ops s` >> simp[]
-QED
-
-(* A LOG whose offset, size and topics evaluate has all its operands
-   defined, so its static check sees them. *)
-Theorem log_operands_some[local]:
-  !tc rest s off sz topics.
-    LENGTH rest = w2n tc + 2 /\
-    eval_operand (HD (REVERSE rest)) s = SOME off /\
-    eval_operand (EL 1 (REVERSE rest)) s = SOME sz /\
-    eval_operands (DROP 2 (REVERSE rest)) s = SOME topics ==>
-    IS_SOME (eval_operands (Lit tc :: rest) s)
-Proof
-  rpt strip_tac >>
-  simp[eval_operands_is_some_every, eval_operand_def] >>
-  ONCE_REWRITE_TAC [GSYM rich_listTheory.EVERY_REVERSE] >>
-  `LENGTH (REVERSE rest) = w2n tc + 2` by simp[] >>
-  qpat_x_assum `LENGTH rest = _` kall_tac >>
-  Cases_on `REVERSE rest` >> gvs[] >>
-  Cases_on `t` >> gvs[] >>
-  qspecl_then [`t'`, `s`] mp_tac eval_operands_is_some_every >> gvs[]
-QED
-
 (* SSTORE and TSTORE abort in a static frame once their operands evaluate;
    the operands then evaluate in the extended state too. *)
 val static_write2_tac =
@@ -285,8 +256,9 @@ Proof
   >>~- ([`inst.inst_opcode = SSTORE`], static_write2_tac)
   >>~- ([`inst.inst_opcode = TSTORE`], static_write2_tac)
   >>~- ([`inst.inst_opcode = LOG`],
-        ext_tac >> imp_res_tac log_operands_some >>
-        gvs[optionTheory.IS_SOME_EQ_NOT_NONE, eval_operands_vars_ext])
+        ext_tac >> imp_res_tac log_operands_defined >>
+        gvs[optionTheory.IS_SOME_EQ_NOT_NONE, eval_operands_vars_ext,
+            eval_operands_def, eval_operand_def])
   >>~- ([`inst.inst_opcode = ALLOCA`], ext_tac)
   >>~- ([`inst.inst_opcode = DALLOCA`], ext_tac)
   >>~- ([`inst.inst_opcode = BUMP`], ext_tac)
