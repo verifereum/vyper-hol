@@ -1785,3 +1785,78 @@ Theorem immutable_mutation_body_supported_probe[local]:
 Proof
   rpt strip_tac >> gvs[] >> EVAL_TAC
 QED
+
+Theorem nested_immutable_array_offset_probe[local]:
+  mem_path_offset
+    (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Fixed 1)) (Dynamic 1))
+    [ValueSubscript (IntV 0)] =
+    SOME (32, ArrayTV (BaseTV (UintT 256)) (Fixed 1))
+Proof
+  simp[mem_path_offset_def, mem_step_offset_def,
+       valueEncodingTheory.type_memory_size_def]
+QED
+
+Theorem compile_nested_immutable_array_probe[local]:
+  !cenv ty st off.
+    FLOOKUP cenv.ce_module_vars (NONE,"a") = SOME (ImmutableLoc off) /\
+    cenv.ce_hashmap_info (NONE,"a") = NONE ==>
+    compile_expr cenv ty
+      (Subscript (ArrayT (BaseT (UintT 256)) (Fixed 1))
+        (TopLevelName
+          (ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 1)) (Dynamic 1))
+          (NONE,"a"))
+        (Literal (BaseT (UintT 256)) (IntL 0))) st =
+    (do
+       p <- compile_array_subscript (Lit (n2w off)) (Lit 0w) T 0 32 32 F
+         (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocCode);
+       comp_return (LocatedValue (ArrayT (BaseT (UintT 256)) (Fixed 1))
+          (mk_ptr p LocCode))
+     od) st
+Proof
+  rpt strip_tac >>
+  simp[Once (CONJUNCT1 exprLoweringTheory.compile_expr_raw_def),
+       exprLoweringTheory.compile_expr_body_def,
+       exprLoweringTheory.compile_subscript_def, vyperASTTheory.expr_size_def,
+       vyperASTTheory.expr_type_def, exprLoweringTheory.place_type_def] >>
+  simp[exprCallBoundsTheory.expr_child_callback_def,
+       vyperASTTheory.expr_size_def, exprLoweringTheory.lower_value_def] >>
+  simp[Once (CONJUNCT1 exprLoweringTheory.compile_expr_raw_def),
+       exprLoweringTheory.compile_expr_body_def,
+       exprLoweringTheory.compile_literal_vv_def,
+       comp_bind_def, comp_return_def] >>
+  simp[contextTheory.vv_location_def, contextTheory.vv_operand_def,
+       contextTheory.mk_ptr_def, vyperASTTheory.expr_type_def,
+       compileEnvTheory.word_scale_def, compileEnvTheory.elem_size_in_location_def,
+       compileEnvTheory.is_slot_addressed_def, compileEnvTheory.is_signed_type_def,
+       compileEnvTheory.type_memory_bytes_def] >>
+  simp[Once (CONJUNCT1 exprLoweringTheory.compile_expr_raw_def),
+       exprLoweringTheory.compile_expr_body_def,
+       exprLoweringTheory.compile_literal_vv_def,
+       exprLoweringTheory.unwrap_value_def] >>
+  simp[comp_return_def, vyperASTTheory.expr_type_def,
+       exprLoweringTheory.unwrap_value_def, integer_wordTheory.i2w_def]
+QED
+
+(* Code-spine audit (compile_expr_body and both dispatcher bodies):
+   TopLevelName/ImmutableLoc creates LocCode. Subscript and ordinary Attribute
+   propagate the object's location; Pop propagates its target's location.
+   Name always uses LocMemory (ce_allocas or ce_mem_locs). Literals return
+   StackValue or a freshly allocated memory buffer. FlagMember is StackValue;
+   StructLit uses base_ptr of a fresh buffer. IfExp's non-code result is proved
+   in exprSimIfExpTheory.compile_expr_ifexp_not_code.
+   All compile_call branches wrap results as StackValue or LocMemory/base_ptr;
+   callbacks for arguments cannot supply the returned location. The builtin
+   dispatcher similarly uses as_stack_val, as_ptr_val LocMemory, or base_ptr;
+   MethodId's literal branch calls compile_literal_vv. The type-builtin
+   dispatcher returns StackValue or LocMemory/base_ptr, including ABI paths.
+   Thus no dispatcher callback's returned location escapes as a code pointer.
+   This is an audit, not a general compiler provenance/execution theorem.
+
+   The nested offset above is geometric, independent of the root value.
+   Reconstructing immutable_holds at a later source state additionally needs
+   read_result cx captured_place es = (INL v, es), where v has the selected
+   type and sub_layout itv fresh_root 32 selected_type v. In this example that
+   requires the fresh dynamic root to have element 0. A fresh empty root has
+   the same type/geometry but no readable captured path. Neither compilation
+   equations nor frag_exec's continuation inclusion establish that premise.
+*)

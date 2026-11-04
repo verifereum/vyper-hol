@@ -60,6 +60,17 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> rw[] >> gvs[vyperASTTheory.expr_type_def]
 QED
 
+Theorem compile_expr_ifexp_not_code:
+  !cenv ty ann c a b st.
+    vv_location (FST (compile_expr cenv ty (IfExp ann c a b) st)) <>
+      SOME LocCode
+Proof
+  rpt gen_tac >>
+  Cases_on `compile_expr cenv ty (IfExp ann c a b) st` >>
+  drule compile_expr_ifexp >> strip_tac >>
+  Cases_on `is_word_type ann` >> gvs[vv_location_def, mk_ptr_def]
+QED
+
 Theorem conditional_read_cases[local]:
   !cx raw st res st'.
     (do r <- conditional_result cx raw; read_result cx r od) st = (res,st') ==>
