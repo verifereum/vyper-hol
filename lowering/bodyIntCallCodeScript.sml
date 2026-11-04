@@ -7,6 +7,7 @@ Ancestors
   bodyIntCallBuiltinLabels bodyIntCallTypeBuiltinLabels bodyIntCallExprBodyLabels
   bodyIntCallSupportedExprLabels bodyIntCallStmtHelperLabels bodyIntCallStmtControlLabels
   bodyIntCallSupportedStmtLabels bodyIntCallFunctionLabels bodyIntCallPrefix
+  bodyIntCallPrefixLabels
 
 Theorem compile_internal_fn_bodies_append:
   !xs ys st.
