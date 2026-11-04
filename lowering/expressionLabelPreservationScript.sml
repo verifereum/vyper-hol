@@ -2,7 +2,7 @@
 Theory expressionLabelPreservation
 Ancestors
   decoderLabelPreservation entryLabelPreservation exprLowering compileEnv
-  loweringShapeDefs emitHelper list abiEncoder
+  loweringShapeDefs emitHelper list abiEncoder exprCallBounds
 
 val label_simps = [label_preserving_return, label_preserving_emit_inst,
   label_preserving_emit_op, label_preserving_emit_void];
@@ -2440,3 +2440,135 @@ Resume label_preserving_expr_body[builtin]:
   asm_simp_tac (srw_ss()) [label_preserving_mod_names_snd]
 QED
 Finalise label_preserving_expr_body
+
+Theorem label_preserving_invalid_expr_call[local]:
+  !ty s r t. invalid_expr_call ty s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rpt gen_tac >> simp[invalid_expr_call_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  drule label_preserving_emit_inst >> simp[]
+QED
+
+Theorem label_preserving_expr_callback[local]:
+  (!c ty e s r t. expr_size e < bound /\ cfn c ty e s = (r,t) ==>
+     cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !c ty e s r t. expr_child_callback bound cfn c ty e s = (r,t) ==>
+     cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rpt strip_tac >> gvs[expr_child_callback_def] >>
+  Cases_on `expr_size e < bound` >> gvs[] >>
+  metis_tac[label_preserving_invalid_expr_call]
+QED
+
+Theorem label_preserving_builtin_callback[local]:
+  (!c rt ty bi args s r t. list_size expr_size args < bound /\
+     bfn c rt ty bi args s = (r,t) ==>
+     cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !c rt ty bi args s r t.
+    builtin_child_callback bound bfn c rt ty bi args s = (r,t) ==>
+     cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rpt strip_tac >> gvs[builtin_child_callback_def] >>
+  Cases_on `list_size expr_size args < bound` >> gvs[] >>
+  metis_tac[label_preserving_invalid_expr_call]
+QED
+
+Theorem label_preserving_type_callback[local]:
+  (!c vt ty tb rt args s r t. list_size expr_size args < bound /\
+     tfn c vt ty tb rt args s = (r,t) ==>
+     cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !c vt ty tb rt args s r t.
+    type_child_callback bound tfn c vt ty tb rt args s = (r,t) ==>
+     cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rpt strip_tac >> gvs[type_child_callback_def] >>
+  Cases_on `list_size expr_size args < bound` >> gvs[] >>
+  metis_tac[label_preserving_invalid_expr_call]
+QED
+
+Theorem label_preserving_expr_mutual[local]:
+  !n.
+    (!c ty e s r t. 2 * expr_size e + 2 <= n /\
+       compile_expr c ty e s = (r,t) ==>
+       cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) /\
+    (!c rt ty bi args s r t. 2 * list_size expr_size args + 1 <= n /\
+       compile_builtin_dispatch c rt ty bi args s = (r,t) ==>
+       cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) /\
+    (!c vt ty tb rt args s r t. 2 * list_size expr_size args + 1 <= n /\
+       compile_type_builtin_dispatch c vt ty tb rt args s = (r,t) ==>
+       cs_extends s t /\ EVERY jump_label_ok (added_labels s t))
+Proof
+  completeInduct_on `n` >> rpt conj_tac >> rpt gen_tac >> strip_tac
+  >- suspend "expr"
+  >- suspend "builtin"
+  >> suspend "type"
+QED
+
+Resume label_preserving_expr_mutual[expr]:
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  once_rewrite_tac[compile_expr_raw_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  match_mp_tac label_preserving_expr_body >> rpt conj_tac
+  >- (match_mp_tac label_preserving_expr_callback >> rpt strip_tac >>
+      first_x_assum (qspec_then `2 * expr_size e' + 2` mp_tac) >>
+      simp[] >> metis_tac[arithmeticTheory.LESS_EQ_REFL])
+  >- (match_mp_tac label_preserving_builtin_callback >> rpt strip_tac >>
+      first_x_assum (qspec_then `2 * list_size expr_size args + 1` mp_tac) >>
+      simp[] >> metis_tac[arithmeticTheory.LESS_EQ_REFL])
+  >> match_mp_tac label_preserving_type_callback >> rpt strip_tac >>
+  first_x_assum (qspec_then `2 * list_size expr_size args + 1` mp_tac) >>
+  simp[] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]
+QED
+
+Resume label_preserving_expr_mutual[builtin]:
+  qpat_x_assum `compile_builtin_dispatch _ _ _ _ _ _ = _` mp_tac >>
+  once_rewrite_tac[compile_expr_raw_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  match_mp_tac label_preserving_builtin_body >>
+  match_mp_tac label_preserving_expr_callback >> rpt strip_tac >>
+  first_x_assum (qspec_then `2 * expr_size e + 2` mp_tac) >>
+  simp[] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]
+QED
+
+Resume label_preserving_expr_mutual[type]:
+  qpat_x_assum `compile_type_builtin_dispatch _ _ _ _ _ _ _ = _` mp_tac >>
+  once_rewrite_tac[compile_expr_raw_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp_tac bool_ss [] >>
+  match_mp_tac label_preserving_type_builtin_body >>
+  match_mp_tac label_preserving_expr_callback >> rpt strip_tac >>
+  first_x_assum (qspec_then `2 * expr_size e + 2` mp_tac) >>
+  simp[] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]
+QED
+Finalise label_preserving_expr_mutual
+
+Theorem label_preserving_compile_expr:
+  !c ty e s r t. compile_expr c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rpt strip_tac >>
+  qspec_then `2 * expr_size e + 2` (mp_tac o CONJUNCT1)
+    label_preserving_expr_mutual >>
+  metis_tac[arithmeticTheory.LESS_EQ_REFL]
+QED
+
+Theorem label_preserving_compile_builtin_dispatch:
+  !c rt ty bi args s r t. compile_builtin_dispatch c rt ty bi args s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rpt strip_tac >>
+  qspec_then `2 * list_size expr_size args + 1`
+    (mp_tac o CONJUNCT1 o CONJUNCT2) label_preserving_expr_mutual >>
+  metis_tac[arithmeticTheory.LESS_EQ_REFL]
+QED
+
+Theorem label_preserving_compile_type_builtin_dispatch:
+  !c vt ty tb rt args s r t.
+    compile_type_builtin_dispatch c vt ty tb rt args s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rpt strip_tac >>
+  qspec_then `2 * list_size expr_size args + 1`
+    (mp_tac o CONJUNCT2 o CONJUNCT2) label_preserving_expr_mutual >>
+  metis_tac[arithmeticTheory.LESS_EQ_REFL]
+QED
