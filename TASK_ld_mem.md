@@ -24,6 +24,7 @@ Theorem lower_dload_stage_mem:
 1. `holbuild -j4 build o1ContractLowerDloadMemTheory` passes with zero CHEAT warnings and zero FAILs, and the frozen statement above is unchanged byte for byte.
 2. No duplicate or near-duplicate lemmas — each helper exists once in its most general form. New helper theories are fine; put them under `venom/compiler/` or `venom/passes/lower_dload/proofs/`.
 3. Do not edit any definition, any other theorem's statement, or any theory outside the ones you create plus `o1ContractLowerDloadMemScript.sml` (adding helper lemmas to `o1ContractLowerDloadScript.sml` is fine).
+   Clarification (owner): statements of helper theorems that this task created, in theories this task created, may be revised freely, e.g. to follow the merged `retpc_use_ok`, which now also admits RETFMP and DRET. The frozen statement and every theorem this task did not create stay unchanged.
 
 **If the theorem is false as stated:**
 - Produce a concrete counterexample (program, initial state, which conjunct fails).
