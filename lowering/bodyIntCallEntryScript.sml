@@ -5,6 +5,7 @@ Ancestors
   vyperTypeEvalSoundness vyperTypeBindArguments vyperTypeInvariants exprSimHyps finite_map
   vyperTypeStoragePreservation vyperTypeEvalStoragePreservation
   vyperStorageLayoutSafety vyperLookupStorage vyperStorageBackend
+  bodyIntCallTypingTransfer
 
 Theorem body_inv_push_stack:
   body_inv tops ctx cenv cx ==>
@@ -63,7 +64,12 @@ Proof
   simp[env_consistent_def] >> conj_tac
   >- (irule bind_arguments_env_scopes_consistent >>
       qexistsl_tac [`args`, `get_tenv cx`, `vs`] >>
-      simp[get_tenv_def] >> metis_tac[]) >>
+      simp[get_tenv_def] >> conj_tac
+      >- (rpt strip_tac >>
+          qpat_x_assum `!n b. FLOOKUP env_body.var_assignable n = SOME b ==> _`
+            drule >> strip_tac >> simp[] >> goal_assum drule) >>
+      rpt strip_tac >>
+      qpat_x_assum `!id ty. MEM (id,ty) args ==> _` drule >> simp[]) >>
   qpat_x_assum `env_immutables_consistent _ _ _` mp_tac >>
   simp[env_immutables_consistent_def] >> metis_tac[]
 QED
@@ -142,13 +148,31 @@ Theorem intcall_bound_body_typing:
 Proof
   rpt strip_tac >>
   drule_all callable_body_typing_from_env_consistent >> strip_tac >>
-  `env_consistent env_body (cx with stk updated_by CONS (src,fn))
+  qabbrev_tac `eb = env_body with var_assignable := (K T) o_f env_body.var_assignable` >>
+  `(!id ty. MEM (id,ty) args ==>
+       FLOOKUP eb.var_types id = SOME ty /\ FLOOKUP eb.var_assignable id = SOME T)` by
+    (simp[Abbr `eb`] >> rpt strip_tac >>
+     irule permission_true_map_lookup >>
+     qpat_x_assum `!id typ. MEM (id,typ) args ==> _` drule >> simp[]) >>
+  `(!n b. FLOOKUP eb.var_assignable n = SOME b ==>
+       ?ty. MEM (n,ty) args /\ b = T)` by
+    (simp[Abbr `eb`, FLOOKUP_o_f, AllCaseEqs()] >> rpt strip_tac >>
+     metis_tac[]) >>
+  `(!n. FLOOKUP env_body.var_assignable n = SOME T ==>
+        FLOOKUP ((K T) o_f env_body.var_assignable) n = SOME T)` by
+    simp[FLOOKUP_o_f] >>
+  drule_all (cj 2 stmt_permission_transfer) >> strip_tac >>
+  rename1 `type_stmts _ ret ss = SOME (env_after with var_assignable := perms)` >>
+  `type_stmts eb ret ss = SOME (env_after with var_assignable := perms)` by
+    simp[Abbr `eb`] >>
+  `env_consistent eb (cx with stk updated_by CONS (src,fn))
      (st with scopes := [sc])` by
     (irule bind_arguments_pushed_env_consistent >>
-     simp[] >> conj_tac
-     >- (qexistsl_tac [`args`, `vs`] >> simp[] >> metis_tac[]) >>
+     simp[Abbr `eb`] >> conj_tac
+     >- (qexistsl_tac [`args`, `vs`] >> gvs[] >> metis_tac[]) >>
      qexists_tac `env` >> simp[]) >>
-  qexistsl_tac [`env_body`, `ret_tv`, `env_after`] >> simp[] >> metis_tac[]
+  qexistsl_tac [`eb`, `ret_tv`, `env_after with var_assignable := perms`] >>
+  gvs[Abbr `eb`] >> metis_tac[]
 QED
 
 Theorem body_inv_internal_prologue:
