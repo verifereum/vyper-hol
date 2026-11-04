@@ -203,8 +203,12 @@ Definition generate_emit_ops_def:
           (case HD inst.inst_operands of
             Label l =>
               let (ret_lbl, ps') = fresh_label "return_label" ps in
+              (* ps_stack already holds the outputs in place of the
+                 callee's frame (its params and return address) *)
+              let base = LENGTH ps.ps_stack - LENGTH inst.inst_outputs in
               ([SOPushLabel ret_lbl; SOPushLabel l;
-                SOEmit "JUMP"; SOLabel ret_lbl], ps')
+                SOEmit "JUMP"; SOLabel ret_lbl],
+               ps' with ps_calls := (l, base) :: ps'.ps_calls)
           | _ => ([], ps))
         else if opc = RET then ([SOEmit "JUMP"], ps)
         else if opc = ASSERT then
@@ -786,7 +790,8 @@ Definition generate_block_insts_plan_def:
     case generate_inst_plan liveness dfg cfg fn inst
            next_live is_halting next_is_term bb_label ps of
       NONE => NONE
-    | SOME (step_ops, ps') =>
+    | SOME (step_ops, ps0) =>
+        let ps' = observe_stack_height (LENGTH ps.ps_stack) step_ops ps0 in
         case generate_block_insts_plan liveness dfg cfg fn bb_label
                is_halting n_params block_len (i + 1) rest ps' of
           NONE => NONE
@@ -800,10 +805,15 @@ Definition generate_block_plan_def:
       if bb = HD fn.fn_blocks
       then prepare_params_plan liveness fn ps
       else ([] : stack_op list, ps) in
-    let (clean_ops, ps2) =
+    let (clean_ops, ps1') =
       if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
       then clean_stack_plan liveness cfg fn bb ps1
       else ([], ps1) in
+    (* the entry block starts with its params on the stack *)
+    let entry_height = LENGTH ps.ps_stack +
+      (if bb = HD fn.fn_blocks then LENGTH (get_params bb.bb_instructions)
+       else 0) in
+    let ps2 = observe_stack_height entry_height (param_ops ++ clean_ops) ps1' in
     let insts = non_param_insts bb in
     let is_halting = bb_is_halting bb in
     let n_params = LENGTH (get_params bb.bb_instructions) in
@@ -1405,7 +1415,9 @@ Definition generate_context_regions_def:
               cpa_regions := SNOC region acc.cpa_regions;
               cpa_label_counter := ps.ps_label_counter;
               cpa_next_spill_base := spill_end;
-              cpa_peak_spill_end := peak
+              cpa_peak_spill_end := peak;
+              cpa_stack :=
+                SNOC (fn.fn_name, ps.ps_peak, ps.ps_calls) acc.cpa_stack
             |>)
         else NONE)
 End
@@ -1420,6 +1432,40 @@ Definition finish_context_plan_def:
   |>
 End
 
+(* A callee's frame sits on its caller's stack, at the height the caller
+   recorded at the INVOKE, so a function's deepest height is its own peak or
+   a call's base plus the callee's deepest height.  Callees come first in
+   fcg_postorder.  The generated code must stay below the EVM's 1024-item
+   limit; a context whose entry depth is unknown is rejected. *)
+Definition fn_stack_depth_def:
+  fn_stack_depth depths (peak, calls) =
+    OPTION_MAP (FOLDL MAX peak)
+      (OPT_MMAP (λ(callee, base). OPTION_MAP ($+ base) (ALOOKUP depths callee))
+         calls)
+End
+
+Definition context_stack_depths_def:
+  context_stack_depths heights order =
+    FOLDL (λdepths name.
+      case ALOOKUP heights name of
+        NONE => depths
+      | SOME h =>
+          case fn_stack_depth depths h of
+            NONE => depths
+          | SOME d => (name, d) :: depths) [] order
+End
+
+Definition context_stack_bounded_def:
+  context_stack_bounded ctx heights <=>
+    case ctx.ctx_entry of
+      NONE => T
+    | SOME e =>
+        case ALOOKUP (context_stack_depths heights
+                        (fcg_postorder (fcg_analyze ctx) e)) e of
+          NONE => F
+        | SOME d => d < 1024
+End
+
 Definition generate_context_plan_with_def:
   generate_context_plan_with gen ctx =
     case max_live_eom ctx of
@@ -1429,13 +1475,15 @@ Definition generate_context_plan_with_def:
           cpa_regions := [];
           cpa_label_counter := 0;
           cpa_next_spill_base := max_eom;
-          cpa_peak_spill_end := 0
+          cpa_peak_spill_end := 0;
+          cpa_stack := []
         |> in
         case generate_context_regions gen ctx.ctx_functions init of
           NONE => NONE
         | SOME acc =>
             let cp = finish_context_plan max_eom acc in
-            if cp.cp_initial_fmp < dimword (:256)
+            if cp.cp_initial_fmp < dimword (:256) ∧
+               context_stack_bounded ctx acc.cpa_stack
             then SOME cp else NONE
 End
 
@@ -1541,6 +1589,25 @@ Theorem cleanup_shared_callee_height_evidence:
   ctx = mk_venom_context [entry; left; right; leaf] (SOME "entry") ==>
   cleanup_caller_height 4 ctx (fcg_analyze ctx) "leaf" = SOME 6 /\
   ALOOKUP (cleanup_growth_table ctx (fcg_analyze ctx)) "entry" = SOME (SOME 8)
+Proof
+  strip_tac >> gvs[] >> EVAL_TAC
+QED
+
+(* The deepest chain is a call's base plus its callee's depth, or a
+   function's own peak; the code must stay below 1024. *)
+Theorem context_stack_bounded_evidence:
+  leaf = mk_raw_function "leaf"
+    [<|bb_label := "leaf"; bb_instructions := [mk_inst 0 STOP [] []]|>] /\
+  entry = mk_raw_function "entry"
+    [<|bb_label := "entry"; bb_instructions :=
+       [mk_inst 1 INVOKE [Label "leaf"] []; mk_inst 2 STOP [] []]|>] /\
+  ctx = mk_venom_context [entry; leaf] (SOME "entry") ==>
+  context_stack_depths [("entry", 7, [("leaf", 3)]); ("leaf", 5, [])]
+    ["leaf"; "entry"] = [("entry", 8); ("leaf", 5)] /\
+  context_stack_bounded ctx [("entry", 2, [("leaf", 1018)]); ("leaf", 5, [])] /\
+  ~context_stack_bounded ctx [("entry", 2, [("leaf", 1019)]); ("leaf", 5, [])] /\
+  ~context_stack_bounded ctx [("entry", 1024, []); ("leaf", 5, [])] /\
+  ~context_stack_bounded ctx [("entry", 2, [("leaf", 1)])]
 Proof
   strip_tac >> gvs[] >> EVAL_TAC
 QED

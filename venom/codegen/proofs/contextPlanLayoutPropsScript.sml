@@ -44,7 +44,8 @@ End
 Theorem context_plan_acc_layout_init:
   context_plan_acc_layout max_eom
     <| cpa_regions := []; cpa_label_counter := 0;
-       cpa_next_spill_base := max_eom; cpa_peak_spill_end := 0 |>
+       cpa_next_spill_base := max_eom; cpa_peak_spill_end := 0;
+       cpa_stack := [] |>
 Proof
   simp[context_plan_acc_layout_def, ordered_spill_regions_def]
 QED
@@ -124,7 +125,8 @@ Proof
   irule finish_context_plan_layout >>
   `context_plan_acc_layout max_eom
     <| cpa_regions := []; cpa_label_counter := 0;
-       cpa_next_spill_base := max_eom; cpa_peak_spill_end := 0 |>`
+       cpa_next_spill_base := max_eom; cpa_peak_spill_end := 0;
+       cpa_stack := [] |>`
     by simp[context_plan_acc_layout_init] >>
   drule_all generate_context_regions_layout >> simp[]
 QED

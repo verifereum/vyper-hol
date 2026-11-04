@@ -38,7 +38,9 @@ Datatype:
     ps_label_counter : num;
     ps_cleanup_height : num option;
     ps_cleanup_growth : (string # num option) list;
-    ps_cleanup_promised : bool
+    ps_cleanup_promised : bool;
+    ps_peak : num;                        (* highest stack height reached *)
+    ps_calls : (string # num) list        (* INVOKE callee, height below it *)
   |>
 End
 
@@ -70,7 +72,9 @@ Datatype:
     cpa_regions : spill_region list;
     cpa_label_counter : num;
     cpa_next_spill_base : num;
-    cpa_peak_spill_end : num
+    cpa_peak_spill_end : num;
+    cpa_stack : (string # num # (string # num) list) list
+                (* per function: ps_peak and ps_calls *)
   |>
 End
 
@@ -153,7 +157,9 @@ Definition init_plan_state_def:
     ps_label_counter := 0;
     ps_cleanup_height := NONE;
     ps_cleanup_growth := [];
-    ps_cleanup_promised := F
+    ps_cleanup_promised := F;
+    ps_peak := 0;
+    ps_calls := []
   |>
 End
 
@@ -162,6 +168,42 @@ Definition fresh_label_def:
     let n = ps.ps_label_counter + 1 in
     (prefix ++ "_" ++ num_to_dec_string n,
      ps with ps_label_counter := n)
+End
+
+(* =========================================================================
+   Stack Height Observation
+   Port of _assembly_peak_stack_growth and _observe_stack_height: the
+   highest operand-stack height an op sequence reaches from height h,
+   counted over the assembly each op executes to.
+   ========================================================================= *)
+
+Definition stack_op_io_def:
+  stack_op_io (SOPush (Var _)) = [] ∧
+  stack_op_io (SOPush (Lit _)) = [(0, 1)] ∧
+  stack_op_io (SOPush (Label _)) = [(0, 1)] ∧
+  stack_op_io (SOPop n) = REPLICATE n (1, 0) ∧
+  stack_op_io (SOSwap _) = [] ∧
+  stack_op_io (SODup _) = [(0, 1)] ∧
+  stack_op_io (SOPoke _ _) = [] ∧
+  stack_op_io (SOSpill _) = [(0, 1); (2, 0)] ∧
+  stack_op_io (SORestore _) = [(0, 1); (1, 1)] ∧
+  stack_op_io (SOEmit name) = [evm_op_stack_io name] ∧
+  stack_op_io SOInitialFmp = [(0, 1)] ∧
+  stack_op_io (SOLabel _) = [] ∧
+  stack_op_io (SOPushLabel _) = [(0, 1)] ∧
+  stack_op_io (SOPushOfst _ _) = [(0, 1)]
+End
+
+Definition ops_peak_height_def:
+  ops_peak_height h ops =
+    SND (FOLDL (λ(h, pk) (i, n). (h - i + n, MAX pk (h - i + n)))
+           (h, h) (FLAT (MAP stack_op_io ops)))
+End
+
+Definition observe_stack_height_def:
+  observe_stack_height h ops ps =
+    ps with ps_peak :=
+      MAX ps.ps_peak (MAX (ops_peak_height h ops) (LENGTH ps.ps_stack))
 End
 
 (* =========================================================================

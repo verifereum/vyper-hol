@@ -149,7 +149,7 @@ revert-data/reason/general-kind equality. The sole exemption is exact
 body (including a return rejection producing that same message); not arbitrary
 `ReturnReject`, static-only decoding or conversion failure.
 
-Resources are frame OutOfGas/StackOverflow or valid computed-precompile failure,
+Resources are frame OutOfGas or valid computed-precompile failure,
 not an existential gas threshold. Entry `cc_gas=0`; Venom GAS stays unchanged
 and opaque, CALL/STATICCALL oracle semantics ignore evaluated gas operands.
 There is no static-entry/immutables/msg.gas/gas=/fallback guarantee or caller-read

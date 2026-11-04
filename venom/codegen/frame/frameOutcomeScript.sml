@@ -40,10 +40,12 @@ Definition frame_outcome_def:
             (exc <> NONE ==> es'.rollback = rb)
 End
 
+(* Only running out of gas.  The operand-stack height of compiled code is
+   fixed by its code path, and codegen rejects code that could reach the
+   1024-item limit, so a stack overflow is not excused. *)
 Definition frame_resource_starved_def:
   frame_resource_starved es r es' <=>
-    ?exc out lgs. (exc = OutOfGas \/ exc = StackOverflow) /\
-                  frame_outcome es r es' (SOME exc) out lgs
+    ?out lgs. frame_outcome es r es' (SOME OutOfGas) out lgs
 End
 
 (* ===== Single-frame bridge ===== *)

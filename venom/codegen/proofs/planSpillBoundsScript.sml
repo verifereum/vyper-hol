@@ -570,7 +570,8 @@ Proof
   Cases_on `max_live_eom ctx` >> gvs[] >>
   Cases_on `generate_context_regions gen ctx.ctx_functions
     <|cpa_regions := []; cpa_label_counter := 0;
-      cpa_next_spill_base := x; cpa_peak_spill_end := 0|>` >>
+      cpa_next_spill_base := x; cpa_peak_spill_end := 0;
+      cpa_stack := []|>` >>
   gvs[finish_context_plan_def] >>
   rpt strip_tac >>
   drule generate_context_regions_access_bounded >>

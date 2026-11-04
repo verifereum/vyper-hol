@@ -213,6 +213,37 @@ Definition venom_to_evm_name_def:
   venom_to_evm_name DLOADBYTES = NONE
 End
 
+(* Operand-stack inputs and outputs of the EVM opcodes codegen emits, as in
+   Python's vyper/evm/opcodes.py.  DUPn and SWAPn are given by their net
+   effect.  A name outside the table counts as one push, which can only
+   overestimate a stack height. *)
+Definition evm_op_stack_io_def:
+  evm_op_stack_io name : num # num =
+    if isPREFIX "DUP" name then (0, 1)
+    else if isPREFIX "SWAP" name then (0, 0)
+    else if MEM name ["STOP"; "JUMPDEST"; "INVALID"] then (0, 0)
+    else if MEM name ["POP"; "JUMP"; "SELFDESTRUCT"] then (1, 0)
+    else if MEM name ["ISZERO"; "NOT"; "BALANCE"; "CALLDATALOAD";
+                      "EXTCODESIZE"; "EXTCODEHASH"; "BLOCKHASH"; "BLOBHASH";
+                      "MLOAD"; "SLOAD"; "TLOAD"] then (1, 1)
+    else if MEM name ["MSTORE"; "MSTORE8"; "SSTORE"; "JUMPI"; "TSTORE";
+                      "LOG0"; "RETURN"; "REVERT"] then (2, 0)
+    else if MEM name ["ADD"; "MUL"; "SUB"; "DIV"; "SDIV"; "MOD"; "SMOD";
+                      "EXP"; "SIGNEXTEND"; "LT"; "GT"; "SLT"; "SGT"; "EQ";
+                      "AND"; "OR"; "XOR"; "BYTE"; "SHL"; "SHR"; "SAR";
+                      "SHA3"] then (2, 1)
+    else if MEM name ["CALLDATACOPY"; "CODECOPY"; "RETURNDATACOPY"; "MCOPY";
+                      "LOG1"] then (3, 0)
+    else if MEM name ["ADDMOD"; "MULMOD"; "CREATE"] then (3, 1)
+    else if MEM name ["EXTCODECOPY"; "LOG2"] then (4, 0)
+    else if name = "CREATE2" then (4, 1)
+    else if name = "LOG3" then (5, 0)
+    else if name = "LOG4" then (6, 0)
+    else if MEM name ["DELEGATECALL"; "STATICCALL"] then (6, 1)
+    else if name = "CALL" then (7, 1)
+    else (0, 1)
+End
+
 (* =========================================================================
    Instruction Operand Helpers
    ========================================================================= *)

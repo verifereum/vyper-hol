@@ -203,7 +203,9 @@ gas oracle**, source `msg.gas` guarantee or `gas=` keyword guarantee. The old
   Callee-return rejection can be exempt only when it produces that same message
   in such a program. Exempt runs still have an actual EVM run but no result/effect
   correspondence obligation.
-- The resource alternative is genuine frame OutOfGas/StackOverflow. A
+- The resource alternative is genuine frame OutOfGas. Stack overflow is not
+  one: codegen rejects code whose deepest call chain could reach the
+  1024-item stack limit. A
   value-zero computed precompile that the EVM fails for lack of gas is not an
   alternative: its failure is the call's oracle outcome, which the source and
   Venom both take. There is no existential sufficient-gas

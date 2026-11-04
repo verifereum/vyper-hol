@@ -180,8 +180,9 @@ successful empty result. Nonzero value or another precompile is ordinary.
 gas positions. Oracle calls evaluate but ignore that operand's value; assembly
 GAS consumes actual EVM readings (zero on exhaustion). No equality of Venom
 GAS with EVM readings, `msg.gas`/`gas=` guarantee or sufficient-gas existential
-is claimed. The conclusion is actual `run_call` and frame OutOfGas /
-StackOverflow, or `call_result_rel`.
+is claimed. The conclusion is actual `run_call` and frame OutOfGas, or
+`call_result_rel`. Codegen rejects a context whose deepest internal call
+chain could reach the 1024-item stack limit, so StackOverflow is not excused.
 
 On success the result relates canonical wrapped return bytes, accounts,
 transient storage, ordered concrete logs and the **entire request sequence**.
@@ -206,7 +207,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | Key | Decision / rejected alternative | Current implementation and explicit deviation or limit | Future owner |
 |---|---|---|---|
 | D1 | Full outcome oracle, not gas numbers; requests success-only | `extCallOracle` records and source SOME/Venom/asm call adoption; `call_result_rel` compares whole successful requests. No forwarded-gas field. | 2.1 trace / 7 callee producer |
-| D2 | Resource disjunction, not existential sufficient gas | `frame_resource_starved` is OutOfGas/StackOverflow; a starved computed precompile is an oracle outcome. No gas-bound proof. | 2.1 / 4 |
+| D2 | Resource disjunction, not existential sufficient gas | `frame_resource_starved` is OutOfGas only (codegen rejects stack-limit overflows); a starved computed precompile is an oracle outcome. No gas-bound proof. | 2.1 / 4 |
 | D3 | Unchanged Venom GAS; asm readings; ignore call gas | `exec_read0` GAS unchanged; `asm_gas`, evaluated CALL/STATICCALL gas, `opaque_use_ok`, entry gas zero. **Implementation proof-scope deviation:** old asm/EVM step now excludes GAS after a checked counterexample; full trace-aware S7 is not proved. | 2.1 / 4.2 |
 | D4 | Compute value-zero precompiles 1/2/6/7's data, take their success from the oracle | `precompile_result`, `take_outcome`, `precompile_call_success`, request filter `call_requests`; helper purity is proved, EVM purity bridge is deferred. | 2.1 |
 | D5 | One evaluator NONE/SOME, not duplicate evaluator or unchecked accounts | Source `evaluation_state.outcomes/requests`, `take_call_outcome` account guard; full triples at call/deploy entry, two-argument initializer retained. Existing storage/type proof guards remain conditional; no universal storage validator. | 6 / 7 |

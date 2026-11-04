@@ -25,8 +25,12 @@
  * ============================
  * How each EVM exception is handled in the correctness argument:
  *
- * OutOfGas and StackOverflow — resource-starvation disjuncts of S7.
- *   No existential sufficient-gas bound or generated-stack bound is claimed.
+ * OutOfGas — the resource-starvation disjunct of S7.
+ *   No existential sufficient-gas bound is claimed.
+ *
+ * StackOverflow — discharged by construction: generate_context_plan
+ *   rejects a context whose deepest call chain could reach 1024 stack
+ *   items (context_stack_bounded), so the generated code never does.
  *
  * StackUnderflow — discharged by construction (codegen stack model
  *   tracks height; well-formed plans never underflow).
@@ -370,7 +374,9 @@ End
    GAS misuse/forbidden opcodes/label collisions. Resource starvation is an
    explicit disjunct; a starved computed precompile is an oracle outcome. No sufficient-gas existential,
    arbitrary label maps, or positional entry parameter is in this API.
-   The current non-GAS EVM lemmas do not yet prove this trace-aware statement. *)
+   The current non-GAS EVM lemmas do not yet prove this trace-aware statement.
+   Also admitted here: the generated code stays below the stack limit
+   (asm_stack_bounded along the run), from context_stack_bounded. *)
 Theorem codegen_correct:
   !fuel rpolicy unit cp prog Inv vs es.
     generate_context_plan unit.cu_context = SOME cp /\
