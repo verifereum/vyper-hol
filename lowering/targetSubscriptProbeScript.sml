@@ -2663,3 +2663,77 @@ Proof
   irule probe_word_run_return >>
   simp[probe_word_copied_observations]
 QED
+
+Theorem probe_word_buffer_disjoint:
+  !a. a + 128 <= dimword (:256) ==>
+    regions_disjoint (w2n ((n2w (a+32):bytes32) + 64w),32)
+      (w2n (n2w (a+32):bytes32),32) /\
+    regions_disjoint (w2n ((n2w (a+32):bytes32) + 32w),32)
+      (w2n (n2w (a+32):bytes32),32)
+Proof
+  rpt strip_tac >>
+  `a+32 < dimword (:256) /\ a+64 < dimword (:256) /\
+   a+96 < dimword (:256)` by decide_tac >>
+  simp[word_add_n2w, w2n_n2w, arithmeticTheory.ADD_ASSOC,
+       venomMemDefsTheory.regions_disjoint_def]
+QED
+
+Definition probe_word_final_state_def:
+  probe_word_final_state s =
+    let b = n2w (s.vs_alloca_next + 32);
+        e = jump_to "@wcopy_cond_0" (probe_word_entry_state s);
+        l = probe_word_loaded_state e b;
+        c = jump_to "@dyn_cond_3" (probe_word_load_exit_state l b) in
+    sstore 0w (sload 3w s)
+      ((probe_word_copied_state c (sload 3w s) b) with vs_inst_idx := 1)
+End
+
+Theorem probe_word_run_function:
+  !s fuel ctx.
+    FLOOKUP s.vs_allocas 1 = NONE /\ FLOOKUP s.vs_allocas 2 = NONE /\
+    ~s.vs_halted /\ s.vs_current_bb = "entry" /\
+    s.vs_alloca_next + 128 <= dimword (:256) /\
+    (sload 3w s = 0w \/ sload 3w s = 1w) ==>
+    run_blocks ((if sload 3w s = 0w then 11 else 19) + fuel)
+      ctx probe_word_function s =
+    IntRet <| iret_values := [0w]; iret_adopt_fmp := NONE |>
+      (probe_word_final_state s)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `((if sload 3w s = 0w then 11 else 19) + fuel) =
+    SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC
+      ((if sload 3w s = 0w then 1 else 9) + SUC fuel)))))))))`
+    by (Cases_on `sload 3w s = 0w` >> simp[]) >>
+  pure_asm_rewrite_tac [] >> drule_all probe_word_run_entry >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `run_blocks _ ctx probe_word_function e` >>
+  qabbrev_tac `b = (n2w (s.vs_alloca_next + 32):bytes32)` >>
+  `lookup_var "%3" e = SOME 0w /\ lookup_var "%2" e = SOME b /\
+   ~e.vs_halted /\ e.vs_current_bb = "@wcopy_cond_0"` by
+    (simp[Abbr `e`, Abbr `b`, control_moves_keep_vars, probe_word_entry_observations] >>
+     simp[Once jump_to_def, probe_word_entry_observations]) >>
+  drule_all probe_word_run_load_loop >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `run_blocks _ ctx probe_word_function l` >>
+  `lookup_var "%2" l = SOME b /\ ~l.vs_halted /\
+   l.vs_current_bb = "@wcopy_exit_2"` by
+    simp[Abbr `l`, probe_word_loaded_observations] >>
+  drule_all probe_word_run_load_exit >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `run_blocks _ ctx probe_word_function c` >>
+  `contract_storage e = contract_storage s` by
+    simp[Abbr `e`, contract_storage_def, jump_to_def,
+         probe_word_entry_state_def, update_var_def] >>
+  `mload (w2n b) l = sload 3w s` by
+    (simp[Abbr `l`] >>
+     dep_rewrite.DEP_REWRITE_TAC [probe_word_loaded_header] >>
+     simp[Abbr `b`, probe_word_buffer_disjoint, sload_def]) >>
+  `probe_word_final_state s = sstore 0w (sload 3w s)
+    ((probe_word_copied_state c (sload 3w s) b) with vs_inst_idx := 1)` by
+    simp[probe_word_final_state_def, Abbr `c`, Abbr `l`, Abbr `e`, Abbr `b`] >>
+  asm_rewrite_tac [] >> irule probe_word_run_copy_return >>
+  simp[Abbr `c`, control_moves_keep_vars, probe_word_load_exit_observations,
+       Abbr `l`, probe_word_loaded_observations, Abbr `e`,
+       probe_word_entry_observations] >>
+  simp[Once jump_to_def, probe_word_load_exit_observations]
+QED
