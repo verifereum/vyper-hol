@@ -181,3 +181,12 @@ QED
    at a near-limit frontier. No body_inv, stmt_state_rel, successful source
    return, or complete lower_vyper_runtime_unit witness is asserted here.
    In particular this is not falsehood evidence for body_intcall_case. *)
+
+(* The existing valueCopy size-bound entry point needs only a TYPE-size
+   bound, not a destination-address bound. This arithmetic supplies it from
+   the compiler's normal allocation limit even in the 32-byte diagnostic. *)
+Theorem alloc_limit_supplies_copy_size_slack:
+  !sz. sz < 2 ** 64 ==> sz + 64 < dimword (:256)
+Proof
+  simp[dimword_def] >> rpt strip_tac >> decide_tac
+QED

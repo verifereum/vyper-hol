@@ -1,7 +1,7 @@
 (* Callee entry invariants for the internal-call body simulation. *)
 Theory bodyIntCallEntry
 Ancestors
-  bodySim bodySimEntry intCallCallee vyperInterpreter vyperContext vyperState list compileVyper bodyIntCallEntryEnv
+  bodySim bodySimEntry compileEnv intCallCallee vyperInterpreter vyperContext vyperState list compileVyper bodyIntCallEntryEnv
   vyperTypeEvalSoundness vyperTypeBindArguments vyperTypeInvariants exprSimHyps finite_map
   vyperTypeStoragePreservation vyperTypeEvalStoragePreservation
   vyperStorageLayoutSafety vyperLookupStorage vyperStorageBackend
@@ -158,4 +158,35 @@ Proof
      >- (qexistsl_tac [`args`, `vs`] >> simp[] >> metis_tac[]) >>
      qexists_tac `env` >> simp[]) >>
   qexistsl_tac [`env_body`, `ret_tv`, `env_after`] >> simp[] >> metis_tac[]
+QED
+
+Theorem body_inv_internal_prologue:
+  body_inv tops ctx cenv cx /\
+  compile_internal_prologue cenv params has_rb rt st0 = ((ce,pc),st1) ==>
+  body_inv tops ctx (ce with ce_alloca_locals := T) cx
+Proof
+  strip_tac >> drule compile_internal_prologue_fields >>
+  simp[compile_env_component_equality] >> strip_tac >>
+  gvs[body_inv_def] >> qexistsl_tac [`rpolicy`, `unit`] >> simp[]
+QED
+
+Theorem body_inv_runtime_internal_entry:
+  body_inv tops ctx caller cx /\
+  set_internal_package_target target
+    (package_internal_fn tops use_trans nkeys F 0
+      (mut,nr,rr,name,args,dflts,ret,ss)) =
+    (lbl,ce,params,has_rb,is_nr,key,trans,view,ctor,imm_len,ss',rt) /\
+  compile_internal_prologue ce params has_rb rt st0 = ((ce2,pc),st1) /\
+  push_function src_fn sc cx es = (INL cxf,es') ==>
+  body_inv tops ctx (ce2 with ce_alloca_locals := T) cxf
+Proof
+  strip_tac >> drule_all body_inv_push_function >> strip_tac >>
+  `body_inv tops ctx
+     (build_compile_env tops Internal mut name args ret ss use_trans) cxf` by
+    (irule body_inv_build_internal_env >> goal_assum drule) >>
+  irule body_inv_internal_prologue >> goal_assum drule >>
+  gvs[compileVyperTheory.package_internal_fn_def,
+      compileVyperTheory.set_internal_package_target_def,
+      compileVyperTheory.update_cenv_nonreentrant_def, body_inv_def] >>
+  metis_tac[]
 QED
