@@ -1158,17 +1158,21 @@ Proof
   simp[ao_flip_comparison_comparator] >> metis_tac[]
 QED
 
+Theorem ao_fn_inst_ids_distinct_alt:
+  fn_inst_ids_distinct fn <=> ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))
+Proof
+  `!bbs. MAP (\i. i.inst_id) (fn_insts_blocks bbs) =
+    FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs)` by
+    (Induct >> simp[fn_insts_blocks_def]) >>
+  simp[fn_inst_ids_distinct_def, fn_insts_def]
+QED
+
 Theorem ao_fn_inst_id_injective:
   fn_inst_ids_distinct fn /\ MEM x (fn_insts fn) /\ MEM y (fn_insts fn) /\
   x.inst_id = y.inst_id ==> x = y
 Proof
-  simp[fn_inst_ids_distinct_def, fn_insts_def] >> strip_tac >>
-  `!bbs. MAP (\i. i.inst_id) (fn_insts_blocks bbs) =
-    FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs)` by
-    (Induct >> simp[fn_insts_blocks_def]) >>
-  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks))` by simp[] >>
+  simp[ao_fn_inst_ids_distinct_alt, fn_insts_def] >> strip_tac >>
   gvs[listTheory.MEM_EL] >>
-  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks))` by simp[] >>
   `n < LENGTH (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks)) /\
    n' < LENGTH (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks))` by simp[] >>
   `EL n (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks)) =
@@ -1199,6 +1203,317 @@ val _ = List.app (fn th =>
   if null (hyp th) then () else raise Fail "residual hypotheses in AO scan")
   [ao_flip_comparison_comparator, ao_cmp_flip_scan_provenance,
    ao_fn_inst_id_injective, ao_cmp_flip_scan_lookup_safety];
+
+Theorem ao_name_inserts_supply_numeric:
+  ao_name_inserts_supply s requests = (named,s') ==>
+  s'.irs_next_inst = s.irs_next_inst + LENGTH requests /\
+  ALL_DISTINCT (MAP (\(a,out,id,v). id) named) /\
+  EVERY (\(a,out,id,v). s.irs_next_inst <= id /\ id < s'.irs_next_inst) named /\
+  MAP FST named = MAP FST requests
+Proof
+  map_every qid_spec_tac [`s'`, `named`, `s`] >>
+  Induct_on `requests`
+  >- simp[ao_name_inserts_supply_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  simp[ao_name_inserts_supply_def, irSupplyTheory.fresh_inst_id_def,
+       irSupplyTheory.fresh_ir_var_def, pairTheory.pair_case_eq] >>
+  rpt strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP, pairTheory.FORALL_PROD] >>
+  rpt strip_tac >> res_tac >> gvs[]
+QED
+
+Theorem ao_named_insert_id_injective:
+  ALL_DISTINCT (MAP (\(a,out,id,v). id) named) /\
+  MEM (a,out,id,v) named /\ MEM (b,out',id,v') named ==> a = b
+Proof
+  Induct_on `named` >> simp[] >> gen_tac >> PairCases_on `h` >>
+  simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem ao_name_inserts_supply_lookup_unique:
+  ao_name_inserts_supply s requests = (named,s') /\
+  ALOOKUP named a = SOME (out,id,v) /\
+  ALOOKUP named b = SOME (out',id,v') ==> a = b
+Proof
+  strip_tac >> drule ao_name_inserts_supply_numeric >> strip_tac >>
+  imp_res_tac alistTheory.ALOOKUP_MEM >>
+  metis_tac[ao_named_insert_id_injective]
+QED
+
+Theorem ao_name_inserts_supply_lookup_bound:
+  ao_name_inserts_supply s requests = (named,s') /\
+  ALOOKUP named a = SOME (out,id,v) ==>
+  s.irs_next_inst <= id /\ id < s'.irs_next_inst
+Proof
+  strip_tac >> drule ao_name_inserts_supply_numeric >> strip_tac >>
+  imp_res_tac alistTheory.ALOOKUP_MEM >>
+  gvs[listTheory.EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]
+QED
+
+Theorem ao_name_inserts_supply_lookup_key:
+  ao_name_inserts_supply s requests = (named,s') /\
+  ALOOKUP named a = SOME (out,id,v) ==> MEM a (MAP FST requests)
+Proof
+  strip_tac >> drule ao_name_inserts_supply_numeric >> strip_tac >>
+  imp_res_tac alistTheory.ALOOKUP_MEM >>
+  metis_tac[listTheory.MEM_MAP, pairTheory.FST]
+QED
+
+Theorem ao_cmp_flip_apply_inst_ids:
+  MAP (\i. i.inst_id) (ao_cmp_flip_apply_inst flips removes named inst) =
+  if IS_SOME (ALOOKUP flips inst.inst_id) \/ MEM inst.inst_id removes then [inst.inst_id]
+  else case ALOOKUP named inst.inst_id of
+         NONE => [inst.inst_id]
+       | SOME (out,id,v) => [id; inst.inst_id]
+Proof
+  Cases_on `ALOOKUP flips inst.inst_id`
+  >- (simp[ao_cmp_flip_apply_inst_def] >>
+      Cases_on `MEM inst.inst_id removes` >> simp[] >>
+      Cases_on `ALOOKUP named inst.inst_id` >> simp[] >>
+      PairCases_on `x` >> simp[]) >>
+  PairCases_on `x` >> simp[ao_cmp_flip_apply_inst_def]
+QED
+
+Theorem ao_cmp_flip_apply_inst_structure:
+  (!opc w op. ALOOKUP flips inst.inst_id = SOME (opc,w,op) ==>
+    is_comparator inst.inst_opcode /\ is_comparator opc) /\
+  (MEM inst.inst_id removes ==> inst.inst_opcode = ISZERO) /\
+  (!out id v. ALOOKUP named inst.inst_id = SOME (out,id,v) ==> inst.inst_opcode = ASSERT) ==>
+  ao_cmp_flip_apply_inst flips removes named inst <> [] /\
+  EVERY (\j. (j.inst_opcode = PHI <=> inst.inst_opcode = PHI) /\
+             (is_terminator j.inst_opcode = is_terminator inst.inst_opcode) /\
+             get_successors j = get_successors inst)
+    (ao_cmp_flip_apply_inst flips removes named inst) /\
+  (is_terminator inst.inst_opcode ==> ao_cmp_flip_apply_inst flips removes named inst = [inst])
+Proof
+  strip_tac >>
+  Cases_on `ALOOKUP flips inst.inst_id`
+  >- (simp[ao_cmp_flip_apply_inst_def] >>
+      Cases_on `MEM inst.inst_id removes` >> gvs[]
+      >- simp[is_terminator_def, get_successors_def] >>
+      Cases_on `ALOOKUP named inst.inst_id` >> simp[] >>
+      PairCases_on `x` >> gvs[] >>
+      simp[is_terminator_def, get_successors_def]) >>
+  PairCases_on `x` >> gvs[] >>
+  simp[ao_cmp_flip_apply_inst_def] >>
+  gvs[is_comparator_def] >> simp[is_terminator_def, get_successors_def]
+QED
+
+Theorem ao_expand_insts_well_formed:
+  (!i. MEM i insts ==>
+    f i <> [] /\
+    EVERY (\j. (j.inst_opcode = PHI <=> i.inst_opcode = PHI) /\
+               (is_terminator j.inst_opcode = is_terminator i.inst_opcode)) (f i) /\
+    (is_terminator i.inst_opcode ==> f i = [i])) /\
+  bb_well_formed (bb with bb_instructions := insts) ==>
+  bb_well_formed (bb with bb_instructions := FLAT (MAP f insts))
+Proof
+  Induct_on `insts`
+  >- simp[bb_well_formed_def] >>
+  rpt strip_tac >>
+  Cases_on `insts = []`
+  >- (gvs[bb_well_formed_def] >> metis_tac[]) >>
+  gvs[ao_bb_cons_well_formed] >>
+  (`bb_well_formed (bb with bb_instructions := FLAT (MAP f insts))` by metis_tac[] >>
+   simp[] >> irule ao_bb_prefix_well_formed >> simp[] >>
+   conj_tac
+   >- (gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+   Cases_on `h.inst_opcode = PHI`
+   >- (disj1_tac >> gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+   disj2_tac >>
+   gvs[listTheory.EVERY_FLAT, listTheory.EVERY_MAP, listTheory.EVERY_MEM] >>
+   metis_tac[])
+QED
+
+Theorem ao_cmp_flip_apply_inst_id_origin:
+  MEM j (ao_cmp_flip_apply_inst flips removes named i) ==>
+  j.inst_id = i.inst_id \/
+  ?out v. ALOOKUP named i.inst_id = SOME (out,j.inst_id,v)
+Proof
+  Cases_on `ALOOKUP flips i.inst_id`
+  >- (Cases_on `MEM i.inst_id removes`
+      >- simp[ao_cmp_flip_apply_inst_def] >>
+      Cases_on `ALOOKUP named i.inst_id`
+      >- simp[ao_cmp_flip_apply_inst_def] >>
+      PairCases_on `x` >>
+      simp[ao_cmp_flip_apply_inst_def] >> rpt strip_tac >> gvs[]) >>
+  PairCases_on `x` >> simp[ao_cmp_flip_apply_inst_def]
+QED
+
+Theorem ao_cmp_flip_apply_insts_distinct:
+  ALL_DISTINCT (MAP (\i. i.inst_id) insts) /\
+  EVERY (\i. i.inst_id < n) insts /\
+  ALL_DISTINCT (MAP (\(a,out,id,v). id) named) /\
+  EVERY (\(a,out,id,v). n <= id) named ==>
+  ALL_DISTINCT (MAP (\i. i.inst_id)
+    (FLAT (MAP (ao_cmp_flip_apply_inst flips removes named) insts)))
+Proof
+  Induct_on `insts` >> simp[] >> rpt strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id)
+    (FLAT (MAP (ao_cmp_flip_apply_inst flips removes named) insts)))` by metis_tac[] >>
+  simp[ao_cmp_flip_apply_inst_ids, listTheory.ALL_DISTINCT_APPEND] >>
+  `!i out id v. ALOOKUP named i = SOME (out,id,v) ==> n <= id` by
+    (rpt strip_tac >> imp_res_tac alistTheory.ALOOKUP_MEM >>
+     gvs[listTheory.EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]) >>
+  `!a out id v b out' v'.
+    ALOOKUP named a = SOME (out,id,v) /\
+    ALOOKUP named b = SOME (out',id,v') ==> a = b` by
+    (rpt strip_tac >> imp_res_tac alistTheory.ALOOKUP_MEM >>
+     metis_tac[ao_named_insert_id_injective]) >>
+  Cases_on `ALOOKUP named h.inst_id` >> simp[] >>
+  rpt pairarg_tac >> gvs[] >>
+  Cases_on `IS_SOME (ALOOKUP flips h.inst_id) \/ MEM h.inst_id removes` >> simp[] >>
+  gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP] >>
+  simp[listTheory.MEM_MAP, listTheory.MEM_FLAT] >>
+  rpt strip_tac >> gvs[] >>
+  spose_not_then strip_assume_tac >> gvs[] >>
+  imp_res_tac ao_cmp_flip_apply_inst_id_origin >> gvs[] >>
+  res_tac >> gvs[] >> PairCases_on `x` >> gvs[] >>
+  res_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem ao_expand_insts_last:
+  insts <> [] /\ is_terminator (LAST insts).inst_opcode /\
+  (!i. MEM i insts ==> f i <> [] /\ (is_terminator i.inst_opcode ==> f i = [i])) ==>
+  FLAT (MAP f insts) <> [] /\ LAST (FLAT (MAP f insts)) = LAST insts
+Proof
+  Induct_on `insts` >> simp[] >> rpt strip_tac >>
+  Cases_on `insts = []`
+  >- (gvs[] >> metis_tac[]) >>
+  gvs[listTheory.LAST_DEF] >>
+  `FLAT (MAP f insts) <> [] /\ LAST (FLAT (MAP f insts)) = LAST insts` by metis_tac[] >>
+  Cases_on `FLAT (MAP f insts)` >> gvs[listTheory.LAST_APPEND_CONS]
+QED
+
+Theorem ao_cmp_flip_apply_block_structure:
+  bb_well_formed bb /\
+  (!i. MEM i bb.bb_instructions ==>
+    (!opc w op. ALOOKUP flips i.inst_id = SOME (opc,w,op) ==>
+      is_comparator i.inst_opcode /\ is_comparator opc) /\
+    (MEM i.inst_id removes ==> i.inst_opcode = ISZERO) /\
+    (!out id v. ALOOKUP named i.inst_id = SOME (out,id,v) ==> i.inst_opcode = ASSERT)) ==>
+  bb_well_formed (bb with bb_instructions :=
+    FLAT (MAP (ao_cmp_flip_apply_inst flips removes named) bb.bb_instructions)) /\
+  bb_succs (bb with bb_instructions :=
+    FLAT (MAP (ao_cmp_flip_apply_inst flips removes named) bb.bb_instructions)) = bb_succs bb
+Proof
+  strip_tac >>
+  `!i. MEM i bb.bb_instructions ==>
+    ao_cmp_flip_apply_inst flips removes named i <> [] /\
+    EVERY (\j. (j.inst_opcode = PHI <=> i.inst_opcode = PHI) /\
+      (is_terminator j.inst_opcode = is_terminator i.inst_opcode) /\
+      get_successors j = get_successors i) (ao_cmp_flip_apply_inst flips removes named i) /\
+    (is_terminator i.inst_opcode ==> ao_cmp_flip_apply_inst flips removes named i = [i])`
+    by (gen_tac >> disch_tac >>
+        first_x_assum drule >> strip_tac >>
+        irule ao_cmp_flip_apply_inst_structure >> simp[]) >>
+  conj_tac
+  >- (irule ao_expand_insts_well_formed >> simp[] >>
+      gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `bb.bb_instructions <> [] /\ is_terminator (LAST bb.bb_instructions).inst_opcode`
+    by gvs[bb_well_formed_def] >>
+  `FLAT (MAP (ao_cmp_flip_apply_inst flips removes named) bb.bb_instructions) <> [] /\
+   LAST (FLAT (MAP (ao_cmp_flip_apply_inst flips removes named) bb.bb_instructions)) =
+   LAST bb.bb_instructions` by
+    (irule ao_expand_insts_last >> simp[] >> metis_tac[]) >>
+  simp[bb_succs_def] >>
+  Cases_on `bb.bb_instructions` >> gvs[] >>
+  Cases_on `FLAT (MAP (ao_cmp_flip_apply_inst flips removes named) (h::t))` >> gvs[]
+QED
+
+Theorem ao_mem_fn_insts_blocks:
+  MEM i (fn_insts_blocks bbs) <=> ?bb. MEM bb bbs /\ MEM i bb.bb_instructions
+Proof
+  Induct_on `bbs` >> simp[fn_insts_blocks_def] >> metis_tac[]
+QED
+
+Theorem ao_cmp_flip_apply_fn_well_formed:
+  wf_function fn /\ EVERY (\i. i.inst_id < n) (fn_insts fn) /\
+  ALL_DISTINCT (MAP (\(a,out,id,v). id) named) /\
+  EVERY (\(a,out,id,v). n <= id) named /\
+  (!i. MEM i (fn_insts fn) ==>
+    (!opc w op. ALOOKUP flips i.inst_id = SOME (opc,w,op) ==>
+      is_comparator i.inst_opcode /\ is_comparator opc) /\
+    (MEM i.inst_id removes ==> i.inst_opcode = ISZERO) /\
+    (!out id v. ALOOKUP named i.inst_id = SOME (out,id,v) ==> i.inst_opcode = ASSERT)) ==>
+  wf_function (ao_cmp_flip_apply_fn flips removes named fn)
+Proof
+  strip_tac >>
+  `!bb. MEM bb fn.fn_blocks ==>
+    bb_well_formed (bb with bb_instructions :=
+      FLAT (MAP (ao_cmp_flip_apply_inst flips removes named) bb.bb_instructions)) /\
+    bb_succs (bb with bb_instructions :=
+      FLAT (MAP (ao_cmp_flip_apply_inst flips removes named) bb.bb_instructions)) = bb_succs bb` by
+    (gen_tac >> disch_tac >> irule ao_cmp_flip_apply_block_structure >>
+     reverse conj_tac >- metis_tac[wf_function_def] >>
+     gen_tac >> disch_tac >> first_x_assum irule >>
+     simp[fn_insts_def, fn_insts_blocks_def] >>
+     simp[ao_mem_fn_insts_blocks] >> metis_tac[]) >>
+  gvs[wf_function_def, fn_labels_def, fn_has_entry_def] >>
+  simp[ao_cmp_flip_apply_fn_def, wf_function_def, fn_labels_def,
+       fn_has_entry_def, listTheory.MAP_MAP_o, combinTheory.o_DEF,
+       listTheory.MEM_MAP] >>
+  conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  conj_tac
+  >- (gvs[fn_succs_closed_def, fn_labels_def] >>
+      simp[listTheory.MEM_MAP, listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+      rpt strip_tac >> gvs[] >>
+      `MEM succ (MAP (\bb. bb.bb_label) fn.fn_blocks)` by metis_tac[] >>
+      gvs[listTheory.MEM_MAP] >>
+      qexists `bb with bb_instructions :=
+        FLAT (MAP (ao_cmp_flip_apply_inst flips removes named) bb.bb_instructions)` >>
+      simp[] >> metis_tac[]) >>
+  `!bbs. fn_insts_blocks (MAP (\bb. bb with bb_instructions :=
+      FLAT (MAP (ao_cmp_flip_apply_inst flips removes named) bb.bb_instructions)) bbs) =
+    FLAT (MAP (ao_cmp_flip_apply_inst flips removes named) (fn_insts_blocks bbs))` by
+    (Induct >> simp[fn_insts_blocks_def, listTheory.MAP_APPEND,
+                   listTheory.FLAT_APPEND]) >>
+  gvs[ao_fn_inst_ids_distinct_alt, fn_insts_def] >>
+  irule ao_cmp_flip_apply_insts_distinct >> simp[] >> metis_tac[]
+QED
+
+Theorem ao_cmp_flip_function_supply_well_formed:
+  wf_function fn /\ EVERY (\i. i.inst_id < s.irs_next_inst) (fn_insts fn) /\
+  ao_cmp_flip_function_supply (dfg_build_function fn) s fn = (fn',s') ==>
+  wf_function fn'
+Proof
+  strip_tac >>
+  Cases_on `ao_cmp_flip_scan (dfg_build_function fn) (fn_insts fn)` >>
+  PairCases_on `r` >>
+  gvs[ao_cmp_flip_function_supply_def] >>
+  Cases_on `NULL q` >> gvs[] >>
+  Cases_on `ao_name_inserts_supply s r1` >> gvs[] >>
+  rename1 `ao_name_inserts_supply s inserts = (named,s')` >>
+  drule ao_name_inserts_supply_numeric >> strip_tac >>
+  `fn_inst_ids_distinct fn` by gvs[wf_function_def] >>
+  drule_all ao_cmp_flip_scan_lookup_safety >> strip_tac >>
+  `EVERY (\i. MEM i (fn_insts fn)) (fn_insts fn)` by simp[listTheory.EVERY_MEM] >>
+  drule_all ao_cmp_flip_scan_provenance >> strip_tac >>
+  irule ao_cmp_flip_apply_fn_well_formed >>
+  reverse conj_tac
+  >- (simp[] >> qexists `s.irs_next_inst` >>
+      gvs[listTheory.EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]) >>
+  gen_tac >> disch_tac >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >> drule_all ao_name_inserts_supply_lookup_key >>
+  simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >> strip_tac >>
+  gvs[listTheory.EVERY_MEM, pairTheory.FORALL_PROD] >>
+  metis_tac[ao_fn_inst_id_injective]
+QED
+
+val _ = List.app (fn th =>
+  if null (hyp th) then () else raise Fail "residual hypotheses in AO application")
+  [ao_fn_inst_ids_distinct_alt, ao_name_inserts_supply_numeric,
+   ao_named_insert_id_injective, ao_name_inserts_supply_lookup_unique,
+   ao_name_inserts_supply_lookup_bound, ao_name_inserts_supply_lookup_key,
+   ao_cmp_flip_apply_inst_ids, ao_cmp_flip_apply_inst_structure,
+   ao_expand_insts_well_formed, ao_cmp_flip_apply_inst_id_origin,
+   ao_cmp_flip_apply_insts_distinct, ao_expand_insts_last,
+   ao_cmp_flip_apply_block_structure, ao_mem_fn_insts_blocks,
+   ao_cmp_flip_apply_fn_well_formed, ao_cmp_flip_function_supply_well_formed];
 
 Theorem ao_preserves_wf_function_proof:
   !sup fn fn' sup'.
