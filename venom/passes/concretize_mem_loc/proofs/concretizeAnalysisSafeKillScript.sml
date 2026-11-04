@@ -2,7 +2,9 @@ Theory concretizeAnalysisSafeKill
 Ancestors
   concretizeAnalysisRuntimeSizes concretizeAnalysisReverseInstance
   concretizeAnalysisSuccessfulWrites concretizePtrReadCoverage
-  concretizeAnalysisExclusiveWriters concretizeMemLocDefs basePtrDefs cfgAnalysis
+  concretizeAnalysisExclusiveWriters concretizeAnalysisKillApplicability
+  frameHistoryDefinitions concretizePtrParamSupport contextCodegenRel
+  removeUnusedSsaProofs venomInst concretizeMemLocDefs basePtrDefs cfgAnalysis
   frameOriginHistory frameOriginReachable o1PassContract ptrDiscipline
   venomWf memLocDefs finite_map list pair
 
@@ -22,7 +24,7 @@ Theorem concretize_production_kill_covers:
     else SOME (context_alloca_size fn (imported_mems_used observed.cu_context fn) a)) /\
   mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
   MEM (Var v) inst.inst_operands /\ inst.inst_opcode <> PHI /\
-  allocation_exclusive P fn v /\ ptr_ml_can_kill (Allocation aid) bp sizes inst /\
+  ptr_ml_can_kill (Allocation aid) bp sizes inst /\
   step_inst fuel C inst s = OK s' /\ access_ok lo G fn inst s /\
   ~in_revert_forward fn s ==>
   ?b sz. FLOOKUP G v = SOME (b,sz) /\
@@ -31,16 +33,28 @@ Theorem concretize_production_kill_covers:
       byte IN range_bytes (step_writes inst s s')
 Proof
   strip_tac >>
+  `frame_reachable vs0 C stk PG G tn fn inst s` by
+    metis_tac[joint_origin_history_erasure, origin_frame_erasure] >>
   `EVERY wf_function C.ctx_functions /\ EVERY fn_inst_wf C.ctx_functions` by
     (gvs[o1_ctx_shape_def, EVERY_MEM] >> metis_tac[o1_fn_shape_def]) >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[EVERY_MEM, fn_inst_wf_def, fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     metis_tac[]) >>
+  `MEM fn C.ctx_functions` by metis_tac[ptr_frame_current_static] >>
+  `fn_ptr_ok P fn` by fs[EVERY_MEM] >>
+  `active_inst fn inst s` by
+    metis_tac[joint_origin_history_projection, frame_history_active] >>
+  `MEM inst (fn_insts fn)` by
+    (gvs[active_inst_def, fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     metis_tac[MEM_EL]) >>
+  `allocation_exclusive P fn v` by
+    (irule production_kill_allocation_exclusive >> metis_tac[]) >>
   `find_base_allocas_opt bp (inst_write_op inst) = [Allocation aid]` by
     gvs[ptr_ml_can_kill_def] >>
   `?site. FLOOKUP om v = SOME (OriginLocal aid,site) /\
     FLOOKUP G v = SOME site /\ FLOOKUP s.vs_allocas aid = SOME site` by
     (irule joint_origin_history_singleton_write_cached_site >> metis_tac[]) >>
   PairCases_on `site` >>
-  `frame_reachable vs0 C stk PG G tn fn inst s` by
-    metis_tac[joint_origin_history_erasure, origin_frame_erasure] >>
   `context_alloca_size fn (imported_mems_used observed.cu_context fn)
       (Allocation aid) = site1` by
     (drule_all concretize_runtime_context_size >> simp[]) >>
@@ -66,7 +80,6 @@ Theorem concretize_protected_cached_byte_no_kill:
     else SOME (context_alloca_size fn (imported_mems_used observed.cu_context fn) a)) /\
   mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
   MEM (Var v) inst.inst_operands /\ inst.inst_opcode <> PHI /\
-  allocation_exclusive P fn v /\
   step_inst fuel C inst s = OK s' /\ access_ok lo G fn inst s /\
   ~in_revert_forward fn s /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
   b <= byte /\ byte < b + sz /\
