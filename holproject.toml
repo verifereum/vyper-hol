@@ -6,7 +6,9 @@ name = "vyper-hol"
 version = "0.2.3"
 
 [build]
-roots = ["lowering/gasShadowRawRuntimeScript.sml",
+roots = ["lowering/fragGasOriginScript.sml",
+         "venom/proofs/gasEventsScript.sml",
+         "lowering/gasShadowRawRuntimeScript.sml",
          "lowering/gasShadowRawDeployScript.sml",
          "lowering/gasShadowUnitScript.sml",
          "lowering/gasShadowRuntimeScript.sml",
