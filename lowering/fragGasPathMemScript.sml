@@ -28,6 +28,8 @@ Definition gas_path_mem_edge_def:
           ~entered.vs_halted /\
           r = OK (entered with vs_inst_idx :=
                     phi_prefix_length target.bb_instructions)) \/
+       (?lbl. is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+              middle = OK (jump_to lbl s) /\ r = middle) \/
        (exit_result middle /\ r = middle))
 End
 
