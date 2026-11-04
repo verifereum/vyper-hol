@@ -1272,6 +1272,23 @@ val () = expr_case "void extcall with default_return_value"
   ``Call NoneT (ExtCall F F ("poke", [], NoneT) [EKDefault])
       [^arg_a; Call NoneT SelfDestructTarget [^arg_a] NONE] NONE``
   [] [``Payable``, ``Nonpayable``]
+val () = return_case "staticcall returning a tuple"
+  ``TupleT [BaseT (UintT 256); BaseT (UintT 256)]``
+  ``Call (TupleT [BaseT (UintT 256); BaseT (UintT 256)])
+      (ExtCall T F ("pair", [BaseT (UintT 256)],
+                    TupleT [BaseT (UintT 256); BaseT (UintT 256)]) [])
+      [^arg_a; ^(uint 1)] NONE``
+  [``Pure``, ``View``] []
+(* Vyper can't name None in a type, so no interface returns or takes a type
+   with None inside. *)
+val () = expr_case "staticcall returning a tuple of None"
+  ``Call (TupleT [NoneT]) (ExtCall T F ("f", [], TupleT [NoneT]) [])
+      [^arg_a] NONE``
+  [] [``Pure``, ``View``, ``Nonpayable``, ``Payable``]
+val () = expr_case "extcall with a None parameter"
+  ``Call NoneT (ExtCall F F ("poke", [NoneT], NoneT) [])
+      [^arg_a; Call NoneT (Send F) [^arg_a; ^(uint 1)] NONE] NONE``
+  [] [``Payable``, ``Nonpayable``]
 val () = expr_case "raw_call"
   ``Call NoneT (RawCallTarget ^raw_call_flags)
       [^arg_a; ^empty_bytes; ^(uint 0)] NONE``
