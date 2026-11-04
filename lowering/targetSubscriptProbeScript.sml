@@ -4181,3 +4181,43 @@ Proof
   irule probe_word_final_memory_frame >> simp[] >> decide_tac
 QED
 
+
+Theorem probe_word_return_buffer_holds:
+  !cenv cx es s p w.
+    lookup_var p s = SOME w ==>
+    vv_holds cenv cx (BaseT (UintT 256)) (Value (IntV 0))
+      (LocatedValue (BaseT (UintT 256))
+        (base_ptr <|buf_operand := Var p; buf_size := 32|>)) es
+      (mstore (w2n w) 0w s)
+Proof
+  rpt strip_tac >>
+  `eval_operand (Var p) (mstore (w2n w) 0w s) = SOME w` by
+    gvs[eval_operand_def, lookup_var_def, mstore_def] >>
+  simp[exprSimTheory.vv_holds_def, contextTheory.base_ptr_def, contextTheory.mk_ptr_def,
+       read_result_def, return_def, evaluate_type_def, is_word_type_def] >>
+  simp[valueEncodingTheory.val_in_memory_def,
+       valueEncodingPropsTheory.mstore_mem_word_at_same,
+       valueEncodingTheory.typed_val_to_w256_def,
+       valueEncodingTheory.val_to_w256_def, integer_wordTheory.i2w_def]
+QED
+
+Theorem probe_word_return_buffer_at:
+  !cenv cx es s p w aid sa sb.
+    lookup_var p s = SOME w /\
+    FLOOKUP s.vs_allocas aid = SOME (w2n w,32) /\
+    sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+    (!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
+       w2n w + 32 <= lb \/ lb + lsz <= w2n w) ==>
+    vv_at cenv cx (BaseT (UintT 256)) sa sb es (Value (IntV 0))
+      (LocatedValue (BaseT (UintT 256))
+        (base_ptr <|buf_operand := Var p; buf_size := 32|>)) s
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[exprSimTheory.vv_at_def, contextTheory.base_ptr_def, contextTheory.mk_ptr_def,
+       read_result_def, return_def, evaluate_type_def] >>
+  simp[valueEncodingTheory.val_wf_def, exprSimTheory.val_footprint_def,
+       valueEncodingTheory.type_memory_size_def] >>
+  qexists_tac `w` >> simp[eval_operand_def] >>
+  disj1_tac >> qexistsl_tac [`aid`,`w2n w`,`32`] >> simp[] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
