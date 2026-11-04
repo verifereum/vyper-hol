@@ -71,7 +71,7 @@ Theorem block_environment_bounds:
   LENGTH tx.block_hashes <= 256 /\
   tp.prevRandao = n2w tx.prev_randao /\ tp.prevHashes = tx.block_hashes
 Proof
-  simp[tx_block_fields_rel_def, tx_env_ok_def]
+  simp[tx_block_fields_rel_def, compileEnvTheory.tx_env_ok_def]
 QED
 
 Theorem no_genesis_or_unbounded_hash_environment:
@@ -81,7 +81,7 @@ Theorem no_genesis_or_unbounded_hash_environment:
   (MIN 256 tx.block_number > LENGTH hashes ==>
     ~tx_env_ok (tx with block_hashes := hashes))
 Proof
-  simp[tx_env_ok_def, arithmeticTheory.MIN_DEF] >> rw[] >> decide_tac
+  simp[compileEnvTheory.tx_env_ok_def, arithmeticTheory.MIN_DEF] >> rw[] >> decide_tac
 QED
 
 (* ===== Exact source module/layout and independent hypotheses ===== *)
@@ -123,18 +123,23 @@ Proof
 QED
 
 Theorem outcome_guard_success_only:
-  call_outcomes_ok tops am tx [] /\
-  (call_outcomes_ok tops am tx [co with co_success := F] <=>
-    LENGTH co.co_returnData < dimword(:256)) /\
-  (call_outcomes_ok tops am tx [co with co_success := T] <=>
+  call_outcomes_ok am tx [] /\
+  (call_outcomes_ok am tx [co with co_success := F] <=>
     LENGTH co.co_returnData < dimword(:256) /\
     accounts_runtime_well_typed co.co_accounts /\
     contract_storage_well_formed
       (initial_evaluation_context am.sources am.layouts tx NONE)
       (initial_state (am with <|accounts := co.co_accounts;
                                tStorage := co.co_tStorage|>) [])) /\
-  (call_outcomes_ok tops am tx (xs ++ ys) <=>
-    call_outcomes_ok tops am tx xs /\ call_outcomes_ok tops am tx ys)
+  (call_outcomes_ok am tx [co with co_success := T] <=>
+    LENGTH co.co_returnData < dimword(:256) /\
+    accounts_runtime_well_typed co.co_accounts /\
+    contract_storage_well_formed
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state (am with <|accounts := co.co_accounts;
+                               tStorage := co.co_tStorage|>) [])) /\
+  (call_outcomes_ok am tx (xs ++ ys) <=>
+    call_outcomes_ok am tx xs /\ call_outcomes_ok am tx ys)
 Proof
   simp[call_outcomes_ok_def, EVERY_APPEND]
 QED
@@ -309,10 +314,11 @@ Theorem success_requires_requests_and_effects:
   (call_result_rel tops ret am tx es r es' <=>
     ?out lgs. frame_outcome es r es' NONE out lgs /\
       tx_return_bytes tops ret tx v out /\
-      accounts_agree cx am'.accounts es'.rollback.accounts /\
+      accounts_agree cx am'.accounts
+        (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
       transient_agree cx am'.tStorage es'.rollback.tStorage /\
       logs_correspond (compiled_event_info tops) (type_env tops) tx.target am'.logs lgs /\
-      LIST_REL (request_agree cx) rqs (MAP FST (call_trace es)))
+      LIST_REL (request_agree cx) rqs (call_requests es))
 Proof
   simp[call_result_rel_def]
 QED

@@ -225,7 +225,7 @@ Proof
      >- (first_x_assum irule >> qexists_tac `env` >>
          first_assum (irule_at Any) >> fs[]) >>
      metis_tac[runtime_storage_consistent_storage])
-  >~ [`eval_expr _ (Call _ (CreateTarget _ _ _) _ _)`] >-
+  >~ [`eval_expr _ (Call _ (CreateTarget _ _ _ _) _ _)`] >-
     (rpt strip_tac >> gvs[expr_has_evm_run_def, supported_expr_exists_def, expr_evm_run_root_def])
   >~ [`eval_exprs _ []`] >-
     (rpt strip_tac >> gvs[Once evaluate_def, return_def, runtime_storage_consistent_def])

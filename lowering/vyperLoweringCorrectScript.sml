@@ -125,14 +125,12 @@ Definition venom_env_rel_def:
   venom_env_rel tx vs <=>
     compileEnv$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
     ~vs.vs_call_ctx.cc_static /\
-    vs.vs_prev_hashes = tx.block_hashes /\
-    (!n. vs.vs_block_ctx.bc_blockhash n =
-         let idx = tx.block_number - n - 1 in
-         if n < tx.block_number /\ tx.block_number - 256 <= n /\
-            idx < LENGTH tx.block_hashes
-         then EL idx tx.block_hashes else 0w)
+    vs.vs_prev_hashes = tx.block_hashes
 End
 
+(* tx_env_ok is also a conjunct of venom_env_rel, through call_ctx_rel; it
+   is stated here too so the transaction premises read in one place, not as
+   a separate assumption. *)
 Definition initial_venom_state_rel_def:
   initial_venom_state_rel tops am tx vs <=>
     value_transfer_ok tx am.accounts /\
@@ -143,6 +141,7 @@ Definition initial_venom_state_rel_def:
     vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
     vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0 /\
     vs.vs_returndata = [] /\ vs.vs_requests = [] /\
+    vs.vs_pending_deletions = am.pending_deletions /\
     immutables_section_rel tops (account_immutables am tx.target) vs.vs_data_section
 End
 
@@ -182,7 +181,8 @@ Definition external_call_result_rel_def:
     case (res, vres) of
       (INL v, Halt ss) =>
         tx_return_bytes tops ret tx v ss.vs_returndata /\
-        accounts_agree cx am'.accounts ss.vs_accounts /\
+        accounts_agree cx am'.accounts
+          (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
         transient_agree cx am'.tStorage ss.vs_transient /\
         logs_correspond (compiled_event_info tops) (type_env tops)
           tx.target am'.logs ss.vs_logs /\
@@ -895,8 +895,9 @@ QED
    builtin arities and distinct internal names; raw_shape_free_program
    excludes msg.gas values and raw_call (wider than the unit shape needs:
    a plain raw_call passes it, but the body-shape proof lacks that case).
-   Raw O1 shape excludes DLOAD; the immutable-free hypothesis restricts this
-   theorem's source domain, not the runtime immutable compiler. *)
+   The body-shape proof covers only static variable locations, so the
+   immutable-free hypothesis restricts this theorem's source domain, not the
+   runtime immutable compiler. *)
 Theorem lower_vyper_runtime_unit_source_unit_ok:
   !tops rpolicy unit layouts addr art.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\

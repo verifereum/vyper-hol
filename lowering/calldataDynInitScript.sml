@@ -10,11 +10,56 @@ Ancestors
   emitHelperProps exprLoweringProps compileEnv emitHelper context
   valueEncodingProps venomExecSemantics venomMemProps venomState venomInst words arithmetic finite_map list rich_list
 
+Theorem calldata_dynarray_prefix_opcodes:
+  abi_decode_dynarray_prefix src CALLDATALOAD hi maxn abi_sz st = ((),st') ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+    (emitted_insts st st')
+Proof
+  strip_tac >> Cases_on `hi = Lit 0w` >>
+  gvs[abi_decode_dynarray_prefix_def, abi_decode_count_guard_def,
+      abi_decode_dynarray_end_guard_def, abi_decode_dynarray_end_def,
+      abiDecoderGuardTheory.abi_decode_le_guard_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
+      emitted_insts_def] >>
+  pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >>
+  gvs[DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def]
+QED
+
+Theorem calldata_array_header_opcodes:
+  abi_decode_array_header dst src CALLDATALOAD st = (cnt,st') ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+    (emitted_insts st st')
+Proof
+  simp[abi_decode_array_header_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+       fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[emitted_insts_def] >>
+  pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >>
+  gvs[DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def]
+QED
+
+Theorem abi_decode_index_init_opcodes:
+  abi_decode_index_init st = (ip,st') ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+    (emitted_insts st st')
+Proof
+  simp[abi_decode_index_init_def, compile_alloc_buffer_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, emit_op_def, emit_void_def,
+       fresh_var_def, fresh_id_def, emit_def] >> rpt strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >>
+  pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >>
+  simp[DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def]
+QED
+
 Theorem calldata_count_guard_code_shape:
   abi_decode_count_guard CALLDATALOAD src limit st = (count_op,st') ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts st'.cs_current_insts /\
-  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
     (emitted_insts st st')
 Proof
   simp[abi_decode_count_guard_def, comp_bind_def, comp_ignore_bind_def,
@@ -192,6 +237,7 @@ Proof
   strip_tac >> drule abi_decode_index_init_shape >> strip_tac >>
   `isPREFIX st.cs_current_insts st'.cs_current_insts` by
     fs[inst_extends_def, IS_PREFIX_APPEND] >>
+  drule abi_decode_index_init_opcodes >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_index_init_prefix_safe) >>
@@ -266,6 +312,7 @@ Proof
        fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
      simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
      simp[DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]) >>
+  drule calldata_array_header_opcodes >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> fs[inst_extends_def] >> conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_array_header_prefix_safe) >>
@@ -483,6 +530,13 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts st loop_st)` by
     (asm_rewrite_tac[EVERY_APPEND] >> fs[EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+              i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+     (emitted_insts st loop_st)` by
+    (imp_res_tac calldata_dynarray_prefix_opcodes >>
+     imp_res_tac calldata_array_header_opcodes >>
+     imp_res_tac abi_decode_index_init_opcodes >>
+     asm_rewrite_tac[EVERY_APPEND]) >>
   reverse (Cases_on `w2n (abi_decode_load CALLDATALOAD srcword initial) <= maxn`)
   >- suspend "reject" >>
   `abi_decode_load CALLDATALOAD srcword initial =

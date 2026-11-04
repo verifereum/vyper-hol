@@ -235,8 +235,8 @@ val range_ci_step =
       val close = FIRST (map MATCH_ACCEPT_TAC
         (List.concat (map BODY_CONJUNCTS (ci_mono_comp_return :: rws))))
   in
-    FIRST [MATCH_MP_TAC ci_mono_bind, MATCH_MP_TAC ci_mono_ignore_bind,
-           close, FIRST_ASSUM MATCH_ACCEPT_TAC,
+    FIRST [close, FIRST_ASSUM MATCH_ACCEPT_TAC,
+           MATCH_MP_TAC ci_mono_bind, MATCH_MP_TAC ci_mono_ignore_bind,
            IF_CASES_TAC, BasicProvers.TOP_CASE_TAC] >>
     rpt conj_tac >> rpt gen_tac >> PURE_REWRITE_TAC[LET_THM] >> BETA_TAC
   end;

@@ -1,33 +1,8 @@
 (* Compiler-only suffix preservation for selected argument registration. *)
 Theory actualRegistrationCode
 Ancestors
-  actualDecoderPackaging abiDecoderAppend moduleLowering fragExec compileEnv arithmetic list
+  actualDecoderPackaging abiDecoderAppend moduleLowering moduleLoweringProps fragExec compileEnv arithmetic list
   loweringShapeProps loweringShapeDefs loweringShapeRules vyperCompiler venomInst
-
-Theorem cs_appends_decode_args:
-  !args cenv off opc hi base.
-    cs_appends (compile_decode_args cenv args off opc hi base)
-Proof
-  Induct >- simp[compile_decode_args_def, cs_appends_return] >>
-  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
-  simp[Once compile_decode_args_def, LET_THM] >>
-  Cases_on `h1` >> simp[]
-  >- (ntac 2 (ho_match_mp_tac cs_appends_bind >> conj_tac
-        >- simp[cs_appends_emit_helpers] >> gen_tac) >>
-      irule cs_appends_ignore_bind >> conj_tac
-      >- simp[cs_appends_abi_clamp] >>
-      irule cs_appends_ignore_bind >> conj_tac
-      >- (Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[cs_appends_return] >>
-          Cases_on `var_location_decode_operand x` >>
-          simp[cs_appends_return, cs_appends_emit_helpers]) >> simp[]) >>
-  Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[] >>
-  Cases_on `var_location_decode_operand x` >> simp[] >>
-  Cases_on `h2` >> simp[] >>
-  rpt (ho_match_mp_tac cs_appends_bind >> conj_tac
-    >- simp[cs_appends_emit_helpers] >> gen_tac) >>
-  irule cs_appends_ignore_bind >>
-  simp[cs_appends_abi_decode_mutual]
-QED
 
 Theorem cs_appends_register_positional_args:
   !args cenv off. cs_appends (compile_register_positional_args cenv args off)
@@ -238,7 +213,9 @@ Proof
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
   goal_assum $ drule_at Any >>
   `shape_step F (K T) (\st. T) (new_block lbl) (\x st. T)` by
-    (ho_match_mp_tac shape_step_new_block >> simp[shape_stable_def]) >>
+    (ho_match_mp_tac shape_step_new_block >> simp[shape_stable_def] >>
+     irule jump_label_ok_not_internal >>
+     gvs[external_fn_shape_ok_def, jump_label_ok_def]) >>
   pop_assum mp_tac >> simp[shape_step_def] >> disch_then drule >>
   simp[] >> strip_tac >>
   mp_tac compile_entry_checks_shape >> simp[shape_step_def] >>
@@ -295,10 +272,8 @@ Theorem external_fallback_suffix_extends:
   cs_extends st entry_end
 Proof
   strip_tac >>
-  `shape_step F (K T) (\st. T) (new_block fallback_lbl) (\x st. T)` by
-    (ho_match_mp_tac shape_step_new_block >> simp[shape_stable_def]) >>
-  pop_assum mp_tac >> simp[shape_step_def] >> disch_then drule >>
-  simp[] >> strip_tac >>
+  drule_all shape_state_new_block >> strip_tac >>
+  drule cs_extends_new_block >> strip_tac >>
   drule runtime_fallback_shape >> simp[shape_step_def] >>
   disch_then drule >> simp[] >> strip_tac >>
   gvs[shape_extends_def] >> metis_tac[cs_extends_trans]

@@ -24,8 +24,9 @@
  *   4 concat, slice, extract32 (#566), uint2str (#561): compile_concat_case,
  *     compile_slice_case, compile_extract32_case, compile_uint2str_case
  *   5 blobhash: compile_blobhash_case, proved: BLOBHASH on the index, whose
- *     blob hashes call_ctx_rel relates to the transaction's (blockhash,
- *     compile_blockhash_case, is #636 Leaves row 5, with block.prevhash)
+ *     blob hashes call_ctx_rel relates to the transaction's; blockhash(n),
+ *     compile_blockhash_case (#636 Leaves row 5, with block.prevhash), is
+ *     proved below, on call_ctx_rel's tx_env_ok and bc_blockhash lookup
  *   6 account reads: compile_acc_case; all but .code by exprSimAccounts'
  *     compile_acc_read_case, .code in compile_acc_code_case (unprovable
  *     for now, below)
@@ -42,9 +43,6 @@
  *   - compile_len_ctor_code_case, len of an immutable in the constructor:
  *     nothing says the immutables buffer's base variable is 0, as
  *     unwrap_ctor_immutable_word_sim (exprSimUnwrap).
- *   - compile_blockhash_case: the source raises a RuntimeError where
- *     BLOCKHASH returns 0 (#671), and call_ctx_rel does not relate the block
- *     hashes.
  *   - compile_acc_code_case, a bare .code: the lowering emits INVALID, as
  *     Python's codegen refuses it; the supported subset leaves it out.
  *
@@ -71,7 +69,8 @@ Theory exprSimBuiltins
 Ancestors
   list rich_list exprSim exprSimHyps vyperAST exprSimWordBuiltins
   exprSimWordArgs exprSimHash vyperTypeSystem exprLowering compileEnv
-  valueEncoding fragExec vyperInterpreter vyperState vyperContext
+  valueEncoding fragExec freshWrites varsExt builtinProps arithmeticProps emitHelper
+  vyperInterpreter vyperState vyperContext
   vyperValueOperation venomState exprSimAccounts exprSimUnop
   exprSimOperators exprBopLowering builtinMisc venomExecSemantics venomInst
   exprSimCalldata exprSimCalldataSlice exprSimLen exprSimPrecompiles exprSimECArith
@@ -287,13 +286,208 @@ QED
 
 (* ===== Chain and account reads ===== *)
 
+(* blockhash(n): compile_blockhash checks NUMBER - 256 <=s n (SLT) and
+   n < NUMBER, then reads BLOCKHASH n.  call_ctx_rel gives tx_env_ok
+   (0 < block_number < 2 ** 255, MIN 256 block_number <= LENGTH
+   block_hashes <= 256) and bc_blockhash as the EVM's lookup.  Under it
+   evaluate_block_hash raises exactly when a check fails:
+   - n >= block_number: the LT check fails; the source raises.
+   - n < block_number, block_number >= 256: LENGTH block_hashes = 256, the
+     bound NUMBER - 256 is a nonnegative word, and n <s it iff
+     block_number - 1 - n >= 256, where the source raises.
+   - n < block_number < 256: the bound is a small negative word, the SLT
+     check passes, and block_number - 1 - n < block_number <= LENGTH.
+   An argument n >= 2 ** 255 is negative as a signed word, so the SLT
+   check may pass, but n >= block_number and the LT check fails.  On
+   success both read EL (block_number - n - 1) block_hashes, as a
+   bytes32 (word_to_bytes_be). *)
+Theorem compile_blockhash_frag:
+  !ctx func cenv cx i es0.
+    0 <= i /\ i < 2 ** 256 ==>
+    unop_frag ctx func cenv cx compile_blockhash
+      (typed_val_to_w256 (BaseTV (UintT 256)) (IntV i))
+      (BaseT (BytesT (Fixed 32)))
+      (unop_result cx (BaseT (BytesT (Fixed 32))) BlockHash
+         [BaseT (UintT 256)] (IntV i) es0) es0
+Proof
+  rpt strip_tac >>
+  simp[unop_result_def, evaluate_builtin_def] >>
+  rw[unop_frag_def] >>
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es0 s0`)
+  >- simp[frag_exec_def] >>
+  `call_ctx_rel cx.txn s0.vs_call_ctx s0.vs_tx_ctx s0.vs_block_ctx` by
+    (qpat_x_assum `stmt_state_rel ctx func cenv cx es0 s0` mp_tac >>
+     simp[stmt_state_rel_def, state_rel_def]) >>
+  `?n. i = &n` by metis_tac[integerTheory.NUM_POSINT_EXISTS] >>
+  gvs[typed_val_to_w256_def, val_to_w256_def, integer_wordTheory.i2w_pos] >>
+  `tx_env_ok cx.txn` by gvs[call_ctx_rel_def] >>
+  simp[tx_env_ok_evaluate_block_hash] >>
+  Cases_on `n < cx.txn.block_number /\ cx.txn.block_number <= n + 256` >> simp[]
+  >- suspend "window_ok" >>
+  irule frag_exec_conseq >>
+  qexistsl_tac [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s /\
+                     (eval_operand x s = SOME (n2w n) /\ s.vs_block_ctx = s0.vs_block_ctx)`,
+                `\s. F`, `expr_exit (INR (Error (RuntimeError "evaluate_block_hash")))`] >>
+  conj_tac >- (Cases >> simp[expr_exit_def]) >>
+  conj_tac >- (rpt strip_tac >> gvs[]) >>
+  simp[] >>
+  ho_match_mp_tac frag_exec_run_abort >>
+      qexists_tac `\a. a = Revert_abort` >>
+      drule compile_blockhash_shape >> strip_tac >> simp[] >>
+      conj_tac
+      >- (rpt strip_tac >>
+          simp[eval_operand_drop_fresh, drop_fresh_def]) >>
+      reverse conj_tac >- simp[expr_exit_def] >>
+      rpt strip_tac >>
+      drule_all compile_blockhash_run >>
+      `0 < cx.txn.block_number /\ cx.txn.block_number < 2 ** 255` by
+        gvs[tx_env_ok_def] >>
+      `n < 2 ** 256` by simp[] >>
+      drule_all blockhash_signed_window >>
+      `s.vs_block_ctx.bc_number = n2w cx.txn.block_number` by
+        gvs[call_ctx_rel_def] >>
+      simp[wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
+      `cx.txn.block_number < 2 ** 256` by fs[] >>
+      fs[] >> strip_tac >> gvs[]
+QED
+
+Resume compile_blockhash_frag[window_ok]:
+  qmatch_goalsub_abbrev_tac `word_to_bytes_be hash` >>
+  irule frag_exec_conseq >>
+  qexistsl_tac [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s /\
+                     (eval_operand x s = SOME (n2w n) /\ s.vs_block_ctx = s0.vs_block_ctx)`,
+                `\s. stmt_state_rel ctx func cenv cx es0 s /\
+                     eval_operand op s = SOME hash /\
+                     (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
+                            lookup_var z s = SOME w) /\
+                     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                              FLOOKUP s.vs_allocas aid = SOME b) /\
+                     s.vs_memory = s0.vs_memory`, `\r. F`] >>
+  simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> simp[expr_val_rel_def, typed_val_to_w256_def,
+            vyperValueTheory.evaluate_type_def, is_word_type_def,
+            PAD_RIGHT, length_word_to_bytes_be, word_of_bytes_be_to_bytes]) >>
+  ho_match_mp_tac frag_exec_run_frame >>
+  qexists_tac `\a. F` >>
+  drule compile_blockhash_shape >> strip_tac >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all compile_blockhash_frame >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >> simp[eval_operand_drop_fresh, drop_fresh_def]) >>
+  rpt strip_tac >>
+  drule_all compile_blockhash_run >>
+  `0 < cx.txn.block_number /\ cx.txn.block_number < 2 ** 255` by
+    gvs[tx_env_ok_def] >>
+  `n < 2 ** 256` by simp[] >>
+  drule_all blockhash_signed_window >>
+  `s.vs_block_ctx.bc_number = n2w cx.txn.block_number` by
+    gvs[call_ctx_rel_def] >>
+  simp[wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
+  `cx.txn.block_number < 2 ** 256` by fs[] >>
+  fs[] >>
+  `s.vs_block_ctx.bc_blockhash n = hash` by
+    (gvs[call_ctx_rel_def, Abbr `hash`] >>
+     drule tx_env_ok_hash_window >>
+     disch_then (qspec_then `n` mp_tac) >> gvs[] >> decide_tac) >>
+  gvs[]
+
+QED
+
+Finalise compile_blockhash_frag
+
+Theorem lower_value_blockhash:
+  !cenv ty ann e sa op sb.
+    lower_value compile_expr cenv ty (Builtin ann BlockHash [e]) sa =
+      (op, sb) ==>
+    ?x s1. lower_value compile_expr cenv ty e sa = (x, s1) /\
+           compile_blockhash x s1 = (op, sb)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+  simp[Once lower_value_def, comp_bind_def, compile_expr_unary_builtin] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  simp[lower_value_child_call, vyperASTTheory.expr_size_def,
+       listTheory.list_size_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[as_stack_val_pair, unwrap_value_def, comp_return_def]
+QED
+
+Theorem names_builtin_blockhash[local]:
+  !args. ~names_builtin BlockHash args
+Proof
+  `!bt args. names_builtin bt args ==> bt <> BlockHash` suffices_by
+    metis_tac[] >>
+  ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]
+QED
+
+Theorem compile_blockhash_stack:
+  !cenv ty ann args sa.
+    ?t op sb. compile_expr cenv ty (Builtin ann BlockHash args) sa =
+              (StackValue t op, sb)
+Proof
+  rpt gen_tac >>
+  simp[compile_expr_builtin_dispatch, names_builtin_blockhash] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def, as_stack_val_pair] >>
+  simp[pairTheory.UNCURRY]
+QED
+
 Theorem compile_blockhash_case:
   !nocalls ctx func cenv cx ann args.
     exprs_case nocalls ctx func cenv cx args ==>
     expr_vv_case nocalls ctx func cenv cx (Builtin ann BlockHash args)
 Proof
-  cheat
+  rpt strip_tac >> irule expr_vv_case_stack >> rpt conj_tac
+  >- metis_tac[eval_expr_builtin_value]
+  >- simp[compile_blockhash_stack] >>
+  rw[expr_sim_case_def] >>
+  `?e1. args = [e1] /\ ann = BaseT (BytesT (Fixed 32)) /\
+        expr_type e1 = BaseT (UintT 256)` by
+    (gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+     Cases_on `args` >> gvs[] >> rename1 `h::t` >> Cases_on `t` >> gvs[]) >>
+  gvs[] >>
+  `expr_body_pre cenv cx env e1 es /\
+   expr_sim ctx func cenv cx ty e1 es` by
+    metis_tac[unop_operand_sim] >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ty`, `BaseT (BytesT (Fixed 32))`,
+               `BlockHash`, `e1`, `ty`, `compile_blockhash`, `es`]
+    mp_tac compile_unop_sim >>
+  impl_tac >- (
+    rpt conj_tac
+    >- simp[]
+    >- simp[builtin_args_length_ok_def]
+    >- simp[is_word_type_def]
+    >- simp[is_word_type_def]
+    >- (rpt strip_tac >> drule lower_value_blockhash >> simp[])
+    >- (rpt gen_tac >> strip_tac >>
+        drule expr_body_pre_lower_value_word_shape >> disch_then drule >>
+        simp[is_word_type_def])
+    >- suspend "shape"
+    >- simp[] >>
+    rpt strip_tac >>
+    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `v1`, `es1`] mp_tac
+      expr_body_pre_word_value >>
+    simp[is_word_type_def] >> strip_tac >>
+    gvs[vyperValueTheory.evaluate_type_def] >>
+    Cases_on `v1` >> gvs[value_has_type_def] >>
+    irule compile_blockhash_frag >>
+    `?n. i = &n` by metis_tac[integerTheory.NUM_POSINT_EXISTS] >> gvs[]) >>
+  simp[]
 QED
+
+Resume compile_blockhash_case[shape]:
+  simp[compile_blockhash_def, comp_bind_def, comp_ignore_bind_def,
+       emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
+       comp_return_def] >>
+  simp[cs_extends_def, same_blocks_def] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+  simp[rich_listTheory.IS_PREFIX_APPEND3]
+QED
+
+Finalise compile_blockhash_case
 
 (* blobhash(n): BLOBHASH reads the transaction's blob hashes, which
    call_ctx_rel makes the source's, with the same 0 past their end. *)
@@ -380,6 +574,7 @@ Proof
     mp_tac compile_unop_sim >>
   impl_tac >- (
     rpt conj_tac
+    >- simp[]
     >- simp[]
     >- simp[builtin_args_length_ok_def]
     >- simp[is_word_type_def]

@@ -94,10 +94,12 @@ Proof
   qabbrev_tac `entry' = entry with <|value := v; popped := []|>` >>
   qabbrev_tac `scs' = pre ++ (env |+ (id, entry')) :: rest` >>
   `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+   t.vs_fmp = s.vs_fmp /\
    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_logs = s.vs_logs /\
    t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
+   t.vs_pending_deletions = s.vs_pending_deletions /\
    t.vs_immutables = s.vs_immutables /\
    t.vs_data_section = s.vs_data_section` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
@@ -150,6 +152,8 @@ Proof
   `alloca_inv t` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
   `alloca_room ctx func t` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+  `fmp_room ctx func t` by
+    (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `immutable_alloca_sep func cenv cx (es with scopes := scs') t` by
     (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
      simp[] >> reverse conj_tac >- fs[stmt_state_rel_def] >>

@@ -411,15 +411,14 @@ Proof
 QED
 
 (* At runtime the word a storage or transient load returns is the value's:
-   the read is live, so storage_rel and transient_rel make the slot agree. *)
+   storage_holds makes the slot agree with the source's. *)
 Theorem storage_holds_load:
-  !func cenv cx es s t v w tr ctx.
-    stmt_state_rel ctx func cenv cx es s /\ is_word_type t /\
-    storage_holds cx tr t (Value v) w es ==>
-    !tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
-          (if tr then tload w s else sload w s) = typed_val_to_w256 tvt v
+  !cx es s t v w tr tvt.
+    is_word_type t /\ storage_holds cx tr t (Value v) w es s /\
+    evaluate_type (get_tenv cx) t = SOME tvt ==>
+    (if tr then tload w s else sload w s) = typed_val_to_w256 tvt v
 Proof
-  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
   gvs[storage_holds_def, read_result_def, return_def] >>
   gvs[read_storage_slot_def, vyperStorageBackendTheory.get_storage_backend_eq,
       bind_def, lift_option_def, AllCaseEqs(), return_def, raise_def] >>
@@ -427,15 +426,7 @@ Proof
   simp[raise_def, return_def] >> strip_tac >> gvs[] >>
   drule_all storage_word_load >> strip_tac >>
   `0 < type_slot_size tvt` by (drule_all word_type_slot_size >> simp[]) >>
-  `storage_agree (storage_dead cx tr (get_storage cx es tr))
-     (get_storage cx es tr)
-     (if tr then contract_transient s else contract_storage s)` by
-    (Cases_on `tr` >>
-     gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
-         storage_rel_def, transient_rel_def,
-         vyperStorageBackendTheory.get_storage_def,
-         vfmStateTheory.lookup_account_def]) >>
-  drule_all accountsRelPropsTheory.storage_agree_read_head >> strip_tac >>
+  drule_all accountsRelPropsTheory.storage_range_agree_head >> strip_tac >>
   Cases_on `tr` >> gvs[sload_def, tload_def]
 QED
 
@@ -458,15 +449,14 @@ Proof
   `t = expr_type e /\
    ?w. eval_operand p.ptr_operand s1 = SOME w /\
        storage_holds cx (p.ptr_location = LocTransient) (expr_type e)
-         (Value v) w es' /\
+         (Value v) w es' s1 /\
        stmt_state_rel ctx func cenv cx es' s1` by
     gvs[vv_post_def, vv_holds_def] >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
   `!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
          (if p.ptr_location = LocTransient then tload w s1 else sload w s1) =
          typed_val_to_w256 tvt v` by (
-    rpt strip_tac >> drule_then drule storage_holds_load >>
-    disch_then drule >> disch_then drule >> simp[]) >>
+    rpt strip_tac >> drule_all storage_holds_load >> simp[]) >>
   drule loweringSliceTheory.emit_op_frag >>
   disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es'`, `s1`,
     `if p.ptr_location = LocTransient then tload w s1 else sload w s1`,

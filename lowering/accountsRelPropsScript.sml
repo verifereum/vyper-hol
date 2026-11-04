@@ -1,7 +1,7 @@
 (*
  * Properties of accounts_rel (#665): the state_rel component that relates
- * every address's accounts and transient storage, with no source pending
- * deletions.  The running contract's storage and transient storage agree
+ * every address's accounts and transient storage. The running contract's
+ * storage and transient storage agree
  * only on their live bytes (#637); everything else is equal.
  *
  * TOP-LEVEL:
@@ -31,6 +31,9 @@
  *   declared_storage_region_read_live, storage_read_live_head,
  *   storage_read_live_field — reads of a declared region see live bytes
  *   storage_agree_read_head — agreeing storages read a live value alike
+ *   storage_range_agree_of_live, storage_range_agree_head,
+ *   storage_range_agree_field — agreement on the slots of one read: from a
+ *                             live read, on its first slot, on a field
  *   storage_dead_update_in_region, storage_dead_update_word_region,
  *   storage_dead_update_struct_word_field, storage_dead_update_zero — a
  *                             write inside a region that keeps its dead
@@ -48,8 +51,7 @@
  *   accounts_rel_storage_transient — storage_rel and transient_rel are
  *                             accounts_rel's case for the running contract
  *   accounts_rel_frame, accounts_rel_updates — accounts_rel reads only
- *                             the accounts, transient storage and pending
- *                             deletions
+ *                             the accounts and transient storage
  *)
 
 Theory accountsRelProps
@@ -71,6 +73,20 @@ Proof
   simp[accounts_agree_def]
 QED
 
+Theorem accounts_agree_process_deletions:
+  !cx ds a1 a2.
+    accounts_agree cx a1 a2 ==>
+    accounts_agree cx (process_deletions ds a1) (process_deletions ds a2)
+Proof
+  gen_tac >> Induct_on `ds` >>
+  simp[process_deletions_def] >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum irule >>
+  Cases_on `h = cx.txn.target` >>
+  gvs[accounts_agree_def, update_account_def,
+      combinTheory.APPLY_UPDATE_THM, storage_agree_def]
+QED
+
 Theorem transient_agree_refl[simp]:
   !cx t. transient_agree cx t t
 Proof
@@ -90,7 +106,7 @@ Theorem state_rel_accounts:
     state_rel func cenv cx es s ==>
     accounts_agree cx es.accounts s.vs_accounts /\
     transient_agree cx es.tStorage s.vs_transient /\
-    es.pending_deletions = []
+    es.pending_deletions = s.vs_pending_deletions
 Proof
   rw[state_rel_def, accounts_rel_def]
 QED
@@ -108,9 +124,7 @@ QED
 
 (* ===== Frames ===== *)
 
-(* accounts_rel reads only the accounts, transient storage and pending
-   deletions of the source and the accounts and transient storage of
-   Venom. *)
+(* accounts_rel reads only the accounts and transient storage of both sides. *)
 Theorem accounts_rel_frame:
   !cx es es' s s'.
     es'.accounts = es.accounts /\ es'.tStorage = es.tStorage /\
@@ -280,7 +294,8 @@ Theorem take_outcome_agree:
     transient_agree cx o1.co_tStorage o2.co_tStorage
 Proof
   rw[request_agree_def] >>
-  `rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data /\
+  `rq1.cr_kind = rq2.cr_kind /\
+   rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data /\
    rq1.cr_value = rq2.cr_value` by
     (qpat_x_assum `_ = rq2` (SUBST1_TAC o SYM) >> simp[]) >>
   gvs[take_outcome_def, computed_precompile_def, failed_outcome_def,
@@ -295,6 +310,7 @@ Theorem accounts_rel_adopt_call_outcome:
   !cx rq rq' outcome outcome' es es' s s' logs.
     accounts_rel cx es s /\ adopt_call_outcome rq outcome es = (INL (), es') /\
     rq'.cr_static = rq.cr_static /\
+    rq'.cr_kind = rq.cr_kind /\
     outcome with <| co_accounts := outcome'.co_accounts;
                     co_tStorage := outcome'.co_tStorage |> = outcome' /\
     accounts_agree cx outcome.co_accounts outcome'.co_accounts /\
@@ -493,7 +509,7 @@ QED
 
 (* A dead byte of a DynArray in the slots of an element below its length is
    that element's. *)
-Theorem dyn_array_elem_dead[local]:
+Theorem dyn_array_elem_dead:
   !st bs tv n i x c.
     dead_bytes st bs (ArrayTV tv (Dynamic n)) x c /\ i < n /\
     i < w2n (lookup_storage (n2w bs) st) /\
@@ -996,4 +1012,78 @@ Proof
   disch_then (qspecl_then [`st`, `w2n w`, `j`, `b`] mp_tac) >>
   impl_tac >- (simp[] >> decide_tac) >>
   simp[arithmeticTheory.ADD_COMM]
+QED
+
+(* ===== Agreement on a read's slots ===== *)
+
+(* st' agrees with st on the slots a read of tv at w covers, at every byte
+   tv does not leave dead at w, and those slots fit the slot space.  A read
+   of a declared region has it from storage_agree (storage_read_live); it
+   narrows to a field, and it survives writes outside those slots, where
+   storage_read_live may not: a pop leaves the popped element past the
+   array's length, dead in the array, while its slots still agree. *)
+Definition storage_range_agree_def:
+  storage_range_agree st st' (w:bytes32) tv <=>
+    w2n w + type_slot_size tv <= dimword (:256) /\
+    !(k:bytes32) b.
+      w2n w <= w2n k /\ w2n k < w2n w + type_slot_size tv /\ b < 32 /\
+      ~dead_bytes st (w2n w) tv (w2n k) b ==>
+      EL b (word_to_bytes (lookup_storage k st') T) =
+      EL b (word_to_bytes (lookup_storage k st) T)
+End
+
+Theorem storage_range_agree_of_live:
+  !cx tr st st' w tv.
+    storage_agree (storage_dead cx tr st) st st' /\
+    storage_read_live cx tr st w tv /\
+    w2n w + type_slot_size tv <= dimword (:256) ==>
+    storage_range_agree st st' w tv
+Proof
+  rw[storage_range_agree_def] >>
+  `~storage_dead cx tr st (w2n k) b` by
+    (strip_tac >> gvs[storage_read_live_def] >> first_x_assum drule >>
+     simp[]) >>
+  gvs[storage_agree_def]
+QED
+
+(* The first slot holds no dead byte, so it agrees whole. *)
+Theorem storage_range_agree_head:
+  !st st' w tv.
+    storage_range_agree st st' w tv /\ 0 < type_slot_size tv ==>
+    lookup_storage w st' = lookup_storage w st
+Proof
+  rw[storage_range_agree_def] >> irule word_to_bytes_EL_eq >>
+  rpt strip_tac >> first_x_assum irule >> simp[] >>
+  strip_tac >> drule (cj 1 dead_bytes_range) >> simp[]
+QED
+
+Theorem storage_range_agree_field:
+  !st st' w fs id foff ftv.
+    storage_range_agree st st' w (StructTV fs) /\
+    struct_field_slot fs id = SOME (foff, ftv) ==>
+    storage_range_agree st st' (w + n2w foff) ftv
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule struct_field_slot_end_bound >> strip_tac >>
+  Cases_on `type_slot_size ftv = 0`
+  >- (`w2n (w + n2w foff) <= dimword (:256)` by
+        (irule arithmeticTheory.LESS_IMP_LESS_OR_EQ >>
+         simp[wordsTheory.w2n_lt]) >>
+      simp[storage_range_agree_def] >> rpt strip_tac >>
+      `w2n (w + n2w foff) < w2n (w + n2w foff)` by
+        (irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
+         qexists_tac `w2n k` >> simp[]) >>
+      gvs[]) >>
+  gvs[storage_range_agree_def] >>
+  `w2n w + foff < dimword (:256)` by decide_tac >>
+  `w2n (w + n2w foff) = w2n w + foff` by
+    (Cases_on `w` >> gvs[wordsTheory.word_add_n2w]) >>
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `!k b. _ ==> _` irule >> simp[] >> strip_tac >>
+  `dead_bytes_fields st (w2n w) fs (w2n k) b` by
+    (qpat_x_assum `dead_bytes _ _ (StructTV _) _ _` mp_tac >>
+     simp[Once dead_bytes_def]) >>
+  drule dead_bytes_fields_selected >>
+  disch_then (qspecl_then [`st`, `w2n w`, `w2n k`, `b`] mp_tac) >>
+  simp[]
 QED

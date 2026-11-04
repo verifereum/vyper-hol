@@ -358,8 +358,8 @@ signature vyperASTSyntax = sig
   val SelfDestructTarget_tm : term
   val is_SelfDestructTarget : term -> bool
   val CreateTarget_tm : term
-  val mk_CreateTarget_tm : term * term * term -> term
-  val dest_CreateTarget_tm : term -> term * term * term
+  val mk_CreateTarget_tm : term * term * term * term -> term
+  val dest_CreateTarget_tm : term -> term * term * term * term
   val is_CreateTarget : term -> bool
 
   val AssertBare_tm : term
@@ -664,7 +664,7 @@ signature vyperASTSyntax = sig
     | VRawLog
     | VRawRevert
     | VSelfDestructTarget
-    | VCreateTarget of term * term * term
+    | VCreateTarget of term * term * term * term
   val view_call_target : term -> call_target_view
 
   datatype toplevel_view =
