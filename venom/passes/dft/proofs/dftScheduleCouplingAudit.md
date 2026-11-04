@@ -212,3 +212,41 @@ state, or absence of native fuel exhaustion. Reverse def/use and def/def
 independence of a crossed pair still require source SSA and unique definitions;
 they do not follow by silently extending `dft_must_order`. Such static bridges
 and dynamic preservation lemmas remain separate semantic obligations.
+
+## Checked stopping-crossing audit (C3.2.7.2)
+
+`dftStoppingRangesTheory` now checks the following boundaries (no oracle
+assumptions). Here `~dft_must_order x y` is directional: x originally
+precedes y and the edit is allowed to move y before x.
+
+* `dft_no_memory_effect_ranges`: absence of MEMORY in both opcode effect
+  sets implies `inst_mem_ranges i s = []`, for every state s.
+* `dft_memory_writer_crossing_ranges` and
+  `dft_memory_writer_crossing_not_invoke`: if x writes MEMORY and the
+  directional edge is absent, y has empty direct ranges in every state and
+  is not INVOKE. Thus direct range emptiness is not silently used to cover
+  observations in a skipped callee.
+* `dft_nonroot_abort_crossing_ranges` / `dft_abort_crossing_not_invoke`:
+  for wf nonterminating-opcode x, an actual Abort and absent directional
+  edge imply the same two conclusions about y. The edge's absence excludes
+  root barriers; the existing checked `dft_swap_nonroot_abort_class` then
+  leaves only INVOKE or RETURNDATACOPY (the latter ExHalt). Both write MEMORY.
+* `dft_nonterminator_halt_crossing_ranges` /
+  `dft_halt_crossing_not_invoke`: for nonterminating-opcode x, an actual Halt
+  and absent edge likewise exclude direct ranges and calls in y. Existing
+  `step_inst_halt_opcodes` reduces this case to INVOKE.
+* `dft_invoke_crossing_ranges`: the INVOKE version does not require any
+  return/stop premise, so also applies to an open or divergent call.
+
+These statements concern the *crossed* instruction y, not x: a stopping
+INVOKE can have observations in its callee and a RETURNDATACOPY can have its
+own direct ranges. Such observations still require matched-prefix transport.
+They also do not say that a target trajectory after successful y and a later
+x can be matched after a source stop at x: compatible terminal behavior and
+unreachable-success exclusions require the future phase proof. Structural
+Error, missing readiness, IntRet/block transitions, arbitrary finite-prefix
+closure, and recursion through paired stacks remain separate obligations.
+No counterexample to the frozen task theorem is claimed by this audit.
+
+Verification: `holbuild(targets=['dftStoppingRangesTheory'])`, including its
+repaired SCCP prerequisite, succeeds. The new theory has no cheats.
