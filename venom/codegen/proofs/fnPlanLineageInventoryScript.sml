@@ -1281,3 +1281,196 @@ Proof
   Cases_on `NULL inputs` >> simp[] >>
   pairarg_tac >> simp[]
 QED
+
+(* Expose the active cleanup payload without unfolding it in replay consumers. *)
+Theorem clean_stack_plan_active_payload:
+  !liveness cfg fn bb ps pred_lbl pred_bb inputs layout
+   to_pop physical retained removed ok promised.
+    cfg_preds_of cfg bb.bb_label = [pred_lbl] /\
+    1 < LENGTH (cfg_succs_of cfg pred_lbl) /\
+    lookup_block pred_lbl fn.fn_blocks = SOME pred_bb /\
+    inputs = input_vars_from pred_lbl bb.bb_instructions
+      (live_vars_at liveness bb.bb_label 0) /\
+    layout = live_vars_at liveness pred_lbl (LENGTH pred_bb.bb_instructions) /\
+    to_pop = FILTER (\v. ~MEM v inputs) layout /\
+    physical = FILTER (\op. IS_SOME (stack_get_depth op ps.ps_stack)) (MAP Var to_pop) /\
+    retained = FILTER (\op. below_all_live op inputs ps.ps_stack) physical /\
+    removed = FILTER (\op. ~MEM op retained) physical /\
+    ok = (ps.ps_cleanup_promised \/
+      cleanup_elision_safe ps.ps_cleanup_height ps.ps_cleanup_growth cfg fn bb
+        (LENGTH ps.ps_stack - LENGTH removed)) /\
+    promised = (ps.ps_cleanup_promised \/ (ok /\ ~NULL retained)) ==>
+    clean_stack_plan liveness cfg fn bb ps =
+    if NULL inputs /\ ok then
+      ([], ps with <|ps_stack := MAP (K dead_stack_marker) ps.ps_stack;
+                     ps_cleanup_promised := promised|>)
+    else if ok then
+      (FST (popmany_plan removed ps),
+       (SND (popmany_plan removed ps)) with
+         <|ps_stack := mark_dead_stack retained (SND (popmany_plan removed ps)).ps_stack;
+           ps_cleanup_promised := promised|>)
+    else popmany_plan (MAP Var to_pop) ps
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[Once clean_stack_plan_def] >>
+  qpat_x_assum `inputs = _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_x_assum `layout = _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_x_assum `to_pop = _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_x_assum `physical = _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_x_assum `retained = _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_x_assum `removed = _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_x_assum `ok = _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_x_assum `promised = _` (fn th => rewrite_tac[GSYM th]) >>
+  Cases_on `NULL inputs` >> Cases_on `ok` >> simp[] >>
+  pairarg_tac >> simp[]
+QED
+
+Theorem clean_stack_plan_active_prefix_replay:
+  !liveness cfg fn bb ps qs m n core pred_lbl pred_bb inputs layout.
+    lineage_core m core ps /\ lineage_core n core qs /\
+    ALL_DISTINCT core /\ EVERY is_var_operand core /\ ps.ps_alloc = qs.ps_alloc /\
+    cfg_preds_of cfg bb.bb_label = [pred_lbl] /\
+    1 < LENGTH (cfg_succs_of cfg pred_lbl) /\
+    lookup_block pred_lbl fn.fn_blocks = SOME pred_bb /\
+    inputs = input_vars_from pred_lbl bb.bb_instructions
+      (live_vars_at liveness bb.bb_label 0) /\
+    layout = live_vars_at liveness pred_lbl (LENGTH pred_bb.bb_instructions) /\
+    set core SUBSET set (MAP Var inputs) UNION set (MAP Var layout) ==>
+    ?choice ops core' m' n' al pref pcand.
+      clean_stack_plan liveness cfg fn bb ps =
+        (ops, ps with <|ps_stack := REPLICATE m' dead_stack_marker ++ core';
+                       ps_alloc := al; ps_cleanup_promised := pref|>) /\
+      clean_stack_plan liveness cfg fn bb
+        (qs with <|ps_cleanup_height := NONE; ps_cleanup_promised := choice|>) =
+        (ops, qs with <|ps_stack := REPLICATE n' dead_stack_marker ++ core';
+                       ps_alloc := al; ps_cleanup_height := NONE;
+                       ps_cleanup_promised := pcand|>) /\
+      ALL_DISTINCT core' /\ EVERY is_var_operand core'
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `to_pop = FILTER (\v. ~MEM v inputs) layout` >>
+  qabbrev_tac `physical = FILTER (\op. IS_SOME (stack_get_depth op ps.ps_stack)) (MAP Var to_pop)` >>
+  qabbrev_tac `retained = FILTER (\op. below_all_live op inputs ps.ps_stack) physical` >>
+  qabbrev_tac `removed = FILTER (\op. ~MEM op retained) physical` >>
+  qabbrev_tac `ok = (ps.ps_cleanup_promised \/
+    cleanup_elision_safe ps.ps_cleanup_height ps.ps_cleanup_growth cfg fn bb
+      (LENGTH ps.ps_stack - LENGTH removed))` >>
+  `~MEM dead_stack_marker core` by
+    (fs[EVERY_MEM] >> strip_tac >>
+     first_x_assum drule >>
+     simp[stackPlanTypesTheory.is_var_operand_def, dead_stack_marker_def]) >>
+  `bottom_dead_equiv ps.ps_stack qs.ps_stack` by
+    (simp[bottom_dead_equiv_def] >> qexistsl_tac [`m`, `n`, `core`] >>
+     simp[] >> gvs[lineage_core_def]) >>
+  `~MEM dead_stack_marker (MAP Var to_pop)` by simp[MEM_MAP, dead_stack_marker_def] >>
+  `physical = FILTER (\op. IS_SOME (stack_get_depth op qs.ps_stack)) (MAP Var to_pop)` by
+    (simp[Abbr `physical`] >> irule bottom_dead_equiv_physical >> simp[]) >>
+  `retained = FILTER (\op. below_all_live op inputs qs.ps_stack) physical` by
+    (drule_all bottom_dead_equiv_cleanup_partitions >>
+     disch_then (qspec_then `inputs` mp_tac) >>
+     simp[Abbr `retained`, Abbr `physical`]) >>
+  `set physical = set (MAP Var to_pop) INTER set core` by
+    (simp[Abbr `physical`, EXTENSION, MEM_FILTER, stack_get_depth_is_some] >>
+     qpat_x_assum `lineage_core m core ps` mp_tac >>
+     qpat_x_assum `~MEM dead_stack_marker (MAP Var to_pop)` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[lineage_core_def] >> rpt strip_tac >>
+     simp[MEM_REPLICATE] >> metis_tac[]) >>
+  `set (MAP Var to_pop) = set (MAP Var layout) DIFF set (MAP Var inputs)` by
+    (simp[Abbr `to_pop`, EXTENSION, MEM_MAP, MEM_FILTER] >>
+     Cases >> simp[] >> metis_tac[]) >>
+  `set physical = set core DIFF set (MAP Var inputs)` by ASM_SET_TAC[] >>
+  qabbrev_tac `pref0 = (ps.ps_cleanup_promised \/ (ok /\ ~NULL retained))` >>
+  `clean_stack_plan liveness cfg fn bb ps =
+    if NULL inputs /\ ok then
+      ([], ps with <|ps_stack := MAP (K dead_stack_marker) ps.ps_stack;
+                     ps_cleanup_promised := pref0|>)
+    else if ok then
+      (FST (popmany_plan removed ps),
+       (SND (popmany_plan removed ps)) with
+         <|ps_stack := mark_dead_stack retained (SND (popmany_plan removed ps)).ps_stack;
+           ps_cleanup_promised := pref0|>)
+    else popmany_plan (MAP Var to_pop) ps` by
+    (irule clean_stack_plan_active_payload >>
+     rpt (goal_assum (drule_at Any)) >>
+     simp[Abbr `to_pop`, Abbr `physical`, Abbr `retained`, Abbr `removed`,
+          Abbr `ok`, Abbr `pref0`]) >>
+  qabbrev_tac `cs = qs with <|ps_cleanup_height := NONE; ps_cleanup_promised := ok|>` >>
+  `clean_stack_plan liveness cfg fn bb cs =
+    if NULL inputs /\ ok then
+      ([], cs with <|ps_stack := MAP (K dead_stack_marker) cs.ps_stack;
+                     ps_cleanup_promised := ok|>)
+    else if ok then
+      (FST (popmany_plan removed cs),
+       (SND (popmany_plan removed cs)) with
+         <|ps_stack := mark_dead_stack retained (SND (popmany_plan removed cs)).ps_stack;
+           ps_cleanup_promised := ok|>)
+    else popmany_plan (MAP Var to_pop) cs` by
+    (irule clean_stack_plan_active_payload >>
+     rpt (goal_assum (drule_at Any)) >>
+     simp[Abbr `cs`, Abbr `to_pop`, Abbr `removed`] >>
+     Cases_on `ok` >> simp[]) >>
+  qexists_tac `ok` >>
+  Cases_on `ok`
+  >- (Cases_on `NULL inputs`
+      >- suspend "empty"
+      >> suspend "marked") >>
+  suspend "popped"
+QED
+
+Resume clean_stack_plan_active_prefix_replay[empty]:
+  qpat_x_assum `Abbrev (cs = _)`
+    (SUBST_ALL_TAC o REWRITE_RULE[markerTheory.Abbrev_def]) >>
+  qexistsl_tac [`[]`, `[]`, `LENGTH ps.ps_stack`, `LENGTH qs.ps_stack`,
+    `ps.ps_alloc`, `pref0`, `T`] >>
+  simp[] >>
+  simp[stackPlanTypesTheory.plan_state_component_equality,
+       LIST_EQ_REWRITE, EL_MAP, EL_REPLICATE, combinTheory.K_DEF]
+QED
+
+Resume clean_stack_plan_active_prefix_replay[marked]:
+  `lineage_core n core cs` by (simp[Abbr `cs`, lineage_core_def] >> fs[lineage_core_def]) >>
+  `ps.ps_alloc = cs.ps_alloc` by simp[Abbr `cs`] >>
+  qpat_x_assum `lineage_core n core qs` kall_tac >>
+  qpat_x_assum `ps.ps_alloc = qs.ps_alloc` kall_tac >>
+  `retained = FILTER (\op. below_all_live op inputs ps.ps_stack) physical` by
+    simp[Abbr `retained`] >>
+  `removed = FILTER (\op. ~MEM op retained) physical` by simp[Abbr `removed`] >>
+  drule_all cleanup_retained_prefix_replay >> strip_tac >>
+  qpat_x_assum `Abbrev (cs = _)`
+    (SUBST_ALL_TAC o REWRITE_RULE[markerTheory.Abbrev_def]) >>
+  qexistsl_tac [`ops`, `live`, `m + LENGTH pre`, `n + LENGTH pre`,
+    `al`, `pref0`, `T`] >>
+  rpt (qpat_x_assum `clean_stack_plan _ _ _ _ _ = _` mp_tac) >>
+  rpt (qpat_x_assum `popmany_plan _ _ = _` mp_tac) >>
+  rpt (qpat_x_assum `mark_dead_stack _ _ = _` mp_tac) >>
+  qpat_x_assum `ALL_DISTINCT live` mp_tac >>
+  qpat_x_assum `EVERY is_var_operand live` mp_tac >>
+  qpat_x_assum `~NULL inputs` mp_tac >>
+  rpt (pop_assum kall_tac) >> rpt strip_tac >> simp[]
+QED
+
+Resume clean_stack_plan_active_prefix_replay[popped]:
+  `?ops live al.
+    popmany_plan (MAP Var to_pop) ps =
+      (ops, ps with <|ps_stack := REPLICATE m dead_stack_marker ++ live; ps_alloc := al|>) /\
+    popmany_plan (MAP Var to_pop) cs =
+      (ops, cs with <|ps_stack := REPLICATE n dead_stack_marker ++ live; ps_alloc := al|>) /\
+    ALL_DISTINCT live /\ set live = set core DIFF set (MAP Var to_pop)` by
+    (irule popmany_plan_prefix_frame >>
+     simp[Abbr `cs`, DISJOINT_ALT, MEM_REPLICATE, MEM_MAP, dead_stack_marker_def] >>
+     fs[lineage_core_def, dead_stack_marker_def]) >>
+  `EVERY is_var_operand live` by
+    (fs[EVERY_MEM] >> rpt strip_tac >>
+     `MEM e core` by ASM_SET_TAC[] >> metis_tac[]) >>
+  qpat_x_assum `Abbrev (cs = _)`
+    (SUBST_ALL_TAC o REWRITE_RULE[markerTheory.Abbrev_def]) >>
+  qexistsl_tac [`ops`, `live`, `m`, `n`, `al`, `ps.ps_cleanup_promised`, `F`] >>
+  rpt (qpat_x_assum `clean_stack_plan _ _ _ _ _ = _` mp_tac) >>
+  rpt (qpat_x_assum `popmany_plan _ _ = _` mp_tac) >>
+  qpat_x_assum `ALL_DISTINCT live` mp_tac >>
+  qpat_x_assum `EVERY is_var_operand live` mp_tac >>
+  rpt (pop_assum kall_tac) >> rpt strip_tac >> simp[]
+QED
+
+Finalise clean_stack_plan_active_prefix_replay
