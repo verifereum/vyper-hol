@@ -3,7 +3,7 @@ Ancestors concretizeAnalysisRuntimeItems concretizeAnalysisLivenessPaths
   concretizeAnalysisCollection concretizePtrOrdering frameJointTransition
   concretizeMemLocDefs o1PassContract venomExecProps venomWf venomInst
   enumeral finite_map list pred_set pair contextCodegenRel
-  frameJointTrace frameActivationCache concretizeAnalysisOwnership concretizeAnalysisCallProjection
+  frameJointTrace frameActivationCache frameOpenCall concretizeAnalysisOwnership concretizeAnalysisCallProjection
 
 (* Metadata is consumed as an ordered set, but ordering loses no keys. *)
 Theorem active_invoke_context_liveset:
@@ -106,4 +106,40 @@ Proof
   goal_assum (drule_at (Pat `joint_transition _ _ _ _`)) >>
   goal_assum (drule_at (Pat `EL _ _ = JointConfig _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> qexists_tac `byte` >> simp[]
+QED
+
+Theorem concretize_open_call_activation_liveset_context:
+  joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ c < n /\ n <= LENGTH es /\
+  EL c (q0::qs) = JointConfig stk0 PG0 G0 tn0 caller invoke s0 oms0 om0 hs0 h0 /\
+  joint_transition C (EL c (q0::qs)) NONE (EL (SUC c) (q0::qs)) /\
+  (!k. c < k /\ k <= n ==> LENGTH stk0 < activation_depth (EL k (q0::qs))) /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  o1_run_state_ok vs0 /\ EVERY all_reachable C.ctx_functions /\
+  activation_cache (EL n (q0::qs)) d owner aid (b,sz) /\ LENGTH stk0 < d /\
+  b <= byte /\ byte < b + sz /\ o1_walk_view rpolicy 2 C' caller observed ==>
+  ?addrs. FLOOKUP (context_mem_livesets (concretize_memloc_fuel caller)
+    observed.cu_context caller
+    (bp_analyze_fuel (concretize_memloc_fuel caller) (cfg_analyze caller) caller)
+    (cfg_analyze caller)) (Allocation aid) = SOME addrs /\
+    MEM (s0.vs_current_bb,s0.vs_inst_idx) addrs
+Proof
+  strip_tac >>
+  `?t. c < t /\ t <= n /\ activation_depth (EL t (q0::qs)) = d /\
+    activation_cache (EL t (q0::qs)) d owner aid (b,sz) /\
+    (!k. t < k /\ k <= n ==> d < activation_depth (EL k (q0::qs)))` by
+    (irule joint_activation_cache_exposure >> simp[activation_depth_def] >>
+     goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[]) >>
+  Cases_on `EL t (q0::qs)` >>
+  gvs[activation_depth_def, activation_cache_current] >>
+  irule concretize_open_call_runtime_liveset_context >> simp[] >>
+  goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `EL t _ = _`)) >>
+  goal_assum (drule_at (Pat `EL _ _ = JointConfig _ _ _ _ caller invoke _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `FLOOKUP _ _ = _`)) >>
+  goal_assum (drule_at (Pat `o1_walk_view _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `callee_first _ _`)) >>
+  simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED

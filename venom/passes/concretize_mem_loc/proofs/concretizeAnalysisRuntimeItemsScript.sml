@@ -2,10 +2,10 @@ Theory concretizeAnalysisRuntimeItems
 Ancestors concretizeAnalysisOpenCallSummary concretizeAnalysisStageSizes
   concretizeAnalysisOwnership concretizeAnalysisCollection frameHistoryCfg
   concretizeAnalysisSizes staticLayoutAllocatorProofs concretizeMemLocDefs
-  frameActivationCache frameJointTransition frameJointTrace frameOriginHistory
+  frameOpenCall frameActivationCache frameJointTransition frameJointTrace frameOriginHistory
   frameOriginReachable frameExecutionHistory frameAllocationSizes
   o1PassContract venomWf venomInst venomExecProps removeUnusedSsaProofs
-  finite_map list pred_set
+  finite_map list pred_set arithmetic
 
 Theorem source_alloca_sizes_positive_item:
   static_alloca_items fn = SOME items /\
@@ -121,4 +121,41 @@ Proof
      goal_assum (drule_at (Pat `static_alloca_items _ = _`)) >>
      simp[] >> metis_tac[]) >>
   drule_all joint_open_call_observed_summary >> simp[]
+QED
+
+Theorem joint_open_call_activation_summary:
+  joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ c < n /\ n <= LENGTH es /\
+  EL c (q0::qs) = JointConfig stk0 PG0 G0 tn0 caller invoke s0 oms0 om0 hs0 h0 /\
+  joint_transition C (EL c (q0::qs)) NONE (EL (SUC c) (q0::qs)) /\
+  (!k. c < k /\ k <= n ==> LENGTH stk0 < activation_depth (EL k (q0::qs))) /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  o1_run_state_ok vs0 /\ static_alloca_items owner = SOME items /\
+  activation_cache (EL n (q0::qs)) d owner aid (b,sz) /\ LENGTH stk0 < d /\
+  b <= byte /\ byte < b + sz /\ o1_walk_view rpolicy 2 C' caller observed ==>
+  ?root name ops g p.
+    invoke.inst_opcode = INVOKE /\ invoke.inst_operands = Label name :: ops /\
+    lookup_function name C.ctx_functions = SOME root /\
+    source_call C caller root /\ RTC (source_call C) root owner /\
+    lookup_function root.fn_name observed.cu_context.ctx_functions = SOME g /\
+    MEM (Allocation aid,p,sz) g.fn_mems_used
+Proof
+  strip_tac >>
+  `?t. c < t /\ t <= n /\ activation_depth (EL t (q0::qs)) = d /\
+    activation_cache (EL t (q0::qs)) d owner aid (b,sz) /\
+    (!k. t < k /\ k <= n ==> d < activation_depth (EL k (q0::qs)))` by
+    (irule joint_activation_cache_exposure >> simp[activation_depth_def] >>
+     goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[]) >>
+  Cases_on `EL t (q0::qs)` >>
+  gvs[activation_depth_def, activation_cache_current] >>
+  irule joint_open_call_runtime_summary >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `EL t _ = _`)) >>
+  goal_assum (drule_at (Pat `EL _ _ = JointConfig _ _ _ _ caller invoke _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `FLOOKUP _ _ = _`)) >>
+  simp[] >> metis_tac[LESS_EQ_TRANS]
 QED

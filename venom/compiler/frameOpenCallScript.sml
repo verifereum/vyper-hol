@@ -155,3 +155,79 @@ Proof
      goal_assum (drule_at (Pat `EL _ _ = JointConfig _ _ _ _ _ _ _ _ _ _ _`)) >> gvs[]) >>
   qexists_tac `c` >> goal_assum (drule_at (Pat `EL _ _ = JointConfig _ _ _ _ _ _ _ _ _ _ _`)) >> gvs[]
 QED
+
+Theorem joint_depth_step_bound[local]:
+  joint_transition ctx p ev q ==>
+  activation_depth q <= SUC (activation_depth p)
+Proof
+  simp[Once joint_transition_cases] >> rpt strip_tac >>
+  gvs[activation_depth_def]
+QED
+
+Theorem joint_trace_depth_exposure[local]:
+  joint_trace vs0 ctx q0 es qs q /\ c < n /\ n <= LENGTH es /\
+  activation_depth (EL c (q0::qs)) < d /\
+  d <= activation_depth (EL n (q0::qs)) ==>
+  ?t. c < t /\ t <= n /\ activation_depth (EL t (q0::qs)) = d /\
+    (!k. t < k /\ k <= n ==> d < activation_depth (EL k (q0::qs)))
+Proof
+  strip_tac >>
+  `?t. c <= t /\ t <= n /\ activation_depth (EL t (q0::qs)) <= d /\
+    (!k. t < k /\ k <= n ==> ~(activation_depth (EL k (q0::qs)) <= d))` by
+    (ho_match_mp_tac last_index_in_interval >> simp[]) >>
+  `!k. t < k /\ k <= n ==> d < activation_depth (EL k (q0::qs))` by
+    metis_tac[NOT_LESS_EQUAL] >>
+  Cases_on `t = n`
+  >- (qexists_tac `n` >> gvs[] >> decide_tac) >>
+  `t < n /\ t < LENGTH es /\ SUC t <= n` by decide_tac >>
+  `activation_depth (EL (SUC t) (q0::qs)) <= SUC (activation_depth (EL t (q0::qs)))` by
+    (irule joint_depth_step_bound >> metis_tac[joint_trace_edge_at]) >>
+  `d < activation_depth (EL (SUC t) (q0::qs))` by
+    (qpat_x_assum `!k. t < k /\ k <= n ==> d < _`
+       (qspec_then `SUC t` mp_tac) >> simp[]) >>
+  `activation_depth (EL t (q0::qs)) = d` by decide_tac >>
+  `c < t` by (Cases_on `t = c` >> gvs[] >> decide_tac) >>
+  qexists_tac `t` >> simp[]
+QED
+
+Theorem joint_activation_cache_exposure:
+  joint_trace vs0 ctx q0 es qs q /\ c < n /\ n <= LENGTH es /\
+  activation_depth (EL c (q0::qs)) < d /\
+  (!k. c < k /\ k <= n ==>
+    activation_depth (EL c (q0::qs)) < activation_depth (EL k (q0::qs))) /\
+  activation_cache (EL n (q0::qs)) d owner aid site ==>
+  ?t. c < t /\ t <= n /\ activation_depth (EL t (q0::qs)) = d /\
+    activation_cache (EL t (q0::qs)) d owner aid site /\
+    (!k. t < k /\ k <= n ==> d < activation_depth (EL k (q0::qs)))
+Proof
+  strip_tac >>
+  `d <= activation_depth (EL n (q0::qs))` by metis_tac[activation_cache_depth] >>
+  drule_all joint_trace_depth_exposure >> strip_tac >>
+  qexists_tac `t` >> simp[] >>
+  Cases_on `t = n` >- gvs[] >>
+  `t < n /\ t < LENGTH es /\ SUC t <= n` by decide_tac >>
+  `d < activation_depth (EL (SUC t) (q0::qs))` by
+    (first_x_assum irule >> simp[]) >>
+  `joint_transition ctx (EL t (q0::qs)) NONE (EL (SUC t) (q0::qs))` by
+    (`joint_transition ctx (EL t (q0::qs)) (EL t es) (EL (SUC t) (q0::qs))` by
+       metis_tac[joint_trace_edge_at] >>
+     `EL t es = NONE` by (irule joint_depth_increase_call >> metis_tac[]) >>
+     metis_tac[]) >>
+  Cases_on `EL t (q0::qs)` >>
+  rename1 `activation_cache (JointConfig stkT pgT gT tnT fnT instT sT omsT omT hsT hT) _ _ _ _` >>
+  Cases_on `EL n (q0::qs)` >>
+  rename1 `EL n (q0::qs) = JointConfig stkN PGN GN tnN fnN instN sN omsN omN hsN hN` >>
+  `LENGTH stkT = d` by gvs[activation_depth_def] >>
+  `(EL (LENGTH stkN - SUC d) stkN).cf_fn = fnT /\
+   (EL (LENGTH stkN - SUC d) stkN).cf_inst = instT /\
+   (EL (LENGTH stkN - SUC d) stkN).cf_state = sT /\ instT.inst_opcode = INVOKE` by
+    (irule joint_open_call_saved_at >>
+     goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `EL _ _ = JointConfig _ _ _ _ fnT instT sT _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `EL _ _ = JointConfig stkN _ _ _ _ _ _ _ _ _ _`)) >>
+     fs[] >> metis_tac[]) >>
+  `d < LENGTH stkN` by
+    (qpat_x_assum `!k. t < k /\ k <= n ==> d < _`
+       (qspec_then `n` mp_tac) >> simp[activation_depth_def]) >>
+  gvs[activation_cache_def, activation_depth_def]
+QED
