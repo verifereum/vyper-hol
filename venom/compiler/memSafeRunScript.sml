@@ -3,8 +3,9 @@
  *
  * mem_safe_run fuel ctx fn s says that every instruction the run of fn from
  * s executes, in callee frames too, reads and writes memory only below the
- * allocation frontier of the state it runs in (inst_mem_below_frontier).
- * The check follows the runner's own recursion (step_inst, exec_block,
+ * allocation frontier of the state it runs in (inst_mem_below_frontier),
+ * and starts every DLOAD/DLOADBYTES offset within the data section
+ * (inst_dload_in_data).  The check follows the runner's own recursion (step_inst, exec_block,
  * run_blocks), so it sees exactly the instructions the run executes, in
  * the states it executes them in.
  *
@@ -32,11 +33,13 @@
  *   revert_forward_at_opcode — the exemption covers only RETURNDATACOPY
  *                           and REVERT
  *   mem_safe_raw_unit_memory_ok — the bridge to raw_unit_memory_ok
+ *   code_data_fixed_closed — the code and the data section never change
+ *   mem_safe_dload_in_data — the bridge for DLOAD offsets
  *)
 
 Theory memSafeRun
 Ancestors
-  list venomExecSemantics venomExecProofs venomInstProofs venomInst venomInstProps
+  list venomExecSemantics venomExecProofs venomInstProofs venomInst
   venomState contextCodegenRel contextCodegenRelProps unitTransformDefs
 
 (* ===== Definitions ===== *)
@@ -59,6 +62,14 @@ End
 Theorem inst_dload_in_data_other[simp]:
   !inst s.
     inst.inst_opcode <> DLOAD /\ inst.inst_opcode <> DLOADBYTES ==>
+    inst_dload_in_data inst s
+Proof
+  rw[inst_dload_in_data_def]
+QED
+
+Theorem inst_dload_in_data_inst_idx[simp]:
+  !inst s n.
+    inst_dload_in_data inst (s with vs_inst_idx := n) <=>
     inst_dload_in_data inst s
 Proof
   rw[inst_dload_in_data_def]
@@ -552,9 +563,9 @@ Proof
   rpt gen_tac >> strip_tac >> Cases_on `is_terminator inst.inst_opcode`
   >- metis_tac[step_inst_ok_terminator_code_data] >>
   conj_tac
-  >- (irule venomInstPropsTheory.step_preserves_code >>
+  >- (irule venomInstProofsTheory.step_preserves_code >>
       qexistsl [`ctx`, `fuel`, `inst`] >> simp[]) >>
-  irule venomInstPropsTheory.step_preserves_data_section >>
+  irule venomInstProofsTheory.step_preserves_data_section >>
   qexistsl [`ctx`, `fuel`, `inst`] >> simp[]
 QED
 
@@ -563,10 +574,9 @@ Theorem eval_phis_ok_code_data:
     eval_phis s insts = OK v ==>
     v.vs_code = s.vs_code /\ v.vs_data_section = s.vs_data_section
 Proof
-  Induct_on `insts` >> simp[eval_phis_def] >>
   rpt gen_tac >> strip_tac >>
-  gvs[AllCaseEqs(), update_var_def] >>
-  first_x_assum drule >> simp[]
+  drule eval_phis_only_updates_vs_vars >>
+  disch_then (fn th => once_rewrite_tac[th]) >> simp[]
 QED
 
 Theorem code_data_fixed_closed:

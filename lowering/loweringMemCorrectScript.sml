@@ -15,6 +15,13 @@
  *     taint bound
  *   lower_vyper_runtime_unit_run_mem_safe -- the memory-safe run
  *   compile_guarded_body_end_mem_safe -- falling off the end of the body
+ *   lower_vyper_runtime_unit_dload_offset_ok -- S3's no-wrap bound on
+ *     DLOAD/DLOADBYTES offsets, which LowerDload's expansion needs, from
+ *     the run through mem_safe_dload_in_data
+ *
+ * "Memory-safe" includes mem_safe_step's DLOAD check: every DLOAD/DLOADBYTES
+ * offset starts within the data section.  So the memory twins below also
+ * claim that check.
  *
  * Named admissions (cheats); all but the last are memory twins of pieces
  * S1 rests on:
@@ -24,8 +31,6 @@
  *     S1's entry bridge with memory (#639, #867)
  *   external_frame_ret_ok_mem -- the frame's returns with memory (#640),
  *     from entryHaltMem's return leaves
- *   lower_vyper_runtime_unit_dload_offset_ok -- S3's no-wrap bound on
- *     DLOAD/DLOADBYTES offsets, which LowerDload's expansion needs
  *   lower_vyper_runtime_unit_ptr_taint -- S3's pointer discipline and
  *     taint bound
  *)
