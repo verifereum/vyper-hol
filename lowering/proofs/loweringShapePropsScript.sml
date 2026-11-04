@@ -13931,3 +13931,124 @@ Proof
   rpt gen_tac >> rewrite_tac[contextTheory.compile_with_byte_offset_def] >>
   IF_CASES_TAC >> simp[comp_return_labels, emit_op_labels]
 QED
+
+Theorem typed_memory_family_labels:
+  (!cenv dst dt src st s.
+    cs_extends s (SND (compile_store_memory_typed cenv dst dt src st s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_store_memory_typed cenv dst dt src st s)))) /\
+  (!cenv dst src dts sts doff soff s.
+    cs_extends s (SND (compile_typed_copy_fields cenv dst src dts sts doff soff s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_typed_copy_fields cenv dst src dts sts doff soff s)))) /\
+  (!cenv dst dt src st count s.
+    cs_extends s (SND (compile_copy_sarray_typed cenv dst dt src st count s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_copy_sarray_typed cenv dst dt src st count s)))) /\
+  (!cenv dst dt cap src st s.
+    cs_extends s (SND (compile_copy_dynarray_typed cenv dst dt cap src st s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_copy_dynarray_typed cenv dst dt cap src st s)))) /\
+  (!cenv dst src dfs sfs doff soff s.
+    cs_extends s (SND (compile_struct_typed_copy cenv dst src dfs sfs doff soff s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_struct_typed_copy cenv dst src dfs sfs doff soff s))))
+Proof
+  ho_match_mp_tac contextTheory.compile_store_memory_typed_ind >>
+  rpt conj_tac
+  >- suspend "dispatch"
+  >- suspend "fields_nil"
+  >- suspend "fields_mismatch"
+  >- suspend "fields_cons"
+  >- suspend "sarray"
+  >- suspend "dynarray"
+  >- suspend "struct_nil"
+  >> suspend "struct_cons"
+QED
+
+Resume typed_memory_family_labels[fields_nil]:
+  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+  simp[comp_return_labels]
+QED
+Resume typed_memory_family_labels[fields_mismatch]:
+  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+  simp[comp_return_labels]
+QED
+Resume typed_memory_family_labels[struct_nil]:
+  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+  simp[comp_return_labels]
+QED
+Resume typed_memory_family_labels[fields_cons]:
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+  simp[LET_THM] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[compile_with_byte_offset_labels])
+QED
+Resume typed_memory_family_labels[sarray]:
+  rpt gen_tac >> strip_tac >>
+  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+  simp[LET_THM] >>
+  IF_CASES_TAC >- simp[compile_copy_memory_labels] >>
+  gvs[] >>
+  rpt (FIRST [irule fresh_label_bind_labels,
+              irule new_block_action_labels >>
+                rename1 `isPREFIX "@" lab` >> Cases_on `lab` >> gvs[],
+              irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac, disch_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_op_labels, emit_inst_labels,
+            fresh_var_action_labels])
+QED
+Resume typed_memory_family_labels[dynarray]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `type_memory_bytes cenv dt = type_memory_bytes cenv st /\ dt = st` >>
+  gvs[] >> once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+  simp[LET_THM] >>
+  rpt (FIRST [irule fresh_label_bind_labels,
+              irule new_block_action_labels >>
+                rename1 `isPREFIX "@" lab` >> Cases_on `lab` >> gvs[],
+              irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac, disch_tac,
+              IF_CASES_TAC >> gvs[]] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_op_labels, emit_inst_labels, emit_void_labels,
+            fresh_var_action_labels, compile_copy_memory_dynamic_labels])
+QED
+Resume typed_memory_family_labels[struct_cons]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ALOOKUP sfs name` >>
+  TRY (rename1 `SOME p` >> PairCases_on `p`) >>
+  gvs[AllCaseEqs()] >>
+  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+  simp[LET_THM] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >> simp[compile_with_byte_offset_labels])
+QED
+Resume typed_memory_family_labels[dispatch]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `is_word_type dt`
+  >- (once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >> simp[] >>
+      irule comp_bind_labels >> simp[emit_op_labels, emit_void_labels]) >>
+  Cases_on `is_bytestring_type dt /\ is_bytestring_type st`
+  >- (once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+      simp[compile_store_bytestring_labels]) >>
+  Cases_on `acyclic_struct_metadata cenv.ce_struct_fields`
+  >- (Cases_on `dt` >> Cases_on `st` >>
+      TRY (rename1 `compile_store_memory_typed cenv dst (ArrayT dt db) src (ArrayT st sb)` >>
+           Cases_on `db` >> Cases_on `sb`) >> gvs[] >>
+      once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+      simp[LET_THM, compile_copy_memory_labels] >> metis_tac[]) >>
+  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >> simp[emit_void_labels]
+QED
+Finalise typed_memory_family_labels
+
+Theorem compile_store_memory_labels:
+  !cenv src dst dt st s.
+    cs_extends s (SND (compile_store_memory cenv src dst dt st s)) /\
+    EVERY (isPREFIX "@")
+      (added_labels s (SND (compile_store_memory cenv src dst dt st s)))
+Proof
+  rpt gen_tac >> rewrite_tac[contextTheory.compile_store_memory_def] >>
+  rpt IF_CASES_TAC >>
+  simp[emit_void_labels, compile_store_bytestring_labels,
+       typed_memory_family_labels, compile_copy_memory_labels]
+QED
