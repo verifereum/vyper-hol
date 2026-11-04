@@ -40,7 +40,7 @@ Proof
 QED
 
 Theorem dse_copy_write_location:
-  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES} /\
+  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY} /\
   inst.inst_operands = [op_dst; src; szop] ==>
   bp_get_write_location bp inst AddrSp_Memory =
     bp_segment_from_ops bp
@@ -67,7 +67,7 @@ Proof
 QED
 
 Theorem dse_copy_write_region:
-  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES} /\
+  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY} /\
   inst.inst_operands = [op_dst; src; szop] /\
   eval_operand op_dst s = SOME a /\ eval_operand szop s = SOME n /\
   bp_ptr_sound bp s /\ bp_accesses_in_own_alloca bp inst s ==>
@@ -83,7 +83,7 @@ Proof
 QED
 
 Theorem dse_copy_write_size:
-  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES} /\
+  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY} /\
   inst.inst_operands = [op_dst; src; szop] /\
   eval_operand szop s = SOME n /\
   (bp_get_write_location bp inst AddrSp_Memory).ml_size = SOME k ==>
@@ -114,7 +114,7 @@ QED
 
 Theorem dse_copy_clobber_covered:
   dse_pending_at cfg bp AddrSp_Memory fn bb idx P s /\
-  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES} /\
+  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY} /\
   inst.inst_operands = [op_dst; src; szop] /\
   eval_operand op_dst s = SOME a /\ eval_operand szop s = SOME n /\
   bp_ptr_sound bp s /\ bp_accesses_in_own_alloca bp inst s /\
@@ -133,7 +133,7 @@ QED
 Theorem dse_copy_pending_memory_step:
   dse_pending_at cfg bp AddrSp_Memory fn bb idx P s /\
   EL idx bb.bb_instructions = inst /\
-  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES} /\
+  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY} /\
   inst.inst_operands = [op_dst; src; szop] /\
   eval_operand op_dst s = SOME a /\ eval_operand szop s = SOME n /\
   bp_ptr_sound bp s /\ bp_accesses_in_own_alloca bp inst s /\
@@ -198,7 +198,7 @@ QED
 Theorem dse_copy_pending_insert_step:
   dse_pending_at cfg bp AddrSp_Memory fn bb idx P s /\
   EL idx bb.bb_instructions = inst /\
-  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES} /\
+  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY} /\
   inst.inst_operands = [op_dst; src; szop] /\
   eval_operand op_dst s = SOME a /\ eval_operand szop s = SOME n /\
   bp_ptr_sound bp s /\ bp_accesses_in_own_alloca bp inst s /\
@@ -265,7 +265,7 @@ Proof
 QED
 
 Theorem dse_copy_other_write_location:
-  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES} /\
+  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY} /\
   sp <> AddrSp_Memory ==>
   bp_get_write_location bp inst sp = ml_empty
 Proof
@@ -274,7 +274,7 @@ Proof
 QED
 
 Theorem dse_copy_other_pending_step:
-  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES} /\
+  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY} /\
   sp <> AddrSp_Memory /\
   dse_pending_at cfg bp sp fn bb idx P s /\
   EL idx bb.bb_instructions = inst ==>
