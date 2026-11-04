@@ -1771,3 +1771,85 @@ QED
 
 
 Finalise label_preserving_type_builtin_body
+
+Theorem label_preserving_builtin_bop[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !cenv ret_ty ty bop args s r t.
+    compile_builtin_dispatch_body cfn cenv ret_ty ty (Bop bop) args s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rpt gen_tac >>
+  simp_tac (srw_ss()) [compile_builtin_dispatch_body_def, LET_THM] >>
+  IF_CASES_TAC
+  >- suspend "membership" >> IF_CASES_TAC
+  >- suspend "bytes_compare" >>
+  CALL_VALUE >> CALL_VALUE >>
+  qmatch_goalsub_abbrev_tac `as_stack_val ret_ty action` >>
+  Cases_on `action` >> gvs[markerTheory.Abbrev_def, as_stack_val_def] >>
+  qpat_x_assum `(_,_) = compile_binop _ _ _ _ _ _ _` (assume_tac o SYM) >>
+  drule_all label_preserving_binop >> strip_tac >>
+  strip_tac >> gvs[] >> metis_tac[label_extends_trans]
+QED
+
+Resume label_preserving_builtin_bop[bytes_compare]:
+  CALL_VALUE >> CALL_VALUE >>
+  CALL_PAIR label_preserving_bytestring_hash >>
+  CALL_PAIR label_preserving_bytestring_hash >> IF_CASES_TAC
+  >- suspend "eq" >> CALL_PAIR label_preserving_emit_op >>
+  suspend "neq"
+QED
+
+Resume label_preserving_builtin_bop[eq]:
+  qmatch_goalsub_abbrev_tac `as_stack_val ret_ty action` >>
+  Cases_on `action` >> gvs[markerTheory.Abbrev_def, as_stack_val_def] >>
+  qpat_x_assum `(_,_) = emit_op _ _ _` (assume_tac o SYM) >>
+  drule_all label_preserving_emit_op >> strip_tac >>
+  strip_tac >> gvs[] >> metis_tac[label_extends_trans]
+QED
+
+Resume label_preserving_builtin_bop[neq]:
+  qmatch_goalsub_abbrev_tac `as_stack_val ret_ty action` >>
+  Cases_on `action` >> gvs[markerTheory.Abbrev_def, as_stack_val_def] >>
+  qpat_x_assum `(_,_) = emit_op _ _ _` (assume_tac o SYM) >>
+  drule_all label_preserving_emit_op >> strip_tac >>
+  strip_tac >> gvs[] >> metis_tac[label_extends_trans]
+QED
+
+val MEMBERSHIP_VAR =
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  first_assum (drule_then strip_assume_tac) >>
+  qmatch_goalsub_abbrev_tac `as_stack_val ret_ty action` >>
+  Cases_on `action` >> gvs[markerTheory.Abbrev_def, as_stack_val_def] >>
+  qpat_x_assum `(_,_) = compile_var_array_membership _ _ _ _ _ _`
+    (assume_tac o SYM) >>
+  drule_all label_preserving_var_array_membership >> strip_tac >>
+  strip_tac >> gvs[] >> metis_tac[label_extends_trans];
+
+Resume label_preserving_builtin_bop[membership]:
+  CALL_VALUE >> Cases_on `HD (TL args)` >>
+  simp_tac (srw_ss()) []
+  >~ [`Builtin bt bi es`] >- (Cases_on `bi` >>
+      simp_tac (srw_ss()) []
+      >~ [`compile_multi_exprs`] >- suspend "membership_list" >>
+      MEMBERSHIP_VAR) >> MEMBERSHIP_VAR
+QED
+
+Resume label_preserving_builtin_bop[membership_list]:
+  CALL_PAIR label_preserving_multi_exprs >> IF_CASES_TAC >>
+  qmatch_goalsub_abbrev_tac `as_stack_val ret_ty action` >>
+  Cases_on `action` >> gvs[markerTheory.Abbrev_def, as_stack_val_def]
+  >- (qpat_x_assum `(_,_) = compile_list_membership_in _ _ _`
+        (assume_tac o SYM) >>
+      drule (Q.INST [`LP` |-> `jump_label_ok`]
+        (CONJUNCT1 label_preserving_list_membership)) >> strip_tac >>
+      strip_tac >> gvs[] >> metis_tac[label_extends_trans]) >>
+  qpat_x_assum `(_,_) = compile_list_membership_notin _ _ _`
+    (assume_tac o SYM) >>
+  drule (Q.INST [`LP` |-> `jump_label_ok`]
+    (CONJUNCT2 label_preserving_list_membership)) >> strip_tac >>
+  strip_tac >> gvs[] >> metis_tac[label_extends_trans]
+QED
+
+Finalise label_preserving_builtin_bop
