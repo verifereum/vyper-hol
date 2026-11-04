@@ -274,22 +274,6 @@ Libs
    an ImmutableLoc whose bytes end below 2 ** 256, as build_compile_env
    places a supported program's immutables (immutableLocationProps). *)
 
-Theorem expr_sim_inv_gas_obs[simp]:
-  expr_sim_inv cenv cx env (es with gas_obs := gs) <=>
-  expr_sim_inv cenv cx env es
-Proof
-  `oracle_storage_ok cx (es with gas_obs := gs) <=>
-   oracle_storage_ok cx es` by
-    (irule oracle_storage_ok_outcomes >> simp[]) >>
-  `contract_storage_well_formed cx (es with gas_obs := gs) <=>
-   contract_storage_well_formed cx es` by
-    (eq_tac >> strip_tac >>
-     irule contract_storage_well_formed_storage_frame >>
-     goal_assum (drule_at Any) >> Cases >>
-     simp[vyperStorageBackendTheory.get_storage_def]) >>
-  simp[expr_sim_inv_def]
-QED
-
 (* The types whose values are word_values (loweringSlice): integers,
    decimals, booleans and flags.  address and bytesN values are BytesV. *)
 
