@@ -30,6 +30,42 @@ Proof
   metis_tac[]
 QED
 
+Theorem stmt_post_normal_entry[local]:
+  stmt_post ctx func cx lctx cenv c sa sm s0 (INL ()) mid t /\
+  ret_pc_ok cenv sa s0 /\ sa.cs_next_var <= sm.cs_next_var ==>
+  cenv_top_ext cenv c mid.scopes /\
+  stmt_state_rel ctx func c cx mid t /\ ~block_is_terminated sm /\
+  ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ret_pc_ok c sm t
+Proof
+  rw[stmt_post_def, stmt_lands_def] >>
+  irule ret_pc_ok_frame >>
+  metis_tac[cenv_top_ext_return_pc]
+QED
+
+Theorem stmt_post_exception_endpoint[local]:
+  res <> INL () /\
+  stmt_post ctx func cx lctx cenv c sa sm s0 res ee t ==>
+  stmt_post ctx func cx lctx cenv c' sa sb s0 res ee t
+Proof
+  rw[stmt_post_def] >> qexists_tac `cenv''` >>
+  gvs[stmt_lands_def] >> metis_tac[]
+QED
+
+Theorem stmt_post_sequence[local]:
+  stmt_post ctx func cx lctx cenv c sa sm s0 (INL ()) mid t /\
+  stmt_post ctx func cx lctx c c' sm sb t res ee u /\
+  sa.cs_next_var <= sm.cs_next_var /\
+  (mid.scopes = [] <=> ee.scopes = []) /\
+  MAP FDOM (TL mid.scopes) = MAP FDOM (TL ee.scopes) ==>
+  stmt_post ctx func cx lctx cenv c' sa sb s0 res ee u
+Proof
+  rw[stmt_post_def] >> qexists_tac `cenv''` >> simp[] >>
+  conj_tac >- (irule cenv_top_ext_trans >> metis_tac[]) >>
+  rpt strip_tac >> first_x_assum irule >>
+  metis_tac[not_fresh_at_def, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
 Theorem stmt_frag_cons_env:
   !ctx func cx lctx RetQ cenv ty stmt ss es.
     (!c. cs_mono (compile_stmt c lctx ty stmt)) /\
