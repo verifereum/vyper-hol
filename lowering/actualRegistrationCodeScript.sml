@@ -1,33 +1,8 @@
 (* Compiler-only suffix preservation for selected argument registration. *)
 Theory actualRegistrationCode
 Ancestors
-  actualDecoderPackaging abiDecoderAppend moduleLowering fragExec compileEnv arithmetic list
+  actualDecoderPackaging abiDecoderAppend moduleLowering moduleLoweringProps fragExec compileEnv arithmetic list
   loweringShapeProps loweringShapeDefs loweringShapeRules vyperCompiler venomInst
-
-Theorem cs_appends_decode_args:
-  !args cenv off opc hi base.
-    cs_appends (compile_decode_args cenv args off opc hi base)
-Proof
-  Induct >- simp[compile_decode_args_def, cs_appends_return] >>
-  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
-  simp[Once compile_decode_args_def, LET_THM] >>
-  Cases_on `h1` >> simp[]
-  >- (ntac 2 (ho_match_mp_tac cs_appends_bind >> conj_tac
-        >- simp[cs_appends_emit_helpers] >> gen_tac) >>
-      irule cs_appends_ignore_bind >> conj_tac
-      >- simp[cs_appends_abi_clamp] >>
-      irule cs_appends_ignore_bind >> conj_tac
-      >- (Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[cs_appends_return] >>
-          Cases_on `var_location_decode_operand x` >>
-          simp[cs_appends_return, cs_appends_emit_helpers]) >> simp[]) >>
-  Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[] >>
-  Cases_on `var_location_decode_operand x` >> simp[] >>
-  Cases_on `h2` >> simp[] >>
-  rpt (ho_match_mp_tac cs_appends_bind >> conj_tac
-    >- simp[cs_appends_emit_helpers] >> gen_tac) >>
-  irule cs_appends_ignore_bind >>
-  simp[cs_appends_abi_decode_mutual]
-QED
 
 Theorem cs_appends_register_positional_args:
   !args cenv off. cs_appends (compile_register_positional_args cenv args off)
