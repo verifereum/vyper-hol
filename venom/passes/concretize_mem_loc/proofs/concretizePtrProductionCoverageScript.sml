@@ -67,3 +67,16 @@ Proof
       metis_tac[pointer_derived_vars_roots, ptr_roots_finite, SUBSET_DEF])
   >> metis_tac[bp_flow_seed]
 QED
+
+Theorem ptr_bp_production_coverage:
+  fn_ptr_ok P fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
+  (!i. MEM i (fn_insts fn) ==> MEM i (bp_scan_insts fn cfg.cfg_dfs_pre)) /\
+  v IN pointer_derived_vars fn (ptr_bp_alloc_roots fn aid) ==>
+  ?off. MEM (Ptr (Allocation aid) off)
+    (bp_get_ptrs (bp_analyze_fuel (concretize_memloc_fuel fn) cfg fn) v)
+Proof
+  strip_tac >> drule_all ptr_bp_derived_flow >> strip_tac >>
+  drule_all bp_flow_production_coverage >>
+  simp[concretizeAnalysisBoundaryTheory.bp_bases_def, MEM_MAP] >>
+  strip_tac >> Cases_on `y` >> gvs[ptr_base_def] >> metis_tac[]
+QED
