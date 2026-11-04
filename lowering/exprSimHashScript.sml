@@ -648,8 +648,11 @@ Theorem hash_outcomes_state_rel:
     (es with outcomes := SOME (DROP 1 s.vs_outcomes))
     (s with vs_outcomes := DROP 1 s.vs_outcomes)
 Proof
+  `fmp_room ctx func (s with vs_outcomes := DROP 1 s.vs_outcomes) <=>
+   fmp_room ctx func s` by
+    (irule fmp_room_fields_cong >> simp[]) >>
   strip_tac >>
-  gvs[stmt_state_rel_def, state_rel_def,
+  gvs[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
        immutable_alloca_sep_def,
        local_ptrs_rel_def, local_region_def, local_backed_def,
        lookup_var_def, storage_rel_def, transient_rel_def, immutables_rel_def,
