@@ -45,7 +45,8 @@ Theorem declare_local_memory_types[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all declare_local_ptr >> strip_tac >>
-  `c.ce_struct_fields = cenv.ce_struct_fields` by
+  `c.ce_struct_fields = cenv.ce_struct_fields /\
+   c.ce_func_return_type = cenv.ce_func_return_type` by
     (qpat_x_assum `c with <| ce_vars := _; ce_var_type := _;
                             ce_dynarray_capacity := _ |> = cenv` mp_tac >>
      simp[compile_env_component_equality]) >>
@@ -56,7 +57,7 @@ Proof
       ho_match_mp_tac type_memory_bytes_ind >>
       rw[type_memory_bytes_def] >>
       AP_TERM_TAC >> irule MAP_CONG >> simp[]) >>
-  gen_tac >> simp[oneline lowered_value_type_def]
+  gen_tac >> gvs[oneline lowered_value_type_def]
 QED
 
 Theorem compile_assign_memory_appends:
