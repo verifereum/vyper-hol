@@ -164,11 +164,11 @@ QED
    instruction of fn is GAS, an interim premise while the assembly's gas
    readings are unconstrained.  vs_labels agrees with the assembly label
    offsets, so Label operands have the same value in Venom and in the
-   assembly.  DFG alias soundness: an operand of the block that the block
-   does not itself define has the value of every DFG-equivalent operand on
-   ps's stack or in its spill map, which the planner's alias-only reorder
-   steps rely on; operands the block defines are left out, as at block
-   entry they are unset or hold a value from an earlier pass of a loop. *)
+   assembly.  DFG alias soundness: every operand on ps's stack or in its
+   spill map has the value of its ASSIGN-chain root (normalize_operand),
+   so the planner's alias-only reorder steps read the right word; it is
+   stated on the planner's live entries only, which the block induction
+   can re-establish at the successor. *)
 Theorem gen_fn_frame_simulation:
   !fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
    spill_base lbl_ctr fn_ops ps_end bb pred ps ps_dfs block_ops ps_dfs_after
@@ -211,14 +211,9 @@ Theorem gen_fn_frame_simulation:
       SOME (block_ops, ps_dfs_after) /\
     asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp block_ops) /\
     fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
-    (!op at.
-       (?inst. MEM inst bb.bb_instructions /\ MEM op inst.inst_operands) /\
-       (!x inst. op = Var x /\ MEM inst bb.bb_instructions ==>
-                 ~MEM x inst.inst_outputs) /\
-       (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
-       operand_equiv dfg op at ==>
-       operand_val (frame_view fn ra vs) lo op =
-       operand_val (frame_view fn ra vs) lo at) /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+       operand_val (frame_view fn ra vs) lo at =
+       operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
     (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret)
     ==>
     (!vs'. run_blocks fuel ctx fn vs = Halt vs' ==>

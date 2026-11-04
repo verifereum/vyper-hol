@@ -17,7 +17,6 @@
  *
  * TOP-LEVEL:
  *   frame_view          — Venom state with return-PC variables read as ra
- *   retpc_shape_ok      — RET jumps through a return-PC variable
  *   closure_spill_byte  — spill byte of a function reachable from name
  *   fn_frame_inv        — the running frame invariant
  *)
@@ -51,20 +50,6 @@ Proof
   simp[frame_view_vars_lookup] >> rpt strip_tac >>
   Cases_on `FLOOKUP vs.vs_vars x` >> simp[]
 QED
-
-(* The generated code for RET jumps to its last operand, so the function
-   theorem can land at the caller's return pc only if that operand is a
-   return-PC variable; and a PHI that merges a return-PC variable with an
-   ordinary one would read as ra on the ordinary path too.  opaque_use_ok
-   restricts where return-PC variables may be used but requires neither. *)
-Definition retpc_shape_ok_def:
-  retpc_shape_ok fn <=>
-    (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = RET ==>
-       ?front x. inst.inst_operands = front ++ [Var x] /\ retpc_var fn x) /\
-    (!inst x y. MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
-       MEM (Var x) inst.inst_operands /\ MEM (Var y) inst.inst_operands /\
-       retpc_var fn x ==> retpc_var fn y)
-End
 
 (* A spill byte of some function reachable from name in the call graph,
    name itself included (fcg_path is reflexive). *)
