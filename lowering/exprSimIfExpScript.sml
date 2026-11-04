@@ -27,6 +27,7 @@ Ancestors
   exprLoweringProps compileEnv context vyperAST vyperInterpreter vyperState
   vyperValue valueEncoding venomExecSemantics venomExecProofs venomInst
   venomState exprSimLiteralBuffer words integer_word vfmConstants valueEncodingProps
+  valueTypingMemoryProps
 Libs
   pairLib intLib
 
@@ -251,6 +252,111 @@ Proof
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
   drule ifexp_string_header >> strip_tac >>
   qexists_tac `LENGTH s'` >> simp[exprSimTheory.val_store_size_def]
+QED
+
+Theorem ifexp_copy_source_bounds[local]:
+  !cx ty tv v op s.
+    is_bytestring_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+    value_has_type tv v /\ expr_val_rel cx ty v op s ==>
+    ?w len. eval_operand op s = SOME w /\
+      val_in_memory tv v (w2n w) s.vs_memory /\
+      mload (w2n w) s = n2w len /\
+      val_store_size tv v = 32 + 32 * word_size len /\
+      32 + 32 * word_size len <= type_memory_size tv
+Proof
+  rpt strip_tac >>
+  `~is_word_type ty` by
+    (Cases_on `ty` >> gvs[is_bytestring_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_bytestring_type_def, is_word_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >>
+     gvs[is_bytestring_type_def, is_word_type_def]) >>
+  gvs[expr_val_rel_def] >>
+  drule_all ifexp_typed_bytestring_header >> strip_tac >>
+  drule value_has_type_memory_wf >> strip_tac >>
+  drule val_store_size_le >> strip_tac >>
+  qexists_tac `len` >> simp[] >> decide_tac
+QED
+
+Theorem ifexp_alloc_preserves_holds[local]:
+  !ctx func cenv cx es sa sm buf sz s et raw vv.
+    compile_alloc_buffer sz sa = (buf,sm) /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
+    MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+      [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
+    (!x. vv_operand vv = Var x ==> not_fresh_at sa x) /\
+    vv_holds cenv cx et raw vv es s ==>
+    ?q w. run_inst_seq (emitted_insts sa sm) s = OK q /\
+      stmt_state_rel ctx func cenv cx es q /\
+      vv_holds cenv cx et raw vv es q /\
+      eval_operand buf.buf_operand q = SOME w /\
+      FLOOKUP q.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
+      q.vs_memory = s.vs_memory
+Proof
+  rpt strip_tac >> drule_all alloc_buffer_frame_run >> strip_tac >>
+  `eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s` by
+    (Cases_on `vv_operand vv` >> gvs[eval_operand_def]) >>
+  `vv_holds cenv cx et raw vv es t` by
+    (Cases_on `vv` >> gvs[vv_holds_def, vv_operand_def, expr_val_rel_def]) >>
+  qexistsl_tac [`t`, `w`] >> simp[]
+QED
+
+Theorem ifexp_vv_at_alloc_frame[local]:
+  vv_at cenv cx ty sa sb es raw vv s /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+               FLOOKUP q.vs_allocas aid = SOME entry) /\
+  eval_operand (vv_operand vv) q = eval_operand (vv_operand vv) s /\
+  (!n b sz. local_region cenv es.scopes q n b sz <=>
+            local_region cenv es.scopes s n b sz) /\
+  sb.cs_next_id <= sm.cs_next_id ==>
+  vv_at cenv cx ty sa sm es raw vv q
+Proof
+  Cases_on `vv` >>
+  simp[vv_at_def, vv_operand_def, expr_val_at_def] >>
+  rpt strip_tac >> gvs[]
+  >>~- ([`FLOOKUP s.vs_allocas aid = SOME (b,sz)`],
+        disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
+        metis_tac[])
+  >>~- ([`local_region cenv es.scopes s n b sz`],
+        disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[])
+QED
+
+Theorem ifexp_alloc_local_regions[local]:
+  !ctx func cenv cx es sa s q.
+    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) ==>
+    !n b sz. local_region cenv es.scopes q n b sz <=>
+             local_region cenv es.scopes s n b sz
+Proof
+  rpt strip_tac >> eq_tac >> strip_tac
+  >- (irule local_region_frame >>
+      conj_tac
+      >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
+      qexistsl_tac [`sa`, `es.scopes`, `q`] >> simp[]) >>
+  irule local_region_frame_fwd >>
+  qexistsl_tac [`s`, `sa`, `es.scopes`] >> simp[]
+QED
+
+Theorem ifexp_alloc_preserves_at[local]:
+  !ctx func cenv cx es origin sa sm buf sz s ty raw vv.
+    compile_alloc_buffer sz sa = (buf,sm) /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
+    MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+      [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
+    (!x. vv_operand vv = Var x ==> not_fresh_at sa x) /\
+    vv_at cenv cx ty origin sa es raw vv s ==>
+    ?q. run_inst_seq (emitted_insts sa sm) s = OK q /\
+        vv_at cenv cx ty origin sm es raw vv q
+Proof
+  rpt strip_tac >> drule_all alloc_buffer_frame_run >> strip_tac >>
+  `eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s` by
+    (Cases_on `vv_operand vv` >> gvs[eval_operand_def]) >>
+  `!n b len. local_region cenv es.scopes t n b len <=>
+             local_region cenv es.scopes s n b len` by
+    (drule_all ifexp_alloc_local_regions >> simp[]) >>
+  qexists_tac `t` >> simp[] >>
+  irule ifexp_vv_at_alloc_frame >> qexistsl_tac [`s`, `sa`] >> simp[]
 QED
 
 (* What compile_expr emits for an IfExp. *)
