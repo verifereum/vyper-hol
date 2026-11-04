@@ -27,7 +27,7 @@
 Theory mem2varDefs
 Ancestors
   passSimulationDefs dfgDefs venomExecSemantics venomInst stateEquiv venomWf
-  pred_set finite_map mem2varFrame
+  pred_set finite_map mem2varFrame irSupply
 
 (* ===== Fresh Variable ===== *)
 
@@ -284,6 +284,54 @@ Definition m2v_bt_def:
       | NONE => [i] in
     bb with bb_instructions :=
       FLAT (MAP rewrite_inst bb.bb_instructions)
+End
+
+(* ===== Supply-aware Function-Level Transform ===== *)
+
+(*
+ * Same rewrite as m2v_transform_function, except that the mstore inserted
+ * before a promoted return takes a fresh inst_id from the supply instead of
+ * reusing the return's (Python's add_before creates a new instruction).
+ * m2v_promote_inst returns two instructions only in that case.
+ *)
+Definition m2v_promote_inst_supply_def:
+  m2v_promote_inst_supply alloca_var alloca_out (size : num) s inst =
+    case m2v_promote_inst alloca_var alloca_out size inst of
+      [store; ret] =>
+        (case fresh_inst_id s of
+           (id, s1) => ([store with inst_id := id; ret], s1))
+    | out => (out, s)
+End
+
+Definition m2v_rewrite_inst_supply_def:
+  m2v_rewrite_inst_supply promo_list s (i : instruction) =
+    case FIND (\(ao, _, _). MEM (Var ao) i.inst_operands) promo_list of
+      SOME (ao, pvar, sz) => m2v_promote_inst_supply pvar ao sz s i
+    | NONE => ([i], s)
+End
+
+Definition m2v_rewrite_insts_supply_def:
+  m2v_rewrite_insts_supply promo_list s [] = ([], s) /\
+  m2v_rewrite_insts_supply promo_list s (i :: is) =
+    case m2v_rewrite_inst_supply promo_list s i of
+      (out, s1) =>
+        case m2v_rewrite_insts_supply promo_list s1 is of
+          (outs, s2) => (out ++ outs, s2)
+End
+
+Definition m2v_rewrite_blocks_supply_def:
+  m2v_rewrite_blocks_supply promo_list s [] = ([], s) /\
+  m2v_rewrite_blocks_supply promo_list s (bb :: bbs) =
+    case m2v_rewrite_insts_supply promo_list s bb.bb_instructions of
+      (insts, s1) =>
+        case m2v_rewrite_blocks_supply promo_list s1 bbs of
+          (bbs', s2) => ((bb with bb_instructions := insts) :: bbs', s2)
+End
+
+Definition m2v_transform_function_supply_def:
+  m2v_transform_function_supply s fn =
+    case m2v_rewrite_blocks_supply (m2v_promo_list fn) s fn.fn_blocks of
+      (bbs, s1) => (fn with fn_blocks := bbs, s1)
 End
 
 (* Set of promoted alloca instruction IDs *)
