@@ -230,6 +230,33 @@ Definition wb_frame_def:
     locals_kept cenv es s0 s
 End
 
+Theorem wb_frame_mstore:
+  !cenv es sa s a w.
+    (!aid off sz. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\
+       aid < sa.cs_next_id ==> regions_disjoint a 32 off sz) /\
+    (!n b sz. local_region cenv es.scopes s n b sz ==>
+       regions_disjoint a 32 b sz) ==>
+    wb_frame cenv es sa s (mstore a w s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!off sz. regions_disjoint a 32 off sz ==>
+     mem_bytes_at off sz (mstore a w s).vs_memory =
+     mem_bytes_at off sz s.vs_memory` by
+    (rpt strip_tac >>
+     irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+     gvs[compileEnvTheory.regions_disjoint_def]) >>
+  simp[wb_frame_def] >> conj_tac
+  >- simp[lookup_var_def, mstore_def] >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      qpat_x_assum `!aid off sz. FLOOKUP _ _ = _ /\ _ ==> _` irule >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  simp[locals_kept_def] >> rpt strip_tac >>
+  first_x_assum irule >>
+  qpat_x_assum `!n b sz. _ ==> regions_disjoint _ _ _ _` drule >>
+  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+QED
+
 Theorem wb_frame_refl:
   !cenv es sa s. wb_frame cenv es sa s s
 Proof
