@@ -2,7 +2,7 @@ Theory loadElimCounterexample
 Ancestors
   loadElimDefs venomExecSemantics venomState venomInst loadElimByteHelpers
   venomWf dfgCorrectnessProof memoryCopyElisionSound cfgTransform
-  basePtrDefs memLocDefs venomMemDefs venomMemProps
+  basePtrDefs memLocDefs venomMemDefs venomMemProps stateEquiv
 
 Definition ce_bb_def:
   ce_bb = <| bb_label := "entry"; bb_instructions :=
@@ -51,7 +51,8 @@ Theorem ce_source_run:
                        vs_memory := REPLICATE 32 0w;
                        vs_inst_idx := 3; vs_halted := T |>)
 Proof
-  EVAL_TAC >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``word_of_bytes``, ``word_to_bytes_aux``]) >>
   simp[wordsTheory.w2n_n2w, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
   rewrite_tac[GSYM (EVAL ``REPLICATE 32 (0w:8 word)``)] >>
   simp[word_of_bytes_zero_256, word_to_bytes_aux_zero,
@@ -63,7 +64,8 @@ Theorem ce_target_run:
     Halt (ce_s with <| vs_vars := FEMPTY |+ ("x",0w) |+ ("y",0w);
                        vs_inst_idx := 2; vs_halted := T |>)
 Proof
-  EVAL_TAC >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``word_of_bytes``, ``word_to_bytes_aux``]) >>
   simp[wordsTheory.w2n_n2w, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
   rewrite_tac[GSYM (EVAL ``REPLICATE 32 (0w:8 word)``)] >>
   simp[word_of_bytes_zero_256, word_to_bytes_aux_zero,
@@ -375,3 +377,73 @@ Proof
   mp_tac ce_step_preserves >>
   simp[ce_dfg_sound, ce_bp_sound, ce_bp_bounded]
 QED
+
+Theorem ce_conclusion_false:
+  ~((?e. run_blocks 2 ce_ctx ce_fn ce_s = Error e) \/
+    lift_result (state_equiv {v | isPREFIX "$le_phi_" v})
+      (execution_equiv {v | isPREFIX "$le_phi_" v})
+      (execution_equiv {v | isPREFIX "$le_phi_" v})
+      (run_blocks 2 ce_ctx ce_fn ce_s)
+      (run_blocks 2 ce_ctx (load_elim_function ce_fn) ce_s))
+Proof
+  rewrite_tac[ce_transform, ce_source_run, ce_target_run,
+              lift_result_def] >>
+  simp[execution_equiv_def] >>
+  strip_tac >> qexists `"y"` >>
+  EVAL_TAC >> wordsLib.WORD_DECIDE_TAC
+QED
+
+(* Exact negation of the frozen universal statement. *)
+Theorem load_elim_function_correct_counterexample:
+  ~(!fuel ctx fn s.
+    wf_function fn /\
+    fn_inst_wf fn /\
+    wf_ssa fn /\
+    EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
+    s.vs_inst_idx = 0 /\
+    fn_entry_label fn = SOME s.vs_current_bb /\
+    dfg_assigns_sound (dfg_build_function fn) s /\
+    bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) s /\
+    alloca_inv s /\
+    allocas_in_word s /\
+    bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s /\
+    bp_phis_closed (bp_analyze (cfg_analyze fn) fn) fn /\
+    bp_assigns_stable (bp_analyze (cfg_analyze fn) fn) (dfg_build_function fn) /\
+    (!bb s0 s_phi.
+       MEM bb fn.fn_blocks /\
+       MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+       eval_phis s0 bb.bb_instructions = OK s_phi /\
+       dfg_assigns_sound (dfg_build_function fn) s0 ==>
+       dfg_assigns_sound (dfg_build_function fn) s_phi) /\
+    (!fuel' run_ctx bb inst s0 s1.
+       MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       inst_wf inst /\
+       dfg_assigns_sound (dfg_build_function fn) (s0 with vs_inst_idx := 0) /\
+       bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) (s0 with vs_inst_idx := 0) /\
+       allocas_non_overlapping (s0 with vs_inst_idx := 0) /\
+       allocas_in_word (s0 with vs_inst_idx := 0) /\
+       bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn (s0 with vs_inst_idx := 0) /\
+       step_inst fuel' run_ctx inst s0 = OK s1 ==>
+       dfg_assigns_sound (dfg_build_function fn) (s1 with vs_inst_idx := 0) /\
+       bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) (s1 with vs_inst_idx := 0) /\
+       allocas_non_overlapping (s1 with vs_inst_idx := 0) /\
+       allocas_in_word (s1 with vs_inst_idx := 0) /\
+       bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn (s1 with vs_inst_idx := 0)) /\
+    LENGTH s.vs_memory < dimword (:256) ==>
+    (?e. run_blocks fuel ctx fn s = Error e) \/
+    lift_result (state_equiv {v | isPREFIX "$le_phi_" v})
+      (execution_equiv {v | isPREFIX "$le_phi_" v})
+      (execution_equiv {v | isPREFIX "$le_phi_" v})
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (load_elim_function fn) s))
+Proof
+  strip_tac >>
+  first_x_assum (qspecl_then [`2`, `ce_ctx`, `ce_fn`, `ce_s`] mp_tac) >>
+  rewrite_tac[ce_antecedent] >>
+  metis_tac[ce_conclusion_false]
+QED
+
+(* Repair boundary for this counterexample (not a claim of full correctness):
+   a redundant MSTORE at offset a may only be removed if a + 32 is no
+   greater than the current memory length, as well as writing the known value.
+   A pure MLOAD does not establish this no-expansion condition. *)
