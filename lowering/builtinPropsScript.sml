@@ -1,7 +1,7 @@
 (*
  * Builtin Function Properties (consolidated)
  *
- * Covers: hashing, math, simple, bytes, system, misc, create, convert, abi
+ * Covers: hashing, math, simple, bytes, misc, abi
  *
  * TOP-LEVEL:
  *   compile_keccak256_word_correct — compiled keccak256 outputs hash of word_to_bytes(w)
@@ -13,7 +13,6 @@
  *                                    reverts exactly on MIN_INT
  *   compile_builtin_abs_correct    — the same, as "outputs |v| or reverts"
  *   compile_builtin_len_correct    — compiled len outputs stored length via ptr_load
- *   compile_raw_create_correct     — compiled raw_create: OK or revert [CHEATED]
  *
  * Source: builtins/*.py
  * Lowering: builtin*Script.sml
@@ -2029,55 +2028,6 @@ Proof
   >> asm_rewrite_tac[]
 QED
 
-(* ===== System Builtins ===== *)
-
-(* TODO: compile_send_correct and compile_raw_create_correct need proofs
-   that reason about exec_ext_call / exec_ext_create, which invoke
-   verifereum's `run`.
-   Note: `run` always terminates (run_eq_tr from vfmDecreasesGasTheory),
-   so the NONE branch in extract_venom_result is dead for the run result.
-   The remaining difficulty is showing extract_venom_result returns SOME,
-   which requires the callee's context stack to be a singleton on return. *)
-
-(* send: CALL with zero-length data, asserts success *)
-Theorem compile_send_correct:
-  ∀ to_op value_op gas_op ss st st' tv vv gv.
-    compile_send to_op value_op gas_op st = ((), st') ∧
-    eval_operand to_op ss = SOME tv ∧
-    eval_operand value_op ss = SOME vv ∧
-    eval_operand gas_op ss = SOME gv ∧
-    fresh_vars_wrt st ss ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∨
-      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
-Proof
-  cheat
-QED
-
-(* ===== Create Builtins ===== *)
-
-(* NOTE: compile_raw_create_correct was ILL-TYPED as originally stated.
-   compile_raw_create takes 5 args (bytecode_op, value_op, salt_opt,
-   revert_on_failure, ctor_args_info) but the original had 6 positional args
-   (code_ptr, code_len, value_op, salt_opt, revert_on_failure), making
-   value_op (operand) land in the salt_opt (operand option) position.
-   Corrected statement below pending task owner review. *)
-Theorem compile_raw_create_correct:
-  ∀ bytecode_op value_op salt_opt revert_on_failure ctor_args_info
-    ss st op st' bv vv.
-    compile_raw_create bytecode_op value_op salt_opt
-      revert_on_failure ctor_args_info st = (op, st') ∧
-    eval_operand bytecode_op ss = SOME bv ∧
-    eval_operand value_op ss = SOME vv ∧
-    fresh_vars_wrt st ss ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∨
-      (* CREATE failure with revert_on_failure → revert *)
-      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
-Proof
-  cheat
-QED
-
 (* ===== Bytes Builtins ===== *)
 
 (* extract32: bounds-checked 32-byte load from a bytestring's data.
@@ -2252,6 +2202,390 @@ QED
 
 Finalise compile_extract32_correct;
 
-(* ===== Type Conversion ===== *)
-(* compile_type_convert_correct moved to builtinTypeConvertPropsScript.sml
-   for build time reasons (49 case arms × step_inst_base_def = slow). *)
+(* NUMBER is a context read, rather than a syntactically pure opcode. *)
+Theorem emit_op_NUMBER_correct:
+  emit_op NUMBER [] st = (out,st') /\ fresh_vars_wrt st ss ==>
+  ?tt. run_inst_seq (emitted_insts st st') ss = OK tt /\
+       eval_operand out tt = SOME ss.vs_block_ctx.bc_number /\
+       fresh_vars_wrt st' tt /\
+       (!op w. eval_operand op ss = SOME w ==> eval_operand op tt = SOME w) /\
+       tt.vs_block_ctx = ss.vs_block_ctx
+Proof
+  strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  gvs[] >>
+  simp[run_inst_seq_def] >>
+  once_rewrite_tac[step_inst_base_def] >>
+  simp[mk_inst_def, exec_read0_def] >>
+  conj_tac
+  >- simp[eval_operand_update_var] >>
+  conj_tac
+  >- (irule fresh_vars_wrt_advance >> simp[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  conj_tac
+  >- (rpt strip_tac >> irule eval_operand_update_fresh >> simp[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  simp[update_var_def]
+QED
+
+Theorem step_hash_read_frame:
+  (inst.inst_opcode = NUMBER \/ inst.inst_opcode = BLOCKHASH) /\
+  step_inst_base inst ss = OK tt ==>
+  tt = ss with vs_vars := tt.vs_vars /\
+  (!x. ~MEM x inst.inst_outputs ==>
+       FLOOKUP tt.vs_vars x = FLOOKUP ss.vs_vars x)
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+  simp[exec_read0_def, exec_read1_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  simp[update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+       venom_state_component_equality]
+QED
+
+Theorem compile_blockhash_shape:
+  compile_blockhash n_op st = (out,st') ==>
+  st'.cs_blocks = st.cs_blocks /\
+  st'.cs_current_bb = st.cs_current_bb /\
+  isPREFIX st.cs_current_insts st'.cs_current_insts /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             ~is_ext_call_op i.inst_opcode) (emitted_insts st st')
+Proof
+  simp[compile_blockhash_def, comp_bind_def, comp_ignore_bind_def,
+       emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
+       comp_return_def] >>
+  strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def,
+       is_terminator_def, is_ext_call_op_def]
+QED
+
+Theorem compile_blockhash_outputs:
+  compile_blockhash n_op st = (out,st') ==>
+  EVERY (\i. MEM i.inst_opcode [SUB; SLT; LT; ISZERO; ASSERT; NUMBER; BLOCKHASH] /\
+             EVERY (\x. ~not_fresh_at st x) i.inst_outputs)
+    (emitted_insts st st')
+Proof
+  simp[compile_blockhash_def, comp_bind_def, comp_ignore_bind_def,
+       emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
+       comp_return_def] >>
+  strip_tac >> gvs[] >> simp[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, not_fresh_at_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_ADD]
+QED
+
+Theorem compile_blockhash_frame:
+  !n_op st out st' ss tt.
+    compile_blockhash n_op st = (out,st') /\
+    run_inst_seq (emitted_insts st st') ss = OK tt ==>
+    tt = ss with vs_vars := tt.vs_vars /\
+    (!x. not_fresh_at st x ==>
+         FLOOKUP tt.vs_vars x = FLOOKUP ss.vs_vars x)
+Proof
+  rpt gen_tac >> disch_then strip_assume_tac >>
+  drule compile_blockhash_outputs >>
+  simp_tac bool_ss [listTheory.EVERY_MEM] >> strip_tac >>
+  irule run_inst_seq_protected_frame >>
+  qexists_tac `emitted_insts st st'` >>
+  conj_tac >- (
+    rpt gen_tac >> disch_then strip_assume_tac >>
+    first_x_assum drule >> strip_tac >>
+    `t = s with vs_vars := t.vs_vars /\
+     (!x. ~MEM x i.inst_outputs ==>
+       FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x)` by
+      (Cases_on `i.inst_opcode = NUMBER \/ i.inst_opcode = BLOCKHASH`
+       >- (drule_all step_hash_read_frame >> simp[]) >>
+       irule step_pure_opcode_frame >> asm_rewrite_tac[] >>
+       gvs[]) >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    rpt strip_tac >> first_x_assum irule >>
+    metis_tac[]) >>
+  asm_rewrite_tac[]
+QED
+
+Theorem compile_blockhash_prefix_run:
+  emit_op NUMBER [] st = (cur,s1) /\
+  emit_op SUB [cur; Lit 256w] s1 = (lo,s2) /\
+  emit_op SLT [n_op;lo] s2 = (old,s3) /\
+  emit_op ISZERO [old] s3 = (ok,s4) /\
+  emit_void ASSERT [ok] s4 = (ignored,s5) /\
+  eval_operand n_op ss = SOME n /\ fresh_vars_wrt st ss ==>
+  if ~(word_lt n (ss.vs_block_ctx.bc_number - 256w)) then
+    ?tt. run_inst_seq (emitted_insts st s5) ss = OK tt /\
+      fresh_vars_wrt s5 tt /\
+      eval_operand cur tt = SOME ss.vs_block_ctx.bc_number /\
+      (!op w. eval_operand op ss = SOME w ==> eval_operand op tt = SOME w) /\
+      tt.vs_block_ctx = ss.vs_block_ctx
+  else ?tt. run_inst_seq (emitted_insts st s5) ss = Abort Revert_abort tt
+Proof
+  strip_tac >> Cases_on `ignored` >>
+  drule_all emit_op_NUMBER_correct >> disch_then (qx_choose_then `t1` strip_assume_tac) >>
+  `eval_operand (Lit 256w) t1 = SOME 256w` by simp[eval_operand_lit] >>
+  drule_all emit_op_SUB_correct >> disch_then (qx_choose_then `t2` strip_assume_tac) >>
+  `eval_operand n_op t2 = SOME n` by
+    (first_assum irule >> first_assum irule >> simp[]) >>
+  drule_all emit_op_SLT_correct >> disch_then (qx_choose_then `t3` strip_assume_tac) >>
+  drule_all emit_op_ISZERO_correct >> disch_then (qx_choose_then `t4` strip_assume_tac) >>
+  drule_all emit_void_ASSERT_ok_or_revert >>
+  Cases_on `word_lt n (ss.vs_block_ctx.bc_number - 256w)` >>
+  simp[bool_to_word_def] >> strip_tac >>
+  imp_res_tac emit_op_extends >> imp_res_tac emit_void_extends >>
+  `run_inst_seq (emitted_insts st s2) ss = OK t2 /\
+   s2.cs_current_insts = st.cs_current_insts ++ emitted_insts st s2`
+    by compose_ok_tac (`t1`, `s1`) >>
+  `run_inst_seq (emitted_insts st s3) ss = OK t3 /\
+   s3.cs_current_insts = st.cs_current_insts ++ emitted_insts st s3`
+    by compose_ok_tac (`t2`, `s2`) >>
+  `run_inst_seq (emitted_insts st s4) ss = OK t4 /\
+   s4.cs_current_insts = st.cs_current_insts ++ emitted_insts st s4`
+    by compose_ok_tac (`t3`, `s3`) >>
+  simp[]
+  >- (qexists_tac `revert_state (set_returndata [] t4)` >>
+      irule run_emitted_compose2_abort >>
+      qexistsl [`t4`, `s4`] >> asm_rewrite_tac[]) >>
+  qexists_tac `t4` >> conj_tac
+  >- (irule run_emitted_compose2 >> qexistsl [`t4`, `s4`] >> asm_rewrite_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (ntac 3 (first_assum irule) >> simp[]) >>
+  conj_tac >- (rpt strip_tac >> ntac 4 (first_assum irule) >> simp[]) >>
+  suspend "block_context"
+QED
+
+Resume compile_blockhash_prefix_run[block_context]:
+  qpat_x_assum `s2.cs_current_insts = st.cs_current_insts ++ _` kall_tac >>
+  qpat_x_assum `s3.cs_current_insts = st.cs_current_insts ++ _` kall_tac >>
+  qpat_x_assum `s4.cs_current_insts = st.cs_current_insts ++ _` kall_tac >>
+  qpat_x_assum `s1.cs_current_insts = st.cs_current_insts ++ _` kall_tac >>
+  `run_inst_seq (emitted_insts s1 s3) t1 = OK t3 /\
+   s3.cs_current_insts = s1.cs_current_insts ++ emitted_insts s1 s3`
+    by compose_ok_tac (`t2`, `s2`) >>
+  `run_inst_seq (emitted_insts s1 s4) t1 = OK t4 /\
+   s4.cs_current_insts = s1.cs_current_insts ++ emitted_insts s1 s4`
+    by compose_ok_tac (`t3`, `s3`) >>
+  `EVERY (\i. MEM i.inst_opcode [SUB; SLT; ISZERO])
+     (emitted_insts s1 s4)` by
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`emit_op SUB _ _ = _`, `emit_op SLT _ _ = _`,
+        `emit_op ISZERO _ _ = _`] >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     imp_res_tac emitted_insts_emit_op >>
+     pure_rewrite_tac[emitted_insts_def] >>
+     asm_rewrite_tac[] >>
+     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def]) >>
+  qspecl_then [`emitted_insts s1 s4`, `\x. F`, `t1`, `t4`]
+    mp_tac run_inst_seq_protected_frame >>
+  impl_tac >- (
+    conj_tac >- (
+      rpt gen_tac >> disch_then strip_assume_tac >>
+      qpat_x_assum `EVERY _ _` mp_tac >>
+      simp_tac bool_ss [listTheory.EVERY_MEM] >>
+      disch_then drule >> strip_tac >> simp_tac bool_ss [] >>
+      irule (cj 1 step_pure_opcode_frame) >> qexists_tac `i` >>
+      simp[] >> gvs[]) >>
+    first_assum ACCEPT_TAC) >>
+  simp_tac bool_ss [] >> strip_tac >>
+  qpat_x_assum `t4 = _ with vs_vars := _`
+    (mp_tac o Q.AP_TERM `\s. s.vs_block_ctx`) >> simp[]
+QED
+
+Finalise compile_blockhash_prefix_run;
+
+Theorem emit_op_BLOCKHASH_correct:
+  emit_op BLOCKHASH [n_op] st = (out,st') /\
+  eval_operand n_op ss = SOME n /\ fresh_vars_wrt st ss ==>
+  ?tt. run_inst_seq (emitted_insts st st') ss = OK tt /\
+       eval_operand out tt = SOME (ss.vs_block_ctx.bc_blockhash (w2n n)) /\
+       fresh_vars_wrt st' tt /\
+       (!op w. eval_operand op ss = SOME w ==> eval_operand op tt = SOME w) /\
+       tt.vs_block_ctx = ss.vs_block_ctx
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  simp[run_inst_seq_def] >>
+  once_rewrite_tac[step_inst_base_def] >>
+  simp[mk_inst_def, exec_read1_def] >>
+  conj_tac >- simp[eval_operand_update_var] >>
+  conj_tac
+  >- (irule fresh_vars_wrt_advance >> simp[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  conj_tac
+  >- (rpt strip_tac >> irule eval_operand_update_fresh >> simp[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  simp[update_var_def]
+QED
+
+Theorem compile_blockhash_run:
+  compile_blockhash n_op st = (out,st') /\
+  eval_operand n_op ss = SOME n /\ fresh_vars_wrt st ss ==>
+  if ~(word_lt n (ss.vs_block_ctx.bc_number - 256w)) /\
+     w2n n < w2n ss.vs_block_ctx.bc_number then
+    ?tt. run_inst_seq (emitted_insts st st') ss = OK tt /\
+         eval_operand out tt = SOME (ss.vs_block_ctx.bc_blockhash (w2n n))
+  else ?tt. run_inst_seq (emitted_insts st st') ss = Abort Revert_abort tt
+Proof
+  strip_tac >>
+  gvs[compile_blockhash_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rename1 `emit_op NUMBER [] st = (cur,s1)` >>
+  rename1 `emit_op SUB [cur; Lit 256w] s1 = (lo,s2)` >>
+  rename1 `emit_op SLT [n_op;lo] s2 = (old,s3)` >>
+  rename1 `emit_op ISZERO [old] s3 = (ok,s4)` >>
+  rename1 `emit_void ASSERT [ok] s4 = (_,s5)` >>
+  rename1 `emit_op LT [n_op;cur] s5 = (recent,s6)` >>
+  rename1 `emit_void ASSERT [recent] s6 = (_,s7)` >>
+  imp_res_tac emit_op_extends >> imp_res_tac emit_void_extends >>
+  `s2.cs_current_insts = st.cs_current_insts ++ emitted_insts st s2` by
+    (irule emit_extends_trans >> qexists_tac `s1` >> asm_rewrite_tac[]) >>
+  `s3.cs_current_insts = st.cs_current_insts ++ emitted_insts st s3` by
+    (irule emit_extends_trans >> qexists_tac `s2` >> asm_rewrite_tac[]) >>
+  `s4.cs_current_insts = st.cs_current_insts ++ emitted_insts st s4` by
+    (irule emit_extends_trans >> qexists_tac `s3` >> asm_rewrite_tac[]) >>
+  `s5.cs_current_insts = st.cs_current_insts ++ emitted_insts st s5` by
+    (irule emit_extends_trans >> qexists_tac `s4` >> asm_rewrite_tac[]) >>
+  drule_all compile_blockhash_prefix_run >>
+  Cases_on `word_lt n (ss.vs_block_ctx.bc_number - 256w)` >> simp[]
+  >- suspend "old" >>
+  disch_then (qx_choose_then `t5` strip_assume_tac) >>
+  `eval_operand n_op t5 = SOME n` by (first_assum irule >> simp[]) >>
+  drule_all emit_op_LT_correct >> disch_then (qx_choose_then `t6` strip_assume_tac) >>
+  drule_all emit_void_ASSERT_ok_or_revert >>
+  Cases_on `w2n n < w2n ss.vs_block_ctx.bc_number` >>
+  simp[bool_to_word_def] >> strip_tac
+  >- suspend "success" >>
+  suspend "recent"
+QED
+
+Resume compile_blockhash_run[old]:
+  disch_then (qx_choose_then `tt` assume_tac) >>
+  imp_res_tac emit_op_extends >> imp_res_tac emit_void_extends >>
+  `s7.cs_current_insts = s5.cs_current_insts ++ emitted_insts s5 s7` by
+    (irule emit_extends_trans >> qexists_tac `s6` >> asm_rewrite_tac[]) >>
+  `st'.cs_current_insts = s5.cs_current_insts ++ emitted_insts s5 st'` by
+    (irule emit_extends_trans >> qexists_tac `s7` >> asm_rewrite_tac[]) >>
+  qexists_tac `tt` >> irule run_emitted_abort_extend >>
+  qexists_tac `s5` >> asm_rewrite_tac[]
+QED
+Resume compile_blockhash_run[success]:
+  `t6.vs_block_ctx = t5.vs_block_ctx` by (
+    qpat_assum `emit_op LT _ _ = _` mp_tac >>
+    qpat_assum `run_inst_seq (emitted_insts s5 s6) t5 = OK t6` mp_tac >>
+    rpt (pop_assum kall_tac) >> rpt strip_tac >>
+    drule emitted_insts_emit_op >> strip_tac >>
+    gvs[run_inst_seq_def, AllCaseEqs()] >>
+    qmatch_asmsub_abbrev_tac `step_inst_base inst t5 = OK t6` >>
+    `t6 = t5 with vs_vars := t6.vs_vars` by (
+      irule (cj 1 step_pure_opcode_frame) >>
+      qexists_tac `inst` >> simp[Abbr `inst`, mk_inst_def]) >>
+    qpat_x_assum `t6 = _ with vs_vars := _`
+      (mp_tac o Q.AP_TERM `\s. s.vs_block_ctx`) >> simp[]) >>
+  `eval_operand n_op t6 = SOME n` by (first_assum irule >> simp[]) >>
+  drule_all emit_op_BLOCKHASH_correct >>
+  disch_then (qx_choose_then `tt` strip_assume_tac) >>
+  `run_inst_seq (emitted_insts st s6) ss = OK t6 /\
+   s6.cs_current_insts = st.cs_current_insts ++ emitted_insts st s6`
+    by compose_ok_tac (`t5`, `s5`) >>
+  `run_inst_seq (emitted_insts st s7) ss = OK t6 /\
+   s7.cs_current_insts = st.cs_current_insts ++ emitted_insts st s7`
+    by compose_ok_tac (`t6`, `s6`) >>
+  qexists_tac `tt` >> conj_tac
+  >- (irule run_emitted_compose2 >> qexistsl [`t6`, `s7`] >> asm_rewrite_tac[]) >>
+  simp[]
+QED
+Resume compile_blockhash_run[recent]:
+  `run_inst_seq (emitted_insts st s6) ss = OK t6 /\
+   s6.cs_current_insts = st.cs_current_insts ++ emitted_insts st s6`
+    by compose_ok_tac (`t5`, `s5`) >>
+  `run_inst_seq (emitted_insts st s7) ss =
+     Abort Revert_abort (revert_state (set_returndata [] t6))` by
+    (irule run_emitted_compose2_abort >>
+     qexistsl [`t6`, `s6`] >> asm_rewrite_tac[]) >>
+  `s7.cs_current_insts = st.cs_current_insts ++ emitted_insts st s7` by
+    (irule emit_extends_trans >> qexists_tac `s6` >> asm_rewrite_tac[]) >>
+  qexists_tac `revert_state (set_returndata [] t6)` >>
+  irule run_emitted_abort_extend >> qexists_tac `s7` >> asm_rewrite_tac[]
+QED
+Finalise compile_blockhash_run;
+
+Theorem compile_prevhash_shape:
+  compile_env_var PrevHash st = (out,st') ==>
+  st'.cs_blocks = st.cs_blocks /\
+  st'.cs_current_bb = st.cs_current_bb /\
+  isPREFIX st.cs_current_insts st'.cs_current_insts /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             ~is_ext_call_op i.inst_opcode /\
+             MEM i.inst_opcode [NUMBER; SUB; BLOCKHASH] /\
+             EVERY (\x. ~not_fresh_at st x) i.inst_outputs)
+    (emitted_insts st st')
+Proof
+  simp[compile_env_var_def, comp_bind_def, comp_ignore_bind_def,
+       emit_op_def, fresh_var_def, fresh_id_def, emit_def, comp_return_def] >>
+  strip_tac >> gvs[] >> simp[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def,
+       is_terminator_def, is_ext_call_op_def, not_fresh_at_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_ADD]
+QED
+
+Theorem compile_prevhash_frame:
+  compile_env_var PrevHash st = (out,st') /\
+  run_inst_seq (emitted_insts st st') ss = OK tt ==>
+  tt = ss with vs_vars := tt.vs_vars /\
+  (!x. not_fresh_at st x ==> FLOOKUP tt.vs_vars x = FLOOKUP ss.vs_vars x)
+Proof
+  strip_tac >> drule compile_prevhash_shape >>
+  simp_tac bool_ss [listTheory.EVERY_MEM] >> strip_tac >>
+  irule run_inst_seq_protected_frame >>
+  qexists_tac `emitted_insts st st'` >>
+  conj_tac >- (
+    rpt gen_tac >> disch_then strip_assume_tac >>
+    first_x_assum drule >> strip_tac >>
+    `t = s with vs_vars := t.vs_vars /\
+     (!x. ~MEM x i.inst_outputs ==>
+       FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x)` by
+      (Cases_on `i.inst_opcode = SUB`
+       >- (irule step_pure_opcode_frame >> asm_rewrite_tac[] >> simp[]) >>
+       irule step_hash_read_frame >> asm_rewrite_tac[] >> gvs[]) >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    rpt strip_tac >> first_x_assum irule >>
+    gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  asm_rewrite_tac[]
+QED
+
+Theorem compile_prevhash_run:
+  compile_env_var PrevHash st = (out,st') /\ fresh_vars_wrt st ss ==>
+  ?tt. run_inst_seq (emitted_insts st st') ss = OK tt /\
+       eval_operand out tt =
+         SOME (ss.vs_block_ctx.bc_blockhash (w2n (ss.vs_block_ctx.bc_number - 1w)))
+Proof
+  strip_tac >>
+  gvs[compile_env_var_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rename1 `emit_op NUMBER [] st = (cur,s1)` >>
+  rename1 `emit_op SUB [cur; Lit 1w] s1 = (prev,s2)` >>
+  drule_all emit_op_NUMBER_correct >> disch_then (qx_choose_then `t1` strip_assume_tac) >>
+  `eval_operand (Lit 1w) t1 = SOME 1w` by simp[eval_operand_lit] >>
+  drule_all emit_op_SUB_correct >> disch_then (qx_choose_then `t2` strip_assume_tac) >>
+  `t2.vs_block_ctx = t1.vs_block_ctx` by (
+    qpat_assum `emit_op SUB _ _ = _` mp_tac >>
+    qpat_assum `run_inst_seq (emitted_insts s1 s2) t1 = OK t2` mp_tac >>
+    rpt (pop_assum kall_tac) >> rpt strip_tac >>
+    drule emitted_insts_emit_op >> strip_tac >>
+    gvs[run_inst_seq_def, AllCaseEqs()] >>
+    qmatch_asmsub_abbrev_tac `step_inst_base inst t1 = OK t2` >>
+    `t2 = t1 with vs_vars := t2.vs_vars` by (
+      irule (cj 1 step_pure_opcode_frame) >>
+      qexists_tac `inst` >> simp[Abbr `inst`, mk_inst_def]) >>
+    qpat_x_assum `t2 = _ with vs_vars := _`
+      (mp_tac o Q.AP_TERM `\s. s.vs_block_ctx`) >> simp[]) >>
+  drule_all emit_op_BLOCKHASH_correct >> disch_then (qx_choose_then `tt` strip_assume_tac) >>
+  imp_res_tac emit_op_extends >>
+  `run_inst_seq (emitted_insts st s2) ss = OK t2 /\
+   s2.cs_current_insts = st.cs_current_insts ++ emitted_insts st s2`
+    by compose_ok_tac (`t1`, `s1`) >>
+  qexists_tac `tt` >> conj_tac
+  >- (irule run_emitted_compose2 >> qexistsl [`t2`, `s2`] >> asm_rewrite_tac[]) >>
+  simp[]
+QED

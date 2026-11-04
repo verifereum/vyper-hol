@@ -206,7 +206,9 @@ Proof
        eval_operand head ready = SOME (n2w (d+ho))` by
        (qpat_assum `abi_decoder_address_frame _ _ _`
           (strip_assume_tac o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
-        conj_tac >- (pure_asm_rewrite_tac [] >> REFL_TAC) >> metis_tac []) >>
+        conj_tac >- (pure_asm_rewrite_tac [] >> REFL_TAC) >>
+        qpat_x_assum `!op w. _` (qspecl_then [`head`, `n2w (d+ho)`] irule) >>
+        asm_rewrite_tac []) >>
      asm_simp_tac (srw_ss()) [Abbr `Pre`] >> decide_tac) >>
   `!ready encoded. Post (ei,SND ops,src,prepared,child_end,child_len) ready encoded ==>
     abi_encoder_spine_cursor_input (head,dyn_ptr,FST ops,child_len,child_end,end_st,limit_st) encoded` by
@@ -296,7 +298,15 @@ Proof
     (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
   `eval_operand dyn_ptr ready = SOME (n2w slot) /\ mload slot ready = n2w off /\
     FLOOKUP ready.vs_allocas site = SOME (slot,32)` by
-    full_simp_tac (srw_ss()) [abi_decoder_address_frame_def, mload_def, Excl "enc_def"] >>
+    (qpat_assum `abi_decoder_address_frame st.cs_next_var initial ready`
+       (strip_assume_tac o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
+     rpt conj_tac
+     >- (qpat_x_assum `!op w. _` (qspecl_then [`dyn_ptr`, `n2w slot`] irule) >>
+         rpt conj_tac >> first_assum ACCEPT_TAC)
+     >- (qpat_x_assum `mload slot initial = _` (SUBST1_TAC o SYM) >>
+         qpat_x_assum `ready.vs_memory = _` (fn th => REWRITE_TAC [mload_def, th])) >>
+     qpat_x_assum `ready.vs_allocas = _` (fn th => REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
   mp_tac (Q.INST [`st` |-> `addressed`, `initial` |-> `ready:venom_state`,
     `src` |-> `SND (FST (coords:(operand # operand) # (operand # operand)))`,
     `data_op` |-> `FST (SND (coords:(operand # operand) # (operand # operand)))`,

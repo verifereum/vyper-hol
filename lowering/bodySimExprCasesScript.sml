@@ -70,8 +70,7 @@ Proof
   metis_tac[body_expr_ok_case]
 QED
 
-(* exprSimOperators' compile_ifexp_case, whose aggregate ternaries are
-   cheated there (compile_ifexp_aggregate_case) for compile_expr_sim too. *)
+(* exprSimOperators' compile_ifexp_case. *)
 Theorem body_ifexp_case:
   !cx v5 e1 e2 e3.
     (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_ok cx e2) /\
@@ -516,7 +515,7 @@ QED
 (* GAP (#636 operands with internal calls): create.  Its case lemma is
    still stated over expr_sim_below, for compile_expr_sim only. *)
 Theorem body_create_case:
-  !cx ty kind has_salt rof es v26.
+  !cx ty kind has_salt rof kw_order es v26.
     (!raw_args s'' prefix t s'3' code_size t'.
        kind = CreateFromBlueprint raw_args /\
        eval_exprs cx (TAKE (if has_salt then 4 else 3) es) s'' = (INL prefix,t) /\
@@ -540,7 +539,7 @@ Theorem body_create_case:
     (kind = CreateCopyOf ==> body_exprs_ok cx es) /\
     (kind = CreateMinimalProxy ==> body_exprs_ok cx es) /\
     (kind = RawCreate ==> body_exprs_ok cx (TAKE 2 es)) ==>
-    body_expr_ok cx (Call ty (CreateTarget kind has_salt rof) es v26)
+    body_expr_ok cx (Call ty (CreateTarget kind has_salt rof kw_order) es v26)
 Proof
   rpt strip_tac >> irule body_expr_ok_intro >> cheat
 QED

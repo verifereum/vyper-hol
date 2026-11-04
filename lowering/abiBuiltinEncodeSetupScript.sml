@@ -15,14 +15,14 @@ Ancestors
 Theorem abi_builtin_encode_setup_none_execute:
   abi_builtin_encode_setup NONE maxlen st = (ops,ready) /\
   ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
-    FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,maxlen+32)) /\
-  maxlen+32 < dimword (:256) /\ ready.cs_next_var <= limit_st.cs_next_var /\
+    FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,32+32*word_size maxlen)) /\
+  32+32*word_size maxlen < dimword (:256) /\ ready.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial ==>
   ?actual. run_inst_seq (emitted_insts st ready) initial = OK actual /\
     eval_operand (FST ops) actual = SOME (n2w p) /\
     eval_operand (SND ops) actual = SOME (n2w (p+32)) /\
     fresh_vars_wrt limit_st actual /\
-    abi_builtin_allocation_frame st.cs_next_var st.cs_next_id (maxlen+32) initial actual /\
+    abi_builtin_allocation_frame st.cs_next_var st.cs_next_id (32+32*word_size maxlen) initial actual /\
     inst_extends st ready
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -34,10 +34,10 @@ Proof
   imp_res_tac emitted_insts_emit_op >> imp_res_tac abi_decoder_operand_live_emit >>
   `allocated.cs_next_var <= limit_st.cs_next_var /\ st.cs_next_var <= allocated.cs_next_var`
     by decide_tac >>
-  mp_tac (Q.INST [`s` |-> `initial:venom_state`, `outsz` |-> `maxlen+32:num`,
+  mp_tac (Q.INST [`s` |-> `initial:venom_state`, `outsz` |-> `32+32*word_size maxlen:num`,
     `st'` |-> `allocated`] abi_builtin_alloc_buffer_frame) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  rename1 `abi_builtin_allocation_frame st.cs_next_var st.cs_next_id (maxlen+32) initial allocated_s` >>
+  rename1 `abi_builtin_allocation_frame st.cs_next_var st.cs_next_id (32+32*word_size maxlen) initial allocated_s` >>
   mp_tac (Q.INST [`lhs` |-> `buf.buf_operand`, `rhs` |-> `Lit 32w`, `out` |-> `data_ptr`,
     `a` |-> `n2w p:bytes32`, `b` |-> `32w:bytes32`, `st` |-> `allocated`,
     `st'` |-> `ready`, `s` |-> `allocated_s:venom_state`] abi_builtin_emit_add) >>
@@ -47,7 +47,7 @@ Proof
     (drule_all abi_encoder_prefix_eval >> simp[]) >>
   qpat_assum `abi_builtin_prefix _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_builtin_prefix_def]) >>
-  `abi_builtin_allocation_frame st.cs_next_var st.cs_next_id (maxlen+32) initial actual` by
+  `abi_builtin_allocation_frame st.cs_next_var st.cs_next_id (32+32*word_size maxlen) initial actual` by
     (irule abi_builtin_allocation_frame_suffix >>
      qexistsl_tac [`allocated_s`, `allocated.cs_next_var`] >> asm_simp_tac bool_ss []) >>
   drule_all abi_decode_sequence_chain >> strip_tac >>
@@ -57,14 +57,14 @@ QED
 Theorem abi_builtin_encode_setup_none_reach:
   abi_builtin_encode_setup NONE maxlen st = (ops,ready) /\ fn_has_code st ready func /\
   ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
-    FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,maxlen+32)) /\
-  maxlen+32 < dimword (:256) /\ ready.cs_next_var <= limit_st.cs_next_var /\
+    FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,32+32*word_size maxlen)) /\
+  32+32*word_size maxlen < dimword (:256) /\ ready.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?actual. eval_operand (FST ops) actual = SOME (n2w p) /\
     eval_operand (SND ops) actual = SOME (n2w (p+32)) /\
     fresh_vars_wrt limit_st actual /\
-    abi_builtin_allocation_frame st.cs_next_var st.cs_next_id (maxlen+32) initial actual /\
+    abi_builtin_allocation_frame st.cs_next_var st.cs_next_id (32+32*word_size maxlen) initial actual /\
     actual.vs_current_bb = ready.cs_current_bb /\ actual.vs_inst_idx = LENGTH ready.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof

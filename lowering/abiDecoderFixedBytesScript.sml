@@ -9,11 +9,15 @@ Theorem abi_decoder_set_byte_low_bit:
   a < 32 /\ j < 8 * (31 - a) /\ ~(w:bytes32) ' j ==>
   ~(set_byte (n2w a) b w T) ' j
 Proof
-  strip_tac >> `a < dimword (:256) /\ j < 256` by
+  strip_tac >>
+  `a < dimword (:256) /\ j < 256` by
     (simp[dimword_def] >> decide_tac) >>
-  rw_tac (std_ss ++ fcpLib.FCP_ss ++ numSimps.ARITH_ss)
-    [set_byte_def, byte_index_def, w2n_n2w, LESS_MOD, LET_THM,
-     word_slice_alt_def, word_or_def, word_lsl_def, w2w, dimindex_256]
+  `byte_index (n2w a : bytes32) T = 8 * (31 - a)` by
+    (asm_simp_tac std_ss
+      [byte_index_def, dimindex_256, w2n_n2w, LESS_MOD, LET_THM]) >>
+  asm_simp_tac arith_ss
+    [set_byte_def, LET_THM, word_slice_alt_def, word_or_def,
+     word_lsl_def, fcpTheory.FCP_BETA, dimindex_256]
 QED
 
 Theorem abi_decoder_bytes_cons_low_bit[local]:
