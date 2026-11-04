@@ -271,7 +271,15 @@ Theorem pop_nested_immutable_runtime_sim:
           find_var_decl_by_name id ts = NONE) ==>
     expr_vv_sim ctx func cenv cx ty (Pop ann bt) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `env_context_consistent env cx` by
+    metis_tac[expr_body_pre_def, expr_sim_inv_def, env_consistent_def] >>
+  `type_place_target env (target_root bt) = NONE` by
+    metis_tac[no_storage_root_untyped_runtime] >>
+  drule target_root_untyped >> strip_tac >>
+  `well_typed_expr env (Pop ann bt)` by metis_tac[expr_body_pre_def] >>
+  qpat_x_assum `well_typed_expr env (Pop ann bt)` mp_tac >>
+  simp[Once well_typed_expr_def]
 QED
 
 (* RESIDUAL (constructor immutables): pop on a member of an immutable in
