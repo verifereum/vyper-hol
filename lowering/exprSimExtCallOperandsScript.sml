@@ -243,3 +243,23 @@ Proof
   irule locals_kept_trans >>
   qexistsl_tac [`es1`, `cut0`, `s1`] >> simp[]
 QED
+
+Theorem delayed_capture_rebase:
+  delayed_capture ctx func ce cx ty tv vv lo hi es s /\
+  local_ptrs_rel func ce es.scopes s /\ local_ptrs_reserved ce hi /\
+  operand_frame ce es s hi es1 s1 /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  hi.cs_next_var <= hi1.cs_next_var /\ hi.cs_next_id <= hi1.cs_next_id ==>
+  delayed_capture ctx func ce cx ty tv vv lo hi1 es1 s1
+Proof
+  pure_rewrite_tac[delayed_capture_def] >> rpt strip_tac >>
+  `operand_frame ce es s hi es' s'` by
+    (irule operand_frame_trans >>
+     conj_tac >- simp[] >>
+     conj_tac >- metis_tac[] >>
+     qexistsl_tac [`hi1`, `es1`, `s1`] >> simp[]) >>
+  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by metis_tac[] >>
+  `hi.cs_next_var <= hi'.cs_next_var /\ hi.cs_next_id <= hi'.cs_next_id`
+    by decide_tac >>
+  metis_tac[]
+QED
