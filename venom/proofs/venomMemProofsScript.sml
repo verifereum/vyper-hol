@@ -825,7 +825,7 @@ Proof
   imp_res_tac exec_ext_call_preserves_alloca_fields >>
   imp_res_tac exec_delegatecall_preserves_alloca_fields >>
   imp_res_tac exec_create_preserves_alloca_fields >>
-  gvs[]
+  gvs[halt_state_def, set_returndata_def]
 QED
 
 Triviality step_inst_base_sstore_alloca_fields[local]:
