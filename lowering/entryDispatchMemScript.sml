@@ -20,7 +20,7 @@ Proof
   rename1 `OK t` >> Cases_on `t.vs_halted` >> simp[]
 QED
 
-Theorem mem_safe_blocks_no_phi[local]:
+Theorem mem_safe_blocks_no_phi:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   eval_phis s bb.bb_instructions = OK s /\
   phi_prefix_length bb.bb_instructions = 0 /\
