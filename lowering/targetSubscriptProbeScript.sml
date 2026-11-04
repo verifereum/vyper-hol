@@ -3617,3 +3617,61 @@ Proof
   disch_then (qspec_then `out` mp_tac) >>
   gvs[get_storage_after_set, update_var_def, contract_storage_def]
 QED
+
+Theorem probe_word_invoke_local_memory:
+  !func cenv scopes s args cs out name lo sz.
+    local_ptrs_rel func cenv scopes s /\
+    setup_callee probe_word_function args s = SOME cs /\
+    s.vs_alloca_next + 128 <= dimword (:256) /\
+    local_region cenv scopes s name lo sz ==>
+    mem_bytes_at lo sz
+      (update_var out 0w (merge_callee_state s (probe_word_final_state cs))).vs_memory =
+    mem_bytes_at lo sz s.vs_memory
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule setup_callee_shared_fields >> strip_tac >>
+  drule probe_word_setup_observations >> strip_tac >>
+  `regions_disjoint lo sz s.vs_alloca_next 128` by
+    (irule localPtrsPropsTheory.local_ptrs_rel_above_frontier >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  Cases_on `sz = 0` >- simp[valueEncodingTheory.mem_bytes_at_def] >>
+  `lo + sz <= cs.vs_alloca_next + 32 \/ cs.vs_alloca_next + 128 <= lo` by
+    (gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+  `mem_bytes_at lo sz (probe_word_final_state cs).vs_memory =
+   mem_bytes_at lo sz cs.vs_memory` by
+    (irule probe_word_final_memory_frame >> simp[]) >>
+  simp[update_var_def]
+QED
+
+Theorem probe_word_invoke_local_ptrs:
+  !func cenv scopes s args cs out.
+    local_ptrs_rel func cenv scopes s /\
+    setup_callee probe_word_function args s = SOME cs /\
+    s.vs_alloca_next + 128 <= dimword (:256) /\
+    not_local_ptr cenv scopes out ==>
+    local_ptrs_rel func cenv scopes
+      (update_var out 0w (merge_callee_state s (probe_word_final_state cs)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule localPtrsPropsTheory.local_ptrs_rel_update_var >> simp[] >>
+  irule localPtrsPropsTheory.local_ptrs_rel_mem_agree >>
+  qexists_tac `s` >>
+  simp[merge_callee_local_fields, lookup_var_def] >>
+  rpt strip_tac >> gvs[] >> sym_tac >>
+  drule_all probe_word_invoke_local_memory >>
+  disch_then (qspec_then `out` mp_tac) >> simp[update_var_def]
+QED
+
+Theorem probe_word_invoke_locals_kept:
+  !func cenv es s args cs out.
+    local_ptrs_rel func cenv es.scopes s /\
+    setup_callee probe_word_function args s = SOME cs /\
+    s.vs_alloca_next + 128 <= dimword (:256) ==>
+    locals_kept cenv es s
+      (update_var out 0w (merge_callee_state s (probe_word_final_state cs)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule exprSimTheory.locals_kept_regions >> rpt strip_tac >>
+  irule probe_word_invoke_local_memory >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
