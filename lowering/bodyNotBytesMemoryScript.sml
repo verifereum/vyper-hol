@@ -10,7 +10,7 @@ Ancestors
   exprLoweringProps emitHelper venomInst venomState words list rich_list
   compileEnv fragExec exprSimDefs valueEncoding vyperValue vyperAST venomExecSemantics
   loweringSlice exprLowering vyperState vyperExprNoControl
-  builtinSimple builtinProps freshWrites varsExt vyperTyping vyperValueOperation integer_word
+  builtinSimple freshWrites varsExt vyperTyping vyperValueOperation integer_word
 
 Theorem body_not_bytes32_tail_mem[local]:
   emit_op NOT [x] sm = (op,sb) /\ local_ptrs_reserved cenv sm /\

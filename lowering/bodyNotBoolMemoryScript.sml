@@ -9,7 +9,7 @@ Ancestors
   exprLoweringProps emitHelper venomInst venomState words list rich_list
   compileEnv fragExec exprSimDefs valueEncoding vyperValue vyperAST venomExecSemantics
   loweringSlice exprLowering vyperState vyperExprNoControl
-  builtinSimple builtinProps freshWrites varsExt vyperTyping vyperValueOperation integer_word
+  builtinSimple freshWrites varsExt vyperTyping vyperValueOperation integer_word
 
 Theorem body_iszero_prefix_mem_ok:
   emit_op ISZERO ops sm = (dst,sn) ==>
