@@ -116,22 +116,30 @@ QED
 Theorem vyper_is_dynamic_submap:
   evaluate_type env ty = SOME tv /\ env SUBMAP tenv ==>
   vyper_is_dynamic env ty = vyper_is_dynamic tenv ty
-Proof metis_tac[cj 1 vyper_abi_metadata_submap] QED
+Proof
+  metis_tac[cj 1 vyper_abi_metadata_submap]
+QED
 
 Theorem vyper_abi_size_bound_submap:
   evaluate_type env ty = SOME tv /\ env SUBMAP tenv ==>
   vyper_abi_size_bound env ty = vyper_abi_size_bound tenv ty
-Proof metis_tac[cj 1 vyper_abi_metadata_submap] QED
+Proof
+  metis_tac[cj 1 vyper_abi_metadata_submap]
+QED
 
 Theorem vyper_any_dynamic_submap:
   evaluate_types env ts acc = SOME tvs /\ env SUBMAP tenv ==>
   vyper_any_dynamic env ts = vyper_any_dynamic tenv ts
-Proof metis_tac[cj 2 vyper_abi_metadata_submap] QED
+Proof
+  metis_tac[cj 2 vyper_abi_metadata_submap]
+QED
 
 Theorem vyper_abi_size_bound_list_submap:
   evaluate_types env ts acc = SOME tvs /\ env SUBMAP tenv ==>
   vyper_abi_size_bound_list env ts = vyper_abi_size_bound_list tenv ts
-Proof metis_tac[cj 2 vyper_abi_metadata_submap] QED
+Proof
+  metis_tac[cj 2 vyper_abi_metadata_submap]
+QED
 
 Theorem vyper_abi_embedded_size_submap:
   evaluate_type env ty = SOME tv /\ env SUBMAP tenv ==>
