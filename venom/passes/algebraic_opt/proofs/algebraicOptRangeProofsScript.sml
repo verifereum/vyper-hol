@@ -1242,3 +1242,14 @@ Proof
   >- (unabbrev_all_tac >> gvs[listTheory.MEM] >> EVAL_TAC)
   >> (unabbrev_all_tac >> gvs[listTheory.MEM] >> EVAL_TAC)
 QED
+Theorem ao_range_source_jnz_distinct:
+  !fn inst c t f.
+    EVERY label_positions_ok (fn_insts fn) /\
+    MEM inst (fn_insts fn) /\
+    inst.inst_opcode = JNZ /\
+    inst.inst_operands = [c;Label t;Label f] ==> t <> f
+Proof
+  rpt strip_tac >>
+  `label_positions_ok inst` by gvs[listTheory.EVERY_MEM] >>
+  gvs[unitShapeDefsTheory.label_positions_ok_def]
+QED
