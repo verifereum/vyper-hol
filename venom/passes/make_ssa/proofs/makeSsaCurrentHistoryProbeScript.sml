@@ -811,3 +811,666 @@ Proof
   simp[history_probe_revisits_def, history_probe_observe_def,
     history_probe_diamond_walks] >> EVAL_TAC
 QED
+
+Definition history_probe_backedges_target_def:
+  history_probe_backedges_target =
+  [history_probe_bb "E"
+    [current_probe_inst 0 ASSIGN [Lit 1w] ["a"];
+     current_probe_inst 1 ASSIGN [Lit 2w] ["b"];
+     current_probe_inst 2 ASSIGN [Lit 3w] ["x"];
+     current_probe_inst 3 JMP [Label "H"] []];
+   history_probe_bb "H"
+    [current_probe_inst 101 PHI [Label "E"; Var "x"; Label "D";
+        Var "formal_var_2"; Label "S"; Var "formal_var_0"] ["formal_var_0"];
+     current_probe_inst 100 PHI [Label "E"; Var "a"; Label "D"; Var "b";
+        Label "S"; Var "a"] ["formal_var_1"];
+     current_probe_inst 4 ASSIGN [Var "formal_var_1"] ["v"];
+     current_probe_inst 5 ADD [Var "formal_var_0"; Var "formal_var_1"] ["z"];
+     current_probe_inst 6 JNZ [Var "z"; Label "D"; Label "S"] []];
+   history_probe_bb "D"
+    [current_probe_inst 7 ASSIGN [Lit 4w] ["formal_var_2"];
+     current_probe_inst 8 JMP [Label "H"] []];
+   history_probe_bb "S" [current_probe_inst 9 JMP [Label "H"] []]]
+End
+
+Theorem history_probe_backedges_target_blocks:
+  (FST (make_ssa_current_fn history_probe_supply history_probe_backedges)).fn_blocks =
+    history_probe_backedges_target
+Proof
+  EVAL_TAC
+QED
+
+Definition history_probe_state_def:
+  history_probe_state xs prev cur = (init_venom_state "E") with
+    <|vs_vars := FEMPTY |++ xs; vs_prev_bb := SOME prev; vs_current_bb := cur|>
+End
+Definition history_probe_backedges_s1_def:
+  history_probe_backedges_s1 = history_probe_state [("a",1w);("b",2w);("x",3w)] "E" "H"
+End
+Definition history_probe_backedges_s2_def:
+  history_probe_backedges_s2 = history_probe_state
+    [("a",1w);("b",2w);("x",3w);("v",1w);("z",4w)] "H" "D"
+End
+Definition history_probe_backedges_s3_def:
+  history_probe_backedges_s3 = history_probe_state
+    [("a",1w);("b",2w);("x",4w);("v",1w);("z",4w)] "D" "H"
+End
+Definition history_probe_backedges_s4_def:
+  history_probe_backedges_s4 = history_probe_state
+    [("a",1w);("b",2w);("x",4w);("v",2w);("z",6w)] "H" "D"
+End
+Definition history_probe_backedges_t2_def:
+  history_probe_backedges_t2 = history_probe_state
+    [("a",1w);("b",2w);("x",3w);("formal_var_0",3w);
+     ("formal_var_1",1w);("v",1w);("z",4w)] "H" "D"
+End
+Definition history_probe_backedges_t3_def:
+  history_probe_backedges_t3 = history_probe_state
+    [("a",1w);("b",2w);("x",3w);("formal_var_0",3w);
+     ("formal_var_1",1w);("v",1w);("z",4w);("formal_var_2",4w)] "D" "H"
+End
+Definition history_probe_backedges_t4_def:
+  history_probe_backedges_t4 = history_probe_state
+    [("a",1w);("b",2w);("x",3w);("formal_var_0",4w);
+     ("formal_var_1",2w);("v",2w);("z",6w);("formal_var_2",4w)] "H" "D"
+End
+
+Theorem history_probe_backedges_source_E:
+  run_block 1 ctx (HD history_probe_backedges.fn_blocks)
+    (init_venom_state "E") = OK history_probe_backedges_s1
+Proof
+  EVAL_TAC >> simp[]
+QED
+Theorem history_probe_backedges_source_H:
+  run_block 1 ctx (EL 1 history_probe_backedges.fn_blocks)
+    history_probe_backedges_s1 = OK history_probe_backedges_s2
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def]
+QED
+Theorem history_probe_backedges_source_D:
+  run_block 1 ctx (EL 2 history_probe_backedges.fn_blocks)
+    history_probe_backedges_s2 = OK history_probe_backedges_s3
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def, finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM,
+    finite_mapTheory.FLOOKUP_UPDATE] >> gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+Theorem history_probe_backedges_source_revisit:
+  run_block 1 ctx (EL 1 history_probe_backedges.fn_blocks)
+    history_probe_backedges_s3 = OK history_probe_backedges_s4
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+Theorem history_probe_backedges_target_E:
+  run_block 1 ctx (HD history_probe_backedges_target)
+    (init_venom_state "E") = OK history_probe_backedges_s1
+Proof
+  EVAL_TAC >> simp[]
+QED
+Theorem history_probe_backedges_target_H:
+  run_block 1 ctx (EL 1 history_probe_backedges_target)
+    history_probe_backedges_s1 = OK history_probe_backedges_t2
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+Theorem history_probe_backedges_target_D:
+  run_block 1 ctx (EL 2 history_probe_backedges_target)
+    history_probe_backedges_t2 = OK history_probe_backedges_t3
+Proof
+  EVAL_TAC >> simp[]
+QED
+Theorem history_probe_backedges_target_revisit:
+  run_block 1 ctx (EL 1 history_probe_backedges_target)
+    history_probe_backedges_t3 = OK history_probe_backedges_t4
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+
+Theorem history_probe_backedges_source_lookups:
+  lookup_block (init_venom_state "E").vs_current_bb history_probe_backedges.fn_blocks =
+    SOME (HD history_probe_backedges.fn_blocks) /\
+  lookup_block history_probe_backedges_s1.vs_current_bb history_probe_backedges.fn_blocks =
+    SOME (EL 1 history_probe_backedges.fn_blocks) /\
+  lookup_block history_probe_backedges_s2.vs_current_bb history_probe_backedges.fn_blocks =
+    SOME (EL 2 history_probe_backedges.fn_blocks) /\
+  lookup_block history_probe_backedges_s3.vs_current_bb history_probe_backedges.fn_blocks =
+    SOME (EL 1 history_probe_backedges.fn_blocks)
+Proof
+  EVAL_TAC
+QED
+Theorem history_probe_backedges_target_lookups:
+  lookup_block (init_venom_state "E").vs_current_bb history_probe_backedges_target =
+    SOME (HD history_probe_backedges_target) /\
+  lookup_block history_probe_backedges_s1.vs_current_bb history_probe_backedges_target =
+    SOME (EL 1 history_probe_backedges_target) /\
+  lookup_block history_probe_backedges_t2.vs_current_bb history_probe_backedges_target =
+    SOME (EL 2 history_probe_backedges_target) /\
+  lookup_block history_probe_backedges_t3.vs_current_bb history_probe_backedges_target =
+    SOME (EL 1 history_probe_backedges_target)
+Proof
+  EVAL_TAC
+QED
+Theorem history_probe_backedges_walks:
+  (history_probe_walk 3 ctx history_probe_backedges (init_venom_state "E") =
+    SOME history_probe_backedges_s3) /\
+  (history_probe_walk 4 ctx history_probe_backedges (init_venom_state "E") =
+    SOME history_probe_backedges_s4) /\
+  (history_probe_walk 3 ctx
+      (FST (make_ssa_current_fn history_probe_supply history_probe_backedges))
+      (init_venom_state "E") = SOME history_probe_backedges_t3) /\
+  (history_probe_walk 4 ctx
+      (FST (make_ssa_current_fn history_probe_supply history_probe_backedges))
+      (init_venom_state "E") = SOME history_probe_backedges_t4)
+Proof
+  simp[history_probe_walk_positive, history_probe_walk_def,
+    history_probe_backedges_target_blocks,
+    history_probe_backedges_source_lookups, history_probe_backedges_target_lookups,
+    history_probe_backedges_source_E, history_probe_backedges_source_H,
+    history_probe_backedges_source_D, history_probe_backedges_source_revisit,
+    history_probe_backedges_target_E, history_probe_backedges_target_H,
+    history_probe_backedges_target_D, history_probe_backedges_target_revisit]
+QED
+Theorem history_probe_backedges_revisit_agreement:
+  (\(s0,s1,t0,t1). IS_SOME s0 /\ IS_SOME s1 /\ s0 = t0 /\ s1 = t1)
+    (history_probe_revisits ctx history_probe_backedges 4)
+Proof
+  simp[history_probe_revisits_def, history_probe_observe_def,
+    history_probe_backedges_walks] >> EVAL_TAC
+QED
+
+Definition history_probe_control_target_def:
+  history_probe_control_target =
+  [history_probe_bb "E"
+    [current_probe_inst 0 ASSIGN [Lit 1w] ["a"];
+     current_probe_inst 1 JMP [Label "D"] []];
+   history_probe_bb "D"
+    [current_probe_inst 100 PHI [Label "E"; Var "a"; Label "D"; Var "b"] ["formal_var_0"];
+     current_probe_inst 2 ASSIGN [Var "formal_var_0"] ["v"];
+     current_probe_inst 3 ASSIGN [Lit 2w] ["b"];
+     current_probe_inst 4 JNZ [Var "formal_var_0"; Label "D"; Label "X"] []];
+   history_probe_bb "X" [current_probe_inst 5 STOP [] []]]
+End
+Theorem history_probe_control_target_blocks:
+  (FST (make_ssa_current_fn history_probe_supply current_probe_loop)).fn_blocks =
+    history_probe_control_target
+Proof
+  EVAL_TAC
+QED
+
+Definition history_probe_control_s1_def:
+  history_probe_control_s1 = history_probe_state [("a",1w)] "E" "D"
+End
+Definition history_probe_control_s2_def:
+  history_probe_control_s2 = history_probe_state [("a",1w);("v",1w);("b",2w)] "D" "D"
+End
+Definition history_probe_control_s3_def:
+  history_probe_control_s3 = history_probe_state [("a",1w);("v",2w);("b",2w)] "D" "D"
+End
+Definition history_probe_control_t2_def:
+  history_probe_control_t2 = history_probe_state
+    [("a",1w);("formal_var_0",1w);("v",1w);("b",2w)] "D" "D"
+End
+Definition history_probe_control_t3_def:
+  history_probe_control_t3 = history_probe_state
+    [("a",1w);("formal_var_0",2w);("v",2w);("b",2w)] "D" "D"
+End
+Theorem history_probe_control_source_E:
+  run_block 1 ctx (HD current_probe_loop.fn_blocks)
+    (init_venom_state "E") = OK history_probe_control_s1
+Proof
+  EVAL_TAC >> simp[]
+QED
+Theorem history_probe_control_source_D:
+  run_block 1 ctx (EL 1 current_probe_loop.fn_blocks)
+    history_probe_control_s1 = OK history_probe_control_s2
+Proof
+  EVAL_TAC >> simp[]
+QED
+Theorem history_probe_control_source_revisit:
+  run_block 1 ctx (EL 1 current_probe_loop.fn_blocks)
+    history_probe_control_s2 = OK history_probe_control_s3
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def, finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM,
+    finite_mapTheory.FLOOKUP_UPDATE] >> gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+Theorem history_probe_control_target_E:
+  run_block 1 ctx (HD history_probe_control_target)
+    (init_venom_state "E") = OK history_probe_control_s1
+Proof
+  EVAL_TAC >> simp[]
+QED
+Theorem history_probe_control_target_D:
+  run_block 1 ctx (EL 1 history_probe_control_target)
+    history_probe_control_s1 = OK history_probe_control_t2
+Proof
+  EVAL_TAC >> simp[]
+QED
+Theorem history_probe_control_target_revisit:
+  run_block 1 ctx (EL 1 history_probe_control_target)
+    history_probe_control_t2 = OK history_probe_control_t3
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def, finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM,
+    finite_mapTheory.FLOOKUP_UPDATE] >> gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+Theorem history_probe_control_source_lookups:
+  lookup_block (init_venom_state "E").vs_current_bb current_probe_loop.fn_blocks =
+    SOME (HD current_probe_loop.fn_blocks) /\
+  lookup_block history_probe_control_s1.vs_current_bb current_probe_loop.fn_blocks =
+    SOME (EL 1 current_probe_loop.fn_blocks) /\
+  lookup_block history_probe_control_s2.vs_current_bb current_probe_loop.fn_blocks =
+    SOME (EL 1 current_probe_loop.fn_blocks)
+Proof
+  EVAL_TAC
+QED
+Theorem history_probe_control_target_lookups:
+  lookup_block (init_venom_state "E").vs_current_bb history_probe_control_target =
+    SOME (HD history_probe_control_target) /\
+  lookup_block history_probe_control_s1.vs_current_bb history_probe_control_target =
+    SOME (EL 1 history_probe_control_target) /\
+  lookup_block history_probe_control_t2.vs_current_bb history_probe_control_target =
+    SOME (EL 1 history_probe_control_target)
+Proof
+  EVAL_TAC
+QED
+Theorem history_probe_control_walks:
+  (history_probe_walk 2 ctx current_probe_loop (init_venom_state "E") =
+    SOME history_probe_control_s2) /\
+  (history_probe_walk 3 ctx current_probe_loop (init_venom_state "E") =
+    SOME history_probe_control_s3) /\
+  (history_probe_walk 2 ctx
+      (FST (make_ssa_current_fn history_probe_supply current_probe_loop))
+      (init_venom_state "E") = SOME history_probe_control_t2) /\
+  (history_probe_walk 3 ctx
+      (FST (make_ssa_current_fn history_probe_supply current_probe_loop))
+      (init_venom_state "E") = SOME history_probe_control_t3)
+Proof
+  simp[history_probe_walk_positive, history_probe_walk_def,
+    history_probe_control_target_blocks,
+    history_probe_control_source_lookups, history_probe_control_target_lookups,
+    history_probe_control_source_E, history_probe_control_source_D,
+    history_probe_control_source_revisit, history_probe_control_target_E,
+    history_probe_control_target_D, history_probe_control_target_revisit]
+QED
+Theorem history_probe_control_revisit_agreement:
+  (\(s0,s1,t0,t1). IS_SOME s0 /\ IS_SOME s1 /\ s0 = t0 /\ s1 = t1)
+    (history_probe_revisits ctx current_probe_loop 3)
+Proof
+  simp[history_probe_revisits_def, history_probe_observe_def,
+    history_probe_control_walks] >> EVAL_TAC
+QED
+
+Definition history_probe_nested_target_def:
+  history_probe_nested_target =
+  [history_probe_bb "E"
+    [current_probe_inst 0 ASSIGN [Lit 1w] ["a"];
+     current_probe_inst 1 ASSIGN [Lit 2w] ["b"];
+     current_probe_inst 2 ASSIGN [Lit 3w] ["x"];
+     current_probe_inst 3 JMP [Label "H"] []];
+   history_probe_bb "H"
+    [current_probe_inst 102 PHI [Label "E"; Var "x"; Label "J";
+        Var "formal_var_2"] ["formal_var_0"];
+     current_probe_inst 101 PHI [Label "E"; Var "a"; Label "J"; Var "b"] ["formal_var_1"];
+     current_probe_inst 4 ASSIGN [Var "formal_var_1"] ["v"];
+     current_probe_inst 5 ADD [Var "formal_var_0"; Var "formal_var_1"] ["z"];
+     current_probe_inst 6 JMP [Label "I"] []];
+   history_probe_bb "I"
+    [current_probe_inst 100 PHI [Label "H"; Var "formal_var_0"; Label "D";
+        Var "formal_var_3"] ["formal_var_2"];
+     current_probe_inst 7 ADD [Var "formal_var_2"; Var "a"] ["w"];
+     current_probe_inst 8 JNZ [Var "w"; Label "D"; Label "J"] []];
+   history_probe_bb "D"
+    [current_probe_inst 9 ASSIGN [Lit 4w] ["formal_var_3"];
+     current_probe_inst 10 JMP [Label "I"] []];
+   history_probe_bb "J" [current_probe_inst 11 JMP [Label "H"] []]]
+End
+Theorem history_probe_nested_target_blocks:
+  (FST (make_ssa_current_fn history_probe_supply history_probe_nested)).fn_blocks =
+    history_probe_nested_target
+Proof
+  EVAL_TAC
+QED
+
+Definition history_probe_nested_s2_def:
+  history_probe_nested_s2 = history_probe_state
+    [("a",1w);("b",2w);("x",3w);("v",1w);("z",4w)] "H" "I"
+End
+Definition history_probe_nested_s3_def:
+  history_probe_nested_s3 = history_probe_state
+    [("a",1w);("b",2w);("x",3w);("v",1w);("z",4w);("w",4w)] "I" "D"
+End
+Definition history_probe_nested_s4_def:
+  history_probe_nested_s4 = history_probe_state
+    [("a",1w);("b",2w);("x",4w);("v",1w);("z",4w);("w",4w)] "D" "I"
+End
+Definition history_probe_nested_s5_def:
+  history_probe_nested_s5 = history_probe_state
+    [("a",1w);("b",2w);("x",4w);("v",1w);("z",4w);("w",5w)] "I" "D"
+End
+Definition history_probe_nested_t2_def:
+  history_probe_nested_t2 = history_probe_state
+    [("a",1w);("b",2w);("x",3w);("formal_var_0",3w);
+     ("formal_var_1",1w);("v",1w);("z",4w)] "H" "I"
+End
+Definition history_probe_nested_t3_def:
+  history_probe_nested_t3 = history_probe_state
+    [("a",1w);("b",2w);("x",3w);("formal_var_0",3w);
+     ("formal_var_1",1w);("v",1w);("z",4w);("formal_var_2",3w);("w",4w)] "I" "D"
+End
+Definition history_probe_nested_t4_def:
+  history_probe_nested_t4 = history_probe_state
+    [("a",1w);("b",2w);("x",3w);("formal_var_0",3w);
+     ("formal_var_1",1w);("v",1w);("z",4w);("formal_var_2",3w);("w",4w);
+     ("formal_var_3",4w)] "D" "I"
+End
+Definition history_probe_nested_t5_def:
+  history_probe_nested_t5 = history_probe_state
+    [("a",1w);("b",2w);("x",3w);("formal_var_0",3w);
+     ("formal_var_1",1w);("v",1w);("z",4w);("formal_var_2",4w);("w",5w);
+     ("formal_var_3",4w)] "I" "D"
+End
+Theorem history_probe_nested_source_E:
+  run_block 1 ctx (HD history_probe_nested.fn_blocks)
+    (init_venom_state "E") = OK history_probe_backedges_s1
+Proof
+  EVAL_TAC >> simp[]
+QED
+Theorem history_probe_nested_source_H:
+  run_block 1 ctx (EL 1 history_probe_nested.fn_blocks)
+    history_probe_backedges_s1 = OK history_probe_nested_s2
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def]
+QED
+Theorem history_probe_nested_source_I:
+  run_block 1 ctx (EL 2 history_probe_nested.fn_blocks)
+    history_probe_nested_s2 = OK history_probe_nested_s3
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def]
+QED
+Theorem history_probe_nested_source_D:
+  run_block 1 ctx (EL 3 history_probe_nested.fn_blocks)
+    history_probe_nested_s3 = OK history_probe_nested_s4
+Proof
+  EVAL_TAC >> simp[finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM,
+    finite_mapTheory.FLOOKUP_UPDATE] >> gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+Theorem history_probe_nested_source_revisit:
+  run_block 1 ctx (EL 2 history_probe_nested.fn_blocks)
+    history_probe_nested_s4 = OK history_probe_nested_s5
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+Theorem history_probe_nested_target_E:
+  run_block 1 ctx (HD history_probe_nested_target)
+    (init_venom_state "E") = OK history_probe_backedges_s1
+Proof
+  EVAL_TAC >> simp[]
+QED
+Theorem history_probe_nested_target_H:
+  run_block 1 ctx (EL 1 history_probe_nested_target)
+    history_probe_backedges_s1 = OK history_probe_nested_t2
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+Theorem history_probe_nested_target_I:
+  run_block 1 ctx (EL 2 history_probe_nested_target)
+    history_probe_nested_t2 = OK history_probe_nested_t3
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def]
+QED
+Theorem history_probe_nested_target_D:
+  run_block 1 ctx (EL 3 history_probe_nested_target)
+    history_probe_nested_t3 = OK history_probe_nested_t4
+Proof
+  EVAL_TAC >> simp[]
+QED
+Theorem history_probe_nested_target_revisit:
+  run_block 1 ctx (EL 2 history_probe_nested_target)
+    history_probe_nested_t4 = OK history_probe_nested_t5
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+
+Theorem history_probe_nested_source_lookups:
+  lookup_block (init_venom_state "E").vs_current_bb history_probe_nested.fn_blocks =
+    SOME (HD history_probe_nested.fn_blocks) /\
+  lookup_block history_probe_backedges_s1.vs_current_bb history_probe_nested.fn_blocks =
+    SOME (EL 1 history_probe_nested.fn_blocks) /\
+  lookup_block history_probe_nested_s2.vs_current_bb history_probe_nested.fn_blocks =
+    SOME (EL 2 history_probe_nested.fn_blocks) /\
+  lookup_block history_probe_nested_s3.vs_current_bb history_probe_nested.fn_blocks =
+    SOME (EL 3 history_probe_nested.fn_blocks) /\
+  lookup_block history_probe_nested_s4.vs_current_bb history_probe_nested.fn_blocks =
+    SOME (EL 2 history_probe_nested.fn_blocks)
+Proof
+  EVAL_TAC
+QED
+Theorem history_probe_nested_target_lookups:
+  lookup_block (init_venom_state "E").vs_current_bb history_probe_nested_target =
+    SOME (HD history_probe_nested_target) /\
+  lookup_block history_probe_backedges_s1.vs_current_bb history_probe_nested_target =
+    SOME (EL 1 history_probe_nested_target) /\
+  lookup_block history_probe_nested_t2.vs_current_bb history_probe_nested_target =
+    SOME (EL 2 history_probe_nested_target) /\
+  lookup_block history_probe_nested_t3.vs_current_bb history_probe_nested_target =
+    SOME (EL 3 history_probe_nested_target) /\
+  lookup_block history_probe_nested_t4.vs_current_bb history_probe_nested_target =
+    SOME (EL 2 history_probe_nested_target)
+Proof
+  EVAL_TAC
+QED
+Theorem history_probe_nested_walks:
+  (history_probe_walk 4 ctx history_probe_nested (init_venom_state "E") =
+    SOME history_probe_nested_s4) /\
+  (history_probe_walk 5 ctx history_probe_nested (init_venom_state "E") =
+    SOME history_probe_nested_s5) /\
+  (history_probe_walk 4 ctx
+      (FST (make_ssa_current_fn history_probe_supply history_probe_nested))
+      (init_venom_state "E") = SOME history_probe_nested_t4) /\
+  (history_probe_walk 5 ctx
+      (FST (make_ssa_current_fn history_probe_supply history_probe_nested))
+      (init_venom_state "E") = SOME history_probe_nested_t5)
+Proof
+  simp[history_probe_walk_positive, history_probe_walk_def,
+    history_probe_nested_target_blocks,
+    history_probe_nested_source_lookups, history_probe_nested_target_lookups,
+    history_probe_nested_source_E, history_probe_nested_source_H,
+    history_probe_nested_source_I, history_probe_nested_source_D,
+    history_probe_nested_source_revisit, history_probe_nested_target_E,
+    history_probe_nested_target_H, history_probe_nested_target_I,
+    history_probe_nested_target_D, history_probe_nested_target_revisit]
+QED
+Theorem history_probe_nested_revisit_agreement:
+  (\(s0,s1,t0,t1). IS_SOME s0 /\ IS_SOME s1 /\ s0 = t0 /\ s1 = t1)
+    (history_probe_revisits ctx history_probe_nested 5)
+Proof
+  simp[history_probe_revisits_def, history_probe_observe_def,
+    history_probe_nested_walks] >> EVAL_TAC
+QED
+
+Definition history_probe_irreducible_target_def:
+  history_probe_irreducible_target =
+  [history_probe_bb "E"
+    [current_probe_inst 0 ASSIGN [Lit 1w] ["a"];
+     current_probe_inst 1 ASSIGN [Lit 2w] ["b"];
+     current_probe_inst 2 ASSIGN [Lit 3w] ["x"];
+     current_probe_inst 3 JNZ [Var "a"; Label "H"; Label "I"] []];
+   history_probe_bb "H"
+    [current_probe_inst 101 PHI [Label "E"; Var "x"; Label "I";
+        Var "formal_var_0"] ["formal_var_1"];
+     current_probe_inst 4 PHI [Label "E"; Var "a"; Label "I"; Var "b"] ["v"];
+     current_probe_inst 5 ADD [Var "formal_var_1"; Var "v"] ["z"];
+     current_probe_inst 6 ASSIGN [Lit 4w] ["formal_var_2"];
+     current_probe_inst 7 JMP [Label "I"] []];
+   history_probe_bb "I"
+    [current_probe_inst 100 PHI [Label "E"; Var "x"; Label "H";
+        Var "formal_var_2"] ["formal_var_0"];
+     current_probe_inst 8 ADD [Var "formal_var_0"; Var "a"] ["w"];
+     current_probe_inst 9 JMP [Label "H"] []]]
+End
+Theorem history_probe_irreducible_target_blocks:
+  (FST (make_ssa_current_fn history_probe_supply history_probe_irreducible)).fn_blocks =
+    history_probe_irreducible_target
+Proof
+  EVAL_TAC
+QED
+
+Definition history_probe_irreducible_s2_def:
+  history_probe_irreducible_s2 = history_probe_state
+    [("a",1w);("b",2w);("x",4w);("v",1w);("z",4w)] "H" "I"
+End
+Definition history_probe_irreducible_s3_def:
+  history_probe_irreducible_s3 = history_probe_state
+    [("a",1w);("b",2w);("x",4w);("v",1w);("z",4w);("w",5w)] "I" "H"
+End
+Definition history_probe_irreducible_s4_def:
+  history_probe_irreducible_s4 = history_probe_state
+    [("a",1w);("b",2w);("x",4w);("v",2w);("z",6w);("w",5w)] "H" "I"
+End
+Definition history_probe_irreducible_t2_def:
+  history_probe_irreducible_t2 = history_probe_state
+    [("a",1w);("b",2w);("x",3w);("formal_var_1",3w);
+     ("v",1w);("z",4w);("formal_var_2",4w)] "H" "I"
+End
+Definition history_probe_irreducible_t3_def:
+  history_probe_irreducible_t3 = history_probe_state
+    [("a",1w);("b",2w);("x",3w);("formal_var_1",3w);
+     ("v",1w);("z",4w);("formal_var_2",4w);("formal_var_0",4w);("w",5w)] "I" "H"
+End
+Definition history_probe_irreducible_t4_def:
+  history_probe_irreducible_t4 = history_probe_state
+    [("a",1w);("b",2w);("x",3w);("formal_var_1",4w);
+     ("v",2w);("z",6w);("formal_var_2",4w);("formal_var_0",4w);("w",5w)] "H" "I"
+End
+Theorem history_probe_irreducible_source_E:
+  run_block 1 ctx (HD history_probe_irreducible.fn_blocks)
+    (init_venom_state "E") = OK history_probe_backedges_s1
+Proof
+  EVAL_TAC >> simp[]
+QED
+Theorem history_probe_irreducible_source_H:
+  run_block 1 ctx (EL 1 history_probe_irreducible.fn_blocks)
+    history_probe_backedges_s1 = OK history_probe_irreducible_s2
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+Theorem history_probe_irreducible_source_I:
+  run_block 1 ctx (EL 2 history_probe_irreducible.fn_blocks)
+    history_probe_irreducible_s2 = OK history_probe_irreducible_s3
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def]
+QED
+Theorem history_probe_irreducible_source_revisit:
+  run_block 1 ctx (EL 1 history_probe_irreducible.fn_blocks)
+    history_probe_irreducible_s3 = OK history_probe_irreducible_s4
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+Theorem history_probe_irreducible_target_E:
+  run_block 1 ctx (HD history_probe_irreducible_target)
+    (init_venom_state "E") = OK history_probe_backedges_s1
+Proof
+  EVAL_TAC >> simp[]
+QED
+Theorem history_probe_irreducible_target_H:
+  run_block 1 ctx (EL 1 history_probe_irreducible_target)
+    history_probe_backedges_s1 = OK history_probe_irreducible_t2
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+Theorem history_probe_irreducible_target_I:
+  run_block 1 ctx (EL 2 history_probe_irreducible_target)
+    history_probe_irreducible_t2 = OK history_probe_irreducible_t3
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def]
+QED
+Theorem history_probe_irreducible_target_revisit:
+  run_block 1 ctx (EL 1 history_probe_irreducible_target)
+    history_probe_irreducible_t3 = OK history_probe_irreducible_t4
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+
+Theorem history_probe_irreducible_source_lookups:
+  lookup_block (init_venom_state "E").vs_current_bb history_probe_irreducible.fn_blocks =
+    SOME (HD history_probe_irreducible.fn_blocks) /\
+  lookup_block history_probe_backedges_s1.vs_current_bb history_probe_irreducible.fn_blocks =
+    SOME (EL 1 history_probe_irreducible.fn_blocks) /\
+  lookup_block history_probe_irreducible_s2.vs_current_bb history_probe_irreducible.fn_blocks =
+    SOME (EL 2 history_probe_irreducible.fn_blocks) /\
+  lookup_block history_probe_irreducible_s3.vs_current_bb history_probe_irreducible.fn_blocks =
+    SOME (EL 1 history_probe_irreducible.fn_blocks)
+Proof
+  EVAL_TAC
+QED
+Theorem history_probe_irreducible_target_lookups:
+  lookup_block (init_venom_state "E").vs_current_bb history_probe_irreducible_target =
+    SOME (HD history_probe_irreducible_target) /\
+  lookup_block history_probe_backedges_s1.vs_current_bb history_probe_irreducible_target =
+    SOME (EL 1 history_probe_irreducible_target) /\
+  lookup_block history_probe_irreducible_t2.vs_current_bb history_probe_irreducible_target =
+    SOME (EL 2 history_probe_irreducible_target) /\
+  lookup_block history_probe_irreducible_t3.vs_current_bb history_probe_irreducible_target =
+    SOME (EL 1 history_probe_irreducible_target)
+Proof
+  EVAL_TAC
+QED
+Theorem history_probe_irreducible_walks:
+  (history_probe_walk 3 ctx history_probe_irreducible (init_venom_state "E") =
+    SOME history_probe_irreducible_s3) /\
+  (history_probe_walk 4 ctx history_probe_irreducible (init_venom_state "E") =
+    SOME history_probe_irreducible_s4) /\
+  (history_probe_walk 3 ctx
+      (FST (make_ssa_current_fn history_probe_supply history_probe_irreducible))
+      (init_venom_state "E") = SOME history_probe_irreducible_t3) /\
+  (history_probe_walk 4 ctx
+      (FST (make_ssa_current_fn history_probe_supply history_probe_irreducible))
+      (init_venom_state "E") = SOME history_probe_irreducible_t4)
+Proof
+  simp[history_probe_walk_positive, history_probe_walk_def,
+    history_probe_irreducible_target_blocks,
+    history_probe_irreducible_source_lookups, history_probe_irreducible_target_lookups,
+    history_probe_irreducible_source_E, history_probe_irreducible_source_H,
+    history_probe_irreducible_source_I, history_probe_irreducible_source_revisit,
+    history_probe_irreducible_target_E, history_probe_irreducible_target_H,
+    history_probe_irreducible_target_I, history_probe_irreducible_target_revisit]
+QED
+Theorem history_probe_irreducible_revisit_agreement:
+  (\(s0,s1,t0,t1). IS_SOME s0 /\ IS_SOME s1 /\ s0 = t0 /\ s1 = t1)
+    (history_probe_revisits ctx history_probe_irreducible 4)
+Proof
+  simp[history_probe_revisits_def, history_probe_observe_def,
+    history_probe_irreducible_walks] >> EVAL_TAC
+QED
+
+(* This finite family checks actual block executions, not all-state
+   equivalence, universal exclusion of degenerate merges, or frame_sim. *)
+Theorem history_probe_revisit_agreement:
+  !fn n. MEM (fn,n) [(history_probe_diamond,4); (history_probe_backedges,4);
+       (history_probe_nested,5); (history_probe_irreducible,4); (current_probe_loop,3)] ==>
+    (\(s0,s1,t0,t1). IS_SOME s0 /\ IS_SOME s1 /\ s0 = t0 /\ s1 = t1)
+      (history_probe_revisits ctx fn n)
+Proof
+  rpt gen_tac >> pure_rewrite_tac[listTheory.MEM] >> strip_tac >> gvs[] >>
+  metis_tac[history_probe_diamond_revisit_agreement,
+    history_probe_backedges_revisit_agreement, history_probe_nested_revisit_agreement,
+    history_probe_irreducible_revisit_agreement, history_probe_control_revisit_agreement]
+QED
