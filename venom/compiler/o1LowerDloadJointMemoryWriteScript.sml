@@ -3,6 +3,9 @@ Theory o1LowerDloadJointMemoryWrite
 Ancestors
   o1LowerDloadJointRelation o1LowerDloadMemoryConsumer
   o1LowerDloadRelocationKernel ptrDiscipline venomState words finite_map pred_set codegenRel
+  o1LowerDloadJointMemoryRead o1LowerDloadJointScalar o1LowerDloadOccurrence
+  o1LowerDloadAddressArithmetic venomExecSemantics list unitShapeDefs memLocDefs
+  o1PassContract pointerConfinedDefs venomInst contextCodegenRel
 
 Theorem ld_memory_agree_mstore_geometry:
   ld_memory_agree sites lo mask s.vs_memory t.vs_memory /\
@@ -62,4 +65,120 @@ Proof
    ~(d+j <= tb+k /\ tb+k < d+j+32)` by decide_tac >>
   asm_rewrite_tac[ld_mstore_bytes] >> irule ld_memory_agree_site_byte >>
   qexistsl_tac [`jd`,`lo`,`mask`,`sites`,`sz`] >> gvs[]
+QED
+
+Theorem ld_joint_mstore_operands[local]:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+  opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
+  inst.inst_opcode = MSTORE /\ inst.inst_operands = [p;vop] /\
+  eval_operand p s = SOME x /\ eval_operand vop s = SOME v ==>
+  ?y w. eval_operand p t = SOME y /\ eval_operand vop t = SOME w /\
+    word_agree_except (op_taint tn vop) v w /\
+    ((w2n x = w2n y /\ w2n x+32 <= lo) \/
+     (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+32 <= z /\
+       w2n x = b+j /\ w2n y = c+j))
+Proof
+  strip_tac >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
+  `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
+    metis_tac[ptr_discipline_def] >>
+  `op_taint tn p = {}` by
+    (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
+  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_def] >>
+  `MEM fn C.ctx_functions /\ FDOM G SUBSET fn_pv P fn` by
+    metis_tac[o1LowerDloadGhostTheory.frame_reachable_prov_support] >>
+  `ptr_use_ok P (fn_pv P fn) inst` by
+    (fs[EVERY_MEM, fn_ptr_ok_def] >>
+     `MEM inst (fn_insts fn)` by
+       (fs[active_inst_def, fn_insts_def,
+           o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
+     metis_tac[]) >>
+  `op_prov G vop = NONE` by
+    (Cases_on `vop` >> simp[op_prov_def] >> rename1 `FLOOKUP G vv` >>
+     Cases_on `FLOOKUP G vv` >> simp[] >>
+     `vv IN fn_pv P fn` by (fs[SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]) >>
+     qpat_x_assum `ptr_use_ok _ _ _` mp_tac >>
+     simp[ptr_use_ok_def, is_pointer_preserving_op_def, mem_write_ops_def,
+          mem_read_ops_def] >>
+     qexists_tac `vv` >> Cases_on `p = Var vv` >> simp[]) >>
+  `!op v. MEM op [p;vop] /\ op = Var v ==> MEM v (fn_ir_vars fn)` by
+    metis_tac[ld_active_operand_ir_var] >>
+  `!op v. MEM op [p;vop] /\ op = Var v ==> ~retpc_var fn v` by
+    (`!v. ~retpc_use_ok inst v` by simp[retpc_use_ok_def] >>
+     metis_tac[ld_active_operand_non_retpc]) >>
+  `?y. eval_operand p t = SOME y /\
+    ld_value_agree sites (op_prov H p) (op_taint tn p) x y` by
+    (irule ld_joint_operand_value >> metis_tac[MEM]) >>
+  `?w. eval_operand vop t = SOME w /\
+    ld_value_agree sites (op_prov H vop) (op_taint tn vop) v w` by
+    (irule ld_joint_operand_value >> metis_tac[MEM]) >>
+  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G /\
+   ld_joint_erasure sites B /\
+   ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U)` by
+    fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
+  `op_prov H vop = NONE` by
+    (drule occurrence_op_erasure >> disch_then (qspec_then `vop` mp_tac) >>
+     Cases_on `op_prov H vop` >> simp[occurrence_param_ok_def]) >>
+  `word_agree_except (op_taint tn vop) v w` by
+    gvs[ld_value_agree_def] >>
+  qexistsl_tac [`y`,`w`] >> simp[] >>
+  `lo < w2n x+32 \/ op_prov G p <> NONE ==>
+    ?vv b z. p = Var vv /\ FLOOKUP G vv = SOME (b,z) /\
+      b <= w2n x /\ w2n x+32 <= b+z` by
+    (qpat_x_assum `access_ok _ _ _ _ _` mp_tac >>
+     gvs[access_ok_def, source_memory_write_ranges_def, mem_write_ops_def,
+         fixed_source_write_range_def] >>
+     metis_tac[]) >>
+  drule occurrence_op_erasure >> disch_then (qspec_then `p` assume_tac) >>
+  Cases_on `op_prov H p`
+  >- (gvs[occurrence_param_ok_def] >>
+      `x = y` by metis_tac[ld_value_agree_clean] >> gvs[] >>
+      Cases_on `lo < w2n x+32` >> gvs[op_prov_def]) >>
+  gvs[occurrence_param_ok_def, ld_value_agree_pointer] >>
+  gvs[op_prov_def] >>
+  `FLOOKUP B x' = SOME (b,z)` by
+    (drule ld_joint_erasure_lookup >> metis_tac[]) >> gvs[] >>
+  `b+z < dimword (:256) /\ c+z < dimword (:256)` by
+    metis_tac[ld_joint_geometry_def] >>
+  `w2n (x + n2w c - n2w b) = c + (w2n x-b)` by
+    (irule lower_dload_translate_endpoint >> simp[] >>
+     qexists_tac `z` >> simp[]) >>
+  disj2_tac >> qexistsl_tac [`x'`,`b`,`c`,`z`,`w2n x-b`] >> simp[]
+QED
+
+Theorem ld_joint_mstore_step:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+  opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
+  inst.inst_opcode = MSTORE /\ step_inst fuel C inst s = OK s1 ==>
+  ?t1. step_inst fuel C' inst t = OK t1 /\
+    ld_memory_agree sites lo (mem_taint tn inst s s1)
+      s1.vs_memory t1.vs_memory
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  gvs[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  qmatch_goalsub_rename_tac `mstore (w2n x) v s` >>
+  rename1 `inst.inst_operands = [p;vop]` >>
+  `?y w. eval_operand p t = SOME y /\ eval_operand vop t = SOME w /\
+    word_agree_except (op_taint tn vop) v w /\
+    ((w2n x = w2n y /\ w2n x+32 <= lo) \/
+     (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+32 <= z /\
+       w2n x = b+j /\ w2n y = c+j))` by
+    (irule ld_joint_mstore_operands >> metis_tac[]) >>
+  (qexists_tac `mstore (w2n y) w t` >> conj_tac
+  >- (qexists_tac `y` >> simp[] >> qexists_tac `w` >> simp[]) >>
+  `mem_taint tn inst s (mstore (w2n x) v s) =
+    ((tn.t_mem DIFF {i | w2n x <= i /\ i < w2n x+32}) UNION
+     {w2n x+k | k IN op_taint tn vop})` by
+    (irule ld_mem_taint_mstore >> simp[] >> metis_tac[w2n_lt]) >>
+  asm_rewrite_tac[] >>
+  `ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U) /\
+   ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory` by
+    fs[ld_joint_boundary_def] >>
+  drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_mstore_geometry >>
+  disch_then irule >> simp[] >> metis_tac[])
 QED
