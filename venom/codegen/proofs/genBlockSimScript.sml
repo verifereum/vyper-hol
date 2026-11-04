@@ -267,7 +267,7 @@ Proof
   imp_res_tac prefix_wf_every_prefix_op >> gvs[]
 QED
 
-Theorem assert_plan_decompose[local]:
+Theorem assert_plan_decompose:
   !liveness dfg cfg fn inst nl ih nt bb ps ops ps' cond.
     inst.inst_opcode = ASSERT /\ inst_wf inst /\
     inst.inst_operands = [cond] /\
@@ -299,7 +299,7 @@ Proof
   strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem assert_unreachable_plan_decompose[local]:
+Theorem assert_unreachable_plan_decompose:
   !liveness dfg cfg fn inst nl ih nt bb ps ops ps' cond.
     inst.inst_opcode = ASSERT_UNREACHABLE /\ inst_wf inst /\
     inst.inst_operands = [cond] /\
