@@ -291,10 +291,12 @@ Definition bp_ptr_from_op_def:
 End
 
 (* Build a mem_loc from InstAccessOps using pointer info.
- * Matches Python segment_from_ops. *)
+ * Matches Python segment_from_ops: the size is the exact access size
+ * (iao_size), not the upper bound (iao_max_size).  CALL-family writes
+ * have no exact size, so their location is not fixed. *)
 Definition bp_segment_from_ops_def:
   bp_segment_from_ops result (ops : inst_access_ops) =
-    let size = case ops.iao_max_size of
+    let size = case ops.iao_size of
                  SOME (Lit n) => SOME (w2n n)
                | _ => NONE
     in

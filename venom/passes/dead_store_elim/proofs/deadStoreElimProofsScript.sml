@@ -633,6 +633,9 @@ Proof
   simp[all_dead_stores_def] >>
   qexistsl [`EL 1 cex_fn.fn_blocks`, `0:num`] >>
   rpt (conj_tac >- (EVAL_TAC >> simp[w2n_32_256] >> NO_TAC)) >>
+  (* the size conjunct: simp turns w2n 32w <> 0 into a word disequation first *)
+  conj_tac >- (EVAL_TAC >> rewrite_tac[w2n_32_256] >> simp[]) >>
+  rpt (conj_tac >- (EVAL_TAC >> simp[w2n_32_256] >> NO_TAC)) >>
   CCONTR_TAC >>
   pop_assum (fn th => ASSUME_TAC (REWRITE_RULE[dse_mem_def_live_def] th)) >>
   pop_assum DISJ_CASES_TAC >- (
@@ -1084,23 +1087,39 @@ QED
    succeeds. See FALSE1 below for the
    counterexample that motivates this disjunct.
 
-   Precondition chain (sound at every reachable state):
-   alloca_inv s: allocas non-overlapping, preserved by step_inst.
-   alloca_safe_access fn (alloca_roots fn) s:
-     Memory accesses through pointer-derived vars stay within alloca bounds.
-     Vacuously true at entry (FEMPTY allocas) — BUT paired with:
-   step_preserves_safety fn (alloca_roots fn):
-     Static code property — each non-terminator, non-ext-call step
-     preserves alloca_safe_access + ptrs_in_alloca_bounds.
-     NOT vacuous: it is a property of fn's instructions.
-     The aliasing counterexample (ADD ptr1 32w escaping Allocation 0)
-     violates this. Together with alloca_inv preservation, this induces
-     alloca_inv + alloca_safe_access at every reachable state. *)
+   Preconditions:
+   wf_function fn: distinct instruction ids, so NOP-ing the ids the
+     analysis marks dead removes exactly the stores it checked.
+   wf_ssa fn: the base-pointer analysis is per-variable.
+   safe_inv: any state invariant that holds at the start state, survives every
+     instruction step and PHI evaluation of fn, and implies alloca safety,
+     allocas fitting in a word, and soundness and boundedness of fn's
+     base-pointer analysis.  safe_inv = "reachable from s" always meets both
+     preservation clauses, so this asks that every reachable state be
+     safe and agree with bp_analyze.  The earlier all-states
+     step_preserves_safety premise failed for any ADD on an alloca
+     pointer, and a start state without bp_ptr_sound lets two pointers
+     that bp_analyze equates differ at runtime.
+   safe_inv does not see vs_inst_idx, which exec_block rewrites between steps. *)
 Theorem dse_function_space_correct:
-  !analysis_fn space fuel ctx fn s.
-    alloca_inv s /\
-    alloca_safe_access fn (alloca_roots fn) s /\
-    step_preserves_safety fn (alloca_roots fn) /\
+  !analysis_fn space fuel ctx fn s safe_inv.
+    wf_function fn /\ wf_ssa fn /\
+    s.vs_inst_idx = 0 /\ safe_inv s /\
+    (!s0 idx. safe_inv (s0 with vs_inst_idx := idx) <=> safe_inv s0) /\
+    (!fuel' ctx' inst s0 s1.
+       MEM inst (fn_insts fn) /\ safe_inv s0 /\
+       step_inst fuel' ctx' inst s0 = OK s1 ==> safe_inv s1) /\
+    (!bb s0 s1.
+       MEM bb fn.fn_blocks /\ safe_inv s0 /\
+       eval_phis s0 bb.bb_instructions = OK s1 ==> safe_inv s1) /\
+    (!s0. safe_inv s0 ==>
+       alloca_inv s0 /\
+       (!aid base sz. FLOOKUP s0.vs_allocas aid = SOME (base, sz) ==>
+                      base + sz < dimword (:256)) /\
+       alloca_safe_access fn (alloca_roots fn) s0 /\
+       ptrs_in_alloca_bounds fn (alloca_roots fn) s0 /\
+       bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) s0 /\
+       bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s0) /\
     (!fn'. all_dead_stores (analysis_fn space fn')
              (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
              space fn') ==>
@@ -1115,10 +1134,24 @@ QED
 (* Full DSE (all three spaces) preserves dse_all_equiv,
    or original execution errors. *)
 Theorem dse_function_correct:
-  !analysis_fn fuel ctx fn s.
-    alloca_inv s /\
-    alloca_safe_access fn (alloca_roots fn) s /\
-    step_preserves_safety fn (alloca_roots fn) /\
+  !analysis_fn fuel ctx fn s safe_inv.
+    wf_function fn /\ wf_ssa fn /\
+    s.vs_inst_idx = 0 /\ safe_inv s /\
+    (!s0 idx. safe_inv (s0 with vs_inst_idx := idx) <=> safe_inv s0) /\
+    (!fuel' ctx' inst s0 s1.
+       MEM inst (fn_insts fn) /\ safe_inv s0 /\
+       step_inst fuel' ctx' inst s0 = OK s1 ==> safe_inv s1) /\
+    (!bb s0 s1.
+       MEM bb fn.fn_blocks /\ safe_inv s0 /\
+       eval_phis s0 bb.bb_instructions = OK s1 ==> safe_inv s1) /\
+    (!s0. safe_inv s0 ==>
+       alloca_inv s0 /\
+       (!aid base sz. FLOOKUP s0.vs_allocas aid = SOME (base, sz) ==>
+                      base + sz < dimword (:256)) /\
+       alloca_safe_access fn (alloca_roots fn) s0 /\
+       ptrs_in_alloca_bounds fn (alloca_roots fn) s0 /\
+       bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) s0 /\
+       bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s0) /\
     (!space fn'.
       all_dead_stores (analysis_fn space fn')
         (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
@@ -1519,6 +1552,9 @@ Proof
   simp[all_dead_stores_def] >>
   qexistsl [`EL 0 cex2_fn.fn_blocks`, `0:num`] >>
   simp[cex2_bp_analyze] >>
+  rpt (conj_tac >- (EVAL_TAC >> simp[w2n_100_256, w2n_32_256] >> NO_TAC)) >>
+  (* the size conjunct: simp turns w2n 32w <> 0 into a word disequation first *)
+  conj_tac >- (EVAL_TAC >> rewrite_tac[w2n_32_256] >> simp[]) >>
   rpt (conj_tac >- (EVAL_TAC >> simp[w2n_100_256, w2n_32_256] >> NO_TAC)) >>
   CCONTR_TAC >>
   pop_assum (fn th => ASSUME_TAC (REWRITE_RULE[dse_mem_def_live_def] th)) >>

@@ -194,7 +194,11 @@ End
 
    This is the tightest sufficient fix: it precisely matches the
    set of instructions DSE eliminates in practice (actual stores)
-   while being formally correct for the dse_equiv relation. *)
+   while being formally correct for the dse_equiv relation.
+
+   Zero-size writes are excluded: a zero-size location never aliases a
+   read, but the Venom semantics still expands memory for it
+   (write_memory_with_expansion), which MEMTOP observes. *)
 Definition all_dead_stores_def:
   all_dead_stores dead_ids cfg aliases bp (space : addr_space) fn <=>
     !id. id IN dead_ids ==>
@@ -207,6 +211,7 @@ Definition all_dead_stores_def:
         inst.inst_outputs = [] /\
         ~(bp_get_write_location bp inst space).ml_volatile /\
         ml_is_fixed (bp_get_write_location bp inst space) /\
+        (bp_get_write_location bp inst space).ml_size <> SOME 0 /\
         outputs_unused inst fn /\
         effects_in_space space inst /\
         ~dse_mem_def_live cfg aliases bp
