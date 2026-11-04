@@ -765,3 +765,209 @@ Proof
   gen_tac >> drule_all mem_safe_run_inst_seq >>
   disch_then (qspecl_then [`n`, `ctx`] mp_tac) >> gvs[]
 QED
+
+Theorem linear_selector_tail_mem_safe[local]:
+  compile_selector_checks mid sels a8 = ((),a9) /\
+  emit_inst JMP [Label fallback] [] a9 = ((),st') /\
+  fn_has_code a8 st' fn /\ eval_operand mid ss = SOME m /\
+  fresh_vars_wrt a8 ss /\ ~ss.vs_halted /\
+  ss.vs_current_bb = a8.cs_current_bb /\
+  ss.vs_inst_idx = LENGTH a8.cs_current_insts /\
+  (!t. vars_pc_only ss t /\ fresh_vars_wrt st' t /\
+       (!x. not_fresh_at a8 x ==> lookup_var x t = lookup_var x ss) /\
+       ~t.vs_halted /\
+       t.vs_current_bb = (case selector_hit m sels of SOME l => l | NONE => fallback) /\
+       t.vs_inst_idx = 0 ==> !n. mem_safe_blocks n ctx fn t) ==>
+  (!n. mem_safe_run n ctx fn ss) /\
+  (a8.cs_current_insts = [] ==> !n. mem_safe_blocks n ctx fn ss)
+Proof
+  strip_tac >> imp_res_tac emit_inst_extends >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_emit_helpers) >>
+  imp_res_tac (SRULE [cs_appends_def] compile_selector_checks_appends) >>
+  `fn_has_code a8 a9 fn /\ fn_has_code a9 st' fn` by
+    metis_tac[fn_has_code_split] >>
+  drule compile_selector_checks_next_var >> strip_tac >>
+  drule compile_selector_checks_mem_safe >>
+  disch_then (qspecl_then [`fn`, `ss`, `m`, `ctx`] mp_tac) >>
+  asm_rewrite_tac[] >> impl_tac
+  >- (gen_tac >> strip_tac >>
+      `fresh_vars_wrt st' t` by
+        (irule fresh_vars_wrt_mono >> qexists_tac `a9` >> simp[]) >>
+      Cases_on `selector_hit m sels` >> simp[]
+      >- (strip_tac >> irule linear_fallback_mem_safe >>
+          goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+          qexistsl_tac [`fallback`, `st'`] >> asm_rewrite_tac[] >>
+          `vars_pc_only ss (jump_to fallback t)` by
+            (irule vars_pc_only_jump_to >> simp[]) >>
+          gen_tac >> first_x_assum irule >>
+          simp[control_moves_keep_vars, jump_to_def]) >>
+      strip_tac >> first_x_assum irule >> simp[]) >>
+  simp[]
+QED
+
+Theorem linear_dispatch_method_mem_safe[local]:
+  emit_op CALLDATALOAD [Lit 0w] a6 = (raw,a7) /\
+  emit_op SHR [Lit 224w; raw] a7 = (mid,a8) /\
+  compile_selector_checks mid sels a8 = ((),a9) /\
+  emit_inst JMP [Label fallback] [] a9 = ((),st') /\
+  fn_has_code a6 st' fn /\
+  EVERY (\(sel,lbl). sel < 2 ** 32) sels /\
+  fresh_vars_wrt a6 ss /\ ~ss.vs_halted /\
+  4 <= LENGTH ss.vs_call_ctx.cc_calldata /\
+  ss.vs_current_bb = a6.cs_current_bb /\
+  ss.vs_inst_idx = LENGTH a6.cs_current_insts /\
+  (!t. vars_pc_only ss t /\ fresh_vars_wrt st' t /\
+       (!x. not_fresh_at a6 x ==> lookup_var x t = lookup_var x ss) /\
+       ~t.vs_halted /\
+       t.vs_current_bb = linear_dispatch_target ss.vs_call_ctx.cc_calldata sels fallback /\
+       t.vs_inst_idx = 0 ==> !n. mem_safe_blocks n ctx fn t) ==>
+  !n. mem_safe_run n ctx fn ss
+Proof
+  strip_tac >> drule_all linear_dispatch_tail_slices >> strip_tac >>
+  drule_all linear_method_prefix_code >> strip_tac >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_emit_helpers) >>
+  imp_res_tac (SRULE [cs_appends_def] compile_selector_checks_appends) >>
+  `cs_extends a6 a8 /\ cs_extends a8 st'` by metis_tac[cs_extends_trans] >>
+  `fn_has_code a8 st' fn` by metis_tac[fn_has_code_split] >>
+  irule linear_method_prefix_mem_safe >> asm_rewrite_tac[] >>
+  qexistsl_tac [`a6`, `a7`, `a8`, `mid`, `raw`] >> asm_rewrite_tac[] >>
+  gen_tac >> strip_tac >>
+  drule linear_selector_tail_mem_safe >> disch_then drule >>
+  disch_then (irule o cj 1) >> asm_rewrite_tac[] >>
+  qexists_tac `calldata_method_id ss.vs_call_ctx.cc_calldata` >>
+  asm_rewrite_tac[] >> gen_tac >> strip_tac >>
+  `vars_pc_only ss t'` by metis_tac[vars_pc_only_trans] >>
+  `!x. not_fresh_at a6 x ==> lookup_var x t' = lookup_var x ss` by
+    (rpt strip_tac >>
+     `not_fresh_at a8 x` by
+       (irule not_fresh_at_mono >> qexists_tac `a6` >> simp[]) >>
+     metis_tac[]) >>
+  first_x_assum irule >>
+  drule_all linear_dispatch_target_selector_hit >> simp[]
+QED
+
+Theorem linear_dispatch_front_mem_safe[local]:
+  emit_op CALLDATASIZE [] st = (cds,a1) /\
+  emit_op LT [cds; Lit 4w] a1 = (small,a2) /\
+  emit_op ISZERO [small] a2 = (cond,a3) /\
+  fresh_label "dispatch" a3 = (dispatch,a4) /\
+  emit_inst JNZ [cond; Label dispatch; Label fallback] [] a4 = ((),a5) /\
+  new_block dispatch a5 = (old,a6) /\ fn_has_code st a6 fn /\
+  fresh_vars_wrt st ss /\ ~ss.vs_halted /\
+  LENGTH ss.vs_call_ctx.cc_calldata < dimword(:256) /\
+  ss.vs_current_bb = st.cs_current_bb /\
+  ss.vs_inst_idx = LENGTH st.cs_current_insts /\
+  (!t. vars_pc_only ss t /\ fresh_vars_wrt a3 t /\
+       (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x ss) /\
+       ~t.vs_halted /\ t.vs_inst_idx = 0 /\
+       t.vs_current_bb = (if 4 <= LENGTH ss.vs_call_ctx.cc_calldata
+                          then dispatch else fallback) ==>
+       !n. mem_safe_blocks n ctx fn t) ==>
+  (!n. mem_safe_run n ctx fn ss) /\
+  (st.cs_current_insts = [] ==> !n. mem_safe_blocks n ctx fn ss)
+Proof
+  strip_tac >> drule_all linear_size_prefix_code >> strip_tac >>
+  `!n. mem_safe_run n ctx fn ss` by
+    (drule linear_size_prefix_mem_safe >> disch_then drule >> disch_then drule >>
+     disch_then drule >> disch_then drule >> disch_then drule >>
+     disch_then irule >> asm_rewrite_tac[] >> gen_tac >> strip_tac >>
+     irule mem_safe_run_jnz >>
+     qexists_tac `<| bb_label := st.cs_current_bb; bb_instructions :=
+       st.cs_current_insts ++ emitted_insts st a3 ++
+       [mk_inst (st.cs_next_id + 3) JNZ [cond; Label dispatch; Label fallback] []] |>` >>
+     asm_rewrite_tac[] >>
+     qexistsl_tac [`cond`, `st.cs_next_id+3`, `fallback`,
+                   `bool_to_word (4 <= LENGTH ss.vs_call_ctx.cc_calldata)`, `dispatch`] >>
+     simp[get_instruction_def, EL_APPEND2] >>
+     Cases_on `4 <= LENGTH ss.vs_call_ctx.cc_calldata` >> simp[bool_to_word_def] >>
+     `!lbl. vars_pc_only ss (jump_to lbl t)` by
+       (gen_tac >> irule vars_pc_only_jump_to >> simp[]) >>
+     first_x_assum irule >> simp[control_moves_keep_vars, jump_to_def]) >>
+  simp[] >> strip_tac >>
+  `ss with vs_inst_idx := 0 = ss` by
+    (gvs[] >> metis_tac[venom_state_component_equality]) >>
+  drule_all linear_size_entry_no_phi >> strip_tac >>
+  irule mem_safe_blocks_no_phi >> simp[]
+QED
+
+Theorem compile_selector_dispatch_linear_mem_safe:
+  compile_selector_dispatch_linear sels fallback st = ((),st') /\
+  fn_has_code st st' fn /\ EVERY (\(sel,lbl). sel < 2 ** 32) sels /\
+  LENGTH ss.vs_call_ctx.cc_calldata < dimword(:256) /\
+  fresh_vars_wrt st ss /\ ~ss.vs_halted /\
+  ss.vs_current_bb = st.cs_current_bb /\
+  ss.vs_inst_idx = LENGTH st.cs_current_insts /\
+  (!t. vars_pc_only ss t /\ fresh_vars_wrt st' t /\
+       (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x ss) /\
+       ~t.vs_halted /\
+       t.vs_current_bb = linear_dispatch_target ss.vs_call_ctx.cc_calldata sels fallback /\
+       t.vs_inst_idx = 0 ==> !n. mem_safe_blocks n ctx fn t) ==>
+  (!n. mem_safe_run n ctx fn ss) /\
+  (st.cs_current_insts = [] ==> !n. mem_safe_blocks n ctx fn ss)
+Proof
+  strip_tac >> drule linear_dispatch_decompose >> strip_tac >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_emit_helpers) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_prims) >>
+  imp_res_tac (SRULE [cs_appends_def] compile_selector_checks_appends) >>
+  `cs_extends st a3` by
+    (irule cs_extends_trans >> qexists_tac `a1` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `a2` >> simp[]) >>
+  `cs_extends st a6` by
+    (irule cs_extends_trans >> qexists_tac `a3` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `a4` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `a5` >> simp[]) >>
+  `cs_extends a6 st'` by
+    (irule cs_extends_trans >> qexists_tac `a7` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `a8` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `a9` >> simp[]) >>
+  `fn_has_code st a6 fn /\ fn_has_code a6 st' fn` by
+    metis_tac[fn_has_code_split] >>
+  drule_all linear_size_prefix_code >> strip_tac >>
+  drule_all linear_dispatch_tail_slices >> strip_tac >>
+  drule_all linear_method_prefix_code >> strip_tac >>
+  drule linear_dispatch_front_mem_safe >> disch_then drule >> disch_then drule >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then irule >> asm_rewrite_tac[] >> gen_tac >> strip_tac >>
+  suspend "dispatch_cont"
+QED
+
+Resume compile_selector_dispatch_linear_mem_safe[dispatch_cont]:
+  rpt (qpat_x_assum `cs_extends _ _` kall_tac) >>
+  rpt (qpat_x_assum `emitted_insts _ _ = _` kall_tac) >>
+  qpat_x_assum `LENGTH (emitted_insts _ _) = _` kall_tac >>
+  qpat_x_assum `lookup_block _ _ = _` kall_tac >>
+  qpat_x_assum `compile_selector_dispatch_linear _ _ _ = _` kall_tac >>
+  qpat_x_assum `emit_op CALLDATASIZE _ _ = _` kall_tac >>
+  qpat_x_assum `emit_op LT _ _ = _` kall_tac >>
+  qpat_x_assum `emit_op ISZERO _ _ = _` kall_tac >>
+  qpat_x_assum `fresh_label _ _ = _` kall_tac >>
+  qpat_x_assum `emit_inst JNZ _ _ _ = _` kall_tac >>
+  qpat_x_assum `new_block _ _ = _` kall_tac >>
+  `fresh_vars_wrt a6 t` by
+    (irule fresh_vars_wrt_mono >> qexists_tac `a3` >> simp[]) >>
+  `fresh_vars_wrt st' t` by
+    (irule fresh_vars_wrt_mono >> qexists_tac `a6` >> simp[]) >>
+  drule vars_pc_only_fields >> strip_tac >>
+  Cases_on `4 <= LENGTH ss.vs_call_ctx.cc_calldata`
+  >- suspend "method_cont" >>
+  first_x_assum irule >> simp[linear_dispatch_target_short]
+QED
+
+Resume compile_selector_dispatch_linear_mem_safe[method_cont]:
+  `t with vs_inst_idx := 0 = t` by
+    simp[venom_state_component_equality] >>
+  drule_all linear_method_entry_no_phi >> strip_tac >>
+  irule mem_safe_blocks_no_phi >> simp[] >>
+  reverse conj_tac >- (qexists_tac `bb` >> gvs[]) >>
+  drule linear_dispatch_method_mem_safe >> disch_then drule >>
+  disch_then drule >> disch_then drule >> disch_then irule >>
+  simp[] >> gen_tac >> strip_tac >>
+  `vars_pc_only ss t'` by metis_tac[vars_pc_only_trans] >>
+  `!x. not_fresh_at st x ==> lookup_var x t' = lookup_var x ss` by
+    (rpt strip_tac >>
+     `not_fresh_at a6 x` by
+       (irule not_fresh_at_mono >> qexists_tac `st` >> simp[]) >>
+     metis_tac[]) >>
+  qpat_x_assum `!t. vars_pc_only ss t /\ _ ==> _` irule >> simp[]
+QED
+Finalise compile_selector_dispatch_linear_mem_safe
