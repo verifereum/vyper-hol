@@ -271,3 +271,89 @@ Proof
      qexists `aid` >> simp[]) >>
   drule valueEncodingProofsTheory.mem_bytes_at_agree_window >> simp[]
 QED
+
+Theorem abi_args_nil_sim:
+  frag_exec ctx sa sa (\s. s = s0 /\ stmt_state_rel ctx func ce cx es s)
+    (\s. abi_args_post ctx func ce cx es sa sa s0 es [] [] [] s)
+    (wb_args_exit (INL []))
+Proof
+  irule fragExecTheory.frag_exec_refl >> simp[abi_args_post_def, wb_frame_refl] >> metis_tac[]
+QED
+
+Theorem abi_args_ready_head:
+  abi_args_ready ctx func ce cx Inv (e::args) /\ Inv es ==>
+  expr_sim ctx func ce cx (expr_type e) e es /\
+  expr_vv_sim ctx func ce cx (expr_type e) e es /\
+  (!res es'. (do r <- eval_expr cx e; read_result cx r od) es = (res,es') ==>
+     expr_res_ok res) /\
+  (!v es'. (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es') ==>
+     Inv es' /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+     (~is_word_type (expr_type e) /\ exprs_can_mutate ce args ==>
+      ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+           value_has_type tv v /\ val_wf tv v /\
+           type_memory_bytes ce (expr_type e) = type_memory_size tv /\
+           type_memory_size tv < 2 ** 64 /\
+           type_memory_size tv + 64 < dimword (:256)))
+Proof
+  simp[abi_args_ready_def] >> metis_tac[]
+QED
+
+Theorem abi_args_compile_mono:
+  !args ce st.
+    ci_mono st (SND (compile_abi_encode_args compile_expr ce args st))
+Proof
+  Induct >> rpt gen_tac >> rewrite_tac[exprLoweringTheory.compile_abi_encode_args_def] >>
+  simp[exprLoweringPropsTheory.ci_mono_comp_return] >>
+  ho_match_mp_tac exprLoweringPropsTheory.ci_mono_bind >> conj_tac
+  >- simp[cj 1 exprLoweringPropsTheory.compile_expr_ci_mono] >>
+  rpt strip_tac >> ho_match_mp_tac exprLoweringPropsTheory.ci_mono_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp[exprLoweringPropsTheory.ci_mono_compile_materialize_vv,
+                           exprLoweringPropsTheory.ci_mono_unwrap_value]) >>
+  rpt strip_tac >> ho_match_mp_tac exprLoweringPropsTheory.ci_mono_bind >> conj_tac
+  >- simp[] >>
+  simp[exprLoweringPropsTheory.ci_mono_comp_return]
+QED
+
+Theorem abi_args_location_end_mono:
+  sm.cs_next_id <= sb.cs_next_id /\ expr_val_at ce cx ty sa sm es v op s ==>
+  expr_val_at ce cx ty sa sb es v op s
+Proof
+  simp[expr_val_at_def] >> rpt strip_tac >>
+  first_x_assum drule_all >> strip_tac >> qexists `w` >> simp[]
+  >- (disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >> metis_tac[]) >>
+  disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[]
+QED
+
+Theorem abi_args_post_start_mono:
+  sa.cs_next_id <= sm.cs_next_id /\
+  abi_args_post ctx func ce cx es sm sb s0 es' args ops vs s /\
+  wb_frame ce es sa s0 s ==>
+  abi_args_post ctx func ce cx es sa sb s0 es' args ops vs s
+Proof
+  simp[abi_args_post_def] >> rpt strip_tac >>
+  irule listTheory.LIST_REL_mono >> goal_assum (drule_at Any) >>
+  simp[] >> rpt strip_tac >>
+  irule expr_val_at_start_mono >> metis_tac[]
+QED
+
+Theorem abi_args_post_cons_frame:
+  expr_post ctx func ce cx e es sa sm s0 es1 v op t /\
+  abi_args_post ctx func ce cx es1 sm sb t es' args ops vs u /\
+  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  expr_val_rel cx (expr_type e) v op u /\
+  expr_val_at ce cx (expr_type e) sa sb es' v op u ==>
+  abi_args_post ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) u
+Proof
+  strip_tac >> rewrite_tac[abi_args_post_cons] >> simp[] >>
+  `wb_frame ce es sa s0 u` by
+    (irule wb_frame_trans >> simp[] >> conj_tac
+     >- (qexistsl [`es1`, `sm`, `t`] >>
+         gvs[abi_args_post_def] >> metis_tac[expr_post_frame]) >>
+     qexistsl [`ctx`, `cx`, `func`] >> simp[]) >>
+  qpat_x_assum `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[abi_args_post_def] >> strip_tac >> simp[] >>
+  irule listTheory.LIST_REL_mono >> goal_assum (drule_at Any) >>
+  simp[] >> rpt strip_tac >> irule expr_val_at_start_mono >> metis_tac[]
+QED
