@@ -372,8 +372,7 @@ Proof
   gvs[]
 QED
 
-(* The dynamic bytestrings, where footprint and store size are their own;
-   every other value takes its type's size. *)
+(* Dynamic bytestrings have their own footprint and store size. *)
 Theorem val_size_cases[local]:
   !tv v.
     (?bs n. v = BytesV bs /\ tv = BaseTV (BytesT (Dynamic n))) \/
@@ -790,17 +789,22 @@ QED
 (* ===== stmt_state_rel and the variables ===== *)
 
 (* stmt_state_rel reads the variables only through the pointers of the
-   live locals. *)
+   live locals and the constructor's immutable base. *)
 Theorem stmt_state_rel_vars_frame:
   !func cenv cx es s V ctx.
     stmt_state_rel ctx func cenv cx es s /\
     (!name entry p sz.
        lookup_scopes name es.scopes = SOME entry /\
        FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+       lookup_var p (s with vs_vars := V) = lookup_var p s) /\
+    (!p. cenv.ce_imm_alloca = SOME (Var p) ==>
        lookup_var p (s with vs_vars := V) = lookup_var p s) ==>
     stmt_state_rel ctx func cenv cx es (s with vs_vars := V)
 Proof
   rpt strip_tac >>
+  `immutable_base_zero cenv (s with vs_vars := V)` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     fs[stmt_state_rel_def]) >>
   `local_ptrs_rel func cenv es.scopes (s with vs_vars := V)` by
     (irule local_ptrs_rel_frame >> qexists_tac `s` >>
      fs[stmt_state_rel_def, state_rel_def] >> conj_tac
@@ -831,7 +835,11 @@ Theorem stmt_state_rel_vars_ext:
 Proof
   rw[vars_ext_def] >>
   qpat_x_assum `t' = _` (fn th => ONCE_REWRITE_TAC [th]) >>
-  irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
+  irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac
+  >~ [`cenv.ce_imm_alloca = SOME (Var p)`]
+  >- (fs[stmt_state_rel_def, immutable_base_zero_def, eval_operand_def,
+         lookup_var_def] >>
+      metis_tac[SUBMAP_FLOOKUP_EQN]) >>
   fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
   first_x_assum drule_all >> strip_tac >>
   fs[lookup_var_def] >> metis_tac[SUBMAP_FLOOKUP_EQN]

@@ -66,7 +66,7 @@ QED
 
 Theorem supported_storage_declarations_reject:
   EVERY (\top. ~supported_declaration_header [] top)
-    [VariableDecl Public Storage "x" (BaseT (UintT 256)) (SOME 0);
+    [VariableDecl (Public F) Storage "x" (BaseT (UintT 256)) (SOME 0);
      VariableDecl Private Storage "x" (BaseT (UintT 256)) NONE;
      VariableDecl Private Transient "x" (BaseT (UintT 256)) NONE;
      VariableDecl Private Immutable "x" (BaseT (UintT 256)) (SOME 0);
@@ -82,7 +82,7 @@ QED
 
 Theorem supported_hashmap_declarations_reject:
   EVERY (\top. ~supported_declaration_header [] top)
-    [HashMapDecl Public F "m" (BaseT BoolT) (Type (BaseT (UintT 256))) (SOME 0);
+    [HashMapDecl (Public F) F "m" (BaseT BoolT) (Type (BaseT (UintT 256))) (SOME 0);
      HashMapDecl Private F "m" (BaseT BoolT) (Type (BaseT (UintT 256))) NONE;
      HashMapDecl Private F "m" (BaseT DecimalT) (Type (BaseT (UintT 256))) (SOME 0);
      HashMapDecl Private F "m" (BaseT AddressT) (Type (BaseT BoolT)) (SOME 0)]

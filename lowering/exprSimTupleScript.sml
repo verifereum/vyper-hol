@@ -275,12 +275,20 @@ Theorem read_storage_slot_array_not_tuple[local]:
     read_storage_slot cx tr slot (ArrayTV etv bd) es <>
       (INL (ArrayV (TupleV vs)), es1)
 Proof
-  rpt gen_tac >> Cases_on `tr` >> Cases_on `bd` >>
+  rpt gen_tac >> Cases_on `tr` >>
   simp[read_storage_slot_def, get_storage_backend_def,
        get_transient_storage_def, get_accounts_def, bind_def, return_def] >>
   qmatch_goalsub_abbrev_tac `decode_value stor` >>
+  (namedCases_on `bd` ["n", "max"]
+  >- (simp[Once decode_value_def] >>
+      Cases_on `decode_static_array stor (w2n slot) etv n` >>
+      simp[lift_option_def, raise_def, return_def]) >>
   simp[Once decode_value_def] >>
-  rpt (CASE_TAC >> simp[lift_option_def, raise_def, return_def])
+  Cases_on `w2n (read_slot stor (w2n slot)) <= max` >>
+  simp[lift_option_def, raise_def, return_def] >>
+  Cases_on `decode_dyn_array stor (w2n slot + 1) etv
+              (MIN (w2n (read_slot stor (w2n slot))) max)` >>
+  simp[lift_option_def, raise_def, return_def])
 QED
 
 (* ===== The source's selection ===== *)

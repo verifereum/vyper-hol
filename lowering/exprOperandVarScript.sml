@@ -903,7 +903,15 @@ Proof
   simp[comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   rpt strip_tac >> gvs[contextTheory.vv_operand_def, contextTheory.base_ptr_def] >>
-  metis_tac[compiler_bytelike_literal_var]
+  all_tac >>~- ([`compile_bytelike_literal _ _ _ = _`],
+    drule (GEN_ALL compiler_bytelike_literal_var) >> disch_then drule >> simp[]) >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  gvs[comp_bind_def, comp_return_def, contextTheory.vv_operand_def] >>
+  rename1 `BytesT bound` >> Cases_on `bound` >>
+  gvs[comp_bind_def, comp_return_def, contextTheory.vv_operand_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[contextTheory.vv_operand_def, contextTheory.base_ptr_def] >>
+  drule (GEN_ALL compiler_bytelike_literal_var) >> disch_then drule >> simp[]
 QED
 
 Theorem compiler_ec_points_var:

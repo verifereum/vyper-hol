@@ -592,7 +592,7 @@ Proof
   `fmp_room ctx func (s with vs_returndata := data) <=>
    fmp_room ctx func s` by
     (irule fmp_room_fields_cong >> simp[]) >>
-  simp[stmt_state_rel_def, state_rel_def,
+  simp[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
        hash_returndata_immutable_alloca_sep,
        local_ptrs_rel_def, local_region_def, local_backed_def,
        lookup_var_def, storage_rel_def, transient_rel_def, immutables_rel_def,
@@ -648,8 +648,11 @@ Theorem hash_outcomes_state_rel:
     (es with outcomes := SOME (DROP 1 s.vs_outcomes))
     (s with vs_outcomes := DROP 1 s.vs_outcomes)
 Proof
+  `fmp_room ctx func (s with vs_outcomes := DROP 1 s.vs_outcomes) <=>
+   fmp_room ctx func s` by
+    (irule fmp_room_fields_cong >> simp[]) >>
   strip_tac >>
-  gvs[stmt_state_rel_def, state_rel_def,
+  gvs[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
        immutable_alloca_sep_def,
        local_ptrs_rel_def, local_region_def, local_backed_def,
        lookup_var_def, storage_rel_def, transient_rel_def, immutables_rel_def,
@@ -837,6 +840,11 @@ Proof
   >- (rpt strip_tac >> rename1 `PtrVar (Var name_var) sz` >>
       `not_fresh_at sa name_var` by
         (gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+      qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x final = _` drule >>
+      simp[lookup_var_def]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      drule_all local_ptrs_reserved_imm_base >> strip_tac >>
       qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x final = _` drule >>
       simp[lookup_var_def]) >>
   simp[Abbr `final`, update_var_def, LET_THM] >>
@@ -1562,6 +1570,10 @@ Proof
   conj_tac
   >- (rpt strip_tac >> qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
       gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all local_ptrs_reserved_imm_base >> strip_tac >>
+      qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x t = _` irule >>
+      first_assum ACCEPT_TAC) >>
   conj_tac
   >- simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
           arithmeticTheory.MAX_DEF] >>

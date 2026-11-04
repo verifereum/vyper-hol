@@ -135,6 +135,9 @@ Proof
          metis_tac[]) >>
      simp[write_memory_with_expansion_def, lookup_var_def] >>
      rpt strip_tac >> gvs[]) >>
+  `immutable_base_zero cenv (write_memory_with_expansion dst data s)` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     gvs[stmt_state_rel_def, write_memory_with_expansion_def, lookup_var_def]) >>
   qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
   rewrite_tac[Once stmt_state_rel_def] >> strip_tac >>
   rewrite_tac[stmt_state_rel_def] >> conj_tac
@@ -815,6 +818,11 @@ Proof
       conj_tac
       >- (rpt strip_tac >> first_x_assum irule >>
           gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+      conj_tac
+      >- (rpt strip_tac >>
+          drule_all local_ptrs_reserved_imm_base >> strip_tac >>
+          qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
+          first_assum ACCEPT_TAC) >>
       rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
   `locals_kept cenv es s t` by
     (irule locals_kept_regions >> rpt strip_tac >>
