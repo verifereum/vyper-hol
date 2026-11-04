@@ -382,3 +382,24 @@ Proof
   Cases_on `INDEX_OF mid ls` >>
   gvs[bind_def, read_result_def, raise_def, return_def, expr_res_ok_def]
 QED
+
+Theorem eval_expr_flag_member_gas:
+  gas_admissible
+    (bind (eval_expr cx (FlagMember ann (src,fid) mid)) (read_result cx))
+    expr_res_ok es ==>
+  ?ts ls i. get_module_code cx src = SOME ts /\
+    lookup_flag fid ts = SOME ls /\ INDEX_OF mid ls = SOME i /\
+    (!tail. bind (eval_expr cx (FlagMember ann (src,fid) mid))
+       (read_result cx) (es with gas_obs := tail) =
+       (INL (FlagV (2 ** i)), es with gas_obs := tail))
+Proof
+  strip_tac >>
+  Cases_on `bind (eval_expr cx (FlagMember ann (src,fid) mid))
+    (read_result cx) (es with gas_obs := [])` >>
+  drule_all gasContextTheory.gas_admissible_result >> strip_tac >>
+  drule_all (SIMP_RULE (srw_ss() ++ ETA_ss) [] eval_expr_flag_member) >>
+  strip_tac >>
+  qexistsl [`ts`, `ls`, `i`] >> simp[] >>
+  simp[Once evaluate_def, lookup_flag_mem_def, bind_def,
+       read_result_def, return_def]
+QED
