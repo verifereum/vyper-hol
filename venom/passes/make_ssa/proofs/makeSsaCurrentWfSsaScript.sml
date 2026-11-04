@@ -915,6 +915,145 @@ Proof
   gvs[] >> qexistsl_tac [`db`, `di`] >> simp[]
 QED
 
+Theorem current_wf_leading_phi_split[local]:
+  !insts. ?pre tail. insts = pre ++ tail /\
+    EVERY (\i. i.inst_opcode = PHI) pre /\
+    (tail = [] \/ (HD tail).inst_opcode <> PHI)
+Proof
+  Induct >- (qexistsl_tac [`[]`, `[]`] >> simp[]) >> gen_tac >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (qpat_x_assum `?pre tail. _` strip_assume_tac >>
+      qexistsl_tac [`h::pre`, `tail`] >> simp[]) >>
+  qexistsl_tac [`[]`, `h::insts`] >> simp[]
+QED
+
+Theorem current_wf_cleanup_phi_successors[local]:
+  i.inst_opcode = PHI ==> get_successors (simplify_current_phi i) = []
+Proof
+  strip_tac >>
+  simp[simplify_current_phi_def, keep_current_phi_vars_def] >>
+  IF_CASES_TAC >> simp[get_successors_def, is_terminator_def] >>
+  simp[simplify_current_phi_raw_def] >>
+  Cases_on `current_phi_output i.inst_outputs` >> simp[get_successors_def, is_terminator_def] >>
+  Cases_on `current_phi_values (remove_current_phi_self x i.inst_operands)` >>
+  simp[get_successors_def, is_terminator_def] >>
+  Cases_on `x'` >> simp[get_successors_def, is_terminator_def] >>
+  Cases_on `EVERY (\w. w = h) t` >> simp[get_successors_def, is_terminator_def]
+QED
+
+Definition current_wf_list_succs_def:
+  current_wf_list_succs insts =
+    if insts = [] then [] else get_successors (LAST insts)
+End
+
+Theorem current_wf_list_succs_no_id[local]:
+  !xs ys. MAP current_inst_no_id xs = MAP current_inst_no_id ys ==>
+    current_wf_list_succs xs = current_wf_list_succs ys
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `xs = []` >> Cases_on `ys = []` >> gvs[current_wf_list_succs_def] >>
+  `current_inst_no_id (LAST xs) = current_inst_no_id (LAST ys)` by
+    metis_tac[LAST_MAP] >>
+  drule current_wf_no_id_fields >> simp[get_successors_def]
+QED
+
+Theorem current_wf_list_succs_prefix[local]:
+  EVERY (\i. get_successors i = []) pre ==>
+  current_wf_list_succs (pre ++ tail) = current_wf_list_succs tail
+Proof
+  strip_tac >> Cases_on `tail = []` >> simp[current_wf_list_succs_def, LAST_APPEND_NOT_NIL] >>
+  Cases_on `pre = []` >> simp[] >> fs[EVERY_MEM] >> metis_tac[LAST_MEM]
+QED
+
+Theorem current_wf_cleanup_block_succs:
+  bb_succs (simplify_current_phi_block bb) = bb_succs bb
+Proof
+  qspec_then `bb.bb_instructions` strip_assume_tac current_wf_leading_phi_split >>
+  `MAP current_inst_no_id (simplify_current_phi_block bb).bb_instructions =
+    MAP current_inst_no_id
+      ((FILTER (\i. i.inst_opcode = PHI) (MAP simplify_current_phi pre) ++
+        FILTER (\i. i.inst_opcode <> PHI) (MAP simplify_current_phi pre)) ++ tail)` by
+    (irule current_wf_cleanup_block_no_id >> metis_tac[]) >>
+  drule current_wf_list_succs_no_id >> disch_tac >>
+  `EVERY (\i. get_successors i = []) pre` by
+    (fs[EVERY_MEM] >> simp[get_successors_def, is_terminator_def]) >>
+  `EVERY (\i. get_successors i = [])
+    (FILTER (\i. i.inst_opcode = PHI) (MAP simplify_current_phi pre) ++
+     FILTER (\i. i.inst_opcode <> PHI) (MAP simplify_current_phi pre))` by
+    (fs[EVERY_MEM, MEM_FILTER, MEM_MAP] >> rpt strip_tac >> gvs[] >>
+     irule current_wf_cleanup_phi_successors >> metis_tac[]) >>
+  `current_wf_list_succs (simplify_current_phi_block bb).bb_instructions =
+    current_wf_list_succs bb.bb_instructions` by
+    metis_tac[current_wf_list_succs_prefix] >>
+  `!b. bb_succs b = nub (REVERSE (current_wf_list_succs b.bb_instructions))` by
+    (gen_tac >> Cases_on `b.bb_instructions` >>
+     simp[bb_succs_def, current_wf_list_succs_def]) >>
+  simp[]
+QED
+
+Theorem current_wf_cleanup_cfg:
+  g.fn_blocks = MAP simplify_current_phi_block f.fn_blocks ==>
+  fn_entry_label g = fn_entry_label f /\
+  (!a b. fn_cfg_edge g a b <=> fn_cfg_edge f a b)
+Proof
+  strip_tac >> conj_tac
+  >- (Cases_on `f.fn_blocks` >>
+      simp[fn_entry_label_def, entry_block_def]) >>
+  simp[fn_cfg_edge_def, MEM_MAP] >>
+  metis_tac[current_wf_cleanup_block_succs, current_cleanup_block_label]
+QED
+
+Theorem current_wf_entry_phi_free[local]:
+  ALL_DISTINCT (fn_labels f) /\ first_block_no_phi f /\
+  MEM bb f.fn_blocks /\ fn_entry_label f = SOME bb.bb_label ==>
+  EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions
+Proof
+  strip_tac >> Cases_on `f.fn_blocks` >>
+  gvs[fn_entry_label_def, entry_block_def, first_block_no_phi_def,
+      fn_labels_def, ALL_DISTINCT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem current_wf_cleanup_preserves_wf_ssa:
+  wf_ssa f /\ ALL_DISTINCT (fn_labels f) /\ all_reachable f /\
+  first_block_no_phi f /\ fn_inst_wf f /\
+  (!bb. MEM bb f.fn_blocks ==> ALL_DISTINCT bb.bb_instructions) /\
+  g.fn_blocks = simplify_current_phis f.fn_blocks ==>
+  wf_ssa g
+Proof
+  strip_tac >>
+  `g.fn_blocks = MAP simplify_current_phi_block f.fn_blocks` by
+    metis_tac[current_cleanup_phis_map] >>
+  drule current_wf_cleanup_cfg >> strip_tac >>
+  irule current_wf_replacement_wf_ssa >>
+  qexistsl_tac [`simplify_current_phi_block`, `f`] >> simp[] >>
+  qx_gen_tac `bb` >> strip_tac >>
+  Cases_on `fn_entry_label f = SOME bb.bb_label`
+  >- (`EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions` by
+        (irule current_wf_entry_phi_free >> qexists_tac `f` >> simp[]) >>
+      `simplify_current_phi_block bb = bb` by
+        (Cases_on `bb.bb_instructions` >>
+         fs[simplify_current_phi_block_def]) >>
+      qexistsl_tac [`[]`, `bb.bb_instructions`, `[]`, `bb.bb_instructions`] >>
+      simp[LIST_REL_EL_EQN]) >>
+  `fn_reachable f bb.bb_label` by fs[all_reachable_def] >>
+  `?entry. fn_entry_label f = SOME entry /\ entry <> bb.bb_label` by
+    (fs[fn_reachable_def] >> metis_tac[]) >>
+  qspec_then `bb.bb_instructions`
+    (qx_choose_then `pre` (qx_choose_then `tail` assume_tac)) current_wf_leading_phi_split >>
+  `!i. MEM i pre ==> (?out. i.inst_outputs = [out]) /\ phi_edge_uses_wf f bb i` by
+    (gen_tac >> disch_tac >>
+     `MEM i bb.bb_instructions /\ i.inst_opcode = PHI` by fs[EVERY_MEM] >>
+     conj_tac
+     >- (`inst_wf i` by metis_tac[fn_inst_wf_def] >>
+         qpat_x_assum `inst_wf i` mp_tac >>
+         simp[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+     fs[wf_ssa_def, def_dominates_uses_def] >> metis_tac[]) >>
+  `ssa_form f` by fs[wf_ssa_def] >>
+  qpat_x_assum `_ = pre ++ tail /\ _` (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all current_wf_cleanup_prefix_semantics >> strip_tac >>
+  qexistsl_tac [`pre`, `tail`, `pre'`, `tail'`] >> fs[] >> metis_tac[]
+QED
+
 Theorem make_ssa_current_fn_wf_ssa:
   fn_defs_reach_uses fn /\ fn_phi_operands_single_def fn /\
   fn_phis_cover_preds fn /\
