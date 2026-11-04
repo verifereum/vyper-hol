@@ -5756,6 +5756,34 @@ Proof
   qexists_tac `AttrSubscript s` >> asm_rewrite_tac [extend_storage_place_def]
 QED
 
+Theorem aug_place_pure_base_state:
+  !t tops cx s r s'.
+    EVERY (supported_pure_expr tops) (target_indices t) /\
+    eval_base_place cx t s = (r,s') ==> s' = s
+Proof
+  measureInduct_on `base_assignment_target_size t` >> Cases_on `t` >>
+  rpt gen_tac >> TRY (PairCases_on `p`) >>
+  simp[target_indices_def, Once evaluate_def] >>
+  rpt strip_tac
+  >- (gvs[bind_def, get_scopes_def, type_check_def, assert_def,
+          ignore_bind_def, return_def, raise_def, AllCaseEqs()])
+  >- metis_tac[vyperStatePreservationTheory.lookup_global_state] >>
+  gvs[bind_def, AllCaseEqs()] >>
+  qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
+  simp[expr_size_def] >> strip_tac >>
+  metis_tac[aug_place_pure_eval_state, read_result_state,
+            vyperPlaceFramesTheory.extend_place_state, raise_def]
+QED
+
+Theorem aug_place_pure_target_state:
+  EVERY (supported_pure_expr tops) (target_indices t) /\
+  eval_target_place cx t s = (r,s') ==> s' = s
+Proof
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  metis_tac[aug_place_pure_base_state, vyperPlaceFramesTheory.get_place_state,
+            raise_def]
+QED
+
 (* A field or element of a local, or of a storage or transient variable
    whose indices have no effect (supported_pure_expr): the place's
    current word is loaded where the target's code left it. *)
