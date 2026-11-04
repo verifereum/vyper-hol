@@ -771,6 +771,96 @@ Proof
   first_x_assum irule >> metis_tac[MEM]
 QED
 
+Theorem revert_path_chain_merge_raw:
+  ALL_DISTINCT (fn_labels fn) /\ EVERY bb_well_formed fn.fn_blocks /\
+  EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn.fn_blocks /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  raw = replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks) /\
+  l <> b.bb_label /\ revert_path fn.fn_blocks n l ==>
+  revert_path raw (LENGTH raw) l
+Proof
+  strip_tac >> irule revert_path_fuel_normalize >>
+  irule revert_path_chain_merge_base >> metis_tac[]
+QED
+
+Theorem flag_fails_nonterminator_environment:
+  ~is_terminator i.inst_opcode /\ flag_fails oldbbs vs i ==>
+  flag_fails newbbs vs i
+Proof
+  Cases_on `i.inst_opcode` >> simp[is_terminator_def, flag_fails_def]
+QED
+
+Theorem flag_fails_front_environment:
+  bb_well_formed bb /\ MEM i (FRONT bb.bb_instructions) /\
+  flag_fails oldbbs vs i ==> flag_fails newbbs vs i
+Proof
+  strip_tac >> irule flag_fails_nonterminator_environment >>
+  reverse conj_tac >- metis_tac[] >>
+  qpat_x_assum `MEM i _` mp_tac >> rewrite_tac[MEM_EL] >> strip_tac >>
+  drule_all bb_front_no_terminator >> simp[]
+QED
+
+Theorem flag_fails_chain_merge_other:
+  ALL_DISTINCT (fn_labels fn) /\ EVERY bb_well_formed fn.fn_blocks /\
+  EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn.fn_blocks /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  raw = replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks) /\
+  MEM c fn.fn_blocks /\ c <> a /\ MEM i c.bb_instructions /\
+  flag_fails fn.fn_blocks vs i ==> flag_fails raw vs i
+Proof
+  strip_tac >>
+  `bb_well_formed c` by gvs[EVERY_MEM] >>
+  `!l. is_terminator i.inst_opcode /\ MEM (Label l) i.inst_operands ==>
+       l <> b.bb_label` by
+    (rpt strip_tac >> gvs[] >>
+     `MEM b.bb_label (bb_succs c)` by
+       (irule bb_terminator_label_successor >> metis_tac[]) >>
+     drule_all can_merge_blocks_unique_pred >> simp[]) >>
+  `!l. is_terminator i.inst_opcode /\ MEM (Label l) i.inst_operands /\
+       revert_path fn.fn_blocks (LENGTH fn.fn_blocks) l ==>
+       revert_path raw (LENGTH raw) l` by
+    (rpt strip_tac >> irule revert_path_chain_merge_raw >> metis_tac[]) >>
+  Cases_on `i.inst_opcode` >> gvs[flag_fails_def, is_terminator_def] >>
+  Cases_on `i.inst_operands` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  metis_tac[MEM]
+QED
+
+Theorem calls_flagged_chain_merge_other:
+  ALL_DISTINCT (fn_labels fn) /\ EVERY bb_well_formed fn.fn_blocks /\
+  EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn.fn_blocks /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  raw = replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks) /\
+  MEM c fn.fn_blocks /\ c <> a /\ calls_flagged fn.fn_blocks c.bb_instructions ==>
+  calls_flagged raw c.bb_instructions
+Proof
+  strip_tac >>
+  `bb_well_formed c` by gvs[EVERY_MEM] >>
+  `c.bb_instructions <> [] /\ is_terminator (LAST c.bb_instructions).inst_opcode` by
+    gvs[bb_well_formed_def] >>
+  `!i vs. MEM i c.bb_instructions /\ flag_fails fn.fn_blocks vs i ==>
+      flag_fails raw vs i` by
+    (rpt strip_tac >> irule flag_fails_chain_merge_other >> metis_tac[]) >>
+  `calls_flagged fn.fn_blocks (FRONT c.bb_instructions ++ [LAST c.bb_instructions])` by
+    simp[APPEND_FRONT_LAST] >>
+  `calls_flagged raw (FRONT c.bb_instructions ++ [LAST c.bb_instructions])` suffices_by
+    simp[APPEND_FRONT_LAST] >>
+  irule calls_flagged_replace_terminal_selective >>
+  conj_tac
+  >- (Cases_on `(LAST c.bb_instructions).inst_opcode` >>
+      gvs[is_terminator_def, calls_flagged_def]) >>
+  qexistsl_tac [`LAST c.bb_instructions`, `fn.fn_blocks`] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> gvs[] >> first_x_assum irule >>
+      metis_tac[rich_listTheory.MEM_FRONT_NOT_NIL]) >>
+  gen_tac >> simp[flag_path_def] >>
+      qpat_x_assum `!i vs. MEM i c.bb_instructions /\ _ ==> _`
+        (qspec_then `LAST c.bb_instructions` mp_tac) >>
+      simp[LAST_MEM]
+QED
+
 Theorem simplify_cfg_call_checks_ok:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn ==>
   call_checks_ok (simplify_cfg_fn fn)
