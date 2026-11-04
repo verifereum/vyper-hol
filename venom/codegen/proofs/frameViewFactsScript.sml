@@ -68,10 +68,12 @@ QED
 Theorem ordinary_operand_not_retpc:
   opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
   MEM (Var x) inst.inst_operands /\ inst.inst_opcode <> ASSIGN /\
-  inst.inst_opcode <> PHI /\ inst.inst_opcode <> RET ==>
+  inst.inst_opcode <> PHI /\ inst.inst_opcode <> RET /\
+  inst.inst_opcode <> RETFMP /\ inst.inst_opcode <> DRET ==>
   ~retpc_var fn x
 Proof
-  metis_tac[opaque_use_ok_retpc_use, retpc_use_ok_def]
+  rpt strip_tac >> drule_all opaque_use_ok_retpc_use >>
+  simp[retpc_use_ok_def]
 QED
 
 Theorem codegen_ready_inst_not_pre:

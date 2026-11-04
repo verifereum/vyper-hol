@@ -256,6 +256,16 @@ Proof
   fs[retpc_var_def] >> metis_tac[copy_phi_upper_bound_sound]
 QED
 
+Theorem last_operand_unique[local]:
+  !ops x. ops <> [] /\
+          (MEM x ops ==> ?front. ops = front ++ [x] /\ ~MEM x front) ==>
+          ~MEM x (FRONT ops)
+Proof
+  rpt strip_tac >>
+  `MEM x ops` by metis_tac[APPEND_FRONT_LAST, MEM_APPEND] >>
+  gvs[GSYM SNOC_APPEND]
+QED
+
 Theorem fmp_lower_inst_opaque_use:
   fmp_lower_inst infos ctx runner s inst = SOME (out,s') /\
   MEM j out /\ MEM x s.irs_used_vars /\ x <> runner /\
@@ -286,7 +296,11 @@ Proof
       gvs[fmpLowerDefsTheory.fmp_lower_inst_def,
           fmpLowerDefsTheory.fmp_lower_inst_shape_def, AllCaseEqs(),
           gas_use_ok_def, retpc_use_ok_def] >>
-      metis_tac[APPEND_FRONT_LAST, MEM_APPEND, MEM]) >>
+      `!y. MEM y (FRONT inst.inst_operands) ==> MEM y inst.inst_operands`
+        by metis_tac[APPEND_FRONT_LAST, MEM_APPEND] >>
+      `MEM (LAST inst.inst_operands) inst.inst_operands`
+        by metis_tac[APPEND_FRONT_LAST, MEM_APPEND, MEM] >>
+      metis_tac[last_operand_unique, venomStateTheory.operand_11]) >>
   Cases_on `inst.inst_opcode = INVOKE`
   >- (rpt strip_tac >>
       gvs[fmpLowerDefsTheory.fmp_lower_inst_def,
