@@ -65,9 +65,10 @@ Definition generate_block_insts_plan_acc_def:
     case generate_inst_plan liveness dfg cfg fn inst next_live is_halting
            next_is_term bb_label ps of
       NONE => NONE
-    | SOME (step_ops,ps') =>
+    | SOME (step_ops,ps0) =>
         generate_block_insts_plan_acc liveness dfg cfg fn bb_label
-          is_halting n_params block_len (i + 1) rest ps'
+          is_halting n_params block_len (i + 1) rest
+          (observe_stack_height (LENGTH ps.ps_stack) step_ops ps0)
           (REVERSE step_ops ++ acc)
 End
 
