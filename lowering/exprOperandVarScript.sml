@@ -847,9 +847,19 @@ Proof
   Cases_on `lit`
   >~ [`compile_literal_vv ty (BoolL b)`] >-
     (Cases_on `b` >> simp[compile_literal_vv_def, comp_return_def] >>
-     rpt strip_tac >> gvs[contextTheory.vv_operand_def]) >>
-  simp[compile_literal_vv_def, comp_return_def] >>
-  rpt CASE_TAC >>
+     rpt strip_tac >> gvs[contextTheory.vv_operand_def])
+  >~ [`compile_literal_vv ty (BytesL bs)`] >-
+    (Cases_on `ty` >>
+     gvs[compile_literal_vv_def, comp_return_def, contextTheory.vv_operand_def] >>
+     rpt strip_tac >> gvs[contextTheory.vv_operand_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[comp_return_def, contextTheory.vv_operand_def] >>
+     rename1 `BytesT bound` >> Cases_on `bound` >>
+     gvs[comp_bind_def, comp_return_def, contextTheory.vv_operand_def] >>
+     rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+     gvs[contextTheory.vv_operand_def, contextTheory.base_ptr_def] >>
+     metis_tac[compiler_bytelike_literal_var]) >>
+  simp[compile_literal_vv_def, comp_return_def, contextTheory.vv_operand_def] >>
   simp[comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   rpt strip_tac >> gvs[contextTheory.vv_operand_def, contextTheory.base_ptr_def] >>
