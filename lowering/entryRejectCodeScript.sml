@@ -1,7 +1,7 @@
 Theory entryRejectCode
 Ancestors
   entryCodeOwnership entryRawFunction moduleLowering compileEnv list pair
-  loweringShapeProps vyperCompiler
+  loweringShapeProps vyperCompiler venomInst
 
 Theorem compile_external_fn_bodies_append[local]:
   !xs ys.
@@ -97,4 +97,60 @@ Proof
   gvs[internal_fn_descriptors_def] >>
   drule_all compile_internal_fn_bodies_shape >> strip_tac >>
   qexists_tac `segs` >> simp[]
+QED
+
+Theorem compile_runtime_retained_entry_package:
+  compile_generate_runtime sels exts ints fb Linear buckets meta dense info
+    (initial_compile_state "__entry") = ((),sz) /\
+  EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl) sels /\
+  EVERY external_fn_shape_ok exts /\ fallback_shape_ok fb /\
+  EVERY internal_fn_shape_ok ints /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
+  ALL_DISTINCT (MAP FST (internal_fn_descriptors ints)) ==>
+  ?se fs.
+    compile_generate_runtime sels exts [] fb Linear buckets meta dense info
+      (initial_compile_state "__entry") = ((),se) /\
+    compile_internal_fn_bodies ints se = ((),sz) /\
+    shape_state se /\
+    package_internal_blocks (internal_fn_descriptors ints) (all_blocks sz) =
+      SOME (all_blocks se,fs)
+Proof
+  strip_tac >> drule_all compile_runtime_retained_entry_stream >> strip_tac >>
+  `EVERY (\d. ~compiler_label (FST d) /\
+               ~MEM (FST d) (MAP (\bb. bb.bb_label) (all_blocks se)))
+         (internal_fn_descriptors ints)` by
+    (pure_rewrite_tac[EVERY_MEM] >> gen_tac >> disch_tac >> BETA_TAC >>
+     irule internal_name_not_entry_label >> simp[] >>
+     gvs[EVERY_MEM]) >>
+  drule_all package_internal_blocks_segments >> strip_tac >>
+  qexists_tac `se` >> simp[]
+QED
+
+Theorem run_lowering_retained_entry:
+  run_lowering sels exts ints fb rp buckets meta dense info "__entry" = SOME u /\
+  EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl) sels /\
+  EVERY external_fn_shape_ok exts /\ fallback_shape_ok fb /\
+  EVERY internal_fn_shape_ok ints /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
+  ALL_DISTINCT (MAP FST (internal_fn_descriptors ints)) /\
+  lookup_function "__entry" u.cu_context.ctx_functions = SOME efn ==>
+  ?se.
+    compile_generate_runtime sels exts [] fb Linear buckets meta dense info
+      (initial_compile_state "__entry") = ((),se) /\
+    shape_state se /\ efn.fn_blocks = all_blocks se /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks se))
+Proof
+  strip_tac >>
+  `lowering_context_ok u.cu_context` by metis_tac[run_lowering_context_ok] >>
+  qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[run_lowering_def] >> strip_tac >> pairarg_tac >>
+  gvs[AllCaseEqs(), lowering_policy_ok_def] >>
+  drule compile_runtime_retained_entry_package >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `efn.fn_blocks = all_blocks se` by
+    (drule_all extracted_entry_blocks >> simp[]) >>
+  qexists_tac `se` >> simp[] >>
+  drule lowering_context_ok_bridge >> strip_tac >>
+  `MEM efn ctx.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  gvs[EVERY_MEM, fn_labels_def] >> metis_tac[]
 QED
