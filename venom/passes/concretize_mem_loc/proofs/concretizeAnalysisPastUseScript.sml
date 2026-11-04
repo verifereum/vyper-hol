@@ -3,7 +3,7 @@ Ancestors
   concretizeAnalysisUsedDemand concretizeAnalysisIncomingDemand
   concretizeAnalysisTemporalDemand frameOriginHistory ptrDiscipline
   concretizePtrIncomingOrigins frameOriginCacheReach frameWriteOwnership
-  frameDemandOwnership frameDemandLastWrite frameOriginReachable frameJointTrace frameJointTransition
+  frameJointTaint frameDemandOwnership frameDemandLastWrite frameOriginReachable frameJointTrace frameJointTransition
   frameActivationSeparation frameActivationCache venomInst o1PassContract cfgWf venomWf finite_map list arithmetic
 
 Theorem joint_write_past_owner_generator:
@@ -159,4 +159,67 @@ Proof
   qexistsl_tac [`t`,`c`] >>
   goal_assum (drule_at (Pat `EL _ _ = JointConfig _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> decide_tac
+QED
+
+Theorem joint_untainted_cache_used:
+  joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ n <= LENGTH es /\
+  activation_cache (EL n (q0::qs)) d owner aid (b,sz) /\
+  activation_location (EL n (q0::qs)) d owner p /\
+  b <= byte /\ byte < b + sz /\ lo <= byte /\
+  byte NOTIN joint_mem_taint (EL n (q0::qs)) /\
+  (!k stk PG G tn fn inst s oms om hs h.
+    k < n /\ EL k (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h ==>
+    ~in_revert_forward fn s) /\
+  wf_function owner /\ all_reachable owner /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  bp = bp_analyze_fuel (concretize_memloc_fuel owner) (cfg_analyze owner) owner /\
+  ml_iterate_fuel (concretize_memloc_fuel owner) bp mems sizes pallocas
+    (cfg_analyze owner) owner FEMPTY FEMPTY = (la,us) ==>
+  MEM (Allocation aid) (ml_lookup us p)
+Proof
+  strip_tac >> drule_all joint_untainted_cache_past_owner_generator >>
+  disch_then (qspec_then `mems` strip_assume_tac) >>
+  `c <= n` by decide_tac >>
+  `!k. c <= k /\ k <= n ==> d <= activation_depth (EL k (q0::qs))` by
+    (rpt strip_tac >> `t < k /\ k <= n` by decide_tac >> metis_tac[]) >>
+  irule joint_activation_used_past_generator >>
+  goal_assum (drule_at (Pat `ml_iterate_fuel _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `EL _ _ = JointConfig _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem joint_untainted_demand_owner_used:
+  joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ n <= j /\ j <= LENGTH es /\
+  activation_cache (EL n (q0::qs)) d owner aid (b,sz) /\
+  activation_location (EL n (q0::qs)) d owner p /\
+  b <= byte /\ byte < b + sz /\ lo <= byte /\
+  byte NOTIN joint_mem_taint (EL j (q0::qs)) /\
+  (!k. n <= k /\ k < j ==>
+    byte NOTIN joint_writes (EL k (q0::qs)) (EL k es)) /\
+  (!k stk PG G tn fn inst s oms om hs h.
+    k < n /\ EL k (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h ==>
+    ~in_revert_forward fn s) /\
+  wf_function owner /\ all_reachable owner /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  bp = bp_analyze_fuel (concretize_memloc_fuel owner) (cfg_analyze owner) owner /\
+  ml_iterate_fuel (concretize_memloc_fuel owner) bp mems sizes pallocas
+    (cfg_analyze owner) owner FEMPTY FEMPTY = (la,us) ==>
+  MEM (Allocation aid) (ml_lookup us p)
+Proof
+  strip_tac >>
+  `byte NOTIN joint_mem_taint (EL n (q0::qs))` by
+    metis_tac[joint_trace_mem_taint] >>
+  `n <= LENGTH es` by decide_tac >>
+  irule joint_untainted_cache_used >>
+  goal_assum (drule_at (Pat `ml_iterate_fuel _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ptr_discipline _ _ _`)) >>
+  goal_assum (drule_at (Pat `byte NOTIN joint_mem_taint _`)) >> simp[] >>
+  metis_tac[]
 QED
