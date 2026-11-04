@@ -26,6 +26,7 @@ Proof
 QED
 
 Theorem bytes_address_conversion_valid:
+  (!k. bd = Dynamic k ==> k <= 32) ==>
   valid_conversion (BaseT (BytesT bd)) (BaseT AddressT)
 Proof
   Cases_on `bd` >> simp[valid_conversion_def]
@@ -118,6 +119,16 @@ Proof
   simp[evaluate_extract32_def, evaluate_convert_def,
        cv_stdTheory.word_of_bytes_be_eq_num_of_bytes,
        dividesTheory.compute_divides] >> EVAL_TAC
+QED
+
+(* Like Vyper, extract32 needs 32 bytes from start, whatever the output type. *)
+Theorem extract32_short_tail_eval:
+  evaluate_extract32 (REPLICATE 10 1w) 0 (UintT 256) =
+    INR (RuntimeError "evaluate_extract32 start") ∧
+  evaluate_extract32 (REPLICATE 4 1w ++ REPLICATE 28 0w) 1 (BytesT (Fixed 3)) =
+    INR (RuntimeError "evaluate_extract32 start")
+Proof
+  EVAL_TAC
 QED
 
 (* Exercise the repository's success-only checker against the ACTUAL unchanged

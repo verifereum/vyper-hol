@@ -142,7 +142,8 @@ Theorem arg_type_fits_assignable_type[local]:
 Proof
   ho_match_mp_tac arg_type_fits_ind >> rw[arg_type_fits_def] >>
   gvs[assignable_type_def] >>
-  metis_tac[well_formed_type_ArrayT_elem, well_formed_type_TupleT_EVERY]
+  metis_tac[well_formed_type_ArrayT_elem, well_formed_type_TupleT_EVERY,
+            arg_types_fit_LENGTH, LENGTH_NIL]
 QED
 
 Theorem type_widens_to_assignable_type:

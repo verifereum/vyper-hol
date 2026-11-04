@@ -24,25 +24,6 @@ Ancestors
 Libs
   monadsyntax
 
-(* A type with a length word has a default value laid out by a zero word,
-   in at least one word. *)
-Theorem has_length_word_default[local]:
-  !tenv t tv off s.
-    has_length_word t /\ evaluate_type tenv t = SOME tv ==>
-    val_in_memory tv (default_value tv) off (mstore off 0w s).vs_memory /\
-    val_wf tv (default_value tv) /\ 32 <= type_memory_size tv
-Proof
-  rpt gen_tac >> strip_tac >>
-  `is_bytestring_type t \/ ?et n. t = ArrayT et (Dynamic n)` by
-    (Cases_on `t` >> gvs[has_length_word_def] >>
-     rename1 `ArrayT _ bd` >> Cases_on `bd` >> gvs[has_length_word_def])
-  >- (drule_all bytestring_type_value >> strip_tac >>
-      gvs[default_value_def, val_in_memory_def, val_wf_def,
-          type_memory_size_def, mstore_mem_word_at_same, mem_bytes_at_def]) >>
-  gvs[evaluate_type_def, AllCaseEqs(), default_value_def, val_in_memory_def,
-      val_wf_def, type_memory_size_def, mstore_mem_word_at_same]
-QED
-
 Theorem annassign_empty_store_run[local]:
   !ctx func cenv cx es s id p sz w inst t tyv sc rest a st st' tenv.
     emit_void MSTORE [Var p; Lit 0w] st = ((), st') /\
@@ -71,8 +52,9 @@ Theorem annassign_empty_store_run[local]:
                  ?fuel'. run_from fuel' ctx func s = r
 Proof
   rpt strip_tac >>
-  drule_all has_length_word_default >>
-  disch_then (qspecl_then [`w2n w`, `s`] strip_assume_tac) >>
+  qspecl_then [`tenv`, `t`, `tyv`, `w2n w`, `(mstore (w2n w) 0w s).vs_memory`]
+    mp_tac memory_length_word_layout >>
+  impl_tac >- fs[mstore_mem_word_at_same] >> strip_tac >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s`, `id`, `p`, `sz`, `w`,
                `inst`, `default_value tyv`, `tyv`, `sc`, `rest`, `a`,
                `Lit 0w`, `st`, `st'`, `0w`] mp_tac annassign_word_store_run >>
@@ -244,7 +226,7 @@ QED
    the declared environment c, the local's ALLOCA, then e's fragment,
    which exits on an error or ends in vv_post; then the MSTORE of 0 at the
    local's buffer, whose region misses every other live local's, lays out
-   T's default value (has_length_word_default). *)
+   T's default value (memory_length_word_layout). *)
 Theorem compile_annassign_empty_stmt_frag:
   !ctx func cx lctx RetQ cenv ty id vtyp e es res es' tyv.
     eval_stmt cx (AnnAssign id vtyp e) es = (res, es') /\

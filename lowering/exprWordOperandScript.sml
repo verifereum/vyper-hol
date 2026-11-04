@@ -153,10 +153,10 @@ Proof
        LET_THM, is_word_type_def] >>
   rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >>
   gvs[word_result_ok_def]
-  >~ [`as_stack_val rt (compile_clamp_extract32 raw clamp st3) = _`] >-
+  >~ [`as_stack_val rt (compile_clamp_basetype raw ret_ty st4) = _`] >-
     (irule as_stack_val_word_result_ok >> goal_assum (drule_at Any) >>
-     rpt strip_tac >> drule_all compile_extract32_safe_operand >>
-     strip_tac >> metis_tac[compile_clamp_extract32_safe_operand])
+     rpt strip_tac >> drule_all compile_extract32_load_safe_operand >>
+     strip_tac >> metis_tac[compile_clamp_basetype_safe_operand])
   >~ [`as_ptr_val _ _ _ = _`] >- metis_tac[as_ptr_val_word_result_ok] >>
   gvs[is_word_type_def]
 QED

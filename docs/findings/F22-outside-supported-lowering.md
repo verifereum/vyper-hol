@@ -66,7 +66,7 @@ regressions. No named original fixture exercises these excluded mismatches.
 | Widths not multiple8 | source type/evaluator permits widths; target uses byte-based width/8 clamps | `supported_int_width` |
 | Memory-type `empty` | source constructs empty/default aggregate; lowering supplies pointer0 without constructing it | Empty only W |
 | Storage Bytes/String | source storage codec versus lowering word/copy representation differs | storage restricted to full-word scalars/arrays/structs |
-| Other conversions | no general source/target agreement claimed | exact `supported_conversion` list |
+| Conversions | checker width restrictions apply | width-aware `valid_conversion` relation |
 | Several ABI encode args / other flags | concrete example; lower encodes first arg; current dispatcher DOES honor ensure via enc_ty | exact single tuple/false ensure/SOME4-byte ID form |
 | ABI decode unwrap flag | source wrapper-sensitive decoding; lowering ignores flag | false flag, identical tuple target/result,≥2 members |
 | Indexed aggregate / bytes20 events | incompatible aggregate topics;20-byte values conflated with address encoding | scalar fields; bytes20 excluded |
@@ -92,7 +92,7 @@ Current producer boundaries are
 
 The whitelist theorems prove **exclusion/support**, not these programs'
 semantic correctness: [expression form properties](../../lowering/supported/supportedExprFormPropsScript.sml)
-`supported_power_shift_counterexamples`, `supported_conversion_exclusion_coverage`,
+`supported_power_shift_counterexamples`, `conversion_width_boundary_rejection`,
 `supported_abi_forms_coverage`; [expression properties](../../lowering/supported/supportedExprPropsScript.sml)
 `supported_storage_base_exclusions`, `supported_effect_nesting_counterexamples`;
 [statement properties](../../lowering/supported/supportedStmtPropsScript.sml)

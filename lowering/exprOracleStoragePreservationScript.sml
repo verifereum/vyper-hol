@@ -208,20 +208,37 @@ Resume eval_expr_oracle_storage_results_mutual[Expr_Call_IntCall]:
   qpat_assum `eval_expr _ _ _ = _` mp_tac >>
   rewrite_tac[Once evaluate_def] >>
   simp_tac(srw_ss())[bind_apply, ignore_bind_apply, LET_THM] >>
-  NTAC 4 (
-    BasicProvers.TOP_CASE_TAC >>
-    imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
-    BasicProvers.VAR_EQ_TAC >>
-    reverse BasicProvers.TOP_CASE_TAC
-    >- (strip_tac >> gvs[type_check_def, assert_def, lift_option_type_def] >>
-        metis_tac[runtime_storage_consistent_storage])) >>
+  BasicProvers.TOP_CASE_TAC >>
+  drule type_check_state >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC
+  >- (rpt (qpat_x_assum `!a. _` kall_tac) >> strip_tac >>
+      gvs[type_check_def, assert_def] >>
+      drule runtime_storage_consistent_storage >> simp[]) >>
+  BasicProvers.TOP_CASE_TAC >>
+  drule lift_option_type_state >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC
+  >- (rpt (qpat_x_assum `!a. _` kall_tac) >> strip_tac >>
+      gvs[lift_option_type_def] >>
+      drule runtime_storage_consistent_storage >> simp[]) >>
+  BasicProvers.TOP_CASE_TAC >>
+  drule lift_option_type_state >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC
+  >- (rpt (qpat_x_assum `!a. _` kall_tac) >> strip_tac >>
+      gvs[lift_option_type_def] >>
+      drule runtime_storage_consistent_storage >> simp[]) >>
+  BasicProvers.TOP_CASE_TAC >>
+  drule type_check_state >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC
+  >- (rpt (qpat_x_assum `!a. _` kall_tac) >> strip_tac >>
+      gvs[type_check_def, assert_def] >>
+      drule runtime_storage_consistent_storage >> simp[]) >>
   disch_then kall_tac >>
   rename1 `runtime_storage_consistent env cx st` >>
   qpat_x_assum `oracle_internal_call_storage _ _` mp_tac >>
   rewrite_tac[oracle_internal_call_storage_def] >>
   disch_then (qspecl_then [`env`,`ty`,`es`,`extra`,`st`,`res`,`st'`] mp_tac) >>
   impl_tac >- (
-    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    asm_rewrite_tac[] >>
     rpt gen_tac >> strip_tac >>
     gvs[type_check_def, assert_def, lift_option_type_def, AllCaseEqs(),
         int_calls_expr_def, supported_expr_exists_def, expr_evm_run_root_def,

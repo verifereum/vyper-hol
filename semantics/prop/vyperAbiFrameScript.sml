@@ -66,21 +66,48 @@ Proof
   `!s. R s s` by
     (gen_tac >> qpat_x_assum `!s mem. R s (s with abi_memory := mem)`
       (qspecl_then [`s`,`s.abi_memory`] mp_tac) >> simp[]) >>
-  rpt conj_tac >>
-  TRY (irule state_rel_frame_pure >> simp[] >> rpt strip_tac >>
-    FIRST [drule return_state, drule raise_state, drule lift_option_state,
-      drule lift_option_type_state, drule lift_sum_state, drule check_state,
-      drule read_storage_slot_state, drule get_storage_backend_state,
-      drule lookup_global_state, drule get_immutables_state, drule read_result_state] >> simp[] >> NO_TAC) >>
-  simp[state_rel_frame_def, get_scopes_def, return_def,
-    capture_abi_memory_def, capture_abi_memory_at_def,
-    capture_abi_immutable_def, write_abi_memory_def,
-    write_abi_memory_child_def, write_abi_immutables_def,
-    mark_abi_memory_def, mark_abi_captures_def,
-    release_abi_memory_def] >>
-  rpt gen_tac >> rpt (CASE_TAC >> simp[return_def, raise_def]) >>
-  once_rewrite_tac [abi_memory_update, abi_immutables_update] >>
-  first_assum MATCH_ACCEPT_TAC
+  rpt conj_tac
+  >- (irule state_rel_frame_pure >> simp[] >> metis_tac[return_state])
+  >- (irule state_rel_frame_pure >> simp[] >> metis_tac[raise_state])
+  >- (irule state_rel_frame_pure >> simp[] >> metis_tac[lift_option_state])
+  >- (irule state_rel_frame_pure >> simp[] >> metis_tac[lift_option_type_state])
+  >- (irule state_rel_frame_pure >> simp[] >> metis_tac[lift_sum_state])
+  >- (irule state_rel_frame_pure >> simp[] >> metis_tac[check_state])
+  >- simp[state_rel_frame_def, get_scopes_def, return_def]
+  >- (irule state_rel_frame_pure >> simp[] >> metis_tac[read_storage_slot_state])
+  >- (irule state_rel_frame_pure >> simp[] >> metis_tac[get_storage_backend_state])
+  >- (irule state_rel_frame_pure >> simp[] >> metis_tac[lookup_global_state])
+  >- (irule state_rel_frame_pure >> simp[] >> metis_tac[get_immutables_state])
+  >- (irule state_rel_frame_pure >> simp[] >> metis_tac[read_result_state])
+  >- (simp[state_rel_frame_def, capture_abi_memory_at_def] >> gen_tac >>
+      Cases_on `encode_value root v` >> simp[return_def, raise_def] >>
+      Cases_on `encode_value tv child` >> simp[return_def, raise_def])
+  >- (simp[state_rel_frame_def, capture_abi_memory_def] >> gen_tac >>
+      Cases_on `encode_value tv v` >> simp[return_def, raise_def])
+  >- (simp[state_rel_frame_def, capture_abi_immutable_def] >> gen_tac >>
+      Cases_on `encode_value tv v` >> simp[return_def, raise_def])
+  >- (simp[state_rel_frame_def, write_abi_memory_def, write_abi_memory_child_def] >>
+      gen_tac >> IF_CASES_TAC >> simp[return_def] >>
+      Cases_on `evaluate_subscripts tv v subs` >> simp[raise_def] >>
+      Cases_on `abi_path_offset tv subs` >> simp[raise_def] >>
+      rename1 `abi_path_offset tv subs = SOME p` >>
+      PairCases_on `p` >> simp[] >>
+      Cases_on `abi_operation_writes p1 x ao` >>
+      pure_rewrite_tac[option_case_def, return_def, raise_def, SND] >>
+      once_rewrite_tac[abi_memory_update] >> asm_simp_tac (srw_ss()) [])
+  >- (simp[state_rel_frame_def, write_abi_immutables_def] >> gen_tac >>
+      IF_CASES_TAC >> simp[return_def] >>
+      Cases_on `abi_path_offset tv subs` >> simp[raise_def] >>
+      PairCases_on `x` >> simp[] >>
+      Cases_on `evaluate_subscripts tv v subs` >> simp[raise_def] >>
+      Cases_on `abi_operation_writes x1 x ao` >>
+      pure_rewrite_tac[option_case_def, return_def, raise_def] >>
+      once_rewrite_tac[abi_immutables_update] >> asm_simp_tac (srw_ss()) [])
+  >- simp[state_rel_frame_def, mark_abi_memory_def, return_def]
+  >- simp[state_rel_frame_def, mark_abi_captures_def, return_def]
+  >- (pure_rewrite_tac[state_rel_frame_def, release_abi_memory_def, return_def] >>
+      once_rewrite_tac[abi_memory_update] >> asm_simp_tac (srw_ss()) [])
+  >> simp[state_rel_frame_def, return_def]
 QED
 
 local

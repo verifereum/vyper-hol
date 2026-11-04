@@ -10082,7 +10082,11 @@ Resume eval_scc_type_sound_results_mutual[AbiExpr_Subscript]:
                      expr_type_def, no_type_error_result_def])]) >>
           strip_tac >> gvs[no_type_error_result_def]) >>
       strip_tac >> gvs[no_type_error_result_def]) >>
-  strip_tac >> gvs[no_type_error_result_def])
+  strip_tac >>
+  qpat_x_assum `INR _ = res` (SUBST1_TAC o SYM) >>
+  qpat_x_assum `_ = st'` (SUBST1_TAC o SYM) >>
+  simp_tac (srw_ss()) [] >>
+  rpt conj_tac >> first_assum MATCH_ACCEPT_TAC)
 QED
 
 Resume eval_scc_type_sound_results_mutual[AbiExpr_Attribute]:

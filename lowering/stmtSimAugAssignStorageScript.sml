@@ -358,8 +358,10 @@ Proof
   PairCases_on `nsid` >>
   gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
+      builtin_operands_ok_def, int_literal_value_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm,
-      vyperASTTheory.expr_type_def]
+      vyperASTTheory.expr_type_def] >>
+  metis_tac[]
 QED
 
 (* A storage or transient variable's read simulates: exprSimLeaves' read
@@ -428,7 +430,7 @@ Proof
   drule_all eval_augassign_toplevel_assign >> strip_tac >>
   `expr_body_pre cenv cx env
      (Builtin ty (Bop bop) [TopLevelName ty (src, id); e]) es` by
-    (irule expr_body_pre_augassign_toplevel >> simp[]) >>
+    (irule expr_body_pre_augassign_toplevel >> simp[] >> metis_tac[]) >>
   `expr_sim_case nocalls ctx func cenv cx
      (Builtin ty (Bop bop) [TopLevelName ty (src, id); e])` by
     (irule compile_bop_word_case >>
