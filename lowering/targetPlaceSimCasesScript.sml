@@ -547,7 +547,34 @@ Theorem target_subscript_nopop_case:
     ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
      expr_sim_case nocalls ctx func cenv cx e /\
      expr_vv_case nocalls ctx func cenv cx e) /\
-    ~target_has_pop (SubscriptTarget bt e) ==>
+    ~target_has_pop (SubscriptTarget bt e) /\
+    (!st r st' l.
+       compile_get_target_ptr compile_expr cenv bt st = (r, st') /\
+       FST (SND r) = SOME l /\ is_slot_addressed l /\
+       (!kt vt. SND (SND r) <> SOME (MapPT kt vt)) ==>
+       ~expr_has_effect e) ==>
+    target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
+Proof
+  cheat
+QED
+
+(* An element of a storage or transient array target whose index has a
+   call (expr_has_effect).  ADMITTED (cheat), with exprSimPlaces'
+   compile_subscript_array_storage_call_case on the read side: the call can
+   shrink the array the target already points into (outer[0][shrink()] = v),
+   and stmt_state_rel relates no dead slots, so nothing says the element's
+   slot is still the source's place.  A storage judgment that relates dead
+   slots replaces this lemma. *)
+Theorem target_subscript_storage_call_case:
+  !nocalls ctx func cenv cx bt e st r st' l.
+    target_case nocalls ctx func cenv cx bt /\
+    ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
+     expr_sim_case nocalls ctx func cenv cx e /\
+     expr_vv_case nocalls ctx func cenv cx e) /\
+    compile_get_target_ptr compile_expr cenv bt st = (r, st') /\
+    FST (SND r) = SOME l /\ is_slot_addressed l /\
+    (!kt vt. SND (SND r) <> SOME (MapPT kt vt)) /\
+    expr_has_effect e ==>
     target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
 Proof
   cheat
@@ -585,7 +612,13 @@ Theorem target_subscript_case:
 Proof
   rpt strip_tac >> Cases_on `target_has_pop (SubscriptTarget bt e)`
   >- metis_tac[target_subscript_pop_case] >>
-  metis_tac[target_subscript_nopop_case]
+  Cases_on `?st r st' l.
+              compile_get_target_ptr compile_expr cenv bt st = (r, st') /\
+              FST (SND r) = SOME l /\ is_slot_addressed l /\
+              (!kt vt. SND (SND r) <> SOME (MapPT kt vt)) /\
+              expr_has_effect e`
+  >- metis_tac[target_subscript_storage_call_case] >>
+  irule target_subscript_nopop_case >> metis_tac[]
 QED
 
 (* ===== Every target ===== *)

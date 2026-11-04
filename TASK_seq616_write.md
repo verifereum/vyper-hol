@@ -17,7 +17,12 @@ Theorem target_subscript_nopop_case:
     ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
      expr_sim_case nocalls ctx func cenv cx e /\
      expr_vv_case nocalls ctx func cenv cx e) /\
-    ~target_has_pop (SubscriptTarget bt e) ==>
+    ~target_has_pop (SubscriptTarget bt e) /\
+    (!st r st' l.
+       compile_get_target_ptr compile_expr cenv bt st = (r, st') /\
+       FST (SND r) = SOME l /\ is_slot_addressed l /\
+       (!kt vt. SND (SND r) <> SOME (MapPT kt vt)) ==>
+       ~expr_has_effect e) ==>
     target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
 ```
 
@@ -27,7 +32,7 @@ Definitions the statement uses: `target_case`, `target_post`, `place_ptr_rel`, `
 
 ## Completion Criteria
 
-1. `holbuild -j2 build targetPlaceSimCasesTheory` passes with no CHEAT warning for `target_subscript_nopop_case` (`target_subscript_pop_case` is out of scope and stays).
+1. `holbuild -j2 build targetPlaceSimCasesTheory` passes with no CHEAT warning for `target_subscript_nopop_case` (`target_subscript_pop_case` and `target_subscript_storage_call_case` are out of scope and stay; the latter, and the matching premise of the frozen statement, were added 2026-11-04 with the design reviewer's approval).
 2. No duplicate or near-duplicate lemmas: search lowering/ and semantics/ before proving a helper; each helper exists once, in its most general form, in the theory where it belongs. A new theory (e.g. `lowering/targetSubscriptSimScript.sml`, imported by targetPlaceSimCases) is fine for the case's machinery; a lemma purely about source evaluation (e.g. that a pop-free expression leaves the caller's scopes unchanged) goes in a lowering theory too, not in semantics/.
 3. No `TRY`/`ORELSE` around `metis_tac` or other search; select goals with `>~`, `>-`, `>|`. No tactic-timeout override. No new `cheat`, axiom, or changed statement anywhere.
 4. Commit messages end with these two lines:
