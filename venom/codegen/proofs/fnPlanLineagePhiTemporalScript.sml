@@ -1013,13 +1013,17 @@ QED
      through overwrite and retirement. No Original is discarded on death.
      These are membership/safety interfaces, not physical-order deletion rules.
 
-   Still unproved producers/assembly (no theorem below assumes them proved):
-   1. Instantiate class_of from the actual PHI operand map, with exactness for
-      FILTER is_var_operand inst_operands, including repeated operands. Use
-      the accepted map-fold boundaries, not a second map implementation.
-   2. Realize both transfer entries in one origin suffix with this certificate
-      and class coverage. Activation is established separately, but must be
-      connected to the *physical* transfer-generated entry slots.
+   Producer/assembly status (updated after E0096):
+   1. Native class construction and operand exactness are discharged in
+      fnPlanLineagePhiClasses and fnPlanLineagePhiMaps; reuse these boundaries
+      rather than introducing a second map implementation.
+   2. Common physical cell suffix production is discharged by
+      successful_join_edges_common_cells (fnPlanLineageJoinEntry) and
+      lineage_dfs_join_common_cells (after the frozen lineage declarations).
+      These derive actual successful predecessor origins and edge totality;
+      they do not restrict lower prefixes or spilled maps. Connecting the
+      independent activation coverage to the evolving temporal schedule
+      remains assembly work, not another assumed entry correspondence.
    3. Derive output class_of=NONE using the accepted global
       reachable_phi_prefix_no_output_use_alias, and derive current class death
       using analyzed_phi_incoming_dead_after. The abstract class premises in
