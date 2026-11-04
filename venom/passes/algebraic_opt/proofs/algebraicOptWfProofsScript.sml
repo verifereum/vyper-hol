@@ -1515,6 +1515,103 @@ val _ = List.app (fn th =>
    ao_cmp_flip_apply_block_structure, ao_mem_fn_insts_blocks,
    ao_cmp_flip_apply_fn_well_formed, ao_cmp_flip_function_supply_well_formed];
 
+Theorem ao_handle_offset_inst_wf:
+  inst_wf i ==> inst_wf (ao_handle_offset_inst i)
+Proof
+  Cases_on `i.inst_opcode = ADD`
+  >- (Cases_on `i.inst_operands` >- simp[ao_handle_offset_inst_def] >>
+      rename1 `i.inst_operands = a::xs` >>
+      Cases_on `a` >> simp[ao_handle_offset_inst_def] >>
+      Cases_on `xs` >- simp[] >>
+      rename1 `i.inst_operands = Label l::b::ys` >>
+      Cases_on `b` >> simp[] >>
+      Cases_on `ys` >> simp[inst_wf_def]) >>
+  simp[ao_handle_offset_inst_def]
+QED
+
+Theorem ao_offset_block_structure:
+  bb_well_formed bb ==>
+  bb_well_formed (bb with bb_instructions := MAP ao_handle_offset_inst bb.bb_instructions) /\
+  bb_succs (bb with bb_instructions := MAP ao_handle_offset_inst bb.bb_instructions) = bb_succs bb
+Proof
+  strip_tac >> conj_tac
+  >- (gvs[bb_well_formed_def] >>
+      simp[listTheory.LAST_MAP, ao_handle_offset_inst_structure] >>
+      conj_tac
+      >- (rpt strip_tac >> gvs[listTheory.EL_MAP, ao_handle_offset_inst_structure]) >>
+      rpt strip_tac >> gvs[listTheory.EL_MAP, ao_handle_offset_inst_structure] >>
+      metis_tac[]) >>
+  Cases_on `bb.bb_instructions = []` >- gvs[bb_well_formed_def] >>
+  simp[bb_succs_def, listTheory.LAST_MAP, ao_handle_offset_inst_structure] >>
+  Cases_on `bb.bb_instructions` >> gvs[] >>
+  pure_rewrite_tac[GSYM listTheory.MAP] >>
+  simp[listTheory.LAST_MAP, ao_handle_offset_inst_structure]
+QED
+
+Theorem ao_offset_fn_insts:
+  fn0 = (fn with fn_blocks := MAP (\bb. bb with bb_instructions :=
+    MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) ==>
+  fn_insts fn0 = MAP ao_handle_offset_inst (fn_insts fn)
+Proof
+  `!bbs. fn_insts_blocks (MAP (\bb. bb with bb_instructions :=
+      MAP ao_handle_offset_inst bb.bb_instructions) bbs) =
+    MAP ao_handle_offset_inst (fn_insts_blocks bbs)` by
+    (Induct >> simp[fn_insts_blocks_def, listTheory.MAP_APPEND]) >>
+  strip_tac >> gvs[fn_insts_def]
+QED
+
+Theorem ao_offset_fn_inst_wf:
+  fn0 = (fn with fn_blocks := MAP (\bb. bb with bb_instructions :=
+    MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) /\
+  fn_inst_wf fn ==> EVERY inst_wf (fn_insts fn0)
+Proof
+  strip_tac >> drule ao_offset_fn_insts >>
+  simp[listTheory.EVERY_MAP] >> disch_then kall_tac >>
+  gvs[fn_inst_wf_def, listTheory.EVERY_MEM, fn_insts_def,
+      ao_mem_fn_insts_blocks] >>
+  metis_tac[ao_handle_offset_inst_wf]
+QED
+
+Theorem ao_offset_fn_inst_bound:
+  fn0 = (fn with fn_blocks := MAP (\bb. bb with bb_instructions :=
+    MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) /\
+  EVERY (\i. i.inst_id < n) (fn_insts fn) ==>
+  EVERY (\i. i.inst_id < n) (fn_insts fn0)
+Proof
+  strip_tac >> drule ao_offset_fn_insts >>
+  simp[listTheory.EVERY_MAP, ao_handle_offset_inst_structure]
+QED
+
+Theorem ao_offset_fn_well_formed:
+  fn0 = (fn with fn_blocks := MAP (\bb. bb with bb_instructions :=
+    MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) /\
+  wf_function fn ==> wf_function fn0
+Proof
+  strip_tac >>
+  `fn_insts fn0 = MAP ao_handle_offset_inst (fn_insts fn)` by
+    (irule ao_offset_fn_insts >> simp[]) >>
+  `fn_inst_ids_distinct fn0` by
+    (gvs[ao_fn_inst_ids_distinct_alt, listTheory.MAP_MAP_o,
+         combinTheory.o_DEF, ao_handle_offset_inst_structure, wf_function_def]) >>
+  gvs[wf_function_def, fn_labels_def, fn_has_entry_def] >>
+  simp[listTheory.MAP_MAP_o, combinTheory.o_DEF, listTheory.MEM_MAP] >>
+  conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[ao_offset_block_structure]) >>
+  gvs[fn_succs_closed_def, fn_labels_def] >>
+  simp[listTheory.MEM_MAP, listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+  rpt strip_tac >> gvs[] >>
+  `bb_well_formed bb'` by metis_tac[] >>
+  drule_all ao_offset_block_structure >> strip_tac >>
+  `MEM succ (MAP (\bb. bb.bb_label) fn.fn_blocks)` by metis_tac[] >>
+  gvs[listTheory.MEM_MAP] >>
+  qexists `bb with bb_instructions := MAP ao_handle_offset_inst bb.bb_instructions` >>
+  simp[] >> metis_tac[]
+QED
+
+val _ = List.app (fn th =>
+  if null (hyp th) then () else raise Fail "residual hypotheses in AO offset")
+  [ao_handle_offset_inst_wf, ao_offset_block_structure, ao_offset_fn_insts,
+   ao_offset_fn_inst_wf, ao_offset_fn_inst_bound, ao_offset_fn_well_formed];
+
 Theorem ao_preserves_wf_function_proof:
   !sup fn fn' sup'.
     wf_function fn /\
