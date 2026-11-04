@@ -3241,9 +3241,11 @@ Theorem probe_word_final_runtime_frame:
     (probe_word_final_state s).vs_pending_deletions = s.vs_pending_deletions /\
     (probe_word_final_state s).vs_immutables = s.vs_immutables
 Proof
-  simp[probe_word_final_state_def, sstore_def, probe_word_copied_runtime_frame,
-       jump_to_def, probe_word_load_exit_state_def, update_var_def,
-       probe_word_loaded_runtime_frame, probe_word_entry_runtime_frame]
+  gen_tac >> rpt conj_tac >>
+  simp[probe_word_final_state_def, sstore_def, jump_to_def, update_var_def] >>
+  simp[probe_word_copied_runtime_frame, probe_word_load_exit_state_def,
+       jump_to_def, update_var_def, probe_word_loaded_runtime_frame,
+       probe_word_entry_runtime_frame]
 QED
 
 Theorem probe_word_function_entry:
@@ -3289,7 +3291,8 @@ Proof
       ctx probe_word_function cs =
     IntRet <| iret_values := [0w]; iret_adopt_fmp := NONE |>
       (probe_word_final_state cs)` by
-    (qspecl_then [`cs`, `fuel`, `ctx`] mp_tac probe_word_run_function >> simp[]) >>
+    (qspecl_then [`cs`, `fuel`, `ctx`] mp_tac probe_word_run_function >>
+     gvs[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]) >>
   gvs[] >>
   simp[Once step_inst_def, decode_invoke_def, bind_outputs_def, adopt_return_fmp_def]
 QED
@@ -3428,6 +3431,7 @@ Proof
       (merge_callee_state s (probe_word_final_state cs))) =
     contract_storage (probe_word_final_state cs)` by
     simp[contract_storage_def, update_var_def, probe_word_final_call_ctx] >>
+  gvs[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
   simp[probe_word_final_storage, sload_def]
 QED
 
@@ -3639,7 +3643,8 @@ Proof
     (gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
   `mem_bytes_at lo sz (probe_word_final_state cs).vs_memory =
    mem_bytes_at lo sz cs.vs_memory` by
-    (irule probe_word_final_memory_frame >> simp[]) >>
+    (irule probe_word_final_memory_frame >>
+     gvs[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]) >>
   simp[update_var_def]
 QED
 
@@ -3658,7 +3663,8 @@ Proof
   qexists_tac `s` >>
   simp[merge_callee_local_fields, lookup_var_def] >>
   rpt strip_tac >> gvs[] >> sym_tac >>
-  drule_all probe_word_invoke_local_memory >>
+  drule_all (SRULE [dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``] probe_word_invoke_local_memory) >>
   disch_then (qspec_then `out` mp_tac) >> simp[update_var_def]
 QED
 
@@ -3692,7 +3698,8 @@ Proof
   qexists_tac `s` >>
   simp[update_var_def] >>
   conj_tac
-  >- (simp[probe_word_final_memory_footprint,
+  >- (gvs[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+      simp[probe_word_final_memory_footprint,
            immutableMemoryFrameTheory.immutable_mstore_capacity] >>
       decide_tac) >>
   reverse conj_tac >- gvs[stmt_state_rel_def, state_rel_def] >>
@@ -3701,7 +3708,8 @@ Proof
     (gvs[stmt_state_rel_def, immutable_alloca_sep_def] >> metis_tac[]) >>
   `mem_bytes_at off (type_memory_size tv) (probe_word_final_state cs).vs_memory =
    mem_bytes_at off (type_memory_size tv) cs.vs_memory` by
-    (irule probe_word_final_memory_frame >> simp[] >> decide_tac) >>
+    (irule probe_word_final_memory_frame >>
+     gvs[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >> decide_tac) >>
   simp[]
 QED
 
@@ -3753,8 +3761,10 @@ Proof
   (impl_tac >- metis_tac[wordsTheory.n2w_w2n]) >> strip_tac >>
   gvs[] >>
   qmatch_goalsub_abbrev_tac `stmt_state_rel _ _ _ _ (set_storage _ _ F stor)` >>
-  drule_all probe_word_invoke_local_ptrs >> strip_tac >>
-  drule_all probe_word_invoke_immutables >> strip_tac >>
+  drule_all (SRULE [dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]
+    probe_word_invoke_local_ptrs) >> strip_tac >>
+  drule_all (SRULE [dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]
+    probe_word_invoke_immutables) >> strip_tac >>
   `immutable_alloca_sep func cenv probe_word_context es s` by
     gvs[stmt_state_rel_def] >>
   drule_all probe_word_invoke_immutable_sep >>
@@ -3928,7 +3938,7 @@ Proof
         run_blocks n ctx probe_word_function cs` by
     (gen_tac >> irule venomExecProofsTheory.run_blocks_eq_from_run_block_eq >> simp[]) >>
   qspecl_then [`cs`, `fuel`, `ctx`] mp_tac probe_word_run_function >>
-  simp[] >> strip_tac >>
+  gvs[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >> strip_tac >>
   `setup_callee (probe_word_function with fn_name := name) args s = SOME cs` by
     (qpat_x_assum `setup_callee _ _ _ = SOME cs` mp_tac >>
      simp[setup_callee_def]) >>
@@ -4178,7 +4188,8 @@ Proof
         venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[]) >>
   `mem_bytes_at off sz (probe_word_final_state cs).vs_memory =
    mem_bytes_at off sz cs.vs_memory` suffices_by simp[] >>
-  irule probe_word_final_memory_frame >> simp[] >> decide_tac
+  irule probe_word_final_memory_frame >>
+  gvs[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >> decide_tac
 QED
 
 
@@ -4930,3 +4941,75 @@ Definition probe_deep_machine_state_def:
   probe_deep_machine_state =
     (init_venom_state "entry") with vs_accounts := probe_deep_source_state.accounts
 End
+
+Theorem probe_deep_blocks_labels:
+  MAP (\bb. bb.bb_label) probe_deep_function.fn_blocks =
+    ["entry"; "@wcopy_cond_0"; "@wcopy_body_1"; "@wcopy_exit_2";
+     "@dyn_cond_3"; "@dyn_body_4"; "@wcopy_cond_6"; "@wcopy_body_7";
+     "@wcopy_exit_8"; "@dyn_exit_5"]
+Proof
+  EVAL_TAC
+QED
+
+(* Normalize one actual block, retaining the recursive continuation opaque.
+   Word reductions are essential before the next block's lookup/branch. *)
+fun probe_deep_block_tac q =
+  pure_rewrite_tac[SRULE [] (Q.INST [`fuel` |-> q] run_blocks_unfold)] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_blocks``]) >>
+  simp[SF wordsLib.WORD_ss, dimword_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``, bool_to_word_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_blocks``]);
+
+Definition probe_deep_suffix_def:
+  probe_deep_suffix =
+    emitted_insts probe_deep_compiled
+      (SND (compile_array_subscript (Lit 2w) (Lit 0w) T 1 1 1 F
+        (\op. emit_op SLOAD [op]) probe_deep_compiled))
+End
+
+Theorem probe_deep_machine_observation:
+  case run_blocks 40 ctx probe_deep_function probe_deep_machine_state of
+    IntRet vs s =>
+      lookup_storage 2w (s.vs_accounts 0w).storage = 0w /\
+      sload 2w s = 0w /\
+      (case run_inst_seq probe_deep_suffix s of
+         Abort Revert_abort s' => T | _ => F)
+  | _ => F
+Proof
+  probe_deep_block_tac `39` >>
+  probe_deep_block_tac `38` >>
+  probe_deep_block_tac `37` >>
+  probe_deep_block_tac `36` >>
+  probe_deep_block_tac `35` >>
+  probe_deep_block_tac `34` >>
+  probe_deep_block_tac `33` >>
+  probe_deep_block_tac `32` >>
+  probe_deep_block_tac `31` >>
+  probe_deep_block_tac `30` >>
+  probe_deep_block_tac `29` >>
+  probe_deep_block_tac `28` >>
+  probe_deep_block_tac `27` >>
+  probe_deep_block_tac `26` >>
+  probe_deep_block_tac `25` >>
+  probe_deep_block_tac `24` >>
+  probe_deep_block_tac `23` >>
+  probe_deep_block_tac `22` >>
+  probe_deep_block_tac `21` >>
+  probe_deep_block_tac `20` >>
+  probe_deep_block_tac `19` >>
+  probe_deep_block_tac `18` >>
+  probe_deep_block_tac `17`
+QED
+
+(* Diagnostic premise ledger:
+   probe_deep_layout/capture/source_call/source_extension and
+   probe_deep_machine_observation are concrete computations with no
+   simulation hypotheses. The actual compiled copy returns with header 2
+   zero, and the actual compiled dynamic-array suffix at that header aborts;
+   the captured source place instead extends successfully to slot 3.
+   This does NOT establish a counterexample to target_subscript_nopop_case:
+   its universally quantified base and expression case premises, and a
+   compatible target_pre/expr_sim_inv witness, have not been validated for
+   this three-level program. No such premise is assumed by this diagnostic.
+   The dead donor header is zero in both initial source and machine stores.
+   A donor-header-one control is not included. *)
