@@ -6,7 +6,7 @@
 
 Theory evalCompilerBytecodeAbiDynamic
 Ancestors evalCompilerSubsetAbiBuiltins compileVyper concretizeMemLocDefs codegenReadyCompute stackPlanGenCompute alist byte integer_word option cv_std
-Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
+Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib intReduce
 
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps [".."]

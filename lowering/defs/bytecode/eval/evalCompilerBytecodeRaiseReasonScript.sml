@@ -216,7 +216,6 @@ val raise_reason_codegen_step1 = SIMP_CONV pure_ss
   ``codegen_assembly ^raise_reason_rpolicy ^raise_reason_unit``
 val raise_reason_codegen_step2 = SIMP_CONV pure_ss
   [raise_reason_execute_context_eval,
-   raise_reason_data_asm_eval,
    raise_reason_raw_asm_eval,
    raise_reason_assembly_safe_eval,
    raise_reason_symbols_ok_eval, AND_CLAUSES]

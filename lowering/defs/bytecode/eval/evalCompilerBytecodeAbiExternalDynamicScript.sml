@@ -192,7 +192,6 @@ val external_dynamic_codegen_step1 = SIMP_CONV pure_ss
   ``codegen_assembly ^external_dynamic_rpolicy ^external_dynamic_unit``
 val external_dynamic_codegen_step2 = SIMP_CONV pure_ss
   [external_dynamic_execute_context_eval,
-   external_dynamic_data_asm_eval,
    external_dynamic_raw_asm_eval,
    external_dynamic_assembly_safe_eval,
    external_dynamic_symbols_ok_eval, AND_CLAUSES]
