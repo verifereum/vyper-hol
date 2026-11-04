@@ -114,7 +114,7 @@ Proof
     dft_erase_def, dft_occ_update_def]
 QED
 
-Theorem dft_pos_cleared_phase[local]:
+Theorem dft_pos_cleared_phase:
   dft_pos_phase C D fi bi pre x call post l r /\
   dft_original_context Corig C /\ dft_original_context Dorig D /\
   dft_occ_oracle_next w C l = l with
@@ -133,7 +133,7 @@ Proof
   fs[dft_pos_phase_def, dft_pos_stack_def, dft_pos_control_def] >> metis_tac[]
 QED
 
-Theorem dft_pos_pending_failure[local]:
+Theorem dft_pos_pending_failure:
   dft_pos_frame C D fi bi pre x call post (SOME z) lf rf /\
   l.dft_occ_core = DftOpen (DftDone (IntRet ret cs)) (lf::ls) nL /\
   r.dft_occ_core = DftOpen (DftDone (IntRet ret cs)) (rf::rs) nR /\
@@ -155,7 +155,7 @@ Proof
   simp[dft_open_return_def, dft_fill_frame_def, GSYM dft_restore_def]
 QED
 
-Theorem dft_pos_nonreturn_clear[local]:
+Theorem dft_pos_nonreturn_clear:
   c.dft_occ_core = DftOpen (DftDone result) stack n /\
   (!ret cs. result <> IntRet ret cs) ==>
   dft_occ_oracle_next w C c = c with
@@ -201,7 +201,7 @@ Proof
   goal_assum (drule_at Any) >> metis_tac[]
 QED
 
-Theorem dft_pos_plain_return_success[local]:
+Theorem dft_pos_plain_return_success:
   dft_pos_phase C D fi bi pre x call post l r /\
   dft_original_context Corig C /\ dft_original_context Dorig D /\
   l.dft_occ_core = DftOpen (DftDone (IntRet ret cs)) (lf::ls) nL /\
@@ -237,7 +237,7 @@ Proof
   gvs[dft_pos_control_def] >> metis_tac[]
 QED
 
-Theorem dft_pos_plain_return_failure[local]:
+Theorem dft_pos_plain_return_failure:
   dft_pos_frame C D fi bi pre x call post NONE lf rf /\
   l.dft_occ_core = DftOpen (DftDone (IntRet ret cs)) (lf::ls) nL /\
   r.dft_occ_core = DftOpen (DftDone (IntRet ret cs)) (rf::rs) nR /\
