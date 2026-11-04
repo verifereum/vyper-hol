@@ -1,6 +1,7 @@
 (* Source preconditions and invariant preservation for expression evaluation. *)
 Theory exprSimSource
 Ancestors
+  exprWordOperand
   compileEnv valueEncoding
   exprSimHypsDefs exprSimDefs loweringSlice allocLimits gasContext list finite_map pair
   vyperTyping
@@ -482,3 +483,65 @@ val () = List.app (fn th =>
      then print "WORD_TYPE_SOURCE_AUDIT OK\n"
      else raise Fail "memory source fact inherited admission"
   end) [word_value_type_word, word_value_type_memory_size];
+
+Theorem env_consistent_var_type_evaluates:
+  !env cx st id ty.
+    env_consistent env cx st /\ FLOOKUP env.var_types id = SOME ty ==>
+    IS_SOME (evaluate_type (get_tenv cx) ty)
+Proof
+  rw[env_consistent_def, env_scopes_consistent_def] >>
+  Cases_on `lookup_scopes id st.scopes` >>
+  metis_tac[optionTheory.IS_SOME_DEF]
+QED
+
+Theorem expr_body_pre_var_types_well_formed:
+  !cenv cx env e es.
+    expr_body_pre cenv cx env e es ==>
+    !id t. FLOOKUP env.var_types id = SOME t ==>
+           well_formed_type env.type_defs t
+Proof
+  rw[expr_body_pre_def, expr_sim_inv_def, well_formed_type_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  metis_tac[env_consistent_var_type_evaluates]
+QED
+
+Theorem expr_body_pre_word_value:
+  !cenv cx env e es v es'.
+    expr_body_pre cenv cx env e es /\ is_word_type (expr_type e) /\
+    (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
+    ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
+          value_has_type tyv v
+Proof
+  rpt strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+        env_context_consistent_def] >>
+  gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def]
+QED
+
+Theorem expr_body_pre_lower_value_word_shape:
+  !cenv cx env e es ty sa op sb.
+    lower_value compile_expr cenv ty e sa = (op, sb) /\
+    expr_body_pre cenv cx env e es /\ is_word_type (expr_type e) ==>
+    cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sa.cs_next_id <= sb.cs_next_id /\
+    (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `well_typed_expr env e` by fs[expr_body_pre_def] >>
+  `!id t. FLOOKUP env.var_types id = SOME t ==>
+          well_formed_type env.type_defs t` by
+    metis_tac[expr_body_pre_var_types_well_formed] >>
+  drule lower_value_word_shape >> disch_then (qspec_then `env` mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  simp[]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "UNARY_SOURCE_AUDIT OK\n"
+     else raise Fail "unary property inherited admission"
+  end) [env_consistent_var_type_evaluates, expr_body_pre_var_types_well_formed, expr_body_pre_word_value, expr_body_pre_lower_value_word_shape];

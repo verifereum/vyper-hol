@@ -1,14 +1,18 @@
 (* Actual Neg opcode suffix; independent of source numeric correctness. *)
 Theory bodyNegMemory
 Ancestors
+  exprSimUnopProps exprSimHypsDefs exprSimProps exprSimMemoryStack
+  exprSimMemoryValues exprSimMemDefs loweringPosts gasNormalPrefix gasSummary
+  gasSummaryCompose gasContext gasCount fragGasMode fragGasPathMem fragGasSeqMem gasExemptCert
+  exprSimUnopProps
   exprSimSource
-  bodyMemoryDefs exprSimUnop bodyFieldMemory emitHelperProps
+  bodyMemoryDefs   emitHelperProps
   fragExecMem instMemFrontier allocaHistoryFragment
   exprLoweringProps emitHelper venomInst venomState words list rich_list
   compileEnv fragExec exprSimDefs valueEncoding vyperValue vyperAST venomExecSemantics
   loweringSlice exprLowering vyperState freshWrites varsExt integer_word
-  arithmeticProps vyperArith vyperTypeSystem vyperTyping exprSimHyps
-  exprBopLowering bodyUnopMemory exprSimOperators
+  arithmeticProps vyperArith vyperTypeSystem vyperTyping
+  exprBopLowering
 
 Theorem body_neg_no_ranges_seq[local]:
   !is s. EVERY (\i. !q. inst_mem_below_frontier i q) is ==>

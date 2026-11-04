@@ -34,6 +34,7 @@
 
 Theory exprSimWordBuiltins
 Ancestors
+  exprWordOperand
   exprSimSource
   exprSimHypsDefs
   exprSimStack

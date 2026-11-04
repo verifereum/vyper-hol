@@ -443,29 +443,7 @@ Proof
   Induct >> rw[int_calls_expr_def] >> gvs[]
 QED
 
-Theorem env_consistent_var_type_evaluates:
-  !env cx st id ty.
-    env_consistent env cx st /\ FLOOKUP env.var_types id = SOME ty ==>
-    IS_SOME (evaluate_type (get_tenv cx) ty)
-Proof
-  rw[env_consistent_def, env_scopes_consistent_def] >>
-  Cases_on `lookup_scopes id st.scopes` >>
-  metis_tac[optionTheory.IS_SOME_DEF]
-QED
-
 (* The local types are well formed: they evaluate by env_scopes_consistent. *)
-Theorem expr_body_pre_var_types_well_formed:
-  !cenv cx env e es.
-    expr_body_pre cenv cx env e es ==>
-    !id t. FLOOKUP env.var_types id = SOME t ==>
-           well_formed_type env.type_defs t
-Proof
-  rw[expr_body_pre_def, expr_sim_inv_def, well_formed_type_def] >>
-  `env.type_defs = get_tenv cx` by
-    gvs[env_consistent_def, env_context_consistent_def] >>
-  metis_tac[env_consistent_var_type_evaluates]
-QED
-
 Theorem expr_sim_pre_var_types_well_formed:
   !cenv cx env e es.
     expr_sim_pre cenv cx env e es ==>

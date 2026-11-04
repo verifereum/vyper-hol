@@ -2,6 +2,8 @@
 Theory bodyExprClosureMemory
 Ancestors
   bodyNameMemory
+  bodyNotFlagMemory bodyNotBytesMemory bodyNotUintMemory
+  bodyAbsMemory bodyNotBoolMemory
   exprSimSource
   bodyMemoryPreds bodyMemoryDefs bodyIfExpMemory exprSimOperators exprSimHyps
   exprLoweringProps vyperInterpreter vyperState

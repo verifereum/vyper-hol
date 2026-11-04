@@ -32,6 +32,7 @@
 
 Theory exprSimConvert
 Ancestors
+  exprWordOperand
   exprSimSource
   exprSimProps
   exprSimHypsDefs
