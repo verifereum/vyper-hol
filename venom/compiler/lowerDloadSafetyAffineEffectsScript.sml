@@ -4,7 +4,7 @@ Ancestors
   lowerDloadSafetyUpdates lowerDloadSafetyValues lowerDloadSafetyRelation
   lowerDloadSafetyKernel lowerDloadPointerClosure ptrDiscipline unitShapeDefs
   venomState venomInst venomExecSemantics pointerConfinedDefs
-  finite_map list pred_set words unitLabelMapIdentity
+  finite_map list pred_set words unitLabelMapIdentity memLocDefs codegenRel
 
 Theorem ld_affine_operand[local]:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
@@ -113,4 +113,80 @@ Proof
    Cases_on `op_prov f.lf_H op2` >>
    gvs[first_prov_def, ld_word_agree_empty] >>
    metis_tac[ld_wordrel_affine, WORD_ADD_COMM])
+QED
+
+Theorem ld_erase_first_prov:
+  first_prov (ld_erase A o_f H) ops =
+    OPTION_MAP (ld_erase A) (first_prov H ops)
+Proof
+  Induct_on `ops` >> simp[first_prov_def, ld_erase_op_prov] >>
+  Cases_on `op_prov H h` >> simp[]
+QED
+
+Theorem ld_affine_success[local]:
+  MEM inst.inst_opcode [ADD; SUB] /\ step_inst_base inst s = OK s' ==>
+  ?a b out x. inst.inst_operands = [a;b] /\ inst.inst_outputs = [out] /\
+    s' = update_var out x s
+Proof
+  strip_tac >> gvs[MEM] >>
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  asm_rewrite_tac[opcode_case_def] >>
+  simp[exec_pure2_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem ld_affine_taint[local]:
+  MEM inst.inst_opcode [ADD; SUB] /\ inst.inst_operands = [a;b] ==>
+  step_taint inst s (update_var v x s) tn =
+    tn with t_var := set_var_taint tn.t_var inst.inst_outputs {}
+Proof
+  strip_tac >>
+  `out_taint tn inst s = {}` by
+    (Cases_on `eval_operand a s` >> gvs[MEM] >> simp[out_taint_def]) >>
+  gvs[MEM] >>
+  simp[step_taint_def, mem_taint_def, update_var_def, new_site_bytes_def,
+       step_writes_def, source_memory_write_ranges_def, range_bytes_def,
+       written_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
+       FLOOKUP_DEF, taint_component_equality] >> SET_TAC[]
+QED
+
+Theorem ld_affine_effect:
+  ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
+  tn.t_var = f.lf_tv /\ fn_ptr_ok P f.lf_fn /\ fn_shape_ok f.lf_fn /\
+  MEM inst (fn_insts f.lf_fn) /\ taint_ok f.lf_fn tn inst f.lf_src /\
+  MEM inst.inst_opcode [ADD; SUB] /\ step_inst_base inst f.lf_tgt = OK ts /\
+  ld_memory lo A tn f.lf_src f.lf_tgt /\ ld_nonghost tn f.lf_src f.lf_tgt ==>
+  ?ss. step_inst_base inst f.lf_src = OK ss /\
+    ld_vars P A (f with <| lf_src := ss; lf_tgt := ts;
+      lf_H := set_prov f.lf_H inst.inst_outputs (first_prov f.lf_H inst.inst_operands);
+      lf_tv := (step_taint inst f.lf_src ss tn).t_var |> ) /\
+    ld_memory lo A (step_taint inst f.lf_src ss tn) ss ts /\
+    ld_nonghost (step_taint inst f.lf_src ss tn) ss ts /\
+    ld_erase A o_f set_prov f.lf_H inst.inst_outputs (first_prov f.lf_H inst.inst_operands) =
+      step_prov PG (ld_erase A o_f f.lf_H) inst ss /\
+    ss.vs_allocas = f.lf_src.vs_allocas /\
+    ss.vs_alloca_next = f.lf_src.vs_alloca_next /\
+    ss.vs_params = f.lf_src.vs_params /\
+    ss.vs_current_bb = f.lf_src.vs_current_bb /\
+    ss.vs_prev_bb = f.lf_src.vs_prev_bb /\
+    ss.vs_inst_idx = f.lf_src.vs_inst_idx /\
+    ts.vs_allocas = f.lf_tgt.vs_allocas /\
+    ts.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
+    ts.vs_params = f.lf_tgt.vs_params /\
+    ts.vs_current_bb = f.lf_tgt.vs_current_bb /\
+    ts.vs_prev_bb = f.lf_tgt.vs_prev_bb /\
+    ts.vs_inst_idx = f.lf_tgt.vs_inst_idx
+Proof
+  strip_tac >> drule_all ld_affine_vars >> strip_tac >>
+  drule_all ld_affine_success >> strip_tac >>
+  qpat_x_assum `step_inst_base inst f.lf_tgt = OK ts` mp_tac >>
+  strip_tac >> drule_all ld_affine_success >> strip_tac >> gvs[] >>
+  (`step_taint inst f.lf_src (update_var out x f.lf_src) tn =
+      tn with t_var := set_var_taint tn.t_var inst.inst_outputs {}` by
+     (irule ld_affine_taint >> simp[] >> metis_tac[]) >>
+   simp[] >> conj_tac
+   >- (irule ld_memory_update_var >> simp[]) >>
+   conj_tac
+   >- (irule ld_nonghost_update_var >> simp[]) >>
+   simp[ld_erase_set_prov, step_prov_def, out_prov_def, ld_erase_first_prov])
 QED
