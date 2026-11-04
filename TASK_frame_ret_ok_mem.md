@@ -105,6 +105,7 @@ holbuild --max-heap 8000 -j4 build loweringMemCorrectTheory
 | Vyper reference at VYPER_PIN | `alan-ref/vyper/vyper/codegen_venom/` | the Python lowering the HOL lowering follows |
 | Encoder correctness (S1) | `lowering/abiEncoderPropsScript.sml`, `lowering/abiEncoder*Script.sml` (`abiEncoderMemoryScript.sml`, `abiEncoderWritesScript.sml`, `abiEncoderBufferFrameScript.sml`) | `compile_abi_encode_to_buf_correct` and its frame/writes lemmas |
 | Return sequences (S1) | `lowering/loweringHaltScript.sml`, `lowering/stmtSimReturnScript.sml`, `lowering/retAbiPlanPropsScript.sml`, `lowering/vyperLoweringCorrectScript.sml` | `compile_external_return_*`, `external_return_*_result_rel`, return ABI plan facts, `external_return_buffer_ok` |
+| Dynamic encoder run, actual window (proved, merged) | `lowering/abiEncoderWindowRunScript.sml`, `lowering/abiEncoderWindowSourceRunScript.sml` and the other `abiEncoderWindow*`/resource theories | `compile_abi_encode_to_buf_window_run` (halting run, final memory, `abi_encoder_registered_effect` write footprint, `alloca_inv`/`alloca_room` kept), `abi_encoder_window_bytestring_source_run`: use these for the dynamic-encoder case instead of re-proving the encoder's execution |
 | Typed memory store (normalize) | `lowering/defs/exprLoweringScript.sml`, `lowering/exprSim*Script.sml` | `compile_store_memory_typed` and its S1 lemmas |
 
 ## Notes
