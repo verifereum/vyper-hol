@@ -212,3 +212,45 @@ Proof
   simp[typed_sa_backedge_state_def, update_var_def, lookup_var_def,
        finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
 QED
+
+Theorem typed_sa_initial_exec[local]:
+  bb.bb_instructions = prefix ++
+    [mk_inst id ASSIGN [Lit 0w] [ctr]; mk_inst (id+1) JMP [Label hdr] []] /\
+  s.vs_inst_idx = LENGTH prefix /\ ~s.vs_halted ==>
+  exec_block fuel ctx bb s = OK (jump_to hdr (update_var ctr 0w s)) /\
+  mem_safe_block fuel ctx bb s
+Proof
+  strip_tac >> `SUC (LENGTH prefix) - LENGTH prefix = 1` by decide_tac >>
+  conj_tac
+  >- (simp[Once exec_block_def, get_instruction_def, rich_listTheory.EL_APPEND2] >>
+      simp[step_inst_def, step_inst_base_opcode_eqs, mk_inst_def,
+           exec_pure1_def, eval_operand_def, is_terminator_def] >>
+      simp[Once exec_block_def, get_instruction_def, rich_listTheory.EL_APPEND2] >>
+      simp[step_inst_def, step_inst_base_opcode_eqs, mk_inst_def,
+           eval_operand_def, is_terminator_def, jump_to_def, update_var_def]) >>
+  simp[Once mem_safe_block_def, get_instruction_def, rich_listTheory.EL_APPEND2,
+       mem_safe_step_def, below_frontier_no_ranges, mk_inst_def] >>
+  simp[step_inst_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def,
+       eval_operand_def, is_terminator_def] >>
+  simp[Once mem_safe_block_def, get_instruction_def, rich_listTheory.EL_APPEND2,
+       mem_safe_step_def, below_frontier_no_ranges, mk_inst_def, is_terminator_def] >>
+  rpt CASE_TAC >> simp[]
+QED
+
+Theorem typed_sa_initial_sim:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = prefix ++
+    [mk_inst id ASSIGN [Lit 0w] [ctr]; mk_inst (id+1) JMP [Label hdr] []] /\
+  s.vs_inst_idx = LENGTH prefix /\ ~s.vs_halted /\
+  lookup_block hdr fn.fn_blocks = SOME next_bb /\
+  phi_prefix_length next_bb.bb_instructions = 0 ==>
+  mem_cont_sim ctx fn s (jump_to hdr (update_var ctr 0w s))
+Proof
+  strip_tac >> irule mem_cont_sim_edge >>
+  conj_tac >- simp[jump_to_def, update_var_def] >>
+  conj_tac >- simp[jump_to_def] >>
+  conj_tac
+  >- (qexists_tac `bb` >> simp[] >>
+      metis_tac[typed_sa_initial_exec]) >>
+  qexists_tac `next_bb` >> simp[jump_to_def]
+QED
