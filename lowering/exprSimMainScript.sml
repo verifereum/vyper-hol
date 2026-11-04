@@ -21,6 +21,7 @@
 
 Theory exprSimMain
 Ancestors
+  exprSimTopLevel
   exprSimName
   exprSimHypsDefs
   list  exprSimHyps exprSimLeaves exprSimOperators exprSimPlaces
