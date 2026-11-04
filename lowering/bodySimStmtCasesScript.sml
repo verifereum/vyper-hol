@@ -1174,6 +1174,9 @@ QED
 Theorem body_assign_local_memory_read[local]:
   !cenv cx env e es tops id ty tyv v es1 entry.
     expr_body_pre cenv cx env e es /\ supported_expr tops e /\
+    supported_program tops /\
+    cenv.ce_func_return_type = build_func_return_type tops /\
+    get_module_code cx NONE = SOME tops /\
     FLOOKUP env.var_types id = SOME ty /\
     type_widens_to env.type_defs (expr_type e) ty /\
     (expr_type e = ty \/ is_bytestring_type ty) /\
@@ -1191,7 +1194,7 @@ Proof
   `entry.type = tyv` by metis_tac[memory_rhs_read_local_type] >>
   simp[] >> irule memory_rhs_read_destination_footprint >>
   conj_tac >- metis_tac[] >>
-  qexistsl_tac [`cx`, `env`, `es`, `es1`, `ty`] >> simp[]
+  qexistsl_tac [`cx`, `env`, `es`, `es1`, `tops`, `ty`] >> simp[]
 QED
 
 Theorem body_assign_local_memory:
@@ -1218,6 +1221,9 @@ Theorem body_assign_local_memory:
       es res es'
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `supported_program tops /\
+   cenv.ce_func_return_type = build_func_return_type tops /\
+   get_module_code cx NONE = SOME tops` by gvs[body_inv_def] >>
   drule_all body_assign_local_rhs_pre >> strip_tac >>
   drule_all expr_sim_inv_local >> strip_tac >>
   `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
@@ -1486,6 +1492,115 @@ Proof
   metis_tac[])
 QED
 
+Theorem storage_scalar_fit_equal[local]:
+  !tops fuel t u.
+    supported_scalar_type t /\
+    supported_nested_type supported_full_word_type fuel tops u /\
+    arg_type_fits t u ==> t = u
+Proof
+  Cases_on `t` >>
+  simp[supported_scalar_type_def, supported_word_type_def,
+       supported_string_type_def] >>
+  rename1 `supported_word_type (BaseT bt)` >> Cases_on `u` >>
+  simp[arg_type_fits_def] >>
+  rename1 `arg_type_fits _ (BaseT ub)` >>
+  Cases_on `bt` >> Cases_on `ub` >>
+  simp[supported_word_type_def, supported_string_type_def,
+       arg_type_fits_def, Once supported_nested_type_def,
+       supported_full_word_type_def] >>
+  rpt strip_tac >> gvs[] >>
+  TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
+  gvs[arg_type_fits_def, supported_word_type_def, supported_string_type_def]
+QED
+
+Theorem storage_scalars_fit_equal[local]:
+  !ts us tops fuel.
+    EVERY supported_scalar_type ts /\
+    EVERY (supported_nested_type supported_full_word_type fuel tops) us /\
+    arg_types_fit ts us ==> ts = us
+Proof
+  Induct >> Cases_on `us` >> simp[arg_type_fits_def] >>
+  rpt strip_tac >> drule_all storage_scalar_fit_equal >> strip_tac >>
+  gvs[] >> first_x_assum irule >> metis_tac[]
+QED
+
+Theorem storage_value_fit_equal[local]:
+  !tops t u.
+    supported_value_type tops t /\ supported_storage_type tops u /\
+    (!et n. u <> ArrayT et (Dynamic n)) /\ arg_type_fits t u ==> t = u
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `supported_scalar_type t`
+  >- metis_tac[storage_scalar_fit_equal, supported_storage_type_def] >>
+  Cases_on `t` >>
+  gvs[supported_value_type_def] >> Cases_on `u` >>
+  gvs[arg_type_fits_def]
+  >~ [`arg_types_fit ts us`]
+  >- (gvs[supported_storage_type_def, Once supported_nested_type_def,
+          supported_full_word_type_def] >>
+      metis_tac[storage_scalars_fit_equal]) >>
+  Cases_on `b` >> Cases_on `b'` >> gvs[arg_type_fits_def] >>
+  fs[supported_storage_type_def] >>
+  qpat_x_assum `supported_nested_type _ _ _ _` mp_tac >>
+  simp[Once supported_nested_type_def, supported_full_word_type_def] >>
+  strip_tac >>
+  metis_tac[storage_scalar_fit_equal, supported_scalar_type_def]
+QED
+
+Theorem storage_not_bytestring[local]:
+  !tops t. supported_storage_type tops t ==> ~is_bytestring_type t
+Proof
+  Cases_on `t` >> simp[is_bytestring_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_bytestring_type_def] >>
+  TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
+  simp[is_bytestring_type_def, supported_storage_type_def,
+       Once supported_nested_type_def, supported_full_word_type_def]
+QED
+
+Theorem storage_rhs_lowered_type[local]:
+  !cenv e tops ctx cx env es.
+    body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+    expr_body_pre cenv cx env e es /\ supported_expr tops e /\
+    supported_storage_type tops (expr_type e) /\
+    (!elem n. expr_type e <> ArrayT elem (Dynamic n)) ==>
+    lowered_value_type cenv e = expr_type e
+Proof
+  ho_match_mp_tac exprLoweringTheory.lowered_value_type_ind >> rpt conj_tac
+  >- (simp[expr_type_def] >> metis_tac[storage_not_bytestring, is_bytestring_type_def])
+  >- (simp[expr_type_def] >> metis_tac[storage_not_bytestring, is_bytestring_type_def])
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+      simp[expr_body_pre_def, well_typed_expr_def,
+           type_builtin_result_ok_def, expr_type_def] >> strip_tac >>
+      gvs[expr_type_def] >>
+      drule storage_not_bytestring >> simp[is_bytestring_type_def])
+  >- (rpt gen_tac >> strip_tac >>
+      `supported_program tops /\
+       cenv.ce_func_return_type = build_func_return_type tops /\
+       get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+      `well_typed_expr env (Call v4 (IntCall func_id) v5 v6)` by
+        gvs[expr_body_pre_def] >>
+      qpat_x_assum `supported_expr _ _` mp_tac >>
+      simp[supported_expr_def, supported_pure_expr_def,
+           supported_effect_expr_def] >> strip_tac >>
+      Cases_on `v6` >> gvs[supported_effect_expr_def, optionTheory.IS_SOME_EXISTS] >>
+      PairCases_on `x` >>
+      `?sig. FLOOKUP env.fn_sigs func_id = SOME sig` by
+        (Cases_on `func_id` >>
+         gvs[well_typed_expr_def, optionTheory.IS_SOME_EXISTS]) >>
+      drule_all supported_internal_signature_return >> strip_tac >>
+      drule_all supported_internal_return_admissible >> strip_tac >>
+      drule_all supported_internal_return_type >> strip_tac >>
+      qpat_x_assum `well_typed_expr _ _` mp_tac >>
+      Cases_on `func_id` >>
+      simp[well_typed_expr_def, expr_type_def] >> strip_tac >>
+      gvs[exprLoweringTheory.lowered_value_type_def, expr_type_def] >>
+      gvs[supported_return_type_def, type_widens_to_def]
+      >- (Cases_on `v4` >> gvs[arg_type_fits_def]) >>
+      metis_tac[storage_value_fit_equal]) >>
+  simp[exprLoweringTheory.lowered_value_type_def]
+QED
+
 (* An assignment to a private storage or transient variable of a type that
    is not a word, not a DynArray and not empty, from a value of exactly that
    type: stmtSimAssignStorageCopy's compile_assign_storage_copy_stmt_frag.
@@ -1532,6 +1647,13 @@ Proof
     (rpt strip_tac >> gvs[type_stmt_def, atarget_accepts_def,
        well_typed_expr_def, type_builtin_result_ok_def, expr_type_def,
        AllCaseEqs()]) >>
+  `supported_storage_type tops (expr_type e)` by
+    (`supported_program tops` by fs[body_inv_def] >>
+     drule supported_variable_decl_mem >> strip_tac >>
+     drule_all supportedProgramTheory.supported_program_declaration >>
+     simp[supported_declaration_header_def]) >>
+  `lowered_value_type cenv e = expr_type e` by
+    (drule_all storage_rhs_lowered_type >> simp[]) >>
   irule compile_assign_storage_copy_stmt_frag >> asm_rewrite_tac[] >>
   qexistsl_tac [`id_str`, `off`, `tr`, `tops`, `tvt`, `expr_type e`] >>
   asm_rewrite_tac[] >>
@@ -1841,7 +1963,8 @@ Proof
        optionTheory.IS_SOME_EXISTS] >>
   drule evaluate_type_TupleT_cases >> strip_tac >> gvs[] >>
   irule compile_assign_tuple_locals_memory_stmt_frag >>
-  rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
+  rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC
+  >- simp[] >>
   qexistsl_tac [`tvs`, `tys`] >> rpt conj_tac
   >~ [`expr_sim _ _ _ _ _ _ _`] >- metis_tac[body_expr_ok_def]
   >~ [`cenv.ce_target CapMcopy`] >- metis_tac[body_inv_mcopy]

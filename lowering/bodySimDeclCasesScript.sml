@@ -285,6 +285,9 @@ Proof
 QED
 
 Resume body_annassign_memory[copy]:
+  `supported_program tops /\
+   cenv.ce_func_return_type = build_func_return_type tops /\
+   get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
   `expr_type e = typ \/ is_bytestring_type typ` by metis_tac[] >>
   `0 < type_memory_bytes cenv (lowered_value_type cenv e) /\
    type_memory_bytes cenv (lowered_value_type cenv e) <= type_memory_bytes cenv typ` by
