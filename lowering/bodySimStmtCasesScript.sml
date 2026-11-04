@@ -2489,6 +2489,57 @@ Proof
        placeTypingPropsTheory.place_map_tables_agree_on_defined_def]
 QED
 
+Theorem aug_place_type_memory_bytes_cong:
+  !c1 ty c2. c1.ce_struct_fields = c2.ce_struct_fields ==>
+    type_memory_bytes c1 ty = type_memory_bytes c2 ty
+Proof
+  recInduct type_memory_bytes_ind >> rpt strip_tac >>
+  simp[type_memory_bytes_def] >> AP_TERM_TAC >>
+  irule MAP_CONG >> simp[]
+QED
+
+Theorem aug_place_elem_size_in_location_cong:
+  !c1 c2 loc ty. c1.ce_struct_fields = c2.ce_struct_fields ==>
+    elem_size_in_location c1 loc ty = elem_size_in_location c2 loc ty
+Proof
+  rpt strip_tac >> drule aug_place_type_memory_bytes_cong >>
+  disch_then (qspec_then `ty` assume_tac) >>
+  simp[elem_size_in_location_def]
+QED
+
+Theorem aug_place_compile_target_metadata:
+  !t.
+    (!nsid. target_root t = TopLevelNameTarget nsid ==>
+       h nsid = cenv.ce_hashmap_info nsid /\
+       m nsid = cenv.ce_module_var_type nsid) /\
+    (!e. MEM e (target_indices t) ==>
+       lower_value compile_expr
+         (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>)
+         (expr_type e) e = lower_value compile_expr cenv (expr_type e) e) ==>
+    compile_get_target_ptr compile_expr
+      (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) t =
+    compile_get_target_ptr compile_expr cenv t
+Proof
+  `(!e:expr. T) /\ (!t.
+    (!nsid. target_root t = TopLevelNameTarget nsid ==>
+       h nsid = cenv.ce_hashmap_info nsid /\
+       m nsid = cenv.ce_module_var_type nsid) /\
+    (!e. MEM e (target_indices t) ==>
+       lower_value compile_expr
+         (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>)
+         (expr_type e) e = lower_value compile_expr cenv (expr_type e) e) ==>
+    compile_get_target_ptr compile_expr
+      (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) t =
+    compile_get_target_ptr compile_expr cenv t)` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[target_root_def, target_indices_def] >> rpt strip_tac >>
+  `!loc ty. elem_size_in_location
+      (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) loc ty =
+      elem_size_in_location cenv loc ty` by
+    (rpt gen_tac >> irule aug_place_elem_size_in_location_cong >> simp[]) >>
+  fs[] >> simp[Ntimes exprLoweringTheory.compile_get_target_ptr_def 2]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
