@@ -137,6 +137,24 @@ Proof
   simp[LENGTH_APPEND] >> metis_tac[gas_path_mem_then]
 QED
 
+Theorem gas_marked_source_bind_normal:
+  gas_marked_exec (ctx, func) a (es, s0) left (INL v) mid (OK t) /\
+  (!tail. k v ((mid with gas_obs := []) with
+       gas_obs := gas_explicit right t.vs_gas_readings ++ tail) =
+     (res, ee with gas_obs := tail)) ==>
+  !tail. bind a k (es with
+      gas_obs := gas_explicit (left ++ right) s0.vs_gas_readings ++ tail) =
+    (res, ee with gas_obs := tail)
+Proof
+  rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+  `gas_explicit (left ++ right) s0.vs_gas_readings =
+     gas_explicit left s0.vs_gas_readings ++
+     gas_explicit right t.vs_gas_readings` by
+    metis_tac[gas_path_mem_exec, gas_explicit_append_path] >>
+  asm_rewrite_tac[] >> irule gas_source_bind_normal >>
+  qexistsl_tac [`mid`, `v`] >> simp[]
+QED
+
 Theorem gas_marked_exec_bind_exception:
   gas_marked_exec (ctx, func) source (es, s0) marks (INR exc) fin r ==>
   gas_marked_exec (ctx, func) (bind source next)
