@@ -57,3 +57,16 @@ Theorem sop_shape_checks:
 Proof
   EVAL_TAC >> simp[relationTheory.RTC_REFL]
 QED
+
+Theorem sop_entry:
+  origin_frame_reachable sop_initial sop_ctx [] [] FEMPTY entry_taint
+    sop_caller (HD (HD sop_caller.fn_blocks).bb_instructions)
+    sop_initial [] FEMPTY
+Proof
+  irule origin_frame_reachable_entry >>
+  conj_tac >- (qexists `"main"` >> EVAL_TAC) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  qexists `"entry"` >> EVAL_TAC >>
+  simp[venomExecSemanticsTheory.eval_phis_def,
+       venomExecSemanticsTheory.phi_prefix_length_def]
+QED
