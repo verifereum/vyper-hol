@@ -1,7 +1,7 @@
 Theory lowerDloadPtrRel
 Ancestors
-  lowerDloadPtrBoundary lowerDloadPtrTaint lowerDloadPtrStatic
-  ptrDiscipline o1PassContract venomState venomExecSemantics
+  lowerDloadPtrBoundary lowerDloadPtrTaint lowerDloadPtrStatic lowerDloadDefs
+  ptrDiscipline o1PassContract unitTransformDefs venomState venomExecSemantics
   list pred_set finite_map words
 
 (* The list is ordered current frame first, followed by suspended callers.
@@ -235,4 +235,122 @@ Theorem dload_callee_inherits_frontier_gap:
   ~(ct.vs_alloca_next <= cs.vs_alloca_next + 32 * CARD (FDOM ct.vs_allocas))
 Proof
   simp[setup_callee_def] >> rpt strip_tac >> gvs[]
+QED
+
+(* Paired state lists are current state followed by suspended callers.
+   Each saved caller's frontier gap counts exactly its own suffix: younger
+   allocations disappear when that caller resumes. *)
+Definition dload_table_stack_def:
+  dload_table_stack fs ss ts <=>
+    LENGTH fs = LENGTH ss /\ LENGTH fs = LENGTH ts /\
+    (!k. k < LENGTH fs ==>
+       (EL k fs).dr_source = (EL k ss).vs_allocas /\
+       (EL k fs).dr_target = (EL k ts).vs_allocas /\
+       (EL k ts).vs_alloca_next = (EL k ss).vs_alloca_next +
+         32 * SUM (MAP (\f. CARD f.dr_scratch) (DROP k fs)))
+End
+
+Theorem dload_table_stack_initial:
+  s.vs_allocas = FEMPTY ==>
+  dload_table_stack
+    [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
+    [s] [s]
+Proof
+  simp[dload_table_stack_def] >> rpt strip_tac >>
+  `k = 0` by decide_tac >> gvs[]
+QED
+
+Theorem dload_table_stack_current:
+  dload_table_stack (f::fs) (s::ss) (t::ts) ==>
+  f.dr_source = s.vs_allocas /\ f.dr_target = t.vs_allocas /\
+  t.vs_alloca_next = s.vs_alloca_next +
+    32 * SUM (MAP (\f. CARD f.dr_scratch) (f::fs))
+Proof
+  simp[dload_table_stack_def] >> strip_tac >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[]
+QED
+
+Theorem dload_table_stack_saved:
+  dload_table_stack fs ss ts /\ k < LENGTH fs ==>
+  (EL k fs).dr_source = (EL k ss).vs_allocas /\
+  (EL k fs).dr_target = (EL k ts).vs_allocas /\
+  (EL k ts).vs_alloca_next = (EL k ss).vs_alloca_next +
+    32 * SUM (MAP (\f. CARD f.dr_scratch) (DROP k fs))
+Proof
+  simp[dload_table_stack_def]
+QED
+
+Theorem dload_live_layout_initial:
+  lo <= f /\ f < dimword (:256) ==>
+  dload_live_layout lo f f
+    [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
+Proof
+  simp[dload_live_layout_def, dload_frame_sites_empty] >>
+  rpt strip_tac >>
+  `k = 0` by decide_tac >> gvs[]
+QED
+
+(* Control is witnessed by the same supply-threaded function transform,
+   including the supplies at the beginning of this block and instruction.
+   phase=0 is an original boundary; positive phases can occur only inside
+   a genuine multi-instruction DLOAD/DLOADBYTES expansion. *)
+Definition dload_control_match_def:
+  dload_control_match supply fn gn s t inst emitted phase <=>
+    (?supply'. lower_dload_function_supply supply fn = (gn,supply')) /\
+    s.vs_current_bb = t.vs_current_bb /\ s.vs_prev_bb = t.vs_prev_bb /\
+    ?bi bb bs before is after.
+      bi < LENGTH fn.fn_blocks /\ bb = EL bi fn.fn_blocks /\
+      bb.bb_label = s.vs_current_bb /\
+      bs = SND (lower_dload_blocks_supply supply (TAKE bi fn.fn_blocks)) /\
+      s.vs_inst_idx < LENGTH bb.bb_instructions /\
+      inst = EL s.vs_inst_idx bb.bb_instructions /\
+      lower_dload_insts_supply bs (TAKE s.vs_inst_idx bb.bb_instructions) =
+        (before,is) /\
+      lower_dload_inst_supply is inst = (emitted,after) /\
+      phase < LENGTH emitted /\
+      t.vs_inst_idx = LENGTH before + phase /\
+      active_inst fn inst s /\ active_inst gn (EL phase emitted) t /\
+      (phase <> 0 ==>
+        (inst.inst_opcode = DLOAD /\ LENGTH emitted = 4) \/
+        (inst.inst_opcode = DLOADBYTES /\ LENGTH emitted = 2))
+End
+
+Theorem dload_control_match_expansion:
+  dload_control_match supply fn gn s t inst emitted phase ==>
+  ?is after. lower_dload_inst_supply is inst = (emitted,after) /\
+             phase < LENGTH emitted /\
+             active_inst gn (EL phase emitted) t
+Proof
+  simp[dload_control_match_def] >> metis_tac[]
+QED
+
+Theorem dload_control_match_boundary:
+  dload_control_match supply fn gn s t inst emitted 0 ==>
+  active_inst fn inst s /\ active_inst gn (HD emitted) t
+Proof
+  simp[dload_control_match_def] >> rpt strip_tac >>
+  Cases_on `emitted` >> gvs[]
+QED
+
+Theorem dload_control_match_phase:
+  dload_control_match supply fn gn s t inst emitted phase /\ phase <> 0 ==>
+  (inst.inst_opcode = DLOAD /\ phase < 4) \/
+  (inst.inst_opcode = DLOADBYTES /\ phase < 2)
+Proof
+  simp[dload_control_match_def] >> metis_tac[]
+QED
+
+Theorem dload_initial_components:
+  o1_run_state_ok vs ==>
+  dload_table_stack
+    [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
+    [vs] [vs] /\
+  dload_vars_match [] V FEMPTY FEMPTY entry_taint entry_taint vs vs /\
+  dload_memory_match lo [] entry_taint entry_taint vs vs
+Proof
+  strip_tac >>
+  `vs.vs_allocas = FEMPTY` by
+    fs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
+  simp[dload_table_stack_initial, dload_vars_match_empty_provenance,
+       dload_memory_match_empty]
 QED
