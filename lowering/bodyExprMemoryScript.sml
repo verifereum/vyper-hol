@@ -1,7 +1,8 @@
 (* Actual expression producers for the memory body induction. *)
 Theory bodyExprMemory
 Ancestors
-  bodyMemoryDefs exprSimDefs exprSimHyps bodySim fragExecMem loweringSlice
+  bodyMemoryDefs exprSimDefs exprSimHypsDefs exprSimProps bodySim
+  exprSimMemoryValues exprSimMemoryStack fragGasPathMem fragExecMem loweringSlice
   exprLowering context compileEnv vyperInterpreter vyperValue vyperState
   vyperValueOperation valueEncoding valueEncodingProofs venomState venomExecSemantics
 
