@@ -25,13 +25,17 @@
  * (loweringRuntimeCorrect).
  *)
 Theory loweringPtrCorrect
-Ancestors
+Ancestors typedCopyArrayExecutionPtr batchCopyRobustPtr normalizationAllocPtr typedCopyLoopBackedgePtr
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
   exprLoweringProps vyperInterpreter vyperContext venomExecSemantics
   venomState compileEnv e2eDefs supportedProgram compileVyper fragExec
   venomInst contextCodegenRel ptrDiscipline ptrSafeRun vyperLoweringCorrect
   loweringRuntimeCorrect bodyPtrDefs stmtSim bodySim moduleLowering
   stmtLowering vyperTypeSystem vyperState emitHelper vyperTypeSelectedEntrySoundness
+  fragExecPtr entryHaltPtr typedCopyFieldsPtr typedCopyBytesRobustPtr
+  typedCopyOffsetPtr typedCopyBytesFieldsPtr typedCopyTuplePtr returnMetadataPtr
+  robustCopyTransportPtr staticTypeFitsPtr liveArrayTransportPtr structChildPtr
+  wordCopyRobustPtr
   stmtLoweringMono venomWf memSafeRun allocaFrontierBound unitTransformDefs
   unitShapeDefs o1PassContract
 
