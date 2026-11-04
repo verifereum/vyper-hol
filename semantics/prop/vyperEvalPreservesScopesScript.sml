@@ -190,7 +190,8 @@ Theorem case_Log_dom[local]:
       eval_stmt cx (Log id es) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
   rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
-  gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+  gvs[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  imp_res_tac check_state >>
   imp_res_tac lift_option_scopes >>
   imp_res_tac push_log_scopes >> gvs[]
 QED
@@ -986,8 +987,9 @@ Proof
     rpt strip_tac >>
     `MAP FDOM st.scopes = MAP FDOM st'.scopes` by (
       qpat_x_assum`eval_stmt _ _ _ = _`mp_tac >>
-      simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
       rpt strip_tac >>
+      imp_res_tac check_state >>
       imp_res_tac eval_exprs_preserves_scopes_dom >>
       imp_res_tac lift_option_scopes >>
       imp_res_tac push_log_scopes >> gvs[]) >>
@@ -1736,7 +1738,9 @@ Proof
     first_x_assum drule_all >> rw[] >>
     metis_tac[preserves_tv_trans] ) >>
   conj_tac >- (
-    rw[evaluate_def, bind_apply, AllCaseEqs(), push_log_def, return_def] >>
+    rw[evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(), push_log_def,
+       return_def] >>
+    imp_res_tac check_state >>
     imp_res_tac lift_option_state >> gvs[] >>
     first_x_assum drule >>
     gvs[preserves_tv_def] ) >>
