@@ -241,7 +241,7 @@ Theorem step_MCOPY_some[local]:
 Proof
   rpt strip_tac >> Cases_on `eval_operand d s` >>
   Cases_on `eval_operand a s` >> Cases_on `eval_operand n s` >> gvs[] >>
-  simp[step_inst_base_def]
+  simp[stepInstBaseLib.simp_opcode_clause ``MCOPY``, venomInstTheory.mk_inst_def]
 QED
 
 Theorem store_bytestring_run[local]:
@@ -325,7 +325,8 @@ Proof
        venomInstTheory.is_terminator_def, run_inst_seq_def] >>
   gvs[emit_void_def, comp_bind_def, fresh_id_def, emit_def,
       comp_ignore_bind_def, comp_return_def] >>
-  simp[step_inst_base_def, venomInstTheory.mk_inst_def, eval_operand_def]
+  simp[stepInstBaseLib.simp_opcode_clause ``MCOPY``, venomInstTheory.mk_inst_def,
+       eval_operand_def]
 QED
 
 (* compile_store_memory at one type ty: a word type's value, held by src
