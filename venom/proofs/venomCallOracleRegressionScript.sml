@@ -69,7 +69,8 @@ Theorem outcome_consumption_vs_nop:
      execution_frame s = execution_frame s /\
      t.vs_outcomes <> s.vs_outcomes /\ t.vs_requests <> s.vs_requests
 Proof
-  simp probe_defs >> EVAL_TAC
+  mp_tac outcome_consumption_not_preservation >>
+  simp[LET_THM, step_inst_base_def, mk_inst_def]
 QED
 
 (* Pairing two calls does not repair the false arbitrary-instruction claim:
