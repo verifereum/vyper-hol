@@ -278,3 +278,31 @@ Theorem avail_transfer_inst_source_inversion:
 Proof
   ACCEPT_TAC availExprProofsTheory.avail_transfer_inst_source_inversion
 QED
+
+(* Latest occurrence in a finite transfer trace; not a runtime trace. *)
+Theorem avail_fold_latest_source:
+  !d e src xs ae.
+    (?vs. FLOOKUP (FOLDL (\a inst. avail_transfer_inst d inst a) ae xs) e =
+          SOME vs /\ MEM src vs) <=>
+    ((?vs. FLOOKUP ae e = SOME vs /\ MEM src vs) /\
+     EVERY (\inst. avail_source_survives e inst /\
+                   ~avail_source_birth d e src inst) xs) \/
+    (?pre inst post. xs = pre ++ [inst] ++ post /\
+      avail_source_birth d e src inst /\
+      EVERY (\i. avail_source_survives e i /\
+                 ~avail_source_birth d e src i) post)
+Proof
+  ACCEPT_TAC availExprProofsTheory.avail_fold_latest_source
+QED
+
+Theorem avail_fold_empty_latest_source:
+  !d e src xs.
+    (?vs. FLOOKUP (FOLDL (\a inst. avail_transfer_inst d inst a) FEMPTY xs) e =
+          SOME vs /\ MEM src vs) <=>
+    (?pre inst post. xs = pre ++ [inst] ++ post /\
+      avail_source_birth d e src inst /\
+      EVERY (\i. avail_source_survives e i /\
+                 ~avail_source_birth d e src i) post)
+Proof
+  ACCEPT_TAC availExprProofsTheory.avail_fold_empty_latest_source
+QED

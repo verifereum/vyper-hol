@@ -430,3 +430,78 @@ Proof
   Cases_on `is_pseudo inst.inst_opcode \/ inst.inst_opcode = ASSIGN \/
             is_terminator inst.inst_opcode` >> simp[] >> metis_tac[]
 QED
+
+Theorem foldl_latest_birth[local]:
+  !T P S B.
+    (!x a. P (T x a) <=> (P a /\ S x) \/ B x) ==>
+    !xs a. P (FOLDL (\a x. T x a) a xs) <=>
+      (P a /\ EVERY (\x. S x /\ ~B x) xs) \/
+      (?pre x post. xs = pre ++ [x] ++ post /\ B x /\
+                    EVERY (\y. S y /\ ~B y) post)
+Proof
+  rpt gen_tac >> strip_tac >> Induct >> simp[] >>
+  rpt gen_tac >> simp[listTheory.FOLDL] >>
+  eq_tac
+  >- (disch_then (DISJ_CASES_THEN2 assume_tac strip_assume_tac)
+      >- (Cases_on `B h`
+          >- (disj2_tac >> qexistsl_tac [`[]`, `h`, `xs`] >> simp[]) >>
+          disj1_tac >> gvs[]) >>
+      disj2_tac >> qexistsl_tac [`h::pre`, `x`, `post`] >> simp[]) >>
+  strip_tac >- metis_tac[] >>
+  Cases_on `pre` >> gvs[] >> metis_tac[]
+QED
+
+(* Proof-only occurrence classification, not an executable transfer. *)
+Definition avail_source_survives_def:
+  avail_source_survives e inst <=>
+    is_pseudo inst.inst_opcode \/ inst.inst_opcode = ASSIGN \/
+    is_terminator inst.inst_opcode \/
+    DISJOINT (root_effects e) (write_effects inst.inst_opcode)
+End
+
+Definition avail_source_birth_def:
+  avail_source_birth d e src inst <=>
+    ~(is_pseudo inst.inst_opcode \/ inst.inst_opcode = ASSIGN \/
+      is_terminator inst.inst_opcode) /\
+    LENGTH inst.inst_outputs <= 1 /\
+    ~is_nonidempotent inst.inst_opcode /\
+    ~has_conflicting_effects inst.inst_opcode /\
+    e = mk_expr d inst /\ src = inst
+End
+
+Theorem avail_fold_latest_source:
+  !d e src xs ae.
+    (?vs. FLOOKUP (FOLDL (\a inst. avail_transfer_inst d inst a) ae xs) e =
+          SOME vs /\ MEM src vs) <=>
+    ((?vs. FLOOKUP ae e = SOME vs /\ MEM src vs) /\
+     EVERY (\inst. avail_source_survives e inst /\
+                   ~avail_source_birth d e src inst) xs) \/
+    (?pre inst post. xs = pre ++ [inst] ++ post /\
+      avail_source_birth d e src inst /\
+      EVERY (\i. avail_source_survives e i /\
+                 ~avail_source_birth d e src i) post)
+Proof
+  rpt gen_tac >>
+  qspecl_then [`\inst a. avail_transfer_inst d inst a`,
+               `\a. ?vs. FLOOKUP a e = SOME vs /\ MEM src vs`,
+               `avail_source_survives e`, `avail_source_birth d e src`]
+    mp_tac foldl_latest_birth >>
+  (impl_tac >- (
+    rpt gen_tac >> simp[avail_transfer_inst_source_member,
+      avail_source_survives_def, avail_source_birth_def] >>
+    Cases_on `is_pseudo x.inst_opcode \/ x.inst_opcode = ASSIGN \/
+              is_terminator x.inst_opcode` >> simp[] >> metis_tac[])) >>
+  simp[]
+QED
+
+Theorem avail_fold_empty_latest_source:
+  !d e src xs.
+    (?vs. FLOOKUP (FOLDL (\a inst. avail_transfer_inst d inst a) FEMPTY xs) e =
+          SOME vs /\ MEM src vs) <=>
+    (?pre inst post. xs = pre ++ [inst] ++ post /\
+      avail_source_birth d e src inst /\
+      EVERY (\i. avail_source_survives e i /\
+                 ~avail_source_birth d e src i) post)
+Proof
+  simp[avail_fold_latest_source]
+QED
