@@ -108,6 +108,9 @@ Proof
   Induct >> simp[run_inst_seq_mem_ok_def] >> rpt gen_tac >> disch_tac >>
   conj_tac
   >- (irule below_frontier_no_ranges >> gvs[]) >>
+  conj_tac
+  >- (irule memSafeRunTheory.inst_dload_in_data_other >>
+      rpt conj_tac >> strip_tac >> gvs[]) >>
   Cases_on `step_inst_base h s` >> simp[]
 QED
 
