@@ -123,11 +123,8 @@ layout end or dynamic (`static_mem_ok eom`).
   vs_initial_fmp; now excluded by `~ctx_has_dalloca C` on all four
   lemmas. (3) `v = PHI [p; a1]` with `p` a PARAM gets a singleton
   points-to set, so a store through `v` must-kills `a1` and a live `a2`
-  is packed onto it; now excluded by `fn_ptr_ok`'s write-exclusion
-  clause: no memory-write offset `Var v` is both alloca-derived and
-  PARAM/DALLOCA-derived (with `phi_pv_all_var fn (ptr_roots P fn)`).
-  Mixed non-store pointers are allowed, since IfExp over a memory param
-  and a literal ASSIGNs both into one var. `callee_first` (call-DAG induction),
+  is packed onto it; now excluded by the two `phi_pv_all_var` clauses
+  added to `fn_ptr_ok`. `callee_first` (call-DAG induction),
   `all_reachable` and `fn_defs_reach_uses` were added as premises
   because the rows carry them; use them freely.
 
@@ -145,10 +142,5 @@ layout end or dynamic (`static_mem_ok eom`).
   re-derive that counterexample. With the premise, C' has neither ALLOCA nor
   DALLOCA, so `P' = K {}` gives an empty `fn_pv`, and along
   `frame_reachable` in C' the provenance map is `FEMPTY` and
-  `vs_allocas = FEMPTY`; `access_ok eom FEMPTY fn` then reduces to the
+  `vs_allocas = FEMPTY`; `access_ok eom FEMPTY` then reduces to the
   `off + len <= eom` bound that `concretize_stage_static_mem` also needs.
-- Revert forwarding (`in_revert_forward fn s`: a `RETURNDATACOPY [p; 0; rds]`
-  then `REVERT [p; rds]` in one block) is exempt from the range clauses of
-  `access_ok` and from `raw_mem_ok`, `static_mem_ok` and `lowered_mem_ok`:
-  it copies a callee's revert data to a zero-size site and reverts with
-  it, so it touches memory past its site and past the frontier.

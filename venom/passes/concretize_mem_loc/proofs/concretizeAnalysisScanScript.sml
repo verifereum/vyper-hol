@@ -1,6 +1,6 @@
 Theory concretizeAnalysisScan
 Ancestors concretizeAnalysisBoundary basePtrDefs execEquivParamBase allocaRemapSSA
-  list pred_set venomInst pair
+  list pred_set venomInst pair basePtrProofs concretizeMemLocDefs
 
 Definition bp_scan_insts_def:
   bp_scan_insts fn [] = [] /\
@@ -112,3 +112,88 @@ QED
    6. No base-path argument supplies memory-liveness demand closure or
       fn_mems_used soundness. Those remain independent integration gates.
 *)
+
+Theorem bp_handle_inst_lookup_cong:
+  (!v. bp_get_ptrs r v = bp_get_ptrs s v) ==>
+  FST (bp_handle_inst r i) = FST (bp_handle_inst s i) /\
+  (!v. bp_get_ptrs (SND (bp_handle_inst r i)) v =
+       bp_get_ptrs (SND (bp_handle_inst s i)) v)
+Proof
+  strip_tac >>
+  `bp_get_ptrs r = bp_get_ptrs s` by simp[FUN_EQ_THM] >>
+  Cases_on `inst_output i` >> simp[bp_handle_inst_def] >>
+  Cases_on `i.inst_opcode` >> simp[bp_handle_inst_def, bp_get_ptrs_update]
+  >~ [`i.inst_opcode = PHI`]
+  >- (IF_CASES_TAC >> simp[bp_get_ptrs_update])
+  >~ [`i.inst_opcode = ASSIGN`]
+  >- (namedCases_on `i.inst_operands` ["", "a tl"] >> simp[] >>
+      Cases_on `tl` >> simp[] >>
+      Cases_on `a` >> simp[bp_get_ptrs_update]) >>
+  namedCases_on `i.inst_operands` ["", "a tl"] >> simp[] >>
+  namedCases_on `tl` ["", "b rest"] >> simp[] >>
+  Cases_on `rest` >> simp[] >>
+  Cases_on `a` >> simp[bp_get_ptrs_update] >>
+  Cases_on `b` >> simp[bp_get_ptrs_update] >>
+  rpt (IF_CASES_TAC >> simp[bp_get_ptrs_update])
+QED
+
+Theorem bp_process_block_lookup_cong:
+  !xs r s. (!v. bp_get_ptrs r v = bp_get_ptrs s v) ==>
+  FST (bp_process_block r xs) = FST (bp_process_block s xs) /\
+  (!v. bp_get_ptrs (SND (bp_process_block r xs)) v =
+       bp_get_ptrs (SND (bp_process_block s xs)) v)
+Proof
+  Induct >> simp[bp_process_block_def] >> rpt gen_tac >> strip_tac >>
+  drule bp_handle_inst_lookup_cong >>
+  disch_then (qspec_then `h` strip_assume_tac) >>
+  first_x_assum (qspecl_then
+    [`SND (bp_handle_inst r h)`, `SND (bp_handle_inst s h)`] mp_tac) >>
+  simp[] >>
+  Cases_on `bp_handle_inst r h` >> Cases_on `bp_handle_inst s h` >>
+  simp[] >> strip_tac >>
+  pairarg_tac >> simp[] >> pairarg_tac >> gvs[]
+QED
+
+Theorem bp_one_pass_lookup_cong:
+  (!v. bp_get_ptrs r v = bp_get_ptrs s v) ==>
+  FST (bp_one_pass fn order r) = FST (bp_one_pass fn order s) /\
+  (!v. bp_get_ptrs (SND (bp_one_pass fn order r)) v =
+       bp_get_ptrs (SND (bp_one_pass fn order s)) v)
+Proof
+  simp[bp_one_pass_scan, bp_process_block_lookup_cong]
+QED
+
+Definition bp_unconditional_passes_def:
+  bp_unconditional_passes 0 fn order r = r /\
+  bp_unconditional_passes (SUC n) fn order r =
+    bp_unconditional_passes n fn order (SND (bp_one_pass fn order r))
+End
+
+Theorem bp_unconditional_passes_stable_ptrs:
+  !n r. FST (bp_one_pass fn order r) = F ==>
+  !v. bp_get_ptrs (bp_unconditional_passes n fn order r) v = bp_get_ptrs r v
+Proof
+  Induct >> simp[bp_unconditional_passes_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule (SRULE [] bp_one_pass_stable_ptrs) >> strip_tac >>
+  `FST (bp_one_pass fn order (SND (bp_one_pass fn order r))) = F`
+    by (drule bp_one_pass_lookup_cong >>
+        disch_then (qspecl_then [`order`, `fn`] strip_assume_tac) >> gvs[]) >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem bp_iterate_fuel_unconditional_ptrs:
+  !n r v. bp_get_ptrs (bp_iterate_fuel n fn order r) v =
+          bp_get_ptrs (bp_unconditional_passes n fn order r) v
+Proof
+  Induct >> simp[bp_iterate_fuel_def, bp_unconditional_passes_def] >>
+  rpt gen_tac >> Cases_on `bp_one_pass fn order r` >> simp[] >>
+  rename1 `bp_one_pass fn order r = (changed,r1)` >>
+  Cases_on `changed` >> simp[] >>
+  `FST (bp_one_pass fn order r) = F` by simp[] >>
+  drule bp_one_pass_stable_ptrs >> strip_tac >>
+  `FST (bp_one_pass fn order r1) = F`
+    by (drule bp_one_pass_lookup_cong >>
+        disch_then (qspecl_then [`order`, `fn`] strip_assume_tac) >> gvs[]) >>
+  simp[bp_unconditional_passes_stable_ptrs]
+QED

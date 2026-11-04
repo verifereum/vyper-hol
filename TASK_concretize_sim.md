@@ -169,11 +169,8 @@ excludes INVOKE; reuse what helps, don't build on its statement.
   vs_initial_fmp; now excluded by `~ctx_has_dalloca C` on all four
   lemmas. (3) `v = PHI [p; a1]` with `p` a PARAM gets a singleton
   points-to set, so a store through `v` must-kills `a1` and a live `a2`
-  is packed onto it; now excluded by `fn_ptr_ok`'s write-exclusion
-  clause: no memory-write offset `Var v` is both alloca-derived and
-  PARAM/DALLOCA-derived (with `phi_pv_all_var fn (ptr_roots P fn)`).
-  Mixed non-store pointers are allowed, since IfExp over a memory param
-  and a literal ASSIGNs both into one var. `callee_first` (call-DAG induction),
+  is packed onto it; now excluded by the two `phi_pv_all_var` clauses
+  added to `fn_ptr_ok`. `callee_first` (call-DAG induction),
   `all_reachable` and `fn_defs_reach_uses` were added as premises
   because the rows carry them; use them freely.
 
@@ -189,9 +186,6 @@ excludes INVOKE; reuse what helps, don't build on its statement.
 - The REVERT exemption (`about_to_revert`): a REVERT, and a RETURNDATACOPY
   right before one, may read tainted memory; both runs then revert, and
   `dead_result_rel` doesn't compare revert payloads.
-- Revert forwarding (`in_revert_forward fn s`: a `RETURNDATACOPY [p; 0; rds]`
-  then `REVERT [p; rds]` in one block) is exempt from `access_ok`'s range
-  clauses and from the raw and static memory facts: both runs revert there.
 
 - The intuition and the known obligations (analysis fuel, fn_mems_used of
   observed callees, callee accesses inside fn_mems_used) are in the SML
