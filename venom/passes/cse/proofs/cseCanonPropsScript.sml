@@ -737,3 +737,16 @@ Proof
  mp_tac (Q.SPEC `bb.bb_instructions` phi_prefix_all_phi) >>
  simp[listTheory.EVERY_EL, listTheory.EL_TAKE, phi_prefix_length_le]
 QED
+
+(* Reuse the shared source-birth and survival predicates. *)
+Theorem cse_transfer_source_cases:
+ !d inst a e src.
+ (?xs. FLOOKUP (avail_transfer_inst d inst a) e = SOME xs /\ MEM src xs) ==>
+ ((?xs. FLOOKUP a e = SOME xs /\ MEM src xs) /\
+   avail_source_survives e inst) \/ avail_source_birth d e src inst
+Proof
+ simp[avail_transfer_inst_source_member,
+      availExprProofsTheory.avail_source_survives_def,
+      availExprProofsTheory.avail_source_birth_def] >>
+ rpt gen_tac >> IF_CASES_TAC >> gvs[] >> metis_tac[]
+QED

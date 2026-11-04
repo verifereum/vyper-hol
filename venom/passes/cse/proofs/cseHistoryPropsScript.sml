@@ -1,7 +1,7 @@
 Theory cseHistoryProps
 Ancestors passSharedProps venomExecSemantics venomState stateEquiv execEquivProofs
   cfgAnalysisProps analysisSimProps venomInstProps venomExecProps
-  venomWf venomInst venomExecProofs list cfgDefs
+  venomWf venomInst venomExecProofs list cfgDefs cseCanonProps
 
 (* Local copy transport only: the persistence premise must be established
    for the particular later execution occurrence by a separate argument. *)
@@ -638,4 +638,36 @@ Theorem cse_prefix_exec_control:
  s.vs_inst_idx <= LENGTH bb.bb_instructions
 Proof
  rpt gen_tac >> strip_tac >> drule cse_prefix_control >> simp[]
+QED
+
+Definition cse_event_survives_def:
+ (cse_event_survives e (CsePhi n bb s t) <=> T) /\
+ (cse_event_survives e (CseStep n bb inst s t) <=>
+  avail_source_survives e inst)
+End
+
+Definition cse_source_history_def:
+ cse_source_history d events e src <=>
+ ?pre post n bb s t.
+ events = pre ++ [CseStep n bb src s t] ++ post /\
+ avail_source_birth d e src src /\ EVERY (cse_event_survives e) post
+End
+
+Theorem cse_source_history_append:
+ !d events e src ev.
+ cse_source_history d events e src /\ cse_event_survives e ev ==>
+ cse_source_history d (events ++ [ev]) e src
+Proof
+ rpt gen_tac >> simp[cse_source_history_def] >> strip_tac >>
+ qexistsl_tac [`pre`, `post ++ [ev]`, `n`, `bb`, `s`, `t`] >>
+ simp[APPEND_ASSOC]
+QED
+
+Theorem cse_source_history_birth:
+ !d events e inst n bb s t.
+ avail_source_birth d e inst inst ==>
+ cse_source_history d (events ++ [CseStep n bb inst s t]) e inst
+Proof
+ rpt strip_tac >> simp[cse_source_history_def] >>
+ qexistsl_tac [`events`, `[]`, `n`, `bb`, `s`, `t`] >> simp[]
 QED
