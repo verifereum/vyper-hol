@@ -311,3 +311,83 @@ Proof
     venomExecSemanticsTheory.phi_prefix_length_def]
 QED
 
+
+Theorem sop_cs2_projections:
+  sop_cs2.vs_inst_idx = 0 /\ sop_cs2.vs_current_bb = "entry" /\
+  sop_cs2.vs_prev_bb = NONE /\ sop_cs2.vs_params = [256w] /\
+  sop_cs2.vs_vars = FEMPTY /\ sop_cs2.vs_allocas = FEMPTY
+Proof
+  simp[sop_cs2_def, venomExecSemanticsTheory.setup_callee_def,
+       sop_callee_def, venomInstTheory.mk_raw_function_def]
+QED
+
+Definition sop_cp2_def:
+  sop_cp2 = (update_var "p" 256w sop_cs2) with vs_inst_idx := 1
+End
+Definition sop_tp2_def:
+  sop_tp2 = step_taint (HD (HD sop_callee.fn_blocks).bb_instructions)
+    sop_cs2 (sop_cp2 with vs_inst_idx := 0) (sop_t3 with t_var := FEMPTY)
+End
+
+Theorem sop_second_param_step:
+  step_inst 0 sop_ctx (HD (HD sop_callee.fn_blocks).bb_instructions) sop_cs2 =
+    OK (sop_cp2 with vs_inst_idx := 0)
+Proof
+  simp[sop_callee_def, venomInstTheory.mk_raw_function_def,
+    venomInstTheory.mk_inst_def, venomExecSemanticsTheory.step_inst_def,
+    venomExecSemanticsTheory.step_inst_base_def, sop_cs2_projections,
+    sop_cp2_def, venomStateTheory.update_var_def] >>
+  metis_tac[venomStateTheory.venom_state_component_equality]
+QED
+
+Theorem sop_second_param_control:
+  active_inst sop_callee (HD (HD sop_callee.fn_blocks).bb_instructions) sop_cs2 /\
+  active_inst sop_callee (EL 1 (HD sop_callee.fn_blocks).bb_instructions)
+    (sop_cp2 with vs_inst_idx := SUC sop_cs2.vs_inst_idx)
+Proof
+  simp[contextCodegenRelTheory.active_inst_def, sop_cs2_projections,
+    sop_cp2_def, venomStateTheory.update_var_def, sop_callee_def,
+    venomInstTheory.mk_raw_function_def]
+QED
+
+Theorem sop_second_param_origins:
+  step_prov sop_pg FEMPTY (HD (HD sop_callee.fn_blocks).bb_instructions)
+    (sop_cp2 with vs_inst_idx := 0) = sop_gp /\
+  origin_step sop_pg FEMPTY (HD (HD sop_callee.fn_blocks).bb_instructions)
+    (sop_cp2 with vs_inst_idx := 0) = sop_op
+Proof
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``sop_cp2``])
+QED
+
+Theorem sop_second_param:
+  origin_frame_reachable sop_initial sop_ctx [sop_frame2] sop_pg sop_gp
+    sop_tp2 sop_callee (EL 1 (HD sop_callee.fn_blocks).bb_instructions)
+    sop_cp2 [sop_o1] sop_op
+Proof
+  assume_tac sop_in_second_callee >> drule origin_frame_reachable_next >>
+  disch_then (qspecl_then
+    [`EL 1 (HD sop_callee.fn_blocks).bb_instructions`,
+     `sop_cp2 with vs_inst_idx := 0`, `0`] mp_tac) >>
+  simp[sop_second_param_control, sop_second_param_step,
+    sop_second_param_origins, sop_tp2_def] >>
+  `sop_cp2 with vs_inst_idx := SUC sop_cs2.vs_inst_idx = sop_cp2` by
+    simp[sop_cp2_def, sop_cs2_projections] >>
+  `~is_terminator (HD (HD sop_callee.fn_blocks).bb_instructions).inst_opcode /\
+    (HD (HD sop_callee.fn_blocks).bb_instructions).inst_opcode <> INVOKE`
+    by EVAL_TAC >>
+  gvs[sop_pg_def]
+QED
+
+Theorem sop_second_allocator:
+  sop_cs2.vs_alloca_next = 288 /\ sop_cb.vs_alloca_next = 320
+Proof
+  `sop_s1.vs_alloca_next = 288` by
+    simp[sop_s1_def, venomStateTheory.update_var_def] >>
+  `sop_s2.vs_alloca_next = 288` by
+    simp[sop_s2_def, venomStateTheory.mstore_def] >>
+  `sop_s3.vs_alloca_next = 288` by
+    simp[sop_s3_def, venomExecSemanticsTheory.merge_callee_state_def] >>
+  simp[sop_cs2_def, venomExecSemanticsTheory.setup_callee_def,
+    sop_callee_def, venomInstTheory.mk_raw_function_def,
+    sop_cb_def, venomStateTheory.update_var_def]
+QED
