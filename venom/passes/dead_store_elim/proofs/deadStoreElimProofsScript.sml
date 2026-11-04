@@ -1092,19 +1092,21 @@ QED
      analysis marks dead removes exactly the stores it checked.
    ssa_form fn: each variable has one definition, so the per-variable
      base-pointer analysis describes it; DSE preserves it, unlike wf_ssa.
-   safe_inv: any state invariant that holds at the start state, survives every
-     instruction step and PHI evaluation of fn, and implies alloca safety,
-     allocas fitting in a word, soundness and boundedness of fn's
-     base-pointer analysis, and accesses staying in the alloca the analysis
-     places them in (bp_accesses_in_own_alloca: without it an access at an
-     unknown offset into one alloca can land in the next, which may_overlap
-     treats as disjoint).  safe_inv = "reachable from s" always meets both
-     preservation clauses, so this asks that every reachable state be
-     safe and agree with bp_analyze.  The earlier all-states
+   safe_inv: an invariant of fn's runs from s, followed the way run_blocks
+     and exec_block step: PHIs on entry to the current block (index 0, then
+     the index past the PHIs), then the instruction at vs_inst_idx (index
+     SUC on a non-terminator; a terminator's jump resets it).  Because it
+     only has to survive steps fn can actually take, safe_inv = "reachable
+     from s" meets it.  It implies alloca safety, allocas fitting in a word,
+     soundness and boundedness of fn's base-pointer analysis, and that the
+     instruction about to run accesses only the alloca the analysis places
+     the access in (bp_accesses_in_own_alloca: may_overlap treats different
+     allocas as disjoint even at an unknown offset, and the analysis adds
+     offsets without wrapping).  The earlier all-states
      step_preserves_safety premise failed for any ADD on an alloca
      pointer, and a start state without bp_ptr_sound lets two pointers
-     that bp_analyze equates differ at runtime.
-   safe_inv does not see vs_inst_idx, which exec_block rewrites between steps.
+     that bp_analyze equates differ at runtime.  A preservation premise over
+     any instruction from any safe state only admits loop-free code.
 
    Observations that may help (ignore them if another route is shorter):
    - NOP-ing stores and clearing NOPs leaves bp_analyze and cfg_analyze
@@ -1112,6 +1114,10 @@ QED
      with no outputs, NOPs included, and dse_inst / clear_nops_function keep
      terminators and labels.  So the bp of every DSE round is fn's, and the
      safe_inv facts about fn's bp carry over to the intermediate functions.
+   - A NOP'd store and clear_nops_function shift what runs at a given
+     index, so composing rounds needs the original fn's reachable state
+     carried alongside the transformed one, or safe_inv transported along
+     dse_all_equiv and the index shift.
    - ma_may_alias_sound (memAliasProps) turns a non-alias verdict into
      disjoint runtime regions for fixed locations; bp_accesses_in_own_alloca
      with allocas_non_overlapping covers a read at an unknown offset.
@@ -1121,22 +1127,27 @@ Theorem dse_function_space_correct:
   !analysis_fn space fuel ctx fn s safe_inv.
     wf_function fn /\ ssa_form fn /\
     s.vs_inst_idx = 0 /\ safe_inv s /\
-    (!s0 idx. safe_inv (s0 with vs_inst_idx := idx) <=> safe_inv s0) /\
-    (!fuel' ctx' inst s0 s1.
-       MEM inst (fn_insts fn) /\ safe_inv s0 /\
-       step_inst fuel' ctx' inst s0 = OK s1 ==> safe_inv s1) /\
     (!bb s0 s1.
-       MEM bb fn.fn_blocks /\ safe_inv s0 /\
-       eval_phis s0 bb.bb_instructions = OK s1 ==> safe_inv s1) /\
+       lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+       s0.vs_inst_idx = 0 /\ safe_inv s0 /\
+       eval_phis s0 bb.bb_instructions = OK s1 ==>
+       safe_inv (s1 with vs_inst_idx := phi_prefix_length bb.bb_instructions)) /\
+    (!bb inst fuel' s0 s1.
+       lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+       get_instruction bb s0.vs_inst_idx = SOME inst /\ safe_inv s0 /\
+       step_inst fuel' ctx inst s0 = OK s1 ==>
+       safe_inv (if is_terminator inst.inst_opcode then s1
+                 else s1 with vs_inst_idx := SUC s0.vs_inst_idx)) /\
     (!s0. safe_inv s0 ==>
        alloca_inv s0 /\
        (!aid base sz. FLOOKUP s0.vs_allocas aid = SOME (base, sz) ==>
                       base + sz < dimword (:256)) /\
-       alloca_safe_access fn (alloca_roots fn) s0 /\
-       ptrs_in_alloca_bounds fn (alloca_roots fn) s0 /\
        bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) s0 /\
        bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s0 /\
-       bp_accesses_in_own_alloca (bp_analyze (cfg_analyze fn) fn) fn s0) /\
+       (!bb inst.
+          lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+          get_instruction bb s0.vs_inst_idx = SOME inst ==>
+          bp_accesses_in_own_alloca (bp_analyze (cfg_analyze fn) fn) inst s0)) /\
     (!fn'. all_dead_stores (analysis_fn space fn')
              (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
              space fn') ==>
@@ -1154,22 +1165,27 @@ Theorem dse_function_correct:
   !analysis_fn fuel ctx fn s safe_inv.
     wf_function fn /\ ssa_form fn /\
     s.vs_inst_idx = 0 /\ safe_inv s /\
-    (!s0 idx. safe_inv (s0 with vs_inst_idx := idx) <=> safe_inv s0) /\
-    (!fuel' ctx' inst s0 s1.
-       MEM inst (fn_insts fn) /\ safe_inv s0 /\
-       step_inst fuel' ctx' inst s0 = OK s1 ==> safe_inv s1) /\
     (!bb s0 s1.
-       MEM bb fn.fn_blocks /\ safe_inv s0 /\
-       eval_phis s0 bb.bb_instructions = OK s1 ==> safe_inv s1) /\
+       lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+       s0.vs_inst_idx = 0 /\ safe_inv s0 /\
+       eval_phis s0 bb.bb_instructions = OK s1 ==>
+       safe_inv (s1 with vs_inst_idx := phi_prefix_length bb.bb_instructions)) /\
+    (!bb inst fuel' s0 s1.
+       lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+       get_instruction bb s0.vs_inst_idx = SOME inst /\ safe_inv s0 /\
+       step_inst fuel' ctx inst s0 = OK s1 ==>
+       safe_inv (if is_terminator inst.inst_opcode then s1
+                 else s1 with vs_inst_idx := SUC s0.vs_inst_idx)) /\
     (!s0. safe_inv s0 ==>
        alloca_inv s0 /\
        (!aid base sz. FLOOKUP s0.vs_allocas aid = SOME (base, sz) ==>
                       base + sz < dimword (:256)) /\
-       alloca_safe_access fn (alloca_roots fn) s0 /\
-       ptrs_in_alloca_bounds fn (alloca_roots fn) s0 /\
        bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) s0 /\
        bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s0 /\
-       bp_accesses_in_own_alloca (bp_analyze (cfg_analyze fn) fn) fn s0) /\
+       (!bb inst.
+          lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+          get_instruction bb s0.vs_inst_idx = SOME inst ==>
+          bp_accesses_in_own_alloca (bp_analyze (cfg_analyze fn) fn) inst s0)) /\
     (!space fn'.
       all_dead_stores (analysis_fn space fn')
         (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')

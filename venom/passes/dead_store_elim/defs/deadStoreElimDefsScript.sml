@@ -246,22 +246,24 @@ Definition bp_access_ops_def:
     | _ => F
 End
 
-(* Every non-empty access of fn through a pointer the base-pointer analysis
-   places in alloca aid stays within aid's region in state s, whether or not
-   the analysis knows the offset.  may_overlap treats locations in different
-   allocas as disjoint, as upstream Vyper does; this is the invariant that
-   makes that sound.  bp_ptrs_bounded only covers memory accesses at a known
-   offset. *)
+(* Every non-empty access of inst through a pointer the base-pointer
+   analysis places in alloca aid stays within aid's region in state s, and
+   sits at the offset the analysis computed when it knows one (the analysis
+   adds offsets without wrapping, the runtime wraps them mod 2^256).
+   may_overlap treats locations in different allocas as disjoint, as
+   upstream Vyper does; this is the invariant that makes that sound.
+   bp_ptrs_bounded only covers memory accesses at a known offset. *)
 Definition bp_accesses_in_own_alloca_def:
-  bp_accesses_in_own_alloca bp fn s <=>
-    !sp inst ops aid off base sz w size_op n.
-      MEM inst (fn_insts fn) /\ bp_access_ops sp inst ops /\
+  bp_accesses_in_own_alloca bp inst s <=>
+    !sp ops aid off base sz w size_op n.
+      bp_access_ops sp inst ops /\
       bp_ptr_from_op bp ops.iao_ofst = SOME (Ptr (Allocation aid) off) /\
       FLOOKUP s.vs_allocas aid = SOME (base, sz) /\
       eval_operand ops.iao_ofst s = SOME w /\
       ops.iao_max_size = SOME size_op /\
       eval_operand size_op s = SOME n /\ n <> 0w ==>
-      base <= w2n w /\ w2n w + w2n n <= base + sz
+      base <= w2n w /\ w2n w + w2n n <= base + sz /\
+      (!k. off = SOME k ==> w2n w = base + k)
 End
 
 (* ===== Per-instruction transform ===== *)

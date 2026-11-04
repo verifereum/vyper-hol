@@ -215,22 +215,27 @@ Theorem dse_function_space_correct:
   !analysis_fn space fuel ctx fn s safe_inv.
     wf_function fn /\ ssa_form fn /\
     s.vs_inst_idx = 0 /\ safe_inv s /\
-    (!s0 idx. safe_inv (s0 with vs_inst_idx := idx) <=> safe_inv s0) /\
-    (!fuel' ctx' inst s0 s1.
-       MEM inst (fn_insts fn) /\ safe_inv s0 /\
-       step_inst fuel' ctx' inst s0 = OK s1 ==> safe_inv s1) /\
     (!bb s0 s1.
-       MEM bb fn.fn_blocks /\ safe_inv s0 /\
-       eval_phis s0 bb.bb_instructions = OK s1 ==> safe_inv s1) /\
+       lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+       s0.vs_inst_idx = 0 /\ safe_inv s0 /\
+       eval_phis s0 bb.bb_instructions = OK s1 ==>
+       safe_inv (s1 with vs_inst_idx := phi_prefix_length bb.bb_instructions)) /\
+    (!bb inst fuel' s0 s1.
+       lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+       get_instruction bb s0.vs_inst_idx = SOME inst /\ safe_inv s0 /\
+       step_inst fuel' ctx inst s0 = OK s1 ==>
+       safe_inv (if is_terminator inst.inst_opcode then s1
+                 else s1 with vs_inst_idx := SUC s0.vs_inst_idx)) /\
     (!s0. safe_inv s0 ==>
        alloca_inv s0 /\
        (!aid base sz. FLOOKUP s0.vs_allocas aid = SOME (base, sz) ==>
                       base + sz < dimword (:256)) /\
-       alloca_safe_access fn (alloca_roots fn) s0 /\
-       ptrs_in_alloca_bounds fn (alloca_roots fn) s0 /\
        bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) s0 /\
        bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s0 /\
-       bp_accesses_in_own_alloca (bp_analyze (cfg_analyze fn) fn) fn s0) /\
+       (!bb inst.
+          lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+          get_instruction bb s0.vs_inst_idx = SOME inst ==>
+          bp_accesses_in_own_alloca (bp_analyze (cfg_analyze fn) fn) inst s0)) /\
     (!fn'. all_dead_stores (analysis_fn space fn')
              (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
              space fn') ==>
@@ -246,22 +251,27 @@ Theorem dse_function_correct:
   !analysis_fn fuel ctx fn s safe_inv.
     wf_function fn /\ ssa_form fn /\
     s.vs_inst_idx = 0 /\ safe_inv s /\
-    (!s0 idx. safe_inv (s0 with vs_inst_idx := idx) <=> safe_inv s0) /\
-    (!fuel' ctx' inst s0 s1.
-       MEM inst (fn_insts fn) /\ safe_inv s0 /\
-       step_inst fuel' ctx' inst s0 = OK s1 ==> safe_inv s1) /\
     (!bb s0 s1.
-       MEM bb fn.fn_blocks /\ safe_inv s0 /\
-       eval_phis s0 bb.bb_instructions = OK s1 ==> safe_inv s1) /\
+       lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+       s0.vs_inst_idx = 0 /\ safe_inv s0 /\
+       eval_phis s0 bb.bb_instructions = OK s1 ==>
+       safe_inv (s1 with vs_inst_idx := phi_prefix_length bb.bb_instructions)) /\
+    (!bb inst fuel' s0 s1.
+       lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+       get_instruction bb s0.vs_inst_idx = SOME inst /\ safe_inv s0 /\
+       step_inst fuel' ctx inst s0 = OK s1 ==>
+       safe_inv (if is_terminator inst.inst_opcode then s1
+                 else s1 with vs_inst_idx := SUC s0.vs_inst_idx)) /\
     (!s0. safe_inv s0 ==>
        alloca_inv s0 /\
        (!aid base sz. FLOOKUP s0.vs_allocas aid = SOME (base, sz) ==>
                       base + sz < dimword (:256)) /\
-       alloca_safe_access fn (alloca_roots fn) s0 /\
-       ptrs_in_alloca_bounds fn (alloca_roots fn) s0 /\
        bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) s0 /\
        bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s0 /\
-       bp_accesses_in_own_alloca (bp_analyze (cfg_analyze fn) fn) fn s0) /\
+       (!bb inst.
+          lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+          get_instruction bb s0.vs_inst_idx = SOME inst ==>
+          bp_accesses_in_own_alloca (bp_analyze (cfg_analyze fn) fn) inst s0)) /\
     (!space fn'.
       all_dead_stores (analysis_fn space fn')
         (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
