@@ -257,8 +257,10 @@ Proof
    `!i y. MEM i (fn_insts fn) /\ i.inst_opcode = SETFMP /\
       MEM (Var y) i.inst_operands ==>
       ~gas_var fn y` by
-     (rpt strip_tac >> spose_not_then assume_tac >>
-      `gas_use_ok i y` by metis_tac[] >> gvs[gas_use_ok_def]) >>
+     (rpt strip_tac >> rename1 `inst.inst_opcode = SETFMP` >>
+      qpat_x_assum `!i x. MEM i (fn_insts fn) /\ gas_var fn x /\ _ ==> _`
+        (qspecl_then [`inst`, `y`] mp_tac) >>
+      simp[gas_use_ok_def]) >>
    `!point base. MEM (point,base) (fmap_to_alist plan) ==>
       ~gas_var fn base` by
      (rpt strip_tac >> rename1 `MEM (point,target) (fmap_to_alist plan)` >>
