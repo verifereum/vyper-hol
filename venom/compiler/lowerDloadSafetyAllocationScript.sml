@@ -2,6 +2,7 @@
 Theory lowerDloadSafetyAllocation
 Ancestors
   lowerDloadSafetyRelation lowerDloadSafetyAdvance lowerDloadSafetyUpdates
+  lowerDloadConfiguredOrigins
   venomExecSemantics ptrDiscipline lowerDloadSafetyKernel
   venomState venomInst memLocDefs codegenRel finite_map pred_set
 
@@ -184,4 +185,184 @@ Proof
   >- (qexists_tac `f.lf_H |+ (out,(f.lf_serial,inst.inst_id))` >>
       simp[] >> gvs[SUBSET_DEF] >> metis_tac[]) >>
   gvs[ld_memory_def, ld_nonghost_def] >> first_assum ACCEPT_TAC
+QED
+
+(* A fresh identity cannot change any supported old provenance. *)
+Theorem ld_erase_fresh_update:
+  k NOTIN FDOM A /\ a IN FDOM A ==>
+  ld_erase (A |+ (k,v)) a = ld_erase A a
+Proof
+  rpt strip_tac >> `a <> k` by metis_tac[] >>
+  simp[ld_erase_def, FLOOKUP_UPDATE]
+QED
+
+Theorem ld_erase_fresh_compose:
+  k NOTIN FDOM A /\ FRANGE H SUBSET FDOM A ==>
+  ld_erase (A |+ (k,v)) o_f H = ld_erase A o_f H
+Proof
+  strip_tac >> simp[fmap_eq_flookup, FLOOKUP_o_f] >> gen_tac >>
+  Cases_on `FLOOKUP H x` >> simp[] >>
+  irule ld_erase_fresh_update >> simp[] >>
+  metis_tac[SUBSET_DEF, FRANGE_FLOOKUP]
+QED
+
+Theorem ld_erase_fresh_params:
+  k NOTIN FDOM A /\ (!a. MEM (SOME a) Q ==> a IN FDOM A) ==>
+  MAP (OPTION_MAP (ld_erase (A |+ (k,v)))) Q =
+  MAP (OPTION_MAP (ld_erase A)) Q
+Proof
+  strip_tac >> irule listTheory.MAP_CONG >> simp[] >>
+  rpt strip_tac >> Cases_on `x` >> simp[] >>
+  irule ld_erase_fresh_update >> metis_tac[]
+QED
+
+Theorem ld_vars_fresh_update:
+  k NOTIN FDOM A /\ ld_vars P A f ==>
+  ld_vars P (A |+ (k,v)) f
+Proof
+  simp[ld_vars_def] >> strip_tac >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      first_x_assum (drule_all_then mp_tac) >>
+      Cases_on `retpc_var f.lf_fn v'` >> simp[] >>
+      Cases_on `FLOOKUP f.lf_H v'` >> simp[] >>
+      strip_tac >> irule ld_wordrel_fresh_update >> simp[]) >>
+  rpt strip_tac >> irule ld_wordrel_fresh_update >> simp[]
+QED
+
+Theorem ld_maps_other_serial_update:
+  f.lf_serial <> FST k /\ ld_maps A f ==>
+  ld_maps (A |+ (k,v)) f
+Proof
+  Cases_on `k` >> strip_tac >> gvs[ld_maps_def, FLOOKUP_UPDATE] >>
+  first_x_assum ACCEPT_TAC
+QED
+
+Theorem ld_slots_absent_head:
+  FDOM A = ld_slots A (f::frames) /\
+  (!g. MEM g frames ==> g.lf_serial <> f.lf_serial) /\
+  FLOOKUP f.lf_src.vs_allocas aid = NONE ==>
+  (f.lf_serial,aid) NOTIN FDOM A
+Proof
+  strip_tac >> simp[Once ld_slots_cons] >>
+  gvs[ld_slots_def] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem ld_maps_absent_original:
+  ld_maps A f /\ FLOOKUP f.lf_src.vs_allocas aid = NONE /\
+  (!d. ~ld_private f d aid) ==>
+  FLOOKUP f.lf_tgt.vs_allocas aid = NONE
+Proof
+  strip_tac >> Cases_on `FLOOKUP f.lf_tgt.vs_allocas aid` >> simp[] >>
+  PairCases_on `x` >> gvs[ld_maps_def] >>
+  first_x_assum drule >> simp[] >> metis_tac[]
+QED
+
+Theorem ld_frames_fresh_update:
+  k NOTIN FDOM A /\
+  EVERY (\f. f.lf_serial <> FST k /\ ld_maps A f /\ ld_vars P A f) frames ==>
+  EVERY (\f. ld_maps (A |+ (k,v)) f /\ ld_vars P (A |+ (k,v)) f) frames
+Proof
+  simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  metis_tac[ld_maps_other_serial_update, ld_vars_fresh_update]
+QED
+
+Theorem ld_private_supply_bound:
+  ld_private f d ai ==> f.lf_supply.irs_next_inst <= ai
+Proof
+  simp[ld_private_def] >> rpt strip_tac >> gvs[] >>
+  `f.lf_supply.irs_next_inst <=
+    (SND (lower_dload_blocks_supply f.lf_supply
+      (TAKE bi f.lf_fn.fn_blocks))).irs_next_inst` by
+    (Cases_on `lower_dload_blocks_supply f.lf_supply (TAKE bi f.lf_fn.fn_blocks)` >>
+     drule lower_dload_blocks_supply_flat >>
+     strip_tac >> drule lower_dload_insts_supply_prefix >> simp[]) >>
+  `(SND (lower_dload_blocks_supply f.lf_supply
+      (TAKE bi f.lf_fn.fn_blocks))).irs_next_inst <=
+    (SND (lower_dload_insts_supply
+      (SND (lower_dload_blocks_supply f.lf_supply (TAKE bi f.lf_fn.fn_blocks)))
+      (TAKE j (EL bi f.lf_fn.fn_blocks).bb_instructions))).irs_next_inst` by
+    (Cases_on `lower_dload_insts_supply
+      (SND (lower_dload_blocks_supply f.lf_supply (TAKE bi f.lf_fn.fn_blocks)))
+      (TAKE j (EL bi f.lf_fn.fn_blocks).bb_instructions)` >>
+     drule lower_dload_insts_supply_prefix >> simp[]) >>
+  gvs[lowerDloadDefsTheory.lower_dload_inst_supply_def,
+      irSupplyTheory.fresh_inst_id_def, AllCaseEqs()] >>
+  qmatch_goalsub_abbrev_tac `fresh_ir_var ui` >>
+  Cases_on `fresh_ir_var ui` >> gvs[] >>
+  rename1 `fresh_ir_var ui = (av,u1)` >>
+  Cases_on `fresh_ir_var u1` >> gvs[] >>
+  imp_res_tac irSupplyTheory.fresh_ir_var_contract >> gvs[] >> decide_tac
+QED
+
+Theorem ld_original_not_private:
+  ir_supply_covers_fn f.lf_supply f.lf_fn /\
+  MEM aid (fn_ir_inst_ids f.lf_fn) ==>
+  !d. ~ld_private f d aid
+Proof
+  simp[venomFnScheduleRunnerTheory.ir_supply_covers_fn_def,
+       listTheory.EVERY_MEM] >> rpt strip_tac >>
+  drule ld_private_supply_bound >> strip_tac >>
+  first_x_assum drule >> decide_tac
+QED
+
+Theorem ld_sync_absent_alloca_key:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::frames) N /\
+  FLOOKUP s.vs_allocas aid = NONE ==>
+  (f.lf_serial,aid) NOTIN FDOM A
+Proof
+  simp[ld_sync_def] >> strip_tac >>
+  drule ld_slots_absent_head >>
+  disch_then (qspec_then `aid` mp_tac) >>
+  simp[] >> impl_tac >- (gvs[listTheory.MEM_MAP] >> metis_tac[]) >>
+  simp[]
+QED
+
+Theorem ld_original_alloca_fresh:
+  ld_maps A f /\ ir_supply_covers_fn f.lf_supply f.lf_fn /\
+  MEM aid (fn_ir_inst_ids f.lf_fn) /\
+  FLOOKUP f.lf_src.vs_allocas aid = NONE ==>
+  (!d. ~ld_private f d aid) /\
+  FLOOKUP f.lf_tgt.vs_allocas aid = NONE
+Proof
+  strip_tac >> `!d. ~ld_private f d aid` by
+    (irule ld_original_not_private >> simp[]) >>
+  simp[] >> irule ld_maps_absent_original >> simp[] >>
+  qexists_tac `A` >> simp[]
+QED
+
+Theorem ld_global_fresh_erasures:
+  ld_global lo A frames /\ k NOTIN FDOM A ==>
+  EVERY (\f.
+    ld_erase (A |+ (k,v)) o_f f.lf_H = ld_erase A o_f f.lf_H /\
+    MAP (OPTION_MAP (ld_erase (A |+ (k,v)))) f.lf_Q =
+      MAP (OPTION_MAP (ld_erase A)) f.lf_Q) frames
+Proof
+  simp[ld_global_def, listTheory.EVERY_MEM] >> rpt strip_tac
+  >- (irule ld_erase_fresh_compose >> simp[SUBSET_DEF] >> metis_tac[]) >>
+  irule ld_erase_fresh_params >> metis_tac[]
+QED
+
+Theorem ld_sync_original_site_fresh:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::frames) N /\
+  ir_supply_covers_fn f.lf_supply fn /\
+  FLOOKUP s.vs_allocas inst.inst_id = NONE ==>
+  (f.lf_serial,inst.inst_id) NOTIN FDOM A /\
+  (!d. ~ld_private f d inst.inst_id) /\
+  FLOOKUP t.vs_allocas inst.inst_id = NONE
+Proof
+  strip_tac >>
+  ` (f.lf_serial,inst.inst_id) NOTIN FDOM A` by
+    (drule_all ld_sync_absent_alloca_key >> simp[]) >>
+  drule ld_sync_active >> simp[] >> strip_tac >>
+  drule ld_sync_source >> strip_tac >>
+  `MEM inst.inst_id (fn_ir_inst_ids fn)` by
+    (gvs[contextCodegenRelTheory.active_inst_def, irSupplyTheory.fn_ir_inst_ids_def,
+      irSupplyTheory.block_ir_inst_ids_def,
+      listTheory.MEM_FLAT, listTheory.MEM_MAP, PULL_EXISTS] >>
+     metis_tac[listTheory.MEM_EL]) >>
+  simp[] >>
+  qpat_x_assum `f.lf_src = s` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `f.lf_tgt = t` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `f.lf_fn = fn` (SUBST_ALL_TAC o SYM) >>
+  irule ld_original_alloca_fresh >> simp[] >> qexists_tac `A` >> simp[]
 QED
