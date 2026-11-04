@@ -22,13 +22,6 @@ binds the entry's declared parameters, and executes the source interpreter.
 `check_evm.py` executes the frozen runtime bytecode independently with py-evm.
 The expected results are checked in both runs.
 
-The HOL test additionally wraps the source-derived `nested_retained_pop` return
-expression in `abi_encode`, checks the resulting contract, and proves the exact
-32-byte result (31 zero bytes followed by 5) for direct and CPS execution. This
-catches ABI capture rechecking bounds through an already-popped ancestor. A
-separate retained-memory probe checks that later writes still alias the captured
-root-relative address. These additional HOL probes are not bytecode fixtures.
-
 ## Reproduction
 
 From the repository root, prepare a clean compiler at `VYPER_PIN` and the same

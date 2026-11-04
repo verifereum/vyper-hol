@@ -218,7 +218,10 @@ def main(generate):
                 for i, (e, p) in enumerate(zip(manifest, captured['provenance']))]
             for dest, value in [(output/(name+'.json'), captured),
                                 (output/'annotated'/(name+'.json'), annotated)]:
+                # Record checkout paths repository-relative, so captures do
+                # not depend on where the generating checkout lives.
                 text = json.dumps(value,sort_keys=True,separators=(',',':')) + '\n'
+                text = text.replace(str(ROOT) + '/', '')
                 if generate:
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     dest.write_text(text)

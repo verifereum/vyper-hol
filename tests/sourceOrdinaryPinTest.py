@@ -157,12 +157,10 @@ class InheritedIdentityTest(unittest.TestCase):
                 self.assertEqual(len(origins), len(entries))
                 for i, ((key, path), origin) in enumerate(zip(entries, origins)):
                     digest = hashlib.sha256((BASE/path).read_bytes()).hexdigest()
-                    # Captures retain the generation checkout's absolute path.
-                    # Check its complete repository-relative identity, not the
-                    # current checkout prefix (or just the file's basename).
-                    suffix = '/tests/fixtures/check_contract/' + path
-                    self.assertTrue(Path(origin['path']).is_absolute())
-                    self.assertTrue(origin['path'].endswith(suffix))
+                    # Captures record the complete repository-relative path,
+                    # not just the file's basename.
+                    self.assertEqual(origin['path'],
+                                     'tests/fixtures/check_contract/' + path)
                     self.assertEqual(origin, {
                         'key': list(key), 'path': origin['path'],
                         'source_id': ids[key], 'source_sha256': digest,

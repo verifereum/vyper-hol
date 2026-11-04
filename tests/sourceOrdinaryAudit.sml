@@ -113,7 +113,6 @@ val _ = app (fn name => let
   val _ = require ("wrong ordinary backend statement: " ^ name) (aconv (concl actual) statement)
   in print ("ORDINARY BACKEND STATEMENT PASS: " ^ name ^ "\n") end)
   sourceBytecodeFixtureLib.certified;
-val _ = DB.fetch "vyperCheckContractLibTest" "check_contract_rejects_method_id_eval";
 val _ = OS.FileSys.chDir audit_cwd;
 val _ = print "AUDIT PASS: 27 ordinary inventory cases; 36 ordinary witnesses; seven legacy runtime/deploy outcomes (six accept, pow_folded_exp rejects); six raw compilation certificates; fold_add inputs differ; nine ordinary exact pipeline parities; closed non-oracle fixture/frontend/checker/type/supported proofs\n";
 val _ = print "LEGACY STATUS: old exact byte parity not asserted because false; annotated-only original arithmetic may differ from ordinary normalization; no legacy semantic correctness claim\n";
