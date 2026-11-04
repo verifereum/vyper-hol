@@ -13814,3 +13814,80 @@ Theorem as_ptr_val_labels:
 Proof
   rpt gen_tac >> Cases_on `p` >> simp[as_ptr_val_def]
 QED
+
+Theorem compile_word_copy_loop_labels:
+  !src dst wc ll sl ic s.
+    cs_extends s (SND (compile_word_copy_loop src dst wc ll sl ic s)) /\
+    EVERY (isPREFIX "@")
+      (added_labels s (SND (compile_word_copy_loop src dst wc ll sl ic s)))
+Proof
+  rpt gen_tac >> rewrite_tac[contextTheory.compile_word_copy_loop_def, LET_THM] >>
+  BETA_TAC >>
+  rpt (FIRST [irule fresh_label_bind_labels,
+              irule new_block_action_labels >>
+                rename1 `isPREFIX "@" lab` >> Cases_on `lab` >> gvs[],
+              irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac, disch_tac,
+              IF_CASES_TAC] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_void_labels, emit_op_labels,
+            emit_inst_labels, fresh_var_action_labels,
+            compile_ptr_load_labels, compile_ptr_store_labels])
+QED
+
+Theorem compile_storage_to_memory_labels:
+  !slot buf wc s.
+    cs_extends s (SND (compile_storage_to_memory slot buf wc s)) /\
+    EVERY (isPREFIX "@")
+      (added_labels s (SND (compile_storage_to_memory slot buf wc s)))
+Proof
+  simp[contextTheory.compile_storage_to_memory_def, compile_word_copy_loop_labels]
+QED
+
+Theorem compile_transient_to_memory_labels:
+  !slot buf wc s.
+    cs_extends s (SND (compile_transient_to_memory slot buf wc s)) /\
+    EVERY (isPREFIX "@")
+      (added_labels s (SND (compile_transient_to_memory slot buf wc s)))
+Proof
+  simp[contextTheory.compile_transient_to_memory_def, compile_word_copy_loop_labels]
+QED
+
+Theorem compile_code_to_memory_labels:
+  !off dst wc s.
+    cs_extends s (SND (compile_code_to_memory off dst wc s)) /\
+    EVERY (isPREFIX "@")
+      (added_labels s (SND (compile_code_to_memory off dst wc s)))
+Proof
+  rpt gen_tac >> rewrite_tac[contextTheory.compile_code_to_memory_def] >>
+  IF_CASES_TAC >- simp[comp_return_labels] >>
+  irule comp_ignore_bind_labels >>
+  simp[compile_word_copy_loop_labels, comp_return_labels]
+QED
+
+Theorem compile_ensure_in_memory_labels:
+  !ptr loc bytes wc ic imm s.
+    cs_extends s (SND (compile_ensure_in_memory ptr loc bytes wc ic imm s)) /\
+    EVERY (isPREFIX "@")
+      (added_labels s (SND (compile_ensure_in_memory ptr loc bytes wc ic imm s)))
+Proof
+  rpt gen_tac >> Cases_on `loc` >>
+  simp[contextTheory.compile_ensure_in_memory_def, comp_return_labels] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac, IF_CASES_TAC] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[LET_THM, comp_return_labels, emit_op_labels, emit_void_labels,
+            compile_alloc_buffer_labels, compile_storage_to_memory_labels,
+            compile_transient_to_memory_labels, compile_imm_copy_to_memory_labels])
+QED
+
+Theorem unwrap_value_labels:
+  !cenv vv s.
+    cs_extends s (SND (unwrap_value cenv vv s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (unwrap_value cenv vv s)))
+Proof
+  rpt gen_tac >> Cases_on `vv` >> simp[unwrap_value_def, comp_return_labels] >>
+  IF_CASES_TAC >- simp[compile_ptr_load_labels] >>
+  rename1 `p.ptr_location` >> Cases_on `p.ptr_location` >>
+  simp[LET_THM, comp_return_labels, compile_ensure_in_memory_labels]
+QED
