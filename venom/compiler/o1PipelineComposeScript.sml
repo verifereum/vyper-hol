@@ -65,6 +65,12 @@ Proof
   simp[raw_mem_ok_def]
 QED
 
+Theorem dload_offset_ok_ctx_free:
+  dload_offset_ok ctx fn inst s ==> dload_offset_ok ctx' fn inst s
+Proof
+  simp[lowerDloadDefsTheory.dload_offset_ok_def]
+QED
+
 Theorem o1_fn_passes_steps:
   o1_step_contracts_from rp 0 o1_fn_passes
 Proof
@@ -123,11 +129,12 @@ Proof
 QED
 
 Theorem o1_source_unit_ok_ctx_shape:
-  unit_wf unit /\ o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
-  unit_entry_no_params unit /\ unit_first_block_no_phi unit ==>
+  unit_wf unit /\ o1_source_unit_ok unit /\ unit_entry_no_params unit ==>
   o1_ctx_shape unit.cu_context
 Proof
-  strip_tac >> simp[o1_ctx_shape_def] >> conj_tac
+  strip_tac >>
+  drule_all o1_source_unit_label_refs_no_phi >> strip_tac >>
+  simp[o1_ctx_shape_def] >> conj_tac
   >- gvs[unit_wf_def, venom_wf_def] >>
   simp[EVERY_MEM] >> rpt strip_tac >>
   drule_all source_member_shape >> strip_tac >>
@@ -274,6 +281,10 @@ Proof
     (mp_tac (Q.INST [`M` |-> `raw_mem_ok`] o1_prune_sim) >>
      impl_tac >- (fs[] >> metis_tac[raw_mem_ok_ctx_free]) >>
      strip_tac >> pop_assum irule >> fs[o1_src_inv_def]) >>
+  `mem_inv dload_offset_ok (prune_unit_fcg_unreachable unit fcg).cu_context vs` by
+    (mp_tac (Q.INST [`M` |-> `dload_offset_ok`] o1_prune_sim) >>
+     impl_tac >- (fs[] >> metis_tac[dload_offset_ok_ctx_free]) >>
+     strip_tac >> pop_assum irule >> fs[o1_src_inv_def]) >>
   qpat_x_assum `fcg = _` kall_tac >>
   fs[o1_src_inv_def] >> rpt conj_tac
   >- fs[prune_unit_fcg_unreachable_fields]
@@ -401,8 +412,7 @@ QED
 Theorem o1_pipeline_stage_facts:
   run_venom_pipeline mem_ok calling_ok post_ok rpolicy o1_pipeline_spec unit =
     SOME out /\
-  o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
-  unit_entry_no_params unit /\ unit_first_block_no_phi unit ==>
+  o1_source_unit_ok unit /\ unit_entry_no_params unit ==>
   o1_ctx_shape out.po_unit.cu_context /\
   entry_fn_first out.po_unit.cu_context /\
   !D vs. dead_wf D /\ o1_run_state_ok vs /\ o1_src_inv D unit.cu_context vs ==>

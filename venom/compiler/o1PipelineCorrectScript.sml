@@ -37,15 +37,16 @@ Proof
 QED
 
 (* S4 -- Milestone 3, from the per-pass contracts.
- * Premises added to the original admission: the source's non-INVOKE label
- * operands are local (unit_label_refs_ok), which unit_wf does not give for
- * PHI; its entry function has no PARAM (unit_entry_no_params); no
- * function has a PHI in its first block (unit_first_block_no_phi); no
- * function has its FMP convention set yet (unit_fmp_unsealed); and
- * the initial state's dynamic-memory pointer is its initial free-memory
- * pointer (o1_run_state_ok), as the entry state has it; and the
+ * Premises added to the original admission: the source's entry function
+ * has no PARAM (unit_entry_no_params); no function has its FMP convention
+ * set yet (unit_fmp_unsealed); the initial state's dynamic-memory pointer
+ * is its initial free-memory pointer (o1_run_state_ok), as the entry
+ * state has it; and the
  * context's global reservations are well-formed, which the stage
- * invariants from ConcretizeMemLoc on need for max_live_eom.
+ * invariants from ConcretizeMemLoc on need for max_live_eom; and every
+ * DLOAD/DLOADBYTES offset stays below 2^256 once added to the code
+ * prefix's length (mem_inv dload_offset_ok), so LowerDload's code_end
+ * offset does not wrap.
  * The runs match up to any well-formed set D of dead bytes (dead_wf):
  * ConcretizeMemLoc moves buffers, so bytes nothing reads may differ.
  * The source's other invariant rows (o1_src_inv) are premises too: no
@@ -55,15 +56,15 @@ QED
 Theorem run_venom_pipeline_correct:
   !D lo rpolicy unit out vs.
     o1_pipeline rpolicy unit = SOME out /\
-    o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
-    unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
+    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
     unit_fmp_unsealed unit /\ o1_run_state_ok vs /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     raw_unit_memory_ok unit.cu_context vs /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
     fixed_region_reserved lo unit.cu_context /\
     ptr_discipline lo unit.cu_context vs /\
-    taint_within D unit.cu_context vs /\ dead_wf D
+    taint_within D unit.cu_context vs /\
+    mem_inv dload_offset_ok unit.cu_context vs /\ dead_wf D
     ==>
     ctx_sim D unit.cu_context out.po_unit.cu_context vs vs
 Proof
@@ -81,14 +82,14 @@ QED
 Theorem run_venom_pipeline_mem_inv:
   !lo rpolicy unit out vs.
     o1_pipeline rpolicy unit = SOME out /\
-    o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
-    unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
+    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
     unit_fmp_unsealed unit /\ o1_run_state_ok vs /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     raw_unit_memory_ok unit.cu_context vs /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
     fixed_region_reserved lo unit.cu_context /\
-    ptr_discipline lo unit.cu_context vs
+    ptr_discipline lo unit.cu_context vs /\
+    mem_inv dload_offset_ok unit.cu_context vs
     ==>
     ?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
           mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp))
@@ -126,14 +127,14 @@ Theorem o1_pipeline_memory_obligations:
   !lo rpolicy unit out cp vs.
     o1_pipeline rpolicy unit = SOME out /\
     generate_context_plan out.po_unit.cu_context = SOME cp /\
-    o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
-    unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
-    o1_run_state_ok vs /\
+    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+    unit_fmp_unsealed unit /\ o1_run_state_ok vs /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     raw_unit_memory_ok unit.cu_context vs /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
     fixed_region_reserved lo unit.cu_context /\
     ptr_discipline lo unit.cu_context vs /\
+    mem_inv dload_offset_ok unit.cu_context vs /\
     vs.vs_initial_fmp = n2w cp.cp_initial_fmp
     ==>
     ?Inv. codegen_memory_obligations Inv out.po_unit.cu_context cp /\
@@ -150,13 +151,12 @@ QED
 (* ===== S6: output shape without new compiler checks ===== *)
 
 (* S6 -- Milestone 3, from the per-pass contracts.
- * Premises added from the original admission: unit_label_refs_ok,
- * unit_entry_no_params and unit_first_block_no_phi, as S4. *)
+ * Premise added from the original admission: unit_entry_no_params, as
+ * S4. *)
 Theorem run_venom_pipeline_output_shape:
   !rpolicy unit out.
     o1_pipeline rpolicy unit = SOME out /\ o1_source_unit_ok unit /\
-    unit_label_refs_ok unit /\ unit_entry_no_params unit /\
-    unit_first_block_no_phi unit
+    unit_entry_no_params unit
     ==> unit_shape_ok out.po_unit
 Proof
   rpt strip_tac >> fs[o1_pipeline_def] >>

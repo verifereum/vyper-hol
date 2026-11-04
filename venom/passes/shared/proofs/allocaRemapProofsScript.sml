@@ -52,25 +52,13 @@ val _ = augment_srw_ss [rewrites [is_immutable_op_def]];
 Theorem remap_step_oracle:
   alloca_remap_rel fn roots remap s1 s2 /\
   inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+  inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2 /\
+  inst.inst_opcode <> DELEGATECALL /\
   step_inst_base inst s1 = OK v1 /\ step_inst_base inst s2 = OK v2 ==>
-  v1.vs_outcomes = v2.vs_outcomes /\ v1.vs_requests = v2.vs_requests
-Proof
-  rw[alloca_remap_rel_def] >>
-  imp_res_tac step_inst_base_oracle >> gvs[]
-QED
-
-Theorem remap_step_pending_deletions[local]:
-  alloca_remap_rel fn roots remap s1 s2 /\
-  inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
-  step_inst_base inst s1 = OK v1 /\ step_inst_base inst s2 = OK v2 ==>
+  v1.vs_outcomes = v2.vs_outcomes /\ v1.vs_requests = v2.vs_requests /\
   v1.vs_pending_deletions = v2.vs_pending_deletions
 Proof
-  rpt strip_tac >>
-  `alloca_remap_frame s1 = alloca_remap_frame s2` by
-    fs[alloca_remap_rel_def] >>
-  qpat_x_assum `alloca_remap_frame _ = _`
-    (mp_tac o AP_TERM ``venom_state_vs_pending_deletions``) >>
-  simp[alloca_remap_frame_def] >> strip_tac >>
+  rw[alloca_remap_rel_def] >>
   imp_res_tac step_inst_base_oracle >> gvs[]
 QED
 
@@ -689,13 +677,6 @@ Theorem mstore_eq_wmwe[local]:
   write_memory_with_expansion offset (word_to_bytes value T) s
 Proof
   simp[mstore_def, write_memory_with_expansion_def, length_w2b_256]
-QED
-
-Theorem mstore8_eq_wmwe[local]:
-  mstore8 offset value s =
-  write_memory_with_expansion offset [w2w value] s
-Proof
-  simp[mstore8_def, write_memory_with_expansion_def]
 QED
 
 (* Generic: writing same bytes at corresponding alloca offsets via
@@ -1562,10 +1543,11 @@ Proof
   disch_then (qspecl_then [`inst`, `s1`, `s2`, `v1`, `v2`] mp_tac) >>
   (impl_tac >- gvs[]) >> strip_tac >>
   (* Step 8: Reconstruct alloca_remap_rel *)
-  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL` by
+  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+   inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2 /\
+   inst.inst_opcode <> DELEGATECALL` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   drule_all remap_step_oracle >> strip_tac >>
-  drule_all remap_step_pending_deletions >> strip_tac >>
   irule remap_rel_from_equiv >>
   gvs[] >> rpt conj_tac
   (* Non-pv vars agree *)
@@ -2717,7 +2699,7 @@ Resume remap_preserved_mem_ops[mstore8]:
   qpat_x_assum `w1 = addr` (SUBST_ALL_TAC o SYM) >>
   fs[] >>
   (* Rewrite to wmwe and apply write_at_pv_preserves_remap *)
-  simp[mstore8_eq_wmwe] >>
+  simp[venomMemPropsTheory.mstore8_eq_write_mem] >>
   (* Safe access bound: w2n w1 + 1 <= orig_off + asz *)
   safe_access_bound_tac
     `<| iao_ofst := Var v; iao_size := SOME (Lit 1w);
@@ -3485,10 +3467,11 @@ Proof
     immutable_op_output_vars_agree) >>
   impl_tac >- simp[] >> strip_tac >>
   (* 10. Reconstruct alloca_remap_rel *)
-  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL` by
+  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+   inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2 /\
+   inst.inst_opcode <> DELEGATECALL` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   drule_all remap_step_oracle >> strip_tac >>
-  drule_all remap_step_pending_deletions >> strip_tac >>
   irule remap_rel_from_equiv >> gvs[] >> rpt conj_tac
   (* Non-PV vars *)
   >- (rpt strip_tac >>
@@ -5101,7 +5084,7 @@ Proof
     rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
     gvs[update_var_def] >>
     (* All results use mstore/mstore8/mcopy → wmwe → monotone *)
-    simp[mstore_eq_wmwe, mstore8_eq_wmwe, mcopy_def] >>
+    simp[mstore_eq_wmwe, venomMemPropsTheory.mstore8_eq_write_mem, mcopy_def] >>
     irule wmwe_mem_length_mono)
 QED
 

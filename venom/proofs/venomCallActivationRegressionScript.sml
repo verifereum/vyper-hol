@@ -133,16 +133,19 @@ Definition probe_computed_def:
 End
 
 Theorem probe_computed_dispatch[local]:
-  step_inst_base (probe_computed target sz) s =
-    OK (update_var "result"
-      (FST (consume_call_outcome
-        (venom_call_request s target 0w 0w sz s.vs_call_ctx.cc_static) 1 0 s))
-      (SND (consume_call_outcome
-        (venom_call_request s target 0w 0w sz s.vs_call_ctx.cc_static) 1 0 s)))
+  ~s.vs_call_ctx.cc_static /\
+  consume_call_outcome (venom_call_request s target 0w 0w sz F) 1 0 s = (v,t) ==>
+  step_inst_base (probe_computed target sz) s = OK (update_var "result" v t)
 Proof
-  simp[probe_computed_def, mk_inst_def, step_inst_base_def,
-       eval_operand_def, exec_ext_call_def, Excl "consume_call_outcome_eq"] >>
-  pairarg_tac >> simp[]
+  strip_tac >>
+  simp[Excl "consume_call_outcome_eq", probe_computed_def, mk_inst_def,
+       step_inst_base_def, eval_operand_def, exec_ext_call_def]
+QED
+
+Theorem call_probe_nonstatic[local,simp]:
+  call_probe_state.vs_call_ctx.cc_static = F
+Proof
+  simp[call_probe_state_def, init_venom_state_def, empty_call_context_def]
 QED
 
 val computed_defs =
@@ -224,10 +227,12 @@ Theorem activated_computed_invalid_ec:
      step_inst_base (probe_computed 7w 64w) s =
        OK (update_var "result" 0w (s with vs_returndata := []))
 Proof
-  `call_probe_state.vs_call_ctx.cc_static = F` by
-    simp[call_probe_state_def, init_venom_state_def, empty_call_context_def] >>
-  simp[probe_computed_dispatch, Excl "consume_call_outcome_eq",
-       consume_invalid_ec_zero_output]
+  mp_tac consume_computed_invalid_ec >>
+  pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>
+  conj_tac >> irule probe_computed_dispatch >>
+  simp[Excl "consume_call_outcome_eq"] >>
+  irule consume_call_outcome_empty_output_size >> simp[Excl "consume_call_outcome_eq"] >>
+  qexists_tac `3` >> simp[Excl "consume_call_outcome_eq", venom_state_fupdcanon]
 QED
 
 Theorem activated_nonzero_precompile_ordinary:
