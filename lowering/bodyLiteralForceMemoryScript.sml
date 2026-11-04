@@ -1,11 +1,12 @@
 Theory bodyLiteralForceMemory
 Ancestors
-  bodyLiteralMemory exprSimMemDefs exprSimHypsDefs exprSimProps
+  bodyLiteralMemory exprSimMemoryValues exprSimMemDefs exprSimHypsDefs exprSimProps
   exprLowering exprLoweringProps fragExecMem
   vyperAST vyperInterpreter vyperTyping valueEncoding
   vyperTypeSystem compileEnv context vyperState exprSimDefs
   vyperValueOperation venomState vyperValue loweringSlice
 
+(* Prior successful uncounted proof and private tactic, retained for reference.
 val literal_word_mem_tac =
   gvs[lower_value_def, compile_expr_def, comp_bind_def, comp_return_def,
       compile_literal_vv_def, unwrap_value_def, evaluate_literal_def, expr_type_def] >>
@@ -33,6 +34,18 @@ Proof
   >~ [`BytesT bd`] >- (Cases_on `bd` >> gvs[is_word_type_def] >>
       literal_word_mem_tac) >>
   literal_word_mem_tac
+QED
+*)
+
+Theorem compile_literal_word_body_sim_mem:
+  !ctx func cenv cx env ty ann l es.
+    expr_sim_pre cenv cx env (Literal ann l) es /\ is_word_type ann ==>
+    expr_sim_mem ctx func cenv cx ty (Literal ann l) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule expr_sim_mem_values >> rpt gen_tac >> strip_tac >>
+  qexistsl_tac [`[]`, `evaluate_literal l`, `es`, `s0`] >>
+  irule body_literal_word_mem_prefix >> metis_tac[]
 QED
 
 val () =
