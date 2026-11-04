@@ -89,3 +89,40 @@ Proof
       irule ld_saved_embedded_support >> metis_tac[]) >>
   first_x_assum irule >> metis_tac[]
 QED
+
+Theorem ld_reachable_stack_fresh_owner:
+  ld_annotated_reachable vs0 C astk k L AP AG tn fn inst s /\
+  LIST_REL (\f g. ?V keys d A. ld_saved_embedded V E keys d A f g) astk bstk ==>
+  LIST_REL (\f g. ?V keys d A.
+    ld_saved_embedded V (E |+ ((0,k),(bs,bt,sz))) keys d A f g) astk bstk
+Proof
+  strip_tac >> irule ld_saved_stack_support >> qexists_tac `E` >> simp[] >>
+  rpt strip_tac >>
+  `ld_live astk L AP AG (owner,(bs',sz'))` by
+    (simp[ld_live_def] >> metis_tac[]) >>
+  drule_all ld_annotated_serial >> simp[] >> strip_tac >>
+  `owner <> (0,k)` by (strip_tac >> gvs[]) >>
+  simp[FLOOKUP_UPDATE]
+QED
+
+Theorem ld_saved_embedded_restrict:
+  ld_saved_embedded V E keys d A f g /\
+  (!owner bs sz. ld_selected f.lf_local f.lf_params f.lf_prov
+    (owner,(bs,sz)) ==> owner IN survivors) ==>
+  ld_saved_embedded V (DRESTRICT E survivors) keys d A f g
+Proof
+  strip_tac >> irule ld_saved_embedded_support >> qexists_tac `E` >> simp[] >>
+  rpt strip_tac >> simp[FLOOKUP_DRESTRICT] >> metis_tac[]
+QED
+
+Theorem ld_saved_stack_restrict:
+  LIST_REL (\f g. ?V keys d A. ld_saved_embedded V E keys d A f g) fs gs /\
+  (!f owner bs sz. MEM f fs /\
+    ld_selected f.lf_local f.lf_params f.lf_prov (owner,(bs,sz)) ==>
+    owner IN survivors) ==>
+  LIST_REL (\f g. ?V keys d A.
+    ld_saved_embedded V (DRESTRICT E survivors) keys d A f g) fs gs
+Proof
+  strip_tac >> irule ld_saved_stack_support >> qexists_tac `E` >> simp[] >>
+  rpt strip_tac >> simp[FLOOKUP_DRESTRICT] >> metis_tac[]
+QED
