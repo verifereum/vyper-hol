@@ -1,8 +1,7 @@
 Theory algebraicOptSsaCmpProofs
 Ancestors
   algebraicOptDefs algebraicOptSsaSupplyProofs venomInst venomWf
-Libs
-  listTheory pred_setTheory alistTheory
+  list pred_set alist
 
 Theorem ao_named_lookup_value:
   ALOOKUP named key = SOME (out,id,v) ==>

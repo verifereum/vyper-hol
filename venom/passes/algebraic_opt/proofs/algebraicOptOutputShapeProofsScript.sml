@@ -1,8 +1,7 @@
 Theory algebraicOptOutputShapeProofs
 Ancestors
   algebraicOptDefs venomInst
-Libs
-  listTheory
+  list
 
 Theorem ao_handle_offset_projection:
   (ao_handle_offset_inst inst).inst_id = inst.inst_id /\

@@ -3,8 +3,7 @@ Ancestors
   algebraicOptDefs venomWf venomFnScheduleRunner venomInst
   algebraicOptSsaSupplyProofs algebraicOptOutputShapeProofs
   algebraicOptSsaMainProofs algebraicOptSsaCmpProofs
-Libs
-  listTheory pred_setTheory
+  list pred_set
 
 Theorem ao_offset_blocks_projection[local]:
   !bbs.

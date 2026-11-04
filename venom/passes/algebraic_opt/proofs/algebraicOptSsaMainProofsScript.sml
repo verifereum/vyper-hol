@@ -1,8 +1,7 @@
 Theory algebraicOptSsaMainProofs
 Ancestors
   algebraicOptDefs algebraicOptSsaSupplyProofs algebraicOptOutputShapeProofs venomInst
-Libs
-  listTheory pred_setTheory
+  list pred_set
 
 Theorem ao_transform_insts_supply_mono:
   !xs s idx ys t.

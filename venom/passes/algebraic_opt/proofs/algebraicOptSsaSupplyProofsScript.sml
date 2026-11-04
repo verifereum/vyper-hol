@@ -1,8 +1,7 @@
 Theory algebraicOptSsaSupplyProofs
 Ancestors
   algebraicOptDefs venomFnScheduleRunner irSupply venomWf venomInst
-Libs
-  listTheory pred_setTheory
+  list pred_set
 
 Theorem ao_alloc_fresh_contract:
   ao_alloc_fresh s = (fr,t) ==>
