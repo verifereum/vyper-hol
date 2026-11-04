@@ -40,3 +40,27 @@ Proof
   simp[word_agree_except_def] >>
   rpt strip_tac >> rpt IF_CASES_TAC >> gvs[word_agree_except_def]
 QED
+
+Theorem ld_memory_agree_return_buffer:
+  k = MIN rs (LENGTH bs) /\
+  ld_memory_agree sites lo mask s.vs_memory t.vs_memory /\
+  ld_joint_geometry sites X lo owners /\
+  (k=0 \/ (p=q /\ p+k<=lo) \/
+   (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+k<=z /\
+                 p=b+j /\ q=c+j)) ==>
+  ld_memory_agree sites lo (mask DIFF {i | p<=i /\ i<p+k})
+    (write_memory_with_expansion p (TAKE rs bs) s).vs_memory
+    (write_memory_with_expansion q (TAKE rs bs) t).vs_memory
+Proof
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac))) >>
+  `LENGTH (TAKE rs bs) = k` by
+    (Cases_on `rs <= LENGTH bs` >> gvs[LENGTH_TAKE_EQ, arithmeticTheory.MIN_DEF]) >>
+  Cases_on `k=0`
+  >- (`TAKE rs bs = []` by metis_tac[LENGTH_NIL] >>
+      gvs[] >> irule ld_memory_agree_empty_write >> simp[]) >>
+  qpat_assum `LENGTH (TAKE rs bs) = _` (fn th => once_rewrite_tac[GSYM th]) >>
+  drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
+  disch_then irule >> simp[] >> metis_tac[]
+QED
