@@ -50,6 +50,7 @@
 
 Theory exprSimTuple
 Ancestors
+  exprSimSource
   exprSimProps
   exprSimHypsDefs
   exprSimDefs

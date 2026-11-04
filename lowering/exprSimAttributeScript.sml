@@ -34,6 +34,7 @@
 
 Theory exprSimAttribute
 Ancestors
+  exprSimSource
   exprSimProps
   exprSimHypsDefs
   exprSimDefs

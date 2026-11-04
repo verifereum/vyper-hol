@@ -37,6 +37,7 @@
 
 Theory exprSimWordArgs
 Ancestors
+  exprSimSource
   exprSimProps
   exprSimDefs
   loweringPosts

@@ -1,6 +1,7 @@
 (* Typed runtime immutable forcing and its actual global-name consumer. *)
 Theory bodyToplevelAggregateMemory
 Ancestors
+  exprSimSource
   bodyImmutableUnwrapMemory bodyToplevelWordMemory bodyToplevelMemory
   bodyMemoryPreds bodyMemoryDefs exprSimHyps exprSimUnwrap exprSimDefs
   exprLowering exprLoweringProps compileEnv context fragExecMem fragExec

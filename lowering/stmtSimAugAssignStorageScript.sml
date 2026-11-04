@@ -36,6 +36,7 @@
 
 Theory stmtSimAugAssignStorage
 Ancestors
+  exprSimSource
   exprSimHypsDefs
   stmtSimDefs
   loweringPosts

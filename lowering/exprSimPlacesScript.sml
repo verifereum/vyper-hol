@@ -46,6 +46,7 @@
 
 Theory exprSimPlaces
 Ancestors
+  exprSimSource
   exprSimHypsDefs
   list  exprSimHyps exprSimPop exprSimAttribute exprSimTuple
   exprSimArrayIndex

@@ -25,6 +25,7 @@
  *)
 Theory exprSimHash
 Ancestors
+  exprSimSource
   exprSimProps
   exprSimHypsDefs
   exprSimDefs

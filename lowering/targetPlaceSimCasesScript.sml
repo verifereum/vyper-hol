@@ -33,6 +33,7 @@
 
 Theory targetPlaceSimCases
 Ancestors
+  exprSimSource
   targetPlaceSimDefs
   stmtSimProps
   exprSimProps

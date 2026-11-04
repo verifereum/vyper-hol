@@ -1,6 +1,7 @@
 (* Bounded forced word consumers; aggregate and constructor immutables remain residual. *)
 Theory bodyToplevelWordMemory
 Ancestors
+  exprSimSource
   bodyToplevelMemory bodyUnwrapMemory bodyMemoryDefs exprSimUnwrap exprSimDefs
   exprLowering exprLoweringProps compileEnv context fragExecMem fragExec
   vyperAST vyperValue vyperInterpreter vyperState loweringSlice exprSimLeaves
