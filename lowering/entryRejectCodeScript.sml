@@ -102,7 +102,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem run_lowering_retained_entry[local]:
+Theorem run_lowering_retained_entry:
   run_lowering sels exts ints fb rp bc mb db ei "__entry" = SOME u /\
   EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt). jump_label_ok lbl) exts /\
   EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
