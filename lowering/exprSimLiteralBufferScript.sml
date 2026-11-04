@@ -688,7 +688,7 @@ Proof
   simp[] >> metis_tac[exprLoweringPropsTheory.same_blocks_trans, APPEND_ASSOC]
 QED
 
-Theorem literal_chunks_no_gas[local]:
+Theorem literal_chunks_no_gas:
   !ptr bs off sa sb.
     compile_store_byte_chunks ptr bs off sa = ((),sb) ==>
     FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []
@@ -773,7 +773,7 @@ QED
 
 Finalise literal_bytelike_run_frag
 
-Theorem literal_bytelike_counted_shape[local]:
+Theorem literal_bytelike_counted_shape:
   !bs ml sa buf sb.
     compile_bytelike_literal bs ml sa = (buf,sb) ==>
     sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
@@ -813,7 +813,7 @@ Proof
   metis_tac[exprLoweringPropsTheory.same_blocks_trans, APPEND_ASSOC]
 QED
 
-Theorem literal_bytelike_gas_path[local]:
+Theorem literal_bytelike_gas_path:
   !bs ml sa buf sb ctx func s t.
     compile_bytelike_literal bs ml sa = (buf,sb) /\
     fn_has_code sa sb func /\ ~s.vs_halted /\
@@ -914,12 +914,6 @@ Proof
   rpt strip_tac >> first_x_assum irule >> metis_tac[]
 QED
 
-Theorem literal_post_initial_gas[local]:
-  vv_post ctx func cenv cx e (es with gas_obs := gs) sa sb s0 ee tv vv t <=>
-  vv_post ctx func cenv cx e es sa sb s0 ee tv vv t
-Proof
-  simp[vv_post_def, locals_kept_def]
-QED
 
 Theorem compile_literal_other_vv_sim:
   !cenv ann l.
@@ -961,7 +955,7 @@ Resume compile_literal_other_vv_sim[bytes]:
   >- simp[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def,
           Once evaluate_def, return_def, evaluate_literal_def] >>
   simp[] >>
-  once_rewrite_tac[GSYM (Q.INST [`gs` |-> `[]`] literal_post_initial_gas)] >>
+  once_rewrite_tac[GSYM (Q.INST [`gs` |-> `[]`] vv_post_initial_gas)] >>
   irule (SRULE [vyperASTTheory.expr_type_def]
     (Q.INST [`e` |-> `Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)`]
       (SPEC_ALL literal_memory_vv_post))) >>
@@ -1009,7 +1003,7 @@ Resume compile_literal_other_vv_sim[string]:
   >- simp[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def,
           Once evaluate_def, return_def, evaluate_literal_def] >>
   simp[] >>
-  once_rewrite_tac[GSYM (Q.INST [`gs` |-> `[]`] literal_post_initial_gas)] >>
+  once_rewrite_tac[GSYM (Q.INST [`gs` |-> `[]`] vv_post_initial_gas)] >>
   irule (SRULE [vyperASTTheory.expr_type_def]
     (Q.INST [`e` |-> `Literal (BaseT (StringT n)) (StringL str)`]
       (SPEC_ALL literal_memory_vv_post))) >>
@@ -1076,3 +1070,5 @@ val () = List.app (fn th =>
    exprLoweringPropsTheory.immutable_alloca_sep_exec_alloca,
    stmt_state_rel_exec_alloca, immutables_rel_mem_agree,
    immutables_rel_mstore_alloca, compile_literal_other_vv_sim];
+
+val () = print "LITERAL_BUFFER_AUDIT OK\n";

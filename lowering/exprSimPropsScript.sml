@@ -441,3 +441,10 @@ Proof
   `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   Cases_on `lookup_scopes n scopes` >> gvs[]
 QED
+
+Theorem vv_post_initial_gas:
+  vv_post ctx func cenv cx e (es with gas_obs := gs) sa sb s0 ee tv vv t <=>
+  vv_post ctx func cenv cx e es sa sb s0 ee tv vv t
+Proof
+  simp[vv_post_def, locals_kept_def]
+QED
