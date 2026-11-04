@@ -36,7 +36,7 @@ Proof
   simp[MEM_MAP] >> qexists `(a,sz)` >> simp[]
 QED
 
-Theorem ptr_concretize_static_items[local]:
+Theorem ptr_concretize_static_items:
   fn.fn_eom = NONE /\
   concretize_function_fuel_in_context fuel ctx reserved fn = SOME fn' ==>
   ?items layout. static_alloca_items fn = SOME items /\
