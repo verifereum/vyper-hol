@@ -3036,3 +3036,106 @@ Proof
        vyperValueTheory.default_value_def] >> EVAL_TAC >>
   simp[wordsTheory.word_0_n2w, wordsTheory.w2n_n2w]
 QED
+
+(* Runtime endpoint relations do not preserve the type of a layout witness. *)
+Theorem immutable_retyped_endpoint_probe[local]:
+  !ce cx0 es vs fn ctx0.
+    let cenv = ce with <| ce_module := NONE; ce_is_ctor := F;
+          ce_vars := FEMPTY;
+          ce_module_vars := FEMPTY |+ ((NONE,"b"),ImmutableLoc 0) |>;
+        cx = cx0 with sources := [];
+        func = fn with fn_blocks := [];
+        ctx = ctx0 with ctx_functions := [func];
+        av = ArrayV (SArrayV []);
+        aty = ArrayTV (BaseTV BoolT) (Fixed 1);
+        am = (ArrayTV aty (Fixed 1),ArrayV (SArrayV [(0,av)]));
+        s = es with <| scopes := []; pending_deletions := [];
+          accounts := vs.vs_accounts; tStorage := vs.vs_transient;
+          logs := []; outcomes := SOME vs.vs_outcomes; requests := [];
+          immutables := [(cx.txn.target,[(NONE,
+            FEMPTY |+ ("a",am) |+ ("b",(aty,av)))])] |>;
+        t = s with immutables := [(cx.txn.target,[(NONE,
+            FEMPTY |+ ("a",am) |+ ("b",(NoneTV,NoneV)))])];
+        ss = vs with <| vs_allocas := FEMPTY; vs_alloca_next := 0;
+          vs_logs := []; vs_requests := []; vs_data_section := REPLICATE 32 0w;
+          vs_call_ctx := vs.vs_call_ctx with <|
+            cc_caller := cx.txn.sender; cc_address := cx.txn.target;
+            cc_callvalue := n2w cx.txn.value; cc_calldata := cx.txn.calldata;
+            cc_static := F |>;
+          vs_tx_ctx := vs.vs_tx_ctx with <|
+            tc_origin := cx.txn.origin; tc_gasprice := n2w cx.txn.gas_price;
+            tc_chainid := n2w cx.txn.chain_id; tc_blobhashes := cx.txn.blob_hashes |>;
+          vs_block_ctx := vs.vs_block_ctx with <|
+            bc_coinbase := cx.txn.coinbase; bc_timestamp := n2w cx.txn.time_stamp;
+            bc_number := n2w cx.txn.block_number;
+            bc_prevrandao := n2w cx.txn.prev_randao;
+            bc_gaslimit := n2w cx.txn.gas_limit; bc_basefee := n2w cx.txn.base_fee;
+            bc_blobbasefee := n2w cx.txn.blob_base_fee |> |>;
+        p = PlaceR (ImmutablePlace NONE "a" [ValueSubscript (IntV 0)])
+    in
+      stmt_state_rel ctx func cenv cx s ss /\
+      stmt_state_rel ctx func cenv cx t ss /\
+      ~cenv.ce_is_ctor /\
+      read_result cx p s = (INL av,s) /\
+      read_result cx p t = (INL av,t) /\
+      immutable_holds cenv cx (ArrayT (BaseT BoolT) (Fixed 1)) p 0w s /\
+      ~immutable_holds cenv cx (ArrayT (BaseT BoolT) (Fixed 1)) p 0w t
+Proof
+  rpt gen_tac >> simp[LET_THM] >>
+  conj_tac >- suspend "relations" >>
+  conj_tac >- suspend "relations" >>
+  simp[read_result_def, read_place_def, get_immutables_def,
+       get_address_immutables_def, get_source_immutables_def,
+       bind_def, return_def, lift_option_type_def, lift_option_def,
+       lift_sum_def, evaluate_subscripts_def, subscript_type_def,
+       finite_mapTheory.FLOOKUP_UPDATE, vyperValueOperationTheory.array_index_def] >>
+  simp[return_def, immutable_holds_def, get_source_immutables_def,
+       finite_mapTheory.FLOOKUP_UPDATE, vyperValueTheory.evaluate_type_def,
+       valueEncodingTheory.type_memory_size_def] >>
+  simp[read_result_def, read_place_def, get_immutables_def,
+       get_address_immutables_def, get_source_immutables_def,
+       bind_def, return_def, lift_option_type_def, lift_option_def,
+       lift_sum_def, evaluate_subscripts_def, subscript_type_def,
+       finite_mapTheory.FLOOKUP_UPDATE, vyperValueOperationTheory.array_index_def,
+       vyperValueTheory.type_slot_size_def, wordsTheory.dimword_def] >>
+  conj_tac
+  >- (qexists `0` >> simp[sub_layout_def] >> EVAL_TAC) >>
+  simp[sub_layout_def, valueEncodingTheory.type_memory_size_def]
+QED
+
+Resume immutable_retyped_endpoint_probe[relations]:
+  markerLib.RESUME_TAC >> (
+  `!a b. ~TC (fn_directly_calls (ctx0 with ctx_functions := [fn with fn_blocks := []])) a b` by
+    (simp[Once relationTheory.TC_CASES1, fcgDefsTheory.fn_directly_calls_def,
+      venomInstTheory.lookup_function_def, listTheory.FIND_thm,
+      venomInstTheory.fn_insts_def, venomInstTheory.fn_insts_blocks_def]) >>
+  simp[stmt_state_rel_def, state_rel_def, immutable_alloca_sep_def,
+    local_ptrs_rel_def, lookup_scopes_def, local_region_def,
+    venomStateTheory.lookup_var_def, storage_rel_def, transient_rel_def,
+    accounts_rel_def, accounts_agree_def, transient_agree_def,
+    logs_rel_def, call_ctx_rel_def,
+    venomStateTheory.contract_storage_def, venomStateTheory.contract_transient_def,
+    vfmStateTheory.lookup_account_def,
+    storage_agree_def] >>
+  simp[storage_vars_rel_def, transient_vars_rel_def,
+    vyperContextTheory.get_module_code_def, finite_mapTheory.FLOOKUP_UPDATE,
+    venomMemDefsTheory.alloca_inv_def, venomInstTheory.fn_insts_def,
+    venomInstTheory.fn_insts_blocks_def] >>
+  conj_tac >- suspend "immutable_rel" >>
+  simp[alloca_room_def, pending_alloca_size_def, unit_alloca_frame_def,
+    venomInstTheory.lookup_function_def, venomInstTheory.fn_insts_def,
+    venomInstTheory.fn_insts_blocks_def] >>
+  simp[venomMemDefsTheory.allocas_non_overlapping_def,
+    venomMemDefsTheory.alloca_next_valid_def, listTheory.FIND_thm])
+QED
+
+Resume immutable_retyped_endpoint_probe[immutable_rel]:
+  markerLib.RESUME_TAC >>
+  simp[immutables_rel_def, get_source_immutables_def,
+    finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  EVAL_TAC >> rpt strip_tac >> gvs[] >> EVAL_TAC >>
+  simp[wordsTheory.word_0_n2w, wordsTheory.w2n_n2w]
+QED
+
+Finalise immutable_retyped_endpoint_probe
