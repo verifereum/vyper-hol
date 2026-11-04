@@ -1,7 +1,6 @@
 (* TASK056 public schema and saved-kernel/classification gate.
- * Raw O1 call correctness is restricted to immutable-free programs because
- * the source-shape proof covers only static variable locations; immutable
- * compilation is unchanged.
+ * The schema still states immutable_free_program, which the raw O1
+ * source-shape proof no longer needs.
  * Not a stage producer, definitionless rollup, or full-project audit.
  * Substantive grouped boundary consumer below needs no stage admission.
  *)
