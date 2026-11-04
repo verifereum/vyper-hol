@@ -267,7 +267,7 @@ val () = assert_some empty_check
 (* Storage layout lookup and public getter artifact construction. *)
 val storage_modules =
   ``([(NONE,
-       [VariableDecl Public Storage "stored" (BaseT (UintT 256)) (SOME 0);
+       [VariableDecl (Public F) Storage "stored" (BaseT (UintT 256)) (SOME 0);
         FunctionDecl External View F F "read" [] [] (BaseT (UintT 256))
           [Return (SOME
              (TopLevelName (BaseT (UintT 256)) (NONE, "stored")))]])]
@@ -1017,7 +1017,7 @@ val widen_map_layouts =
       : (address # (storage_layout # storage_layout)) list)``
 val () = check_accepts "widen HashMap leaf" false widen_map_layouts
   ``[(NONE,
-      [HashMapDecl Public F "m" (BaseT (UintT 8)) (Type (BaseT (StringT 20)))
+      [HashMapDecl (Public F) F "m" (BaseT (UintT 8)) (Type (BaseT (StringT 20)))
          NONE;
        FunctionDecl External Nonpayable F F "put"
          [("i",BaseT (UintT 8)); ("s",BaseT (StringT 10))] [] NoneT
@@ -1101,7 +1101,7 @@ val () = check_accepts "widen annotated assignment and append" false
 
 val () = check_rejects widen_map_layouts
   ``[(NONE,
-      [HashMapDecl Public F "m" (BaseT (UintT 8)) (Type ^s10) NONE;
+      [HashMapDecl (Public F) F "m" (BaseT (UintT 8)) (Type ^s10) NONE;
        FunctionDecl External Nonpayable F F "put"
          [("i",BaseT (UintT 8)); ("s",^s20)] [] NoneT
          [Assign
@@ -1609,6 +1609,49 @@ val () = List.app assert_some
    aug_function bool_ty bool_ty ``vyperAST$Or`` (op_name bool_ty "y"),
    aug_function bool_ty bool_ty ``vyperAST$XOr`` (op_name bool_ty "y")]
 
+(* Issue 565: live public getters require the global slot-zero lock only when
+   their Public flag is set. Check both deployment and runtime validation. *)
+fun getter_lock_case decl lock accepted in_deploy = let
+  val modules = ``[(NONE,[^decl])] : (num option # toplevel list) list``
+  val locks = case lock of
+      NONE => ``[] : storage_layout``
+    | SOME n => ``[((NONE,"$.nonreentrant_key"), ^(numSyntax.term_of_int n))] : storage_layout``
+  val layouts = ``[((0w : address),
+    ([((NONE,"g"),1)] : storage_layout, ^locks))]``
+  val result = vyperCheckContractLib.check_contract_conv
+    ``check_contract ^(if in_deploy then T else F) ^layouts
+      ^zero_address ^modules``
+in (if accepted then assert_some else assert_none) result end
+val getter_scalar = ``VariableDecl (Public T) Storage "g"
+  (BaseT (UintT 256)) (SOME 1)``
+val getter_array = ``VariableDecl (Public T) Storage "g"
+  (ArrayT (BaseT (UintT 256)) (Fixed 2)) (SOME 1)``
+val getter_map = ``HashMapDecl (Public T) F "g"
+  (BaseT AddressT) (Type (BaseT (UintT 256))) (SOME 1)``
+val () = List.app (fn deploy => List.app (fn decl =>
+  (getter_lock_case decl NONE false deploy;
+   getter_lock_case decl (SOME 2) false deploy;
+   getter_lock_case decl (SOME 0) true deploy))
+  [getter_scalar, getter_array, getter_map]) [false, true]
+val () = List.app (fn deploy => getter_lock_case
+  ``VariableDecl (Public F) Storage "g" (BaseT (UintT 256)) (SOME 1)``
+  NONE true deploy) [false, true]
+
+(* A malformed constant/immutable flag is rejected independently of layout. *)
+val () = List.app (fn decl => getter_lock_case decl (SOME 0) false false)
+  [``VariableDecl (Public T) (Constant (Literal (BaseT (UintT 256)) (IntL 7)))
+      "g" (BaseT (UintT 256)) NONE``,
+   ``VariableDecl (Public T) Immutable "g" (BaseT (UintT 256)) NONE``]
+
+Theorem inactive_public_getter_needs_no_lock:
+  check_toplevel_body deploy [] (0w : address) [] [] art NONE
+    (VariableDecl (Public T) Storage "g" (BaseT (UintT 256)) (SOME 1)) /\
+  check_toplevel_body deploy [] (0w : address) [] [] art NONE
+    (HashMapDecl (Public T) F "g" (BaseT AddressT)
+      (Type (BaseT (UintT 256))) (SOME 1))
+Proof
+  simp[check_toplevel_body_def, function_live_def]
+QED
 (* Each collision has an accepted control differing only in its getter name
    or omitted-default prefix. Check the full checker in both modes. *)
 fun check_selector_decls in_deploy layouts decls =
@@ -1625,7 +1668,7 @@ val () = List.app (fn in_deploy =>
      val decls =
        ``[FunctionDecl External Nonpayable F F "burn"
             [("a", BaseT (UintT 256))] [] NoneT [];
-          HashMapDecl Public F ^name (BaseT (BytesT (Fixed 16)))
+          HashMapDecl (Public F) F ^name (BaseT (BytesT (Fixed 16)))
             (Type (BaseT (UintT 256))) (SOME 0)]``
    in
      expect (check_selector_decls in_deploy layouts decls)

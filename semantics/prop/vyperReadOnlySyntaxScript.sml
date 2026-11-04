@@ -3,7 +3,7 @@ Theory vyperReadOnlySyntax
 Ancestors
   vyperTypeContract vyperTypeContractStaticMaps vyperAST list rich_list
   vyperInterpreter vyperTypeContractGetter vyperTypeSelectedEntry
-  vyperContext vyperLookupStorage
+  vyperContext vyperLookupStorage vyperGetter
 
 val _ = Parse.hide "body";
 
@@ -137,7 +137,7 @@ QED
 
 Theorem getter_mutability:
   expr_mutability_ok mods View e /\
-  getter e kt vt = (mut,nr,args,(dflts:expr list),ret,body) ==>
+  getter getter_nr e kt vt = (mut,nr,args,(dflts:expr list),ret,body) ==>
   stmts_mutability_ok mods View body
 Proof
   simp[getter_def, pairTheory.UNCURRY] >> strip_tac >> gvs[] >>
@@ -152,8 +152,7 @@ Proof
   Cases_on `vis` >> simp[external_getter_tuple_def] >> rpt strip_tac >>
   gvs[AllCaseEqs()] >>
   simp[stmt_mutability_ok_def, expr_mutability_ok_def] >>
-  irule getter_mutability >> goal_assum (drule_at Any) >>
-  simp[expr_mutability_ok_def]
+  drule_at Any getter_mutability >> simp[expr_mutability_ok_def]
 QED
 
 Theorem hashmap_getter_mutability[local]:
@@ -162,8 +161,7 @@ Theorem hashmap_getter_mutability[local]:
   stmts_mutability_ok mods View body
 Proof
   Cases_on `vis` >> simp[external_getter_tuple_def] >> rpt strip_tac >>
-  irule getter_mutability >> goal_assum (drule_at Any) >>
-  simp[expr_mutability_ok_def]
+  drule_at Any getter_mutability >> simp[expr_mutability_ok_def]
 QED
 
 Theorem external_getter_mutability:

@@ -101,7 +101,7 @@ Proof
    t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
    t.vs_pending_deletions = s.vs_pending_deletions /\
    t.vs_immutables = s.vs_immutables /\
-   t.vs_data_section = s.vs_data_section` by
+   t.vs_data_section = s.vs_data_section /\ t.vs_labels = s.vs_labels` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
   `local_ptrs_rel func cenv es.scopes s /\ alloca_inv s` by
@@ -161,6 +161,12 @@ Proof
      gvs[local_region_def] >>
      qpat_x_assum `!n e q sq. _ ==> lookup_var q t = _` drule_all >>
      strip_tac >> Cases_on `id' = id` >> gvs[] >> metis_tac[]) >>
+  `immutable_base_zero cenv t` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     simp[] >> reverse conj_tac >- fs[stmt_state_rel_def] >>
+     rpt strip_tac >>
+     qpat_x_assum `!q. ~not_local_ptr _ _ q ==> _` irule >>
+     simp[not_local_ptr_def]) >>
   fs[stmt_state_rel_def] >> metis_tac[]
 QED
 

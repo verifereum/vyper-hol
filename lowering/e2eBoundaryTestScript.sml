@@ -123,23 +123,23 @@ Proof
 QED
 
 Theorem outcome_guard_success_only:
-  call_outcomes_ok tops am tx [] /\
-  (call_outcomes_ok tops am tx [co with co_success := F] <=>
+  call_outcomes_ok am tx [] /\
+  (call_outcomes_ok am tx [co with co_success := F] <=>
     LENGTH co.co_returnData < dimword(:256) /\
     accounts_runtime_well_typed co.co_accounts /\
     contract_storage_well_formed
       (initial_evaluation_context am.sources am.layouts tx NONE)
       (initial_state (am with <|accounts := co.co_accounts;
                                tStorage := co.co_tStorage|>) [])) /\
-  (call_outcomes_ok tops am tx [co with co_success := T] <=>
+  (call_outcomes_ok am tx [co with co_success := T] <=>
     LENGTH co.co_returnData < dimword(:256) /\
     accounts_runtime_well_typed co.co_accounts /\
     contract_storage_well_formed
       (initial_evaluation_context am.sources am.layouts tx NONE)
       (initial_state (am with <|accounts := co.co_accounts;
                                tStorage := co.co_tStorage|>) [])) /\
-  (call_outcomes_ok tops am tx (xs ++ ys) <=>
-    call_outcomes_ok tops am tx xs /\ call_outcomes_ok tops am tx ys)
+  (call_outcomes_ok am tx (xs ++ ys) <=>
+    call_outcomes_ok am tx xs /\ call_outcomes_ok am tx ys)
 Proof
   simp[call_outcomes_ok_def, EVERY_APPEND]
 QED
@@ -189,7 +189,7 @@ QED
    independent supported whitelist rejects public variables. Do not silently
    strengthen the exact PLAN predicate with an extra MEM FunctionDecl guard. *)
 Theorem source_lookup_getter_outside_supported:
-  let tops = [VariableDecl Public Storage "g" (BaseT (UintT 256)) (SOME 0)] in
+  let tops = [VariableDecl (Public F) Storage "g" (BaseT (UintT 256)) (SOME 0)] in
     vyperInterpreter$lookup_function NONE "g" External tops =
       SOME (View,F,[],[],BaseT (UintT 256),
         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"g")))]) /\

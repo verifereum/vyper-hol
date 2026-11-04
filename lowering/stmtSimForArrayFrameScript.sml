@@ -170,7 +170,8 @@ Resume supported_pure_scopes_mutual[builtin]:
      gvs[supported_builtin_form_def, AllCaseEqs()] >> Cases_on `exprs` >> gvs[]) >>
   gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
       ignore_bind_def, return_def, raise_def, AllCaseEqs(), get_accounts_def] >>
-  imp_res_tac lift_sum_state >> gvs[] >> metis_tac[]
+  imp_res_tac lift_sum_state >>
+  imp_res_tac precompile_call_success_state >> gvs[] >> metis_tac[]
 QED
 
 Resume supported_pure_scopes_mutual[typebuiltin]:
