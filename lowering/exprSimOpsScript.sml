@@ -41,6 +41,7 @@
 
 Theory exprSimOps
 Ancestors
+  exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
   fragExec varsExt exprSim freshWrites exprBopLowering loweringSlice

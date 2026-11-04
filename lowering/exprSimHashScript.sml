@@ -25,6 +25,7 @@
  *)
 Theory exprSimHash
 Ancestors
+  exprSimDefs
   loweringPosts
   exprSimAlloc
   allocLimits

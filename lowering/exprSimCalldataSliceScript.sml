@@ -21,6 +21,7 @@
 
 Theory exprSimCalldataSlice
 Ancestors
+  exprSimDefs
   loweringPosts
   exprSimAlloc
   allocLimits

@@ -35,6 +35,7 @@
 
 Theory exprSimSend
 Ancestors
+  exprSimDefs exprSimStack
   loweringPosts
   allocLimits
   list pair vyperMisc fragExec loweringSlice exprSim exprSimHyps exprSimWordArgs

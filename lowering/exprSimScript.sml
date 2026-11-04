@@ -83,6 +83,7 @@
 
 Theory exprSim
 Ancestors
+  exprSimDefs exprSimStack exprSimValues
   loweringPosts
   list rich_list finite_map pred_set
   fragExec varsExt loweringSlice localPtrsProps venomMemDefs
@@ -100,41 +101,17 @@ Ancestors
    "UNREACHABLE", as result_rel relates them.  external_call_result_rel
    asks a revert for RevertData, but result_rel, which the statement lemmas
    conclude, allows any Abort. *)
-Definition expr_exit_def:
-  (expr_exit (INR (Error (RuntimeError m))) (Abort a s) <=> T) /\
-  (expr_exit (INR (Error (RevertData d))) (Abort a s) <=> T) /\
-  (expr_exit (INR (AssertException str)) (Abort a s) <=>
-     a = Revert_abort \/ (a = ExHalt_abort /\ str = "UNREACHABLE")) /\
-  (expr_exit _ _ <=> F)
-End
 
-Theorem expr_exit_INL[simp]:
-  !x r. ~expr_exit (INL x) r
-Proof
-  Cases_on `r` >> simp[expr_exit_def]
-QED
+
+
 
 (* Exit predicates are insensitive to the successful result representation. *)
-Theorem expr_exit_success_map:
-  !f r. expr_exit (case r of INL v => INL (f v) | INR ex => INR ex) =
-        expr_exit r
-Proof
-  rpt gen_tac >> simp[FUN_EQ_THM] >> gen_tac >>
-  Cases_on `r` >- simp[] >>
-  rename1 `INR ex` >> Cases_on `ex` >>
-  Cases_on `x` >> simp[expr_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
-QED
+
 
 (* The source results the judgment speaks of: a value, an error other than
    a type error, or an assertion.  Type errors and control exceptions
    (break, continue, return) are left out. *)
-Definition expr_res_ok_def:
-  expr_res_ok (res : value + exception) <=>
-    (?v. res = INL v) \/ (?m. res = INR (Error (RuntimeError m))) \/
-    (?d. res = INR (Error (RevertData d))) \/
-    (?str. res = INR (AssertException str))
-End
+
 
 (* The value v of an expression of type t held by operand op in s: a word
    type's value as the operand, in the typed word encoding of t (the one
@@ -466,18 +443,7 @@ QED
    expr_post; on an error other than a type error or an assertion it exits
    as expr_exit allows.  This is expr_frag (loweringSlice) with the failing
    outcomes added. *)
-Definition expr_sim_def:
-  expr_sim ctx func cenv cx ty e es <=>
-    !sa sb op res es' s0.
-      lower_value compile_expr cenv ty e sa = (op, sb) /\
-      (do result <- eval_expr cx e; read_result cx result od) es = (res, es') /\ expr_res_ok res /\
-      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-        (\s. ?v. res = INL v /\
-                 expr_post ctx func cenv cx e es sa sb s0 es' v op s)
-        (expr_exit res)
-End
+
 
 (* ===== The judgment on compile_expr's value ===== *)
 
@@ -522,122 +488,28 @@ End
 
 (* Raw expression results include values and captured places.  Mapping
    roots are excluded because they cannot be read as values. *)
-Definition expr_vv_res_ok_def:
-  expr_vv_res_ok (res : eval_result + exception) <=>
-    (?v. res = INL (Value v)) \/ (?p. res = INL (PlaceR p)) \/
-    (?m. res = INR (Error (RuntimeError m))) \/
-    (?d. res = INR (Error (RevertData d))) \/
-    (?str. res = INR (AssertException str))
-End
 
-Definition expr_read_res_ok_def:
-  expr_read_res_ok cx es res <=>
-    (?r v. res = INL r /\ read_result cx r es = (INL v,es)) \/
-    (?exc. res = INR exc /\
-           expr_res_ok (INR exc : value + exception))
-End
+
+
 
 (* expr_sim with compile_expr in place of lower_value: compile_expr's
    fragment of e, run from a state related at es, reaches its end with the
    value_vv holding the source result as vv_post says, or exits as
    expr_exit allows. *)
-Definition expr_vv_sim_def:
-  expr_vv_sim ctx func cenv cx ty e es <=>
-    !sa sb vv res es' s0.
-      compile_expr cenv ty e sa = (vv, sb) /\
-      eval_expr cx e es = (res, es') /\ expr_vv_res_ok res /\
-      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-        (\s. ?tv. res = INL tv /\
-                  vv_post ctx func cenv cx e es sa sb s0 es' tv vv s)
-        (expr_exit res)
-End
+
 
 (* Where compile_expr hands out a StackValue, unwrap_value emits no code, so
    expr_sim is expr_vv_sim on the results that are values. *)
-Theorem expr_vv_sim_stack:
-  !ctx func cenv cx ty e es.
-    expr_sim ctx func cenv cx ty e es /\
-    (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op, sb)) /\
-    (!tv es'. eval_expr cx e es = (INL tv, es') ==> ?v. tv = Value v) ==>
-    expr_vv_sim ctx func cenv cx ty e es
-Proof
-  rw[expr_vv_sim_def] >>
-  first_x_assum (qspec_then `sa` strip_assume_tac) >> gvs[] >>
-  `lower_value compile_expr cenv ty e sa = (op, sb)` by
-    simp[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def] >>
-  Cases_on `res`
-  >- (rename1 `eval_expr cx e es = (INL raw, es')` >>
-      `?v. raw = Value v` by metis_tac[] >> gvs[] >>
-      qpat_x_assum `expr_sim _ _ _ _ _ _ _`
-        (mp_tac o SIMP_RULE std_ss [expr_sim_def]) >>
-      disch_then (qspecl_then [`sa`, `sb`, `op`, `INL v`, `es'`, `s0`] mp_tac) >>
-      simp[bind_def, read_result_def, return_def, expr_res_ok_def] >>
-      strip_tac >> irule frag_exec_conseq >>
-      first_x_assum (irule_at Any) >>
-      rpt strip_tac >>
-      gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
-          read_result_def, return_def] >> first_assum ACCEPT_TAC) >>
-  rename1 `eval_expr cx e es = (INR exc, es')` >>
-  `expr_res_ok (INR exc : value + exception)` by
-    gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _`
-    (mp_tac o SIMP_RULE std_ss [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sb`, `op`, `INR exc`, `es'`, `s0`] mp_tac) >>
-  simp[bind_def] >> strip_tac >>
-  irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
-  simp[] >> rpt gen_tac >>
-  Cases_on `exc` >> Cases_on `r` >> simp[expr_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
-QED
+
 
 (* expr_sim gives expr_frag where the expression's type is a word type
    whose typed encoding agrees, on the values the expression evaluates to,
    with val_to_w256, the encoding expr_frag uses. *)
-Theorem expr_sim_expr_frag:
-  !ctx func cenv cx ty e es R tv.
-    expr_sim ctx func cenv cx ty e es /\ is_word_type (expr_type e) /\
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    (!v es'. (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es') ==>
-             typed_val_to_w256 tv v = val_to_w256 v) ==>
-    expr_frag ctx func cenv cx ty e es R
-Proof
-  rw[expr_sim_def, expr_frag_def] >>
-  first_x_assum (qspecl_then [`sa`, `sb`, `op`, `INL v`, `es'`, `s0`]
-                   mp_tac) >>
-  impl_tac >- simp[expr_res_ok_def] >>
-  strip_tac >> irule frag_exec_conseq >>
-  first_x_assum (irule_at Any) >>
-  simp[expr_post_def, expr_val_rel_def] >> rpt strip_tac >>
-  qpat_x_assum `!tv. evaluate_type _ _ = SOME tv ==> _`
-    (qspec_then `tv` mp_tac) >>
-  qpat_x_assum `!v es'. (do result <- eval_expr _ _; read_result _ result od) _ = _ ==> _` drule >>
-  gvs[]
-QED
+
 
 (* An expression whose results the judgment speaks of are all values: its
    fragment need only reach expr_post. *)
-Theorem expr_sim_values:
-  !ctx func cenv cx ty e es.
-    (!res es'. (do result <- eval_expr cx e; read_result cx result od) es = (res, es') /\ expr_res_ok res ==>
-               ?v. res = INL v) /\
-    (!sa sb op v es' s0.
-       lower_value compile_expr cenv ty e sa = (op, sb) /\
-       (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es') /\
-       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-       local_ptrs_reserved cenv sa ==>
-       frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-         (expr_post ctx func cenv cx e es sa sb s0 es' v op) (\r. F)) ==>
-    expr_sim ctx func cenv cx ty e es
-Proof
-  rpt gen_tac >> strip_tac >> simp[expr_sim_def] >> rpt strip_tac >>
-  qpat_x_assum `!res es'. _ ==> _` (drule_all_then strip_assume_tac) >>
-  gvs[] >>
-  first_x_assum (drule_all_then (qspec_then `s0` assume_tac)) >>
-  irule frag_exec_conseq >>
-  first_x_assum (irule_at Any) >> simp[]
-QED
+
 
 (* ===== stmt_state_rel and the variables ===== *)
 

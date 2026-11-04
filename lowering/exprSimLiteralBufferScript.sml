@@ -15,6 +15,7 @@
 
 Theory exprSimLiteralBuffer
 Ancestors
+  exprSimDefs
   loweringPosts
   exprSimAlloc
   allocLimits

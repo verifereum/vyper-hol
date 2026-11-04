@@ -30,6 +30,7 @@
 
 Theory exprSimCompare
 Ancestors
+  exprSimDefs
   list rich_list
   fragExec varsExt exprSim freshWrites exprSimOps loweringSlice
   exprLowering emitHelper emitHelperProps exprLoweringProps arithmeticProps

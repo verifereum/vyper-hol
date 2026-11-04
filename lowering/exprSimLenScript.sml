@@ -21,6 +21,7 @@
 
 Theory exprSimLen
 Ancestors
+  exprSimDefs
   loweringPosts
   list fragExec exprSim exprSimHyps exprSimWordBuiltins exprBopLowering exprLowering
   exprLoweringProps builtinSimple emitHelper compileEnv accountsRelProps

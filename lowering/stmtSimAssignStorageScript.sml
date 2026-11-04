@@ -35,6 +35,7 @@
 
 Theory stmtSimAssignStorage
 Ancestors
+  exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
   fragExec exprSim exprSimLeaves stmtSim stmtSimDecl stmtSimDeclMem

@@ -231,6 +231,7 @@
 
 Theory exprSimHyps
 Ancestors
+  exprSimDefs exprSimStack
   gasContext
   list finite_map
   exprSim exprCallBounds exprBopLowering exprLowering compileEnv

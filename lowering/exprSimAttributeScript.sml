@@ -34,6 +34,7 @@
 
 Theory exprSimAttribute
 Ancestors
+  exprSimDefs
   loweringPosts
   allocLimits
   list rich_list finite_map pair

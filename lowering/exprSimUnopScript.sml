@@ -31,6 +31,7 @@
 
 Theory exprSimUnop
 Ancestors
+  exprSimDefs
   loweringPosts
   arithmetic list integer words integer_word byte
   fragExec varsExt exprSim freshWrites

@@ -23,6 +23,7 @@
 
 Theory stmtSimReturn
 Ancestors
+  exprSimDefs
   loweringPosts
   list rich_list finite_map fragExec exprSim exprSimLeaves stmtSim freshWrites
   vyperTypeABI

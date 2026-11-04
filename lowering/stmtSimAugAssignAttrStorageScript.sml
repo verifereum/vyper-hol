@@ -30,6 +30,7 @@
 
 Theory stmtSimAugAssignAttrStorage
 Ancestors
+  exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set alist
   fragExec freshWrites loweringSlice exprSim exprSimHyps exprSimOps

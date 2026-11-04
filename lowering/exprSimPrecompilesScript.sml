@@ -48,6 +48,7 @@
 
 Theory exprSimPrecompiles
 Ancestors
+  exprSimDefs exprSimStack
   loweringPosts
   exprSimAlloc
   list fragExec loweringSlice exprSim exprSimHyps exprSimWordBuiltins

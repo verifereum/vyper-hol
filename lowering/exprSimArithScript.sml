@@ -48,6 +48,7 @@
 
 Theory exprSimArith
 Ancestors
+  exprSimDefs
   arithmetic list rich_list bit integer words fcp integer_word int_bitwise
   intBits fragExec varsExt exprSim freshWrites exprSimOps exprSimCompare
   loweringSlice

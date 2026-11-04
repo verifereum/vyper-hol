@@ -25,6 +25,7 @@
 
 Theory stmtSimForRange
 Ancestors
+  exprSimDefs
   loweringPosts
   stmtSim stmtSimForParts stmtSimForLoop exprWordOperand
   list rich_list finite_map pred_set

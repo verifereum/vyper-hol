@@ -25,6 +25,7 @@
 
 Theory stmtSimReasonStorage
 Ancestors
+  exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim exprSimUnwrap exprSimHyps exprSimWordBuiltins loweringSlice

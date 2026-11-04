@@ -69,6 +69,7 @@
 
 Theory exprSimBuiltins
 Ancestors
+  exprSimDefs
   loweringPosts
   list rich_list exprSim exprSimHyps vyperAST exprSimWordBuiltins
   exprSimWordArgs exprSimHash vyperTypeSystem exprLowering compileEnv

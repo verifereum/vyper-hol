@@ -35,6 +35,7 @@
 
 Theory exprSimUnwrap
 Ancestors
+  exprSimDefs
   loweringPosts
   list finite_map
   exprSim exprLowering compileEnv immutableEncoding vyperAST vyperInterpreter

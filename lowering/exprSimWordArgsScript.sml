@@ -37,6 +37,7 @@
 
 Theory exprSimWordArgs
 Ancestors
+  exprSimDefs
   loweringPosts
   list exprSim exprSimHyps exprSimOps loweringSlice exprLowering
   exprLoweringProps vyperEvalExprPreservesScopesDom vyperInterpreter

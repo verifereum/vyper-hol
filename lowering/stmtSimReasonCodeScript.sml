@@ -25,6 +25,7 @@
 
 Theory stmtSimReasonCode
 Ancestors
+  exprSimDefs
   loweringPosts
   list rich_list finite_map
   fragExec varsExt freshWrites exprSim exprSimUnwrap exprSimCopy exprSimStorageCopy

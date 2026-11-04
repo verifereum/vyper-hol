@@ -22,6 +22,7 @@
 
 Theory stmtSimReasonExpr
 Ancestors
+  exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim exprSimUnwrap loweringSlice

@@ -31,6 +31,7 @@
 
 Theory exprSimPop
 Ancestors
+  exprSimDefs
   loweringPosts
   list rich_list finite_map arithmetic words
   fragExec loweringSlice exprSim exprSimHyps exprSimLeaves exprSimAggregateLayout
