@@ -5219,3 +5219,139 @@ QED
    this three-level program. No such premise is assumed by this diagnostic.
    The dead donor header is zero in both initial source and machine stores.
    A donor-header-one control is not included. *)
+
+Theorem probe_deep_pre_shapes:
+  !cenv env e es.
+    expr_body_pre cenv probe_deep_context env e es ==>
+    let st = get_storage probe_deep_context es F in
+    w2n (lookup_storage 4w st) <= 1 /\
+    (lookup_storage 4w st = 1w ==> w2n (lookup_storage 5w st) <= 1) /\
+    (lookup_storage 4w st = 1w /\ lookup_storage 5w st = 1w ==>
+      w2n (lookup_storage 6w st) <= 1)
+Proof
+  rpt gen_tac >> strip_tac >> simp[LET_THM] >>
+  `contract_storage_well_formed probe_deep_context es` by
+    gvs[expr_body_pre_def, expr_sim_inv_def] >>
+  `slots_in_range (get_storage probe_deep_context es F) 4
+     (ArrayTV (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1)) (Dynamic 1))` by
+    (qpat_assum `contract_storage_well_formed _ _` mp_tac >>
+     simp[NoAsms, contract_storage_well_formed_def, get_storage_backend_eq,
+          probe_deep_declared_region] >> strip_tac >>
+     first_x_assum (qspecl_then [`"donor"`,`4w`] mp_tac) >>
+     simp[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]) >>
+  qpat_x_assum `slots_in_range _ _ _` mp_tac >>
+  simp[Once vyperLookupStorageTheory.slots_in_range_def,
+       vyperStorageTheory.read_slot_def] >>
+  strip_tac >> simp[] >>
+  Cases_on `lookup_storage 4w (get_storage probe_deep_context es F) = 1w` >> simp[] >>
+  qpat_x_assum `dyn_slots_in_range _ _ _ _` mp_tac >>
+  pure_rewrite_tac[arithmeticTheory.ONE,
+    vyperLookupStorageTheory.slots_in_range_def] >>
+  simp[vyperStorageTheory.read_slot_def] >>
+  pure_rewrite_tac[arithmeticTheory.ONE,
+    vyperLookupStorageTheory.slots_in_range_def] >>
+  simp[vyperStorageTheory.read_slot_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `dyn_slots_in_range _ _ _ _` mp_tac >>
+  simp[] >>
+  pure_rewrite_tac[arithmeticTheory.ONE,
+    vyperLookupStorageTheory.slots_in_range_def] >>
+  simp[vyperStorageTheory.read_slot_def]
+QED
+
+Theorem probe_deep_copy_symbolic_success:
+  !es n m k.
+    n <= 1 /\ (n = 1 ==> m <= 1) /\
+    (n = 1 /\ m = 1 ==> k <= 1) /\
+    lookup_storage 4w (get_storage probe_deep_context es F) = n2w n /\
+    lookup_storage 5w (get_storage probe_deep_context es F) = n2w m /\
+    lookup_storage 6w (get_storage probe_deep_context es F) = n2w k ==>
+    eval_expr probe_deep_context
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es =
+    (INL (Value (IntV 0)),
+     set_storage probe_deep_context es F
+       (let st = get_storage probe_deep_context es F in
+        if n = 0 then update_storage 0w 0w st
+        else if m = 0 then update_storage 1w 0w (update_storage 0w 1w st)
+        else if k = 0 then update_storage 2w 0w
+          (update_storage 1w 1w (update_storage 0w 1w st))
+        else update_storage 3w (lookup_storage 7w st)
+          (update_storage 2w 1w
+            (update_storage 1w 1w (update_storage 0w 1w st)))))
+Proof
+  rpt strip_tac >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_storage_backend``,
+    ``set_storage_backend``, ``lookup_storage``]) >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_storage_backend``,
+    ``set_storage_backend``, ``lookup_storage``]) >>
+  simp[get_storage_backend_eq, get_storage_scopes] >>
+  gvs[get_storage_def, probe_deep_context_def,
+      empty_evaluation_context_def, empty_call_txn_def] >>
+  `n = 0 \/ n = 1` by decide_tac >> gvs[] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_storage_backend``,
+    ``set_storage_backend``, ``lookup_storage``]) >>
+  simp[set_storage_backend_eq, handle_function_def, return_def] >>
+  simp[set_storage_def, evaluation_state_component_equality] >>
+  Cases_on `m = 0` >> gvs[] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_storage_backend``,
+    ``set_storage_backend``, ``lookup_storage``]) >>
+  simp[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_storage_backend``,
+    ``set_storage_backend``, ``lookup_storage``]) >>
+  simp[set_storage_backend_eq, handle_function_def, return_def,
+       set_storage_def, evaluation_state_component_equality] >>
+  `m = 1` by decide_tac >> gvs[] >>
+  `k = 0 \/ k = 1` by decide_tac >> gvs[] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_storage_backend``,
+    ``set_storage_backend``, ``lookup_storage``]) >>
+  simp[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_storage_backend``,
+    ``set_storage_backend``, ``lookup_storage``]) >>
+  simp[set_storage_backend_eq, handle_function_def, return_def,
+       set_storage_def, evaluation_state_component_equality] >>
+  qspec_then `lookup_storage 7w (es.accounts 0w).storage` mp_tac
+    wordsTheory.w2n_lt >>
+  simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  strip_tac >> simp[]
+QED
+
+Theorem probe_deep_source_call_boundary:
+  !cenv env e es.
+    expr_body_pre cenv probe_deep_context env e es ==>
+    let st = get_storage probe_deep_context es F in
+    ?es'. eval_expr probe_deep_context
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es =
+      (INL (Value (IntV 0)), es') /\ es'.scopes = es.scopes /\
+      es' = set_storage probe_deep_context es F
+        (if w2n (lookup_storage 4w st) = 0 then update_storage 0w 0w st
+         else if w2n (lookup_storage 5w st) = 0 then
+           update_storage 1w 0w (update_storage 0w 1w st)
+         else if w2n (lookup_storage 6w st) = 0 then
+           update_storage 2w 0w (update_storage 1w 1w (update_storage 0w 1w st))
+         else update_storage 3w (lookup_storage 7w st)
+           (update_storage 2w 1w (update_storage 1w 1w (update_storage 0w 1w st))))
+Proof
+  rpt gen_tac >> strip_tac >> simp[LET_THM] >>
+  drule probe_deep_pre_shapes >> simp[LET_THM] >> strip_tac >>
+  qspecl_then [`es`,
+    `w2n (lookup_storage 4w (get_storage probe_deep_context es F))`,
+    `w2n (lookup_storage 5w (get_storage probe_deep_context es F))`,
+    `w2n (lookup_storage 6w (get_storage probe_deep_context es F))`]
+    mp_tac probe_deep_copy_symbolic_success >>
+  simp[wordsTheory.n2w_w2n] >>
+  (impl_tac >- metis_tac[wordsTheory.n2w_w2n]) >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[set_storage_def]
+QED
+
+val () = List.app (fn (name,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn oracle => oracle = "DISK_THM") oracles
+     then print ("DEEP_SOURCE_AUDIT " ^ name ^ " OK\n")
+     else raise Fail (name ^ ": admitted proof dependency") end)
+  [("probe_deep_pre_shapes",probe_deep_pre_shapes),
+   ("probe_deep_copy_symbolic_success",probe_deep_copy_symbolic_success),
+   ("probe_deep_source_call_boundary",probe_deep_source_call_boundary)];
