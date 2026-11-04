@@ -610,3 +610,59 @@ Proof
   Cases >> Cases >> simp[range_widen_opt_def,range_sound_bottom,range_sound_fempty] >>
   rpt strip_tac >> IF_CASES_TAC >> gvs[range_sound_fempty]
 QED
+
+Theorem ao_range_computed_entry_sound:
+  !edges seed (lbl:string) joined old (visits:num) threshold s.
+    EVERY (\x. range_sound x s) edges /\
+    (case seed of NONE => T | SOME (l,v) => l = lbl ==> range_sound v s) /\
+    joined = (case edges of
+      [] => (case seed of NONE => NONE | SOME (l,v) => if lbl = l then v else NONE)
+    | _ => FOLDL range_join_opt NONE edges) ==>
+    range_sound (if visits >= threshold then range_widen_opt old joined else joined) s
+Proof
+  rpt gen_tac >> strip_tac >>
+  `range_sound joined s` by
+    (Cases_on `edges`
+     >- (Cases_on `seed` >> gvs[range_sound_bottom] >>
+         PairCases_on `x` >> gvs[] >> IF_CASES_TAC >> gvs[range_sound_bottom])
+     >> gvs[] >> irule ao_range_fold_join_sound >>
+        simp[] >> irule ao_range_join_sound >> simp[range_sound_bottom]) >>
+  IF_CASES_TAC >> simp[ao_range_widen_sound]
+QED
+
+Theorem ao_range_process_entry_sound:
+  !transfer edge_transfer ctx cfg bbs threshold seed lbl st s q.
+    (!p. range_sound (df_widen_entry NONE st p) s) /\
+    EVERY (\nbr. range_sound
+      (edge_transfer ctx nbr lbl (df_widen_boundary NONE st nbr)) s)
+      (cfg_preds_of cfg lbl) /\
+    (case seed of NONE => T | SOME (l,v) => l = lbl ==> range_sound v s) ==>
+    range_sound (df_widen_entry NONE
+      (df_process_block_widen Forward NONE range_join_opt range_widen_opt
+        threshold transfer edge_transfer ctx seed cfg bbs lbl st) q) s
+Proof
+  rpt gen_tac >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `EVERY _ neighbors` >>
+  qabbrev_tac `edges = MAP (\nbr.
+    edge_transfer ctx nbr lbl (df_widen_boundary NONE st nbr)) neighbors` >>
+  qabbrev_tac `joined = (case edges of
+      [] => (case seed of NONE => NONE | SOME (l,v) => if lbl = l then v else NONE)
+    | _ => FOLDL range_join_opt NONE edges)` >>
+  qabbrev_tac `entry = if df_widen_visits st lbl >= threshold then
+    range_widen_opt (df_widen_entry NONE st lbl) joined else joined` >>
+  `range_sound entry s` by
+    (simp[Abbr `entry`] >> irule ao_range_computed_entry_sound >>
+     qexistsl_tac [`edges`,`lbl`,`seed`] >>
+     simp[Abbr `joined`,Abbr `edges`,listTheory.EVERY_MAP]) >>
+  rewrite_tac[Once dfAnalyzeWidenDefsTheory.df_process_block_widen_def] >>
+  fs[markerTheory.Abbrev_def] >>
+  qpat_x_assum `neighbors = _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_x_assum `edges = _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_x_assum `joined = _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_x_assum `entry = _` (fn th => rewrite_tac[GSYM th]) >>
+  pairarg_tac >> simp[] >> IF_CASES_TAC >- simp[] >>
+  simp[dfAnalyzeWidenDefsTheory.df_widen_entry_def,finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `q = lbl` >> simp[] >>
+  first_x_assum (qspec_then `q` mp_tac) >>
+  simp[dfAnalyzeWidenDefsTheory.df_widen_entry_def]
+QED
