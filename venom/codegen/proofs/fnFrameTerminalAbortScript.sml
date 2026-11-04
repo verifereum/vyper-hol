@@ -121,7 +121,7 @@ QED
 
 Theorem frame_entry_selected_prefix_sim:
   !opc operands lo ps nl iops prepared dfg selected rops arranged spillbase
-    fn ra vs cplan ops name post ctx rest mem0 st prog r final o2pc.
+    fn ra vs cplan ops suffix ctx rest mem0 st prog r final o2pc.
   opc <> INVOKE /\
   (!l. MEM (Label l) operands ==> IS_SOME (FLOOKUP lo l)) /\
   (!op. MEM op operands /\ is_var_operand op ==>
@@ -139,7 +139,7 @@ Theorem frame_entry_selected_prefix_sim:
     operand_equiv dfg op at ==>
     operand_val (frame_view fn ra vs) lo op = operand_val (frame_view fn ra vs) lo at) /\
   prefix_spill_wf cplan.cp_initial_fmp lo (FRONT ops) ps /\
-  ops = iops ++ rops ++ [SOEmit name] ++ post /\
+  ops = iops ++ rops ++ suffix /\ suffix <> [] /\
   fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st /\
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
   MEM r cplan.cp_regions /\
@@ -174,8 +174,10 @@ Proof
     fs[generated_plan_state_wf_def] >>
   `EVERY (\s. case s of SOSpill off => off < dimword(:256)
     | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops)` by
-    (simp[] >> irule regular_prefix_segment_address_bounds >>
-     qexistsl_tac [`cplan.cp_initial_fmp`, `lo`, `name`, `ops`, `post`, `ps`] >> simp[]) >>
+    (irule scratchPrefixSimTheory.prefix_spill_wf_address_bounds >>
+     qexistsl_tac [`cplan.cp_initial_fmp`, `lo`, `ps`] >>
+     irule prefix_spill_wf_front_prefix >> qexists `suffix` >>
+     gvs[APPEND_ASSOC]) >>
   `asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by
     (qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
      simp[execute_plan_append, asm_block_at_append]) >>
@@ -343,7 +345,7 @@ Resume gen_inst_revert_frame_sim[decomposed]:
      goal_assum (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
-     qexistsl_tac [`"REVERT"`, `[]`] >>
+     qexists `[SOEmit "REVERT"]` >>
      simp[sortingTheory.PERM_REFL] >> metis_tac[]) >>
   suspend "prepared"
 QED
@@ -450,7 +452,7 @@ Resume gen_inst_assert_frame_sim[decomposed]:
      goal_assum (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
-     qexistsl_tac [`"ISZERO"`, `[SOPushLabel "revert"; SOEmit "JUMPI"]`] >>
+     qexists `[SOEmit "ISZERO"; SOPushLabel "revert"; SOEmit "JUMPI"]` >>
      pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
      gvs[sortingTheory.PERM_REFL] >> metis_tac[]) >>
   suspend "prepared"
