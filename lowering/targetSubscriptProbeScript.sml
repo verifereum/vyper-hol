@@ -5508,3 +5508,160 @@ val () = List.app (fn (name,th) =>
   [("probe_deep_dead_bytes",probe_deep_dead_bytes),
    ("probe_deep_copy_footprint_agree",probe_deep_copy_footprint_agree),
    ("probe_deep_copy_pre_summary",probe_deep_copy_pre_summary)];
+
+(* Reachability audit: moving shrink into the base changes which live
+   header the next extension consults.  The outermost index is pure. *)
+Theorem probe_deep_capture_parent:
+  eval_base_place probe_deep_context
+    (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+      (Literal (BaseT (UintT 256)) (IntL 0))) probe_deep_source_state =
+  (INL (PlaceR (StoragePlace F 1w
+    (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1)))),
+   probe_deep_source_state)
+Proof
+  EVAL_TAC >> simp[return_def, word_add_n2w, dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
+
+Theorem probe_deep_inner_shrink_base:
+  eval_base_place probe_deep_context
+    (SubscriptTarget
+      (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+        (Literal (BaseT (UintT 256)) (IntL 0)))
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE))
+    probe_deep_source_state =
+  (INR (Error (RuntimeError "array dynamic length oob")),
+   set_storage probe_deep_context probe_deep_source_state F
+     (update_storage 0w 1w (update_storage 1w 0w
+       (get_storage probe_deep_context probe_deep_source_state F))))
+Proof
+  simp[Once evaluate_def, bind_def, probe_deep_capture_parent,
+       probe_deep_source_call, read_result_def, return_def] >>
+  simp[extend_place_storage_array_index, get_storage_after_set,
+       lookup_storage_def, update_storage_def, APPLY_UPDATE_THM]
+QED
+
+Definition probe_deep_empty_donor_state_def:
+  probe_deep_empty_donor_state =
+    set_storage probe_deep_context probe_deep_source_state F
+      (update_storage 4w 0w
+        (get_storage probe_deep_context probe_deep_source_state F))
+End
+
+Theorem probe_deep_empty_donor_call:
+  eval_expr probe_deep_context
+    (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
+    probe_deep_empty_donor_state =
+  (INL (Value (IntV 0)),
+   set_storage probe_deep_context probe_deep_empty_donor_state F
+     (update_storage 0w 0w
+       (get_storage probe_deep_context probe_deep_empty_donor_state F)))
+Proof
+  qspecl_then [`probe_deep_empty_donor_state`, `0`, `0`, `0`]
+    mp_tac probe_deep_copy_symbolic_success >>
+  simp[probe_deep_empty_donor_state_def, get_storage_after_set,
+       lookup_storage_def, update_storage_def, APPLY_UPDATE_THM] >>
+  EVAL_TAC
+QED
+
+Theorem probe_deep_empty_donor_capture_parent:
+  eval_base_place probe_deep_context
+    (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+      (Literal (BaseT (UintT 256)) (IntL 0))) probe_deep_empty_donor_state =
+  (INL (PlaceR (StoragePlace F 1w
+    (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1)))),
+   probe_deep_empty_donor_state)
+Proof
+  EVAL_TAC >> simp[return_def, word_add_n2w, dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
+
+Theorem probe_deep_inner_root_shrink_base:
+  eval_base_place probe_deep_context
+    (SubscriptTarget
+      (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+        (Literal (BaseT (UintT 256)) (IntL 0)))
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE))
+    probe_deep_empty_donor_state =
+  (INL (PlaceR (StoragePlace F 2w (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)))),
+   set_storage probe_deep_context probe_deep_empty_donor_state F
+     (update_storage 0w 0w
+       (get_storage probe_deep_context probe_deep_empty_donor_state F)))
+Proof
+  simp[Once evaluate_def, bind_def, probe_deep_empty_donor_capture_parent,
+       probe_deep_empty_donor_call, read_result_def, return_def] >>
+  simp[extend_place_storage_array_index, get_storage_after_set,
+       lookup_storage_def, update_storage_def, APPLY_UPDATE_THM] >>
+  EVAL_TAC >> simp[return_def, word_add_n2w, dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
+
+Theorem probe_deep_inner_root_shrink_not_live:
+  ~storage_read_live probe_deep_context F
+    (get_storage probe_deep_context
+      (set_storage probe_deep_context probe_deep_empty_donor_state F
+        (update_storage 0w 0w
+          (get_storage probe_deep_context probe_deep_empty_donor_state F))) F)
+    2w (ArrayTV (BaseTV (UintT 256)) (Dynamic 1))
+Proof
+  strip_tac >> drule accountsRelPropsTheory.storage_read_live_head >>
+  simp[type_slot_size_def] >> qexists_tac `0` >>
+  simp[get_storage_after_set, probe_deep_dead_bytes,
+       lookup_storage_def, update_storage_def, APPLY_UPDATE_THM]
+QED
+
+Theorem probe_deep_inner_root_shrink_capacity:
+  lookup_storage 2w (get_storage probe_deep_context
+    (set_storage probe_deep_context probe_deep_empty_donor_state F
+      (update_storage 0w 0w
+        (get_storage probe_deep_context probe_deep_empty_donor_state F))) F) = 1w
+Proof
+  simp[get_storage_after_set, probe_deep_empty_donor_state_def,
+       lookup_storage_def, update_storage_def, APPLY_UPDATE_THM] >> EVAL_TAC
+QED
+
+Theorem probe_deep_empty_donor_storage_well_formed:
+  contract_storage_well_formed probe_deep_context probe_deep_empty_donor_state
+Proof
+  rw[contract_storage_well_formed_def,
+     vyperLookupStorageTheory.well_formed_storage_def,
+     vyperLookupStorageTheory.storage_var_in_range_def,
+     probe_deep_storage_var_info, probe_deep_declared_region,
+     get_storage_backend_eq] >>
+  gvs[] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``slots_in_range``]) >>
+  EVAL_TAC >>
+  simp[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >> EVAL_TAC
+QED
+
+(* Base-endpoint dependency audit (not a task-level counterexample).
+   NameTarget: a memory place, so no storage-header premise is needed.
+   TopLevelNameTarget: lookup_global returns a declared root; existing
+     declared_storage_region_read_live and entry well-formed storage give
+     the live read and root capacity at that unchanged endpoint.
+   AttributeTarget: no intervening expression; extend_place_region gives
+     provenance. A live field-read boundary must still justify the field
+     header, rather than treating provenance as a value invariant.
+   Mapping SubscriptTarget: evaluates its key before extension. The hashed
+     region is structural, but the current mapped value/header requires
+     post-key well-formedness and a live mapping-root boundary.
+   Array SubscriptTarget: evaluates its index after capturing the parent.
+     Extension checks capacity and current parent length, not ancestor
+     lengths or the selected child's header. The empty-donor example above
+     succeeds with a returned array at slot 2 after root slot 0 becomes 0;
+     the returned header remains 1 (capacity 1), but the read is dead.
+     In contrast the original deep donor clears parent slot 1, and the
+     very same base expression fails its parent-length check.
+
+   Entry ledger for the new empty-donor calculation: the shared deep
+     context's supported code, function/body typing and layout-safety facts
+     remain proved. The new state's contract_storage_well_formed is checked
+     above. Full target_pre/expr_sim_inv, target_indices_pre and the universal
+     target_case for the effectful base have NOT been constructed here.
+     Consequently this is a checked evaluation/liveness diagnostic, not a
+     refutation of a theorem with target_pre as antecedent.
+   Machine ledger: no new compiled execution is claimed. The existing
+     deep-copy footprint summary is conditional on its actual writes.
+     Post-call storage agreement alone does not determine slot 2 after the
+     root becomes empty. Whether the actual base execution retains the
+     same header is a distinct execution-aware obligation. *)
