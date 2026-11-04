@@ -4132,6 +4132,74 @@ Proof
   irule aug_place_target_sim >> simp[] >> metis_tac[]
 QED
 
+Theorem aug_place_eval_cases:
+  eval_stmt cx (AugAssign ty t bop e) es = (res,es') ==>
+  ?rp stp. eval_target_place cx t es = (rp,stp) /\
+    case rp of
+      INR ex => res = INR ex /\ es' = stp
+    | INL p => ?rc stc. read_place cx p stp = (rc,stc) /\
+      case rc of
+        INR ex => res = INR ex /\ es' = stc
+      | INL cur => ?rt stt. place_type_value cx p stc = (rt,stt) /\
+        case rt of
+          INR ex => res = INR ex /\ es' = stt
+        | INL ptv => ?rr str.
+          (do tv <- eval_expr cx e; read_result cx tv od) stt = (rr,str) /\
+          case rr of
+            INR ex => res = INR ex /\ es' = str
+          | INL rhs =>
+            case evaluate_binop
+              (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+              ptv bop cur rhs of
+              INR err => res = INR (Error err) /\ es' = str
+            | INL v => write_place cx p v str = (res,es')
+Proof
+  Cases_on `eval_target_place cx t es` >> rename1 `_ = (rp,stp)` >>
+  Cases_on `rp` >>
+  simp[Once evaluate_def, bind_def] >>
+  rename1 `eval_target_place cx t es = (INL p,stp)` >>
+  Cases_on `read_place cx p stp` >>
+  rename1 `read_place cx p stp = (rread,sread)` >>
+  Cases_on `rread` >> simp[] >>
+  rename1 `read_place cx p stp = (INL vcur,sread)` >>
+  Cases_on `place_type_value cx p sread` >>
+  rename1 `place_type_value cx p sread = (rtype,stype)` >>
+  Cases_on `rtype` >> simp[] >>
+  rename1 `place_type_value cx p sread = (INL vtype,stype)` >>
+  Cases_on `eval_expr cx e stype` >> rename1 `eval_expr cx e stype = (raw,sraw)` >>
+  Cases_on `raw` >> simp[] >>
+  rename1 `eval_expr cx e stype = (INL vraw,sraw)` >>
+  Cases_on `read_result cx vraw sraw` >> rename1 `read_result cx vraw sraw = (rrhs,srhs)` >>
+  Cases_on `rrhs` >> simp[] >>
+  rename1 `read_result cx vraw sraw = (INL vrhs,srhs)` >>
+  qmatch_goalsub_abbrev_tac `evaluate_binop u vtype bop vcur vrhs` >>
+  Cases_on `evaluate_binop u vtype bop vcur vrhs` >>
+  simp[lift_sum_def, return_def, raise_def, ignore_bind_def]
+QED
+
+Theorem aug_place_eval_bop:
+  bop <> In /\ bop <> NotIn ==>
+  (case evaluate_binop
+     (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+     ptv bop cur rhs of
+     INR err => res = INR (Error err) /\ es' = st
+   | INL v => write_place cx p v st = (res,es')) =
+  (case bop_result cx ty bop [ty;expr_type e] cur rhs st of
+     INR ex => res = INR ex /\ es' = st
+   | INL v => write_place cx p v st = (res,es'))
+Proof
+  strip_tac >>
+  `bop_result cx ty bop [ty;expr_type e] cur rhs st =
+   case evaluate_binop
+     (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+     ptv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
+    (irule bop_result_augassign >> simp[]) >>
+  simp[] >>
+  Cases_on `evaluate_binop
+    (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+    ptv bop cur rhs` >> simp[]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
