@@ -16,7 +16,7 @@ Ancestors
   makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentTreeTrace
   makeSsaCurrentFinalBlock makeSsaCurrentTreePaths makeSsaCurrentTraceCertificate
   makeSsaCurrentAvailability venomExecProofs allocaRemapSSA removeUnusedSsaProofs
-  makeSsaCurrentCleanupShape sorting
+  makeSsaCurrentCleanupShape sorting venomFnScheduleRunner
   makeSsaCurrentCleanupBoundary makeSsaCurrentEdgeTrace
 Libs
   rich_listTheory
@@ -824,6 +824,95 @@ Proof
   `def_available_at f bb (SOME (EL n tail)) v` by
     (fs[def_dominates_uses_def] >> metis_tac[MEM_APPEND, EL_MEM]) >>
   irule current_wf_replacement_suffix >> metis_tac[]
+QED
+
+Theorem current_wf_precleanup_ids_distinct:
+  wf_function fn /\ ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  defs = compute_defs (MAP THE (FILTER IS_SOME
+    (MAP (\lbl. lookup_block lbl fn.fn_blocks) labels))) /\
+  add_phi_nodes_supply s df pm li fn.fn_blocks defs = (ins,si) /\
+  rename_current_blocks si rs ins sm tree = (ctrs,s',renamed) ==>
+  ALL_DISTINCT (FLAT (MAP block_ir_inst_ids renamed))
+Proof
+  strip_tac >>
+  `ssa_vars_covered s (FLAT (MAP block_ir_vars fn.fn_blocks))` by
+    fs[ir_supply_covers_fn_def, list_subset_def, fn_ir_vars_def, ssa_vars_covered_def] >>
+  `ssa_vars_covered s (MAP FST defs)` by
+    (simp[] >> irule compute_defs_lookup_blocks_vars_covered >> simp[]) >>
+  `ALL_DISTINCT (FLAT (MAP block_ir_inst_ids fn.fn_blocks))` by
+    (fs[wf_function_def, fn_inst_ids_distinct_def] >>
+     qpat_x_assum `ALL_DISTINCT (FLAT _)` mp_tac >>
+     simp[GSYM block_ir_inst_ids_def, ETA_THM]) >>
+  `EVERY (\id. MEM id s.irs_used_inst_ids) (FLAT (MAP block_ir_inst_ids fn.fn_blocks))` by
+    fs[ir_supply_covers_fn_def, list_subset_def, fn_ir_inst_ids_def] >>
+  `ALL_DISTINCT (MAP basic_block_bb_label fn.fn_blocks)` by
+    fs[wf_function_def, fn_labels_def] >>
+  drule_all add_phi_nodes_supply_ok >> strip_tac >>
+  `ALL_DISTINCT (MAP basic_block_bb_label ins)` by metis_tac[] >>
+  drule_all (CONJUNCT1 rename_current_blocks_inst_ids) >>
+  fs[ssa_ids_supply_ok_def]
+QED
+
+Theorem current_wf_blocks_distinct_instructions:
+  !bbs. ALL_DISTINCT (FLAT (MAP block_ir_inst_ids bbs)) ==>
+    !bb. MEM bb bbs ==> ALL_DISTINCT bb.bb_instructions
+Proof
+  Induct >> simp[ALL_DISTINCT_APPEND] >> rpt strip_tac >> gvs[] >>
+  fs[block_ir_inst_ids_def] >> metis_tac[ALL_DISTINCT_MAP]
+QED
+
+Theorem current_wf_cleanup_prefix_semantics:
+  ssa_form fn /\ MEM bb fn.fn_blocks /\
+  bb.bb_instructions = pre ++ tail /\
+  EVERY (\i. i.inst_opcode = PHI) pre /\
+  (tail = [] \/ (HD tail).inst_opcode <> PHI) /\
+  fn_reachable fn bb.bb_label /\ fn_entry_label fn = SOME entry /\
+  entry <> bb.bb_label /\
+  (!i. MEM i pre ==> (?out. i.inst_outputs = [out]) /\ phi_edge_uses_wf fn bb i) ==>
+  ?pre' tail'.
+    (simplify_current_phi_block bb).bb_instructions = pre' ++ tail' /\
+    LENGTH pre' = LENGTH pre /\
+    PERM (FLAT (MAP (\i. i.inst_outputs) pre'))
+         (FLAT (MAP (\i. i.inst_outputs) pre)) /\
+    LIST_REL (\x y. current_inst_no_id x = current_inst_no_id y) tail tail' /\
+    (!i'. MEM i' pre' ==>
+      (i'.inst_opcode = PHI ==>
+         ?i. MEM i pre /\ current_inst_no_id i' = current_inst_no_id i) /\
+      (i'.inst_opcode <> PHI ==> !v. MEM (Var v) i'.inst_operands ==>
+         ?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+           MEM v di.inst_outputs /\ db.bb_label <> bb.bb_label /\
+           fn_dominates fn db.bb_label bb.bb_label))
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `!i. MEM i pre ==> simplify_current_phi i = i \/
+    ?src db di. simplify_current_phi i =
+       i with <|inst_opcode := ASSIGN; inst_operands := [Var src]|> /\
+       MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+       MEM src di.inst_outputs /\ db.bb_label <> bb.bb_label /\
+       fn_dominates fn db.bb_label bb.bb_label` by
+    (rpt strip_tac >> irule current_wf_phi_cleanup_classification >>
+     fs[EVERY_MEM] >> metis_tac[MEM_APPEND]) >>
+  `!i. MEM i pre ==> (simplify_current_phi i).inst_outputs = i.inst_outputs` by
+    (rpt strip_tac >> first_x_assum drule >> strip_tac >> simp[]) >>
+  mp_tac (Q.INST [`bb` |-> `bb`, `pre` |-> `pre`, `tail` |-> `tail`]
+    current_wf_cleanup_block_split) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexistsl_tac [`pre'`, `tail'`] >> simp[] >> rpt strip_tac
+  >- (qpat_x_assum `!i'. MEM i' _ ==> ?i. _` drule >> strip_tac >>
+      `simplify_current_phi i = i \/
+        ?src db di. simplify_current_phi i =
+           i with <|inst_opcode := ASSIGN; inst_operands := [Var src]|> /\
+           MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+           MEM src di.inst_outputs /\ db.bb_label <> bb.bb_label /\
+           fn_dominates fn db.bb_label bb.bb_label` by metis_tac[]
+      >- metis_tac[] >>
+      drule current_wf_no_id_fields >> simp[]) >>
+  qpat_x_assum `!i'. MEM i' _ ==> ?i. _` drule >> strip_tac >>
+  drule current_wf_no_id_fields >> strip_tac >>
+  qpat_x_assum `!i. MEM i _ ==> simplify_current_phi i = i \/ _` drule >>
+  strip_tac
+  >- (fs[EVERY_MEM] >> metis_tac[]) >>
+  gvs[] >> qexistsl_tac [`db`, `di`] >> simp[]
 QED
 
 Theorem make_ssa_current_fn_wf_ssa:
