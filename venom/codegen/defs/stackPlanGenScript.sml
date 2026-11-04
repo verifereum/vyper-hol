@@ -389,14 +389,15 @@ End
 (* The planner plans each block once, from the stack of the first edge the
    DFS takes into it, and reorders the stack to a block's live-in order only
    on a JMP.  So the entry block, planned from the empty stack, must have no
-   predecessors, and a block with several predecessors must be entered from
-   each by a JMP (upstream venom_to_assembly assumes the same of a
-   normalized CFG). *)
+   predecessors (and so no PHIs, which would have no edge to read), and a
+   block with several predecessors must be entered from each by a JMP
+   (upstream venom_to_assembly assumes the same of a normalized CFG). *)
 Definition block_entries_ready_def:
   block_entries_ready cfg fn ⇔
-    (case fn_entry_label fn of
+    (case entry_block fn of
        NONE => T
-     | SOME lbl => NULL (cfg_preds_of cfg lbl)) ∧
+     | SOME eb => NULL (cfg_preds_of cfg eb.bb_label) ∧
+                  NULL (collect_phis eb.bb_instructions)) ∧
     EVERY (λbb. LENGTH (cfg_preds_of cfg bb.bb_label) ≤ 1 ∨
              EVERY (λp. case lookup_block p fn.fn_blocks of
                           NONE => F
