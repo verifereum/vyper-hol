@@ -378,3 +378,239 @@ val () =
      then print "BODY_IFEXP_JNZ_ARM_MEMORY_AUDIT OK\n"
      else raise Fail "ifexp jnz arm memory inherited admission"
   end;
+
+Theorem ifexp_branch_sim_mem:
+  !ctx func cenv cx ty t c a b e bv es es1 es' res sa sb s0 s1 s5 s6 x6 s7
+   bs bm bn bo bx bp tl el xl bl lbl rv cond_op eop.
+    expr_type c = BaseT BoolT /\ expr_sim_mem ctx func cenv cx (BaseT BoolT) c es /\
+    expr_sim_mem ctx func cenv cx ty e es1 /\
+    (do result <- eval_expr cx c; read_result cx result od) es = (INL (BoolV bv), es1) /\
+    (do result <- eval_expr cx e; read_result cx result od) es1 = (res, es') /\
+    expr_res_ok res /\ expr_type e = t /\
+    res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
+    lower_value compile_expr cenv (BaseT BoolT) c sa = (cond_op, s1) /\
+    emit_inst JNZ [cond_op; Label tl; Label el] [] s5 = ((), s6) /\
+    new_block tl s6 = (x6, s7) /\
+    lower_value compile_expr cenv ty e bs = (eop, bm) /\
+    emit_inst ASSIGN [eop] [rv] bm = ((), bn) /\
+    emit_inst JMP [Label xl] [] bn = ((), bo) /\
+    new_block lbl bo = (bx, bp) /\
+    (if bv then tl else el) = bl /\ bs.cs_current_bb = bl /\
+    bs.cs_current_insts = [] /\
+    s5.cs_current_bb = s1.cs_current_bb /\
+    s5.cs_current_insts = s1.cs_current_insts /\
+    sb.cs_current_bb = xl /\ sb.cs_current_insts = [] /\
+    cs_extends sa s1 /\ cs_extends s1 s5 /\ cs_extends s7 bs /\
+    cs_extends bs bm /\ cs_extends bp sb /\
+    sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= bs.cs_next_var /\
+    sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= bs.cs_next_id /\
+    bm.cs_next_id <= sb.cs_next_id /\
+    (!x. not_fresh_at sa x ==> x <> rv) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+    alloca_history func s0 ==>
+    frag_exec_mem ctx sa sb
+      (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\ alloca_history func s)
+      (\s. (?v. res = INL v /\
+                vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 es' (Value v)
+                  (if is_word_type t then StackValue t (Var rv)
+                   else LocatedValue t (mk_ptr (Var rv) LocMemory)) s) /\
+            s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s)
+      (expr_exit res)
+Proof
+  rpt strip_tac >>
+  `cs_extends s5 s6 /\ cs_extends bm bn /\ cs_extends bn bo` by
+    metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  `cs_extends s6 s7 /\ cs_extends bo bp` by metis_tac[cs_extends_new_block] >>
+  `cs_extends bs bn /\ cs_extends bs bp /\ cs_extends bs sb /\
+   cs_extends bm sb /\ cs_extends s1 s6 /\ cs_extends s1 s7 /\
+   cs_extends s7 sb /\ cs_extends s1 bs /\ cs_extends s1 sb /\
+   cs_extends sa bs` by metis_tac[cs_extends_trans] >>
+  `cs_extends bn sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa s1 func` by metis_tac[fn_has_code_split] >>
+  `fn_has_code bs bn func` by
+    (irule fn_has_code_mid >> simp[] >> qexistsl_tac [`sb`, `sa`] >> simp[]) >>
+  `local_ptrs_reserved cenv bs` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
+    (qpat_x_assum `(do result <- eval_expr cx c; read_result cx result od) es = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[vyperStateTheory.bind_def, AllCaseEqs()] >> strip_tac >>
+     imp_res_tac vyperStateTheory.read_result_state >> gvs[] >>
+     metis_tac[vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom]) >>
+  qpat_x_assum `expr_sim_mem _ _ _ _ (BaseT BoolT) c _`
+    (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
+  disch_then (qspecl_then [`sa`, `s1`, `cond_op`, `INL (BoolV bv)`, `es1`, `s0`] mp_tac) >>
+  (impl_tac >- simp[expr_res_ok_def]) >>
+  disch_then (mp_tac o MATCH_MP frag_exec_mem_pre_exit_c) >>
+  disch_then (qspecl_then
+    [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\ alloca_history func s`,
+     `expr_exit res`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (fn th => irule (MATCH_MP frag_exec_mem_then th)) >>
+  simp[] >> rpt strip_tac >> fs[] >>
+  rename1 `expr_post ctx func cenv cx c es sa s1 s0 es1 (BoolV bv) cond_op tt` >>
+  `stmt_state_rel ctx func cenv cx es1 tt /\
+   eval_operand cond_op tt = SOME (val_to_w256 (BoolV bv))` by
+    (fs[expr_post_def] >>
+     qspecl_then [`cx`, `BaseT BoolT`, `BoolV bv`, `cond_op`, `tt`] mp_tac
+       exprSimOpsTheory.expr_val_rel_word >>
+     simp[word_value_def, is_word_type_def, vyperValueTheory.evaluate_type_def] >>
+     disch_then irule >> gvs[]) >>
+  `alloca_history func (jump_to bs.cs_current_bb tt)` by
+    (irule ifexp_history_jump >> simp[]) >>
+  `!l s. (jump_to l s).vs_alloca_next = s.vs_alloca_next` by
+    simp[jump_to_def] >>
+  drule_all ifexp_arm_frag_mem >> simp[] >> strip_tac >>
+  irule ifexp_jnz_arm_mem >>
+  qpat_x_assum `frag_exec_mem _ _ _ _ _ _` (irule_at Any) >>
+  simp[] >>
+  qpat_assum `expr_post _ _ _ _ c _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `emit_inst JNZ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `new_block tl _ = _` (irule_at Any) >>
+  qpat_assum `new_block lbl _ = _` (irule_at Any) >> simp[]
+QED
+
+val () =
+  let val th = ifexp_branch_sim_mem
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_IFEXP_BRANCH_SIM_MEMORY_AUDIT OK\n"
+     else raise Fail "ifexp branch sim memory inherited admission"
+  end;
+
+Theorem compile_ifexp_forced_frag_mem:
+  !ctx func cenv cx ty t c a b es.
+    expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
+    (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id) /\
+    (!e sa sb op. (e = a \/ e = b) /\
+       lower_value compile_expr cenv ty e sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id) /\
+    expr_sim_mem ctx func cenv cx (BaseT BoolT) c es /\
+    (!tv es1. (do result <- eval_expr cx c; read_result cx result od) es = (INL tv, es1) ==>
+       expr_sim_mem ctx func cenv cx ty a es1 /\
+       expr_sim_mem ctx func cenv cx ty b es1) ==>
+    !sa sb vv res es' s0.
+      compile_expr cenv ty (IfExp t c a b) sa = (vv, sb) /\
+      (do result <- eval_expr cx (IfExp t c a b); read_result cx result od) es = (res, es') /\
+      expr_res_ok res /\
+      res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
+      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+      local_ptrs_reserved cenv sa ==>
+      frag_exec_mem ctx sa sb
+        (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\ alloca_history func s)
+        (\s. (?v. res = INL v /\
+                  vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 es' (Value v) vv s) /\
+              s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s)
+        (expr_exit res)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0`)
+  >- (simp[frag_exec_mem_def] >> metis_tac[]) >>
+  gvs[] >> drule_all compile_expr_ifexp_states >> strip_tac >>
+  drule eval_expr_ifexp_cases >> strip_tac
+  >- (`fn_has_code sa s1 func` by metis_tac[fn_has_code_split] >>
+      qpat_x_assum `expr_sim_mem _ _ _ _ (BaseT BoolT) c _`
+        (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
+      disch_then (qspecl_then [`sa`, `s1`, `cond_op`, `INR exc`, `es'`, `s0`] mp_tac) >>
+      (impl_tac >- gvs[]) >>
+      disch_then (mp_tac o MATCH_MP frag_exec_mem_weaken) >>
+      disch_then (qspecl_then
+        [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\ alloca_history func s`,
+         `\s. F`, `expr_exit res`] mp_tac) >>
+      (impl_tac >- gvs[]) >> strip_tac >>
+      irule frag_exec_mem_exit_prefix >> qexists_tac `s1` >> simp[])
+  >- (qpat_x_assum `!tv es1. (do result <- eval_expr cx c; read_result cx result od) es = _ ==> _` drule >>
+      strip_tac >> Cases_on `bv` >> fs[]
+      >- (irule ifexp_branch_sim_mem >> simp[cs_extends_refl] >>
+          qpat_assum `lower_value _ _ _ a s7 = _` (irule_at Any) >>
+          qpat_assum `emit_inst ASSIGN [aop] _ _ = _` (irule_at Any) >>
+          qpat_assum `emit_inst JMP _ _ s9 = _` (irule_at Any) >>
+          qpat_assum `new_block el s10 = _` (irule_at Any) >>
+          simp[] >> qpat_assum `emit_inst JNZ _ _ _ = _` (irule_at Any) >>
+          qpat_assum `new_block tl s6 = _` (irule_at Any) >> simp[cs_extends_refl]) >>
+      irule ifexp_branch_sim_mem >> simp[cs_extends_refl] >>
+      qpat_assum `lower_value _ _ _ b s11 = _` (irule_at Any) >>
+      qpat_assum `emit_inst ASSIGN [bop] _ _ = _` (irule_at Any) >>
+      qpat_assum `emit_inst JMP _ _ s13 = _` (irule_at Any) >>
+      qpat_assum `new_block xl s14 = _` (irule_at Any) >>
+      simp[] >> qpat_assum `emit_inst JNZ _ _ _ = _` (irule_at Any) >>
+      qpat_assum `new_block tl s6 = _` (irule_at Any) >> simp[cs_extends_refl]) >>
+  gvs[expr_res_ok_def]
+QED
+
+Theorem readable_eval_frag_transport_mem:
+  eval_expr cx e es = (raw,es') /\ expr_read_res_ok cx es' raw /\
+  raw <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
+  (!res. (do result <- eval_expr cx e; read_result cx result od) es = (res,es') /\
+         expr_res_ok res /\
+         res <> INR (Error (RuntimeError "convert empty bytes to signed")) ==>
+         frag_exec_mem ctx sa sb P
+           (\s. (?v. res = INL v /\
+                vv_post ctx func cenv cx e es sa sb s0 es' (Value v) vv s) /\
+                 s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s)
+           (expr_exit res)) ==>
+  frag_exec_mem ctx sa sb P
+    (\s. (?tv. raw = INL tv /\
+         vv_post ctx func cenv cx e es sa sb s0 es' tv vv s) /\
+          s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s)
+    (expr_exit raw)
+Proof
+  strip_tac >> fs[expr_read_res_ok_def] >> gvs[]
+  >- (qpat_x_assum `!res. _` (qspec_then `INL v` mp_tac) >>
+      simp[vyperStateTheory.bind_def, expr_res_ok_def] >>
+      drule exprSimUnwrapTheory.vv_post_read_result >> strip_tac >>
+      `expr_exit (INL v) = (\r. F)` by simp[FUN_EQ_THM] >>
+      `expr_exit (INL r) = (\r. F)` by simp[FUN_EQ_THM] >> simp[]) >>
+  `expr_exit (INR exc : value + exception) =
+   expr_exit (INR exc : eval_result + exception)` by
+    (fs[expr_res_ok_def] >> rewrite_tac[FUN_EQ_THM] >> Cases >> simp[expr_exit_def]) >>
+  qpat_x_assum `!res. _` (qspec_then `INR exc` mp_tac) >> simp[vyperStateTheory.bind_def]
+QED
+
+Theorem compile_ifexp_vv_sim_mem:
+  !ctx func cenv cx ty t c a b es.
+    expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
+    (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id) /\
+    (!e sa sb op. (e = a \/ e = b) /\
+       lower_value compile_expr cenv ty e sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id) /\
+    expr_sim_mem ctx func cenv cx (BaseT BoolT) c es /\
+    (!tv es1. (do result <- eval_expr cx c; read_result cx result od) es = (INL tv, es1) ==>
+       expr_sim_mem ctx func cenv cx ty a es1 /\
+       expr_sim_mem ctx func cenv cx ty b es1) ==>
+    !sa sb vv res es' s0.
+      compile_expr cenv ty (IfExp t c a b) sa = (vv, sb) /\
+      eval_expr cx (IfExp t c a b) es = (res, es') /\ expr_read_res_ok cx es' res /\
+      res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
+      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+      local_ptrs_reserved cenv sa ==>
+      frag_exec_mem ctx sa sb
+        (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\ alloca_history func s)
+        (\s. (?tv. res = INL tv /\
+                  vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 es' tv vv s) /\
+              s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s)
+        (expr_exit res)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  irule readable_eval_frag_transport_mem >>
+  simp[] >> rpt strip_tac >>
+  irule compile_ifexp_forced_frag_mem >> simp[] >> qexists_tac `ty` >> simp[] >>
+  first_assum ACCEPT_TAC
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_IFEXP_CONSUMER_MEMORY_AUDIT OK\n"
+     else raise Fail "ifexp consumer memory inherited admission"
+  end) [compile_ifexp_forced_frag_mem, readable_eval_frag_transport_mem,
+        compile_ifexp_vv_sim_mem];
