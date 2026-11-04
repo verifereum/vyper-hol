@@ -20,7 +20,8 @@ val EXT_CALL_FIXTURE_SIMP =
    get_scopes_def, lookup_scopes_def,
    take_call_outcome_def, call_outcome_request_def, take_outcome_def,
    record_request_def, computed_precompile_addresses, failed_outcome_def,
-   empty_state_def, UNCURRY, sum_CASE_rator, option_CASE_rator];
+   empty_state_def, UNCURRY, sum_CASE_rator, option_CASE_rator,
+   EVAL ``empty_call_txn.is_static``];
 
 Theorem activated_NONE_keeps_concrete_code_check:
   eval_expr empty_evaluation_context
