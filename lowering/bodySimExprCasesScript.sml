@@ -147,9 +147,7 @@ Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
   Cases_on `!e. MEM e (MAP SND kes) ==>
               int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
-  >- (irule compile_struct_lit_case >> conj_tac
-      >- metis_tac[body_exprs_ok_case] >>
-      metis_tac[]) >>
+  >- (irule compile_struct_lit_case >> metis_tac[body_exprs_ok_case]) >>
   rw[expr_sim_case_def, expr_vv_case_def] >>
   metis_tac[body_struct_lit_widened_call_elem]
 QED
@@ -222,9 +220,7 @@ Proof
       drule well_typed_builtin_app_length >> simp[]) >>
   Cases_on `!e. MEM e es ==>
               int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
-  >- (irule compile_make_array_case >> conj_tac
-      >- metis_tac[body_exprs_ok_case] >>
-      metis_tac[]) >>
+  >- (irule compile_make_array_case >> metis_tac[body_exprs_ok_case]) >>
   rw[expr_sim_case_def, expr_vv_case_def] >>
   metis_tac[body_make_array_widened_call_elem]
 QED
