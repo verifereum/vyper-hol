@@ -708,6 +708,57 @@ Proof
   EVAL_TAC
 QED
 
+Theorem nested_counterexample_state_fields[local]:
+  nested_counterexample_state.scopes = [FEMPTY] /\
+  nested_counterexample_state.immutables = [] /\
+  nested_counterexample_state.outcomes = SOME []
+Proof
+  simp[nested_counterexample_state_def, set_storage_backend_def,
+       get_accounts_def, update_accounts_def, bind_def, return_def, empty_state_def]
+QED
+
+Theorem nested_counterexample_state_well_typed[local]:
+  state_well_typed nested_counterexample_state
+Proof
+  simp[vyperTypeInvariantsTheory.state_well_typed_def,
+       nested_counterexample_state_fields,
+       vyperTypeInvariantsTheory.scope_well_typed_def]
+QED
+
+Theorem nested_counterexample_popped_keys_indexed[local]:
+  popped_keys_indexed nested_counterexample_state.scopes
+Proof
+  simp[nested_counterexample_state_fields, popped_keys_indexed_def]
+QED
+
+Theorem nested_counterexample_outcomes_typed[local]:
+  outcomes_accounts_typed nested_counterexample_state.outcomes
+Proof
+  simp[nested_counterexample_state_fields, outcomes_accounts_typed_def]
+QED
+
+Theorem nested_counterexample_outcomes_some[local]:
+  IS_SOME nested_counterexample_state.outcomes
+Proof
+  simp[nested_counterexample_state_fields]
+QED
+
+Theorem nested_counterexample_env_consistent[local]:
+  env_consistent nested_counterexample_env nested_counterexample_context
+    nested_counterexample_state
+Proof
+  simp[vyperTypeInvariantsTheory.env_consistent_def,
+       nested_counterexample_env_context_consistent] >>
+  conj_tac
+  >- simp[vyperTypeInvariantsTheory.env_scopes_consistent_def,
+          nested_counterexample_state_fields, nested_counterexample_env_def,
+          lookup_scopes_def] >>
+  rw[vyperTypeInvariantsTheory.env_immutables_consistent_def,
+     nested_counterexample_env_def, FLOOKUP_UPDATE] >>
+  gvs[AllCaseEqs(), nested_counterexample_module_lookup,
+      nested_counterexample_type_env]
+QED
+
 Definition nested_pop_suffix_def[local]:
   nested_pop_suffix hdr tr id esz x0 x1 x2 x3 x4 x5 x6 =
     [mk_inst id (if tr then TLOAD else SLOAD) [hdr] [x0];
