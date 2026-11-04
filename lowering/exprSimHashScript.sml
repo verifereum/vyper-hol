@@ -1540,7 +1540,9 @@ Proof
        vfmConstantsTheory.word_size_def, vyperValueTheory.evaluate_type_def,
        vyperValueTheory.compatible_bound_def, vyperValueTheory.type_slot_size_def,
        wordsTheory.dimword_def, LENGTH_TAKE,
-       vyperTypeBytesCryptoTheory.LENGTH_Keccak_256_w64]) >>
+       vyperTypeBytesCryptoTheory.LENGTH_Keccak_256_w64,
+       supportedExprTraverseTheory.supported_expr_exists_def,
+       supportedExprTraverseTheory.call_operands_effect_root_def]) >>
   `expr_vv_ok cenv (Literal (BaseT (BytesT (Dynamic 4)))
      (BytesL (TAKE 4 (Keccak_256_w64 bs))))` by
     (irule compile_literal_other_vv_sim >> simp[is_word_type_def]) >>
@@ -1936,7 +1938,8 @@ Theorem vv_post_frame_intro:
   stmt_state_rel ctx func cenv cx es' t /\
   vv_holds cenv cx (expr_type e) tv vv es' t /\
   vv_at cenv cx (expr_type e) sa sb es' tv vv t /\
-  wb_frame cenv es sa s0 t ==>
+  wb_frame cenv es sa s0 t /\
+  (!p. tv = PlaceR p ==> vv_place_ptr_rel cenv cx es' p vv t) ==>
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv t
 Proof
   simp[vv_post_def, wb_frame_def] >> metis_tac[]
@@ -2097,13 +2100,23 @@ Proof
   Cases_on `op` >> simp[eval_operand_def, lookup_var_def]
 QED
 
+Theorem hash_place_ptr_inst_idx[local]:
+  vv_place_ptr_rel cenv cx es p vv (s with vs_inst_idx := n) <=>
+  vv_place_ptr_rel cenv cx es p vv s
+Proof
+  Cases_on `vv` >> Cases_on `p` >>
+  simp[vv_place_ptr_rel_def, placeProvenanceTheory.place_ptr_rel_def,
+       lookup_var_def]
+QED
+
 Theorem vv_post_inst_idx[simp]:
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv (s with vs_inst_idx := n) <=>
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv s
 Proof
   Cases_on `vv` >>
   simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
-       expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def]
+       expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def,
+       hash_place_ptr_inst_idx]
 QED
 
 Theorem hash_buffer_suffix_shape:
@@ -2806,7 +2819,7 @@ Theorem vv_post_pointer_cong:
 Proof
   strip_tac >>
   qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  asm_rewrite_tac[vv_post_def, vv_holds_def, vv_at_def]
+  asm_rewrite_tac[vv_post_def, vv_holds_def, vv_at_def, vv_place_ptr_rel_def]
 QED
 
 Theorem compile_method_id_runtime_typed_vv_sim:
