@@ -2,7 +2,7 @@
 Theory o1LowerDloadJointExternal
 Ancestors
   o1LowerDloadJointExternalUpdate o1LowerDloadConcreteExternal
-  o1LowerDloadExternalEffects o1LowerDloadExternalOracle
+  o1LowerDloadExternalEffects o1LowerDloadExternalOracle o1LowerDloadPrecompileEffects
   o1LowerDloadJointRangeRead o1LowerDloadJointRangeCopy
   o1LowerDloadJointRelation o1LowerDloadShared o1PassContract
   o1LowerDloadOccurrence o1LowerDloadJointScalar o1LowerDloadOpaque
@@ -633,3 +633,89 @@ Resume ld_joint_create_next[shared]:
 QED
 
 Finalise ld_joint_create_next
+
+Theorem ld_joint_call_operands[local]:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+  opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
+  ((inst.inst_opcode = CALL /\ prefix = [gop;adop;vop]) \/
+   (inst.inst_opcode = STATICCALL /\ prefix = [gop;adop])) /\
+  inst.inst_operands = prefix ++ [offop;szop;rop;rsop] /\
+  (!op. MEM op prefix ==> ?w. eval_operand op s = SOME w) /\
+  eval_operand offop s = SOME off /\ eval_operand szop s = SOME sz /\
+  eval_operand rop s = SOME ro /\ eval_operand rsop s = SOME rs ==>
+  (!op. MEM op (prefix ++ [szop;rsop]) ==> eval_operand op s = eval_operand op t) /\
+  ?off' ro'. eval_operand offop t = SOME off' /\ eval_operand rop t = SOME ro' /\
+    read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
+    (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=lo) \/
+     (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n rs<=z /\
+                    w2n ro=b+j /\ w2n ro'=c+j))
+Proof
+  strip_tac >> (
+  `!op. MEM op (prefix ++ [szop;rsop]) ==>
+     op_prov H op = NONE /\ op_taint tn op = {}` by
+    (gen_tac >> disch_tac >>
+     drule ld_joint_external_scalar_clean >> disch_then irule >>
+     gvs[Excl "FILTER", MEM, mem_read_ops_def, mem_write_ops_def] >>
+     rpt strip_tac >> gvs[Excl "FILTER"] >>
+     qpat_x_assum `FILTER _ _ = _` mp_tac >>
+     simp_tac (srw_ss()) [FILTER] >>
+     rpt IF_CASES_TAC >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >> irule ld_joint_operand_clean >>
+      `!v. ~retpc_use_ok inst v` by gvs[retpc_use_ok_def] >>
+      metis_tac[ld_active_operand_ir_var, ld_active_operand_non_retpc, MEM, MEM_APPEND]) >>
+  `?off'. eval_operand offop t = SOME off' /\
+     read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t` by
+    (drule ld_joint_external_input_slice >> disch_then irule >>
+     gvs[mem_read_ops_def, source_memory_read_ranges_def,
+         memory_range_of_operands_def] >>
+     `(?w. eval_operand gop s = SOME w) /\
+      (?w. eval_operand adop s = SOME w)` by metis_tac[] >>
+     simp[] >>
+     qpat_x_assum `!op. _ ==> ?w. eval_operand op s = SOME w`
+       (qspec_then `vop` mp_tac) >> simp[] >> strip_tac >> simp[]) >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `op_taint tn rop = {}` by
+    (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
+     gvs[taint_ok_def] >> metis_tac[MEM]) >>
+  `?ro'. eval_operand rop t = SOME ro' /\
+    (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=lo) \/
+     (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n rs<=z /\
+                    w2n ro=b+j /\ w2n ro'=c+j))` by
+    (drule ld_joint_write_operand_range >> disch_then irule >>
+     gvs[mem_write_ops_def, source_memory_write_ranges_def,
+         fixed_source_write_range_def, retpc_use_ok_def] >>
+     `(?w. eval_operand gop s = SOME w) /\
+      (?w. eval_operand adop s = SOME w)` by metis_tac[] >>
+     simp[] >>
+     qpat_x_assum `!op. _ ==> ?w. eval_operand op s = SOME w`
+       (qspec_then `vop` mp_tac) >> simp[] >> strip_tac >> simp[]) >>
+  qexistsl_tac [`off'`,`ro'`] >> gvs[] >> metis_tac[])
+QED
+
+Theorem ld_call_outcome_effects[local]:
+  ld_shared_agree D A tn s t /\
+  rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
+  rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient /\
+  ((computed_precompile rq1 /\ computed_precompile rq2 /\
+     rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
+   request_agree_except D rq1 rq2) /\
+  consume_call_outcome rq1 ro1 rs1 s = (w1,s1) /\
+  consume_call_outcome rq2 ro2 rs2 t = (w2,t1) ==>
+  w1 = w2 /\ s1.vs_returndata = t1.vs_returndata /\
+  ld_shared_agree D A
+    (tn with <|t_stor := if s1.vs_accounts <> s.vs_accounts then {} else tn.t_stor;
+               t_trans := if s1.vs_transient <> s.vs_transient then {} else tn.t_trans|>)
+    s1 t1
+Proof
+  strip_tac
+  >- (drule_all ld_consume_precompile_shared >> strip_tac >> simp[]) >>
+  `s.vs_outcomes = t.vs_outcomes /\
+   LIST_REL (request_agree_except D) s.vs_requests t.vs_requests` by
+    fs[ld_shared_agree_def] >>
+  drule_all ld_consume_call_outcome_masked_observation >> strip_tac >> simp[] >>
+  drule_all ld_consume_call_outcome_shared >> simp[]
+QED
