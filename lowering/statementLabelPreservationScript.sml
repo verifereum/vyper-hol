@@ -143,3 +143,26 @@ Proof
   ntac 2 STMT_BIND >> ho_match_mp_tac label_preserving_bind >> conj_tac
   >- metis_tac[label_preserving_abi_encode_mutual] >> gen_tac >> STMT_LEAF
 QED
+
+val stmt_label_leaves = stmt_label_leaves @ [label_preserving_fresh_var,
+  label_preserving_new_block, label_preserving_word_copy_loop];
+val STMT_LEAF = rpt strip_tac >> metis_tac stmt_label_leaves;
+val STMT_BIND = ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- STMT_LEAF >> gen_tac;
+val STMT_FRESH = ho_match_mp_tac
+    (Q.ISPEC `jump_label_ok` label_preserving_bind_result) >> conj_tac
+  >- metis_tac[label_preserving_fresh_label] >> gen_tac >> strip_tac;
+
+Theorem label_preserving_dynarray_to_storage[local]:
+  !s r t. compile_dynarray_to_storage src dst ew ems trans s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[compile_dynarray_to_storage_def] >> STMT_BIND >>
+  ntac 3 STMT_FRESH >> rewrite_tac[comp_ignore_bind_def] >>
+  ntac 8 STMT_BIND >> IF_CASES_TAC
+  >- (ntac 6 STMT_BIND >>
+      ho_match_mp_tac label_preserving_bind >> conj_tac
+      >- (IF_CASES_TAC >> STMT_LEAF) >> gen_tac >>
+      ntac 4 STMT_BIND >> IF_CASES_TAC >> STMT_LEAF) >>
+  ntac 11 STMT_BIND >> IF_CASES_TAC >> STMT_LEAF
+QED
