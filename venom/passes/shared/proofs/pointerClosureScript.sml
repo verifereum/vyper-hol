@@ -216,3 +216,14 @@ Proof
   simp[UNION_SUBSET] >> conj_tac >>
   irule ptr_derived_mono >> simp[]
 QED
+
+Theorem ptr_derived_backward_exclusion:
+  FINITE roots /\ MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+  is_pointer_preserving_op inst.inst_opcode /\ MEM out inst.inst_outputs /\
+  out NOTIN pointer_derived_vars fn roots /\ MEM (Var v) inst.inst_operands ==>
+  v NOTIN pointer_derived_vars fn roots
+Proof
+  rpt strip_tac >>
+  `MEM inst (fn_insts fn)` by metis_tac[mem_fn_insts_intro] >>
+  metis_tac[pointer_derived_vars_closed]
+QED
