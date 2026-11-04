@@ -127,6 +127,105 @@ Proof
   metis_tac[revert_path_fuel_mono]
 QED
 
+Theorem flag_path_append:
+  !xs bbs vs ys. flag_path bbs vs xs ==> flag_path bbs vs (xs ++ ys)
+Proof
+  Induct >- simp[flag_path_def] >>
+  rpt gen_tac >> simp[flag_path_def] >> metis_tac[]
+QED
+
+Theorem calls_flagged_append:
+  !xs bbs ys. calls_flagged bbs xs /\ calls_flagged bbs ys ==>
+    calls_flagged bbs (xs ++ ys)
+Proof
+  Induct >- simp[calls_flagged_def] >>
+  rpt gen_tac >> simp[calls_flagged_def] >> strip_tac >>
+  strip_tac >> Cases_on `h.inst_outputs` >> gvs[] >>
+  Cases_on `t` >> gvs[] >> metis_tac[flag_path_append]
+QED
+
+Theorem calls_flagged_prefix_no_calls:
+  !xs bbs ys.
+    EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL) xs ==>
+    (calls_flagged bbs (xs ++ ys) <=> calls_flagged bbs ys)
+Proof
+  Induct >> simp[calls_flagged_def] >> metis_tac[]
+QED
+
+Theorem flag_path_replace_last:
+  !xs bbs vs old ys.
+    flag_path bbs vs (xs ++ [old]) /\
+    (!ws. flag_path bbs ws ys) ==>
+    flag_path bbs vs (xs ++ ys)
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  simp[flag_path_def] >> metis_tac[]
+QED
+
+Theorem calls_flagged_replace_last:
+  !xs bbs old ys.
+    calls_flagged bbs (xs ++ [old]) /\ calls_flagged bbs ys /\
+    (!ws. flag_path bbs ws ys) ==>
+    calls_flagged bbs (xs ++ ys)
+Proof
+  Induct >- simp[calls_flagged_def] >>
+  rpt gen_tac >> simp[calls_flagged_def] >> strip_tac >>
+  conj_tac
+  >- (strip_tac >> Cases_on `h.inst_outputs` >> gvs[] >>
+      Cases_on `t` >> gvs[] >> metis_tac[flag_path_replace_last]) >>
+  metis_tac[]
+QED
+
+Theorem calls_flagged_phi_map:
+  !xs f bbs.
+    (!i j. i < j /\ j < LENGTH xs /\ (EL j xs).inst_opcode = PHI ==>
+       (EL i xs).inst_opcode = PHI) /\
+    (!i. i.inst_opcode <> PHI ==> f i = i) /\
+    (!i. i.inst_opcode = PHI ==>
+       (f i).inst_opcode <> CALL /\ (f i).inst_opcode <> STATICCALL) ==>
+    (calls_flagged bbs (MAP f xs) <=> calls_flagged bbs xs)
+Proof
+  Induct >- simp[calls_flagged_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (simp[calls_flagged_def] >> first_x_assum irule >> simp[] >>
+      rpt strip_tac >>
+      first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]) >>
+  `EVERY (\i. i.inst_opcode <> PHI) xs` by
+    (simp[EVERY_EL] >> rpt strip_tac >>
+     first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]) >>
+  `MAP f xs = xs` by (`MAP f xs = MAP I xs` suffices_by simp[] >>
+      irule MAP_CONG >> gvs[EVERY_MEM]) >>
+  simp[calls_flagged_def]
+QED
+
+Theorem calls_flagged_block_phi_map:
+  bb_well_formed bb /\
+  (!i. i.inst_opcode <> PHI ==> f i = i) /\
+  (!i. i.inst_opcode = PHI ==>
+    (f i).inst_opcode <> CALL /\ (f i).inst_opcode <> STATICCALL) ==>
+  (calls_flagged bbs (MAP f bb.bb_instructions) <=>
+   calls_flagged bbs bb.bb_instructions)
+Proof
+  strip_tac >> irule calls_flagged_phi_map >> gvs[bb_well_formed_def] >>
+  metis_tac[]
+QED
+
+Theorem phi_map_revert_observations:
+  bb_well_formed bb /\
+  (!i. (f i).inst_opcode = i.inst_opcode) /\
+  (!i. i.inst_opcode <> PHI ==> f i = i) ==>
+  MAP f bb.bb_instructions <> [] /\
+  LAST (MAP f bb.bb_instructions) = LAST bb.bb_instructions /\
+  (EVERY (\i. i.inst_opcode <> INVOKE) (MAP f bb.bb_instructions) <=>
+   EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions)
+Proof
+  strip_tac >>
+  `bb.bb_instructions <> [] /\
+   (LAST bb.bb_instructions).inst_opcode <> PHI` by
+    (gvs[bb_well_formed_def] >> strip_tac >> gvs[is_terminator_def]) >>
+  simp[LAST_MAP, EVERY_MAP]
+QED
+
 Theorem simplify_cfg_call_checks_ok:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn ==>
   call_checks_ok (simplify_cfg_fn fn)
