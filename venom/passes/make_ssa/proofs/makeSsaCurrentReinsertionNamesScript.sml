@@ -1,7 +1,7 @@
 Theory makeSsaCurrentReinsertionNames
 Ancestors
   makeSsaCurrentReinsertionTokens makeSsaCurrentOutputNames makeSsaCurrentSourceCuts
-  makeSsaCurrentTraceCertificate makeSsaCurrentTreePaths
+  makeSsaCurrentTraceCertificate makeSsaCurrentTreePaths makeSsaCurrentActualRetention
   makeSsaCurrentAllocation makeSsaCurrentRenameTrace makeSsaCurrentTreeTrace
   makeSsaCurrentTokens makeSsaCurrentInduct makeSsaCurrentCertificate makeSsaDefs
   makeSsaCurrentPhiLocality makeSsaCurrentPlacementCut venomWf venomInst venomExecProps cfgWf list pair
@@ -361,7 +361,8 @@ Theorem current_certificate_events_valid:
   current_structural_certificate s fn fn' s' A H events /\
   wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s ==>
-  ?V. EVERY (current_event_valid A V) events
+  ?V. EVERY (current_event_valid A V) events /\
+    current_history_valid V H /\ EVERY (current_event_names H V) events
 Proof
   simp[current_structural_certificate_def] >> rpt strip_tac >>
   `MAP (\b. b.bb_label) ins = MAP (\b. b.bb_label) fn.fn_blocks /\
@@ -390,8 +391,13 @@ Proof
     (irule current_initial_state_valid >> simp[]) >>
   `ALL_DISTINCT (dom_tree_labels (current_dom_tree fn))` by
     metis_tac[current_actual_tree_labels_distinct] >>
-  qexists_tac `FLAT (MAP block_ir_vars ins)` >>
-  gvs[] >> drule_all current_annotated_tree_events_valid >> simp[]
+  gvs[] >> drule_all current_annotated_tree_events_valid >> strip_tac >>
+  `current_env_history_owners [] CurrentDefault` by
+    simp[current_env_history_owners_default] >>
+  drule_all current_annotated_tree_history_valid >> strip_tac >>
+  drule (cj 1 current_tree_trace_events) >> strip_tac >>
+  drule_all current_events_names_valid >> strip_tac >>
+  qexists_tac `FLAT (MAP block_ir_vars ins)` >> simp[]
 QED
 
 Theorem current_certificate_reinserted_first_name:
