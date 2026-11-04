@@ -708,3 +708,51 @@ val _ = List.app (fn (name,th) =>
   end)
   [("word_val_footprint", word_val_footprint),
    ("vv_holds_effect_free_frame", vv_holds_effect_free_frame)];
+
+Theorem vv_at_effect_free_frame:
+  vv_at ce cx ty lo hi es tv vv s /\
+  operand_frame ce es s hi es2 s2 /\
+  hi.cs_next_id <= hi2.cs_next_id /\
+  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce hi /\
+  es2.scopes = es.scopes /\ es2.immutables = es.immutables /\
+  (!tr. get_storage cx es2 tr = get_storage cx es tr) /\
+  (case vv of StackValue _ op => eval_operand op s2 = eval_operand op s
+   | LocatedValue _ p => eval_operand p.ptr_operand s2 = eval_operand p.ptr_operand s) ==>
+  vv_at ce cx ty lo hi2 es2 tv vv s2
+Proof
+  strip_tac >>
+  `!v. read_result cx tv es2 = (INL v,es2) ==>
+       read_result cx tv es = (INL v,es)` by
+    (rpt strip_tac >> irule read_result_preserved_fields >> metis_tac[]) >>
+  `!n b sz. local_region ce es2.scopes s2 n b sz <=>
+             local_region ce es.scopes s n b sz` by
+    (rpt gen_tac >> eq_tac
+     >- (strip_tac >> irule local_region_frame >>
+         fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
+            operand_frame_def] >> metis_tac[]) >>
+     strip_tac >> irule local_region_frame_fwd >>
+     fs[operand_frame_def] >> metis_tac[]) >>
+  Cases_on `vv` >>
+  fs[vv_at_def, expr_val_at_def] >> rpt strip_tac >>
+  `read_result cx tv es = (INL v,es)` by metis_tac[] >>
+  last_x_assum (qspec_then `v` mp_tac) >> simp[] >>
+  rpt strip_tac >>
+  fs[operand_frame_def] >>
+  TRY (rename1 `aid < hi.cs_next_id` >> suspend "allocation") >>
+  metis_tac[]
+QED
+
+Resume vv_at_effect_free_frame[allocation]:
+  markerLib.RESUME_TAC >>
+  `aid < hi2.cs_next_id` by decide_tac >>
+  `FLOOKUP s2.vs_allocas aid = SOME (b,sz)` by metis_tac[] >>
+  disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
+  first_assum ACCEPT_TAC
+QED
+
+Finalise vv_at_effect_free_frame
+
+val _ = let val (ors,axs) = Tag.dest_tag (Thm.tag vv_at_effect_free_frame) in
+  if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+  then raise Fail "Operand placement dependency" else ()
+end;
