@@ -2,7 +2,7 @@ Theory loadElimSentinelHelpers
 Ancestors
   list rich_list finite_map pred_set arithmetic words venomState venomInst
   venomMemDefs memLocDefs basePtrDefs dfgCorrectnessProof
-  memoryCopyElisionSound callLayoutDefs unitShapeDefs
+  memoryCopyElisionSound callLayoutDefs unitShapeDefs venomExecSemantics venomWf
 
 (* Sentinel insertion never changes variables or any old allocation lookup.
    BP soundness therefore needs no freshness relative to BP pointer lists.
@@ -170,4 +170,64 @@ Proof
   qexistsl_tac [`j`, `le_sentinel s j B`] >>
   simp[le_sentinel_dfg, le_sentinel_bp_sound, le_sentinel_in_word] >>
   simp[le_sentinel_def]
+QED
+
+(* Exact five conjuncts in the frozen universal-step premise. *)
+Definition le_step_invariants_def:
+  le_step_invariants bp dfg fn s <=>
+    dfg_assigns_sound dfg s /\ bp_ptr_sound bp s /\
+    allocas_non_overlapping s /\ allocas_in_word s /\
+    bp_ptrs_bounded bp fn s
+End
+
+Definition le_step_preserves_def:
+  le_step_preserves bp dfg fn <=>
+    !fuel run_ctx bb inst s0 s1.
+      MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\ inst_wf inst /\
+      le_step_invariants bp dfg fn (s0 with vs_inst_idx := 0) /\
+      step_inst fuel run_ctx inst s0 = OK s1 ==>
+      le_step_invariants bp dfg fn (s1 with vs_inst_idx := 0)
+End
+
+Theorem le_sentinel_alloca_overlap:
+  j <> inst.inst_id /\ FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit n] /\
+  inst.inst_outputs = [out] /\ 0 < w2n n ==>
+  ?t. step_inst fuel ctx inst (le_sentinel s j B) = OK t /\
+      ~allocas_non_overlapping (t with vs_inst_idx := 0)
+Proof
+  strip_tac >>
+  simp[step_inst_def, step_inst_base_def, exec_alloca_def,
+       le_sentinel_def, FLOOKUP_UPDATE] >>
+  simp[allocas_non_overlapping_def, update_var_def] >>
+  qexistsl_tac [`j`, `inst.inst_id`, `B`, `1`, `B`, `w2n n`] >>
+  simp[FLOOKUP_UPDATE]
+QED
+
+Theorem le_positive_alloca_must_exist:
+  le_step_preserves bp dfg fn /\
+  MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\ inst_wf inst /\
+  inst.inst_opcode = ALLOCA /\ inst.inst_operands = [op] /\
+  inst.inst_outputs = [out] /\ eval_operand op s = SOME n /\ 0 < w2n n /\
+  le_step_invariants bp dfg fn s /\ B+1 < dimword(:256) /\
+  (!a b sz. FLOOKUP s.vs_allocas a = SOME (b,sz) ==> b+sz <= B) ==>
+  FLOOKUP s.vs_allocas inst.inst_id <> NONE
+Proof
+  strip_tac >> strip_tac >>
+  `op = Lit n` by
+    (gvs[inst_wf_def, eval_operand_def]) >>
+  `?j t. j <> inst.inst_id /\ FLOOKUP s.vs_allocas j = NONE /\
+         t = le_sentinel s j B /\ le_step_invariants bp dfg fn t` by
+    (mp_tac (Q.INST [`aid` |-> `inst.inst_id`] le_sentinel_extension) >>
+     gvs[le_step_invariants_def] >> metis_tac[]) >>
+  `?u. step_inst 0 ARB inst (le_sentinel s j B) = OK u /\
+       ~allocas_non_overlapping (u with vs_inst_idx := 0)` by
+    (irule le_sentinel_alloca_overlap >> simp[] >> metis_tac[]) >>
+  `le_sentinel s j B with vs_inst_idx := 0 = le_sentinel s j B` by
+    simp[le_sentinel_def] >>
+  `le_step_invariants bp dfg fn
+     (le_sentinel s j B with vs_inst_idx := 0)` by gvs[] >>
+  fs[le_step_preserves_def] >>
+  first_x_assum drule_all >>
+  simp[le_step_invariants_def]
 QED
