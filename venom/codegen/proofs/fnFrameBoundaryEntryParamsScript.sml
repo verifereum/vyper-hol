@@ -1427,3 +1427,52 @@ Proof
   gvs[ALL_DISTINCT_APPEND] >>
   metis_tac[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND]
 QED
+
+Theorem entry_param_output_retpc_iff:
+  !fn s inst.
+    ssa_form fn /\ MEM inst (fn_insts fn) /\ entry_param_shape s inst ==>
+    (retpc_var fn (HD inst.inst_outputs) <=> inst.inst_opcode = RETPC_PARAM)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM (HD inst.inst_outputs) inst.inst_outputs` by
+    gvs[entry_param_shape_def] >>
+  Cases_on `inst.inst_opcode = RETPC_PARAM`
+  >- (simp[retpc_var_def] >> irule copy_phi_var_seed >>
+      qexists `inst` >> simp[]) >>
+  simp[] >> irule noncopy_output_not_retpc >> simp[] >>
+  qexists `inst` >>
+  gvs[entry_param_shape_def]
+QED
+
+Theorem entry_param_frame_lookup:
+  !fn ra s insts inst.
+    ssa_form fn /\ MEM inst (fn_insts fn) /\
+    EVERY (entry_param_shape s) insts /\ MEM inst insts /\
+    ALL_DISTINCT (MAP (\i. HD i.inst_outputs) insts) ==>
+    FLOOKUP
+      (frame_view fn ra (entry_bind_pairs (entry_param_pairs s insts) s)).vs_vars
+      (HD inst.inst_outputs) =
+    SOME (if inst.inst_opcode = RETPC_PARAM then ra
+      else EL (w2n (case HD inst.inst_operands of Lit idx => idx | _ => 0w)) s.vs_params)
+Proof
+  rpt strip_tac >>
+  `entry_param_shape s inst` by metis_tac[EVERY_MEM] >>
+  drule_all entry_param_output_retpc_iff >> strip_tac >>
+  `FLOOKUP (entry_bind_pairs (entry_param_pairs s insts) s).vs_vars
+      (HD inst.inst_outputs) =
+    SOME (if inst.inst_opcode = RETPC_PARAM then s.vs_return_pc_token
+      else EL (w2n (case HD inst.inst_operands of Lit idx => idx | _ => 0w)) s.vs_params)` by
+    (irule entry_bind_pairs_lookup >>
+     simp[entry_param_pairs_def, MAP_MAP_o, combinTheory.o_DEF] >>
+     simp[MEM_MAP] >> qexists `inst` >> simp[]) >>
+  simp[frame_view_vars_lookup] >> Cases_on `inst.inst_opcode = RETPC_PARAM` >> simp[]
+QED
+
+Theorem param_insts_from_el:
+  !insts k j. param_insts_from k insts /\ j < LENGTH insts ==>
+    param_inst_at (k + j) (EL j insts)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> Cases_on `j` >>
+  simp[param_insts_from_def, ADD_CLAUSES] >> strip_tac >>
+  first_x_assum (qspecl_then [`SUC k`, `n`] mp_tac) >> simp[ADD_CLAUSES]
+QED
