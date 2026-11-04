@@ -5,7 +5,8 @@ Ancestors
   dftOccurrenceReplay dftOccurrenceMachine dftOpenErase dftOpenMachine dftOpenFuel
   venomExecSemantics venomInst dftAvailability dftOccurrenceAvailability
   dftScheduleOrder dftCorrectness dftOrdinarySwap venomWf venomState sccpCorrectnessProofs finite_map
-  list arithmetic allocaRemapSSA venomExecProofs venomExecProps
+  list arithmetic allocaRemapSSA venomExecProofs venomExecProps dftOrdinaryStop opcodeClass
+  dftOccurrenceCallTrace
 
 Theorem dft_nonphi_edit_phi_bound:
   !pre. x.inst_opcode <> PHI ==>
@@ -541,4 +542,596 @@ Theorem dft_source_active_enter:
 Proof
   strip_tac >> fs[dft_source_provenance_def] >>
   gvs[dft_source_core_def, dft_source_control_def]
+QED
+
+(* Abort endpoints agree on the observable tag and the entry counter, not
+   on the state left by a crossed instruction.  The stack has been cleared. *)
+Definition dft_ordinary_stopped_def:
+  dft_ordinary_stopped c d <=>
+    ?a s t n.
+      c.dft_occ_core = DftOpen (DftDone (Abort a s)) [] n /\
+      d.dft_occ_core = DftOpen (DftDone (Abort a t)) [] n
+End
+
+Theorem dft_ordinary_sync_first_abort:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  dft_ordinary_swap_pair x y /\ inst_wf x /\ inst_wf y /\
+  ~dft_must_order x y /\
+  (!op. MEM op y.inst_operands ==> ?v. eval_operand op s = SOME v) /\
+  dft_ordinary_sync bb0 pre x y post c d /\
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb0 s) stack n /\
+  s.vs_inst_idx = LENGTH pre /\ step_inst_base x s = Abort a t ==>
+  ?j. 2 <= j /\ j <= 3 /\
+    dft_ordinary_stopped
+      (FUNPOW (dft_occ_oracle_next w C) 2 c)
+      (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) j d)
+Proof
+  strip_tac >> drule_all dft_ordinary_sync_fetch >> strip_tac >>
+  `~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
+      write_effects x.inst_opcode = empty_effects)` by fs[dft_must_order_def] >>
+  drule_all dft_occ_ordinary_first_abort >>
+  disch_then (qspecl_then [`w`, `dft_gas_edit_ctx bb0 pre x y post C`, `C`]
+    strip_assume_tac) >>
+  qexists_tac `SUC j` >> simp[] >>
+  simp[dft_ordinary_stopped_def] >>
+  qexistsl_tac [`a`, `t`, `u`, `n`] >> conj_tac
+  >- (simp[FUNPOW_2, FUNPOW] >> irule dft_occ_abort_clear >> metis_tac[]) >>
+  irule dft_occ_abort_prefix_clear >> metis_tac[]
+QED
+
+Theorem dft_ordinary_sync_second_abort:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  dft_ordinary_swap_pair x y /\
+  dft_ordinary_sync bb0 pre x y post c d /\
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb0 s) stack n /\
+  s.vs_inst_idx = LENGTH pre /\ step_inst_base x s = OK sx /\
+  step_inst_base y (sx with vs_inst_idx := SUC s.vs_inst_idx) = Abort a t ==>
+  dft_ordinary_stopped
+    (FUNPOW (dft_occ_oracle_next w C) 3 c)
+    (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) 2 d)
+Proof
+  strip_tac >> drule_all dft_ordinary_sync_fetch >> strip_tac >>
+  drule_all dft_occ_ordinary_second_abort >>
+  disch_then (qspecl_then [`w`, `dft_gas_edit_ctx bb0 pre x y post C`, `C`]
+    strip_assume_tac) >>
+  simp[dft_ordinary_stopped_def] >> qexistsl_tac [`a`, `t`, `u`, `n`] >>
+  conj_tac
+  >- (`3 = SUC 2` by simp[] >> once_asm_rewrite_tac[] >>
+      rewrite_tac[FUNPOW_SUC] >>
+      irule dft_occ_abort_clear >> metis_tac[]) >>
+  simp[FUNPOW_2, FUNPOW] >> irule dft_occ_abort_clear >> metis_tac[]
+QED
+
+Theorem dft_ordinary_stopped_next:
+  dft_ordinary_stopped c d ==>
+  dft_ordinary_stopped (dft_occ_oracle_next w C c)
+    (dft_occ_oracle_next w C' d)
+Proof
+  simp[dft_ordinary_stopped_def] >> strip_tac >>
+  qexistsl_tac [`a`, `s`, `t`, `n`] >>
+  metis_tac[dft_occ_abort_clear]
+QED
+
+Theorem dft_ordinary_abort_no_observe:
+  c.dft_occ_core = DftOpen (DftDone (Abort a t)) stack n ==>
+  !h f i s. ~dft_open_observe f i s
+    (FUNPOW (dft_occ_oracle_next w C) h c).dft_occ_core
+Proof
+  strip_tac >>
+  `!k. ?st. (FUNPOW (dft_occ_oracle_next w C) k c).dft_occ_core =
+     DftOpen (DftDone (Abort a t)) st n` by
+    (Induct >- (simp[FUNPOW] >> metis_tac[]) >>
+     rewrite_tac[FUNPOW_SUC] >> metis_tac[dft_occ_abort_clear]) >>
+  rpt gen_tac >> first_x_assum (qspec_then `h` strip_assume_tac) >>
+  simp[dft_open_observe_def]
+QED
+
+Definition dft_ordinary_prefix_cover_def:
+  dft_ordinary_prefix_cover fm w C C' c d k j <=>
+    !h f i t. h < j /\
+      dft_open_observe f i t
+        (FUNPOW (dft_occ_oracle_next w C') h d).dft_occ_core /\
+      inst_mem_ranges i t <> [] ==>
+      ?l g s. l < k /\ f = fm g /\
+        dft_open_observe g i s
+          (FUNPOW (dft_occ_oracle_next w C) l c).dft_occ_core /\
+        (!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t) /\
+        inst_mem_ranges i s = inst_mem_ranges i t /\ s.vs_memory = t.vs_memory
+End
+
+Theorem dft_ordinary_sync_first_abort_cover:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  dft_ordinary_swap_pair x y /\ inst_wf x /\ ~dft_must_order x y /\
+  dft_ordinary_sync bb0 pre x y post c d /\
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb0 s) stack n /\
+  s.vs_inst_idx = LENGTH pre /\ step_inst_base x s = Abort a t ==>
+  dft_ordinary_prefix_cover (dft_gas_edit_fn bb0 pre x y post) w C
+    (dft_gas_edit_ctx bb0 pre x y post C) c d 2 2
+Proof
+  strip_tac >> drule_all dft_ordinary_sync_fetch >> strip_tac >>
+  simp[dft_ordinary_prefix_cover_def] >> rpt strip_tac >>
+  drule_all dft_occ_ordinary_first_abort_observe >> strip_tac >>
+  qexistsl_tac [`0`, `fn`, `s`] >> simp[FUNPOW] >> metis_tac[]
+QED
+
+Theorem dft_ordinary_sync_second_abort_cover:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  dft_ordinary_swap_pair x y /\
+  dft_ordinary_sync bb0 pre x y post c d /\
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb0 s) stack n /\
+  s.vs_inst_idx = LENGTH pre /\ step_inst_base x s = OK sx ==>
+  dft_ordinary_prefix_cover (dft_gas_edit_fn bb0 pre x y post) w C
+    (dft_gas_edit_ctx bb0 pre x y post C) c d 3 1
+Proof
+  strip_tac >> drule_all dft_ordinary_sync_fetch >> strip_tac >>
+  simp[dft_ordinary_prefix_cover_def] >> rpt strip_tac >>
+  `dft_open_observe f i t d.dft_occ_core` by metis_tac[] >>
+  drule_all dft_occ_ordinary_second_abort_observe >>
+  disch_then (qspecl_then [`w`, `C`] strip_assume_tac) >>
+  qexistsl_tac [`1`, `fn`, `sx with vs_inst_idx := SUC s.vs_inst_idx`] >>
+  simp[FUNPOW] >> metis_tac[]
+QED
+
+Theorem dft_ordinary_prefix_cover_abort_pad:
+  dft_ordinary_prefix_cover fm w C C' c d k b /\ j <= b /\
+  (FUNPOW (dft_occ_oracle_next w C') j d).dft_occ_core =
+    DftOpen (DftDone (Abort a t)) stack n ==>
+  dft_ordinary_prefix_cover fm w C C' c d k (SUC j)
+Proof
+  pure_rewrite_tac[dft_ordinary_prefix_cover_def] >> rpt strip_tac >>
+  Cases_on `h < b` >- metis_tac[] >>
+  `h = j` by decide_tac >> gvs[dft_open_observe_def]
+QED
+
+Theorem dft_ordinary_sync_success_cover:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  dft_ordinary_swap_pair x y /\ inst_wf x /\ inst_wf y /\
+  dft_ordinary_sync bb0 pre x y post c d /\
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb0 s) stack n /\
+  s.vs_inst_idx = LENGTH pre /\ step_inst_base x s = OK sx /\
+  step_inst_base y (sx with vs_inst_idx := SUC s.vs_inst_idx) = OK sxy ==>
+  dft_ordinary_prefix_cover (dft_gas_edit_fn bb0 pre x y post) w C
+    (dft_gas_edit_ctx bb0 pre x y post C) c d 2 2
+Proof
+  strip_tac >> drule_all dft_ordinary_sync_fetch >> strip_tac >>
+  drule_all dft_occ_ordinary_observe_source_prefix >>
+  disch_then (qspecl_then [`w`, `dft_gas_edit_ctx bb0 pre x y post C`, `C`]
+    strip_assume_tac) >>
+  pure_rewrite_tac[dft_ordinary_prefix_cover_def] >> rpt strip_tac >>
+  `h = 0 \/ h = 1` by decide_tac
+  >- (gvs[FUNPOW, dft_open_observe_def] >>
+      qexistsl_tac [`1`, `fn`, `sx with vs_inst_idx := SUC s.vs_inst_idx`] >>
+      simp[FUNPOW] >> metis_tac[]) >>
+  gvs[FUNPOW] >>
+  `f = dft_gas_edit_fn bb0 pre x y post fn /\ i = x /\ t = sy` by
+    (gvs[dft_open_observe_def]) >>
+  gvs[] >> qexistsl_tac [`0`, `fn`, `s`] >>
+  simp[FUNPOW, dft_open_observe_def] >> metis_tac[]
+QED
+
+Theorem dft_ordinary_sync_outside_observe:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  dft_ordinary_sync bb0 pre x y post c d /\
+  ~dft_edit_before bb0 (LENGTH pre) c /\
+  dft_open_observe f i t d.dft_occ_core ==>
+  ?g. f = dft_gas_edit_fn bb0 pre x y post g /\
+    dft_open_observe g i t c.dft_occ_core
+Proof
+  simp[dft_ordinary_sync_def] >> strip_tac >>
+  Cases_on `c.dft_occ_core` >> rename1 `c.dft_occ_core = DftOpen ctl stack n` >>
+  Cases_on `ctl` >>
+  gvs[dft_edit_occ_def, dft_edit_core_def, dft_edit_control_def,
+      dft_open_observe_def] >>
+  rename1 `get_instruction (dft_gas_edit_block bb0 pre x y post bb) t.vs_inst_idx = SOME i` >>
+  `bb <> bb0 \/ (t.vs_inst_idx <> LENGTH pre /\
+                  t.vs_inst_idx <> SUC (LENGTH pre))` by
+    (fs[dft_edit_safe_def, dft_edit_safe_core_def, dft_edit_control_safe_def,
+        dft_edit_cut_def, dft_edit_before_def] >> metis_tac[]) >>
+  metis_tac[dft_gas_edit_instruction_outside]
+QED
+
+Theorem dft_ordinary_sync_outside_cover:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  dft_ordinary_sync bb0 pre x y post c d /\
+  ~dft_edit_before bb0 (LENGTH pre) c ==>
+  dft_ordinary_prefix_cover (dft_gas_edit_fn bb0 pre x y post) w C
+    (dft_gas_edit_ctx bb0 pre x y post C) c d 1 1
+Proof
+  strip_tac >> simp[dft_ordinary_prefix_cover_def] >> rpt strip_tac >>
+  `dft_open_observe f i t d.dft_occ_core` by metis_tac[] >>
+  drule_all dft_ordinary_sync_outside_observe >> strip_tac >>
+  qexistsl_tac [`g`, `t`] >> simp[FUNPOW]
+QED
+
+Definition dft_ordinary_no_error_def:
+  dft_ordinary_no_error w C c <=>
+    !h e stack n. (FUNPOW (dft_occ_oracle_next w C) h c).dft_occ_core <>
+      DftOpen (DftDone (Error e)) stack n
+End
+
+Theorem dft_ordinary_no_error_shift:
+  dft_ordinary_no_error w C c ==>
+  dft_ordinary_no_error w C (FUNPOW (dft_occ_oracle_next w C) k c)
+Proof
+  simp[dft_ordinary_no_error_def, GSYM FUNPOW_ADD] >> metis_tac[]
+QED
+
+Theorem dft_occ_ordinary_error:
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb s) stack n /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
+  step_inst_base inst s = Error e ==>
+  (dft_occ_oracle_next w C c).dft_occ_core =
+    DftOpen (DftDone (Error e)) (MAP (dft_fill_frame 0) stack) n
+Proof
+  strip_tac >>
+  simp[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+    dft_fill_def, dft_fill_control_def, dft_open_next_def,
+    dft_open_deliver_def, dft_erase_def] >>
+  `!f. dft_fill_frame 0 (dft_fill_frame 1 f) = dft_fill_frame 0 f` by
+    (Cases >> simp[dft_fill_frame_def]) >>
+  simp[MAP_MAP_o, combinTheory.o_DEF] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC
+QED
+
+Theorem dft_ordinary_no_error_step:
+  dft_ordinary_no_error w C c /\
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb s) stack n /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE ==>
+  !e. step_inst_base inst s <> Error e
+Proof
+  rpt strip_tac >> drule_all dft_occ_ordinary_error >>
+  disch_then (qspecl_then [`w`, `C`] assume_tac) >>
+  fs[dft_ordinary_no_error_def] >>
+  first_x_assum (qspec_then `1` mp_tac) >> simp[FUNPOW] >> metis_tac[]
+QED
+
+Theorem dft_ordinary_first_abort_segment:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  dft_ordinary_swap_pair x y /\ inst_wf x /\ inst_wf y /\
+  ~dft_must_order x y /\
+  (!op. MEM op y.inst_operands ==> ?v. eval_operand op s = SOME v) /\
+  dft_ordinary_sync bb0 pre x y post c d /\
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb0 s) stack n /\
+  s.vs_inst_idx = LENGTH pre /\ step_inst_base x s = Abort a t ==>
+  ?j. 2 <= j /\ j <= 3 /\
+    dft_ordinary_stopped
+      (FUNPOW (dft_occ_oracle_next w C) 2 c)
+      (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) j d) /\
+    dft_ordinary_prefix_cover (dft_gas_edit_fn bb0 pre x y post) w C
+      (dft_gas_edit_ctx bb0 pre x y post C) c d 2 j
+Proof
+  strip_tac >> drule_all dft_ordinary_sync_first_abort_cover >> strip_tac >>
+  drule_all dft_ordinary_sync_fetch >> strip_tac >>
+  `~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
+      write_effects x.inst_opcode = empty_effects)` by fs[dft_must_order_def] >>
+  drule_all dft_occ_ordinary_first_abort >>
+  disch_then (qspecl_then [`w`, `dft_gas_edit_ctx bb0 pre x y post C`, `C`]
+    strip_assume_tac) >>
+  qexists_tac `SUC j` >> simp[] >> conj_tac
+  >- (simp[dft_ordinary_stopped_def] >>
+      qexistsl_tac [`a`, `t`, `u`, `n`] >> conj_tac
+      >- (simp[FUNPOW_2, FUNPOW] >> irule dft_occ_abort_clear >> metis_tac[]) >>
+      irule dft_occ_abort_prefix_clear >> metis_tac[]) >>
+  irule dft_ordinary_prefix_cover_abort_pad >> metis_tac[]
+QED
+
+Theorem dft_ordinary_second_abort_segment:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  dft_ordinary_swap_pair x y /\
+  dft_ordinary_sync bb0 pre x y post c d /\
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb0 s) stack n /\
+  s.vs_inst_idx = LENGTH pre /\ step_inst_base x s = OK sx /\
+  step_inst_base y (sx with vs_inst_idx := SUC s.vs_inst_idx) = Abort a t ==>
+  dft_ordinary_stopped
+    (FUNPOW (dft_occ_oracle_next w C) 3 c)
+    (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) 2 d) /\
+  dft_ordinary_prefix_cover (dft_gas_edit_fn bb0 pre x y post) w C
+    (dft_gas_edit_ctx bb0 pre x y post C) c d 3 2
+Proof
+  strip_tac >> conj_tac >- (irule dft_ordinary_sync_second_abort >> metis_tac[]) >>
+  drule_all dft_ordinary_sync_second_abort_cover >> strip_tac >>
+  drule_all dft_ordinary_sync_fetch >> strip_tac >>
+  drule_all dft_occ_ordinary_second_abort >>
+  disch_then (qspecl_then [`w`, `dft_gas_edit_ctx bb0 pre x y post C`, `C`]
+    strip_assume_tac) >>
+  `2 = SUC 1` by simp[] >> once_asm_rewrite_tac[] >>
+  irule dft_ordinary_prefix_cover_abort_pad >>
+  conj_tac >- (simp[FUNPOW] >> metis_tac[]) >>
+  qexists_tac `1` >> simp[]
+QED
+
+Theorem dft_ordinary_result_cases:
+  ~is_terminator inst.inst_opcode /\
+  (!e. step_inst_base inst s <> Error e) ==>
+  (?t. step_inst_base inst s = OK t) \/
+  (?a t. step_inst_base inst s = Abort a t)
+Proof
+  strip_tac >> Cases_on `step_inst_base inst s` >> gvs[]
+  >- metis_tac[dft_ordinary_no_halt] >>
+  drule step_inst_base_intret_opcodes >> strip_tac >> gvs[is_terminator_def]
+QED
+
+Theorem dft_ordinary_sync_pair_segment:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  dft_ordinary_swap_pair x y /\ inst_wf x /\ inst_wf y /\
+  ~dft_must_order x y /\ dft_ordinary_no_error w C c /\
+  (!op. MEM op y.inst_operands ==> ?v. eval_operand op s = SOME v) /\
+  dft_ordinary_sync bb0 pre x y post c d /\
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb0 s) stack n /\
+  s.vs_inst_idx = LENGTH pre ==>
+  ?k j. 0 < k /\ k <= 3 /\ 0 < j /\ j <= 3 /\
+    (dft_ordinary_sync bb0 pre x y post
+       (FUNPOW (dft_occ_oracle_next w C) k c)
+       (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) j d) \/
+     dft_ordinary_stopped
+       (FUNPOW (dft_occ_oracle_next w C) k c)
+       (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) j d)) /\
+    dft_ordinary_prefix_cover (dft_gas_edit_fn bb0 pre x y post) w C
+      (dft_gas_edit_ctx bb0 pre x y post C) c d k j
+Proof
+  strip_tac >> drule_all dft_ordinary_sync_fetch >> strip_tac >>
+  `x.inst_opcode <> GAS /\ x.inst_opcode <> INVOKE /\
+   ~is_terminator x.inst_opcode /\ ~is_terminator y.inst_opcode /\
+   y.inst_opcode <> GAS /\ y.inst_opcode <> INVOKE` by
+    fs[dft_ordinary_swap_pair_def] >>
+  `(!e. step_inst_base x s <> Error e)` by
+    (irule dft_ordinary_no_error_step >> metis_tac[]) >>
+  drule_all dft_ordinary_result_cases >> strip_tac
+  >- (rename1 `step_inst_base x s = OK sx` >>
+      `dft_ordinary_no_error w C (dft_occ_oracle_next w C c)` by
+        (drule dft_ordinary_no_error_shift >>
+         disch_then (qspec_then `1` mp_tac) >> simp[FUNPOW]) >>
+      drule_all dft_occ_ordinary_next >>
+      disch_then (qspecl_then [`w`, `C`] assume_tac) >>
+      `(dft_occ_oracle_next w C c).dft_occ_core = DftOpen
+         (DftAt fn 0 bb0 (sx with vs_inst_idx := SUC s.vs_inst_idx))
+         (MAP (dft_fill_frame 0) stack) n` by simp[] >>
+      `!e. step_inst_base y (sx with vs_inst_idx := SUC s.vs_inst_idx) <> Error e` by
+        (irule dft_ordinary_no_error_step >> simp[] >> metis_tac[]) >>
+      drule_all dft_ordinary_result_cases >> strip_tac
+      >- (qexistsl_tac [`2`, `2`] >> simp[] >> conj_tac
+          >- (disj1_tac >> irule dft_ordinary_sync_success >> metis_tac[]) >>
+          irule dft_ordinary_sync_success_cover >> metis_tac[]) >>
+      qexistsl_tac [`3`, `2`] >> simp[] >>
+      drule_all dft_ordinary_second_abort_segment >> strip_tac >> simp[]) >>
+  drule_all dft_ordinary_first_abort_segment >>
+  disch_then (qspecl_then [`w`, `C`] strip_assume_tac) >>
+  qexistsl_tac [`2`, `j`] >> simp[]
+QED
+
+Theorem dft_ordinary_sync_segment:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  dft_ordinary_swap_pair x y /\ ~dft_must_order x y /\
+  dft_ordinary_no_error w C c /\ dft_runtime_ready c /\
+  dft_source_provenance C L c /\ EVERY wf_ssa C.ctx_functions /\
+  (!f i l. MEM f C.ctx_functions /\ MEM i (fn_insts f) /\
+    MEM (Label l) i.inst_operands /\ i.inst_opcode <> INVOKE /\
+    ~is_terminator i.inst_opcode /\ ~is_pseudo i.inst_opcode ==>
+    l IN FDOM L) /\
+  dft_ordinary_sync bb0 pre x y post c d ==>
+  ?k j. 0 < k /\ k <= 3 /\ 0 < j /\ j <= 3 /\
+    (dft_ordinary_sync bb0 pre x y post
+       (FUNPOW (dft_occ_oracle_next w C) k c)
+       (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) j d) \/
+     dft_ordinary_stopped
+       (FUNPOW (dft_occ_oracle_next w C) k c)
+       (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) j d)) /\
+    dft_ordinary_prefix_cover (dft_gas_edit_fn bb0 pre x y post) w C
+      (dft_gas_edit_ctx bb0 pre x y post C) c d k j
+Proof
+  strip_tac >> Cases_on `dft_edit_before bb0 (LENGTH pre) c`
+  >- (fs[dft_edit_before_def] >>
+      `inst_wf x /\ inst_wf y` by
+        (fs[dft_runtime_ready_def, dft_runtime_core_ready_def,
+            dft_runtime_control_ready_def, dft_runtime_fn_ok_def, EVERY_MEM] >>
+         metis_tac[MEM_APPEND, MEM]) >>
+      `!op. MEM op y.inst_operands ==> ?v. eval_operand op s = SOME v` by
+        (rpt strip_tac >> irule dft_source_ready_crossed_operands >> metis_tac[]) >>
+      irule dft_ordinary_sync_pair_segment >> metis_tac[]) >>
+  qexistsl_tac [`1`, `1`] >> simp[FUNPOW] >> conj_tac
+  >- (disj1_tac >> irule dft_ordinary_sync_outside >>
+      fs[dft_ordinary_swap_pair_def] >> metis_tac[is_pseudo_def]) >>
+  irule dft_ordinary_sync_outside_cover >> metis_tac[]
+QED
+
+Definition dft_ordinary_endpoint_def:
+  dft_ordinary_endpoint bb0 pre x y post c d <=>
+    dft_ordinary_sync bb0 pre x y post c d \/ dft_ordinary_stopped c d
+End
+
+Theorem dft_ordinary_stopped_cover:
+  dft_ordinary_stopped c d ==>
+  dft_ordinary_prefix_cover fm w C C' c d 1 1
+Proof
+  simp[dft_ordinary_stopped_def, dft_ordinary_prefix_cover_def,
+       dft_open_observe_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem dft_ordinary_endpoint_segment:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  dft_ordinary_swap_pair x y /\ ~dft_must_order x y /\
+  dft_ordinary_no_error w C c /\ dft_runtime_ready c /\
+  dft_source_provenance C L c /\ EVERY wf_ssa C.ctx_functions /\
+  (!f i l. MEM f C.ctx_functions /\ MEM i (fn_insts f) /\
+    MEM (Label l) i.inst_operands /\ i.inst_opcode <> INVOKE /\
+    ~is_terminator i.inst_opcode /\ ~is_pseudo i.inst_opcode ==>
+    l IN FDOM L) /\
+  dft_ordinary_endpoint bb0 pre x y post c d ==>
+  ?k j. 0 < k /\ k <= 3 /\ 0 < j /\ j <= 3 /\
+    dft_ordinary_endpoint bb0 pre x y post
+       (FUNPOW (dft_occ_oracle_next w C) k c)
+       (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) j d) /\
+    dft_ordinary_prefix_cover (dft_gas_edit_fn bb0 pre x y post) w C
+      (dft_gas_edit_ctx bb0 pre x y post C) c d k j
+Proof
+  simp[dft_ordinary_endpoint_def] >> strip_tac
+  >- (drule_all dft_ordinary_sync_segment >> metis_tac[]) >>
+  qexistsl_tac [`1`, `1`] >> simp[FUNPOW] >> conj_tac
+  >- (disj2_tac >> irule dft_ordinary_stopped_next >> simp[]) >>
+  irule dft_ordinary_stopped_cover >> simp[]
+QED
+
+Theorem dft_ordinary_prefix_cover_shift:
+  dft_ordinary_prefix_cover fm w C C' c d k j /\ h < j /\
+  dft_open_observe f i t (FUNPOW (dft_occ_oracle_next w C') h d).dft_occ_core /\
+  inst_mem_ranges i t <> [] ==>
+  ?l g s. l < k /\ f = fm g /\
+    dft_open_observe g i s (FUNPOW (dft_occ_oracle_next w C) l c).dft_occ_core /\
+    (!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t) /\
+    inst_mem_ranges i s = inst_mem_ranges i t /\ s.vs_memory = t.vs_memory
+Proof
+  simp[dft_ordinary_prefix_cover_def] >> metis_tac[]
+QED
+
+Definition dft_ordinary_environment_def:
+  dft_ordinary_environment bb0 pre x y post C L <=>
+    bb0.bb_instructions = pre ++ [x;y] ++ post /\
+    dft_ordinary_swap_pair x y /\ ~dft_must_order x y /\
+    EVERY wf_ssa C.ctx_functions /\ EVERY dft_runtime_fn_ok C.ctx_functions /\
+    (!f i l. MEM f C.ctx_functions /\ MEM i (fn_insts f) /\
+      MEM (Label l) i.inst_operands /\ i.inst_opcode <> INVOKE /\
+      ~is_terminator i.inst_opcode /\ ~is_pseudo i.inst_opcode ==> l IN FDOM L)
+End
+
+Definition dft_ordinary_live_def:
+  dft_ordinary_live w C L c <=>
+    dft_ordinary_no_error w C c /\ dft_runtime_ready c /\
+    dft_source_provenance C L c
+End
+
+Theorem dft_ordinary_live_shift:
+  EVERY dft_runtime_fn_ok C.ctx_functions /\ dft_ordinary_live w C L c ==>
+  dft_ordinary_live w C L (FUNPOW (dft_occ_oracle_next w C) k c)
+Proof
+  simp[dft_ordinary_live_def] >> strip_tac >>
+  metis_tac[dft_ordinary_no_error_shift, dft_runtime_iter, dft_source_run]
+QED
+
+Theorem dft_ordinary_live_segment:
+  dft_ordinary_environment bb0 pre x y post C L /\
+  dft_ordinary_live w C L c /\ dft_ordinary_endpoint bb0 pre x y post c d ==>
+  ?k j. 0 < k /\ k <= 3 /\ 0 < j /\ j <= 3 /\
+    dft_ordinary_endpoint bb0 pre x y post
+       (FUNPOW (dft_occ_oracle_next w C) k c)
+       (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) j d) /\
+    dft_ordinary_live w C L (FUNPOW (dft_occ_oracle_next w C) k c) /\
+    dft_ordinary_prefix_cover (dft_gas_edit_fn bb0 pre x y post) w C
+      (dft_gas_edit_ctx bb0 pre x y post C) c d k j
+Proof
+  strip_tac >>
+  `EVERY dft_runtime_fn_ok C.ctx_functions` by fs[dft_ordinary_environment_def] >>
+  `?k j. 0 < k /\ k <= 3 /\ 0 < j /\ j <= 3 /\
+    dft_ordinary_endpoint bb0 pre x y post
+       (FUNPOW (dft_occ_oracle_next w C) k c)
+       (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) j d) /\
+    dft_ordinary_prefix_cover (dft_gas_edit_fn bb0 pre x y post) w C
+      (dft_gas_edit_ctx bb0 pre x y post C) c d k j` by
+    (irule dft_ordinary_endpoint_segment >>
+     fs[dft_ordinary_environment_def, dft_ordinary_live_def] >> metis_tac[]) >>
+  qexistsl_tac [`k`, `j`] >> simp[] >> irule dft_ordinary_live_shift >> simp[]
+QED
+
+Theorem dft_ordinary_orbit_observe:
+  !h c d f i t.
+  dft_ordinary_environment bb0 pre x y post C L /\
+  dft_ordinary_live w C L c /\ dft_ordinary_endpoint bb0 pre x y post c d /\
+  dft_open_observe f i t
+    (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) h d).dft_occ_core /\
+  inst_mem_ranges i t <> [] ==>
+  ?l g s. f = dft_gas_edit_fn bb0 pre x y post g /\
+    dft_open_observe g i s (FUNPOW (dft_occ_oracle_next w C) l c).dft_occ_core /\
+    (!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t) /\
+    inst_mem_ranges i s = inst_mem_ranges i t /\ s.vs_memory = t.vs_memory
+Proof
+  completeInduct_on `h` >> rpt strip_tac >>
+  drule_all dft_ordinary_live_segment >> strip_tac >>
+  Cases_on `h < j`
+  >- (drule_all dft_ordinary_prefix_cover_shift >> metis_tac[]) >>
+  `h - j < h /\ h = (h - j) + j` by decide_tac >>
+  first_x_assum (qspec_then `h - j` mp_tac) >> simp[] >>
+  disch_then (qspecl_then
+    [`FUNPOW (dft_occ_oracle_next w C) k c`,
+     `FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) j d`,
+     `f`, `i`, `t`] mp_tac) >>
+  simp[GSYM FUNPOW_ADD] >> strip_tac >>
+  qexistsl_tac [`k + l`, `g`, `s`] >> simp[]
+QED
+
+Theorem dft_ordinary_orbit_cofinal:
+  !m c d.
+  dft_ordinary_environment bb0 pre x y post C L /\
+  dft_ordinary_live w C L c /\ dft_ordinary_endpoint bb0 pre x y post c d ==>
+  ?p q. m <= p /\ m <= q /\
+    dft_ordinary_endpoint bb0 pre x y post
+      (FUNPOW (dft_occ_oracle_next w C) p c)
+      (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) q d) /\
+    dft_ordinary_live w C L (FUNPOW (dft_occ_oracle_next w C) p c)
+Proof
+  Induct
+  >- (rpt strip_tac >> qexistsl_tac [`0`, `0`] >> simp[FUNPOW]) >>
+  rpt strip_tac >> first_x_assum drule_all >> strip_tac >>
+  drule_all dft_ordinary_live_segment >> strip_tac >>
+  qexistsl_tac [`p + k`, `q + j`] >>
+  conj_tac >- decide_tac >> conj_tac >- decide_tac >>
+  gvs[GSYM FUNPOW_ADD, ADD_COMM]
+QED
+
+Definition dft_ordinary_result_rel_def:
+  dft_ordinary_result_rel r r' <=>
+    r = r' \/ ?a s t. r = Abort a s /\ r' = Abort a t
+End
+
+Theorem dft_ordinary_endpoint_root:
+  dft_ordinary_endpoint bb0 pre x y post c d /\
+  c.dft_occ_core = DftOpen (DftDone r) [] n ==>
+  ?r' n'. d.dft_occ_core = DftOpen (DftDone r') [] n' /\
+    dft_ordinary_result_rel r r'
+Proof
+  simp[dft_ordinary_endpoint_def] >> strip_tac
+  >- (fs[dft_ordinary_sync_def] >>
+      simp[dft_edit_occ_def, dft_edit_core_def, dft_edit_control_def] >>
+      metis_tac[dft_ordinary_result_rel_def]) >>
+  fs[dft_ordinary_stopped_def] >> gvs[] >>
+  metis_tac[dft_ordinary_result_rel_def]
+QED
+
+Theorem dft_ordinary_orbit_terminal:
+  dft_ordinary_environment bb0 pre x y post C L /\
+  dft_ordinary_live w C L c /\ dft_ordinary_endpoint bb0 pre x y post c d /\
+  (FUNPOW (dft_occ_oracle_next w C) h c).dft_occ_core =
+    DftOpen (DftDone r) [] n ==>
+  ?q r' n'.
+    (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) q d).dft_occ_core =
+      DftOpen (DftDone r') [] n' /\ dft_ordinary_result_rel r r'
+Proof
+  strip_tac >> drule_all dft_ordinary_orbit_cofinal >>
+  disch_then (qspec_then `h` strip_assume_tac) >>
+  `?delta. p = delta + h` by (qexists_tac `p - h` >> decide_tac) >>
+  `?n. (FUNPOW (dft_occ_oracle_next w C) p c).dft_occ_core =
+     DftOpen (DftDone r) [] n` by
+    (gvs[FUNPOW_ADD] >> irule dft_occ_oracle_root_absorb >> metis_tac[]) >>
+  drule_all dft_ordinary_endpoint_root >> metis_tac[]
+QED
+
+Theorem dft_ordinary_root_init:
+  dft_ordinary_environment bb0 pre x y post C s.vs_labels /\
+  MEM fn C.ctx_functions /\ fn_reachable fn s.vs_current_bb /\
+  strict_dom_vars_defined fn s /\
+  dft_ordinary_no_error w C (dft_occ_init (DftOpen (DftEnter fn 0 s) [] n)) ==>
+  dft_ordinary_live w C s.vs_labels
+    (dft_occ_init (DftOpen (DftEnter fn 0 s) [] n)) /\
+  dft_ordinary_endpoint bb0 pre x y post
+    (dft_occ_init (DftOpen (DftEnter fn 0 s) [] n))
+    (dft_occ_init (DftOpen
+      (DftEnter (dft_gas_edit_fn bb0 pre x y post fn) 0 s) [] n))
+Proof
+  strip_tac >>
+  `dft_runtime_fn_ok fn` by fs[dft_ordinary_environment_def, EVERY_MEM] >>
+  conj_tac
+  >- (simp[dft_ordinary_live_def] >> conj_tac
+      >- (irule dft_runtime_root >> simp[]) >>
+      irule dft_source_root >> simp[]) >>
+  simp[dft_ordinary_endpoint_def, dft_ordinary_sync_init]
 QED
