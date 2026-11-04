@@ -40,12 +40,12 @@ Proof
   Cases_on `lower_dload_blocks_supply s1 (TAKE n' bs)` >> gvs[]
 QED
 
-Theorem dload_insts_supply_prefix_suc[local]:
-  !xs n q ps u i after.
+Theorem dload_insts_supply_prefix_emission[local]:
+  !xs n q ps u i emitted after.
     n < LENGTH xs /\ i = EL n xs /\
     lower_dload_insts_supply q (TAKE n xs) = (ps,u) /\
-    lower_dload_inst_supply u i = ([i],after) ==>
-    lower_dload_insts_supply q (TAKE (SUC n) xs) = (ps ++ [i],after)
+    lower_dload_inst_supply u i = (emitted,after) ==>
+    lower_dload_insts_supply q (TAKE (SUC n) xs) = (ps ++ emitted,after)
 Proof
   Induct >- simp[] >> Cases_on `n` >> rpt gen_tac >>
   simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >> strip_tac
@@ -53,6 +53,16 @@ Proof
   gvs[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
   first_x_assum drule_all >> strip_tac >>
   simp[Once lower_dload_insts_supply_def, APPEND_ASSOC]
+QED
+
+Theorem dload_insts_supply_prefix_suc[local]:
+  !xs n q ps u i after.
+    n < LENGTH xs /\ i = EL n xs /\
+    lower_dload_insts_supply q (TAKE n xs) = (ps,u) /\
+    lower_dload_inst_supply u i = ([i],after) ==>
+    lower_dload_insts_supply q (TAKE (SUC n) xs) = (ps ++ [i],after)
+Proof
+  metis_tac[dload_insts_supply_prefix_emission]
 QED
 
 Theorem dload_active_at_block[local]:
@@ -66,6 +76,54 @@ Proof
   `lookup_block t.vs_current_bb g.fn_blocks = SOME bb'` by
     (irule MEM_lookup_block >> simp[]) >>
   gvs[]
+QED
+
+Theorem dload_control_emission_next_fields:
+  !q f g s t i xs s1 tN j.
+    dload_control_match q f g s t i xs 0 /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
+    s1.vs_current_bb = s.vs_current_bb /\ s1.vs_prev_bb = s.vs_prev_bb /\
+    s1.vs_inst_idx = s.vs_inst_idx /\
+    tN.vs_current_bb = t.vs_current_bb /\ tN.vs_prev_bb = t.vs_prev_bb /\
+    tN.vs_inst_idx = t.vs_inst_idx + LENGTH xs /\
+    active_inst g j tN ==>
+    ?i' emitted'.
+      dload_control_match q f g
+        (s1 with vs_inst_idx := SUC s.vs_inst_idx) tN i' emitted' 0 /\
+      j = HD emitted'
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `dload_control_match _ _ _ _ _ _ _ _` mp_tac >>
+  simp[dload_control_match_def] >> strip_tac >>
+  `?aq. lower_dload_blocks_supply q f.fn_blocks = (g.fn_blocks,aq)` by
+    (gvs[lower_dload_function_supply_def, AllCaseEqs()] >> metis_tac[]) >>
+  drule_all dload_blocks_supply_el >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `lower_dload_block_supply bs _ = (gb,_)` >>
+  `gb.bb_label = (EL bi f.fn_blocks).bb_label /\
+   ?aq. lower_dload_insts_supply bs (EL bi f.fn_blocks).bb_instructions =
+      (gb.bb_instructions,aq)` by
+    (qpat_x_assum `lower_dload_block_supply _ _ = _` mp_tac >>
+     simp[lower_dload_block_supply_def, AllCaseEqs()] >> strip_tac >> gvs[]) >>
+  `tN.vs_inst_idx < LENGTH gb.bb_instructions /\
+   j = EL tN.vs_inst_idx gb.bb_instructions` by
+    (drule dload_active_at_block >>
+     disch_then (qspecl_then [`tN`,`j`,`gb`] mp_tac) >>
+     simp[Abbr `gb`, EL_MEM]) >>
+  `lower_dload_insts_supply bs (TAKE (SUC s.vs_inst_idx)
+       (EL bi f.fn_blocks).bb_instructions) = (before ++ xs,after)` by
+    (irule dload_insts_supply_prefix_emission >> simp[] >> metis_tac[]) >>
+  `SUC s.vs_inst_idx <= LENGTH (EL bi f.fn_blocks).bb_instructions` by decide_tac >>
+  `LENGTH (before ++ xs) < LENGTH gb.bb_instructions` by simp[] >>
+  qpat_x_assum `lower_dload_insts_supply _ (TAKE s.vs_inst_idx _) = _` kall_tac >>
+  drule_all dload_insts_supply_at_prefix >> strip_tac >>
+  `j = HD emitted` by gvs[] >>
+  `0 < LENGTH emitted` by (Cases_on `emitted` >> gvs[]) >>
+  qexistsl [`EL (SUC s.vs_inst_idx) (EL bi f.fn_blocks).bb_instructions`,`emitted`] >>
+  simp[] >> qexistsl [`bi`,`before ++ xs`,`after`,`after'`] >>
+  simp[Abbr `bs`] >>
+  simp[active_inst_def] >> conj_tac
+  >- (qexists_tac `EL bi f.fn_blocks` >> simp[EL_MEM]) >>
+  qexists_tac `gb` >> simp[EL_MEM, Abbr `gb`]
 QED
 
 Theorem dload_control_singleton_next_fields:
@@ -84,37 +142,8 @@ Theorem dload_control_singleton_next_fields:
       j = HD emitted'
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `dload_control_match _ _ _ _ _ _ _ _` mp_tac >>
-  simp[dload_control_match_def] >> strip_tac >>
-  `?aq. lower_dload_blocks_supply q f.fn_blocks = (g.fn_blocks,aq)` by
-    (gvs[lower_dload_function_supply_def, AllCaseEqs()] >> metis_tac[]) >>
-  drule_all dload_blocks_supply_el >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `lower_dload_block_supply bs _ = (gb,_)` >>
-  `gb.bb_label = (EL bi f.fn_blocks).bb_label /\
-   ?aq. lower_dload_insts_supply bs (EL bi f.fn_blocks).bb_instructions =
-      (gb.bb_instructions,aq)` by
-    (qpat_x_assum `lower_dload_block_supply _ _ = _` mp_tac >>
-     simp[lower_dload_block_supply_def, AllCaseEqs()] >> strip_tac >> gvs[]) >>
-  `SUC t.vs_inst_idx < LENGTH gb.bb_instructions /\
-   j = EL (SUC t.vs_inst_idx) gb.bb_instructions` by
-    (drule dload_active_at_block >>
-     disch_then (qspecl_then [`t1 with vs_inst_idx := SUC t.vs_inst_idx`,`j`,`gb`] mp_tac) >>
-     simp[Abbr `gb`, EL_MEM]) >>
-  `lower_dload_insts_supply bs (TAKE (SUC s.vs_inst_idx)
-       (EL bi f.fn_blocks).bb_instructions) = (before ++ [i],after)` by
-    (irule dload_insts_supply_prefix_suc >> simp[] >> metis_tac[]) >>
-  `SUC s.vs_inst_idx <= LENGTH (EL bi f.fn_blocks).bb_instructions` by decide_tac >>
-  `LENGTH (before ++ [i]) < LENGTH gb.bb_instructions` by simp[] >>
-  qpat_x_assum `lower_dload_insts_supply _ (TAKE s.vs_inst_idx _) = _` kall_tac >>
-  drule_all dload_insts_supply_at_prefix >> strip_tac >>
-  `j = HD emitted` by gvs[arithmeticTheory.ADD1] >>
-  `0 < LENGTH emitted` by (Cases_on `emitted` >> gvs[]) >>
-  qexistsl [`EL (SUC s.vs_inst_idx) (EL bi f.fn_blocks).bb_instructions`,`emitted`] >>
-  simp[] >> qexistsl [`bi`,`before ++ [i]`,`after`,`after'`] >>
-  simp[Abbr `bs`, arithmeticTheory.ADD1] >>
-  simp[active_inst_def] >> conj_tac
-  >- (qexists_tac `EL bi f.fn_blocks` >> simp[EL_MEM, GSYM arithmeticTheory.ADD1]) >>
-  qexists_tac `gb` >> simp[EL_MEM, Abbr `gb`, GSYM arithmeticTheory.ADD1]
+  irule dload_control_emission_next_fields >>
+  simp[] >> qexistsl [`i`,`t`,`[i]`] >> simp[arithmeticTheory.ADD1]
 QED
 
 Theorem dload_control_singleton_next:
