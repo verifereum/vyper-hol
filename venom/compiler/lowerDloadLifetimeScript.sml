@@ -48,28 +48,30 @@ Theorem ld_site_entry_alloca:
   j.inst_outputs = [out'] /\
   exec_alloca i s n = OK s' /\ exec_alloca j t n = OK t' ==>
   ?bs bt sz.
-    ld_site_entry (E |+ ((frame,i.inst_id),(bs,bt,sz)))
-      (frame,i.inst_id) bs bt sz /\
+    ld_site_entry (E |+ (owner,(bs,bt,sz))) owner bs bt sz /\
     FLOOKUP s'.vs_allocas i.inst_id = SOME (bs,sz) /\
     FLOOKUP t'.vs_allocas j.inst_id = SOME (bt,sz) /\
     lookup_var out s' = SOME (n2w bs) /\
     lookup_var out' t' = SOME (n2w bt) /\
-    ld_ptr_rel bs bt (n2w bs) (n2w bt)
+    ld_ptr_rel bs bt (n2w bs) (n2w bt) /\
+    (!selected a b n. selected <> owner ==>
+      (ld_site_entry (E |+ (owner,(bs,bt,sz))) selected a b n <=>
+       ld_site_entry E selected a b n))
 Proof
   strip_tac >> drule_all ld_alloc_account_outputs >>
   strip_tac >> qexistsl [`bs`, `bt`, `sz`] >>
-  simp[ld_site_entry_def, FLOOKUP_UPDATE]
+  simp[ld_site_entry_update]
 QED
 
 (* A repeated instruction uses its saved selected instance: no fresh owner. *)
 Theorem ld_site_entry_alloca_repeated:
-  ld_site_entry E (frame,i.inst_id) bs bt sz /\
+  ld_site_entry E owner bs bt sz /\
   i.inst_id = j.inst_id /\ i.inst_outputs = [out] /\
   j.inst_outputs = [out'] /\
   FLOOKUP s.vs_allocas i.inst_id = SOME (bs,sz) /\
   FLOOKUP t.vs_allocas j.inst_id = SOME (bt,sz) /\
   exec_alloca i s n = OK s' /\ exec_alloca j t n = OK t' ==>
-  ld_site_entry E (frame,i.inst_id) bs bt sz /\
+  ld_site_entry E owner bs bt sz /\
   FLOOKUP s'.vs_allocas i.inst_id = SOME (bs,sz) /\
   FLOOKUP t'.vs_allocas j.inst_id = SOME (bt,sz) /\
   lookup_var out s' = SOME (n2w bs) /\
@@ -303,7 +305,8 @@ Theorem ld_alloca_successive_calls:
   (!k. k < 32 ==> s.vs_alloca_next + k IN new_site_bytes c2 v)
 Proof
   simp[setup_callee_def] >> strip_tac >>
-  gvs[exec_alloca_def, update_var_def, FLOOKUP_UPDATE] >>
+  `dimindex (:256) = 256` by CONV_TAC fcpLib.INDEX_CONV >>
+  gvs[exec_alloca_def, update_var_def, FLOOKUP_UPDATE, dimword_def] >>
   simp[merge_callee_state_def, new_site_bytes_def, FLOOKUP_UPDATE] >>
   rpt strip_tac >> disj1_tac >>
   qexistsl [`i.inst_id`, `s.vs_alloca_next`, `32`] >> simp[]
