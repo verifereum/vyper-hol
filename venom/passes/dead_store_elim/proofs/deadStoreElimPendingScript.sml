@@ -541,3 +541,49 @@ Proof
     fs[dse_inst_clobbers_def] >>
   drule_all dse_region_matches_contains >> simp[]
 QED
+
+Theorem dse_key_normalize_insert_filter:
+  dse_key_normalize (k::FILTER (\j. j <> k) ks) m =
+  dse_key_normalize (k::ks) m
+Proof
+  simp[FUN_EQ_THM, dse_key_normalize_apply, MEM_FILTER] >>
+  gen_tac >> Cases_on `x = k` >> simp[]
+QED
+
+Theorem dse_accounts_normalize_insert_filter:
+  dse_accounts_normalize c (k::FILTER (\j. j <> k) ks) A =
+  dse_accounts_normalize c (k::ks) A
+Proof
+  simp[dse_accounts_normalize_def, dse_key_normalize_insert_filter]
+QED
+
+Theorem dse_transient_normalize_insert_filter:
+  dse_transient_normalize c (k::FILTER (\j. j <> k) ks) ts =
+  dse_transient_normalize c (k::ks) ts
+Proof
+  simp[dse_transient_normalize_def, dse_key_normalize_insert_filter]
+QED
+
+Theorem dse_pending_space_sstore_insert_cover:
+  dse_pending_space AddrSp_Storage P s t /\ key_ok P ==>
+  dse_pending_space AddrSp_Storage
+    ((loc,(w2n k,1))::FILTER (\(loc,(a,n)). n2w a <> k) P) (sstore k v s) t
+Proof
+  strip_tac >> drule_all dse_pending_space_sstore_insert >>
+  disch_then (qspecl_then [`v`, `loc`, `k`] mp_tac) >>
+  simp[dse_pending_space_def, dse_pending_keys_def,
+       SRULE [dse_pending_keys_def] dse_pending_keys_filter,
+       dse_accounts_normalize_insert_filter]
+QED
+
+Theorem dse_pending_space_tstore_insert_cover:
+  dse_pending_space AddrSp_Transient P s t /\ key_ok P ==>
+  dse_pending_space AddrSp_Transient
+    ((loc,(w2n k,1))::FILTER (\(loc,(a,n)). n2w a <> k) P) (tstore k v s) t
+Proof
+  strip_tac >> drule_all dse_pending_space_tstore_insert >>
+  disch_then (qspecl_then [`v`, `loc`, `k`] mp_tac) >>
+  simp[dse_pending_space_def, dse_pending_keys_def,
+       SRULE [dse_pending_keys_def] dse_pending_keys_filter,
+       dse_transient_normalize_insert_filter]
+QED
