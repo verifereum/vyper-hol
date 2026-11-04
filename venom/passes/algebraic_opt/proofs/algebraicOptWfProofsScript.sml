@@ -202,12 +202,6 @@ Proof
   simp[ao_opt_eq_def]
 QED
 
-Theorem ao_opt_comparator_empty_probe[local]:
-  ao_opt_comparator dfg ra lbl idx fr (inst with inst_operands := []) = ARB
-Proof
-  simp[ao_opt_comparator_def]
-QED
-
 Theorem ao_opt_comparator_structure:
   LENGTH inst.inst_operands = 2 ==>
   MEM (MAP (\i. (i.inst_id, i.inst_opcode))
@@ -320,6 +314,165 @@ Proof
       strip_tac >> irule ao_inst_wf_comparator_arity >> simp[]) >>
   drule ao_opt_producer_structure >>
   Cases_on `x = []` >> simp[]
+QED
+
+Theorem ao_singleton_ids[local]:
+  LENGTH xs = 1 /\ EVERY (\i. i.inst_id = n /\ P i) xs ==>
+  MAP (\i. i.inst_id) xs = [n]
+Proof
+  Cases_on `xs` >> simp[] >> rename1 `LENGTH tail = 0` >>
+  Cases_on `tail` >> simp[]
+QED
+
+Theorem ao_peephole_inst_ids:
+  (MEM inst.inst_opcode [GT; LT; SGT; SLT] ==>
+   LENGTH inst.inst_operands = 2) ==>
+  MEM (MAP (\i. i.inst_id) (ao_peephole_inst dfg ra lbl idx fr inst))
+    [[inst.inst_id]; [FST (fr "not"); inst.inst_id];
+     [FST (fr "xor"); inst.inst_id]; [FST (fr "iz"); inst.inst_id];
+     [FST (fr "not"); FST (fr "iz"); inst.inst_id];
+     [FST (fr "xor"); FST (fr "iz"); inst.inst_id]]
+Proof
+  strip_tac >> simp[ao_peephole_inst_def] >>
+  IF_CASES_TAC >- simp[] >>
+  IF_CASES_TAC >- simp[] >>
+  IF_CASES_TAC >- (mp_tac ao_opt_shift_structure >>
+    disch_then (drule_then assume_tac ao_singleton_ids) >> simp[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_signextend_structure >>
+    disch_then (drule_then assume_tac ao_singleton_ids) >> simp[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_exp_structure >>
+    disch_then (drule_then assume_tac ao_singleton_ids) >> simp[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_addsub_structure >>
+    disch_then (drule_then assume_tac ao_singleton_ids) >> simp[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_and_structure >>
+    disch_then (drule_then assume_tac ao_singleton_ids) >> simp[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_muldiv_structure >>
+    disch_then (drule_then assume_tac ao_singleton_ids) >> simp[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_or_structure >>
+    disch_then (drule_then assume_tac ao_singleton_ids) >> simp[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_eq_structure >>
+    simp[] >> rpt strip_tac >> gvs[listTheory.MAP_EQ_CONS, listTheory.MAP_EQ_NIL]) >>
+  IF_CASES_TAC >- (`LENGTH inst.inst_operands = 2` by gvs[] >>
+    drule ao_opt_comparator_structure >>
+    disch_then (qspecl_then [`ra`, `lbl`, `idx`, `fr`, `dfg`] mp_tac) >>
+    simp[] >> rpt strip_tac >> gvs[listTheory.MAP_EQ_CONS, listTheory.MAP_EQ_NIL]) >>
+  simp[]
+QED
+
+Theorem ao_peephole_inst_classification:
+  (MEM inst.inst_opcode [GT; LT; SGT; SLT] ==>
+   LENGTH inst.inst_operands = 2) ==>
+  EVERY (\i. i.inst_opcode = inst.inst_opcode \/
+    MEM i.inst_opcode [ASSIGN; ISZERO; NOT; AND; SHR; SHL; EQ; XOR])
+    (ao_peephole_inst dfg ra lbl idx fr inst)
+Proof
+  strip_tac >> simp[ao_peephole_inst_def] >>
+  IF_CASES_TAC >- simp[] >>
+  IF_CASES_TAC >- simp[] >>
+  IF_CASES_TAC >- (mp_tac ao_opt_shift_structure >>
+    simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_signextend_structure >>
+    simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_exp_structure >>
+    simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_addsub_structure >>
+    simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_and_structure >>
+    simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_muldiv_structure >>
+    simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_or_structure >>
+    simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_eq_structure >>
+    simp[] >> rpt strip_tac >> gvs[listTheory.MAP_EQ_CONS, listTheory.MAP_EQ_NIL]) >>
+  IF_CASES_TAC >- (`LENGTH inst.inst_operands = 2` by gvs[] >>
+    drule ao_opt_comparator_structure >>
+    disch_then (qspecl_then [`ra`, `lbl`, `idx`, `fr`, `dfg`] mp_tac) >>
+    simp[] >> rpt strip_tac >> gvs[listTheory.MAP_EQ_CONS, listTheory.MAP_EQ_NIL]) >>
+  simp[]
+QED
+
+Theorem ao_transform_inst_classification:
+  inst_wf inst ==>
+  EVERY (\i. i.inst_opcode = inst.inst_opcode \/
+    MEM i.inst_opcode [ASSIGN; ISZERO; NOT; AND; SHR; SHL; EQ; XOR; SELFBALANCE])
+    (ao_transform_inst dfg ra lbl idx targets fr inst)
+Proof
+  strip_tac >> simp[ao_transform_inst_def] >>
+  IF_CASES_TAC >- simp[ao_resolve_iszero_inst_structure] >>
+  IF_CASES_TAC >- simp[ao_resolve_iszero_inst_structure] >>
+  Cases_on `ao_opt_producer dfg (ao_resolve_iszero_inst targets inst)` >> simp[]
+  >- (`MEM (ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)).inst_opcode
+          [GT; LT; SGT; SLT] ==>
+        LENGTH (ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)).inst_operands = 2`
+        by (simp[ao_pre_flip_inst_structure, ao_pre_flip_inst_arity,
+                 ao_resolve_iszero_inst_structure] >>
+            strip_tac >> irule ao_inst_wf_comparator_arity >> simp[]) >>
+      drule ao_peephole_inst_classification >>
+      disch_then (qspecl_then [`ra`, `lbl`, `idx`, `fr`, `dfg`] mp_tac) >>
+      simp[listTheory.EVERY_MAP, listTheory.EVERY_MEM,
+           ao_post_flip_inst_structure, ao_pre_flip_inst_structure,
+           ao_resolve_iszero_inst_structure] >> metis_tac[]) >>
+  drule ao_opt_producer_structure >>
+  simp[listTheory.EVERY_MAP, listTheory.EVERY_MEM,
+       ao_post_flip_inst_structure, ao_resolve_iszero_inst_structure] >>
+  metis_tac[]
+QED
+
+Theorem ao_transform_inst_nonphi:
+  inst_wf inst /\ inst.inst_opcode <> PHI ==>
+  EVERY (\i. i.inst_opcode <> PHI)
+    (ao_transform_inst dfg ra lbl idx targets fr inst)
+Proof
+  strip_tac >> drule ao_transform_inst_classification >>
+  disch_then (qspecl_then [`targets`, `ra`, `lbl`, `idx`, `fr`, `dfg`] mp_tac) >>
+  simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem ao_transform_inst_nonterminator:
+  inst_wf inst /\ ~is_terminator inst.inst_opcode ==>
+  EVERY (\i. ~is_terminator i.inst_opcode)
+    (ao_transform_inst dfg ra lbl idx targets fr inst)
+Proof
+  strip_tac >> drule ao_transform_inst_classification >>
+  disch_then (qspecl_then [`targets`, `ra`, `lbl`, `idx`, `fr`, `dfg`] mp_tac) >>
+  simp[listTheory.EVERY_MEM] >> disch_tac >> gen_tac >> disch_tac >>
+  qpat_x_assum `!i. MEM i _ ==> _` (qspec_then `i` mp_tac) >>
+  simp[] >> strip_tac >> gvs[is_terminator_def]
+QED
+
+Theorem ao_transform_inst_phi:
+  inst.inst_opcode = PHI ==>
+  ao_transform_inst dfg ra lbl idx targets fr inst =
+    [ao_resolve_iszero_inst targets inst]
+Proof
+  simp[ao_transform_inst_def, ao_resolve_iszero_inst_structure]
+QED
+
+Theorem ao_transform_inst_no_outputs:
+  inst.inst_outputs = [] ==>
+  ao_transform_inst dfg ra lbl idx targets fr inst =
+    [ao_resolve_iszero_inst targets inst]
+Proof
+  simp[ao_transform_inst_def, ao_resolve_iszero_inst_structure]
+QED
+
+Theorem ao_inst_wf_terminator_outputs:
+  inst_wf inst /\ is_terminator inst.inst_opcode ==>
+  inst.inst_outputs = []
+Proof
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def, inst_wf_def] >>
+  metis_tac[]
+QED
+
+Theorem ao_transform_inst_terminator:
+  inst_wf inst /\ is_terminator inst.inst_opcode ==>
+  ao_transform_inst dfg ra lbl idx targets fr inst =
+    [ao_resolve_iszero_inst targets inst]
+Proof
+  strip_tac >> irule ao_transform_inst_no_outputs >>
+  irule ao_inst_wf_terminator_outputs >> simp[]
 QED
 
 Theorem ao_preserves_wf_function_proof:
