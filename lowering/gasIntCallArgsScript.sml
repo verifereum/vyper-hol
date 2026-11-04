@@ -23,5 +23,23 @@ Theorem gas_exempt_intcall_args:
         (return ()))
       (es, s0) marks (err, ee) (leaf, finish)
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all eval_expr_intcall_args_factor >>
+  disch_then (qspecl_then [`ty`, `drv`] SUBST1_TAC) >>
+  qmatch_goalsub_abbrev_tac `ignore_bind (bind a k) (return ())` >>
+  `ignore_bind (bind a k) (return ()) =
+   bind a (\v. ignore_bind (k v) (return ()))` by
+    (simp[FUN_EQ_THM, ignore_bind_def] >> gen_tac >>
+     Cases_on `a x` >> Cases_on `q` >> simp[bind_def]) >>
+  pop_assum SUBST1_TAC >>
+  irule gas_exempt_cert_error_values >>
+  simp[Abbr `a`, SF ETA_ss]
 QED
+
+(* Check the frozen root's full proof ancestry, not only its final tactic. *)
+val () =
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag gas_exempt_intcall_args) in
+    if null (Thm.hyp gas_exempt_intcall_args) andalso null axioms andalso
+       List.all (fn s => s = "DISK_THM") oracles then ()
+    else raise Fail "gas_exempt_intcall_args: admitted dependency"
+  end;
