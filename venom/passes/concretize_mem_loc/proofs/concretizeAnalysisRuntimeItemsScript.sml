@@ -1,6 +1,6 @@
 Theory concretizeAnalysisRuntimeItems
 Ancestors concretizeAnalysisOpenCallSummary concretizeAnalysisStageSizes
-  concretizeAnalysisOwnership
+  concretizeAnalysisOwnership concretizeAnalysisCollection frameHistoryCfg
   concretizeAnalysisSizes staticLayoutAllocatorProofs concretizeMemLocDefs
   frameActivationCache frameJointTransition frameJointTrace frameOriginHistory
   frameOriginReachable frameExecutionHistory frameAllocationSizes
@@ -51,6 +51,37 @@ Proof
   `MEM (EL (LENGTH l - SUC d) l) l` by metis_tac[EL_MEM] >>
   drule_all o1_frame_source_sizes_saved >>
   metis_tac[cache_sizes_ok_lookup]
+QED
+
+Theorem activation_cache_source_static_item:
+  joint_config_reachable vs0 C q /\ o1_run_state_ok vs0 /\
+  o1_ctx_shape C /\ ctx_inst_ids_distinct C /\
+  activation_cache q d owner aid (b,sz) /\ b <= byte /\ byte < b + sz ==>
+  ?items. static_alloca_items owner = SOME items /\
+    MEM (Allocation aid,sz) items
+Proof
+  strip_tac >>
+  `EVERY (\f. fn_inst_wf f /\ fn_inst_ids_distinct f) C.ctx_functions` by
+    (gvs[EVERY_MEM, o1_ctx_shape_def] >> rpt strip_tac >>
+     metis_tac[o1_fn_shape_def, source_member_ids_distinct]) >>
+  `EVERY wf_function C.ctx_functions` by
+    (gvs[EVERY_MEM, o1_ctx_shape_def] >> metis_tac[o1_fn_shape_def]) >>
+  `MEM owner C.ctx_functions` by
+    (Cases_on `q` >> gvs[joint_config_reachable_def] >>
+     drule joint_origin_history_erasure >> strip_tac >>
+     drule origin_frame_erasure >> strip_tac >>
+     drule frame_reachable_has_history >> strip_tac >>
+     drule_all frame_history_cfg_invariant >> strip_tac >>
+     qpat_x_assum `activation_cache _ _ _ _ _` mp_tac >>
+     simp[activation_cache_def] >> strip_tac >> gvs[] >>
+     gvs[LIST_REL_EL_EQN] >>
+     `LENGTH l - SUC d < LENGTH l` by decide_tac >> metis_tac[]) >>
+  drule_all source_static_alloca_items_total >> strip_tac >>
+  goal_assum (drule_at (Pat `static_alloca_items _ = _`)) >>
+  irule activation_cache_static_item >>
+  goal_assum (drule_at (Pat `joint_config_reachable _ _ _`)) >>
+  goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem joint_open_call_runtime_summary:
