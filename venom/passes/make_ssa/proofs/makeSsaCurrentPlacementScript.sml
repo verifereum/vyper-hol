@@ -558,3 +558,134 @@ Proof
   gvs[current_var_mark_def, current_insert_phi_changes] >>
   metis_tac[current_insert_phi_changes]
 QED
+
+Theorem current_var_mark_dead_step:
+  ~current_placement_live li v f ==>
+  LIST_REL (current_var_mark li v hp (f::hp)) bbs bbs
+Proof
+  simp[LIST_REL_EL_EQN, current_var_mark_def] >> metis_tac[]
+QED
+
+Theorem current_process_frontiers_mark:
+  !fs s v pm li bbs rest hp bbs' rest' hp' s'.
+    process_frontiers_supply s v pm li bbs rest hp fs =
+      (bbs',rest',hp',s') ==>
+    LIST_REL (current_var_mark li v hp hp') bbs bbs'
+Proof
+  Induct >- simp[process_frontiers_supply_def, LIST_REL_EL_EQN,
+                 current_var_mark_refl] >>
+  pop_assum $ mk_asm "ih" >> rpt gen_tac >>
+  simp[process_frontiers_supply_def, GSYM current_placement_live_lookup] >>
+  Cases_on `MEM h hp` >> simp[]
+  >- (strip_tac >> asm "ih" drule >> simp[]) >>
+  Cases_on `current_placement_live li v h` >> simp[]
+  >- (pairarg_tac >> simp[] >> strip_tac >>
+      drule current_process_frontiers_processed >> strip_tac >>
+      asm "ih" drule >> strip_tac >>
+      irule current_var_mark_list_compose >>
+      qexists_tac `h::hp` >> goal_assum $ drule_at Any >> simp[] >>
+      irule current_var_mark_map_step >> simp[]) >>
+  strip_tac >> drule current_process_frontiers_processed >> strip_tac >>
+  asm "ih" drule >> strip_tac >>
+  irule current_var_mark_list_compose >>
+  qexists_tac `h::hp` >> goal_assum $ drule_at Any >> simp[] >>
+  irule current_var_mark_dead_step >> simp[]
+QED
+
+Theorem current_insert_var_mark:
+  !s v df pm li bbs work hp bbs' s'.
+    insert_phis_for_var_supply s v df pm li bbs work hp = (bbs',s') /\
+    current_placement_work_inv df li v roots hp work /\ ALL_DISTINCT hp ==>
+    ?final. current_placement_work_inv df li v roots final [] /\
+      ALL_DISTINCT final /\ (!x. MEM x hp ==> MEM x final) /\
+      LIST_REL (current_var_mark li v hp final) bbs bbs'
+Proof
+  recInduct insert_phis_for_var_supply_ind >> rpt strip_tac
+  >- (gvs[insert_phis_for_var_supply_def] >> qexists_tac `has_phi` >>
+      simp[LIST_REL_EL_EQN, current_var_mark_refl]) >>
+  gvs[Once insert_phis_for_var_supply_def] >> pairarg_tac >> gvs[] >>
+  drule_all current_process_frontiers_distinct >> strip_tac >>
+  `current_placement_work_inv dom_frontiers live_in var roots has_phi' rest'` by
+    (irule current_process_frontiers_work_inv >>
+     goal_assum $ drule_at Any >> qexists_tac `d` >>
+     simp[current_frontier_edge_lookup]) >>
+  drule current_placement_work_inv_filter >> strip_tac >>
+  drule current_process_frontiers_processed >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  qexists_tac `final` >> simp[] >>
+  irule current_var_mark_list_compose >>
+  qexists_tac `has_phi'` >> goal_assum $ drule_at Any >> simp[] >>
+  irule current_process_frontiers_mark >> goal_assum $ drule_at Any
+QED
+
+Theorem current_insert_var_physical:
+  insert_phis_for_var_supply s v df pm li bbs roots [] = (bbs',s') ==>
+  LIST_REL (\a b. current_var_prefix pm li v [] a b /\
+    (a <> b <=> current_pruned_reach df li v roots a.bb_label)) bbs bbs'
+Proof
+  strip_tac >> drule current_insert_var_mark >>
+  disch_then (qspec_then `roots` mp_tac) >>
+  simp[current_placement_work_inv_initial] >> strip_tac >>
+  drule current_placement_work_inv_final >> strip_tac >>
+  drule current_insert_var_prefix >> strip_tac >>
+  gvs[LIST_REL_EL_EQN, current_var_mark_def, MEM_FILTER] >>
+  metis_tac[]
+QED
+
+Definition current_defs_placement_def:
+  (current_defs_placement df pm li [] bbs bbs' <=> bbs' = bbs) /\
+  (current_defs_placement df pm li ((v,roots)::defs) bbs bbs' <=>
+    ?mid. LIST_REL (\a b. current_var_prefix pm li v [] a b /\
+      (a <> b <=> current_pruned_reach df li v roots a.bb_label)) bbs mid /\
+      current_defs_placement df pm li defs mid bbs')
+End
+
+Theorem current_add_phi_nodes_placement:
+  !defs s df pm li bbs bbs' s'.
+    add_phi_nodes_supply s df pm li bbs defs = (bbs',s') ==>
+    current_defs_placement df pm li defs bbs bbs'
+Proof
+  Induct >- simp[add_phi_nodes_supply_def, current_defs_placement_def] >>
+  Cases_on `h` >> rpt gen_tac >> simp[add_phi_nodes_supply_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  drule current_insert_var_physical >> strip_tac >>
+  simp[current_defs_placement_def] >> goal_assum $ drule_at Any >>
+  first_x_assum irule >> goal_assum $ drule_at Any
+QED
+
+Theorem current_phi_prefix_refl[simp]:
+  current_phi_prefix pm vars bb bb
+Proof
+  simp[current_phi_prefix_def] >> qexists_tac `[]` >> simp[]
+QED
+
+Theorem current_phi_prefix_compose:
+  current_phi_prefix pm xs a b /\ current_phi_prefix pm ys b c ==>
+  current_phi_prefix pm (xs ++ ys) a c
+Proof
+  simp[current_phi_prefix_def] >> rpt strip_tac >> gvs[] >>
+  qexists_tac `pre' ++ pre` >> simp[EVERY_APPEND] >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem current_phi_prefix_list_compose:
+  LIST_REL (current_phi_prefix pm xs) as bs /\
+  LIST_REL (current_phi_prefix pm ys) bs cs ==>
+  LIST_REL (current_phi_prefix pm (xs ++ ys)) as cs
+Proof
+  map_every qid_spec_tac [`cs`, `bs`] >>
+  Induct_on `as` >> Cases_on `bs` >> Cases_on `cs` >> simp[] >>
+  rpt strip_tac >- metis_tac[current_phi_prefix_compose] >> metis_tac[]
+QED
+
+Theorem current_defs_placement_prefix:
+  !defs bbs bbs'. current_defs_placement df pm li defs bbs bbs' ==>
+  LIST_REL (current_phi_prefix pm (MAP FST defs)) bbs bbs'
+Proof
+  Induct >- simp[current_defs_placement_def, LIST_REL_EL_EQN] >>
+  Cases_on `h` >> simp[current_defs_placement_def] >> rpt strip_tac >>
+  `LIST_REL (current_phi_prefix pm [q]) bbs mid` by
+    (gvs[LIST_REL_EL_EQN] >> metis_tac[current_var_prefix_provenance]) >>
+  first_x_assum drule >> strip_tac >>
+  drule_all current_phi_prefix_list_compose >> simp[]
+QED
