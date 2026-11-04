@@ -2,7 +2,7 @@
    provenance, but an inserted scratch allocation can separate them. *)
 Theory o1LowerDloadZeroAllocProbe
 Ancestors
-  venomExecSemantics venomState venomInst ptrDiscipline words o1PassContract unitShapeDefs pointerConfinedDefs While
+  venomExecSemantics venomState venomInst ptrDiscipline words o1PassContract unitShapeDefs pointerConfinedDefs While unitTransformDefs lowerDloadDefs byte
 
 (* Shared concrete syntax, not a new logical definition. *)
 val zero_alias_fn = ``mk_raw_function "entry"
@@ -136,4 +136,88 @@ Proof
   qexistsl [`^zero_alias_unit`, `^zero_alias_supply`, `^zero_alias_out`] >>
   simp[zero_alias_pass_step, any_view_def, ctx_fn_names_def,
        mk_venom_context_def]
+QED
+
+val zero_alias_v = ``(init_venom_state "entry") with
+  vs_labels := FEMPTY |+ ("code_end", (0w:bytes32))``;
+
+Theorem zero_alias_run_state_ok:
+  o1_run_state_ok ^zero_alias_v
+Proof
+  simp[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def,
+       lowerDloadDefsTheory.code_layout_valid_def, init_venom_state_def] >>
+  EVAL_TAC
+QED
+
+val za_i0 = ``<| inst_id := 0; inst_opcode := ALLOCA;
+  inst_operands := [Lit (0w:bytes32)]; inst_outputs := ["p"] |>``;
+val za_i1 = ``<| inst_id := 1; inst_opcode := DLOAD;
+  inst_operands := [Lit (0w:bytes32)]; inst_outputs := ["x"] |>``;
+val za_i2 = ``<| inst_id := 2; inst_opcode := ALLOCA;
+  inst_operands := [Lit (0w:bytes32)]; inst_outputs := ["q"] |>``;
+val za_i3 = ``<| inst_id := 3; inst_opcode := EQ;
+  inst_operands := [Var "p"; Var "q"]; inst_outputs := ["e"] |>``;
+val za_i4 = ``<| inst_id := 4; inst_opcode := ASSERT;
+  inst_operands := [Var "e"]; inst_outputs := [] |>``;
+val za_i5 = ``<| inst_id := 5; inst_opcode := STOP;
+  inst_operands := []; inst_outputs := [] |>``;
+val za_s0 = zero_alias_v;
+val za_u0 = ``^za_s0 with <|
+  vs_vars := FEMPTY |+ ("p", (0w:bytes32));
+  vs_allocas := FEMPTY |+ (0,(0,0)) |>``;
+val za_s1 = ``^za_u0 with vs_inst_idx := 1``;
+val za_u1 = ``^za_s1 with vs_vars :=
+  FEMPTY |+ ("p", (0w:bytes32)) |+ ("x", (0w:bytes32))``;
+val za_s2 = ``^za_u1 with vs_inst_idx := 2``;
+val za_u2 = ``^za_s2 with <|
+  vs_vars := FEMPTY |+ ("p", (0w:bytes32)) |+ ("x", (0w:bytes32))
+                    |+ ("q", (0w:bytes32));
+  vs_allocas := FEMPTY |+ (0,(0,0)) |+ (2,(0,0)) |>``;
+val za_s3 = ``^za_u2 with vs_inst_idx := 3``;
+val za_u3 = ``^za_s3 with vs_vars :=
+  FEMPTY |+ ("p", (0w:bytes32)) |+ ("x", (0w:bytes32))
+         |+ ("q", (0w:bytes32)) |+ ("e", (1w:bytes32))``;
+val za_s4 = ``^za_u3 with vs_inst_idx := 4``;
+val za_u4 = za_s4;
+val za_s5 = ``^za_u4 with vs_inst_idx := 5``;
+
+Theorem zero_alias_step0:
+  step_inst fuel ^zero_alias_ctx ^za_i0 ^za_s0 = OK ^za_u0
+Proof
+  EVAL_TAC >> simp[dimword_def] >>
+  CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >> simp[]
+QED
+
+Theorem zero_alias_step1:
+  step_inst fuel ^zero_alias_ctx ^za_i1 ^za_s1 = OK ^za_u1
+Proof
+  EVAL_TAC >> simp[dimword_def] >>
+  CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >> simp[]
+QED
+
+Theorem zero_alias_step2:
+  step_inst fuel ^zero_alias_ctx ^za_i2 ^za_s2 = OK ^za_u2
+Proof
+  EVAL_TAC >> simp[dimword_def] >>
+  CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >> simp[]
+QED
+
+Theorem zero_alias_step3:
+  step_inst fuel ^zero_alias_ctx ^za_i3 ^za_s3 = OK ^za_u3
+Proof
+  EVAL_TAC >> simp[dimword_def] >>
+  CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >> simp[]
+QED
+
+Theorem zero_alias_step4:
+  step_inst fuel ^zero_alias_ctx ^za_i4 ^za_s4 = OK ^za_u4
+Proof
+  EVAL_TAC
+QED
+
+Theorem zero_alias_step5:
+  step_inst fuel ^zero_alias_ctx ^za_i5 ^za_s5 =
+    Halt (halt_state (^za_s5 with vs_returndata := []))
+Proof
+  EVAL_TAC
 QED
