@@ -342,3 +342,49 @@ holbuild lowerDloadPtrSupportTheory (TO_ld_ptr_v2-20261104T033958Z_m1510_t001).
 
 None of these source-only closures supplies paired opaque definedness,
 post-expansion memory transport, scratch budget or saved suffix layout.
+
+## Parallel PHI definedness boundary (C1.12.3.5)
+
+Checked in `lowerDloadPtrPhiTheory`: `eval_operand_definedness`,
+`update_var_definedness`, `eval_one_phi_definedness`, and
+`eval_phis_definedness`. No new definitions. Exact main signature:
+
+```sml
+!xs V s t t'.
+  s.vs_prev_bb = t.vs_prev_bb /\ s.vs_labels = t.vs_labels /\
+  (!i v. MEM i xs /\ MEM (Var v) i.inst_operands ==> v IN V) /\
+  (!v. v IN V ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+  eval_phis t xs = OK t' ==>
+  ?s'. eval_phis s xs = OK s' /\
+       (!v. v IN V ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE))
+```
+
+The single-PHI boundary requires the same predecessor and label map,
+input-variable NONE equivalence for variables in that instruction's operands,
+and `eval_one_phi t i = SOME (out,b)`; it returns an `a` with
+`eval_one_phi s i = SOME (out,a)`. Successful target evaluation excludes
+malformed output lists, missing predecessors, unresolved PHIs and undefined
+selected operands. The scalar values need not agree. Paired update_var writes
+the same output name but arbitrary differing values, preserving NONE equivalence
+on any V. The list proof keeps the original input states fixed while evaluating
+the tail, then applies the paired write boundary.
+
+### Premise origins for future consumers (not full consumer proofs)
+
+| Premise | Initial entry | Later block entry |
+|---|---|---|
+| Matching predecessor | Both entry setup states explicitly set vs_prev_bb to NONE. Exact paired entry construction still to be integrated. | Needs matched branch destinations and originating block labels from the paired control invariant. Not supplied by source support. |
+| Equal label maps | Common starting state gives equality; matched function labels are available from lower_dload_function_supply_labels when constructing callee setup. Setup/control reconstruction remains unproved here. | Must be retained across paired transitions and setup/returns. No derivation from provenance domain support. |
+| Identical PHI list/prefix | Actual supply expansion leaves PHI instructions unchanged and expands DLOAD/DLOADBYTES to non-PHIs; this still needs a common-prefix equality boundary for corresponding selected blocks. | Same missing common-prefix equality boundary, using actual block transform witnesses and lookup correspondence. |
+| Input coverage in V | Choose V to contain all original operand and output variable names, INCLUDING retpc variables. For an original PHI prefix coverage follows from instruction membership. | Same syntactic membership argument, once the common prefix is identified. |
+| Input NONE equivalence on V | Identical initial variables establish this before entry PHIs. Paired setup at INVOKE is a separate unfinished obligation. | Must be maintained inductively on ALL original V, including opaque variables. Existing boundary_core does not imply it. |
+| Successful target eval_phis | Invert the target enters_block witness. | Invert target enters_block after the matched terminator. |
+
+Inspected `lower_dload_function_supply_phi` in StaticTheory, lines 486-490:
+it preserves `phi_pv_all_var` given covering supply and static pointer-use
+hypotheses. It is NOT a PHI-prefix equality or successful eval_phis theorem.
+Likewise `lower_dload_insts_supply_phi_prefix` in o1ContractLowerDloadTheory
+preserves the PHI-prefix ordering property, NOT equality of prefixes. Neither
+may be substituted for the still-missing common-prefix correspondence origin.
+This checkpoint proves definedness/success transport only, not dload_vars_match,
+provenance/taint coupling, saved suffix layouts or whole enters_block transport.
