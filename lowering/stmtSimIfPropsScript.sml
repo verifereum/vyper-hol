@@ -76,70 +76,8 @@ Proof
   rpt IF_CASES_TAC >> gvs[stmt_res_ok_def, no_control_exc_def] >> metis_tac[]
 QED
 
-Theorem eval_expr_switch_forced:
-  !cx e es kt kf.
-    bind (eval_expr cx e) (\raw. switch_BoolV cx raw kt kf) es =
-    (case (do raw <- eval_expr cx e; read_result cx raw od) es of
-       (INR ex, s) => (INR ex, s)
-     | (INL v, s) => if v = BoolV T then kt s
-                    else if v = BoolV F then kf s
-                    else raise (Error (TypeError "not BoolV")) s)
-Proof
-  rpt gen_tac >> simp[switch_BoolV_def, bind_def] >>
-  Cases_on `eval_expr cx e es` >> rename1 `_ = (raw, est)` >>
-  Cases_on `raw` >> simp[] >>
-  rename1 `eval_expr cx e es = (INL captured, est)` >>
-  Cases_on `read_result cx captured est` >> rename1 `_ = (forced, esf)` >>
-  Cases_on `forced` >> simp[] >> rpt IF_CASES_TAC >> simp[]
-QED
 
-Theorem eval_assert_forced_parts:
-  !cx e ak es res es'.
-    (ak = AssertBare \/ ak = AssertUnreachable) /\
-    eval_stmt cx (Assert e ak) es = (res, es') ==>
-    ?r s. (do raw <- eval_expr cx e; read_result cx raw od) es = (r,s) /\
-      (case r of INR ex => (INR ex,s)
-       | INL v => if v = BoolV T then (INL (),s)
-                  else if v = BoolV F then
-                    (INR (AssertException
-                      (if ak = AssertBare then "" else "UNREACHABLE")),s)
-                  else (INR (Error (TypeError "not BoolV")),s)) = (res,es')
-Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, eval_expr_switch_forced] >>
-  Cases_on `(do raw <- eval_expr cx e; read_result cx raw od) es` >>
-  rename1 `_ = (forced,sf)` >>
-  simp[return_def, raise_def] >> Cases_on `forced` >> simp[]
-QED
 
-Theorem eval_assert_forced_ok:
-  !cx e ak es res es' lctx.
-    (ak = AssertBare \/ ak = AssertUnreachable) /\
-    eval_stmt cx (Assert e ak) es = (res, es') /\
-    stmt_res_ok lctx res ==>
-    ?r s. (do raw <- eval_expr cx e; read_result cx raw od) es = (r,s) /\
-      expr_res_ok r /\ (!v. r = INL v ==> ?b. v = BoolV b) /\
-      (case r of INR ex => (INR ex,s)
-       | INL v => if v = BoolV T then (INL (),s)
-                  else if v = BoolV F then
-                    (INR (AssertException
-                      (if ak = AssertBare then "" else "UNREACHABLE")),s)
-                  else (INR (Error (TypeError "not BoolV")),s)) = (res,es')
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_at Any eval_assert_forced_parts >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  `!exc. r = INR exc ==> no_control_exc exc` by
-    (rpt strip_tac >> gvs[] >>
-     qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
-     simp[bind_def] >> Cases_on `eval_expr cx e es` >>
-     rename1 `_ = (raw,est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
-     metis_tac[read_result_no_control, cj 1 eval_expr_no_control]) >>
-  qexistsl_tac [`r`,`s`] >> simp[] >>
-  Cases_on `r` >> gvs[expr_res_ok_def, AllCaseEqs()] >>
-  rpt IF_CASES_TAC >> gvs[stmt_res_ok_def, no_control_exc_def] >> metis_tac[]
-QED
 
 Theorem eval_stmt_if_all:
   !cx c ss1 ss2 es res es'.
