@@ -2,7 +2,7 @@
 Theory lowerDloadSafetyBoundary
 Ancestors
   o1PassContract unitTransformDefs unitShapeDefs lowerDloadRelocationBoundary
-  ptrDiscipline finite_map list
+  ptrDiscipline finite_map list fcgDefs
 
 Theorem lower_dload_initial_allocations:
   o1_run_state_ok s ==>
@@ -174,4 +174,102 @@ QED
 
    These equations validate the proposed ghost interface only. They are not
    a provenance-completeness induction or a paired execution proof.
+*)
+
+Theorem list_precedes_transitive:
+  !xs x y z.
+    list_precedes x y xs /\ list_precedes y z xs ==>
+    list_precedes x z xs
+Proof
+  simp[list_precedes_iff] >> rpt strip_tac >> gvs[] >>
+  qexistsl_tac [`i`, `j'`] >> simp[] >> decide_tac
+QED
+
+Theorem list_precedes_distinct:
+  !xs x y. list_precedes x y xs ==> x <> y
+Proof
+  simp[list_precedes_iff] >> rpt strip_tac >> gvs[]
+QED
+
+(* C1.11.c stack charging and prefix interface diagnostic.
+
+   Strict stack invariant proposed for frame_reachable vs C stk PG G tn fn i s:
+     EVERY (\f. MEM f.cf_fn C.ctx_functions) stk /\
+     MEM fn C.ctx_functions /\
+     (!k. k < LENGTH stk ==>
+         list_precedes fn.fn_name (EL k stk).cf_fn.fn_name names) /\
+     (!j k. j < k /\ k < LENGTH stk ==>
+         list_precedes (EL j stk).cf_fn.fn_name
+                       (EL k stk).cf_fn.fn_name names).
+   Stack order is most recent caller first; function names increase with
+   stack index. On call, callee_first gives callee BEFORE current caller,
+   not after. list_precedes_transitive propagates this to older frames;
+   list_precedes_distinct excludes recursive active-name reuse. On return
+   remove the active callee and the top caller record, restoring that caller.
+   Membership must come from lookup_function and context shape, not from
+   list_precedes alone. A general frame_reachable stack invariant remains
+   to be proved; these two checked order lemmas validate its order boundary.
+
+   Scratch accounting: for each active frame f keep E_f, the set of DLOAD
+   source ids whose private ALLOCA has already executed successfully in f.
+   Charge q = SUM (MAP CARD E_f) over the active frame and suspended callers.
+   Current frontier equation t.next = s.next + 32*q uses ALL these charges,
+   because setup_callee inherits the current frontier. Each suspended caller
+   separately stores its prefix q_at_push and its two saved frontiers.
+   - first scratch at d: E_f'=E_f UNION {d}, q'=q+1;
+   - reused scratch at d: E_f'=E_f, q'=q;
+   - new original ALLOCA: both frontiers increase by identical size, q'=q;
+   - push: E_new={}, q'=q, new frame map empty;
+   - pop: restore caller saved frontiers and q_at_push, discard callee E;
+     this is NOT subtraction from an arbitrary current cumulative count.
+   Distinct active names and per-function distinct source ids give injection
+   of charged pairs into context DLOAD occurrences, hence q<=ctx_dload_count C.
+   Repeated sibling calls reuse bytes but do not accumulate active charges.
+   Headroom at the matching source state gives t.next<dimword(:256).
+
+   Target phase table (positions BEFORE executing active instruction).
+   Let source inst d be active in frame_reachable at s; let p be its lowered
+   start index, with fresh vars a,z and fresh ids ai,zi,ci,mi from supply.
+   For DLOAD [off] [out]:
+     phase 0: index p,   ALLOCA ai [32] [a]; source witness s before d.
+       Frontier equation with current E, scratch may already be allocated.
+     phase 1: index p+1, ADD zi [off;Label code_end] [z]; same source s.
+       Scratch has recorded base c and size 32, c+32<=t.next; E includes d.
+     phase 2: index p+2, CODECOPY ci [a;z;32] []; same source s.
+       eval a=n2w c, eval z=n2w (off+code boundary), source offset bound
+       prevents code-address wrap. Scratch disjointness/taint masks retained.
+     phase 3: index p+3, MLOAD mi [a] [out]; same source s.
+       Scratch now contains the 32 bytes read by source DLOAD; its read
+       access is below frontier even before proving output equality.
+     successor: source executes d OK s', target executes MLOAD OK t';
+       compare successor indices and step_taint/provenance at phase 0.
+   For DLOADBYTES [dst;off;n]:
+     phase 0: p, ADD [off;Label code_end] [z], witness before source d.
+     phase 1: p+1, CODECOPY [dst;z;n], same source s, computed z bound;
+       dst is translated by selected identity or is fixed-region scalar;
+       source access_ok supplies destination site containment when needed.
+     successor: source DLOADBYTES OK s', target CODECOPY OK t', phase 0.
+   Other instructions: phase 0 only. Malformed expansion envelopes are
+   unchanged by supply, but context shape should exclude them; do not infer
+   shape solely from the opcode. Structural origin uses C1.1 facts.
+
+   Prefix induction required by mem_inv_raw_reachable is raw_reachable_ind
+   in contextRawReachable, instantiated at the TARGET context and vs0.
+   Its four rules are entry, next (including atomic successful INVOKE),
+   block, and callee. A next rule with INVOKE steps an entire callee run,
+   so stack-phase reasoning alone is insufficient: successful callee-run
+   preservation must be a separate boundary, typically by fuel induction.
+   Alternative: establish frame_reachable target coverage then prove its
+   erasure covers raw_reachable, including that atomic INVOKE-next rule.
+   Source-to-target terminating simulation does not imply either route.
+   At every phase, prove raw_mem_ok at the active state even if its next
+   step errors; an Error has no successor but the current access still
+   belongs to raw_reachable. A matched source error cannot justify skipping
+   target active-state safety. For source progress at the final phase need
+   operand agreement/definedness, not merely successful target execution.
+
+   Outstanding precise boundary: simultaneous target fuel/run coverage
+   and prefix induction with explicit caller restoration, plus general
+   active-stack order/charge preservation. No such theorem is asserted by
+   this finite phase and arithmetic diagnostic.
 *)
