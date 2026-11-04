@@ -242,23 +242,27 @@ Theorem joint_activation_used_past_generator:
   EL n (q0::qs) = JointConfig stk0 PG0 G0 tn0 fn inst0 s0 oms0 om0 hs0 h0 /\
   active_inst fn inst0 s0 /\ ml_used_gen a bp mems inst0 /\ LENGTH stk0 = d /\
   (!k. n <= k /\ k <= j ==> d <= activation_depth (EL k (q0::qs))) /\
-  EL j (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\ LENGTH stk = d ==>
-  MEM a (ml_lookup us (s.vs_current_bb,s.vs_inst_idx))
+  activation_location (EL j (q0::qs)) d fn p ==>
+  MEM a (ml_lookup us p)
 Proof
   strip_tac >>
   `activation_location (EL n (q0::qs)) d fn (s0.vs_current_bb,s0.vs_inst_idx)` by
     gvs[activation_location_def] >>
   `!k. activation_guard (EL k (q0::qs)) d (\inst. T)` by
     (gen_tac >> Cases_on `EL k (q0::qs)` >> simp[activation_guard_def]) >>
-  `ml_indexed_path fn (\inst. T) (s0.vs_current_bb,s0.vs_inst_idx)
-      (s.vs_current_bb,s.vs_inst_idx)` by
-    (irule joint_activation_current_path >> metis_tac[]) >>
+  `ml_indexed_path fn (\inst. T) (s0.vs_current_bb,s0.vs_inst_idx) p` by
+    (`?p'. activation_location (EL j (q0::qs)) d fn p' /\
+        ml_indexed_path fn (\inst. T) (s0.vs_current_bb,s0.vs_inst_idx) p'` by
+       (irule joint_activation_location_interval >> simp[] >>
+        conj_tac >- (qexists_tac `n` >> simp[]) >>
+        goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[]) >>
+     Cases_on `EL j (q0::qs)` >> gvs[activation_location_def]) >>
   fs[active_inst_def] >>
   irule ml_production_used_past_generator >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem write_ops_operand[local]:
+Theorem write_ops_operand:
   mem_write_ops inst = SOME ops ==>
   MEM ops.iao_ofst inst.inst_operands /\ inst.inst_opcode <> PHI /\
   inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode

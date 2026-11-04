@@ -1,6 +1,6 @@
 Theory concretizeAnalysisOwnership
 Ancestors
-  concretizeAnalysisSizes o1ScheduleDecomp fcgDefs mem2varProofs
+  concretizeAnalysisSizes o1ScheduleDecomp o1PassContract fcgDefs mem2varProofs
   relation list words arithmetic venomWf venomInst removeUnusedSsaProofs
   mem2varBlockSimHelpers pair
 
