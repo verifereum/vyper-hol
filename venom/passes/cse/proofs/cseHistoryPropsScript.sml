@@ -1498,3 +1498,84 @@ Proof
  first_x_assum (qspec_then `pre ++ d::tail` mp_tac) >>
  fs[APPEND]
 QED
+
+(* Syntactic PHI expansion shares one atomic event number. NONE denotes
+   padding, not an executed instruction. The final cursor is separate. *)
+Definition cse_event_points_def:
+ (cse_event_points j (CsePhi n bb s t) =
+   GENLIST (\k. ((bb.bb_label,k),SOME (j,k)))
+     (phi_prefix_length bb.bb_instructions)) /\
+ (cse_event_points j (CseStep n bb inst s t) =
+   [((bb.bb_label,s.vs_inst_idx),SOME (j,s.vs_inst_idx))] ++
+   if is_terminator inst.inst_opcode
+   then [((bb.bb_label,LENGTH bb.bb_instructions),NONE)] else [])
+End
+
+Definition cse_history_points_def:
+ (cse_history_points j [] = []) /\
+ (cse_history_points j (ev::events) =
+   cse_event_points j ev ++ cse_history_points (SUC j) events)
+End
+
+Definition cse_phase_point_def:
+ (cse_phase_point (CseRun n s) = (s.vs_current_bb,s.vs_inst_idx)) /\
+ (cse_phase_point (CseExec n bb s) = (bb.bb_label,s.vs_inst_idx))
+End
+
+Definition cse_project_trace_def:
+ cse_project_trace events phase =
+   MAP FST (cse_history_points 0 events) ++ [cse_phase_point phase]
+End
+
+Theorem cse_history_points_append:
+ !xs j ys. cse_history_points j (xs ++ ys) =
+ cse_history_points j xs ++ cse_history_points (j + LENGTH xs) ys
+Proof
+ Induct >> simp[cse_history_points_def] >> rpt gen_tac >>
+ simp[listTheory.APPEND_ASSOC, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem cse_project_trace_last:
+ LAST (cse_project_trace events phase) = cse_phase_point phase
+Proof
+ simp[cse_project_trace_def]
+QED
+
+Theorem cse_event_points_index:
+ !ev start p j k. MEM (p,SOME (j,k)) (cse_event_points start ev) ==>
+ j = start
+Proof
+ Cases >> simp[cse_event_points_def, MEM_GENLIST] >> rpt gen_tac >>
+ Cases_on `is_terminator i.inst_opcode` >> simp[] >> metis_tac[]
+QED
+
+Theorem cse_history_points_occurrence:
+ !events start p j k.
+ MEM (p,SOME (j,k)) (cse_history_points start events) ==>
+ ?pre ev post. events = pre ++ ev::post /\ j = start + LENGTH pre /\
+   MEM (p,SOME (j,k)) (cse_event_points j ev)
+Proof
+ Induct >> simp[cse_history_points_def] >> rpt gen_tac >> strip_tac
+ >- (drule cse_event_points_index >> strip_tac >>
+     qexistsl_tac [`[]`, `h`, `events`] >> gvs[]) >>
+ first_x_assum drule >> strip_tac >>
+ qexistsl_tac [`h::pre`, `ev`, `post`] >>
+ simp[arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem cse_static_trace_advance:
+ !n ps lbl k bb fn.
+ cse_static_trace fn ps /\ LAST ps = (lbl,k) /\
+ lookup_block lbl fn.fn_blocks = SOME bb /\ k + n <= LENGTH bb.bb_instructions ==>
+ cse_static_trace fn
+   (ps ++ GENLIST (\i. (lbl,k + SUC i)) n)
+Proof
+ Induct >> simp[GENLIST] >> rpt gen_tac >> strip_tac >>
+ `cse_static_trace fn (ps ++ GENLIST (\i. (lbl,k + SUC i)) n)` by
+   (first_x_assum irule >> simp[]) >>
+ rewrite_tac[rich_listTheory.SNOC_APPEND, APPEND_ASSOC, arithmeticTheory.ADD_CLAUSES] >>
+ irule (cj 2 cse_static_trace_rules) >>
+ conj_tac >- (qexists_tac `bb` >> simp[]) >>
+ conj_tac >- (Cases_on `n` >> simp[GENLIST]) >>
+ gvs[arithmeticTheory.ADD_CLAUSES]
+QED
