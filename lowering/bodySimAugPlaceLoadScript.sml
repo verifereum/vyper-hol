@@ -189,12 +189,15 @@ Theorem aug_place_step_project:
     evaluate_subscripts tv a [sb] = INL v ==>
     val_in_memory etv v (base + off) mem
 Proof
-  Cases >> rpt gen_tac >> Cases_on `sb` >>
-  TRY (rename1 `ValueSubscript sv` >> Cases_on `sv`) >>
-  simp[mem_step_offset_def] >> rpt strip_tac
-  >~ [`value_has_type (ArrayTV _ _) _`] >- suspend "array"
-  >~ [`value_has_type (TupleTV _) _`] >- suspend "tuple"
-  >> suspend "struct"
+  Cases >> rpt gen_tac >> Cases_on `sb`
+  >~ [`mem_step_offset (ArrayTV _ _) (ValueSubscript sv)`]
+  >- (Cases_on `sv` >> simp[mem_step_offset_def] >>
+      rpt strip_tac >> suspend "array")
+  >~ [`mem_step_offset (TupleTV _) (ValueSubscript sv)`]
+  >- (Cases_on `sv` >> simp[mem_step_offset_def] >>
+      rpt strip_tac >> suspend "tuple")
+  >>~- ([`ValueSubscript sv`], Cases_on `sv` >> simp[mem_step_offset_def])
+  >> simp[mem_step_offset_def] >> rpt strip_tac >> suspend "struct"
 QED
 Resume aug_place_step_project[array]:
   Cases_on `a` >> gvs[value_has_type_def] >>
@@ -230,13 +233,15 @@ Theorem aug_place_step_type:
     mem_step_offset tv sb = SOME (off,etv) ==>
     subscript_type tv sb = SOME etv
 Proof
-  Cases >> Cases >> simp[mem_step_offset_def, subscript_type_def] >>
-  TRY (rename1 `ValueSubscript sv` >> Cases_on `sv` >>
-       simp[mem_step_offset_def, subscript_type_def]) >>
-  rpt gen_tac
-  >- (Cases_on `b` >> simp[mem_step_offset_def, subscript_type_def,
-                          vyperASTTheory.bound_length_def] >> metis_tac[])
-  >> metis_tac[aug_place_field_type]
+  Cases >> Cases >> simp[mem_step_offset_def, subscript_type_def]
+  >~ [`mem_step_offset (ArrayTV _ b) (ValueSubscript sv)`]
+  >- (Cases_on `sv` >> simp[mem_step_offset_def, subscript_type_def] >>
+      rpt gen_tac >> Cases_on `b` >>
+      simp[mem_step_offset_def, subscript_type_def,
+           vyperASTTheory.bound_length_def] >> metis_tac[])
+  >>~- ([`ValueSubscript sv`], Cases_on `sv` >>
+       simp[mem_step_offset_def, subscript_type_def])
+  >> rpt gen_tac >> metis_tac[aug_place_field_type]
 QED
 
 Theorem aug_place_path_project:

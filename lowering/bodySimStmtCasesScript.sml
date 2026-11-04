@@ -2820,8 +2820,10 @@ Theorem aug_place_bare_decl:
       (mut = Immutable \/ ?e. mut = Constant e)
 Proof
   Induct >> simp[is_bare_global_decl_def] >>
-  Cases_on `h` >> simp[is_bare_global_decl_def] >>
-  TRY (rename1 `VariableDecl vis mut vid ty init` >> Cases_on `mut`) >>
+  Cases_on `h` >> simp[is_bare_global_decl_def]
+  >>~- ([`VariableDecl vis mut vid ty init`], Cases_on `mut` >>
+    simp[is_bare_global_decl_def] >> rpt strip_tac >>
+    rpt IF_CASES_TAC >> gvs[] >> metis_tac[]) >>
   simp[is_bare_global_decl_def] >> rpt strip_tac >>
   rpt IF_CASES_TAC >> gvs[] >> metis_tac[]
 QED
@@ -3508,16 +3510,24 @@ Proof
     lower_value g cenv ty e` by
     (rpt strip_tac >> irule aug_place_lower_value_metadata >> metis_tac[]) >>
   Cases_on `tb` >> Cases_on `args` >>
-  gvs[supportedExprFormsTheory.supported_type_builtin_form_def] >>
-  TRY (rename1 `case tail of [] => _ | _ => _` >> Cases_on `tail` >>
-       gvs[supportedExprFormsTheory.supported_type_builtin_form_def]) >>
-  TRY (rename1 `AbiEncode ensure method` >> Cases_on `method` >>
-       gvs[supportedExprFormsTheory.supported_type_builtin_form_def]) >>
-  simp[exprLoweringTheory.compile_type_builtin_dispatch_body_def,
-       SRULE [] aug_place_memory_bytes_metadata,
-       SRULE [] aug_place_abi_enc_metadata, SRULE [] aug_place_abi_dec_metadata,
-       SRULE [] aug_place_lowered_value_type_metadata,
-       SRULE [] aug_place_unwrap_metadata]
+  gvs[supportedExprFormsTheory.supported_type_builtin_form_def]
+  >~ [`AbiEncode ensure method`]
+  >- (Cases_on `method` >>
+      gvs[supportedExprFormsTheory.supported_type_builtin_form_def] >>
+      rename1 `case tail of [] => _ | _ => _` >> Cases_on `tail` >>
+      gvs[supportedExprFormsTheory.supported_type_builtin_form_def] >>
+      simp[exprLoweringTheory.compile_type_builtin_dispatch_body_def,
+           SRULE [] aug_place_abi_enc_metadata,
+           SRULE [] aug_place_unwrap_metadata])
+  >>~- ([`case tail of [] => _ | _ => _`], Cases_on `tail` >>
+       gvs[supportedExprFormsTheory.supported_type_builtin_form_def] >>
+       simp[exprLoweringTheory.compile_type_builtin_dispatch_body_def,
+            SRULE [] aug_place_memory_bytes_metadata,
+            SRULE [] aug_place_abi_dec_metadata,
+            SRULE [] aug_place_lowered_value_type_metadata,
+            SRULE [] aug_place_unwrap_metadata])
+  >> simp[exprLoweringTheory.compile_type_builtin_dispatch_body_def,
+          SRULE [] aug_place_memory_bytes_metadata]
 QED
 
 Theorem aug_place_makearray_dispatch_metadata:
@@ -4612,11 +4622,12 @@ Proof
   >- (rename1 `ValueSubscript key` >> Cases_on `key` >>
       Cases_on `a` >>
       simp[Once evaluate_subscripts_def, Once assign_subscripts_def] >>
-      simp[AllCaseEqs()] >> rpt strip_tac >>
-      TRY (first_x_assum drule_all >> simp[] >> NO_TAC) >>
-      gvs[vyperValueOperationTheory.array_set_index_def,
-          vyperValueOperationTheory.array_index_def, AllCaseEqs(),
-          listTheory.oEL_THM] >> metis_tac[]) >>
+      simp[AllCaseEqs()] >> rpt strip_tac >> gvs[]
+      >~ [`array_set_index _ _ _ _ = INR _`]
+      >- (gvs[vyperValueOperationTheory.array_set_index_def,
+              vyperValueOperationTheory.array_index_def, AllCaseEqs(),
+              listTheory.oEL_THM] >> metis_tac[]) >>
+      first_x_assum drule_all >> simp[]) >>
   Cases_on `a` >>
   simp[Once evaluate_subscripts_def, Once assign_subscripts_def] >>
   simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
@@ -5421,8 +5432,11 @@ Proof
   rpt (pairarg_tac >> gvs[])
   >- (drule exprSafeOperandTheory.emit_op_safe_operand >>
       simp[exprSafeOperandTheory.safe_operand_def]) >>
-  Cases_on `SND (SND result)` >> gvs[] >>
-  TRY (rename1 `SOME pt` >> Cases_on `pt` >> gvs[]) >>
+  Cases_on `SND (SND result)` >> gvs[]
+  >>~- ([`SOME pt`], Cases_on `pt` >> gvs[] >>
+    gvs[comp_bind_def, comp_return_def] >>
+    rpt (pairarg_tac >> gvs[]) >>
+    metis_tac[exprSafeOperandBuiltinsTheory.subscript_pop_not_label]) >>
   gvs[comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   metis_tac[exprSafeOperandBuiltinsTheory.subscript_pop_not_label]
@@ -6052,21 +6066,24 @@ Proof
   drule vyperStoragePlaceProvenanceTheory.extend_storage_place_subregion >>
   strip_tac >> gvs[] >>
   Cases_on `sb` >> Cases_on `tv` >>
-  gvs[extend_storage_place_def, raise_def] >>
-  TRY (rename1 `ValueSubscript key` >> Cases_on `key` >>
-       gvs[extend_storage_place_def, raise_def])
-  >~ [`TupleTV tvs`]
-  >- (gvs[extend_storage_place_def, bind_def, ignore_bind_def,
+  gvs[extend_storage_place_def, raise_def]
+  >~ [`TupleTV tvs`, `ValueSubscript key`]
+  >- (Cases_on `key` >> gvs[extend_storage_place_def, raise_def] >>
+      gvs[extend_storage_place_def, bind_def, ignore_bind_def,
           check_def, assert_def, lift_option_type_def, return_def,
           vyperMiscTheory.option_CASE_rator, raise_def, AllCaseEqs(),
           Once vyperStoragePlaceRegionTheory.storage_subregion_def] >>
       gvs[Once vyperStoragePlaceRegionTheory.storage_subregion_def] >>
       irule aug_place_storage_read_live_tuple >>
-      goal_assum (drule_at Any) >> simp[]) >>
+      goal_assum (drule_at Any) >> simp[])
+  >>~- ([`ValueSubscript key`], Cases_on `key` >>
+    gvs[extend_storage_place_def, raise_def] >>
+    irule aug_place_storage_extend_live >>
+    goal_assum (drule_at Any) >> simp[] >>
+    qexists_tac `ValueSubscript (IntV i)` >>
+    asm_rewrite_tac [extend_storage_place_def]) >>
   irule aug_place_storage_extend_live >>
-  goal_assum (drule_at Any) >> simp[]
-  >- (qexists_tac `ValueSubscript (IntV i)` >>
-      asm_rewrite_tac [extend_storage_place_def]) >>
+  goal_assum (drule_at Any) >> simp[] >>
   qexists_tac `AttrSubscript s` >> asm_rewrite_tac [extend_storage_place_def]
 QED
 
@@ -6077,12 +6094,14 @@ Theorem aug_place_pure_base_storage:
     get_storage cx s' tr = get_storage cx s tr
 Proof
   measureInduct_on `base_assignment_target_size t` >> Cases_on `t` >>
-  rpt gen_tac >> TRY (PairCases_on `p`) >>
+  rpt gen_tac
+  >~ [`TopLevelNameTarget p`]
+  >- (PairCases_on `p` >> simp[target_indices_def, Once evaluate_def] >>
+      rpt strip_tac >> metis_tac[vyperStatePreservationTheory.lookup_global_state]) >>
   simp[target_indices_def, Once evaluate_def] >>
   rpt strip_tac
   >- (gvs[bind_def, get_scopes_def, type_check_def, assert_def,
-          ignore_bind_def, return_def, raise_def, AllCaseEqs()])
-  >- metis_tac[vyperStatePreservationTheory.lookup_global_state] >>
+          ignore_bind_def, return_def, raise_def, AllCaseEqs()]) >>
   gvs[bind_def, AllCaseEqs()] >>
   qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
   simp[expr_size_def] >> strip_tac >>
@@ -6129,14 +6148,18 @@ Theorem aug_place_pure_base_storage_live:
     storage_read_live cx tr (get_storage cx s' tr) slot tv
 Proof
   measureInduct_on `base_assignment_target_size t` >> Cases_on `t` >>
-  rpt gen_tac >> TRY (PairCases_on `p`) >>
-  simp[target_indices_def, Once evaluate_def, bind_def, AllCaseEqs(),
-       get_scopes_def, type_check_def, assert_def, ignore_bind_def,
-       return_def, raise_def] >> rpt strip_tac >> gvs[]
-  >- (drule vyperStoragePlaceProvenanceTheory.lookup_global_storage_region >>
+  rpt gen_tac
+  >~ [`TopLevelNameTarget p`]
+  >- (PairCases_on `p` >>
+      simp[target_indices_def, Once evaluate_def, bind_def, AllCaseEqs(),
+           return_def, raise_def] >> rpt strip_tac >> gvs[] >>
+      drule vyperStoragePlaceProvenanceTheory.lookup_global_storage_region >>
       strip_tac >>
       irule accountsRelPropsTheory.declared_storage_region_read_live >>
       goal_assum (drule_at Any)) >>
+  simp[target_indices_def, Once evaluate_def, bind_def, AllCaseEqs(),
+       get_scopes_def, type_check_def, assert_def, ignore_bind_def,
+       return_def, raise_def] >> rpt strip_tac >> gvs[] >>
   qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
   simp[expr_size_def] >> strip_tac
   >- (rename1 `eval_expr cx e s'' = (INL result,s3)` >>
@@ -6254,23 +6277,28 @@ Theorem aug_place_storage_extend_range:
   slots_in_range (get_storage cx st' tr') (w2n child) leaf
 Proof
   strip_tac >> Cases_on `sb` >> Cases_on `tv` >>
-  gvs[extend_storage_place_def, raise_def] >>
-  TRY (rename1 `ValueSubscript key` >> Cases_on `key` >>
-       gvs[extend_storage_place_def, raise_def]) >>
-  gvs[bind_def, ignore_bind_def, check_def, assert_def, lift_option_type_def,
-      return_def, raise_def, AllCaseEqs()]
-  >~ [`StructTV fs`]
-  >- (Cases_on `struct_field_slot fs s` >>
+  gvs[extend_storage_place_def, raise_def]
+  >~ [`struct_field_slot fs s`]
+  >- (gvs[bind_def, ignore_bind_def, check_def, assert_def, lift_option_type_def,
+          return_def, raise_def, AllCaseEqs()] >>
+      Cases_on `struct_field_slot fs s` >>
       gvs[raise_def, return_def] >> PairCases_on `x` >>
       gvs[return_def] >>
       irule vyperLookupStorageTheory.storage_field_slots_in_range >>
       goal_assum (drule_at Any) >> simp[])
-  >~ [`TupleTV tvs`]
-  >- (Cases_on `oEL (Num i) tvs` >> gvs[return_def, raise_def] >>
+  >~ [`TupleTV tvs`, `ValueSubscript key`]
+  >- (Cases_on `key` >> gvs[extend_storage_place_def, raise_def] >>
+      gvs[bind_def, ignore_bind_def, check_def, assert_def, lift_option_type_def,
+          return_def, raise_def, AllCaseEqs()] >>
+      Cases_on `oEL (Num i) tvs` >> gvs[return_def, raise_def] >>
       irule aug_place_range_word_offset >>
       irule aug_place_tuple_range_selected >>
       gvs[Once vyperLookupStorageTheory.slots_in_range_def] >>
       goal_assum (drule_at Any) >> simp[]) >>
+  rename1 `ValueSubscript key` >> Cases_on `key` >>
+  gvs[extend_storage_place_def, raise_def] >>
+  gvs[bind_def, ignore_bind_def, check_def, assert_def, lift_option_type_def,
+      return_def, raise_def, AllCaseEqs()] >>
   Cases_on `b` >>
   gvs[resolve_array_element_def, bind_def, ignore_bind_def, check_def,
       assert_def, return_def, raise_def, AllCaseEqs(),
@@ -6330,17 +6358,21 @@ Theorem aug_place_pure_base_storage_range:
     slots_in_range (get_storage cx s' tr) (w2n slot) tv
 Proof
   measureInduct_on `base_assignment_target_size t` >> Cases_on `t` >>
-  rpt gen_tac >> TRY (PairCases_on `p`) >>
-  simp[target_indices_def, Once evaluate_def, bind_def, AllCaseEqs(),
-       get_scopes_def, type_check_def, assert_def, ignore_bind_def,
-       return_def, raise_def] >> rpt strip_tac >> gvs[]
-  >- (drule vyperStoragePlaceProvenanceTheory.lookup_global_storage_region >>
+  rpt gen_tac
+  >~ [`TopLevelNameTarget p`]
+  >- (PairCases_on `p` >>
+      simp[target_indices_def, Once evaluate_def, bind_def, AllCaseEqs(),
+           return_def, raise_def] >> rpt strip_tac >> gvs[] >>
+      drule vyperStoragePlaceProvenanceTheory.lookup_global_storage_region >>
       strip_tac >>
       drule vyperStatePreservationTheory.lookup_global_state >> strip_tac >> gvs[] >>
       irule vyperStorageLayoutSafetyTheory.contract_storage_well_formed_region >>
       goal_assum (drule_at Any) >>
       simp[vyperStorageBackendTheory.get_storage_backend_eq] >>
       qexists_tac `s` >> simp[]) >>
+  simp[target_indices_def, Once evaluate_def, bind_def, AllCaseEqs(),
+       get_scopes_def, type_check_def, assert_def, ignore_bind_def,
+       return_def, raise_def] >> rpt strip_tac >> gvs[] >>
   qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
   simp[expr_size_def] >> strip_tac
   >- (rename1 `eval_expr cx e s'' = (INL result,s3)` >>
