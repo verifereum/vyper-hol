@@ -2,7 +2,7 @@
 Theory lowerDloadSafetyAmbient
 Ancestors
   lowerDloadSafetyRelation lowerDloadSafetyKernel lowerDloadDefs words
-  o1PassContract venomWf venomInst list contextCodegenRel venomExecProps venomInstProps venomExecSemantics venomExecProofs
+  o1PassContract venomWf venomInst list contextCodegenRel venomExecProps venomInstProps venomExecSemantics venomExecProofs contextRawReachable ptrDiscipline
 
 Theorem ld_sync_labels:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
@@ -292,4 +292,69 @@ Theorem ld_return_cont_block:
   ld_return_cont C fn cs s1
 Proof
   metis_tac[ld_return_cont_def, ld_return_suffix_block]
+QED
+
+Definition ld_saved_calls_def:
+  (ld_saved_calls vs0 C [] fn cs <=> T) /\
+  (ld_saved_calls vs0 C (f::stk) fn cs <=>
+    ?caller_cs nm ops args.
+      MEM f.cf_fn C.ctx_functions /\
+      raw_reachable vs0 C f.cf_fn f.cf_inst f.cf_state /\
+      active_inst f.cf_fn f.cf_inst f.cf_state /\
+      f.cf_inst.inst_opcode = INVOKE /\
+      decode_invoke f.cf_inst = SOME (nm, ops) /\
+      lookup_function nm C.ctx_functions = SOME fn /\
+      eval_operands ops f.cf_state = SOME args /\
+      setup_callee fn args f.cf_state = SOME cs /\
+      ld_return_cont C f.cf_fn caller_cs f.cf_state /\
+      ld_saved_calls vs0 C stk f.cf_fn caller_cs)
+End
+
+Theorem ld_saved_calls_push:
+  MEM caller C.ctx_functions /\ raw_reachable vs0 C caller callinst s /\
+  active_inst caller callinst s /\ callinst.inst_opcode = INVOKE /\
+  decode_invoke callinst = SOME (nm, ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  ld_return_cont C caller caller_cs s /\
+  ld_saved_calls vs0 C stk caller caller_cs ==>
+  ld_saved_calls vs0 C
+    (<| cf_fn := caller; cf_inst := callinst; cf_state := s;
+        cf_params := PG; cf_prov := G; cf_tvar := tv |> :: stk) callee cs
+Proof
+  simp[ld_saved_calls_def] >> metis_tac[]
+QED
+
+Theorem ld_saved_calls_return:
+  o1_ctx_shape C /\ MEM fn C.ctx_functions /\
+  ld_saved_calls vs0 C (f::stk) fn cs /\ ld_return_cont C fn cs s /\
+  active_inst fn rinst s /\ step_inst k C rinst s = IntRet ret se /\
+  bind_outputs f.cf_inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state f.cf_state se)) = SOME q ==>
+  ?n caller_cs.
+    step_inst n C f.cf_inst f.cf_state = OK q /\
+    raw_reachable vs0 C f.cf_fn f.cf_inst f.cf_state /\
+    active_inst f.cf_fn f.cf_inst f.cf_state /\
+    MEM f.cf_fn C.ctx_functions /\
+    ld_saved_calls vs0 C stk f.cf_fn caller_cs /\
+    ld_return_cont C f.cf_fn caller_cs
+      (q with vs_inst_idx := SUC f.cf_state.vs_inst_idx)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    (gvs[o1_ctx_shape_def, EVERY_MEM] >>
+     metis_tac[o1_fn_shape_components]) >>
+  `ld_return_suffix C fn s ret se` by
+    (irule ld_return_suffix_terminal >> metis_tac[]) >>
+  `?n. run_blocks n C fn cs = IntRet ret se` by
+    metis_tac[ld_return_cont_def] >>
+  qpat_x_assum `ld_saved_calls _ _ (_::_) _ _` mp_tac >>
+  simp[ld_saved_calls_def] >> strip_tac >>
+  `step_inst n C f.cf_inst f.cf_state = OK q` by
+    simp[Once step_inst_def] >>
+  qexistsl_tac [`n`, `caller_cs`] >> simp[] >>
+  irule ld_return_cont_next >> simp[] >> conj_tac
+  >- (gvs[o1_ctx_shape_def, EVERY_MEM] >>
+      metis_tac[o1_fn_shape_components]) >>
+  qexistsl_tac [`f.cf_inst`, `n`] >> simp[is_terminator_def]
 QED
