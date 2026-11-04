@@ -1,7 +1,7 @@
 (* Local provenance boundaries; not a reachable-frame coherence theorem. *)
 Theory o1LowerDloadGhost
 Ancestors
-  lowerDloadClassify venomExecProps o1LowerDloadClosure ptrDiscipline finite_map pointerConfinedDefs venomInst memLocDefs pred_set list
+  contextCodegenRel lowerDloadClassify venomExecProps o1LowerDloadClosure ptrDiscipline finite_map pointerConfinedDefs venomInst memLocDefs pred_set list
 
 Theorem first_prov_origin:
   !ops G site. first_prov G ops = SOME site ==>
@@ -137,4 +137,64 @@ Proof
   Cases_on `EL k ops` >> gvs[op_prov_def] >>
   `s IN fn_pv P fn` by (fs[SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]) >>
   metis_tac[]
+QED
+
+Theorem active_inst_member[local]:
+  active_inst fn inst s ==> MEM inst (fn_insts fn)
+Proof
+  rw[active_inst_def, fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >>
+  metis_tac[MEM_EL]
+QED
+
+Theorem frame_reachable_prov_support:
+  !vs C stk PG G tn fn inst s.
+  frame_reachable vs C stk PG G tn fn inst s ==>
+  !P. EVERY (fn_ptr_ok P) C.ctx_functions ==>
+  MEM fn C.ctx_functions /\ FDOM G SUBSET fn_pv P fn /\
+  (!k site. k < LENGTH PG /\ EL k PG = SOME site ==> k IN P fn.fn_name) /\
+  EVERY (\f. MEM f.cf_fn C.ctx_functions /\
+    FDOM f.cf_prov SUBSET fn_pv P f.cf_fn /\
+    (!k site. k < LENGTH f.cf_params /\ EL k f.cf_params = SOME site ==>
+      k IN P f.cf_fn.fn_name)) stk
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[] >> metis_tac[venomInstTheory.lookup_function_MEM])
+  >- (rpt strip_tac >>
+      first_x_assum (qspec_then `P` mp_tac) >> simp[] >> strip_tac >> gvs[] >>
+      irule step_prov_support >> simp[] >> metis_tac[active_inst_member])
+  >- (rpt strip_tac >>
+      first_x_assum (qspec_then `P` mp_tac) >> simp[] >> strip_tac >> gvs[] >>
+      metis_tac[entry_prov_support])
+  >- (rpt strip_tac >>
+      first_x_assum (qspec_then `P` mp_tac) >> simp[] >> strip_tac >> gvs[] >>
+      imp_res_tac venomInstTheory.lookup_function_MEM >> gvs[] >>
+      `ptr_use_ok P (fn_pv P fn) inst` by
+        (gvs[EVERY_MEM, fn_ptr_ok_def] >> metis_tac[active_inst_member]) >>
+      `fn'.fn_name = nm` by
+        (fs[lookup_function_def] >> drule venomExecProofsTheory.FIND_P >> simp[]) >>
+      drule invoke_prov_positions >> simp[] >>
+      disch_then (qspecl_then [`G`, `k`, `site`] mp_tac) >> simp[]) >>
+  rpt strip_tac >>
+  first_x_assum (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
+  gvs[FDOM_DRESTRICT, SUBSET_DEF]
+QED
+
+Theorem frame_reachable_active_inst[local]:
+  frame_reachable vs C stk PG G tn fn inst s ==> active_inst fn inst s
+Proof
+  simp[Once frame_reachable_cases] >> metis_tac[]
+QED
+
+Theorem frame_reachable_ret_no_provenance:
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  frame_reachable vs C stk PG G tn fn inst s /\
+  inst.inst_opcode = RET /\ MEM op inst.inst_operands ==>
+  op_prov G op = NONE
+Proof
+  rpt strip_tac >>
+  drule frame_reachable_prov_support >>
+  disch_then (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
+  irule ret_operand_no_provenance >> simp[] >>
+  gvs[EVERY_MEM, fn_ptr_ok_def] >>
+  metis_tac[frame_reachable_active_inst, active_inst_member]
 QED
