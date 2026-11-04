@@ -3,7 +3,8 @@ Ancestors
   unitShapeDefs execEquivParamBase venomExecSemantics venomInst
   contextCodegenRel list lowerDloadReturnBoundary lowerDloadOrdinaryExecution
   finite_map pred_set venomState lowerDloadPairedBoundary
-  lowerDloadOwnership ptrDiscipline
+  lowerDloadOwnership ptrDiscipline lowerDloadCallBoundaryTest
+  lowerDloadDefs o1ContractLowerDload lowerDloadFrameCertificate
 
 (* Opaque return-PC values cannot be observed by ordinary instructions. *)
 Theorem ld_retpc_observable_operand:
@@ -282,3 +283,93 @@ Proof
     (mp_then Any strip_assume_tac ld_eval_operands_front) >> gvs[] >>
   Cases_on `x` >> gvs[]
 QED
+
+(* Bounded setup diagnostic: the two LAST words are explicitly unequal.
+   This produces source setup, not a completed source callee derivation. *)
+Theorem ld_unequal_token_setup:
+  lower_dload_function_supply a source = (callee,b) /\
+  s.vs_labels = t.vs_labels /\ u <> v /\
+  setup_callee callee (args ++ [v]) t = SOME ts ==>
+  ?ss. setup_callee source (args ++ [u]) s = SOME ss /\
+    ld_owned_vars {x | x IN V /\ ~retpc_var source x}
+      E FEMPTY FEMPTY tn un ss ts /\
+    (!x. lookup_var x ss = NONE /\ lookup_var x ts = NONE) /\
+    ss.vs_return_pc_token = u /\ ts.vs_return_pc_token = v /\
+    ss.vs_return_pc_token <> ts.vs_return_pc_token /\
+    ss.vs_prev_bb = ts.vs_prev_bb /\ ss.vs_current_bb = ts.vs_current_bb
+Proof
+  strip_tac >>
+  `MAP (\bb. bb.bb_label) callee.fn_blocks =
+   MAP (\bb. bb.bb_label) source.fn_blocks` by
+    (gvs[lower_dload_function_supply_def, AllCaseEqs()] >>
+     metis_tac[lower_dload_blocks_supply_labels]) >>
+  qpat_x_assum `setup_callee _ _ _ = _` mp_tac >>
+  simp[setup_callee_def] >> strip_tac >>
+  Cases_on `source.fn_blocks` >> Cases_on `callee.fn_blocks` >> gvs[] >>
+  simp[setup_callee_def, ld_owned_vars_def, lookup_var_def,
+       GSYM SNOC_APPEND, LAST_SNOC]
+QED
+
+(* The local source RET and caller binding are produced from a target RET.
+   The saved certificate is used only for caller variables, not shared memory. *)
+Theorem ld_nonopaque_ret_resumed_owned_backward:
+  fn_ptr_ok P fn /\ opaque_use_ok fn /\ MEM i (fn_insts fn) /\
+  i.inst_opcode = RET /\ FDOM AG SUBSET fn_pv P fn /\ taint_ok fn tn i s /\
+  ld_owned_vars {v | v IN V /\ ~retpc_var fn v} E AG BH tn un s t /\
+  (!v. v IN V ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
+  step_inst fuelT CT i t = IntRet tret tend /\
+  f.lf_inst.inst_outputs = g.lf_inst.inst_outputs /\
+  bind_outputs g.lf_inst.inst_outputs tret.iret_values
+    (adopt_return_fmp tret (merge_callee_state g.lf_state tend)) = SOME t' /\
+  ld_saved_embedded savedV E keys d A f g ==>
+  ?s'. step_inst fuelS CS i s = IntRet tret s /\
+    bind_outputs f.lf_inst.inst_outputs tret.iret_values
+      (merge_callee_state f.lf_state s) = SOME s' /\
+    ld_owned_vars savedV E
+      (DRESTRICT f.lf_prov (COMPL (set f.lf_inst.inst_outputs)))
+      (DRESTRICT g.lf_prov (COMPL (set g.lf_inst.inst_outputs)))
+      (entry_taint with t_var := DRESTRICT f.lf_tvar
+        (COMPL (set f.lf_inst.inst_outputs)))
+      (entry_taint with t_var := DRESTRICT g.lf_tvar
+        (COMPL (set g.lf_inst.inst_outputs))) s' t'
+Proof
+  strip_tac >>
+  `step_inst fuelS CS i s = IntRet tret s /\ tend = t` by
+    (irule ld_nonopaque_ret_backward >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  `tret.iret_adopt_fmp = NONE` by
+    (qpat_x_assum `step_inst fuelT CT i t = _` mp_tac >>
+     simp[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[]) >>
+  gvs[adopt_return_fmp_def] >>
+  drule ld_bind_outputs_target_exists >>
+  disch_then (qspec_then `merge_callee_state f.lf_state s` strip_assume_tac) >>
+  qexists_tac `s'` >> simp[] >>
+  drule ld_saved_embedded_return_vars >>
+  disch_then (qspecl_then [`t`,`s`] assume_tac) >>
+  drule_all ld_owned_bind_outputs >> simp[]
+QED
+
+(* Operational diagnostic result / remaining recursive interface:
+   ld_unequal_token_setup accepts genuinely unequal defined LAST values;
+   labels equality is needed because setup preserves the caller label map.
+   ld_nonopaque_ret_resumed_owned_backward produces source RET and caller
+   binding from the target RET, without LAST equality or saved shared memory.
+
+   Neither theorem produces the completed callee run. In run_defs' INVOKE
+   branch the exact recursive premise is
+     run_blocks fuelT CT callee ts = IntRet ret tend.
+   A backward completed-execution IH must, from the paired setup states ss/ts
+   (restricted ownership, whole-support definedness, geometry/accounting,
+   current shared-memory relation, and aligned saved stack), produce
+     ?fuelS send. run_blocks fuelS CS source ss = IntRet ret send
+   together with the exit invariant at send/tend. For RET, equal FRONT and
+   adopt_fmp=NONE allow the same ret despite unequal opaque LAST words.
+   The run_blocks subcall of target step_inst's INVOKE branch supplies this
+   IH; a terminal step_inst RET equation alone does not. Halt and Abort
+   branches need their corresponding completed-execution conclusions too.
+   Source annotated reachability and stack origin must be advanced by this
+   same constructed run before caller resumption; they cannot be inferred
+   from the local setup/RET equations above. Scratch reserve and owner
+   restriction must travel with that IH, not be existentially reset on pop.
+   This is an interface requirement, not an assumed simulation theorem. *)
