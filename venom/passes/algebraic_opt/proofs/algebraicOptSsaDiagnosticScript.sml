@@ -1,7 +1,7 @@
 Theory algebraicOptSsaDiagnostic
 Ancestors
   algebraicOptDefs algebraicOptOutputShapeProofs venomInst venomWf
-  venomFnScheduleRunner irSupply
+  venomFnScheduleRunner irSupply passSharedDefs
 Libs
   listTheory
 
@@ -66,4 +66,42 @@ Theorem ao_malformed_fn_exposure:
 Proof
   irule ao_empty_gt_transform >>
   EVAL_TAC
+QED
+
+Theorem ao_arb_empty_ssa:
+  (ARB : instruction list) = [] ==>
+  ssa_form (FST (ao_transform_function_supply ao_malformed_supply ao_malformed_fn))
+Proof
+  strip_tac >>
+  simp[ao_transform_function_supply_def, ao_malformed_fn_def, mk_raw_function_def,
+       ao_handle_offset_inst_def, ao_transform_blocks_supply_def,
+       ao_transform_block_supply_def, ao_transform_insts_supply_def,
+       ao_transform_inst_def, ao_resolve_iszero_inst_def,
+       ao_opt_producer_def, ao_pre_flip_inst_def, ao_peephole_inst_def,
+       ao_empty_comparator] >>
+  Cases_on `ao_alloc_fresh ao_malformed_supply` >> simp[] >>
+  Cases_on `ao_alloc_fresh r` >>
+  simp[ao_cmp_flip_function_supply_def, fn_insts_def, fn_insts_blocks_def,
+       ao_cmp_flip_scan_def, is_comparator_def, ssa_form_def]
+QED
+
+Theorem ao_arb_duplicate_not_ssa:
+  (ARB : instruction list) =
+    [<| inst_id := 10; inst_opcode := ASSIGN;
+        inst_operands := []; inst_outputs := ["x"] |>;
+     <| inst_id := 11; inst_opcode := ASSIGN;
+        inst_operands := []; inst_outputs := ["x"] |>] ==>
+  ~ssa_form (FST (ao_transform_function_supply ao_malformed_supply ao_malformed_fn))
+Proof
+  strip_tac >>
+  simp[ao_transform_function_supply_def, ao_malformed_fn_def, mk_raw_function_def,
+       ao_handle_offset_inst_def, ao_transform_blocks_supply_def,
+       ao_transform_block_supply_def, ao_transform_insts_supply_def,
+       ao_transform_inst_def, ao_resolve_iszero_inst_def,
+       ao_opt_producer_def, ao_pre_flip_inst_def, ao_peephole_inst_def,
+       ao_empty_comparator, ao_post_flip_inst_def] >>
+  Cases_on `ao_alloc_fresh ao_malformed_supply` >> simp[] >>
+  Cases_on `ao_alloc_fresh r` >>
+  simp[ao_cmp_flip_function_supply_def, fn_insts_def, fn_insts_blocks_def,
+       ao_cmp_flip_scan_def, is_comparator_def, ssa_form_def]
 QED
