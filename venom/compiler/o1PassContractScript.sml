@@ -49,7 +49,7 @@ Ancestors
   venomPassSchedule venomFnScheduleRunner venomPassDispatcher venomWf
   venomExecSemantics venomInst irSupply contextCodegenRel stackPlanGen
   ptrDiscipline staticLayoutDefs venomState stateEquiv passSimulationDefs
-  vfmState extCallOracle finite_map dretDesugarDefs list
+  vfmState extCallOracle finite_map dretDesugarDefs fcgDefs list
 
 (* ===== Equivalence up to dead bytes ===== *)
 
@@ -305,6 +305,13 @@ Definition unit_first_block_no_phi_def:
     EVERY first_block_no_phi unit.cu_context.ctx_functions
 End
 
+(* The lowering leaves every function's FMP convention unset; only
+   FmpLowering sets it. *)
+Definition unit_fmp_unsealed_def:
+  unit_fmp_unsealed unit <=>
+    EVERY (\fn. fn.fn_fmp_signature = NONE) unit.cu_context.ctx_functions
+End
+
 (* The unit's entry function has no parameter instruction (the lowering's
    entry function reads calldata, never PARAMs). *)
 Definition unit_entry_no_params_def:
@@ -318,13 +325,17 @@ End
    with the well-formedness every pass keeps.  Of the raw-opcode
    restriction only no DRET is kept, which no pass introduces (the source
    never has one, so DretDesugar is the identity); the passes introduce
-   the other opcodes it excludes. *)
+   the other opcodes it excludes.  No DALLOCA result is a gas or return-pc
+   value: FmpLowering copies a DALLOCA result into its pointer variable,
+   which opaque_use_ok would then forbid it to use. *)
 Definition o1_fn_shape_def:
   o1_fn_shape ctx fn <=>
     wf_function fn /\ fn_inst_wf fn /\
     fn_shape_ok fn /\ first_block_no_preds fn /\ first_block_no_phi fn /\
     fn_invoke_ok (ctx_fn_names ctx) fn /\ fn_label_refs_ok fn /\
     no_dret fn /\
+    (!inst x. MEM inst (fn_insts fn) /\ inst.inst_opcode = DALLOCA /\
+              MEM x inst.inst_outputs ==> ~gas_var fn x /\ ~retpc_var fn x) /\
     (ctx.ctx_entry = SOME fn.fn_name ==>
        entry_fn_no_return fn /\ entry_fn_no_params fn) /\
     (ctx.ctx_entry <> SOME fn.fn_name ==>
@@ -485,6 +496,22 @@ End
 
 (* ===== The stage invariants ===== *)
 
+(* Until FmpLowering, no function has its FMP convention set or an FMP
+   operation: the source has none (raw_opcode_ok, unit_fmp_unsealed) and
+   no earlier pass adds one.  FmpLowering then only seals. *)
+Definition fmp_free_ctx_def:
+  fmp_free_ctx C <=>
+    EVERY (\fn. fn.fn_fmp_signature = NONE /\ no_raw_fmp_ops fn)
+      C.ctx_functions
+End
+
+(* Every function comes after its callees in names: the walk's order. *)
+Definition callee_first_def:
+  callee_first names fns <=>
+    !g callee. MEM g fns /\ MEM callee (fn_invoke_targets g) ==>
+      list_precedes callee g.fn_name names
+End
+
 (* Before ConcretizeMemLoc: the raw phase of the shared memory invariant,
    and what ConcretizeMemLoc needs of its input: no static layout yet, no
    DALLOCA, the pointer discipline above a reserved fixed region, and
@@ -497,7 +524,7 @@ Definition o1_src_inv_def:
     reserved_intervals_wf C.ctx_global_reserved /\ mem_inv raw_mem_ok C vs /\
     EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ ~ctx_has_dalloca C /\
     (?lo. fixed_region_reserved lo C /\ ptr_discipline lo C vs) /\
-    taint_within D C vs
+    taint_within D C vs /\ fmp_free_ctx C
 End
 
 (* After ConcretizeMemLoc: every access below the context's layout end,
@@ -507,7 +534,8 @@ End
    eom. *)
 Definition o1_static_inv_def:
   o1_static_inv C vs <=>
-    ?eom. max_live_eom C = SOME eom /\ mem_inv (static_mem_ok eom) C vs
+    (?eom. max_live_eom C = SOME eom /\ mem_inv (static_mem_ok eom) C vs) /\
+    fmp_free_ctx C
 End
 
 (* After FmpLowering: static, or dynamic at or above the initial fmp. *)
@@ -521,11 +549,15 @@ End
    fact a run needs of its input is a conjunct of its row, put there by
    the run that establishes it, and a conjunct of row 0 is a premise of
    S4 that the lowering stage owes.  A row may speak of the dead bytes D
-   the runs are matched up to. *)
+   the runs are matched up to.  Up to FmpLowering, which seals a
+   function after its callees, the functions are in a callee-first
+   order. *)
 Definition o1_inv_def:
   o1_inv (D : dead) (k : num) =
-    if k <= 2 then o1_src_inv D
-    else if k = 3 then o1_static_inv
+    if k <= 2 then
+      (\C vs. o1_src_inv D C vs /\ ?names. callee_first names C.ctx_functions)
+    else if k = 3 then
+      (\C vs. o1_static_inv C vs /\ ?names. callee_first names C.ctx_functions)
     else o1_lowered_inv
 End
 

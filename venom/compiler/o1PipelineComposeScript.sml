@@ -92,6 +92,36 @@ QED
 
 (* ===== Source shape ===== *)
 
+Theorem raw_opcode_ok_not_raw_fmp[local]:
+  raw_opcode_ok op ==> ~is_raw_fmp_opcode op
+Proof
+  Cases_on `op` >> simp[raw_opcode_ok_def, is_raw_fmp_opcode_def]
+QED
+
+Theorem source_no_raw_fmp_ops:
+  o1_source_unit_ok u /\ MEM fn u.cu_context.ctx_functions ==>
+  no_raw_fmp_ops fn
+Proof
+  rw[o1_source_unit_ok_def, no_raw_fmp_ops_def, EVERY_MEM] >>
+  metis_tac[raw_opcode_ok_not_raw_fmp]
+QED
+
+Theorem source_fmp_free:
+  o1_source_unit_ok unit /\ unit_fmp_unsealed unit ==>
+  fmp_free_ctx unit.cu_context
+Proof
+  rw[fmp_free_ctx_def, unit_fmp_unsealed_def, EVERY_MEM] >>
+  metis_tac[source_no_raw_fmp_ops]
+QED
+
+Theorem fmp_free_ctx_prune:
+  fmp_free_ctx unit.cu_context ==>
+  fmp_free_ctx (prune_unit_fcg_unreachable unit fcg).cu_context
+Proof
+  rw[fmp_free_ctx_def, prune_unit_fcg_unreachable_def] >>
+  irule EVERY_FILTER_IMP >> simp[]
+QED
+
 Theorem o1_source_unit_ok_ctx_shape:
   unit_wf unit /\ o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
   unit_entry_no_params unit /\ unit_first_block_no_phi unit ==>
@@ -103,6 +133,9 @@ Proof
   drule_all source_member_shape >> strip_tac >>
   simp[o1_fn_shape_def] >> rpt conj_tac
   >- gvs[unit_label_refs_ok_def, EVERY_MEM]
+  >- (rpt strip_tac >> drule_all source_no_raw_fmp_ops >>
+      simp[no_raw_fmp_ops_def] >> qexists_tac `inst` >>
+      simp[is_raw_fmp_opcode_def])
   >- metis_tac[source_entry_shape]
   >> strip_tac >> drule_all source_internal_shape >> simp[]
 QED
@@ -252,9 +285,10 @@ Proof
       irule ptr_discipline_ctx_agree >>
       simp[prune_unit_fcg_unreachable_fields] >>
       qexistsl_tac [`fcg_is_reachable fcg`, `unit.cu_context`] >> gvs[])
-  >> irule taint_within_ctx_agree >>
-  simp[prune_unit_fcg_unreachable_fields] >>
-  qexistsl_tac [`fcg_is_reachable fcg`, `unit.cu_context`] >> gvs[]
+  >- (irule taint_within_ctx_agree >>
+      simp[prune_unit_fcg_unreachable_fields] >>
+      qexistsl_tac [`fcg_is_reachable fcg`, `unit.cu_context`] >> gvs[])
+  >> irule fmp_free_ctx_prune >> fs[]
 QED
 
 (* ===== The walk ===== *)
@@ -349,13 +383,16 @@ Proof
     (qpat_x_assum `!k. k <= _ ==> _` (qspec_then `LENGTH o1_fn_passes` mp_tac) >>
      gvs[prune_unit_fcg_unreachable_fields]) >>
   simp[] >> rpt gen_tac >> strip_tac >>
-  `o1_inv D 0 = o1_src_inv D /\
+  `(!C vs. o1_inv D 0 C vs <=>
+           o1_src_inv D C vs /\ ?names. callee_first names C.ctx_functions) /\
    o1_inv D (LENGTH o1_fn_passes) = o1_lowered_inv` by
     simp[o1_inv_def, o1_fn_passes_def] >>
   `ctx_sim D (stage 0) (stage (LENGTH o1_fn_passes)) vs vs /\
    o1_inv D (LENGTH o1_fn_passes) (stage (LENGTH o1_fn_passes)) vs` by
-    (irule o1_walk_stages_sim >> fs[] >> qexists_tac `rpolicy` >>
-     rpt strip_tac >> first_x_assum drule >> simp[o1_walk_view_def]) >>
+    (irule o1_walk_stages_sim >> fs[] >> conj_tac
+     >- (qexists_tac `rpolicy` >> rpt strip_tac >> first_x_assum drule >>
+         simp[o1_walk_view_def]) >>
+     qexists_tac `fcg_postorder fcg entry` >> gvs[]) >>
   gvs[] >> metis_tac[]
 QED
 
