@@ -37,7 +37,7 @@ Ancestors typedCopyArrayExecutionPtr batchCopyRobustPtr normalizationAllocPtr ty
   robustCopyTransportPtr staticTypeFitsPtr liveArrayTransportPtr structChildPtr
   wordCopyRobustPtr
   stmtLoweringMono venomWf memSafeRun allocaFrontierBound unitTransformDefs
-  unitShapeDefs o1PassContract
+  unitShapeDefs o1PassContract rawEntryCode
 
 val _ = Parse.hide "body";
 
