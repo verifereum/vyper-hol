@@ -1314,3 +1314,26 @@ Proof
     >- metis_tac[label_preserving_select] >> gen_tac >> CONVERT_BIND >>
     LABEL_BIND >> ntac 3 CONVERT_BIND >> CONVERT_LEAF) >> CONVERT_LEAF
 QED
+
+Theorem label_preserving_fresh_vars[local]:
+  !n s r t. fresh_vars n s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  Induct >> rewrite_tac[fresh_vars_def] >> all_tac >- CONVERT_LEAF >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_fresh_var] >> gen_tac >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[] >> gen_tac >> CONVERT_LEAF
+QED
+
+Theorem label_preserving_emit_multi_op[local]:
+  !s r t. emit_multi_op opc ops n s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[emit_multi_op_def, comp_ignore_bind_def] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_fresh_vars] >> gen_tac >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_emit_inst] >> gen_tac >> CONVERT_LEAF
+QED
+
