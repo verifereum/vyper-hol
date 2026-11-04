@@ -834,6 +834,7 @@ Resume aggregate_make_array_sim[header_suffix]:
          drule_all local_ptrs_rel_alloca_disjoint >>
          simp[regions_disjoint_def] >> decide_tac)
      >- simp_tac (srw_ss()) [venomStateTheory.mstore_def, venomStateTheory.lookup_var_def]
+     >- simp_tac (srw_ss()) [venomStateTheory.mstore_def, venomStateTheory.lookup_var_def]
      >- simp[immutableMemoryFrameTheory.immutable_mstore_capacity]
      >- simp_tac (srw_ss()) [venomStateTheory.mstore_def, venomStateTheory.write_memory_with_expansion_def, LET_THM]
      >- (rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >>

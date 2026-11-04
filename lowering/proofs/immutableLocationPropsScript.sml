@@ -23,8 +23,10 @@ Theorem immutable_module_vars_origin:
 Proof
   Induct >> simp[add_module_var_locations_def] >> rpt gen_tac >>
   Cases_on `h` >> simp[add_module_var_locations_def] >>
-  rpt CASE_TAC >> simp[] >> strip_tac >>
-  first_x_assum drule >> simp[FLOOKUP_UPDATE] >> rw[]
+  strip_tac >> first_x_assum drule >>
+  simp[] >> Cases_on `o'` >> simp[]
+  >- (Cases_on `v0` >> simp[FLOOKUP_UPDATE] >> rw[]) >>
+  Cases_on `b` >> simp[FLOOKUP_UPDATE] >> rw[]
 QED
 
 Theorem immutable_locations_cons:

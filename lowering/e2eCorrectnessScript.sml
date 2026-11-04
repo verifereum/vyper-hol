@@ -731,9 +731,8 @@ QED
 *)
 
 (* ===== PLAN §2.1 call theorem: seven stage leaves, raw O1 source domain ===== *)
-(* Runtime immutable compilation remains available, but the raw O1 shape
-   theorem covers only static variable locations and therefore requires
-   immutable_free_program. *)
+(* The raw O1 shape theorems no longer need immutable_free_program; it
+   remains in this statement, which is unchanged. *)
 
 Theorem vyper_call_correct:
   !policy tops deploy_bc runtime_bc am tx ret es.
@@ -743,7 +742,7 @@ Theorem vyper_call_correct:
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    call_outcomes_ok tops am tx (MAP SND (call_trace es))
+    call_outcomes_ok am tx (MAP SND (call_trace es))
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -759,6 +758,7 @@ Proof
     metis_tac[source_typing_ok_def] >>
   drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
   drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   drule_all entry_venom_state_initial_venom_state_rel >>
   disch_then (qspec_then `cplan` assume_tac) >>
@@ -774,7 +774,7 @@ Proof
    vs.vs_call_ctx.cc_calldata = buffer_to_list (FST (HD es.contexts)).msgParams.data` by
     simp[Abbr`vs`, entry_venom_state_def] >>
   `valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-   call_outcomes_ok tops am tx vs.vs_outcomes` by simp[] >>
+   call_outcomes_ok am tx vs.vs_outcomes` by simp[] >>
   `source_deployment_rel tops am tx` by fs[call_state_rel_def] >>
   `source_unit_execution_correct tops ret am tx unit vs` by
     (irule lower_vyper_runtime_unit_correct >> simp[] >>

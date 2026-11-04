@@ -3410,7 +3410,8 @@ Proof
            ≠ a ∨
          (is_signed_type ty ∧ type_bits ty = 256 ∧ a = n2w (2 ** 255) ∧
           b = n2w (2 ** 256 − 1))` by
-          (Cases_on `is_signed_type ty` >> fs[] >- (strip_tac >> qspecl_then [`a`, `b`, `ty`] mp_tac mul_sdiv_mismatch >>
+          (Cases_on `is_signed_type ty` >> fs[]
+           >- (strip_tac >> qspecl_then [`a`, `b`, `ty`] mp_tac mul_sdiv_mismatch >>
                simp[int_min_256, int_max_256])
            >- (strip_tac >> qspecl_then [`a`, `b`, `ty`] mp_tac mul_sdiv_mismatch >>
                simp[int_min_256, int_max_256]) >>
@@ -3479,7 +3480,6 @@ Proof
          integerTheory.INT_QUOT_1] >>
     strip_tac >> `A = -&X` by intLib.ARITH_TAC >> fs[]
 QED
-
 
 (* compile_safe_div_ok: a division by a non-zero word, but for the signed
    minimum by -1, runs through and gives the word quotient.  The success
