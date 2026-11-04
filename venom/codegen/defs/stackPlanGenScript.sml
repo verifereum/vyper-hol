@@ -174,11 +174,6 @@ End
    Per-opcode emission logic.
    ========================================================================= *)
 
-Definition bump_round_word_def:
-  bump_round_word (sz:bytes32) =
-    word_lsl (word_lsr (sz + 31w) 5) 5
-End
-
 Definition bump_emit_ops_def:
   bump_emit_ops =
     [SODup 2; SOEmit "ADD"]
@@ -310,7 +305,10 @@ Definition generate_regular_inst_plan_def:
       (input_ops ++ join_ops ++ reorder_ops ++ emit_ops, ps8)
     else
       let (pop_ops, ps8) =
-        if ¬ is_halting then
+        (* A halting block may retain a dead single output.  Multi-output
+           instructions such as BUMP still discard dead outputs so later
+           operand reordering sees the same stack as pinned Vyper. *)
+        if ¬ is_halting ∨ LENGTH outputs > 1 then
           let dead = FILTER (λout. ¬ MEM out next_liveness) outputs in
           popmany_plan (MAP Var dead) ps7
         else ([] : stack_op list, ps7) in
@@ -362,7 +360,41 @@ Definition codegen_ready_inst_def:
     (inst.inst_opcode = INVOKE ==> invoke_operands_wf inst)
 End
 
-(* Per-function: structural WF + SSA + SUE + normalized CFG + no bad opcodes *)
+(* A block's PHI prefix keeps each PHI operand to its own PHI: no variable
+   is read by two of the block's PHIs, and no PHI operand is live after
+   the prefix.  The join's entry stack (input_vars_from) gives each PHI
+   one slot and maps every PHI operand to it, so a variable read by a
+   second PHI or by a later instruction would lose its own slot.  Upstream
+   single-use expansion establishes this by copying such operands on the
+   edge (vyper #5009, #5284); this repo's single-use expansion predates
+   those changes, so the pipeline driver's codegen_ready check rejects an
+   output without it. *)
+Definition phi_uses_disjoint_def:
+  phi_uses_disjoint [] = T ∧
+  phi_uses_disjoint (phi :: phis) =
+    (EVERY (λq. EVERY (λv. ¬MEM v (inst_uses q)) (inst_uses phi)) phis ∧
+     phi_uses_disjoint phis)
+End
+
+Definition phi_block_ready_def:
+  phi_block_ready liveness bb ⇔
+    phi_uses_disjoint (collect_phis bb.bb_instructions) ∧
+    EVERY (λphi. EVERY (λv.
+        ¬MEM v (live_vars_at liveness bb.bb_label
+                  (LENGTH (collect_phis bb.bb_instructions))))
+      (inst_uses phi))
+      (collect_phis bb.bb_instructions)
+End
+
+(* The liveness analysis is only consulted when the function has a PHI. *)
+Definition phi_operands_ready_def:
+  phi_operands_ready fn ⇔
+    if EVERY (λbb. NULL (collect_phis bb.bb_instructions)) fn.fn_blocks then T
+    else EVERY (phi_block_ready (liveness_analyze fn)) fn.fn_blocks
+End
+
+(* Per-function: structural WF + SSA + SUE + normalized CFG + PHI operands
+   + no bad opcodes *)
 Definition codegen_ready_fn_def:
   codegen_ready_fn fn ⇔
     canonical_param_prefix fn ∧
@@ -372,6 +404,7 @@ Definition codegen_ready_fn_def:
     def_dominates_uses fn ∧
     single_use_form fn ∧
     cfg_is_normalized (cfg_analyze fn) fn ∧
+    phi_operands_ready fn ∧
     EVERY (λbb. EVERY codegen_ready_inst bb.bb_instructions) fn.fn_blocks
 End
 

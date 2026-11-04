@@ -329,17 +329,6 @@ Proof
   simp[make_venom_delegatecall_state_def, LET_THM, venom_to_tx_params_jump]
 QED
 
-Theorem make_venom_create_state_jump[local]:
-  !s new_address gas value init_code pb cb idx.
-    make_venom_create_state
-      (s with <|vs_prev_bb := pb; vs_current_bb := cb;
-                vs_inst_idx := idx|>)
-      new_address gas value init_code =
-    make_venom_create_state s new_address gas value init_code
-Proof
-  simp[make_venom_create_state_def, LET_THM, venom_to_tx_params_jump]
-QED
-
 (* Utility: case-OPTION_MAP fusion *)
 Theorem option_case_OPTION_MAP[local]:
   !f x n g.
@@ -429,10 +418,9 @@ Theorem exec_create_jump[local]:
       (exec_create inst s value offset sz salt_opt)
 Proof
   rpt gen_tac >>
-  simp([exec_create_def, make_venom_create_state_jump] @ ext_call_rw) >>
-  Cases_on `salt_opt` >> simp[] >>
+  simp([exec_create_def, venom_create_request_def] @ ext_call_rw) >>
   EVERY_CASE_TAC >>
-  simp[instIdxIndepTheory.exec_result_map_def, update_var_jump,
+  simp[instIdxIndepTheory.exec_result_map_def, update_var_def, update_var_jump,
        venom_state_component_equality]
 QED
 

@@ -312,7 +312,8 @@ QED
 
 (* The source rows besides the memory invariant: no layout end, no
    DALLOCA, the pointer discipline above a reserved fixed region, taint
-   only in the dead bytes D, and no FMP convention or operation.  The
+   only in the dead bytes D, no FMP convention or operation, and DLOAD
+   offsets that fit after the code.  The
    pre-walk run keeps them.  Admitted for now. *)
 Theorem simplify_cfg_stage_src_extras:
   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
@@ -320,7 +321,7 @@ Theorem simplify_cfg_stage_src_extras:
   o1_src_inv D C vs ==>
   EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\ ~ctx_has_dalloca C' /\
   (?lo. fixed_region_reserved lo C' /\ ptr_discipline lo C' vs) /\
-  taint_within D C' vs /\ fmp_free_ctx C'
+  taint_within D C' vs /\ fmp_free_ctx C' /\ mem_inv dload_offset_ok C' vs
 Proof
   cheat
 QED
