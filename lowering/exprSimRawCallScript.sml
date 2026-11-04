@@ -20,7 +20,7 @@
 
 Theory exprSimRawCall
 Ancestors
-  allocLimits
+  allocLimits freshWrites builtinSimple
   list pair vyperMisc fragExec loweringSlice exprSim exprSimHyps exprSimWordArgs
   exprSimPrecompiles exprSimOperators exprSimOperands exprSimAccounts
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
@@ -1306,6 +1306,38 @@ Proof
        wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD,
        GSYM mem_bytes_at_def, hash_write_memory_read_self,
        revert_state_def, set_returndata_def]
+QED
+
+(* Erasing variables exposes every field framed by the pure success prefix. *)
+Theorem raw_call_length_prefix_frame[local]:
+  (do len <- emit_op RETURNDATASIZE [];
+      cmp <- emit_op LT [len;Lit (n2w cap)];
+      compile_select cmp len (Lit (n2w cap)) od) sa = (capped,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  t with vs_vars := FEMPTY = s with vs_vars := FEMPTY
+Proof
+  strip_tac >>
+  irule run_inst_seq_preserves_field >>
+  qexists_tac `emitted_insts sa sb` >> simp[] >>
+  `EVERY (\i. i.inst_opcode = RETURNDATASIZE \/ fresh_write_op i.inst_opcode)
+    (emitted_insts sa sb)` by
+    (qpat_x_assum `run_inst_seq _ _ = _` kall_tac >>
+     qpat_x_assum `comp_bind _ _ _ = _` mp_tac >>
+     simp[compile_select_def, comp_bind_def, emit_op_def, fresh_var_def,
+          fresh_id_def, comp_ignore_bind_def, comp_return_def, emit_def] >>
+     strip_tac >> gvs[] >>
+     simp[emitted_insts_def] >>
+     pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+     pure_rewrite_tac [rich_listTheory.DROP_LENGTH_APPEND] >>
+     simp[mk_inst_def, fresh_write_op_def]) >>
+  rpt strip_tac >> fs[EVERY_MEM] >>
+  first_x_assum drule >> strip_tac
+  >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+      simp[exec_read0_def, bind_outputs_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[update_var_def]) >>
+  drule_all step_fresh_write_op >> strip_tac >>
+  qpat_x_assum `_ = _ with vs_vars := _` SUBST1_TAC >> simp[]
 QED
 
 (* TOP-LEVEL *)
