@@ -2,6 +2,7 @@ Theory fnPlanLineagePath
 Ancestors
   fnPlanLineagePhiActivation fnPlanLineageLiveness stackPlanGen livenessDefs
   livenessAnalysisProps cfgAnalysisProps removeUnusedProofs
+  removeUnusedSsaProofs codegenReadyCompute
 
 Theorem analyzed_ready_live_through_edge:
   !fn lbl bb pred pred_bb v.
@@ -58,3 +59,33 @@ QED
    These are explicit remaining symbolic proof obligations, not premises
    added to the frozen theorem or an assertion of global alias exclusion.
 *)
+
+Theorem dominates_analyzed_path_no_revisit:
+  !fn d p.
+    wf_function fn /\ fn_dominates fn d p ==>
+    ?tail. is_fn_path fn (d::tail) /\ LAST (d::tail) = p /\
+      ~MEM d tail /\
+      EVERY (\lbl. fn_reachable fn lbl /\
+        cfg_reachable_of (cfg_analyze fn) lbl /\
+        MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+        ?bb. lookup_block lbl fn.fn_blocks = SOME bb) (d::tail)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all dominates_path_no_revisit >> strip_tac >>
+  qexists_tac `path` >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  `fn_reachable fn d` by
+    metis_tac[fn_dominates_dom_reachable_compute] >>
+  rewrite_tac[listTheory.EVERY_MEM] >> qx_gen_tac `lbl` >> strip_tac >>
+  `fn_reachable fn lbl` by
+    (irule is_fn_path_all_reachable >>
+     qexists_tac `d::path` >> simp[]) >>
+  `cfg_reachable_of (cfg_analyze fn) lbl` by
+    metis_tac[fn_reachable_cfg_analyze] >>
+  `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
+    (drule cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  metis_tac[fn_reachable_has_block]
+QED
