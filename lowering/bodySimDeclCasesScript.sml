@@ -27,6 +27,7 @@
 
 Theory bodySimDeclCases
 Ancestors
+  bodyExprPreFacts
   stmtSimProps
   exprSimHypsDefs
   vyperTypeStoragePreservation
