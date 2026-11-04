@@ -743,6 +743,11 @@ Definition well_typed_expr_def:
      (* Vyper rejects default_return_value on a call that returns nothing
         (semantics/types/function.py). *)
      (ret_ty = NoneT ==> ~MEM EKDefault opts) /\
+     (* Vyper's type annotations can't name None, nested or not
+        (semantics/types/utils.py), and interface parameters are
+        assignable, as params_ok requires of InterfaceDecl. *)
+     (ret_ty <> NoneT ==> assignable_type env.type_defs ret_ty) /\
+     EVERY (assignable_type env.type_defs) arg_types /\
      LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
      expr_type (HD args) = BaseT AddressT /\
      (* positional arguments may be narrower than the declared types *)
