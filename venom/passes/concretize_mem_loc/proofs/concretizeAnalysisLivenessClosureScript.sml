@@ -1,6 +1,6 @@
 Theory concretizeAnalysisLivenessClosure
 Ancestors concretizeAnalysisLivenessTransfer singleWriterScan cfgWf
-  list pred_set finite_map
+  concretizeMemLocDefs concretizePtrOrdering venomExecProofs enumeral list pred_set finite_map
 
 (* The boundary transfer is Boolean affine: a constant generator or the
    incoming boundary bit passed through a fixed propagation guard. *)
@@ -168,4 +168,204 @@ Proof
   simp[ml_used_boundary_desc_def, sw_rhs_def] >>
   once_rewrite_tac[ml_used_boundary_bit_affine] >>
   rpt IF_CASES_TAC >> simp[] >> metis_tac[]
+QED
+
+Theorem ml_liveat_block_record_exact:
+  ml_liveat_block bpr mems sizes cfg la bb = (changed,la') /\
+  (!nm. OL alloc_to (mems nm)) /\ ptr_ml_ordered la /\
+  i < LENGTH bb.bb_instructions ==>
+  (MEM a (ml_lookup la' (bb.bb_label,i)) <=>
+   ml_liveat_record_bit a bpr mems sizes bb.bb_label (bb.bb_label,i)
+     (MAPi (\j inst. (j,inst)) bb.bb_instructions)
+     (?lbl. MEM lbl (cfg_succs_of cfg bb.bb_label) /\ MEM a (ml_lookup la (lbl,0))) F)
+Proof
+  simp[ml_liveat_block_def] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `OL alloc_to (FOLDL (smerge alloc_to) []
+    (MAP (\lbl. ml_lookup la (lbl,0)) (cfg_succs_of cfg bb.bb_label)))` by
+    (irule ptr_ordered_merge_fold >>
+     fs[OL, EVERY_MAP, EVERY_MEM, ptr_ml_ordered_def]) >>
+  drule_all ml_liveat_insts_bits_exact >> disch_then (qspec_then `a` strip_assume_tac) >>
+  first_x_assum (qspec_then `(bb.bb_label,i)` mp_tac) >>
+  simp[ml_liveat_block_join_mem] >>
+  `MEM (i,EL i bb.bb_instructions)
+    (MAPi (\j inst. (j,inst)) bb.bb_instructions)` by simp[indexedListsTheory.MEM_MAPi] >>
+  strip_tac >> irule ml_liveat_record_bit_old_irrelevant >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem ml_used_block_record_exact:
+  ml_used_block bpr mems pallocas cfg us bb blocks = (changed,us') /\
+  i < LENGTH bb.bb_instructions ==>
+  (MEM a (ml_lookup us' (bb.bb_label,i)) <=>
+   ml_used_record_bit a bpr mems bb.bb_label (bb.bb_label,i)
+     (MAPi (\j inst. (j,inst)) bb.bb_instructions)
+     (MEM a pallocas \/ ?lbl. MEM lbl (cfg_preds_of cfg bb.bb_label) /\
+       MEM a (case FIND (\b. b.bb_label = lbl) blocks of
+         NONE => ml_lookup us (lbl,0)
+       | SOME b => ml_lookup us (b.bb_label,PRE (LENGTH b.bb_instructions)))) F)
+Proof
+  simp[ml_used_block_def] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  drule ml_used_insts_bits_exact >> disch_then (qspec_then `a` strip_assume_tac) >>
+  first_x_assum (qspec_then `(bb.bb_label,i)` mp_tac) >>
+  simp[ml_used_block_join_mem] >>
+  `MEM (i,EL i bb.bb_instructions)
+    (MAPi (\j inst. (j,inst)) bb.bb_instructions)` by simp[indexedListsTheory.MEM_MAPi] >>
+  strip_tac >> irule ml_used_record_bit_old_irrelevant >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem ml_liveat_block_boundary_exact:
+  ml_liveat_block bpr mems sizes cfg la bb = (changed,la') /\
+  (!nm. OL alloc_to (mems nm)) /\ ptr_ml_ordered la /\
+  bb.bb_instructions <> [] ==>
+  (MEM a (ml_lookup la' (bb.bb_label,0)) <=>
+   T IN sw_rhs (ml_liveat_boundary_desc a bpr mems sizes cfg bb)
+     (\lbl. if MEM a (ml_lookup la (lbl,0)) then {T} else {}))
+Proof
+  strip_tac >> simp[ml_liveat_boundary_desc_rhs, ml_liveat_boundary_bit_def, COND_RAND] >>
+  irule ml_liveat_block_record_exact >> simp[] >> Cases_on `bb.bb_instructions` >> gvs[]
+QED
+
+Theorem ml_used_block_boundary_exact:
+  ml_used_block bpr mems pallocas cfg us bb blocks = (changed,us') /\
+  bb.bb_instructions <> [] /\
+  (!lbl. MEM lbl (cfg_preds_of cfg bb.bb_label) ==>
+    (MEM a (case FIND (\b. b.bb_label = lbl) blocks of
+       NONE => ml_lookup us (lbl,0)
+     | SOME b => ml_lookup us (b.bb_label,PRE (LENGTH b.bb_instructions))) <=>
+     T IN X lbl)) ==>
+  (MEM a (ml_lookup us' (bb.bb_label,PRE (LENGTH bb.bb_instructions))) <=>
+   T IN sw_rhs (ml_used_boundary_desc a bpr mems pallocas cfg bb) X)
+Proof
+  strip_tac >> simp[ml_used_boundary_desc_rhs, ml_used_boundary_bit_def] >>
+  drule ml_used_block_record_exact >>
+  disch_then (qspecl_then [`PRE (LENGTH bb.bb_instructions)`, `a`] mp_tac) >>
+  impl_tac >- (Cases_on `bb.bb_instructions` >> gvs[]) >>
+  strip_tac >> gvs[] >> AP_THM_TAC >> AP_TERM_TAC >> metis_tac[]
+QED
+
+Theorem ml_liveat_block_other_label:
+  ml_liveat_block bpr mems sizes cfg la bb = (changed,la') /\
+  lbl <> bb.bb_label ==>
+  ml_lookup la' (lbl,i) = ml_lookup la (lbl,i)
+Proof
+  simp[ml_liveat_block_def] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  irule ml_liveat_insts_other_address >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem ml_used_block_other_label:
+  ml_used_block bpr mems pallocas cfg us bb blocks = (changed,us') /\
+  lbl <> bb.bb_label ==>
+  ml_lookup us' (lbl,i) = ml_lookup us (lbl,i)
+Proof
+  simp[ml_used_block_def] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  irule ml_used_insts_other_address >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem ml_liveat_block_sw_update:
+  ml_liveat_block bpr mems sizes cfg la bb = (changed,la') /\
+  (!nm. OL alloc_to (mems nm)) /\ ptr_ml_ordered la /\
+  bb.bb_instructions <> [] /\
+  (!lbl. MEM a (ml_lookup la (lbl,0)) <=> T IN X lbl) ==>
+  (!lbl. MEM a (ml_lookup la' (lbl,0)) <=>
+    T IN sw_update (ml_liveat_boundary_desc a bpr mems sizes cfg bb) X lbl)
+Proof
+  strip_tac >> gen_tac >> simp[sw_update_lookup, ml_boundary_desc_out, COND_RAND] >>
+  Cases_on `lbl = bb.bb_label` >> gvs[]
+  >- (drule_all ml_liveat_block_boundary_exact >>
+      simp[ml_liveat_boundary_desc_rhs, COND_RAND]) >>
+  drule_all ml_liveat_block_other_label >> simp[]
+QED
+
+(* Expand a traversal to its actual sequence of successful block lookups.
+   Shared by both directions of the concrete scan. *)
+Definition ml_scan_blocks_def:
+  (ml_scan_blocks blocks [] = []) /\
+  (ml_scan_blocks blocks (lbl::lbls) =
+    case FIND (\bb. bb.bb_label = lbl) blocks of
+      NONE => ml_scan_blocks blocks lbls
+    | SOME bb => bb::ml_scan_blocks blocks lbls)
+End
+
+Theorem ml_liveat_pass_sw_scan:
+  !la changed la' X.
+  ml_one_pass_liveat bpr mems sizes cfg blocks lbls la = (changed,la') /\
+  (!nm. OL alloc_to (mems nm)) /\ ptr_ml_ordered la /\
+  EVERY (\bb. bb.bb_instructions <> []) blocks /\
+  (!lbl. MEM a (ml_lookup la (lbl,0)) <=> T IN X lbl) ==>
+  (!lbl. MEM a (ml_lookup la' (lbl,0)) <=>
+    T IN sw_scan (MAP (ml_liveat_boundary_desc a bpr mems sizes cfg)
+      (ml_scan_blocks blocks lbls)) X lbl)
+Proof
+  Induct_on `lbls`
+  >- simp[ml_one_pass_liveat_def, ml_scan_blocks_def, sw_scan_def] >>
+  rpt gen_tac >> simp[ml_one_pass_liveat_def, ml_scan_blocks_def] >>
+  Cases_on `FIND (\bb. bb.bb_label = h) blocks` >> simp[]
+  >- metis_tac[] >>
+  rename1 `FIND _ blocks = SOME bb` >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `MEM bb blocks` by metis_tac[venomExecProofsTheory.FIND_MEM] >>
+  `bb.bb_instructions <> []` by
+    (qpat_x_assum `EVERY _ blocks` mp_tac >> simp[EVERY_MEM] >> disch_then drule >> simp[]) >>
+  rename1 `ml_liveat_block bpr mems sizes cfg la bb = (c1,mid)` >>
+  `ptr_ml_ordered mid` by
+    (drule_all ptr_liveat_block_ordered >>
+     disch_then (qspecl_then [`sizes`, `cfg`, `bpr`, `bb`] mp_tac) >> simp[]) >>
+  drule_all ml_liveat_block_sw_update >> strip_tac >>
+  simp[sw_scan_def] >> first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Definition ml_used_boundary_lookup_def:
+  ml_used_boundary_lookup blocks us lbl =
+    case FIND (\b. b.bb_label = lbl) blocks of
+      NONE => ml_lookup us (lbl,0)
+    | SOME b => ml_lookup us (b.bb_label,PRE (LENGTH b.bb_instructions))
+End
+
+Theorem ml_used_block_sw_update:
+  ml_used_block bpr mems pallocas cfg us bb blocks = (changed,us') /\
+  FIND (\b. b.bb_label = bb.bb_label) blocks = SOME bb /\
+  bb.bb_instructions <> [] /\
+  (!lbl. MEM a (ml_used_boundary_lookup blocks us lbl) <=> T IN X lbl) ==>
+  (!lbl. MEM a (ml_used_boundary_lookup blocks us' lbl) <=>
+    T IN sw_update (ml_used_boundary_desc a bpr mems pallocas cfg bb) X lbl)
+Proof
+  strip_tac >> gen_tac >> simp[sw_update_lookup, ml_boundary_desc_out, COND_RAND] >>
+  Cases_on `lbl = bb.bb_label` >> gvs[]
+  >- (simp[ml_used_boundary_lookup_def] >>
+      irule ml_used_block_boundary_exact >> simp[] >>
+      goal_assum (drule_at (Pat `ml_used_block _ _ _ _ _ _ _ = _`)) >> simp[] >>
+      gvs[ml_used_boundary_lookup_def]) >>
+  `ml_used_boundary_lookup blocks us' lbl = ml_used_boundary_lookup blocks us lbl` suffices_by simp[] >>
+  simp[ml_used_boundary_lookup_def] >>
+  Cases_on `FIND (\b. b.bb_label = lbl) blocks` >> simp[]
+  >- (drule_all ml_used_block_other_label >> simp[]) >>
+  drule venomExecProofsTheory.FIND_P >> simp[] >> strip_tac >>
+  drule_all ml_used_block_other_label >> simp[]
+QED
+
+Theorem ml_used_pass_sw_scan:
+  !us changed us' X.
+  ml_one_pass_used bpr mems pallocas cfg blocks lbls us = (changed,us') /\
+  EVERY (\bb. bb.bb_instructions <> []) blocks /\
+  (!lbl. MEM a (ml_used_boundary_lookup blocks us lbl) <=> T IN X lbl) ==>
+  (!lbl. MEM a (ml_used_boundary_lookup blocks us' lbl) <=>
+    T IN sw_scan (MAP (ml_used_boundary_desc a bpr mems pallocas cfg)
+      (ml_scan_blocks blocks lbls)) X lbl)
+Proof
+  Induct_on `lbls`
+  >- simp[ml_one_pass_used_def, ml_scan_blocks_def, sw_scan_def] >>
+  rpt gen_tac >> simp[ml_one_pass_used_def, ml_scan_blocks_def] >>
+  Cases_on `FIND (\bb. bb.bb_label = h) blocks` >> simp[]
+  >- metis_tac[] >>
+  rename1 `FIND _ blocks = SOME bb` >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `MEM bb blocks` by metis_tac[venomExecProofsTheory.FIND_MEM] >>
+  `bb.bb_instructions <> []` by
+    (qpat_x_assum `EVERY _ blocks` mp_tac >> simp[EVERY_MEM] >> disch_then drule >> simp[]) >>
+  `bb.bb_label = h` by
+    (drule venomExecProofsTheory.FIND_P >> simp[]) >>
+  `FIND (\b. b.bb_label = bb.bb_label) blocks = SOME bb` by simp[] >>
+  drule_all ml_used_block_sw_update >> strip_tac >>
+  simp[sw_scan_def] >> first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
 QED
