@@ -224,3 +224,27 @@ Proof
   qexists_tac `q` >> simp[] >>
   irule buffer_mcopy_exterior >> decide_tac
 QED
+
+Theorem normalized_bytes_word_fields[local]:
+  compile_typed_copy_fields cenv dst src
+    [BaseT (BytesT (Dynamic 33)); BaseT (UintT 256)]
+    [BaseT (BytesT (Dynamic 1)); BaseT (UintT 256)] 0 0 =
+  do compile_store_bytestring src dst;
+     d <- compile_with_byte_offset dst 96;
+     p <- compile_with_byte_offset src 64;
+     compile_store_memory_typed cenv d (BaseT (UintT 256)) p
+       (BaseT (UintT 256))
+  od
+Proof
+  simp[Once compile_store_memory_typed_def, compile_with_byte_offset_def,
+       comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  simp[compile_store_memory_typed_bytes, is_bytestring_type_def,
+       type_memory_bytes_def, word_size_def] >>
+  simp[Once compile_store_memory_typed_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, FUN_EQ_THM] >>
+  gen_tac >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[Once compile_store_memory_typed_def, comp_return_def] >>
+  gvs[compile_with_byte_offset_def]
+QED
+
