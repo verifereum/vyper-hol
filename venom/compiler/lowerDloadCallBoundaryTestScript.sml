@@ -1,6 +1,6 @@
 Theory lowerDloadCallBoundaryTest
 Ancestors
-  lowerDloadTargetGeometry lowerDloadOrdinaryExecution lowerDloadFrameCertificate
+  lowerDloadReturnBoundary lowerDloadTargetGeometry lowerDloadOrdinaryExecution lowerDloadFrameCertificate
   lowerDloadPairedBoundary lowerDloadOwnership lowerDloadAllocation
   lowerDloadControlPosition lowerDloadDefs venomExecSemantics venomState
   ptrDiscipline contextCodegenRel finite_map pred_set list rich_list
@@ -219,4 +219,93 @@ QED
    - Source annotated reachability/stack origin at a resumed caller needs
      the recursive completed-source-callee summary. Local source setup and
      IntRet existence alone cannot advance that origin.
+*)
+
+Theorem ld_ret_resumed_owned_backward:
+  ptr_discipline lo ctx vs0 /\
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn i s /\
+  i.inst_opcode = RET /\ ld_owned_vars V E AG BH tn un s t /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
+  step_inst fuelT CT i t = IntRet tret tend /\
+  f.lf_inst.inst_outputs = g.lf_inst.inst_outputs /\
+  bind_outputs g.lf_inst.inst_outputs tret.iret_values
+    (adopt_return_fmp tret (merge_callee_state g.lf_state tend)) = SOME t' /\
+  ld_saved_embedded savedV E keys d A f g ==>
+  ?s'. step_inst fuelS CS i s = IntRet tret s /\
+    bind_outputs f.lf_inst.inst_outputs tret.iret_values
+      (merge_callee_state f.lf_state s) = SOME s' /\
+    ld_owned_vars savedV E
+      (DRESTRICT f.lf_prov (COMPL (set f.lf_inst.inst_outputs)))
+      (DRESTRICT g.lf_prov (COMPL (set g.lf_inst.inst_outputs)))
+      (entry_taint with t_var := DRESTRICT f.lf_tvar
+        (COMPL (set f.lf_inst.inst_outputs)))
+      (entry_taint with t_var := DRESTRICT g.lf_tvar
+        (COMPL (set g.lf_inst.inst_outputs))) s' t'
+Proof
+  strip_tac >>
+  `eval_operands i.inst_operands s = eval_operands i.inst_operands t` by
+    (irule ld_annotated_ret_operands_equal >> metis_tac[]) >>
+  qpat_x_assum `step_inst fuelT CT i t = _` mp_tac >>
+  simp[step_inst_non_invoke] >>
+  pure_once_rewrite_tac[step_inst_base_def] >> simp[] >>
+  strip_tac >> gvs[AllCaseEqs(), adopt_return_fmp_def] >>
+  drule ld_bind_outputs_target_exists >>
+  disch_then (qspec_then `merge_callee_state f.lf_state s` strip_assume_tac) >>
+  qexists_tac `s'` >> simp[step_inst_non_invoke] >>
+  pure_once_rewrite_tac[step_inst_base_def] >> simp[] >>
+  drule ld_saved_embedded_return_vars >>
+  disch_then (qspecl_then [`t`,`s`] assume_tac) >>
+  drule_all ld_owned_bind_outputs >> simp[]
+QED
+
+(* Each charge is indexed by the strict tail, never by all active frames.
+   The head is the very same f,g,E certificate used by the return producer. *)
+Theorem ld_saved_charge_push_pop:
+  ld_saved_embedded V E keys (32 * SUM (MAP CARD suspended)) A f g /\
+  (!j. j < LENGTH suspended ==>
+    ld_saved_embedded (EL j supports) E (EL j keysets)
+      (32 * SUM (MAP CARD (DROP (SUC j) suspended)))
+      (EL j suspended) (EL j fs) (EL j gs)) ==>
+  (!j. j < LENGTH (A::suspended) ==>
+    ld_saved_embedded (EL j (V::supports)) E (EL j (keys::keysets))
+      (32 * SUM (MAP CARD (DROP (SUC j) (A::suspended))))
+      (EL j (A::suspended)) (EL j (f::fs)) (EL j (g::gs))) /\
+  ld_alloc_account keys (32 * SUM (MAP CARD suspended)) A
+    f.lf_state g.lf_state /\
+  g.lf_state.vs_alloca_next = f.lf_state.vs_alloca_next +
+    32 * SUM (MAP CARD (A::suspended))
+Proof
+  strip_tac >> conj_tac
+  >- (gen_tac >> Cases_on `j` >> simp[] >> metis_tac[]) >>
+  drule ld_saved_embedded_account >> strip_tac >> simp[] >>
+  drule ld_alloc_account_frontier >> simp[]
+QED
+
+Theorem ld_setup_return_token_residual:
+  setup_callee source xs s = SOME ss /\
+  setup_callee target ys t = SOME ts /\ NULL xs = NULL ys ==>
+  (ss.vs_return_pc_token = ts.vs_return_pc_token <=>
+   NULL xs \/ LAST xs = LAST ys)
+Proof
+  simp[setup_callee_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  Cases_on `NULL ys` >> gvs[]
+QED
+
+(* Exact residual of the return-PC audit:
+   ptr_use_ok at INVOKE allows any pointer argument position k IN P nm;
+   it does not exclude LENGTH args - 1 from P nm. setup_callee copies LAST
+   into vs_return_pc_token. RETPC_PARAM [Lit idx] then reads that field
+   independently of idx, whereas its pointer provenance has no Var input.
+   Thus a relocated pointer in the last argument is not ruled out by the
+   current local premises. A global paired boundary must either establish
+   equal LAST values from an additional reachable/static invariant, or
+   represent the token's relocation and its propagation through RETPC_PARAM.
+   The residual theorem above is only an equivalence, not such a producer.
+
+   Independently, resumed source stack origin requires an actual derivation
+   of the source run from ss (the source callee setup) to its IntRet state s.
+   The local source RET equation produced here supplies only the final step;
+   it does not supply that recursive execution derivation. A simultaneous
+   recursive summary must retain entry setup, aligned stack certificates,
+   source annotated reachability at exit, and source completed callee run.
 *)
