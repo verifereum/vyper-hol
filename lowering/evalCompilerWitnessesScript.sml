@@ -10,6 +10,7 @@ Ancestors
   evalCompilerNameCollisions
   evalCompilerCtorLocals
   evalCompilerInternalLabels
+  evalCompilerForIterables
   evalCompilerSliceBuffers
   evalCompilerBuiltinForms
   evalCompilerPhiPointers

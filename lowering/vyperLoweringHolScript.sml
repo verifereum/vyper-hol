@@ -44,4 +44,5 @@ Ancestors
   (* focused internal-frame allocation, cleanup and whitelist regressions *)
   calleeMemoryWitness
   cleanupPromiseWitness
+  joinSpillWitness
   internalFrameWhitelistDiagnostic

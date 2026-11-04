@@ -41,7 +41,7 @@ Proof
   qexistsl_tac [`mut`,`args`,`body`] >> simp[encode_create_ctor_args_def]
 QED
 
-(* The guard is Call-specific, not a ban on Pop or computed precompiles.
+(* The guard is a ban on Calls and the precompile builtins, not on Pop.
    Inspect nested expressions/reasons/branches as well as direct statement
    roots. The function lookup does not need already-deployed source code. *)
 Theorem constructor_call_exclusion:
@@ -69,10 +69,15 @@ Proof
        dest_Deploy_Fn_def]
 QED
 
-Theorem constructor_computed_builtin_not_call:
-  constructor_call_free
+(* A precompile builtin is excluded like a Call; another builtin is not. *)
+Theorem constructor_precompile_builtin_excluded:
+  ~constructor_call_free
     [FunctionDecl Deploy Payable F F "__init__" [] [] NoneT
       [Expr (Builtin (BaseT (BytesT (Fixed 32))) Sha256
+         [Literal (BaseT (BytesT (Dynamic 0))) (BytesL [])])]] /\
+  constructor_call_free
+    [FunctionDecl Deploy Payable F F "__init__" [] [] NoneT
+      [Expr (Builtin (BaseT (BytesT (Fixed 32))) Keccak256
          [Literal (BaseT (BytesT (Dynamic 0))) (BytesL [])])]]
 Proof
   EVAL_TAC >> simp[] >> EVAL_TAC

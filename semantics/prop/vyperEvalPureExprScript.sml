@@ -89,7 +89,7 @@ Definition eval_pure_expr_def:
               | _ => NONE)
            | NONE => NONE)
         | _ => NONE)
-     else if builtin_args_length_ok bt (LENGTH es) then
+     else if builtin_args_length_ok bt (LENGTH es) ∧ ¬precompile_builtin bt then
        (case eval_pure_exprs cx st es of
         | SOME vs =>
           (case evaluate_builtin cx st.accounts ty bt (MAP expr_type es) vs of
@@ -229,7 +229,9 @@ Proof
       simp monadic_defs >>
       imp_res_tac result_array_length_state >>
       simp[vyperContextTheory.builtin_args_length_ok_def] >>
-      simp[vyperStateTheory.get_accounts_def] >>
+      simp[vyperStateTheory.get_accounts_def,
+           vyperInterpreterTheory.precompile_call_success_def,
+           vyperInterpreterTheory.precompile_builtin_def] >>
       simp monadic_defs)
   (* TypeBuiltin *)
   >- (rpt gen_tac >>
@@ -394,7 +396,8 @@ Proof
           `s1 = st` by metis_tac[eval_exprs_preserves_state] >>
           pop_assum SUBST_ALL_TAC >>
           fs[vyperStateTheory.get_accounts_def, vyperStateTheory.return_def,
-             vyperStateTheory.bind_def, vyperStateTheory.lift_sum_def] >>
+             vyperStateTheory.bind_def, vyperStateTheory.lift_sum_def,
+             vyperInterpreterTheory.precompile_call_success_def] >>
           Cases_on `evaluate_builtin cx st.accounts ty bt (MAP expr_type es) vs` >>
           gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]))
   (* TypeBuiltin *)

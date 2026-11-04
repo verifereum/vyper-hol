@@ -63,9 +63,19 @@ Proof
   CONV_TAC cv_eval
 QED
 
-Theorem activated_precompile_does_not_consume_or_record:
-  SND (eval_expr empty_evaluation_context sha256_expr counter_state) = counter_state /\
-  ISL (FST (eval_expr empty_evaluation_context sha256_expr counter_state))
+(* A computed precompile takes its success from the next outcome and
+   records no request. *)
+Theorem activated_precompile_consumes_without_recording:
+  SND (eval_expr empty_evaluation_context sha256_expr counter_state) =
+    counter_state with outcomes := SOME [] /\
+  ~ISL (FST (eval_expr empty_evaluation_context sha256_expr counter_state)) /\
+  SND (eval_expr empty_evaluation_context sha256_expr
+         (counter_state with outcomes :=
+            SOME [counter_outcome with co_success := T])) =
+    counter_state with outcomes := SOME [] /\
+  ISL (FST (eval_expr empty_evaluation_context sha256_expr
+              (counter_state with outcomes :=
+                 SOME [counter_outcome with co_success := T])))
 Proof
   simp (sha256_expr_def :: sha256_fixture_address :: precompile_result_sha256 ::
         adopt_call_outcome_def :: adopt_outcome_def :: EXT_CALL_FIXTURE_SIMP) >>
