@@ -55,19 +55,25 @@ Proof
       drule_all ld_mload_effect >>
       disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
       qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
-      simp[] >> metis_tac[ld_set_prov_selected]) >>
+      simp[] >> (qpat_assum `FDOM A = _` (fn th => rewrite_tac[GSYM th]) >>
+       gen_tac >> strip_tac >> irule ld_set_prov_selected >>
+       qexistsl_tac [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[])) >>
   (Cases_on `inst.inst_opcode = ILOAD`
   >- (gvs[Excl "MEM"] >>
       `~in_revert_forward f.lf_fn f.lf_src` by metis_tac[MEM] >>
       drule_all ld_iload_effect >>
       disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
       qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
-      simp[] >> metis_tac[ld_set_prov_selected]) >>
+      simp[] >> (qpat_assum `FDOM A = _` (fn th => rewrite_tac[GSYM th]) >>
+       gen_tac >> strip_tac >> irule ld_set_prov_selected >>
+       qexistsl_tac [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[])) >>
   `MEM inst.inst_opcode [LT;GT;EQ]` by gvs[MEM] >>
   drule_all ld_comparison_effect >>
   disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
   qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
-  simp[] >> metis_tac[ld_set_prov_selected]))
+  simp[] >> (qpat_assum `FDOM A = _` (fn th => rewrite_tac[GSYM th]) >>
+       gen_tac >> strip_tac >> irule ld_set_prov_selected >>
+       qexistsl_tac [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[])))
 QED
 
 Theorem ld_sync_classified_read_coverage:

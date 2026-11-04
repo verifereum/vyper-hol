@@ -503,11 +503,15 @@ Proof
 QED
 
 Theorem ld_set_prov_selected:
-  (!a. a IN FRANGE H ==> a IN FDOM A) ==>
-  !a. a IN FRANGE (set_prov H outs NONE) ==> a IN FDOM A
+  (!a. q = SOME a ==> a IN FDOM A) /\
+  (!a. a IN FRANGE (H : string |-> 'a) ==> a IN FDOM A) ==>
+  !a. a IN FRANGE (set_prov H outs q) ==> a IN FDOM A
 Proof
-  Cases_on `outs` >>
-  simp[set_prov_def, IN_FRANGE, FDOM_DRESTRICT, DRESTRICT_DEF] >> metis_tac[]
+  strip_tac >> Cases_on `outs`
+  >- (gvs[set_prov_def, IN_FRANGE, FDOM_DRESTRICT, DRESTRICT_DEF] >> metis_tac[]) >>
+  Cases_on `t` >> Cases_on `q` >>
+  gvs[set_prov_def, FAPPLY_FUPDATE_THM, FRANGE_FUPDATE, IN_FRANGE,
+      FDOM_DRESTRICT, DRESTRICT_DEF] >> metis_tac[]
 QED
 
 Theorem ld_oracle_call_provenance:
@@ -618,5 +622,7 @@ Proof
   drule_all ld_oracle_call_step >> strip_tac >>
   qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
   simp[] >> (conj_tac >- (irule ld_oracle_call_provenance >> simp[])) >>
-  metis_tac[ld_set_prov_selected]
+  qpat_assum `FDOM A = _` (fn th => rewrite_tac[GSYM th]) >>
+  gen_tac >> strip_tac >> irule ld_set_prov_selected >>
+  qexistsl_tac [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[]
 QED

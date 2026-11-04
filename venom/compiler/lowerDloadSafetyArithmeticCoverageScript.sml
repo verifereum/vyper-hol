@@ -19,13 +19,9 @@ Theorem ld_set_first_prov_selected:
   (!a. a IN FRANGE H ==> a IN FDOM A) ==>
   !a. a IN FRANGE (set_prov H outs (first_prov H ops)) ==> a IN FDOM A
 Proof
-  strip_tac >> Cases_on `first_prov H ops`
-  >- metis_tac[ld_set_prov_selected] >>
-  `x IN FRANGE H` by metis_tac[ld_first_prov_range] >>
-  Cases_on `outs`
-  >- (gvs[set_prov_def, IN_FRANGE, FDOM_DRESTRICT, DRESTRICT_DEF] >> metis_tac[]) >>
-  Cases_on `t` >> gvs[set_prov_def, FAPPLY_FUPDATE_THM, FRANGE_FUPDATE, IN_FRANGE,
-    FDOM_DRESTRICT, DRESTRICT_DEF] >> metis_tac[]
+  rpt strip_tac >> irule ld_set_prov_selected >>
+  qexistsl_tac [`H`,`outs`,`first_prov H ops`] >>
+  simp[] >> metis_tac[ld_first_prov_range]
 QED
 
 Theorem ld_sync_arithmetic_effect:
@@ -75,7 +71,8 @@ Proof
   >- (drule_all ld_shift_effect >>
       disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
       qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
-      simp[] >> metis_tac[ld_set_prov_selected]) >>
+      simp[] >> (gen_tac >> strip_tac >> irule ld_set_prov_selected >>
+       qexistsl_tac [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[])) >>
   `MEM inst.inst_opcode
     [MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
      ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET]` by
@@ -83,7 +80,8 @@ Proof
   drule_all ld_scalar_pure_effect >>
   disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
   qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
-  simp[] >> metis_tac[ld_set_prov_selected]))
+  simp[] >> (gen_tac >> strip_tac >> irule ld_set_prov_selected >>
+       qexistsl_tac [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[])))
 QED
 
 Theorem ld_sync_arithmetic_coverage:

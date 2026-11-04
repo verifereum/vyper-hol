@@ -52,22 +52,26 @@ Proof
   >- (drule_all ld_environment_read_effect >>
       disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
       qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
-      simp[] >> metis_tac[ld_set_prov_selected]) >>
+      simp[] >> (gen_tac >> strip_tac >> irule ld_set_prov_selected >>
+       qexistsl_tac [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[])) >>
   (Cases_on `MEM inst.inst_opcode [BLOCKHASH;BLOBHASH;CALLDATALOAD]`
   >- (drule_all ld_keyed_environment_read_effect >>
       disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
       qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
-      simp[] >> metis_tac[ld_set_prov_selected]) >>
+      simp[] >> (gen_tac >> strip_tac >> irule ld_set_prov_selected >>
+       qexistsl_tac [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[])) >>
   (Cases_on `MEM inst.inst_opcode [BALANCE;SELFBALANCE;EXTCODESIZE;EXTCODEHASH]`
   >- (drule_all ld_account_read_effect >>
       disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
       qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
-      simp[] >> metis_tac[ld_set_prov_selected]) >>
+      simp[] >> (gen_tac >> strip_tac >> irule ld_set_prov_selected >>
+       qexistsl_tac [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[])) >>
   `MEM inst.inst_opcode [SLOAD;TLOAD]` by gvs[MEM] >>
   drule_all ld_storage_read_effect >>
   disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
   qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
-  simp[] >> metis_tac[ld_set_prov_selected])))
+  simp[] >> (gen_tac >> strip_tac >> irule ld_set_prov_selected >>
+       qexistsl_tac [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[]))))
 QED
 
 Theorem ld_sync_observational_read_coverage:

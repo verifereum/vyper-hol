@@ -45,7 +45,8 @@ Proof
   `inst.inst_opcode = RETPC_PARAM` by gvs[MEM] >>
   drule_all ld_retpc_param_effect >> strip_tac >>
   qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
-  simp[] >> metis_tac[ld_set_prov_selected])
+  simp[] >> (gen_tac >> strip_tac >> irule ld_set_prov_selected >>
+   qexistsl_tac [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[]))
 QED
 
 Theorem ld_sync_assignment_coverage:
