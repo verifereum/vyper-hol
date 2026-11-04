@@ -2,7 +2,7 @@
 Theory bodyIntCallVoid
 Ancestors
   supportedStmts supportedDecls bodyAppendStorageFacts compileVyper
-  stmtLowering finite_map list
+  stmtLowering compileEnv context finite_map list
 
 Theorem supported_variable_decl_type_map:
   !tops src id vis mut ty slot.
@@ -35,4 +35,21 @@ Theorem supported_append_compile_type_independent:
 Proof
   strip_tac >> drule_all supported_append_root_array >> strip_tac >>
   simp[Once compile_stmt_def] >> simp[Once compile_stmt_def]
+QED
+
+Theorem declare_local_module_var_type:
+  declare_local cenv id ty sa = (cenv',sb) ==>
+  cenv'.ce_module_var_type = cenv.ce_module_var_type
+Proof
+  Cases_on `cenv.ce_alloca_locals` >>
+  simp[declare_local_def, comp_bind_def, comp_return_def, fresh_var_def,
+       comp_get_def, LET_THM] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem declare_stmt_local_module_var_type:
+  declare_stmt_local cenv s sa = (cenv',sb) ==>
+  cenv'.ce_module_var_type = cenv.ce_module_var_type
+Proof
+  Cases_on `s` >> simp[declare_stmt_local_def, comp_return_def] >>
+  metis_tac[declare_local_module_var_type]
 QED
