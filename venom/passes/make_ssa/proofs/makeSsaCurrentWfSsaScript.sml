@@ -26,6 +26,7 @@ Ancestors
   makeSsaCurrentDemandedCut makeSsaCurrentTokenGraph makeSsaCurrentLastSite
   makeSsaCurrentPlacementCut makeSsaCurrentOccurrence makeSsaCurrentCutTokens
   makeSsaCurrentDefSupport makeSsaCurrentPlacement makeSsaCurrentFrontier
+  makeSsaCurrentInduct makeSsaDefs
   ssaPipeline codegenReadyCompute o1ContractSimplifyCfg
 Libs
   rich_listTheory
@@ -3396,6 +3397,145 @@ Proof
     (simp[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
   drule_all current_frontier_elim >>
   simp[current_cfg_edge_preds] >> metis_tac[]
+QED
+
+Theorem current_wf_outputs_history_owners:
+  !anns s rs H E names s' rs' H' E'.
+  current_outputs_trace anns s rs H E names s' rs' H' E' ==>
+  MAP (\e. (FST e,FST (SND e))) H' =
+    MAP (\e. (FST e,FST (SND e))) H ++ anns
+Proof
+  Induct >> simp[current_outputs_trace_def] >>
+  gen_tac >> PairCases_on `h` >> simp[current_outputs_trace_def] >>
+  rpt strip_tac >> first_x_assum drule >> simp[APPEND_ASSOC]
+QED
+
+Theorem current_wf_local_history_owners:
+  !annss insts s rs H E insts' s' rs' H' E'.
+  current_local_trace annss insts s rs H E insts' s' rs' H' E' ==>
+  MAP (\e. (FST e,FST (SND e))) H' =
+    MAP (\e. (FST e,FST (SND e))) H ++ FLAT annss
+Proof
+  Induct >> simp[current_local_trace_def] >> rpt strip_tac >>
+  drule current_inst_trace_projection >> strip_tac >>
+  qpat_x_assum `current_inst_trace _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[current_inst_trace_def] >> strip_tac >>
+  drule current_wf_outputs_history_owners >> strip_tac >>
+  first_x_assum drule >> simp[APPEND_ASSOC]
+QED
+
+Definition current_wf_history_provenance_def:
+  current_wf_history_provenance A visited H <=>
+    !t v n. MEM (t,v,n) H ==>
+      ?l. MEM l visited /\ MEM (t,v) (FLAT (A l))
+End
+
+Theorem current_wf_local_history_provenance:
+  current_local_trace (A l) insts s rs H E insts' s' rs' H' E' /\
+  current_wf_history_provenance A visited H ==>
+  current_wf_history_provenance A (l::visited) H'
+Proof
+  strip_tac >> drule current_wf_local_history_owners >> strip_tac >>
+  simp[current_wf_history_provenance_def] >> rpt strip_tac >>
+  `MEM (t,v) (MAP (\e. (FST e,FST (SND e))) H')` by
+    (simp[MEM_MAP] >> qexists_tac `(t,v,n)` >> simp[]) >>
+  qpat_x_assum `MEM (t,v) (MAP _ H')` mp_tac >>
+  pure_asm_rewrite_tac[MEM_APPEND] >>
+  simp[MEM_MAP, pairTheory.EXISTS_PROD] >> strip_tac
+  >- (fs[current_wf_history_provenance_def] >> metis_tac[]) >>
+  qexists_tac `l` >> simp[]
+QED
+
+Theorem current_wf_tree_history_provenance:
+  (!tree A sm s rs bbs H E visited ctrs' s' bbs' H' visited' events.
+    current_tree_trace A sm tree s rs bbs H E visited
+      ctrs' s' bbs' H' visited' events /\
+    current_wf_history_provenance A visited H ==>
+    current_wf_history_provenance A visited' H') /\
+  (!trees A sm s ctrs stacks bbs H E visited ctrs' s' bbs' H' visited' events.
+    current_children_trace A sm trees s ctrs stacks bbs H E visited
+      ctrs' s' bbs' H' visited' events /\
+    current_wf_history_provenance A visited H ==>
+    current_wf_history_provenance A visited' H')
+Proof
+  ho_match_mp_tac current_dom_tree_induction >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >>
+      simp[current_tree_trace_def] >>
+      Cases_on `lookup_block lbl bbs` >> simp[] >> strip_tac >> gvs[] >>
+      first_x_assum irule >> metis_tac[current_wf_local_history_provenance])
+  >- simp[current_tree_trace_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[current_tree_trace_def] >> strip_tac >> gvs[] >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Definition current_wf_event_history_provenance_def:
+  current_wf_event_history_provenance A
+    (l,bb,s,rs,H,E,insts1,s1,rs1,H1,E1,
+      (bbs1 : basic_block list),(bbs2 : basic_block list)) <=>
+    ?visited. ~MEM l visited /\ current_wf_history_provenance A visited H
+End
+
+Theorem current_wf_tree_event_history_provenance:
+  (!tree A sm s rs bbs H E visited ctrs' s' bbs' H' visited' events.
+    current_tree_trace A sm tree s rs bbs H E visited
+      ctrs' s' bbs' H' visited' events /\
+    ALL_DISTINCT (dom_tree_labels tree) /\
+    (!l. MEM l (dom_tree_labels tree) ==> ~MEM l visited) /\
+    current_wf_history_provenance A visited H ==>
+    EVERY (current_wf_event_history_provenance A) events) /\
+  (!trees A sm s ctrs stacks bbs H E visited ctrs' s' bbs' H' visited' events.
+    current_children_trace A sm trees s ctrs stacks bbs H E visited
+      ctrs' s' bbs' H' visited' events /\
+    ALL_DISTINCT (FLAT (MAP dom_tree_labels trees)) /\
+    (!l. MEM l (FLAT (MAP dom_tree_labels trees)) ==> ~MEM l visited) /\
+    current_wf_history_provenance A visited H ==>
+    EVERY (current_wf_event_history_provenance A) events)
+Proof
+  ho_match_mp_tac current_dom_tree_induction >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >>
+      simp[current_tree_trace_def, dom_tree_labels_def] >>
+      Cases_on `lookup_block lbl bbs` >> simp[] >> strip_tac >> gvs[] >>
+      conj_tac
+      >- (simp[current_wf_event_history_provenance_def] >> metis_tac[]) >>
+      first_x_assum irule >>
+      metis_tac[current_wf_local_history_provenance, MEM])
+  >- simp[current_tree_trace_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[current_tree_trace_def, ALL_DISTINCT_APPEND] >> strip_tac >> gvs[] >>
+  simp[EVERY_APPEND] >> conj_tac
+  >- (last_x_assum irule >> metis_tac[MEM_APPEND]) >>
+  `current_wf_history_provenance A visited1 H1` by
+    metis_tac[cj 1 current_wf_tree_history_provenance] >>
+  `!l. MEM l (FLAT (MAP dom_tree_labels trees)) ==> ~MEM l visited1` by
+    (drule (cj 1 current_tree_trace_visited) >> metis_tac[MEM_APPEND]) >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Theorem current_wf_event_single_owner_absent:
+  current_wf_event_history_provenance A
+    (l,bb,s,rs,H,E,insts1,s1,rs1,H1,E1,bbs1,bbs2) /\
+  (!q t. MEM (t,v) (FLAT (A q)) ==> q = l) ==>
+  current_owner_count H v = 0
+Proof
+  simp[current_wf_event_history_provenance_def,
+    current_wf_history_provenance_def] >> strip_tac >>
+  `EVERY (\e. FST (SND e) <> v) H` by
+    (simp[EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]) >>
+  fs[current_owner_count_def, FILTER_EQ_NIL]
+QED
+
+Theorem current_wf_precleanup_event_history:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb ==>
+  EVERY (current_wf_event_history_provenance A) events
+Proof
+  strip_tac >> drule current_wf_precleanup_structural >>
+  simp[current_structural_certificate_def] >> strip_tac >>
+  `ALL_DISTINCT (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_labels_distinct] >>
+  gvs[] >> drule (cj 1 current_wf_tree_event_history_provenance) >>
+  simp[current_wf_history_provenance_def]
 QED
 
 Theorem current_wf_precleanup_ordinary_available:
