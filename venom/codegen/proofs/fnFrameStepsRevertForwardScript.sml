@@ -2,7 +2,7 @@
 Theory fnFrameStepsRevertForward
 Ancestors
   contextCodegenRel dfgDefs list dfgAnalysisProps allocaRemapSSA venomWf
-  stackPlanGen
+  stackPlanGen venomExecProofs
 
 Theorem resolve_block_assigns_cong:
   !insts at h.
@@ -117,4 +117,36 @@ Proof
   first_x_assum (qspecl_then [`fn`, `d`] mp_tac) >> simp[] >> strip_tac >>
   qexists_tac `h :: pre` >>
   Cases_on `pre` >> gvs[is_fn_path_def]
+QED
+
+Theorem fn_dominates_strict_measure:
+  !fn. ?depth : string -> num.
+    !d n. fn_dominates fn d n /\ d <> n ==> depth d < depth n
+Proof
+  gen_tac >>
+  qabbrev_tac `P = \lbl k. ?path. is_fn_path fn path /\ path <> [] /\
+    (?entry. fn_entry_label fn = SOME entry /\ HD path = entry) /\
+    LAST path = lbl /\ LENGTH path = k` >>
+  `!lbl. fn_reachable fn lbl ==> ?k. P lbl k` by
+    (rpt strip_tac >> gvs[fn_reachable_def] >>
+     drule rtc_to_fn_path >> strip_tac >>
+     qexists_tac `LENGTH path` >> simp[Abbr `P`] >> metis_tac[]) >>
+  qexists_tac `\lbl. LEAST k. P lbl k` >> rpt strip_tac >>
+  `fn_reachable fn n` by gvs[fn_dominates_def] >>
+  `?k. P n k` by metis_tac[] >>
+  `P n (LEAST k. P n k)` by
+    (numLib.LEAST_ELIM_TAC >> metis_tac[]) >>
+  `?path. is_fn_path fn path /\ path <> [] /\
+     (?entry. fn_entry_label fn = SOME entry /\ HD path = entry) /\
+     LAST path = n /\ LENGTH path = (LEAST k. P n k)` by
+    (qpat_x_assum `P n _` mp_tac >> simp[Abbr `P`]) >>
+  `MEM d path` by (gvs[fn_dominates_def] >> metis_tac[]) >>
+  `d <> LAST path` by simp[] >>
+  drule_all is_fn_path_proper_prefix >> strip_tac >>
+  `P d (LENGTH pre)` by (simp[Abbr `P`] >> metis_tac[]) >>
+  ` (LEAST k. P d k) <= LENGTH pre` by
+    (numLib.LEAST_ELIM_TAC >> conj_tac >- metis_tac[] >>
+     rpt strip_tac >> spose_not_then assume_tac >>
+     first_x_assum (qspec_then `LENGTH pre` mp_tac) >> simp[]) >>
+  simp[]
 QED
