@@ -1,6 +1,6 @@
 Theory lowerDloadOracleCallAssembly
 Ancestors
-  lowerDloadExternalCallEffects lowerDloadSafetyWriteAssembly
+  lowerDloadExternalCallEffects lowerDloadSafetyWriteAssembly lowerDloadSafetyBytes
   lowerDloadSafetyAmbient lowerDloadSafetyValues lowerDloadSafetyUpdates
   lowerDloadSafetyRelation ptrDiscipline venomExecSemantics venomState
   memLocDefs pointerConfinedDefs venomInst finite_map pred_set list words arithmetic
@@ -133,4 +133,117 @@ Proof
      qexistsl_tac [`f.lf_fn`,`inst`,`f.lf_src`] >> simp[] >>
      qpat_x_assum `_ \/ _` strip_assume_tac >> fs[] >> metis_tac[]) >>
   gvs[op_taint_def]
+QED
+
+Theorem ld_oracle_call_dispatch:
+  ((inst.inst_opcode = CALL /\
+    inst.inst_operands = [g;a;v;ao;az;ro;rz] /\
+    st = t.vs_call_ctx.cc_static) \/
+   (inst.inst_opcode = STATICCALL /\
+    inst.inst_operands = [g;a;ao;az;ro;rz] /\ st = T)) /\
+  step_inst_base inst t = OK ts ==>
+  ?gas addr value at size rt rsize.
+    eval_operand g t = SOME gas /\ eval_operand a t = SOME addr /\
+    (inst.inst_opcode = CALL ==> eval_operand v t = SOME value) /\
+    (inst.inst_opcode = STATICCALL ==> value = 0w) /\
+    eval_operand ao t = SOME at /\ eval_operand az t = SOME size /\
+    eval_operand ro t = SOME rt /\ eval_operand rz t = SOME rsize /\
+    exec_ext_call inst t gas addr value at size rt rsize st = OK ts
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  asm_rewrite_tac[opcode_case_def] >>
+  simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem ld_oracle_call_operands:
+  ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
+  fn_shape_ok f.lf_fn /\ fn_ptr_ok P f.lf_fn /\
+  MEM inst (fn_insts f.lf_fn) /\
+  taint_ok f.lf_fn tn inst f.lf_src /\ tn.t_var = f.lf_tv /\
+  ((inst.inst_opcode = CALL /\
+    inst.inst_operands = [g;a;v;ao;az;ro;rz] /\
+    st = f.lf_tgt.vs_call_ctx.cc_static) \/
+   (inst.inst_opcode = STATICCALL /\
+    inst.inst_operands = [g;a;ao;az;ro;rz] /\ st = T)) /\
+  step_inst_base inst f.lf_tgt = OK ts ==>
+  ?gas addr value x y size r q rsize.
+    eval_operand g f.lf_src = SOME gas /\
+    eval_operand a f.lf_src = SOME addr /\
+    (inst.inst_opcode = CALL ==> eval_operand v f.lf_src = SOME value) /\
+    (inst.inst_opcode = STATICCALL ==> value = 0w) /\
+    eval_operand ao f.lf_src = SOME x /\
+    eval_operand az f.lf_src = SOME size /\
+    eval_operand ro f.lf_src = SOME r /\
+    eval_operand rz f.lf_src = SOME rsize /\
+    eval_operand ao f.lf_tgt = SOME y /\
+    eval_operand ro f.lf_tgt = SOME q /\
+    (op_prov f.lf_H ao = NONE ==> x = y) /\
+    (!k. op_prov f.lf_H ao = SOME k ==> ld_wordrel A (SOME k) x y) /\
+    (op_prov f.lf_H ro = NONE ==> r = q) /\
+    (!k. op_prov f.lf_H ro = SOME k ==> ld_wordrel A (SOME k) r q) /\
+    exec_ext_call inst f.lf_tgt gas addr value y size q rsize st = OK ts
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `!i. ((inst.inst_opcode = CALL /\ MEM i [0;1;2;4;6]) \/
+         (inst.inst_opcode = STATICCALL /\ MEM i [0;1;3;5])) ==>
+     eval_operand (EL i inst.inst_operands) f.lf_src =
+     eval_operand (EL i inst.inst_operands) f.lf_tgt` by
+    (rpt strip_tac >> irule ld_oracle_call_scalar_equal >> simp[] >>
+     qpat_x_assum `_ \/ _` strip_assume_tac >> gvs[] >> metis_tac[]) >>
+  `!op z. MEM op inst.inst_operands /\ eval_operand op f.lf_tgt = SOME z ==>
+    ?w. eval_operand op f.lf_src = SOME w /\
+      (op_prov f.lf_H op = NONE ==> w = z) /\
+      (!k. op_prov f.lf_H op = SOME k ==> ld_wordrel A (SOME k) w z)` by
+    (rpt strip_tac >>
+     `op_taint tn op = {}` by
+       (irule ld_numeric_operand_untainted >>
+        qexistsl_tac [`f.lf_fn`,`inst`,`f.lf_src`] >> simp[] >>
+        qpat_x_assum `_ \/ _` strip_assume_tac >> fs[] >> gvs[]) >>
+     irule ld_numeric_operand_observation >> simp[] >>
+     conj_tac >- (qexists_tac `tn` >> simp[]) >>
+     conj_tac >- (qexists_tac `inst` >> simp[] >>
+       qpat_x_assum `_ \/ _` strip_assume_tac >> gvs[]) >>
+     qexists_tac `P` >> simp[]) >>
+  drule_all ld_oracle_call_dispatch >> strip_tac >>
+  rename1 `eval_operand az f.lf_tgt = SOME n` >>
+  `?x. eval_operand ao f.lf_src = SOME x /\
+      (op_prov f.lf_H ao = NONE ==> x = at) /\
+      (!k. op_prov f.lf_H ao = SOME k ==> ld_wordrel A (SOME k) x at)` by
+    (first_x_assum irule >> qpat_x_assum `_ \/ _` strip_assume_tac >> fs[]) >>
+  `?r. eval_operand ro f.lf_src = SOME r /\
+      (op_prov f.lf_H ro = NONE ==> r = rt) /\
+      (!k. op_prov f.lf_H ro = SOME k ==> ld_wordrel A (SOME k) r rt)` by
+    (first_x_assum irule >> qpat_x_assum `_ \/ _` strip_assume_tac >> fs[]) >>
+  qexistsl_tac [`gas`,`addr`,`value`,`x`,`at`,`n`,`r`,`rt`,`rsize`] >>
+  simp[] >> qpat_x_assum `_ \/ _` strip_assume_tac >> gvs[] >>
+  first_x_assum (fn th => map_every (fn i => mp_tac (Q.SPEC i th))
+    [`0`,`1`,`2`,`3`,`4`,`5`,`6`]) >> simp[EL]
+QED
+
+Theorem ld_observed_memory_read:
+  ld_memory lo A tn s t /\
+  access_ok lo (ld_erase A o_f H) fn inst s /\
+  taint_ok fn tn inst s /\ ~about_to_revert fn inst s /\
+  ~in_revert_forward fn s /\
+  ~MEM inst.inst_opcode [MLOAD;ILOAD;MCOPY;RETURN] /\
+  mem_read_ops inst = SOME ops /\
+  MEM (w2n x,n) (source_memory_read_ranges inst s) /\
+  (op_prov H ops.iao_ofst = NONE ==> x = y) /\
+  (!k. op_prov H ops.iao_ofst = SOME k ==> ld_wordrel A (SOME k) x y) /\
+  (!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz < dimword(:256)) ==>
+  read_memory (w2n x) n s = read_memory (w2n y) n t
+Proof
+  strip_tac >> Cases_on `n = 0` >- gvs[read_memory_def] >>
+  `!j. j < n ==> w2n x+j NOTIN tn.t_mem` by
+    (fs[taint_ok_def] >> rpt strip_tac >>
+     first_x_assum (qspecl_then [`w2n x`,`n`,`w2n x+j`] mp_tac) >>
+     simp[] >> decide_tac) >>
+  `0 < n` by decide_tac >>
+  drule_all ld_read_access_classified >> strip_tac
+  >- (gvs[] >> irule ld_memory_read_low >>
+      qexistsl_tac [`A`,`lo`,`tn`] >> simp[ADD_COMM]) >>
+  gvs[] >> irule ld_memory_read_slot >>
+  qexistsl_tac [`A`,`k`,`lo`,`sz`,`tn`] >> simp[GSYM ADD_ASSOC]
 QED
