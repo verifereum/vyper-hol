@@ -3787,9 +3787,9 @@ QED
 
 (* The actual caller allocates a return buffer even for a single word. *)
 Theorem probe_word_shrink_lower_value:
-  !cenv sa bufsz flags.
+  !cenv sa bufsz flags ty.
     cenv.ce_func_info "shrink" = (1,bufsz,flags) ==>
-    lower_value compile_expr cenv (BaseT (UintT 256))
+    lower_value compile_expr cenv ty
       (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) sa =
     (Var ("%" ++ toString (sa.cs_next_var + 3)),
      sa with <| cs_next_var := sa.cs_next_var + 4;
@@ -3872,3 +3872,23 @@ QED
    instructions and the final MLOAD value. Neither universal judgment follows
    merely from this lowering equation or the conditional INVOKE summaries.
 *)
+
+Theorem probe_word_internal_label_mismatch:
+  !fid tys ctor.
+    internal_fn_label fid "shrink" tys ctor <>
+      probe_word_function.fn_name
+Proof
+  simp[internal_fn_label_def, probe_word_function_def, mk_raw_function_def]
+QED
+
+Theorem probe_word_emitted_label_lookup_impossible:
+  !fns fid tys ctor.
+    lookup_function (internal_fn_label fid "shrink" tys ctor) fns <>
+      SOME probe_word_function
+Proof
+  Induct_on `fns` >- simp[venomInstTheory.lookup_function_def, listTheory.FIND_thm] >>
+  rpt gen_tac >>
+  simp[venomInstTheory.lookup_function_def, listTheory.FIND_thm] >>
+  IF_CASES_TAC >- (strip_tac >> gvs[probe_word_internal_label_mismatch]) >>
+  gvs[venomInstTheory.lookup_function_def]
+QED
