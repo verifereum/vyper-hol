@@ -184,3 +184,23 @@ Proof
   simp[EVERY_MEM, ptr_observation_reachable_def] >>
   metis_tac[ptr_revert_frame_labels]
 QED
+
+Theorem ptr_chrono_ordinary_non_revert:
+  o1_ctx_shape ctx /\ ptr_chrono_history vs0 ctx h endpoint /\
+  ~in_revert_forward endpoint.po_fn endpoint.po_state /\
+  endpoint.po_inst.inst_opcode <> ASSIGN /\
+  endpoint.po_inst.inst_opcode <> REVERT ==>
+  EVERY (\obs. ~in_revert_forward obs.po_fn obs.po_state) h
+Proof
+  strip_tac >>
+  drule_all ptr_chrono_history_labels >> simp[EVERY_EL] >> strip_tac >>
+  drule ptr_chrono_history_end >> strip_tac >>
+  `LENGTH h <> 0` by metis_tac[LENGTH_NIL] >>
+  `EL (LENGTH h - 1) h = endpoint` by
+    (`PRE (LENGTH h) = LENGTH h - 1` by decide_tac >> gvs[LAST_EL]) >>
+  simp[EVERY_EL] >> rpt strip_tac >>
+  Cases_on `n = LENGTH h - 1`
+  >- gvs[] >>
+  `n < LENGTH h - 1 /\ LENGTH h - 1 < LENGTH h` by decide_tac >>
+  metis_tac[ptr_chrono_revert_suffix]
+QED
