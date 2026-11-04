@@ -1,0 +1,365 @@
+Theory deadStoreElimPending
+Ancestors
+  deadStoreElimMemory deadStoreElimLocations deadStoreElimLiveness
+  deadStoreElimDefs deadStoreElimEquiv venomState venomExecSemantics
+  memLocDefs words list rich_list combin arithmetic vfmState deadStoreElimFrame
+Libs
+  deadStoreElimFrameLib
+
+val _ = augment_srw_ss [deadStoreElimFrameLib.frame_ss];
+
+Definition dse_pending_keys_def:
+  dse_pending_keys (P : (mem_loc # (num # num)) list) =
+    MAP (\(loc,(a,n)). (n2w a : bytes32)) P
+End
+
+Definition dse_key_normalize_def:
+  (dse_key_normalize [] m = m) /\
+  (dse_key_normalize (k::ks) m =
+    update_storage k 0w (dse_key_normalize ks m))
+End
+
+Definition dse_accounts_normalize_def:
+  dse_accounts_normalize c ks A =
+    (c =+ ((A c) with storage := dse_key_normalize ks (A c).storage)) A
+End
+
+Definition dse_transient_normalize_def:
+  dse_transient_normalize c ks ts =
+    (c =+ dse_key_normalize ks (ts c)) ts
+End
+
+Definition key_ok_def:
+  key_ok (P : (mem_loc # (num # num)) list) <=>
+    EVERY (\(loc,(a,n)). n = 1 /\ a < dimword (:256)) P
+End
+
+Definition dse_pending_space_def:
+  dse_pending_space sp P s t <=>
+    dse_equiv sp s t /\
+    (sp = AddrSp_Memory ==> dse_pending_memory (MAP SND P) s t) /\
+    (sp = AddrSp_Storage ==>
+      dse_accounts_normalize s.vs_call_ctx.cc_address (dse_pending_keys P) s.vs_accounts =
+      dse_accounts_normalize t.vs_call_ctx.cc_address (dse_pending_keys P) t.vs_accounts) /\
+    (sp = AddrSp_Transient ==>
+      dse_transient_normalize s.vs_call_ctx.cc_address (dse_pending_keys P) s.vs_transient =
+      dse_transient_normalize t.vs_call_ctx.cc_address (dse_pending_keys P) t.vs_transient)
+End
+
+Definition dse_pending_at_def:
+  dse_pending_at cfg bp sp fn bb idx P s <=>
+    EVERY (\(loc,(a,n)). ml_is_fixed loc /\ loc.ml_size = SOME n /\
+      0 < n /\ dse_region_matches loc s a n /\
+      dse_suffix_dead cfg FEMPTY bp loc sp fn bb idx) P /\
+    ((sp = AddrSp_Storage \/ sp = AddrSp_Transient) ==> key_ok P)
+End
+
+Theorem dse_key_normalize_nil[simp]:
+  dse_key_normalize [] m = m
+Proof
+  simp[dse_key_normalize_def]
+QED
+
+Theorem dse_key_normalize_apply:
+  !ks m k. dse_key_normalize ks m k = if MEM k ks then 0w else m k
+Proof
+  Induct >> simp[dse_key_normalize_def, update_storage_def, combinTheory.APPLY_UPDATE_THM] >>
+  rpt strip_tac >> Cases_on `h = k` >> simp[]
+QED
+
+Theorem dse_key_normalize_update:
+  dse_key_normalize ks (update_storage k v m) =
+    if MEM k ks then dse_key_normalize ks m
+    else update_storage k v (dse_key_normalize ks m)
+Proof
+  simp[FUN_EQ_THM, dse_key_normalize_apply, update_storage_def,
+       APPLY_UPDATE_THM] >>
+  Cases_on `MEM k ks` >> simp[] >>
+  gen_tac >> Cases_on `k = x` >>
+  gvs[APPLY_UPDATE_THM, dse_key_normalize_apply]
+QED
+
+Theorem dse_key_normalize_overwrite:
+  dse_key_normalize ks m = dse_key_normalize ks q ==>
+  dse_key_normalize (FILTER (\j. j <> k) ks) (update_storage k v m) =
+  dse_key_normalize (FILTER (\j. j <> k) ks) (update_storage k v q)
+Proof
+  simp[FUN_EQ_THM, dse_key_normalize_apply, MEM_FILTER,
+       update_storage_def, APPLY_UPDATE_THM] >>
+  rpt strip_tac >> Cases_on `k = x` >> simp[] >>
+  Cases_on `MEM x ks` >> simp[] >> metis_tac[]
+QED
+
+Theorem dse_accounts_normalize_nil[simp]:
+  dse_accounts_normalize c [] A = A
+Proof
+  simp[dse_accounts_normalize_def, FUN_EQ_THM, APPLY_UPDATE_THM] >>
+  gen_tac >> Cases_on `c = x` >> simp[]
+QED
+
+Theorem dse_transient_normalize_nil[simp]:
+  dse_transient_normalize c [] ts = ts
+Proof
+  simp[dse_transient_normalize_def, FUN_EQ_THM, APPLY_UPDATE_THM] >>
+  gen_tac >> Cases_on `c = x` >> simp[]
+QED
+
+Theorem dse_accounts_normalize_other:
+  d <> c ==> dse_accounts_normalize c ks A d = A d
+Proof
+  simp[dse_accounts_normalize_def, APPLY_UPDATE_THM]
+QED
+
+Theorem dse_transient_normalize_other:
+  d <> c ==> dse_transient_normalize c ks ts d = ts d
+Proof
+  simp[dse_transient_normalize_def, APPLY_UPDATE_THM]
+QED
+
+Theorem dse_accounts_normalize_storage[simp]:
+  (dse_accounts_normalize c ks A c).storage = dse_key_normalize ks (A c).storage
+Proof
+  simp[dse_accounts_normalize_def, APPLY_UPDATE_THM]
+QED
+
+Theorem dse_accounts_normalize_nonce[simp]:
+  (dse_accounts_normalize c ks A c).nonce = (A c).nonce
+Proof
+  simp[dse_accounts_normalize_def, APPLY_UPDATE_THM]
+QED
+
+Theorem dse_accounts_normalize_balance[simp]:
+  (dse_accounts_normalize c ks A c).balance = (A c).balance
+Proof
+  simp[dse_accounts_normalize_def, APPLY_UPDATE_THM]
+QED
+
+Theorem dse_accounts_normalize_code[simp]:
+  (dse_accounts_normalize c ks A c).code = (A c).code
+Proof
+  simp[dse_accounts_normalize_def, APPLY_UPDATE_THM]
+QED
+
+Theorem dse_pending_space_refl:
+  dse_pending_space sp P s s
+Proof
+  simp[dse_pending_space_def, dse_equiv_refl, dse_pending_memory_refl]
+QED
+
+Theorem dse_pending_space_equiv:
+  dse_pending_space sp P s t ==> dse_equiv sp s t
+Proof
+  simp[dse_pending_space_def]
+QED
+
+Theorem dse_pending_space_storage_empty:
+  dse_pending_space AddrSp_Storage [] s t ==> s.vs_accounts = t.vs_accounts
+Proof
+  simp[dse_pending_space_def, dse_pending_keys_def]
+QED
+
+Theorem dse_pending_space_transient_empty:
+  dse_pending_space AddrSp_Transient [] s t ==> s.vs_transient = t.vs_transient
+Proof
+  simp[dse_pending_space_def, dse_pending_keys_def]
+QED
+
+Theorem dse_pending_space_memory_empty:
+  dse_pending_space AddrSp_Memory [] s t ==> s.vs_memory = t.vs_memory
+Proof
+  simp[dse_pending_space_def] >> metis_tac[dse_pending_memory_empty]
+QED
+
+Theorem key_ok_insert:
+  key_ok P ==> key_ok ((loc,(w2n (k:bytes32),1))::P)
+Proof
+  simp[key_ok_def, w2n_lt]
+QED
+
+Theorem key_ok_filter:
+  key_ok P ==> key_ok (FILTER f P)
+Proof
+  simp[key_ok_def, EVERY_MEM, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem dse_pending_at_empty:
+  dse_pending_at cfg bp sp fn bb idx [] s
+Proof
+  simp[dse_pending_at_def, key_ok_def]
+QED
+
+Theorem dse_equiv_call_ctx:
+  dse_equiv sp s t ==> s.vs_call_ctx = t.vs_call_ctx
+Proof
+  simp[dse_equiv_def] >> rpt strip_tac >>
+  qpat_x_assum `dse_frame _ _ = _`
+    (mp_tac o Q.AP_TERM `\s. s.vs_call_ctx`) >> simp[]
+QED
+
+Theorem dse_pending_space_sload:
+  dse_pending_space AddrSp_Storage P s t /\ key_ok P /\
+  (!loc a n. MEM (loc,(a,n)) P ==> k <> n2w a) ==>
+  sload k s = sload k t
+Proof
+  rpt strip_tac >>
+  `~MEM k (dse_pending_keys P)` by
+    (simp[dse_pending_keys_def, MEM_MAP] >>
+     rpt strip_tac >> PairCases_on `y` >> gvs[] >> metis_tac[]) >>
+  gvs[dse_pending_space_def] >>
+  qpat_x_assum `dse_accounts_normalize _ _ _ = _`
+    (mp_tac o Q.AP_TERM `\A. (A s.vs_call_ctx.cc_address).storage k`) >>
+  simp[dse_key_normalize_apply, sload_def, contract_storage_def,
+       lookup_account_def, lookup_storage_def] >>
+  `s.vs_call_ctx = t.vs_call_ctx` by
+    (drule dse_equiv_call_ctx >> simp[]) >>
+  simp[dse_key_normalize_apply]
+QED
+
+Theorem dse_pending_space_tload:
+  dse_pending_space AddrSp_Transient P s t /\ key_ok P /\
+  (!loc a n. MEM (loc,(a,n)) P ==> k <> n2w a) ==>
+  tload k s = tload k t
+Proof
+  rpt strip_tac >>
+  `~MEM k (dse_pending_keys P)` by
+    (simp[dse_pending_keys_def, MEM_MAP] >>
+     rpt strip_tac >> PairCases_on `y` >> gvs[] >> metis_tac[]) >>
+  gvs[dse_pending_space_def] >>
+  `s.vs_call_ctx = t.vs_call_ctx` by
+    (drule dse_equiv_call_ctx >> simp[]) >>
+  qpat_x_assum `dse_transient_normalize _ _ _ = _`
+    (mp_tac o Q.AP_TERM `\ts. ts s.vs_call_ctx.cc_address k`) >>
+  simp[dse_transient_normalize_def, APPLY_UPDATE_THM,
+       dse_key_normalize_apply, tload_def, contract_transient_def,
+       lookup_storage_def]
+QED
+
+Theorem dse_accounts_normalize_cons:
+  dse_accounts_normalize c (k::ks) A =
+  dse_accounts_normalize c [k] (dse_accounts_normalize c ks A)
+Proof
+  simp[dse_accounts_normalize_def, dse_key_normalize_def,
+       FUN_EQ_THM, APPLY_UPDATE_THM] >>
+  gen_tac >> Cases_on `c = x` >> gvs[]
+QED
+
+Theorem dse_transient_normalize_cons:
+  dse_transient_normalize c (k::ks) ts =
+  dse_transient_normalize c [k] (dse_transient_normalize c ks ts)
+Proof
+  simp[dse_transient_normalize_def, dse_key_normalize_def,
+       FUN_EQ_THM, APPLY_UPDATE_THM] >>
+  gen_tac >> Cases_on `c = x` >> gvs[]
+QED
+
+Theorem dse_accounts_normalize_update:
+  MEM k ks ==>
+  dse_accounts_normalize c ks
+    ((c =+ ((A c) with storage := update_storage k v (A c).storage)) A) =
+  dse_accounts_normalize c ks A
+Proof
+  strip_tac >>
+  simp[dse_accounts_normalize_def, dse_key_normalize_update,
+       FUN_EQ_THM, APPLY_UPDATE_THM] >>
+  gen_tac >> Cases_on `c = x` >> gvs[]
+QED
+
+Theorem dse_transient_normalize_update:
+  MEM k ks ==>
+  dse_transient_normalize c ks ((c =+ update_storage k v (ts c)) ts) =
+  dse_transient_normalize c ks ts
+Proof
+  strip_tac >>
+  simp[dse_transient_normalize_def, dse_key_normalize_update,
+       FUN_EQ_THM, APPLY_UPDATE_THM] >>
+  gen_tac >> Cases_on `c = x` >> gvs[]
+QED
+
+Theorem dse_pending_space_sstore_insert:
+  dse_pending_space AddrSp_Storage P s t /\ key_ok P ==>
+  dse_pending_space AddrSp_Storage ((loc,(w2n k,1))::P) (sstore k v s) t
+Proof
+  simp[dse_pending_space_def, dse_pending_keys_def] >> rpt strip_tac
+  >- (gvs[dse_equiv_def, lookup_var_def] >> simp[sstore_def, lookup_var_def]) >>
+  simp[sstore_def, lookup_account_def, dse_accounts_normalize_update] >>
+  drule dse_equiv_call_ctx >> strip_tac >>
+  once_rewrite_tac[dse_accounts_normalize_cons] >> gvs[]
+QED
+
+Theorem dse_pending_space_tstore_insert:
+  dse_pending_space AddrSp_Transient P s t /\ key_ok P ==>
+  dse_pending_space AddrSp_Transient ((loc,(w2n k,1))::P) (tstore k v s) t
+Proof
+  simp[dse_pending_space_def, dse_pending_keys_def] >> rpt strip_tac
+  >- (gvs[dse_equiv_def, lookup_var_def] >> simp[tstore_def, lookup_var_def]) >>
+  simp[tstore_def, dse_transient_normalize_update] >>
+  drule dse_equiv_call_ctx >> strip_tac >>
+  once_rewrite_tac[dse_transient_normalize_cons] >> gvs[]
+QED
+
+Theorem dse_accounts_normalize_overwrite:
+  dse_accounts_normalize c ks A = dse_accounts_normalize c ks B ==>
+  dse_accounts_normalize c (FILTER (\j. j <> k) ks)
+    ((c =+ ((A c) with storage := update_storage k v (A c).storage)) A) =
+  dse_accounts_normalize c (FILTER (\j. j <> k) ks)
+    ((c =+ ((B c) with storage := update_storage k v (B c).storage)) B)
+Proof
+  strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  qpat_x_assum `dse_accounts_normalize _ _ _ = _`
+    (fn th => mp_tac (Q.AP_THM th `x`)) >>
+  Cases_on `c = x`
+  >- (gvs[dse_accounts_normalize_def, APPLY_UPDATE_THM,
+          account_state_component_equality] >>
+      metis_tac[dse_key_normalize_overwrite]) >>
+  simp[dse_accounts_normalize_def, APPLY_UPDATE_THM]
+QED
+
+Theorem dse_transient_normalize_overwrite:
+  dse_transient_normalize c ks ts = dse_transient_normalize c ks us ==>
+  dse_transient_normalize c (FILTER (\j. j <> k) ks)
+    ((c =+ update_storage k v (ts c)) ts) =
+  dse_transient_normalize c (FILTER (\j. j <> k) ks)
+    ((c =+ update_storage k v (us c)) us)
+Proof
+  strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  qpat_x_assum `dse_transient_normalize _ _ _ = _`
+    (fn th => mp_tac (Q.AP_THM th `x`)) >>
+  Cases_on `c = x`
+  >- (gvs[dse_transient_normalize_def, APPLY_UPDATE_THM] >>
+      metis_tac[dse_key_normalize_overwrite]) >>
+  simp[dse_transient_normalize_def, APPLY_UPDATE_THM]
+QED
+
+Theorem dse_pending_keys_filter:
+  dse_pending_keys (FILTER (\(loc,(a,n)). n2w a <> k) P) =
+  FILTER (\j. j <> k) (dse_pending_keys P)
+Proof
+  Induct_on `P` >- simp[dse_pending_keys_def] >>
+  gen_tac >> PairCases_on `h` >>
+  simp[dse_pending_keys_def] >> Cases_on `(n2w h1:bytes32) = k` >>
+  gvs[dse_pending_keys_def]
+QED
+
+Theorem dse_pending_space_sstore_overwrite:
+  dse_pending_space AddrSp_Storage P s t /\ key_ok P ==>
+  dse_pending_space AddrSp_Storage
+    (FILTER (\(loc,(a,n)). n2w a <> k) P) (sstore k v s) (sstore k v t)
+Proof
+  simp[dse_pending_space_def] >> rpt strip_tac
+  >- (gvs[dse_equiv_def, lookup_var_def] >> simp[sstore_def, lookup_var_def]) >>
+  drule dse_equiv_call_ctx >> strip_tac >>
+  simp[sstore_def, lookup_account_def, dse_pending_keys_filter] >>
+  irule dse_accounts_normalize_overwrite >> gvs[]
+QED
+
+Theorem dse_pending_space_tstore_overwrite:
+  dse_pending_space AddrSp_Transient P s t /\ key_ok P ==>
+  dse_pending_space AddrSp_Transient
+    (FILTER (\(loc,(a,n)). n2w a <> k) P) (tstore k v s) (tstore k v t)
+Proof
+  simp[dse_pending_space_def] >> rpt strip_tac
+  >- (gvs[dse_equiv_def, lookup_var_def] >> simp[tstore_def, lookup_var_def]) >>
+  drule dse_equiv_call_ctx >> strip_tac >>
+  simp[tstore_def, dse_pending_keys_filter] >>
+  irule dse_transient_normalize_overwrite >> gvs[]
+QED
