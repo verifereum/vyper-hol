@@ -361,11 +361,13 @@ Proof
 QED
 
 Theorem current_wf_source_cut_origin[local]:
-  current_source_cut A
-    (l,bb,s0,rs0,H0,E0,ren,s1,rs1,H1,E1,bbs1,bbs2) n rs E ==>
-  E v = E0 v \/ ?k. k < n /\ MEM (E v,v) (EL k (A l))
+  current_source_cut A ev n rs E ==>
+  E v = current_event_entry_env ev v \/
+  ?k. k < n /\ k < LENGTH (A (current_event_label ev)) /\
+    MEM (E v,v) (EL k (A (current_event_label ev)))
 Proof
-  simp[current_source_cut_def] >> rpt strip_tac >>
+  PairCases_on `ev` >>
+  simp[current_event_entry_env_def, current_event_label_def, current_source_cut_def] >> rpt strip_tac >>
   qpat_x_assum `current_local_trace aq xq _ _ _ _ _ _ _ _ _` kall_tac >>
   drule current_wf_local_origin >>
   disch_then (qspec_then `v` strip_assume_tac)
@@ -930,6 +932,50 @@ Theorem current_wf_event_entry_origin:
 Proof
   strip_tac >> fs[current_event_path_def] >> qexists_tac `path` >> simp[] >>
   metis_tac[current_wf_path_annotation_origin]
+QED
+
+Theorem current_wf_nondefault_cut_output:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  current_structural_certificate s fn fn' s' A H events /\
+  (!dev k j. MEM dev events /\ k < LENGTH (A (current_event_label dev)) /\
+    j < LENGTH (EL k (A (current_event_label dev))) ==>
+    current_wf_output_at A H dev k
+      (FST (EL j (EL k (A (current_event_label dev)))))) /\
+  MEM ev events /\ current_source_cut A ev n rs E /\ E v <> CurrentDefault v ==>
+  ?dev k. MEM dev events /\ current_wf_output_at A H dev k (E v) /\
+    ((dev = ev /\ k < n) \/
+     (current_event_label dev <> current_event_label ev /\
+      fn_dominates fn (current_event_label dev) (current_event_label ev)))
+Proof
+  strip_tac >>
+  `current_event_path A (current_dom_tree fn) CurrentDefault ev` by
+    (fs[current_structural_certificate_def] >>
+     metis_tac[cj 1 current_tree_trace_paths, EVERY_MEM]) >>
+  `!l. MEM l (dom_tree_labels (current_dom_tree fn)) ==>
+    ?dev. MEM dev events /\ current_event_label dev = l` by
+    (fs[current_structural_certificate_def] >>
+     `MAP (\b. b.bb_label) ins = MAP (\b. b.bb_label) fn.fn_blocks` by
+       metis_tac[add_phi_nodes_supply_labels] >>
+     metis_tac[current_tree_trace_event_coverage, current_actual_tree_lookup_coverage]) >>
+  drule current_wf_source_cut_origin >> disch_then (qspec_then `v` strip_assume_tac)
+  >- (drule current_wf_event_entry_origin >>
+      disch_then (qspec_then `v` strip_assume_tac) >> gvs[] >>
+      `?dev. MEM dev events /\ current_event_label dev = l` by
+        metis_tac[current_tree_ancestor_path_labels] >>
+      `?j. j < LENGTH (EL k (A l)) /\ EL j (EL k (A l)) = (E v,v)` by
+        metis_tac[MEM_EL] >>
+      `current_wf_output_at A H dev k (E v)` by metis_tac[pairTheory.FST] >>
+      `MEM (current_event_label ev) (fn_labels fn)` by
+        metis_tac[current_tree_ancestor_path_labels, current_actual_tree_label_member] >>
+      `fn_dominates fn l (current_event_label ev)` by
+        metis_tac[current_wf_tree_ancestor_dominates] >>
+      drule_all current_actual_path_chain >> strip_tac >>
+      `strict_dominates (dom_analyze (cfg_analyze fn) fn) l (current_event_label ev)` by
+        metis_tac[current_actual_chain_membership, MEM_REVERSE] >>
+      fs[strict_dominates_def] >> metis_tac[]) >>
+  `?j. j < LENGTH (EL k (A (current_event_label ev))) /\
+    EL j (EL k (A (current_event_label ev))) = (E v,v)` by metis_tac[MEM_EL] >>
+  metis_tac[pairTheory.FST]
 QED
 
 Theorem current_wf_entry_unavailable:
