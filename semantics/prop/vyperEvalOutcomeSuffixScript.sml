@@ -579,7 +579,8 @@ Proof
 QED
 
 val OUTCOMES_SUFFIX_TAC = rpt (outcomes_suffix_step
-  (outcomes_suffix_create :: outcomes_suffix_ext_call :: outcomes_suffix_send :: outcomes_suffix_base_facts));
+  (outcomes_suffix_create :: outcomes_suffix_ext_call :: outcomes_suffix_send ::
+   outcomes_suffix_raw_call :: outcomes_suffix_base_facts));
 (* The IntCall case's lock steps, unfolded in the goal and the hypotheses. *)
 val lock_helper_defs = [lock_if_nr_def, unlock_if_nr_def, is_view_mut_def];
 
