@@ -23,26 +23,16 @@ Theorem abi_decoder_sign_extend_cast_bit:
     if word_msb w then 1w else 0w
 Proof
   strip_tac >>
-  `8 * n + 7 = dimindex (:'a) - 1` by decide_tac >>
-  `8 * n + 7 < dimindex (:'a)` by decide_tac >>
-  `8 * n + 7 < 256` by decide_tac >>
-  Cases_on `word_msb w` >> (
-  asm_simp_tac bool_ss [] >>
-  rewrite_tac [fcpTheory.CART_EQ] >>
-  qx_gen_tac `i` >> strip_tac >>
-  Cases_on `i = 0`
-  >- (asm_simp_tac std_ss
-        [word_and_def, fcpTheory.FCP_BETA, word_index, word_0,
-         abi_signed_bit_one] >>
-      asm_simp_tac std_ss [word_lsr_def, fcpTheory.FCP_BETA, dimindex_256] >>
-      asm_simp_tac arith_ss [sw2sw, dimindex_256] >>
-      `8 * (n + 1) - 1 = dimindex (:'a) - 1` by decide_tac >>
-      qpat_x_assum `8 * (n + 1) - 1 = _` (fn th => pure_rewrite_tac [th]) >>
-      full_simp_tac bool_ss [word_msb_def] >>
-      simp_tac std_ss [word_index, dimindex_256, abi_signed_bit_one]) >>
-  asm_simp_tac std_ss
-    [word_and_def, fcpTheory.FCP_BETA, word_index, word_0,
-     abi_signed_bit_one])
+  `8 * n + 7 = dimindex (:'a) - 1 /\ dimindex (:'a) <= 256` by decide_tac >>
+  pure_rewrite_tac [fcpTheory.CART_EQ] >> qx_gen_tac `i` >> strip_tac >>
+  Cases_on `i = 0` >>
+  simp_tac (std_ss ++ fcpLib.FCP_ss)
+    [word_and_def, word_lsr_def, word_index, word_0,
+     dimindex_256, abi_signed_bit_one] >>
+  gvs[dimindex_256, fcpTheory.FCP_BETA, word_index, abi_signed_bit_one] >>
+  Cases_on `word_msb w` >>
+  gvs[sw2sw, word_msb_def, fcpTheory.FCP_BETA, dimindex_256,
+      word_index, word_0, abi_signed_bit_one]
 QED
 
 Theorem abi_decoder_sign_extend_cast_mask:
@@ -133,12 +123,17 @@ Theorem abi_decoder_signed_canonical_i2w:
 Proof
   strip_tac >>
   drule abi_decoder_integer_widths >> strip_tac >>
-  qpat_x_assum `MEM bits _` (strip_assume_tac o PURE_REWRITE_RULE [MEM]) >> gvs[] >>
-  FIRST (List.tabulate (32, fn j =>
-    irule (SIMP_RULE (srw_ss()) [GSYM abi_decoder_signed_bound]
-      (INST [``n:num`` |-> numSyntax.term_of_int j]
-        (INST_TYPE [alpha |-> fcpLib.index_type (Arbnum.fromInt (8 * (j + 1)))]
-          abi_decoder_sign_extend_i2w))))) >>
+  qpat_x_assum `MEM bits _` (strip_assume_tac o PURE_REWRITE_RULE [MEM]) >>
+  qpat_x_assum `bits = _` (fn th =>
+    let val width = numSyntax.int_of_term (rhs (concl th))
+        val j = width div 8 - 1
+    in
+      SUBST_ALL_TAC th >> gvs[] >>
+      irule (SIMP_RULE (srw_ss()) [GSYM abi_decoder_signed_bound]
+        (INST [``n:num`` |-> numSyntax.term_of_int j]
+          (INST_TYPE [alpha |-> fcpLib.index_type (Arbnum.fromInt width)]
+            abi_decoder_sign_extend_i2w)))
+    end) >>
   CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >> simp[]
 QED
 

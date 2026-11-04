@@ -7,6 +7,7 @@ Ancestors
   contextRawReachable contextCodegenRel venomExecProofs calleeTransport
   venomInstProofs venomInst regularCallEmitSim codegenRel venomState spillSim
   venomExecSemantics venomCallOracleDefs venomInstProofs3 venomEffects opcodeClass
+  venomMemProps
 
 Theorem raw_reachable_active:
   !vs0 ctx fn inst s.
@@ -37,15 +38,6 @@ Theorem adopt_return_fmp_memory[simp]:
   (adopt_return_fmp ir s).vs_memory = s.vs_memory
 Proof
   irule adopt_return_fmp_projection >> simp[]
-QED
-
-Theorem write_memory_byte_frame:
-  LENGTH bytes <= len /\ ~(off <= i /\ i < off + len) ==>
-  read_byte i (write_memory_with_expansion off bytes s).vs_memory =
-  read_byte i s.vs_memory
-Proof
-  strip_tac >> simp[read_byte_write_memory_with_expansion] >>
-  `~(off <= i /\ i < off + LENGTH bytes)` by decide_tac >> simp[]
 QED
 
 Theorem read_byte_mstore8_outside:
@@ -120,15 +112,6 @@ Proof
   simp[exec_ext_call_def, consume_call_outcome_eq] >>
   strip_tac >> gvs[AllCaseEqs(), update_var_def] >>
   irule write_memory_byte_frame >> qexists_tac `w2n rz` >> simp[listTheory.LENGTH_TAKE_EQ]
-QED
-
-Theorem extract_venom_result_memory:
-  extract_venom_result s output ro rz result = SOME (value,t) ==>
-  t.vs_memory = (write_memory_with_expansion ro
-    (TAKE rz t.vs_returndata) s).vs_memory
-Proof
-  simp[extract_venom_result_def, AllCaseEqs()] >> rpt strip_tac >>
-  pairarg_tac >> gvs[]
 QED
 
 Theorem extract_venom_result_byte_frame:

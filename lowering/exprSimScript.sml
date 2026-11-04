@@ -67,11 +67,8 @@
  *   - bytes and string literals: a bytesN literal is a Lit of its typed
  *     encoding, a dynamic bytes or string literal a memory buffer;
  *   - locals other than word_value ones (address, bytesN, memory-backed);
- *   - block.prevhash: evaluate_block_hash raises a RuntimeError when the
- *     block number is 0 or the hash list is too short, while Venom's
- *     BLOCKHASH is total, so the lowered code does not abort there; and
- *     call_ctx_rel does not relate bc_blockhash to the transaction's block
- *     hashes.  expr_sim is unprovable for it as things stand;
+ *   - block.prevhash: it reads BLOCKHASH (NUMBER - 1), so its case is
+ *     exprSimLeaves' compile_prevhash_sim, on call_ctx_rel's tx_env_ok;
  *   - msg.gas: the source reads the next of the state's gas readings
  *     (gas_obs), while the lowering emits GAS, and call_ctx_rel does not
  *     relate the two.
@@ -89,7 +86,7 @@ Ancestors
   vyperInterpreter vyperState vyperValueOperation vyperContext
   valueEncoding valueEncodingProofs vyperTypeSystem
   venomExecSemantics venomInst venomState
-  vyperLookupStorage vyperStorageBackend
+  vyperLookupStorage vyperStorageBackend accountsRelProps
 
 (* ===== The judgment ===== *)
 
@@ -375,8 +372,7 @@ Proof
   gvs[]
 QED
 
-(* The dynamic bytestrings, where footprint and store size are their own;
-   every other value takes its type's size. *)
+(* Dynamic bytestrings have their own footprint and store size. *)
 Theorem val_size_cases[local]:
   !tv v.
     (?bs n. v = BytesV bs /\ tv = BaseTV (BytesT (Dynamic n))) \/
@@ -556,16 +552,20 @@ End
 (* The slot w holds the value obtained by reading the captured source
    result at es, the slots it occupies are in range (slots_in_range):
    a word's slot holds its value's encoding, so a load of the slot gives
-   the value's word, and the read sees no other value's dead bytes, so
-   storage_rel and transient_rel relate the Venom slots it reads. *)
+   the value's word, and s's storage or transient storage agrees with the
+   source's on those slots, but at the bytes the value itself leaves dead
+   (storage_range_agree).  A read of a declared region has that from
+   storage_rel and transient_rel; a popped element, past its array's new
+   length, keeps it though its slots are dead in the array. *)
 Definition storage_holds_def:
-  storage_holds cx is_transient t tv (w:bytes32) es <=>
+  storage_holds cx is_transient t tv (w:bytes32) es s <=>
     ?tvt v. evaluate_type (get_tenv cx) t = SOME tvt /\
             read_storage_slot cx is_transient w tvt es = (INL v, es) /\
             read_result cx tv es = (INL v, es) /\
             slots_in_range (get_storage cx es is_transient) (w2n w) tvt /\
-            storage_read_live cx is_transient (get_storage cx es is_transient)
-              w tvt
+            storage_range_agree (get_storage cx es is_transient)
+              (if is_transient then contract_transient s
+               else contract_storage s) w tvt
 End
 
 (* tvt v sits at offset k inside the layout of itv iv: wherever memory holds
@@ -618,8 +618,8 @@ Definition vv_holds_def:
                        (is_word_type t ==>
                         mem_word_at (w2n w) s.vs_memory =
                           typed_val_to_w256 tvt v)
-         | LocStorage => storage_holds cx F t tv w es
-         | LocTransient => storage_holds cx T t tv w es
+         | LocStorage => storage_holds cx F t tv w es s
+         | LocTransient => storage_holds cx T t tv w es s
          | LocCode => immutable_holds cenv cx t tv w es
          | LocCalldata => F)
 End
@@ -789,17 +789,22 @@ QED
 (* ===== stmt_state_rel and the variables ===== *)
 
 (* stmt_state_rel reads the variables only through the pointers of the
-   live locals. *)
+   live locals and the constructor's immutable base. *)
 Theorem stmt_state_rel_vars_frame:
   !func cenv cx es s V ctx.
     stmt_state_rel ctx func cenv cx es s /\
     (!name entry p sz.
        lookup_scopes name es.scopes = SOME entry /\
        FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+       lookup_var p (s with vs_vars := V) = lookup_var p s) /\
+    (!p. cenv.ce_imm_alloca = SOME (Var p) ==>
        lookup_var p (s with vs_vars := V) = lookup_var p s) ==>
     stmt_state_rel ctx func cenv cx es (s with vs_vars := V)
 Proof
   rpt strip_tac >>
+  `immutable_base_zero cenv (s with vs_vars := V)` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     fs[stmt_state_rel_def]) >>
   `local_ptrs_rel func cenv es.scopes (s with vs_vars := V)` by
     (irule local_ptrs_rel_frame >> qexists_tac `s` >>
      fs[stmt_state_rel_def, state_rel_def] >> conj_tac
@@ -809,6 +814,8 @@ Proof
     (irule alloca_inv_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `alloca_room ctx func (s with vs_vars := V)` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+  `fmp_room ctx func (s with vs_vars := V)` by
+    (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `immutable_alloca_sep func cenv cx es (s with vs_vars := V)` by
     (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
      fs[stmt_state_rel_def] >>
@@ -828,7 +835,11 @@ Theorem stmt_state_rel_vars_ext:
 Proof
   rw[vars_ext_def] >>
   qpat_x_assum `t' = _` (fn th => ONCE_REWRITE_TAC [th]) >>
-  irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
+  irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac
+  >~ [`cenv.ce_imm_alloca = SOME (Var p)`]
+  >- (fs[stmt_state_rel_def, immutable_base_zero_def, eval_operand_def,
+         lookup_var_def] >>
+      metis_tac[SUBMAP_FLOOKUP_EQN]) >>
   fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
   first_x_assum drule_all >> strip_tac >>
   fs[lookup_var_def] >> metis_tac[SUBMAP_FLOOKUP_EQN]
@@ -957,8 +968,9 @@ Proof
 QED
 
 (* An environment read (msg.sender, block.timestamp, ...) annotated with
-   its type, but block.prevhash and msg.gas, for which expr_sim does not
-   hold (see the header). *)
+   its type, but block.prevhash, proved in exprSimLeaves'
+   compile_prevhash_sim, and msg.gas, for which expr_sim does not hold
+   (see the header). *)
 Theorem compile_env_sim:
   !ctx func cenv cx ty ann item es.
     item <> PrevHash /\ item <> MsgGas /\ ann = env_item_type item ==>

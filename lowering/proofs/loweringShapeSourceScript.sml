@@ -1,24 +1,27 @@
 (* S2 from the type checker: a checked contract lowers to an O1 source unit
-   once it avoids msg.gas as a value and raw_call.  The checker allows both;
+   once it avoids msg.gas as a value, raw_call and creation. The checker allows these;
    the unit shape rejects msg.gas values and delegate or calldata raw_call,
-   and the body-shape proof has no case for plain raw_call yet.
+   and the body-shape proof has no case for plain raw_call or creation yet.
    TOP-LEVEL: lower_vyper_runtime_unit_source_unit_ok_checked,
-   supported_program_raw_shape_free_program. *)
+   supported_program_raw_shape_free_program,
+   supported_names_internal_names_distinct. *)
 Theory loweringShapeSource
 Ancestors
   list option loweringShapeProps vyperTypeSystem vyperTypeContract
   vyperTypeContractContext supportedProgram supportedExprTraverse
-  supportedStmtTraverse compileVyper vyperAST
+  supportedStmtTraverse compileVyper vyperAST supportedNames
 
 (* The shape roots the type checker doesn't exclude: expr_shape_root less its
-   builtin arity cases.  The unit shape rejects msg.gas as a value, a
+   builtin arity cases. The unit shape rejects msg.gas as a value, creation,
    delegate raw_call (DELEGATECALL) and the calldata form (DALLOCA); a plain
    raw_call passes it, but the body-shape proof has no case for it yet. *)
 Definition expr_raw_shape_root_def:
   expr_raw_shape_root e <=>
     (?ty es. e = Builtin ty (Env MsgGas) es) \/
     (?ty flags es d. e = Call ty (RawCallTarget flags) es d) \/
-    (?ty flags es d. e = Call ty (RawCallCalldataTarget flags) es d)
+    (?ty flags es d. e = Call ty (RawCallCalldataTarget flags) es d) \/
+    (?ty kind salted rof order es d.
+       e = Call ty (CreateTarget kind salted rof order) es d)
 End
 
 Definition raw_shape_free_program_def:
@@ -188,13 +191,15 @@ Theorem lower_vyper_runtime_unit_source_unit_ok_checked:
   !tops rpolicy unit layouts addr art.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     check_contract F layouts addr [(NONE, tops)] = SOME art /\
-    raw_shape_free_program tops /\ immutable_free_program tops ==>
+    raw_shape_free_program tops ==>
     o1_source_unit_ok unit
 Proof
   rpt strip_tac >>
-  drule_then irule lower_vyper_runtime_unit_source_unit_ok_shape >>
-  metis_tac[check_contract_runtime_bodies_shape_ok,
-            check_contract_internal_names_distinct]
+  drule lower_vyper_runtime_unit_source_unit_ok_shape >>
+  impl_tac
+  >- metis_tac[check_contract_runtime_bodies_shape_ok,
+               check_contract_internal_names_distinct] >>
+  simp[]
 QED
 
 (* ===== supported_program excludes the raw shape roots ===== *)
@@ -247,4 +252,26 @@ Proof
   irule (CONJUNCT2 supported_stmt_expr_exists_mono) >>
   first_x_assum (irule_at Any) >>
   simp[expr_raw_shape_root_def, expr_shape_root_def] >> metis_tac[]
+QED
+
+(* supported_program's distinct function names keep the internal ones
+   apart, as lower_vyper_runtime_unit_source_unit_ok_shape asks. *)
+Theorem supported_names_internal_names_distinct:
+  !tops. ALL_DISTINCT (supported_function_names tops) ==>
+         ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
+                         (FST (SND (classify_functions tops))))
+Proof
+  Induct >- simp[classify_functions_def] >>
+  rpt strip_tac >>
+  `!name. MEM name (MAP (\p. FST (SND (SND (SND p))))
+                      (FST (SND (classify_functions tops)))) ==>
+          MEM name (supported_function_names tops)` by
+    (simp[MEM_MAP, pairTheory.EXISTS_PROD, PULL_EXISTS,
+          MEM_classify_internal, MEM_supported_function_names] >>
+     metis_tac[]) >>
+  `classify_functions (h::tops) = classify_function h (classify_functions tops)`
+    by simp[classify_functions_def] >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  Cases_on `h` >> gvs[classify_function_def, supported_function_names_def] >>
+  BasicProvers.every_case_tac >> gvs[] >> metis_tac[]
 QED

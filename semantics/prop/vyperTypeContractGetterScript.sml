@@ -8,6 +8,7 @@
 
 Theory vyperTypeContractGetter
 Ancestors
+  vyperGetter
   list rich_list arithmetic finite_map alist option pair
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
   vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeValues vyperTypeBindArguments
@@ -48,19 +49,19 @@ Proof
 QED
 
 Definition is_public_getter_decl_def:
-  is_public_getter_decl fn (VariableDecl Public mut id typ init) = (id = fn) /\
-  is_public_getter_decl fn (HashMapDecl Public is_transient id kt vt init) = (id = fn) /\
+  is_public_getter_decl fn (VariableDecl (Public getter_nr) mut id typ init) = (id = fn) /\
+  is_public_getter_decl fn (HashMapDecl (Public getter_nr) is_transient id kt vt init) = (id = fn) /\
   is_public_getter_decl _ _ = F
 End
 
 Definition external_getter_tuple_def:
-  external_getter_tuple src (VariableDecl Public mut id typ init) =
+  external_getter_tuple src (VariableDecl (Public getter_nr) mut id typ init) =
     (if ~is_ArrayT typ then
-       SOME (View,F,[],[],typ,[Return (SOME (TopLevelName typ (src,id)))])
+       SOME (View,getter_nr,[],[],typ,[Return (SOME (TopLevelName typ (src,id)))])
      else
-       SOME (getter (TopLevelName typ (src,id)) (BaseT (UintT 256)) (Type (ArrayT_type typ)))) /\
-  external_getter_tuple src (HashMapDecl Public is_transient id kt vt init) =
-    SOME (getter (TopLevelName NoneT (src,id)) kt vt) /\
+       SOME (getter getter_nr (TopLevelName typ (src,id)) (BaseT (UintT 256)) (Type (ArrayT_type typ)))) /\
+  external_getter_tuple src (HashMapDecl (Public getter_nr) is_transient id kt vt init) =
+    SOME (getter getter_nr (TopLevelName NoneT (src,id)) kt vt) /\
   external_getter_tuple _ _ = NONE
 End
 
@@ -78,11 +79,11 @@ Proof
   TRY (disj1_tac >> qexists `b0` >> simp[] >> NO_TAC) >>
   TRY (disj1_tac >> qexists `raw` >> simp[] >> NO_TAC) >>
   TRY (disj1_tac >> goal_assum (drule_at Any) >> simp[] >> NO_TAC) >>
-  TRY (disj2_tac >> qexists `VariableDecl Public v0 fn ret o'` >>
+  TRY (disj2_tac >> qexists `VariableDecl (Public b) v0 fn ret o'` >>
        simp[is_public_getter_decl_def, external_getter_tuple_def] >> NO_TAC) >>
-  TRY (disj2_tac >> qexists `VariableDecl Public v0 fn t o'` >>
+  TRY (disj2_tac >> qexists `VariableDecl (Public b) v0 fn t o'` >>
        simp[is_public_getter_decl_def, external_getter_tuple_def] >> NO_TAC) >>
-  TRY (disj2_tac >> qexists `HashMapDecl Public b fn t v0 o'` >>
+  TRY (disj2_tac >> qexists `HashMapDecl (Public b') b fn t v0 o'` >>
        simp[is_public_getter_decl_def, external_getter_tuple_def] >> NO_TAC) >>
   TRY (disj2_tac >> goal_assum (drule_at Any) >>
        simp[is_public_getter_decl_def, external_getter_tuple_def] >> NO_TAC) >>
@@ -118,7 +119,7 @@ Theorem checked_scalar_public_getter_eval_no_type_error:
     (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\
   module_allocated am.layouts tx.target src ts /\
-  MEM (VariableDecl Public mut fn typ init) ts /\
+  MEM (VariableDecl (Public getter_nr) mut fn typ init) ts /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,fn)) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st') ==>
   no_type_error_result res
@@ -129,7 +130,7 @@ Proof
   `FLOOKUP art.cta_toplevel_vtypes (src,fn) = SOME (Type typ)` by
     (drule_all allocated_toplevel_vtype_VariableDecl >> simp[]) >>
   `check_toplevel_decl mods art src
-     (VariableDecl Public mut fn typ init)` by
+     (VariableDecl (Public getter_nr) mut fn typ init)` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
   `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
     (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
@@ -219,7 +220,7 @@ Theorem checked_scalar_public_getter_eval_no_type_error_materialisable:
     (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\
   module_allocated am.layouts tx.target src ts /\
-  MEM (VariableDecl Public mut fn typ init) ts /\
+  MEM (VariableDecl (Public getter_nr) mut fn typ init) ts /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,fn)) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st') ==>
   no_type_error_result res /\
@@ -235,7 +236,7 @@ Proof
   `FLOOKUP art.cta_toplevel_vtypes (src,fn) = SOME (Type typ)` by
     (drule_all allocated_toplevel_vtype_VariableDecl >> simp[]) >>
   `check_toplevel_decl mods art src
-     (VariableDecl Public mut fn typ init)` by
+     (VariableDecl (Public getter_nr) mut fn typ init)` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
   `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
     (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
@@ -323,7 +324,7 @@ Theorem checked_scalar_public_getter_eval_no_type_error_materialisable_post_pref
     (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\
   module_allocated am.layouts tx.target src ts /\
-  MEM (VariableDecl Public mut fn typ init) ts /\
+  MEM (VariableDecl (Public getter_nr) mut fn typ init) ts /\
   st.scopes = [scope] /\ st.immutables = am.immutables /\ state_well_typed st /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,fn)) st = (res,st') ==>
@@ -340,7 +341,7 @@ Proof
     `FLOOKUP art.cta_toplevel_vtypes (src,fn) = SOME (Type typ)` by
       (drule_all allocated_toplevel_vtype_VariableDecl >> simp[]) >>
     `check_toplevel_decl mods art src
-       (VariableDecl Public mut fn typ init)` by
+       (VariableDecl (Public getter_nr) mut fn typ init)` by
       metis_tac[check_contract_toplevel_decl_MEM] >>
     `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
       (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
@@ -416,7 +417,7 @@ Proof
   `FLOOKUP art.cta_toplevel_vtypes (src,fn) = SOME (Type typ)` by
     (drule_all allocated_toplevel_vtype_VariableDecl >> simp[]) >>
   `check_toplevel_decl mods art src
-     (VariableDecl Public mut fn typ init)` by
+     (VariableDecl (Public getter_nr) mut fn typ init)` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
   `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
     (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
@@ -506,9 +507,9 @@ QED
 
 Theorem array_public_getter_tuple_shape:
   is_ArrayT typ /\
-  external_getter_tuple src (VariableDecl Public mut id typ init) =
+  external_getter_tuple src (VariableDecl (Public getter_nr) mut id typ init) =
     SOME (gm,gnr,args,dflts,ret,body) ==>
-  gm = View /\ gnr = F /\ dflts = [] /\
+  gm = View /\ gnr = getter_nr /\ dflts = [] /\
   ?kt vt exp. build_getter (TopLevelName typ (src,id)) kt (Type vt) 0 =
                  (args,ret,exp) /\ body = [Return (SOME exp)]
 Proof
@@ -519,9 +520,9 @@ Proof
 QED
 
 Theorem hashmap_public_getter_tuple_shape:
-  external_getter_tuple src (HashMapDecl Public is_transient id kt vt init) =
+  external_getter_tuple src (HashMapDecl (Public getter_nr) is_transient id kt vt init) =
     SOME (gm,gnr,args,dflts,ret,body) ==>
-  gm = View /\ gnr = F /\ dflts = [] /\
+  gm = View /\ gnr = getter_nr /\ dflts = [] /\
   ?exp. build_getter (TopLevelName NoneT (src,id)) kt vt 0 =
           (args,ret,exp) /\ body = [Return (SOME exp)]
 Proof
@@ -535,7 +536,7 @@ Theorem checked_public_hashmap_TopLevelName_carrier:
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
   module_allocated am.layouts tx.target src ts /\
-  MEM (HashMapDecl Public is_transient id kt vt init) ts /\
+  MEM (HashMapDecl (Public getter_nr) is_transient id kt vt init) ts /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,id)) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INL tvl,st') ==>
   ?slot. tvl = HashMapRef is_transient slot kt vt
@@ -548,7 +549,7 @@ Proof
      SOME (HashMapVarDecl is_transient kt vt,id)` by
     metis_tac[find_var_decl_by_name_SOME_hashmap] >>
   `check_toplevel_decl mods art src
-     (HashMapDecl Public is_transient id kt vt init)` by
+     (HashMapDecl (Public getter_nr) is_transient id kt vt init)` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
   drule_all module_allocated_HashMapDecl_slot >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
@@ -566,7 +567,7 @@ Theorem checked_public_hashmap_TopLevelName_no_type_error:
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
   module_allocated am.layouts tx.target src ts /\
-  MEM (HashMapDecl Public is_transient id kt vt init) ts /\
+  MEM (HashMapDecl (Public getter_nr) is_transient id kt vt init) ts /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,id)) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st') ==>
   no_type_error_result res
@@ -579,7 +580,7 @@ Proof
      SOME (HashMapVarDecl is_transient kt vt,id)` by
     metis_tac[find_var_decl_by_name_SOME_hashmap] >>
   `check_toplevel_decl mods art src
-     (HashMapDecl Public is_transient id kt vt init)` by
+     (HashMapDecl (Public getter_nr) is_transient id kt vt init)` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
   drule_all module_allocated_HashMapDecl_slot >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
@@ -598,7 +599,7 @@ Theorem checked_public_hashmap_TopLevelName_carrier_post_prefix:
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
   module_allocated am.layouts tx.target src ts /\
-  MEM (HashMapDecl Public is_transient id kt vt init) ts /\
+  MEM (HashMapDecl (Public getter_nr) is_transient id kt vt init) ts /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,id)) st = (INL tvl,st') ==>
   ?slot. tvl = HashMapRef is_transient slot kt vt
@@ -611,7 +612,7 @@ Proof
      SOME (HashMapVarDecl is_transient kt vt,id)` by
     metis_tac[find_var_decl_by_name_SOME_hashmap] >>
   `check_toplevel_decl mods art src
-     (HashMapDecl Public is_transient id kt vt init)` by
+     (HashMapDecl (Public getter_nr) is_transient id kt vt init)` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
   drule_all module_allocated_HashMapDecl_slot >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
@@ -941,9 +942,9 @@ QED
 
 Theorem array_public_getter_tuple_shape_exact[local]:
   is_ArrayT typ /\
-  external_getter_tuple src (VariableDecl Public mut id typ init) =
+  external_getter_tuple src (VariableDecl (Public getter_nr) mut id typ init) =
     SOME (gm,gnr,args,dflts,ret,body) ==>
-  gm = View /\ gnr = F /\ dflts = [] /\
+  gm = View /\ gnr = getter_nr /\ dflts = [] /\
   ?exp. build_getter (TopLevelName typ (src,id)) (BaseT (UintT 256))
           (Type (ArrayT_type typ)) 0 = (args,ret,exp) /\
         body = [Return (SOME exp)]
@@ -1093,7 +1094,7 @@ Proof
   ntac 6 strip_tac
   >- (Cases_on `is_ArrayT t`
       >- (gvs[] >>
-          `mut = View /\ nr = F /\ dflts = [] /\
+          `mut = View /\ nr = b /\ dflts = [] /\
            ?exp. build_getter (TopLevelName t (src,fn))
                    (BaseT (UintT 256)) (Type (ArrayT_type t)) 0 =
                    (args,ret,exp) /\ body = [Return (SOME exp)]` by
@@ -1105,7 +1106,7 @@ Proof
              SOME (Type t)` by
             metis_tac[allocated_toplevel_vtype_VariableDecl] >>
           `check_toplevel_decl mods art src
-             (VariableDecl Public v0 fn t o')` by
+             (VariableDecl (Public b) v0 fn t o')` by
             metis_tac[check_contract_toplevel_decl_MEM] >>
           `check_value_type (type_env_all_modules mods) (Type t)` by
             (Cases_on `v0` >>
@@ -1126,7 +1127,7 @@ Proof
          SOME (Type ret)` by
         metis_tac[allocated_toplevel_vtype_VariableDecl] >>
       `check_toplevel_decl mods art src
-         (VariableDecl Public v0 fn ret o')` by
+         (VariableDecl (Public b) v0 fn ret o')` by
         metis_tac[check_contract_toplevel_decl_MEM] >>
       `well_formed_type (type_env_all_modules mods) ret /\ ret <> NoneT` by
         (Cases_on `v0` >>
@@ -1135,7 +1136,7 @@ Proof
                    assignable_type_not_NoneT]) >>
       simp[function_entry_env_def, artifact_env_def, type_stmt_def,
            well_typed_expr_def, vtype_annotation_ok_def, expr_type_def]) >>
-  `external_getter_tuple src (HashMapDecl Public b s t v0 o') =
+  `external_getter_tuple src (HashMapDecl (Public b') b s t v0 o') =
      SOME (mut,nr,args,dflts,ret,body)` by
     simp[external_getter_tuple_def] >>
   drule hashmap_public_getter_tuple_shape >>
@@ -1145,7 +1146,7 @@ Proof
      SOME (HashMapT t v0)` by
     metis_tac[allocated_toplevel_vtype_HashMapDecl] >>
   `check_toplevel_decl mods art src
-     (HashMapDecl Public b fn t v0 o')` by
+     (HashMapDecl (Public b') b fn t v0 o')` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
   `check_value_type (type_env_all_modules mods) v0` by
     gvs[check_toplevel_decl_def] >>

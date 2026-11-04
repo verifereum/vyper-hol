@@ -256,6 +256,19 @@ QED
    decrease. A size-bounded, one-way struct consistency invariant suffices
    when both environments drop a struct. Compiler embedded static size
    counts only the head; source embedded size also includes a dynamic tail. *)
+(* Per-member embedded sizes determine the complete tuple encoding size. *)
+Theorem abi_size_bound_tuple_agrees:
+  !ts sf tenv.
+    (!t. MEM t ts ==>
+      abi_embedded_static_size sf t +
+        (if is_abi_dynamic sf t then abi_size_bound sf t else 0) =
+      vyper_abi_embedded_size tenv t) ==>
+    abi_size_bound sf (TupleT ts) = vyper_abi_size_bound tenv (TupleT ts)
+Proof
+  simp[abi_size_bound_def, vyperABITheory.vyper_abi_size_bound_def] >>
+  Induct >> simp[vyperABITheory.vyper_abi_size_bound_def] >> metis_tac[]
+QED
+
 Theorem abi_props_vyper_typed:
   !sf tenv ty tv.
     sfields_tenv_consistent sf tenv /\
@@ -273,4 +286,21 @@ Proof
   Cases_on `vyper_is_dynamic tenv ty` >>
   gvs[abi_embedded_static_size_def, vyper_abi_size_bound_def,
       arithmeticTheory.ADD_COMM]
+QED
+
+Theorem abi_size_bound_tuple_typed:
+  !sf tenv ts.
+    sfields_tenv_consistent sf tenv /\
+    EVERY (\t. IS_SOME (evaluate_type tenv t)) ts ==>
+    abi_size_bound sf (TupleT ts) = vyper_abi_size_bound tenv (TupleT ts)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[Once abi_size_bound_def, Once vyper_abi_size_bound_def] >>
+  qpat_x_assum `EVERY _ ts` mp_tac >>
+  Induct_on `ts` >> simp[vyper_abi_size_bound_def] >>
+  rpt strip_tac >>
+  gvs[IS_SOME_EXISTS] >>
+  drule_all abi_props_vyper_typed >> strip_tac >>
+  qpat_x_assum `_ = vyper_abi_embedded_size tenv h` mp_tac >>
+  simp[Once vyper_abi_size_bound_def] >> decide_tac
 QED
