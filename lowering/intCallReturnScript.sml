@@ -180,6 +180,18 @@ Proof
   imp_res_tac run_block_data_section >> res_tac >> gvs[]
 QED
 
+(* The same frame when execution begins in the middle of a block. *)
+Theorem run_from_intret_data_section:
+  !fuel ctx fn s ret s'.
+    fragExec$run_from fuel ctx fn s = IntRet ret s' ==>
+    s'.vs_data_section = s.vs_data_section
+Proof
+  rpt gen_tac >>
+  simp[fragExecTheory.run_from_def, AllCaseEqs()] >> rpt strip_tac >>
+  imp_res_tac (SRULE [] exec_block_data_section) >>
+  imp_res_tac run_blocks_intret_data_section >> gvs[]
+QED
+
 (* The caller's INVOKE of a callee whose run ends in an IntRet that
    intret_q accepts, at the source state es2 the callee's body ends in.
    s and es are the caller's states at the INVOKE (after the arguments,

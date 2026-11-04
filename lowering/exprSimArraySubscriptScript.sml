@@ -5,6 +5,7 @@ Ancestors
   vyperTypeEnv vyperTypeInvariants exprSimHyps supportedExprTraverse supportedStmts exprSimAttribute
   vyperPlaceFrames vyperStatePreservation vyperInterpreter vyperArray exprSimLen exprSimPop
   exprOracleStorageInterfaces vyperImmutablesPreservation vyperCreateFrame vyperCallFrame vyperCallOutcomeFrame
+  fragExec venomExecSemantics venomInst venomState rich_list emitHelper intCallReturn
 
 (* A current-value path takes priority over every historical snapshot. *)
 Theorem read_memory_path_current_append:
@@ -3139,3 +3140,87 @@ Resume immutable_retyped_endpoint_probe[immutable_rel]:
 QED
 
 Finalise immutable_retyped_endpoint_probe
+
+(* A return observer changes only the function used inside frag_exec, not the
+   fixed function indexing the source/target relation. *)
+Definition fragment_return_observer_def:
+  fragment_return_observer fn sb =
+    fn with fn_blocks :=
+      <| bb_label := sb.cs_current_bb;
+         bb_instructions := sb.cs_current_insts ++
+           [mk_inst sb.cs_next_id RET [Lit 0w] []] |> :: fn.fn_blocks
+End
+
+Theorem fragment_return_observer_has_code:
+  fn_has_code sa sb fn /\
+  (!bb. MEM bb (emitted_blocks sa sb) ==>
+        bb.bb_label <> sb.cs_current_bb) ==>
+  fn_has_code sa sb (fragment_return_observer fn sb)
+Proof
+  simp[fn_has_code_def, fragment_return_observer_def,
+       lookup_block_def, listTheory.FIND_thm, IS_PREFIX_APPEND]
+QED
+
+Theorem fragment_return_observer_at_end:
+  s.vs_current_bb = sb.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+  run_from 0 ctx (fragment_return_observer fn sb) s =
+    IntRet <| iret_values := []; iret_adopt_fmp := NONE |> s
+Proof
+  rpt strip_tac >>
+  simp[run_from_def, fragment_return_observer_def, lookup_block_def,
+       listTheory.FIND_thm, Once exec_block_def, get_instruction_def,
+       listTheory.EL_APPEND_EQN, step_inst_non_invoke, mk_inst_def,
+       Once step_inst_base_def, eval_operands_def, eval_operand_def]
+QED
+
+Theorem frag_exec_return_observer_witness:
+  frag_exec ctx sa sb (\s. s = s0 /\ P s) Q (\r. F) /\
+  fn_has_code sa sb fn /\
+  (!bb. MEM bb (emitted_blocks sa sb) ==>
+        bb.bb_label <> sb.cs_current_bb) /\
+  P s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?s1. Q s1 /\ s1.vs_data_section = s0.vs_data_section
+Proof
+  rpt strip_tac >>
+  `fn_has_code sa sb (fragment_return_observer fn sb)` by
+    (irule fragment_return_observer_has_code >> simp[]) >>
+  qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >>
+  simp[frag_exec_def] >>
+  disch_then (qspec_then `fragment_return_observer fn sb` mp_tac) >>
+  simp[] >> strip_tac >>
+  rename1 `Q s1` >>
+  `run_from 0 ctx (fragment_return_observer fn sb) s1 =
+    IntRet <| iret_values := []; iret_adopt_fmp := NONE |> s1` by
+    (irule fragment_return_observer_at_end >> simp[]) >>
+  qpat_x_assum `!fuel. _` (qspec_then `0` mp_tac) >>
+  simp[] >> strip_tac >>
+  drule run_from_intret_data_section >> strip_tac >>
+  qexists `s1` >> simp[]
+QED
+
+Theorem expr_sim_return_observer_witness:
+  expr_sim ctx func cenv cx ty idx es /\
+  lower_value compile_expr cenv ty idx sa = (op,sb) /\
+  (do result <- eval_expr cx idx; read_result cx result od) es = (INL v,t) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  (!bb. MEM bb (emitted_blocks sa sb) ==>
+        bb.bb_label <> sb.cs_current_bb) /\
+  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?s1. expr_post ctx func cenv cx idx es sa sb s0 t v op s1 /\
+       s1.vs_data_section = s0.vs_data_section
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_sim_def, expr_res_ok_def] >>
+  disch_then drule_all >>
+  disch_then (qspec_then `s0` mp_tac) >>
+  simp[] >> strip_tac >>
+  `expr_exit (INL v) = (\r. F)` by simp[FUN_EQ_THM] >>
+  gvs[] >> drule_all frag_exec_return_observer_witness >> simp[]
+QED
