@@ -1,7 +1,8 @@
 Theory lowerDloadPtrBytesTransport
 Ancestors
   lowerDloadPtrMemoryWrite lowerDloadPtrRel lowerDloadPtrExpansionTransport
-  lowerDloadPtrAggregate lowerDloadPtrCall
+  lowerDloadPtrAggregate lowerDloadPtrCall lowerDloadPtrPhase lowerDloadDefs instIdxIndep
+  lowerDloadPtrBlockEntry
   venomExecSemantics venomState codegenRel memLocDefs ptrDiscipline
   pointerConfinedDefs list pred_set words arithmetic finite_map
 
@@ -203,3 +204,201 @@ Proof
      venom_state_component_equality, op_taint_def] >>
   metis_tac[]
 QED
+
+Theorem dloadbytes_two_step_boundary:
+  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  i.inst_opcode = DLOADBYTES /\ i.inst_operands = [dst;off;sz] /\ i.inst_outputs = [] /\
+  a.inst_opcode = ADD /\ a.inst_operands = [off;Label "code_end"] /\ a.inst_outputs = [cv] /\
+  c.inst_opcode = CODECOPY /\ c.inst_operands = [dst;Var cv;sz] /\ c.inst_outputs = [] /\
+  cv NOTIN V /\ dst <> Var cv /\ sz <> Var cv /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
+  MEM i (fn_insts fn) /\ fn_ptr_ok P fn /\ FDOM G SUBSET fn_pv P fn /\
+  taint_ok fn tn i s /\ access_ok lo G fn i s /\ ~in_revert_forward fn s /\
+  code_layout_valid s /\ dload_offset_ok C fn i s /\
+  dload_prefix_match fuel Ct PH [a;c] 2 t H un t2 H2 un2 ==>
+  ?s1. step_inst fuel C i s = OK s1 /\
+    dload_boundary_core lo fs V Ws PG PH (step_prov PG G i s1) H2
+      (step_taint i s s1 tn) un2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) t2 cs ds
+Proof
+  strip_tac >>
+  `?v1 v2 t1 H1 un1.
+    step_inst fuel Ct a t = OK v1 /\
+    t1 = v1 with vs_inst_idx := SUC t.vs_inst_idx /\
+    H1 = step_prov PH H a v1 /\ un1 = step_taint a t v1 un /\
+    step_inst fuel Ct c t1 = OK v2 /\
+    t2 = v2 with vs_inst_idx := SUC t1.vs_inst_idx /\
+    H2 = step_prov PH H1 c v2 /\ un2 = step_taint c t1 v2 un1` by
+    (qpat_x_assum `dload_prefix_match _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     `2 = SUC (SUC 0)` by decide_tac >>
+     pop_assum (fn th => pure_rewrite_tac[th]) >>
+     simp[dload_prefix_match_def] >> rpt strip_tac >> gvs[] >>
+     gvs[step_inst_non_invoke, step_inst_base_def, exec_pure2_def, AllCaseEqs()] >>
+     metis_tac[]) >>
+  qpat_x_assum `dload_prefix_match _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  `step_inst_base a t = OK v1 /\ step_inst_base c t1 = OK v2` by
+    (qpat_x_assum `step_inst _ _ c _ = _` mp_tac >>
+     qpat_x_assum `step_inst _ _ a _ = _` mp_tac >>
+     simp[step_inst_non_invoke]) >>
+  `?ox e. eval_operand off t = SOME ox /\
+    eval_operand (Label "code_end") t = SOME e /\ v1 = update_var cv (ox+e) t` by
+    (qpat_x_assum `step_inst_base _ _ = _` kall_tac >>
+     qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[step_inst_base_def, exec_pure2_def, AllCaseEqs()] >> metis_tac[]) >>
+  `?y z. eval_operand dst t = SOME y /\ eval_operand sz t = SOME z` by
+    (qpat_x_assum `step_inst_base c t1 = OK v2` mp_tac >>
+     simp[step_inst_base_def, AllCaseEqs()] >> strip_tac >>
+     gvs[eval_op_inst_idx] >>
+     Cases_on `dst` >> Cases_on `sz` >>
+     gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
+  suspend "scalar_inputs"
+QED
+
+Resume dloadbytes_two_step_boundary[scalar_inputs]:
+  `dload_vars_match fs V G H tn un s t` by metis_tac[dload_boundary_vars] >>
+  `s.vs_labels = t.vs_labels /\ s.vs_data_section = t.vs_data_section /\
+   code_layout_valid t` by
+    (qpat_x_assum `code_layout_valid s` mp_tac >>
+     drule dload_boundary_environment >>
+     rpt (pop_assum kall_tac) >>
+     simp[dload_equal_environment_def, venom_state_component_equality, code_layout_valid_def] >>
+     metis_tac[]) >>
+  `!op. MEM op [dst;off;sz] ==>
+    (eval_operand op s = NONE <=> eval_operand op t = NONE)` by
+    (rpt strip_tac >> irule dload_matched_operand_defined >> simp[] >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  `(!v. off = Var v ==> v IN V) /\ (!v. sz = Var v ==> v IN V)` by
+    (gvs[] >> metis_tac[]) >>
+  `(eval_operand off s = NONE <=> eval_operand off t = NONE) /\
+   (eval_operand sz s = NONE <=> eval_operand sz t = NONE)` by simp[] >>
+  `eval_operand off s = SOME ox /\ eval_operand sz s = SOME z` by
+    (drule_all dloadbytes_scalar_equal >> simp[] >> metis_tac[]) >>
+  `?x. eval_operand dst s = SOME x` by
+    (Cases_on `eval_operand dst s` >> gvs[] >> metis_tac[]) >>
+  `w2n ox + w2n e < dimword (:256)` by
+    (qpat_x_assum `dload_offset_ok _ _ _ _` mp_tac >>
+     qpat_x_assum `code_layout_valid t` mp_tac >>
+     qpat_x_assum `code_layout_valid s` mp_tac >>
+     qpat_x_assum `eval_operand (Label "code_end") t = _` mp_tac >>
+     qpat_x_assum `eval_operand off s = _` mp_tac >>
+     qpat_x_assum `s.vs_data_section = _` mp_tac >>
+     drule dload_boundary_environment >>
+     qpat_x_assum `i.inst_opcode = _` mp_tac >>
+     qpat_x_assum `i.inst_operands = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[dload_equal_environment_def, venom_state_component_equality,
+          dload_offset_ok_def, code_layout_valid_def, eval_operand_def] >>
+     rpt strip_tac >> gvs[] >> fs[dimword_def, LESS_MOD] >> metis_tac[]) >>
+  `dload_boundary_core lo fs V Ws PG PH G H1 tn un1 s v1 cs ds` by
+    (qpat_assum `H1 = _` SUBST1_TAC >> qpat_assum `un1 = _` SUBST1_TAC >>
+     irule dload_boundary_core_add_temporary >> metis_tac[]) >>
+  `dload_boundary_core lo fs V Ws PG PH G H1 tn un1 s t1 cs ds` by
+    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s v1 _ _`
+      (mp_then Any mp_tac dload_boundary_core_index_update) >>
+     disch_then (qspecl_then [`SUC t.vs_inst_idx`,`s.vs_inst_idx`] mp_tac) >> simp[]) >>
+  suspend "paired_copy"
+QED
+
+Resume dloadbytes_two_step_boundary[paired_copy]:
+  `eval_operand dst t1 = SOME y /\ eval_operand (Var cv) t1 = SOME (ox+e) /\
+   eval_operand sz t1 = SOME z /\ t1.vs_code = t.vs_code` by
+    (Cases_on `dst` >> Cases_on `sz` >>
+     gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `op_taint tn dst = {}` by
+    (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
+     simp[taint_ok_def] >> strip_tac >>
+     first_x_assum (qspec_then `dst` mp_tac) >> simp[]) >>
+  `dload_vars_match fs V G H1 tn un1 s t1` by metis_tac[dload_boundary_vars] >>
+  `s.vs_labels = t1.vs_labels` by
+    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s t1 _ _`
+      (mp_then Any mp_tac dload_boundary_environment) >>
+     simp[dload_equal_environment_def, venom_state_component_equality]) >>
+  `!v. dst = Var v ==> v IN V` by (gvs[] >> metis_tac[]) >>
+  `dload_value_word fs {} (op_prov G dst) (op_prov H1 dst) x y` by
+    (qpat_assum `op_taint tn dst = {}` (fn th =>
+       once_rewrite_tac[GSYM th]) >>
+     irule dload_matched_operand >> simp[] >>
+     qexistsl [`V`,`s`,`t1`,`un1`] >> gvs[]) >>
+  `TAKE (w2n z) (DROP (w2n ox) s.vs_data_section ++ REPLICATE (w2n z) 0w) =
+   TAKE (w2n z) (DROP (w2n (ox+e)) t1.vs_code ++ REPLICATE (w2n z) 0w)` by
+    (drule_all dload_code_data_padded_slice >> simp[]) >>
+  qmatch_asmsub_abbrev_tac `payload = TAKE (w2n z) (DROP (w2n (ox+e)) t1.vs_code ++ _)` >>
+  `payload = TAKE (w2n z) (DROP (w2n ox) s.vs_data_section ++ REPLICATE (w2n z) 0w)` by
+    simp[Abbr `payload`] >>
+  drule_all dloadbytes_codecopy_boundary >> strip_tac >>
+  suspend "indexed_finish"
+QED
+
+Resume dloadbytes_two_step_boundary[indexed_finish]:
+  qexists_tac `s1` >>
+  conj_tac >- simp[step_inst_non_invoke] >>
+  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s1 v2 _ _`
+    (mp_then Any mp_tac dload_boundary_core_index_update) >>
+  disch_then (qspecl_then [`SUC t1.vs_inst_idx`,`SUC s.vs_inst_idx`] mp_tac) >>
+  qpat_x_assum `H2 = _` SUBST1_TAC >>
+  qpat_x_assum `un2 = _` SUBST1_TAC >>
+  qpat_x_assum `t2 = _` SUBST1_TAC >>
+  simp[]
+QED
+
+Finalise dloadbytes_two_step_boundary
+
+Theorem dloadbytes_two_step_lookup:
+  i.inst_opcode = DLOADBYTES /\ i.inst_outputs = [] /\
+  a.inst_opcode = ADD /\ a.inst_outputs = [cv] /\
+  c.inst_opcode = CODECOPY /\ c.inst_outputs = [] /\
+  step_inst fuel C i s = OK s1 /\
+  dload_prefix_match fuel Ct PH [a;c] 2 t H un t2 H2 un2 ==>
+  (!v. lookup_var v s1 = lookup_var v s) /\
+  (!v. v <> cv ==> lookup_var v t2 = lookup_var v t)
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst _ _ i _ = _` mp_tac >>
+  simp[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `dload_prefix_match _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  `2 = SUC (SUC 0)` by decide_tac >>
+  pop_assum (fn th => pure_rewrite_tac[th]) >>
+  simp[dload_prefix_match_def] >> rpt strip_tac >> gvs[] >>
+  gvs[step_inst_non_invoke, step_inst_base_def, exec_pure2_def, AllCaseEqs()] >>
+  simp[lookup_var_def, write_memory_with_expansion_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem dloadbytes_supply_boundary:
+  lower_dload_inst_supply supply i = (xs,next) /\
+  fresh_ir_var supply = (cv,supply1) /\
+  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  i.inst_opcode = DLOADBYTES /\ i.inst_operands = [dst;off;sz] /\ i.inst_outputs = [] /\
+  cv NOTIN V /\ dst <> Var cv /\ sz <> Var cv /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
+  MEM i (fn_insts fn) /\ fn_ptr_ok P fn /\ FDOM G SUBSET fn_pv P fn /\
+  taint_ok fn tn i s /\ access_ok lo G fn i s /\ ~in_revert_forward fn s /\
+  code_layout_valid s /\ dload_offset_ok C fn i s /\
+  dload_prefix_match fuel Ct PH xs 2 t H un t2 H2 un2 ==>
+  ?s1. step_inst fuel C i s = OK s1 /\
+    dload_boundary_core lo fs V Ws PG PH (step_prov PG G i s1) H2
+      (step_taint i s s1 tn) un2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) t2 cs ds /\
+    (!v. lookup_var v s1 = lookup_var v s) /\
+    (!v. v <> cv ==> lookup_var v t2 = lookup_var v t)
+Proof
+  strip_tac >>
+  qpat_x_assum `lower_dload_inst_supply _ _ = _` mp_tac >>
+  simp[lower_dload_inst_supply_def] >>
+  Cases_on `fresh_inst_id supply1` >> simp[] >>
+  rename1 `fresh_inst_id supply1 = (add_id,supply2)` >>
+  Cases_on `fresh_inst_id supply2` >> simp[] >> strip_tac >> gvs[] >>
+  suspend "supply_finish"
+QED
+
+Resume dloadbytes_supply_boundary[supply_finish]:
+  drule_at (Pat `dload_prefix_match _ _ _ _ _ _ _ _ _ _ _`)
+    dloadbytes_two_step_boundary >> simp[] >>
+  disch_then drule >> simp[] >>
+  disch_then (qspecl_then [`i`,`fn`,`P`,`C`] mp_tac) >> simp[] >>
+  impl_tac >- metis_tac[] >>
+  strip_tac >> qexists_tac `s1` >> simp[] >>
+  drule_at (Pat `dload_prefix_match _ _ _ _ _ _ _ _ _ _ _`)
+    dloadbytes_two_step_lookup >> simp[] >>
+  disch_then irule >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Finalise dloadbytes_supply_boundary
