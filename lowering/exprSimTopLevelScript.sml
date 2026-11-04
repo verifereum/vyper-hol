@@ -27,3 +27,11 @@ Proof
   >- (gvs[] >> irule compile_toplevel_storage_vv_sim >> metis_tac[]) >>
   irule compile_toplevel_storage_undecodable_sim >> metis_tac[]
 QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_toplevel_name_sim)
+  in if null axioms andalso null (Thm.hyp compile_toplevel_name_sim) andalso
+        List.all (fn oracle => oracle = "DISK_THM") oracles then
+       print "TOPLEVEL_NAME_AUDIT OK\n"
+     else raise Fail "top-level name consumer inherited admission"
+  end;
