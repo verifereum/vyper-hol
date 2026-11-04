@@ -49,7 +49,9 @@ Proof
   rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
   simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
-  first_x_assum irule >> simp[body_inv_def] >> metis_tac[]
+  first_x_assum irule >>
+  goal_assum (drule_at Any) >> simp[] >>
+  gvs[body_inv_def] >> metis_tac[]
 QED
 
 Theorem materialize_internal_params_body_inv[local]:
@@ -64,7 +66,9 @@ Proof
   rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
   simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
-  first_x_assum irule >> simp[body_inv_def] >> metis_tac[]
+  first_x_assum irule >>
+  goal_assum (drule_at Any) >> simp[] >>
+  gvs[body_inv_def] >> metis_tac[]
 QED
 
 Theorem compile_internal_prologue_body_inv:
@@ -78,8 +82,11 @@ Proof
   simp[compile_internal_prologue_def, comp_bind_def, comp_return_def,
        comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
-  irule materialize_internal_params_body_inv >>
-  asm_rewrite_tac[] >> simp[body_inv_def] >> metis_tac[]
+  gvs[] >>
+  drule_at (Pat `materialize_internal_params _ _ _ = _`)
+    materialize_internal_params_body_inv >>
+  disch_then (qspecl_then [`tops`, `cx`, `ctx`] mp_tac) >>
+  (impl_tac >- (gvs[body_inv_def] >> metis_tac[])) >> simp[]
 QED
 
 (* A compile env that binds only parameters, with a type environment that
@@ -341,6 +348,7 @@ Theorem external_body_support_bounds:
   supported_program tops /\
   MEM (FunctionDecl External mut nr rr name args defaults ret ss) tops /\
   cenv.ce_struct_fields = make_struct_fields_map tops /\
+  cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
   env_context_consistent env cx /\
   (!n ty. FLOOKUP env.var_types n = SOME ty ==> MEM (n,ty) args) /\
   EVERY (\(n,ty). assignable_type env.type_defs ty) args /\
