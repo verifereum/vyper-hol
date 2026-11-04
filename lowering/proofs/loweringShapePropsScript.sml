@@ -3280,6 +3280,34 @@ Proof
   shape_framed_tac compile_copy_memory_shape
 QED
 
+Theorem compile_bytestring_widen_copy_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st v)
+    (compile_bytestring_widen_copy d v sz) (\w st. R st /\ plain_operand st w)
+Proof
+  strip_tac >> simp[compile_bytestring_widen_copy_def] >>
+  `shape_stable (\st. R st /\ plain_operand st v)` by
+    (ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[v]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\buf st. (R st /\ plain_operand st v) /\
+                         plain_operand st buf.buf_operand` >>
+  conj_tac
+  >- (ho_match_mp_tac compile_alloc_buffer_shape_framed >> simp[]) >>
+  qx_gen_tac `buf` >> BETA_TAC >>
+  `shape_stable (\st. R st /\ plain_operand st buf.buf_operand)` by
+    (ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[buf.buf_operand]:operand list`
+               shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_ignore_bind >>
+  qexists_tac `\u st. R st /\ plain_operand st buf.buf_operand` >>
+  conj_tac
+  >- (irule shape_step_frame_from >>
+      irule_at Any compile_copy_memory_shape >>
+      qexists_tac `\st. R st /\ plain_operand st buf.buf_operand` >> simp[]) >>
+  gen_tac >> irule shape_step_return >> simp[]
+QED
+
 Theorem compile_store_memory_shape_framed[local]:
   shape_stable R ==>
   shape_step internal compiler_label
@@ -7218,6 +7246,13 @@ Resume compile_type_builtin_dispatch_body_shape[convert]:
              lowered_value_type cenv (HD args) = BaseT (StringT 0))` >>
   pop_assum (fn th => REWRITE_TAC [th])
   >- (simp[shape_step_def, shape_extends_refl, value_shape_ok_def] >> shape_opcode_tac) >>
+  Cases_on `is_bytestring_type (expr_type (HD args)) /\ is_bytestring_type ret_ty /\
+            type_memory_bytes cenv (lowered_value_type cenv (HD args)) <
+            type_memory_bytes cenv ret_ty` >>
+  pop_assum (fn th => REWRITE_TAC [th])
+  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> irule shape_step_as_stack_val >>
+      shape_under_tac compile_bytestring_widen_copy_shape `\st. T` >>
+      simp[shape_stable_def]) >>
   Cases_on `ret_ty` >> simp[] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
   irule shape_step_as_stack_val >>
   shape_under_tac compile_type_convert_shape `\st. T` >> simp[shape_stable_def]
