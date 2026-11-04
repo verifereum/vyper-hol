@@ -4282,3 +4282,16 @@ Proof
   simp[vyperTypeCallGraphTheory.int_calls_expr_def] >>
   rpt conj_tac >> goal_assum (drule_at Any)
 QED
+
+Theorem vv_holds_code_immutable_noeffect_nopop:
+  ~expr_has_effect e /\ ~expr_has_pop e /\
+  eval_expr cx e s = (res,t) /\
+  vv_location vv = SOME LocCode /\
+  vv_holds cenv cx ty (PlaceR (ImmutablePlace md name path)) vv s q /\
+  (!w. eval_operand (vv_operand vv) q = SOME w ==>
+       eval_operand (vv_operand vv) q' = SOME w) ==>
+  vv_holds cenv cx ty (PlaceR (ImmutablePlace md name path)) vv t q'
+Proof
+  strip_tac >> drule expr_no_effect_int_calls >> strip_tac >>
+  drule_all vv_holds_code_immutable_callfree_nopop >> simp[]
+QED
