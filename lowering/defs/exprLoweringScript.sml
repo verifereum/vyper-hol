@@ -154,13 +154,50 @@ Proof
   simp[place_type_def]
 QED
 
-(* Bytelike literals and ABI encoding results carry their produced bound,
+(* Concat's temporary is sized by input capacities. Assignment staging uses
+   that produced bound through lowered_value_type; the value tag retains the
+   expression annotation, as it does for literals and ABI encoding. *)
+Definition concat_payload_capacity_def:
+  concat_payload_capacity (BaseT (BytesT (Dynamic n))) = n /\
+  concat_payload_capacity (BaseT (BytesT (Fixed n))) = n /\
+  concat_payload_capacity (BaseT (StringT n)) = n /\
+  concat_payload_capacity _ = 32
+End
+
+Definition concat_buffer_type_def:
+  concat_buffer_type ret_ty n =
+    (case ret_ty of
+       BaseT (StringT _) => BaseT (StringT n)
+     | _ => BaseT (BytesT (Dynamic n)))
+End
+
+(* Fixed-byte arguments use full-word stores even at unaligned offsets.
+   Reserve their furthest write, as in vyperlang/vyper#5295. *)
+Definition concat_data_bound_def:
+  concat_data_bound prefix [] = 0 /\
+  concat_data_bound prefix (ty :: tys) =
+    let cap = concat_payload_capacity ty in
+    let rest = concat_data_bound (prefix + cap) tys in
+    if is_bytestring_type ty then rest
+    else MAX (prefix + 32) rest
+End
+
+Definition concat_alloc_size_def:
+  concat_alloc_size tys =
+    let payload_capacity = SUM (MAP concat_payload_capacity tys) in
+    MAX (32 + ((payload_capacity + 31) DIV 32) * 32)
+        (32 + concat_data_bound 0 tys)
+End
+
+(* Bytelike literals, concatenations and ABI encoding results carry their produced bound,
    independently of the annotated destination bound. *)
 Definition lowered_value_type_def:
   lowered_value_type cenv (Literal (BaseT (StringT _)) (StringL s)) =
     BaseT (StringT (LENGTH s)) ∧
   lowered_value_type cenv (Literal (BaseT (BytesT (Dynamic _))) (BytesL bs)) =
     BaseT (BytesT (Dynamic (LENGTH bs))) ∧
+  lowered_value_type cenv (Builtin ty (Concat _) args) =
+    concat_buffer_type ty (SUM (MAP (concat_payload_capacity o expr_type) args)) ∧
   lowered_value_type cenv (TypeBuiltin _ (AbiEncode ensure method_id) _ args) =
     (let enc_ty = if LENGTH args = 1 ∧ ¬ensure then expr_type (HD args)
                   else TupleT (MAP expr_type args) in
@@ -3039,7 +3076,7 @@ Definition compile_builtin_dispatch_body_def:
             else case ety of
               BaseT (BytesT (Fixed m)) => (F, m)
             | _ => (F, 32:num)) args in
-          let alloc_size = 32 + ((max_len + 31) DIV 32) * 32 in
+          let alloc_size = concat_alloc_size (MAP expr_type args) in
                     let (buf_op_alloc, st2) = compile_alloc_buffer alloc_size st in
                     let buf_op = buf_op_alloc.buf_operand in
           let (data_ptr, st3) = emit_op ADD [buf_op; Lit 32w] st2 in

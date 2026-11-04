@@ -66,6 +66,7 @@ Definition alloc_limits_expr_def:
           SUM (MAP (type_memory_bytes cenv o expr_type) es) < 2 ** 64
       | MakeArray (SOME _) _ => type_memory_bytes cenv t < 2 ** 64
       | CalldataSlice n => 32 + 32 * word_size n < 2 ** 64
+      | Concat _ => concat_alloc_size (MAP expr_type es) < 2 ** 64
       | _ => T) /\
      alloc_limits_exprs cenv es) /\
   alloc_limits_expr cenv (TypeBuiltin t tb ty es) =
