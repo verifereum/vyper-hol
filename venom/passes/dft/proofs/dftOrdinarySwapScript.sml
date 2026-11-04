@@ -289,3 +289,111 @@ Theorem dft_ordinary_external_replay_backward:
 Proof
   strip_tac >> drule_all dft_ordinary_external_replay_both >> metis_tac[]
 QED
+
+Theorem dft_ordinary_updates_disjoint[local]:
+  dft_ordinary_swap_pair x y /\ EVERY (\p. MEM (FST p) x.inst_outputs) us ==>
+  EVERY (\p. ~MEM (Var (FST p)) y.inst_operands /\ ~MEM (FST p) y.inst_outputs) us
+Proof
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  fs[dft_ordinary_swap_pair_def, inst_defs_def, inst_uses_def,
+     pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+  metis_tac[dftBlockSimTheory.mem_var_operand_vars]
+QED
+
+Theorem dft_ordinary_swap_external_first[local]:
+  dft_ordinary_swap_pair a b /\ inst_wf a /\ inst_wf b /\
+  is_ext_call_op a.inst_opcode /\
+  step_inst fuel C a s = OK sa /\ step_inst fuel C b sa = OK sab ==>
+  ?sb. step_inst fuel C b s = OK sb /\ step_inst fuel C a sb = OK sab
+Proof
+  strip_tac >>
+  `dft_ordinary_swap_pair b a` by metis_tac[dft_ordinary_swap_pair_sym] >>
+  drule_all dft_ordinary_external_replay_backward >> strip_tac >>
+  qexists_tac `FOLDL (\u p. update_var (FST p) (SND p) u) s us` >> simp[] >>
+  `EVERY (\p. ~MEM (Var (FST p)) a.inst_operands /\ ~MEM (FST p) a.inst_outputs) us` by
+    metis_tac[dft_ordinary_updates_disjoint] >>
+  simp[dft_external_ok_fold_iff] >> metis_tac[]
+QED
+
+Theorem dft_ordinary_external_updates[local]:
+  dft_ordinary_swap_pair a b /\ is_ext_call_op b.inst_opcode /\
+  step_inst fuel C a s = OK sa ==>
+  ?us. EVERY (\p. MEM (FST p) a.inst_outputs) us /\
+       sa = FOLDL (\u p. update_var (FST p) (SND p) u) s us
+Proof
+  strip_tac >>
+  `write_effects a.inst_opcode = empty_effects` by
+    metis_tac[dft_ordinary_external_empty_write] >>
+  `Eff_RETURNDATA NOTIN read_effects a.inst_opcode` by
+    (Cases_on `b.inst_opcode` >>
+     gvs[dft_ordinary_swap_pair_def, effects_independent_def, is_ext_call_op_def,
+         write_effects_def, all_effects_def, empty_effects_def,
+         pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `step_inst_base a s = OK sa` by
+    (fs[dft_ordinary_swap_pair_def] >> metis_tac[step_inst_non_invoke]) >>
+  mp_tac (Q.INST [`x` |-> `a`, `t` |-> `s`, `r` |-> `sa`] dft_ordinary_empty_write_replay) >>
+  simp[] >>
+  `~is_pseudo a.inst_opcode /\ ~is_terminator a.inst_opcode /\
+    a.inst_opcode <> ALLOCA /\ a.inst_opcode <> GAS` by
+    (fs[dft_ordinary_swap_pair_def] >> metis_tac[is_alloca_op_def]) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem dft_ordinary_swap_external_second[local]:
+  dft_ordinary_swap_pair a b /\ inst_wf a /\ inst_wf b /\
+  is_ext_call_op b.inst_opcode /\
+  step_inst fuel C a s = OK sa /\ step_inst fuel C b sa = OK sab ==>
+  ?sb. step_inst fuel C b s = OK sb /\ step_inst fuel C a sb = OK sab
+Proof
+  strip_tac >> drule_all dft_ordinary_external_updates >> strip_tac >>
+  `EVERY (\p. ~MEM (Var (FST p)) b.inst_operands /\ ~MEM (FST p) b.inst_outputs) us` by
+    metis_tac[dft_ordinary_updates_disjoint] >>
+  `?sb. step_inst fuel C b s = OK sb /\
+        sab = FOLDL (\u p. update_var (FST p) (SND p) u) sb us` by
+    metis_tac[dft_external_ok_fold_iff] >>
+  qexists_tac `sb` >> simp[] >>
+  drule_all dft_ordinary_external_replay_forward >> strip_tac >>
+  `EVERY (\p. ~MEM (Var (FST p)) b.inst_operands /\ ~MEM (FST p) b.inst_outputs) us'` by
+    metis_tac[dft_ordinary_updates_disjoint] >>
+  `step_inst fuel C b sa =
+     OK (FOLDL (\u p. update_var (FST p) (SND p) u) sb us')` by
+    metis_tac[dft_external_ok_fold_iff] >> gvs[]
+QED
+
+Theorem dft_ordinary_step_swap_ok:
+  dft_ordinary_swap_pair a b /\ inst_wf a /\ inst_wf b /\
+  step_inst fuel C a s = OK sa /\ step_inst fuel C b sa = OK sab ==>
+  ?sb. step_inst fuel C b s = OK sb /\ step_inst fuel C a sb = OK sab
+Proof
+  strip_tac >> Cases_on `is_ext_call_op a.inst_opcode`
+  >- (drule_all dft_ordinary_swap_external_first >> simp[]) >>
+  Cases_on `is_ext_call_op b.inst_opcode`
+  >- (drule_all dft_ordinary_swap_external_second >> simp[]) >>
+  `ext_bi_independent a b` by metis_tac[dft_ordinary_swap_pair_nonexternal] >>
+  drule_all step_swap_ok_ext >> simp[]
+QED
+
+Theorem dft_ordinary_indexed_step_swap_ok:
+  dft_ordinary_swap_pair a b /\ inst_wf a /\ inst_wf b /\
+  step_inst fuel C a s = OK sa /\
+  step_inst fuel C b (sa with vs_inst_idx := SUC s.vs_inst_idx) = OK sab ==>
+  ?sb sba. step_inst fuel C b s = OK sb /\
+    step_inst fuel C a (sb with vs_inst_idx := SUC s.vs_inst_idx) = OK sba /\
+    (sab with vs_inst_idx := SUC (SUC s.vs_inst_idx)) =
+    (sba with vs_inst_idx := SUC (SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `~is_terminator a.inst_opcode /\ ~is_terminator b.inst_opcode` by
+    gvs[dft_ordinary_swap_pair_def] >>
+  `step_inst fuel C b sa = OK (sab with vs_inst_idx := sa.vs_inst_idx)` by
+    (drule_all dft_step_ok_idx >>
+     disch_then (qspec_then `sa.vs_inst_idx` mp_tac) >> simp[]) >>
+  drule_all dft_ordinary_step_swap_ok >> strip_tac >>
+  qexistsl_tac [`sb`, `sab with vs_inst_idx := SUC s.vs_inst_idx`] >> simp[] >>
+  qpat_x_assum `step_inst _ _ a s = _` kall_tac >>
+  qpat_x_assum `step_inst _ _ b s = _` kall_tac >>
+  qpat_x_assum `step_inst _ _ b sa = _` kall_tac >>
+  qpat_x_assum `step_inst _ _ b (_ with vs_inst_idx := _) = _` kall_tac >>
+  drule_all dft_step_ok_idx >>
+  disch_then (qspec_then `SUC s.vs_inst_idx` mp_tac) >> simp[]
+QED
