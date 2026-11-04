@@ -1,6 +1,6 @@
 Theory typedNormalizeFields
 Ancestors
-  typedNormalizeFrame typedBytesArrayMem externalReturnNormalizeMem
+  typedNormalizeFrame typedBytesArrayMem externalReturnNormalizeMem abiDecoderFrame
   context compileEnv emitHelper venomInst exprLoweringProps memContinuation venomState
 
 (* Offsets are straight-line, even when the child they precede has a CFG. *)
@@ -217,4 +217,130 @@ Proof
   qexists_tac `u` >> simp[] >>
   conj_tac >- (irule mem_cont_sim_trans >> metis_tac[]) >>
   gvs[venom_state_component_equality]
+QED
+
+(* Only the recursive child is a semantic premise; offsets are executed here. *)
+Theorem normalize_field_child_cont[local]:
+  compile_with_byte_offset dst doff sa = (dp,sc) /\
+  compile_with_byte_offset src soff sc = (sp,sd) /\
+  compile_store_memory_typed ce dp dt sp st sd = ((),se) /\
+  eval_operand dst s = SOME d /\ eval_operand src s = SOME p /\
+  (!x. dst = Var x \/ src = Var x ==> not_fresh_at sa x) /\
+  fn_has_code sa se fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  Src s.vs_memory /\
+  (!u. eval_operand dp u = SOME (d + n2w doff) /\
+    eval_operand sp u = SOME (p + n2w soff) /\
+    (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
+    fn_has_code sd se fn /\ ~u.vs_halted /\
+    u.vs_current_bb = sd.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sd.cs_current_insts /\
+    u.vs_alloca_next = s.vs_alloca_next /\ Src u.vs_memory ==>
+    ?v. mem_cont_sim ctx fn u v /\ D v.vs_memory /\
+      ~v.vs_halted /\ v.vs_current_bb = se.cs_current_bb /\
+      v.vs_inst_idx = LENGTH se.cs_current_insts /\
+      abi_decode_footprint_frame fp u v /\
+      (!x. not_fresh_at sd x ==> lookup_var x v = lookup_var x u) /\
+      sd.cs_next_var <= se.cs_next_var /\
+      (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
+        vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
+        vs_prev_bb := u.vs_prev_bb|>) = u) ==>
+  ?v. mem_cont_sim ctx fn s v /\ D v.vs_memory /\
+    ~v.vs_halted /\ v.vs_current_bb = se.cs_current_bb /\
+    v.vs_inst_idx = LENGTH se.cs_current_insts /\
+    abi_decode_footprint_frame fp s v /\
+    (!x. not_fresh_at sa x ==> lookup_var x v = lookup_var x s) /\
+    sa.cs_next_var <= se.cs_next_var /\
+    (v with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
+      vs_prev_bb := s.vs_prev_bb|>) = s
+Proof
+  strip_tac >>
+  `cs_extends sd se` by
+    (mp_tac (cj 1 ci_mono_typed_memory_family) >>
+     disch_then (qspecl_then [`ce`, `dp`, `dt`, `sp`, `st`, `sd`] mp_tac) >>
+     simp[ci_mono_def]) >>
+  imp_res_tac normalize_byte_offset_straight >>
+  `cs_extends sa sd` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sd fn /\ fn_has_code sd se fn` by
+    metis_tac[fragExecTheory.fn_has_code_split] >>
+  drule_all normalize_field_offsets_cont >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `u.vs_memory = s.vs_memory /\ u.vs_alloca_next = s.vs_alloca_next` by
+    gvs[venom_state_component_equality] >>
+  `Src u.vs_memory` by metis_tac[] >>
+  qpat_x_assum `!u. _ ==> ?v. _` drule_all >> strip_tac >>
+  qexists_tac `v` >> simp[] >>
+  conj_tac >- (irule mem_cont_sim_trans >> metis_tac[]) >>
+  conj_tac >- gvs[abi_decode_footprint_frame_def, venom_state_component_equality] >>
+  conj_tac >- (rpt strip_tac >>
+    `not_fresh_at sd x` by
+      (gvs[not_fresh_at_def] >> decide_tac) >> metis_tac[]) >>
+  gvs[venom_state_component_equality]
+QED
+
+(* The memory part of the indexed completed-prefix invariant.  d and h are
+   the absolute destination/source prefix-sum endpoints at the call site. *)
+Theorem normalize_fields_prefix_frame[local]:
+  i < N /\
+  (!j k. j <= k /\ k <= N ==> d j <= d k /\ h j <= h k) /\
+  abi_footprint_disjoint (h 0) (h N - h 0) [(d 0,d N - d 0)] /\
+  (!j m m'. j < N /\
+    mem_bytes_at (h j) (h (SUC j) - h j) m' =
+      mem_bytes_at (h j) (h (SUC j) - h j) m /\ Src j m ==> Src j m') /\
+  (!j m m'. j < N /\
+    mem_bytes_at (d j) (d (SUC j) - d j) m' =
+      mem_bytes_at (d j) (d (SUC j) - d j) m /\ Dst j m ==> Dst j m') /\
+  (!j. j < N ==> Src j u.vs_memory) /\
+  (!j. j < i ==> Dst j u.vs_memory) /\ Dst i v.vs_memory /\
+  abi_decode_footprint_frame [(d 0,d i - d 0)] s u /\
+  abi_decode_footprint_frame [(d i,d (SUC i) - d i)] u v ==>
+  (!j. j < N ==> Src j v.vs_memory) /\
+  (!j. j < SUC i ==> Dst j v.vs_memory) /\
+  abi_decode_footprint_frame [(d 0,d (SUC i) - d 0)] s v /\
+  mem_bytes_at (h 0) (h N - h 0) v.vs_memory =
+    mem_bytes_at (h 0) (h N - h 0) u.vs_memory
+Proof
+  strip_tac >>
+  `!j k. j <= k /\ k <= N ==> d j <= d k` by metis_tac[] >>
+  `!j k. j <= k /\ k <= N ==> h j <= h k` by metis_tac[] >>
+  `!j. j < N ==> abi_footprint_disjoint (h j) (h (SUC j) - h j)
+      [(d i,d (SUC i) - d i)]` by
+    (simp[abi_footprint_disjoint_def] >> rpt strip_tac >>
+     `h 0 <= h j /\ h j <= h (SUC j) /\ h (SUC j) <= h N /\ d 0 <= d i /\
+      d (SUC i) <= d N /\ d i <= d (SUC i)` by
+       (rpt conj_tac >> first_assum irule >> decide_tac) >>
+     `h 0 <= h N /\ d 0 <= d N` by
+       (conj_tac >> first_assum irule >> decide_tac) >>
+     qpat_x_assum `abi_footprint_disjoint _ _ _` mp_tac >>
+     simp_tac (srw_ss()) [abi_footprint_disjoint_def] >> decide_tac) >>
+  conj_tac >- (rpt strip_tac >>
+    `mem_bytes_at (h j) (h (SUC j) - h j) v.vs_memory =
+      mem_bytes_at (h j) (h (SUC j) - h j) u.vs_memory` by
+        (irule abi_decode_footprint_frame_slice >> metis_tac[]) >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> Cases_on `j = i` >- gvs[] >>
+    `j < i` by decide_tac >>
+    `abi_footprint_disjoint (d j) (d (SUC j) - d j)
+      [(d i,d (SUC i) - d i)]` by
+      (simp[abi_footprint_disjoint_def] >>
+       `d j <= d (SUC j) /\ d (SUC j) <= d i` by
+         (conj_tac >> first_assum irule >> decide_tac) >> decide_tac) >>
+    `mem_bytes_at (d j) (d (SUC j) - d j) v.vs_memory =
+      mem_bytes_at (d j) (d (SUC j) - d j) u.vs_memory` by
+        (irule abi_decode_footprint_frame_slice >> metis_tac[]) >>
+    `j < N` by decide_tac >> `Dst j u.vs_memory` by metis_tac[] >>
+    qpat_x_assum `!j m m'. _ ==> Dst j m'` irule >>
+    simp[] >> qexists_tac `u.vs_memory` >> simp[]) >>
+  `d 0 <= d i /\ d i <= d (SUC i) /\ d (SUC i) <= d N /\
+   h 0 <= h N` by (rpt conj_tac >> first_assum irule >> decide_tac) >>
+  conj_tac
+  >- (irule abi_decode_footprint_frame_trans >> qexists_tac `u` >>
+      conj_tac >> irule abi_decode_footprint_frame_weaken >>
+      goal_assum (drule_at (Pat `abi_decode_footprint_frame _ _ _`)) >>
+      simp[] >> decide_tac) >>
+  irule abi_decode_footprint_frame_slice >>
+  qexists_tac `[(d i,d (SUC i) - d i)]` >> simp[] >>
+  qpat_x_assum `abi_footprint_disjoint _ _ _` mp_tac >>
+  simp_tac (srw_ss()) [abi_footprint_disjoint_def] >> decide_tac
 QED
