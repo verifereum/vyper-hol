@@ -1,15 +1,10 @@
 (* Memory-safe unary lowering. *)
 Theory bodyNotMemoryProps
 Ancestors
-  exprSimSource exprSimHypsDefs exprSimProps exprSimUnopProps
-  exprSimMemoryStack exprSimMemoryValues exprSimMemDefs loweringPosts
-  gasNormalPrefix gasSummary gasSummaryCompose gasContext gasCount fragGasMode
-  fragGasPathMem fragGasSeqMem gasExemptCert
-  bodyMemoryDefs emitHelperProps fragExecMem instMemFrontier allocaHistoryFragment
-  exprLoweringProps emitHelper venomInst venomState words list rich_list
-  compileEnv fragExec exprSimDefs valueEncoding vyperValue vyperAST venomExecSemantics
-  loweringSlice exprLowering vyperState vyperExprNoControl
-  builtinSimple builtinProps freshWrites varsExt vyperTyping vyperValueOperation integer_word
+  loweringPosts exprSimDefs exprLoweringProps emitHelper emitHelperProps
+  fragExec fragExecMem instMemFrontier allocaHistoryFragment
+  compileEnv venomInst venomState venomExecSemantics freshWrites
+  words list rich_list
 
 Theorem body_not_prefix_mem_ok:
   emit_op NOT ops sm = (dst,sn) ==>
