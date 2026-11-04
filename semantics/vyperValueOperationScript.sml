@@ -366,9 +366,15 @@ Definition evaluate_binop_def:
        | FlagV n1 => (case v2 of FlagV n2 =>
            INL (BoolV (n1 = n2)) | _ => INR (TypeError "binop"))
        | StringV s1 => (case v2 of StringV s2 =>
-           INL (BoolV (s1 = s2)) | _ => INR (TypeError "binop"))
+           INL (BoolV (Keccak_256_w64 (MAP n2w_o_ORD s1) =
+                       Keccak_256_w64 (MAP n2w_o_ORD s2)))
+           | _ => INR (TypeError "binop"))
        | BytesV s1 => (case v2 of BytesV s2 =>
-           INL (BoolV (s1 = s2)) | _ => INR (TypeError "binop"))
+           INL (BoolV (case tv of
+                         BaseTV (BytesT (Dynamic _)) =>
+                           Keccak_256_w64 s1 = Keccak_256_w64 s2
+                       | _ => s1 = s2))
+           | _ => INR (TypeError "binop"))
        | BoolV s1 => (case v2 of BoolV s2 =>
            INL (BoolV (s1 = s2)) | _ => INR (TypeError "binop"))
        | DecimalV s1 => (case v2 of DecimalV s2 =>

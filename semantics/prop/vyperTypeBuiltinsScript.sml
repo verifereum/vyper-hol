@@ -912,7 +912,10 @@ Proof
   (* Catch-all for simple remaining cases *)
   TRY (gvs[within_int_bound_def] >> NO_TAC) >>
   TRY (intLib.ARITH_TAC >> NO_TAC) >>
-  TRY (gvs[] >> NO_TAC)
+  TRY (gvs[] >> NO_TAC) >>
+  Cases_on `tv` >> simp[] >>
+  rename1 `bt = BytesT _` >> Cases_on `bt` >> simp[] >>
+  rename1 `bound = Fixed _` >> Cases_on `bound` >> simp[]
 QED
 Theorem builtin_bop_success_type[local]:
   well_typed_binop ty bop t1 t2 /\

@@ -243,7 +243,7 @@ Proof
       `bop_result cx ty bop [ty; expr_type e] cur v2 es1 =
         case evaluate_binop u ftv bop cur v2 of
           INL v => INL v | INR err => INR (Error err)` by
-        (simp[Abbr `u`] >> irule bop_result_augassign >> simp[]) >>
+        (simp[Abbr `u`] >> irule bop_result_augassign >> metis_tac[word_value_not_bytes]) >>
       Cases_on `evaluate_binop u ftv bop cur v2` >> gvs[])
   >- (rpt gen_tac >> strip_tac >> gvs[] >>
       `value_has_type ftv v` by
@@ -252,7 +252,7 @@ Proof
           case evaluate_binop
             (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
             ftv bop cur v2 of INL v => INL v | INR err => INR (Error err)` by
-           (irule bop_result_augassign >> simp[]) >>
+           (irule bop_result_augassign >> metis_tac[word_value_not_bytes]) >>
          strip_tac >> gvs[AllCaseEqs()] >>
          irule vyperTypeBuiltinsTheory.well_typed_binop_success_type >>
          goal_assum (drule_at (Pat `well_typed_binop _ _ _ _`)) >>

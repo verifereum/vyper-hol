@@ -678,7 +678,8 @@ Proof
                ftv bop fv v2 of
           INL v => INL v
         | INR err => INR (Error err)` by
-    (gen_tac >> irule bop_result_augassign >> simp[]) >>
+    (gen_tac >> irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes]) >>
   (* the code *)
   `cs_extends s1 s2 /\ s1.cs_next_var <= s2.cs_next_var /\
    (!z. rhs = Var z ==> not_fresh_at s2 z) /\ (!l. rhs <> Label l)` by

@@ -137,7 +137,8 @@ Theorem eval_augassign_toplevel_assign:
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
     evaluate_type (get_tenv cx) typ = SOME tvt /\
     read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
-    bop <> In /\ bop <> NotIn ==>
+    bop <> In /\ bop <> NotIn /\
+    ((bop = Eq \/ bop = NotEq) ==> !bs. v0 <> BytesV bs) ==>
     eval_stmt cx
       (Assign (BaseTarget (TopLevelNameTarget (src, id)))
          (Builtin ty (Bop bop) [TopLevelName ty (src, id); e])) es =
@@ -165,7 +166,7 @@ Proof
                  tvt bop v0 w of
             INL v => INL v
           | INR err => INR (Error err)` by
-    (rpt gen_tac >> irule bop_result_augassign >> simp[]) >>
+    (rpt gen_tac >> irule bop_result_augassign >> metis_tac[]) >>
   gvs[vyperASTTheory.expr_type_def] >>
   Cases_on `evaluate_binop
               (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
@@ -425,6 +426,14 @@ Proof
   `?v0. read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es)` by
     (irule toplevel_storage_read_decodes >>
      gvs[expr_sim_inv_def] >> metis_tac[]) >>
+  `contract_storage_well_formed cx es` by fs[expr_sim_inv_def] >>
+  `well_formed_type_value tvt` by
+    metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
+  `value_has_type tvt v0` by
+    metis_tac[vyperTypeStatePreservationTheory.read_storage_slot_well_typed_value] >>
+  `word_value v0` by metis_tac[word_value_type_typed] >>
+  `((bop = Eq \/ bop = NotEq) ==> !bs. v0 <> BytesV bs)` by
+    metis_tac[word_value_not_bytes] >>
   drule_all eval_augassign_toplevel_assign >> strip_tac >>
   `expr_body_pre cenv cx env
      (Builtin ty (Bop bop) [TopLevelName ty (src, id); e]) es` by
