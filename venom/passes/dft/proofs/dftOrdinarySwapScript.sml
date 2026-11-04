@@ -148,6 +148,51 @@ Proof
   >> qexists_tac `[]` >> simp[]
 QED
 
+(* Empty effects do not imply independence from immutable execution context. *)
+Theorem dft_empty_effect_caller_probe:
+  let i = mk_inst 0 CALLER [] ["out"];
+      s = init_venom_state "entry";
+      t = s with vs_call_ctx := (s.vs_call_ctx with cc_caller := 1w)
+  in read_effects i.inst_opcode = empty_effects /\
+     write_effects i.inst_opcode = empty_effects /\
+     (!op. MEM op i.inst_operands ==> eval_operand op t = eval_operand op s) /\
+     step_inst_base i s = OK (update_var "out" 0w s) /\
+     step_inst_base i t = OK (update_var "out" 1w t)
+Proof
+  EVAL_TAC >> simp[wordsTheory.w2w_def]
+QED
+
+Theorem dft_ordinary_empty_effect_replay:
+  ~is_pseudo x.inst_opcode /\ ~is_terminator x.inst_opcode /\
+  x.inst_opcode <> ALLOCA /\ x.inst_opcode <> GAS /\
+  read_effects x.inst_opcode = empty_effects /\
+  write_effects x.inst_opcode = empty_effects /\
+  (!op. MEM op x.inst_operands ==> eval_operand op t = eval_operand op s) /\
+  t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+  t.vs_block_ctx = s.vs_block_ctx /\ t.vs_code = s.vs_code /\
+  step_inst_base x s = OK r ==>
+  ?us. EVERY (\p. MEM (FST p) x.inst_outputs) us /\
+       r = FOLDL (\u p. update_var (FST p) (SND p) u) s us /\
+       step_inst_base x t = OK (FOLDL (\u p. update_var (FST p) (SND p) u) t us)
+Proof
+  strip_tac >> Cases_on `x.inst_opcode` >>
+  fs[read_effects_def, write_effects_def, empty_effects_def, all_effects_def,
+     is_pseudo_def, is_terminator_def] >>
+  with_opcode_clause (fn cs => gvs cs) >> all_tac
+  >>~- ([`exec_pure1 f x t`], irule dft_ordinary_pure1_replay >> simp[])
+  >>~- ([`exec_pure2 f x t`], irule dft_ordinary_pure2_replay >> simp[])
+  >>~- ([`exec_pure3 f x t`], irule dft_ordinary_pure3_replay >> simp[])
+  >>~- ([`exec_read0 _ _ _`], irule dft_ordinary_read0_replay >> simp[empty_effects_def])
+  >>~- ([`exec_read1 _ _ _`], irule dft_ordinary_read1_replay >> simp[empty_effects_def])
+  >> gvs[AllCaseEqs(), empty_effects_def]
+  >>~- ([`EVERY (\p. FST p = out) _`],
+    qmatch_goalsub_abbrev_tac `update_var out value s` >>
+    qexists_tac `[(out,value)]` >> simp[])
+  >>~- ([`x.inst_opcode = BUMP`],
+    qexists_tac `[(ptr_out,base_val); (next_out,base_val + sz)]` >> simp[])
+  >> qexists_tac `[]` >> simp[]
+QED
+
 Theorem dft_ordinary_extract_fmp[local]:
   extract_venom_result s value off sz result = SOME (v,t) ==>
   t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp
