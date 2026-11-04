@@ -220,7 +220,8 @@ Triviality step_inst_base_abort_terminator_opcodes[local]:
   !inst vs a vs'.
     is_terminator inst.inst_opcode /\
     step_inst_base inst vs = Abort a vs' ==>
-    inst.inst_opcode = REVERT \/ inst.inst_opcode = INVALID
+    inst.inst_opcode = REVERT \/ inst.inst_opcode = INVALID \/
+    (vs.vs_call_ctx.cc_static /\ inst.inst_opcode = SELFDESTRUCT)
 Proof
   rpt strip_tac >>
   drule terminator_opcode_cases >> strip_tac >> gvs[] >>
@@ -607,17 +608,20 @@ Proof
   Cases >> EVAL_TAC
 QED
 
+(* A static frame aborts at CALL with value, CREATE and CREATE2. *)
 Triviality ext_call_not_halt_abort[local]:
   !inst s vs' a.
     is_ext_call_op inst.inst_opcode ==>
     step_inst_base inst s <> Halt vs' /\
-    step_inst_base inst s <> Abort a vs'
+    (~(s.vs_call_ctx.cc_static /\
+       (inst.inst_opcode = CALL \/ inst.inst_opcode = CREATE \/
+        inst.inst_opcode = CREATE2)) ==>
+     step_inst_base inst s <> Abort a vs')
 Proof
-  rpt gen_tac >> strip_tac >> conj_tac
-  >> (strip_tac >>
-      drule ext_call_opcode_cases >> strip_tac >>
-      qpat_x_assum `step_inst_base inst s = _` mp_tac >>
-      step_inst_base_opcode_tac >> gvs[AllCaseEqs()])
+  rpt gen_tac >> strip_tac >> conj_tac >> rpt strip_tac >>
+  drule ext_call_opcode_cases >> strip_tac >>
+  qpat_x_assum `step_inst_base inst s = _` mp_tac >>
+  step_inst_base_opcode_tac >> gvs[AllCaseEqs()]
 QED
 
 Triviality storage_imm_log_assert_not_halt[local]:
@@ -635,12 +639,16 @@ Proof
   gvs[AllCaseEqs()]
 QED
 
+(* A static frame aborts at SSTORE, TSTORE and LOG. *)
 Triviality nofail_storage_imm_log_not_abort[local]:
   !inst s a vs'.
     (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
      inst.inst_opcode = ISTORE \/ inst.inst_opcode = LOG \/
      inst.inst_opcode = SETFMP \/ inst.inst_opcode = DALLOCA \/
-     inst.inst_opcode = INVOKE) ==>
+     inst.inst_opcode = INVOKE) /\
+    ~(s.vs_call_ctx.cc_static /\
+      (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+       inst.inst_opcode = LOG)) ==>
     step_inst_base inst s <> Abort a vs'
 Proof
   rpt strip_tac >> gvs[] >>
@@ -733,6 +741,7 @@ Proof
   fs[] >> imp_res_tac step_inst_base_halt_opcodes >> simp[]
 QED
 
+(* A static frame (cc_static) also aborts at its state writes. *)
 Theorem step_inst_base_abort_opcodes:
   !inst vs a vs'.
     step_inst_base inst vs = Abort a vs' ==>
@@ -740,7 +749,12 @@ Theorem step_inst_base_abort_opcodes:
     inst.inst_opcode = INVALID \/
     inst.inst_opcode = ASSERT \/
     inst.inst_opcode = ASSERT_UNREACHABLE \/
-    inst.inst_opcode = RETURNDATACOPY
+    inst.inst_opcode = RETURNDATACOPY \/
+    (vs.vs_call_ctx.cc_static /\
+     (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+      inst.inst_opcode = LOG \/ inst.inst_opcode = SELFDESTRUCT \/
+      inst.inst_opcode = CALL \/ inst.inst_opcode = CREATE \/
+      inst.inst_opcode = CREATE2))
 Proof
   rpt strip_tac >>
   Cases_on `is_terminator inst.inst_opcode`
@@ -752,7 +766,7 @@ Proof
   >- (qspecl_then [`inst`, `vs`, `vs'`, `a`] mp_tac
         alloca_not_halt_abort >> gvs[])
   >- (qspecl_then [`inst`, `vs`, `vs'`, `a`] mp_tac
-        ext_call_not_halt_abort >> gvs[]) >>
+        ext_call_not_halt_abort >> gvs[] >> rw[] >> gvs[]) >>
   gvs[] >>
   qspecl_then [`inst`, `vs`, `a`, `vs'`] mp_tac
     nofail_storage_imm_log_not_abort >> gvs[]
@@ -766,7 +780,12 @@ Theorem step_inst_abort_opcodes:
     inst.inst_opcode = ASSERT \/
     inst.inst_opcode = ASSERT_UNREACHABLE \/
     inst.inst_opcode = RETURNDATACOPY \/
-    inst.inst_opcode = INVOKE
+    inst.inst_opcode = INVOKE \/
+    (vs.vs_call_ctx.cc_static /\
+     (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+      inst.inst_opcode = LOG \/ inst.inst_opcode = SELFDESTRUCT \/
+      inst.inst_opcode = CALL \/ inst.inst_opcode = CREATE \/
+      inst.inst_opcode = CREATE2))
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode = INVOKE` >- simp[] >>

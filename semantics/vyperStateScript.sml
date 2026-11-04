@@ -208,6 +208,13 @@ End
 
 val () = cv_auto_trans check_def;
 
+(* A static frame fails where the EVM fails with WriteInStaticContext. *)
+Definition check_not_static_def:
+  check_not_static cx = check (~cx.txn.is_static) "write in static context"
+End
+
+val () = cv_auto_trans check_not_static_def;
+
 Definition type_check_def:
   type_check b str = assert b (Error (TypeError str))
 End
@@ -437,6 +444,7 @@ val () = read_storage_slot_def
 (* Write a value to storage at a slot *)
 Definition write_storage_slot_def:
   write_storage_slot cx is_transient slot tv v = do
+    check_not_static cx;
     storage <- get_storage_backend cx is_transient;
     writes <- lift_option_type (encode_value tv v) "write_storage_slot encode";
     storage' <<- apply_writes slot writes storage;
@@ -445,8 +453,9 @@ Definition write_storage_slot_def:
 End
 
 val () = write_storage_slot_def
-  |> SRULE [bind_def, FUN_EQ_THM, LET_THM, set_storage_backend_def,
-            update_transient_def, update_accounts_def]
+  |> SRULE [bind_def, ignore_bind_def, FUN_EQ_THM, LET_THM,
+            set_storage_backend_def, check_not_static_def, check_def,
+            assert_def, update_transient_def, update_accounts_def]
   |> cv_auto_trans;
 
 (* Module-aware immutables lookup *)

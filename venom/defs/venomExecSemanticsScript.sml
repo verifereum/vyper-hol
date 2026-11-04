@@ -597,13 +597,19 @@ Definition step_inst_base_def:
             | _ => Error "undefined operand")
         | _ => Error "mcopy requires 3 operands")
 
-    (* Storage *)
+    (* Storage.  A static frame (cc_static) halts exceptionally at every
+       state write: SSTORE, TSTORE, LOG, SELFDESTRUCT, CREATE/CREATE2 and a
+       CALL with value, as the EVM fails with WriteInStaticContext. *)
     | SLOAD => exec_read1 (\key s. sload key s) inst s
-    | SSTORE => exec_write2 (\key val s. sstore key val s) inst s
+    | SSTORE =>
+        if s.vs_call_ctx.cc_static then Abort ExHalt_abort (halt_state (set_returndata [] s))
+        else exec_write2 (\key val s. sstore key val s) inst s
 
     (* Transient storage *)
     | TLOAD => exec_read1 (\key s. tload key s) inst s
-    | TSTORE => exec_write2 (\key val s. tstore key val s) inst s
+    | TSTORE =>
+        if s.vs_call_ctx.cc_static then Abort ExHalt_abort (halt_state (set_returndata [] s))
+        else exec_write2 (\key val s. tstore key val s) inst s
 
     (* Control flow - JMP *)
     | JMP =>
@@ -988,6 +994,7 @@ Definition step_inst_base_def:
        first; the remaining operands are in Python's physical stack order:
        topics, size, offset (rightmost operand at the top of the stack). *)
     | LOG =>
+        if s.vs_call_ctx.cc_static then Abort ExHalt_abort (halt_state (set_returndata [] s)) else
         (case inst.inst_operands of
           Lit tc :: rest =>
             let n = w2n tc in
@@ -1014,6 +1021,7 @@ Definition step_inst_base_def:
     (* Selfdestruct: transfer balance to beneficiary, then halt.
        Deprecated post-Cancun but still defined in Venom IR. *)
     | SELFDESTRUCT =>
+        if s.vs_call_ctx.cc_static then Abort ExHalt_abort (halt_state (set_returndata [] s)) else
         (case inst.inst_operands of
           [addr_op] =>
             (case eval_operand addr_op s of
@@ -1047,7 +1055,9 @@ Definition step_inst_base_def:
                    eval_operand as_op s, eval_operand ro_op s,
                    eval_operand rs_op s) of
               (SOME gas, SOME addr, SOME value, SOME ao, SOME as_, SOME ro, SOME rs) =>
-                exec_ext_call inst s gas addr value ao as_ ro rs
+                if s.vs_call_ctx.cc_static /\ value <> 0w then
+                  Abort ExHalt_abort (halt_state (set_returndata [] s))
+                else exec_ext_call inst s gas addr value ao as_ ro rs
                   s.vs_call_ctx.cc_static
             | _ => Error "undefined operand")
         | _ => Error "call requires 7 operands")
@@ -1075,6 +1085,7 @@ Definition step_inst_base_def:
         | _ => Error "delegatecall requires 6 operands")
 
     | CREATE =>
+        if s.vs_call_ctx.cc_static then Abort ExHalt_abort (halt_state (set_returndata [] s)) else
         (case inst.inst_operands of
           [val_op; off_op; sz_op] =>
             (case (eval_operand val_op s, eval_operand off_op s,
@@ -1085,6 +1096,7 @@ Definition step_inst_base_def:
         | _ => Error "create requires 3 operands")
 
     | CREATE2 =>
+        if s.vs_call_ctx.cc_static then Abort ExHalt_abort (halt_state (set_returndata [] s)) else
         (case inst.inst_operands of
           [val_op; off_op; sz_op; salt_op] =>
             (case (eval_operand val_op s, eval_operand off_op s,

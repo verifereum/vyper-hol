@@ -875,7 +875,8 @@ Definition make_delegate_call_state_def:
        Only code lookup uses the target; the message still belongs to the proxy. *)
     let (code, accesses) =
       code_from_tx accounts accesses (tx with to := SOME target_addr) in
-    let ctxt = initial_context cx.txn.target code F empty_return_destination tx in
+    let ctxt = initial_context cx.txn.target code cx.txn.is_static
+                 empty_return_destination tx in
     let rollback =
       <| accounts := accounts; tStorage := tStorage; accesses := accesses;
          toDelete := [] |> in
@@ -908,7 +909,7 @@ Definition run_raw_call_def:
     if flags.rcf_is_delegate then
       run_delegate_call cx target_addr calldata gas accounts tStorage
     else run_ext_call cx.txn.target target_addr calldata
-      (if flags.rcf_is_static then NONE else SOME amount)
+      (if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount)
       gas accounts tStorage (vyper_to_tx_params cx.txn)
 End
 
@@ -933,6 +934,30 @@ End
 
 val () = cv_auto_trans ext_call_precheck_ok_def;
 
+(* A static frame may call only without value, and every call it makes is
+   static: NONE stands for a static call (call_outcome_request,
+   make_ext_call_state). *)
+Definition frame_call_value_def:
+  frame_call_value cx value_opt =
+    if cx.txn.is_static then do
+      check (value_opt = NONE \/ value_opt = SOME 0)
+        "write in static context";
+      return NONE
+    od else return value_opt
+End
+
+val () = frame_call_value_def
+  |> SRULE [FUN_EQ_THM, COND_RATOR, ignore_bind_def, bind_def, check_def,
+            assert_def]
+  |> cv_auto_trans;
+
+Theorem frame_call_value_state:
+  frame_call_value cx value_opt st = (res, st') ==> st' = st
+Proof
+  rw[frame_call_value_def, ignore_bind_def, bind_def, check_def, assert_def,
+     return_def] >> gvs[AllCaseEqs()]
+QED
+
 (* Shared execution after raw_call operands have been evaluated and decoded.
    Both input forms retain the same static/revert/output and state effects.
    A call or staticcall takes its outcome from the external-call oracle when
@@ -944,11 +969,13 @@ Definition eval_raw_call_def:
       (¬(flags.rcf_is_delegate ∧ flags.rcf_is_static) ∧
        ((flags.rcf_is_delegate ∨ flags.rcf_is_static) ⇒ amount = 0))
       "raw_call flags/value";
+    value_opt <- frame_call_value cx
+      (if flags.rcf_is_static then NONE else SOME amount);
     outcomes <- (λst. return st.outcomes st);
     (success, returnData) <-
       if IS_SOME outcomes ∧ ¬flags.rcf_is_delegate then do
         (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata
-          (if flags.rcf_is_static then NONE else SOME amount);
+          value_opt;
         vyperCallOutcome$adopt_call_outcome rq outcome;
         return (call_outcome_success outcome, call_outcome_return_data outcome)
       od else do
@@ -995,6 +1022,7 @@ Proof
        update_transient_def, append_logs_def, UNCURRY, COND_RATOR,
        option_CASE_rator, prod_CASE_rator, sum_CASE_rator, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
+  imp_res_tac frame_call_value_state >>
   imp_res_tac take_call_outcome_frame >> imp_res_tac adopt_call_outcome_frame >>
   gvs[evaluation_state_component_equality]
 QED
@@ -1104,6 +1132,7 @@ Definition eval_ext_call_def:
     accounts <- get_accounts;
     check (ext_call_precheck_ok skip_check ret_type target_addr accounts)
           "ExtCall target has no code";
+    value_opt <- frame_call_value cx value_opt;
     returnData <- eval_ext_call_effects cx target_addr calldata value_opt
       (forwarded_gas default_evm_gas_limit gas_opt) accounts;
     case (if returnData = [] then default_opt else NONE) of
@@ -1138,10 +1167,11 @@ Definition eval_send_def:
     amount <- lift_option_type (dest_NumV amount_v) "Send not NumV";
     (* the gas operand is send's only keyword argument *)
     gas_opt <<- ext_call_kwarg EKGas [EKGas] gas_vs;
+    value_opt <- frame_call_value cx (SOME amount);
     outcomes <- (λst. return st.outcomes st);
     case outcomes of
     | SOME _ => do
-      (rq, outcome) <- vyperCallOutcome$take_call_outcome toAddr [] (SOME amount);
+      (rq, outcome) <- vyperCallOutcome$take_call_outcome toAddr [] value_opt;
       check (call_outcome_success outcome) "send failed";
       vyperCallOutcome$adopt_call_outcome rq outcome;
       return $ Value $ NoneV
@@ -1150,7 +1180,7 @@ Definition eval_send_def:
       accounts <- get_accounts;
       tStorage <- get_transient_storage;
       result <- lift_option
-        (run_ext_call cx.txn.target toAddr [] (SOME amount)
+        (run_ext_call cx.txn.target toAddr [] value_opt
                       (forwarded_gas 0 gas_opt)
                       accounts tStorage (vyper_to_tx_params cx.txn))
         "send run failed";
@@ -1182,6 +1212,15 @@ Proof
   simp[state_rel_frame_def, append_logs_def, return_def]
 QED
 
+Theorem frame_call_value_locals[local]:
+  vyperCallOutcomeFrame$state_rel_frame
+    (\s t. t.scopes = s.scopes /\ t.immutables = s.immutables)
+    (frame_call_value cx value_opt)
+Proof
+  simp[state_rel_frame_result] >> rpt strip_tac >>
+  drule frame_call_value_state >> simp[]
+QED
+
 val call_locals_relation =
   ``\s:evaluation_state t. t.scopes = s.scopes /\ t.immutables = s.immutables``;
 val call_locals_primitives =
@@ -1195,6 +1234,7 @@ val CALL_LOCALS_STEP = FIRST [
   FIRST (map MATCH_ACCEPT_TAC (CONJUNCTS call_locals_primitives)),
   MATCH_ACCEPT_TAC call_locals_take,
   MATCH_ACCEPT_TAC append_logs_locals,
+  MATCH_ACCEPT_TAC frame_call_value_locals,
   MATCH_MP_TAC call_locals_bind >> conj_tac,
   gen_tac, strip_tac,
   CHANGED_TAC (simp_tac bool_ss
@@ -1224,7 +1264,7 @@ Theorem eval_send_preserves_non_accounts:
 Proof
   Cases_on `vs` >- simp[eval_send_def, raise_def] >>
   Cases_on `t` >- simp[eval_send_def, raise_def] >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_send_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, lift_option_type_def, check_def,
        get_accounts_def, update_accounts_def, get_transient_storage_def,
        lift_option_def, update_transient_def, append_logs_def,
@@ -1306,12 +1346,19 @@ Definition lock_if_nr_def:
     if nr then
       case cx.nonreentrant_slot of
       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-      | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+      | SOME slot => do
+          (* A static frame checks the lock and then fails before taking
+             it, as the compiled TLOAD, ASSERT, TSTORE does. *)
+          acquire_nonreentrant_lock cx.txn.target slot
+            (is_view \/ cx.txn.is_static);
+          if is_view then return () else check_not_static cx
+        od
     else return ()
 End
 
 val () = lock_if_nr_def
-  |> SRULE [FUN_EQ_THM, COND_RATOR, option_CASE_rator]
+  |> SRULE [FUN_EQ_THM, COND_RATOR, option_CASE_rator, ignore_bind_def,
+            bind_def]
   |> cv_auto_trans;
 
 Definition unlock_if_nr_def:
@@ -1422,6 +1469,7 @@ Definition evaluate_def:
     event <- lift_option
       (encode_source_event (get_tenv cx) cx.sources cx.txn.target id vs)
       "Log encode event";
+    check_not_static cx;
     push_log event
   od ∧
   eval_stmt cx (AnnAssign id typ e) = do
@@ -1649,6 +1697,7 @@ Definition evaluate_def:
     topic_vals <<- (case topics of
        TupleV vs => vs | DynArrayV vs => vs | _ => []);
     type_check (LENGTH topic_vals ≤ 4) "raw_log too many topics";
+    check_not_static cx;
     push_log (encode_raw_event_values cx.txn.target topic_vals data);
     return $ Value NoneV
   od ∧
@@ -1663,6 +1712,7 @@ Definition evaluate_def:
     vs <- eval_exprs cx es;
     type_check (LENGTH vs = 1) "selfdestruct args";
     target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "selfdestruct target";
+    check_not_static cx;
     accounts <- get_accounts;
     self_acct <<- lookup_account cx.txn.target accounts;
     balance <<- self_acct.balance;
