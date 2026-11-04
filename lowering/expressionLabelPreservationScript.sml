@@ -826,3 +826,98 @@ Proof
   ho_match_mp_tac label_preserving_bind >> conj_tac
   >- metis_tac[label_preserving_store_byte_chunks] >> gen_tac >> LABEL_LEAF
 QED
+
+Theorem label_preserving_env_var:
+  !s r t. compile_env_var ev s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  Cases_on `ev` >> rewrite_tac[compile_env_var_def] >>
+  rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_name_vv:
+  !s r t. compile_name_vv cenv ty id s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[compile_name_vv_def] >>
+  Cases_on `FLOOKUP cenv.ce_vars id` >-
+    (simp_tac (srw_ss()) [] >> rewrite_tac[comp_ignore_bind_def] >>
+     LABEL_BIND >> LABEL_LEAF) >>
+  Cases_on `x` >> rewrite_tac[comp_ignore_bind_def] >>
+  CONV_TAC (STRIP_QUANT_CONV (LAND_CONV (LAND_CONV
+    (RATOR_CONV (SIMP_CONV (srw_ss()) []))))) >> rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_literal_vv:
+  !s r t. compile_literal_vv ty lit s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  Cases_on `lit` >> rewrite_tac[compile_literal_vv_def]
+  >- (Cases_on `b` >> rewrite_tac[compile_literal_vv_def] >> LABEL_LEAF)
+  >- (ho_match_mp_tac label_preserving_bind >> conj_tac
+      >- metis_tac[label_preserving_bytelike_literal] >> gen_tac >> LABEL_LEAF)
+  >- (Cases_on `ty`
+      >- (Cases_on `b` >>
+          CONV_TAC (STRIP_QUANT_CONV (LAND_CONV (LAND_CONV
+            (RATOR_CONV (SIMP_CONV (srw_ss()) [])))))
+          >- LABEL_LEAF >- LABEL_LEAF >- LABEL_LEAF
+          >- LABEL_LEAF >- LABEL_LEAF
+          >- (Cases_on `b'` >>
+              CONV_TAC (STRIP_QUANT_CONV (LAND_CONV (LAND_CONV
+                (RATOR_CONV (SIMP_CONV (srw_ss()) [])))))
+              >- LABEL_LEAF >>
+              ho_match_mp_tac label_preserving_bind >> conj_tac
+              >- metis_tac[label_preserving_bytelike_literal] >> gen_tac >> LABEL_LEAF) >>
+          LABEL_LEAF) >>
+      CONV_TAC (STRIP_QUANT_CONV (LAND_CONV (LAND_CONV
+        (RATOR_CONV (SIMP_CONV (srw_ss()) []))))) >> LABEL_LEAF)
+  >- LABEL_LEAF >> LABEL_LEAF
+QED
+
+Theorem label_preserving_load_bytestring_as_word:
+  !s r t. load_bytestring_as_word v opc s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[load_bytestring_as_word_def] >> ntac 6 LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_int_clamp:
+  !s r t. compile_int_clamp signed bits v s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[compile_int_clamp_def] >> IF_CASES_TAC >>
+  simp_tac pure_ss [LET_THM] >> rewrite_tac[comp_ignore_bind_def] >>
+  rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+val label_simps = label_simps @ [label_preserving_int_clamp,
+  label_preserving_load_bytestring_as_word];
+val LABEL_LEAF = rpt strip_tac >> metis_tac label_simps;
+val LABEL_BIND = ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- LABEL_LEAF >> gen_tac;
+
+val CONVERT_LEAF = rpt strip_tac >> metis_tac[label_preserving_return,
+  label_preserving_emit_op, label_preserving_emit_void,
+  label_preserving_int_clamp, label_preserving_load_bytestring_as_word];
+val CONVERT_BIND = ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- CONVERT_LEAF >> gen_tac;
+
+Theorem label_preserving_type_convert:
+  !s r t. compile_type_convert v cop s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  Cases_on `cop` >> rewrite_tac[compile_type_convert_def, comp_ignore_bind_def] >>
+  simp_tac pure_ss [LET_THM] >> rpt IF_CASES_TAC >>
+  simp_tac pure_ss [LET_THM] >>
+  rpt CONVERT_BIND >> rpt IF_CASES_TAC >>
+  simp_tac pure_ss [LET_THM] >> rpt CONVERT_BIND >>
+  all_tac >>~- ([`!s r t. emit_op opc ops s = (r,t) ==> cs_extends s t /\ EVERY jump_label_ok (added_labels s t)`], CONVERT_LEAF) >>
+  all_tac >>~- ([`!s r t. comp_return x s = (r,t) ==> cs_extends s t /\ EVERY jump_label_ok (added_labels s t)`], CONVERT_LEAF) >>
+  all_tac >>~- ([`!s r t. compile_int_clamp sg n x s = (r,t) ==> cs_extends s t /\ EVERY jump_label_ok (added_labels s t)`], CONVERT_LEAF) >>
+  rpt (BETA_TAC >> pure_rewrite_tac[comp_bind_assoc] >> CONVERT_BIND) >>
+  BETA_TAC >>
+  all_tac >>~- ([`!s r t. emit_op opc ops s = (r,t) ==> cs_extends s t /\ EVERY jump_label_ok (added_labels s t)`], CONVERT_LEAF) >>
+  PairCases_on `r` >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  rpt IF_CASES_TAC >> rpt CONVERT_BIND >> CONVERT_LEAF
+QED
