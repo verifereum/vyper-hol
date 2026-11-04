@@ -16014,3 +16014,57 @@ Proof
   rpt gen_tac >> once_rewrite_tac[compile_entry_checks_def] >>
   stmt_labels_chain stmt_labels_rws
 QED
+
+Theorem fresh_namespace_labels_mono:
+  !a b P. cs_extends a b /\ EVERY (isPREFIX "@") (added_labels a b) /\
+    (!l. isPREFIX "@" l ==> P l) ==>
+    cs_extends a b /\ EVERY P (added_labels a b)
+Proof
+  rpt strip_tac >> gvs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem compile_external_fn_bodies_labels:
+  !packages P.
+    EVERY (\p. P (FST p)) packages /\
+    (!l. isPREFIX "@" l ==> P l) ==>
+    !s. cs_extends s (SND (compile_external_fn_bodies packages s)) /\
+      EVERY P (added_labels s (SND (compile_external_fn_bodies packages s)))
+Proof
+  Induct >> rpt gen_tac
+  >- simp[compile_external_fn_bodies_def, comp_return_labels] >>
+  PairCases_on `h` >> simp[EVERY_DEF] >> strip_tac >>
+  once_rewrite_tac[compile_external_fn_bodies_def] >>
+  irule comp_ignore_bind_labels >> conj_tac
+  >- (rpt gen_tac >> irule new_block_action_labels >> simp[]) >>
+  rpt gen_tac >> irule comp_ignore_bind_labels >> conj_tac
+  >- (rpt gen_tac >> irule fresh_namespace_labels_mono >>
+      simp[compile_entry_checks_labels]) >>
+  rpt gen_tac >> irule comp_ignore_bind_labels >> conj_tac
+  >- (rpt gen_tac >> irule fresh_namespace_labels_mono >>
+      simp[compile_external_function_body_labels]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem compile_external_fn_bodies_label_partition:
+  !packages s.
+    cs_extends s (SND (compile_external_fn_bodies packages s)) /\
+    EVERY (\l. MEM l (MAP FST packages) \/ isPREFIX "@" l)
+      (added_labels s (SND (compile_external_fn_bodies packages s)))
+Proof
+  rpt gen_tac >> irule compile_external_fn_bodies_labels >>
+  simp[EVERY_MEM, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem compile_external_fn_bodies_preserves_label_absent:
+  !packages lbl s.
+    ~MEM lbl (MAP FST packages) /\ ~isPREFIX "@" lbl /\
+    ~MEM lbl (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+    ~MEM lbl (MAP (\bb. bb.bb_label)
+      (all_blocks (SND (compile_external_fn_bodies packages s))))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`packages`, `s`] strip_assume_tac
+    compile_external_fn_bodies_label_partition >>
+  drule cs_extends_labels >> disch_then SUBST1_TAC >>
+  gvs[MEM_APPEND, EVERY_MEM] >> metis_tac[]
+QED

@@ -26,9 +26,10 @@ Theorem abi_encoder_array_address_step_globals[local]:
   (t.vs_accounts,t.vs_transient,t.vs_logs,t.vs_requests,t.vs_pending_deletions) =
   (s.vs_accounts,s.vs_transient,s.vs_logs,s.vs_requests,s.vs_pending_deletions)
 Proof
-  strip_tac >>
-  gvs[step_inst_base_def, exec_pure2_def, exec_read1_def,
-    AllCaseEqs(), update_var_def]
+  strip_tac
+  >- gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs(), update_var_def]
+  >- gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs(), update_var_def]
+  >> gvs[step_inst_base_def, exec_read1_def, AllCaseEqs(), update_var_def]
 QED
 
 Theorem abi_encoder_array_address_raw_globals:

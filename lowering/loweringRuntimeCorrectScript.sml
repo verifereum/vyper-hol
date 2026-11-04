@@ -641,6 +641,58 @@ Proof
   qexists_tac `se` >> simp[]
 QED
 
+(* The label-only variant needs no instruction-shape or immutable premise. *)
+Theorem external_checks_labels_unshadowed[local]:
+  !pre lbl mincd pay sd sa st st'.
+    ~MEM lbl (MAP FST pre) /\ ~isPREFIX "@" lbl /\
+    ~MEM lbl (MAP (\bb. bb.bb_label) (all_blocks sd)) /\
+    compile_external_fn_bodies pre sd = ((),sa) /\
+    new_block lbl sa = (sa.cs_current_bb,st) /\
+    compile_entry_checks mincd pay st = ((),st') ==>
+    !se func. cs_extends st' se /\ func.fn_blocks = all_blocks se ==>
+      fn_has_code st st' func
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~MEM lbl (MAP (\bb. bb.bb_label) (all_blocks sa))` by
+    (drule_all loweringShapePropsTheory.compile_external_fn_bodies_preserves_label_absent >>
+     simp[]) >>
+  `st.cs_current_bb = lbl /\
+   ~MEM lbl (MAP (\bb. bb.bb_label) (REVERSE st.cs_blocks))` by
+    gvs[new_block_def, loweringShapeDefsTheory.all_blocks_def, LET_THM] >>
+  rpt gen_tac >> strip_tac >>
+  drule compile_entry_checks_same_blocks >>
+  rewrite_tac[same_blocks_def] >> strip_tac >>
+  simp[fn_has_code_def, emitted_blocks_def] >>
+  drule loweringShapeRulesTheory.cs_extends_open_lookup >> simp[]
+QED
+
+Theorem external_checks_labels_code[local]:
+  !packages lbl ce args mincd pay nr key ut iv body rt sd sx se func.
+    MEM (lbl,ce,args,mincd,pay,nr,key,ut,iv,body,rt) packages /\
+    ALL_DISTINCT (MAP FST packages) /\ ~isPREFIX "@" lbl /\
+    ~MEM lbl (MAP (\bb. bb.bb_label) (all_blocks sd)) /\
+    compile_external_fn_bodies packages sd = ((),sx) /\
+    cs_extends sx se /\ func.fn_blocks = all_blocks se ==>
+    ?st st'. compile_entry_checks mincd pay st = ((),st') /\
+      fn_has_code st st' func /\ st.cs_current_bb = lbl /\
+      st.cs_current_insts = [] /\ sd.cs_next_var <= st.cs_next_var
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all external_checks_occurrence >> strip_tac >>
+  `cs_extends st' sb` by
+    (qspecl_then [`ce`, `args`, `nr`, `key`, `ut`, `iv`, `body`, `rt`, `st'`]
+       mp_tac loweringShapePropsTheory.compile_external_function_body_labels >> simp[]) >>
+  `cs_extends sb sx` by
+    (qspecl_then [`post`, `sb`] mp_tac
+       loweringShapePropsTheory.compile_external_fn_bodies_label_partition >> simp[]) >>
+  `cs_extends st' se` by metis_tac[cs_extends_trans] >>
+  `~MEM lbl (MAP FST pre)` by
+    gvs[ALL_DISTINCT_APPEND] >>
+  drule_all external_checks_labels_unshadowed >>
+  disch_then drule_all >> strip_tac >>
+  qexistsl_tac [`st`, `st'`] >> simp[]
+QED
+
 Theorem run_lowering_entry_checks_code[local]:
   !selectors packages internal_fns fallback_fn rpolicy buckets metadata dense info unit
    lbl ce args min_cds pay nr key ut iv fbody rt.
