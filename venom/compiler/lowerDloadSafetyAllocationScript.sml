@@ -19,3 +19,13 @@ Proof
   irule ld_maps_cached_original >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`b`,`inst`,`n`,`szS`] >> simp[exec_alloca_def]
 QED
+
+Theorem ld_alloca_step:
+  inst.inst_opcode = ALLOCA ==>
+  (step_inst fuel C inst s = OK ss <=>
+   ?sz. inst.inst_operands = [Lit sz] /\ exec_alloca inst s sz = OK ss)
+Proof
+  strip_tac >> simp[step_inst_non_invoke, Once step_inst_base_def] >>
+  namedCases_on `inst.inst_operands` ["", "operand rest"] >> simp[] >>
+  Cases_on `rest` >> simp[] >> Cases_on `operand` >> simp[]
+QED
