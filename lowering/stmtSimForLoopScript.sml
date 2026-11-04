@@ -15,6 +15,7 @@
 
 Theory stmtSimForLoop
 Ancestors
+  loweringPosts
   stmtSim stmtSimForParts stmtSimDeclStore
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim loweringSlice

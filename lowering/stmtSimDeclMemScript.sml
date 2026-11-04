@@ -25,6 +25,7 @@
 
 Theory stmtSimDeclMem
 Ancestors
+  loweringPosts
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclStore
   stmtSimDecl valueCopy valueCopyBytes intCallResult exprOperandVar freshWrites
@@ -45,7 +46,8 @@ Theorem declare_local_memory_types[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all declare_local_ptr >> strip_tac >>
-  `c.ce_struct_fields = cenv.ce_struct_fields` by
+  `c.ce_struct_fields = cenv.ce_struct_fields /\
+   c.ce_func_return_type = cenv.ce_func_return_type` by
     (qpat_x_assum `c with <| ce_vars := _; ce_var_type := _;
                             ce_dynarray_capacity := _ |> = cenv` mp_tac >>
      simp[compile_env_component_equality]) >>
@@ -56,7 +58,7 @@ Proof
       ho_match_mp_tac type_memory_bytes_ind >>
       rw[type_memory_bytes_def] >>
       AP_TERM_TAC >> irule MAP_CONG >> simp[]) >>
-  gen_tac >> simp[oneline lowered_value_type_def]
+  gen_tac >> gvs[oneline lowered_value_type_def]
 QED
 
 Theorem compile_assign_memory_appends:
@@ -87,6 +89,10 @@ Theorem annassign_widen_footprint[local]:
     (expr_type e = vtyp \/
      is_bytestring_type vtyp /\ is_bytestring_type (expr_type e)) /\
     (lowered_value_type cenv e = vtyp \/ is_bytestring_type vtyp) /\
+    (lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
     evaluate_type tenv vtyp = SOME tyv /\
     evaluate_type tenv (lowered_value_type cenv e) = SOME ltv /\
     type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size ltv /\
@@ -98,7 +104,7 @@ Proof
   >- (gvs[] >> irule val_footprint_le >> simp[value_has_type_memory_wf]) >>
   `is_bytestring_type vtyp /\ is_bytestring_type (expr_type e)` by gvs[] >>
   `is_bytestring_type (lowered_value_type cenv e)` by
-    simp[exprSimHypsTheory.lowered_value_type_bytestring] >>
+    metis_tac[] >>
   simp[] >> irule valueCopyBytesTheory.bytestring_val_footprint_le >> metis_tac[]
 QED
 
@@ -871,6 +877,10 @@ Theorem compile_annassign_memory_widen_stmt_frag:
     (expr_type e = vtyp \/
      is_bytestring_type vtyp /\ is_bytestring_type (expr_type e)) /\
     (lowered_value_type cenv e = vtyp \/ is_bytestring_type vtyp) /\
+    (lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
     evaluate_type (get_tenv cx) vtyp = SOME tyv /\
     evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME ltv /\

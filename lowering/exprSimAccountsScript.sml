@@ -31,6 +31,7 @@
 
 Theory exprSimAccounts
 Ancestors
+  loweringPosts
   list rich_list words integer_word byte
   fragExec freshWrites varsExt loweringSlice exprSim exprSimHyps exprSimUnop
   exprSimOperators exprSimWordBuiltins exprBopLowering exprLowering

@@ -1,5 +1,6 @@
 Theory exprSimPopStorage
 Ancestors
+  loweringPosts
   exprSimPop exprSimLeaves accountsRelProps
   vyperInterpreter vyperState vyperValueOperation finite_map
   vyperTypeAssignContext vyperPlaceResultTyping vyperTypeEnv vyperTypeInvariants
@@ -220,6 +221,10 @@ Proof
      simp[] >> Cases_on `tr` >>
      simp[Abbr `s1`, Abbr `es1`, sstore_def, tstore_def, LET_THM,
           set_storage_def, local_region_def, lookup_var_def] >> metis_tac[]) >>
+  `immutable_base_zero cenv s1` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     fs[stmt_state_rel_def] >> Cases_on `tr` >>
+     simp[Abbr `s1`, sstore_def, tstore_def, LET_THM, lookup_var_def]) >>
   irule stmt_state_rel_allocas_frame >> simp[] >>
   qexistsl [`es`, `s`] >> simp[] >>
   Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]
@@ -327,7 +332,7 @@ Theorem pop_storage_holds:
   storage_holds cx tr ann (PlaceR (StoragePlace tr elem tv)) elem es s
 Proof
   strip_tac >> drule_all decode_value_from_slots_in_range >> strip_tac >>
-  simp[exprSimTheory.storage_holds_def, read_storage_slot_eq, read_result_def,
+  simp[loweringPostsTheory.storage_holds_def, read_storage_slot_eq, read_result_def,
        read_place_def]
 QED
 
@@ -457,9 +462,9 @@ Theorem pop_storage_vv_post:
     (LocatedValue ann (mk_ptr (Var x) (if tr then LocTransient else LocStorage))) u
 Proof
   Cases_on `tr` >>
-  simp[exprSimTheory.vv_post_def, exprSimTheory.vv_holds_def,
-       exprSimTheory.vv_at_def, contextTheory.mk_ptr_def, eval_operand_def,
-       exprSimTheory.locals_kept_def, expr_type_def]
+  simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
+       loweringPostsTheory.vv_at_def, contextTheory.mk_ptr_def, eval_operand_def,
+       loweringPostsTheory.locals_kept_def, expr_type_def]
 QED
 
 Theorem pop_declared_array_agree:

@@ -63,6 +63,7 @@
 
 Theory exprSimAggregates
 Ancestors
+  loweringPosts
   exprSimAlloc
   allocLimits
   list exprSim exprSimHyps exprSimConvert exprLowering compileEnv
@@ -96,7 +97,9 @@ QED
 
 Theorem compile_struct_lit_vv_case:
   !nocalls ctx func cenv cx ann nsid fields.
-    exprs_case nocalls ctx func cenv cx (MAP SND fields) ==>
+    exprs_case nocalls ctx func cenv cx (MAP SND fields) /\
+    (~nocalls ==> !e. MEM e (MAP SND fields) ==>
+       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
     expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
 Proof
   rw[expr_vv_case_def, expr_vv_sim_def] >>
@@ -186,7 +189,9 @@ QED
 
 Theorem compile_make_array_vv_case:
   !nocalls ctx func cenv cx ann topt bnd args.
-    exprs_case nocalls ctx func cenv cx args ==>
+    exprs_case nocalls ctx func cenv cx args /\
+    (~nocalls ==> !e. MEM e args ==>
+       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
     expr_vv_case nocalls ctx func cenv cx (Builtin ann (MakeArray topt bnd) args)
 Proof
   rpt gen_tac >> Cases_on `topt`
@@ -370,7 +375,9 @@ Finalise compile_make_array_vv_case
 
 Theorem compile_struct_lit_case:
   !nocalls ctx func cenv cx ann nsid fields.
-    exprs_case nocalls ctx func cenv cx (MAP SND fields) ==>
+    exprs_case nocalls ctx func cenv cx (MAP SND fields) /\
+    (~nocalls ==> !e. MEM e (MAP SND fields) ==>
+       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
     expr_sim_case nocalls ctx func cenv cx (StructLit ann nsid fields) /\
     expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
 Proof
@@ -379,7 +386,9 @@ QED
 
 Theorem compile_make_array_case:
   !nocalls ctx func cenv cx ann topt bnd args.
-    exprs_case nocalls ctx func cenv cx args ==>
+    exprs_case nocalls ctx func cenv cx args /\
+    (~nocalls ==> !e. MEM e args ==>
+       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
     expr_sim_case nocalls ctx func cenv cx
       (Builtin ann (MakeArray topt bnd) args) /\
     expr_vv_case nocalls ctx func cenv cx
@@ -394,7 +403,7 @@ Theorem compile_struct_lit_sim:
     expr_vv_ok cenv (StructLit ann nsid fields)
 Proof
   rpt strip_tac >> simp[expr_vv_ok_case] >> rpt gen_tac >>
-  irule compile_struct_lit_vv_case >> irule exprs_case_every_ok >>
+  irule compile_struct_lit_vv_case >> simp[] >> irule exprs_case_every_ok >>
   irule expr_sim_below_struct_fields >> metis_tac[]
 QED
 
@@ -404,7 +413,7 @@ Theorem compile_make_array_sim:
     expr_vv_ok cenv (Builtin ann (MakeArray topt bnd) args)
 Proof
   rpt strip_tac >> simp[expr_vv_ok_case] >> rpt gen_tac >>
-  irule compile_make_array_vv_case >> irule exprs_case_every_ok >>
+  irule compile_make_array_vv_case >> simp[] >> irule exprs_case_every_ok >>
   irule expr_sim_below_args >> first_assum ACCEPT_TAC
 QED
 

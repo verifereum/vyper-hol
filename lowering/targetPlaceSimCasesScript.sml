@@ -33,6 +33,7 @@
 
 Theory targetPlaceSimCases
 Ancestors
+  loweringPosts
   list rich_list finite_map pair
   fragExec exprSim exprSimHyps exprSimBuffer exprSimAttributeFields
   freshWrites stmtLoweringMono targetPlaceSim

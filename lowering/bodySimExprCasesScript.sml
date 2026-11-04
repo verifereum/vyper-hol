@@ -24,7 +24,7 @@
 Theory bodySimExprCases
 Ancestors
   list bodySim exprSim exprSimHyps exprSimOperators exprSimAttribute
-  exprSimPlaces exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
+  exprSimPlaces exprSimPopNested targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph bodyIntCallVoid bodyIntCallReturn bodyIntCallSource bodyIntCallCode bodyIntCallEntry bodyIntCallEntryTarget bodyIntCallArgs bodyIntCallArgMetadata bodyIntCallArgLifetime bodyIntCallArgList bodyIntCallArgStaging bodyIntCallForce
 
 (* With no internal call in it, an expression simulates by
@@ -70,6 +70,29 @@ Proof
   metis_tac[body_expr_ok_case]
 QED
 
+(* A ternary with an arm whose value the lowering lays out differently from
+   its source type: an internal call whose callee's return type the call's
+   type widens (supported_pure_expr keeps calls out of supported ternaries,
+   but body_expr_ok ranges over every expression).  The arm's simulation
+   would have to describe its value at the lowered type, which expr_sim
+   does not do yet; that is the internal-call simulation's work, as for
+   body_intcall_case. *)
+Theorem body_ifexp_widened_call_arm:
+  !cx v5 e1 e2 e3.
+    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_ok cx e2) /\
+    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_ok cx e3) /\
+    body_expr_ok cx e1 ==>
+    !tops ctx func cenv env ty es.
+      body_inv tops ctx cenv cx /\
+      expr_body_pre cenv cx env (IfExp v5 e1 e2 e3) es /\
+      (?e. (e = e2 \/ e = e3) /\ int_calls_expr e <> [] /\
+           ~same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) ==>
+      expr_sim ctx func cenv cx ty (IfExp v5 e1 e2 e3) es /\
+      expr_vv_sim ctx func cenv cx ty (IfExp v5 e1 e2 e3) es
+Proof
+  cheat
+QED
+
 (* exprSimOperators' compile_ifexp_case. *)
 Theorem body_ifexp_case:
   !cx v5 e1 e2 e3.
@@ -79,9 +102,45 @@ Theorem body_ifexp_case:
     body_expr_ok cx (IfExp v5 e1 e2 e3)
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
-  irule compile_ifexp_case >> rpt conj_tac
-  >- (strip_tac >> metis_tac[body_expr_ok_case]) >>
-  metis_tac[body_expr_ok_case]
+  Cases_on `!e. (e = e2 \/ e = e3) ==>
+    int_calls_expr e = [] \/ same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)`
+  >- (irule compile_ifexp_case >> simp[] >> metis_tac[body_expr_ok_case]) >>
+  rw[expr_sim_case_def, expr_vv_case_def] >>
+  metis_tac[body_ifexp_widened_call_arm]
+QED
+
+(* An aggregate literal with an element whose value the lowering lays out
+   differently from the element's type: an internal call whose callee's
+   return type the call's type widens.  As for body_ifexp_widened_call_arm,
+   describing that value at its lowered type is the internal-call
+   simulation's work (body_intcall_case). *)
+Theorem body_struct_lit_widened_call_elem:
+  !cx v7 src_id_opt id kes.
+    (!ks. ks = MAP FST kes ==> body_exprs_ok cx (MAP SND kes)) ==>
+    !tops ctx func cenv env ty es.
+      body_inv tops ctx cenv cx /\
+      expr_body_pre cenv cx env (StructLit v7 (src_id_opt,id) kes) es /\
+      (?e. MEM e (MAP SND kes) /\ int_calls_expr e <> [] /\
+           lowered_value_type cenv e <> expr_type e) ==>
+      expr_sim ctx func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es /\
+      expr_vv_sim ctx func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es
+Proof
+  cheat
+QED
+
+Theorem body_make_array_widened_call_elem:
+  !cx ty t n es.
+    (builtin_args_length_ok (MakeArray t n) (LENGTH es) ==>
+     body_exprs_ok cx es) ==>
+    !tops ctx func cenv env ty' st.
+      body_inv tops ctx cenv cx /\
+      expr_body_pre cenv cx env (Builtin ty (MakeArray t n) es) st /\
+      (?e. MEM e es /\ int_calls_expr e <> [] /\
+           lowered_value_type cenv e <> expr_type e) ==>
+      expr_sim ctx func cenv cx ty' (Builtin ty (MakeArray t n) es) st /\
+      expr_vv_sim ctx func cenv cx ty' (Builtin ty (MakeArray t n) es) st
+Proof
+  cheat
 QED
 
 (* exprSimAggregates' compile_struct_lit_case. *)
@@ -90,9 +149,12 @@ Theorem body_structlit_case:
     (!ks. ks = MAP FST kes ==> body_exprs_ok cx (MAP SND kes)) ==>
     body_expr_ok cx (StructLit v7 (src_id_opt,id) kes)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >>
-  strip_tac >> irule compile_struct_lit_case >>
-  metis_tac[body_exprs_ok_case]
+  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  Cases_on `!e. MEM e (MAP SND kes) ==>
+              int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
+  >- (irule compile_struct_lit_case >> metis_tac[body_exprs_ok_case]) >>
+  rw[expr_sim_case_def, expr_vv_case_def] >>
+  metis_tac[body_struct_lit_widened_call_elem]
 QED
 
 (* exprSimPlaces' compile_subscript_case, whose array and mapping cases are
@@ -161,7 +223,11 @@ Proof
   >- (rw[expr_sim_case_def, expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
       drule well_typed_builtin_app_length >> simp[]) >>
-  irule compile_make_array_case >> metis_tac[body_exprs_ok_case]
+  Cases_on `!e. MEM e es ==>
+              int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
+  >- (irule compile_make_array_case >> metis_tac[body_exprs_ok_case]) >>
+  rw[expr_sim_case_def, expr_vv_case_def] >>
+  metis_tac[body_make_array_widened_call_elem]
 QED
 
 (* ecadd and ecmul: exprSimECArith's compile_ecadd_call_case and
@@ -271,18 +337,36 @@ Proof
   irule compile_bop_args_case >> gvs[]
 QED
 
-(* GAP (#636 operands with internal calls): pop on a nested target whose
-   subscript key makes an internal call.  Blocked on the target/place
-   judgment that exprSimPlaces' compile_pop_nested_sim needs, here for
-   indices that make internal calls: the induction hypotheses give only
-   body_base_target_ok of the target. *)
+(* RESIDUAL (target metadata): the target's fragment judgment in the body,
+   where an index may make an internal call.  target_case_all gives
+   target_sim from body_base_target_ok's index judgments and target_pre,
+   whose target_env_ok asks for every module's storage and mapping
+   declarations to be in the compile environment's tables, which body_inv
+   gives for the main module only (exprSimPopNested's
+   pop_nested_expr_target_frag has the same gap). *)
+Theorem body_pop_nested_target_frag:
+  !cx bt tops ctx func cenv env ann es.
+    body_base_target_ok cx bt /\ body_inv tops ctx cenv cx /\
+    expr_body_pre cenv cx env (Pop ann bt) es /\ ~immutable_root cx bt ==>
+    pop_target_frag ctx func cenv cx env bt es
+Proof
+  cheat
+QED
+
+(* pop on a nested target: exprSimPopNested's pop_nested_sim, by the
+   target's root, with the target's fragment judgment from
+   body_pop_nested_target_frag. *)
 Theorem body_pop_nested_case:
   !cx v10 bt.
     (!id. bt <> NameTarget id) /\ (!nid. bt <> TopLevelNameTarget nid) /\
     body_base_target_ok cx bt ==>
     body_expr_ok cx (Pop v10 bt)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  `expr_vv_case F ctx func cenv cx (Pop v10 bt)` by
+    (rw[expr_vv_case_def] >> irule pop_nested_sim >> qexists_tac `env` >> simp[] >>
+     strip_tac >> irule body_pop_nested_target_frag >> metis_tac[]) >>
+  simp[expr_sim_case_of_vv]
 QED
 
 (* pop on a local: exprSimPlaces' compile_pop_name_case; on a module

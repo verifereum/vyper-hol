@@ -62,6 +62,7 @@ Theorem compile_expr_open_general:
     ~block_is_terminated sa ==> ~block_is_terminated sb
 Proof
   measureInduct_on `expr_size e` >> rpt gen_tac >> strip_tac >>
+  `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
   Cases_on `e`
   >~ [`compile_expr _ _ (Name _ _) _ = _`]
     >- (irule compile_expr_name_open >>

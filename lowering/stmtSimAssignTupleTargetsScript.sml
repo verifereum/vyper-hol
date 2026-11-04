@@ -1,6 +1,7 @@
 (* General tuple assignment simulation. *)
 Theory stmtSimAssignTupleTargets
 Ancestors
+  loweringPosts
   tupleAssignParts tupleTargetStoreRun tupleTargetStoreProps tupleAssignPrefix
   tupleAssignMemory tupleStageProps tupleLocalStoreProps stmtSimReturn stmtSimAssignTuple stmtSim
   exprSim exprLowering exprLoweringProps fragExec loweringSlice compileEnv freshWrites
@@ -41,6 +42,7 @@ Theorem assign_tuple_targets_success_run:
   !ctx func cx lctx cenv ty gs e es es' tys tvs sa sf s0.
     eval_stmt cx (Assign (TupleTarget gs) e) es = (INL (),es') /\
     gs <> [] /\ expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     (EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy) /\
     (is_memory_view e /\ EXISTS (\t. ~is_word_type t) tys ==>
@@ -83,6 +85,7 @@ Proof
   `LENGTH tys = LENGTH tvs /\ LENGTH tvs = LENGTH vs` by
     (gvs[evaluate_type_def, AllCaseEqs()] >>
      metis_tac[LIST_REL_LENGTH, values_have_types_length]) >>
+  `lowered_value_type cenv e = expr_type e` by simp[] >>
   drule_all assign_tuple_targets_code_parts >> strip_tac >>
   suspend "prefix_setup"
 QED
@@ -170,6 +173,7 @@ Theorem compile_assign_tuple_targets_stmt_frag:
   !ctx func cx lctx RetQ cenv ty gs e es res es' tys tvs.
     eval_stmt cx (Assign (TupleTarget gs) e) es = (res,es') /\
     expr_type e = TupleT tys /\ LENGTH gs = LENGTH tys /\
+    lowered_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     (EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy) /\
     (is_memory_view e /\ EXISTS (\t. ~is_word_type t) tys ==>

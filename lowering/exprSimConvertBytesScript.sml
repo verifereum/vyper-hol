@@ -1,6 +1,7 @@
 (* Shared conversion simulation for dynamic Bytes and String results. *)
 Theory exprSimConvertBytes
 Ancestors
+  loweringPosts
   exprSimConvert exprSimHyps exprSim exprLowering exprLoweringProps compileEnv
   exprSimAlloc exprSimBuffer exprSimBufferStore exprSimLiteralBuffer exprSimHash
   exprOperandVar valueEncoding valueEncodingProofs
@@ -13,13 +14,15 @@ Libs
 Theorem bytestring_read_lowered_footprint:
   !cenv e env cx es v es' tv.
     expr_body_pre cenv cx env e es /\
+    (!a f args d. e = Call a (IntCall f) args d ==>
+       lowered_value_type cenv e = expr_type e) /\
     is_bytestring_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
     val_footprint tv v <= type_memory_bytes cenv (lowered_value_type cenv e)
 Proof
   rpt strip_tac >>
-  drule_all memory_rhs_read_lowered_typed >> strip_tac >>
+  drule_all memory_rhs_read_lowered_typed_unwidened >> strip_tac >>
   drule_all memory_rhs_read_annotation_typed >> strip_tac >>
   `is_bytestring_type (lowered_value_type cenv e)` by
     metis_tac[lowered_value_type_bytestring] >>
@@ -770,12 +773,20 @@ Theorem convert_readonly_state_frame:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `tt = _` (fn th => once_rewrite_tac[th]) >>
-  irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
-  fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
-  first_x_assum drule_all >> strip_tac >>
-  `not_fresh_at sa p` by
-    (fs[local_ptrs_reserved_def] >> res_tac) >>
-  qpat_x_assum `!z w. _ ==> lookup_var _ _ = _` drule >> simp[lookup_var_def]
+  irule stmt_state_rel_vars_frame >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+      qpat_x_assum `!name' entry' p' sz'. _` drule_all >> strip_tac >>
+      `not_fresh_at sa p` by
+        (fs[local_ptrs_reserved_def] >> res_tac) >>
+      qpat_x_assum `!z w. _ ==> lookup_var _ _ = _` drule >> simp[lookup_var_def]) >>
+  rpt strip_tac >>
+  `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_imm_base] >>
+  `lookup_var p s = SOME 0w` by
+    (fs[exprLoweringPropsTheory.stmt_state_rel_def, immutable_base_zero_alt,
+        lookup_var_def] >> metis_tac[]) >>
+  qpat_x_assum `!z w. _ ==> lookup_var _ _ = _`
+    (qspecl_then [`p`, `0w`] mp_tac) >> simp[lookup_var_def]
 QED
 
 Theorem convert_readonly_frag:
@@ -1358,6 +1369,8 @@ Theorem compile_convert_bytestring_frag_sim[local]:
   !ctx func cenv cx env ty t e1 es.
     expr_body_pre cenv cx env (TypeBuiltin t Convert t [e1]) es /\
     is_bytestring_type t /\
+    (!a f args d. e1 = Call a (IntCall f) args d ==>
+       lowered_value_type cenv e1 = expr_type e1) /\
     expr_sim ctx func cenv cx (expr_type e1) e1 es ==>
     expr_sim ctx func cenv cx ty (TypeBuiltin t Convert t [e1]) es
 Proof
@@ -1413,7 +1426,9 @@ Proof
   Cases_on `type_memory_bytes cenv (lowered_value_type cenv e1) < type_memory_bytes cenv t`
   >- (gvs[] >>
       `val_footprint tv1 v1 <= type_memory_bytes cenv (lowered_value_type cenv e1)` by
-        (drule_all bytestring_read_lowered_footprint >> simp[]) >>
+        (`!a f args d. e1 = Call a (IntCall f) args d ==>
+            lowered_value_type cenv e1 = expr_type e1` by metis_tac[] >>
+         drule_all bytestring_read_lowered_footprint >> simp[]) >>
       `type_memory_bytes cenv t < dimword (:256)` by
         (`~is_word_type t` by gvs[bytestring_type_cases, is_word_type_def] >>
          `alloc_limits_expr cenv (TypeBuiltin t Convert t [e1])` by
@@ -1433,7 +1448,9 @@ QED
 Theorem compile_convert_to_bytestring_case:
   !nocalls ctx func cenv cx ann t e1.
     exprs_case nocalls ctx func cenv cx [e1] /\
-    is_bytestring_type t ==>
+    is_bytestring_type t /\
+    (!a f args d. e1 = Call a (IntCall f) args d ==>
+       lowered_value_type cenv e1 = expr_type e1) ==>
     expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t [e1])
 Proof
   rw[expr_vv_case_def] >> drule expr_body_pre_convert >> strip_tac >>

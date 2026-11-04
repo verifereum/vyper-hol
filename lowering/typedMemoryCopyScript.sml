@@ -4,6 +4,7 @@
    Metadata premises are the field-layout clauses of expr_sim_inv. *)
 Theory typedMemoryCopy
 Ancestors
+  loweringPosts
   context typedCopyDomain compileEnv emitHelper emitHelperProps structFieldsProps valueEncoding valueEncodingProps
   valueEncodingProofs valueCopy fragExec exprLoweringProps exprSimHyps
   vyperTypeSystem vyperTypeArgFits vyperValue vyperTyping
@@ -2118,7 +2119,7 @@ Proof
   strip_tac >>
   `stv = dtv` by metis_tac[typed_copy_static_widening] >>
   qpat_x_assum `stv = dtv` (SUBST_ALL_TAC o SYM) >>
-  simp[exprSimTheory.val_footprint_def, type_memory_size_def]
+  simp[loweringPostsTheory.val_footprint_def, type_memory_size_def]
 QED
 
 Theorem typed_copy_dynarray_mload_step:
@@ -3475,7 +3476,7 @@ Proof
        goal_assum (drule_at (Pat `compile_store_bytestring _ _ _ = _`)) >>
        FIRST [rename1 `StringV str` >> qexistsl_tac [`STRLEN str`, `sw`],
               rename1 `BytesV bs` >> qexistsl_tac [`LENGTH bs`, `sw`]] >>
-       gvs[val_in_memory_def, exprSimTheory.val_footprint_def,
+  gvs[val_in_memory_def, loweringPostsTheory.val_footprint_def,
            type_memory_size_def] >>
        qmatch_goalsub_abbrev_tac `word_size len <= word_size capacity` >>
        `word_size len <= word_size capacity` by

@@ -33,6 +33,7 @@
 
 Theory bodySim
 Ancestors
+  loweringPosts
   list exprSim exprSimHyps stmtSim compileEnv compileVyper vyperTypeContract
   supportedProgram supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
@@ -44,13 +45,16 @@ Ancestors
    unit, cenv is a runtime function's compile env with the program's
    function ids, parameter types and calling conventions (so compile_call
    gives an internal call the label package_internal_fn gave the callee:
-   compile_call_intcall_label, and the caller reads the callee's results
-   the way the callee returns them), the program's events, and its locals
-   in allocas, as build_compile_env makes every body's, and the source finds
+   compile_call_intcall_label) and return types (the type compile_call
+   gives an internal call's result), the program's events, and its locals in
+   allocas, as build_compile_env makes every body's, and the source finds
    its functions in tops.  tops's module variables have distinct names, as
    the type checker gives (source_typing_ok_vtype_keys_distinct), and cenv
-   has build_compile_env's hashmaps, module variable types, struct metadata and module
-   DynArray capacities, which no declaration changes.  cenv's target is the unit's policy target, as
+   has build_compile_env's hashmaps, module variable types, struct metadata
+   and module DynArray capacities, which no declaration changes.  Its struct
+   metadata is acyclic (build_compile_env_struct_metadata_acyclic), so a
+   typed memory copy never takes its INVALID fallback.  cenv's target is
+   the unit's policy target, as
    set_*_package_target installs it, which run_lowering requires to have
    MCOPY (lowering_policy_ok).  The source runs the runtime code (~cx.in_deploy),
    so an internal call finds its callee among the runtime unit's
@@ -66,6 +70,8 @@ Definition body_inv_def:
     cenv.ce_func_param_types = build_func_param_types tops /\
     cenv.ce_func_info =
       build_func_info (get_struct_fields (make_struct_fields_map tops)) tops /\
+    cenv.ce_func_return_type = build_func_return_type tops /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
     cenv.ce_struct_fields = make_struct_fields_map tops /\
     ~cenv.ce_is_ctor /\ cenv.ce_alloca_locals /\

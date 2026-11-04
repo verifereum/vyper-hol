@@ -57,6 +57,7 @@
 
 Theory exprSimLeaves
 Ancestors
+  loweringPosts
   list finite_map freshWrites builtinProps varsExt vyperContext exprSimUnop
   exprSim exprSimHyps exprSimUnwrap exprLowering exprLoweringProps
   compileEnv accountsRelProps loweringSlice
