@@ -84,7 +84,7 @@ Theorem run_inst_seq_abort_gas_path:
     ?n j. gas_marked_path memory ctx func s n
       (Abort a (t with vs_inst_idx := j))
 Proof
-    Induct_on `code` >- simp[run_inst_seq_def] >>
+  Induct_on `code` >- simp[run_inst_seq_def] >>
   rpt gen_tac >> strip_tac >>
   drule instruction_prefix_cursor >> strip_tac >>
   Cases_on `step_inst_base h s` >>
