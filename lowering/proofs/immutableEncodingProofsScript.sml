@@ -467,3 +467,29 @@ val _ = List.app (fn (name, th) => let
        print ("IMMUTABLE_DECODING_KERNEL_CLOSED " ^ name ^ "\n")
      else raise Fail ("Unclosed immutable decoding theorem: " ^ name)
   end) (DB.thms "immutableEncodingProofs");
+
+Theorem immutable_scalar_shared_memory:
+  !bt old fresh a mem.
+    immutable_value_admissible (BaseTV bt) old /\
+    immutable_value_admissible (BaseTV bt) fresh /\
+    type_memory_size (BaseTV bt) < dimword (:256) /\
+    val_in_memory (BaseTV bt) old a mem /\
+    val_in_memory (BaseTV bt) fresh a mem ==>
+    !b m. val_in_memory (BaseTV bt) fresh b m <=>
+          val_in_memory (BaseTV bt) old b m
+Proof
+  rpt gen_tac >> Cases_on `bt` >> Cases_on `old` >> Cases_on `fresh` >>
+  simp[immutable_value_admissible_def] >>
+  rpt strip_tac >> gvs[val_in_memory_def]
+  >- (`n < dimword (:256)` by
+        (fs[type_memory_size_def] >>
+         mp_tac immutable_capacity_roundup >> decide_tac) >>
+      `STRLEN s < dimword (:256) /\ STRLEN s' < dimword (:256)` by decide_tac >>
+      gvs[]) >>
+  Cases_on `b` >> gvs[] >>
+  rename1 `LENGTH l <= n` >>
+  `n < dimword (:256)` by
+    (fs[type_memory_size_def] >> mp_tac immutable_capacity_roundup >> decide_tac) >>
+  `LENGTH l < dimword (:256) /\ LENGTH l' < dimword (:256)` by decide_tac >>
+  gvs[]
+QED
