@@ -2,11 +2,12 @@ Theory typedNormalizeLoop
 Ancestors
   typedNormalizeFrame typedArrayLoopControlMem typedArrayLoopLayoutMem
   context compileEnv emitHelper emitHelperProps exprLoweringProps fragExec
-  venomInst venomState venomExecSemantics words arithmetic list rich_list
+  venomInst venomState venomExecSemantics valueEncoding valueEncodingProps
+  words arithmetic list rich_list
 
 (* Keep the recursive child's exit state opaque: its current block and all
    ncounters determine the backedge, not the enclosing body's entry state. *)
-Theorem typed_sarray_child_states:
+Theorem typed_sarray_child_states[local]:
   ~(type_memory_bytes ce dt = type_memory_bytes ce st /\
     ~is_abi_dynamic ce.ce_struct_fields dt) /\
   compile_copy_sarray_typed ce dst dt src st ncount sa = ((),sb) /\
@@ -83,7 +84,7 @@ QED
 
 (* The entry arithmetic is independent of both element layouts and the
    recursive child's CFG.  Only its four fresh result registers change. *)
-Theorem typed_sa_pointer_cont:
+Theorem typed_sa_pointer_cont[local]:
   code =
     [mk_inst id MUL [Var ctr; Lit (n2w src_stride)] [so];
      mk_inst (id+1) MUL [Var ctr; Lit (n2w dst_stride)] [dso];
@@ -115,7 +116,7 @@ Proof
   fs[venom_state_component_equality, eval_operand_def, lookup_var_def]
 QED
 
-Theorem typed_sarray_child_decompose:
+Theorem typed_sarray_child_decompose[local]:
   ~(type_memory_bytes ce dt = type_memory_bytes ce st /\
     ~is_abi_dynamic ce.ce_struct_fields dt) /\
   compile_copy_sarray_typed ce dst dt src st ncount sa = ((),sb) /\
@@ -193,4 +194,62 @@ Proof
        DISJ_IMP_THM, FORALL_AND_THM] >>
   qpat_x_assum `fn_has_code ec sb fn` mp_tac >>
   simp[fn_has_code_def, emitted_blocks_def]
+QED
+
+(* A child overwrites only its own destination slot.  Memory locality, not
+   recursive knowledge of the enclosing prefix, transports earlier slots. *)
+Theorem typed_array_local_prefix_step[local]:
+  (!j a m m'. j < n /\ mem_bytes_at a stride m = mem_bytes_at a stride m' ==>
+    (D j a m <=> D j a m')) /\
+  (!j. j < i ==> D j ((addr:num)+stride*j) mem) /\
+  D i (addr+stride*i) mem' /\ i < n /\
+  (!a k. a+k <= addr+stride*i \/ addr+stride*i+stride <= a ==>
+    mem_bytes_at a k mem' = mem_bytes_at a k mem) ==>
+  !j. j < SUC i ==> D j (addr+stride*j) mem'
+Proof
+  rpt strip_tac >> Cases_on `j = i` >- gvs[] >>
+  `j < i /\ j < n` by decide_tac >>
+  `stride * (j+1) <= stride*i` by simp[LE_MULT_LCANCEL] >>
+  `addr + stride*j + stride <= addr + stride*i` by
+    (qpat_x_assum `stride * (j+1) <= stride*i` mp_tac >>
+     pure_rewrite_tac [LEFT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac) >>
+  `mem_bytes_at (addr+stride*j) stride mem' =
+    mem_bytes_at (addr+stride*j) stride mem` by metis_tac[] >>
+  metis_tac[]
+QED
+
+Theorem typed_array_local_source_frame[local]:
+  (!j a m m'. j < n /\ mem_bytes_at a stride m = mem_bytes_at a stride m' ==>
+    (Src j a m <=> Src j a m')) /\
+  (!j. j < n ==> Src j (addr+stride*j) mem) /\
+  mem_bytes_at addr (stride*n) mem' = mem_bytes_at addr (stride*n) mem ==>
+  !j. j < n ==> Src j (addr+stride*j) mem'
+Proof
+  rpt strip_tac >>
+  `stride * (j+1) <= stride*n` by simp[LE_MULT_LCANCEL] >>
+  `stride*j + stride <= stride*n` by
+    (qpat_x_assum `stride * (j+1) <= stride*n` mp_tac >>
+     pure_rewrite_tac [LEFT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac) >>
+  `mem_bytes_at (addr+stride*j) stride mem' =
+    mem_bytes_at (addr+stride*j) stride mem` by
+    (irule mem_bytes_at_translated_window >>
+     qexists_tac `stride*n` >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem typed_array_child_exterior[local]:
+  i < n /\ (a+ss*n <= b \/ b+ds*n <= a) /\
+  (!p k. p+k <= b+ds*i \/ b+ds*i+ds <= p ==>
+    mem_bytes_at p k mem' = mem_bytes_at p k mem) ==>
+  mem_bytes_at a (ss*n) mem' = mem_bytes_at a (ss*n) mem /\
+  (!p k. p+k <= b \/ b+ds*n <= p ==>
+    mem_bytes_at p k mem' = mem_bytes_at p k mem)
+Proof
+  strip_tac >>
+  `ds * (i+1) <= ds*n` by simp[LE_MULT_LCANCEL] >>
+  `b+ds*i+ds <= b+ds*n` by
+    (qpat_x_assum `ds * (i+1) <= ds*n` mp_tac >>
+     pure_rewrite_tac [LEFT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac) >>
+  conj_tac >- (first_x_assum irule >> decide_tac) >>
+  rpt strip_tac >> first_x_assum irule >> decide_tac
 QED
