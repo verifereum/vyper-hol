@@ -4,7 +4,7 @@ Ancestors
   fnFrameTerminalPrep generatedPrefixSim planSpillBounds mixedPrefixSim
   stackPlanGen stackPlanOps stackPlanTypes stackModel venomInst
   asmFrame asmSem codegenRel frameRel contextCodegenRel genBlockSim
-  preparedPrefixSim
+  preparedPrefixSim genFrameSim frameViewFacts frameViewMemory
 
 (* A transient spill is covered by the output high-water mark even though
    the live spill map is empty again after restoration. *)
@@ -115,4 +115,50 @@ Proof
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
   simp[] >> qexists `st'` >> simp[] >>
   drule_all prepared_local_run_frame_context >> simp[]
+QED
+
+(* Any declared source-memory read range, not just REVERT's range. *)
+Theorem context_source_payload_agree:
+  source_memory_reads_disjoint cplan inst vs /\
+  context_memory_rel cplan vs.vs_memory m /\
+  MEM (off,n) (source_memory_read_ranges inst vs) ==>
+  TAKE n (DROP off m ++ REPLICATE n 0w) =
+  TAKE n (DROP off vs.vs_memory ++ REPLICATE n 0w)
+Proof
+  strip_tac >> irule padded_memory_read_cong >> rpt strip_tac >>
+  drule context_reads_agree >> simp[] >> disch_then irule >>
+  simp[source_memory_read_byte_def] >>
+  qexists `(off,n)` >> simp[byte_in_memory_range_def]
+QED
+
+Theorem abort_operands_frame_view:
+  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  MEM inst.inst_opcode
+    [REVERT; INVALID; ASSERT; ASSERT_UNREACHABLE; CREATE; CREATE2; RETURNDATACOPY] ==>
+  eval_operands inst.inst_operands (frame_view fn ra vs with vs_memory := m) =
+  eval_operands inst.inst_operands vs
+Proof
+  strip_tac >> irule eval_operands_frame_view >> gen_tac >> disch_tac >>
+  irule ordinary_operand_not_retpc >>
+  simp[] >> qexists `inst` >> gvs[]
+QED
+
+Theorem revert_context_payload_agree:
+  inst.inst_opcode = REVERT /\ inst.inst_operands = [off_op; size_op] /\
+  eval_operand off_op vs = SOME off /\ eval_operand size_op vs = SOME sz /\
+  source_memory_reads_disjoint cplan inst vs /\
+  context_memory_rel cplan vs.vs_memory m ==>
+  TAKE (w2n sz) (DROP (w2n off) m ++ REPLICATE (w2n sz) 0w) =
+  TAKE (w2n sz) (DROP (w2n off) vs.vs_memory ++ REPLICATE (w2n sz) 0w)
+Proof
+  strip_tac >> irule context_source_payload_agree >>
+  qexistsl [`cplan`, `inst`] >>
+  simp[source_memory_read_ranges_def, memory_range_of_operands_def]
+QED
+
+Theorem terminal_rel_frame_view_stack:
+  venom_asm_terminal_rel (frame_view fn ra vs) (st with as_stack := stk) <=>
+  venom_asm_terminal_rel vs st
+Proof
+  simp[venom_asm_terminal_rel_def, frame_view_def]
 QED
