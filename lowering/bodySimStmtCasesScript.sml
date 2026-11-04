@@ -2628,6 +2628,129 @@ Proof
   Cases_on `vdecl0` >> gvs[] >> metis_tac[]
 QED
 
+Theorem aug_place_find_storage_decl:
+  !ts id tr ty id_str.
+    find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty,id_str) ==>
+    id_str = id /\
+    ?vis mut init. MEM (VariableDecl vis mut id ty init) ts /\
+      (mut = Storage \/ mut = Transient) /\ (tr <=> mut = Transient)
+Proof
+  Induct >> simp[find_var_decl_by_name_def] >>
+  Cases_on `h` >> simp[find_var_decl_by_name_def] >>
+  rpt gen_tac >> rpt IF_CASES_TAC >> rpt strip_tac >>
+  gvs[RIGHT_AND_OVER_OR, EXISTS_OR_THM] >> metis_tac[]
+QED
+
+Theorem aug_place_find_hashmap_decl:
+  !ts id tr kt vt id_str.
+    find_var_decl_by_name id ts = SOME (HashMapVarDecl tr kt vt,id_str) ==>
+    id_str = id /\
+    ?vis init. MEM (HashMapDecl vis tr id kt vt init) ts
+Proof
+  Induct >> simp[find_var_decl_by_name_def] >>
+  Cases_on `h` >> simp[find_var_decl_by_name_def] >>
+  rpt gen_tac >> rpt IF_CASES_TAC >> rpt strip_tac >>
+  gvs[RIGHT_AND_OVER_OR, EXISTS_OR_THM] >> metis_tac[]
+QED
+
+Theorem aug_place_bare_decl:
+  !ts id. is_bare_global_decl id ts ==>
+    ?vis mut ty init. MEM (VariableDecl vis mut id ty init) ts /\
+      (mut = Immutable \/ ?e. mut = Constant e)
+Proof
+  Induct >> simp[is_bare_global_decl_def] >>
+  Cases_on `h` >> simp[is_bare_global_decl_def] >>
+  TRY (rename1 `VariableDecl vis mut vid ty init` >> Cases_on `mut`) >>
+  simp[is_bare_global_decl_def] >> rpt strip_tac >>
+  rpt IF_CASES_TAC >> gvs[] >> metis_tac[]
+QED
+
+Theorem aug_place_complete_storage:
+  toplevel_vtypes_complete tvs cx /\
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty,id_str) /\
+  IS_SOME (lookup_var_slot_from_layout cx tr src id_str) ==>
+  FLOOKUP tvs (src,id) = SOME (Type ty)
+Proof
+  strip_tac >> drule aug_place_find_storage_decl >> strip_tac >> gvs[] >>
+  gvs[toplevel_vtypes_complete_def] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  Cases_on `mut = Storage` >> gvs[]
+QED
+
+Theorem aug_place_complete_hashmap:
+  toplevel_vtypes_complete tvs cx /\
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (HashMapVarDecl tr kt vt,id_str) /\
+  IS_SOME (lookup_var_slot_from_layout cx tr src id_str) ==>
+  FLOOKUP tvs (src,id) = SOME (HashMapT kt vt)
+Proof
+  strip_tac >> drule aug_place_find_hashmap_decl >> strip_tac >> gvs[] >>
+  gvs[toplevel_vtypes_complete_def] >> metis_tac[]
+QED
+
+Theorem aug_place_complete_bare:
+  toplevel_vtypes_complete tvs cx /\
+  get_module_code cx src = SOME ts /\ is_bare_global_decl id ts ==>
+  IS_SOME (FLOOKUP tvs (src,id))
+Proof
+  strip_tac >> drule aug_place_bare_decl >> strip_tac >>
+  gvs[toplevel_vtypes_complete_def] >>
+  `FLOOKUP tvs (src,id) = SOME (Type ty)` suffices_by simp[] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> gvs[]
+QED
+
+Theorem aug_place_context_bare_domain:
+  env_context_consistent env0 cx /\ env_context_consistent env1 cx /\
+  FLOOKUP env1.bare_globals (src,id) = SOME ty ==>
+  IS_SOME (FLOOKUP env0.toplevel_vtypes (src,id))
+Proof
+  strip_tac >> drule_all env_context_consistent_bare_global_find_NONE >>
+  strip_tac >> irule aug_place_complete_bare >>
+  gvs[env_context_consistent_def] >> metis_tac[]
+QED
+
+Theorem aug_place_context_toplevel_domain:
+  env_context_consistent env0 cx /\ env_context_consistent env1 cx /\
+  FLOOKUP env1.toplevel_vtypes (src,id) = SOME vt ==>
+  IS_SOME (FLOOKUP env0.toplevel_vtypes (src,id))
+Proof
+  strip_tac >>
+  `toplevel_vtypes_complete env0.toplevel_vtypes cx` by
+    gvs[env_context_consistent_def] >>
+  qpat_x_assum `env_context_consistent env0 cx` kall_tac >>
+  Cases_on `vt`
+  >- (Cases_on `FLOOKUP env1.bare_globals (src,id)`
+      >- (gvs[env_context_consistent_def] >>
+          qpat_x_assum `!src id ty. _ /\ _ ==> _` drule_all >>
+          strip_tac >>
+          `FLOOKUP env0.toplevel_vtypes (src,id) = SOME (Type t)`
+            suffices_by simp[] >>
+          irule aug_place_complete_storage >> metis_tac[]) >>
+      drule_all env_context_consistent_bare_global_find_NONE >>
+      strip_tac >> irule aug_place_complete_bare >> metis_tac[]) >>
+  rename1 `FLOOKUP env1.toplevel_vtypes (src,id) = SOME (HashMapT kt value_ty)` >>
+  gvs[env_context_consistent_def] >>
+  qpat_x_assum `!src id kt vt. _ ==> _` drule >> strip_tac >>
+  `FLOOKUP env0.toplevel_vtypes (src,id) = SOME (HashMapT kt value_ty)`
+    suffices_by simp[] >>
+  irule aug_place_complete_hashmap >> metis_tac[]
+QED
+
+Theorem aug_place_context_domain:
+  env_context_consistent env0 cx /\ env_context_consistent env1 cx ==>
+  (!nsid vt. FLOOKUP env1.toplevel_vtypes nsid = SOME vt ==>
+     IS_SOME (FLOOKUP env0.toplevel_vtypes nsid)) /\
+  (!nsid ty. FLOOKUP env1.bare_globals nsid = SOME ty ==>
+     IS_SOME (FLOOKUP env0.toplevel_vtypes nsid))
+Proof
+  strip_tac >> conj_tac >> Cases >> rpt strip_tac
+  >- metis_tac[aug_place_context_toplevel_domain] >>
+  metis_tac[aug_place_context_bare_domain]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
