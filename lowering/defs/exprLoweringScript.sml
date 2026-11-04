@@ -2410,7 +2410,7 @@ Definition call_can_mutate_def:
   call_can_mutate cenv (ExtCall is_static _ _ _) = ~is_static ∧
   call_can_mutate cenv (RawCallTarget flags) = ~flags.rcf_is_static ∧
   call_can_mutate cenv (RawCallCalldataTarget flags) = ~flags.rcf_is_static ∧
-  call_can_mutate cenv (CreateTarget _ _ _) = T ∧
+  call_can_mutate cenv (CreateTarget _ _ _ _) = T ∧
   call_can_mutate cenv (Send _) = T ∧
   call_can_mutate cenv SelfDestructTarget = T ∧
   call_can_mutate cenv _ = F
