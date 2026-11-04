@@ -56,6 +56,21 @@ Proof
   Cases_on `point` >> gvs[] >> metis_tac[]
 QED
 
+Definition current_phi_operand_def:
+  current_phi_operand fn v <=>
+    ?bb inst pred. MEM bb fn.fn_blocks /\
+      MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
+      MEM (pred,v) (phi_pairs inst.inst_operands)
+End
+
+Theorem current_phi_operand_single_def:
+  fn_phi_operands_single_def fn /\ current_phi_operand fn v ==>
+  LENGTH (FILTER (\i. MEM v i.inst_outputs) (fn_insts fn)) <= 1
+Proof
+  simp[current_phi_operand_def, fn_phi_operands_single_def_def] >>
+  metis_tac[]
+QED
+
 Theorem current_phi_operand_available:
   wf_function fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
   def_on_all_paths fn bb point v /\
