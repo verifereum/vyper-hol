@@ -873,7 +873,7 @@ Proof
 QED
 
 (* What step_inst ASSERT_UNREACHABLE abort produces *)
-Theorem step_inst_assert_unreachable_abort[local]:
+Theorem step_inst_assert_unreachable_abort:
   !fuel ctx inst vs a vs'.
     inst.inst_opcode = ASSERT_UNREACHABLE /\
     step_inst fuel ctx inst vs = Abort a vs' ==>
@@ -1736,7 +1736,7 @@ Proof
 QED
 
 (* 3-step terminal: PushLabel end_lbl; JUMPI (falls through, cond=0w); INVALID *)
-Theorem terminal_pushlabel_jumpi_invalid[local]:
+Theorem terminal_pushlabel_jumpi_invalid:
   !lo o2pc prog st end_lbl off rest_stk vs.
     asm_block_at prog st.as_pc
       [AsmPushLabel end_lbl; AsmOp "JUMPI"; AsmOp "INVALID";

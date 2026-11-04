@@ -486,3 +486,204 @@ Resume gen_inst_assert_frame_sim[prepared]:
 QED
 
 Finalise gen_inst_assert_frame_sim
+
+Theorem gen_inst_assert_unreachable_frame_sim:
+  !inst cplan vs fn r final base ps nl lo ra dfg ops ctx rest mem0 st
+    lv cfg halting term label prog fuel a vs' o2pc.
+  inst.inst_opcode = ASSERT_UNREACHABLE /\
+  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\ inst_wf inst /\
+  MEM r cplan.cp_regions /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  generated_plan_state_wf base ps /\
+  LENGTH (compute_operands inst) <= 16 /\
+  LENGTH (compute_operands inst) <= LENGTH (SND
+    (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps)).ps_stack /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
+    IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  (!l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)) /\
+  (!op. MEM op (compute_operands inst) ==>
+    eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
+  (!op at. MEM op (compute_operands inst) /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at (compute_operands inst)) /\
+    operand_equiv dfg op at ==>
+    operand_val (frame_view fn ra vs) lo op = operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
+  prefix_spill_wf cplan.cp_initial_fmp lo (FRONT ops) ps /\
+  (!lbl i. i < LENGTH (execute_plan cplan.cp_initial_fmp ops) /\
+    EL i (execute_plan cplan.cp_initial_fmp ops) = AsmLabel lbl ==>
+    ?off. FLOOKUP lo lbl = SOME off /\ off < dimword(:256) /\
+      FLOOKUP o2pc off = SOME (st.as_pc + i)) /\
+  fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st /\
+  generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops, final) /\
+  asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
+  step_inst fuel ctx inst vs = Abort a vs' ==>
+  ?n out. a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
+    venom_asm_terminal_rel vs' out
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all step_inst_assert_unreachable_abort >> strip_tac >>
+  drule_all assert_unreachable_plan_decompose >> strip_tac >>
+  rename1 `reorder_plan dfg [cond] prepared = (rops,arranged)` >>
+  rename1 `emit_input_plan ASSERT_UNREACHABLE [cond] nl ps = (iops,prepared)` >>
+  rename1 `fresh_label "reachable" _ = (endlabel,after)` >>
+  `after.ps_alloc = arranged.ps_alloc` by
+    gvs[fresh_label_def, plan_state_component_equality] >>
+  suspend "decomposed"
+QED
+
+Resume gen_inst_assert_unreachable_frame_sim[decomposed]:
+  rename1 `generated_plan_state_wf spillbase ps` >>
+  `asm_block_at prog (st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)))
+     [AsmPushLabel endlabel; AsmOp "JUMPI"; AsmOp "INVALID"; AsmLabel endlabel]` by
+    (qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
+     once_rewrite_tac[GSYM APPEND_ASSOC] >>
+     simp[execute_plan_append, execute_plan_def, exec_stack_op_def, asm_block_at_append]) >>
+  `?off. FLOOKUP lo endlabel = SOME off` by
+    (qpat_x_assum `!lbl i. _` (qspecl_then [`endlabel`,
+       `LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3`] mp_tac) >>
+     simp[execute_plan_append, execute_plan_def, exec_stack_op_def, EL_APPEND_EQN,
+       LENGTH_APPEND, APPEND_ASSOC] >> metis_tac[]) >>
+  `plan_state_residual_wf spillbase [cond] (LENGTH [cond]) arranged /\
+   arranged.ps_stack = stack_pop (LENGTH [cond]) arranged.ps_stack ++ [cond] /\
+   ?mid. asm_steps lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) st =
+       AsmOK (mid with as_stack := mid.as_stack ++ rest) /\
+     venom_asm_rel lo arranged
+       (frame_view fn ra vs with vs_memory := st.as_memory) mid /\
+     context_memory_rel cplan vs.vs_memory mid.as_memory /\
+     mid.as_pc = st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) /\
+     venom_asm_terminal_rel vs (mid with as_stack := mid.as_stack ++ rest)` by
+    (irule frame_entry_selected_prefix_sim >>
+     simp[] >> rpt conj_tac
+     >- (qexistsl_tac [`final`, `r`] >>
+         gvs[release_dead_spills_spill_base, release_dead_spills_next_offset]) >>
+     goal_assum (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+     qexists `[SOPushLabel endlabel; SOEmit "JUMPI"; SOEmit "INVALID"; SOLabel endlabel]` >>
+     gvs[sortingTheory.PERM_REFL] >> metis_tac[]) >>
+  suspend "prepared"
+QED
+
+Resume gen_inst_assert_unreachable_frame_sim[prepared]:
+  `!op. operand_val (frame_view fn ra vs with vs_memory := st.as_memory) lo op =
+        operand_val (frame_view fn ra vs) lo op` by
+    (Cases >> simp[operand_val_def]) >>
+  `eval_operands inst.inst_operands (frame_view fn ra vs with vs_memory := st.as_memory) =
+    SOME [0w]` by
+    (drule abort_operands_frame_view >> simp[eval_operands_def]) >>
+  `mid.as_stack = [0w] ++ DROP (LENGTH inst.inst_operands) mid.as_stack` by
+    (irule arranged_eval_operands_stack >>
+     conj_tac
+     >- (gvs[compute_operands_def, EVERY_MEM, MEM_REVERSE] >> metis_tac[]) >>
+     goal_assum (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
+     qexists `stack_pop 1 arranged.ps_stack` >>
+     gvs[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def,
+       eval_operand_with_memory] >> metis_tac[]) >>
+  `?out. asm_steps lo o2pc prog 3 (mid with as_stack := mid.as_stack ++ rest) = AsmFault out /\
+    venom_asm_terminal_rel (vs with <|vs_returndata := []; vs_halted := T|>) out` by
+    (irule terminal_pushlabel_jumpi_invalid >>
+     simp[] >> conj_tac
+     >- (qexists `DROP (LENGTH inst.inst_operands) mid.as_stack ++ rest` >>
+         metis_tac[APPEND, APPEND_ASSOC]) >>
+     qexistsl_tac [`endlabel`, `off`] >>
+     simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3`, `out`] >>
+  simp[halt_state_def, set_returndata_def] >>
+  irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Finalise gen_inst_assert_unreachable_frame_sim
+
+Theorem gen_inst_invalid_frame_sim:
+  !inst cplan vs fn r final base ps nl lo ra dfg ops ctx rest mem0 st
+    lv cfg halting term label prog fuel a vs' o2pc.
+  inst.inst_opcode = INVALID /\ inst_wf inst /\
+  MEM r cplan.cp_regions /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  generated_plan_state_wf base ps /\
+  LENGTH (compute_operands inst) <= 16 /\
+  LENGTH (compute_operands inst) <= LENGTH (SND
+    (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps)).ps_stack /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
+    IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  (!l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)) /\
+  (!op at. MEM op (compute_operands inst) /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at (compute_operands inst)) /\
+    operand_equiv dfg op at ==>
+    operand_val (frame_view fn ra vs) lo op = operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
+  prefix_spill_wf cplan.cp_initial_fmp lo (FRONT ops) ps /\
+  fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st /\
+  generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops, final) /\
+  asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
+  step_inst fuel ctx inst vs = Abort a vs' ==>
+  ?n out. a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
+    venom_asm_terminal_rel vs' out
+Proof
+  rpt gen_tac >> strip_tac >>
+  `generate_regular_inst_plan lv dfg cfg fn inst nl halting term label ps = (ops,final)` by
+    (qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[generate_inst_plan_def] >>
+     `~is_pre_codegen_opcode INVALID /\ ~is_param_opcode INVALID` by EVAL_TAC >> simp[]) >>
+  `inst.inst_outputs = []` by gvs[inst_wf_def] >>
+  `a = ExHalt_abort /\ vs' = halt_state (set_returndata [] vs)` by
+    (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+     simp[Once venomExecSemanticsTheory.step_inst_def, is_terminator_def] >>
+     simp[Once venomExecSemanticsTheory.step_inst_base_def]) >>
+  `?iops prepared rops arranged.
+    emit_input_plan inst.inst_opcode (compute_operands inst) nl ps = (iops,prepared) /\
+    reorder_plan dfg (compute_operands inst) prepared = (rops,arranged) /\
+    ops = iops ++ rops ++ [SOEmit "INVALID"] /\
+    final = release_dead_spills nl
+      (arranged with ps_stack := stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack)` by
+    (qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[generate_regular_inst_plan_def, is_commutative_def,
+       generate_emit_ops_def, venom_to_evm_name_def] >>
+     rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >> metis_tac[]) >>
+  suspend "decomposed"
+QED
+
+Resume gen_inst_invalid_frame_sim[decomposed]:
+  rename1 `generated_plan_state_wf spillbase ps` >>
+  `asm_block_at prog (st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)))
+     [AsmOp "INVALID"]` by
+    (qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
+     once_rewrite_tac[GSYM APPEND_ASSOC] >>
+     simp[execute_plan_append, execute_plan_def, exec_stack_op_def, asm_block_at_append]) >>
+  `plan_state_residual_wf spillbase (compute_operands inst)
+       (LENGTH (compute_operands inst)) arranged /\
+   arranged.ps_stack = stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack ++
+      compute_operands inst /\
+   ?mid. asm_steps lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) st =
+       AsmOK (mid with as_stack := mid.as_stack ++ rest) /\
+     venom_asm_rel lo arranged
+       (frame_view fn ra vs with vs_memory := st.as_memory) mid /\
+     context_memory_rel cplan vs.vs_memory mid.as_memory /\
+     mid.as_pc = st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) /\
+     venom_asm_terminal_rel vs (mid with as_stack := mid.as_stack ++ rest)` by
+    (irule frame_entry_selected_prefix_sim >>
+     simp[] >> rpt conj_tac
+     >- (qexistsl_tac [`final`, `r`] >>
+         gvs[release_dead_spills_spill_base, release_dead_spills_next_offset]) >>
+     goal_assum (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+     qexists `[SOEmit "INVALID"]` >>
+     gvs[sortingTheory.PERM_REFL] >> metis_tac[]) >>
+  `?out. asm_steps lo o2pc prog 1 (mid with as_stack := mid.as_stack ++ rest) = AsmFault out /\
+    venom_asm_terminal_rel (vs with <|vs_returndata := []; vs_halted := T|>) out` by
+    (irule terminal_invalid_step >> simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 1`, `out`] >>
+  simp[halt_state_def, set_returndata_def] >>
+  irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Finalise gen_inst_invalid_frame_sim
