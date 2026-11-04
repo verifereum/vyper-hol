@@ -905,6 +905,20 @@ Proof
   simp[immutable_holds_def] >> metis_tac[]
 QED
 
+Theorem expr_body_pre_foreign_immutable_holds:
+  expr_body_pre cenv cx env e s /\ ~expr_has_pop e /\
+  eval_expr cx e s = (res,t) /\ cenv.ce_module <> NONE /\ md <> NONE /\
+  immutable_holds cenv cx ty (PlaceR (ImmutablePlace md name path)) w s ==>
+  immutable_holds cenv cx ty (PlaceR (ImmutablePlace md name path)) w t
+Proof
+  rpt strip_tac >> irule immutable_holds_source_frame >>
+  goal_assum (drule_at Any) >>
+  conj_tac
+  >- (gen_tac >> drule_all expr_body_pre_foreign_immutable_read >> simp[]) >>
+  qpat_x_assum `md <> NONE` kall_tac >>
+  drule_all expr_body_pre_foreign_immutable_frame >> simp[]
+QED
+
 (* The semantic load dispatch and the length-loader execution agree. *)
 Theorem array_len_ok_ptr_load:
   eval_operand op ss = SOME w /\ (loc = LocCode ==> ~ctor) ==>
