@@ -5,7 +5,7 @@
    arg_type_fits's, so the source semantics keeps a single widening rule. *)
 Theory vyperEventArgCompat
 Ancestors
-  vyperTypeSystem list
+  vyperTypeSystem vyperTypeArgFits list
 
 Definition event_arg_compatible_alias_def:
   event_arg_compatible fty aty <=> arg_type_fits aty fty
@@ -15,18 +15,11 @@ Definition event_arg_compatible_list_alias_def:
   event_arg_compatible_list fts ats <=> arg_types_fit ats fts
 End
 
-Theorem arg_types_fit_length:
-  !ts us. arg_types_fit ts us ==> LENGTH ts = LENGTH us
-Proof
-  Induct >> rpt gen_tac >> Cases_on `us` >> simp[arg_type_fits_def] >>
-  metis_tac[]
-QED
-
 Theorem event_arg_compatible_list_length[local]:
   !fts ats. event_arg_compatible_list fts ats <=>
             LENGTH fts = LENGTH ats /\ event_arg_compatible_list fts ats
 Proof
-  metis_tac[event_arg_compatible_list_alias_def, arg_types_fit_length]
+  metis_tac[event_arg_compatible_list_alias_def, arg_types_fit_LENGTH]
 QED
 
 local
