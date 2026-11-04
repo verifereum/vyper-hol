@@ -7,6 +7,12 @@ version = "0.2.3"
 
 [build]
 roots = ["vyperHolScript.sml",
+         "lowering/calldataFiniteTypedScript.sml",
+         "lowering/calldataAggregateTypedScript.sml",
+         "lowering/actualDecoderPackagingScript.sml",
+         "lowering/actualRegistrationCodeScript.sml",
+         "lowering/actualEntryAllocationFrameScript.sml",
+         "lowering/abiEncoderWindowSourceRunScript.sml",
          "lowering/abiTypeBoundPropsScript.sml",
          "tests/vyperExternalHeadersTestScript.sml",
          "tests/vyperRawSystemTypingTestScript.sml",

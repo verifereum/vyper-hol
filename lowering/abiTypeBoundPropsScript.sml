@@ -256,6 +256,19 @@ QED
    decrease. A size-bounded, one-way struct consistency invariant suffices
    when both environments drop a struct. Compiler embedded static size
    counts only the head; source embedded size also includes a dynamic tail. *)
+(* Per-member embedded sizes determine the complete tuple encoding size. *)
+Theorem abi_size_bound_tuple_agrees:
+  !ts sf tenv.
+    (!t. MEM t ts ==>
+      abi_embedded_static_size sf t +
+        (if is_abi_dynamic sf t then abi_size_bound sf t else 0) =
+      vyper_abi_embedded_size tenv t) ==>
+    abi_size_bound sf (TupleT ts) = vyper_abi_size_bound tenv (TupleT ts)
+Proof
+  simp[abi_size_bound_def, vyperABITheory.vyper_abi_size_bound_def] >>
+  Induct >> simp[vyperABITheory.vyper_abi_size_bound_def] >> metis_tac[]
+QED
+
 Theorem abi_props_vyper_typed:
   !sf tenv ty tv.
     sfields_tenv_consistent sf tenv /\
