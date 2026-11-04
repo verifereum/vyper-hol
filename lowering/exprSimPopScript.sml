@@ -405,6 +405,8 @@ Theorem pop_name_facts:
       cenv.ce_var_type id = SOME (ArrayT ann (Dynamic n)) /\
       lookup_scopes id es.scopes = SOME entry /\ entry.assignable /\
       evaluate_type (get_tenv cx) ann = SOME etv /\
+      evaluate_type (get_tenv cx) (ArrayT ann (Dynamic n)) =
+        SOME (ArrayTV etv (Dynamic n)) /\
       entry.type = ArrayTV etv (Dynamic n) /\
       entry.value = ArrayV (DynArrayV vs) /\
       LENGTH vs <= n /\ n < dimword (:256) /\ elems_val_wf vs etv /\
@@ -438,6 +440,10 @@ Proof
   simp[evaluate_type_def, AllCaseEqs()] >> strip_tac >>
   rename1 `evaluate_type _ ann = SOME etv` >>
   `entry.type = ArrayTV etv (Dynamic n)` by simp[] >>
+  `evaluate_type (get_tenv cx) (ArrayT ann (Dynamic n)) =
+     SOME (ArrayTV etv (Dynamic n))` by
+    (qpat_x_assum `ArrayTV _ _ = entry.type` kall_tac >>
+     simp[evaluate_type_def]) >>
   `value_has_type (ArrayTV etv (Dynamic n)) entry.value` by metis_tac[] >>
   drule value_has_type_dynarray >> strip_tac >>
   `local_ptrs_rel func cenv es.scopes s0` by
@@ -675,7 +681,9 @@ Proof
   irule mstore_mem_bytes_at_disjoint >>
   Cases_on `nm = id`
   >- (`b' = w2n w` by gvs[local_region_def] >>
-      gvs[dynarray_local_def, dynarray_type_def]) >>
+      `dynarray_len_at cenv id 0` by
+        (irule dynarray_len_at_root >> metis_tac[]) >>
+      gvs[] >> first_x_assum drule >> simp[]) >>
   `regions_disjoint (w2n w) sz b' sz'` by
     (fs[local_ptrs_rel_def] >> metis_tac[]) >>
   gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
@@ -704,7 +712,9 @@ Theorem pop_vv_post:
     lookup_var x6 u =
       SOME (w + 32w + (n2w (LENGTH vs) - 1w) * n2w (type_memory_size etv)) /\
     EVERY (value_has_type etv) vs /\
-    evaluate_type (get_tenv cx) ann = SOME etv ==>
+    evaluate_type (get_tenv cx) ann = SOME etv /\
+    evaluate_type (get_tenv cx) (ArrayT ann (Dynamic n)) =
+      SOME (ArrayTV etv (Dynamic n)) ==>
     vv_post ctx func cenv cx (Pop ann (NameTarget id)) es sa sb s0
       (es with scopes :=
          pre ++ envs |+ (id, pop_name_entry entry vs)
@@ -780,8 +790,13 @@ Proof
       `w2n w + 32 + (LENGTH vs - 1) * type_memory_size etv +
          val_footprint etv (LAST vs) <= w2n w + sz` by
         (irule pop_elem_fits >> metis_tac[val_footprint_le]) >>
+      `local_val_at cenv cx id
+         (32 + (LENGTH vs - 1) * type_memory_size etv) etv (LAST vs)` by
+        (irule local_path_at_val_at >> simp[local_path_at_def] >>
+         qexists_tac `[ValueSubscript (IntV &(LENGTH vs - 1))]` >>
+         simp[mem_path_offset_def, mem_step_offset_def]) >>
       simp[] >> disj2_tac >> disj1_tac >>
-      qexistsl_tac [`id`, `w2n w`, `sz`] >> fs[])
+      qexistsl_tac [`id`, `w2n w`, `sz`] >> fs[] >> gvs[])
   >~ [`locals_kept`]
   >- (irule pop_locals_kept >>
       conj_tac

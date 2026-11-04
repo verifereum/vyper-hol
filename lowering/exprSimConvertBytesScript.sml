@@ -340,7 +340,9 @@ Proof
   drule_all convert_bytestring_memory >> strip_tac >>
   drule_all convert_bytestring_wf >> strip_tac >>
   gvs[expr_val_at_def, is_bytestring_word_type] >>
-  gvs[bytestring_type_cases, dynarray_type_def] >> metis_tac[]
+  gvs[bytestring_type_cases] >>
+  imp_res_tac vyperTypeValuesTheory.evaluate_type_BaseT_cases >> gvs[] >>
+  metis_tac[local_val_at_base, arithmeticTheory.LESS_EQ_REFL]
 QED
 
 Theorem convert_bytestring_footprint_small:

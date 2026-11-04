@@ -2011,7 +2011,7 @@ Proof
     (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
   drule_all exprSimLeavesTheory.toplevel_storage_ce_vars >> strip_tac >>
   drule_all exprSimAttributeFieldsTheory.struct_fields_layout >> strip_tac >> gvs[] >>
-  drule_all struct_field_type >> strip_tac >> gvs[] >>
+  drule_all exprSimAttributeFieldsTheory.struct_field_type >> strip_tac >> gvs[] >>
   drule vyperPlaceResultTypingTheory.struct_field_slot_exists >> strip_tac >>
   drule_all exprSimAttributeFieldsTheory.struct_field_offset_slots_eq >> strip_tac >>
   simp[tupleTargetStorePropsTheory.tuple_target_aligned_field] >>

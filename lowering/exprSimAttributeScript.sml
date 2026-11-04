@@ -256,14 +256,18 @@ Theorem base_vv_at_struct[local]:
                               b + sz <= lb \/ lb + lsz <= b)) \/
      (?n b sz. local_region cenv es.scopes s n b sz /\
                b <= w2n w /\ w2n w + val_footprint stv v <= b + sz /\
-               (dynarray_local cenv n ==> b + 32 <= w2n w)) \/
+               local_path_at cenv cx n (w2n w - b) stv) \/
      val_footprint stv v = 0)
 Proof
   rpt gen_tac >> Cases_on `vv` >>
   simp[vv_at_def, vv_loc_def, vv_location_def, vv_operand_def,
-       expr_val_at_def, is_word_type_def, dynarray_type_def] >>
+       expr_val_at_def, is_word_type_def, local_val_at_def] >>
   rpt strip_tac >> gvs[] >>
-  TRY (first_x_assum drule_all >> strip_tac >> gvs[]) >> metis_tac[]
+  TRY (first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  TRY (qpat_x_assum `evaluate_type _ (StructT _) = SOME (BaseTV _)` mp_tac >>
+       simp[vyperValueTheory.evaluate_type_def, AllCaseEqs(), LET_THM] >>
+       NO_TAC) >>
+  metis_tac[]
 QED
 
 (* A field's pointer does not wrap: the struct's bytes end below 2 ** 256,
@@ -323,7 +327,13 @@ Proof
       first_assum ACCEPT_TAC)
   >~ [`local_region cenv es1.scopes q n b sz`]
   >- (disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[] >>
-      rpt strip_tac >> res_tac >> decide_tac) >>
+      `mem_step_offset (StructTV fs) (AttrSubscript fld) =
+       SOME (struct_field_offset fields fld, ftv)` by
+        simp[mem_step_offset_def, mem_field_offset_layout] >>
+      drule_all local_path_at_step >>
+      `w2n w - b + struct_field_offset fields fld =
+       w2n w + struct_field_offset fields fld - b` by decide_tac >>
+      simp[local_path_at_val_at] >> decide_tac) >>
   disj2_tac >> disj2_tac >> decide_tac
 QED
 
