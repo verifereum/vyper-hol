@@ -7,8 +7,9 @@
  * attributes (exprSimAttribute's compile_attribute_vv_sim), tuple
  * subscripts (exprSimTuple's compile_subscript_tuple_sim), a dispatch that
  * disagrees with the base's type and subscripts of any base but an array, a
- * tuple or a mapping, which do not type.  Cheated, for the later #636 PRs:
- * array and mapping subscripts and pop on any other target, by kind
+ * tuple or a mapping, which do not type.  Mapping names and subscripts are
+ * proved using exprSimMap.  Cheated, for the later #636 PRs: array
+ * subscripts and pop on any other target, by kind
  * (compile_pop_storage_sim, compile_pop_immutable_sim,
  * compile_pop_nested_sim).
  *
@@ -32,10 +33,10 @@
  * expr_sim_case; expr_vv_case describes a base's value_vv, captured memory,
  * storage and transient places included.  It does not cover a hashmap
  * base: that evaluates to a HashMapRef and is typed by type_place_expr, not
- * well_typed_expr, so for a nested mapping (m[a][b]) nothing judges the
- * inner key a.  The mapping lemma's proof needs expr_vv_case to describe a
- * HashMapRef result (the operand holding the mapping's slot), which then
- * carries the inner keys' simulation to the outer subscript.
+ * well_typed_expr.  The separate expr_map_case judgment describes a
+ * HashMapRef result by the operand holding the mapping's slot, and carries
+ * the inner keys' simulation to the outer subscript of a nested mapping
+ * (m[a][b]).
  *
  * compile_subscript dispatches on place_type of the base, the base's own
  * type for a nested place, and pop takes its target's place from
@@ -75,7 +76,7 @@ QED
    HashMap[...]]): the base's slot, the key lowered after it, and
    compile_mapping_subscript's SHA3 over the two against hashmap_slot slot
    (encode_hashmap_key kt kv), with compile_keccak256_key for a bytes or
-   string key.  Cheated. *)
+   string key.  The shared execution boundary is in exprSimMap. *)
 Theorem compile_subscript_map_map_case:
   !nocalls ctx func cenv cx ann obj idx.
     expr_map_case nocalls ctx func cenv cx obj /\
@@ -144,7 +145,7 @@ Proof
 QED
 
 (* A subscript of a mapping (place_type MapPT) whose values are not
-   mappings: the leaf's storage place.  Cheated: the base's slot comes from
+   mappings: the leaf's storage place.  The base's slot comes from
    its expr_map_case, the key's word is lowered after it, and
    compile_mapping_subscript's SHA3 over the two stored in a 64-byte buffer
    computes hashmap_slot slot (encode_hashmap_key kt kv), with
