@@ -228,3 +228,21 @@ Proof
   Cases_on `ps` >> Cases_on `pt` >>
   gvs[ld_set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >> metis_tac[]
 QED
+
+Theorem ld_owned_value_offset_add:
+  ld_owned_value E ps pt {} {} x y ==>
+  ld_owned_value E ps pt {} {} (x+k) (y+k)
+Proof
+  Cases_on `ps` >> simp[ld_owned_value_def]
+  >- metis_tac[ld_mask_word_clean, ld_mask_word_def] >>
+  PairCases_on `x'` >> simp[] >> metis_tac[ld_ptr_rel_add]
+QED
+
+Theorem ld_owned_value_offset_sub:
+  ld_owned_value E ps pt {} {} x y ==>
+  ld_owned_value E ps pt {} {} (x-k) (y-k)
+Proof
+  Cases_on `ps` >> simp[ld_owned_value_def]
+  >- metis_tac[ld_mask_word_clean, ld_mask_word_def] >>
+  PairCases_on `x'` >> simp[] >> metis_tac[ld_ptr_rel_sub]
+QED
