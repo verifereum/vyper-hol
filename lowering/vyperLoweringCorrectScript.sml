@@ -206,7 +206,7 @@ End
 
 (* ===== S1 halt bridge (#640) ===== *)
 
-Theorem abstract_machine_from_state_context[local,simp]:
+Theorem abstract_machine_from_state_context[simp]:
   (abstract_machine_from_state srcs exps layouts es).sources = srcs /\
   (abstract_machine_from_state srcs exps layouts es).layouts = layouts
 Proof
