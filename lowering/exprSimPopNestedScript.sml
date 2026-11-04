@@ -229,10 +229,6 @@ Proof
   irule pop_nested_storage_effectful_sim >> metis_tac[]
 QED
 
-(* An immutable or constant root at runtime: bare_global_assignable is
-   empty outside the constructor (bare_global_assignable_complete), so the
-   root names a bare global, which type_place_target rejects, and the pop
-   does not type. *)
 Theorem no_storage_root_untyped_runtime[local]:
   !env cx src id.
     env_context_consistent env cx /\ ~cx.in_deploy /\
@@ -262,6 +258,10 @@ Proof
       type_place_target_SubscriptTarget]
 QED
 
+(* An immutable or constant root at runtime: bare_global_assignable is
+   empty outside the constructor (bare_global_assignable_complete), so the
+   root names a bare global, which type_place_target rejects, and the pop
+   does not type. *)
 Theorem pop_nested_immutable_runtime_sim:
   !ctx func cenv cx env ann bt ty es src id.
     ~cx.in_deploy /\
