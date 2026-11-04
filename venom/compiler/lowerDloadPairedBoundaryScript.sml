@@ -98,3 +98,46 @@ Proof
   simp[read_memory_def, merge_callee_state_def] >>
   metis_tac[ld_site_bytes_pop, read_memory_def]
 QED
+
+Theorem ld_owned_op_selection:
+  (!v. ld_owned_selection E (FLOOKUP AG v) (FLOOKUP AH v)) ==>
+  ld_owned_selection E (ld_op_prov AG op) (ld_op_prov AH op)
+Proof
+  Cases_on `op` >> simp[ld_op_prov_def, ld_owned_selection_def]
+QED
+
+Theorem ld_owned_phi_selection:
+  (!v. ld_owned_selection E (FLOOKUP AG v) (FLOOKUP AH v)) ==>
+  ld_owned_selection E (ld_phi_prov prev AG i) (ld_phi_prov prev AH i)
+Proof
+  strip_tac >> Cases_on `prev` >> simp[ld_phi_prov_def, ld_owned_selection_def] >>
+  Cases_on `resolve_phi x i.inst_operands` >>
+  simp[ld_owned_selection_def] >>
+  metis_tac[ld_owned_op_selection, ld_owned_selection_def]
+QED
+
+Theorem ld_owned_set_selection:
+  (!v. ld_owned_selection E (FLOOKUP AG v) (FLOOKUP AH v)) /\
+  ld_owned_selection E ps pt ==>
+  !v. ld_owned_selection E (FLOOKUP (ld_set_prov AG outs ps) v)
+    (FLOOKUP (ld_set_prov AH outs pt) v)
+Proof
+  simp[ld_owned_selection_def] >> rpt strip_tac >>
+  Cases_on `outs` >> simp[ld_set_prov_def, FLOOKUP_DRESTRICT] >>
+  Cases_on `t` >> simp[ld_set_prov_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
+Theorem ld_owned_phis_selection:
+  (!v. ld_owned_selection E (FLOOKUP AG v) (FLOOKUP AH v)) ==>
+  !phis v. ld_owned_selection E (FLOOKUP (ld_phis_prov prev AG phis) v)
+    (FLOOKUP (ld_phis_prov prev AH phis) v)
+Proof
+  strip_tac >> Induct >> simp[ld_phis_prov_def] >> gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  irule ld_owned_set_selection >> simp[] >>
+  metis_tac[ld_owned_phi_selection]
+QED
+
+(* Resolved PHI values use ld_owned_operand_value directly: resolution only
+   identifies the operand and adds no further value hypothesis. *)
