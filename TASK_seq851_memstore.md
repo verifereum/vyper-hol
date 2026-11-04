@@ -178,16 +178,18 @@ You may restate these, and other theorems in `memoryLocalRhsPropsScript.sml` tha
 
 In `stmtSimAssignStorageCopyScript.sml`, the local lemmas `storage_copy_lowered_type`, `storage_copy_success_compatible` and the AbiEncode helpers (`storage_copy_bytes_type`, `storage_copy_abi_value`, `storage_copy_abi_eval`) become unnecessary under the new premise: delete them, and simplify the local proofs that used them.
 
+In `stmtSimDeclMemScript.sml` (now in scope too), the local lemma `lowered_value_type_bytestring` (`is_bytestring_type (expr_type e) ==> is_bytestring_type (lowered_value_type cenv e)`) is false for an internal call whose callee's return type isn't a bytestring. Its only use is `annassign_widen_footprint` (local), in the case `lowered_value_type cenv e <> vtyp`, with `is_bytestring_type vtyp`, `evaluate_type tenv (lowered_value_type cenv e) = SOME ltv`, `value_has_type tyv v` and `value_has_type ltv v`. Both local lemmas may be restated, removed or replaced. The frozen consumer is `compile_annassign_memory_widen_stmt_frag`, whose statement stays as it is.
+
 ## Completion Criteria
 
-- `stmtSimAssignStorageCopyTheory`, `memoryLocalRhsPropsTheory`, `bodySimStmtCasesTheory` and `bodySimDeclCasesTheory` build with the command below at the default per-step limit.
-- No new `cheat` in these four theories. Cheats already there (`body_assign_other`, `body_annassign_other`, and others present before this task) stay as they are.
+- `stmtSimAssignStorageCopyTheory`, `stmtSimDeclMemTheory`, `memoryLocalRhsPropsTheory`, `bodySimStmtCasesTheory` and `bodySimDeclCasesTheory` build with the command below at the default per-step limit.
+- No new `cheat` in these five theories. Cheats already there (`body_assign_other`, `body_annassign_other`, and others present before this task) stay as they are.
 - No changed premises beyond what this file allows.
 
 ## Build
 
 ```sh
-holbuild -j4 build stmtSimAssignStorageCopyTheory memoryLocalRhsPropsTheory bodySimStmtCasesTheory bodySimDeclCasesTheory
+holbuild -j4 build stmtSimAssignStorageCopyTheory stmtSimDeclMemTheory memoryLocalRhsPropsTheory bodySimStmtCasesTheory bodySimDeclCasesTheory
 ```
 
 ## Background
@@ -204,7 +206,7 @@ Notes from read-only audits (not built):
 
 - Keep every executable definition unchanged. No new premise beyond what this file allows, no feature exclusion, no new cheat.
 - The commit at HEAD titled `TEMP: stand-in cheats ...` stands in for proofs being repaired on another branch (`exprSimIfExp`, `exprSimOperators`' ternary cases, `body_ifexp_case`). Don't touch those theories or that commit.
-- If an ancestor theory outside the four targets fails to build for a reason other than box load, stop and report it; don't repair it.
+- If an ancestor theory outside the five targets fails to build for a reason other than box load, stop and report it; don't repair it.
 - Search for existing helpers before adding one.
 - No `TRY`/`ORELSE` around `metis_tac` or other search. Never raise tactic timeouts. No `holbuild run`/`repl`, no Holmake, no `--skip-*` flags, no `--force`.
 - A step timeout at a line you didn't touch is box load: rerun that theory once before treating it as a proof problem.
@@ -212,7 +214,7 @@ Notes from read-only audits (not built):
 
 ## Available Resources
 
-- The four target scripts above
+- The five target scripts above
 - `lowering/defs/exprLoweringScript.sml`, `lowering/defs/stmtLoweringScript.sml`, `lowering/defs/compileVyperScript.sml` (`build_func_return_type_def`), `lowering/defs/contextScript.sml`
 - `lowering/bodySimScript.sml` (`body_inv_def`), `lowering/exprSimHypsScript.sml` (`expr_body_pre_def`, `expr_sim_inv`), `lowering/intCallLookupScript.sml`
 - `lowering/supported/` (`supported_program`, `supported_storage_type`, `supported_value_type`, `supported_effect_expr`)
