@@ -1122,7 +1122,10 @@ Theorem current_wf_certificate_static_entry:
   MEM ev events ==>
   ?path. current_tree_ancestor_path (current_dom_tree fn) (current_event_label ev) path /\
     (!v. current_event_entry_env ev v =
-      current_inherited_token fn (current_actual_inserted fn) v path)
+      current_inherited_token fn (current_actual_inserted fn) v path) /\
+    (!v. current_event_exit_env ev v =
+      current_block_token fn (current_actual_inserted fn) v (current_event_label ev)
+        (current_inherited_token fn (current_actual_inserted fn) v path))
 Proof
   simp[current_structural_certificate_def] >> rpt strip_tac >>
   `MAP (\b. b.bb_label) ins = MAP (\b. b.bb_label) fn.fn_blocks` by
@@ -3191,6 +3194,14 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
+Theorem current_wf_blocks_distinct_instructions:
+  !bbs. ALL_DISTINCT (FLAT (MAP block_ir_inst_ids bbs)) ==>
+    !bb. MEM bb bbs ==> ALL_DISTINCT bb.bb_instructions
+Proof
+  Induct >> simp[ALL_DISTINCT_APPEND] >> rpt strip_tac >> gvs[] >>
+  fs[block_ir_inst_ids_def] >> metis_tac[ALL_DISTINCT_MAP]
+QED
+
 Theorem current_wf_original_phi_single_site:
   current_wf_phi_context s fn renamed s' A H events /\
   entry_block fn = SOME eb /\
@@ -3248,6 +3259,93 @@ Proof
       metis_tac[current_site_block_constant]) >>
   `~current_changing_site fn ins v h` by metis_tac[] >>
   simp[current_non_site_block_token]
+QED
+
+Theorem current_wf_single_site_endpoint:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM p (fn_labels fn) /\ MEM d (fn_labels fn) /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps p /\
+  current_changing_site fn ins v d /\
+  (!l. current_changing_site fn ins v l ==> l = d) ==>
+  current_block_token fn ins v p
+    (current_inherited_token fn ins v (REVERSE ps)) =
+  if d = p \/ strict_dominates (dom_analyze (cfg_analyze fn) fn) d p
+  then current_block_token fn ins v d (CurrentDefault v)
+  else CurrentDefault v
+Proof
+  strip_tac >>
+  drule_all current_actual_chain_membership >> strip_tac >>
+  `!ls t. current_chain_token fn ins v ls t =
+    if MEM d ls then current_block_token fn ins v d (CurrentDefault v) else t`
+    by metis_tac[current_wf_single_site_chain] >>
+  once_rewrite_tac[GSYM current_inherited_token_step] >>
+  simp[current_inherited_token_def] >>
+  metis_tac[]
+QED
+
+Theorem current_wf_original_phi_block_token:
+  current_wf_phi_context s fn renamed s' A H events /\
+  lookup_block h fn.fn_blocks = SOME old /\ k < LENGTH old.bb_instructions /\
+  (EL k old.bb_instructions).inst_opcode = PHI /\
+  (EL k old.bb_instructions).inst_outputs = [v] ==>
+  current_block_token fn ins v h t = CurrentOriginal h k 0
+Proof
+  strip_tac >>
+  `wf_function fn /\ fn_phi_outputs_single_def fn` by
+    fs[current_wf_phi_context_def] >>
+  `MEM old fn.fn_blocks /\ old.bb_label = h` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `MEM (EL k old.bb_instructions) old.bb_instructions` by metis_tac[MEM_EL] >>
+  `LENGTH (FILTER (\inst. MEM v inst.inst_outputs) (fn_insts fn)) <= 1` by
+    metis_tac[fn_phi_outputs_single_def_def, MEM] >>
+  `ALL_DISTINCT old.bb_instructions` by
+    (irule current_wf_blocks_distinct_instructions >>
+     qexists_tac `fn.fn_blocks` >>
+     fs[wf_function_def, fn_inst_ids_distinct_def,
+        GSYM block_ir_inst_ids_def, ETA_THM]) >>
+  `!r. r < LENGTH old.bb_instructions /\ r <> k ==>
+    ~MEM v (EL r old.bb_instructions).inst_outputs` by
+    (rpt strip_tac >>
+     `EL r old.bb_instructions = EL k old.bb_instructions` by
+       (irule (cj 2 current_single_def_occurrence) >> metis_tac[MEM_EL, MEM]) >>
+     metis_tac[ALL_DISTINCT_EL_IMP]) >>
+  simp[current_block_token_def] >>
+  drule_all current_wf_original_scan_single >> simp[]
+QED
+
+Theorem current_wf_original_phi_exit_token:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ MEM ev events /\
+  lookup_block h fn.fn_blocks = SOME old /\ k < LENGTH old.bb_instructions /\
+  (EL k old.bb_instructions).inst_opcode = PHI /\
+  (EL k old.bb_instructions).inst_outputs = [v] ==>
+  current_event_exit_env ev v =
+    if h = current_event_label ev \/
+       strict_dominates (dom_analyze (cfg_analyze fn) fn) h (current_event_label ev)
+    then CurrentOriginal h k 0 else CurrentDefault v
+Proof
+  strip_tac >>
+  `wf_function fn /\ all_reachable fn /\
+   current_wf_precleanup_certificate s fn renamed s' A H events` by
+    fs[current_wf_phi_context_def] >>
+  drule current_wf_precleanup_structural >> strip_tac >>
+  drule_all current_wf_certificate_static_entry >> strip_tac >>
+  `MEM old fn.fn_blocks /\ old.bb_label = h` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `MEM h (fn_labels fn)` by (simp[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `MEM (current_event_label ev) (fn_labels fn)` by
+    metis_tac[current_tree_ancestor_path_labels, current_actual_tree_label_member] >>
+  `current_changing_site fn (current_actual_inserted fn) v h` by
+    (simp[current_changing_site_def] >> disj2_tac >>
+     qexistsl_tac [`old`, `EL k old.bb_instructions`] >> simp[] >>
+     metis_tac[MEM_EL]) >>
+  `!l. current_changing_site fn (current_actual_inserted fn) v l ==> l = h` by
+    (metis_tac[current_wf_original_phi_single_site, MEM_EL, MEM]) >>
+  drule_all current_actual_path_chain >> strip_tac >>
+  drule_all current_wf_single_site_endpoint >> simp[] >>
+  `current_block_token fn (current_actual_inserted fn) v h (CurrentDefault v) =
+     CurrentOriginal h k 0` by metis_tac[current_wf_original_phi_block_token] >>
+  simp[]
 QED
 
 Theorem current_wf_precleanup_ordinary_available:
@@ -3594,14 +3692,6 @@ Proof
   `ALL_DISTINCT (MAP basic_block_bb_label ins)` by metis_tac[] >>
   drule_all (CONJUNCT1 rename_current_blocks_inst_ids) >>
   fs[ssa_ids_supply_ok_def]
-QED
-
-Theorem current_wf_blocks_distinct_instructions:
-  !bbs. ALL_DISTINCT (FLAT (MAP block_ir_inst_ids bbs)) ==>
-    !bb. MEM bb bbs ==> ALL_DISTINCT bb.bb_instructions
-Proof
-  Induct >> simp[ALL_DISTINCT_APPEND] >> rpt strip_tac >> gvs[] >>
-  fs[block_ir_inst_ids_def] >> metis_tac[ALL_DISTINCT_MAP]
 QED
 
 Theorem current_wf_cleanup_prefix_semantics:
