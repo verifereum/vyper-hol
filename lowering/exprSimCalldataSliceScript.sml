@@ -27,7 +27,7 @@ Ancestors
   loweringPosts
   exprSimAlloc
   allocLimits
-  list fragExec loweringSlice builtinBytes exprSim exprSimHyps exprBopLowering
+  list fragExec loweringSlice builtinBytes  exprSimHyps exprBopLowering
   exprSimOperators vyperEvalExprPreservesScopesDom
   exprLowering exprLoweringProps builtinSimple emitHelper compileEnv
   valueEncoding venomExecSemantics venomInst venomState vyperAST

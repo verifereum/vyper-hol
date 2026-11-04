@@ -47,7 +47,7 @@
 Theory exprSimPlaces
 Ancestors
   exprSimHypsDefs
-  list exprSim exprSimHyps exprSimPop exprSimAttribute exprSimTuple
+  list  exprSimHyps exprSimPop exprSimAttribute exprSimTuple
   exprSimArrayIndex
   exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
 

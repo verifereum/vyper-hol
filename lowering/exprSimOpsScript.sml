@@ -45,7 +45,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
-  fragExec varsExt exprSim freshWrites exprBopLowering loweringSlice
+  fragExec varsExt  freshWrites exprBopLowering loweringSlice
   localPtrsProps vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
   vyperInterpreter vyperState vyperValueOperation vyperContext

@@ -27,7 +27,7 @@
 Theory stmtSimAssignStore
 Ancestors
   list rich_list finite_map pred_set
-  fragExec localPtrsProps loweringSlice exprSim stmtSimDeclStore stmtSimDecl
+  fragExec localPtrsProps loweringSlice  stmtSimDeclStore stmtSimDecl
   exprLowering stmtLowering exprLoweringProps
   compileEnv valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperLookup

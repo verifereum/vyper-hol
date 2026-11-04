@@ -24,7 +24,7 @@
 Theory bodySimExprCases
 Ancestors
   exprSimHypsDefs
-  list bodySim exprSim exprSimHyps exprSimOperators exprSimAttribute
+  list bodySim  exprSimHyps exprSimOperators exprSimAttribute
   exprSimPlaces exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph
 

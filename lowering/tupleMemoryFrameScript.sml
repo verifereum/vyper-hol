@@ -8,7 +8,7 @@
  *)
 Theory tupleMemoryFrame
 Ancestors
-  tupleMemoryLayout compileEnv localPtrsProps exprSim valueEncodingProps
+  tupleMemoryLayout compileEnv localPtrsProps  valueEncodingProps
   valueEncodingProofs arithmetic venomMemDefs exprSimAggregateChildren
   vyperEvalPreservesScopes
 

@@ -38,12 +38,13 @@ Ancestors
   exprSimStack
   list words integer_word vfmExecution valueEncoding loweringSlice
   vyperEvalExprPreservesScopesDom
-  exprSim exprSimHyps exprSimOperators exprSimWordArgs exprLowering
+   exprSimHyps exprSimOperators exprSimWordArgs exprLowering
   vyperTypeSystem vyperTyping vyperInterpreter vyperState vyperContext
   exprBopLowering builtinMath builtinMisc builtinSimple arithmeticProps
   compileEnv exprSimOps freshWrites fragExec varsExt exprLoweringProps
   venomExecSemantics venomState emitHelper emitHelperProps venomInst
   builtinProps
+  exprSimNameWord
 Libs
   stepInstBaseLib
 

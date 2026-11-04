@@ -22,7 +22,7 @@ Ancestors
   exprSimAlloc
   allocLimits
   list finite_map exprSimWordArgs loweringHalt exprLoweringProps
-  exprSim exprSimOps exprSimHyps exprLowering compileEnv loweringSlice
+   exprSimOps exprSimHyps exprLowering compileEnv loweringSlice
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperValueOperation valueEncoding fragExec venomState
 

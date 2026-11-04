@@ -30,7 +30,7 @@ Ancestors
   loweringPosts
   allocLimits
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim exprSimHyps exprSimOps exprSimBinopFrag
+  fragExec localPtrsProps  exprSimHyps exprSimOps exprSimBinopFrag
   exprSimOperators exprSimLeaves loweringSlice stmtSim stmtSimDecl
   stmtSimDeclStore stmtSimAssignStore
   exprLowering exprBopLowering stmtLowering emitHelper emitHelperProps

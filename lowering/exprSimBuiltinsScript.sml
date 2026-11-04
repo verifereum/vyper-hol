@@ -72,7 +72,7 @@ Ancestors
   exprSimHypsDefs
   exprSimDefs
   loweringPosts
-  list rich_list exprSim exprSimHyps vyperAST exprSimWordBuiltins
+  list rich_list  exprSimHyps vyperAST exprSimWordBuiltins
   exprSimWordArgs exprSimHash vyperTypeSystem exprLowering compileEnv
   valueEncoding fragExec vyperInterpreter vyperState vyperContext
   vyperValueOperation venomState exprSimAccounts exprSimUnop

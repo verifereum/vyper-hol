@@ -39,7 +39,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   list finite_map
-  exprSim exprLowering compileEnv immutableEncoding vyperAST vyperInterpreter
+   exprLowering compileEnv immutableEncoding vyperAST vyperInterpreter
   vyperState
   loweringSlice fragExec freshWrites venomInst venomExecSemantics venomState
   exprSimCopy exprOperandVar vyperEvalExprPreservesScopesDom

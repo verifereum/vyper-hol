@@ -18,7 +18,7 @@ Theory intCallReturnMem
 Ancestors
   loweringPosts
   list rich_list
-  fragExec exprSim stmtSimReturn intCallResult valueCopy instIdxIndep
+  fragExec  stmtSimReturn intCallResult valueCopy instIdxIndep
   stmtLowering exprLowering emitHelper emitHelperProps exprLoweringProps
   context compileEnv valueEncoding
   vyperState vyperTyping venomExecSemantics venomInst venomState

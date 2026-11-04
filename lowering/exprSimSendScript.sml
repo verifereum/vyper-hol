@@ -39,7 +39,7 @@ Ancestors
   exprSimDefs exprSimStack
   loweringPosts
   allocLimits
-  list pair vyperMisc fragExec loweringSlice exprSim exprSimHyps exprSimWordArgs
+  list pair vyperMisc fragExec loweringSlice  exprSimHyps exprSimWordArgs
   exprSimPrecompiles exprSimOperators exprSimOperands exprSimAccounts
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
   exprLoweringProps emitHelper compileEnv localPtrsProps valueEncoding

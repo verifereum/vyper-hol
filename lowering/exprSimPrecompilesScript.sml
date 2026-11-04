@@ -53,7 +53,7 @@ Ancestors
   exprSimDefs exprSimStack
   loweringPosts
   exprSimAlloc
-  list fragExec loweringSlice exprSim exprSimHyps exprSimWordBuiltins
+  list fragExec loweringSlice  exprSimHyps exprSimWordBuiltins
   exprSimLiteralBuffer abiDecodeStaticProps dftCommutation loweringHalt
   exprSimWordArgs exprSimOperators exprSimHash exprBopLowering exprLowering
   exprLoweringProps builtinMisc compileEnv

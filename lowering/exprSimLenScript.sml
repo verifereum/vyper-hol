@@ -25,7 +25,7 @@ Ancestors
   exprSimHypsDefs
   exprSimDefs
   loweringPosts
-  list fragExec exprSim exprSimHyps exprSimWordBuiltins exprBopLowering exprLowering
+  list fragExec  exprSimHyps exprSimWordBuiltins exprBopLowering exprLowering
   exprLoweringProps builtinSimple emitHelper compileEnv accountsRelProps
   valueEncoding
   venomExecSemantics venomInst venomState vyperAST vyperInterpreter vyperState

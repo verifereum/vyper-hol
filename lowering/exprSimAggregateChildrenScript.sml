@@ -27,7 +27,7 @@ Ancestors
   exprSimProps
   loweringPosts
   exprSimAlloc
-  exprSim exprSimHyps exprSimUnwrap exprSimBufferStore exprSimBuffer
+   exprSimHyps exprSimUnwrap exprSimBufferStore exprSimBuffer
   vyperInterpreter vyperValueOperation vyperState fragExec
   compileEnv context exprSimLiteralBuffer exprSimOps venomState
   exprSimHash exprOperandVar emitHelperProps ASCIInumbers exprLoweringProps venomInst

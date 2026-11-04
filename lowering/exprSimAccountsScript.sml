@@ -34,7 +34,7 @@ Ancestors
   exprSimHypsDefs
   loweringPosts
   list rich_list words integer_word byte
-  fragExec freshWrites varsExt loweringSlice exprSim exprSimHyps exprSimUnop
+  fragExec freshWrites varsExt loweringSlice  exprSimHyps exprSimUnop
   exprSimOperators exprSimWordBuiltins exprBopLowering exprLowering
   emitHelper emitHelperProps compileEnv exprLoweringProps accountsRelProps
   valueEncoding

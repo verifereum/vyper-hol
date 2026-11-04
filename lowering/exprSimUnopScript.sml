@@ -35,7 +35,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   arithmetic list integer words integer_word byte
-  fragExec varsExt exprSim freshWrites
+  fragExec varsExt  freshWrites
   exprBopLowering loweringSlice
   exprLowering emitHelper emitHelperProps exprLoweringProps
   builtinSimple builtinProps

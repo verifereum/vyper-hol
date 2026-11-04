@@ -38,7 +38,7 @@ Ancestors
   loweringPosts
   allocLimits
   arithmetic list integer words integer_word
-  fragExec varsExt exprSim freshWrites exprSimOps exprSimArith
+  fragExec varsExt  freshWrites exprSimOps exprSimArith
   exprBopLowering loweringSlice
   exprLowering emitHelper emitHelperProps exprLoweringProps arithmeticProps
   compileEnv vyperAST vyperInterpreter vyperState vyperContext vyperValue

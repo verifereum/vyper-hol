@@ -34,7 +34,7 @@ Ancestors
   list rich_list byte words fragExec ASCIInumbers
   venomExecSemantics venomInst venomState emitHelper emitHelperProps
   builtinHashing exprLoweringProps compileEnv
-  exprSim exprSimHyps exprSimLiteralBuffer exprSimWordArgs
+   exprSimHyps exprSimLiteralBuffer exprSimWordArgs
   vyperTypeSystem valueEncoding valueEncodingProofs extCallOracle
   vyperAST vyperValue exprLowering vyperInterpreter vyperContext
   vyperValueOperation vyperState exprSimWordBuiltins

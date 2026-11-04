@@ -24,7 +24,7 @@ Ancestors
   exprSimProps
   exprSimHypsDefs
   compileEnv exprLowering stmtLowering vyperTypeSystem exprSimAggregates
-  vyperAST vyperInterpreter vyperValue vyperState exprSim
+  vyperAST vyperInterpreter vyperValue vyperState
   exprSimAggregateSource vyperValueOperation abiCallerAbiBound supportedTypes
   supportedExprs supportedExprForms vyperABI exprSimHyps
   vyperTypeEvalSoundness vyperTypeExprSoundness vyperTypeCallGraph

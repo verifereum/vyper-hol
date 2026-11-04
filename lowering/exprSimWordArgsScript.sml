@@ -40,7 +40,7 @@ Ancestors
   exprSimProps
   exprSimDefs
   loweringPosts
-  list exprSim exprSimHyps exprSimOps loweringSlice exprLowering
+  list  exprSimHyps exprSimOps loweringSlice exprLowering
   exprLoweringProps vyperEvalExprPreservesScopesDom vyperInterpreter
   vyperState vyperContext vyperTyping compileEnv freshWrites fragExec varsExt
   venomExecSemantics venomState emitHelper emitHelperProps venomInst

@@ -2,7 +2,7 @@
    complete postcondition. The caller keeps the existing exemption gate. *)
 Theory exprSimAbiDecodeGas
 Ancestors
-  gasSummary exprSim exprLowering compileEnv
+  gasSummary  exprLowering compileEnv
   vyperInterpreter vyperContext vyperState vyperValue vyperAST
 
 Theorem abi_decode_invalid_source:

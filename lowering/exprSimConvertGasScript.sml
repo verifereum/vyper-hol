@@ -2,7 +2,7 @@
    concrete child's source value and target landing have been related. *)
 Theory exprSimConvertGas
 Ancestors
-  gasSummary exprSimConvert exprSim exprLowering compileEnv
+  gasSummary exprSimConvert  exprLowering compileEnv
   vyperInterpreter vyperState vyperValue vyperAST
 
 Theorem convert_empty_gas_prefix:

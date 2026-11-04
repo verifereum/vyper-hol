@@ -21,7 +21,7 @@ Ancestors
   exprSimAlloc
   exprSimLiteralBuffer emitHelperProps exprLoweringProps compileEnv
   context venomInst venomState words fragExec rich_list list
-  exprSimWordArgs exprSimOps exprSim
+  exprSimWordArgs exprSimOps
 
 Theorem buffer_offset_no_wrap:
   !w:bytes32. !off sz.

@@ -60,12 +60,15 @@ Ancestors
   exprSimDefs
   loweringPosts
   list finite_map
-  exprSim exprSimHyps exprSimUnwrap exprLowering exprLoweringProps
+   exprSimHyps exprSimUnwrap exprLowering exprLoweringProps
   compileEnv accountsRelProps loweringSlice
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeEnv vyperTyping vyperTypeGlobalLookupSoundness
   vyperValueOperation valueEncoding fragExec venomState exprSimLiteralBuffer
   vyperStorageLayoutSafety vyperLookupStorage vyperTypeValues
+  exprSimNameWord
+  exprSimLiteralWord
+  exprSimEnv
 
 val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
                   basicSizeTheory.option_size_def];

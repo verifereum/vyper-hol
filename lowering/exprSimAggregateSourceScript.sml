@@ -26,7 +26,7 @@ Ancestors
   exprSimHypsDefs
   loweringPosts
   allocLimits
-  exprSim exprSimAggregateChildren exprSimHyps
+   exprSimAggregateChildren exprSimHyps
   vyperInterpreter vyperValueOperation vyperState vyperTyping
   valueEncoding valueEncodingProofs vyperStatePreservation
   vyperTypeSystem vyperTypeCallGraph list exprCallBounds

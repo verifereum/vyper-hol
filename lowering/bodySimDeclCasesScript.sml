@@ -30,7 +30,7 @@ Ancestors
   stmtSimProps
   exprSimHypsDefs
   vyperTypeStoragePreservation
-  list finite_map bodySim bodySimStmtCases allocLimits exprSim exprSimHyps
+  list finite_map bodySim bodySimStmtCases allocLimits  exprSimHyps
   exprLoweringProps stmtSim stmtSimDecl stmtSimReturn stmtSimAssign
   stmtSimDeclMem stmtSimDeclEmpty memoryLocalRhsProps
   stmtSimFor stmtSimForParts stmtSimForRange stmtLowering stmtLoweringMono

@@ -31,7 +31,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclStore
+  fragExec localPtrsProps  loweringSlice stmtSim stmtSimDeclStore
   stmtSimDecl valueCopy valueCopyBytes intCallResult exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   context compileEnv valueEncoding valueTypingMemoryProps

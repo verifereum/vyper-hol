@@ -235,7 +235,7 @@ Ancestors
   exprSimDefs exprSimStack
   gasContext
   list finite_map
-  exprSim exprCallBounds exprBopLowering exprLowering compileEnv
+   exprCallBounds exprBopLowering exprLowering compileEnv
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins

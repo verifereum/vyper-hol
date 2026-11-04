@@ -22,7 +22,7 @@
 Theory exprSimMain
 Ancestors
   exprSimHypsDefs
-  list exprSim exprSimHyps exprSimLeaves exprSimOperators exprSimPlaces
+  list  exprSimHyps exprSimLeaves exprSimOperators exprSimPlaces
   exprSimAggregates exprSimBuiltins exprSimCalls exprLowering
   vyperAST vyperTypeCallGraph vyperTypeSystem exprSimWordBuiltins
   exprSimCalldataSlice exprSimPrecompiles exprSimLen

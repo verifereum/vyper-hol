@@ -48,7 +48,7 @@ Ancestors
   exprSimLiteralBuffer
   exprSimCalldataSlice entryDecodeStaticProps
   builtinMisc venomInst exprLoweringProps venomExecSemantics
-  venomState vyperTypeSystem vyperContext valueEncoding exprSim
+  venomState vyperTypeSystem vyperContext valueEncoding
   vyperTyping valueEncodingProofs vyperTypeBuiltins vyperValueOperation
   vyperValue vyperAssignPreservesType compileEnv extCallOracle byte
   vfmBuffer venomMemDefs vfmTypes vfmExecution bn254 list rich_list

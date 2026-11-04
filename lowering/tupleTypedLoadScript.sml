@@ -12,7 +12,7 @@ Ancestors
   tupleLoadProps tupleMemoryLayout tupleStageProps stmtSimReturn exprSimLeaves
   stmtLowering compileEnv valueEncoding vyperTyping
   list rich_list words arithmetic valueEncodingProofs vyperTypeDefaults
-  exprLoweringProps venomMemDefs finite_map exprSim venomState fragExec
+  exprLoweringProps venomMemDefs finite_map  venomState fragExec
   emitHelperProps venomExecSemantics
 
 Theorem tuple_prefix_sizes:
